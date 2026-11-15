@@ -676,8 +676,9 @@ TEST_CASE("Fire: a burning colonist runs to water and jumps in") {
     CHECK(cellOf(f.reg().get<Position>(pawn)).x >= 34);  // it ran east, to the water
 }
 
-TEST_CASE("Fire: heat armor on a burning pawn turns flames aside and the clothes wear down") {
-    // Two pawns burn for the same time; one wears a hyperweave duster and cowboy hat (heat armor 0.86 and 1.4).
+TEST_CASE("Fire: elemental mitigation on a burning pawn softens the flames and the clothes wear down") {
+    // Two pawns burn for the same time; one wears a hyperweave duster and cowboy hat (12% and 6% elemental):
+    // fire damage / 1.12 / 1.06, about 84% (docs/design/armour.md).
     FireFixture f;
     const Entity bare = f.sim.things().spawn("Human", CellPos{10, 10, 0});
     const Entity clad = f.sim.things().spawn("Human", CellPos{40, 40, 0});
@@ -713,7 +714,7 @@ TEST_CASE("Fire: heat armor on a burning pawn turns flames aside and the clothes
         return sum;
     };
     CHECK(total(bare) > 0.0f);
-    CHECK(total(clad) < total(bare) * 0.7f);
+    CHECK(total(clad) < total(bare) * 0.92f);
     // Worn clothes wear their durability, not their hit points (docs/design/apparel-durability.md).
     CHECK(f.reg().get<HitPoints>(duster).current == hpBefore);
     CHECK(ApparelStats::condition(f.reg(), duster) < 1.0f);

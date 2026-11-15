@@ -1,3 +1,4 @@
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
@@ -268,7 +269,7 @@ TEST_CASE("Combat: hitboxes follow the stance and the hit lands in the part that
     CHECK(shootAtHeight(0.15f).hit == ProjectileHitKind::Pawn);
 }
 
-TEST_CASE("Combat: armor stops or softens hits on the parts it covers") {
+TEST_CASE("Combat: armor softens every hit by the same share, wherever it lands, and stops none") {
     auto sim = combatTestSim();
     const Entity shooter = combatTestPawn(*sim, 10, 30, "Gun_Revolver");
     const Entity target = combatTestPawn(*sim, 18, 30);
@@ -289,8 +290,16 @@ TEST_CASE("Combat: armor stops or softens hits on the parts it covers") {
                     combatTestIsUnder(*sim, target, e.part, "torso") && !combatTestIsUnder(*sim, target, e.part, "neck") &&
                     !combatTestIsUnder(*sim, target, e.part, "left shoulder") && !combatTestIsUnder(*sim, target, e.part, "right shoulder")) {
                     ++torso;
+                }
+                if (e.type == EventType::ProjectileHit && (e.hit == ProjectileHitKind::Armor || e.hit == ProjectileHitKind::Pawn)) {
                     stopped += e.hit == ProjectileHitKind::Armor ? 1 : 0;
-                    bruised += (e.hit == ProjectileHitKind::Pawn && e.amount == doctest::Approx(6.0f)) ? 1 : 0;
+                    // A revolver bullet, 12 damage, 75% blunt and 25% sharp, 18% penetration: the vest's 15% blunt
+                    // and 30% sharp work at 82% (docs/design/armour.md).
+                    const float expected = 9.0f / (1.0f + 0.15f * 0.82f) + 3.0f / (1.0f + 0.30f * 0.82f);
+                    if (e.amount != doctest::Approx(expected).epsilon(0.001)) {
+                        ++bruised;
+                        MESSAGE("amount " << e.amount << " expected " << expected);
+                    }
                 }
                 injuries += e.type == EventType::PawnInjured ? 1 : 0;
             }
@@ -302,11 +311,11 @@ TEST_CASE("Combat: armor stops or softens hits on the parts it covers") {
         // The vest wears out under fire (apparel.md); this test is about the armor roll, so mend it.
         HitPoints& vestHp = sim->things().registry().get<HitPoints>(vest);
         vestHp.current = vestHp.max;
+        sim->things().registry().remove<Durability>(vest);
     }
-    // Flak vest 100% sharp less the revolver's 18% penetration: 41% bounce off, 41% half damage.
     COMBAT_REQUIRE(torso > 200);
-    CHECK(static_cast<double>(stopped) / torso == doctest::Approx(0.41).epsilon(0.2));
-    CHECK(static_cast<double>(bruised) / torso == doctest::Approx(0.41).epsilon(0.2));
+    CHECK(stopped == 0);
+    CHECK(bruised == 0);  // every hit, torso or not, took the same damage
 }
 
 TEST_CASE("Combat: shoot orders wait for the warm-up, fire bursts and cool down") {

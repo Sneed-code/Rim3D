@@ -427,7 +427,7 @@ private:
     float adaptGrowthRate_ = 1.0f;  // the difficulty's, not saved
     float adaptImpact_ = 1.0f;
     std::vector<float> marketValue_;  // per def id
-    std::vector<float> armor_;        // per def id: armorRatingSharp of apparel
+    std::vector<float> armor_;        // per def id: gear.mitigation.sharp / 50 of armour
     std::vector<Event>* events_ = nullptr;
     std::function<void(Entity, uint64_t, bool)> looks_;
     Construction* construction_ = nullptr;

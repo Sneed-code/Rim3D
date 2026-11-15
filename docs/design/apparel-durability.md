@@ -33,8 +33,9 @@ All in `ApparelRules`. Durability is a share, so a sturdier piece (more hit poin
 
 ## Tattered
 
-At 0 durability a piece is **tattered**: it stays on, but its armor and insulation are 80% of normal
-(`tatteredBenefitFactor` 0.8), and its wearer has the thought "tattered clothes", **-1** (one stage; RimWorld's ratty
+At 0 durability a piece is **tattered**: it stays on, but its mitigation is 67% of normal
+(`tatteredMitigationFactor`, sneed 2026-11-14, [armour.md](armour.md)) and its insulation 80% (`tatteredBenefitFactor`),
+and its wearer has the thought "tattered clothes", **-1 for each tattered piece, up to -3** (RimWorld's ratty
 -3 and tattered -5 are gone). It looks the same for now: the snapshot gives `durability` beside `hitPointShare`, and
 the clothes are drawn torn by hit points as before.
 

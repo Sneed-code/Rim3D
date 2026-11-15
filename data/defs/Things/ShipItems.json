@@ -1,6 +1,6 @@
 [
  {
-  "defName": "Plasteel",
+  "defName": "Plasteel", "armourStuff": {"factor": {"blunt": 1.2, "sharp": 1.25, "elemental": 1.1}},
   "parent": "ItemBase",
   "label": "plasteel",
   "stackLimit": 75,
@@ -45,9 +45,6 @@
     "flammability": 0.0,
     "workToBuild": 2.2,
     "workToMake": 2.2,
-    "armorRatingSharp": 1.14,
-    "armorRatingBlunt": 0.55,
-    "armorRatingHeat": 0.65,
     "sharpDamageMultiplier": 1.1,
     "bluntDamageMultiplier": 0.9,
     "meleeCooldownMultiplier": 0.8
@@ -67,7 +64,7 @@
   }
  },
  {
-  "defName": "Uranium",
+  "defName": "Uranium", "armourStuff": {"factor": {"blunt": 1.2, "sharp": 1.2, "elemental": 1.1}},
   "parent": "ItemBase",
   "label": "uranium",
   "stackLimit": 75,
@@ -112,9 +109,6 @@
     "flammability": 0.0,
     "workToBuild": 1.9,
     "workToMake": 1.9,
-    "armorRatingSharp": 1.08,
-    "armorRatingBlunt": 0.54,
-    "armorRatingHeat": 0.65,
     "sharpDamageMultiplier": 1.1,
     "bluntDamageMultiplier": 1.5,
     "meleeCooldownMultiplier": 1.1
