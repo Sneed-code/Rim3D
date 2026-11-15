@@ -66,7 +66,9 @@ constexpr float kHiveHuntRange = 30.0f;   // brood mounds this near the barracks
 constexpr float kHiveAvoidRange = 70.0f;  // farther ones (they come up 20 to 60 m from the colony) are kept away from
 constexpr int kHiveAvoid = 25;            // by an allowed area without the squares this far round each mound
 constexpr size_t kHiveHuntersMin = 3;
-constexpr int kRebuildSteelReserve = 200;  // rebuilt steel walls go up in wood below this much steel on the map    // with at least this many armed colonists fit to fight
+constexpr int kRebuildSteelReserve = 200;
+constexpr float kHeatPlanAbove = 38.0f;  // the heat plan starts the first time the air is this hot
+constexpr int kHeatCoolers = 3;          // passive coolers in the barracks  // rebuilt steel walls go up in wood below this much steel on the map    // with at least this many armed colonists fit to fight
 constexpr float kHuntLeash = 60.0f;
 constexpr int64_t kWinterDay = 33; // year run: the campfire, the warm clothes and the extra wood come on this game day
 constexpr int kFields = 4;         // year run: rice fields
@@ -387,6 +389,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         // what the greenhouse is made of.
         sim.submit(UnlockResearchCommand{"Electricity"});
         sim.submit(UnlockResearchCommand{"Hydroponics"});
+        sim.submit(UnlockResearchCommand{"PassiveCooler"});  // neolithic: the rainforest's heat waves (see the heat plan)
     }
     if (year) {
         // The year run: a rice field beside the room and a stockpile for its harvest, so the colony can live on.
@@ -654,6 +657,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     bool hiveHuntShooting = false;     // walking up to shoot the mound (else holding at the rally point)
     std::vector<Entity> hunters;
     uint64_t hiveHunts = 0;
+    int coolersPlanned = 0;  // passive coolers put in the barracks when the first heat came
     uint32_t avoidArea = 0;  // the allowed area that keeps the colony away from mounds farther out
     bool avoidAreaAsked = false;
     std::vector<Entity> avoidMounds;
@@ -1732,6 +1736,25 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     }
                 }
             }
+            if (year && coolersPlanned == 0 && allBuiltAt >= 0 && sim.outdoorTemperature() >= kHeatPlanAbove) {
+                // The heat plan: the first time the air passes 38 C, passive coolers go into the barracks, as a player
+                // builds them for a heat wave. On the rainforest start (seed 7) a heat wave of +17 C for five days took
+                // the barracks to 47 C and killed seven of heatstroke.
+                for (int x = kRoomWidth - 2; x >= 2 && coolersPlanned < kHeatCoolers; --x) {  // the east wall first
+                    for (int y = 1; y < kRoomHeight - 1 && coolersPlanned < kHeatCoolers; ++y) {
+                        const CellPos c{origin.x + x, origin.y + y, 0};
+                        if (sim.map().buildingAt(c) == kNoEntity && sim.construction().siteAt(c) == kNoEntity) {
+                            sim.submit(PlaceBlueprintCommand{"PassiveCooler", "", c, Rot4::North});
+                            plans.push_back(Plan{defs->idOf("Things", "PassiveCooler"), "PassiveCooler", "", c, Rot4::North});
+                            ++coolersPlanned;
+                        }
+                    }
+                }
+                if (verbose) {
+                    std::fprintf(stderr, "day %lld: heat plan: %d passive coolers in the barracks (%.1f C outside)\n",
+                                 static_cast<long long>(sim.time().day()), coolersPlanned, static_cast<double>(sim.outdoorTemperature()));
+                }
+            }
             if (designationsDoneAt < 0 && sim.designations().count() == 0 && now > 0) {
                 designationsDoneAt = now;
             }
@@ -1886,7 +1909,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 static_cast<unsigned long long>(sim.stateHash()));
 
     if (year) {
-        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"warmthSeeks\":%llu,\"weaponsTaken\":%llu,\"weaponsHanded\":%llu,\"firebreakMarks\":%llu,\"rebuilt\":%llu,\"hiveHunts\":%llu,\"hiveShots\":%llu,\"hiveAreas\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), static_cast<unsigned long long>(warmthSeeks), static_cast<unsigned long long>(weaponsTaken), static_cast<unsigned long long>(weaponsHanded), static_cast<unsigned long long>(firebreakMarks), static_cast<unsigned long long>(rebuilt), static_cast<unsigned long long>(hiveHunts), static_cast<unsigned long long>(hivesShot), static_cast<unsigned long long>(avoidPaints));
+        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"warmthSeeks\":%llu,\"weaponsTaken\":%llu,\"weaponsHanded\":%llu,\"firebreakMarks\":%llu,\"rebuilt\":%llu,\"hiveHunts\":%llu,\"hiveShots\":%llu,\"hiveAreas\":%llu,\"coolers\":%d}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), static_cast<unsigned long long>(warmthSeeks), static_cast<unsigned long long>(weaponsTaken), static_cast<unsigned long long>(weaponsHanded), static_cast<unsigned long long>(firebreakMarks), static_cast<unsigned long long>(rebuilt), static_cast<unsigned long long>(hiveHunts), static_cast<unsigned long long>(hivesShot), static_cast<unsigned long long>(avoidPaints), coolersPlanned);
         std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"narrator\":\"%s\",\"letters\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), narrator.c_str(), static_cast<unsigned long long>(letters));
         if (greenhousePlanned) {
             std::printf("{\"greenhouse\":{\"at\":\"%d,%d\",\"basins\":%d,\"generators\":%d,\"heaters\":%d,\"lamps\":%d,\"zoneMade\":%s,"

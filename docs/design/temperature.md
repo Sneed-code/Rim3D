@@ -51,12 +51,15 @@ non-wall buildings in the way don't count.
 is shared by the room's cells. One RimWorld second is 60 ticks and a game hour is 2,500 ticks, so
 one game second of a heater with 21 adds 21 x 2500 / 60 / 3600 / cells degrees: **35 degrees an hour
 in a 25 cell room**. A pusher with `maxTemp` (heater 21, campfire 28) adds heat only while the room is
-below it and never takes the room past it; one with `minTemp` (cooler 10, passive cooler 9) cools
+below it and never takes the room past it; one with `minTemp` (cooler 10, passive cooler 17) cools
 only while above. Heat pushed into the open air is lost. The room is the one under the building, or
 beside it. **Power (E5) decides which pushers run**: `Sim` installs
 `PowerGrid::running` with `TemperatureSystem::setSourceRunning(fn(Entity) -> bool)`, so a heater or
-cooler warms only while its net runs it, and a campfire (no power part) always does. Fuel (C11)
-will add its test the same way.
+cooler warms only while its net runs it, and **one that burns fuel runs only while it has some** (`FuelSystem::lit`):
+a campfire or a passive cooler is built empty and does nothing until a colonist fills it. Before (2026-11-15) a campfire
+with no wood still warmed its room. The **passive cooler** has the RimWorld wiki's numbers: 50 wood to build, heat per
+second -11, no lower than 17 C, a 50-wood tank burning 10 a day; one in a 25 cell room holds it well under 40 C on a
+49 C day.
 
 **Fire** (E4) pushes heat with `TemperatureSystem::addHeat(cell, heatPerSecond, seconds, maxTemp)`: the same formula as a
 pusher, once per fire pass, into the enclosed room the cell is in ([fire.md](fire.md)).

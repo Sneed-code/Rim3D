@@ -11,6 +11,7 @@
 #include "ColonySim/Weather.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Temperature.h"
+#include "ColonySim/Fuel.h"
 #include "ColonySim/Things.h"
 
 #include <doctest.h>
@@ -172,7 +173,7 @@ TEST_CASE("Temperature: an open door lets the room follow the outdoors much fast
     tempClock = 0;
 }
 
-TEST_CASE("Temperature: a heater warms only while its power net runs it, a campfire needs no power") {
+TEST_CASE("Temperature: a heater warms only while its power net runs it, a campfire needs no power but needs wood") {
     // No power: the heater stays cold, the campfire (no power part) works.
     {
         auto sim = tempSim(0.0f, 48, true);
@@ -188,9 +189,13 @@ TEST_CASE("Temperature: a heater warms only while its power net runs it, a campf
     {
         auto sim = tempSim(0.0f, 48, true);
         tempRing(*sim, 10, 10, 16, 16);
-        TEMP_REQUIRE(sim->things().spawn("Campfire", CellPos{12, 12, 0}) != kNoEntity);
+        const Entity fire = sim->things().spawn("Campfire", CellPos{12, 12, 0});
+        TEMP_REQUIRE(fire != kNoEntity);
         sim->rooms().update();
         tempClock = 0;
+        tempHours(*sim, 6.0);
+        CHECK(tempAt(*sim, 13, 13) < 1.0f);  // built empty: no wood, no heat
+        sim->things().registry().get<Fuel>(fire).amount = 10.0f;
         tempHours(*sim, 6.0);
         CHECK(tempAt(*sim, 13, 13) > 10.0f);
     }
@@ -271,6 +276,44 @@ TEST_CASE("Temperature: a heater warms a room to its limit and holds it, a coole
         tempHours(*sim, 6.0);
         CHECK(tempAt(*sim, 30, 30) == -10.0f);
         CHECK(tempAt(*sim, 31, 30) == -10.0f);
+    }
+}
+
+TEST_CASE("Temperature: a passive cooler burns wood to cool a room in a heat wave, down to 17 at the lowest") {
+    // RimWorld wiki (Passive cooler): heat per second -11, no lower than 17 C, 10 wood a day from a 50-wood tank.
+    const DefId def = tempDefs()->idOf("Things", "PassiveCooler");
+    TEMP_REQUIRE(def.valid());
+    CHECK(tempDefs()->get(def).number("heatPusher.heatPerSecond") == doctest::Approx(-11.0));
+    CHECK(tempDefs()->get(def).number("fuel.capacity") == doctest::Approx(50.0));
+    CHECK(tempDefs()->get(def).number("fuel.perDay") == doctest::Approx(10.0));
+    {
+        // Empty, it does nothing: the room follows the 49 degree heat wave.
+        auto sim = tempSim(49.0f, 48, true);
+        tempRing(*sim, 10, 10, 16, 16);
+        const Entity cooler = sim->things().spawn("PassiveCooler", CellPos{12, 12, 0});
+        TEMP_REQUIRE(cooler != kNoEntity);
+        sim->rooms().update();
+        tempClock = 0;
+        tempHours(*sim, 24.0);
+        CHECK(tempAt(*sim, 13, 13) > 45.0f);
+        // With wood it pulls the room down, well under the heat stroke range, and holds it there.
+        sim->things().registry().get<Fuel>(cooler).amount = 50.0f;
+        tempHours(*sim, 24.0);
+        const float cooled = tempAt(*sim, 13, 13);
+        CHECK(cooled < 40.0f);
+        CHECK(cooled >= 17.0f);
+    }
+    {
+        // In mild weather it stops at 17.
+        auto sim = tempSim(25.0f, 48, true);
+        tempRing(*sim, 10, 10, 16, 16);
+        const Entity cooler = sim->things().spawn("PassiveCooler", CellPos{12, 12, 0});
+        TEMP_REQUIRE(cooler != kNoEntity);
+        sim->things().registry().get<Fuel>(cooler).amount = 50.0f;
+        sim->rooms().update();
+        tempClock = 0;
+        tempHours(*sim, 48.0);
+        CHECK(tempAt(*sim, 13, 13) == doctest::Approx(17.0f).epsilon(0.002));
     }
 }
 
