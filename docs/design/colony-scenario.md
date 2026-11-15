@@ -426,3 +426,20 @@ count as "stopped on ground" in the verbose fight lines; those are not crest hit
 | 42 | 2 | 6 | one in the day 32 raid |
 | 42, rainforest | 1 | 2 | the day 44 to 50 wave, then a raid on day 57 |
 
+**Tenth pass (2026-11-15): fire breaks and rebuilding.** Seeds 1 and 7 both lost the barracks to a colonist's
+fire-starting break (seed 1 day 22, seed 7 day 36). Neither colonist was a pyromaniac. With beds, stove and most of the rice
+gone, seed 1's plague patients had no beds and seed 7 froze and starved in the winter. Two fixes:
+
+- **Only pyromaniacs** go on a fire-starting spree, for 2.4 to 4 hours (wiki, Mental break). The def's new
+  `requiredTrait` keeps the break from anyone without the trait ([mental-breaks.md](mental-breaks.md)).
+- **The script rebuilds**, as a player would: every hour, where a planned building (barracks, storeroom, greenhouse) stood
+  once and is gone with no fire on its cell, its blueprint goes back. A rebuilt stove or butcher table gets its bill again.
+  The year line prints `rebuilt`.
+
+| Seed | Ninth pass, second round | Tenth pass | What killed them |
+| --- | --- | --- | --- |
+| 1 | 0 | 4 | plague on day 24 (two), raids on days 23, 25 and 35; the stove was lost late with no steel left to rebuild it, so the four left were starving by day 60 |
+| 7 | 0 | 5 | the day 36 raid (three) and one on day 46; through the winter with food |
+| 42 | 6 | 0 | an infestation beside the storeroom on day 44, then malaria and raids to day 55 (the run went a different way: no fire before) |
+| 42, rainforest | 2 | 6 | one in the day 44 raid |
+

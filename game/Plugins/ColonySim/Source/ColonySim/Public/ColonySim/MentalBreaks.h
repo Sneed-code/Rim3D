@@ -161,6 +161,7 @@ private:
         BreakState state = BreakState::Wander;
         int count = 0;
         std::vector<std::string> needs;  // the def's `requires`
+        std::string trait;               // the def's `requiredTrait`: only pawns with it get this break
     };
     enum class Walk : uint8_t { None, Going, Arrived, Failed };
 

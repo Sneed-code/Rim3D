@@ -14,6 +14,7 @@
 #include "ColonySim/Fuel.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Husbandry.h"
@@ -44,6 +45,7 @@
 #include <cstring>
 #include <iterator>
 #include <map>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -626,8 +628,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     CellRect healrootRect{0, 0, 0, 0, 0};  // year run: the healroot patch, if one was made      // year run: plants marked for the firebreak
     uint64_t weaponsHanded = 0;
     std::map<std::pair<Entity, std::string>, int> workSet;  // year run: the work priority the script last set, plus 1 (0: none yet)       // year run: weapons the script handed to colonists
-    bool billAdded = false;
-    bool butcherBillAdded = false;
+    Entity billedStove = kNoEntity;  // the stove the cooking bill is on: a rebuilt stove gets it again
+    uint64_t rebuilt = 0;            // blueprints put back where a planned building burned or was broken
+    std::set<int64_t> stoodOnce;     // map cells of planned buildings that were built
+    Entity billedButcher = kNoEntity;
     uint64_t butchered = 0;
     bool clubBillAdded = false;
     uint64_t clubsMade = 0;
@@ -1358,13 +1362,13 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
             }
             if (year) {
                 for (const ThingView& t : snapshot.things) {
-                    if (!butcherBillAdded && t.category == ThingCategory::Building && t.stage == ConstructionStage::Built &&
+                    if (billedButcher != t.id && t.category == ThingCategory::Building && t.stage == ConstructionStage::Built &&
                         defs->get(t.def).defName() == "ButcherTable") {
                         sim.submit(AddBillCommand{t.id, "ButcherCorpse", BillMode::Forever, 1});
                         // Only corpses within 40 m: with no limit the butcher walks across the map to a wolf's kill. People stay
                         // out of the filter, as by default.
                         sim.submit(SetBillOptionsCommand{t.id, 1, 0, 20, 40.0f, 0, 0, 0, {"Human"}});
-                        butcherBillAdded = true;
+                        billedButcher = t.id;
                     }
                 }
                 // Hunting: keep a few game animals marked, nearest to the landing first (not the predators or the boars).
@@ -1399,10 +1403,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     }
                 }
             }
-            if (stove != kNoEntity && !billAdded) {
+            if (stove != kNoEntity && stove != billedStove) {
                 // Cook until there are 8 meals on the map, so the stove keeps the colony fed.
                 sim.submit(AddBillCommand{stove, "CookMealSimple", BillMode::UntilHave, year ? 30 : 8});
-                billAdded = true;
+                billedStove = stove;
             }
             if (craftingSpot != kNoEntity && !clubBillAdded) {
                 // One club, made of chopped wood by whoever has Crafting work.
@@ -1414,6 +1418,25 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     sim.submit(AssignBedCommand{beds[static_cast<size_t>(b)], colonists[static_cast<size_t>(b)]});
                 }
                 bedsAssigned = true;
+            }
+            if (year && allBuiltAt >= 0) {
+                // A player rebuilds what a fire or a raid destroyed: on seeds 1 and 7 a fire burned the barracks' beds and
+                // stove, and the colony went through the plague and the winter with neither. Put the blueprint back where a
+                // planned building is gone, once the fire there is out.
+                // Only what stood once: a plan made this hour is still a queued command.
+                for (const std::vector<Plan>* list : {&plans, &shedPlans, &greenPlans}) {
+                    for (const Plan& p : *list) {
+                        const Entity there = sim.map().buildingAt(p.cell);
+                        const int64_t key = static_cast<int64_t>(sim.map().index(p.cell));
+                        if (there != kNoEntity) {
+                            stoodOnce.insert(key);
+                        } else if (stoodOnce.count(key) != 0 && sim.construction().siteAt(p.cell) == kNoEntity &&
+                                   !sim.fire().burning(p.cell)) {
+                            sim.submit(PlaceBlueprintCommand{p.defName, p.stuff, p.cell, p.rot});
+                            ++rebuilt;
+                        }
+                    }
+                }
             }
             if (designationsDoneAt < 0 && sim.designations().count() == 0 && now > 0) {
                 designationsDoneAt = now;
@@ -1569,7 +1592,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 static_cast<unsigned long long>(sim.stateHash()));
 
     if (year) {
-        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"warmthSeeks\":%llu,\"weaponsTaken\":%llu,\"weaponsHanded\":%llu,\"firebreakMarks\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), static_cast<unsigned long long>(warmthSeeks), static_cast<unsigned long long>(weaponsTaken), static_cast<unsigned long long>(weaponsHanded), static_cast<unsigned long long>(firebreakMarks));
+        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"warmthSeeks\":%llu,\"weaponsTaken\":%llu,\"weaponsHanded\":%llu,\"firebreakMarks\":%llu,\"rebuilt\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), static_cast<unsigned long long>(warmthSeeks), static_cast<unsigned long long>(weaponsTaken), static_cast<unsigned long long>(weaponsHanded), static_cast<unsigned long long>(firebreakMarks), static_cast<unsigned long long>(rebuilt));
         std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"narrator\":\"%s\",\"letters\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), narrator.c_str(), static_cast<unsigned long long>(letters));
         if (greenhousePlanned) {
             std::printf("{\"greenhouse\":{\"at\":\"%d,%d\",\"basins\":%d,\"generators\":%d,\"heaters\":%d,\"lamps\":%d,\"zoneMade\":%s,"

@@ -457,6 +457,66 @@ TEST_CASE("Mental breaks: a fire-starting spree lights fires near flammable thin
     CHECK_FALSE(breakStart(sim, pawn, "NoSuchBreak", &error));
 }
 
+namespace {
+
+// Holds every pawn at an extreme-break mood for `days` (calm again as soon as a break begins) and returns the
+// breaks they had, by name.
+std::vector<std::string> breakExtremeRun(Sim& sim, const std::vector<Entity>& pawns, int64_t days) {
+    BreakLog log;
+    for (int64_t i = 0; i < days * 86400; ++i) {
+        for (const Entity pawn : pawns) {
+            if (!sim.things().registry().valid(pawn) || !sim.things().registry().all_of<Mood, Needs>(pawn)) {
+                continue;  // gave up and left
+            }
+            breakMood(sim, pawn).level = sim.mentalBreaks().active(pawn) ? 90.0f : 2.0f;
+            sim.things().registry().get<Needs>(pawn).food = 1.0f;
+            sim.things().registry().get<Needs>(pawn).rest = 1.0f;
+        }
+        breakRun(sim, log, 1);
+    }
+    std::vector<std::string> kinds;
+    for (const Event& e : log.events) {
+        if (e.type == EventType::PawnMentalBreak) {
+            kinds.push_back(e.message);
+        }
+    }
+    return kinds;
+}
+
+}  // namespace
+
+TEST_CASE("Mental breaks: only a pyromaniac goes on a fire-starting spree, and it is a pyromaniac's only extreme break") {
+    // RimWorld wiki, Mental break: the fire-starting spree is for pyromaniacs only, and replaces their other extreme breaks.
+    {
+        Sim sim = breakSim();
+        std::vector<Entity> plain;
+        for (int i = 0; i < 3; ++i) {
+            plain.push_back(breakColonist(sim, CellPos{12 + 8 * i, 24, 0}));
+        }
+        for (int i = 0; i < 3; ++i) {
+            sim.things().spawn("Table", CellPos{14 + 8 * i, 24, 0});  // something wooden to light, beside each
+        }
+        sim.step();
+        const std::vector<std::string> kinds = breakExtremeRun(sim, plain, 12);
+        CHECK(!kinds.empty());
+        for (const std::string& kind : kinds) {
+            CHECK_MESSAGE(kind != "FireSpree", kind);
+        }
+    }
+    {
+        Sim sim = breakSim();
+        const Entity pyro = breakColonist(sim, CellPos{24, 24, 0});
+        sim.things().registry().get<Colonist>(pyro).traits.push_back(TraitRecord{"Pyromaniac", 0});
+        sim.things().spawn("Table", CellPos{28, 24, 0});
+        sim.step();
+        const std::vector<std::string> kinds = breakExtremeRun(sim, {pyro}, 12);
+        CHECK(!kinds.empty());
+        for (const std::string& kind : kinds) {
+            CHECK_MESSAGE(kind == "FireSpree", kind);
+        }
+    }
+}
+
 TEST_CASE("Mental breaks: a colonist in a break takes no orders, and a drafted one is undrafted") {
     Sim sim = breakSim();
     const Entity pawn = breakColonist(sim, CellPos{24, 24, 0});
