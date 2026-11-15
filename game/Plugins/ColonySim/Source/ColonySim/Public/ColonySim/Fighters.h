@@ -153,7 +153,9 @@ struct FighterRules {
     float walkStayBonus = 3.0f;       // on top of stayBonus while walking to the spot: a pawn on its way doesn't change its mind for a small gain
     float rangeMargin = 1.0f;         // a spot has to be this far inside the gun's range to count as one it can shoot from
     float focusMetres = 8.0f;         // colonists: each friend already shooting an enemy makes it count this much nearer (focus fire)
-    float ambushRange = 6.0f;         // a defending melee fighter waits in cover until a gunman is this close, then charges
+    float ambushRange = 6.0f;         // a defending melee fighter waits until an enemy is this close, then charges
+    float helpRange = 20.0f;          // ... or runs in sooner, from this far, to an enemy at a friend
+    float helpReach = 2.5f;           // an enemy this near a friend is at it
     float minWalkShare = 0.25f;       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
 };
 
@@ -293,6 +295,7 @@ private:
     std::vector<PawnInfo> pawns_;  // scratch: every pawn on the map this step, by id
     std::vector<Candidate> candidates_;
     std::vector<CellPos> friendSpots_;   // scratch for one plan
+    std::vector<CellPos> shotless_;      // scratch for one plan: spots looked at that have no shot
     std::vector<KnownEnemy> merged_;     // scratch for sharing what friends know
     std::vector<Entity> order_;
     std::vector<Incoming> incoming_;     // scratch: projectiles in flight this step, by id

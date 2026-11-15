@@ -74,7 +74,11 @@ don't swap every plan). Three colonists facing two raiders all shoot the same on
 **A defender with a club waits** (C25): a fighter the alarm called up (`defending`) that would charge in
 melee doesn't run at an enemy with a gun until it is within `ambushRange` (6 m, ours); until then it
 scores cover like a gunman with no range to get into. A drafted pawn or an attack order still charges. In the
-year run a colonist with a club ran 10 m across open ground at two shotgun raiders and was shot on the way.
+year run a colonist with a club ran 10 m across open ground at two shotgun raiders and was shot on the way. Since the
+ninth pass the same holds for an enemy with a club or spear (colonists ran out one at a time 20 m to two raiders with
+clubs and were beaten down), **unless that enemy is at a friend** already (within `helpReach`, 2.5 m, ours) and within
+`helpRange` (20 m, ours) of the defender: then it runs in to help, so two or three fight one. **A fighter in the Flee
+mode starts no swing** (a routed raider beat two colonists down on its way out after the alarm had stopped).
 
 ## Where to stand
 
@@ -113,7 +117,14 @@ ground and rock (`CombatSystem::trace` without pawns; buildings stay cover). The
 look at the target's eyes, so over a low crest a crouched fighter saw its enemy while every shot went into the crest:
 in the year run a colonist and a raider 14 m apart on a hillside fired about 200 shots at each other in two hours and
 nearly all of them hit the ground 4 to 5 m in front of the shooter. Now the fighter stands up to shoot over it, or
-picks another spot.
+picks another spot. The ground check takes the target **as it stands now** (sight still takes it standing up): the
+shots go at a crouched target's head over a crest (`CombatSystem::shoot` raises the aim, at most to 0.15 m under the
+top of the body), so the line to that highest aim, 0.3 m low, must clear too. Before the ninth pass the plan judged
+the shot as if the target stood up, and a rifle colonist fired 64 shots at a raider crouched behind a rise, 55 into the
+ground. **Looking further for a shot**: when none of the 10 best spots has a shot, up to 16 more cells are tried in
+score order, spread out (none within 2 cells of one already found without a shot), and the first with a shot wins if it
+scores better (`kFightShotSearch`, `kFightShotSearchGap`, ours). The quick score knows nothing of shots, so the 10 best
+were always the cells round where the fighter stood, all behind the same rise.
 
 **Going by the goal.** A fighter that advances and has a goal (a raider) but has no spot it can shoot from, and
 whose target is out of range from the best spot, doesn't settle where it is: scoring cells within 10 m can't see
