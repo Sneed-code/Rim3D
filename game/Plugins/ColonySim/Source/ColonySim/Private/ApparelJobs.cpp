@@ -187,8 +187,20 @@ JobSystem::StepResult JobSystem::apparelWork(Entity pawn, Job& job, std::string&
         why = "the pawn isn't where the clothes lie";
         return StepResult::Failed;
     }
+    // Clothing goes on at once, armour takes 4 seconds a piece and a hit stops it (docs/design/armour.md).
+    const int steps = job.type == JobType::WearApparel ? apparel_->wearStepsFor(job.thing) : apparel_->rules().wearSteps;
+    if (job.type == JobType::WearApparel && job.count == 0 && steps > apparel_->rules().clothingWearSteps) {
+        const Health* health = reg.try_get<Health>(pawn);
+        const int64_t injuries = health != nullptr ? static_cast<int64_t>(health->injuries.size()) : 0;
+        if (job.until == 0) {
+            job.until = injuries + 1;  // the injuries it had when it started, plus one
+        } else if (injuries > job.until - 1) {
+            why = "hit while putting on armour";
+            return StepResult::Failed;
+        }
+    }
     job.progress += 1.0f;
-    if (job.progress < static_cast<float>(apparel_->rules().wearSteps)) {
+    if (job.progress < static_cast<float>(steps)) {
         return StepResult::Running;
     }
     std::string error;

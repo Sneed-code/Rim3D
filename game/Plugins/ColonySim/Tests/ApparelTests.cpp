@@ -1000,3 +1000,69 @@ TEST_CASE("Apparel: the clothing commands record into a replay and play back the
         CHECK(std::string(commandName(command)) == name);
     }
 }
+
+TEST_CASE("Apparel: worn weight slows walking; armour slows attacks and, a quarter as much, work") {
+    auto sim = apparelTestSim();
+    const entt::registry& reg = sim->things().registry();
+    const ApparelStats& stats = sim->apparel().stats();
+    const Entity pawn = apparelColonist(*sim, 20, 20);
+    CHECK(stats.moveFactor(reg, pawn) == doctest::Approx(1.0f));
+    // Cotton shirt and pants: 1 kg each, 2% slower, no slower to shoot or work.
+    apparelWear(*sim, pawn, "Apparel_TShirt");
+    apparelWear(*sim, pawn, "Apparel_Pants");
+    CHECK(stats.wornKg(reg, pawn) == doctest::Approx(2.0f));
+    CHECK(stats.moveFactor(reg, pawn) == doctest::Approx(1.0f / 1.02f));
+    CHECK(stats.attackTimeFactor(reg, pawn) == doctest::Approx(1.0f));
+    CHECK(stats.workFactor(reg, pawn) == doctest::Approx(1.0f));
+    // A cataphract suit (15 kg) and helmet (2 kg) over them; the tuque under the helmet weighs nothing.
+    apparelWear(*sim, pawn, "Apparel_Tuque");
+    apparelWear(*sim, pawn, "Apparel_CataphractArmor");
+    apparelWear(*sim, pawn, "Apparel_CataphractHelmet");
+    CHECK(stats.armourKg(reg, pawn) == doctest::Approx(17.0f));
+    CHECK(stats.wornKg(reg, pawn) == doctest::Approx(19.0f));
+    CHECK(stats.moveFactor(reg, pawn) == doctest::Approx(1.0f / 1.19f));
+    CHECK(stats.attackTimeFactor(reg, pawn) == doctest::Approx(1.17f));
+    CHECK(stats.workFactor(reg, pawn) == doctest::Approx(1.0f / (1.0f + 0.25f * 0.17f)));
+    // The weapon in its hands counts toward walking (a 2 kg longsword).
+    const Entity sword = sim->things().make(apparelDef(*sim, "Melee_Longsword"));
+    APPAREL_REQUIRE(sim->combat().equip(pawn, sword));
+    CHECK(stats.wornKg(reg, pawn) == doctest::Approx(21.0f));
+    // What it wears and holds is not in its carry load (sneed: it only slows the walk).
+    CHECK(sim->jobs().loadMass(pawn) == doctest::Approx(0.0));
+}
+
+TEST_CASE("Apparel: clothing goes on at once, armour takes 4 seconds, and a hit stops it") {
+    for (const bool hit : {false, true}) {
+        auto sim = apparelTestSim();
+        const Entity pawn = apparelColonist(*sim, 20, 20);
+        const Entity vest = apparelLying(*sim, 20, 20, "Apparel_FlakVest");
+        CHECK(sim->apparel().wearStepsFor(vest) == 120);
+        CHECK(sim->apparel().wearStepsFor(sim->things().make(apparelDef(*sim, "Apparel_TShirt"))) == 1);
+        int64_t started = -1;
+        int64_t worn = -1;
+        for (int i = 0; i < 400 && worn < 0; ++i) {
+            sim->step();
+            const Worker& w = sim->things().registry().get<Worker>(pawn);
+            if (started < 0 && w.job.type == JobType::WearApparel && w.job.thing == vest && w.job.progress > 0.0f) {
+                started = sim->time().seconds;
+                if (hit) {
+                    sim->step();
+                    sim->submit(DamagePawnCommand{pawn, "Cut", 2.0f, 0});
+                }
+            }
+            if (apparelWearing(*sim, pawn, vest)) {
+                worn = sim->time().seconds;
+            }
+            if (hit && started >= 0 && sim->time().seconds >= started + 121) {
+                break;
+            }
+        }
+        APPAREL_REQUIRE(started >= 0);
+        if (hit) {
+            CHECK(worn < 0);  // the hit stopped it
+        } else {
+            CHECK(worn - started >= 118);
+            CHECK(worn - started <= 124);
+        }
+    }
+}

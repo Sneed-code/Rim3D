@@ -338,7 +338,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
     movement_->setSpeedFactor([this](Entity pawn) {
         return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed")) *
-               combat_->staggerSpeedFactor(pawn);
+               combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn);
     });
     combat_->setBodySize([this](Entity pawn) {
         const float animal = animals_->bodySize(pawn);
@@ -364,6 +364,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setRoomStats(roomStats_.get());
     jobs_->setTalents(talents_.get());
     jobs_->setTraits(traits_.get());
+    jobs_->setGearWorkFactor([this](Entity pawn) { return combat_->apparelStats().workFactor(things_->registry(), pawn); });
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());

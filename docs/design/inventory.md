@@ -23,7 +23,8 @@ inventory" for drugs and meals is a later task).
 ## Weight
 
 Every item's weight is its def's `stats.mass` (RimWorld's kg) times the stack count, unchanged. A pawn's **load**
-is everything it carries: worn apparel, weapons, the bag and a hauled stack.
+is everything it carries: weapons on its body, the bag and a hauled stack. Since 2026-11-15 (sneed) what it wears and
+the weapon in its hands are not in the load: their weight slows its walk instead ([armour.md](armour.md) "Weight").
 
 **Capacity** (how much it can carry):
 

@@ -893,12 +893,8 @@ double JobSystem::gearMass(Entity pawn) const {
     for (const Entity item : gear->inventory) {
         mass += itemMassFor(pawn, item);
     }
-    if (carry_.present) {
-        mass += gear->weapon != kNoEntity ? itemMassFor(pawn, gear->weapon) : 0.0;
-        for (const Entity item : gear->apparel) {
-            mass += itemMassFor(pawn, item);
-        }
-    }
+    // What it wears and the weapon in its hands are not carried: their weight slows its walk instead
+    // (sneed, docs/design/armour.md, ApparelStats::moveFactor).
     return mass;
 }
 

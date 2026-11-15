@@ -345,6 +345,10 @@
     "taintedStageCap": 4,
     "defaultOutfit": "Anything",
     "wearSteps": 60,
+    "clothingWearSteps": 1,
+    "armourWearSteps": 120,
+    "weightKgPerSlowdown": 100,
+    "workWeightShare": 0.25,
     "stripStepsPerPiece": 60,
     "checkEverySteps": 1200,
     "scoreBase": 0.1,
@@ -356,7 +360,7 @@
     "taintedScorePenalty": 0.2,
     "minGain": 0.05,
     "unverified": ["wearSteps", "stripStepsPerPiece"],
-    "ours": ["wearFactor", "tatteredBenefitFactor", "tatteredMitigationFactor: sneed, a worn-down piece mitigates 33% less", "clothingInsulationCold", "clothingInsulationHeat: sneed, every regular garment gives +10 cold and +2 heat", "durabilityNote", "defaultOutfit", "wearSteps", "stripStepsPerPiece", "checkEverySteps", "scoreBase", "scoreSharp", "scoreBlunt", "scoreHeat", "scoreInsulationPerDegree", "scoreHpFloor", "taintedScorePenalty", "minGain"]
+    "ours": ["wearFactor", "tatteredBenefitFactor", "tatteredMitigationFactor: sneed, a worn-down piece mitigates 33% less", "clothingWearSteps", "armourWearSteps: sneed, 4 seconds a piece at 1x", "weightKgPerSlowdown", "workWeightShare: sneed, speed / (1 + kg / 100), work a quarter of armour kg", "clothingInsulationCold", "clothingInsulationHeat: sneed, every regular garment gives +10 cold and +2 heat", "durabilityNote", "defaultOutfit", "wearSteps", "stripStepsPerPiece", "checkEverySteps", "scoreBase", "scoreSharp", "scoreBlunt", "scoreHeat", "scoreInsulationPerDegree", "scoreHpFloor", "taintedScorePenalty", "minGain"]
   },
   {
     "defName": "MedicineRules", "source": "RimWorld wiki",

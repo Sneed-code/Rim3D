@@ -1,5 +1,6 @@
 #include "ColonySim/Melee.h"
 
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
@@ -417,7 +418,9 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         }
     }
     const Tool& tool = set->tools[m.tool];
-    const int windup = meleeWindup(rules_, tool.cooldown);
+    // Worn armour's weight slows a swing (docs/design/armour.md).
+    const int windup = std::max(1, static_cast<int>(std::lround(static_cast<float>(meleeWindup(rules_, tool.cooldown)) *
+                                                                 combat_.apparelStats().attackTimeFactor(things_.registry(), pawn))));
     m.phase = MeleePhase::Windup;
     m.stepsLeft = windup;
     m.target = target;
@@ -866,7 +869,11 @@ void MeleeSystem::step() {
                     strike(pawn, m);
                     const Tool* tool = toolOf(pawn, m);
                     m.phase = MeleePhase::Recovery;
-                    m.stepsLeft = tool != nullptr ? std::max(1, tool->cooldown - meleeWindup(rules_, tool->cooldown)) : 1;
+                    m.stepsLeft = tool != nullptr
+                                      ? std::max(1, static_cast<int>(std::lround(
+                                                        static_cast<float>(tool->cooldown - meleeWindup(rules_, tool->cooldown)) *
+                                                        combat_.apparelStats().attackTimeFactor(things_.registry(), pawn))))
+                                      : 1;
                 }
                 break;
         }
