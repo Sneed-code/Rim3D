@@ -39,6 +39,9 @@ def main():
     DEST.mkdir(parents=True, exist_ok=True)
     for layer, info in layers.items():
         have = [p for ext in ("jpg", "png") for p in [DEST / f"{layer}_color.{ext}", DEST / f"{layer}_normal.{ext}"] if p.exists()]
+        if info["source"] == "asset":
+            print(f"{layer}: textures already in the project ({info['color']}); run tools/electric_dreams.ps1 if missing")
+            continue
         if info["source"] == "local":
             print(f"{layer}: local files {'found' if len(have) >= 2 else 'MISSING'} in {DEST}")
             continue

@@ -4,6 +4,7 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Dom/JsonObject.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PostProcessComponent.h"
 #include "Components/SceneComponent.h"
@@ -67,6 +68,9 @@ namespace
 	// The sim's daylight curve (LightRules skyGlowByHour) rises from 05:00 to 07:00 and falls from 17:00 to 19:00,
 	// so the sun is on the horizon at 06:00 and 18:00.
 	constexpr float SkySunriseHour = 6.0f;
+	// The night sky's material (SkyArt commandlet) and how far away the star dome is drawn.
+	const TCHAR* const SkyStarMaterialPath = TEXT("/Game/Rim3D/Generated/Sky/M_StarSky.M_StarSky");
+	constexpr float SkyStarDomeRadiusCm = 5.0e6f;
 	constexpr float SkySunsetHour = 18.0f;
 	// The sun's noon height in degrees at midsummer and midwinter (the year's mid-points are days 22.5 and 52.5).
 	constexpr float SkyNoonElevationMean = 48.0f;
@@ -205,6 +209,20 @@ bool FLookConfig::Load(const FString& Path, FString& OutError)
 	LookNumber(FogJson, TEXT("lowSunMist"), LowSunMist);
 	LookNumber(FogJson, TEXT("lowSunMistFromDeg"), LowSunMistFromDeg);
 	LookNumber(FogJson, TEXT("lowSunMistToDeg"), LowSunMistToDeg);
+	const TSharedPtr<FJsonObject> MistJson = LookObject(Root, TEXT("morningMist"));
+	LookNumber(MistJson, TEXT("density"), MistDensity);
+	LookNumber(MistJson, TEXT("heightFalloff"), MistHeightFalloff);
+	LookNumber(MistJson, TEXT("heightOffsetCm"), MistHeightOffsetCm);
+	LookNumber(MistJson, TEXT("fromHour"), MistFromHour);
+	LookNumber(MistJson, TEXT("peakHour"), MistPeakHour);
+	LookNumber(MistJson, TEXT("toHour"), MistToHour);
+	LookNumber(MistJson, TEXT("evening"), MistEvening);
+	LookNumber(MistJson, TEXT("afterRain"), MistAfterRain);
+	LookNumber(MistJson, TEXT("baseShare"), MistBaseShare);
+	const TSharedPtr<FJsonObject> StarsJson = LookObject(Root, TEXT("stars"));
+	LookNumber(StarsJson, TEXT("brightness"), StarBrightness);
+	LookNumber(StarsJson, TEXT("latitudeDeg"), StarLatitudeDeg);
+	LookNumber(StarsJson, TEXT("cloudCut"), StarCloudCut);
 
 	const TSharedPtr<FJsonObject> FilmJson = LookObject(Root, TEXT("film"));
 	LookNumber(FilmJson, TEXT("slope"), FilmSlope);
@@ -442,6 +460,24 @@ FSkyState USkySubsystem::ComputeState(const colony::Sim& Sim, float Hour, float 
 	// A low mist while the sun is near the horizon, morning and evening, when it is not raining (the volumetric fog's light shafts).
 	S.FogDensity += Look.LowSunMist * SkySmooth(Look.LowSunMistFromDeg, Look.LowSunMistFromDeg + 3.0f, Elevation) *
 		(1.0f - SkySmooth(Look.LowSunMistToDeg - 6.0f, Look.LowSunMistToDeg, Elevation)) * (1.0f - S.Rain);
+	// Ground mist (the fog's second layer): it gathers in the small hours, is thickest about dawn and burns off by mid
+	// morning; wet ground (after rain) makes more, falling rain clears it (the rain's own fog takes over). A little comes
+	// back in the evening. Every morning gets baseShare of it; the rest follows how wet the ground is.
+	{
+		const auto Window = [](float H, float From, float Peak, float To)
+		{
+			if (H < From || H > To) { return 0.0f; }
+			return H <= Peak ? SkySmooth(From, Peak, H) : 1.0f - SkySmooth(Peak, To, H);
+		};
+		const float Morning = Window(Hour, Look.MistFromHour, Look.MistPeakHour, Look.MistToHour);
+		const float Evening = Look.MistEvening * Window(Hour, 18.5f, 21.5f, 24.0f) + Look.MistEvening * Window(Hour + 24.0f, 18.5f, 21.5f, 24.0f + Look.MistFromHour);
+		const float Damp = FMath::Clamp(Look.MistBaseShare + (1.0f - Look.MistBaseShare) * Look.MistAfterRain * FMath::Clamp(Effects.wetness * 1.5f, 0.0f, 1.0f), 0.0f, 1.5f);
+		S.MistDensity = Look.MistDensity * FMath::Max(Morning, Evening) * Damp * (1.0f - S.Rain) * (1.0f - S.Snow);
+	}
+	// Stars (the star dome): out once the sun is well down, gone under cloud; the sky turns once a sidereal day (a little
+	// more than once a day), set by the clock so a given hour shows the same sky season by season.
+	S.StarBrightness = Look.StarBrightness * (1.0f - SkySmooth(-14.0f, -4.0f, Elevation)) * FMath::Clamp(1.0f - S.Overcast * Look.StarCloudCut / 0.6f, 0.0f, 1.0f);
+	S.StarTurn = FMath::Fmod(2.0f * PI * ((Hour - 12.0f) / 24.0f + DayOfYear / SkyDaysPerYear) * 1.0027379f, 2.0f * PI);
 	// The fog's colour is the sky atmosphere's own; as the sky clouds over, snows or fogs up, a grey (or snow-white) veil lit by
 	// the sky's light is mixed in.
 	const float Veil = FMath::Max3(S.Overcast, S.Snow, FMath::Clamp((1.0f - Sight) / 0.6f, 0.0f, 1.0f));
@@ -672,6 +708,33 @@ void USkySubsystem::BuildScene()
 		UE_LOG(LogSky, Warning, TEXT("Could not load %s; no clouds"), SkyCloudMaterialPath);
 	}
 
+	// The star dome (SkyArt commandlet): a sphere 100 km across kept round the camera, drawn additively over the sky.
+	if (UMaterialInterface* StarBase = LoadObject<UMaterialInterface>(nullptr, SkyStarMaterialPath))
+	{
+		if (UStaticMesh* Sphere = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere")))
+		{
+			StarMaterial = UMaterialInstanceDynamic::Create(StarBase, this);
+			StarMaterial->SetScalarParameterValue(TEXT("StarLatitude"), FMath::DegreesToRadians(Look.StarLatitudeDeg));
+			StarDome = NewObject<UStaticMeshComponent>(Holder);
+			StarDome->SetStaticMesh(Sphere);
+			StarDome->SetMaterial(0, StarMaterial);
+			StarDome->SetMobility(EComponentMobility::Movable);
+			StarDome->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			StarDome->SetCastShadow(false);
+			StarDome->bAffectDistanceFieldLighting = false;
+			StarDome->bVisibleInReflectionCaptures = false;
+			StarDome->bVisibleInRealTimeSkyCaptures = false;
+			StarDome->SetWorldScale3D(FVector(SkyStarDomeRadiusCm / 50.0f));
+			StarDome->SetupAttachment(Root);
+			StarDome->SetUsingAbsoluteLocation(true);
+			StarDome->RegisterComponent();
+		}
+	}
+	else
+	{
+		UE_LOG(LogSky, Display, TEXT("No %s (run the SkyArt commandlet): the night sky has no stars"), SkyStarMaterialPath);
+	}
+
 	// Rain, snow and splashes.
 	SolidMaterial = LoadObject<UMaterialInterface>(nullptr, SkySolidMaterialPath);
 	if (SolidMaterial)
@@ -712,6 +775,8 @@ void USkySubsystem::DestroyScene()
 	Clouds = nullptr;
 	CloudMaterial = nullptr;
 	Exposure = nullptr;
+	StarDome = nullptr;
+	StarMaterial = nullptr;
 	RainInstances = nullptr;
 	SnowInstances = nullptr;
 	SplashInstances = nullptr;
@@ -754,6 +819,25 @@ void USkySubsystem::ApplyState(const FSkyState& New)
 	// Fog takes the sky atmosphere's colour; the veil is the grey of an overcast sky or the white of snow (ComputeState).
 	Fog->SetFogDensity(State.FogDensity);
 	Fog->SetFogInscatteringColor(State.FogVeil * GSkyFogLuminance.GetValueOnGameThread());
+	if (FMath::Abs(Fog->SecondFogData.FogDensity - State.MistDensity) > 0.0005f || Fog->SecondFogData.FogHeightFalloff != Look.MistHeightFalloff || bMistBaseMoved)
+	{
+		FExponentialHeightFogData Mist;
+		Mist.FogDensity = State.MistDensity;
+		Mist.FogHeightFalloff = Look.MistHeightFalloff;
+		// The fog's own height is the sky's (the world origin); the mist sits on the map's low ground.
+		Mist.FogHeightOffset = (MistBaseZ > -1.0e8 ? static_cast<float>(MistBaseZ - Fog->GetComponentLocation().Z) : 0.0f) + Look.MistHeightOffsetCm;
+		Fog->SetSecondFogData(Mist);
+		bMistBaseMoved = false;
+	}
+	if (StarMaterial)
+	{
+		StarMaterial->SetScalarParameterValue(TEXT("StarBrightness"), State.StarBrightness);
+		StarMaterial->SetScalarParameterValue(TEXT("StarTurn"), State.StarTurn);
+		if (StarDome && StarDome->IsVisible() != (State.StarBrightness > 0.0f))
+		{
+			StarDome->SetVisibility(State.StarBrightness > 0.0f);
+		}
+	}
 
 	// The weather's sky glow already dims the sun under cloud, so the clouds' own shadow on the ground fades out as the sky
 	// closes over (else an overcast day is darkened twice); scattered clouds keep their moving shadows.
@@ -906,6 +990,27 @@ void USkySubsystem::UpdateLightning(const colony::Sim& Sim, float RealDelta)
 
 // ---------------------------------------------------------------------------
 // Rain and snow.
+
+void USkySubsystem::FindMistBase(const colony::Sim& Sim, const USimSubsystem& Source)
+{
+	// Every fourth cell each way is plenty to find where the low ground is.
+	const colony::Map& Map = Sim.map();
+	TArray<float> Heights;
+	for (int32 Y = 0; Y < Map.height(); Y += 4)
+	{
+		for (int32 X = 0; X < Map.width(); X += 4)
+		{
+			Heights.Add(Map.groundHeight(X, Y));
+		}
+	}
+	if (Heights.IsEmpty())
+	{
+		return;
+	}
+	Heights.Sort();
+	MistBaseZ = Source.GetWorldOrigin().Z + static_cast<double>(Heights[Heights.Num() * 3 / 10]) * 100.0;
+	bMistBaseMoved = true;
+}
 
 double USkySubsystem::GroundZ(const colony::Sim& Sim, const USimSubsystem& Source, double X, double Y) const
 {
@@ -1135,11 +1240,13 @@ void USkySubsystem::Tick(float DeltaTime)
 	{
 		BuildScene();
 		BuiltGeneration = Source->GetSimGeneration();
+		FindMistBase(Sim, *Source);
 	}
 	else if (BuiltGeneration != Source->GetSimGeneration())
 	{
 		// A new game or a load: the weather starts over, so the particles and the soak do too.
 		BuiltGeneration = Source->GetSimGeneration();
+		FindMistBase(Sim, *Source);
 		ResetPrecipitation();
 		GroundWet = 0.0f;
 		LastWetnessSeconds = -1.0f;
@@ -1164,6 +1271,14 @@ void USkySubsystem::Tick(float DeltaTime)
 		DayOfYear = FMath::Fmod(GSkyDayOfYear.GetValueOnGameThread(), SkyDaysPerYear);
 	}
 	ApplyState(ComputeState(Sim, Hour, DayOfYear));
+	// The star dome stays centred on the camera, so the stars sit at the same place in the sky wherever it looks from.
+	if (StarDome && StarDome->IsVisible())
+	{
+		if (const APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0))
+		{
+			StarDome->SetWorldLocation(CameraManager->GetCameraLocation());
+		}
+	}
 	ApplyWetness(Sim, static_cast<float>(Source->GetGameSeconds()), DeltaTime);
 
 	// The air moves in real time, and holds still while the game is paused.

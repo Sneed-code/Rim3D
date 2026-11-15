@@ -116,6 +116,24 @@
       "installedTo": "assets/raw/sketchfab/ on the PC (not in Git), imported later by Z2 into game/Content/ThirdParty/Animals/",
       "usedFor": "tropical animals, birds and insects (Z2 to Z7)",
       "reinstall": "download each model again from its Sketchfab page (free account, Download button, glTF)"
+    },
+    {
+      "name": "Electric Dreams Environment, tropical part (Megascans plants, surfaces, decals)",
+      "source": "Epic Games' free Electric Dreams Environment sample on Fab (sneed added it to the library; on the PC as Documents/Unreal Projects/ElectricDreamsEnv)",
+      "licence": "Epic content (Fab Standard License for Epic-made content): free to use in Unreal Engine projects",
+      "version": "5.8 sample, copied 2026-11-15",
+      "installedTo": "game/Content/Megascans/ (3D_Plants, Surfaces, Decals: the tropical folders only), game/Content/MSPresets/, game/Content/Custom/CustomMaterials/ (the foliage master materials), not in Git",
+      "usedFor": "grass, bushes, palms and ground cover (L2), the jungle floor, mossy gravel and water ripples of the terrain material (L3)",
+      "reinstall": "create the Electric Dreams project from the Fab library (Epic launcher), then powershell -File tools/electric_dreams.ps1"
+    },
+    {
+      "name": "NASA Deep Star Maps 2020 (8k star map)",
+      "source": "https://svs.gsfc.nasa.gov/4851 (NASA/Goddard Space Flight Center Scientific Visualization Studio; Gaia DR2: ESA/Gaia/DPAC)",
+      "licence": "NASA imagery, free to use with the credit line above (credit in the game's credits)",
+      "version": "2020 release, celestial coordinates, starmap_2020_8k.exr",
+      "installedTo": "game/Content/ThirdParty/Sky/ (not in Git), made into /Game/Rim3D/Generated/Sky by the SkyArt commandlet",
+      "usedFor": "the night sky's stars and Milky Way",
+      "reinstall": "python tools/sky_textures.py, then UnrealEditor-Cmd game/Rim3D.uproject -run=SkyArt -unattended -nosplash -AllowCommandletRendering"
     }
   ]
 }

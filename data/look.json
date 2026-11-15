@@ -11,7 +11,7 @@
     "volumetricScattering": 1.0
   },
   "moon": {
-    "fullLux": 0.5,
+    "fullLux": 1.0,
     "newMoonShare": 0.25,
     "color": [0.62, 0.74, 1.0]
   },
@@ -55,6 +55,26 @@
     "lowSunMistToDeg": 14.0
   },
 
+  "morningMist": {
+    "_about": "Ground mist, the height fog's second layer: it gathers from fromHour, is thickest at peakHour (about dawn) and has burnt off by toHour; a little (evening share) comes back after dusk. Every morning gets baseShare of it and wet ground (after rain) adds up to afterRain more; falling rain or snow clears it. density uses the fog's units (0.3 is a mist you cannot see 50 m through); heightFalloff makes it a low layer (1.0: halves about every 8 m); heightOffsetCm lifts it.",
+    "density": 0.3,
+    "heightFalloff": 1.0,
+    "heightOffsetCm": 0,
+    "fromHour": 3.0,
+    "peakHour": 6.2,
+    "toHour": 9.5,
+    "evening": 0.15,
+    "baseShare": 0.4,
+    "afterRain": 1.0
+  },
+
+  "stars": {
+    "_about": "The night sky: NASA's Deep Star Maps 2020 (tools/sky_textures.py, SkyArt commandlet) on a dome round the camera. brightness multiplies the map (its Milky Way is about 0.03, so 0.6 gives a faint band as a dark-sky site shows it); latitudeDeg is the colony's latitude (the tropics: near the equator, so the sky turns overhead); cloudCut is how much cloud hides them.",
+    "brightness": 0.6,
+    "latitudeDeg": 5.0,
+    "cloudCut": 0.85
+  },
+
   "film": {
     "_about": "The engine's filmic tone curve, at its neutral defaults, then a small lift.",
     "slope": 0.88,
@@ -76,6 +96,30 @@
     "summer": { "white": 6700, "saturation": 1.07, "contrast": 1.05, "gain": [1.01, 1.0, 0.97] },
     "autumn": { "white": 6900, "saturation": 1.0, "contrast": 1.04, "gain": [1.03, 0.99, 0.94] },
     "winter": { "white": 6350, "saturation": 0.9, "contrast": 1.0, "gain": [0.98, 0.99, 1.02] }
+  },
+
+  "groundCover": {
+    "_about": "Cosmetic ground cover (task L2, docs/design/terrain.md): low leafy tufts and dead leaves on open fertile soil, never sim plants. Each cell tries perCell times; a try succeeds with chancePoor at minFertility up to chanceRich on rich soil (fertility 1.4), times underPlants where a sim plant grows, times the Terrain.GroundCover console value. Meshes are scaled to fitHeight metres; drawn out to cullDistance metres; leaves move in the wind out to windDistance metres.",
+    "meshes": [
+      "/Game/Megascans/3D_Plants/GroundCover/SM_GroundCover_01.SM_GroundCover_01",
+      "/Game/Megascans/3D_Plants/GroundCover/SM_GroundCover_03.SM_GroundCover_03",
+      "/Game/Megascans/3D_Plants/GroundCover/SM_GroundCover_05.SM_GroundCover_05",
+      "/Game/Megascans/3D_Plants/GroundCover/SM_GroundCover_07.SM_GroundCover_07",
+      "/Game/Megascans/3D_Plants/Periwinkle/SM_Periwinkle_01.SM_Periwinkle_01",
+      "/Game/Megascans/3D_Plants/Periwinkle/SM_Periwinkle_03.SM_Periwinkle_03",
+      "/Game/Megascans/3D_Plants/CloverVarieties/SM_CloverVarieties_02.SM_CloverVarieties_02",
+      "/Game/Megascans/3D_Plants/MoneyPlant/SM_MoneyPlant_01.SM_MoneyPlant_01",
+      "/Game/Megascans/3D_Plants/DeadLeaves/SM_DeadLeaves_01.SM_DeadLeaves_01"
+    ],
+    "fitHeight": 0.35,
+    "jitter": 0.3,
+    "cullDistance": 45,
+    "windDistance": 25,
+    "minFertility": 0.5,
+    "chancePoor": 0.4,
+    "chanceRich": 0.95,
+    "perCell": 3,
+    "underPlants": 0.5
   },
 
   "quality": {

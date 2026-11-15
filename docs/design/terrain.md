@@ -111,6 +111,35 @@ decide). A full copy of 119,000 plants each step would be wasteful, and plants c
 - Grass and flowers have a cull distance (90 m for grass), so a hundred thousand tufts are never
   all drawn. Trees are drawn out to 1.5 km. Anything under 1.5 m tall casts no shadow.
 
+### Real plant meshes and the ground cover (L2, 2026-11-15)
+
+Since the look pass L2 the tropical plants are Megascans meshes from Epic's free Electric Dreams sample, copied into
+`game/Content/Megascans/` with their `/Game` paths unchanged by `tools/electric_dreams.ps1` (not in Git; a fresh clone
+draws the old shapes until it is run). A plant def lists several meshes in `visual.meshes`; the cell's hash picks one,
+so a field of grass or a jungle understorey is not one plant copied. Each mesh is scaled so it stands `visual.fitHeight`
+metres tall when fully grown (times `visual.scale` and the matching `visual.meshScales` entry). Every mesh is its own
+instance kind, so a chunk holds one component per mesh in use: keep the lists short (four to eight).
+
+| Def | Meshes (Electric Dreams) | Height |
+| --- | --- | --- |
+| Plant_Grass, Plant_TallGrass | Kikuyu grass, 4 each | 0.35 m, 0.8 m |
+| Plant_Bush | jungle ginger, taro, arrowhead plant, Boston fern, bird of paradise | 1.1 m |
+| Plant_Brambles | fern, silver lady fern | 0.6 m |
+| Plant_Dandelion | white windflower | 0.3 m |
+| Plant_Moss | moss clumps | 0.1 m |
+| Plant_TreePalm | fan palm, Alexandra palm (stand-ins until L6) | 6 m |
+
+**Wind**: the Megascans foliage materials sway by world position offset. `visual.windDistance` (metres) is how far
+out a kind keeps moving (`SetWorldPositionOffsetDisableDistance`); past it the leaves hold still and cost nothing.
+`Terrain.WindDistance` scales every kind's distance (0 turns plant wind off), read when the terrain is built.
+
+**The ground cover** (`data/look.json` `"groundCover"`) is cosmetic and never a sim plant: low leafy tufts, clover and
+dead leaves on open soil with fertility at least `minFertility`. Each cell tries `perCell` times; a try succeeds with
+`chancePoor` at the lowest fertility up to `chanceRich` on rich soil, times `underPlants` where a sim plant grows. None
+on built or levelled cells, under any building, or inside a roofed room; a chunk's cover is rebuilt with its plants and
+whenever its ground is. It is drawn out to `cullDistance` (45 m) and casts no shadow. `Terrain.GroundCover` (0 to 1,
+read at build) thins it for slower PCs.
+
 ### The `visual` field of a plant def
 
 ```json

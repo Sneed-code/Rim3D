@@ -13,6 +13,9 @@ game/Plugins/*/Intermediate/
 # Third-party asset packs and plugins stay out of Git (see assets/README.md, assets/manifest.json)
 game/Plugins/ImGui/
 game/Content/Megascans/
+# Electric Dreams master materials the Megascans plants use (tools/electric_dreams.ps1)
+game/Content/MSPresets/
+game/Content/Custom/
 game/Content/MetaHumans/
 game/Content/Fab/
 game/Content/ThirdParty/
