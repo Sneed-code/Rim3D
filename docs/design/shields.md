@@ -80,7 +80,8 @@ section `apparel` 4.
 
 ## Not done yet
 
-- Unreal: a hold key for the protagonist and controlled pawns (sending `ShieldCommand` with the camera direction),
+- Unreal: hold the right mouse button to block (sneed, 2026-11-15) for the protagonist and controlled pawns (sending
+  `ShieldCommand` with the camera direction),
   shield models on the arm and the back, a raised-shield pose, block sparks on `ShieldBlocked`.
 - Raiders and traders don't carry shields yet (no pawn kind lists them).
 - Shield bash, and blocking with the weapon (melee.md) together with a shield.
