@@ -338,7 +338,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
     movement_->setSpeedFactor([this](Entity pawn) {
         return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed")) *
-               combat_->staggerSpeedFactor(pawn);
+               combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn);
     });
     combat_->setBodySize([this](Entity pawn) {
         const float animal = animals_->bodySize(pawn);
@@ -364,6 +364,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setRoomStats(roomStats_.get());
     jobs_->setTalents(talents_.get());
     jobs_->setTraits(traits_.get());
+    jobs_->setGearWorkFactor([this](Entity pawn) { return combat_->apparelStats().workFactor(things_->registry(), pawn); });
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
@@ -1019,6 +1020,20 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     }
     if (const auto* bag = std::get_if<InventoryCommand>(&command)) {
         applyInventoryCommand(*bag, id);
+        return;
+    }
+    if (const auto* fightGear = std::get_if<SetOutfitFightGearCommand>(&command)) {
+        std::string why;
+        if (!apparel_->setFightGear(fightGear->outfit, fightGear->armourInBag, fightGear->clothesInBag, why)) {
+            commandFailed(id, why);
+        }
+        return;
+    }
+    if (const auto* hideGear = std::get_if<HideGearCommand>(&command)) {
+        std::string why;
+        if (!apparel_->setHideGear(hideGear->pawn, hideGear->hide, why)) {
+            commandFailed(id, why);
+        }
         return;
     }
     // The comms console, before the long chain below (MSVC's limit on nested else-ifs).
@@ -2250,7 +2265,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.fittedParts.clear();
     out.outfits.clear();
     for (const OutfitPolicy& outfit : apparel_->outfits()) {
-        out.outfits.push_back(OutfitView{outfit.id, outfit.name});
+        out.outfits.push_back(OutfitView{outfit.id, outfit.name, outfit.armourInBag, outfit.clothesInBag});
     }
     out.designations.clear();
     for (const auto& [index, kind] : designations_->all()) {
@@ -2539,6 +2554,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (view.category == ThingCategory::Pawn) {
             view.outfit = apparel_->outfitOf(entity);
             view.markedForStrip = apparel_->stripMarked(entity);
+            view.hideGear = apparel_->gearHidden(entity);
+            if (const Dressing* dressing = reg.try_get<Dressing>(entity); dressing != nullptr && dressing->stepsLeft > 0) {
+                view.dressingSteps = dressing->stepsLeft;
+            }
         } else if (view.category == ThingCategory::Item && apparel_->stats().isApparel(thing.def)) {
             if (const MadeOf* made = reg.try_get<MadeOf>(entity)) {
                 view.stuff = made->stuff;

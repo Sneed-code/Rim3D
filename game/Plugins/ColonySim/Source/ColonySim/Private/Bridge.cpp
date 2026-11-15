@@ -252,6 +252,10 @@ const char* commandName(const Command& command) {
                         return "Scanner";
                     } else if constexpr (std::is_same_v<Type, InventoryCommand>) {
                         return "Inventory";
+                    } else if constexpr (std::is_same_v<Type, SetOutfitFightGearCommand>) {
+                        return "SetOutfitFightGear";
+                    } else if constexpr (std::is_same_v<Type, HideGearCommand>) {
+                        return "HideGear";
                     } else {
                         static_assert(std::is_same_v<Type, RerollColonistCommand>, "name every command type");
                         return "RerollColonist";

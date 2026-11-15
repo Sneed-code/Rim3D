@@ -126,7 +126,7 @@ float JobSystem::workFactor(Entity pawn) const {
     const Position* at = lights_ != nullptr ? things_.registry().try_get<Position>(pawn) : nullptr;
     // The light on the pawn, its drugs and its own nature: industrious works faster, lazy slower (TraitStats).
     return (at != nullptr ? lights_->workSpeedAt(cellOf(*at)) : 1.0f) * health_.workSpeedFactor(pawn) *
-           (traits_ != nullptr ? traits_->of(pawn).workSpeed : 1.0f);
+           (traits_ != nullptr ? traits_->of(pawn).workSpeed : 1.0f) * (gearWorkFactor_ ? gearWorkFactor_(pawn) : 1.0f);
 }
 
 double JobSystem::miningSpeed(Entity pawn) const {
