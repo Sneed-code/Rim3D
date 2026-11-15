@@ -1,13 +1,13 @@
 {
   "source": "Poly Haven (https://polyhaven.com) and ambientCG (https://ambientcg.com), both CC0, 1k JPG, colour and DirectX normal maps",
   "swap": "To use other textures (Megascans, say) set a layer's \"source\" to \"local\" and put <layer>_color.jpg|png and <layer>_normal.jpg|png (DirectX normals) in game/Content/ThirdParty/TerrainTextures/, then run the TerrainMaterials commandlet again. Nothing else changes.",
-  "fields": "source: polyhaven, ambientcg or local. id: the texture's name on that site. tileMetres: metres one repeat of the texture covers. roughness: 0 shiny to 1 matt.",
+  "fields": "source: polyhaven, ambientcg, local, or asset (color and normal name textures already in the project, such as the Electric Dreams Megascans surfaces copied by tools/electric_dreams.ps1). id: the texture's name on that site. tileMetres: metres one repeat of the texture covers. roughness: 0 shiny to 1 matt.",
   "layers": {
-    "grass":  {"source": "polyhaven", "id": "forrest_ground_01",         "tileMetres": 4.0, "roughness": 0.92},
+    "grass":  {"source": "asset", "color": "/Game/Megascans/Surfaces/MossyGrass/T_MossyGrass_01_BC.T_MossyGrass_01_BC", "normal": "/Game/Megascans/Surfaces/MossyGrass/T_MossyGrass_01_N.T_MossyGrass_01_N", "tileMetres": 3.0, "roughness": 0.9, "was": "polyhaven forrest_ground_01, 4 m"},
     "sand":   {"source": "polyhaven", "id": "coast_sand_01",             "tileMetres": 3.0, "roughness": 0.95},
-    "gravel": {"source": "polyhaven", "id": "gravel_embedded_concrete",  "tileMetres": 2.5, "roughness": 0.9},
+    "gravel": {"source": "asset", "color": "/Game/Megascans/Surfaces/JungleGround/T_JungleGround_01_BC.T_JungleGround_01_BC", "normal": "/Game/Megascans/Surfaces/JungleGround/T_JungleGround_01_N.T_JungleGround_01_N", "tileMetres": 2.5, "roughness": 0.88, "was": "polyhaven gravel_embedded_concrete, 2.5 m"},
     "rock":   {"source": "polyhaven", "id": "rock_face_03",              "tileMetres": 4.0, "roughness": 0.85}
   },
   "slope": {"rockFrom": 0.84, "rockFull": 0.62, "note": "the ground's up-facing normal (1 flat) below rockFrom starts to turn into rock and is all rock at rockFull"},
-  "water": {"color": [0.03, 0.12, 0.26], "roughness": 0.12}
+  "water": {"color": [0.035, 0.07, 0.06], "roughness": 0.06, "ripple": 0.35, "normal": "/Game/Megascans/Surfaces/SwampWater/T_SwampWater_01_N.T_SwampWater_01_N"}
 }

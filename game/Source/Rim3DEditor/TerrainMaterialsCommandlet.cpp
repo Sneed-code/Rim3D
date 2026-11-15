@@ -13,6 +13,7 @@
 #include "Materials/MaterialExpressionComponentMask.h"
 #include "Materials/MaterialExpressionCustom.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
+#include "Materials/MaterialExpressionTime.h"
 #include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "Materials/MaterialExpressionTextureObjectParameter.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
@@ -47,6 +48,13 @@ namespace
 		"float grass = saturate(1.0 - sand - rock - gravel - water);\n"
 		"float steep = (1.0 - smoothstep(SlopeFull, SlopeFrom, n.z)) * (1.0 - water);\n"
 		"grass *= 1.0 - steep; sand *= 1.0 - steep; gravel *= 1.0 - steep; rock = rock * (1.0 - steep) + steep;\n"
+		"float2 bq = P.xy / 140.0; float2 bi = floor(bq); float2 bf = frac(bq); bf = bf * bf * (3.0 - 2.0 * bf);\n"
+		"float4 b00 = frac(sin(float4(dot(bi, float2(127.1, 311.7)), dot(bi, float2(269.5, 183.3)), dot(bi, float2(419.2, 371.9)), dot(bi, float2(91.7, 233.1)))) * 43758.5453);\n"
+		"float4 b10 = frac(sin(float4(dot(bi + float2(1, 0), float2(127.1, 311.7)), dot(bi + float2(1, 0), float2(269.5, 183.3)), dot(bi + float2(1, 0), float2(419.2, 371.9)), dot(bi + float2(1, 0), float2(91.7, 233.1)))) * 43758.5453);\n"
+		"float4 b01 = frac(sin(float4(dot(bi + float2(0, 1), float2(127.1, 311.7)), dot(bi + float2(0, 1), float2(269.5, 183.3)), dot(bi + float2(0, 1), float2(419.2, 371.9)), dot(bi + float2(0, 1), float2(91.7, 233.1)))) * 43758.5453);\n"
+		"float4 b11 = frac(sin(float4(dot(bi + float2(1, 1), float2(127.1, 311.7)), dot(bi + float2(1, 1), float2(269.5, 183.3)), dot(bi + float2(1, 1), float2(419.2, 371.9)), dot(bi + float2(1, 1), float2(91.7, 233.1)))) * 43758.5453);\n"
+		"float4 bn = lerp(lerp(b00, b10, bf.x), lerp(b01, b11, bf.x), bf.y);\n"
+		"grass *= 0.35 + 1.3 * bn.x; sand *= 0.35 + 1.3 * bn.y; gravel *= 0.35 + 1.3 * bn.z; rock *= 0.35 + 1.3 * bn.w;\n"
 		"float total = max(grass + sand + gravel + rock + water, 0.0001);\n"
 		"grass /= total; sand /= total; gravel /= total; rock /= total; water /= total;\n"
 		"float3 tw = pow(abs(n), 4.0); tw /= (tw.x + tw.y + tw.z);\n"
@@ -58,7 +66,9 @@ namespace
 		"float2 rockZ = P.xy / (TileRock * 100.0);\n");
 
 	const TCHAR* const TerrColorCode = TEXT(
-		"float3 land = grass * Texture2DSample(GrassC, GrassCSampler, uvG).rgb\n"
+		"float2 uvG2 = float2(uvG.x * 0.21 - uvG.y * 0.12, uvG.x * 0.12 + uvG.y * 0.21);\n"
+		"float3 grassC = lerp(Texture2DSample(GrassC, GrassCSampler, uvG).rgb, Texture2DSample(GrassC, GrassCSampler, uvG2).rgb, 0.4);\n"
+		"float3 land = grass * grassC\n"
 		"  + sand * Texture2DSample(SandC, SandCSampler, uvS).rgb\n"
 		"  + gravel * Texture2DSample(GravelC, GravelCSampler, uvV).rgb\n"
 		"  + rock * (tw.x * Texture2DSample(RockC, RockCSampler, rockX).rgb + tw.y * Texture2DSample(RockC, RockCSampler, rockY).rgb + tw.z * Texture2DSample(RockC, RockCSampler, rockZ).rgb);\n"
@@ -75,7 +85,7 @@ namespace
 		"land *= lerp(1.0, 0.55, wet);\n"
 		"float rough = grass * RoughGrass + sand * RoughSand + gravel * RoughGravel + rock * RoughRock + water * WaterRough;\n"
 		"rough *= lerp(1.0, 0.3, wet);\n"
-		"float3 color = land + water * WaterColor;\n"
+		"float3 color = land + water * WaterColor * lerp(1.8, 1.0, smoothstep(0.5, 1.0, water));\n"
 		"color = lerp(color, float3(VCR, VCG, VCB), VCA);\n"
 		"rough = lerp(rough, 0.9, VCA);\n"
 		"return float4(color, rough);\n");
@@ -91,6 +101,9 @@ namespace
 		"float3 bump = float3(grass * nGrass + sand * nSand + gravel * nGravel, 0.0);\n"
 		"bump += rock * (tw.x * float3(0.0, nRx.x, nRx.y) + tw.y * float3(nRy.x, 0.0, nRy.y) + tw.z * float3(nRz.x, nRz.y, 0.0));\n"
 		"bump *= (1.0 - water) * (1.0 - VCA);\n"
+		"float2 w1 = Texture2DSample(WaterN, WaterNSampler, P.xy / 260.0 + float2(0.013, 0.007) * T).xy * 2.0 - 1.0;\n"
+		"float2 w2 = Texture2DSample(WaterN, WaterNSampler, P.yx / 410.0 - float2(0.009, 0.011) * T).xy * 2.0 - 1.0;\n"
+		"bump += water * (1.0 - VCA) * float3((w1 + w2) * WaterRipple, 0.0);\n"
 		"return normalize(n + bump);\n");
 
 	bool TerrSave(UObject* Object)
@@ -146,6 +159,33 @@ namespace
 		}
 		UE_LOG(LogTerrainMaterials, Error, TEXT("Importing %s made no texture"), *File);
 		return nullptr;
+	}
+
+	/**
+	 * A copy of a texture already in the project (a Megascans surface) as an ordinary streamed texture. The Megascans
+	 * ones are virtual textures, which the terrain's custom node cannot read (Rim3D has virtual texturing off), so the
+	 * copy turns that off and sets it up like a downloaded layer.
+	 */
+	UTexture2D* TerrCopyTexture(const FString& Path, const FString& Name, bool bNormal)
+	{
+		UTexture2D* Source = LoadObject<UTexture2D>(nullptr, *Path);
+		if (!Source)
+		{
+			UE_LOG(LogTerrainMaterials, Error, TEXT("Texture %s not found (run tools/electric_dreams.ps1?)"), *Path);
+			return nullptr;
+		}
+		UPackage* Package = CreatePackage(*(FString(TerrFolder) / TEXT("Textures") / Name));
+		UTexture2D* Copy = DuplicateObject<UTexture2D>(Source, Package, *Name);
+		Copy->SetFlags(RF_Public | RF_Standalone);
+		Copy->VirtualTextureStreaming = false;
+		Copy->LODGroup = bNormal ? TEXTUREGROUP_WorldNormalMap : TEXTUREGROUP_World;
+		Copy->CompressionSettings = bNormal ? TC_Normalmap : TC_Default;
+		Copy->SRGB = !bNormal;
+		Copy->AddressX = TA_Wrap;
+		Copy->AddressY = TA_Wrap;
+		Copy->PostEditChange();
+		TerrSave(Copy);
+		return Copy;
 	}
 
 	UMaterialExpression* TerrNode(UMaterial* Material, UClass* Class, int32 X, int32 Y)
@@ -228,6 +268,11 @@ namespace
 			TerrInput(ColorNode, Name, Node);
 			TerrInput(NormalNode, Name, Node);
 		};
+		TerrInput(NormalNode, TEXT("T"), TerrNode(Material, UMaterialExpressionTime::StaticClass(), -1400, 2100));
+		TerrInput(NormalNode, TEXT("WaterN"), TerrTexture(Material, TEXT("WaterNormal"), true, 2000));
+		double Ripple = 0.35;
+		Water->TryGetNumberField(TEXT("ripple"), Ripple);
+		TerrInput(NormalNode, TEXT("WaterRipple"), TerrScalar(Material, TEXT("WaterRipple"), Ripple, 2200));
 		BothGet(TEXT("SlopeFrom"), Slope->GetNumberField(TEXT("rockFrom")), 500);
 		BothGet(TEXT("SlopeFull"), Slope->GetNumberField(TEXT("rockFull")), 560);
 		int32 Y = 620;
@@ -293,6 +338,10 @@ namespace
 			UMaterialEditingLibrary::SetMaterialInstanceScalarParameterValue(Instance, *FString::Printf(TEXT("Tile%s"), TerrLayerNames[I]), static_cast<float>(Layer->GetNumberField(TEXT("tileMetres"))));
 			UMaterialEditingLibrary::SetMaterialInstanceScalarParameterValue(Instance, *FString::Printf(TEXT("Rough%s"), TerrLayerNames[I]), static_cast<float>(Layer->GetNumberField(TEXT("roughness"))));
 		}
+		if (UTexture2D* WaterNormal = Textures.FindRef(TEXT("water_normal")))
+		{
+			UMaterialEditingLibrary::SetMaterialInstanceTextureParameterValue(Instance, TEXT("WaterNormal"), WaterNormal);
+		}
 		UMaterialEditingLibrary::UpdateMaterialInstance(Instance);
 		return Instance;
 	}
@@ -320,17 +369,41 @@ int32 UTerrainMaterialsCommandlet::Main(const FString& Params)
 	IFileManager::Get().DeleteDirectory(*FPackageName::LongPackageNameToFilename(TerrFolder), false, true);
 
 	TMap<FString, UTexture2D*> Textures;
+	const TSharedPtr<FJsonObject> LayerList = Root->GetObjectField(TEXT("layers"));
 	for (const TCHAR* Layer : TerrLayers)
 	{
+		const TSharedPtr<FJsonObject> LayerJson = LayerList->GetObjectField(Layer);
+		const bool bAsset = LayerJson->GetStringField(TEXT("source")) == TEXT("asset");
 		for (const bool bNormal : {false, true})
 		{
 			const TCHAR* Kind = bNormal ? TEXT("normal") : TEXT("color");
-			UTexture2D* Texture = TerrImportTexture(Layer, Kind, bNormal);
+			UTexture2D* Texture = nullptr;
+			if (bAsset)
+			{
+				const FString Path = LayerJson->GetStringField(Kind);
+				Texture = TerrCopyTexture(Path, FString::Printf(TEXT("T_%s_%s"), Layer, Kind), bNormal);
+			}
+			else
+			{
+				Texture = TerrImportTexture(Layer, Kind, bNormal);
+			}
 			if (!Texture)
 			{
 				return 1;
 			}
 			Textures.Add(FString::Printf(TEXT("%s_%s"), Layer, Kind), Texture);
+		}
+	}
+	FString WaterNormalPath;
+	if (Root->GetObjectField(TEXT("water"))->TryGetStringField(TEXT("normal"), WaterNormalPath))
+	{
+		if (UTexture2D* WaterNormal = TerrCopyTexture(WaterNormalPath, TEXT("T_water_normal"), true))
+		{
+			Textures.Add(TEXT("water_normal"), WaterNormal);
+		}
+		else
+		{
+			UE_LOG(LogTerrainMaterials, Warning, TEXT("Water normal %s not found; the water stays flat"), *WaterNormalPath);
 		}
 	}
 	UMaterial* Master = TerrMakeMaster(Root);
