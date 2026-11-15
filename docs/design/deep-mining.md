@@ -24,6 +24,7 @@ left (300 a cell). **Nothing is there until a scanner finds it**: a find makes t
 | Uranium | 4 to 10 | 1 | 10 |
 | Jade | 1 to 5 | 0.5 | 10 |
 | Gold | 1 to 5 | 0.5 | 10 |
+| Copper (ours) | 20 to 40 | 3 | 45 |
 
 Plasteel, uranium, jade and gold are new items (stats unverified). A deposit grows from a random ground cell over
 random neighbours, going round water and cells that already hold a deposit. The layer has its own random stream
