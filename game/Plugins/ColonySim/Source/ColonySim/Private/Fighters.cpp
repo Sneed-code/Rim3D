@@ -548,7 +548,11 @@ void FighterSystem::see(Entity pawn, Fighter& f, const PawnInfo& self) {
             continue;
         }
         ++sightChecks_;
-        if (map_.cover().lineOfSight(eye, Viewpoint{p.x, p.y, p.level, p.stance})) {
+        // A turret's gun on its post shows over the barricades round it (the mini-turret's muzzle is 1.3 m up), as a
+        // pawn behind sandbags shows itself standing up to shoot: it is known and shot at, and the barricades take the
+        // shots aimed at its low body until they are broken down (docs/design/fighters.md "Turrets").
+        const Stance shows = p.turret ? Stance::Standing : p.stance;
+        if (map_.cover().lineOfSight(eye, Viewpoint{p.x, p.y, p.level, shows})) {
             learn(KnownEnemy{p.pawn, p.x, p.y, p.level, t});
         }
     }

@@ -782,10 +782,12 @@ struct DefnBarricadeFight {
     int mechShots = 0;
     int standing = 0;
     int turretHp = 0;
+    int barricadeHp = 0;     // left, all together
+    int barricadeHpMax = 0;  // at the start
     bool mechAble = true;
 };
 
-DefnBarricadeFight defnBarricadeFight(int away) {
+DefnBarricadeFight defnBarricadeFight(int away, int seconds = 120) {
     DefnBarricadeFight out;
     auto sim = defnSim();
     const Entity turret = defnPoweredTurret(*sim);
@@ -798,11 +800,14 @@ DefnBarricadeFight defnBarricadeFight(int away) {
         }
     }
     CHECK(barricades.size() == 7u);
+    for (const Entity b : barricades) {
+        out.barricadeHpMax += sim->things().registry().get<HitPoints>(b).current;
+    }
     const Entity mech = sim->things().spawn("Mech_Lancer", CellPos{15, 10 + away, 0});
     CHECK(mech != kNoEntity);
     sim->combat().equip(mech, sim->things().make(sim->defs().idOf("Things", "Gun_ChargeLance")));
     sim->submit(SetFactionCommand{mech, 3});
-    for (int i = 0; i < 30 * 120 && sim->things().registry().valid(turret); ++i) {
+    for (int i = 0; i < 30 * seconds && sim->things().registry().valid(turret); ++i) {
         sim->step();
         for (const Event& e : sim->events()) {
             out.turretShots += e.type == EventType::ShotFired && e.thing == turret ? 1 : 0;
@@ -810,28 +815,31 @@ DefnBarricadeFight defnBarricadeFight(int away) {
         }
     }
     out.standing = static_cast<int>(std::count_if(barricades.begin(), barricades.end(), [&](Entity b) { return sim->things().registry().valid(b); }));
+    for (const Entity b : barricades) {
+        out.barricadeHp += sim->things().registry().valid(b) ? sim->things().registry().get<HitPoints>(b).current : 0;
+    }
     out.turretHp = sim->things().registry().valid(turret) ? sim->things().registry().get<HitPoints>(turret).current : 0;
     const entt::registry& reg = sim->things().registry();
     out.mechAble = reg.valid(mech) && !reg.get<Health>(mech).dead && reg.get<Posture>(mech).stance != Stance::Prone;
-    MESSAGE("lancer ", away, " m off: turret shots ", out.turretShots, ", lancer shots ", out.mechShots, ", barricades standing ",
-            out.standing, ", turret hp ", out.turretHp, ", lancer ", out.mechAble ? "able" : "down");
+    MESSAGE("lancer ", away, " m off, ", seconds, " s: turret shots ", out.turretShots, ", lancer shots ", out.mechShots, ", barricades standing ",
+            out.standing, " (hp ", out.barricadeHp, " of ", out.barricadeHpMax, "), turret hp ", out.turretHp, ", lancer ", out.mechAble ? "able" : "down");
     return out;
 }
 }  // namespace
 
-TEST_CASE("Defense: barricades round the mini-turret hide it from a lancer, and it fires over them") {
+TEST_CASE("Defense: barricades round the mini-turret take the lancer's shots, and the turret fires over them") {
     // The player's answer to the lancer's longer reach (RimWorld's too): cover round the turret. The barricades
-    // (1.1 m) hide the turret's 0.8 m body from level ground, and its gun (muzzle 1.3 m) fires over them.
-    SUBCASE("out of the turret's reach the lancer has nothing to shoot") {
+    // (1.1 m) stand in front of the turret's 0.8 m body, and its gun (muzzle 1.3 m) fires over them. The gun shows over
+    // them, so the lancer knows the turret is there and shoots at it: the barricades take the hits.
+    SUBCASE("two minutes") {
         const DefnBarricadeFight f = defnBarricadeFight(33);
-        CHECK(f.mechShots == 0);
+        CHECK(f.mechShots > 0);
+        CHECK(f.turretShots > 0);
+        CHECK(f.barricadeHp < f.barricadeHpMax);
         CHECK(f.turretHp == 100);
     }
-    SUBCASE("inside it the turret shoots the lancer, which can't hit back") {
-        const DefnBarricadeFight f = defnBarricadeFight(26);
-        CHECK(f.turretShots > 0);
-        CHECK(f.mechShots == 0);
-        CHECK(f.turretHp == 100);
-        CHECK(f.standing == 7);
+    SUBCASE("ten minutes: it breaks barricades down (it wrecks the turret in the open in under two)") {
+        const DefnBarricadeFight f = defnBarricadeFight(33, 600);
+        CHECK(f.standing < 7);
     }
 }

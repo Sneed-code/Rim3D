@@ -66,6 +66,10 @@ its middle (an aimed shot at a point, `FighterSystem::fireAt`), and a bullet tha
 points; at none it is destroyed (and a mini-turret blows up, [defense.md](defense.md)). Only a fighter with a
 gun that doesn't charge in melee takes a turret on: a raider with a club or bare hands leaves it be, and
 nobody throws a grenade at one. Colonists never target their own.
+Its gun shows over barricades round it (seen as at standing height, the mini-turret's muzzle being 1.3 m up),
+so raiders know it is there and shoot at its middle all the same: the barricades in front take the hits until
+they break (test "barricades round the mini-turret take the lancer's shots"; a lancer that wrecks the turret in the
+open in under two minutes breaks two barricades and the turret within ten minutes). Raiders don't otherwise target buildings.
 
 **Focus fire** (colonists only, C25): an able enemy within the colonist's gun range counts `focusMetres`
 (8 m, ours) nearer for each friend already shooting it, itself included (so two colonists on two raiders

@@ -38,9 +38,10 @@ switched off (`FlickCommand`), it forgets its target and its burst and does noth
   meet the mechs.
 - **Behind barricades.** The gun sits on a post (`turret.muzzleHeight` 1.3 m, ours) above its 0.8 m body (fill 0.4),
   so it fires over barricades and sandbags (1.1 m) next to it, as RimWorld's turrets fire over adjacent cover. From
-  level ground the barricades hide the body: a lancer out of the turret's reach finds nothing to shoot, and one inside
-  it is shot at and can't answer (test "barricades round the mini-turret"). From higher ground, or round a gap, the
-  turret can still be hit. Raiders don't shoot barricades down yet.
+  level ground the barricades stand in front of the body. The gun shows over them, so raiders know the turret is there
+  and shoot at it: the barricades take the hits until they break, then the turret does ([fighters.md](fighters.md)
+  "Turrets"; a lancer that wrecks a bare turret in under two minutes breaks two barricades and the turret within ten). From higher ground, or round a gap, the turret is hit
+  sooner.
 - **Blowing up when hurt (RimWorld's rule).** A building whose def has `explosion` and `explodeWhenDamaged`
   (`belowHealth` 0.2, `chance` 0.5, `delayTicks` 240) may spark: the first time its HP drops below 20 %, it rolls
   once (`colony::Rng`), and on a hit it blows up 120 steps (4 s) later unless it is gone by then
