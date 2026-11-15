@@ -156,6 +156,7 @@ MentalBreakSystem::MentalBreakSystem(Things& things, Map& map, HealthSystem& hea
         kind.hoursMin = def.numberAt("durationHours", 0, 0.0);
         kind.hoursMax = std::max(kind.hoursMin, def.numberAt("durationHours", 1, kind.hoursMin));
         kind.count = static_cast<int>(def.integer("count", 0));
+        kind.trait = def.text("requiredTrait");
         for (size_t i = 0; i < def.count("requires"); ++i) {
             kind.needs.push_back(def.textAt("requires", i));
         }
@@ -299,6 +300,9 @@ void MentalBreakSystem::natural(Entity pawn, int64_t now, Rng& rng) {
     for (const Kind& kind : kinds_) {
         if (pyromaniac && kind.state != BreakState::FireSpree) {
             continue;
+        }
+        if (!kind.trait.empty() && !mood_.hasTrait(pawn, kind.trait)) {
+            continue;  // e.g. the fire-starting spree: pyromaniacs only
         }
         if (kind.band == band && provided(kind) && kind.commonality > 0.0 && feasible(pawn, kind, rng)) {
             options.push_back(&kind);
