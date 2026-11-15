@@ -42,7 +42,7 @@ def log(*a):
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mh_common import (make_wrinkle_map, round_hair_ends, add_genital_bone, add_horns, add_morphs, add_soft_bones, add_tail, add_tusks, dump_vertices,  # noqa: E402
+from mh_common import (write_body_areas, make_wrinkle_map, round_hair_ends, add_genital_bone, add_horns, add_morphs, add_soft_bones, add_tail, add_tusks, dump_vertices,  # noqa: E402
                        fuller_labia, grow_pubic_hair, lower_pubic_hair, make_pigment_mask, make_skin_normal, prepare_for_unreal,
                        write_materials)
 
@@ -218,6 +218,10 @@ try:
         sys.exit(0)
     if cfg.get("morphs"):
         add_morphs([o for o in export if o != rig], cfg["morphs"], log=log)
+    # Where markings go on this body (areas.json, for the creator).
+    if cfg.get("body_areas"):
+        os.makedirs(os.path.dirname(cfg["out"]), exist_ok=True)
+        write_body_areas(rig, body, os.path.join(os.path.dirname(cfg["out"]), "areas.json"), log=log)
     # Wrinkles from the face units ("wrinkles": {group: [morph names]}; RGBA, one group a channel).
     wrinkles = None
     if cfg.get("wrinkles") and cfg.get("morphs"):

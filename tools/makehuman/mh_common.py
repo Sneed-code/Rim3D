@@ -1056,3 +1056,95 @@ def make_wrinkle_map(body, morphs, groups, out_path, size=2048, spacing=0.016, l
     img.file_format = "PNG"
     img.save()
     return out_path
+
+
+def write_body_areas(rig, body, out_path, log=print):
+    """Where markings go on this body (the creator's tattoos, scars, paint): for each area a point on the skin found
+    from the bones (the outside of the upper arm, the chest, the back...), its texture coordinates, which way is up
+    the body there in texture space, and how much texture a metre of skin there is. Written as areas.json."""
+    import json as _json
+    import math
+    from mathutils import Vector
+    import numpy as np
+    to_rig = rig.matrix_world.inverted() @ body.matrix_world
+    mesh = body.data
+    pts = np.array([tuple(to_rig @ v.co) for v in mesh.vertices])
+    uv_layer = mesh.uv_layers.active
+    loop_uv = np.empty(len(mesh.loops) * 2, dtype=np.float32)
+    uv_layer.data.foreach_get("uv", loop_uv)
+    loop_uv = loop_uv.reshape(-1, 2)
+    loop_vert = np.empty(len(mesh.loops), dtype=np.int64)
+    mesh.loops.foreach_get("vertex_index", loop_vert)
+    vuv = np.zeros((len(pts), 2), dtype=np.float32)
+    vuv[loop_vert[::-1]] = loop_uv[::-1]
+    bones = rig.data.bones
+
+    def B(name, at=0.5):
+        b = bones.get(name)
+        return None if b is None else b.head_local.lerp(b.tail_local, at)
+
+    def axis(name):
+        b = bones.get(name)
+        return None if b is None else (b.tail_local - b.head_local).normalized()
+
+    up = Vector((0, 0, 1))
+    front, back = Vector((0, -1, 0)), Vector((0, 1, 0))
+    specs = {}
+    for s, sx in (("L", 1.0), ("R", -1.0)):
+        side = "l" if s == "L" else "r"
+        out = Vector((sx, 0, 0))
+        specs["UpperArm" + s] = (B("upperarm_" + side), out, -axis("upperarm_" + side) if axis("upperarm_" + side) else up)
+        specs["Forearm" + s] = (B("lowerarm_" + side), (out + back * 0.6).normalized(), -axis("lowerarm_" + side) if axis("lowerarm_" + side) else up)
+        specs["Shoulder" + s] = (B("upperarm_" + side, 0.05), (out + up * 0.6).normalized(), up)
+        specs["Chest" + s] = ((B("clavicle_" + side, 0.55) or Vector()) - up * 0.09, front, up)  # the upper chest, under the collarbone
+        specs["Thigh" + s] = (B("thigh_" + side), out, -axis("thigh_" + side) if axis("thigh_" + side) else up)
+        specs["Calf" + s] = (B("calf_" + side, 0.35), (out + back).normalized(), -axis("calf_" + side) if axis("calf_" + side) else up)
+        specs["Cheek" + s] = ((B("head", 0.02) or Vector()) + out * 0.03, (front + out * 0.25).normalized(), up)
+    specs["Belly"] = (B("spine_01", 0.6), front, up)
+    specs["UpperBack"] = (B("spine_03", 0.4), back, up)
+    specs["LowerBack"] = (B("spine_01", 0.3), back, up)
+    specs["Neck"] = (B("neck_01", 0.5), front, up)
+    specs["Forehead"] = ((B("head", 0.6) or Vector()), front, up)
+    areas = {}
+    for name, (p, d, u) in specs.items():
+        if p is None:
+            continue
+        P = np.array(tuple(p))
+        D = np.array(tuple(d))
+        rel = pts - P
+        along = rel @ D
+        lateral = np.linalg.norm(rel - np.outer(along, D), axis=1)
+        score = np.where((lateral < 0.06) & (along > -0.02), along - 3.0 * lateral, -1e9)
+        i = int(np.argmax(score))
+        if score[i] < -1e8:
+            log("area", name, "not found")
+            continue
+        def measure(direction):
+            # Texture per metre along a direction: both ways, the side that does not jump a seam.
+            best = None
+            for sign in (1.0, -1.0):
+                k = int(np.argmin(np.linalg.norm(pts - (pts[i] + sign * 0.025 * direction), axis=1)))
+                m = float(np.linalg.norm(pts[k] - pts[i]))
+                duv = vuv[k] - vuv[i]
+                if m < 1e-4 or np.linalg.norm(duv) > 0.08:
+                    continue
+                if best is None or np.linalg.norm(duv) / m < best[0]:
+                    best = (float(np.linalg.norm(duv)) / m, sign * duv)
+            return best
+        U = np.array(tuple(u))
+        up_m = measure(U)
+        across = np.cross(U, D)
+        across = across / (np.linalg.norm(across) or 1.0)
+        across_m = measure(across)
+        if up_m is None:
+            log("area", name, "on a seam")
+            continue
+        du = up_m[1]
+        # In image space (v down), the angle of "up the body" from the image's up.
+        angle = math.atan2(float(du[0]), float(du[1]))
+        areas[name] = {"u": float(vuv[i][0]), "v": float(1.0 - vuv[i][1]), "angle": angle, "scale": up_m[0],
+                       "scale_across": across_m[0] if across_m else up_m[0]}
+    with open(out_path, "w", encoding="utf-8") as f:
+        _json.dump(areas, f, indent=1)
+    log("body areas", len(areas), "to", out_path)
+    return areas

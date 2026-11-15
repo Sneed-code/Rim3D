@@ -13,6 +13,10 @@
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Paths.h"
+#include "Misc/FileHelper.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "UnrealClient.h"
 #include "Misc/Parse.h"
 
@@ -36,6 +40,54 @@
 namespace
 {
 	enum class ECreatorKind : int32 { Baseline, Imp, Orcoid };
+
+	// Markings (tools/makehuman/markings.py): the atlas's 16 designs, the kind of mark each makes (0 tattoo ink, 1 scar,
+	// 2 brand, 3 paint), and where they go (areas.json beside each base, from mh_export.py).
+	const char* const CreatorMarkNames[16] = {"Tribal band", "Tribal flame", "Mandala", "Star", "Script", "Spiral", "Runes", "Dot ring",
+		"Scar: slash", "Scar: claws", "Scar: burn", "Scar: stitched", "Brand", "Paint: stripes", "Paint: dots", "Paint: hand"};
+	int32 CreatorMarkKind(int32 Design) { return Design < 8 ? 0 : (Design < 12 ? 1 : (Design == 12 ? 2 : 3)); }
+	struct FCreatorMark
+	{
+		bool bOn = false;
+		int32 Design = 0;
+		FString Area = TEXT("UpperArmL");
+		float Size = 12.0f;        // cm across
+		float Angle = 0.0f;        // degrees
+		float Opacity = 0.9f;
+		float Colour[3] = {0.08f, 0.10f, 0.14f};  // ink; paint colour for paint
+	};
+	struct FCreatorArea
+	{
+		float U = 0.5f, V = 0.5f, Angle = 0.0f, Scale = 1.0f, ScaleAcross = 1.0f;
+	};
+	/** The marking areas of a base (areas.json), read once. */
+	const TMap<FString, FCreatorArea>& CreatorAreas(const FString& Base)
+	{
+		static TMap<FString, TMap<FString, FCreatorArea>> Cache;
+		if (const TMap<FString, FCreatorArea>* Found = Cache.Find(Base))
+		{
+			return *Found;
+		}
+		TMap<FString, FCreatorArea>& Areas = Cache.Add(Base);
+		FString Text;
+		TSharedPtr<FJsonObject> Json;
+		if (FFileHelper::LoadFileToString(Text, *(FPaths::ProjectSavedDir() / TEXT("MakeHuman") / Base / TEXT("areas.json"))) &&
+			FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Json) && Json)
+		{
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Entry : Json->Values)
+			{
+				const TSharedPtr<FJsonObject> A = Entry.Value->AsObject();
+				FCreatorArea Area;
+				Area.U = A->GetNumberField(TEXT("u"));
+				Area.V = A->GetNumberField(TEXT("v"));
+				Area.Angle = A->GetNumberField(TEXT("angle"));
+				Area.Scale = A->GetNumberField(TEXT("scale"));
+				Area.ScaleAcross = A->HasField(TEXT("scale_across")) ? A->GetNumberField(TEXT("scale_across")) : Area.Scale;
+				Areas.Add(Entry.Key, Area);
+			}
+		}
+		return Areas;
+	}
 
 	// Scalp hair styles: each a mesh on the bases (MPFB hairs, creator.json "hairs"), found by its material slot's name;
 	// the creator shows one (or none: bald).
@@ -116,6 +168,7 @@ namespace
 		float PubicLength = 1.0f;  // 1 natural .. 0.35 trimmed (PubicShort)
 		float PubicCurl = 1.0f;    // 1 curly .. 0 straighter (PubicStraight)
 		bool bJiggle = true;
+		FCreatorMark Marks[4];     // tattoos, scars, brands, paint: only what the player picks (never generated)
 		int32 HairStyle = -1;      // CreatorHairStyles; -1: the base's first (long for the woman, short for the man)
 		int32 Expression = 0;      // CreatorExpressions
 		float ExpressionStrength = 1.0f;
@@ -244,12 +297,40 @@ namespace
 		}
 		if (UMaterialInterface* Wanted = CreatorSkinMaterial(P.Looks.MakeHuman, b4KSkin))
 		{
+			// The skin as its own instance (for the markings), made again when the 2K / 4K skin is swapped.
+			const TMap<FString, FCreatorArea>& Areas = CreatorAreas(P.Looks.MakeHuman);
 			for (int32 i = 0; i < Mesh->GetNumMaterials(); ++i)
 			{
-				const UMaterialInterface* Now = Mesh->GetMaterial(i);
-				if (Now && Now != Wanted && Now->GetName().StartsWith(MakeHumanSkinName(P.Looks.MakeHuman)))
+				UMaterialInterface* Now = Mesh->GetMaterial(i);
+				UMaterialInstanceDynamic* Dynamic = Cast<UMaterialInstanceDynamic>(Now);
+				const UMaterialInterface* Base = Dynamic ? Dynamic->Parent.Get() : Now;
+				if (!Base || !Base->GetName().StartsWith(MakeHumanSkinName(P.Looks.MakeHuman)))
 				{
-					Mesh->SetMaterial(i, Wanted);
+					continue;
+				}
+				if (!Dynamic || Base != Wanted)
+				{
+					Dynamic = UMaterialInstanceDynamic::Create(Wanted, Mesh);
+					Mesh->SetMaterial(i, Dynamic);
+				}
+				for (int32 m = 0; m < 4; ++m)
+				{
+					const FCreatorMark& Mark = P.Marks[m];
+					const FCreatorArea* Area = Areas.Find(Mark.Area);
+					if (!Mark.bOn || !Area)
+					{
+						Dynamic->SetVectorParameterValue(*FString::Printf(TEXT("Mark%dB"), m), FLinearColor(0, 0, 0, 0));
+						continue;
+					}
+					// Texture across and up the stamp (the skin's texture stretches differently each way).
+					const float Across = Area->ScaleAcross * Mark.Size / 100.0f;
+					const float Up = Area->Scale * Mark.Size / 100.0f;
+					Dynamic->SetVectorParameterValue(*FString::Printf(TEXT("Mark%dA"), m),
+						FLinearColor(Area->U, Area->V, Area->Angle + FMath::DegreesToRadians(Mark.Angle), Across));
+					Dynamic->SetVectorParameterValue(*FString::Printf(TEXT("Mark%dB"), m),
+						FLinearColor(static_cast<float>(Mark.Design), Mark.Opacity, static_cast<float>(CreatorMarkKind(Mark.Design)), Up));
+					Dynamic->SetVectorParameterValue(*FString::Printf(TEXT("Mark%dC"), m),
+						FLinearColor::FromSRGBColor(FLinearColor(Mark.Colour[0], Mark.Colour[1], Mark.Colour[2]).ToFColor(false)));
 				}
 			}
 		}
@@ -556,6 +637,32 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		}
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorFocusZ="), State->FocusOffset.Z);
 		State->b4KSkin = FParse::Param(FCommandLine::Get(), TEXT("Creator4K"));
+		FString MarkArg;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorMark="), MarkArg, false))
+		{
+			// -CreatorMark=design:area[:size],design:area[:size]...
+			TArray<FString> Items;
+			MarkArg.ParseIntoArray(Items, TEXT(","));
+			for (FCreatorPerson& Person : State->People)
+			{
+				for (int32 m = 0; m < FMath::Min(4, Items.Num()); ++m)
+				{
+					TArray<FString> Parts;
+					Items[m].ParseIntoArray(Parts, TEXT(":"));
+					if (Parts.Num() >= 2)
+					{
+						Person.Marks[m].bOn = true;
+						Person.Marks[m].Design = FCString::Atoi(*Parts[0]);
+						Person.Marks[m].Area = Parts[1];
+						Person.Marks[m].Size = Parts.Num() > 2 ? FCString::Atof(*Parts[2]) : 14.0f;
+						if (CreatorMarkKind(Person.Marks[m].Design) == 3)
+						{
+							Person.Marks[m].Colour[0] = 0.75f, Person.Marks[m].Colour[1] = 0.12f, Person.Marks[m].Colour[2] = 0.08f;
+						}
+					}
+				}
+			}
+		}
 		FString HairLabel;
 		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorHair="), HairLabel))
 		{
@@ -960,6 +1067,54 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 								Unit = 0.0f;
 							}
 						}
+					}
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("Markings"))
+				{
+					const TMap<FString, FCreatorArea>& Areas = CreatorAreas(P.Looks.MakeHuman);
+					if (Areas.IsEmpty())
+					{
+						ImGui::TextDisabled("No body areas for this base (rebuild it with mh_creator.py)");
+					}
+					TArray<FString> AreaNames;
+					Areas.GetKeys(AreaNames);
+					AreaNames.Sort();
+					for (int32 m = 0; m < 4; ++m)
+					{
+						FCreatorMark& Mark = P.Marks[m];
+						ImGui::PushID(m);
+						ImGui::SeparatorText(TCHAR_TO_UTF8(*FString::Printf(TEXT("Mark %d"), m + 1)));
+						ImGui::Checkbox("On", &Mark.bOn);
+						if (Mark.bOn)
+						{
+							ImGui::SameLine();
+							ImGui::SetNextItemWidth(220.0f * Scale);
+							ImGui::Combo("Design", &Mark.Design, CreatorMarkNames, 16);
+							int32 AreaIndex = FMath::Max(0, AreaNames.IndexOfByKey(Mark.Area));
+							TArray<FTCHARToUTF8> Utf8;
+							TArray<const char*> Items;
+							for (const FString& Name : AreaNames)
+							{
+								Utf8.Emplace(*Name);
+							}
+							for (const FTCHARToUTF8& Item : Utf8)
+							{
+								Items.Add(Item.Get());
+							}
+							if (!Items.IsEmpty() && ImGui::Combo("Where", &AreaIndex, Items.GetData(), Items.Num()))
+							{
+								Mark.Area = AreaNames[AreaIndex];
+							}
+							ImGui::SliderFloat("Size (cm)", &Mark.Size, 3.0f, 40.0f, "%.0f");
+							ImGui::SliderFloat("Turn", &Mark.Angle, -180.0f, 180.0f, "%.0f");
+							ImGui::SliderFloat("Strength", &Mark.Opacity, 0.0f, 1.0f, "%.2f");
+							if (CreatorMarkKind(Mark.Design) == 0 || CreatorMarkKind(Mark.Design) == 3)
+							{
+								ImGui::ColorEdit3(CreatorMarkKind(Mark.Design) == 0 ? "Ink" : "Paint", Mark.Colour);
+							}
+						}
+						ImGui::PopID();
 					}
 					ImGui::EndTabItem();
 				}

@@ -363,6 +363,106 @@ namespace
 			UMaterialEditingLibrary::ConnectMaterialProperty(Wrinkle, TEXT(""), MP_Normal);
 		}
 
+		// Markings (tools/makehuman/markings.py: a 4 by 4 atlas of designs): up to four stamps by texture coordinates,
+		// each MarkNA (u, v, angle, texture across the stamp), MarkNB (design 0-15, opacity, kind, texture up the stamp), MarkNC (colour).
+		// Kinds: 0 tattoo ink, 1 scar (paler, raised), 2 brand (darker, raised), 3 paint (opaque colour).
+		{
+			auto* Atlas = Cast<UMaterialExpressionTextureObjectParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureObjectParameter::StaticClass(), -1400, -900));
+			Atlas->ParameterName = TEXT("MarkAtlas");
+			Atlas->Texture = LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineResources/Black.Black"));
+			Atlas->SamplerType = UMaterialExpressionTextureBase::GetSamplerTypeForTexture(Atlas->Texture);
+			auto* MarkUV = Cast<UMaterialExpressionTextureCoordinate>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureCoordinate::StaticClass(), -1400, -1000));
+			TArray<UMaterialExpressionVectorParameter*> Marks;
+			for (int32 m = 0; m < 4; ++m)
+			{
+				for (const TCHAR* Part : {TEXT("A"), TEXT("B"), TEXT("C")})
+				{
+					auto* P = Cast<UMaterialExpressionVectorParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVectorParameter::StaticClass(), -1400, -800 + Marks.Num() * 60));
+					P->ParameterName = FName(*FString::Printf(TEXT("Mark%d%s"), m, Part));
+					P->DefaultValue = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+					Marks.Add(P);
+				}
+			}
+			const FString Stamp = TEXT("float4 Stamp(float2 uv, float4 A, float4 B, Texture2D Tex, SamplerState S)\n"
+				"{\n"
+				"  if (B.y <= 0.001 || A.w <= 0.0001) return 0;\n"
+				"  float2 size = float2(A.w, B.w > 0.0001 ? B.w : A.w);\n"
+				"  float2 d = float2(uv.x - A.x, uv.y - A.y);\n"
+				"  float c = cos(A.z), s = sin(A.z);\n"
+				"  float2 l = float2(c * d.x - s * d.y, -(s * d.x + c * d.y)) / size + 0.5;\n"
+				"  if (any(l < 0.0) || any(l > 1.0)) return 0;\n"
+				"  float cell = floor(B.x + 0.5);\n"
+				"  float2 at = (float2(fmod(cell, 4.0), floor(cell / 4.0)) + l) / 4.0;\n"
+				"  return float4(Tex.SampleLevel(S, at, 0).r * B.y, B.z, 0, 0);\n"
+				"}\n");
+			// The colour: each stamp over the last.
+			auto* MarkColour = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -150, -700));
+			MarkColour->OutputType = CMOT_Float3;
+			MarkColour->Description = TEXT("SkinMarkings");
+			MarkColour->Code = TEXT("struct F { ") + Stamp + TEXT(" } f;\n"
+				"float3 col = Base;\n"
+				"float4 A[4] = {M0A, M1A, M2A, M3A}; float4 B[4] = {M0B, M1B, M2B, M3B}; float3 C[4] = {M0C.rgb, M1C.rgb, M2C.rgb, M3C.rgb};\n"
+				"for (int i = 0; i < 4; ++i)\n"
+				"{\n"
+				"  float4 st = f.Stamp(UV, A[i], B[i], Atlas, AtlasSampler);\n"
+				"  float a = saturate(st.x); float k = floor(st.y + 0.5);\n"
+				"  if (a <= 0.0) continue;\n"
+				"  if (k < 0.5) col = lerp(col, col * C[i], a);\n"
+				"  else if (k < 1.5) col = lerp(col, saturate(col * float3(1.12, 0.98, 0.97) + 0.04), a);\n"
+				"  else if (k < 2.5) col = lerp(col, col * float3(0.55, 0.36, 0.33), a);\n"
+				"  else col = lerp(col, C[i], a);\n"
+				"}\n"
+				"return col;");
+			// The normal: scars and brands raised a little.
+			auto* MarkNormal = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -150, -500));
+			MarkNormal->OutputType = CMOT_Float3;
+			MarkNormal->Description = TEXT("SkinMarkingsNormal");
+			MarkNormal->Code = TEXT("struct F { ") + Stamp + TEXT(" } f;\n"
+				"float4 A[4] = {M0A, M1A, M2A, M3A}; float4 B[4] = {M0B, M1B, M2B, M3B};\n"
+				"float2 e = float2(0.0005, 0);\n"
+				"float h = 0, hx = 0, hy = 0;\n"
+				"for (int i = 0; i < 4; ++i)\n"
+				"{\n"
+				"  float k = floor(B[i].z + 0.5);\n"
+				"  if (k < 0.5 || k > 2.5 || B[i].y <= 0.001) continue;\n"
+				"  h += f.Stamp(UV, A[i], B[i], Atlas, AtlasSampler).x;\n"
+				"  hx += f.Stamp(UV + e.xy, A[i], B[i], Atlas, AtlasSampler).x;\n"
+				"  hy += f.Stamp(UV + e.yx, A[i], B[i], Atlas, AtlasSampler).x;\n"
+				"}\n"
+				"if (h + hx + hy <= 0.0) return Base;\n"
+				"float3 n = normalize(float3((h - hx) * 2.5, (h - hy) * 2.5, 1.0));\n"
+				"return normalize(float3(Base.xy + n.xy, Base.z * n.z));");
+			for (UMaterialExpressionCustom* Node : {MarkColour, MarkNormal})
+			{
+				Node->Inputs.Reset();
+				for (const TCHAR* InputName : {TEXT("Base"), TEXT("UV"), TEXT("Atlas")})
+				{
+					Node->Inputs.AddDefaulted_GetRef().InputName = InputName;
+				}
+				Node->Inputs[1].Input.Connect(0, MarkUV);
+				Node->Inputs[2].Input.Connect(0, Atlas);
+				for (int32 m = 0; m < 4; ++m)
+				{
+					for (int32 p = 0; p < (Node == MarkColour ? 3 : 2); ++p)
+					{
+						FCustomInput& In = Node->Inputs.AddDefaulted_GetRef();
+						In.InputName = FName(*FString::Printf(TEXT("M%d%s"), m, p == 0 ? TEXT("A") : (p == 1 ? TEXT("B") : TEXT("C"))));
+						In.Input.Connect(5, Marks[m * 3 + p]);  // RGBA
+					}
+				}
+			}
+			if (UMaterialExpression* BaseColorIn = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_BaseColor))
+			{
+				MarkColour->Inputs[0].Input.Connect(0, BaseColorIn);
+				UMaterialEditingLibrary::ConnectMaterialProperty(MarkColour, TEXT(""), MP_BaseColor);
+			}
+			if (UMaterialExpression* NormalIn = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_Normal))
+			{
+				MarkNormal->Inputs[0].Input.Connect(0, NormalIn);
+				UMaterialEditingLibrary::ConnectMaterialProperty(MarkNormal, TEXT(""), MP_Normal);
+			}
+		}
+
 		// Roughness map (the 4K skin's): mid-grey keeps the material's Roughness, lighter rougher, darker smoother, by
 		// RoughnessMapAmount (0 on the 2K skin, which has no map).
 		if (UMaterialExpression* RoughnessValue = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_Roughness))
@@ -1069,6 +1169,26 @@ namespace
 						UTexture* NormalToUse = SkinNormal ? static_cast<UTexture*>(SkinNormal) : LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineMaterials/FlatNormal.FlatNormal"));
 						SkinInstance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamNormal), NormalToUse);
 						// The areolae and genitals, darker and warmer by the pawn's pigment (custom primitive data 3).
+						// The markings atlas (tools/makehuman/markings.py), shared by every skin.
+						{
+							const FString AtlasFile = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("MakeHuman/Markings/markings.png"));
+							static TWeakObjectPtr<UTexture2D> AtlasTexture;
+							if (!AtlasTexture.IsValid() && FPaths::FileExists(AtlasFile))
+							{
+								AtlasTexture = MhImportTexture(AtlasFile, MakeHumanFolder, TEXT("T_MH_Markings"), true);
+								if (AtlasTexture.IsValid())
+								{
+									AtlasTexture->SRGB = false;
+									AtlasTexture->CompressionSettings = TC_Default;
+									AtlasTexture->PostEditChange();
+									MhSave(AtlasTexture.Get());
+								}
+							}
+							if (AtlasTexture.IsValid())
+							{
+								SkinInstance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("MarkAtlas")), AtlasTexture.Get());
+							}
+						}
 						FString WrinkleFile;
 						UTexture2D* WrinkleTexture = nullptr;
 						if ((*Entry)->TryGetStringField(TEXT("wrinkles"), WrinkleFile) && (WrinkleTexture = Texture(WrinkleFile, true)) != nullptr)
@@ -1117,6 +1237,11 @@ namespace
 								if (WrinkleTexture)
 								{
 									Skin4K->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("WrinkleMap")), WrinkleTexture);
+								}
+								UTexture* AtlasValue = nullptr;
+								if (SkinInstance->GetTextureParameterValue(FMaterialParameterInfo(TEXT("MarkAtlas")), AtlasValue) && AtlasValue)
+								{
+									Skin4K->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("MarkAtlas")), AtlasValue);
 								}
 								FMaterialParameterInfo PigmentInfo(TEXT("PigmentMask"));
 								UTexture* PigmentTexture = nullptr;

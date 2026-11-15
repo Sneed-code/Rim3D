@@ -156,7 +156,8 @@
           "{mpfb}/hair/braid01/braid01.mhclo",
           "{mpfb}/hair/short02/short02.mhclo",
           "{mpfb}/hair/afro01/afro01.mhclo"
-        ]
+        ],
+        "body_areas": true
       },
       "morphs": {
         "Masculine": {
@@ -653,7 +654,8 @@
           "{mpfb}/hair/long01/long01.mhclo",
           "{mpfb}/hair/ponytail01/ponytail01.mhclo",
           "{mpfb}/hair/afro01/afro01.mhclo"
-        ]
+        ],
+        "body_areas": true
       },
       "morphs": {
         "Feminine": {
