@@ -134,6 +134,15 @@
       "installedTo": "game/Content/ThirdParty/Sky/ (not in Git), made into /Game/Rim3D/Generated/Sky by the SkyArt commandlet",
       "usedFor": "the night sky's stars and Milky Way",
       "reinstall": "python tools/sky_textures.py, then UnrealEditor-Cmd game/Rim3D.uproject -run=SkyArt -unattended -nosplash -AllowCommandletRendering"
+    },
+    {
+      "name": "Poly Haven tropical trees (island trees, small tree, jacaranda)",
+      "source": "https://polyhaven.com (island_tree_01, island_tree_02, tree_small_02, jacaranda_tree), listed in assets/tree_art.json",
+      "licence": "CC0",
+      "version": "glTF 2k (jacaranda 1k), 2026-11-15",
+      "installedTo": "game/Content/ThirdParty/Trees/ (not in Git), imported to /Game/Rim3D/Generated/Trees by the TreeArt commandlet",
+      "usedFor": "teak and cecropia trees (L6)",
+      "reinstall": "python tools/tree_art.py, then the TreeArt and FoliageMaterials commandlets (in that order)"
     }
   ]
 }
