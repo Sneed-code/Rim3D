@@ -1445,6 +1445,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     // a turret, and the three cells beyond the conduit row south of it (the conduits are flat). The turret
                     // fires over them (muzzle 1.3 m, barricade 1.1 m); its own 0.8 m body is hidden behind them from level
                     // ground.
+                    // Steel ones (80 steel; the colony has 400 or more on day 6): wood ones by the battery caught fire when a
+                    // short circuit blew it, and the fire took the turrets. Steel burns at 40% (stuff flammability 0.4).
                     for (const int tx : {post.x, post.x + kPostWidth - 1}) {
                         const int ty = post.y + 1;
                         std::vector<CellPos> cells;
@@ -1467,7 +1469,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                             });
                             if (!taken && dryGround(sim, c) && sim.map().buildingAt(c) == kNoEntity && sim.construction().siteAt(c) == kNoEntity &&
                                 sim.farming().zoneAt(c) == kNoGrowingZone && sim.zones().stockpileAt(c) == nullptr && touchable(sim, landing, c)) {
-                                defence("Barricade", "WoodLog", c);
+                                defence("Barricade", "Steel", c);
                                 ++postBarricades;
                             }
                         }

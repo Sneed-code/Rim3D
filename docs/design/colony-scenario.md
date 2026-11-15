@@ -539,3 +539,22 @@ lost to fire after short circuits (the battery blows and the wood burns), and re
 38 alive on day 60 across the six runs, against 33 with the wiki mini-turret alone (and 38 in the thirteenth pass, when
 the turret had our own weaker numbers but a third shot in each burst).
 
+**Fifteenth pass (2026-11-15): steel barricades, and raiders shoot at the turrets behind them.** The barricades round
+the gun post's turrets are steel now (80 steel; the colony has 400 or more on day 6): wood ones by the battery caught
+fire when a short circuit blew it. Steel burns at 40%, and a short circuit can still burn the post (rainforest seed 7
+lost its solar panel on day 6 and had no steel left to rebuild it). Raiders now know a turret behind barricades is
+there (its gun shows over them) and shoot at it, so the barricades take the hits and break, 3 to 17 a run
+([fighters.md](fighters.md) "Turrets"). A firebreak cut round the gun post as well was tried and dropped: with it two
+seeds lost everyone to an infestation and raids around day 45 (25 and 26 alive in two rounds).
+
+| Run | Fourteenth pass | Fifteenth pass |
+| --- | --- | --- |
+| 7, rainforest | 8 | 6 |
+| 42, rainforest | 5 | 7 |
+| 3, rainforest | 5 | 5 |
+| 7 | 9 | 7 |
+| 1 | 6 | 7 |
+| 42 | 5 | 6 |
+
+38 alive on day 60, as before.
+
