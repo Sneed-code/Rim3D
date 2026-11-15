@@ -307,6 +307,7 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
                 const std::string& ore = sim.defs().get(rock).defName();
                 if (ore == "Ore_Steel") { r = 90; g = 150; b = 230; }
                 else if (ore == "Ore_Silver") { r = 240; g = 240; b = 250; }
+                else if (ore == "Ore_Copper") { r = 200; g = 115; b = 60; }
                 else { r = 240; g = 140; b = 40; }
             }
             const float shade = 0.6f + 0.4f * (map.groundHeight(x, y) / 60.0f);
