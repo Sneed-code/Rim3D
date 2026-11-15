@@ -125,7 +125,8 @@
     "Ore_Silver",
     "Ore_Gold",
     "Ore_Uranium",
-    "Ore_Jade"
+    "Ore_Jade",
+    "Ore_Copper"
    ]
   },
   "visual": {

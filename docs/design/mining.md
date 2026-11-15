@@ -18,6 +18,16 @@ of rock cells) with a running hash that `Sim::stateHash` includes.
 - A new map gets 2 or 3 rock types (RimWorld: 2 to 3, chosen from the seed) in patches of 96 m
   value noise, and ore lumps grown inside the rock (6 per 10,000 rock cells, as the wiki says).
   Rock cells keep the terrain `Rock`; fertility under rock stays 0.
+- **Copper** (ours, sneed 2026-11-15; not in RimWorld): an easy, common ore for wiring and
+  components. `Ore_Copper` has 1000 hit points (steel ore 1500) and 40 copper a cell, in lumps of
+  20 to 40 cells at commonality 1.5, so a map has about 1.5 times as many copper lumps as steel.
+  It is the last ore drawn, after the others' lumps are placed, and only takes plain rock, so every
+  other ore of a map stays where it was. The `Copper` item (1.5 silver, 0.5 kg, trade category
+  Metals) is not a building material. It also comes from deep drills (commonality 3, 45 a cycle),
+  the long-range mineral scanner, the bulk goods trader (150 to 300) and both Crashlanded starts
+  (150 near the colonists). Uses: the power conduit costs 1 copper instead of 1 steel, and the new
+  `MakeComponentIndustrial` recipe (fabrication bench, Fabrication research, Crafting 8) makes a
+  component from RimWorld's 12 steel plus 4 copper. Tests `CopperTests`.
 - **Mined out** (hit points 0): the layer forgets the cell and `Map::setTerrain(c, Terrain::RoughStone)`
   marks regions and cover dirty. Rough stone walks like soil at path cost 2. Regions rebuild on
   their next update, so a tunnel opens a route the same second.

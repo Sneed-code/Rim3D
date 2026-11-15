@@ -25,7 +25,7 @@
    1
   ],
   "costs": {
-   "Steel": 1
+   "Copper": 1
   },
   "fillPercent": 0,
   "stats": {
@@ -37,10 +37,10 @@
   },
   "passability": "Standable",
   "unverified": [
-   "costs",
    "stats.workToBuild",
    "stats.maxHitPoints"
-  ]
+  ],
+  "ours": ["costs: RimWorld's 1 steel is 1 copper here (sneed, 2026-11-15: copper is for wiring)"]
  },
  {
   "defName": "PowerSwitch", "researchPrerequisite": "Electricity",
