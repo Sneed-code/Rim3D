@@ -126,6 +126,7 @@ namespace
 		bool bUiWantsKeys = false;
 		bool bFaced = false;
 		bool b4KSkin = false;      // the 4K skin, to compare with the 2K one
+		bool bAutoPlayed = false;  // -CreatorPlay done
 		// The animation panel: the clips made by the MakeHumanArt commandlet (-Clips), what plays, how.
 		TArray<FSoftObjectPath> Clips;
 		TArray<FString> ClipNames;
@@ -362,7 +363,12 @@ namespace
 		{
 			return;
 		}
+		const int32 Before = State.Playing.Num();
 		State.Playing.SetNum(State.People.Num());
+		for (int32 i = Before; i < State.Playing.Num(); ++i)
+		{
+			State.Playing[i] = -1;
+		}
 		Anim->StopSlotAnimation(0.25f, FAnimSlotGroup::DefaultSlotName);
 		State.Playing[Person] = -1;
 		if (!State.Clips.IsValidIndex(Clip))
@@ -582,19 +588,20 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			CreatorListClips(*State);
 		}
 		FString PlayName;
-		if (State->bFaced && PhaseTime > 4.5f && State->Playing.IsEmpty() && FParse::Value(FCommandLine::Get(), TEXT("CreatorPlay="), PlayName))
+		if (State->bFaced && PhaseTime > 4.5f && !State->bAutoPlayed && FParse::Value(FCommandLine::Get(), TEXT("CreatorPlay="), PlayName))
 		{
 			const int32 Index = State->ClipNames.IndexOfByKey(PlayName);
 			for (int32 i = 0; i < State->People.Num(); ++i)
 			{
 				CreatorPlay(*State, i, Index, Pawns->FindPawn(State->People[i].Thing));
 			}
-			State->Playing.SetNum(State->People.Num());
+			while (State->Playing.Num() < State->People.Num()) { State->Playing.Add(-1); }  // -1: not playing
+			State->bAutoPlayed = true;
 			Notes.Add(FString::Printf(TEXT("creator: playing %s (%d clips)"), *PlayName, State->Clips.Num()));
 		}
 		// -CreatorRecord=<seconds> with -CreatorPlay: every frame of the clip at a fixed 30 a second (creator/rec_0000.png ...).
 		float PlayRecord = 0.0f;
-		if (!State->Playing.IsEmpty() && !FParse::Param(FCommandLine::Get(), TEXT("CreatorDemo")) && FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), PlayRecord)
+		if (State->bAutoPlayed && !FParse::Param(FCommandLine::Get(), TEXT("CreatorDemo")) && FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), PlayRecord)
 			&& State->Recorded < FMath::RoundToInt32(PlayRecord * 30.0f))
 		{
 			if (State->Recorded == 0)
@@ -965,7 +972,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		ImGui::SetNextWindowBgAlpha(0.88f);
 		if (ImGui::Begin("ANIMATIONS", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
 		{
-			State->Playing.SetNum(State->People.Num());
+			while (State->Playing.Num() < State->People.Num()) { State->Playing.Add(-1); }  // -1: not playing
 			if (State->Clips.IsEmpty())
 			{
 				ImGui::TextDisabled("No clips yet: run the MakeHumanArt commandlet with -Clips");

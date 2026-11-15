@@ -608,6 +608,10 @@ namespace
 		{
 			Material->BlendMode = BLEND_Masked;
 			Material->TwoSided = true;
+			// Hair cards, brows and lashes: soft edges (the cut-out dithered and smoothed by TSR, not a hard edge) and a
+			// lower cut-off so the fine tips stay, which makes brows and lashes fuller.
+			Material->DitherOpacityMask = true;
+			Material->OpacityMaskClipValue = 0.2f;
 		}
 		UTexture* White = LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture"));
 		UTexture* Flat = LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineMaterials/FlatNormal.FlatNormal"));
