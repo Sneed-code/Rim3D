@@ -11,15 +11,14 @@ An apparel item is a Thing with `HitPoints` and, for a garment made of a stuff (
 devilstrand...), `MadeOf{stuff}` and `Quality{level}` (0 awful to 6 legendary; no `Quality` means
 normal). A worn piece is off the map and listed in the wearer's `Gear::apparel`.
 
-**Armor** (`ApparelStats::armor`): a garment made of a stuff has the stuff's armor factor times the
-garment's `armorMultiplier` (from `Textiles.json` and `Clothing.json`, D6); other apparel (flak
-vest) has its own rating; both times the quality's factor (`QualityRules`). **Insulation** follows
-the same way from `insulationCold` and `insulationHeat`. Hit points are the def's times the stuff's
+**Mitigation** (`ApparelStats::mitigation`, since 2026-11-15): sneed's clothing and armour layers, damage
+classes and % numbers replace RimWorld's armor ratings; see [armour.md](armour.md). **Insulation**: every
+regular garment gives +10 cold and +2 heat; armour keeps its def's (or stuff's) `insulationCold` and
+`insulationHeat`; both times the quality's insulation factor. Hit points are the def's times the stuff's
 factor. Without a stuff a `stuffRequired` garment is worth nothing.
 
-**Combat** uses the same rule for every piece: per covered part, outermost layer first, a roll under
-half the armor deflects, under all of it halves the damage (F2, `combat.md`). Every layer that
-absorbs damage wears 1 hit point's worth of **durability** per 4 damage absorbed (random rounding). Bullets and melee blows (F8) share `CombatSystem::hitPawn`, which lists the pieces that absorbed (`PawnHitResult::wear`); the caller applies it with `wearApparel`. Worn
+**Combat** divides every hit by each counted piece's % ([armour.md](armour.md)); the pieces that took damage off
+share 1 hit point's worth of **durability** per 4 damage of the hit (random rounding). Bullets and melee blows (F8) share `CombatSystem::hitPawn`, which lists the pieces that wore (`PawnHitResult::wear`); the caller applies it with `wearApparel`. Worn
 pieces are not destroyed, except basic clothes past 0 durability: see [apparel-durability.md](apparel-durability.md).
 
 ## Wear and tear, tattered, dead men's clothes
@@ -28,7 +27,7 @@ pieces are not destroyed, except basic clothes past 0 durability: see [apparel-d
 durability (-1, -20% armor and insulation). The rules are in [apparel-durability.md](apparel-durability.md); in short:
 
 - Each worn piece wears 0.4 hit points' worth of durability a day (checked hourly).
-- At 0 durability it is tattered: thought -1 (`TatteredApparel`), 80% of its armor and insulation.
+- At 0 durability it is tattered: thought -1 a piece, up to -3 (`TatteredApparel`), 67% of its mitigation and 80% of its insulation.
 - When a human dies wearing something it loses 15 to 40% of its durability and is `Tainted` for good.
   Wearing tainted clothes gives "wearing a dead man's clothes": -5, -8, -11, -14 for 1, 2, 3, 4 or
   more tainted pieces, with no duration; Bloodlust pawns don't mind. Taking the clothes off ends it.

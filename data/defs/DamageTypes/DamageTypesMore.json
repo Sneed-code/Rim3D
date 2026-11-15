@@ -1,3 +1,3 @@
 [
-  {"defName": "Arrow", "parent": "DamageTypeBase", "label": "arrow", "reachesInside": true, "hediff": "Stab", "source": "RimWorld wiki"}
+  {"defName": "Arrow", "mix": {"sharp": 1}, "parent": "DamageTypeBase", "label": "arrow", "reachesInside": true, "hediff": "Stab", "source": "RimWorld wiki"}
 ]

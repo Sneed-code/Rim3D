@@ -112,13 +112,13 @@ TEST_CASE("Monsters: the wiki's numbers are in the defs") {
     const auto defs = monsterDefs();
     const Def& scyther = defs->get(defs->idOf("Things", "Mech_Scyther"));
     CHECK(scyther.number("race.baseHealthScale") == doctest::Approx(1.32));
-    CHECK(scyther.number("race.armor.sharp") == doctest::Approx(0.4));
+    CHECK(scyther.number("naturalMitigation.sharp") == doctest::Approx(20.0));  // half RimWorld's 40% (docs/design/armour.md)
     CHECK(scyther.number("race.combatPower") == 150);
     CHECK(scyther.number("stats.moveSpeed") * 30 == doctest::Approx(4.7).epsilon(0.001));
     CHECK(defs->get(defs->idOf("Things", "Mech_Lancer")).text("race.weapon") == "Gun_ChargeLance");
     CHECK(defs->get(defs->idOf("Things", "Mech_Centipede")).number("race.baseBodySize") == doctest::Approx(3.0));
     CHECK(defs->get(defs->idOf("Things", "Megaspider")).number("race.combatPower") == 150);
-    CHECK(defs->get(defs->idOf("Things", "Megascarab")).number("race.armor.sharp") == doctest::Approx(0.72));
+    CHECK(defs->get(defs->idOf("Things", "Megascarab")).number("naturalMitigation.sharp") == doctest::Approx(36.0));
     CHECK(defs->get(defs->idOf("Things", "Hive")).number("stats.maxHitPoints") == 130);
 }
 
@@ -141,21 +141,15 @@ TEST_CASE("Monsters: mechanoids neither bleed nor hurt, and their hulls turn blo
     CHECK(humanReport.bleedPerDay > 0.0f);
     CHECK(mechReport.bleedPerDay == 0.0f);
     CHECK(mechReport.pain == 0.0f);
-    // Armor: a scyther's 40% sharp armor deflects about a fifth of hits and halves another fifth.
+    // Hull: a scyther's 10% blunt and 20% sharp take a bullet (75% blunt, 25% sharp) down every time, never to 0.
     const DefId bullet = sim->health().damageTypeId("Bullet");
-    int deflected = 0, halved = 0, humanStopped = 0;
-    for (uint64_t seed = 1; seed <= 600; ++seed) {
+    for (uint64_t seed = 1; seed <= 50; ++seed) {
         const PawnHitResult r = sim->combat().hitPawn(mech, 0, bullet, 10.0f, 0.0f, seed);
-        deflected += r.deflected ? 1 : 0;
-        halved += !r.deflected && r.amount < 10.0f ? 1 : 0;
+        CHECK_FALSE(r.deflected);
+        CHECK(r.amount == doctest::Approx(7.5f / 1.1f + 2.5f / 1.2f));
         const PawnHitResult h = sim->combat().hitPawn(human, 0, bullet, 10.0f, 0.0f, seed);
-        humanStopped += h.amount < 10.0f ? 1 : 0;
+        CHECK(h.amount == doctest::Approx(10.0f));
     }
-    CHECK(deflected > 600 * 0.14);
-    CHECK(deflected < 600 * 0.26);
-    CHECK(halved > 600 * 0.14);
-    CHECK(halved < 600 * 0.26);
-    CHECK(humanStopped == 0);
 }
 
 TEST_CASE("Monsters: an infestation grows mounds and sends insects after the colony") {

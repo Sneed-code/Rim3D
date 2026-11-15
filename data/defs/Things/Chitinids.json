@@ -1,6 +1,6 @@
 [
  {
-  "defName": "Megascarab",
+  "defName": "Megascarab", "naturalMitigation": {"blunt": 9, "sharp": 36, "elemental": 0},
   "parent": "AnimalBase",
   "label": "brood scarab",
   "source": "RimWorld wiki",
@@ -27,10 +27,6 @@
      "foodFactor": 1.0
     }
    ],
-   "armor": {
-    "sharp": 0.72,
-    "blunt": 0.18
-   },
    "combatPower": 40,
    "chitinid": true
   },
@@ -62,7 +58,7 @@
   ],
   "ours": [
    "race.chitinid",
-   "race.armor",
+   "naturalMitigation",
    "race.combatPower",
    "race.lifeStages"
   ],
@@ -76,7 +72,7 @@
   }
  },
  {
-  "defName": "Spelopede",
+  "defName": "Spelopede", "naturalMitigation": {"blunt": 9, "sharp": 9, "elemental": 0},
   "parent": "AnimalBase",
   "label": "brood delver",
   "source": "RimWorld wiki",
@@ -103,10 +99,6 @@
      "foodFactor": 1.0
     }
    ],
-   "armor": {
-    "sharp": 0.18,
-    "blunt": 0.18
-   },
    "combatPower": 75,
    "chitinid": true
   },
@@ -137,7 +129,7 @@
   ],
   "ours": [
    "race.chitinid",
-   "race.armor",
+   "naturalMitigation",
    "race.combatPower",
    "race.lifeStages"
   ],
@@ -151,7 +143,7 @@
   }
  },
  {
-  "defName": "Megaspider",
+  "defName": "Megaspider", "naturalMitigation": {"blunt": 9, "sharp": 14, "elemental": 0},
   "parent": "AnimalBase",
   "label": "brood stalker",
   "source": "RimWorld wiki",
@@ -178,10 +170,6 @@
      "foodFactor": 1.0
     }
    ],
-   "armor": {
-    "sharp": 0.27,
-    "blunt": 0.18
-   },
    "combatPower": 150,
    "chitinid": true
   },
@@ -213,7 +201,7 @@
   ],
   "ours": [
    "race.chitinid",
-   "race.armor",
+   "naturalMitigation",
    "race.combatPower",
    "race.lifeStages"
   ],

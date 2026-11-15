@@ -244,7 +244,8 @@ RaidSystem::RaidSystem(Things& things, Map& map, Rooms& rooms, CombatSystem& com
         const Def& def = defs_.get(id);
         marketValue_[id.value] = static_cast<float>(def.number("stats.marketValue", 0.0));
         if (def.has("apparel")) {
-            armor_[id.value] = static_cast<float>(def.number("stats.armorRatingSharp", 0.0));
+            // Armour's sharp mitigation, 50% counting like an old armor rating of 1 (docs/design/armour.md).
+            armor_[id.value] = static_cast<float>(def.number("gear.mitigation.sharp", 0.0)) / 50.0f;
         }
     }
 }

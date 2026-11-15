@@ -2,7 +2,7 @@
 
 Code: `ColonySim/Combat.h`, `Private/Combat.cpp`. Tests: `Tests/CombatTests.cpp`. Data: `Things/Weapons.json`,
 `Things/Apparel.json`, `Projectiles/Bullets.json`, `Hitboxes/Hitboxes.json`, `Rules/CombatRules`,
-`armorCategory` in `DamageTypes`, the projectile speed multiplier in `data/tuning.json`. Task F2.
+the `mix` of `DamageTypes` ([armour.md](armour.md)), the projectile speed multiplier in `data/tuning.json`. Task F2.
 
 Every shot is a real projectile. It leaves the muzzle with spread, flies with speed and drop, and
 stops at the first thing it touches: the ground, rock, a building, or a pawn's hitbox. A pawn hit
@@ -111,16 +111,11 @@ inside hit also hurts the outside part over it.
 
 ## Armor
 
-RimWorld's rule, per apparel piece covering the part hit (its `apparel.bodyPartGroups` against the
-part's groups), outermost layer first (`apparelLayersOuterFirst`: Overhead, Shell, Middle, OnSkin):
-effective armor = armor rating (by the damage type's `armorCategory`) less the bullet's armor
-penetration; a roll under half of that deflects the bullet (`ProjectileHit` with `Armor`, no
-injury); under all of it halves the damage and turns a sharp hit blunt (a bruise or a crack); later
-layers still use their sharp rating. Flak vest (torso and neck, 100% sharp), flak pants (legs, 55%)
-and a simple helmet (upper head and ears, 45%, the steel one: RimWorld makes it from any metal and
-Crashlanded's is plasteel; materials come later). Against a revolver (18%) a flak vest stops 41% of
-torso hits and halves another 41%. Since C15 every piece has its own armor (stuff, quality) and wears down
-by what it absorbs ([apparel.md](apparel.md)), and the vest's and pants' movement penalty (`equippedStatOffsets`) isn't applied yet.
+**Replaced 2026-11-15** (sneed, decision 0009): RimWorld's deflect-and-halve rolls are gone. Every hit is a
+mix of blunt, sharp and elemental damage, and each worn piece and the creature's hide divides it by (1 + %),
+wherever it lands (`CombatSystem::armorPass` and `mitigate`); armour penetration takes its share off each %.
+No hit is deflected any more, so `ProjectileHit` with `Armor` and the melee "deflected" message no longer
+come up. Everything is in [armour.md](armour.md).
 
 ## Gear
 

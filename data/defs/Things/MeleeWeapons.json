@@ -136,7 +136,7 @@
    {
     "label": "blade",
     "capacities": [
-     "Cut"
+     "Slash"
     ],
     "power": 14.1,
     "cooldownTime": 60.0,
@@ -259,7 +259,7 @@
    {
     "label": "blade",
     "capacities": [
-     "Cut"
+     "Slash"
     ],
     "power": 19.4,
     "cooldownTime": 73.5,
