@@ -13,6 +13,7 @@
 #include "ColonySim/Needs.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
+#include "ColonySim/Raids.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Social.h"
@@ -406,7 +407,7 @@ TEST_CASE("Mental breaks: berserk swings at the nearest pawn with melee until it
     CHECK(std::count_if(log.events.begin(), log.events.end(), [&](const Event& e) {
               return e.type == EventType::PawnAction && e.action == PawnAction::Punch && e.target == victim;
           }) == 0);
-    CHECK(sim.things().registry().get<Health>(pawn).injuries.empty());
+    // (The victim may hit back: a berserker is an enemy to the colony, see the next test.)
     // Ended by hand: no catharsis for that.
     sim.submit(EndMentalBreakCommand{pawn});
     breakRun(sim, log, 2);
@@ -622,4 +623,44 @@ TEST_CASE("Mental breaks: the protagonist never snaps, even at the lowest mood, 
     CHECK(log.count(EventType::PawnMentalBreak) == 0);
     CHECK_FALSE(sim.mentalBreaks().active(pawn));
     CHECK(breakMood(sim, pawn).level == doctest::Approx(50.0f));  // no mood: held at the base level
+}
+
+TEST_CASE("Mental breaks: the colony fights a berserk colonist down, and the break ends there") {
+    Sim sim = breakSim();
+    const Entity berserker = breakColonist(sim, CellPos{20, 24, 0});
+    const Entity a = breakColonist(sim, CellPos{27, 24, 0});
+    const Entity b = breakColonist(sim, CellPos{27, 26, 0});
+    for (const Entity p : {berserker, a, b}) {
+        sim.things().registry().emplace_or_replace<Posture>(p);
+    }
+    for (const Entity p : {a, b}) {
+        sim.combat().equip(p, sim.things().make(sim.defs().idOf("Things", "Gun_Revolver")));
+    }
+    sim.step();
+    CHECK(breakStart(sim, berserker, "Berserk"));
+    breakMood(sim, berserker).level = 5.0f;  // stays in the break until something else ends it
+    BreakLog log;
+    const bool downed = breakRunUntil(sim, log, 30 * 120, [&] { return sim.health().incapacitated(berserker); });
+    CHECK(downed);
+    CHECK(log.count(EventType::AlarmChanged) >= 1);
+    CHECK(std::count_if(log.events.begin(), log.events.end(), [&](const Event& e) {
+              return e.type == EventType::ShotFired && (e.thing == a || e.thing == b);
+          }) > 0);
+    breakRun(sim, log, 30 * 60);
+    CHECK_FALSE(sim.mentalBreaks().active(berserker));
+    const Event* ended = log.first(EventType::PawnMentalBreakEnded);
+    CHECK(ended != nullptr);
+    if (ended != nullptr) {
+        CHECK((ended->message == "downed" || ended->message == "died"));
+        MESSAGE("the break ended: ", ended->message);
+    }
+    // Once it is down nobody shoots it again, and the alarm stops.
+    const int64_t shotsBefore = std::count_if(log.events.begin(), log.events.end(), [](const Event& e) { return e.type == EventType::ShotFired; });
+    BreakLog after;
+    breakRun(sim, after, 30 * 60);
+    CHECK(after.count(EventType::ShotFired) == 0);
+    CHECK_FALSE(sim.raids().state().alarm);
+    CHECK_FALSE(sim.things().registry().get<Health>(a).dead);
+    CHECK_FALSE(sim.things().registry().get<Health>(b).dead);
+    MESSAGE("shots fired at the berserker: ", shotsBefore);
 }

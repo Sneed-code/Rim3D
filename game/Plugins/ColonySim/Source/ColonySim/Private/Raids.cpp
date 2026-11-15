@@ -12,6 +12,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Random.h"
@@ -1852,6 +1853,12 @@ void RaidSystem::thinkAlarm() {
         }
         hostiles.push_back(pawn);
     }
+    // A colonist on a Berserk break attacks anyone: an enemy until it is downed or the break ends.
+    for (const auto [pawn, breaker, pos] : reg.view<const MentalBreaker, const Position>().each()) {
+        if (isBerserk(&breaker) && !health_.incapacitated(pawn) && fighters_.factionOf(pawn) == kPlayerFaction) {
+            hostiles.push_back(pawn);
+        }
+    }
     std::sort(hostiles.begin(), hostiles.end());
     if (hostiles.empty()) {
         state_.suppressed = false;
@@ -1866,7 +1873,8 @@ void RaidSystem::thinkAlarm() {
     std::vector<Entity> ours;
     for (const auto [pawn, pos, mover] : reg.view<const Position, const Mover>().each()) {
         const Animal* animal = reg.try_get<Animal>(pawn);
-        if (fighters_.factionOf(pawn) == kPlayerFaction && !health_.incapacitated(pawn) && (animal == nullptr || animal->temper == AnimalTemper::Calm)) {
+        if (fighters_.factionOf(pawn) == kPlayerFaction && !health_.incapacitated(pawn) && (animal == nullptr || animal->temper == AnimalTemper::Calm) &&
+            !isBerserk(reg.try_get<MentalBreaker>(pawn))) {
             ours.push_back(pawn);
         }
     }
