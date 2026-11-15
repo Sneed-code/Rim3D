@@ -265,18 +265,33 @@ sweeping, carrying firewood, eating seated, lying down and getting up, shadowbox
 rifle aim, shotgun reload; no props). `clip_prep.py` bakes the clip's own frame range (Blender's default 1 to 250 cut
 or padded every clip to 8.3 s).
 
-Mixamo set (436 clips, sneed's downloads in `mocap/mixamo/`: 10 packs under `packs/` and 56 singles, on the Y Bot,
-mostly without skin). `tools/makehuman/mixamo_prep.py` loads them all in one Blender run: each clip's hips are moved so
-it starts over the origin, the Y Bot mesh is skinned to it, and the armature's object transform (Mixamo's 90 degree turn
-about X and 0.01 scale) is baked into the bones and the location keys. Unreal reads that object transform one way for a
-skeleton and another for an animation, so without the bake every clip played with the body lying on the ground. The armature
-is also renamed from "Armature" to MixamoRig. Unreal drops a top node named "Armature" and converts only the top bone's
-rest position to centimetres, not the animation's keys for it, so the retargeter sank every body to the waist. It writes
-`game/Saved/Mocap/Mixamo/<Name>.fbx`, the Y Bot, and `mixamo.json` (name, category, file). `assets/animations.json`
-"sets" points at that manifest; the commandlet imports the Y Bot once, every clip onto its skeleton, and retargets a
-category at a time into `Animations/Mixamo/<category>/A_<name>`. Categories: each pack, and the singles as Injured,
-Falls, Crawling, Fear, Cover, Rolls, Firearms, Interact and Other. The creator's ANIMATIONS panel folds them by category
-with a search box.
+Mixamo set: 436 clips from sneed's downloads in `mocap/mixamo/` (10 packs under `packs/` plus 56 singles, on the Y Bot,
+mostly without skin). `tools/makehuman/mixamo_prep.py` loads them all in one Blender run. For each clip it:
+1. Moves the hips so the clip starts over the origin.
+2. Bakes Mixamo's object transform (a 90° turn about X and 0.01 scale) into the bones and location keys.
+3. Moves the clip onto PetitePale's rig, the rig the other clips use (it has the Mixamo bone names). Each
+   target bone's rest is first turned to point where the Y Bot bone's rest points (T pose against A pose). The Y Bot's
+   turns from rest are then copied onto it in world space, and the hips are moved as the Y Bot's, scaled by hip height.
+4. Writes `game/Saved/Mocap/Mixamo/<Name>.fbx` (the armature alone).
+
+It also writes `Rig.fbx` (the rig with its mesh, the shared skeleton) and `mixamo.json` (name, category and file).
+
+Three Unreal problems led to this design:
+- Unreal reads the Mixamo object transform one way for a skeleton and another for an animation, so the clips played
+  lying on the ground.
+- Unreal drops a top node named "Armature" (the armature is exported as MixamoRig) and converts only the top bone's
+  rest position to centimetres, so the bodies sank to the waist.
+- Every clip, the older ones too, leaned 30 to 90 degrees more than its source: the bodies folded at the waist or fell
+  "sideways into the ground". The cause was the clip retargeter's IK step. The mannequin's full-body IK bent its
+  upper spine to reach the hand goals. Clip retargeters now run FK only (`-ClipIK` turns IK back on), and
+  `-Probe -ProbeAnim=<anims>` prints each clip's pelvis-to-head lean over time to check this. Each body's own
+  retargeter still plants the feet.
+
+`assets/animations.json` "sets" points at the manifest. The commandlet imports the rig once and every clip onto its
+skeleton (saving the raw clips under `Source/Raw` for `-ProbeAnim`), then retargets a category at a time into
+`Animations/Mixamo/<category>/A_<name>`. The categories are each pack, plus the singles grouped as Injured, Falls,
+Crawling, Fear, Cover, Rolls, Firearms, Interact and Other. The creator's ANIMATIONS panel folds them by category and
+has a search box.
 
 ## Not done (next, as of 2026-11-14)
 

@@ -1,9 +1,9 @@
 # Prepares a folder of Mixamo downloads for the game in one Blender run (docs/design/makehuman.md, "Animation clips"):
-# every animation FBX (packs/<pack>/*.fbx and singles/*.fbx, on the Y Bot skeleton, without skin) is loaded, its hips
-# moved so the clip starts over the origin (the motion kept: a walk still walks), and written out again; the Y Bot
-# character (mesh and skeleton in its T pose) goes out the same way, as the shared skeleton the clips import onto. Also
-# writes mixamo.json: name, category and file of each clip, for assets/animations.json.
-#   blender.exe -b -noaudio --python tools/makehuman/mixamo_prep.py -- <mocap/mixamo> <game/Saved/Mocap/Mixamo>
+# every animation FBX (packs/<pack>/*.fbx and singles/*.fbx, on the Y Bot skeleton) is loaded, its hips moved so the
+# clip starts over the origin (the motion kept: a walk still walks), moved onto the rig of the clips that already work
+# (PetitePale's, Mixamo bone names) and written out as that armature alone; the rig with its mesh goes out once as
+# Rig.fbx, the shared skeleton the clips import onto. Also writes mixamo.json: name, category and file of each clip.
+#   blender.exe -b -noaudio --python tools/makehuman/mixamo_prep.py -- <mocap/mixamo> <game/Saved/Mocap/Mixamo> [rig.fbx]
 import json
 import os
 import re
@@ -118,18 +118,98 @@ def export(path, anim):
 
 
 clips = []
-# The Y Bot first: the shared skeleton, and its mesh (saved as a .blend) goes into every clip's file.
-ybot = next(os.path.join(r, f) for r, _, fs in os.walk(src) for f in fs if f.lower() == "y bot.fbx")
+# The skeleton every clip goes onto: the rig of the clips that already import and retarget well (sneed's PetitePale,
+# Mixamo bone names, from game/Saved/Mocap/Skip/Skip.fbx). Taken onto the Y Bot itself, Unreal's retargeter bent the
+# Mixamo spines about twice as far as the clip does (bodies folded at the waist); moved onto this rig here first, by
+# each bone's turn from its rest pose, the clips reach Unreal like the ones that work.
+repo = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+target_fbx = os.path.abspath(sys.argv[sys.argv.index("--") + 3]) if len(sys.argv) > sys.argv.index("--") + 3 else os.path.join(repo, "game", "Saved", "Mocap", "Skip", "Skip.fbx")
 clear()
-bpy.ops.import_scene.fbx(filepath=ybot)
-bake_object_transform(next(o for o in bpy.data.objects if o.type == "ARMATURE"))
-export(os.path.join(dst, "YBot.fbx"), False)
-ybot_blend = os.path.join(dst, "YBot.blend")
-bpy.ops.wm.save_as_mainfile(filepath=ybot_blend, copy=True)
-ybot_done = True
+bpy.ops.import_scene.fbx(filepath=target_fbx)
+target = next(o for o in bpy.data.objects if o.type == "ARMATURE")
+if target.animation_data:
+    target.animation_data.action = None
+for action in list(bpy.data.actions):
+    bpy.data.actions.remove(action)
+bake_object_transform(target)
+export(os.path.join(dst, "Rig.fbx"), False)   # the shared skeleton, with its mesh
+target_blend = os.path.join(dst, "Rig.blend")
+for obj in [o for o in bpy.data.objects if o.type == "MESH"]:
+    bpy.data.objects.remove(obj, do_unlink=True)   # the clips go out as the armature alone
+bpy.ops.wm.save_as_mainfile(filepath=target_blend, copy=True)
+
+
+def bone_order(arm):
+    out = []
+
+    def walk(b):
+        out.append(b)
+        for c in b.children:
+            walk(c)
+    for b in arm.data.bones:
+        if b.parent is None:
+            walk(b)
+    return out
+
+
+def transfer(source, target):
+    """The source clip onto the target rig: every bone of the same name turned from its rest pose as the source's is
+    (in the world), the hips moved as the source's, scaled by the two rigs' hip heights; other bones keep their rest
+    pose. The rests differ (the Y Bot stands in a T pose, PetitePale in an A pose), so each target bone's rest is first
+    turned to point where the source bone's rest points (as Unreal's retarget pose does), and the source's turns are
+    applied to that. Keyed on every frame of the clip."""
+    action = source.animation_data.action
+    first, last = (int(round(x)) for x in action.frame_range)
+    scene = bpy.context.scene
+    scene.frame_start, scene.frame_end = first, last
+    s_bones = {b.name: b for b in source.data.bones}
+    order = bone_order(target)
+    s_hips = next(b for b in source.data.bones if b.parent is None)
+    t_hips = target.data.bones.get(s_hips.name) or next(b for b in target.data.bones if b.name.endswith("Hips"))
+    scale = t_hips.head_local.z / max(s_hips.head_local.z, 1e-4)
+    rel = {b.name: (b.parent.matrix_local.inverted() @ b.matrix_local) if b.parent else b.matrix_local.copy() for b in order}
+    aligned = {}
+    for b in order:
+        s = s_bones.get(b.name)
+        if s is None:
+            continue
+        d_t = (b.tail_local - b.head_local).normalized()
+        d_s = (s.tail_local - s.head_local).normalized()
+        aligned[b.name] = d_t.rotation_difference(d_s).to_matrix() @ b.matrix_local.to_3x3()
+    target.animation_data_create()
+    target.animation_data.action = bpy.data.actions.new(action.name + "_rig")
+    for pb in target.pose.bones:
+        pb.rotation_mode = "QUATERNION"
+    for f in range(first, last + 1):
+        scene.frame_set(f)
+        s_pose = {pb.name: pb.matrix.copy() for pb in source.pose.bones}
+        done = {}
+        for b in order:
+            parent_m = done[b.parent.name] if b.parent else None
+            base = (parent_m @ rel[b.name]) if parent_m is not None else rel[b.name].copy()
+            s = s_bones.get(b.name)
+            if s is not None:
+                turn = s_pose[b.name].to_3x3() @ s.matrix_local.to_3x3().inverted()
+                rot = (turn @ aligned[b.name]).to_4x4()
+                if b == t_hips:
+                    head = s_pose[s.name].to_translation() * scale
+                else:
+                    head = base.to_translation()
+                m = rot
+                m.translation = head
+            else:
+                m = base
+            done[b.name] = m
+            basis = (base.inverted() @ m) if parent_m is not None else (rel[b.name].inverted() @ m)
+            pb = target.pose.bones[b.name]
+            pb.matrix_basis = basis
+            pb.keyframe_insert("location", frame=f)
+            pb.keyframe_insert("rotation_quaternion", frame=f)
+
+
 for root, _, files in os.walk(src):
-    rel = os.path.relpath(root, src)
-    pack = os.path.basename(root) if rel.startswith("packs") and rel != "packs" else None
+    rel_dir = os.path.relpath(root, src)
+    pack = os.path.basename(root) if rel_dir.startswith("packs") and rel_dir != "packs" else None
     for f in sorted(files):
         if not f.lower().endswith(".fbx"):
             continue
@@ -145,27 +225,27 @@ for root, _, files in os.walk(src):
         name = tidy((pack.replace(" Pack", "") + " " if pack else "") + base)
         clear()
         bpy.ops.import_scene.fbx(filepath=path)
-        arm = next((o for o in bpy.data.objects if o.type == "ARMATURE"), None)
-        if arm is None:
+        source = next((o for o in bpy.data.objects if o.type == "ARMATURE"), None)
+        if source is None or not source.animation_data or not source.animation_data.action:
             continue
-        anchor(arm)
-        bake_object_transform(arm)
-        # With the Y Bot's mesh skinned to it, as the Y Bot itself goes out.
-        if not any(o.type == "MESH" for o in bpy.data.objects):
-            with bpy.data.libraries.load(ybot_blend) as (data_from, data_to):
-                data_to.objects = [n for n in data_from.objects if n not in ("Armature", RIG)]
-            for obj in data_to.objects:
-                if obj is None or obj.type != "MESH":
-                    continue
+        anchor(source)
+        bake_object_transform(source)
+        for obj in [o for o in bpy.data.objects if o.type == "MESH"]:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        source.name = "MixamoSource"
+        with bpy.data.libraries.load(target_blend) as (data_from, data_to):
+            data_to.objects = list(data_from.objects)
+        rig = None
+        for obj in data_to.objects:
+            if obj is not None and obj.type == "ARMATURE":
                 bpy.context.scene.collection.objects.link(obj)
-                obj.parent = arm
-                for m in obj.modifiers:
-                    if m.type == "ARMATURE":
-                        m.object = arm
+                rig = obj
+        transfer(source, rig)
+        bpy.data.objects.remove(source, do_unlink=True)
         out = os.path.join(dst, name + ".fbx")
         export(out, True)
         clips.append({"name": name, "category": group, "fbx": out.replace("\\", "/")})
         print("[mixamo_prep]", group, name, flush=True)
 with open(os.path.join(dst, "mixamo.json"), "w", encoding="utf-8") as fh:
-    json.dump({"skeleton": os.path.join(dst, "YBot.fbx").replace("\\", "/"), "clips": clips}, fh, indent=1)
-print("[mixamo_prep]", len(clips), "clips, Y Bot", ybot_done, flush=True)
+    json.dump({"skeleton": os.path.join(dst, "Rig.fbx").replace("\\", "/"), "clips": clips}, fh, indent=1)
+print("[mixamo_prep]", len(clips), "clips onto", target_fbx, flush=True)

@@ -103,6 +103,31 @@ namespace
 			AnimPaths.ParseIntoArray(Paths, TEXT(","));
 			for (const FString& Path : Paths)
 			{
+				if (UIKRigDefinition* ProbeRig = LoadObject<UIKRigDefinition>(nullptr, *Path))
+				{
+					UE_LOG(LogMakeHumanArt, Display, TEXT("Probe rig %s: root %s"), *Path, *ProbeRig->GetPelvis().ToString());
+					for (const FBoneChain& Chain : ProbeRig->GetRetargetChains())
+					{
+						UE_LOG(LogMakeHumanArt, Display, TEXT("  chain %s: %s .. %s"), *Chain.ChainName.ToString(), *Chain.StartBone.BoneName.ToString(), *Chain.EndBone.BoneName.ToString());
+					}
+					continue;
+				}
+				if (UIKRetargeter* ProbeRtg = LoadObject<UIKRetargeter>(nullptr, *Path))
+				{
+					UIKRetargeterController* ProbeController = UIKRetargeterController::GetController(ProbeRtg);
+					for (int32 Op = 0; Op < ProbeController->GetNumRetargetOps(); ++Op)
+					{
+						FInstancedStruct* Struct = ProbeController->GetRetargetOpStructAtIndex(Op);
+						FString Text;
+						if (Struct && Struct->GetScriptStruct())
+						{
+							Struct->GetScriptStruct()->ExportText(Text, Struct->GetMemory(), nullptr, nullptr, PPF_None, nullptr);
+						}
+						UE_LOG(LogMakeHumanArt, Display, TEXT("  op %d %s %s: %s"), Op, Struct && Struct->GetScriptStruct() ? *Struct->GetScriptStruct()->GetName() : TEXT("?"),
+							ProbeController->GetRetargetOpEnabled(Op) ? TEXT("on") : TEXT("off"), *Text.Left(1500));
+					}
+					continue;
+				}
 				UAnimSequence* Seq = LoadObject<UAnimSequence>(nullptr, *Path);
 				if (!Seq || !Seq->GetSkeleton())
 				{
@@ -110,6 +135,19 @@ namespace
 					{
 						const FReferenceSkeleton& MeshRef = ProbeMesh->GetRefSkeleton();
 						UE_LOG(LogMakeHumanArt, Display, TEXT("Probe mesh %s: %d bones"), *Path, MeshRef.GetNum());
+						{
+							// Which way it faces: its left thigh and left toe in component space.
+							TArray<FTransform> G;
+							FAnimationRuntime::FillUpComponentSpaceTransforms(MeshRef, MeshRef.GetRefBonePose(), G);
+							for (const TCHAR* Bone : {TEXT("LeftUpLeg"), TEXT("thigh_l"), TEXT("LeftToeBase"), TEXT("ball_l"), TEXT("Head"), TEXT("head")})
+							{
+								const int32 Index = MeshRef.FindBoneIndex(Bone);
+								if (Index != INDEX_NONE)
+								{
+									UE_LOG(LogMakeHumanArt, Display, TEXT("  component %s at %s"), Bone, *G[Index].GetLocation().ToString());
+								}
+							}
+						}
 						for (int32 b = 0; b < FMath::Min(6, MeshRef.GetNum()); ++b)
 						{
 							UE_LOG(LogMakeHumanArt, Display, TEXT("  %s parent %d ref %s rot %s"), *MeshRef.GetBoneName(b).ToString(), MeshRef.GetParentIndex(b),
@@ -122,6 +160,46 @@ namespace
 				}
 				const FReferenceSkeleton& Ref = Seq->GetSkeleton()->GetReferenceSkeleton();
 				UE_LOG(LogMakeHumanArt, Display, TEXT("Probe %s: %d bones, %d frames"), *Path, Ref.GetNum(), Seq->GetNumberOfSampledKeys());
+				// The lean of the body: pelvis (hips) to head in component space, from straight up, over the clip.
+				{
+					const int32 Pelvis = Ref.FindBoneIndex(TEXT("pelvis")) != INDEX_NONE ? Ref.FindBoneIndex(TEXT("pelvis")) : Ref.FindBoneIndex(TEXT("Hips"));
+					const int32 Head = Ref.FindBoneIndex(TEXT("head")) != INDEX_NONE ? Ref.FindBoneIndex(TEXT("head")) : Ref.FindBoneIndex(TEXT("Head"));
+					if (Pelvis != INDEX_NONE && Head != INDEX_NONE)
+					{
+						FString Leans;
+						for (int32 k = -1; k <= 8; ++k)
+						{
+							const FFrameNumber Frame(FMath::Clamp(Seq->GetNumberOfSampledKeys() * k / 8, 0, Seq->GetNumberOfSampledKeys() - 1));
+							TArray<FTransform> Component;
+							Component.SetNum(Ref.GetNum());
+							for (int32 b = 0; b < Ref.GetNum(); ++b)
+							{
+								const FName Bone = Ref.GetBoneName(b);
+								const FTransform Local = k >= 0 && Seq->GetDataModel()->IsValidBoneTrackName(Bone) ? Seq->GetDataModel()->GetBoneTrackTransform(Bone, Frame) : Ref.GetRefBonePose()[b];  // k -1: the reference pose
+								const int32 Parent = Ref.GetParentIndex(b);
+								Component[b] = Parent == INDEX_NONE ? Local : Local * Component[Parent];
+							}
+							if (k <= 0)
+							{
+								FString Chain;
+								for (const TCHAR* Name : {TEXT("root"), TEXT("pelvis"), TEXT("spine_01"), TEXT("spine_03"), TEXT("spine_05"), TEXT("neck_01"), TEXT("MixamoRig"), TEXT("Hips"), TEXT("Spine"), TEXT("Spine1"), TEXT("Spine2"), TEXT("Neck"), TEXT("head"), TEXT("Head")})
+								{
+									const int32 Index = Ref.FindBoneIndex(Name);
+									if (Index != INDEX_NONE)
+									{
+										const FVector L = Component[Index].GetTranslation();
+										const FRotator R = Component[Index].GetRotation().Rotator();
+										Chain += FString::Printf(TEXT(" %s(%.0f,%.0f,%.0f|%.0f,%.0f,%.0f)"), Name, L.X, L.Y, L.Z, R.Pitch, R.Yaw, R.Roll);
+									}
+								}
+								UE_LOG(LogMakeHumanArt, Display, TEXT("  %s:%s"), k < 0 ? TEXT("ref") : TEXT("frame0"), *Chain);
+							}
+							const FVector Up = (Component[Head].GetTranslation() - Component[Pelvis].GetTranslation()).GetSafeNormal();
+							Leans += FString::Printf(TEXT(" %.0f"), FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Up.Z, -1.0, 1.0))));
+						}
+						UE_LOG(LogMakeHumanArt, Display, TEXT("  lean pelvis-head from up (degrees, 9 times over the clip):%s"), *Leans);
+					}
+				}
 				for (int32 b = 0; b < FMath::Min(6, Ref.GetNum()); ++b)
 				{
 					const FName Bone = Ref.GetBoneName(b);
@@ -895,7 +973,7 @@ namespace
 	// keeps the target's own spread). The engine's auto align needs the editor's processor; this is the same idea:
 	// local deltas, NewLocal = RefLocal * Delta.
 	void MhAlignRetargetPose(UIKRetargeterController* Controller, const UIKRigDefinition* SourceRig, const USkeletalMesh* SourceMesh,
-		const UIKRigDefinition* TargetRig, const USkeletalMesh* TargetMesh)
+		const UIKRigDefinition* TargetRig, const USkeletalMesh* TargetMesh, bool bAlignSpine = true)
 	{
 		const FReferenceSkeleton& SRef = SourceMesh->GetRefSkeleton();
 		const FReferenceSkeleton& TRef = TargetMesh->GetRefSkeleton();
@@ -927,6 +1005,10 @@ namespace
 		int32 Turned = 0;
 		for (const FName& Name : Aligned)
 		{
+			if (!bAlignSpine && (Name == TEXT("Spine") || Name == TEXT("Neck")))
+			{
+				continue;
+			}
 			const FBoneChain* TChain = TargetRig->GetRetargetChainByName(Name);
 			const FBoneChain* SChain = SourceRig->GetRetargetChainByName(Name);
 			if (!TChain || !SChain)
@@ -1078,7 +1160,11 @@ namespace
 		{
 			FInstancedStruct* Struct = Controller->GetRetargetOpStructAtIndex(Op);
 			const FString Type = Struct && Struct->GetScriptStruct() ? Struct->GetScriptStruct()->GetName() : FString();
-			if (Type == TEXT("IKRetargetBlendToSourceOp") || Type == TEXT("IKRetargetOffsetGoalsOp"))
+			// The IK step off as well (-ClipIK keeps it): the mannequin's full-body IK bent its upper spine to reach the hand
+			// goals, so every clip came out leaning 30 to 90 degrees more than its source (bodies folded at the waist, or
+			// "sideways into the ground"). FK alone matches the source's lean; each body's own retargeter still plants feet.
+			const bool bNoIK = !FParse::Param(FCommandLine::Get(), TEXT("ClipIK")) && (Type == TEXT("IKRetargetRunIKRigOp") || Type == TEXT("IKRetargetSpeedPlantingOp"));
+			if (Type == TEXT("IKRetargetBlendToSourceOp") || Type == TEXT("IKRetargetOffsetGoalsOp") || bNoIK)
 			{
 				Controller->SetRetargetOpEnabled(Op, false);
 			}
@@ -1102,7 +1188,9 @@ namespace
 		{
 			Controller->SetCurrentRetargetPose(Pose, ERetargetSourceOrTarget::Target);
 			Controller->ResetRetargetPose(Pose, {}, ERetargetSourceOrTarget::Target);
-			MhAlignRetargetPose(Controller, Rig, Mesh, Target, TargetMesh);
+			// Limbs only: both spines stand upright already, and turning the mannequin's five spine bones to the source's
+			// curved three left the mannequin's retarget pose leaning, so every clip came out leaning 30 to 60 degrees.
+			MhAlignRetargetPose(Controller, Rig, Mesh, Target, TargetMesh, false);
 		}
 		Controller->SetCurrentRetargetPose(Current, ERetargetSourceOrTarget::Target);
 		Failures += MhSave(Retargeter) ? 0 : 1;
