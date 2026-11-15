@@ -352,10 +352,22 @@ bool DefenseSystem::knows(Entity pawn, Entity trap) const {
 }
 
 bool DefenseSystem::avoidsCell(FactionId faction, CellPos cell) const {
+    const entt::registry& reg = things_.registry();
     if (faction == kPlayerFaction) {
+        // The colony's fighters keep out of the blast of their own turrets: a turret shot to pieces goes up, and in the
+        // year run four colonists crouched round one as cover were all downed by it and bled out.
+        const float x = static_cast<float>(cell.x) + 0.5f;
+        const float y = static_cast<float>(cell.y) + 0.5f;
+        for (const auto [b, turret, thing, pos] : reg.view<const Turret, const Thing, const Position>().each()) {
+            (void)turret;
+            const auto* blast = model_->blast(thing.def);
+            if (blast != nullptr && model_->explodeOnDestroy[thing.def.value] != 0 && pos.level == cell.level &&
+                defenseDistance(x, y, pos.x, pos.y) <= blast->radius) {
+                return true;
+            }
+        }
         return false;
     }
-    const entt::registry& reg = things_.registry();
     for (const ArmedTrap& a : armedTraps()) {
         if (a.cell == cell && std::binary_search(reg.get<Trap>(a.trap).known.begin(), reg.get<Trap>(a.trap).known.end(), faction)) {
             return true;

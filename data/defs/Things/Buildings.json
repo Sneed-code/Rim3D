@@ -20,15 +20,15 @@
     "defName": "AncientWall", "visual": {"link": {"thickness": 0.5}, "parts": [{"shape": "box", "size": [0, 0, 2.2], "color": [0.42, 0.4, 0.37]}]}, "parent": "BuildingBase", "label": "ancient wall",
     "passability": "Impassable", "fillPercent": 1.0,
     "stats": { "maxHitPoints": 200, "flammability": 0 },
-    "building": { "holdsRoof": true },
-    "ours": ["building.holdsRoof", "stats.maxHitPoints"],
+    "building": { "holdsRoof": true }, "mapFeature": true,
+    "ours": ["building.holdsRoof", "stats.maxHitPoints", "mapFeature: not the colony's, so not its home (raids.md)"],
     "note": "Part of a ruin the map is made with (docs/design/mapgen.md). Not built by anyone."
   },
   {
     "defName": "SteamGeyser", "visual": {"parts": [{"shape": "cylinder", "radius": 0.85, "height": 0.35, "color": [0.4, 0.38, 0.35]}, {"shape": "cylinder", "radius": 0.35, "height": 0.5, "color": [0.55, 0.55, 0.55]}]}, "parent": "BuildingBase", "label": "steam geyser",
     "size": [2, 2], "passability": "Impassable", "fillPercent": 0.3,
-    "stats": { "maxHitPoints": 100000, "flammability": 0 },
-    "ours": ["stats.maxHitPoints"],
+    "stats": { "maxHitPoints": 100000, "flammability": 0 }, "mapFeature": true,
+    "ours": ["stats.maxHitPoints", "mapFeature: not the colony's, so not its home (raids.md)"],
     "note": "Found on the map, never built. Steam power and eruptions come with the events (docs/design/mapgen.md)."
   },
   {

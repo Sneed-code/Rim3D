@@ -114,7 +114,9 @@ public:
 
     // Whether a pawn knows where a trap is: pawns of its side, and pawns of a side that learned of it.
     bool knows(Entity pawn, Entity trap) const;
-    // The side `faction` knows an armed trap in `cell`: its fighters keep out of that cell and walk round it.
+    // The side `faction` knows an armed trap in `cell`: its fighters keep out of that cell and walk round it. For the
+    // colony's side: `cell` is within the blast of one of its turrets (one that explodes when destroyed), where its
+    // fighters don't take cover (they don't walk round it).
     bool avoidsCell(FactionId faction, CellPos cell) const;
     // Bends a walk (cells after the start, as the pathfinder and smoothPath give them) round the cells of armed traps
     // the side knows, with the detours `DefenseNumbers::detourTries` allows. The last cell is never changed.

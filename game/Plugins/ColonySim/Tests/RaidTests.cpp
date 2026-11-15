@@ -750,3 +750,35 @@ TEST_CASE("Raids: a colonist resting in bed to get over an illness stays in bed 
         CHECK(reg.all_of<Fighter>(colonists[i]));  // the healthy are called up
     }
 }
+
+TEST_CASE("Raids: the alarm's home is the middle of the colony's own buildings, not ruins, geysers or brood mounds") {
+    auto sim = raidTestSim();
+    for (int x = 60; x < 64; ++x) {
+        sim->things().spawn("RaidTestWall", CellPos{x, 60, 0});
+    }
+    float x0 = 0.0f;
+    float y0 = 0.0f;
+    CHECK(sim->raids().colonyMiddle(x0, y0));
+    // The map's own buildings far off: a ruin's ancient walls, a steam geyser and a brood mound.
+    for (int y = 100; y < 120; ++y) {
+        sim->things().spawn("AncientWall", CellPos{115, y, 0});
+    }
+    CHECK(sim->things().spawn("SteamGeyser", CellPos{10, 10, 0}) != kNoEntity);
+    CHECK(sim->things().spawn("Hive", CellPos{100, 20, 0}) != kNoEntity);
+    float x1 = 0.0f;
+    float y1 = 0.0f;
+    CHECK(sim->raids().colonyMiddle(x1, y1));
+    CHECK(x1 == doctest::Approx(x0));
+    CHECK(y1 == doctest::Approx(y0));
+    // A building of the colony's does move it, and the alarm takes it as home.
+    sim->things().spawn("RaidTestWall", CellPos{90, 60, 0});
+    float x2 = 0.0f;
+    float y2 = 0.0f;
+    CHECK(sim->raids().colonyMiddle(x2, y2));
+    CHECK(x2 > x1 + 1.0f);
+    sim->submit(SoundAlarmCommand{true});
+    sim->step();
+    CHECK(sim->raids().state().hasHome);
+    CHECK(sim->raids().state().homeX == doctest::Approx(x2));
+    CHECK(sim->raids().state().homeY == doctest::Approx(y2));
+}

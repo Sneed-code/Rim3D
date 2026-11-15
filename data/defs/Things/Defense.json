@@ -66,5 +66,14 @@
     "stats": { "maxHitPoints": 300, "workToBuild": 259.2, "flammability": 0.0, "beauty": -10 },
     "ours": ["visual"],
     "note": "Wiki-checked 2026-10-28: 5 fabric or leather, 300 HP, 180 ticks of work (x 1.44 = 259.2 game seconds), cover 55% (fill), path cost 42, beauty -10, 0% flammable, 1x1, no research. Siege camps build them (docs/design/sieges.md)."
+  },
+  {
+    "defName": "Barricade", "parent": "BuildingBase", "label": "barricade", "source": "RimWorld wiki",
+    "size": [1, 1], "passability": "PassThroughOnly", "pathCost": 42, "fillPercent": 0.55, "designationCategory": "Security",
+    "stuffCategories": ["Metallic", "Woody", "Stony"], "costStuffCount": 5,
+    "visual": { "parts": [{ "shape": "box", "size": [0.95, 0.4, 0.55], "stuff": true }] },
+    "stats": { "maxHitPoints": 300, "workToBuild": 460.8, "flammability": 1.0, "beauty": -3 },
+    "ours": ["visual"],
+    "note": "Wiki-checked 2026-11-15: 5 metallic, woody or stony stuff, 300 HP (before the stuff's factor), 320 ticks of work (x 1.44 = 460.8 game seconds), cover 55% (fill), path cost 42, beauty -3, 100% flammable before the stuff, 1x1, pass through only, no research. The year run's defence posts are wood barricades (docs/design/colony-scenario.md)."
   }
 ]

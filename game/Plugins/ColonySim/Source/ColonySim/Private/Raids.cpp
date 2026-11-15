@@ -1773,6 +1773,38 @@ bool RaidSystem::canSee(Entity watcher, Entity pawn) const {
     return map_.cover().lineOfSight(Viewpoint{a.x, a.y, a.level, Stance::Standing}, Viewpoint{b.x, b.y, b.level, stance});
 }
 
+bool RaidSystem::colonyMiddle(float& x, float& y) const {
+    // The middle of the colony's buildings, else of its colonists. Not the map's own buildings: the ruins' ancient walls and
+    // the steam geysers (`mapFeature` in their defs) and brood mounds are nobody's home; in the year run a ruin across the
+    // map put "home" 60 m from the barracks, so the defenders held their line out in the open. In id order, so the sum is the
+    // same after a load.
+    const entt::registry& reg = things_.registry();
+    std::vector<Entity> buildings;
+    std::vector<Entity> colonists;
+    for (const auto [e, thing, pos] : reg.view<const Thing, const Position>().each()) {
+        if (thing.category == ThingCategory::Building && reg.all_of<Footprint>(e)) {
+            const Def& def = defs_.get(thing.def);
+            if (!def.flag("mapFeature") && !def.has("hive")) {
+                buildings.push_back(e);
+            }
+        } else if (reg.all_of<Colonist>(e) && fighters_.factionOf(e) == kPlayerFaction) {
+            colonists.push_back(e);
+        }
+    }
+    std::vector<Entity>& from = buildings.empty() ? colonists : buildings;
+    std::sort(from.begin(), from.end());
+    float sx = 0.0f;
+    float sy = 0.0f;
+    const int n = static_cast<int>(from.size());
+    for (const Entity e : from) {
+        sx += reg.get<Position>(e).x;
+        sy += reg.get<Position>(e).y;
+    }
+    x = n > 0 ? sx / static_cast<float>(n) : 0.0f;
+    y = n > 0 ? sy / static_cast<float>(n) : 0.0f;
+    return n > 0;
+}
+
 void RaidSystem::setAlarm(bool on, const char* why) {
     entt::registry& reg = things_.registry();
     if (on == state_.alarm) {
@@ -1780,29 +1812,7 @@ void RaidSystem::setAlarm(bool on, const char* why) {
     }
     state_.alarm = on;
     if (on) {
-        // Home: the middle of the colony's buildings, else of its colonists.
-        // In id order, so the sum is the same after a load.
-        std::vector<Entity> buildings;
-        std::vector<Entity> colonists;
-        for (const auto [e, thing, pos] : reg.view<const Thing, const Position>().each()) {
-            if (thing.category == ThingCategory::Building && reg.all_of<Footprint>(e)) {
-                buildings.push_back(e);
-            } else if (reg.all_of<Colonist>(e) && fighters_.factionOf(e) == kPlayerFaction) {
-                colonists.push_back(e);
-            }
-        }
-        std::vector<Entity>& from = buildings.empty() ? colonists : buildings;
-        std::sort(from.begin(), from.end());
-        float x = 0.0f;
-        float y = 0.0f;
-        const int n = static_cast<int>(from.size());
-        for (const Entity e : from) {
-            x += reg.get<Position>(e).x;
-            y += reg.get<Position>(e).y;
-        }
-        state_.hasHome = n > 0;
-        state_.homeX = n > 0 ? x / static_cast<float>(n) : 0.0f;
-        state_.homeY = n > 0 ? y / static_cast<float>(n) : 0.0f;
+        state_.hasHome = colonyMiddle(state_.homeX, state_.homeY);
     } else {
         std::vector<Entity> called;
         for (const auto [pawn, f] : reg.view<const Fighter>().each()) {
