@@ -469,3 +469,19 @@ colonists who went there to cut trees and hunt (one left on day 60). Three chang
 | 3, rainforest | | 3 | raids on days 32, 47 and 55 |
 | 7, rainforest | | 0 | **a heat wave** (+17 C for 5 days, from day 17) killed seven of heatstroke on days 19 and 20 |
 
+**Twelfth pass (2026-11-15): the heat plan.** On rainforest seed 7 a heat wave held the air at 42 to 49 C for three days
+and the barracks followed it to 47 C: seven colonists died of heatstroke on days 19 and 20, with nowhere cool to go.
+RimWorld's answer is a cooler. The year script now researches the passive cooler at the start (neolithic, no power) and,
+the first time the air passes 38 C, puts three in the barracks (east wall first, free cells only); they are rebuilt like
+the rest. Colonists already leave their work for a cooler room once heatstroke is serious (`makeShelterJob`); now there is
+one. Two sim fixes came with it: the passive cooler had made-up numbers (steel, -1.3, 9 C, no fuel), now the wiki's, and a
+fuel-burning heat source only runs while it has fuel. The year line prints `coolers`.
+
+| Run | Eleventh pass | Twelfth pass | What killed them |
+| --- | --- | --- | --- |
+| 7, rainforest | 0 | 8 | nobody: the heat wave on day 17 passed with the coolers in |
+| 42, rainforest | 3 | 6 | one in the day 46 raid |
+| 3, rainforest | 3 | 3 | raids on days 32 and 54 (two heat waves, nobody lost to them) |
+| 7 | 6 | 7 | one on day 42 |
+| 1, 42 | 6, 2 | 6, 2 | never past 38 C: no coolers, the same games |
+

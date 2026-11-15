@@ -285,7 +285,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     power_->setSun([this](const GameTime&) { return static_cast<double>(lights_->skyGlow()); });
     power_->setOnChange([this] { lights_->markDirty(); });
     // A lamp that burns fuel is dark without it (FuelSystem marks the lamps dirty when that changes).
-    lights_->setActive([this](Entity building) { return power_->running(building) && jobs_->fuel().lit(building); });
+    lights_->setActive([this](Entity building) { return power_->running(building) && (jobs_ == nullptr || jobs_->fuel().lit(building)); });
     movement_->setLights(lights_.get());
     recreation_ = std::make_unique<RecreationSystem>(*things_, *defs_);
     recreation_->setRooms(rooms_.get());
@@ -312,8 +312,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         max += heat;
         min += traits_->of(pawn).comfyMinOffset;
     });
-    // A heater or cooler that draws power pushes heat only while it has it (E5); a campfire has no power part.
-    temperature_->setSourceRunning([this](Entity building) { return power_->running(building); });
+    // A heater or cooler that draws power pushes heat only while it has it (E5), and one that burns fuel (a campfire, a
+    // passive cooler) only while it has some: before, a campfire with no wood left still warmed its room.
+    temperature_->setSourceRunning([this](Entity building) { return power_->running(building) && (jobs_ == nullptr || jobs_->fuel().lit(building)); });
     spoilage_ = std::make_unique<SpoilageSystem>(map_, *things_, *temperature_, *roomStats_, *defs_,
                                                  splitMix64(settings.seed ^ 0x73706F696CULL));
     spoilage_->setEventLog(&events_);

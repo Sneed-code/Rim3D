@@ -348,23 +348,22 @@
    1
   ],
   "costs": {
-   "Steel": 20
+   "WoodLog": 50
   },
+  "fuel": {"item": "WoodLog", "capacity": 50, "perDay": 10.0},
   "fillPercent": 0.5,
   "stats": {
    "maxHitPoints": 80,
    "workToBuild": 576.0
   },
   "heatPusher": {
-   "heatPerSecond": -1.3,
-   "minTemp": 9,
+   "heatPerSecond": -11,
+   "minTemp": 17,
    "passive": true
   },
+  "note": "RimWorld wiki (Passive cooler): 50 wood, heat per second -11, cools to 17 C at the lowest, burns 10 wood a day from a 50-wood tank, 80 hit points.",
   "unverified": [
-   "costs",
-   "stats.workToBuild",
-   "power",
-   "heatPusher"
+   "stats.workToBuild"
   ]
  },
  {
