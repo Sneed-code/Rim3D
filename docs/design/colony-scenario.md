@@ -520,3 +520,22 @@ The year line prints `turrets`, `barricades` and `turretShots`. Two sim bugs cam
 colonist on a Berserk break beat four others to death in the barracks while they stood by (rainforest seed 3, first round),
 and colonists don't subdue a berserk friend.
 
+**Fourteenth pass (2026-11-15): barricades round the turrets.** Mechanoids outreach the mini-turret (RimWorld's numbers,
+[defense.md](defense.md)) and shot it to pieces in the open. Now the gun post also gets a wood barricade in every free cell
+next to each turret and in the three cells past the conduit row south of it (16 barricades on every test seed, verbose
+`gun post at x,y, N barricades round its turrets`, year line `postBarricades`). The turret's gun now sits on a post
+(muzzle 1.3 m, ours) so it fires over them, while its 0.8 m body hides behind them from level ground. Turrets were still
+lost to fire after short circuits (the battery blows and the wood burns), and rebuilt.
+
+| Run | #286 (wiki mini-turret) | Fourteenth pass |
+| --- | --- | --- |
+| 7, rainforest | 9 | 8 |
+| 42, rainforest | 3 | 5 |
+| 3, rainforest | 4 | 5 |
+| 7 | 5 | 9 |
+| 1 | 6 | 6 |
+| 42 | 6 | 5 |
+
+38 alive on day 60 across the six runs, against 33 with the wiki mini-turret alone (and 38 in the thirteenth pass, when
+the turret had our own weaker numbers but a third shot in each burst).
+

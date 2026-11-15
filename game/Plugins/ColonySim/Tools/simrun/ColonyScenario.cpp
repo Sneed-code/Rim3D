@@ -678,6 +678,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     CellRect postRect{0, 0, 0, 0, 0};
     std::vector<Plan> defencePlans;  // rebuilt like the rest
     int barricades = 0;              // barricades planned in the ring
+    int postBarricades = 0;          // barricades planned round the gun post's turrets
     uint64_t turretShots = 0;
     Entity billedButcher = kNoEntity;
     uint64_t butchered = 0;
@@ -1439,8 +1440,40 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     defence("Battery", "", CellPos{post.x + 1, post.y + 1, 0});
                     defence("Turret_Mini", "", CellPos{post.x, post.y + 1, 0});
                     defence("Turret_Mini", "", CellPos{post.x + kPostWidth - 1, post.y + 1, 0});
+                    // Barricades round each turret, as a player rings turrets with sandbags: mechanoids outreach the
+                    // mini-turret (lance 32.9 m against 28.9 m) and shoot it to pieces in the open. Every free cell next to
+                    // a turret, and the three cells beyond the conduit row south of it (the conduits are flat). The turret
+                    // fires over them (muzzle 1.3 m, barricade 1.1 m); its own 0.8 m body is hidden behind them from level
+                    // ground.
+                    for (const int tx : {post.x, post.x + kPostWidth - 1}) {
+                        const int ty = post.y + 1;
+                        std::vector<CellPos> cells;
+                        for (int dy = -1; dy <= 1; ++dy) {
+                            for (int dx = -1; dx <= 1; ++dx) {
+                                if (dx != 0 || dy != 0) {
+                                    cells.push_back(CellPos{tx + dx, ty + dy, 0});
+                                }
+                            }
+                        }
+                        for (int dx = -1; dx <= 1; ++dx) {
+                            cells.push_back(CellPos{tx + dx, post.y - 1, 0});
+                        }
+                        for (const CellPos& c : cells) {
+                            const bool taken = std::any_of(defencePlans.begin(), defencePlans.end(), [&](const Plan& p) {
+                                const Def* d = defs->find("Things", p.defName);
+                                const int w = d != nullptr ? std::max(1, static_cast<int>(d->numberAt("size", 0, 1.0))) : 1;
+                                const int h = d != nullptr ? std::max(1, static_cast<int>(d->numberAt("size", 1, 1.0))) : 1;
+                                return c.x >= p.cell.x && c.x < p.cell.x + w && c.y >= p.cell.y && c.y < p.cell.y + h;
+                            });
+                            if (!taken && dryGround(sim, c) && sim.map().buildingAt(c) == kNoEntity && sim.construction().siteAt(c) == kNoEntity &&
+                                sim.farming().zoneAt(c) == kNoGrowingZone && sim.zones().stockpileAt(c) == nullptr && touchable(sim, landing, c)) {
+                                defence("Barricade", "WoodLog", c);
+                                ++postBarricades;
+                            }
+                        }
+                    }
                     if (verbose) {
-                        std::fprintf(stderr, "gun post at %d,%d\n", post.x, post.y);
+                        std::fprintf(stderr, "gun post at %d,%d, %d barricades round its turrets\n", post.x, post.y, postBarricades);
                     }
                 } else if (verbose) {
                     std::fprintf(stderr, "no room for the gun post\n");
@@ -2035,7 +2068,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 static_cast<unsigned long long>(sim.stateHash()));
 
     if (year) {
-        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"warmthSeeks\":%llu,\"weaponsTaken\":%llu,\"weaponsHanded\":%llu,\"firebreakMarks\":%llu,\"rebuilt\":%llu,\"hiveHunts\":%llu,\"hiveShots\":%llu,\"hiveAreas\":%llu,\"coolers\":%d,\"turrets\":%d,\"barricades\":%d,\"turretShots\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), static_cast<unsigned long long>(warmthSeeks), static_cast<unsigned long long>(weaponsTaken), static_cast<unsigned long long>(weaponsHanded), static_cast<unsigned long long>(firebreakMarks), static_cast<unsigned long long>(rebuilt), static_cast<unsigned long long>(hiveHunts), static_cast<unsigned long long>(hivesShot), static_cast<unsigned long long>(avoidPaints), coolersPlanned, postRect.sizeX > 0 ? 2 : 0, barricades, static_cast<unsigned long long>(turretShots));
+        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"warmthSeeks\":%llu,\"weaponsTaken\":%llu,\"weaponsHanded\":%llu,\"firebreakMarks\":%llu,\"rebuilt\":%llu,\"hiveHunts\":%llu,\"hiveShots\":%llu,\"hiveAreas\":%llu,\"coolers\":%d,\"turrets\":%d,\"barricades\":%d,\"postBarricades\":%d,\"turretShots\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), static_cast<unsigned long long>(warmthSeeks), static_cast<unsigned long long>(weaponsTaken), static_cast<unsigned long long>(weaponsHanded), static_cast<unsigned long long>(firebreakMarks), static_cast<unsigned long long>(rebuilt), static_cast<unsigned long long>(hiveHunts), static_cast<unsigned long long>(hivesShot), static_cast<unsigned long long>(avoidPaints), coolersPlanned, postRect.sizeX > 0 ? 2 : 0, barricades, postBarricades, static_cast<unsigned long long>(turretShots));
         std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"narrator\":\"%s\",\"letters\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), narrator.c_str(), static_cast<unsigned long long>(letters));
         if (greenhousePlanned) {
             std::printf("{\"greenhouse\":{\"at\":\"%d,%d\",\"basins\":%d,\"generators\":%d,\"heaters\":%d,\"lamps\":%d,\"zoneMade\":%s,"
