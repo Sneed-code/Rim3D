@@ -16,6 +16,7 @@
     ],
     "nearbyThings": [
       { "thing": "Steel", "count": 450 },
+      { "thing": "Copper", "count": 150 },
       { "thing": "WoodLog", "count": 300 }
     ],
     "scatteredThings": [
@@ -23,7 +24,7 @@
       { "thing": "MealSurvivalPack", "count": 7 }
     ],
     "gearLater": ["MeleeWeapon_Knife (plasteel) when melee comes", "the helmet is plasteel in RimWorld; steel until materials exist"],
-    "ours": ["colonists", "protagonist", "colonistPawnKind"]
+    "ours": ["colonists", "protagonist", "colonistPawnKind", "Copper 150 nearby (copper is ours; enough wire to start a power net)"]
   },
   {
     "defName": "CrashlandedRainforest", "source": "ours", "label": "crashlanded (tropical rainforest)",
@@ -42,6 +43,7 @@
     ],
     "nearbyThings": [
       { "thing": "Steel", "count": 450 },
+      { "thing": "Copper", "count": 150 },
       { "thing": "WoodLog", "count": 300 }
     ],
     "scatteredThings": [
@@ -49,7 +51,7 @@
       { "thing": "MealSurvivalPack", "count": 7 }
     ],
     "gearLater": ["MeleeWeapon_Knife (plasteel) when melee comes", "the helmet is plasteel in RimWorld; steel until materials exist"],
-    "ours": ["colonists", "protagonist", "colonistPawnKind", "biome: the Crashlanded start on a rainforest tile, for the tropical playtest (G2); needs SimWorld"]
+    "ours": ["colonists", "protagonist", "colonistPawnKind", "Copper 150 nearby (copper is ours; enough wire to start a power net)", "biome: the Crashlanded start on a rainforest tile, for the tropical playtest (G2); needs SimWorld"]
   },
   {
     "defName": "PerfColony", "source": "ours", "label": "performance test colony",

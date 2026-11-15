@@ -2,7 +2,7 @@
   {
     "defName": "BulkGoods", "source": "RimWorld wiki", "label": "bulk goods trader",
     "silver": [750, 1200],
-    "stock": [ { "thing": "Steel", "count": [250, 400] }, { "thing": "WoodLog", "count": [200, 400] }, { "thing": "ComponentIndustrial", "count": [30, 40] }, { "thing": "MedicineIndustrial", "count": [10, 25] }, { "thing": "RawBerries", "count": [50, 150] } ],
+    "stock": [ { "thing": "Steel", "count": [250, 400] }, { "thing": "Copper", "count": [150, 300] }, { "thing": "WoodLog", "count": [200, 400] }, { "thing": "ComponentIndustrial", "count": [30, 40] }, { "thing": "MedicineIndustrial", "count": [10, 25] }, { "thing": "RawBerries", "count": [50, 150] } ],
     "buys": ["Foods", "Textiles", "Apparel", "Furniture", "Metals", "Stuff", "DomesticAnimals"], "sells": ["Foods", "Textiles", "Apparel", "Furniture", "Metals", "Stuff", "DomesticAnimals"],
     "unverified": ["silver", "stock", "buys", "sells"],
     "notes": "Food, basic materials (steel, wood, components, gold, textiles), clothing, furniture and domestic animals. Silver and steel ranges are the wiki's caravan figures; the other counts are ours until more items exist. buys and sells name item categories that later tasks (C23) match against."
