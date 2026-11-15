@@ -535,6 +535,12 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                     } else if constexpr (std::is_same_v<Type, HideGearCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
                         j["hide"] = c.hide;
+                    } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
+                        j["pawn"] = entt::to_integral(c.pawn);
+                        j["up"] = c.up;
+                        j["hasDir"] = c.hasDir;
+                        j["dirX"] = c.dirX;
+                        j["dirY"] = c.dirY;
                     } else {
                         static_assert(std::is_same_v<Type, RerollColonistCommand>, "write every command type");
                         j["slot"] = c.slot;
@@ -1842,6 +1848,17 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             HideGearCommand c;
             uint32_t pawn = entt::to_integral(kNoEntity);
             if (!r.integer(j, "pawn", pawn, where) || !r.flag(j, "hide", c.hide, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "Shield") {
+            ShieldCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            if (!r.integer(j, "pawn", pawn, where) || !r.flag(j, "up", c.up, where) || !r.flag(j, "hasDir", c.hasDir, where) ||
+                !r.number(j, "dirX", c.dirX, where) || !r.number(j, "dirY", c.dirY, where)) {
                 return false;
             }
             c.pawn = static_cast<Entity>(pawn);

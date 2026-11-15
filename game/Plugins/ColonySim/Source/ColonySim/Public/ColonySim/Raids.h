@@ -367,6 +367,7 @@ private:
         struct Wear {
             std::string thing;
             float chance = 1.0f;
+            std::string stuff;  // what it is made of, for things made of a stuff (a clan warrior's wooden shield)
         };
         std::vector<Wear> apparel;
     };

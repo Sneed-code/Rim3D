@@ -1,6 +1,7 @@
 #include "ColonySim/Raids.h"
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
@@ -485,7 +486,8 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, R
         for (size_t a = 0; a < kindDef->count("apparel"); ++a) {
             const std::string ab = "apparel." + std::to_string(a);
             k.apparel.push_back(PawnKind::Wear{kindDef->text((ab + ".thing").c_str()),
-                                               static_cast<float>(kindDef->number((ab + ".chance").c_str(), 1.0))});
+                                               static_cast<float>(kindDef->number((ab + ".chance").c_str(), 1.0)),
+                                               kindDef->text((ab + ".stuff").c_str())});
         }
         if (k.combatPower <= 0.0f || !defs_.idOf("Things", k.race).valid()) {
             error = "pawn kind '" + k.defName + "' has no combat power or an unknown race";
@@ -698,6 +700,13 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, R
         for (const PawnKind::Wear& wear : kind.apparel) {
             if (rng_.unit() < wear.chance) {
                 const Entity item = things_.spawn(wear.thing, cell);
+                const DefId stuff = wear.stuff.empty() ? DefId{} : defs_.idOf("Things", wear.stuff);
+                if (item != kNoEntity && stuff.valid()) {
+                    // Made of its stuff, with the hit points that gives (docs/design/shields.md).
+                    reg.emplace_or_replace<MadeOf>(item, MadeOf{stuff});
+                    const int hp = combat_.apparelStats().maxHitPoints(reg.get<Thing>(item).def, stuff);
+                    reg.emplace_or_replace<HitPoints>(item, HitPoints{hp, hp});
+                }
                 if (item != kNoEntity && !combat_.equip(pawn, item)) {
                     things_.destroy(item);
                 }

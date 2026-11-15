@@ -1,5 +1,6 @@
 #include "ColonySim/Trade.h"
 
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
@@ -423,7 +424,8 @@ bool TradeSystem::readKind(const std::string& kindName, KindInfo& out, std::stri
     }
     for (size_t a = 0; a < kindDef->count("apparel"); ++a) {
         const std::string ab = "apparel." + std::to_string(a);
-        out.apparel.push_back(KindInfo::Wear{kindDef->text((ab + ".thing").c_str()), static_cast<float>(kindDef->number((ab + ".chance").c_str(), 1.0))});
+        out.apparel.push_back(KindInfo::Wear{kindDef->text((ab + ".thing").c_str()), static_cast<float>(kindDef->number((ab + ".chance").c_str(), 1.0)),
+                                             kindDef->text((ab + ".stuff").c_str())});
     }
     return true;
 }
@@ -506,6 +508,13 @@ bool TradeSystem::spawnPawn(Visit& visit, const KindInfo& kind, VisitorRole role
     for (const KindInfo::Wear& wear : kind.apparel) {
         if (rng_.unit() < wear.chance) {
             const Entity item = things_.spawn(wear.thing, cell);
+            const DefId stuff = wear.stuff.empty() ? DefId{} : defs_.idOf("Things", wear.stuff);
+            if (item != kNoEntity && stuff.valid()) {
+                entt::registry& wreg = things_.registry();
+                wreg.emplace_or_replace<MadeOf>(item, MadeOf{stuff});
+                const int hp = combat_.apparelStats().maxHitPoints(wreg.get<Thing>(item).def, stuff);
+                wreg.emplace_or_replace<HitPoints>(item, HitPoints{hp, hp});
+            }
             if (item != kNoEntity && !combat_.equip(pawn, item)) {
                 things_.destroy(item);
             }

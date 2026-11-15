@@ -277,6 +277,8 @@ private:
     int64_t now() const;
     void planCharge(Entity pawn, Fighter& f, CellPos goal);
     bool meleeAct(Entity pawn, Fighter& f);
+    // Raises the shield at an attack it sees coming, lowers it to attack (docs/design/shields.md).
+    void shieldAct(Entity pawn, Fighter& f);
     // Rescue mode (FighterRescue.cpp): lifts the patient once in reach, keeps it with the fighter, lays it down at
     // the end. `endRescue` lays it where the fighter stands (if lifted) and sends the fighter back to Fight.
     void rescueStep(Entity pawn, Fighter& f);
