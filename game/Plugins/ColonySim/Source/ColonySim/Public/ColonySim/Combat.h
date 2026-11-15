@@ -454,6 +454,11 @@ public:
     // 1 for a normal weapon of no stuff. The melee factor is by the blow's damage type (sharp or blunt
     // stuff factor times the quality's) and applies to damage and armor penetration alike.
     float meleeDamageFactor(Entity weapon, DefId damageType) const;
+    // The damage left of `amount` of `damageType` after the pawn's worn pieces and its own hide
+    // (docs/design/armour.md), and, when asked, each piece's share of what was taken off. `blast`:
+    // set off by an explosion (the type's explosionMix).
+    float mitigate(Entity pawn, DefId damageType, float amount, float penetration = 0.0f, bool blast = false,
+                   std::vector<std::pair<Entity, float>>* contributions = nullptr) const;
     float rangedAccuracyFactor(Entity weapon) const;
     float rangedDamageFactor(Entity weapon) const;
     bool isGun(DefId def) const;
@@ -479,10 +484,11 @@ private:
     void updateShooter(Entity pawn, Shooter& s, Rng& rng);
     void startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps);
     void drop(Entity pawn, Entity item);
-    // The armor rolls of a hit on `part` (shared by bullets, blows and blast fragments): the damage
-    // left (deflected if the armor turned it away), the damage type (sharp may become blunt) and the
-    // wear on the pieces. Uses `rng`.
-    PawnHitResult armorPass(Entity pawn, int part, DefId damageType, float damage, float penetration, Rng& rng) const;
+    // The mitigation of a hit (shared by bullets, blows, flames and blast fragments): the damage left and
+    // the wear on the pieces (docs/design/armour.md). `blast` uses the type's explosionMix. Uses `rng`
+    // only to round the wear.
+    PawnHitResult armorPass(Entity pawn, int part, DefId damageType, float damage, float penetration, Rng& rng,
+                            bool blast = false) const;
     int pickOutsidePart(Entity pawn, Rng& rng) const;
     Entity launch(Entity launcher, DefId weaponDef, float ox, float oy, float oz, int level, CellPos startCell, float x,
                   float y, float z, float spreadSlope, Rng& rng, float kickUp, float kickSide, Posture* posture);

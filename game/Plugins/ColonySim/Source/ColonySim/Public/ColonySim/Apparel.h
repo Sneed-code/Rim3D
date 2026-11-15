@@ -30,7 +30,49 @@ struct Event;
 // (ApparelStats); what a pawn wears and why (outfits, wearing, wear and tear, taint, thoughts) is
 // ApparelSystem. Unreal reads worn pieces and outfits from the snapshot and sends the commands.
 
-enum class ArmorType : uint8_t { Sharp, Blunt, Heat };
+// sneed's damage model (2026-11-14, docs/design/armour.md). Every hit is a mix of three classes; an
+// elemental hit also names its subtype (fire, cold...). Every worn piece and a creature's own hide has
+// a % against each class and an extra % against each subtype; damage is divided by (1 + %) for every
+// piece, so it never reaches 0. A negative % multiplies the damage by (1 + |%|) instead.
+enum class DamageClass : uint8_t { Blunt, Sharp, Elemental };
+enum class DamageSub : uint8_t { None, Fire, Cold, Toxic, Electric, Psionic };
+constexpr int kDamageClasses = 3;
+constexpr int kMitigationFields = 8;  // blunt, sharp, elemental, fire, cold, toxic, electric, psionic
+
+// Percentages, by field: the three classes, then the five subtypes (field 3 + subtype - 1).
+struct COLONY_API Mitigation {
+    float pct[kMitigationFields] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+    // Reads {"blunt": 15, "sharp": 30, "elemental": 15, "fire": 10, ...} at `path`; missing fields are 0.
+    static Mitigation read(const Def& def, const std::string& path);
+    static const char* fieldName(int field);
+    bool any() const;
+};
+
+// What a hit is made of: shares of the three classes (summing to 1 for a normal hit) and the subtype of its
+// elemental share. Read from a DamageTypes def's `mix` ({"sharp": 0.75, "blunt": 0.25},
+// {"elemental": 1, "sub": "Fire"}).
+struct COLONY_API DamageMix {
+    float share[kDamageClasses] = {0, 0, 0};
+    DamageSub sub = DamageSub::None;
+
+    static DamageMix read(const Def& def, const std::string& path);
+    float total() const { return share[0] + share[1] + share[2]; }
+};
+
+// The divisor one % gives: 1 + % / 100, or 1 / (1 + |%| / 100) for a negative %.
+COLONY_API float mitigationDivisor(float pct);
+// The divisor a set of %s gives against one class (an elemental hit adds its subtype's), after
+// armour penetration (0 to 1) takes that share off each positive %.
+COLONY_API float mitigationFactor(const Mitigation& m, DamageClass c, DamageSub sub, float penetration);
+
+// Which layer a worn piece is (docs/design/armour.md): clothing (shirt, pants, hat) or armour (vest,
+// suit, helmet); other gear (belts, packs) gives no mitigation. A piece fills slots; two pieces of the
+// same kind can't share a slot. Pants and a shirt count under armour; a hat and a helmet: the better.
+enum class GearKind : uint8_t { None, Clothing, Armour, Other };
+constexpr uint8_t kGearHead = 1;
+constexpr uint8_t kGearChest = 2;
+constexpr uint8_t kGearLegs = 4;
 
 // An item made of a stuff (cloth, leather...): clothes from tailoring. Its armor and insulation come
 // from the stuff (Textiles.json, `stuffProps`); without one a `stuffRequired` garment is worth nothing.
@@ -84,7 +126,10 @@ struct COLONY_API ApparelRules {
     float wearFactor = 1.0f;                // times that (ours, to tune)
     float deathHpLossMin = 0.15f;           // worn apparel loses this share of its durability when the wearer dies...
     float deathHpLossMax = 0.40f;           // ...up to this share
-    float tatteredBenefitFactor = 0.8f;     // a piece at 0 durability gives this share of its armor and insulation (ours)
+    float tatteredBenefitFactor = 0.8f;     // a piece at 0 durability gives this share of its insulation (ours)
+    float tatteredMitigationFactor = 0.67f; // ...and this share of its mitigation % (sneed)
+    float clothingInsulationCold = 10.0f;   // every regular garment, degrees (sneed)
+    float clothingInsulationHeat = 2.0f;
     int taintedStageCap = 4;
     std::string defaultOutfit = "Anything";
     int wearSteps = 60;                     // putting on or taking off one piece
@@ -113,10 +158,17 @@ public:
     const std::vector<std::string>& layers(DefId def) const;
     bool covers(DefId def, const std::string& group) const;
 
-    // Armor rating 0 to more than 1 (1 stops everything a rating of 1 can). A garment made of a
-    // stuff: the stuff's factor times the garment's multiplier; other apparel: its own rating. Times
-    // the quality's factor.
-    float armor(const entt::registry& reg, Entity item, ArmorType type) const;
+    // Which layer and slots a def fills (GearKind::None for a def that is not apparel or says nothing).
+    GearKind gearKind(DefId def) const { return isApparel(def) ? apparel_[def.value].kind : GearKind::None; }
+    uint8_t gearSlots(DefId def) const { return isApparel(def) ? apparel_[def.value].slots : 0; }
+    // The piece's mitigation %s (docs/design/armour.md): clothing takes its material's `clothing.mitigation`
+    // times the garment's share (a hat half); armour its own `gear.mitigation`, times its material's
+    // `armourStuff.factor` plus `armourStuff.offset` when it is made of one. Positive %s are then scaled
+    // by the quality's factor and, worn down, by `tatteredMitigationFactor`.
+    Mitigation mitigation(const entt::registry& reg, Entity item) const;
+    // Kilograms the piece weighs on the wearer: clothing its material's `clothing.kg` times the share,
+    // other apparel its def's mass.
+    float weightKg(const entt::registry& reg, Entity item) const;
     // Degrees Celsius the comfortable range widens: cold lowers its minimum, heat raises its maximum.
     float insulationCold(const entt::registry& reg, Entity item) const;
     float insulationHeat(const entt::registry& reg, Entity item) const;
@@ -127,7 +179,7 @@ public:
     // The item's durability, 0 to 1: its own wear, capped by its hit-point share (an item at 70% of its hit points
     // is at most 70% durable). 1 for an item with neither.
     static float condition(const entt::registry& reg, Entity item);
-    // At 0 durability: tattered, worth `tatteredBenefitFactor` of its armor and insulation.
+    // At 0 durability: tattered, worth `tatteredMitigationFactor` of its mitigation and `tatteredBenefitFactor` of its insulation.
     static bool tattered(const entt::registry& reg, Entity item);
     // Basic clothes (`apparel.fragile`): worn at 0 durability, further wear takes hit points and can destroy them.
     bool fragile(DefId def) const { return isApparel(def) && apparel_[def.value].fragile; }
@@ -143,8 +195,11 @@ private:
         bool valid = false;
         bool stuffRequired = false;
         bool fragile = false;
-        float fixedArmor[3] = {0.0f, 0.0f, 0.0f};
-        float armorMultiplier = 1.0f;
+        GearKind kind = GearKind::None;
+        uint8_t slots = 0;
+        float share = 1.0f;     // clothing: share of the material's mitigation and weight (hats 0.5)
+        Mitigation fixed;       // armour: its own %s (steel's for armour made of a material)
+        float mass = 0.0f;
         float coldMultiplier = 0.0f;
         float heatMultiplier = 0.0f;
         float fixedCold = 0.0f;
@@ -155,7 +210,11 @@ private:
     };
     struct Stuff {
         bool valid = false;
-        float armor[3] = {0.0f, 0.0f, 0.0f};
+        bool clothing = false;  // has a `clothing` block
+        Mitigation clothingMit;
+        float clothingKg = 0.0f;
+        float armourFactor[kDamageClasses] = {1.0f, 1.0f, 1.0f};
+        Mitigation armourOffset;
         float cold = 0.0f;
         float heat = 0.0f;
         float hitPoints = 1.0f;
@@ -168,6 +227,9 @@ private:
     std::vector<std::string> qualityNames_;
     int defaultQuality_ = 2;
     float tatteredFactor_ = 0.8f;
+    float tatteredMitigation_ = 0.67f;
+    float clothingCold_ = 10.0f;
+    float clothingHeat_ = 2.0f;
     std::vector<std::string> none_;
     std::string noName_;
 };
@@ -226,6 +288,8 @@ public:
     const std::vector<Entity>& worn(Entity pawn) const;
     // Total insulation of everything worn, degrees (E2 adds it to the comfortable range).
     void insulation(Entity pawn, float& cold, float& heat) const;
+    // Worn pieces at 0 durability (the tattered thought's stage, up to 3).
+    int tatteredWorn(Entity pawn) const;
     // The durability (ApparelStats::condition) of the worst worn piece; 1 when it wears nothing.
     float worstCondition(Entity pawn) const;
     // Wears a piece down by a share of its full durability (never below 0; hit points are not touched).

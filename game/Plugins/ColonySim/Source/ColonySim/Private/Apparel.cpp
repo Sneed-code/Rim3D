@@ -26,9 +26,66 @@ float apparelNum(const Def& def, const char* path, float fallback) {
     return static_cast<float>(def.number(path, fallback));
 }
 
-const char* const kApparelArmorKeys[3] = {"armorRatingSharp", "armorRatingBlunt", "armorRatingHeat"};
+const char* const kApparelMitigationNames[kMitigationFields] = {"blunt", "sharp", "elemental", "fire",
+                                                                 "cold",  "toxic", "electric",  "psionic"};
+
+uint8_t apparelSlotBit(const std::string& name) {
+    return name == "Head" ? kGearHead : name == "Chest" ? kGearChest : name == "Legs" ? kGearLegs : 0;
+}
 
 }  // namespace
+
+// ---- Mitigation ------------------------------------------------------------------------------
+
+Mitigation Mitigation::read(const Def& def, const std::string& path) {
+    Mitigation m;
+    for (int f = 0; f < kMitigationFields; ++f) {
+        m.pct[f] = static_cast<float>(def.number((path + "." + kApparelMitigationNames[f]).c_str(), 0.0));
+    }
+    return m;
+}
+
+const char* Mitigation::fieldName(int field) {
+    return field >= 0 && field < kMitigationFields ? kApparelMitigationNames[field] : "";
+}
+
+bool Mitigation::any() const {
+    for (const float p : pct) {
+        if (p != 0.0f) {
+            return true;
+        }
+    }
+    return false;
+}
+
+DamageMix DamageMix::read(const Def& def, const std::string& path) {
+    DamageMix mix;
+    for (int c = 0; c < kDamageClasses; ++c) {
+        mix.share[c] = std::max(0.0f, static_cast<float>(def.number((path + "." + kApparelMitigationNames[c]).c_str(), 0.0)));
+    }
+    const std::string sub = def.text((path + ".sub").c_str());
+    mix.sub = sub == "Fire"       ? DamageSub::Fire
+              : sub == "Cold"     ? DamageSub::Cold
+              : sub == "Toxic"    ? DamageSub::Toxic
+              : sub == "Electric" ? DamageSub::Electric
+              : sub == "Psionic"  ? DamageSub::Psionic
+                                  : DamageSub::None;
+    return mix;
+}
+
+float mitigationDivisor(float pct) {
+    return pct >= 0.0f ? 1.0f + pct / 100.0f : 1.0f / (1.0f - pct / 100.0f);
+}
+
+float mitigationFactor(const Mitigation& m, DamageClass c, DamageSub sub, float penetration) {
+    const float keep = std::clamp(1.0f - penetration, 0.0f, 1.0f);
+    const auto after = [keep](float pct) { return pct > 0.0f ? pct * keep : pct; };
+    float divisor = mitigationDivisor(after(m.pct[static_cast<int>(c)]));
+    if (c == DamageClass::Elemental && sub != DamageSub::None) {
+        divisor *= mitigationDivisor(after(m.pct[2 + static_cast<int>(sub)]));
+    }
+    return divisor;
+}
 
 ApparelRules ApparelRules::read(const DefDatabase& defs) {
     ApparelRules r;
@@ -42,6 +99,9 @@ ApparelRules ApparelRules::read(const DefDatabase& defs) {
     r.deathHpLossMin = static_cast<float>(def->numberAt("deathHpLoss", 0, r.deathHpLossMin));
     r.deathHpLossMax = static_cast<float>(def->numberAt("deathHpLoss", 1, r.deathHpLossMax));
     r.tatteredBenefitFactor = std::clamp(apparelNum(*def, "tatteredBenefitFactor", r.tatteredBenefitFactor), 0.0f, 1.0f);
+    r.tatteredMitigationFactor = std::clamp(apparelNum(*def, "tatteredMitigationFactor", r.tatteredMitigationFactor), 0.0f, 1.0f);
+    r.clothingInsulationCold = apparelNum(*def, "clothingInsulationCold", r.clothingInsulationCold);
+    r.clothingInsulationHeat = apparelNum(*def, "clothingInsulationHeat", r.clothingInsulationHeat);
     r.taintedStageCap = std::max(1, static_cast<int>(def->integer("taintedStageCap", r.taintedStageCap)));
     r.defaultOutfit = def->text("defaultOutfit", r.defaultOutfit);
     r.wearSteps = std::max(1, static_cast<int>(def->integer("wearSteps", r.wearSteps)));
@@ -83,7 +143,11 @@ ApparelStats::ApparelStats(const DefDatabase& defs) {
         defaultQuality_ = 0;
     }
     defaultQuality_ = std::clamp(defaultQuality_, 0, static_cast<int>(qualityArmor_.size()) - 1);
-    tatteredFactor_ = ApparelRules::read(defs).tatteredBenefitFactor;
+    const ApparelRules rules = ApparelRules::read(defs);
+    tatteredFactor_ = rules.tatteredBenefitFactor;
+    tatteredMitigation_ = rules.tatteredMitigationFactor;
+    clothingCold_ = rules.clothingInsulationCold;
+    clothingHeat_ = rules.clothingInsulationHeat;
 
     for (const DefId id : defs.idsOfKind("Things")) {
         const Def& def = defs.get(id);
@@ -92,10 +156,14 @@ ApparelStats::ApparelStats(const DefDatabase& defs) {
             a.valid = true;
             a.stuffRequired = def.flag("stuffRequired");
             a.fragile = def.flag("apparel.fragile");
-            for (int t = 0; t < 3; ++t) {
-                a.fixedArmor[t] = apparelNum(def, (std::string("stats.") + kApparelArmorKeys[t]).c_str(), 0.0f);
+            const std::string kind = def.text("gear.kind");
+            a.kind = kind == "Clothing" ? GearKind::Clothing : kind == "Armour" ? GearKind::Armour : kind == "Other" ? GearKind::Other : GearKind::None;
+            for (size_t i = 0; i < def.count("gear.slots"); ++i) {
+                a.slots = static_cast<uint8_t>(a.slots | apparelSlotBit(def.textAt("gear.slots", i)));
             }
-            a.armorMultiplier = apparelNum(def, "apparel.stuffEffectMultiplierArmor", 1.0f);
+            a.share = apparelNum(def, "gear.share", 1.0f);
+            a.fixed = Mitigation::read(def, "gear.mitigation");
+            a.mass = apparelNum(def, "stats.mass", 0.0f);
             a.coldMultiplier = apparelNum(def, "apparel.stuffEffectMultiplierInsulationCold", 0.0f);
             a.heatMultiplier = apparelNum(def, "apparel.stuffEffectMultiplierInsulationHeat", 0.0f);
             a.fixedCold = apparelNum(def, "stats.insulationCold", 0.0f);
@@ -111,9 +179,13 @@ ApparelStats::ApparelStats(const DefDatabase& defs) {
         if (def.has("stuffProps")) {
             Stuff& s = stuff_[id.value];
             s.valid = true;
-            for (int t = 0; t < 3; ++t) {
-                s.armor[t] = apparelNum(def, (std::string("stuffProps.statFactors.") + kApparelArmorKeys[t]).c_str(), 0.0f);
+            s.clothing = def.has("clothing");
+            s.clothingMit = Mitigation::read(def, "clothing.mitigation");
+            s.clothingKg = apparelNum(def, "clothing.kg", 0.0f);
+            for (int c = 0; c < kDamageClasses; ++c) {
+                s.armourFactor[c] = apparelNum(def, (std::string("armourStuff.factor.") + kApparelMitigationNames[c]).c_str(), 1.0f);
             }
+            s.armourOffset = Mitigation::read(def, "armourStuff.offset");
             s.cold = apparelNum(def, "stuffProps.statOffsets.insulationCold", 0.0f);
             s.heat = apparelNum(def, "stuffProps.statOffsets.insulationHeat", 0.0f);
             s.hitPoints = apparelNum(def, "stuffProps.statFactors.maxHitPoints", 1.0f);
@@ -145,22 +217,60 @@ const std::string& ApparelStats::qualityName(int level) const {
     return level >= 0 && level < qualityLevels() ? qualityNames_[static_cast<size_t>(level)] : noName_;
 }
 
-float ApparelStats::armor(const entt::registry& reg, Entity item, ArmorType type) const {
+Mitigation ApparelStats::mitigation(const entt::registry& reg, Entity item) const {
+    Mitigation m;
+    const DefId def = reg.get<Thing>(item).def;
+    if (!isApparel(def)) {
+        return m;
+    }
+    const Apparel& a = apparel_[def.value];
+    const MadeOf* made = reg.try_get<MadeOf>(item);
+    const Stuff* stuff = made != nullptr && made->stuff.valid() && made->stuff.value < stuff_.size() && stuff_[made->stuff.value].valid
+                             ? &stuff_[made->stuff.value]
+                             : nullptr;
+    if (a.kind == GearKind::Clothing) {
+        if (stuff == nullptr || !stuff->clothing) {
+            return m;
+        }
+        for (int f = 0; f < kMitigationFields; ++f) {
+            m.pct[f] = stuff->clothingMit.pct[f] * a.share;
+        }
+    } else if (a.kind == GearKind::Armour) {
+        if (a.stuffRequired && stuff == nullptr) {
+            return m;
+        }
+        m = a.fixed;
+        if (a.stuffRequired) {
+            for (int c = 0; c < kDamageClasses; ++c) {
+                m.pct[c] *= stuff->armourFactor[c];
+            }
+            for (int f = 0; f < kMitigationFields; ++f) {
+                m.pct[f] += stuff->armourOffset.pct[f];
+            }
+        }
+    } else {
+        return m;
+    }
+    const float scale = qualityArmor_[static_cast<size_t>(qualityOf(reg, item))] * (tattered(reg, item) ? tatteredMitigation_ : 1.0f);
+    for (float& p : m.pct) {
+        p = p > 0.0f ? p * scale : p;
+    }
+    return m;
+}
+
+float ApparelStats::weightKg(const entt::registry& reg, Entity item) const {
     const DefId def = reg.get<Thing>(item).def;
     if (!isApparel(def)) {
         return 0.0f;
     }
     const Apparel& a = apparel_[def.value];
-    const int t = static_cast<int>(type);
-    float value = a.fixedArmor[t];
-    if (a.stuffRequired) {
+    if (a.kind == GearKind::Clothing && a.stuffRequired) {
         const MadeOf* made = reg.try_get<MadeOf>(item);
-        if (made == nullptr || !made->stuff.valid() || !stuff_[made->stuff.value].valid) {
-            return 0.0f;
+        if (made != nullptr && made->stuff.valid() && made->stuff.value < stuff_.size() && stuff_[made->stuff.value].clothing) {
+            return stuff_[made->stuff.value].clothingKg * a.share;
         }
-        value = stuff_[made->stuff.value].armor[t] * a.armorMultiplier;
     }
-    return value * qualityArmor_[static_cast<size_t>(qualityOf(reg, item))] * (tattered(reg, item) ? tatteredFactor_ : 1.0f);
+    return a.mass;
 }
 
 float ApparelStats::insulationCold(const entt::registry& reg, Entity item) const {
@@ -170,7 +280,13 @@ float ApparelStats::insulationCold(const entt::registry& reg, Entity item) const
     }
     const Apparel& a = apparel_[def.value];
     float value = a.fixedCold;
-    if (a.stuffRequired) {
+    if (a.kind == GearKind::Clothing) {
+        const MadeOf* made = reg.try_get<MadeOf>(item);
+        if (a.stuffRequired && (made == nullptr || !made->stuff.valid())) {
+            return 0.0f;
+        }
+        value = clothingCold_;
+    } else if (a.stuffRequired) {
         const MadeOf* made = reg.try_get<MadeOf>(item);
         if (made == nullptr || !made->stuff.valid()) {
             return 0.0f;
@@ -187,7 +303,13 @@ float ApparelStats::insulationHeat(const entt::registry& reg, Entity item) const
     }
     const Apparel& a = apparel_[def.value];
     float value = a.fixedHeat;
-    if (a.stuffRequired) {
+    if (a.kind == GearKind::Clothing) {
+        const MadeOf* made = reg.try_get<MadeOf>(item);
+        if (a.stuffRequired && (made == nullptr || !made->stuff.valid())) {
+            return 0.0f;
+        }
+        value = clothingHeat_;
+    } else if (a.stuffRequired) {
         const MadeOf* made = reg.try_get<MadeOf>(item);
         if (made == nullptr || !made->stuff.valid()) {
             return 0.0f;
@@ -509,9 +631,13 @@ void ApparelSystem::wearDown(Entity item, float share) {
 
 float ApparelSystem::score(Entity item) const {
     const entt::registry& reg = things_.registry();
-    float value = rules_.scoreBase + rules_.scoreSharp * stats().armor(reg, item, ArmorType::Sharp) +
-                  rules_.scoreBlunt * stats().armor(reg, item, ArmorType::Blunt) +
-                  rules_.scoreHeat * stats().armor(reg, item, ArmorType::Heat) +
+    // Mitigation scores as old armor ratings did: 50% counts like a rating of 1 (ours), once per chest and
+    // legs slot a piece fills.
+    const Mitigation m = stats().mitigation(reg, item);
+    const uint8_t slots = stats().gearSlots(reg.get<Thing>(item).def);
+    const float fills = static_cast<float>(std::max(1, ((slots & kGearChest) != 0 ? 1 : 0) + ((slots & kGearLegs) != 0 ? 1 : 0)));
+    float value = rules_.scoreBase +
+                  fills * (rules_.scoreSharp * m.pct[1] + rules_.scoreBlunt * m.pct[0] + rules_.scoreHeat * m.pct[2]) / 50.0f +
                   rules_.scoreInsulationPerDegree * (stats().insulationCold(reg, item) + stats().insulationHeat(reg, item));
     value *= rules_.scoreHpFloor + (1.0f - rules_.scoreHpFloor) * ApparelStats::condition(reg, item);
     if (reg.all_of<Tainted>(item)) {
@@ -524,6 +650,12 @@ bool ApparelSystem::conflicts(Entity item, Entity wornItem) const {
     const entt::registry& reg = things_.registry();
     const DefId a = reg.get<Thing>(item).def;
     const DefId b = reg.get<Thing>(wornItem).def;
+    // Clothing and armour (docs/design/armour.md): one piece of a kind per slot, whatever its layers.
+    const GearKind ka = stats().gearKind(a);
+    const GearKind kb = stats().gearKind(b);
+    if ((ka == GearKind::Clothing || ka == GearKind::Armour) && (kb == GearKind::Clothing || kb == GearKind::Armour)) {
+        return ka == kb && (stats().gearSlots(a) & stats().gearSlots(b)) != 0;
+    }
     bool sharedLayer = false;
     for (const std::string& layer : stats().layers(a)) {
         const std::vector<std::string>& others = stats().layers(b);
@@ -706,14 +838,21 @@ int ApparelSystem::humanLeatherWorn(Entity pawn) const {
     return count;
 }
 
+int ApparelSystem::tatteredWorn(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    int count = 0;
+    for (const Entity piece : worn(pawn)) {
+        count += ApparelStats::tattered(reg, piece) ? 1 : 0;
+    }
+    return count;
+}
+
 void ApparelSystem::registerSituations(MoodSystem& mood) const {
     mood.addSituation("noApparel", [this](Entity pawn) { return naked(pawn) ? 0 : -1; });
     mood.addSituation("apparelOnNudist", [this](Entity pawn) { return nudistClothed(pawn) ? 0 : -1; });
     mood.addSituation("apparelTattered", [this](Entity pawn) {
-        if (worn(pawn).empty()) {
-            return -1;
-        }
-        return worstCondition(pawn) <= 0.0f ? 0 : -1;
+        const int count = tatteredWorn(pawn);
+        return count <= 0 ? -1 : std::min(count, 3) - 1;
     });
     mood.addSituation("apparelTainted", [this](Entity pawn) {
         const int count = taintedWorn(pawn);

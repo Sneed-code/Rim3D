@@ -1,13 +1,14 @@
 [
-  { "defName": "DamageTypeBase", "abstract": true, "source": "RimWorld wiki", "hediffSolid": "Crack", "ours": ["reachesInside"], "unverified": ["hediffSolid"], "reachesInside": false, "armorCategory": "Sharp" },
-  { "defName": "Bullet", "visual": {"sound": {"hit": "Flesh_Bullet"}}, "parent": "DamageTypeBase", "reachesInside": true, "label": "bullet", "hediff": "Gunshot" },
-  { "defName": "Cut", "visual": {"sound": {"hit": "Flesh_Cut"}}, "parent": "DamageTypeBase", "reachesInside": true, "label": "cut", "hediff": "Cut" },
-  { "defName": "Stab", "visual": {"sound": {"hit": "Flesh_Stab"}}, "parent": "DamageTypeBase", "reachesInside": true, "label": "stab", "hediff": "Stab" },
-  { "defName": "Scratch", "visual": {"sound": {"hit": "Flesh_Bite"}}, "parent": "DamageTypeBase", "label": "scratch", "hediff": "Scratch" },
-  { "defName": "Bite", "visual": {"sound": {"hit": "Flesh_Bite"}}, "parent": "DamageTypeBase", "label": "bite", "hediff": "Bite" },
-  { "defName": "Blunt", "visual": {"sound": {"hit": "Flesh_Blunt"}}, "parent": "DamageTypeBase", "label": "blunt", "armorCategory": "Blunt", "hediff": "Bruise" },
-  { "defName": "Crush", "visual": {"sound": {"hit": "Flesh_Blunt"}}, "parent": "DamageTypeBase", "label": "crush", "armorCategory": "Blunt", "hediff": "Crush" },
-  { "defName": "Bomb", "visual": {"sound": {"hit": "Flesh_Blunt", "explosion": "Explosion_Blast"}}, "parent": "DamageTypeBase", "label": "bomb", "hediff": "Shredded", "source": "RimWorld wiki",
+  { "defName": "DamageTypeBase", "abstract": true, "source": "RimWorld wiki", "hediffSolid": "Crack", "ours": ["reachesInside"], "unverified": ["hediffSolid"], "reachesInside": false },
+  { "defName": "Bullet", "mix": {"blunt": 0.75, "sharp": 0.25}, "visual": {"sound": {"hit": "Flesh_Bullet"}}, "parent": "DamageTypeBase", "reachesInside": true, "label": "bullet", "hediff": "Gunshot" },
+  { "defName": "Cut", "mix": {"sharp": 1}, "visual": {"sound": {"hit": "Flesh_Cut"}}, "parent": "DamageTypeBase", "reachesInside": true, "label": "cut", "hediff": "Cut" },
+  { "defName": "Slash", "mix": {"sharp": 0.75, "blunt": 0.25}, "visual": {"sound": {"hit": "Flesh_Cut"}}, "parent": "DamageTypeBase", "reachesInside": true, "label": "slash", "hediff": "Cut", "source": "ours", "note": "A sword's edge: 75% sharp, 25% blunt (sneed, 2026-11-15, docs/design/armour.md); wounds like a cut." },
+  { "defName": "Stab", "mix": {"sharp": 1}, "visual": {"sound": {"hit": "Flesh_Stab"}}, "parent": "DamageTypeBase", "reachesInside": true, "label": "stab", "hediff": "Stab" },
+  { "defName": "Scratch", "mix": {"sharp": 1}, "visual": {"sound": {"hit": "Flesh_Bite"}}, "parent": "DamageTypeBase", "label": "scratch", "hediff": "Scratch" },
+  { "defName": "Bite", "mix": {"sharp": 1}, "visual": {"sound": {"hit": "Flesh_Bite"}}, "parent": "DamageTypeBase", "label": "bite", "hediff": "Bite" },
+  { "defName": "Blunt", "mix": {"blunt": 1}, "visual": {"sound": {"hit": "Flesh_Blunt"}}, "parent": "DamageTypeBase", "label": "blunt", "hediff": "Bruise" },
+  { "defName": "Crush", "mix": {"blunt": 1}, "visual": {"sound": {"hit": "Flesh_Blunt"}}, "parent": "DamageTypeBase", "label": "crush", "hediff": "Crush" },
+  { "defName": "Bomb", "mix": {"blunt": 0.75, "sharp": 0.25}, "visual": {"sound": {"hit": "Flesh_Blunt", "explosion": "Explosion_Blast"}}, "parent": "DamageTypeBase", "label": "bomb", "hediff": "Shredded", "source": "RimWorld wiki",
     "explosion": { "buildingFactor": 2, "impassableFactor": 2, "wallFactor": 2, "fragmentsMin": 2, "fragmentsMax": 4, "fragmentMinDamage": 15 } },
-  { "defName": "Burn", "visual": {"sound": {"hit": "Flesh_Burn", "explosion": "Explosion_Fire"}}, "parent": "DamageTypeBase", "label": "burn", "armorCategory": "Heat", "hediff": "Burn", "hediffSolid": "Burn" }
+  { "defName": "Burn", "mix": {"elemental": 1, "sub": "Fire"}, "explosionMix": {"blunt": 0.5, "elemental": 0.5, "sub": "Fire"}, "visual": {"sound": {"hit": "Flesh_Burn", "explosion": "Explosion_Fire"}}, "parent": "DamageTypeBase", "label": "burn", "hediff": "Burn", "hediffSolid": "Burn" }
 ]

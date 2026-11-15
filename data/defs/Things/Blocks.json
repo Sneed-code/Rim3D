@@ -22,9 +22,7 @@
     "workToMake": 1.0,
     "workToBuild": 1.0,
     "beauty": 1.0,
-    "flammability": 0,
-    "armorRatingSharp": 1.0,
-    "armorRatingBlunt": 1.0
+    "flammability": 0
    }
   },
   "unverified": [
@@ -53,9 +51,7 @@
     "beauty": 1.0,
     "flammability": 0,
     "workToMake": 1.3,
-    "workToBuild": 3.0,
-    "armorRatingSharp": 1.0,
-    "armorRatingBlunt": 1.0
+    "workToBuild": 3.0
    }
   }
  },
@@ -80,9 +76,7 @@
     "beauty": 1.0,
     "flammability": 0,
     "workToMake": 1.3,
-    "workToBuild": 2.0,
-    "armorRatingSharp": 0.8,
-    "armorRatingBlunt": 0.8
+    "workToBuild": 2.0
    }
   }
  },
@@ -107,9 +101,7 @@
     "beauty": 1.1,
     "flammability": 0,
     "workToMake": 1.1,
-    "workToBuild": 2.0,
-    "armorRatingSharp": 0.8,
-    "armorRatingBlunt": 0.8
+    "workToBuild": 2.0
    }
   }
  },
@@ -134,9 +126,7 @@
     "beauty": 1.1,
     "flammability": 0,
     "workToMake": 1.3,
-    "workToBuild": 2.0,
-    "armorRatingSharp": 0.8,
-    "armorRatingBlunt": 0.8
+    "workToBuild": 2.0
    }
   }
  },
@@ -161,9 +151,7 @@
     "beauty": 1.35,
     "flammability": 0,
     "workToMake": 1.15,
-    "workToBuild": 3.0,
-    "armorRatingSharp": 0.8,
-    "armorRatingBlunt": 0.8
+    "workToBuild": 3.0
    },
    "statOffsets": {
     "beauty": 0.5
