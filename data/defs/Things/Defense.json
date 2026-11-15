@@ -13,15 +13,15 @@
     "researchPrerequisite": "GunTurrets",
     "size": [1, 1], "passability": "Impassable", "fillPercent": 0.4, "designationCategory": "Security",
     "costs": { "Steel": 100, "ComponentIndustrial": 3 },
-    "visual": { "parts": [{"shape": "box", "size": [0.7, 0.7, 0.35], "color": [0.32, 0.34, 0.36]}, {"shape": "cylinder", "radius": 0.2, "height": 0.2, "at": [0, 0, 0.35], "color": [0.22, 0.24, 0.26]}, {"shape": "box", "size": [0.12, 0.7, 0.12], "at": [0, 0.25, 0.45], "color": [0.14, 0.14, 0.16]}] },
+    "visual": { "parts": [{"shape": "box", "size": [0.7, 0.7, 0.35], "color": [0.32, 0.34, 0.36]}, {"shape": "cylinder", "radius": 0.08, "height": 0.85, "at": [0, 0, 0.35], "color": [0.22, 0.24, 0.26]}, {"shape": "cylinder", "radius": 0.2, "height": 0.2, "at": [0, 0, 1.15], "color": [0.22, 0.24, 0.26]}, {"shape": "box", "size": [0.12, 0.7, 0.12], "at": [0, 0.25, 1.24], "color": [0.14, 0.14, 0.16]}] },
     "stats": { "maxHitPoints": 100, "workToBuild": 2592, "flammability": 0.5 },
     "power": { "consumption": 80 },
-    "turret": { "gun": "Gun_MiniTurret", "shootingSkill": 8, "muzzleHeight": 0.8 },
+    "turret": { "gun": "Gun_MiniTurret", "shootingSkill": 8, "muzzleHeight": 1.3 },
     "explosion": { "damageDef": "Bomb", "damage": 50, "armorPenetration": 0.1, "radius": 3.9 },
     "explodeWhenDamaged": { "belowHealth": 0.2, "chance": 0.5, "delayTicks": 240 },
     "unverified": ["researchPrerequisite", "explosion.armorPenetration"],
     "ours": ["turret", "visual", "costs: the wiki's 30 metallic stuff plus 70 steel, taken as 100 steel"],
-    "note": "Wiki-checked 2026-11-15 (Mini-turret): 100 HP (steel), 80 W, 30 metallic stuff + 70 steel + 3 components, 1800 ticks of work (x 1.44 = 2592 game seconds), cover 40%; below 20% HP a 50% chance to spark for 240 ticks and explode, 50 bomb damage in 3.9 m. The barrel's 80 units of wear (refuelled with steel) are not in yet."
+    "note": "Wiki-checked 2026-11-15 (Mini-turret): 100 HP (steel), 80 W, 30 metallic stuff + 70 steel + 3 components, 1800 ticks of work (x 1.44 = 2592 game seconds), cover 40%; below 20% HP a 50% chance to spark for 240 ticks and explode, 50 bomb damage in 3.9 m. The barrel's 80 units of wear (refuelled with steel) are not in yet. Ours: the gun sits on a post, muzzle 1.3 m, so it fires over barricades and sandbags (1.1 m) round it as RimWorld turrets fire over adjacent cover; the 0.8 m body (fill 0.4) is what gets hit."
   },
   {
     "defName": "FoamTurret", "parent": "BuildingBase", "label": "foam turret", "source": "RimWorld wiki",

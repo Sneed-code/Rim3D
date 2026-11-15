@@ -773,3 +773,65 @@ TEST_CASE("Defense: a lancer outranges the mini-turret (32.9 m against 28.9 m) a
     CHECK(mechShots > 0);
     CHECK(apart > 28.9f);
 }
+
+namespace {
+// A powered mini-turret at 15,10 with a barricade in every free cell round it (7: the conduit west of it is taken),
+// and a lancer `away` metres north of it, hostile. Steps up to two minutes; counts both sides' shots.
+struct DefnBarricadeFight {
+    int turretShots = 0;
+    int mechShots = 0;
+    int standing = 0;
+    int turretHp = 0;
+    bool mechAble = true;
+};
+
+DefnBarricadeFight defnBarricadeFight(int away) {
+    DefnBarricadeFight out;
+    auto sim = defnSim();
+    const Entity turret = defnPoweredTurret(*sim);
+    std::vector<Entity> barricades;
+    for (int dx = -1; dx <= 1; ++dx) {
+        for (int dy = -1; dy <= 1; ++dy) {
+            if ((dx != 0 || dy != 0) && sim->map().buildingAt(CellPos{15 + dx, 10 + dy, 0}) == kNoEntity) {
+                barricades.push_back(sim->things().spawn("Barricade", CellPos{15 + dx, 10 + dy, 0}));
+            }
+        }
+    }
+    CHECK(barricades.size() == 7u);
+    const Entity mech = sim->things().spawn("Mech_Lancer", CellPos{15, 10 + away, 0});
+    CHECK(mech != kNoEntity);
+    sim->combat().equip(mech, sim->things().make(sim->defs().idOf("Things", "Gun_ChargeLance")));
+    sim->submit(SetFactionCommand{mech, 3});
+    for (int i = 0; i < 30 * 120 && sim->things().registry().valid(turret); ++i) {
+        sim->step();
+        for (const Event& e : sim->events()) {
+            out.turretShots += e.type == EventType::ShotFired && e.thing == turret ? 1 : 0;
+            out.mechShots += e.type == EventType::ShotFired && e.thing == mech ? 1 : 0;
+        }
+    }
+    out.standing = static_cast<int>(std::count_if(barricades.begin(), barricades.end(), [&](Entity b) { return sim->things().registry().valid(b); }));
+    out.turretHp = sim->things().registry().valid(turret) ? sim->things().registry().get<HitPoints>(turret).current : 0;
+    const entt::registry& reg = sim->things().registry();
+    out.mechAble = reg.valid(mech) && !reg.get<Health>(mech).dead && reg.get<Posture>(mech).stance != Stance::Prone;
+    MESSAGE("lancer ", away, " m off: turret shots ", out.turretShots, ", lancer shots ", out.mechShots, ", barricades standing ",
+            out.standing, ", turret hp ", out.turretHp, ", lancer ", out.mechAble ? "able" : "down");
+    return out;
+}
+}  // namespace
+
+TEST_CASE("Defense: barricades round the mini-turret hide it from a lancer, and it fires over them") {
+    // The player's answer to the lancer's longer reach (RimWorld's too): cover round the turret. The barricades
+    // (1.1 m) hide the turret's 0.8 m body from level ground, and its gun (muzzle 1.3 m) fires over them.
+    SUBCASE("out of the turret's reach the lancer has nothing to shoot") {
+        const DefnBarricadeFight f = defnBarricadeFight(33);
+        CHECK(f.mechShots == 0);
+        CHECK(f.turretHp == 100);
+    }
+    SUBCASE("inside it the turret shoots the lancer, which can't hit back") {
+        const DefnBarricadeFight f = defnBarricadeFight(26);
+        CHECK(f.turretShots > 0);
+        CHECK(f.mechShots == 0);
+        CHECK(f.turretHp == 100);
+        CHECK(f.standing == 7);
+    }
+}
