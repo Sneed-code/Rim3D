@@ -247,11 +247,10 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 			{
 				Last = FName(*FString::Printf(TEXT("hair_c%d_%d"), c, i));
 			}
-			// Simulated in the head's space: a clip's first frame or a turn moves the head far in one step, which flung
-			// the world-space chains up into a sheet; relative to the head the hair only sways under gravity.
+			// Simulated in component space: in world space a clip's first frame or a jump of the pawn flung the chains up
+			// into a sheet, and in the head's space gravity pointed along the head bone's axis (the hair stood out sideways).
 			TSharedPtr<FAnimNode_AnimDynamics> Chain = MakeChain(First, Last, Ref, 1.0f, 260.0f, 14.0f);
-			Chain->SimulationSpace = AnimPhysSimSpaceType::BoneRelative;
-			Chain->RelativeSpaceBone.BoneName = TEXT("head");
+			Chain->SimulationSpace = AnimPhysSimSpaceType::Component;
 			Dynamics.Add(Chain);
 		}
 		// A tail (mh_export.py's add_tail: tail_01 ... under the pelvis): its own swish (FMakeHumanTailNode).
