@@ -169,6 +169,18 @@ mannequin's.
 `assets/makehuman.local.json`, which is not in Git, and import into `/Game/ThirdParty/Local`, which is not in Git
 either. They are never committed or shipped.
 
+## Animation clips
+
+Clips are listed in `assets/animations.json` (name, FBX, loop). Markerless mocap (FlowHMR) stands metres from the origin
+and may face another way than its skeleton's rest pose: `tools/makehuman/clip_prep.py` centres the hips over the clip
+and turns the motion to face as the rest pose does ("source" -> "fbx"). `UnrealEditor-Cmd ... -run=MakeHumanArt -Clips`
+imports each FBX with its skeleton (Mixamo), builds an IK rig with the mannequin rig's chain names, a retargeter from it
+onto the game's mannequin (the template's ops, the mannequin's pose turned to the T pose), and retargets the clip with
+`UIKRetargetBatchOperation::RunBatchRetarget` into `/Game/Rim3D/Generated/Animations/<name>/A_<name>`. The pawns play
+mannequin animations, so every body (each through its own retargeter) plays every clip. The creator's ANIMATIONS panel
+(right) lists the clips and plays one on the picked person or everyone (loop, speed); `-CreatorPlay=<name>` with
+`-CreatorRecord=<seconds>` films it. First clip: Skip (jump rope, FlowHMR, sneed).
+
 ## Not done (next, as of 2026-11-14)
 
 - Scalp hair styles in the creator: put several MPFB hairs (long01, bob02, short02, ponytail01, braid01, afro01) in each

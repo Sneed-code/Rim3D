@@ -45,6 +45,9 @@
 #include "Rig/IKRigDefinition.h"
 #include "RigEditor/IKRigController.h"
 #include "RigEditor/IKRigDefinitionFactory.h"
+#include "Animation/AnimSequence.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "RetargetEditor/IKRetargetBatchOperation.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/UnrealType.h"
@@ -589,6 +592,219 @@ namespace
 		UE_LOG(LogMakeHumanArt, Display, TEXT("  retarget pose: %d bones turned to the source's directions"), Turned);
 	}
 
+	const TCHAR* const MhClipsFolder = TEXT("/Game/Rim3D/Generated/Animations");
+
+	// A Mixamo skeleton's retarget chains by the game rigs' chain names (lower case): bone pairs, and the root.
+	bool MhMixamoChains(const FReferenceSkeleton& Ref, TMap<FString, TPair<FName, FName>>& Out, FName& OutRoot)
+	{
+		FString Prefix;
+		bool bMixamo = false;
+		for (const TCHAR* Try : {TEXT("mixamorig:"), TEXT("mixamorig_"), TEXT("mixamorig"), TEXT("")})
+		{
+			if (Ref.FindBoneIndex(FName(*(FString(Try) + TEXT("Hips")))) != INDEX_NONE && Ref.FindBoneIndex(FName(*(FString(Try) + TEXT("LeftUpLeg")))) != INDEX_NONE)
+			{
+				Prefix = Try;
+				bMixamo = true;
+				break;
+			}
+		}
+		if (!bMixamo)
+		{
+			return false;
+		}
+		const auto B = [&](const FString& Name) { return FName(*(Prefix + Name)); };
+		Out.Add(TEXT("root"), {Ref.GetBoneName(0), Ref.GetBoneName(0)});
+		Out.Add(TEXT("spine"), {B(TEXT("Spine")), B(TEXT("Spine2"))});
+		Out.Add(TEXT("neck"), {B(TEXT("Neck")), B(TEXT("Neck"))});
+		Out.Add(TEXT("head"), {B(TEXT("Head")), B(TEXT("Head"))});
+		for (const FString S : {FString(TEXT("Left")), FString(TEXT("Right"))})
+		{
+			Out.Add((S + TEXT("Clavicle")).ToLower(), {B(S + TEXT("Shoulder")), B(S + TEXT("Shoulder"))});
+			Out.Add((S + TEXT("Arm")).ToLower(), {B(S + TEXT("Arm")), B(S + TEXT("Hand"))});
+			Out.Add((S + TEXT("Leg")).ToLower(), {B(S + TEXT("UpLeg")), B(S + TEXT("Foot"))});
+			Out.Add((S + TEXT("Toe")).ToLower(), {B(S + TEXT("ToeBase")), B(S + TEXT("ToeBase"))});
+			for (const TCHAR* Finger : {TEXT("Thumb"), TEXT("Index"), TEXT("Middle"), TEXT("Ring"), TEXT("Pinky")})
+			{
+				if (Ref.FindBoneIndex(B(S + TEXT("Hand") + Finger + TEXT("1"))) != INDEX_NONE)
+				{
+					Out.Add((S + Finger).ToLower(), {B(S + TEXT("Hand") + Finger + TEXT("1")), B(S + TEXT("Hand") + Finger + TEXT("3"))});
+				}
+			}
+		}
+		OutRoot = B(TEXT("Hips"));
+		return true;
+	}
+
+	// One animation clip (assets/animations.json): its FBX imported with its skeleton, an IK rig for that skeleton (a
+	// Mixamo one), a retargeter from it onto the game's mannequin (UEFN), and the clip retargeted onto the mannequin as
+	// <folder>/A_<name>. The pawns play mannequin animations, and every body takes them through its own retargeter.
+	int32 MhMakeClip(IAssetTools& Tools, const FString& Name, const FString& Fbx)
+	{
+		const FString Folder = FString(MhClipsFolder) / Name;
+		const FString Source = Folder / TEXT("Source");
+		UAssetImportTask* Task = NewObject<UAssetImportTask>();
+		Task->Filename = Fbx;
+		Task->DestinationPath = Source;
+		Task->DestinationName = TEXT("SK_") + Name + TEXT("_Source");
+		Task->bAutomated = true;
+		Task->bReplaceExisting = true;
+		Task->bSave = false;
+		UFbxFactory* Factory = NewObject<UFbxFactory>();
+		Factory->ImportUI = NewObject<UFbxImportUI>(Factory);
+		Factory->ImportUI->bImportMesh = true;
+		Factory->ImportUI->bImportAsSkeletal = true;
+		Factory->ImportUI->MeshTypeToImport = FBXIT_SkeletalMesh;
+		Factory->ImportUI->bImportAnimations = true;
+		Factory->ImportUI->bImportMaterials = false;
+		Factory->ImportUI->bImportTextures = false;
+		Factory->ImportUI->bCreatePhysicsAsset = false;
+		Factory->ImportUI->SkeletalMeshImportData->bImportMorphTargets = false;
+		Factory->ImportUI->SkeletalMeshImportData->bConvertScene = true;
+		Task->Factory = Factory;
+		Task->Options = Factory->ImportUI;
+		Tools.ImportAssetTasks({Task});
+		USkeletalMesh* Mesh = nullptr;
+		for (UObject* Object : Task->GetObjects())
+		{
+			Mesh = Mesh ? Mesh : Cast<USkeletalMesh>(Object);
+		}
+		if (!Mesh)
+		{
+			UE_LOG(LogMakeHumanArt, Error, TEXT("Clip %s: importing %s made no skeletal mesh"), *Name, *Fbx);
+			return 1;
+		}
+		int32 Failures = 0;
+		Failures += MhSave(Mesh) ? 0 : 1;
+		if (Mesh->GetSkeleton())
+		{
+			Failures += MhSave(Mesh->GetSkeleton()) ? 0 : 1;
+		}
+		IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		TArray<FAssetData> Found;
+		Registry.ScanPathsSynchronous({Source}, true);
+		Registry.GetAssetsByPath(FName(*Source), Found, true);
+		TArray<FAssetData> Sequences;
+		for (const FAssetData& Asset : Found)
+		{
+			if (UAnimSequence* Sequence = Cast<UAnimSequence>(Asset.GetAsset()))
+			{
+				Failures += MhSave(Sequence) ? 0 : 1;
+				Sequences.Add(FAssetData(Sequence));
+				UE_LOG(LogMakeHumanArt, Display, TEXT("Clip %s: %s, %.2f s, %d keys"), *Name, *Sequence->GetName(), Sequence->GetPlayLength(),
+					Sequence->GetNumberOfSampledKeys());
+			}
+		}
+		if (Sequences.IsEmpty())
+		{
+			UE_LOG(LogMakeHumanArt, Error, TEXT("Clip %s: no animation in %s"), *Name, *Fbx);
+			return Failures + 1;
+		}
+		TMap<FString, TPair<FName, FName>> Chains;
+		FName Root;
+		if (!MhMixamoChains(Mesh->GetRefSkeleton(), Chains, Root))
+		{
+			UE_LOG(LogMakeHumanArt, Error, TEXT("Clip %s: not a Mixamo skeleton (only Mixamo clips are set up)"), *Name);
+			return Failures + 1;
+		}
+		UIKRigDefinition* Target = LoadObject<UIKRigDefinition>(nullptr, MhSourceRig);
+		USkeletalMesh* TargetMesh = Target ? Target->GetPreviewMesh() : nullptr;
+		UIKRetargeter* TemplateRetargeter = LoadObject<UIKRetargeter>(nullptr, MhTemplateRetargeter);
+		if (!Target || !TargetMesh || !TemplateRetargeter)
+		{
+			UE_LOG(LogMakeHumanArt, Error, TEXT("Clip %s: no mannequin IK rig, its mesh or the template retargeter"), *Name);
+			return Failures + 1;
+		}
+		// The clip's IK rig: the mannequin rig's chain names on the Mixamo bones.
+		UIKRigDefinition* Rig = Cast<UIKRigDefinition>(Tools.CreateAsset(TEXT("IK_") + Name + TEXT("_Source"), Source, UIKRigDefinition::StaticClass(), NewObject<UIKRigDefinitionFactory>()));
+		UIKRigController* RigController = UIKRigController::GetController(Rig);
+		RigController->SetSkeletalMesh(Mesh);
+		int32 Mapped = 0;
+		for (const FBoneChain& Chain : Target->GetRetargetChains())
+		{
+			if (const TPair<FName, FName>* Bones = Chains.Find(Chain.ChainName.ToString().ToLower()))
+			{
+				RigController->AddRetargetChain(Chain.ChainName, Bones->Key, Bones->Value, NAME_None);
+				++Mapped;
+			}
+		}
+		RigController->SetRetargetRoot(Root);
+		Failures += MhSave(Rig) ? 0 : 1;
+		UE_LOG(LogMakeHumanArt, Display, TEXT("Clip %s: IK rig with %d of the mannequin's %d chains"), *Name, Mapped, Target->GetRetargetChains().Num());
+		// The retargeter: the template's ops, Mixamo to the mannequin.
+		UIKRetargeter* Retargeter = Cast<UIKRetargeter>(Tools.DuplicateAsset(TEXT("RTG_") + Name + TEXT("_to_UEFN"), Source, TemplateRetargeter));
+		UIKRetargeterController* Controller = UIKRetargeterController::GetController(Retargeter);
+		Controller->SetIKRig(ERetargetSourceOrTarget::Source, Rig);
+		Controller->SetPreviewMesh(ERetargetSourceOrTarget::Source, Mesh);
+		Controller->SetIKRig(ERetargetSourceOrTarget::Target, Target);
+		Controller->SetPreviewMesh(ERetargetSourceOrTarget::Target, TargetMesh);
+		Controller->AssignIKRigToAllOps(ERetargetSourceOrTarget::Source, Rig);
+		Controller->AssignIKRigToAllOps(ERetargetSourceOrTarget::Target, Target);
+		for (int32 Op = 0; Op < Controller->GetNumRetargetOps(); ++Op)
+		{
+			FInstancedStruct* Struct = Controller->GetRetargetOpStructAtIndex(Op);
+			const FString Type = Struct && Struct->GetScriptStruct() ? Struct->GetScriptStruct()->GetName() : FString();
+			if (Type == TEXT("IKRetargetBlendToSourceOp") || Type == TEXT("IKRetargetOffsetGoalsOp"))
+			{
+				Controller->SetRetargetOpEnabled(Op, false);
+			}
+			FStructProperty* SettingsProperty = Struct && Struct->GetScriptStruct() ? FindFProperty<FStructProperty>(Struct->GetScriptStruct(), TEXT("Settings")) : nullptr;
+			void* Settings = SettingsProperty ? SettingsProperty->ContainerPtrToValuePtr<void>(Struct->GetMutableMemory()) : nullptr;
+			for (const TPair<const TCHAR*, FName>& Bone : {TPair<const TCHAR*, FName>(TEXT("SourcePelvisBone"), Root), TPair<const TCHAR*, FName>(TEXT("TargetPelvisBone"), FName(TEXT("pelvis")))})
+			{
+				FStructProperty* Property = SettingsProperty ? FindFProperty<FStructProperty>(SettingsProperty->Struct, Bone.Key) : nullptr;
+				if (Property && Property->Struct == FBoneReference::StaticStruct())
+				{
+					Property->ContainerPtrToValuePtr<FBoneReference>(Settings)->BoneName = Bone.Value;
+				}
+			}
+		}
+		Controller->AutoMapChains(EAutoMapChainType::Exact, true);
+		// Mixamo stands in a T pose, the mannequin in an A pose: the mannequin's retarget pose is turned to match.
+		TArray<FName> Poses;
+		Controller->GetRetargetPoses(ERetargetSourceOrTarget::Target).GetKeys(Poses);
+		const FName Current = Controller->GetCurrentRetargetPoseName(ERetargetSourceOrTarget::Target);
+		for (const FName& Pose : Poses)
+		{
+			Controller->SetCurrentRetargetPose(Pose, ERetargetSourceOrTarget::Target);
+			Controller->ResetRetargetPose(Pose, {}, ERetargetSourceOrTarget::Target);
+			MhAlignRetargetPose(Controller, Rig, Mesh, Target, TargetMesh);
+		}
+		Controller->SetCurrentRetargetPose(Current, ERetargetSourceOrTarget::Target);
+		Failures += MhSave(Retargeter) ? 0 : 1;
+		// The clip on the mannequin.
+		FIKRetargetBatchOperationInputs Inputs;
+		Inputs.AssetsToRetarget = Sequences;
+		Inputs.SourceMesh = Mesh;
+		Inputs.TargetMesh = TargetMesh;
+		Inputs.IKRetargetAsset = Retargeter;
+		Inputs.TargetPath = Folder;
+		Inputs.Prefix = TEXT("A_");
+		Inputs.bIncludeReferencedAssets = false;
+		Inputs.bOverwriteExistingFiles = true;
+		const TArray<FAssetData> Made = UIKRetargetBatchOperation::RunBatchRetarget(Inputs);
+		int32 Saved = 0;
+		for (const FAssetData& Asset : Made)
+		{
+			if (UAnimSequence* Sequence = Cast<UAnimSequence>(Asset.GetAsset()))
+			{
+				// One name per clip for the game: a copy as <folder>/A_<name>.
+				UAnimSequence* Named = Cast<UAnimSequence>(Tools.DuplicateAsset(TEXT("A_") + Name, Folder, Sequence));
+				Sequence = Named ? Named : Sequence;
+				Failures += MhSave(Sequence) ? 0 : 1;
+				++Saved;
+				UE_LOG(LogMakeHumanArt, Display, TEXT("Clip %s: retargeted onto the mannequin as %s (%s), %.2f s"), *Name, *Sequence->GetName(),
+					*Sequence->GetOutermost()->GetName(), Sequence->GetPlayLength());
+				break;
+			}
+		}
+		if (Saved == 0)
+		{
+			UE_LOG(LogMakeHumanArt, Error, TEXT("Clip %s: the batch retarget made nothing"), *Name);
+			++Failures;
+		}
+		return Failures;
+	}
+
 	// One character: the mesh, its skin, its IK rig and the retargeter from the game's mannequin.
 	int32 MhMakeCharacter(IAssetTools& Tools, const FMakeHumanCharacterFiles& Files, const TSharedPtr<FJsonObject>& Config, const FString& Folder)
 	{
@@ -970,6 +1186,38 @@ int32 UMakeHumanArtCommandlet::Main(const FString& Params)
 	}
 	IAssetTools& Tools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 	int32 Failures = 0;
+	// -Clips: only the animation clips (assets/animations.json), retargeted onto the mannequin.
+	if (Params.Contains(TEXT("-Clips")))
+	{
+		IFileManager::Get().DeleteDirectory(*FPackageName::LongPackageNameToFilename(MhClipsFolder), false, true);
+		const FString RepoRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT(".."));
+		FString Text;
+		TSharedPtr<FJsonObject> Json;
+		if (!FFileHelper::LoadFileToString(Text, *(RepoRoot / TEXT("assets/animations.json"))) ||
+			!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Json) || !Json)
+		{
+			UE_LOG(LogMakeHumanArt, Error, TEXT("No assets/animations.json"));
+			return 1;
+		}
+		for (const TSharedPtr<FJsonValue>& Value : Json->GetArrayField(TEXT("clips")))
+		{
+			const TSharedPtr<FJsonObject> Clip = Value->AsObject();
+			FString Name, Fbx;
+			if (!Clip || !Clip->TryGetStringField(TEXT("name"), Name) || !Clip->TryGetStringField(TEXT("fbx"), Fbx))
+			{
+				continue;
+			}
+			Fbx = FPaths::IsRelative(Fbx) ? RepoRoot / Fbx : Fbx;
+			if (!FPaths::FileExists(Fbx))
+			{
+				UE_LOG(LogMakeHumanArt, Warning, TEXT("Clip %s: no %s; skipped"), *Name, *Fbx);
+				continue;
+			}
+			Failures += MhMakeClip(Tools, Name, Fbx);
+		}
+		UE_LOG(LogMakeHumanArt, Display, TEXT("Animation clips: done, %d problems"), Failures);
+		return Failures == 0 ? 0 : 1;
+	}
 	// Start clean: both folders hold only what this run makes.
 	for (const TCHAR* Folder : {MakeHumanFolder, MakeHumanLocalFolder})
 	{

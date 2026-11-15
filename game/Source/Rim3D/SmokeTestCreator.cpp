@@ -6,6 +6,8 @@
 
 #include "Components/SkeletalMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Animation/AnimSequence.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/App.h"
@@ -89,6 +91,15 @@ namespace
 		bool bUiWantsMouse = false;
 		bool bUiWantsKeys = false;
 		bool bFaced = false;
+		// The animation panel: the clips made by the MakeHumanArt commandlet (-Clips), what plays, how.
+		TArray<FSoftObjectPath> Clips;
+		TArray<FString> ClipNames;
+		bool bClipsListed = false;
+		int32 Clip = 0;
+		bool bLoop = true;
+		bool bEveryone = false;
+		float ClipSpeed = 1.0f;
+		TArray<int32> Playing;     // per person: the clip it plays, or -1
 		float DemoTime = -1.0f;   // -CreatorDemo: seconds into the self-running demo
 		int32 Recorded = 0;
 		int32 PanelFrames = 0;
@@ -218,6 +229,48 @@ namespace
 		// The panel's colour is as seen (sRGB); the skin material takes it linear, as FSimPawnLooks::Skin is.
 		const FLinearColor Skin = FLinearColor::FromSRGBColor(FLinearColor(P.Skin[0], P.Skin[1], P.Skin[2]).ToFColor(false));
 		Mesh->SetCustomPrimitiveDataVector3(PawnLooksSkinDataIndex, FVector(Skin.R, Skin.G, Skin.B));
+	}
+
+	/** The game's animation clips (assets/animations.json, made by the MakeHumanArt commandlet with -Clips): A_<name>. */
+	void CreatorListClips(FCreatorState& State)
+	{
+		State.bClipsListed = true;
+		IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		const FString Folder = TEXT("/Game/Rim3D/Generated/Animations");
+		Registry.ScanPathsSynchronous({Folder}, true);
+		TArray<FAssetData> Assets;
+		Registry.GetAssetsByPath(FName(*Folder), Assets, true);
+		for (const FAssetData& Asset : Assets)
+		{
+			const FString Name = Asset.AssetName.ToString();
+			if (Asset.AssetClassPath == UAnimSequence::StaticClass()->GetClassPathName() && Name.StartsWith(TEXT("A_")) && !Name.StartsWith(TEXT("A_SK_")))
+			{
+				State.Clips.Add(Asset.GetSoftObjectPath());
+				State.ClipNames.Add(Name.Mid(2));
+			}
+		}
+	}
+
+	/** Plays a clip on a person's body (its mannequin, which every body follows), or stops it (Clip -1). */
+	void CreatorPlay(FCreatorState& State, int32 Person, int32 Clip, ASimPawnActor* Pawn)
+	{
+		USimPawnAnimInstance* Anim = Pawn ? Pawn->GetAnim() : nullptr;
+		if (!Anim)
+		{
+			return;
+		}
+		State.Playing.SetNum(State.People.Num());
+		Anim->StopSlotAnimation(0.25f, FAnimSlotGroup::DefaultSlotName);
+		State.Playing[Person] = -1;
+		if (!State.Clips.IsValidIndex(Clip))
+		{
+			return;
+		}
+		if (UAnimSequence* Sequence = Cast<UAnimSequence>(State.Clips[Clip].TryLoad()))
+		{
+			Anim->PlaySlotAnimationAsDynamicMontage(Sequence, FAnimSlotGroup::DefaultSlotName, 0.25f, 0.25f, State.ClipSpeed, State.bLoop ? 100000 : 1);
+			State.Playing[Person] = Clip;
+		}
 	}
 
 	/** Gender: the person's base (the woman's or the man's); its kind and sliders stay. */
@@ -400,6 +453,34 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			{
 				B->Submit(colony::MoveOrderCommand{State->People[i].Thing, colony::CellPos{State->Middle.x, State->Middle.y + 6 - 3 + i * 2, 0}});
 			}
+		}
+		// -CreatorPlay=<clip name>: everyone plays that clip once their bodies are there (for tests and pictures).
+		if (!State->bClipsListed)
+		{
+			CreatorListClips(*State);
+		}
+		FString PlayName;
+		if (State->bFaced && PhaseTime > 4.5f && State->Playing.IsEmpty() && FParse::Value(FCommandLine::Get(), TEXT("CreatorPlay="), PlayName))
+		{
+			const int32 Index = State->ClipNames.IndexOfByKey(PlayName);
+			for (int32 i = 0; i < State->People.Num(); ++i)
+			{
+				CreatorPlay(*State, i, Index, Pawns->FindPawn(State->People[i].Thing));
+			}
+			State->Playing.SetNum(State->People.Num());
+			Notes.Add(FString::Printf(TEXT("creator: playing %s (%d clips)"), *PlayName, State->Clips.Num()));
+		}
+		// -CreatorRecord=<seconds> with -CreatorPlay: every frame of the clip at a fixed 30 a second (creator/rec_0000.png ...).
+		float PlayRecord = 0.0f;
+		if (!State->Playing.IsEmpty() && !FParse::Param(FCommandLine::Get(), TEXT("CreatorDemo")) && FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), PlayRecord)
+			&& State->Recorded < FMath::RoundToInt32(PlayRecord * 30.0f))
+		{
+			if (State->Recorded == 0)
+			{
+				FApp::SetUseFixedTimeStep(true);
+				FApp::SetFixedDeltaTime(1.0 / 30.0);
+			}
+			FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") / FString::Printf(TEXT("rec_%04d.png"), State->Recorded++), false, false);
 		}
 		// Walking: back and forth along X, side by side, so the jiggle and the tail show.
 		if (State->bWalk && State->LegTime > 4.0f)
@@ -714,6 +795,52 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				State->CameraDistance = 420.0f;
 				State->FocusOffset = FVector::ZeroVector;
 			}
+		}
+		ImGui::End();
+		// The animation panel, on the right: a clip on the picked person (or everyone), looped or once, at a speed.
+		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - 16.0f * Scale, Viewport->Pos.y + 16.0f * Scale), ImGuiCond_Once, ImVec2(1.0f, 0.0f));
+		ImGui::SetNextWindowBgAlpha(0.88f);
+		if (ImGui::Begin("ANIMATIONS", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
+		{
+			State->Playing.SetNum(State->People.Num());
+			if (State->Clips.IsEmpty())
+			{
+				ImGui::TextDisabled("No clips yet: run the MakeHumanArt commandlet with -Clips");
+			}
+			for (int32 c = 0; c < State->Clips.Num(); ++c)
+			{
+				if (ImGui::Selectable(TCHAR_TO_UTF8(*State->ClipNames[c]), State->Clip == c, 0, ImVec2(260.0f * Scale, 0.0f)))
+				{
+					State->Clip = c;
+				}
+			}
+			ImGui::SeparatorText("Play");
+			ImGui::Checkbox("Loop", &State->bLoop);
+			ImGui::SameLine();
+			ImGui::Checkbox("Everyone", &State->bEveryone);
+			ImGui::SliderFloat("Speed", &State->ClipSpeed, 0.25f, 2.0f, "%.2f");
+			const auto Apply = [&](int32 ClipIndex)
+			{
+				for (int32 i = 0; i < State->People.Num(); ++i)
+				{
+					if (State->bEveryone || i == State->Selected)
+					{
+						CreatorPlay(*State, i, ClipIndex, Pawns->FindPawn(State->People[i].Thing));
+					}
+				}
+			};
+			if (ImGui::Button("Play"))
+			{
+				State->bWalk = false;  // standing still while they act it out
+				Apply(State->Clip);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Stop"))
+			{
+				Apply(-1);
+			}
+			const int32 Now = State->Playing.IsValidIndex(State->Selected) ? State->Playing[State->Selected] : -1;
+			ImGui::TextDisabled("%s", Now >= 0 ? TCHAR_TO_UTF8(*(TEXT("Playing: ") + State->ClipNames[Now])) : "Not playing");
 		}
 		ImGui::End();
 		ImGui::PopStyleColor(UE_ARRAY_COUNT(Colours));

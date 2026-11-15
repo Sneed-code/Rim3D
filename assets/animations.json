@@ -1,0 +1,12 @@
+{
+  "comment": "Animation clips for the game (docs/design/makehuman.md, \"Animation clips\"): each FBX (a Mixamo skeleton, with or without its mesh) is imported, retargeted onto the game's mannequin by the MakeHumanArt commandlet with -Clips, and saved as /Game/Rim3D/Generated/Animations/<name>/A_<name>; every body plays it through its own retargeter. FBX paths are relative to the repo (game/Saved is not in Git: copy clips there) unless absolute. Mocap that stands away from the origin is first centred with tools/makehuman/clip_prep.py (\"source\" -> \"fbx\").",
+  "clips": [
+    {
+      "name": "Skip",
+      "fbx": "game/Saved/Mocap/Skip/Skip.fbx",
+      "loop": true,
+      "comment": "Jump rope (skipping), FlowHMR markerless mocap retargeted by sneed onto his Petite Pale woman (Mixamo skeleton).",
+      "source": "game/Saved/Mocap/Skip/PaleWoman_Retargeted.fbx"
+    }
+  ]
+}
