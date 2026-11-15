@@ -656,6 +656,7 @@ void UTerrainSubsystem::LoadPlantVisuals(const colony::Sim& Sim)
 	}
 	const USimSubsystem* Source = Bridge.Get();
 	LoadGroundCover(Source ? Source->GetDataRoot() / TEXT("look.json") : FString());
+	LoadRockScatter(Source ? Source->GetDataRoot() / TEXT("look.json") : FString());
 	Stats.PlantKinds = PlantVisuals.Num();
 }
 
@@ -966,7 +967,7 @@ void UTerrainSubsystem::ApplyChunkPlants(FChunk& Chunk, TArray<TArray<FTransform
 		}
 		Component->AddInstances(List, false, false, false);
 		++Stats.PlantComponents;
-		(Cover.Count > 0 && Kind >= Cover.First ? CoverCount : Count) += List.Num();
+		(IsCosmeticKind(Kind) ? CoverCount : Count) += List.Num();
 	}
 	Stats.PlantInstances += Count - Chunk.PlantCount;
 	Chunk.PlantCount = Count;
@@ -993,6 +994,10 @@ uint64 UTerrainSubsystem::GatherChunkPlants(int32 ChunkX, int32 ChunkY, TArray<T
 			if (Out && Cover.Count > 0)
 			{
 				GatherCover(Map, Plants, Cell, bHasPlant, *Out);
+			}
+			if (Out && Rocks.Count > 0)
+			{
+				GatherRocks(Map, Cell, *Out);
 			}
 			if (!bHasPlant)
 			{
@@ -1033,6 +1038,95 @@ uint64 UTerrainSubsystem::GatherChunkPlants(int32 ChunkX, int32 ChunkY, TArray<T
 		}
 	}
 	return Signature;
+}
+
+void UTerrainSubsystem::LoadRockScatter(const FString& LookPath)
+{
+	Rocks = FRockScatter();
+	FString Text;
+	TSharedPtr<FJsonObject> Root;
+	if (LookPath.IsEmpty() || !FFileHelper::LoadFileToString(Text, *LookPath) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
+	{
+		return;
+	}
+	const TSharedPtr<FJsonObject>* Json = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Meshes = nullptr;
+	if (!Root->TryGetObjectField(TEXT("rockScatter"), Json) || !(*Json)->TryGetArrayField(TEXT("meshes"), Meshes))
+	{
+		return;
+	}
+	double Size = 1.2, Cull = 250.0, Jitter = 0.45;
+	(*Json)->TryGetNumberField(TEXT("size"), Size);
+	(*Json)->TryGetNumberField(TEXT("cullDistance"), Cull);
+	(*Json)->TryGetNumberField(TEXT("jitter"), Jitter);
+	(*Json)->TryGetNumberField(TEXT("chance"), Rocks.Chance);
+	const int32 First = PlantVisuals.Num();
+	for (const TSharedPtr<FJsonValue>& Value : *Meshes)
+	{
+		UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *Value->AsString());
+		if (!Mesh)
+		{
+			UE_LOG(LogSimTerrain, Warning, TEXT("rockScatter: mesh %s not found (python tools/tree_art.py, TreeArt commandlet)"), *Value->AsString());
+			continue;
+		}
+		FPlantVisual Visual;
+		Visual.Mesh = Mesh;
+		Visual.CullDistanceCm = static_cast<float>(Cull * 100.0);
+		Visual.Jitter = static_cast<float>(Jitter);
+		// `size` is the metres across the rock's widest side, whatever size the model came at.
+		const FVector Extent = Mesh->GetBounds().BoxExtent;
+		const float Across = 2.0f * FMath::Max(Extent.X, Extent.Y);
+		Visual.Scale = Across > 1.0f ? static_cast<float>(Size * 100.0) / Across : 1.0f;
+		Visual.bCastShadow = true;
+		PlantMeshes.Add(Mesh);
+		PlantVisuals.Add(Visual);
+	}
+	if (PlantVisuals.Num() > First)
+	{
+		Rocks.First = First;
+		Rocks.Count = PlantVisuals.Num() - First;
+	}
+}
+
+void UTerrainSubsystem::GatherRocks(const colony::Map& Map, colony::CellPos Cell, TArray<TArray<FTransform>>& Out) const
+{
+	// Boulders and mossy stones on open ground beside rock, so a mountain's foot is not a clean cut between ground and
+	// block. Never on built or levelled cells. Where, which and how big come from the cell's hash.
+	const colony::Terrain Here = Map.terrain(Cell);
+	if ((Here != colony::Terrain::Soil && Here != colony::Terrain::Sand && Here != colony::Terrain::RoughStone) || Map.levelled(Cell) || Map.buildingAt(Cell) != colony::kNoEntity)
+	{
+		return;
+	}
+	int32 RockNear = 0;
+	for (int32 DY = -1; DY <= 1; ++DY)
+	{
+		for (int32 DX = -1; DX <= 1; ++DX)
+		{
+			const colony::CellPos N{Cell.x + DX, Cell.y + DY, 0};
+			RockNear += (DX != 0 || DY != 0) && Map.inBounds(N) && Map.terrain(N) == colony::Terrain::Rock ? 1 : 0;
+		}
+	}
+	if (RockNear == 0)
+	{
+		return;
+	}
+	const int32 Index = Map.index(Cell);
+	const uint64 H = TerrHash(static_cast<uint64>(Index) * 13ULL + 0x2F7A1B33ULL);
+	const float Roll = static_cast<float>(H & 0xFFFF) / 65535.0f;
+	if (Roll >= Rocks.Chance * FMath::Min(1.0f, 0.4f + 0.2f * static_cast<float>(RockNear)))
+	{
+		return;
+	}
+	const float R1 = static_cast<float>((H >> 16) & 0xFFFF) / 65535.0f;
+	const float R2 = static_cast<float>((H >> 32) & 0xFFFF) / 65535.0f;
+	const float R3 = static_cast<float>((H >> 48) & 0xFFFF) / 65535.0f;
+	const int32 Kind = Rocks.First + static_cast<int32>((H >> 8) % static_cast<uint64>(Rocks.Count));
+	const FPlantVisual& Visual = PlantVisuals[Kind];
+	const float PX = static_cast<float>(Cell.x) + 0.2f + R1 * 0.6f;
+	const float PY = static_cast<float>(Cell.y) + 0.2f + R2 * 0.6f;
+	const float Size = Visual.Scale * (1.0f + (R3 - 0.5f) * 2.0f * Visual.Jitter);
+	// Sunk a little so it sits in the ground rather than on it.
+	Out[Kind].Add(FTransform(FRotator(0.0, R3 * 7919.0f, 0.0), FVector(PX * 100.0f, PY * 100.0f, Map.heightAt(PX, PY) * 100.0f - 12.0f * Size), FVector(Size)));
 }
 
 void UTerrainSubsystem::GatherCover(const colony::Map& Map, const colony::Plants& Plants, colony::CellPos Cell, bool bHasPlant, TArray<TArray<FTransform>>& Out) const
@@ -1110,7 +1204,7 @@ void UTerrainSubsystem::FlushDirty()
 			{
 				RebuildChunkGround(CX, CY);
 				// The ground cover follows the ground (mined, levelled for a building, roofed over).
-				if (Cover.Count > 0)
+				if (Cover.Count > 0 || Rocks.Count > 0)
 				{
 					Chunk.bPlantsDirty = true;
 				}

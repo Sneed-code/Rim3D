@@ -146,6 +146,7 @@ private:
 	uint64 GatherChunkPlants(int32 ChunkX, int32 ChunkY, TArray<TArray<FTransform>>* Out) const;
 	/** Adds a cell's cosmetic ground cover (Cover) to the kinds' transforms. */
 	void GatherCover(const colony::Map& Map, const colony::Plants& Plants, colony::CellPos Cell, bool bHasPlant, TArray<TArray<FTransform>>& Out) const;
+	void GatherRocks(const colony::Map& Map, colony::CellPos Cell, TArray<TArray<FTransform>>& Out) const;
 	void ScanPlants();
 	void UpdateRoofVisibility(bool bForce);
 	bool WantRoofs() const;
@@ -182,6 +183,11 @@ private:
 	TArray<uint8> VariantsOfDef;
 	FGroundCover Cover;
 	void LoadGroundCover(const FString& LookPath);
+	/** Cosmetic boulders and mossy rocks on open ground next to rock (data/look.json "rockScatter", L6): kinds after the cover. */
+	struct FRockScatter { int32 First = -1; int32 Count = 0; float Chance = 0.25f; };
+	FRockScatter Rocks;
+	void LoadRockScatter(const FString& LookPath);
+	bool IsCosmeticKind(int32 Kind) const { return (Cover.Count > 0 && Kind >= Cover.First && Kind < Cover.First + Cover.Count) || (Rocks.Count > 0 && Kind >= Rocks.First && Kind < Rocks.First + Rocks.Count); }
 	/** One byte per map cell: 1 where a thin roof is drawn (the snapshot's roofCells). */
 	TArray<uint8> ThinRoof;
 	TArray<int32> ThinRoofCells;
