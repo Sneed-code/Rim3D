@@ -252,6 +252,29 @@ void USmokeTestSubsystem::BuildLookPhases()
 			return;
 		}
 		const auto At = [=](int32 DX, int32 DY) { return colony::CellPos{State->Room.x + DX, State->Room.y + DY, 0}; };
+		// A colony's clearing: no trees, bamboo or bushes within 22 cells of the room or 8 of home (grass and the ground cover stay),
+		// so the close-up, walls and night shots see the colony and not a wall of jungle.
+		{
+			colony::Sim* Clear = SimOf();
+			const colony::CellPos Mid{State->Room.x + LookRoomW / 2, State->Room.y + LookRoomH / 2, 0};
+			const auto Near = [](int32 X, int32 Y, colony::CellPos P, int32 R) { return (X - P.x) * (X - P.x) + (Y - P.y) * (Y - P.y) <= R * R; };
+			for (int32 Y = Mid.y - 24; Clear && Y <= Mid.y + 24; ++Y)
+			{
+				for (int32 X = Mid.x - 24; X <= Mid.x + 24; ++X)
+				{
+					const colony::CellPos C{X, Y, 0};
+					if (!Map.inBounds(C) || !Clear->plants().has(C) || !(Near(X, Y, Mid, 22) || Near(X, Y, State->Home, 8)))
+					{
+						continue;
+					}
+					const std::string Name = Clear->defs().get(Clear->plants().defAt(C)).defName();
+					if (Name.find("Tree") != std::string::npos || Name == "Plant_Bamboo" || Name == "Plant_Bush")
+					{
+						Clear->plants().remove(C);
+					}
+				}
+			}
+		}
 		// No trees or bushes in the room or on the sample wall's line.
 		for (int32 Y = LookSampleY - 1; Y <= LookSampleY + 2 * static_cast<int32>(UE_ARRAY_COUNT(LookSampleStuffs)); ++Y)
 		{
