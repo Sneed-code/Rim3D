@@ -64,6 +64,17 @@ fists (kept only for things that aren't pawns) are the two choices to revisit.
 - A thing destroyed under a pawn's target is forgotten (`forget`); a target that goes away by itself
   (someone ate the food) is simply dropped and a new one found.
 
+## Others and a berserker
+
+A colonist on a Berserk break (`isBerserk`, `MentalBreaks.h`) is an enemy to its own colony until it is downed or the
+break ends: the alarm counts it among the hostiles once a colonist sees it (`RaidSystem::thinkAlarm`) and never calls it
+up, and the fighter AI puts it on no side (`kWildFaction`, as a mad animal), so armed colonists fight it like a raider and
+the unarmed shelter from it. Downed, the break ends (`downed`), it is the colony's again and nobody shoots it; doctors
+rescue and tend it. A colonist the alarm had called up is stood down when it snaps. RimWorld leaves this to the player
+(draft and beat the berserker down); in the year run nobody did, and one berserk colonist beat four others to death in
+the barracks while they stood by (colony-scenario.md, thirteenth pass). Guns can kill the berserker; a test with two
+revolvers downed it in four shots.
+
 ## What Unreal sees
 
 - **Snapshot:** `ThingView::mentalBreak` is the `MentalBreaks` def while the pawn is in a break
@@ -89,5 +100,4 @@ goal, target, counters, visited targets). A save from before has none and loads 
 - The other breaks of RimWorld's DLCs, inspirations,
   and drug-induced states.
 - Animations and sounds for the break states; U-tasks read the events and the snapshot.
-- Other colonists reacting to a berserker (the defence plan, F6, treats everyone of the player's side
-  as a friend).
+

@@ -74,7 +74,8 @@ knows of it or one of the colony's pawns sees it within 60 m (line of sight from
 fighters see). Spotting one **sounds the alarm** by itself; the middle of the colony's buildings
 (else of its colonists) becomes **home**, and the middle of the spotted enemies the **threat**. The map's own buildings
 are not the colony's: ruin walls and steam geysers (`mapFeature` in their defs) and brood mounds don't count
-(`RaidSystem::colonyMiddle`). Before, a ruin across the map put home up to 60 m from the barracks in the year run.
+(`RaidSystem::colonyMiddle`). Before, a ruin across the map put home up to 60 m from the barracks in the year run. A colonist on a
+Berserk break counts as an enemy too ([mental-breaks.md](mental-breaks.md)).
 
 While the alarm is on, every colonist that isn't drafted or controlled by the player does what its
 `DefensePlan` says (`SetDefenseRoleCommand`; none is a Defender):

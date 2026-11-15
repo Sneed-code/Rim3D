@@ -16,6 +16,7 @@
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Trade.h"
 #include "ColonySim/Melee.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Regions.h"
@@ -393,6 +394,11 @@ void FighterSystem::step() {
         if (wildLife != nullptr && wildLife->temper != AnimalTemper::Calm) {
             // A mad animal is nobody's friend: the colony's own squirrel gone mad bit a colonist in bed to death while the
             // others, its side, never saw it as an enemy (seed 42 of the year run).
+            p.faction = kWildFaction;
+        }
+        if (isBerserk(reg.try_get<MentalBreaker>(e))) {
+            // Nor a colonist gone berserk: on the rainforest start one beat four colonists to death in the barracks while
+            // the others stood by. Its friends fight it like any enemy now, and stop once it is down (the break ends).
             p.faction = kWildFaction;
         }
         p.stance = p.able ? posture.stance : Stance::Prone;

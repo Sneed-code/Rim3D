@@ -389,6 +389,8 @@ void MentalBreakSystem::begin(Entity pawn, const Kind& kind, int band, int64_t n
     if (const Fighter* fighter = reg.try_get<Fighter>(pawn); fighter != nullptr && fighter->drafted) {
         std::string ignored;
         fighters_.draft(pawn, false, ignored);
+    } else if (fighter != nullptr && fighter->defending) {
+        fighters_.standDown(pawn);  // called up by the alarm: the break runs it now, not the fighter AI
     }
     MentalBreaker& b = reg.get_or_emplace<MentalBreaker>(pawn);
     stopWalk(pawn, b);
