@@ -1033,6 +1033,20 @@ struct InventoryCommand {
     int count = 0;
 };
 
+// An outfit's fight gear (docs/design/armour.md): its armour and/or clothes (not hats) are kept in the bag and put on
+// only for fights. Fails if there is no such outfit.
+struct SetOutfitFightGearCommand {
+    uint32_t outfit = 0;
+    bool armourInBag = false;
+    bool clothesInBag = false;
+};
+
+// The look-only switch: `hide` true stops a pawn's clothes and armour being drawn; they still count.
+struct HideGearCommand {
+    Entity pawn = kNoEntity;
+    bool hide = true;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -1065,7 +1079,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
                              AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand,
                              ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand,
-                             InventoryCommand>;
+                             InventoryCommand, SetOutfitFightGearCommand, HideGearCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

@@ -672,8 +672,8 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             out[0] = keyOf(JobTarget{job.site, CellPos{}});
             return 1;
         case JobType::WearApparel:
-            if (job.count != 0) {
-                return 0;  // taking a worn piece off holds nothing
+            if (job.count == 1 || job.count == 2) {
+                return 0;  // taking a worn piece off (onto the ground or into the bag) holds nothing
             }
             out[0] = keyOf(JobTarget{job.thing, CellPos{}});
             return 1;

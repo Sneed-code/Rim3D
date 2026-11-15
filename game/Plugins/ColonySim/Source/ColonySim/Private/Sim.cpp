@@ -1022,6 +1022,20 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         applyInventoryCommand(*bag, id);
         return;
     }
+    if (const auto* fightGear = std::get_if<SetOutfitFightGearCommand>(&command)) {
+        std::string why;
+        if (!apparel_->setFightGear(fightGear->outfit, fightGear->armourInBag, fightGear->clothesInBag, why)) {
+            commandFailed(id, why);
+        }
+        return;
+    }
+    if (const auto* hideGear = std::get_if<HideGearCommand>(&command)) {
+        std::string why;
+        if (!apparel_->setHideGear(hideGear->pawn, hideGear->hide, why)) {
+            commandFailed(id, why);
+        }
+        return;
+    }
     // The comms console, before the long chain below (MSVC's limit on nested else-ifs).
     if (const auto* comms = std::get_if<CommsCommand>(&command)) {
         if (comms->action != "RequestCaravan") {
@@ -2251,7 +2265,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.fittedParts.clear();
     out.outfits.clear();
     for (const OutfitPolicy& outfit : apparel_->outfits()) {
-        out.outfits.push_back(OutfitView{outfit.id, outfit.name});
+        out.outfits.push_back(OutfitView{outfit.id, outfit.name, outfit.armourInBag, outfit.clothesInBag});
     }
     out.designations.clear();
     for (const auto& [index, kind] : designations_->all()) {
@@ -2540,6 +2554,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (view.category == ThingCategory::Pawn) {
             view.outfit = apparel_->outfitOf(entity);
             view.markedForStrip = apparel_->stripMarked(entity);
+            view.hideGear = apparel_->gearHidden(entity);
+            if (const Dressing* dressing = reg.try_get<Dressing>(entity); dressing != nullptr && dressing->stepsLeft > 0) {
+                view.dressingSteps = dressing->stepsLeft;
+            }
         } else if (view.category == ThingCategory::Item && apparel_->stats().isApparel(thing.def)) {
             if (const MadeOf* made = reg.try_get<MadeOf>(entity)) {
                 view.stuff = made->stuff;

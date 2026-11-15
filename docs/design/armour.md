@@ -94,10 +94,29 @@ Clothing goes on in one step; armour takes 120 steps a piece (4 seconds at 1x, `
 and a new injury while putting it on stops the job ("hit while putting on armour"). A pawn picks clothing
 first, then armour legs, chest, helmet, then other gear (`ApparelSystem::bestToWear`).
 
+## Fight gear in the bag
+
+An outfit can keep gear in the pawn's bag and put it on only for fights (`OutfitPolicy.armourInBag`,
+`clothesInBag`; `SetOutfitFightGearCommand`; the Outfits def keys of the same names):
+
+- Outside a fight the pawn picks up the best allowed pieces of that kind into its bag (as much as it can carry;
+  a better piece swaps for the one in the bag, which drops) and takes worn ones off into the bag. Bag gear counts
+  toward the carry load; worn gear doesn't.
+- When it fights (drafted, called up by the alarm, or an enemy; not while fleeing) it puts them on from the bag:
+  clothes all at once, then armour legs, chest, helmet at 120 steps a piece (the `Dressing` component). Meanwhile it
+  can't shoot or swing ("putting on armour"). A new injury makes it give up and fight as it is until the fight ends.
+- When the fight ends the job system puts the pieces back in the bag.
+- `clothesInBag` leaves hats on (RimWorld's nudist outfit allows them). Outfits: "Armour for fights" (armour in the
+  bag) and "Nudist, dressed for fights" (clothes and armour in the bag, hat on). The plain "Nudist" outfit stays
+  naked but for a hat.
+
+**Hide gear** (`HideGearCommand`, the `HideGear` component, `ThingView.hideGear`): a look-only switch; the pawn's
+clothes and armour are not drawn but still count for everything.
+
 ## Not done yet (next steps in the same thread)
 
-- Armour carried in the bag and put on when a fight starts (a policy).
-- Nudists naked unless an outfit setting dresses them for fights or work; a look-only switch to hide a
-  pawn's clothes and armour.
+- Buttons for the fight gear and hide gear settings (the sim and the drawing are done; there is no outfit window
+  in Unreal yet).
+- Nudists dressed for work (sneed: "for fights or work").
 - Races, strength or melee skill lowering the weight penalty (sneed: "various things affect this").
 - Plant fibre has no source yet (BACKLOG). Gloves and boots don't exist yet.

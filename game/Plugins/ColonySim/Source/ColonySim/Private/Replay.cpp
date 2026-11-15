@@ -528,6 +528,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                         j["action"] = c.action;
                         j["item"] = entt::to_integral(c.item);
                         j["count"] = c.count;
+                    } else if constexpr (std::is_same_v<Type, SetOutfitFightGearCommand>) {
+                        j["outfit"] = c.outfit;
+                        j["armourInBag"] = c.armourInBag;
+                        j["clothesInBag"] = c.clothesInBag;
+                    } else if constexpr (std::is_same_v<Type, HideGearCommand>) {
+                        j["pawn"] = entt::to_integral(c.pawn);
+                        j["hide"] = c.hide;
                     } else {
                         static_assert(std::is_same_v<Type, RerollColonistCommand>, "write every command type");
                         j["slot"] = c.slot;
@@ -1819,6 +1826,25 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             }
             c.pawn = static_cast<Entity>(pawn);
             c.item = static_cast<Entity>(item);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetOutfitFightGear") {
+            SetOutfitFightGearCommand c;
+            if (!r.integer(j, "outfit", c.outfit, where) || !r.flag(j, "armourInBag", c.armourInBag, where) ||
+                !r.flag(j, "clothesInBag", c.clothesInBag, where)) {
+                return false;
+            }
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "HideGear") {
+            HideGearCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            if (!r.integer(j, "pawn", pawn, where) || !r.flag(j, "hide", c.hide, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
             out.command = std::move(c);
             return true;
         }

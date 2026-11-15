@@ -969,18 +969,21 @@ TEST_CASE("Apparel: the clothing commands record into a replay and play back the
     APPAREL_REQUIRE(pawn != kNoEntity);
     original.submit(AddOutfitCommand{"Replayed"});
     original.step();
+    const uint32_t replayed = apparelOutfitId(original, "Replayed");
     EditOutfitCommand edit;
-    edit.outfit = 5;
+    edit.outfit = replayed;
     edit.disallowed = {"Apparel_SimpleHelmet"};
     edit.hitPointsMin = 0.1f;
     edit.qualityMax = 4;
     original.submit(edit);
-    original.submit(SetOutfitCommand{pawn, 5});
+    original.submit(SetOutfitCommand{pawn, replayed});
+    original.submit(SetOutfitFightGearCommand{replayed, true, false});
+    original.submit(HideGearCommand{pawn, true});
     original.submit(StripCommand{pawn, true});  // not downed: fails, and is logged
     for (int i = 0; i < 800; ++i) {
         original.step();
     }
-    original.submit(RemoveOutfitCommand{5});
+    original.submit(RemoveOutfitCommand{replayed});
     original.step();
 
     const Replay recorded = recordReplay(original);
@@ -994,7 +997,7 @@ TEST_CASE("Apparel: the clothing commands record into a replay and play back the
     CHECK(again.stateHash() == original.stateHash());
 
     // Every command type is known by name.
-    for (const char* name : {"SetOutfit", "EditOutfit", "AddOutfit", "RemoveOutfit", "Strip"}) {
+    for (const char* name : {"SetOutfit", "EditOutfit", "AddOutfit", "RemoveOutfit", "Strip", "SetOutfitFightGear", "HideGear"}) {
         Command command;
         CHECK(commandFromName(name, command));
         CHECK(std::string(commandName(command)) == name);
@@ -1065,4 +1068,156 @@ TEST_CASE("Apparel: clothing goes on at once, armour takes 4 seconds, and a hit 
             CHECK(worn - started <= 124);
         }
     }
+}
+
+// ---- Fight gear in the bag (docs/design/armour.md) -------------------------------------------
+
+namespace {
+
+bool apparelInBag(const Sim& sim, Entity pawn, Entity item) {
+    const Gear* gear = sim.things().registry().try_get<Gear>(pawn);
+    return gear != nullptr && std::find(gear->inventory.begin(), gear->inventory.end(), item) != gear->inventory.end();
+}
+
+}  // namespace
+
+TEST_CASE("Apparel: armour for fights stays in the bag, goes on when drafted, legs-chest-helmet, and back after") {
+    auto sim = apparelTestSim();
+    const entt::registry& reg = sim->things().registry();
+    const Entity pawn = apparelColonist(*sim, 20, 20);
+    sim->submit(SetOutfitCommand{pawn, apparelOutfitId(*sim, "Armour for fights")});
+    const Entity shirt = apparelLying(*sim, 21, 20, "Apparel_TShirt");
+    const Entity vest = apparelLying(*sim, 22, 20, "Apparel_FlakVest");
+    const Entity pants = apparelLying(*sim, 22, 21, "Apparel_FlakPants");
+    const Entity helmet = apparelLying(*sim, 21, 21, "Apparel_FlakHelmet", -1, "Steel");
+    for (int i = 0; i < 600; ++i) {
+        sim->step();
+    }
+    // Clothes on, armour in the bag (and not slowing the walk as armour would).
+    CHECK(apparelWearing(*sim, pawn, shirt));
+    CHECK(apparelInBag(*sim, pawn, vest));
+    CHECK(apparelInBag(*sim, pawn, pants));
+    CHECK(apparelInBag(*sim, pawn, helmet));
+    CHECK(sim->apparel().stats().armourKg(reg, pawn) == doctest::Approx(0.0f));
+
+    sim->submit(DraftCommand{pawn, true});
+    sim->step();
+    sim->step();
+    // Legs first, 4 seconds a piece, no shooting meanwhile.
+    APPAREL_REQUIRE(reg.all_of<Dressing>(pawn));
+    CHECK(reg.get<Dressing>(pawn).item == pants);
+    CHECK(isDressing(reg, pawn));
+    std::vector<Entity> order;
+    for (int i = 0; i < 400; ++i) {
+        sim->step();
+        for (const Entity piece : {pants, vest, helmet}) {
+            if (apparelWearing(*sim, pawn, piece) && std::find(order.begin(), order.end(), piece) == order.end()) {
+                order.push_back(piece);
+                if (order.size() == 1) {
+                    CHECK(i >= 110);  // the legs took about 120 steps
+                }
+            }
+        }
+    }
+    CHECK(order == std::vector<Entity>{pants, vest, helmet});
+    CHECK_FALSE(isDressing(reg, pawn));
+    // The fight is over: the armour goes back in the bag.
+    sim->submit(DraftCommand{pawn, false});
+    for (int i = 0; i < 1200; ++i) {
+        sim->step();
+    }
+    CHECK(apparelInBag(*sim, pawn, vest));
+    CHECK(apparelInBag(*sim, pawn, pants));
+    CHECK(apparelInBag(*sim, pawn, helmet));
+    CHECK(apparelWearing(*sim, pawn, shirt));
+    CHECK_FALSE(reg.all_of<Dressing>(pawn));
+}
+
+TEST_CASE("Apparel: hit while putting on armour from the bag, a fighter gives up until the fight is over") {
+    auto sim = apparelTestSim();
+    const entt::registry& reg = sim->things().registry();
+    const Entity pawn = apparelColonist(*sim, 20, 20);
+    sim->submit(SetOutfitCommand{pawn, apparelOutfitId(*sim, "Armour for fights")});
+    const Entity vest = apparelLying(*sim, 21, 20, "Apparel_FlakVest");
+    for (int i = 0; i < 400; ++i) {
+        sim->step();
+    }
+    APPAREL_REQUIRE(apparelInBag(*sim, pawn, vest));
+    sim->submit(DraftCommand{pawn, true});
+    for (int i = 0; i < 30; ++i) {
+        sim->step();
+    }
+    APPAREL_REQUIRE(isDressing(reg, pawn));
+    sim->submit(DamagePawnCommand{pawn, "Cut", 2.0f, 0});
+    for (int i = 0; i < 300; ++i) {
+        sim->step();
+    }
+    CHECK(apparelInBag(*sim, pawn, vest));
+    CHECK_FALSE(isDressing(reg, pawn));
+    APPAREL_REQUIRE(reg.all_of<Dressing>(pawn));
+    CHECK(reg.get<Dressing>(pawn).gaveUp);
+    // Drafted again later, it tries again.
+    sim->submit(DraftCommand{pawn, false});
+    sim->step();
+    sim->step();
+    CHECK_FALSE(reg.all_of<Dressing>(pawn));
+}
+
+TEST_CASE("Apparel: a nudist dressed for fights keeps clothes in the bag and puts them on at once when drafted") {
+    auto sim = apparelTestSim();
+    const Entity pawn = apparelColonist(*sim, 20, 20, false, "Nudist");
+    sim->submit(SetOutfitCommand{pawn, apparelOutfitId(*sim, "Nudist, dressed for fights")});
+    const Entity shirt = apparelLying(*sim, 21, 20, "Apparel_TShirt");
+    const Entity pants = apparelLying(*sim, 22, 20, "Apparel_Pants");
+    const Entity hat = apparelLying(*sim, 21, 21, "Apparel_Tuque");
+    for (int i = 0; i < 600; ++i) {
+        sim->step();
+    }
+    CHECK(apparelInBag(*sim, pawn, shirt));
+    CHECK(apparelInBag(*sim, pawn, pants));
+    CHECK(apparelWearing(*sim, pawn, hat));  // hats stay on
+    CHECK_FALSE(sim->apparel().nudistClothed(pawn));
+    sim->submit(DraftCommand{pawn, true});
+    sim->step();
+    sim->step();
+    CHECK(apparelWearing(*sim, pawn, shirt));
+    CHECK(apparelWearing(*sim, pawn, pants));
+}
+
+TEST_CASE("Apparel: the hide-gear switch shows in the snapshot, fight gear settings save and load") {
+    auto sim = apparelTestSim();
+    const Entity pawn = apparelColonist(*sim, 20, 20);
+    const uint32_t outfit = apparelOutfitId(*sim, "Worker");
+    sim->submit(SetOutfitFightGearCommand{outfit, true, true});
+    sim->submit(HideGearCommand{pawn, true});
+    sim->submit(SetOutfitFightGearCommand{999, true, false});  // no such outfit: fails
+    sim->step();
+    CHECK(sim->apparel().gearHidden(pawn));
+    CHECK(sim->apparel().outfit(outfit)->armourInBag);
+    CHECK(sim->apparel().outfit(outfit)->clothesInBag);
+    Snapshot snapshot;
+    sim->writeSnapshot(snapshot);
+    const ThingView* seen = snapshot.find(pawn);
+    APPAREL_REQUIRE(seen != nullptr);
+    CHECK(seen->hideGear);
+    bool listed = false;
+    for (const OutfitView& view : snapshot.outfits) {
+        if (view.id == outfit) {
+            listed = true;
+            CHECK(view.armourInBag);
+            CHECK(view.clothesInBag);
+        }
+    }
+    CHECK(listed);
+
+    const std::vector<uint8_t> bytes = saveSim(*sim);
+    SaveLoadResult loaded = loadSim(bytes, apparelTestDefs());
+    APPAREL_REQUIRE(loaded.error.empty());
+    APPAREL_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+    CHECK(loaded.sim->apparel().gearHidden(pawn));
+    CHECK(loaded.sim->apparel().outfit(outfit)->armourInBag);
+    sim->submit(HideGearCommand{pawn, false});
+    sim->step();
+    CHECK_FALSE(sim->apparel().gearHidden(pawn));
 }

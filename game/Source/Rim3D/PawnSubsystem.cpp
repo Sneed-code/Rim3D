@@ -251,6 +251,7 @@ uint64 USimPawnSubsystem::ApparelKey(const colony::Snapshot& Snapshot, const col
 	uint64 Key = 1469598103934665603ULL;
 	const auto Mix = [&Key](uint64 Value) { Key = (Key ^ Value) * 1099511628211ULL; };
 	Mix(View.apparelCount);
+	Mix(View.hideGear ? 1u : 0u);
 	for (uint32 I = 0; I < View.apparelCount; ++I)
 	{
 		if (const colony::ApparelView* Piece = PawnApparelAt(Snapshot, View, I))
@@ -267,7 +268,7 @@ uint64 USimPawnSubsystem::ApparelKey(const colony::Snapshot& Snapshot, const col
 FSimPawnApparel USimPawnSubsystem::MakeApparel(const colony::Snapshot& Snapshot, const colony::ThingView& View, const colony::DefDatabase* Defs)
 {
 	FSimPawnApparel Out;
-	if (!Defs)
+	if (!Defs || View.hideGear) // the look-only switch: worn gear still counts, it just isn't drawn
 	{
 		return Out;
 	}

@@ -1109,6 +1109,9 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     if (switching(pawn)) {
         return fail("switching weapons");
     }
+    if (isDressing(reg, pawn)) {
+        return fail("putting on armour");
+    }
     Shooter& s = reg.get_or_emplace<Shooter>(pawn);
     if (s.phase == ShotPhase::Reloading) {
         return fail("reloading");
@@ -1356,6 +1359,9 @@ bool CombatSystem::reload(Entity pawn, std::string* why) {
     }
     if (switching(pawn)) {
         return fail("switching weapons");
+    }
+    if (isDressing(reg, pawn)) {
+        return fail("putting on armour");
     }
     Shooter& s = reg.get_or_emplace<Shooter>(pawn);
     if (s.phase == ShotPhase::Aiming || s.phase == ShotPhase::Firing || s.phase == ShotPhase::Reloading) {

@@ -41,16 +41,19 @@ a function that gives a stage number; `situation.trait` and `situation.notTrait`
 pawns with or without a trait. 
 ## Outfits
 
-An outfit policy (`Outfits.json`: Anything, Worker, Soldier, Nudist) lists the apparel defs it
+An outfit policy (`Outfits.json`: Anything, Worker, Soldier, Nudist, Armour for fights, Nudist dressed for fights) lists the apparel defs it
 disallows, a hit-point share range and a quality range. Ids are 1, 2, 3... in the order made. A pawn
 follows its `PawnOutfit` (default: the first outfit, "Anything"). Commands: `SetOutfit{pawn,
 outfit}`, `EditOutfit{...}`, `AddOutfit{name}`, `RemoveOutfit{outfit}` (pawns on it go back to the
-default; the first can't go). The snapshot lists the outfits and each pawn's outfit.
+default; the first can't go), `SetOutfitFightGear{outfit, armourInBag, clothesInBag}` (gear kept in the bag
+and put on for fights, [armour.md](armour.md) "Fight gear in the bag"). The snapshot lists the outfits and each
+pawn's outfit.
 
 ## Changing clothes (think node)
 
 `thinkApparel` sits after the schedule and before work. A pawn with a worn piece its outfit doesn't
-allow takes it off first (job `WearApparel` with `count` 1); else it looks for the lying apparel
+allow takes it off first (job `WearApparel` with `count` 1; fight gear goes into the bag with `count` 2, and
+lying fight gear is picked up into the bag with `count` 3); else it looks for the lying apparel
 that gains most (`ApparelSystem::score`: armor by type, insulation, hit points, taint penalty) by at
 least `minGain` within 50 m (ours) that it can reach and nobody else reserved, walks there and puts
 it on (60 steps per piece; what it replaces drops where it stands). It keeps looking while it

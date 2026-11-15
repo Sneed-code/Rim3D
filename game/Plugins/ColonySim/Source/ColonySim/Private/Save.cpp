@@ -374,6 +374,9 @@ struct SaveApparel {
     int64_t nextCheck = 0;
     bool hasDurability = false;  // section version 2 on (docs/design/apparel-durability.md)
     float durability = 1.0f;
+    bool hideGear = false;       // section version 3 on (docs/design/armour.md)
+    bool hasDressing = false;
+    Dressing dressing;
 };
 
 // What the repair system keeps on an item: the repair mark, the upgrade part ordered fitted and the parts fitted, by
@@ -1302,7 +1305,8 @@ template <typename Type>
 inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitCommand> || std::is_same_v<Type, TradeCommand> ||
                                             std::is_same_v<Type, AdjustGoodwillCommand> || std::is_same_v<Type, GiftCommand> ||
                                             std::is_same_v<Type, CommsCommand> || std::is_same_v<Type, ScannerCommand> ||
-                                            std::is_same_v<Type, InventoryCommand>;
+                                            std::is_same_v<Type, InventoryCommand> ||
+                                            std::is_same_v<Type, SetOutfitFightGearCommand> || std::is_same_v<Type, HideGearCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1339,6 +1343,13 @@ void saveTradeCommand(Ar& ar, Type& c) {
         ar.text("action", c.action);
         ar.value("item", c.item);
         ar.value("count", c.count);
+    } else if constexpr (std::is_same_v<Type, SetOutfitFightGearCommand>) {
+        ar.value("outfit", c.outfit);
+        ar.value("armourInBag", c.armourInBag);
+        ar.value("clothesInBag", c.clothesInBag);
+    } else if constexpr (std::is_same_v<Type, HideGearCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("hide", c.hide);
     } else {
         static_assert(std::is_same_v<Type, GiftCommand>, "save every trade command here");
         auto* gift = &c;
@@ -2008,6 +2019,14 @@ void saveApparelPart(Ar& ar, SaveApparel& a) {
         ar.value("durability", a.durability);
         ar.require(a.durability >= 0.0f && a.durability <= 1.0f, "the save file has an impossible durability");
     }
+    if (ar.sectionVersion() >= 3) {
+        ar.value("hideGear", a.hideGear);
+        ar.value("hasDressing", a.hasDressing);
+        ar.value("dressingItem", a.dressing.item);
+        ar.value("dressingSteps", a.dressing.stepsLeft);
+        ar.value("dressingInjuries", a.dressing.injuries);
+        ar.value("dressingGaveUp", a.dressing.gaveUp);
+    }
 }
 
 template <typename Ar>
@@ -2019,6 +2038,10 @@ void saveOutfitPolicy(Ar& ar, OutfitPolicy& o) {
     ar.value("hitPointsMax", o.hitPointsMax);
     ar.value("qualityMin", o.qualityMin);
     ar.value("qualityMax", o.qualityMax);
+    if (ar.sectionVersion() >= 3) {
+        ar.value("armourInBag", o.armourInBag);
+        ar.value("clothesInBag", o.clothesInBag);
+    }
     ar.require(o.id != 0 && o.hitPointsMin >= 0.0f && o.hitPointsMax <= 1.0f && o.hitPointsMin <= o.hitPointsMax &&
                    o.qualityMin <= o.qualityMax,
                "the save file has an impossible outfit");
@@ -3499,7 +3522,7 @@ void saveSections(Ar& ar, SaveData& d) {
             saveParts(ar, "talking", e, &SaveEntity::talking, [&](SaveTalking& t) { saveTalkingPart(ar, t); });
         }
     });
-    ar.section("apparel", 2, [&] {
+    ar.section("apparel", 3, [&] {
         saveParts(ar, "apparel", e, &SaveEntity::apparel, [&](SaveApparel& a) { saveApparelPart(ar, a); });
         ar.value("nextOutfitId", d.nextOutfitId);
         ar.list("outfits", d.outfits, [&](OutfitPolicy& o) { saveOutfitPolicy(ar, o); });
@@ -4008,8 +4031,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
         const Quality* quality = reg.try_get<Quality>(e);
         const PawnOutfit* outfit = reg.try_get<PawnOutfit>(e);
         const Durability* durability = reg.try_get<Durability>(e);
+        const Dressing* dressing = reg.try_get<Dressing>(e);
         if (made != nullptr || quality != nullptr || outfit != nullptr || durability != nullptr || reg.all_of<Tainted>(e) ||
-            reg.all_of<StripMark>(e)) {
+            reg.all_of<StripMark>(e) || reg.all_of<HideGear>(e) || dressing != nullptr) {
             SaveApparel a;
             a.stuff = made != nullptr && made->stuff.valid() ? sim.defs_->get(made->stuff).defName() : std::string();
             a.quality = quality != nullptr ? static_cast<int>(quality->level) : -1;
@@ -4020,6 +4044,11 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
             a.nextCheck = outfit != nullptr ? outfit->nextCheck : 0;
             a.hasDurability = durability != nullptr;
             a.durability = durability != nullptr ? durability->share : 1.0f;
+            a.hideGear = reg.all_of<HideGear>(e);
+            a.hasDressing = dressing != nullptr;
+            if (dressing != nullptr) {
+                a.dressing = *dressing;
+            }
             out.apparel = std::move(a);
         }
     }
@@ -4413,6 +4442,12 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
         }
         if (a.hasDurability) {
             reg.emplace<Durability>(entity, Durability{a.durability});
+        }
+        if (a.hideGear) {
+            reg.emplace<HideGear>(entity);
+        }
+        if (a.hasDressing) {
+            reg.emplace<Dressing>(entity, a.dressing);
         }
     }
     if (e.looks) {

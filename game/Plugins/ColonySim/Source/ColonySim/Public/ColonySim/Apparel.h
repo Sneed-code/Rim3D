@@ -117,7 +117,29 @@ struct OutfitPolicy {
     float hitPointsMax = 1.0f;
     uint8_t qualityMin = 0;
     uint8_t qualityMax = 6;
+    // Fight gear (docs/design/armour.md): armour / clothes (not hats) the outfit allows are kept in the bag and put on
+    // only when the pawn fights, then go back in the bag. Clothes in the bag are for nudists.
+    bool armourInBag = false;
+    bool clothesInBag = false;
 };
+
+// On a fighting pawn putting on gear from its bag (docs/design/armour.md): `item` goes on when `stepsLeft` runs out;
+// meanwhile it can't shoot or swing. A new injury (more than `injuries`) makes it give up for the rest of the fight
+// (`gaveUp`). Removed when it stops fighting.
+struct Dressing {
+    Entity item = kNoEntity;
+    int stepsLeft = 0;
+    int injuries = 0;
+    bool gaveUp = false;
+};
+
+inline bool isDressing(const entt::registry& reg, Entity pawn) {
+    const Dressing* dressing = reg.valid(pawn) ? reg.try_get<Dressing>(pawn) : nullptr;
+    return dressing != nullptr && dressing->stepsLeft > 0;
+}
+
+// On a pawn whose clothes and armour are not drawn (a look-only switch, docs/design/armour.md); they still count.
+struct HideGear {};
 
 // The numbers from the ApparelRules def (RimWorld's where the wiki gives them, the rest ours).
 struct COLONY_API ApparelRules {
@@ -285,6 +307,12 @@ public:
     // Replaces the outfits (loading a save).
     void restoreOutfits(std::vector<OutfitPolicy> outfits, uint32_t nextId);
     bool allowed(const OutfitPolicy& outfit, Entity item) const;
+    // Sets an outfit's fight gear: armour and/or clothes kept in the bag and put on for fights.
+    bool setFightGear(uint32_t outfit, bool armourInBag, bool clothesInBag, std::string& error);
+    // Whether the pawn's outfit keeps pieces of this def in the bag outside fights.
+    bool bagged(Entity pawn, DefId def) const;
+    // Whether the pawn is in a fight (drafted, called up, or an enemy), so it wears its fight gear.
+    bool fighting(Entity pawn) const;
 
     // ---- Wearing ------------------------------------------------------------------------------
     // How good a piece is to wear (ours: armor, insulation, hit points, taint).
@@ -297,6 +325,17 @@ public:
     // Puts it on (the pieces it replaces drop where the pawn stands) / takes it off and drops it there.
     bool putOn(Entity pawn, Entity item, std::string& error);
     bool takeOff(Entity pawn, Entity item, std::string& error);
+    // Fight gear: a worn piece the outfit keeps in the bag (while not fighting), or kNoEntity; a piece in the bag to
+    // put on now (fighting: clothes first, then armour legs, chest, helmet), or kNoEntity.
+    Entity wornToBag(Entity pawn) const;
+    Entity bagToWear(Entity pawn) const;
+    // Worn into the bag / from the ground into the bag (a bagged piece it replaces drops there) / from the bag on.
+    bool stow(Entity pawn, Entity item, std::string& error);
+    bool pickUp(Entity pawn, Entity item, std::string& error);
+    bool wearFromBag(Entity pawn, Entity item, std::string& error);
+    // The look-only switch: hide the pawn's clothes and armour (they still count).
+    bool setHideGear(Entity pawn, bool hide, std::string& error);
+    bool gearHidden(Entity pawn) const;
     // Apparel and weapon off a downed or dead pawn, on the ground where it lies.
     bool strip(Entity pawn);
     // Whether the pawn wears anything over a body part group, and the pieces it wears.
@@ -329,7 +368,8 @@ public:
     void registerSituations(MoodSystem& mood) const;
 
     // One step, after combat: the dead wear their clothes down and taint them, worn clothes wear
-    // (once an hour), marks on pawns that need no stripping go. `now` is the game second of the step.
+    // (once an hour), marks on pawns that need no stripping go, fighters put on their fight gear from the bag.
+    // `now` is the game second of the step.
     void step(int64_t now, Rng& rng, const std::vector<Event>& events);
 
     // The state hash and the save read these.
@@ -341,6 +381,7 @@ private:
     bool isFemale(Entity pawn) const;
     bool conflicts(Entity item, Entity worn) const;
     int wearRank(DefId def) const;
+    void stepDressing();
 
     Things& things_;
     CombatSystem& combat_;

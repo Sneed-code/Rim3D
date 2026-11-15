@@ -254,6 +254,8 @@ struct ThingView {
     // `stuff` and a `quality` too (C14).
     uint32_t outfit = 0;
     bool markedForStrip = false;
+    bool hideGear = false;     // the look-only switch: don't draw its clothes and armour (docs/design/armour.md)
+    int dressingSteps = 0;     // steps left putting a piece of armour on from its bag in a fight, 0 for none
     uint32_t firstApparel = 0;
     uint32_t apparelCount = 0;
     // Inventory and carry weight (docs/design/inventory.md). Pawns: what they carry in kg (worn, weapons, bag,
@@ -326,6 +328,8 @@ struct InventoryItemView {
 struct OutfitView {
     uint32_t id = 0;
     std::string name;
+    bool armourInBag = false;   // its armour is kept in the bag and put on for fights (docs/design/armour.md)
+    bool clothesInBag = false;  // ...and its clothes (not hats), for nudists
 };
 
 // A raid squad on the map (docs/design/raids.md). `state` is a SquadState: 0 Advance, 1 Hold,
