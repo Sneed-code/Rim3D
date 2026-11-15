@@ -606,7 +606,8 @@ TEST_CASE("Fighters: an advancing raider with no shot goes round a wall by its g
 
 TEST_CASE("Fighters: a caravan guard standing by a colonist never swings at it; a raider in its place does") {
     // C25: a trader's guards are fighters of another faction, and stood next to colonists they knifed them.
-    const auto swingsAt = [](bool visitor) {
+    // A raider running off doesn't either (ninth pass: a routed raider beat two colonists down on its way out).
+    const auto swingsAt = [](bool visitor, FightMode mode = FightMode::Flee) {
         const auto sim = fightTestSim();
         const Entity colonist = fightTestPawn(*sim, 40, 40);
         const Entity guard = fightTestPawn(*sim, 41, 40);
@@ -618,7 +619,7 @@ TEST_CASE("Fighters: a caravan guard standing by a colonist never swings at it; 
         fightTestDraft(*sim, colonist);
         sim->step();
         // As the trade system walks a visit's pawns: a fighter in the Flee mode, on its way to its spot.
-        sim->fighters().enlist(guard, "test: a guard on its caravan's business").mode = FightMode::Flee;
+        sim->fighters().enlist(guard, "test: a guard on its caravan's business").mode = mode;
         int swings = 0;
         for (int i = 0; i < 120; ++i) {
             fightTestHeal(*sim, colonist);
@@ -630,7 +631,8 @@ TEST_CASE("Fighters: a caravan guard standing by a colonist never swings at it; 
         return swings;
     };
     CHECK(swingsAt(true) == 0);
-    CHECK(swingsAt(false) > 0);
+    CHECK(swingsAt(false) == 0);                   // a raider fleeing
+    CHECK(swingsAt(false, FightMode::Fight) > 0);  // a raider fighting
 }
 
 TEST_CASE("Fighters: over a low crest a fighter shoots from where its shots clear the ground") {
@@ -676,7 +678,9 @@ TEST_CASE("Fighters: over a low crest a fighter shoots from where its shots clea
     }
     MESSAGE(aimed << " steps able to fire, " << crouchedAim << " of them crouched; " << shots << " shots, " << intoGround << " into the crest");
     CHECK(aimed > 0);
-    CHECK(crouchedAim == 0);  // it stands to shoot: crouched, the muzzle is below the line over the crest
+    // It stands to shoot nearly always: crouched, the muzzle is below the line over the crest (now and then, with the
+    // enemy crouched too, the aim over the crest at its head clears from a crouch).
+    CHECK(crouchedAim * 20 <= aimed);
     CHECK(shots >= 5);
     CHECK(intoGround * 4 <= shots);
 }
@@ -763,4 +767,88 @@ TEST_CASE("Fighters: a defender with a club waits in cover for a gunman to come 
     MESSAGE("drafted: came within " << charging << " m of the raider; defending: within " << waiting << " m");
     CHECK(charging < 3.0f);
     CHECK(waiting > 6.0f);
+}
+
+TEST_CASE("Fighters: a fighter whose shots go into a crest in front of a crouched enemy moves to a better spot") {
+    // Found by the year run (docs/design/colony-scenario.md "Eighth pass"): a rifle colonist fired 64 shots at a raider
+    // crouched behind a rise 23 m away, 55 of them into the ground. The plan judged the shot as if the raider stood up;
+    // the shots went at its head as it crouched, and into the rise.
+    auto sim = fightTestSim();
+    for (int x = 39; x <= 41; ++x) {  // a short rise: from a few metres to the side the shots clear it
+        sim->editMap().setGroundHeight(CellPos{x, 52, 0}, 0.85f);
+    }
+    const Entity fighter = fightTestPawn(*sim, 40, 34, "Gun_BoltActionRifle");
+    const Entity enemy = fightTestPawn(*sim, 40, 54);  // unarmed, kept crouched where it is: 1.5 m behind the crest
+    fightTestHostile(*sim, enemy);
+    sim->step();
+    sim->fighters().enlist(fighter, "test: free to pick its spot");
+    entt::registry& reg = sim->things().registry();
+    std::vector<Entity> shotsInFlight;
+    int shots = 0;
+    int intoGround = 0;
+    for (int i = 0; i < 1800; ++i) {
+        fightTestHeal(*sim, fighter);
+        fightTestHeal(*sim, enemy);
+        Position& p = reg.get<Position>(enemy);
+        p.x = 40.5f;
+        p.y = 54.5f;
+        if (Mover* m = reg.try_get<Mover>(enemy)) {
+            m->path.clear();
+            m->next = 0;
+            m->vx = 0.0f;
+            m->vy = 0.0f;
+        }
+        sim->combat().setStance(enemy, Stance::Crouching);
+        sim->step();
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::ShotFired && e.thing == fighter) {
+                ++shots;
+                shotsInFlight.push_back(e.target);
+            } else if (e.type == EventType::ProjectileHit) {
+                const auto it = std::find(shotsInFlight.begin(), shotsInFlight.end(), e.thing);
+                if (it != shotsInFlight.end()) {
+                    intoGround += (e.hit == ProjectileHitKind::Ground || e.hit == ProjectileHitKind::Rock) && e.y < 53.5f ? 1 : 0;
+                    shotsInFlight.erase(it);
+                }
+            }
+        }
+    }
+    const CellPos at = fightTestCell(*sim, fighter);
+    MESSAGE(shots << " shots, " << intoGround << " into the crest; the fighter ended at " << at.x << "," << at.y);
+    CHECK(at != CellPos{40, 34, 0});  // from where it started every shot was into the rise
+    CHECK(shots >= 5);
+    CHECK(intoGround * 4 <= shots);
+}
+
+TEST_CASE("Fighters: a defender with a club waits for a lone club raider, but runs in when it is at a friend") {
+    // Found by the year run (docs/design/colony-scenario.md "Ninth pass"): colonists with clubs ran one at a time 20 m out
+    // to two raiders with clubs and were beaten down. A defender waits with the others; once the enemy is at a friend it
+    // goes to help, so they fight it two to one.
+    const auto run = [](bool friendThere) {
+        auto sim = fightTestSim();
+        const Entity colonist = fightTestPawn(*sim, 40, 40, "Melee_Club");
+        const Entity raider = fightTestPawn(*sim, 40, 52, "Melee_Club");  // inside a drafted pawn's leash
+        const Entity other = fightTestPawn(*sim, friendThere ? 41 : 80, friendThere ? 52 : 80);
+        fightTestDraft(*sim, colonist);
+        fightTestHostile(*sim, raider);
+        sim->step();
+        sim->things().registry().get<Fighter>(colonist).defending = true;  // as the alarm calls it up
+        float closest = 100.0f;
+        for (int i = 0; i < 150; ++i) {
+            fightTestHeal(*sim, colonist);
+            fightTestHeal(*sim, raider);
+            fightTestHeal(*sim, other);
+            sim->things().registry().emplace_or_replace<Stunned>(raider, Stunned{5});  // the raider holds still
+            sim->step();
+            const Position& c = sim->things().registry().get<Position>(colonist);
+            const Position& r = sim->things().registry().get<Position>(raider);
+            closest = std::min(closest, std::hypot(c.x - r.x, c.y - r.y));
+        }
+        return closest;
+    };
+    const float alone = run(false);
+    const float helping = run(true);
+    MESSAGE("raider on its own: came within " << alone << " m; raider at a friend: within " << helping << " m");
+    CHECK(alone > 6.0f);
+    CHECK(helping < 3.0f);
 }

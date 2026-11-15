@@ -615,3 +615,37 @@ TEST_CASE("Medicine: a recorded session with medical care and tending replays to
     CHECK(check.compared > 5);
     CHECK(again.stateHash() == recorded.stateHash());
 }
+
+TEST_CASE("Medicine: at bedtime a tired doctor tends a bleeding colonist before it goes to sleep") {
+    // Found by the year run (docs/design/colony-scenario.md "Ninth pass"): a raid ended at 2 at night, everyone went to
+    // bed, and a colonist shot in the fight bled out before the doctor got up. RimWorld's emergency work comes before
+    // sleep unless the doctor is exhausted.
+    const auto firstJob = [](bool bleeding) {
+        Sim sim = medSim();
+        sim.things().spawn("MedicineIndustrial", CellPos{12, 12, 0}, 3);
+        sim.things().spawn("Bed", CellPos{20, 20, 0});
+        const Entity doctor = medColonist(sim, CellPos{10, 10, 0});
+        const Entity patient = medPatient(sim, CellPos{14, 10, 0});
+        for (int h = 0; h < 24; ++h) {
+            sim.submit(SetScheduleCommand{doctor, h, ScheduleKind::Sleep});
+        }
+        MedLog log;
+        log.step(sim);
+        sim.things().registry().get<Needs>(doctor).rest = 0.2f;  // drowsy: off to bed at bedtime
+        if (bleeding) {
+            medHit(sim, patient, "Cut", 6.0f, "left arm");
+        }
+        JobType first = JobType::None;
+        medRunUntil(sim, log, 120, [&] {
+            const JobType now = sim.things().registry().get<Worker>(doctor).job.type;
+            if (now == JobType::TendPatient || now == JobType::LayDown) {
+                first = now;
+                return true;
+            }
+            return false;
+        });
+        return first;
+    };
+    CHECK(firstJob(false) == JobType::LayDown);
+    CHECK(firstJob(true) == JobType::TendPatient);
+}

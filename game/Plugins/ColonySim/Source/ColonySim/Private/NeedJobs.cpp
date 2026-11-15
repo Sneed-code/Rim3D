@@ -195,6 +195,11 @@ void JobSystem::interruptForNeeds(Entity pawn) {
         return;
     }
     Job job;
+    if (thinkEmergency(pawn, job)) {  // a bleeding friend before bed or a meal (MedicineJobs.cpp)
+        endJob(pawn, JobEnd::Interrupted, "emergency");
+        startJob(pawn, std::move(job));
+        return;
+    }
     if (!(thinkNeeds(pawn, job) || thinkSchedule(pawn, job)) || (job.type != JobType::Ingest && job.type != JobType::LayDown)) {
         return;
     }

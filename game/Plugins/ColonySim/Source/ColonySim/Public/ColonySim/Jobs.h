@@ -594,6 +594,7 @@ private:
 
     // The think list: each node may give a job; the first that does wins (docs/design/jobs.md).
     using ThinkNode = bool (JobSystem::*)(Entity pawn, Job& out);
+    bool thinkEmergency(Entity pawn, Job& out);
     bool thinkNeeds(Entity pawn, Job& out);
     // An addict's dose, a scheduled one, or one for joy, as the pawn's drug policy says (DrugJobs.cpp, docs/design/drugs.md).
     bool thinkDrugs(Entity pawn, Job& out);
@@ -613,7 +614,7 @@ private:
     bool thinkWork(Entity pawn, Job& out);
     // thinkWork's scan; `urgentOnly` asks only the emergency work types (doctor, patient...). With `dutyWork` (an
     // index in workTypes_) it asks only that work type, whatever its priority, and only targets FieldCare allows.
-    bool thinkWorkPass(Entity pawn, Job& out, bool urgentOnly, int dutyWork = -1);
+    bool thinkWorkPass(Entity pawn, Job& out, bool urgentOnly, int dutyWork = -1, int onlyWork = -1);
     // A Medic or Firefighter on duty (FieldCareJobs.cpp) instead of the think list: its duty's work on safe targets,
     // else StandBy at its place behind the line; a job it had that isn't its duty ends.
     void dutyStep(Entity pawn, int dutyWork);
@@ -819,6 +820,7 @@ private:
     const NeedRules& rules_;
     const GameTime& time_;
     const Lights* lights_ = nullptr;
+    int emergencyWork_ = -1;  // the Doctor work type's index, found on first use (thinkEmergency)
     ApparelSystem* apparel_ = nullptr;
     SimStats& stats_;
     std::vector<Event>& events_;

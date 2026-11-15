@@ -3,6 +3,7 @@
 #include "ColonySim/Jobs.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Animals.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Fighters.h"
@@ -17,6 +18,7 @@
 #include "ColonySim/Random.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Trade.h"
 
 #include <algorithm>
 #include <cmath>
@@ -108,6 +110,47 @@ bool JobSystem::bedOccupied(CellPos cell, Entity except) const {
         }
     }
     return false;
+}
+
+// RimWorld's emergency work, asked before the needs: a colonist that can doctor, not exhausted or starving, tends a
+// bleeding colonist or carries a downed one to bed before it goes to sleep or eats. In the year run (ninth pass) a raid
+// ended at 2 at night, everyone went to bed, and a colonist shot in the fight bled out before the doctor got up at 5.
+bool JobSystem::thinkEmergency(Entity pawn, Job& out) {
+    entt::registry& reg = things_.registry();
+    const Faction* side = reg.try_get<Faction>(pawn);
+    if (medicine_ == nullptr || reg.all_of<Animal>(pawn) || reg.all_of<Prisoner>(pawn) || reg.all_of<Visitor>(pawn) ||
+        (side != nullptr && side->id != kPlayerFaction)) {
+        return false;
+    }
+    const Needs* needs = reg.try_get<Needs>(pawn);
+    if (needs != nullptr && (needs->rest < rules_.restTiredBelow || needs->food < rules_.foodRavenousBelow)) {
+        return false;
+    }
+    const Position& at = reg.get<Position>(pawn);
+    bool someone = false;
+    for (const auto [patient, health, pos] : reg.view<const Health, const Position>().each()) {
+        if (patient == pawn || pos.level != at.level || health.dead || !reg.all_of<Worker>(patient)) {
+            continue;
+        }
+        const Faction* faction = reg.try_get<Faction>(patient);
+        if (faction != nullptr && faction->id != kPlayerFaction) {
+            continue;
+        }
+        if (needsRescue(patient) || (health_.urgentlyNeedsTending(patient) && medicine_->careOf(patient) != MedicalCare::NoCare)) {
+            someone = true;
+            break;
+        }
+    }
+    if (!someone) {
+        return false;
+    }
+    if (emergencyWork_ < 0) {
+        emergencyWork_ = workTypeIndex(defs_.idOf("WorkTypes", "Doctor"));
+        if (emergencyWork_ < 0) {
+            return false;
+        }
+    }
+    return thinkWorkPass(pawn, out, true, -1, emergencyWork_);
 }
 
 bool JobSystem::needsRescue(Entity pawn) const {

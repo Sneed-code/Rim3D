@@ -1071,7 +1071,7 @@ void JobSystem::step() {
     // The think list, in order. Later tasks put theirs in place: emergencies first (downed, on
     // fire: F1 and later), then the defense plan (F6), urgent needs and the schedule (C6), work
     // and finally idling. Player orders don't wait for a think: the command starts them.
-    static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkNeeds, &JobSystem::thinkTemperature, &JobSystem::thinkDrugs,
+    static constexpr ThinkNode kThinkList[] = {&JobSystem::thinkEmergency, &JobSystem::thinkNeeds, &JobSystem::thinkTemperature, &JobSystem::thinkDrugs,
                                                &JobSystem::thinkSchedule, &JobSystem::thinkApparel,
                                                &JobSystem::thinkWork, &JobSystem::thinkJoy, &JobSystem::thinkIdle};
 
@@ -1194,7 +1194,7 @@ bool JobSystem::thinkWork(Entity pawn, Job& out) {
     return thinkWorkPass(pawn, out, false);
 }
 
-bool JobSystem::thinkWorkPass(Entity pawn, Job& out, bool urgentOnly, int dutyWork) {
+bool JobSystem::thinkWorkPass(Entity pawn, Job& out, bool urgentOnly, int dutyWork, int onlyWork) {
     entt::registry& reg = things_.registry();
     const WorkSettings* settings = reg.try_get<WorkSettings>(pawn);
     if (settings == nullptr) {
@@ -1212,7 +1212,7 @@ bool JobSystem::thinkWorkPass(Entity pawn, Job& out, bool urgentOnly, int dutyWo
                 const bool wanted = dutyWork >= 0
                                         ? static_cast<int>(w) == dutyWork && priority == 1 && pass == 0
                                         : entry.priority == priority && (workTypes_[w].naturalPriority >= kJobsUrgentWorkFrom) == (pass == 0);
-                if (entry.disabled || !wanted) {
+                if (entry.disabled || !wanted || (onlyWork >= 0 && static_cast<int>(w) != onlyWork)) {
                     continue;
                 }
                 for (size_t g = 0; g < workTypes_[w].givers.size(); ++g) {

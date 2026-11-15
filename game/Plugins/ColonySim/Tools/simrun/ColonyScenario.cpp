@@ -1177,6 +1177,12 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                         const bool kills = d.name == "plague" || d.name == "malaria" || d.name == "flu" || d.name.rfind("infection", 0) == 0;
                         care = std::max(care, kills ? 2 : 1);
                     }
+                    // A wound that bleeds fast or has taken a lot of blood gets the best too (ninth pass: a colonist shot in
+                    // a night raid was tended with herbal at quality 0.39 while 53 industrial medicine sat in the storeroom,
+                    // and bled out).
+                    if (report.downed || report.bleedPerDay >= 0.5f || report.bloodLoss >= 0.3f) {
+                        care = 2;
+                    }
                     int& last = careSet[pawn];
                     if (last != care + 1) {
                         sim.submit(SetMedicalCareCommand{pawn, care == 2 ? "Best" : care == 1 ? "NoMedicine" : "Herbal"});

@@ -380,3 +380,35 @@ What still kills: one or two raiders who reach the colonists at point-blank rang
 the room, a shotgun at 1 m: "a vital part destroyed" from one hit), long gunfights where most shots go into a crest
 (a rifle colonist fired 64 shots at a raider crouched behind a rise 23 m away, 55 into the ground), downed colonists
 bleeding out during a long fight, and an infestation, malaria and a raid in three days.
+
+**Ninth pass (2026-11-15): close fights, shots into crests, the bleeding after a fight.** What the logs showed, and the
+fixes (each with a test):
+
+- **Clubs run out one at a time.** On seed 7 day 12 two raiders with clubs came in; a colonist with a club ran 20 m from
+  the others to them and was beaten down, then the next did the same. A defender armed for melee now waits for any
+  enemy (not only a gunman) until it is within 6 m, unless the enemy is already at a friend: then it runs in from up to
+  20 m to help, so they fight it two or three to one ([fighters.md](fighters.md)).
+- **A routed raider still swinging.** The alarm stops when the last raider flees, and the fleeing raider beat two
+  colonists down on its way out. A fighter in the Flee mode starts no swing now.
+- **Shots into a crest.** The plan judged a shot as if the target stood up, but the shots go at it as it is: crouched
+  behind a rise, the rise took them (64 shots, 55 into the ground). The ground check now takes the target's real stance
+  and the highest aim over a crest, and when none of the 10 best spots has a shot up to 16 more are tried, spread out,
+  so the fighter moves to one that has ([fighters.md](fighters.md)).
+- **Bleeding out after a night raid.** On seed 42 day 14 a raid ended at 2 at night, everyone went to bed, and a
+  colonist shot in the fight was tended at 5 with herbal medicine (53 industrial in the storeroom) and died. Doctors now
+  tend the bleeding and carry the downed before they sleep or eat, as RimWorld's emergency work does
+  ([medicine.md](medicine.md)), and the year script gives a downed colonist, or one bleeding 0.5 a day or with 30% blood
+  lost, the best medicine.
+
+| Seed | Before (main, same day) | After | What killed them |
+| --- | --- | --- | --- |
+| 1 | 5 | 0 | plague on day 22 took six by day 25; nobody died in the day 11 and 13 raids (one before) |
+| 7 | 0 | 0 | plague and malaria on day 32, then a raid on day 34 took eight; nobody in the day 12 and 15 raids (two before) |
+| 42 | 0 | 2 | two to a raid on day 32, two to mechanoids on day 36, one to plague; nobody in the day 11 and 13 raids (one before) |
+| 42, rainforest | 0 | 1 | the day 44 to 48 wave (infestation, malaria, raid) |
+
+The early raids, where the close fights were, now kill nobody on any seed. The year is still decided by disease: plague
+with tend quality around 0.4 (RimWorld's numbers) kills most of whoever gets it, and a raid a day or two after an
+outbreak finds the colonists sick and weak. Also seen: misses fired downhill land in the ground behind the target and
+count as "stopped on ground" in the verbose fight lines; those are not crest hits.
+
