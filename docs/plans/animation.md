@@ -89,6 +89,33 @@ onto the MPFB skeleton (`tools/mocap/`) → Cascadeur cleans foot sliding and ha
 commandlet takes it like any other clip. Fingers and faces never come from body mocap: hands use
 grip poses, faces use the face system below.
 
+### Video mocap that works now: FlowHMR in RGB MoCap (2026-11-15)
+
+sneed installed the **RGB MoCap** app (FlowHMR plus SAM 3D Body and SMPL-H) on the PC, and it runs
+**without its window**: `C:\Dev\Rim3D-mocap\tools\flowhmr_headless.py` drives the app's own worker
+steps (track, SAM features, FlowHMR, correction, export, retarget onto a Mixamo character in the
+bundled Blender) with the app's own Python, at low priority. About 80 seconds and 7 GB of graphics
+memory per 10-second clip; the result is a Mixamo-skeleton FBX that the creator's clip import takes
+(`clip_prep.py`, `MakeHumanArt -Clips`). Nothing from it goes in Git: the clips, outputs and the
+index of sources live in `C:\Dev\Rim3D-mocap\` (copy of the index in the project files,
+`mocap-clips/index.md`), the FBX files in `C:\Dev\Rim3D-bodies\mocap\`.
+
+**Where the video comes from:** free stock sites (Pexels, Pixabay, Mixkit; free to use, no credit
+needed). A clip works when one person is the clear subject, the whole body stays in frame, the
+camera is steady and the view is side-on or three-quarter. Stock footage is rich in sport and
+martial arts (boxing, kickboxing, Muay Thai, kendo, wushu, staff and stick work, fencing, archery,
+shooting ranges) and poor in trades (hammering, sawing, carrying while walking, throwing, crawling:
+always close-ups of hands); sneed films those on a phone, or Mixamo fills them. FlowHMR guesses
+wrong where a limb is hidden for long (the harvest clip's legs behind a straw bundle), so every
+result gets a check render and bad stretches are cut.
+
+**First batch (17 moves):** pickaxe, axe, shovel, planting, sweeping, holding firewood, eating
+seated, lying down and getting out of bed, shadowboxing, punch combos, kick, sword lunge, bow draw,
+rifle raise and aim, long-gun reload, gathering crops. **Combat batch (sneed, 2026-11-15):**
+katana draw and cuts, sword attack sequences, staff and stick combos (they stand in for war clubs
+and maces), shield moves, kicks, knees, Muay Thai and kickboxing combos, pistol aim, fire and
+reload, tactical movement and cover, rolls.
+
 **When to use it:** only for gaps the libraries leave (the shower wash, a seated eating style, flirt
 and giggle body language, fights in sneed's own style). Everything else comes from the libraries, so
 mocap stays optional.
@@ -226,6 +253,12 @@ Fist fights are social fights and fist weapons. Every blow is cut to the sim's w
 | One-hand slash, stab, overhead | `OneHandMelee` | Mixamo sword and shield set without the shield, Paragon |
 | Two-hand sweep, overhead, thrust | `TwoHandMelee` | Mixamo great sword pack, Paragon Kwang and Greystone |
 | Dodge sidestep, dodge roll | `Dodge`, `Roll` | GASP roll, Mixamo |
+| Katana: draw from the scabbard, two-hand cuts (diagonal, horizontal, rising), sheathe | a katana in `TwoHandMelee` (or its own grip) | FlowHMR from kendo and sword-art video, Mixamo great sword pack |
+| Sword attack sequences: three-blow chains, lunge, parry and riposte | `OneHandMelee`, chained swings in one fight | FlowHMR from fencing and sword-art video, Paragon |
+| War club, mace, staff: heavy overhead, wide sweep, two-hand jab | club grips | FlowHMR from staff and stick fighting (arnis, wushu), Paragon Greystone |
+| Kicks and knees: front kick, round kick, knee strike | fist fights (a strong blow), the protagonist | FlowHMR from Muay Thai and kickboxing video |
+| Off-hand shield: guard up, block, shield bash, walk behind the shield | a shield in the off hand (mechanics to come from sneed) | FlowHMR from reenactment video, Mixamo sword and shield set |
+| Tower shield: brace low, step behind it, push | a tower shield (mechanics to come from sneed) | Mixamo, Cascadeur |
 
 ### Hits, staggers and falls
 
