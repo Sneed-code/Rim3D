@@ -21,6 +21,7 @@ namespace colony {
 
 class CombatSystem;
 class FuelSystem;
+class AnimalSystem;
 class HealthSystem;
 class Map;
 class PowerGrid;
@@ -96,6 +97,9 @@ public:
     // Ammunition: a turret whose def has a `fuel` block with `perUse` uses that much of it for every shot, and fires only
     // while it has it (colonists refuel it like any building, docs/design/fuel.md). Null: turrets never run dry.
     void setFuel(FuelSystem* fuel) { fuel_ = fuel; }
+    // Turrets shoot animals the fighter AI takes for enemies (insects on the attack, manhunters, an animal out for
+    // revenge), as RimWorld's shoot every hostile; calm animals are left alone. Without it no animal is shot.
+    void setAnimals(const AnimalSystem* animals) { animals_ = animals; }
     // Called before the system destroys a thing itself (a trap that went off), so jobs can let go of it.
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
     // Called for every fighter of a side that has just noticed a trap, so it plans its spot and walk again round it
@@ -165,6 +169,7 @@ private:
     HealthSystem& health_;
     PowerGrid& power_;
     FuelSystem* fuel_ = nullptr;
+    const AnimalSystem* animals_ = nullptr;
     const GameTime& time_;
     DefenseNumbers numbers_;
     std::unique_ptr<DefenseModel> model_;
