@@ -101,6 +101,11 @@ kept the alarm on for days and the colonists starved at their posts. RimWorld ha
 Not while an enemy that can see it stands within `keepWorkingRadius` (20 m): then it fights on hungry (the eighth year
 pass found colonists eating while a raider shot them from 1 to 6 m).
 
+**The sick stay in bed (C25 ninth pass).** A colonist on a bed rest job (`BedRest`: getting over an illness or wounds) when
+the alarm sounds is not called up; it stays in bed, as a player leaves the sick undrafted. In the year run a raid two days
+after plague and malaria called the sick out of bed, and eight died fighting at a fraction of their strength. One already
+called up stays in the fight.
+
 **Drafting a called-up colonist** hands it to the player where it stands; undrafting it gives it back
 to the alarm at the next check while the alarm is on.
 
