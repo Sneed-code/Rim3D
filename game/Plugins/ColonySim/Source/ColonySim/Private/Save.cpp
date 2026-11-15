@@ -2577,6 +2577,10 @@ void saveTurretPart(Ar& ar, Turret& t) {
     ar.value("stepsLeft", t.stepsLeft);
     ar.value("shotsLeft", t.shotsLeft);
     ar.value("target", t.target);
+    if (ar.sectionVersion() >= 2) {
+        ar.value("fuse", t.fuse);
+        ar.value("fuseRolled", t.fuseRolled);
+    }
 }
 
 template <typename Ar>
@@ -3580,7 +3584,7 @@ void saveSections(Ar& ar, SaveData& d) {
             saveParts(ar, "young", e, &SaveEntity::young, [&](Young& y) { saveYoungPart(ar, y); });
         }
     });
-    ar.section("defense", 1, [&] {
+    ar.section("defense", 2, [&] {
         saveParts(ar, "turret", e, &SaveEntity::turret, [&](Turret& t) { saveTurretPart(ar, t); });
         saveParts(ar, "trap", e, &SaveEntity::trap, [&](Trap& t) { saveTrapPart(ar, t); });
     });

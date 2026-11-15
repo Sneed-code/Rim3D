@@ -54,12 +54,19 @@ struct DefenseModel {
     std::vector<TrapInfo> traps;
     std::vector<Blast> blasts;        // by Things DefId value: what a building makes when it explodes
     std::vector<uint8_t> explodeOnDestroy;
+    struct Fuse {
+        float below = 0.0f;  // share of hit points; 0: the def has no `explodeWhenDamaged`
+        float chance = 0.0f;
+        int steps = 0;
+    };
+    std::vector<Fuse> fuses;  // by Things DefId value
 
     DefenseModel(const DefDatabase& defs, const CombatSystem& combat) {
         turrets.resize(defs.size());
         traps.resize(defs.size());
         blasts.resize(defs.size());
         explodeOnDestroy.resize(defs.size(), 0);
+        fuses.resize(defs.size());
         for (const DefId id : defs.idsOfKind("Things")) {
             const Def& def = defs.get(id);
             if (def.has("explosion")) {
@@ -70,6 +77,13 @@ struct DefenseModel {
                 b.damageType = defs.idOf("DamageTypes", def.text("explosion.damageDef"));
                 b.valid = b.radius > 0.0f && b.damage > 0.0f && b.damageType.valid();
                 explodeOnDestroy[id.value] = def.flag("explodeWhenDestroyed") ? 1 : 0;
+                if (def.has("explodeWhenDamaged")) {
+                    Fuse& f = fuses[id.value];
+                    f.below = static_cast<float>(def.number("explodeWhenDamaged.belowHealth"));
+                    f.chance = static_cast<float>(def.number("explodeWhenDamaged.chance", 1.0));
+                    // RimWorld ticks are half a step (60 to the real second against our 30).
+                    f.steps = std::max(1, static_cast<int>(std::lround(def.number("explodeWhenDamaged.delayTicks") / 2.0)));
+                }
             }
             if (def.has("turret.gun")) {
                 TurretInfo& t = turrets[id.value];
@@ -104,6 +118,13 @@ struct DefenseModel {
     }
     const Blast* blast(DefId def) const {
         return def.valid() && def.value < blasts.size() && blasts[def.value].valid ? &blasts[def.value] : nullptr;
+    }
+    const Fuse* fuse(DefId def) const {
+        return blast(def) != nullptr && fuses[def.value].below > 0.0f ? &fuses[def.value] : nullptr;
+    }
+    // Its blast can go off: when destroyed, or when damaged.
+    bool mayExplode(DefId def) const {
+        return blast(def) != nullptr && (explodeOnDestroy[def.value] != 0 || fuses[def.value].below > 0.0f);
     }
 };
 
@@ -222,6 +243,19 @@ Entity DefenseSystem::pickTarget(const Position& pos, float range, float minRang
     return best;
 }
 
+namespace {
+
+// Back to idle: no target, no burst. A sparking turret keeps sparking.
+void defenseTurretIdle(Turret& turret) {
+    const int fuse = turret.fuse;
+    const bool rolled = turret.fuseRolled;
+    turret = Turret{};
+    turret.fuse = fuse;
+    turret.fuseRolled = rolled;
+}
+
+}  // namespace
+
 void DefenseSystem::stepTurret(Entity building, Turret& turret, Rng& rng) {
     entt::registry& reg = things_.registry();
     const Position& pos = reg.get<Position>(building);
@@ -230,7 +264,7 @@ void DefenseSystem::stepTurret(Entity building, Turret& turret, Rng& rng) {
         return;
     }
     if (!power_.running(building)) {
-        turret = Turret{};  // no power: it forgets its target, and the burst it was on
+        defenseTurretIdle(turret);  // no power: it forgets its target, and the burst it was on
         return;
     }
     const GunStats& gun = info->stats;
@@ -269,7 +303,7 @@ void DefenseSystem::stepTurret(Entity building, Turret& turret, Rng& rng) {
         }
         case TurretPhase::Warming:
             if (!stillGood()) {
-                turret = Turret{};
+                defenseTurretIdle(turret);
                 return;
             }
             if (--turret.stepsLeft > 0) {
@@ -293,7 +327,7 @@ void DefenseSystem::stepTurret(Entity building, Turret& turret, Rng& rng) {
             float ay = 0.0f;
             float az = 0.0f;
             if (!combat_.leadPointFrom(pos.x, pos.y, info->gun, turret.target, numbers_.lead, ax, ay, az)) {
-                turret = Turret{};
+                defenseTurretIdle(turret);
                 return;
             }
             const float distance = defenseDistance(pos.x, pos.y, ax, ay);
@@ -315,7 +349,7 @@ void DefenseSystem::stepTurret(Entity building, Turret& turret, Rng& rng) {
         }
         case TurretPhase::Cooling:
             if (--turret.stepsLeft <= 0) {
-                turret = Turret{};
+                defenseTurretIdle(turret);
             }
             return;
     }
@@ -361,7 +395,7 @@ bool DefenseSystem::avoidsCell(FactionId faction, CellPos cell) const {
         for (const auto [b, turret, thing, pos] : reg.view<const Turret, const Thing, const Position>().each()) {
             (void)turret;
             const auto* blast = model_->blast(thing.def);
-            if (blast != nullptr && model_->explodeOnDestroy[thing.def.value] != 0 && pos.level == cell.level &&
+            if (blast != nullptr && model_->mayExplode(thing.def) && pos.level == cell.level &&
                 defenseDistance(x, y, pos.x, pos.y) <= blast->radius) {
                 return true;
             }
@@ -663,17 +697,22 @@ void DefenseSystem::stepTraps(Rng& rng) {
 
 // ---- Buildings shot to pieces ----------------------------------------------------------------
 
-void DefenseSystem::queueBlast(Entity building, const Position& pos) {
+void DefenseSystem::queueBlast(Entity building, const Position& pos, bool fuse) {
     const entt::registry& reg = things_.registry();
     const DefId def = reg.get<Thing>(building).def;
     const DefenseModel::Blast* blast = model_->blast(def);
-    if (blast == nullptr || model_->explodeOnDestroy[def.value] == 0) {
+    if (blast == nullptr || (!fuse && model_->explodeOnDestroy[def.value] == 0)) {
         return;
     }
     Blast b;
     b.explosion.x = pos.x;
     b.explosion.y = pos.y;
     b.explosion.z = map_.heightAt(pos.x, pos.y);
+    if (fuse) {
+        // A sparking turret goes up while it still stands: the blast starts at its top, so its own body doesn't shield it.
+        const auto& fp = reg.get<Footprint>(building);
+        b.explosion.z += static_cast<float>(fp.obstacleDm) * 0.1f + 0.1f;
+    }
     b.explosion.level = pos.level;
     b.explosion.radius = blast->radius;
     b.explosion.damage = blast->damage;
@@ -692,6 +731,34 @@ void DefenseSystem::onDestroy(Entity building) {
     }
     armedAt_ = -1;
     queueBlast(building, reg.get<Position>(building));
+}
+
+// The mini-turret (wiki): below 20% of its hit points it has a 50% chance to spark for 240 ticks and explode. It goes up
+// at its own place; its blast (50 bomb damage) finishes it.
+void DefenseSystem::stepFuse(Entity building, Turret& turret, Rng& rng) {
+    const entt::registry& reg = things_.registry();
+    const DefenseModel::Fuse* fuse = model_->fuse(reg.get<Thing>(building).def);
+    const HitPoints* hp = reg.try_get<HitPoints>(building);
+    if (fuse == nullptr || hp == nullptr || hp->max <= 0) {
+        return;
+    }
+    if (turret.fuse > 0) {
+        if (--turret.fuse == 0) {
+            queueBlast(building, reg.get<Position>(building), true);
+        }
+        return;
+    }
+    const bool low = static_cast<float>(hp->current) < fuse->below * static_cast<float>(hp->max);
+    if (!low) {
+        turret.fuseRolled = false;  // repaired: it may roll again the next time
+        return;
+    }
+    if (!turret.fuseRolled) {
+        turret.fuseRolled = true;
+        if (rng.unit() < fuse->chance) {
+            turret.fuse = fuse->steps;
+        }
+    }
 }
 
 void DefenseSystem::step(Rng& rng) {
@@ -719,6 +786,7 @@ void DefenseSystem::step(Rng& rng) {
         std::sort(order_.begin(), order_.end());
         for (const Entity building : order_) {
             if (reg.valid(building) && reg.all_of<Position>(building)) {
+                stepFuse(building, reg.get<Turret>(building), rng);
                 stepTurret(building, reg.get<Turret>(building), rng);
             }
         }
@@ -736,6 +804,8 @@ void DefenseSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(t->stepsLeft);
         h.add(t->shotsLeft);
         h.add(entt::to_integral(t->target));
+        h.add(t->fuse);
+        h.add(t->fuseRolled);
     }
     if (const Trap* t = reg.try_get<Trap>(e)) {
         h.add(uint64_t{0x7472});
