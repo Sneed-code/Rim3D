@@ -119,6 +119,10 @@ try:
         part = HumanService.add_mhclo_asset(path, basemesh, asset_type=kind, subdiv_levels=0, material_type="GAMEENGINE")
         log("part", kind, part.name, len(part.data.vertices))
 
+    # More scalp hair styles (the creator shows one of them): added like clothes, each its own mesh and material.
+    for path in [place(h) for h in cfg.get("hairs", [])]:
+        h = HumanService.add_mhclo_asset(path, basemesh, asset_type="Clothes", subdiv_levels=0, material_type="GAMEENGINE")
+        log("hair style", h.name, len(h.data.vertices))
     for path in cfg.get("clothes", []):
         c = HumanService.add_mhclo_asset(path, basemesh, asset_type="Clothes", subdiv_levels=0, material_type="GAMEENGINE")
         log("clothes", c.name, len(c.data.vertices))

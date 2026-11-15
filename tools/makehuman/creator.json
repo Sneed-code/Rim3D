@@ -62,6 +62,46 @@
             0.78,
             0.72,
             0.58
+          ],
+          "bob02": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "ponytail01": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "braid01": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "short02": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "short04": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "short_messy": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "cortu": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "afro": [
+            0.06,
+            0.045,
+            0.035
           ]
         },
         "horns": {
@@ -109,7 +149,14 @@
             "Face_NoseRightElevation",
             "Face_NoseDepression"
           ]
-        }
+        },
+        "hairs": [
+          "{mpfb}/hair/bob02/bob02.mhclo",
+          "{mpfb}/hair/ponytail01/ponytail01.mhclo",
+          "{mpfb}/hair/braid01/braid01.mhclo",
+          "{mpfb}/hair/short02/short02.mhclo",
+          "{mpfb}/hair/afro01/afro01.mhclo"
+        ]
       },
       "morphs": {
         "Masculine": {
@@ -507,6 +554,46 @@
             0.05,
             0.04,
             0.03
+          ],
+          "long01": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "bob02": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "ponytail01": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "braid01": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "short04": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "short_messy": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "cortu": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "afro": [
+            0.06,
+            0.045,
+            0.035
           ]
         },
         "genital_bone": true,
@@ -559,7 +646,14 @@
             "Face_NoseRightElevation",
             "Face_NoseDepression"
           ]
-        }
+        },
+        "hairs": [
+          "{mpfb}/hair/short04/short04.mhclo",
+          "{mpfb}/hair/cortu_short_messy_hair/cortu_short_messy_hair.mhclo",
+          "{mpfb}/hair/long01/long01.mhclo",
+          "{mpfb}/hair/ponytail01/ponytail01.mhclo",
+          "{mpfb}/hair/afro01/afro01.mhclo"
+        ]
       },
       "morphs": {
         "Feminine": {

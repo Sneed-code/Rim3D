@@ -37,6 +37,28 @@ namespace
 {
 	enum class ECreatorKind : int32 { Baseline, Imp, Orcoid };
 
+	// Scalp hair styles: each a mesh on the bases (MPFB hairs, creator.json "hairs"), found by its material slot's name;
+	// the creator shows one (or none: bald).
+	struct FCreatorHairStyle
+	{
+		const char* Label;
+		const TCHAR* Key;  // in the slot name
+	};
+	const FCreatorHairStyle CreatorHairStyles[] = {
+		{"Bald", nullptr}, {"Long", TEXT("long01")}, {"Bob", TEXT("bob02")}, {"Ponytail", TEXT("ponytail01")}, {"Braid", TEXT("braid01")},
+		{"Short", TEXT("short02")}, {"Crop", TEXT("short04")}, {"Messy", TEXT("short_messy")}, {"Afro", TEXT("afro")}};
+	bool CreatorIsHairSlot(const FString& Slot)
+	{
+		for (const FCreatorHairStyle& Style : CreatorHairStyles)
+		{
+			if (Style.Key && Slot.Contains(Style.Key))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	// The face: MakeHuman's 34 expression units, each a morph Face_<unit> on the creator bases (mh_creator.py), and
 	// expressions made of them (unit index, weight).
 	constexpr int32 CreatorUnitCount = 34;
@@ -94,6 +116,7 @@ namespace
 		float PubicLength = 1.0f;  // 1 natural .. 0.35 trimmed (PubicShort)
 		float PubicCurl = 1.0f;    // 1 curly .. 0 straighter (PubicStraight)
 		bool bJiggle = true;
+		int32 HairStyle = -1;      // CreatorHairStyles; -1: the base's first (long for the woman, short for the man)
 		int32 Expression = 0;      // CreatorExpressions
 		float ExpressionStrength = 1.0f;
 		float Units[CreatorUnitCount] = {};  // fine tuning on top of the expression
@@ -314,8 +337,7 @@ namespace
 			const FString Slot = Slots[i].ToString();
 			const bool bPubic = Slot.Contains(TEXT("Pubic"));
 			const bool bBrow = Slot.Contains(TEXT("eyebrow"));
-			const bool bHead = !bPubic && !Slot.Contains(TEXT("lash")) && (Slot.Contains(TEXT("hair")) || Slot.Contains(TEXT("long0")) ||
-				Slot.Contains(TEXT("short0")) || Slot.Contains(TEXT("ponytail")) || Slot.Contains(TEXT("bob0")) || Slot.Contains(TEXT("braid")));
+			const bool bHead = !bPubic && !Slot.Contains(TEXT("lash")) && CreatorIsHairSlot(Slot);
 			if (!bPubic && !bBrow && !bHead)
 			{
 				continue;
@@ -328,6 +350,17 @@ namespace
 			if (Dynamic)
 			{
 				Dynamic->SetVectorParameterValue(TEXT("Tint"), bPubic ? PubicColour : (bBrow ? HairColour * 0.8f : HairColour));
+			}
+		}
+		// Only the chosen hair style shows.
+		const int32 Style = P.HairStyle >= 0 ? P.HairStyle : (P.bFemale ? 1 : 5);
+		for (int32 i = 0; i < Slots.Num(); ++i)
+		{
+			const FString Slot = Slots[i].ToString();
+			if (CreatorIsHairSlot(Slot))
+			{
+				const TCHAR* Key = CreatorHairStyles[FMath::Clamp(Style, 0, static_cast<int32>(UE_ARRAY_COUNT(CreatorHairStyles)) - 1)].Key;
+				Mesh->ShowMaterialSection(i, 0, Key && Slot.Contains(Key), 0);
 			}
 		}
 		// The panel's colour is as seen (sRGB); the skin material takes it linear, as FSimPawnLooks::Skin is.
@@ -386,6 +419,7 @@ namespace
 	void CreatorSetGender(FCreatorPerson& P, bool bFemale, USimPawnSubsystem& Pawns)
 	{
 		P.bFemale = bFemale;
+		P.HairStyle = -1;
 		P.Looks.bFemale = bFemale;
 		P.Looks.MakeHuman = bFemale ? TEXT("CreatorFemale") : TEXT("CreatorMale");
 		Pawns.SetLooksOverride(P.Thing, P.Looks);
@@ -522,6 +556,20 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		}
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorFocusZ="), State->FocusOffset.Z);
 		State->b4KSkin = FParse::Param(FCommandLine::Get(), TEXT("Creator4K"));
+		FString HairLabel;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorHair="), HairLabel))
+		{
+			for (int32 h = 0; h < static_cast<int32>(UE_ARRAY_COUNT(CreatorHairStyles)); ++h)
+			{
+				if (HairLabel == UTF8_TO_TCHAR(CreatorHairStyles[h].Label))
+				{
+					for (FCreatorPerson& Person : State->People)
+					{
+						Person.HairStyle = h;
+					}
+				}
+			}
+		}
 		FString Face;
 		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorFace="), Face))
 		{
@@ -918,6 +966,35 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				if (ImGui::BeginTabItem("Hair and skin"))
 				{
 					ImGui::SeparatorText("Hair");
+					{
+						const int32 Current = P.HairStyle >= 0 ? P.HairStyle : (P.bFemale ? 1 : 5);
+						int32 Shown = 0;
+						for (int32 h = 0; h < static_cast<int32>(UE_ARRAY_COUNT(CreatorHairStyles)); ++h)
+						{
+							// Only the styles this base has (and bald).
+							const TCHAR* Key = CreatorHairStyles[h].Key;
+							bool bHas = Key == nullptr;
+							if (const ASimPawnActor* Pawn = Pawns->FindPawn(P.Thing); Pawn && Pawn->GetMakeHumanMesh() && Key)
+							{
+								for (const FName& Slot : Pawn->GetMakeHumanMesh()->GetMaterialSlotNames())
+								{
+									bHas |= Slot.ToString().Contains(Key);
+								}
+							}
+							if (!bHas)
+							{
+								continue;
+							}
+							if (Shown++ % 5 != 0)
+							{
+								ImGui::SameLine();
+							}
+							if (ImGui::RadioButton(CreatorHairStyles[h].Label, Current == h))
+							{
+								P.HairStyle = h;
+							}
+						}
+					}
 					ImGui::ColorEdit3("Hair colour", P.Hair);
 					ImGui::SeparatorText("Pubic hair");
 					bool bPubic = P.Pubic != 0;
