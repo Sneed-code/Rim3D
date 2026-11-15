@@ -42,7 +42,7 @@ def log(*a):
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mh_common import (add_jewellery, write_body_areas, make_wrinkle_map, round_hair_ends, add_genital_bone, add_horns, add_morphs, add_soft_bones, add_tail, add_tusks, dump_vertices,  # noqa: E402
+from mh_common import (add_hair_bones, feather_hair_ends, add_cat_claws, add_cat_ears, flatten_human_ears, make_fur_textures, add_jewellery, write_body_areas, make_wrinkle_map, round_hair_ends, add_genital_bone, add_horns, add_morphs, add_soft_bones, add_tail, add_tusks, dump_vertices,  # noqa: E402
                        fuller_labia, grow_pubic_hair, lower_pubic_hair, make_pigment_mask, make_skin_normal, prepare_for_unreal,
                        write_materials)
 
@@ -173,6 +173,9 @@ try:
                 obj.modifiers.remove(m)
 
     body = proxy if proxy else basemesh
+    # The Beast-Strain's head: no human ears (the creator's CatHead morph).
+    if cfg.get("flatten_ears"):
+        flatten_human_ears(rig, body, log=log)
     # Soft tissue bones for jiggle (buttocks; the skeleton has the breast bones) and natural pubic hair.
     if cfg.get("soft_bones", True):
         add_soft_bones(rig, body, log=log)
@@ -187,6 +190,9 @@ try:
     if cfg.get("round_hair_ends", True):
         for o in [o for o in bpy.data.objects if o.type == "MESH" and "long0" in o.name.lower()]:
             round_hair_ends(o, rig, log=log)
+    # Long scalp hair swings on bones of its own ("hair_bones": true; the creator's long, bob and braid styles).
+    if cfg.get("hair_bones"):
+        add_hair_bones(rig, [o for o in bpy.data.objects if o.type == "MESH" and any(k in o.name.lower() for k in ("long0", "bob0", "braid0"))], log=log)
     # Pubic hair grown out of the skin ("pubic_grow": {"female", "count", "style", "length", "width"}) in place of
     # MakeHuman's flat pubic hair card; "pubic_layout" keeps the same hairs across the creator's variants.
     if cfg.get("pubic_grow"):
@@ -210,6 +216,15 @@ try:
             body_mat = next((s.material for s in body.material_slots if s.material), None)
             if body_mat:
                 tail.data.materials.append(body_mat)  # the body's own skin
+    # Beast-Strain, cat ({"ears": {...}, "claws": {...}, "tail": {...}}): ears on top of the head, claws, a furred tail on
+    # the tail bones. The creator shows them (their materials CatFur, CatEarInner, CatClaw) only on the cat kind.
+    if cfg.get("cat"):
+        cat = cfg["cat"]
+        add_cat_ears(rig, body, log=log, **cat.get("ears", {}))
+        add_cat_claws(rig, body, log=log, **cat.get("claws", {}))
+        cat_tail = add_tail(rig, body, name="CatTail", log=log, **cat.get("tail", {"length": 0.8, "radius": 0.022, "taper": 0.3}))
+        if cat_tail:
+            cat_tail.data.materials.append(bpy.data.materials.get("CatFur"))
 
     # With a body proxy the basemesh itself is not exported.
     export = [rig] + [o for o in bpy.data.objects if o.type == "MESH" and (o != basemesh or proxy is None)]
@@ -249,6 +264,24 @@ try:
     os.makedirs(os.path.dirname(cfg["out"]), exist_ok=True)
     manifest = write_materials([o for o in export if o != rig], os.path.dirname(cfg["out"]), skin_meshes=skin_meshes,
                                tints=cfg.get("tints", {}), overrides=cfg["material_overrides"])
+    # Long hair: the strands end at different lengths instead of one straight cut ("feather_hair_ends": false to keep it).
+    if cfg.get("feather_hair_ends", True):
+        changed = False
+        for entry in manifest.values():
+            if "long0" in entry.get("blender", "").lower() and entry.get("color") and os.path.exists(entry["color"]):
+                base_name = os.path.splitext(os.path.basename(entry["color"]))[0]
+                entry["color"] = feather_hair_ends(entry["color"], os.path.join(os.path.dirname(cfg["out"]), base_name + "_ends.png"), log=log)
+                changed = True
+        if changed:
+            with open(os.path.join(os.path.dirname(cfg["out"]), "materials.json"), "w", encoding="utf-8") as f:
+                json.dump(manifest, f, indent=1)
+    if cfg.get("cat") and not cfg.get("dump_vertices"):
+        fur, fur_normal = make_fur_textures(os.path.dirname(cfg["out"]), log=log)
+        for entry in manifest.values():
+            if entry.get("blender") == "CatFur":
+                entry.update({"color": fur, "normal": fur_normal, "tint": [1.0, 1.0, 1.0]})
+        with open(os.path.join(os.path.dirname(cfg["out"]), "materials.json"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=1)
     skin_normal = os.path.join(os.path.dirname(cfg["out"]), "skin_normal.png")
     if (os.path.exists(skin_normal) and cfg.get("skin_normal", True)) or pigment or wrinkles:
         for entry in manifest.values():

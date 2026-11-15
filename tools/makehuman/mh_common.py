@@ -377,15 +377,17 @@ def add_horns(rig, body, length=0.11, radius=0.017, curl=1.0, color=(0.05, 0.04,
     return objs
 
 
-def add_tail(rig, body, length=0.75, radius=0.03, bones=7, log=print):
+def add_tail(rig, body, length=0.75, radius=0.03, bones=7, name="Tail", taper=0.85, log=print):
     """A tail from the base of the spine for any MakeHuman body: a chain of bones tail_01... under the pelvis (the game
     swings it like hair) and a tapered tube skinned along them, out and down from the lower back and up at the tip.
-    Returns the tail object (its material is skin)."""
+    Returns the tail object (the imp's material is skin). Called again with another name (the Beast-Strain's furred
+    CatTail, thicker and hardly tapering), the tube goes on the same bones."""
     from mathutils import Vector
     to_rig = rig.matrix_world.inverted() @ body.matrix_world
     pelvis = rig.data.bones.get("pelvis")
-    if pelvis is None or "tail_01" in rig.data.bones:
+    if pelvis is None:
         return None
+    reuse = "tail_01" in rig.data.bones
     pz = pelvis.head_local.z
     pts = [to_rig @ v.co for v in body.data.vertices]
     back = [p for p in pts if abs(p.x - pelvis.head_local.x) < 0.02 and pz - 0.02 < p.z < pz + 0.08]
@@ -394,31 +396,35 @@ def add_tail(rig, body, length=0.75, radius=0.03, bones=7, log=print):
     root = max(back, key=lambda p: p.y) + Vector((0.0, -0.02, 0.0))   # just under the skin of the lower back
     n = 24
     path = [root + Vector((0.0, 0.85 * t, -0.55 * t + 0.6 * t ** 3)) * length for t in [i / (n - 1) for i in range(n)]]
-    if bpy.context.object and bpy.context.object.mode != "OBJECT":
-        bpy.ops.object.mode_set(mode="OBJECT")
-    bpy.ops.object.select_all(action="DESELECT")
-    rig.select_set(True)
-    bpy.context.view_layer.objects.active = rig
-    bpy.ops.object.mode_set(mode="EDIT")
-    parent = rig.data.edit_bones["pelvis"]
+    names = ["tail_%02d" % (i + 1) for i in range(bones)]
+    if reuse:
+        bones = len([b for b in rig.data.bones if b.name.startswith("tail_")])
+        names = ["tail_%02d" % (i + 1) for i in range(bones)]
+    else:
+        if bpy.context.object and bpy.context.object.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.select_all(action="DESELECT")
+        rig.select_set(True)
+        bpy.context.view_layer.objects.active = rig
+        bpy.ops.object.mode_set(mode="EDIT")
+    parent = None if reuse else rig.data.edit_bones["pelvis"]
     joints = [path[round(i * (n - 1) / bones)] for i in range(bones + 1)]
-    names = []
-    for i in range(bones):
+    for i in (range(0) if reuse else range(bones)):
         eb = rig.data.edit_bones.new("tail_%02d" % (i + 1))
         eb.head, eb.tail = joints[i], joints[i + 1]
         eb.parent = parent
         eb.use_connect = i > 0
         eb.use_deform = True
         parent = eb
-        names.append(eb.name)
-    bpy.ops.object.mode_set(mode="OBJECT")
-    radii = [max(radius * (1.0 - 0.85 * i / (n - 1)), 0.004) for i in range(n)]
+    if not reuse:
+        bpy.ops.object.mode_set(mode="OBJECT")
+    radii = [max(radius * (1.0 - taper * i / (n - 1)), 0.004) for i in range(n)]
     frames = []
     for i in range(n):
         d = (path[min(i + 1, n - 1)] - path[max(i - 1, 0)]).normalized()
         a = Vector((1, 0, 0))
         frames.append((a, d.cross(a).normalized()))
-    obj = _tube("Tail", path, radii, frames, uv_rect=(0.30, 0.50, 0.36, 0.60))
+    obj = _tube(name, path, radii, frames, uv_rect=(0.30, 0.50, 0.36, 0.60) if name == "Tail" else (0.0, 0.0, 1.0, 4.0))
     segs = 12
     weights = {}
     for vi in range(len(obj.data.vertices)):
@@ -431,7 +437,7 @@ def add_tail(rig, body, length=0.75, radius=0.03, bones=7, log=print):
             w[names[k + 1]] = 0.5 * frac
         weights[vi] = w
     _skin_to(obj, rig, weights)
-    log("tail", length, "m,", bones, "bones")
+    log(name, length, "m,", bones, "bones")
     return obj
 
 
@@ -738,18 +744,20 @@ def _pubic_layout(rig, body, female, count, seed, log=print):
         dx = abs(p.x - cx)
         zone, u, v, density = None, 0.0, 0.0, 0.0
         if female:
-            # The top edge arches: highest on the middle line, coming down to the sides (not cut straight across).
-            # A rounded inverted triangle: the top arches and its corners are rounded off, and the hairs thin out over
-            # the outer part so the outline is soft, not a jagged cut.
+            # An inverted triangle with a level top (no peak in the middle, sneed's line) whose two top corners are
+            # only just rounded; the sides thin out so the outline is soft, the top stays a clean line.
             z0 = crotch + 0.022
-            z1 = crotch + 0.104 - 0.03 * (min(dx, 0.05) / 0.05) ** 2
+            top = crotch + 0.08
+            half_top = 0.046
+            corner = max(0.0, (dx / half_top - 0.78) / 0.22)
+            z1 = top - 0.008 * min(corner, 1.0) ** 2
             if z0 <= p.z <= z1 and n.y < -0.25:
-                v = (p.z - z0) / (z1 - z0)
-                half = 0.011 + 0.039 * v ** 0.7 * (1.0 - 0.25 * max(0.0, v - 0.8) / 0.2)
+                v = (p.z - z0) / (top - z0)
+                half = 0.011 + (half_top - 0.011) * min(v, 1.0) ** 0.7
                 if dx < half:
                     zone, u = "mons", dx / half
-                    density = 1.0 if u < 0.55 else max(0.0, 1.0 - (u - 0.55) / 0.45) ** 1.5
-                    density *= 1.0 if v < 0.7 else max(0.0, 1.0 - (v - 0.7) / 0.3) ** 1.2
+                    density = 1.0 if u < 0.6 else max(0.0, 1.0 - (u - 0.6) / 0.4) ** 1.5
+                    density *= 1.0 if v < 0.88 else max(0.25, 1.0 - (v - 0.88) / 0.12)
             elif crotch + 0.004 <= p.z < z0 and 0.006 < dx < 0.02 and n.y < -0.3:
                 zone, u, v = "labia", dx / 0.02, (p.z - crotch) / (z0 - crotch) * 0.1
                 density = 0.25
@@ -1351,3 +1359,437 @@ def add_jewellery(rig, body, female, color=(0.8, 0.7, 0.45), log=print):
                 piece(_band("Jewel_" + name + side.upper(), c, ax, limb_radius(c, ax) + 0.004, h, 0.006), bone)
     log("jewellery", len(made), made)
     return made
+
+
+# ---- Beast-Strain (cat): parts made for the body they go on, like the horns and the tail ----
+
+def _shared_material(name, color):
+    mat = bpy.data.materials.get(name)
+    return mat if mat else _material(name, color)
+
+
+def _loft(name, rings, apex=None):
+    """A closed mesh through rings of points (each the same count), capped at the end by `apex`. UV: u around, v
+    along. Returns the object."""
+    seg = len(rings[0])
+    verts = [tuple(p) for ring in rings for p in ring]
+    faces = []
+    for i in range(len(rings) - 1):
+        for s in range(seg):
+            p0, p1 = i * seg + s, i * seg + (s + 1) % seg
+            faces.append((p0, p1, p1 + seg, p0 + seg))
+    last = (len(rings) - 1) * seg
+    if apex is not None:
+        verts.append(tuple(apex))
+        faces += [(last + s, last + (s + 1) % seg, len(verts) - 1) for s in range(seg)]
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+    uv = mesh.uv_layers.new(name="UVMap")
+    for poly in mesh.polygons:
+        poly.use_smooth = True
+        for li in poly.loop_indices:
+            vi = mesh.loops[li].vertex_index
+            ring = min(vi // seg, len(rings) - 1)
+            uv.data[li].uv = ((vi % seg) / seg if vi < len(rings) * seg else 0.5, ring / max(len(rings) - 1, 1))
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
+def flatten_human_ears(rig, body, log=print):
+    """Takes the human ears away (the Beast-Strain's cat ears are on top of the head): every point of each ear is laid
+    onto the side of the skull, which is drawn across the ear from the skull just in front of and behind it, blended out
+    at the edges. Found from the shape, for any head (the ears: the head's points standing out furthest, as the
+    earrings find them)."""
+    import numpy as np
+    from mathutils import Vector
+    head = rig.data.bones.get("head")
+    if head is None:
+        return
+    to_rig = rig.matrix_world.inverted() @ body.matrix_world
+    from_rig = to_rig.inverted()
+    pts = np.array([tuple(to_rig @ v.co) for v in body.data.vertices])
+    hx, hz = head.head_local.x, head.head_local.z
+    face = pts[(pts[:, 2] > hz - 0.02) & (pts[:, 2] < hz + 0.12)]
+    width = np.max(np.abs(face[:, 0] - hx))
+    moved = 0
+    for sx in (1.0, -1.0):
+        ear = face[(face[:, 0] - hx) * sx > width * 0.82]
+        if len(ear) < 10:
+            continue
+        y0, y1 = ear[:, 1].min() - 0.012, ear[:, 1].max() + 0.012
+        z0, z1 = ear[:, 2].min() - 0.01, ear[:, 2].max() + 0.01
+        lat = (pts[:, 0] - hx) * sx
+
+        def skull_at(y_lo, y_hi, z):
+            sel = (pts[:, 1] > y_lo) & (pts[:, 1] < y_hi) & (np.abs(pts[:, 2] - z) < 0.006) & (lat > 0.02)
+            return lat[sel].max() if sel.any() else None
+
+        zs = np.arange(z0 - 0.01, z1 + 0.0101, 0.004)
+        front = [skull_at(y0 - 0.012, y0 - 0.002, z) for z in zs]
+        back = [skull_at(y1 + 0.002, y1 + 0.012, z) for z in zs]
+        ok = [i for i in range(len(zs)) if front[i] is not None and back[i] is not None]
+        if len(ok) < 3:
+            log("ear", sx, ": no skull around it, kept")
+            continue
+        fz = np.interp(zs, zs[ok], [front[i] for i in ok])
+        bz = np.interp(zs, zs[ok], [back[i] for i in ok])
+        def surface_at(y, z):
+            t = min(max((y - (y0 - 0.006)) / (y1 - y0 + 0.012), 0.0), 1.0)
+            return np.interp(z, zs, fz) * (1.0 - t) + np.interp(z, zs, bz) * t
+
+        box = (pts[:, 1] > y0 - 0.006) & (pts[:, 1] < y1 + 0.006) & (pts[:, 2] > z0 - 0.006) & (pts[:, 2] < z1 + 0.006) & (lat > 0.02)
+        idx = [i for i in np.nonzero(box)[0] if lat[i] > surface_at(pts[i, 1], pts[i, 2]) - 0.03]   # not deep inside
+        weight = {}
+        for i in idx:
+            y, z = pts[i, 1], pts[i, 2]
+            edge = min(y - (y0 - 0.006), (y1 + 0.006) - y, z - (z0 - 0.006), (z1 + 0.006) - z)
+            weight[i] = min(edge / 0.006, 1.0)   # fully inside the ear's box, fading out over 6 mm around it
+        # The ear folded onto the skull overlaps itself: its points are spread out again over the patch (smoothed in
+        # height and front to back, the patch's rim held), then laid on the skull.
+        nbrs = {i: [] for i in idx}
+        for e in body.data.edges:
+            a, b = e.vertices
+            if a in nbrs:
+                nbrs[a].append(b)
+            if b in nbrs:
+                nbrs[b].append(a)
+        yz = {i: pts[i, 1:3].copy() for i in idx}
+        get = lambda j: yz[j] if j in yz else pts[j, 1:3]
+        for _ in range(40):
+            new = {}
+            for i in idx:
+                if weight[i] < 1.0 or not nbrs[i]:
+                    new[i] = yz[i]
+                    continue
+                new[i] = 0.5 * yz[i] + 0.5 * np.mean([get(j) for j in nbrs[i]], axis=0)
+            yz = new
+        for i in idx:
+            w = weight[i]
+            y, z = pts[i, 1] + (yz[i][0] - pts[i, 1]) * w, pts[i, 2] + (yz[i][1] - pts[i, 2]) * w
+            new_lat = lat[i] + (surface_at(y, z) - 0.0005 - lat[i]) * w
+            p = np.array([hx + sx * new_lat, y, z])
+            body.data.vertices[i].co = from_rig @ Vector(tuple(float(c) for c in p))
+            moved += 1
+    body.data.update()
+    log("human ears laid flat:", moved, "points")
+
+
+def make_fur_textures(out_dir, size=512, log=print):
+    """A light fur colour map (the creator's fur colour multiplies it), strands along v, and its normal map: fur.png
+    and fur_normal.png in out_dir."""
+    import numpy as np
+    rng = np.random.default_rng(7)
+    u = np.arange(size)
+    strands = np.zeros(size)
+    for octave, amp in ((4, 0.5), (16, 0.3), (64, 0.25), (256, 0.2)):
+        strands += amp * np.interp(u * octave / size, np.arange(octave + 1), rng.random(octave + 1))
+    rows = rng.random((size // 32 + 2, size))
+    along = np.array([np.interp(np.arange(size) / 32, np.arange(rows.shape[0]), rows[:, c]) for c in range(size)]).T
+    height = strands[None, :] + 0.25 * along
+    height = (height - height.min()) / (height.max() - height.min())
+    colour = 0.72 + 0.28 * height
+    img = np.stack([colour, colour * 0.985, colour * 0.97], axis=2)
+    gy, gx = np.gradient(height)
+    n = np.stack([-gx * 6.0, -gy * 2.0, np.ones_like(height)], axis=2)
+    n /= np.linalg.norm(n, axis=2, keepdims=True)
+    paths = []
+    os.makedirs(out_dir, exist_ok=True)
+    for name, data in (("fur.png", img), ("fur_normal.png", n * 0.5 + 0.5)):
+        im = bpy.data.images.new(name, size, size, alpha=False)
+        if name == "fur_normal.png":
+            im.colorspace_settings.name = "Non-Color"
+        px = np.concatenate([data, np.ones((size, size, 1))], axis=2).astype(np.float32)
+        im.pixels.foreach_set(px.ravel())
+        path = os.path.join(out_dir, name)
+        im.filepath_raw = path
+        im.file_format = "PNG"
+        im.save()
+        paths.append(path)
+    log("fur textures", paths)
+    return paths
+
+
+def add_cat_ears(rig, body, height=0.066, width=0.062, depth=0.03, tilt=0.35, log=print):
+    """Cat ears for any MakeHuman head: up out of the top of the head either side of the crown, tilted out a little and
+    turned a little outwards, a crescent in section (cupped at the front), weighted wholly to the head. The outside is
+    the fur material (CatFur), the cup's inside CatEarInner. Returns the ear objects."""
+    import math
+    from mathutils import Vector
+    head = rig.data.bones.get("head")
+    if head is None:
+        return []
+    to_rig = rig.matrix_world.inverted() @ body.matrix_world
+    hx, hz = head.head_local.x, head.head_local.z
+    pts = [to_rig @ v.co for v in body.data.vertices]
+    skull = [p for p in pts if p.z > hz + 0.02 and abs(p.x - hx) < 0.12]
+    if not skull:
+        return []
+    top_p = max(skull, key=lambda p: p.z)
+    top = top_p.z
+    centre = Vector((hx, top_p.y, top - 0.09))
+    fur = _shared_material("CatFur", (0.6, 0.45, 0.3))
+    inner = _shared_material("CatEarInner", (0.85, 0.6, 0.55))
+    upper = [p for p in skull if p.z > top - 0.05]
+    objs = []
+    for side in (1.0, -1.0):
+        want = Vector((hx + side * 0.05, top_p.y + 0.008, top - 0.018))
+        base = min(upper, key=lambda p: (p - want).length)
+        normal = (base - centre).normalized()
+        axis = (normal * 0.4 + Vector((0, 0, 1)) * 0.6 + Vector((side, 0, 0)) * tilt).normalized()
+        fwd = Vector((side * math.sin(math.radians(20)), -math.cos(math.radians(20)), 0.0))   # forward, turned out
+        fwd = (fwd - axis * fwd.dot(axis)).normalized()
+        lat = axis.cross(fwd).normalized()
+        rings_n, seg = 10, 16
+        rings = []
+        for i in range(rings_n):
+            t = i / rings_n
+            c = base - axis * 0.012 + axis * (height + 0.012) * t
+            a = 0.5 * width * (1.0 - t ** 1.15) * (1.0 - t) ** 0.35 + 0.001   # a little rounded out, a soft tip
+            b = 0.5 * depth * (1.0 - t) + 0.0008
+            ring = []
+            for s in range(seg):
+                th = 2.0 * math.pi * s / seg
+                cos = math.cos(th)
+                o_f = b * cos - 1.5 * b * max(cos, 0.0) ** 2   # the front cupped in
+                ring.append(c + lat * a * math.sin(th) + fwd * o_f)
+            rings.append(ring)
+        apex = base - axis * 0.012 + axis * (height + 0.012) - fwd * 0.004
+        obj = _loft("CatEar_" + ("l" if side > 0 else "r"), rings, apex)
+        import bmesh
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        bm.to_mesh(obj.data)
+        bm.free()
+        obj.data.materials.append(fur)
+        obj.data.materials.append(inner)
+        for poly in obj.data.polygons:
+            vs = list(poly.vertices)
+            if any(v >= rings_n * seg for v in vs):
+                continue
+            ring_i = min(v // seg for v in vs)
+            if 1 <= ring_i < rings_n - 2 and all(math.cos(2.0 * math.pi * (v % seg) / seg) > 0.35 for v in vs):
+                poly.material_index = 1
+        _skin_to(obj, rig, {i: {"head": 1.0} for i in range(len(obj.data.vertices))})
+        objs.append(obj)
+    log("cat ears", height, "m on the skull at z", round(top, 3))
+    return objs
+
+
+def add_cat_claws(rig, body, length=0.009, radius=0.0021, color=(0.88, 0.84, 0.76), log=print):
+    """Small cat claws at the tip of every finger and thumb: a curved cone from the nail side of the fingertip, out along
+    the finger and curling towards the palm, weighted to the finger's last bone. One mesh, CatClaws, material CatClaw."""
+    import numpy as np
+    from mathutils import Vector
+    bones = rig.data.bones
+    to_rig = rig.matrix_world.inverted() @ body.matrix_world
+    pts = np.array([tuple(to_rig @ v.co) for v in body.data.vertices])
+    mat = _shared_material("CatClaw", color)
+    objs = []
+    for side, sx in (("l", 1.0), ("r", -1.0)):
+        i1, p1, m3 = bones.get("index_01_" + side), bones.get("pinky_01_" + side), bones.get("middle_03_" + side)
+        hand = bones.get("hand_" + side)
+        if not (i1 and p1 and m3 and hand):
+            continue
+        # The back of the hand: across the knuckles crossed with along the hand, the way that points up and out in the
+        # rest pose (palms down).
+        across = Vector(p1.head_local) - Vector(i1.head_local)
+        along = Vector(m3.tail_local) - Vector(hand.head_local)
+        back = across.cross(along).normalized()
+        if back.z + 0.3 * sx * back.x < 0:
+            back = -back
+        for finger in ("thumb", "index", "middle", "ring", "pinky"):
+            b = bones.get("%s_03_%s" % (finger, side))
+            if b is None:
+                continue
+            head, tail = Vector(b.head_local), Vector(b.tail_local)
+            d = (tail - head).normalized()
+            D = np.array(tuple(d))
+            near = pts[np.linalg.norm(pts - np.array(tuple(tail)), axis=1) < 0.025]
+            if not len(near):
+                continue
+            rel = near - np.array(tuple(head))
+            alongs = rel @ D
+            tip_along = float(alongs.max())
+            ring = rel[np.abs(alongs - (tip_along - 0.008)) < 0.003]
+            r_f = float(np.median(np.linalg.norm(ring - np.outer(ring @ D, D), axis=1))) if len(ring) else 0.006
+            up = (back - d * back.dot(d)).normalized()
+            start = head + d * (tip_along - 0.005) + up * r_f * 0.55
+            n = 8
+            centres = [start + d * length * t - up * length * 0.5 * t * t for t in [k / (n - 1) for k in range(n)]]
+            radii = [max(radius * (1.0 - k / (n - 1)) ** 0.8, 0.0003) for k in range(n)]
+            frames = []
+            for k in range(n):
+                dd = (centres[min(k + 1, n - 1)] - centres[max(k - 1, 0)]).normalized()
+                a = dd.cross(up).normalized()
+                frames.append((a * 0.75, dd.cross(a).normalized()))   # a little flat side to side, like a claw
+            obj = _tube("CatClaw_%s_%s" % (finger, side), centres, radii, frames, segments=8)
+            obj.data.materials.append(mat)
+            _skin_to(obj, rig, {i: {b.name: 1.0} for i in range(len(obj.data.vertices))})
+            objs.append(obj)
+    if not objs:
+        return []
+    claws = _join(objs)
+    claws.name = "CatClaws"
+    log("cat claws:", len(objs))
+    return [claws]
+
+
+def feather_hair_ends(src, dst, tip_share=0.13, fade_share=0.025, seed=3, log=print):
+    """MakeHuman's long hair card ends in a solid straight edge (its alpha only blurs the last few pixels), which reads
+    as hair cut with one snip. This rewrites the colour map's alpha so the strands end at different lengths: in each
+    column of the texture (one strand's width, along which the hair runs), the hair's lowest point is pulled up by a
+    random share of its length (fine per strand, coarser in clumps), with a short fade, so the ends are wispy."""
+    import numpy as np
+    img = bpy.data.images.load(src, check_existing=False)
+    w, h = img.size
+    flat = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(flat)
+    px = flat.reshape(h, w, 4)[::-1].copy()   # Blender keeps the bottom row first: top row first here
+    alpha = px[:, :, 3].copy()
+    rng = np.random.default_rng(seed)
+
+    def smooth_noise(n, width):
+        raw = rng.random(n + 2 * width)
+        kernel = np.ones(width) / width
+        return np.convolve(raw, kernel, mode="same")[width:width + n]
+
+    fine = smooth_noise(w, 2)
+    clump = smooth_noise(w, 28)
+    clump = (clump - clump.min()) / max(clump.max() - clump.min(), 1e-6)
+    fine = (fine - fine.min()) / max(fine.max() - fine.min(), 1e-6)
+    pull = 0.45 * fine ** 2.0 + 0.55 * clump
+    rows = np.arange(h)[:, None]
+    solid = alpha > 0.5
+    has = solid.any(axis=0)
+    bottom = np.where(has, h - 1 - np.argmax(solid[::-1], axis=0), 0)
+    top = np.where(has, np.argmax(solid, axis=0), 0)
+    length = (bottom - top).astype(np.float32)
+    cut = bottom - length * tip_share * pull
+    fade = np.maximum(length * fade_share, 2.0)
+    factor = np.clip((cut[None, :] - rows) / fade[None, :] + 1.0, 0.0, 1.0)
+    factor[:, ~has] = 1.0
+    px[:, :, 3] = alpha * factor
+    out = bpy.data.images.new(os.path.basename(dst), w, h, alpha=True)
+    out.pixels.foreach_set(px[::-1].ravel())
+    out.filepath_raw = dst
+    out.file_format = "PNG"
+    out.save()
+    bpy.data.images.remove(img)
+    log("hair ends feathered:", os.path.basename(src), "->", dst)
+    return dst
+
+
+def add_hair_bones(rig, hairs, azimuths=(0.0, 55.0, -55.0, 115.0, -115.0), bones=4, log=print):
+    """Bones for long scalp hair to swing on (MakeHuman's long, bob and braid styles have none, so they stayed stiff):
+    chains hair_c1_1 ... under the head, hanging down the hair at the back (azimuth 0), the back corners and the sides,
+    shaped along the longest hair, shared by every style (only one shows at a time). Each style's points below the back of
+    the skull are weighted to the nearest two chains by direction round the head and along the chain by height, blending
+    from the head bone near the top. The game swings the chains (MakeHumanAnimInstance)."""
+    import math
+    import numpy as np
+    from mathutils import Vector
+    head = rig.data.bones.get("head")
+    hairs = [h for h in hairs if h is not None]
+    if head is None or not hairs or "hair_c1_1" in rig.data.bones:
+        return
+    hx, hy, hz = head.head_local
+    to_rig = {h.name: rig.matrix_world.inverted() @ h.matrix_world for h in hairs}
+    pts = {h.name: np.array([tuple(to_rig[h.name] @ v.co) for v in h.data.vertices]) for h in hairs}
+    root_z = hz + 0.04   # about the back of the skull, where long hair leaves the head
+
+    def azimuth(p):
+        return np.degrees(np.arctan2(p[:, 0] - hx, p[:, 1] - hy))   # 0 behind (+Y), +90 the left side, 180 the face
+
+    longest = max(hairs, key=lambda h: np.ptp(pts[h.name][:, 2]))
+    lp = pts[longest.name]
+    laz = azimuth(lp)
+    chains = []
+    for c, az in enumerate(azimuths):
+        near = lp[(np.abs(((laz - az) + 180.0) % 360.0 - 180.0) < 20.0) & (lp[:, 2] < root_z)]
+        if len(near) < 10:
+            continue
+        bottom = float(near[:, 2].min())
+        if root_z - bottom < 0.08:
+            continue
+        joints = []
+        for i in range(bones + 1):
+            z = root_z - (root_z - bottom) * i / bones
+            ring = near[np.abs(near[:, 2] - z) < max((root_z - bottom) / bones * 0.5, 0.01)]
+            if not len(ring):
+                ring = near[np.argsort(np.abs(near[:, 2] - z))[:5]]
+            # The hair's middle at this height, a little inside its surface.
+            r = np.hypot(ring[:, 0] - hx, ring[:, 1] - hy)
+            a = math.radians(az)
+            rr = float(np.median(r)) * 0.92
+            joints.append(Vector((hx + rr * math.sin(a), hy + rr * math.cos(a), z)))
+        chains.append((c + 1, az, bottom, joints))
+    if not chains:
+        log("hair bones: no long hair")
+        return
+    if bpy.context.object and bpy.context.object.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.ops.object.select_all(action="DESELECT")
+    rig.select_set(True)
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode="EDIT")
+    for c, az, bottom, joints in chains:
+        parent = rig.data.edit_bones["head"]
+        for i in range(bones):
+            eb = rig.data.edit_bones.new("hair_c%d_%d" % (c, i + 1))
+            eb.head, eb.tail = joints[i], joints[i + 1]
+            eb.parent = parent
+            eb.use_connect = i > 0
+            eb.use_deform = True
+            parent = eb
+    bpy.ops.object.mode_set(mode="OBJECT")
+    chain_az = np.array([az for _, az, _, _ in chains])
+    for h in hairs:
+        p = pts[h.name]
+        az = azimuth(p)
+        deform = {b.name for b in rig.data.bones if b.use_deform}
+        groups = {g.index: g for g in h.vertex_groups}
+        made = 0
+        new_groups = {}
+        for vi in np.nonzero(p[:, 2] < root_z + 0.02)[0]:
+            z = p[vi, 2]
+            # The two nearest chains round the head, blended linearly between them.
+            d = np.abs(((az[vi] - chain_az) + 180.0) % 360.0 - 180.0)
+            order = np.argsort(d)
+            if d[order[0]] > 75.0:
+                continue   # in front of the face: stays on the head
+            w_chain = {}
+            if len(order) > 1 and d[order[1]] < 90.0:
+                span = d[order[0]] + d[order[1]]
+                w_chain[order[0]] = d[order[1]] / span
+                w_chain[order[1]] = d[order[0]] / span
+            else:
+                w_chain[order[0]] = 1.0
+            weights = {}
+            hold = min(max(1.0 - (root_z + 0.02 - z) / 0.08, 0.0), 1.0)   # the head holds the top
+            if hold > 0:
+                weights["head"] = hold
+            for ci, wc in w_chain.items():
+                c, _, bottom, _ = chains[ci]
+                f = min(max((root_z - z) / max(root_z - bottom, 1e-3), 0.0), 0.999) * bones
+                k = int(f)
+                frac = f - k
+                for bi, wb in ((k, 1.0 - frac), (min(k + 1, bones - 1), frac)):
+                    name = "hair_c%d_%d" % (c, bi + 1)
+                    weights[name] = weights.get(name, 0.0) + (1.0 - hold) * wc * wb
+            for g in h.vertex_groups:
+                if g.name in deform:
+                    g.remove([int(vi)])
+            for name, wv in weights.items():
+                if wv <= 1e-4:
+                    continue
+                g = h.vertex_groups.get(name) or new_groups.get(name)
+                if g is None:
+                    g = h.vertex_groups.new(name=name)
+                    new_groups[name] = g
+                g.add([int(vi)], float(wv), "REPLACE")
+            made += 1
+        log("hair bones on", h.name, ":", made, "points")
+    log("hair bones:", len(chains), "chains of", bones)

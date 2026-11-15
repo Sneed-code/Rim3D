@@ -232,6 +232,28 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 			}
 			Dynamics.Add(MakeChain(TEXT("ponytail1"), Last, Ref));
 		}
+		// Long scalp hair (mh_common.add_hair_bones: hair_c1_1 ... chains down the back, back corners and sides, shared by
+		// the long, bob and braid styles): stiffer and in a narrower cone than the ponytail, so the sheet sways and does
+		// not fly up into the body.
+		for (int32 c = 1; c < 10; ++c)
+		{
+			const FName First(*FString::Printf(TEXT("hair_c%d_1"), c));
+			if (Ref.FindBoneIndex(First) == INDEX_NONE)
+			{
+				continue;
+			}
+			FName Last = First;
+			for (int32 i = 2; i < 12 && Ref.FindBoneIndex(FName(*FString::Printf(TEXT("hair_c%d_%d"), c, i))) != INDEX_NONE; ++i)
+			{
+				Last = FName(*FString::Printf(TEXT("hair_c%d_%d"), c, i));
+			}
+			// Simulated in the head's space: a clip's first frame or a turn moves the head far in one step, which flung
+			// the world-space chains up into a sheet; relative to the head the hair only sways under gravity.
+			TSharedPtr<FAnimNode_AnimDynamics> Chain = MakeChain(First, Last, Ref, 1.0f, 260.0f, 14.0f);
+			Chain->SimulationSpace = AnimPhysSimSpaceType::BoneRelative;
+			Chain->RelativeSpaceBone.BoneName = TEXT("head");
+			Dynamics.Add(Chain);
+		}
 		// A tail (mh_export.py's add_tail: tail_01 ... under the pelvis): its own swish (FMakeHumanTailNode).
 		Tail.Bones.Reset();
 		for (int32 i = 1; i < 30 && Ref.FindBoneIndex(FName(*FString::Printf(TEXT("tail_%02d"), i))) != INDEX_NONE; ++i)

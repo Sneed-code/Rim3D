@@ -17,6 +17,7 @@
 #include "Factories/FbxFactory.h"
 #include "Factories/FbxImportUI.h"
 #include "Factories/FbxSkeletalMeshImportData.h"
+#include "Factories/FbxAnimSequenceImportData.h"
 #include "Factories/MaterialInstanceConstantFactoryNew.h"
 #include "Factories/TextureFactory.h"
 #include "HAL/FileManager.h"
@@ -94,6 +95,50 @@ namespace
 
 	int32 MhProbe()
 	{
+		// -ProbeAnim=<path>,<path>: the first bones' reference pose and their frame-0 pose in each animation.
+		FString AnimPaths;
+		if (FParse::Value(FCommandLine::Get(), TEXT("ProbeAnim="), AnimPaths, false))
+		{
+			TArray<FString> Paths;
+			AnimPaths.ParseIntoArray(Paths, TEXT(","));
+			for (const FString& Path : Paths)
+			{
+				UAnimSequence* Seq = LoadObject<UAnimSequence>(nullptr, *Path);
+				if (!Seq || !Seq->GetSkeleton())
+				{
+					if (USkeletalMesh* ProbeMesh = LoadObject<USkeletalMesh>(nullptr, *Path))
+					{
+						const FReferenceSkeleton& MeshRef = ProbeMesh->GetRefSkeleton();
+						UE_LOG(LogMakeHumanArt, Display, TEXT("Probe mesh %s: %d bones"), *Path, MeshRef.GetNum());
+						for (int32 b = 0; b < FMath::Min(6, MeshRef.GetNum()); ++b)
+						{
+							UE_LOG(LogMakeHumanArt, Display, TEXT("  %s parent %d ref %s rot %s"), *MeshRef.GetBoneName(b).ToString(), MeshRef.GetParentIndex(b),
+								*MeshRef.GetRefBonePose()[b].GetTranslation().ToString(), *MeshRef.GetRefBonePose()[b].GetRotation().Rotator().ToString());
+						}
+						continue;
+					}
+					UE_LOG(LogMakeHumanArt, Display, TEXT("Probe %s: no animation"), *Path);
+					continue;
+				}
+				const FReferenceSkeleton& Ref = Seq->GetSkeleton()->GetReferenceSkeleton();
+				UE_LOG(LogMakeHumanArt, Display, TEXT("Probe %s: %d bones, %d frames"), *Path, Ref.GetNum(), Seq->GetNumberOfSampledKeys());
+				for (int32 b = 0; b < FMath::Min(6, Ref.GetNum()); ++b)
+				{
+					const FName Bone = Ref.GetBoneName(b);
+					const FTransform RefPose = Ref.GetRefBonePose()[b];
+					const FTransform Frame = Seq->GetDataModel()->GetBoneTrackTransform(Bone, FFrameNumber(0));
+					UE_LOG(LogMakeHumanArt, Display, TEXT("  %s ref %s rot %s | frame0 %s rot %s"), *Bone.ToString(), *RefPose.GetTranslation().ToString(),
+						*RefPose.GetRotation().Rotator().ToString(), *Frame.GetTranslation().ToString(), *Frame.GetRotation().Rotator().ToString());
+					for (int32 k = 1; k < 4; ++k)
+					{
+						const FTransform Later = Seq->GetDataModel()->GetBoneTrackTransform(Bone, FFrameNumber(Seq->GetNumberOfSampledKeys() * k / 4));
+						UE_LOG(LogMakeHumanArt, Display, TEXT("     at %d/4: %s angle from ref %.1f"), k, *Later.GetTranslation().ToString(),
+							FMath::RadiansToDegrees(Later.GetRotation().AngularDistance(RefPose.GetRotation())));
+					}
+				}
+			}
+			return 0;
+		}
 		if (UClass* Anim = LoadClass<UAnimInstance>(nullptr, MhGenericRetargetAnim))
 		{
 			UE_LOG(LogMakeHumanArt, Display, TEXT("Probe %s (parent %s):"), *Anim->GetPathName(), *Anim->GetSuperClass()->GetName());
@@ -267,6 +312,44 @@ namespace
 		}
 		}
 		return Out;
+	}
+
+	// Wetness (custom primitive data 12: 0 dry .. 1 soaked; the creator's slider, later the weather): a wet surface is
+	// darker (water fills the pores and fibres; hair and cloth darken most) and glossier. One shared step on every
+	// MakeHuman material, so skin, hair and jewellery all get wet together.
+	void MhAddWetness(UMaterial* Material, float Darken, float WetRoughness)
+	{
+		auto* Wet = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -200, 1500));
+		Wet->ParameterName = TEXT("Wetness");
+		Wet->DefaultValue = 0.0f;
+		Wet->bUseCustomPrimitiveData = true;
+		Wet->PrimitiveDataIndex = 12;
+		if (UMaterialExpression* BaseColor = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_BaseColor))
+		{
+			auto* Dark = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -100, -700));
+			Dark->OutputType = CMOT_Float3;
+			Dark->Description = TEXT("WetColour");
+			Dark->Code = FString::Printf(TEXT("return Base * lerp(1.0, %.3f, saturate(Wet));"), Darken);
+			Dark->Inputs.SetNum(2);
+			Dark->Inputs[0].InputName = TEXT("Base");
+			Dark->Inputs[1].InputName = TEXT("Wet");
+			Dark->Inputs[0].Input.Connect(Material->GetEditorOnlyData()->BaseColor.OutputIndex, BaseColor);
+			Dark->Inputs[1].Input.Connect(0, Wet);
+			UMaterialEditingLibrary::ConnectMaterialProperty(Dark, TEXT(""), MP_BaseColor);
+		}
+		if (UMaterialExpression* Roughness = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_Roughness))
+		{
+			auto* Gloss = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -100, 1400));
+			Gloss->OutputType = CMOT_Float1;
+			Gloss->Description = TEXT("WetRoughness");
+			Gloss->Code = FString::Printf(TEXT("return lerp(Base, min(Base, %.3f), saturate(Wet));"), WetRoughness);
+			Gloss->Inputs.SetNum(2);
+			Gloss->Inputs[0].InputName = TEXT("Base");
+			Gloss->Inputs[1].InputName = TEXT("Wet");
+			Gloss->Inputs[0].Input.Connect(Material->GetEditorOnlyData()->Roughness.OutputIndex, Roughness);
+			Gloss->Inputs[1].Input.Connect(0, Wet);
+			UMaterialEditingLibrary::ConnectMaterialProperty(Gloss, TEXT(""), MP_Roughness);
+		}
 	}
 
 	// Our skin material (M_PawnSkin) with the MetaHumans' skin micro-normal tiled over the skin's own normal: pores and
@@ -515,6 +598,7 @@ namespace
 			Pigment->Inputs[2].Input.Connect(0, Amount);
 			UMaterialEditingLibrary::ConnectMaterialProperty(Pigment, TEXT(""), MP_BaseColor);
 		}
+		MhAddWetness(Material, 0.78f, 0.12f);
 		Material->PostEditChange();
 		MhSave(Material);
 		UE_LOG(LogMakeHumanArt, Display, TEXT("skin material with micro detail: %s"), *Material->GetName());
@@ -576,6 +660,7 @@ namespace
 		Cut->Inputs[1].Input.Connect(0, Density);
 		Cut->Inputs[2].Input.Connect(0, Coverage);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Cut, TEXT(""), MP_OpacityMask);
+		MhAddWetness(Material, 0.55f, 0.3f);
 		Material->PostEditChange();
 		MhSave(Material);
 		return Material;
@@ -706,13 +791,15 @@ namespace
 		Rough->ParameterName = TEXT("Roughness");
 		Rough->DefaultValue = 0.25f;
 		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
+		MhAddWetness(Material, 1.0f, 0.1f);
 		Material->PostEditChange();
 		MhSave(Material);
 		return Material;
 	}
 
-	UMaterial* MhBaseMaterial(IAssetTools& Tools, const FString& Name, bool bMasked, bool bSkin, bool bAlphaFromColor = false)
+	UMaterial* MhBaseMaterial(IAssetTools& Tools, const FString& BaseName, bool bMasked, bool bSkin, bool bAlphaFromColor = false)
 	{
+		const FString Name = BaseName + TEXT("_Wet");  // the version with wetness (earlier ones stay on disk unused)
 		const FString Path = MakeHumanAssetPath(MakeHumanFolder, Name);
 		if (UMaterial* Existing = FindObject<UMaterial>(nullptr, *Path))
 		{
@@ -780,6 +867,8 @@ namespace
 			Opacity->SamplerType = SAMPLERTYPE_LinearColor;
 			UMaterialEditingLibrary::ConnectMaterialProperty(Opacity, TEXT("R"), MP_OpacityMask);
 		}
+		// Hair and cards darken and gloss the most when wet; plain parts (horns, the cat's fur) a little less.
+		MhAddWetness(Material, bMasked ? 0.55f : 0.7f, bSkin ? 0.12f : 0.3f);
 		Material->PostEditChange();
 		MhSave(Material);
 		return Material;
@@ -940,6 +1029,86 @@ namespace
 		return true;
 	}
 
+	// A Mixamo skeleton's IK rig (the mannequin rig's chain names on its bones) and a retargeter from it onto the game's
+	// mannequin, in Source. Null if the skeleton is not Mixamo's or the mannequin's assets are missing.
+	UIKRetargeter* MhClipRetargeter(IAssetTools& Tools, const FString& Name, USkeletalMesh* Mesh, const FString& Source, int32& Failures,
+		USkeletalMesh*& TargetMesh)
+	{
+		TMap<FString, TPair<FName, FName>> Chains;
+		FName Root;
+		if (!MhMixamoChains(Mesh->GetRefSkeleton(), Chains, Root))
+		{
+			UE_LOG(LogMakeHumanArt, Error, TEXT("Clip %s: not a Mixamo skeleton (only Mixamo clips are set up)"), *Name);
+			return nullptr;
+		}
+		UIKRigDefinition* Target = LoadObject<UIKRigDefinition>(nullptr, MhSourceRig);
+		TargetMesh = Target ? Target->GetPreviewMesh() : nullptr;
+		UIKRetargeter* TemplateRetargeter = LoadObject<UIKRetargeter>(nullptr, MhTemplateRetargeter);
+		if (!Target || !TargetMesh || !TemplateRetargeter)
+		{
+			UE_LOG(LogMakeHumanArt, Error, TEXT("Clip %s: no mannequin IK rig, its mesh or the template retargeter"), *Name);
+			return nullptr;
+		}
+		// The clip's IK rig: the mannequin rig's chain names on the Mixamo bones.
+		UIKRigDefinition* Rig = Cast<UIKRigDefinition>(Tools.CreateAsset(TEXT("IK_") + Name + TEXT("_Source"), Source, UIKRigDefinition::StaticClass(), NewObject<UIKRigDefinitionFactory>()));
+		UIKRigController* RigController = UIKRigController::GetController(Rig);
+		RigController->SetSkeletalMesh(Mesh);
+		int32 Mapped = 0;
+		for (const FBoneChain& Chain : Target->GetRetargetChains())
+		{
+			if (const TPair<FName, FName>* Bones = Chains.Find(Chain.ChainName.ToString().ToLower()))
+			{
+				RigController->AddRetargetChain(Chain.ChainName, Bones->Key, Bones->Value, NAME_None);
+				++Mapped;
+			}
+		}
+		RigController->SetRetargetRoot(Root);
+		Failures += MhSave(Rig) ? 0 : 1;
+		UE_LOG(LogMakeHumanArt, Display, TEXT("Clip %s: IK rig with %d of the mannequin's %d chains"), *Name, Mapped, Target->GetRetargetChains().Num());
+		// The retargeter: the template's ops, Mixamo to the mannequin.
+		UIKRetargeter* Retargeter = Cast<UIKRetargeter>(Tools.DuplicateAsset(TEXT("RTG_") + Name + TEXT("_to_UEFN"), Source, TemplateRetargeter));
+		UIKRetargeterController* Controller = UIKRetargeterController::GetController(Retargeter);
+		Controller->SetIKRig(ERetargetSourceOrTarget::Source, Rig);
+		Controller->SetPreviewMesh(ERetargetSourceOrTarget::Source, Mesh);
+		Controller->SetIKRig(ERetargetSourceOrTarget::Target, Target);
+		Controller->SetPreviewMesh(ERetargetSourceOrTarget::Target, TargetMesh);
+		Controller->AssignIKRigToAllOps(ERetargetSourceOrTarget::Source, Rig);
+		Controller->AssignIKRigToAllOps(ERetargetSourceOrTarget::Target, Target);
+		for (int32 Op = 0; Op < Controller->GetNumRetargetOps(); ++Op)
+		{
+			FInstancedStruct* Struct = Controller->GetRetargetOpStructAtIndex(Op);
+			const FString Type = Struct && Struct->GetScriptStruct() ? Struct->GetScriptStruct()->GetName() : FString();
+			if (Type == TEXT("IKRetargetBlendToSourceOp") || Type == TEXT("IKRetargetOffsetGoalsOp"))
+			{
+				Controller->SetRetargetOpEnabled(Op, false);
+			}
+			FStructProperty* SettingsProperty = Struct && Struct->GetScriptStruct() ? FindFProperty<FStructProperty>(Struct->GetScriptStruct(), TEXT("Settings")) : nullptr;
+			void* Settings = SettingsProperty ? SettingsProperty->ContainerPtrToValuePtr<void>(Struct->GetMutableMemory()) : nullptr;
+			for (const TPair<const TCHAR*, FName>& Bone : {TPair<const TCHAR*, FName>(TEXT("SourcePelvisBone"), Root), TPair<const TCHAR*, FName>(TEXT("TargetPelvisBone"), FName(TEXT("pelvis")))})
+			{
+				FStructProperty* Property = SettingsProperty ? FindFProperty<FStructProperty>(SettingsProperty->Struct, Bone.Key) : nullptr;
+				if (Property && Property->Struct == FBoneReference::StaticStruct())
+				{
+					Property->ContainerPtrToValuePtr<FBoneReference>(Settings)->BoneName = Bone.Value;
+				}
+			}
+		}
+		Controller->AutoMapChains(EAutoMapChainType::Exact, true);
+		// Mixamo stands in a T pose, the mannequin in an A pose: the mannequin's retarget pose is turned to match.
+		TArray<FName> Poses;
+		Controller->GetRetargetPoses(ERetargetSourceOrTarget::Target).GetKeys(Poses);
+		const FName Current = Controller->GetCurrentRetargetPoseName(ERetargetSourceOrTarget::Target);
+		for (const FName& Pose : Poses)
+		{
+			Controller->SetCurrentRetargetPose(Pose, ERetargetSourceOrTarget::Target);
+			Controller->ResetRetargetPose(Pose, {}, ERetargetSourceOrTarget::Target);
+			MhAlignRetargetPose(Controller, Rig, Mesh, Target, TargetMesh);
+		}
+		Controller->SetCurrentRetargetPose(Current, ERetargetSourceOrTarget::Target);
+		Failures += MhSave(Retargeter) ? 0 : 1;
+		return Retargeter;
+	}
+
 	// One animation clip (assets/animations.json): its FBX imported with its skeleton, an IK rig for that skeleton (a
 	// Mixamo one), a retargeter from it onto the game's mannequin (UEFN), and the clip retargeted onto the mannequin as
 	// <folder>/A_<name>. The pawns play mannequin animations, and every body takes them through its own retargeter.
@@ -1004,78 +1173,12 @@ namespace
 			UE_LOG(LogMakeHumanArt, Error, TEXT("Clip %s: no animation in %s"), *Name, *Fbx);
 			return Failures + 1;
 		}
-		TMap<FString, TPair<FName, FName>> Chains;
-		FName Root;
-		if (!MhMixamoChains(Mesh->GetRefSkeleton(), Chains, Root))
+		USkeletalMesh* TargetMesh = nullptr;
+		UIKRetargeter* Retargeter = MhClipRetargeter(Tools, Name, Mesh, Source, Failures, TargetMesh);
+		if (!Retargeter)
 		{
-			UE_LOG(LogMakeHumanArt, Error, TEXT("Clip %s: not a Mixamo skeleton (only Mixamo clips are set up)"), *Name);
 			return Failures + 1;
 		}
-		UIKRigDefinition* Target = LoadObject<UIKRigDefinition>(nullptr, MhSourceRig);
-		USkeletalMesh* TargetMesh = Target ? Target->GetPreviewMesh() : nullptr;
-		UIKRetargeter* TemplateRetargeter = LoadObject<UIKRetargeter>(nullptr, MhTemplateRetargeter);
-		if (!Target || !TargetMesh || !TemplateRetargeter)
-		{
-			UE_LOG(LogMakeHumanArt, Error, TEXT("Clip %s: no mannequin IK rig, its mesh or the template retargeter"), *Name);
-			return Failures + 1;
-		}
-		// The clip's IK rig: the mannequin rig's chain names on the Mixamo bones.
-		UIKRigDefinition* Rig = Cast<UIKRigDefinition>(Tools.CreateAsset(TEXT("IK_") + Name + TEXT("_Source"), Source, UIKRigDefinition::StaticClass(), NewObject<UIKRigDefinitionFactory>()));
-		UIKRigController* RigController = UIKRigController::GetController(Rig);
-		RigController->SetSkeletalMesh(Mesh);
-		int32 Mapped = 0;
-		for (const FBoneChain& Chain : Target->GetRetargetChains())
-		{
-			if (const TPair<FName, FName>* Bones = Chains.Find(Chain.ChainName.ToString().ToLower()))
-			{
-				RigController->AddRetargetChain(Chain.ChainName, Bones->Key, Bones->Value, NAME_None);
-				++Mapped;
-			}
-		}
-		RigController->SetRetargetRoot(Root);
-		Failures += MhSave(Rig) ? 0 : 1;
-		UE_LOG(LogMakeHumanArt, Display, TEXT("Clip %s: IK rig with %d of the mannequin's %d chains"), *Name, Mapped, Target->GetRetargetChains().Num());
-		// The retargeter: the template's ops, Mixamo to the mannequin.
-		UIKRetargeter* Retargeter = Cast<UIKRetargeter>(Tools.DuplicateAsset(TEXT("RTG_") + Name + TEXT("_to_UEFN"), Source, TemplateRetargeter));
-		UIKRetargeterController* Controller = UIKRetargeterController::GetController(Retargeter);
-		Controller->SetIKRig(ERetargetSourceOrTarget::Source, Rig);
-		Controller->SetPreviewMesh(ERetargetSourceOrTarget::Source, Mesh);
-		Controller->SetIKRig(ERetargetSourceOrTarget::Target, Target);
-		Controller->SetPreviewMesh(ERetargetSourceOrTarget::Target, TargetMesh);
-		Controller->AssignIKRigToAllOps(ERetargetSourceOrTarget::Source, Rig);
-		Controller->AssignIKRigToAllOps(ERetargetSourceOrTarget::Target, Target);
-		for (int32 Op = 0; Op < Controller->GetNumRetargetOps(); ++Op)
-		{
-			FInstancedStruct* Struct = Controller->GetRetargetOpStructAtIndex(Op);
-			const FString Type = Struct && Struct->GetScriptStruct() ? Struct->GetScriptStruct()->GetName() : FString();
-			if (Type == TEXT("IKRetargetBlendToSourceOp") || Type == TEXT("IKRetargetOffsetGoalsOp"))
-			{
-				Controller->SetRetargetOpEnabled(Op, false);
-			}
-			FStructProperty* SettingsProperty = Struct && Struct->GetScriptStruct() ? FindFProperty<FStructProperty>(Struct->GetScriptStruct(), TEXT("Settings")) : nullptr;
-			void* Settings = SettingsProperty ? SettingsProperty->ContainerPtrToValuePtr<void>(Struct->GetMutableMemory()) : nullptr;
-			for (const TPair<const TCHAR*, FName>& Bone : {TPair<const TCHAR*, FName>(TEXT("SourcePelvisBone"), Root), TPair<const TCHAR*, FName>(TEXT("TargetPelvisBone"), FName(TEXT("pelvis")))})
-			{
-				FStructProperty* Property = SettingsProperty ? FindFProperty<FStructProperty>(SettingsProperty->Struct, Bone.Key) : nullptr;
-				if (Property && Property->Struct == FBoneReference::StaticStruct())
-				{
-					Property->ContainerPtrToValuePtr<FBoneReference>(Settings)->BoneName = Bone.Value;
-				}
-			}
-		}
-		Controller->AutoMapChains(EAutoMapChainType::Exact, true);
-		// Mixamo stands in a T pose, the mannequin in an A pose: the mannequin's retarget pose is turned to match.
-		TArray<FName> Poses;
-		Controller->GetRetargetPoses(ERetargetSourceOrTarget::Target).GetKeys(Poses);
-		const FName Current = Controller->GetCurrentRetargetPoseName(ERetargetSourceOrTarget::Target);
-		for (const FName& Pose : Poses)
-		{
-			Controller->SetCurrentRetargetPose(Pose, ERetargetSourceOrTarget::Target);
-			Controller->ResetRetargetPose(Pose, {}, ERetargetSourceOrTarget::Target);
-			MhAlignRetargetPose(Controller, Rig, Mesh, Target, TargetMesh);
-		}
-		Controller->SetCurrentRetargetPose(Current, ERetargetSourceOrTarget::Target);
-		Failures += MhSave(Retargeter) ? 0 : 1;
 		// The clip on the mannequin.
 		FIKRetargetBatchOperationInputs Inputs;
 		Inputs.AssetsToRetarget = Sequences;
@@ -1107,6 +1210,133 @@ namespace
 			UE_LOG(LogMakeHumanArt, Error, TEXT("Clip %s: the batch retarget made nothing"), *Name);
 			++Failures;
 		}
+		return Failures;
+	}
+
+	// A set of clips on one skeleton (assets/animations.json "sets": Mixamo's Y Bot): the skeleton's mesh imported once
+	// with one retargeter, every clip's FBX imported as an animation of that skeleton, and all retargeted onto the
+	// mannequin in one batch, as <folder>/<category>/A_<name>.
+	int32 MhMakeClipSet(IAssetTools& Tools, const FString& SetName, const FString& SkeletonFbx, const TArray<TTuple<FString, FString, FString>>& Clips)
+	{
+		const FString Source = FString(MhClipsFolder) / SetName / TEXT("Source");
+		int32 Failures = 0;
+		UAssetImportTask* MeshTask = NewObject<UAssetImportTask>();
+		MeshTask->Filename = SkeletonFbx;
+		MeshTask->DestinationPath = Source;
+		MeshTask->DestinationName = TEXT("SK_") + SetName;
+		MeshTask->bAutomated = true;
+		MeshTask->bReplaceExisting = true;
+		MeshTask->bSave = false;
+		UFbxFactory* MeshFactory = NewObject<UFbxFactory>();
+		MeshFactory->ImportUI = NewObject<UFbxImportUI>(MeshFactory);
+		MeshFactory->ImportUI->bImportMesh = true;
+		MeshFactory->ImportUI->bImportAsSkeletal = true;
+		MeshFactory->ImportUI->MeshTypeToImport = FBXIT_SkeletalMesh;
+		MeshFactory->ImportUI->bImportAnimations = false;
+		MeshFactory->ImportUI->bImportMaterials = false;
+		MeshFactory->ImportUI->bImportTextures = false;
+		MeshFactory->ImportUI->bCreatePhysicsAsset = false;
+		MeshFactory->ImportUI->SkeletalMeshImportData->bConvertScene = true;
+		MeshTask->Factory = MeshFactory;
+		MeshTask->Options = MeshFactory->ImportUI;
+		Tools.ImportAssetTasks({MeshTask});
+		USkeletalMesh* Mesh = nullptr;
+		for (UObject* Object : MeshTask->GetObjects())
+		{
+			Mesh = Mesh ? Mesh : Cast<USkeletalMesh>(Object);
+		}
+		if (!Mesh || !Mesh->GetSkeleton())
+		{
+			UE_LOG(LogMakeHumanArt, Error, TEXT("Clip set %s: importing %s made no skeletal mesh"), *SetName, *SkeletonFbx);
+			return 1;
+		}
+		Failures += MhSave(Mesh) ? 0 : 1;
+		Failures += MhSave(Mesh->GetSkeleton()) ? 0 : 1;
+		USkeletalMesh* TargetMesh = nullptr;
+		UIKRetargeter* Retargeter = MhClipRetargeter(Tools, SetName, Mesh, Source, Failures, TargetMesh);
+		if (!Retargeter)
+		{
+			return Failures + 1;
+		}
+		// Every clip onto that skeleton, then retargeted, a category at a time.
+		TMap<FString, TArray<TPair<FString, UAnimSequence*>>> ByCategory;
+		int32 Imported = 0;
+		for (const TTuple<FString, FString, FString>& Clip : Clips)
+		{
+			const FString& Name = Clip.Get<0>();
+			const FString& Category = Clip.Get<1>();
+			UAssetImportTask* Task = NewObject<UAssetImportTask>();
+			Task->Filename = Clip.Get<2>();
+			Task->DestinationPath = Source / TEXT("Raw");
+			Task->DestinationName = Name;
+			Task->bAutomated = true;
+			Task->bReplaceExisting = true;
+			Task->bSave = false;
+			UFbxFactory* Factory = NewObject<UFbxFactory>();
+			Factory->ImportUI = NewObject<UFbxImportUI>(Factory);
+			Factory->ImportUI->bImportMesh = false;
+			Factory->ImportUI->bImportAsSkeletal = true;
+			Factory->ImportUI->MeshTypeToImport = FBXIT_Animation;
+			Factory->ImportUI->bImportAnimations = true;
+			Factory->ImportUI->bImportMaterials = false;
+			Factory->ImportUI->bImportTextures = false;
+			Factory->ImportUI->Skeleton = Mesh->GetSkeleton();
+			Factory->ImportUI->AnimSequenceImportData->bConvertScene = true;
+			Task->Factory = Factory;
+			Task->Options = Factory->ImportUI;
+			Tools.ImportAssetTasks({Task});
+			UAnimSequence* Sequence = nullptr;
+			for (UObject* Object : Task->GetObjects())
+			{
+				Sequence = Sequence ? Sequence : Cast<UAnimSequence>(Object);
+			}
+			if (!Sequence)
+			{
+				// An FBX with a skinned mesh in it (Mixamo's "with skin" downloads) makes <name>_Anim beside the mesh.
+				const FString AnimPath = Source / TEXT("Raw") / (Name + TEXT("_Anim"));
+				Sequence = LoadObject<UAnimSequence>(nullptr, *(AnimPath + TEXT(".") + Name + TEXT("_Anim")));
+				if (Sequence && Sequence->GetSkeleton() != Mesh->GetSkeleton())
+				{
+					UE_LOG(LogMakeHumanArt, Warning, TEXT("Clip %s: on its own skeleton, not the set's"), *Name);
+					Sequence = nullptr;
+				}
+			}
+			if (!Sequence)
+			{
+				UE_LOG(LogMakeHumanArt, Warning, TEXT("Clip %s: no animation from %s"), *Name, *Clip.Get<2>());
+				continue;
+			}
+			MhSave(Sequence);  // the raw clip on the set's skeleton, kept for checks (-ProbeAnim)
+			ByCategory.FindOrAdd(Category).Add({Name, Sequence});
+			++Imported;
+		}
+		int32 Saved = 0;
+		for (TPair<FString, TArray<TPair<FString, UAnimSequence*>>>& Category : ByCategory)
+		{
+			const FString Folder = FString(MhClipsFolder) / SetName / Category.Key.Replace(TEXT(" "), TEXT("")).Replace(TEXT("/"), TEXT(""));
+			FIKRetargetBatchOperationInputs Inputs;
+			for (const TPair<FString, UAnimSequence*>& Clip : Category.Value)
+			{
+				Inputs.AssetsToRetarget.Add(FAssetData(Clip.Value));
+			}
+			Inputs.SourceMesh = Mesh;
+			Inputs.TargetMesh = TargetMesh;
+			Inputs.IKRetargetAsset = Retargeter;
+			Inputs.TargetPath = Folder;
+			Inputs.Prefix = TEXT("A_");
+			Inputs.bIncludeReferencedAssets = false;
+			Inputs.bOverwriteExistingFiles = true;
+			for (const FAssetData& Asset : UIKRetargetBatchOperation::RunBatchRetarget(Inputs))
+			{
+				if (UAnimSequence* Sequence = Cast<UAnimSequence>(Asset.GetAsset()))
+				{
+					Failures += MhSave(Sequence) ? 0 : 1;
+					++Saved;
+				}
+			}
+			UE_LOG(LogMakeHumanArt, Display, TEXT("Clip set %s: %s, %d clips"), *SetName, *Category.Key, Category.Value.Num());
+		}
+		UE_LOG(LogMakeHumanArt, Display, TEXT("Clip set %s: %d of %d clips imported, %d retargeted onto the mannequin"), *SetName, Imported, Clips.Num(), Saved);
 		return Failures;
 	}
 
@@ -1572,6 +1802,9 @@ int32 UMakeHumanArtCommandlet::Main(const FString& Params)
 	if (Params.Contains(TEXT("-Clips")))
 	{
 		IFileManager::Get().DeleteDirectory(*FPackageName::LongPackageNameToFilename(MhClipsFolder), false, true);
+		// The asset registry still lists what was there (scanned at startup): rescanned, or the batch retarget's
+		// overwrite finds assets with no file and crashes.
+		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get().ScanPathsSynchronous({MhClipsFolder}, true);
 		const FString RepoRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT(".."));
 		FString Text;
 		TSharedPtr<FJsonObject> Json;
@@ -1596,6 +1829,39 @@ int32 UMakeHumanArtCommandlet::Main(const FString& Params)
 				continue;
 			}
 			Failures += MhMakeClip(Tools, Name, Fbx);
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Sets = nullptr;
+		if (Json->TryGetArrayField(TEXT("sets"), Sets))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Sets)
+			{
+				const TSharedPtr<FJsonObject> Set = Value->AsObject();
+				FString SetName, Manifest;
+				if (!Set || !Set->TryGetStringField(TEXT("name"), SetName) || !Set->TryGetStringField(TEXT("manifest"), Manifest))
+				{
+					continue;
+				}
+				// The set's clips: a manifest written by its prep script (mixamo_prep.py: skeleton, clips: name, category, fbx).
+				Manifest = FPaths::IsRelative(Manifest) ? RepoRoot / Manifest : Manifest;
+				FString ManifestText;
+				TSharedPtr<FJsonObject> ManifestJson;
+				if (!FFileHelper::LoadFileToString(ManifestText, *Manifest) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(ManifestText), ManifestJson) || !ManifestJson)
+				{
+					UE_LOG(LogMakeHumanArt, Warning, TEXT("Clip set %s: no %s; skipped"), *SetName, *Manifest);
+					continue;
+				}
+				FString Skeleton = ManifestJson->GetStringField(TEXT("skeleton"));
+				Skeleton = FPaths::IsRelative(Skeleton) ? RepoRoot / Skeleton : Skeleton;
+				TArray<TTuple<FString, FString, FString>> Clips;
+				for (const TSharedPtr<FJsonValue>& ClipValue : ManifestJson->GetArrayField(TEXT("clips")))
+				{
+					const TSharedPtr<FJsonObject> Clip = ClipValue->AsObject();
+					FString File = Clip->GetStringField(TEXT("fbx"));
+					File = FPaths::IsRelative(File) ? RepoRoot / File : File;
+					Clips.Add(MakeTuple(Clip->GetStringField(TEXT("name")), Clip->GetStringField(TEXT("category")), File));
+				}
+				Failures += MhMakeClipSet(Tools, SetName, Skeleton, Clips);
+			}
 		}
 		UE_LOG(LogMakeHumanArt, Display, TEXT("Animation clips: done, %d problems"), Failures);
 		return Failures == 0 ? 0 : 1;

@@ -246,5 +246,12 @@
       "loop": true,
       "comment": "Combat mocap clip 39 from the mocap thread (no props)."
     }
+  ],
+  "sets": [
+    {
+      "name": "Mixamo",
+      "manifest": "game/Saved/Mocap/Mixamo/mixamo.json",
+      "comment": "Mixamo packs and singles on the Y Bot skeleton (mocap/mixamo), prepared by tools/makehuman/mixamo_prep.py; grouped by category in the creator's Animations panel."
+    }
   ]
 }

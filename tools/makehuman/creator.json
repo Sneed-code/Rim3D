@@ -161,7 +161,17 @@
           "{mpfb}/hair/afro01/afro01.mhclo"
         ],
         "body_areas": true,
-        "jewellery": "female"
+        "jewellery": "female",
+        "cat": {
+          "ears": {},
+          "claws": {},
+          "tail": {
+            "length": 0.8,
+            "radius": 0.022,
+            "taper": 0.3
+          }
+        },
+        "hair_bones": true
       },
       "morphs": {
         "Masculine": {
@@ -505,6 +515,9 @@
           "targets": {
             "expression/units/caucasian/nose-right-elevation": 1.0
           }
+        },
+        "CatHead": {
+          "flatten_ears": true
         }
       }
     },
@@ -665,7 +678,17 @@
           "Jewel_": {
             "metal": true
           }
-        }
+        },
+        "cat": {
+          "ears": {},
+          "claws": {},
+          "tail": {
+            "length": 0.8,
+            "radius": 0.022,
+            "taper": 0.3
+          }
+        },
+        "hair_bones": true
       },
       "morphs": {
         "Feminine": {
@@ -1007,6 +1030,9 @@
           "targets": {
             "expression/units/caucasian/nose-right-elevation": 1.0
           }
+        },
+        "CatHead": {
+          "flatten_ears": true
         }
       }
     }

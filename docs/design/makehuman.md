@@ -212,6 +212,44 @@ wrist cuffs and ankle shackles fitted to the body and weighted to the bone each 
 `M_MH_Metal`; the creator's Jewellery tab shows each and picks its metal. Note: MPFB's breast bones start at the
 sternum, their tail is in the breast (the pigment mask now uses the tail too).
 
+## Beast-Strain (cat)
+
+A fourth kind in the creator's Kind tab beside Baseline, Imp and Orcoid (sneed, 2026-11-15: cat only for now). It looks
+the same as a person except for these parts, all generated for whatever body they go on (`mh_common.py`):
+- `add_cat_ears`: cat ears coming up out of the top of the head either side of the crown, tilted out and turned slightly
+  outwards. They have a crescent cross-section with a cupped front, and are weighted to the head. Outside material
+  CatFur, inside CatEarInner (skin, pinker).
+- `add_cat_claws`: one small curved claw per fingertip, starting at the nail side and curling towards the palm, weighted
+  to the last finger bone. Material CatClaw.
+- A furred CatTail: `add_tail` called a second time, so it uses the imp tail's bones. That means the tail swish node
+  moves it.
+- The human ears: removed by the CatHead morph (`flatten_human_ears`). Each ear is laid onto the side of the skull,
+  using the skull just in front of and behind it, and unfolded by smoothing so it leaves no creases.
+
+`creator.json` sets `"cat"` on both bases, which gives every variant the parts so the morphs fit them too. The creator
+shows the cat parts' material sections only on this kind and hides the imp tail (NoTail). CatFur's colour is the hair
+colour with a shade slider (darker to lighter), or its own colour. Its texture is `make_fur_textures` (strands along the
+tail, with a normal map). Earrings are hidden on this kind. `-CreatorKind=3` puts everyone in it for pictures.
+
+## Wetness and long hair
+
+**Wetness** is one value per pawn, custom primitive data 12 (0 dry to 1 soaked). `MhAddWetness` in the MakeHumanArt
+commandlet adds it to every MakeHuman material:
+- Skin darkens to 0.78× and becomes glossy (roughness down to 0.12).
+- Hair and cards darken to 0.55× (roughness 0.3).
+- Pubic hair darkens to 0.55× (roughness 0.3).
+- Metal stays the same colour but gets shinier (roughness 0.1).
+
+The plain materials are now `M_MH_*_Wet`, new assets, because the commandlet keeps an existing plain material as it is.
+The creator's "Hair and skin" tab has a Wet slider, and `-CreatorWet=<0-1>` sets it for pictures. Next: the weather
+sets it (rain raises it, shelter or a fire dries it), clothes and armour get the same step, and droplets.
+
+**Long hair** swings: `add_hair_bones` ("hair_bones" in a config) adds five chains, hair_c1_1 to hair_c5_4, under the
+head. They hang down the back, the back corners and the sides, shaped along the longest style, and are shared by long01,
+bob02 and braid01. The points of each style are weighted to the two nearest chains, with the head holding the top.
+`UMakeHumanAnimInstance` swings them as AnimDynamics chains (spring 260, 14° cone). `feather_hair_ends` rewrites the
+long style's alpha so the strands end at different lengths: wispy ends instead of one straight cut.
+
 ## Animation clips
 
 Clips are listed in `assets/animations.json` (name, FBX, loop). Markerless mocap (FlowHMR) stands metres from the origin
@@ -226,6 +264,19 @@ mannequin animations, so every body (each through its own retargeter) plays ever
 sweeping, carrying firewood, eating seated, lying down and getting up, shadowboxing, punches, kick, sword lunge, bow draw,
 rifle aim, shotgun reload; no props). `clip_prep.py` bakes the clip's own frame range (Blender's default 1 to 250 cut
 or padded every clip to 8.3 s).
+
+Mixamo set (436 clips, sneed's downloads in `mocap/mixamo/`: 10 packs under `packs/` and 56 singles, on the Y Bot,
+mostly without skin). `tools/makehuman/mixamo_prep.py` loads them all in one Blender run: each clip's hips are moved so
+it starts over the origin, the Y Bot mesh is skinned to it, and the armature's object transform (Mixamo's 90 degree turn
+about X and 0.01 scale) is baked into the bones and the location keys. Unreal reads that object transform one way for a
+skeleton and another for an animation, so without the bake every clip played with the body lying on the ground. The armature
+is also renamed from "Armature" to MixamoRig. Unreal drops a top node named "Armature" and converts only the top bone's
+rest position to centimetres, not the animation's keys for it, so the retargeter sank every body to the waist. It writes
+`game/Saved/Mocap/Mixamo/<Name>.fbx`, the Y Bot, and `mixamo.json` (name, category, file). `assets/animations.json`
+"sets" points at that manifest; the commandlet imports the Y Bot once, every clip onto its skeleton, and retargets a
+category at a time into `Animations/Mixamo/<category>/A_<name>`. Categories: each pack, and the singles as Injured,
+Falls, Crawling, Fear, Cover, Rolls, Firearms, Interact and Other. The creator's ANIMATIONS panel folds them by category
+with a search box.
 
 ## Not done (next, as of 2026-11-14)
 

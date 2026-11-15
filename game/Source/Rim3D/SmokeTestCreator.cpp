@@ -39,7 +39,7 @@
 
 namespace
 {
-	enum class ECreatorKind : int32 { Baseline, Imp, Orcoid };
+	enum class ECreatorKind : int32 { Baseline, Imp, Orcoid, Beast };
 
 	// Jewellery (mh_common.add_jewellery): each piece a mesh on the bases with a material slot Jewel_<key>.
 	struct FCreatorJewel
@@ -153,7 +153,7 @@ namespace
 	};
 	enum { CreatorUnitEyeLeftClosure = 0, CreatorUnitEyeRightClosure = 3,
 		CreatorUnitMouthOpen = 20, CreatorUnitMouthPursing = 24 };
-	const char* const CreatorKindNames[] = {"Baseline", "Imp", "Orcoid"};
+	const char* const CreatorKindNames[] = {"Baseline", "Imp", "Orcoid", "Beast-Strain (cat)"};
 	const char* const CreatorPubicNames[] = {"None", "Natural", "Trimmed", "Strip"};
 
 	/** One character in the creator: its gender (which base), kind, slider values, and its colonist. */
@@ -201,6 +201,11 @@ namespace
 		float Hair[3] = {0.10f, 0.08f, 0.07f};
 		bool bOwnPubicColour = false;  // else a little darker than the head hair, as is usual
 		float PubicHair[3] = {0.07f, 0.055f, 0.05f};
+		// Beast-Strain fur (cat ears and tail): the body hair's colour with a shade of its own, or a colour of its own.
+		float FurShade = 0.25f;        // -1 darker .. 1 lighter than the hair
+		float Wet = 0.0f;              // 0 dry .. 1 soaked (skin, hair and jewellery darker and glossier)
+		bool bOwnFurColour = false;
+		float Fur[3] = {0.55f, 0.36f, 0.2f};
 
 		FString Label(int32 Index) const
 		{
@@ -225,6 +230,8 @@ namespace
 		// The animation panel: the clips made by the MakeHumanArt commandlet (-Clips), what plays, how.
 		TArray<FSoftObjectPath> Clips;
 		TArray<FString> ClipNames;
+		TArray<FString> ClipCategories;  // the folder under Animations/<set>/ (Mixamo packs and groups), or "Mocap"
+		char ClipFilter[64] = {};
 		bool bClipsListed = false;
 		int32 Clip = 0;
 		bool bLoop = true;
@@ -369,11 +376,13 @@ namespace
 		Set(TEXT("NoHorns"), 1.0f - P.Horns);
 		Set(TEXT("NoTusks"), 1.0f - P.Tusks);
 		Set(TEXT("NoTail"), 1.0f - P.Tail);
+		Set(TEXT("CatHead"), P.Kind == ECreatorKind::Beast ? 1.0f : 0.0f);  // no human ears
 		Set(TEXT("PubicShort"), P.bShaved ? 0.0f : (1.0f - P.PubicLength) / 0.65f);
 		Set(TEXT("PubicStraight"), P.bShaved ? 0.0f : 1.0f - P.PubicCurl);
 		Set(TEXT("PubicStubble"), P.bShaved ? 1.0f : 0.0f);
 		Mesh->SetCustomPrimitiveDataFloat(4, P.Pubic == 0 ? 0.0f : P.PubicDensity);
 		Mesh->SetCustomPrimitiveDataFloat(5, P.PubicCoverage);
+		Mesh->SetCustomPrimitiveDataFloat(12, P.Wet);  // MakeHumanArt's MhAddWetness on every material
 		if (UMakeHumanAnimInstance* Anim = Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()))
 		{
 			Anim->SetSoftTissueEnabled(P.bJiggle);
@@ -468,7 +477,7 @@ namespace
 				{
 					if (Key && Slot.EndsWith(Key))
 					{
-						bShow = P.Jewels[j];
+						bShow = P.Jewels[j] && !(j == 0 && P.Kind == ECreatorKind::Beast);  // earrings: no human ears
 						MetalIndex = P.Metal[j];
 					}
 				}
@@ -485,6 +494,40 @@ namespace
 				{
 					Dynamic->SetVectorParameterValue(TEXT("Tint"), CreatorMetalColours[FMath::Clamp(MetalIndex, 0, 5)]);
 					Dynamic->SetScalarParameterValue(TEXT("Roughness"), MetalIndex == 3 ? 0.55f : (MetalIndex == 5 ? 0.35f : 0.22f));
+				}
+			}
+		}
+		// Beast-Strain parts (cat ears, claws, the furred tail) only on that kind; the fur in the hair's colour, shaded.
+		{
+			const bool bBeast = P.Kind == ECreatorKind::Beast;
+			const float Shade = P.FurShade;
+			const float FurShaded[3] = {
+				FMath::Clamp(Shade >= 0.0f ? FMath::Lerp(P.Hair[0], 0.95f, Shade * 0.6f) : P.Hair[0] * (1.0f + Shade * 0.6f), 0.0f, 1.0f),
+				FMath::Clamp(Shade >= 0.0f ? FMath::Lerp(P.Hair[1], 0.85f, Shade * 0.6f) : P.Hair[1] * (1.0f + Shade * 0.6f), 0.0f, 1.0f),
+				FMath::Clamp(Shade >= 0.0f ? FMath::Lerp(P.Hair[2], 0.72f, Shade * 0.6f) : P.Hair[2] * (1.0f + Shade * 0.6f), 0.0f, 1.0f)};
+			const FLinearColor FurColour = Linear(P.bOwnFurColour ? P.Fur : FurShaded);
+			const float Inner[3] = {FMath::Lerp(P.Skin[0], 0.92f, 0.45f), FMath::Lerp(P.Skin[1], 0.62f, 0.45f), FMath::Lerp(P.Skin[2], 0.62f, 0.45f)};
+			for (int32 i = 0; i < Slots.Num(); ++i)
+			{
+				const FString Slot = Slots[i].ToString();
+				const bool bFur = Slot.Contains(TEXT("CatFur"));
+				const bool bInner = Slot.Contains(TEXT("CatEarInner"));
+				if (!bFur && !bInner && !Slot.Contains(TEXT("CatClaw")))
+				{
+					continue;
+				}
+				Mesh->ShowMaterialSection(i, 0, bBeast, 0);
+				if (bBeast && (bFur || bInner))
+				{
+					UMaterialInstanceDynamic* Dynamic = Cast<UMaterialInstanceDynamic>(Mesh->GetMaterial(i));
+					if (!Dynamic)
+					{
+						Dynamic = Mesh->CreateDynamicMaterialInstance(i);
+					}
+					if (Dynamic)
+					{
+						Dynamic->SetVectorParameterValue(TEXT("Tint"), bFur ? FurColour : Linear(Inner));
+					}
 				}
 			}
 		}
@@ -518,10 +561,37 @@ namespace
 			const FString Name = Asset.AssetName.ToString();
 			if (Asset.AssetClassPath == UAnimSequence::StaticClass()->GetClassPathName() && Name.StartsWith(TEXT("A_")) && !Name.StartsWith(TEXT("A_SK_")))
 			{
+				// Animations/<clip>/A_<clip> (single clips) or Animations/<set>/<category>/A_<name> (sets).
+				TArray<FString> Parts;
+				Asset.PackagePath.ToString().Mid(Folder.Len() + 1).ParseIntoArray(Parts, TEXT("/"));
 				State.Clips.Add(Asset.GetSoftObjectPath());
-				State.ClipNames.Add(Name.Mid(2));
+				FString Shown = Name.Mid(2);
+				Shown.RemoveFromEnd(TEXT("_Anim"));
+				State.ClipNames.Add(Shown);
+				State.ClipCategories.Add(Parts.Num() >= 2 ? Parts.Last() : TEXT("Mocap"));
 			}
 		}
+		// In order: category, then name.
+		TArray<int32> Order;
+		for (int32 i = 0; i < State.Clips.Num(); ++i)
+		{
+			Order.Add(i);
+		}
+		Order.Sort([&State](int32 A, int32 B)
+		{
+			return State.ClipCategories[A] != State.ClipCategories[B] ? State.ClipCategories[A] < State.ClipCategories[B] : State.ClipNames[A] < State.ClipNames[B];
+		});
+		TArray<FSoftObjectPath> Clips;
+		TArray<FString> Names, Categories;
+		for (const int32 i : Order)
+		{
+			Clips.Add(State.Clips[i]);
+			Names.Add(State.ClipNames[i]);
+			Categories.Add(State.ClipCategories[i]);
+		}
+		State.Clips = MoveTemp(Clips);
+		State.ClipNames = MoveTemp(Names);
+		State.ClipCategories = MoveTemp(Categories);
 	}
 
 	/** Plays a clip on a person's body (its mannequin, which every body follows), or stops it (Clip -1). */
@@ -769,6 +839,24 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			}
 		}
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorPitch="), State->CameraPitch);
+		// -CreatorWet=<0-1> for everyone, for pictures.
+		float WetArg = -1.0f;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorWet="), WetArg))
+		{
+			for (FCreatorPerson& Person : State->People)
+			{
+				Person.Wet = FMath::Clamp(WetArg, 0.0f, 1.0f);
+			}
+		}
+		// -CreatorKind=<0-3> (Baseline, Imp, Orcoid, Beast-Strain) for everyone, for pictures.
+		int32 KindArg = -1;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorKind="), KindArg) && KindArg >= 0 && KindArg < 4)
+		{
+			for (FCreatorPerson& Person : State->People)
+			{
+				CreatorSetKind(Person, static_cast<ECreatorKind>(KindArg));
+			}
+		}
 		float Genital = 0.0f;
 		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorGenital="), Genital))
 		{
@@ -1067,7 +1155,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				}
 				if (ImGui::BeginTabItem("Kind"))
 				{
-					for (int32 k = 0; k < 3; ++k)
+					for (int32 k = 0; k < 4; ++k)
 					{
 						if (k > 0)
 						{
@@ -1086,6 +1174,16 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					ImGui::SliderFloat("Horns", &P.Horns, 0.0f, 1.0f, "%.2f");
 					ImGui::SliderFloat("Tusks", &P.Tusks, 0.0f, 1.0f, "%.2f");
 					ImGui::SliderFloat("Tail", &P.Tail, 0.0f, 1.0f, "%.2f");
+					if (P.Kind == ECreatorKind::Beast)
+					{
+						ImGui::SeparatorText("Fur (ears and tail)");
+						ImGui::SliderFloat("Shade from hair", &P.FurShade, -1.0f, 1.0f, "%.2f");
+						ImGui::Checkbox("Own fur colour", &P.bOwnFurColour);
+						if (P.bOwnFurColour)
+						{
+							ImGui::ColorEdit3("Fur", P.Fur);
+						}
+					}
 					ImGui::EndTabItem();
 				}
 				if (ImGui::BeginTabItem("Body"))
@@ -1212,6 +1310,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				}
 				if (ImGui::BeginTabItem("Hair and skin"))
 				{
+					ImGui::SliderFloat("Wet (rain, swimming)", &P.Wet, 0.0f, 1.0f, "%.2f");
 					ImGui::SeparatorText("Hair");
 					{
 						const int32 Current = P.HairStyle >= 0 ? P.HairStyle : (P.bFemale ? 1 : 5);
@@ -1301,13 +1400,37 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			{
 				ImGui::TextDisabled("No clips yet: run the MakeHumanArt commandlet with -Clips");
 			}
-			for (int32 c = 0; c < State->Clips.Num(); ++c)
+			// Grouped by category (folded), with a search box that shows every match unfolded.
+			ImGui::SetNextItemWidth(300.0f * Scale);
+			ImGui::InputTextWithHint("##filter", "search", State->ClipFilter, sizeof(State->ClipFilter));
+			const FString Filter = UTF8_TO_TCHAR(State->ClipFilter);
+			ImGui::BeginChild("##clips", ImVec2(320.0f * Scale, 520.0f * Scale), ImGuiChildFlags_Borders);
+			for (int32 c = 0; c < State->Clips.Num();)
 			{
-				if (ImGui::Selectable(TCHAR_TO_UTF8(*State->ClipNames[c]), State->Clip == c, 0, ImVec2(260.0f * Scale, 0.0f)))
+				const FString Category = State->ClipCategories[c];
+				int32 End = c;
+				while (End < State->Clips.Num() && State->ClipCategories[End] == Category)
 				{
-					State->Clip = c;
+					++End;
 				}
+				const bool bOpen = !Filter.IsEmpty() || ImGui::CollapsingHeader(TCHAR_TO_UTF8(*FString::Printf(TEXT("%s (%d)"), *Category, End - c)));
+				if (bOpen)
+				{
+					for (int32 i = c; i < End; ++i)
+					{
+						if (!Filter.IsEmpty() && !State->ClipNames[i].Contains(Filter) && !Category.Contains(Filter))
+						{
+							continue;
+						}
+						if (ImGui::Selectable(TCHAR_TO_UTF8(*State->ClipNames[i]), State->Clip == i))
+						{
+							State->Clip = i;
+						}
+					}
+				}
+				c = End;
 			}
+			ImGui::EndChild();
 			ImGui::SeparatorText("Play");
 			ImGui::Checkbox("Loop", &State->bLoop);
 			ImGui::SameLine();
