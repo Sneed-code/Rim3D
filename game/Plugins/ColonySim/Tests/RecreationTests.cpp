@@ -172,6 +172,35 @@ TEST_CASE("Recreation: in a Joy hour a colonist plays horseshoes beside the pin 
     CHECK(recJoy(sim, pawn).toleranceOf("Dexterity") > 0.04f);
 }
 
+TEST_CASE("Recreation: the protagonist has no recreation need and never goes to play") {
+    Sim sim = recSim();
+    sim.things().spawn("HorseshoesPin", CellPos{12, 12, 0});
+    const Entity pawn = sim.things().spawn("Human", CellPos{5, 5, 0});
+    Colonist colonist;
+    colonist.protagonist = true;
+    sim.things().registry().emplace<Colonist>(pawn, colonist);
+    sim.jobs().addWorker(pawn);
+    for (int h = 0; h < 24; ++h) {
+        sim.submit(SetScheduleCommand{pawn, h, ScheduleKind::Joy});
+    }
+    sim.step();
+    REC_REQUIRE(sim.things().registry().all_of<Joy>(pawn));
+    recJoy(sim, pawn).level = 0.1f;
+    for (int i = 0; i < 1200; ++i) {
+        sim.step();
+        CHECK(recJob(sim, pawn).type != JobType::Recreate);
+        if (recJob(sim, pawn).type == JobType::Recreate) {
+            break;
+        }
+    }
+    CHECK(recJoy(sim, pawn).level == doctest::Approx(1.0f));
+    Snapshot snapshot;
+    sim.writeSnapshot(snapshot);
+    REC_REQUIRE(snapshot.find(pawn) != nullptr);
+    CHECK(snapshot.find(pawn)->joy == -1.0f);
+    CHECK(snapshot.find(pawn)->comfort == -1.0f);
+}
+
 TEST_CASE("Recreation: the activity with the least tolerance wins, and the pin takes only so many players") {
     Sim sim = recSim();
     sim.things().spawn("HorseshoesPin", CellPos{12, 12, 0});

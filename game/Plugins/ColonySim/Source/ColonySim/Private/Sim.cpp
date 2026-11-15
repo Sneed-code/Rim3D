@@ -47,6 +47,7 @@
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Surgery.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Protagonist.h"
 #include "ColonySim/Quests.h"
 #include "ColonySim/Ship.h"
 #include "ColonySim/Research.h"
@@ -2433,12 +2434,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.food = needs->food;
             view.rest = needs->rest;
         }
-        if (const Joy* joy = reg.try_get<Joy>(entity)) {
+        const bool noMind = mindIsPlayersOwn(reg, entity);  // the protagonist: no mood, recreation or beauty need
+        if (const Joy* joy = noMind ? nullptr : reg.try_get<Joy>(entity)) {
             view.joy = joy->level;
             view.comfort = joy->comfort;
             view.outdoors = joy->outdoors;
         }
-        if (const Mood* mood = reg.try_get<Mood>(entity)) {
+        if (const Mood* mood = noMind ? nullptr : reg.try_get<Mood>(entity)) {
             view.mood = mood->level;
             view.moodBand = static_cast<int>(mood->band);
         }
@@ -2450,7 +2452,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 view.lovinPose = static_cast<int>(lovin->pose);
             }
         }
-        if (const BeautyNeed* beauty = roomStats_->beautyNeed(entity)) {
+        if (const BeautyNeed* beauty = noMind ? nullptr : roomStats_->beautyNeed(entity)) {
             view.beautyNeed = beauty->level;
         }
         if (const Worker* worker = reg.try_get<Worker>(entity)) {

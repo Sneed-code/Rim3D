@@ -4,6 +4,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Protagonist.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
 
@@ -212,6 +213,14 @@ void RecreationSystem::step() {
             continue;
         }
         Joy& joy = reg.get<Joy>(pawn);
+        if (mindIsPlayersOwn(reg, pawn)) {
+            // The protagonist has no recreation need (sneed, 2026-11-15): held full, so nothing sends them to play.
+            joy.level = 1.0f;
+            joy.comfort = 1.0f;
+            joy.outdoors = 1.0f;
+            joy.tolerance.clear();
+            continue;
+        }
         const Worker* worker = reg.try_get<Worker>(pawn);
         const bool asleep = worker != nullptr && jobIsLyingDown(worker->job);
         const bool playing = worker != nullptr && worker->job.type == JobType::Recreate && worker->job.step > 0;
