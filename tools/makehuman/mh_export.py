@@ -42,7 +42,7 @@ def log(*a):
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mh_common import (write_body_areas, make_wrinkle_map, round_hair_ends, add_genital_bone, add_horns, add_morphs, add_soft_bones, add_tail, add_tusks, dump_vertices,  # noqa: E402
+from mh_common import (add_jewellery, write_body_areas, make_wrinkle_map, round_hair_ends, add_genital_bone, add_horns, add_morphs, add_soft_bones, add_tail, add_tusks, dump_vertices,  # noqa: E402
                        fuller_labia, grow_pubic_hair, lower_pubic_hair, make_pigment_mask, make_skin_normal, prepare_for_unreal,
                        write_materials)
 
@@ -199,6 +199,8 @@ try:
     skin_meshes = [body]
     if cfg.get("horns"):
         add_horns(rig, body, log=log, **cfg["horns"])
+    if cfg.get("jewellery"):
+        add_jewellery(rig, body, female=cfg["jewellery"] == "female", log=log)
     if cfg.get("tusks"):
         add_tusks(rig, body, log=log, **cfg["tusks"])
     if cfg.get("tail"):

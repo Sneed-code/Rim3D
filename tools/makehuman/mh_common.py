@@ -638,7 +638,8 @@ def make_pigment_mask(rig, body, out_path, female=True, size=1024, log=print):
         b = rig.data.bones.get(bone)
         if b is None:
             continue
-        near = [i for i, p in enumerate(pts) if (p - b.head_local).length < 0.12 and abs(p.x - b.head_local.x) < 0.06]
+        ref = b.tail_local  # the breast bone starts at the sternum; its tail is in the breast
+        near = [i for i, p in enumerate(pts) if (p - ref).length < 0.08 and abs(p.x - ref.x) < 0.06]
         if not near:
             continue
         tip = pts[min(near, key=lambda i: pts[i].y)]
@@ -1148,3 +1149,205 @@ def write_body_areas(rig, body, out_path, log=print):
         _json.dump(areas, f, indent=1)
     log("body areas", len(areas), "to", out_path)
     return areas
+
+
+def _torus(name, centre, axis, major, minor, rings=24, segments=8):
+    """A ring (torus) round `axis` at `centre`: hoops, rings, bands."""
+    import math
+    from mathutils import Vector
+    axis = axis.normalized()
+    a = axis.cross(Vector((1, 0, 0)))
+    if a.length < 0.1:
+        a = axis.cross(Vector((0, 1, 0)))
+    a.normalize()
+    b = axis.cross(a).normalized()
+    verts, faces = [], []
+    for i in range(rings):
+        t = 2 * math.pi * i / rings
+        radial = a * math.cos(t) + b * math.sin(t)
+        c = centre + radial * major
+        for j in range(segments):
+            s = 2 * math.pi * j / segments
+            verts.append(c + radial * (minor * math.cos(s)) + axis * (minor * math.sin(s)))
+    for i in range(rings):
+        for j in range(segments):
+            p0 = i * segments + j
+            p1 = i * segments + (j + 1) % segments
+            q0 = ((i + 1) % rings) * segments + j
+            q1 = ((i + 1) % rings) * segments + (j + 1) % segments
+            faces.append((p0, q0, q1, p1))
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata([tuple(v) for v in verts], [], faces)
+    mesh.update()
+    for poly in mesh.polygons:
+        poly.use_smooth = True
+    mesh.uv_layers.new(name="UVMap")
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
+def _band(name, centre, axis, radius, height, thickness, rings=32):
+    """A flat band round `axis` (a collar, cuff or shackle): a short thick tube."""
+    import math
+    from mathutils import Vector
+    axis = axis.normalized()
+    a = axis.cross(Vector((1, 0, 0)))
+    if a.length < 0.1:
+        a = axis.cross(Vector((0, 1, 0)))
+    a.normalize()
+    b = axis.cross(a).normalized()
+    profile = [(radius, -height / 2), (radius + thickness, -height / 2), (radius + thickness, height / 2), (radius, height / 2)]
+    verts, faces = [], []
+    for i in range(rings):
+        t = 2 * math.pi * i / rings
+        radial = a * math.cos(t) + b * math.sin(t)
+        for r, h in profile:
+            verts.append(centre + radial * r + axis * h)
+    n = len(profile)
+    for i in range(rings):
+        for j in range(n):
+            p0 = i * n + j
+            p1 = i * n + (j + 1) % n
+            q0 = ((i + 1) % rings) * n + j
+            q1 = ((i + 1) % rings) * n + (j + 1) % n
+            faces.append((p0, q0, q1, p1))
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata([tuple(v) for v in verts], [], faces)
+    mesh.update()
+    mesh.uv_layers.new(name="UVMap")
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
+def _join(objs):
+    """Joins meshes into the first (a piece made of parts)."""
+    first = objs[0]
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in objs:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = first
+    with bpy.context.temp_override(active_object=first, selected_editable_objects=objs, selected_objects=objs):
+        bpy.ops.object.join()
+    return first
+
+
+def add_jewellery(rig, body, female, color=(0.8, 0.7, 0.45), log=print):
+    """Jewellery fitted to this body (the creator shows each piece or not): earrings, a nose ring, nipple, navel and
+    genital piercings, a finger ring, a necklace, a collar, wrist cuffs and ankle shackles, each found from the body's
+    shape and bones and weighted to the bone it rides on (so piercings move with the jiggle). Each piece is its own
+    mesh and material, Jewel_<name>."""
+    import numpy as np
+    from mathutils import Vector
+    to_rig = rig.matrix_world.inverted() @ body.matrix_world
+    pts = np.array([tuple(to_rig @ v.co) for v in body.data.vertices])
+    bones = rig.data.bones
+    made = []
+
+    def V(a):
+        return Vector(tuple(float(x) for x in a))
+
+    def piece(obj, bone):
+        mat = _material("Jewel_" + obj.name.replace("Jewel_", ""), color)
+        obj.data.materials.append(mat)
+        if bone not in bones:
+            bone = "head" if "head" in bones else bones[0].name
+        _skin_to(obj, rig, {i: {bone: 1.0} for i in range(len(obj.data.vertices))})
+        made.append(obj.name)
+
+    def limb_radius(point, axis, slab=0.012):
+        P, A = np.array(tuple(point)), np.array(tuple(axis.normalized()))
+        rel = pts - P
+        along = rel @ A
+        sel = np.abs(along) < slab
+        if not sel.any():
+            return 0.03
+        lateral = np.linalg.norm(rel[sel] - np.outer(along[sel], A), axis=1)
+        near = lateral[lateral < 0.12]
+        return float(np.percentile(near, 95)) if near.size else 0.03
+
+    head = bones.get("head")
+    hx = head.head_local.x if head else 0.0
+    hz = head.head_local.z if head else 1.5
+    # Earrings: hoops through the lowest point of each ear.
+    face = pts[(pts[:, 2] > hz - 0.02) & (pts[:, 2] < hz + 0.12)]
+    if head is not None and len(face):
+        width = np.max(np.abs(face[:, 0] - hx))
+        for side, sx in (("L", 1.0), ("R", -1.0)):
+            ear = face[(face[:, 0] - hx) * sx > width * 0.82]
+            if len(ear):
+                lobe = V(ear[np.argmin(ear[:, 2])])
+                piece(_torus("Jewel_Earring" + side, lobe + Vector((0, 0, -0.008)), Vector((sx, 0, 0)), 0.008, 0.0012), "head")
+        # Nose ring through the left nostril.
+        front = face[np.argmin(face[:, 1])]
+        tip = V(front)
+        nost = pts[np.argmin(np.linalg.norm(pts - np.array(tuple(tip + Vector((0.011, 0.006, -0.012)))), axis=1))]
+        piece(_torus("Jewel_NoseRing", V(nost) + Vector((0.002, -0.003, -0.004)), Vector((1, 0, 0)), 0.005, 0.0009), "head")
+    # Nipple barbells.
+    for side, sx in (("L", 1.0), ("R", -1.0)):
+        b = bones.get("breast_" + side.lower())
+        if b is None:
+            continue
+        P = np.array(tuple(b.tail_local))  # the breast bone starts at the sternum; its tail is in the breast
+        near = pts[(np.linalg.norm(pts - P, axis=1) < 0.08) & (np.abs(pts[:, 0] - P[0]) < 0.06)]
+        if len(near):
+            tip = V(near[np.argmin(near[:, 1])])
+            # A barbell through the nipple, side to side, a ball at each end showing either side of it.
+            centre = tip + Vector((0, 0.0035, 0.0))
+            parts = [_band("Jewel_Nipple" + side, centre, Vector((1, 0, 0)), 0.0, 0.02, 0.0012, rings=8)]
+            for end in (-0.0105, 0.0105):
+                parts.append(_torus("ball", centre + Vector((end, 0, 0)), Vector((1, 0, 0)), 0.0012, 0.0021, rings=10, segments=8))
+            obj = _join(parts)
+            piece(obj, "breast_" + side.lower())
+    # Navel ring: the deepest point of the belly's middle line between the hips and the ribs.
+    if "spine_01" in bones and "spine_02" in bones:
+        cx = bones["pelvis"].head_local.x
+        z0, z1 = bones["spine_01"].head_local.z, bones["spine_02"].head_local.z
+        mid = pts[(np.abs(pts[:, 0] - cx) < 0.006) & (pts[:, 2] > z0) & (pts[:, 2] < z1) & (pts[:, 1] < bones["spine_01"].head_local.y)]
+        if len(mid):
+            order = np.argsort(mid[:, 2])
+            front = mid[order]
+            navel = V(front[np.argmax(front[:, 1])])
+            piece(_torus("Jewel_Navel", navel + Vector((0, -0.003, -0.006)), Vector((1, 0, 0)), 0.006, 0.0011), "spine_01")
+    # Genital piercing: male, a ring at the tip of the genitals; female, a ring at the top of the vulva.
+    cx, crotch = _crotch(rig, [Vector(tuple(p)) for p in pts])
+    if crotch is not None:
+        if female:
+            top = pts[(np.abs(pts[:, 0] - cx) < 0.004) & (pts[:, 2] > crotch + 0.03) & (pts[:, 2] < crotch + 0.06)]
+            if len(top):
+                p = V(top[np.argmin(top[:, 1])])
+                piece(_torus("Jewel_Genital", p + Vector((0, -0.003, -0.004)), Vector((1, 0, 0)), 0.005, 0.0011), "pelvis")
+        else:
+            g = list(_male_genital_weights(rig, [Vector(tuple(p)) for p in pts]).keys())
+            if g:
+                gp = pts[g]
+                tip = V(gp[np.argmin(gp[:, 2] - 0.3 * gp[:, 1])])
+                piece(_torus("Jewel_Genital", tip + Vector((0, -0.004, -0.004)), Vector((1, 0, 0)), 0.006, 0.0012), "genital")
+    # A finger ring on the left ring finger.
+    if "ring_01_l" in bones:
+        b = bones["ring_01_l"]
+        c = b.head_local.lerp(b.tail_local, 0.5)
+        ax = b.tail_local - b.head_local
+        piece(_torus("Jewel_Ring", c, ax, limb_radius(c, ax, 0.006) + 0.0012, 0.0013), "ring_01_l")
+    # Necklace and collar round the neck.
+    if "neck_01" in bones:
+        b = bones["neck_01"]
+        ax = b.tail_local - b.head_local
+        # The necklace lies round the base of the neck, lower at the front (over the collarbones).
+        mid0 = b.head_local.lerp(b.tail_local, 0.5)
+        base = b.head_local + Vector((0, -0.012, -0.02))
+        tilt = (ax.normalized() + Vector((0, -0.45, 0))).normalized()
+        piece(_torus("Jewel_Necklace", base, tilt, limb_radius(mid0, ax) + 0.022, 0.0018, rings=48), "neck_01")
+        mid = b.head_local.lerp(b.tail_local, 0.5)
+        piece(_band("Jewel_Collar", mid, ax, limb_radius(mid, ax) + 0.002, 0.03, 0.006), "neck_01")
+    # Cuffs on the wrists and shackles on the ankles.
+    for side in ("l", "r"):
+        for bone, at, name, h in (("lowerarm_" + side, 0.92, "Cuff", 0.035), ("calf_" + side, 0.9, "Shackle", 0.04)):
+            if bone in bones:
+                b = bones[bone]
+                c = b.head_local.lerp(b.tail_local, at)
+                ax = b.tail_local - b.head_local
+                piece(_band("Jewel_" + name + side.upper(), c, ax, limb_radius(c, ax) + 0.004, h, 0.006), bone)
+    log("jewellery", len(made), made)
+    return made

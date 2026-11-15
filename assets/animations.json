@@ -126,6 +126,125 @@
       "fbx": "game/Saved/Mocap/Harvest/Harvest.fbx",
       "loop": true,
       "comment": "Mocap clip 20 from the mocap thread: gathering crops by hand (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "KatanaCuts",
+      "source": "mocap/23_katana_cuts_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/KatanaCuts/KatanaCuts.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 23 from the mocap thread (no props)."
+    },
+    {
+      "name": "SwordSwings",
+      "source": "mocap/24_sword_swings_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/SwordSwings/SwordSwings.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 24 from the mocap thread (no props)."
+    },
+    {
+      "name": "KendoStrikes",
+      "source": "mocap/25_kendo_strikes_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/KendoStrikes/KendoStrikes.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 25 from the mocap thread (no props)."
+    },
+    {
+      "name": "FencingAttacks",
+      "source": "mocap/26_fencing_attacks_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/FencingAttacks/FencingAttacks.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 26 from the mocap thread (no props)."
+    },
+    {
+      "name": "StaffCombo",
+      "source": "mocap/27_staff_combo_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/StaffCombo/StaffCombo.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 27 from the mocap thread (no props)."
+    },
+    {
+      "name": "StaffForm",
+      "source": "mocap/28_staff_form_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/StaffForm/StaffForm.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 28 from the mocap thread (no props)."
+    },
+    {
+      "name": "HeavySwing",
+      "source": "mocap/29_heavy_swing_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/HeavySwing/HeavySwing.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 29 from the mocap thread (no props)."
+    },
+    {
+      "name": "DualSticks",
+      "source": "mocap/30_dual_sticks_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/DualSticks/DualSticks.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 30 from the mocap thread (no props)."
+    },
+    {
+      "name": "KickboxPads",
+      "source": "mocap/31_kickbox_pads_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/KickboxPads/KickboxPads.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 31 from the mocap thread (no props)."
+    },
+    {
+      "name": "MuaythaiKick",
+      "source": "mocap/32_muaythai_kick_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/MuaythaiKick/MuaythaiKick.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 32 from the mocap thread (no props)."
+    },
+    {
+      "name": "KickBag",
+      "source": "mocap/33_kick_bag_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/KickBag/KickBag.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 33 from the mocap thread (no props)."
+    },
+    {
+      "name": "KneeBag",
+      "source": "mocap/34_knee_bag_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/KneeBag/KneeBag.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 34 from the mocap thread (no props)."
+    },
+    {
+      "name": "BoxVsSword",
+      "source": "mocap/35_box_vs_sword_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/BoxVsSword/BoxVsSword.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 35 from the mocap thread (no props)."
+    },
+    {
+      "name": "MartialForm",
+      "source": "mocap/36_martial_form_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/MartialForm/MartialForm.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 36 from the mocap thread (no props)."
+    },
+    {
+      "name": "PistolAim",
+      "source": "mocap/37_pistol_aim_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/PistolAim/PistolAim.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 37 from the mocap thread (no props)."
+    },
+    {
+      "name": "TakeCover",
+      "source": "mocap/38_take_cover_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/TakeCover/TakeCover.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 38 from the mocap thread (no props)."
+    },
+    {
+      "name": "SpearGuard",
+      "source": "mocap/39_spear_guard_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/SpearGuard/SpearGuard.fbx",
+      "loop": true,
+      "comment": "Combat mocap clip 39 from the mocap thread (no props)."
     }
   ]
 }

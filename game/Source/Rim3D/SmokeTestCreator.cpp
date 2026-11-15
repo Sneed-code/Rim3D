@@ -41,6 +41,23 @@ namespace
 {
 	enum class ECreatorKind : int32 { Baseline, Imp, Orcoid };
 
+	// Jewellery (mh_common.add_jewellery): each piece a mesh on the bases with a material slot Jewel_<key>.
+	struct FCreatorJewel
+	{
+		const char* Label;
+		const TCHAR* Keys[2];
+	};
+	const FCreatorJewel CreatorJewels[] = {
+		{"Earrings", {TEXT("Jewel_EarringL"), TEXT("Jewel_EarringR")}}, {"Nose ring", {TEXT("Jewel_NoseRing"), nullptr}},
+		{"Nipple piercings", {TEXT("Jewel_NippleL"), TEXT("Jewel_NippleR")}}, {"Navel ring", {TEXT("Jewel_Navel"), nullptr}},
+		{"Genital piercing", {TEXT("Jewel_Genital"), nullptr}}, {"Finger ring", {TEXT("Jewel_Ring"), nullptr}},
+		{"Necklace", {TEXT("Jewel_Necklace"), nullptr}}, {"Collar", {TEXT("Jewel_Collar"), nullptr}},
+		{"Wrist cuffs", {TEXT("Jewel_CuffL"), TEXT("Jewel_CuffR")}}, {"Ankle shackles", {TEXT("Jewel_ShackleL"), TEXT("Jewel_ShackleR")}}};
+	constexpr int32 CreatorJewelCount = UE_ARRAY_COUNT(CreatorJewels);
+	const char* const CreatorMetalNames[] = {"Gold", "Silver", "Steel", "Iron", "Copper", "Black"};
+	const FLinearColor CreatorMetalColours[] = {FLinearColor(1.0f, 0.77f, 0.34f), FLinearColor(0.95f, 0.93f, 0.88f), FLinearColor(0.56f, 0.57f, 0.58f),
+		FLinearColor(0.33f, 0.32f, 0.31f), FLinearColor(0.95f, 0.64f, 0.54f), FLinearColor(0.04f, 0.04f, 0.04f)};
+
 	// Markings (tools/makehuman/markings.py): the atlas's 16 designs, the kind of mark each makes (0 tattoo ink, 1 scar,
 	// 2 brand, 3 paint), and where they go (areas.json beside each base, from mh_export.py).
 	const char* const CreatorMarkNames[16] = {"Tribal band", "Tribal flame", "Mandala", "Star", "Script", "Spiral", "Runes", "Dot ring",
@@ -168,6 +185,8 @@ namespace
 		float PubicLength = 1.0f;  // 1 natural .. 0.35 trimmed (PubicShort)
 		float PubicCurl = 1.0f;    // 1 curly .. 0 straighter (PubicStraight)
 		bool bJiggle = true;
+		bool Jewels[CreatorJewelCount] = {};  // none by default (never generated)
+		int32 Metal[CreatorJewelCount] = {};
 		FCreatorMark Marks[4];     // tattoos, scars, brands, paint: only what the player picks (never generated)
 		int32 HairStyle = -1;      // CreatorHairStyles; -1: the base's first (long for the woman, short for the man)
 		int32 Expression = 0;      // CreatorExpressions
@@ -433,6 +452,42 @@ namespace
 				Dynamic->SetVectorParameterValue(TEXT("Tint"), bPubic ? PubicColour : (bBrow ? HairColour * 0.8f : HairColour));
 			}
 		}
+		// Only the chosen jewellery shows, in its metal.
+		for (int32 i = 0; i < Slots.Num(); ++i)
+		{
+			const FString Slot = Slots[i].ToString();
+			if (!Slot.Contains(TEXT("Jewel_")))
+			{
+				continue;
+			}
+			bool bShow = false;
+			int32 MetalIndex = 0;
+			for (int32 j = 0; j < CreatorJewelCount; ++j)
+			{
+				for (const TCHAR* Key : CreatorJewels[j].Keys)
+				{
+					if (Key && Slot.EndsWith(Key))
+					{
+						bShow = P.Jewels[j];
+						MetalIndex = P.Metal[j];
+					}
+				}
+			}
+			Mesh->ShowMaterialSection(i, 0, bShow, 0);
+			if (bShow)
+			{
+				UMaterialInstanceDynamic* Dynamic = Cast<UMaterialInstanceDynamic>(Mesh->GetMaterial(i));
+				if (!Dynamic)
+				{
+					Dynamic = Mesh->CreateDynamicMaterialInstance(i);
+				}
+				if (Dynamic)
+				{
+					Dynamic->SetVectorParameterValue(TEXT("Tint"), CreatorMetalColours[FMath::Clamp(MetalIndex, 0, 5)]);
+					Dynamic->SetScalarParameterValue(TEXT("Roughness"), MetalIndex == 3 ? 0.55f : (MetalIndex == 5 ? 0.35f : 0.22f));
+				}
+			}
+		}
 		// Only the chosen hair style shows.
 		const int32 Style = P.HairStyle >= 0 ? P.HairStyle : (P.bFemale ? 1 : 5);
 		for (int32 i = 0; i < Slots.Num(); ++i)
@@ -637,6 +692,27 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		}
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorFocusZ="), State->FocusOffset.Z);
 		State->b4KSkin = FParse::Param(FCommandLine::Get(), TEXT("Creator4K"));
+		// -CreatorJewels=0,3,7 (indices into CreatorJewels) for pictures; -CreatorMetal=<0-5>.
+		FString JewelArg;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorJewels="), JewelArg, false))
+		{
+			int32 MetalArg = 0;
+			FParse::Value(FCommandLine::Get(), TEXT("CreatorMetal="), MetalArg);
+			TArray<FString> Items;
+			JewelArg.ParseIntoArray(Items, TEXT(","));
+			for (FCreatorPerson& Person : State->People)
+			{
+				for (const FString& Item : Items)
+				{
+					const int32 j = FCString::Atoi(*Item);
+					if (j >= 0 && j < CreatorJewelCount)
+					{
+						Person.Jewels[j] = true;
+						Person.Metal[j] = MetalArg;
+					}
+				}
+			}
+		}
 		FString MarkArg;
 		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorMark="), MarkArg, false))
 		{
@@ -1113,6 +1189,22 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 							{
 								ImGui::ColorEdit3(CreatorMarkKind(Mark.Design) == 0 ? "Ink" : "Paint", Mark.Colour);
 							}
+						}
+						ImGui::PopID();
+					}
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("Jewellery"))
+				{
+					for (int32 j = 0; j < CreatorJewelCount; ++j)
+					{
+						ImGui::PushID(j);
+						ImGui::Checkbox(CreatorJewels[j].Label, &P.Jewels[j]);
+						if (P.Jewels[j])
+						{
+							ImGui::SameLine(260.0f * Scale);
+							ImGui::SetNextItemWidth(140.0f * Scale);
+							ImGui::Combo("##metal", &P.Metal[j], CreatorMetalNames, UE_ARRAY_COUNT(CreatorMetalNames));
 						}
 						ImGui::PopID();
 					}

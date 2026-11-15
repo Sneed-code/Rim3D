@@ -35,6 +35,9 @@
         "material_overrides": {
           "high-poly": {
             "color": "{mpfb}/eyes/materials/green_eye.png"
+          },
+          "Jewel_": {
+            "metal": true
           }
         },
         "tints": {
@@ -157,7 +160,8 @@
           "{mpfb}/hair/short02/short02.mhclo",
           "{mpfb}/hair/afro01/afro01.mhclo"
         ],
-        "body_areas": true
+        "body_areas": true,
+        "jewellery": "female"
       },
       "morphs": {
         "Masculine": {
@@ -655,7 +659,13 @@
           "{mpfb}/hair/ponytail01/ponytail01.mhclo",
           "{mpfb}/hair/afro01/afro01.mhclo"
         ],
-        "body_areas": true
+        "body_areas": true,
+        "jewellery": "male",
+        "material_overrides": {
+          "Jewel_": {
+            "metal": true
+          }
+        }
       },
       "morphs": {
         "Feminine": {

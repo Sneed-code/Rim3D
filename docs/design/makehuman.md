@@ -198,6 +198,20 @@ angry or surprised, smile lines when smiling). Hair, brow and lash cards use a d
 cut-off (0.2), so they are softer and fuller. The creator lights faces with the 7:30 morning
 sun (`-CreatorHour=`). `MH_CREATOR_REUSE=1` rebuilds only the bases, keeping the variant builds.
 
+## Hair styles, markings, jewellery
+
+**Scalp hair**: each base carries several MPFB hairs (`creator.json` `"hairs"`) as their own meshes; the creator shows
+one with `ShowMaterialSection` (woman: long, bob, ponytail, braid, short, afro; man: short, crop, messy, long, ponytail,
+afro; or bald). **Markings**: `tools/makehuman/markings.py` draws 16 original designs into an atlas (8 tattoos, 4 scars,
+a brand, 3 body paints); `write_body_areas` writes `areas.json` per base (a point on the skin per body area, found from
+the bones, with which way is up and the texture per metre both ways, measured away from seams); `M_MH_SkinDetail` stamps
+up to four (`MarkNA/B/C`: place, design, kind, colour; scars paler and raised, brands dark and raised, paint opaque).
+Pawns never get markings on their own: only the creator's Markings tab sets them. **Jewellery**: `add_jewellery`
+generates earrings, a nose ring, nipple barbells, a navel ring, a genital ring, a finger ring, a necklace, a collar,
+wrist cuffs and ankle shackles fitted to the body and weighted to the bone each rides on (piercings follow the jiggle);
+`M_MH_Metal`; the creator's Jewellery tab shows each and picks its metal. Note: MPFB's breast bones start at the
+sternum, their tail is in the breast (the pigment mask now uses the tail too).
+
 ## Animation clips
 
 Clips are listed in `assets/animations.json` (name, FBX, loop). Markerless mocap (FlowHMR) stands metres from the origin

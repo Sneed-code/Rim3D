@@ -677,6 +677,40 @@ namespace
 		return Material;
 	}
 
+	// Jewellery (mh_common.add_jewellery): polished metal in one colour (Tint: gold, silver, steel...).
+	UMaterial* MhMetalMaterial(IAssetTools& Tools)
+	{
+		const FString Name = TEXT("M_MH_Metal");
+		const FString Path = MakeHumanAssetPath(MakeHumanFolder, Name);
+		if (UMaterial* Existing = FindObject<UMaterial>(nullptr, *Path))
+		{
+			return Existing;
+		}
+		UMaterial* Material = Cast<UMaterial>(Tools.CreateAsset(Name, MakeHumanFolder, UMaterial::StaticClass(), NewObject<UMaterialFactoryNew>()));
+		if (!Material)
+		{
+			return nullptr;
+		}
+		bool bRecompile = false;
+		UMaterialEditingLibrary::SetMaterialUsage(Material, MATUSAGE_SkeletalMesh, bRecompile);
+		UMaterialEditingLibrary::SetMaterialUsage(Material, MATUSAGE_MorphTargets, bRecompile);
+		auto* Tint = Cast<UMaterialExpressionVectorParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVectorParameter::StaticClass(), -500, -200));
+		Tint->ParameterName = TEXT("Tint");
+		Tint->DefaultValue = FLinearColor(0.8f, 0.62f, 0.3f);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Tint, TEXT("RGB"), MP_BaseColor);
+		auto* Metal = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -500, 0));
+		Metal->ParameterName = TEXT("Metallic");
+		Metal->DefaultValue = 1.0f;
+		UMaterialEditingLibrary::ConnectMaterialProperty(Metal, TEXT(""), MP_Metallic);
+		auto* Rough = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -500, 150));
+		Rough->ParameterName = TEXT("Roughness");
+		Rough->DefaultValue = 0.25f;
+		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
+		Material->PostEditChange();
+		MhSave(Material);
+		return Material;
+	}
+
 	UMaterial* MhBaseMaterial(IAssetTools& Tools, const FString& Name, bool bMasked, bool bSkin, bool bAlphaFromColor = false)
 	{
 		const FString Path = MakeHumanAssetPath(MakeHumanFolder, Name);
@@ -1262,7 +1296,9 @@ namespace
 				bool bPubic = false;
 				(*Entry)->TryGetBoolField(TEXT("pubic"), bPubic);
 				const bool bEye = Key.Contains(TEXT("high_poly")) || Key.Contains(TEXT("low_poly"));
-				UMaterial* Base = bPubic ? MhPubicMaterial(Tools) : bEye ? MhEyeMaterial(Tools) : MhBaseMaterial(Tools, !bMasked ? (bSkin ? TEXT("M_MH_Skin") : TEXT("M_MH_Lit")) : (Opacity.IsEmpty() ? TEXT("M_MH_MaskedA") : TEXT("M_MH_Masked")),
+				bool bMetal = false;
+				(*Entry)->TryGetBoolField(TEXT("metal"), bMetal);
+				UMaterial* Base = bPubic ? MhPubicMaterial(Tools) : bMetal ? MhMetalMaterial(Tools) : bEye ? MhEyeMaterial(Tools) : MhBaseMaterial(Tools, !bMasked ? (bSkin ? TEXT("M_MH_Skin") : TEXT("M_MH_Lit")) : (Opacity.IsEmpty() ? TEXT("M_MH_MaskedA") : TEXT("M_MH_Masked")),
 					bMasked, bSkin, Opacity.IsEmpty() && bAlpha);
 				auto* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
 				Factory->InitialParent = Base;
