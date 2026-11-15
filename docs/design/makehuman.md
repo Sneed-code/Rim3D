@@ -169,6 +169,15 @@ mannequin's.
 `assets/makehuman.local.json`, which is not in Git, and import into `/Game/ThirdParty/Local`, which is not in Git
 either. They are never committed or shipped.
 
+## Facial expressions
+
+No face bones: MakeHuman's 34 expression units (MPFB `targets/expression/units/caucasian`: eyelids, brows, mouth
+corners, jaw open, nose, neck) are morphs `Face_<Unit>` on the creator bases (`creator.json` variants; a "folder/name"
+target picks one file), so the skeleton and every animation stay as they are and the eyes, teeth, brows and lashes
+follow. The creator's Face tab has expressions made of them (smile, grin, frown, sad, angry, surprised, afraid,
+disgusted, in pain, pout, asleep) with a strength, the 34 units for fine tuning, an automatic blink and talking.
+`-CreatorFace=<name>` for pictures.
+
 ## Animation clips
 
 Clips are listed in `assets/animations.json` (name, FBX, loop). Markerless mocap (FlowHMR) stands metres from the origin

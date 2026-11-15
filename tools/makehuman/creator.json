@@ -256,6 +256,176 @@
             "curl": 0.0,
             "trim": 0.07
           }
+        },
+        "Face_EyeLeftClosure": {
+          "targets": {
+            "expression/units/caucasian/eye-left-closure": 1.0
+          }
+        },
+        "Face_EyeLeftOpenedUp": {
+          "targets": {
+            "expression/units/caucasian/eye-left-opened-up": 1.0
+          }
+        },
+        "Face_EyeLeftSlit": {
+          "targets": {
+            "expression/units/caucasian/eye-left-slit": 1.0
+          }
+        },
+        "Face_EyeRightClosure": {
+          "targets": {
+            "expression/units/caucasian/eye-right-closure": 1.0
+          }
+        },
+        "Face_EyeRightOpenedUp": {
+          "targets": {
+            "expression/units/caucasian/eye-right-opened-up": 1.0
+          }
+        },
+        "Face_EyeRightSlit": {
+          "targets": {
+            "expression/units/caucasian/eye-right-slit": 1.0
+          }
+        },
+        "Face_EyebrowsLeftDown": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-down": 1.0
+          }
+        },
+        "Face_EyebrowsLeftExternUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-extern-up": 1.0
+          }
+        },
+        "Face_EyebrowsLeftInnerUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-inner-up": 1.0
+          }
+        },
+        "Face_EyebrowsLeftUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-up": 1.0
+          }
+        },
+        "Face_EyebrowsRightDown": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-down": 1.0
+          }
+        },
+        "Face_EyebrowsRightExternUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-extern-up": 1.0
+          }
+        },
+        "Face_EyebrowsRightInnerUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-inner-up": 1.0
+          }
+        },
+        "Face_EyebrowsRightUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-up": 1.0
+          }
+        },
+        "Face_MouthCompression": {
+          "targets": {
+            "expression/units/caucasian/mouth-compression": 1.0
+          }
+        },
+        "Face_MouthCornerPuller": {
+          "targets": {
+            "expression/units/caucasian/mouth-corner-puller": 1.0
+          }
+        },
+        "Face_MouthDepression": {
+          "targets": {
+            "expression/units/caucasian/mouth-depression": 1.0
+          }
+        },
+        "Face_MouthDepressionRetraction": {
+          "targets": {
+            "expression/units/caucasian/mouth-depression-retraction": 1.0
+          }
+        },
+        "Face_MouthElevation": {
+          "targets": {
+            "expression/units/caucasian/mouth-elevation": 1.0
+          }
+        },
+        "Face_MouthEversion": {
+          "targets": {
+            "expression/units/caucasian/mouth-eversion": 1.0
+          }
+        },
+        "Face_MouthOpen": {
+          "targets": {
+            "expression/units/caucasian/mouth-open": 1.0
+          }
+        },
+        "Face_MouthParling": {
+          "targets": {
+            "expression/units/caucasian/mouth-parling": 1.0
+          }
+        },
+        "Face_MouthPartLater": {
+          "targets": {
+            "expression/units/caucasian/mouth-part-later": 1.0
+          }
+        },
+        "Face_MouthProtusion": {
+          "targets": {
+            "expression/units/caucasian/mouth-protusion": 1.0
+          }
+        },
+        "Face_MouthPursing": {
+          "targets": {
+            "expression/units/caucasian/mouth-pursing": 1.0
+          }
+        },
+        "Face_MouthRetraction": {
+          "targets": {
+            "expression/units/caucasian/mouth-retraction": 1.0
+          }
+        },
+        "Face_MouthUpwardRetraction": {
+          "targets": {
+            "expression/units/caucasian/mouth-upward-retraction": 1.0
+          }
+        },
+        "Face_NeckPlatysma": {
+          "targets": {
+            "expression/units/caucasian/neck-platysma": 1.0
+          }
+        },
+        "Face_NoseCompression": {
+          "targets": {
+            "expression/units/caucasian/nose-compression": 1.0
+          }
+        },
+        "Face_NoseDepression": {
+          "targets": {
+            "expression/units/caucasian/nose-depression": 1.0
+          }
+        },
+        "Face_NoseLeftDilatation": {
+          "targets": {
+            "expression/units/caucasian/nose-left-dilatation": 1.0
+          }
+        },
+        "Face_NoseLeftElevation": {
+          "targets": {
+            "expression/units/caucasian/nose-left-elevation": 1.0
+          }
+        },
+        "Face_NoseRightDilatation": {
+          "targets": {
+            "expression/units/caucasian/nose-right-dilatation": 1.0
+          }
+        },
+        "Face_NoseRightElevation": {
+          "targets": {
+            "expression/units/caucasian/nose-right-elevation": 1.0
+          }
         }
       }
     },
@@ -506,6 +676,176 @@
             "count": 3000,
             "curl": 0.0,
             "trim": 0.07
+          }
+        },
+        "Face_EyeLeftClosure": {
+          "targets": {
+            "expression/units/caucasian/eye-left-closure": 1.0
+          }
+        },
+        "Face_EyeLeftOpenedUp": {
+          "targets": {
+            "expression/units/caucasian/eye-left-opened-up": 1.0
+          }
+        },
+        "Face_EyeLeftSlit": {
+          "targets": {
+            "expression/units/caucasian/eye-left-slit": 1.0
+          }
+        },
+        "Face_EyeRightClosure": {
+          "targets": {
+            "expression/units/caucasian/eye-right-closure": 1.0
+          }
+        },
+        "Face_EyeRightOpenedUp": {
+          "targets": {
+            "expression/units/caucasian/eye-right-opened-up": 1.0
+          }
+        },
+        "Face_EyeRightSlit": {
+          "targets": {
+            "expression/units/caucasian/eye-right-slit": 1.0
+          }
+        },
+        "Face_EyebrowsLeftDown": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-down": 1.0
+          }
+        },
+        "Face_EyebrowsLeftExternUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-extern-up": 1.0
+          }
+        },
+        "Face_EyebrowsLeftInnerUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-inner-up": 1.0
+          }
+        },
+        "Face_EyebrowsLeftUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-up": 1.0
+          }
+        },
+        "Face_EyebrowsRightDown": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-down": 1.0
+          }
+        },
+        "Face_EyebrowsRightExternUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-extern-up": 1.0
+          }
+        },
+        "Face_EyebrowsRightInnerUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-inner-up": 1.0
+          }
+        },
+        "Face_EyebrowsRightUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-up": 1.0
+          }
+        },
+        "Face_MouthCompression": {
+          "targets": {
+            "expression/units/caucasian/mouth-compression": 1.0
+          }
+        },
+        "Face_MouthCornerPuller": {
+          "targets": {
+            "expression/units/caucasian/mouth-corner-puller": 1.0
+          }
+        },
+        "Face_MouthDepression": {
+          "targets": {
+            "expression/units/caucasian/mouth-depression": 1.0
+          }
+        },
+        "Face_MouthDepressionRetraction": {
+          "targets": {
+            "expression/units/caucasian/mouth-depression-retraction": 1.0
+          }
+        },
+        "Face_MouthElevation": {
+          "targets": {
+            "expression/units/caucasian/mouth-elevation": 1.0
+          }
+        },
+        "Face_MouthEversion": {
+          "targets": {
+            "expression/units/caucasian/mouth-eversion": 1.0
+          }
+        },
+        "Face_MouthOpen": {
+          "targets": {
+            "expression/units/caucasian/mouth-open": 1.0
+          }
+        },
+        "Face_MouthParling": {
+          "targets": {
+            "expression/units/caucasian/mouth-parling": 1.0
+          }
+        },
+        "Face_MouthPartLater": {
+          "targets": {
+            "expression/units/caucasian/mouth-part-later": 1.0
+          }
+        },
+        "Face_MouthProtusion": {
+          "targets": {
+            "expression/units/caucasian/mouth-protusion": 1.0
+          }
+        },
+        "Face_MouthPursing": {
+          "targets": {
+            "expression/units/caucasian/mouth-pursing": 1.0
+          }
+        },
+        "Face_MouthRetraction": {
+          "targets": {
+            "expression/units/caucasian/mouth-retraction": 1.0
+          }
+        },
+        "Face_MouthUpwardRetraction": {
+          "targets": {
+            "expression/units/caucasian/mouth-upward-retraction": 1.0
+          }
+        },
+        "Face_NeckPlatysma": {
+          "targets": {
+            "expression/units/caucasian/neck-platysma": 1.0
+          }
+        },
+        "Face_NoseCompression": {
+          "targets": {
+            "expression/units/caucasian/nose-compression": 1.0
+          }
+        },
+        "Face_NoseDepression": {
+          "targets": {
+            "expression/units/caucasian/nose-depression": 1.0
+          }
+        },
+        "Face_NoseLeftDilatation": {
+          "targets": {
+            "expression/units/caucasian/nose-left-dilatation": 1.0
+          }
+        },
+        "Face_NoseLeftElevation": {
+          "targets": {
+            "expression/units/caucasian/nose-left-elevation": 1.0
+          }
+        },
+        "Face_NoseRightDilatation": {
+          "targets": {
+            "expression/units/caucasian/nose-right-dilatation": 1.0
+          }
+        },
+        "Face_NoseRightElevation": {
+          "targets": {
+            "expression/units/caucasian/nose-right-elevation": 1.0
           }
         }
       }

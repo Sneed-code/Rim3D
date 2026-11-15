@@ -35,6 +35,32 @@
 namespace
 {
 	enum class ECreatorKind : int32 { Baseline, Imp, Orcoid };
+
+	// The face: MakeHuman's 34 expression units, each a morph Face_<unit> on the creator bases (mh_creator.py), and
+	// expressions made of them (unit index, weight).
+	constexpr int32 CreatorUnitCount = 34;
+	const TCHAR* const CreatorUnits[CreatorUnitCount] = {TEXT("EyeLeftClosure"), TEXT("EyeLeftOpenedUp"), TEXT("EyeLeftSlit"), TEXT("EyeRightClosure"), TEXT("EyeRightOpenedUp"), TEXT("EyeRightSlit"), TEXT("EyebrowsLeftDown"), TEXT("EyebrowsLeftExternUp"), TEXT("EyebrowsLeftInnerUp"), TEXT("EyebrowsLeftUp"), TEXT("EyebrowsRightDown"), TEXT("EyebrowsRightExternUp"), TEXT("EyebrowsRightInnerUp"), TEXT("EyebrowsRightUp"), TEXT("MouthCompression"), TEXT("MouthCornerPuller"), TEXT("MouthDepression"), TEXT("MouthDepressionRetraction"), TEXT("MouthElevation"), TEXT("MouthEversion"), TEXT("MouthOpen"), TEXT("MouthParling"), TEXT("MouthPartLater"), TEXT("MouthProtusion"), TEXT("MouthPursing"), TEXT("MouthRetraction"), TEXT("MouthUpwardRetraction"), TEXT("NeckPlatysma"), TEXT("NoseCompression"), TEXT("NoseDepression"), TEXT("NoseLeftDilatation"), TEXT("NoseLeftElevation"), TEXT("NoseRightDilatation"), TEXT("NoseRightElevation")};
+	struct FCreatorExpression
+	{
+		const char* Name;
+		TArray<TPair<int32, float>> Units;
+	};
+	const FCreatorExpression CreatorExpressions[] = {
+		{"Neutral", {}},
+		{"Smile", {{15, 0.80f}, {18, 0.20f}, {2, 0.25f}, {5, 0.25f}, {31, 0.10f}, {33, 0.10f}}},
+		{"Grin", {{15, 1.00f}, {20, 0.25f}, {25, 0.40f}, {2, 0.40f}, {5, 0.40f}}},
+		{"Frown", {{16, 0.60f}, {6, 0.70f}, {10, 0.70f}, {28, 0.30f}}},
+		{"Sad", {{16, 0.50f}, {8, 0.90f}, {12, 0.90f}, {2, 0.20f}, {5, 0.20f}}},
+		{"Angry", {{6, 1.00f}, {10, 1.00f}, {31, 0.50f}, {33, 0.50f}, {14, 0.50f}, {25, 0.30f}, {2, 0.30f}, {5, 0.30f}, {27, 0.20f}}},
+		{"Surprised", {{9, 1.00f}, {13, 1.00f}, {1, 0.80f}, {4, 0.80f}, {20, 0.60f}}},
+		{"Afraid", {{8, 0.80f}, {12, 0.80f}, {9, 0.40f}, {13, 0.40f}, {1, 0.80f}, {4, 0.80f}, {25, 0.50f}, {20, 0.25f}, {27, 0.60f}}},
+		{"Disgusted", {{31, 0.90f}, {33, 0.90f}, {26, 0.60f}, {6, 0.40f}, {10, 0.40f}, {2, 0.30f}, {5, 0.30f}}},
+		{"In pain", {{0, 0.60f}, {3, 0.60f}, {8, 0.60f}, {12, 0.60f}, {6, 0.40f}, {10, 0.40f}, {25, 0.70f}, {20, 0.20f}, {27, 0.50f}, {31, 0.40f}, {33, 0.40f}}},
+		{"Pout", {{24, 0.80f}, {23, 0.60f}}},
+		{"Asleep", {{0, 1.00f}, {3, 1.00f}, {20, 0.05f}}},
+	};
+	enum { CreatorUnitEyeLeftClosure = 0, CreatorUnitEyeRightClosure = 3,
+		CreatorUnitMouthOpen = 20, CreatorUnitMouthPursing = 24 };
 	const char* const CreatorKindNames[] = {"Baseline", "Imp", "Orcoid"};
 	const char* const CreatorPubicNames[] = {"None", "Natural", "Trimmed", "Strip"};
 
@@ -67,6 +93,13 @@ namespace
 		float PubicLength = 1.0f;  // 1 natural .. 0.35 trimmed (PubicShort)
 		float PubicCurl = 1.0f;    // 1 curly .. 0 straighter (PubicStraight)
 		bool bJiggle = true;
+		int32 Expression = 0;      // CreatorExpressions
+		float ExpressionStrength = 1.0f;
+		float Units[CreatorUnitCount] = {};  // fine tuning on top of the expression
+		bool bBlink = true;
+		bool bTalk = false;
+		float FaceTime = 0.0f;
+		float NextBlink = 2.0f;
 		float PubicLow = 0.0f;
 		float Skin[3] = {0.91f, 0.80f, 0.75f};
 		float Hair[3] = {0.10f, 0.08f, 0.07f};
@@ -197,6 +230,30 @@ namespace
 		Set(TEXT("GenitalLarge"), P.Genital);
 		Set(TEXT("GenitalSmall"), -P.Genital);
 		Mesh->SetCustomPrimitiveDataFloat(3, P.Pigment);
+		// The face: the expression, the fine tuning, a blink now and then, talking.
+		float Face[CreatorUnitCount];
+		for (int32 u = 0; u < CreatorUnitCount; ++u)
+		{
+			Face[u] = P.Units[u];
+		}
+		for (const TPair<int32, float>& Unit : CreatorExpressions[FMath::Clamp(P.Expression, 0, static_cast<int32>(UE_ARRAY_COUNT(CreatorExpressions)) - 1)].Units)
+		{
+			Face[Unit.Key] += Unit.Value * P.ExpressionStrength;
+		}
+		if (P.bBlink && P.NextBlink - P.FaceTime < 0.14f && P.NextBlink > P.FaceTime)
+		{
+			Face[CreatorUnitEyeLeftClosure] = Face[CreatorUnitEyeRightClosure] = 1.0f;
+		}
+		if (P.bTalk)
+		{
+			const float T = P.FaceTime;
+			Face[CreatorUnitMouthOpen] += FMath::Max(0.0f, 0.22f * FMath::Sin(T * 13.0f) + 0.12f * FMath::Sin(T * 7.3f + 1.0f) + 0.05f);
+			Face[CreatorUnitMouthPursing] += FMath::Max(0.0f, 0.25f * FMath::Sin(T * 5.1f + 2.0f));
+		}
+		for (int32 u = 0; u < CreatorUnitCount; ++u)
+		{
+			Set(*(FString(TEXT("Face_")) + CreatorUnits[u]), Face[u]);
+		}
 		Mesh->SetRelativeScale3D(FVector(P.Height));
 		// Hair colours: head hair and brows the picked colour (brows a touch darker), pubic hair a little darker than the head
 		// hair unless it has its own. The hair materials' Tint multiplies their texture.
@@ -409,6 +466,21 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			State->CameraYaw += Yaw;
 		}
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorFocusZ="), State->FocusOffset.Z);
+		FString Face;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorFace="), Face))
+		{
+			for (int32 e = 0; e < static_cast<int32>(UE_ARRAY_COUNT(CreatorExpressions)); ++e)
+			{
+				if (Face == UTF8_TO_TCHAR(CreatorExpressions[e].Name))
+				{
+					for (FCreatorPerson& Person : State->People)
+					{
+						Person.Expression = e;
+						Person.bBlink = false;
+					}
+				}
+			}
+		}
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorPitch="), State->CameraPitch);
 		float Genital = 0.0f;
 		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorGenital="), Genital))
@@ -547,6 +619,11 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		}
 		for (FCreatorPerson& P : State->People)
 		{
+			P.FaceTime += GetWorld()->GetDeltaSeconds();
+			if (P.FaceTime > P.NextBlink)
+			{
+				P.NextBlink = P.FaceTime + FMath::FRandRange(2.5f, 5.5f);
+			}
 			if (ASimPawnActor* Pawn = Pawns->FindPawn(P.Thing))
 			{
 				CreatorApply(P, *Pawn);
@@ -744,6 +821,40 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 						P.Weight = R.FRandRange(-0.8f, 0.8f);
 						P.Muscle = R.FRandRange(-0.6f, 0.8f);
 						P.Breasts = R.FRandRange(-0.8f, 0.8f);
+					}
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("Face"))
+				{
+					ImGui::SeparatorText("Expression");
+					for (int32 e = 0; e < static_cast<int32>(UE_ARRAY_COUNT(CreatorExpressions)); ++e)
+					{
+						if (e % 4 != 0)
+						{
+							ImGui::SameLine();
+						}
+						if (ImGui::RadioButton(CreatorExpressions[e].Name, P.Expression == e))
+						{
+							P.Expression = e;
+						}
+					}
+					ImGui::SliderFloat("Strength", &P.ExpressionStrength, 0.0f, 1.5f, "%.2f");
+					ImGui::Checkbox("Blink", &P.bBlink);
+					ImGui::SameLine();
+					ImGui::Checkbox("Talk", &P.bTalk);
+					if (ImGui::CollapsingHeader("Face units (fine tuning)"))
+					{
+						for (int32 u = 0; u < CreatorUnitCount; ++u)
+						{
+							ImGui::SliderFloat(TCHAR_TO_UTF8(CreatorUnits[u]), &P.Units[u], 0.0f, 1.0f, "%.2f");
+						}
+						if (ImGui::Button("Clear units"))
+						{
+							for (float& Unit : P.Units)
+							{
+								Unit = 0.0f;
+							}
+						}
 					}
 					ImGui::EndTabItem();
 				}

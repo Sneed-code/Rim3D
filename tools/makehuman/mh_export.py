@@ -23,6 +23,7 @@ places = {
     "mh_system": os.environ.get("MH_SYSTEM_DATA", os.path.join(os.environ.get("LOCALAPPDATA", ""), "makehuman-community", "makehuman", "data")),
     "codex": os.environ.get("MH_CHARACTERS", os.path.expanduser("~/Documents/Codex/2026-10-25/dow/outputs")),
     # MPFB's own asset folder (hair, eyes, eyebrows, eyelashes, teeth, skins, clothes).
+    "mpfb_targets": os.path.join(os.environ.get("APPDATA", ""), "Blender Foundation", "Blender", "5.2", "extensions", "user_default", "mpfb", "data", "targets"),
     "mpfb": os.environ.get("MPFB_DATA", os.path.join(os.environ.get("APPDATA", ""), "Blender Foundation", "Blender", "5.2", "extensions", ".user", "user_default", "mpfb", "data")),
 }
 def place(path):
@@ -75,9 +76,10 @@ try:
         # Detail targets (MakeHuman's modelling sliders by name, e.g. "l-ear-shape-pointed"), before the skeleton is
         # fitted to the shape.
         for name, weight in cfg.get("targets", {}).items():
-            path = TargetService.target_full_path(name)
-            if path:
-                TargetService.load_target(basemesh, path, weight=weight, name=name)
+            # "folder/name" picks one file under MPFB's targets (the face units come in a set per race).
+            path = os.path.join(places["mpfb_targets"], name + ".target.gz") if "/" in name else TargetService.target_full_path(name)
+            if path and os.path.exists(path):
+                TargetService.load_target(basemesh, path, weight=weight, name=name.replace("/", "_"))
             else:
                 log("no such target", name)
         if cfg.get("targets"):
