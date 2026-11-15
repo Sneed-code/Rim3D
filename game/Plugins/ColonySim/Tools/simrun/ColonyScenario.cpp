@@ -4,6 +4,7 @@
 
 #include "ColonySim/Animals.h"
 #include "ColonySim/Apparel.h"
+#include "ColonySim/Areas.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
@@ -61,6 +62,11 @@ constexpr int64_t kHuntDay = 13;   // year run: hunting starts on this game day
 // far from help (two dead on seed 7), so they stay nearer home.
 constexpr int kHuntMarks = 3;
 constexpr float kHuntRadius = 50.0f;
+constexpr float kHiveHuntRange = 30.0f;   // brood mounds this near the barracks or the storeroom are hunted down
+constexpr float kHiveAvoidRange = 70.0f;  // farther ones (they come up 20 to 60 m from the colony) are kept away from
+constexpr int kHiveAvoid = 25;            // by an allowed area without the squares this far round each mound
+constexpr size_t kHiveHuntersMin = 3;
+constexpr int kRebuildSteelReserve = 200;  // rebuilt steel walls go up in wood below this much steel on the map    // with at least this many armed colonists fit to fight
 constexpr float kHuntLeash = 60.0f;
 constexpr int64_t kWinterDay = 33; // year run: the campfire, the warm clothes and the extra wood come on this game day
 constexpr int kFields = 4;         // year run: rice fields
@@ -631,6 +637,28 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     Entity billedStove = kNoEntity;  // the stove the cooking bill is on: a rebuilt stove gets it again
     uint64_t rebuilt = 0;            // blueprints put back where a planned building burned or was broken
     std::set<int64_t> stoodOnce;     // map cells of planned buildings that were built
+    // The hive hunt: when brood mounds come up near the colony, the armed colonists go out together, kill the insects and
+    // shoot the mounds, as a player drafts the colony against an infestation (on seed 42 the insects of a mound beside the
+    // storeroom killed the colonists one at a time as they came for food).
+    const DefId hiveDef = defs->idOf("Things", "Hive");
+    std::vector<DefId> insectDefs;
+    if (hiveDef.valid()) {
+        for (size_t k = 0; k < defs->get(hiveDef).count("hive.insects"); ++k) {
+            insectDefs.push_back(defs->idOf("Things", defs->get(hiveDef).textAt("hive.insects", k)));
+        }
+    }
+    bool hiveHunt = false;
+    int64_t hiveHuntSince = 0;
+    int64_t hiveHuntRetry = 0;
+    Entity hiveHuntRally = kNoEntity;  // the mound the hunters last walked out to
+    bool hiveHuntShooting = false;     // walking up to shoot the mound (else holding at the rally point)
+    std::vector<Entity> hunters;
+    uint64_t hiveHunts = 0;
+    uint32_t avoidArea = 0;  // the allowed area that keeps the colony away from mounds farther out
+    bool avoidAreaAsked = false;
+    std::vector<Entity> avoidMounds;
+    uint64_t avoidPaints = 0;
+    uint64_t hivesShot = 0;
     Entity billedButcher = kNoEntity;
     uint64_t butchered = 0;
     bool clubBillAdded = false;
@@ -678,6 +706,14 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     }
                     break;
                 case EventType::PawnAte: ++ate; atTable += e.message == "table" ? 1 : 0; break;
+                case EventType::ThingDestroyed:
+                    if (verbose && e.def.valid() && defs->get(e.def).text("category") == "Building") {
+                        std::fprintf(stderr, "day %lld %02lld:%02lld: building %s destroyed\n", static_cast<long long>(sim.time().seconds / kSecondsPerDay),
+                                     static_cast<long long>(sim.time().seconds % kSecondsPerDay / kSecondsPerHour),
+                                     static_cast<long long>(sim.time().seconds % kSecondsPerHour / 60),
+                                     defs->get(e.def).defName().c_str());
+                    }
+                    break;
                 case EventType::PawnWokeUp: ++slept; sleptInBed += e.message == "bed" ? 1 : 0; break;
                 case EventType::Interaction: ++talks; break;
                 case EventType::SocialFight: fights += e.message == "started" ? 1 : 0; break;
@@ -848,6 +884,252 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         }
 
         const int64_t now = sim.time().seconds;
+        if (year && hiveDef.valid() && now % 10 == 0) {
+            entt::registry& reg = sim.things().registry();
+            const auto centreOf = [](const CellRect& r) {
+                return std::make_pair(static_cast<float>(r.minX) + static_cast<float>(r.sizeX) * 0.5f,
+                                      static_cast<float>(r.minY) + static_cast<float>(r.sizeY) * 0.5f);
+            };
+            std::vector<std::pair<float, float>> homes = {centreOf(roomRect)};
+            if (shedRect.sizeX > 0) {
+                homes.push_back(centreOf(shedRect));
+            }
+            const auto nearHome = [&](float x, float y, float range) {
+                return std::any_of(homes.begin(), homes.end(),
+                                   [&](const std::pair<float, float>& h) { return std::hypot(x - h.first, y - h.second) <= range; });
+            };
+            struct HiveSpot {
+                Entity e;
+                float x, y;
+            };
+            std::vector<HiveSpot> hives;
+            for (const auto [b, thing, pos] : reg.view<const Thing, const Position>().each()) {
+                if (thing.def == hiveDef && nearHome(pos.x, pos.y, kHiveAvoidRange)) {
+                    hives.push_back(HiveSpot{b, pos.x, pos.y});
+                }
+            }
+            std::sort(hives.begin(), hives.end(), [&](const HiveSpot& a, const HiveSpot& b) {
+                const float da = std::hypot(a.x - homes[0].first, a.y - homes[0].second);
+                const float db = std::hypot(b.x - homes[0].first, b.y - homes[0].second);
+                return da != db ? da < db : a.e < b.e;
+            });
+            // Mounds away from home: the colony keeps clear of them with an allowed area, as a player paints one, so nobody
+            // works, hauls or hunts within their insects' reach (on the rainforest start the insects killed tree cutters
+            // and hunters 40 to 60 m out). Painted again whenever the mounds change; gone with the last of them.
+            std::vector<Entity> moundSet;
+            for (const HiveSpot& h : hives) {
+                moundSet.push_back(h.e);
+            }
+            std::sort(moundSet.begin(), moundSet.end());
+            if (moundSet != avoidMounds) {
+                if (moundSet.empty()) {
+                    if (avoidArea != 0) {
+                        sim.submit(DeleteAreaCommand{avoidArea});
+                        avoidArea = 0;
+                    }
+                    avoidMounds = moundSet;
+                } else if (avoidArea == 0 && !avoidAreaAsked) {
+                    sim.submit(CreateAreaCommand{"Away from the hives"});
+                    avoidAreaAsked = true;  // painted once it exists, next time round
+                } else if (avoidArea != 0) {
+                    sim.submit(PaintAreaCommand{avoidArea, CellRect{0, 0, sim.map().width(), sim.map().height(), 0}, true});
+                    for (const HiveSpot& h : hives) {
+                        const int hx = static_cast<int>(std::floor(h.x));
+                        const int hy = static_cast<int>(std::floor(h.y));
+                        const int x0 = std::max(0, hx - kHiveAvoid);
+                        const int y0 = std::max(0, hy - kHiveAvoid);
+                        const int x1 = std::min(sim.map().width() - 1, hx + kHiveAvoid);
+                        const int y1 = std::min(sim.map().height() - 1, hy + kHiveAvoid);
+                        sim.submit(PaintAreaCommand{avoidArea, CellRect{x0, y0, x1 - x0 + 1, y1 - y0 + 1, 0}, false});
+                    }
+                    avoidMounds = moundSet;
+                    ++avoidPaints;
+                }
+            }
+            if (avoidArea == 0 && avoidAreaAsked) {
+                for (const Area& a : sim.areas().areas()) {
+                    if (a.name == "Away from the hives") {
+                        avoidArea = a.id;
+                        avoidAreaAsked = false;
+                    }
+                }
+            }
+            if (avoidArea != 0 && avoidMounds == moundSet && now % kSecondsPerHour == 0) {
+                for (const auto [pawn, colonist] : reg.view<const Colonist>().each()) {
+                    (void)colonist;
+                    if (sim.things().spawned(pawn) && sim.fighters().factionOf(pawn) == kPlayerFaction && !reg.all_of<Prisoner>(pawn) &&
+                        !reg.all_of<Visitor>(pawn) && sim.areas().areaOf(pawn) != avoidArea &&
+                        !(reg.all_of<Health>(pawn) && reg.get<Health>(pawn).dead)) {
+                        sim.submit(AssignAreaCommand{pawn, avoidArea});
+                    }
+                }
+            }
+            hives.erase(std::remove_if(hives.begin(), hives.end(), [&](const HiveSpot& h) { return !nearHome(h.x, h.y, kHiveHuntRange); }),
+                        hives.end());
+            std::vector<std::pair<Entity, Position>> bugs;
+            for (const auto [a, animal, thing, pos] : reg.view<const Animal, const Thing, const Position>().each()) {
+                (void)animal;
+                if (std::find(insectDefs.begin(), insectDefs.end(), thing.def) == insectDefs.end() || sim.health().incapacitated(a) ||
+                    !sim.things().spawned(a)) {
+                    continue;
+                }
+                const bool byMound = std::any_of(hives.begin(), hives.end(), [&](const HiveSpot& h) { return std::hypot(pos.x - h.x, pos.y - h.y) <= 40.0f; });
+                if (byMound || nearHome(pos.x, pos.y, kHiveHuntRange)) {
+                    bugs.emplace_back(a, pos);
+                }
+            }
+            std::sort(bugs.begin(), bugs.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+            const auto armed = [&](Entity pawn) {
+                const Gear* gear = reg.try_get<Gear>(pawn);
+                return gear != nullptr && gear->weapon != kNoEntity && reg.valid(gear->weapon) && reg.all_of<Thing>(gear->weapon) &&
+                       defs->get(reg.get<Thing>(gear->weapon).def).count("verbs") > 0;
+            };
+            const auto fit = [&](Entity pawn) {
+                if (!reg.valid(pawn) || !sim.things().spawned(pawn) || sim.health().incapacitated(pawn) || sim.mentalBreaks().active(pawn) ||
+                    sim.fighters().factionOf(pawn) != kPlayerFaction || reg.all_of<Prisoner>(pawn) || reg.all_of<Visitor>(pawn)) {
+                    return false;
+                }
+                const Worker* w = reg.try_get<Worker>(pawn);
+                return w == nullptr || w->job.type != JobType::BedRest;
+            };
+            const auto endHunt = [&](const char* why, int64_t retryAfter) {
+                for (const Entity h : hunters) {
+                    const Fighter* f = reg.valid(h) ? reg.try_get<Fighter>(h) : nullptr;
+                    if (f != nullptr && f->drafted && !sim.health().incapacitated(h)) {
+                        sim.submit(DraftCommand{h, false});
+                    }
+                }
+                hunters.clear();
+                hiveHunt = false;
+                hiveHuntRetry = now + retryAfter;
+                if (verbose) {
+                    std::fprintf(stderr, "day %lld: hive hunt over: %s\n", static_cast<long long>(sim.time().day()), why);
+                }
+            };
+            // A free cell near (x, y) the colony can walk to, or false.
+            const auto standNear = [&](float x, float y, CellPos& out) {
+                const CellPos c{static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y)), 0};
+                for (int r = 0; r <= 4; ++r) {
+                    for (int dy = -r; dy <= r; ++dy) {
+                        for (int dx = -r; dx <= r; ++dx) {
+                            const CellPos n{c.x + dx, c.y + dy, 0};
+                            if ((std::abs(dx) == r || std::abs(dy) == r) && sim.map().inBounds(n) && sim.map().walkable(n) &&
+                                sim.regions().canReach(landing, n)) {
+                                out = n;
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            };
+            if (!hiveHunt) {
+                if (!hives.empty() && now >= hiveHuntRetry && !sim.raids().state().alarm) {
+                    for (const auto [pawn, colonist] : reg.view<const Colonist>().each()) {
+                        (void)colonist;
+                        if (fit(pawn) && armed(pawn)) {
+                            hunters.push_back(pawn);
+                        }
+                    }
+                    std::sort(hunters.begin(), hunters.end());
+                    if (hunters.size() >= kHiveHuntersMin) {
+                        for (const Entity h : hunters) {
+                            const Fighter* f = reg.try_get<Fighter>(h);
+                            if (f == nullptr || !f->drafted) {
+                                sim.submit(DraftCommand{h, true});
+                            }
+                        }
+                        hiveHunt = true;
+                        hiveHuntSince = now;
+                        hiveHuntRally = kNoEntity;
+                        hiveHuntShooting = false;
+                        ++hiveHunts;
+                        if (verbose) {
+                            std::fprintf(stderr, "day %lld: hive hunt: %zu armed colonists against %zu mounds and %zu insects\n",
+                                         static_cast<long long>(sim.time().day()), hunters.size(), hives.size(), bugs.size());
+                        }
+                    } else {
+                        hunters.clear();
+                        hiveHuntRetry = now + kSecondsPerHour;
+                    }
+                }
+            } else {
+                hunters.erase(std::remove_if(hunters.begin(), hunters.end(), [&](Entity h) { return !fit(h); }), hunters.end());
+                if (hives.empty() && bugs.empty()) {
+                    endHunt("the mounds and insects near the colony are gone", 0);
+                } else if (hunters.size() < 2) {
+                    endHunt("too few hunters left", kSecondsPerDay);
+                } else if (sim.raids().state().alarm) {
+                    endHunt("a raid", kSecondsPerHour);
+                } else if (now - hiveHuntSince > kSecondsPerDay / 2) {
+                    endHunt("half a day without clearing them", kSecondsPerDay);
+                } else {
+                    // Fresh hunters are drafted by now (the draft is applied at the next step).
+                    const HiveSpot* hive = hives.empty() ? nullptr : &hives.front();
+                    if (!bugs.empty()) {
+                        // Hold together at a point 14 m short of the mound, toward home, and shoot the insects as they come.
+                        if (hive != nullptr && (hiveHuntRally != hive->e || hiveHuntShooting)) {
+                            const float dx = homes[0].first - hive->x;
+                            const float dy = homes[0].second - hive->y;
+                            const float d = std::max(1.0f, std::hypot(dx, dy));
+                            const float back = std::min(14.0f, d);
+                            CellPos rally;
+                            if (standNear(hive->x + dx / d * back, hive->y + dy / d * back, rally)) {
+                                for (const Entity h : hunters) {
+                                    sim.submit(MoveOrderCommand{h, rally});
+                                }
+                            }
+                            hiveHuntRally = hive->e;
+                            hiveHuntShooting = false;
+                        }
+                        for (const Entity h : hunters) {
+                            const Position& hp = reg.get<Position>(h);
+                            Entity best = kNoEntity;
+                            float bestD = 0.0f;
+                            for (const auto& [b, bp] : bugs) {
+                                const float d = std::hypot(bp.x - hp.x, bp.y - hp.y);
+                                if (best == kNoEntity || d < bestD) {
+                                    best = b;
+                                    bestD = d;
+                                }
+                            }
+                            const Fighter* f = reg.try_get<Fighter>(h);
+                            if (f != nullptr && f->drafted && f->forcedTarget != best && reg.all_of<Posture>(best)) {
+                                sim.submit(AttackOrderCommand{h, best});
+                            }
+                        }
+                    } else if (hive != nullptr) {
+                        // No insects left: walk up to the mound and shoot it.
+                        if (hiveHuntRally != hive->e || !hiveHuntShooting) {
+                            const float dx = homes[0].first - hive->x;
+                            const float dy = homes[0].second - hive->y;
+                            const float d = std::max(1.0f, std::hypot(dx, dy));
+                            CellPos spot;
+                            if (standNear(hive->x + dx / d * 5.0f, hive->y + dy / d * 5.0f, spot)) {
+                                for (const Entity h : hunters) {
+                                    sim.submit(MoveOrderCommand{h, spot});
+                                }
+                            }
+                            hiveHuntRally = hive->e;
+                            hiveHuntShooting = true;
+                        }
+                        for (const Entity h : hunters) {
+                            const Position& hp = reg.get<Position>(h);
+                            const Fighter* f = reg.try_get<Fighter>(h);
+                            if (f == nullptr || !f->drafted) {
+                                continue;
+                            }
+                            if (f->forcedTarget != kNoEntity) {
+                                sim.submit(AttackOrderCommand{h, kNoEntity});
+                            } else if (std::hypot(hp.x - hive->x, hp.y - hive->y) <= 12.0f && sim.combat().shotReadyIn(h) == 0) {
+                                sim.submit(ShootCommand{h, kNoEntity, hive->x, hive->y, sim.map().heightAt(hive->x, hive->y) + 0.4f, false});
+                                ++hivesShot;
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if (now % 60 == 0) {
             // Stuck: a pawn that has a job (or is lying down) but nothing about it changes for a game hour
             // (its cell, job, job step, work done); and idle time, which is only reported.
@@ -1424,6 +1706,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 // stove, and the colony went through the plague and the winter with neither. Put the blueprint back where a
                 // planned building is gone, once the fire there is out.
                 // Only what stood once: a plan made this hour is still a queued command.
+                int steelLeft = -1;  // counted when first needed
                 for (const std::vector<Plan>* list : {&plans, &shedPlans, &greenPlans}) {
                     for (const Plan& p : *list) {
                         const Entity there = sim.map().buildingAt(p.cell);
@@ -1432,7 +1715,18 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                             stoodOnce.insert(key);
                         } else if (stoodOnce.count(key) != 0 && sim.construction().siteAt(p.cell) == kNoEntity &&
                                    !sim.fire().burning(p.cell)) {
-                            sim.submit(PlaceBlueprintCommand{p.defName, p.stuff, p.cell, p.rot});
+                            // Steel walls go back in wood once steel is short: on seed 1 the rebuilt steel walls took the
+                            // last of it and the burned stove (steel) could never be rebuilt.
+                            if (steelLeft < 0) {
+                                steelLeft = 0;
+                                for (const auto [item, thing, stack] : sim.things().registry().view<const Thing, const StackCount>().each()) {
+                                    (void)item;
+                                    steelLeft += defs->get(thing.def).defName() == "Steel" ? stack.count : 0;
+                                }
+                            }
+                            const bool wall = p.defName == "Wall" || p.defName == "Door";
+                            const std::string stuff = wall && p.stuff == "Steel" && steelLeft < kRebuildSteelReserve ? "WoodLog" : p.stuff;
+                            sim.submit(PlaceBlueprintCommand{p.defName, stuff, p.cell, p.rot});
                             ++rebuilt;
                         }
                     }
@@ -1592,7 +1886,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 static_cast<unsigned long long>(sim.stateHash()));
 
     if (year) {
-        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"warmthSeeks\":%llu,\"weaponsTaken\":%llu,\"weaponsHanded\":%llu,\"firebreakMarks\":%llu,\"rebuilt\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), static_cast<unsigned long long>(warmthSeeks), static_cast<unsigned long long>(weaponsTaken), static_cast<unsigned long long>(weaponsHanded), static_cast<unsigned long long>(firebreakMarks), static_cast<unsigned long long>(rebuilt));
+        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"warmthSeeks\":%llu,\"weaponsTaken\":%llu,\"weaponsHanded\":%llu,\"firebreakMarks\":%llu,\"rebuilt\":%llu,\"hiveHunts\":%llu,\"hiveShots\":%llu,\"hiveAreas\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), static_cast<unsigned long long>(warmthSeeks), static_cast<unsigned long long>(weaponsTaken), static_cast<unsigned long long>(weaponsHanded), static_cast<unsigned long long>(firebreakMarks), static_cast<unsigned long long>(rebuilt), static_cast<unsigned long long>(hiveHunts), static_cast<unsigned long long>(hivesShot), static_cast<unsigned long long>(avoidPaints));
         std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"narrator\":\"%s\",\"letters\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), narrator.c_str(), static_cast<unsigned long long>(letters));
         if (greenhousePlanned) {
             std::printf("{\"greenhouse\":{\"at\":\"%d,%d\",\"basins\":%d,\"generators\":%d,\"heaters\":%d,\"lamps\":%d,\"zoneMade\":%s,"

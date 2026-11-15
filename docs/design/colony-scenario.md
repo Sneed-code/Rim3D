@@ -443,3 +443,29 @@ gone, seed 1's plague patients had no beds and seed 7 froze and starved in the w
 | 42 | 6 | 0 | an infestation beside the storeroom on day 44, then malaria and raids to day 55 (the run went a different way: no fire before) |
 | 42, rainforest | 2 | 6 | one in the day 44 raid |
 
+**Eleventh pass (2026-11-15): insect mounds and steel for rebuilds.** Run on the code with the protagonist's mood gone
+(#278), which changed every seed's story: seeds 1, 7 and 42 had no infestation and lost no stove. The rainforest start
+(seed 42) did: a mound came up under the mountain 40 to 60 m west of the colony on day 44, and its insects killed five
+colonists who went there to cut trees and hunt (one left on day 60). Three changes to the script, as a player plays:
+
+- **Keep clear of far mounds.** While a mound is within 70 m of the barracks or storeroom, every colonist is limited to an
+  allowed area, "Away from the hives": the whole map less the 51 x 51 square round each mound (25 m, past the insects'
+  18 m guard range). Nobody works, hauls or hunts there (areas limit work targets, [areas.md](areas.md)). The area is
+  painted again whenever the mounds change and deleted with the last of them. The year line prints `hiveAreas`.
+- **Hunt down near mounds.** A mound within 30 m of the barracks or storeroom (seed 42's old storeroom case) is hunted:
+  at least three armed, fit colonists are drafted, hold 14 m short of the mound and shoot its insects, then walk up and
+  shoot the mound itself; they give up after half a day, when fewer than two are left, or when a raid comes. A first try
+  that hunted every mound within 65 m failed on the rainforest: shots at insects in the cave above went into the hillside
+  for half a day, four times over.
+- **Steel for rebuilds.** Rebuilt steel walls and doors go up in wood once the map holds less than 200 steel, so a burned
+  stove (steel) can still be rebuilt.
+
+| Run | Without | With | What killed them |
+| --- | --- | --- | --- |
+| 1 | 6 | 6 | no infestation |
+| 7 | 6 | 6 | no infestation |
+| 42 | 2 | 2 | no infestation; raids and illness |
+| 42, rainforest | 1 | 3 | nobody to the insects; a raid on day 46 (two), one on day 56 |
+| 3, rainforest | | 3 | raids on days 32, 47 and 55 |
+| 7, rainforest | | 0 | **a heat wave** (+17 C for 5 days, from day 17) killed seven of heatstroke on days 19 and 20 |
+
