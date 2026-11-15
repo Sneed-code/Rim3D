@@ -68,7 +68,15 @@ constexpr int kHiveAvoid = 25;            // by an allowed area without the squa
 constexpr size_t kHiveHuntersMin = 3;
 constexpr int kRebuildSteelReserve = 200;
 constexpr float kHeatPlanAbove = 38.0f;  // the heat plan starts the first time the air is this hot
-constexpr int kHeatCoolers = 3;          // passive coolers in the barracks  // rebuilt steel walls go up in wood below this much steel on the map    // with at least this many armed colonists fit to fight
+constexpr int kHeatCoolers = 3;          // passive coolers in the barracks
+// The defence plan (year run): on this day a gun post (a solar panel, a battery and two mini-turrets on a row of conduits,
+// kPostWidth by kPostHeight) goes up near the colony, and kDefencePosts posts of kPostBarricades wood barricades each in a
+// ring round the middle of the colony's buildings, where the alarm's defenders hold the line.
+constexpr int64_t kDefenceDay = 6;
+constexpr int kPostWidth = 10;
+constexpr int kPostHeight = 5;
+constexpr int kDefencePosts = 12;
+constexpr int kPostBarricades = 3;
 constexpr float kHuntLeash = 60.0f;
 constexpr int64_t kWinterDay = 33; // year run: the campfire, the warm clothes and the extra wood come on this game day
 constexpr int kFields = 4;         // year run: rice fields
@@ -390,6 +398,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
         sim.submit(UnlockResearchCommand{"Electricity"});
         sim.submit(UnlockResearchCommand{"Hydroponics"});
         sim.submit(UnlockResearchCommand{"PassiveCooler"});  // neolithic: the rainforest's heat waves (see the heat plan)
+        for (const char* project : {"SolarPanel", "Battery", "GunTurrets"}) {  // the defence plan's gun post
+            sim.submit(UnlockResearchCommand{project});
+        }
     }
     if (year) {
         // The year run: a rice field beside the room and a stockpile for its harvest, so the colony can live on.
@@ -634,9 +645,9 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     int medicineBought = 0;             // year run: medicine bought from traders
     int riceSold = 0;
     uint64_t firebreakMarks = 0;
-    CellRect healrootRect{0, 0, 0, 0, 0};  // year run: the healroot patch, if one was made      // year run: plants marked for the firebreak
-    uint64_t weaponsHanded = 0;
-    std::map<std::pair<Entity, std::string>, int> workSet;  // year run: the work priority the script last set, plus 1 (0: none yet)       // year run: weapons the script handed to colonists
+    CellRect healrootRect{0, 0, 0, 0, 0};  // year run: the healroot patch, if one was made
+    uint64_t weaponsHanded = 0;  // year run: weapons the script handed to colonists
+    std::map<std::pair<Entity, std::string>, int> workSet;  // year run: the work priority the script last set, plus 1 (0: none yet)
     Entity billedStove = kNoEntity;  // the stove the cooking bill is on: a rebuilt stove gets it again
     uint64_t rebuilt = 0;            // blueprints put back where a planned building burned or was broken
     std::set<int64_t> stoodOnce;     // map cells of planned buildings that were built
@@ -663,6 +674,11 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     std::vector<Entity> avoidMounds;
     uint64_t avoidPaints = 0;
     uint64_t hivesShot = 0;
+    bool defencePlanned = false;     // the defence plan: the gun post and the barricade ring
+    CellRect postRect{0, 0, 0, 0, 0};
+    std::vector<Plan> defencePlans;  // rebuilt like the rest
+    int barricades = 0;              // barricades planned in the ring
+    uint64_t turretShots = 0;
     Entity billedButcher = kNoEntity;
     uint64_t butchered = 0;
     bool clubBillAdded = false;
@@ -809,6 +825,10 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                     break;
                 case EventType::ShotFired:
                     ++shotsBy[e.thing];
+                    if (sim.things().registry().valid(e.thing) && sim.things().registry().all_of<Thing>(e.thing) &&
+                        defs->get(sim.things().registry().get<Thing>(e.thing).def).has("turret")) {
+                        ++turretShots;
+                    }
                     if (verbose) {
                         shooterOf[e.target] = e.thing;
                     }
@@ -1362,7 +1382,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
             }
             if (year && !greenhousePlanned && sim.time().day() >= kGreenhouseDay) {
                 greenhousePlanned = true;
-                if (!findGreenhouseSite(sim, landing, roomRect, greenOrigin, kGreenWidth, kGreenHeight, {shedRect})) {
+                if (!findGreenhouseSite(sim, landing, roomRect, greenOrigin, kGreenWidth, kGreenHeight, {shedRect, postRect})) {
                     std::fprintf(stderr, "colony scenario: no room for the greenhouse\n");
                     return 2;
                 }
@@ -1397,6 +1417,101 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 green("StandingLamp", "", 5, 4);
                 for (const Plan& p : greenPlans) {
                     sim.submit(PlaceBlueprintCommand{p.defName, p.stuff, p.cell, p.rot});
+                }
+            }
+            if (year && !defencePlanned && shedPlanned && sim.time().day() >= kDefenceDay) {
+                // The defence plan, as a player sets one up before the raids grow: a gun post, and cover where the
+                // defenders hold the line. Raids were the main killer on every seed after the twelfth pass.
+                defencePlanned = true;
+                const auto defence = [&](const char* def, const char* stuff, CellPos c, Rot4 rot = Rot4::North) {
+                    defencePlans.push_back(Plan{defs->idOf("Things", def), def, stuff, c, rot});
+                    sim.submit(PlaceBlueprintCommand{def, stuff, c, rot});
+                };
+                // The gun post: a row of conduits along its south edge (y = 0) joining a solar panel (4 by 4, x 3..6, y 1..4),
+                // a battery (x 1, y 1..2) for the nights, and a mini-turret at each end (x 0 and x 9, y 1), 9 m apart.
+                CellPos post;
+                if (findGreenhouseSite(sim, landing, roomRect, post, kPostWidth, kPostHeight, {shedRect, healrootRect})) {
+                    postRect = CellRect{post.x, post.y, kPostWidth, kPostHeight, 0};
+                    for (int x = 0; x < kPostWidth; ++x) {
+                        defence("PowerConduit", "", CellPos{post.x + x, post.y, 0});
+                    }
+                    defence("SolarGenerator", "", CellPos{post.x + 3, post.y + 1, 0});
+                    defence("Battery", "", CellPos{post.x + 1, post.y + 1, 0});
+                    defence("Turret_Mini", "", CellPos{post.x, post.y + 1, 0});
+                    defence("Turret_Mini", "", CellPos{post.x + kPostWidth - 1, post.y + 1, 0});
+                    if (verbose) {
+                        std::fprintf(stderr, "gun post at %d,%d\n", post.x, post.y);
+                    }
+                } else if (verbose) {
+                    std::fprintf(stderr, "no room for the gun post\n");
+                }
+                // The ring: the alarm's defenders hold a line defenseLine (15 m) from "home", the middle of the colony's
+                // buildings, toward the threat, choosing cover within 10 m of it. So the posts go round that middle at that
+                // distance (the gun post's parts counted as if built). Twelve directions from a fixed table, so every
+                // platform agrees.
+                std::vector<CellRect> base{roomRect, shedRect};
+                if (postRect.sizeX > 0) {
+                    base.push_back(postRect);
+                }
+                float cx = 0.0f;
+                float cy = 0.0f;
+                (void)sim.raids().colonyMiddle(cx, cy);
+                // The gun post's parts, as if built (their blueprints were just sent).
+                int counted = 0;
+                for (const auto [b, thing, pos] : sim.things().registry().view<const Thing, const Position>().each()) {
+                    const Def& def = defs->get(thing.def);
+                    counted += thing.category == ThingCategory::Building && sim.things().registry().all_of<Footprint>(b) &&
+                                       !def.flag("mapFeature") && !def.has("hive") ? 1 : 0;
+                }
+                if (!defencePlans.empty()) {
+                    float px = 0.0f;
+                    float py = 0.0f;
+                    for (const Plan& p : defencePlans) {
+                        px += static_cast<float>(p.cell.x) + 0.5f;
+                        py += static_cast<float>(p.cell.y) + 0.5f;
+                    }
+                    const float all = static_cast<float>(counted + static_cast<int>(defencePlans.size()));
+                    cx = (cx * static_cast<float>(counted) + px) / all;
+                    cy = (cy * static_cast<float>(counted) + py) / all;
+                }
+                const float radius = sim.raids().rules().defenseLine;
+                static const float kRingDirs[kDefencePosts][2] = {
+                    {1.0f, 0.0f}, {0.8660254f, 0.5f}, {0.5f, 0.8660254f}, {0.0f, 1.0f}, {-0.5f, 0.8660254f}, {-0.8660254f, 0.5f},
+                    {-1.0f, 0.0f}, {-0.8660254f, -0.5f}, {-0.5f, -0.8660254f}, {0.0f, -1.0f}, {0.5f, -0.8660254f}, {0.8660254f, -0.5f}};
+                const auto fitForBarricade = [&](CellPos c) {
+                    if (!dryGround(sim, c) || sim.map().buildingAt(c) != kNoEntity || sim.construction().siteAt(c) != kNoEntity ||
+                        sim.farming().zoneAt(c) != kNoGrowingZone || sim.zones().stockpileAt(c) != nullptr || !touchable(sim, landing, c)) {
+                        return false;
+                    }
+                    for (const CellRect& r : base) {  // two cells clear of the base's buildings, out of the doorways
+                        if (c.x >= r.minX - 2 && c.x < r.minX + r.sizeX + 2 && c.y >= r.minY - 2 && c.y < r.minY + r.sizeY + 2) {
+                            return false;
+                        }
+                    }
+                    return std::none_of(defencePlans.begin(), defencePlans.end(), [&](const Plan& p) { return p.cell.x == c.x && p.cell.y == c.y; });
+                };
+                for (int k = 0; k < kDefencePosts; ++k) {
+                    // A short wall across the way in: east-west for the posts north and south of the base, else north-south.
+                    const bool across = std::fabs(kRingDirs[k][1]) > std::fabs(kRingDirs[k][0]);
+                    for (const int shift : {0, 1, -1, 2, -2, 3, -3, 4}) {  // a little farther out or nearer where the ground is not fit
+                        const float r = radius + static_cast<float>(shift);
+                        const CellPos mid{static_cast<int>(std::floor(cx + kRingDirs[k][0] * r)), static_cast<int>(std::floor(cy + kRingDirs[k][1] * r)), 0};
+                        std::vector<CellPos> cells;
+                        for (int b = -(kPostBarricades / 2); b < kPostBarricades - kPostBarricades / 2; ++b) {
+                            cells.push_back(across ? CellPos{mid.x + b, mid.y, 0} : CellPos{mid.x, mid.y + b, 0});
+                        }
+                        if (std::all_of(cells.begin(), cells.end(), fitForBarricade)) {
+                            for (const CellPos& c : cells) {
+                                defence("Barricade", "WoodLog", c);
+                                ++barricades;
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (verbose) {
+                    std::fprintf(stderr, "defence ring round %.1f,%.1f radius %.1f: %d barricades\n", static_cast<double>(cx), static_cast<double>(cy),
+                                 static_cast<double>(radius), barricades);
                 }
             }
             int treesMarked = 0;
@@ -1619,6 +1734,17 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                                  gen != kNoEntity && sim.jobs().fuel().lit(gen), gen != kNoEntity && sim.power().powered(gen));
                 }
             }
+            if (verbose && postRect.sizeX > 0 && now % (12 * kSecondsPerHour) == 0) {
+                // The gun post: are the turrets up and powered, and what does the battery hold for the night?
+                const entt::registry& reg = sim.things().registry();
+                const Entity west = sim.map().buildingAt(CellPos{postRect.minX, postRect.minY + 1, 0});
+                const Entity east = sim.map().buildingAt(CellPos{postRect.minX + kPostWidth - 1, postRect.minY + 1, 0});
+                const Entity battery = sim.map().buildingAt(CellPos{postRect.minX + 1, postRect.minY + 1, 0});
+                const PowerPart* cell = battery != kNoEntity ? reg.try_get<PowerPart>(battery) : nullptr;
+                std::fprintf(stderr, "    gun post: turrets powered %d %d, battery %.0f Wd, turret shots %llu\n",
+                             west != kNoEntity && sim.power().running(west), east != kNoEntity && sim.power().running(east),
+                             cell != nullptr ? cell->stored : -1.0, static_cast<unsigned long long>(turretShots));
+            }
             sim.writeSnapshot(snapshot);
             int built = 0;
             int stoveId = 0;
@@ -1711,7 +1837,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 // planned building is gone, once the fire there is out.
                 // Only what stood once: a plan made this hour is still a queued command.
                 int steelLeft = -1;  // counted when first needed
-                for (const std::vector<Plan>* list : {&plans, &shedPlans, &greenPlans}) {
+                for (const std::vector<Plan>* list : {&plans, &shedPlans, &greenPlans, &defencePlans}) {
                     for (const Plan& p : *list) {
                         const Entity there = sim.map().buildingAt(p.cell);
                         const int64_t key = static_cast<int64_t>(sim.map().index(p.cell));
@@ -1909,7 +2035,7 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 static_cast<unsigned long long>(sim.stateHash()));
 
     if (year) {
-        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"warmthSeeks\":%llu,\"weaponsTaken\":%llu,\"weaponsHanded\":%llu,\"firebreakMarks\":%llu,\"rebuilt\":%llu,\"hiveHunts\":%llu,\"hiveShots\":%llu,\"hiveAreas\":%llu,\"coolers\":%d}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), static_cast<unsigned long long>(warmthSeeks), static_cast<unsigned long long>(weaponsTaken), static_cast<unsigned long long>(weaponsHanded), static_cast<unsigned long long>(firebreakMarks), static_cast<unsigned long long>(rebuilt), static_cast<unsigned long long>(hiveHunts), static_cast<unsigned long long>(hivesShot), static_cast<unsigned long long>(avoidPaints), coolersPlanned);
+        std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"warmthSeeks\":%llu,\"weaponsTaken\":%llu,\"weaponsHanded\":%llu,\"firebreakMarks\":%llu,\"rebuilt\":%llu,\"hiveHunts\":%llu,\"hiveShots\":%llu,\"hiveAreas\":%llu,\"coolers\":%d,\"turrets\":%d,\"barricades\":%d,\"turretShots\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), static_cast<unsigned long long>(warmthSeeks), static_cast<unsigned long long>(weaponsTaken), static_cast<unsigned long long>(weaponsHanded), static_cast<unsigned long long>(firebreakMarks), static_cast<unsigned long long>(rebuilt), static_cast<unsigned long long>(hiveHunts), static_cast<unsigned long long>(hivesShot), static_cast<unsigned long long>(avoidPaints), coolersPlanned, postRect.sizeX > 0 ? 2 : 0, barricades, static_cast<unsigned long long>(turretShots));
         std::printf("{\"year\":{\"worstStepMs\":%.2f,\"worstStepAt\":%lld,\"day\":%lld,\"narrator\":\"%s\",\"letters\":%llu}}\n", worstStepMs, static_cast<long long>(worstStepAt), static_cast<long long>(worstStepAt / kSecondsPerDay), narrator.c_str(), static_cast<unsigned long long>(letters));
         if (greenhousePlanned) {
             std::printf("{\"greenhouse\":{\"at\":\"%d,%d\",\"basins\":%d,\"generators\":%d,\"heaters\":%d,\"lamps\":%d,\"zoneMade\":%s,"

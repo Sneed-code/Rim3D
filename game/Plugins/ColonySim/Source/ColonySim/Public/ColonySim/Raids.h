@@ -332,6 +332,9 @@ public:
     // Where outsiders walk in: `target` is the player's colonist nearest the middle (else the middle) and `entry` a cell
     // near a map edge (`edge` 0 to 3, or -1 for any) that can reach it. False, with a reason, if there is no way in.
     bool findEntry(int edge, CellPos& target, CellPos& entry, std::string& error);
+    // The colony's middle, as the alarm takes it for "home": the mean position of the colony's buildings (not ruins,
+    // geysers or brood mounds), else of its colonists. False when there are neither.
+    bool colonyMiddle(float& x, float& y) const;
     bool soundAlarm(bool on, std::string& error);
     bool setRole(Entity pawn, DefenseRole role, bool hasSpot, CellPos spot, std::string& error);
     // The room at `cell` is where Shelter colonists go; `clear` takes the mark off.

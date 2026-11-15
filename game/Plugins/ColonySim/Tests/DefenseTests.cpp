@@ -2,6 +2,8 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
+#include "ColonySim/Construction.h"
+#include "ColonySim/Cover.h"
 #include "ColonySim/Defense.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Fighters.h"
@@ -9,6 +11,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Power.h"
+#include "ColonySim/Raids.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
@@ -610,4 +613,94 @@ TEST_CASE("Defense: turrets, traps, what sides know and a rearm survive a save, 
     playReplay(again, replayed, again.endStep);
     CHECK(replayed.stateHash() == original.stateHash());
     CHECK(checkReplay(again, replayed).matched());
+}
+
+TEST_CASE("Defense: a wood barricade is 1.1 m of cover a pawn walks through, with the wiki's numbers") {
+    const DefDatabase& defs = *defnDefs();
+    const Def* barricade = defs.find("Things", "Barricade");
+    DEFN_REQUIRE(barricade != nullptr);
+    CHECK(barricade->integer("costStuffCount") == 5);
+    CHECK(barricade->number("stats.maxHitPoints") == doctest::Approx(300.0));
+    CHECK(barricade->number("stats.workToBuild") == doctest::Approx(320.0 * 1.44));
+    CHECK(barricade->number("fillPercent") == doctest::Approx(0.55));
+    CHECK(barricade->text("passability") == "PassThroughOnly");
+
+    auto sim = defnSim();
+    // No research needed: a blueprint in wood is taken.
+    sim->submit(PlaceBlueprintCommand{"Barricade", "WoodLog", CellPos{20, 20, 0}, Rot4::North});
+    sim->step();
+    CHECK(defnCount(*sim, EventType::CommandFailed) == 0);
+    CHECK(sim->construction().siteAt(CellPos{20, 20, 0}) != kNoEntity);
+
+    const Entity wood = sim->things().spawn("Barricade", CellPos{30, 20, 0});  // (the macro runs its argument twice)
+    DEFN_REQUIRE(wood != kNoEntity);
+    CHECK(sim->map().walkable(CellPos{30, 20, 0}));
+    CHECK(sim->map().obstacleDm(CellPos{30, 20, 0}) == 11);
+    CHECK(sim->cover().coverHeight(CellPos{29, 20, 0}, Dir8::E) == doctest::Approx(1.1f));
+}
+
+TEST_CASE("Defense: the year run's gun post (solar panel, battery, two mini-turrets) keeps its turrets on through the night") {
+    auto sim = defnSim();
+    // The layout of docs/design/colony-scenario.md: conduits along y = 10, the solar panel at x 13..16, y 11..14, the
+    // battery at x 11, y 11..12 and the turrets at the two ends.
+    for (int x = 10; x < 20; ++x) {
+        sim->things().spawn("PowerConduit", CellPos{x, 10, 0});
+    }
+    const Entity solar = sim->things().spawn("SolarGenerator", CellPos{13, 11, 0});  // (the macro runs its argument twice)
+    const Entity battery = sim->things().spawn("Battery", CellPos{11, 11, 0});
+    DEFN_REQUIRE(solar != kNoEntity);
+    DEFN_REQUIRE(battery != kNoEntity);
+    const Entity west = sim->things().spawn("Turret_Mini", CellPos{10, 11, 0});
+    const Entity east = sim->things().spawn("Turret_Mini", CellPos{19, 11, 0});
+    DEFN_REQUIRE(west != kNoEntity);
+    DEFN_REQUIRE(east != kNoEntity);
+    // The first day charges the battery; through the second, night included, both turrets stay powered.
+    while (sim->time().seconds < kSecondsPerDay) {
+        sim->step();
+    }
+    int dark = 0;
+    while (sim->time().seconds < 2 * kSecondsPerDay) {
+        sim->step();
+        if (sim->time().seconds % 600 == 0) {
+            dark += sim->power().running(west) && sim->power().running(east) ? 0 : 1;
+        }
+    }
+    CHECK(dark == 0);
+}
+
+TEST_CASE("Defense: the colony's fighters take no cover within the blast of their own turret") {
+    auto sim = defnSim();
+    const Entity turret = sim->things().spawn("Turret_Mini", CellPos{30, 30, 0});
+    DEFN_REQUIRE(turret != kNoEntity);
+    // The mini-turret's blast reaches 2.9 m.
+    CHECK(sim->defense().avoidsCell(kPlayerFaction, CellPos{31, 30, 0}));
+    CHECK(sim->defense().avoidsCell(kPlayerFaction, CellPos{32, 31, 0}));
+    CHECK_FALSE(sim->defense().avoidsCell(kPlayerFaction, CellPos{34, 30, 0}));
+    CHECK_FALSE(sim->defense().avoidsCell(2, CellPos{31, 30, 0}));  // raiders don't mind it
+
+    // A drafted rifleman with sandbags 5 m north and an unpowered turret just past their middle takes the sandbags
+    // at one end, out of the blast (right behind the middle is the best cover against the enemy 30 m north).
+    for (int x = 36; x <= 44; ++x) {
+        sim->things().spawn("Sandbags", CellPos{x, 45, 0});
+    }
+    const Entity guard = sim->things().spawn("Turret_Mini", CellPos{40, 46, 0});
+    DEFN_REQUIRE(guard != kNoEntity);
+    const Entity rifleman = sim->things().spawn("Human", CellPos{40, 40, 0});
+    DEFN_REQUIRE(rifleman != kNoEntity);
+    sim->things().registry().emplace<Colonist>(rifleman);
+    sim->combat().equip(rifleman, sim->things().make(sim->defs().idOf("Things", "Gun_BoltActionRifle")));
+    const Entity enemy = defnHostile(*sim, 41, 72);
+    sim->combat().equip(enemy, sim->things().make(sim->defs().idOf("Things", "Gun_Revolver")));
+    sim->submit(DraftCommand{rifleman, true});
+    for (int i = 0; i < 400; ++i) {
+        sim->things().registry().replace<Health>(rifleman, Health{});
+        sim->things().registry().replace<Health>(enemy, Health{});
+        sim->step();
+    }
+    const Fighter* f = sim->things().registry().try_get<Fighter>(rifleman);
+    DEFN_REQUIRE(f != nullptr);
+    CHECK(f->hasSpot);
+    MESSAGE("spot ", f->spot.x, ",", f->spot.y);
+    CHECK(f->spot.y == 44);  // behind the sandbags
+    CHECK(std::hypot(static_cast<float>(f->spot.x) + 0.5f - 40.5f, static_cast<float>(f->spot.y) + 0.5f - 46.5f) > 2.9f);
 }

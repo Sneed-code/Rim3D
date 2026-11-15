@@ -485,3 +485,38 @@ fuel-burning heat source only runs while it has fuel. The year line prints `cool
 | 7 | 6 | 7 | one on day 42 |
 | 1, 42 | 6, 2 | 6, 2 | never past 38 C: no coolers, the same games |
 
+**Thirteenth pass (2026-11-15): the defence plan.** After the heat plan, raids and mechanoids were the main killer on every
+seed. A player sets up defences before the raids grow, so on day 6 the year script builds two things, rebuilt like the
+rest when broken:
+
+- **A gun post:** a 10 by 5 site found like the storeroom's (3 cells clear of other buildings), with a row of conduits
+  along its south edge joining a solar panel (4 by 4), a battery (for the nights) and a mini-turret at each end, 9 m
+  apart. The research for them (solar panel, battery, gun turrets) is done at the start, like the greenhouse's. The
+  battery is full by day 9 and holds the turrets through every night. Verbose runs print a `gun post:` line every 12 hours.
+- **A barricade ring:** twelve posts of three wood barricades (the wiki's barricade, new in `Things/Defense.json`,
+  [defense.md](defense.md)), 15 m round the colony's middle, where the alarm's defenders hold their line and pick cover
+  within 10 m. Posts that would land on a field, a stockpile, water, a building or within 2 cells of the barracks,
+  storeroom or gun post move up to 4 m in or out, or are left out (18 to 33 barricades on the test seeds).
+
+The year line prints `turrets`, `barricades` and `turretShots`. Two sim bugs came out of the runs:
+
+- **Home was off the colony.** The alarm's "home" (the middle of the colony's buildings, from which the defenders' line
+  is drawn) counted the ruins' ancient walls and the steam geysers across the map; on two seeds it lay 60 m from the
+  barracks, out in the open. They and brood mounds no longer count ([raids.md](raids.md)).
+- **Cover by the turret.** Defenders took the mini-turret as cover (it is 0.8 m tall); a mechanoid shot it to pieces and
+  its blast downed the four crouched round it, who bled out. The colony's fighters now take no cover within the blast of
+  their own turrets ([defense.md](defense.md)).
+
+| Run | Twelfth pass | Thirteenth pass | What killed them |
+| --- | --- | --- | --- |
+| 7, rainforest | 8 | 8 | illness and an injury on day 47; nobody in the raids |
+| 42, rainforest | 6 | 6 | one on day 55 (an infestation and a raid days 44 to 46 cost nobody) |
+| 3, rainforest | 3 | 6 | nobody in the raids (raids on days 32 and 54 killed before) |
+| 7 | 7 | 8 | one in the day 15 raid |
+| 1 | 6 | 5 | two raids on day 45 (three), illness |
+| 42 | 2 | 5 | an infestation on day 43 (two); nobody in four raids and a mechanoid cluster |
+
+38 alive on day 60 across the six runs, against 32. Raids now kill on two of six seeds. Seen on the way, not fixed: a
+colonist on a Berserk break beat four others to death in the barracks while they stood by (rainforest seed 3, first round),
+and colonists don't subdue a berserk friend.
+

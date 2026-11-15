@@ -55,6 +55,14 @@ Autocannon: range 32.9 m, burst of 3 with 8.5 steps between, cooldown 105 steps,
 Their blast (50 Bomb, 5.9 m) goes off when they are destroyed; RimWorld's comes 4 s after they drop below 20% HP.
 Tests: `HeavyTurretTests` (shots, ammunition, minimum range, a 2 x 2 turret shooting out of all 8 directions).
 
+## Sandbags and barricades
+
+Plain buildings with no code of their own: `fillPercent` 0.55 makes them 1.1 m of cover ([cover.md](cover.md)), so a
+crouching pawn hides behind them, and `PassThroughOnly` lets pawns walk over them slowly (path cost 42). Sandbags take 5
+fabric or leather and burn not at all; the **barricade** (wiki, checked 2026-11-15) takes 5 metallic, woody or stony stuff,
+320 ticks of work (460.8 game seconds), 300 HP and beauty -3, and burns as its stuff does. Siege camps build sandbags
+([sieges.md](sieges.md)); the year run builds wood barricades round the colony ([colony-scenario.md](colony-scenario.md)).
+
 ## Traps
 
 A building whose def has a `trap` block gets a `Trap` component (`sprung`, `known`). It is not a wall
@@ -83,7 +91,9 @@ A building whose def has a `trap` block gets a `Trap` component (`sprung`, `know
   them (`DefenseSystem::detour`, called after `smoothPath`): where a straight stretch of the route
   crosses a known trap's cell (and `avoidMargin`, 0.15 m, round it), it inserts the walkable cell within two
   cells of the trap that makes the shortest detour and misses every known trap, up to `detourTries` times.
-  A walk with no way round goes through. The colony's own fighters never avoid anything.
+  A walk with no way round goes through. The colony's own fighters avoid no trap, but take no cover within the blast
+  of one of their own turrets that explodes when destroyed (2.9 m for the mini-turret): in the year run four colonists
+  crouched round a mini-turret were all downed when a mechanoid shot it to pieces. They still walk past it.
 
 ## Rearming
 
