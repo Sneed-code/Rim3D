@@ -672,8 +672,8 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
             out[0] = keyOf(JobTarget{job.site, CellPos{}});
             return 1;
         case JobType::WearApparel:
-            if (job.count != 0) {
-                return 0;  // taking a worn piece off holds nothing
+            if (job.count == 1 || job.count == 2) {
+                return 0;  // taking a worn piece off (onto the ground or into the bag) holds nothing
             }
             out[0] = keyOf(JobTarget{job.thing, CellPos{}});
             return 1;
@@ -893,12 +893,8 @@ double JobSystem::gearMass(Entity pawn) const {
     for (const Entity item : gear->inventory) {
         mass += itemMassFor(pawn, item);
     }
-    if (carry_.present) {
-        mass += gear->weapon != kNoEntity ? itemMassFor(pawn, gear->weapon) : 0.0;
-        for (const Entity item : gear->apparel) {
-            mass += itemMassFor(pawn, item);
-        }
-    }
+    // What it wears and the weapon in its hands are not carried: their weight slows its walk instead
+    // (sneed, docs/design/armour.md, ApparelStats::moveFactor).
     return mass;
 }
 

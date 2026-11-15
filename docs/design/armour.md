@@ -74,13 +74,49 @@ of the reduction (`ApparelRules.absorbDamageDivisor`).
 - Insulation: every regular garment gives +10 cold and +2 heat degrees (`ApparelRules.clothingInsulationCold`,
   `clothingInsulationHeat`), times quality; armour keeps its own.
 
+## Weight
+
+What a pawn wears weighs on it (`ApparelStats::wornKg`, `armourKg`; numbers in `ApparelRules`):
+
+- **Walking**: speed / (1 + kg / 100) for everything worn plus the weapon in its hands; a hat under a helmet
+  weighs nothing. Clothing weighs its material's `clothing.kg` (a hat half), armour its `stats.mass`.
+  5 kg is about 5% slower, a cataphract set (17 kg) about 15%.
+- **Attacks**: aiming, the cooldown after a burst, reloading and melee swings take (1 + armour kg / 100)
+  times as long. Clothing doesn't count.
+- **Work**: every work speed (`JobSystem::workFactor`) / (1 + 0.25 x armour kg / 100): 20 kg of armour is
+  1 / 1.05. Recreation is not work and isn't slowed.
+- Worn gear and the weapon in hand are not in the carry load ([inventory.md](inventory.md)).
+- The old `equippedStatOffsets.moveSpeed` on armour was never applied and is still not.
+
+## Putting it on
+
+Clothing goes on in one step; armour takes 120 steps a piece (4 seconds at 1x, `ApparelRules.armourWearSteps`),
+and a new injury while putting it on stops the job ("hit while putting on armour"). A pawn picks clothing
+first, then armour legs, chest, helmet, then other gear (`ApparelSystem::bestToWear`).
+
+## Fight gear in the bag
+
+An outfit can keep gear in the pawn's bag and put it on only for fights (`OutfitPolicy.armourInBag`,
+`clothesInBag`; `SetOutfitFightGearCommand`; the Outfits def keys of the same names):
+
+- Outside a fight the pawn picks up the best allowed pieces of that kind into its bag (as much as it can carry;
+  a better piece swaps for the one in the bag, which drops) and takes worn ones off into the bag. Bag gear counts
+  toward the carry load; worn gear doesn't.
+- When it fights (drafted, called up by the alarm, or an enemy; not while fleeing) it puts them on from the bag:
+  clothes all at once, then armour legs, chest, helmet at 120 steps a piece (the `Dressing` component). Meanwhile it
+  can't shoot or swing ("putting on armour"). A new injury makes it give up and fight as it is until the fight ends.
+- When the fight ends the job system puts the pieces back in the bag.
+- `clothesInBag` leaves hats on (RimWorld's nudist outfit allows them). Outfits: "Armour for fights" (armour in the
+  bag) and "Nudist, dressed for fights" (clothes and armour in the bag, hat on). The plain "Nudist" outfit stays
+  naked but for a hat.
+
+**Hide gear** (`HideGearCommand`, the `HideGear` component, `ThingView.hideGear`): a look-only switch; the pawn's
+clothes and armour are not drawn but still count for everything.
+
 ## Not done yet (next steps in the same thread)
 
-- Weight: movement 1 / (1 + kg / 100) for everything worn and held (a hat under a helmet weighs
-  nothing); attack speed from armour kg only; work speed from a quarter of armour kg; worn armour not in
-  the carry limit. `weightKg` is ready; the old `equippedStatOffsets.moveSpeed` on armour still applies.
-- Putting armour on takes 4 seconds a piece (legs, chest, helmet), stopped by a hit; clothing goes on
-  at once. Armour carried in the bag and put on when a fight starts.
-- Nudists naked unless an outfit setting dresses them for fights or work; a look-only switch to hide a
-  pawn's clothes and armour.
+- Buttons for the fight gear and hide gear settings (the sim and the drawing are done; there is no outfit window
+  in Unreal yet).
+- Nudists dressed for work (sneed: "for fights or work").
+- Races, strength or melee skill lowering the weight penalty (sneed: "various things affect this").
 - Plant fibre has no source yet (BACKLOG). Gloves and boots don't exist yet.
