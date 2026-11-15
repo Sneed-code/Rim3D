@@ -10,6 +10,7 @@
 #include "ColonySim/Needs.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Protagonist.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Spoilage.h"
@@ -98,6 +99,9 @@ bool JobSystem::thinkSchedule(Entity pawn, Job& out) {
         case ScheduleKind::Sleep:
             return needs->rest < rules_.fallAsleepBelow && makeSleepJob(pawn, out);
         case ScheduleKind::Joy:
+            if (mindIsPlayersOwn(things_.registry(), pawn)) {
+                break;  // no recreation need: a joy hour is a free hour
+            }
             if (makeRecreationJob(pawn, out, recreation_.joyHoursUntil)) {
                 return true;
             }

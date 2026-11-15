@@ -140,8 +140,13 @@ to try W A S D, the mouse and Tab once.
 ## Mind rules: mood never takes the protagonist from the player
 
 The protagonist is *your* character; colonists and other pawns are people with minds of their own.
-Mood is still tracked and shown for the protagonist (it is part of survival), but it never takes
-control away. Today that means:
+**The protagonist has no mood and no recreation need** (sneed, 2026-11-15), and is immune to
+psychological effects. The `Mood` and `Joy` components stay (other systems read them), but every step
+the mood is held at the base level with no thoughts, memories or bands (so no psychic drone or soothe,
+no insult or lovin thoughts, no inspirations), and recreation, comfort and outdoors are held full, so
+nothing sends them to play; a Joy hour in their schedule is a free hour. The snapshot gives -1 for their
+mood, joy, comfort, outdoors and beauty need, so the UI shows none. Food, rest, health and temperature
+are still needs. Nothing takes control away either:
 
 - no mental breaks (C19): the natural roll skips them and `StartMentalBreakCommand` fails;
 - no social fights: an insult or a jealous rage never starts a fistfight with them;

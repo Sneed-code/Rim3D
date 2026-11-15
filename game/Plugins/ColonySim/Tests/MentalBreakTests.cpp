@@ -621,5 +621,5 @@ TEST_CASE("Mental breaks: the protagonist never snaps, even at the lowest mood, 
     }
     CHECK(log.count(EventType::PawnMentalBreak) == 0);
     CHECK_FALSE(sim.mentalBreaks().active(pawn));
-    CHECK(breakMood(sim, pawn).level <= 5.0f);  // mood is still tracked
+    CHECK(breakMood(sim, pawn).level == doctest::Approx(50.0f));  // no mood: held at the base level
 }
