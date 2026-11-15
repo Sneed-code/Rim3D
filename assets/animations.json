@@ -119,6 +119,13 @@
       "fbx": "game/Saved/Mocap/ShotgunReload/ShotgunReload.fbx",
       "loop": false,
       "comment": "Mocap clip 16 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "Harvest",
+      "source": "mocap/20_harvest_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/Harvest/Harvest.fbx",
+      "loop": true,
+      "comment": "Mocap clip 20 from the mocap thread: gathering crops by hand (Mixamo skeleton, no props)."
     }
   ]
 }
