@@ -45,6 +45,8 @@ class, then the parts add up.
   cataphract) cover chest and legs and count twice. The flak vest and flak jacket are the same piece.
 - Head: only the better of the hat and the helmet counts, per damage class.
 - Other gear (shield belt, pop packs) has no mitigation.
+- A shield on the arm counts once, like a chest piece; slung behind a two-handed weapon, not at all
+  ([shields.md](shields.md)).
 - Last, the creature's own `naturalMitigation` (mechanoids, chitinids; animals have none yet).
 
 Two pieces conflict only when they are the same kind (clothing or armour) and share a slot

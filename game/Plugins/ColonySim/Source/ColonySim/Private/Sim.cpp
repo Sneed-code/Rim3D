@@ -1036,6 +1036,13 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
         return;
     }
+    if (const auto* shield = std::get_if<ShieldCommand>(&command)) {
+        std::string why;
+        if (!combat_->setBlocking(shield->pawn, shield->up, &why, false, kNoEntity, shield->hasDir, shield->dirX, shield->dirY)) {
+            commandFailed(id, why);
+        }
+        return;
+    }
     // The comms console, before the long chain below (MSVC's limit on nested else-ifs).
     if (const auto* comms = std::get_if<CommsCommand>(&command)) {
         if (comms->action != "RequestCaravan") {
@@ -2555,6 +2562,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.outfit = apparel_->outfitOf(entity);
             view.markedForStrip = apparel_->stripMarked(entity);
             view.hideGear = apparel_->gearHidden(entity);
+            view.shieldUp = combat_->shieldUp(entity);
+            const Entity shield = combat_->apparelStats().shieldWorn(reg, entity);
+            view.shieldSlung = shield != kNoEntity && combat_->apparelStats().activeShield(reg, entity) == kNoEntity;
             if (const Dressing* dressing = reg.try_get<Dressing>(entity); dressing != nullptr && dressing->stepsLeft > 0) {
                 view.dressingSteps = dressing->stepsLeft;
             }

@@ -73,6 +73,32 @@ enum class GearKind : uint8_t { None, Clothing, Armour, Other };
 constexpr uint8_t kGearHead = 1;
 constexpr uint8_t kGearChest = 2;
 constexpr uint8_t kGearLegs = 4;
+constexpr uint8_t kGearArm = 8;  // a shield (docs/design/shields.md): armour kind, its own slot
+
+// sneed's shields (2026-11-15, docs/design/shields.md). The numbers from the ShieldRules def.
+struct COLONY_API ShieldRules {
+    float blockCut = 0.4f;          // a hit that lands on a raised shield loses this share...
+    float floorBaseDamage = 6.0f;   // ...then the material's flat block; a hit of at least this much...
+    float floorDamage = 1.0f;       // ...keeps at least this much
+    float arcDegrees = 60.0f;       // the raised shield catches hits from within this angle either side of its facing
+    int aiHoldSteps = 15;           // a fighter keeps its shield up this long after the last attack it saw coming
+
+    static ShieldRules read(const DefDatabase& defs);
+};
+
+// On a pawn holding its shield up (docs/design/shields.md): it can walk and reload but not shoot or swing. A hit
+// from the front (within `arcDegrees` of where it faces) lands on the shield with the shield's catch chance. The
+// fighter AI raises it at an attack it sees coming (`ai`) and faces `threat` while it is up; it lowers it once
+// `holdSteps` run out with no attack coming, or to attack. The player's block faces where the pawn faces, or the
+// way the command gave (`hasDir`).
+struct Blocking {
+    Entity threat = kNoEntity;
+    bool ai = false;
+    int holdSteps = 0;
+    bool hasDir = false;
+    float dirX = 1.0f;
+    float dirY = 0.0f;
+};
 
 // An item made of a stuff (cloth, leather...): clothes from tailoring. Its armor and insulation come
 // from the stuff (Textiles.json, `stuffProps`); without one a `stuffRequired` garment is worth nothing.
@@ -204,6 +230,19 @@ public:
     float moveFactor(const entt::registry& reg, Entity pawn) const;
     float attackTimeFactor(const entt::registry& reg, Entity pawn) const;
     float workFactor(const entt::registry& reg, Entity pawn) const;
+    // Shields (docs/design/shields.md). A shield is armour in the Arm slot with a catch chance; its material gives
+    // the flat block (`shieldStuff.block`) and a weight factor (`shieldStuff.mass`). A two-handed weapon in the hands
+    // (`twoHanded` on the weapon's def) slings it on the back: it still weighs but neither protects nor blocks.
+    bool isShield(DefId def) const { return isApparel(def) && apparel_[def.value].shield; }
+    float catchChance(DefId def) const { return isShield(def) ? apparel_[def.value].catchChance : 0.0f; }
+    float shieldBlock(const entt::registry& reg, Entity item) const;
+    bool twoHanded(DefId weaponDef) const {
+        return weaponDef.valid() && weaponDef.value < twoHanded_.size() && twoHanded_[weaponDef.value];
+    }
+    // The shield the pawn wears (kNoEntity for none) / the same, only when it is on its arm (not slung).
+    Entity shieldWorn(const entt::registry& reg, Entity pawn) const;
+    Entity activeShield(const entt::registry& reg, Entity pawn) const;
+    const ShieldRules& shieldRules() const { return shieldRules_; }
     // Degrees Celsius the comfortable range widens: cold lowers its minimum, heat raises its maximum.
     float insulationCold(const entt::registry& reg, Entity item) const;
     float insulationHeat(const entt::registry& reg, Entity item) const;
@@ -234,6 +273,8 @@ private:
         uint8_t slots = 0;
         float share = 1.0f;     // clothing: share of the material's mitigation and weight (hats 0.5)
         Mitigation fixed;       // armour: its own %s (steel's for armour made of a material)
+        bool shield = false;    // a shield (gear.shield)
+        float catchChance = 0.0f;
         float mass = 0.0f;
         float coldMultiplier = 0.0f;
         float heatMultiplier = 0.0f;
@@ -253,6 +294,8 @@ private:
         float cold = 0.0f;
         float heat = 0.0f;
         float hitPoints = 1.0f;
+        float shieldBlock = 0.0f;  // shieldStuff.block: flat damage a raised shield of it stops
+        float shieldMass = 1.0f;   // shieldStuff.mass: times the shield def's mass
     };
 
     std::vector<Apparel> apparel_;  // by Things DefId value
@@ -268,6 +311,8 @@ private:
     float kgPerSlowdown_ = 100.0f;
     float workWeightShare_ = 0.25f;
     std::vector<float> weaponKg_;  // by Things DefId value: stats.mass of anything else (the weapon in hand)
+    std::vector<bool> twoHanded_;  // by Things DefId value: a weapon held in both hands
+    ShieldRules shieldRules_;
     std::vector<std::string> none_;
     std::string noName_;
 };

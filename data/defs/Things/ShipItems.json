@@ -1,6 +1,6 @@
 [
  {
-  "defName": "Plasteel", "armourStuff": {"factor": {"blunt": 1.2, "sharp": 1.25, "elemental": 1.1}},
+  "defName": "Plasteel", "armourStuff": {"factor": {"blunt": 1.2, "sharp": 1.25, "elemental": 1.1}}, "shieldStuff": {"block": 3, "mass": 0.7},
   "parent": "ItemBase",
   "label": "plasteel",
   "stackLimit": 75,
@@ -64,7 +64,7 @@
   }
  },
  {
-  "defName": "Uranium", "armourStuff": {"factor": {"blunt": 1.2, "sharp": 1.2, "elemental": 1.1}},
+  "defName": "Uranium", "armourStuff": {"factor": {"blunt": 1.2, "sharp": 1.2, "elemental": 1.1}}, "shieldStuff": {"block": 2.5, "mass": 2},
   "parent": "ItemBase",
   "label": "uranium",
   "stackLimit": 75,

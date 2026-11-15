@@ -1047,6 +1047,17 @@ struct HideGearCommand {
     bool hide = true;
 };
 
+// Shields (docs/design/shields.md): `up` raises the pawn's shield, false lowers it. Held up, the pawn can walk and
+// reload but not shoot or swing. `hasDir`: the shield faces (dirX, dirY) (the player's camera), else where the pawn
+// faces. Fails without a shield on its arm (none, or slung behind a two-handed weapon).
+struct ShieldCommand {
+    Entity pawn = kNoEntity;
+    bool up = true;
+    bool hasDir = false;
+    float dirX = 0.0f;
+    float dirY = 0.0f;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -1079,7 +1090,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
                              AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand,
                              ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand,
-                             InventoryCommand, SetOutfitFightGearCommand, HideGearCommand>;
+                             InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand>;
 
 // A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
 // applied in. Failed commands are logged too.

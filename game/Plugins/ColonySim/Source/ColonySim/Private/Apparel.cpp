@@ -31,7 +31,7 @@ const char* const kApparelMitigationNames[kMitigationFields] = {"blunt", "sharp"
                                                                  "cold",  "toxic", "electric",  "psionic"};
 
 uint8_t apparelSlotBit(const std::string& name) {
-    return name == "Head" ? kGearHead : name == "Chest" ? kGearChest : name == "Legs" ? kGearLegs : 0;
+    return name == "Head" ? kGearHead : name == "Chest" ? kGearChest : name == "Legs" ? kGearLegs : name == "Arm" ? kGearArm : 0;
 }
 
 }  // namespace
@@ -124,6 +124,20 @@ ApparelRules ApparelRules::read(const DefDatabase& defs) {
     return r;
 }
 
+ShieldRules ShieldRules::read(const DefDatabase& defs) {
+    ShieldRules r;
+    const Def* def = defs.find("Rules", "ShieldRules");
+    if (def == nullptr) {
+        return r;
+    }
+    r.blockCut = std::clamp(apparelNum(*def, "blockCut", r.blockCut), 0.0f, 1.0f);
+    r.floorBaseDamage = std::max(0.0f, apparelNum(*def, "floorBaseDamage", r.floorBaseDamage));
+    r.floorDamage = std::max(0.0f, apparelNum(*def, "floorDamage", r.floorDamage));
+    r.arcDegrees = std::clamp(apparelNum(*def, "arcDegrees", r.arcDegrees), 0.0f, 180.0f);
+    r.aiHoldSteps = std::max(1, static_cast<int>(def->integer("aiHoldSteps", r.aiHoldSteps)));
+    return r;
+}
+
 // ---- ApparelStats ---------------------------------------------------------------------------
 
 ApparelStats::ApparelStats(const DefDatabase& defs) {
@@ -156,10 +170,13 @@ ApparelStats::ApparelStats(const DefDatabase& defs) {
     kgPerSlowdown_ = rules.weightKgPerSlowdown;
     workWeightShare_ = rules.workWeightShare;
     weaponKg_.assign(defs.size(), 0.0f);
+    twoHanded_.assign(defs.size(), false);
+    shieldRules_ = ShieldRules::read(defs);
 
     for (const DefId id : defs.idsOfKind("Things")) {
         const Def& def = defs.get(id);
         weaponKg_[id.value] = apparelNum(def, "stats.mass", 0.0f);
+        twoHanded_[id.value] = def.flag("twoHanded");
         if (def.has("apparel")) {
             Apparel& a = apparel_[id.value];
             a.valid = true;
@@ -172,6 +189,8 @@ ApparelStats::ApparelStats(const DefDatabase& defs) {
             }
             a.share = apparelNum(def, "gear.share", 1.0f);
             a.fixed = Mitigation::read(def, "gear.mitigation");
+            a.shield = def.has("gear.shield");
+            a.catchChance = std::clamp(apparelNum(def, "gear.shield.catchChance", 0.0f), 0.0f, 1.0f);
             a.mass = apparelNum(def, "stats.mass", 0.0f);
             a.coldMultiplier = apparelNum(def, "apparel.stuffEffectMultiplierInsulationCold", 0.0f);
             a.heatMultiplier = apparelNum(def, "apparel.stuffEffectMultiplierInsulationHeat", 0.0f);
@@ -198,6 +217,8 @@ ApparelStats::ApparelStats(const DefDatabase& defs) {
             s.cold = apparelNum(def, "stuffProps.statOffsets.insulationCold", 0.0f);
             s.heat = apparelNum(def, "stuffProps.statOffsets.insulationHeat", 0.0f);
             s.hitPoints = apparelNum(def, "stuffProps.statFactors.maxHitPoints", 1.0f);
+            s.shieldBlock = std::max(0.0f, apparelNum(def, "shieldStuff.block", 0.0f));
+            s.shieldMass = std::max(0.0f, apparelNum(def, "shieldStuff.mass", 1.0f));
         }
     }
 }
@@ -253,8 +274,11 @@ Mitigation ApparelStats::mitigation(const entt::registry& reg, Entity item) cons
             for (int c = 0; c < kDamageClasses; ++c) {
                 m.pct[c] *= stuff->armourFactor[c];
             }
+            // A shield takes its size's share of the material's offset, as of its %s (wood's -10% fire on a tower
+            // shield is -2.5% on a small one); other armour all of it (gear.share is 1).
+            const float offsetShare = a.shield ? a.share : 1.0f;
             for (int f = 0; f < kMitigationFields; ++f) {
-                m.pct[f] += stuff->armourOffset.pct[f];
+                m.pct[f] += stuff->armourOffset.pct[f] * offsetShare;
             }
         }
     } else {
@@ -279,7 +303,46 @@ float ApparelStats::weightKg(const entt::registry& reg, Entity item) const {
             return stuff_[made->stuff.value].clothingKg * a.share;
         }
     }
+    if (a.shield) {
+        const MadeOf* made = reg.try_get<MadeOf>(item);
+        if (made != nullptr && made->stuff.valid() && made->stuff.value < stuff_.size() && stuff_[made->stuff.value].valid) {
+            return a.mass * stuff_[made->stuff.value].shieldMass;
+        }
+    }
     return a.mass;
+}
+
+float ApparelStats::shieldBlock(const entt::registry& reg, Entity item) const {
+    const MadeOf* made = reg.valid(item) ? reg.try_get<MadeOf>(item) : nullptr;
+    if (made == nullptr || !made->stuff.valid() || made->stuff.value >= stuff_.size() || !stuff_[made->stuff.value].valid) {
+        return 0.0f;
+    }
+    return stuff_[made->stuff.value].shieldBlock;
+}
+
+Entity ApparelStats::shieldWorn(const entt::registry& reg, Entity pawn) const {
+    const Gear* gear = reg.valid(pawn) ? reg.try_get<Gear>(pawn) : nullptr;
+    if (gear == nullptr) {
+        return kNoEntity;
+    }
+    for (const Entity worn : gear->apparel) {
+        if (isShield(reg.get<Thing>(worn).def)) {
+            return worn;
+        }
+    }
+    return kNoEntity;
+}
+
+Entity ApparelStats::activeShield(const entt::registry& reg, Entity pawn) const {
+    const Entity shield = shieldWorn(reg, pawn);
+    if (shield == kNoEntity) {
+        return kNoEntity;
+    }
+    const Gear& gear = reg.get<Gear>(pawn);
+    if (gear.weapon != kNoEntity && reg.valid(gear.weapon) && twoHanded(reg.get<Thing>(gear.weapon).def)) {
+        return kNoEntity;  // slung on the back
+    }
+    return shield;
 }
 
 float ApparelStats::armourKg(const entt::registry& reg, Entity pawn) const {
@@ -777,10 +840,10 @@ int ApparelSystem::wearRank(DefId def) const {
         return 0;
     }
     if (kind != GearKind::Armour) {
-        return 4;
+        return 5;
     }
     const uint8_t slots = stats().gearSlots(def);
-    return (slots & kGearHead) != 0 ? 3 : (slots & kGearChest) != 0 ? 2 : 1;
+    return (slots & kGearArm) != 0 ? 4 : (slots & kGearHead) != 0 ? 3 : (slots & kGearChest) != 0 ? 2 : 1;
 }
 
 Entity ApparelSystem::bestToWear(Entity pawn, const std::function<bool(Entity)>& usable) const {
@@ -806,6 +869,11 @@ Entity ApparelSystem::bestToWear(Entity pawn, const std::function<bool(Entity)>&
         const float dy = pos.y - at->y;
         const float dist = dx * dx + dy * dy;
         if (dist > maxDistSq || !allowed(*policy, item)) {
+            continue;
+        }
+        // A shield is no use with a two-handed weapon in the hands (docs/design/shields.md).
+        if (stats().isShield(thing.def) && gear != nullptr && gear->weapon != kNoEntity && reg.valid(gear->weapon) &&
+            stats().twoHanded(reg.get<Thing>(gear->weapon).def)) {
             continue;
         }
         // Fight gear is weighed against what is in the bag, the rest against what is worn.
@@ -1237,7 +1305,7 @@ void ApparelSystem::hashThing(Entity e, StateHasher& h) const {
     const uint64_t mask = (made != nullptr ? 1u : 0u) | (quality != nullptr ? 2u : 0u) | (reg.all_of<Tainted>(e) ? 4u : 0u) |
                           (reg.all_of<StripMark>(e) ? 8u : 0u) | (outfitOfPawn != nullptr ? 16u : 0u) |
                           (durability != nullptr ? 32u : 0u) | (reg.all_of<Dressing>(e) ? 64u : 0u) |
-                          (reg.all_of<HideGear>(e) ? 128u : 0u);
+                          (reg.all_of<HideGear>(e) ? 128u : 0u) | (reg.all_of<Blocking>(e) ? 256u : 0u);
     if (mask == 0) {
         return;  // most things have none of these: their hash stays what it was
     }
@@ -1260,6 +1328,14 @@ void ApparelSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(dressing->stepsLeft);
         h.add(dressing->injuries);
         h.add(dressing->gaveUp);
+    }
+    if (const Blocking* blocking = reg.try_get<Blocking>(e)) {
+        h.add(entt::to_integral(blocking->threat));
+        h.add(blocking->ai);
+        h.add(blocking->holdSteps);
+        h.add(blocking->hasDir);
+        h.add(blocking->dirX);
+        h.add(blocking->dirY);
     }
 }
 

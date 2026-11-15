@@ -236,6 +236,18 @@ struct PawnHitResult {
     // Worn pieces that stopped or softened the hit and the hit points each loses (C15); the caller
     // passes the result to CombatSystem::wearApparel.
     std::vector<std::pair<Entity, int>> wear;
+    // The hit landed on a raised shield (docs/design/shields.md): `shield` took `shieldTook` off it before armour.
+    bool shieldBlocked = false;
+    Entity shield = kNoEntity;
+    float shieldTook = 0.0f;
+};
+
+// Where a hit comes from, for a raised shield (docs/design/shields.md): the shooter's side of a bullet, the
+// attacker of a blow, a blast's centre. Hits from nowhere (flames, traps) never land on a shield.
+struct HitFrom {
+    bool known = false;
+    float x = 0.0f;
+    float y = 0.0f;
 };
 
 // What a gun's def says, for fixed guns that fire without a pawn's hands (turrets, F11): range in
@@ -435,11 +447,18 @@ public:
     // layer first (RimWorld's rule). Every random choice comes from `seed`. Doesn't apply the damage:
     // the caller does (HealthSystem::applyHit), so bullets and melee strikes land the same way (F8).
     PawnHitResult hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
-                          uint64_t seed) const;
+                          uint64_t seed, const HitFrom& from = HitFrom{}) const;
     // One blow that comes from no gun or hand (a spike trap's stab): lands on an outside part picked
     // by size, goes through the pawn's armor like a bullet (so armor wears) and hurts what is left.
     // A pawn with no hitboxes takes it on a part health picks.
-    void strikePawn(Entity pawn, DefId damageType, float amount, float penetration, Rng& rng);
+    void strikePawn(Entity pawn, DefId damageType, float amount, float penetration, Rng& rng,
+                    const HitFrom& from = HitFrom{});
+    // Shields (docs/design/shields.md): raises or lowers the pawn's shield. Up, it can walk and reload but not shoot
+    // or swing. Fails without a shield on its arm (none, or slung behind a two-handed weapon), or downed. `ai`: the
+    // fighter AI raised it at `threat`; `hasDir`: the player's block faces (dirX, dirY).
+    bool setBlocking(Entity pawn, bool up, std::string* why = nullptr, bool ai = false, Entity threat = kNoEntity,
+                     bool hasDir = false, float dirX = 0.0f, float dirY = 0.0f);
+    bool shieldUp(Entity pawn) const;
     // Damage of a kind with no aim behind it (flames): a random outside part, through the armor that
     // covers it (heat armor for Burn), worn pieces losing hit points. False if the pawn can't be hurt.
     bool hurtPawn(Entity pawn, DefId damageType, float amount, Rng& rng);
@@ -488,7 +507,8 @@ private:
     // the wear on the pieces (docs/design/armour.md). `blast` uses the type's explosionMix. Uses `rng`
     // only to round the wear.
     PawnHitResult armorPass(Entity pawn, int part, DefId damageType, float damage, float penetration, Rng& rng,
-                            bool blast = false) const;
+                            bool blast = false, const HitFrom& from = HitFrom{}) const;
+    void stepBlocking();
     int pickOutsidePart(Entity pawn, Rng& rng) const;
     Entity launch(Entity launcher, DefId weaponDef, float ox, float oy, float oz, int level, CellPos startCell, float x,
                   float y, float z, float spreadSlope, Rng& rng, float kickUp, float kickSide, Posture* posture);

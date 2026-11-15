@@ -256,6 +256,8 @@ struct ThingView {
     bool markedForStrip = false;
     bool hideGear = false;     // the look-only switch: don't draw its clothes and armour (docs/design/armour.md)
     int dressingSteps = 0;     // steps left putting a piece of armour on from its bag in a fight, 0 for none
+    bool shieldUp = false;     // holding its shield up (docs/design/shields.md); `facingX/Y` is where it points
+    bool shieldSlung = false;  // its shield hangs on its back behind a two-handed weapon
     uint32_t firstApparel = 0;
     uint32_t apparelCount = 0;
     // Inventory and carry weight (docs/design/inventory.md). Pawns: what they carry in kg (worn, weapons, bag,

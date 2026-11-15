@@ -171,6 +171,7 @@ enum class EventType : uint8_t {
     // Lovin (docs/design/lovin.md): abstract, the couple lies in its bed a while.
     Lovin,                 // `thing` and `target` the partners; `message` "started" (`amount` its seconds), "done" or "interrupted"
     PawnStaggered,         // a bullet staggered `thing` (AN1, docs/design/combat.md "Stagger"): it walks slowly for `amount` steps; (x, y) where
+    ShieldBlocked,         // a hit landed on `thing`'s raised shield `target` (docs/design/shields.md): `amount` it took off, `message` "stopped" (all of it) or "softened"; (x, y) where
 };
 
 // What stopped a projectile (ProjectileHit).

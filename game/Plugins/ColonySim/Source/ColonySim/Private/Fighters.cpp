@@ -1,6 +1,7 @@
 #include "ColonySim/Fighters.h"
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Construction.h"
@@ -466,6 +467,7 @@ void FighterSystem::step() {
             f.nextPlan = now() + rules_.planEvery;
             plan(pawn, f);
         }
+        shieldAct(pawn, f);
         considerThrow(pawn, f);
         act(pawn, f);
     }
@@ -1470,6 +1472,84 @@ bool FighterSystem::meleeAct(Entity pawn, Fighter& f) {
         melee_->attack(pawn, victim, false);
     }
     return true;
+}
+
+// Shields (docs/design/shields.md): a fighter with a shield on its arm raises it when it sees a shot being aimed or
+// a swing wound up at it, and keeps it up `aiHoldSteps` after the last one, facing the attacker; it can walk and
+// reload meanwhile. It lowers it as soon as it can strike itself: a gun ready with a shot to take, or a melee weapon
+// ready with an enemy in reach. A shield the player raised is the player's to lower.
+void FighterSystem::shieldAct(Entity pawn, Fighter& f) {
+    entt::registry& reg = things_.registry();
+    const ApparelStats& stats = combat_.apparelStats();
+    if (stats.activeShield(reg, pawn) == kNoEntity) {
+        return;  // the combat step lowers a shield that is gone or slung
+    }
+    Blocking* up = reg.try_get<Blocking>(pawn);
+    if (up != nullptr && !up->ai) {
+        return;
+    }
+    const PawnInfo* self = info(pawn);
+    if (self == nullptr) {
+        return;
+    }
+    // The nearest enemy whose shot or swing is coming at it.
+    Entity threat = kNoEntity;
+    float nearest = 0.0f;
+    for (const PawnInfo& p : pawns_) {
+        if (p.pawn == pawn || p.faction == self->faction || p.animal || !p.able || p.level != self->level) {
+            continue;
+        }
+        const Shooter* s = reg.try_get<Shooter>(p.pawn);
+        const Melee* m = reg.try_get<Melee>(p.pawn);
+        const bool coming = (s != nullptr && s->target == pawn && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) ||
+                            (m != nullptr && m->target == pawn && m->phase == MeleePhase::Windup);
+        if (!coming) {
+            continue;
+        }
+        const float d = fightDist(p.x, p.y, self->x, self->y);
+        if (threat == kNoEntity || d < nearest) {
+            threat = p.pawn;
+            nearest = d;
+        }
+    }
+    // Whether it would rather strike now.
+    bool strike = false;
+    const Shooter* own = reg.try_get<Shooter>(pawn);
+    const ShotPhase phase = own != nullptr ? own->phase : ShotPhase::Ready;
+    if (phase == ShotPhase::Aiming || phase == ShotPhase::Firing || (melee_ != nullptr && melee_->winding(pawn))) {
+        strike = true;
+    } else if (f.mode == FightMode::Flee) {
+        strike = false;
+    } else if (weaponRange(pawn) > 0.0f) {
+        strike = phase == ShotPhase::Ready && f.canFire && info(f.target) != nullptr && !combat_.switching(pawn);
+    } else if (melee_ != nullptr) {
+        const Melee* m = reg.try_get<Melee>(pawn);
+        if ((m == nullptr || m->phase == MeleePhase::Ready) && !combat_.switching(pawn)) {
+            for (const PawnInfo& p : pawns_) {
+                if (p.faction != self->faction && !p.animal && p.able && p.level == self->level && !p.turret &&
+                    melee_->inReach(pawn, p.pawn)) {
+                    strike = true;
+                    break;
+                }
+            }
+        }
+    }
+    const int hold = stats.shieldRules().aiHoldSteps;
+    if (threat != kNoEntity && !strike) {
+        if (up == nullptr) {
+            combat_.setBlocking(pawn, true, nullptr, true, threat);
+        } else {
+            up->threat = threat;
+            up->holdSteps = hold;
+        }
+        return;
+    }
+    if (up == nullptr) {
+        return;
+    }
+    if (strike || --up->holdSteps <= 0) {
+        reg.remove<Blocking>(pawn);
+    }
 }
 
 // In cover with nothing to shoot just now: top the magazine up rather than run dry mid-fight.

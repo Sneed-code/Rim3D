@@ -1112,6 +1112,9 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     if (isDressing(reg, pawn)) {
         return fail("putting on armour");
     }
+    if (reg.all_of<Blocking>(pawn)) {
+        return fail("holding up a shield");
+    }
     Shooter& s = reg.get_or_emplace<Shooter>(pawn);
     if (s.phase == ShotPhase::Reloading) {
         return fail("reloading");
@@ -1564,7 +1567,8 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
                 (bodySize_ ? bodySize_(hit.thing) : 1.0f) <= bullet.stoppingPower + 0.001f) {
                 stagger(hit.thing);
             }
-            const PawnHitResult result = hitPawn(hit.thing, hit.part, bullet.damageType, bullet.damage * p.damageFactor, bullet.penetration * p.damageFactor, p.seed);
+            const PawnHitResult result = hitPawn(hit.thing, hit.part, bullet.damageType, bullet.damage * p.damageFactor,
+                                                 bullet.penetration * p.damageFactor, p.seed, HitFrom{true, h.x - p.vx, h.y - p.vy});
             h.part = result.part;
             if (result.deflected) {
                 h.kind = ProjectileHitKind::Armor;
@@ -1613,15 +1617,21 @@ float CombatSystem::mitigate(Entity pawn, DefId damageType, float amount, float 
     };
     std::vector<Piece> pieces;
     if (gear != nullptr) {
+        // A shield counts once, like a vest, while it is on the arm (docs/design/shields.md); slung, not at all.
+        const Entity shield = apparelStats_->activeShield(reg, pawn);
         for (const Entity worn : gear->apparel) {
             const DefId def = reg.get<Thing>(worn).def;
             const GearKind gk = apparelStats_->gearKind(def);
             if (gk != GearKind::Clothing && gk != GearKind::Armour) {
                 continue;
             }
+            const bool isShield = apparelStats_->isShield(def);
+            if (isShield && worn != shield) {
+                continue;
+            }
             const uint8_t slots = apparelStats_->gearSlots(def);
-            Piece p{worn, apparelStats_->mitigation(reg, worn), ((slots & kGearChest) != 0 ? 1 : 0) + ((slots & kGearLegs) != 0 ? 1 : 0),
-                    (slots & kGearHead) != 0, gk == GearKind::Armour, 0.0f};
+            const int count = isShield ? 1 : ((slots & kGearChest) != 0 ? 1 : 0) + ((slots & kGearLegs) != 0 ? 1 : 0);
+            Piece p{worn, apparelStats_->mitigation(reg, worn), count, (slots & kGearHead) != 0, gk == GearKind::Armour, 0.0f};
             pieces.push_back(p);
         }
     }
@@ -1672,13 +1682,57 @@ float CombatSystem::mitigate(Entity pawn, DefId damageType, float amount, float 
 }
 
 PawnHitResult CombatSystem::armorPass(Entity pawn, int part, DefId damageType, float amount, float penetration,
-                                      Rng& rng, bool blast) const {
+                                      Rng& rng, bool blast, const HitFrom& from) const {
     PawnHitResult result;
     result.part = part;
     result.damageType = damageType;
     result.amount = amount;
-    if (model_->kind(things_.registry().get<Thing>(pawn).def) == nullptr) {
+    const entt::registry& reg = things_.registry();
+    if (model_->kind(reg.get<Thing>(pawn).def) == nullptr) {
         return result;
+    }
+    // A raised shield (docs/design/shields.md): a hit from the front lands on it with its catch chance, whatever the
+    // damage, and loses 40% and then the material's flat block, but a hit of 6 or more keeps at least 1. Then armour.
+    // The roll is made only for a pawn with its shield up, so fights without shields draw the same numbers.
+    const Blocking* blocking = reg.try_get<Blocking>(pawn);
+    const Entity shield = blocking != nullptr && from.known ? apparelStats_->activeShield(reg, pawn) : kNoEntity;
+    if (shield != kNoEntity && amount > 0.0f) {
+        const Position& pos = reg.get<Position>(pawn);
+        const Posture* posture = reg.try_get<Posture>(pawn);
+        float fx = blocking->hasDir ? blocking->dirX : posture != nullptr ? posture->facingX : 1.0f;
+        float fy = blocking->hasDir ? blocking->dirY : posture != nullptr ? posture->facingY : 0.0f;
+        const float dx = from.x - pos.x;
+        const float dy = from.y - pos.y;
+        const float len = std::sqrt(dx * dx + dy * dy);
+        const float flen = std::sqrt(fx * fx + fy * fy);
+        const ShieldRules& sr = apparelStats_->shieldRules();
+        const float cosArc = std::cos(sr.arcDegrees * 3.14159265f / 180.0f);
+        const bool front = len < 1e-4f || flen < 1e-4f || (fx * dx + fy * dy) / (len * flen) >= cosArc - 1e-6f;
+        if (front && rng.unit() < apparelStats_->catchChance(reg.get<Thing>(shield).def)) {
+            float left = amount * (1.0f - sr.blockCut) - apparelStats_->shieldBlock(reg, shield);
+            if (amount >= sr.floorBaseDamage) {
+                left = std::max(left, sr.floorDamage);
+            }
+            left = std::max(0.0f, std::min(left, amount));
+            result.shieldBlocked = true;
+            result.shield = shield;
+            result.shieldTook = amount - left;
+            // The shield wears for what it stopped, as armour does: 1 hit point's worth per 4 points.
+            const float lost = result.shieldTook / model_->absorbDivisor;
+            int points = static_cast<int>(lost);
+            if (rng.unit() < lost - static_cast<float>(points)) {
+                ++points;
+            }
+            if (points > 0) {
+                result.wear.emplace_back(shield, points);
+            }
+            amount = left;
+            result.amount = left;
+            if (left <= 0.0f) {
+                result.deflected = true;  // all of it stopped
+                return result;
+            }
+        }
     }
     std::vector<std::pair<Entity, float>> shares;
     result.amount = mitigate(pawn, damageType, amount, penetration, blast, &shares);
@@ -1696,7 +1750,7 @@ PawnHitResult CombatSystem::armorPass(Entity pawn, int part, DefId damageType, f
 }
 
 PawnHitResult CombatSystem::hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
-                                    uint64_t seed) const {
+                                    uint64_t seed, const HitFrom& from) const {
     const entt::registry& reg = things_.registry();
     PawnHitResult result;
     result.damageType = damageType;
@@ -1729,7 +1783,7 @@ PawnHitResult CombatSystem::hitPawn(Entity pawn, int hitboxPart, DefId damageTyp
     }
     part = health_.goInside(pawn, damageType, part, rng);
     result.part = part;
-    return armorPass(pawn, part, damageType, amount, penetration, rng);
+    return armorPass(pawn, part, damageType, amount, penetration, rng, false, from);
 }
 
 bool CombatSystem::hurtPawn(Entity pawn, DefId damageType, float amount, Rng& rng) {
@@ -1854,6 +1908,7 @@ void CombatSystem::step(Rng& rng) {
             }
         }
     }
+    stepBlocking();
 
     // Triggers, in id order: they share the random stream.
     scratch_.clear();
@@ -2095,7 +2150,8 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
             if (part < 0) {
                 break;
             }
-            const PawnHitResult piece = armorPass(pawn, part, ex.damageType, amount * weights[i] / weightSum, ex.penetration, rng, true);
+            const PawnHitResult piece = armorPass(pawn, part, ex.damageType, amount * weights[i] / weightSum, ex.penetration, rng, true,
+                                                    HitFrom{true, bx, by});
             if (piece.deflected || piece.amount <= 0.0f) {
                 wearApparel(pawn, piece);
                 continue;
@@ -2294,13 +2350,13 @@ bool CombatSystem::unequip(Entity pawn, Entity item) {
     return true;
 }
 
-void CombatSystem::strikePawn(Entity pawn, DefId damageType, float amount, float penetration, Rng& rng) {
+void CombatSystem::strikePawn(Entity pawn, DefId damageType, float amount, float penetration, Rng& rng, const HitFrom& from) {
     const int part = pickOutsidePart(pawn, rng);
     if (part < 0) {
         health_.applyDamage(pawn, damageType, amount, -1, rng);
         return;
     }
-    const PawnHitResult hit = armorPass(pawn, part, damageType, amount, penetration, rng);
+    const PawnHitResult hit = armorPass(pawn, part, damageType, amount, penetration, rng, false, from);
     if (!hit.deflected && hit.amount > 0.0f) {
         health_.applyHit(pawn, hit.damageType, hit.amount, part);
     }
@@ -2308,8 +2364,109 @@ void CombatSystem::strikePawn(Entity pawn, DefId damageType, float amount, float
 }
 
 void CombatSystem::wearApparel(Entity pawn, const PawnHitResult& result) {
+    if (result.shieldBlocked && events_ != nullptr) {
+        Event e;
+        e.type = EventType::ShieldBlocked;
+        e.thing = pawn;
+        e.target = result.shield;
+        e.amount = result.shieldTook;
+        if (const Position* pos = things_.registry().try_get<Position>(pawn)) {
+            e.cell = cellOf(*pos);
+            e.x = pos->x;
+            e.y = pos->y;
+        }
+        e.message = result.deflected ? "stopped" : "softened";
+        events_->push_back(std::move(e));
+    }
     for (const auto& [item, points] : result.wear) {
         damageApparel(pawn, item, points);
+    }
+}
+
+bool CombatSystem::setBlocking(Entity pawn, bool up, std::string* why, bool ai, Entity threat, bool hasDir, float dirX,
+                               float dirY) {
+    entt::registry& reg = things_.registry();
+    const auto fail = [why](const char* message) {
+        if (why != nullptr) {
+            *why = message;
+        }
+        return false;
+    };
+    if (!reg.valid(pawn) || !reg.all_of<Thing>(pawn) || reg.get<Thing>(pawn).category != ThingCategory::Pawn) {
+        return fail("that is not a pawn");
+    }
+    if (!up) {
+        reg.remove<Blocking>(pawn);
+        return true;
+    }
+    if (apparelStats_->shieldWorn(reg, pawn) == kNoEntity) {
+        return fail("that pawn has no shield");
+    }
+    if (apparelStats_->activeShield(reg, pawn) == kNoEntity) {
+        return fail("the shield is slung behind a two-handed weapon");
+    }
+    if (health_.incapacitated(pawn)) {
+        return fail("that pawn can't raise a shield (downed or dead)");
+    }
+    if (reg.any_of<KnockedDown, Stunned>(pawn)) {
+        return fail("that pawn is knocked down or stunned");
+    }
+    if (const Shooter* s = reg.try_get<Shooter>(pawn); s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) {
+        return fail("busy shooting");
+    }
+    Blocking b;
+    b.ai = ai;
+    b.threat = threat;
+    b.holdSteps = ai ? apparelStats_->shieldRules().aiHoldSteps : 0;
+    const float len = std::sqrt(dirX * dirX + dirY * dirY);
+    b.hasDir = hasDir && len > 1e-4f;
+    if (b.hasDir) {
+        b.dirX = dirX / len;
+        b.dirY = dirY / len;
+    }
+    reg.emplace_or_replace<Blocking>(pawn, b);
+    return true;
+}
+
+bool CombatSystem::shieldUp(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    return reg.valid(pawn) && reg.all_of<Blocking>(pawn);
+}
+
+// Shields that can't stay up come down: none on the arm any more (dropped, or slung behind a two-handed weapon), the
+// pawn downed, knocked down or stunned. A shield up faces its threat (the AI's) or the player's way.
+void CombatSystem::stepBlocking() {
+    entt::registry& reg = things_.registry();
+    scratch_.clear();
+    for (const Entity pawn : reg.view<Blocking>()) {
+        scratch_.push_back(pawn);
+    }
+    std::sort(scratch_.begin(), scratch_.end());
+    for (const Entity pawn : scratch_) {
+        if (apparelStats_->activeShield(reg, pawn) == kNoEntity || !things_.spawned(pawn) || health_.incapacitated(pawn) ||
+            reg.any_of<KnockedDown, Stunned>(pawn)) {
+            reg.remove<Blocking>(pawn);
+            continue;
+        }
+        const Blocking& b = reg.get<Blocking>(pawn);
+        Posture* posture = reg.try_get<Posture>(pawn);
+        if (posture == nullptr) {
+            continue;
+        }
+        if (b.hasDir) {
+            posture->facingX = b.dirX;
+            posture->facingY = b.dirY;
+        } else if (b.threat != kNoEntity && reg.valid(b.threat) && things_.spawned(b.threat)) {
+            const Position& at = reg.get<Position>(pawn);
+            const Position& to = reg.get<Position>(b.threat);
+            const float dx = to.x - at.x;
+            const float dy = to.y - at.y;
+            const float len = std::sqrt(dx * dx + dy * dy);
+            if (len > 0.01f) {
+                posture->facingX = dx / len;
+                posture->facingY = dy / len;
+            }
+        }
     }
 }
 

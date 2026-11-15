@@ -342,7 +342,8 @@ bool MeleeSystem::ready(Entity pawn) const {
         return false;
     }
     const Melee* m = reg.try_get<Melee>(pawn);
-    return (m == nullptr || m->phase == MeleePhase::Ready) && !combat_.switching(pawn) && !isDressing(reg, pawn);
+    return (m == nullptr || m->phase == MeleePhase::Ready) && !combat_.switching(pawn) && !isDressing(reg, pawn) &&
+           !reg.all_of<Blocking>(pawn);
 }
 
 bool MeleeSystem::winding(Entity pawn) const {
@@ -379,6 +380,9 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     }
     if (isDressing(reg, pawn)) {
         return fail("putting on armour");
+    }
+    if (reg.all_of<Blocking>(pawn)) {
+        return fail("holding up a shield");
     }
     if (const Shooter* s = reg.try_get<Shooter>(pawn); s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) {
         return fail("busy shooting");
@@ -793,11 +797,12 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             combat_.noteHurt(victim, pawn);
         } else {
             const PawnHitResult result =
-                combat_.hitPawn(victim, hit.part, tool->damageType, power, penetration, splitMix64(m.seed ^ 0x417ULL));
+                combat_.hitPawn(victim, hit.part, tool->damageType, power, penetration, splitMix64(m.seed ^ 0x417ULL),
+                                HitFrom{true, pos.x, pos.y});
             e.part = result.part;
             if (result.deflected) {
                 e.hit = ProjectileHitKind::Armor;
-                e.message = "deflected";
+                e.message = result.shieldBlocked ? "blocked" : "deflected";  // a raised shield stopped all of it
             } else {
                 e.message = "hit";
                 e.amount = result.amount;
