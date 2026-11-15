@@ -56,6 +56,10 @@ struct Turret {
     int stepsLeft = 0;  // of the phase
     int shotsLeft = 0;  // in the burst, counting the next
     Entity target = kNoEntity;
+    // A def with `explodeWhenDamaged` (the mini-turret): below that share of its hit points it rolls once whether it goes
+    // up; if so it sparks for the delay (`fuse` steps left) and explodes. Repaired above the share, it may roll again.
+    int fuse = 0;
+    bool fuseRolled = false;
 };
 
 // On every building whose def has a `trap` block. Every field is saved and hashed.
@@ -186,7 +190,8 @@ private:
     void learn(Trap& trap, FactionId faction);
     FactionId factionOf(Entity pawn) const;
     bool segmentHits(float x0, float y0, float x1, float y1, CellPos cell) const;
-    void queueBlast(Entity building, const Position& pos);
+    void queueBlast(Entity building, const Position& pos, bool fuse = false);
+    void stepFuse(Entity building, Turret& turret, Rng& rng);
 };
 
 }  // namespace colony
