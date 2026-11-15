@@ -721,3 +721,32 @@ TEST_CASE("Raids: a colonist too hungry to stand at its post leaves the alarm to
     r = away;  // far off again: let off to eat
     CHECK(sim->raids().excusedToEat(hungry));
 }
+
+TEST_CASE("Raids: a colonist resting in bed to get over an illness stays in bed when the alarm sounds") {
+    // Found by the year run (docs/design/colony-scenario.md "Ninth pass"): a raid two days after plague and malaria
+    // called the sick out of bed, and they died fighting at a fraction of their strength. A player leaves them undrafted.
+    auto sim = raidTestSim(21, 160);
+    const std::vector<Entity> colonists = raidTestColonists(*sim);
+    RAID_REQUIRE(colonists.size() == 6);
+    for (const Entity c : colonists) {
+        raidTestArm(*sim, c);
+    }
+    entt::registry& reg = sim->things().registry();
+    const Entity sick = colonists[0];
+    const Position& at = reg.get<Position>(sick);
+    sim->things().spawn("Bed", CellPos{static_cast<int>(at.x) + 3, static_cast<int>(at.y), 0});
+    sim->submit(ContractDiseaseCommand{sick, "Plague", 0.4f, -1});
+    bool resting = false;
+    for (int i = 0; i < 1200 && !resting; ++i) {
+        sim->step();
+        resting = reg.get<Worker>(sick).job.type == JobType::BedRest;
+    }
+    RAID_REQUIRE(resting);
+    sim->submit(SoundAlarmCommand{true});
+    sim->stepMany(40);
+    CHECK_FALSE(reg.all_of<Fighter>(sick));
+    CHECK(reg.get<Worker>(sick).job.type == JobType::BedRest);
+    for (size_t i = 1; i < colonists.size(); ++i) {
+        CHECK(reg.all_of<Fighter>(colonists[i]));  // the healthy are called up
+    }
+}

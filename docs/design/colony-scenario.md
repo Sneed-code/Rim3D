@@ -412,3 +412,17 @@ with tend quality around 0.4 (RimWorld's numbers) kills most of whoever gets it,
 outbreak finds the colonists sick and weak. Also seen: misses fired downhill land in the ground behind the target and
 count as "stopped on ground" in the verbose fight lines; those are not crest hits.
 
+**Ninth pass, second round (2026-11-15): plague and the sick.** Two more fixes:
+
+- **Immunity in bed.** Our bed gave immunity x1.05 and a hospital bed x1.07, with no factor for resting. The wiki's are
+  x1.07 and x1.11, times x1.10 for resting or sleeping: now 1.177 and 1.221 ([diseases.md](diseases.md)). Plague in a
+  bed tended at 0.4 is now won on day 1.63 (it was a coin toss).
+- **The sick stay in bed** when the alarm sounds ([raids.md](raids.md)).
+
+| Seed | First round | Second round | What killed them |
+| --- | --- | --- | --- |
+| 1 | 0 | 0 | a colonist's fire-setting break burned the barracks on day 22, then plague with no beds took six by day 25 |
+| 7 | 0 | 0 | plague on day 32 cost one; nobody in the day 34 raid (eight before); winter cold and then starvation from day 52 |
+| 42 | 2 | 6 | one in the day 32 raid |
+| 42, rainforest | 1 | 2 | the day 44 to 50 wave, then a raid on day 57 |
+

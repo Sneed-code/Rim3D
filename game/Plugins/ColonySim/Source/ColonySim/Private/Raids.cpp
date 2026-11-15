@@ -1900,6 +1900,12 @@ void RaidSystem::thinkAlarm() {
         if (!reg.all_of<Colonist>(pawn) || reg.all_of<PlayerControl>(pawn)) {
             continue;
         }
+        if (const Worker* w = reg.try_get<Worker>(pawn); w != nullptr && w->job.type == JobType::BedRest && reg.try_get<Fighter>(pawn) == nullptr) {
+            // Resting in bed to get over an illness or wounds: it stays there, as a player leaves the sick undrafted. In the
+            // year run (ninth pass) a raid two days after plague and malaria called the sick out of bed, and eight died
+            // fighting at a fraction of their strength.
+            continue;
+        }
         if (excusedToEat(pawn)) {
             if (const Fighter* f = reg.try_get<Fighter>(pawn); f != nullptr && f->defending) {
                 fighters_.standDown(pawn);  // off to eat; called up again once fed

@@ -12,8 +12,11 @@ tend, an infection's wound) and each disease def the pawn has met has an `Immuni
 
 Every `diseaseUpdateSeconds` (60) a pawn with a disease moves it on (each pawn at its own offset). Per day:
 
-- **Immunity** rises by `immunity.gainPerDaySick` x the gain speed. Gain speed is the rest factor (ground 1, bed 1.05 **ours**,
-  hospital bed 1.07, `MedicineRules.immunityGainSpeedByRest`) x the pawn's BloodFiltration. Several infections in
+- **Immunity** rises by `immunity.gainPerDaySick` x the gain speed. Gain speed is the rest factor (ground 1, bed 1.177, hospital bed
+  1.221, `MedicineRules.immunityGainSpeedByRest`; the wiki's bed 1.07 and hospital bed 1.11 times 1.10 for resting, since a
+  pawn counted in a bed is lying in it; until 2026-11-15 these were 1.05 and 1.07 and the resting factor was missing) x the
+  pawn's BloodFiltration. Not modelled: lying on the ground (x1.10), hunger (x0.9 urgently hungry, x0.7 starving) and
+  tiredness (x0.96 to x0.8). Several infections in
   different wounds raise one immunity, once.
 - **Severity** changes by `severityPerDayNotImmune` while immunity is under 1 and by `severityPerDayImmune` (negative) after.
   While a tend lasts it also changes by `tend.severityPerDayAtQuality1` x the tend quality.
@@ -23,8 +26,10 @@ Every `diseaseUpdateSeconds` (60) a pawn with a disease moves it on (each pawn a
   never kill (`lethalSeverity` 0).
 
 Flu from the wiki: immunity 0.2388 a day against severity 0.2488, so a healthy pawn on the ground dies on day 4.0 just before
-immunity arrives on day 4.2; in a bed (1.05) or a hospital bed (1.07) it wins, and tending slows the climb by up to 0.0773.
-Untended infection kills in 1.2 days, immunity only comes on day 1.55: it must be tended.
+immunity arrives on day 4.2; in a bed or a hospital bed it wins, and tending slows the climb by up to 0.0773.
+Untended infection kills in 1.2 days, immunity only comes on day 1.55: it must be tended. Plague in a bed: immunity 0.615
+a day against severity 0.666 less 0.363 x the tend quality, so at quality 0.4 immunity comes on day 1.63 and severity
+would reach 1 on day 1.92; on the ground (0.52 a day) it is a coin toss.
 
 **Stages** work like blood loss's: the stage at the current severity adds `capacityOffsets`, `capacityMax` caps (an infection
 or sleeping sickness in the last stage leaves 10% Consciousness) and `painOffset` to the pain. As in RimWorld, the offsets of
