@@ -226,6 +226,8 @@ void USmokeTestSubsystem::BuildLookPhases()
 		Options.Seed = 42;
 		Options.MapSize = 256;
 		Options.Scenario = GLookSmokeScenario.GetValueOnGameThread();
+		// A biome scenario's biome comes from its world tile, so those start on the world map (as the playtest does).
+		Options.bWorld = Options.Scenario != TEXT("Crashlanded");
 		B->SetWorldOrigin(LookSmokeOrigin);
 		if (!B->StartSim(Options))
 		{
@@ -326,6 +328,29 @@ void USmokeTestSubsystem::BuildLookPhases()
 		State->bRoomBuilt = Sim->map().buildingAt(At(0, 0)) != colony::kNoEntity && Torches == 2;
 		Notes.Add(FString::Printf(TEXT("_prepare: home (%d, %d), room at (%d, %d), %d torches fuelled, %d sample walls"), State->Home.x, State->Home.y, State->Room.x, State->Room.y, Torches,
 			SampleWalls));
+		{
+			// Which plants the bench's map grows (the look tasks dress the common ones first).
+			TMap<FString, int32> Kinds;
+			const colony::Map& M = Sim->map();
+			for (int32 Y = 0; Y < M.height(); ++Y)
+			{
+				for (int32 X = 0; X < M.width(); ++X)
+				{
+					const colony::CellPos C{X, Y, 0};
+					if (Sim->plants().has(C))
+					{
+						++Kinds.FindOrAdd(UTF8_TO_TCHAR(Sim->defs().get(Sim->plants().defAt(C)).defName().c_str()));
+					}
+				}
+			}
+			Kinds.ValueSort([](int32 A, int32 B) { return A > B; });
+			FString List;
+			for (const TPair<FString, int32>& Kind : Kinds)
+			{
+				List += FString::Printf(TEXT("%s %d, "), *Kind.Key, Kind.Value);
+			}
+			Notes.Add(TEXT("_prepare: plants: ") + List);
+		}
 		RunFor(10 * colony::kSecondsPerHour);
 		SetClock(12.0f, LookSmokeMidsummer);
 		Aim(State->Home, -8.0f, 0.0f, 0.0f);

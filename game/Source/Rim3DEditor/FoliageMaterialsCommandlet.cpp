@@ -2,7 +2,9 @@
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/Texture.h"
+#include "Engine/Texture2D.h"
 #include "Factories/MaterialFactoryNew.h"
 #include "Factories/MaterialInstanceConstantFactoryNew.h"
 #include "IAssetTools.h"
@@ -81,10 +83,10 @@ namespace
 	}
 
 	/** The master. Its texture parameters start with one plant's virtual textures (every Megascans texture is one). */
-	UMaterial* FolMakeMaster(UTexture* Albedo, UTexture* Normal, UTexture* Art, UTexture* Translucency)
+	UMaterial* FolMakeMaster(const TCHAR* Name, bool bVirtual, UTexture* Albedo, UTexture* Normal, UTexture* Art, UTexture* Translucency)
 	{
 		IAssetTools& Tools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
-		UMaterial* Material = Cast<UMaterial>(Tools.CreateAsset(TEXT("M_Foliage"), FolFolder, UMaterial::StaticClass(), NewObject<UMaterialFactoryNew>()));
+		UMaterial* Material = Cast<UMaterial>(Tools.CreateAsset(Name, FolFolder, UMaterial::StaticClass(), NewObject<UMaterialFactoryNew>()));
 		if (!Material)
 		{
 			return nullptr;
@@ -96,13 +98,13 @@ namespace
 		Material->bUsedWithInstancedStaticMeshes = true;
 		Material->bUsedWithNanite = true;
 
-		auto* AlbedoNode = FolTexture(Material, TEXT("Albedo"), SAMPLERTYPE_VirtualColor, 0);
+		auto* AlbedoNode = FolTexture(Material, TEXT("Albedo"), bVirtual ? SAMPLERTYPE_VirtualColor : SAMPLERTYPE_Color, 0);
 		AlbedoNode->Texture = Albedo;
-		auto* NormalNode = FolTexture(Material, TEXT("Normal"), SAMPLERTYPE_VirtualNormal, 300);
+		auto* NormalNode = FolTexture(Material, TEXT("Normal"), bVirtual ? SAMPLERTYPE_VirtualNormal : SAMPLERTYPE_Normal, 300);
 		NormalNode->Texture = Normal;
-		auto* ArtNode = FolTexture(Material, TEXT("ART"), SAMPLERTYPE_VirtualMasks, 600);
+		auto* ArtNode = FolTexture(Material, TEXT("ART"), bVirtual ? SAMPLERTYPE_VirtualMasks : SAMPLERTYPE_Masks, 600);
 		ArtNode->Texture = Art;
-		auto* TransNode = FolTexture(Material, TEXT("Translucency"), SAMPLERTYPE_VirtualColor, 900);
+		auto* TransNode = FolTexture(Material, TEXT("Translucency"), bVirtual ? SAMPLERTYPE_VirtualColor : SAMPLERTYPE_Color, 900);
 		TransNode->Texture = Translucency ? Translucency : Albedo;
 
 		// Colour (times a tint) and opacity from the albedo's alpha (UseOpacity 0 for plants made without one).
@@ -208,11 +210,37 @@ int32 UFoliageMaterialsCommandlet::Main(const FString& Params)
 		UE_LOG(LogFoliageMaterials, Error, TEXT("No plant instance has Albedo, Normal and ART textures"));
 		return 1;
 	}
-	UMaterial* Master = FolMakeMaster(FolParam(First, TEXT("Albedo")), FolParam(First, TEXT("Normal")), FolParam(First, TEXT("ART")), FolParam(First, TEXT("Translucency")));
+	UMaterial* Master = FolMakeMaster(TEXT("M_Foliage"), true, FolParam(First, TEXT("Albedo")), FolParam(First, TEXT("Normal")), FolParam(First, TEXT("ART")), FolParam(First, TEXT("Translucency")));
 	if (!Master)
 	{
 		return 1;
 	}
+	// The L6 trees (TreeArt commandlet, run before this) have ordinary textures: a second master samples those.
+	TArray<FAssetData> TreeTextures;
+	Registry.GetAssetsByPath(FName(TEXT("/Game/Rim3D/Generated/Trees")), TreeTextures, true);
+	UTexture* AnyTree[3] = {nullptr, nullptr, nullptr};
+	TMap<FString, UTexture*> TreeTex;
+	for (const FAssetData& Asset : TreeTextures)
+	{
+		if (UTexture* Texture = Asset.AssetClassPath == UTexture2D::StaticClass()->GetClassPathName() ? Cast<UTexture>(Asset.GetAsset()) : nullptr)
+		{
+			const FString Name = Texture->GetName();
+			const int32 Kind = Name.Contains(TEXT("_nor")) ? 1 : (Name.Contains(TEXT("_rough")) ? 2 : (Name.Contains(TEXT("_diff")) ? 0 : -1));
+			if (Kind < 0)
+			{
+				continue;
+			}
+			// Set each up the way the master reads it (the glTF import guesses).
+			Texture->VirtualTextureStreaming = false;
+			Texture->CompressionSettings = Kind == 1 ? TC_Normalmap : (Kind == 2 ? TC_Masks : TC_Default);
+			Texture->SRGB = Kind == 0;
+			Texture->PostEditChange();
+			FolSave(Texture);
+			AnyTree[Kind] = AnyTree[Kind] ? AnyTree[Kind] : Texture;
+			TreeTex.Add(Name, Texture);
+		}
+	}
+	UMaterial* TreeMaster = AnyTree[0] && AnyTree[1] && AnyTree[2] ? FolMakeMaster(TEXT("M_FoliageTex"), false, AnyTree[0], AnyTree[1], AnyTree[2], AnyTree[0]) : nullptr;
 	if (GShaderCompilingManager)
 	{
 		GShaderCompilingManager->FinishAllCompilation();
@@ -226,7 +254,7 @@ int32 UFoliageMaterialsCommandlet::Main(const FString& Params)
 			bErrors = true;
 		}
 	}
-	bool bSaved = FolSave(Master);
+	bool bSaved = FolSave(Master) && (!TreeMaster || FolSave(TreeMaster));
 
 	IAssetTools& Tools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 	int32 Made = 0;
@@ -268,6 +296,93 @@ int32 UFoliageMaterialsCommandlet::Main(const FString& Params)
 		bSaved = FolSave(Instance) && bSaved;
 		++Made;
 	}
+	// One instance per tree material slot, named after the slot's material, with the textures named after it
+	// (Poly Haven: <material>_diff, _nor_gl, _rough). Leaves are masked and see-through; bark is solid. The whole
+	// tree sways a little, all slots alike, so leaves stay on their branches.
+	int32 TreeMade = 0;
+	TArray<FAssetData> TreeMeshes;
+	Registry.GetAssetsByClass(UStaticMesh::StaticClass()->GetClassPathName(), TreeMeshes, true);
+	for (const FAssetData& Asset : TreeMeshes)
+	{
+		if (!TreeMaster || !Asset.PackagePath.ToString().StartsWith(TEXT("/Game/Rim3D/Generated/Trees")))
+		{
+			continue;
+		}
+		UStaticMesh* Mesh = Cast<UStaticMesh>(Asset.GetAsset());
+		for (int32 Slot = 0; Mesh && Slot < Mesh->GetStaticMaterials().Num(); ++Slot)
+		{
+			UMaterialInterface* Original = Mesh->GetMaterial(Slot);
+			if (!Original)
+			{
+				continue;
+			}
+			// The textures carry the material's name, or a shorter one (branches -> branch; the trunk often has the model's).
+			FString Base = Original->GetName();
+			const auto HasDiff = [&TreeTex](const FString& Name)
+			{
+				for (const TPair<FString, UTexture*>& Pair : TreeTex)
+				{
+					if (Pair.Key.StartsWith(Name + TEXT("_diff")))
+					{
+						return true;
+					}
+				}
+				return false;
+			};
+			const FString MaterialName = Base;
+			if (!HasDiff(Base) && HasDiff(Base.Replace(TEXT("branches"), TEXT("branch"))))
+			{
+				Base = Base.Replace(TEXT("branches"), TEXT("branch"));
+			}
+			else if (!HasDiff(Base) && HasDiff(Mesh->GetName()))
+			{
+				Base = Mesh->GetName();
+			}
+			const auto Find = [&TreeTex, &Base](const TCHAR* Suffix) -> UTexture*
+			{
+				for (const TPair<FString, UTexture*>& Pair : TreeTex)
+				{
+					if (Pair.Key.StartsWith(Base + Suffix))
+					{
+						return Pair.Value;
+					}
+				}
+				return nullptr;
+			};
+			UTexture* Diff = Find(TEXT("_diff"));
+			if (!Diff)
+			{
+				UE_LOG(LogFoliageMaterials, Warning, TEXT("%s: no %s_diff texture"), *Mesh->GetName(), *Base);
+				continue;
+			}
+			UMaterialInstanceConstantFactoryNew* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
+			Factory->InitialParent = TreeMaster;
+			UMaterialInstanceConstant* Instance = Cast<UMaterialInstanceConstant>(Tools.CreateAsset(MaterialName + TEXT("_R3D"), FolFolder, UMaterialInstanceConstant::StaticClass(), Factory));
+			if (!Instance)
+			{
+				continue;
+			}
+			const bool bLeaves = MaterialName.Contains(TEXT("leaves")) || MaterialName.Contains(TEXT("leaf")) || MaterialName.Contains(TEXT("branch"));
+			UMaterialEditingLibrary::SetMaterialInstanceTextureParameterValue(Instance, TEXT("Albedo"), Diff);
+			UMaterialEditingLibrary::SetMaterialInstanceTextureParameterValue(Instance, TEXT("Translucency"), Diff);
+			if (UTexture* Nor = Find(TEXT("_nor")))
+			{
+				UMaterialEditingLibrary::SetMaterialInstanceTextureParameterValue(Instance, TEXT("Normal"), Nor);
+			}
+			if (UTexture* Rough = Find(TEXT("_rough")))
+			{
+				UMaterialEditingLibrary::SetMaterialInstanceTextureParameterValue(Instance, TEXT("ART"), Rough);
+			}
+			UMaterialEditingLibrary::SetMaterialInstanceScalarParameterValue(Instance, TEXT("UseOpacity"), bLeaves ? 1.0f : 0.0f);
+			UMaterialEditingLibrary::SetMaterialInstanceScalarParameterValue(Instance, TEXT("Translucency Amount"), bLeaves ? 0.3f : 0.0f);
+			UMaterialEditingLibrary::SetMaterialInstanceScalarParameterValue(Instance, TEXT("Brightness"), 1.0f);
+			UMaterialEditingLibrary::SetMaterialInstanceScalarParameterValue(Instance, TEXT("Wind Amount"), 0.35f);
+			UMaterialEditingLibrary::UpdateMaterialInstance(Instance);
+			bSaved = FolSave(Instance) && bSaved;
+			++TreeMade;
+		}
+	}
+	UE_LOG(LogFoliageMaterials, Display, TEXT("Trees: %d tree materials on M_FoliageTex%s"), TreeMade, TreeMaster ? TEXT("") : TEXT(" (no tree textures found: run the TreeArt commandlet first)"));
 	UE_LOG(LogFoliageMaterials, Display, TEXT("%s %s/M_Foliage and %d plant materials (of %d found)%s"), bSaved ? TEXT("Saved") : TEXT("FAILED to save"), FolFolder, Made, Sources.Num(), bErrors ? TEXT(" (with errors)") : TEXT(""));
 	return bSaved && !bErrors ? 0 : 1;
 }

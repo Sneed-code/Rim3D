@@ -127,7 +127,16 @@ instance kind, so a chunk holds one component per mesh in use: keep the lists sh
 | Plant_Brambles | fern, silver lady fern | 0.6 m |
 | Plant_Dandelion | white windflower | 0.3 m |
 | Plant_Moss | moss clumps | 0.1 m |
-| Plant_TreePalm | fan palm, Alexandra palm (stand-ins until L6) | 6 m |
+| Plant_TreePalm | Alexandra palm | 6 m |
+| Plant_Bamboo | cane palm | 5 m |
+| Plant_TreeTeak | Poly Haven island trees 01 and 02 (L6) | 8 m |
+| Plant_TreeCecropia | Poly Haven small tree 02, jacaranda (L6) | 7 m |
+
+**Trees (L6, 2026-11-15)**: `tools/tree_art.py` downloads the Poly Haven trees in `assets/tree_art.json`; the `TreeArt`
+commandlet imports each whole (one mesh, Nanite on with foliage keeping its area, full textures) into
+`/Game/Rim3D/Generated/Trees/`. The `FoliageMaterials` commandlet (run after it) gives every tree slot an instance of
+`M_FoliageTex` (the plant master for ordinary, non-virtual textures): leaves and branch cards masked, bark solid, all of a
+tree swaying alike. The glTF import's own materials drew the leaves black.
 
 **Wind**: the Megascans foliage materials sway by world position offset. `visual.windDistance` (metres) is how far
 out a kind keeps moving (`SetWorldPositionOffsetDisableDistance`); past it the leaves hold still and cost nothing.
