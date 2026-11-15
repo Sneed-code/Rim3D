@@ -317,6 +317,31 @@ namespace
 		Blend->Inputs[2].Input.Connect(0, Strength);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Blend, TEXT(""), MP_Normal);
 
+		// Roughness map (the 4K skin's): mid-grey keeps the material's Roughness, lighter rougher, darker smoother, by
+		// RoughnessMapAmount (0 on the 2K skin, which has no map).
+		if (UMaterialExpression* RoughnessValue = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_Roughness))
+		{
+			auto* RoughMap = Cast<UMaterialExpressionTextureSampleParameter2D>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureSampleParameter2D::StaticClass(), -1000, 1100));
+			RoughMap->ParameterName = TEXT("RoughnessMap");
+			RoughMap->Texture = LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineResources/Black.Black"));
+			RoughMap->SamplerType = UMaterialExpressionTextureBase::GetSamplerTypeForTexture(RoughMap->Texture);
+			auto* RoughAmount = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1000, 1300));
+			RoughAmount->ParameterName = TEXT("RoughnessMapAmount");
+			RoughAmount->DefaultValue = 0.0f;
+			auto* Rough = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -500, 1100));
+			Rough->OutputType = CMOT_Float1;
+			Rough->Description = TEXT("SkinRoughness");
+			Rough->Code = TEXT("return saturate(Base + (pow(Map.r, 0.4545) - 0.5) * Amount);");  // the map is an sRGB texture
+			Rough->Inputs.SetNum(3);
+			Rough->Inputs[0].InputName = TEXT("Base");
+			Rough->Inputs[1].InputName = TEXT("Map");
+			Rough->Inputs[2].InputName = TEXT("Amount");
+			Rough->Inputs[0].Input.Connect(0, RoughnessValue);
+			Rough->Inputs[1].Input.Connect(0, RoughMap);
+			Rough->Inputs[2].Input.Connect(0, RoughAmount);
+			UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
+		}
+
 		// Pigment: the areolae and genitals (PigmentMask, made by mh_export.py) darker and warmer than the rest, by the
 		// pawn's pigment (custom primitive data 3, 0 to 1; the creator's slider). It multiplies the skin's own colour, so
 		// it follows the skin tone: a darker skin's areolae are darker still.
@@ -909,6 +934,45 @@ namespace
 						SkinInstance->PostEditChange();
 						Failures += MhSave(SkinInstance) ? 0 : 1;
 						Material.MaterialInterface = SkinInstance;
+						// The 4K skin (tools/makehuman/skin_4k.py: skin_4k.png, skin_normal_4k.png, skin_rough_4k.png beside the
+						// FBX): a second instance, MI_MH_<name>_Skin4K, the creator's switch. The 2K one stays the mesh's own.
+						const FString Dir = FPaths::GetPath(Files.Fbx);
+						if (FPaths::FileExists(Dir / TEXT("skin_4k.png")))
+						{
+							auto* Factory4K = NewObject<UMaterialInstanceConstantFactoryNew>();
+							Factory4K->InitialParent = SkinBase;
+							auto* Skin4K = Cast<UMaterialInstanceConstant>(Tools.CreateAsset(MakeHumanSkinName(Files.Name) + TEXT("4K"), Folder, UMaterialInstanceConstant::StaticClass(), Factory4K));
+							UTexture2D* Color4K = MhImportTexture(Dir / TEXT("skin_4k.png"), Folder, TEXT("T_") + Files.Name + TEXT("_Skin4K"), true);
+							UTexture2D* Normal4K = FPaths::FileExists(Dir / TEXT("skin_normal_4k.png")) ? MhImportTexture(Dir / TEXT("skin_normal_4k.png"), Folder, TEXT("T_") + Files.Name + TEXT("_SkinNormal4K"), false) : nullptr;
+							UTexture2D* Rough4K = FPaths::FileExists(Dir / TEXT("skin_rough_4k.png")) ? MhImportTexture(Dir / TEXT("skin_rough_4k.png"), Folder, TEXT("T_") + Files.Name + TEXT("_SkinRough4K"), true) : nullptr;
+							if (Skin4K && Color4K)
+							{
+								for (UTexture2D* T : {Color4K, Normal4K, Rough4K})
+								{
+									if (T)
+									{
+										Failures += MhSave(T) ? 0 : 1;
+									}
+								}
+								Skin4K->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamBaseColor), Color4K);
+								Skin4K->SetVectorParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamSourceAverage), MhAverage(Color4K));
+								Skin4K->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(PawnLooksParamNormal), Normal4K ? static_cast<UTexture*>(Normal4K) : NormalToUse);
+								if (Rough4K)
+								{
+									Skin4K->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("RoughnessMap")), Rough4K);
+									Skin4K->SetScalarParameterValueEditorOnly(FMaterialParameterInfo(TEXT("RoughnessMapAmount")), 0.35f);
+								}
+								FMaterialParameterInfo PigmentInfo(TEXT("PigmentMask"));
+								UTexture* PigmentTexture = nullptr;
+								if (SkinInstance->GetTextureParameterValue(PigmentInfo, PigmentTexture) && PigmentTexture)
+								{
+									Skin4K->SetTextureParameterValueEditorOnly(PigmentInfo, PigmentTexture);
+								}
+								Skin4K->PostEditChange();
+								Failures += MhSave(Skin4K) ? 0 : 1;
+								UE_LOG(LogMakeHumanArt, Display, TEXT("  4K skin %s"), *Skin4K->GetName());
+							}
+						}
 						UE_LOG(LogMakeHumanArt, Display, TEXT("  slot %d %s: skin %s"), Slot, *Key, *SkinInstance->GetName());
 						continue;
 					}

@@ -78,6 +78,8 @@ if abs(yaw) > math.radians(5):
 print("[clip_prep] turned by", round(math.degrees(yaw), 1), "degrees to face as the rest pose does", flush=True)
 scene.frame_set(first)
 print("[clip_prep] hips moved by", tuple(round(v, 3) for v in offset), "on", len(fcurves), "curves; frames", first, "to", last, flush=True)
+# The export bakes the scene's frame range: the clip's own, not the default 1 to 250.
+scene.frame_start, scene.frame_end = first, last
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.export_scene.fbx(filepath=out, use_selection=True, object_types={"ARMATURE", "MESH"}, add_leaf_bones=False, bake_anim=True,
                          bake_anim_use_all_actions=False, bake_anim_use_nla_strips=False, mesh_smooth_type="FACE")

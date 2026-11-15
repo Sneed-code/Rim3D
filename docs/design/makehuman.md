@@ -169,6 +169,15 @@ mannequin's.
 `assets/makehuman.local.json`, which is not in Git, and import into `/Game/ThirdParty/Local`, which is not in Git
 either. They are never committed or shipped.
 
+## 4K skin (switch)
+
+`tools/makehuman/skin_4k.py` (run by `mh_creator.py` for each base) makes `skin_4k.png` (a sharp 4096 resize of the
+2K skin with faint mottling and pores added, so tones, the pawn's skin colour and pigment are kept), `skin_normal_4k.png`
+and `skin_rough_4k.png`; the MakeHumanArt commandlet makes `MI_MH_<base>_Skin4K` beside the 2K skin (`RoughnessMap`,
+`RoughnessMapAmount` 0.35 on `M_MH_SkinDetail`). The creator's "4K skin" box swaps them on every body, so the two can
+be compared; the 2K skin stays the meshes' own. An AI upscale (Real-ESRGAN x4plus, `upscale_skin.py`) was tried: it
+smooths skin and shifts its tone, so it is not used. `-Creator4K` for pictures.
+
 ## Facial expressions
 
 No face bones: MakeHuman's 34 expression units (MPFB `targets/expression/units/caucasian`: eyelids, brows, mouth
@@ -188,7 +197,10 @@ onto the game's mannequin (the template's ops, the mannequin's pose turned to th
 `UIKRetargetBatchOperation::RunBatchRetarget` into `/Game/Rim3D/Generated/Animations/<name>/A_<name>`. The pawns play
 mannequin animations, so every body (each through its own retargeter) plays every clip. The creator's ANIMATIONS panel
 (right) lists the clips and plays one on the picked person or everyone (loop, speed); `-CreatorPlay=<name>` with
-`-CreatorRecord=<seconds>` films it. First clip: Skip (jump rope, FlowHMR, sneed).
+`-CreatorRecord=<seconds>` films it. Clips: Skip (jump rope, FlowHMR, sneed) and 16 from the mocap thread (`mocap/`: mining, chopping, digging, planting,
+sweeping, carrying firewood, eating seated, lying down and getting up, shadowboxing, punches, kick, sword lunge, bow draw,
+rifle aim, shotgun reload; no props). `clip_prep.py` bakes the clip's own frame range (Blender's default 1 to 250 cut
+or padded every clip to 8.3 s).
 
 ## Not done (next, as of 2026-11-14)
 

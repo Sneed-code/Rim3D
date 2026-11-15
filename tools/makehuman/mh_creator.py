@@ -74,6 +74,9 @@ def main():
             morphs[name] = variant["dump_vertices"]
         cfg["morphs"] = morphs
         run(cfg, work, base["name"])
+        # The 4K skin beside it, for the creator's switch (skin_4k.py).
+        folder = os.path.join(REPO, "game", "Saved", "MakeHuman", base["name"])
+        subprocess.run([sys.executable, os.path.join(HERE, "skin_4k.py"), folder], check=False)
 
 
 if __name__ == "__main__":

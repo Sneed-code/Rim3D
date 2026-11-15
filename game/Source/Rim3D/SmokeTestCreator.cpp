@@ -20,6 +20,7 @@
 #include "PawnActor.h"
 #include "PawnLooks.h"
 #include "PawnSubsystem.h"
+#include "MakeHumanArt.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Apparel.h"
@@ -124,6 +125,7 @@ namespace
 		bool bUiWantsMouse = false;
 		bool bUiWantsKeys = false;
 		bool bFaced = false;
+		bool b4KSkin = false;      // the 4K skin, to compare with the 2K one
 		// The animation panel: the clips made by the MakeHumanArt commandlet (-Clips), what plays, how.
 		TArray<FSoftObjectPath> Clips;
 		TArray<FString> ClipNames;
@@ -194,13 +196,38 @@ namespace
 		}
 	}
 
-	/** Puts a person's sliders on its mesh: morphs, height, skin colour. */
-	void CreatorApply(const FCreatorPerson& P, ASimPawnActor& Pawn)
+	/** The skin material to show: the 2K one (the mesh's own) or the 4K one (MakeHumanArt makes both). */
+	UMaterialInterface* CreatorSkinMaterial(const FString& Base, bool b4K)
+	{
+		static TMap<FString, TWeakObjectPtr<UMaterialInterface>> Cache;
+		const FString Name = MakeHumanSkinName(Base) + (b4K ? TEXT("4K") : TEXT(""));
+		if (const TWeakObjectPtr<UMaterialInterface>* Found = Cache.Find(Name); Found && Found->IsValid())
+		{
+			return Found->Get();
+		}
+		UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, *FString::Printf(TEXT("/Game/Rim3D/Generated/MakeHuman/%s.%s"), *Name, *Name));
+		Cache.Add(Name, Material);
+		return Material;
+	}
+
+	/** Puts a person's sliders on its mesh: morphs, height, skin colour (and the 2K or 4K skin). */
+	void CreatorApply(const FCreatorPerson& P, ASimPawnActor& Pawn, bool b4KSkin)
 	{
 		USkeletalMeshComponent* Mesh = Pawn.GetMakeHumanMesh();
 		if (!Mesh || Pawn.GetLooks().MakeHuman != P.Looks.MakeHuman)
 		{
 			return;  // its new base is not on yet
+		}
+		if (UMaterialInterface* Wanted = CreatorSkinMaterial(P.Looks.MakeHuman, b4KSkin))
+		{
+			for (int32 i = 0; i < Mesh->GetNumMaterials(); ++i)
+			{
+				const UMaterialInterface* Now = Mesh->GetMaterial(i);
+				if (Now && Now != Wanted && Now->GetName().StartsWith(MakeHumanSkinName(P.Looks.MakeHuman)))
+				{
+					Mesh->SetMaterial(i, Wanted);
+				}
+			}
 		}
 		const auto Set = [Mesh](const TCHAR* Name, float Value) { Mesh->SetMorphTarget(Name, FMath::Clamp(Value, 0.0f, 1.0f), false); };
 		Set(P.bFemale ? TEXT("Masculine") : TEXT("Feminine"), P.Sex);
@@ -368,7 +395,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				TEXT("sg.AntiAliasingQuality 4"), TEXT("r.ScreenPercentage 100"), TEXT("r.AntiAliasingMethod 4"), TEXT("r.DynamicGlobalIlluminationMethod 1"),
 				TEXT("r.ReflectionMethod 1"), TEXT("r.Lumen.ScreenProbeGather.DownsampleFactor 8"), TEXT("r.Shadow.Virtual.Enable 1"),
 				TEXT("r.SSS.Quality 1"), TEXT("r.SSS.HalfRes 0"), TEXT("r.SSS.Checkerboard 0"), TEXT("r.ContactShadows 1"), TEXT("Pawns.FullDetail 20"),
-				TEXT("Overseer.UI 0"), TEXT("DisableAllScreenMessages")})
+				TEXT("Overseer.UI 0"), TEXT("DisableAllScreenMessages"), TEXT("r.SetRes 1920x1080w")})
 			{
 				PC->ConsoleCommand(Command);
 			}
@@ -466,6 +493,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			State->CameraYaw += Yaw;
 		}
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorFocusZ="), State->FocusOffset.Z);
+		State->b4KSkin = FParse::Param(FCommandLine::Get(), TEXT("Creator4K"));
 		FString Face;
 		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorFace="), Face))
 		{
@@ -626,7 +654,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			}
 			if (ASimPawnActor* Pawn = Pawns->FindPawn(P.Thing))
 			{
-				CreatorApply(P, *Pawn);
+				CreatorApply(P, *Pawn, State->b4KSkin);
 				if (const USkeletalMeshComponent* Mesh = Pawn->GetMakeHumanMesh())
 				{
 					if (UMakeHumanAnimInstance* Anim = Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()))
@@ -897,6 +925,8 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			}
 			ImGui::Separator();
 			ImGui::Checkbox("Walk back and forth", &State->bWalk);
+			ImGui::SameLine();
+			ImGui::Checkbox("4K skin", &State->b4KSkin);
 			ImGui::SeparatorText("View");
 			ImGui::TextDisabled("middle mouse turn, wheel zoom, right mouse or WASD/QE move");
 			if (ImGui::Button("Reset view"))

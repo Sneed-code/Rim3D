@@ -7,6 +7,118 @@
       "loop": true,
       "comment": "Jump rope (skipping), FlowHMR markerless mocap retargeted by sneed onto his Petite Pale woman (Mixamo skeleton).",
       "source": "game/Saved/Mocap/Skip/PaleWoman_Retargeted.fbx"
+    },
+    {
+      "name": "MinePickaxe",
+      "source": "mocap/01_mine_pickaxe_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/MinePickaxe/MinePickaxe.fbx",
+      "loop": true,
+      "comment": "Mocap clip 01 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "ChopAxe",
+      "source": "mocap/02_chop_axe_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/ChopAxe/ChopAxe.fbx",
+      "loop": true,
+      "comment": "Mocap clip 02 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "DigShovel",
+      "source": "mocap/03_dig_shovel_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/DigShovel/DigShovel.fbx",
+      "loop": true,
+      "comment": "Mocap clip 03 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "PlantKneeling",
+      "source": "mocap/04_plant_kneeling_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/PlantKneeling/PlantKneeling.fbx",
+      "loop": true,
+      "comment": "Mocap clip 04 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "Sweep",
+      "source": "mocap/05_sweep_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/Sweep/Sweep.fbx",
+      "loop": true,
+      "comment": "Mocap clip 05 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "HoldFirewood",
+      "source": "mocap/06_hold_firewood_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/HoldFirewood/HoldFirewood.fbx",
+      "loop": true,
+      "comment": "Mocap clip 06 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "EatSeated",
+      "source": "mocap/07_eat_seated_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/EatSeated/EatSeated.fbx",
+      "loop": true,
+      "comment": "Mocap clip 07 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "LiedownBed",
+      "source": "mocap/08_liedown_bed_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/LiedownBed/LiedownBed.fbx",
+      "loop": false,
+      "comment": "Mocap clip 08 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "GetupBed",
+      "source": "mocap/09_getup_bed_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/GetupBed/GetupBed.fbx",
+      "loop": false,
+      "comment": "Mocap clip 09 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "Shadowbox",
+      "source": "mocap/10_shadowbox_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/Shadowbox/Shadowbox.fbx",
+      "loop": true,
+      "comment": "Mocap clip 10 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "PunchCombo",
+      "source": "mocap/11_punch_combo_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/PunchCombo/PunchCombo.fbx",
+      "loop": false,
+      "comment": "Mocap clip 11 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "Kick",
+      "source": "mocap/12_kick_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/Kick/Kick.fbx",
+      "loop": false,
+      "comment": "Mocap clip 12 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "SwordLunge",
+      "source": "mocap/13_sword_lunge_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/SwordLunge/SwordLunge.fbx",
+      "loop": false,
+      "comment": "Mocap clip 13 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "BowDraw",
+      "source": "mocap/14_bow_draw_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/BowDraw/BowDraw.fbx",
+      "loop": true,
+      "comment": "Mocap clip 14 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "RifleAim",
+      "source": "mocap/15_rifle_aim_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/RifleAim/RifleAim.fbx",
+      "loop": true,
+      "comment": "Mocap clip 15 from the mocap thread (Mixamo skeleton, no props)."
+    },
+    {
+      "name": "ShotgunReload",
+      "source": "mocap/16_shotgun_reload_mixamo_retargeted.fbx",
+      "fbx": "game/Saved/Mocap/ShotgunReload/ShotgunReload.fbx",
+      "loop": false,
+      "comment": "Mocap clip 16 from the mocap thread (Mixamo skeleton, no props)."
     }
   ]
 }
