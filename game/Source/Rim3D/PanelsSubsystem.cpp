@@ -5,6 +5,8 @@
 
 #include <imgui.h>
 
+#include "Engine/Engine.h"
+#include "GraphicsOptionsSubsystem.h"
 #include "OverseerSubsystem.h"
 #include "QuestPanelSubsystem.h"
 #include "ShipPanelSubsystem.h"
@@ -1318,6 +1320,14 @@ void UPanelsSubsystem::DrawSettings(USimSubsystem& Bridge, float Scale, float Ma
 		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("How long a game day lasts at normal speed."));
 		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("Walking, fighting and work keep their speed; hunger, sleep,"));
 		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("crops, animals, food rot and the sun follow the day."));
+
+		// Graphics: quality, ray tracing, upscaler (docs/design/graphics-options.md).
+		if (UGraphicsOptionsSubsystem* Graphics = GEngine ? GEngine->GetEngineSubsystem<UGraphicsOptionsSubsystem>() : nullptr)
+		{
+			ImGui::Separator();
+			PTextColored(ImVec4(0.9f, 0.85f, 0.6f, 1.0f), TEXT("Graphics"));
+			Graphics->DrawOptions(Scale);
+		}
 	}
 	ImGui::End();
 }
