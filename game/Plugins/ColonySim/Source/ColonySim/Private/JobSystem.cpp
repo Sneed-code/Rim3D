@@ -465,7 +465,7 @@ JobSystem::JobSystem(Map& map, Things& things, Pathfinder& pathfinder, Zones& zo
             else if (taste == "MealFine") tier = 5;
             else if (taste == "MealLavish") tier = 6;
             foodTier_[i] = static_cast<int8_t>(tier);
-            nutrition_[i] = static_cast<float>(def.number("stats.nutrition"));
+            nutrition_[i] = static_cast<float>(def.number("stats.nutrition")) * rules_.nutritionFactor(taste);  // better food fills more
             maxIngest_[i] = static_cast<uint16_t>(std::clamp<int64_t>(
                 def.integer("ingestible.maxNumToIngestAtOnce", rules_.maxNumToIngestAtOnce), 1, 1000));
             ingestSeconds_[i] = static_cast<float>(def.number("ingestible.baseIngestSeconds", rules_.ingestSeconds));
@@ -1077,6 +1077,7 @@ void JobSystem::step() {
             continue;
         }
         reg.get<Mover>(pawn).hold = false;
+        autoEatFromBag(pawn);  // the protagonist snacks from its bag, steered or not
         // It is being carried to a prison bed by a warden (an arrest): the warden's job moves it.
         if (const ArrestOrder* arrest = reg.try_get<ArrestOrder>(pawn); arrest != nullptr && arrest->by != kNoEntity) {
             continue;

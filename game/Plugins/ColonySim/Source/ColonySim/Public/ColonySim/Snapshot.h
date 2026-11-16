@@ -266,6 +266,10 @@ struct ThingView {
     // hauled stack) and what they can carry, and their bag: `inventoryCount` items from Snapshot::inventory[firstInventory].
     float loadKg = 0.0f;
     float capacityKg = 0.0f;
+    // Pawns: how fast they walk as a share of their def's speed (load, talents, a stagger, worn weight, hunger), which
+    // the player's own walk in direct mode follows; and whether they are starving (food 0: 75% speed, needs.md).
+    float moveFactor = 1.0f;
+    bool starving = false;
     uint32_t firstInventory = 0;
     uint32_t inventoryCount = 0;
     int quality = -1;
