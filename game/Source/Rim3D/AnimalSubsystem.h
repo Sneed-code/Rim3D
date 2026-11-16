@@ -25,6 +25,8 @@ enum class ESimAnimalDetail : uint8
 struct FSimAnimalModel
 {
 	TObjectPtr<USkeletalMesh> Mesh;
+	/** Extra parts (eyes, teeth, fur cards) on the same skeleton, when the import kept them apart (<model>_Part<N>). */
+	TArray<TObjectPtr<USkeletalMesh>> Parts;
 	TObjectPtr<UAnimSequence> Idle;
 	TObjectPtr<UAnimSequence> Walk;
 	TObjectPtr<UAnimSequence> Gallop;
@@ -34,6 +36,13 @@ struct FSimAnimalModel
 	FVector Extent = FVector::ZeroVector;
 	/** Scale that makes the imported mesh as long as the animal really is (`lengthM` in the art table). */
 	float FitScale = 1.0f;
+	/** Degrees the mesh is turned so it faces the actor's forward (`yaw` in the art table's imports; Quaternius -90). */
+	float YawOffset = -90.0f;
+	/** How far the walk and gallop clips go per second at scale 1, in cm (`walkCm`, `gallopCm`). */
+	float WalkClipSpeed = 140.0f;
+	float GallopClipSpeed = 450.0f;
+	/** False when the model has no death clip: a dead one lies still on its side. */
+	bool bHasDeath = true;
 	bool bLoaded = false;
 };
 
@@ -95,6 +104,8 @@ private:
 
 	TMap<FName, FSimAnimalArt> Art;
 	TMap<FName, float> LengthsCm;
+	/** Per model from the art table's `imports`: yaw, walkCm, gallopCm. */
+	TMap<FName, FVector3f> ImportLooks;
 	TMap<FName, FSimAnimalModel> Models;
 
 	/** Keeps every loaded mesh and clip alive (the models above are not a UPROPERTY). */

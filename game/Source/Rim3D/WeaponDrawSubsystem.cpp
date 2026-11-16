@@ -44,6 +44,19 @@ namespace
 	constexpr float WeaponHitStopMax = 0.12f;
 	constexpr float WeaponHitStopDeflected = 0.04f;
 	constexpr float WeaponHitStopBlocked = 0.08f;
+	// The shield, actor space (cm, X forward, +Y right, from the feet): hung on the left arm facing out, raised in front
+	// of the chest, slung on the back facing behind. How fast it comes up and goes down (per real second).
+	const FVector WeaponShieldLowered(12.0, -30.0, 96.0);
+	const FRotator WeaponShieldLoweredRotation(0.0, -70.0, 0.0);
+	const FVector WeaponShieldRaised(40.0, -6.0, 118.0);
+	const FRotator WeaponShieldRaisedRotation(0.0, -8.0, 0.0);
+	const FVector WeaponShieldSlungAt(-26.0, 0.0, 112.0);
+	const FRotator WeaponShieldSlungRotation(0.0, 180.0, 0.0);
+	constexpr float WeaponShieldRaiseRate = 7.0f;
+	constexpr float WeaponShieldSlingRate = 2.5f;
+	// The right-mouse shield follows the camera: sent again when the view turns more than 15 degrees, at most 5 times a second.
+	constexpr float WeaponShieldResendCosine = 0.966f;
+	constexpr double WeaponShieldResendSeconds = 0.2;
 
 	FVector WeaponSimToWorld(const USimSubsystem& Bridge, float X, float Y, float Z)
 	{
@@ -108,6 +121,9 @@ void UWeaponDrawSubsystem::OnSimEvent(const colony::Event& Event)
 			break;
 		case colony::EventType::PawnAction:
 			OnPawnAction(Event);
+			break;
+		case colony::EventType::ShieldBlocked:
+			OnShieldBlocked(Event);
 			break;
 		case colony::EventType::WeaponSwitched:
 			++SwitchesDone;
@@ -264,8 +280,78 @@ void UWeaponDrawSubsystem::OnPawnAction(const colony::Event& Event)
 	}
 }
 
+void UWeaponDrawSubsystem::OnShieldBlocked(const colony::Event& Event)
+{
+	++ShieldBlocksSeen;
+	USimSubsystem* Bridge = BridgeSource.Get();
+	const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>();
+	UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>();
+	ASimPawnActor* Actor = Pawns ? Pawns->FindPawn(Event.thing) : nullptr;
+	if (!Bridge || !Fight || !Actor || !DrawOn())
+	{
+		return;
+	}
+	// Sparks off the face of the shield, thrown back toward whoever hit it.
+	const UStaticMeshComponent* Shield = GetShieldComponent(Event.thing);
+	const FVector Forward = Actor->GetActorForwardVector();
+	const FVector At = Shield && Shield->IsVisible() ? Shield->GetComponentLocation() + Forward * 4.0 : Actor->GetActorLocation() + Forward * 40.0 + FVector(0.0, 0.0, 110.0);
+	Fight->SpawnMeleeImpact(colony::ProjectileHitKind::Armor, colony::kNoEntity, Event.thing, At, -Forward, -1, FMath::Max(2.0f, Event.amount));
+}
+
 // ---------------------------------------------------------------------------
 // Meshes and poses.
+
+bool UWeaponDrawSubsystem::LoadSolidMaterial()
+{
+	if (!SolidMaterial)
+	{
+		SolidMaterial = LoadObject<UMaterialInterface>(nullptr, WeaponSolidMaterialPath);
+		if (!SolidMaterial)
+		{
+			UE_LOG(LogWeaponDraw, Error, TEXT("Could not load %s; weapons cannot be drawn"), WeaponSolidMaterialPath);
+		}
+	}
+	return SolidMaterial != nullptr;
+}
+
+UStaticMesh* UWeaponDrawSubsystem::ShieldMesh(colony::DefId Shield, colony::DefId Stuff)
+{
+	const uint64 Key = (static_cast<uint64>(Shield.value) << 32) | static_cast<uint64>(Stuff.value);
+	if (const TObjectPtr<UStaticMesh>* Found = ShieldMeshes.Find(Key))
+	{
+		return *Found;
+	}
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	if (!Bridge || !Bridge->GetDefs() || !LoadSolidMaterial())
+	{
+		return nullptr;
+	}
+	const colony::DefDatabase& Defs = *Bridge->GetDefs();
+	TArray<VisualMesh::FPart> Parts;
+	VisualMesh::ReadParts(Defs.get(Shield), "visual", FVector2f(100.0f, 100.0f), Parts);
+	if (Parts.IsEmpty())
+	{
+		VisualMesh::FPart Fallback;
+		Fallback.Size = FVector3f(3.0f, 55.0f, 70.0f);
+		Fallback.At = FVector3f(0.0f, 0.0f, -35.0f);
+		Fallback.bStuff = true;
+		Parts.Add(Fallback);
+	}
+	// The material's colour; plasteel and uranium have none in their defs.
+	FLinearColor Color(0.42f, 0.46f, 0.53f);
+	if (Stuff.valid() && Stuff.value < Defs.size())
+	{
+		const colony::Def& Material = Defs.get(Stuff);
+		const std::string& Name = Material.defName();
+		const FLinearColor Fallback = Name == "Plasteel" ? FLinearColor(0.62f, 0.68f, 0.72f)
+			: Name == "Uranium"                         ? FLinearColor(0.30f, 0.36f, 0.30f)
+														: Color;
+		Color = VisualMesh::ReadColor(Material, "visual.color", Fallback);
+	}
+	UStaticMesh* Mesh = VisualMesh::MakeMesh(this, SolidMaterial, Parts, VisualMesh::EPartSet::All, &Color, false);
+	ShieldMeshes.Add(Key, Mesh);
+	return Mesh;
+}
 
 bool UWeaponDrawSubsystem::IsGun(colony::DefId Weapon) const
 {
@@ -284,14 +370,9 @@ UStaticMesh* UWeaponDrawSubsystem::WeaponMesh(colony::DefId Weapon)
 	{
 		return nullptr;
 	}
-	if (!SolidMaterial)
+	if (!LoadSolidMaterial())
 	{
-		SolidMaterial = LoadObject<UMaterialInterface>(nullptr, WeaponSolidMaterialPath);
-		if (!SolidMaterial)
-		{
-			UE_LOG(LogWeaponDraw, Error, TEXT("Could not load %s; weapons cannot be drawn"), WeaponSolidMaterialPath);
-			return nullptr;
-		}
+		return nullptr;
 	}
 	TArray<VisualMesh::FPart> Parts;
 	VisualMesh::ReadParts(Bridge->GetDefs()->get(Weapon), "visual", FVector2f(100.0f, 100.0f), Parts);
@@ -357,6 +438,7 @@ void UWeaponDrawSubsystem::HoldPose(int32 Slot, float Height, FVector& OutLocati
 void UWeaponDrawSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	FrameDelta = DeltaTime;
 	USimSubsystem* Bridge = BridgeSource.Get();
 	if (!Bridge || !Bridge->GetSim())
 	{
@@ -367,6 +449,8 @@ void UWeaponDrawSubsystem::Tick(float DeltaTime)
 		LastGeneration = Bridge->GetSimGeneration();
 		Weapons.Reset();
 		LastOrderStep = -1;
+		bShieldWanted = false;
+		ShieldPawn = colony::kNoEntity;
 	}
 	UpdatePlayerInput();
 
@@ -401,6 +485,10 @@ void UWeaponDrawSubsystem::Tick(float DeltaTime)
 				{
 					Slot.Component->SetVisibility(false);
 				}
+			}
+			if (Found->Shield.IsValid())
+			{
+				Found->Shield->SetVisibility(false);
 			}
 		}
 	}
@@ -521,6 +609,53 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		Shown.Component->SetRelativeLocationAndRotation(Location, Rotation);
 		Shown.Component->SetVisibility(bShow);
 	}
+
+	UpdateShield(Actor, View, Pawn, bShow && !View.hideGear, Height);
+}
+
+void UWeaponDrawSubsystem::UpdateShield(ASimPawnActor& Actor, const colony::ThingView& View, FPawnWeapons& Pawn, bool bShow, float Height)
+{
+	if (!View.shield.valid())
+	{
+		if (Pawn.Shield.IsValid())
+		{
+			Pawn.Shield->DestroyComponent();
+		}
+		Pawn.Shield = nullptr;
+		Pawn.ShieldKey = 0;
+		return;
+	}
+	const uint64 Key = (static_cast<uint64>(View.shield.value) << 32) | static_cast<uint64>(View.shieldStuff.value);
+	if (!Pawn.Shield.IsValid() || Pawn.ShieldKey != Key)
+	{
+		if (Pawn.Shield.IsValid())
+		{
+			Pawn.Shield->DestroyComponent();
+		}
+		Pawn.Shield = nullptr;
+		UStaticMesh* Mesh = ShieldMesh(View.shield, View.shieldStuff);
+		if (!Mesh)
+		{
+			return;
+		}
+		Pawn.Shield = MakeComponent(Actor, Mesh);
+		Pawn.ShieldKey = Key;
+		// A new shield starts where it should be, not swinging in from the arm.
+		Pawn.ShieldRaise = View.shieldUp ? 1.0f : 0.0f;
+		Pawn.ShieldSlung = View.shieldSlung ? 1.0f : 0.0f;
+	}
+	Pawn.ShieldRaise = FMath::FInterpConstantTo(Pawn.ShieldRaise, View.shieldUp ? 1.0f : 0.0f, FrameDelta, WeaponShieldRaiseRate);
+	Pawn.ShieldSlung = FMath::FInterpConstantTo(Pawn.ShieldSlung, View.shieldSlung ? 1.0f : 0.0f, FrameDelta, WeaponShieldSlingRate);
+
+	const float Raise = MeleePose::EaseInOut(Pawn.ShieldRaise);
+	const float Slung = MeleePose::EaseInOut(Pawn.ShieldSlung);
+	const FVector Scale(1.0, 1.0, Height);
+	FVector Location = FMath::Lerp(WeaponShieldLowered, WeaponShieldRaised, static_cast<double>(Raise)) * Scale;
+	FRotator Rotation = WeaponSlerp(WeaponShieldLoweredRotation, WeaponShieldRaisedRotation, Raise);
+	Location = FMath::Lerp(Location, WeaponShieldSlungAt * Scale, static_cast<double>(Slung));
+	Rotation = WeaponSlerp(Rotation, WeaponShieldSlungRotation, Slung);
+	Pawn.Shield->SetRelativeLocationAndRotation(Location, Rotation);
+	Pawn.Shield->SetVisibility(bShow);
 }
 
 // ---------------------------------------------------------------------------
@@ -556,6 +691,18 @@ UStaticMeshComponent* UWeaponDrawSubsystem::GetHandsComponent(colony::Entity Paw
 		}
 	}
 	return nullptr;
+}
+
+UStaticMeshComponent* UWeaponDrawSubsystem::GetShieldComponent(colony::Entity Pawn) const
+{
+	const FPawnWeapons* Found = Weapons.Find(entt::to_integral(Pawn));
+	return Found && Found->Shield.IsValid() ? Found->Shield.Get() : nullptr;
+}
+
+float UWeaponDrawSubsystem::GetShieldRaise(colony::Entity Pawn) const
+{
+	const FPawnWeapons* Found = Weapons.Find(entt::to_integral(Pawn));
+	return Found ? Found->ShieldRaise : 0.0f;
 }
 
 int32 UWeaponDrawSubsystem::CountWeaponsInHands() const
@@ -701,6 +848,58 @@ bool UWeaponDrawSubsystem::Block()
 	return true;
 }
 
+bool UWeaponDrawSubsystem::HasShieldOnArm(const colony::ThingView& View)
+{
+	return View.shield.valid() && !View.shieldSlung;
+}
+
+bool UWeaponDrawSubsystem::HoldShield(bool bUp)
+{
+	USimSubsystem* Bridge = nullptr;
+	const colony::ThingView* Me = ControlledView(Bridge);
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	const double Now = GetWorld()->GetRealTimeSeconds();
+	if (!bUp)
+	{
+		if (!bShieldWanted)
+		{
+			return false;
+		}
+		bShieldWanted = false;
+		USimSubsystem* Sim = BridgeSource.Get();
+		if (!Sim || !Sim->GetSim() || ShieldPawn == colony::kNoEntity)
+		{
+			return false;
+		}
+		Sim->Submit(colony::ShieldCommand{ShieldPawn, false, false, 0.0f, 0.0f});
+		ShieldPawn = colony::kNoEntity;
+		ShieldSentAt = Now;
+		++ShieldOrders;
+		return true;
+	}
+	if (!Me || !HasShieldOnArm(*Me) || !Protagonist || !Protagonist->GetBody())
+	{
+		return false;
+	}
+	const FVector Look = Protagonist->GetBody()->GetViewDirection().GetSafeNormal2D();
+	const FVector2D Dir = Look.IsNearlyZero() ? FVector2D(Me->facingX, Me->facingY) : FVector2D(Look.X, Look.Y);
+	// Sent when the wish changes, when the camera has turned, or now and then if the sim has not raised it (it was busy).
+	const bool bChanged = !bShieldWanted || ShieldPawn != Me->id;
+	const bool bTurned = FVector2D::DotProduct(Dir, ShieldDirSent) < WeaponShieldResendCosine;
+	const bool bStale = !Me->shieldUp && Now - ShieldSentAt > 0.5;
+	if (!bChanged && !bStale && !(bTurned && Now - ShieldSentAt >= WeaponShieldResendSeconds))
+	{
+		return false;
+	}
+	Bridge->Submit(colony::ShieldCommand{Me->id, true, true, static_cast<float>(Dir.X), static_cast<float>(Dir.Y)});
+	bShieldWanted = true;
+	ShieldPawn = Me->id;
+	ShieldDirSent = Dir;
+	ShieldSentAt = Now;
+	++ShieldOrders;
+	return true;
+}
+
 bool UWeaponDrawSubsystem::SwitchTo(int32 Slot)
 {
 	USimSubsystem* Bridge = nullptr;
@@ -753,21 +952,44 @@ void UWeaponDrawSubsystem::UpdatePlayerInput()
 	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
 	if (!Protagonist || !Protagonist->IsDirectMode() || !PC)
 	{
+		// Leaving direct mode with the shield held: put it down, so the colonist doesn't carry on behind it.
+		HoldShield(false);
 		return;
 	}
 	// With a building in hand the mouse buttons plan it and cancel it (UHandsOnSubsystem).
 	const UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
 	if (Orders && Orders->IsDirectBuilding())
 	{
+		HoldShield(false);
 		return;
 	}
 	if (PC->IsInputKeyDown(EKeys::LeftMouseButton))
 	{
 		Swing();
 	}
-	if (PC->IsInputKeyDown(EKeys::RightMouseButton))
+	// The right mouse button holds up the shield when one is on the arm, else the weapon (a gun aims, ProtagonistPawn).
+	USimSubsystem* Bridge = nullptr;
+	const colony::ThingView* Me = ControlledView(Bridge);
+	const bool bRight = bScriptedRight ? bScriptRightHeld : PC->IsInputKeyDown(EKeys::RightMouseButton);
+	if (!Me)
 	{
-		Block();
+		// Paused, downed or dead: leave the shield as it is (the sim lowers it for a downed pawn).
+	}
+	else if (HasShieldOnArm(*Me))
+	{
+		if (ShieldPawn != colony::kNoEntity && ShieldPawn != Me->id)
+		{
+			HoldShield(false); // the player took over another colonist with the old one's shield up
+		}
+		HoldShield(bRight);
+	}
+	else
+	{
+		HoldShield(false);
+		if (bRight)
+		{
+			Block();
+		}
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::Q))
 	{
