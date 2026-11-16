@@ -123,6 +123,7 @@ bool Sim::visitMap(int caravanId, std::string& error) {
         s.world.startTile = tile;
         s.world.visit = true;
         s.startSecond = time_.seconds;
+        s.dayMinutes = time_.dayMinutes;
         auto sim = std::make_unique<Sim>(s, defs_);
         if (!sim->setupErrors().empty() || sim->site() == nullptr) {
             error = "the map of that tile can't be made" + (sim->setupErrors().empty() ? std::string() : ": " + sim->setupErrors().front());
@@ -195,7 +196,7 @@ bool Sim::formOnMap(int tile, const std::vector<Entity>& pawns, const std::vecto
 
 void Sim::stepOtherMaps() {
     for (OtherMap& m : otherMaps_) {
-        m.sim->stepOnce(false);
+        m.sim->stepOnce(false, time_.tick ? 1 : 0);  // the colony's calendar: both maps keep the same time
         std::vector<int> departed;
         for (const Event& e : m.sim->events()) {
             if (e.type == EventType::CaravanDeparted) {
@@ -206,7 +207,7 @@ void Sim::stepOtherMaps() {
             takeCaravanFrom(m, id);
         }
     }
-    if (otherMaps_.empty() || time_.seconds % kSecondsPerHour != 0) {
+    if (otherMaps_.empty() || !time_.tick || time_.seconds % kSecondsPerHour != 0) {
         return;
     }
     // A colonist who died away (or is gone from there) no longer has a place kept here.

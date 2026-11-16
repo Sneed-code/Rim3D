@@ -509,7 +509,7 @@ void MonsterSystem::step(const std::vector<Event>& events, size_t from) {
             s.dropJelly(ev.cell, s.destroyJelly);
         }
     }
-    if (s.time.seconds % kMonsterCheckEvery != 0) {
+    if (!s.time.tick || s.time.seconds % kMonsterCheckEvery != 0) {  // by the calendar, once a second at most
         return;
     }
     const std::vector<Entity> hives = s.hives();

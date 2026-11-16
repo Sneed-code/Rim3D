@@ -288,7 +288,7 @@ void DefenseSystem::stepTurret(Entity building, Turret& turret, Rng& rng) {
     };
     switch (turret.phase) {
         case TurretPhase::Idle: {
-            if ((time_.seconds + static_cast<int64_t>(entt::to_integral(building))) % numbers_.scanEvery != 0) {
+            if ((time_.steps + static_cast<int64_t>(entt::to_integral(building))) % numbers_.scanEvery != 0) {
                 return;
             }
             if (!hasAmmo()) {
@@ -363,7 +363,7 @@ void DefenseSystem::stepTurret(Entity building, Turret& turret, Rng& rng) {
 const std::vector<DefenseSystem::ArmedTrap>& DefenseSystem::armedTraps() const {
     const entt::registry& reg = things_.registry();
     const size_t traps = reg.view<Trap>().size();
-    if (armedAt_ == time_.seconds && armedCount_ == traps) {
+    if (armedAt_ == time_.steps && armedCount_ == traps) {
         return armed_;
     }
     armedCount_ = traps;
@@ -374,7 +374,7 @@ const std::vector<DefenseSystem::ArmedTrap>& DefenseSystem::armedTraps() const {
         }
     }
     std::sort(armed_.begin(), armed_.end(), [](const ArmedTrap& a, const ArmedTrap& b) { return a.trap < b.trap; });
-    armedAt_ = time_.seconds;
+    armedAt_ = time_.steps;
     return armed_;
 }
 
@@ -648,7 +648,7 @@ void DefenseSystem::stepTraps(Rng& rng) {
         return;
     }
     // Enemy fighters near an armed trap may notice it.
-    if (time_.seconds % numbers_.noticeEvery == 0) {
+    if (time_.steps % numbers_.noticeEvery == 0) {
         for (const ArmedTrap& a : armed) {
             Trap& t = reg.get<Trap>(a.trap);
             const Position& tp = reg.get<Position>(a.trap);

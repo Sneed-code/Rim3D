@@ -535,6 +535,8 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                     } else if constexpr (std::is_same_v<Type, HideGearCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
                         j["hide"] = c.hide;
+                    } else if constexpr (std::is_same_v<Type, SetDayLengthCommand>) {
+                        j["minutes"] = c.minutes;
                     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
                         j["up"] = c.up;
@@ -1854,6 +1856,14 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             out.command = std::move(c);
             return true;
         }
+        if (type == "SetDayLength") {
+            SetDayLengthCommand c;
+            if (!r.integer(j, "minutes", c.minutes, where)) {
+                return false;
+            }
+            out.command = std::move(c);
+            return true;
+        }
         if (type == "Shield") {
             ShieldCommand c;
             uint32_t pawn = entt::to_integral(kNoEntity);
@@ -1889,7 +1899,7 @@ Replay recordReplay(const Sim& sim) {
     replay.settings = sim.settings();
     replay.commands = sim.commandLog();
     replay.checkpoints = sim.checkpoints();
-    replay.endStep = sim.time().seconds;
+    replay.endStep = sim.time().steps;
     replay.hasEndHash = true;
     replay.endHash = sim.stateHash();
     return replay;
@@ -1912,6 +1922,9 @@ std::string writeReplay(const Replay& replay) {
     }
     if (s.wildAnimals != 0) {
         settings["wildAnimals"] = s.wildAnimals;
+    }
+    if (s.dayMinutes != kBaseDayMinutes) {
+        settings["dayMinutes"] = s.dayMinutes;
     }
     if (s.world.enabled) {
         ReplayOrderedJson world = ReplayOrderedJson::object();
@@ -1987,8 +2000,11 @@ bool readReplay(const std::string& text, Replay& out, std::string& error) {
         !r.text(*settings, "haulItemDef", s.haulItemDef, where) ||
         !r.integer(*settings, "checkpointEvery", s.checkpointEvery, where) ||
         !r.integer(*settings, "pathBudget", s.pathBudget, where) || !r.text(*settings, "scenario", s.scenario, where) ||
-        !r.integer(*settings, "wildAnimals", s.wildAnimals, where)) {
+        !r.integer(*settings, "wildAnimals", s.wildAnimals, where) || !r.integer(*settings, "dayMinutes", s.dayMinutes, where)) {
         return false;
+    }
+    if (!dayMinutesValid(s.dayMinutes)) {
+        return r.fail("settings: dayMinutes must be 48 to 120");
     }
     if (s.mapSize <= 0 || s.mapSize > 4096 || s.pawns < 0 || s.items < 0 || s.checkpointEvery < 0 ||
         s.pathBudget <= 0 || s.wildAnimals < 0) {
@@ -2077,7 +2093,7 @@ bool saveReplayFile(const std::string& path, const Replay& replay, std::string& 
 }
 
 void ReplayFeeder::submitDue(Sim& sim) {
-    while (next_ < replay_.commands.size() && replay_.commands[next_].step <= sim.time().seconds) {
+    while (next_ < replay_.commands.size() && replay_.commands[next_].step <= sim.time().steps) {
         sim.submit(replay_.commands[next_].command);
         ++next_;
     }
@@ -2085,7 +2101,7 @@ void ReplayFeeder::submitDue(Sim& sim) {
 
 void playReplay(const Replay& replay, Sim& sim, int64_t endStep) {
     ReplayFeeder feeder(replay);
-    while (sim.time().seconds < endStep) {
+    while (sim.time().steps < endStep) {
         feeder.submitDue(sim);
         sim.step();
     }
@@ -2108,7 +2124,7 @@ ReplayCheck checkReplay(const Replay& expected, const Sim& sim) {
             return check;
         }
     }
-    if (expected.hasEndHash && expected.endStep == sim.time().seconds) {
+    if (expected.hasEndHash && expected.endStep == sim.time().steps) {
         ++check.compared;
         if (sim.stateHash() != expected.endHash) {
             check.firstMismatch = expected.endStep;
