@@ -4,7 +4,6 @@
 #include "AssetToolsModule.h"
 #include "Dom/JsonObject.h"
 #include "Engine/StaticMesh.h"
-#include "Materials/Material.h"
 #include "IAssetTools.h"
 #include "InterchangeGenericAssetsPipeline.h"
 #include "InterchangeGenericMeshPipeline.h"
@@ -107,25 +106,6 @@ int32 UTreeArtCommandlet::Main(const FString& Params)
 			Each->PostEditChange();
 			// The import saved the mesh, its materials and textures; save the mesh again with Nanite on.
 			bSaved = TreeSave(Each) && bSaved;
-			// Their materials must say they are used on Nanite and instanced meshes (the rock scatter draws them
-			// instanced): a game can't add the flag itself, so it drew the default material (pale grey boxes).
-			for (const FStaticMaterial& Slot : Each->GetStaticMaterials())
-			{
-				UMaterial* Base = Slot.MaterialInterface ? Slot.MaterialInterface->GetMaterial() : nullptr;
-				if (!Base || !Base->GetPathName().StartsWith(TreeFolder))
-				{
-					continue;
-				}
-				bool bNeedsRecompile = false;
-				const bool bNanite = Base->SetMaterialUsage(bNeedsRecompile, MATUSAGE_Nanite);
-				const bool bInstanced = Base->SetMaterialUsage(bNeedsRecompile, MATUSAGE_InstancedStaticMeshes);
-				if (!bNanite || !bInstanced)
-				{
-					UE_LOG(LogTreeArt, Warning, TEXT("%s: could not set the Nanite or instanced usage"), *Base->GetPathName());
-				}
-				Base->PostEditChange();
-				bSaved = TreeSave(Base) && bSaved;
-			}
 		}
 		const FBox Box = Mesh->GetBoundingBox();
 		UE_LOG(LogTreeArt, Display, TEXT("%s: %s, %d materials, %.1f x %.1f x %.1f m%s"), *Id, *Mesh->GetPathName(), Mesh->GetStaticMaterials().Num(),
