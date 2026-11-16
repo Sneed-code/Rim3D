@@ -892,7 +892,7 @@ namespace
 
 	UMaterial* MhBaseMaterial(IAssetTools& Tools, const FString& BaseName, bool bMasked, bool bSkin, bool bAlphaFromColor = false)
 	{
-		const FString Name = BaseName + TEXT("_Wet");  // the version with wetness (earlier ones stay on disk unused)
+		const FString Name = BaseName + TEXT("_Wet2");  // the current version (wetness, hair colour); earlier ones stay on disk unused
 		const FString Path = MakeHumanAssetPath(MakeHumanFolder, Name);
 		if (UMaterial* Existing = FindObject<UMaterial>(nullptr, *Path))
 		{
@@ -935,10 +935,28 @@ namespace
 		auto* Tint = Cast<UMaterialExpressionVectorParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVectorParameter::StaticClass(), -600, -400));
 		Tint->ParameterName = TEXT("Tint");
 		Tint->DefaultValue = FLinearColor::White;
-		auto* Tinted = UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionMultiply::StaticClass(), -300, -250);
-		UMaterialEditingLibrary::ConnectMaterialExpressions(Color, TEXT("RGB"), Tinted, TEXT("A"));
-		UMaterialEditingLibrary::ConnectMaterialExpressions(Tint, TEXT("RGB"), Tinted, TEXT("B"));
-		UMaterialEditingLibrary::ConnectMaterialProperty(Tinted, TEXT(""), MP_BaseColor);
+		if (bMasked)
+		{
+			// Hair, brows and lashes: the colour is the tint, the texture only its strand detail (its lightness). Tint times
+			// the brown texture made white or platinum hair (the Drow's) come out light brown.
+			auto* HairColour = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -300, -250));
+			HairColour->OutputType = CMOT_Float3;
+			HairColour->Description = TEXT("HairColour");
+			HairColour->Code = TEXT("return Tint * saturate(dot(Tex, float3(0.3, 0.59, 0.11)) * 2.6);");
+			HairColour->Inputs.SetNum(2);
+			HairColour->Inputs[0].InputName = TEXT("Tex");
+			HairColour->Inputs[1].InputName = TEXT("Tint");
+			HairColour->Inputs[0].Input.Connect(0, Color);
+			HairColour->Inputs[1].Input.Connect(0, Tint);
+			UMaterialEditingLibrary::ConnectMaterialProperty(HairColour, TEXT(""), MP_BaseColor);
+		}
+		else
+		{
+			auto* Tinted = UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionMultiply::StaticClass(), -300, -250);
+			UMaterialEditingLibrary::ConnectMaterialExpressions(Color, TEXT("RGB"), Tinted, TEXT("A"));
+			UMaterialEditingLibrary::ConnectMaterialExpressions(Tint, TEXT("RGB"), Tinted, TEXT("B"));
+			UMaterialEditingLibrary::ConnectMaterialProperty(Tinted, TEXT(""), MP_BaseColor);
+		}
 		if (bMasked && bAlphaFromColor)
 		{
 			UMaterialEditingLibrary::ConnectMaterialProperty(Color, TEXT("A"), MP_OpacityMask);
@@ -1641,6 +1659,7 @@ namespace
 					++Failures;
 					continue;
 				}
+				Instance->SetParentEditorOnly(Base);  // an instance already on disk keeps its old parent otherwise
 				const TArray<TSharedPtr<FJsonValue>>* TintValues = nullptr;
 				if ((*Entry)->TryGetArrayField(TEXT("tint"), TintValues) && TintValues->Num() >= 3)
 				{

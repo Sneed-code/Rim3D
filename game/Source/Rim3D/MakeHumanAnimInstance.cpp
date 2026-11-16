@@ -259,9 +259,9 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 			// Calmer (sneed: long hair touching the body jittered): well damped, so it settles instead of buzzing at its
 			// limits. (Collision spheres round the back and chest pushed the hair's bodies, which hang a few cm from the
 			// spine bones, out of place: the long hair vanished. Not used.)
-			Chain->AngularDampingOverride = 1.5f;
-			Chain->bOverrideLinearDamping = true;
-			Chain->LinearDampingOverride = 1.0f;
+			// The damping is a share of the velocity taken off each step (above 1 the chain blew apart and the long hair
+			// vanished): 0.8 against MakeChain's 0.5.
+			Chain->AngularDampingOverride = 0.8f;
 			Dynamics.Add(Chain);
 		}
 		// A tail (mh_export.py's add_tail: tail_01 ... under the pelvis): its own swish (FMakeHumanTailNode).
