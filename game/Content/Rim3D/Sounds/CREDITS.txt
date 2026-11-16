@@ -1,0 +1,30 @@
+Voice_* files (Voice_FemHit, Voice_FemScream, Voice_LovinCouple, Voice_LovinFem) are sneed's own recordings.
+
+Third-party sounds below were cut, faded, converted to mono 16-bit WAV and level-adjusted for Rim3D.
+Licences: CC BY / CC BY-SA (https://creativecommons.org/licenses/). Sound files under CC BY-SA keep that licence.
+
+== Amb_Birds_Tropical (tropical birdsong, 16 clips) ==
+cues/Amb_Birds_Tropical/1.wav | Montezuma oropendola (Psarocolius montezuma) | British Library sound archive | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Montezuma_Oropendola_(Psarocolius_montezuma)_(W_PSAROCOLIUS_MONTEZUMA_R1_C4).ogg
+cues/Amb_Birds_Tropical/2.wav | Keel-billed toucan (Ramphastos sulfuratus) | soundbytez | CC BY 3.0 | https://commons.wikimedia.org/wiki/File:Keel_Billed_Toucan.ogg  (originally https://www.freesound.org/people/soundbytez/sounds/111030/)
+cues/Amb_Birds_Tropical/3.wav | Screaming piha (Lipaugus vociferans) | Niels Krabbe | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Lipaugus_vociferans_-_Screaming_Piha_XC249588.mp3  (also https://xeno-canto.org/249588)
+cues/Amb_Birds_Tropical/4.wav | Great tinamou (Tinamus major) | Niels Krabbe | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Tinamus_major_-_Great_Tinamou_XC251636.mp3  (also https://xeno-canto.org/251636)
+cues/Amb_Birds_Tropical/5.wav | Laughing kookaburra (Dacelo novaeguineae) | V. Powys (Australian National Wildlife Collection) | CC BY 3.0 | https://commons.wikimedia.org/wiki/File:Dacelo_novaeguineae_ANWC_X00518.opus
+cues/Amb_Birds_Tropical/6.wav | Black-faced antthrush (Formicarius analis) | Niels Krabbe | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Formicarius_analis_-_Black-faced_Antthrush_XC248897.mp3  (also https://xeno-canto.org/248897)
+cues/Amb_Birds_Tropical/7.wav | Eastern whipbird (Psophodes olivaceus) | James Ray | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Psophodes_olivaceus_-_Eastern_Whipbird_XC442271.mp3  (also https://xeno-canto.org/442271)
+cues/Amb_Birds_Tropical/8.wav | White-rumped shama (Copsychus malabaricus) | Sharadapte | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:White-rumped_shama_song_recorded_in_June_2014_at_Netravali,_Goa.wav
+cues/Amb_Birds_Tropical/9.wav | Rhinoceros hornbill (Buceros rhinoceros) | soundbytez | CC BY 3.0 | https://commons.wikimedia.org/wiki/File:Rhinoceros_hornbill_call.ogg  (originally https://www.freesound.org/people/soundbytez/sounds/97388/)
+cues/Amb_Birds_Tropical/10.wav | Rufous-tailed jacamar (Galbula ruficauda) | Niels Krabbe | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Galbula_ruficauda_-_Rufous-tailed_Jacamar_XC250854.mp3  (also https://xeno-canto.org/250854)
+cues/Amb_Birds_Tropical/11.wav | Little tinamou (Crypturellus soui) | Niels Krabbe | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Crypturellus_soui_-_Little_Tinamou_XC250736.mp3  (also https://xeno-canto.org/250736)
+cues/Amb_Birds_Tropical/12.wav | Thrush-like wren (Campylorhynchus turdinus) | Niels Krabbe | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Campylorhynchus_turdinus_-_Thrush-like_Wren_XC242304.mp3  (also https://xeno-canto.org/242304)
+cues/Amb_Birds_Tropical/13.wav | Greater racket-tailed drongo (Dicrurus paradiseus) | Sudipto Roy | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Dicrurus_paradiseus_-_Greater_Racket-tailed_Drongo_XC124717.ogg  (also https://xeno-canto.org/124717)
+cues/Amb_Birds_Tropical/14.wav | Channel-billed toucan (Ramphastos vitellinus) | Niels Krabbe | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Ramphastos_vitellinus_-_Channel-billed_Toucan_XC251457.mp3  (also https://xeno-canto.org/251457)
+cues/Amb_Birds_Tropical/15.wav | Lesson's motmot (Momotus lessonii) | Oliver Komar | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Momotus_lessonii_-_Lesson%27s_Motmot_XC574522.mp3  (also https://xeno-canto.org/574522)
+cues/Amb_Birds_Tropical/16.wav | Scarlet macaw (Ara macao) | Ganesh Mohan T | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Scarlet_macaw_01.wav
+
+== Amb_Tropical_Day (45 s loop, mix of two recordings) ==
+cues/Amb_Tropical_Day/1.wav | forest insects (katydids, cicadas) with distant birds, Blue Mountains, NSW, Australia | James Ray | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Sonus_naturalis_-_Soundscape_XC446158.mp3  (also https://xeno-canto.org/446158)
+cues/Amb_Tropical_Day/1.wav | soft distant birds, morning at a mangrove edge, Chiriqui, Panama (quiet layer) | Oliver Komar | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Sonus_naturalis_-_Soundscape_XC459083.mp3  (also https://xeno-canto.org/459083)
+
+== Amb_Tropical_Night (45 s loop, mix of two recordings) ==
+cues/Amb_Tropical_Night/1.wav | night insect chorus before dawn, Cocle, Panama | Mario Frasca | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Sonus_naturalis_-_Soundscape_XC467480.mp3  (also https://xeno-canto.org/467480)
+cues/Amb_Tropical_Night/1.wav | night chorus of frogs and toads, Niger Delta, Nigeria (quieter layer) | ElemePodcast | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Night_Chorus_of_Frogs_and_Toads_in_Niger_Delta.ogg
