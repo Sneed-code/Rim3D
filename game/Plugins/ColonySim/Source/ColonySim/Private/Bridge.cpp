@@ -488,6 +488,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Scan: return "Scan";
         case PawnAction::Drill: return "Drill";
         case PawnAction::Man: return "Man";
+        case PawnAction::Cornered: return "Cornered";
     }
     return "?";
 }

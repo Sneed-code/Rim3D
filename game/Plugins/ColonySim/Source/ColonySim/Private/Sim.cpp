@@ -413,7 +413,12 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setBreeding(breeding_.get());
     animals_->setHusbandry(husbandry_.get());
     animals_->setPathfinder(&pathfinder_);
-    combat_->setHurtHook([this](Entity victim, Entity attacker) { animals_->hurt(victim, attacker); });
+    combat_->setHurtHook([this](Entity victim, Entity attacker) {
+        animals_->hurt(victim, attacker);
+        if (raids_) {
+            raids_->hurt(victim, attacker);
+        }
+    });
     jobs_->setHusbandry(husbandry_.get());
     jobs_->setCombat(combat_.get());
     husbandry_->setHaulerHook([this](Entity animal, bool on) { jobs_->setAnimalHauler(animal, on); });
