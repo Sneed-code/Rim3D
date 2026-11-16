@@ -124,6 +124,11 @@ public:
 	/** A hit (docs/design/fights.md): the pawn flinches, leaning away from the shot for about half a
 	 *  second. `ShotDirection` is the way the bullet was travelling; `Strength` is 0 to 1. Cosmetic. */
 	void PlayHitReaction(const FVector& ShotDirection, float Strength);
+	/** A bullet hit with footwork (docs/design/fights.md): a whole-body react clip by the side the shot came from, the
+	 *  large one with steps back when the sim staggered the pawn (`bStaggered`). False if no clip played (lying,
+	 *  jumping, ragdoll or the clip is missing); the lean of PlayHitReaction still goes on top. Cosmetic. */
+	bool PlayHitClip(const FVector& ShotDirection, bool bStaggered);
+	int32 GetHitClipsPlayed() const { return HitClipsPlayed; }
 	int32 GetHitReactions() const { return HitReactions; }
 	bool IsReacting() const { return ReactionAge < kHitReactionSeconds; }
 	/** The lean now, in degrees (0 when still). */
@@ -316,6 +321,7 @@ private:
 	bool bRagdoll = false;
 	int32 RagdollsStarted = 0;
 	float ReactionAge = kHitReactionSeconds;
+	int32 HitClipsPlayed = 0;
 	float ReactionStrength = 0.0f;
 	FVector ReactionDirection = FVector::ForwardVector;
 	float LeanDegrees = 0.0f;
