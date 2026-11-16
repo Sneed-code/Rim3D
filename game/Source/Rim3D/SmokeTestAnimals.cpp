@@ -105,9 +105,9 @@ void USmokeTestSubsystem::BuildAnimalsPhases()
 			}
 			State->PosesSeen.Add(static_cast<uint8>(Animal->GetPose()));
 			State->DefsDrawn.Add(FName(UTF8_TO_TCHAR(B->GetDefs()->get(View.def).defName().c_str())));
-			// Drawn about as big as an animal: the whole body between 15 cm and 8 m long (an elephant with its trunk).
+			// Drawn about as big as an animal: the whole body between 15 cm and 13 m long (the 12 m T-rex).
 			const double Size = Body->Bounds.BoxExtent.GetMax() * 2.0;
-			if (Size < 15.0 || Size > 800.0)
+			if (Size < 15.0 || Size > 1300.0)
 			{
 				State->Error(FString::Printf(TEXT("an animal is %.0f cm across (draw scale %.2f)"), Size, Animal->GetDrawScale()));
 			}
@@ -283,12 +283,16 @@ void USmokeTestSubsystem::BuildAnimalsPhases()
 		int32 I = 0;
 		for (const TCHAR* Def : AnimalSmokeCloseDefs)
 		{
-			B->Submit(colony::SpawnThingCommand{std::string(TCHAR_TO_UTF8(Def)), colony::CellPos{M.x - 14, M.y - 4 + I++ * 4, 0}});
+			// The 12 m T-rex stands behind the middle of the row, where it fits in the picture without hiding the rest.
+			const bool bBig = FCString::Strcmp(Def, TEXT("TRex")) == 0;
+			const colony::CellPos At = bBig ? colony::CellPos{M.x - 28, M.y + 10, 0} : colony::CellPos{M.x - 14, M.y - 4 + I++ * 4, 0};
+			B->Submit(colony::SpawnThingCommand{std::string(TCHAR_TO_UTF8(Def)), At});
 		}
 		B->StepOnce();
 		B->SetSpeed(0);
-		const FVector Target = B->SimToWorld(M.x - 14.0f, M.y + 6.0f, 0) + FVector(0.0, 0.0, 100.0);
-		const FVector From = Target + FVector(-1500.0, -400.0, 400.0);
+		// From the side the animals face (+x), wide enough for the whole row of eight and the T-rex behind it.
+		const FVector Target = B->SimToWorld(M.x - 16.0f, M.y + 10.0f, 0) + FVector(0.0, 0.0, 250.0);
+		const FVector From = Target + FVector(2000.0, -1100.0, 500.0);
 		ViewFrom(From, (Target - From).Rotation());
 		State->Reset();
 	};
