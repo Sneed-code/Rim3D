@@ -231,6 +231,43 @@ shows the cat parts' material sections only on this kind and hides the imp tail 
 colour with a shade slider (darker to lighter), or its own colour. Its texture is `make_fur_textures` (strands along the
 tail, with a normal map). Earrings are hidden on this kind. `-CreatorKind=3` puts everyone in it for pictures.
 
+## Creator round 3 (sneed, 2026-11-16)
+
+**Drow** is a fifth kind with these defaults:
+- Long pointed ears: the ElfEars morph, MakeHuman ear targets beyond 1.
+- Red irises with a strength slider. The eye material has IrisColour and IrisAmount: the texture's lightness is kept and
+  the colour laid over it. Everyone can set an eye colour.
+- Platinum hair; any hair colour can still be picked.
+- Skin picked along `CreatorDrowSkins`, from light ash violet through slate and midnight purple to obsidian.
+
+**Ears under headgear:** the creator's headgear test shrinks the ImpEars and ElfEars weights: ear tops covered keeps
+35%, whole ears covered keeps 0, so nothing pokes out of a helmet. The game's headgear should do the same once
+clothes have an "ears covered" flag.
+
+**Jewellery** (`add_jewellery`):
+- Ear piercings: a lobe hoop through the lobe, a stud, a dangle, a helix ring, a tragus stud and an industrial bar.
+- Navel: a ring, a gem stud and a dangle.
+- A woman's genital ring goes through the clitoral hood: the point where the front of the body, coming up from
+  between the legs, turns upright. It used to sit on the mons.
+- The finger ring and collar are fitted to the limb's own cross-section (`fit_ring`). MakeHuman's finger bones run near
+  the back of the finger, so a ring round the bone sat off-centre and looked like a halo.
+- The necklace is a chain of links lying on the skin, lower at the front. Each point takes the skin weights under it.
+- Piercings take the skin weights of the skin they go through, so a nipple barbell moves exactly as the breast does.
+
+**Animation:**
+- Breast jiggle slider: 0 is the old default; 1 is softer and bouncier, still damped.
+- Long hair rests on the body: AnimDynamics outer spheres round the upper back, chest, neck, shoulders and breasts, with
+  more damping.
+- People who are standing play a seamless breathing idle (a Mixamo unarmed idle) instead of the game's idle, which
+  restarted.
+- Picking another clip while one plays switches to it.
+
+**Faces:** the nose wrinkles stay on the nose and the smile wrinkles stay off the upper lip, so disgust and pain lost
+their lip crease. Forehead creases are softer and only partial for inner-brow raises. Sad, surprised, disgusted, pain
+and pout are redone. The old pout is now "Sip", and there is a new "Smile (teeth)".
+
+The menu text is 15% smaller, and the kinds sit two to a row (the fourth had fallen off the panel).
+
 ## Wetness and long hair
 
 **Wetness** is one value per pawn, custom primitive data 12 (0 dry to 1 soaked). `MhAddWetness` in the MakeHumanArt

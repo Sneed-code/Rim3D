@@ -254,25 +254,12 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 			const bool bSide = c >= 4;
 			TSharedPtr<FAnimNode_AnimDynamics> Chain = MakeChain(First, Last, Ref, 1.0f, bSide ? 450.0f : 260.0f, bSide ? 6.0f : 14.0f);
 			Chain->SimulationSpace = AnimPhysSimSpaceType::Component;
-			// Calmer (sneed: long hair touching the body jittered), and it rests on the body instead of passing into it:
-			// spheres the hair stays outside of round the upper back and chest, the neck, the shoulders and breasts.
+			// Calmer (sneed: long hair touching the body jittered): well damped, so it settles instead of buzzing at its
+			// limits. (Collision spheres round the back and chest pushed the hair's bodies, which hang a few cm from the
+			// spine bones, out of place: the long hair vanished. Not used.)
 			Chain->AngularDampingOverride = 1.5f;
 			Chain->bOverrideLinearDamping = true;
 			Chain->LinearDampingOverride = 1.0f;
-			Chain->bUseSphericalLimits = true;
-			for (const TPair<const TCHAR*, float>& Sphere : {TPair<const TCHAR*, float>(TEXT("spine_05"), 11.0f), TPair<const TCHAR*, float>(TEXT("spine_03"), 11.0f),
-				TPair<const TCHAR*, float>(TEXT("neck_01"), 6.5f), TPair<const TCHAR*, float>(TEXT("upperarm_l"), 6.0f), TPair<const TCHAR*, float>(TEXT("upperarm_r"), 6.0f),
-				TPair<const TCHAR*, float>(TEXT("breast_l"), 6.0f), TPair<const TCHAR*, float>(TEXT("breast_r"), 6.0f)})
-			{
-				if (Ref.FindBoneIndex(Sphere.Key) != INDEX_NONE)
-				{
-					FAnimPhysSphericalLimit& Limit = Chain->SphericalLimits.AddDefaulted_GetRef();
-					Limit.DrivingBone.BoneName = Sphere.Key;
-					Limit.SphereLocalOffset = FVector::ZeroVector;
-					Limit.LimitRadius = Sphere.Value;
-					Limit.LimitType = ESphericalLimitType::Outer;
-				}
-			}
 			Dynamics.Add(Chain);
 		}
 		// A tail (mh_export.py's add_tail: tail_01 ... under the pelvis): its own swish (FMakeHumanTailNode).

@@ -223,7 +223,7 @@ namespace
 		float FurShade = 0.25f;        // -1 darker .. 1 lighter than the hair
 		float Wet = 0.0f;              // 0 dry .. 1 soaked (skin, hair and jewellery darker and glossier)
 		float ElfEars = 0.0f;          // long pointed ears (Drow)
-		float DrowTone = 0.55f;        // along CreatorDrowSkins, light .. obsidian
+		float DrowTone = 0.35f;        // along CreatorDrowSkins, light .. obsidian
 		bool bOwnIris = false;         // the eyes' own iris colour, else the base's
 		float Iris[3] = {0.8f, 0.05f, 0.04f};
 		float IrisStrength = 1.0f;     // how strongly the colour shows (Drow: faint to vivid red)
@@ -331,7 +331,7 @@ namespace
 			P.Weight = -0.3f;
 			P.Muscle = 0.3f;
 			P.ElfEars = 1.0f;
-			P.DrowTone = 0.55f;
+			P.DrowTone = 0.35f;
 			CreatorDrowSkin(P);
 			P.Hair[0] = 0.92f, P.Hair[1] = 0.91f, P.Hair[2] = 0.88f;
 			P.bOwnIris = true;
@@ -904,7 +904,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		{
 			for (int32 e = 0; e < static_cast<int32>(UE_ARRAY_COUNT(CreatorExpressions)); ++e)
 			{
-				if (Face == UTF8_TO_TCHAR(CreatorExpressions[e].Name))
+				if (Face == UTF8_TO_TCHAR(CreatorExpressions[e].Name) || (Face.IsNumeric() && FCString::Atoi(*Face) == e))  // by name or number
 				{
 					for (FCreatorPerson& Person : State->People)
 					{
