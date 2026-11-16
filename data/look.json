@@ -76,7 +76,7 @@
   },
 
   "film": {
-    "_about": "The engine's filmic tone curve, at its neutral defaults, then a small lift.",
+    "_about": "The engine's filmic tone curve, at its neutral defaults, then a small lift. localExposureShadows below 1 lifts dark areas against bright ones.",
     "slope": 0.88,
     "toe": 0.55,
     "shoulder": 0.26,
@@ -87,7 +87,9 @@
     "ambientOcclusion": 0.55,
     "ambientOcclusionRadiusCm": 120,
     "localExposureHighlights": 0.85,
-    "localExposureShadows": 0.85
+    "localExposureShadows": 0.75,
+    "skylightLeaking": 0.06,
+    "_skylightLeaking": "Lumen skylight leaking: lifts shade a little under hardware ray tracing, which leaks less light than software Lumen (0 = engine default, 0.06 since 2026-11-16)."
   },
 
   "seasons": {
