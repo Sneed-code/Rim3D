@@ -73,3 +73,19 @@ demos use one style (0 club).
 measured up to 6 cm, but the wobble was not visible in the 14 s creator clip (its own slider demo hid it) or the club
 clip at their camera distance. A first rebuild had lopsided limb weights: `bone.head_local` goes stale in edit mode,
 so `add_body_soft_bones` copies it first.
+
+## Making it visible (second round)
+
+The springs now have three times the room (belly 6 cm, buttocks 5, thighs 3, arms 2.5) and kicks twice to three times
+as hard (creator slap 300 cm/s, blast 900, weapon hits club 320 and blades 220). The belly and buttocks also **squash
+and stretch** (`FBody::Squash` 0.45 and 0.35): pushed in, the bone scales down along the line out from its parent and
+up sideways by half as much; pulled out, the reverse. The scale goes on whichever of the bone's own axes lies nearest
+that line, so no bone axis convention is assumed.
+
+**Skin dents**: every `AddHitKick` also dents the skin at the hit (up to two at a time): a smooth bowl round the point
+(radius a third of the kick's reach, 6 to 14 cm), as deep as the hit is hard (0.015 cm per cm/s, at most 3.5 cm), in
+over 40 ms, then springing back past flat into a small bulge and settling within 1.2 s (`exp(-5t) cos(16t)`). The point
+rides on the nearest bone. `UMakeHumanAnimInstance::NativeUpdateAnimation` writes it to custom primitive data 16 to 25
+(x, y, z, depth, radius twice) and `M_MH_SkinDetail`'s `SkinDent` node moves the skin along its normal in world position
+offset. The lighting is not bent into the dent yet (the outline and shadows show it). `Pawns.SkinDentScale` scales the
+depth; dents fade with the soft-body distance fade. The creator's smoke note gives the deepest dent.

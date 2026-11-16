@@ -275,6 +275,7 @@ namespace
 		colony::CellPos Middle = colony::CellPos{48, 48, 0};
 		float LargestTailSwing = 0.0f;
 		float LargestJiggle = 0.0f;
+		float DeepestDent = 0.0f;
 		// Soft-body tests (docs/design/soft-body.md): a blast 3 m in front of the picked one, a slap on its belly.
 		float BlastEvery = 0.0f;   // -CreatorBlast=<seconds>: a blast that often (for clips)
 		float BlastTimer = 0.0f;
@@ -1207,7 +1208,9 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			{
 				const FVector Forward = PickedMesh->GetOwner()->GetActorForwardVector();
 				const FVector Blast = PickedMesh->GetComponentLocation() + Forward * 300.0f + FVector(0, 0, 60.0f);
-				const FVector Belly = PickedMesh->GetSocketLocation(TEXT("spine_01")) + Forward * 15.0f;
+				// The belly bone sits 7 cm inside the skin (mh_common.add_body_soft_bones), so this is on the skin.
+				const bool bBellyBone = PickedMesh->GetBoneIndex(TEXT("belly")) != INDEX_NONE;
+				const FVector Belly = bBellyBone ? PickedMesh->GetSocketLocation(TEXT("belly")) + Forward * 7.0f : PickedMesh->GetSocketLocation(TEXT("spine_01")) + Forward * 15.0f;
 				for (const FCreatorPerson& Other : State->People)
 				{
 					const ASimPawnActor* Pawn = Pawns->FindPawn(Other.Thing);
@@ -1219,11 +1222,11 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					}
 					if (State->bBlastNow)
 					{
-						Anim->AddBlastKick(Blast, 450.0f, 900.0f);
+						Anim->AddBlastKick(Blast, 900.0f, 900.0f);
 					}
 					else if (Mesh == PickedMesh)
 					{
-						Anim->AddHitKick(Belly, -Forward * 120.0f + FVector(0, 0, 20.0f), 30.0f);
+						Anim->AddHitKick(Belly, -Forward * 300.0f + FVector(0, 0, 40.0f), 35.0f);
 					}
 				}
 				if (State->bBlastNow)
@@ -1250,6 +1253,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					{
 						State->LargestTailSwing = FMath::Max(State->LargestTailSwing, Anim->TakeLargestTailSwing());
 						State->LargestJiggle = FMath::Max(State->LargestJiggle, Anim->TakeLargestJiggle());
+						State->DeepestDent = FMath::Max(State->DeepestDent, Anim->TakeDeepestDent());
 					}
 				}
 			}
@@ -1780,8 +1784,8 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 	};
 	Play.Verify = [=, this]()
 	{
-		Notes.Add(FString::Printf(TEXT("creator: %d people, panel drawn %d frames, tail swung up to %.0f degrees, soft tissue up to %.1f cm"), State->People.Num(),
-			State->PanelFrames, State->LargestTailSwing, State->LargestJiggle));
+		Notes.Add(FString::Printf(TEXT("creator: %d people, panel drawn %d frames, tail swung up to %.0f degrees, soft tissue up to %.1f cm, skin dents up to %.1f cm"), State->People.Num(),
+			State->PanelFrames, State->LargestTailSwing, State->LargestJiggle, State->DeepestDent));
 		for (int32 i = 0; i < State->People.Num(); ++i)
 		{
 			Notes.Add(FString::Printf(TEXT("creator: %s"), *State->People[i].Label(i)));

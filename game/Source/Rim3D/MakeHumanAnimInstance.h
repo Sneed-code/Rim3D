@@ -42,6 +42,9 @@ struct FMakeHumanJiggleNode : public FAnimNode_SkeletalControlBase
 		float BaseStiffness = 160.0f;
 		float BaseMaxOffset = 2.5f;
 		bool bBodySoft = false;    // scaled by the body's softness (belly, thighs, arms, buttocks; not breasts or genitals)
+		// Squash and stretch: pushed in, the part flattens along the line out from its parent bone and spreads sideways;
+		// pulled out, it stretches and narrows (volume kept roughly). 0 none; the share of the scale change at full room.
+		float Squash = 0.0f;
 		FVector Position = FVector::ZeroVector;  // world, simulated
 		FVector Velocity = FVector::ZeroVector;
 		bool bStarted = false;
@@ -173,6 +176,8 @@ public:
 	float GetBodySoftness() const { return BodySoftness; }
 	/** Kicks queued since the last animation update (moved to the spring node in PreUpdate). */
 	TArray<FMakeHumanKick> PendingKicks;
+	/** The deepest skin dent (cm) since the last call, for the tests. */
+	float TakeDeepestDent();
 	/** The left hand's wrist pulled to a point given in the right hand bone's space (a two-handed grip), the elbow bent
 	 *  towards ElbowWorld; Alpha 0 is off. Read once a frame before the animation updates (creator weapons). */
 	void SetLeftHandGrip(float Alpha, const FVector& InRightHandOffset, const FVector& InElbowWorld)
@@ -186,6 +191,7 @@ public:
 	FVector LeftElbowWorld = FVector::ZeroVector;
 
 protected:
+	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
 	virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;
 	virtual void DestroyAnimInstanceProxy(FAnimInstanceProxy* Proxy) override;
 
@@ -195,4 +201,19 @@ private:
 	UPROPERTY()
 	TObjectPtr<UIKRetargeter> Retargeter;
 	float BodySoftness = 0.5f;
+
+	/** A dent in the skin where a hit landed (M_MH_SkinDetail's SkinDent, custom primitive data 16 to 25): pushed in along
+	 *  the skin's normal round a point that rides on the nearest bone, then springing back past flat and settling. */
+	struct FDent
+	{
+		FName Bone;
+		FVector Local = FVector::ZeroVector;  // the point in the bone's space
+		float Depth = 0.0f;                   // cm at the deepest
+		float Radius = 10.0f;                 // cm
+		float Age = 0.0f;                     // s
+	};
+	FDent Dents[2];
+	int32 NextDent = 0;
+	float DeepestDent = 0.0f;
+	bool bDentsShown = false;
 };

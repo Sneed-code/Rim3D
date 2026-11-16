@@ -1838,7 +1838,7 @@ namespace
 				{
 					if (UMakeHumanAnimInstance* DefAnim = Cast<UMakeHumanAnimInstance>(DefMesh->GetAnimInstance()))
 					{
-						DefAnim->AddHitKick(Hit.At, Travel * (bClub ? 160.0f : 110.0f) * (0.6f + Heavy * 0.6f), bClub ? 40.0f : 30.0f);
+						DefAnim->AddHitKick(Hit.At, Travel * (bClub ? 320.0f : 220.0f) * (0.6f + Heavy * 0.6f), bClub ? 40.0f : 30.0f);
 					}
 				}
 				GCwPending.bDeath = S.bFinish;

@@ -16,6 +16,8 @@ namespace
 		TEXT("Soft-body springs run fully on MakeHuman characters within this many cm of the camera, fading out to Pawns.SoftBodyFar."), ECVF_Default);
 	TAutoConsoleVariable<float> GMakeHumanSoftFar(TEXT("Pawns.SoftBodyFar"), 1500.0f,
 		TEXT("Beyond this many cm from the camera a MakeHuman character's soft parts stay as animated (no springs)."), ECVF_Default);
+	TAutoConsoleVariable<float> GMakeHumanDentScale(TEXT("Pawns.SkinDentScale"), 1.0f,
+		TEXT("How deep hits dent the skin of MakeHuman characters (1 as tuned, 0 no dents)."), ECVF_Default);
 	TAutoConsoleVariable<float> GMakeHumanSoftScale(TEXT("Pawns.SoftBodyScale"), 1.0f,
 		TEXT("How hard hits and blasts kick the soft parts (1 as tuned, 0 none)."), ECVF_Default);
 
@@ -28,21 +30,23 @@ namespace
 		float Damping;
 		float MaxOffset;
 		bool bBodySoft;
+		float Squash;
 	};
 	// Breasts about 2 Hz and well damped (their own slider); buttocks softer and bouncier (about 1.7 Hz, a quarter of
 	// critical damping) so walking shows it; male genitals loose (they hang and swing the most); the belly a slow heavy
 	// wobble; thighs and upper arms quicker and small, so the limbs' flesh shivers on a landing or a hit, not swings.
+	// Rooms and kicks were first a third of these: measured up to 6 cm, but nothing showed on screen (2026-11-16 clips).
 	const FMhSoftPart MhSoftParts[] = {
-		{TEXT("breast_l"), 150.0f, 5.5f, 4.0f, false},
-		{TEXT("breast_r"), 150.0f, 5.5f, 4.0f, false},
-		{TEXT("butt_l"), 110.0f, 5.0f, 4.0f, true},
-		{TEXT("butt_r"), 110.0f, 5.0f, 4.0f, true},
-		{TEXT("genital"), 70.0f, 3.5f, 3.5f, false},
-		{TEXT("belly"), 120.0f, 5.0f, 3.0f, true},
-		{TEXT("thigh_soft_l"), 220.0f, 7.0f, 1.8f, true},
-		{TEXT("thigh_soft_r"), 220.0f, 7.0f, 1.8f, true},
-		{TEXT("arm_soft_l"), 240.0f, 7.0f, 1.5f, true},
-		{TEXT("arm_soft_r"), 240.0f, 7.0f, 1.5f, true},
+		{TEXT("breast_l"), 150.0f, 5.5f, 4.0f, false, 0.0f},
+		{TEXT("breast_r"), 150.0f, 5.5f, 4.0f, false, 0.0f},
+		{TEXT("butt_l"), 110.0f, 5.0f, 5.0f, true, 0.35f},
+		{TEXT("butt_r"), 110.0f, 5.0f, 5.0f, true, 0.35f},
+		{TEXT("genital"), 70.0f, 3.5f, 3.5f, false, 0.0f},
+		{TEXT("belly"), 110.0f, 4.5f, 6.0f, true, 0.45f},
+		{TEXT("thigh_soft_l"), 200.0f, 6.0f, 3.0f, true, 0.0f},
+		{TEXT("thigh_soft_r"), 200.0f, 6.0f, 3.0f, true, 0.0f},
+		{TEXT("arm_soft_l"), 220.0f, 6.0f, 2.5f, true, 0.0f},
+		{TEXT("arm_soft_r"), 220.0f, 6.0f, 2.5f, true, 0.0f},
 	};
 
 
@@ -157,6 +161,23 @@ void FMakeHumanJiggleNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePose
 		LargestOffset = FMath::Max(LargestOffset, static_cast<float>(Offset.Size()));
 		// Fading out towards Pawns.SoftBodyFar, so a pawn walking away never visibly switches off.
 		Pose.SetLocation(Component.InverseTransformPosition(Goal + Offset * Fade));
+		// Squash and stretch along the line out from the parent bone (the belly's points forwards, a buttock's back):
+		// scaled on whichever of the bone's own axes lies closest to it.
+		if (Body.Squash > 0.0f)
+		{
+			const FCompactPoseBoneIndex ParentIndex = Bones.GetParentBoneIndex(Index);
+			if (ParentIndex.IsValid())
+			{
+				const FVector Out = (Pose.GetLocation() - Output.Pose.GetComponentSpaceTransform(ParentIndex).GetLocation()).GetSafeNormal();
+				const FVector OffsetC = Component.InverseTransformVectorNoScale(Offset);
+				const float Along = FMath::Clamp(static_cast<float>(FVector::DotProduct(OffsetC, Out)) / FMath::Max(Body.MaxOffset, 0.1f), -1.0f, 1.0f) * Fade;
+				const FVector Local = Pose.GetRotation().UnrotateVector(Out).GetAbs();
+				const int32 Axis = Local.X >= Local.Y && Local.X >= Local.Z ? 0 : (Local.Y >= Local.Z ? 1 : 2);
+				FVector Scale(static_cast<double>(1.0f - 0.5f * Body.Squash * Along));
+				Scale[Axis] = 1.0f + Body.Squash * Along;
+				Pose.SetScale3D(Pose.GetScale3D() * Scale);
+			}
+		}
 		Out.Add(FBoneTransform(Index, Pose));
 	}
 	Kicks.Reset();
@@ -382,6 +403,7 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 				Body.Damping = Part.Damping;
 				Body.MaxOffset = Body.BaseMaxOffset = Part.MaxOffset;
 				Body.bBodySoft = Part.bBodySoft;
+				Body.Squash = Part.Squash;
 			}
 		}
 		// MakeHuman's ponytail sub-rig: ponytail, ponytail1 ... ponytail4 under the head.
@@ -576,6 +598,74 @@ void UMakeHumanAnimInstance::AddHitKick(const FVector& At, const FVector& Veloci
 	}
 	PendingKicks.Add({At, Velocity, 0.0f, Radius, false});
 	PendingKicks.Add({At, Velocity * 0.1f, 0.0f, 250.0f, false});  // the whole body feels a tenth of it
+	// A dent in the skin at the hit, riding on the nearest bone: deeper for a harder hit (up to 3.5 cm), as wide as a
+	// third of the kick's reach.
+	const USkeletalMeshComponent* Mesh = GetSkelMeshComponent();
+	const float Depth = FMath::Min(static_cast<float>(Velocity.Size()) * 0.015f, 3.5f) * FMath::Max(0.0f, GMakeHumanDentScale.GetValueOnGameThread());
+	if (Mesh && Depth > 0.2f)
+	{
+		const FName Bone = Mesh->FindClosestBone(At);
+		if (Bone != NAME_None)
+		{
+			FDent& Dent = Dents[NextDent];
+			NextDent = (NextDent + 1) % UE_ARRAY_COUNT(Dents);
+			Dent.Bone = Bone;
+			Dent.Local = Mesh->GetSocketTransform(Bone).InverseTransformPosition(At);
+			Dent.Depth = Depth;
+			Dent.Radius = FMath::Clamp(Radius * 0.35f, 6.0f, 14.0f);
+			Dent.Age = 0.0f;
+		}
+	}
+}
+
+void UMakeHumanAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
+{
+	Super::NativeUpdateAnimation(DeltaSeconds);
+	// Skin dents: pushed in over 40 ms, then springing back past flat (a small bulge) and settling within about a second,
+	// fading out with the soft body's distance fade. The skin material reads them from custom primitive data 16 to 25.
+	USkeletalMeshComponent* Mesh = GetSkelMeshComponent();
+	if (!Mesh)
+	{
+		return;
+	}
+	const float Fade = GetProxyOnGameThread<FMakeHumanAnimProxy>().Jiggle.Fade;
+	bool bAny = false;
+	for (int32 d = 0; d < static_cast<int32>(UE_ARRAY_COUNT(Dents)); ++d)
+	{
+		FDent& Dent = Dents[d];
+		float Now = 0.0f;
+		FVector At = FVector::ZeroVector;
+		if (Dent.Depth > 0.0f)
+		{
+			Dent.Age += DeltaSeconds;
+			const float T = Dent.Age;
+			Now = T < 0.04f ? Dent.Depth * T / 0.04f : Dent.Depth * FMath::Exp(-(T - 0.04f) * 5.0f) * FMath::Cos((T - 0.04f) * 16.0f);
+			Now *= Fade;
+			if (T > 1.2f)
+			{
+				Dent.Depth = 0.0f;
+				Now = 0.0f;
+			}
+			At = Mesh->GetSocketTransform(Dent.Bone).TransformPosition(Dent.Local);
+			DeepestDent = FMath::Max(DeepestDent, Now);
+		}
+		bAny |= Now != 0.0f;
+		const int32 First = 16 + d * 5;  // x, y, z, depth, radius
+		if (Now != 0.0f || bDentsShown)
+		{
+			Mesh->SetCustomPrimitiveDataVector3(First, At);
+			Mesh->SetCustomPrimitiveDataFloat(First + 3, Now);
+			Mesh->SetCustomPrimitiveDataFloat(First + 4, Dent.Radius);
+		}
+	}
+	bDentsShown = bAny;
+}
+
+float UMakeHumanAnimInstance::TakeDeepestDent()
+{
+	const float Deepest = DeepestDent;
+	DeepestDent = 0.0f;
+	return Deepest;
 }
 
 void UMakeHumanAnimInstance::AddBlastKick(const FVector& At, float Speed, float Radius)

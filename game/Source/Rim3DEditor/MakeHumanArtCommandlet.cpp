@@ -34,6 +34,8 @@
 #include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
+#include "Materials/MaterialExpressionVertexNormalWS.h"
+#include "Materials/MaterialExpressionWorldPosition.h"
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "Materials/MaterialInstanceConstant.h"
 #include "Dom/JsonObject.h"
@@ -676,10 +678,73 @@ namespace
 			Pigment->Inputs[2].Input.Connect(0, Amount);
 			UMaterialEditingLibrary::ConnectMaterialProperty(Pigment, TEXT(""), MP_BaseColor);
 		}
+		// Skin dents (soft body, docs/design/soft-body.md): up to two hits pushing the skin in along its normal as a smooth
+		// bowl round a world point, custom primitive data 16-19 and 21-24 (x, y, z, depth in cm; a negative depth bulges
+		// out as the skin springs back) and 20 and 25 (radius in cm), set each frame by UMakeHumanAnimInstance. Added to
+		// any world position offset the skin already has.
+		{
+			auto* Pos = Cast<UMaterialExpressionWorldPosition>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionWorldPosition::StaticClass(), -1000, 2300));
+			auto* Nrm = Cast<UMaterialExpressionVertexNormalWS>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVertexNormalWS::StaticClass(), -1000, 2400));
+			UMaterialExpression* DentIn[4] = {};
+			for (int32 d = 0; d < 2; ++d)
+			{
+				auto* At = Cast<UMaterialExpressionVectorParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVectorParameter::StaticClass(), -1000, 2500 + d * 200));
+				At->ParameterName = FName(*FString::Printf(TEXT("Dent%dAt"), d));
+				At->DefaultValue = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+				At->bUseCustomPrimitiveData = true;
+				At->PrimitiveDataIndex = 16 + d * 5;
+				auto* Radius = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1000, 2600 + d * 200));
+				Radius->ParameterName = FName(*FString::Printf(TEXT("Dent%dRadius"), d));
+				Radius->DefaultValue = 10.0f;
+				Radius->bUseCustomPrimitiveData = true;
+				Radius->PrimitiveDataIndex = 20 + d * 5;
+				DentIn[d * 2] = At;
+				DentIn[d * 2 + 1] = Radius;
+			}
+			auto* Dent = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -400, 2400));
+			Dent->OutputType = CMOT_Float3;
+			Dent->Description = TEXT("SkinDent");
+			Dent->Code = TEXT("float3 o = Base;\n"
+				"float4 A[2] = {A0, A1};\n"
+				"float R[2] = {R0, R1};\n"
+				"for (int i = 0; i < 2; ++i)\n"
+				"{\n"
+				"  if (abs(A[i].w) < 0.01 || R[i] < 0.5) continue;\n"
+				"  float x = saturate(length(P - A[i].xyz) / R[i]);\n"
+				"  float f = 1.0 - x * x;\n"
+				"  o -= N * A[i].w * f * f;\n"
+				"}\n"
+				"return o;");
+			const TCHAR* Names[] = {TEXT("Base"), TEXT("P"), TEXT("N"), TEXT("A0"), TEXT("R0"), TEXT("A1"), TEXT("R1")};
+			Dent->Inputs.SetNum(UE_ARRAY_COUNT(Names));
+			for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Names)); ++i)
+			{
+				Dent->Inputs[i].InputName = Names[i];
+			}
+			int32 First = 1;
+			if (UMaterialExpression* OldOffset = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_WorldPositionOffset))
+			{
+				Dent->Inputs[0].Input.Connect(Material->GetEditorOnlyData()->WorldPositionOffset.OutputIndex, OldOffset);
+			}
+			else
+			{
+				// No offset before: start from zero (an unconnected input would not compile).
+				Dent->Code = Dent->Code.Replace(TEXT("float3 o = Base;"), TEXT("float3 o = 0;"));
+				Dent->Inputs.RemoveAt(0);
+				First = 0;
+			}
+			Dent->Inputs[First].Input.Connect(0, Pos);
+			Dent->Inputs[First + 1].Input.Connect(0, Nrm);
+			Dent->Inputs[First + 2].Input.Connect(5, DentIn[0]);  // RGBA
+			Dent->Inputs[First + 3].Input.Connect(0, DentIn[1]);
+			Dent->Inputs[First + 4].Input.Connect(5, DentIn[2]);
+			Dent->Inputs[First + 5].Input.Connect(0, DentIn[3]);
+			UMaterialEditingLibrary::ConnectMaterialProperty(Dent, TEXT(""), MP_WorldPositionOffset);
+		}
 		MhAddWetness(Material, 0.78f, 0.12f);
 		Material->PostEditChange();
 		MhSave(Material);
-		UE_LOG(LogMakeHumanArt, Display, TEXT("skin material with micro detail: %s"), *Material->GetName());
+		UE_LOG(LogMakeHumanArt, Display, TEXT("skin material with micro detail and dents: %s"), *Material->GetName());
 		return Material;
 	}
 
