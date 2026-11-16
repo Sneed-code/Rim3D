@@ -466,3 +466,47 @@ TEST_CASE("Shields: clan warriors raid with wooden shields") {
     CHECK(shields > 0);
     CHECK(shields < raiders);
 }
+
+TEST_CASE("Shields: a raider holds its swing at a raised shield facing it, then presses after a while") {
+    // docs/design/real-time-combat.md phase 2: don't swing into a guard.
+    auto sim = shieldTestSim();
+    entt::registry& reg = sim->things().registry();
+    const Entity wall = shieldPawn(*sim, 20, 20);  // a colonist behind its tower shield, held up by hand
+    shieldWear(*sim, wall, "Apparel_ShieldTower", "Steel");
+    const Entity raider = shieldPawn(*sim, 21, 20);
+    reg.get<Position>(raider).x = 21.4f;
+    reg.get<Position>(raider).y = 20.5f;
+    reg.get<Position>(wall).x = 20.5f;
+    reg.get<Position>(wall).y = 20.5f;
+    shieldHold(*sim, raider, "Melee_Club");
+    sim->submit(SetFactionCommand{raider, 2});
+    sim->step();
+    SHIELD_REQUIRE(sim->combat().setBlocking(wall, true, nullptr));
+    const auto swingsBy = [&](int steps, bool faceRaider) {
+        int swings = 0;
+        for (int i = 0; i < steps; ++i) {
+            Posture& p = reg.get<Posture>(wall);
+            p.facingX = faceRaider ? 1.0f : -1.0f;
+            p.facingY = 0.0f;
+            reg.replace<Health>(wall, Health{});
+            sim->health().refresh(wall);
+            sim->step();
+            for (const Event& e : sim->events()) {
+                swings += e.type == EventType::MeleeSwing && e.thing == raider ? 1 : 0;
+            }
+        }
+        return swings;
+    };
+    const int early = swingsBy(sim->melee().rules().guardWaitSteps - 5, true);
+    const int later = swingsBy(120, true);
+    MESSAGE("swings at the raised shield: " << early << " while waiting, " << later << " after");
+    CHECK(early == 0);  // it waits for the shield to drop...
+    CHECK(later >= 1);  // ...then presses anyway
+    // With the shield-bearer's back to it, it swings at once.
+    SHIELD_REQUIRE(reg.all_of<Blocking>(wall));
+    for (int i = 0; i < 80 && !sim->melee().ready(raider); ++i) {
+        sim->step();
+    }
+    reg.get<Melee>(raider).guardWaitFrom = 0;
+    CHECK(swingsBy(10, false) >= 1);
+}
