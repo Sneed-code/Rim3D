@@ -6,6 +6,7 @@
 #include "Animation/AnimNodeSpaceConversions.h"
 #include "AnimNodes/AnimNode_RetargetPoseFromMesh.h"
 #include "BoneControllers/AnimNode_AnimDynamics.h"
+#include "BoneControllers/AnimNode_TwoBoneIK.h"
 
 #include "MakeHumanAnimInstance.generated.h"
 
@@ -83,6 +84,7 @@ struct FMakeHumanAnimProxy : public FAnimInstanceProxy
 	FMakeHumanTailNode Tail;
 	TArray<TSharedPtr<FAnimNode_AnimDynamics>> Dynamics;
 	FAnimNode_ConvertComponentToLocalSpace ToLocal;
+	FAnimNode_TwoBoneIK LeftHandIK;  // creator weapons: the left hand on a two-handed hilt (Pawns.MakeHumanHandIK)
 	bool bPhysics = false;
 
 	virtual void Initialize(UAnimInstance* Instance) override;
@@ -113,6 +115,17 @@ public:
 	void SetSoftTissueEnabled(bool bEnabled);
 	/** Breast jiggle, 0 (the default: firm, a small lag) to 1 (softer, looser and bouncier, still damped). */
 	void SetBreastJiggle(float Amount);
+	/** The left hand's wrist pulled to a point given in the right hand bone's space (a two-handed grip), the elbow bent
+	 *  towards ElbowWorld; Alpha 0 is off. Read once a frame before the animation updates (creator weapons). */
+	void SetLeftHandGrip(float Alpha, const FVector& InRightHandOffset, const FVector& InElbowWorld)
+	{
+		LeftGripAlpha = Alpha;
+		LeftGripOffset = InRightHandOffset;
+		LeftElbowWorld = InElbowWorld;
+	}
+	float LeftGripAlpha = 0.0f;
+	FVector LeftGripOffset = FVector::ZeroVector;
+	FVector LeftElbowWorld = FVector::ZeroVector;
 
 protected:
 	virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;

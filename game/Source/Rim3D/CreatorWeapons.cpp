@@ -10,6 +10,8 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/EngineBaseTypes.h"
+#include "Engine/Level.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -23,6 +25,7 @@
 #include "UnrealClient.h"
 
 #include "FightSubsystem.h"
+#include "MakeHumanAnimInstance.h"
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
 #include "SimSubsystem.h"
@@ -238,6 +241,7 @@ namespace
 		FTransform SavedRelative = FTransform::Identity;
 		FVector Facing = FVector::ForwardVector;  // world, flat: where the demo has the body face
 		FVector Spot = FVector::ZeroVector;       // world: where the demo stands the body (its feet)
+		float LeftGrip = 0.0f;                    // 0..1: the left hand on a two-handed hilt (IK on the visible body)
 	};
 
 	enum class ECwDemo : uint8 { Off, Pause, Swing, Impact, Recover, DeathHold };
@@ -254,6 +258,7 @@ namespace
 		float PreviewPause = 0.0f;  // the gap between swings in the preview
 		// Grip tweaks per style and hand: offset (cm, along the grip's axes) and turn (degrees).
 		float Grip[CwStyleCount][2][6] = {};
+		float LeftHandBelow = 9.0f; // two hands: the left hand this far below the right along the hilt (cm)
 		// Demo.
 		ECwDemo Demo = ECwDemo::Off;
 		int32 DemoA = 0, DemoB = 1;
@@ -271,6 +276,10 @@ namespace
 		int32 ScriptHitShots = 0;
 		FString PendingShot;
 		int32 Recorded = 0;          // -CwRecord=<seconds>: frames of the demo saved so far
+		bool bForceStagger = false;  // the next blow that reaches the body staggers (StumbleBackwards); no guarding meanwhile
+		float StaggerT = -1.0f;      // -CwScript: seconds since the forced stagger landed (shots), -1 none
+		int32 StaggerShots = 0;
+		float MostApart = 0.0f;      // the largest push-apart so far (log)
 		int32 SwingAttack = 0;
 		int32 Swings = 0, BodyHits = 0, Blocks = 0, WorldHits = 0, Misses = 0;
 		FString LastEvent;
@@ -1153,6 +1162,116 @@ namespace
 		float Fraction = 1.0f;                   // how far between last frame and this one
 	};
 
+	struct FCaps
+	{
+		FVector A, B;
+		float R;
+	};
+	using FCwCaps = TArray<FCaps, TInlineAllocator<16>>;
+
+	/** A body as capsules, from its pose now. */
+	void CwBodyCapsules(const USkeletalMeshComponent* Mesh, FCwCaps& Caps)
+	{
+		Caps.Reset();
+		if (!Mesh)
+		{
+			return;
+		}
+		for (const FCwCapsule& C : CwCapsules)
+		{
+			if (CwHasBone(Mesh, C.A) && CwHasBone(Mesh, C.B))
+			{
+				Caps.Add({CwBone(Mesh, C.A), CwBone(Mesh, C.B), C.Radius});
+			}
+		}
+		if (CwHasBone(Mesh, TEXT("head")) && CwHasBone(Mesh, TEXT("neck_01")))
+		{
+			const FVector Head = CwBone(Mesh, TEXT("head"));
+			const FVector Up = (Head - CwBone(Mesh, TEXT("neck_01"))).GetSafeNormal();
+			Caps.Add({Head + Up * 4.0f, Head + Up * 13.0f, 10.0f});
+		}
+	}
+
+	/**
+	 * Whether the attacker's blades, where they are now, are in anything: the defender's body, shield or blades, or the
+	 * world. A still test (no sweep), for finding the last moment before a contact.
+	 */
+	bool CwTouching(UWorld* World, const FCwPerson& Attacker, const FCwBlade Now[2], const FCwPerson& Defender, const FCwBlade DefBlades[2], const FCwCaps& Caps)
+	{
+		for (int32 Hand = 0; Hand < 2; ++Hand)
+		{
+			const FCwBlade& Blade = Now[Hand];
+			if (!Blade.bValid || Blade.bShield)
+			{
+				continue;
+			}
+			for (const FCaps& C : Caps)
+			{
+				FVector P1, P2;
+				FMath::SegmentDistToSegmentSafe(Blade.Hilt, Blade.Tip, C.A, C.B, P1, P2);
+				if (FVector::Dist(P1, P2) < C.R + 0.5)
+				{
+					return true;
+				}
+			}
+			for (int32 d = 0; d < 2; ++d)
+			{
+				const FCwBlade& Def = DefBlades[d];
+				if (!Def.bValid)
+				{
+					continue;
+				}
+				if (Def.bShield)
+				{
+					const double DHilt = FVector::DotProduct(Blade.Hilt - Def.Centre, Def.Normal);
+					const double DTip = FVector::DotProduct(Blade.Tip - Def.Centre, Def.Normal);
+					for (int32 k = 0; k <= 8; ++k)
+					{
+						const FVector Pt = FMath::Lerp(Blade.Hilt, Blade.Tip, k / 8.0f);
+						const double Dz = FVector::DotProduct(Pt - Def.Centre, Def.Normal);
+						if (FMath::Abs(Dz) < 2.0 && ((Pt - Def.Centre) - Def.Normal * Dz).Size() < Def.Radius)
+						{
+							return true;
+						}
+					}
+					if (DHilt * DTip < 0.0)
+					{
+						const FVector Cross = FMath::Lerp(Blade.Hilt, Blade.Tip, static_cast<float>(DHilt / (DHilt - DTip)));
+						if (FVector::Dist(Cross, Def.Centre) < Def.Radius)
+						{
+							return true;
+						}
+					}
+				}
+				else
+				{
+					FVector P1, P2;
+					FMath::SegmentDistToSegmentSafe(Blade.Hilt, Blade.Tip, Def.Hilt, Def.Tip, P1, P2);
+					if (FVector::Dist(P1, P2) < 3.0f)
+					{
+						return true;
+					}
+				}
+			}
+			if (World)
+			{
+				FCollisionQueryParams Params(SCENE_QUERY_STAT(CreatorWeaponsBladeStill), false);
+				Params.AddIgnoredActor(Attacker.Pawn.Get());
+				Params.AddIgnoredActor(Defender.Pawn.Get());
+				FHitResult Hit;
+				if (World->LineTraceSingleByChannel(Hit, Blade.Hilt, Blade.Tip, ECC_Visibility, Params))
+				{
+					return true;
+				}
+			}
+			if (Attacker.Pawn.IsValid() && Blade.Tip.Z < Attacker.Pawn->GetActorLocation().Z + 0.5)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	FCwHit CwSweep(UWorld* World, const FCwPerson& Attacker, const FCwBlade Now[2], const FCwPerson& Defender, const FCwBlade DefBlades[2], float Dt)
 	{
 		FCwHit Best;
@@ -1162,25 +1281,8 @@ namespace
 			return Best;
 		}
 		// The defender's body as capsules, once.
-		struct FCaps
-		{
-			FVector A, B;
-			float R;
-		};
-		TArray<FCaps, TInlineAllocator<16>> Caps;
-		for (const FCwCapsule& C : CwCapsules)
-		{
-			if (CwHasBone(DefMesh, C.A) && CwHasBone(DefMesh, C.B))
-			{
-				Caps.Add({CwBone(DefMesh, C.A), CwBone(DefMesh, C.B), C.Radius});
-			}
-		}
-		if (CwHasBone(DefMesh, TEXT("head")) && CwHasBone(DefMesh, TEXT("neck_01")))
-		{
-			const FVector Head = CwBone(DefMesh, TEXT("head"));
-			const FVector Up = (Head - CwBone(DefMesh, TEXT("neck_01"))).GetSafeNormal();
-			Caps.Add({Head + Up * 4.0f, Head + Up * 13.0f, 10.0f});
-		}
+		FCwCaps Caps;
+		CwBodyCapsules(DefMesh, Caps);
 		constexpr int32 Steps = 6;
 		for (int32 Hand = 0; Hand < 2 && Best.Kind == ECwContact::None; ++Hand)
 		{
@@ -1306,6 +1408,7 @@ namespace
 		int32 Side = 0;
 		bool bStrong = false;
 		bool bDeath = false;
+		bool bStumble = false;  // a forced heavy stagger: StumbleBackwards whatever the side
 	};
 	FCwPending GCwPending;
 	bool GCwPreviewDirty = true;
@@ -1423,6 +1526,11 @@ namespace
 			if (Gap < 55.0)
 			{
 				S.ExtraApart = FMath::Min(S.ExtraApart + static_cast<float>(55.0 - Gap) * 0.5f, 120.0f);
+				if (S.ExtraApart > S.MostApart + 5.0f)
+				{
+					S.MostApart = S.ExtraApart;
+					UE_LOG(LogCreatorWeapons, Display, TEXT("Push-apart: pelvises %.0f cm apart, spots %.0f cm further apart"), Gap, S.ExtraApart);
+				}
 			}
 			else
 			{
@@ -1456,14 +1564,76 @@ namespace
 		return 0;
 	}
 
-	void CwResolve(FCwState& S, UWorld* World, FCwPerson& Att, FCwPerson& Def, const FCwBlade DefBlades[2], FCwHit Hit)
+	/**
+	 * Poses a fighter again now, in the middle of the frame: its hidden mannequin (where the clips play) and then the
+	 * visible body that copies it. The new pose is the one drawn this frame.
+	 */
+	void CwEvaluateNow(FCwPerson& P)
+	{
+		ASimPawnActor* Pawn = P.Pawn.Get();
+		USkeletalMeshComponent* Body = Pawn ? Pawn->GetBody() : nullptr;
+		USkeletalMeshComponent* Visible = P.Mesh.Get();
+		if (Body)
+		{
+			Body->TickAnimation(0.0f, false);
+			Body->RefreshBoneTransforms();
+		}
+		if (Visible && Visible != Body)
+		{
+			Visible->TickAnimation(0.0f, false);
+			Visible->RefreshBoneTransforms();
+		}
+	}
+
+	/**
+	 * After the animation of a frame in which the attacker's blade went into something: its swing is put back to the
+	 * last moment the blade was clear (a few halvings between last frame's place and this one) and posed again, so
+	 * this very frame shows the blade at the surface. Returns how many poses it tried.
+	 */
+	int32 CwRewindToContact(FCwState& S, UWorld* World, FCwPerson& Att, const FCwPerson& Def, const FCwBlade DefBlades[2], float Fraction, FCwBlade OutBlades[2])
+	{
+		const float Now = CwMontagePos(Att);
+		float Clear = Att.PrevMontagePos <= Now ? FMath::Max(0.0f, Att.PrevMontagePos) : FMath::Max(0.0f, Now - 0.05f);
+		float Inside = Now;
+		FCwCaps Caps;
+		CwBodyCapsules(Def.Mesh.Get(), Caps);
+		int32 Tries = 0;
+		float Try = Clear + (Inside - Clear) * FMath::Clamp(Fraction, 0.0f, 1.0f);
+		for (int32 Step = 0; Step < 6 && Inside - Clear > 0.0005f; ++Step)
+		{
+			CwSetPos(Att, Try);
+			CwEvaluateNow(Att);
+			CwPlaceWeapons(S, Att, OutBlades);
+			++Tries;
+			if (CwTouching(World, Att, OutBlades, Def, DefBlades, Caps))
+			{
+				Inside = Try;
+			}
+			else
+			{
+				Clear = Try;
+			}
+			Try = (Clear + Inside) * 0.5f;
+		}
+		// End on the clear pose (the last one tried may have been inside).
+		if (!FMath::IsNearlyEqual(CwMontagePos(Att), Clear, 0.0001f) || Tries == 0)
+		{
+			CwSetPos(Att, Clear);
+			CwEvaluateNow(Att);
+			CwPlaceWeapons(S, Att, OutBlades);
+			++Tries;
+		}
+		return Tries;
+	}
+
+	void CwResolve(FCwState& S, UWorld* World, FCwPerson& Att, FCwPerson& Def, const FCwBlade DefBlades[2], FCwHit Hit, FCwBlade* AttBlades = nullptr)
 	{
 		const FCwStyleDef& Style = CwStyles[Att.HeldStyle];
 		const float Heavy = Style.Attacks[S.SwingAttack].Heavy;
 		UFightSubsystem* Fight = World->GetSubsystem<UFightSubsystem>();
 		const FVector Travel = Hit.Velocity.IsNearlyZero() ? (Def.Spot - Att.Spot).GetSafeNormal() : Hit.Velocity.GetSafeNormal();
 		// Guarding from the front: a blow that got to the body is taken on the weapon instead.
-		if (Hit.Kind == ECwContact::Body && S.bBlocking && CwSide(Def, -Travel) == 0)
+		if (Hit.Kind == ECwContact::Body && S.bBlocking && !S.bForceStagger && CwSide(Def, -Travel) == 0)
 		{
 			for (int32 d = 0; d < 2; ++d)
 			{
@@ -1476,11 +1646,40 @@ namespace
 				}
 			}
 		}
-		// Back to where the blade touched, so it does not show inside what it hit.
-		const float Pos = CwMontagePos(Att);
-		CwSetPos(Att, Att.PrevMontagePos + (Pos - Att.PrevMontagePos) * Hit.Fraction);
+		// Back to where the blade touched, posed again this frame, so it never shows inside what it hit.
 		CwSetRate(Att, 0.0f);
 		CwSetRate(Def, 0.0f);
+		if (AttBlades)
+		{
+			const int32 Tries = CwRewindToContact(S, World, Att, Def, DefBlades, Hit.Fraction, AttBlades);
+			if (Hit.Kind == ECwContact::Body)
+			{
+				// The wound where the blade now rests: the nearest point of the body to it, on the skin.
+				FCwCaps Caps;
+				CwBodyCapsules(Def.Mesh.Get(), Caps);
+				double Nearest = TNumericLimits<double>::Max();
+				for (int32 Hand = 0; Hand < 2; ++Hand)
+				{
+					if (!AttBlades[Hand].bValid || AttBlades[Hand].bShield)
+					{
+						continue;
+					}
+					for (const FCaps& C : Caps)
+					{
+						FVector P1, P2;
+						FMath::SegmentDistToSegmentSafe(AttBlades[Hand].Hilt, AttBlades[Hand].Tip, C.A, C.B, P1, P2);
+						const double Gap = FVector::Dist(P1, P2) - C.R;
+						if (Gap < Nearest)
+						{
+							Nearest = Gap;
+							const FVector Out = (P1 - P2).GetSafeNormal();
+							Hit.At = Out.IsNearlyZero() ? P1 : P2 + Out * C.R;
+						}
+					}
+				}
+			}
+			UE_LOG(LogCreatorWeapons, Display, TEXT("Contact %d: swing put back to %.3f s, posed again %d times this frame"), static_cast<int32>(Hit.Kind), CwMontagePos(Att), Tries);
+		}
 		GCwPending = FCwPending();
 		GCwPending.Kind = Hit.Kind;
 		GCwPending.Side = CwSide(Def, -Travel);
@@ -1515,6 +1714,15 @@ namespace
 				CwBleed(S, World, Def, &Att, Hit.At, Travel, Amount);
 				GCwPending.bDeath = S.bFinish;
 				GCwPending.bStrong = Heavy * S.Random.FRandRange(0.6f, 1.3f) > 0.75f || (Def.Hits >= 4 && S.Random.FRand() < 0.5f);
+				if (S.bForceStagger && !GCwPending.bDeath)
+				{
+					S.bForceStagger = false;
+					GCwPending.bStrong = true;
+					GCwPending.bStumble = true;
+					S.StaggerT = 0.0f;
+					S.StaggerShots = 0;
+					UE_LOG(LogCreatorWeapons, Display, TEXT("Heavy stagger: StumbleBackwards (fighters pushed %.0f cm further apart so far at most)"), S.MostApart);
+				}
 				S.DemoTime = GCwPending.bStrong ? 0.12f : CwHitStopSeconds;
 				if (S.ScriptT >= 0.0f && S.ScriptHitShots < 6)
 				{
@@ -1560,7 +1768,11 @@ namespace
 						return;
 					}
 				}
-				if (Side == 0)
+				if (GCwPending.bStumble)
+				{
+					Clip = CwReactLarge[0];
+				}
+				else if (Side == 0)
 				{
 					Clip = GCwPending.bStrong && S.Random.FRand() < 0.6f ? CwReactLarge[0] : CwPick(S, Style.Impacts, 5);
 				}
@@ -1585,14 +1797,13 @@ namespace
 		FCwBlade H[2];
 	};
 
-	void CwUpdateDemo(FCwState& S, UWorld* World, float Dt, TArray<FCwBlades>& Blades)
+	void CwUpdateDemo(FCwState& S, UWorld* World, float Dt)
 	{
 		FCwPerson& A = S.People[S.DemoA];
 		FCwPerson& B = S.People[S.DemoB];
 		FCwPerson& Att = S.Attacker == 0 ? A : B;
 		FCwPerson& Def = S.Attacker == 0 ? B : A;
 		const int32 AttIndex = S.Attacker == 0 ? S.DemoA : S.DemoB;
-		const int32 DefIndex = S.Attacker == 0 ? S.DemoB : S.DemoA;
 		if (Att.HeldStyle < 0 || Def.HeldStyle < 0)
 		{
 			return;  // a body without hands (not a MakeHuman or mannequin mesh)
@@ -1619,7 +1830,7 @@ namespace
 						Att.Role = ECwRole::Attack;
 						++S.Swings;
 						const FCwStyleDef& DefStyle = CwStyles[Def.HeldStyle];
-						S.bBlocking = !S.bFinish && DefStyle.Blocks[0] && S.Random.FRand() < 0.35f;
+						S.bBlocking = !S.bFinish && !S.bForceStagger && DefStyle.Blocks[0] && S.Random.FRand() < 0.35f;
 						if (S.bBlocking && CwPlay(S, Def, CwPick(S, DefStyle.Blocks, 3), 1.0f, true, 0.12f, 0.3f))
 						{
 							Def.Role = ECwRole::Block;
@@ -1635,44 +1846,8 @@ namespace
 				}
 				break;
 			case ECwDemo::Swing:
-			{
-				const float Fraction = CwMontageFraction(Att);
-				if (Fraction > 0.1f && Fraction < 0.9f)
-				{
-					const FCwHit Hit = CwSweep(World, Att, Blades[AttIndex].H, Def, Blades[DefIndex].H, Dt);
-					if (Hit.Kind != ECwContact::None)
-					{
-						CwResolve(S, World, Att, Def, Blades[DefIndex].H, Hit);
-						break;
-					}
-				}
-				if (Fraction >= 0.97f)
-				{
-					if (S.bFinish && Blades[AttIndex].H[0].bValid && Def.Mesh.IsValid() && CwHasBone(Def.Mesh.Get(), TEXT("spine_03")))
-					{
-						// Finishing: the last blow lands even if this swing fell short.
-						FCwHit Forced;
-						Forced.Kind = ECwContact::Body;
-						Forced.At = CwBone(Def.Mesh.Get(), TEXT("spine_03")) + Def.Facing * 12.0f;
-						Forced.Velocity = -Def.Facing * 300.0f;
-						Forced.Fraction = 1.0f;
-						S.bBlocking = false;
-						CwResolve(S, World, Att, Def, Blades[DefIndex].H, Forced);
-						break;
-					}
-					++S.Misses;
-					S.LastEvent = TEXT("Missed.");
-					CwPlayStance(S, Att);
-					if (Def.Role == ECwRole::Block)
-					{
-						CwPlayStance(S, Def);
-					}
-					S.Attacker ^= 1;
-					S.Demo = ECwDemo::Pause;
-					S.DemoTime = 0.8f;
-				}
+				// The blade test runs after the animation (CwSwingAfterAnimation).
 				break;
-			}
 			case ECwDemo::Impact:
 				if (S.DemoTime <= 0.0f)
 				{
@@ -1739,6 +1914,198 @@ namespace
 		}
 	}
 
+	/**
+	 * The swing, after this frame's animation: the attacker's blades from last frame to now against the defender, and
+	 * on a contact the stop, posed back to the contact before anything is drawn.
+	 */
+	void CwSwingAfterAnimation(FCwState& S, UWorld* World, float Dt, TArray<FCwBlades>& Blades)
+	{
+		FCwPerson& A = S.People[S.DemoA];
+		FCwPerson& B = S.People[S.DemoB];
+		FCwPerson& Att = S.Attacker == 0 ? A : B;
+		FCwPerson& Def = S.Attacker == 0 ? B : A;
+		const int32 AttIndex = S.Attacker == 0 ? S.DemoA : S.DemoB;
+		const int32 DefIndex = S.Attacker == 0 ? S.DemoB : S.DemoA;
+		if (Att.HeldStyle < 0 || Def.HeldStyle < 0)
+		{
+			return;
+		}
+		switch (S.Demo)
+		{
+			case ECwDemo::Swing:
+			{
+				const float Fraction = CwMontageFraction(Att);
+				if (Fraction > 0.1f && Fraction < 0.9f)
+				{
+					const FCwHit Hit = CwSweep(World, Att, Blades[AttIndex].H, Def, Blades[DefIndex].H, Dt);
+					if (Hit.Kind != ECwContact::None)
+					{
+						CwResolve(S, World, Att, Def, Blades[DefIndex].H, Hit, Blades[AttIndex].H);
+						break;
+					}
+				}
+				if (Fraction >= 0.97f)
+				{
+					if (S.bFinish && Blades[AttIndex].H[0].bValid && Def.Mesh.IsValid() && CwHasBone(Def.Mesh.Get(), TEXT("spine_03")))
+					{
+						// Finishing: the last blow lands even if this swing fell short.
+						FCwHit Forced;
+						Forced.Kind = ECwContact::Body;
+						Forced.At = CwBone(Def.Mesh.Get(), TEXT("spine_03")) + Def.Facing * 12.0f;
+						Forced.Velocity = -Def.Facing * 300.0f;
+						Forced.Fraction = 1.0f;
+						S.bBlocking = false;
+						CwResolve(S, World, Att, Def, Blades[DefIndex].H, Forced);
+						break;
+					}
+					++S.Misses;
+					S.LastEvent = TEXT("Missed.");
+					CwPlayStance(S, Att);
+					if (Def.Role == ECwRole::Block)
+					{
+						CwPlayStance(S, Def);
+					}
+					S.Attacker ^= 1;
+					S.Demo = ECwDemo::Pause;
+					S.DemoTime = 0.8f;
+				}
+				break;
+			}
+			default:
+				break;
+		}
+	}
+
+	/**
+	 * The left hand on a two-handed hilt: a point on the grip below the right hand, given to the visible body's
+	 * animation in the right hand bone's space (so it follows the right hand exactly in the next pose), the elbow out
+	 * to the side and down. Eases in and out.
+	 */
+	void CwUpdateLeftGrip(FCwState& S, FCwPerson& P, float Dt)
+	{
+		USkeletalMeshComponent* Mesh = P.Mesh.Get();
+		UMakeHumanAnimInstance* Anim = Mesh ? Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()) : nullptr;
+		if (!Anim)
+		{
+			P.LeftGrip = 0.0f;
+			return;
+		}
+		const bool bWant = P.HeldStyle == static_cast<int32>(ECwStyle::GreatSword) && P.Role != ECwRole::Dying && P.Role != ECwRole::Dead &&
+			CwHasBone(Mesh, TEXT("upperarm_l")) && CwHasBone(Mesh, TEXT("upperarm_r")) && CwHasBone(Mesh, TEXT("pelvis")) && CwHasBone(Mesh, TEXT("neck_01"));
+		P.LeftGrip = FMath::FInterpConstantTo(P.LeftGrip, bWant ? 1.0f : 0.0f, Dt, 4.0f);
+		FTransform Right, Left;
+		if (P.LeftGrip <= 0.0f || P.HeldStyle < 0 || !CwGripFrame(Mesh, true, Right) || !CwGripFrame(Mesh, false, Left))
+		{
+			Anim->SetLeftHandGrip(0.0f, FVector::ZeroVector, FVector::ZeroVector);
+			return;
+		}
+		// The hilt point: below the right fist along the grip (the grip tweak included, as the sword is placed).
+		const float* T = S.Grip[P.HeldStyle][0];
+		const FTransform Held = FTransform(FRotator(T[3], T[4], T[5]), FVector(T[0], T[1], T[2])) * Right;
+		const FVector OnHilt = Held.TransformPosition(FVector(-S.LeftHandBelow, 0.0, 0.0));
+		// The wrist goes where it puts the left fist's grip point on the hilt.
+		const FVector Wrist = OnHilt + (CwBone(Mesh, TEXT("hand_l")) - Left.GetLocation());
+		const FVector Offset = Mesh->GetSocketTransform(TEXT("hand_r"), RTS_World).InverseTransformPosition(Wrist);
+		const FVector Shoulder = CwBone(Mesh, TEXT("upperarm_l"));
+		const FVector Across = (Shoulder - CwBone(Mesh, TEXT("upperarm_r"))).GetSafeNormal();
+		const FVector Up = (CwBone(Mesh, TEXT("neck_01")) - CwBone(Mesh, TEXT("pelvis"))).GetSafeNormal();
+		const FVector Elbow = (Shoulder + Wrist) * 0.5 + (Across - Up).GetSafeNormal() * 30.0;
+		Anim->SetLeftHandGrip(FMath::SmoothStep(0.0f, 1.0f, P.LeftGrip), Offset, Elbow);
+	}
+
+	/** Once a frame after all the animation, before the frame is drawn (FCwAfterAnimationTick). */
+	void CwAfterAnimation(FCwState& S, UWorld* World, float DeltaSeconds)
+	{
+		const float Dt = FMath::Clamp(DeltaSeconds, 0.0f, 0.1f);
+		TArray<FCwBlades> Blades;
+		Blades.SetNum(S.People.Num());
+		for (int32 i = 0; i < S.People.Num(); ++i)
+		{
+			CwPlaceWeapons(S, S.People[i], Blades[i].H);
+		}
+		if (S.Demo == ECwDemo::Swing && S.People.IsValidIndex(S.DemoA) && S.People.IsValidIndex(S.DemoB))
+		{
+			CwSwingAfterAnimation(S, World, Dt, Blades);
+		}
+		for (int32 i = 0; i < S.People.Num(); ++i)
+		{
+			FCwPerson& P = S.People[i];
+			for (int32 Hand = 0; Hand < 2; ++Hand)
+			{
+				P.PrevHilt[Hand] = Blades[i].H[Hand].Hilt;
+				P.PrevTip[Hand] = Blades[i].H[Hand].Tip;
+			}
+			P.bPrevValid = P.HeldStyle >= 0;
+			P.PrevMontagePos = CwMontagePos(P);
+			CwUpdateLeftGrip(S, P, Dt);
+		}
+	}
+
+	/**
+	 * Runs CwAfterAnimation in TG_PostUpdateWork, after the fighters' meshes have ticked (prerequisites on them too), so
+	 * the blade test sees this frame's pose and a contact is posed back before the frame is drawn.
+	 */
+	struct FCwAfterAnimationTick : public FTickFunction
+	{
+		TWeakObjectPtr<UWorld> World;
+		TSet<TWeakObjectPtr<USkeletalMeshComponent>> Waits;
+
+		virtual void ExecuteTick(float DeltaTime, ELevelTick TickType, ENamedThreads::Type CurrentThread, const FGraphEventRef& MyCompletionGraphEvent) override
+		{
+			FCwState& S = CwState();
+			if (World.IsValid() && S.World.Get() == World.Get())
+			{
+				CwAfterAnimation(S, World.Get(), DeltaTime);
+			}
+		}
+		virtual FString DiagnosticMessage() override { return TEXT("CreatorWeapons after animation"); }
+		virtual FName DiagnosticContext(bool bDetailed) override { return FName(TEXT("CreatorWeapons")); }
+	};
+
+	FCwAfterAnimationTick& CwAfterTick()
+	{
+		// Never destroyed: a tick function unregisters itself on destruction, and at exit its level is long gone.
+		static FCwAfterAnimationTick* Tick = new FCwAfterAnimationTick();
+		return *Tick;
+	}
+
+	/** Registers the after-animation tick in this world and makes it wait for every person's meshes. */
+	void CwEnsureAfterTick(FCwState& S, UWorld* World)
+	{
+		FCwAfterAnimationTick& Tick = CwAfterTick();
+		if (Tick.World.Get() != World || !Tick.IsTickFunctionRegistered())
+		{
+			if (Tick.IsTickFunctionRegistered())
+			{
+				Tick.UnRegisterTickFunction();
+			}
+			Tick.Waits.Reset();
+			Tick.World = World;
+			Tick.bCanEverTick = true;
+			Tick.bTickEvenWhenPaused = true;
+			Tick.bStartWithTickEnabled = true;
+			Tick.TickGroup = TG_PostUpdateWork;
+			Tick.EndTickGroup = TG_PostUpdateWork;
+			if (World->PersistentLevel)
+			{
+				Tick.RegisterTickFunction(World->PersistentLevel);
+				Tick.SetTickFunctionEnable(true);
+			}
+		}
+		for (const FCwPerson& P : S.People)
+		{
+			ASimPawnActor* Pawn = P.Pawn.Get();
+			for (USkeletalMeshComponent* Mesh : {Pawn ? Pawn->GetBody() : nullptr, P.Mesh.Get()})
+			{
+				if (Mesh && !Tick.Waits.Contains(Mesh))
+				{
+					Tick.AddPrerequisite(Mesh, Mesh->PrimaryComponentTick);
+					Tick.Waits.Add(Mesh);
+				}
+			}
+		}
+	}
+
 	void CwUpdatePreview(FCwState& S, FCwPerson& P, float Dt)
 	{
 		if (P.HeldStyle < 0)
@@ -1801,7 +2168,7 @@ namespace
 		struct FStep
 		{
 			float At;
-			int32 Action;  // 0 style+attack, 1 shot, 2 start the demo, 3 finish
+			int32 Action;  // 0 style+attack, 1 shot, 2 start the demo, 3 finish, 4 stop the demo, 5 the next body blow staggers
 			int32 Style;
 			int32 Attack;
 			const TCHAR* Shot;
@@ -1810,10 +2177,52 @@ namespace
 			{9.0f, 0, 1, 0, nullptr}, {9.7f, 1, 0, 0, TEXT("c_great1")}, {10.1f, 1, 0, 0, TEXT("c_great2")},
 			{11.5f, 0, 3, 0, nullptr}, {12.2f, 1, 0, 0, TEXT("d_dual1")}, {12.8f, 1, 0, 0, TEXT("d_dual2")},
 			{14.0f, 0, 1, -1, nullptr}, {14.5f, 2, 0, 0, nullptr}, {45.0f, 3, 0, 0, nullptr}, {56.0f, 1, 0, 0, TEXT("f_after1")},
+			// Sword and shield: the shield, the push-apart in lunges, and one heavy stagger (StumbleBackwards).
+			{58.0f, 4, 0, 0, nullptr}, {58.5f, 0, 2, -1, nullptr}, {59.5f, 2, 0, 0, nullptr}, {63.0f, 1, 0, 0, TEXT("g_shield1")},
+			{68.0f, 1, 0, 0, TEXT("g_shield2")}, {70.0f, 5, 0, 0, nullptr},
 		};
+		// The forced stagger: the blow, then the stumble twice.
+		if (S.StaggerT >= 0.0f)
+		{
+			S.StaggerT += Dt;
+			static const float ShotAt[3] = {0.0f, 0.4f, 0.9f};
+			if (S.StaggerShots < 3 && S.StaggerT >= ShotAt[S.StaggerShots])
+			{
+				S.PendingShot = FString::Printf(TEXT("h_stagger%d"), ++S.StaggerShots);
+			}
+		}
 		// -CwRecord=<seconds>: from 6 s into the demo, every frame at a fixed 30 a second (Saved/Weapons/rec_0000.png ...).
-		float RecordSeconds = 0.0f;
-		if (S.Demo != ECwDemo::Off && S.ScriptT >= 20.5f && FParse::Value(FCommandLine::Get(), TEXT("CwRecord="), RecordSeconds) && S.Recorded < FMath::RoundToInt32(RecordSeconds * 30.0f))
+		// -CwRecordAt=<from>:<seconds>,<from>:<seconds>...: instead, those spans of the script's clock (numbered on).
+		static TArray<FVector2f> Spans = []
+		{
+			TArray<FVector2f> Out;
+			FString List;
+			float Seconds = 0.0f;
+			if (FParse::Value(FCommandLine::Get(), TEXT("CwRecordAt="), List, false))
+			{
+				TArray<FString> Parts;
+				List.ParseIntoArray(Parts, TEXT(","));
+				for (const FString& Part : Parts)
+				{
+					FString From, Length;
+					if (Part.Split(TEXT(":"), &From, &Length))
+					{
+						Out.Emplace(FCString::Atof(*From), FCString::Atof(*Length));
+					}
+				}
+			}
+			else if (FParse::Value(FCommandLine::Get(), TEXT("CwRecord="), Seconds))
+			{
+				Out.Emplace(20.5f, Seconds);
+			}
+			return Out;
+		}();
+		bool bRecordNow = false;
+		for (const FVector2f& Span : Spans)
+		{
+			bRecordNow |= S.ScriptT >= Span.X && S.ScriptT < Span.X + Span.Y;
+		}
+		if (bRecordNow && S.Demo != ECwDemo::Off)
 		{
 			if (S.Recorded == 0)
 			{
@@ -1841,6 +2250,12 @@ namespace
 					break;
 				case 3:
 					S.bFinish = true;
+					break;
+				case 4:
+					CwStopDemo(S);
+					break;
+				case 5:
+					S.bForceStagger = true;
 					break;
 				default:
 					break;
@@ -1920,31 +2335,16 @@ void CreatorWeapons::Tick(UWorld* World, const TArray<ASimPawnActor*>& People, i
 		bInOutWalk = false;
 		CwPlaceFighters(S, Dt);
 	}
-	// Weapons to the hands, then the preview or the demo.
-	TArray<FCwBlades> Blades;
-	Blades.SetNum(S.People.Num());
-	for (int32 i = 0; i < S.People.Num(); ++i)
-	{
-		CwPlaceWeapons(S, S.People[i], Blades[i].H);
-	}
+	// The preview or the demo. The weapons go to the hands, and the blade test runs, after the animation
+	// (CwAfterAnimation, in TG_PostUpdateWork).
+	CwEnsureAfterTick(S, World);
 	if (S.Demo != ECwDemo::Off)
 	{
-		CwUpdateDemo(S, World, Dt, Blades);
+		CwUpdateDemo(S, World, Dt);
 	}
 	else if (S.bEquip && S.People.IsValidIndex(S.Selected))
 	{
 		CwUpdatePreview(S, S.People[S.Selected], Dt);
-	}
-	for (int32 i = 0; i < S.People.Num(); ++i)
-	{
-		FCwPerson& P = S.People[i];
-		for (int32 Hand = 0; Hand < 2; ++Hand)
-		{
-			P.PrevHilt[Hand] = Blades[i].H[Hand].Hilt;
-			P.PrevTip[Hand] = Blades[i].H[Hand].Tip;
-		}
-		P.bPrevValid = P.HeldStyle >= 0;
-		P.PrevMontagePos = CwMontagePos(P);
 	}
 	CwUpdateBlood(S, World, Dt);
 	if (!S.PendingShot.IsEmpty())
@@ -2086,6 +2486,10 @@ void CreatorWeapons::DrawWindow(float Scale)
 
 		if (ImGui::CollapsingHeader("Grip (fine tuning)"))
 		{
+			if (S.Style == static_cast<int32>(ECwStyle::GreatSword))
+			{
+				ImGui::SliderFloat("Left hand below the right (cm)", &S.LeftHandBelow, 4.0f, 25.0f, "%.1f");
+			}
 			for (int32 Hand = 0; Hand < 2; ++Hand)
 			{
 				const char* Def = Hand == 0 ? Style.RightDef : Style.LeftDef;

@@ -9,6 +9,8 @@ namespace
 {
 	TAutoConsoleVariable<int32> GMakeHumanPhysics(TEXT("Pawns.MakeHumanPhysics"), 1,
 		TEXT("1 runs jiggle (breast bones) and hair sway (ponytail bones) on MakeHuman characters; read when a character's animation starts."), ECVF_Default);
+	TAutoConsoleVariable<int32> GMakeHumanHandIK(TEXT("Pawns.MakeHumanHandIK"), 1,
+		TEXT("1 lets the creator's weapons put the left hand on a two-handed hilt (two-bone IK, off until asked for); read when a character's animation starts."), ECVF_Default);
 
 
 	// A swinging chain (hair): each bone a body hanging from the last, limited to a cone.
@@ -269,11 +271,27 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 			Tail.Bones.Emplace(FName(*FString::Printf(TEXT("tail_%02d"), i)));
 		}
 	}
-	bPhysics = !Dynamics.IsEmpty() || !Jiggle.Bodies.IsEmpty() || !Tail.Bones.IsEmpty();
+	// Creator weapons' two-handed grip: hand_l to a point in hand_r's space, the elbow towards a world point (alpha 0 = off).
+	const bool bHandIK = Asset && GMakeHumanHandIK.GetValueOnGameThread() != 0 && Asset->GetRefSkeleton().FindBoneIndex(TEXT("hand_l")) != INDEX_NONE &&
+		Asset->GetRefSkeleton().FindBoneIndex(TEXT("hand_r")) != INDEX_NONE;
+	if (bHandIK)
+	{
+		LeftHandIK.IKBone.BoneName = TEXT("hand_l");
+		LeftHandIK.EffectorTarget = FBoneSocketTarget(TEXT("hand_r"));
+		LeftHandIK.EffectorLocationSpace = BCS_BoneSpace;
+		LeftHandIK.JointTargetLocationSpace = BCS_WorldSpace;
+		LeftHandIK.Alpha = 0.0f;
+	}
+	bPhysics = !Dynamics.IsEmpty() || !Jiggle.Bodies.IsEmpty() || !Tail.Bones.IsEmpty() || bHandIK;
 	if (bPhysics)
 	{
 		ToComponent.LocalPose.SetLinkNode(&Retarget);
 		FAnimNode_Base* Previous = &ToComponent;
+		if (bHandIK)
+		{
+			LeftHandIK.ComponentPose.SetLinkNode(Previous);
+			Previous = &LeftHandIK;
+		}
 		if (!Jiggle.Bodies.IsEmpty())
 		{
 			Jiggle.ComponentPose.SetLinkNode(Previous);
@@ -300,6 +318,9 @@ void FMakeHumanAnimProxy::PreUpdate(UAnimInstance* Instance, float DeltaSeconds)
 	if (const UMakeHumanAnimInstance* MakeHuman = Cast<UMakeHumanAnimInstance>(Instance))
 	{
 		Retarget.IKRetargeterAsset = MakeHuman->GetRetargeter();
+		LeftHandIK.Alpha = MakeHuman->LeftGripAlpha;
+		LeftHandIK.EffectorLocation = MakeHuman->LeftGripOffset;
+		LeftHandIK.JointTargetLocation = MakeHuman->LeftElbowWorld;
 	}
 	Retarget.RetargetFrom = ERetargetSourceMode::ParentSkeletalMeshComponent;
 	Retarget.PreUpdate(Instance);
