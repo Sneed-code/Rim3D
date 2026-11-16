@@ -236,6 +236,7 @@ bool FLookConfig::Load(const FString& Path, FString& OutError)
 	LookNumber(FilmJson, TEXT("ambientOcclusionRadiusCm"), AmbientOcclusionRadiusCm);
 	LookNumber(FilmJson, TEXT("localExposureHighlights"), LocalExposureHighlights);
 	LookNumber(FilmJson, TEXT("localExposureShadows"), LocalExposureShadows);
+	LookNumber(FilmJson, TEXT("skylightLeaking"), SkylightLeaking);
 
 	const TSharedPtr<FJsonObject> SeasonsJson = LookObject(Root, TEXT("seasons"));
 	for (int32 Index = 0; Index < 4; ++Index)
@@ -685,6 +686,8 @@ void USkySubsystem::BuildScene()
 		P.LocalExposureHighlightContrastScale = Look.LocalExposureHighlights;
 		P.bOverride_LocalExposureShadowContrastScale = true;
 		P.LocalExposureShadowContrastScale = Look.LocalExposureShadows;
+		P.bOverride_LumenSkylightLeaking = true;
+		P.LumenSkylightLeaking = Look.SkylightLeaking;
 		P.bOverride_WhiteTemp = true;
 		P.bOverride_ColorSaturation = true;
 		P.bOverride_ColorContrast = true;
