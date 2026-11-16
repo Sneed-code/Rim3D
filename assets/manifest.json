@@ -152,6 +152,33 @@
       "installedTo": "game/Content/ThirdParty/Trees/ (not in Git), imported to /Game/Rim3D/Generated/Trees by the TreeArt commandlet",
       "usedFor": "teak and cecropia trees (L6)",
       "reinstall": "python tools/tree_art.py, then the TreeArt and FoliageMaterials commandlets (in that order)"
+    },
+    {
+      "name": "Soviet Assault Rifle by SpatialNeglect",
+      "source": "Fab (free), FBX download",
+      "licence": "Fab Standard License (free listing): usable in games, credit given in the game's credits; no readme or licence file came in the zip",
+      "version": "FBX, AK47Subdiv.fbx with 2022 textures, downloaded 2026-11-16",
+      "installedTo": "assets/raw/guns/AssaultRifle/ (not in Git), imported to /Game/Rim3D/Generated/Guns by the GunArt commandlet (assets/guns.json)",
+      "usedFor": "the gun range's assault rifle (Gun_AssaultRifle)",
+      "reinstall": "download the FBX from the Fab page above (ak47fbx.zip), unzip it into assets/raw/guns/AssaultRifle/, then UnrealEditor-Cmd game/Rim3D.uproject -run=GunArt -unattended -nosplash"
+    },
+    {
+      "name": "Pistol 9mm Custom by DTry",
+      "source": "Fab (free), FBX download",
+      "licence": "Fab Standard License (free listing): usable in games, credit given in the game's credits; no readme or licence file came in the zip",
+      "version": "FBX pack CustomPistol9mmPack.fbx (pistol, magazine and attachments), downloaded 2026-11-16",
+      "installedTo": "assets/raw/guns/Autopistol/ (not in Git), imported to /Game/Rim3D/Generated/Guns by the GunArt commandlet (assets/guns.json)",
+      "usedFor": "the gun range's pistol (Gun_Autopistol), body and separate magazine",
+      "reinstall": "download the FBX from the Fab page above (pistol-9mm-custom.zip, about 500 MB), unzip it into assets/raw/guns/Autopistol/, then UnrealEditor-Cmd game/Rim3D.uproject -run=GunArt -unattended -nosplash"
+    },
+    {
+      "name": "Model 12 Pump Action Shotgun by the 9th Earl",
+      "source": "Fab (free standard), FBX download",
+      "licence": "Fab Standard License (free listing): usable in games, credit given in the game's credits; no readme or licence file came in the zip",
+      "version": "FBX Model12_shotgun.fbx (from the inner 'Model 12 Trench gun model.zip'), downloaded 2026-11-16",
+      "installedTo": "assets/raw/guns/PumpShotgun/ (not in Git), imported to /Game/Rim3D/Generated/Guns by the GunArt commandlet (assets/guns.json)",
+      "usedFor": "the gun range's pump shotgun (Gun_PumpShotgun)",
+      "reinstall": "download the FBX from the Fab page above (model-12-pump-action-shotgun-free-standard.zip; unzip the inner source zip too), unzip it into assets/raw/guns/PumpShotgun/, then UnrealEditor-Cmd game/Rim3D.uproject -run=GunArt -unattended -nosplash"
     }
   ]
 }

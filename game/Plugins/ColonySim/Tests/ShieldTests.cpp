@@ -126,14 +126,22 @@ TEST_CASE("Shields: sizes double protection, a steel tower shield equals steel p
     CHECK(stats.mitigation(reg, woodSmall).pct[3] == doctest::Approx(-2.5f));
     CHECK(stats.weightKg(reg, woodTower) == doctest::Approx(9.6f));
     CHECK(stats.shieldBlock(reg, woodSmall) == doctest::Approx(1.0f));
-    // Plasteel blocks 3 and is light; uranium is heavy.
+    // The tech tier: plasteel blocks 3 and is light.
     const Entity plasteel = shieldMake(*sim, "Apparel_ShieldTower", "Plasteel", CellPos{16, 10, 0});
-    const Entity uranium = shieldMake(*sim, "Apparel_ShieldTower", "Uranium", CellPos{17, 10, 0});
     CHECK(stats.mitigation(reg, plasteel).pct[1] == doctest::Approx(37.5f));
     CHECK(stats.shieldBlock(reg, plasteel) == doctest::Approx(3.0f));
     CHECK(stats.weightKg(reg, plasteel) == doctest::Approx(8.4f));
-    CHECK(stats.weightKg(reg, uranium) == doctest::Approx(24.0f));
-    CHECK(stats.shieldBlock(reg, uranium) == doctest::Approx(2.5f));
+    // Composite (sneed: modern plastic, 50% lighter): steel's protection at half the weight, block 2.5.
+    const Entity composite = shieldMake(*sim, "Apparel_ShieldTower", "Composite", CellPos{17, 10, 0});
+    SHIELD_REQUIRE(composite != kNoEntity);
+    for (int c = 0; c < kDamageClasses; ++c) {
+        CHECK(stats.mitigation(reg, composite).pct[c] == doctest::Approx(stats.mitigation(reg, tower).pct[c]));
+    }
+    CHECK(stats.weightKg(reg, composite) == doctest::Approx(6.0f));
+    CHECK(stats.shieldBlock(reg, composite) == doctest::Approx(2.5f));
+    CHECK(reg.get<HitPoints>(composite).max == 280);
+    // Uranium makes no shields any more (sneed's four tiers are wood, steel, composite and plasteel).
+    CHECK(sim->defs().get(shieldDef(*sim, "Uranium")).count("shieldStuff.block") == 0);
 }
 
 TEST_CASE("Shields: a shield works like armour, weighs on walking and attacks, and a two-handed weapon slings it") {

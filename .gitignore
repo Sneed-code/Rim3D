@@ -54,3 +54,6 @@ __pycache__/
 
 # Local-only comparison models (docs/design/makehuman.md): never committed
 assets/makehuman.local.json
+
+# Downloaded third-party models (Fab, Sketchfab, Codex copies): never in Git (public repo).
+assets/raw/

@@ -155,6 +155,10 @@ public:
 	int32 GetImpacts() const { return Impacts; }
 	int32 GetImpactsOfKind(colony::ProjectileHitKind Kind) const { return ImpactsByKind[static_cast<int32>(Kind)]; }
 	int32 GetHitReactions() const { return HitReactionsPlayed; }
+	/** Whole-body react clips started on bullet hits (a stumble when the sim staggered the pawn). */
+	int32 GetHitClips() const { return HitClipsPlayed; }
+	/** Damage numbers put up over your own hits so far. */
+	int32 GetDamageNumbersShown() const { return DamageNumbersShown; }
 	int32 GetBodyDecals() const { return BodyDecals; }
 	int32 GetGroundDecals() const { return GroundDecals; }
 	int32 GetRagdollsStarted() const { return RagdollsStarted; }
@@ -282,6 +286,20 @@ private:
 	bool bHaveKeyState = false;
 	bool bNoGunMessage = false;
 	float HitMarkerSeconds = 0.0f;
+	/** The damage of your own hits, floating up over where they landed for a second (direct mode). */
+	struct FFightDamageNumber
+	{
+		FVector At = FVector::ZeroVector;
+		float Amount = 0.0f;
+		float Age = 0.0f;
+		bool bArmour = false;
+	};
+	TArray<FFightDamageNumber> DamageNumbers;
+	int32 DamageNumbersShown = 0;
+	void AddDamageNumber(const FFightTracer& Tracer, bool bArmour);
+	void SpawnBodyThroughHit(const FFightTracer& Tracer);
+	int32 BodyThroughHits = 0;
+	void DrawDamageNumbers(float Scale);
 	float EquipMessageSeconds = 0.0f;
 
 	int32 ShotsSeen = 0;
@@ -294,6 +312,7 @@ private:
 	int32 Impacts = 0;
 	int32 ImpactsByKind[8] = {};
 	int32 HitReactionsPlayed = 0;
+	int32 HitClipsPlayed = 0;
 	int32 BodyDecals = 0;
 	int32 GroundDecals = 0;
 	int32 RagdollsStarted = 0;
