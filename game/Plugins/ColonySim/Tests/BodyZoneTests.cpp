@@ -13,12 +13,14 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Save.h"
+#include "ColonySim/Snapshot.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
 
 #include <doctest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -526,4 +528,48 @@ TEST_CASE("Body zones: a person on their feet limps at 40% or better, however mu
     MESSAGE("pain " << h.pain << ", moving " << h.movingFactor);
     CHECK_FALSE(sim->health().incapacitated(pawn));
     CHECK(h.movingFactor >= 0.4f - 1e-4f);
+}
+
+// ---- Part D: crawling away.
+
+TEST_CASE("Crawling: a person downed by the torso crawls away from an enemy near; by a leg, or with nobody near, lies still") {
+    const auto run = [](const char* part, float amount, bool enemy) {
+        auto sim = zoneTestSim();
+        const Entity pawn = zoneTestPawn(*sim, 20, 20);
+        Entity raider = kNoEntity;
+        if (enemy) {
+            raider = sim->things().spawn("Human", CellPos{15, 20, 0});
+            sim->submit(SetFactionCommand{raider, 2});
+        }
+        sim->step();
+        if (raider != kNoEntity) {
+            sim->things().registry().emplace<Stunned>(raider).stepsLeft = 100000;  // stands where it is
+        }
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", amount, part));
+        sim->step();
+        CHECK(sim->health().incapacitated(pawn));
+        const Position start = sim->things().registry().get<Position>(pawn);
+        sim->stepMany(600);
+        const Position& end = sim->things().registry().get<Position>(pawn);
+        return std::hypot(end.x - start.x, end.y - start.y) * (end.x >= start.x ? 1.0f : -1.0f);
+    };
+    const float crawled = run("torso", 80.0f, true);
+    MESSAGE("crawled " << crawled << " m in 20 s");
+    CHECK(crawled > 1.5f);   // away from the raider (it stands to the west)
+    CHECK(crawled < 9.0f);   // and slowly (a tenth of its walk, a cell at a time)
+    CHECK(std::abs(run("torso", 80.0f, false)) < 0.01f);
+    CHECK(std::abs(run("left leg", 60.0f, true)) < 0.01f);
+}
+
+TEST_CASE("Crawling: the snapshot tells Unreal who crawls") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim, 20, 20);
+    sim->step();
+    CHECK(zoneTestHit(*sim, pawn, "Blunt", 80.0f, "torso"));
+    sim->step();
+    Snapshot snap;
+    sim->writeSnapshot(snap);
+    const ThingView* view = snap.find(pawn);
+    CHECK(view != nullptr);
+    CHECK((view != nullptr && view->crawling));
 }

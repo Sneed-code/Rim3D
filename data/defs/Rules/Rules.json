@@ -98,7 +98,8 @@
       "patchSeconds": [1, 2, 3],
       "patchQuality": 0.3,
       "coverBlood": 1500,
-      "minMoving": 0.4
+      "minMoving": 0.4,
+      "crawlMoving": 0.1
     },
     "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss", "innerInjuryAlsoHurtsOuter"],
     "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter", "scarSeverity", "oldWoundFromHpLost", "zones"]

@@ -142,6 +142,7 @@ struct Health {
     // order (HealthSystem::zoneNames); empty otherwise.
     std::vector<float> zones;
     bool unconscious = false;    // body zones: head under 25%, or blood at 1000 or less
+    bool crawls = false;         // body zones: downed by the torso and awake, so it crawls away from enemies (part D)
     std::vector<uint8_t> zoneBleeds;  // body zones: each zone's bleeding, 0 none, 1 light, 2 moderate, 3 heavy
 
     bool incapacitated() const { return downed || dead; }

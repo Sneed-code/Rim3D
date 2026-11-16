@@ -255,6 +255,7 @@ public:
     float patchQuality = 0.3f;                   // the tend quality of a patch
     float coverBlood = 1500.0f;                  // under this a bleeding fighter falls back to cover to patch
     float minMoving = 0.4f;                      // a person on their feet (body zones) limps, never slower than this share
+    float crawlMoving = 0.1f;                    // a torso-downed person crawls at this share of its walk (part D)
     void buildZones();
     // Scars (H1): the chance a healed injury leaves one grows from 0 at scarMinHp hit points lost to scarMax at scarFullHp.
     float scarMax = 0.02f;
@@ -624,6 +625,7 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
             num("zones.patchQuality", patchQuality);
             num("zones.coverBlood", coverBlood);
             num("zones.minMoving", minMoving);
+            num("zones.crawlMoving", crawlMoving);
             bloodMax = std::max(1.0f, bloodMax);
             stepsPerRealSecond = std::max(1.0f, stepsPerRealSecond);
         }
@@ -1343,6 +1345,7 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
         // sneed's rules: torso, head or a leg under 25%, or 3 zones under 50%; unconscious with the head under 25% or
         // 1000 blood or less. The protagonist is never downed and dies when its zones have lost 100 hit points.
         bool down = false;
+        bool torsoDown = false;
         bool headOut = false;
         int low = 0;
         float lost = 0.0f;
@@ -1354,9 +1357,11 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
             if (f < model_->zoneDownBelow &&
                 (kind == HealthModel::ZoneKind::Head || kind == HealthModel::ZoneKind::Torso || kind == HealthModel::ZoneKind::Leg)) {
                 down = true;
+                torsoDown = torsoDown || kind == HealthModel::ZoneKind::Torso;
             }
             headOut = headOut || (kind == HealthModel::ZoneKind::Head && f < model_->zoneHeadUnconscious);
         }
+        health.crawls = false;
         if (health.protagonist) {
             health.unconscious = false;
             shouldBeDown = false;
@@ -1366,6 +1371,7 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
         } else {
             health.unconscious = headOut || health.bloodLoss >= 1.0f - model_->bloodUnconscious / model_->bloodMax;
             shouldBeDown = down || low >= model_->zoneManyCount || health.unconscious;
+            health.crawls = torsoDown && !health.unconscious;
         }
         return;
     }
@@ -1416,6 +1422,8 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
         if (!health.zones.empty()) {
             health.movingFactor = std::max(health.movingFactor, model_->minMoving);
         }
+    } else if (health.crawls && !health.dead) {
+        health.movingFactor = model_->crawlMoving;  // part D: downed by the torso, it can still drag itself along
     }
 }
 

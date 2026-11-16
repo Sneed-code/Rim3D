@@ -123,6 +123,13 @@ Code: `ColonySim/Patch.h`, `Private/Patch.cpp` (`PatchSystem`), `HealthSystem::p
   falling back counts cover double when it picks where to go (hurt fighters were waiting in the open far away).
 - Physics wobble at the struck spot belongs to part E (Unreal).
 
+## Part D as built
+
+- A person downed by the torso and awake (`Health::crawls`, derived) drags itself away from the nearest able enemy
+  within 20 m, one cell at a time, at 10% of its walk (`zones.crawlMoving`, ours; about 6 m in 20 s). Downed by a leg,
+  by many zones, or knocked out, it lies still; with no enemy near it lies still; a rescuer or a hauler carrying it
+  stops it (`PatchSystem::crawl`). The snapshot's `crawling` tells Unreal to play a crawl when it moves.
+
 ## Later (sneed, 2026-11-16)
 
 - **Ragdolls**: unconscious pawns, corpses and severed limbs are physics ragdolls in Unreal (cosmetic: the sim keeps

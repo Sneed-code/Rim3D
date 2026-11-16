@@ -235,6 +235,7 @@ struct ThingView {
     int meleeStepsLeft = 0;
     Entity meleeTarget = kNoEntity;
     bool blocking = false;
+    bool crawling = false;   // downed by the torso and awake: Unreal plays a crawl when it moves (body-health.md part D)
     int patchZone = -1;      // patching this body zone itself (body-health.md part B), -1 when not patching
     int patchStepsLeft = 0;
     // Turrets and traps (docs/design/defense.md). A turret: what it is doing (a TurretPhase number) and the pawn it

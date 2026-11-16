@@ -6,6 +6,9 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Jobs.h"
+#include "ColonySim/Map.h"
+#include "ColonySim/Movement.h"
 #include "ColonySim/Resonance.h"
 #include "ColonySim/Things.h"
 
@@ -14,8 +17,8 @@
 
 namespace colony {
 
-PatchSystem::PatchSystem(Things& things, HealthSystem& health, FighterSystem& fighters, const GameTime& time)
-    : things_(things), health_(health), fighters_(fighters), time_(time) {}
+PatchSystem::PatchSystem(Things& things, const Map& map, HealthSystem& health, FighterSystem& fighters, const GameTime& time)
+    : things_(things), map_(map), health_(health), fighters_(fighters), time_(time) {}
 
 bool PatchSystem::patching(Entity pawn) const {
     const entt::registry& reg = things_.registry();
@@ -118,6 +121,98 @@ void PatchSystem::step() {
         }
         std::string ignored;
         patch(pawn, false, ignored);
+    }
+    crawl();
+}
+
+Entity PatchSystem::crawlThreat(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Position* pos = reg.try_get<Position>(pawn);
+    if (pos == nullptr) {
+        return kNoEntity;
+    }
+    const FactionId side = fighters_.factionOf(pawn);
+    Entity best = kNoEntity;
+    float bestD = rules_.crawlRange;
+    for (const auto [other, f, at] : reg.view<const Fighter, const Position>().each()) {
+        if (other == pawn || at.level != pos->level || fighters_.factionOf(other) == side || health_.incapacitated(other) ||
+            !things_.spawned(other)) {
+            continue;
+        }
+        const float d = std::hypot(at.x - pos->x, at.y - pos->y);
+        if (d < bestD || (d == bestD && best != kNoEntity && other < best)) {
+            bestD = d;
+            best = other;
+        }
+    }
+    return best;
+}
+
+// Part D: a person downed by the torso and awake drags itself a cell at a time away from the nearest able enemy within
+// crawlRange; with none near it lies still. Not while carried (a rescuer or a hauler has it).
+void PatchSystem::crawl() {
+    entt::registry& reg = things_.registry();
+    const int64_t now = time_.steps;
+    scratch_.clear();
+    for (const auto [pawn, health] : reg.view<Health>().each()) {
+        if (health.crawls && health.downed && !health.dead) {
+            scratch_.push_back(pawn);
+        }
+    }
+    if (scratch_.empty()) {
+        return;
+    }
+    std::sort(scratch_.begin(), scratch_.end());
+    std::vector<Entity> carried;
+    for (const auto [carrier, c] : reg.view<const Carrying>().each()) {
+        carried.push_back(c.thing);
+    }
+    for (const auto [rescuer, f] : reg.view<const Fighter>().each()) {
+        if (f.lifted) {
+            carried.push_back(f.rescuing);
+        }
+    }
+    for (const Entity pawn : scratch_) {
+        if ((now + static_cast<int64_t>(entt::to_integral(pawn))) % rules_.thinkEvery != 0 || !things_.spawned(pawn) ||
+            !reg.all_of<Mover, Position>(pawn)) {
+            continue;
+        }
+        Mover& mover = reg.get<Mover>(pawn);
+        if (std::find(carried.begin(), carried.end(), pawn) != carried.end()) {
+            mover.path.clear();
+            mover.next = 0;
+            continue;
+        }
+        if (!mover.arrived()) {
+            continue;  // still dragging itself to the last cell
+        }
+        const Entity threat = crawlThreat(pawn);
+        if (threat == kNoEntity) {
+            continue;
+        }
+        const Position& pos = reg.get<Position>(pawn);
+        const Position& from = reg.get<Position>(threat);
+        const CellPos here = cellOf(pos);
+        float bestD = std::hypot(pos.x - from.x, pos.y - from.y);
+        CellPos best = here;
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const CellPos c{here.x + dx, here.y + dy, here.level};
+                if ((dx == 0 && dy == 0) || !map_.walkable(c)) {
+                    continue;
+                }
+                const float cx = static_cast<float>(c.x) + 0.5f;
+                const float cy = static_cast<float>(c.y) + 0.5f;
+                const float d = std::hypot(cx - from.x, cy - from.y);
+                if (d > bestD + 0.1f && straightWalkIsClear(map_, pos.x, pos.y, cx, cy, kPawnRadius, here.level)) {
+                    bestD = d;
+                    best = c;
+                }
+            }
+        }
+        if (best != here) {
+            mover.walkTo(pos.x, pos.y, {best});
+        }
     }
 }
 
