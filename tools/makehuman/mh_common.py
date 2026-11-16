@@ -97,7 +97,10 @@ def write_materials(meshes, out_dir, skin_meshes=(), tints=None, overrides=None)
                 if normal is not None and _image_path(normal) and normal != color:
                     entry["normal"] = _image_path(normal)
             # Hair cards, brows and lashes cut out by their colour map's alpha.
-            cutout = any(k in (obj.name + mat.name).lower() for k in ("hair", "brow", "lash", "ponytail", "tail", "eye", "high-poly", "low-poly"))
+            # (The scalp hair styles go by their own names: long01, bob02, short02... Missing from this list they went in
+            # opaque, solid helmets with straight cut ends, and took no hair colour of their own.)
+            cutout = any(k in (obj.name + mat.name).lower() for k in ("hair", "brow", "lash", "ponytail", "tail", "eye", "high-poly", "low-poly",
+                                                                    "long0", "bob0", "short0", "short_", "afro", "braid"))
             if cutout and color is not None and getattr(color, "channels", 4) == 4:
                 entry["alpha"] = True
             if "color" not in entry and "tint" not in entry:

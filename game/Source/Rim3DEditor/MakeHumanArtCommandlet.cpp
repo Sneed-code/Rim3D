@@ -942,7 +942,7 @@ namespace
 			auto* HairColour = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -300, -250));
 			HairColour->OutputType = CMOT_Float3;
 			HairColour->Description = TEXT("HairColour");
-			HairColour->Code = TEXT("return Tint * saturate(dot(Tex, float3(0.3, 0.59, 0.11)) * 2.6);");
+			HairColour->Code = TEXT("return Tint * lerp(0.5, 1.1, saturate(dot(Tex, float3(0.3, 0.59, 0.11)) * 3.0));");
 			HairColour->Inputs.SetNum(2);
 			HairColour->Inputs[0].InputName = TEXT("Tex");
 			HairColour->Inputs[1].InputName = TEXT("Tint");
