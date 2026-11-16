@@ -22,7 +22,7 @@ materials) must have been made on this PC first (`docs/setup/pc-setup.md`).
    **Run**.) A black window flashes and the game opens; the first start takes up to a minute while
    shaders warm up.
 3. The game opens on the overseer camera above the colony (Tab walks the protagonist). It starts at
-   midnight with the colonists asleep, running at normal speed. **Space** pauses,
+   midnight with the colonists asleep, running at normal speed. **F2** (or Space in the overseer view) pauses,
    **2** / **3** run faster until morning.
 4. Press **F1** any time for the list of keys (bottom right).
 5. To quit: **Alt+F4**. **F5** saves, **F9** loads the quick save.
@@ -34,7 +34,7 @@ is another world and another rainforest tile). A windowed game: add `-windowed`.
 
 | Mode | Key | What it does |
 |---|---|---|
-| Any | Space | pause / unpause |
+| Any | F2 (or Space in the overseer view) | pause / unpause |
 | Any | 1, 2, 3 | game speed |
 | Any | . (full stop) | one step while paused |
 | Any | F1 | show / hide the key list |
@@ -53,7 +53,7 @@ is another world and another rainforest tile). A windowed game: add `-windowed`.
 | Overseer | Esc | clear the selection |
 | Protagonist | W A S D | walk (Ctrl: slow walk) |
 | Protagonist | mouse | look; right mouse aims, left mouse fires |
-| Protagonist | R | reload; Left Shift rolls; G throws a grenade |
+| Protagonist | R | reload; Shift sprints; Space jumps; Left Alt rolls; G throws a grenade |
 | Protagonist | E | pick up the nearest gun; Q switches weapon; C crouch, Z prone |
 | Protagonist | V | first / third person; T takes over the colonist you look at |
 | Protagonist | B | build mode (left click places, R turns, Q changes the material, right click or Esc cancels) |

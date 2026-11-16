@@ -1074,8 +1074,9 @@ void UFightSubsystem::UpdatePlayerInput()
 	{
 		EquipNearest();
 	}
-	// Left Shift rolls the way the movement keys point (U21); G throws a grenade at the crosshair.
-	if (PC->WasInputKeyJustPressed(EKeys::LeftShift))
+	// Left Alt rolls the way the movement keys point (U21; it was Left Shift, which sprints now); G throws a grenade at the
+	// crosshair.
+	if (PC->WasInputKeyJustPressed(EKeys::LeftAlt))
 	{
 		Roll(FVector2D((PC->IsInputKeyDown(EKeys::D) ? 1.0 : 0.0) - (PC->IsInputKeyDown(EKeys::A) ? 1.0 : 0.0),
 			(PC->IsInputKeyDown(EKeys::W) ? 1.0 : 0.0) - (PC->IsInputKeyDown(EKeys::S) ? 1.0 : 0.0)));
