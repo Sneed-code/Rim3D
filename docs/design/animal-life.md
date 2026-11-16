@@ -129,6 +129,12 @@ that follow the body's pose. `yaw`, `walkCm` and `gallopCm` set the facing and c
 model with no death clip lies still on its side when it dies. Now drawn: monkey (chimpanzee), cat (sphynx),
 cougar (hyena, stand-in) and thrumbo (Akhal-Teke horse, stand-in). The smoke test's `animals_close` shot
 shows them at noon.
+
+Second batch (2026-11-16): Protofactor's free African Animals Pack is already in Unreal's format, so its
+`imports` entries name the assets by path (`assets`: mesh and clips by role; `parts`: the elephant's tusks)
+and the commandlet skips them; the pack sits in `game/Content/AfricanAnimalsPack` (not in Git, in
+`DirectoriesToAlwaysCook`). Elephant, rhinoceros and lion use it; the lioness stands in for the cougar.
+The Akhal-Teke horse imports near-black, so the thrumbo stays on the Quaternius white horse for now.
 Animation cost goes by distance to the camera: every frame within `Animals.NearDistance` (40 m), 8 times
 a second within `Animals.MidDistance` (120 m), a frozen pose (no skeleton update) within
 `Animals.HideDistance` (400 m), not drawn beyond. Smoke test `animals` (`tools\smoke.ps1 -Test animals`).
