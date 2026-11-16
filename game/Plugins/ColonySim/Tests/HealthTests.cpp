@@ -682,3 +682,38 @@ TEST_CASE("Health: in the Crashlanded start only the protagonist has double hit 
     CHECK(colonists == 6);
     CHECK(heroes == 1);
 }
+
+TEST_CASE("Health: a death says whether the pawn was up, downed and awake, or knocked out") {
+    const auto diedAmount = [](Sim& sim) {
+        float amount = -1.0f;
+        for (const Event& e : sim.events()) {
+            if (e.type == EventType::PawnDied) amount = e.amount;
+        }
+        return amount;
+    };
+    {
+        // Up and well, then the heart: killed outright.
+        auto sim = healthTestSim();
+        const Entity pawn = healthTestPawn(*sim);
+        CHECK(healthTestHit(*sim, pawn, "Cut", 60.0f, "heart"));
+        float amount = diedAmount(*sim);
+        sim->step();
+        amount = std::max(amount, diedAmount(*sim));
+        CHECK(amount == 0.0f);
+    }
+    {
+        // Both legs gone (downed, still awake), then the heart: 1, so she may scream once more.
+        auto sim = healthTestSim();
+        const Entity pawn = healthTestPawn(*sim);
+        CHECK(healthTestHit(*sim, pawn, "Cut", 40.0f, "left leg"));
+        CHECK(healthTestHit(*sim, pawn, "Cut", 40.0f, "right leg"));
+        sim->health().tendAll(pawn, 1.0f);
+        sim->step();
+        CHECK(healthTestReport(*sim, pawn).downed);
+        CHECK(healthTestHit(*sim, pawn, "Cut", 60.0f, "heart"));
+        float amount = diedAmount(*sim);  // a hit may report the death at once; the next step clears it
+        sim->step();
+        amount = std::max(amount, diedAmount(*sim));
+        CHECK(amount == 1.0f);
+    }
+}
