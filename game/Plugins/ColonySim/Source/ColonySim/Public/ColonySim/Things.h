@@ -106,6 +106,9 @@ struct Mover {
     // Metres per step right now. Unreal reads it to turn and animate the pawn.
     float vx = 0.0f;
     float vy = 0.0f;
+    // The pace it walks at when under way, metres per step, with every slowdown in (injury, light, weather, genes,
+    // traits); set each step it walks. Only for the animation (which gait to pick); not saved.
+    float pace = 0.0f;
     // Steps in a row spent wanting to walk but held back (by pawns or walls), and steps left of
     // walking through other pawns after that went on too long (the fix for two pawns meeting in a
     // one-cell corridor). `heldSteps` keeps counting through that, until the pawn gives up.

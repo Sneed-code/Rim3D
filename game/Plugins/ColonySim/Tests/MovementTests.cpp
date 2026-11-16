@@ -600,3 +600,19 @@ TEST_CASE("Movement: two pawns on the very same spot walking the same way part a
     CHECK(moveTestMover(sim, a).arrived());
     CHECK(moveTestMover(sim, b).arrived());
 }
+
+TEST_CASE("Movement: a walking pawn's pace is in the snapshot for its gait") {
+    Sim sim = moveTestSim(32);
+    const Entity pawn = moveTestPawn(sim, 5, 5);
+    CHECK(moveTestMover(sim, pawn).pace == 0.0f);
+    moveTestWalk(sim, pawn, {CellPos{6, 5, 0}, CellPos{7, 5, 0}, CellPos{8, 5, 0}});
+    sim.step();
+    const float pace = moveTestMover(sim, pawn).pace;
+    CHECK(pace > 0.0f);
+    CHECK(pace < 1.0f);
+    Snapshot snap;
+    sim.writeSnapshot(snap);
+    const ThingView* view = snap.find(pawn);
+    MOVE_REQUIRE(view != nullptr);
+    CHECK(view->pace == doctest::Approx(pace));
+}
