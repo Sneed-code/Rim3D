@@ -34,6 +34,9 @@
 #include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
+#include "Materials/MaterialExpressionTransform.h"
+#include "Materials/MaterialExpressionVertexNormalWS.h"
+#include "Materials/MaterialExpressionWorldPosition.h"
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
 #include "Materials/MaterialInstanceConstant.h"
 #include "Dom/JsonObject.h"
@@ -430,6 +433,35 @@ namespace
 		}
 	}
 
+	// The squish table (USoftContactSubsystem): 16 by 8 float texels, nearest filtering, no mips, never streamed, so the
+	// game can overwrite it every frame (UpdateTextureRegions) and the skin material can Load() it in the vertex shader.
+	UTexture2D* MhSoftContactTexture()
+	{
+		const FString Name = TEXT("T_MH_SoftContacts");
+		const FString Path = MakeHumanAssetPath(MakeHumanFolder, Name);
+		if (UTexture2D* Existing = FindObject<UTexture2D>(nullptr, *Path))
+		{
+			return Existing;
+		}
+		UPackage* Package = CreatePackage(*(FString(MakeHumanFolder) / Name));
+		UTexture2D* Texture = NewObject<UTexture2D>(Package, *Name, RF_Public | RF_Standalone);
+		Texture->PreEditChange(nullptr);
+		TArray<FLinearColor> Zeros;
+		Zeros.SetNumZeroed(16 * 8);
+		Texture->Source.Init(16, 8, 1, 1, TSF_RGBA32F, reinterpret_cast<const uint8*>(Zeros.GetData()));
+		Texture->SRGB = false;
+		Texture->CompressionSettings = TC_HDR_F32;
+		Texture->MipGenSettings = TMGS_NoMipmaps;
+		Texture->Filter = TF_Nearest;
+		Texture->NeverStream = true;
+		Texture->AddressX = TA_Clamp;
+		Texture->AddressY = TA_Clamp;
+		Texture->LODGroup = TEXTUREGROUP_Pixels2D;
+		Texture->PostEditChange();
+		MhSave(Texture);
+		return Texture;
+	}
+
 	// Our skin material (M_PawnSkin) with the MetaHumans' skin micro-normal tiled over the skin's own normal: pores and
 	// fine lines at any distance, which MakeHuman's painted skins lack (MicroTiling, MicroStrength).
 	UMaterialInterface* MhSkinDetailMaterial(IAssetTools& Tools, UMaterialInterface* SkinBase)
@@ -676,10 +708,210 @@ namespace
 			Pigment->Inputs[2].Input.Connect(0, Amount);
 			UMaterialEditingLibrary::ConnectMaterialProperty(Pigment, TEXT(""), MP_BaseColor);
 		}
+		// Skin dents (soft body, docs/design/soft-body.md): up to two hits pushing the skin in along its normal as a smooth
+		// bowl round a world point, custom primitive data 16-19 and 21-24 (x, y, z, depth in cm; a negative depth bulges
+		// out as the skin springs back) and 20 and 25 (radius in cm), set each frame by UMakeHumanAnimInstance. Added to
+		// any world position offset the skin already has.
+		{
+			auto* Pos = Cast<UMaterialExpressionWorldPosition>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionWorldPosition::StaticClass(), -1000, 2300));
+			auto* Nrm = Cast<UMaterialExpressionVertexNormalWS>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVertexNormalWS::StaticClass(), -1000, 2400));
+			UMaterialExpression* DentIn[4] = {};
+			for (int32 d = 0; d < 2; ++d)
+			{
+				auto* At = Cast<UMaterialExpressionVectorParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVectorParameter::StaticClass(), -1000, 2500 + d * 200));
+				At->ParameterName = FName(*FString::Printf(TEXT("Dent%dAt"), d));
+				At->DefaultValue = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+				At->bUseCustomPrimitiveData = true;
+				At->PrimitiveDataIndex = 16 + d * 5;
+				auto* Radius = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1000, 2600 + d * 200));
+				Radius->ParameterName = FName(*FString::Printf(TEXT("Dent%dRadius"), d));
+				Radius->DefaultValue = 10.0f;
+				Radius->bUseCustomPrimitiveData = true;
+				Radius->PrimitiveDataIndex = 20 + d * 5;
+				DentIn[d * 2] = At;
+				DentIn[d * 2 + 1] = Radius;
+			}
+			auto* Dent = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -400, 2400));
+			Dent->OutputType = CMOT_Float3;
+			Dent->Description = TEXT("SkinDent");
+			Dent->Code = TEXT("float3 o = Base;\n"
+				"float4 A[2] = {A0, A1};\n"
+				"float R[2] = {R0, R1};\n"
+				"for (int i = 0; i < 2; ++i)\n"
+				"{\n"
+				"  if (abs(A[i].w) < 0.01 || R[i] < 0.5) continue;\n"
+				"  float x = saturate(length(P - A[i].xyz) / R[i]);\n"
+				"  float f = 1.0 - x * x;\n"
+				"  o -= N * A[i].w * f * f;\n"
+				"}\n"
+				"return o;");
+			const TCHAR* Names[] = {TEXT("Base"), TEXT("P"), TEXT("N"), TEXT("A0"), TEXT("R0"), TEXT("A1"), TEXT("R1")};
+			Dent->Inputs.SetNum(UE_ARRAY_COUNT(Names));
+			for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Names)); ++i)
+			{
+				Dent->Inputs[i].InputName = Names[i];
+			}
+			int32 First = 1;
+			if (UMaterialExpression* OldOffset = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_WorldPositionOffset))
+			{
+				Dent->Inputs[0].Input.Connect(Material->GetEditorOnlyData()->WorldPositionOffset.OutputIndex, OldOffset);
+			}
+			else
+			{
+				// No offset before: start from zero (an unconnected input would not compile).
+				Dent->Code = Dent->Code.Replace(TEXT("float3 o = Base;"), TEXT("float3 o = 0;"));
+				Dent->Inputs.RemoveAt(0);
+				First = 0;
+			}
+			Dent->Inputs[First].Input.Connect(0, Pos);
+			Dent->Inputs[First + 1].Input.Connect(0, Nrm);
+			Dent->Inputs[First + 2].Input.Connect(5, DentIn[0]);  // RGBA
+			Dent->Inputs[First + 3].Input.Connect(0, DentIn[1]);
+			Dent->Inputs[First + 4].Input.Connect(5, DentIn[2]);
+			Dent->Inputs[First + 5].Input.Connect(0, DentIn[3]);
+			UMaterialEditingLibrary::ConnectMaterialProperty(Dent, TEXT(""), MP_WorldPositionOffset);
+
+			// The dent's light: world position offset leaves the normals as they were, so a dent hardly showed (2026-11-16
+			// clip). The bowl's walls face in towards its middle: its slope (dDepth/dr) along the skin, turned into tangent
+			// space and added to the skin's normal, a little exaggerated (1.5).
+			auto* Tilt = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -400, 2700));
+			Tilt->OutputType = CMOT_Float3;
+			Tilt->Description = TEXT("SkinDentTilt");
+			Tilt->Code = TEXT("float3 t = 0;\n"
+				"float4 A[2] = {A0, A1};\n"
+				"float R[2] = {R0, R1};\n"
+				"for (int i = 0; i < 2; ++i)\n"
+				"{\n"
+				"  if (abs(A[i].w) < 0.01 || R[i] < 0.5) continue;\n"
+				"  float3 d = P - A[i].xyz;\n"
+				"  d -= N * dot(d, N);\n"
+				"  float r = length(d);\n"
+				"  float x = saturate(r / R[i]);\n"
+				"  if (x >= 1.0 || r < 0.001) continue;\n"
+				"  float slope = A[i].w * 4.0 * x * (1.0 - x * x) / R[i];\n"
+				"  t -= (d / r) * slope;\n"
+				"}\n"
+				"return t;");
+			const TCHAR* TiltNames[] = {TEXT("P"), TEXT("N"), TEXT("A0"), TEXT("R0"), TEXT("A1"), TEXT("R1")};
+			Tilt->Inputs.SetNum(UE_ARRAY_COUNT(TiltNames));
+			for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(TiltNames)); ++i)
+			{
+				Tilt->Inputs[i].InputName = TiltNames[i];
+			}
+			Tilt->Inputs[0].Input.Connect(0, Pos);
+			Tilt->Inputs[1].Input.Connect(0, Nrm);
+			Tilt->Inputs[2].Input.Connect(5, DentIn[0]);
+			Tilt->Inputs[3].Input.Connect(0, DentIn[1]);
+			Tilt->Inputs[4].Input.Connect(5, DentIn[2]);
+			Tilt->Inputs[5].Input.Connect(0, DentIn[3]);
+			auto* ToTangent = Cast<UMaterialExpressionTransform>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTransform::StaticClass(), -200, 2700));
+			ToTangent->TransformSourceType = TRANSFORMSOURCE_World;
+			ToTangent->TransformType = TRANSFORM_Tangent;
+			ToTangent->Input.Connect(0, Tilt);
+			if (UMaterialExpression* NormalIn = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_Normal))
+			{
+				auto* DentNormal = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -50, 2700));
+				DentNormal->OutputType = CMOT_Float3;
+				DentNormal->Description = TEXT("SkinDentNormal");
+				DentNormal->Code = TEXT("return normalize(float3(Base.xy + T.xy * 1.5, Base.z));");
+				DentNormal->Inputs.SetNum(2);
+				DentNormal->Inputs[0].InputName = TEXT("Base");
+				DentNormal->Inputs[1].InputName = TEXT("T");
+				DentNormal->Inputs[0].Input.Connect(Material->GetEditorOnlyData()->Normal.OutputIndex, NormalIn);
+				DentNormal->Inputs[1].Input.Connect(0, ToTangent);
+				UMaterialEditingLibrary::ConnectMaterialProperty(DentNormal, TEXT(""), MP_Normal);
+			}
+		}
+
+		// Squish on contact (USoftContactSubsystem, docs/design/soft-body.md step 2): the body's row of T_MH_SoftContacts
+		// (custom primitive data 13; -1 none) lists up to 8 capsules pressing on it (texel 2i: A.xyz, radius; 2i+1: B.xyz,
+		// strength). Skin facing a capsule is pushed out of it along the line from its axis, with a soft edge (softplus over
+		// 2.5 cm, at most 10 cm), and its normal turned to lie on the capsule where it is pressed flat.
+		if (UTexture* Contacts = MhSoftContactTexture())
+		{
+			auto* Table = Cast<UMaterialExpressionTextureObjectParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureObjectParameter::StaticClass(), -1000, 3100));
+			Table->ParameterName = TEXT("SoftContacts");
+			Table->Texture = Contacts;
+			Table->SamplerType = UMaterialExpressionTextureBase::GetSamplerTypeForTexture(Contacts);
+			auto* Row = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1000, 3250));
+			Row->ParameterName = TEXT("SoftContactRow");
+			Row->DefaultValue = -1.0f;
+			Row->bUseCustomPrimitiveData = true;
+			Row->PrimitiveDataIndex = 13;
+			auto* SquishPos = Cast<UMaterialExpressionWorldPosition>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionWorldPosition::StaticClass(), -1000, 3350));
+			SquishPos->WorldPositionShaderOffset = WPT_ExcludeAllShaderOffsets;  // the skin before any offset, in both shaders
+			auto* SquishNrm = Cast<UMaterialExpressionVertexNormalWS>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVertexNormalWS::StaticClass(), -1000, 3450));
+			const FString Loop = TEXT(
+				"int y = (int)(Row + 0.5);\n"
+				"for (int i = 0; i < 8; ++i)\n"
+				"{\n"
+				"  float4 a = Tex.Load(int3(i * 2, y, 0));\n"
+				"  float4 b = Tex.Load(int3(i * 2 + 1, y, 0));\n"
+				"  if (b.w <= 0.0 || a.w <= 0.0) continue;\n"
+				"  float3 ab = b.xyz - a.xyz;\n"
+				"  float t = saturate(dot(P - a.xyz, ab) / max(dot(ab, ab), 0.0001));\n"
+				"  float3 v = P - (a.xyz + ab * t);\n"
+				"  float d = length(v);\n"
+				"  if (d < 0.001) continue;\n"
+				"  float3 dir = v / d;\n"
+				"  float pen = a.w - d;\n"
+				"  if (pen < -10.0) continue;\n"
+				"  float face = saturate(dot(N, -dir) * 1.5 + 0.5) * b.w;\n"
+				"  float amt = min(2.5 * log(1.0 + exp(pen / 2.5)), 3.0) * face;\n"
+				"  BODY\n"
+				"}\n");
+			auto* Squish = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -300, 3200));
+			Squish->OutputType = CMOT_Float3;
+			Squish->Description = TEXT("SkinSquish");
+			Squish->Code = TEXT("float3 o = Base;\nif (Row < -0.5) return o;\n") + Loop.Replace(TEXT("BODY"), TEXT("o += dir * amt;")) + TEXT("return o;");
+			auto* SquishTilt = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -300, 3400));
+			SquishTilt->OutputType = CMOT_Float3;
+			SquishTilt->Description = TEXT("SkinSquishTilt");
+			SquishTilt->Code = TEXT("float3 n = N;\nif (Row < -0.5) return 0;\n")
+				+ Loop.Replace(TEXT("BODY"), TEXT("n = lerp(n, -dir, saturate(pen / 2.5) * face * 0.35);"))
+				+ TEXT("return normalize(n) - N;");
+			for (UMaterialExpressionCustom* Node : {Squish, SquishTilt})
+			{
+				const bool bOffset = Node == Squish;
+				Node->Inputs.Reset();  // a new Custom node comes with one unnamed input
+				const TCHAR* Names[] = {TEXT("Base"), TEXT("P"), TEXT("N"), TEXT("Tex"), TEXT("Row")};
+				for (int32 i = bOffset ? 0 : 1; i < static_cast<int32>(UE_ARRAY_COUNT(Names)); ++i)
+				{
+					Node->Inputs.AddDefaulted_GetRef().InputName = Names[i];
+				}
+				const int32 First = bOffset ? 1 : 0;
+				Node->Inputs[First].Input.Connect(0, SquishPos);
+				Node->Inputs[First + 1].Input.Connect(0, SquishNrm);
+				Node->Inputs[First + 2].Input.Connect(0, Table);
+				Node->Inputs[First + 3].Input.Connect(0, Row);
+			}
+			if (UMaterialExpression* OldOffset = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_WorldPositionOffset))
+			{
+				Squish->Inputs[0].Input.Connect(Material->GetEditorOnlyData()->WorldPositionOffset.OutputIndex, OldOffset);
+				UMaterialEditingLibrary::ConnectMaterialProperty(Squish, TEXT(""), MP_WorldPositionOffset);
+			}
+			auto* SquishToTangent = Cast<UMaterialExpressionTransform>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTransform::StaticClass(), -150, 3400));
+			SquishToTangent->TransformSourceType = TRANSFORMSOURCE_World;
+			SquishToTangent->TransformType = TRANSFORM_Tangent;
+			SquishToTangent->Input.Connect(0, SquishTilt);
+			if (UMaterialExpression* NormalIn = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_Normal))
+			{
+				auto* SquishNormal = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -50, 3400));
+				SquishNormal->OutputType = CMOT_Float3;
+				SquishNormal->Description = TEXT("SkinSquishNormal");
+				SquishNormal->Code = TEXT("return normalize(float3(Base.xy + T.xy, Base.z));");
+				SquishNormal->Inputs.SetNum(2);
+				SquishNormal->Inputs[0].InputName = TEXT("Base");
+				SquishNormal->Inputs[1].InputName = TEXT("T");
+				SquishNormal->Inputs[0].Input.Connect(Material->GetEditorOnlyData()->Normal.OutputIndex, NormalIn);
+				SquishNormal->Inputs[1].Input.Connect(0, SquishToTangent);
+				UMaterialEditingLibrary::ConnectMaterialProperty(SquishNormal, TEXT(""), MP_Normal);
+			}
+		}
 		MhAddWetness(Material, 0.78f, 0.12f);
 		Material->PostEditChange();
 		MhSave(Material);
-		UE_LOG(LogMakeHumanArt, Display, TEXT("skin material with micro detail: %s"), *Material->GetName());
+		UE_LOG(LogMakeHumanArt, Display, TEXT("skin material with micro detail and dents: %s"), *Material->GetName());
 		return Material;
 	}
 

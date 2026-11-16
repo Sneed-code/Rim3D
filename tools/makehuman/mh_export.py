@@ -42,7 +42,7 @@ def log(*a):
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mh_common import (add_hair_bones, feather_hair_ends, add_cat_claws, add_cat_ears, flatten_human_ears, make_fur_textures, add_jewellery, write_body_areas, make_wrinkle_map, round_hair_ends, add_genital_bone, add_horns, add_morphs, add_soft_bones, add_tail, add_tusks, dump_vertices,  # noqa: E402
+from mh_common import (add_hair_bones, feather_hair_ends, add_cat_claws, add_cat_ears, flatten_human_ears, make_fur_textures, add_jewellery, write_body_areas, make_wrinkle_map, round_hair_ends, add_genital_bone, add_horns, add_morphs, add_soft_bones, add_body_soft_bones, add_tail, add_tusks, dump_vertices,  # noqa: E402
                        fuller_labia, grow_pubic_hair, lower_pubic_hair, make_pigment_mask, make_skin_normal, prepare_for_unreal,
                        write_materials)
 
@@ -179,6 +179,8 @@ try:
     # Soft tissue bones for jiggle (buttocks; the skeleton has the breast bones) and natural pubic hair.
     if cfg.get("soft_bones", True):
         add_soft_bones(rig, body, log=log)
+    if cfg.get("body_soft_bones", True):
+        add_body_soft_bones(rig, body, log=log)
     if cfg.get("genital_bone"):
         add_genital_bone(rig, body, log=log)
     if cfg.get("labia"):

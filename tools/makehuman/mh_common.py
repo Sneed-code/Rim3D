@@ -183,6 +183,100 @@ def add_soft_bones(rig, body, log=print):
         log("buttock bone", "butt_" + side, "weights", count, "vertices")
 
 
+def add_body_soft_bones(rig, body, log=print):
+    """Soft bones for whole-body wobble (soft body step 1, docs/design/soft-body.md), made for any MakeHuman body with no
+    hand work, like the buttock bones: a belly bone inside the fullest point of the belly (parented to spine_01, weighted
+    onto the front of the trunk within 17 cm), and one soft bone along the middle of each thigh and upper arm (parented to
+    that bone, weighted as a bell along its length so the middle of the limb's flesh moves and its joints stay put; the
+    back of the upper arm more than the front). Other bones' weights are scaled down to make room. The game's spring
+    node (MakeHumanAnimInstance) moves them; the creator scales their softness by the body's weight and muscle."""
+    import math
+    from mathutils import Vector
+    bones = rig.data.bones
+    need = ("pelvis", "spine_01", "spine_02", "thigh_l", "thigh_r", "calf_l", "calf_r", "upperarm_l", "upperarm_r", "lowerarm_l", "lowerarm_r")
+    if any(n not in bones for n in need) or "belly" in bones:
+        return
+    world_to_rig = rig.matrix_world.inverted() @ body.matrix_world
+    verts = [world_to_rig @ v.co for v in body.data.vertices]
+    # MakeHuman faces -Y: the front is -Y.
+    plans = {}  # name -> (parent, head, tail, weight(p) -> 0..1)
+    pelvis, spine2 = bones["pelvis"].head_local, bones["spine_02"].head_local
+    front = [i for i, p in enumerate(verts) if abs(p.x - pelvis.x) < 0.08 and pelvis.z + 0.03 < p.z < spine2.z and p.y < pelvis.y]
+    if front:
+        surface = verts[min(front, key=lambda i: verts[i].y)]
+        head = Vector((pelvis.x, surface.y + 0.07, surface.z))
+
+        def belly_w(p, head=head):
+            d = (p - head).length
+            if d >= 0.17 or p.y > head.y + 0.03 or p.z < head.z - 0.12:
+                return 0.0
+            return 0.75 * (1.0 - d / 0.17) ** 2
+        plans["belly"] = ("spine_01", head, head + Vector((0.0, -0.07, 0.0)), belly_w)
+    else:
+        log("no belly found")
+
+    def limb(name, parent, a, b, radius, peak, back_extra, side):
+        # Copies: bone.head_local goes stale once the rig enters edit mode below (the weights read it afterwards).
+        a, b = a.copy(), b.copy()
+        axis = b - a
+        length = axis.length
+        if length < 1e-4:
+            return
+        u = axis / length
+
+        def w(p):
+            t = (p - a).dot(u) / length
+            if t <= 0.15 or t >= 0.85:
+                return 0.0
+            radial = (p - a) - u * (t * length)
+            r = radial.length
+            if r >= radius or (p.x - a.x) * side < -radius:
+                return 0.0
+            bell = math.sin(math.pi * (t - 0.15) / 0.7) ** 2
+            share = peak
+            if back_extra and r > 1e-5:
+                share += back_extra * max(0.0, radial.y / r)  # +Y is the back: the back of the upper arm hangs looser
+            return min(0.85, share * bell)
+        plans[name] = (parent, a + axis * 0.45, a + axis * 0.55, w)
+
+    for side, sign in (("l", 1.0), ("r", -1.0)):
+        limb("thigh_soft_" + side, "thigh_" + side, bones["thigh_" + side].head_local, bones["calf_" + side].head_local, 0.13, 0.55, 0.0, sign)
+        limb("arm_soft_" + side, "upperarm_" + side, bones["upperarm_" + side].head_local, bones["lowerarm_" + side].head_local, 0.08, 0.35, 0.35, sign)
+    if not plans:
+        return
+    if bpy.context.object and bpy.context.object.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+    rig.hide_set(False)
+    rig.hide_viewport = False
+    bpy.ops.object.select_all(action="DESELECT")
+    rig.select_set(True)
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode="EDIT")
+    for name, (parent, head, tail, _) in plans.items():
+        eb = rig.data.edit_bones.new(name)
+        eb.head, eb.tail = head, tail
+        eb.parent = rig.data.edit_bones[parent]
+        eb.use_deform = True
+    bpy.ops.object.mode_set(mode="OBJECT")
+    groups = _deform_groups(body, rig)
+    # Each limb's weights stay off the other side's limb (thigh_soft_l never takes the right thigh's inside).
+    for name, (_, _, _, weight) in plans.items():
+        group = body.vertex_groups.new(name=name)
+        count = 0
+        for i, p in enumerate(verts):
+            w = weight(p)
+            if w <= 0.01:
+                continue
+            v = body.data.vertices[i]
+            for g in v.groups:
+                vg = body.vertex_groups[g.group]
+                if vg in groups:
+                    g.weight *= (1.0 - w)
+            group.add([i], w, "REPLACE")
+            count += 1
+        log("soft bone", name, "weights", count, "vertices")
+
+
 def lower_pubic_hair(obj, body, top_share=0.6, above_crotch=0.025, width=1.0, depth=0.0, log=print):
     """MakeHuman's pubic hair sits too high on these bodies (it reaches up the belly and stops well above where the legs
     meet): squeezed down towards its lowest point (its top edge comes down to top_share of its height), narrowed a
