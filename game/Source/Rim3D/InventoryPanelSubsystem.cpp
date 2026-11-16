@@ -44,7 +44,7 @@ namespace
 
 	/** Within this many metres a lying item shows under Nearby (the sim's reach for Take is 2 m). */
 	constexpr float InvReachMetres = 2.0f;
-	constexpr int32 InvBagColumns = 8;
+	constexpr int32 InvBagColumns = 5;
 
 	void InvText(const FString& Text)
 	{
@@ -366,7 +366,9 @@ void UInventoryPanelSubsystem::DrawWindow(USimSubsystem& Bridge, colony::Entity 
 		ImGui::TableNextColumn();
 		// The bag: a big grid; a click drops the stack.
 		ImGui::SeparatorText("Bag");
-		const float Cell = 72.0f * Scale;
+		// Cells fill the column's width, so the grid never runs off the window.
+		const float Spacing = ImGui::GetStyle().ItemSpacing.x;
+		const float Cell = FMath::Max(32.0f, (ImGui::GetContentRegionAvail().x - Spacing * (InvBagColumns - 1)) / InvBagColumns);
 		for (uint32 i = 0; i < View->inventoryCount; ++i)
 		{
 			const colony::InventoryItemView& Item = Snap.inventory[View->firstInventory + i];
@@ -375,7 +377,7 @@ void UInventoryPanelSubsystem::DrawWindow(USimSubsystem& Bridge, colony::Entity 
 				ImGui::SameLine();
 			}
 			ImGui::PushID(static_cast<int>(i));
-			FString Short = InvLabel(Sim, Item.def).Left(8);
+			FString Short = InvLabel(Sim, Item.def).Left(7);
 			const FTCHARToUTF8 CellText(*FString::Printf(TEXT("%s\nx%d"), *Short, Item.count));
 			if (ImGui::Button(CellText.Get(), ImVec2(Cell, Cell)))
 			{
