@@ -8,6 +8,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "ZonelessDefs.h"
 
 #include <doctest.h>
 
@@ -32,19 +33,9 @@ using namespace colony;
 namespace {
 
 // These tests run on the game's real data (the Human body, capacities, injuries): they check the
-// numbers in docs/design/health.md, so they are meant to change when those numbers do.
-std::shared_ptr<const DefDatabase> healthTestDefs() {
-    static const std::shared_ptr<const DefDatabase> defs = [] {
-        auto db = std::make_shared<DefDatabase>();
-        std::vector<std::string> errors;
-        DefDatabase::loadDirectory(COLONY_DATA_DIR, *db, errors);
-        for (const std::string& e : errors) {
-            MESSAGE(e);
-        }
-        return db;
-    }();
-    return defs;
-}
+// numbers in docs/design/health.md, so they are meant to change when those numbers do. They check RimWorld's rules,
+// which animals still have, so the Human body's zones (docs/design/body-health.md, BodyZoneTests.cpp) are taken off.
+std::shared_ptr<const DefDatabase> healthTestDefs() { return zonelessTestDefs(); }
 
 std::unique_ptr<Sim> healthTestSim(int pawns = 0, int items = 0) {
     SimSettings settings;

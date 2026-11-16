@@ -83,9 +83,9 @@ bool medHit(Sim& sim, Entity pawn, const char* type, float amount, const std::st
 // heals, in the end (a lost leg would not).
 void medDownBleeding(Sim& sim, Entity pawn) {
     for (const char* part : {"torso", "left leg", "right leg", "left arm"}) {
-        medHit(sim, pawn, "Blunt", 20.0f, part);
+        medHit(sim, pawn, "Blunt", std::string(part) == "left leg" ? 60.0f : 20.0f, part);  // a leg under a quarter downs
     }
-    medHit(sim, pawn, "Cut", 6.0f, "right arm");
+    medHit(sim, pawn, "Cut", 15.0f, "right arm");  // 70% of the arm: it bleeds
 }
 
 // Everything that happened, step by step.
@@ -235,7 +235,7 @@ TEST_CASE("Medicine: needsTending and needsRest follow the injuries") {
     sim.step();
     CHECK_FALSE(sim.health().needsTending(pawn));
     CHECK_FALSE(sim.health().needsRest(pawn));
-    medHit(sim, pawn, "Cut", 5.0f, "left arm");
+    medHit(sim, pawn, "Cut", 15.0f, "left arm");  // 70% of the arm: it bleeds
     sim.step();
     CHECK(sim.health().needsTending(pawn));
     CHECK(sim.health().urgentlyNeedsTending(pawn));  // it bleeds
@@ -633,7 +633,7 @@ TEST_CASE("Medicine: at bedtime a tired doctor tends a bleeding colonist before 
         log.step(sim);
         sim.things().registry().get<Needs>(doctor).rest = 0.2f;  // drowsy: off to bed at bedtime
         if (bleeding) {
-            medHit(sim, patient, "Cut", 6.0f, "left arm");
+            medHit(sim, patient, "Cut", 15.0f, "left arm");
         }
         JobType first = JobType::None;
         medRunUntil(sim, log, 120, [&] {

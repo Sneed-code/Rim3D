@@ -72,8 +72,30 @@
     "medicineMaxTendQuality": { "None": 0.7, "Herbal": 0.7, "Medicine": 1.0, "Lumen": 1.3 },
     "protagonistPartHitPointsFactor": 2.0,
     "innerInjuryAlsoHurtsOuter": true,
+    "zones": {
+      "note": "sneed's body health (docs/design/body-health.md), for the bodies listed: zone hit points, downing, unconscious, bleeding (blood a real second), blood store",
+      "bodies": ["Human"],
+      "list": [
+        { "name": "Head", "root": "Neck", "hp": 50 },
+        { "name": "Torso", "root": "Torso", "hp": 100 },
+        { "name": "Arm", "root": "Shoulder", "hp": 50 },
+        { "name": "Leg", "root": "Leg", "hp": 75 }
+      ],
+      "downBelow": 0.25,
+      "manyBelow": 0.5,
+      "manyCount": 3,
+      "headUnconsciousBelow": 0.25,
+      "bloodMax": 3000,
+      "bloodUnconscious": 1000,
+      "bleedAt": [0.75, 0.5, 0.25],
+      "bleedPerSecond": [1, 2, 3],
+      "bloodRegenDelaySeconds": 30,
+      "bloodRegenPerSecond": 10,
+      "stepsPerRealSecond": 30,
+      "protagonistHp": 100
+    },
     "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss", "innerInjuryAlsoHurtsOuter"],
-    "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter", "scarSeverity", "oldWoundFromHpLost"]
+    "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter", "scarSeverity", "oldWoundFromHpLost", "zones"]
   },
   {
     "defName": "JobRules", "source": "Rim3D",

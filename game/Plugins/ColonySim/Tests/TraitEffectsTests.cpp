@@ -18,20 +18,15 @@
 #include <string>
 #include <vector>
 
+#include "ZonelessDefs.h"
+
 using namespace colony;
 
 namespace {
 
-// The game's real data: trait numbers, thoughts and the health model are part of what is tested.
-std::shared_ptr<const DefDatabase> traitFxDefs() {
-    static std::shared_ptr<const DefDatabase> defs = [] {
-        auto db = std::make_shared<DefDatabase>();
-        std::vector<std::string> errors;
-        DefDatabase::loadDirectory(COLONY_DATA_DIR, *db, errors);
-        return std::shared_ptr<const DefDatabase>(db);
-    }();
-    return defs;
-}
+// The game's real data: trait numbers, thoughts and the health model are part of what is tested. Without body zones:
+// Wimp moves the pain shock threshold, which downs only a body without zones (docs/design/body-health.md).
+std::shared_ptr<const DefDatabase> traitFxDefs() { return zonelessTestDefs(); }
 
 std::unique_ptr<Sim> traitFxSim() {
     return std::make_unique<Sim>(SimSettings{5, 64, 0, 0, true}, traitFxDefs());

@@ -253,6 +253,14 @@ TEST_CASE("Fighters: behind a wall a fighter steps out past its end to fire, the
     MESSAGE(shotsOut << " shots from the corner, " << backInCover << " steps back in cover");
 }
 
+namespace {
+// The left leg's part index: beating a leg downs a person without killing it (body zones, docs/design/body-health.md).
+int fightTestLeftLeg(const Sim& sim, Entity pawn) {
+    const std::vector<std::string> labels = sim.health().partLabels(sim.things().registry().get<Thing>(pawn).def);
+    return static_cast<int>(std::find(labels.begin(), labels.end(), "left leg") - labels.begin());
+}
+}  // namespace
+
 TEST_CASE("Fighters: the closest able enemy is the target, the downed only when none is left") {
     auto sim = fightTestSim();
     const Entity fighter = fightTestPawn(*sim, 40, 40, "Gun_AssaultRifle");
@@ -266,7 +274,7 @@ TEST_CASE("Fighters: the closest able enemy is the target, the downed only when 
     // Beat it until it goes down (and stays down: nobody tends it).
     sim->step();
     for (int i = 0; i < 200 && !sim->health().incapacitated(nearDowned); ++i) {
-        sim->submit(DamagePawnCommand{nearDowned, "Blunt", 4.0f, -1});
+        sim->submit(DamagePawnCommand{nearDowned, "Blunt", 6.0f, fightTestLeftLeg(*sim, nearDowned)});  // a leg under a quarter downs
         sim->step();
     }
     FIGHT_REQUIRE(!sim->things().registry().get<Health>(nearDowned).dead);
@@ -698,7 +706,7 @@ TEST_CASE("Fighters: a raider spares a downed colonist while another colonist st
     fightTestHostile(*sim, raider);
     sim->step();
     for (int i = 0; i < 200 && !sim->health().incapacitated(downed); ++i) {
-        sim->submit(DamagePawnCommand{downed, "Blunt", 4.0f, -1});
+        sim->submit(DamagePawnCommand{downed, "Blunt", 6.0f, fightTestLeftLeg(*sim, downed)});  // a leg under a quarter downs
         sim->step();
     }
     FIGHT_REQUIRE(sim->health().incapacitated(downed));

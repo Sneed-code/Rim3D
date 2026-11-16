@@ -237,6 +237,7 @@ struct SaveHealth {
     DeathCause cause = DeathCause::None;
     bool downed = false;  // health section 5 on: with `dirty`, so a wound not yet worked out is still pending after a load
     bool dirty = false;
+    int64_t bleedStoppedAt = -1;  // health section 7 on
 };
 
 // An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
@@ -1965,10 +1966,14 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     }
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
-    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Withdrawal), "the save file has a bad cause of death");
+    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Wounds), "the save file has a bad cause of death");
     if (ar.sectionVersion() >= 6) {
         ar.value("downed", h.downed);
         ar.value("dirty", h.dirty);
+    }
+    if (ar.sectionVersion() >= 7) {
+        ar.value("bleedStoppedAt", h.bleedStoppedAt);
+        ar.require(h.bleedStoppedAt >= -1, "the save file has an impossible bleeding time");
     }
 }
 
@@ -3341,7 +3346,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("colonists", 2, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 6, [&] {
+    ar.section("health", 7, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -4167,6 +4172,7 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
             saved.added.push_back(SaveAddedPart{added.part, sim.defs_->get(added.hediff).defName()});
         }
         saved.bloodLoss = health->bloodLoss;
+        saved.bleedStoppedAt = health->bleedStoppedAt;
         for (const EnvironmentHediff& env : health->environment) {
             saved.environment.push_back(SaveEnvironmentHediff{sim.defs_->get(env.def).defName(), env.severity});
         }
@@ -4637,6 +4643,7 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
             health.added.push_back(AddedPart{added.part, hediff->id()});
         }
         health.bloodLoss = e.health->bloodLoss;
+        health.bleedStoppedAt = e.health->bleedStoppedAt;
         for (const SaveEnvironmentHediff& env : e.health->environment) {
             const Def* hediff = sim.defs_->find("Hediffs", env.hediff);
             if (hediff == nullptr) {

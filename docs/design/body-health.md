@@ -49,6 +49,37 @@ for people changes. Animals keep RimWorld's rules for now.
 | E | Damage numbers, layered upper-body staggers by zone and a limp after a leg hit, blood on clothes | Unreal (PC) |
 | F | Dismemberment and gibs (pre-cut limbs with caps, gib chunk sets, skull and brain interior) | sim rule + Unreal art (PC) |
 
+## Part A as built
+
+Code: `HealthModel::buildZones`, `HealthEval::workOutZones`, the zone branch of `HealthSystem::derive` and the blood
+lines of `HealthSystem::step` (`Private/Health.cpp`). Data: `HealthRules` `zones` (`Rules/Rules.json`): the bodies
+that have zones (`bodies`, now only `Human`), the zone list (name, root part def, hit points) and every number in the
+table above. Tests: `Tests/BodyZoneTests.cpp`. `Tests/HealthTests.cpp` takes the Human zones off and keeps checking
+RimWorld's rules, which animals still use.
+
+- **Zones**: a rule's root part def starts a zone at every part of that def (two shoulders, two legs); the rule whose
+  root is the body's core part (Torso) takes what is left. Every part's hit points are scaled by its zone (torso 40 to
+  100: a heart has 37.5).
+- **Zone health** (`Health::zones`, `HealthSystem::zoneHealth`, by `zoneNames` order): 1 minus the damage on the
+  zone's outside parts (each part at most its hit points), a lost part's full hit points, over the zone's hit points.
+- **Downed** by sneed's rules only: pain shock and RimWorld's capacity thresholds no longer down a person (they still
+  slow it). A vital organ destroyed or a vital capacity at 0 still kills, as before. So the Wimp trait (a lower pain shock
+  threshold) and numb (resonance, takes pain away) no longer change whether a person is down; they still work for
+  bodies without zones. Whether pain should come back as a rule of its own is sneed's call.
+- **Unconscious** (`Health::unconscious`): head zone under 25%, or blood 1000 or less. It is a kind of downed.
+- **Bleeding**: a zone at 75% or less with an untended wound that bleeds (a cut, stab or gunshot, not a bruise or
+  burn) or an untended lost part in it bleeds 1, 2 or 3 blood a
+  real second (`bleedPerDay` holds it as blood loss a day, so the HUD and AI keep working). Tending is "patching" until
+  part B adds patching yourself in 1 to 3 seconds. RimWorld's blood loss stages (consciousness offsets) are off for a
+  zoned body: blood only matters at 1000 and 0.
+- **Blood comes back**: once nothing bleeds, `Health::bleedStoppedAt` (saved, health section 7) holds the step; from
+  30 seconds (900 steps) on, 10 blood a second.
+- **Protagonist**: never downed or unconscious; dies (`DeathCause::Wounds`, "wounds") when its zones have lost 100 hit
+  points in all. Its parts are no longer doubled (that stays for an unzoned body). It still bleeds, and a destroyed
+  brain or heart still kills.
+- Not yet: shooting corpses (part A2: the dead have no hitboxes yet; the downed can already be shot), patching (B),
+  poise (C), crawling (D).
+
 ## Later (sneed, 2026-11-16)
 
 - **Ragdolls**: unconscious pawns, corpses and severed limbs are physics ragdolls in Unreal (cosmetic: the sim keeps

@@ -3382,6 +3382,9 @@ uint64_t Sim::stateHash() const {
                 h.add(added.hediff.value);
             }
             h.add(health->bloodLoss);
+            if (health->bleedStoppedAt >= 0) {
+                h.add(health->bleedStoppedAt);
+            }
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
             if (!health->environment.empty()) {

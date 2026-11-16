@@ -263,7 +263,10 @@ TEST_CASE("Filth: a bleeding pawn leaves blood") {
     Sim sim = rsSim();
     const Entity pawn = sim.things().spawn("Human", CellPos{20, 20, 0});
     RS_REQUIRE(pawn != kNoEntity);
-    sim.submit(DamagePawnCommand{pawn, "Cut", 12.0f, -1});
+    // 30 of a leg's 75: it bleeds a blood a second (body zones).
+    const std::vector<std::string> labels = sim.health().partLabels(sim.things().registry().get<Thing>(pawn).def);
+    const int leg = static_cast<int>(std::find(labels.begin(), labels.end(), "left leg") - labels.begin());
+    sim.submit(DamagePawnCommand{pawn, "Cut", 30.0f, leg});
     for (int i = 0; i < 4 * 3600; ++i) {
         sim.step();
         if (sim.filth().totalLayers() > 0) {

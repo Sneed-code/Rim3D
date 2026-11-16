@@ -24,6 +24,11 @@ hit points lost) and a list of **lost parts** (a destroyed part; its children go
 hit points are its maximum (doubled for the protagonist, `Health::protagonist`, set before the pawn
 is hurt) minus the severity of the injuries on it; efficiency is that over the maximum, 0 if lost.
 
+**People (the Human body) have body zones** since 2026-11-16 ([body-health.md](body-health.md)): their part hit points
+are scaled to sneed's zone hit points, and being downed, unconscious, bleeding and the protagonist's death follow
+sneed's zone rules instead of pain shock, capacities and RimWorld's bleed rates. Everything below still holds for
+animals and for any body not listed in `HealthRules` `zones`.
+
 **`HealthSystem::applyDamage(pawn, damageType, amount, part, rng)`** is the way in for the dev command
 `DamagePawnCommand`. Combat (F2, [combat.md](combat.md)) picks the outside part from the hitbox a
 bullet hit, goes in with `goInside`, applies armor and then calls **`applyHit(pawn, type, amount,
