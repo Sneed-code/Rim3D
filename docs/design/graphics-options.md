@@ -81,6 +81,9 @@ modules load (`OnModulesChanged`).
   specular 0.5) goes onto every pawn's face, hand and bare skin through one shared dynamic instance per skin material
   (`USimPawnSubsystem::GetShinySkin`, `ApplySkinShine`); console `Look.SkinRoughness` / `Look.SkinSpecular` override it for
   new pawns while tuning.
+- **Cinematic depth of field** in the protagonist's third person view: a full-frame lens at f/4 focused on the colonist
+  (`Look.DepthOfField`, 0 off), so the far background softens like a film camera. It fades out while aiming and is off in first
+  person, so a distant target stays sharp.
 
 ## Next
 
