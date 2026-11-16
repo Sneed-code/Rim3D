@@ -597,10 +597,14 @@ void USmokeTestSubsystem::BuildFightsPhases()
 		{
 			State->PausedAt = PhaseTime;  // the moment of the hit; stopped a tenth of a second later
 		}
-		if (State->PausedAt > 0.0 && PhaseTime > State->PausedAt + 0.1 && F->GetParticlesOfKind(EFightParticle::Blood) > 0)
+		// Blood in the air: the old simple particles, or the new blood's drops and mist when its assets are there.
+		UBloodSubsystem* NewBlood = F->GetWorld()->GetSubsystem<UBloodSubsystem>();
+		const int32 BloodInAir = F->GetParticlesOfKind(EFightParticle::Blood) +
+			(NewBlood && NewBlood->IsReady() ? NewBlood->GetActiveDrops() + NewBlood->GetActiveMist() : 0);
+		if (State->PausedAt > 0.0 && PhaseTime > State->PausedAt + 0.1 && BloodInAir > 0)
 		{
 			State->bPaused = true;
-			State->BloodAtPause = F->GetParticlesOfKind(EFightParticle::Blood);
+			State->BloodAtPause = BloodInAir;
 			// The pawn that was hit flinches: the target, or whoever stood in the line of fire in front of it.
 			State->bLeanAtPause = false;
 			for (const TPair<uint32, TObjectPtr<ASimPawnActor>>& Pair : Pawns()->GetPawns())
@@ -653,11 +657,22 @@ void USmokeTestSubsystem::BuildFightsPhases()
 		ViewFrom(Eye, (Them + FVector(0.0, 0.0, 80.0) - Eye).Rotation());
 	}, 1.0f, 1.5f, nullptr, [=, this]()
 	{
-		if (Fight()->GetLiveDecals() < 2)
+		// The new blood (when its assets are there) draws the stains instead of the fight's old decals.
+		UBloodSubsystem* NewBlood = Fight()->GetWorld()->GetSubsystem<UBloodSubsystem>();
+		const bool bNewBlood = NewBlood && NewBlood->IsReady();
+		const int32 Alive = bNewBlood ? NewBlood->GetLiveStains() + NewBlood->GetLiveBodyStains() : Fight()->GetLiveDecals();
+		if (Alive < 2)
 		{
-			Fail(FString::Printf(TEXT("wounds: only %d decals alive after a pawn was hit"), Fight()->GetLiveDecals()));
+			Fail(FString::Printf(TEXT("wounds: only %d decals alive after a pawn was hit"), Alive));
 		}
-		Notes.Add(FString::Printf(TEXT("wounds: %d decals alive (%d on bodies, %d on the ground so far)"), Fight()->GetLiveDecals(), Fight()->GetBodyDecals(), Fight()->GetGroundDecals()));
+		if (bNewBlood)
+		{
+			Notes.Add(FString::Printf(TEXT("wounds: %d blood stains alive (%d on bodies, %d on the world)"), Alive, NewBlood->GetLiveBodyStains(), NewBlood->GetLiveStains()));
+		}
+		else
+		{
+			Notes.Add(FString::Printf(TEXT("wounds: %d decals alive (%d on bodies, %d on the ground so far)"), Fight()->GetLiveDecals(), Fight()->GetBodyDecals(), Fight()->GetGroundDecals()));
+		}
 	});
 
 	// 6. The hitbox debug view over the pawns, from the side.

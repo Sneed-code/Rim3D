@@ -266,8 +266,9 @@ namespace
 
 		// The decal colour: RGB, and alpha = 2 x round(wet x 31) + opacity.
 		auto* DecalColor = BloodArtNode<UMaterialExpressionDecalColor>(Material, -1150, -450);
-		auto* Rgb = BloodArtMask(Material, -950, -500, DecalColor, TEXT(""), true, true, true, false);
-		auto* Alpha = BloodArtMask(Material, -950, -400, DecalColor, TEXT(""), false, false, false, true);
+		// UE 5.8: the node's first pin is "RGB" (3 channels); alpha has its own "A" pin.
+		auto* Rgb = BloodArtMask(Material, -950, -500, DecalColor, TEXT("RGB"), true, true, true, false);
+		auto* Alpha = BloodArtMask(Material, -950, -400, DecalColor, TEXT("A"), true, false, false, false);
 		auto* Opacity = BloodArtNode<UMaterialExpressionFrac>(Material, -800, -350);
 		BloodArtConnect(Alpha, TEXT(""), Opacity, TEXT(""));
 		auto* WetSteps = BloodArtNode<UMaterialExpressionFloor>(Material, -800, -450);
