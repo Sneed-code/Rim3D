@@ -1832,6 +1832,15 @@ namespace
 				const bool bClub = Att.HeldStyle == static_cast<int32>(ECwStyle::Club);
 				const float Amount = (0.45f + Heavy * 0.75f) * (bClub ? 0.55f : 1.0f) * S.Random.FRandRange(0.8f, 1.2f);
 				CwBleed(S, World, Def, &Att, Hit.At, Travel, Amount);
+				// Soft body (docs/design/soft-body.md): the flesh round the hit gives with the blow and wobbles back; a club's
+				// broad blunt face moves more of it than an edge.
+				if (USkeletalMeshComponent* DefMesh = Def.Mesh.Get())
+				{
+					if (UMakeHumanAnimInstance* DefAnim = Cast<UMakeHumanAnimInstance>(DefMesh->GetAnimInstance()))
+					{
+						DefAnim->AddHitKick(Hit.At, Travel * (bClub ? 320.0f : 220.0f) * (0.6f + Heavy * 0.6f), bClub ? 40.0f : 30.0f);
+					}
+				}
 				GCwPending.bDeath = S.bFinish;
 				GCwPending.bStrong = Heavy * S.Random.FRandRange(0.6f, 1.3f) > 0.75f || (Def.Hits >= 4 && S.Random.FRand() < 0.5f);
 				// The heaviest blows (a heavy attack that staggers, now and then) knock the defender down.
@@ -2391,6 +2400,11 @@ namespace
 					S.bEquip = true;
 					S.Style = Step.Style;
 					S.Attack = Step.Attack;
+					// -CwScriptStyle=<0-3>: the demos use that fighting style instead (0 club) for clips.
+					if (int32 DemoStyle = -1; Step.Attack < 0 && FParse::Value(FCommandLine::Get(), TEXT("CwScriptStyle="), DemoStyle) && DemoStyle >= 0 && DemoStyle < CwStyleCount)
+					{
+						S.Style = DemoStyle;
+					}
 					GCwPreviewDirty = true;
 					break;
 				case 1:
