@@ -83,6 +83,10 @@ the origin): muzzle socket (69.5, 0, 3.2), fore-end (34, 0, -2), scope axis at y
 - Mouse speed: `Protagonist.MouseTurn` default 0.7 to 1.2, a "Mouse speed" slider in Settings (saved in
   GameUserSettings.ini), and `[` `]` in the range. Switching guns dips for 0.3 s (was 0.45).
 - V switches first and third person (it always did; now on the panel).
+- Second try: your own hits float their damage over where they landed for a second (`Fight.DamageNumbers`, white,
+  gold from 15, blue on armour). A new group comes by itself only after everyone has been down a minute (dead: 20 s),
+  so the downed can be shot. A bullet of yours that goes through a dead body, or a downed one's ragdoll off its sim
+  hitboxes, throws blood, leaves a wound and pushes the ragdoll (cosmetic; the sim's hit stands).
 
 ## Not done
 

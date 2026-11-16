@@ -46,6 +46,9 @@ namespace
 		TEXT("Fight.Effects"), 1, TEXT("1 draws tracers, muzzle flashes, impacts, wounds and ragdolls for the sim's fights, 0 draws none."), ECVF_Default);
 	TAutoConsoleVariable<int32> GFightHitboxes(
 		TEXT("Fight.Hitboxes"), 0, TEXT("1 draws every pawn's hitboxes where the sim has them (colour by body part)."), ECVF_Default);
+	TAutoConsoleVariable<int32> GFightDamageNumbers(
+		TEXT("Fight.DamageNumbers"), 1, TEXT("1 floats the damage of your own hits over where they landed (playing as a pawn), 0 hides them."), ECVF_Default);
+	constexpr float FightDamageNumberSeconds = 1.0f;
 
 	const TCHAR* const FightSolidMaterialPath = TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial");
 	const TCHAR* const FightDecalMaterialPath = TEXT("/Game/Rim3D/Generated/Fights/M_WoundDecal.M_WoundDecal");
@@ -464,6 +467,13 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 	const FVector At = Tracer.End;
 	const FVector Dir = Tracer.Dir.GetSafeNormal().IsNearlyZero() ? -FVector::UpVector : Tracer.Dir.GetSafeNormal();
 	const FVector Back = -Dir;
+	// Your bullet passed through a body lying on the ground (a dead one, which the sim no longer counts, or a downed one
+	// whose ragdoll lies off its hitboxes): the blood, a wound and a push, where the line met the body. Cosmetic; the sim
+	// decided the bullet's hit, and a dead body has nothing left for it to decide.
+	if (Tracer.HitKind != colony::ProjectileHitKind::Pawn && Tracer.HitKind != colony::ProjectileHitKind::Armor)
+	{
+		SpawnBodyThroughHit(Tracer);
+	}
 	switch (Tracer.HitKind)
 	{
 		case colony::ProjectileHitKind::Ground:
@@ -489,6 +499,10 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 					Actor->PlayHitReaction(Dir, 0.3f);
 					++HitReactionsPlayed;
 				}
+			}
+			if (const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>(); Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == Tracer.Shooter)
+			{
+				AddDamageNumber(Tracer, true);
 			}
 			break;
 		case colony::ProjectileHitKind::Pawn:
@@ -525,6 +539,7 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 			{
 				HitMarkerSeconds = 0.18f;
 				++HitMarkers;
+				AddDamageNumber(Tracer, false);
 			}
 			break;
 		}
@@ -543,6 +558,42 @@ void UFightSubsystem::TrimDecals()
 			Decals[0]->DestroyComponent();
 		}
 		Decals.RemoveAt(0);
+	}
+}
+
+void UFightSubsystem::SpawnBodyThroughHit(const FFightTracer& Tracer)
+{
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	if (!Protagonist || !Protagonist->IsDirectMode() || Protagonist->GetControlled() != Tracer.Shooter || !Bridge || !Bridge->GetSim() || !Tracer.bDirKnown)
+	{
+		return;
+	}
+	const FVector Dir = Tracer.Dir.GetSafeNormal();
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(ECC_PhysicsBody);
+	Objects.AddObjectTypesToQuery(ECC_Pawn);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(FightBodyThrough), false);
+	TArray<FHitResult> Hits;
+	GetWorld()->LineTraceMultiByObjectType(Hits, Tracer.Start, Tracer.End + Dir * 20.0f, Objects, Params);
+	for (const FHitResult& Hit : Hits)
+	{
+		ASimPawnActor* Actor = Cast<ASimPawnActor>(Hit.GetActor());
+		const colony::ThingView* View = Actor ? Bridge->GetCurrentSnapshot().find(Actor->GetThing()) : nullptr;
+		if (!View || (!View->dead && !View->downed))
+		{
+			continue;
+		}
+		const FVector At = Hit.ImpactPoint;
+		SpawnBurst(EFightParticle::Blood, At, Dir + FVector::UpVector * 0.3f, 14, 300.0f, 0.5f, 4.0f, 0.7f, 980.0f);
+		SpawnBurst(EFightParticle::Blood, At, -Dir + FVector::UpVector * 0.4f, 6, 160.0f, 0.6f, 3.5f, 0.5f, 980.0f);
+		SpawnBodyDecal(*Actor, At, Dir, 10.0f);
+		if (UPrimitiveComponent* Body = Hit.GetComponent(); Body && Body->IsSimulatingPhysics(Hit.BoneName))
+		{
+			Body->AddImpulseAtLocation(Dir * 6000.0f, At, Hit.BoneName);
+		}
+		++BodyThroughHits;
+		return;
 	}
 }
 
@@ -642,6 +693,11 @@ void UFightSubsystem::Tick(float DeltaTime)
 		}
 	}
 	HitMarkerSeconds = FMath::Max(0.0f, HitMarkerSeconds - DeltaTime);
+	for (FFightDamageNumber& Number : DamageNumbers)
+	{
+		Number.Age += DeltaTime;
+	}
+	DamageNumbers.RemoveAll([](const FFightDamageNumber& Number) { return Number.Age >= FightDamageNumberSeconds; });
 	EquipMessageSeconds = FMath::Max(0.0f, EquipMessageSeconds - DeltaTime);
 	DrawHitboxes();
 	DrawHud();
@@ -1300,6 +1356,56 @@ void UFightSubsystem::DrawHud()
 			}
 		}
 	}
+	DrawDamageNumbers(Scale);
 	(void)Sim;
 	++HudFramesDrawn;
+}
+
+void UFightSubsystem::AddDamageNumber(const FFightTracer& Tracer, bool bArmour)
+{
+	if (GFightDamageNumbers.GetValueOnGameThread() == 0)
+	{
+		return;
+	}
+	// A little to the side at random so a burst's numbers don't sit on each other.
+	const FVector Jitter(Random.FRandRange(-8.0f, 8.0f), Random.FRandRange(-8.0f, 8.0f), Random.FRandRange(0.0f, 10.0f));
+	DamageNumbers.Add({Tracer.End + Jitter, Tracer.Amount, 0.0f, bArmour});
+	if (DamageNumbers.Num() > 24)
+	{
+		DamageNumbers.RemoveAt(0);
+	}
+	++DamageNumbersShown;
+}
+
+void UFightSubsystem::DrawDamageNumbers(float Scale)
+{
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	if (!PC || DamageNumbers.IsEmpty())
+	{
+		return;
+	}
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	ImDrawList* Draw = ImGui::GetForegroundDrawList();
+	ImFont* Font = ImGui::GetFont();
+	for (const FFightDamageNumber& Number : DamageNumbers)
+	{
+		FVector2D Screen;
+		if (!PC->ProjectWorldLocationToScreen(Number.At, Screen, true))
+		{
+			continue;
+		}
+		const float T = Number.Age / FightDamageNumberSeconds;
+		// Pops a little bigger at first, rises about 50 px and fades over the last half.
+		const float Size = ImGui::GetFontSize() * (T < 0.1f ? 1.9f - T * 4.0f : 1.5f) * (Number.Amount >= 15.0f ? 1.2f : 1.0f);
+		const float Alpha = T < 0.5f ? 1.0f : 1.0f - (T - 0.5f) / 0.5f;
+		const FString Text = Number.bArmour && Number.Amount <= 0.0f ? FString(TEXT("blocked")) : FString::Printf(TEXT("%.0f"), FMath::Max(Number.Amount, 0.0f));
+		const FTCHARToUTF8 Utf8(*Text);
+		const ImVec2 Extent = Font->CalcTextSizeA(Size, FLT_MAX, 0.0f, Utf8.Get());
+		const ImVec2 At(Viewport->Pos.x + static_cast<float>(Screen.X) - Extent.x * 0.5f, Viewport->Pos.y + static_cast<float>(Screen.Y) - Extent.y - 50.0f * Scale * T);
+		const ImU32 Colour = Number.bArmour ? IM_COL32(170, 200, 255, static_cast<int>(255 * Alpha))
+			: (Number.Amount >= 15.0f ? IM_COL32(255, 210, 60, static_cast<int>(255 * Alpha)) : IM_COL32(255, 255, 255, static_cast<int>(255 * Alpha)));
+		const ImU32 Shadow = IM_COL32(0, 0, 0, static_cast<int>(200 * Alpha));
+		Draw->AddText(Font, Size, ImVec2(At.x + 2.0f, At.y + 2.0f), Shadow, Utf8.Get());
+		Draw->AddText(Font, Size, At, Colour, Utf8.Get());
+	}
 }

@@ -382,11 +382,13 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		}
 		G->SetSceneLine(FString::Printf(TEXT("Targets: %d standing, %d down, %d dead   (group %d)"), Standing, Downed, Dead, State->Group));
 
-		// N: a new group now. All down for 6 seconds: a new group by itself.
+		// N: a new group now. By itself only after everyone has been down a full minute (or dead for 20 seconds), so the
+		// downed can still be shot and the bodies looked at (sneed: downed is not dead).
 		APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
 		const bool bAllDown = !State->Targets.IsEmpty() && Standing == 0;
 		State->AllDownFor = bAllDown ? State->AllDownFor + Dt : 0.0f;
-		if (State->PendingSpawn == 0 && ((PC && PC->WasInputKeyJustPressed(EKeys::N)) || State->AllDownFor > 6.0f))
+		const float NewGroupAfter = Downed == 0 ? 20.0f : 60.0f;
+		if (State->PendingSpawn == 0 && ((PC && PC->WasInputKeyJustPressed(EKeys::N)) || State->AllDownFor > NewGroupAfter))
 		{
 			SpawnGroup();
 		}
