@@ -185,6 +185,14 @@ void soundHitVoice(const DefDatabase& db, const Event& e, const SoundDefOf& defO
 
 }  // namespace
 
+std::string soundLovinCue(SoundGender a, SoundGender b) {
+    const int women = (a == SoundGender::Female ? 1 : 0) + (b == SoundGender::Female ? 1 : 0);
+    const int men = (a == SoundGender::Male ? 1 : 0) + (b == SoundGender::Male ? 1 : 0);
+    if (women == 1 && men == 1) return "Voice_LovinCouple";
+    if (women >= 1 && men == 0) return "Voice_LovinFem";
+    return {};
+}
+
 bool soundViolentDeath(const std::string& cause) {
     return cause == "a vital part destroyed" || cause == "organ failure" || cause == "executed";
 }

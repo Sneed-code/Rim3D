@@ -198,3 +198,28 @@ range), so a close voice is dry and clear and a far scream is mostly what comes 
    (`PlayWhenSilent`), so only our ranking decides.
 3. **To see it in play:** `Sound.Debug 1` shows voices, sounds, drops and the place on screen; `Sound.Debug 2` also logs
    every sound dropped or not played and why (out of hearing, budget full, grunt in its cooldown, over a scream).
+
+## Lovin, birds, the rainforest beds and the mute keys (sneed, 2026-11-16, second round)
+
+- **A fourth scream**: sneed's `femscream4` joins `Voice_FemScream` (it was much quieter than the others; levelled like them).
+- **Lovin** (`Lovin` event, `soundLovinCue`): sneed's six recordings (in Git, mono, 22 kHz). A man and a woman pick from
+  all six (`Voice_LovinCouple`, which `alsoPlays` the women's three), two women from the three women's ones
+  (`Voice_LovinFem`), two men nothing. A woman alone would use the women's ones too, but the sim has no lovin alone yet.
+  The sound starts 10 real seconds into the lovin (a fifth of the way in when a short one at speed is over sooner), at the
+  bed, following the first partner, and fades out over 1.5 s when the lovin ends (0.3 s when it is broken off).
+  Range 14 m with full volume within 1 m: next to the bed it is clear; outside a closed room 10 m away it is gone.
+- **Walls and doors keep sound in**: each wall or **shut door** on the line between, and a roof over one end and not the
+  other, now makes a sound a quarter as loud (-12 dB; it was 0.55, -5 dB) and duller (low-pass 5 kHz for one, 2.9 kHz
+  for two, 2 kHz for three). An open door lets it through.
+- **Birds** (`Amb_Birds_Tropical`, the biome's `birds` slot; rainforest and tropical swamp): short calls, 4 to 20 s each,
+  from many species, placed in the trees 15 to 40 m from the ears and 4 m up (so distance, walls and echo apply). Only on
+  about 3 days in 5; on those days a call may start at dawn (05:30 to 07:30) or dusk (17:30 to 19:30), about once every
+  two minutes, and one call comes as rain moves in. Never more than 2% of the day's real length (about 1 minute with the
+  48-minute day). Not while it rains. They are ambience: the Ambience slider turns them down or off, and `Sound.Birds 0`
+  turns off just the birds.
+- **Rainforest beds**: `Amb_Tropical_Day` (insects, distant calls) and `Amb_Tropical_Night` (frogs, crickets) replace the
+  temperate beds in the two tropical biomes.
+- **Mute keys**: **Ctrl+M** mutes the music, **Ctrl+S** mutes all sound, each again to turn it back on, kept in the user
+  settings (`Sound.MusicMuted`, `Sound.Enable`). A short note on screen says which.
+- The bird and bed files come from free recordings (Wikimedia Commons, credited in `game/Content/Rim3D/Sounds/CREDITS.txt`),
+  picked and cut on the PC because the cloud cannot reach those sites.

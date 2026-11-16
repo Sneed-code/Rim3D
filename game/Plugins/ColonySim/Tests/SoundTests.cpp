@@ -316,3 +316,25 @@ TEST_CASE("sound: voice cues carry their rules") {
     CHECK(scream->number("cooldown", 0.0) == doctest::Approx(0.0));
     CHECK(scream->integer("priority", 3) == 0);
 }
+
+TEST_CASE("sound: lovin sounds by who is in the bed") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    using G = SoundGender;
+    CHECK(soundLovinCue(G::Male, G::Female) == "Voice_LovinCouple");
+    CHECK(soundLovinCue(G::Female, G::Male) == "Voice_LovinCouple");
+    CHECK(soundLovinCue(G::Female, G::Female) == "Voice_LovinFem");
+    CHECK(soundLovinCue(G::Female, G::Unknown) == "Voice_LovinFem");  // a woman alone
+    CHECK(soundLovinCue(G::Male, G::Male).empty());
+    CHECK(soundLovinCue(G::Male, G::Unknown).empty());
+    CHECK(soundLovinCue(G::Unknown, G::Unknown).empty());
+    for (const char* cue : {"Voice_LovinCouple", "Voice_LovinFem", "Amb_Birds_Tropical", "Amb_Tropical_Day", "Amb_Tropical_Night"}) {
+        CHECK_MESSAGE(db.find("SoundCues", cue) != nullptr, cue);
+    }
+    // Through a closed room it must not carry far: a short range.
+    CHECK(db.find("SoundCues", "Voice_LovinCouple")->number("range", 0.0) <= 15.0);
+    const Def* rain = db.find("Biomes", "TropicalRainforest");
+    if (rain == nullptr) { CHECK(false); return; }
+    CHECK(soundSlot(*rain, "birds") == "Amb_Birds_Tropical");
+    CHECK(soundSlot(*rain, "night") == "Amb_Tropical_Night");
+}

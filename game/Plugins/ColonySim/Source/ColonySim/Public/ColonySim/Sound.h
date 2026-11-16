@@ -68,6 +68,11 @@ COLONY_API std::string soundStepCue(const DefDatabase& db, DefId terrain);
 COLONY_API void soundForEvent(const DefDatabase& db, const Event& event, const SoundDefOf& defOf,
                               std::vector<SoundPlay>& out, const SoundGenderOf& genderOf = {});
 
+// The lovin sound for a pair (docs/design/sound.md "Lovin"): a man and a woman `Voice_LovinCouple` (sneed's six
+// recordings), two women or a woman alone (`b` Unknown) `Voice_LovinFem` (the three women's ones), two men or a man alone
+// nothing (empty).
+COLONY_API std::string soundLovinCue(SoundGender a, SoundGender b);
+
 // The death causes that make a pawn scream (PawnDied's `message`): violence, not bleeding out, cold or illness.
 COLONY_API bool soundViolentDeath(const std::string& cause);
 
