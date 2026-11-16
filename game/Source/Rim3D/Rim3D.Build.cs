@@ -21,6 +21,12 @@ public class Rim3D : ModuleRules
 		// Seeded hair styles and beards (PawnActor.cpp): groom components.
 		PrivateDependencyModuleNames.Add("HairStrandsCore");
 
+		// MakeHuman characters (docs/design/makehuman.md): their retargeters.
+		PrivateDependencyModuleNames.Add("IKRig");
+
+		// The character creator's animation panel (SmokeTestCreator.cpp): finds the clips.
+		PrivateDependencyModuleNames.Add("AssetRegistry");
+
 		// Terrain and plants (TerrainSubsystem.cpp): chunk meshes, and plant meshes made at run time.
 		PrivateDependencyModuleNames.AddRange(new string[] { "MeshDescription", "StaticMeshDescription" });
 
