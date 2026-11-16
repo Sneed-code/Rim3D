@@ -14,6 +14,17 @@
     }
   },
   {
+    "defName": "Composite", "armourStuff": {"factor": {"blunt": 1, "sharp": 1, "elemental": 1}}, "shieldStuff": {"block": 2.5, "mass": 0.5}, "visual": {"color": [0.24, 0.26, 0.24], "pieces": 5, "layer": 0.05, "parts": [{"shape": "box", "size": [0.3, 0.16, 0.05], "color": [0.22, 0.24, 0.22]}]}, "parent": "ItemBase", "label": "composite", "description": "Fibre-reinforced plastic sheet: as tough as steel at half the weight.", "stackLimit": 75, "source": "ours",
+    "ours": ["sneed's shield tiers (2026-11-16, docs/design/shields.md): modern composite, half steel's weight with steel's protection; block 2.5 (between steel and plasteel)", "stats", "stuffProps", "visual"],
+    "stats": { "maxHitPoints": 100, "marketValue": 4.0, "mass": 0.25, "beauty": -4, "flammability": 0.2 },
+    "stuffProps": {
+      "categories": ["Composite"],
+      "statFactors": {
+        "maxHitPoints": 1.0, "beauty": 1.0, "flammability": 0.2, "workToBuild": 1.0, "workToMake": 1.0
+      }
+    }
+  },
+  {
     "defName": "WoodLog", "armourStuff": {"factor": {"blunt": 1, "sharp": 0.6, "elemental": 0}, "offset": {"fire": -10}}, "shieldStuff": {"block": 1, "mass": 0.8}, "visual": { "surface": "wood", "mesh": "/Game/Rim3D/Generated/Art/SM_WoodLog.SM_WoodLog", "color": [0.6, 0.42, 0.26], "pieces": 6, "layer": 0.14, "parts": [{"shape": "cylinder", "radius": 0.07, "height": 0.55, "at": [0, 0, -0.205], "color": [0.55, 0.38, 0.22], "rot": [90, 0, 0]}]}, "parent": "ItemBase", "label": "wood",
     "stats": { "maxHitPoints": 150, "marketValue": 1.2, "mass": 0.4, "beauty": -4, "flammability": 1.0, "deteriorationRate": 0.5 },
     "stuffProps": {
