@@ -98,17 +98,24 @@
       "starvingSpeedFactor": 0.75
     },
     "rest": {
-      "fallPerDay": { "Rested": 0.95, "Drowsy": 0.66, "Tired": 0.28, "Exhausted": 0.57 },
-      "drowsyBelow": 0.28, "tiredBelow": 0.14, "exhaustedBelow": 0.01,
-      "gainPerDay": 2.285714,
+      "fallPerDay": { "Rested": 0.6, "Drowsy": 0.6, "Tired": 0.6, "Exhausted": 0.6 },
+      "drowsyBelow": 0.001, "tiredBelow": 0.001, "exhaustedBelow": 0.001,
+      "gainPerDay": 1.5,
       "groundEffectiveness": 0.8,
-      "fallAsleepBelow": 0.75,
+      "fallAsleepBelow": 0.85,
+      "sleepThroughNight": false,
       "wakeAt": 1.0,
-      "wakeOutsideSleepAt": 0.7
+      "wakeOutsideSleepAt": 0.5,
+      "napBelow": 0.1,
+      "napBelowWork": 0.001,
+      "exhaustedPerformance": 0.75,
+      "nightFromHour": 18,
+      "nightToHour": 6
     },
+    "restNote": "sneed 2026-11-16 (replaces RimWorld's rest bands): a 16-hour waking day uses 40% rest (0.6 a day awake) and a regular 8-hour sleep in a bed gives back 50% (1.5 a day lying down; 40% on the ground), so a pawn catches up. No effect until rest reaches 0 (the Exhausted band, under 0.001): then the Exhausted mood and 25% slower work, aiming, cooldowns, reloads and swings and 25% less shooting accuracy. Pawns go to bed every night (fallAsleepBelow 0.85: after any normal day they are under it) and get up once full (sleepThroughNight false: staying in bed till 6:00 cost the year colony about half its survivors, too few work hours); outside them they nap below 10% (Work hours only at 0) and wake at 50%. The protagonist has no rest need; their sleep passes the night from nightFromHour to nightToHour (SleepCommand).",
     "schedule": { "sleepFromHour": 22, "sleepToHour": 5 },
-    "unverified": ["food.ingestSeconds", "food.maxNumToIngestAtOnce", "rest.fallAsleepBelow", "rest.wakeAt", "schedule"],
-    "ours": ["food.eatSpotRadius", "food.ingestSeconds", "food.nutritionFactor", "food.starvingSpeedFactor", "rest.wakeOutsideSleepAt", "rest.fallAsleepBelow", "rest.wakeAt"]
+    "unverified": ["food.ingestSeconds", "food.maxNumToIngestAtOnce", "schedule"],
+    "ours": ["food.eatSpotRadius", "food.ingestSeconds", "food.nutritionFactor", "food.starvingSpeedFactor", "rest"]
   },
   {
     "defName": "MoodRules", "source": "RimWorld wiki",

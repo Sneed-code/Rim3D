@@ -5,6 +5,7 @@
 #include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Protagonist.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -96,6 +97,12 @@ NeedRules NeedRules::read(const DefDatabase& defs) {
     r.fallAsleepBelow = needsFloat(*def, "rest.fallAsleepBelow", r.fallAsleepBelow);
     r.wakeAt = needsFloat(*def, "rest.wakeAt", r.wakeAt);
     r.wakeOutsideSleepAt = needsFloat(*def, "rest.wakeOutsideSleepAt", r.wakeOutsideSleepAt);
+    r.sleepThroughNight = def->flag("rest.sleepThroughNight", r.sleepThroughNight);
+    r.napBelow = needsFloat(*def, "rest.napBelow", r.restDrowsyBelow);
+    r.napBelowWork = needsFloat(*def, "rest.napBelowWork", r.restTiredBelow);
+    r.exhaustedPerformance = std::clamp(needsFloat(*def, "rest.exhaustedPerformance", r.exhaustedPerformance), 0.05f, 1.0f);
+    r.nightFromHour = std::clamp(static_cast<int>(def->integer("rest.nightFromHour", r.nightFromHour)), 0, 23);
+    r.nightToHour = std::clamp(static_cast<int>(def->integer("rest.nightToHour", r.nightToHour)), 0, 23);
     r.sleepFromHour = std::clamp(static_cast<int>(def->integer("schedule.sleepFromHour", r.sleepFromHour)), 0, 23);
     r.sleepToHour = std::clamp(static_cast<int>(def->integer("schedule.sleepToHour", r.sleepToHour)), 0, 23);
     if (const Def* joy = defs.find("Rules", "JoyRules"); joy != nullptr && joy->count("joyHours") >= 2) {
@@ -157,6 +164,18 @@ float NeedsSystem::restGainPerDay(Entity bed) const {
     return rules_.restGainPerDay * effectiveness;
 }
 
+float NeedsSystem::performanceFactor(Entity pawn) const {
+    if (!rules_.present || rules_.exhaustedPerformance >= 1.0f) {
+        return 1.0f;
+    }
+    const entt::registry& reg = things_.registry();
+    const Needs* needs = reg.valid(pawn) ? reg.try_get<Needs>(pawn) : nullptr;
+    if (needs == nullptr || mindIsPlayersOwn(reg, pawn)) {
+        return 1.0f;
+    }
+    return restBandOf(rules_, needs->rest) == RestBand::Exhausted ? rules_.exhaustedPerformance : 1.0f;
+}
+
 void NeedsSystem::step() {
     if (!rules_.present) {
         return;
@@ -198,10 +217,12 @@ void NeedsSystem::step() {
             needs.malnutrition = std::max(0.0f, needs.malnutrition - rules_.malnutritionPerDay * kPerSecond);
         }
 
-        // Rest rises while lying down and falls otherwise, by band.
+        // Rest rises while lying down and falls otherwise, by band. The protagonist has no rest need.
         const Worker* worker = reg.try_get<Worker>(pawn);
         const bool elsewhere = restingElsewhere_ && restingElsewhere_(pawn);
-        if ((worker != nullptr && jobIsLyingDown(worker->job)) || elsewhere) {
+        if (mindIsPlayersOwn(reg, pawn)) {
+            needs.rest = 1.0f;
+        } else if ((worker != nullptr && jobIsLyingDown(worker->job)) || elsewhere) {
             // Quick sleeper: `restRateMultiplier` +0.5 rests half as fast again.
             const float restRate = std::max(0.0f, needsTraitStat(defs_, reg, pawn, "restRateMultiplier", 1.0f));
             const Entity bed = elsewhere ? kNoEntity : worker->job.thing;

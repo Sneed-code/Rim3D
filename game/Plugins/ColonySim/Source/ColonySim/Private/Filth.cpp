@@ -63,9 +63,17 @@ Filth::Filth(Map& map, Things& things, const Floors& floors, const DefDatabase& 
     }
     dirtKind_ = kindIndex("Dirt");
     filthRate_.assign(defs.size(), 0.0f);
+    bloodKind_.assign(defs.size(), -1);
     for (DefId id : defs.idsOfKind("Things")) {
-        filthRate_[id.value] = static_cast<float>(defs.get(id).number("stats.filthRate", 0.0));
+        const Def& def = defs.get(id);
+        filthRate_[id.value] = static_cast<float>(def.number("stats.filthRate", 0.0));
+        const char* fallback = def.flag("race.chitinid", false) ? "InsectBlood" : def.flag("race.mechanical", false) ? "MachineFluid" : "Blood";
+        bloodKind_[id.value] = kindIndex(def.text("race.bloodFilth", fallback));
     }
+}
+
+int Filth::bloodKindOf(DefId pawnDef) const {
+    return pawnDef.valid() && pawnDef.value < bloodKind_.size() ? bloodKind_[pawnDef.value] : -1;
 }
 
 int Filth::kindIndex(const std::string& name) const {
@@ -257,7 +265,7 @@ void Filth::step() {
         }
         const Health* health = reg.try_get<Health>(pawn);
         if (health != nullptr && !health->dead && health->bleedPerDay > 0.0f) {
-            const int blood = kindIndex("Blood");
+            const int blood = bloodKindOf(reg.get<Thing>(pawn).def);
             if (blood >= 0 && rng_.unit() < bloodPerSecond * health->bleedPerDay) {
                 add(cell, blood, 1);
             }

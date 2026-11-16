@@ -8,19 +8,39 @@
   },
   {
     "defName": "Dirt", "parent": "FilthBase", "label": "dirt",
-    "stats": { "beauty": -15, "cleanliness": -5 }, "cleanTicks": 35
+    "stats": { "beauty": -15, "cleanliness": -5 }, "cleanTicks": 35,
+    "look": { "wet": [0.20, 0.15, 0.10], "dry": [0.20, 0.15, 0.10] }, "ours": ["look"]
   },
   {
     "defName": "Blood", "parent": "FilthBase", "label": "blood",
-    "stats": { "beauty": -30, "cleanliness": -10 }, "cleanTicks": 70
+    "stats": { "beauty": -30, "cleanliness": -10 }, "cleanTicks": 70,
+    "look": { "fluid": true, "wet": [0.30, 0.012, 0.010], "dry": [0.075, 0.012, 0.010] },
+    "ours": ["look"],
+    "note": "look (Unreal only, docs/design/blood.md): the colour fresh and after drying (about 5 real minutes), linear RGB. fluid: drawn as wet splats that dry."
+  },
+  {
+    "defName": "InsectBlood", "parent": "FilthBase", "label": "insect blood", "source": "RimWorld wiki (Filth_BloodInsect)",
+    "stats": { "beauty": -30, "cleanliness": -10 }, "cleanTicks": 70,
+    "look": { "fluid": true, "wet": [0.42, 0.40, 0.035], "dry": [0.16, 0.13, 0.02] },
+    "ours": ["look"], "unverified": ["stats", "cleanTicks"],
+    "note": "What chitinids bleed (Filth::bloodKindOf). Numbers as Blood."
+  },
+  {
+    "defName": "MachineFluid", "parent": "FilthBase", "label": "machine fluid",
+    "stats": { "beauty": -30, "cleanliness": -10 }, "cleanTicks": 70,
+    "look": { "fluid": true, "wet": [0.02, 0.16, 0.55], "dry": [0.01, 0.05, 0.16] },
+    "ours": ["stats", "cleanTicks", "look"],
+    "note": "Blue fluid that mechanical pawns leak when hit (sneed, 2026-11-16); RimWorld's mechanoids do not bleed. Numbers as Blood."
   },
   {
     "defName": "Vomit", "parent": "FilthBase", "label": "vomit",
-    "stats": { "beauty": -40, "cleanliness": -15 }, "cleanTicks": 70
+    "stats": { "beauty": -40, "cleanliness": -15 }, "cleanTicks": 70,
+    "look": { "fluid": true, "wet": [0.45, 0.40, 0.18], "dry": [0.30, 0.27, 0.14] }, "ours": ["look"]
   },
   {
     "defName": "Ash", "parent": "FilthBase", "label": "ash",
-    "stats": { "beauty": -12, "cleanliness": -15 }, "cleanTicks": 70
+    "stats": { "beauty": -12, "cleanliness": -15 }, "cleanTicks": 70,
+    "look": { "wet": [0.05, 0.05, 0.05], "dry": [0.05, 0.05, 0.05] }, "ours": ["look"]
   },
   {
     "defName": "FireFoam", "parent": "FilthBase", "label": "firefoam", "maxThickness": 1, "trackable": false,
@@ -30,6 +50,7 @@
   },
   {
     "defName": "AnimalFilth", "parent": "FilthBase", "label": "animal filth",
-    "stats": { "beauty": -15, "cleanliness": -5 }, "cleanTicks": 35
+    "stats": { "beauty": -15, "cleanliness": -5 }, "cleanTicks": 35,
+    "look": { "wet": [0.14, 0.10, 0.05], "dry": [0.14, 0.10, 0.05] }, "ours": ["look"]
   }
 ]
