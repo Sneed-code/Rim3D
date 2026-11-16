@@ -75,9 +75,10 @@ open in under two minutes breaks two barricades and the turret within ten minute
 (8 m, ours) nearer for each friend already shooting it, itself included (so two colonists on two raiders
 don't swap every plan). Three colonists facing two raiders all shoot the same one, as a player would order.
 
-**A defender with a club waits** (C25): a fighter the alarm called up (`defending`) that would charge in
+**A defender with a club waits** (C25; since real-time-combat.md every colonist, drafted too, by the colonists'
+`profiles.colonists.holdsForFriends`; raiders' profile charges): a fighter the alarm called up (`defending`) that would charge in
 melee doesn't run at an enemy with a gun until it is within `ambushRange` (6 m, ours); until then it
-scores cover like a gunman with no range to get into. A drafted pawn or an attack order still charges. In the
+scores cover like a gunman with no range to get into. An attack order still charges (a drafted colonist did too before the combat profiles). In the
 year run a colonist with a club ran 10 m across open ground at two shotgun raiders and was shot on the way. Since the
 ninth pass the same holds for an enemy with a club or spear (colonists ran out one at a time 20 m to two raiders with
 clubs and were beaten down), **unless that enemy is at a friend** already (within `helpReach`, 2.5 m, ours) and within
@@ -223,7 +224,7 @@ steps as cover.md says.
 - Target choice: the closest able enemy; the downed one only when nobody else is left; an attack order wins.
 - A raider spares a downed colonist while another colonist stands, even one over 60 m off it can't see.
 - Three colonists against two raiders all shoot the same one (focus fire).
-- A defending colonist with a club stays over 6 m from a shotgun raider; drafted, it charges.
+- A defending or drafted colonist with a club stays over 6 m from a shotgun raider; with an attack order it charges.
 - Close fights (`Tests/CloseFightTests.cpp`): a gunman behind a colonist fighting a raider hand to hand steps aside
   and shoots without hitting its friend (before: 2 to 4 hits on the friend a fight); in a corridor it holds its fire;
   beside a colonist fighting a chitinid it never hits the friend; three colonists with revolvers beat a raider with a
