@@ -62,7 +62,7 @@ COLONY_API std::string soundStepCue(const DefDatabase& db, DefId terrain);
 
 // Appends what `event` sounds like to `out`; nothing for an event that makes no noise. Same event and
 // same defs always give the same cues. With `genderOf`, pawns with a `visual.sound` slot for their gender's voice
-// (`femaleHit`, `femaleScream`, `maleHit`, `maleScream`) also cry out: a hit grunt for a melee hit that does more than
+// (`femaleHit`, `femaleScream`, `maleHit`, `maleScream`) also cry out: a hit grunt for a melee hit or a shot that does more than
 // the cue's `minDamage` (3), `chance` of the time (0.5, decided by a hash of the event so it never touches the game's
 // random numbers), and a scream when downed or killed by violence (a vital part destroyed, organ failure, executed).
 COLONY_API void soundForEvent(const DefDatabase& db, const Event& event, const SoundDefOf& defOf,

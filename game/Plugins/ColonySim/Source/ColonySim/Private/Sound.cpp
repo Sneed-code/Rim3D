@@ -169,10 +169,23 @@ SoundPlay soundVoiceOn(const std::string& cue, Entity pawn, SoundVoice voice, fl
     return p;
 }
 
-// A grunt from the one struck by a hard melee hit, some of the time.
+// Killed while lying downed and awake: does she scream once more? A hash of the event decides, like the hit grunt.
+bool soundDownedDeathRoll(const DefDatabase& db, const SoundDefOf& defOf, const SoundGenderOf& genderOf, const Event& e) {
+    const std::string cue = soundVoiceCue(db, defOf, genderOf, e.thing, SoundVoice::Scream);
+    const Def* cueDef = cue.empty() ? nullptr : db.find("SoundCues", cue);
+    if (cueDef == nullptr) return false;
+    const double chance = cueDef->number("downedDeathChance", 0.5);
+    const uint64_t roll = splitMix64(static_cast<uint64_t>(e.thing) ^ (static_cast<uint64_t>(static_cast<uint32_t>(e.cell.x)) << 20) ^
+                                     (static_cast<uint64_t>(static_cast<uint32_t>(e.cell.y)) << 40) ^ 0x5C2EA4ull);
+    return static_cast<double>(roll >> 11) * 0x1.0p-53 < chance;
+}
+
+// A grunt from the one struck by a hard hit (melee or shot), some of the time.
 void soundHitVoice(const DefDatabase& db, const Event& e, const SoundDefOf& defOf, const SoundGenderOf& genderOf,
                    std::vector<SoundPlay>& out) {
-    if (e.hit != ProjectileHitKind::Pawn || e.message != "hit") return;
+    // A melee blow that landed ("hit"), or a bullet, arrow or shard that struck the pawn (ProjectileHit on a Pawn).
+    if (e.hit != ProjectileHitKind::Pawn) return;
+    if (e.type == EventType::MeleeHit && e.message != "hit") return;
     const std::string cue = soundVoiceCue(db, defOf, genderOf, e.target, SoundVoice::Hit);
     const Def* cueDef = cue.empty() ? nullptr : db.find("SoundCues", cue);
     if (cueDef == nullptr || e.amount <= static_cast<float>(cueDef->number("minDamage", 3.0))) return;
@@ -218,6 +231,7 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
                 case ProjectileHitKind::Pawn: {
                     const std::string cue = soundFleshCue(db, soundDamageTypeOfProjectile(db, e.def));
                     out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));
+                    soundHitVoice(db, e, defOf, genderOf, out);
                     break;
                 }
                 case ProjectileHitKind::Armor: out.push_back(soundAt("Impact_Armor", e.x, e.y, e.z)); break;
@@ -265,7 +279,13 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
             const char* slot = e.type == EventType::PawnDied ? "death" : "downed";
             const std::string cue = soundSlotOr(soundDefOfEntity(db, defOf, e.thing), slot, "");
             if (!cue.empty()) out.push_back(soundOn(cue, e.thing));
-            if (e.type == EventType::PawnDowned || soundViolentDeath(e.message)) {
+            // A woman screams every time she goes down, and when violence kills her outright. Killed while she lay downed: a
+            // last scream some of the time (the cue's `downedDeathChance`, 0.5) if she was still awake, none if knocked out.
+            bool screams = e.type == EventType::PawnDowned;
+            if (e.type == EventType::PawnDied && soundViolentDeath(e.message)) {
+                screams = e.amount < 0.5f || (e.amount < 1.5f && soundDownedDeathRoll(db, defOf, genderOf, e));
+            }
+            if (screams) {
                 const std::string scream = soundVoiceCue(db, defOf, genderOf, e.thing, SoundVoice::Scream);
                 if (!scream.empty()) out.push_back(soundVoiceOn(scream, e.thing, SoundVoice::Scream, static_cast<float>(e.cell.x) + 0.5f,
                                                       static_cast<float>(e.cell.y) + 0.5f,

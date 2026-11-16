@@ -302,6 +302,75 @@ TEST_CASE("sound: a woman grunts at some hard melee hits and screams when downed
     CHECK(voices(died).empty());
     died.message = "hypothermia";
     CHECK(voices(died).empty());
+
+    // Killed while she lay downed: awake, a last scream about half the time (by the event alone); knocked out, none.
+    died.message = "a vital part destroyed";
+    int last = 0;
+    bool knockedOut = false;
+    for (int i = 0; i < 400; ++i) {
+        died.thing = static_cast<Entity>(100 + i);
+        died.cell = {i % 23, i / 23, 0};
+        const Entity who = died.thing;
+        const SoundGenderOf allFemale = [](Entity) { return SoundGender::Female; };
+        const SoundDefOf allHuman = [&](Entity) { return human; };
+        const auto count = [&](float amount) {
+            died.amount = amount;
+            std::vector<SoundPlay> out;
+            soundForEvent(db, died, allHuman, out, allFemale);
+            int n = 0;
+            for (const SoundPlay& p : out) n += p.voice == SoundVoice::Scream && p.entity == who ? 1 : 0;
+            return n;
+        };
+        CHECK(count(0.0f) == 1);  // was up: killed outright, always
+        last += count(1.0f);
+        knockedOut = knockedOut || count(2.0f) != 0;
+    }
+    CHECK(last > 160);
+    CHECK(last < 240);
+    CHECK(!knockedOut);
+}
+
+TEST_CASE("sound: a woman grunts at some hard shots too") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    const Entity woman = static_cast<Entity>(21);
+    const DefId human = db.idOf("Things", "Human");
+    const SoundDefOf defOf = [&](Entity e) { return e == woman ? human : DefId{}; };
+    const SoundGenderOf genderOf = [&](Entity e) { return e == woman ? SoundGender::Female : SoundGender::Unknown; };
+    Event shot;
+    shot.type = EventType::ProjectileHit;
+    shot.def = db.idOf("Projectiles", "Bullet_Revolver");
+    shot.hit = ProjectileHitKind::Pawn;
+    shot.target = woman;
+    int grunts = 0;
+    bool weak = false;
+    bool armour = false;
+    for (int i = 0; i < 400; ++i) {
+        shot.x = static_cast<float>(i) * 0.41f;
+        shot.y = static_cast<float>(i % 13);
+        const auto count = [&](float amount, ProjectileHitKind kind) {
+            shot.amount = amount;
+            shot.hit = kind;
+            std::vector<SoundPlay> out;
+            soundForEvent(db, shot, defOf, out, genderOf);
+            int n = 0;
+            for (const SoundPlay& p : out) {
+                if (p.voice == SoundVoice::Hit) {
+                    ++n;
+                    CHECK(p.cue == "Voice_FemHit");
+                    CHECK(p.entity == woman);
+                }
+            }
+            return n;
+        };
+        grunts += count(12.0f, ProjectileHitKind::Pawn);
+        weak = weak || count(3.0f, ProjectileHitKind::Pawn) != 0;
+        armour = armour || count(12.0f, ProjectileHitKind::Armor) != 0;
+    }
+    CHECK(grunts > 160);
+    CHECK(grunts < 240);
+    CHECK(!weak);
+    CHECK(!armour);
 }
 
 TEST_CASE("sound: voice cues carry their rules") {

@@ -146,12 +146,13 @@ us to start on the voice (the files had 0.1 to 0.4 s of silence first), mono, 44
 
 | Cue | When | Rules |
 | --- | --- | --- |
-| `Voice_FemHit` | a woman takes a melee hit of more than `minDamage` (3) | `chance` 0.5; at most one per pawn every `cooldown` (5) real seconds |
-| `Voice_FemScream` | a woman is downed, or killed by violence (a vital part destroyed, organ failure, executed) | no cooldown; cuts her own hit grunt |
+| `Voice_FemHit` | a woman takes a melee hit or a shot (bullet, arrow, shard on flesh, not armour) of more than `minDamage` (3) | `chance` 0.5; at most one per pawn every `cooldown` (5) real seconds |
+| `Voice_FemScream` | a woman is downed (every time), or killed by violence (a vital part destroyed, organ failure, executed): always if she was up, `downedDeathChance` (0.5) if she lay downed and awake, never if knocked out | no cooldown; cuts her own hit grunt |
 
 - The sim decides (`soundForEvent` with a `SoundGenderOf` callback): the Human def's slots `femaleHit`, `femaleScream`
   (`maleHit`, `maleScream` when there are male recordings), the 50% from a hash of the event, so the game's random
   numbers are never touched and the same fight always gives the same grunts. Bleeding out, cold or illness: no scream.
+  PawnDied's `amount` says how she lay (0 up, 1 downed and awake, 2 downed with consciousness under 0.3, knocked out).
 - Unreal keeps **one voice per pawn** (`PlayVoice`): a scream cuts that pawn's grunt with a 40 ms fade (no click), a grunt
   never plays over a scream, a scream does not restart within 2 s (downed and killed together scream once). Other sounds,
   even the same pawn's footsteps or the club's thud, are never touched. The grunt's 5 s are counted in real time, from
