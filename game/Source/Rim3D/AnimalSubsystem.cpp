@@ -99,7 +99,7 @@ void USimAnimalSubsystem::LoadArtTable()
 			{
 				continue;
 			}
-			double YawValue = 0.0, Walk = 140.0, Gallop = 450.0;
+			double YawValue = -90.0, Walk = 140.0, Gallop = 450.0;
 			Entry->TryGetNumberField(TEXT("yaw"), YawValue);
 			Entry->TryGetNumberField(TEXT("walkCm"), Walk);
 			Entry->TryGetNumberField(TEXT("gallopCm"), Gallop);
