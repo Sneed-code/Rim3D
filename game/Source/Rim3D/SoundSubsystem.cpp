@@ -11,6 +11,8 @@
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/ReverbEffect.h"
 #include "Sound/SoundAttenuation.h"
 
 #include "OverseerPawn.h"
@@ -39,10 +41,18 @@ namespace
 	TAutoConsoleVariable<float> GSoundAmbience(TEXT("Sound.Ambience"), 0.8f, TEXT("Ambience and weather volume, 0 to 1."));
 	TAutoConsoleVariable<float> GSoundVoicesVolume(TEXT("Sound.VoicesVolume"), 1.0f, TEXT("Pawn and animal voices volume, 0 to 1."));
 	TAutoConsoleVariable<float> GSoundMusic(TEXT("Sound.Music"), 0.6f, TEXT("Music volume, 0 to 1."));
-	TAutoConsoleVariable<int32> GSoundVoices(TEXT("Sound.Voices"), 32, TEXT("How many sounds play at once (the voice budget)."));
+	TAutoConsoleVariable<int32> GSoundVoices(TEXT("Sound.Voices"), 48, TEXT("How many sounds play at once (the voice budget)."));
 	TAutoConsoleVariable<int32> GSoundTones(TEXT("Sound.Tones"), 1,
 		TEXT("Placeholder tones for cues with no sound file: 0 none, 1 short sounds only, 2 loops too."));
-	TAutoConsoleVariable<int32> GSoundDebug(TEXT("Sound.Debug"), 0, TEXT("1 lists the sounds playing on screen."));
+	TAutoConsoleVariable<int32> GSoundDebug(TEXT("Sound.Debug"), 0,
+		TEXT("1 lists the sounds playing on screen; 2 also logs every sound that was dropped or not played, and why."));
+	TAutoConsoleVariable<int32> GSoundSameCue(TEXT("Sound.SameCueAtOnce"), 6,
+		TEXT("At most this many of one cue play at once (the nearest); more of the same in a battle only add mush."));
+	TAutoConsoleVariable<int32> GSoundEcho(TEXT("Sound.Echo"), 1, TEXT("0 turns off the echo of the place (outdoors, room, cave)."));
+
+	/** A scream does not start again over its own first seconds (downed and killed in the same moment scream once). */
+	constexpr double SoundScreamRepeatS = 2.0;
+	const FName SoundReverbTag(TEXT("Rim3D.Place"));
 
 	const TCHAR* SoundConfigSection = TEXT("/Script/Rim3D.Sound");
 	const TCHAR* SoundGroupKeys[] = {TEXT("Effects"), TEXT("Ambience"), TEXT("Voices"), TEXT("Music")};
@@ -83,7 +93,7 @@ namespace
 		{
 			return ESoundMix::Ambience;
 		}
-		if (Cue.StartsWith(TEXT("Pawn_")) || Cue.StartsWith(TEXT("Animal_")) || Cue == TEXT("Work_Chat"))
+		if (Cue.StartsWith(TEXT("Voice_")) || Cue.StartsWith(TEXT("Pawn_")) || Cue.StartsWith(TEXT("Animal_")) || Cue == TEXT("Work_Chat"))
 		{
 			return ESoundMix::Voices;
 		}
@@ -186,6 +196,41 @@ namespace
 			Clip->Samples[I] = static_cast<int16>(FMath::Clamp(V * Envelope * 0.5f, -1.0f, 1.0f) * 32767.0f);
 		}
 		return Clip;
+	}
+
+	/** An echo for the place the ears are in, made in code (no asset): 0 outdoors, 1 a built room, 2 a cave. */
+	UReverbEffect* SoundMakeReverb(UObject* Outer, int32 Place)
+	{
+		UReverbEffect* R = NewObject<UReverbEffect>(Outer);
+		if (Place == 2)
+		{
+			// Rock all round: long, dense, bright tail.
+			R->Density = 1.0f; R->Diffusion = 1.0f; R->Gain = 0.32f; R->GainHF = 0.7f;
+			R->DecayTime = 2.9f; R->DecayHFRatio = 1.1f;
+			R->ReflectionsGain = 0.6f; R->ReflectionsDelay = 0.015f; R->LateGain = 1.4f; R->LateDelay = 0.022f;
+		}
+		else if (Place == 1)
+		{
+			// A room of wood or stone: strong early reflections, short tail.
+			R->Density = 1.0f; R->Diffusion = 1.0f; R->Gain = 0.32f; R->GainHF = 0.8f;
+			R->DecayTime = 0.65f; R->DecayHFRatio = 0.8f;
+			R->ReflectionsGain = 0.5f; R->ReflectionsDelay = 0.007f; R->LateGain = 1.2f; R->LateDelay = 0.011f;
+		}
+		else
+		{
+			// Outdoors in the forest: no walls, a soft late echo off trees and far ground, dull (leaves eat the highs).
+			R->Density = 0.3f; R->Diffusion = 0.6f; R->Gain = 0.25f; R->GainHF = 0.5f;
+			R->DecayTime = 1.3f; R->DecayHFRatio = 0.5f;
+			R->ReflectionsGain = 0.05f; R->ReflectionsDelay = 0.03f; R->LateGain = 0.8f; R->LateDelay = 0.08f;
+		}
+		R->AirAbsorptionGainHF = 0.994f;
+		return R;
+	}
+
+	void SoundApplyFilter(UAudioComponent* Component, float Cutoff)
+	{
+		Component->SetLowPassFilterEnabled(Cutoff < 19000.0f);
+		Component->SetLowPassFilterFrequency(Cutoff);
 	}
 
 	FString SoundFolder()
@@ -341,6 +386,7 @@ void USoundSubsystem::LoadCues()
 	const bool bFirst = Cues.Num() == 0;
 	Cues.Reset();
 	const FString CueFolder = FPaths::Combine(SoundFolder(), TEXT("cues"));
+	const FString OwnFolder = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Rim3D"), TEXT("Sounds"), TEXT("cues"));
 	int32 FileCount = 0;
 	for (colony::DefId Id : Defs->idsOfKind("SoundCues"))
 	{
@@ -350,6 +396,8 @@ void USoundSubsystem::LoadCues()
 		Cue.bLoop = Def.flag("loop");
 		Cue.Volume = static_cast<float>(Def.number("volume", 0.5));
 		Cue.RangeM = static_cast<float>(Def.number("range", 30.0));
+		Cue.NearM = static_cast<float>(Def.number("near", FMath::Clamp(Cue.RangeM / 15.0f, 1.0f, 10.0f)));
+		Cue.CooldownS = static_cast<float>(Def.number("cooldown", 0.0));
 		Cue.Priority = static_cast<int32>(Def.integer("priority", 2));
 		Cue.Group = SoundGroupOf(Cue.Name);
 		Cue.Tone = SoundMakeTone(UTF8_TO_TCHAR(Def.text("tone.wave", "sine").c_str()), static_cast<float>(Def.number("tone.hz", 440.0)),
@@ -360,11 +408,18 @@ void USoundSubsystem::LoadCues()
 		}
 		else
 		{
-			for (const FString& Path : SoundWavsIn(FPaths::Combine(CueFolder, Cue.Name)))
+			// The cut downloads (not in Git), then our own sounds (in Git: sneed's voices).
+			TArray<FString> Paths = SoundWavsIn(FPaths::Combine(CueFolder, Cue.Name));
+			Paths.Append(SoundWavsIn(FPaths::Combine(OwnFolder, Cue.Name)));
+			for (const FString& Path : Paths)
 			{
 				if (TSharedPtr<const FSoundClip> Clip = SoundLoadWav(Path))
 				{
 					Cue.Clips.Add(Clip);
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Sound: %s is not a 16-bit PCM WAV, skipped"), *Path);
 				}
 			}
 		}
@@ -466,6 +521,9 @@ void USoundSubsystem::ResetForSim()
 	PlaysTotal = 0;
 	Dropped = 0;
 	MaxVoicesInUse = 0;
+	VoicesCut = 0;
+	VoicesSkipped = 0;
+	PawnVoices.Reset();
 	bAlarmOn = false;
 	SeenFlashes = -1;
 	BedCue.Reset();
@@ -512,7 +570,26 @@ void USoundSubsystem::OnSimEvent(const colony::Event& Event)
 		bAlarmOn = Event.message.rfind("on", 0) == 0;
 	}
 	const colony::SoundDefOf DefOf = [this](colony::Entity E) { return DefOfEntity(E); };
-	colony::soundForEvent(*Source->GetDefs(), Event, DefOf, PendingPlays);
+	const colony::SoundGenderOf Gender = [this](colony::Entity E) { return GenderOf(E); };
+	colony::soundForEvent(*Source->GetDefs(), Event, DefOf, PendingPlays, Gender);
+}
+
+colony::SoundGender USoundSubsystem::GenderOf(colony::Entity Thing) const
+{
+	const USimSubsystem* Source = Bridge.Get();
+	if (!Source)
+	{
+		return colony::SoundGender::Unknown;
+	}
+	const colony::Snapshot& Snap = Source->GetCurrentSnapshot();
+	if (const colony::ThingView* View = Snap.find(Thing))
+	{
+		if (View->looks >= 0 && View->looks < static_cast<int32>(Snap.looks.size()))
+		{
+			return Snap.looks[static_cast<size_t>(View->looks)].female ? colony::SoundGender::Female : colony::SoundGender::Male;
+		}
+	}
+	return colony::SoundGender::Unknown;
 }
 
 TSharedPtr<const FSoundClip> USoundSubsystem::PickClip(const FCue& Cue)
@@ -540,7 +617,7 @@ int32 USoundSubsystem::AddSound(const FCue& Cue, const FVector& Location, bool b
 	Sound.Clip = PickClip(Cue);
 	Sound.StartedAt = Now;
 	Sound.Pitch = Cue.bLoop || Cue.Group == ESoundMix::Ambience ? 1.0f : Random.FRandRange(0.95f, 1.05f);
-	Sound.EndsAt = Now + (Sound.Clip ? Sound.Clip->Seconds() / Sound.Pitch : 0.0) + 0.05;
+	Sound.EndsAt = Now + (Sound.Clip ? Sound.Clip->Seconds() / Sound.Pitch : 0.0) + 0.5;
 	++PlaysTotal;
 	PlayCounts.FindOrAdd(Cue.Name) += 1;
 	if (Follow != colony::kNoEntity)
@@ -630,8 +707,173 @@ void USoundSubsystem::HandlePlay(const colony::SoundPlay& Play)
 	{
 		return;
 	}
+	if (Play.voice != colony::SoundVoice::None && Play.entity != colony::kNoEntity)
+	{
+		PlayVoice(*Cue, Play, Location);
+		return;
+	}
 	AddSound(*Cue, Location, bEverywhere, Play.entity, Key);
 }
+
+void USoundSubsystem::PlayVoice(const FCue& Cue, const colony::SoundPlay& Play, const FVector& Location)
+{
+	// One voice per pawn: a scream cuts that pawn's hit grunt short and is never cut by one; a grunt waits out its
+	// cooldown. Nobody else's sounds are touched.
+	FPawnVoice& Voice = PawnVoices.FindOrAdd(SoundEntityId(Play.entity));
+	const bool bSpeaking = Sounds.IsValidIndex(Voice.Sound) && !Sounds[Voice.Sound].bDead && Sounds[Voice.Sound].VoiceOf == Play.entity;
+	const bool bScreaming = bSpeaking && Sounds[Voice.Sound].VoiceKind == colony::SoundVoice::Scream;
+	const TCHAR* Skip = nullptr;
+	if (Play.voice == colony::SoundVoice::Hit)
+	{
+		if (Now - Voice.LastHitAt < Cue.CooldownS)
+		{
+			Skip = TEXT("hit grunt in its cooldown");
+		}
+		else if (bScreaming)
+		{
+			Skip = TEXT("hit grunt over a scream");
+		}
+	}
+	else if (bScreaming && Now - Sounds[Voice.Sound].StartedAt < SoundScreamRepeatS)
+	{
+		Skip = TEXT("already screaming");
+	}
+	if (Skip)
+	{
+		++VoicesSkipped;
+		UE_CLOG(GSoundDebug.GetValueOnGameThread() >= 2, LogTemp, Log, TEXT("Sound: %s not played: %s"), *Cue.Name, Skip);
+		return;
+	}
+	if (bSpeaking)
+	{
+		++VoicesCut;
+		UE_CLOG(GSoundDebug.GetValueOnGameThread() >= 2, LogTemp, Log, TEXT("Sound: %s cut short by %s"), *Sounds[Voice.Sound].Cue->Name, *Cue.Name);
+		CutSound(Voice.Sound);
+	}
+	const colony::SoundVoice Kind = Play.voice;
+	const int32 Index = AddSound(Cue, Location, false, Play.entity, 0);
+	Sounds[Index].VoiceOf = Play.entity;
+	Sounds[Index].VoiceKind = Kind;
+	Voice.Sound = Index;  // AddSound and CutSound leave PawnVoices alone, so the reference still holds
+	if (Kind == colony::SoundVoice::Hit)
+	{
+		Voice.LastHitAt = Now;
+	}
+}
+
+void USoundSubsystem::CutSound(int32 Index)
+{
+	if (!Sounds.IsValidIndex(Index))
+	{
+		return;
+	}
+	FSound& Sound = Sounds[Index];
+	if (Voices.IsValidIndex(Sound.Voice))
+	{
+		FVoice& Voice = Voices[Sound.Voice];
+		if (Voice.Component)
+		{
+			Voice.Component->FadeOut(0.04f, 0.0f);
+		}
+		Voice.Sound = -1;
+		Voice.Wave = nullptr;
+		Voice.BusyUntil = Now + 0.08;
+	}
+	Sound.Voice = -1;
+	Sound.bDead = true;
+}
+
+FString USoundSubsystem::GetPawnVoice(colony::Entity Pawn) const
+{
+	const FPawnVoice* Voice = PawnVoices.Find(SoundEntityId(Pawn));
+	if (Voice && Sounds.IsValidIndex(Voice->Sound) && !Sounds[Voice->Sound].bDead && Sounds[Voice->Sound].VoiceOf == Pawn)
+	{
+		return Sounds[Voice->Sound].Cue->Name;
+	}
+	return FString();
+}
+
+float USoundSubsystem::DistanceGain(float NearM, float RangeM, float DistanceM)
+{
+	if (RangeM <= 0.0f)
+	{
+		return 1.0f;
+	}
+	if (DistanceM >= RangeM)
+	{
+		return 0.0f;
+	}
+	const float Near = FMath::Clamp(NearM, 0.25f, RangeM);
+	float Gain = Near / FMath::Max(DistanceM, Near);
+	const float FadeFrom = RangeM * 0.7f;
+	if (DistanceM > FadeFrom)
+	{
+		const float T = (DistanceM - FadeFrom) / (RangeM - FadeFrom);
+		Gain *= 1.0f - T * T * (3.0f - 2.0f * T);
+	}
+	return Gain;
+}
+
+float USoundSubsystem::AirCutoff(float RangeM, float DistanceM)
+{
+	if (RangeM <= 0.0f)
+	{
+		return 20000.0f;
+	}
+	return FMath::Max(800.0f, 20000.0f * FMath::Pow(2.0f, -4.0f * FMath::Max(0.0f, DistanceM) / RangeM));
+}
+
+USoundAttenuation* USoundSubsystem::SpatialFor(const FCue& Cue)
+{
+	const int32 Range = FMath::Max(1, FMath::RoundToInt(Cue.RangeM));
+	if (TObjectPtr<USoundAttenuation>* Found = SpatialByRange.Find(Range))
+	{
+		return Found->Get();
+	}
+	USoundAttenuation* A = NewObject<USoundAttenuation>(this);
+	A->Attenuation.bAttenuate = false;         // the distance falloff is ours (DistanceGain)
+	A->Attenuation.bSpatialize = true;
+	A->Attenuation.bAttenuateWithLPF = false;  // so is the low-pass (air and walls)
+	// More echo the farther a sound is: close, you hear it dry; far, mostly what comes back off trees and walls.
+	A->Attenuation.bEnableReverbSend = true;
+	A->Attenuation.ReverbSendMethod = EReverbSendMethod::Linear;
+	A->Attenuation.ReverbWetLevelMin = 0.15f;
+	A->Attenuation.ReverbWetLevelMax = 0.8f;
+	A->Attenuation.ReverbDistanceMin = FMath::Clamp(Cue.NearM, 0.5f, FMath::Max(Cue.RangeM, 0.5f)) * 100.0f;
+	A->Attenuation.ReverbDistanceMax = FMath::Max(Cue.RangeM, Cue.NearM + 1.0f) * 100.0f;
+	SpatialByRange.Add(Range, A);
+	return A;
+}
+
+void USoundSubsystem::UpdateEnvironment(const colony::Sim& Sim)
+{
+	int32 Place = 0;
+	if (bEarsOnMap)
+	{
+		const colony::Roof Roof = Sim.map().roof(colony::CellPos{EarCell.x, EarCell.y, 0});
+		Place = Roof == colony::Roof::Thick ? 2 : Roof == colony::Roof::Thin ? 1 : 0;
+	}
+	if (GSoundEcho.GetValueOnGameThread() == 0)
+	{
+		Place = -2;
+	}
+	if (Place == Environment)
+	{
+		return;
+	}
+	Environment = Place;
+	if (Place < 0)
+	{
+		UGameplayStatics::DeactivateReverbEffect(this, SoundReverbTag);
+		return;
+	}
+	static const float SoundWetByPlace[] = {0.35f, 0.5f, 0.7f};
+	if (Reverbs.IsValidIndex(Place) && Reverbs[Place])
+	{
+		UGameplayStatics::ActivateReverbEffect(this, Reverbs[Place], SoundReverbTag, 1.0f, SoundWetByPlace[Place], 1.0f);
+	}
+}
+
 
 void USoundSubsystem::KeepLoop(const FString& CueName, uint64 Key, const FVector& Location, colony::Entity Follow, bool bEverywhere, float Gain)
 {
@@ -684,6 +926,10 @@ void USoundSubsystem::Tick(float DeltaTime)
 		Spatial->Attenuation.bAttenuateWithLPF = false;
 		MusicComponent = MakeComponent();
 		StingerComponent = MakeComponent();
+		for (int32 Place = 0; Place < 3; ++Place)
+		{
+			Reverbs.Add(SoundMakeReverb(this, Place));
+		}
 	}
 	if (SeenGeneration != Source->GetSimGeneration())
 	{
@@ -699,6 +945,7 @@ void USoundSubsystem::Tick(float DeltaTime)
 	}
 
 	UpdateEars();
+	UpdateEnvironment(*Source->GetSim());
 	for (const colony::SoundPlay& Play : PendingPlays)
 	{
 		HandlePlay(Play);
@@ -710,8 +957,8 @@ void USoundSubsystem::Tick(float DeltaTime)
 
 	if (GSoundDebug.GetValueOnGameThread() != 0 && GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(0x50D0, 0.0f, FColor::Cyan, FString::Printf(TEXT("Sound: %d voices of %d, %d sounds, bed %s, weather %s, music %d %s"),
-			GetVoicesInUse(), GetVoiceBudget(), Sounds.Num(), *BedCue, *WeatherCue, MusicMood, *MusicTrackName));
+		GEngine->AddOnScreenDebugMessage(0x50D0, 0.0f, FColor::Cyan, FString::Printf(TEXT("Sound: %d voices of %d, %d sounds, %d dropped, place %d, bed %s, weather %s, music %d %s"),
+			GetVoicesInUse(), GetVoiceBudget(), Sounds.Num(), Dropped, Environment, *BedCue, *WeatherCue, MusicMood, *MusicTrackName));
 	}
 }
 
@@ -1101,17 +1348,24 @@ void USoundSubsystem::StartVoice(int32 VoiceIndex, int32 SoundIndex)
 	Wave->Setup(Sound.Clip, Sound.Cue->bLoop, Offset);
 	UAudioComponent* Component = Voice.Component;
 	Component->Stop();
+	// Never let Unreal's own voice limit or silence check drop it: which sounds play is decided here.
+	Wave->Priority = 4.0f - static_cast<float>(Sound.Cue->Priority);
+	Wave->VirtualizationMode = EVirtualizationMode::PlayWhenSilent;
 	Component->bAllowSpatialization = !Sound.bEverywhere;
-	Component->AttenuationSettings = Sound.bEverywhere ? nullptr : Spatial.Get();
+	Component->AttenuationSettings = Sound.bEverywhere ? nullptr : SpatialFor(*Sound.Cue);
 	Component->SetWorldLocation(Sound.Location);
 	Component->SetSound(Wave);
 	Component->SetVolumeMultiplier(Sound.Volume);
 	Component->SetPitchMultiplier(Sound.Pitch);
-	Component->SetLowPassFilterEnabled(Sound.Occlusion > 0);
-	Component->SetLowPassFilterFrequency(20000.0f / (1.0f + 3.0f * Sound.Occlusion));
+	SoundApplyFilter(Component, Sound.Cutoff);
 	Component->Play();
 	Voice.Sound = SoundIndex;
+	Voice.Wave = Wave;
+	Voice.BusyUntil = 0.0;
 	Sound.Voice = VoiceIndex;
+	// A one-shot's clock starts when it really starts: a long frame before this must not end it early.
+	Sound.EndsAt = Now + (Sound.Clip ? Sound.Clip->Seconds() / Sound.Pitch : 0.0) + 0.5;
+	Sound.DoneAt = -1.0;
 }
 
 void USoundSubsystem::FreeVoice(int32 VoiceIndex)
@@ -1126,6 +1380,7 @@ void USoundSubsystem::FreeVoice(int32 VoiceIndex)
 		Voice.Component->Stop();
 		Voice.Component->SetSound(nullptr);
 	}
+	Voice.Wave = nullptr;
 	if (Sounds.IsValidIndex(Voice.Sound) && Sounds[Voice.Sound].Voice == VoiceIndex)
 	{
 		Sounds[Voice.Sound].Voice = -1;
@@ -1156,10 +1411,20 @@ void USoundSubsystem::MixAndAssign(const USimSubsystem* Source, float Delta)
 			continue;
 		}
 		const bool bLoop = Sound.Cue->bLoop;
-		if (!bLoop && Now >= Sound.EndsAt)
+		if (!bLoop)
 		{
-			StopSound(I);
-			continue;
+			// Over when the clip has handed out its last sample and the device has had time to play it (not by the
+			// game clock alone, which cut short sounds off after a long frame), or at the latest half a second late.
+			const UCueVoiceWave* Wave = Voices.IsValidIndex(Sound.Voice) ? Voices[Sound.Voice].Wave : nullptr;
+			if (Wave && Wave->IsDone() && Sound.DoneAt < 0.0)
+			{
+				Sound.DoneAt = Now;
+			}
+			if (Now >= Sound.EndsAt || (Sound.DoneAt >= 0.0 && Now - Sound.DoneAt >= 0.15))
+			{
+				StopSound(I);
+				continue;
+			}
 		}
 		if (Sound.Follow != colony::kNoEntity)
 		{
@@ -1200,11 +1465,13 @@ void USoundSubsystem::MixAndAssign(const USimSubsystem* Source, float Delta)
 			}
 		}
 		float Distance = 1.0f;
+		float Air = 20000.0f;
 		if (!Sound.bEverywhere)
 		{
-			const float Share = FMath::Clamp(1.0f - Sound.DistanceM / FMath::Max(1.0f, Sound.Cue->RangeM), 0.0f, 1.0f);
-			Distance = Share * Share;
+			Distance = DistanceGain(Sound.Cue->NearM, Sound.Cue->RangeM, Sound.DistanceM);
+			Air = AirCutoff(Sound.Cue->RangeM, Sound.DistanceM);
 		}
+		Sound.Cutoff = FMath::Min(Air, 20000.0f / (1.0f + 3.0f * Sound.Occlusion));
 		Sound.Volume = bOn && Sound.Clip ? Sound.Cue->Volume * GroupVolume(Sound.Cue->Group) * Sound.Gain * Distance * FMath::Pow(0.55f, static_cast<float>(Sound.Occlusion)) : 0.0f;
 		if (Sound.Volume > 0.001f)
 		{
@@ -1212,6 +1479,8 @@ void USoundSubsystem::MixAndAssign(const USimSubsystem* Source, float Delta)
 		}
 		else if (!bLoop && Now - Sound.StartedAt > 0.1)
 		{
+			UE_CLOG(GSoundDebug.GetValueOnGameThread() >= 2 && Sound.Voice < 0 && bOn, LogTemp, Log, TEXT("Sound: %s not played: out of hearing (%.0f m of %.0f)"),
+				*Sound.Cue->Name, Sound.DistanceM, Sound.Cue->RangeM);
 			StopSound(I);  // a one-shot out of hearing is not worth keeping
 		}
 		else if (Sound.Voice >= 0)
@@ -1230,6 +1499,22 @@ void USoundSubsystem::MixAndAssign(const USimSubsystem* Source, float Delta)
 		}
 		return SA.Volume > SB.Volume;
 	});
+	// In a battle, the twentieth rifle shot adds nothing the nearest six don't: past that many of one cue, the farther
+	// ones go to the back of the queue, so a scream or a nearby clang still gets a voice.
+	{
+		const int32 SameCue = FMath::Max(1, GSoundSameCue.GetValueOnGameThread());
+		TMap<const FCue*, int32> PerCue;
+		TArray<int32> Ranked;
+		TArray<int32> Crowded;
+		Ranked.Reserve(Audible.Num());
+		for (const int32 I : Audible)
+		{
+			int32& N = PerCue.FindOrAdd(Sounds[I].Cue);
+			(++N <= SameCue || Sounds[I].Cue->bLoop ? Ranked : Crowded).Add(I);
+		}
+		Ranked.Append(Crowded);
+		Audible = MoveTemp(Ranked);
+	}
 	const int32 Budget = FMath::Min(GetVoiceBudget(), Voices.Num());
 	for (int32 Rank = Budget; Rank < Audible.Num(); ++Rank)
 	{
@@ -1240,6 +1525,8 @@ void USoundSubsystem::MixAndAssign(const USimSubsystem* Source, float Delta)
 			if (Sound.Voice >= 0 || Now - Sound.StartedAt <= Delta + 0.001)
 			{
 				++Dropped;
+				UE_CLOG(GSoundDebug.GetValueOnGameThread() >= 2, LogTemp, Log, TEXT("Sound: %s dropped: %d more important sounds playing (%.0f m)"),
+					*Sound.Cue->Name, Budget, Sound.DistanceM);
 			}
 			StopSound(Audible[Rank]);
 		}
@@ -1254,7 +1541,7 @@ void USoundSubsystem::MixAndAssign(const USimSubsystem* Source, float Delta)
 		FSound& Sound = Sounds[Audible[Rank]];
 		if (Sound.Voice < 0)
 		{
-			while (FreeAt < Voices.Num() && Voices[FreeAt].Sound >= 0)
+			while (FreeAt < Voices.Num() && (Voices[FreeAt].Sound >= 0 || Voices[FreeAt].BusyUntil > Now))
 			{
 				++FreeAt;
 			}
@@ -1268,8 +1555,7 @@ void USoundSubsystem::MixAndAssign(const USimSubsystem* Source, float Delta)
 		UAudioComponent* Component = Voices[Sound.Voice].Component;
 		Component->SetWorldLocation(Sound.Location);
 		Component->SetVolumeMultiplier(Sound.Volume);
-		Component->SetLowPassFilterEnabled(Sound.Occlusion > 0);
-		Component->SetLowPassFilterFrequency(20000.0f / (1.0f + 3.0f * Sound.Occlusion));
+		SoundApplyFilter(Component, Sound.Cutoff);
 	}
 	MaxVoicesInUse = FMath::Max(MaxVoicesInUse, GetVoicesInUse());
 	// Drop the finished sounds from the list (keys point at indices, so rebuild them).
@@ -1281,6 +1567,10 @@ void USoundSubsystem::MixAndAssign(const USimSubsystem* Source, float Delta)
 		for (int32 V = 0; V < Voices.Num(); ++V)
 		{
 			Voices[V].Sound = -1;
+		}
+		for (TPair<uint32, FPawnVoice>& Voice : PawnVoices)
+		{
+			Voice.Value.Sound = -1;
 		}
 		for (FSound& Sound : Sounds)
 		{
@@ -1296,6 +1586,10 @@ void USoundSubsystem::MixAndAssign(const USimSubsystem* Source, float Delta)
 			if (Kept[Index].Key != 0)
 			{
 				LoopsByKey.Add(Kept[Index].Key, Index);
+			}
+			if (Kept[Index].VoiceOf != colony::kNoEntity)
+			{
+				PawnVoices.FindOrAdd(SoundEntityId(Kept[Index].VoiceOf)).Sound = Index;
 			}
 		}
 		Sounds = MoveTemp(Kept);

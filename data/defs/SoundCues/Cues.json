@@ -78,6 +78,8 @@
   {"defName": "Pawn_Death", "label": "death cry", "loop": false, "volume": 0.7, "range": 80, "priority": 1, "tone": {"wave": "saw", "hz": 200, "seconds": 0.6}},
   {"defName": "Pawn_Downed", "label": "falls down", "loop": false, "volume": 0.4, "range": 40, "priority": 2, "tone": {"wave": "noise", "hz": 120, "seconds": 0.2}},
   {"defName": "Pawn_Burning", "label": "screaming on fire", "loop": true, "volume": 0.7, "range": 80, "priority": 1, "tone": {"wave": "saw", "hz": 450, "seconds": 0.5}},
+  {"defName": "Voice_FemHit", "label": "woman grunts at a hard hit", "loop": false, "volume": 0.75, "range": 60, "near": 2, "priority": 1, "chance": 0.5, "minDamage": 3, "cooldown": 5, "tone": {"wave": "saw", "hz": 520, "seconds": 0.25}},
+  {"defName": "Voice_FemScream", "label": "woman screams", "loop": false, "volume": 0.9, "range": 110, "near": 3, "priority": 0, "tone": {"wave": "saw", "hz": 700, "seconds": 0.6}},
   {"defName": "Animal_Rodent_Idle", "label": "rodent call", "loop": false, "volume": 0.35, "range": 50, "priority": 3, "tone": {"wave": "saw", "hz": 1800, "seconds": 0.2}},
   {"defName": "Animal_Rodent_Hurt", "label": "rodent hurt", "loop": false, "volume": 0.6, "range": 70, "priority": 2, "tone": {"wave": "saw", "hz": 2340, "seconds": 0.2}},
   {"defName": "Animal_Rodent_Death", "label": "rodent dies", "loop": false, "volume": 0.6, "range": 70, "priority": 2, "tone": {"wave": "saw", "hz": 1440, "seconds": 0.30000000000000004}},

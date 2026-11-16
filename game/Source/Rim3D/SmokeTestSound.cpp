@@ -35,6 +35,9 @@ namespace
 		float WalkTime = 0.0f;
 		int32 WalkLeg = 0;
 		float OldMusic = 0.6f;
+		float VoiceTime = 0.0f;
+		int32 VoiceStage = 0;
+		FString VoiceAfterScream;
 	};
 
 	int32 SoundSmokeSteps(const USoundSubsystem& Sound)
@@ -175,7 +178,7 @@ void USmokeTestSubsystem::BuildSoundPhases()
 	Setup.OnFrame = Watch;
 	Phases.Add(Setup);
 
-	// 2. Sixty shots at once: no more than the budget plays, the rest are dropped.
+	// 2. Eighty shots at once: no more than the budget plays, the rest are dropped.
 	FPhase Budget;
 	Budget.Name = TEXT("sound_budget");
 	Budget.WarmupSeconds = 0.5f;
@@ -190,7 +193,7 @@ void USmokeTestSubsystem::BuildSoundPhases()
 		}
 		State->MaxVoices = 0;
 		const FVector Ears = S->GetEars();
-		for (int32 I = 0; I < 60; ++I)
+		for (int32 I = 0; I < 80; ++I)
 		{
 			S->PlayCue(TEXT("Shot_Rifle"), FVector(Ears.X + (I % 8) * 100.0, Ears.Y + (I / 8) * 100.0, Ears.Z - 300.0));
 		}
@@ -211,10 +214,101 @@ void USmokeTestSubsystem::BuildSoundPhases()
 		}
 		if (S->GetDropped() < 20)
 		{
-			Fail(FString::Printf(TEXT("sound_budget: only %d of 60 shots were dropped"), S->GetDropped()));
+			Fail(FString::Printf(TEXT("sound_budget: only %d of 80 shots were dropped"), S->GetDropped()));
 		}
 	};
 	Phases.Add(Budget);
+
+	// 2b. Pawn voices (docs/design/sound.md "Voices"): a hit grunt, a second grunt inside its 5 s cooldown (not played),
+	// then a scream 0.2 s later that cuts the first grunt short. The distance curve halves with each doubling.
+	FPhase VoicePhase;
+	VoicePhase.Name = TEXT("sound_voices");
+	VoicePhase.WarmupSeconds = 0.1f;
+	VoicePhase.MeasureSeconds = 1.0f;
+	const auto QueueVoice = [=](const char* Cue, colony::SoundVoice Kind)
+	{
+		USoundSubsystem* S = Sound();
+		USimSubsystem* B = Bridge();
+		if (!S || !B)
+		{
+			return;
+		}
+		colony::SoundPlay Play;
+		Play.cue = Cue;
+		Play.entity = State->Walker;
+		Play.voice = Kind;
+		Play.hasPos = true;
+		Play.x = State->Middle.x - 1.5f;
+		Play.y = State->Middle.y + 0.5f;
+		S->QueuePlay(Play);
+	};
+	VoicePhase.Setup = [=]()
+	{
+		State->VoiceTime = 0.0f;
+		State->VoiceStage = 0;
+		QueueVoice("Voice_FemHit", colony::SoundVoice::Hit);
+	};
+	VoicePhase.OnFrame = [=, this]()
+	{
+		USoundSubsystem* S = Sound();
+		if (!S)
+		{
+			return;
+		}
+		State->VoiceTime += GetWorld()->GetDeltaSeconds();
+		if (State->VoiceStage == 0 && State->VoiceTime > 0.05f)
+		{
+			State->VoiceStage = 1;
+			QueueVoice("Voice_FemHit", colony::SoundVoice::Hit);
+		}
+		else if (State->VoiceStage == 1 && State->VoiceTime > 0.2f)
+		{
+			State->VoiceStage = 2;
+			QueueVoice("Voice_FemScream", colony::SoundVoice::Scream);
+		}
+		else if (State->VoiceStage == 2 && State->VoiceTime > 0.3f)
+		{
+			State->VoiceStage = 3;
+			State->VoiceAfterScream = S->GetPawnVoice(State->Walker);
+		}
+	};
+	VoicePhase.Verify = [=, this]()
+	{
+		USoundSubsystem* S = Sound();
+		if (!S)
+		{
+			return;
+		}
+		PhaseNumbers.Add(TEXT("voices_cut"), S->GetVoicesCut());
+		PhaseNumbers.Add(TEXT("voices_skipped"), S->GetVoicesSkipped());
+		PhaseNumbers.Add(TEXT("femhit_files"), S->GetClipCount(TEXT("Voice_FemHit")));
+		PhaseNumbers.Add(TEXT("femscream_files"), S->GetClipCount(TEXT("Voice_FemScream")));
+		PhaseNumbers.Add(TEXT("screaming_after_cut"), State->VoiceAfterScream == TEXT("Voice_FemScream") ? 1 : 0);
+		PhaseNumbers.Add(TEXT("place"), S->GetEnvironment());
+		if (S->GetPlayCount(TEXT("Voice_FemHit")) != 1 || S->GetVoicesSkipped() < 1)
+		{
+			Fail(FString::Printf(TEXT("sound_voices: %d hit grunts played, %d skipped (want 1 and 1: the second is in the cooldown)"),
+				S->GetPlayCount(TEXT("Voice_FemHit")), S->GetVoicesSkipped()));
+		}
+		if (S->GetVoicesCut() < 1 || State->VoiceAfterScream != TEXT("Voice_FemScream"))
+		{
+			Fail(FString::Printf(TEXT("sound_voices: the scream cut %d grunts and the pawn's voice is '%s'"), S->GetVoicesCut(), *State->VoiceAfterScream));
+		}
+		const float Near = USoundSubsystem::DistanceGain(2.0f, 60.0f, 2.0f);
+		const float Twice = USoundSubsystem::DistanceGain(2.0f, 60.0f, 4.0f);
+		const float Edge = USoundSubsystem::DistanceGain(2.0f, 60.0f, 60.0f);
+		if (!FMath::IsNearlyEqual(Near, 1.0f) || !FMath::IsNearlyEqual(Twice, 0.5f, 0.01f) || Edge > 0.0f
+			|| USoundSubsystem::AirCutoff(60.0f, 50.0f) >= USoundSubsystem::AirCutoff(60.0f, 5.0f))
+		{
+			Fail(FString::Printf(TEXT("sound_voices: distance gains %.2f %.2f %.2f"), Near, Twice, Edge));
+		}
+		if (S->GetClipCount(TEXT("Voice_FemHit")) != 5 || S->GetClipCount(TEXT("Voice_FemScream")) != 3)
+		{
+			Fail(FString::Printf(TEXT("sound_voices: %d hit grunts and %d screams loaded from game/Content/Rim3D/Sounds/cues (want 5 and 3)"),
+				S->GetClipCount(TEXT("Voice_FemHit")), S->GetClipCount(TEXT("Voice_FemScream"))));
+		}
+	};
+	Phases.Add(VoicePhase);
 
 	// 3. Walls: a sound behind the wall is muffled, one on the open side is not. The colonist walks to and fro on the
 	// open side and its steps are heard.

@@ -208,3 +208,112 @@ TEST_CASE("sound: same event, same cues") {
     CHECK(a.size() == b.size());
     CHECK(a.at(0).cue == b.at(0).cue);
 }
+
+TEST_CASE("sound: a woman grunts at some hard melee hits and screams when downed or killed") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    const Entity woman = static_cast<Entity>(11);
+    const Entity man = static_cast<Entity>(12);
+    const Entity beast = static_cast<Entity>(13);
+    const DefId human = db.idOf("Things", "Human");
+    const SoundDefOf defOf = [&](Entity e) { return e == woman || e == man ? human : DefId{}; };
+    const SoundGenderOf genderOf = [&](Entity e) {
+        return e == woman ? SoundGender::Female : e == man ? SoundGender::Male : SoundGender::Unknown;
+    };
+    const auto voices = [&](const Event& e) {
+        std::vector<SoundPlay> out;
+        soundForEvent(db, e, defOf, out, genderOf);
+        std::vector<SoundPlay> v;
+        for (const SoundPlay& p : out) if (p.voice != SoundVoice::None) v.push_back(p);
+        return v;
+    };
+
+    Event mh;
+    mh.type = EventType::MeleeHit;
+    mh.def = db.idOf("Things", "Melee_Club");
+    mh.message = "hit";
+    mh.hit = ProjectileHitKind::Pawn;
+    mh.target = woman;
+    mh.amount = 8.0f;
+    // About half the hard hits, decided by the event alone (the same event always gives the same answer).
+    int grunts = 0;
+    for (int i = 0; i < 400; ++i) {
+        mh.x = static_cast<float>(i) * 0.37f;
+        mh.y = static_cast<float>(i % 17);
+        const auto v = voices(mh);
+        CHECK(v.size() == voices(mh).size());
+        if (!v.empty()) {
+            ++grunts;
+            CHECK(v[0].cue == "Voice_FemHit");
+            CHECK(v[0].voice == SoundVoice::Hit);
+            CHECK(v[0].entity == woman);
+            CHECK(v[0].hasPos);
+        }
+    }
+    CHECK(grunts > 160);
+    CHECK(grunts < 240);
+    // The club's own hit sound still plays with it.
+    CHECK(soundTestPlay(db, mh, defOf).at(0).cue == "Flesh_Blunt");
+
+    // 3 damage or less, a blocked or deflected blow, a man (no male voice yet), an animal, or no gender callback: no grunt.
+    bool any = false;
+    for (int i = 0; i < 100; ++i) {
+        mh.x = static_cast<float>(i);
+        mh.amount = 3.0f;
+        any = any || !voices(mh).empty();
+        mh.amount = 8.0f;
+        mh.target = man;
+        any = any || !voices(mh).empty();
+        mh.target = beast;
+        any = any || !voices(mh).empty();
+        mh.target = woman;
+        mh.message = "blocked";
+        any = any || !voices(mh).empty();
+        mh.message = "hit";
+        std::vector<SoundPlay> out;
+        soundForEvent(db, mh, defOf, out);
+        for (const SoundPlay& p : out) any = any || p.voice != SoundVoice::None;
+    }
+    CHECK(!any);
+
+    // Downed: always a scream, at the pawn and following it.
+    Event down;
+    down.type = EventType::PawnDowned;
+    down.thing = woman;
+    down.cell = {5, 6, 0};
+    auto v = voices(down);
+    if (v.size() != 1) { CHECK(v.size() == 1); return; }
+    CHECK(v[0].cue == "Voice_FemScream");
+    CHECK(v[0].voice == SoundVoice::Scream);
+    CHECK(v[0].entity == woman);
+    CHECK(v[0].x == doctest::Approx(5.5f));
+    down.thing = man;
+    CHECK(voices(down).empty());
+
+    // Killed by violence screams; bleeding out, cold or illness do not.
+    Event died;
+    died.type = EventType::PawnDied;
+    died.thing = woman;
+    died.message = "a vital part destroyed";
+    CHECK(voices(died).size() == 1);
+    died.message = "executed";
+    CHECK(voices(died).size() == 1);
+    died.message = "blood loss";
+    CHECK(voices(died).empty());
+    died.message = "hypothermia";
+    CHECK(voices(died).empty());
+}
+
+TEST_CASE("sound: voice cues carry their rules") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    const Def* hit = db.find("SoundCues", "Voice_FemHit");
+    const Def* scream = db.find("SoundCues", "Voice_FemScream");
+    REQUIRE(hit != nullptr);
+    REQUIRE(scream != nullptr);
+    CHECK(hit->number("chance", 0.0) == doctest::Approx(0.5));
+    CHECK(hit->number("minDamage", 0.0) == doctest::Approx(3.0));
+    CHECK(hit->number("cooldown", 0.0) == doctest::Approx(5.0));
+    CHECK(scream->number("cooldown", 0.0) == doctest::Approx(0.0));
+    CHECK(scream->integer("priority", 3) == 0);
+}
