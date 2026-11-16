@@ -13,7 +13,7 @@ fires from the snapshot's `fires`, burning pawns from `ThingView::onFire`, burnt
 
 | What | From | How |
 | --- | --- | --- |
-| Lamp light | `lights().sources()` (building, radius, glow) | a point light at the building, coloured by the def's `glower.color`, `glower.lift` metres up (campfire 0.3, torch 0.35, standing lamp 1.4, sun lamp 2.1), 40 candelas times the glow, out to the sim's radius (10 m). Lamps with a fuel part (campfire, torch) flicker |
+| Lamp light | `lights().sources()` (building, radius, glow) | a point light at the building, coloured by the def's `glower.color`, `glower.lift` metres up (campfire 0.3, torch 0.55 so the light sits above its bowl, standing lamp 1.4, sun lamp 2.1), 40 candelas times the glow, out to the sim's radius (10 m). Lamps with a fuel part (campfire, torch) flicker |
 | Lamp flames | `visual.flame` on the def (`lift`, `size`) | the campfire and the torch lamp have flames and embers; the campfire smokes a little |
 | Fire | the snapshot's `fires` (cell, size 0 to 1.75) | per burning cell: flames (cones that go yellow, orange, then red as they rise and shrink), embers that drift up and wink out, smoke that rises and leans with the wind. How many and how big follow the fire's size, which the drawn fire follows over about a second (so a fire the rain shrinks, or one that spreads, changes smoothly) |
 | Fire light | the same | one orange light for each 4 m block of fire, 10 candelas plus 3.5 per unit of size (at most 60), radius 5.5 to 15 m, flickering |
