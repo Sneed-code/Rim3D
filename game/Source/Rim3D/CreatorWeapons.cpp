@@ -52,6 +52,7 @@ namespace
 		const TCHAR* Clip;
 		float Heavy;      // 0 light .. 1 heavy: how hard it hits (stagger, blood)
 		bool bBlock;      // a guard, not a blow (preview only)
+		bool bTravel = false;  // runs, leaps or slides metres forward: preview only, never in the two-person demo
 	};
 
 	// What a style holds. "Shield" is the procedural shield; other names are melee weapon defs (their visual parts).
@@ -80,7 +81,7 @@ namespace
 		{"Combo 2", TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingMeleeComboAttackVer2"), 0.6f, false},
 		{"Combo 3", TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingMeleeComboAttackVer3"), 0.7f, false},
 		{"Heavy swing", TEXT("HeavySwing/A_HeavySwing"), 1.0f, false},
-		{"Running jump attack", TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingMeleeRunJumpAttack"), 1.0f, false},
+		{"Running jump attack", TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingMeleeRunJumpAttack"), 1.0f, false, true},
 		{"Kick", TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingMeleeAttackKickVer1"), 0.4f, false},
 		{"Guard", TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingBlockIdle"), 0.0f, true},
 	};
@@ -92,8 +93,8 @@ namespace
 		{"Slash 5", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordSlash5"), 0.8f, false},
 		{"Attack", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordAttack"), 0.8f, false},
 		{"High spin", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordHighSpinAttack"), 1.0f, false},
-		{"Jump attack", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordJumpAttack"), 1.0f, false},
-		{"Slide attack", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordSlideAttack"), 0.9f, false},
+		{"Jump attack", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordJumpAttack"), 1.0f, false, true},
+		{"Slide attack", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordSlideAttack"), 0.9f, false, true},
 		{"Kick", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordKick"), 0.4f, false},
 		{"Guard", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordBlocking"), 0.0f, true},
 	};
@@ -1666,14 +1667,16 @@ namespace
 	int32 CwPickAttack(FCwState& S, int32 Style)
 	{
 		const FCwStyleDef& Def = CwStyles[Style];
-		if (S.bPickedOnly && S.Attack >= 0 && S.Attack < Def.AttackCount && !Def.Attacks[S.Attack].bBlock)
+		// Attacks that carry the body metres forward (running jump, jump, slide) ran the attacker straight through the
+		// defender, who folded over him and was carried off; they stay in the one-person preview only.
+		if (S.bPickedOnly && S.Attack >= 0 && S.Attack < Def.AttackCount && !Def.Attacks[S.Attack].bBlock && !Def.Attacks[S.Attack].bTravel)
 		{
 			return S.Attack;
 		}
 		for (int32 Try = 0; Try < 16; ++Try)
 		{
 			const int32 i = S.Random.RandRange(0, Def.AttackCount - 1);
-			if (!Def.Attacks[i].bBlock)
+			if (!Def.Attacks[i].bBlock && !Def.Attacks[i].bTravel)
 			{
 				return i;
 			}
