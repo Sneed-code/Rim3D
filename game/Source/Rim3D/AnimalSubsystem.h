@@ -25,6 +25,8 @@ enum class ESimAnimalDetail : uint8
 struct FSimAnimalModel
 {
 	TObjectPtr<USkeletalMesh> Mesh;
+	/** Extra parts (eyes, teeth, fur cards) on the same skeleton, when the import kept them apart (<model>_Part<N>). */
+	TArray<TObjectPtr<USkeletalMesh>> Parts;
 	TObjectPtr<UAnimSequence> Idle;
 	TObjectPtr<UAnimSequence> Walk;
 	TObjectPtr<UAnimSequence> Gallop;

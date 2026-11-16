@@ -152,6 +152,16 @@ const FSimAnimalModel* USimAnimalSubsystem::GetModelFor(FName DefName, FSimAnima
 	{
 		const FString Name = OutArt.Model.ToString();
 		Model.Mesh = AnimalLoad<USkeletalMesh>(Name, Name);
+		for (int32 Part = 0; Part < 32; ++Part)
+		{
+			USkeletalMesh* Piece = AnimalLoad<USkeletalMesh>(Name, FString::Printf(TEXT("%s_Part%d"), *Name, Part));
+			if (!Piece)
+			{
+				break;
+			}
+			Model.Parts.Add(Piece);
+			KeepAlive.Add(Piece);
+		}
 		const FString Prefix = Name + TEXT("AnimalArmature_");
 		Model.Idle = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Idle"));
 		Model.Walk = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Walk"));

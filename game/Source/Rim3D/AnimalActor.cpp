@@ -51,6 +51,18 @@ void ASimAnimalActor::Setup(const FSimAnimalModel& InModel, float InArtScale, co
 	Thing = InThing;
 	Body->SetSkeletalMesh(Model.Mesh);
 	Body->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+	for (USkeletalMesh* Piece : Model.Parts)
+	{
+		// Eyes, teeth, fur cards: drawn on the body's pose, no animation of their own.
+		USkeletalMeshComponent* Part = NewObject<USkeletalMeshComponent>(this);
+		Part->SetupAttachment(Body);
+		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Part->SetGenerateOverlapEvents(false);
+		Part->SetCanEverAffectNavigation(false);
+		Part->SetSkeletalMesh(Piece);
+		Part->RegisterComponent();
+		Part->SetLeaderPoseComponent(Body);
+	}
 	Body->SetRelativeScale3D(FVector(ArtScale));
 	DrawScale = ArtScale;
 	PlaceBody(false);

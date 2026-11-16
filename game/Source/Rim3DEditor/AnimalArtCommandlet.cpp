@@ -74,7 +74,7 @@ namespace
 		UInterchangeGenericAssetsPipeline* Pipeline = NewObject<UInterchangeGenericAssetsPipeline>();
 		if (Pipeline->MeshPipeline)
 		{
-			Pipeline->MeshPipeline->bCombineSkeletalMeshes = true;
+			Pipeline->MeshPipeline->CombineSkeletalMeshesBehavior = EInterchangeCombineSkeletalMeshesBehavior::BySkeleton;
 		}
 		Task->Options = Pipeline;
 		Tools.ImportAssetTasks({Task});
@@ -107,12 +107,24 @@ namespace
 			Names += (Names.IsEmpty() ? TEXT("") : TEXT(", ")) + FString::Printf(TEXT("%s (%.1f s)"), *Clip->GetName(), Clip->GetPlayLength());
 		}
 		UE_LOG(LogAnimalArt, Display, TEXT("%s: %d skeletal mesh, %d skeleton, %d clips: %s"), *Model, Meshes.Num(), Skeletons, Clips.Num(), *Names);
-		if (Meshes.Num() != 1)
+		if (Meshes.IsEmpty())
 		{
-			UE_LOG(LogAnimalArt, Error, TEXT("%s: wanted one skeletal mesh, got %d"), *Model, Meshes.Num());
+			UE_LOG(LogAnimalArt, Error, TEXT("%s: the import made no skeletal mesh"), *Model);
 			return false;
 		}
+		// If the parts did not combine, the body is the main mesh (<model>) and the rest are <model>_Part<N>, drawn
+		// on the same skeleton following the body (ASimAnimalActor).
+		Meshes.Sort([](const USkeletalMesh& A, const USkeletalMesh& B)
+		{
+			const bool bBodyA = A.GetName().Contains(TEXT("Body")), bBodyB = B.GetName().Contains(TEXT("Body"));
+			return bBodyA != bBodyB ? bBodyA : A.GetBounds().SphereRadius > B.GetBounds().SphereRadius;
+		});
 		bool bOk = AnimalArtRename(Tools, Meshes[0], Folder, Model);
+		for (int32 Part = 1; Part < Meshes.Num(); ++Part)
+		{
+			UE_LOG(LogAnimalArt, Display, TEXT("%s: part %d is %s"), *Model, Part - 1, *Meshes[Part]->GetName());
+			bOk = AnimalArtRename(Tools, Meshes[Part], Folder, FString::Printf(TEXT("%s_Part%d"), *Model, Part - 1)) && bOk;
+		}
 		const FBox Box = Meshes[0]->GetBounds().GetBox();
 		UE_LOG(LogAnimalArt, Display, TEXT("%s: mesh %.2f x %.2f x %.2f m, %d materials"), *Model, Box.GetSize().X / 100.0, Box.GetSize().Y / 100.0,
 			Box.GetSize().Z / 100.0, Meshes[0]->GetMaterials().Num());
