@@ -23,10 +23,10 @@ namespace
 	const FVector AnimalSmokeOrigin(-900000.0, 0.0, 0.0);
 	// Every def A4 has art for, the realistic Sketchfab ones (monkey, cat, cougar, thrumbo), plus two with none (they fall back on a stand-in model).
 	const TCHAR* const AnimalSmokeDefs[] = {TEXT("Cow"), TEXT("Muffalo"), TEXT("Deer"), TEXT("Husky"), TEXT("TimberWolf"), TEXT("Thrumbo"),
-		TEXT("Alpaca"), TEXT("Cat"), TEXT("WildBoar"), TEXT("Cougar"), TEXT("GrizzlyBear"), TEXT("Chicken"), TEXT("Monkey"), TEXT("Elephant"), TEXT("Rhinoceros"), TEXT("Lion")};
+		TEXT("Alpaca"), TEXT("Cat"), TEXT("WildBoar"), TEXT("Cougar"), TEXT("GrizzlyBear"), TEXT("Chicken"), TEXT("Monkey"), TEXT("Elephant"), TEXT("Rhinoceros"), TEXT("Lion"), TEXT("Raptor"), TEXT("TRex")};
 	constexpr float AnimalSmokeSpacing = 2.0f;
 	// The realistic Sketchfab models, side by side in daylight for a close look (phase animals_close).
-	const TCHAR* const AnimalSmokeCloseDefs[] = {TEXT("Monkey"), TEXT("Cat"), TEXT("Cougar"), TEXT("Thrumbo"), TEXT("Elephant"), TEXT("Rhinoceros")};
+	const TCHAR* const AnimalSmokeCloseDefs[] = {TEXT("Monkey"), TEXT("Cat"), TEXT("Cougar"), TEXT("Thrumbo"), TEXT("Elephant"), TEXT("Rhinoceros"), TEXT("Muffalo"), TEXT("Raptor"), TEXT("TRex")};
 
 	struct FAnimalSmokeState
 	{

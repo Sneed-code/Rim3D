@@ -2,7 +2,7 @@
   "source": "Quaternius Ultimate Animated Animals (https://quaternius.com/packs/ultimateanimatedanimals.html), CC0, FBX",
   "folderId": "1uJ3N5HfB7jKTseJUNQr3N4YaN0UuEtHk",
   "note": "Each model is a rigged, animated skeletal mesh (own skeleton, walk/run/idle/eat/death clips) imported to /Game/Rim3D/Generated/Animals/<model>. `lengthM` is each model's real nose-to-tail length in metres (U15 fits the imported mesh to it, the import is about 3 times too big); `scale` is the multiplier on that size for the def's body size; a def with no real model yet is under `missing` and keeps its code-built shapes. Retargeting onto shared skeletons is left for U15.",
-  "lengthM": {"Alpaca": 1.4, "Bull": 2.5, "Cow": 2.3, "Deer": 1.7, "Donkey": 1.9, "Fox": 0.9, "Horse": 2.4, "Horse_White": 2.4, "Husky": 1.0, "ShibaInu": 0.8, "Stag": 1.9, "Wolf": 1.3},
+  "lengthM": {"Alpaca": 1.4, "Bull": 2.5, "Cow": 2.3, "Deer": 1.7, "Donkey": 1.9, "Fox": 0.9, "Horse": 2.4, "Horse_White": 2.4, "Husky": 1.0, "ShibaInu": 0.8, "Stag": 1.9, "Wolf": 1.3, "TRex": 12.0, "Raptor": 3.5, "Buffalo": 2.9},
   "models": ["Alpaca", "Bull", "Cow", "Deer", "Donkey", "Fox", "Horse", "Horse_White", "Husky", "ShibaInu", "Stag", "Wolf"],
   "importsNote": "Realistic rigged Sketchfab models (sneed's downloads, assets/raw/sketchfab on the PC, not in Git). The AnimalArt commandlet imports each `file` (glTF, real size, so no lengthM) and renames the clips named in `clips` to <model>AnimalArmature_<role>, the names the game looks for. `yaw` turns the mesh to face the actor's forward (the Quaternius models need -90); `walkCm` and `gallopCm` are how far the walk and gallop clips go per second at scale 1. A model with no Death clip lies on its side, still, when it dies. Entries with `assets` (object paths by role, plus `parts` drawn on the body's pose) are packs already in Unreal's format, copied into game/Content (the African Animals Pack: game/Content/AfricanAnimalsPack, not in Git); the commandlet skips them.",
   "imports": [
@@ -13,12 +13,15 @@
     {"model": "Elephant", "credit": "AFRICAN ANIMALS PACK by Protofactor, free on Fab", "assets": {"mesh": "/Game/AfricanAnimalsPack/Elephant/Meshes/SK_Elephant", "Idle": "/Game/AfricanAnimalsPack/Elephant/Animations/ANIM_Elephant_IdleBreathe", "Walk": "/Game/AfricanAnimalsPack/Elephant/Animations/ANIM_Elephant_Walk", "Gallop": "/Game/AfricanAnimalsPack/Elephant/Animations/ANIM_Elephant_Run", "Eating": "/Game/AfricanAnimalsPack/Elephant/Animations/ANIM_Elephant_IdleLookAroundEat", "Death": "/Game/AfricanAnimalsPack/Elephant/Animations/ANIM_Elephant_Death"}, "yaw": -90, "walkCm": 150, "gallopCm": 450, "parts": ["/Game/AfricanAnimalsPack/Elephant/Meshes/SK_ElephantTusksMedium"]},
     {"model": "Rhinoceros", "credit": "AFRICAN ANIMALS PACK by Protofactor, free on Fab", "assets": {"mesh": "/Game/AfricanAnimalsPack/Rhinoceros/Meshes/SK_Rhinoceros", "Idle": "/Game/AfricanAnimalsPack/Rhinoceros/Animations/ANIM_Rhinoceros_IdleBreathe", "Walk": "/Game/AfricanAnimalsPack/Rhinoceros/Animations/ANIM_Rhinoceros_Walk", "Gallop": "/Game/AfricanAnimalsPack/Rhinoceros/Animations/ANIM_Rhinoceros_Run", "Eating": "/Game/AfricanAnimalsPack/Rhinoceros/Animations/ANIM_Rhinoceros_IdleGraze", "Death": "/Game/AfricanAnimalsPack/Rhinoceros/Animations/ANIM_Rhinoceros_Death"}, "yaw": -90, "walkCm": 130, "gallopCm": 600},
     {"model": "Lion", "credit": "AFRICAN ANIMALS PACK by Protofactor, free on Fab", "assets": {"mesh": "/Game/AfricanAnimalsPack/LionAndLioness/Meshes/SK_Lion_LOD0", "Idle": "/Game/AfricanAnimalsPack/LionAndLioness/Animations/ANIM_Lion_IdleBreathe", "Walk": "/Game/AfricanAnimalsPack/LionAndLioness/Animations/ANIM_Lion_Walk", "Gallop": "/Game/AfricanAnimalsPack/LionAndLioness/Animations/ANIM_Lion_Run", "Death": "/Game/AfricanAnimalsPack/LionAndLioness/Animations/ANIM_Lion_Death"}, "yaw": -90, "walkCm": 120, "gallopCm": 700},
-    {"model": "Lioness", "credit": "AFRICAN ANIMALS PACK by Protofactor, free on Fab", "assets": {"mesh": "/Game/AfricanAnimalsPack/LionAndLioness/Meshes/SK_Lioness_LOD0", "Idle": "/Game/AfricanAnimalsPack/LionAndLioness/Animations/ANIM_Lion_IdleBreathe", "Walk": "/Game/AfricanAnimalsPack/LionAndLioness/Animations/ANIM_Lion_Walk", "Gallop": "/Game/AfricanAnimalsPack/LionAndLioness/Animations/ANIM_Lion_Run", "Death": "/Game/AfricanAnimalsPack/LionAndLioness/Animations/ANIM_Lion_Death"}, "yaw": -90, "walkCm": 120, "gallopCm": 700}
+    {"model": "Lioness", "credit": "AFRICAN ANIMALS PACK by Protofactor, free on Fab", "assets": {"mesh": "/Game/AfricanAnimalsPack/LionAndLioness/Meshes/SK_Lioness_LOD0", "Idle": "/Game/AfricanAnimalsPack/LionAndLioness/Animations/ANIM_Lion_IdleBreathe", "Walk": "/Game/AfricanAnimalsPack/LionAndLioness/Animations/ANIM_Lion_Walk", "Gallop": "/Game/AfricanAnimalsPack/LionAndLioness/Animations/ANIM_Lion_Run", "Death": "/Game/AfricanAnimalsPack/LionAndLioness/Animations/ANIM_Lion_Death"}, "yaw": -90, "walkCm": 120, "gallopCm": 700},
+    {"model": "TRex", "file": "assets/raw/sketchfab/tyrannosaurus-rex-animated-science-based/source/Tirannosaurus_Rex_v5_Sketchfab.glb", "credit": "Tyrannosaurus Rex (science based) by Animal Animator, CC BY", "clips": {"Idle": "01_Idle", "Walk": "02_Walk", "Gallop": "03_Run"}, "yaw": -90, "walkCm": 12, "gallopCm": 50, "note": "The file is about 1 m long; lengthM fits it to 12 m. 04_Attack is not used yet (no attack role)."},
+    {"model": "Raptor", "file": "assets/raw/fab/pbr-velociraptor-animated/pbr_velociraptor_animated.glb", "credit": "PBR Velociraptor (Animated) by Ferocious Industries, Fab Standard License (sneed's library)", "clips": {}, "yaw": -90, "walkCm": 100, "gallopCm": 400, "note": "clips to fill from the import log"},
+    {"model": "Buffalo", "file": "assets/raw/fab/buffalo-a1/Buffalo_A1.fbx", "credit": "Buffalo_A1 by Animated3D, CC BY, free on Fab", "clips": {}, "yaw": -90, "walkCm": 120, "gallopCm": 450, "note": "clips to fill from the import log (Idle, Walk, Run, Die, Lying, Turnleft)"}
   ],
   "defs": [
     {"def": "Alpaca", "model": "Alpaca", "scale": 1.0},
     {"def": "Cow", "model": "Cow", "scale": 1.0},
-    {"def": "Muffalo", "model": "Bull", "scale": 1.05},
+    {"def": "Muffalo", "model": "Buffalo", "scale": 1.0},
     {"def": "Deer", "model": "Deer", "scale": 1.0},
     {"def": "Husky", "model": "Husky", "scale": 1.0},
     {"def": "TimberWolf", "model": "Wolf", "scale": 1.0},
@@ -32,7 +35,9 @@
     {"def": "Rhinoceros", "model": "Rhinoceros", "scale": 1.0},
     {"def": "Cat", "model": "SphynxCat", "scale": 0.8},
     {"def": "Hare", "model": "Fox", "scale": 0.4, "stand_in": true},
-    {"def": "Squirrel", "model": "Fox", "scale": 0.2, "stand_in": true}
+    {"def": "Squirrel", "model": "Fox", "scale": 0.2, "stand_in": true},
+    {"def": "Raptor", "model": "Raptor", "scale": 1.0},
+    {"def": "TRex", "model": "TRex", "scale": 1.0}
   ],
   "missing": ["GrizzlyBear", "Chicken"]
 }
