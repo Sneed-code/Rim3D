@@ -27,6 +27,10 @@ Kellan's MetaHuman body only has hands and feet; his hoodie and trousers are wha
    mesh with a `bone` (hats) is attached to that bone of the MetaHuman's body.
 4. **Hair** hides while a piece with `apparel.hidesHair` (tuque, simple helmet) is worn; the cowboy hat lets it show.
 
+Since the real body ([looks.md](looks.md), character creator step 1) the MetaHuman's own body is the engine's whole body,
+all skin, so steps 1 and 3 stay but there is no skin layer (step 2): where nothing is worn, and through torn holes, the
+body shows. The skin layer is only made for older generated assets.
+
 If the clothes assets (or the looks assets) are missing, Kellan's own clothes stay and nothing else changes.
 Mannequins have no clothes. A pawn's meshes are remade only when the list's items, defs or stuffs change.
 

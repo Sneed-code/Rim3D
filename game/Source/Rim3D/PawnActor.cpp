@@ -2,6 +2,8 @@
 
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimSequence.h"
+#include "Retargeter/IKRetargeter.h"
+#include "MakeHumanAnimInstance.h"
 #include "AnimationRuntime.h"
 #include "Components/DecalComponent.h"
 #include "Components/MeshComponent.h"
@@ -23,6 +25,8 @@
 #include "PawnFaces.h"
 #include "PawnLooks.h"
 #include "PawnSubsystem.h"
+#include "ProtagonistPawn.h"
+#include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Clock.h"
@@ -235,7 +239,25 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		Vx = Now.x - Before->x;
 		Vy = Now.y - Before->y;
 	}
-	const FVector Velocity(Vx * colony::kStepsPerRealSecondAt1x * 100.0f, Vy * colony::kStepsPerRealSecondAt1x * 100.0f, 0.0f);
+	FVector Velocity(Vx * colony::kStepsPerRealSecondAt1x * 100.0f, Vy * colony::kStepsPerRealSecondAt1x * 100.0f, 0.0f);
+	// The pace its animation aims for: the sim's own for this pawn now (drafted, hurt, in the dark ...), else its def's.
+	float Pace = Now.pace > 0.0f ? Now.pace * colony::kStepsPerRealSecondAt1x * 100.0f : CruiseSpeed;
+	// The player's colonist: the sim moves it by the steps the keys send, which come unevenly (two or three frames a step),
+	// so it would jerk and its animation would see a stuttering speed. It is drawn where the player's body is (moved
+	// every frame, at most a metre from the sim's: ProtagonistPawn reconciles) at its smooth velocity.
+	if (const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+		Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == Thing && Now.rollPhase == 0 && Now.climb <= 0.0f)
+	{
+		if (const AProtagonistPawn* Player = Protagonist->GetBody(); Player && Player->GetSimLevel() == Now.level && !Player->IsClimbing())
+		{
+			const FVector Local = Bridge.SimToWorld(static_cast<float>(Player->GetSimPosition().X), static_cast<float>(Player->GetSimPosition().Y), Now.level);
+			Location.X = Local.X;
+			Location.Y = Local.Y;
+			Velocity = FVector(Player->GetLocalVelocity().X * 100.0, Player->GetLocalVelocity().Y * 100.0, 0.0);
+			Pace = Player->GetTargetSpeed() > 0.1f ? Player->GetTargetSpeed() * 100.0f : CruiseSpeed;
+		}
+	}
+	GroundSpeed = Velocity.Size2D();
 
 	if (Velocity.Size2D() > PawnTurnSpeed)
 	{
@@ -301,7 +323,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		In.Location = Location;
 		In.Yaw = Yaw;
 		In.Velocity = Velocity;
-		In.CruiseSpeed = CruiseSpeed;
+		In.CruiseSpeed = Pace;
 		In.Detail = Detail;
 		In.bTeleported = bTeleported;
 		In.Route.Reset();
@@ -358,6 +380,98 @@ void ASimPawnActor::PlayAction(colony::PawnAction Action)
 	}
 }
 
+namespace
+{
+	const TCHAR* const PawnJumpFolder = TEXT("/Game/Characters/UEFN_Mannequin/Animations/Jump/");
+
+	UAnimSequence* PawnJumpAnimation(const FString& Name)
+	{
+		return LoadObject<UAnimSequence>(nullptr, *(FString(PawnJumpFolder) + Name + TEXT(".") + Name));
+	}
+
+	/** The sample's gait names by ground speed (cm/s). */
+	const TCHAR* PawnJumpGait(float Speed)
+	{
+		return Speed < 60.0f ? TEXT("Stand") : (Speed < 260.0f ? TEXT("Walk") : (Speed < 520.0f ? TEXT("Run") : TEXT("Sprint")));
+	}
+}
+
+bool ASimPawnActor::StartJump()
+{
+	USimPawnAnimInstance* Anim = GetAnim();
+	if (IsJumping() || bRagdoll || StanceHeight < 0.9f || RollProgress > 0.0f || !Anim)
+	{
+		return false;
+	}
+	JumpAge = 0.0f;
+	JumpSpeed = GroundSpeed;
+	bJumpFalling = false;
+	JumpStartLength = 0.0f;
+	if (UAnimSequence* Start = PawnJumpAnimation(FString::Printf(TEXT("M_Neutral_Jump_F_Start_%s_Lfoot"), PawnJumpGait(JumpSpeed))))
+	{
+		if (Anim->PlaySlotAnimationAsDynamicMontage(Start, FAnimSlotGroup::DefaultSlotName, 0.08f, 0.15f))
+		{
+			JumpStartLength = Start->GetPlayLength();
+		}
+	}
+	ActionEndSeconds = 0.0;
+	++JumpsPlayed;
+	return true;
+}
+
+float ASimPawnActor::GetJumpHeight() const
+{
+	if (!IsJumping())
+	{
+		return 0.0f;
+	}
+	// A thrown body: up at the speed that reaches kJumpHeight halfway through, back down by kJumpSeconds.
+	const float T = FMath::Clamp(JumpAge / kJumpSeconds, 0.0f, 1.0f);
+	return 4.0f * kJumpHeight * T * (1.0f - T);
+}
+
+void ASimPawnActor::AdvanceJump(float GameDelta)
+{
+	if (!IsJumping())
+	{
+		return;
+	}
+	USimPawnAnimInstance* Anim = GetAnim();
+	JumpAge += GameDelta;
+	const float Left = kJumpSeconds - JumpAge;
+	// The take-off animation runs out before the ground comes: the fall loop holds the body in the air.
+	if (Anim && !bJumpFalling && JumpAge > JumpStartLength - 0.15f && Left > 0.2f)
+	{
+		bJumpFalling = true;
+		if (UAnimSequence* Fall = PawnJumpAnimation(TEXT("M_Neutral_Jump_Loop_Fall")))
+		{
+			Anim->PlaySlotAnimationAsDynamicMontage(Fall, FAnimSlotGroup::DefaultSlotName, 0.15f, 0.1f, 1.0f, 100);
+		}
+	}
+	if (Left <= 0.0f)
+	{
+		JumpAge = -1.0f;
+		if (!Anim)
+		{
+			return;
+		}
+		// The landing for how fast it is going now; the walk or run takes over again soon after.
+		const float Speed = GroundSpeed;
+		const TCHAR* Gait = PawnJumpGait(Speed);
+		if (UAnimSequence* Land = PawnJumpAnimation(FString::Printf(TEXT("M_Neutral_Jump_F_Land_%s_Light_Lfoot"), Gait)))
+		{
+			if (Anim->PlaySlotAnimationAsDynamicMontage(Land, FAnimSlotGroup::DefaultSlotName, 0.05f, 0.25f))
+			{
+				ActionEndSeconds = Speed < 60.0f ? 0.6 : 0.35;
+			}
+		}
+		else
+		{
+			Anim->StopSlotAnimation(0.2f, FAnimSlotGroup::DefaultSlotName);
+		}
+	}
+}
+
 void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& InLooks)
 {
 	if (bHasLooks && Looks == InLooks)
@@ -369,12 +483,24 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 
 	// Height: the whole pawn, MetaHuman and horns included, scales with the mannequin.
 	Body->SetRelativeScale3D(FVector(Looks.Height));
+	if (Looks.MakeHuman != AppliedMakeHuman)
+	{
+		ApplyMakeHuman(Pawns);
+	}
 
 	for (USkeletalMeshComponent* Mesh : ShapedMeshes)
 	{
 		for (const TPair<FName, float>& Morph : Looks.MorphWeights())
 		{
 			Mesh->SetMorphTarget(Morph.Key, Morph.Value);
+		}
+	}
+	// The shaped face's neck follows the body type too (the real body); a face without those morphs ignores them.
+	if (FaceMesh)
+	{
+		for (const TPair<FName, float>& Morph : Looks.MorphWeights())
+		{
+			FaceMesh->SetMorphTarget(Morph.Key, Morph.Value);
 		}
 	}
 	const FVector Skin(Looks.Skin.R, Looks.Skin.G, Looks.Skin.B);
@@ -466,15 +592,69 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 // ---------------------------------------------------------------------------
 // Faces, hair and marks (V2, V3; docs/design/looks.md).
 
+void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
+{
+	AppliedMakeHuman = Looks.MakeHuman;
+	UIKRetargeter* Retargeter = nullptr;
+	USkeletalMesh* Mesh = Looks.MakeHuman.IsEmpty() ? nullptr : Pawns.GetMakeHumanMesh(Looks.MakeHuman, Retargeter);
+	if (!Mesh || !Retargeter)
+	{
+		if (!Looks.MakeHuman.IsEmpty())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("MakeHuman character %s is not imported (run the MakeHumanArt commandlet, docs/design/makehuman.md)"), *Looks.MakeHuman);
+		}
+		if (MakeHumanMesh)
+		{
+			MakeHumanMesh->DestroyComponent();
+			MakeHumanMesh = nullptr;
+		}
+		if (MetaHuman)
+		{
+			MetaHuman->SetActorHiddenInGame(false);
+		}
+		return;
+	}
+	if (!MakeHumanMesh)
+	{
+		// Attached to the hidden mannequin: the Game Animation Sample's generic retarget animation takes the pose of the mesh it is attached to.
+		MakeHumanMesh = NewObject<USkeletalMeshComponent>(this, TEXT("MakeHuman"));
+		MakeHumanMesh->SetupAttachment(Body);
+		MakeHumanMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		MakeHumanMesh->SetCanEverAffectNavigation(false);
+		MakeHumanMesh->bReceivesDecals = true;
+		MakeHumanMesh->RegisterComponent();
+	}
+	MakeHumanMesh->SetSkeletalMeshAsset(Mesh);
+	MakeHumanMesh->SetAnimInstanceClass(UMakeHumanAnimInstance::StaticClass());
+	if (UMakeHumanAnimInstance* Anim = Cast<UMakeHumanAnimInstance>(MakeHumanMesh->GetAnimInstance()))
+	{
+		Anim->SetRetargeter(Retargeter);
+	}
+	MakeHumanMesh->SetCustomPrimitiveDataVector3(PawnLooksSkinDataIndex, FVector(Looks.Skin.R, Looks.Skin.G, Looks.Skin.B));
+	if (MetaHuman)
+	{
+		MetaHuman->SetActorHiddenInGame(true);
+	}
+}
+
 void ASimPawnActor::ApplyFace(USimPawnSubsystem& Pawns)
 {
 	if (!Looks.HasFace())
 	{
 		return;  // a pawn from an older save keeps Kellan's face, eyes and grooms
 	}
+	if (!AppliedFacePreset.IsNone())
+	{
+		FaceMesh->SetMorphTarget(AppliedFacePreset, 0.0f);
+		AppliedFacePreset = NAME_None;
+	}
 	for (const TPair<FName, float>& Morph : Looks.FaceMorphWeights())
 	{
 		FaceMesh->SetMorphTarget(Morph.Key, Morph.Value);
+	}
+	if (!Looks.FacePreset.IsEmpty())
+	{
+		AppliedFacePreset = PawnFacesPresetMorph(Looks.bFemale, Looks.FacePreset);
 	}
 	if (UMaterialInterface* Eye = Cast<UMaterialInterface>(Pawns.GetFacesAsset(PawnFacesEyeInstanceName(Looks.Eyes))))
 	{
@@ -493,7 +673,8 @@ void ASimPawnActor::ApplyFace(USimPawnSubsystem& Pawns)
 	}
 	const float Sliders[] = {Looks.FaceShape, Looks.Brow, Looks.Nose, Looks.Jaw};
 	const int32 Choices = Skins + (Looks.bFemale ? 0 : 1);
-	const int32 SkinPick = Choices > 0 ? static_cast<int32>(FCrc::MemCrc32(Sliders, sizeof(Sliders)) % static_cast<uint32>(Choices)) : 0;
+	const int32 SkinPick = Looks.FaceSkin >= 0 && Looks.FaceSkin < Skins ? Looks.FaceSkin
+		: Choices > 0 ? static_cast<int32>(FCrc::MemCrc32(Sliders, sizeof(Sliders)) % static_cast<uint32>(Choices)) : 0;
 	UMaterialInterface* FaceSkin = SkinPick < Skins ? Pawns.GetShinySkin(Cast<UMaterialInterface>(Pawns.GetFacesAsset(PawnFacesSkinName(Looks.bFemale, SkinPick)))) : nullptr;
 	for (const TPair<int32, TObjectPtr<UMaterialInterface>>& Slot : FaceSkinSlots)
 	{
@@ -798,9 +979,23 @@ void ASimPawnActor::EnsureBareLayer(USimPawnSubsystem& Pawns)
 		{
 			DefaultTrousers = Mesh;
 		}
+		else if (Name.Contains(TEXT("shoes")))
+		{
+			DefaultShoes = Mesh;
+		}
 	}
 	if (!DefaultTop || !DefaultTrousers)
 	{
+		return;
+	}
+	// The real body (character creator step 1): the MetaHuman's body is the engine's whole body, all skin, so it is
+	// what shows where nothing is worn. Kellan's own clothes go once the clothes assets are there to replace them.
+	const USkeletalMesh* BodyMesh = MetaHumanBody->GetSkeletalMeshAsset();
+	if (BodyMesh && BodyMesh->FindMorphTarget(PawnLooksFullBodyMarker) && Pawns.GetClothesAsset(PawnBareMeshes[0]))
+	{
+		bFullBody = true;
+		DefaultTop->SetVisibility(false);
+		DefaultTrousers->SetVisibility(false);
 		return;
 	}
 	USkinnedMeshComponent* Leader = DefaultTop->LeaderPoseComponent.IsValid() ? DefaultTop->LeaderPoseComponent.Get() : MetaHumanBody.Get();
@@ -908,7 +1103,7 @@ void ASimPawnActor::ApplyApparel(USimPawnSubsystem& Pawns, const FSimPawnApparel
 		return;  // a mannequin has no clothes to change
 	}
 	EnsureBareLayer(Pawns);
-	if (BareLayer.IsEmpty() || !DefaultTop || !DefaultTrousers)
+	if ((BareLayer.IsEmpty() && !bFullBody) || !DefaultTop || !DefaultTrousers)
 	{
 		return;  // no clothes assets, or no looks meshes to put away: Kellan's own clothes stay
 	}
@@ -954,6 +1149,11 @@ void ASimPawnActor::ApplyApparel(USimPawnSubsystem& Pawns, const FSimPawnApparel
 		}
 	}
 	Apparel = Wanted;
+	// With the whole body, a pawn that wears nothing at all goes barefoot (the sim has no footwear: dressed pawns keep Kellan's shoes).
+	if (bFullBody && DefaultShoes)
+	{
+		DefaultShoes->SetVisibility(!Apparel.Pieces.IsEmpty());
+	}
 
 	// Colour and wear of every mesh, rebuilt or not.
 	for (const FSimWornPiece& Piece : Apparel.Pieces)
@@ -1055,7 +1255,9 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 	const bool bReacting = ReactionAge < kHitReactionSeconds;
 	const bool bMelee = Swing.IsActive() || BlockBlend > 0.0f || DodgeAge < kDodgeSeconds;
 	const bool bRolling = RollProgress > 0.0f;
-	if (!bReacting && !bMelee && !bRolling)
+	AdvanceJump(GameDelta);
+	const float JumpHeight = GetJumpHeight();
+	if (!bReacting && !bMelee && !bRolling && JumpHeight <= 0.0f)
 	{
 		if (bBodyPosed)
 		{
@@ -1107,6 +1309,7 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 		const FVector World = FVector(0.0, 0.0, PivotZ) - RollWorld.RotateVector(FVector(0.0, 0.0, PivotZ)) - FVector(0.0, 0.0, Duck);
 		Offset += RootQuat.Inverse().RotateVector(World);
 	}
+	Offset.Z += JumpHeight;
 	Body->SetRelativeLocationAndRotation(Offset, RootQuat.Inverse() * RollWorld * LeanWorld * RootQuat * MeleeLocal * PawnBodyRelativeRotation.Quaternion());
 }
 
