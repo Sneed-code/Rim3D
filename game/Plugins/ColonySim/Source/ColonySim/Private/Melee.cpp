@@ -8,6 +8,7 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Patch.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Random.h"
@@ -105,7 +106,7 @@ int meleeWindup(const MeleeRules& r, int cooldown) {
 
 bool meleeAble(const entt::registry& reg, Entity pawn) {
     const Health* h = reg.try_get<Health>(pawn);
-    return (h == nullptr || !h->incapacitated()) && !reg.all_of<Stunned>(pawn);  // a stunned pawn can't swing, block or dodge (X2)
+    return (h == nullptr || !h->incapacitated()) && !reg.any_of<Stunned, Patching>(pawn);  // a stunned pawn can't swing, block or dodge (X2)
 }
 
 }  // namespace

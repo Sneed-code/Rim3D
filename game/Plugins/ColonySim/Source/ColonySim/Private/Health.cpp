@@ -251,6 +251,9 @@ public:
     float bloodRegenPerSecond = 10.0f;
     float stepsPerRealSecond = 30.0f;
     float protagonistZoneHp = 100.0f;  // the protagonist: never downed, dies when this much damage is on its zones
+    float patchSeconds[3] = {1.0f, 2.0f, 3.0f};  // patching a zone that bleeds lightly, moderately, heavily (real seconds)
+    float patchQuality = 0.3f;                   // the tend quality of a patch
+    float coverBlood = 1500.0f;                  // under this a bleeding fighter falls back to cover to patch
     void buildZones();
     // Scars (H1): the chance a healed injury leaves one grows from 0 at scarMinHp hit points lost to scarMax at scarFullHp.
     float scarMax = 0.02f;
@@ -614,6 +617,11 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
             num("zones.bloodRegenPerSecond", bloodRegenPerSecond);
             num("zones.stepsPerRealSecond", stepsPerRealSecond);
             num("zones.protagonistHp", protagonistZoneHp);
+            for (size_t i = 0; i < 3; ++i) {
+                patchSeconds[i] = static_cast<float>(rules->numberAt("zones.patchSeconds", i, patchSeconds[i]));
+            }
+            num("zones.patchQuality", patchQuality);
+            num("zones.coverBlood", coverBlood);
             bloodMax = std::max(1.0f, bloodMax);
             stepsPerRealSecond = std::max(1.0f, stepsPerRealSecond);
         }
@@ -740,6 +748,7 @@ struct HealthEval {
     std::vector<float> zoneDamage;  // body zones: hit points lost on each zone's outside parts
     std::vector<float> zoneHealth;  // ...and its health, 0 to 1
     float zoneBleed = 0.0f;         // blood lost a real second, over the zones
+    std::vector<uint8_t> zoneLevel;  // ...and each zone's bleeding: 0 none, 1 light, 2 moderate, 3 heavy
 
     HealthEval(const HealthModel& m, const HealthModel::Body& b, const Health& h, float factor)
         : model(m), body(b), health(h), hpFactor(factor), damage(b.parts.size(), 0.0f), gone(b.parts.size(), 0),
@@ -871,6 +880,7 @@ struct HealthEval {
             }
         }
         zoneBleed = 0.0f;
+        zoneLevel.assign(count, 0);
         for (size_t z = 0; z < count; ++z) {
             const float hp = body.zones[z].hp * hpFactor;
             zoneHealth[z] = hp > 0.0f ? std::clamp(1.0f - zoneDamage[z] / hp, 0.0f, 1.0f) : 1.0f;
@@ -880,6 +890,7 @@ struct HealthEval {
             for (int level = 2; level >= 0; --level) {
                 if (zoneHealth[z] <= model.zoneBleedAt[level]) {
                     zoneBleed += model.zoneBleedPerSecond[level];
+                    zoneLevel[z] = static_cast<uint8_t>(level + 1);
                     break;
                 }
             }
@@ -1096,6 +1107,72 @@ float HealthSystem::blood(Entity pawn) const {
     return model_->bloodMax * std::clamp(1.0f - reg.get<Health>(pawn).bloodLoss, 0.0f, 1.0f);
 }
 
+int HealthSystem::zoneBleedLevel(Entity pawn, int zone) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Health>(pawn) || zone < 0) {
+        return 0;
+    }
+    const Health& health = reg.get<Health>(pawn);
+    return !health.dead && static_cast<size_t>(zone) < health.zoneBleeds.size() ? health.zoneBleeds[static_cast<size_t>(zone)] : 0;
+}
+
+int HealthSystem::worstBleedingZone(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Health>(pawn) || reg.get<Health>(pawn).dead) {
+        return -1;
+    }
+    const std::vector<uint8_t>& levels = reg.get<Health>(pawn).zoneBleeds;
+    int best = -1;
+    for (size_t z = 0; z < levels.size(); ++z) {
+        if (levels[z] > 0 && (best < 0 || levels[z] > levels[static_cast<size_t>(best)])) {
+            best = static_cast<int>(z);
+        }
+    }
+    return best;
+}
+
+int HealthSystem::patchZone(Entity pawn, int zone, float quality) {
+    entt::registry& reg = things_.registry();
+    const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+    if (kind == nullptr || reg.get<Health>(pawn).dead || zone < 0) {
+        return 0;
+    }
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    if (static_cast<size_t>(zone) >= body.zones.size()) {
+        return 0;
+    }
+    Health& health = reg.get<Health>(pawn);
+    quality = std::max(0.0f, quality);
+    int patched = 0;
+    for (Injury& injury : health.injuries) {
+        const HealthModel::Hediff& h = model_->hediffs[injury.hediff.value];
+        if (!injury.tended() && !h.permanent && h.bleedRate > 0.0f && injury.part < body.zoneOf.size() &&
+            body.zoneOf[injury.part] == zone) {
+            injury.tendQuality = quality;
+            ++patched;
+        }
+    }
+    for (MissingPart& missing : health.missing) {
+        if (!missing.tended() && missing.part < body.zoneOf.size() && body.zoneOf[missing.part] == zone) {
+            missing.tendQuality = quality;
+            ++patched;
+        }
+    }
+    if (patched > 0) {
+        recompute(pawn, health, true);
+    }
+    return patched;
+}
+
+int HealthSystem::patchSteps(int level) const {
+    const int i = std::clamp(level, 1, 3) - 1;
+    return std::max(1, static_cast<int>(std::lround(model_->patchSeconds[i] * model_->stepsPerRealSecond)));
+}
+
+float HealthSystem::patchQuality() const { return model_->patchQuality; }
+
+float HealthSystem::coverBlood() const { return model_->coverBlood; }
+
 bool HealthSystem::unconscious(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     return reg.valid(pawn) && reg.all_of<Health>(pawn) && !reg.get<Health>(pawn).dead && reg.get<Health>(pawn).unconscious;
@@ -1184,11 +1261,13 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
     if (zoned) {
         eval.workOutZones();
         health.zones = eval.zoneHealth;
+        health.zoneBleeds = mechanical ? std::vector<uint8_t>(eval.zoneLevel.size(), 0) : eval.zoneLevel;
         // Blood a real second over the 3000 store, as blood loss a day.
         eval.bleedPerDay = eval.zoneBleed * static_cast<float>(kSecondsPerDay) /
                            (model_->stepsPerRealSecond * model_->bloodMax * std::max(model_->bloodPerDayPerBleed, 1e-6f));
     } else {
         health.zones.clear();
+        health.zoneBleeds.clear();
         health.unconscious = false;
     }
     health.bleedPerDay = mechanical ? 0.0f : eval.bleedPerDay;

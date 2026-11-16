@@ -61,6 +61,7 @@
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Resonance.h"
+#include "ColonySim/Patch.h"
 #include "ColonySim/Trade.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
@@ -471,6 +472,7 @@ struct SaveEntity {
     std::optional<SaveAttunement> attunement;   // section "resonance" (X2)
     std::optional<SaveCasting> casting;         // section "resonance"
     std::optional<Stunned> stunned;             // section "resonance"
+    std::optional<Patching> patching;           // section "patch" (body-health.md part B)
     std::optional<ResonanceEffects> resonanceFx;  // section "resonance"
     std::optional<Prisoner> prisoner;       // section "prisoners" (C22)
     std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
@@ -1315,7 +1317,8 @@ inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitComma
                                             std::is_same_v<Type, CommsCommand> || std::is_same_v<Type, ScannerCommand> ||
                                             std::is_same_v<Type, InventoryCommand> ||
                                             std::is_same_v<Type, SetOutfitFightGearCommand> || std::is_same_v<Type, HideGearCommand> ||
-                                            std::is_same_v<Type, ShieldCommand> || std::is_same_v<Type, SetDayLengthCommand>;
+                                            std::is_same_v<Type, ShieldCommand> || std::is_same_v<Type, SetDayLengthCommand> ||
+                                            std::is_same_v<Type, PatchCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1361,6 +1364,8 @@ void saveTradeCommand(Ar& ar, Type& c) {
         ar.value("hide", c.hide);
     } else if constexpr (std::is_same_v<Type, SetDayLengthCommand>) {
         ar.value("minutes", c.minutes);
+    } else if constexpr (std::is_same_v<Type, PatchCommand>) {
+        ar.value("pawn", c.pawn);
     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("up", c.up);
@@ -2502,6 +2507,9 @@ void saveFighterPart(Ar& ar, Fighter& f) {
         ar.value("lifted", f.lifted);
         ar.group("rescueTo", [&] { saveCell(ar, f.rescueTo); });
     }
+    if (ar.sectionVersion() >= 4) {  // a Wimp falling back after a hit
+        ar.value("cowerUntil", f.cowerUntil);
+    }
 
 }
 
@@ -3397,7 +3405,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("doors", 1, [&] {
         saveParts(ar, "door", e, &SaveEntity::door, [&](Door& door) { saveDoorPart(ar, door); });
     });
-    ar.section("fighters", 3, [&] {
+    ar.section("fighters", 4, [&] {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
@@ -3701,6 +3709,14 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "casting", e, &SaveEntity::casting, [&](SaveCasting& c) { saveCastingPart(ar, c); });
         saveParts(ar, "stunned", e, &SaveEntity::stunned, [&](Stunned& s) { ar.value("stepsLeft", s.stepsLeft); });
         saveParts(ar, "effects", e, &SaveEntity::resonanceFx, [&](ResonanceEffects& fx) { saveResonanceFxPart(ar, fx); });
+    });
+    ar.section("patch", 1, [&] {
+        saveParts(ar, "patching", e, &SaveEntity::patching, [&](Patching& p) {
+            ar.value("zone", p.zone);
+            ar.value("stepsLeft", p.stepsLeft);
+            ar.value("player", p.player);
+            ar.require(p.zone >= 0 && p.zone < 64 && p.stepsLeft >= 0 && p.stepsLeft < 100000, "the save file has an impossible patch");
+        });
     });
     ar.section("prisoners", 3, [&] {
         saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
@@ -4289,6 +4305,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     }
     if (const Stunned* s = reg.try_get<Stunned>(e)) {
         out.stunned = *s;
+    }
+    if (const Patching* p = reg.try_get<Patching>(e)) {
+        out.patching = *p;
     }
     if (const ResonanceEffects* fx = reg.try_get<ResonanceEffects>(e)) {
         out.resonanceFx = *fx;
@@ -4936,6 +4955,9 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     }
     if (e.stunned) {
         reg.emplace<Stunned>(entity, *e.stunned);
+    }
+    if (e.patching) {
+        reg.emplace<Patching>(entity, *e.patching);
     }
     if (e.resonanceFx) {
         reg.emplace<ResonanceEffects>(entity, *e.resonanceFx);

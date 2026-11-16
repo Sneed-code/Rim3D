@@ -235,6 +235,8 @@ struct ThingView {
     int meleeStepsLeft = 0;
     Entity meleeTarget = kNoEntity;
     bool blocking = false;
+    int patchZone = -1;      // patching this body zone itself (body-health.md part B), -1 when not patching
+    int patchStepsLeft = 0;
     // Turrets and traps (docs/design/defense.md). A turret: what it is doing (a TurretPhase number) and the pawn it
     // is aiming at. A trap: 0 not a trap, 1 armed, 2 sprung (waiting to be rearmed).
     uint8_t turretPhase = 0;

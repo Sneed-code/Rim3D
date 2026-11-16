@@ -142,6 +142,7 @@ struct Health {
     // order (HealthSystem::zoneNames); empty otherwise.
     std::vector<float> zones;
     bool unconscious = false;    // body zones: head under 25%, or blood at 1000 or less
+    std::vector<uint8_t> zoneBleeds;  // body zones: each zone's bleeding, 0 none, 1 light, 2 moderate, 3 heavy
 
     bool incapacitated() const { return downed || dead; }
 };
@@ -285,6 +286,14 @@ public:
     float zoneHealth(Entity pawn, int zone) const;
     float blood(Entity pawn) const;
     bool unconscious(Entity pawn) const;
+    // Patching (part B): a zone's bleeding (0 none, 1 light, 2 moderate, 3 heavy), the zone that bleeds worst (-1 for
+    // none), and patching it: tends its untended bleeding wounds and lost parts at `quality`, returns how many.
+    int zoneBleedLevel(Entity pawn, int zone) const;
+    int worstBleedingZone(Entity pawn) const;
+    int patchZone(Entity pawn, int zone, float quality);
+    int patchSteps(int level) const;  // steps it takes to patch a zone bleeding at that level (1, 2 or 3 real seconds)
+    float patchQuality() const;
+    float coverBlood() const;         // blood under which a bleeding fighter falls back to patch (1500)
     // Kills a pawn for a cause that is not an injury (starvation). False if it has no tracked
     // health or is dead already.
     bool kill(Entity pawn, DeathCause cause);

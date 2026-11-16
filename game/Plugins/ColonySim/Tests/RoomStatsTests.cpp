@@ -11,6 +11,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
 
@@ -263,6 +264,10 @@ TEST_CASE("Filth: a bleeding pawn leaves blood") {
     Sim sim = rsSim();
     const Entity pawn = sim.things().spawn("Human", CellPos{20, 20, 0});
     RS_REQUIRE(pawn != kNoEntity);
+    // Under the player's hand, so it doesn't patch itself (body zones part B) and keeps bleeding.
+    sim.things().registry().emplace<Colonist>(pawn);
+    sim.jobs().addWorker(pawn);
+    sim.things().registry().emplace<PlayerControl>(pawn);
     // 30 of a leg's 75: it bleeds a blood a second (body zones).
     const std::vector<std::string> labels = sim.health().partLabels(sim.things().registry().get<Thing>(pawn).def);
     const int leg = static_cast<int>(std::find(labels.begin(), labels.end(), "left leg") - labels.begin());

@@ -1,8 +1,14 @@
 // Body zones (docs/design/body-health.md): sneed's head, torso, arm and leg hit points, downing, unconsciousness,
 // bleeding by zone and the 3000 blood store, on the game's real Human body.
 #include "ColonySim/Apparel.h"
+#include "ColonySim/Colonist.h"
+#include "ColonySim/Commands.h"
+#include "ColonySim/Events.h"
+#include "ColonySim/Fighters.h"
+#include "ColonySim/Patch.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
@@ -42,8 +48,14 @@ std::unique_ptr<Sim> zoneTestSim() {
 }
 
 // A parka keeps the weather off (C15).
-Entity zoneTestPawn(Sim& sim, int x = 10, int y = 10) {
+// `held`: under the player's hand, so the AI doesn't patch it (part B) and a test can watch it bleed.
+Entity zoneTestPawn(Sim& sim, int x = 10, int y = 10, bool held = false) {
     const Entity pawn = sim.things().spawn("Human", CellPos{x, y, 0});
+    if (held) {
+        sim.things().registry().emplace<Colonist>(pawn);
+        sim.jobs().addWorker(pawn);
+        sim.things().registry().emplace<PlayerControl>(pawn);
+    }
     std::string why;
     const Entity parka =
         sim.apparel().make(sim.defs().idOf("Things", "Apparel_Parka"), sim.defs().idOf("Things", "Cloth"), -1, CellPos{x, y, 0}, &why);
@@ -115,7 +127,7 @@ TEST_CASE("Body zones: a person has a head, a torso, two arms and two legs, with
 
 TEST_CASE("Body zones: a hurt zone bleeds until it is patched, then the blood comes back") {
     auto sim = zoneTestSim();
-    const Entity pawn = zoneTestPawn(*sim);
+    const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
     const int arm = zoneTestZone(*sim, pawn, "Arm");
     // 10 of 50 on the arm: 80%, no bleeding.
     CHECK(zoneTestHit(*sim, pawn, "Cut", 10.0f, "left hand"));
@@ -196,7 +208,7 @@ TEST_CASE("Body zones: a leg, the torso or the head under a quarter downs a pers
 
 TEST_CASE("Body zones: bleeding out knocks a person out at 1000 blood, kills at 0, and they wake above 1000") {
     auto sim = zoneTestSim();
-    const Entity pawn = zoneTestPawn(*sim);
+    const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
     Health& health = sim->things().registry().get<Health>(pawn);
     CHECK(zoneTestHit(*sim, pawn, "Cut", 20.0f, "left arm"));  // 60%: 1 a second
     health.bloodLoss = 1.0f - 1003.0f / 3000.0f;
@@ -215,7 +227,7 @@ TEST_CASE("Body zones: bleeding out knocks a person out at 1000 blood, kills at 
 
     // Not patched, it bleeds to death.
     auto sim2 = zoneTestSim();
-    const Entity other = zoneTestPawn(*sim2);
+    const Entity other = zoneTestPawn(*sim2, 10, 10, true);
     CHECK(zoneTestHit(*sim2, other, "Cut", 45.0f, "left leg"));  // 40%: 2 a second
     sim2->things().registry().get<Health>(other).bloodLoss = 1.0f - 60.0f / 3000.0f;
     zoneTestRun(*sim2, 31 * 30);
@@ -240,7 +252,7 @@ TEST_CASE("Body zones: the protagonist is never downed and dies when 100 hit poi
 
 TEST_CASE("Body zones: when the bleeding stopped is saved, so the blood comes back on time after a load") {
     auto sim = zoneTestSim();
-    const Entity pawn = zoneTestPawn(*sim);
+    const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
     CHECK(zoneTestHit(*sim, pawn, "Cut", 30.0f, "left arm"));
     zoneTestRun(*sim, 600);
     sim->health().tendAll(pawn, 0.5f);
@@ -257,5 +269,119 @@ TEST_CASE("Body zones: when the bleeding stopped is saved, so the blood comes ba
     zoneTestRun(*sim, 1200);
     zoneTestRun(*loaded.sim, 1200);
     CHECK(loaded.sim->health().blood(pawn) == sim->health().blood(pawn));
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+}
+
+// ---- Part B: patching ------------------------------------------------------------------------------
+
+TEST_CASE("Patching: the player's pawn patches its worst bleeding zone on command, in 1 to 3 seconds") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim);
+    sim->things().registry().emplace<Colonist>(pawn);
+    sim->jobs().addWorker(pawn);
+    sim->things().registry().emplace<PlayerControl>(pawn);
+    // Nothing bleeds yet.
+    sim->submit(PatchCommand{pawn});
+    sim->step();
+    bool failed = false;
+    for (const Event& e : sim->events()) {
+        failed = failed || e.type == EventType::CommandFailed;
+    }
+    CHECK(failed);
+
+    CHECK(zoneTestHit(*sim, pawn, "Cut", 10.0f, "left hand"));  // 80%: the arm doesn't bleed
+    CHECK(zoneTestHit(*sim, pawn, "Cut", 33.0f, "left leg"));   // 56%: light
+    CHECK(zoneTestHit(*sim, pawn, "Cut", 20.0f, "right arm"));  // 60%: light
+    CHECK(zoneTestHit(*sim, pawn, "Cut", 20.0f, "right arm"));  // 20%: heavy
+    const int arm = zoneTestZone(*sim, pawn, "Arm", 1);
+    const int leg = zoneTestZone(*sim, pawn, "Leg");
+    CHECK(sim->health().zoneBleedLevel(pawn, arm) == 3);
+    CHECK(sim->health().zoneBleedLevel(pawn, leg) == 1);
+    CHECK(sim->health().worstBleedingZone(pawn) == arm);
+    // The AI leaves the player's pawn alone.
+    zoneTestRun(*sim, 40);
+    CHECK_FALSE(sim->patches().patching(pawn));
+
+    sim->submit(PatchCommand{pawn});
+    sim->step();
+    CHECK(sim->patches().patching(pawn));
+    bool started = false;
+    for (const Event& e : sim->events()) {
+        started = started || (e.type == EventType::PawnAction && e.action == PawnAction::Patch && e.part == arm && e.amount == 90.0f);
+    }
+    CHECK(started);
+    zoneTestRun(*sim, 88);
+    CHECK(sim->health().zoneBleedLevel(pawn, arm) == 3);  // 3 seconds for a heavy bleed
+    zoneTestRun(*sim, 2);
+    CHECK_FALSE(sim->patches().patching(pawn));
+    CHECK(sim->health().zoneBleedLevel(pawn, arm) == 0);
+    CHECK(sim->health().zoneBleedLevel(pawn, leg) == 1);  // one zone at a time
+    sim->submit(PatchCommand{pawn});
+    zoneTestRun(*sim, 32);
+    CHECK(sim->health().worstBleedingZone(pawn) < 0);
+    CHECK(zoneTestHealth(*sim, pawn).bleedPerDay == 0.0f);
+}
+
+TEST_CASE("Patching: a colonist going about its work patches itself; a fighter only with no enemy seen near") {
+    auto sim = zoneTestSim();
+    const Entity worker = zoneTestPawn(*sim);
+    CHECK(zoneTestHit(*sim, worker, "Cut", 30.0f, "left arm"));  // 40%: moderate, 2 seconds
+    zoneTestRun(*sim, 15 + 60 + 2);
+    CHECK(sim->health().worstBleedingZone(worker) < 0);
+
+    // A fighter with an enemy in sight 10 m off waits; once it has seen none for 2 seconds it patches.
+    const Entity fighter = zoneTestPawn(*sim, 20, 20);
+    const Entity enemy = zoneTestPawn(*sim, 30, 20);
+    entt::registry& reg = sim->things().registry();
+    Fighter& f = reg.emplace<Fighter>(fighter);
+    f.known.push_back(KnownEnemy{enemy, 30.5f, 20.5f, 0, sim->time().steps});
+    CHECK(zoneTestHit(*sim, fighter, "Cut", 30.0f, "left arm"));
+    CHECK_FALSE(sim->patches().safe(fighter));
+    // An enemy seen far off (over 30 m) doesn't count.
+    reg.get<Fighter>(fighter).known[0].x = 60.5f;
+    CHECK(sim->patches().safe(fighter));
+    reg.get<Fighter>(fighter).known[0].x = 30.5f;
+    reg.get<Fighter>(fighter).known[0].seenAt = sim->time().steps - 61;
+    CHECK(sim->patches().safe(fighter));
+}
+
+TEST_CASE("Patching: a fighter bleeding under 1500 blood falls back to patch; above it, it fights on") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim);
+    Health& health = sim->things().registry().get<Health>(pawn);
+    CHECK(zoneTestHit(*sim, pawn, "Cut", 20.0f, "left arm"));  // bleeding, light
+    health.bloodLoss = 1.0f - 2200.0f / 3000.0f;
+    sim->health().refresh(pawn);
+    CHECK_FALSE(sim->fighters().badlyHurt(pawn));
+    health.bloodLoss = 1.0f - 1400.0f / 3000.0f;
+    sim->health().refresh(pawn);
+    CHECK(sim->fighters().badlyHurt(pawn));
+    sim->health().patchZone(pawn, sim->health().worstBleedingZone(pawn), 0.3f);
+    health.bloodLoss = 1.0f - 2200.0f / 3000.0f;
+    sim->health().refresh(pawn);
+    CHECK_FALSE(sim->fighters().badlyHurt(pawn));  // patched
+}
+
+TEST_CASE("Patching: a patch under way saves and loads, and finishes the same") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim);
+    sim->things().registry().emplace<Colonist>(pawn);
+    sim->jobs().addWorker(pawn);
+    sim->things().registry().emplace<PlayerControl>(pawn);
+    CHECK(zoneTestHit(*sim, pawn, "Cut", 40.0f, "left arm"));  // 20%: heavy
+    sim->submit(PatchCommand{pawn});
+    zoneTestRun(*sim, 30);
+    CHECK(sim->patches().patching(pawn));
+    SaveLoadResult loaded = loadSim(saveSim(*sim), zoneTestDefs());
+    CHECK_MESSAGE(loaded.error.empty(), loaded.error);
+    if (loaded.sim == nullptr) {
+        return;
+    }
+    CHECK(loaded.sim->patches().patching(pawn));
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+    zoneTestRun(*sim, 100);
+    zoneTestRun(*loaded.sim, 100);
+    CHECK_FALSE(loaded.sim->patches().patching(pawn));
+    CHECK(loaded.sim->health().worstBleedingZone(pawn) < 0);
     CHECK(loaded.sim->stateHash() == sim->stateHash());
 }

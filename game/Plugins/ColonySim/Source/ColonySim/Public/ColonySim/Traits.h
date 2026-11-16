@@ -23,6 +23,8 @@ struct COLONY_API TraitStats {
     float learningFactor = 1.0f;     // times the experience learned: 1 + globalLearningFactor (learners)
     float skillLossFactor = 1.0f;    // times the experience lost a day by high skills (Great memory)
     float comfyMinOffset = 0.0f;     // degrees C added to the coldest comfortable temperature (Nudist, ours)
+    float fleeHurtMin = 0.0f;        // hurt in a fight, it falls back to cover for this many real seconds..
+    float fleeHurtMax = 0.0f;        // ..to this many (Wimp, sneed's `fleeWhenHurtSeconds`); 0 for no
 };
 
 // The TraitStats of colonists, worked out on first ask and kept (a colonist's traits don't change).

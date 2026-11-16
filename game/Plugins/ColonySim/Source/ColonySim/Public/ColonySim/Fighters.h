@@ -97,6 +97,7 @@ struct Fighter {
     Entity rescuing = kNoEntity;
     bool lifted = false;
     CellPos rescueTo;
+    int64_t cowerUntil = 0;  // a Wimp hurt in a fight falls back to cover until this step (sneed, traits.md)
 };
 
 // The fighter going to carry `pawn`, a downed friend, to cover (F10), or kNoEntity.
@@ -174,6 +175,8 @@ public:
     const FighterRules& rules() const { return rules_; }
     // Hurt badly enough to fall back: pain, blood loss or Moving past the FighterRules limits.
     bool badlyHurt(Entity pawn) const;
+    // The combat hurt hook: a fighter with a trait that flees when hurt (Wimp) falls back for a while.
+    void hurt(Entity victim, Entity attacker);
     void setEventLog(std::vector<Event>* events) { events_ = events; }
     // Grenades (F9): fighters throw the ones on their belts and dive away from ones about to go off.
     void setExplosives(ExplosiveSystem* explosives) { explosives_ = explosives; }

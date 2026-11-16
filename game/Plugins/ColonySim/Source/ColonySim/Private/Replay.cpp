@@ -537,6 +537,8 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                         j["hide"] = c.hide;
                     } else if constexpr (std::is_same_v<Type, SetDayLengthCommand>) {
                         j["minutes"] = c.minutes;
+                    } else if constexpr (std::is_same_v<Type, PatchCommand>) {
+                        j["pawn"] = entt::to_integral(c.pawn);
                     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
                         j["up"] = c.up;
@@ -1850,6 +1852,16 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             HideGearCommand c;
             uint32_t pawn = entt::to_integral(kNoEntity);
             if (!r.integer(j, "pawn", pawn, where) || !r.flag(j, "hide", c.hide, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "Patch") {
+            PatchCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            if (!r.integer(j, "pawn", pawn, where)) {
                 return false;
             }
             c.pawn = static_cast<Entity>(pawn);

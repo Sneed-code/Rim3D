@@ -63,6 +63,7 @@ class RecreationSystem;
 class SocialSystem;
 class ResearchSystem;
 class ResonanceSystem;
+class PatchSystem;
 class TalentSystem;
 class TraitBook;
 class TravelSystem;
@@ -472,6 +473,8 @@ public:
     // Attunement, strain, focus and the powers of resonance (docs/design/resonance.md).
     ResonanceSystem& resonance() { return *resonance_; }
     const ResonanceSystem& resonance() const { return *resonance_; }
+    PatchSystem& patches() { return *patches_; }
+    const PatchSystem& patches() const { return *patches_; }
 
     // Power nets, generators, batteries and who has power (docs/design/power.md). Stepped at the end
     // of every step, after rooms (the sun needs roofs).
@@ -644,6 +647,7 @@ private:
     std::unique_ptr<NatureEvents> nature_;      // after narrator_ (T2)
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
     std::unique_ptr<ResonanceSystem> resonance_;  // after the fighters and the job system it holds
+    std::unique_ptr<PatchSystem> patches_;        // after the fighters (body health part B)
     std::unique_ptr<TravelSystem> travel_;    // after nearly everything: it asks the others about threats
     std::vector<OtherMap> otherMaps_;         // W5, by the order they were made
 };

@@ -92,7 +92,10 @@
       "bloodRegenDelaySeconds": 30,
       "bloodRegenPerSecond": 10,
       "stepsPerRealSecond": 30,
-      "protagonistHp": 100
+      "protagonistHp": 100,
+      "patchSeconds": [1, 2, 3],
+      "patchQuality": 0.3,
+      "coverBlood": 1500
     },
     "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss", "innerInjuryAlsoHurtsOuter"],
     "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter", "scarSeverity", "oldWoundFromHpLost", "zones"]

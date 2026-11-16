@@ -65,7 +65,7 @@ RimWorld's rules, which animals still use.
 - **Downed** by sneed's rules only: pain shock and RimWorld's capacity thresholds no longer down a person (they still
   slow it). A vital organ destroyed or a vital capacity at 0 still kills, as before. So the Wimp trait (a lower pain shock
   threshold) and numb (resonance, takes pain away) no longer change whether a person is down; they still work for
-  bodies without zones. Whether pain should come back as a rule of its own is sneed's call.
+  bodies without zones. sneed (2026-11-16) made Wimp psychological instead: see part B.
 - **Unconscious** (`Health::unconscious`): head zone under 25%, or blood 1000 or less. It is a kind of downed.
 - **Bleeding**: a zone at 75% or less with an untended wound that bleeds (a cut, stab or gunshot, not a bruise or
   burn) or an untended lost part in it bleeds 1, 2 or 3 blood a
@@ -79,6 +79,29 @@ RimWorld's rules, which animals still use.
   brain or heart still kills.
 - Not yet: shooting corpses (part A2: the dead have no hitboxes yet; the downed can already be shot), patching (B),
   poise (C), crawling (D).
+
+## Part B as built
+
+Code: `ColonySim/Patch.h`, `Private/Patch.cpp` (`PatchSystem`), `HealthSystem::patchZone` / `worstBleedingZone` /
+`zoneBleedLevel`, `FighterSystem::badlyHurt`. Data: `HealthRules` `zones` `patchSeconds` [1, 2, 3] (sneed's),
+`patchQuality` 0.3 and `coverBlood` 1500 (sneed's); `PatchRules` in code (`safeSeenSteps` 60, `safeRange` 30 m,
+`thinkEvery` 15; ours). Tests: the "Patching" cases in `Tests/BodyZoneTests.cpp`.
+
+- **Patching** (`Patching` component, saved in section `patch`): the pawn stands still (aim dropped, fighter
+  stopped, job paused, no swings) for 1, 2 or 3 real seconds by how badly its worst zone bleeds, then that zone's
+  untended bleeding wounds and lost parts are tended at quality 0.3. One zone at a time. Downed mid-patch: the patch
+  is lost. `PawnAction` `Patch`: "patching" (`part` the zone, `amount` the steps) and "patched".
+- **The AI** looks every half second: a person (not the player's pawn) who bleeds and is not downed, stunned,
+  casting or patching patches itself when it is **safe**: not a fighter, or a fighter whose side has seen no able
+  enemy within 30 m for 2 seconds.
+- **Under 1500 blood** a bleeding fighter counts as badly hurt and falls back to cover (the fall-back it already had),
+  where it patches once it is safe. The old rule stays too: bad pain, 30% blood lost or a bad leg send a fighter back
+  (the raid soak's fighters stood in the open more without it).
+- **Wimp** (sneed, 2026-11-16): a Wimp fighter hurt by an enemy falls back to cover for 12 to 20 real seconds
+  (`Traits` Wimp `fleeWhenHurtSeconds`, `Fighter::cowerUntil`, saved in fighters section 4), then fights again. Not
+  the player's pawn. An enemy at arm's length still makes it stand and fight.
+- **The player's pawn** patches on `PatchCommand` (a key on the PC, to be bound with the stagger work). The snapshot's
+  `patchZone` / `patchStepsLeft` let Unreal play a patching animation.
 
 ## Later (sneed, 2026-11-16)
 
