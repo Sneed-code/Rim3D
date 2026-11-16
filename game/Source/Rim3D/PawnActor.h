@@ -172,6 +172,9 @@ public:
 	int32 GetRollsSeen() const { return RollsSeen; }
 	/** 1 standing, 0.66 crouching, 0.24 lying: what weapon heights are scaled by. */
 	float GetStanceHeight() const { return StanceHeight; }
+	/** How tall the body is drawn, times the 1.80 m man (the looks' height; 1 before the looks arrive). Weapons and
+	 *  shields place themselves by it (docs/design/gear-size.md). */
+	float GetBodyScale() const { return bHasLooks ? Looks.Height : 1.0f; }
 	/** Where the held melee weapon is now, in this actor's space (cm, degrees): the swing or the block,
 	 *  the dodge and the body's twist and lunge together. */
 	void GetMeleeWeaponPose(FVector& OutLocation, FRotator& OutRotation) const;

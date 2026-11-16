@@ -89,4 +89,19 @@ COLONY_API bool bodyRegionOfPart(const std::string& partDef, bool left, BodyRegi
 
 COLONY_API const char* bodyTypeName(BodyType body);
 
+// How a pawn's hand-held gear (weapons and shields) is drawn for its body (docs/design/gear-size.md). Clothes and
+// armour are skinned to the body and follow its height by themselves; weapons and shields are separate meshes, so
+// the drawing asks this. `place` scales where the gear sits (hands, holsters, back, shield arm): the same as the
+// body, so a grip stays in a short pawn's hands. `size` scales the gear itself only part of the way
+// (LooksRules `gearSizeFollow`), so a sword stays a real sword: a 1.58 m woman's longsword is drawn about 6% smaller
+// than a 1.80 m man's, not 12%, which keeps it in proportion to her hands without it looking like a toy.
+struct GearSize {
+    float place = 1.0f;
+    float size = 1.0f;
+};
+
+// `height` is PawnLooks::height (times 1.80 m), clamped to 0.5 to 1.5 as the drawing does. Without LooksRules the
+// gear follows half way.
+COLONY_API GearSize gearSizeFor(const DefDatabase& defs, float height);
+
 }  // namespace colony

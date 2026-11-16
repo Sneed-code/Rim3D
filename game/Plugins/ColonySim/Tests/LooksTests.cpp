@@ -515,3 +515,25 @@ TEST_CASE("looks: faces, marks and hair survive a save and load") {
     }
     CHECK(seen);
 }
+
+TEST_CASE("looks: hand-held gear sits where the body's hands are and grows half as much as the body") {
+    auto defs = looksTestDefs();
+    // The average man: nothing changes.
+    GearSize man = gearSizeFor(*defs, 1.0f);
+    CHECK(man.place == doctest::Approx(1.0f));
+    CHECK(man.size == doctest::Approx(1.0f));
+    // A short woman (1.58 m): grips and holsters come down with her, the sword shrinks only half as much.
+    GearSize woman = gearSizeFor(*defs, 0.88f);
+    CHECK(woman.place == doctest::Approx(0.88f));
+    CHECK(woman.size == doctest::Approx(0.94f));
+    // A tall hulk (1.96 m): the other way.
+    GearSize hulk = gearSizeFor(*defs, 1.09f);
+    CHECK(hulk.place == doctest::Approx(1.09f));
+    CHECK(hulk.size == doctest::Approx(1.045f));
+    // Out of range heights are clamped like the drawing clamps them.
+    CHECK(gearSizeFor(*defs, 3.0f).place == doctest::Approx(1.5f));
+    CHECK(gearSizeFor(*defs, 3.0f).size == doctest::Approx(1.25f));
+    // Without LooksRules the gear still follows half way.
+    DefDatabase empty;
+    CHECK(gearSizeFor(empty, 0.9f).size == doctest::Approx(0.95f));
+}
