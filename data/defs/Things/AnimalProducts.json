@@ -43,6 +43,8 @@
   {"defName": "Meat_Rhinoceros", "parent": "MeatBase", "label": "rhinoceros meat", "stats": {"marketValue": 2.0}},
   {"defName": "Meat_Elephant", "parent": "MeatBase", "label": "elephant meat", "stats": {"marketValue": 2.0}},
   {"defName": "Meat_Lion", "parent": "MeatBase", "label": "lion meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_Raptor", "parent": "MeatBase", "label": "raptor meat", "stats": {"marketValue": 2.0}},
+  {"defName": "Meat_TRex", "parent": "MeatBase", "label": "tyrannosaurus meat", "stats": {"marketValue": 2.0}},
   {"defName": "Meat_Monkey", "parent": "MeatBase", "label": "monkey meat", "stats": {"marketValue": 2.0}},
   {"defName": "Meat_Capybara", "parent": "MeatBase", "label": "capybara meat", "stats": {"marketValue": 2.0}},
   {"defName": "Meat_Iguana", "parent": "MeatBase", "label": "iguana meat", "stats": {"marketValue": 2.0}},
