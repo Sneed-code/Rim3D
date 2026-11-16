@@ -12,6 +12,12 @@ game/Plugins/*/Intermediate/
 
 # Third-party asset packs and plugins stay out of Git (see assets/README.md, assets/manifest.json)
 game/Plugins/ImGui/
+# NVIDIA DLSS 4.5 plugin v8.9.0 for UE 5.8 (docs/design/graphics-options.md)
+game/Plugins/DLSS/
+game/Plugins/StreamlineNGXCommon/
+game/Plugins/StreamlineCore/
+game/Plugins/StreamlineDLSSG/
+game/Plugins/StreamlineReflex/
 game/Content/Megascans/
 # Electric Dreams master materials the Megascans plants use (tools/electric_dreams.ps1)
 game/Content/MSPresets/
