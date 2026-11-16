@@ -1484,7 +1484,7 @@ bool FighterSystem::meleeAct(Entity pawn, Fighter& f) {
         stop(pawn, f);
     }
     combat_.setStance(pawn, Stance::Standing);
-    if (melee_->ready(pawn)) {
+    if (melee_->ready(pawn) && !melee_->holdSwing(pawn, victim)) {
         melee_->attack(pawn, victim, false);
     }
     return true;
