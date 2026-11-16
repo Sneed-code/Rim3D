@@ -93,7 +93,9 @@
       "malnutritionPerDay": 0.48,
       "ingestSeconds": 720,
       "maxNumToIngestAtOnce": 20,
-      "eatSpotRadius": 40
+      "eatSpotRadius": 40,
+      "nutritionFactor": { "MealSimple": 1.1, "MealFine": 1.25, "MealLavish": 1.5 },
+      "starvingSpeedFactor": 0.75
     },
     "rest": {
       "fallPerDay": { "Rested": 0.95, "Drowsy": 0.66, "Tired": 0.28, "Exhausted": 0.57 },
@@ -106,7 +108,7 @@
     },
     "schedule": { "sleepFromHour": 22, "sleepToHour": 5 },
     "unverified": ["food.ingestSeconds", "food.maxNumToIngestAtOnce", "rest.fallAsleepBelow", "rest.wakeAt", "schedule"],
-    "ours": ["food.eatSpotRadius", "food.ingestSeconds", "rest.wakeOutsideSleepAt", "rest.fallAsleepBelow", "rest.wakeAt"]
+    "ours": ["food.eatSpotRadius", "food.ingestSeconds", "food.nutritionFactor", "food.starvingSpeedFactor", "rest.wakeOutsideSleepAt", "rest.fallAsleepBelow", "rest.wakeAt"]
   },
   {
     "defName": "MoodRules", "source": "RimWorld wiki",

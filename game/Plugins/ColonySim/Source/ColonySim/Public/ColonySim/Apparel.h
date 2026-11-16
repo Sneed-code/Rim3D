@@ -226,10 +226,12 @@ public:
     float armourKg(const entt::registry& reg, Entity pawn) const;
     float wornKg(const entt::registry& reg, Entity pawn) const;
     // Movement: 1 / (1 + wornKg / 100). Attack (aim, cooldown, reload, swings): their times are multiplied by
-    // 1 + armourKg / 100. Work: 1 / (1 + 0.25 x armourKg / 100).
+    // 1 + armourKg / 100. Work: 1 / (1 + 0.25 x armourKg / 100). A starving pawn (needs.md "Starving") does all
+    // three at NeedRules' `starvingSpeedFactor` (0.75) on top: `hungerFactor`.
     float moveFactor(const entt::registry& reg, Entity pawn) const;
     float attackTimeFactor(const entt::registry& reg, Entity pawn) const;
     float workFactor(const entt::registry& reg, Entity pawn) const;
+    float hungerFactor(const entt::registry& reg, Entity pawn) const;
     // Shields (docs/design/shields.md). A shield is armour in the Arm slot with a catch chance; its material gives
     // the flat block (`shieldStuff.block`) and a weight factor (`shieldStuff.mass`). A two-handed weapon in the hands
     // (`twoHanded` on the weapon's def) slings it on the back: it still weighs but neither protects nor blocks.
@@ -309,6 +311,7 @@ private:
     float clothingCold_ = 10.0f;
     float clothingHeat_ = 2.0f;
     float kgPerSlowdown_ = 100.0f;
+    float starvingFactor_ = 1.0f;
     float workWeightShare_ = 0.25f;
     std::vector<float> weaponKg_;  // by Things DefId value: stats.mass of anything else (the weapon in hand)
     std::vector<bool> twoHanded_;  // by Things DefId value: a weapon held in both hands

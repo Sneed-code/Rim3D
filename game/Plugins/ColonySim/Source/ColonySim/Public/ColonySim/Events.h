@@ -245,7 +245,8 @@ struct Event {
     // def (depth-first, torso 0), `amount` the hit points of damage dealt to it.
     int part = -1;
     // PawnAte: `thing` the pawn, `def` the food's Things def, `amount` the nutrition gained, `cell`
-    // where it stood and `message` "table" (in a chair at a table) or "ground". PawnWokeUp: `thing`
+    // where it stood and `message` "table" (in a chair at a table), "ground" or "bag" (the protagonist ate from its
+    // bag on the go, NeedJobs.cpp autoEatFromBag). PawnWokeUp: `thing`
     // the pawn, `target` the bed it slept in or none, `message` "bed" or "ground", `amount` its rest.
     // PawnMoodBand: `thing` the pawn, `message` the new band ("stable", "minor", "major", "extreme"),
     // `amount` its mood.
