@@ -2,7 +2,7 @@
 
 Updated 2026-11-16.
 
-Muffalo model (sneed, 2026-11-17; Unreal and data): the **muffalo is now drawn with the free Buffalo_A1** (Animated3D, CC BY; sneed's source.zip unzipped in `assets/raw/fab/buffalo-a1`), textured, 2.9 m, facing forward in the `animals_close` shot. The free version has **no walk or run clip** (only idle, death, lying and a turn), so it walks on its idle and its feet slide; an animal model with no walk clip now falls back on its idle instead of not drawing. Every FBX import now gets its material moved onto the skinned copy of the engine master (no black models). **Next: a buffalo with walk and run clips to stop the sliding; check raptor and T-rex feet in play.**
+Muffalo model (sneed, 2026-11-17; Unreal and data): the free **Buffalo_A1** is imported for the muffalo (Animated3D, CC BY; sneed's source.zip unzipped in `assets/raw/fab/buffalo-a1`), textured, 2.9 m, facing forward in the `animals_close` shot. The free version has **no walk or run clip** (only idle, death, lying and a turn), so the muffalo **stays on the Quaternius bull** until the buffalo has walk and run clips (one line in `assets/animal_art.json` swaps it); an animal model with no walk clip now falls back on its idle instead of not drawing. Every FBX import now gets its material moved onto the skinned copy of the engine master (no black models). **Next: a buffalo with walk and run clips to stop the sliding; check raptor and T-rex feet in play.**
 
 Body health part D (sneed, 2026-11-16; sim): a person **downed by the torso** and awake now crawls away from enemies within 20 m, slowly (a tenth of a walk); downed by a leg or knocked out they lie still. The snapshot's `crawling` is for a crawl animation on the PC.
 

@@ -21,7 +21,7 @@
   "defs": [
     {"def": "Alpaca", "model": "Alpaca", "scale": 1.0},
     {"def": "Cow", "model": "Cow", "scale": 1.0},
-    {"def": "Muffalo", "model": "Buffalo", "scale": 1.0},
+    {"def": "Muffalo", "model": "Bull", "scale": 1.05},
     {"def": "Deer", "model": "Deer", "scale": 1.0},
     {"def": "Husky", "model": "Husky", "scale": 1.0},
     {"def": "TimberWolf", "model": "Wolf", "scale": 1.0},
