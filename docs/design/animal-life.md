@@ -119,6 +119,16 @@ skeleton, so no retargeting; a def not in the table is drawn as a Husky). The ac
 idle, walk, gallop, eating and death clips as a single-node animation (no Animation Blueprint), chosen
 from the snapshot: dead, `asleep`, speed (gallop above 2.8 m/s), food rising while standing (eating).
 Size is the table's scale times 0.5 / 0.75 / 1 for baby / juvenile / adult.
+
+Realistic models (Z2, 2026-11-16): the table's `imports` list rigged Sketchfab models (Animal Animator,
+CC BY, real size, so no `lengthM`) that the AnimalArt commandlet imports from `assets/raw/sketchfab` on the
+PC (`-run=AnimalArt -Models=Chimpanzee,SphynxCat,Hyena,AkhalTeke`): it renames the clips named in `clips`
+to `<model>AnimalArmature_<role>`, and since these files keep body, eyes, teeth, tongue and fur cards as
+separate skinned meshes, the body is `<model>` and the rest `<model>_Part<N>`, drawn by extra components
+that follow the body's pose. `yaw`, `walkCm` and `gallopCm` set the facing and clip speeds per model. A
+model with no death clip lies still on its side when it dies. Now drawn: monkey (chimpanzee), cat (sphynx),
+cougar (hyena, stand-in) and thrumbo (Akhal-Teke horse, stand-in). The smoke test's `animals_close` shot
+shows them at noon.
 Animation cost goes by distance to the camera: every frame within `Animals.NearDistance` (40 m), 8 times
 a second within `Animals.MidDistance` (120 m), a frozen pose (no skeleton update) within
 `Animals.HideDistance` (400 m), not drawn beyond. Smoke test `animals` (`tools\smoke.ps1 -Test animals`).
