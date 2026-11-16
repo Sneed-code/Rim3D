@@ -1183,8 +1183,23 @@ bool HealthSystem::kill(Entity pawn, DeathCause cause) {
     if (!tracks(pawn) || !reg.all_of<Health>(pawn) || reg.get<Health>(pawn).dead) {
         return false;
     }
-    die(pawn, reg.get<Health>(pawn), cause, true);
+    Health& health = reg.get<Health>(pawn);
+    die(pawn, health, cause, true, downedAwake(health));
     return true;
+}
+
+bool HealthSystem::downedAwake(const Health& health) const {
+    // Downed, and its consciousness still above the line where it would go down for that alone (0.3): down from pain
+    // or legs, not knocked out.
+    if (!health.downed || health.dead) {
+        return false;
+    }
+    const int c = model_->consciousnessCapacity;
+    if (c < 0 || static_cast<size_t>(c) >= health.capacities.size()) {
+        return true;
+    }
+    const HealthModel::Capacity& cap = model_->capacities[static_cast<size_t>(c)];
+    return !cap.hasDownedBelow || health.capacities[static_cast<size_t>(c)] >= cap.downedBelow;
 }
 
 void HealthSystem::emit(EventType type, Entity pawn, DefId def, int part, float amount, const char* message) {
@@ -1216,17 +1231,18 @@ void HealthSystem::stopWalking(Entity pawn) {
     }
 }
 
-void HealthSystem::die(Entity pawn, Health& health, DeathCause cause, bool announce) {
+void HealthSystem::die(Entity pawn, Health& health, DeathCause cause, bool announce, bool downedAwake) {
     if (health.dead) {
         return;
     }
+    const bool wasDowned = health.downed;
     health.dead = true;
     health.cause = cause;
     health.downed = false;
     health.movingFactor = 0.0f;
     stopWalking(pawn);
     if (announce) {
-        emit(EventType::PawnDied, pawn, DefId{}, -1, 0.0f, deathCauseName(cause));
+        emit(EventType::PawnDied, pawn, DefId{}, -1, wasDowned ? (downedAwake ? 1.0f : 2.0f) : 0.0f, deathCauseName(cause));
     }
 }
 
@@ -1359,11 +1375,12 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
     if (mods_) {
         mods_(pawn, mods);
     }
+    const bool wasDownedAwake = downedAwake(health);  // before this step's wounds count
     derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown,
            traits_ != nullptr ? traits_->of(pawn).painShockOffset : 0.0f);
 
     if (!health.dead && cause != DeathCause::None) {
-        die(pawn, health, cause, announce);
+        die(pawn, health, cause, announce, wasDownedAwake);
     }
     if (!health.dead) {
         const bool wasDowned = health.downed;

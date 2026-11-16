@@ -416,7 +416,10 @@ private:
     void emit(EventType type, Entity pawn, DefId def = DefId{}, int part = -1, float amount = 0.0f,
               const char* message = nullptr);
     void stopWalking(Entity pawn);
-    void die(Entity pawn, Health& health, DeathCause cause, bool announce);
+    // `downedAwake`: it was lying downed but still conscious when it died. PawnDied's `amount` says how it lay: 0 up,
+    // 1 downed and awake (a sound can give it a last scream), 2 downed and knocked out.
+    void die(Entity pawn, Health& health, DeathCause cause, bool announce, bool downedAwake = false);
+    bool downedAwake(const Health& health) const;
     bool hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter);
     bool damagePart(Entity pawn, Health& health, int part, DefId hediff, float amount);
     void destroyPart(Entity pawn, Health& health, int part, float amount);
