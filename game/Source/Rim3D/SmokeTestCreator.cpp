@@ -275,6 +275,12 @@ namespace
 		colony::CellPos Middle = colony::CellPos{48, 48, 0};
 		float LargestTailSwing = 0.0f;
 		float LargestJiggle = 0.0f;
+		// Soft-body tests (docs/design/soft-body.md): a blast 3 m in front of the picked one, a slap on its belly.
+		float BlastEvery = 0.0f;   // -CreatorBlast=<seconds>: a blast that often (for clips)
+		float BlastTimer = 0.0f;
+		bool bBlastNow = false;
+		bool bSlapNow = false;
+		int32 Blasts = 0;
 	};
 
 	const FVector CreatorOrigin(-1695000.0, 4800.0, 0.0);
@@ -441,6 +447,7 @@ namespace
 		{
 			Anim->SetSoftTissueEnabled(P.bJiggle);
 			Anim->SetBreastJiggle(P.BreastJiggle);
+			Anim->SetBodySoftness(P.Weight, P.Muscle, P.Older);
 		}
 		Set(TEXT("GenitalLarge"), P.Genital);
 		Set(TEXT("GenitalSmall"), -P.Genital);
@@ -831,6 +838,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		// For pictures: -CreatorSelect=<0-2>, -CreatorWalk, -CreatorYaw=<degrees>, -CreatorDistance=<cm>.
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorSelect="), State->Selected);
 		State->bWalk = FParse::Param(FCommandLine::Get(), TEXT("CreatorWalk"));
+		FParse::Value(FCommandLine::Get(), TEXT("CreatorBlast="), State->BlastEvery);
 		float Yaw = 0.0f;
 		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorYaw="), Yaw))
 		{
@@ -1092,6 +1100,51 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") / FString::Printf(TEXT("rec_%04d.png"), State->Recorded++), false, false);
 			}
 		}
+		// Soft-body tests: a blast in front of the picked one (everyone feels it, less further away), or a slap on its belly.
+		if (State->BlastEvery > 0.0f)
+		{
+			State->BlastTimer += GetWorld()->GetDeltaSeconds();
+			if (State->BlastTimer >= State->BlastEvery)
+			{
+				State->BlastTimer = 0.0f;
+				State->bBlastNow = true;
+			}
+		}
+		if ((State->bBlastNow || State->bSlapNow) && State->People.IsValidIndex(State->Selected))
+		{
+			const ASimPawnActor* Picked = Pawns->FindPawn(State->People[State->Selected].Thing);
+			const USkeletalMeshComponent* PickedMesh = Picked ? Picked->GetMakeHumanMesh() : nullptr;
+			if (PickedMesh)
+			{
+				const FVector Forward = PickedMesh->GetOwner()->GetActorForwardVector();
+				const FVector Blast = PickedMesh->GetComponentLocation() + Forward * 300.0f + FVector(0, 0, 60.0f);
+				const FVector Belly = PickedMesh->GetSocketLocation(TEXT("spine_01")) + Forward * 15.0f;
+				for (const FCreatorPerson& Other : State->People)
+				{
+					const ASimPawnActor* Pawn = Pawns->FindPawn(Other.Thing);
+					const USkeletalMeshComponent* Mesh = Pawn ? Pawn->GetMakeHumanMesh() : nullptr;
+					UMakeHumanAnimInstance* Anim = Mesh ? Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()) : nullptr;
+					if (!Anim)
+					{
+						continue;
+					}
+					if (State->bBlastNow)
+					{
+						Anim->AddBlastKick(Blast, 450.0f, 900.0f);
+					}
+					else if (Mesh == PickedMesh)
+					{
+						Anim->AddHitKick(Belly, -Forward * 120.0f + FVector(0, 0, 20.0f), 30.0f);
+					}
+				}
+				if (State->bBlastNow)
+				{
+					++State->Blasts;
+					UE_LOG(LogTemp, Display, TEXT("Soft body: blast %d at %s"), State->Blasts, *Blast.ToString());
+				}
+			}
+			State->bBlastNow = State->bSlapNow = false;
+		}
 		for (FCreatorPerson& P : State->People)
 		{
 			P.FaceTime += GetWorld()->GetDeltaSeconds();
@@ -1325,6 +1378,17 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					if (P.bFemale)
 					{
 						ImGui::SliderFloat("Breast jiggle", &P.BreastJiggle, 0.0f, 1.0f, "%.2f");
+					}
+					// Soft body step 1: the body's softness follows thin/heavy, soft/muscular and older.
+					ImGui::Text("Flesh softness %.2f (from the body sliders)", 0.5f + 0.4f * P.Weight - 0.3f * P.Muscle + 0.1f * P.Older);
+					if (ImGui::Button("Slap belly"))
+					{
+						State->bSlapNow = true;
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Blast nearby"))
+					{
+						State->bBlastNow = true;
 					}
 					if (ImGui::Button("Random body"))
 					{
