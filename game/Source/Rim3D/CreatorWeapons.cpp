@@ -247,6 +247,9 @@ namespace
 		float LeftGrip = 0.0f;                    // 0..1: the left hand on a two-handed hilt (IK on the visible body)
 		bool bFloored = false;                    // its react ends on the ground: getting up follows
 		float GiveGround = 0.0f;                  // cm its demo spot has moved back, giving ground to a lunge
+		float AnchorT = 0.0f;                     // s left holding its pelvis where it is (a clip change whose root differs)
+		float PelvisAlong = 0.0f;                 // its pelvis ahead of its spot along its facing last frame (cm)
+		bool bPelvisAlong = false;
 	};
 
 	enum class ECwDemo : uint8 { Off, Pause, Swing, Impact, Recover, DeathHold };
@@ -1527,6 +1530,8 @@ namespace
 			P.Hits = 0;
 			P.GiveGround = 0.0f;
 			P.bFloored = false;
+			P.AnchorT = 0.0f;
+			P.bPelvisAlong = false;
 		}
 		S.RawGap = -1.0f;
 		S.GapRate = 0.0f;
@@ -1558,6 +1563,25 @@ namespace
 		constexpr float MinGap = 55.0f;
 		if (A.Mesh.IsValid() && B.Mesh.IsValid() && CwHasBone(A.Mesh.Get(), TEXT("pelvis")) && CwHasBone(B.Mesh.Get(), TEXT("pelvis")) && Dt > 0.0f)
 		{
+			// Getting up starts lying face down with the pelvis at the clip's origin, while the stumble left it a metre or
+			// more back: for a moment after such a change the spot moves to keep the pelvis where it was (else the body
+			// slid into the other one as the clips blended).
+			for (FCwPerson* P : {&A, &B})
+			{
+				const float Along = static_cast<float>(FVector::DotProduct(CwBone(P->Mesh.Get(), TEXT("pelvis")) - P->Spot, P->Facing));
+				if (P->AnchorT > 0.0f && P->bPelvisAlong)
+				{
+					const float Moved = Along - P->PelvisAlong;
+					P->GiveGround = FMath::Clamp(P->GiveGround + Moved, 0.0f, 250.0f);
+					if (S.RawGap >= 0.0f)
+					{
+						S.RawGap -= Moved;  // our own sliding, not the bodies closing
+					}
+				}
+				P->AnchorT = FMath::Max(0.0f, P->AnchorT - Dt);
+				P->PelvisAlong = Along;
+				P->bPelvisAlong = true;
+			}
 			const float Gap = static_cast<float>(FVector::DotProduct(CwBone(B.Mesh.Get(), TEXT("pelvis")) - CwBone(A.Mesh.Get(), TEXT("pelvis")), Dir));
 			// The bodies' own closing, without our sliding (the spots move the pelvises by exactly the give-ground).
 			const float Raw = Gap - A.GiveGround - B.GiveGround;
@@ -1577,13 +1601,14 @@ namespace
 			{
 				Def.GiveGround += FMath::Min(Want, 400.0f * Dt);  // stepping back ahead of the lunge
 			}
-			Def.GiveGround = FMath::Min(Def.GiveGround, 120.0f);
-			// Drift back only while there is room to spare and nothing is closing.
+			Def.GiveGround = FMath::Min(Def.GiveGround, 250.0f);
+			// Drift back (a step or two in, about 70 cm a second) while there is room to spare, nothing is closing and
+			// nobody is down or getting up: given ground left at 25 cm a second kept them 3 m apart and swings missed.
 			for (FCwPerson* P : {&A, &B})
 			{
-				if (Want <= 0.0f && Gap > MinGap + 10.0f && S.GapRate > -20.0f && P->GiveGround > 0.0f)
+				if (Want <= 0.0f && Gap > MinGap + 10.0f && S.GapRate > -20.0f && P->GiveGround > 0.0f && P->AnchorT <= 0.0f && !P->bFloored)
 				{
-					P->GiveGround = FMath::Max(0.0f, P->GiveGround - FMath::Min(25.0f * Dt, Gap - MinGap - 10.0f));
+					P->GiveGround = FMath::Max(0.0f, P->GiveGround - FMath::Min(70.0f * Dt, Gap - MinGap - 10.0f));
 				}
 			}
 			const float Total = A.GiveGround + B.GiveGround;
@@ -1884,6 +1909,7 @@ namespace
 				{
 					CwPlayStance(S, *P);
 				}
+				P->AnchorT = 0.6f;
 				UE_LOG(LogCreatorWeapons, Display, TEXT("Getting up after the stumble"));
 			}
 			else if ((P->Role == ECwRole::React && CwMontageFraction(*P) >= 0.92f) || P->Role == ECwRole::Idle)
@@ -1976,6 +2002,7 @@ namespace
 					{
 						Def.Role = ECwRole::React;
 						Def.bFloored = false;
+						Def.AnchorT = 0.7f;
 					}
 					else
 					{
