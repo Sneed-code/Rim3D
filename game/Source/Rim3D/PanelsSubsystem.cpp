@@ -8,6 +8,7 @@
 #include "Engine/Engine.h"
 #include "GraphicsOptionsSubsystem.h"
 #include "OverseerSubsystem.h"
+#include "ProtagonistPawn.h"
 #include "QuestPanelSubsystem.h"
 #include "ShipPanelSubsystem.h"
 #include "SimSubsystem.h"
@@ -1320,6 +1321,21 @@ void UPanelsSubsystem::DrawSettings(USimSubsystem& Bridge, float Scale, float Ma
 		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("How long a game day lasts at normal speed."));
 		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("Walking, fighting and work keep their speed; hunger, sleep,"));
 		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("crops, animals, food rot and the sun follow the day."));
+
+		// Mouse speed when playing as a pawn (saved; 1.2 is the default).
+		ImGui::Separator();
+		float MouseTurn = AProtagonistPawn::GetMouseTurn();
+		ImGui::SetNextItemWidth(260.0f * Scale);
+		if (ImGui::SliderFloat("Mouse speed", &MouseTurn, 0.2f, 4.0f, "%.2f"))
+		{
+			AProtagonistPawn::SetMouseTurn(MouseTurn);
+		}
+		ImGui::SameLine();
+		if (PButton(TEXT("Default##MouseTurn"), false))
+		{
+			AProtagonistPawn::SetMouseTurn(AProtagonistPawn::kDefaultMouseTurn);
+		}
+		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("How fast the mouse turns the view when you play as a pawn."));
 
 		// Graphics: quality, ray tracing, upscaler (docs/design/graphics-options.md).
 		if (UGraphicsOptionsSubsystem* Graphics = GEngine ? GEngine->GetEngineSubsystem<UGraphicsOptionsSubsystem>() : nullptr)

@@ -132,6 +132,7 @@ struct FMakeHumanAnimProxy : public FAnimInstanceProxy
 	FMakeHumanHairNode Hair;
 	TArray<TSharedPtr<FAnimNode_AnimDynamics>> Dynamics;
 	FAnimNode_ConvertComponentToLocalSpace ToLocal;
+	FAnimNode_TwoBoneIK RightHandIK; // the gun range: the right hand moved so the gun's sight is before the eye
 	FAnimNode_TwoBoneIK LeftHandIK;  // creator weapons: the left hand on a two-handed hilt (Pawns.MakeHumanHandIK)
 	bool bPhysics = false;
 
@@ -188,6 +189,17 @@ public:
 		LeftGripOffset = InRightHandOffset;
 		LeftElbowWorld = InElbowWorld;
 	}
+	/** The right hand's wrist moved to a point in this component's space (its rotation kept as animated), the elbow
+	 *  bent towards a point in the same space; Alpha 0 is off. Evaluated before the left hand's grip (the gun range). */
+	void SetRightHandReach(float Alpha, const FVector& InTargetComponent, const FVector& InElbowComponent)
+	{
+		RightReachAlpha = Alpha;
+		RightReachTarget = InTargetComponent;
+		RightElbowComponent = InElbowComponent;
+	}
+	float RightReachAlpha = 0.0f;
+	FVector RightReachTarget = FVector::ZeroVector;
+	FVector RightElbowComponent = FVector::ZeroVector;
 	float LeftGripAlpha = 0.0f;
 	FVector LeftGripOffset = FVector::ZeroVector;
 	FVector LeftElbowWorld = FVector::ZeroVector;
