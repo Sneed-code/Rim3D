@@ -282,6 +282,36 @@ TEST_CASE("Filth: a bleeding pawn leaves blood") {
     CHECK(found);
 }
 
+TEST_CASE("Filth: each body bleeds its own fluid (docs/design/blood.md)") {
+    Sim sim = rsSim();
+    const DefDatabase& defs = sim.defs();
+    CHECK(sim.filth().bloodKindOf(defs.idOf("Things", "Human")) == sim.filth().kindIndex("Blood"));
+    CHECK(sim.filth().bloodKindOf(defs.idOf("Things", "Megascarab")) == sim.filth().kindIndex("InsectBlood"));
+    CHECK(sim.filth().bloodKindOf(defs.idOf("Things", "Mech_Scyther")) == sim.filth().kindIndex("MachineFluid"));
+    CHECK(sim.filth().kindIndex("InsectBlood") >= 0);
+    CHECK(sim.filth().kindIndex("MachineFluid") >= 0);
+    CHECK(sim.filth().bloodKindOf(DefId{}) == -1);
+
+    // A cut chitinid leaves insect blood, not red blood.
+    const Entity bug = sim.things().spawn("Megaspider", CellPos{20, 20, 0});
+    RS_REQUIRE(bug != kNoEntity);
+    sim.submit(DamagePawnCommand{bug, "Cut", 12.0f, -1});
+    for (int i = 0; i < 4 * 3600 && sim.filth().totalLayers() == 0; ++i) {
+        sim.step();
+    }
+    bool insect = false;
+    bool red = false;
+    for (const auto& [index, piles] : sim.filth().all()) {
+        (void)index;
+        for (const FilthPile& pile : piles) {
+            insect = insect || static_cast<int>(pile.kind) == sim.filth().kindIndex("InsectBlood");
+            red = red || static_cast<int>(pile.kind) == sim.filth().kindIndex("Blood");
+        }
+    }
+    CHECK(insect);
+    CHECK_FALSE(red);
+}
+
 TEST_CASE("Cleaning: a colonist cleans indoor filth a layer at a time, and leaves the outdoors") {
     Sim sim = rsSim();
     rsRing(sim, 10, 10, 16, 16);

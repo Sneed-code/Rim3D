@@ -93,6 +93,10 @@ public:
     const std::vector<FilthKind>& kinds() const { return kinds_; }
     // Index in kinds(), or -1.
     int kindIndex(const std::string& name) const;
+    // The filth kind a pawn of that Things def bleeds (docs/design/blood.md): `race.bloodFilth` if the def names one
+    // ("" for none), else InsectBlood for a chitinid, MachineFluid for a mechanical pawn and Blood for the rest; -1 if
+    // there is no such kind.
+    int bloodKindOf(DefId pawnDef) const;
 
     // Adds `layers` to the cell's pile of that kind (making it), up to the kind's thickness limit.
     // False if nothing was added: no such kind, a cell that is off the map, rock, water or blocked
@@ -144,6 +148,7 @@ private:
     FilthNumbers numbers_;
     std::vector<FilthKind> kinds_;
     std::vector<float> filthRate_;  // per def id: stats.filthRate
+    std::vector<int> bloodKind_;    // per def id: bloodKindOf
     int dirtKind_ = -1;
     std::map<int, std::vector<FilthPile>> piles_;
     std::map<uint32_t, FilthCarrier> carriers_;  // by entity id
