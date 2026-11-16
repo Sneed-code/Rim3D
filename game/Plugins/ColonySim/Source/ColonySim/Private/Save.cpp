@@ -1318,6 +1318,7 @@ inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitComma
                                             std::is_same_v<Type, InventoryCommand> ||
                                             std::is_same_v<Type, SetOutfitFightGearCommand> || std::is_same_v<Type, HideGearCommand> ||
                                             std::is_same_v<Type, ShieldCommand> || std::is_same_v<Type, SetDayLengthCommand> ||
+                                            std::is_same_v<Type, SleepCommand> ||
                                             std::is_same_v<Type, PatchCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
@@ -1364,6 +1365,10 @@ void saveTradeCommand(Ar& ar, Type& c) {
         ar.value("hide", c.hide);
     } else if constexpr (std::is_same_v<Type, SetDayLengthCommand>) {
         ar.value("minutes", c.minutes);
+    } else if constexpr (std::is_same_v<Type, SleepCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("bed", c.bed);
+        ar.value("wake", c.wake);
     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
         ar.value("pawn", c.pawn);
     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {

@@ -1055,6 +1055,17 @@ struct SetDayLengthCommand {
     int minutes = kBaseDayMinutes;
 };
 
+// The player's own sleep (docs/design/needs.md "The protagonist sleeps the night away", Palworld's). The colonist under
+// control lies down in `bed` (within reach; its own or a free slot) or, with kNoEntity, on the ground where it stands, and
+// the night is skipped to morning (NeedRules `nightToHour`) like SkipNightCommand, but the colonist stays the player's.
+// `wake` true gets up now and ends the skip. Fails when it isn't night (`nightFromHour` to `nightToHour`), for a pawn not
+// under control or downed, a bed out of reach or full, or while anything threatens the colony.
+struct SleepCommand {
+    Entity pawn = kNoEntity;
+    Entity bed = kNoEntity;
+    bool wake = false;
+};
+
 // Shields (docs/design/shields.md): `up` raises the pawn's shield, false lowers it. Held up, the pawn can walk and
 // reload but not shoot or swing. `hasDir`: the shield faces (dirX, dirY) (the player's camera), else where the pawn
 // faces. Fails without a shield on its arm (none, or slung behind a two-handed weapon).
@@ -1105,6 +1116,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand,
                              ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand,
                              InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand,
+                             SleepCommand,
                              PatchCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute

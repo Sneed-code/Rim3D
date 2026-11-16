@@ -1,5 +1,7 @@
 #include "FightSubsystem.h"
 
+#include "BloodSubsystem.h"
+
 #include "Camera/PlayerCameraManager.h"
 #include "Components/DecalComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -507,18 +509,24 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 			break;
 		case colony::ProjectileHitKind::Pawn:
 		{
-			// Blood: a spray out of the far side along the shot, a smaller spatter back toward the shooter, and a fine
-			// mist that hangs a moment; more for a bigger wound.
-			const float Wound = FMath::Clamp(Tracer.Amount / 15.0f, 0.6f, 2.0f);
-			SpawnBurst(EFightParticle::Blood, At, Dir + FVector::UpVector * 0.15f, FMath::RoundToInt(22.0f * Wound), 420.0f, 0.45f, 5.0f, 0.9f, 980.0f);
-			SpawnBurst(EFightParticle::Blood, At, Back + FVector::UpVector * 0.3f, FMath::RoundToInt(8.0f * Wound), 200.0f, 0.6f, 4.0f, 0.6f, 980.0f);
-			SpawnBurst(EFightParticle::Blood, At, Dir, 14, 110.0f, 0.9f, 6.0f, 0.45f, 120.0f);
+			// Blood: UBloodSubsystem's spray, wounds and bleeding (docs/design/blood.md); the old bursts and decals if its
+			// assets are missing or Blood.Enabled is 0.
+			UBloodSubsystem* Blood = GetWorld()->GetSubsystem<UBloodSubsystem>();
+			const bool bFullBlood = Blood && Blood->IsReady();
+			if (!bFullBlood)
+			{
+				const float Wound = FMath::Clamp(Tracer.Amount / 15.0f, 0.6f, 2.0f);
+				SpawnBurst(EFightParticle::Blood, At, Dir + FVector::UpVector * 0.15f, FMath::RoundToInt(22.0f * Wound), 420.0f, 0.45f, 5.0f, 0.9f, 980.0f);
+				SpawnBurst(EFightParticle::Blood, At, Back + FVector::UpVector * 0.3f, FMath::RoundToInt(8.0f * Wound), 200.0f, 0.6f, 4.0f, 0.6f, 980.0f);
+				SpawnBurst(EFightParticle::Blood, At, Dir, 14, 110.0f, 0.9f, 6.0f, 0.45f, 120.0f);
+			}
 			const float Strength = FMath::Clamp(Tracer.Amount / 20.0f, 0.35f, 1.0f);
 			const USimSubsystem* StaggerBridge = BridgeSource.Get();
 			const colony::ThingView* HitView = StaggerBridge && StaggerBridge->GetSim() ? StaggerBridge->GetCurrentSnapshot().find(Tracer.Target) : nullptr;
 			if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
 			{
-				if (ASimPawnActor* Actor = Pawns->FindPawn(Tracer.Target))
+				ASimPawnActor* Actor = Pawns->FindPawn(Tracer.Target);
+				if (Actor)
 				{
 					// A whole-body react with steps (a stumble back when the sim staggered it); the lean goes on top.
 					if (HitView && !HitView->downed && !HitView->dead && Actor->PlayHitClip(Dir, HitView->staggeredFor > 0))
@@ -527,6 +535,23 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 					}
 					Actor->PlayHitReaction(Dir, Strength);
 					++HitReactionsPlayed;
+				}
+				if (bFullBlood)
+				{
+					FBloodHit Hit;
+					Hit.At = At;
+					Hit.Direction = Dir;
+					Hit.Kind = EBloodWound::Auto;
+					// A bullet unless the sim said otherwise (a blow's MeleeHit comes through here too, from SpawnMeleeImpact).
+					Hit.Fallback = Tracer.Id != colony::kNoEntity ? EBloodWound::Gunshot : EBloodWound::Blunt;
+					Hit.Damage = Tracer.Amount;
+					Hit.Victim = Tracer.Target;
+					Hit.Part = Tracer.Part;
+					Hit.Mesh = Actor ? Actor->GetDecalMesh() : nullptr;
+					Blood->AddHit(Hit);
+				}
+				else if (Actor)
+				{
 					SpawnBodyDecal(*Actor, At, Dir, Tracer.Amount);
 					SpawnGroundDecal(FVector(At.X, At.Y, Actor->GetActorLocation().Z), FMath::Clamp(14.0f + Tracer.Amount * 1.2f, 16.0f, 40.0f));
 				}

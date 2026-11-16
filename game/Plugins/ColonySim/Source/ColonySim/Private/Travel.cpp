@@ -340,6 +340,44 @@ bool TravelSystem::startNight(std::string& error) {
     return true;
 }
 
+bool TravelSystem::playerNightNow() const {
+    const NeedRules& needs = needs_.rules();
+    return travelInHours(time_.hourOfDay(), needs.nightFromHour, (needs.nightToHour + 23) % 24);
+}
+
+bool TravelSystem::playerNight() const {
+    return state_.kind == SkipKind::Night && state_.pawn != kNoEntity && things_.registry().valid(state_.pawn) &&
+           things_.registry().all_of<PlayerControl>(state_.pawn) && jobs_.sleepingByHand(state_.pawn);
+}
+
+bool TravelSystem::startPlayerNight(Entity sleeper, std::string& error) {
+    if (skipping()) {
+        error = "time is already being skipped";
+        return false;
+    }
+    const NeedRules& needs = needs_.rules();
+    if (!playerNightNow()) {
+        error = "you can sleep from " + std::to_string(needs.nightFromHour) + ":00 to " + std::to_string(needs.nightToHour) + ":00";
+        return false;
+    }
+    const std::string threatNow = threat();
+    if (!threatNow.empty()) {
+        error = "you can't sleep now: " + threatNow;
+        return false;
+    }
+    const int64_t end = static_cast<int64_t>(needs.nightToHour) * kSecondsPerHour;
+    int64_t morning = time_.day() * kSecondsPerDay + end;
+    if (morning <= time_.seconds) {
+        morning += kSecondsPerDay;
+    }
+    state_.kind = SkipKind::Night;
+    state_.startedAt = time_.seconds;
+    state_.endsAt = morning;
+    state_.pawn = sleeper;
+    emit(EventType::SkipStarted, "night", static_cast<float>(state_.endsAt - state_.startedAt));
+    return true;
+}
+
 bool TravelSystem::startTravel(Entity pawn, float x, float y, std::string& error) {
     if (skipping()) {
         error = "time is already being skipped";
@@ -392,6 +430,10 @@ void TravelSystem::finish(const std::string& why, bool arrived) {
     } else if (kind == SkipKind::Night && arrived) {
         ++state_.nights;
     }
+    // The player's own sleep: they get up when the night ends, however it ends.
+    if (kind == SkipKind::Night && playerNight()) {
+        jobs_.handsOnStop(state_.pawn);
+    }
     const int64_t skipped = time_.seconds - state_.startedAt;
     state_.skipped += skipped;
     hold_ += skipped;
@@ -405,6 +447,12 @@ void TravelSystem::afterStep() {
         return;
     }
     const int64_t startedAt = state_.startedAt;
+    // The player slept the night away and is up early (a fire beside the bed, letting go): the night runs at its pace again.
+    if (state_.kind == SkipKind::Night && state_.pawn != kNoEntity && things_.registry().valid(state_.pawn) &&
+        things_.registry().all_of<PlayerControl>(state_.pawn) && !jobs_.sleepingByHand(state_.pawn)) {
+        finish("you woke up", false);
+        return;
+    }
     if (time_.seconds >= state_.endsAt) {
         finish(state_.kind == SkipKind::Night ? "morning" : "arrived", true);
         return;

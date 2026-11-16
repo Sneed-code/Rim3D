@@ -260,6 +260,8 @@ const char* commandName(const Command& command) {
                         return "Shield";
                     } else if constexpr (std::is_same_v<Type, SetDayLengthCommand>) {
                         return "SetDayLength";
+                    } else if constexpr (std::is_same_v<Type, SleepCommand>) {
+                        return "Sleep";
                     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
                         return "Patch";
                     } else {

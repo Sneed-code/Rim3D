@@ -366,7 +366,11 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setRoomStats(roomStats_.get());
     jobs_->setTalents(talents_.get());
     jobs_->setTraits(traits_.get());
-    jobs_->setGearWorkFactor([this](Entity pawn) { return combat_->apparelStats().workFactor(things_->registry(), pawn); });
+    // Worn armour's weight, and being exhausted (rest at 0: sneed's -25%), slow work.
+    jobs_->setGearWorkFactor([this](Entity pawn) {
+        return combat_->apparelStats().workFactor(things_->registry(), pawn) * needs_->performanceFactor(pawn);
+    });
+    combat_->setPerformance([this](Entity pawn) { return needs_->performanceFactor(pawn); });
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
@@ -1001,6 +1005,43 @@ bool Sim::startClimb(Entity pawn, float dx, float dy, std::string& error) {
     return true;
 }
 
+void Sim::applySleepCommand(const SleepCommand& sleep, uint64_t id) {
+    std::string error;
+    if (sleep.wake) {
+        if (!jobs_->sleepingByHand(sleep.pawn)) {
+            commandFailed(id, "you aren't asleep");
+            return;
+        }
+        jobs_->handsOnStop(sleep.pawn);
+        if (travel_->kind() == SkipKind::Night) {
+            travel_->cancel("you woke up", error);
+        }
+        return;
+    }
+    if (!travel_->playerNightNow()) {
+        const NeedRules& rules = needs_->rules();
+        commandFailed(id, "you can sleep from " + std::to_string(rules.nightFromHour) + ":00 to " + std::to_string(rules.nightToHour) + ":00");
+        return;
+    }
+    if (travel_->skipping()) {
+        commandFailed(id, "time is already being skipped");
+        return;
+    }
+    const std::string threat = travel_->threat();
+    if (!threat.empty()) {
+        commandFailed(id, "you can't sleep now: " + threat);
+        return;
+    }
+    if (!jobs_->handsOnSleep(sleep.pawn, sleep.bed, error)) {
+        commandFailed(id, error);
+        return;
+    }
+    if (!travel_->startPlayerNight(sleep.pawn, error)) {
+        jobs_->handsOnStop(sleep.pawn);
+        commandFailed(id, error);
+    }
+}
+
 void Sim::applyCommand(const Command& command, uint64_t id) {
     std::string error;
     // A colonist in a mental break takes no orders: it isn't the player's to command until it is over.
@@ -1047,6 +1088,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!apparel_->setHideGear(hideGear->pawn, hideGear->hide, why)) {
             commandFailed(id, why);
         }
+        return;
+    }
+    if (const auto* sleep = std::get_if<SleepCommand>(&command)) {
+        applySleepCommand(*sleep, id);
         return;
     }
     if (const auto* patch = std::get_if<PatchCommand>(&command)) {
@@ -1523,6 +1568,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         } else if (combat_->rollLocked(move->pawn) || reg.any_of<Stunned, Casting>(move->pawn)) {
             // Rolling (P2), stunned or winding up a power (X2): the player's position is ignored, without a failure
             // because Unreal sends one every step.
+        } else if (jobs_->sleepingByHand(move->pawn)) {
+            // Asleep (SleepCommand): lying still until morning or SleepCommand{wake}; the same, no failure.
         } else if (reg.get<Mover>(move->pawn).climbing(reg.get<Position>(move->pawn).level)) {
             // Climbing (U17): the movement system takes it up or down; the same, no failure.
         } else {
@@ -2502,11 +2549,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.jobTarget = worker->job.thing;
             view.jobProgress = worker->job.type != JobType::None ? jobs_->jobProgress(entity) : 0.0f;
         }
+        const bool noMind = mindIsPlayersOwn(reg, entity);  // the protagonist: no mood, recreation, beauty or rest need
         if (const Needs* needs = reg.try_get<Needs>(entity)) {
             view.food = needs->food;
-            view.rest = needs->rest;
+            view.rest = noMind ? -1.0f : needs->rest;
         }
-        const bool noMind = mindIsPlayersOwn(reg, entity);  // the protagonist: no mood, recreation or beauty need
         if (const Joy* joy = noMind ? nullptr : reg.try_get<Joy>(entity)) {
             view.joy = joy->level;
             view.comfort = joy->comfort;

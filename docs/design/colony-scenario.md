@@ -572,3 +572,8 @@ buying steel and components from traders with the silver left after medicine (31
 traders then had less silver for medicine) and not rebuilding while a fire burns within two cells. Year runs, six seeds:
 8,6,6,7,6,6 = 39 alive (39).
 
+**Rest rework (2026-11-16, sim and data, no script change).** sneed's rest rules ([needs.md](needs.md) "Rest"): 40% a
+waking day, 50% a night, nothing until 0, and the protagonist never sleeps by itself. First round with everyone kept in bed
+until 6:00: 7,1,0,0,5,7 = 20 alive (late raid waves on days 47 to 54 wiped two colonies, starvation on two). With pawns up
+once rested (about 4:30): 8,5,5,8,5,6 = 37 alive (39).
+
