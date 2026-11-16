@@ -62,7 +62,7 @@ JobSystem::StepResult JobSystem::partyWork(Entity pawn, Job& job, std::string&) 
     if (now() >= job.until) {
         return StepResult::Next;
     }
-    if (Joy* joy = things_.registry().try_get<Joy>(pawn)) {
+    if (Joy* joy = things_.registry().try_get<Joy>(pawn); joy != nullptr && time_.tick) {  // per game hour
         joy->level = std::min(1.0f, joy->level + job.progress / static_cast<float>(kSecondsPerHour));
     }
     return StepResult::Running;
