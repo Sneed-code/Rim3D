@@ -19,6 +19,7 @@
 #include "Misc/Paths.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Misc/App.h"
 #include "UnrealClient.h"
 
 #include "FightSubsystem.h"
@@ -269,6 +270,7 @@ namespace
 		int32 ScriptStep = 0;
 		int32 ScriptHitShots = 0;
 		FString PendingShot;
+		int32 Recorded = 0;          // -CwRecord=<seconds>: frames of the demo saved so far
 		int32 SwingAttack = 0;
 		int32 Swings = 0, BodyHits = 0, Blocks = 0, WorldHits = 0, Misses = 0;
 		FString LastEvent;
@@ -1809,6 +1811,17 @@ namespace
 			{11.5f, 0, 3, 0, nullptr}, {12.2f, 1, 0, 0, TEXT("d_dual1")}, {12.8f, 1, 0, 0, TEXT("d_dual2")},
 			{14.0f, 0, 1, -1, nullptr}, {14.5f, 2, 0, 0, nullptr}, {45.0f, 3, 0, 0, nullptr}, {56.0f, 1, 0, 0, TEXT("f_after1")},
 		};
+		// -CwRecord=<seconds>: from 6 s into the demo, every frame at a fixed 30 a second (Saved/Weapons/rec_0000.png ...).
+		float RecordSeconds = 0.0f;
+		if (S.Demo != ECwDemo::Off && S.ScriptT >= 20.5f && FParse::Value(FCommandLine::Get(), TEXT("CwRecord="), RecordSeconds) && S.Recorded < FMath::RoundToInt32(RecordSeconds * 30.0f))
+		{
+			if (S.Recorded == 0)
+			{
+				FApp::SetUseFixedTimeStep(true);
+				FApp::SetFixedDeltaTime(1.0 / 30.0);
+			}
+			FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Weapons") / FString::Printf(TEXT("rec_%04d.png"), S.Recorded++), false, false);
+		}
 		while (S.ScriptStep < static_cast<int32>(UE_ARRAY_COUNT(Steps)) && S.ScriptT >= Steps[S.ScriptStep].At)
 		{
 			const FStep& Step = Steps[S.ScriptStep++];
