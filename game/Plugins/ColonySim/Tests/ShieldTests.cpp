@@ -171,6 +171,9 @@ TEST_CASE("Shields: a shield works like armour, weighs on walking and attacks, a
             seen = true;
             CHECK(v.shieldSlung);
             CHECK_FALSE(v.shieldUp);
+            // What Unreal draws: the shield and its material.
+            CHECK(v.shield == shieldDef(*sim, "Apparel_ShieldTower"));
+            CHECK(v.shieldStuff == shieldDef(*sim, "Steel"));
         }
     }
     CHECK(seen);

@@ -415,7 +415,8 @@ public:
     // One step, after combat: the dead wear their clothes down and taint them, worn clothes wear
     // (once an hour), marks on pawns that need no stripping go, fighters put on their fight gear from the bag.
     // `now` is the game second of the step.
-    void step(int64_t now, Rng& rng, const std::vector<Event>& events);
+    // `calendarTick`: this step moves the calendar on (docs/design/day-length.md); the hourly wear waits for one.
+    void step(int64_t now, Rng& rng, const std::vector<Event>& events, bool calendarTick = true);
 
     // The state hash and the save read these.
     void hashThing(Entity e, StateHasher& h) const;

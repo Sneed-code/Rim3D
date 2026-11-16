@@ -13,6 +13,7 @@
 #include "SimSubsystem.h"
 #include "WeaponDrawSubsystem.h"
 
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
@@ -47,6 +48,8 @@ namespace
 		colony::Entity Rifle = colony::kNoEntity;
 		colony::Entity Revolver = colony::kNoEntity;
 		colony::Entity Gladius = colony::kNoEntity;
+		colony::Entity Shield = colony::kNoEntity;
+		colony::Entity Basher = colony::kNoEntity;
 		FVector2D Start = FVector2D::ZeroVector;
 		colony::CellPos Cell{0, 0, 0};
 
@@ -82,6 +85,12 @@ namespace
 		int32 DodgesAtStart = 0;
 		int32 BlockedAtStart = 0;
 		int32 BlocksAtStart = 0;
+		int32 ShieldOrdersAtStart = 0;
+		int32 ShieldBlocksAtStart = 0;
+		int32 SparksAtStart = 0;
+		float MaxShieldRaise = 0.0f;
+		bool bShieldUpSeen = false;
+		FVector RaisedAt = FVector::ZeroVector;
 	};
 
 	const colony::ThingView* MeleeSmokeFind(const USimSubsystem& Bridge, colony::Entity Thing)
@@ -940,5 +949,128 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		Notes.Add(FString::Printf(TEXT("duel: %d swings, %d hits, %d blocked, %d deflected, %d dodged, %d missed; %d sidesteps (%d played), %d raised weapons, %d hit-stops"), Swings,
 			W->GetHitsSeen() - State->HitsAtStart, Blocked, W->GetDeflectedSeen(), W->GetDodgedSeen(), W->GetMissedSeen(), Dodges, DodgesPlayed, Blocks,
 			W->GetHitStopsPlayed() - State->StopsAtStart));
+	});
+	// 11. A shield (docs/design/shields.md): a steel medium shield on the protagonist's arm beside the gladius, the right
+	// mouse button raises it facing the camera, a clubber beats on it (sparks), and letting go lowers it.
+	AddPhase(TEXT("shield"), [=, this]()
+	{
+		USimSubsystem* B = Bridge();
+		colony::Sim& Sim = *const_cast<colony::Sim*>(B->GetSim());
+		entt::registry& Registry = Sim.things().registry();
+		State->bStaged = false;
+		State->MaxShieldRaise = 0.0f;
+		State->bShieldUpSeen = false;
+		State->LastHealSeconds = 0.0f;
+		State->ShieldOrdersAtStart = Weapons()->GetShieldOrders();
+		State->ShieldBlocksAtStart = Weapons()->GetShieldBlocksSeen();
+		State->SparksAtStart = Fight()->GetImpactsOfKind(colony::ProjectileHitKind::Armor);
+		// Away from the duel, the protagonist facing east with the gladius in hand.
+		const colony::CellPos A{State->Cell.x - 12, State->Cell.y - 30, 0};
+		colony::Position& MeAt = Registry.get<colony::Position>(State->Me);
+		MeAt.x = A.x + 0.5f;
+		MeAt.y = A.y + 0.5f;
+		Registry.get<colony::Mover>(State->Me).path.clear();
+		Registry.get<colony::Mover>(State->Me).next = 0;
+		const colony::ThingView* Me = Snapshot(State->Me);
+		if (Me && Me->carried[2].valid() && Me->weapon != Me->carried[2])
+		{
+			B->Submit(colony::SwitchWeaponCommand{State->Me, colony::WeaponSlot::Melee});
+		}
+		std::string Why;
+		State->Shield = Sim.apparel().make(Sim.defs().idOf("Things", "Apparel_ShieldMedium"), Sim.defs().idOf("Things", "Steel"), -1, A, &Why);
+		if (State->Shield == colony::kNoEntity || !Sim.apparel().putOn(State->Me, State->Shield, Why))
+		{
+			Fail(FString::Printf(TEXT("shield: could not put a steel medium shield on the protagonist: %s"), UTF8_TO_TCHAR(Why.c_str())));
+		}
+		B->Submit(colony::SpawnThingCommand{"Human", colony::CellPos{A.x + 1, A.y, 0}, 1});
+		B->Submit(colony::SpawnThingCommand{"Melee_Club", colony::CellPos{A.x + 1, A.y + 2, 0}, 1});
+		MeleeSmokeHeal(Sim, State->Me);
+		UProtagonistSubsystem* P = Prot();
+		P->GetBody()->Look(FRotator::NormalizeAxis(-P->GetBody()->GetYaw()), -5.0f - P->GetBody()->GetPitch());
+		B->SetSpeed(1);
+	}, 1.5f, 10.0f, [=, this]()
+	{
+		USimSubsystem* B = Bridge();
+		const colony::ThingView* Me = Snapshot(State->Me);
+		ASimPawnActor* Actor = ActorOf(State->Me);
+		if (!B || !B->GetSim() || !Me || !Actor)
+		{
+			return;
+		}
+		colony::Sim& Sim = *const_cast<colony::Sim*>(B->GetSim());
+		const colony::CellPos A{State->Cell.x - 12, State->Cell.y - 30, 0};
+		BodyView(State->Me, 260.0, 120.0, 150.0);
+		KeepAlive();
+		MeleeSmokeHeal(Sim, State->Basher);
+		// Held for the first 8 seconds, then let go.
+		Weapons()->ScriptRightMouse(true, PhaseTime < 8.0f);
+		State->MaxShieldRaise = FMath::Max(State->MaxShieldRaise, Weapons()->GetShieldRaise(State->Me));
+		State->bShieldUpSeen = State->bShieldUpSeen || Me->shieldUp;
+		if (Me->shieldUp && Weapons()->GetShieldRaise(State->Me) >= 0.99f)
+		{
+			if (const UStaticMeshComponent* Shield = Weapons()->GetShieldComponent(State->Me))
+			{
+				State->RaisedAt = Shield->GetRelativeLocation();
+			}
+		}
+		if (!State->bStaged)
+		{
+			State->Basher = MeleeSmokePawnAt(*B, A.x + 1.5f, A.y + 0.5f, State->Me, State->Enemy);
+			const colony::Entity Club = MeleeSmokeNearestItem(*B, "Melee_Club", A.x + 1.5f, A.y + 2.5f, 1.5f);
+			if (State->Basher == colony::kNoEntity || Club == colony::kNoEntity)
+			{
+				return;
+			}
+			State->bStaged = true;
+			MeleeSmokeSkill(Sim, State->Basher, 20);
+			B->Submit(colony::EquipCommand{State->Basher, Club});
+			B->Submit(colony::SetFactionCommand{State->Basher, 2});
+			return;
+		}
+		if (PhaseTime < 8.0f && B->GetGameSeconds() > State->LastOrderStep && Sim.melee().ready(State->Basher) && Sim.melee().inReach(State->Basher, State->Me))
+		{
+			B->Submit(colony::MeleeCommand{State->Basher, State->Me, colony::MeleeMode::Attack});
+			State->LastOrderStep = B->GetGameSeconds();
+		}
+	}, [=, this]()
+	{
+		UWeaponDrawSubsystem* W = Weapons();
+		W->ScriptRightMouse(false, false);
+		const colony::ThingView* Me = Snapshot(State->Me);
+		const UStaticMeshComponent* Shield = W->GetShieldComponent(State->Me);
+		if (!Me || !Me->shield.valid() || Me->shieldSlung)
+		{
+			Fail(TEXT("shield: the snapshot does not show a shield on the protagonist's arm"));
+			return;
+		}
+		if (!Shield || !Shield->IsVisible())
+		{
+			Fail(TEXT("shield: no shield is drawn on the protagonist"));
+			return;
+		}
+		if (W->GetShieldOrders() - State->ShieldOrdersAtStart < 2)
+		{
+			Fail(FString::Printf(TEXT("shield: %d shield commands sent, expected at least raise and lower"), W->GetShieldOrders() - State->ShieldOrdersAtStart));
+		}
+		if (!State->bShieldUpSeen || State->MaxShieldRaise < 0.99f)
+		{
+			Fail(FString::Printf(TEXT("shield: the sim raised it: %s; drawn up %.2f of the way"), State->bShieldUpSeen ? TEXT("yes") : TEXT("no"), State->MaxShieldRaise));
+		}
+		if (State->RaisedAt.X < 30.0 || FMath::Abs(State->RaisedAt.Y) > 15.0 || State->RaisedAt.Z < 100.0)
+		{
+			Fail(FString::Printf(TEXT("shield: raised it sits at %s, expected in front of the chest"), *State->RaisedAt.ToString()));
+		}
+		if (Me->shieldUp || W->GetShieldRaise(State->Me) > 0.01f)
+		{
+			Fail(TEXT("shield: still up 2 seconds after the button was let go"));
+		}
+		const int32 Blocks = W->GetShieldBlocksSeen() - State->ShieldBlocksAtStart;
+		const int32 Sparks = Fight()->GetImpactsOfKind(colony::ProjectileHitKind::Armor) - State->SparksAtStart;
+		if (State->bStaged && (Blocks < 1 || Sparks < 1))
+		{
+			Fail(FString::Printf(TEXT("shield: %d blows landed on the shield, %d sparks"), Blocks, Sparks));
+		}
+		Notes.Add(FString::Printf(TEXT("shield: raised at %s, %d blows on the shield, %d sparks, %d commands"), *State->RaisedAt.ToString(), Blocks, Sparks,
+			W->GetShieldOrders() - State->ShieldOrdersAtStart));
 	});
 }

@@ -172,6 +172,11 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
             break;
         }
         case EventType::MeleeHit: soundMeleeHit(db, e, out); break;
+        // A hit softened by a raised shield (docs/design/shields.md); one it stopped already sounds as a blocked blow or an
+        // armour impact.
+        case EventType::ShieldBlocked:
+            if (e.message == "softened") out.push_back(soundOn("Melee_Block", e.thing));
+            break;
         case EventType::Explosion: {
             const std::string cue = soundSlotOr(soundDef(db, e.def), "explosion", "Explosion_Blast");
             out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));

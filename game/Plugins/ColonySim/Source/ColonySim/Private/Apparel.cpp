@@ -1168,7 +1168,7 @@ void ApparelSystem::registerSituations(MoodSystem& mood) const {
 
 // ---- Stepping -------------------------------------------------------------------------------
 
-void ApparelSystem::step(int64_t now, Rng& rng, const std::vector<Event>& events) {
+void ApparelSystem::step(int64_t now, Rng& rng, const std::vector<Event>& events, bool calendarTick) {
     entt::registry& reg = things_.registry();
 
     // The dead: what they wore is worn down (not its hit points), and what a human wore is tainted for good. Collected
@@ -1193,7 +1193,7 @@ void ApparelSystem::step(int64_t now, Rng& rng, const std::vector<Event>& events
     // Wear and tear: once an hour each worn piece wears a 24th of the day's hit points' worth of durability
     // (RimWorld's 0.4 hit points a day as a steady rate: a 100 hit point shirt wears 24% in a 60-day year). Never
     // hit points, so normal use can't destroy clothes. Pawns in id order.
-    if (now % kSecondsPerHour == 0) {
+    if (calendarTick && now % kSecondsPerHour == 0) {
         scratch_.clear();
         for (const Entity pawn : reg.view<Gear, Position>()) {
             scratch_.push_back(pawn);

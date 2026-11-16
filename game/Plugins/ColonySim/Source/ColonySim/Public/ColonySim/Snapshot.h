@@ -258,6 +258,8 @@ struct ThingView {
     int dressingSteps = 0;     // steps left putting a piece of armour on from its bag in a fight, 0 for none
     bool shieldUp = false;     // holding its shield up (docs/design/shields.md); `facingX/Y` is where it points
     bool shieldSlung = false;  // its shield hangs on its back behind a two-handed weapon
+    DefId shield;              // the shield it wears (invalid: none) and what it is made of, for drawing it
+    DefId shieldStuff;
     uint32_t firstApparel = 0;
     uint32_t apparelCount = 0;
     // Inventory and carry weight (docs/design/inventory.md). Pawns: what they carry in kg (worn, weapons, bag,
@@ -699,7 +701,11 @@ struct AttunedView {
 };
 
 struct Snapshot {
-    int64_t gameSeconds = 0;  // Sim::time().seconds when it was written
+    int64_t gameSeconds = 0;  // Sim::time().seconds when it was written: the calendar (the clock, the sun)
+    // Sim::time().steps: one per step, real time. Use it, not gameSeconds, to tell whether a step has
+    // run (with a day longer than 48 minutes the calendar stands still on some steps).
+    int64_t steps = 0;
+    int dayMinutes = 48;  // real minutes a game day lasts at 1x (docs/design/day-length.md)
     int mapWidth = 0;
     int mapHeight = 0;
     std::vector<ThingView> things;  // sorted by id

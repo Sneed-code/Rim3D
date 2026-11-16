@@ -56,7 +56,7 @@ public:
 	/** The scale the body is drawn at (model scale from the art table, life stage, body size). */
 	float GetDrawScale() const { return DrawScale; }
 
-	/** The mesh's forward axis is this many degrees off the actor's (+X). */
+	/** The Quaternius meshes' forward axis is this many degrees off the actor's (+X); other models set their own. */
 	static constexpr float kMeshYawOffset = -90.0f;
 
 private:
@@ -67,6 +67,8 @@ private:
 	TObjectPtr<USkeletalMeshComponent> Body;
 
 	void SetPose(ESimAnimalPose NewPose, float PlayRate);
+	/** Turns the mesh to face forward, or onto its side for a dead model with no death clip. */
+	void PlaceBody(bool bOnSide);
 
 	FSimAnimalModel Model;
 	colony::Entity Thing = colony::kNoEntity;

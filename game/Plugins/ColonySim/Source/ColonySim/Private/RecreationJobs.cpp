@@ -371,7 +371,9 @@ JobSystem::StepResult JobSystem::play(Entity pawn, Job& job, std::string& why) {
     }
     // Tolerance to the kind grows by two thirds of the joy gained (wiki "Recreation").
     const float before = joy->level;
-    joy->level = std::min(1.0f, joy->level + recreation_.gainPerHour(*activity, *joy) * factor / static_cast<float>(kSecondsPerHour));
+    if (time_.tick) {  // a rate per game hour: only on steps that move the calendar (docs/design/day-length.md)
+        joy->level = std::min(1.0f, joy->level + recreation_.gainPerHour(*activity, *joy) * factor / static_cast<float>(kSecondsPerHour));
+    }
     if (joy->level > before) {
         joy->addTolerance(recreation_.kinds[static_cast<size_t>(activity->kind)].defName,
                           (joy->level - before) * recreation_.toleranceGainFraction, recreation_.toleranceMax);

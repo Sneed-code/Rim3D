@@ -75,13 +75,32 @@ smithy with Smithing; tower shields (wood or metal) at a smithy with Plate armor
 
 ## Snapshot and saving
 
-`ThingView.shieldUp` (and `facingX/Y` is where it points), `ThingView.shieldSlung`. The `Blocking` component is saved in
-section `apparel` 4.
+`ThingView.shieldUp` (and `facingX/Y` is where it points), `ThingView.shieldSlung`, and `ThingView.shield` /
+`shieldStuff` (the shield's def and material, for drawing it). The `Blocking` component is saved in section `apparel` 4.
+
+## On screen (Unreal)
+
+`UWeaponDrawSubsystem` (`game/Source/Rim3D/WeaponDrawSubsystem.cpp`):
+
+- **Right mouse button.** In direct mode, with a shield on the arm, holding the right mouse button sends
+  `ShieldCommand{up, camera direction}`; it is sent again when the camera turns more than 15 degrees (at most five
+  times a second), and letting go sends the shield down. Without a shield the button does what it did before (a gun
+  aims, a melee weapon blocks). Leaving direct mode, picking up a building, or taking over another colonist puts the
+  shield down. With a shield on the arm a one-handed gun doesn't aim on the right button (`AProtagonistPawn`).
+- **The shield is drawn** from the def's `visual.parts` (placeholder plate and boss shapes until real models come),
+  tinted the material's colour (plasteel and uranium have fallback colours in code). It hangs on the left arm facing
+  out, swings up in front of the chest while `shieldUp`, and rides on the back while `shieldSlung`. It is hidden on a
+  downed, dead or ragdolled pawn and with the look-only `hideGear` switch.
+- **Pose.** While the shield is up the body takes the block lean (`ASimPawnActor::ApplyBodyPose`) and the pawn turns
+  to face where the shield points.
+- **Hits.** `ShieldBlocked` throws sparks off the shield's face (`UFightSubsystem::SpawnMeleeImpact`, Armor) and a
+  softened blow plays the block clang (`Melee_Block`, `Sound.cpp`).
+- Smoke test `melee`, phase `shield`: a steel medium shield on the protagonist, the right button held from code
+  (`ScriptRightMouse`), a clubber beats on it, then it is let go.
 
 ## Not done yet
 
-- Unreal: hold the right mouse button to block (sneed, 2026-11-15) for the protagonist and controlled pawns (sending
-  `ShieldCommand` with the camera direction),
-  shield models on the arm and the back, a raised-shield pose, block sparks on `ShieldBlocked`.
+- Real shield models (free realistic ones or sneed's own Blender ones) in place of the placeholder shapes; a proper
+  raised-shield animation for the body (now the procedural block lean).
 - Raiders and traders don't carry shields yet (no pawn kind lists them).
 - Shield bash, and blocking with the weapon (melee.md) together with a shield.

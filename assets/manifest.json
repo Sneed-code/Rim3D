@@ -113,7 +113,7 @@
       "source": "sketchfab.com, downloaded by sneed 2026-11-14 (list and authors in docs/plans/animal-shortlist.md, Round 3)",
       "licence": "CC BY (Animal Animator, toucan by sevketkabatas; credit in the game's credits), CC BY-NC (parrot by Nyilonelycompany; private game only)",
       "version": "2026-11-14",
-      "installedTo": "assets/raw/sketchfab/ on the PC (not in Git), imported later by Z2 into game/Content/ThirdParty/Animals/",
+      "installedTo": "assets/raw/sketchfab/ on the PC (not in Git); the AnimalArt commandlet imports the ones in assets/animal_art.json `imports` (chimpanzee, sphynx cat, hyena, Akhal-Teke horse) into game/Content/Rim3D/Generated/Animals/ (not in Git). The \"Ultimate Animal Pack\" there is a preview of WildMesh 3D's paid pack (only the wolf is animated): not used.",
       "usedFor": "tropical animals, birds and insects (Z2 to Z7)",
       "reinstall": "download each model again from its Sketchfab page (free account, Download button, glTF)"
     },

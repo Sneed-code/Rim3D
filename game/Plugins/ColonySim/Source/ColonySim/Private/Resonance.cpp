@@ -132,7 +132,7 @@ const PowerDef* ResonanceSystem::power(const std::string& defName) const {
     return nullptr;
 }
 
-int64_t ResonanceSystem::now() const { return time_.seconds; }
+int64_t ResonanceSystem::now() const { return time_.steps; }  // real time, like the fights powers are used in
 
 float ResonanceSystem::sensitivity(Entity pawn) const {
     const entt::registry& reg = things_.registry();
@@ -575,7 +575,7 @@ void ResonanceSystem::step() {
         const float recovery = rules_.strainRecoveryPerStep * (1.0f + rules_.strainRecoveryPerLevel * static_cast<float>(a.level - 1)) *
                                (1.0f + rules_.strainRecoveryPerPain * pain);
         a.strain = std::max(0.0f, a.strain - recovery);
-        for (size_t b = 0; b < rules_.focusBandBelow.size(); ++b) {
+        for (size_t b = 0; b < rules_.focusBandBelow.size() && time_.tick; ++b) {  // focus fades by the calendar
             if (a.focus < rules_.focusBandBelow[b]) {
                 a.focus = std::max(0.0f, a.focus - rules_.focusDecayPerDay[b] / static_cast<float>(kSecondsPerDay));
                 break;
