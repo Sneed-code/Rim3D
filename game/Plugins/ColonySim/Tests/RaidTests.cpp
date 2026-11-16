@@ -24,6 +24,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <vector>
 
 using namespace colony;
@@ -882,4 +883,73 @@ TEST_CASE("Raids: a routed raider walled in with no way off the map fights inste
     CHECK(walledIn);
     CHECK(reg.get<Raider>(boxed).cornered);
     CHECK(reg.get<Fighter>(boxed).mode == FightMode::Fight);
+}
+
+TEST_CASE("Raids: a working colonist hurt by an enemy drops its job: armed it fights back, unarmed it runs") {
+    // sneed (docs/design/real-time-combat.md phase 3): anyone shot at goes for cover and shoots back.
+    const auto run = [](bool armed, bool silenced, bool medic) {
+        auto sim = raidTestSim(71, 192);
+        sim->stepMany(5);
+        const std::vector<Entity> colonists = raidTestColonists(*sim);
+        const Entity colonist = colonists.empty() ? kNoEntity : colonists.front();
+        if (colonist == kNoEntity) {
+            return std::make_tuple(false, false, false, false);
+        }
+        entt::registry& reg = sim->things().registry();
+        if (Gear* g = reg.try_get<Gear>(colonist); g != nullptr && g->weapon != kNoEntity) {
+            sim->combat().unequip(colonist, g->weapon);
+        }
+        if (armed) {
+            raidTestArm(*sim, colonist, "Gun_Revolver");
+        }
+        if (medic) {
+            sim->submit(SetDefenseRoleCommand{colonist, 3, false, CellPos{}});  // Medic
+        }
+        // An enemy 70 m off, beyond anyone's sight (60 m), so the alarm doesn't sound by itself first.
+        const Position& p = reg.get<Position>(colonist);
+        const int rx = static_cast<int>(p.x) + 70 < 188 ? static_cast<int>(p.x) + 70 : static_cast<int>(p.x) - 70;
+        const Entity raider = sim->things().spawn("Human", CellPos{rx, static_cast<int>(p.y), 0});
+        raidTestArm(*sim, raider, "Gun_BoltActionRifle");
+        sim->submit(SetFactionCommand{raider, 2});
+        sim->step();
+        if (silenced) {
+            sim->submit(SoundAlarmCommand{true});
+            sim->step();
+            sim->submit(SoundAlarmCommand{false});  // with an enemy on the map: it stays silent
+            sim->step();
+        }
+        if (reg.all_of<Fighter>(colonist) || reg.all_of<Fighter>(raider) == false) {
+            MESSAGE("setup: colonist already fighting or raider not a fighter");
+        }
+        sim->combat().noteHurt(colonist, raider);
+        sim->step();
+        bool tookCover = false;
+        for (const Event& e : sim->events()) {
+            tookCover = tookCover || (e.type == EventType::PawnAction && e.action == PawnAction::TakeCover && e.thing == colonist);
+        }
+        const Fighter* f = reg.try_get<Fighter>(colonist);
+        const bool knows = f != nullptr && std::any_of(f->known.begin(), f->known.end(), [&](const KnownEnemy& k) { return k.pawn == raider; });
+        return std::make_tuple(tookCover, f != nullptr && f->mode == FightMode::Fight && knows, f != nullptr && f->mode == FightMode::Shelter,
+                               sim->raids().state().alarm);
+    };
+    const auto [armedCover, armedFights, armedShelters, armedAlarm] = run(true, false, false);
+    CHECK(armedCover);
+    CHECK(armedFights);  // fights back with its attacker known
+    CHECK_FALSE(armedShelters);
+    CHECK(armedAlarm);  // being shot sounds the alarm
+    const auto [bareCover, bareFights, bareShelters, bareAlarm] = run(false, false, false);
+    CHECK(bareCover);
+    CHECK_FALSE(bareFights);
+    CHECK(bareShelters);  // runs for shelter
+    const auto [quietCover, quietFights, quietShelters, quietAlarm] = run(true, true, false);
+    CHECK_FALSE(quietCover);  // the player silenced the alarm: left alone
+    const auto [medicCover, medicFights, medicShelters, medicAlarm] = run(true, false, true);
+    CHECK_FALSE(medicCover);  // a medic keeps to its duty (field care)
+    (void)bareAlarm;
+    (void)quietFights;
+    (void)quietShelters;
+    (void)quietAlarm;
+    (void)medicFights;
+    (void)medicShelters;
+    (void)medicAlarm;
 }

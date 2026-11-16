@@ -2527,6 +2527,10 @@ void saveMeleePart(Ar& ar, Melee& m) {
         ar.value("guardBrokenUntil", m.guardBrokenUntil);
         ar.value("noDefendUntil", m.noDefendUntil);
     }
+    if (ar.sectionVersion() >= 3) {  // real-time combat phase 2: waiting out a raised guard
+        ar.value("guardWaitFrom", m.guardWaitFrom);
+        ar.value("nextRollAt", m.nextRollAt);
+    }
 }
 
 template <typename Ar>
@@ -3547,7 +3551,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(s.rot >= 0.0f && s.rot < 1.0f && s.decay >= 0.0f && s.decay < 1.0f, "the save file has an impossible rot or wear");
         });
     });
-    ar.section("melee", 2, [&] {
+    ar.section("melee", 3, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
     });
     ar.section("social", 3, [&] {

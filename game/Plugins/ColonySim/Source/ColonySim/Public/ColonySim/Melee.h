@@ -66,6 +66,9 @@ struct Melee {
     int64_t guardFrom = 0;       // step of its last parry
     int64_t guardBrokenUntil = 0;  // no parrying before this step
     int64_t noDefendUntil = 0;   // no defending at all before this step (after a sidestep, or its own swing)
+    // Phase 2 (melee section 3): when it began holding its swing at a raised guard; 0 when not waiting.
+    int64_t guardWaitFrom = 0;
+    int64_t nextRollAt = 0;      // an AI fighter rolls at most once every aiRollEverySteps
 };
 
 // The numbers (MeleeRules in data/defs/Rules/MeleeRules.json). Ours and sneed's: RimWorld's hit and dodge
@@ -81,6 +84,10 @@ struct MeleeRules {
     int guardBreakSteps = 75;         // a broken guard: stagger, and no parrying for this long
     int dodgeRecoverySteps = 30;      // after a sidestep, no defending for this long
     int recoveryNoDefendSteps = 12;   // after its own strike, no defending for this long
+    int guardWaitSteps = 60;          // an AI fighter holds its swing at a raised guard facing it for up to this long
+    float guardFacingCos = 0.5f;      // a guard faces the attacker when the defender looks within 60 degrees of it
+    float rollClearance = 2.0f;       // an AI roll needs this many metres of open ground in its direction
+    int aiRollEverySteps = 180;       // and comes at most this often: between rolls it sidesteps (fights don't turn into chases)
     float penetrationPerDamage = 0.015f;  // a tool's armor penetration when it gives none
     std::vector<std::string> chargeTraits = {"Brawler"};
     float bodyReach = 0.85f;          // metres from the pawn's centre that fists, teeth and claws reach
@@ -147,6 +154,11 @@ public:
     float aimWobble(Entity pawn) const;
     // The pawn's guard is broken: it can't parry until it recovers.
     bool guardBroken(Entity pawn) const;
+    // `target` holds a raised guard (a shield up, or a parry) facing `pawn`, and its guard isn't broken.
+    bool guardedAgainst(Entity target, Entity pawn) const;
+    // The fighter AI asks before a swing at `target`: true to hold it, because the target's guard is up and facing it
+    // and it has waited less than guardWaitSteps (real-time-combat.md phase 2). Keeps the wait in the pawn's Melee.
+    bool holdSwing(Entity pawn, Entity target);
 
     // One step: defenders act on swings they read, swings wind up, strike and recover. Runs after
     // movement (so strikes see where pawns are now) and before combat.
@@ -160,6 +172,7 @@ public:
     uint64_t dodges() const { return dodges_; }
     uint64_t blocks() const { return blocks_; }
     uint64_t guardBreaks() const { return guardBreaks_; }
+    uint64_t rolls() const { return rolls_; }
 
 private:
     struct Tool {
@@ -180,6 +193,7 @@ private:
     void prepareDefense(Entity defender, Entity attacker, int stepsToHit, uint64_t seed);
     void defend(Entity defender, Melee& d);
     void sidestep(Entity defender, Melee& d);
+    bool roll(Entity defender, Melee& d);
     void commit(Entity pawn, Melee& m);
     void strike(Entity pawn, Melee& m);
     void face(Entity pawn, float x, float y);
@@ -203,6 +217,7 @@ private:
     uint64_t dodges_ = 0;
     uint64_t blocks_ = 0;
     uint64_t guardBreaks_ = 0;
+    uint64_t rolls_ = 0;
 };
 
 }  // namespace colony
