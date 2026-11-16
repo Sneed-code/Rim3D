@@ -39,6 +39,18 @@ namespace
 		return static_cast<uint32>(entt::to_integral(Thing));
 	}
 
+	/** Loads "/Game/Folder/Asset" (the asset named like its package) or a full "/Game/Folder/Asset.Asset" path. */
+	template <typename T>
+	T* AnimalLoadPath(const FString& Path)
+	{
+		const FString Package = FPackageName::ObjectPathToPackageName(Path);
+		if (!FPackageName::DoesPackageExist(Package))
+		{
+			return nullptr;
+		}
+		return LoadObject<T>(nullptr, *(Path.Contains(TEXT(".")) ? Path : Path + TEXT(".") + FPackageName::GetShortName(Path)));
+	}
+
 	template <typename T>
 	T* AnimalLoad(const FString& Model, const FString& Name)
 	{
@@ -103,7 +115,24 @@ void USimAnimalSubsystem::LoadArtTable()
 			Entry->TryGetNumberField(TEXT("yaw"), YawValue);
 			Entry->TryGetNumberField(TEXT("walkCm"), Walk);
 			Entry->TryGetNumberField(TEXT("gallopCm"), Gallop);
-			ImportLooks.Add(FName(*Entry->GetStringField(TEXT("model"))), FVector3f(YawValue, Walk, Gallop));
+			const FName ModelName(*Entry->GetStringField(TEXT("model")));
+			ImportLooks.Add(ModelName, FVector3f(YawValue, Walk, Gallop));
+			if (const TSharedPtr<FJsonObject>* Paths = nullptr; Entry->TryGetObjectField(TEXT("assets"), Paths))
+			{
+				TMap<FString, FString>& Roles = ImportAssets.Add(ModelName);
+				for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*Paths)->Values)
+				{
+					Roles.Add(Pair.Key, Pair.Value->AsString());
+				}
+			}
+			if (const TArray<TSharedPtr<FJsonValue>>* PartList = nullptr; Entry->TryGetArrayField(TEXT("parts"), PartList))
+			{
+				TArray<FString>& Paths = ImportParts.Add(ModelName);
+				for (const TSharedPtr<FJsonValue>& Part : *PartList)
+				{
+					Paths.Add(Part->AsString());
+				}
+			}
 		}
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Defs = nullptr;
@@ -168,6 +197,26 @@ const FSimAnimalModel* USimAnimalSubsystem::GetModelFor(FName DefName, FSimAnima
 		Model.Gallop = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Gallop"));
 		Model.Eat = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Eating"));
 		Model.Death = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Death"));
+		if (const TMap<FString, FString>* Paths = ImportAssets.Find(OutArt.Model))
+		{
+			// A pack already in Unreal's format: the art table names each asset by its path.
+			const auto Clip = [Paths](const TCHAR* Role) { return Paths->Contains(Role) ? AnimalLoadPath<UAnimSequence>((*Paths)[Role]) : nullptr; };
+			Model.Mesh = Paths->Contains(TEXT("mesh")) ? AnimalLoadPath<USkeletalMesh>((*Paths)[TEXT("mesh")]) : nullptr;
+			Model.Idle = Clip(TEXT("Idle"));
+			Model.Walk = Clip(TEXT("Walk"));
+			Model.Gallop = Clip(TEXT("Gallop"));
+			Model.Eat = Clip(TEXT("Eating"));
+			Model.Death = Clip(TEXT("Death"));
+			Model.Parts.Reset();
+			for (const FString& Path : ImportParts.FindRef(OutArt.Model))
+			{
+				if (USkeletalMesh* Piece = AnimalLoadPath<USkeletalMesh>(Path))
+				{
+					Model.Parts.Add(Piece);
+					KeepAlive.Add(Piece);
+				}
+			}
+		}
 		if (!Model.Mesh || !Model.Idle || !Model.Walk)
 		{
 			UE_LOG(LogSimAnimals, Error, TEXT("Model %s is missing its mesh, idle or walk clip: run the AnimalArt commandlet (assets/animal_art.json)"), *Name);

@@ -195,7 +195,8 @@ int32 UAnimalArtCommandlet::Main(const FString& Params)
 	{
 		for (const TSharedPtr<FJsonValue>& Value : *Imports)
 		{
-			if (Wanted(Value->AsObject()->GetStringField(TEXT("model"))) && !AnimalArtImportGltf(Tools, Value->AsObject()))
+			// An entry with `assets` instead of `file` is already in Unreal's format (a Fab pack): nothing to import.
+			if (Value->AsObject()->HasField(TEXT("file")) && Wanted(Value->AsObject()->GetStringField(TEXT("model"))) && !AnimalArtImportGltf(Tools, Value->AsObject()))
 			{
 				++Failed;
 			}
