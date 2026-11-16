@@ -455,7 +455,17 @@ void AProtagonistPawn::UpdateCamera()
 	}
 	const FRotator Look(Pitch, Yaw, 0.0);
 	const float Blend = ProtagonistSmooth(AimBlend);
-	const FVector Eye = Feet + FVector(0.0, 0.0, kEyeHeight) + FRotator(0.0, Yaw, 0.0).Vector() * ProtagonistEyeForward;
+	// The eyes and the camera's pivot were set for the 1.80 m man: they follow this colonist's own height, so a short
+	// colonist sees the world from lower down (docs/design/gear-size.md).
+	double BodyScale = 1.0;
+	if (const USimPawnSubsystem* Pawns = GetWorld() ? GetWorld()->GetSubsystem<USimPawnSubsystem>() : nullptr)
+	{
+		if (const ASimPawnActor* Drawn = Thing != colony::kNoEntity ? Pawns->FindPawn(Thing) : nullptr)
+		{
+			BodyScale = FMath::Clamp(Drawn->GetBodyScale(), 0.5f, 1.5f);
+		}
+	}
+	const FVector Eye = Feet + FVector(0.0, 0.0, kEyeHeight * BodyScale) + FRotator(0.0, Yaw, 0.0).Vector() * ProtagonistEyeForward;
 	FVector Location;
 	EffectiveArm = ArmLength;
 	if (bFirstPerson)
@@ -466,7 +476,7 @@ void AProtagonistPawn::UpdateCamera()
 	else
 	{
 		// Aimed (over the shoulder): the camera comes in close behind and to the right of the colonist.
-		const FVector Pivot = Feet + FVector(0.0, 0.0, ProtagonistPivotHeight);
+		const FVector Pivot = Feet + FVector(0.0, 0.0, ProtagonistPivotHeight * BodyScale);
 		EffectiveArm = FMath::Lerp(ArmLength, FMath::Min(ArmLength, ProtagonistAimArm), Blend);
 		const FVector Right = FRotator(0.0, Yaw, 0.0).RotateVector(FVector::RightVector);
 		Location = Pivot - Look.Vector() * EffectiveArm + Right * (ProtagonistAimShoulder * Blend);

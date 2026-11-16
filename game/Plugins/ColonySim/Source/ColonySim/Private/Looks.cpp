@@ -193,6 +193,16 @@ void looksFace(const Def& rules, uint64_t seed, bool female, PawnLooks& out) {
 
 }  // namespace
 
+GearSize gearSizeFor(const DefDatabase& defs, float height) {
+    const float h = std::clamp(height, 0.5f, 1.5f);
+    const Def* rules = defs.find("Rules", "LooksRules");
+    const float follow = std::clamp(rules != nullptr ? static_cast<float>(rules->number("gearSizeFollow", 0.5)) : 0.5f, 0.0f, 1.0f);
+    GearSize out;
+    out.place = h;
+    out.size = 1.0f + follow * (h - 1.0f);
+    return out;
+}
+
 const char* bodyTypeName(BodyType body) {
     return kLooksBodyNames[std::min<size_t>(static_cast<size_t>(body), 3)];
 }

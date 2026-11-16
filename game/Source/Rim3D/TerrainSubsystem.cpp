@@ -1078,6 +1078,9 @@ void UTerrainSubsystem::LoadRockScatter(const FString& LookPath)
 		const float Across = 2.0f * FMath::Max(Extent.X, Extent.Y);
 		Visual.Scale = Across > 1.0f ? static_cast<float>(Size * 100.0) / Across : 1.0f;
 		Visual.bCastShadow = true;
+		// The glTF import's own materials can't draw on instanced Nanite meshes (default material, grey boxes): the
+		// FoliageMaterials commandlet's solid copies (MI_<name>_R3D on M_FoliageTex) replace them.
+		Visual.Materials = FoliageFor(Mesh);
 		PlantMeshes.Add(Mesh);
 		PlantVisuals.Add(Visual);
 	}
