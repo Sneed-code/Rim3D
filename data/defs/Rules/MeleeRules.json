@@ -11,6 +11,10 @@
     "guardBreakSteps": 75,
     "dodgeRecoverySteps": 30,
     "recoveryNoDefendSteps": 12,
+    "guardWaitSteps": 60,
+    "guardFacingCos": 0.5,
+    "rollClearance": 2.0,
+    "aiRollEverySteps": 180,
     "armorPenetrationPerDamage": 0.015,
     "chargeTraits": ["Brawler"],
     "bodyReach": 0.85,
@@ -41,7 +45,7 @@
       "bodyReach", "animalReachBase", "animalReachPerRoot", "weaponReach", "reachSlack", "closeIn", "standGround", "defaultWeaponReach", "shoulderBelowEye", "strikeDepth", "windupShare",
       "minWindup", "commitSteps", "reactionStepsBySkill", "reactionJitter", "blockSteps",
       "defaultMeleeSkill", "skillSpeedBySkill", "skillDamageBySkill", "aimWobbleBySkill", "reactionTraitSteps", "guardBlocks",
-      "guardWindowSteps", "guardBreakSteps", "dodgeRecoverySteps", "recoveryNoDefendSteps",
+      "guardWindowSteps", "guardBreakSteps", "dodgeRecoverySteps", "recoveryNoDefendSteps", "guardWaitSteps", "guardFacingCos", "rollClearance", "aiRollEverySteps",
       "blockRecoverySteps", "playerBlockSteps", "dodgeHoldSteps", "chargeTraits", "strongPowerShare"
     ]
   }

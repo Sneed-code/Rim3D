@@ -405,7 +405,10 @@ public:
     // isn't a colonist under direct control, is downed, lies prone, or is rolling or waiting out
     // the last roll. A roll ends a shot being aimed or fired (a reload goes on). While it lasts the
     // pawn can't shoot or reload, and the sim moves it: DirectMove is ignored (rollLocked).
-    bool dodgeRoll(Entity pawn, float dx, float dy, std::string* why = nullptr);
+    // `ai`: an AI fighter's roll (real-time-combat.md phase 2): no direct control needed.
+    bool dodgeRoll(Entity pawn, float dx, float dy, std::string* why = nullptr, bool ai = false);
+    // Steps from the start of a roll to the end of its recovery.
+    int rollTotalSteps() const;
     RollPhase rollPhase(Entity pawn) const;
     // True from the command to the end of the recovery: the pawn is not its player's to move.
     bool rollLocked(Entity pawn) const { return rollPhase(pawn) != RollPhase::Idle; }

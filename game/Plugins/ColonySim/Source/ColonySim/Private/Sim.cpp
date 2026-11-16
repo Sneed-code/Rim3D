@@ -2139,6 +2139,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     { SimLap lap(profile_, "defense"); defense_->step(rng_); }
     { SimLap lap(profile_, "artillery"); artillery_->step(rng_); }
+    raids_->takeFire();  // colonists hurt this step take cover or run (real-time-combat.md phase 3)
     { SimLap lap(profile_, "monsters"); monsters_->step(events_, 0); }  // mounds make jelly, brood and spread; insects hunt (docs/design/monsters.md)
     {
         // Blasts of Burn damage start fires; a pawn that catches fire stops what it was doing.

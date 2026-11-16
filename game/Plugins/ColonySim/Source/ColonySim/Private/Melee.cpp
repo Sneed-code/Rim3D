@@ -59,6 +59,10 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     whole("guardBreakSteps", r.guardBreakSteps);
     whole("dodgeRecoverySteps", r.dodgeRecoverySteps);
     whole("recoveryNoDefendSteps", r.recoveryNoDefendSteps);
+    whole("guardWaitSteps", r.guardWaitSteps);
+    num("guardFacingCos", r.guardFacingCos);
+    num("rollClearance", r.rollClearance);
+    whole("aiRollEverySteps", r.aiRollEverySteps);
     num("armorPenetrationPerDamage", r.penetrationPerDamage);
     if (def->has("chargeTraits")) {
         r.chargeTraits.clear();
@@ -292,6 +296,51 @@ float MeleeSystem::reactionSteps(Entity pawn) const {
 bool MeleeSystem::guardBroken(Entity pawn) const {
     const Melee* m = things_.registry().try_get<Melee>(pawn);
     return m != nullptr && now() < m->guardBrokenUntil;
+}
+
+bool MeleeSystem::guardedAgainst(Entity target, Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(target) || !reg.valid(pawn) || !meleeAble(reg, target) || guardBroken(target)) {
+        return false;
+    }
+    const bool shieldUp = reg.all_of<Blocking>(target) && combat_.apparelStats().activeShield(reg, target) != kNoEntity;
+    if (!shieldUp && !blocking(target)) {
+        return false;
+    }
+    const Position* tp = reg.try_get<Position>(target);
+    const Position* pp = reg.try_get<Position>(pawn);
+    const Posture* posture = reg.try_get<Posture>(target);
+    if (tp == nullptr || pp == nullptr || posture == nullptr) {
+        return false;
+    }
+    const float dx = pp->x - tp->x;
+    const float dy = pp->y - tp->y;
+    const float len = std::sqrt(dx * dx + dy * dy);
+    return len < 0.01f || (posture->facingX * dx + posture->facingY * dy) / len >= rules_.guardFacingCos;
+}
+
+// Real-time-combat.md phase 2: don't swing into a raised guard. Hold, facing it, until it drops (a shield-bearer lowers
+// its shield to strike, a parry ends with the blow) or guardWaitSteps have passed; then press anyway, since every parry
+// wears the guard down.
+bool MeleeSystem::holdSwing(Entity pawn, Entity target) {
+    entt::registry& reg = things_.registry();
+    if (!guardedAgainst(target, pawn)) {
+        if (Melee* m = reg.try_get<Melee>(pawn)) {
+            m->guardWaitFrom = 0;
+        }
+        return false;
+    }
+    Melee& m = reg.get_or_emplace<Melee>(pawn);
+    if (m.guardWaitFrom == 0) {
+        m.guardWaitFrom = now();
+    }
+    if (now() - m.guardWaitFrom >= rules_.guardWaitSteps) {
+        m.guardWaitFrom = 0;  // pressing now; the next wait starts afresh
+        return false;
+    }
+    const Position& to = reg.get<Position>(target);
+    face(pawn, to.x, to.y);
+    return true;
 }
 
 bool MeleeSystem::ready(Entity pawn) const {
@@ -528,8 +577,61 @@ void MeleeSystem::defend(Entity defender, Melee& d) {
         return;
     }
     if (defense == MeleeDefense::Dodge && swing->stepsLeft > 0) {
-        sidestep(defender, d);
+        // A heavy blow is worth a roll clear of it (phase 2); a light one a sidestep.
+        if (!(strongSwing(d.threat) && roll(defender, d))) {
+            sidestep(defender, d);
+        }
     }
+}
+
+// The AI's dodge roll (real-time-combat.md phase 2): the player's roll (hit-proof frames, CombatSystem::dodgeRoll),
+// across and away from the attacker, to whichever side has rollClearance of open ground. False if neither has.
+bool MeleeSystem::roll(Entity defender, Melee& d) {
+    entt::registry& reg = things_.registry();
+    if (!reg.all_of<Fighter>(defender) || combat_.rollLocked(defender) || now() < d.nextRollAt) {
+        return false;
+    }
+    const Position pos = reg.get<Position>(defender);
+    const Position& from = reg.get<Position>(d.threat);
+    float ax = pos.x - from.x;
+    float ay = pos.y - from.y;
+    const float len = std::sqrt(ax * ax + ay * ay);
+    if (len < 0.01f) {
+        return false;
+    }
+    ax /= len;
+    ay /= len;
+    const float first = (Rng(d.reactAt ^ seed_ ^ 0x5011ULL).unit() < 0.5f) ? 1.0f : -1.0f;
+    for (const float sign : {first, -first}) {
+        // Half across, half away: out of reach and off the line.
+        float rx = -ay * sign + ax;
+        float ry = ax * sign + ay;
+        const float rl = std::sqrt(rx * rx + ry * ry);
+        rx /= rl;
+        ry /= rl;
+        if (!straightWalkIsClear(map_, pos.x, pos.y, pos.x + rx * rules_.rollClearance, pos.y + ry * rules_.rollClearance, kPawnRadius,
+                                 pos.level)) {
+            continue;
+        }
+        Mover& mover = reg.get<Mover>(defender);
+        mover.path.clear();
+        mover.next = 0;
+        if (!combat_.dodgeRoll(defender, rx, ry, nullptr, true)) {
+            return false;
+        }
+        d.dodged = true;
+        d.nextRollAt = now() + rules_.aiRollEverySteps;
+        ++rolls_;
+        ++dodges_;
+        const int total = combat_.rollTotalSteps();
+        d.noDefendUntil = std::max(d.noDefendUntil, now() + total + rules_.dodgeRecoverySteps);
+        if (Fighter* f = reg.try_get<Fighter>(defender)) {
+            f->dodgeUntil = std::max(f->dodgeUntil, now() + total);
+            f->nextPlan = std::min(f->nextPlan, f->dodgeUntil);
+        }
+        return true;
+    }
+    return false;
 }
 
 // A one-cell step to the side of the line from the attacker, whichever side is free. Nothing if
@@ -899,6 +1001,8 @@ void MeleeSystem::hashThing(Entity e, StateHasher& h) const {
     h.add(m->guardFrom);
     h.add(m->guardBrokenUntil);
     h.add(m->noDefendUntil);
+    h.add(m->guardWaitFrom);
+    h.add(m->nextRollAt);
 }
 
 }  // namespace colony
