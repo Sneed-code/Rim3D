@@ -621,7 +621,7 @@ void UMakeHumanAnimInstance::AddHitKick(const FVector& At, const FVector& Veloci
 void UMakeHumanAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 {
 	Super::NativeUpdateAnimation(DeltaSeconds);
-	// Skin dents: pushed in over 40 ms, then springing back past flat (a small bulge) and settling within about a second,
+	// Skin dents: pushed in over 40 ms and held 0.3 s, then springing back past flat (a small bulge) and settling,
 	// fading out with the soft body's distance fade. The skin material reads them from custom primitive data 16 to 25.
 	USkeletalMeshComponent* Mesh = GetSkelMeshComponent();
 	if (!Mesh)
@@ -639,9 +639,11 @@ void UMakeHumanAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		{
 			Dent.Age += DeltaSeconds;
 			const float T = Dent.Age;
-			Now = T < 0.04f ? Dent.Depth * T / 0.04f : Dent.Depth * FMath::Exp(-(T - 0.04f) * 5.0f) * FMath::Cos((T - 0.04f) * 16.0f);
+			// Held 0.3 s before it springs back (it lasted a tenth of a second and read as a shadow flicker), then slower.
+			const float Back = FMath::Max(T - 0.3f, 0.0f);
+			Now = T < 0.04f ? Dent.Depth * T / 0.04f : Dent.Depth * FMath::Exp(-Back * 3.5f) * FMath::Cos(Back * 9.0f);
 			Now *= Fade;
-			if (T > 1.2f)
+			if (T > 1.8f)
 			{
 				Dent.Depth = 0.0f;
 				Now = 0.0f;
