@@ -40,6 +40,8 @@ enum class EOrderTool : uint8
 	Cancel,
 	/** Drag a rectangle: marks the finished buildings in it to be taken down. */
 	Deconstruct,
+	/** Drag a rectangle: a growing zone of its free soil cells, sown with the chosen crop (GetGrowCrop). */
+	Grow,
 };
 
 /** What the orders overlay draws (smoke test `orders`). */
@@ -51,6 +53,8 @@ struct FOrdersStats
 	int32 HarvestMarks = 0;
 	int32 DeconstructMarks = 0;
 	int32 ZoneCells = 0;
+	/** Cells of growing zones drawn. */
+	int32 GrowCells = 0;
 	/** Instances of the placement ghost (valid, invalid). */
 	int32 GhostValid = 0;
 	int32 GhostInvalid = 0;
@@ -97,6 +101,10 @@ public:
 	/** Picks the Build tool for this building def (a Things defName), made of the stuff with the most in stock unless `Stuff` names one. False if the def can't be built. */
 	bool SelectBuilding(const FString& DefName, const FString& Stuff = FString());
 	colony::DefId GetBuildDef() const { return BuildDef; }
+	/** The crop the Grow tool sows (a Things def such as Plant_Rice); rice until the player picks another. */
+	colony::DefId GetGrowCrop() const { return GrowCrop; }
+	/** Picks the Grow tool's crop by def name; false if it is not a crop the colony may grow. */
+	bool SetGrowCrop(const FString& DefName);
 	colony::DefId GetBuildStuff() const { return BuildStuff; }
 	void SetBuildStuff(colony::DefId Stuff) { BuildStuff = Stuff; }
 	colony::Rot4 GetBuildRotation() const { return BuildRot; }
@@ -235,6 +243,7 @@ private:
 	// What is in hand.
 	EOrderTool Tool = EOrderTool::None;
 	colony::DefId BuildDef;
+	colony::DefId GrowCrop;
 	colony::DefId BuildStuff;
 	colony::Rot4 BuildRot = colony::Rot4::North;
 	FString OpenCategory;
@@ -271,6 +280,8 @@ private:
 	TObjectPtr<UMaterialInterface> SolidMaterial;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ZoneMaterial;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> GrowZoneMaterial;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> GhostGoodMaterial;
 	UPROPERTY()

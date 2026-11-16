@@ -159,6 +159,7 @@ AnimalSystem::AnimalSystem(Things& things, const Map& map, Plants& plants, Healt
     hasBiome_ = biomeDef != nullptr;
     density_ = hasBiome_ ? static_cast<float>(biomeDef->number("animalDensity", 0.0)) : 0.0f;
     kindOfDef_.assign(defs.size(), -1);
+    const double pace = std::max(0.01, defs.tuning(kPaceLifeTuning));
     for (const DefId id : defs.idsOfKind("Things")) {
         const Def& def = defs.get(id);
         if (def.text("category") != "Pawn" || def.text("race.intelligence") != "Animal") {
@@ -179,12 +180,13 @@ AnimalSystem::AnimalSystem(Things& things, const Map& map, Plants& plants, Healt
             k.herdMin = std::max(1, static_cast<int>(def.number("race.herd.minSize", 1.0)));
             k.herdMax = std::max(k.herdMin, static_cast<int>(def.number("race.herd.maxSize", static_cast<double>(k.herdMin))));
         }
-        k.lifeExpectancyDays = def.number("race.lifeExpectancy", 10.0) * static_cast<double>(kDaysPerYear);
+        // The life pace (Clock.h) makes animals grow up and age that many times faster.
+        k.lifeExpectancyDays = def.number("race.lifeExpectancy", 10.0) * static_cast<double>(kDaysPerYear) / pace;
         const size_t stages = def.count("race.lifeStages");
         for (size_t i = 0; i < stages; ++i) {
             const std::string at = "race.lifeStages." + std::to_string(i) + ".";
             Stage s;
-            s.minAgeSeconds = animalYearsToSeconds(def.number((at + "minAgeYears").c_str(), 0.0));
+            s.minAgeSeconds = animalYearsToSeconds(def.number((at + "minAgeYears").c_str(), 0.0) / pace);
             s.bodySizeFactor = static_cast<float>(def.number((at + "bodySizeFactor").c_str(), 1.0));
             s.healthFactor = std::max(0.05f, static_cast<float>(def.number((at + "healthScaleFactor").c_str(), 1.0)));
             s.foodFactor = static_cast<float>(def.number((at + "foodFactor").c_str(), 1.0));

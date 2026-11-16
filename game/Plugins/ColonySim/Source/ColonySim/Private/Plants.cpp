@@ -1,5 +1,6 @@
 #include "ColonySim/Plants.h"
 
+#include "ColonySim/Clock.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Random.h"
 
@@ -55,7 +56,9 @@ Plants::Plants(const Map& map, const DefDatabase& defs, uint64_t seed, const std
       kind_(fertility_.size(), 0),
       growth_(fertility_.size(), 0),
       age_(fertility_.size(), 0) {
-    growthTuning_ = defs.tuning("plantGrowth");
+    // The life pace speeds growth and shortens lifespans alike, so a plant's life keeps its shape.
+    const double pace = std::max(0.01, defs.tuning(kPaceLifeTuning));
+    growthTuning_ = defs.tuning("plantGrowth") * pace;
     if (const Def* rules = defs.find("Rules", "PlantRules")) {
         growStartHour_ = static_cast<int>(rules->numberAt("growHours", 0, growStartHour_));
         growEndHour_ = static_cast<int>(rules->numberAt("growHours", 1, growEndHour_));
@@ -75,7 +78,7 @@ Plants::Plants(const Map& map, const DefDatabase& defs, uint64_t seed, const std
         k.growthPerHour = static_cast<double>(kPlantFullGrowth) / (growDays * 24.0);
         k.fertilityMin = static_cast<float>(def.number("plant.fertilityMin", 0.0));
         k.fertilitySensitivity = static_cast<float>(def.number("plant.fertilitySensitivity", 0.0));
-        k.lifespanHours = static_cast<uint32_t>(std::lround(growDays * def.number("plant.lifespanDaysPerGrowDays", 8.0) * 24.0));
+        k.lifespanHours = static_cast<uint32_t>(std::max<long>(1, std::lround(growDays * def.number("plant.lifespanDaysPerGrowDays", 8.0) * 24.0 / pace)));
         k.isTree = def.flag("plant.isTree");
         if (biomeDef != nullptr) {
             k.commonality = biomeDef->number(("wildPlants." + def.defName()).c_str(), 0.0);
@@ -334,7 +337,7 @@ void Plants::generate(uint64_t seed, double density, const ForestPatches& patche
             // than that), the rest anywhere on the way up.
             const Kind& kind = kinds_[chosen];
             const double growDaysHours = static_cast<double>(kPlantFullGrowth) / kind.growthPerHour;  // growDays x 24
-            const double hoursToGrow = growDaysHours * 24.0 / 13.0;  // growing 13 hours a day
+            const double hoursToGrow = growDaysHours * 24.0 / 13.0 / growthTuning_;  // growing 13 hours a day
             uint32_t growth = 0;
             uint32_t age = 0;
             if (rng.below(3) == 0) {
