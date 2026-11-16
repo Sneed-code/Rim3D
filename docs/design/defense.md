@@ -16,9 +16,12 @@ component. It is a powered consumer (80 W for the mini-turret, `power.consumptio
 switched off (`FlickCommand`), it forgets its target and its burst and does nothing.
 
 - **Looking.** Every `scanEvery` steps (10, staggered by building id) an idle turret picks the nearest
-  pawn that is able (not downed, not dead), not an animal, not on the colony's side (`kPlayerFaction`),
-  within the gun's range, and seen: a line from the muzzle to the pawn's chest that ground, rock and
-  buildings do not stop (`CombatSystem::trace`; the turret's own cell never blocks).
+  pawn that is able (not downed, not dead), not a calm animal, not a prisoner or visitor, not on the colony's
+  side (`kPlayerFaction`), within the gun's range, and seen: a line from the muzzle to the pawn's chest that
+  ground, rock and buildings do not stop (`CombatSystem::trace`; the turret's own cell never blocks). A hostile
+  animal (`AnimalSystem::hostile`: insects on the attack, a manhunter, one out for revenge) is shot like a raider,
+  as RimWorld's turrets shoot every hostile (`DefenseSystem::setAnimals`; test "a turret leaves calm animals alone").
+  Calm insects by their mound are left be, so a turret doesn't stir up a hive.
 - **Shooting.** Warm-up (the gun's `warmupTime`), a burst of `burstShotCount` shots `secondsBetweenBurstShots`
   apart, then the gun's `rangedWeaponCooldown`. Every shot is a real projectile from `fireFrom`: the
   muzzle is `muzzleHeight` above the ground, the aim leads a walking target (`lead` 1: perfectly), and the

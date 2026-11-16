@@ -1,3 +1,4 @@
+#include "ColonySim/Animals.h"
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
@@ -841,5 +842,30 @@ TEST_CASE("Defense: barricades round the mini-turret take the lancer's shots, an
     SUBCASE("ten minutes: it breaks barricades down (it wrecks the turret in the open in under two)") {
         const DefnBarricadeFight f = defnBarricadeFight(33, 600);
         CHECK(f.standing < 7);
+    }
+}
+
+TEST_CASE("Defense: a turret leaves calm animals alone and shoots a manhunter and an attacking insect, as in RimWorld") {
+    // RimWorld's turrets shoot every hostile: insects and manhunting animals among them. Ours left every animal be, and
+    // an insect clawed four colonists to death beside the year run's gun post.
+    for (const char* kind : {"WildBoar", "Megascarab"}) {
+        CAPTURE(kind);
+        auto sim = defnSim();
+        const Entity turret = defnPoweredTurret(*sim);  // at 15,10
+        const Entity colonist = sim->things().spawn("Human", CellPos{12, 14, 0});
+        const Entity animal = sim->things().spawn(kind, CellPos{15, 30, 0});
+        CHECK(animal != kNoEntity);
+        sim->stepMany(5);
+        CHECK(sim->power().running(turret));
+        CHECK_FALSE(sim->animals().hostile(animal));
+        CHECK(defnShots(*sim, turret, 300) == 0);  // calm: left alone
+        CHECK(defnHurt(*sim, animal) == 0.0f);
+        const bool enraged = sim->animals().enrage(animal, AnimalTemper::Manhunter, colonist);
+        CHECK(enraged);
+        CHECK(sim->animals().hostile(animal));
+        const int shots = defnShots(*sim, turret, 30 * 60);
+        MESSAGE(std::string(kind), ": turret shots ", shots, ", animal hurt ", defnHurt(*sim, animal));
+        CHECK(shots > 0);
+        CHECK(defnHurt(*sim, animal) > 0.0f);
     }
 }

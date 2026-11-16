@@ -194,7 +194,10 @@ void DefenseSystem::collectPawns() {
         p.y = pos.y;
         p.level = pos.level;
         p.able = h == nullptr || !h->downed;
-        p.animal = reg.all_of<Animal>(e) || reg.all_of<Prisoner>(e) || reg.all_of<Visitor>(e);  // turrets leave prisoners (C22) and visitors (C23) alone
+        // Turrets leave prisoners (C22), visitors (C23) and calm animals alone; a hostile animal (insects on the attack, a
+        // manhunter) is shot like a raider, as in RimWorld. An insect killed four colonists by the gun post in the year run.
+        const bool hostileAnimal = animals_ != nullptr && animals_->hostile(e);
+        p.animal = (reg.all_of<Animal>(e) && !hostileAnimal) || reg.all_of<Prisoner>(e) || reg.all_of<Visitor>(e);
         p.fighter = reg.all_of<Fighter>(e);
         pawns_.push_back(p);
     }
@@ -203,7 +206,7 @@ void DefenseSystem::collectPawns() {
 
 // ---- Turrets ---------------------------------------------------------------------------------
 
-// A pawn the turret may shoot: able, not an animal, not on the colony's side; within range and seen.
+// A pawn the turret may shoot: able, not a calm animal, not on the colony's side; within range and seen.
 bool DefenseSystem::canSee(const Position& pos, float height, Entity target, float range) const {
     const entt::registry& reg = things_.registry();
     if (!reg.valid(target) || !reg.all_of<Position, Posture>(target)) {
