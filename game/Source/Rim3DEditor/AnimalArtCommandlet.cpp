@@ -7,6 +7,8 @@
 #include "Dom/JsonObject.h"
 #include "Engine/SkeletalMesh.h"
 #include "IAssetTools.h"
+#include "InterchangeGenericAssetsPipeline.h"
+#include "InterchangeGenericMeshPipeline.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "HAL/FileManager.h"
 #include "Misc/PackageName.h"
@@ -68,6 +70,13 @@ namespace
 		Task->bAutomated = true;
 		Task->bReplaceExisting = true;
 		Task->bSave = true;
+		// The body, eyes, tongue, teeth and fur cards are separate skinned parts in these files: one mesh for all of them.
+		UInterchangeGenericAssetsPipeline* Pipeline = NewObject<UInterchangeGenericAssetsPipeline>();
+		if (Pipeline->MeshPipeline)
+		{
+			Pipeline->MeshPipeline->bCombineSkeletalMeshes = true;
+		}
+		Task->Options = Pipeline;
 		Tools.ImportAssetTasks({Task});
 
 		TArray<USkeletalMesh*> Meshes;
