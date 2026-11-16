@@ -300,6 +300,7 @@ int32 UFoliageMaterialsCommandlet::Main(const FString& Params)
 	// (Poly Haven: <material>_diff, _nor_gl, _rough). Leaves are masked and see-through; bark is solid. The whole
 	// tree sways a little, all slots alike, so leaves stay on their branches.
 	int32 TreeMade = 0;
+	TSet<FString> TreeDone; // a rock set's pieces share one material: make its copy once
 	TArray<FAssetData> TreeMeshes;
 	Registry.GetAssetsByClass(UStaticMesh::StaticClass()->GetClassPathName(), TreeMeshes, true);
 	for (const FAssetData& Asset : TreeMeshes)
@@ -372,6 +373,11 @@ int32 UFoliageMaterialsCommandlet::Main(const FString& Params)
 				UE_LOG(LogFoliageMaterials, Warning, TEXT("%s: no %s_diff texture"), *Mesh->GetName(), *Base);
 				continue;
 			}
+			if (TreeDone.Contains(MaterialName))
+			{
+				continue;
+			}
+			TreeDone.Add(MaterialName);
 			UMaterialInstanceConstantFactoryNew* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
 			Factory->InitialParent = TreeMaster;
 			UMaterialInstanceConstant* Instance = Cast<UMaterialInstanceConstant>(Tools.CreateAsset(MaterialName + TEXT("_R3D"), FolFolder, UMaterialInstanceConstant::StaticClass(), Factory));
