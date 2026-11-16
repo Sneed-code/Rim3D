@@ -7,6 +7,9 @@
 #include "Dom/JsonObject.h"
 #include "Engine/SkeletalMesh.h"
 #include "IAssetTools.h"
+#include "Engine/Texture.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialInstanceConstant.h"
 #include "InterchangeGenericAssetsPipeline.h"
 #include "InterchangeGenericMeshPipeline.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -47,6 +50,132 @@ namespace
 			}
 		}
 		return AnimalArtSave(Object);
+	}
+
+	/**
+	 * Logs each imported material's parameters and, for an entry with "albedo" (the colour texture's asset name),
+	 * makes the colour come through: some FBX files bring a black diffuse colour or leave the colour map empty.
+	 */
+	bool AnimalArtFixMaterials(USkeletalMesh* Mesh, const FString& Folder, const TSharedPtr<FJsonObject>& Entry)
+	{
+		// "albedo" is a picture file (repo-relative) imported next to the mesh as the body's colour map.
+		FString AlbedoFile;
+		const bool bFix = Entry->TryGetStringField(TEXT("albedo"), AlbedoFile);
+		UTexture* Albedo = nullptr;
+		if (bFix)
+		{
+			UAssetImportTask* Task = NewObject<UAssetImportTask>();
+			Task->Filename = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), AlbedoFile));
+			Task->DestinationPath = Folder;
+			Task->bAutomated = true;
+			Task->bReplaceExisting = true;
+			Task->bSave = true;
+			FAssetToolsModule::GetModule().Get().ImportAssetTasks({Task});
+			for (UObject* Object : Task->GetObjects())
+			{
+				Albedo = Albedo ? Albedo : Cast<UTexture>(Object);
+			}
+			if (!Albedo)
+			{
+				UE_LOG(LogAnimalArt, Error, TEXT("%s: cannot import the colour map %s"), *Mesh->GetName(), *Task->Filename);
+				return false;
+			}
+		}
+		for (const FSkeletalMaterial& Slot : Mesh->GetMaterials())
+		{
+			UMaterialInstanceConstant* Instance = Cast<UMaterialInstanceConstant>(Slot.MaterialInterface);
+			if (!Instance)
+			{
+				UE_LOG(LogAnimalArt, Display, TEXT("%s: material %s is not an instance"), *Mesh->GetName(), Slot.MaterialInterface ? *Slot.MaterialInterface->GetPathName() : TEXT("none"));
+				continue;
+			}
+			FString Info = FString::Printf(TEXT("parent %s;"), Instance->Parent ? *Instance->Parent->GetName() : TEXT("none"));
+			bool bChanged = false;
+			// The engine's FBX master has no skeletal or morph-target usage flags and cannot be changed: without them
+			// the game draws the default material. A copy in the model's folder gets them, and the instances use it.
+			UMaterial* Base = Instance->GetMaterial();
+			if (bFix && Base && Base->GetPathName().StartsWith(TEXT("/Interchange")))
+			{
+				const FString CopyName = Base->GetName() + TEXT("_R3D");
+				UMaterial* Copy = LoadObject<UMaterial>(nullptr, *(Folder / CopyName + TEXT(".") + CopyName), nullptr, LOAD_Quiet | LOAD_NoWarn);
+				if (!Copy)
+				{
+					Copy = Cast<UMaterial>(FAssetToolsModule::GetModule().Get().DuplicateAsset(CopyName, Folder, Base));
+					if (Copy)
+					{
+						Copy->bUsedWithSkeletalMesh = true;
+						Copy->bUsedWithMorphTargets = true;
+						Copy->PostEditChange();
+						AnimalArtSave(Copy);
+					}
+				}
+				if (Copy)
+				{
+					Instance->SetParentEditorOnly(Copy);
+					bChanged = true;
+				}
+				else
+				{
+					UE_LOG(LogAnimalArt, Error, TEXT("%s: cannot copy %s"), *Mesh->GetName(), *Base->GetPathName());
+				}
+			}
+			TArray<FMaterialParameterInfo> Infos;
+			TArray<FGuid> Ids;
+			Instance->GetAllTextureParameterInfo(Infos, Ids);
+			for (const FMaterialParameterInfo& P : Infos)
+			{
+				UTexture* Value = nullptr;
+				Instance->GetTextureParameterValue(P, Value);
+				Info += FString::Printf(TEXT(" tex %s=%s;"), *P.Name.ToString(), Value ? *Value->GetName() : TEXT("none"));
+				const FString N = P.Name.ToString();
+				const bool bColour = N.Contains(TEXT("Diffuse")) || N.Contains(TEXT("BaseColor")) || N.Contains(TEXT("Albedo"));
+				if (bFix && bColour && Slot.MaterialSlotName.ToString().Contains(TEXT("Body")) && Value != Albedo)
+				{
+					Instance->SetTextureParameterValueEditorOnly(P, Albedo);
+					bChanged = true;
+				}
+			}
+			Instance->GetAllVectorParameterInfo(Infos, Ids);
+			for (const FMaterialParameterInfo& P : Infos)
+			{
+				FLinearColor Value;
+				Instance->GetVectorParameterValue(P, Value);
+				Info += FString::Printf(TEXT(" vec %s=(%.2f %.2f %.2f);"), *P.Name.ToString(), Value.R, Value.G, Value.B);
+				const FString N = P.Name.ToString();
+				if (bFix && (N.Contains(TEXT("Diffuse")) || N.Contains(TEXT("BaseColor"))) && Value.R + Value.G + Value.B < 0.15f)
+				{
+					Instance->SetVectorParameterValueEditorOnly(P, FLinearColor::White);
+					bChanged = true;
+				}
+			}
+			Instance->GetAllScalarParameterInfo(Infos, Ids);
+			for (const FMaterialParameterInfo& P : Infos)
+			{
+				float Value = 0.0f;
+				Instance->GetScalarParameterValue(P, Value);
+				Info += FString::Printf(TEXT(" num %s=%.2f;"), *P.Name.ToString(), Value);
+				const FString N = P.Name.ToString();
+				if (bFix && (N.Contains(TEXT("Metallic")) && !N.Contains(TEXT("Map"))) && Value > 0.5f)
+				{
+					Instance->SetScalarParameterValueEditorOnly(P, 0.0f);
+					bChanged = true;
+				}
+				// "materialNumbers": {"<parameter>": value} sets numbers on every material of the model.
+				double Wanted = 0.0;
+				if (const TSharedPtr<FJsonObject>* Numbers = nullptr; Entry->TryGetObjectField(TEXT("materialNumbers"), Numbers) && (*Numbers)->TryGetNumberField(N, Wanted) && !FMath::IsNearlyEqual(Value, static_cast<float>(Wanted)))
+				{
+					Instance->SetScalarParameterValueEditorOnly(P, static_cast<float>(Wanted));
+					bChanged = true;
+				}
+			}
+			UE_LOG(LogAnimalArt, Display, TEXT("%s: material %s (slot %s): %s%s"), *Mesh->GetName(), *Instance->GetName(), *Slot.MaterialSlotName.ToString(), *Info, bChanged ? TEXT(" -> fixed") : TEXT(""));
+			if (bChanged)
+			{
+				Instance->PostEditChange();
+				AnimalArtSave(Instance);
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -128,6 +257,7 @@ namespace
 		const FBox Box = Meshes[0]->GetBounds().GetBox();
 		UE_LOG(LogAnimalArt, Display, TEXT("%s: mesh %.2f x %.2f x %.2f m, %d materials"), *Model, Box.GetSize().X / 100.0, Box.GetSize().Y / 100.0,
 			Box.GetSize().Z / 100.0, Meshes[0]->GetMaterials().Num());
+		bOk = AnimalArtFixMaterials(Meshes[0], Folder, Entry) && bOk;
 		const TSharedPtr<FJsonObject>* Roles = nullptr;
 		if (Entry->TryGetObjectField(TEXT("clips"), Roles))
 		{
