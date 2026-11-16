@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <utility>
 
 namespace colony {
 
@@ -23,10 +24,11 @@ struct GameTime;
 // A swing has a wind-up, a hit moment and a recovery, timed in the sim. At the hit moment a strike
 // line from the attacker's shoulder is traced against hitboxes (CombatSystem::trace), so reach is
 // physical: a target that stepped back or aside is missed. Where the strike goes is fixed a little
-// before the hit (`commitSteps`), with a spread sized so that a standing man is hit as often as
-// RimWorld's melee hit chance says. A defender that sees the swing coming in time sidesteps (as
-// often as RimWorld's dodge chance says) or raises its weapon to block. Damage goes through armor
-// like a bullet's (CombatSystem::hitPawn).
+// before the hit (`commitSteps`), with only a small wobble of the hand by skill: no hit-chance dice
+// (docs/design/real-time-combat.md). Melee skill makes swings faster and harder. A defender that reads
+// the swing in time always does the sensible thing: a shield goes up (Fighters), a melee weapon parries
+// (until its guard breaks), empty hands sidestep. Damage goes through armor like a bullet's
+// (CombatSystem::hitPawn).
 //
 // Unreal reads `meleePhase`, `meleeTarget`, `meleeStepsLeft` and `blocking` from the snapshot (which
 // is why the snapshot includes this header), MeleeSwing and MeleeHit events, and sends MeleeCommand.
@@ -59,21 +61,26 @@ struct Melee {
     int64_t blockFrom = 0;       // blocking from this game second up to (not including) blockUntil
     int64_t blockUntil = 0;
     bool dodged = false;         // it sidestepped this swing
+    // Guard and breath (melee section 2): parries in a row break the guard; a sidestep or its own swing leaves a gap.
+    uint8_t guardCount = 0;      // parries in a row, each within guardWindowSteps of the last
+    int64_t guardFrom = 0;       // step of its last parry
+    int64_t guardBrokenUntil = 0;  // no parrying before this step
+    int64_t noDefendUntil = 0;   // no defending at all before this step (after a sidestep, or its own swing)
 };
 
-// The numbers (MeleeRules in data/defs/Rules/MeleeRules.json). The hit and dodge curves and the
-// capacity weights are RimWorld's (wiki); reach and timing are ours.
+// The numbers (MeleeRules in data/defs/Rules/MeleeRules.json). Ours and sneed's: RimWorld's hit and dodge
+// chances are gone (docs/decisions/0010-real-time-combat.md).
 struct MeleeRules {
-    std::vector<float> hitCurveX = {0.0f, 10.0f, 20.0f, 40.0f};  // base score (Melee skill and offsets)...
-    std::vector<float> hitCurveY = {0.5f, 0.8f, 0.9f, 0.96f};     // ...to the chance a standing man is hit
-    std::vector<float> dodgeCurveX = {5.0f, 20.0f, 60.0f};
-    std::vector<float> dodgeCurveY = {0.0f, 0.3f, 0.5f};
     int defaultSkill = 4;             // pawns without skills
-    float hitCapacityWeight = 12.0f;  // base score per 100% of Manipulation and of Sight above 100%...
-    float hitCapacityCap = 1.5f;      // ...counted up to this
-    float dodgeMovingWeight = 18.0f;
-    float dodgeSightWeight = 8.0f;
-    float dodgeSightCap = 1.4f;
+    float skillSpeed[2] = {0.8f, 1.2f};   // at Melee skill 0 and 20: a swing takes its time divided by this (sneed)
+    float skillDamage[2] = {0.8f, 1.2f};  // at Melee skill 0 and 20: damage and armour penetration times this (sneed)
+    float aimWobble[2] = {0.12f, 0.03f};  // at Melee skill 0 and 20: metres the hand wobbles off the aimed point
+    std::vector<std::pair<std::string, float>> reactionTraitSteps = {{"Nimble", -3.0f}};  // traits that read swings quicker
+    int guardBlocks = 3;              // this many parries, each within guardWindowSteps of the last, break the guard
+    int guardWindowSteps = 150;
+    int guardBreakSteps = 75;         // a broken guard: stagger, and no parrying for this long
+    int dodgeRecoverySteps = 30;      // after a sidestep, no defending for this long
+    int recoveryNoDefendSteps = 12;   // after its own strike, no defending for this long
     float penetrationPerDamage = 0.015f;  // a tool's armor penetration when it gives none
     std::vector<std::string> chargeTraits = {"Brawler"};
     float bodyReach = 0.85f;          // metres from the pawn's centre that fists, teeth and claws reach
@@ -90,7 +97,6 @@ struct MeleeRules {
     int commitSteps = 6;              // steps before the hit at which the strike's line is fixed
     float reactionSteps[2] = {14.0f, 5.0f};  // at Melee skill 0 and 20: steps to read a swing
     float reactionJitter = 4.0f;      // plus or minus this, picked per swing
-    float blockChance[2] = {0.1f, 0.5f};     // at Melee skill 0 and 20, holding a melee weapon
     int blockSteps = 4;               // to raise the weapon
     int blockRecoverySteps = 12;      // the blocker's stagger: no swing of its own meanwhile
     int playerBlockSteps = 20;        // how long the player's block holds
@@ -131,11 +137,16 @@ public:
     // The fighter AI charges with this pawn: no gun, and a melee weapon in hand or a trait that says
     // so (Brawler). Others only strike back at enemies in reach.
     bool charges(Entity pawn) const;
-    // RimWorld's numbers for the pawn as it is now.
     int meleeSkill(Entity pawn) const;
-    float hitChance(Entity pawn) const;
-    float dodgeChance(Entity pawn) const;
-    float blockChance(Entity pawn) const;
+    // Melee skill's factors (MeleeRules skillSpeedBySkill, skillDamageBySkill): >1 is faster or harder.
+    float swingSpeed(Entity pawn) const;
+    float swingDamage(Entity pawn) const;
+    // Steps the pawn takes to read a swing at it, before the per-swing jitter: skill and traits (Nimble).
+    float reactionSteps(Entity pawn) const;
+    // Metres its hand wobbles off the point it aims a swing at.
+    float aimWobble(Entity pawn) const;
+    // The pawn's guard is broken: it can't parry until it recovers.
+    bool guardBroken(Entity pawn) const;
 
     // One step: defenders act on swings they read, swings wind up, strike and recover. Runs after
     // movement (so strikes see where pawns are now) and before combat.
@@ -148,6 +159,7 @@ public:
     uint64_t hits() const { return hits_; }
     uint64_t dodges() const { return dodges_; }
     uint64_t blocks() const { return blocks_; }
+    uint64_t guardBreaks() const { return guardBreaks_; }
 
 private:
     struct Tool {
@@ -172,8 +184,7 @@ private:
     void strike(Entity pawn, Melee& m);
     void face(Entity pawn, float x, float y);
     bool shoulder(Entity pawn, float& x, float& y, float& z) const;
-    float capacity(Entity pawn, const char* name) const;
-    float traitOffset(Entity pawn, const char* stat) const;
+    float swingTimeFactor(Entity pawn) const;
     int64_t now() const;
 
     Things& things_;
@@ -191,6 +202,7 @@ private:
     uint64_t hits_ = 0;
     uint64_t dodges_ = 0;
     uint64_t blocks_ = 0;
+    uint64_t guardBreaks_ = 0;
 };
 
 }  // namespace colony

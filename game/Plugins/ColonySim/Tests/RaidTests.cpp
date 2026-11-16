@@ -782,3 +782,104 @@ TEST_CASE("Raids: the alarm's home is the middle of the colony's own buildings, 
     CHECK(sim->raids().state().homeX == doctest::Approx(x2));
     CHECK(sim->raids().state().homeY == doctest::Approx(y2));
 }
+
+namespace {
+
+// A squad of pirates that has just routed (half of them shot down). Returns the ones still running.
+std::vector<Entity> raidTestRouted(Sim& sim) {
+    sim.submit(StartRaidCommand{"Pirate", 400.0f, 2});
+    sim.step();
+    std::vector<Entity> raiders = raidTestRaiders(sim);
+    if (raiders.size() < 4) {
+        return {};
+    }
+    sim.stepMany(60);
+    const size_t half = (raiders.size() + 1) / 2;
+    for (size_t i = 0; i < half; ++i) {
+        sim.submit(DamagePawnCommand{raiders[i], "Bullet", 500.0f, 0});
+    }
+    for (int i = 0; i < 40; ++i) {
+        sim.step();
+    }
+    std::vector<Entity> running;
+    for (size_t i = half; i < raiders.size(); ++i) {
+        const Fighter* f = sim.things().registry().try_get<Fighter>(raiders[i]);
+        if (f != nullptr && f->mode == FightMode::Flee) {
+            running.push_back(raiders[i]);
+        }
+    }
+    return running;
+}
+
+}  // namespace
+
+TEST_CASE("Raids: a routed raider caught by an enemy at its heels turns and fights to the death") {
+    // sneed (docs/design/real-time-combat.md): raiders run at half lost, but fight back when caught.
+    SimSettings settings;
+    settings.seed = 41;
+    settings.mapSize = 96;
+    settings.flatMap = true;
+    Sim sim(settings, raidTestDefs());
+    const std::vector<Entity> running = raidTestRouted(sim);
+    RAID_REQUIRE(running.size() >= 2);
+    entt::registry& reg = sim.things().registry();
+    const Entity caught = running[0];
+    const Entity far = running[1];
+    // A colonist with a club right behind the first; one shooting the second from 20 m.
+    const Position& cp = reg.get<Position>(caught);
+    const Entity chaser = sim.things().spawn("Human", CellPos{static_cast<int>(cp.x) + 2, static_cast<int>(cp.y), 0});
+    raidTestArm(sim, chaser, "Melee_Club");
+    const Position& fp = reg.get<Position>(far);
+    const Entity shooter = sim.things().spawn("Human", CellPos{static_cast<int>(fp.x), static_cast<int>(fp.y) + 20, 0});
+    RAID_REQUIRE(raidTestDist(sim, chaser, caught) <= 4.0f);
+    RAID_REQUIRE(raidTestDist(sim, shooter, far) > 4.0f);
+    sim.combat().noteHurt(caught, chaser);
+    sim.combat().noteHurt(far, shooter);
+    CHECK(reg.get<Raider>(caught).cornered);
+    CHECK(reg.get<Fighter>(caught).mode == FightMode::Fight);
+    CHECK_FALSE(reg.get<Raider>(far).cornered);  // shot from afar: it keeps running
+    CHECK(reg.get<Fighter>(far).mode == FightMode::Flee);
+    CHECK(sim.raids().corneredCount() == 1);
+    // The squad's next thoughts (still routed) don't send it running again, and it doesn't leave the map.
+    for (int i = 0; i < 90; ++i) {
+        sim.step();
+    }
+    CHECK(reg.valid(caught));
+    CHECK(reg.get<Fighter>(caught).mode == FightMode::Fight);
+}
+
+TEST_CASE("Raids: a routed raider walled in with no way off the map fights instead") {
+    SimSettings settings;
+    settings.seed = 41;
+    settings.mapSize = 96;
+    settings.flatMap = true;
+    Sim sim(settings, raidTestDefs());
+    const std::vector<Entity> running = raidTestRouted(sim);
+    RAID_REQUIRE(!running.empty());
+    entt::registry& reg = sim.things().registry();
+    const Entity boxed = running[0];
+    // Put it in a closed box of walls in the middle of the map.
+    Position& p = reg.get<Position>(boxed);
+    p.x = 48.5f;
+    p.y = 48.5f;
+    reg.get<Mover>(boxed).path.clear();
+    reg.get<Mover>(boxed).next = 0;
+    for (int y = 46; y <= 50; ++y) {
+        for (int x = 46; x <= 50; ++x) {
+            if (x == 46 || x == 50 || y == 46 || y == 50) {
+                sim.things().spawn("Wall", CellPos{x, y, 0});
+            }
+        }
+    }
+    bool walledIn = false;
+    for (int i = 0; i < 60; ++i) {
+        sim.step();
+        for (const Event& e : sim.events()) {
+            walledIn = walledIn || (e.type == EventType::PawnAction && e.action == PawnAction::Cornered && e.thing == boxed &&
+                                    e.message == "walled in");
+        }
+    }
+    CHECK(walledIn);
+    CHECK(reg.get<Raider>(boxed).cornered);
+    CHECK(reg.get<Fighter>(boxed).mode == FightMode::Fight);
+}
