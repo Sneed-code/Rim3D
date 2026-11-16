@@ -94,7 +94,8 @@ namespace
 			// The engine's FBX master has no skeletal or morph-target usage flags and cannot be changed: without them
 			// the game draws the default material. A copy in the model's folder gets them, and the instances use it.
 			UMaterial* Base = Instance->GetMaterial();
-			if (bFix && Base && Base->GetPathName().StartsWith(TEXT("/Interchange")))
+			const bool bFbx = Entry->GetStringField(TEXT("file")).EndsWith(TEXT(".fbx"), ESearchCase::IgnoreCase);
+			if ((bFix || bFbx) && Base && Base->GetPathName().StartsWith(TEXT("/Interchange")))
 			{
 				const FString CopyName = Base->GetName() + TEXT("_R3D");
 				UMaterial* Copy = LoadObject<UMaterial>(nullptr, *(Folder / CopyName + TEXT(".") + CopyName), nullptr, LOAD_Quiet | LOAD_NoWarn);
