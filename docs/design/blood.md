@@ -46,7 +46,13 @@ body it hits. The splat's length / width = 1 / sin(angle of impact), with the ta
 on a wall can run down it. Small splats close together run together into one (a puddle under drips) instead of
 another decal. **Mist**: soft camera-facing puffs that spread and fade in under a second.
 
-**Bleeding**: each wound that bleeds is stuck to its bone. While the sim says that part's wound bleeds it drips (0.4 to
+**For now (sneed, 2026-11-16, after the gun range):** blood only on the hit, no ongoing bleeding effects, so
+`Blood.Bleeding` is 0 (the drips, runs, spurts and pools below stay in the code for later), and the tissue bits are off
+(`Blood.Bits` 0: they read as low-poly chunks). Each hit leaves the wound mark exactly where it landed and a soaked
+patch round it (and round the exit), which lands on clothes where they cover the spot. The spray leans on a fine
+pinpoint mist of many small puffs plus small drops.
+
+**Bleeding** (`Blood.Bleeding 1`): each wound that bleeds is stuck to its bone. While the sim says that part's wound bleeds it drips (0.4 to
 7 drips a second by its share of `bleedPerDay`), a run grows down the skin while the body is upright, a very bad
 gunshot, cut or stab (force >= 1.3, half of them) spurts with the heartbeat (every 0.7 to 0.85 s, weaker as blood is
 lost), and a downed or dead body bleeds a pool that spreads (to 40-80 cm by blood loss). A dead body's bleeding runs
@@ -77,7 +83,7 @@ colours update a slice a frame (every stain about every half second, only when i
 fights on a slow PC.
 
 Console: `Blood.Enabled`, `Blood.Quality`, `Blood.MaxDrops`, `Blood.MaxStains`, `Blood.DryMinutes`, `Blood.Filth`,
-`Blood.DropScale`, `Blood.FlipU` / `Blood.FlipV` / `Blood.SwapUV` (if the stain pictures come out mirrored or turned),
+`Blood.DropScale`, `Blood.Bleeding`, `Blood.Bits`, `Blood.FlipU` / `Blood.FlipV` / `Blood.SwapUV` (if the stain pictures come out mirrored or turned),
 `Blood.Debug`.
 
 ## Later

@@ -41,6 +41,9 @@ namespace
 	TAutoConsoleVariable<int32> GBloodFlipU(TEXT("Blood.FlipU"), 0, TEXT("1 mirrors the stain pictures left-right (if spatter tails point the wrong way)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GBloodFlipV(TEXT("Blood.FlipV"), 0, TEXT("1 mirrors the stain pictures top-bottom (if runs go up)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GBloodSwapUV(TEXT("Blood.SwapUV"), 0, TEXT("1 turns the stain pictures a quarter (if runs go sideways)."), ECVF_Default);
+	TAutoConsoleVariable<int32> GBloodBleeding(TEXT("Blood.Bleeding"), 0,
+		TEXT("1: wounds keep bleeding while the sim says so (drips, runs, heartbeat spurts, pools). 0 (sneed, 2026-11-16, for now): blood only on the hit."), ECVF_Default);
+	TAutoConsoleVariable<int32> GBloodBits(TEXT("Blood.Bits"), 0, TEXT("1 throws small bits of tissue on heavy hits (off: sneed read them as low-poly chunks)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GBloodDebug(TEXT("Blood.Debug"), 0, TEXT("1 logs every hit and prints counts on screen."), ECVF_Default);
 
 	const TCHAR* const BloodSplatterPath = TEXT("/Game/Rim3D/Generated/Blood/M_BloodSplatter.M_BloodSplatter");
@@ -521,7 +524,7 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 		{
 			// The way in: a small back-spatter toward the shooter and a puff.
 			SprayCone(Hit.At, (Back + Up * 0.2f).GetSafeNormal(), 35.0f, N(14.0f * Force), 120.0f, 380.0f, 0.08f, 0.25f, Fluid, Ignore, GroundZ);
-			SprayMist(Hit.At, Back, 40.0f, N(2.0f), 80.0f, 6.0f, 0.35f, 0.35f, Fluid);
+			SprayMist(Hit.At, Back, 30.0f, N(5.0f), 160.0f, 3.5f, 0.4f, 0.5f, Fluid);
 			bExit = Force >= 0.55f || Random.FRand() < Force;
 			if (bExit)
 			{
@@ -530,8 +533,10 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 				const float Speed = FMath::Sqrt(Force);
 				SprayCone(ExitAt, (Dir + Up * 0.08f).GetSafeNormal(), 22.0f, N(55.0f * Force), 350.0f * Speed, 1100.0f * Speed, 0.10f, 0.55f, Fluid, Ignore, GroundZ);
 				SprayCone(ExitAt, Dir, 8.0f, N(10.0f), 600.0f * Speed, 900.0f * Speed, 0.30f, 0.60f, Fluid, Ignore, GroundZ);
-				SprayMist(ExitAt, Dir, 25.0f, N(6.0f * Force), 250.0f, 12.0f, 0.7f, 0.55f, Fluid);
-				if (Force > 0.9f)
+				// A fine pinpoint mist: many small puffs fanning out, and a slower cloud that hangs.
+				SprayMist(ExitAt, Dir, 18.0f, N(14.0f * Force), 420.0f, 5.0f, 0.55f, 0.6f, Fluid);
+				SprayMist(ExitAt, Dir, 35.0f, N(5.0f * Force), 150.0f, 11.0f, 0.9f, 0.4f, Fluid);
+				if (Force > 0.9f && GBloodBits.GetValueOnGameThread() != 0)
 				{
 					for (int32 I = 0; I < FMath::RoundToInt(2.0f * Force); ++I)
 					{
@@ -544,7 +549,8 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 			else
 			{
 				SprayCone(Hit.At, (Back + Up * 0.3f).GetSafeNormal(), 45.0f, N(20.0f * Force), 150.0f, 450.0f, 0.10f, 0.40f, Fluid, Ignore, GroundZ);
-				SprayMist(Hit.At, Back, 45.0f, N(3.0f), 120.0f, 9.0f, 0.5f, 0.45f, Fluid);
+				SprayMist(Hit.At, Back, 35.0f, N(8.0f * Force), 220.0f, 4.5f, 0.5f, 0.55f, Fluid);
+				SprayMist(Hit.At, Back, 45.0f, N(3.0f), 90.0f, 9.0f, 0.8f, 0.35f, Fluid);
 			}
 			break;
 		}
@@ -554,7 +560,7 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 			const FVector Along = (Dir + Up * 0.25f).GetSafeNormal();
 			SprayCone(Hit.At, Along, 30.0f, N(35.0f * Force), 200.0f, 650.0f, 0.10f, 0.45f, Fluid, Ignore, GroundZ);
 			SprayCone(Hit.At, Along, 5.0f, N(10.0f * Force), 300.0f, 700.0f, 0.15f, 0.40f, Fluid, Ignore, GroundZ);
-			SprayMist(Hit.At, Along, 30.0f, N(2.0f), 150.0f, 7.0f, 0.45f, 0.35f, Fluid);
+			SprayMist(Hit.At, Along, 25.0f, N(6.0f * Force), 260.0f, 4.0f, 0.45f, 0.5f, Fluid);
 			break;
 		}
 		case EBloodWound::Stab:
@@ -575,7 +581,7 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 			Away = (Away + Up * 0.4f).GetSafeNormal();
 			SprayCone(Hit.At, Away, 75.0f, N(60.0f * Force), 300.0f, 900.0f, 0.10f, 0.55f, Fluid, Ignore, GroundZ);
 			SprayMist(Hit.At, Away, 70.0f, N(8.0f * Force), 300.0f, 16.0f, 0.8f, 0.5f, Fluid);
-			for (int32 I = 0; I < FMath::RoundToInt(3.0f * Force); ++I)
+			for (int32 I = 0; I < (GBloodBits.GetValueOnGameThread() != 0 ? FMath::RoundToInt(3.0f * Force) : 0); ++I)
 			{
 				SpawnDrop(Hit.At, FMath::VRandCone(Away, FMath::DegreesToRadians(60.0f)) * Random.FRandRange(300.0f, 700.0f), Random.FRandRange(0.8f, 1.5f), Fluid,
 					Ignore, GroundZ, EDropKind::Chunk);
@@ -634,6 +640,19 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 			default:
 				break;
 		}
+		if (Kind != EBloodWound::Blunt || Hit.Damage >= 8.0f)
+		{
+			// Blood soaking out round the wound (into clothes where they cover it: they take the decal too).
+			const float Soak = 4.0f + 5.0f * Force;
+			AddBodyStain(MakeBodyDecal(Mesh, BloodCellPool + Random.RandRange(0, 1), Hit.At, Into, Side, Soak, Soak * 0.85f, DecalColorFor(Fluid, 0.0f, 0.75f)), Mesh,
+				Hit.Victim, Fluid, false);
+			if (bExit)
+			{
+				const float ExitSoak = Soak * 1.3f;
+				AddBodyStain(MakeBodyDecal(Mesh, BloodCellPool + Random.RandRange(0, 1), ExitAt, -Dir, BloodAnyPerpendicular(Dir, Random), ExitSoak, ExitSoak * 0.85f,
+					DecalColorFor(Fluid, 0.0f, 0.75f)), Mesh, Hit.Victim, Fluid, false);
+			}
+		}
 		if (Force >= 0.5f)
 		{
 			// Blood splashed on the skin round the wound.
@@ -645,7 +664,7 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 	}
 
 	// Wounds that bleed on.
-	const bool bBleeds = Kind != EBloodWound::Blunt || Hit.Damage >= 8.0f;
+	const bool bBleeds = GBloodBleeding.GetValueOnGameThread() != 0 && (Kind != EBloodWound::Blunt || Hit.Damage >= 8.0f);
 	if (bBleeds && Mesh)
 	{
 		AddBleed(Hit, Kind, Force, Fluid, Hit.At, Kind == EBloodWound::Gunshot ? Back : -(Mesh->GetSocketLocation(Mesh->FindClosestBone(Hit.At)) - Hit.At).GetSafeNormal());
