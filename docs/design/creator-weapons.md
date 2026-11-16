@@ -65,6 +65,11 @@ Jump clips (the club's running jump attack, the great sword's jump attack) lift 
 stance height; the visible mesh is lowered by the rest, at once on the way up and gently as it lands (log line "Jump
 capped").
 
+The attacks that carry the body metres forward (the club's running jump attack, the great sword's jump and slide
+attacks) are for the one-person preview only: in the fight demo the running jump ran him straight through her, she
+folded over him and both were carried out of the frame. The demo never picks them, even with "Only the picked
+attack" on (it picks another).
+
 ## Blades that stop
 
 Each frame of a swing, between 10% and 90% of the clip, the attacker's blade (hilt to tip) is swept from where it was
