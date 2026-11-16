@@ -309,8 +309,7 @@ TEST_CASE("sound: voice cues carry their rules") {
     if (!soundTestLoad(db)) { CHECK(false); return; }
     const Def* hit = db.find("SoundCues", "Voice_FemHit");
     const Def* scream = db.find("SoundCues", "Voice_FemScream");
-    REQUIRE(hit != nullptr);
-    REQUIRE(scream != nullptr);
+    if (hit == nullptr || scream == nullptr) { CHECK(false); return; }
     CHECK(hit->number("chance", 0.0) == doctest::Approx(0.5));
     CHECK(hit->number("minDamage", 0.0) == doctest::Approx(3.0));
     CHECK(hit->number("cooldown", 0.0) == doctest::Approx(5.0));
