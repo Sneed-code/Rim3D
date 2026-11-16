@@ -541,17 +541,18 @@ namespace
 		if (Key == TEXT("Shield"))
 		{
 			// A round shield: a wooden board, an iron rim behind it and an iron boss, its face along +z.
-			// 50 cm across. The cylinder shape has only six sides, so the rim and the board are each four of them turned
-			// 15 degrees apart (24 sides); a flattened ball makes the board's slight dome, an iron boss its middle.
+			// 50 cm across. The cylinder shape has only six sides, so the rim and the board are each 24 of them turned
+			// 2.5 degrees apart (four turned 15 degrees apart left notches between the corners: a saw-blade edge); a
+			// flattened ball makes the board's slight dome, an iron boss its middle.
 			const FLinearColor Iron(0.20f, 0.20f, 0.22f);
 			const FLinearColor Wood(0.28f, 0.16f, 0.075f);
-			for (int32 Turn = 0; Turn < 4; ++Turn)
+			for (int32 Turn = 0; Turn < 24; ++Turn)
 			{
 				VisualMesh::FPart Rim;
 				Rim.Shape = VisualMesh::EShape::Cylinder;
 				Rim.Size = FVector3f(25.0f, 25.0f, 2.2f);
 				Rim.At = FVector3f(0.0f, 0.0f, -1.6f);
-				Rim.Rotation = FRotator3f(0.0f, Turn * 15.0f, 0.0f);
+				Rim.Rotation = FRotator3f(0.0f, Turn * 2.5f, 0.0f);
 				Rim.Color = Iron;
 				VisualMesh::FPart Board = Rim;
 				Board.Size = FVector3f(23.8f, 23.8f, 2.6f);
@@ -659,6 +660,23 @@ namespace
 				if (Back < -0.2)
 				{
 					X = (X - Forearm * (Back + 0.2)).GetSafeNormal();
+				}
+			}
+			// Nor through its holder's own body (a hit reaction's twisted wrist pointed a two-handed blade back through the
+			// chest): if the blade's line runs into the torso and the other way is clear, it goes the other way.
+			if (CwHasBone(Mesh, TEXT("pelvis")) && CwHasBone(Mesh, TEXT("neck_01")))
+			{
+				const FVector Pelvis = CwBone(Mesh, TEXT("pelvis"));
+				const FVector Neck = CwBone(Mesh, TEXT("neck_01"));
+				auto IntoBody = [&](const FVector& Dir)
+				{
+					FVector P1, P2;
+					FMath::SegmentDistToSegmentSafe(Grip + Dir * 12.0, Grip + Dir * 55.0, Pelvis, Neck, P1, P2);
+					return FVector::Dist(P1, P2) < 13.0;
+				};
+				if (IntoBody(X) && !IntoBody(-X))
+				{
+					X = -X;
 				}
 			}
 			Fingers = (Fingers - X * FVector::DotProduct(Fingers, X)).GetSafeNormal();
