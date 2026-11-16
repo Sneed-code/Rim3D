@@ -52,6 +52,19 @@ public:
 	/** Plays the short animation for what the pawn did (picked up, put down). */
 	void PlayAction(colony::PawnAction Action);
 
+	/** A jump (the player's body, Space): the body goes up and down in an arc over kJumpSeconds of game time while the Game
+	 *  Animation Sample's jump plays (take-off by speed, the fall loop, the landing). Only the picture: the sim keeps the
+	 *  pawn on the ground. False if it is already in the air, lying or ragdolled. */
+	bool StartJump();
+	bool IsJumping() const { return JumpAge >= 0.0f; }
+	/** How high the body is off the ground now, cm. */
+	float GetJumpHeight() const;
+	int32 GetJumpsPlayed() const { return JumpsPlayed; }
+	/** How fast the pawn moves over the ground now (the sim's, blended), cm per second at 1x. */
+	float GetGroundSpeed() const { return GroundSpeed; }
+	static constexpr float kJumpHeight = 45.0f;
+	static constexpr float kJumpSeconds = 0.62f;
+
 	/** Gives the pawn its seeded looks (docs/design/looks.md): height, and with the MetaHuman its body
 	 *  shape, skin and hair colour; horns for lineages that have them. Does nothing if they are unchanged. */
 	void ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& InLooks);
@@ -63,6 +76,10 @@ public:
 	const TArray<TObjectPtr<UStaticMeshComponent>>& GetHorns() const { return Horns; }
 	/** V2 (docs/design/looks.md): the MetaHuman's face with the face shape morphs, null without the PawnFaces assets. */
 	USkeletalMeshComponent* GetFaceMesh() const { return FaceMesh; }
+	/** The MakeHuman character's mesh while the looks ask for one (docs/design/makehuman.md); null otherwise. */
+	USkeletalMeshComponent* GetMakeHumanMesh() const { return MakeHumanMesh; }
+	/** The MetaHuman's body (with the whole body, all of its skin); null for a mannequin. */
+	USkeletalMeshComponent* GetSkinBody() const { return MetaHumanBody; }
 	/** The eye slots of the face (left, right). */
 	const TArray<int32>& GetEyeSlots() const { return EyeSlots; }
 	/** The groom a groom component (Hair, Eyebrows, Mustache, Beard, Eyelashes) draws now: the asset's name, empty for none. */
@@ -81,7 +98,9 @@ public:
 	/** The meshes of the worn pieces now (skinned garments and head props), and the item each belongs to. */
 	const TArray<TObjectPtr<UMeshComponent>>& GetWornMeshes() const { return WornMeshes; }
 	const TArray<uint32>& GetWornMeshItems() const { return WornMeshItems; }
-	/** The bare skin layer (torso and arms, legs); empty while the clothes assets are missing. */
+	/** Whether the MetaHuman wears the engine's whole body (all skin; no skin layer needed under the clothes). */
+	bool HasFullBody() const { return bFullBody; }
+	/** The bare skin layer (torso and arms, legs) of the older hands-and-feet body; empty with the whole body or without the clothes assets. */
 	const TArray<TObjectPtr<USkeletalMeshComponent>>& GetBareLayer() const { return BareLayer; }
 	const TArray<TObjectPtr<UMaterialInstanceDynamic>>& GetBareSkins() const { return BareSkins; }
 	const UStaticMeshComponent* GetHairCards() const { return HairCards; }
@@ -266,17 +285,25 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<USkeletalMeshComponent> DefaultTrousers;
+	TObjectPtr<USkeletalMeshComponent> DefaultShoes;
 
 	FSimPawnApparel Apparel;
 	uint64 ApparelKey = 0;
 	bool bApparelApplied = false;
 	bool bBareLayerTried = false;
+	bool bFullBody = false;
+	FName AppliedFacePreset;
+	// A MakeHuman character drawn instead of the MetaHuman (docs/design/makehuman.md): its mesh, retargeted from the hidden mannequin.
+	TObjectPtr<USkeletalMeshComponent> MakeHumanMesh;
+	FString AppliedMakeHuman;
+	void ApplyMakeHuman(USimPawnSubsystem& Pawns);
 	bool bHairHidden = false;
 	int32 ApparelRebuilds = 0;
 
 	void SpawnRagdollFloor();
 	/** The hit reaction's lean and the melee pose, applied to the body together. */
 	void ApplyBodyPose(float GameDelta, bool bBlocking);
+	void AdvanceJump(float GameDelta);
 	/** The swing or block, plus the dodge: what the body and the weapon do now. */
 	FMeleePose ComputeMeleePose() const;
 
@@ -303,6 +330,13 @@ private:
 	/** Real seconds the sim has disagreed with the swing on screen (a swing the sim called off). */
 	float SwingMismatch = 0.0f;
 	bool bBodyPosed = false;
+	/** Game seconds into the jump, or below nought when not jumping; how fast it was going when it jumped (cm/s). */
+	float JumpAge = -1.0f;
+	float JumpSpeed = 0.0f;
+	float JumpStartLength = 0.0f;
+	bool bJumpFalling = false;
+	int32 JumpsPlayed = 0;
+	float GroundSpeed = 0.0f;
 	float RollProgress = 0.0f;
 	float RollAngle = 0.0f;
 	FVector RollDirection = FVector::ForwardVector;
