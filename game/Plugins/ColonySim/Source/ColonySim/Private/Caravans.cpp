@@ -100,7 +100,7 @@ CaravanSystem::CaravanSystem(Things& things, Map& map, Pathfinder& pathfinder, H
         const float nutrition = static_cast<float>(def.number("stats.nutrition", 0.0));
         // Caravans don't eat people (nobody packs them as food) or anything that has no nutrition.
         if (nutrition > 0.0f && !def.flag("humanlike") && def.text("category") != "Pawn") {
-            nutrition_[id.value] = nutrition;
+            nutrition_[id.value] = nutrition * needs.rules().nutritionFactor(def.text("ingestible.preferability"));
             foodRank_[id.value] = caravanFoodRank(def.text("ingestible.preferability"));
         }
     }

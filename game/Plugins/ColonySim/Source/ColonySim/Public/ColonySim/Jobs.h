@@ -632,6 +632,12 @@ private:
     float sleepBelow(ScheduleKind slot) const;
     // `commit` false only asks whether there is food: a nutrient paste dispenser then makes no meal.
     bool findFood(Entity pawn, Job& out, bool commit = true);
+public:
+    // sneed (2026-11-16): the protagonist eats the best food in its bag by itself before it gets hungry
+    // (needs.md "The protagonist eats from the bag"). Called for every pawn each step; does nothing for others.
+    // Returns true if it ate.
+    bool autoEatFromBag(Entity pawn);
+private:
     // Nutrient paste (NutrientPaste.cpp, docs/design/nutrient-paste.md): the raw food in the hoppers beside a dispenser
     // (nutrition), and whether the dispenser could make a meal now (powered, with enough in its hoppers).
     float pasteStock(Entity dispenser) const;
