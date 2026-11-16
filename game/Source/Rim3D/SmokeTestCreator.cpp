@@ -20,6 +20,7 @@
 #include "UnrealClient.h"
 #include "Misc/Parse.h"
 
+#include "CreatorWeapons.h"
 #include "MakeHumanAnimInstance.h"
 #include "PawnActor.h"
 #include "PawnLooks.h"
@@ -1075,6 +1076,15 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			PC->bShowMouseCursor = true;
 		}
 
+		// The WEAPONS window's weapons, preview, fight demo and blood (CreatorWeapons.cpp).
+		{
+			TArray<ASimPawnActor*> CwPeople;
+			for (const FCreatorPerson& Person : State->People)
+			{
+				CwPeople.Add(Pawns->FindPawn(Person.Thing));
+			}
+			CreatorWeapons::Tick(GetWorld(), CwPeople, State->Selected, GetWorld()->GetDeltaSeconds(), State->bWalk);
+		}
 		// The panel (-CreatorNoPanel: none, for pictures).
 		if (FParse::Param(FCommandLine::Get(), TEXT("CreatorNoPanel")))
 		{
@@ -1460,6 +1470,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			ImGui::TextDisabled("%s", Now >= 0 ? TCHAR_TO_UTF8(*(TEXT("Playing: ") + State->ClipNames[Now])) : "Not playing");
 		}
 		ImGui::End();
+		CreatorWeapons::DrawWindow(Scale);
 		ImGui::PopStyleColor(UE_ARRAY_COUNT(Colours));
 		ImGui::PopStyleVar(UE_ARRAY_COUNT(Vars) + 4);
 		++State->PanelFrames;
