@@ -16,6 +16,7 @@
 class UAudioComponent;
 class USimSubsystem;
 class USoundAttenuation;
+class UReverbEffect;
 namespace colony { class Sim; struct Event; struct Snapshot; }
 
 /** A sound in memory: 16-bit samples, interleaved when it has two channels. */
@@ -47,6 +48,9 @@ public:
 	/** StartSample counts frames (a sample per channel); a loop wraps it. */
 	void Setup(TSharedPtr<const FSoundClip> InClip, bool bInLoop, int64 StartSample);
 	virtual int32 OnGeneratePCMAudio(TArray<uint8>& OutAudio, int32 NumSamples) override;
+
+	/** A one-shot that has handed its last sample to the audio device (a loop never is). */
+	bool IsDone() const { return !bLoop && (!Clip || Cursor.load() >= Clip->Samples.Num()); }
 
 	/** Samples handed to the audio device so far (the smoke test calls OnGeneratePCMAudio itself). */
 	int64 GetSamplesOut() const { return SamplesOut.load(); }
@@ -106,6 +110,18 @@ public:
 	/** Plays a cue now, at a place in world cm (or heard everywhere with bEverywhere). False if it is not a cue. */
 	bool PlayCue(const FString& Cue, const FVector& Location, bool bEverywhere = false);
 
+	/** Handles a play as if the sim had sent it, on the next tick (the smoke test sends pawn voices this way). */
+	void QueuePlay(const colony::SoundPlay& Play) { PendingPlays.push_back(Play); }
+
+	/**
+	 * How loud a sound is at a distance, 0 to 1 (docs/design/sound.md "Distance"): full up to `NearM`, then halved with
+	 * every doubling of the distance, as sound spreads in open air (-6 dB), and eased to silence over the last 30% of the
+	 * cue's range so nothing stops with a jump.
+	 */
+	static float DistanceGain(float NearM, float RangeM, float DistanceM);
+	/** The low-pass for air: far sounds lose their highs first (20 kHz close, about 1.3 kHz at the edge of the range). */
+	static float AirCutoff(float RangeM, float DistanceM);
+
 	/** The mixer panel (sliders), drawn by the overseer under its settings. */
 	void DrawMixerPanel(float ViewportRight, float Scale);
 
@@ -116,6 +132,8 @@ public:
 	int32 GetCuesWithFiles() const;
 	int32 GetMusicTracks(int32 Mood) const;
 	bool HasCue(const FString& Cue) const { return Cues.Contains(Cue); }
+	/** How many sound files a cue has (0: it plays its tone). */
+	int32 GetClipCount(const FString& Cue) const { const FCue* C = Cues.Find(Cue); return C ? C->Clips.Num() : 0; }
 	/** Sounds asked for since the sim started, by cue. */
 	int32 GetPlayCount(const FString& Cue) const { const int32* N = PlayCounts.Find(Cue); return N ? *N : 0; }
 	int32 GetPlaysTotal() const { return PlaysTotal; }
@@ -131,6 +149,14 @@ public:
 	/** 0 calm, 1 tense, 2 combat, and the track playing ("" between tracks). */
 	int32 GetMusicMood() const { return MusicMood; }
 	const FString& GetMusicTrack() const { return MusicTrackName; }
+	/** The room the ears are in, for the echo: 0 outdoors, 1 under a built roof, 2 under rock (a cave). */
+	int32 GetEnvironment() const { return Environment; }
+	/** Pawn voices cut short by a newer voice of the same pawn (a scream over a hit grunt), and voices not played
+	 *  (a hit grunt in its cooldown or over a scream). */
+	int32 GetVoicesCut() const { return VoicesCut; }
+	int32 GetVoicesSkipped() const { return VoicesSkipped; }
+	/** Whether a pawn's voice sound is playing now, and which cue. */
+	FString GetPawnVoice(colony::Entity Pawn) const;
 	/** Stingers played for letters. */
 	int32 GetStingers() const { return Stingers; }
 	/** Walls and roofs between a place (world cm) and the ears, as the occlusion counts them. */
@@ -152,6 +178,10 @@ private:
 		bool bLoop = false;
 		float Volume = 0.5f;
 		float RangeM = 30.0f;
+		/** Full volume up to here; beyond it -6 dB for every doubling of the distance. */
+		float NearM = 2.0f;
+		/** Pawn voices: seconds before the same pawn can make this sound again (a hit grunt's 5). */
+		float CooldownS = 0.0f;
 		int32 Priority = 2;
 		ESoundMix Group = ESoundMix::Effects;
 		/** The cut files; empty plays the tone. */
@@ -176,7 +206,14 @@ private:
 		int32 Occlusion = 0;
 		float OcclusionAge = 99.0f;
 		float Volume = 0.0f;
+		/** Low-pass for distance and walls together, Hz (20000: none). */
+		float Cutoff = 20000.0f;
 		int32 Voice = -1;
+		/** One-shots: when the clip had handed out its last sample (the device still has a little of it to play). */
+		double DoneAt = -1.0;
+		/** A pawn's own voice: the pawn, and whether it is a hit grunt or a scream. */
+		colony::Entity VoiceOf = colony::kNoEntity;
+		colony::SoundVoice VoiceKind = colony::SoundVoice::None;
 		float TargetGain = 1.0f;
 		bool bDead = false;
 		/** Kept alive by the snapshot (machines, beds), not by events: stops when a scan no longer sees it. */
@@ -188,7 +225,17 @@ private:
 	struct FVoice
 	{
 		UAudioComponent* Component = nullptr;  // held by Components
+		UCueVoiceWave* Wave = nullptr;          // held by the component while it plays
 		int32 Sound = -1;
+		/** A voice fading out after a cut is not handed to a new sound until then. */
+		double BusyUntil = 0.0;
+	};
+
+	/** The sound a pawn's voice is making, and when its last hit grunt started (for the cooldown). */
+	struct FPawnVoice
+	{
+		int32 Sound = -1;
+		double LastHitAt = -1.0e9;
 	};
 
 	/** A def's `visual.sound` slots that the snapshot uses, read once. */
@@ -206,6 +253,12 @@ private:
 	void SaveMixer() const;
 	void OnSimEvent(const colony::Event& Event);
 	void HandlePlay(const colony::SoundPlay& Play);
+	void PlayVoice(const FCue& Cue, const colony::SoundPlay& Play, const FVector& Location);
+	/** Stops a sound with a quick fade (no click), leaving its voice to finish the fade. */
+	void CutSound(int32 Index);
+	void UpdateEnvironment(const colony::Sim& Sim);
+	USoundAttenuation* SpatialFor(const FCue& Cue);
+	colony::SoundGender GenderOf(colony::Entity Thing) const;
 	int32 AddSound(const FCue& Cue, const FVector& Location, bool bEverywhere, colony::Entity Follow, uint64 Key);
 	void StopSound(int32 Index);
 	void ResetForSim();
@@ -234,6 +287,14 @@ private:
 	UPROPERTY()
 	TObjectPtr<USoundAttenuation> Spatial;
 
+	/** Attenuation by cue range (rounded metres): it sets how much echo a sound sends, more the farther it is. */
+	UPROPERTY()
+	TMap<int32, TObjectPtr<USoundAttenuation>> SpatialByRange;
+
+	/** The echo of the place the ears are in: outdoors, a room, a cave. */
+	UPROPERTY()
+	TArray<TObjectPtr<UReverbEffect>> Reverbs;
+
 	UPROPERTY()
 	TArray<TObjectPtr<UAudioComponent>> Components;
 
@@ -254,6 +315,10 @@ private:
 	int32 PlaysTotal = 0;
 	int32 Dropped = 0;
 	int32 MaxVoicesInUse = 0;
+	int32 VoicesCut = 0;
+	int32 VoicesSkipped = 0;
+	int32 Environment = -1;
+	TMap<uint32, FPawnVoice> PawnVoices;
 	double Now = 0.0;
 
 	// Snapshot-driven sounds, by entity number.
