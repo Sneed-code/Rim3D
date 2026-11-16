@@ -135,3 +135,66 @@ the packaged build stages both folders as plain files (`DefaultGame.ini`).
   palace, the desert) by measured loudness, not by ear; no combat tracks yet. Stingers: Kenney's steel jingles.
 - The picks were made from file names and the packs' notes, not by listening: sneed should judge them in play.
 - `CREDITS.txt` in the Sounds folder lists the two CC-BY credits (the footsteps and the music); a credits screen is V24.
+
+## Voices, distance, echo and battles (sneed, 2026-11-16)
+
+### Pawn voices
+
+sneed's own recordings, in Git at `game/Content/Rim3D/Sounds/cues/Voice_FemHit/` (5) and `Voice_FemScream/` (3): cut by
+us to start on the voice (the files had 0.1 to 0.4 s of silence first), mono, 44.1 kHz, levelled to the same loudness
+(peak at most -1 dB). The game reads this folder after `ThirdParty/Sounds/cues` and stages it in the packaged build.
+
+| Cue | When | Rules |
+| --- | --- | --- |
+| `Voice_FemHit` | a woman takes a melee hit of more than `minDamage` (3) | `chance` 0.5; at most one per pawn every `cooldown` (5) real seconds |
+| `Voice_FemScream` | a woman is downed, or killed by violence (a vital part destroyed, organ failure, executed) | no cooldown; cuts her own hit grunt |
+
+- The sim decides (`soundForEvent` with a `SoundGenderOf` callback): the Human def's slots `femaleHit`, `femaleScream`
+  (`maleHit`, `maleScream` when there are male recordings), the 50% from a hash of the event, so the game's random
+  numbers are never touched and the same fight always gives the same grunts. Bleeding out, cold or illness: no scream.
+- Unreal keeps **one voice per pawn** (`PlayVoice`): a scream cuts that pawn's grunt with a 40 ms fade (no click), a grunt
+  never plays over a scream, a scream does not restart within 2 s (downed and killed together scream once). Other sounds,
+  even the same pawn's footsteps or the club's thud, are never touched. The grunt's 5 s are counted in real time, from
+  the last grunt that played.
+- Smoke test `sound`, phase `sound_voices`.
+
+### Distance (realistic falloff)
+
+Before, the volume was `(1 - distance / range)^2`, which keeps a sound at about the same level for the first few metres
+and then drops it off a cliff. Now (`USoundSubsystem::DistanceGain`):
+
+- Full volume up to the cue's `near` (default range / 15, 1 to 10 m; the voices say 2 and 3 m), then **halved for every
+  doubling of the distance** (-6 dB), which is how sound spreads in open air. A grunt at 4 m is half as loud as at 2 m,
+  at 16 m an eighth.
+- The last 30% of the range eases it to silence, so nothing stops with a jump.
+- **Air takes the highs first:** a low-pass that falls from 20 kHz close to about 1.3 kHz at the edge of the range
+  (`AirCutoff`), so a far shot is a dull thump and a near one cracks. Walls and roofs lower it further (occlusion, as before).
+- Panning left and right is Unreal's (each sound sits at its place in 3D).
+
+### Echo (environment)
+
+The place the ears are in sets the echo (`UpdateEnvironment`, three reverbs made in code, no assets, `Sound.Echo 0` turns
+it off): **outdoors** (the forest: soft late echo off trees, highs absorbed, wet 0.35), **under a built roof** (a room:
+strong early reflections, 0.65 s tail, wet 0.5) and **under rock** (a cave: 2.9 s tail, wet 0.7), crossfading over a
+second as the ears move. Each sound sends more to the echo the farther it is (15% wet at `near`, 80% at the edge of its
+range), so a close voice is dry and clear and a far scream is mostly what comes back.
+
+### Battles
+
+- **Voice budget** `Sound.Voices` 48 (was 32). Every frame each sound is ranked by `priority` (screams 0, grunts and
+  pain 1), then by how loud it is from the ears; the top 48 play.
+- **Same-cue limit** `Sound.SameCueAtOnce` 6: past six of one cue (the twentieth rifle shot), the farther ones go to the
+  back of the queue, so a scream or a nearby clang still finds a voice in a firefight.
+
+### Why sounds sometimes did not play (fixed)
+
+1. **Short sounds ended by the clock before they were heard.** A one-shot was stopped when the game clock said its clip
+   was over, counted from the frame it was asked for. After a long frame (a hitch, a load) it was stopped before the
+   audio device had played it. Now it ends when its wave has handed out its last sample, 0.15 s later, with a safety stop
+   half a second after the clip's length counted from when its voice really started.
+2. **Unreal's own channel limit.** `AudioMaxChannels=0` meant Unreal's default of 32 channels, but we ask for 32 voices
+   plus music and stinger plus whatever animations play themselves; Unreal then dropped some of ours without telling.
+   Now 128 channels for our 48, and every voice tells Unreal its priority and to keep playing when quiet
+   (`PlayWhenSilent`), so only our ranking decides.
+3. **To see it in play:** `Sound.Debug 1` shows voices, sounds, drops and the place on screen; `Sound.Debug 2` also logs
+   every sound dropped or not played and why (out of hearing, budget full, grunt in its cooldown, over a scream).

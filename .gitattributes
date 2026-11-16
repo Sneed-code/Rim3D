@@ -14,3 +14,6 @@
 
 # Save files are binary (test fixtures in game/Plugins/ColonySim/Tests/saves)
 *.save binary
+
+# Our own short sound files, read straight from disk by the game, stay plain Git (small; the cloud cannot push LFS)
+game/Content/Rim3D/Sounds/**/*.wav -filter -diff -merge binary
