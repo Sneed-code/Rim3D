@@ -75,6 +75,13 @@ struct FGunRangeGun
 	float ScopeFov = 0.0f;
 };
 
+/** A melee weapon on the combat range's rack, after the guns: the main game draws and swings it (third person). */
+struct FGunRangeMelee
+{
+	FString Def;
+	FString Label;
+};
+
 /**
  * The gun range (docs/design/gun-range.md): the first-person arms and gun the player sees, for the guns in
  * assets/guns.json. Cosmetic only: the sim fires, reloads (the magazine is free: ammunition is not counted) and decides
@@ -98,9 +105,13 @@ public:
 
 	void SetEnabled(bool bOn);
 	bool IsEnabled() const { return bEnabled; }
-	/** The gun items to pick from, in the order of assets/guns.json (kNoEntity where a gun is missing). */
+	/** The items to pick from: the guns in the order of assets/guns.json, then its melee weapons (kNoEntity where one
+	 *  is missing). */
 	void SetRack(const TArray<colony::Entity>& Items) { Rack = Items; }
 	const TArray<FGunRangeGun>& GetGuns() const { return Guns; }
+	const TArray<FGunRangeMelee>& GetMelee() const { return Melee; }
+	/** Rack index of the weapon in the hands (guns first, then melee), -1 for none the range knows. */
+	int32 GetHeldRackIndex() const { return HeldRack; }
 	/** Puts rack gun Index in the player's hands. False if there is no such gun or the sim is not ready. */
 	bool SelectGun(int32 Index);
 	/** Reads assets/guns.json again. */
@@ -138,7 +149,12 @@ private:
 	bool bEnabled = false;
 	bool bShown = false;
 	TArray<FGunRangeGun> Guns;
+	TArray<FGunRangeMelee> Melee;
 	TArray<colony::Entity> Rack;
+	int32 HeldRack = -1;
+	int32 LastHeldRack = -1;
+	/** The range turned third person on for a melee weapon (and turns first person back on for a gun). */
+	bool bAutoThirdPerson = false;
 	FString AnimRoot = TEXT("/Game/Rim3D/Generated/Animations/");
 	/** Where the arms' head bone sits in the view (cm, x ahead): a little behind and below the eyes. */
 	FVector HeadInView = FVector(-8.0f, 0.0f, -7.0f);

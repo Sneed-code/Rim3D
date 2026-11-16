@@ -1915,6 +1915,32 @@ FSimPawnLooks CreatorPeople::RandomLooks(int32 Seed, bool bFemale, const FSimPaw
 	return Looks;
 }
 
+FSimPawnLooks CreatorPeople::DefaultLooks(bool bFemale, const FSimPawnLooks& From)
+{
+	const FCreatorPerson Person;
+	FSimPawnLooks Looks = From;
+	Looks.bFemale = bFemale;
+	Looks.MakeHuman = bFemale ? TEXT("CreatorFemale") : TEXT("CreatorMale");
+	Looks.Height = 1.0f;
+	Looks.Skin = FLinearColor(Person.Skin[0], Person.Skin[1], Person.Skin[2]);
+	return Looks;
+}
+
+bool CreatorPeople::ApplyDefault(bool bFemale, ASimPawnActor& Pawn)
+{
+	FCreatorPerson Person;
+	Person.bFemale = bFemale;
+	Person.Looks.bFemale = bFemale;
+	Person.Looks.MakeHuman = bFemale ? TEXT("CreatorFemale") : TEXT("CreatorMale");
+	if (!Pawn.GetMakeHumanMesh() || Pawn.GetLooks().MakeHuman != Person.Looks.MakeHuman)
+	{
+		return false;
+	}
+	Person.bBlink = false;
+	CreatorApply(Person, Pawn, false);
+	return true;
+}
+
 bool CreatorPeople::ApplyRandom(int32 Seed, bool bFemale, ASimPawnActor& Pawn)
 {
 	FCreatorPerson Person = CreatorPeopleMake(Seed, bFemale);

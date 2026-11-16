@@ -53,6 +53,7 @@ namespace
 	{
 		colony::Entity Player = colony::kNoEntity;
 		int32 PlayerSeed = 0;
+		bool bRandomPlayer = false;
 		TWeakObjectPtr<USkeletalMeshComponent> PlayerAppliedTo;
 		bool bControlled = false;
 		bool bArmed = false;
@@ -187,7 +188,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 	FPhase Play;
 	Play.Name = TEXT("gunrange");
 	Play.WarmupSeconds = 6.0f;
-	float Minutes = bScript ? 1.6f : 240.0f;
+	float Minutes = bScript ? 2.0f : 240.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("GunRangeMinutes="), Minutes);
 	Play.MeasureSeconds = Minutes * 60.0f;
 	Play.Setup = [=, this]()
@@ -279,17 +280,28 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		State->Stand = colony::CellPos{FMath::FloorToInt32(Colonists[0]->x), FMath::FloorToInt32(Colonists[0]->y), 0};
 		State->RackCell = colony::CellPos{State->Stand.x - 1, State->Stand.y - 2, 0};
 		State->PlayerSeed = BaseSeed * 31337 + 5;
+		State->bRandomPlayer = FParse::Param(FCommandLine::Get(), TEXT("GunRangeRandomPlayer"));
 		{
 			const colony::DefDatabase* Defs = B->GetDefs().get();
 			const FSimPawnLooks From = Colonists[0]->looks >= 0 ? USimPawnSubsystem::MakeLooks(Snapshot.looks[static_cast<size_t>(Colonists[0]->looks)], Defs) : FSimPawnLooks();
-			Pawns->SetLooksOverride(State->Player, CreatorPeople::RandomLooks(State->PlayerSeed, true, From));
+			// You are the creator's generic woman (sneed); -GunRangeRandomPlayer gives a random one instead.
+			Pawns->SetLooksOverride(State->Player, State->bRandomPlayer ? CreatorPeople::RandomLooks(State->PlayerSeed, true, From) : CreatorPeople::DefaultLooks(true, From));
 		}
 		GunRangeStrip(*Sim, *B, State->Player);
-		// The rack: one of each gun at the player's feet.
+		// The rack: one of each gun, then each melee weapon, at the player's feet.
 		G->SetEnabled(true);
+		TArray<FString> RackDefs;
 		for (const FGunRangeGun& Gun : G->GetGuns())
 		{
-			B->Submit(colony::SpawnThingCommand{TCHAR_TO_UTF8(*Gun.Def), State->RackCell, 1});
+			RackDefs.Add(Gun.Def);
+		}
+		for (const FGunRangeMelee& Weapon : G->GetMelee())
+		{
+			RackDefs.Add(Weapon.Def);
+		}
+		for (const FString& Def : RackDefs)
+		{
+			B->Submit(colony::SpawnThingCommand{TCHAR_TO_UTF8(*Def), State->RackCell, 1});
 		}
 		B->StepOnce();
 		SpawnGroup();
@@ -297,14 +309,14 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		B->StepOnce();
 		AdoptGroup();
 		State->PendingSpawn = 0;
-		// The rack's items by def, in the order of the gun list.
+		// The rack's items by def, in the order of the list (guns, then melee).
 		TArray<colony::Entity> Rack;
-		for (const FGunRangeGun& Gun : G->GetGuns())
+		for (const FString& Def : RackDefs)
 		{
 			colony::Entity Found = colony::kNoEntity;
 			for (const colony::ThingView& View : B->GetCurrentSnapshot().things)
 			{
-				if (View.category == colony::ThingCategory::Item && View.def.valid() && B->GetDefs()->get(View.def).defName() == TCHAR_TO_UTF8(*Gun.Def) &&
+				if (View.category == colony::ThingCategory::Item && View.def.valid() && B->GetDefs()->get(View.def).defName() == TCHAR_TO_UTF8(*Def) &&
 					FMath::Abs(View.x - (State->RackCell.x + 0.5f)) < 3.0f && FMath::Abs(View.y - (State->RackCell.y + 0.5f)) < 3.0f && !Rack.Contains(View.id))
 				{
 					Found = View.id;
@@ -312,7 +324,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			}
 			if (Found == colony::kNoEntity)
 			{
-				Notes.Add(FString::Printf(TEXT("gunrange: no %s in the rack"), *Gun.Def));
+				Notes.Add(FString::Printf(TEXT("gunrange: no %s in the rack"), *Def));
 			}
 			Rack.Add(Found);
 		}
@@ -354,7 +366,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		// The random looks go on once each body's creator base is there (again if it is rebuilt).
 		if (ASimPawnActor* Actor = Pawns->FindPawn(State->Player); Actor && Actor->GetMakeHumanMesh() && State->PlayerAppliedTo.Get() != Actor->GetMakeHumanMesh())
 		{
-			if (CreatorPeople::ApplyRandom(State->PlayerSeed, true, *Actor))
+			if (State->bRandomPlayer ? CreatorPeople::ApplyRandom(State->PlayerSeed, true, *Actor) : CreatorPeople::ApplyDefault(true, *Actor))
 			{
 				State->PlayerAppliedTo = Actor->GetMakeHumanMesh();
 			}
@@ -606,7 +618,43 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				{
 					Picture(TEXT("third_person_aimed"));
 					Body->SetScriptedAim(false);
-					Next(7);
+					Next(G->GetMelee().Num() > 0 ? 7 : 10);
+				}
+				break;
+			case 7:  // the combat range: back to first person with a gun, then a melee weapon from the rack
+				G->SelectGun(0);
+				if (!Body->IsFirstPerson())
+				{
+					Body->ToggleView();
+					Body->SnapCamera();
+				}
+				if (State->StepTime > 1.0f)
+				{
+					Next(9);
+				}
+				break;
+			case 9:  // taking the melee weapon should turn third person on by itself (the main game draws the swing)
+				G->SelectGun(GunCount + FMath::Min(4, G->GetMelee().Num() - 1));
+				AimAtNearest();
+				if (State->StepTime > 2.0f && !State->bFiringPicture)
+				{
+					Notes.Add(FString::Printf(TEXT("gunrange: melee rack %d in hand, view %s"), G->GetHeldRackIndex(),
+						Body->IsFirstPerson() ? TEXT("first person (auto switch failed)") : TEXT("third person")));
+					Picture(TEXT("melee_held"));
+					State->bFiringPicture = true;
+				}
+				if (State->StepTime > 3.0f)
+				{
+					G->SelectGun(0);
+					Next(11);
+				}
+				break;
+			case 11:  // a gun again: first person back
+				if (State->StepTime > 2.0f)
+				{
+					Notes.Add(FString::Printf(TEXT("gunrange: gun back in hand, view %s"), Body->IsFirstPerson() ? TEXT("first person") : TEXT("third person (switch back failed)")));
+					Picture(TEXT("gun_again"));
+					Next(10);
 				}
 				break;
 			default:
