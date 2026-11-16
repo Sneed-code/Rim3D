@@ -2569,6 +2569,12 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.shieldUp = combat_->shieldUp(entity);
             const Entity shield = combat_->apparelStats().shieldWorn(reg, entity);
             view.shieldSlung = shield != kNoEntity && combat_->apparelStats().activeShield(reg, entity) == kNoEntity;
+            if (shield != kNoEntity) {
+                view.shield = reg.get<Thing>(shield).def;
+                if (const MadeOf* made = reg.try_get<MadeOf>(shield)) {
+                    view.shieldStuff = made->stuff;
+                }
+            }
             if (const Dressing* dressing = reg.try_get<Dressing>(entity); dressing != nullptr && dressing->stepsLeft > 0) {
                 view.dressingSteps = dressing->stepsLeft;
             }
