@@ -34,6 +34,7 @@
 #include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
+#include "Materials/MaterialExpressionTransform.h"
 #include "Materials/MaterialExpressionVertexNormalWS.h"
 #include "Materials/MaterialExpressionWorldPosition.h"
 #include "Materials/MaterialExpressionTextureSampleParameter2D.h"
@@ -740,6 +741,57 @@ namespace
 			Dent->Inputs[First + 4].Input.Connect(5, DentIn[2]);
 			Dent->Inputs[First + 5].Input.Connect(0, DentIn[3]);
 			UMaterialEditingLibrary::ConnectMaterialProperty(Dent, TEXT(""), MP_WorldPositionOffset);
+
+			// The dent's light: world position offset leaves the normals as they were, so a dent hardly showed (2026-11-16
+			// clip). The bowl's walls face in towards its middle: its slope (dDepth/dr) along the skin, turned into tangent
+			// space and added to the skin's normal, a little exaggerated (1.5).
+			auto* Tilt = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -400, 2700));
+			Tilt->OutputType = CMOT_Float3;
+			Tilt->Description = TEXT("SkinDentTilt");
+			Tilt->Code = TEXT("float3 t = 0;\n"
+				"float4 A[2] = {A0, A1};\n"
+				"float R[2] = {R0, R1};\n"
+				"for (int i = 0; i < 2; ++i)\n"
+				"{\n"
+				"  if (abs(A[i].w) < 0.01 || R[i] < 0.5) continue;\n"
+				"  float3 d = P - A[i].xyz;\n"
+				"  d -= N * dot(d, N);\n"
+				"  float r = length(d);\n"
+				"  float x = saturate(r / R[i]);\n"
+				"  if (x >= 1.0 || r < 0.001) continue;\n"
+				"  float slope = A[i].w * 4.0 * x * (1.0 - x * x) / R[i];\n"
+				"  t -= (d / r) * slope;\n"
+				"}\n"
+				"return t;");
+			const TCHAR* TiltNames[] = {TEXT("P"), TEXT("N"), TEXT("A0"), TEXT("R0"), TEXT("A1"), TEXT("R1")};
+			Tilt->Inputs.SetNum(UE_ARRAY_COUNT(TiltNames));
+			for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(TiltNames)); ++i)
+			{
+				Tilt->Inputs[i].InputName = TiltNames[i];
+			}
+			Tilt->Inputs[0].Input.Connect(0, Pos);
+			Tilt->Inputs[1].Input.Connect(0, Nrm);
+			Tilt->Inputs[2].Input.Connect(5, DentIn[0]);
+			Tilt->Inputs[3].Input.Connect(0, DentIn[1]);
+			Tilt->Inputs[4].Input.Connect(5, DentIn[2]);
+			Tilt->Inputs[5].Input.Connect(0, DentIn[3]);
+			auto* ToTangent = Cast<UMaterialExpressionTransform>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTransform::StaticClass(), -200, 2700));
+			ToTangent->TransformSourceType = TRANSFORMSOURCE_World;
+			ToTangent->TransformType = TRANSFORM_Tangent;
+			ToTangent->Input.Connect(0, Tilt);
+			if (UMaterialExpression* NormalIn = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_Normal))
+			{
+				auto* DentNormal = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -50, 2700));
+				DentNormal->OutputType = CMOT_Float3;
+				DentNormal->Description = TEXT("SkinDentNormal");
+				DentNormal->Code = TEXT("return normalize(float3(Base.xy + T.xy * 1.5, Base.z));");
+				DentNormal->Inputs.SetNum(2);
+				DentNormal->Inputs[0].InputName = TEXT("Base");
+				DentNormal->Inputs[1].InputName = TEXT("T");
+				DentNormal->Inputs[0].Input.Connect(Material->GetEditorOnlyData()->Normal.OutputIndex, NormalIn);
+				DentNormal->Inputs[1].Input.Connect(0, ToTangent);
+				UMaterialEditingLibrary::ConnectMaterialProperty(DentNormal, TEXT(""), MP_Normal);
+			}
 		}
 		MhAddWetness(Material, 0.78f, 0.12f);
 		Material->PostEditChange();

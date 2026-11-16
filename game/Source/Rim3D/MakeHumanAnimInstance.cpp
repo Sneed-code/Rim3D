@@ -598,10 +598,10 @@ void UMakeHumanAnimInstance::AddHitKick(const FVector& At, const FVector& Veloci
 	}
 	PendingKicks.Add({At, Velocity, 0.0f, Radius, false});
 	PendingKicks.Add({At, Velocity * 0.1f, 0.0f, 250.0f, false});  // the whole body feels a tenth of it
-	// A dent in the skin at the hit, riding on the nearest bone: deeper for a harder hit (up to 3.5 cm), as wide as a
-	// third of the kick's reach.
+	// A dent in the skin at the hit, riding on the nearest bone: deeper for a harder hit (up to 5 cm), about half as
+	// wide as the kick's reach.
 	const USkeletalMeshComponent* Mesh = GetSkelMeshComponent();
-	const float Depth = FMath::Min(static_cast<float>(Velocity.Size()) * 0.015f, 3.5f) * FMath::Max(0.0f, GMakeHumanDentScale.GetValueOnGameThread());
+	const float Depth = FMath::Min(static_cast<float>(Velocity.Size()) * 0.03f, 5.0f) * FMath::Max(0.0f, GMakeHumanDentScale.GetValueOnGameThread());
 	if (Mesh && Depth > 0.2f)
 	{
 		const FName Bone = Mesh->FindClosestBone(At);
@@ -612,7 +612,7 @@ void UMakeHumanAnimInstance::AddHitKick(const FVector& At, const FVector& Veloci
 			Dent.Bone = Bone;
 			Dent.Local = Mesh->GetSocketTransform(Bone).InverseTransformPosition(At);
 			Dent.Depth = Depth;
-			Dent.Radius = FMath::Clamp(Radius * 0.35f, 6.0f, 14.0f);
+			Dent.Radius = FMath::Clamp(Radius * 0.45f, 8.0f, 18.0f);
 			Dent.Age = 0.0f;
 		}
 	}

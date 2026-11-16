@@ -83,9 +83,9 @@ up sideways by half as much; pulled out, the reverse. The scale goes on whicheve
 that line, so no bone axis convention is assumed.
 
 **Skin dents**: every `AddHitKick` also dents the skin at the hit (up to two at a time): a smooth bowl round the point
-(radius a third of the kick's reach, 6 to 14 cm), as deep as the hit is hard (0.015 cm per cm/s, at most 3.5 cm), in
+(radius 0.45 of the kick's reach, 8 to 18 cm), as deep as the hit is hard (0.03 cm per cm/s, at most 5 cm), in
 over 40 ms, then springing back past flat into a small bulge and settling within 1.2 s (`exp(-5t) cos(16t)`). The point
 rides on the nearest bone. `UMakeHumanAnimInstance::NativeUpdateAnimation` writes it to custom primitive data 16 to 25
 (x, y, z, depth, radius twice) and `M_MH_SkinDetail`'s `SkinDent` node moves the skin along its normal in world position
-offset. The lighting is not bent into the dent yet (the outline and shadows show it). `Pawns.SkinDentScale` scales the
+offset. The first version moved the skin only and hardly showed (2026-11-16: 2.9 cm at 170 cm away read as nothing), so the depth and radius were raised and `SkinDentTilt` bends the normal into the bowl: its slope along the skin (dDepth/dr) turned into tangent space and added to the skin's normal, times 1.5. `Pawns.SkinDentScale` scales the
 depth; dents fade with the soft-body distance fade. The creator's smoke note gives the deepest dent.
