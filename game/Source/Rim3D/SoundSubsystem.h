@@ -155,6 +155,17 @@ public:
 	 *  (a hit grunt in its cooldown or over a scream). */
 	int32 GetVoicesCut() const { return VoicesCut; }
 	int32 GetVoicesSkipped() const { return VoicesSkipped; }
+	/** Lovin sounds started, bird calls played (and their seconds today). */
+	int32 GetLovinPlays() const { return LovinPlays; }
+	int32 GetBirdPlays() const { return BirdPlays; }
+	float GetBirdSecondsPlayed() const { return BirdSecondsPlayed; }
+	/** Ctrl+M and Ctrl+S (also Sound.MusicMuted, Sound.Enable). */
+	bool IsMusicMuted() const;
+	bool IsAllMuted() const;
+	void ToggleMusicMute();
+	void ToggleAllMute();
+	/** For the smoke test: start a lovin's sound now, as the Lovin event would after its lead-in. */
+	void StartLovinForTest(colony::Entity A, colony::Entity B);
 	/** Whether a pawn's voice sound is playing now, and which cue. */
 	FString GetPawnVoice(colony::Entity Pawn) const;
 	/** Stingers played for letters. */
@@ -254,8 +265,11 @@ private:
 	void OnSimEvent(const colony::Event& Event);
 	void HandlePlay(const colony::SoundPlay& Play);
 	void PlayVoice(const FCue& Cue, const colony::SoundPlay& Play, const FVector& Location);
-	/** Stops a sound with a quick fade (no click), leaving its voice to finish the fade. */
-	void CutSound(int32 Index);
+	/** Stops a sound with a fade (40 ms: no click), leaving its voice to finish the fade. */
+	void CutSound(int32 Index, float FadeSeconds = 0.04f);
+	void UpdateLovin();
+	void UpdateBirds(const colony::Sim& Sim, const colony::Snapshot& Snap);
+	void UpdateMuteKeys();
 	void UpdateEnvironment(const colony::Sim& Sim);
 	USoundAttenuation* SpatialFor(const FCue& Cue);
 	colony::SoundGender GenderOf(colony::Entity Thing) const;
@@ -317,6 +331,29 @@ private:
 	int32 MaxVoicesInUse = 0;
 	int32 VoicesCut = 0;
 	int32 VoicesSkipped = 0;
+
+	/** A couple (or one) having lovin: its sound starts a little into it and fades when it ends. */
+	struct FLovin
+	{
+		colony::Entity A = colony::kNoEntity;
+		colony::Entity B = colony::kNoEntity;
+		double StartedAt = 0.0;    // real seconds
+		double PlayAt = 0.0;       // real seconds
+		uint64 Key = 0;            // its sound, by key (indices move)
+		bool bPlayed = false;
+	};
+	TArray<FLovin> Lovins;
+	int32 LovinPlays = 0;
+
+	// Birds: short bursts at dawn, dusk and before rain, under 2% of the day, not every day.
+	int64 BirdDay = -1;
+	bool bBirdDay = false;
+	float BirdSecondsLeft = 0.0f;
+	double NextBirdCheck = 0.0;
+	double BirdBurstUntil = -1.0;
+	int32 BirdPlays = 0;
+	float BirdSecondsPlayed = 0.0f;
+	FString LastWeatherLoop;
 	int32 Environment = -1;
 	TMap<uint32, FPawnVoice> PawnVoices;
 	double Now = 0.0;

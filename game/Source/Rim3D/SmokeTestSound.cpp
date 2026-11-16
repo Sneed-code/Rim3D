@@ -271,6 +271,11 @@ void USmokeTestSubsystem::BuildSoundPhases()
 			State->VoiceStage = 3;
 			State->VoiceAfterScream = S->GetPawnVoice(State->Walker);
 		}
+		else if (State->VoiceStage == 3 && State->VoiceTime > 0.4f)
+		{
+			State->VoiceStage = 4;
+			S->StartLovinForTest(State->Walker, colony::kNoEntity);
+		}
 	};
 	VoicePhase.Verify = [=, this]()
 	{
@@ -302,10 +307,30 @@ void USmokeTestSubsystem::BuildSoundPhases()
 		{
 			Fail(FString::Printf(TEXT("sound_voices: distance gains %.2f %.2f %.2f"), Near, Twice, Edge));
 		}
-		if (S->GetClipCount(TEXT("Voice_FemHit")) != 5 || S->GetClipCount(TEXT("Voice_FemScream")) != 3)
+		if (S->GetClipCount(TEXT("Voice_FemHit")) != 5 || S->GetClipCount(TEXT("Voice_FemScream")) != 4
+			|| S->GetClipCount(TEXT("Voice_LovinCouple")) != 6 || S->GetClipCount(TEXT("Voice_LovinFem")) != 3)
 		{
-			Fail(FString::Printf(TEXT("sound_voices: %d hit grunts and %d screams loaded from game/Content/Rim3D/Sounds/cues (want 5 and 3)"),
-				S->GetClipCount(TEXT("Voice_FemHit")), S->GetClipCount(TEXT("Voice_FemScream"))));
+			Fail(FString::Printf(TEXT("sound_voices: loaded %d hit grunts, %d screams, %d couple and %d women's lovin sounds from game/Content/Rim3D/Sounds/cues (want 5, 4, 6, 3)"),
+				S->GetClipCount(TEXT("Voice_FemHit")), S->GetClipCount(TEXT("Voice_FemScream")), S->GetClipCount(TEXT("Voice_LovinCouple")),
+				S->GetClipCount(TEXT("Voice_LovinFem"))));
+		}
+		PhaseNumbers.Add(TEXT("bird_files"), S->GetClipCount(TEXT("Amb_Birds_Tropical")));
+		PhaseNumbers.Add(TEXT("tropical_day_files"), S->GetClipCount(TEXT("Amb_Tropical_Day")));
+		// A colonist alone: a woman's lovin sound starts, a man's none (sneed's rule).
+		bool bFemale = false;
+		if (USimSubsystem* B = Bridge())
+		{
+			const colony::Snapshot& Snap = B->GetCurrentSnapshot();
+			if (const colony::ThingView* View = Snap.find(State->Walker))
+			{
+				bFemale = View->looks >= 0 && View->looks < static_cast<int32>(Snap.looks.size()) && Snap.looks[static_cast<size_t>(View->looks)].female;
+			}
+		}
+		PhaseNumbers.Add(TEXT("walker_female"), bFemale ? 1 : 0);
+		PhaseNumbers.Add(TEXT("lovin_plays"), S->GetLovinPlays());
+		if (S->GetLovinPlays() != (bFemale ? 1 : 0))
+		{
+			Fail(FString::Printf(TEXT("sound_voices: a lone %s's lovin started %d sounds"), bFemale ? TEXT("woman") : TEXT("man"), S->GetLovinPlays()));
 		}
 	};
 	Phases.Add(VoicePhase);
