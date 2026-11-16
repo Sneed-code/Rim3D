@@ -52,6 +52,7 @@ namespace
 		const TCHAR* Clip;
 		float Heavy;      // 0 light .. 1 heavy: how hard it hits (stagger, blood)
 		bool bBlock;      // a guard, not a blow (preview only)
+		bool bTravel = false;  // runs, leaps or slides metres forward: preview only, never in the two-person demo
 	};
 
 	// What a style holds. "Shield" is the procedural shield; other names are melee weapon defs (their visual parts).
@@ -80,7 +81,7 @@ namespace
 		{"Combo 2", TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingMeleeComboAttackVer2"), 0.6f, false},
 		{"Combo 3", TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingMeleeComboAttackVer3"), 0.7f, false},
 		{"Heavy swing", TEXT("HeavySwing/A_HeavySwing"), 1.0f, false},
-		{"Running jump attack", TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingMeleeRunJumpAttack"), 1.0f, false},
+		{"Running jump attack", TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingMeleeRunJumpAttack"), 1.0f, false, true},
 		{"Kick", TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingMeleeAttackKickVer1"), 0.4f, false},
 		{"Guard", TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingBlockIdle"), 0.0f, true},
 	};
@@ -92,8 +93,8 @@ namespace
 		{"Slash 5", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordSlash5"), 0.8f, false},
 		{"Attack", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordAttack"), 0.8f, false},
 		{"High spin", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordHighSpinAttack"), 1.0f, false},
-		{"Jump attack", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordJumpAttack"), 1.0f, false},
-		{"Slide attack", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordSlideAttack"), 0.9f, false},
+		{"Jump attack", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordJumpAttack"), 1.0f, false, true},
+		{"Slide attack", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordSlideAttack"), 0.9f, false, true},
 		{"Kick", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordKick"), 0.4f, false},
 		{"Guard", TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordBlocking"), 0.0f, true},
 	};
@@ -250,6 +251,8 @@ namespace
 		float AnchorT = 0.0f;                     // s left holding its pelvis where it is (a clip change whose root differs)
 		float PelvisAlong = 0.0f;                 // its pelvis ahead of its spot along its facing last frame (cm)
 		bool bPelvisAlong = false;
+		float StandPelvisH = -1.0f;               // cm: its pelvis above the mesh origin in its stance (learned)
+		float LiftCut = 0.0f;                     // cm the demo lowers the mesh: a jump clip's rise is capped
 	};
 
 	enum class ECwDemo : uint8 { Off, Pause, Swing, Impact, Recover, DeathHold };
@@ -257,6 +260,7 @@ namespace
 	struct FCwState
 	{
 		TWeakObjectPtr<UWorld> World;
+		float MostLiftCut = 0.0f;  // the largest jump lowering logged so far
 		TArray<FCwPerson> People;
 		int32 Selected = 0;
 		bool bEquip = true;
@@ -1479,7 +1483,7 @@ namespace
 		const float Delta = static_cast<float>(P.Facing.Rotation().Yaw - Pawn->GetActorRotation().Yaw);
 		const FQuat Rotation = FQuat(FVector::UpVector, FMath::DegreesToRadians(Delta)) * Base.GetRotation();
 		FVector Shift = P.Spot - Pawn->GetActorLocation();
-		Shift.Z = 0.0;
+		Shift.Z = -P.LiftCut;
 		Mesh->SetWorldLocationAndRotation(Base.GetLocation() + Shift, Rotation);
 	}
 
@@ -1532,7 +1536,10 @@ namespace
 			P.bFloored = false;
 			P.AnchorT = 0.0f;
 			P.bPelvisAlong = false;
+			P.StandPelvisH = -1.0f;
+			P.LiftCut = 0.0f;
 		}
+		S.MostLiftCut = 0.0f;
 		S.RawGap = -1.0f;
 		S.GapRate = 0.0f;
 		S.SwingMinGap = 1.0e6f;
@@ -1627,6 +1634,32 @@ namespace
 		B.Spot = Mid + Dir * (Half + B.GiveGround);
 		A.Facing = Dir;
 		B.Facing = -Dir;
+		// Jump clips (the club's running jump attack, the great sword's jump attack) lift the body far more than a
+		// real leap (it sailed 1.5-2 m up over the other's head): the pelvis may rise at most kCwMaxLift above its
+		// stance height, the mesh is lowered by the rest. Measured against the mesh origin, so the lowering itself
+		// doesn't feed back.
+		constexpr float kCwMaxLift = 30.0f;
+		for (FCwPerson* P : {&A, &B})
+		{
+			USkeletalMeshComponent* Mesh = P->Mesh.Get();
+			if (!Mesh || !CwHasBone(Mesh, TEXT("pelvis")))
+			{
+				continue;
+			}
+			const float H = static_cast<float>(CwBone(Mesh, TEXT("pelvis")).Z - Mesh->GetComponentLocation().Z);
+			if (P->Role == ECwRole::Stance && !P->bFloored)
+			{
+				P->StandPelvisH = P->StandPelvisH < 0.0f ? H : FMath::FInterpTo(P->StandPelvisH, H, Dt, 2.0f);
+			}
+			const float Want = P->StandPelvisH < 0.0f ? 0.0f : FMath::Max(0.0f, H - P->StandPelvisH - kCwMaxLift);
+			// Down at once (no frame shows the leap), back up gently as the clip lands.
+			P->LiftCut = Want >= P->LiftCut ? Want : FMath::FInterpTo(P->LiftCut, Want, Dt, 12.0f);
+			if (Want > 20.0f && P->LiftCut == Want && Want > S.MostLiftCut + 10.0f)
+			{
+				S.MostLiftCut = Want;
+				UE_LOG(LogCreatorWeapons, Display, TEXT("Jump capped: pelvis %.0f cm above stance, lowered %.0f cm"), H - P->StandPelvisH, Want);
+			}
+		}
 		CwStand(A);
 		CwStand(B);
 	}
@@ -1634,14 +1667,16 @@ namespace
 	int32 CwPickAttack(FCwState& S, int32 Style)
 	{
 		const FCwStyleDef& Def = CwStyles[Style];
-		if (S.bPickedOnly && S.Attack >= 0 && S.Attack < Def.AttackCount && !Def.Attacks[S.Attack].bBlock)
+		// Attacks that carry the body metres forward (running jump, jump, slide) ran the attacker straight through the
+		// defender, who folded over him and was carried off; they stay in the one-person preview only.
+		if (S.bPickedOnly && S.Attack >= 0 && S.Attack < Def.AttackCount && !Def.Attacks[S.Attack].bBlock && !Def.Attacks[S.Attack].bTravel)
 		{
 			return S.Attack;
 		}
 		for (int32 Try = 0; Try < 16; ++Try)
 		{
 			const int32 i = S.Random.RandRange(0, Def.AttackCount - 1);
-			if (!Def.Attacks[i].bBlock)
+			if (!Def.Attacks[i].bBlock && !Def.Attacks[i].bTravel)
 			{
 				return i;
 			}

@@ -60,6 +60,16 @@ finishing blow from the side or behind plays `Magic/StandingReactDeath<Left|Forw
 from 0.4 (a kick) to 1.0 (heavy swing, jump attacks). The weight decides how hard the blow is: the stagger chance and
 how much blood.
 
+Jump clips (the club's running jump attack, the great sword's jump attack) lift the body much higher than a real leap
+(the man sailed 1.5 to 2 m up over the other's head). In the fight demo the pelvis may rise at most 30 cm above its
+stance height; the visible mesh is lowered by the rest, at once on the way up and gently as it lands (log line "Jump
+capped").
+
+The attacks that carry the body metres forward (the club's running jump attack, the great sword's jump and slide
+attacks) are for the one-person preview only: in the fight demo the running jump ran him straight through her, she
+folded over him and both were carried out of the frame. The demo never picks them, even with "Only the picked
+attack" on (it picks another).
+
 ## Blades that stop
 
 Each frame of a swing, between 10% and 90% of the clip, the attacker's blade (hilt to tip) is swept from where it was
