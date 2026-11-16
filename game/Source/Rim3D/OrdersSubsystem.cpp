@@ -30,8 +30,10 @@
 #include "VisualMesh.h"
 
 #include "ColonySim/Construction.h"
+#include "ColonySim/Farming.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Plants.h"
+#include "ColonySim/Research.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/UpperFloors.h"
 
@@ -60,6 +62,8 @@ namespace
 	constexpr int32 OrdDeconstruct = 4;
 	constexpr int32 OrdZoneTile = 5;
 	constexpr int32 OrdZoneRing = 6;
+	constexpr int32 OrdGrowTile = 7;
+	constexpr int32 OrdGrowRing = 8;
 	constexpr int32 OrdKeyScale = 10000;
 
 	constexpr int32 OrdMaxBuildOrigins = 200;
@@ -71,6 +75,7 @@ namespace
 	const FLinearColor OrdHarvestColor = FLinearColor::FromSRGBColor(FColor(245, 215, 50));
 	const FLinearColor OrdDeconstructColor = FLinearColor::FromSRGBColor(FColor(225, 50, 50));
 	const FLinearColor OrdZoneColor = FLinearColor::FromSRGBColor(FColor(60, 150, 230));
+	const FLinearColor OrdGrowColor = FLinearColor::FromSRGBColor(FColor(120, 200, 60));
 
 	uint64 OrdMix(uint64 Seed, uint64 Value)
 	{
@@ -162,6 +167,7 @@ namespace
 			case EOrderTool::Harvest: return FColor(245, 215, 50);
 			case EOrderTool::Stockpile: return FColor(60, 150, 230);
 			case EOrderTool::RemoveZone: return FColor(160, 160, 170);
+			case EOrderTool::Grow: return FColor(120, 200, 60);
 			case EOrderTool::Cancel: return FColor(255, 255, 255);
 			case EOrderTool::Deconstruct: return FColor(225, 50, 50);
 			default: return FColor(255, 255, 255);
@@ -212,6 +218,7 @@ namespace
 			case EOrderTool::Harvest: return TEXT("Harvest");
 			case EOrderTool::Cancel: return TEXT("Cancel");
 			case EOrderTool::Deconstruct: return TEXT("Deconstruct");
+			case EOrderTool::Grow: return TEXT("Grow");
 		}
 		return TEXT("?");
 	}
@@ -492,6 +499,23 @@ colony::DefId UOrdersSubsystem::BestStuffFor(colony::DefId Def) const
 }
 
 // ---- Tools -------------------------------------------------------------------------------------
+
+bool UOrdersSubsystem::SetGrowCrop(const FString& DefName)
+{
+	const USimSubsystem* Bridge = GetBridge();
+	const colony::Sim* Sim = Bridge ? Bridge->GetSim() : nullptr;
+	if (!Sim)
+	{
+		return false;
+	}
+	const colony::DefId Crop = Sim->defs().idOf("Things", TCHAR_TO_UTF8(*DefName));
+	if (!Sim->farming().isCrop(Crop) || !Sim->research().unlocked(Sim->defs().get(Crop)))
+	{
+		return false;
+	}
+	GrowCrop = Crop;
+	return true;
+}
 
 void UOrdersSubsystem::SetTool(EOrderTool NewTool)
 {
@@ -894,9 +918,27 @@ int32 UOrdersSubsystem::EndDrag(colony::CellPos Cell)
 			Say(FString::Printf(TEXT("Stockpile zone %d x %d"), Rect.sizeX, Rect.sizeY));
 			break;
 		case EOrderTool::RemoveZone:
+			// Stockpile and growing zones alike (each command fails quietly where it finds no zone of its kind).
 			Submit(colony::RemoveZoneCellsCommand{Rect});
+			Submit(colony::RemoveGrowingZoneCellsCommand{Rect});
 			Say(TEXT("Zone cells removed"));
 			break;
+		case EOrderTool::Grow:
+		{
+			if (!GrowCrop.valid())
+			{
+				SetGrowCrop(TEXT("Plant_Rice"));
+			}
+			if (!GrowCrop.valid())
+			{
+				Say(TEXT("No crop to sow"));
+				break;
+			}
+			const colony::Def& Crop = Bridge->GetSim()->defs().get(GrowCrop);
+			Submit(colony::CreateGrowingZoneCommand{Rect, Crop.defName()});
+			Say(FString::Printf(TEXT("Growing zone %d x %d: %s"), Rect.sizeX, Rect.sizeY, *OrdCapital(Crop.label())));
+			break;
+		}
 		case EOrderTool::Mine:
 			Submit(colony::DesignateCommand{Rect, colony::DesignationKind::Mine});
 			Say(FString::Printf(TEXT("Mine %d x %d"), Rect.sizeX, Rect.sizeY));
@@ -1107,6 +1149,7 @@ void UOrdersSubsystem::EnsureOverlayActor()
 			return Material;
 		};
 		ZoneMaterial = Make(FLinearColor(OrdZoneColor.R, OrdZoneColor.G, OrdZoneColor.B, 0.30f));
+		GrowZoneMaterial = Make(FLinearColor(OrdGrowColor.R, OrdGrowColor.G, OrdGrowColor.B, 0.22f));
 		GhostGoodMaterial = Make(FLinearColor(0.15f, 0.85f, 0.25f, 0.42f));
 		GhostBadMaterial = Make(FLinearColor(0.95f, 0.18f, 0.15f, 0.42f));
 	}
@@ -1163,6 +1206,12 @@ UStaticMesh* UOrdersSubsystem::GetMarkMesh(int32 Kind, int32 TopCm)
 		case OrdZoneTile:
 			Box(FVector3f(96.0f, 96.0f, 3.0f), FVector3f::ZeroVector, OrdZoneColor);
 			break;
+		case OrdGrowTile:
+			Box(FVector3f(96.0f, 96.0f, 3.0f), FVector3f::ZeroVector, OrdGrowColor);
+			break;
+		case OrdGrowRing:
+			Ring(OrdGrowColor);
+			break;
 		default:
 			Ring(OrdZoneColor);
 			break;
@@ -1206,7 +1255,7 @@ void UOrdersSubsystem::RebuildMarks(const USimSubsystem& Bridge)
 	const UBuildingSubsystem* Buildings = GetWorld()->GetSubsystem<UBuildingSubsystem>();
 	TMap<int32, TArray<FTransform>> Batches;
 	TMap<int32, UMaterialInterface*> Materials;
-	Stats.MineMarks = Stats.CutMarks = Stats.HarvestMarks = Stats.DeconstructMarks = Stats.ZoneCells = 0;
+	Stats.MineMarks = Stats.CutMarks = Stats.HarvestMarks = Stats.DeconstructMarks = Stats.ZoneCells = Stats.GrowCells = 0;
 
 	// How high a plant stands, from its def's stem and crown, cm.
 	TMap<uint32, int32> PlantTop;
@@ -1278,6 +1327,13 @@ void UOrdersSubsystem::RebuildMarks(const USimSubsystem& Bridge)
 		Place(ZoneDraw ? OrdZoneTile : OrdZoneRing, 0, Cell.x, Cell.y, 2.0, ZoneDraw);
 		++Stats.ZoneCells;
 	}
+	// Growing zones: a faint green tile under the crop, so a freshly drawn field shows before anything is sown.
+	UMaterialInterface* GrowDraw = GrowZoneMaterial.Get();
+	for (const colony::CellPos& Cell : Snapshot.growingZoneCells)
+	{
+		Place(GrowDraw ? OrdGrowTile : OrdGrowRing, 0, Cell.x, Cell.y, 1.0, GrowDraw);
+		++Stats.GrowCells;
+	}
 
 	for (TPair<int32, TObjectPtr<UInstancedStaticMeshComponent>>& Pair : OverlayComponents)
 	{
@@ -1339,6 +1395,10 @@ void UOrdersSubsystem::RefreshOverlay()
 		for (const colony::CellPos& Cell : Snapshot.zoneCells)
 		{
 			Signature = OrdMix(Signature, OrdCellKey(Cell.x, Cell.y) ^ 0x5A5A5A5AULL);
+		}
+		for (const colony::CellPos& Cell : Snapshot.growingZoneCells)
+		{
+			Signature = OrdMix(Signature, OrdCellKey(Cell.x, Cell.y) ^ 0x67726F77ULL);
 		}
 		for (const colony::ThingView& View : Snapshot.things)
 		{
@@ -1667,6 +1727,7 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 		else if (OpenCategory == TEXT("Zones"))
 		{
 			ToolButton(TEXT("Stockpile"), EOrderTool::Stockpile);
+			ToolButton(TEXT("Growing zone"), EOrderTool::Grow);
 			ToolButton(TEXT("Remove zone"), EOrderTool::RemoveZone);
 			ImGui::NewLine();
 		}
@@ -1736,6 +1797,39 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 			}
 			ImGui::SameLine();
 			OrdText(FString::Printf(TEXT("Costs %s.  Click to plan; drag a line for walls."), *Cost));
+		}
+		else if (Tool == EOrderTool::Grow)
+		{
+			if (!GrowCrop.valid())
+			{
+				SetGrowCrop(TEXT("Plant_Rice"));
+			}
+			// The crops the colony may sow now (research done), with their growing time.
+			const FString Preview = GrowCrop.valid() ? OrdCapital(Sim.defs().get(GrowCrop).label()) : FString(TEXT("(none)"));
+			OrdText(TEXT("Crop"));
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(220.0f * Scale);
+			if (ImGui::BeginCombo("##OrdersCrop", TCHAR_TO_UTF8(*Preview)))
+			{
+				for (const colony::DefId Crop : Sim.farming().crops())
+				{
+					const colony::Def& Def = Sim.defs().get(Crop);
+					if (!Sim.research().unlocked(Def))
+					{
+						continue;
+					}
+					// Days to grow in good soil: growDays round the clock, 13 growing hours a day, times the life pace.
+					const double Days = Def.number("plant.growDays", 1.0) * 24.0 / 13.0 / FMath::Max(Sim.plants().growthTuning(), 0.01);
+					const FString Label = FString::Printf(TEXT("%s (%.1f days)"), *OrdCapital(Def.label()), Days);
+					if (ImGui::Selectable(TCHAR_TO_UTF8(*Label), Crop == GrowCrop))
+					{
+						GrowCrop = Crop;
+					}
+				}
+				ImGui::EndCombo();
+			}
+			ImGui::SameLine();
+			OrdText(TEXT("Drag a rectangle on open soil.  Colonists with Growing work sow it."));
 		}
 		else if (Tool != EOrderTool::None)
 		{

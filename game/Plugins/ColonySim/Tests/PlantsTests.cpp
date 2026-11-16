@@ -1,3 +1,4 @@
+#include "ColonySim/Clock.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Save.h"
@@ -8,6 +9,7 @@
 
 #include <doctest.h>
 
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -143,9 +145,11 @@ TEST_CASE("Plants: growth happens only in the growing hours and takes growDays x
     plants.growHour(22);
     CHECK(plants.growthPpm(soil) == 0);
     CHECK(plants.ageHours(soil) == 2);
-    // A growing hour adds 1 / (growDays x 24) of full growth (grass: 2.5 days, so 1/60).
+    // A growing hour adds 1 / (growDays x 24) of full growth (grass: 2.5 days, so 1/60), times the
+    // growth tuning (plantGrowth x the life pace, docs/design/pace.md).
+    const double tuning = plants.growthTuning();
     plants.growHour(10);
-    CHECK(plants.growthPpm(soil) == doctest::Approx(1000000.0 / 60.0).epsilon(0.001));
+    CHECK(plants.growthPpm(soil) == doctest::Approx(1000000.0 / 60.0 * tuning).epsilon(0.001));
 
     // A day has 13 growing hours (06:00 to 19:00), so grass takes 60 / 13 days to grow up.
     plants.remove(soil);
@@ -156,7 +160,7 @@ TEST_CASE("Plants: growth happens only in the growing hours and takes growDays x
         ++hours;
     }
     CHECK(plants.mature(soil));
-    CHECK(hours == doctest::Approx(60.0 / 13.0 * 24.0).epsilon(0.03));
+    CHECK(hours == doctest::Approx(60.0 / 13.0 * 24.0 / tuning).epsilon(0.05));
 }
 
 TEST_CASE("Plants: fertility changes the growth rate and low fertility stops it") {
@@ -182,7 +186,7 @@ TEST_CASE("Plants: fertility changes the growth rate and low fertility stops it"
     plants.place(stony, oak);  // oak needs 0.7: just enough
     plants.place(sand, oak);   // placing is allowed, growing is not
     plants.growHour(12);
-    const double base = 1000000.0 / (30.0 * 24.0);
+    const double base = 1000000.0 / (30.0 * 24.0) * plants.growthTuning();
     CHECK(plants.growthPpm(rich) == doctest::Approx(base * (1.0 + 0.4 * 0.5)).epsilon(0.001));  // sensitivity 0.5
     CHECK(plants.growthPpm(stony) == doctest::Approx(base * (1.0 - 0.3 * 0.5)).epsilon(0.001));
     CHECK(plants.growthPpm(sand) == 0);
@@ -197,8 +201,10 @@ TEST_CASE("Plants: plants die at the end of their lifespan") {
     Sim sim(plantsTestSettings(1, 32), plantsTestRealDefs());
     Plants& plants = sim.plants();
     const DefId grass = sim.defs().idOf("Things", "Plant_Grass");
-    CHECK(plants.lifespanHours(grass) == 20 * 24);  // 2.5 grow days x 8
-    CHECK(plants.lifespanHours(sim.defs().idOf("Things", "Plant_TreeOak")) == 270 * 24);
+    // 2.5 grow days x 8, shortened by the life pace (docs/design/pace.md).
+    const double pace = sim.defs().tuning(kPaceLifeTuning);
+    CHECK(plants.lifespanHours(grass) == static_cast<uint32_t>(std::lround(20 * 24 / pace)));
+    CHECK(plants.lifespanHours(sim.defs().idOf("Things", "Plant_TreeOak")) == static_cast<uint32_t>(std::lround(270 * 24 / pace)));
     const CellPos c = [&] {
         for (int i = 0; i < 32 * 32; ++i) {
             if (plants.fertility(sim.map().cellAt(i)) > 0.0f) return sim.map().cellAt(i);

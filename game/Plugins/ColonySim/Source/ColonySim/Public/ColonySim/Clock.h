@@ -22,6 +22,13 @@ inline constexpr int64_t kDaysPerSeason = 15;
 inline constexpr int64_t kSeasonsPerYear = 4;
 inline constexpr int64_t kDaysPerYear = kDaysPerSeason * kSeasonsPerYear;
 
+// The life pace: one data/tuning.json value ("pace.life", 1 if absent) that speeds up every slow
+// living clock at once: plants growing (and their lifespans), animals growing up, pregnancy and egg
+// hatching. 2 makes all of them take half as many game days. It does not touch the day length
+// (kStepsPerRealSecondAt1x), work speeds, needs or produce (eggs, milk, wool per day); changing the
+// day length compresses everything counted in game days, this included (docs/design/pace.md).
+inline constexpr const char* kPaceLifeTuning = "pace.life";
+
 // RimWorld counts 2,500 ticks per game hour. The importer uses this to turn
 // RimWorld's tick-based numbers into game seconds.
 inline constexpr double kRimWorldTicksPerHour = 2500.0;

@@ -53,7 +53,8 @@ adding a plant def never shifts anything else.
   `1 + (fertility - 1) x fertilitySensitivity` (never below 0). Thirteen growing hours a day make
   the wiki's "with rest" times: grass `2.5 x 24 / 13` = 4.6 days, an oak 55 days.
 
-Tune it all at once with the `plantGrowth` multiplier in `data/tuning.json` (1 if absent).
+Tune it all at once with the `plantGrowth` multiplier in `data/tuning.json` (1 if absent). The life pace
+`pace.life` (2.75, `docs/design/pace.md`) multiplies growth on top and shortens lifespans by the same factor.
 
 Not in yet, each for a later task: the light threshold (`growMinGlow`, with day and night light),
 temperature limits, plants spreading and sowing (C3 harvests, a farming task sows), blight, and
