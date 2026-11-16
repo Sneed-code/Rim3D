@@ -106,6 +106,9 @@ private:
 	TMap<FName, float> LengthsCm;
 	/** Per model from the art table's `imports`: yaw, walkCm, gallopCm. */
 	TMap<FName, FVector3f> ImportLooks;
+	/** Models already in Unreal's format (Fab packs): `assets` (mesh and clip object paths by role) and `parts`. */
+	TMap<FName, TMap<FString, FString>> ImportAssets;
+	TMap<FName, TArray<FString>> ImportParts;
 	TMap<FName, FSimAnimalModel> Models;
 
 	/** Keeps every loaded mesh and clip alive (the models above are not a UPROPERTY). */
