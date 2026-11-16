@@ -156,6 +156,10 @@ TEST_CASE("Trait effects: a wimp hurt in a fight runs to cover for 12 to 20 seco
     const TraitBook book(reg, sim->defs());
     CHECK(book.of(wimp).fleeHurtMin == doctest::Approx(12.0f));
     CHECK(book.of(wimp).fleeHurtMax == doctest::Approx(20.0f));
+    // A skirmisher: its melee blows do 10% less (sneed, 2026-11-17).
+    CHECK(book.of(wimp).meleeDamageFactor == doctest::Approx(0.9f));
+    CHECK(book.of(plain).meleeDamageFactor == doctest::Approx(1.0f));
+    CHECK(sim->combat().traitMeleeDamage(wimp) == doctest::Approx(0.9f));
     const int64_t now = sim->time().steps;
     sim->fighters().hurt(plain, enemy);
     sim->fighters().hurt(wimp, enemy);

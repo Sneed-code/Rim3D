@@ -2106,6 +2106,10 @@ bool CombatSystem::jolt(Entity pawn, int part, DefId damageType, float force, fl
     return true;
 }
 
+float CombatSystem::traitMeleeDamage(Entity pawn) const {
+    return traits_ != nullptr ? traits_->of(pawn).meleeDamageFactor : 1.0f;
+}
+
 int CombatSystem::poiseImmuneFor(Entity pawn) const {
     const Poise* p = things_.registry().valid(pawn) ? things_.registry().try_get<Poise>(pawn) : nullptr;
     return p != nullptr ? p->immuneLeft : 0;
