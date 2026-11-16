@@ -285,6 +285,12 @@ public:
     void setHurtHook(std::function<void(Entity, Entity)> hook) { hurtHook_ = std::move(hook); }
     // A pawn's body size in RimWorld's units (a man is 1) for the stagger rule; unset: 1 for everyone.
     void setBodySize(std::function<float(Entity)> size) { bodySize_ = std::move(size); }
+    // How well the pawn performs, 1 normally (an Exhausted pawn 0.75, NeedsSystem::performanceFactor): aim, cooldown,
+    // reload and swing times are divided by it, shooting accuracy multiplied.
+    void setPerformance(std::function<float(Entity)> performance) { performance_ = std::move(performance); }
+    float performance(Entity pawn) const { return performance_ ? std::max(0.05f, performance_(pawn)) : 1.0f; }
+    // Times for aiming, cooldown, reloading and swings are multiplied by this: worn armour's weight over performance.
+    float attackTimeFactor(Entity pawn) const;
     void noteHurt(Entity victim, Entity attacker) const {
         if (hurtHook_) {
             hurtHook_(victim, attacker);
@@ -499,6 +505,7 @@ private:
     std::function<void(Entity)> beforeDestroy_;
     std::function<void(Entity, Entity)> hurtHook_;
     std::function<float(Entity)> bodySize_;
+    std::function<float(Entity)> performance_;
     std::vector<Entity> scratch_;
 
     void emitHit(Entity projectile, const Projectile& p, const TraceHit& hit, float amount);

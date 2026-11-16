@@ -100,6 +100,14 @@ public:
 
     // ---- Commands. False, with a reason in plain words, when they can't be done.
     bool startNight(std::string& error);
+    // The player's own sleep (SleepCommand): `sleeper`, the colonist under control, has lain down; the night runs on
+    // to NeedRules `nightToHour`, and the colonist stays the player's. When the skip ends (morning, a threat or
+    // cancelled) the sleeper gets up. Fails in daytime or while anything threatens the colony.
+    bool startPlayerNight(Entity sleeper, std::string& error);
+    // Whether the player's own night is being skipped (the pawn is still under control and asleep by hand).
+    bool playerNight() const;
+    // Whether it is night for the player's sleep now (NeedRules nightFromHour to nightToHour).
+    bool playerNightNow() const;
     bool startTravel(Entity pawn, float x, float y, std::string& error);
     // Ends the skip now. `why` goes into the event. False if nothing is being skipped.
     bool cancel(const std::string& why, std::string& error);

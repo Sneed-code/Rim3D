@@ -462,7 +462,7 @@ TEST_CASE("Needs: the game's real numbers: starvation kills, and sleeping puts a
     }();
     Sim sim(SimSettings{3, 64, 0, 0, true}, real);
     CHECK(sim.needs().rules().present);
-    CHECK(sim.needs().rules().restFallPerDayRested == doctest::Approx(0.95f));
+    CHECK(sim.needs().rules().restFallPerDayRested == doctest::Approx(0.6f));  // sneed: 40% in a 16-hour day
     const Entity pawn = sim.things().spawn("Human", CellPos{10, 10, 0});
     sim.jobs().addWorker(pawn);
     NEEDS_REQUIRE(sim.things().registry().all_of<Needs, Health>(pawn));

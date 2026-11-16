@@ -276,7 +276,7 @@ float MeleeSystem::aimWobble(Entity pawn) const { return std::max(0.0f, meleeByS
 
 // Armour weight slows a swing (docs/design/armour.md); melee skill speeds it up or slows it down (real-time-combat.md).
 float MeleeSystem::swingTimeFactor(Entity pawn) const {
-    return combat_.apparelStats().attackTimeFactor(things_.registry(), pawn) / swingSpeed(pawn);
+    return combat_.attackTimeFactor(pawn) / swingSpeed(pawn);  // armour weight and exhaustion (CombatSystem)
 }
 
 float MeleeSystem::reactionSteps(Entity pawn) const {
