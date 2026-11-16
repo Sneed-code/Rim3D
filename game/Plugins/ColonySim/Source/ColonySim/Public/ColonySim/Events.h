@@ -239,7 +239,7 @@ struct Event {
     CellPos cell;              // ThingSpawned: its cell (for a building, the footprint origin); Job*: the job's cell
     JobType job = JobType::None;  // JobStarted, JobEnded
     uint64_t command = 0;      // CommandFailed: the id Sim::submit returned
-    std::string message;       // CommandFailed: why, in plain words; PawnDied: the cause ("blood loss"); JobEnded: how it ended
+    std::string message;       // CommandFailed: why, in plain words; PawnDied: the cause ("blood loss"), and `amount` 0 if it was up, 1 downed and awake, 2 downed and knocked out; JobEnded: how it ended
     PawnAction action = PawnAction::PickUp;  // PawnAction
     Entity target = kNoEntity;               // PawnAction: the thing it was done to; Job*: what the job is about, if any
     // PawnInjured: `def` is the injury's Hediffs def; PawnPartLost: the Hediffs def is MissingBodyPart.

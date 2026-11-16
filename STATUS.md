@@ -2,6 +2,10 @@
 
 Updated 2026-11-16.
 
+Shot grunts and last screams (sneed, 2026-11-16; sim): a woman now grunts at hard **gunshot** hits too (same 50%, over 3 damage, once per 5 s), screams every time she goes down, and if she is killed while lying downed and awake she screams once more about half the time (never when knocked out). **Next: sneed listens in the gun range after a rebuild.**
+
+Lovin sounds, birds and mute keys (sneed, 2026-11-16; sim, data and Unreal): a fourth scream; sneed's six **lovin recordings** play 10 s into a lovin at the bed (man and woman: any of the six; two women: the three women's; two men: none) and fade when it ends; walls and shut doors now keep sound in (-12 dB each, was -5), so a closed bedroom is silent 10 m away. **Tropical birds**: short calls from many species at dawn, dusk and as rain comes, on about 3 days in 5 and never over 2% of the day; rainforest **day and night beds**. **Ctrl+M** mutes music, **Ctrl+S** all sound. `docs/design/sound.md` "Lovin, birds...", tests in `SoundTests`. **Next: sneed listens.**
+
 Gear sized to the body (sneed, 2026-11-16; Unreal, one sim helper): **weapons and shields now sit where each pawn's
 hands, hips and back really are** (all their places were measured on the 1.80 m man, so a 1.58 m woman held her gun at
 her chin), and they are drawn **half as much bigger or smaller as the body** (LooksRules `gearSizeFollow` 0.5: her sword
