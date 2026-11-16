@@ -113,7 +113,7 @@ TEST_CASE("Rest: sneed's numbers are in the game's data") {
     CHECK(rules.restFallPerDayRested * 16.0f / 24.0f == doctest::Approx(0.4f));
     CHECK(rules.restGainPerDay * 8.0f / 24.0f == doctest::Approx(0.5f));
     CHECK(rules.restGainPerDay * rules.groundRestEffectiveness * 8.0f / 24.0f == doctest::Approx(0.4f));
-    CHECK(rules.sleepThroughNight);
+    CHECK_FALSE(rules.sleepThroughNight);  // up once full: staying in bed till 6:00 cost the year colony too many work hours
     CHECK(rules.exhaustedPerformance == doctest::Approx(0.75f));
     CHECK(restBandOf(rules, 0.05f) == RestBand::Rested);
     CHECK(restBandOf(rules, 0.0f) == RestBand::Exhausted);
@@ -133,21 +133,20 @@ TEST_CASE("Rest: awake it falls 40% in 16 hours, and nothing happens until it is
                        [](const ThoughtView& t) { return t.def == "Drowsy" || t.def == "Tired" || t.def == "Exhausted"; }));
 }
 
-TEST_CASE("Rest: every night pawns sleep through the Sleep hours, gain 50%, and catch up over nights") {
+TEST_CASE("Rest: every night pawns go to bed, get up once full, gain 50% from a night, and catch up over nights") {
     Sim sim = restSim();
     RestLog log;
     restRunToHour(sim, log, 21);
-    const Entity pawn = restPawn(sim, CellPos{10, 10, 0}, 0.8f);  // hardly tired: it still goes to bed
+    const Entity pawn = restPawn(sim, CellPos{10, 10, 0}, 0.6f);  // after a normal 16-hour day
     sim.things().spawn("Bed", CellPos{12, 10, 0});
     REST_REQUIRE(restRunUntil(sim, log, 2 * 3600, [&] { return jobIsLyingDown(restJob(sim, pawn)); }));
     CHECK(sim.time().hourOfDay() == 22);
-    // Full long before 6:00, it stays in bed till the Sleep hours end.
-    restRunToHour(sim, log, 5);
+    // 40% back takes 6.4 hours: up full at about 4:30, and not back to bed that night.
+    REST_REQUIRE(restRunUntil(sim, log, 8 * 3600, [&] { return log.count(EventType::PawnWokeUp) == 1; }));
+    CHECK(sim.time().hourOfDay() == 4);
     CHECK(restNeeds(sim, pawn).rest == doctest::Approx(1.0f));
-    CHECK(jobIsLyingDown(restJob(sim, pawn)));
-    CHECK(log.count(EventType::PawnWokeUp) == 0);
-    REST_REQUIRE(restRunUntil(sim, log, 2 * 3600, [&] { return log.count(EventType::PawnWokeUp) == 1; }));
-    CHECK(sim.time().hourOfDay() == 6);
+    restRunToHour(sim, log, 6);
+    CHECK_FALSE(jobIsLyingDown(restJob(sim, pawn)));
 
     // An exhausted pawn gets about 50% from a night, and is still asleep at 6:00 if under 50%: it naps on till then.
     Sim tired = restSim();

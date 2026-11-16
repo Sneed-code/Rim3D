@@ -63,8 +63,9 @@ The nearest to the food wins. With none the pawn eats where the food lay, standi
   aiming, cooldowns, reloads and melee swings take 1/0.75 times as long (`CombatSystem::attackTimeFactor`), and shooting
   accuracy is multiplied by 0.75. Walking speed is not touched. This leaves room for long fights and emergencies.
 - **The default is still to sleep every night.** In a Sleep hour a pawn goes to bed below 0.85 (`fallAsleepBelow`; after
-  any normal day it is well under) and **stays in bed until the Sleep hours end** (`sleepThroughNight`), even once full.
-  At 6:00 a pawn under 50% sleeps on until 50% (`wakeOutsideSleepAt` 0.5). Outside Sleep hours a pawn naps only below 10%
+  any normal day it is well under) and gets up once full (`wakeAt` 1.0): from 60% that is about 4:30. At 6:00 a pawn under
+  50% sleeps on until 50% (`wakeOutsideSleepAt` 0.5). `sleepThroughNight` true would keep everyone in bed until the Sleep
+  hours end; tried and dropped, because the year colony lost too many work hours (20 alive of six runs instead of 37). Outside Sleep hours a pawn naps only below 10%
   (`napBelow`; in Work hours only at 0, `napBelowWork`) and gets up at 50%.
 
 While lying, `Health::rest` is set to Bed or Ground for the healing bonus (F1, [health.md](health.md)) and goes back to

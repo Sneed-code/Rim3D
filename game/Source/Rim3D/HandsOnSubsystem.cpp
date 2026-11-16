@@ -175,8 +175,11 @@ FHandsOnTarget UHandsOnSubsystem::FindTarget(const USimSubsystem& Bridge, const 
 	for (const colony::ThingView& View : Bridge.GetCurrentSnapshot().things)
 	{
 		const bool bSite = View.category == colony::ThingCategory::Building && View.stage != colony::ConstructionStage::Built;
+		// A finished bed: F sleeps the night away in it (docs/design/needs.md "The protagonist sleeps the night away").
+		const bool bBed = View.category == colony::ThingCategory::Building && !bSite && View.def.valid() &&
+			Sim->defs().get(View.def).flag("building.bed");
 		FBox Box;
-		if ((View.category != colony::ThingCategory::Item && !bSite) || !SimPicking::ThingBox(Bridge, View, Box) ||
+		if ((View.category != colony::ThingCategory::Item && !bSite && !bBed) || !SimPicking::ThingBox(Bridge, View, Box) ||
 			!FMath::LineBoxIntersection(Box, Origin, Origin + Reach, Reach))
 		{
 			continue;
@@ -227,7 +230,13 @@ void UHandsOnSubsystem::Interact(USimSubsystem& Bridge, bool bDown)
 	const colony::Entity Pawn = Protagonist ? Protagonist->GetControlled() : colony::kNoEntity;
 	if (bDown && !bWasDown)
 	{
-		if (Plan.ok())
+		if (Plan.ok() && Plan.kind == colony::HandsOnKind::Sleep)
+		{
+			// A bed: a press sleeps the night away (SleepCommand); nothing is held.
+			LastCommand = Bridge.Submit(colony::SleepCommand{Pawn, Target.Thing, false});
+			++Stats.CommandsSent;
+		}
+		else if (Plan.ok())
 		{
 			LastCommand = Bridge.Submit(colony::HandsOnCommand{Pawn, colony::HandsOnMode::Work, Target.Thing, Target.Cell});
 			++Stats.CommandsSent;
@@ -456,7 +465,8 @@ void UHandsOnSubsystem::DrawHud(USimSubsystem& Bridge)
 			if (Plan.ok())
 			{
 				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.95f, 0.55f, 1.0f));
-				HandsText(FString::Printf(TEXT("F   hold: %s"), *Label));
+				HandsText(Plan.kind == colony::HandsOnKind::Sleep ? FString::Printf(TEXT("F   %s"), *Label)
+																 : FString::Printf(TEXT("F   hold: %s"), *Label));
 			}
 			else
 			{
