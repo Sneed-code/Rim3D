@@ -12,14 +12,9 @@ sneed, 2026-11-16 (thread "Set pawn-mode pacing and fast crops").
 ## Day length
 
 One sim step is one game second; at 1x the sim runs `kStepsPerRealSecondAt1x` (30) steps a real
-second, so a game day is **48 real minutes** (`Clock.h`). sneed's choice: keep 48 minutes for now and
-later offer the day length as a **player option** (a slider from 48 minutes up to 2 hours).
-
-Why the slider is its own task: walking, fighting and work are counted in game seconds just like
-hunger, crops and the sun. Simply running fewer steps a real second would make everyone walk, fight
-and work slower too. The slider has to split "action time" (walking, fighting, work: stay real time)
-from "calendar time" (needs per day, crops, rot, seasons, the sun: follow the slider). Planned in
-`BACKLOG.md`.
+second, so a game day is **48 real minutes** (`Clock.h`). sneed's choice: 48 minutes by default, with a **day-length option from 48 minutes to 2 hours**
+(built: `docs/design/day-length.md`). Walking, fighting and work stay real time; needs, crops, rot,
+seasons and the sun follow the calendar, so the life pace below compresses or stretches with it.
 
 ## Life pace (`pace.life`)
 
