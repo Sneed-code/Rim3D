@@ -123,6 +123,12 @@ struct CombatModel {
     int maxFlight = 120;
     int staggerSteps = 48;           // CombatRules stagger.steps (RimWorld's 95 ticks)
     float staggerSpeed = 0.17f;      // CombatRules stagger.moveSpeedFactor
+    // sneed's poise (part C): CombatRules poise.
+    float poiseBase = 50.0f;
+    int poiseImmuneSteps = 900;
+    int staggerEverySteps = 150;
+    float staggerPartShare = 0.1f;
+    std::vector<float> poiseForce;   // by DamageTypes DefId value (1 by default)
     std::vector<std::string> layerOrder;
     // F9's blasts: ExplosiveRules, and per damage type the explosion block of its def.
     struct Blast {
@@ -342,6 +348,16 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         }
     }
 
+    poiseForce.assign(defs.size(), 1.0f);
+    if (const Def* rules = defs.find("Rules", "CombatRules")) {
+        poiseBase = combatNum(*rules, "poise.base", poiseBase);
+        poiseImmuneSteps = std::max(0, static_cast<int>(rules->integer("poise.immuneSteps", poiseImmuneSteps)));
+        staggerEverySteps = std::max(0, static_cast<int>(rules->integer("poise.staggerEverySteps", staggerEverySteps)));
+        staggerPartShare = combatNum(*rules, "poise.staggerPartShare", staggerPartShare);
+        for (const DefId id : defs.idsOfKind("DamageTypes")) {
+            poiseForce[id.value] = std::max(0.0f, combatNum(*rules, "poise.forceFactor." + defs.get(id).defName(), 1.0f));
+        }
+    }
     for (const DefId id : defs.idsOfKind("DamageTypes")) {
         const Def& def = defs.get(id);
         const DamageMix m = DamageMix::read(def, "mix");
@@ -1566,8 +1582,10 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
                 emitHit(projectile, p, h, 0.0f);
                 break;
             }
-            // RimWorld's stagger: before the damage, armor or not, a bullet with the stopping power for the body.
-            if (reg.valid(hit.thing) && bullet.stoppingPower > 0.0f &&
+            // RimWorld's stagger: before the damage, armor or not, a bullet with the stopping power for the body. A body
+            // with zones uses sneed's poise and stagger rules instead (jolt, after the damage).
+            const bool zoned = reg.valid(hit.thing) && health_.partZoneHp(hit.thing, 0) > 0.0f;
+            if (!zoned && reg.valid(hit.thing) && bullet.stoppingPower > 0.0f &&
                 (bodySize_ ? bodySize_(hit.thing) : 1.0f) <= bullet.stoppingPower + 0.001f) {
                 stagger(hit.thing);
             }
@@ -1583,6 +1601,9 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
             emitHit(projectile, p, h, result.amount);
             health_.applyHit(hit.thing, result.damageType, result.amount, result.part);
             wearApparel(hit.thing, result);
+            if (zoned) {
+                jolt(hit.thing, result.part, bullet.damageType, bullet.damage * p.damageFactor, result.amount);
+            }
             if (p.launcher != kNoEntity) {
                 noteHurt(hit.thing, p.launcher);
             }
@@ -1952,6 +1973,20 @@ void CombatSystem::step(Rng& rng) {
             reg.remove<Staggered>(pawn);
         }
     }
+    // Poise (part C): the knock-down immunity and the stagger wait run out.
+    scratch_.clear();
+    for (const Entity pawn : reg.view<Poise>()) {
+        scratch_.push_back(pawn);
+    }
+    std::sort(scratch_.begin(), scratch_.end());
+    for (const Entity pawn : scratch_) {
+        Poise& poise = reg.get<Poise>(pawn);
+        poise.immuneLeft = std::max(0, poise.immuneLeft - 1);
+        poise.staggerWait = std::max(0, poise.staggerWait - 1);
+        if (poise.immuneLeft == 0 && poise.staggerWait == 0) {
+            reg.remove<Poise>(pawn);
+        }
+    }
 
     // Projectiles, in id order: one may knock down a wall another would have hit.
     scratch_.clear();
@@ -2012,6 +2047,73 @@ void CombatSystem::stagger(Entity pawn) {
         }
         events_->push_back(std::move(e));
     }
+}
+
+bool CombatSystem::jolt(Entity pawn, int part, DefId damageType, float force, float dealt) {
+    entt::registry& reg = things_.registry();
+    const float zoneHp = reg.valid(pawn) ? health_.partZoneHp(pawn, part) : 0.0f;
+    if (zoneHp <= 0.0f) {
+        return false;
+    }
+    if (health_.incapacitated(pawn) || !things_.spawned(pawn) || !reg.all_of<Posture, Position>(pawn)) {
+        return true;
+    }
+    Poise* poise = reg.try_get<Poise>(pawn);
+    const float factor = damageType.valid() && damageType.value < model_->poiseForce.size() ? model_->poiseForce[damageType.value] : 1.0f;
+    const float push = force * factor;
+    // Knock-down: the blow's force beats the pawn's poise, and it isn't still getting over the last one.
+    if (push > model_->poiseBase && (poise == nullptr || poise->immuneLeft <= 0) && !reg.all_of<KnockedDown>(pawn)) {
+        Posture& posture = reg.get<Posture>(pawn);
+        const int steps = static_cast<int>(std::min(model_->knockMaxSteps, model_->knockBaseSteps + model_->knockStepsPerDamage * push));
+        reg.emplace<KnockedDown>(pawn, KnockedDown{steps, posture.stance});
+        posture.stance = Stance::Prone;
+        if (Shooter* shooter = reg.try_get<Shooter>(pawn);
+            shooter != nullptr && (shooter->phase == ShotPhase::Aiming || shooter->phase == ShotPhase::Firing)) {
+            shooter->phase = ShotPhase::Ready;
+            shooter->shotsLeft = 0;
+            shooter->stepsLeft = 0;
+        }
+        if (Mover* mover = reg.try_get<Mover>(pawn)) {
+            mover->path.clear();
+            mover->next = 0;
+            mover->vx = 0.0f;
+            mover->vy = 0.0f;
+        }
+        poise = &reg.get_or_emplace<Poise>(pawn);
+        poise->immuneLeft = model_->poiseImmuneSteps;
+        if (events_ != nullptr) {
+            const Position& at = reg.get<Position>(pawn);
+            Event e;
+            e.type = EventType::PawnKnockedDown;
+            e.thing = pawn;
+            e.target = kNoEntity;
+            e.def = reg.get<Thing>(pawn).def;
+            e.amount = static_cast<float>(steps);
+            e.x = at.x;
+            e.y = at.y;
+            e.z = map_.heightAt(at.x, at.y);
+            e.cell = cellOf(at);
+            e.message = "poise";
+            events_->push_back(std::move(e));
+        }
+        return true;
+    }
+    // Stagger: only a hit that took over a tenth of the zone's hit points, and once per 5 s.
+    if (dealt > model_->staggerPartShare * zoneHp && (poise == nullptr || poise->staggerWait <= 0) && !reg.all_of<KnockedDown>(pawn)) {
+        stagger(pawn);
+        reg.get_or_emplace<Poise>(pawn).staggerWait = model_->staggerEverySteps;
+    }
+    return true;
+}
+
+int CombatSystem::poiseImmuneFor(Entity pawn) const {
+    const Poise* p = things_.registry().valid(pawn) ? things_.registry().try_get<Poise>(pawn) : nullptr;
+    return p != nullptr ? p->immuneLeft : 0;
+}
+
+int CombatSystem::staggerWaitFor(Entity pawn) const {
+    const Poise* p = things_.registry().valid(pawn) ? things_.registry().try_get<Poise>(pawn) : nullptr;
+    return p != nullptr ? p->staggerWait : 0;
 }
 
 int CombatSystem::knockedDownFor(Entity pawn) const {
@@ -2832,6 +2934,11 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
     }
     if (const Staggered* st = reg.try_get<Staggered>(e)) {
         h.add(st->stepsLeft);
+    }
+    if (const Poise* poise = reg.try_get<Poise>(e)) {
+        h.add(uint64_t{0x9015E});
+        h.add(poise->immuneLeft);
+        h.add(poise->staggerWait);
     }
     if (const WeaponSwitch* change = reg.try_get<WeaponSwitch>(e)) {
         h.add(entt::to_integral(change->to));

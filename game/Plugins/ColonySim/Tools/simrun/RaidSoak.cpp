@@ -43,7 +43,9 @@ class StuckWatch {
 public:
     void watch(colony::Sim& sim) {
         for (const auto [pawn, f] : sim.things().registry().view<const colony::Fighter>().each()) {
-            if (sim.health().incapacitated(pawn) || f.walk == 0) {
+            // Knocked down or staggered by a blow (poise, body-health.md part C) is held up for a moment, not stuck.
+            if (sim.health().incapacitated(pawn) || f.walk == 0 ||
+                sim.things().registry().any_of<colony::KnockedDown, colony::Staggered>(pawn)) {
                 seen_.erase(pawn);
                 continue;
             }

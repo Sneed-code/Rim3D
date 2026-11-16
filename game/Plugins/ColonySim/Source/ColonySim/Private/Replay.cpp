@@ -541,6 +541,8 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                         j["pawn"] = entt::to_integral(c.pawn);
                         j["bed"] = entt::to_integral(c.bed);
                         j["wake"] = c.wake;
+                    } else if constexpr (std::is_same_v<Type, PatchCommand>) {
+                        j["pawn"] = entt::to_integral(c.pawn);
                     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
                         j["up"] = c.up;
@@ -1869,6 +1871,16 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             }
             c.pawn = static_cast<Entity>(pawn);
             c.bed = static_cast<Entity>(bed);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "Patch") {
+            PatchCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            if (!r.integer(j, "pawn", pawn, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
             out.command = std::move(c);
             return true;
         }

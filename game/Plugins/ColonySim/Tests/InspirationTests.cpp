@@ -304,9 +304,9 @@ TEST_CASE("Inspirations: an inspired doctor's tend keeps its medicine") {
             return static_cast<int>(std::find(labels.begin(), labels.end(), label) - labels.begin());
         };
         for (const char* p : {"torso", "left leg", "right leg", "left arm"}) {
-            sim.health().applyDamage(patient, sim.health().damageTypeId("Blunt"), 20.0f, part(p), rng);
+            sim.health().applyDamage(patient, sim.health().damageTypeId("Blunt"), std::string(p) == "left leg" ? 60.0f : 20.0f, part(p), rng);
         }
-        sim.health().applyDamage(patient, sim.health().damageTypeId("Cut"), 6.0f, part("right arm"), rng);
+        sim.health().applyDamage(patient, sim.health().damageTypeId("Cut"), 15.0f, part("right arm"), rng);
         bool tended = false;
         for (int i = 0; i < 3000 && !tended; ++i) {
             sim.step();

@@ -75,7 +75,8 @@ Entity priEnemy(Sim& sim, CellPos cell, bool down = true) {
         const std::vector<std::string> labels = sim.health().partLabels(sim.things().registry().get<Thing>(pawn).def);
         for (const char* part : {"torso", "left leg", "right leg", "left arm"}) {
             const auto it = std::find(labels.begin(), labels.end(), part);
-            sim.health().applyDamage(pawn, sim.health().damageTypeId("Blunt"), 20.0f, static_cast<int>(it - labels.begin()), rng);
+            sim.health().applyDamage(pawn, sim.health().damageTypeId("Blunt"), std::string(part) == "left leg" ? 60.0f : 20.0f,
+                                     static_cast<int>(it - labels.begin()), rng);
         }
     }
     return pawn;

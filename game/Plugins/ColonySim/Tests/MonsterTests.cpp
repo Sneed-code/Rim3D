@@ -130,9 +130,11 @@ TEST_CASE("Monsters: mechanoids neither bleed nor hurt, and their hulls turn blo
     MONSTER_REQUIRE(human != kNoEntity);
     Rng rng(5);
     const DefId cut = sim->health().damageTypeId("Cut");
+    const std::vector<std::string> labels = sim->health().partLabels(sim->things().registry().get<Thing>(human).def);
+    const int humanArm = static_cast<int>(std::find(labels.begin(), labels.end(), "left arm") - labels.begin());
     for (int i = 0; i < 3; ++i) {
         sim->health().applyDamage(mech, cut, 6.0f, -1, rng);
-        sim->health().applyDamage(human, cut, 6.0f, -1, rng);
+        sim->health().applyDamage(human, cut, 6.0f, humanArm, rng);  // 18 of the arm's 50: it bleeds (body zones)
     }
     sim->step();
     HealthReport mechReport, humanReport;

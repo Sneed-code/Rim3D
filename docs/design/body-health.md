@@ -49,6 +49,80 @@ for people changes. Animals keep RimWorld's rules for now.
 | E | Damage numbers, layered upper-body staggers by zone and a limp after a leg hit, blood on clothes | Unreal (PC) |
 | F | Dismemberment and gibs (pre-cut limbs with caps, gib chunk sets, skull and brain interior) | sim rule + Unreal art (PC) |
 
+## Part A as built
+
+Code: `HealthModel::buildZones`, `HealthEval::workOutZones`, the zone branch of `HealthSystem::derive` and the blood
+lines of `HealthSystem::step` (`Private/Health.cpp`). Data: `HealthRules` `zones` (`Rules/Rules.json`): the bodies
+that have zones (`bodies`, now only `Human`), the zone list (name, root part def, hit points) and every number in the
+table above. Tests: `Tests/BodyZoneTests.cpp`. `Tests/HealthTests.cpp` takes the Human zones off and keeps checking
+RimWorld's rules, which animals still use.
+
+- **Zones**: a rule's root part def starts a zone at every part of that def (two shoulders, two legs); the rule whose
+  root is the body's core part (Torso) takes what is left. Every part's hit points are scaled by its zone (torso 40 to
+  100: a heart has 37.5).
+- **Zone health** (`Health::zones`, `HealthSystem::zoneHealth`, by `zoneNames` order): 1 minus the damage on the
+  zone's outside parts (each part at most its hit points), a lost part's full hit points, over the zone's hit points.
+- **Downed** by sneed's rules only: pain shock and RimWorld's capacity thresholds no longer down a person (they still
+  slow it). A vital organ destroyed or a vital capacity at 0 still kills, as before. So the Wimp trait (a lower pain shock
+  threshold) and numb (resonance, takes pain away) no longer change whether a person is down; they still work for
+  bodies without zones. sneed (2026-11-16) made Wimp psychological instead: see part B.
+- **Unconscious** (`Health::unconscious`): head zone under 25%, or blood 1000 or less. It is a kind of downed.
+- **Bleeding**: a zone at 75% or less with an untended wound that bleeds (a cut, stab or gunshot, not a bruise or
+  burn) or an untended lost part in it bleeds 1, 2 or 3 blood a
+  real second (`bleedPerDay` holds it as blood loss a day, so the HUD and AI keep working). Tending is "patching" until
+  part B adds patching yourself in 1 to 3 seconds. RimWorld's blood loss stages (consciousness offsets) are off for a
+  zoned body: blood only matters at 1000 and 0.
+- **Blood comes back**: once nothing bleeds, `Health::bleedStoppedAt` (saved, health section 7) holds the step; from
+  30 seconds (900 steps) on, 10 blood a second.
+- **Protagonist**: never downed or unconscious; dies (`DeathCause::Wounds`, "wounds") when its zones have lost 100 hit
+  points in all. Its parts are no longer doubled (that stays for an unzoned body). It still bleeds, and a destroyed
+  brain or heart still kills.
+- Not yet: shooting corpses (part A2: the dead have no hitboxes yet; the downed can already be shot), patching (B),
+  poise (C), crawling (D).
+
+## Part B as built
+
+Code: `ColonySim/Patch.h`, `Private/Patch.cpp` (`PatchSystem`), `HealthSystem::patchZone` / `worstBleedingZone` /
+`zoneBleedLevel`, `FighterSystem::badlyHurt`. Data: `HealthRules` `zones` `patchSeconds` [1, 2, 3] (sneed's),
+`patchQuality` 0.3 and `coverBlood` 1500 (sneed's); `PatchRules` in code (`safeSeenSteps` 60, `safeRange` 30 m,
+`thinkEvery` 15; ours). Tests: the "Patching" cases in `Tests/BodyZoneTests.cpp`.
+
+- **Patching** (`Patching` component, saved in section `patch`): the pawn stands still (aim dropped, fighter
+  stopped, job paused, no swings) for 1, 2 or 3 real seconds by how badly its worst zone bleeds, then that zone's
+  untended bleeding wounds and lost parts are tended at quality 0.3. One zone at a time. Downed mid-patch: the patch
+  is lost. `PawnAction` `Patch`: "patching" (`part` the zone, `amount` the steps) and "patched".
+- **The AI** looks every half second: a person (not the player's pawn) who bleeds and is not downed, stunned,
+  casting or patching patches itself when it is **safe**: not a fighter, or a fighter whose side has seen no able
+  enemy within 30 m for 2 seconds.
+- **Under 1500 blood** a bleeding fighter counts as badly hurt and falls back to cover (the fall-back it already had),
+  where it patches once it is safe. The old rule stays too: bad pain, 30% blood lost or a bad leg send a fighter back
+  (the raid soak's fighters stood in the open more without it).
+- **Wimp** (sneed, 2026-11-16): a Wimp fighter hurt by an enemy falls back to cover for 12 to 20 real seconds
+  (`Traits` Wimp `fleeWhenHurtSeconds`, `Fighter::cowerUntil`, saved in fighters section 4), then fights again. Not
+  the player's pawn. An enemy at arm's length still makes it stand and fight.
+- **The player's pawn** patches on `PatchCommand` (a key on the PC, to be bound with the stagger work). The snapshot's
+  `patchZone` / `patchStepsLeft` let Unreal play a patching animation.
+
+## Part C as built
+
+- **Poise** (CombatRules `poise`, ours): a blow's force is its damage before armour times its damage type's force
+  factor (blunt and crush 1.5, burn 0, the rest 1). Force over the pawn's poise (50) knocks it down for the blast
+  knock-down's time (20 steps plus 0.6 per point of force, at most 90) and then no blow can knock it down for 900 steps
+  (30 real seconds). `CombatSystem::jolt`, `Poise` component (saved in combat section 4, hashed). The event is
+  `PawnKnockedDown` with message "poise". A knocked-down pawn can't swing, block or dodge.
+- **Staggers** (sneed, 10:46): a hit staggers a person only if what got through armour is over 10% of the struck
+  zone's hit points, and at most once per 150 steps (5 s). This replaces RimWorld's stopping-power stagger for bodies
+  with zones, for bullets and melee alike; animals and mechs keep the old rule.
+- **Sweeping blows**: cut, slash, blunt, crush and scratch blows sweep their arc (MeleeRules `arcHalfDegrees` 30,
+  `arcRaysPerSide` 2). The aimed line is traced first; if it meets nothing, the lines either side are traced in turn
+  and the first pawn met is hit. Stabs and bites only go straight. A man who steps straight back is still missed.
+- **Knock-on fixes**: a person on their feet never walks slower than 40% (`zones.minMoving`; pain no longer downs, so
+  it doesn't leave them crawling upright either; a raider at 3% speed held a raid open for hours). A hurt fighter
+  whose side outnumbers the enemies near two to one presses on instead of backing off (a bruised trio and a lone
+  colonist all backing off left a brawl with nobody coming on); bleeding under 1500 it still goes to patch. A fighter
+  falling back counts cover double when it picks where to go (hurt fighters were waiting in the open far away).
+- Physics wobble at the struck spot belongs to part E (Unreal).
+
 ## Later (sneed, 2026-11-16)
 
 - **Ragdolls**: unconscious pawns, corpses and severed limbs are physics ragdolls in Unreal (cosmetic: the sim keeps

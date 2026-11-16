@@ -73,9 +73,11 @@ struct ExecFixture {
         // Down it with bruises (they do not bleed).
         Rng rng(5);
         const std::vector<std::string> labels = sim.health().partLabels(sim.things().registry().get<Thing>(prisoner).def);
+        // A leg under a quarter of its 75 hit points downs a person (body zones, docs/design/body-health.md).
         for (const char* part : {"torso", "left leg", "right leg", "left arm"}) {
             const auto it = std::find(labels.begin(), labels.end(), part);
-            sim.health().applyDamage(prisoner, sim.health().damageTypeId("Blunt"), 20.0f, static_cast<int>(it - labels.begin()), rng);
+            const float amount = std::string(part) == "left leg" ? 60.0f : 20.0f;
+            sim.health().applyDamage(prisoner, sim.health().damageTypeId("Blunt"), amount, static_cast<int>(it - labels.begin()), rng);
         }
         // A raider who was caught: it belongs to a raid squad, so it harmed the colony. The warden carries it to the bed.
         sim.things().registry().emplace<Raider>(prisoner);

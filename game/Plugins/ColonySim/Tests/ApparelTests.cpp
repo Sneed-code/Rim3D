@@ -491,7 +491,7 @@ TEST_CASE("Apparel: a human's clothes are worn down and tainted when they die") 
     const Entity shirt = apparelWear(*sim, pawn, "Apparel_TShirt");
     const Entity vest = apparelWear(*sim, pawn, "Apparel_FlakVest");
     const int vestMax = sim->things().registry().get<HitPoints>(vest).max;
-    sim->submit(DamagePawnCommand{pawn, "Cut", 60.0f, 0});  // the torso
+    sim->submit(DamagePawnCommand{pawn, "Cut", 110.0f, 0});  // the torso (100 hit points with body zones)
     sim->step();
     bool died = false;
     for (const Event& e : sim->events()) {
@@ -779,7 +779,7 @@ TEST_CASE("Apparel: a colonist strips a dead pawn of clothes and weapon where it
     }
     CHECK(failed == 1);
 
-    sim->submit(DamagePawnCommand{victim, "Cut", 60.0f, 0});
+    sim->submit(DamagePawnCommand{victim, "Cut", 110.0f, 0});
     sim->step();
     sim->submit(StripCommand{victim, true});
     sim->step();

@@ -54,10 +54,11 @@ add_test(NAME simrun_gather COMMAND simrun --seed 42 --size 256 --days 2 --start
 # Food, rest and schedules (C6): the Crashlanded colonists live three days on their starting food, nobody dies.
 add_test(NAME simrun_needs COMMAND simrun --seed 42 --size 128 --days 3 --start Crashlanded --check)
 # Raids (F6): pirates walk in, the alarm sounds, the armed colonists fight, and the raid ends
-# (beaten, routed or gone) within a quarter of a day.
-add_test(NAME simrun_raid COMMAND simrun --seed 2 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --check)
+# (beaten, routed or gone) within 0.4 of a day (a routed raider with a ruined leg limps off slowly since body zones:
+# people are downed only below a quarter of a leg, docs/design/body-health.md).
+add_test(NAME simrun_raid COMMAND simrun --seed 2 --size 256 --days 0.4 --start Crashlanded --raid 300 --armed --check)
 # Medics, firefighters and rescue under fire (F10): the same raid with a Medic and a Firefighter; it still ends.
-add_test(NAME simrun_medics COMMAND simrun --seed 2 --size 256 --days 0.25 --start Crashlanded --raid 300 --armed --medics --check)
+add_test(NAME simrun_medics COMMAND simrun --seed 2 --size 256 --days 0.3 --start Crashlanded --raid 300 --armed --medics --check)
 # Orrin's first big threat, a raid, comes between day 11 and 15.6 of a new colony (T1, docs/design/narrator.md).
 # Save round trips in a busy game (docs/design/saves.md): every 3 game hours simrun saves, loads a copy, checks the
 # hash and the file, and runs both 600 steps on; the copy must never go its own way.

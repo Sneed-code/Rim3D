@@ -11,6 +11,9 @@
 #include "ColonySim/Genes.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Patch.h"
+#include "ColonySim/Random.h"
+#include "ColonySim/Traits.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Prisoners.h"
@@ -184,10 +187,42 @@ float FighterSystem::weaponRange(Entity pawn) const {
     return def.value < range_.size() ? range_[def.value] * (mods != nullptr ? mods->range : 1.0f) : 0.0f;
 }
 
+void FighterSystem::hurt(Entity victim, Entity attacker) {
+    entt::registry& reg = things_.registry();
+    Fighter* f = reg.valid(victim) ? reg.try_get<Fighter>(victim) : nullptr;
+    if (f == nullptr || reg.all_of<PlayerControl>(victim) || !reg.valid(attacker) || factionOf(attacker) == factionOf(victim) ||
+        now() < f->cowerUntil) {
+        return;
+    }
+    const TraitStats& traits = TraitBook(reg, defs_).of(victim);
+    if (traits.fleeHurtMax <= 0.0f) {
+        return;
+    }
+    // 12 to 20 real seconds, picked from the pawn, the attacker and the step (deterministic).
+    const uint64_t roll = splitMix64((static_cast<uint64_t>(entt::to_integral(victim)) << 32) ^
+                                     static_cast<uint64_t>(entt::to_integral(attacker)) ^ static_cast<uint64_t>(now()) ^ 0x57494D50ULL);
+    const float t = static_cast<float>(roll >> 40) / static_cast<float>(1ULL << 24);
+    const float seconds = traits.fleeHurtMin + (traits.fleeHurtMax - traits.fleeHurtMin) * t;
+    f->cowerUntil = now() + static_cast<int64_t>(std::lround(seconds * 30.0f));
+    f->nextPlan = now();  // re-plan at once: off to cover
+}
+
+bool FighterSystem::bleedingLow(Entity pawn) const {
+    // Body zones (docs/design/body-health.md): bleeding under 1500 blood, it falls back to cover to patch.
+    const Health* h = things_.registry().try_get<Health>(pawn);
+    return h != nullptr && !h->zones.empty() && health_.blood(pawn) < health_.coverBlood() &&
+           std::any_of(h->zoneBleeds.begin(), h->zoneBleeds.end(), [](uint8_t b) { return b > 0; });
+}
+
 bool FighterSystem::badlyHurt(Entity pawn) const {
     const Health* h = things_.registry().try_get<Health>(pawn);
-    return h != nullptr &&
-           (h->pain >= rules_.hurtPain || h->bloodLoss >= rules_.hurtBloodLoss || h->movingFactor <= rules_.hurtMoving);
+    if (h == nullptr) {
+        return false;
+    }
+    if (bleedingLow(pawn)) {
+        return true;
+    }
+    return h->pain >= rules_.hurtPain || h->bloodLoss >= rules_.hurtBloodLoss || h->movingFactor <= rules_.hurtMoving;
 }
 
 const FighterSystem::PawnInfo* FighterSystem::info(Entity pawn) const {
@@ -456,7 +491,7 @@ void FighterSystem::step() {
             continue;
         }
         // Thrown to the ground by a blast, stunned, or winding up a power (X2): nothing until it is over.
-        if (reg.any_of<KnockedDown, Stunned, Casting>(pawn)) {
+        if (reg.any_of<KnockedDown, Stunned, Casting, Patching>(pawn)) {  // or patching a wound (body-health.md)
             if (f.walk != 0) {
                 stop(pawn, f);
             }
@@ -832,9 +867,13 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
             ++friendsNear;
         }
     }
-    f.fallingBack = f.retreat ||
+    // A hurt fighter whose side outnumbers the enemies near as much as being outnumbered means presses on instead (a
+    // bruised group of three against one doesn't back off, and the lone one backing off from them left a fight with
+    // nobody coming on); one bleeding low still goes to patch.
+    const bool overwhelming = static_cast<float>(friendsNear) >= rules_.outnumberedRatio * static_cast<float>(enemiesNear);
+    f.fallingBack = f.retreat || now() < f.cowerUntil ||
                     (enemiesNear > 0 && (static_cast<float>(enemiesNear) >= rules_.outnumberedRatio * static_cast<float>(friendsNear) ||
-                                         badlyHurt(pawn)));
+                                         (badlyHurt(pawn) && (!overwhelming || bleedingLow(pawn)))));
     // With an enemy already at arm's length there is no getting away on foot: it stands and fights (F8).
     if (f.fallingBack && melee_ != nullptr && threatCount > 0 && threats[0].d <= melee_->reach(pawn) + melee_->rules().standGround) {
         f.fallingBack = false;
@@ -982,7 +1021,8 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
                         covered += kFightThreatWeights[i] * cover.coverAgainst(c, Stance::Crouching, threats[i].x, threats[i].y);
                     }
                 }
-                s += rules_.coverWeight * covered / threatWeight;
+                // Falling back hurt, cover counts double: it gets out of the line of fire first, not just far away.
+                s += (f.fallingBack ? 2.0f : 1.0f) * rules_.coverWeight * covered / threatWeight;
             }
             s -= rules_.travelWeight * fightDist(cx, cy, self.x, self.y);
             s -= rules_.crowdWeight * crowd;
@@ -1971,6 +2011,9 @@ void FighterSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(static_cast<int>(f->fireStance));
         h.add(f->canFire);
         h.add(f->fallingBack);
+        if (f->cowerUntil > 0) {
+            h.add(f->cowerUntil);
+        }
         h.add(f->nextPlan);
         h.add(static_cast<int>(f->walk));
         h.add(static_cast<int>(f->repaths));

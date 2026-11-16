@@ -40,13 +40,17 @@
     "playerBlockSteps": 20,
     "dodgeHoldSteps": 3,
     "strongPowerShare": 1.15,
+    "arcHalfDegrees": 30,
+    "arcRaysPerSide": 2,
+    "arcDamageTypes": ["Cut", "Slash", "Blunt", "Crush", "Scratch"],
     "unverified": ["armorPenetrationPerDamage"],
     "ours": [
       "bodyReach", "animalReachBase", "animalReachPerRoot", "weaponReach", "reachSlack", "closeIn", "standGround", "defaultWeaponReach", "shoulderBelowEye", "strikeDepth", "windupShare",
       "minWindup", "commitSteps", "reactionStepsBySkill", "reactionJitter", "blockSteps",
       "defaultMeleeSkill", "skillSpeedBySkill", "skillDamageBySkill", "aimWobbleBySkill", "reactionTraitSteps", "guardBlocks",
       "guardWindowSteps", "guardBreakSteps", "dodgeRecoverySteps", "recoveryNoDefendSteps", "guardWaitSteps", "guardFacingCos", "rollClearance", "aiRollEverySteps",
-      "blockRecoverySteps", "playerBlockSteps", "dodgeHoldSteps", "chargeTraits", "strongPowerShare"
+      "blockRecoverySteps", "playerBlockSteps", "dodgeHoldSteps", "chargeTraits", "strongPowerShare",
+      "arcHalfDegrees", "arcRaysPerSide", "arcDamageTypes"
     ]
   }
 ]

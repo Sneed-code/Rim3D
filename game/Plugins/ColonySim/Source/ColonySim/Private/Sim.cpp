@@ -52,6 +52,7 @@
 #include "ColonySim/Ship.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Resonance.h"
+#include "ColonySim/Patch.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Trade.h"
 #include "ColonySim/Needs.h"
@@ -416,6 +417,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     animals_->setPathfinder(&pathfinder_);
     combat_->setHurtHook([this](Entity victim, Entity attacker) {
         animals_->hurt(victim, attacker);
+        if (fighters_) {
+            fighters_->hurt(victim, attacker);
+        }
         if (raids_) {
             raids_->hurt(victim, attacker);
         }
@@ -712,7 +716,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                                    splitMix64(settings.seed ^ 0x7265736F6EULL));
     resonance_->setEventLog(&events_);
     health_->setMods([this](Entity pawn, HealthMods& mods) { resonance_->healthMods(pawn, mods); });
-    jobs_->setPauseGate([this](Entity pawn) { return things_->registry().any_of<Stunned, Casting>(pawn); });
+    patches_ = std::make_unique<PatchSystem>(*things_, *health_, *fighters_, time_);
+    patches_->setEventLog(&events_);
+    jobs_->setPauseGate([this](Entity pawn) { return things_->registry().any_of<Stunned, Casting, Patching>(pawn); });
     mentalBreaks_->setEventLog(&events_);
     mentalBreaks_->setMelee(melee_.get());
     mentalBreaks_->setFire(fire_.get());
@@ -1086,6 +1092,13 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     }
     if (const auto* sleep = std::get_if<SleepCommand>(&command)) {
         applySleepCommand(*sleep, id);
+        return;
+    }
+    if (const auto* patch = std::get_if<PatchCommand>(&command)) {
+        std::string why;
+        if (!patches_->patch(patch->pawn, true, why)) {
+            commandFailed(id, why);
+        }
         return;
     }
     if (const auto* day = std::get_if<SetDayLengthCommand>(&command)) {
@@ -2111,6 +2124,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     }
     { SimLap lap(profile_, "fighters"); fighters_->step(); }
     { SimLap lap(profile_, "resonance"); resonance_->step(); }
+    { SimLap lap(profile_, "patches"); patches_->step(); }
     if (calendar) {
         { SimLap lap(profile_, "prisoners"); prisoners_->step(); }
         { SimLap lap(profile_, "trade"); trade_->step(events_); }
@@ -2775,6 +2789,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.meleeTool = melee->tool;
             view.meleeStrong = melee_->strongSwing(entity);
         }
+        if (const Patching* patching = reg.try_get<Patching>(entity)) {
+            view.patchZone = patching->zone;
+            view.patchStepsLeft = patching->stepsLeft;
+        }
         if (reg.all_of<Posture>(entity) && !view.dead) {
             // AN1: a pawn down on the floor lies (in the bed under it, if any); cover toward its fight target; a low
             // obstacle it walks over.
@@ -3430,6 +3448,9 @@ uint64_t Sim::stateHash() const {
                 h.add(added.hediff.value);
             }
             h.add(health->bloodLoss);
+            if (health->bleedStoppedAt >= 0) {
+                h.add(health->bleedStoppedAt);
+            }
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
             if (!health->environment.empty()) {
@@ -3457,6 +3478,7 @@ uint64_t Sim::stateHash() const {
         defense_->hashThing(e, h);
         artillery_->hashThing(e, h);
         resonance_->hashThing(e, h);
+        patches_->hashThing(e, h);
         apparel_->hashThing(e, h);
         mentalBreaks_->hashThing(e, h);
         inspirations_->hashThing(e, h);

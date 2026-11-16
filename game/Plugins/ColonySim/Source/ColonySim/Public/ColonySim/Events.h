@@ -229,6 +229,8 @@ enum class PawnAction : uint8_t {
     Man,          // took its post at `target`, a mortar or rocket launcher (once per ManArtillery job; it stays until its JobEnded)
     Cornered,     // a routed raider turned to fight to the death: `message` "walled in" or "caught" (real-time-combat.md)
     TakeCover,    // a working colonist hurt by `target` dropped its job: `message` "fights back" or "runs" (real-time-combat.md)
+    Patch,        // patching a bleeding body zone itself (body-health.md): `part` the zone, `message` "patching" (`amount` steps
+                  // it takes) or "patched" (`count` 1)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.

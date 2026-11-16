@@ -8,6 +8,7 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Patch.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Random.h"
@@ -89,6 +90,15 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     whole("playerBlockSteps", r.playerBlockSteps);
     whole("dodgeHoldSteps", r.dodgeHoldSteps);
     num("strongPowerShare", r.strongPowerShare);
+    num("arcHalfDegrees", r.arcHalfDegrees);
+    whole("arcRaysPerSide", r.arcRaysPerSide);
+    if (def->has("arcDamageTypes")) {
+        r.arcDamageTypes.clear();
+        for (size_t i = 0; i < def->count("arcDamageTypes"); ++i) {
+            r.arcDamageTypes.push_back(def->textAt("arcDamageTypes", i));
+        }
+    }
+    r.arcRaysPerSide = std::clamp(r.arcRaysPerSide, 0, 8);
     r.minWindup = std::max(1, r.minWindup);
     r.commitSteps = std::max(0, r.commitSteps);
     r.guardBlocks = std::max(1, r.guardBlocks);
@@ -105,7 +115,8 @@ int meleeWindup(const MeleeRules& r, int cooldown) {
 
 bool meleeAble(const entt::registry& reg, Entity pawn) {
     const Health* h = reg.try_get<Health>(pawn);
-    return (h == nullptr || !h->incapacitated()) && !reg.all_of<Stunned>(pawn);  // a stunned pawn can't swing, block or dodge (X2)
+    // A stunned (X2) or knocked-down (poise, part C) pawn can't swing, block or dodge.
+    return (h == nullptr || !h->incapacitated()) && !reg.any_of<Stunned, Patching, KnockedDown>(pawn);
 }
 
 }  // namespace
@@ -114,6 +125,13 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
                          const GameTime& time, uint64_t seed)
     : things_(things), map_(map), combat_(combat), health_(health), defs_(defs), time_(time), seed_(seed) {
     meleeReadRules(defs_, rules_);
+    arcTypes_.assign(defs_.size(), 0);
+    for (const std::string& name : rules_.arcDamageTypes) {
+        const DefId id = defs_.idOf("DamageTypes", name);
+        if (id.valid() && id.value < arcTypes_.size()) {
+            arcTypes_[id.value] = 1;
+        }
+    }
     const Def* rulesDef = defs_.find("Rules", "MeleeRules");
     tools_.resize(defs_.size());
     for (const DefId id : defs_.idsOfKind("Things")) {
@@ -802,33 +820,57 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
         dx /= flat;
         dy /= flat;
     }
-    const float dz = 0.0f;
     // As far as the aimed point and a little past it, but never further than the reach.
     const float length = std::min(flat + rules_.strikeDepth, reach(pawn));
-    const float ex = ox + dx * length;
-    const float ey = oy + dy * length;
     const float ez = oz;
-    TraceHit hit = combat_.trace(ox, oy, oz, ex, ey, ez, pos.level, pawn, cellOf(pos));
-
-    // A target without hitboxes (animals until they get theirs): hit if the strike passes within its
-    // body, which is then hurt where health picks.
-    if (hit.kind != ProjectileHitKind::Pawn && hit.kind != ProjectileHitKind::Building && m.target != kNoEntity &&
-        reg.valid(m.target) && things_.spawned(m.target)) {
-        std::vector<HitboxView> boxes;
-        if (!combat_.hitboxesOf(m.target, boxes)) {
-            const Position& t = reg.get<Position>(m.target);
-            const float px = t.x - ox;
-            const float py = t.y - oy;
-            const float along = std::clamp(px * dx + py * dy, 0.0f, length);
-            const float cx = ox + dx * along - t.x;
-            const float cy = oy + dy * along - t.y;
-            if (cx * cx + cy * cy <= kPawnRadius * kPawnRadius && t.level == pos.level) {
-                hit.kind = ProjectileHitKind::Pawn;
-                hit.thing = m.target;
-                hit.part = -1;
-                hit.x = t.x;
-                hit.y = t.y;
-                hit.z = oz + dz * along;
+    // One line of the blow at `angle` radians off the aimed line: walls and hitboxes first, then a target without
+    // hitboxes (animals until they get theirs), hit if the line passes within its body, which is then hurt where
+    // health picks.
+    float ex = ox + dx * length;
+    float ey = oy + dy * length;
+    const auto line = [&](float angle) {
+        const float c = std::cos(angle);
+        const float sn = std::sin(angle);
+        const float lx = dx * c - dy * sn;
+        const float ly = dx * sn + dy * c;
+        const float lex = ox + lx * length;
+        const float ley = oy + ly * length;
+        TraceHit found = combat_.trace(ox, oy, oz, lex, ley, ez, pos.level, pawn, cellOf(pos));
+        if (found.kind != ProjectileHitKind::Pawn && found.kind != ProjectileHitKind::Building && m.target != kNoEntity &&
+            reg.valid(m.target) && things_.spawned(m.target)) {
+            std::vector<HitboxView> boxes;
+            if (!combat_.hitboxesOf(m.target, boxes)) {
+                const Position& t = reg.get<Position>(m.target);
+                const float along = std::clamp((t.x - ox) * lx + (t.y - oy) * ly, 0.0f, length);
+                const float cx = ox + lx * along - t.x;
+                const float cy = oy + ly * along - t.y;
+                if (cx * cx + cy * cy <= kPawnRadius * kPawnRadius && t.level == pos.level) {
+                    found.kind = ProjectileHitKind::Pawn;
+                    found.thing = m.target;
+                    found.part = -1;
+                    found.x = t.x;
+                    found.y = t.y;
+                    found.z = oz;
+                }
+            }
+        }
+        return found;
+    };
+    TraceHit hit = line(0.0f);
+    // sneed's arc (part C): a cut or a blunt blow sweeps through its arc, so one that misses on the aimed line still
+    // meets whatever stands in the swing, from the weapon side across (but not a pawn that sidestepped this blow in
+    // time). A stab or a bite only goes straight.
+    if (hit.kind == ProjectileHitKind::None && rules_.arcRaysPerSide > 0 && arcSwing(tool->damageType)) {
+        const float half = rules_.arcHalfDegrees * 3.14159265f / 180.0f;
+        for (int side : {1, -1}) {
+            for (int i = 1; i <= rules_.arcRaysPerSide && hit.kind == ProjectileHitKind::None; ++i) {
+                const float angle = static_cast<float>(side) * half * static_cast<float>(i) / static_cast<float>(rules_.arcRaysPerSide);
+                TraceHit swept = line(angle);
+                // A sidestep read in time is timed to the blade: the sweep doesn't catch the one who dodged it.
+                const Melee* dodger = swept.kind == ProjectileHitKind::Pawn ? reg.try_get<Melee>(swept.thing) : nullptr;
+                if (swept.kind == ProjectileHitKind::Pawn && !(dodger != nullptr && dodger->dodged && dodger->threat == pawn)) {
+                    hit = swept;
+                }
             }
         }
     }
@@ -901,6 +943,7 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             }
             combat_.wearApparel(victim, result);
             if (!result.deflected) {
+                combat_.jolt(victim, result.part, tool->damageType, power, result.amount);  // poise and stagger (part C)
                 combat_.noteHurt(victim, pawn);
             }
             return;
@@ -914,6 +957,10 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
     if (events_ != nullptr) {
         events_->push_back(std::move(e));
     }
+}
+
+bool MeleeSystem::arcSwing(DefId damageType) const {
+    return damageType.valid() && damageType.value < arcTypes_.size() && arcTypes_[damageType.value] != 0;
 }
 
 void MeleeSystem::step() {

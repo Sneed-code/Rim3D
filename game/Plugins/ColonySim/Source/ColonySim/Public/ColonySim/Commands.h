@@ -1077,6 +1077,12 @@ struct ShieldCommand {
     float dirY = 0.0f;
 };
 
+// Patching (docs/design/body-health.md, part B): the pawn stops and patches its worst bleeding body zone, 1 to 3 real
+// seconds. Fails if nothing bleeds, the pawn is downed or busy (stunned, casting) or patching already.
+struct PatchCommand {
+    Entity pawn = kNoEntity;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -1110,7 +1116,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand,
                              ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand,
                              InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand,
-                             SleepCommand>;
+                             SleepCommand,
+                             PatchCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
 // day) it was applied in. Failed commands are logged too.

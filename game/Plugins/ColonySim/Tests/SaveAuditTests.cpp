@@ -318,7 +318,7 @@ void auditRun(uint64_t seed, const std::vector<int64_t>& gaps) {
             const std::vector<std::string> labels = original.health().partLabels(original.things().registry().get<Thing>(enemy).def);
             for (const char* part : {"torso", "left leg", "right leg", "left arm"}) {
                 const auto it = std::find(labels.begin(), labels.end(), part);
-                original.health().applyDamage(enemy, original.health().damageTypeId("Blunt"), 20.0f,
+                original.health().applyDamage(enemy, original.health().damageTypeId("Blunt"), std::string(part) == "left leg" ? 60.0f : 20.0f,
                                               static_cast<int>(it - labels.begin()), rng);
             }
         }

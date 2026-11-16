@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 
+#include "ZonelessDefs.h"
+
 using namespace colony;
 
 // Evaluates once: some checks cast a power.
@@ -35,38 +37,9 @@ using namespace colony;
 
 namespace {
 
-// The game's real data. These tests check docs/design/resonance.md.
-std::shared_ptr<const DefDatabase> resoDefs() {
-    static const std::shared_ptr<const DefDatabase> defs = [] {
-        namespace fs = std::filesystem;
-        const fs::path root = fs::path(COLONY_DATA_DIR);
-        std::vector<DefSource> sources;
-        std::vector<fs::path> files;
-        for (const auto& entry : fs::recursive_directory_iterator(root / "defs")) {
-            if (entry.is_regular_file() && entry.path().extension() == ".json") {
-                files.push_back(entry.path());
-            }
-        }
-        std::sort(files.begin(), files.end());
-        for (const fs::path& file : files) {
-            std::ifstream in(file, std::ios::binary);
-            std::stringstream text;
-            text << in.rdbuf();
-            sources.push_back(DefSource{file.parent_path().filename().string(), file.filename().string(), text.str()});
-        }
-        std::ifstream tuningFile(root / "tuning.json", std::ios::binary);
-        std::stringstream tuning;
-        tuning << tuningFile.rdbuf();
-        auto db = std::make_shared<DefDatabase>();
-        std::vector<std::string> errors;
-        DefDatabase::build(sources, tuning.str(), *db, errors);
-        for (const std::string& e : errors) {
-            MESSAGE(e);
-        }
-        return db;
-    }();
-    return defs;
-}
+// The game's real data. These tests check docs/design/resonance.md. Without body zones: numb takes pain away, and
+// pain shock downs only a body without zones (docs/design/body-health.md).
+std::shared_ptr<const DefDatabase> resoDefs() { return zonelessTestDefs(); }
 
 std::unique_ptr<Sim> resoSim(uint64_t seed = 5) {
     SimSettings settings;
