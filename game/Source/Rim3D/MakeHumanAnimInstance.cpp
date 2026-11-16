@@ -196,6 +196,120 @@ void FMakeHumanTailNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 	LargestAngle = FMath::Max(LargestAngle, FMath::Abs(TipAngle));
 }
 
+void FMakeHumanHairNode::UpdateInternal(const FAnimationUpdateContext& Context)
+{
+	FAnimNode_SkeletalControlBase::UpdateInternal(Context);
+	DeltaTime = Context.GetDeltaTime();
+}
+
+bool FMakeHumanHairNode::IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones)
+{
+	return !Chains.IsEmpty() && Head.IsValidToEvaluate(RequiredBones);
+}
+
+void FMakeHumanHairNode::InitializeBoneReferences(const FBoneContainer& RequiredBones)
+{
+	Head.Initialize(RequiredBones);
+	for (TArray<FBoneReference>& Chain : Chains)
+	{
+		for (FBoneReference& Bone : Chain)
+		{
+			Bone.Initialize(RequiredBones);
+		}
+	}
+}
+
+void FMakeHumanHairNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms)
+{
+	const FTransform Component = Output.AnimInstanceProxy->GetComponentTransform();
+	const FBoneContainer& Container = Output.Pose.GetPose().GetBoneContainer();
+	const float Dt = FMath::Clamp(DeltaTime, 0.0f, 0.05f);
+	// The head's motion in the world: its acceleration swings the hair the other way.
+	const FVector HeadWorld = Component.TransformPosition(Output.Pose.GetComponentSpaceTransform(Head.GetCompactPoseIndex(Container)).GetLocation());
+	FVector Accel = FVector::ZeroVector;
+	if (bStarted && Dt > 1.0e-4f)
+	{
+		const FVector Velocity = (HeadWorld - LastHead) / Dt;
+		if (Velocity.Size() < 1500.0f)  // not a teleport or a jump of the mesh
+		{
+			Accel = (Velocity - HeadVelocity) / Dt;
+			HeadVelocity = Velocity;
+		}
+		else
+		{
+			HeadVelocity = FVector::ZeroVector;
+		}
+	}
+	LastHead = HeadWorld;
+	bStarted = true;
+	FVector Target = -Accel * 0.012f;  // degrees per cm/s^2
+	Target.Z = 0.0;
+	Target = Target.GetClampedToMaxSize(22.0f);
+	// A damped spring (a little under critical: one soft overshoot), small steps.
+	for (float Left = Dt; Left > 1.0e-5f;)
+	{
+		const float Step = FMath::Min(Left, 1.0f / 120.0f);
+		SwingVelocity += (55.0f * (Target - Swing) - 11.0f * SwingVelocity) * Step;
+		Swing += SwingVelocity * Step;
+		Swing = Swing.GetClampedToMaxSize(25.0f);
+		Left -= Step;
+	}
+	const FVector DownC = Component.InverseTransformVectorNoScale(FVector::DownVector);
+	const FVector SwingAxisC = Component.InverseTransformVectorNoScale(FVector::CrossProduct(FVector::UpVector, Swing.GetSafeNormal()));
+	const float SwingAngle = static_cast<float>(Swing.Size());
+	for (const TArray<FBoneReference>& Chain : Chains)
+	{
+		TArray<FCompactPoseBoneIndex, TInlineAllocator<8>> Index;
+		TArray<FTransform, TInlineAllocator<8>> Original;
+		for (const FBoneReference& Bone : Chain)
+		{
+			if (!Bone.IsValidToEvaluate(Container))
+			{
+				break;
+			}
+			Index.Add(Bone.GetCompactPoseIndex(Container));
+			Original.Add(Output.Pose.GetComponentSpaceTransform(Index.Last()));
+		}
+		const int32 N = Index.Num();
+		if (N < 2)
+		{
+			continue;
+		}
+		// Hanging: the chain's line (root to tip) turned most of the way towards the ground, at most 70 degrees.
+		const FVector Root = Original[0].GetLocation();
+		const FVector Tip = Original[N - 1].GetLocation() + (Original[N - 1].GetLocation() - Original[N - 2].GetLocation());
+		const FVector Line = (Tip - Root).GetSafeNormal();
+		FQuat Hang = FQuat::FindBetweenNormals(Line, FMath::Lerp(Line, DownC, 0.75f).GetSafeNormal());
+		FVector HangAxis;
+		float HangAngle;
+		Hang.ToAxisAndAngle(HangAxis, HangAngle);
+		HangAngle = FMath::Min(HangAngle, FMath::DegreesToRadians(70.0f));
+		// Both spread down the chain, more of it at the root for the hang, more at the tip for the swing.
+		FQuat Total = FQuat::Identity;
+		FVector Joint = Root;
+		const float Sum = N * (N + 1) * 0.5f;
+		for (int32 i = 0; i < N; ++i)
+		{
+			if (i > 0)
+			{
+				Joint += Total.RotateVector(Original[i].GetLocation() - Original[i - 1].GetLocation());
+			}
+			const float HangShare = (N - i) / Sum;
+			const float SwingShare = (i + 1) / Sum;
+			FQuat Turn = FQuat(HangAxis, HangAngle * HangShare);
+			if (SwingAngle > 0.01f && !SwingAxisC.IsNearlyZero())
+			{
+				Turn = FQuat(SwingAxisC.GetSafeNormal(), FMath::DegreesToRadians(SwingAngle) * SwingShare) * Turn;
+			}
+			Total = (Turn * Total).GetNormalized();
+			FTransform Moved = Original[i];
+			Moved.SetLocation(Joint);
+			Moved.SetRotation((Total * Original[i].GetRotation()).GetNormalized());
+			OutBoneTransforms.Add(FBoneTransform(Index[i], Moved));
+		}
+	}
+}
+
 void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 {
 	// The graph is linked up first: the engine's Initialize takes the root node (GetCustomRootNode) there and keeps it, so
@@ -209,6 +323,7 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 		const FReferenceSkeleton& Ref = Asset->GetRefSkeleton();
 		// Soft tissue: breasts (MPFB's breast bones) and buttocks (the bones mh_export.py adds), a little softer below.
 		Jiggle.Bodies.Reset();
+		Hair.Chains.Reset();
 		for (const TCHAR* Bone : {TEXT("breast_l"), TEXT("breast_r"), TEXT("butt_l"), TEXT("butt_r"), TEXT("genital")})
 		{
 			if (Ref.FindBoneIndex(Bone) != INDEX_NONE)
@@ -249,21 +364,15 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 			{
 				Last = FName(*FString::Printf(TEXT("hair_c%d_%d"), c, i));
 			}
-			// Simulated in component space: in world space a clip's first frame or a jump of the pawn flung the chains up
-			// into a sheet, and in the head's space gravity pointed along the head bone's axis (the hair stood out sideways).
-			// Chains 4 and 5 hang at the sides in front of the shoulders (add_hair_bones' azimuths): stiffer and in a narrow
-			// cone, or a lock swings across the chest.
-			const bool bSide = c >= 4;
-			TSharedPtr<FAnimNode_AnimDynamics> Chain = MakeChain(First, Last, Ref, 1.0f, bSide ? 450.0f : 260.0f, bSide ? 6.0f : 14.0f);
-			Chain->SimulationSpace = AnimPhysSimSpaceType::Component;
-			// Calmer (sneed: long hair touching the body jittered): well damped, so it settles instead of buzzing at its
-			// limits. (Collision spheres round the back and chest pushed the hair's bodies, which hang a few cm from the
-			// spine bones, out of place: the long hair vanished. Not used.)
-			// The damping is a share of the velocity taken off each step (above 1 the chain blew apart and the long hair
-			// vanished): 0.8 against MakeChain's 0.5.
-			Chain->AngularDampingOverride = 0.8f;
-			Dynamics.Add(Chain);
+			// Our own spring (FMakeHumanHairNode), not AnimDynamics: those chains flung the hair into a sheet now and then.
+			TArray<FBoneReference>& Chain = Hair.Chains.AddDefaulted_GetRef();
+			for (int32 i = 1; i < 12 && Ref.FindBoneIndex(FName(*FString::Printf(TEXT("hair_c%d_%d"), c, i))) != INDEX_NONE; ++i)
+			{
+				Chain.Emplace(FName(*FString::Printf(TEXT("hair_c%d_%d"), c, i)));
+			}
+			(void)Last;
 		}
+		Hair.Head.BoneName = TEXT("head");
 		// A tail (mh_export.py's add_tail: tail_01 ... under the pelvis): its own swish (FMakeHumanTailNode).
 		Tail.Bones.Reset();
 		for (int32 i = 1; i < 30 && Ref.FindBoneIndex(FName(*FString::Printf(TEXT("tail_%02d"), i))) != INDEX_NONE; ++i)
@@ -282,7 +391,7 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 		LeftHandIK.JointTargetLocationSpace = BCS_WorldSpace;
 		LeftHandIK.Alpha = 0.0f;
 	}
-	bPhysics = !Dynamics.IsEmpty() || !Jiggle.Bodies.IsEmpty() || !Tail.Bones.IsEmpty() || bHandIK;
+	bPhysics = !Dynamics.IsEmpty() || !Jiggle.Bodies.IsEmpty() || !Tail.Bones.IsEmpty() || !Hair.Chains.IsEmpty() || bHandIK;
 	if (bPhysics)
 	{
 		ToComponent.LocalPose.SetLinkNode(&Retarget);
@@ -301,6 +410,11 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 		{
 			Tail.ComponentPose.SetLinkNode(Previous);
 			Previous = &Tail;
+		}
+		if (!Hair.Chains.IsEmpty())
+		{
+			Hair.ComponentPose.SetLinkNode(Previous);
+			Previous = &Hair;
 		}
 		for (const TSharedPtr<FAnimNode_AnimDynamics>& Node : Dynamics)
 		{

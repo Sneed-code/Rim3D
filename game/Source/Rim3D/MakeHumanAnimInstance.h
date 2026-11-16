@@ -67,6 +67,32 @@ struct FMakeHumanTailNode : public FAnimNode_SkeletalControlBase
 };
 
 /**
+ * Long hair (mh_common.add_hair_bones: hair_c1_1 ... chains under the head): no physics engine, a spring of our own
+ * that cannot blow up. Each chain first hangs towards the ground (a bowed head lets the hair fall forward), then all
+ * swing together against the head's acceleration (starts, stops, turns, a jump) through a damped spring, limited to a
+ * few tens of degrees. (AnimDynamics chains flung the hair into a sheet now and then.)
+ */
+USTRUCT()
+struct FMakeHumanHairNode : public FAnimNode_SkeletalControlBase
+{
+	GENERATED_BODY()
+
+	TArray<TArray<FBoneReference>> Chains;
+	FBoneReference Head;
+	float DeltaTime = 0.0f;
+	FVector LastHead = FVector::ZeroVector;      // world
+	FVector HeadVelocity = FVector::ZeroVector;  // world, cm/s
+	FVector Swing = FVector::ZeroVector;         // world, horizontal: which way and how far (degrees) the hair swings
+	FVector SwingVelocity = FVector::ZeroVector;
+	bool bStarted = false;
+
+	virtual void UpdateInternal(const FAnimationUpdateContext& Context) override;
+	virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) override;
+	virtual bool IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones) override;
+	virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override;
+};
+
+/**
  * The pose of the mesh this one is attached to (the pawn's hidden mannequin), retargeted; then, where the skeleton
  * has them, soft-body jiggle on the breast bones and a swinging chain on a ponytail's bones (AnimDynamics).
  */
@@ -82,6 +108,7 @@ struct FMakeHumanAnimProxy : public FAnimInstanceProxy
 	FAnimNode_ConvertLocalToComponentSpace ToComponent;
 	FMakeHumanJiggleNode Jiggle;
 	FMakeHumanTailNode Tail;
+	FMakeHumanHairNode Hair;
 	TArray<TSharedPtr<FAnimNode_AnimDynamics>> Dynamics;
 	FAnimNode_ConvertComponentToLocalSpace ToLocal;
 	FAnimNode_TwoBoneIK LeftHandIK;  // creator weapons: the left hand on a two-handed hilt (Pawns.MakeHumanHandIK)
