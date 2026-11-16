@@ -85,7 +85,7 @@ as smoothly as the body.
 | T | take over the colonist under the crosshair (within 25 m) |
 | Space, 1 | pause, 1x (2 and 3 stay at 1x) |
 | F5, F9, F8, F7 | the bridge's keys (F5 quicksave, F9 quickload); a save made in direct mode puts you back in direct mode when you load it |
-| N, F on a bed | sleep the night away, 18:00 to 6:00 (W A S D, N or Esc: get up); Unreal part in the next PR |
+| N, F on a bed | sleep the night away, 18:00 to 6:00 (W A S D, N or Esc: get up) |
 
 The overseer's inspect panel also has a **Take control (Tab)** button for a selected colonist. The
 console has `Protagonist.Enter` and `Protagonist.Exit`. The game starts in direct mode with `-Direct`

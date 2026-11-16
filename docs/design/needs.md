@@ -111,7 +111,7 @@ reach or full, and while anything threatens the colony (the skip's own threat ch
 ends the skip and the player gets up; so does a fire beside the bed. `wake` true gets up now and ends the skip. While asleep,
 `DirectMoveCommand` is ignored. `planHandsOn` on a bed gives `HandsOnKind::Sleep` ("sleep till morning", or why not).
 
-Unreal (next PR, waiting for a PC compile): in direct mode **F** on a bed (a press, not a hold) or **N** anywhere sleeps; the screen fades to dark with the clock
+Unreal (compiled, smoke tests `protagonist` and `handson` pass; not yet seen in play): in direct mode **F** on a bed (a press, not a hold) or **N** anywhere sleeps; the screen fades to dark with the clock
 running; **W A S D, N or Esc** get up; Tab gets up first. Any other colonist under control can sleep the same way (and rests).
 
 ## Beds
