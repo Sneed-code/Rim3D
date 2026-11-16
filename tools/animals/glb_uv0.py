@@ -6,7 +6,10 @@ and Unreal's glTF materials read UV0, so the body imports grey. This moves the U
 uses into TEXCOORD_0 on the primitives that use that material, and sets texCoord to 0. Only the
 JSON chunk changes; the binary data is copied as it is.
 
-  python3 tools/animals/glb_uv0.py IN.glb OUT.glb
+It also drops vertex colours (COLOR_n, which Unreal's glTF import multiplies into the colour) and, with
+--no-metal, each material's metal map (fur is not metal; a packed metal channel turns the coat black).
+
+  python3 tools/animals/glb_uv0.py IN.glb OUT.glb [--no-metal]
 """
 import json, struct, sys
 
@@ -31,7 +34,7 @@ def reset_texcoord(material):
             info.pop("texCoord", None)
 
 
-def main(src, dst):
+def main(src, dst, no_metal=False):
     with open(src, "rb") as f:
         magic, version, _ = struct.unpack("<III", f.read(12))
         json_len, json_type = struct.unpack("<II", f.read(8))
@@ -50,6 +53,16 @@ def main(src, dst):
             if f"TEXCOORD_{uv}" in attrs:
                 attrs["TEXCOORD_0"], attrs[f"TEXCOORD_{uv}"] = attrs[f"TEXCOORD_{uv}"], attrs.get("TEXCOORD_0", attrs[f"TEXCOORD_{uv}"])
                 changed += 1
+    for mesh in gltf.get("meshes", []):
+        for prim in mesh["primitives"]:
+            for key in [k for k in prim["attributes"] if k.startswith("COLOR_")]:
+                del prim["attributes"][key]
+    if no_metal:
+        for material in gltf.get("materials", []):
+            pbr = material.setdefault("pbrMetallicRoughness", {})
+            if pbr.pop("metallicRoughnessTexture", None) is not None:
+                pbr["metallicFactor"] = 0
+                pbr.setdefault("roughnessFactor", 0.6)
     for material in gltf.get("materials", []):
         sets = texcoord_of(material)
         if len(sets) == 1 and 0 not in sets:
@@ -65,4 +78,4 @@ def main(src, dst):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], "--no-metal" in sys.argv[3:])
