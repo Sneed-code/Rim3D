@@ -1963,7 +1963,12 @@ void CreatorWeapons::DrawWindow(float Scale)
 	}
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	// Bottom middle, clear of the creator panel (left) and the animations panel (right).
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y - 16.0f * Scale), ImGuiCond_Once, ImVec2(0.5f, 1.0f));
+	// Placed again whenever the view changes size (the creator sets 1920x1080 after the first frames, which left a
+	// once-placed window off the picture).
+	static ImVec2 CwLastViewport(0.0f, 0.0f);
+	const bool bResized = CwLastViewport.x != Viewport->Size.x || CwLastViewport.y != Viewport->Size.y;
+	CwLastViewport = Viewport->Size;
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y - 16.0f * Scale), bResized ? ImGuiCond_Always : ImGuiCond_Once, ImVec2(0.5f, 1.0f));
 	ImGui::SetNextWindowBgAlpha(0.88f);
 	if (ImGui::Begin("WEAPONS", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
 	{
