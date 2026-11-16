@@ -21,6 +21,7 @@
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Looks.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
@@ -506,6 +507,12 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 	FPawnWeapons& Pawn = Weapons.FindOrAdd(entt::to_integral(View.id));
 	const bool bShow = !View.downed && !View.dead && !Actor.IsRagdoll();
 	const float Height = Actor.GetStanceHeight();
+	// The body's own height (docs/design/gear-size.md): every place below was measured on the 1.80 m man, so it is
+	// scaled to this body, and the gear itself grows or shrinks part of the way (LooksRules gearSizeFollow).
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	const colony::GearSize Gear = Bridge && Bridge->GetSim() ? colony::gearSizeFor(Bridge->GetSim()->defs(), Actor.GetBodyScale())
+																: colony::GearSize{};
+	const double Place = Gear.place;
 
 	// What sits in each display slot, and which one is in the hands.
 	colony::DefId Wanted[GWeaponDisplaySlots];
@@ -568,8 +575,10 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 			}
 			Shown.Component = MakeComponent(Actor, Mesh);
 			Shown.Def = Def;
-			Shown.Component->SetRelativeScale3D(FVector(Slot == static_cast<int32>(colony::WeaponSlot::Sidearm) ? WeaponSidearmScale : 1.0f));
 		}
+		// Set every frame: the looks (and so the height) can arrive after the weapon.
+		Shown.Component->SetRelativeScale3D(
+			FVector((Slot == static_cast<int32>(colony::WeaponSlot::Sidearm) ? WeaponSidearmScale : 1.0f) * Gear.size));
 
 		// 0 holstered to 1 in the hands.
 		float InHand = Slot == InHands ? 1.0f : 0.0f;
@@ -604,16 +613,17 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		{
 			Actor.GetMeleeWeaponPose(HandsLocation, HandsRotation);
 		}
-		const FVector Location = FMath::Lerp(HolsterLocation, HandsLocation, static_cast<double>(InHand));
+		const FVector Location = FMath::Lerp(HolsterLocation, HandsLocation, static_cast<double>(InHand)) * Place;
 		const FRotator Rotation = WeaponSlerp(HolsterRotation, HandsRotation, InHand);
 		Shown.Component->SetRelativeLocationAndRotation(Location, Rotation);
 		Shown.Component->SetVisibility(bShow);
 	}
 
-	UpdateShield(Actor, View, Pawn, bShow && !View.hideGear, Height);
+	UpdateShield(Actor, View, Pawn, bShow && !View.hideGear, Height, Gear);
 }
 
-void UWeaponDrawSubsystem::UpdateShield(ASimPawnActor& Actor, const colony::ThingView& View, FPawnWeapons& Pawn, bool bShow, float Height)
+void UWeaponDrawSubsystem::UpdateShield(ASimPawnActor& Actor, const colony::ThingView& View, FPawnWeapons& Pawn, bool bShow, float Height,
+										const colony::GearSize& Gear)
 {
 	if (!View.shield.valid())
 	{
@@ -649,7 +659,9 @@ void UWeaponDrawSubsystem::UpdateShield(ASimPawnActor& Actor, const colony::Thin
 
 	const float Raise = MeleePose::EaseInOut(Pawn.ShieldRaise);
 	const float Slung = MeleePose::EaseInOut(Pawn.ShieldSlung);
-	const FVector Scale(1.0, 1.0, Height);
+	// Placed for this body (its height, then crouched or standing) and sized part of the way to it.
+	const FVector Scale = FVector(1.0, 1.0, Height) * static_cast<double>(Gear.place);
+	Pawn.Shield->SetRelativeScale3D(FVector(Gear.size));
 	FVector Location = FMath::Lerp(WeaponShieldLowered, WeaponShieldRaised, static_cast<double>(Raise)) * Scale;
 	FRotator Rotation = WeaponSlerp(WeaponShieldLoweredRotation, WeaponShieldRaisedRotation, Raise);
 	Location = FMath::Lerp(Location, WeaponShieldSlungAt * Scale, static_cast<double>(Slung));

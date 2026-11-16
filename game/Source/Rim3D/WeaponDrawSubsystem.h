@@ -16,7 +16,7 @@ class UMaterialInterface;
 class USimSubsystem;
 class UStaticMesh;
 class UStaticMeshComponent;
-namespace colony { struct ThingView; }
+namespace colony { struct ThingView; struct GearSize; }
 
 /** Where a weapon is drawn: the three slots of P1 and one more for a weapon in the hands that no slot holds. */
 inline constexpr int32 GWeaponDisplaySlots = 4;
@@ -147,7 +147,8 @@ private:
 	void OnMeleeHit(const colony::Event& Event);
 	void OnPawnAction(const colony::Event& Event);
 	void OnShieldBlocked(const colony::Event& Event);
-	void UpdateShield(ASimPawnActor& Actor, const colony::ThingView& View, FPawnWeapons& Pawn, bool bShow, float Height);
+	void UpdateShield(ASimPawnActor& Actor, const colony::ThingView& View, FPawnWeapons& Pawn, bool bShow, float Height,
+					  const colony::GearSize& Gear);
 	UStaticMesh* ShieldMesh(colony::DefId Shield, colony::DefId Stuff);
 	bool LoadSolidMaterial();
 	void UpdatePawn(ASimPawnActor& Actor, const colony::ThingView& View);
