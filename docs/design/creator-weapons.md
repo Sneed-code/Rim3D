@@ -28,7 +28,7 @@ three lines). Blood splats use `M_BloodSplat`, made by the FightMaterials comman
 The weapons hang on the **visible MakeHuman body** (`ASimPawnActor::GetMakeHumanMesh`), not the hidden mannequin:
 - The club, longsword and gladius are the defs' own procedural meshes (`visual.parts` of `Melee_Club`,
   `Melee_Longsword`, `Melee_Gladius`, built with `VisualMesh` like `UWeaponDrawSubsystem`).
-- The shield is generated: a round wooden board 58 cm across, an iron rim behind it and an iron boss.
+- The shield is generated: a round wooden board 50 cm across with a slight dome, an iron rim and an iron boss (24 sides: four six-sided discs turned 15 degrees apart).
 
 A weapon's place in the hand is worked out each frame from the hand's bones (the UE4 mannequin names that MakeHuman's
 game_engine skeleton has: `hand_r`, `index_01_r`, `middle_01_r`, `pinky_01_r`, `index_03_r`, and the left ones):
@@ -37,6 +37,8 @@ game_engine skeleton has: `hand_r`, `index_01_r`, `middle_01_r`, `pinky_01_r`, `
 - The blade's edge points the way the fingers point.
 - The grip sits 2.5 cm in from the knuckles, on the palm side. The palm side is found from where the curled index
   finger points.
+- The blade leans about 15 degrees the way the fingers point, and any part of it that runs back along the forearm
+  is taken out.
 - The shield rides the left forearm, 55% of the way to the wrist, its face out from the back of the arm.
 
 Each weapon is attached to its hand bone (the shield to `lowerarm_l`) so it moves with the hand between updates. The
@@ -62,7 +64,7 @@ how much blood.
 
 Each frame of a swing, between 10% and 90% of the clip, the attacker's blade (hilt to tip) is swept from where it was
 last frame to where it is now in 6 steps. Each step is tested against:
-- the defender's shield, as a disc 30 cm across: a point of the blade within 3 cm of its face, or crossing it;
+- the defender's shield, as a disc 50 cm across: a point of the blade within 3 cm of its face, or crossing it;
 - the defender's blade, within 4 cm;
 - the defender's body, as 12 capsules from bone to bone (torso, neck, head, arms, legs; radii 4.5 to 15 cm);
 - the world: a line trace along the tip's path and along the blade (ECC_Visibility, the two pawns left out), and the
@@ -105,6 +107,7 @@ a club or the shield), and strikes on the ground throw dust, through `UFightSubs
 
 - The left hand isn't pinned to a two-handed grip (no IK), and dual wield has no mirrored or two-sword clips.
 - Body contact uses bone capsules, not the physics asset, and the shield is a flat disc.
+- The two bodies are kept at least 55 cm apart (pelvis to pelvis) during lunges: their spots slide apart and drift back.
 - Staggers come back to the spot they started from when the clip blends out (no root motion carried over).
 - The demo turns and moves the visible body, not the pawn. Only the creator does this; the game's own melee
   (`UWeaponDrawSubsystem`, procedural swings) is unchanged.

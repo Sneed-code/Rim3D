@@ -259,6 +259,7 @@ namespace
 		int32 Attacker = 0;         // 0: DemoA attacks, 1: DemoB
 		float DemoTime = 0.0f;
 		float Distance = 160.0f;    // cm between them
+		float ExtraApart = 0.0f;    // more, while a lunge would put one inside the other
 		bool bPickedOnly = false;
 		bool bFinish = false;
 		bool bBlocking = false;     // the defender guards this swing
@@ -529,23 +530,39 @@ namespace
 		if (Key == TEXT("Shield"))
 		{
 			// A round shield: a wooden board, an iron rim behind it and an iron boss, its face along +z.
-			VisualMesh::FPart Rim;
-			Rim.Shape = VisualMesh::EShape::Cylinder;
-			Rim.Size = FVector3f(30.5f, 30.5f, 1.8f);
-			Rim.At = FVector3f(0.0f, 0.0f, -1.6f);
-			Rim.Color = FLinearColor(0.20f, 0.20f, 0.22f);
-			VisualMesh::FPart Board = Rim;
-			Board.Size = FVector3f(29.0f, 29.0f, 2.4f);
-			Board.At = FVector3f(0.0f, 0.0f, -1.2f);
-			Board.Color = FLinearColor(0.28f, 0.16f, 0.075f);
+			// 50 cm across. The cylinder shape has only six sides, so the rim and the board are each four of them turned
+			// 15 degrees apart (24 sides); a flattened ball makes the board's slight dome, an iron boss its middle.
+			const FLinearColor Iron(0.20f, 0.20f, 0.22f);
+			const FLinearColor Wood(0.28f, 0.16f, 0.075f);
+			for (int32 Turn = 0; Turn < 4; ++Turn)
+			{
+				VisualMesh::FPart Rim;
+				Rim.Shape = VisualMesh::EShape::Cylinder;
+				Rim.Size = FVector3f(25.0f, 25.0f, 2.2f);
+				Rim.At = FVector3f(0.0f, 0.0f, -1.6f);
+				Rim.Rotation = FRotator3f(0.0f, Turn * 15.0f, 0.0f);
+				Rim.Color = Iron;
+				VisualMesh::FPart Board = Rim;
+				Board.Size = FVector3f(23.8f, 23.8f, 2.6f);
+				Board.At = FVector3f(0.0f, 0.0f, -1.2f);
+				Board.Color = Wood;
+				Parts.Add(Rim);
+				Parts.Add(Board);
+			}
+			VisualMesh::FPart Dome;
+			Dome.Shape = VisualMesh::EShape::Sphere;
+			Dome.Size = FVector3f(23.0f, 23.0f, 5.0f);
+			Dome.At = FVector3f(0.0f, 0.0f, -1.5f);
+			Dome.Color = Wood;
 			VisualMesh::FPart Boss;
 			Boss.Shape = VisualMesh::EShape::Sphere;
-			Boss.Size = FVector3f(7.0f, 7.0f, 7.0f);
-			Boss.At = FVector3f(0.0f, 0.0f, -2.5f);
+			Boss.Size = FVector3f(5.5f, 5.5f, 5.5f);
+			Boss.At = FVector3f(0.0f, 0.0f, -1.0f);
 			Boss.Color = FLinearColor(0.32f, 0.32f, 0.34f);
-			Parts = {Rim, Board, Boss};
+			Parts.Add(Dome);
+			Parts.Add(Boss);
 			OutHilt = 0.0f;
-			OutTip = 30.0f;  // the radius
+			OutTip = 25.0f;  // the radius
 		}
 		else
 		{
@@ -620,6 +637,20 @@ namespace
 			}
 			Palm *= Side;
 			Grip = (I + K) * 0.5f + Palm * 2.5f + Fingers * 0.5f;
+			// A held blade leans a little the way the fingers point (about 15 degrees), and never runs back along
+			// the forearm (a twisted wrist pose or a noisy knuckle could flip it): its backward part is taken out.
+			X = (X + Fingers * 0.27f).GetSafeNormal();
+			const TCHAR* Elbow = bRight ? TEXT("lowerarm_r") : TEXT("lowerarm_l");
+			if (CwHasBone(Mesh, Elbow))
+			{
+				const FVector Forearm = (H - CwBone(Mesh, Elbow)).GetSafeNormal();
+				const double Back = FVector::DotProduct(X, Forearm);
+				if (Back < -0.2)
+				{
+					X = (X - Forearm * (Back + 0.2)).GetSafeNormal();
+				}
+			}
+			Fingers = (Fingers - X * FVector::DotProduct(Fingers, X)).GetSafeNormal();
 		}
 		else
 		{
@@ -867,7 +898,7 @@ namespace
 				V = S.Random.GetUnitVector() * 30.0f;
 			}
 			Drop.V = V;
-			Drop.Size = S.Random.FRandRange(0.25f, 0.9f) * (Kind < 0.9f ? 1.0f : 1.4f);
+			Drop.Size = S.Random.FRandRange(0.45f, 1.4f) * (Kind < 0.9f ? 1.0f : 1.4f);
 			Drop.GroundZ = GroundZ;
 			S.Droplets.Add(Drop);
 		}
@@ -1001,7 +1032,7 @@ namespace
 			}
 			const float Speed = static_cast<float>(Drop.V.Size());
 			const FRotator Along = Speed > 1.0f ? Drop.V.Rotation() : FRotator::ZeroRotator;
-			Instances.Add(FTransform(Along, Drop.P, FVector(Drop.Size * (1.0f + Speed / 260.0f), Drop.Size, Drop.Size)));
+			Instances.Add(FTransform(Along, Drop.P, FVector(Drop.Size * (1.0f + Speed / 140.0f), Drop.Size, Drop.Size)));
 		}
 		if (UInstancedStaticMeshComponent* Ism = S.DropletInstances.Get())
 		{
@@ -1372,7 +1403,7 @@ namespace
 	}
 
 	/** The demo spots each frame: either side of the middle between the two pawns, facing each other. */
-	void CwPlaceFighters(FCwState& S)
+	void CwPlaceFighters(FCwState& S, float Dt)
 	{
 		FCwPerson& A = S.People[S.DemoA];
 		FCwPerson& B = S.People[S.DemoB];
@@ -1382,8 +1413,23 @@ namespace
 		Dir.Z = 0.0;
 		Dir = Dir.IsNearlyZero() ? FVector(0.0, 1.0, 0.0) : Dir.GetSafeNormal();
 		const FVector Mid = (PA + PB) * 0.5;
-		A.Spot = Mid - Dir * (S.Distance * 0.5f);
-		B.Spot = Mid + Dir * (S.Distance * 0.5f);
+		// A lunge can carry one body into the other (the clips step forward): their spots move apart while the
+		// pelvises are closer than 55 cm along the line between them, and drift back afterwards.
+		if (A.Mesh.IsValid() && B.Mesh.IsValid() && CwHasBone(A.Mesh.Get(), TEXT("pelvis")) && CwHasBone(B.Mesh.Get(), TEXT("pelvis")))
+		{
+			const double Gap = FVector::DotProduct(CwBone(B.Mesh.Get(), TEXT("pelvis")) - CwBone(A.Mesh.Get(), TEXT("pelvis")), Dir);
+			if (Gap < 55.0)
+			{
+				S.ExtraApart = FMath::Min(S.ExtraApart + static_cast<float>(55.0 - Gap) * 0.5f, 120.0f);
+			}
+			else
+			{
+				S.ExtraApart = FMath::FInterpTo(S.ExtraApart, 0.0f, Dt, 1.2f);
+			}
+		}
+		const float Half = (S.Distance + S.ExtraApart) * 0.5f;
+		A.Spot = Mid - Dir * Half;
+		B.Spot = Mid + Dir * Half;
 		A.Facing = Dir;
 		B.Facing = -Dir;
 		CwStand(A);
@@ -1859,7 +1905,7 @@ void CreatorWeapons::Tick(UWorld* World, const TArray<ASimPawnActor*>& People, i
 	if (S.Demo != ECwDemo::Off)
 	{
 		bInOutWalk = false;
-		CwPlaceFighters(S);
+		CwPlaceFighters(S, Dt);
 	}
 	// Weapons to the hands, then the preview or the demo.
 	TArray<FCwBlades> Blades;
