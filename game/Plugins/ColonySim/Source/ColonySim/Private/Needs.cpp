@@ -76,6 +76,15 @@ NeedRules NeedRules::read(const DefDatabase& defs) {
     r.ingestSeconds = def->number("food.ingestSeconds", r.ingestSeconds);
     r.maxNumToIngestAtOnce = std::max(1, static_cast<int>(def->integer("food.maxNumToIngestAtOnce", r.maxNumToIngestAtOnce)));
     r.eatSpotRadius = needsFloat(*def, "food.eatSpotRadius", r.eatSpotRadius);
+    static constexpr const char* kNeedsPreferabilities[] = {"DesperateOnly", "DesperateOnlyForHumanlikes", "RawBad", "RawTasty",
+                                                            "MealAwful", "MealSimple", "MealFine", "MealLavish"};
+    for (const char* name : kNeedsPreferabilities) {
+        const std::string key = std::string("food.nutritionFactor.") + name;
+        if (def->has(key.c_str())) {
+            r.nutritionFactors.emplace_back(name, std::max(0.0f, needsFloat(*def, key.c_str(), 1.0f)));
+        }
+    }
+    r.starvingSpeedFactor = std::clamp(needsFloat(*def, "food.starvingSpeedFactor", r.starvingSpeedFactor), 0.05f, 1.0f);
     r.restFallPerDayRested = needsFloat(*def, "rest.fallPerDay.Rested", r.restFallPerDayRested);
     r.restFallPerDayDrowsy = needsFloat(*def, "rest.fallPerDay.Drowsy", r.restFallPerDayDrowsy);
     r.restFallPerDayTired = needsFloat(*def, "rest.fallPerDay.Tired", r.restFallPerDayTired);
@@ -101,6 +110,20 @@ NeedRules NeedRules::read(const DefDatabase& defs) {
         r.joyToHour = std::clamp(static_cast<int>(joy->numberAt("joyHours", 1, -1)), 0, 23);
     }
     return r;
+}
+
+float NeedRules::nutritionFactor(const std::string& preferability) const {
+    for (const auto& [name, factor] : nutritionFactors) {
+        if (name == preferability) {
+            return factor;
+        }
+    }
+    return 1.0f;
+}
+
+bool isStarving(const entt::registry& reg, Entity pawn) {
+    const Needs* needs = reg.valid(pawn) ? reg.try_get<Needs>(pawn) : nullptr;
+    return needs != nullptr && needs->food <= 0.0f;
 }
 
 Schedule NeedRules::standardSchedule() const {

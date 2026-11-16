@@ -623,6 +623,9 @@ TEST_CASE("Fighters: a caravan guard standing by a colonist never swings at it; 
         int swings = 0;
         for (int i = 0; i < 120; ++i) {
             fightTestHeal(*sim, colonist);
+            // The colonist holds still: since real-time-combat.md an unarmed fighter sidesteps a swing it reads, and the
+            // two would then stand out of each other's reach.
+            sim->things().registry().emplace_or_replace<Stunned>(colonist, Stunned{5});
             sim->step();
             for (const Event& e : sim->events()) {
                 swings += e.type == EventType::MeleeSwing && e.thing == guard && e.target == colonist ? 1 : 0;
@@ -742,14 +745,19 @@ TEST_CASE("Fighters: colonists focus their fire on one raider") {
 TEST_CASE("Fighters: a defender with a club waits in cover for a gunman to come close, then charges") {
     // Found by the year run (docs/design/colony-scenario.md): a colonist with a club ran 10 m across open ground at two
     // shotgun raiders and was shot down on the way.
-    const auto run = [](bool defending) {
+    // Since real-time-combat.md (combat profiles) a drafted colonist holds with the others too; an attack order sends it.
+    const auto run = [](int mode) {  // 0 drafted, 1 defending, 2 drafted with an attack order
         auto sim = fightTestSim();
         const Entity colonist = fightTestPawn(*sim, 40, 40, "Melee_Club");
         const Entity raider = fightTestPawn(*sim, 40, 52, "Gun_PumpShotgun");
         fightTestDraft(*sim, colonist);
         fightTestHostile(*sim, raider);
         sim->step();
-        sim->things().registry().get<Fighter>(colonist).defending = defending;  // as the alarm calls it up
+        sim->things().registry().get<Fighter>(colonist).defending = mode == 1;  // as the alarm calls it up
+        if (mode == 2) {
+            std::string error;
+            sim->fighters().orderAttack(colonist, raider, error);
+        }
         float closest = 100.0f;
         for (int i = 0; i < 150; ++i) {
             fightTestHeal(*sim, colonist);
@@ -762,11 +770,14 @@ TEST_CASE("Fighters: a defender with a club waits in cover for a gunman to come 
         }
         return closest;
     };
-    const float charging = run(false);
-    const float waiting = run(true);
-    MESSAGE("drafted: came within " << charging << " m of the raider; defending: within " << waiting << " m");
-    CHECK(charging < 3.0f);
+    const float drafted = run(0);
+    const float waiting = run(1);
+    const float ordered = run(2);
+    MESSAGE("drafted: came within " << drafted << " m of the raider; defending: within " << waiting << " m; ordered: within "
+                                    << ordered << " m");
+    CHECK(drafted > 6.0f);
     CHECK(waiting > 6.0f);
+    CHECK(ordered < 3.0f);
 }
 
 TEST_CASE("Fighters: a fighter whose shots go into a crest in front of a crouched enemy moves to a better spot") {

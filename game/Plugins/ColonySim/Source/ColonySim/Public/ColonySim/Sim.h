@@ -501,6 +501,7 @@ public:
     const Pathfinder& pathfinder() const { return pathfinder_; }
 
 private:
+    float pawnMoveFactor(Entity pawn) const;  // see Sim.cpp
     friend class SimSaveAccess;  // saves read and restore the private state (Save.h)
 
     struct EmptyStart {};

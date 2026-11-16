@@ -131,6 +131,8 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     num("ambushRange", r.ambushRange);
     num("helpRange", r.helpRange);
     num("helpReach", r.helpReach);
+    r.colonistsHoldForFriends = def->flag("profiles.colonists.holdsForFriends", r.colonistsHoldForFriends);
+    r.raidersHoldForFriends = def->flag("profiles.raiders.holdsForFriends", r.raidersHoldForFriends);
     r.throwEvery = std::max(1, r.throwEvery);
     r.planEvery = std::max(1, r.planEvery);
     r.threats = std::clamp(r.threats, 1, kFightMaxThreats);
@@ -857,7 +859,11 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
                    fightDist(p.x, p.y, tx, ty) <= rules_.helpReach;
         });
     };
-    const bool lies = f.defending && f.forcedTarget != f.target && targetInfo != nullptr && targetInfo->able &&
+    // The combat profile (real-time-combat.md): colonists hold with the others whether the alarm called them up or the
+    // player drafted them; an attack order still sends them.
+    const bool disciplined =
+        f.defending || (self.faction == kPlayerFaction ? rules_.colonistsHoldForFriends : rules_.raidersHoldForFriends);
+    const bool lies = disciplined && f.forcedTarget != f.target && targetInfo != nullptr && targetInfo->able &&
                       fightDist(tx, ty, self.x, self.y) > rules_.ambushRange && (weaponRange(f.target) > 0.0f || !atFriend());
     if (melee_ != nullptr && targetInfo != nullptr && !f.fallingBack && !lies && melee_->charges(pawn)) {
         const CellPos goal = cellOf(Position{tx, ty, targetInfo->level});

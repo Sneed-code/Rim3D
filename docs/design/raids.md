@@ -54,6 +54,10 @@ Each squad thinks once a real second (`squadThinkEvery`, 30 steps):
    hours), it runs. Every member that can still walk gets `FightMode::Flee`: no more looking or
    shooting, just the nearest edge cell it can reach. At the edge it **leaves the map** with its gear
    (`PawnLeftMap`, then `ThingDestroyed`). Downed raiders stay where they fell.
+   **Cornered** (sneed, [real-time-combat.md](real-time-combat.md)): a running raider that can reach no map edge
+   ("walled in"), or that an enemy hurts from within `caughtRange` (4 m, ours: "caught"), turns and fights to the death
+   (`Raider::cornered`, `RaidRules` `fightWhenCaught`, `PawnAction` `Cornered`): Fight mode, advancing, never routed
+   again and never leaving at the edge. One carrying loot keeps running. Shot from afar, a routed raider keeps running.
 2. Otherwise **strength** decides: its able members' strength against the strength of the enemies its
    members know of. A pawn's strength is its health ((1 - pain) x Moving), times 1 with a gun (0.3
    without), times 1 + half its armor's sharp rating. At least as strong (`advanceRatio` 1):

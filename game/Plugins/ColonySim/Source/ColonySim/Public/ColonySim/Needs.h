@@ -4,9 +4,12 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Entity.h"
 
+#include <entt/entity/fwd.hpp>
+
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -69,6 +72,12 @@ struct COLONY_API NeedRules {
     double ingestSeconds = 720.0;  // eating one sitting of a food whose def has no `ingestible.baseIngestSeconds`
     int maxNumToIngestAtOnce = 20;
     float eatSpotRadius = 40.0f;  // how far from the food a chair at a table is looked for, metres
+    // sneed (2026-11-16): better food fills more. A food's nutrition is its def's `stats.nutrition` times the factor
+    // for its `ingestible.preferability` (`food.nutritionFactor.<preferability>`, 1 for any not listed).
+    std::vector<std::pair<std::string, float>> nutritionFactors;
+    // sneed (2026-11-16): a starving pawn (an empty stomach, malnutrition building) moves, attacks and works at
+    // this fraction of its speed (`food.starvingSpeedFactor`).
+    float starvingSpeedFactor = 1.0f;
 
     // Rest: 1 is fully rested.
     float restFallPerDayRested = 0.95f;
@@ -106,6 +115,7 @@ struct COLONY_API NeedRules {
 
     static NeedRules read(const DefDatabase& defs);
     Schedule standardSchedule() const;
+    float nutritionFactor(const std::string& preferability) const;
 };
 
 // Which band a level is in.
@@ -113,6 +123,8 @@ enum class FoodBand : uint8_t { Fed, Hungry, Ravenous, Malnourished };
 enum class RestBand : uint8_t { Rested, Drowsy, Tired, Exhausted };
 COLONY_API FoodBand foodBandOf(const NeedRules& rules, float food);
 COLONY_API RestBand restBandOf(const NeedRules& rules, float rest);
+// Starving: a pawn with needs whose stomach is empty (food 0, malnutrition building).
+COLONY_API bool isStarving(const entt::registry& reg, Entity pawn);
 
 // Runs every pawn's needs once per game second: food and rest fall, rest rises in bed,
 // malnutrition builds when the stomach is empty and kills at 1. Eating and sleeping are jobs

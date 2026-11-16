@@ -48,6 +48,27 @@ building with `building.isTable` in one of its four neighbouring cells, within 4
 The nearest to the food wins. With none the pawn eats where the food lay, standing. The
 `PawnAte` event says which (`message` "table" or "ground") for C9.
 
+**Better food fills more** (sneed, 2026-11-16; ours, RimWorld has no such rule): a food's nutrition is its
+def's `stats.nutrition` times NeedRules `food.nutritionFactor` for its preferability: simple meals 1.1, fine
+meals 1.25, lavish meals 1.5, everything else 1. So a simple meal (0.9) fills 0.99, a fine meal 1.125 (a full
+stomach from empty), a lavish meal 1.35. It counts for everyone who eats: colonists, prisoners, caravans.
+
+**The protagonist eats from the bag** (sneed, 2026-11-16; `JobSystem::autoEatFromBag`): the main character
+eats by itself from its own bag (`Gear::inventory`, [inventory.md](inventory.md)) as soon as food falls under
+the seek level (0.3), before it is hungry (0.25), whether the player is steering or not. It picks the best kind
+in the bag (the tiers above, tastiest first), the most filling of that kind next, eats as many as fill it (up
+to `maxNumToIngestAtOnce`, so one meal) **at once, on the spot**, with no job and no time taken, and the rest
+stays in the bag. Food for desperate times (chocolate) only when ravenous; drugs never; not while down. The
+`PawnAte` event says `message` "bag". With nothing edible in the bag it goes looking for food as before (in
+the overseer view; steered, the player feeds it). Other colonists don't eat from their bags yet.
+
+**Starving** (sneed, 2026-11-16, "for now"; ours): a pawn whose stomach is empty (food 0, malnutrition
+building) moves, attacks (aiming, cooldowns, reloads, swings) and works at **75%** (NeedRules
+`food.starvingSpeedFactor` 0.75), on top of the weight slowdowns (`ApparelStats::hungerFactor`,
+[armour.md](armour.md) "Weight"). It is gone the moment it eats. The snapshot has `starving` and
+`moveFactor` (every walk slowdown together), and the player's own walk in direct mode follows `moveFactor`, so
+a starving protagonist walks slower too (as do load and worn weight, which it ignored before).
+
 ## Rest
 
 **sneed's rules (2026-11-16), replacing RimWorld's rest bands.** `Needs::rest`, 1 rested to 0.

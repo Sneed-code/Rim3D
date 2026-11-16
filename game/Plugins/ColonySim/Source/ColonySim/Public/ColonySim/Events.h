@@ -227,6 +227,7 @@ enum class PawnAction : uint8_t {
     Scan,         // started working a ground-penetrating scanner `target` (once per job; the work goes on until its JobEnded)
     Drill,        // started working a deep drill `target` (once per job; the work goes on until its JobEnded)
     Man,          // took its post at `target`, a mortar or rocket launcher (once per ManArtillery job; it stays until its JobEnded)
+    Cornered,     // a routed raider turned to fight to the death: `message` "walled in" or "caught" (real-time-combat.md)
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -245,7 +246,8 @@ struct Event {
     // def (depth-first, torso 0), `amount` the hit points of damage dealt to it.
     int part = -1;
     // PawnAte: `thing` the pawn, `def` the food's Things def, `amount` the nutrition gained, `cell`
-    // where it stood and `message` "table" (in a chair at a table) or "ground". PawnWokeUp: `thing`
+    // where it stood and `message` "table" (in a chair at a table), "ground" or "bag" (the protagonist ate from its
+    // bag on the go, NeedJobs.cpp autoEatFromBag). PawnWokeUp: `thing`
     // the pawn, `target` the bed it slept in or none, `message` "bed" or "ground", `amount` its rest.
     // PawnMoodBand: `thing` the pawn, `message` the new band ("stable", "minor", "major", "extreme"),
     // `amount` its mood.
