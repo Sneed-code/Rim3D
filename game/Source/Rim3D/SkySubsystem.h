@@ -121,6 +121,9 @@ struct FLookConfig
 	float AmbientOcclusionRadiusCm = 120.0f;
 	float LocalExposureHighlights = 0.85f;
 	float LocalExposureShadows = 0.85f;
+	/** Lumen's skylight leaking (post process): a little sky light that reaches every shaded spot, so shade under hardware ray tracing
+	 * (which leaks less than software Lumen) does not go near black. 0 is the engine's default. */
+	float SkylightLeaking = 0.0f;
 
 	/** Spring, summer, autumn, winter. */
 	FLookSeason Seasons[4];

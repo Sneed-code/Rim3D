@@ -675,7 +675,7 @@ void ASimPawnActor::ApplyFace(USimPawnSubsystem& Pawns)
 	const int32 Choices = Skins + (Looks.bFemale ? 0 : 1);
 	const int32 SkinPick = Looks.FaceSkin >= 0 && Looks.FaceSkin < Skins ? Looks.FaceSkin
 		: Choices > 0 ? static_cast<int32>(FCrc::MemCrc32(Sliders, sizeof(Sliders)) % static_cast<uint32>(Choices)) : 0;
-	UMaterialInterface* FaceSkin = SkinPick < Skins ? Cast<UMaterialInterface>(Pawns.GetFacesAsset(PawnFacesSkinName(Looks.bFemale, SkinPick))) : nullptr;
+	UMaterialInterface* FaceSkin = SkinPick < Skins ? Pawns.GetShinySkin(Cast<UMaterialInterface>(Pawns.GetFacesAsset(PawnFacesSkinName(Looks.bFemale, SkinPick)))) : nullptr;
 	for (const TPair<int32, TObjectPtr<UMaterialInterface>>& Slot : FaceSkinSlots)
 	{
 		FaceMesh->SetMaterial(Slot.Key, FaceSkin ? FaceSkin : Slot.Value.Get());
@@ -1028,6 +1028,7 @@ void ASimPawnActor::EnsureBareLayer(USimPawnSubsystem& Pawns)
 		{
 			UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(BareSkin, Layer);
 			Instance->SetVectorParameterValue(PawnLooksParamSkinColor, Skin);
+			Pawns.ApplySkinShine(Instance);
 			for (int32 Slot = 0; Slot < Layer->GetNumMaterials(); ++Slot)
 			{
 				Layer->SetMaterial(Slot, Instance);

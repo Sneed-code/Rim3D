@@ -8,7 +8,11 @@
 #include "GameFramework/PlayerController.h"
 #include "Engine/StaticMesh.h"
 #include "HAL/IConsoleManager.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "Misc/FileHelper.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "Misc/PackageName.h"
 #include "PoseSearch/PoseSearchDatabase.h"
 
@@ -36,6 +40,10 @@ namespace
 		TEXT("Pawns.NearDistance"), 40.0f, TEXT("Metres: past this, pawns update their animation 8 times a second instead of 20."), ECVF_Default);
 	TAutoConsoleVariable<int32> GPawnsMetaHumans(
 		TEXT("Pawns.MetaHumans"), 0, TEXT("1 draws pawns as MetaHumans (driven by a hidden mannequin), 0 as mannequins."), ECVF_Default);
+	TAutoConsoleVariable<float> GPawnsSkinRoughness(
+		TEXT("Look.SkinRoughness"), -1.0f, TEXT("Skin roughness for every pawn (lower is shinier); negative uses data/look.json \"skin\"."), ECVF_Default);
+	TAutoConsoleVariable<float> GPawnsSkinSpecular(
+		TEXT("Look.SkinSpecular"), -1.0f, TEXT("Skin specular for every pawn (0.5 is the engine's default); negative uses data/look.json \"skin\"."), ECVF_Default);
 	TAutoConsoleVariable<int32> GPawnsShowDetail(
 		TEXT("Pawns.ShowDetail"), 0, TEXT("1 marks each pawn's animation detail over its head: green full, yellow near, red far."), ECVF_Default);
 
@@ -397,9 +405,78 @@ UMaterialInterface* USimPawnSubsystem::GetSkinMaterial(const UMaterialInterface*
 	{
 		return *Found;
 	}
-	UMaterialInterface* Material = PawnLoadLooksAsset<UMaterialInterface>(PawnLooksSkinInstanceName(Original->GetName()));
+	UMaterialInterface* Material = GetShinySkin(PawnLoadLooksAsset<UMaterialInterface>(PawnLooksSkinInstanceName(Original->GetName())));
 	SkinMaterials.Add(Original->GetFName(), Material);
 	return Material;
+}
+
+void USimPawnSubsystem::ReadSkinShine()
+{
+	bSkinShineRead = true;
+	const USimSubsystem* Bridge = GetWorld() ? GetWorld()->GetSubsystem<USimSubsystem>() : nullptr;
+	FString Text;
+	TSharedPtr<FJsonObject> Root;
+	const TSharedPtr<FJsonObject>* Skin = nullptr;
+	if (Bridge && FFileHelper::LoadFileToString(Text, *(Bridge->GetDataRoot() / TEXT("look.json"))) &&
+		FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) && Root.IsValid() && Root->TryGetObjectField(TEXT("skin"), Skin))
+	{
+		double Value = 0.0;
+		if ((*Skin)->TryGetNumberField(TEXT("roughness"), Value))
+		{
+			SkinRoughness = static_cast<float>(Value);
+		}
+		if ((*Skin)->TryGetNumberField(TEXT("specular"), Value))
+		{
+			SkinSpecular = static_cast<float>(Value);
+		}
+	}
+	UE_LOG(LogSimPawns, Display, TEXT("Skin shine: roughness %.2f, specular %.2f (negative keeps the material's own)"), SkinRoughness, SkinSpecular);
+}
+
+void USimPawnSubsystem::ApplySkinShine(UMaterialInstanceDynamic* Instance)
+{
+	if (!Instance)
+	{
+		return;
+	}
+	if (!bSkinShineRead)
+	{
+		ReadSkinShine();
+	}
+	const float RoughnessOverride = GPawnsSkinRoughness.GetValueOnGameThread();
+	const float SpecularOverride = GPawnsSkinSpecular.GetValueOnGameThread();
+	const float Roughness = RoughnessOverride >= 0.0f ? RoughnessOverride : SkinRoughness;
+	const float Specular = SpecularOverride >= 0.0f ? SpecularOverride : SkinSpecular;
+	if (Roughness >= 0.0f)
+	{
+		Instance->SetScalarParameterValue(TEXT("Roughness"), Roughness);
+	}
+	if (Specular >= 0.0f)
+	{
+		Instance->SetScalarParameterValue(TEXT("Specular"), Specular);
+	}
+}
+
+UMaterialInterface* USimPawnSubsystem::GetShinySkin(UMaterialInterface* Skin)
+{
+	if (!Skin)
+	{
+		return nullptr;
+	}
+	if (const TObjectPtr<UMaterialInstanceDynamic>* Found = ShinySkins.Find(Skin))
+	{
+		return *Found;
+	}
+	// Only our skins (M_PawnSkin and its instances) have these two parameters.
+	float Unused = 0.0f;
+	if (!Skin->GetScalarParameterValue(FHashedMaterialParameterInfo(TEXT("Roughness")), Unused))
+	{
+		return Skin;
+	}
+	UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(Skin, this);
+	ApplySkinShine(Instance);
+	ShinySkins.Add(Skin, Instance);
+	return Instance;
 }
 
 UMaterialInterface* USimPawnSubsystem::GetClothMaterial(const UMaterialInterface* Original)

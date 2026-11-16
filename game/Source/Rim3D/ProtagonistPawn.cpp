@@ -27,6 +27,8 @@ namespace
 	// (sneed's G2 playtest).
 	TAutoConsoleVariable<float> GProtagonistMouseTurn(TEXT("Protagonist.MouseTurn"), 0.7f,
 		TEXT("How fast the mouse turns the view in direct control: degrees per unit of mouse axis (0.7 default, higher turns faster)."));
+	TAutoConsoleVariable<float> GProtagonistDepthOfField(TEXT("Look.DepthOfField"), 2.0f,
+		TEXT("The third person camera's cinematic depth of field: the lens f-stop, focused on the colonist (lower blurs the distance more; 0 turns it off). Fades out while aiming and in first person."));
 	constexpr float ProtagonistMaxPitch = 80.0f;
 	// One wheel notch scales the third person distance by this much.
 	constexpr float ProtagonistZoomPerNotch = 0.85f;
@@ -468,6 +470,20 @@ void AProtagonistPawn::UpdateCamera()
 			PostProcess.VignetteIntensity = ProtagonistBaseVignette + Nudge.Vignette;
 			PostProcess.bOverride_SceneFringeIntensity = true;
 			PostProcess.SceneFringeIntensity = Nudge.Fringe;
+			// Cinematic depth of field on the colonist, like a film camera: the far background softens a little. Off in first
+			// person and while aiming, so a distant target stays sharp.
+			const float FStop = GProtagonistDepthOfField.GetValueOnGameThread();
+			const bool bFocus = FStop > 0.0f && !bFirstPerson && Blend < 0.99f && EffectiveArm > 1.0f;
+			PostProcess.bOverride_DepthOfFieldFocalDistance = bFocus;
+			PostProcess.bOverride_DepthOfFieldFstop = bFocus;
+			PostProcess.bOverride_DepthOfFieldSensorWidth = bFocus;
+			if (bFocus)
+			{
+				PostProcess.DepthOfFieldFocalDistance = static_cast<float>(EffectiveArm);
+				// A wider aperture number while the aim blends in, so the blur fades out smoothly.
+				PostProcess.DepthOfFieldFstop = FStop / FMath::Max(1.0f - Blend, 0.05f);
+				PostProcess.DepthOfFieldSensorWidth = 36.0f;  // full frame
+			}
 			Camera->PostProcessBlendWeight = 1.0f;
 		}
 	}
