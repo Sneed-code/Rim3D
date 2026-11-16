@@ -156,6 +156,10 @@ struct FighterRules {
     float ambushRange = 6.0f;         // a defending melee fighter waits until an enemy is this close, then charges
     float helpRange = 20.0f;          // ... or runs in sooner, from this far, to an enemy at a friend
     float helpReach = 2.5f;           // an enemy this near a friend is at it
+    // Combat profiles (docs/design/real-time-combat.md): a disciplined side's melee fighters hold with the others (the
+    // ambushRange / helpRange rule) even when drafted, unless ordered to attack; a reckless side charges.
+    bool colonistsHoldForFriends = true;
+    bool raidersHoldForFriends = false;
     float minWalkShare = 0.25f;       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
 };
 

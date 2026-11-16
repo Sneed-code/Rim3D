@@ -105,6 +105,7 @@ struct Raider {
     Entity goalThing = kNoEntity;
     Entity loot = kNoEntity;
     bool sparesDowned = false;  // kidnappers don't shoot the downed: they come to carry them off
+    bool cornered = false;      // routed but walled in or caught: it fights to the death and never runs again (real-time-combat.md)
 };
 
 // On a colonist a kidnapper carries off: its position follows `by` until it is put down or leaves the map.
@@ -211,6 +212,8 @@ struct RaidRules {
     float maxPoints = 10000.0f;
     // When a squad routs or gives up.
     float fleeLostFraction = 0.5f;  // share of its pawns downed, dead or gone
+    bool fightWhenCaught = true;    // a routed raider turns and fights to the death when walled in or hurt by an enemy this close:
+    float caughtRange = 4.0f;       // ...(ours, real-time-combat.md)
     float giveUpHoursMin = 10.4f;   // RimWorld's 26,000 to 38,000 ticks
     float giveUpHoursMax = 15.2f;
     // Ours.
@@ -297,6 +300,10 @@ public:
     }
     // Gives a new raider its looks (Sim::giveLooks): pawn, seed, female.
     void setLooksMaker(std::function<void(Entity, uint64_t, bool)> maker) { looks_ = std::move(maker); }
+    // A bullet or blow hurt `victim` (CombatSystem's hurt hook): a routed raider caught by its attacker fights back.
+    void hurt(Entity victim, Entity attacker);
+    // Counter for tests: raiders that turned to fight when cornered or caught.
+    uint64_t corneredCount() const { return cornered_; }
 
     // RimWorld's storyteller wealth (wiki "Raid points"): items on the map and carried by the
     // player's pawns, and the player's own pawns (colonists, tame animals), at their market value,
@@ -409,7 +416,8 @@ private:
     CellPos shelterCell(Entity pawn);
     // Where the shelter rules see danger: able enemies (not calm animals, prisoners, visitors or the downed) and brood mounds.
     std::vector<std::pair<float, float>> shelterDangers() const;
-    CellPos exitCell(Entity pawn, const Squad& squad);
+    CellPos exitCell(Entity pawn, const Squad& squad, bool* reachable = nullptr);
+    void corner(Entity pawn, const char* why);
     bool nearestFree(float x, float y, int level, CellPos from, int radius, CellPos& out);
     float strength(Entity pawn) const;
     bool canSee(Entity watcher, Entity pawn) const;
@@ -434,6 +442,7 @@ private:
     std::vector<float> armor_;        // per def id: gear.mitigation.sharp / 50 of armour
     std::vector<Event>* events_ = nullptr;
     std::function<void(Entity, uint64_t, bool)> looks_;
+    uint64_t cornered_ = 0;
     Construction* construction_ = nullptr;
     ArtillerySystem* artillery_ = nullptr;
     FuelSystem* fuel_ = nullptr;
