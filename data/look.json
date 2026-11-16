@@ -92,6 +92,12 @@
     "_skylightLeaking": "Lumen skylight leaking: lifts shade a little under hardware ray tracing, which leaks less light than software Lumen (0 = engine default, 0.06 since 2026-11-16)."
   },
 
+  "skin": {
+    "_about": "Every pawn's skin (face, hands and the bare skin under clothes) on the subsurface skin material: lower roughness is shinier, specular 0.5 is the engine's default. The generated material's own values were roughness 0.55, specular 0.35 (matte). 2026-11-16, toward the cinematic look.",
+    "roughness": 0.42,
+    "specular": 0.5
+  },
+
   "seasons": {
     "_about": "One colour grade per season, blended between the seasons' middle days (the sim's year is 60 days: spring 0 to 15, summer to 30, autumn to 45, winter to 60). white is the white balance in kelvin (6500 neutral; lower looks colder, higher warmer).",
     "spring": { "white": 6500, "saturation": 1.04, "contrast": 1.02, "gain": [1.0, 1.0, 0.99] },

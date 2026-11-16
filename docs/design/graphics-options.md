@@ -72,6 +72,16 @@ modules load (`OnModulesChanged`).
   anti-aliasing unless ray reconstruction is on; we install v8.9.0 (2026-10-16), and ray reconstruction is one tick away.
 - The whole change: set `r.RayTracing=False` in `DefaultEngine.ini` (a restart and shader rebuild).
 
+## Shade and skin (2026-11-16, second step)
+
+- **Shade.** Hardware ray tracing leaks less sky light into shaded places than software Lumen, so shade went too dark. `data/look.json`
+  `film.skylightLeaking` (Lumen skylight leaking, post process, 0.06) lets a little sky light reach every shaded spot, and
+  `film.localExposureShadows` 0.85 to 0.75 lifts dark areas against bright ones.
+- **Skin shine.** The generated skin material was matte (roughness 0.55, specular 0.35). `data/look.json` `skin` (roughness 0.42,
+  specular 0.5) goes onto every pawn's face, hand and bare skin through one shared dynamic instance per skin material
+  (`USimPawnSubsystem::GetShinySkin`, `ApplySkinShine`); console `Look.SkinRoughness` / `Look.SkinSpecular` override it for
+  new pawns while tuning.
+
 ## Next
 
 Toward the SFM look, separate tasks: skin shading (subsurface profile tuning, specular and sheen on MetaHuman and MPFB skin),
