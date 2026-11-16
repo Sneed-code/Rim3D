@@ -173,7 +173,9 @@ public:
     FighterSystem& operator=(const FighterSystem&) = delete;
 
     const FighterRules& rules() const { return rules_; }
-    // Hurt badly enough to fall back: pain, blood loss or Moving past the FighterRules limits.
+    // Bleeding under 1500 blood with body zones (falls back to patch whatever the odds).
+    bool bleedingLow(Entity pawn) const;
+    // Hurt badly enough to fall back: bleeding low, or pain, blood loss or Moving past the FighterRules limits.
     bool badlyHurt(Entity pawn) const;
     // The combat hurt hook: a fighter with a trait that flees when hurt (Wimp) falls back for a while.
     void hurt(Entity victim, Entity attacker);

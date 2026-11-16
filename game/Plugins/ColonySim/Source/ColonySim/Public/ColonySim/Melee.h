@@ -109,6 +109,9 @@ struct MeleeRules {
     int playerBlockSteps = 20;        // how long the player's block holds
     int dodgeHoldSteps = 3;           // a fighter that sidestepped stays put this long after the hit
     float strongPowerShare = 1.15f;   // a swing is strong when its tool's power is this share of the set's mean or more (AN1, ours)
+    float arcHalfDegrees = 30.0f;     // a sweeping blow (part C) can meet a pawn this far either side of its aimed line
+    int arcRaysPerSide = 2;           // lines traced on each side of the aimed one
+    std::vector<std::string> arcDamageTypes = {"Cut", "Slash", "Blunt", "Crush", "Scratch"};  // the sweeping blows
 };
 
 class COLONY_API MeleeSystem {
@@ -196,6 +199,7 @@ private:
     bool roll(Entity defender, Melee& d);
     void commit(Entity pawn, Melee& m);
     void strike(Entity pawn, Melee& m);
+    bool arcSwing(DefId damageType) const;
     void face(Entity pawn, float x, float y);
     bool shoulder(Entity pawn, float& x, float& y, float& z) const;
     float swingTimeFactor(Entity pawn) const;
@@ -209,6 +213,7 @@ private:
     const GameTime& time_;
     uint64_t seed_;
     MeleeRules rules_;
+    std::vector<uint8_t> arcTypes_;  // by DamageTypes DefId value: 1 for a sweeping blow
     std::vector<ToolSet> tools_;  // by Things DefId value: a melee weapon's tools, or a pawn def's body tools
     std::vector<Entity> order_;
     std::vector<Event>* events_ = nullptr;

@@ -103,6 +103,26 @@ Code: `ColonySim/Patch.h`, `Private/Patch.cpp` (`PatchSystem`), `HealthSystem::p
 - **The player's pawn** patches on `PatchCommand` (a key on the PC, to be bound with the stagger work). The snapshot's
   `patchZone` / `patchStepsLeft` let Unreal play a patching animation.
 
+## Part C as built
+
+- **Poise** (CombatRules `poise`, ours): a blow's force is its damage before armour times its damage type's force
+  factor (blunt and crush 1.5, burn 0, the rest 1). Force over the pawn's poise (50) knocks it down for the blast
+  knock-down's time (20 steps plus 0.6 per point of force, at most 90) and then no blow can knock it down for 900 steps
+  (30 real seconds). `CombatSystem::jolt`, `Poise` component (saved in combat section 4, hashed). The event is
+  `PawnKnockedDown` with message "poise". A knocked-down pawn can't swing, block or dodge.
+- **Staggers** (sneed, 10:46): a hit staggers a person only if what got through armour is over 10% of the struck
+  zone's hit points, and at most once per 150 steps (5 s). This replaces RimWorld's stopping-power stagger for bodies
+  with zones, for bullets and melee alike; animals and mechs keep the old rule.
+- **Sweeping blows**: cut, slash, blunt, crush and scratch blows sweep their arc (MeleeRules `arcHalfDegrees` 30,
+  `arcRaysPerSide` 2). The aimed line is traced first; if it meets nothing, the lines either side are traced in turn
+  and the first pawn met is hit. Stabs and bites only go straight. A man who steps straight back is still missed.
+- **Knock-on fixes**: a person on their feet never walks slower than 40% (`zones.minMoving`; pain no longer downs, so
+  it doesn't leave them crawling upright either; a raider at 3% speed held a raid open for hours). A hurt fighter
+  whose side outnumbers the enemies near two to one presses on instead of backing off (a bruised trio and a lone
+  colonist all backing off left a brawl with nobody coming on); bleeding under 1500 it still goes to patch. A fighter
+  falling back counts cover double when it picks where to go (hurt fighters were waiting in the open far away).
+- Physics wobble at the struck spot belongs to part E (Unreal).
+
 ## Later (sneed, 2026-11-16)
 
 - **Ragdolls**: unconscious pawns, corpses and severed limbs are physics ragdolls in Unreal (cosmetic: the sim keeps

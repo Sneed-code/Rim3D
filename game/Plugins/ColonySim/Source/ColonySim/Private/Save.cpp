@@ -457,6 +457,7 @@ struct SaveEntity {
     std::optional<Lovin> lovin;             // section "social" 2 (docs/design/lovin.md)
     std::optional<SaveTalking> talking;     // section "social" 3 (AN1)
     std::optional<Staggered> staggered;     // section "combat" 3 (AN1)
+    std::optional<Poise> poise;             // section "combat" 4 (body-health.md part C)
     std::optional<SaveApparel> apparel;     // section "apparel" (format 20 on)
     std::optional<RecoilKick> kick;         // section "feel"
     std::optional<DodgeRoll> roll;          // section "feel"
@@ -2589,6 +2590,14 @@ void saveStaggeredPart(Ar& ar, Staggered& s) {
 }
 
 template <typename Ar>
+void savePoisePart(Ar& ar, Poise& p) {
+    ar.value("immuneLeft", p.immuneLeft);
+    ar.value("staggerWait", p.staggerWait);
+    ar.require(p.immuneLeft >= 0 && p.immuneLeft < 1000000 && p.staggerWait >= 0 && p.staggerWait < 1000000,
+               "the save file has an impossible poise");
+}
+
+template <typename Ar>
 void saveSocialFightPart(Ar& ar, SocialFight& f) {
     ar.value("opponent", f.opponent);
     ar.value("startedAt", f.startedAt);
@@ -3396,7 +3405,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("mood", 1, [&] {
         saveParts(ar, "mood", e, &SaveEntity::mood, [&](Mood& m) { saveMoodPart(ar, m); });
     });
-    ar.section("combat", 3, [&] {
+    ar.section("combat", 4, [&] {
         saveParts(ar, "posture", e, &SaveEntity::posture, [&](Posture& p) { savePosturePart(ar, p); });
         saveParts(ar, "gear", e, &SaveEntity::gear, [&](Gear& g) { saveGearPart(ar, g); });
         saveParts(ar, "equippedBy", e, &SaveEntity::equippedBy, [&](EquippedBy& b) { saveEquippedByPart(ar, b); });
@@ -3405,6 +3414,9 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "magazine", e, &SaveEntity::magazine, [&](Magazine& m) { saveMagazinePart(ar, m); });
         if (ar.sectionVersion() >= 3) {  // AN1
             saveParts(ar, "staggered", e, &SaveEntity::staggered, [&](Staggered& s) { saveStaggeredPart(ar, s); });
+        }
+        if (ar.sectionVersion() >= 4) {  // poise (part C)
+            saveParts(ar, "poise", e, &SaveEntity::poise, [&](Poise& p) { savePoisePart(ar, p); });
         }
     });
     ar.section("doors", 1, [&] {
@@ -4351,6 +4363,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     if (const Staggered* st = reg.try_get<Staggered>(e)) {
         out.staggered = *st;
     }
+    if (const Poise* poise = reg.try_get<Poise>(e)) {
+        out.poise = *poise;
+    }
     if (const Talking* talk = reg.try_get<Talking>(e)) {
         out.talking = SaveTalking{talk->def.valid() ? sim.defs_->get(talk->def).defName() : std::string(), *talk};
     }
@@ -4775,6 +4790,9 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     }
     if (e.staggered) {
         reg.emplace<Staggered>(entity, *e.staggered);
+    }
+    if (e.poise) {
+        reg.emplace<Poise>(entity, *e.poise);
     }
     if (e.talking) {
         Talking t = e.talking->t;

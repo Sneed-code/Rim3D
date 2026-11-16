@@ -23,12 +23,14 @@
     "recoilKickMaxDegrees": 10,
     "weaponSwitchSteps": { "Primary": 36, "Sidearm": 18, "Melee": 27 },
     "stagger": { "steps": 48, "moveSpeedFactor": 0.17 },
+    "poise": { "base": 50, "immuneSteps": 900, "staggerEverySteps": 150, "staggerPartShare": 0.1,
+               "forceFactor": { "Blunt": 1.5, "Crush": 1.5, "Burn": 0 } },
     "dodgeRoll": { "startUpSteps": 3, "rollSteps": 15, "hitProofSteps": 12, "recoverySteps": 9, "cooldownSteps": 6, "distance": 4.0 },
     "unverified": ["accuracyDistances", "minHitChance", "stagger"],
     "ours": ["defaultShootingSkill", "standardTarget", "playerSpreadDistance", "gravity", "recoilRecoveryPerSecond",
              "recoilSkillReduction", "maxFlightSeconds", "reactionStepsBySkill", "leadBySkill", "leadErrorBySkill",
              "reloadTimeFactorBySkill", "recoilKickHoldSteps", "recoilKickResetSteps", "recoilKickRecoveryPerStep",
-             "recoilKickMaxDegrees", "dodgeRoll", "weaponSwitchSteps"]
+             "recoilKickMaxDegrees", "dodgeRoll", "weaponSwitchSteps", "poise"]
   },
   {
     "defName": "PlantRules", "source": "RimWorld wiki",
@@ -95,7 +97,8 @@
       "protagonistHp": 100,
       "patchSeconds": [1, 2, 3],
       "patchQuality": 0.3,
-      "coverBlood": 1500
+      "coverBlood": 1500,
+      "minMoving": 0.4
     },
     "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss", "innerInjuryAlsoHurtsOuter"],
     "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter", "scarSeverity", "oldWoundFromHpLost", "zones"]

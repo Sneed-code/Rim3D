@@ -284,6 +284,8 @@ public:
     // zone, so two "Arm"s), empty for a body without zones; a zone's health 0 to 1 (1 for none); blood 0 to 3000.
     std::vector<std::string> zoneNames(Entity pawn) const;
     float zoneHealth(Entity pawn, int zone) const;
+    // The full hit points of the zone that body part `part` is in (part C's stagger rule); 0 for a body without zones.
+    float partZoneHp(Entity pawn, int part) const;
     float blood(Entity pawn) const;
     bool unconscious(Entity pawn) const;
     // Patching (part B): a zone's bleeding (0 none, 1 light, 2 moderate, 3 heavy), the zone that bleeds worst (-1 for

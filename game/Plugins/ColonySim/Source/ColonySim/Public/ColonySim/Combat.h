@@ -156,6 +156,15 @@ struct Staggered {
     int stepsLeft = 0;
 };
 
+// sneed's poise (part C, docs/design/body-health.md), on a pawn with body zones that was hit lately. A blow whose
+// force (damage before armour times its type's force factor) is over the pawn's poise (50) knocks it down, and then
+// no blow can for `immuneLeft` steps (30 s). A hit staggers it only if it took over 10% of that zone's hit points, and
+// at most once per `staggerWait` steps (5 s). The component goes when both run out.
+struct Poise {
+    int immuneLeft = 0;
+    int staggerWait = 0;
+};
+
 // On a stunned pawn (resonance's Stun, X2, docs/design/resonance.md): it can't walk, shoot, throw,
 // swing, block, cast or work until the steps run out; its stance stays as it was. ResonanceSystem
 // counts it down.
@@ -447,6 +456,13 @@ public:
     float staggerSpeedFactor(Entity pawn) const;
     // Staggers the pawn for CombatRules `stagger.steps` (a fresh stagger restarts the time) and sends PawnStaggered.
     void stagger(Entity pawn);
+    // Part C: a blow on a pawn with body zones, after its damage went in. `force` is the damage before armour, `dealt`
+    // what got through, `part` the body part hit. May knock the pawn down (poise) or stagger it (sneed's 5 s / 10%
+    // rule). True if the pawn has body zones (the caller then skips RimWorld's stopping-power stagger).
+    bool jolt(Entity pawn, int part, DefId damageType, float force, float dealt);
+    // Steps left of a pawn's knock-down immunity and stagger wait (0 when free).
+    int poiseImmuneFor(Entity pawn) const;
+    int staggerWaitFor(Entity pawn) const;
 
     // Hashes the combat components of one thing (Sim::stateHash calls it for every thing).
     void hashThing(Entity e, StateHasher& h) const;

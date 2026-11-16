@@ -254,6 +254,7 @@ public:
     float patchSeconds[3] = {1.0f, 2.0f, 3.0f};  // patching a zone that bleeds lightly, moderately, heavily (real seconds)
     float patchQuality = 0.3f;                   // the tend quality of a patch
     float coverBlood = 1500.0f;                  // under this a bleeding fighter falls back to cover to patch
+    float minMoving = 0.4f;                      // a person on their feet (body zones) limps, never slower than this share
     void buildZones();
     // Scars (H1): the chance a healed injury leaves one grows from 0 at scarMinHp hit points lost to scarMax at scarFullHp.
     float scarMax = 0.02f;
@@ -622,6 +623,7 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
             }
             num("zones.patchQuality", patchQuality);
             num("zones.coverBlood", coverBlood);
+            num("zones.minMoving", minMoving);
             bloodMax = std::max(1.0f, bloodMax);
             stepsPerRealSecond = std::max(1.0f, stepsPerRealSecond);
         }
@@ -1099,6 +1101,18 @@ float HealthSystem::zoneHealth(Entity pawn, int zone) const {
     return static_cast<size_t>(zone) < zones.size() ? zones[static_cast<size_t>(zone)] : 1.0f;
 }
 
+float HealthSystem::partZoneHp(Entity pawn, int part) const {
+    const HealthModel::Kind* kind = healthKindOf(*model_, things_.registry(), pawn);
+    if (kind == nullptr || part < 0) {
+        return 0.0f;
+    }
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    if (static_cast<size_t>(part) >= body.zoneOf.size() || body.zoneOf[static_cast<size_t>(part)] < 0) {
+        return 0.0f;
+    }
+    return body.zones[static_cast<size_t>(body.zoneOf[static_cast<size_t>(part)])].hp;
+}
+
 float HealthSystem::blood(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || !reg.all_of<Health>(pawn)) {
@@ -1397,6 +1411,11 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
         health.movingFactor = model_->movingCapacity >= 0
                                   ? std::clamp(health.capacities[static_cast<size_t>(model_->movingCapacity)], 0.0f, 1.0f)
                                   : 1.0f;
+        // Body zones: pain no longer downs a person, so it doesn't leave one crawling on its feet either; a bad leg is a
+        // limp (sneed), and a leg under a quarter downs.
+        if (!health.zones.empty()) {
+            health.movingFactor = std::max(health.movingFactor, model_->minMoving);
+        }
     }
 }
 

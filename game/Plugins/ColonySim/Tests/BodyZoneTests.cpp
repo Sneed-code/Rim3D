@@ -2,6 +2,9 @@
 // bleeding by zone and the 3000 blood store, on the game's real Human body.
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Combat.h"
+#include "ColonySim/Melee.h"
+#include "ColonySim/Movement.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Fighters.h"
@@ -384,4 +387,143 @@ TEST_CASE("Patching: a patch under way saves and loads, and finishes the same") 
     CHECK_FALSE(loaded.sim->patches().patching(pawn));
     CHECK(loaded.sim->health().worstBleedingZone(pawn) < 0);
     CHECK(loaded.sim->stateHash() == sim->stateHash());
+}
+
+// ---- Part C: poise, staggers and sweeping blows (docs/design/body-health.md "Part C as built").
+
+TEST_CASE("Poise: a blow harder than 50 knocks a person down, then nothing can for 30 seconds") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
+    sim->step();
+    const int torso = zoneTestPart(*sim, pawn, "torso");
+    CHECK(torso >= 0);
+    if (!(torso >= 0)) {
+        return;
+    }
+    const DefId blunt = sim->defs().idOf("DamageTypes", "Blunt");
+    const DefId cut = sim->defs().idOf("DamageTypes", "Cut");
+    // Under the poise: no knock-down. A blunt blow counts half again (35 blunt is 52.5).
+    CHECK(sim->combat().jolt(pawn, torso, cut, 45.0f, 1.0f));
+    CHECK(sim->combat().knockedDownFor(pawn) == 0);
+    sim->combat().jolt(pawn, torso, blunt, 35.0f, 1.0f);
+    CHECK(sim->combat().knockedDownFor(pawn) > 0);
+    CHECK(sim->combat().poiseImmuneFor(pawn) == 900);
+    CHECK(std::any_of(sim->events().begin(), sim->events().end(), [](const Event& e) { return e.type == EventType::PawnKnockedDown; }));
+    // It gets up, and for the rest of the 30 seconds an even harder blow doesn't knock it down again.
+    while (sim->combat().knockedDownFor(pawn) > 0) {
+        sim->step();
+    }
+    sim->combat().jolt(pawn, torso, cut, 200.0f, 1.0f);
+    CHECK(sim->combat().knockedDownFor(pawn) == 0);
+    while (sim->combat().poiseImmuneFor(pawn) > 0) {
+        sim->step();
+    }
+    sim->combat().jolt(pawn, torso, cut, 60.0f, 1.0f);
+    CHECK(sim->combat().knockedDownFor(pawn) > 0);
+}
+
+TEST_CASE("Poise: a hit staggers only if it took over a tenth of the zone, and at most once in 5 seconds") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
+    sim->step();
+    const int torso = zoneTestPart(*sim, pawn, "torso");
+    const int leg = zoneTestPart(*sim, pawn, "left leg");
+    CHECK(torso >= 0);
+    if (!(torso >= 0)) {
+        return;
+    }
+    CHECK(leg >= 0);
+    if (!(leg >= 0)) {
+        return;
+    }
+    const DefId cut = sim->defs().idOf("DamageTypes", "Cut");
+    // Torso 100: 10 is not over a tenth, 11 is. Leg 75: 8 is.
+    sim->combat().jolt(pawn, torso, cut, 10.0f, 10.0f);
+    CHECK(sim->combat().staggeredFor(pawn) == 0);
+    sim->combat().jolt(pawn, leg, cut, 8.0f, 8.0f);
+    CHECK(sim->combat().staggeredFor(pawn) > 0);
+    CHECK(sim->combat().staggerWaitFor(pawn) == 150);
+    while (sim->combat().staggeredFor(pawn) > 0) {
+        sim->step();
+    }
+    sim->combat().jolt(pawn, torso, cut, 30.0f, 30.0f);
+    CHECK(sim->combat().staggeredFor(pawn) == 0);  // too soon
+    while (sim->combat().staggerWaitFor(pawn) > 0) {
+        sim->step();
+    }
+    sim->combat().jolt(pawn, torso, cut, 30.0f, 30.0f);
+    CHECK(sim->combat().staggeredFor(pawn) > 0);
+}
+
+TEST_CASE("Poise: the knock-down and the stagger wait save and load") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
+    sim->step();
+    const int torso = zoneTestPart(*sim, pawn, "torso");
+    sim->combat().jolt(pawn, torso, sim->defs().idOf("DamageTypes", "Blunt"), 60.0f, 20.0f);
+    sim->stepMany(5);
+    const int immune = sim->combat().poiseImmuneFor(pawn);
+    CHECK(immune > 0);
+    if (!(immune > 0)) {
+        return;
+    }
+    SaveLoadResult loaded = loadSim(saveSim(*sim), zoneTestDefs());
+    CHECK_MESSAGE(loaded.error.empty(), loaded.error);
+    CHECK(loaded.sim != nullptr);
+    if (!(loaded.sim != nullptr)) {
+        return;
+    }
+    CHECK(loaded.sim->combat().poiseImmuneFor(pawn) == immune);
+    CHECK(loaded.sim->combat().knockedDownFor(pawn) == sim->combat().knockedDownFor(pawn));
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+}
+
+TEST_CASE("Sweeping blows: a hammer or a mace meets a man beside its aimed line") {
+    const auto swing = [](const char* weapon) {
+        auto sim = zoneTestSim();
+        const Entity hero = sim->things().spawn("Human", CellPos{30, 30, 0});
+        const Entity dummy = sim->things().spawn("Human", CellPos{31, 30, 0});
+        entt::registry& reg = sim->things().registry();
+        reg.get<Position>(hero).x = 30.5f;
+        reg.get<Position>(hero).y = 30.5f;
+        reg.get<Position>(dummy).x = 31.3f;   // 0.9 m away, 27 degrees off the hero's facing
+        reg.get<Position>(dummy).y = 30.91f;
+        sim->combat().equip(hero, sim->things().make(sim->defs().idOf("Things", weapon)));
+        reg.emplace<Colonist>(hero);
+        sim->jobs().addWorker(hero);
+        sim->submit(ControlPawnCommand{hero});
+        sim->step();
+        reg.get<Posture>(hero).facingX = 1.0f;
+        reg.get<Posture>(hero).facingY = 0.0f;
+        // Both tools of each are blunt, so every swing sweeps.
+        sim->submit(MeleeCommand{hero, kNoEntity, MeleeMode::Attack});
+        std::string outcome;
+        for (int s = 0; s < 60 && outcome.empty(); ++s) {
+            sim->step();
+            for (const Event& e : sim->events()) {
+                if (e.type == EventType::MeleeHit && e.thing == hero) {
+                    outcome = e.message;
+                }
+            }
+        }
+        return outcome;
+    };
+    CHECK(swing("Melee_Zeushammer") == "hit");
+    CHECK(swing("Melee_Mace") == "hit");
+}
+
+TEST_CASE("Body zones: a person on their feet limps at 40% or better, however much it hurts") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
+    sim->step();
+    // Bruises all over: lots of pain, nothing under a quarter, so still on their feet.
+    for (int round = 0; round < 3; ++round) {
+        for (const char* part : {"left leg", "right leg", "torso"}) {
+            CHECK(zoneTestHit(*sim, pawn, "Blunt", 14.0f, part));
+        }
+    }
+    const Health& h = sim->things().registry().get<Health>(pawn);
+    MESSAGE("pain " << h.pain << ", moving " << h.movingFactor);
+    CHECK_FALSE(sim->health().incapacitated(pawn));
+    CHECK(h.movingFactor >= 0.4f - 1e-4f);
 }

@@ -207,14 +207,19 @@ void FighterSystem::hurt(Entity victim, Entity attacker) {
     f->nextPlan = now();  // re-plan at once: off to cover
 }
 
+bool FighterSystem::bleedingLow(Entity pawn) const {
+    // Body zones (docs/design/body-health.md): bleeding under 1500 blood, it falls back to cover to patch.
+    const Health* h = things_.registry().try_get<Health>(pawn);
+    return h != nullptr && !h->zones.empty() && health_.blood(pawn) < health_.coverBlood() &&
+           std::any_of(h->zoneBleeds.begin(), h->zoneBleeds.end(), [](uint8_t b) { return b > 0; });
+}
+
 bool FighterSystem::badlyHurt(Entity pawn) const {
     const Health* h = things_.registry().try_get<Health>(pawn);
     if (h == nullptr) {
         return false;
     }
-    // Body zones (docs/design/body-health.md): bleeding under 1500 blood, it also falls back to cover to patch.
-    if (!h->zones.empty() && health_.blood(pawn) < health_.coverBlood() &&
-        std::any_of(h->zoneBleeds.begin(), h->zoneBleeds.end(), [](uint8_t b) { return b > 0; })) {
+    if (bleedingLow(pawn)) {
         return true;
     }
     return h->pain >= rules_.hurtPain || h->bloodLoss >= rules_.hurtBloodLoss || h->movingFactor <= rules_.hurtMoving;
@@ -862,9 +867,13 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
             ++friendsNear;
         }
     }
+    // A hurt fighter whose side outnumbers the enemies near as much as being outnumbered means presses on instead (a
+    // bruised group of three against one doesn't back off, and the lone one backing off from them left a fight with
+    // nobody coming on); one bleeding low still goes to patch.
+    const bool overwhelming = static_cast<float>(friendsNear) >= rules_.outnumberedRatio * static_cast<float>(enemiesNear);
     f.fallingBack = f.retreat || now() < f.cowerUntil ||
                     (enemiesNear > 0 && (static_cast<float>(enemiesNear) >= rules_.outnumberedRatio * static_cast<float>(friendsNear) ||
-                                         badlyHurt(pawn)));
+                                         (badlyHurt(pawn) && (!overwhelming || bleedingLow(pawn)))));
     // With an enemy already at arm's length there is no getting away on foot: it stands and fights (F8).
     if (f.fallingBack && melee_ != nullptr && threatCount > 0 && threats[0].d <= melee_->reach(pawn) + melee_->rules().standGround) {
         f.fallingBack = false;
@@ -1012,7 +1021,8 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
                         covered += kFightThreatWeights[i] * cover.coverAgainst(c, Stance::Crouching, threats[i].x, threats[i].y);
                     }
                 }
-                s += rules_.coverWeight * covered / threatWeight;
+                // Falling back hurt, cover counts double: it gets out of the line of fire first, not just far away.
+                s += (f.fallingBack ? 2.0f : 1.0f) * rules_.coverWeight * covered / threatWeight;
             }
             s -= rules_.travelWeight * fightDist(cx, cy, self.x, self.y);
             s -= rules_.crowdWeight * crowd;
