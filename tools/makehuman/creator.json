@@ -1,0 +1,1076 @@
+{
+  "comment": "The character creator's base bodies (tools/makehuman/mh_creator.py, docs/design/makehuman.md). Each morph is a variant build of its base with these settings changed. Adults only: there is no younger morph.",
+  "bases": [
+    {
+      "name": "CreatorFemale",
+      "config": {
+        "macro": {
+          "gender": 0.0,
+          "age": 0.5,
+          "muscle": 0.45,
+          "weight": 0.38,
+          "height": 0.42,
+          "proportions": 0.65,
+          "cupsize": 0.55,
+          "firmness": 0.6,
+          "race": {
+            "caucasian": 1.0,
+            "asian": 0.0,
+            "african": 0.0
+          }
+        },
+        "rig": "game_engine_with_breast",
+        "proxy": "{mh_user}/proxymeshes/adult_female_anatomy_body/adult_female_anatomy_body.proxy",
+        "skin": "{mh_user}/skins/natural_pale/natural_pale.mhmat",
+        "clothes": [
+          "{mh_user}/clothes/natural_pubic_hair/natural_pubic_hair.mhclo"
+        ],
+        "parts": {
+          "Hair": "{mpfb}/hair/long01/long01.mhclo",
+          "Eyebrows": "{mpfb}/eyebrows/eyebrow001/eyebrow001.mhclo",
+          "Eyelashes": "{mpfb}/eyelashes/eyelashes01/eyelashes01.mhclo",
+          "Eyes": "{mpfb}/eyes/high-poly/high-poly.mhclo",
+          "Teeth": "{mpfb}/teeth/teeth_base/teeth_base.mhclo"
+        },
+        "material_overrides": {
+          "high-poly": {
+            "color": "{mpfb}/eyes/materials/green_eye.png"
+          },
+          "Jewel_": {
+            "metal": true
+          }
+        },
+        "tints": {
+          "long01": [
+            0.035,
+            0.03,
+            0.03
+          ],
+          "eyebrow": [
+            0.25,
+            0.2,
+            0.18
+          ],
+          "pubic": [
+            0.035,
+            0.028,
+            0.026
+          ],
+          "horn": [
+            0.06,
+            0.045,
+            0.04
+          ],
+          "tusk": [
+            0.78,
+            0.72,
+            0.58
+          ],
+          "bob02": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "ponytail01": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "braid01": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "short02": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "short04": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "short_messy": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "cortu": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "afro": [
+            0.06,
+            0.045,
+            0.035
+          ]
+        },
+        "horns": {
+          "length": 0.14,
+          "radius": 0.019,
+          "curl": 1.0
+        },
+        "tail": {
+          "length": 0.8,
+          "radius": 0.028,
+          "bones": 7
+        },
+        "tusks": {
+          "length": 0.036,
+          "radius": 0.0075
+        },
+        "pigment_mask": "female",
+        "pubic_grow": {
+          "female": true,
+          "count": 3000,
+          "curl": 1.0
+        },
+        "wrinkles": {
+          "Forehead": [
+            "Face_EyebrowsLeftUp",
+            "Face_EyebrowsRightUp",
+            "Face_EyebrowsLeftExternUp",
+            "Face_EyebrowsRightExternUp",
+            "Face_EyebrowsLeftInnerUp",
+            "Face_EyebrowsRightInnerUp"
+          ],
+          "Furrow": [
+            "Face_EyebrowsLeftDown",
+            "Face_EyebrowsRightDown",
+            "Face_NoseCompression"
+          ],
+          "Smile": [
+            "Face_MouthCornerPuller",
+            "Face_EyeLeftSlit",
+            "Face_EyeRightSlit",
+            "Face_MouthUpwardRetraction"
+          ],
+          "Nose": [
+            "Face_NoseLeftElevation",
+            "Face_NoseRightElevation",
+            "Face_NoseDepression"
+          ]
+        },
+        "hairs": [
+          "{mpfb}/hair/bob02/bob02.mhclo",
+          "{mpfb}/hair/ponytail01/ponytail01.mhclo",
+          "{mpfb}/hair/braid01/braid01.mhclo",
+          "{mpfb}/hair/short02/short02.mhclo",
+          "{mpfb}/hair/afro01/afro01.mhclo"
+        ],
+        "body_areas": true,
+        "jewellery": "female",
+        "cat": {
+          "ears": {},
+          "claws": {},
+          "tail": {
+            "length": 0.8,
+            "radius": 0.022,
+            "taper": 0.3
+          }
+        },
+        "hair_bones": true
+      },
+      "morphs": {
+        "Masculine": {
+          "macro": {
+            "gender": 0.5
+          }
+        },
+        "BreastsLarge": {
+          "macro": {
+            "cupsize": 1.0
+          }
+        },
+        "BreastsSmall": {
+          "macro": {
+            "cupsize": 0.0
+          }
+        },
+        "Older": {
+          "macro": {
+            "age": 0.9
+          }
+        },
+        "Heavy": {
+          "macro": {
+            "weight": 1.0
+          }
+        },
+        "Thin": {
+          "macro": {
+            "weight": 0.0
+          }
+        },
+        "Muscular": {
+          "macro": {
+            "muscle": 1.0
+          }
+        },
+        "Soft": {
+          "macro": {
+            "muscle": 0.0
+          }
+        },
+        "ImpEars": {
+          "targets": {
+            "l-ear-shape-pointed": 1.0,
+            "r-ear-shape-pointed": 1.0,
+            "l-ear-scale-incr": 1.0,
+            "r-ear-scale-incr": 1.0,
+            "l-ear-scale-vert-incr": 1.0,
+            "r-ear-scale-vert-incr": 1.0,
+            "l-ear-rot-backward": 0.7,
+            "r-ear-rot-backward": 0.7,
+            "l-ear-wing-incr": 1.0,
+            "r-ear-wing-incr": 1.0,
+            "l-ear-trans-up": 0.5,
+            "r-ear-trans-up": 0.5
+          }
+        },
+        "ImpFace": {
+          "targets": {
+            "head-triangular": 0.8,
+            "head-scale-vert-incr": 0.3,
+            "chin-triangle": 0.8,
+            "chin-prominent-incr": 0.5,
+            "nose-point-down": 0.7,
+            "nose-hump-incr": 0.6,
+            "nose-scale-vert-incr": 0.4,
+            "nose-flaring-incr": 0.5,
+            "l-eye-corner1-up": 0.8,
+            "r-eye-corner1-up": 0.8,
+            "l-eye-corner2-up": 0.6,
+            "r-eye-corner2-up": 0.6,
+            "eyebrows-angle-down": 0.8,
+            "eyebrows-trans-forward": 0.6
+          }
+        },
+        "NoHorns": {
+          "horns": {
+            "length": 0.002,
+            "radius": 0.002,
+            "curl": 1.0
+          }
+        },
+        "NoTail": {
+          "tail": {
+            "length": 0.004,
+            "radius": 0.002,
+            "bones": 7
+          }
+        },
+        "OrcFace": {
+          "targets": {
+            "chin-width-incr": 1.0,
+            "chin-prognathism-incr": 0.8,
+            "chin-bones-incr": 1.0,
+            "chin-height-incr": 0.4,
+            "nose-flaring-incr": 1.0,
+            "nose-width1-incr": 1.0,
+            "nose-width2-incr": 1.0,
+            "nose-width3-incr": 0.8,
+            "nose-scale-vert-decr": 0.5,
+            "nose-point-width-incr": 0.8,
+            "nose-curve-concave": 0.6,
+            "eyebrows-trans-forward": 0.6,
+            "eyebrows-angle-down": 0.5,
+            "head-square": 1.0,
+            "head-scale-horiz-incr": 0.4,
+            "head-fat-incr": 0.5,
+            "l-eye-scale-decr": 0.15,
+            "r-eye-scale-decr": 0.15,
+            "mouth-scale-horiz-incr": 0.6,
+            "mouth-lowerlip-volume-incr": 0.6,
+            "mouth-trans-forward": 0.4
+          }
+        },
+        "NoTusks": {
+          "tusks": {
+            "length": 0.002,
+            "radius": 0.001,
+            "inset": 0.03
+          }
+        },
+        "GenitalLarge": {
+          "labia": 0.008
+        },
+        "GenitalSmall": {
+          "labia": -0.003
+        },
+        "PubicStraight": {
+          "pubic_grow": {
+            "female": true,
+            "count": 3000,
+            "curl": 0.12
+          }
+        },
+        "PubicShort": {
+          "pubic_grow": {
+            "female": true,
+            "count": 3000,
+            "curl": 1.0,
+            "trim": 0.35
+          }
+        },
+        "OrcBody": {
+          "macro": {
+            "muscle": 1.0,
+            "weight": 0.6
+          },
+          "targets": {
+            "torso-muscle-dorsi-incr": 1.0,
+            "torso-muscle-pectoral-incr": 0.8,
+            "torso-scale-horiz-incr": 0.45,
+            "torso-scale-depth-incr": 0.35,
+            "neck-scale-horiz-incr": 1.0,
+            "neck-scale-depth-incr": 0.8,
+            "measure-neck-circ-incr": 0.8,
+            "l-upperarm-muscle-incr": 1.0,
+            "r-upperarm-muscle-incr": 1.0,
+            "l-upperarm-shoulder-muscle-incr": 1.0,
+            "r-upperarm-shoulder-muscle-incr": 1.0,
+            "l-lowerarm-muscle-incr": 0.8,
+            "r-lowerarm-muscle-incr": 0.8,
+            "l-upperarm-scale-horiz-incr": 0.4,
+            "r-upperarm-scale-horiz-incr": 0.4
+          }
+        },
+        "PubicStubble": {
+          "pubic_grow": {
+            "female": true,
+            "count": 3000,
+            "curl": 0.0,
+            "trim": 0.07
+          }
+        },
+        "Face_EyeLeftClosure": {
+          "targets": {
+            "expression/units/caucasian/eye-left-closure": 1.0
+          }
+        },
+        "Face_EyeLeftOpenedUp": {
+          "targets": {
+            "expression/units/caucasian/eye-left-opened-up": 1.0
+          }
+        },
+        "Face_EyeLeftSlit": {
+          "targets": {
+            "expression/units/caucasian/eye-left-slit": 1.0
+          }
+        },
+        "Face_EyeRightClosure": {
+          "targets": {
+            "expression/units/caucasian/eye-right-closure": 1.0
+          }
+        },
+        "Face_EyeRightOpenedUp": {
+          "targets": {
+            "expression/units/caucasian/eye-right-opened-up": 1.0
+          }
+        },
+        "Face_EyeRightSlit": {
+          "targets": {
+            "expression/units/caucasian/eye-right-slit": 1.0
+          }
+        },
+        "Face_EyebrowsLeftDown": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-down": 1.0
+          }
+        },
+        "Face_EyebrowsLeftExternUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-extern-up": 1.0
+          }
+        },
+        "Face_EyebrowsLeftInnerUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-inner-up": 1.0
+          }
+        },
+        "Face_EyebrowsLeftUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-up": 1.0
+          }
+        },
+        "Face_EyebrowsRightDown": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-down": 1.0
+          }
+        },
+        "Face_EyebrowsRightExternUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-extern-up": 1.0
+          }
+        },
+        "Face_EyebrowsRightInnerUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-inner-up": 1.0
+          }
+        },
+        "Face_EyebrowsRightUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-up": 1.0
+          }
+        },
+        "Face_MouthCompression": {
+          "targets": {
+            "expression/units/caucasian/mouth-compression": 1.0
+          }
+        },
+        "Face_MouthCornerPuller": {
+          "targets": {
+            "expression/units/caucasian/mouth-corner-puller": 1.0
+          }
+        },
+        "Face_MouthDepression": {
+          "targets": {
+            "expression/units/caucasian/mouth-depression": 1.0
+          }
+        },
+        "Face_MouthDepressionRetraction": {
+          "targets": {
+            "expression/units/caucasian/mouth-depression-retraction": 1.0
+          }
+        },
+        "Face_MouthElevation": {
+          "targets": {
+            "expression/units/caucasian/mouth-elevation": 1.0
+          }
+        },
+        "Face_MouthEversion": {
+          "targets": {
+            "expression/units/caucasian/mouth-eversion": 1.0
+          }
+        },
+        "Face_MouthOpen": {
+          "targets": {
+            "expression/units/caucasian/mouth-open": 1.0
+          }
+        },
+        "Face_MouthParling": {
+          "targets": {
+            "expression/units/caucasian/mouth-parling": 1.0
+          }
+        },
+        "Face_MouthPartLater": {
+          "targets": {
+            "expression/units/caucasian/mouth-part-later": 1.0
+          }
+        },
+        "Face_MouthProtusion": {
+          "targets": {
+            "expression/units/caucasian/mouth-protusion": 1.0
+          }
+        },
+        "Face_MouthPursing": {
+          "targets": {
+            "expression/units/caucasian/mouth-pursing": 1.0
+          }
+        },
+        "Face_MouthRetraction": {
+          "targets": {
+            "expression/units/caucasian/mouth-retraction": 1.0
+          }
+        },
+        "Face_MouthUpwardRetraction": {
+          "targets": {
+            "expression/units/caucasian/mouth-upward-retraction": 1.0
+          }
+        },
+        "Face_NeckPlatysma": {
+          "targets": {
+            "expression/units/caucasian/neck-platysma": 1.0
+          }
+        },
+        "Face_NoseCompression": {
+          "targets": {
+            "expression/units/caucasian/nose-compression": 1.0
+          }
+        },
+        "Face_NoseDepression": {
+          "targets": {
+            "expression/units/caucasian/nose-depression": 1.0
+          }
+        },
+        "Face_NoseLeftDilatation": {
+          "targets": {
+            "expression/units/caucasian/nose-left-dilatation": 1.0
+          }
+        },
+        "Face_NoseLeftElevation": {
+          "targets": {
+            "expression/units/caucasian/nose-left-elevation": 1.0
+          }
+        },
+        "Face_NoseRightDilatation": {
+          "targets": {
+            "expression/units/caucasian/nose-right-dilatation": 1.0
+          }
+        },
+        "Face_NoseRightElevation": {
+          "targets": {
+            "expression/units/caucasian/nose-right-elevation": 1.0
+          }
+        },
+        "CatHead": {
+          "flatten_ears": true
+        },
+        "ElfEars": {
+          "targets": {
+            "l-ear-shape-pointed": 1.6,
+            "r-ear-shape-pointed": 1.6,
+            "l-ear-scale-vert-incr": 1.6,
+            "r-ear-scale-vert-incr": 1.6,
+            "l-ear-scale-incr": 0.6,
+            "r-ear-scale-incr": 0.6,
+            "l-ear-rot-backward": 1.0,
+            "r-ear-rot-backward": 1.0,
+            "l-ear-trans-up": 0.6,
+            "r-ear-trans-up": 0.6,
+            "l-ear-wing-decr": 0.4,
+            "r-ear-wing-decr": 0.4,
+            "l-ear-lobe-decr": 0.6,
+            "r-ear-lobe-decr": 0.6
+          }
+        }
+      }
+    },
+    {
+      "name": "CreatorMale",
+      "config": {
+        "macro": {
+          "gender": 1.0,
+          "age": 0.5,
+          "muscle": 0.55,
+          "weight": 0.45,
+          "height": 0.5,
+          "proportions": 0.55,
+          "race": {
+            "caucasian": 1.0,
+            "asian": 0.0,
+            "african": 0.0
+          }
+        },
+        "rig": "game_engine_with_breast",
+        "proxy": "{mh_user}/proxymeshes/adult_male_anatomy_body/adult_male_anatomy_body.proxy",
+        "skin": "{mpfb}/skins/young_caucasian_male/young_caucasian_male.mhmat",
+        "parts": {
+          "Hair": "{mpfb}/hair/short02/short02.mhclo",
+          "Eyebrows": "{mpfb}/eyebrows/eyebrow002/eyebrow002.mhclo",
+          "Eyelashes": "{mpfb}/eyelashes/eyelashes01/eyelashes01.mhclo",
+          "Eyes": "{mpfb}/eyes/high-poly/high-poly.mhclo",
+          "Teeth": "{mpfb}/teeth/teeth_base/teeth_base.mhclo"
+        },
+        "tints": {
+          "short02": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "eyebrow": [
+            0.1,
+            0.08,
+            0.06
+          ],
+          "horn": [
+            0.06,
+            0.045,
+            0.04
+          ],
+          "tusk": [
+            0.78,
+            0.72,
+            0.58
+          ],
+          "pubic": [
+            0.05,
+            0.04,
+            0.03
+          ],
+          "long01": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "bob02": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "ponytail01": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "braid01": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "short04": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "short_messy": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "cortu": [
+            0.06,
+            0.045,
+            0.035
+          ],
+          "afro": [
+            0.06,
+            0.045,
+            0.035
+          ]
+        },
+        "genital_bone": true,
+        "horns": {
+          "length": 0.14,
+          "radius": 0.019,
+          "curl": 1.0
+        },
+        "tail": {
+          "length": 0.8,
+          "radius": 0.028,
+          "bones": 7
+        },
+        "tusks": {
+          "length": 0.036,
+          "radius": 0.0075
+        },
+        "clothes": [
+          "{mh_user}/clothes/natural_pubic_hair/natural_pubic_hair.mhclo"
+        ],
+        "pigment_mask": "male",
+        "pubic_above_crotch": 0.05,
+        "pubic_grow": {
+          "female": false,
+          "count": 3000,
+          "curl": 1.0
+        },
+        "wrinkles": {
+          "Forehead": [
+            "Face_EyebrowsLeftUp",
+            "Face_EyebrowsRightUp",
+            "Face_EyebrowsLeftExternUp",
+            "Face_EyebrowsRightExternUp",
+            "Face_EyebrowsLeftInnerUp",
+            "Face_EyebrowsRightInnerUp"
+          ],
+          "Furrow": [
+            "Face_EyebrowsLeftDown",
+            "Face_EyebrowsRightDown",
+            "Face_NoseCompression"
+          ],
+          "Smile": [
+            "Face_MouthCornerPuller",
+            "Face_EyeLeftSlit",
+            "Face_EyeRightSlit",
+            "Face_MouthUpwardRetraction"
+          ],
+          "Nose": [
+            "Face_NoseLeftElevation",
+            "Face_NoseRightElevation",
+            "Face_NoseDepression"
+          ]
+        },
+        "hairs": [
+          "{mpfb}/hair/short04/short04.mhclo",
+          "{mpfb}/hair/cortu_short_messy_hair/cortu_short_messy_hair.mhclo",
+          "{mpfb}/hair/long01/long01.mhclo",
+          "{mpfb}/hair/ponytail01/ponytail01.mhclo",
+          "{mpfb}/hair/afro01/afro01.mhclo"
+        ],
+        "body_areas": true,
+        "jewellery": "male",
+        "material_overrides": {
+          "Jewel_": {
+            "metal": true
+          }
+        },
+        "cat": {
+          "ears": {},
+          "claws": {},
+          "tail": {
+            "length": 0.8,
+            "radius": 0.022,
+            "taper": 0.3
+          }
+        },
+        "hair_bones": true
+      },
+      "morphs": {
+        "Feminine": {
+          "macro": {
+            "gender": 0.5
+          }
+        },
+        "Older": {
+          "macro": {
+            "age": 0.9
+          }
+        },
+        "Heavy": {
+          "macro": {
+            "weight": 1.0
+          }
+        },
+        "Thin": {
+          "macro": {
+            "weight": 0.0
+          }
+        },
+        "Muscular": {
+          "macro": {
+            "muscle": 1.0
+          }
+        },
+        "Soft": {
+          "macro": {
+            "muscle": 0.0
+          }
+        },
+        "ImpEars": {
+          "targets": {
+            "l-ear-shape-pointed": 1.0,
+            "r-ear-shape-pointed": 1.0,
+            "l-ear-scale-incr": 1.0,
+            "r-ear-scale-incr": 1.0,
+            "l-ear-scale-vert-incr": 1.0,
+            "r-ear-scale-vert-incr": 1.0,
+            "l-ear-rot-backward": 0.7,
+            "r-ear-rot-backward": 0.7,
+            "l-ear-wing-incr": 1.0,
+            "r-ear-wing-incr": 1.0,
+            "l-ear-trans-up": 0.5,
+            "r-ear-trans-up": 0.5
+          }
+        },
+        "ImpFace": {
+          "targets": {
+            "head-triangular": 0.8,
+            "head-scale-vert-incr": 0.3,
+            "chin-triangle": 0.8,
+            "chin-prominent-incr": 0.5,
+            "nose-point-down": 0.7,
+            "nose-hump-incr": 0.6,
+            "nose-scale-vert-incr": 0.4,
+            "nose-flaring-incr": 0.5,
+            "l-eye-corner1-up": 0.8,
+            "r-eye-corner1-up": 0.8,
+            "l-eye-corner2-up": 0.6,
+            "r-eye-corner2-up": 0.6,
+            "eyebrows-angle-down": 0.8,
+            "eyebrows-trans-forward": 0.6
+          }
+        },
+        "NoHorns": {
+          "horns": {
+            "length": 0.002,
+            "radius": 0.002,
+            "curl": 1.0
+          }
+        },
+        "NoTail": {
+          "tail": {
+            "length": 0.004,
+            "radius": 0.002,
+            "bones": 7
+          }
+        },
+        "OrcFace": {
+          "targets": {
+            "chin-width-incr": 1.0,
+            "chin-prognathism-incr": 0.8,
+            "chin-bones-incr": 1.0,
+            "chin-height-incr": 0.4,
+            "nose-flaring-incr": 1.0,
+            "nose-width1-incr": 1.0,
+            "nose-width2-incr": 1.0,
+            "nose-width3-incr": 0.8,
+            "nose-scale-vert-decr": 0.5,
+            "nose-point-width-incr": 0.8,
+            "nose-curve-concave": 0.6,
+            "eyebrows-trans-forward": 0.6,
+            "eyebrows-angle-down": 0.5,
+            "head-square": 1.0,
+            "head-scale-horiz-incr": 0.4,
+            "head-fat-incr": 0.5,
+            "l-eye-scale-decr": 0.15,
+            "r-eye-scale-decr": 0.15,
+            "mouth-scale-horiz-incr": 0.6,
+            "mouth-lowerlip-volume-incr": 0.6,
+            "mouth-trans-forward": 0.4
+          }
+        },
+        "NoTusks": {
+          "tusks": {
+            "length": 0.002,
+            "radius": 0.001,
+            "inset": 0.03
+          }
+        },
+        "GenitalLarge": {
+          "targets": {
+            "penis-length-incr": 0.3,
+            "penis-circ-incr": 0.3,
+            "penis-testicles-incr": 0.3
+          }
+        },
+        "GenitalSmall": {
+          "targets": {
+            "penis-length-decr": 0.6,
+            "penis-circ-decr": 0.4,
+            "penis-testicles-decr": 0.4
+          }
+        },
+        "PubicStraight": {
+          "pubic_grow": {
+            "female": false,
+            "count": 3000,
+            "curl": 0.12
+          }
+        },
+        "PubicShort": {
+          "pubic_grow": {
+            "female": false,
+            "count": 3000,
+            "curl": 1.0,
+            "trim": 0.35
+          }
+        },
+        "OrcBody": {
+          "macro": {
+            "muscle": 1.0,
+            "weight": 0.6
+          },
+          "targets": {
+            "torso-muscle-dorsi-incr": 1.0,
+            "torso-muscle-pectoral-incr": 0.8,
+            "torso-scale-horiz-incr": 0.45,
+            "torso-scale-depth-incr": 0.35,
+            "neck-scale-horiz-incr": 1.0,
+            "neck-scale-depth-incr": 0.8,
+            "measure-neck-circ-incr": 0.8,
+            "l-upperarm-muscle-incr": 1.0,
+            "r-upperarm-muscle-incr": 1.0,
+            "l-upperarm-shoulder-muscle-incr": 1.0,
+            "r-upperarm-shoulder-muscle-incr": 1.0,
+            "l-lowerarm-muscle-incr": 0.8,
+            "r-lowerarm-muscle-incr": 0.8,
+            "l-upperarm-scale-horiz-incr": 0.4,
+            "r-upperarm-scale-horiz-incr": 0.4
+          }
+        },
+        "PubicStubble": {
+          "pubic_grow": {
+            "female": false,
+            "count": 3000,
+            "curl": 0.0,
+            "trim": 0.07
+          }
+        },
+        "Face_EyeLeftClosure": {
+          "targets": {
+            "expression/units/caucasian/eye-left-closure": 1.0
+          }
+        },
+        "Face_EyeLeftOpenedUp": {
+          "targets": {
+            "expression/units/caucasian/eye-left-opened-up": 1.0
+          }
+        },
+        "Face_EyeLeftSlit": {
+          "targets": {
+            "expression/units/caucasian/eye-left-slit": 1.0
+          }
+        },
+        "Face_EyeRightClosure": {
+          "targets": {
+            "expression/units/caucasian/eye-right-closure": 1.0
+          }
+        },
+        "Face_EyeRightOpenedUp": {
+          "targets": {
+            "expression/units/caucasian/eye-right-opened-up": 1.0
+          }
+        },
+        "Face_EyeRightSlit": {
+          "targets": {
+            "expression/units/caucasian/eye-right-slit": 1.0
+          }
+        },
+        "Face_EyebrowsLeftDown": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-down": 1.0
+          }
+        },
+        "Face_EyebrowsLeftExternUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-extern-up": 1.0
+          }
+        },
+        "Face_EyebrowsLeftInnerUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-inner-up": 1.0
+          }
+        },
+        "Face_EyebrowsLeftUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-left-up": 1.0
+          }
+        },
+        "Face_EyebrowsRightDown": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-down": 1.0
+          }
+        },
+        "Face_EyebrowsRightExternUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-extern-up": 1.0
+          }
+        },
+        "Face_EyebrowsRightInnerUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-inner-up": 1.0
+          }
+        },
+        "Face_EyebrowsRightUp": {
+          "targets": {
+            "expression/units/caucasian/eyebrows-right-up": 1.0
+          }
+        },
+        "Face_MouthCompression": {
+          "targets": {
+            "expression/units/caucasian/mouth-compression": 1.0
+          }
+        },
+        "Face_MouthCornerPuller": {
+          "targets": {
+            "expression/units/caucasian/mouth-corner-puller": 1.0
+          }
+        },
+        "Face_MouthDepression": {
+          "targets": {
+            "expression/units/caucasian/mouth-depression": 1.0
+          }
+        },
+        "Face_MouthDepressionRetraction": {
+          "targets": {
+            "expression/units/caucasian/mouth-depression-retraction": 1.0
+          }
+        },
+        "Face_MouthElevation": {
+          "targets": {
+            "expression/units/caucasian/mouth-elevation": 1.0
+          }
+        },
+        "Face_MouthEversion": {
+          "targets": {
+            "expression/units/caucasian/mouth-eversion": 1.0
+          }
+        },
+        "Face_MouthOpen": {
+          "targets": {
+            "expression/units/caucasian/mouth-open": 1.0
+          }
+        },
+        "Face_MouthParling": {
+          "targets": {
+            "expression/units/caucasian/mouth-parling": 1.0
+          }
+        },
+        "Face_MouthPartLater": {
+          "targets": {
+            "expression/units/caucasian/mouth-part-later": 1.0
+          }
+        },
+        "Face_MouthProtusion": {
+          "targets": {
+            "expression/units/caucasian/mouth-protusion": 1.0
+          }
+        },
+        "Face_MouthPursing": {
+          "targets": {
+            "expression/units/caucasian/mouth-pursing": 1.0
+          }
+        },
+        "Face_MouthRetraction": {
+          "targets": {
+            "expression/units/caucasian/mouth-retraction": 1.0
+          }
+        },
+        "Face_MouthUpwardRetraction": {
+          "targets": {
+            "expression/units/caucasian/mouth-upward-retraction": 1.0
+          }
+        },
+        "Face_NeckPlatysma": {
+          "targets": {
+            "expression/units/caucasian/neck-platysma": 1.0
+          }
+        },
+        "Face_NoseCompression": {
+          "targets": {
+            "expression/units/caucasian/nose-compression": 1.0
+          }
+        },
+        "Face_NoseDepression": {
+          "targets": {
+            "expression/units/caucasian/nose-depression": 1.0
+          }
+        },
+        "Face_NoseLeftDilatation": {
+          "targets": {
+            "expression/units/caucasian/nose-left-dilatation": 1.0
+          }
+        },
+        "Face_NoseLeftElevation": {
+          "targets": {
+            "expression/units/caucasian/nose-left-elevation": 1.0
+          }
+        },
+        "Face_NoseRightDilatation": {
+          "targets": {
+            "expression/units/caucasian/nose-right-dilatation": 1.0
+          }
+        },
+        "Face_NoseRightElevation": {
+          "targets": {
+            "expression/units/caucasian/nose-right-elevation": 1.0
+          }
+        },
+        "CatHead": {
+          "flatten_ears": true
+        },
+        "ElfEars": {
+          "targets": {
+            "l-ear-shape-pointed": 1.6,
+            "r-ear-shape-pointed": 1.6,
+            "l-ear-scale-vert-incr": 1.6,
+            "r-ear-scale-vert-incr": 1.6,
+            "l-ear-scale-incr": 0.6,
+            "r-ear-scale-incr": 0.6,
+            "l-ear-rot-backward": 1.0,
+            "r-ear-rot-backward": 1.0,
+            "l-ear-trans-up": 0.6,
+            "r-ear-trans-up": 0.6,
+            "l-ear-wing-decr": 0.4,
+            "r-ear-wing-decr": 0.4,
+            "l-ear-lobe-decr": 0.6,
+            "r-ear-lobe-decr": 0.6
+          }
+        }
+      }
+    }
+  ]
+}

@@ -133,6 +133,22 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildFacesPhases();
 	}
+	else if (TestName == TEXT("bodies"))
+	{
+		BuildBodiesPhases();
+	}
+	else if (TestName == TEXT("compare"))
+	{
+		BuildComparePhases();
+	}
+	else if (TestName == TEXT("creator"))
+	{
+		BuildCreatorPhases();
+	}
+	else if (TestName == TEXT("showcase"))
+	{
+		BuildShowcasePhases();
+	}
 	else if (TestName == TEXT("world"))
 	{
 		BuildWorldPhases();
@@ -1250,7 +1266,7 @@ void USmokeTestSubsystem::Tick(float DeltaTime)
 		bScreenshotTaken = true;
 		const FString Path = FPaths::ProjectSavedDir() / TEXT("Smoke") / TestName / (Phase.Name + TEXT(".png"));
 		// The sim tests show the on-screen sim timings and the overseer its ImGui panels, which count as UI.
-		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist") || TestName == TEXT("orders") || TestName == TEXT("orders_world") || TestName == TEXT("panels") || TestName == TEXT("trade") || TestName == TEXT("quests") || TestName == TEXT("ship") || TestName == TEXT("worldmap") || TestName == TEXT("fights") || TestName == TEXT("handson") || TestName == TEXT("sky") || TestName == TEXT("melee") || TestName == TEXT("levels") || (TestName == TEXT("look") && Phase.Name == TEXT("hud")), false);
+		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist") || TestName == TEXT("orders") || TestName == TEXT("orders_world") || TestName == TEXT("panels") || TestName == TEXT("trade") || TestName == TEXT("quests") || TestName == TEXT("ship") || TestName == TEXT("worldmap") || TestName == TEXT("fights") || TestName == TEXT("handson") || TestName == TEXT("sky") || TestName == TEXT("melee") || TestName == TEXT("levels") || TestName == TEXT("creator") || (TestName == TEXT("look") && Phase.Name == TEXT("hud")), false);
 	}
 	if (PhaseTime >= Phase.WarmupSeconds + Phase.MeasureSeconds)
 	{
