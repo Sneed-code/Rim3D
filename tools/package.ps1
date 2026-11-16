@@ -44,7 +44,9 @@ $wrapper = Join-Path $env:TEMP "rim3d-package.bat"
 Set-Content -Path $wrapper -Encoding ASCII -Value "@call `"$Uat`" $uatArgs > `"$log`" 2>&1"
 $p = Start-Process -FilePath "cmd.exe" -ArgumentList "/c start `"`" /b /wait /belownormal /affinity $mask cmd /c `"$wrapper`"" -PassThru -WindowStyle Hidden
 $p.WaitForExit()
-if ($p.ExitCode -ne 0 -or -not (Test-Path (Join-Path $PackageDir "Windows\Rim3D.exe"))) {
+# cmd's exit code is 0 even when UAT fails (an old Rim3D.exe from an earlier package stays), so read UAT's own.
+$uatOk = Select-String -Path $log -Pattern "AutomationTool exiting with ExitCode=0" -Quiet
+if ($p.ExitCode -ne 0 -or -not $uatOk -or -not (Test-Path (Join-Path $PackageDir "Windows\Rim3D.exe"))) {
     Write-Host "Packaging failed (exit $($p.ExitCode)). Last lines of $log :"
     Get-Content $log -Tail 30
     exit 2
