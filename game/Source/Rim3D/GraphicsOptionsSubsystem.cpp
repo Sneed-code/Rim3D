@@ -92,13 +92,25 @@ void UGraphicsOptionsSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		Var->AsVariable()->SetOnChangedCallback(OnChange);
 	}
 	Apply();
-	// The DLSS plugin loads after the engine starts, so look again once it has.
+	// The DLSS plugin loads after the engine starts (even after OnPostEngineInit in the editor), so look again once it has.
 	PostEngineInitHandle = FCoreDelegates::OnPostEngineInit.AddUObject(this, &UGraphicsOptionsSubsystem::Apply);
+	ModulesChangedHandle = FModuleManager::Get().OnModulesChanged().AddUObject(this, &UGraphicsOptionsSubsystem::OnModulesChanged);
+}
+
+void UGraphicsOptionsSubsystem::OnModulesChanged(FName ModuleName, EModuleChangeReason Reason)
+{
+	static const FName GfxDlssModule(TEXT("DLSS"));
+	static const FName GfxDlssgModule(TEXT("StreamlineDLSSG"));
+	if (Reason == EModuleChangeReason::ModuleLoaded && (ModuleName == GfxDlssModule || ModuleName == GfxDlssgModule))
+	{
+		Apply();
+	}
 }
 
 void UGraphicsOptionsSubsystem::Deinitialize()
 {
 	FCoreDelegates::OnPostEngineInit.Remove(PostEngineInitHandle);
+	FModuleManager::Get().OnModulesChanged().Remove(ModulesChangedHandle);
 	for (TAutoConsoleVariable<int32>* Var : {&GGfxRayTracing, &GGfxUpscaler, &GGfxResolution, &GGfxFrameGeneration, &GGfxRayReconstruction})
 	{
 		Var->AsVariable()->SetOnChangedCallback(FConsoleVariableDelegate());

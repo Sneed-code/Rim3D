@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Modules/ModuleManager.h"
 #include "Subsystems/EngineSubsystem.h"
 
 #include "GraphicsOptionsSubsystem.generated.h"
@@ -51,9 +52,12 @@ public:
 
 private:
 	void Load();
+	/** Applies again once the DLSS or Streamline module has loaded (they start after this subsystem). */
+	void OnModulesChanged(FName ModuleName, EModuleChangeReason Reason);
 
 	EGfxUpscaler ActiveUpscaler = EGfxUpscaler::Tsr;
 	float ActiveScreenPercent = 100.0f;
 	bool bApplying = false;
 	FDelegateHandle PostEngineInitHandle;
+	FDelegateHandle ModulesChangedHandle;
 };
