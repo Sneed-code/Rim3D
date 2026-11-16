@@ -562,6 +562,30 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				if (State->StepTime > 2.5f)
 				{
 					Picture(TEXT("downed"));
+					Next(8);
+				}
+				break;
+			case 8:  // shoot the one lying down: blood and a wound through the body trace (SpawnBodyThroughHit)
+				for (const FGunRangeTarget& T : State->Targets)
+				{
+					const colony::ThingView* View = B->GetCurrentSnapshot().find(T.Thing);
+					FVector At;
+					if (View && (View->downed || View->dead) && B->GetBlendedLocation(T.Thing, At))
+					{
+						const FRotator Wanted = (At + FVector(0.0, 0.0, 15.0) - Body->GetViewLocation()).Rotation();
+						Body->Look(FRotator::NormalizeAxis(Wanted.Yaw - Body->GetYaw()), Wanted.Pitch - Body->GetPitch());
+						break;
+					}
+				}
+				Body->SetScriptedAim(true);
+				if (State->StepTime > 0.8f && State->StepTime < 1.4f)
+				{
+					Fight->Fire();
+				}
+				if (State->StepTime > 1.7f)
+				{
+					Picture(TEXT("downed_shot"));
+					Body->SetScriptedAim(false);
 					Next(5);
 				}
 				break;

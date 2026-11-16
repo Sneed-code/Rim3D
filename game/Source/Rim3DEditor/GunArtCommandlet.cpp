@@ -257,7 +257,7 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 		return 1;
 	}
 	FString Only;
-	FParse::Value(*Params, TEXT("Guns="), Only);
+	FParse::Value(*Params, TEXT("Guns="), Only, /*bShouldStopOnSeparator=*/ false);
 	TArray<FString> OnlyNames;
 	Only.ParseIntoArray(OnlyNames, TEXT(","));
 
@@ -322,50 +322,92 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 			continue;
 		}
 
-		// Its material: M_GunPBR with the listed maps (none listed: the FBX's own materials stay).
-		const TSharedPtr<FJsonObject>* TexPtr = nullptr;
-		if (Master && Art->TryGetObjectField(TEXT("textures"), TexPtr))
+		// Its material: M_GunPBR with the listed maps (none listed: the FBX's own materials stay). "meshTextures" gives
+		// meshes whose name has a piece in it their own maps (a separate magazine with its own texture set).
+		const auto MakeInstance = [&](const TSharedPtr<FJsonObject>& Tex, const FString& MiName) -> UMaterialInstanceConstant*
 		{
-			const TSharedPtr<FJsonObject> Tex = *TexPtr;
-			const FString MiName = TEXT("MI_") + Name;
-			UMaterialInstanceConstant* Instance = LoadObject<UMaterialInstanceConstant>(nullptr, *(Dest / MiName + TEXT(".") + MiName));
+			UMaterialInstanceConstant* Instance = LoadObject<UMaterialInstanceConstant>(nullptr, *(Dest / MiName + TEXT(".") + MiName), nullptr, LOAD_NoWarn | LOAD_Quiet);
 			if (!Instance)
 			{
 				UMaterialInstanceConstantFactoryNew* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
 				Factory->InitialParent = Master;
 				Instance = Cast<UMaterialInstanceConstant>(Tools.CreateAsset(MiName, Dest, UMaterialInstanceConstant::StaticClass(), Factory));
 			}
-			if (Instance)
+			if (!Instance)
 			{
-				Instance->SetParentEditorOnly(Master);
-				const auto Map = [&](const TCHAR* Key, const TCHAR* Param, bool bNormal, bool bLinear)
+				return nullptr;
+			}
+			Instance->SetParentEditorOnly(Master);
+			const bool bFlipGreen = Tex->HasField(TEXT("normalOpenGL")) && Tex->GetBoolField(TEXT("normalOpenGL"));
+			const auto Map = [&](const TCHAR* Key, const TCHAR* Param, bool bNormal, bool bLinear)
+			{
+				FString Path;
+				if (Tex->TryGetStringField(Key, Path))
 				{
-					FString Path;
-					if (Tex->TryGetStringField(Key, Path))
+					if (UTexture2D* Texture = GunArtTexture(Tools, GunArtResolve(Path), Dest, bNormal, bLinear))
 					{
-						if (UTexture2D* Texture = GunArtTexture(Tools, GunArtResolve(Path), Dest, bNormal, bLinear))
+						if (bNormal && bFlipGreen && !Texture->bFlipGreenChannel)
 						{
-							Instance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(Param), Texture);
-							return true;
+							Texture->bFlipGreenChannel = true;
+							Texture->PostEditChange();
+							GunArtSave(Texture);
 						}
+						Instance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(Param), Texture);
+						return true;
 					}
-					return false;
-				};
-				Map(TEXT("baseColor"), TEXT("BaseColorMap"), false, false);
-				Map(TEXT("normal"), TEXT("NormalMap"), true, false);
-				Map(TEXT("roughness"), TEXT("RoughnessMap"), false, true);
-				Map(TEXT("metallic"), TEXT("MetallicMap"), false, true);
-				if (Map(TEXT("orm"), TEXT("ORMMap"), false, true))
-				{
-					Instance->SetScalarParameterValueEditorOnly(FMaterialParameterInfo(TEXT("UseORM")), 1.0f);
 				}
-				Instance->PostEditChange();
-				GunArtSave(Instance);
+				return false;
+			};
+			Map(TEXT("baseColor"), TEXT("BaseColorMap"), false, false);
+			Map(TEXT("normal"), TEXT("NormalMap"), true, false);
+			Map(TEXT("roughness"), TEXT("RoughnessMap"), false, true);
+			Map(TEXT("metallic"), TEXT("MetallicMap"), false, true);
+			if (Map(TEXT("orm"), TEXT("ORMMap"), false, true))
+			{
+				Instance->SetScalarParameterValueEditorOnly(FMaterialParameterInfo(TEXT("UseORM")), 1.0f);
+			}
+			Instance->PostEditChange();
+			GunArtSave(Instance);
+			return Instance;
+		};
+		const auto ApplyInstance = [](UStaticMesh* Mesh, UMaterialInstanceConstant* Instance)
+		{
+			for (int32 Slot = 0; Slot < Mesh->GetStaticMaterials().Num(); ++Slot)
+			{
+				Mesh->SetMaterial(Slot, Instance);
+			}
+		};
+		const TSharedPtr<FJsonObject>* TexPtr = nullptr;
+		if (Master && Art->TryGetObjectField(TEXT("textures"), TexPtr))
+		{
+			if (UMaterialInstanceConstant* Instance = MakeInstance(*TexPtr, TEXT("MI_") + Name))
+			{
 				for (UStaticMesh* Mesh : Meshes)
 				{
-					for (int32 Slot = 0; Slot < Mesh->GetStaticMaterials().Num(); ++Slot)
+					ApplyInstance(Mesh, Instance);
+				}
+			}
+		}
+		const TArray<TSharedPtr<FJsonValue>>* MeshTex = nullptr;
+		if (Master && Art->TryGetArrayField(TEXT("meshTextures"), MeshTex))
+		{
+			for (const TSharedPtr<FJsonValue>& Entry : *MeshTex)
+			{
+				const TSharedPtr<FJsonObject> E = Entry->AsObject();
+				const TSharedPtr<FJsonObject>* SetPtr = nullptr;
+				FString Match;
+				if (!E.IsValid() || !E->TryGetStringField(TEXT("match"), Match) || !E->TryGetObjectField(TEXT("textures"), SetPtr))
+				{
+					continue;
+				}
+				if (UMaterialInstanceConstant* Instance = MakeInstance(*SetPtr, TEXT("MI_") + Name + TEXT("_") + Match))
+				{
+					for (UStaticMesh* Mesh : Meshes)
 					{
-						Mesh->SetMaterial(Slot, Instance);
+						if (Mesh->GetName().Contains(Match))
+						{
+							ApplyInstance(Mesh, Instance);
+						}
 					}
 				}
 			}
@@ -376,6 +418,10 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 			UE_LOG(LogGunArt, Display, TEXT("%s: mesh %s, %d triangles, bounds %s .. %s cm"), *Name, *Mesh->GetPathName(),
 				Mesh->GetRenderData() && Mesh->GetRenderData()->LODResources.Num() ? Mesh->GetRenderData()->LODResources[0].GetNumTriangles() : -1,
 				*Box.Min.ToCompactString(), *Box.Max.ToCompactString());
+			for (const FStaticMaterial& Slot : Mesh->GetStaticMaterials())
+			{
+				UE_LOG(LogGunArt, Display, TEXT("%s:   slot %s"), *Name, *Slot.ImportedMaterialSlotName.ToString());
+			}
 			GunArtSave(Mesh);
 		}
 	}

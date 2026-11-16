@@ -40,56 +40,67 @@
     {
       "def": "Gun_AssaultRifle",
       "label": "Assault rifle",
-      "credit": "Soviet Assault Rifle by SpatialNeglect (Fab, free)",
+      "credit": "Soviet Assault Rifle by SpatialNeglect (Fab, free, Fab Standard License)",
       "art": {
         "name": "AssaultRifle",
-        "fbx": "assets/raw/guns/AssaultRifle/ak47.fbx",
-        "combine": true,
+        "fbx": "assets/raw/guns/AssaultRifle/AssaultRifle_Game.fbx",
+        "prep": "tools/gun_prep.py makes this from AK47Subdiv.fbx",
         "textures": {
-          "baseColor": "assets/raw/guns/AssaultRifle/BaseColor.png",
-          "normal": "assets/raw/guns/AssaultRifle/Normal.png",
-          "roughness": "assets/raw/guns/AssaultRifle/Roughness.png",
-          "metallic": "assets/raw/guns/AssaultRifle/Metallic.png"
+          "baseColor": "assets/raw/guns/AssaultRifle/textures/AK_Base_color.png",
+          "normal": "assets/raw/guns/AssaultRifle/textures/AK_Normal_OpenGL.png",
+          "normalOpenGL": true,
+          "roughness": "assets/raw/guns/AssaultRifle/textures/AK_Roughness.png",
+          "metallic": "assets/raw/guns/AssaultRifle/textures/AK_Metallic.png"
         }
       },
-      "parts": [{"name": "body", "match": ""}],
+      "parts": [{"name": "body", "match": "AssaultRifle_Game"}],
       "meshRotation": [0, 0, 0],
       "meshOffset": [0, 0, 0],
       "grip": [0, 0, 0],
-      "offHand": [30, 0, -1],
-      "sight": [-4, 0, 9],
-      "muzzle": [70, 0, 4],
+      "offHand": [36, 0, 6],
+      "sight": [-3, 0, 13.3],
+      "muzzle": [61, 0, 7],
       "rake": 20,
       "stance": "Mixamo/Rifle/A_ProRifleIdleAiming",
       "reload": "Mixamo/Firearms/A_Reloading",
-      "magazine": {"from": [14, 0, -8], "out": 0.25, "in": 0.62},
+      "magazine": {"from": [22, 0, -4], "out": 0.25, "in": 0.62},
       "hip": [18, 9, -6],
-      "sightDistance": 10,
+      "sightDistance": 14,
       "kick": {"back": 3.5, "up": 2.2, "recover": 14}
     },
     {
       "def": "Gun_Autopistol",
       "label": "Pistol",
-      "credit": "Pistol 9mm Custom by DTry (Fab, free)",
+      "credit": "Pistol 9mm Custom by DTry (Fab, free, Fab Standard License)",
       "art": {
         "name": "Pistol",
-        "fbx": "assets/raw/guns/Pistol/pistol.fbx",
+        "fbx": "assets/raw/guns/Autopistol/Autopistol_Game.fbx",
+        "prep": "tools/gun_prep.py makes this from source/CustomPistol9mmPack.fbx",
         "textures": {
-          "baseColor": "assets/raw/guns/Pistol/BaseColor.png",
-          "normal": "assets/raw/guns/Pistol/Normal.png",
-          "roughness": "assets/raw/guns/Pistol/Roughness.png",
-          "metallic": "assets/raw/guns/Pistol/Metallic.png"
-        }
+          "baseColor": "assets/raw/guns/Autopistol/textures/CustomPistol9mm_BaseColor.png",
+          "normal": "assets/raw/guns/Autopistol/textures/CustomPistol9mm_Normal.png",
+          "roughness": "assets/raw/guns/Autopistol/textures/CustomPistol9mm_Roughness.png",
+          "metallic": "assets/raw/guns/Autopistol/textures/CustomPistol9mm_Metallic.png"
+        },
+        "meshTextures": [
+          {"match": "PistolMagazine", "textures": {
+            "baseColor": "assets/raw/guns/Autopistol/textures/Magazin_Bullet_Magazine_BaseColor.png",
+            "normal": "assets/raw/guns/Autopistol/textures/Magazin_Bullet_Magazine_Normal.png",
+            "roughness": "assets/raw/guns/Autopistol/textures/Magazin_Bullet_Magazine_Roughness.png",
+            "metallic": "assets/raw/guns/Autopistol/textures/Magazin_Bullet_Magazine_Metallic.png"
+          }}
+        ]
       },
       "parts": [
-        {"name": "body", "match": "Pistol"},
-        {"name": "magazine", "match": "Magazine"}
+        {"name": "body", "match": "PistolBody"},
+        {"name": "magazine", "match": "PistolMagazine"}
       ],
       "meshRotation": [0, 0, 0],
       "meshOffset": [0, 0, 0],
       "grip": [0, 0, 0],
-      "sight": [-2, 0, 9],
-      "muzzle": [16, 0, 6],
+      "sight": [-2, 2.6, 5.4],
+      "muzzle": [14, 0, 4.5],
+      "reloadSpot": [28, 2, -6],
       "rake": 22,
       "stance": "PistolAim/A_PistolAim",
       "stanceHold": 1.0,
@@ -102,26 +113,37 @@
     {
       "def": "Gun_PumpShotgun",
       "label": "Pump shotgun",
-      "credit": "Model 12 Pump Action Shotgun by the 9th Earl (Fab, free)",
+      "credit": "Model 12 Pump Action Shotgun by the 9th Earl (Fab, free, Fab Standard License)",
       "art": {
         "name": "Shotgun",
-        "fbx": "assets/raw/guns/Shotgun/model12.fbx",
-        "combine": true
+        "fbx": "assets/raw/guns/PumpShotgun/PumpShotgun_Game.fbx",
+        "prep": "tools/gun_prep.py makes this from source/Pump action shotgun/Model12_shotgun.fbx",
+        "textures": {
+          "baseColor": "assets/raw/guns/PumpShotgun/textures/4k_Shotgun_colour.png",
+          "normal": "assets/raw/guns/PumpShotgun/textures/2kNormal_shotgun.png",
+          "roughness": "assets/raw/guns/PumpShotgun/textures/4kRoughness_shotgun.png",
+          "metallic": "assets/raw/guns/PumpShotgun/textures/4k_Shotgun_Metallic.png"
+        }
       },
-      "parts": [{"name": "body", "match": ""}],
+      "parts": [
+        {"name": "body", "match": "ShotgunBody"},
+        {"name": "pump", "match": "ShotgunPump"}
+      ],
       "meshRotation": [0, 0, 0],
       "meshOffset": [0, 0, 0],
       "grip": [0, 0, 0],
-      "offHand": [40, 0, -3],
-      "sight": [-6, 0, 7],
-      "muzzle": [85, 0, 4],
+      "offHand": [52, 0, 2.5],
+      "sight": [0, 0, 11.8],
+      "muzzle": [86, 0, 7.8],
+      "reloadSpot": [42, 4, -6],
       "rake": 18,
       "stance": "Mixamo/Rifle/A_ProRifleIdleAiming",
       "reload": "ShotgunReload/A_ShotgunReload",
       "hip": [18, 9, -6],
-      "sightDistance": 10,
+      "sightDistance": 18,
       "kick": {"back": 9, "up": 7, "recover": 7},
-      "pump": {"start": 0.3, "seconds": 0.5}
+      "pump": {"start": 0.3, "seconds": 0.5},
+      "cycle": {"part": "pump", "start": 0.3, "seconds": 0.5, "lift": 0, "back": -9}
     }
   ]
 }

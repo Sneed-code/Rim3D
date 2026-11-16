@@ -72,6 +72,16 @@ The Codex rifle (`BoltActionRifle_Game.fbx`) imports as `SM_BoltActionRifle_Body
 -8.1..12.0 cm), `_PIVOT_Bolt` and `_PIVOT_Trigger`, already in the gun frame (+X muzzle, +Y right, +Z up, grip at
 the origin): muzzle socket (69.5, 0, 3.2), fore-end (34, 0, -2), scope axis at y -2.6, z 8.9, eyepiece at x -7.
 
+The three Fab guns (round 3, 2026-11-16) come as the creators made them: the pistol pack is a showcase scene (a reload
+copy, an exploded copy, red dot, lights, laser, rails), the shotgun is rigged with loose shells beside it and is 152 cm
+long. `tools/gun_prep.py` (Blender, `blender -b --factory-startup -P tools/gun_prep.py`) keeps one gun, joins its
+pieces into the named parts (`PistolBody` + `PistolMagazine`, `ShotgunBody` + `ShotgunPump`, the rifle whole), scales
+the shotgun to 0.83 (a 30-inch-barrel Model 12, about 126 cm) and puts it in the gun frame with the grip at the
+origin, writing `<Folder>_Game.fbx`; so their `meshRotation`/`meshOffset` are zero. A one-mesh FBX imports under the
+file's name (`AssaultRifle_Game`). `meshTextures` gives meshes their own maps (the pistol's magazine), and
+`normalOpenGL` flips a normal map's green (the rifle's). The pump slides back through `cycle` (lift 0, back -9).
+`-Guns=A,B,C` now takes a list (it stopped at the first comma).
+
 ## After sneed's first try (2026-11-16)
 
 - Main merged in, so the combat voices (screams, hit noises) and ray tracing come along. The range is a smoke-test
