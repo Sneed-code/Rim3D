@@ -19,7 +19,7 @@ namespace
 		TEXT("Gfx.RayTracing"), 1,
 		TEXT("1 lights the world with hardware ray tracing (Lumen on the RTX cores), 0 with Lumen's software tracing (the fallback)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GGfxUpscaler(
-		TEXT("Gfx.Upscaler"), 1, TEXT("0 Unreal's TSR, 1 NVIDIA DLSS (falls back to TSR when the plugin or card can't)."), ECVF_Default);
+		TEXT("Gfx.Upscaler"), 0, TEXT("0 Unreal's TSR (the default: the game is held back by the processor, not the graphics card), 1 NVIDIA DLSS (falls back to TSR when the plugin or card can't)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GGfxResolution(
 		TEXT("Gfx.Resolution"), -1,
 		TEXT("Render resolution: 0 Native, 1 Quality (67%), 2 Balanced (58%), 3 Performance (50%), 4 Ultra performance (33%); -1 picks Quality with DLSS and Native with TSR."),
@@ -323,7 +323,7 @@ void UGraphicsOptionsSubsystem::DrawOptions(float Scale)
 	{
 		GfxSetInt(TEXT("Look.Quality"), 2);
 		GGfxRayTracing.AsVariable()->Set(1, ECVF_SetByCode);
-		GGfxUpscaler.AsVariable()->Set(1, ECVF_SetByCode);
+		GGfxUpscaler.AsVariable()->Set(0, ECVF_SetByCode);
 		GGfxResolution.AsVariable()->Set(-1, ECVF_SetByCode);
 		GGfxFrameGeneration.AsVariable()->Set(0, ECVF_SetByCode);
 		GGfxRayReconstruction.AsVariable()->Set(0, ECVF_SetByCode);
