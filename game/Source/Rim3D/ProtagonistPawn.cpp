@@ -232,7 +232,10 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 		// Ground and slope slow the walk the way they slow every pawn (the sim's own numbers).
 		const float Factor = colony::walkSpeedFactor(Map, static_cast<float>(Position.X), static_cast<float>(Position.Y),
 			static_cast<float>(Wanted.X), static_cast<float>(Wanted.Y));
-		Target = Wanted * (bWalk ? kWalkSpeed : CruiseSpeed) * Factor;
+		// ... and so do load, worn weight and hunger (a starving colonist walks at 75%): the sim's own factor.
+		const colony::ThingView* Self = Bridge->GetCurrentSnapshot().find(Thing);
+		const float SimFactor = Self ? FMath::Clamp(Self->moveFactor, 0.05f, 2.0f) : 1.0f;
+		Target = Wanted * (bWalk ? kWalkSpeed : CruiseSpeed) * Factor * SimFactor;
 	}
 	Velocity = FMath::Vector2DInterpTo(Velocity, Target, DeltaTime, ProtagonistAcceleration);
 	if (Velocity.SizeSquared() < 1.0e-6f)
