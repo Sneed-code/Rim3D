@@ -31,37 +31,6 @@ float meleeBySkill(const float (&v)[2], int skill) {
     return meleeLerp(v[0], v[1], static_cast<float>(std::clamp(skill, 0, 20)) / 20.0f);
 }
 
-// A RimWorld stat curve: straight lines between the points, flat beyond the ends.
-float meleeCurve(const std::vector<float>& xs, const std::vector<float>& ys, float x) {
-    if (xs.empty()) {
-        return 0.0f;
-    }
-    if (x <= xs.front()) {
-        return ys.front();
-    }
-    for (size_t i = 1; i < xs.size(); ++i) {
-        if (x <= xs[i]) {
-            const float span = xs[i] - xs[i - 1];
-            return meleeLerp(ys[i - 1], ys[i], span > 0.0f ? (x - xs[i - 1]) / span : 1.0f);
-        }
-    }
-    return ys.back();
-}
-
-void meleeReadCurve(const Def& def, const char* key, std::vector<float>& xs, std::vector<float>& ys) {
-    const size_t n = def.count(key);
-    if (n == 0) {
-        return;
-    }
-    xs.clear();
-    ys.clear();
-    for (size_t i = 0; i < n; ++i) {
-        const std::string point = std::string(key) + "." + std::to_string(i);
-        xs.push_back(static_cast<float>(def.numberAt(point.c_str(), 0)));
-        ys.push_back(static_cast<float>(def.numberAt(point.c_str(), 1)));
-    }
-}
-
 void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     const Def* def = defs.find("Rules", "MeleeRules");
     if (def == nullptr) {
@@ -74,14 +43,26 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
             out[i] = static_cast<float>(def->numberAt(key, i, out[i]));
         }
     };
-    meleeReadCurve(*def, "hitChanceCurve", r.hitCurveX, r.hitCurveY);
-    meleeReadCurve(*def, "dodgeChanceCurve", r.dodgeCurveX, r.dodgeCurveY);
     whole("defaultMeleeSkill", r.defaultSkill);
-    num("hitCapacityWeight", r.hitCapacityWeight);
-    num("hitCapacityCap", r.hitCapacityCap);
-    num("dodgeMovingWeight", r.dodgeMovingWeight);
-    num("dodgeSightWeight", r.dodgeSightWeight);
-    num("dodgeSightCap", r.dodgeSightCap);
+    bySkill("skillSpeedBySkill", r.skillSpeed);
+    bySkill("skillDamageBySkill", r.skillDamage);
+    bySkill("aimWobbleBySkill", r.aimWobble);
+    if (def->has("reactionTraitSteps")) {
+        r.reactionTraitSteps.clear();
+        for (size_t i = 0; i < def->count("reactionTraitSteps"); ++i) {
+            const std::string point = "reactionTraitSteps." + std::to_string(i);
+            r.reactionTraitSteps.emplace_back(def->textAt(point.c_str(), 0), static_cast<float>(def->numberAt(point.c_str(), 1)));
+        }
+    }
+    whole("guardBlocks", r.guardBlocks);
+    whole("guardWindowSteps", r.guardWindowSteps);
+    whole("guardBreakSteps", r.guardBreakSteps);
+    whole("dodgeRecoverySteps", r.dodgeRecoverySteps);
+    whole("recoveryNoDefendSteps", r.recoveryNoDefendSteps);
+    whole("guardWaitSteps", r.guardWaitSteps);
+    num("guardFacingCos", r.guardFacingCos);
+    num("rollClearance", r.rollClearance);
+    whole("aiRollEverySteps", r.aiRollEverySteps);
     num("armorPenetrationPerDamage", r.penetrationPerDamage);
     if (def->has("chargeTraits")) {
         r.chargeTraits.clear();
@@ -103,7 +84,6 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     whole("commitSteps", r.commitSteps);
     bySkill("reactionStepsBySkill", r.reactionSteps);
     num("reactionJitter", r.reactionJitter);
-    bySkill("blockChanceBySkill", r.blockChance);
     whole("blockSteps", r.blockSteps);
     whole("blockRecoverySteps", r.blockRecoverySteps);
     whole("playerBlockSteps", r.playerBlockSteps);
@@ -111,6 +91,10 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     num("strongPowerShare", r.strongPowerShare);
     r.minWindup = std::max(1, r.minWindup);
     r.commitSteps = std::max(0, r.commitSteps);
+    r.guardBlocks = std::max(1, r.guardBlocks);
+    for (float& f : r.skillSpeed) {
+        f = std::max(0.05f, f);
+    }
 }
 
 // Steps of a tool's swing spent winding up; the rest of its cooldown is recovery.
@@ -284,56 +268,79 @@ int MeleeSystem::meleeSkill(Entity pawn) const {
     return std::clamp(rules_.defaultSkill, 0, 20);
 }
 
-float MeleeSystem::capacity(Entity pawn, const char* name) const {
-    return health_.tracks(pawn) ? health_.capacityValue(pawn, name) : 1.0f;
+float MeleeSystem::swingSpeed(Entity pawn) const { return meleeBySkill(rules_.skillSpeed, meleeSkill(pawn)); }
+
+float MeleeSystem::swingDamage(Entity pawn) const { return meleeBySkill(rules_.skillDamage, meleeSkill(pawn)); }
+
+float MeleeSystem::aimWobble(Entity pawn) const { return std::max(0.0f, meleeBySkill(rules_.aimWobble, meleeSkill(pawn))); }
+
+// Armour weight slows a swing (docs/design/armour.md); melee skill speeds it up or slows it down (real-time-combat.md).
+float MeleeSystem::swingTimeFactor(Entity pawn) const {
+    return combat_.apparelStats().attackTimeFactor(things_.registry(), pawn) / swingSpeed(pawn);
 }
 
-// The sum of a stat's offsets over the pawn's traits (Traits defs' degreeDatas.statOffsets).
-float MeleeSystem::traitOffset(Entity pawn, const char* stat) const {
-    const Colonist* colonist = things_.registry().try_get<Colonist>(pawn);
-    if (colonist == nullptr) {
-        return 0.0f;
-    }
-    float total = 0.0f;
-    for (const TraitRecord& trait : colonist->traits) {
-        const Def* def = defs_.find("Traits", trait.def);
-        if (def == nullptr) {
-            continue;
-        }
-        for (size_t i = 0; i < def->count("degreeDatas"); ++i) {
-            const std::string base = "degreeDatas." + std::to_string(i);
-            if (def->integer((base + ".degree").c_str(), 0) == trait.degree) {
-                total += static_cast<float>(def->number((base + ".statOffsets." + stat).c_str(), 0.0));
+float MeleeSystem::reactionSteps(Entity pawn) const {
+    float steps = meleeBySkill(rules_.reactionSteps, meleeSkill(pawn));
+    if (const Colonist* colonist = things_.registry().try_get<Colonist>(pawn)) {
+        for (const TraitRecord& trait : colonist->traits) {
+            for (const auto& [name, offset] : rules_.reactionTraitSteps) {
+                if (trait.def == name) {
+                    steps += offset;
+                }
             }
         }
     }
-    return total;
+    return std::max(1.0f, steps);
 }
 
-// RimWorld: Melee skill plus 12 per 100% of Manipulation and Sight above normal (up to 150%), plus
-// traits (Brawler +4), through the hit chance curve.
-float MeleeSystem::hitChance(Entity pawn) const {
-    const float cap = rules_.hitCapacityCap;
-    const float score = static_cast<float>(meleeSkill(pawn)) +
-                        rules_.hitCapacityWeight * (std::min(capacity(pawn, "Manipulation"), cap) - 1.0f) +
-                        rules_.hitCapacityWeight * (std::min(capacity(pawn, "Sight"), cap) - 1.0f) +
-                        traitOffset(pawn, "meleeHitChance");
-    return std::clamp(meleeCurve(rules_.hitCurveX, rules_.hitCurveY, score), 0.01f, 1.0f);
+bool MeleeSystem::guardBroken(Entity pawn) const {
+    const Melee* m = things_.registry().try_get<Melee>(pawn);
+    return m != nullptr && now() < m->guardBrokenUntil;
 }
 
-// RimWorld: Melee skill plus 18 per 100% of Moving above or below normal, 8 per 100% of Sight (up to
-// 140%), plus traits (Nimble +15), through the dodge chance curve.
-float MeleeSystem::dodgeChance(Entity pawn) const {
-    const float score = static_cast<float>(meleeSkill(pawn)) + rules_.dodgeMovingWeight * (capacity(pawn, "Moving") - 1.0f) +
-                        rules_.dodgeSightWeight * (std::min(capacity(pawn, "Sight"), rules_.dodgeSightCap) - 1.0f) +
-                        traitOffset(pawn, "meleeDodgeChance");
-    return std::clamp(meleeCurve(rules_.dodgeCurveX, rules_.dodgeCurveY, score), 0.0f, 1.0f);
+bool MeleeSystem::guardedAgainst(Entity target, Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(target) || !reg.valid(pawn) || !meleeAble(reg, target) || guardBroken(target)) {
+        return false;
+    }
+    const bool shieldUp = reg.all_of<Blocking>(target) && combat_.apparelStats().activeShield(reg, target) != kNoEntity;
+    if (!shieldUp && !blocking(target)) {
+        return false;
+    }
+    const Position* tp = reg.try_get<Position>(target);
+    const Position* pp = reg.try_get<Position>(pawn);
+    const Posture* posture = reg.try_get<Posture>(target);
+    if (tp == nullptr || pp == nullptr || posture == nullptr) {
+        return false;
+    }
+    const float dx = pp->x - tp->x;
+    const float dy = pp->y - tp->y;
+    const float len = std::sqrt(dx * dx + dy * dy);
+    return len < 0.01f || (posture->facingX * dx + posture->facingY * dy) / len >= rules_.guardFacingCos;
 }
 
-float MeleeSystem::blockChance(Entity pawn) const {
-    bool weapon = false;
-    toolsOf(pawn, weapon);
-    return weapon ? std::clamp(meleeBySkill(rules_.blockChance, meleeSkill(pawn)), 0.0f, 1.0f) : 0.0f;
+// Real-time-combat.md phase 2: don't swing into a raised guard. Hold, facing it, until it drops (a shield-bearer lowers
+// its shield to strike, a parry ends with the blow) or guardWaitSteps have passed; then press anyway, since every parry
+// wears the guard down.
+bool MeleeSystem::holdSwing(Entity pawn, Entity target) {
+    entt::registry& reg = things_.registry();
+    if (!guardedAgainst(target, pawn)) {
+        if (Melee* m = reg.try_get<Melee>(pawn)) {
+            m->guardWaitFrom = 0;
+        }
+        return false;
+    }
+    Melee& m = reg.get_or_emplace<Melee>(pawn);
+    if (m.guardWaitFrom == 0) {
+        m.guardWaitFrom = now();
+    }
+    if (now() - m.guardWaitFrom >= rules_.guardWaitSteps) {
+        m.guardWaitFrom = 0;  // pressing now; the next wait starts afresh
+        return false;
+    }
+    const Position& to = reg.get<Position>(target);
+    face(pawn, to.x, to.y);
+    return true;
 }
 
 bool MeleeSystem::ready(Entity pawn) const {
@@ -425,9 +432,9 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         }
     }
     const Tool& tool = set->tools[m.tool];
-    // Worn armour's weight slows a swing (docs/design/armour.md).
-    const int windup = std::max(1, static_cast<int>(std::lround(static_cast<float>(meleeWindup(rules_, tool.cooldown)) *
-                                                                 combat_.apparelStats().attackTimeFactor(things_.registry(), pawn))));
+    // Worn armour's weight slows a swing (docs/design/armour.md), melee skill changes its pace (real-time-combat.md).
+    const int windup =
+        std::max(1, static_cast<int>(std::lround(static_cast<float>(meleeWindup(rules_, tool.cooldown)) * swingTimeFactor(pawn))));
     m.phase = MeleePhase::Windup;
     m.stepsLeft = windup;
     m.target = target;
@@ -497,9 +504,11 @@ bool MeleeSystem::block(Entity pawn, std::string* why) {
 
 // ---- Defending -------------------------------------------------------------------------------
 
-// A swing at `defender` has begun. It reads it after its reaction time (Melee skill), then, if it
-// can, sidesteps as often as RimWorld's dodge chance says or else raises its weapon to block. The
-// player defends by hand (MeleeCommand Block), so a controlled pawn does nothing by itself.
+// A swing at `defender` has begun. It reads it after its reaction time (Melee skill, Nimble), then does the sensible
+// thing if it read it in time (docs/design/real-time-combat.md): a shield on its arm goes up (the fighter AI's
+// shieldAct), a melee weapon parries unless its guard is broken, otherwise a fighter sidesteps. No dice: a late
+// read, a fast swing or a wall at its side and the blow lands. The player defends by hand (MeleeCommand Block, the
+// roll), so a controlled pawn does nothing by itself.
 void MeleeSystem::prepareDefense(Entity defender, Entity attacker, int stepsToHit, uint64_t seed) {
     entt::registry& reg = things_.registry();
     if (reg.all_of<PlayerControl>(defender) || !meleeAble(reg, defender) || !reg.all_of<Mover, Posture>(defender)) {
@@ -509,27 +518,33 @@ void MeleeSystem::prepareDefense(Entity defender, Entity attacker, int stepsToHi
     d.threat = attacker;
     d.defense = MeleeDefense::None;
     d.dodged = false;
-    // Busy with its own swing or a shot: no defense (RimWorld: no dodging while aiming or firing).
+    // Busy with its own swing or a shot, or just after a sidestep or its own strike: no defense.
     const Shooter* s = reg.try_get<Shooter>(defender);
-    if (d.phase == MeleePhase::Windup || (s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing))) {
+    if (d.phase == MeleePhase::Windup || (s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) ||
+        now() < d.noDefendUntil) {
         return;
     }
+    if (combat_.apparelStats().activeShield(reg, defender) != kNoEntity && reg.all_of<Fighter>(defender)) {
+        return;  // the fighter AI raises the shield (shields.md)
+    }
     Rng rng(splitMix64(seed ^ 0xD0D6EULL ^ (uint64_t{entt::to_integral(defender)} << 32)));
-    const int skill = meleeSkill(defender);
-    const float reaction = meleeBySkill(rules_.reactionSteps, skill) + (2.0f * rng.unit() - 1.0f) * rules_.reactionJitter;
+    const float reaction = reactionSteps(defender) + (2.0f * rng.unit() - 1.0f) * rules_.reactionJitter;
     const int64_t noticed = now() + std::max(1, static_cast<int>(std::lround(reaction)));
     const int64_t hitAt = now() + stepsToHit;
-    const float dodgeRoll = rng.unit();
-    const float blockRoll = rng.unit();
-    if (reg.all_of<Fighter>(defender) && dodgeRoll < dodgeChance(defender)) {
-        // It moves once the attacker is committed to the line (moving sooner, the swing would follow it).
-        d.defense = MeleeDefense::Dodge;
-        d.reactAt = std::max(noticed, hitAt - rules_.commitSteps);
-    } else if (blockRoll < blockChance(defender)) {
+    if (noticed >= hitAt) {
+        return;  // too quick for it
+    }
+    bool weapon = false;
+    toolsOf(defender, weapon);
+    if (weapon && !guardBroken(defender)) {
         d.defense = MeleeDefense::Block;
         d.reactAt = noticed;
         d.blockFrom = noticed + rules_.blockSteps;
         d.blockUntil = hitAt + 1;
+    } else if (reg.all_of<Fighter>(defender)) {
+        // It moves once the attacker is committed to the line (moving sooner, the swing would follow it).
+        d.defense = MeleeDefense::Dodge;
+        d.reactAt = std::max(noticed, hitAt - rules_.commitSteps);
     }
 }
 
@@ -562,8 +577,61 @@ void MeleeSystem::defend(Entity defender, Melee& d) {
         return;
     }
     if (defense == MeleeDefense::Dodge && swing->stepsLeft > 0) {
-        sidestep(defender, d);
+        // A heavy blow is worth a roll clear of it (phase 2); a light one a sidestep.
+        if (!(strongSwing(d.threat) && roll(defender, d))) {
+            sidestep(defender, d);
+        }
     }
+}
+
+// The AI's dodge roll (real-time-combat.md phase 2): the player's roll (hit-proof frames, CombatSystem::dodgeRoll),
+// across and away from the attacker, to whichever side has rollClearance of open ground. False if neither has.
+bool MeleeSystem::roll(Entity defender, Melee& d) {
+    entt::registry& reg = things_.registry();
+    if (!reg.all_of<Fighter>(defender) || combat_.rollLocked(defender) || now() < d.nextRollAt) {
+        return false;
+    }
+    const Position pos = reg.get<Position>(defender);
+    const Position& from = reg.get<Position>(d.threat);
+    float ax = pos.x - from.x;
+    float ay = pos.y - from.y;
+    const float len = std::sqrt(ax * ax + ay * ay);
+    if (len < 0.01f) {
+        return false;
+    }
+    ax /= len;
+    ay /= len;
+    const float first = (Rng(d.reactAt ^ seed_ ^ 0x5011ULL).unit() < 0.5f) ? 1.0f : -1.0f;
+    for (const float sign : {first, -first}) {
+        // Half across, half away: out of reach and off the line.
+        float rx = -ay * sign + ax;
+        float ry = ax * sign + ay;
+        const float rl = std::sqrt(rx * rx + ry * ry);
+        rx /= rl;
+        ry /= rl;
+        if (!straightWalkIsClear(map_, pos.x, pos.y, pos.x + rx * rules_.rollClearance, pos.y + ry * rules_.rollClearance, kPawnRadius,
+                                 pos.level)) {
+            continue;
+        }
+        Mover& mover = reg.get<Mover>(defender);
+        mover.path.clear();
+        mover.next = 0;
+        if (!combat_.dodgeRoll(defender, rx, ry, nullptr, true)) {
+            return false;
+        }
+        d.dodged = true;
+        d.nextRollAt = now() + rules_.aiRollEverySteps;
+        ++rolls_;
+        ++dodges_;
+        const int total = combat_.rollTotalSteps();
+        d.noDefendUntil = std::max(d.noDefendUntil, now() + total + rules_.dodgeRecoverySteps);
+        if (Fighter* f = reg.try_get<Fighter>(defender)) {
+            f->dodgeUntil = std::max(f->dodgeUntil, now() + total);
+            f->nextPlan = std::min(f->nextPlan, f->dodgeUntil);
+        }
+        return true;
+    }
+    return false;
 }
 
 // A one-cell step to the side of the line from the attacker, whichever side is free. Nothing if
@@ -587,6 +655,7 @@ void MeleeSystem::sidestep(Entity defender, Melee& d) {
         reg.get<Mover>(defender).walkTo(pos.x, pos.y, std::vector<CellPos>{n});
         d.dodged = true;
         ++dodges_;
+        d.noDefendUntil = std::max(d.noDefendUntil, now() + reg.get<Melee>(d.threat).stepsLeft + rules_.dodgeRecoverySteps);
         if (Fighter* f = reg.try_get<Fighter>(defender)) {
             const Melee& swing = reg.get<Melee>(d.threat);
             f->dodgeUntil = std::max(f->dodgeUntil, now() + swing.stepsLeft + rules_.dodgeHoldSteps);
@@ -637,8 +706,8 @@ bool MeleeSystem::shoulder(Entity pawn, float& x, float& y, float& z) const {
     return true;
 }
 
-// Fixes where the strike goes: the target's chest as it is now, moved by a random point in the circle
-// around it that a standing man fills with the attacker's hit chance (RimWorld's melee hit chance).
+// Fixes where the strike goes: the target's chest as it is now, moved by a small wobble of the hand
+// (MeleeRules aimWobbleBySkill): no hit-chance dice.
 // The player's swing goes straight at the target, or straight ahead at chest height.
 void MeleeSystem::commit(Entity pawn, Melee& m) {
     entt::registry& reg = things_.registry();
@@ -692,7 +761,7 @@ void MeleeSystem::commit(Entity pawn, Melee& m) {
             break;
         }
     }
-    const float radius = combat_.spreadRadiusFor(hitChance(pawn));
+    const float radius = aimWobble(pawn);
     m.aimX += (rx * u + ux * w) * radius;
     m.aimY += (ry * u + uy * w) * radius;
     m.aimZ += uz * w * radius;
@@ -716,6 +785,7 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
         const Gear* held = reg.try_get<Gear>(pawn);
         blow = held != nullptr ? combat_.meleeDamageFactor(held->weapon, tool->damageType) : 1.0f;
     }
+    blow *= swingDamage(pawn);  // melee skill (real-time-combat.md)
     const float power = tool->power * blow;
     const float penetration = tool->penetration * blow;
     const Position& pos = reg.get<Position>(pawn);
@@ -784,9 +854,24 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             // The weapon takes it, and the blocker staggers: no swing of its own for a moment.
             e.message = "blocked";
             ++blocks_;
+            // Guard: parries each within guardWindowSteps of the last wear it down; the last one breaks it (a long stagger, no
+            // parrying), so the next blow gets through unless it sidesteps.
+            if (now() - vm->guardFrom > rules_.guardWindowSteps) {
+                vm->guardCount = 0;  // it got its breath back since the last parry
+            }
+            vm->guardFrom = now();
+            ++vm->guardCount;
+            int stagger = rules_.blockRecoverySteps;
+            if (vm->guardCount >= rules_.guardBlocks) {
+                vm->guardCount = 0;
+                vm->guardBrokenUntil = now() + rules_.guardBreakSteps;
+                stagger = rules_.guardBreakSteps;
+                ++guardBreaks_;
+                e.count = 1;  // the guard broke
+            }
             if (vm->phase == MeleePhase::Ready) {
                 vm->phase = MeleePhase::Recovery;
-                vm->stepsLeft = rules_.blockRecoverySteps;
+                vm->stepsLeft = stagger;
             }
         } else if (hit.part < 0) {
             Rng rng(splitMix64(m.seed ^ 0xB0D7ULL));
@@ -875,12 +960,13 @@ void MeleeSystem::step() {
                 }
                 if (m.stepsLeft <= 0) {
                     strike(pawn, m);
+                    m.noDefendUntil = std::max(m.noDefendUntil, now() + rules_.recoveryNoDefendSteps);
                     const Tool* tool = toolOf(pawn, m);
                     m.phase = MeleePhase::Recovery;
                     m.stepsLeft = tool != nullptr
                                       ? std::max(1, static_cast<int>(std::lround(
                                                         static_cast<float>(tool->cooldown - meleeWindup(rules_, tool->cooldown)) *
-                                                        combat_.apparelStats().attackTimeFactor(things_.registry(), pawn))))
+                                                        swingTimeFactor(pawn))))
                                       : 1;
                 }
                 break;
@@ -911,6 +997,12 @@ void MeleeSystem::hashThing(Entity e, StateHasher& h) const {
     h.add(m->blockFrom);
     h.add(m->blockUntil);
     h.add(m->dodged);
+    h.add(static_cast<int>(m->guardCount));
+    h.add(m->guardFrom);
+    h.add(m->guardBrokenUntil);
+    h.add(m->noDefendUntil);
+    h.add(m->guardWaitFrom);
+    h.add(m->nextRollAt);
 }
 
 }  // namespace colony

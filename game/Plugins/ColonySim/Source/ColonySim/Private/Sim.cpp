@@ -410,7 +410,12 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setBreeding(breeding_.get());
     animals_->setHusbandry(husbandry_.get());
     animals_->setPathfinder(&pathfinder_);
-    combat_->setHurtHook([this](Entity victim, Entity attacker) { animals_->hurt(victim, attacker); });
+    combat_->setHurtHook([this](Entity victim, Entity attacker) {
+        animals_->hurt(victim, attacker);
+        if (raids_) {
+            raids_->hurt(victim, attacker);
+        }
+    });
     jobs_->setHusbandry(husbandry_.get());
     jobs_->setCombat(combat_.get());
     husbandry_->setHaulerHook([this](Entity animal, bool on) { jobs_->setAnimalHauler(animal, on); });
@@ -2087,6 +2092,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     { SimLap lap(profile_, "defense"); defense_->step(rng_); }
     { SimLap lap(profile_, "artillery"); artillery_->step(rng_); }
+    raids_->takeFire();  // colonists hurt this step take cover or run (real-time-combat.md phase 3)
     { SimLap lap(profile_, "monsters"); monsters_->step(events_, 0); }  // mounds make jelly, brood and spread; insects hunt (docs/design/monsters.md)
     {
         // Blasts of Burn damage start fires; a pawn that catches fire stops what it was doing.

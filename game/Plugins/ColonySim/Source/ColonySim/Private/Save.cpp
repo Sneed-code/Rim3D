@@ -2521,6 +2521,16 @@ void saveMeleePart(Ar& ar, Melee& m) {
     ar.value("blockFrom", m.blockFrom);
     ar.value("blockUntil", m.blockUntil);
     ar.value("dodged", m.dodged);
+    if (ar.sectionVersion() >= 2) {  // real-time combat: guard and breath
+        ar.value("guardCount", m.guardCount);
+        ar.value("guardFrom", m.guardFrom);
+        ar.value("guardBrokenUntil", m.guardBrokenUntil);
+        ar.value("noDefendUntil", m.noDefendUntil);
+    }
+    if (ar.sectionVersion() >= 3) {  // real-time combat phase 2: waiting out a raised guard
+        ar.value("guardWaitFrom", m.guardWaitFrom);
+        ar.value("nextRollAt", m.nextRollAt);
+    }
 }
 
 template <typename Ar>
@@ -3506,7 +3516,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("celsius", t.celsius);
         });
     });
-    ar.section("raids", 3, [&] {
+    ar.section("raids", 4, [&] {
         saveRaids(ar, d.raids);
         saveParts(ar, "defense", e, &SaveEntity::defense, [&](DefensePlan& p) {
             ar.value("role", p.role);
@@ -3521,6 +3531,9 @@ void saveSections(Ar& ar, SaveData& d) {
                 ar.value("goalThing", r.goalThing);
                 ar.value("loot", r.loot);
                 ar.value("sparesDowned", r.sparesDowned);
+            }
+            if (ar.sectionVersion() >= 4) {  // real-time combat: cornered raiders
+                ar.value("cornered", r.cornered);
             }
         });
         if (ar.sectionVersion() >= 2) {
@@ -3538,7 +3551,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(s.rot >= 0.0f && s.rot < 1.0f && s.decay >= 0.0f && s.decay < 1.0f, "the save file has an impossible rot or wear");
         });
     });
-    ar.section("melee", 1, [&] {
+    ar.section("melee", 3, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
     });
     ar.section("social", 3, [&] {

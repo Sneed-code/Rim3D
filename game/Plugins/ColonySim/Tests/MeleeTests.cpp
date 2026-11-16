@@ -175,33 +175,48 @@ TEST_CASE("Melee: weapons and fists come from the data, and only melee fighters 
     CHECK(sim->melee().charges(brawler));  // the trait says so
 
     // Only a melee weapon blocks.
-    CHECK(sim->melee().blockChance(knifer) > 0.0f);
-    CHECK(sim->melee().blockChance(bare) == 0.0f);
     sim->submit(MeleeCommand{bare, kNoEntity, MeleeMode::Block});
     sim->step();
     CHECK(meleeTestFailed(*sim));
 }
 
-TEST_CASE("Melee: hit and dodge chances follow RimWorld's tables") {
+TEST_CASE("Melee: skill sets swing speed, damage, the hand's wobble and reaction time") {
+    // sneed (docs/design/real-time-combat.md): skill 0 swings 20% slower and weaker, skill 20 20% faster and harder.
     auto sim = meleeTestSim();
     const Entity pawn = meleeTestPawn(*sim, 10.5f, 10.5f);
-    const auto at = [&](int skill, const char* trait, float expectedHit, float expectedDodge) {
+    const auto at = [&](int skill, const char* trait, float speed, float damage, float wobble, float reaction) {
         meleeTestSkill(*sim, pawn, skill, trait);
-        CHECK(sim->melee().hitChance(pawn) == doctest::Approx(expectedHit).epsilon(0.005));
-        CHECK(sim->melee().dodgeChance(pawn) == doctest::Approx(expectedDodge).epsilon(0.005));
+        CHECK(sim->melee().swingSpeed(pawn) == doctest::Approx(speed));
+        CHECK(sim->melee().swingDamage(pawn) == doctest::Approx(damage));
+        CHECK(sim->melee().aimWobble(pawn) == doctest::Approx(wobble));
+        CHECK(sim->melee().reactionSteps(pawn) == doctest::Approx(reaction));
     };
-    // The wiki's tables (Melee Hit Chance, Melee Dodge Chance).
-    at(0, nullptr, 0.50f, 0.0f);
-    at(5, nullptr, 0.65f, 0.0f);
-    at(10, nullptr, 0.80f, 0.10f);
-    at(15, nullptr, 0.85f, 0.20f);
-    at(20, nullptr, 0.90f, 0.30f);
-    at(10, "Brawler", 0.84f, 0.10f);
-    at(0, "Nimble", 0.50f, 0.20f);
-    at(20, "Nimble", 0.90f, 0.375f);
+    at(0, nullptr, 0.8f, 0.8f, 0.12f, 14.0f);
+    at(10, nullptr, 1.0f, 1.0f, 0.075f, 9.5f);
+    at(20, nullptr, 1.2f, 1.2f, 0.03f, 5.0f);
+    at(20, "Nimble", 1.2f, 1.2f, 0.03f, 2.0f);  // Nimble reads swings quicker
     // A pawn with no skills counts as level 4.
     const Entity raider = meleeTestPawn(*sim, 12.5f, 10.5f);
-    CHECK(sim->melee().hitChance(raider) == doctest::Approx(0.62f).epsilon(0.005));
+    CHECK(sim->melee().swingSpeed(raider) == doctest::Approx(0.88f));
+
+    // The swing itself: fists' 60-step cooldown, 30% wind-up.
+    const auto windupAt = [&](int skill) {
+        auto s2 = meleeTestSim();
+        const Entity a = meleeTestPawn(*s2, 30.5f, 30.5f);
+        const Entity t = meleeTestPawn(*s2, 31.3f, 30.5f);
+        meleeTestSkill(*s2, a, skill);
+        s2->submit(MeleeCommand{a, t, MeleeMode::Attack});
+        s2->step();
+        for (const Event& e : s2->events()) {
+            if (e.type == EventType::MeleeSwing) {
+                return static_cast<int>(e.amount);
+            }
+        }
+        return -1;
+    };
+    CHECK(windupAt(0) == 23);   // 18 / 0.8
+    CHECK(windupAt(10) == 18);
+    CHECK(windupAt(20) == 15);  // 18 / 1.2
 }
 
 TEST_CASE("Melee: a swing winds up, hits at its moment and recovers") {
@@ -209,7 +224,7 @@ TEST_CASE("Melee: a swing winds up, hits at its moment and recovers") {
     const Entity attacker = meleeTestPawn(*sim, 30.5f, 30.5f);  // fists: 60 steps a swing
     const Entity target = meleeTestPawn(*sim, 31.3f, 30.5f);
     const Entity far = meleeTestPawn(*sim, 35.5f, 30.5f);
-    meleeTestSkill(*sim, attacker, 20);
+    meleeTestSkill(*sim, attacker, 10);  // RimWorld's pace
     meleeTestFace(*sim, target, -1.0f, 0.0f);
 
     sim->submit(MeleeCommand{attacker, far, MeleeMode::Attack});
@@ -278,21 +293,56 @@ TEST_CASE("Melee: reach is real: a target that steps back once the strike is fix
     CHECK(report.injuries.empty());
 }
 
-TEST_CASE("Melee: strikes land on a standing man about as often as RimWorld's hit chance") {
-    const double novice = meleeTestHitRate(0, 300, 21);
-    const double master = meleeTestHitRate(20, 300, 22);
-    MESSAGE("skill 0: " << novice << " (RimWorld 0.50), skill 20: " << master << " (RimWorld 0.90)");
-    CHECK(novice == doctest::Approx(0.50).epsilon(0.2));
-    CHECK(master == doctest::Approx(0.90).epsilon(0.08));
-    CHECK(master > novice + 0.2);
+TEST_CASE("Melee: no dice: a swing at a man who stands still lands at any skill") {
+    // docs/decisions/0010-real-time-combat.md: RimWorld's melee hit chance is gone. A swing misses because the target
+    // moved, dodged, blocked or was out of reach, not because of a roll.
+    const double novice = meleeTestHitRate(0, 100, 21);
+    const double master = meleeTestHitRate(20, 100, 22);
+    MESSAGE("skill 0: " << novice << ", skill 20: " << master);
+    CHECK(novice >= 0.97);
+    CHECK(master >= 0.97);
 }
 
-TEST_CASE("Melee: a skilled fighter reads swings and sidesteps some of them") {
+TEST_CASE("Melee: a skilled blow hurts more than an unskilled one") {
+    const auto damage = [](int skill) {
+        auto sim = meleeTestSim(23);
+        const Entity attacker = meleeTestPawn(*sim, 30.5f, 30.5f, "Melee_Mace");
+        const Entity target = meleeTestPawn(*sim, 31.5f, 30.5f);
+        meleeTestSkill(*sim, attacker, skill);
+        meleeTestFace(*sim, target, -1.0f, 0.0f);
+        float total = 0.0f;
+        for (int i = 0; i < 20; ++i) {
+            sim->submit(MeleeCommand{attacker, target, MeleeMode::Attack});
+            for (int s = 0; s < 100; ++s) {
+                sim->step();
+                for (const Event& e : sim->events()) {
+                    if (e.type == EventType::MeleeHit && e.message == "hit") {
+                        total += e.amount;
+                    }
+                }
+                if (sim->melee().ready(attacker)) {
+                    break;
+                }
+            }
+            meleeTestHeal(*sim, target);
+            meleeTestFace(*sim, target, -1.0f, 0.0f);
+        }
+        return total;
+    };
+    const float novice = damage(0);
+    const float master = damage(20);
+    MESSAGE("20 swings: skill 0 did " << novice << ", skill 20 did " << master);
+    CHECK(novice > 0.0f);
+    CHECK(master == doctest::Approx(novice * 1.5f).epsilon(0.15));  // 1.2 / 0.8
+}
+
+TEST_CASE("Melee: an unarmed fighter sidesteps the swings it reads in time; a slow reader gets hit") {
+  const auto run = [](int defenderSkill, int& outSwings, int& outDodged, int& outHits) {
     auto sim = meleeTestSim(31);
     const Entity attacker = meleeTestPawn(*sim, 30.5f, 30.5f, "Melee_Club");
     const Entity defender = meleeTestPawn(*sim, 31.5f, 30.5f);
     meleeTestSkill(*sim, attacker, 20);
-    meleeTestSkill(*sim, defender, 20);  // 30% dodge
+    meleeTestSkill(*sim, defender, defenderSkill);
     sim->submit(DraftCommand{defender, true});
     sim->step();
     int swings = 0;
@@ -335,19 +385,32 @@ TEST_CASE("Melee: a skilled fighter reads swings and sidesteps some of them") {
             }
         }
     }
-    MESSAGE("swings " << swings << ", sidesteps " << dodges << ", dodged " << dodged << ", hits " << hits);
+    MESSAGE("defender skill " << defenderSkill << ": swings " << swings << ", sidesteps " << dodges << ", dodged " << dodged
+                              << ", hits " << hits);
+    outSwings = swings;
+    outDodged = dodged;
+    outHits = hits;
+  };
+    int swings = 0;
+    int dodged = 0;
+    int hits = 0;
+    run(20, swings, dodged, hits);
     CHECK(swings >= 100);
-    CHECK(dodges > swings / 8);       // about 30% read and stepped away from...
-    CHECK(dodges < swings / 2);
-    CHECK(dodged > dodges * 3 / 4);   // ...and nearly all of those got clear
+    CHECK(dodged > swings * 3 / 4);  // a skilled fighter reads nearly every swing in time and gets clear
+    int slowSwings = 0;
+    int slowDodged = 0;
+    int slowHits = 0;
+    run(0, slowSwings, slowDodged, slowHits);
+    CHECK(slowDodged < dodged / 2);  // a skill 20 swing is too quick for a skill 0 reader most of the time
+    CHECK(slowHits > hits);
 }
 
-TEST_CASE("Melee: a pawn with a melee weapon blocks swings from the front and staggers") {
+TEST_CASE("Melee: a pawn with a melee weapon parries swings from the front until its guard breaks") {
     auto sim = meleeTestSim(41);
     const Entity attacker = meleeTestPawn(*sim, 30.5f, 30.5f, "Melee_Mace");
     const Entity blocker = meleeTestPawn(*sim, 31.5f, 30.5f, "Melee_Gladius");
     meleeTestSkill(*sim, attacker, 20);
-    meleeTestSkill(*sim, blocker, 20);  // block 50%; not a fighter, so it never sidesteps
+    meleeTestSkill(*sim, blocker, 20);  // reads every swing in time; not a fighter, so it never sidesteps
     meleeTestFace(*sim, blocker, -1.0f, 0.0f);
     int blocked = 0;
     int raised = 0;
@@ -375,11 +438,13 @@ TEST_CASE("Melee: a pawn with a melee weapon blocks swings from the front and st
             }
         }
     }
-    MESSAGE("swings " << swings << ", raised " << raised << ", blocked " << blocked);
+    MESSAGE("swings " << swings << ", raised " << raised << ", blocked " << blocked << ", guard breaks "
+                       << sim->melee().guardBreaks());
     CHECK(swings == 80);
-    CHECK(raised > 20);
-    CHECK(raised < 60);
-    CHECK(blocked > raised / 2);  // a raised weapon catches the strikes that would have hit
+    CHECK(raised > 50);                  // it parries whenever its guard holds...
+    CHECK(blocked > raised * 3 / 4);     // ...and the raised weapon catches the strike
+    CHECK(sim->melee().guardBreaks() > 10);  // every third parry in a row breaks the guard...
+    CHECK(blocked < 70);                 // ...and the next blow gets through
     CHECK(staggered);
 
     // From behind there is nothing to block with.
@@ -426,17 +491,19 @@ TEST_CASE("Melee: knife raiders charge, a drafted brawler charges back, an unarm
     }
     MESSAGE("closest " << closest << ", raider swings " << raiderSwings << ", colonist swings " << colonistSwings);
     CHECK(closest <= sim->melee().reach(raider) + kPawnRadius);
-    CHECK(raiderSwings >= 4);
+    CHECK(raiderSwings >= 2);  // fewer than before: the colonist sidesteps the swings it reads (real-time-combat.md)
     CHECK(colonistSwings >= 2);  // unarmed, but it hits back at an enemy in reach
-    const CellPos colonistNow = cellOf(sim->things().registry().get<Position>(colonist));
-    CHECK(std::abs(colonistNow.x - colonistStart.x) + std::abs(colonistNow.y - colonistStart.y) <= 4);  // it didn't charge
+    // It didn't charge: the raider came to it. (Its own position wanders since phase 2: it rolls 4 m clear of heavy stabs
+    // and the raider follows, real-time-combat.md.)
+    (void)colonistStart;
 
-    // A drafted Brawler runs at an enemy 7 m away (inside its leash); a plain unarmed one doesn't.
+    // A drafted Brawler runs at an enemy 5 m away (inside its leash and the colonists' 6 m ambush range: further off it
+    // holds with the others, real-time-combat.md); a plain unarmed one doesn't.
     auto sim2 = meleeTestSim(52);
     const Entity brawler = meleeTestPawn(*sim2, 20.5f, 20.5f);
     const Entity plain = meleeTestPawn(*sim2, 20.5f, 40.5f);
-    const Entity enemyA = meleeTestPawn(*sim2, 27.5f, 20.5f);
-    const Entity enemyB = meleeTestPawn(*sim2, 27.5f, 40.5f);
+    const Entity enemyA = meleeTestPawn(*sim2, 25.5f, 20.5f);
+    const Entity enemyB = meleeTestPawn(*sim2, 25.5f, 40.5f);
     meleeTestSkill(*sim2, brawler, 10, "Brawler");
     meleeTestSkill(*sim2, plain, 10);
     for (const Entity e : {enemyA, enemyB}) {
@@ -455,7 +522,7 @@ TEST_CASE("Melee: knife raiders charge, a drafted brawler charges back, an unarm
             brawlerSwings += e.type == EventType::MeleeSwing && e.thing == brawler ? 1 : 0;
         }
     }
-    CHECK(brawlerSwings >= 2);
+    CHECK(brawlerSwings >= 1);  // its enemy sidesteps (real-time-combat.md)
     CHECK(meleeTestDistance(*sim2, plain, enemyB) > 4.0f);
 }
 
@@ -613,4 +680,52 @@ TEST_CASE("Melee: three brawlers against three armed raiders fight it out") {
     uint64_t hash2 = 0;
     fight(81, downed2, swings2, hits2, hash2);
     CHECK(hash2 == hash);  // deterministic
+}
+
+TEST_CASE("Melee: an AI fighter rolls clear of a heavy blow and sidesteps a light one") {
+    // docs/design/real-time-combat.md phase 2: the player's dodge roll, used by the AI against strong swings.
+    auto sim = meleeTestSim(61);
+    const Entity attacker = meleeTestPawn(*sim, 30.5f, 30.5f, "Melee_Longsword");
+    const Entity defender = meleeTestPawn(*sim, 31.5f, 30.5f);
+    meleeTestSkill(*sim, attacker, 10);
+    meleeTestSkill(*sim, defender, 20);
+    sim->submit(DraftCommand{defender, true});
+    sim->step();
+    int strong = 0;
+    int rolled = 0;
+    int dodged = 0;
+    for (int i = 0; i < 40; ++i) {
+        entt::registry& reg = sim->things().registry();
+        // Wait out any roll, then put them back side by side, unhurt.
+        for (int s = 0; s < 80 && sim->combat().rollLocked(defender); ++s) {
+            sim->step();
+        }
+        Position& a = reg.get<Position>(attacker);
+        Position& d = reg.get<Position>(defender);
+        a.x = 30.5f;
+        a.y = 30.5f;
+        d.x = 31.5f;
+        d.y = 30.5f;
+        reg.get<Mover>(defender).path.clear();
+        reg.get<Mover>(defender).next = 0;
+        meleeTestHeal(*sim, attacker);
+        meleeTestHeal(*sim, defender);
+        sim->submit(MeleeCommand{attacker, defender, MeleeMode::Attack});
+        for (int s = 0; s < 120; ++s) {
+            sim->step();
+            for (const Event& e : sim->events()) {
+                strong += e.type == EventType::MeleeSwing && e.thing == attacker && e.count == 1 ? 1 : 0;
+                rolled += e.type == EventType::PawnAction && e.action == PawnAction::Roll && e.thing == defender ? 1 : 0;
+                dodged += e.type == EventType::MeleeHit && e.thing == attacker && e.message == "dodged" ? 1 : 0;
+            }
+            if (sim->melee().ready(attacker)) {
+                break;
+            }
+        }
+    }
+    MESSAGE("40 swings, " << strong << " strong; " << rolled << " rolls, " << dodged << " dodged");
+    CHECK(strong >= 5);
+    CHECK(rolled >= 8);       // rolls from heavy blows, at most one every aiRollEverySteps...
+    CHECK(rolled <= strong);  // ...and none from the light ones (sidesteps)
+    CHECK(dodged >= 30);
 }

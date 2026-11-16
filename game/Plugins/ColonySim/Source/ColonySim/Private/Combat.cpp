@@ -2943,7 +2943,9 @@ bool CombatSystem::rollDirection(Entity pawn, float& x, float& y) const {
     return true;
 }
 
-bool CombatSystem::dodgeRoll(Entity pawn, float dx, float dy, std::string* why) {
+int CombatSystem::rollTotalSteps() const { return model_->rollStartUp + model_->rollActive + model_->rollRecovery; }
+
+bool CombatSystem::dodgeRoll(Entity pawn, float dx, float dy, std::string* why, bool ai) {
     entt::registry& reg = things_.registry();
     const auto fail = [why](const char* message) {
         if (why != nullptr) {
@@ -2951,7 +2953,7 @@ bool CombatSystem::dodgeRoll(Entity pawn, float dx, float dy, std::string* why) 
         }
         return false;
     };
-    if (!things_.spawned(pawn) || !reg.all_of<Posture, Position, Mover, PlayerControl>(pawn)) {
+    if (!things_.spawned(pawn) || !reg.all_of<Posture, Position, Mover>(pawn) || (!ai && !reg.all_of<PlayerControl>(pawn))) {
         return fail("that pawn isn't under direct control");
     }
     if (health_.incapacitated(pawn)) {

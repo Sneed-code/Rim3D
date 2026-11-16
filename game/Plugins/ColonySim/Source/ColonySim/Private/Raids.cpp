@@ -92,6 +92,9 @@ void raidReadRules(const DefDatabase& defs, RaidRules& r) {
     num("minPoints", r.minPoints);
     num("maxPoints", r.maxPoints);
     num("fleeLostFraction", r.fleeLostFraction);
+    r.fightWhenCaught = def->flag("fightWhenCaught", r.fightWhenCaught);
+    r.underFireResponds = def->flag("underFireResponds", r.underFireResponds);
+    num("caughtRange", r.caughtRange);
     num("giveUpHoursMin", r.giveUpHoursMin);
     num("giveUpHoursMax", r.giveUpHoursMax);
     whole("squadThinkEvery", r.squadThinkEvery);
@@ -918,6 +921,25 @@ void RaidSystem::thinkSquad(Squad& squad) {
                                        }),
                         squad.members.end());
     if (squad.state == SquadState::Rout) {
+        // Running: one whose way to its edge is shut looks for another, and with none left turns to fight (cornered).
+        for (const Entity m : squad.members) {
+            Fighter* f = reg.try_get<Fighter>(m);
+            if (f == nullptr || f->mode != FightMode::Flee || !f->hasGoal || !things_.spawned(m) || health_.incapacitated(m)) {
+                continue;
+            }
+            const CellPos here = cellOf(reg.get<Position>(m));
+            if (map_.regions().canReach(here, f->goal)) {
+                continue;
+            }
+            bool reachable = true;
+            const CellPos exit = exitCell(m, squad, &reachable);
+            if (reachable) {
+                f->goal = exit;
+                fighters_.replan(m);
+            } else if (rules_.fightWhenCaught && reg.get<Raider>(m).loot == kNoEntity) {
+                corner(m, "walled in");
+            }
+        }
         return;
     }
     int able = 0;
@@ -1023,12 +1045,19 @@ void RaidSystem::thinkSquad(Squad& squad) {
         if (f == nullptr || !things_.spawned(m)) {
             continue;
         }
+        if (reg.get<Raider>(m).cornered) {
+            continue;  // fights to the death: the squad's mood no longer moves it
+        }
         if (next == SquadState::Rout) {
+            bool reachable = true;
             f->mode = FightMode::Flee;
             f->hasGoal = true;
-            f->goal = exitCell(m, squad);
+            f->goal = exitCell(m, squad, &reachable);
             f->retreat = false;
             fighters_.replan(m);
+            if (!reachable && rules_.fightWhenCaught && reg.get<Raider>(m).loot == kNoEntity) {
+                corner(m, "walled in");
+            }
             continue;
         }
         const Raider& raider = reg.get<Raider>(m);
@@ -1076,7 +1105,7 @@ void RaidSystem::thinkSquad(Squad& squad) {
 }
 
 // The nearest edge cell it can reach, looked for along the edge nearest to it, then the others.
-CellPos RaidSystem::exitCell(Entity pawn, const Squad& squad) {
+CellPos RaidSystem::exitCell(Entity pawn, const Squad& squad, bool* reachable) {
     const Position& p = things_.registry().get<Position>(pawn);
     const CellPos here = cellOf(p);
     const int w = map_.width();
@@ -1103,7 +1132,64 @@ CellPos RaidSystem::exitCell(Entity pawn, const Squad& squad) {
             }
         }
     }
+    if (reachable != nullptr) {
+        *reachable = false;
+    }
     return squad.entry;
+}
+
+// A routed raider with no way out, or caught by an enemy at its heels, turns and fights to the death (sneed,
+// docs/design/real-time-combat.md). It counts for the alarm again (it is no longer fleeing) and swings and shoots.
+void RaidSystem::corner(Entity pawn, const char* why) {
+    entt::registry& reg = things_.registry();
+    Raider* raider = reg.try_get<Raider>(pawn);
+    Fighter* f = reg.try_get<Fighter>(pawn);
+    if (raider == nullptr || f == nullptr || raider->cornered) {
+        return;
+    }
+    raider->cornered = true;
+    ++cornered_;
+    f->mode = FightMode::Fight;
+    f->advances = true;
+    f->retreat = false;
+    f->hasGoal = false;
+    fighters_.replan(pawn);
+    if (events_ != nullptr) {
+        Event e;
+        e.type = EventType::PawnAction;
+        e.action = PawnAction::Cornered;
+        e.thing = pawn;
+        e.def = reg.get<Thing>(pawn).def;
+        e.message = why;
+        if (const Position* p = reg.try_get<Position>(pawn)) {
+            e.cell = cellOf(*p);
+        }
+        events_->push_back(std::move(e));
+    }
+}
+
+void RaidSystem::hurt(Entity victim, Entity attacker) {
+    const entt::registry& reg = things_.registry();
+    if (rules_.underFireResponds && reg.valid(victim) && reg.all_of<Colonist>(victim) && !reg.all_of<Fighter>(victim) &&
+        reg.valid(attacker) && attacker != victim) {
+        underFire_.emplace_back(victim, attacker);  // answered after combat (takeFire): not while combat walks its lists
+    }
+    if (!rules_.fightWhenCaught) {
+        return;
+    }
+    const Raider* raider = reg.valid(victim) ? reg.try_get<Raider>(victim) : nullptr;
+    const Fighter* f = raider != nullptr ? reg.try_get<Fighter>(victim) : nullptr;
+    if (f == nullptr || raider->cornered || f->mode != FightMode::Flee || raider->loot != kNoEntity || health_.incapacitated(victim) ||
+        !reg.valid(attacker) || !reg.all_of<Position>(attacker) || !reg.all_of<Position>(victim)) {
+        return;
+    }
+    const Position& a = reg.get<Position>(attacker);
+    const Position& v = reg.get<Position>(victim);
+    const float dx = a.x - v.x;
+    const float dy = a.y - v.y;
+    if (a.level == v.level && dx * dx + dy * dy <= rules_.caughtRange * rules_.caughtRange) {
+        corner(victim, "caught");
+    }
 }
 
 // Routed raiders who reach the edge of the map leave it, with what they carry.
@@ -1113,8 +1199,8 @@ void RaidSystem::leaveAtEdge(Squad& squad) {
     const int h = map_.height();
     std::vector<Entity> leaving;
     for (const Entity m : squad.members) {
-        if (!things_.spawned(m) || health_.incapacitated(m)) {
-            continue;
+        if (!things_.spawned(m) || health_.incapacitated(m) || (reg.all_of<Raider>(m) && reg.get<Raider>(m).cornered)) {
+            continue;  // a cornered raider fights on wherever it stands
         }
         const CellPos c = cellOf(reg.get<Position>(m));
         if (c.x <= 1 || c.y <= 1 || c.x >= w - 2 || c.y >= h - 2) {
@@ -2401,10 +2487,84 @@ void RaidSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(entt::to_integral(r->goalThing));
         h.add(entt::to_integral(r->loot));
         h.add(r->sparesDowned);
+        h.add(r->cornered);
     }
     if (const Kidnapped* k = reg.try_get<Kidnapped>(e)) {
         h.add(uint64_t{0x4B1D});
         h.add(entt::to_integral(k->by));
+    }
+}
+
+// Under fire (sneed, docs/design/real-time-combat.md phase 3): a colonist going about its work who is hurt by an enemy
+// doesn't stand there. Whatever its defense role (a Keep working colonist, one shot from beyond the alarm's sight, one
+// in bed), it drops the job: armed, it fights from cover with its attacker known; unarmed, it runs for shelter. Being
+// shot sounds the alarm, so everyone answers and stands down together when it ends. Not when the player has silenced
+// the alarm (their call), nor for a medic or firefighter (field care keeps them on their duty), nor for the
+// player's own pawn or a drafted one.
+void RaidSystem::takeFire() {
+    if (underFire_.empty()) {
+        return;
+    }
+    std::vector<std::pair<Entity, Entity>> hits;
+    hits.swap(underFire_);
+    std::sort(hits.begin(), hits.end());
+    hits.erase(std::unique(hits.begin(), hits.end(), [](const auto& a, const auto& b) { return a.first == b.first; }), hits.end());
+    entt::registry& reg = things_.registry();
+    for (const auto& [pawn, attacker] : hits) {
+        if (!things_.spawned(pawn) || health_.incapacitated(pawn) || reg.all_of<Fighter>(pawn) || reg.all_of<PlayerControl>(pawn) ||
+            reg.all_of<Prisoner>(pawn) || fighters_.factionOf(pawn) != kPlayerFaction || !reg.valid(attacker) ||
+            !things_.spawned(attacker) || !reg.all_of<Position>(attacker)) {
+            continue;
+        }
+        // An enemy: another side's pawn that isn't a visitor or prisoner, a hostile animal, or a berserk colonist.
+        const Animal* wild = reg.try_get<Animal>(attacker);
+        const bool enemy = (fighters_.factionOf(attacker) != kPlayerFaction && !reg.all_of<Visitor>(attacker) &&
+                            !reg.all_of<Prisoner>(attacker) && (wild == nullptr || wild->temper != AnimalTemper::Calm)) ||
+                           isBerserk(reg.try_get<MentalBreaker>(attacker));
+        if (!enemy) {
+            continue;
+        }
+        const DefensePlan* plan = reg.try_get<DefensePlan>(pawn);
+        if (plan != nullptr && (plan->role == DefenseRole::Medic || plan->role == DefenseRole::Firefighter)) {
+            continue;
+        }
+        const Position& from = reg.get<Position>(attacker);
+        if (!state_.alarm) {
+            if (state_.suppressed) {
+                continue;
+            }
+            state_.hasThreat = true;
+            state_.threatX = from.x;
+            state_.threatY = from.y;
+            state_.threatSeenAt = now();
+            setAlarm(true, "a colonist is under fire");
+        }
+        const Position& pos = reg.get<Position>(pawn);
+        const Gear* gear = reg.try_get<Gear>(pawn);
+        const bool armed = gear != nullptr && gear->weapon != kNoEntity && reg.valid(gear->weapon);
+        Fighter& f = fighters_.enlist(pawn, "under fire");
+        f.defending = true;
+        if (armed) {
+            f.anchor = cellOf(pos);
+            f.leash = rules_.defenderLeash;
+            f.known.push_back(KnownEnemy{attacker, from.x, from.y, from.level, time_.seconds});
+        } else {
+            f.mode = FightMode::Shelter;
+            f.hasGoal = true;
+            f.goal = shelterCell(pawn);
+        }
+        fighters_.replan(pawn);
+        if (events_ != nullptr) {
+            Event e;
+            e.type = EventType::PawnAction;
+            e.action = PawnAction::TakeCover;
+            e.thing = pawn;
+            e.target = attacker;
+            e.def = reg.get<Thing>(pawn).def;
+            e.message = armed ? "fights back" : "runs";
+            e.cell = cellOf(pos);
+            events_->push_back(std::move(e));
+        }
     }
 }
 

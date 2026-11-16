@@ -24,6 +24,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <vector>
 
 using namespace colony;
@@ -781,4 +782,174 @@ TEST_CASE("Raids: the alarm's home is the middle of the colony's own buildings, 
     CHECK(sim->raids().state().hasHome);
     CHECK(sim->raids().state().homeX == doctest::Approx(x2));
     CHECK(sim->raids().state().homeY == doctest::Approx(y2));
+}
+
+namespace {
+
+// A squad of pirates that has just routed (half of them shot down). Returns the ones still running.
+std::vector<Entity> raidTestRouted(Sim& sim) {
+    sim.submit(StartRaidCommand{"Pirate", 400.0f, 2});
+    sim.step();
+    std::vector<Entity> raiders = raidTestRaiders(sim);
+    if (raiders.size() < 4) {
+        return {};
+    }
+    sim.stepMany(60);
+    const size_t half = (raiders.size() + 1) / 2;
+    for (size_t i = 0; i < half; ++i) {
+        sim.submit(DamagePawnCommand{raiders[i], "Bullet", 500.0f, 0});
+    }
+    for (int i = 0; i < 40; ++i) {
+        sim.step();
+    }
+    std::vector<Entity> running;
+    for (size_t i = half; i < raiders.size(); ++i) {
+        const Fighter* f = sim.things().registry().try_get<Fighter>(raiders[i]);
+        if (f != nullptr && f->mode == FightMode::Flee) {
+            running.push_back(raiders[i]);
+        }
+    }
+    return running;
+}
+
+}  // namespace
+
+TEST_CASE("Raids: a routed raider caught by an enemy at its heels turns and fights to the death") {
+    // sneed (docs/design/real-time-combat.md): raiders run at half lost, but fight back when caught.
+    SimSettings settings;
+    settings.seed = 41;
+    settings.mapSize = 96;
+    settings.flatMap = true;
+    Sim sim(settings, raidTestDefs());
+    const std::vector<Entity> running = raidTestRouted(sim);
+    RAID_REQUIRE(running.size() >= 2);
+    entt::registry& reg = sim.things().registry();
+    const Entity caught = running[0];
+    const Entity far = running[1];
+    // A colonist with a club right behind the first; one shooting the second from 20 m.
+    const Position& cp = reg.get<Position>(caught);
+    const Entity chaser = sim.things().spawn("Human", CellPos{static_cast<int>(cp.x) + 2, static_cast<int>(cp.y), 0});
+    raidTestArm(sim, chaser, "Melee_Club");
+    const Position& fp = reg.get<Position>(far);
+    const Entity shooter = sim.things().spawn("Human", CellPos{static_cast<int>(fp.x), static_cast<int>(fp.y) + 20, 0});
+    RAID_REQUIRE(raidTestDist(sim, chaser, caught) <= 4.0f);
+    RAID_REQUIRE(raidTestDist(sim, shooter, far) > 4.0f);
+    sim.combat().noteHurt(caught, chaser);
+    sim.combat().noteHurt(far, shooter);
+    CHECK(reg.get<Raider>(caught).cornered);
+    CHECK(reg.get<Fighter>(caught).mode == FightMode::Fight);
+    CHECK_FALSE(reg.get<Raider>(far).cornered);  // shot from afar: it keeps running
+    CHECK(reg.get<Fighter>(far).mode == FightMode::Flee);
+    CHECK(sim.raids().corneredCount() == 1);
+    // The squad's next thoughts (still routed) don't send it running again, and it doesn't leave the map.
+    for (int i = 0; i < 90; ++i) {
+        sim.step();
+    }
+    CHECK(reg.valid(caught));
+    CHECK(reg.get<Fighter>(caught).mode == FightMode::Fight);
+}
+
+TEST_CASE("Raids: a routed raider walled in with no way off the map fights instead") {
+    SimSettings settings;
+    settings.seed = 41;
+    settings.mapSize = 96;
+    settings.flatMap = true;
+    Sim sim(settings, raidTestDefs());
+    const std::vector<Entity> running = raidTestRouted(sim);
+    RAID_REQUIRE(!running.empty());
+    entt::registry& reg = sim.things().registry();
+    const Entity boxed = running[0];
+    // Put it in a closed box of walls in the middle of the map.
+    Position& p = reg.get<Position>(boxed);
+    p.x = 48.5f;
+    p.y = 48.5f;
+    reg.get<Mover>(boxed).path.clear();
+    reg.get<Mover>(boxed).next = 0;
+    for (int y = 46; y <= 50; ++y) {
+        for (int x = 46; x <= 50; ++x) {
+            if (x == 46 || x == 50 || y == 46 || y == 50) {
+                sim.things().spawn("Wall", CellPos{x, y, 0});
+            }
+        }
+    }
+    bool walledIn = false;
+    for (int i = 0; i < 60; ++i) {
+        sim.step();
+        for (const Event& e : sim.events()) {
+            walledIn = walledIn || (e.type == EventType::PawnAction && e.action == PawnAction::Cornered && e.thing == boxed &&
+                                    e.message == "walled in");
+        }
+    }
+    CHECK(walledIn);
+    CHECK(reg.get<Raider>(boxed).cornered);
+    CHECK(reg.get<Fighter>(boxed).mode == FightMode::Fight);
+}
+
+TEST_CASE("Raids: a working colonist hurt by an enemy drops its job: armed it fights back, unarmed it runs") {
+    // sneed (docs/design/real-time-combat.md phase 3): anyone shot at goes for cover and shoots back.
+    const auto run = [](bool armed, bool silenced, bool medic) {
+        auto sim = raidTestSim(71, 192);
+        sim->stepMany(5);
+        const std::vector<Entity> colonists = raidTestColonists(*sim);
+        const Entity colonist = colonists.empty() ? kNoEntity : colonists.front();
+        if (colonist == kNoEntity) {
+            return std::make_tuple(false, false, false, false);
+        }
+        entt::registry& reg = sim->things().registry();
+        if (Gear* g = reg.try_get<Gear>(colonist); g != nullptr && g->weapon != kNoEntity) {
+            sim->combat().unequip(colonist, g->weapon);
+        }
+        if (armed) {
+            raidTestArm(*sim, colonist, "Gun_Revolver");
+        }
+        if (medic) {
+            sim->submit(SetDefenseRoleCommand{colonist, 3, false, CellPos{}});  // Medic
+        }
+        // An enemy 70 m off, beyond anyone's sight (60 m), so the alarm doesn't sound by itself first.
+        const Position& p = reg.get<Position>(colonist);
+        const int rx = static_cast<int>(p.x) + 70 < 188 ? static_cast<int>(p.x) + 70 : static_cast<int>(p.x) - 70;
+        const Entity raider = sim->things().spawn("Human", CellPos{rx, static_cast<int>(p.y), 0});
+        raidTestArm(*sim, raider, "Gun_BoltActionRifle");
+        sim->submit(SetFactionCommand{raider, 2});
+        sim->step();
+        if (silenced) {
+            sim->submit(SoundAlarmCommand{true});
+            sim->step();
+            sim->submit(SoundAlarmCommand{false});  // with an enemy on the map: it stays silent
+            sim->step();
+        }
+        if (reg.all_of<Fighter>(colonist) || reg.all_of<Fighter>(raider) == false) {
+            MESSAGE("setup: colonist already fighting or raider not a fighter");
+        }
+        sim->combat().noteHurt(colonist, raider);
+        sim->step();
+        bool tookCover = false;
+        for (const Event& e : sim->events()) {
+            tookCover = tookCover || (e.type == EventType::PawnAction && e.action == PawnAction::TakeCover && e.thing == colonist);
+        }
+        const Fighter* f = reg.try_get<Fighter>(colonist);
+        const bool knows = f != nullptr && std::any_of(f->known.begin(), f->known.end(), [&](const KnownEnemy& k) { return k.pawn == raider; });
+        return std::make_tuple(tookCover, f != nullptr && f->mode == FightMode::Fight && knows, f != nullptr && f->mode == FightMode::Shelter,
+                               sim->raids().state().alarm);
+    };
+    const auto [armedCover, armedFights, armedShelters, armedAlarm] = run(true, false, false);
+    CHECK(armedCover);
+    CHECK(armedFights);  // fights back with its attacker known
+    CHECK_FALSE(armedShelters);
+    CHECK(armedAlarm);  // being shot sounds the alarm
+    const auto [bareCover, bareFights, bareShelters, bareAlarm] = run(false, false, false);
+    CHECK(bareCover);
+    CHECK_FALSE(bareFights);
+    CHECK(bareShelters);  // runs for shelter
+    const auto [quietCover, quietFights, quietShelters, quietAlarm] = run(true, true, false);
+    CHECK_FALSE(quietCover);  // the player silenced the alarm: left alone
+    const auto [medicCover, medicFights, medicShelters, medicAlarm] = run(true, false, true);
+    CHECK_FALSE(medicCover);  // a medic keeps to its duty (field care)
+    (void)bareAlarm;
+    (void)quietFights;
+    (void)quietShelters;
+    (void)quietAlarm;
+    (void)medicFights;
+    (void)medicShelters;
+    (void)medicAlarm;
 }

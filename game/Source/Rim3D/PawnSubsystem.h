@@ -8,6 +8,8 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
 
+class UMaterialInstanceDynamic;
+
 #include "PawnSubsystem.generated.h"
 
 class ASimPawnActor;
@@ -204,6 +206,11 @@ public:
 	UObject* GetFacesAsset(const FString& Name);
 	/** A MakeHuman character's mesh and retargeter (MakeHumanArt.h names), from the generated or the local-only folder; null if not imported. */
 	USkeletalMesh* GetMakeHumanMesh(const FString& Name, class UIKRetargeter*& OutRetargeter);
+	/** A skin material with the skin shine (data/look.json "skin": roughness and specular, docs/design/graphics-options.md) on a
+	 * dynamic instance shared by every pawn that uses it; the material itself when it isn't a skin with those parameters. */
+	UMaterialInterface* GetShinySkin(UMaterialInterface* Skin);
+	/** Puts the skin shine on a pawn's own skin instance (the bare skin under clothes). */
+	void ApplySkinShine(UMaterialInstanceDynamic* Instance);
 	/** The looks a pawn's sim looks and lineage add up to. */
 	static FSimPawnLooks MakeLooks(const colony::PawnLooksView& View, const colony::DefDatabase* Defs);
 	/** What a pawn wears, from the snapshot (U16), and a number that changes whenever any of it does (cheap: no allocation). */
@@ -254,6 +261,14 @@ private:
 
 	UPROPERTY()
 	TMap<FName, TObjectPtr<UMaterialInterface>> ClothMaterials;
+
+	/** Skin materials with the skin shine, by the material they were made from. */
+	UPROPERTY()
+	TMap<TObjectPtr<UMaterialInterface>, TObjectPtr<UMaterialInstanceDynamic>> ShinySkins;
+	float SkinRoughness = -1.0f;
+	float SkinSpecular = -1.0f;
+	bool bSkinShineRead = false;
+	void ReadSkinShine();
 
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> HornMesh;

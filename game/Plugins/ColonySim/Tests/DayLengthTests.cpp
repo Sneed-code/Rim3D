@@ -184,10 +184,11 @@ TEST_CASE("Day length: walking keeps its real-time speed") {
 }
 
 TEST_CASE("Day length: a melee swing takes the same steps whatever the day length") {
+    int first = -1;
     for (const int minutes : {48, 120}) {
         CAPTURE(minutes);
         auto sim = dayLengthSim(minutes);
-        const Entity attacker = dayLengthPawn(*sim, 30.5f, 30.5f);  // fists: 60 steps a swing
+        const Entity attacker = dayLengthPawn(*sim, 30.5f, 30.5f);  // fists: 60 steps a swing at Melee 10
         const Entity target = dayLengthPawn(*sim, 31.3f, 30.5f);
         sim->submit(MeleeCommand{attacker, target, MeleeMode::Attack});
         sim->step();
@@ -197,7 +198,12 @@ TEST_CASE("Day length: a melee swing takes the same steps whatever the day lengt
             sim->step();
             ++steps;
         }
-        CHECK(steps == 60);
+        // No skills: Melee 4, 0.88 of the pace (real-time-combat.md): 20 steps of wind-up and 48 of recovery.
+        CHECK(steps == 68);
+        if (first < 0) {
+            first = steps;
+        }
+        CHECK(steps == first);
     }
 }
 

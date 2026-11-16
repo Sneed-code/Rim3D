@@ -311,6 +311,8 @@ TEST_CASE("Weapons: a fighter picks the weapon for the distance") {
         sim->submit(DraftCommand{fighter, true});
         sim->step();
         for (int s = 0; s < 200; ++s) {
+            // It holds still: since real-time-combat.md phase 2 an unarmed fighter rolls clear of a heavy stab.
+            sim->things().registry().emplace_or_replace<Stunned>(enemy, Stunned{5});
             sim->step();
             weapHeal(*sim, fighter);
             weapHeal(*sim, enemy);
@@ -329,6 +331,7 @@ TEST_CASE("Weapons: a fighter with a rifle and a knife swings at an enemy that c
     sim->step();
     int swings = 0;
     for (int s = 0; s < 300; ++s) {
+        sim->things().registry().emplace_or_replace<Stunned>(enemy, Stunned{5});  // holds still (no rolling away)
         sim->step();
         weapHeal(*sim, fighter);
         weapHeal(*sim, enemy);
