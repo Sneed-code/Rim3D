@@ -102,6 +102,8 @@ namespace
 			Options.WorldSeed = static_cast<uint64>(WorldSeed);
 		}
 		FParse::Value(Line, TEXT("SimWorldTile="), Options.WorldStartTile);
+		Options.DayMinutes = USimSubsystem::GetSavedDayMinutes();
+		FParse::Value(Line, TEXT("SimDayMinutes="), Options.DayMinutes);
 		return Options;
 	}
 
@@ -308,6 +310,7 @@ bool USimSubsystem::StartSim(const FSimStartOptions& Options)
 	Settings.world.width = Options.WorldWidth;
 	Settings.world.height = Options.WorldHeight;
 	Settings.world.startTile = Options.WorldStartTile;
+	Settings.dayMinutes = FMath::Clamp(Options.DayMinutes, colony::kBaseDayMinutes, colony::kMaxDayMinutes);
 	Sim = Defs ? std::make_unique<colony::Sim>(Settings, Defs) : std::make_unique<colony::Sim>(Settings);
 	for (const std::string& Problem : Sim->setupErrors())
 	{
@@ -554,6 +557,46 @@ int64 USimSubsystem::GetGameSeconds() const
 	return Sim ? Sim->time().seconds : 0;
 }
 
+int64 USimSubsystem::GetSteps() const
+{
+	return Sim ? Sim->time().steps : 0;
+}
+
+int32 USimSubsystem::GetDayMinutes() const
+{
+	return Sim ? Sim->dayMinutes() : colony::kBaseDayMinutes;
+}
+
+namespace
+{
+	const TCHAR* const SimBridgeGameSection = TEXT("Rim3D.Game");
+}
+
+int32 USimSubsystem::GetSavedDayMinutes()
+{
+	int32 Minutes = colony::kBaseDayMinutes;
+	if (GConfig)
+	{
+		GConfig->GetInt(SimBridgeGameSection, TEXT("DayMinutes"), Minutes, GGameUserSettingsIni);
+	}
+	return FMath::Clamp(Minutes, colony::kBaseDayMinutes, colony::kMaxDayMinutes);
+}
+
+void USimSubsystem::SetDayMinutes(int32 Minutes)
+{
+	Minutes = FMath::Clamp(Minutes, colony::kBaseDayMinutes, colony::kMaxDayMinutes);
+	StartOptions.DayMinutes = Minutes;  // a restart (world screen) keeps it
+	if (Sim && Sim->dayMinutes() != Minutes)
+	{
+		Submit(colony::SetDayLengthCommand{Minutes});
+	}
+	if (GConfig)
+	{
+		GConfig->SetInt(SimBridgeGameSection, TEXT("DayMinutes"), Minutes, GGameUserSettingsIni);
+		GConfig->Flush(false, GGameUserSettingsIni);
+	}
+}
+
 FString USimSubsystem::SaveReplay()
 {
 	if (!Sim)
@@ -657,6 +700,7 @@ bool USimSubsystem::LoadGame(const FString& Slot)
 	StartOptions.WorldWidth = Settings.world.width;
 	StartOptions.WorldHeight = Settings.world.height;
 	StartOptions.WorldStartTile = Settings.world.startTile;
+	StartOptions.DayMinutes = Sim->dayMinutes();  // the save's day length
 	ResetAfterSimChange();
 	UE_LOG(LogColonySim, Display, TEXT("Loaded %s: day %lld, %d things"), *Path, static_cast<long long>(Sim->time().day() + 1), static_cast<int32>(Current.things.size()));
 	SimBridgeScreenMessage(11, 3.0f, FColor::Green, FString::Printf(TEXT("Loaded: %s"), *Clean));

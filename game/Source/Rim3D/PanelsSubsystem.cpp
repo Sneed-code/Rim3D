@@ -572,6 +572,10 @@ void UPanelsSubsystem::DrawPanels(USimSubsystem& Bridge)
 	}
 
 	DrawLog(Bridge, Scale, Margin);
+	if (bSettingsOpen)
+	{
+		DrawSettings(Bridge, Scale, Margin);
+	}
 	++Stats.FramesDrawn;
 }
 
@@ -605,6 +609,11 @@ void UPanelsSubsystem::DrawMenuAndColonistBar(USimSubsystem& Bridge, float Scale
 		if (PButton(TEXT("Log"), bLogOpen))
 		{
 			bLogOpen = !bLogOpen;
+		}
+		ImGui::SameLine();
+		if (PButton(TEXT("Settings"), bSettingsOpen))
+		{
+			bSettingsOpen = !bSettingsOpen;
 		}
 		if (UQuestPanelSubsystem* Quests = GetWorld()->GetSubsystem<UQuestPanelSubsystem>())
 		{
@@ -1283,6 +1292,32 @@ void UPanelsSubsystem::DrawThermostatPanel(USimSubsystem& Bridge, const colony::
 		}
 		PTextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), bOwnTarget ? FString::Printf(TEXT("Set to %.0f C (the building's own limit is %.0f C)."), Target, OwnLimit)
 														 : FString::Printf(TEXT("At the building's own limit, %.0f C."), OwnLimit));
+	}
+	ImGui::End();
+}
+
+void UPanelsSubsystem::DrawSettings(USimSubsystem& Bridge, float Scale, float Margin)
+{
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Margin + 60.0f * Scale), ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
+	ImGui::SetNextWindowBgAlpha(0.9f);
+	if (ImGui::Begin("Settings##PanelsSettings", &bSettingsOpen, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse))
+	{
+		// Whole minutes, 48 (the default) to 120. Changing it applies to this game now and to new games.
+		int32 Minutes = Bridge.GetDayMinutes();
+		ImGui::SetNextItemWidth(260.0f * Scale);
+		if (ImGui::SliderInt("Day length", &Minutes, colony::kBaseDayMinutes, colony::kMaxDayMinutes, "%d real minutes"))
+		{
+			Bridge.SetDayMinutes(Minutes);
+		}
+		ImGui::SameLine();
+		if (PButton(TEXT("Default"), false))
+		{
+			Bridge.SetDayMinutes(colony::kBaseDayMinutes);
+		}
+		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("How long a game day lasts at normal speed."));
+		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("Walking, fighting and work keep their speed; hunger, sleep,"));
+		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("crops, animals, food rot and the sun follow the day."));
 	}
 	ImGui::End();
 }
