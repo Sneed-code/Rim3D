@@ -14,16 +14,19 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Plants.h"
 
 #include <string>
 
 namespace
 {
 	const FVector AnimalSmokeOrigin(-900000.0, 0.0, 0.0);
-	// Every def A4 has art for, plus two with none (they fall back on a stand-in model).
+	// Every def A4 has art for, the realistic Sketchfab ones (monkey, cat, cougar, thrumbo), plus two with none (they fall back on a stand-in model).
 	const TCHAR* const AnimalSmokeDefs[] = {TEXT("Cow"), TEXT("Muffalo"), TEXT("Deer"), TEXT("Husky"), TEXT("TimberWolf"), TEXT("Thrumbo"),
-		TEXT("Alpaca"), TEXT("Cat"), TEXT("WildBoar"), TEXT("Cougar"), TEXT("GrizzlyBear"), TEXT("Chicken")};
+		TEXT("Alpaca"), TEXT("Cat"), TEXT("WildBoar"), TEXT("Cougar"), TEXT("GrizzlyBear"), TEXT("Chicken"), TEXT("Monkey")};
 	constexpr float AnimalSmokeSpacing = 2.0f;
+	// The realistic Sketchfab models, side by side in daylight for a close look (phase animals_close).
+	const TCHAR* const AnimalSmokeCloseDefs[] = {TEXT("Monkey"), TEXT("Cat"), TEXT("Cougar"), TEXT("Thrumbo")};
 
 	struct FAnimalSmokeState
 	{
@@ -146,6 +149,23 @@ void USmokeTestSubsystem::BuildAnimalsPhases()
 			Fail(TEXT("The game's data did not load"));
 			return;
 		}
+		// Noon, and no trees or bushes in the way of the camera.
+		AnimalSmokeSetDistance(TEXT("Sky.Hour"), 12.0f);
+		AnimalSmokeSetDistance(TEXT("Sky.DayOfYear"), 22.5f);
+		if (colony::Sim* Sim = const_cast<colony::Sim*>(B->GetSim()))
+		{
+			for (int32 Y = 0; Y < Options.MapSize; ++Y)
+			{
+				for (int32 X = 0; X < Options.MapSize; ++X)
+				{
+					const colony::CellPos C{X, Y, 0};
+					if (Sim->plants().has(C) && Sim->defs().get(Sim->plants().defAt(C)).defName() != "Plant_Grass")
+					{
+						Sim->plants().remove(C);
+					}
+				}
+			}
+		}
 		const colony::CellPos M = Middle();
 		int32 I = 0;
 		for (const TCHAR* Def : AnimalSmokeDefs)
@@ -246,4 +266,38 @@ void USmokeTestSubsystem::BuildAnimalsPhases()
 		AnimalSmokeSetDistance(TEXT("Animals.HideDistance"), 400.0f);
 	};
 	Phases.Add(MoveTemp(Detail));
+
+	// 3. The realistic models close up in daylight, paused so they hold still for the picture.
+	FPhase Near;
+	Near.Name = TEXT("animals_close");
+	Near.WarmupSeconds = 3.0f;
+	Near.MeasureSeconds = 2.0f;
+	Near.Setup = [=, this]()
+	{
+		USimSubsystem* B = Bridge();
+		if (!B || !B->GetSim())
+		{
+			return;
+		}
+		const colony::CellPos M = Middle();
+		int32 I = 0;
+		for (const TCHAR* Def : AnimalSmokeCloseDefs)
+		{
+			B->Submit(colony::SpawnThingCommand{std::string(TCHAR_TO_UTF8(Def)), colony::CellPos{M.x - 14, M.y - 4 + I++ * 3, 0}});
+		}
+		B->StepOnce();
+		B->SetSpeed(0);
+		const FVector Target = B->SimToWorld(M.x - 14.0f, M.y + 0.5f, 0) + FVector(0.0, 0.0, 60.0);
+		const FVector From = Target + FVector(-900.0, -250.0, 250.0);
+		ViewFrom(From, (Target - From).Rotation());
+		State->Reset();
+	};
+	Near.OnFrame = CheckFrame;
+	Near.Verify = [=, this]()
+	{
+		VerifyFrames(TEXT("animals_close"));
+		AnimalSmokeSetDistance(TEXT("Sky.Hour"), -1.0f);
+		AnimalSmokeSetDistance(TEXT("Sky.DayOfYear"), -1.0f);
+	};
+	Phases.Add(MoveTemp(Near));
 }

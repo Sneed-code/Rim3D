@@ -89,6 +89,23 @@ void USimAnimalSubsystem::LoadArtTable()
 			LengthsCm.Add(FName(*Pair.Key), static_cast<float>(Pair.Value->AsNumber() * 100.0));
 		}
 	}
+	const TArray<TSharedPtr<FJsonValue>>* Imports = nullptr;
+	if (Root->TryGetArrayField(TEXT("imports"), Imports))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Imports)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			double YawValue = -90.0, Walk = 140.0, Gallop = 450.0;
+			Entry->TryGetNumberField(TEXT("yaw"), YawValue);
+			Entry->TryGetNumberField(TEXT("walkCm"), Walk);
+			Entry->TryGetNumberField(TEXT("gallopCm"), Gallop);
+			ImportLooks.Add(FName(*Entry->GetStringField(TEXT("model"))), FVector3f(YawValue, Walk, Gallop));
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Defs = nullptr;
 	if (!Root->TryGetArrayField(TEXT("defs"), Defs))
 	{
@@ -135,6 +152,16 @@ const FSimAnimalModel* USimAnimalSubsystem::GetModelFor(FName DefName, FSimAnima
 	{
 		const FString Name = OutArt.Model.ToString();
 		Model.Mesh = AnimalLoad<USkeletalMesh>(Name, Name);
+		for (int32 Part = 0; Part < 32; ++Part)
+		{
+			USkeletalMesh* Piece = AnimalLoad<USkeletalMesh>(Name, FString::Printf(TEXT("%s_Part%d"), *Name, Part));
+			if (!Piece)
+			{
+				break;
+			}
+			Model.Parts.Add(Piece);
+			KeepAlive.Add(Piece);
+		}
 		const FString Prefix = Name + TEXT("AnimalArmature_");
 		Model.Idle = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Idle"));
 		Model.Walk = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Walk"));
@@ -150,7 +177,14 @@ const FSimAnimalModel* USimAnimalSubsystem::GetModelFor(FName DefName, FSimAnima
 		// A clip that is missing falls back on the idle.
 		if (!Model.Gallop) { Model.Gallop = Model.Walk; }
 		if (!Model.Eat) { Model.Eat = Model.Idle; }
+		Model.bHasDeath = Model.Death != nullptr;
 		if (!Model.Death) { Model.Death = Model.Idle; }
+		if (const FVector3f* Looks = ImportLooks.Find(OutArt.Model))
+		{
+			Model.YawOffset = Looks->X;
+			Model.WalkClipSpeed = FMath::Max(Looks->Y, 10.0f);
+			Model.GallopClipSpeed = FMath::Max(Looks->Z, 10.0f);
+		}
 		Model.Extent = Model.Mesh->GetBounds().BoxExtent;
 		const float NativeLength = FMath::Max(Model.Extent.X, Model.Extent.Y) * 2.0f;
 		const float* WantedLength = LengthsCm.Find(OutArt.Model);
