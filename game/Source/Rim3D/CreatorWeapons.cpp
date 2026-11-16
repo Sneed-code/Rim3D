@@ -17,6 +17,9 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Misc/Paths.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "UnrealClient.h"
 
 #include "FightSubsystem.h"
 #include "PawnActor.h"
@@ -117,7 +120,7 @@ namespace
 	const FCwStyleDef CwStyles[CwStyleCount] = {
 		{"Club (one hand)", nullptr, "Melee_Club", nullptr, TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingIdle"), CwClubAttacks, UE_ARRAY_COUNT(CwClubAttacks),
 			{TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingBlockIdle"), nullptr, nullptr}, TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingBlockReactLarge"),
-			{TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingReactLargeGut"), TEXT("Injured/A_HitReaction"), TEXT("Injured/A_HitToHead"), nullptr, nullptr},
+			{TEXT("Mixamo/MeleeAxe/A_ProMeleeAxeStandingReactLargeGut"), TEXT("Mixamo/Injured/A_HitReaction"), TEXT("Mixamo/Injured/A_HitToHead"), nullptr, nullptr},
 			{TEXT("Mixamo/Magic/A_ProMagicStandingReactDeathBackward"), TEXT("Mixamo/Magic/A_ProMagicStandingReactDeathForward")}},
 		{"Sword (two hands)", nullptr, "Melee_Longsword", nullptr, TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordIdle"), CwGreatSwordAttacks, UE_ARRAY_COUNT(CwGreatSwordAttacks),
 			{TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordBlocking"), TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordBlocking2"), TEXT("Mixamo/GreatSword/A_GreatSwordGreatSwordBlocking3")},
@@ -143,7 +146,7 @@ namespace
 	// Reactions by the side a blow came from (front uses the style's own impacts).
 	const TCHAR* const CwReactSmall[4] = {TEXT("Mixamo/Magic/A_ProMagicStandingReactSmallFromFront"), TEXT("Mixamo/Magic/A_ProMagicStandingReactSmallFromRight"),
 		TEXT("Mixamo/Magic/A_ProMagicStandingReactSmallFromBack"), TEXT("Mixamo/Magic/A_ProMagicStandingReactSmallFromLeft")};
-	const TCHAR* const CwReactLarge[4] = {TEXT("Injured/A_StumbleBackwards"), TEXT("Mixamo/Magic/A_ProMagicStandingReactLargeFromRight"),
+	const TCHAR* const CwReactLarge[4] = {TEXT("Mixamo/Injured/A_StumbleBackwards"), TEXT("Mixamo/Magic/A_ProMagicStandingReactLargeFromRight"),
 		TEXT("Mixamo/Magic/A_ProMagicStandingReactLargeFromBack"), TEXT("Mixamo/Magic/A_ProMagicStandingReactLargeFromLeft")};
 	const TCHAR* const CwDeathBySide[4] = {TEXT("Mixamo/Magic/A_ProMagicStandingReactDeathBackward"), TEXT("Mixamo/Magic/A_ProMagicStandingReactDeathLeft"),
 		TEXT("Mixamo/Magic/A_ProMagicStandingReactDeathForward"), TEXT("Mixamo/Magic/A_ProMagicStandingReactDeathRight")};
@@ -260,6 +263,11 @@ namespace
 		bool bFinish = false;
 		bool bBlocking = false;     // the defender guards this swing
 		bool bContact = false;
+		// -CwScript: a fixed run for pictures (styles, attacks, the demo), shots into Saved/Weapons.
+		float ScriptT = -1.0f;
+		int32 ScriptStep = 0;
+		int32 ScriptHitShots = 0;
+		FString PendingShot;
 		int32 SwingAttack = 0;
 		int32 Swings = 0, BodyHits = 0, Blocks = 0, WorldHits = 0, Misses = 0;
 		FString LastEvent;
@@ -481,8 +489,8 @@ namespace
 			return;
 		}
 		const float Fresh = FMath::Exp(-Age / DrySeconds);
-		const FLinearColor Dry(0.075f, 0.005f, 0.004f);
-		const FLinearColor Wet(0.28f, 0.010f, 0.008f);
+		const FLinearColor Dry(0.045f, 0.0035f, 0.003f);
+		const FLinearColor Wet(0.08f, 0.004f, 0.0035f);
 		Mid->SetVectorParameterValue(TEXT("Color"), FMath::Lerp(Dry, Wet, Fresh));
 		Mid->SetScalarParameterValue(TEXT("Roughness"), FMath::Lerp(0.55f, 0.1f, Fresh));
 	}
@@ -938,6 +946,8 @@ namespace
 		const float GroundZ = CwGroundZ(World, At, &Victim, Other);
 		CwSpray(S, At, Dir, Amount, GroundZ);
 		CwStain(S, Victim, At, Dir, Amount);
+		UE_LOG(LogCreatorWeapons, Display, TEXT("Bleed %.2f at %s (ground %.0f): %d droplets, %d stains, %d spots, splat %s, droplet mesh %s"), Amount, *At.ToString(), GroundZ,
+			S.Droplets.Num(), Victim.Stains.Num(), S.Spots.Num(), S.SplatBase.IsValid() ? *S.SplatBase->GetName() : TEXT("none"), S.DropletInstances.IsValid() ? TEXT("yes") : TEXT("no"));
 		Victim.Blood += Amount;
 		Victim.DripIn = FMath::Min(Victim.DripIn, 0.4f);
 	}
@@ -1055,7 +1065,7 @@ namespace
 			}
 			// A pool under someone badly hurt (or dying), growing slowly to a size by how much they have bled.
 			const bool bDown = P.Role == ECwRole::Dying || P.Role == ECwRole::Dead;
-			const float Want = bDown ? 70.0f : (P.Blood >= 2.2f ? FMath::Min(16.0f + P.Blood * 5.0f, 42.0f) : 0.0f);
+			const float Want = bDown ? 70.0f : (P.Blood >= 3.0f ? FMath::Min(10.0f + P.Blood * 3.0f, 32.0f) : 0.0f);
 			USkeletalMeshComponent* Mesh = P.Mesh.Get();
 			if (Want > 0.0f && Mesh && S.bBlood)
 			{
@@ -1458,6 +1468,10 @@ namespace
 				GCwPending.bDeath = S.bFinish;
 				GCwPending.bStrong = Heavy * S.Random.FRandRange(0.6f, 1.3f) > 0.75f || (Def.Hits >= 4 && S.Random.FRand() < 0.5f);
 				S.DemoTime = GCwPending.bStrong ? 0.12f : CwHitStopSeconds;
+				if (S.ScriptT >= 0.0f && S.ScriptHitShots < 6)
+				{
+					S.PendingShot = FString::Printf(TEXT("e_hit_%d"), ++S.ScriptHitShots);
+				}
 				S.LastEvent = GCwPending.bDeath ? TEXT("A finishing blow.") : (GCwPending.bStrong ? TEXT("A heavy hit: staggered.") : TEXT("A hit."));
 				break;
 			}
@@ -1722,6 +1736,58 @@ namespace
 			}
 		}
 	}
+	/** -CwScript: a fixed sequence for pictures. */
+	void CwRunScript(FCwState& S, float Dt)
+	{
+		if (S.ScriptT < 0.0f)
+		{
+			if (!S.People.IsValidIndex(S.Selected) || !S.People[S.Selected].Pawn.IsValid() || !S.People[S.Selected].Pawn->GetMakeHumanMesh())
+			{
+				return;
+			}
+			S.ScriptT = 0.0f;
+			S.ScriptStep = 0;
+			S.bEquip = false;
+		}
+		S.ScriptT += Dt;
+		struct FStep
+		{
+			float At;
+			int32 Action;  // 0 style+attack, 1 shot, 2 start the demo, 3 finish
+			int32 Style;
+			int32 Attack;
+			const TCHAR* Shot;
+		};
+		static const FStep Steps[] = {
+			{9.0f, 0, 1, 0, nullptr}, {9.7f, 1, 0, 0, TEXT("c_great1")}, {10.1f, 1, 0, 0, TEXT("c_great2")},
+			{11.5f, 0, 3, 0, nullptr}, {12.2f, 1, 0, 0, TEXT("d_dual1")}, {12.8f, 1, 0, 0, TEXT("d_dual2")},
+			{14.0f, 0, 1, -1, nullptr}, {14.5f, 2, 0, 0, nullptr}, {45.0f, 3, 0, 0, nullptr}, {56.0f, 1, 0, 0, TEXT("f_after1")},
+		};
+		while (S.ScriptStep < static_cast<int32>(UE_ARRAY_COUNT(Steps)) && S.ScriptT >= Steps[S.ScriptStep].At)
+		{
+			const FStep& Step = Steps[S.ScriptStep++];
+			switch (Step.Action)
+			{
+				case 0:
+					S.bEquip = true;
+					S.Style = Step.Style;
+					S.Attack = Step.Attack;
+					GCwPreviewDirty = true;
+					break;
+				case 1:
+					S.PendingShot = Step.Shot;
+					break;
+				case 2:
+					CwStartDemo(S);
+					break;
+				case 3:
+					S.bFinish = true;
+					break;
+				default:
+					break;
+			}
+		}
+	}
 }
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -1763,6 +1829,11 @@ void CreatorWeapons::Tick(UWorld* World, const TArray<ASimPawnActor*>& People, i
 	if (S.Demo != ECwDemo::Off && (!S.People.IsValidIndex(S.DemoA) || !S.People.IsValidIndex(S.DemoB) || !S.People[S.DemoA].Pawn.IsValid() || !S.People[S.DemoB].Pawn.IsValid()))
 	{
 		CwStopDemo(S);
+	}
+	static const bool bCwScript = FParse::Param(FCommandLine::Get(), TEXT("CwScript"));
+	if (bCwScript)
+	{
+		CwRunScript(S, Dt);
 	}
 	if (S.bEquip || S.Demo != ECwDemo::Off)
 	{
@@ -1817,6 +1888,11 @@ void CreatorWeapons::Tick(UWorld* World, const TArray<ASimPawnActor*>& People, i
 		P.PrevMontagePos = CwMontagePos(P);
 	}
 	CwUpdateBlood(S, World, Dt);
+	if (!S.PendingShot.IsEmpty())
+	{
+		FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Weapons") / S.PendingShot + TEXT(".png"), true, false);
+		S.PendingShot.Reset();
+	}
 }
 
 void CreatorWeapons::DrawWindow(float Scale)
@@ -1827,7 +1903,8 @@ void CreatorWeapons::DrawWindow(float Scale)
 		return;
 	}
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - 16.0f * Scale, Viewport->Pos.y + Viewport->Size.y - 16.0f * Scale), ImGuiCond_Once, ImVec2(1.0f, 1.0f));
+	// Bottom middle, clear of the creator panel (left) and the animations panel (right).
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y - 16.0f * Scale), ImGuiCond_Once, ImVec2(0.5f, 1.0f));
 	ImGui::SetNextWindowBgAlpha(0.88f);
 	if (ImGui::Begin("WEAPONS", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
 	{

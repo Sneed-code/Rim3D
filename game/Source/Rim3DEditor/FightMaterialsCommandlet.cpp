@@ -164,7 +164,7 @@ namespace
 			Noise->OutputMin = 0.0f;
 			Noise->OutputMax = 1.0f;
 			Noise->bTurbulence = false;
-			FightConnect(Position, TEXT(""), Noise, TEXT("Position"));
+			FightConnect(Position, TEXT(""), Noise, TEXT(""));  // the first input (Position)
 			return Noise;
 		};
 		UMaterialExpressionNoise* Coarse = MakeNoise(5.0f, 100, 4);
