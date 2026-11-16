@@ -1,5 +1,7 @@
 #include "FightSubsystem.h"
 
+#include "BloodSubsystem.h"
+
 #include "Camera/PlayerCameraManager.h"
 #include "Components/DecalComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -493,14 +495,39 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 			break;
 		case colony::ProjectileHitKind::Pawn:
 		{
-			SpawnBurst(EFightParticle::Blood, At, Dir, 16, 320.0f, 0.7f, 6.0f, 0.6f, 980.0f);
+			// Blood: UBloodSubsystem's spray, wounds and bleeding (docs/design/blood.md); the old blob and decals if its
+			// assets are missing or Blood.Enabled is 0.
+			UBloodSubsystem* Blood = GetWorld()->GetSubsystem<UBloodSubsystem>();
+			const bool bFullBlood = Blood && Blood->IsReady();
+			if (!bFullBlood)
+			{
+				SpawnBurst(EFightParticle::Blood, At, Dir, 16, 320.0f, 0.7f, 6.0f, 0.6f, 980.0f);
+			}
 			const float Strength = FMath::Clamp(Tracer.Amount / 20.0f, 0.35f, 1.0f);
 			if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
 			{
-				if (ASimPawnActor* Actor = Pawns->FindPawn(Tracer.Target))
+				ASimPawnActor* Actor = Pawns->FindPawn(Tracer.Target);
+				if (Actor)
 				{
 					Actor->PlayHitReaction(Dir, Strength);
 					++HitReactionsPlayed;
+				}
+				if (bFullBlood)
+				{
+					FBloodHit Hit;
+					Hit.At = At;
+					Hit.Direction = Dir;
+					Hit.Kind = EBloodWound::Auto;
+					// A bullet unless the sim said otherwise (a blow's MeleeHit comes through here too, from SpawnMeleeImpact).
+					Hit.Fallback = Tracer.Id != colony::kNoEntity ? EBloodWound::Gunshot : EBloodWound::Blunt;
+					Hit.Damage = Tracer.Amount;
+					Hit.Victim = Tracer.Target;
+					Hit.Part = Tracer.Part;
+					Hit.Mesh = Actor ? Actor->GetDecalMesh() : nullptr;
+					Blood->AddHit(Hit);
+				}
+				else if (Actor)
+				{
 					SpawnBodyDecal(*Actor, At, Dir, Tracer.Amount);
 					SpawnGroundDecal(FVector(At.X, At.Y, Actor->GetActorLocation().Z), FMath::Clamp(14.0f + Tracer.Amount * 1.2f, 16.0f, 40.0f));
 				}

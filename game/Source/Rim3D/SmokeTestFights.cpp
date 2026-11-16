@@ -8,6 +8,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 
+#include "BloodSubsystem.h"
 #include "FightSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
@@ -444,7 +445,20 @@ void USmokeTestSubsystem::BuildFightsPhases()
 			{
 				Fail(TEXT("fire_at_pawn: the player hit a pawn and got no hit marker"));
 			}
-			if (F->IsDecalMaterialMissing())
+			UBloodSubsystem* Blood = F->GetWorld()->GetSubsystem<UBloodSubsystem>();
+			if (Blood && Blood->IsReady())
+			{
+				// The full blood draws the wounds (docs/design/blood.md): it must have seen the hits and marked the bodies.
+				if (Blood->GetHits() < 1 || Blood->GetWoundMarks() < 1 || Blood->GetDropsSpawned() < 1)
+				{
+					Fail(FString::Printf(TEXT("fire_at_pawn: blood saw %d hits, made %d wound marks and %d drops for %d pawn hits"), Blood->GetHits(), Blood->GetWoundMarks(),
+						Blood->GetDropsSpawned(), PawnHits));
+				}
+				Notes.Add(FString::Printf(TEXT("blood: %d hits (%d gunshot), %d drops, %d mist, %d splats (%d merged, %d on walls), %d body stains, %d exits, %d drips, %d pools"),
+					Blood->GetHits(), Blood->GetHitsOfKind(EBloodWound::Gunshot), Blood->GetDropsSpawned(), Blood->GetMistSpawned(), Blood->GetSplatsMade(), Blood->GetSplatsMerged(),
+					Blood->GetWallSplats(), Blood->GetBodyStainsMade(), Blood->GetExitWounds(), Blood->GetDrips(), Blood->GetPools()));
+			}
+			else if (F->IsDecalMaterialMissing())
 			{
 				Fail(TEXT("fire_at_pawn: game/Content/Rim3D/Generated/Fights/M_WoundDecal is missing (run the FightMaterials commandlet, docs/design/smoke-tests.md)"));
 			}
