@@ -163,7 +163,7 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		Move(Right, Forward, bWalk, DeltaTime);
 	}
 
-	// Holding aim: the right mouse button with a gun in hand (a melee weapon blocks with it instead).
+	// Holding aim: the right mouse button with a gun in hand (a melee weapon or a shield blocks instead).
 	bool bWantAim = false;
 	if (bScriptedAim)
 	{
@@ -177,7 +177,9 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	{
 		const USimSubsystem* Bridge = GetBridge();
 		const colony::ThingView* View = Bridge && Bridge->GetSim() ? Bridge->GetCurrentSnapshot().find(Thing) : nullptr;
-		bWantAim = View && !View->downed && !View->dead && View->weapon.valid() && Bridge->GetDefs() && Bridge->GetDefs()->get(View->weapon).has("verbs");
+		// With a shield on the arm the right mouse button holds it up instead (UWeaponDrawSubsystem, docs/design/shields.md).
+		bWantAim = View && !View->downed && !View->dead && View->weapon.valid() && Bridge->GetDefs() && Bridge->GetDefs()->get(View->weapon).has("verbs")
+			&& !(View->shield.valid() && !View->shieldSlung);
 	}
 	bAimHeld = bWantAim;
 	AimBlend = FMath::FInterpConstantTo(AimBlend, bAimHeld ? 1.0f : 0.0f, DeltaTime, ProtagonistAimBlendPerSecond);
