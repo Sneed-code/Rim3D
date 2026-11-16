@@ -19,6 +19,8 @@ public class Rim3DEditor : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"MetaHumanCharacter", "MetaHumanCharacterEditor", "MetaHumanCoreTech", "MetaHumanCoreTechLib", "HairStrandsCore", "Projects",
+			// MakeHumanArt: the IK rig and retargeter for imported MakeHuman characters.
+			"IKRig", "IKRigEditor", "Slate", "SlateCore",
 		});
 		// PawnLooks.h: names shared with the game module.
 		PrivateIncludePaths.Add(Path.Combine(ModuleDirectory, "..", "Rim3D"));

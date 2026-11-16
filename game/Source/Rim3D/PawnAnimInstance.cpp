@@ -79,6 +79,10 @@ private:
 	FMotionMatchingState State;
 	bool bCacheBones = true;
 	bool bResetHistory = true;
+	/** The ground speed a moment ago (smoothed over about 0.15 s), cm/s: whether the pawn is speeding up or holding its pace. */
+	float RecentSpeed = 0.0f;
+	/** The velocity smoothed over about 0.12 s: the player's pawn moves by the steps the keys send, uneven from step to step. */
+	FVector SmoothVelocity = FVector::ZeroVector;
 };
 
 /**
@@ -293,8 +297,16 @@ void FSimPawnLocomotionNode::PredictAlongRoute(const FSimPawnAnimInputs& In, flo
 	// point, turn to face the way it goes. Without a route the pawn brakes where it is heading.
 	const float Accel = FMath::Max(In.CruiseSpeed, 100.0f) * PawnAccelerationPerSpeed;
 	FVector Position = In.Location;
-	float Speed = In.Velocity.Size2D();
-	FVector Heading = Speed > PawnStandSpeed ? In.Velocity.GetSafeNormal2D() : FVector::ZeroVector;
+	SmoothVelocity = In.bTeleported ? In.Velocity : FMath::Lerp(SmoothVelocity, In.Velocity, FMath::Clamp(DeltaTime / 0.12f, 0.0f, 1.0f));
+	float Speed = SmoothVelocity.Size2D();
+	// The pace it heads for: the cruise speed while it is still getting going, otherwise the pace it keeps now. Pawns often
+	// move slower than their cruise speed (drafted, slow ground, the player's walk), and predicting a speed-up they never
+	// make had motion matching play walk-to-run starts over and over while the feet slid.
+	const bool bSpeedingUp = Speed < PawnStandSpeed || Speed > RecentSpeed + 0.04f * In.CruiseSpeed;
+	const bool bSlowingDown = Speed < RecentSpeed - 0.06f * In.CruiseSpeed;
+	const float Pace = bSpeedingUp ? In.CruiseSpeed : FMath::Min(Speed, In.CruiseSpeed * 2.0f);
+	RecentSpeed = FMath::Lerp(RecentSpeed, Speed, FMath::Clamp(DeltaTime / 0.25f, 0.0f, 1.0f));
+	FVector Heading = Speed > PawnStandSpeed ? SmoothVelocity.GetSafeNormal2D() : FVector::ZeroVector;
 	float Yaw = In.Yaw;
 	int32 Next = 0;
 
@@ -315,7 +327,9 @@ void FSimPawnLocomotionNode::PredictAlongRoute(const FSimPawnAnimInputs& In, flo
 		for (int32 Sub = 0; Sub < SubSteps; ++Sub)
 		{
 			const bool bOnRoute = Next < In.Route.Num();
-			const float Wanted = bOnRoute ? FMath::Min(In.CruiseSpeed, FMath::Sqrt(2.0f * Accel * RouteLeft)) : 0.0f;
+			// Without a route a moving pawn is the player's (driven by the keys), which keeps going the way it goes; the sim's
+			// pawns have braked at their last waypoint by then.
+			const float Wanted = bOnRoute ? FMath::Min(Pace, FMath::Sqrt(2.0f * Accel * RouteLeft)) : (In.Route.IsEmpty() && Speed > PawnStandSpeed && !bSlowingDown ? Pace : 0.0f);
 			Speed = PawnApproach(Speed, Wanted, Accel * SubDt);
 			float Distance = Speed * SubDt;
 			if (bOnRoute)
