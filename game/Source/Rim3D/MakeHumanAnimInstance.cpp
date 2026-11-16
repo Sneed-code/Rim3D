@@ -168,10 +168,10 @@ void FMakeHumanJiggleNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePose
 			const FCompactPoseBoneIndex ParentIndex = Bones.GetParentBoneIndex(Index);
 			if (ParentIndex.IsValid())
 			{
-				const FVector Out = (Pose.GetLocation() - Output.Pose.GetComponentSpaceTransform(ParentIndex).GetLocation()).GetSafeNormal();
+				const FVector OutDir = (Pose.GetLocation() - Output.Pose.GetComponentSpaceTransform(ParentIndex).GetLocation()).GetSafeNormal();
 				const FVector OffsetC = Component.InverseTransformVectorNoScale(Offset);
-				const float Along = FMath::Clamp(static_cast<float>(FVector::DotProduct(OffsetC, Out)) / FMath::Max(Body.MaxOffset, 0.1f), -1.0f, 1.0f) * Fade;
-				const FVector Local = Pose.GetRotation().UnrotateVector(Out).GetAbs();
+				const float Along = FMath::Clamp(static_cast<float>(FVector::DotProduct(OffsetC, OutDir)) / FMath::Max(Body.MaxOffset, 0.1f), -1.0f, 1.0f) * Fade;
+				const FVector Local = Pose.GetRotation().UnrotateVector(OutDir).GetAbs();
 				const int32 Axis = Local.X >= Local.Y && Local.X >= Local.Z ? 0 : (Local.Y >= Local.Z ? 1 : 2);
 				FVector Scale(static_cast<double>(1.0f - 0.5f * Body.Squash * Along));
 				Scale[Axis] = 1.0f + Body.Squash * Along;
