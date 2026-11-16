@@ -1003,6 +1003,16 @@ def make_wrinkle_map(body, morphs, groups, out_path, size=2048, spacing=0.016, l
         live = amount[amount > 1e-4]
         peak = float(np.percentile(live, 98)) if live.size else 1.0
         amount = np.clip(amount / max(peak, 1e-6), 0.0, 1.0)
+        # Where each group may crease (sneed: the sneer and pain units drew a crease across the upper lip, which skin
+        # does not do): the nose group only on the nose and above its tip, the smile group not on the upper lip's middle.
+        top = base[:, 2].max()
+        head = base[base[:, 2] > top - 0.25]
+        nose_tip = head[np.argmin(head[:, 1])]
+        if name.lower() == "nose":
+            amount *= np.clip((base[:, 2] - (nose_tip[2] - 0.004)) / 0.006, 0.0, 1.0)
+        if name.lower() == "smile":
+            lip = (np.abs(base[:, 0] - nose_tip[0]) < 0.017) & (base[:, 2] < nose_tip[2]) & (base[:, 2] > nose_tip[2] - 0.035)
+            amount[lip] = 0.0
         channels.append((name, tensor, amount, uvscale))
     # Rasterise every face triangle where some group squeezes.
     out = np.zeros((size, size, 4), dtype=np.float32)
@@ -1241,30 +1251,138 @@ def _join(objs):
     return first
 
 
+def _sphere(name, centre, radius, rings=6, segments=8):
+    """A small ball (a stud, a barbell end, a gem)."""
+    import math
+    verts, faces = [], []
+    for i in range(1, rings):
+        phi = math.pi * i / rings
+        for j in range(segments):
+            th = 2 * math.pi * j / segments
+            verts.append(centre + radius * __import__("mathutils").Vector((math.sin(phi) * math.cos(th), math.sin(phi) * math.sin(th), math.cos(phi))))
+    top, bottom = len(verts), len(verts) + 1
+    verts += [centre + __import__("mathutils").Vector((0, 0, radius)), centre - __import__("mathutils").Vector((0, 0, radius))]
+    for i in range(rings - 2):
+        for j in range(segments):
+            p0, p1 = i * segments + j, i * segments + (j + 1) % segments
+            faces.append((p0, p1, p1 + segments, p0 + segments))
+    for j in range(segments):
+        faces.append((top, (j + 1) % segments, j))
+        last = (rings - 2) * segments
+        faces.append((bottom, last + j, last + (j + 1) % segments))
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata([tuple(v) for v in verts], [], faces)
+    mesh.update()
+    for poly in mesh.polygons:
+        poly.use_smooth = True
+    mesh.uv_layers.new(name="UVMap")
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
+def _rod(name, a, b, radius, segments=8):
+    """A straight bar from a to b (a barbell, an industrial bar, a dangle's wire)."""
+    d = (b - a)
+    frames = []
+    axis = d.normalized()
+    side = axis.cross(__import__("mathutils").Vector((0, 0, 1)))
+    if side.length < 0.1:
+        side = axis.cross(__import__("mathutils").Vector((1, 0, 0)))
+    side.normalize()
+    up = axis.cross(side).normalized()
+    centres = [a.lerp(b, t / 3.0) for t in range(4)]
+    return _tube(name, centres, [radius] * 4, [(side, up)] * 4, segments=segments)
+
+
+def _chain(name, path, link=0.0075, wire=0.0011):
+    """A chain of oval links along `path` (points), each link turned a quarter round from the last, as real chains lie."""
+    import math
+    from mathutils import Vector
+    # Even spacing along the path.
+    lengths = [0.0]
+    for i in range(1, len(path)):
+        lengths.append(lengths[-1] + (path[i] - path[i - 1]).length)
+    total = lengths[-1]
+    count = max(int(total / (link * 0.72)), 2)
+    parts = []
+    k = 0
+    for n in range(count):
+        s = total * n / count
+        while k + 1 < len(lengths) - 1 and lengths[k + 1] < s:
+            k += 1
+        t = (s - lengths[k]) / max(lengths[k + 1] - lengths[k], 1e-6)
+        p = path[k].lerp(path[k + 1], t)
+        d = (path[k + 1] - path[k]).normalized()
+        # A link: an oval ring whose long side runs along the chain, flat one way then the other.
+        flat = d.cross(Vector((0, 0, 1)))
+        if flat.length < 0.1:
+            flat = d.cross(Vector((1, 0, 0)))
+        flat.normalize()
+        if n % 2:
+            flat = d.cross(flat).normalized()
+        o = _torus(name + "_%d" % n, p, flat, link * 0.38, wire, rings=10, segments=5)
+        # Stretched along the chain: an oval.
+        for v in o.data.vertices:
+            rel = v.co - p
+            v.co = p + rel + d * (rel.dot(d) * 0.45)
+        parts.append(o)
+    obj = _join(parts)
+    obj.name = name
+    obj.data.name = name
+    return obj
+
+
 def add_jewellery(rig, body, female, color=(0.8, 0.7, 0.45), log=print):
-    """Jewellery fitted to this body (the creator shows each piece or not): earrings, a nose ring, nipple, navel and
-    genital piercings, a finger ring, a necklace, a collar, wrist cuffs and ankle shackles, each found from the body's
-    shape and bones and weighted to the bone it rides on (so piercings move with the jiggle). Each piece is its own
-    mesh and material, Jewel_<name>."""
+    """Jewellery fitted to this body (the creator shows each piece or not), each found from the body's shape and bones:
+    ear piercings (lobe hoop and stud, a dangle, helix ring, tragus stud, industrial bar), a nose ring, nipple
+    barbells, navel jewellery (ring, gem stud, dangle), a genital piercing (a woman's through the clitoral hood), a
+    finger ring, a chain necklace lying on the skin, a collar resting low on the neck, wrist cuffs and ankle shackles.
+    Piercings take the skin weights of the skin they go through, so they move exactly as it does (with the jiggle);
+    bands follow their bone. Each piece is its own mesh and material, Jewel_<name>."""
     import numpy as np
     from mathutils import Vector
     to_rig = rig.matrix_world.inverted() @ body.matrix_world
     pts = np.array([tuple(to_rig @ v.co) for v in body.data.vertices])
     bones = rig.data.bones
+    deform = {b.name for b in bones if b.use_deform}
+    group_names = {g.index: g.name for g in body.vertex_groups}
     made = []
 
     def V(a):
         return Vector(tuple(float(x) for x in a))
 
-    def piece(obj, bone):
+    def skin_weights(point):
+        """The skin weights of the body point nearest `point`."""
+        i = int(np.argmin(np.linalg.norm(pts - np.array(tuple(point)), axis=1)))
+        w = {}
+        for g in body.data.vertices[i].groups:
+            name = group_names.get(g.group)
+            if name in deform and g.weight > 1e-3:
+                w[name] = g.weight
+        total = sum(w.values())
+        return {k: v / total for k, v in w.items()} if total > 0 else None
+
+    def piece(obj, bone, through=None):
         mat = _material("Jewel_" + obj.name.replace("Jewel_", ""), color)
+        obj.data.materials.clear()
         obj.data.materials.append(mat)
+        for poly in obj.data.polygons:
+            poly.material_index = 0
         if bone not in bones:
             bone = "head" if "head" in bones else bones[0].name
-        _skin_to(obj, rig, {i: {bone: 1.0} for i in range(len(obj.data.vertices))})
+        if isinstance(through, str) and through == "each":
+            # Every point takes the skin weights under it (a chain lying on the body bends with it).
+            per = {}
+            for i, v in enumerate(obj.data.vertices):
+                per[i] = skin_weights(v.co) or {bone: 1.0}
+            _skin_to(obj, rig, per)
+        else:
+            weights = (skin_weights(through) if through is not None else None) or {bone: 1.0}
+            _skin_to(obj, rig, {i: weights for i in range(len(obj.data.vertices))})
         made.append(obj.name)
 
-    def limb_radius(point, axis, slab=0.012):
+    def limb_radius(point, axis, slab=0.012, near=0.12):
         P, A = np.array(tuple(point)), np.array(tuple(axis.normalized()))
         rel = pts - P
         along = rel @ A
@@ -1272,27 +1390,77 @@ def add_jewellery(rig, body, female, color=(0.8, 0.7, 0.45), log=print):
         if not sel.any():
             return 0.03
         lateral = np.linalg.norm(rel[sel] - np.outer(along[sel], A), axis=1)
-        near = lateral[lateral < 0.12]
-        return float(np.percentile(near, 95)) if near.size else 0.03
+        close = lateral[lateral < near]
+        return float(np.percentile(close, 95)) if close.size else 0.03
+
+    def fit_ring(point, axis, near, slab=0.005, keep=None, share=80):
+        A = np.array(tuple(axis.normalized()))
+        C = np.array(tuple(point))
+        sel = np.abs((pts - C) @ A) < slab
+        ring = pts[sel]
+        if keep is not None:
+            ring = ring[keep(ring)]
+        for _ in range(3):
+            rel = ring - C
+            flat = rel - np.outer(rel @ A, A)
+            dist = np.linalg.norm(flat, axis=1)
+            inner = ring[dist < near]
+            if len(inner) < 6:
+                break
+            rel_i = inner - C
+            C = C + (rel_i - np.outer(rel_i @ A, A)).mean(axis=0)
+        rel = ring - C
+        dist = np.linalg.norm(rel - np.outer(rel @ A, A), axis=1)
+        dist = dist[dist < near]
+        return V(C), (float(np.percentile(dist, share)) if dist.size else near * 0.6)
 
     head = bones.get("head")
     hx = head.head_local.x if head else 0.0
     hz = head.head_local.z if head else 1.5
-    # Earrings: hoops through the lowest point of each ear.
     face = pts[(pts[:, 2] > hz - 0.02) & (pts[:, 2] < hz + 0.12)]
     if head is not None and len(face):
         width = np.max(np.abs(face[:, 0] - hx))
         for side, sx in (("L", 1.0), ("R", -1.0)):
             ear = face[(face[:, 0] - hx) * sx > width * 0.82]
-            if len(ear):
-                lobe = V(ear[np.argmin(ear[:, 2])])
-                piece(_torus("Jewel_Earring" + side, lobe + Vector((0, 0, -0.008)), Vector((sx, 0, 0)), 0.008, 0.0012), "head")
+            if len(ear) < 5:
+                continue
+            out = Vector((sx, 0, 0))
+            lobe = V(ear[np.argmin(ear[:, 2])])
+            pierce = lobe + Vector((0, 0, 0.004))     # through the lobe, 4 mm up from its lowest point
+            # Lobe hoop: its plane across the lobe (round the forward axis), so it goes through the ear and hangs.
+            piece(_torus("Jewel_Earring" + side, pierce + Vector((0, 0, -0.0055)), Vector((0, 1, 0)), 0.0068, 0.0009), "head", pierce)
+            # Lobe stud: a small ball on the front of the lobe with its bar through it.
+            stud = _join([_sphere("stud", pierce + out * 0.0022, 0.0018), _rod("bar", pierce + out * 0.002, pierce - out * 0.003, 0.0005)])
+            stud.name = "Jewel_EarStud" + side
+            piece(stud, "head", pierce)
+            # A dangle: a short wire from the lobe and a drop.
+            drop = _join([_rod("wire", pierce, pierce + Vector((0, 0, -0.016)), 0.0005), _sphere("drop", pierce + Vector((0, 0, -0.019)), 0.0032)])
+            drop.name = "Jewel_EarDangle" + side
+            piece(drop, "head", pierce)
+            # Helix: a small ring through the upper back rim of the ear.
+            top = ear[ear[:, 2] > ear[:, 2].max() - 0.012]
+            helix = V(top[np.argmax(top[:, 1])]) + Vector((0, -0.002, -0.004))
+            piece(_torus("Jewel_Helix" + side, helix + Vector((0, 0, 0.0032)), Vector((0, 1, 0)), 0.0042, 0.0007), "head", helix)
+            # Tragus: a stud on the small flap in front of the ear opening.
+            mid = ear[np.abs(ear[:, 2] - (lobe.z + 0.022)) < 0.006]
+            if len(mid):
+                tragus = V(mid[np.argmin(mid[:, 1])]) + Vector((0, 0.004, 0))
+                t = _join([_sphere("tragus", tragus + out * 0.0015, 0.0016), _rod("bar", tragus + out * 0.0015, tragus - out * 0.003, 0.0005)])
+                t.name = "Jewel_Tragus" + side
+                piece(t, "head", tragus)
+            # Industrial: one bar across the top of the ear, front to back.
+            upper = ear[(ear[:, 2] > helix.z - 0.016) & (np.linalg.norm(ear - np.array(tuple(helix)), axis=1) < 0.026)]
+            front = (V(upper[np.argmin(upper[:, 1])]) if len(upper) else helix + Vector((0, -0.015, -0.004))) + Vector((0, 0.002, -0.003))
+            back = helix
+            ind = _join([_rod("bar", front - (back - front).normalized() * 0.003, back + (back - front).normalized() * 0.003, 0.0007),
+                         _sphere("a", front - (back - front).normalized() * 0.004, 0.0013), _sphere("b", back + (back - front).normalized() * 0.004, 0.0013)])
+            ind.name = "Jewel_Industrial" + side
+            piece(ind, "head", (front + back) * 0.5)
         # Nose ring through the left nostril.
-        front = face[np.argmin(face[:, 1])]
-        tip = V(front)
-        nost = pts[np.argmin(np.linalg.norm(pts - np.array(tuple(tip + Vector((0.011, 0.006, -0.012)))), axis=1))]
-        piece(_torus("Jewel_NoseRing", V(nost) + Vector((0.002, -0.003, -0.004)), Vector((1, 0, 0)), 0.005, 0.0009), "head")
-    # Nipple barbells.
+        tip = V(face[np.argmin(face[:, 1])])
+        nost = V(pts[np.argmin(np.linalg.norm(pts - np.array(tuple(tip + Vector((0.011, 0.006, -0.012)))), axis=1))])
+        piece(_torus("Jewel_NoseRing", nost + Vector((0.002, -0.003, -0.004)), Vector((1, 0, 0)), 0.005, 0.0009), "head", nost)
+    # Nipple barbells: they take the nipple's own skin weights, so they move with the breast and not beyond it.
     for side, sx in (("L", 1.0), ("R", -1.0)):
         b = bones.get("breast_" + side.lower())
         if b is None:
@@ -1301,54 +1469,109 @@ def add_jewellery(rig, body, female, color=(0.8, 0.7, 0.45), log=print):
         near = pts[(np.linalg.norm(pts - P, axis=1) < 0.08) & (np.abs(pts[:, 0] - P[0]) < 0.06)]
         if len(near):
             tip = V(near[np.argmin(near[:, 1])])
-            # A barbell through the nipple, side to side, a ball at each end showing either side of it.
             centre = tip + Vector((0, 0.0035, 0.0))
             parts = [_band("Jewel_Nipple" + side, centre, Vector((1, 0, 0)), 0.0, 0.02, 0.0012, rings=8)]
             for end in (-0.0105, 0.0105):
                 parts.append(_torus("ball", centre + Vector((end, 0, 0)), Vector((1, 0, 0)), 0.0012, 0.0021, rings=10, segments=8))
             obj = _join(parts)
-            piece(obj, "breast_" + side.lower())
-    # Navel ring: the deepest point of the belly's middle line between the hips and the ribs.
+            piece(obj, "breast_" + side.lower(), tip)
+    # Navel: the deepest point of the belly's middle line between the hips and the ribs. A ring, a gem stud (a curved
+    # bar with a gem above and a ball below) and a dangle.
     if "spine_01" in bones and "spine_02" in bones:
         cx = bones["pelvis"].head_local.x
         z0, z1 = bones["spine_01"].head_local.z, bones["spine_02"].head_local.z
         mid = pts[(np.abs(pts[:, 0] - cx) < 0.006) & (pts[:, 2] > z0) & (pts[:, 2] < z1) & (pts[:, 1] < bones["spine_01"].head_local.y)]
         if len(mid):
-            order = np.argsort(mid[:, 2])
-            front = mid[order]
-            navel = V(front[np.argmax(front[:, 1])])
-            piece(_torus("Jewel_Navel", navel + Vector((0, -0.003, -0.006)), Vector((1, 0, 0)), 0.006, 0.0011), "spine_01")
-    # Genital piercing: male, a ring at the tip of the genitals; female, a ring at the top of the vulva.
+            navel = V(mid[np.argmax(mid[:, 1])])
+            upper = navel + Vector((0, -0.002, 0.007))
+            piece(_torus("Jewel_Navel", navel + Vector((0, -0.003, -0.006)), Vector((1, 0, 0)), 0.006, 0.0011), "spine_01", navel)
+            gem = _join([_rod("bar", upper, navel + Vector((0, -0.001, -0.009)), 0.0008), _sphere("gem", upper + Vector((0, -0.0015, 0.002)), 0.0034),
+                         _sphere("ball", navel + Vector((0, -0.003, -0.011)), 0.0024)])
+            gem.name = "Jewel_NavelGem"
+            piece(gem, "spine_01", navel)
+            dangle = _join([_sphere("top", upper + Vector((0, -0.0015, 0.001)), 0.0024), _rod("bar", upper, navel + Vector((0, -0.002, -0.008)), 0.0008),
+                            _rod("wire", navel + Vector((0, -0.003, -0.009)), navel + Vector((0, -0.004, -0.024)), 0.0006),
+                            _sphere("drop1", navel + Vector((0, -0.004, -0.014)), 0.0022), _sphere("drop2", navel + Vector((0, -0.0045, -0.027)), 0.0036)])
+            dangle.name = "Jewel_NavelDangle"
+            piece(dangle, "spine_01", navel)
+    # Genital piercing: a man's ring at the tip; a woman's through the clitoral hood, at the top of the vulva where
+    # the body's front, coming up from between the legs, turns upright (the mons is above it).
     cx, crotch = _crotch(rig, [Vector(tuple(p)) for p in pts])
     if crotch is not None:
         if female:
-            top = pts[(np.abs(pts[:, 0] - cx) < 0.004) & (pts[:, 2] > crotch + 0.03) & (pts[:, 2] < crotch + 0.06)]
-            if len(top):
-                p = V(top[np.argmin(top[:, 1])])
-                piece(_torus("Jewel_Genital", p + Vector((0, -0.003, -0.004)), Vector((1, 0, 0)), 0.005, 0.0011), "pelvis")
+            mid = pts[(np.abs(pts[:, 0] - cx) < 0.006) & (pts[:, 2] > crotch) & (pts[:, 2] < crotch + 0.06) & (pts[:, 1] < 0.0)]
+            hood = None
+            prev = None
+            for dz in np.arange(0.0, 0.05, 0.0025):
+                s = mid[np.abs(mid[:, 2] - (crotch + dz)) < 0.002]
+                if not len(s):
+                    continue
+                front = s[np.argmin(s[:, 1])]
+                if prev is not None and (prev[1] - front[1]) < 0.0012 * (front[2] - prev[2]) / 0.0025 and dz > 0.012:
+                    hood = prev
+                    break
+                prev = front
+            if hood is None and prev is not None:
+                hood = prev
+            if hood is not None:
+                p = V(hood)
+                piece(_torus("Jewel_Genital", p + Vector((0, -0.0025, -0.004)), Vector((1, 0, 0)), 0.0048, 0.0010), "pelvis", p)
         else:
             g = list(_male_genital_weights(rig, [Vector(tuple(p)) for p in pts]).keys())
             if g:
                 gp = pts[g]
                 tip = V(gp[np.argmin(gp[:, 2] - 0.3 * gp[:, 1])])
-                piece(_torus("Jewel_Genital", tip + Vector((0, -0.004, -0.004)), Vector((1, 0, 0)), 0.006, 0.0012), "genital")
-    # A finger ring on the left ring finger.
+                piece(_torus("Jewel_Genital", tip + Vector((0, -0.004, -0.004)), Vector((1, 0, 0)), 0.006, 0.0012), "genital", tip)
+    # A finger ring on the left ring finger: its size from that finger alone (the hand and the other fingers nearby made
+    # it a halo).
     if "ring_01_l" in bones:
         b = bones["ring_01_l"]
-        c = b.head_local.lerp(b.tail_local, 0.5)
+        c = b.head_local.lerp(b.tail_local, 0.55)
         ax = b.tail_local - b.head_local
-        piece(_torus("Jewel_Ring", c, ax, limb_radius(c, ax, 0.006) + 0.0012, 0.0013), "ring_01_l")
-    # Necklace and collar round the neck.
+        A = np.array(tuple(ax.normalized()))
+
+        def axis_distance(points, start, direction):
+            rel = points - start
+            return np.linalg.norm(rel - np.outer(rel @ direction, direction), axis=1)
+
+        def own_finger(points):
+            # Nearer this finger than the fingers either side.
+            d_own = axis_distance(points, np.array(tuple(c)), A)
+            keep = d_own < 0.016
+            for other in ("middle_01_l", "pinky_01_l"):
+                if other in bones:
+                    ob = bones[other]
+                    oa = np.array(tuple((ob.tail_local - ob.head_local).normalized()))
+                    keep &= d_own < axis_distance(points, np.array(tuple(ob.head_local)), oa)
+            return keep
+
+        centre, r = fit_ring(c, ax, near=0.013, keep=own_finger, share=85)
+        piece(_band("Jewel_Ring", centre, ax, r + 0.0005, 0.0035, 0.0012, rings=24), "ring_01_l")
+    # Necklace: a chain lying on the skin round the base of the neck, lower at the front (over the collarbones, down
+    # towards the breastbone), as a chain falls; collar: resting low on the neck, its front lower than its back.
     if "neck_01" in bones:
+        import math
         b = bones["neck_01"]
-        ax = b.tail_local - b.head_local
-        # The necklace lies round the base of the neck, lower at the front (over the collarbones).
-        mid0 = b.head_local.lerp(b.tail_local, 0.5)
-        base = b.head_local + Vector((0, -0.012, -0.02))
-        tilt = (ax.normalized() + Vector((0, -0.45, 0))).normalized()
-        piece(_torus("Jewel_Necklace", base, tilt, limb_radius(mid0, ax) + 0.022, 0.0018, rings=48), "neck_01")
-        mid = b.head_local.lerp(b.tail_local, 0.5)
-        piece(_band("Jewel_Collar", mid, ax, limb_radius(mid, ax) + 0.002, 0.03, 0.006), "neck_01")
+        ax = (b.tail_local - b.head_local).normalized()
+        base = b.head_local
+        r_neck = limb_radius(base + ax * 0.01, ax)
+        path = []
+        for i in range(73):
+            th = 2 * math.pi * i / 72
+            radial = Vector((math.sin(th), math.cos(th), 0.0))   # th 0: the back (+Y), pi: the front
+            frontness = max(0.0, -math.cos(th))
+            want = base + radial * (r_neck + 0.01 + 0.03 * frontness) + Vector((0, 0, -0.012 - 0.07 * frontness ** 1.6))
+            # Onto the skin, 2 mm off it.
+            j = int(np.argmin(np.linalg.norm(pts - np.array(tuple(want)), axis=1)))
+            surf = V(pts[j])
+            normal = (surf - (base + Vector((0, 0, surf.z - base.z)))).normalized()
+            path.append(surf + normal * 0.0025)
+        chain = _chain("Jewel_Necklace", path)
+        piece(chain, "neck_01", "each")
+        tilt = (ax + Vector((0, -0.35, 0))).normalized()
+        low = base + ax * 0.012 + Vector((0, -0.006, 0))
+        centre, r = fit_ring(low, tilt, near=0.07, slab=0.008, share=60)
+        piece(_band("Jewel_Collar", centre, tilt, r + 0.004, 0.028, 0.006), "neck_01")
     # Cuffs on the wrists and shackles on the ankles.
     for side in ("l", "r"):
         for bone, at, name, h in (("lowerarm_" + side, 0.92, "Cuff", 0.035), ("calf_" + side, 0.9, "Shackle", 0.04)):

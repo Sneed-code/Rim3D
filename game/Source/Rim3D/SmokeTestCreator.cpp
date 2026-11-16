@@ -40,7 +40,11 @@
 
 namespace
 {
-	enum class ECreatorKind : int32 { Baseline, Imp, Orcoid, Beast };
+	enum class ECreatorKind : int32 { Baseline, Imp, Orcoid, Beast, Drow };
+	// Drow skin: a range of its own, from a light ash violet through slate and midnight purple to obsidian (the slider
+	// picks along it).
+	const FLinearColor CreatorDrowSkins[] = {FLinearColor(0.47f, 0.43f, 0.52f), FLinearColor(0.34f, 0.30f, 0.40f), FLinearColor(0.25f, 0.20f, 0.32f),
+		FLinearColor(0.17f, 0.13f, 0.24f), FLinearColor(0.11f, 0.10f, 0.15f), FLinearColor(0.07f, 0.065f, 0.08f)};
 
 	// Jewellery (mh_common.add_jewellery): each piece a mesh on the bases with a material slot Jewel_<key>.
 	struct FCreatorJewel
@@ -49,12 +53,17 @@ namespace
 		const TCHAR* Keys[2];
 	};
 	const FCreatorJewel CreatorJewels[] = {
-		{"Earrings", {TEXT("Jewel_EarringL"), TEXT("Jewel_EarringR")}}, {"Nose ring", {TEXT("Jewel_NoseRing"), nullptr}},
+		{"Lobe hoops", {TEXT("Jewel_EarringL"), TEXT("Jewel_EarringR")}}, {"Lobe studs", {TEXT("Jewel_EarStudL"), TEXT("Jewel_EarStudR")}},
+		{"Ear dangles", {TEXT("Jewel_EarDangleL"), TEXT("Jewel_EarDangleR")}}, {"Helix rings", {TEXT("Jewel_HelixL"), TEXT("Jewel_HelixR")}},
+		{"Tragus studs", {TEXT("Jewel_TragusL"), TEXT("Jewel_TragusR")}}, {"Industrial bars", {TEXT("Jewel_IndustrialL"), TEXT("Jewel_IndustrialR")}},
+		{"Nose ring", {TEXT("Jewel_NoseRing"), nullptr}},
 		{"Nipple piercings", {TEXT("Jewel_NippleL"), TEXT("Jewel_NippleR")}}, {"Navel ring", {TEXT("Jewel_Navel"), nullptr}},
+		{"Navel gem", {TEXT("Jewel_NavelGem"), nullptr}}, {"Navel dangle", {TEXT("Jewel_NavelDangle"), nullptr}},
 		{"Genital piercing", {TEXT("Jewel_Genital"), nullptr}}, {"Finger ring", {TEXT("Jewel_Ring"), nullptr}},
 		{"Necklace", {TEXT("Jewel_Necklace"), nullptr}}, {"Collar", {TEXT("Jewel_Collar"), nullptr}},
 		{"Wrist cuffs", {TEXT("Jewel_CuffL"), TEXT("Jewel_CuffR")}}, {"Ankle shackles", {TEXT("Jewel_ShackleL"), TEXT("Jewel_ShackleR")}}};
 	constexpr int32 CreatorJewelCount = UE_ARRAY_COUNT(CreatorJewels);
+	constexpr int32 CreatorEarJewels = 6;  // the first six are in the ears (none on the cat kind: no human ears)
 	const char* const CreatorMetalNames[] = {"Gold", "Silver", "Steel", "Iron", "Copper", "Black"};
 	const FLinearColor CreatorMetalColours[] = {FLinearColor(1.0f, 0.77f, 0.34f), FLinearColor(0.95f, 0.93f, 0.88f), FLinearColor(0.56f, 0.57f, 0.58f),
 		FLinearColor(0.33f, 0.32f, 0.31f), FLinearColor(0.95f, 0.64f, 0.54f), FLinearColor(0.04f, 0.04f, 0.04f)};
@@ -141,20 +150,28 @@ namespace
 	const FCreatorExpression CreatorExpressions[] = {
 		{"Neutral", {}},
 		{"Smile", {{15, 0.80f}, {18, 0.20f}, {2, 0.25f}, {5, 0.25f}, {31, 0.10f}, {33, 0.10f}}},
-		{"Grin", {{15, 1.00f}, {20, 0.25f}, {25, 0.40f}, {2, 0.40f}, {5, 0.40f}}},
+		// A natural smile showing the teeth (sneed): the corners up, the upper lip lifted off the teeth, the lips a little
+		// apart and the mouth 10 to 15% wider, the eyes narrowing with it.
+		{"Smile (teeth)", {{15, 0.85f}, {26, 0.35f}, {20, 0.12f}, {25, 0.15f}, {2, 0.30f}, {5, 0.30f}}},
+		{"Grin", {{15, 0.95f}, {26, 0.25f}, {20, 0.15f}, {25, 0.28f}, {2, 0.40f}, {5, 0.40f}}},
 		{"Frown", {{16, 0.60f}, {6, 0.70f}, {10, 0.70f}, {28, 0.30f}}},
-		{"Sad", {{16, 0.50f}, {8, 0.90f}, {12, 0.90f}, {2, 0.20f}, {5, 0.20f}}},
+		{"Sad", {{16, 0.55f}, {8, 0.65f}, {12, 0.65f}, {6, 0.15f}, {10, 0.15f}, {2, 0.20f}, {5, 0.20f}, {19, 0.15f}}},
 		{"Angry", {{6, 1.00f}, {10, 1.00f}, {31, 0.50f}, {33, 0.50f}, {14, 0.50f}, {25, 0.30f}, {2, 0.30f}, {5, 0.30f}, {27, 0.20f}}},
-		{"Surprised", {{9, 1.00f}, {13, 1.00f}, {1, 0.80f}, {4, 0.80f}, {20, 0.60f}}},
+		{"Surprised", {{9, 0.80f}, {13, 0.80f}, {8, 0.20f}, {12, 0.20f}, {1, 0.70f}, {4, 0.70f}, {20, 0.45f}}},
 		{"Afraid", {{8, 0.80f}, {12, 0.80f}, {9, 0.40f}, {13, 0.40f}, {1, 0.80f}, {4, 0.80f}, {25, 0.50f}, {20, 0.25f}, {27, 0.60f}}},
-		{"Disgusted", {{31, 0.90f}, {33, 0.90f}, {26, 0.60f}, {6, 0.40f}, {10, 0.40f}, {2, 0.30f}, {5, 0.30f}}},
-		{"In pain", {{0, 0.85f}, {3, 0.85f}, {8, 0.9f}, {12, 0.9f}, {6, 0.7f}, {10, 0.7f}, {25, 1.0f}, {20, 0.3f}, {27, 0.8f}, {31, 0.7f}, {33, 0.7f}, {28, 0.5f}}},
-		{"Pout", {{24, 0.80f}, {23, 0.60f}}},
+		{"Disgusted", {{31, 0.70f}, {33, 0.70f}, {26, 0.35f}, {16, 0.25f}, {6, 0.40f}, {10, 0.40f}, {2, 0.30f}, {5, 0.30f}}},
+		// Pain: eyes squeezed, brows drawn down and in with the inner ends raised, teeth clenched behind lips pulled
+		// back and a little apart, the neck tight.
+		{"In pain", {{0, 0.65f}, {3, 0.65f}, {6, 0.55f}, {10, 0.55f}, {8, 0.40f}, {12, 0.40f}, {28, 0.35f}, {25, 0.55f}, {16, 0.30f}, {20, 0.12f}, {27, 0.45f}, {31, 0.25f}, {33, 0.25f}}},
+		// Pout: the lower lip pushed out, the corners down a little, the brows' inner ends up.
+		{"Pout", {{19, 0.60f}, {16, 0.35f}, {23, 0.20f}, {8, 0.30f}, {12, 0.30f}}},
+		// Lips rounded and pushed forward (sipping, sucking, whistling): what "pout" was.
+		{"Sip", {{24, 0.80f}, {23, 0.60f}}},
 		{"Asleep", {{0, 1.00f}, {3, 1.00f}, {20, 0.05f}}},
 	};
 	enum { CreatorUnitEyeLeftClosure = 0, CreatorUnitEyeRightClosure = 3,
 		CreatorUnitMouthOpen = 20, CreatorUnitMouthPursing = 24 };
-	const char* const CreatorKindNames[] = {"Baseline", "Imp", "Orcoid", "Beast-Strain (cat)"};
+	const char* const CreatorKindNames[] = {"Baseline", "Imp", "Orcoid", "Beast-Strain (cat)", "Drow"};
 	const char* const CreatorPubicNames[] = {"None", "Natural", "Trimmed", "Strip"};
 
 	/** One character in the creator: its gender (which base), kind, slider values, and its colonist. */
@@ -205,6 +222,13 @@ namespace
 		// Beast-Strain fur (cat ears and tail): the body hair's colour with a shade of its own, or a colour of its own.
 		float FurShade = 0.25f;        // -1 darker .. 1 lighter than the hair
 		float Wet = 0.0f;              // 0 dry .. 1 soaked (skin, hair and jewellery darker and glossier)
+		float ElfEars = 0.0f;          // long pointed ears (Drow)
+		float DrowTone = 0.55f;        // along CreatorDrowSkins, light .. obsidian
+		bool bOwnIris = false;         // the eyes' own iris colour, else the base's
+		float Iris[3] = {0.8f, 0.05f, 0.04f};
+		float IrisStrength = 1.0f;     // how strongly the colour shows (Drow: faint to vivid red)
+		float BreastJiggle = 0.0f;     // 0 the default (firm) .. 1 looser and bouncier
+		int32 EarCover = 0;            // headgear test: 0 none, 1 covers the top of the ears, 2 covers them fully
 		bool bOwnFurColour = false;
 		float Fur[3] = {0.55f, 0.36f, 0.2f};
 
@@ -239,6 +263,7 @@ namespace
 		bool bEveryone = false;
 		float ClipSpeed = 1.0f;
 		TArray<int32> Playing;     // per person: the clip it plays, or -1
+		int32 IdleClip = -1;       // standing still: a seamless breathing idle, looped (not the game's idle, which restarts)
 		float DemoTime = -1.0f;   // -CreatorDemo: seconds into the self-running demo
 		int32 Recorded = 0;
 		int32 PanelFrames = 0;
@@ -261,13 +286,23 @@ namespace
 		P.Skin[2] = B;
 	}
 
+	/** Drow skin: the colour at the person's DrowTone along CreatorDrowSkins. */
+	void CreatorDrowSkin(FCreatorPerson& P)
+	{
+		const float T = FMath::Clamp(P.DrowTone, 0.0f, 1.0f) * (UE_ARRAY_COUNT(CreatorDrowSkins) - 1);
+		const int32 K = FMath::Min(static_cast<int32>(T), static_cast<int32>(UE_ARRAY_COUNT(CreatorDrowSkins)) - 2);
+		const FLinearColor C = FMath::Lerp(CreatorDrowSkins[K], CreatorDrowSkins[K + 1], T - K);
+		CreatorSetSkin(P, C.R, C.G, C.B);
+	}
+
 	/** A kind's look on top of the person's gender: the inhuman parts, a build and a skin colour. Body sliders reset. */
 	void CreatorSetKind(FCreatorPerson& P, ECreatorKind Kind)
 	{
 		P.Kind = Kind;
 		P.Sex = P.Older = P.Breasts = P.Genital = 0.0f;
 		P.Pigment = 0.5f;
-		P.ImpEars = P.ImpFace = P.OrcFace = P.OrcBody = P.Horns = P.Tusks = P.Tail = 0.0f;
+		P.ImpEars = P.ImpFace = P.OrcFace = P.OrcBody = P.Horns = P.Tusks = P.Tail = P.ElfEars = 0.0f;
+		P.bOwnIris = false;
 		P.Weight = P.bFemale ? -0.2f : 0.0f;
 		P.Muscle = 0.0f;
 		P.Height = P.bFemale ? 0.94f : 1.02f;
@@ -288,6 +323,20 @@ namespace
 			P.Muscle = 0.6f;
 			P.ImpEars = P.ImpFace = P.Horns = P.Tail = 1.0f;
 			CreatorSetSkin(P, 0.72f, 0.17f, 0.12f);
+		}
+		else if (Kind == ECreatorKind::Drow)
+		{
+			// Long pointed ears, platinum hair, red irises, skin from the Drow range.
+			P.Height = P.bFemale ? 0.97f : 1.02f;
+			P.Weight = -0.3f;
+			P.Muscle = 0.3f;
+			P.ElfEars = 1.0f;
+			P.DrowTone = 0.55f;
+			CreatorDrowSkin(P);
+			P.Hair[0] = 0.92f, P.Hair[1] = 0.91f, P.Hair[2] = 0.88f;
+			P.bOwnIris = true;
+			P.Iris[0] = 0.85f, P.Iris[1] = 0.05f, P.Iris[2] = 0.04f;
+			P.IrisStrength = 1.0f;
 		}
 		else if (Kind == ECreatorKind::Orcoid)
 		{
@@ -370,7 +419,11 @@ namespace
 		Set(TEXT("Soft"), -P.Muscle);
 		Set(TEXT("BreastsLarge"), P.bFemale ? P.Breasts : 0.0f);
 		Set(TEXT("BreastsSmall"), P.bFemale ? -P.Breasts : 0.0f);
-		Set(TEXT("ImpEars"), P.ImpEars);
+		// Headgear that covers the ears tucks pointed ears in: fully covered, back to a human ear's size (nothing pokes out
+		// of a helmet); only the top covered, their tips pulled down under it.
+		const float EarKeep = P.EarCover == 2 ? 0.0f : (P.EarCover == 1 ? 0.35f : 1.0f);
+		Set(TEXT("ImpEars"), P.ImpEars * EarKeep);
+		Set(TEXT("ElfEars"), P.ElfEars * EarKeep);
 		Set(TEXT("ImpFace"), P.ImpFace);
 		Set(TEXT("OrcFace"), P.OrcFace);
 		Set(TEXT("OrcBody"), P.OrcBody);
@@ -387,6 +440,7 @@ namespace
 		if (UMakeHumanAnimInstance* Anim = Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()))
 		{
 			Anim->SetSoftTissueEnabled(P.bJiggle);
+			Anim->SetBreastJiggle(P.BreastJiggle);
 		}
 		Set(TEXT("GenitalLarge"), P.Genital);
 		Set(TEXT("GenitalSmall"), -P.Genital);
@@ -428,8 +482,10 @@ namespace
 			}
 			return 0.0f;
 		};
-		const float Forehead = FMath::Max3(FMath::Max(U(TEXT("EyebrowsLeftUp")), U(TEXT("EyebrowsRightUp"))),
-			FMath::Max(U(TEXT("EyebrowsLeftInnerUp")), U(TEXT("EyebrowsRightInnerUp"))), FMath::Max(U(TEXT("EyebrowsLeftExternUp")), U(TEXT("EyebrowsRightExternUp"))));
+		// The forehead creases run across the whole brow: full for a brow raise, less for the outer ends, little for the
+		// inner ends (sad, afraid: across the whole forehead it looked wrong), and all a little softer.
+		const float Forehead = 0.8f * FMath::Max3(FMath::Max(U(TEXT("EyebrowsLeftUp")), U(TEXT("EyebrowsRightUp"))),
+			0.35f * FMath::Max(U(TEXT("EyebrowsLeftInnerUp")), U(TEXT("EyebrowsRightInnerUp"))), 0.7f * FMath::Max(U(TEXT("EyebrowsLeftExternUp")), U(TEXT("EyebrowsRightExternUp"))));
 		const float Furrow = FMath::Max3(U(TEXT("EyebrowsLeftDown")), U(TEXT("EyebrowsRightDown")), U(TEXT("NoseCompression")));
 		const float Smile = FMath::Max3(U(TEXT("MouthCornerPuller")), 0.7f * FMath::Max(U(TEXT("EyeLeftSlit")), U(TEXT("EyeRightSlit"))), U(TEXT("MouthUpwardRetraction")));
 		const float Nose = FMath::Max3(U(TEXT("NoseLeftElevation")), U(TEXT("NoseRightElevation")), U(TEXT("NoseDepression")));
@@ -478,7 +534,7 @@ namespace
 				{
 					if (Key && Slot.EndsWith(Key))
 					{
-						bShow = P.Jewels[j] && !(j == 0 && P.Kind == ECreatorKind::Beast);  // earrings: no human ears
+						bShow = P.Jewels[j] && !(j < CreatorEarJewels && P.Kind == ECreatorKind::Beast);  // ear piercings: no human ears
 						MetalIndex = P.Metal[j];
 					}
 				}
@@ -496,6 +552,25 @@ namespace
 					Dynamic->SetVectorParameterValue(TEXT("Tint"), CreatorMetalColours[FMath::Clamp(MetalIndex, 0, 5)]);
 					Dynamic->SetScalarParameterValue(TEXT("Roughness"), MetalIndex == 3 ? 0.55f : (MetalIndex == 5 ? 0.35f : 0.22f));
 				}
+			}
+		}
+		// Eyes: the iris in the person's own colour (Drow red), or the base's.
+		for (int32 i = 0; i < Slots.Num(); ++i)
+		{
+			const FString Slot = Slots[i].ToString();
+			if (!Slot.Contains(TEXT("high_poly")) && !Slot.Contains(TEXT("low_poly")))
+			{
+				continue;
+			}
+			UMaterialInstanceDynamic* Dynamic = Cast<UMaterialInstanceDynamic>(Mesh->GetMaterial(i));
+			if (!Dynamic)
+			{
+				Dynamic = Mesh->CreateDynamicMaterialInstance(i);
+			}
+			if (Dynamic)
+			{
+				Dynamic->SetVectorParameterValue(TEXT("IrisColour"), Linear(P.Iris));
+				Dynamic->SetScalarParameterValue(TEXT("IrisAmount"), P.bOwnIris ? FMath::Clamp(P.IrisStrength, 0.0f, 1.0f) : 0.0f);
 			}
 		}
 		// Beast-Strain parts (cat ears, claws, the furred tail) only on that kind; the fur in the hair's colour, shaded.
@@ -596,7 +671,7 @@ namespace
 	}
 
 	/** Plays a clip on a person's body (its mannequin, which every body follows), or stops it (Clip -1). */
-	void CreatorPlay(FCreatorState& State, int32 Person, int32 Clip, ASimPawnActor* Pawn)
+	void CreatorPlay(FCreatorState& State, int32 Person, int32 Clip, ASimPawnActor* Pawn, bool bAlwaysLoop = false)
 	{
 		USimPawnAnimInstance* Anim = Pawn ? Pawn->GetAnim() : nullptr;
 		if (!Anim)
@@ -617,7 +692,7 @@ namespace
 		}
 		if (UAnimSequence* Sequence = Cast<UAnimSequence>(State.Clips[Clip].TryLoad()))
 		{
-			Anim->PlaySlotAnimationAsDynamicMontage(Sequence, FAnimSlotGroup::DefaultSlotName, 0.25f, 0.25f, State.ClipSpeed, State.bLoop ? 100000 : 1);
+			Anim->PlaySlotAnimationAsDynamicMontage(Sequence, FAnimSlotGroup::DefaultSlotName, 0.25f, 0.25f, bAlwaysLoop ? 1.0f : State.ClipSpeed, State.bLoop || bAlwaysLoop ? 100000 : 1);
 			State.Playing[Person] = Clip;
 		}
 	}
@@ -851,7 +926,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		}
 		// -CreatorKind=<0-3> (Baseline, Imp, Orcoid, Beast-Strain) for everyone, for pictures.
 		int32 KindArg = -1;
-		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorKind="), KindArg) && KindArg >= 0 && KindArg < 4)
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorKind="), KindArg) && KindArg >= 0 && KindArg < static_cast<int32>(UE_ARRAY_COUNT(CreatorKindNames)))
 		{
 			for (FCreatorPerson& Person : State->People)
 			{
@@ -918,6 +993,29 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			while (State->Playing.Num() < State->People.Num()) { State->Playing.Add(-1); }  // -1: not playing
 			State->bAutoPlayed = true;
 			Notes.Add(FString::Printf(TEXT("creator: playing %s (%d clips)"), *PlayName, State->Clips.Num()));
+		}
+		// Standing: anyone not walking and not playing a clip breathes in a seamless idle; walking stops it.
+		if (State->bClipsListed && State->bFaced && PhaseTime > 4.5f)
+		{
+			if (State->IdleClip < 0)
+			{
+				for (const TCHAR* Name : {TEXT("ProMeleeAxeUnarmedIdle"), TEXT("ProLongbowUnarmedIdle01"), TEXT("ActionAdventureIdle")})
+				{
+					State->IdleClip = State->IdleClip >= 0 ? State->IdleClip : State->ClipNames.IndexOfByKey(Name);
+				}
+			}
+			while (State->Playing.Num() < State->People.Num()) { State->Playing.Add(-1); }
+			for (int32 i = 0; i < State->People.Num() && State->IdleClip >= 0; ++i)
+			{
+				if (!State->bWalk && State->Playing[i] < 0)
+				{
+					CreatorPlay(*State, i, State->IdleClip, Pawns->FindPawn(State->People[i].Thing), true);
+				}
+				else if (State->bWalk && State->Playing[i] == State->IdleClip)
+				{
+					CreatorPlay(*State, i, -1, Pawns->FindPawn(State->People[i].Thing));
+				}
+			}
 		}
 		// -CreatorRecord=<seconds> with -CreatorPlay: every frame of the clip at a fixed 30 a second (creator/rec_0000.png ...).
 		float PlayRecord = 0.0f;
@@ -1097,7 +1195,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		}
 		const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 		const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-		ImGui::GetStyle().FontScaleMain = 1.8f * Scale;  // half as big again as the other panels (sneed)
+		ImGui::GetStyle().FontScaleMain = 1.53f * Scale;  // larger than the other panels (sneed: x1.5, then 15% smaller)
 		State->bUiWantsMouse = ImGui::GetIO().WantCaptureMouse;
 		State->bUiWantsKeys = ImGui::GetIO().WantCaptureKeyboard;
 		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + 16.0f * Scale, Viewport->Pos.y + 16.0f * Scale), ImGuiCond_Once);
@@ -1165,11 +1263,11 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				}
 				if (ImGui::BeginTabItem("Kind"))
 				{
-					for (int32 k = 0; k < 4; ++k)
+					for (int32 k = 0; k < static_cast<int32>(UE_ARRAY_COUNT(CreatorKindNames)); ++k)
 					{
-						if (k > 0)
+						if (k % 2 == 1)
 						{
-							ImGui::SameLine();
+							ImGui::SameLine(200.0f * Scale);  // two to a row: in one row the last ones fell off the panel
 						}
 						if (ImGui::RadioButton(CreatorKindNames[k], static_cast<int32>(P.Kind) == k))
 						{
@@ -1184,6 +1282,22 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					ImGui::SliderFloat("Horns", &P.Horns, 0.0f, 1.0f, "%.2f");
 					ImGui::SliderFloat("Tusks", &P.Tusks, 0.0f, 1.0f, "%.2f");
 					ImGui::SliderFloat("Tail", &P.Tail, 0.0f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Long pointed ears", &P.ElfEars, 0.0f, 1.0f, "%.2f");
+					if (P.Kind == ECreatorKind::Drow)
+					{
+						ImGui::SeparatorText("Drow");
+						if (ImGui::SliderFloat("Skin (light .. obsidian)", &P.DrowTone, 0.0f, 1.0f, "%.2f"))
+						{
+							CreatorDrowSkin(P);
+						}
+						ImGui::SliderFloat("Red of the eyes", &P.IrisStrength, 0.2f, 1.0f, "%.2f");
+					}
+					ImGui::SeparatorText("Headgear test");
+					ImGui::RadioButton("No headgear", &P.EarCover, 0);
+					ImGui::SameLine();
+					ImGui::RadioButton("Ear tops covered", &P.EarCover, 1);
+					ImGui::SameLine();
+					ImGui::RadioButton("Ears covered", &P.EarCover, 2);
 					if (P.Kind == ECreatorKind::Beast)
 					{
 						ImGui::SeparatorText("Fur (ears and tail)");
@@ -1207,7 +1321,11 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 						ImGui::SliderFloat("Breasts", &P.Breasts, -1.0f, 1.0f, "%.2f");
 					}
 					ImGui::SliderFloat(P.bFemale ? "Labia" : "Genitals", &P.Genital, -1.0f, 1.0f, "%.2f");
-					ImGui::Checkbox("Jiggle (off: keep still)", &P.bJiggle);
+					ImGui::Checkbox("Jiggle (off: soft parts stay as animated)", &P.bJiggle);
+					if (P.bFemale)
+					{
+						ImGui::SliderFloat("Breast jiggle", &P.BreastJiggle, 0.0f, 1.0f, "%.2f");
+					}
 					if (ImGui::Button("Random body"))
 					{
 						FRandomStream R(FPlatformTime::Cycles());
@@ -1352,6 +1470,13 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 						}
 					}
 					ImGui::ColorEdit3("Hair colour", P.Hair);
+					ImGui::SeparatorText("Eyes");
+					ImGui::Checkbox("Own iris colour", &P.bOwnIris);
+					if (P.bOwnIris)
+					{
+						ImGui::ColorEdit3("Iris", P.Iris);
+						ImGui::SliderFloat("Iris strength", &P.IrisStrength, 0.2f, 1.0f, "%.2f");
+					}
 					ImGui::SeparatorText("Pubic hair");
 					bool bPubic = P.Pubic != 0;
 					if (ImGui::Checkbox("Pubic hair", &bPubic))
@@ -1374,7 +1499,17 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 						ImGui::TextUnformatted("(a little darker than the hair)");
 					}
 					ImGui::SeparatorText("Skin");
-					ImGui::ColorEdit3("Skin", P.Skin);
+					if (P.Kind == ECreatorKind::Drow)
+					{
+						if (ImGui::SliderFloat("Drow skin (light .. obsidian)", &P.DrowTone, 0.0f, 1.0f, "%.2f"))
+						{
+							CreatorDrowSkin(P);
+						}
+					}
+					else
+					{
+						ImGui::ColorEdit3("Skin", P.Skin);
+					}
 					ImGui::SliderFloat("Areola and genital pigment", &P.Pigment, 0.0f, 1.0f, "%.2f");
 					if (ImGui::Button("Random skin tone"))
 					{
@@ -1414,6 +1549,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			ImGui::SetNextItemWidth(300.0f * Scale);
 			ImGui::InputTextWithHint("##filter", "search", State->ClipFilter, sizeof(State->ClipFilter));
 			const FString Filter = UTF8_TO_TCHAR(State->ClipFilter);
+			int32 Picked = -1;
 			ImGui::BeginChild("##clips", ImVec2(320.0f * Scale, 520.0f * Scale), ImGuiChildFlags_Borders);
 			for (int32 c = 0; c < State->Clips.Num();)
 			{
@@ -1435,6 +1571,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 						if (ImGui::Selectable(TCHAR_TO_UTF8(*State->ClipNames[i]), State->Clip == i))
 						{
 							State->Clip = i;
+							Picked = i;
 						}
 					}
 				}
@@ -1456,6 +1593,12 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					}
 				}
 			};
+			// Picking another clip while one plays switches to it straight away.
+			const int32 Current = State->Playing.IsValidIndex(State->Selected) ? State->Playing[State->Selected] : -1;
+			if (Picked >= 0 && Current >= 0 && Current != State->IdleClip)
+			{
+				Apply(Picked);
+			}
 			if (ImGui::Button("Play"))
 			{
 				State->bWalk = false;  // standing still while they act it out
@@ -1464,10 +1607,10 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			ImGui::SameLine();
 			if (ImGui::Button("Stop"))
 			{
-				Apply(-1);
+				Apply(-1);  // back to the breathing idle (the tick starts it)
 			}
 			const int32 Now = State->Playing.IsValidIndex(State->Selected) ? State->Playing[State->Selected] : -1;
-			ImGui::TextDisabled("%s", Now >= 0 ? TCHAR_TO_UTF8(*(TEXT("Playing: ") + State->ClipNames[Now])) : "Not playing");
+			ImGui::TextDisabled("%s", Now >= 0 && Now != State->IdleClip ? TCHAR_TO_UTF8(*(TEXT("Playing: ") + State->ClipNames[Now])) : "Standing (breathing idle)");
 		}
 		ImGui::End();
 		CreatorWeapons::DrawWindow(Scale);

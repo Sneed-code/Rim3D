@@ -809,17 +809,32 @@ namespace
 		auto* Tint = Cast<UMaterialExpressionVectorParameter>(Make(UMaterialExpressionVectorParameter::StaticClass(), -300, -300));
 		Tint->ParameterName = TEXT("Tint");
 		Tint->DefaultValue = FLinearColor::White;
+		// The iris in a colour of its own (the creator's eye colour, the Drow's red), by IrisAmount: the texture's
+		// lightness kept as the iris's detail, the colour laid over it.
+		auto* IrisColour = Cast<UMaterialExpressionVectorParameter>(Make(UMaterialExpressionVectorParameter::StaticClass(), -300, -450));
+		IrisColour->ParameterName = TEXT("IrisColour");
+		IrisColour->DefaultValue = FLinearColor(0.5f, 0.35f, 0.2f);
+		auto* IrisAmount = Cast<UMaterialExpressionScalarParameter>(Make(UMaterialExpressionScalarParameter::StaticClass(), -300, -550));
+		IrisAmount->ParameterName = TEXT("IrisAmount");
+		IrisAmount->DefaultValue = 0.0f;
 		auto* Shade = Cast<UMaterialExpressionCustom>(Make(UMaterialExpressionCustom::StaticClass(), -50, -150));
 		Shade->OutputType = CMOT_Float3;
 		Shade->Description = TEXT("EyeColour");
-		Shade->Code = TEXT("return Tex * Tint * (1.0 - 0.4 * Iris.y);");
-		Shade->Inputs.SetNum(3);
+		Shade->Code = TEXT("float3 base = Tex * Tint;\n"
+			"float lum = dot(Tex, float3(0.3, 0.59, 0.11));\n"
+			"float3 own = IrisColour * (0.35 + 1.5 * lum);\n"
+			"return lerp(base, own, Iris.x * saturate(Amount)) * (1.0 - 0.4 * Iris.y);");
+		Shade->Inputs.SetNum(5);
 		Shade->Inputs[0].InputName = TEXT("Tex");
 		Shade->Inputs[1].InputName = TEXT("Tint");
 		Shade->Inputs[2].InputName = TEXT("Iris");
+		Shade->Inputs[3].InputName = TEXT("IrisColour");
+		Shade->Inputs[4].InputName = TEXT("Amount");
 		Shade->Inputs[0].Input.Connect(0, Color);
 		Shade->Inputs[1].Input.Connect(0, Tint);
 		Shade->Inputs[2].Input.Connect(0, Iris);
+		Shade->Inputs[3].Input.Connect(0, IrisColour);
+		Shade->Inputs[4].Input.Connect(0, IrisAmount);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Shade, TEXT(""), MP_BaseColor);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Color, TEXT("A"), MP_OpacityMask);
 		// Wet: very smooth (sharp highlights, the sky and the sun's catchlight), the iris smoother still.

@@ -518,6 +518,24 @@
         },
         "CatHead": {
           "flatten_ears": true
+        },
+        "ElfEars": {
+          "targets": {
+            "l-ear-shape-pointed": 1.6,
+            "r-ear-shape-pointed": 1.6,
+            "l-ear-scale-vert-incr": 1.6,
+            "r-ear-scale-vert-incr": 1.6,
+            "l-ear-scale-incr": 0.6,
+            "r-ear-scale-incr": 0.6,
+            "l-ear-rot-backward": 1.0,
+            "r-ear-rot-backward": 1.0,
+            "l-ear-trans-up": 0.6,
+            "r-ear-trans-up": 0.6,
+            "l-ear-wing-decr": 0.4,
+            "r-ear-wing-decr": 0.4,
+            "l-ear-lobe-decr": 0.6,
+            "r-ear-lobe-decr": 0.6
+          }
         }
       }
     },
@@ -1033,6 +1051,24 @@
         },
         "CatHead": {
           "flatten_ears": true
+        },
+        "ElfEars": {
+          "targets": {
+            "l-ear-shape-pointed": 1.6,
+            "r-ear-shape-pointed": 1.6,
+            "l-ear-scale-vert-incr": 1.6,
+            "r-ear-scale-vert-incr": 1.6,
+            "l-ear-scale-incr": 0.6,
+            "r-ear-scale-incr": 0.6,
+            "l-ear-rot-backward": 1.0,
+            "r-ear-rot-backward": 1.0,
+            "l-ear-trans-up": 0.6,
+            "r-ear-trans-up": 0.6,
+            "l-ear-wing-decr": 0.4,
+            "r-ear-wing-decr": 0.4,
+            "l-ear-lobe-decr": 0.6,
+            "r-ear-lobe-decr": 0.6
+          }
         }
       }
     }

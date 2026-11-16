@@ -111,6 +111,8 @@ public:
 	float TakeLargestTailSwing();
 	/** Soft-tissue jiggle on or off (on by default). Off, breasts, buttocks and genitals stay as animated. */
 	void SetSoftTissueEnabled(bool bEnabled);
+	/** Breast jiggle, 0 (the default: firm, a small lag) to 1 (softer, looser and bouncier, still damped). */
+	void SetBreastJiggle(float Amount);
 
 protected:
 	virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;
