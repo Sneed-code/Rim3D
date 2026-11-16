@@ -14,8 +14,9 @@ namespace
 {
 	TAutoConsoleVariable<float> GSoftContactFar(TEXT("Pawns.SoftContactFar"), 600.0f,
 		TEXT("Skin squish on contact runs on MakeHuman bodies within this many cm of the camera (the nearest 8)."), ECVF_Default);
-	TAutoConsoleVariable<int32> GSoftContact(TEXT("Pawns.SoftContact"), 1,
-		TEXT("1 lets what touches a MakeHuman body push its skin in (docs/design/soft-body.md), 0 off."), ECVF_Default);
+	TAutoConsoleVariable<int32> GSoftContact(TEXT("Pawns.SoftContact"), 0,
+		TEXT("1 lets what touches a MakeHuman body push its skin in (docs/design/soft-body.md), 0 off (the default until it looks right;\n"
+			"the creator's soft-body demo turns it on)."), ECVF_Default);
 
 	// A body's capsules (cm): which bone to which, and how thick. Hands and head are spheres (the same bone twice).
 	struct FSoftCapsuleBone

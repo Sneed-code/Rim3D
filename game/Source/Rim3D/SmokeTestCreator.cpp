@@ -313,6 +313,7 @@ namespace
 			{
 				Ball->SetActorHiddenInGame(true);
 			}
+			S.CameraYaw = 215.0f;
 			return;
 		}
 		const float Radius = 5.0f;
@@ -327,7 +328,7 @@ namespace
 		else if (Which == 1)
 		{
 			// The cheek: in front of and to the side of the head bone (which sits low in the skull, at the top of the neck).
-			Surface = Mesh->GetSocketLocation(TEXT("head")) + FVector::UpVector * 7.0f + Fwd * 9.0f + Right * 4.5f;
+			Surface = Mesh->GetSocketLocation(TEXT("head")) - FVector::UpVector * 3.0f + Fwd * 9.0f + Right * 4.5f;  // 7 cm up landed on the brow
 		}
 		else
 		{
@@ -341,6 +342,14 @@ namespace
 		{
 			++S.SoftPressFrames;
 		}
+		static int32 LastLogged = -1;
+		if (LastLogged != Which)
+		{
+			LastLogged = Which;
+			UE_LOG(LogTemp, Display, TEXT("Soft body demo: ball pressing %s at %s"), Which == 0 ? TEXT("belly") : (Which == 1 ? TEXT("cheek") : TEXT("thigh")), *Surface.ToString());
+		}
+		// Seen from the side while it presses, so the skin giving round it shows (from the front the ball hid it).
+		S.CameraYaw = 260.0f;
 		AActor* Ball = S.SoftBall.Get();
 		if (!Ball)
 		{
@@ -354,7 +363,6 @@ namespace
 				Spawned->SetActorScale3D(FVector(Radius / 50.0));  // the engine sphere is 100 cm across
 				S.SoftBall = Spawned;
 				Ball = Spawned;
-				UE_LOG(LogTemp, Display, TEXT("Soft body demo: ball pressing %s at %s"), Which == 0 ? TEXT("belly") : (Which == 1 ? TEXT("cheek") : TEXT("thigh")), *Surface.ToString());
 			}
 		}
 		if (Ball)
@@ -1241,6 +1249,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				State->BlastEvery = 0.0f;
 				State->CameraDistance = 170.0f;
 				State->CameraYaw = 215.0f;
+				IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.SoftContact"))->Set(1);  // off by default until it looks right
 				W.Weight = 0.6f;
 				W.Muscle = -0.4f;
 				if (RecordSeconds > 0.0f)

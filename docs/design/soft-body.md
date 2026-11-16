@@ -108,7 +108,7 @@ a deformer could: keep a per-point state over frames (the springs and dents carr
   `UpdateTextureRegions`), and puts the row in custom primitive data 13 (-1 none).
 
 `M_MH_SkinDetail`'s `SkinSquish` node (after `SkinDent`) pushes each skin point facing a presser out of it, along the
-line from the capsule's axis, by softplus(penetration, 2.5 cm) (at most 10 cm), so skin inside is pressed flat onto the
+line from the capsule's axis, by softplus(penetration, 2.5 cm) (at most 3 cm: 10 cm smeared the face), so skin inside is pressed flat onto the
 presser and skin just outside eases in. `SkinSquishTilt` turns the normal towards lying on the presser where it is
 pressed flat (in tangent space, like the dent's light). Both read the skin's position before any offset.
 
@@ -119,3 +119,9 @@ table.
 
 Not yet: the face's teeth and jaw as hidden pressers from inside (so lips press against teeth), clothes following the
 squish, and beds or seats pressing (a seat or bed is a static mesh not held by a body).
+
+**First squish build (2026-11-16):** builds and runs (the ball reached the table in 222 frames), but: from the front
+camera the ball hid the belly; the cheek target was 10 cm high and pushing up to 10 cm smeared the eye and brow; the
+normal turned 80 % towards the presser left a hard black crescent round the ball on the thigh. Now: at most 3 cm of
+push, the normal turned at most 35 % and only where the skin is really inside, the cheek 10 cm lower, the camera to the
+side while the ball presses, and `Pawns.SoftContact` off by default (the soft demo turns it on) until it looks right.

@@ -857,7 +857,7 @@ namespace
 				"  float pen = a.w - d;\n"
 				"  if (pen < -10.0) continue;\n"
 				"  float face = saturate(dot(N, -dir) * 1.5 + 0.5) * b.w;\n"
-				"  float amt = min(2.5 * log(1.0 + exp(pen / 2.5)), 10.0) * face;\n"
+				"  float amt = min(2.5 * log(1.0 + exp(pen / 2.5)), 3.0) * face;\n"
 				"  BODY\n"
 				"}\n");
 			auto* Squish = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -300, 3200));
@@ -868,7 +868,7 @@ namespace
 			SquishTilt->OutputType = CMOT_Float3;
 			SquishTilt->Description = TEXT("SkinSquishTilt");
 			SquishTilt->Code = TEXT("float3 n = N;\nif (Row < -0.5) return 0;\n")
-				+ Loop.Replace(TEXT("BODY"), TEXT("n = lerp(n, -dir, saturate(pen / 2.5 + 0.5) * face * 0.8);"))
+				+ Loop.Replace(TEXT("BODY"), TEXT("n = lerp(n, -dir, saturate(pen / 2.5) * face * 0.35);"))
 				+ TEXT("return normalize(n) - N;");
 			for (UMaterialExpressionCustom* Node : {Squish, SquishTilt})
 			{
