@@ -150,7 +150,10 @@ namespace
 	// Reactions by the side a blow came from (front uses the style's own impacts).
 	const TCHAR* const CwReactSmall[4] = {TEXT("Mixamo/Magic/A_ProMagicStandingReactSmallFromFront"), TEXT("Mixamo/Magic/A_ProMagicStandingReactSmallFromRight"),
 		TEXT("Mixamo/Magic/A_ProMagicStandingReactSmallFromBack"), TEXT("Mixamo/Magic/A_ProMagicStandingReactSmallFromLeft")};
-	const TCHAR* const CwReactLarge[4] = {TEXT("Mixamo/Injured/A_StumbleBackwards"), TEXT("Mixamo/Magic/A_ProMagicStandingReactLargeFromRight"),
+	// The heaviest blows: a stumble back that ends on the ground, then getting up (never a snap from lying to standing).
+	const TCHAR* const CwStumble = TEXT("Mixamo/Injured/A_StumbleBackwards");
+	const TCHAR* const CwGetUp = TEXT("Mixamo/Falls/A_GettingUp");
+	const TCHAR* const CwReactLarge[4] = {TEXT("Mixamo/Magic/A_ProMagicStandingReactLargeFromFront"), TEXT("Mixamo/Magic/A_ProMagicStandingReactLargeFromRight"),
 		TEXT("Mixamo/Magic/A_ProMagicStandingReactLargeFromBack"), TEXT("Mixamo/Magic/A_ProMagicStandingReactLargeFromLeft")};
 	const TCHAR* const CwDeathBySide[4] = {TEXT("Mixamo/Magic/A_ProMagicStandingReactDeathBackward"), TEXT("Mixamo/Magic/A_ProMagicStandingReactDeathLeft"),
 		TEXT("Mixamo/Magic/A_ProMagicStandingReactDeathForward"), TEXT("Mixamo/Magic/A_ProMagicStandingReactDeathRight")};
@@ -242,6 +245,8 @@ namespace
 		FVector Facing = FVector::ForwardVector;  // world, flat: where the demo has the body face
 		FVector Spot = FVector::ZeroVector;       // world: where the demo stands the body (its feet)
 		float LeftGrip = 0.0f;                    // 0..1: the left hand on a two-handed hilt (IK on the visible body)
+		bool bFloored = false;                    // its react ends on the ground: getting up follows
+		float GiveGround = 0.0f;                  // cm its demo spot has moved back, giving ground to a lunge
 	};
 
 	enum class ECwDemo : uint8 { Off, Pause, Swing, Impact, Recover, DeathHold };
@@ -265,7 +270,10 @@ namespace
 		int32 Attacker = 0;         // 0: DemoA attacks, 1: DemoB
 		float DemoTime = 0.0f;
 		float Distance = 160.0f;    // cm between them
-		float ExtraApart = 0.0f;    // more, while a lunge would put one inside the other
+		float ExtraApart = 0.0f;    // both fighters' give-ground together (log)
+		float RawGap = -1.0f;       // pelvis to pelvis along the line last frame, less the give-ground (cm), -1 unknown
+		float GapRate = 0.0f;       // how fast that closes (cm/s, negative closing), smoothed
+		float SwingMinGap = 1.0e6f; // the closest the pelvises came this swing (log)
 		bool bPickedOnly = false;
 		bool bFinish = false;
 		bool bBlocking = false;     // the defender guards this swing
@@ -1184,6 +1192,7 @@ namespace
 	{
 		FVector A, B;
 		float R;
+		bool bHead = false;
 	};
 	using FCwCaps = TArray<FCaps, TInlineAllocator<16>>;
 
@@ -1206,7 +1215,7 @@ namespace
 		{
 			const FVector Head = CwBone(Mesh, TEXT("head"));
 			const FVector Up = (Head - CwBone(Mesh, TEXT("neck_01"))).GetSafeNormal();
-			Caps.Add({Head + Up * 4.0f, Head + Up * 13.0f, 10.0f});
+			Caps.Add({Head + Up * 4.0f, Head + Up * 13.0f, 10.0f, true});
 		}
 	}
 
@@ -1227,7 +1236,8 @@ namespace
 			{
 				FVector P1, P2;
 				FMath::SegmentDistToSegmentSafe(Blade.Hilt, Blade.Tip, C.A, C.B, P1, P2);
-				if (FVector::Dist(P1, P2) < C.R + 0.5)
+				// The head's capsule is rounder than the skull it stands for: a blade put back to it showed a little inside.
+				if (FVector::Dist(P1, P2) < C.R + (C.bHead ? 2.0 : 0.5))
 				{
 					return true;
 				}
@@ -1426,7 +1436,7 @@ namespace
 		int32 Side = 0;
 		bool bStrong = false;
 		bool bDeath = false;
-		bool bStumble = false;  // a forced heavy stagger: StumbleBackwards whatever the side
+		bool bStumble = false;  // the heaviest blow: StumbleBackwards (down) whatever the side, then getting up
 	};
 	FCwPending GCwPending;
 	bool GCwPreviewDirty = true;
@@ -1515,7 +1525,12 @@ namespace
 			CwStopMontage(P, 0.3f);
 			P.Role = ECwRole::Idle;
 			P.Hits = 0;
+			P.GiveGround = 0.0f;
+			P.bFloored = false;
 		}
+		S.RawGap = -1.0f;
+		S.GapRate = 0.0f;
+		S.SwingMinGap = 1.0e6f;
 		S.Demo = ECwDemo::Pause;
 		S.DemoTime = 1.2f;
 		S.Attacker = 0;
@@ -1536,28 +1551,53 @@ namespace
 		Dir.Z = 0.0;
 		Dir = Dir.IsNearlyZero() ? FVector(0.0, 1.0, 0.0) : Dir.GetSafeNormal();
 		const FVector Mid = (PA + PB) * 0.5;
-		// A lunge can carry one body into the other (the clips step forward): their spots move apart while the
-		// pelvises are closer than 55 cm along the line between them, and drift back afterwards.
-		if (A.Mesh.IsValid() && B.Mesh.IsValid() && CwHasBone(A.Mesh.Get(), TEXT("pelvis")) && CwHasBone(B.Mesh.Get(), TEXT("pelvis")))
+		// A lunge can carry one body into the other (the clips step forward). The defender gives ground: its spot
+		// slides back before they meet, from how fast the pelvises close (where they will be in a quarter second), so
+		// they keep at least 55 cm apart along the line; it drifts back afterwards. The attacker's spot stays.
+		FCwPerson& Def = S.Attacker == 0 ? B : A;
+		constexpr float MinGap = 55.0f;
+		if (A.Mesh.IsValid() && B.Mesh.IsValid() && CwHasBone(A.Mesh.Get(), TEXT("pelvis")) && CwHasBone(B.Mesh.Get(), TEXT("pelvis")) && Dt > 0.0f)
 		{
-			const double Gap = FVector::DotProduct(CwBone(B.Mesh.Get(), TEXT("pelvis")) - CwBone(A.Mesh.Get(), TEXT("pelvis")), Dir);
-			if (Gap < 55.0)
+			const float Gap = static_cast<float>(FVector::DotProduct(CwBone(B.Mesh.Get(), TEXT("pelvis")) - CwBone(A.Mesh.Get(), TEXT("pelvis")), Dir));
+			// The bodies' own closing, without our sliding (the spots move the pelvises by exactly the give-ground).
+			const float Raw = Gap - A.GiveGround - B.GiveGround;
+			if (S.RawGap >= 0.0f)
 			{
-				S.ExtraApart = FMath::Min(S.ExtraApart + static_cast<float>(55.0 - Gap) * 0.5f, 120.0f);
-				if (S.ExtraApart > S.MostApart + 5.0f)
+				S.GapRate = FMath::FInterpTo(S.GapRate, (Raw - S.RawGap) / Dt, Dt, 12.0f);
+			}
+			S.RawGap = Raw;
+			S.SwingMinGap = FMath::Min(S.SwingMinGap, Gap);
+			const float Ahead = Gap + FMath::Min(S.GapRate, 0.0f) * 0.25f;
+			const float Want = FMath::Max(0.0f, MinGap - FMath::Min(Gap, Ahead));
+			if (Gap < MinGap)
+			{
+				Def.GiveGround += MinGap - Gap;  // already too close: at once
+			}
+			else if (Want > 0.0f)
+			{
+				Def.GiveGround += FMath::Min(Want, 400.0f * Dt);  // stepping back ahead of the lunge
+			}
+			Def.GiveGround = FMath::Min(Def.GiveGround, 120.0f);
+			// Drift back only while there is room to spare and nothing is closing.
+			for (FCwPerson* P : {&A, &B})
+			{
+				if (Want <= 0.0f && Gap > MinGap + 10.0f && S.GapRate > -20.0f && P->GiveGround > 0.0f)
 				{
-					S.MostApart = S.ExtraApart;
-					UE_LOG(LogCreatorWeapons, Display, TEXT("Push-apart: pelvises %.0f cm apart, spots %.0f cm further apart"), Gap, S.ExtraApart);
+					P->GiveGround = FMath::Max(0.0f, P->GiveGround - FMath::Min(25.0f * Dt, Gap - MinGap - 10.0f));
 				}
 			}
-			else
+			const float Total = A.GiveGround + B.GiveGround;
+			if (Total > S.MostApart + 5.0f)
 			{
-				S.ExtraApart = FMath::FInterpTo(S.ExtraApart, 0.0f, Dt, 1.2f);
+				S.MostApart = Total;
+				UE_LOG(LogCreatorWeapons, Display, TEXT("Giving ground: pelvises %.0f cm apart, closing %.0f cm/s, %.0f cm in a quarter second; spots %.0f cm further apart"), Gap,
+					-S.GapRate, Ahead, Total);
 			}
+			S.ExtraApart = Total;
 		}
-		const float Half = (S.Distance + S.ExtraApart) * 0.5f;
-		A.Spot = Mid - Dir * Half;
-		B.Spot = Mid + Dir * Half;
+		const float Half = S.Distance * 0.5f;
+		A.Spot = Mid - Dir * (Half + A.GiveGround);
+		B.Spot = Mid + Dir * (Half + B.GiveGround);
 		A.Facing = Dir;
 		B.Facing = -Dir;
 		CwStand(A);
@@ -1732,6 +1772,8 @@ namespace
 				CwBleed(S, World, Def, &Att, Hit.At, Travel, Amount);
 				GCwPending.bDeath = S.bFinish;
 				GCwPending.bStrong = Heavy * S.Random.FRandRange(0.6f, 1.3f) > 0.75f || (Def.Hits >= 4 && S.Random.FRand() < 0.5f);
+				// The heaviest blows (a heavy attack that staggers, now and then) knock the defender down.
+				GCwPending.bStumble = GCwPending.bStrong && !GCwPending.bDeath && Heavy >= 0.85f && S.Random.FRand() < 0.35f;
 				if (S.bForceStagger && !GCwPending.bDeath)
 				{
 					S.bForceStagger = false;
@@ -1786,11 +1828,13 @@ namespace
 						return;
 					}
 				}
-				if (GCwPending.bStumble)
+				if (GCwPending.bStumble && CwPlay(S, Def, CwStumble, 1.0f, false, 0.06f, 0.3f))
 				{
-					Clip = CwReactLarge[0];
+					Def.Role = ECwRole::React;
+					Def.bFloored = true;
+					break;
 				}
-				else if (Side == 0)
+				if (Side == 0)
 				{
 					Clip = GCwPending.bStrong && S.Random.FRand() < 0.6f ? CwReactLarge[0] : CwPick(S, Style.Impacts, 5);
 				}
@@ -1801,6 +1845,7 @@ namespace
 				if (CwPlay(S, Def, Clip, 1.0f, false, 0.06f, 0.3f))
 				{
 					Def.Role = ECwRole::React;
+					Def.bFloored = false;
 				}
 				break;
 			}
@@ -1831,7 +1876,17 @@ namespace
 		for (FCwPerson* P : {&A, &B})
 		{
 			P->RoleTime += Dt;
-			if ((P->Role == ECwRole::React && CwMontageFraction(*P) >= 0.92f) || P->Role == ECwRole::Idle)
+			if (P->Role == ECwRole::React && P->bFloored && CwMontageFraction(*P) >= 0.88f)
+			{
+				// Down: getting up from where the fall left it (blended in), and only then the stance.
+				P->bFloored = false;
+				if (!CwPlay(S, *P, CwGetUp, 1.0f, false, 0.3f, 0.4f))
+				{
+					CwPlayStance(S, *P);
+				}
+				UE_LOG(LogCreatorWeapons, Display, TEXT("Getting up after the stumble"));
+			}
+			else if ((P->Role == ECwRole::React && CwMontageFraction(*P) >= 0.92f) || P->Role == ECwRole::Idle)
 			{
 				CwPlayStance(S, *P);
 			}
@@ -1846,6 +1901,11 @@ namespace
 					if (CwPlay(S, Att, Style.Attacks[S.SwingAttack].Clip, S.Speed, false, 0.15f, 0.3f))
 					{
 						Att.Role = ECwRole::Attack;
+						if (S.Swings > 0 && S.SwingMinGap < 1.0e5f)
+						{
+							UE_LOG(LogCreatorWeapons, Display, TEXT("Swing %d: pelvises came within %.0f cm"), S.Swings, S.SwingMinGap);
+						}
+						S.SwingMinGap = 1.0e6f;
 						++S.Swings;
 						const FCwStyleDef& DefStyle = CwStyles[Def.HeldStyle];
 						S.bBlocking = !S.bFinish && !S.bForceStagger && DefStyle.Blocks[0] && S.Random.FRand() < 0.35f;
@@ -1911,8 +1971,17 @@ namespace
 				else if (Def.Role == ECwRole::Dead && S.DemoTime <= 0.0f)
 				{
 					// The demo goes on: up again, blood kept.
-					CwStopMontage(Def, 0.9f);
-					CwPlayStance(S, Def);
+					// Getting up from the floor (the stance follows when it ends), not a blend from lying to standing.
+					if (CwPlay(S, Def, CwGetUp, 1.0f, false, 0.4f, 0.4f))
+					{
+						Def.Role = ECwRole::React;
+						Def.bFloored = false;
+					}
+					else
+					{
+						CwStopMontage(Def, 0.9f);
+						CwPlayStance(S, Def);
+					}
 					Def.Hits = 0;
 					S.bFinish = false;
 					S.Attacker ^= 1;
@@ -2199,12 +2268,12 @@ namespace
 			{58.0f, 4, 0, 0, nullptr}, {58.5f, 0, 2, -1, nullptr}, {59.5f, 2, 0, 0, nullptr}, {63.0f, 1, 0, 0, TEXT("g_shield1")},
 			{68.0f, 1, 0, 0, TEXT("g_shield2")}, {70.0f, 5, 0, 0, nullptr},
 		};
-		// The forced stagger: the blow, then the stumble twice.
+		// The forced stagger: the blow, the stumble twice, then getting up twice.
 		if (S.StaggerT >= 0.0f)
 		{
 			S.StaggerT += Dt;
-			static const float ShotAt[3] = {0.0f, 0.4f, 0.9f};
-			if (S.StaggerShots < 3 && S.StaggerT >= ShotAt[S.StaggerShots])
+			static const float ShotAt[5] = {0.0f, 0.4f, 0.9f, 2.4f, 3.6f};
+			if (S.StaggerShots < 5 && S.StaggerT >= ShotAt[S.StaggerShots])
 			{
 				S.PendingShot = FString::Printf(TEXT("h_stagger%d"), ++S.StaggerShots);
 			}
