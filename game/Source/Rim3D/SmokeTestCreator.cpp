@@ -349,6 +349,49 @@ namespace
 		}
 	}
 
+	/**
+	 * A random baseline human (sneed: every demo and test pawn comes from the creator's randomizer; baseline humans only
+	 * for now): build, age and proportions spread round the average, a hair style and a natural hair colour, and a skin
+	 * tone weighted very heavily towards fair, with tan levels but never dark.
+	 */
+	void CreatorRandomize(FCreatorPerson& P, FRandomStream& R)
+	{
+		CreatorSetKind(P, ECreatorKind::Baseline);
+		const auto Gauss = [&R]() { return (R.FRand() + R.FRand() + R.FRand() - 1.5f) * 2.0f; };  // about -3 .. 3, spread 1
+		P.Height = (P.bFemale ? 0.94f : 1.02f) * (1.0f + 0.035f * Gauss());
+		P.Sex = R.FRandRange(0.0f, 0.15f);
+		P.Older = R.FRand() < 0.75f ? 0.0f : R.FRandRange(0.1f, 0.6f);
+		P.Weight = FMath::Clamp((P.bFemale ? -0.15f : 0.0f) + 0.32f * Gauss(), -0.8f, 0.9f);
+		P.Muscle = FMath::Clamp(0.3f * Gauss(), -0.7f, 0.8f);
+		P.Breasts = P.bFemale ? FMath::Clamp(0.4f * Gauss(), -0.9f, 0.9f) : 0.0f;
+		P.Pigment = R.FRandRange(0.3f, 0.7f);
+		P.PubicDensity = R.FRandRange(0.7f, 1.0f);
+		P.PubicCurl = R.FRandRange(0.5f, 1.0f);
+		// Skin: fair to tanned, most of them fair (the tone's share cubed), a touch of warmth or rosiness.
+		const float Tone = FMath::Pow(R.FRand(), 3.0f);
+		const float Warm = R.FRandRange(-0.015f, 0.015f);
+		CreatorSetSkin(P, FMath::Lerp(0.96f, 0.80f, Tone), FMath::Lerp(0.86f, 0.62f, Tone) + Warm, FMath::Lerp(0.80f, 0.50f, Tone) - Warm);
+		// Hair: natural colours, darker ones commoner.
+		struct FShade { float Weight; float C[3]; };
+		static const FShade Shades[] = {{30, {0.17f, 0.11f, 0.07f}}, {24, {0.32f, 0.22f, 0.14f}}, {14, {0.07f, 0.06f, 0.055f}}, {12, {0.48f, 0.36f, 0.24f}},
+			{10, {0.78f, 0.66f, 0.45f}}, {6, {0.45f, 0.20f, 0.10f}}, {3, {0.62f, 0.27f, 0.12f}}};
+		float Pick = R.FRand() * 99.0f;
+		for (const FShade& Shade : Shades)
+		{
+			Pick -= Shade.Weight;
+			if (Pick <= 0.0f)
+			{
+				P.Hair[0] = Shade.C[0], P.Hair[1] = Shade.C[1], P.Hair[2] = Shade.C[2];
+				break;
+			}
+		}
+		// Styles each base has (mh_creator's "hairs"): long, bob, ponytail, braid, short for women; short, crop, messy, long,
+		// ponytail for men, now and then bald.
+		static const int32 Women[] = {1, 1, 2, 3, 4, 5};
+		static const int32 Men[] = {5, 5, 6, 7, 1, 3, 0};
+		P.HairStyle = P.bFemale ? Women[R.RandRange(0, UE_ARRAY_COUNT(Women) - 1)] : Men[R.RandRange(0, UE_ARRAY_COUNT(Men) - 1)];
+	}
+
 	/** The skin material to show: the 2K one (the mesh's own) or the 4K one (MakeHumanArt makes both). */
 	UMaterialInterface* CreatorSkinMaterial(const FString& Base, bool b4K)
 	{
@@ -811,7 +854,11 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			FCreatorPerson Person;
 			Person.Thing = Colonists[i]->id;
 			Person.bFemale = i == 0 || i == 2;
-			CreatorSetKind(Person, i < 2 ? ECreatorKind::Baseline : (i == 2 ? ECreatorKind::Imp : ECreatorKind::Orcoid));
+			// Random baseline humans from the creator's randomizer (seeded: -CreatorSeed=<n>, the same people every run).
+			int32 Seed = 42;
+			FParse::Value(FCommandLine::Get(), TEXT("CreatorSeed="), Seed);
+			FRandomStream PersonRandom(Seed * 7919 + i * 104729);
+			CreatorRandomize(Person, PersonRandom);
 			Person.Looks = Colonists[i]->looks >= 0 ? USimPawnSubsystem::MakeLooks(Snapshot.looks[static_cast<size_t>(Colonists[i]->looks)], Defs) : FSimPawnLooks();
 			Person.Looks.Height = 1.0f;
 			Person.Looks.Skin = FLinearColor(Person.Skin[0], Person.Skin[1], Person.Skin[2]);
@@ -1326,6 +1373,12 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					{
 						ImGui::SliderFloat("Breast jiggle", &P.BreastJiggle, 0.0f, 1.0f, "%.2f");
 					}
+					if (ImGui::Button("Random person"))
+					{
+						FRandomStream R(FPlatformTime::Cycles());
+						CreatorRandomize(P, R);
+					}
+					ImGui::SameLine();
 					if (ImGui::Button("Random body"))
 					{
 						FRandomStream R(FPlatformTime::Cycles());
@@ -1513,8 +1566,9 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					ImGui::SliderFloat("Areola and genital pigment", &P.Pigment, 0.0f, 1.0f, "%.2f");
 					if (ImGui::Button("Random skin tone"))
 					{
-						const float Tone = FRandomStream(FPlatformTime::Cycles()).FRand();
-						CreatorSetSkin(P, FMath::Lerp(0.95f, 0.36f, Tone), FMath::Lerp(0.84f, 0.22f, Tone), FMath::Lerp(0.78f, 0.15f, Tone));
+						// Mostly fair, sometimes tanned, never dark (as CreatorRandomize; the colour picker still goes anywhere).
+						const float Tone = FMath::Pow(FRandomStream(FPlatformTime::Cycles()).FRand(), 3.0f);
+						CreatorSetSkin(P, FMath::Lerp(0.96f, 0.80f, Tone), FMath::Lerp(0.86f, 0.62f, Tone), FMath::Lerp(0.80f, 0.50f, Tone));
 					}
 					ImGui::EndTabItem();
 				}
