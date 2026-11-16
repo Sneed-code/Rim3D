@@ -558,3 +558,8 @@ seeds lost everyone to an infestation and raids around day 45 (25 and 26 alive i
 
 38 alive on day 60, as before.
 
+**Sixteenth pass (2026-11-15): turrets shoot insects.** An insect clawed four colonists to death 6 m from the gun post
+(seed 42) while the turrets, which left every animal alone, looked on. Turrets now shoot hostile animals (insects on the
+attack, manhunters, animals out for revenge) as RimWorld's do, and still leave calm ones be ([defense.md](defense.md)).
+Year runs, six seeds: 6,7,6,7,7,6 = 39 alive (38); turret shots rose on rainforest seed 3 (24 to 180) and seed 7 (4 to 14).
+
