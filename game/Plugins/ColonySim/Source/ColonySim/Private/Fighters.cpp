@@ -162,7 +162,7 @@ FighterSystem::FighterSystem(Things& things, Map& map, CombatSystem& combat, Hea
 FighterSystem::~FighterSystem() = default;
 
 int64_t FighterSystem::now() const {
-    return time_.seconds;
+    return time_.steps;  // real time: aiming, dodging and planning keep their pace whatever the day length
 }
 
 FactionId FighterSystem::factionOf(Entity pawn) const {

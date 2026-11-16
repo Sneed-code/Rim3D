@@ -472,7 +472,7 @@ void MentalBreakSystem::tick(Entity pawn, MentalBreaker& b, int64_t now, Rng& rn
         return;
     }
     // A pawn that is on fire runs about, whatever its break was doing.
-    if (fire_ != nullptr && reg.all_of<Burning>(pawn) && fire_->panicStep(pawn, now)) {
+    if (fire_ != nullptr && reg.all_of<Burning>(pawn) && fire_->panicStep(pawn, time_.steps)) {
         stopWalk(pawn, b);
         b.target = kNoEntity;
     } else switch (b.state) {

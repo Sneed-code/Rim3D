@@ -258,6 +258,8 @@ const char* commandName(const Command& command) {
                         return "HideGear";
                     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
                         return "Shield";
+                    } else if constexpr (std::is_same_v<Type, SetDayLengthCommand>) {
+                        return "SetDayLength";
                     } else {
                         static_assert(std::is_same_v<Type, RerollColonistCommand>, "name every command type");
                         return "RerollColonist";

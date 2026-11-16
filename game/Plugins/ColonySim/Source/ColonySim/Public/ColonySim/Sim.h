@@ -144,6 +144,11 @@ struct SimSettings {
     // The game second the sim starts at (another map made in play starts at the colony's time). Not
     // saved: a save has the time it reached.
     int64_t startSecond = 0;
+    // Real minutes a game day lasts at 1x, kBaseDayMinutes (48) to kMaxDayMinutes (120): the
+    // new-game option. Walking, fighting and work keep their real-time speed; the calendar slows
+    // (docs/design/day-length.md). SetDayLengthCommand changes it in play; the save keeps the
+    // current one in its "clock" section.
+    int dayMinutes = kBaseDayMinutes;
 };
 
 struct SimStats {
@@ -154,7 +159,7 @@ struct SimStats {
 
 // The state hash after a step, recorded every SimSettings::checkpointEvery game seconds.
 struct Checkpoint {
-    int64_t step = 0;  // game seconds
+    int64_t step = 0;  // Sim::time().steps (the game second with the 48-minute day)
     uint64_t hash = 0;
 };
 
@@ -228,6 +233,10 @@ public:
     const SimSettings& settings() const { return settings_; }
     const DefDatabase& defs() const { return *defs_; }
     const GameTime& time() const { return time_; }
+    int dayMinutes() const { return time_.dayMinutes; }
+    // Sets the day length now (SetDayLengthCommand does this between steps; tests may call it
+    // before the first step). Clamped to 48 to 120.
+    void setDayMinutes(int minutes);
     const Map& map() const { return map_; }
     // For map generation and tests that set the world up; the game changes the map through commands.
     Map& editMap() { return map_; }
@@ -501,7 +510,9 @@ private:
 
     void applyCommand(const Command& command, uint64_t id);
     // One game second. `keepEvents`: the events of the steps before it in this Sim::step stay (a skip's batch).
-    void stepOnce(bool keepEvents);
+    // `tick`: whether the calendar moves on this step; -1 lets the day length decide (another map
+    // is told by the colony's, so the two keep the same time).
+    void stepOnce(bool keepEvents, int tick = -1);
     void commandFailed(uint64_t id, std::string message);
     // ClimbCommand (U17): sets the controlled pawn off up or down the stairs or ladder at its cell.
     bool startClimb(Entity pawn, float dx, float dy, std::string& error);
@@ -584,6 +595,10 @@ private:
     std::unique_ptr<RepairSystem> repair_;      // after apparel_ and combat_
     std::map<FactionId, std::unique_ptr<ThreatMap>> threatMaps_;
     GameTime time_;
+    // How far the calendar is toward its next second: kBaseDayMinutes is added every step, and the
+    // calendar moves on once it reaches time_.dayMinutes (the day length now: SimSettings::dayMinutes
+    // until a SetDayLengthCommand).
+    int calendarAcc_ = 0;
     Rng rng_;
     uint64_t groundHash_;  // map content hash before anything was built
     std::optional<CellPos> stockpileCell_;

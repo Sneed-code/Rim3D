@@ -35,8 +35,10 @@ inline constexpr int32 GWeaponDisplaySlots = 4;
  *   weapon across the chest while the snapshot says `blocking`; a sidestep dips and tips the body.
  * - A hit freezes both pawns for a moment (hit-stop), makes blood or sparks and a flinch (UFightSubsystem).
  * - The player's keys in direct mode: the left mouse button swings a melee weapon (or fists) at the pawn in
- *   front or straight ahead, the right mouse button holds the weapon up to block, Q brings up the next
- *   carried weapon.
+ *   front or straight ahead, the right mouse button holds the weapon up to block (or, with a shield on the arm,
+ *   holds the shield up facing the camera), Q brings up the next carried weapon.
+ * - A worn shield (docs/design/shields.md) hangs on the left arm, comes up in front while `shieldUp`, rides on
+ *   the back while `shieldSlung`; a hit it takes (ShieldBlocked) throws sparks off it.
  *
  * Console: Weapons.Draw (0 draws no weapons).
  */
@@ -59,6 +61,13 @@ public:
 	bool Swing();
 	/** Holds the melee weapon up to block. False unless the colonist holds a melee weapon and is ready. */
 	bool Block();
+	/** Right mouse with a shield on the arm: raises the shield (facing where the camera looks) or lowers it. Sends a
+	 *  ShieldCommand when the wish changes, and again when the camera turns more than 15 degrees. False if nothing went out. */
+	bool HoldShield(bool bUp);
+	/** Tests: hold the right mouse button from code (`bScripted` false gives it back to the mouse). */
+	void ScriptRightMouse(bool bScripted, bool bHeld) { bScriptedRight = bScripted; bScriptRightHeld = bHeld; }
+	/** Whether this pawn's view has a shield on its arm (worn, not slung behind a two-handed weapon). */
+	static bool HasShieldOnArm(const colony::ThingView& View);
 	/** Q: starts bringing up the next carried weapon. False if there is nothing else to take. */
 	bool SwitchNext();
 	/** Starts switching to the weapon in this slot (0 rifle, 1 sidearm, 2 melee). */
@@ -72,6 +81,10 @@ public:
 	UStaticMeshComponent* GetSlotComponent(colony::Entity Pawn, int32 Slot) const;
 	/** The component of the weapon in a pawn's hands (what the sim calls `weapon`), if it has one. */
 	UStaticMeshComponent* GetHandsComponent(colony::Entity Pawn) const;
+	/** The mesh drawn for the pawn's shield (on the arm, raised or slung), if it wears one. */
+	UStaticMeshComponent* GetShieldComponent(colony::Entity Pawn) const;
+	/** 0 shield lowered to 1 raised, as drawn now. */
+	float GetShieldRaise(colony::Entity Pawn) const;
 	/** Weapons drawn in the hands of pawns now. */
 	int32 CountWeaponsInHands() const;
 	/** Weapons drawn on one pawn, in the hands and on the body. */
@@ -86,6 +99,8 @@ public:
 	int32 GetSwingOrders() const { return SwingOrders; }
 	int32 GetBlockOrders() const { return BlockOrders; }
 	int32 GetSwitchOrders() const { return SwitchOrders; }
+	int32 GetShieldOrders() const { return ShieldOrders; }
+	int32 GetShieldBlocksSeen() const { return ShieldBlocksSeen; }
 	int32 GetSwingsSeen() const { return SwingsSeen; }
 	int32 GetHitsSeen() const { return MeleeHits; }
 	int32 GetDeflectedSeen() const { return MeleeDeflected; }
@@ -120,12 +135,21 @@ private:
 		FDisplayed Slots[GWeaponDisplaySlots];
 		/** Steps the switch in progress takes (from the Switch action), to turn steps left into progress. */
 		int32 SwitchTotal = 0;
+		/** The shield: its component, the def and stuff it was made for, and how far it is raised and slung (0 to 1). */
+		TWeakObjectPtr<UStaticMeshComponent> Shield;
+		uint64 ShieldKey = 0;
+		float ShieldRaise = 0.0f;
+		float ShieldSlung = 0.0f;
 	};
 
 	void OnSimEvent(const colony::Event& Event);
 	void OnMeleeSwing(const colony::Event& Event);
 	void OnMeleeHit(const colony::Event& Event);
 	void OnPawnAction(const colony::Event& Event);
+	void OnShieldBlocked(const colony::Event& Event);
+	void UpdateShield(ASimPawnActor& Actor, const colony::ThingView& View, FPawnWeapons& Pawn, bool bShow, float Height);
+	UStaticMesh* ShieldMesh(colony::DefId Shield, colony::DefId Stuff);
+	bool LoadSolidMaterial();
 	void UpdatePawn(ASimPawnActor& Actor, const colony::ThingView& View);
 	void UpdatePlayerInput();
 	UStaticMesh* WeaponMesh(colony::DefId Weapon);
@@ -142,15 +166,28 @@ private:
 	UPROPERTY()
 	TMap<uint32, TObjectPtr<UStaticMesh>> Meshes;
 
+	UPROPERTY()
+	TMap<uint64, TObjectPtr<UStaticMesh>> ShieldMeshes;
+
 	TMap<uint32, FPawnWeapons> Weapons;
 	FDelegateHandle EventHandle;
 	TWeakObjectPtr<USimSubsystem> BridgeSource;
 	int32 LastGeneration = -1;
 	int64 LastOrderStep = -1;
+	float FrameDelta = 0.0f;
+	/** The right-mouse shield: whether the player wants it up, for which pawn, the way it was last sent and when (real seconds). */
+	bool bShieldWanted = false;
+	bool bScriptedRight = false;
+	bool bScriptRightHeld = false;
+	colony::Entity ShieldPawn = colony::kNoEntity;
+	FVector2D ShieldDirSent = FVector2D::ZeroVector;
+	double ShieldSentAt = -1.0;
 
 	int32 SwingOrders = 0;
 	int32 BlockOrders = 0;
 	int32 SwitchOrders = 0;
+	int32 ShieldOrders = 0;
+	int32 ShieldBlocksSeen = 0;
 	int32 SwingsSeen = 0;
 	int32 MeleeHits = 0;
 	int32 MeleeDeflected = 0;

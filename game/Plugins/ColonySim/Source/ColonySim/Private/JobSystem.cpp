@@ -1115,7 +1115,7 @@ void JobSystem::step() {
             continue;
         }
         // On fire: it runs about in panic, thinking of nothing else (docs/design/fire.md). A pawn who can't (no panic) thinks as usual.
-        if (fire_ != nullptr && reg.all_of<Burning>(pawn) && fire_->panicStep(pawn, time_.seconds)) {
+        if (fire_ != nullptr && reg.all_of<Burning>(pawn) && fire_->panicStep(pawn, time_.steps)) {
             if (reg.get<Worker>(pawn).job.type != JobType::None) {
                 endJob(pawn, JobEnd::Interrupted, "it is on fire");
             }
