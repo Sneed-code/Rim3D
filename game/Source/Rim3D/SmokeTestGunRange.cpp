@@ -23,6 +23,7 @@
 #include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
+#include "SoundSubsystem.h"
 
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Commands.h"
@@ -72,6 +73,10 @@ namespace
 		int32 Shots = 0;
 		bool bFiringPicture = false;
 		int32 Pictures = 0;
+		// A picture a moment after the first react clip of each gun (the flinch and the blood).
+		int32 HitClipsAtStep = 0;
+		float HitSeenAt = -1.0f;
+		bool bHitPicture = false;
 	};
 
 	void GunRangeStrip(colony::Sim& Sim, USimSubsystem& B, colony::Entity Pawn)
@@ -472,6 +477,9 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					State->bFiringPicture = false;
 					Picture(*FString::Printf(TEXT("gun%d_aimed"), State->Gun + 1));
 					State->Shots = G->GetShotsSeen();
+					State->HitClipsAtStep = Fight->GetHitClips();
+					State->HitSeenAt = -1.0f;
+					State->bHitPicture = false;
 					Next(2);
 				}
 				break;
@@ -483,6 +491,15 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				{
 					Picture(*FString::Printf(TEXT("gun%d_firing"), State->Gun + 1));
 					State->bFiringPicture = true;
+				}
+				if (State->HitSeenAt < 0.0f && Fight->GetHitClips() > State->HitClipsAtStep)
+				{
+					State->HitSeenAt = State->StepTime;
+				}
+				if (!State->bHitPicture && State->HitSeenAt >= 0.0f && State->StepTime > State->HitSeenAt + 0.25f)
+				{
+					Picture(*FString::Printf(TEXT("gun%d_hit_react"), State->Gun + 1));
+					State->bHitPicture = true;
 				}
 				if (State->StepTime > 2.0f)
 				{
@@ -546,6 +563,26 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					Next(5);
 				}
 				break;
+			case 5:  // third person (the V key): the body holding the gun, then aimed over the shoulder
+				if (Body->IsFirstPerson())
+				{
+					Body->ToggleView();
+					Body->SnapCamera();
+				}
+				AimAtNearest();
+				if (State->StepTime > 2.0f && !State->bFiringPicture)
+				{
+					Picture(TEXT("third_person"));
+					State->bFiringPicture = true;
+				}
+				Body->SetScriptedAim(State->StepTime > 2.0f);
+				if (State->StepTime > 3.5f)
+				{
+					Picture(TEXT("third_person_aimed"));
+					Body->SetScriptedAim(false);
+					Next(7);
+				}
+				break;
 			default:
 				break;
 		}
@@ -560,6 +597,17 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			{
 				Notes.Add(FString::Printf(TEXT("gunrange: %s: %s"), *G->GetGuns()[i].Label, G->HasModel(i) ? TEXT("model") : TEXT("no model (box)")));
 			}
+		}
+		if (UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>())
+		{
+			PhaseNumbers.Add(TEXT("hit_clips"), Fight->GetHitClips());
+		}
+		if (USoundSubsystem* S = GetWorld()->GetSubsystem<USoundSubsystem>())
+		{
+			PhaseNumbers.Add(TEXT("voice_femhit"), S->GetPlayCount(TEXT("Voice_FemHit")));
+			PhaseNumbers.Add(TEXT("voice_femscream"), S->GetPlayCount(TEXT("Voice_FemScream")));
+			PhaseNumbers.Add(TEXT("voices_cut"), S->GetVoicesCut());
+			PhaseNumbers.Add(TEXT("voices_skipped"), S->GetVoicesSkipped());
 		}
 	};
 	Phases.Add(MoveTemp(Play));

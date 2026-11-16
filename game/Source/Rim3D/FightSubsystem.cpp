@@ -80,7 +80,7 @@ namespace
 			case EFightParticle::Dust: return {FLinearColor(0.42f, 0.34f, 0.24f), false};
 			case EFightParticle::Chip: return {FLinearColor(0.32f, 0.32f, 0.34f), false};
 			case EFightParticle::Spark: return {FLinearColor(1.0f, 0.62f, 0.18f), false};
-			case EFightParticle::Blood: return {FLinearColor(0.55f, 0.02f, 0.02f), false};
+			case EFightParticle::Blood: return {FLinearColor(0.42f, 0.01f, 0.01f), true};  // drops, stretched along their flight
 			case EFightParticle::Smoke: return {FLinearColor(0.55f, 0.55f, 0.58f), true};
 			default: return {FLinearColor(1.0f, 0.92f, 0.62f), true};
 		}
@@ -498,7 +498,7 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 			const float Wound = FMath::Clamp(Tracer.Amount / 15.0f, 0.6f, 2.0f);
 			SpawnBurst(EFightParticle::Blood, At, Dir + FVector::UpVector * 0.15f, FMath::RoundToInt(22.0f * Wound), 420.0f, 0.45f, 5.0f, 0.9f, 980.0f);
 			SpawnBurst(EFightParticle::Blood, At, Back + FVector::UpVector * 0.3f, FMath::RoundToInt(8.0f * Wound), 200.0f, 0.6f, 4.0f, 0.6f, 980.0f);
-			SpawnBurst(EFightParticle::Blood, At, Dir, 6, 90.0f, 0.9f, 11.0f, 0.4f, 120.0f);
+			SpawnBurst(EFightParticle::Blood, At, Dir, 14, 110.0f, 0.9f, 6.0f, 0.45f, 120.0f);
 			const float Strength = FMath::Clamp(Tracer.Amount / 20.0f, 0.35f, 1.0f);
 			const USimSubsystem* StaggerBridge = BridgeSource.Get();
 			const colony::ThingView* HitView = StaggerBridge && StaggerBridge->GetSim() ? StaggerBridge->GetCurrentSnapshot().find(Tracer.Target) : nullptr;
@@ -774,6 +774,16 @@ void UFightSubsystem::UpdateParticles(float GameDelta)
 		else if (T > 0.7f)
 		{
 			Scale *= (1.0f - T) / 0.3f;
+		}
+		if (Particle.Kind == EFightParticle::Blood)
+		{
+			// The drop mesh is long along Z: point it along the velocity and stretch it with speed (a streak in flight,
+			// round once it slows).
+			const float Speed = Particle.Velocity.Size();
+			const FRotator Along = Speed > 1.0f ? FRotationMatrix::MakeFromZ(Particle.Velocity / Speed).Rotator() : FRotator::ZeroRotator;
+			const float Stretch = 0.6f + FMath::Min(Speed / 250.0f, 1.6f);
+			ByKind[static_cast<int32>(Particle.Kind)].Add(FTransform(Along, Particle.Position, FVector(Scale, Scale, Scale * Stretch)));
+			continue;
 		}
 		ByKind[static_cast<int32>(Particle.Kind)].Add(FTransform(FRotator(T * 400.0f, T * 700.0f, 0.0f), Particle.Position, FVector(Scale)));
 	}
