@@ -68,20 +68,58 @@ namespace
 		return Cast<T>(UMaterialEditingLibrary::CreateMaterialExpression(Material, T::StaticClass(), X, Y));
 	}
 
-	UTexture2D* GunArtDefaultTexture(const TCHAR* Name)
+	/** An engine texture by its full path ("/Engine/EngineResources/WhiteSquareTexture"). */
+	UTexture2D* GunArtDefaultTexture(const TCHAR* Path)
 	{
-		return LoadObject<UTexture2D>(nullptr, *FString::Printf(TEXT("/Engine/EngineMaterials/%s.%s"), Name, Name));
+		UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, *FString::Printf(TEXT("%s.%s"), Path, *FPaths::GetBaseFilename(Path)));
+		if (!Texture)
+		{
+			UE_LOG(LogGunArt, Error, TEXT("No engine texture %s"), Path);
+		}
+		return Texture;
+	}
+
+	/** A 4x4 grey mask texture (linear, TC_Masks) for the master's mask defaults: the engine's squares are sRGB colour
+	 *  textures, which a Masks sampler refuses. */
+	UTexture2D* GunArtMaskTexture(const TCHAR* Name, uint8 Value)
+	{
+		const FString PackageName = FString(GunArtRoot) / Name;
+		UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, *(PackageName + TEXT(".") + Name), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (!Texture)
+		{
+			UPackage* Package = CreatePackage(*PackageName);
+			Texture = NewObject<UTexture2D>(Package, Name, RF_Public | RF_Standalone);
+		}
+		constexpr int32 Size = 4;
+		TArray<uint8> Pixels;
+		Pixels.Init(Value, Size * Size * 4);
+		for (int32 i = 3; i < Pixels.Num(); i += 4)
+		{
+			Pixels[i] = 255;
+		}
+		Texture->Source.Init(Size, Size, 1, 1, TSF_BGRA8, Pixels.GetData());
+		Texture->SRGB = false;
+		Texture->CompressionSettings = TC_Masks;
+		Texture->MipGenSettings = TMGS_NoMipmaps;
+		Texture->PostEditChange();
+		GunArtSave(Texture);
+		return Texture;
 	}
 
 	/** M_GunPBR: base colour x tint, normal, roughness and metallic from their maps or from an ORM map (UseORM 1). */
 	UMaterial* GunArtMaster(IAssetTools& Tools)
 	{
 		const FString Path = FString(GunArtRoot) / TEXT("M_GunPBR");
-		if (UMaterial* Existing = LoadObject<UMaterial>(nullptr, *(Path + TEXT(".M_GunPBR"))))
+		// Built again on every run (an older one is emptied), so a fix here reaches the saved material.
+		UMaterial* Material = LoadObject<UMaterial>(nullptr, *(Path + TEXT(".M_GunPBR")), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (Material)
 		{
-			return Existing;
+			UMaterialEditingLibrary::DeleteAllMaterialExpressions(Material);
 		}
-		UMaterial* Material = Cast<UMaterial>(Tools.CreateAsset(TEXT("M_GunPBR"), GunArtRoot, UMaterial::StaticClass(), NewObject<UMaterialFactoryNew>()));
+		else
+		{
+			Material = Cast<UMaterial>(Tools.CreateAsset(TEXT("M_GunPBR"), GunArtRoot, UMaterial::StaticClass(), NewObject<UMaterialFactoryNew>()));
+		}
 		if (!Material)
 		{
 			return nullptr;
@@ -94,11 +132,12 @@ namespace
 			Node->SamplerType = Type;
 			return Node;
 		};
-		auto* Base = Sample(TEXT("BaseColorMap"), -400, GunArtDefaultTexture(TEXT("DefaultDiffuse")), SAMPLERTYPE_Color);
-		auto* Normal = Sample(TEXT("NormalMap"), -100, GunArtDefaultTexture(TEXT("DefaultNormal")), SAMPLERTYPE_Normal);
-		auto* Rough = Sample(TEXT("RoughnessMap"), 200, GunArtDefaultTexture(TEXT("WhiteSquareTexture")), SAMPLERTYPE_LinearColor);
-		auto* Metal = Sample(TEXT("MetallicMap"), 500, GunArtDefaultTexture(TEXT("BlackSquareTexture")), SAMPLERTYPE_LinearColor);
-		auto* Orm = Sample(TEXT("ORMMap"), 800, GunArtDefaultTexture(TEXT("WhiteSquareTexture")), SAMPLERTYPE_LinearColor);
+		// The grey maps are imported as masks (TC_Masks, linear), so their samplers are Masks, with mask defaults.
+		auto* Base = Sample(TEXT("BaseColorMap"), -400, GunArtDefaultTexture(TEXT("/Engine/EngineResources/WhiteSquareTexture")), SAMPLERTYPE_Color);
+		auto* Normal = Sample(TEXT("NormalMap"), -100, GunArtDefaultTexture(TEXT("/Engine/EngineMaterials/DefaultNormal")), SAMPLERTYPE_Normal);
+		auto* Rough = Sample(TEXT("RoughnessMap"), 200, GunArtMaskTexture(TEXT("T_GunMaskWhite"), 255), SAMPLERTYPE_Masks);
+		auto* Metal = Sample(TEXT("MetallicMap"), 500, GunArtMaskTexture(TEXT("T_GunMaskBlack"), 0), SAMPLERTYPE_Masks);
+		auto* Orm = Sample(TEXT("ORMMap"), 800, GunArtMaskTexture(TEXT("T_GunMaskWhite"), 255), SAMPLERTYPE_Masks);
 		auto* UseOrm = GunArtNode<UMaterialExpressionScalarParameter>(Material, -600, 1100);
 		UseOrm->ParameterName = TEXT("UseORM");
 		UseOrm->DefaultValue = 0.0f;

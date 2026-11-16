@@ -53,6 +53,10 @@ struct FGunRangeGun
 	float MagazineIn = 0.62f;
 	FVector Hip = FVector(0, 9, -8);
 	float SightDistance = 10.0f;
+	/** The right hand reaches to put the sight at its spot (false: the stance clip's own hold). */
+	bool bReach = true;
+	/** Where the sight goes through a reload (cm from the eye, x ahead): lower and nearer, still in view. */
+	FVector ReloadSpot = FVector(22.0f, 6.0f, -14.0f);
 	float KickBack = 4.0f;
 	float KickUp = 3.0f;
 	float KickRecover = 12.0f;
@@ -66,6 +70,9 @@ struct FGunRangeGun
 	bool bPump = false;
 	float PumpStart = 0.3f;
 	float PumpSeconds = 0.5f;
+	/** A telescopic sight: fully aimed, the view goes through it (this field of view, a scope ring drawn over it, the arms
+	 *  and gun hidden). 0: open sights, the gun stays in view. */
+	float ScopeFov = 0.0f;
 };
 
 /**
@@ -112,6 +119,8 @@ public:
 	float GetBarrelOffDegrees() const { return BarrelOffDegrees; }
 	/** Where the gun's sight is from the view's centre line while aimed, cm. */
 	float GetSightOffCm() const { return SightOffCm; }
+	/** Where the arms' main bones are in the view (cm, x ahead, y right, z up), for the smoke test's notes. */
+	const FString& GetBoneLine() const { return BoneLine; }
 
 private:
 	void OnSimEvent(const colony::Event& Event);
@@ -124,12 +133,15 @@ private:
 	void UpdateInput();
 	void UpdateView(float Dt, ASimPawnActor& Player);
 	void DrawPanel();
+	void DrawScope();
 
 	bool bEnabled = false;
 	bool bShown = false;
 	TArray<FGunRangeGun> Guns;
 	TArray<colony::Entity> Rack;
 	FString AnimRoot = TEXT("/Game/Rim3D/Generated/Animations/");
+	/** Where the arms' head bone sits in the view (cm, x ahead): a little behind and below the eyes. */
+	FVector HeadInView = FVector(-8.0f, 0.0f, -7.0f);
 	FString SceneLine;
 	TMap<FString, TWeakObjectPtr<UAnimSequence>> Clips;
 	TSet<FString> MissingClips;
@@ -185,4 +197,10 @@ private:
 	int32 ReloadsSeen = 0;
 	float BarrelOffDegrees = 0.0f;
 	float SightOffCm = 0.0f;
+	/** The stand-in box's own place and size in the gun frame (no model imported). */
+	bool bFallback = false;
+	FTransform FallbackFix = FTransform::Identity;
+	/** Looking through a scope this frame (see FGunRangeGun::ScopeFov). */
+	bool bScoped = false;
+	FString BoneLine;
 };

@@ -70,6 +70,7 @@ namespace
 		float StepTime = 0.0f;
 		int32 Gun = 0;
 		int32 Shots = 0;
+		bool bFiringPicture = false;
 		int32 Pictures = 0;
 	};
 
@@ -412,9 +413,10 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		const auto Picture = [=, this](const TCHAR* What)
 		{
 			const FString Path = FPaths::ProjectSavedDir() / TEXT("GunRange") / FString::Printf(TEXT("%02d_%s.png"), State->Pictures++, What);
-			FScreenshotRequest::RequestScreenshot(Path, false, false);
+			FScreenshotRequest::RequestScreenshot(Path, true, false);  // with the UI: the scope view is drawn by it
 			Notes.Add(FString::Printf(TEXT("gunrange: picture %s (gun %d, barrel off %.1f deg, sight off %.1f cm, shots %d, reloads %d)"),
 				*FPaths::GetCleanFilename(Path), G->GetCurrentGun(), G->GetBarrelOffDegrees(), G->GetSightOffCm(), G->GetShotsSeen(), G->GetReloadsSeen()));
+			Notes.Add(FString::Printf(TEXT("gunrange:   bones %s"), *G->GetBoneLine()));
 		};
 		const auto AimAtNearest = [=]() -> bool
 		{
@@ -444,7 +446,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		};
 		State->StepTime += Dt;
 		const int32 GunCount = G->GetGuns().Num();
-		const auto Next = [=](int32 Step) { State->Step = Step; State->StepTime = 0.0f; };
+		const auto Next = [=](int32 Step) { State->Step = Step; State->StepTime = 0.0f; State->bFiringPicture = false; };
 		switch (State->Step)
 		{
 			case 0:  // pick the gun, look at the field
@@ -459,8 +461,15 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			case 1:  // aim down the sights
 				Body->SetScriptedAim(true);
 				AimAtNearest();
+				// Half way up (a scope coming to the eye) and then fully aimed.
+				if (!State->bFiringPicture && Body->GetAimBlend() > 0.5f)
+				{
+					Picture(*FString::Printf(TEXT("gun%d_raising"), State->Gun + 1));
+					State->bFiringPicture = true;
+				}
 				if (State->StepTime > 1.2f)
 				{
+					State->bFiringPicture = false;
 					Picture(*FString::Printf(TEXT("gun%d_aimed"), State->Gun + 1));
 					State->Shots = G->GetShotsSeen();
 					Next(2);
@@ -469,10 +478,11 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			case 2:  // fire a few
 				AimAtNearest();
 				Fight->Fire();
-				if (G->GetShotsSeen() >= State->Shots + 1 && State->StepTime > 0.05f && State->StepTime < 0.2f)
+				// The first shot seen: a picture right away (the kick and the flash).
+				if (!State->bFiringPicture && G->GetShotsSeen() > State->Shots)
 				{
 					Picture(*FString::Printf(TEXT("gun%d_firing"), State->Gun + 1));
-					State->StepTime = 0.2f;
+					State->bFiringPicture = true;
 				}
 				if (State->StepTime > 2.0f)
 				{

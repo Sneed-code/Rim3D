@@ -33,9 +33,16 @@ Hung on the view camera, so they move with the gun kick and shake of the shooter
   hair and legs hidden (`HideBoneByName`), no shadow. Skin, build and materials are copied from the player's body.
 - The **gun** sits in the right hand from the knuckles: the grip runs from the little finger's knuckle to the index
   finger's, the barrel along the hand, tilted back by the gun's grip `rake`; the gun's `grip` point lands in the palm.
-- **Aim**: the whole rig turns so the barrel runs along the view and moves so the gun's `sight` point sits
-  `sightDistance` before the eye; from the hip it sits `hip` lower right. Right mouse button blends to the sights (the
-  view's field of view narrows as anywhere in direct mode). Held still through a reload and a switch.
+- **Aim**: the body hangs from its head, which sits at `headInView` (top of guns.json: a little behind and below the
+  eye), and turns so the barrel runs along the view. The right hand then reaches (a two-bone IK on `hand_r`, its
+  rotation kept from the clip) until the gun's `sight` point sits `sightDistance` before the eye, or `hip` lower right
+  of that from the hip; through a reload it reaches to `reloadSpot` instead, so the gun stays in view while the clip
+  turns it. (Moving the whole body to bring the sight there put the camera inside a shoulder: the Mixamo stances don't
+  hold the sight before the eye.) Right mouse button blends to the sights (the field of view narrows as anywhere in
+  direct mode). `"reach": false` leaves a gun in the clip's own hold.
+- **Scope**: a gun with `"scope": {"fov": n}` (the bolt-action rifle's side-mounted scope) goes through it once fully
+  aimed: the arms and gun hide, the view narrows to `fov`, and a scope ring and post reticle are drawn over it. On the
+  way up the scope's eyepiece comes to the eye (its `sight` is the eyepiece on the scope's axis).
 - The **left hand** goes to the `offHand` point (the fore-end) with the MakeHuman two-bone IK, off through the reload.
 - **Moving parts**: the bolt-action rifle's bolt lifts and runs back after each shot and opens for the reload (the Codex
   model's own parts and pivots), triggers pull. A gun with a separate magazine mesh drops the empty one and the left
@@ -57,7 +64,13 @@ numbers can be tuned while it runs.
 
 Models are not in Git (public repo): they go in `assets/raw/guns/<Name>/` and the GunArt commandlet imports them into
 `/Game/Rim3D/Generated/Guns/<Name>/` (each FBX object its own mesh; textures onto `M_GunPBR`). A gun without a model
-shows a dark box the gun's size, and the panel says "no model yet".
+shows a dark box the gun's size, and the panel says "no model yet". The commandlet skips a gun whose FBX is missing
+with a warning, and builds `M_GunPBR` again on every run (grey maps are Masks samplers with its own linear
+`T_GunMaskWhite`/`T_GunMaskBlack` defaults; the engine's squares are sRGB and broke the compile).
+
+The Codex rifle (`BoltActionRifle_Game.fbx`) imports as `SM_BoltActionRifle_Body` (bounds -42.5..69.5 x -5.5..2.4 x
+-8.1..12.0 cm), `_PIVOT_Bolt` and `_PIVOT_Trigger`, already in the gun frame (+X muzzle, +Y right, +Z up, grip at
+the origin): muzzle socket (69.5, 0, 3.2), fore-end (34, 0, -2), scope axis at y -2.6, z 8.9, eyepiece at x -7.
 
 ## Not done
 

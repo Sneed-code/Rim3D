@@ -141,6 +141,7 @@ bool UGunRangeSubsystem::LoadConfig()
 		return false;
 	}
 	Root->TryGetStringField(TEXT("animRoot"), AnimRoot);
+	HeadInView = GunRangeVec(Root, TEXT("headInView"), FVector(-8.0f, 0.0f, -7.0f));
 	TArray<FGunRangeGun> Read;
 	for (const TSharedPtr<FJsonValue>& Value : Root->GetArrayField(TEXT("guns")))
 	{
@@ -195,6 +196,8 @@ bool UGunRangeSubsystem::LoadConfig()
 		}
 		G.Hip = GunRangeVec(J, TEXT("hip"), G.Hip);
 		G.SightDistance = GunRangeNum(J, TEXT("sightDistance"), G.SightDistance);
+		G.bReach = !J->HasField(TEXT("reach")) || J->GetBoolField(TEXT("reach"));
+		G.ReloadSpot = GunRangeVec(J, TEXT("reloadSpot"), G.ReloadSpot);
 		const TSharedPtr<FJsonObject>* KickObj = nullptr;
 		if (J->TryGetObjectField(TEXT("kick"), KickObj))
 		{
@@ -219,6 +222,11 @@ bool UGunRangeSubsystem::LoadConfig()
 			G.bPump = true;
 			G.PumpStart = GunRangeNum(*Pump, TEXT("start"), G.PumpStart);
 			G.PumpSeconds = GunRangeNum(*Pump, TEXT("seconds"), G.PumpSeconds);
+		}
+		const TSharedPtr<FJsonObject>* Scope = nullptr;
+		if (J->TryGetObjectField(TEXT("scope"), Scope))
+		{
+			G.ScopeFov = FMath::Clamp(GunRangeNum(*Scope, TEXT("fov"), 20.0f), 2.0f, 60.0f);
 		}
 		Read.Add(MoveTemp(G));
 	}
@@ -345,6 +353,7 @@ void UGunRangeSubsystem::OnSimEvent(const colony::Event& Event)
 void UGunRangeSubsystem::HideAll()
 {
 	bShown = false;
+	bScoped = false;
 	if (ViewRoot)
 	{
 		ViewRoot->SetVisibility(false, true);
@@ -500,6 +509,7 @@ void UGunRangeSubsystem::SetupGun(int32 Index)
 	bHaveCorrection = false;
 	ValidFrames = 0;
 	Dip = 1.0f;
+	bFallback = false;
 	bWasReloading = false;
 	bMagOut = false;
 	if (!Guns.IsValidIndex(Index) || !GunFrame)
@@ -536,8 +546,10 @@ void UGunRangeSubsystem::SetupGun(int32 Index)
 		{
 			Part->SetStaticMesh(FallbackMesh);
 			const float Length = FMath::Max(G.Muzzle.X + 20.0f, 20.0f);
-			Part->SetRelativeLocation(FVector(G.Muzzle.X - Length * 0.5f, 0.0f, 2.0f));
-			Part->SetRelativeScale3D(FVector(Length / 100.0f, 0.045f, 0.09f));
+			// Kept here: the moving-parts pass sets every part's transform each frame.
+			FallbackFix = FTransform(FQuat::Identity, FVector(G.Muzzle.X - Length * 0.5f, 0.0f, 1.0f), FVector(Length / 100.0f, 0.035f, 0.055f));
+			Part->SetRelativeTransform(FallbackFix);
+			bFallback = true;
 		}
 		UE_LOG(LogGunRange, Warning, TEXT("%s: no model in %s/%s (run the GunArt commandlet); a box stands in"), *G.Label, GunRangeArtRoot, *G.ArtName);
 	}
@@ -732,22 +744,48 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 	Dip = FMath::Max(0.0f, Dip - Dt / GunRangeSwitchSeconds);
 	SprintBlend = FMath::FInterpTo(SprintBlend, Body->IsSprinting() ? 1.0f : 0.0f, Dt, 7.0f);
 
-	// --- Place the arms: the sight at its spot before the eye (aimed) or lower right (from the hip). ---
+	// --- Place the arms: the body hangs from the head (the view is the eyes), and the right hand reaches so the sight
+	// is at its spot before the eye (aimed) or lower right (from the hip). Moving the body to bring the sight there
+	// instead put the camera inside a shoulder: the stance clips don't hold the sight before the eye. ---
 	const FVector SightInRoot = GunInRoot.TransformPosition(G.Sight);
-	const FVector Spot = FVector(G.SightDistance, 0.0f, 0.0f) + G.Hip * (1.0f - Ads);
+	const FVector HeadInRoot = Bone(TEXT("head"));
+	// Through a reload the hand keeps reaching, to the reload spot (the clip still turns the gun and moves the left
+	// hand), so the gun stays in view instead of going wherever the clip's third-person hold puts it.
+	const FVector Spot = FMath::Lerp(FVector(G.SightDistance, 0.0f, 0.0f) + G.Hip * (1.0f - Ads), G.ReloadSpot, FMath::Clamp(ActionWeight, 0.0f, 1.0f));
 	const float DipEase = GunRangeSmooth(Dip);
+	{
+		// Without the procedural layers (the reach must not undo the kick or the dip): where the sight is now, how far
+		// the hand has to go. The hand read this frame already carries last frame's reach, so this settles at once.
+		const FVector SightBase = HeadInView + AimCorrection.RotateVector(SightInRoot - HeadInRoot);
+		const FVector Shift = AimCorrection.UnrotateVector(Spot - SightBase);
+		const FTransform ArmsInRoot = Arms->GetComponentTransform().GetRelativeTransform(ViewRoot->GetComponentTransform());
+		const float Reach = G.bReach ? 1.0f : 0.0f;
+		if (UMakeHumanAnimInstance* ArmsAnim = Cast<UMakeHumanAnimInstance>(Arms->GetAnimInstance()))
+		{
+			const FVector TargetRoot = Hand + Shift;
+			// The elbow out to the right and down, as a shooter holds it.
+			const FVector ElbowRoot = TargetRoot + AimCorrection.UnrotateVector(FVector(-30.0f, 25.0f, -30.0f));
+			ArmsAnim->SetRightHandReach(Reach, ArmsInRoot.InverseTransformPosition(TargetRoot), ArmsInRoot.InverseTransformPosition(ElbowRoot));
+		}
+	}
 	const FQuat Procedural = FRotator(G.KickUp * Kick - 38.0f * DipEase - 14.0f * SprintBlend + Sway.Y, Sway.X + 22.0f * SprintBlend, 6.0f * SprintBlend + FMath::Sin(BobPhase) * 0.8f * BobAmount).Quaternion();
 	const FQuat RootRot = Procedural * AimCorrection;
-	FVector RootLoc = Spot - RootRot.RotateVector(SightInRoot);
+	FVector RootLoc = HeadInView - RootRot.RotateVector(HeadInRoot);
 	RootLoc += FVector(-G.KickBack * Kick, 0.0f, 0.0f);
 	RootLoc += FVector(0.0f, FMath::Sin(BobPhase) * 0.7f, -FMath::Abs(FMath::Cos(BobPhase)) * 0.6f) * BobAmount;
 	RootLoc += FVector(-4.0f, 4.0f, -22.0f) * DipEase + FVector(-4.0f, 3.0f, -5.0f) * SprintBlend;
 	ViewRoot->SetRelativeLocationAndRotation(RootLoc, RootRot);
 	GunFrame->SetRelativeTransform(GunInRoot);
 
-	// Show once the pose is settled (the first frames have no animation yet).
-	const bool bShow = ValidFrames >= 3;
-	if (bShow != bShown || !Arms->IsVisible())
+	// Show once the pose is settled (the first frames have no animation yet). Through a scope (fully aimed, not
+	// reloading or switching) the arms and gun go and the view narrows to the scope's.
+	bScoped = G.ScopeFov > 0.0f && Ads > 0.93f && ActionWeight < 0.05f && Dip < 0.05f && ValidFrames >= 3;
+	if (bScoped)
+	{
+		Camera->SetFieldOfView(G.ScopeFov);
+	}
+	const bool bShow = ValidFrames >= 3 && !bScoped;
+	if (bShow != bShown || Arms->IsVisible() != bShow)
 	{
 		ViewRoot->SetVisibility(bShow, true);
 		Source->SetVisibility(false, false);
@@ -759,6 +797,16 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 		BarrelOffDegrees = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(BarrelCam.X, -1.0, 1.0)));
 		const FVector SightCam = RootLoc + RootRot.RotateVector(SightInRoot);
 		SightOffCm = static_cast<float>(FVector2D(SightCam.Y, SightCam.Z).Size());
+		BoneLine.Reset();
+		for (const TCHAR* Name : {TEXT("head"), TEXT("neck_01"), TEXT("spine_05"), TEXT("clavicle_r"), TEXT("upperarm_r"), TEXT("lowerarm_r"), TEXT("hand_r"),
+			TEXT("clavicle_l"), TEXT("upperarm_l"), TEXT("lowerarm_l"), TEXT("hand_l")})
+		{
+			if (Arms->GetBoneIndex(Name) != INDEX_NONE)
+			{
+				const FVector At = RootLoc + RootRot.RotateVector(Bone(Name));
+				BoneLine += FString::Printf(TEXT("%s(%.0f,%.0f,%.0f) "), Name, At.X, At.Y, At.Z);
+			}
+		}
 	}
 
 	// --- Moving parts: the bolt cycling after a shot and opening for a reload, the trigger. ---
@@ -770,6 +818,11 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 		}
 		const FTransform MeshFix(G.MeshRotation, G.MeshOffset);
 		FTransform Local = MeshFix;
+		if (bFallback)
+		{
+			Part->SetRelativeTransform(Part == PartComponents[0] ? FallbackFix : MeshFix);
+			continue;
+		}
 		for (const FGunRangeGun::FPart& PartDef : G.Parts)
 		{
 			if (!Part->ComponentHasTag(FName(*PartDef.Name)))
@@ -889,6 +942,10 @@ void UGunRangeSubsystem::DrawPanel()
 	}
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
 	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	if (bScoped)
+	{
+		DrawScope();
+	}
 	const ImGuiWindowFlags Flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs;
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + 14.0f * Scale, Viewport->Pos.y + 14.0f * Scale), ImGuiCond_Always);
@@ -910,4 +967,27 @@ void UGunRangeSubsystem::DrawPanel()
 		}
 	}
 	ImGui::End();
+}
+
+void UGunRangeSubsystem::DrawScope()
+{
+	// The view through the scope: black outside a round field, a thin dark ring at its edge, a post from below and a
+	// level line either side (an old sniper scope's reticle). Called inside DrawPanel's ImGui context.
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	ImDrawList* Draw = ImGui::GetBackgroundDrawList();
+	const ImVec2 Centre(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.5f);
+	const float Radius = Viewport->Size.y * 0.46f;
+	const float Far = FMath::Sqrt(Viewport->Size.x * Viewport->Size.x + Viewport->Size.y * Viewport->Size.y);
+	const ImU32 Black = IM_COL32(0, 0, 0, 255);
+	const ImU32 Edge = IM_COL32(0, 0, 0, 150);
+	const ImU32 Line = IM_COL32(8, 8, 8, 235);
+	// A ring as thick as the screen covers everything outside the field.
+	Draw->AddCircle(Centre, Radius + Far * 0.5f, Black, 128, Far);
+	Draw->AddCircle(Centre, Radius - 6.0f, Edge, 128, 14.0f);
+	const float Thin = FMath::Max(1.5f, Viewport->Size.y / 600.0f);
+	Draw->AddLine(ImVec2(Centre.x - Radius, Centre.y), ImVec2(Centre.x - Radius * 0.08f, Centre.y), Line, Thin * 2.0f);
+	Draw->AddLine(ImVec2(Centre.x + Radius * 0.08f, Centre.y), ImVec2(Centre.x + Radius, Centre.y), Line, Thin * 2.0f);
+	// The post: wide from the bottom, a fine tip just reaching the centre.
+	Draw->AddRectFilled(ImVec2(Centre.x - Thin * 2.5f, Centre.y + Radius * 0.12f), ImVec2(Centre.x + Thin * 2.5f, Centre.y + Radius), Line);
+	Draw->AddTriangleFilled(ImVec2(Centre.x - Thin * 2.5f, Centre.y + Radius * 0.12f), ImVec2(Centre.x + Thin * 2.5f, Centre.y + Radius * 0.12f), ImVec2(Centre.x, Centre.y), Line);
 }
