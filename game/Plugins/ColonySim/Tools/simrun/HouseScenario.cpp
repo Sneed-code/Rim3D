@@ -651,8 +651,15 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
     if (!groundIndoors) {
         fail("%s", "the ground floor is not an enclosed, roofed room");
     }
-    if (sleptUpstairs.size() != static_cast<size_t>(kBeds)) {
-        fail("%zu of %d colonists woke up from a bed upstairs", sleptUpstairs.size(), kBeds);
+    // The protagonist has no rest need (docs/design/needs.md): only the other colonists go to bed by themselves.
+    int sleepers = 0;
+    for (const auto [pawn, colonist] : sim.things().registry().view<const Colonist>().each()) {
+        (void)pawn;
+        sleepers += colonist.protagonist ? 0 : 1;
+    }
+    sleepers = std::min(sleepers, kBeds);
+    if (sleptUpstairs.size() != static_cast<size_t>(sleepers)) {
+        fail("%zu of %d colonists woke up from a bed upstairs", sleptUpstairs.size(), sleepers);
     }
     if (sleptDownstairs > 0) {
         fail("%llu times a colonist woke in a bed downstairs", static_cast<unsigned long long>(sleptDownstairs));

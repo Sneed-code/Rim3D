@@ -56,11 +56,11 @@ ScheduleKind JobSystem::scheduleNow(Entity pawn) const {
 float JobSystem::sleepBelow(ScheduleKind slot) const {
     switch (slot) {
         case ScheduleKind::Sleep: return rules_.fallAsleepBelow;
-        case ScheduleKind::Work: return rules_.restTiredBelow;
+        case ScheduleKind::Work: return rules_.napBelowWork;
         case ScheduleKind::Anything:
         case ScheduleKind::Joy: break;
     }
-    return rules_.restDrowsyBelow;
+    return rules_.napBelow;
 }
 
 // Urgent needs: eat when the stomach is under the seek level, sleep when worn out. Whatever the
@@ -81,7 +81,7 @@ bool JobSystem::thinkNeeds(Entity pawn, Job& out) {
         needs->foodSearchAfter = now() + idleSeconds_;  // nothing to eat now: look again in a minute
     }
     const ScheduleKind slot = scheduleNow(pawn);
-    if (needs->rest < (slot == ScheduleKind::Work ? rules_.restTiredBelow : rules_.restDrowsyBelow)) {
+    if (!mindIsPlayersOwn(reg, pawn) && needs->rest < (slot == ScheduleKind::Work ? rules_.napBelowWork : rules_.napBelow)) {
         return makeSleepJob(pawn, out);
     }
     return false;
@@ -97,6 +97,9 @@ bool JobSystem::thinkSchedule(Entity pawn, Job& out) {
     }
     switch (scheduleNow(pawn)) {
         case ScheduleKind::Sleep:
+            if (mindIsPlayersOwn(things_.registry(), pawn)) {
+                break;  // no rest need: a sleep hour is a free hour (the player may still sleep the night away)
+            }
             return needs->rest < rules_.fallAsleepBelow && makeSleepJob(pawn, out);
         case ScheduleKind::Joy:
             if (mindIsPlayersOwn(things_.registry(), pawn)) {
@@ -738,11 +741,16 @@ JobSystem::StepResult JobSystem::lie(Entity pawn, Job& job, std::string&) {
     if (reg.all_of<Lovin>(pawn)) {
         return StepResult::Running;
     }
+    // The player's own sleep (SleepCommand): only passes the night, ends at morning or when woken.
+    if (job.handsOn != 0) {
+        return time_.hourOfDay() == rules_.nightToHour ? StepResult::Next : StepResult::Running;
+    }
     Needs& needs = reg.get<Needs>(pawn);
-    if (needs.rest >= rules_.wakeAt) {
+    const bool sleepHour = scheduleNow(pawn) == ScheduleKind::Sleep;
+    if (needs.rest >= rules_.wakeAt && !(sleepHour && rules_.sleepThroughNight)) {
         return StepResult::Next;
     }
-    if (scheduleNow(pawn) != ScheduleKind::Sleep && needs.rest >= rules_.wakeOutsideSleepAt) {
+    if (!sleepHour && needs.rest >= rules_.wakeOutsideSleepAt) {
         return StepResult::Next;
     }
     // A pawn that is starving wakes to eat, if there is something to eat.

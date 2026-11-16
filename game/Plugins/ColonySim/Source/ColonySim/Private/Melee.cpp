@@ -427,7 +427,7 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     const Tool& tool = set->tools[m.tool];
     // Worn armour's weight slows a swing (docs/design/armour.md).
     const int windup = std::max(1, static_cast<int>(std::lround(static_cast<float>(meleeWindup(rules_, tool.cooldown)) *
-                                                                 combat_.apparelStats().attackTimeFactor(things_.registry(), pawn))));
+                                                                 combat_.attackTimeFactor(pawn))));
     m.phase = MeleePhase::Windup;
     m.stepsLeft = windup;
     m.target = target;
@@ -880,7 +880,7 @@ void MeleeSystem::step() {
                     m.stepsLeft = tool != nullptr
                                       ? std::max(1, static_cast<int>(std::lround(
                                                         static_cast<float>(tool->cooldown - meleeWindup(rules_, tool->cooldown)) *
-                                                        combat_.apparelStats().attackTimeFactor(things_.registry(), pawn))))
+                                                        combat_.attackTimeFactor(pawn))))
                                       : 1;
                 }
                 break;

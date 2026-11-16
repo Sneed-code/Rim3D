@@ -50,40 +50,47 @@ The nearest to the food wins. With none the pawn eats where the food lay, standi
 
 ## Rest
 
-`Needs::rest`, 1 rested to 0. Awake it falls by band, per the wiki:
+**sneed's rules (2026-11-16), replacing RimWorld's rest bands.** `Needs::rest`, 1 rested to 0.
 
-| Band | Rest | Falls at (a day) |
-| --- | --- | --- |
-| Rested | 0.28 and up | 0.95 |
-| Drowsy | 0.14 to 0.28 | 0.66 |
-| Tired | 0.01 to 0.14 | 0.28 |
-| Exhausted | under 0.01 | 0.57 |
+- **Awake** it falls 0.6 a day whatever the level: a 16-hour waking day uses **40%**, so a pawn that woke at 100% has
+  60% left at bedtime.
+- **Lying down** it rises 1.5 a day times the bed's `stats.bedRestEffectiveness` (bed 1.0, the ground 0.8): a regular
+  8-hour night in a bed gives back **50%** (40% on the ground), more than a day uses, so a pawn that lost sleep catches up
+  over a few nights.
+- **Nothing happens until 0.** The Drowsy and Tired bands are gone (`drowsyBelow`, `tiredBelow` and `exhaustedBelow` all
+  0.001). At 0 the pawn is **Exhausted**: the Exhausted mood (-18) and **25% less performance**
+  (`rest.exhaustedPerformance` 0.75, `NeedsSystem::performanceFactor`): work goes at 75% (through `JobSystem::workFactor`),
+  aiming, cooldowns, reloads and melee swings take 1/0.75 times as long (`CombatSystem::attackTimeFactor`), and shooting
+  accuracy is multiplied by 0.75. Walking speed is not touched. This leaves room for long fights and emergencies.
+- **The default is still to sleep every night.** In a Sleep hour a pawn goes to bed below 0.85 (`fallAsleepBelow`; after
+  any normal day it is well under) and **stays in bed until the Sleep hours end** (`sleepThroughNight`), even once full.
+  At 6:00 a pawn under 50% sleeps on until 50% (`wakeOutsideSleepAt` 0.5). Outside Sleep hours a pawn naps only below 10%
+  (`napBelow`; in Work hours only at 0, `napBelowWork`) and gets up at 50%.
 
-Lying down it **rises** 2.2857 a day (0.5714% per 150 ticks) times the **rest effectiveness**:
-the bed def's `stats.bedRestEffectiveness` (bed 1.0), 0.8 on the ground (`groundEffectiveness`).
-So 0 to 1 takes 10.5 hours in a bed. While lying, `Health::rest` is set to Bed or Ground for the
-healing bonus (F1, [health.md](health.md)) and goes back to Ground when the pawn gets up.
+While lying, `Health::rest` is set to Bed or Ground for the healing bonus (F1, [health.md](health.md)) and goes back to
+Ground when the pawn gets up. Every number above is ours (sneed's), in `NeedRules` `rest` with a `restNote`.
 
-**The sleep job** (`LayDown`): walk to the bed's cell (or none: lie where the pawn stands), then
-lie. It wakes when rest is back to 1.0 (`wakeAt`); in an hour that is not a Sleep hour it wakes at
-0.7 (`wakeOutsideSleepAt`, ours); and a ravenous pawn (under 0.125) wakes to eat if there is
-anything to eat. RimWorld's own wake-up rule is not on the wiki, so the three levels above are ours
-(`unverified` in the def).
+**The sleep job** (`LayDown`): walk to the bed's cell (or none: lie where the pawn stands), then lie. A fire beside the
+bed wakes it, and a ravenous pawn (under 0.125) wakes to eat if there is anything to eat.
 
-## The schedule
+## The protagonist sleeps the night away
 
-`Schedule`: one `ScheduleKind` for each hour of the day. `Anything` and `Work` are for working,
-`Joy` keeps the pawn from working (there is no recreation yet, so it idles), `Sleep` sends it to
-bed. The standard schedule is Sleep from 22:00 through 05:59 and Anything the rest (RimWorld's
-default is recalled, not read; `schedule` in NeedRules). `SetScheduleCommand{pawn, hour, kind}`.
+The protagonist has **no rest need** (sneed, 2026-11-16): rest is held at 1, never Exhausted, no sleep jobs from needs or
+the schedule (a Sleep hour is a free hour), and the snapshot gives -1 for their rest. Sleeping only passes the night, as in
+Palworld, so nights never force a stop and night missions are no chore.
 
-When a pawn goes to bed (ours, all in `NeedRules`):
+`SleepCommand{pawn, bed, wake}`: the colonist under control lies down in `bed` (within reach, `kHandsOnReach`; its own or
+one with a free slot, which it then owns) or with `kNoEntity` on the ground where it stands, as a hands-on `LayDown` job
+(`JobSystem::handsOnSleep`), and the night is skipped to morning like `SkipNightCommand` ([skip-travel.md](skip-travel.md)):
+the sim runs 1,200 game seconds a step with the narrator held, everyone else carrying on as normal
+(`TravelSystem::startPlayerNight`). The colonist stays the player's. It may start from 18:00 (`rest.nightFromHour`) and
+ends at 6:00 (`rest.nightToHour`); it is refused in daytime, for a pawn not under control or downed, with a bed out of
+reach or full, and while anything threatens the colony (the skip's own threat check). A threat that turns up while asleep
+ends the skip and the player gets up; so does a fire beside the bed. `wake` true gets up now and ends the skip. While asleep,
+`DirectMoveCommand` is ignored. `planHandsOn` on a bed gives `HandsOnKind::Sleep` ("sleep till morning", or why not).
 
-| Hour is | The pawn sleeps when rest is under |
-| --- | --- |
-| Sleep | 0.75 (`fallAsleepBelow`) |
-| Anything or Joy | 0.28 (Drowsy) |
-| Work | 0.14 (Tired) |
+Unreal (next PR, waiting for a PC compile): in direct mode **F** on a bed (a press, not a hold) or **N** anywhere sleeps; the screen fades to dark with the clock
+running; **W A S D, N or Esc** get up; Tab gets up first. Any other colonist under control can sleep the same way (and rests).
 
 ## Beds
 
@@ -99,8 +106,8 @@ C4: `building: {bed, sleepingSlots}`, `stats.bedRestEffectiveness`, and for the 
 
 ## In the think list
 
-Order in `JobSystem::step`: **needs** (eat when food is under 0.3, sleep when drowsy or tired by
-the table above), **schedule** (a Sleep hour sends a pawn under 0.75 to bed; a Joy hour idles
+Order in `JobSystem::step`: **needs** (eat when food is under 0.3, nap by
+the table above), **schedule** (a Sleep hour sends a pawn under 0.85 to bed; a Joy hour idles
 it), then work, then idle. A pawn on a job it may drop (hauling, waiting, not a player order) is
 checked **every step**: if it has become hungry enough to eat, or tired enough to sleep this hour,
 the job ends ("interrupted: hungry" / "interrupted: tired") and the need job starts. Eating and
@@ -134,7 +141,7 @@ owl and greedy colonists have mood effects, see [mood.md](mood.md).
 
 - Overeating, food poisoning,
   rotting, food policies, baby and animal food.
-- Malnutrition's effect on consciousness; hunger and tiredness slowing work.
+- Malnutrition's effect on consciousness; hunger slowing work.
 - Plants to harvest (C3), medical beds, beds for
   guests and prisoners, sleeping spots, bedrolls, bed quality.
 - Meditation. (Recreation for Joy hours is C18: [recreation.md](recreation.md); the standard schedule now has Joy from 19:00 to 21:59.)

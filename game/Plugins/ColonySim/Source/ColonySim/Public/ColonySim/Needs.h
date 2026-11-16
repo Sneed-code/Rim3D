@@ -83,6 +83,20 @@ struct COLONY_API NeedRules {
     float fallAsleepBelow = 0.75f;      // in a Sleep hour
     float wakeAt = 1.0f;                // asleep in a Sleep hour
     float wakeOutsideSleepAt = 0.7f;    // asleep in any other hour
+    // In a Sleep hour a sleeper stays in bed until the Sleep hours end, even once fully rested
+    // (sneed, 2026-11-16: the default is always to rest at night). False: it wakes at `wakeAt`.
+    bool sleepThroughNight = false;
+    // Outside Sleep hours a pawn naps when rest falls under these (Anything and Joy hours, Work hours).
+    // Read from `rest.napBelow` and `rest.napBelowWork`; without them, the Drowsy and Tired levels.
+    float napBelow = 0.28f;
+    float napBelowWork = 0.14f;
+    // An Exhausted pawn (rest at the bottom band) works, aims, shoots and swings at this share of its
+    // speed and accuracy (sneed: -25% at 0% rest). 1 = no penalty.
+    float exhaustedPerformance = 1.0f;
+    // The protagonist has no rest need (sneed, 2026-11-16): sleeping only passes the night, Palworld style
+    // (SleepCommand). They may lie down from `nightFromHour` and wake at `nightToHour`.
+    int nightFromHour = 18;
+    int nightToHour = 6;
     // The default schedule: Sleep from `sleepFromHour` through `sleepToHour` (wrapping midnight).
     int sleepFromHour = 22;
     int sleepToHour = 5;
@@ -111,6 +125,9 @@ public:
     // The rest gained per game day lying in `bed` (kNoEntity: on the ground): the rules' rate times
     // the bed def's `stats.bedRestEffectiveness`.
     float restGainPerDay(Entity bed) const;
+    // Work speed, aim and attack speed, shooting accuracy: `exhaustedPerformance` for an Exhausted pawn,
+    // else 1. The protagonist is never tired.
+    float performanceFactor(Entity pawn) const;
 
     // Pawns that sleep somewhere off the map (a caravan resting for the night): they rest as on the ground.
     void setRestingElsewhere(std::function<bool(Entity)> resting) { restingElsewhere_ = std::move(resting); }

@@ -509,6 +509,7 @@ private:
     Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart);
 
     void applyCommand(const Command& command, uint64_t id);
+    void applySleepCommand(const SleepCommand& sleep, uint64_t id);
     // One game second. `keepEvents`: the events of the steps before it in this Sim::step stay (a skip's batch).
     // `tick`: whether the calendar moves on this step; -1 lets the day length decide (another map
     // is told by the colony's, so the two keep the same time).

@@ -1137,7 +1137,7 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
         s.shotsLeft = gun.burst;
         // Trigger-happy pawns spend half the aiming time, careful shooters a quarter more (TraitStats).
         // Worn armour's weight slows aiming, cooldown and reloading (docs/design/armour.md).
-        const float armourTime = apparelStats_->attackTimeFactor(reg, pawn);
+        const float armourTime = attackTimeFactor(pawn);
         const int warmup = static_cast<int>(std::lround(static_cast<float>(gun.warmup) * armourTime *
                                                         (traits_ != nullptr ? traits_->of(pawn).aimDelayFactor : 1.0f)));
         s.phase = player || warmup <= 0 ? ShotPhase::Firing : ShotPhase::Aiming;
@@ -1276,7 +1276,7 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     const WeaponMods* mods = reg.try_get<WeaponMods>(gear->weapon);
     const float partsAccuracy = mods != nullptr ? mods->accuracy : 1.0f;
     const float quality = rangedAccuracyFactor(gear->weapon);
-    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player, accuracyFactor * quality * partsAccuracy) * steady + s.recoil, rng,
+    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player, accuracyFactor * quality * partsAccuracy * performance(pawn)) * steady + s.recoil, rng,
          kickUp, kickSide);
     const float skillFactor = std::max(0.0f, 1.0f - model_->recoilSkillReduction * static_cast<float>(skill));
     s.recoil += gun->recoil * skillFactor;
@@ -1306,10 +1306,14 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
         return;
     }
     const int cooldown = static_cast<int>(std::lround(
-        static_cast<float>(gun->cooldown) * apparelStats_->attackTimeFactor(things_.registry(), pawn) *
+        static_cast<float>(gun->cooldown) * attackTimeFactor(pawn) *
         (inspirations_ != nullptr ? static_cast<float>(inspirations_->statFactor(pawn, "fireCooldown")) : 1.0f)));
     s.phase = cooldown > 0 ? ShotPhase::Cooling : ShotPhase::Ready;
     s.stepsLeft = cooldown;
+}
+
+float CombatSystem::attackTimeFactor(Entity pawn) const {
+    return apparelStats_->attackTimeFactor(things_.registry(), pawn) / performance(pawn);
 }
 
 void CombatSystem::startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps) {
@@ -1318,7 +1322,7 @@ void CombatSystem::startReload(Entity pawn, Shooter& s, Entity weapon, int extra
     const CombatModel::Gun& gun = *combatGunOf(*model_, reg, weapon, moddedGun);
     const float factor = combatBySkill(model_->reloadFactor, shootingSkill(pawn)) *
                          (talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "reloadTime")) : 1.0f) *
-                         apparelStats_->attackTimeFactor(reg, pawn);
+                         attackTimeFactor(pawn);
     s.phase = ShotPhase::Reloading;
     s.shotsLeft = 0;
     s.stepsLeft = std::max(1, extraSteps + static_cast<int>(std::lround(static_cast<float>(gun.reloadTime) * factor)));

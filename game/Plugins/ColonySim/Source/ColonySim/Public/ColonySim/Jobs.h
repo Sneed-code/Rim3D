@@ -169,7 +169,8 @@ inline bool jobIsLyingDown(const Job& job) {
 }
 
 // What the controlled colonist would do with its hands on a target (JobSystem::planHandsOn).
-enum class HandsOnKind : uint8_t { None, Mine, Chop, Cut, Harvest, Build, Deliver, PickUp };
+// Sleep: a bed, slept in by pressing (SleepCommand, not HandsOnCommand): the player's night skip.
+enum class HandsOnKind : uint8_t { None, Mine, Chop, Cut, Harvest, Build, Deliver, PickUp, Sleep };
 
 struct HandsOnPlan {
     HandsOnKind kind = HandsOnKind::None;
@@ -299,6 +300,12 @@ public:
     bool handsOnPutDown(Entity pawn, CellPos cell, std::string& error);
     // Ends the pawn's hands-on job, if it has one.
     void handsOnStop(Entity pawn);
+    // The player's own sleep (SleepCommand): the controlled pawn lies down in `bed` (within reach; its own or one
+    // with a free slot, which it then owns) or on the ground where it stands (kNoEntity), as a hands-on LayDown job
+    // that lasts until morning. Refused, with a reason, otherwise.
+    bool handsOnSleep(Entity pawn, Entity bed, std::string& error);
+    // Whether the pawn is lying down for the player's own sleep.
+    bool sleepingByHand(Entity pawn) const;
     // How far along the pawn's job is, 0 to 1 (a swing of the pick, a plant, a frame); 0 with no job.
     float jobProgress(Entity pawn) const;
     // Puts down what the pawn carries on the nearest free cell. Used when the player lets a colonist go.
