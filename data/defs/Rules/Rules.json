@@ -243,6 +243,7 @@
     "heightMale": [0.95, 1.05],
     "heightFemale": [0.88, 0.97],
     "hulkHeightBonus": 0.04,
+    "gearSizeFollow": 0.5,
     "melaninRange": [0.0, 1.0],
     "skinColors": [
       [0.0, 0.62, 0.48, 0.41], [0.25, 0.52, 0.38, 0.31], [0.5, 0.42, 0.29, 0.22],
@@ -311,7 +312,7 @@
         { "name": "Stitched" }
       ]
     },
-    "ours": ["bodyTypeWeights", "weightRange", "heightMale", "heightFemale", "hulkHeightBonus", "melaninRange",
+    "ours": ["bodyTypeWeights", "weightRange", "heightMale", "heightFemale", "hulkHeightBonus", "gearSizeFollow", "melaninRange",
              "skinColors", "hairColors", "faceGenderShift", "eyeColors", "hairStyles", "beardStyles", "bodyHair", "tattoos", "scars"]
   },
   {

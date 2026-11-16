@@ -457,6 +457,11 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 		LeftHandIK.EffectorLocationSpace = BCS_BoneSpace;
 		LeftHandIK.JointTargetLocationSpace = BCS_WorldSpace;
 		LeftHandIK.Alpha = 0.0f;
+		RightHandIK.IKBone.BoneName = TEXT("hand_r");
+		RightHandIK.EffectorLocationSpace = BCS_ComponentSpace;
+		RightHandIK.JointTargetLocationSpace = BCS_ComponentSpace;
+		RightHandIK.bAllowStretching = false;
+		RightHandIK.Alpha = 0.0f;
 	}
 	bPhysics = !Dynamics.IsEmpty() || !Jiggle.Bodies.IsEmpty() || !Tail.Bones.IsEmpty() || !Hair.Chains.IsEmpty() || bHandIK;
 	if (bPhysics)
@@ -465,6 +470,8 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 		FAnimNode_Base* Previous = &ToComponent;
 		if (bHandIK)
 		{
+			RightHandIK.ComponentPose.SetLinkNode(Previous);
+			Previous = &RightHandIK;
 			LeftHandIK.ComponentPose.SetLinkNode(Previous);
 			Previous = &LeftHandIK;
 		}
@@ -502,6 +509,9 @@ void FMakeHumanAnimProxy::PreUpdate(UAnimInstance* Instance, float DeltaSeconds)
 		LeftHandIK.Alpha = MakeHuman->LeftGripAlpha;
 		LeftHandIK.EffectorLocation = MakeHuman->LeftGripOffset;
 		LeftHandIK.JointTargetLocation = MakeHuman->LeftElbowWorld;
+		RightHandIK.Alpha = MakeHuman->RightReachAlpha;
+		RightHandIK.EffectorLocation = MakeHuman->RightReachTarget;
+		RightHandIK.JointTargetLocation = MakeHuman->RightElbowComponent;
 		// Hits and blasts since the last update; the node uses them on its next evaluation.
 		if (UMakeHumanAnimInstance* Kicked = Cast<UMakeHumanAnimInstance>(Instance))
 		{

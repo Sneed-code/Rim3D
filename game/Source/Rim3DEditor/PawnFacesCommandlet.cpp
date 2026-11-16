@@ -1348,6 +1348,21 @@ namespace
 		UMaterialEditingLibrary::ConnectMaterialProperty(Color, TEXT("RGB"), MP_BaseColor);
 		auto* Coverage = FacesNode<UMaterialExpressionTextureSampleParameter2D>(Material, -800, 200);
 		Coverage->ParameterName = TEXT("Coverage");
+		// A linear white default: without one the node falls back on the engine's sRGB default texture, which a linear
+		// sampler refuses, and the whole material failed to compile (hair drew as a pale lump in the default material).
+		const FString DefaultName = TEXT("T_PawnHairCardsDefault");
+		UTexture2D* Default = NewObject<UTexture2D>(CreatePackage(*(FString(PawnFacesFolder) / DefaultName)), *DefaultName, RF_Public | RF_Standalone);
+		TArray<uint8> White;
+		White.Init(255, 4 * 4 * 4);
+		Default->Source.Init(4, 4, 1, 1, TSF_BGRA8, White.GetData());
+		Default->CompressionSettings = TC_Default;
+		Default->SRGB = false;
+		Default->PostEditChange();
+		if (!FacesSave(Default))
+		{
+			return nullptr;
+		}
+		Coverage->Texture = Default;
 		Coverage->SamplerType = SAMPLERTYPE_LinearColor;
 		auto* Channel = FacesNode<UMaterialExpressionVectorParameter>(Material, -800, 450);
 		Channel->ParameterName = TEXT("CoverageChannel");  // which channel of the texture holds the coverage
@@ -1410,6 +1425,13 @@ namespace
 				CoverageChannel = Textures.Layout == EHairTextureLayout::Layout3 ? FLinearColor(0, 0, 0, 1) : FLinearColor(1, 0, 0, 0);
 				CoverageTexture = Cast<UTexture2D>(Tools.DuplicateAsset(Name.Replace(TEXT("SM_"), TEXT("T_")) + TEXT("_Coverage"), PawnFacesFolder,
 					Textures.Textures[Index]));
+				// The cards material samples it as linear colour: a coverage map is data, never sRGB.
+				if (CoverageTexture && (CoverageTexture->SRGB || CoverageTexture->CompressionSettings != TC_Default))
+				{
+					CoverageTexture->SRGB = false;
+					CoverageTexture->CompressionSettings = TC_Default;
+					CoverageTexture->PostEditChange();
+				}
 			}
 		}
 		if (Groups == 0 || !CoverageTexture)

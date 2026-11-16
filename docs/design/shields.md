@@ -10,15 +10,16 @@ Code: `ShieldRules`, `Blocking`, `ApparelStats::isShield`, `catchChance`, `shiel
 ## What a shield is
 
 A shield is armour in its own slot (`gear.slots` `["Arm"]`, so a pawn wears one) with `gear.shield.catchChance`.
-Three sizes, each made of a material (`stuffCategories` Metallic and Woody): wood, steel, plasteel, uranium.
+Three sizes, each made of one of four tiers of material (sneed, 2026-11-16: primitive, steel, composite, tech): wood,
+steel, composite (ours: modern plastic, half steel's weight) and plasteel. 12 shields in all. Uranium makes none.
 Defs in `data/defs/Things/Shields.json`.
 
 - **Protection** works like armour (divides every hit, wherever it lands) while the shield is on the arm. A tower shield
   equals a chest piece of its tier: the defs hold steel's numbers (steel plate armour's 20 / 30 / 10), each size down
   halves them, and the material scales them as it scales plate armour (`armourStuff`). A material's offset (wood's -10%
   fire) is scaled by the size too (`gear.share` 0.25, 0.5, 1).
-- **Weight**: 3 / 6 / 12 kg for steel, times the material's `shieldStuff.mass` (wood 0.8, plasteel 0.7, uranium 2;
-  RimWorld's material weights against steel's). It counts as armour: walking speed / (1 + kg / 100), attacks take
+- **Weight**: 3 / 6 / 12 kg for steel, times the material's `shieldStuff.mass` (wood 0.8, plasteel 0.7: RimWorld's
+  material weights against steel's; composite 0.5, sneed's "50% lighter"). It counts as armour: walking speed / (1 + kg / 100), attacks take
   (1 + kg / 100) times as long, work a quarter of that.
 - **Durability**: 70 / 140 / 280 hit points for steel, times the material's hit point factor; it wears like any armour.
 - **Hands**: a weapon with `twoHanded` (every rifle, shotgun, SMG, LMG and minigun, every bow, the launchers, the
@@ -30,7 +31,7 @@ Defs in `data/defs/Things/Shields.json`.
 | --- | --- | --- | --- |
 | Wood (1, 0.8) | 5 / 4.5 / 0, fire -2.5 | 10 / 9 / 0, fire -5 | 20 / 18 / 0, fire -10 |
 | Steel (2, 1) | 5 / 7.5 / 2.5 | 10 / 15 / 5 | 20 / 30 / 10 |
-| Uranium (2.5, 2) | 6 / 9 / 2.75 | 12 / 18 / 5.5 | 24 / 36 / 11 |
+| Composite (2.5, 0.5) | 5 / 7.5 / 2.5 | 10 / 15 / 5 | 20 / 30 / 10 |
 | Plasteel (3, 0.7) | 6 / 9.4 / 2.75 | 12 / 18.75 / 5.5 | 24 / 37.5 / 11 |
 
 Catch chance: small 60%, medium 80%, tower 95%.
@@ -69,9 +70,18 @@ the player.
 
 ## Making them
 
-Small and medium wooden shields at a crafting spot or smithy with no research (the tropical start); metal ones at a
-smithy with Smithing; tower shields (wood or metal) at a smithy with Plate armor. 30 / 60 / 120 of the material
-(`data/defs/Recipes/WeaponAndArmorRecipes.json`; work and cost ours).
+One recipe per shield, 30 / 60 / 120 of the material (`data/defs/Recipes/WeaponAndArmorRecipes.json`; work and cost
+ours):
+
+| Tier | Small and medium | Tower |
+| --- | --- | --- |
+| Wood | crafting spot or smithy, no research (the tropical start) | smithy, Plate armor |
+| Steel | smithy, Smithing | smithy, Plate armor |
+| Composite | machining table, Flak armor | machining table, Flak armor |
+| Plasteel | machining table, Shields | machining table, Shields |
+
+Composite (`Composite`, stuff category Composite, `data/defs/Things/Items.json`) is made at a machining table with Flak
+armor: 10 steel and 10 chemfuel make 20. It takes steel's armour factors; flat block 2.5.
 
 ## Snapshot and saving
 

@@ -23,10 +23,26 @@
 namespace
 {
 	// Degrees per unit of the mouse axis (the engine has already scaled each count by the input's 0.07), so the
-	// default turns about 0.05 degrees a count, a usual shooter feel. 0.12 was 0.008 a count and much too slow
-	// (sneed's G2 playtest).
-	TAutoConsoleVariable<float> GProtagonistMouseTurn(TEXT("Protagonist.MouseTurn"), 0.7f,
-		TEXT("How fast the mouse turns the view in direct control: degrees per unit of mouse axis (0.7 default, higher turns faster)."));
+	// default turns about 0.08 degrees a count. 0.12 was 0.008 a count and much too slow (sneed's G2 playtest), and
+	// 0.7 still too slow in the gun range; the Settings window has a slider (saved in GameUserSettings.ini).
+	TAutoConsoleVariable<float> GProtagonistMouseTurn(TEXT("Protagonist.MouseTurn"), AProtagonistPawn::kDefaultMouseTurn,
+		TEXT("How fast the mouse turns the view in direct control: degrees per unit of mouse axis (1.2 default, higher turns faster)."));
+	const TCHAR* const ProtagonistControlsSection = TEXT("Rim3D.Controls");
+	bool bProtagonistMouseTurnLoaded = false;
+
+	void ProtagonistLoadMouseTurn()
+	{
+		if (bProtagonistMouseTurnLoaded || !GConfig)
+		{
+			return;
+		}
+		bProtagonistMouseTurnLoaded = true;
+		float Saved = 0.0f;
+		if (GConfig->GetFloat(ProtagonistControlsSection, TEXT("MouseTurn"), Saved, GGameUserSettingsIni) && Saved > 0.0f)
+		{
+			GProtagonistMouseTurn->Set(Saved, ECVF_SetByGameSetting);
+		}
+	}
 	TAutoConsoleVariable<float> GProtagonistDepthOfField(TEXT("Look.DepthOfField"), 2.0f,
 		TEXT("The third person camera's cinematic depth of field: the lens f-stop, focused on the colonist (lower blurs the distance more; 0 turns it off). Fades out while aiming and in first person."));
 	constexpr float ProtagonistMaxPitch = 80.0f;
@@ -74,6 +90,24 @@ AProtagonistPawn::AProtagonistPawn()
 	Camera->SetupAttachment(Root);
 	Camera->SetFieldOfView(80.0f);
 	Camera->bUsePawnControlRotation = false;
+}
+
+float AProtagonistPawn::GetMouseTurn()
+{
+	ProtagonistLoadMouseTurn();
+	return GProtagonistMouseTurn.GetValueOnGameThread();
+}
+
+void AProtagonistPawn::SetMouseTurn(float Value)
+{
+	ProtagonistLoadMouseTurn();
+	const float Clamped = FMath::Clamp(Value, 0.1f, 5.0f);
+	GProtagonistMouseTurn->Set(Clamped, ECVF_SetByGameSetting);
+	if (GConfig)
+	{
+		GConfig->SetFloat(ProtagonistControlsSection, TEXT("MouseTurn"), Clamped, GGameUserSettingsIni);
+		GConfig->Flush(false, GGameUserSettingsIni);
+	}
 }
 
 USimSubsystem* AProtagonistPawn::GetBridge() const
@@ -176,7 +210,7 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		PC->GetInputMouseDelta(MouseX, MouseY);
 		if (MouseX != 0.0f || MouseY != 0.0f)
 		{
-			const float Turn = FMath::Max(0.01f, GProtagonistMouseTurn.GetValueOnGameThread());
+			const float Turn = FMath::Max(0.01f, GetMouseTurn());
 			Look(MouseX * Turn, MouseY * Turn);
 		}
 	}
@@ -421,7 +455,17 @@ void AProtagonistPawn::UpdateCamera()
 	}
 	const FRotator Look(Pitch, Yaw, 0.0);
 	const float Blend = ProtagonistSmooth(AimBlend);
-	const FVector Eye = Feet + FVector(0.0, 0.0, kEyeHeight) + FRotator(0.0, Yaw, 0.0).Vector() * ProtagonistEyeForward;
+	// The eyes and the camera's pivot were set for the 1.80 m man: they follow this colonist's own height, so a short
+	// colonist sees the world from lower down (docs/design/gear-size.md).
+	double BodyScale = 1.0;
+	if (const USimPawnSubsystem* Pawns = GetWorld() ? GetWorld()->GetSubsystem<USimPawnSubsystem>() : nullptr)
+	{
+		if (const ASimPawnActor* Drawn = Thing != colony::kNoEntity ? Pawns->FindPawn(Thing) : nullptr)
+		{
+			BodyScale = FMath::Clamp(Drawn->GetBodyScale(), 0.5f, 1.5f);
+		}
+	}
+	const FVector Eye = Feet + FVector(0.0, 0.0, kEyeHeight * BodyScale) + FRotator(0.0, Yaw, 0.0).Vector() * ProtagonistEyeForward;
 	FVector Location;
 	EffectiveArm = ArmLength;
 	if (bFirstPerson)
@@ -432,7 +476,7 @@ void AProtagonistPawn::UpdateCamera()
 	else
 	{
 		// Aimed (over the shoulder): the camera comes in close behind and to the right of the colonist.
-		const FVector Pivot = Feet + FVector(0.0, 0.0, ProtagonistPivotHeight);
+		const FVector Pivot = Feet + FVector(0.0, 0.0, ProtagonistPivotHeight * BodyScale);
 		EffectiveArm = FMath::Lerp(ArmLength, FMath::Min(ArmLength, ProtagonistAimArm), Blend);
 		const FVector Right = FRotator(0.0, Yaw, 0.0).RotateVector(FVector::RightVector);
 		Location = Pivot - Look.Vector() * EffectiveArm + Right * (ProtagonistAimShoulder * Blend);

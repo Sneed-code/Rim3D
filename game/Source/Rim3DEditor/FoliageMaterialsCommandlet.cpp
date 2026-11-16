@@ -300,6 +300,7 @@ int32 UFoliageMaterialsCommandlet::Main(const FString& Params)
 	// (Poly Haven: <material>_diff, _nor_gl, _rough). Leaves are masked and see-through; bark is solid. The whole
 	// tree sways a little, all slots alike, so leaves stay on their branches.
 	int32 TreeMade = 0;
+	TSet<FString> TreeDone; // a rock set's pieces share one material: make its copy once
 	TArray<FAssetData> TreeMeshes;
 	Registry.GetAssetsByClass(UStaticMesh::StaticClass()->GetClassPathName(), TreeMeshes, true);
 	for (const FAssetData& Asset : TreeMeshes)
@@ -309,16 +310,13 @@ int32 UFoliageMaterialsCommandlet::Main(const FString& Params)
 			continue;
 		}
 		UStaticMesh* Mesh = Cast<UStaticMesh>(Asset.GetAsset());
-		// Only trees (a slot with leaves or branch cards); rocks keep the materials they came with.
+		// Trees (a slot with leaves or branch cards) sway; rocks get solid, still copies too: the glTF import's own
+		// materials sit on an engine master without the Nanite and instanced usages, so they drew as the default material.
 		bool bTree = false;
 		for (int32 Slot = 0; Mesh && Slot < Mesh->GetStaticMaterials().Num(); ++Slot)
 		{
 			const FString SlotMaterial = Mesh->GetMaterial(Slot) ? Mesh->GetMaterial(Slot)->GetName() : FString();
 			bTree |= SlotMaterial.Contains(TEXT("leaves")) || SlotMaterial.Contains(TEXT("leaf")) || SlotMaterial.Contains(TEXT("branch"));
-		}
-		if (!bTree)
-		{
-			continue;
 		}
 		for (int32 Slot = 0; Mesh && Slot < Mesh->GetStaticMaterials().Num(); ++Slot)
 		{
@@ -349,6 +347,15 @@ int32 UFoliageMaterialsCommandlet::Main(const FString& Params)
 			{
 				Base = Mesh->GetName();
 			}
+			// A rock set's pieces (rock_moss_set_01_a ...) share the set's textures: drop trailing _parts until one matches.
+			for (FString Shorter = MaterialName; !HasDiff(Base) && Shorter.Contains(TEXT("_"));)
+			{
+				Shorter = Shorter.Left(Shorter.Find(TEXT("_"), ESearchCase::CaseSensitive, ESearchDir::FromEnd));
+				if (HasDiff(Shorter))
+				{
+					Base = Shorter;
+				}
+			}
 			const auto Find = [&TreeTex, &Base](const TCHAR* Suffix) -> UTexture*
 			{
 				for (const TPair<FString, UTexture*>& Pair : TreeTex)
@@ -366,6 +373,11 @@ int32 UFoliageMaterialsCommandlet::Main(const FString& Params)
 				UE_LOG(LogFoliageMaterials, Warning, TEXT("%s: no %s_diff texture"), *Mesh->GetName(), *Base);
 				continue;
 			}
+			if (TreeDone.Contains(MaterialName))
+			{
+				continue;
+			}
+			TreeDone.Add(MaterialName);
 			UMaterialInstanceConstantFactoryNew* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
 			Factory->InitialParent = TreeMaster;
 			UMaterialInstanceConstant* Instance = Cast<UMaterialInstanceConstant>(Tools.CreateAsset(MaterialName + TEXT("_R3D"), FolFolder, UMaterialInstanceConstant::StaticClass(), Factory));
@@ -387,7 +399,7 @@ int32 UFoliageMaterialsCommandlet::Main(const FString& Params)
 			UMaterialEditingLibrary::SetMaterialInstanceScalarParameterValue(Instance, TEXT("UseOpacity"), bLeaves ? 1.0f : 0.0f);
 			UMaterialEditingLibrary::SetMaterialInstanceScalarParameterValue(Instance, TEXT("Translucency Amount"), bLeaves ? 0.3f : 0.0f);
 			UMaterialEditingLibrary::SetMaterialInstanceScalarParameterValue(Instance, TEXT("Brightness"), 1.0f);
-			UMaterialEditingLibrary::SetMaterialInstanceScalarParameterValue(Instance, TEXT("Wind Amount"), 0.35f);
+			UMaterialEditingLibrary::SetMaterialInstanceScalarParameterValue(Instance, TEXT("Wind Amount"), bTree ? 0.35f : 0.0f);
 			UMaterialEditingLibrary::UpdateMaterialInstance(Instance);
 			bSaved = FolSave(Instance) && bSaved;
 			++TreeMade;
