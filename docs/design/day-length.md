@@ -71,8 +71,9 @@ Speed-up (2x, 3x, overseer only) multiplies steps as before: both clocks speed u
 
 ## Not done yet
 
-- Unreal: the slider in the new-game screen and the in-game options, and switching the few
-  "has a step run?" checks (shooting once a step, overlays) from `gameSeconds` to `steps`.
+- Unreal (done in #294): the Settings window's "Day length" slider, kept for new games, and the
+  fight subsystem's once-a-step checks on `steps`. Overlay refresh checks still use `gameSeconds`
+  (they refresh a little less often with a longer day, which is harmless).
 - Some job and animal timers in game seconds that are really real-time waits (a hunter's repath,
   a wild animal's chase, waiting a minute before looking for food again) now last longer in real
   time with a longer day. None changes the outcome much; move them to steps if playtests show it.
