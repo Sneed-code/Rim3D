@@ -1,0 +1,21 @@
+{
+  "comment": "sneed's Petite Natural Pale Adult, rebuilt from his MakeHuman save with our skeleton (breast bones for jiggle, the ponytail's own bones for hair sway). {codex} is the folder holding the .mhm.",
+  "out": "game/Saved/MakeHuman/PetitePale/PetitePale.fbx",
+  "mhm": "{codex}/Petite Natural Pale Adult - Anatomy MH2.mhm",
+  "rig": "game_engine_with_breast",
+  "material_overrides": {
+    "high-poly": {
+      "color": "{mh_user}/skins/violet_reference_skin/light_violet_eyes.png"
+    },
+    "ponytail": {
+      "color": "{mh_user}/skins/violet_reference_skin/purple_ponytail.png"
+    }
+  },
+  "tints": {
+    "pubic": [
+      0.035,
+      0.028,
+      0.026
+    ]
+  }
+}
