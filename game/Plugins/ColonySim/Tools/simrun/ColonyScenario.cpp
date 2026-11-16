@@ -1872,8 +1872,20 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                 // planned building is gone, once the fire there is out.
                 // Only what stood once: a plan made this hour is still a queued command.
                 int steelLeft = -1;  // counted when first needed
+                // The gun post's solar panel goes back up before its turrets and battery: on rainforest seed 7 the rebuilt
+                // turrets took the last steel and the panel, without which nothing there works, never came back.
+                bool solarStands = true;
+                for (const Plan& p : defencePlans) {
+                    if (p.defName == "SolarGenerator") {
+                        const Entity there = sim.map().buildingAt(p.cell);
+                        solarStands = there != kNoEntity && !sim.things().registry().all_of<ConstructionSite>(there);
+                    }
+                }
                 for (const std::vector<Plan>* list : {&plans, &shedPlans, &greenPlans, &defencePlans}) {
                     for (const Plan& p : *list) {
+                        if (!solarStands && (p.defName == "Turret_Mini" || p.defName == "Battery")) {
+                            continue;
+                        }
                         const Entity there = sim.map().buildingAt(p.cell);
                         const int64_t key = static_cast<int64_t>(sim.map().index(p.cell));
                         if (there != kNoEntity) {
@@ -1889,7 +1901,8 @@ int run(uint64_t seed, int mapSize, double days, std::shared_ptr<const DefDataba
                                     steelLeft += defs->get(thing.def).defName() == "Steel" ? stack.count : 0;
                                 }
                             }
-                            const bool wall = p.defName == "Wall" || p.defName == "Door";
+                            // Barricades too: the steel is for the turrets, the solar panel and the battery.
+                            const bool wall = p.defName == "Wall" || p.defName == "Door" || p.defName == "Barricade";
                             const std::string stuff = wall && p.stuff == "Steel" && steelLeft < kRebuildSteelReserve ? "WoodLog" : p.stuff;
                             sim.submit(PlaceBlueprintCommand{p.defName, stuff, p.cell, p.rot});
                             ++rebuilt;

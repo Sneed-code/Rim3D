@@ -563,3 +563,12 @@ seeds lost everyone to an infestation and raids around day 45 (25 and 26 alive i
 attack, manhunters, animals out for revenge) as RimWorld's do, and still leave calm ones be ([defense.md](defense.md)).
 Year runs, six seeds: 6,7,6,7,7,6 = 39 alive (38); turret shots rose on rainforest seed 3 (24 to 180) and seed 7 (4 to 14).
 
+**Seventeenth pass (2026-11-16): rebuilding the gun post.** On rainforest seed 7 a short circuit burned the new gun post on
+day 6; the rebuilt turrets took the last steel and the solar panel never came back, so the post stood unpowered all year.
+Now the post's turrets and battery are rebuilt only once its solar panel stands, and its steel barricades go back in wood
+when the colony has under 200 steel (as the steel walls already did). Seed 7 still ends with no power there: after the
+fires it has neither the steel nor the components for two turrets. Two more ideas made things worse and were dropped:
+buying steel and components from traders with the silver left after medicine (31 and 24 alive in two rounds; later
+traders then had less silver for medicine) and not rebuilding while a fire burns within two cells. Year runs, six seeds:
+8,6,6,7,6,6 = 39 alive (39).
+
