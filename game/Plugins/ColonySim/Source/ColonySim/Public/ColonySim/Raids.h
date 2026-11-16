@@ -212,6 +212,7 @@ struct RaidRules {
     float maxPoints = 10000.0f;
     // When a squad routs or gives up.
     float fleeLostFraction = 0.5f;  // share of its pawns downed, dead or gone
+    bool underFireResponds = true;  // a working colonist hurt by an enemy drops its job and fights from cover, or runs (phase 3)
     bool fightWhenCaught = true;    // a routed raider turns and fights to the death when walled in or hurt by an enemy this close:
     float caughtRange = 4.0f;       // ...(ours, real-time-combat.md)
     float giveUpHoursMin = 10.4f;   // RimWorld's 26,000 to 38,000 ticks
@@ -302,6 +303,9 @@ public:
     void setLooksMaker(std::function<void(Entity, uint64_t, bool)> maker) { looks_ = std::move(maker); }
     // A bullet or blow hurt `victim` (CombatSystem's hurt hook): a routed raider caught by its attacker fights back.
     void hurt(Entity victim, Entity attacker);
+    // Colonists hurt by an enemy this step take cover and fight back, or run (real-time-combat.md phase 3). Sim calls it
+    // once a step after combat, so no state is left between steps.
+    void takeFire();
     // Counter for tests: raiders that turned to fight when cornered or caught.
     uint64_t corneredCount() const { return cornered_; }
 
@@ -443,6 +447,7 @@ private:
     std::vector<Event>* events_ = nullptr;
     std::function<void(Entity, uint64_t, bool)> looks_;
     uint64_t cornered_ = 0;
+    std::vector<std::pair<Entity, Entity>> underFire_;  // (colonist, attacker) hurt this step; emptied by takeFire
     Construction* construction_ = nullptr;
     ArtillerySystem* artillery_ = nullptr;
     FuelSystem* fuel_ = nullptr;

@@ -164,6 +164,25 @@ break), `FighterTests` (drafted colonists hold, an attack order sends them), `Ra
 raiders). Shields keep sneed's catch chance (60/80/95% by size, shields.md); turning that into a physical cover area
 is a phase 2 candidate.
 
+## Phase 2 and 3 as built
+
+- **AI dodge roll** (`MeleeSystem::roll`): a fighter that sidesteps reads a **strong** swing (a heavy blow, AN1's
+  `strongSwing`) and rolls clear instead, the player's roll (`CombatSystem::dodgeRoll` with `ai`), half across and
+  half away from the attacker, to a side with `rollClearance` (2 m) of open ground; else it sidesteps. No defending
+  until the roll and `dodgeRecoverySteps` are over. Test: a skill 20 unarmed fighter rolled from every one of 28 heavy
+  longsword swings out of 40 and got clear of all 40.
+- **Waiting out a guard** (`MeleeSystem::holdSwing`, from the fighter AI's swing): a shield up or a parry raised facing
+  the attacker (within 60 degrees, `guardFacingCos`) and not broken: it holds its swing, facing the target, up to
+  `guardWaitSteps` (2 s), then presses anyway. A shield-bearer lowers its shield to strike, and that is the opening.
+  Melee save section 3 (`guardWaitFrom`).
+- **Under fire** (`RaidSystem::takeFire`, phase 3): a colonist who is not fighting and is hurt by an enemy (another
+  side, a hostile animal, a berserk colonist) drops its job whatever its role: armed, it becomes a defending fighter
+  with its attacker known (cover, shoot back); unarmed, it runs for shelter (`PawnAction` `TakeCover`, "fights back" or
+  "runs"). Being shot sounds the alarm, so it stands down with everyone when the alarm stops. Not when the player
+  silenced the alarm, nor for a Medic or Firefighter (field care), nor a controlled or drafted pawn
+  (`RaidRules` `underFireResponds`). Hurts are gathered by the combat hurt hook and answered once a step after combat.
+- Still to do from phase 3: danger-aware paths (avoid open ground in an enemy's sight).
+
 ## Tuning later
 
 Every number above lives in `data/defs/Rules/MeleeRules.json` or `FighterRules.json` (and `data/tuning.json`
