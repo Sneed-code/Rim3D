@@ -567,6 +567,11 @@ struct SaveData {
     uint64_t defsHash = 0;
     SimSettings settings;
     int64_t seconds = 0;
+    // Section "clock" (docs/design/day-length.md). A save from before it has none: the step clock
+    // was the calendar's (-1 here) and the day 48 minutes.
+    int64_t steps = -1;
+    int dayMinutes = kBaseDayMinutes;
+    int calendarAcc = 0;
     uint64_t rngState = 0;
     uint64_t rngIncrement = 0;
     uint64_t groundHash = 0;
@@ -1309,7 +1314,7 @@ inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitComma
                                             std::is_same_v<Type, CommsCommand> || std::is_same_v<Type, ScannerCommand> ||
                                             std::is_same_v<Type, InventoryCommand> ||
                                             std::is_same_v<Type, SetOutfitFightGearCommand> || std::is_same_v<Type, HideGearCommand> ||
-                                            std::is_same_v<Type, ShieldCommand>;
+                                            std::is_same_v<Type, ShieldCommand> || std::is_same_v<Type, SetDayLengthCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1353,6 +1358,8 @@ void saveTradeCommand(Ar& ar, Type& c) {
     } else if constexpr (std::is_same_v<Type, HideGearCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("hide", c.hide);
+    } else if constexpr (std::is_same_v<Type, SetDayLengthCommand>) {
+        ar.value("minutes", c.minutes);
     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("up", c.up);
@@ -3811,6 +3818,11 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("at", c.at);
         });
     });
+    ar.section("clock", 1, [&] {  // the step clock and the day length (docs/design/day-length.md)
+        ar.value("steps", d.steps);
+        ar.value("dayMinutes", d.dayMinutes);
+        ar.value("calendarAcc", d.calendarAcc);
+    });
     // New sections go here, at the end.
 }
 
@@ -5101,6 +5113,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.nature = sim.nature_->state();
     d.fire = sim.fire_->saved();
     d.seconds = sim.time_.seconds;
+    d.steps = sim.time_.steps;
+    d.dayMinutes = sim.time_.dayMinutes;
+    d.calendarAcc = sim.calendarAcc_;
     d.rngState = sim.rng_.state();
     d.rngIncrement = sim.rng_.increment();
     d.groundHash = sim.groundHash_;
@@ -5673,6 +5688,10 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
     }
     sim.time_.seconds = d.seconds;
+    sim.time_.steps = d.steps >= 0 ? d.steps : d.seconds;
+    sim.time_.tick = true;
+    sim.time_.dayMinutes = std::clamp(d.dayMinutes, kBaseDayMinutes, kMaxDayMinutes);
+    sim.calendarAcc_ = std::clamp(d.calendarAcc, 0, sim.time_.dayMinutes - 1);
     sim.rng_.restore(d.rngState, d.rngIncrement);
     sim.stockpileCell_ = d.stockpile;
     sim.stats_.hauls = d.hauls;

@@ -174,7 +174,7 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
 MeleeSystem::~MeleeSystem() = default;
 
 int64_t MeleeSystem::now() const {
-    return time_.seconds;
+    return time_.steps;  // real time: swings and blocks keep their pace whatever the day length
 }
 
 // ---- What a pawn fights with -----------------------------------------------------------------

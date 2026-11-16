@@ -699,7 +699,11 @@ struct AttunedView {
 };
 
 struct Snapshot {
-    int64_t gameSeconds = 0;  // Sim::time().seconds when it was written
+    int64_t gameSeconds = 0;  // Sim::time().seconds when it was written: the calendar (the clock, the sun)
+    // Sim::time().steps: one per step, real time. Use it, not gameSeconds, to tell whether a step has
+    // run (with a day longer than 48 minutes the calendar stands still on some steps).
+    int64_t steps = 0;
+    int dayMinutes = 48;  // real minutes a game day lasts at 1x (docs/design/day-length.md)
     int mapWidth = 0;
     int mapHeight = 0;
     std::vector<ThingView> things;  // sorted by id

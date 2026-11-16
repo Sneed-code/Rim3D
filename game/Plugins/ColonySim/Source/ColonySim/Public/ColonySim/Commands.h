@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ColonySim/Api.h"
+#include "ColonySim/Clock.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/BillMode.h"
@@ -1047,6 +1048,13 @@ struct HideGearCommand {
     bool hide = true;
 };
 
+// The day length (docs/design/day-length.md): `minutes` real minutes a game day lasts at 1x, 48 to 120. Walking,
+// fighting and work keep their speed; the calendar (needs, growth, rot, the sun, the seasons) follows. Fails outside
+// 48 to 120.
+struct SetDayLengthCommand {
+    int minutes = kBaseDayMinutes;
+};
+
 // Shields (docs/design/shields.md): `up` raises the pawn's shield, false lowers it. Held up, the pawn can walk and
 // reload but not shoot or swing. `hasDir`: the shield faces (dirX, dirY) (the player's camera), else where the pawn
 // faces. Fails without a shield on its arm (none, or slung behind a two-handed weapon).
@@ -1090,10 +1098,10 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
                              AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand,
                              ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand,
-                             InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand>;
+                             InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand>;
 
-// A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
-// applied in. Failed commands are logged too.
+// A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
+// day) it was applied in. Failed commands are logged too.
 struct LoggedCommand {
     int64_t step = 0;
     Command command;

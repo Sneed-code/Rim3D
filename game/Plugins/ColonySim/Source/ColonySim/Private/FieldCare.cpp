@@ -71,7 +71,7 @@ FieldCare::FieldCare(Things& things, Map& map, HealthSystem& health, JobSystem& 
 }
 
 int64_t FieldCare::now() const {
-    return time_.seconds;
+    return time_.steps;  // real time, like the fight it happens in
 }
 
 void FieldCare::invalidate() {

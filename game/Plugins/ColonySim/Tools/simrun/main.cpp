@@ -13,6 +13,7 @@
 //   simrun --load game.save --days 1 --save later.save    (continues a save; --days defaults to 0)
 //   simrun --load game.save --days 0 --save-json game.json   (readable dump of a save)
 //   simrun --seed 42 --size 128 --days 60 --weather   (a line a day: season, temperatures, weather, snow; E1)
+//   simrun --seed 42 --size 128 --days 2 --day-minutes 120   (a 2-hour day: --days counts game days)
 //   simrun --scenario colony [--seed 42] [--size 512] [--days 5] [--verbose]   (the colony test, C10;
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
 //   simrun --perf [--seed 42] [--size 1024] [--days 1] [--budget MS]   (the sim cost check, S9: 30 colonists, 300 tame animals, crops
@@ -111,6 +112,7 @@ struct Options {
     bool sizeGiven = false;
     double days = 1.0;
     bool daysGiven = false;
+    int dayMinutes = colony::kBaseDayMinutes;  // --day-minutes: the day length (docs/design/day-length.md)
     int pawns = 0;
     int items = 0;
     int pathBudget = colony::Pathfinder::kDefaultBudget;
@@ -175,6 +177,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else if (std::strcmp(arg, "--days") == 0 && hasValue) {
             out.days = std::atof(argv[++i]);
             out.daysGiven = true;
+        } else if (std::strcmp(arg, "--day-minutes") == 0 && hasValue) {
+            out.dayMinutes = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--pawns") == 0 && hasValue) {
             out.pawns = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--items") == 0 && hasValue) {
@@ -747,11 +751,14 @@ int main(int argc, char** argv) {
     settings.pathBudget = options.pathBudget;
     settings.scenario = options.start;
     settings.wildAnimals = options.animals;
+    settings.dayMinutes = options.dayMinutes;
     settings.world.enabled = options.onWorld;
     settings.world.width = options.worldWidth;
     settings.world.height = options.worldHeight;
     settings.world.startTile = options.worldTile;
-    int64_t steps = static_cast<int64_t>(options.days * static_cast<double>(colony::kSecondsPerDay));
+    // --days counts game days: a longer day has more steps in it.
+    int64_t steps = static_cast<int64_t>(options.days * static_cast<double>(colony::kSecondsPerDay) * options.dayMinutes /
+                                         colony::kBaseDayMinutes);
     if (!options.replay.empty()) {
         std::string error;
         if (!colony::loadReplayFile(options.replay, replay, error)) {

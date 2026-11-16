@@ -81,7 +81,7 @@ TravelSystem::~TravelSystem() = default;
 
 int TravelSystem::batch() const {
     switch (state_.kind) {
-        case SkipKind::Night: return rules_.nightBatch;
+        case SkipKind::Night: return rules_.nightBatch * time_.dayMinutes / kBaseDayMinutes;  // a night lasts more steps with a longer day
         case SkipKind::Travel: return rules_.travelBatch;
         case SkipKind::None: break;
     }
@@ -345,10 +345,12 @@ bool TravelSystem::startTravel(Entity pawn, float x, float y, std::string& error
         error = "time is already being skipped";
         return false;
     }
-    const int64_t seconds = travelSeconds(pawn, x, y, error);
-    if (seconds <= 0) {
+    const int64_t walkSteps = travelSeconds(pawn, x, y, error);
+    if (walkSteps <= 0) {
         return false;
     }
+    // The walk takes steps (real time); the calendar that passes meanwhile is less with a longer day.
+    const int64_t seconds = std::max<int64_t>(1, std::llround(time_.calendarSecondsIn(static_cast<double>(walkSteps))));
     state_.kind = SkipKind::Travel;
     state_.startedAt = time_.seconds;
     state_.endsAt = time_.seconds + seconds;

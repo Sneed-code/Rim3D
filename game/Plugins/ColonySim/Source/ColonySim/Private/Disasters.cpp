@@ -599,7 +599,7 @@ void DisasterSystem::registerWorkers() {
             combat_.explode(ex);
         }
         fire_.igniteRadius(pos.x, pos.y, pos.level, static_cast<float>(radius), static_cast<float>(n.circuitFireChance),
-                           time_.seconds);
+                           time_.steps);  // the fire's clock
         f.text = released > 0.0 ? "Short circuit: a power net shorted out and its batteries blew." : "Short circuit: a power conduit burnt out.";
         f.hasCell = true;
         f.cell = cell;

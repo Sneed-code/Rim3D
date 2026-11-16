@@ -21,7 +21,7 @@ struct Replay {
     SimSettings settings;
     std::vector<LoggedCommand> commands;  // in step order
     std::vector<Checkpoint> checkpoints;  // in step order
-    int64_t endStep = -1;                 // game second it was recorded at; -1 if not given
+    int64_t endStep = -1;                 // step (Sim::time().steps) it was recorded at; -1 if not given
     bool hasEndHash = false;
     uint64_t endHash = 0;  // Sim::stateHash() at endStep
 };
@@ -49,7 +49,8 @@ private:
     size_t next_ = 0;
 };
 
-// Steps a sim made from `replay.settings` (and not stepped yet) up to game second `endStep`,
+// Steps a sim made from `replay.settings` (and not stepped yet) up to step `endStep` (the game
+// second with the 48-minute day),
 // feeding it the replay's commands.
 COLONY_API void playReplay(const Replay& replay, Sim& sim, int64_t endStep);
 
