@@ -2,6 +2,7 @@
 #include "ColonySim/Jobs.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Combat.h"
 #include "ColonySim/Drugs.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Fire.h"
@@ -416,6 +417,78 @@ bool JobSystem::findFood(Entity pawn, Job& out, bool commit) {
     if (out.chair == kNoEntity) {
         out.cell = foodCell;  // no table to sit at: eat where the food lies
     }
+    return true;
+}
+
+// The protagonist's bag (sneed, 2026-11-16): below the seek level, before it gets hungry, it eats the best food it
+// carries at once, wherever it is and whatever it is doing, steered by the player or not: the best kind first (the
+// food tiers, tastiest last), the most filling of that kind next. Like any meal, as many as fill the stomach, up to
+// what is eaten at once. Food for desperate times only when ravenous. Not while down.
+bool JobSystem::autoEatFromBag(Entity pawn) {
+    entt::registry& reg = things_.registry();
+    if (!mindIsPlayersOwn(reg, pawn)) {
+        return false;
+    }
+    Needs* needs = reg.try_get<Needs>(pawn);
+    Gear* gear = reg.try_get<Gear>(pawn);
+    if (needs == nullptr || gear == nullptr || gear->inventory.empty() || needs->food >= rules_.foodSeekBelow ||
+        health_.incapacitated(pawn)) {
+        return false;
+    }
+    Entity best = kNoEntity;
+    int bestTier = -1;
+    float bestNutrition = 0.0f;
+    for (const Entity item : gear->inventory) {
+        if (!reg.valid(item) || !reg.all_of<Thing>(item)) {
+            continue;
+        }
+        const DefId def = reg.get<Thing>(item).def;
+        const int tier = def.value < foodTier_.size() ? foodTier_[def.value] : -1;
+        if (tier < 0 || (tier == 0 && needs->food >= rules_.foodRavenousBelow) || (drugs_ != nullptr && drugs_->isDrug(def))) {
+            continue;
+        }
+        const float nutrition = nutrition_[def.value];
+        if (best == kNoEntity || tier > bestTier || (tier == bestTier && (nutrition > bestNutrition || (nutrition == bestNutrition && item < best)))) {
+            best = item;
+            bestTier = tier;
+            bestNutrition = nutrition;
+        }
+    }
+    if (best == kNoEntity || bestNutrition <= 0.0f) {
+        return false;
+    }
+    const DefId def = reg.get<Thing>(best).def;
+    const StackCount* stack = reg.try_get<StackCount>(best);
+    const int have = stack != nullptr ? stack->count : 1;
+    const int wanted = std::max(1, static_cast<int>(std::ceil((1.0f - needs->food) / bestNutrition - 0.001f)));
+    const int count = std::min({have, static_cast<int>(maxIngest_[def.value]), wanted});
+    Entity eaten = best;
+    if (count < have) {
+        eaten = things_.splitOff(best, count);  // the rest stays in the bag
+        if (eaten == kNoEntity) {
+            return false;
+        }
+    } else {
+        gear->inventory.erase(std::find(gear->inventory.begin(), gear->inventory.end(), best));
+        reg.remove<EquippedBy>(best);
+    }
+    const float before = needs->food;
+    needs->food = std::min(1.0f, needs->food + bestNutrition * static_cast<float>(count));
+    needs->foodSearchAfter = 0;
+    if (spoilage_ != nullptr) {
+        spoilage_->eaten(pawn, eaten);
+    }
+    const bool humanIngredient = spoilage_ != nullptr && spoilage_->humanlikeIngredient(eaten);
+    things_.destroy(eaten);
+    Event event;
+    event.type = EventType::PawnAte;
+    event.thing = pawn;
+    event.def = def;
+    event.cell = cellOf(reg.get<Position>(pawn));
+    event.amount = needs->food - before;
+    event.message = "bag";
+    event.part = humanIngredient ? 1 : -1;
+    events_.push_back(std::move(event));
     return true;
 }
 

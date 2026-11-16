@@ -340,10 +340,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     lights_->setWeather(weather_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
-    movement_->setSpeedFactor([this](Entity pawn) {
-        return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed")) *
-               combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn);
-    });
+    movement_->setSpeedFactor([this](Entity pawn) { return pawnMoveFactor(pawn); });
     combat_->setBodySize([this](Entity pawn) {
         const float animal = animals_->bodySize(pawn);
         if (animal > 0.0f) {
@@ -2613,6 +2610,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (view.category == ThingCategory::Pawn) {
             view.loadKg = static_cast<float>(jobs_->loadMass(entity));
             view.capacityKg = static_cast<float>(jobs_->carryCapacity(entity));
+            view.moveFactor = pawnMoveFactor(entity);
+            view.starving = isStarving(reg, entity);
         }
         if (view.category == ThingCategory::Pawn) {
             view.outfit = apparel_->outfitOf(entity);
@@ -3435,6 +3434,15 @@ void Sim::applyScannerCommand(const ScannerCommand& command, uint64_t id) {
         return;
     }
     deepResources_->setTune(things_->registry().get<Footprint>(building).origin, ore);
+}
+
+
+// How fast the pawn walks, as a share of its def's speed: its load, the moveSpeed talents, a bullet stagger, what it
+// wears and hunger (a starving pawn walks at 75%, needs.md "Starving"). The movement system and the snapshot (for the
+// player's own walk in direct mode) both use it.
+float Sim::pawnMoveFactor(Entity pawn) const {
+    return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed")) *
+           combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn);
 }
 
 }  // namespace colony

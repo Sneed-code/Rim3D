@@ -10,6 +10,7 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Mood.h"
+#include "ColonySim/Needs.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Things.h"
 
@@ -169,6 +170,7 @@ ApparelStats::ApparelStats(const DefDatabase& defs) {
     clothingHeat_ = rules.clothingInsulationHeat;
     kgPerSlowdown_ = rules.weightKgPerSlowdown;
     workWeightShare_ = rules.workWeightShare;
+    starvingFactor_ = NeedRules::read(defs).starvingSpeedFactor;
     weaponKg_.assign(defs.size(), 0.0f);
     twoHanded_.assign(defs.size(), false);
     shieldRules_ = ShieldRules::read(defs);
@@ -378,15 +380,19 @@ float ApparelStats::wornKg(const entt::registry& reg, Entity pawn) const {
 }
 
 float ApparelStats::moveFactor(const entt::registry& reg, Entity pawn) const {
-    return 1.0f / (1.0f + wornKg(reg, pawn) / kgPerSlowdown_);
+    return hungerFactor(reg, pawn) / (1.0f + wornKg(reg, pawn) / kgPerSlowdown_);
+}
+
+float ApparelStats::hungerFactor(const entt::registry& reg, Entity pawn) const {
+    return starvingFactor_ < 1.0f && isStarving(reg, pawn) ? starvingFactor_ : 1.0f;
 }
 
 float ApparelStats::attackTimeFactor(const entt::registry& reg, Entity pawn) const {
-    return 1.0f + armourKg(reg, pawn) / kgPerSlowdown_;
+    return (1.0f + armourKg(reg, pawn) / kgPerSlowdown_) / hungerFactor(reg, pawn);
 }
 
 float ApparelStats::workFactor(const entt::registry& reg, Entity pawn) const {
-    return 1.0f / (1.0f + workWeightShare_ * armourKg(reg, pawn) / kgPerSlowdown_);
+    return hungerFactor(reg, pawn) / (1.0f + workWeightShare_ * armourKg(reg, pawn) / kgPerSlowdown_);
 }
 
 float ApparelStats::insulationCold(const entt::registry& reg, Entity item) const {
