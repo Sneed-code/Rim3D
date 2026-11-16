@@ -41,7 +41,7 @@ stay hidden in first person; first person arms and a held gun (a view model) are
   would come from the protagonist's own body, so they'd be the right length by this same rule.
 - **Grip sockets in the hands**: in the game the gun floats at the chest and melee weapons follow a procedural swing
   ([melee-draw.md](melee-draw.md)); hands holding the grip by bone and IK come with the phase 4 animations. The
-  creator's fight demo already holds weapons by the hand bones ([creator-weapons.md](creator-weapons.md), on the
-  `makehuman-characters` branch); there the weapon is a child of a scaled mesh and so grows fully with it; when that
-  merges it should take `gearSizeFor(...).size` too.
+  creator's fight demo already holds weapons by the hand bones ([creator-weapons.md](creator-weapons.md)) and uses
+  this rule too: the grip comes from that body's own hand bones, its fine-tune offsets scale by `place` and the weapon
+  and shield by `size` (`CwPlaceWeapons`).
 - **Animals and big creatures** carry no gear, so nothing to scale.
