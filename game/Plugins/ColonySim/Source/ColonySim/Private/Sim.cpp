@@ -716,7 +716,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                                    splitMix64(settings.seed ^ 0x7265736F6EULL));
     resonance_->setEventLog(&events_);
     health_->setMods([this](Entity pawn, HealthMods& mods) { resonance_->healthMods(pawn, mods); });
-    patches_ = std::make_unique<PatchSystem>(*things_, *health_, *fighters_, time_);
+    patches_ = std::make_unique<PatchSystem>(*things_, map_, *health_, *fighters_, time_);
     patches_->setEventLog(&events_);
     jobs_->setPauseGate([this](Entity pawn) { return things_->registry().any_of<Stunned, Casting, Patching>(pawn); });
     mentalBreaks_->setEventLog(&events_);
@@ -2511,6 +2511,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
+            view.crawling = health->downed && health->crawls;
             view.dead = health->dead;
             view.pain = std::clamp(health->pain, 0.0f, 1.0f);
             view.bloodLoss = health->bloodLoss;

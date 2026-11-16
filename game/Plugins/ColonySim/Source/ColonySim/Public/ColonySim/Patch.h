@@ -4,6 +4,8 @@
 // 1, 2 or 3 real seconds for a light, moderate or heavy bleed, which tends that zone's bleeding wounds. The AI patches
 // only when it is safe (no enemy seen for a moment); a fighter bleeding under 1500 blood falls back to cover first
 // (FighterSystem::badlyHurt). The player's pawn patches on PatchCommand.
+// Crawling (part D): a person downed by the torso and awake drags itself away from enemies near, a cell at a time, at
+// HealthRules `zones.crawlMoving` of its walk.
 
 #include "ColonySim/Api.h"
 #include "ColonySim/Entity.h"
@@ -16,6 +18,7 @@ namespace colony {
 
 class FighterSystem;
 class HealthSystem;
+class Map;
 class Things;
 struct Event;
 struct GameTime;
@@ -32,11 +35,12 @@ struct PatchRules {
     int safeSeenSteps = 60;   // a fighter patches only when no enemy within safeRange was seen for this long (2 real s)
     float safeRange = 30.0f;  // metres
     int thinkEvery = 15;     // steps between the AI's looks (offset by the pawn's id)
+    float crawlRange = 20.0f; // a downed person crawls away from an able enemy this close (metres)
 };
 
 class COLONY_API PatchSystem {
 public:
-    PatchSystem(Things& things, HealthSystem& health, FighterSystem& fighters, const GameTime& time);
+    PatchSystem(Things& things, const Map& map, HealthSystem& health, FighterSystem& fighters, const GameTime& time);
 
     void setEventLog(std::vector<Event>* events) { events_ = events; }
     const PatchRules& rules() const { return rules_; }
@@ -47,14 +51,18 @@ public:
     bool patching(Entity pawn) const;
     // Whether the AI would think it safe for this pawn to patch now.
     bool safe(Entity pawn) const;
+    // Part D: the able enemy nearest a downed crawler within crawlRange, or kNoEntity.
+    Entity crawlThreat(Entity pawn) const;
 
     void step();
     void hashThing(Entity pawn, StateHasher& h) const;
 
 private:
     void emitAction(Entity pawn, int zone, int steps, const char* message, int count);
+    void crawl();
 
     Things& things_;
+    const Map& map_;
     HealthSystem& health_;
     FighterSystem& fighters_;
     const GameTime& time_;
