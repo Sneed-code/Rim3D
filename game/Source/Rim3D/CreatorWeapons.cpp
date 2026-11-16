@@ -250,6 +250,8 @@ namespace
 		float AnchorT = 0.0f;                     // s left holding its pelvis where it is (a clip change whose root differs)
 		float PelvisAlong = 0.0f;                 // its pelvis ahead of its spot along its facing last frame (cm)
 		bool bPelvisAlong = false;
+		float StandPelvisH = -1.0f;               // cm: its pelvis above the mesh origin in its stance (learned)
+		float LiftCut = 0.0f;                     // cm the demo lowers the mesh: a jump clip's rise is capped
 	};
 
 	enum class ECwDemo : uint8 { Off, Pause, Swing, Impact, Recover, DeathHold };
@@ -257,6 +259,7 @@ namespace
 	struct FCwState
 	{
 		TWeakObjectPtr<UWorld> World;
+		float MostLiftCut = 0.0f;  // the largest jump lowering logged so far
 		TArray<FCwPerson> People;
 		int32 Selected = 0;
 		bool bEquip = true;
@@ -1479,7 +1482,7 @@ namespace
 		const float Delta = static_cast<float>(P.Facing.Rotation().Yaw - Pawn->GetActorRotation().Yaw);
 		const FQuat Rotation = FQuat(FVector::UpVector, FMath::DegreesToRadians(Delta)) * Base.GetRotation();
 		FVector Shift = P.Spot - Pawn->GetActorLocation();
-		Shift.Z = 0.0;
+		Shift.Z = -P.LiftCut;
 		Mesh->SetWorldLocationAndRotation(Base.GetLocation() + Shift, Rotation);
 	}
 
@@ -1532,7 +1535,10 @@ namespace
 			P.bFloored = false;
 			P.AnchorT = 0.0f;
 			P.bPelvisAlong = false;
+			P.StandPelvisH = -1.0f;
+			P.LiftCut = 0.0f;
 		}
+		S.MostLiftCut = 0.0f;
 		S.RawGap = -1.0f;
 		S.GapRate = 0.0f;
 		S.SwingMinGap = 1.0e6f;
@@ -1627,6 +1633,32 @@ namespace
 		B.Spot = Mid + Dir * (Half + B.GiveGround);
 		A.Facing = Dir;
 		B.Facing = -Dir;
+		// Jump clips (the club's running jump attack, the great sword's jump attack) lift the body far more than a
+		// real leap (it sailed 1.5-2 m up over the other's head): the pelvis may rise at most kCwMaxLift above its
+		// stance height, the mesh is lowered by the rest. Measured against the mesh origin, so the lowering itself
+		// doesn't feed back.
+		constexpr float kCwMaxLift = 30.0f;
+		for (FCwPerson* P : {&A, &B})
+		{
+			USkeletalMeshComponent* Mesh = P->Mesh.Get();
+			if (!Mesh || !CwHasBone(Mesh, TEXT("pelvis")))
+			{
+				continue;
+			}
+			const float H = static_cast<float>(CwBone(Mesh, TEXT("pelvis")).Z - Mesh->GetComponentLocation().Z);
+			if (P->Role == ECwRole::Stance && !P->bFloored)
+			{
+				P->StandPelvisH = P->StandPelvisH < 0.0f ? H : FMath::FInterpTo(P->StandPelvisH, H, Dt, 2.0f);
+			}
+			const float Want = P->StandPelvisH < 0.0f ? 0.0f : FMath::Max(0.0f, H - P->StandPelvisH - kCwMaxLift);
+			// Down at once (no frame shows the leap), back up gently as the clip lands.
+			P->LiftCut = Want >= P->LiftCut ? Want : FMath::FInterpTo(P->LiftCut, Want, Dt, 12.0f);
+			if (Want > 20.0f && P->LiftCut == Want && Want > S.MostLiftCut + 10.0f)
+			{
+				S.MostLiftCut = Want;
+				UE_LOG(LogCreatorWeapons, Display, TEXT("Jump capped: pelvis %.0f cm above stance, lowered %.0f cm"), H - P->StandPelvisH, Want);
+			}
+		}
 		CwStand(A);
 		CwStand(B);
 	}
