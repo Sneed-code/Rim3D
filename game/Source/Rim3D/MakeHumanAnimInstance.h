@@ -161,6 +161,8 @@ public:
 	float TakeLargestTailSwing();
 	/** Soft-tissue jiggle on or off (on by default). Off, breasts, buttocks and genitals stay as animated. */
 	void SetSoftTissueEnabled(bool bEnabled);
+	/** Whether the soft parts run (the creator's "Jiggle" box); skin squish on contact follows it too. */
+	bool IsSoftTissueEnabled() const { return GetProxyOnGameThread<FMakeHumanAnimProxy>().Jiggle.bEnabled; }
 	/** Breast jiggle, 0 (the default: firm, a small lag) to 1 (softer, looser and bouncier, still damped). */
 	void SetBreastJiggle(float Amount);
 	/** How soft the body's flesh is, from the creator's sliders (Weight -1 thin .. 1 heavy, Muscle -1 soft .. 1

@@ -90,3 +90,32 @@ rides on the nearest bone. `UMakeHumanAnimInstance::NativeUpdateAnimation` write
 (x, y, z, depth, radius twice) and `M_MH_SkinDetail`'s `SkinDent` node moves the skin along its normal in world position
 offset. The first version moved the skin only and hardly showed (2026-11-16: 2.9 cm at 170 cm away read as nothing), so the depth and radius were raised and `SkinDentTilt` bends the normal into the bowl: its slope along the skin (dDepth/dr) turned into tangent space and added to the skin's normal, times 1.5. `Pawns.SkinDentScale` scales the
 depth; dents fade with the soft-body distance fade. The creator's smoke note gives the deepest dent.
+
+## Step 2: squish on contact (sneed said go, 2026-11-16)
+
+Built in world position offset like the dents, not a Deformer Graph: the skin material already runs after the morphs
+and skinning, it needs no new plugin, and every body (any slider mix, any kind) gets it for free. What it can't do that
+a deformer could: keep a per-point state over frames (the springs and dents carry that on the CPU instead).
+
+`USoftContactSubsystem` (Rim3D) each frame:
+- picks the nearest 8 MakeHuman bodies within `Pawns.SoftContactFar` (600 cm) of the camera whose soft parts are on
+  (`Pawns.SoftContact 0` turns it off);
+- gathers what can press: every body's capsules (hands and head as spheres, forearms, upper arms, thighs, calves and the
+  trunk), a capsule for each static mesh held or worn by a body (along its box's longest side), and a test probe
+  (`SetProbe`); a body's own capsules and what it holds never press on it;
+- for each near body lists up to 8 pressers within 3 cm of its flesh (its own capsules plus 8 cm) in its row of
+  `T_MH_SoftContacts` (16 by 8 float texels, made by the MakeHumanArt commandlet, overwritten with
+  `UpdateTextureRegions`), and puts the row in custom primitive data 13 (-1 none).
+
+`M_MH_SkinDetail`'s `SkinSquish` node (after `SkinDent`) pushes each skin point facing a presser out of it, along the
+line from the capsule's axis, by softplus(penetration, 2.5 cm) (at most 10 cm), so skin inside is pressed flat onto the
+presser and skin just outside eases in. `SkinSquishTilt` turns the normal towards lying on the presser where it is
+pressed flat (in tangent space, like the dent's light). Both read the skin's position before any offset.
+
+Creator: `-CreatorSoftDemo` now runs 24 s (record about 25): slaps and a blast with the soft parts on, then a 5 cm grey
+ball pressing 4 cm into the belly (8-10.5 s), a cheek (11-13.5 s) and a thigh (14-16.5 s), then with the soft parts off
+a slap, a blast and the ball on the belly again (21-23.5 s). The smoke note counts the frames the ball reached the
+table.
+
+Not yet: the face's teeth and jaw as hidden pressers from inside (so lips press against teeth), clothes following the
+squish, and beds or seats pressing (a seat or bed is a static mesh not held by a body).

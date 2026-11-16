@@ -26,6 +26,10 @@
 #include "PawnLooks.h"
 #include "PawnSubsystem.h"
 #include "MakeHumanArt.h"
+#include "SoftContactSubsystem.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshActor.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Apparel.h"
@@ -284,9 +288,81 @@ namespace
 		int32 Blasts = 0;
 		float SoftDemoT = -1.0f;   // -CreatorSoftDemo: seconds into the soft-body showcase
 		int32 SoftDemoStep = 0;
+		TWeakObjectPtr<AActor> SoftBall;  // the soft-body demo's pressing ball
+		int32 SoftPressFrames = 0;      // frames in which the ball's press reached the skin table
 	};
 
 	const FVector CreatorOrigin(-1695000.0, 4800.0, 0.0);
+
+	/** The soft-body demo's ball (5 cm, a fist's size) pressing into Which (0 belly, 1 cheek, 2 thigh, -1 none) of the picked
+	 *  one, Phase 0..1: in from 6 cm off the skin to 4 cm into it and back out. It is shown as a grey sphere and handed to
+	 *  USoftContactSubsystem as its probe. */
+	void CreatorSoftPress(FCreatorState& S, const FCreatorPerson& P, USimPawnSubsystem* Pawns, int32 Which, float Phase)
+	{
+		UWorld* World = Pawns ? Pawns->GetWorld() : nullptr;
+		USoftContactSubsystem* Contacts = World ? World->GetSubsystem<USoftContactSubsystem>() : nullptr;
+		const ASimPawnActor* Pawn = Pawns ? Pawns->FindPawn(P.Thing) : nullptr;
+		const USkeletalMeshComponent* Mesh = Pawn ? Pawn->GetMakeHumanMesh() : nullptr;
+		if (!Contacts || !Mesh || Which < 0)
+		{
+			if (Contacts)
+			{
+				Contacts->SetProbe(FVector::ZeroVector, FVector::ZeroVector, 0.0f);
+			}
+			if (AActor* Ball = S.SoftBall.Get())
+			{
+				Ball->SetActorHiddenInGame(true);
+			}
+			return;
+		}
+		const float Radius = 5.0f;
+		const FVector Fwd = Pawn->GetActorForwardVector();
+		const FVector Right = Pawn->GetActorRightVector();
+		FVector Surface;
+		if (Which == 0)
+		{
+			// The belly bone sits 7 cm inside the skin (mh_common.add_body_soft_bones).
+			Surface = Mesh->GetBoneIndex(TEXT("belly")) != INDEX_NONE ? Mesh->GetSocketLocation(TEXT("belly")) + Fwd * 7.0f : Mesh->GetSocketLocation(TEXT("spine_01")) + Fwd * 15.0f;
+		}
+		else if (Which == 1)
+		{
+			// The cheek: in front of and to the side of the head bone (which sits low in the skull, at the top of the neck).
+			Surface = Mesh->GetSocketLocation(TEXT("head")) + FVector::UpVector * 7.0f + Fwd * 9.0f + Right * 4.5f;
+		}
+		else
+		{
+			// The front of the thigh: its soft bone lies on the thigh's axis, about 8 cm under the skin.
+			Surface = (Mesh->GetBoneIndex(TEXT("thigh_soft_l")) != INDEX_NONE ? Mesh->GetSocketLocation(TEXT("thigh_soft_l")) : Mesh->GetSocketLocation(TEXT("thigh_l"))) + Fwd * 8.0f;
+		}
+		const float In = FMath::Sin(PI * FMath::Clamp(Phase, 0.0f, 1.0f));
+		const FVector Centre = Surface + Fwd * (Radius + 6.0f - 10.0f * In);
+		Contacts->SetProbe(Centre, Centre, Radius);
+		if (Contacts->GetContactsLastFrame() > 0)
+		{
+			++S.SoftPressFrames;
+		}
+		AActor* Ball = S.SoftBall.Get();
+		if (!Ball)
+		{
+			UStaticMesh* Sphere = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+			AStaticMeshActor* Spawned = Sphere ? World->SpawnActor<AStaticMeshActor>(Centre, FRotator::ZeroRotator) : nullptr;
+			if (Spawned)
+			{
+				Spawned->SetMobility(EComponentMobility::Movable);
+				Spawned->GetStaticMeshComponent()->SetStaticMesh(Sphere);
+				Spawned->GetStaticMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				Spawned->SetActorScale3D(FVector(Radius / 50.0));  // the engine sphere is 100 cm across
+				S.SoftBall = Spawned;
+				Ball = Spawned;
+				UE_LOG(LogTemp, Display, TEXT("Soft body demo: ball pressing %s at %s"), Which == 0 ? TEXT("belly") : (Which == 1 ? TEXT("cheek") : TEXT("thigh")), *Surface.ToString());
+			}
+		}
+		if (Ball)
+		{
+			Ball->SetActorHiddenInGame(false);
+			Ball->SetActorLocation(Centre);
+		}
+	}
 
 	void CreatorSetSkin(FCreatorPerson& P, float R, float G, float B)
 	{
@@ -1174,10 +1250,17 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				}
 			}
 			State->SoftDemoT += GetWorld()->GetDeltaSeconds();
-			// Soft parts on: slap 1.5 s, blast 4 s, slap 6.5 s; off from 8.5 s: slap 9.5 s, blast 12 s, slap 14.5 s.
-			static const float SoftTimes[] = {1.5f, 4.0f, 6.5f, 9.5f, 12.0f, 14.5f};
-			static const bool SoftBlast[] = {false, true, false, false, true, false};
-			W.bJiggle = State->SoftDemoT < 8.5f;
+			// Soft parts on: slap 1.5 s, blast 4 s, slap 6.5 s, then a fist-sized ball presses into the belly (8-10.5 s), a
+			// cheek (11-13.5 s) and a thigh (14-16.5 s); off from 17 s: slap 18 s, blast 20 s, the ball on the belly 21-23.5 s.
+			static const float SoftTimes[] = {1.5f, 4.0f, 6.5f, 18.0f, 20.0f};
+			static const bool SoftBlast[] = {false, true, false, false, true};
+			W.bJiggle = State->SoftDemoT < 17.0f;
+			{
+				const float T = State->SoftDemoT;
+				const int32 Press = T >= 8.0f && T < 10.5f ? 0 : (T >= 11.0f && T < 13.5f ? 1 : (T >= 14.0f && T < 16.5f ? 2 : (T >= 21.0f && T < 23.5f ? 0 : -1)));
+				const float Start = Press < 0 ? 0.0f : (T >= 21.0f ? 21.0f : (Press == 0 ? 8.0f : (Press == 1 ? 11.0f : 14.0f)));
+				CreatorSoftPress(*State, W, Pawns, Press, (T - Start) / 2.5f);
+			}
 			if (State->SoftDemoStep < static_cast<int32>(UE_ARRAY_COUNT(SoftTimes)) && State->SoftDemoT >= SoftTimes[State->SoftDemoStep])
 			{
 				(SoftBlast[State->SoftDemoStep] ? State->bBlastNow : State->bSlapNow) = true;
@@ -1784,8 +1867,8 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 	};
 	Play.Verify = [=, this]()
 	{
-		Notes.Add(FString::Printf(TEXT("creator: %d people, panel drawn %d frames, tail swung up to %.0f degrees, soft tissue up to %.1f cm, skin dents up to %.1f cm"), State->People.Num(),
-			State->PanelFrames, State->LargestTailSwing, State->LargestJiggle, State->DeepestDent));
+		Notes.Add(FString::Printf(TEXT("creator: %d people, panel drawn %d frames, tail swung up to %.0f degrees, soft tissue up to %.1f cm, skin dents up to %.1f cm, ball pressing the skin %d frames"), State->People.Num(),
+			State->PanelFrames, State->LargestTailSwing, State->LargestJiggle, State->DeepestDent, State->SoftPressFrames));
 		for (int32 i = 0; i < State->People.Num(); ++i)
 		{
 			Notes.Add(FString::Printf(TEXT("creator: %s"), *State->People[i].Label(i)));
