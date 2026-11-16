@@ -34,6 +34,11 @@ class RIM3D_API AProtagonistPawn : public APawn
 public:
 	AProtagonistPawn();
 
+	/** Mouse speed in direct control (Settings window): the Protagonist.MouseTurn value, saved in GameUserSettings.ini. */
+	static float GetMouseTurn();
+	static void SetMouseTurn(float Value);
+	static constexpr float kDefaultMouseTurn = 1.2f;
+
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 

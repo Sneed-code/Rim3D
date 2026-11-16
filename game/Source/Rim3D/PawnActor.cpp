@@ -1180,6 +1180,49 @@ void ASimPawnActor::PlayHitReaction(const FVector& ShotDirection, float Strength
 	++HitReactions;
 }
 
+namespace
+{
+	// Whole-body react clips by the side the shot came from: front, right, back, left (Mixamo, retargeted).
+	const TCHAR* const PawnHitClipSmall[4] = {TEXT("Mixamo/Magic/A_ProMagicStandingReactSmallFromFront"), TEXT("Mixamo/Magic/A_ProMagicStandingReactSmallFromRight"),
+		TEXT("Mixamo/Magic/A_ProMagicStandingReactSmallFromBack"), TEXT("Mixamo/Magic/A_ProMagicStandingReactSmallFromLeft")};
+	const TCHAR* const PawnHitClipLarge[4] = {TEXT("Mixamo/Magic/A_ProMagicStandingReactLargeFromFront"), TEXT("Mixamo/Magic/A_ProMagicStandingReactLargeFromRight"),
+		TEXT("Mixamo/Magic/A_ProMagicStandingReactLargeFromBack"), TEXT("Mixamo/Magic/A_ProMagicStandingReactLargeFromLeft")};
+
+	UAnimSequence* PawnHitClipLoad(const TCHAR* Rel)
+	{
+		const FString Name = FPaths::GetBaseFilename(Rel);
+		return LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("/Game/Rim3D/Generated/Animations/%s.%s"), Rel, *Name), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	}
+}
+
+bool ASimPawnActor::PlayHitClip(const FVector& ShotDirection, bool bStaggered)
+{
+	USimPawnAnimInstance* Anim = GetAnim();
+	if (!Anim || bRagdoll || IsJumping() || StanceHeight < 0.9f || RollProgress > 0.0f || Swing.IsActive())
+	{
+		return false;
+	}
+	// The side the shot came from, in the pawn's own frame: it travels along ShotDirection, so it came from -ShotDirection.
+	const FVector From = -FVector(ShotDirection.X, ShotDirection.Y, 0.0).GetSafeNormal();
+	if (From.IsNearlyZero())
+	{
+		return false;
+	}
+	const double Ahead = FVector::DotProduct(From, GetActorForwardVector());
+	const double Right = FVector::DotProduct(From, GetActorRightVector());
+	const int32 Side = FMath::Abs(Ahead) >= FMath::Abs(Right) ? (Ahead >= 0.0 ? 0 : 2) : (Right >= 0.0 ? 1 : 3);
+	UAnimSequence* Clip = PawnHitClipLoad(bStaggered ? PawnHitClipLarge[Side] : PawnHitClipSmall[Side]);
+	if (!Clip || !Anim->PlaySlotAnimationAsDynamicMontage(Clip, FAnimSlotGroup::DefaultSlotName, 0.06f, 0.3f))
+	{
+		return false;
+	}
+	// The stumble lasts while the sim slows the walk (its stagger is about 1.6 s at 1x), the flinch a short moment; the
+	// walk or idle takes over again after.
+	ActionEndSeconds = FMath::Min(static_cast<double>(Clip->GetPlayLength()), bStaggered ? 1.3 : 0.7);
+	++HitClipsPlayed;
+	return true;
+}
+
 void ASimPawnActor::BeginMeleeSwing(EMeleeStyle Style, float StepsToHit)
 {
 	Swing.Begin(Style, StepsToHit, StanceHeight);

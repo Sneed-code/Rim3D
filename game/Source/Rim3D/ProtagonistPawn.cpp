@@ -23,10 +23,26 @@
 namespace
 {
 	// Degrees per unit of the mouse axis (the engine has already scaled each count by the input's 0.07), so the
-	// default turns about 0.05 degrees a count, a usual shooter feel. 0.12 was 0.008 a count and much too slow
-	// (sneed's G2 playtest).
-	TAutoConsoleVariable<float> GProtagonistMouseTurn(TEXT("Protagonist.MouseTurn"), 0.7f,
-		TEXT("How fast the mouse turns the view in direct control: degrees per unit of mouse axis (0.7 default, higher turns faster)."));
+	// default turns about 0.08 degrees a count. 0.12 was 0.008 a count and much too slow (sneed's G2 playtest), and
+	// 0.7 still too slow in the gun range; the Settings window has a slider (saved in GameUserSettings.ini).
+	TAutoConsoleVariable<float> GProtagonistMouseTurn(TEXT("Protagonist.MouseTurn"), AProtagonistPawn::kDefaultMouseTurn,
+		TEXT("How fast the mouse turns the view in direct control: degrees per unit of mouse axis (1.2 default, higher turns faster)."));
+	const TCHAR* const ProtagonistControlsSection = TEXT("Rim3D.Controls");
+	bool bProtagonistMouseTurnLoaded = false;
+
+	void ProtagonistLoadMouseTurn()
+	{
+		if (bProtagonistMouseTurnLoaded || !GConfig)
+		{
+			return;
+		}
+		bProtagonistMouseTurnLoaded = true;
+		float Saved = 0.0f;
+		if (GConfig->GetFloat(ProtagonistControlsSection, TEXT("MouseTurn"), Saved, GGameUserSettingsIni) && Saved > 0.0f)
+		{
+			GProtagonistMouseTurn->Set(Saved, ECVF_SetByGameSetting);
+		}
+	}
 	constexpr float ProtagonistMaxPitch = 80.0f;
 	// One wheel notch scales the third person distance by this much.
 	constexpr float ProtagonistZoomPerNotch = 0.85f;
@@ -72,6 +88,24 @@ AProtagonistPawn::AProtagonistPawn()
 	Camera->SetupAttachment(Root);
 	Camera->SetFieldOfView(80.0f);
 	Camera->bUsePawnControlRotation = false;
+}
+
+float AProtagonistPawn::GetMouseTurn()
+{
+	ProtagonistLoadMouseTurn();
+	return GProtagonistMouseTurn.GetValueOnGameThread();
+}
+
+void AProtagonistPawn::SetMouseTurn(float Value)
+{
+	ProtagonistLoadMouseTurn();
+	const float Clamped = FMath::Clamp(Value, 0.1f, 5.0f);
+	GProtagonistMouseTurn->Set(Clamped, ECVF_SetByGameSetting);
+	if (GConfig)
+	{
+		GConfig->SetFloat(ProtagonistControlsSection, TEXT("MouseTurn"), Clamped, GGameUserSettingsIni);
+		GConfig->Flush(false, GGameUserSettingsIni);
+	}
 }
 
 USimSubsystem* AProtagonistPawn::GetBridge() const
@@ -174,7 +208,7 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		PC->GetInputMouseDelta(MouseX, MouseY);
 		if (MouseX != 0.0f || MouseY != 0.0f)
 		{
-			const float Turn = FMath::Max(0.01f, GProtagonistMouseTurn.GetValueOnGameThread());
+			const float Turn = FMath::Max(0.01f, GetMouseTurn());
 			Look(MouseX * Turn, MouseY * Turn);
 		}
 	}

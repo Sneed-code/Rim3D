@@ -72,9 +72,21 @@ The Codex rifle (`BoltActionRifle_Game.fbx`) imports as `SM_BoltActionRifle_Body
 -8.1..12.0 cm), `_PIVOT_Bolt` and `_PIVOT_Trigger`, already in the gun frame (+X muzzle, +Y right, +Z up, grip at
 the origin): muzzle socket (69.5, 0, 3.2), fore-end (34, 0, -2), scope axis at y -2.6, z 8.9, eyepiece at x -7.
 
+## After sneed's first try (2026-11-16)
+
+- Main merged in, so the combat voices (screams, hit noises) and ray tracing come along. The range is a smoke-test
+  scene of the same game, not a copy: every game system it uses is the real one.
+- Bullet hits on pawns (everywhere, `UFightSubsystem`): a bigger blood spray out of the far side, spatter back and a
+  short mist, and a whole-body react clip by the side the shot came from (`ASimPawnActor::PlayHitClip`): a large
+  react with steps back when the sim staggered the pawn (stopping power at least the body size, RimWorld's rule),
+  a small flinch otherwise. The old lean goes on top.
+- Mouse speed: `Protagonist.MouseTurn` default 0.7 to 1.2, a "Mouse speed" slider in Settings (saved in
+  GameUserSettings.ini), and `[` `]` in the range. Switching guns dips for 0.3 s (was 0.45).
+- V switches first and third person (it always did; now on the panel).
+
 ## Not done
 
 - The shotgun's pump and the slide of the pistol don't move (the shotgun comes as one mesh; its own rig and reload
   animation are not used yet).
 - No sounds of its own (the game's gunshot cues play from the sim's events as anywhere), no shell ejection.
-- Targets have no clothes or armour (MakeHuman bodies have no clothes yet); the combat voices aren't on this branch.
+- Targets have no clothes or armour (MakeHuman bodies have no clothes yet).

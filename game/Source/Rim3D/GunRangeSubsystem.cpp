@@ -39,7 +39,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogGunRange, Log, All);
 namespace
 {
 	const TCHAR* const GunRangeArtRoot = TEXT("/Game/Rim3D/Generated/Guns");
-	constexpr float GunRangeSwitchSeconds = 0.45f;
+	constexpr float GunRangeSwitchSeconds = 0.3f;
 	constexpr float GunRangeFlashSeconds = 0.06f;
 
 	FVector GunRangeVec(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, const FVector& Default)
@@ -589,6 +589,12 @@ void UGunRangeSubsystem::UpdateInput()
 	{
 		LoadConfig();
 	}
+	// [ and ] change the mouse speed (the same saved setting as the Settings window's slider).
+	if (PC->WasInputKeyJustPressed(EKeys::LeftBracket) || PC->WasInputKeyJustPressed(EKeys::RightBracket))
+	{
+		const float Factor = PC->WasInputKeyJustPressed(EKeys::RightBracket) ? 1.15f : 1.0f / 1.15f;
+		AProtagonistPawn::SetMouseTurn(AProtagonistPawn::GetMouseTurn() * Factor);
+	}
 }
 
 void UGunRangeSubsystem::Tick(float DeltaTime)
@@ -961,6 +967,7 @@ void UGunRangeSubsystem::DrawPanel()
 		ImGui::Separator();
 		ImGui::TextUnformatted("Left mouse fire   Right mouse aim   R reload");
 		ImGui::TextUnformatted("1-4 or wheel: gun   N: new targets   F2 pause");
+		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("V: first/third person   [ ] mouse speed %.2f"), AProtagonistPawn::GetMouseTurn())));
 		if (!SceneLine.IsEmpty())
 		{
 			ImGui::TextUnformatted(TCHAR_TO_UTF8(*SceneLine));
