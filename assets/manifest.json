@@ -10,6 +10,15 @@
       "reinstall": "Create the sample at C:\\Dev\\GameAnimationSample, then copy its Content folder over game/Content"
     },
     {
+      "name": "NVIDIA DLSS 4.5 plugin for Unreal Engine 5.8 (DLSS, StreamlineNGXCommon, StreamlineCore, StreamlineDLSSG, StreamlineReflex)",
+      "source": "https://developer.nvidia.com/rtx/dlss (UE 5.8 plugin, 2026.10.16_ue5.8_dlss4.5plugin_v8.9.0.zip, about 1.2 GB)",
+      "licence": "NVIDIA RTX SDK EULA (free, may ship in games)",
+      "version": "8.9.0 (NGX 310.9.16, Streamline 2.14.16)",
+      "installedTo": "game/Plugins/DLSS, StreamlineNGXCommon, StreamlineCore, StreamlineDLSSG, StreamlineReflex (not in Git); enabled in game/Rim3D.uproject; the PC keeps the zip in C:\\Dev\\Rim3D-dlss",
+      "usedFor": "DLSS upscaling, DLAA, ray reconstruction and frame generation (docs/design/graphics-options.md)",
+      "reinstall": "Download the zip from the page above, unpack it and copy those five folders from its Plugins folder into game/Plugins"
+    },
+    {
       "name": "ImGui (Unreal plugin by VesCodes, bundling Dear ImGui 1.92.8)",
       "source": "https://github.com/VesCodes/ImGui, commit 71f29cf675b7d501af4f8e152fb73145f24a3f58",
       "licence": "MIT (plugin and Dear ImGui)",
