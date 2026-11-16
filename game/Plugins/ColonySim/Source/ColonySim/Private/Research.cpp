@@ -55,6 +55,7 @@ ResearchSystem::ResearchSystem(Things& things, const DefDatabase& defs) : things
         p.techLevel = def.text("techLevel");
         p.baseCost = def.number("baseCost");
         p.benchTier = std::max(1, static_cast<int>(def.integer("benchTier", 1)));
+        p.requiredFacility = def.text("requiredFacility");
         for (const char* key : {"prerequisites", "hiddenPrerequisites"}) {
             for (size_t i = 0; i < def.count(key); ++i) {
                 p.prerequisites.push_back(def.textAt(key, i));
@@ -68,6 +69,7 @@ ResearchSystem::ResearchSystem(Things& things, const DefDatabase& defs) : things
             ResearchBenchInfo info;
             info.tier = std::max(1, static_cast<int>(def.integer("researchBench.tier", 1)));
             info.speedFactor = def.number("researchBench.speedFactor", 1.0);
+            info.multiAnalyzerBonus = def.number("researchBench.multiAnalyzerBonus", 0.0);
             benches_[id.value] = info;
         }
     }
@@ -183,7 +185,7 @@ bool ResearchSystem::benchCanWork(const ResearchBenchInfo& bench) const {
     return p != nullptr && available(*p) && bench.tier >= p->benchTier;
 }
 
-double ResearchSystem::speedAt(Entity pawn, const ResearchBenchInfo& bench) const {
+double ResearchSystem::speedAt(Entity pawn, const ResearchBenchInfo& bench, double facilityBonus) const {
     int level = rules_.defaultSkillLevel;
     if (const Colonist* colonist = things_.registry().try_get<Colonist>(pawn)) {
         if (const SkillRecord* record = colonist->skill("Intellectual")) {
@@ -191,7 +193,7 @@ double ResearchSystem::speedAt(Entity pawn, const ResearchBenchInfo& bench) cons
         }
     }
     const double skill = std::max(0.0, rules_.skillSpeedBase + rules_.skillSpeedPerLevel * level);
-    return rules_.pointsPerSecond() * skill * bench.speedFactor * (traits_ != nullptr ? traits_->of(pawn).workSpeed : 1.0f);
+    return rules_.pointsPerSecond() * skill * (bench.speedFactor + facilityBonus) * (traits_ != nullptr ? traits_->of(pawn).workSpeed : 1.0f);
 }
 
 bool ResearchSystem::addProgress(double points, Entity pawn, std::vector<Event>& events) {

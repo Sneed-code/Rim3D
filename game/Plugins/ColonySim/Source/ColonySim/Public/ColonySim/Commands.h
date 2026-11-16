@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ColonySim/Api.h"
+#include "ColonySim/Clock.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/BillMode.h"
@@ -664,6 +665,14 @@ struct CaravanCommand {
 // - "Launch": `group` flies to `tile` (-1: this map) and does `arrival` there: "Land" at cell (x, y) (x -1: the
 //   middle) on the colony's map or another map a caravan has been to, "Caravan" (the passengers form a caravan on
 //   the tile), or "Gift" (no passengers: the goods go to the tile's settlement for goodwill).
+// Tunes a long-range mineral scanner (docs/design/mineral-scanner.md) to one ore: its later finds are lumps of that ore.
+// `ore` is a Mineable defName from the scanner's def (Ore_Steel, Ore_Plasteel, ...). Fails for a building that is
+// not a long-range scanner or an ore it cannot be tuned to.
+struct ScannerCommand {
+    Entity building = kNoEntity;
+    std::string ore;
+};
+
 struct PodCommand {
     std::string action;
     int group = 0;
@@ -1014,6 +1023,49 @@ struct CommsCommand {
     Entity negotiator = kNoEntity;
 };
 
+// A pawn's bag (docs/design/inventory.md). "Take": `item`, lying within 2 cells of the pawn, goes into its bag, all
+// of the stack or `count` of it (0 for all), as much as fits under its carry capacity. "Drop": `count` (0 for all) of
+// `item`, which is in its bag, goes on the ground where it stands. "DropAll": its bag is emptied there. Fails with the
+// reason in plain words (no body, dead, downed, too far, too heavy, not in the bag).
+struct InventoryCommand {
+    Entity pawn = kNoEntity;
+    std::string action;
+    Entity item = kNoEntity;
+    int count = 0;
+};
+
+// An outfit's fight gear (docs/design/armour.md): its armour and/or clothes (not hats) are kept in the bag and put on
+// only for fights. Fails if there is no such outfit.
+struct SetOutfitFightGearCommand {
+    uint32_t outfit = 0;
+    bool armourInBag = false;
+    bool clothesInBag = false;
+};
+
+// The look-only switch: `hide` true stops a pawn's clothes and armour being drawn; they still count.
+struct HideGearCommand {
+    Entity pawn = kNoEntity;
+    bool hide = true;
+};
+
+// The day length (docs/design/day-length.md): `minutes` real minutes a game day lasts at 1x, 48 to 120. Walking,
+// fighting and work keep their speed; the calendar (needs, growth, rot, the sun, the seasons) follows. Fails outside
+// 48 to 120.
+struct SetDayLengthCommand {
+    int minutes = kBaseDayMinutes;
+};
+
+// Shields (docs/design/shields.md): `up` raises the pawn's shield, false lowers it. Held up, the pawn can walk and
+// reload but not shoot or swing. `hasDir`: the shield faces (dirX, dirY) (the player's camera), else where the pawn
+// faces. Fails without a shield on its arm (none, or slung behind a two-handed weapon).
+struct ShieldCommand {
+    Entity pawn = kNoEntity;
+    bool up = true;
+    bool hasDir = false;
+    float dirX = 0.0f;
+    float dirY = 0.0f;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -1045,10 +1097,11 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              LearnPowerCommand, CastPowerCommand, SetThermostatCommand, RepairGearCommand,
                              FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
                              AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand,
-                             ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand>;
+                             ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand,
+                             InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand>;
 
-// A command as applied: `step` is the game second (Sim::time().seconds) of the step it was
-// applied in. Failed commands are logged too.
+// A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
+// day) it was applied in. Failed commands are logged too.
 struct LoggedCommand {
     int64_t step = 0;
     Command command;

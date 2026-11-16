@@ -10,6 +10,15 @@
       "reinstall": "Create the sample at C:\\Dev\\GameAnimationSample, then copy its Content folder over game/Content"
     },
     {
+      "name": "NVIDIA DLSS 4.5 plugin for Unreal Engine 5.8 (DLSS, StreamlineNGXCommon, StreamlineCore, StreamlineDLSSG, StreamlineReflex)",
+      "source": "https://developer.nvidia.com/rtx/dlss (UE 5.8 plugin, 2026.10.16_ue5.8_dlss4.5plugin_v8.9.0.zip, about 1.2 GB)",
+      "licence": "NVIDIA RTX SDK EULA (free, may ship in games)",
+      "version": "8.9.0 (NGX 310.9.16, Streamline 2.14.16)",
+      "installedTo": "game/Plugins/DLSS, StreamlineNGXCommon, StreamlineCore, StreamlineDLSSG, StreamlineReflex (not in Git); enabled in game/Rim3D.uproject; the PC keeps the zip in C:\\Dev\\Rim3D-dlss",
+      "usedFor": "DLSS upscaling, DLAA, ray reconstruction and frame generation (docs/design/graphics-options.md)",
+      "reinstall": "Download the zip from the page above, unpack it and copy those five folders from its Plugins folder into game/Plugins"
+    },
+    {
       "name": "ImGui (Unreal plugin by VesCodes, bundling Dear ImGui 1.92.8)",
       "source": "https://github.com/VesCodes/ImGui, commit 71f29cf675b7d501af4f8e152fb73145f24a3f58",
       "licence": "MIT (plugin and Dear ImGui)",
@@ -107,6 +116,42 @@
       "installedTo": "game/Content/ThirdParty/Sounds/<id>/ (not in Git)",
       "usedFor": "the 140 sound cues of docs/design/sound.md and the music (V21 PC half)",
       "reinstall": "python tools/sound_assets.py, then fetch the Sonniss and Freesound parts by hand (docs/design/sound.md)"
+    },
+    {
+      "name": "Sketchfab animals (Animal Animator and others)",
+      "source": "sketchfab.com, downloaded by sneed 2026-11-14 (list and authors in docs/plans/animal-shortlist.md, Round 3)",
+      "licence": "CC BY (Animal Animator, toucan by sevketkabatas; credit in the game's credits), CC BY-NC (parrot by Nyilonelycompany; private game only)",
+      "version": "2026-11-14",
+      "installedTo": "assets/raw/sketchfab/ on the PC (not in Git); the AnimalArt commandlet imports the ones in assets/animal_art.json `imports` (chimpanzee, sphynx cat, hyena, Akhal-Teke horse) into game/Content/Rim3D/Generated/Animals/ (not in Git). The \"Ultimate Animal Pack\" there is a preview of WildMesh 3D's paid pack (only the wolf is animated): not used.",
+      "usedFor": "tropical animals, birds and insects (Z2 to Z7)",
+      "reinstall": "download each model again from its Sketchfab page (free account, Download button, glTF)"
+    },
+    {
+      "name": "Electric Dreams Environment, tropical part (Megascans plants, surfaces, decals)",
+      "source": "Epic Games' free Electric Dreams Environment sample on Fab (sneed added it to the library; on the PC as Documents/Unreal Projects/ElectricDreamsEnv)",
+      "licence": "Epic content (Fab Standard License for Epic-made content): free to use in Unreal Engine projects",
+      "version": "5.8 sample, copied 2026-11-15",
+      "installedTo": "game/Content/Megascans/ (3D_Plants, Surfaces, Decals: the tropical folders only), game/Content/MSPresets/, game/Content/Custom/CustomMaterials/ (the foliage master materials), not in Git",
+      "usedFor": "grass, bushes, palms and ground cover (L2), the jungle floor, mossy gravel and water ripples of the terrain material (L3)",
+      "reinstall": "create the Electric Dreams project from the Fab library (Epic launcher), then powershell -File tools/electric_dreams.ps1"
+    },
+    {
+      "name": "NASA Deep Star Maps 2020 (8k star map)",
+      "source": "https://svs.gsfc.nasa.gov/4851 (NASA/Goddard Space Flight Center Scientific Visualization Studio; Gaia DR2: ESA/Gaia/DPAC)",
+      "licence": "NASA imagery, free to use with the credit line above (credit in the game's credits)",
+      "version": "2020 release, celestial coordinates, starmap_2020_8k.exr",
+      "installedTo": "game/Content/ThirdParty/Sky/ (not in Git), made into /Game/Rim3D/Generated/Sky by the SkyArt commandlet",
+      "usedFor": "the night sky's stars and Milky Way",
+      "reinstall": "python tools/sky_textures.py, then UnrealEditor-Cmd game/Rim3D.uproject -run=SkyArt -unattended -nosplash -AllowCommandletRendering"
+    },
+    {
+      "name": "Poly Haven tropical trees (island trees, small tree, jacaranda)",
+      "source": "https://polyhaven.com (island_tree_01, island_tree_02, tree_small_02, jacaranda_tree), listed in assets/tree_art.json",
+      "licence": "CC0",
+      "version": "glTF 2k (jacaranda 1k), 2026-11-15",
+      "installedTo": "game/Content/ThirdParty/Trees/ (not in Git), imported to /Game/Rim3D/Generated/Trees by the TreeArt commandlet",
+      "usedFor": "teak and cecropia trees (L6)",
+      "reinstall": "python tools/tree_art.py, then the TreeArt and FoliageMaterials commandlets (in that order)"
     }
   ]
 }

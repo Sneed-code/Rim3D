@@ -15,7 +15,7 @@ class UMaterialInterface;
 class UProceduralMeshComponent;
 class USimSubsystem;
 class UStaticMesh;
-namespace colony { class Map; class Sim; }
+namespace colony { class Map; class Plants; class Sim; }
 
 /** What the terrain subsystem has built and how much work it did (smoke test `world`, docs/design/terrain.md). */
 struct FTerrainStats
@@ -25,6 +25,8 @@ struct FTerrainStats
 	int64 GroundVertices = 0;
 	int64 RoofVertices = 0;
 	int64 PlantInstances = 0;
+	/** Cosmetic ground cover instances (L2), not counted in PlantInstances. */
+	int64 CoverInstances = 0;
 	/** Plant instance components that hold at least one instance. */
 	int32 PlantComponents = 0;
 	/** Plant kinds that have a mesh. */
@@ -103,7 +105,21 @@ protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
 
 private:
-	struct FPlantVisual { int32 DefValue = -1; UStaticMesh* Mesh = nullptr; float CullDistanceCm = 0.0f; float Scale = 1.0f; float Jitter = 0.15f; bool bCastShadow = true; };
+	struct FPlantVisual { int32 DefValue = -1; UStaticMesh* Mesh = nullptr; float CullDistanceCm = 0.0f; float Scale = 1.0f; float Jitter = 0.15f; bool bCastShadow = true; float WindOffCm = 0.0f; TArray<UMaterialInterface*> Materials; };
+	/** The cosmetic ground cover (data/look.json "groundCover", L2): kinds at the end of PlantVisuals, never sim plants. */
+	struct FGroundCover
+	{
+		int32 First = -1;
+		int32 Count = 0;
+		float MinFertility = 0.7f;
+		/** Share of cells that get a tuft, at the lowest fertility and at rich soil (1.4); times Terrain.GroundCover. */
+		float ChancePoor = 0.25f;
+		float ChanceRich = 0.9f;
+		/** Tufts in one cell at most (the chance is tried this many times). */
+		int32 PerCell = 2;
+		/** Share of the chance left in a cell where a sim plant grows. */
+		float UnderPlants = 0.5f;
+	};
 	struct FChunk
 	{
 		UProceduralMeshComponent* Mesh = nullptr;
@@ -112,6 +128,7 @@ private:
 		int32 GroundVertices = 0;
 		int32 RoofVertices = 0;
 		int32 PlantCount = 0;
+		int32 CoverCount = 0;
 		uint64 PlantSignature = 0;
 		bool bGroundDirty = false;
 		bool bPlantsDirty = false;
@@ -127,6 +144,9 @@ private:
 	void ApplyChunkPlants(FChunk& Chunk, TArray<TArray<FTransform>>& Transforms);
 	/** The plants of a chunk by kind as instance transforms (null: only work out the signature); the signature changes when a plant appears, goes or steps to another size. */
 	uint64 GatherChunkPlants(int32 ChunkX, int32 ChunkY, TArray<TArray<FTransform>>* Out) const;
+	/** Adds a cell's cosmetic ground cover (Cover) to the kinds' transforms. */
+	void GatherCover(const colony::Map& Map, const colony::Plants& Plants, colony::CellPos Cell, bool bHasPlant, TArray<TArray<FTransform>>& Out) const;
+	void GatherRocks(const colony::Map& Map, colony::CellPos Cell, TArray<TArray<FTransform>>& Out) const;
 	void ScanPlants();
 	void UpdateRoofVisibility(bool bForce);
 	bool WantRoofs() const;
@@ -137,6 +157,11 @@ private:
 
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMesh>> PlantMeshes;
+
+	/** Rim3D's own materials for the Megascans plants (FoliageMaterials commandlet), by mesh slot; kept alive here. */
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInterface>> FoliageMaterials;
+	TArray<UMaterialInterface*> FoliageFor(UStaticMesh* Mesh);
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> GroundMaterial;
@@ -152,8 +177,17 @@ private:
 
 	TArray<FChunk> Chunks;
 	TArray<FPlantVisual> PlantVisuals;
-	/** By DefId value: an index into PlantVisuals, or -1 for a def that isn't drawn. */
+	/** By DefId value: an index into PlantVisuals, or -1 for a def that isn't drawn; a def with several meshes
+	 *  (visual.meshes) has that many kinds in a row from there, VariantsOfDef of them, one picked by the cell's hash. */
 	TArray<int32> VisualOfDef;
+	TArray<uint8> VariantsOfDef;
+	FGroundCover Cover;
+	void LoadGroundCover(const FString& LookPath);
+	/** Cosmetic boulders and mossy rocks on open ground next to rock (data/look.json "rockScatter", L6): kinds after the cover. */
+	struct FRockScatter { int32 First = -1; int32 Count = 0; float Chance = 0.25f; };
+	FRockScatter Rocks;
+	void LoadRockScatter(const FString& LookPath);
+	bool IsCosmeticKind(int32 Kind) const { return (Cover.Count > 0 && Kind >= Cover.First && Kind < Cover.First + Cover.Count) || (Rocks.Count > 0 && Kind >= Rocks.First && Kind < Rocks.First + Rocks.Count); }
 	/** One byte per map cell: 1 where a thin roof is drawn (the snapshot's roofCells). */
 	TArray<uint8> ThinRoof;
 	TArray<int32> ThinRoofCells;

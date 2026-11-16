@@ -1,7 +1,10 @@
+#include "ColonySim/Animals.h"
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
+#include "ColonySim/Construction.h"
+#include "ColonySim/Cover.h"
 #include "ColonySim/Defense.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Fighters.h"
@@ -9,6 +12,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Power.h"
+#include "ColonySim/Raids.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
@@ -139,12 +143,12 @@ TEST_CASE("Defense: the mini-turret, spike trap and IED are defs with their numb
     DEFN_REQUIRE(gun != nullptr);
     DEFN_REQUIRE(spike != nullptr);
     DEFN_REQUIRE(ied != nullptr);
-    CHECK(turret->number("power.consumption") == doctest::Approx(100.0));
+    CHECK(turret->number("power.consumption") == doctest::Approx(80.0));
     CHECK(turret->number("stats.maxHitPoints") == doctest::Approx(100.0));
     CHECK(turret->text("turret.gun") == "Gun_MiniTurret");
-    CHECK(turret->flag("explodeWhenDestroyed"));
+    CHECK(turret->number("explodeWhenDamaged.belowHealth") == doctest::Approx(0.2));
     CHECK(gun->number("verbs.0.range") == doctest::Approx(28.9));
-    CHECK(gun->integer("verbs.0.burstShotCount") == 3);
+    CHECK(gun->integer("verbs.0.burstShotCount") == 2);
     CHECK(spike->integer("trap.hits") == 5);
     CHECK(spike->number("trap.damage") == doctest::Approx(100.0));
     CHECK(ied->flag("trap.explodes"));
@@ -204,6 +208,48 @@ TEST_CASE("Defense: a turret with no power, out of range or behind a wall does n
     }
 }
 
+TEST_CASE("Defense: a raider with a gun shoots at a turret and wears it down; one without a gun leaves it be") {
+    {
+        auto sim = defnSim();
+        // No power: the turret can't shoot back, so the raider lives to show what it does.
+        const Entity turret = sim->things().spawn("Turret_Mini", CellPos{15, 10, 0});
+        DEFN_REQUIRE(turret != kNoEntity);
+        const int full = sim->things().registry().get<HitPoints>(turret).current;
+        const Entity raider = defnHostile(*sim, 27, 10);
+        sim->combat().equip(raider, sim->things().make(sim->defs().idOf("Things", "Gun_Revolver")));
+        bool targeted = false;
+        int shots = 0;
+        for (int i = 0; i < 3000; ++i) {
+            sim->step();
+            if (!sim->things().registry().valid(turret) || sim->things().registry().get<HitPoints>(turret).current < full / 2) {
+                break;
+            }
+            const Fighter* f = sim->things().registry().try_get<Fighter>(raider);
+            targeted = targeted || (f != nullptr && f->target == turret);
+            for (const Event& e : sim->events()) {
+                shots += e.type == EventType::ShotFired && e.thing == raider ? 1 : 0;
+            }
+        }
+        CHECK(targeted);
+        CHECK(shots > 0);
+        const bool gone = !sim->things().registry().valid(turret);
+        CHECK((gone || sim->things().registry().get<HitPoints>(turret).current < full / 2));
+    }
+    {
+        auto sim = defnSim();
+        const Entity turret = sim->things().spawn("Turret_Mini", CellPos{15, 10, 0});
+        const Entity raider = defnHostile(*sim, 22, 10);  // bare hands: it can't hurt a turret
+        bool targeted = false;
+        for (int i = 0; i < 600; ++i) {
+            sim->step();
+            const Fighter* f = sim->things().registry().try_get<Fighter>(raider);
+            targeted = targeted || (f != nullptr && f->target == turret);
+        }
+        CHECK_FALSE(targeted);
+        CHECK(sim->things().registry().get<HitPoints>(turret).current == 100);
+    }
+}
+
 TEST_CASE("Defense: a switched-off turret stops mid-burst and starts again when switched on") {
     auto sim = defnSim();
     const Entity turret = defnPoweredTurret(*sim);
@@ -214,23 +260,58 @@ TEST_CASE("Defense: a switched-off turret stops mid-burst and starts again when 
     CHECK(defnShots(*sim, turret, 200) >= 3);
 }
 
-TEST_CASE("Defense: a turret shot to pieces blows up, one pulled down does not") {
+TEST_CASE("Defense: a mini-turret below 20% of its hit points may spark and blow up 4 seconds later") {
+    // Wiki (Mini-turret): below 20% health a 50% chance to spark for 240 ticks (120 steps), then 50 bomb damage in 3.9 m.
+    int sparked = 0;
+    bool checkedBlast = false;
+    for (uint64_t seed = 1; seed <= 24; ++seed) {
+        auto sim = defnSim(seed);
+        const Entity turret = sim->things().spawn("Turret_Mini", CellPos{40, 40, 0});
+        const Entity bystander = sim->things().spawn("Human", CellPos{40, 42, 0});  // 2 m off
+        DEFN_REQUIRE(turret != kNoEntity);
+        HitPoints& hp = sim->things().registry().get<HitPoints>(turret);
+        hp.current = hp.max / 2;  // half: no roll
+        sim->stepMany(3);
+        CHECK_FALSE(sim->things().registry().get<Turret>(turret).fuseRolled);
+        hp.current = hp.max / 10;
+        sim->step();
+        const Turret& t = sim->things().registry().get<Turret>(turret);
+        CHECK(t.fuseRolled);
+        if (t.fuse == 0) {
+            // No luck this time: it never goes up, and it rolls again only after a repair.
+            sim->stepMany(200);
+            CHECK(sim->things().registry().valid(turret));
+            continue;
+        }
+        ++sparked;
+        CHECK(t.fuse == 120);  // 240 ticks
+        if (checkedBlast) {
+            continue;
+        }
+        checkedBlast = true;
+        int blasts = 0;
+        for (int k = 0; k < 125; ++k) {
+            sim->step();
+            blasts += defnCount(*sim, EventType::Explosion);
+        }
+        CHECK(blasts == 1);  // its own blast, which finishes it, and no second one
+        CHECK_FALSE(sim->things().registry().valid(turret));
+        CHECK(defnHurt(*sim, bystander) > 0.0f);
+    }
+    MESSAGE(sparked, " of 24 sparked");
+    CHECK(sparked >= 6);
+    CHECK(sparked <= 18);
+    CHECK(checkedBlast);
+}
+
+TEST_CASE("Defense: a mini-turret shot to pieces at once or pulled down does not blow up") {
     auto sim = defnSim();
     const Entity turret = sim->things().spawn("Turret_Mini", CellPos{40, 40, 0});
-    const Entity bystander = sim->things().spawn("Human", CellPos{40, 42, 0});  // outside the first blast, inside the turret's
     sim->submit(ExplodeCommand{40.5f, 40.5f, 0.5f, 500.0f, "Bomb", 0.1f});
     sim->step();
     CHECK_FALSE(sim->things().registry().valid(turret));
-    CHECK(defnCount(*sim, EventType::Explosion) == 2);  // the blast, then the turret's own
-    CHECK(defnHurt(*sim, bystander) > 0.0f);
-    sim->stepMany(5);
+    sim->stepMany(150);
     CHECK(defnCount(*sim, EventType::Explosion) == 0);
-
-    auto control = defnSim();
-    const Entity safe = control->things().spawn("Human", CellPos{40, 42, 0});
-    control->submit(ExplodeCommand{40.5f, 40.5f, 0.5f, 500.0f, "Bomb", 0.1f});  // no turret
-    control->step();
-    CHECK(defnHurt(*control, safe) == 0.0f);
 
     auto quiet = defnSim();
     const Entity other = quiet->things().spawn("Turret_Mini", CellPos{40, 40, 0});
@@ -523,6 +604,13 @@ TEST_CASE("Defense: turrets, traps, what sides know and a rearm survive a save, 
         sim->step();
     }
     DEFN_REQUIRE(sim->things().registry().get<Turret>(turret).phase == TurretPhase::Firing);
+    {
+        // Sparking (below 20% of its hit points, the roll lost): the fuse is saved too.
+        sim->things().registry().get<HitPoints>(turret).current = 10;
+        Turret& t = sim->things().registry().get<Turret>(turret);
+        t.fuseRolled = true;
+        t.fuse = 300;
+    }
     const std::string json = saveToJson(*sim);
     CHECK(json.find("\"defense\"") != std::string::npos);
     CHECK(json.find("\"turret\"") != std::string::npos);
@@ -531,6 +619,8 @@ TEST_CASE("Defense: turrets, traps, what sides know and a rearm survive a save, 
     DEFN_REQUIRE(loaded.sim != nullptr);
     CHECK(loaded.sim->stateHash() == sim->stateHash());
     CHECK(loaded.sim->things().registry().get<Trap>(trap).known == std::vector<FactionId>{2, 5});
+    CHECK(loaded.sim->things().registry().get<Turret>(turret).fuse == 300);
+    CHECK(loaded.sim->things().registry().get<Turret>(turret).fuseRolled);
     CHECK(loaded.sim->things().registry().valid(ied));
     for (int i = 0; i < 200; ++i) {
         sim->step();
@@ -568,4 +658,214 @@ TEST_CASE("Defense: turrets, traps, what sides know and a rearm survive a save, 
     playReplay(again, replayed, again.endStep);
     CHECK(replayed.stateHash() == original.stateHash());
     CHECK(checkReplay(again, replayed).matched());
+}
+
+TEST_CASE("Defense: a wood barricade is 1.1 m of cover a pawn walks through, with the wiki's numbers") {
+    const DefDatabase& defs = *defnDefs();
+    const Def* barricade = defs.find("Things", "Barricade");
+    DEFN_REQUIRE(barricade != nullptr);
+    CHECK(barricade->integer("costStuffCount") == 5);
+    CHECK(barricade->number("stats.maxHitPoints") == doctest::Approx(300.0));
+    CHECK(barricade->number("stats.workToBuild") == doctest::Approx(320.0 * 1.44));
+    CHECK(barricade->number("fillPercent") == doctest::Approx(0.55));
+    CHECK(barricade->text("passability") == "PassThroughOnly");
+
+    auto sim = defnSim();
+    // No research needed: a blueprint in wood is taken.
+    sim->submit(PlaceBlueprintCommand{"Barricade", "WoodLog", CellPos{20, 20, 0}, Rot4::North});
+    sim->step();
+    CHECK(defnCount(*sim, EventType::CommandFailed) == 0);
+    CHECK(sim->construction().siteAt(CellPos{20, 20, 0}) != kNoEntity);
+
+    const Entity wood = sim->things().spawn("Barricade", CellPos{30, 20, 0});  // (the macro runs its argument twice)
+    DEFN_REQUIRE(wood != kNoEntity);
+    CHECK(sim->map().walkable(CellPos{30, 20, 0}));
+    CHECK(sim->map().obstacleDm(CellPos{30, 20, 0}) == 11);
+    CHECK(sim->cover().coverHeight(CellPos{29, 20, 0}, Dir8::E) == doctest::Approx(1.1f));
+}
+
+TEST_CASE("Defense: the year run's gun post (solar panel, battery, two mini-turrets) keeps its turrets on through the night") {
+    auto sim = defnSim();
+    // The layout of docs/design/colony-scenario.md: conduits along y = 10, the solar panel at x 13..16, y 11..14, the
+    // battery at x 11, y 11..12 and the turrets at the two ends.
+    for (int x = 10; x < 20; ++x) {
+        sim->things().spawn("PowerConduit", CellPos{x, 10, 0});
+    }
+    const Entity solar = sim->things().spawn("SolarGenerator", CellPos{13, 11, 0});  // (the macro runs its argument twice)
+    const Entity battery = sim->things().spawn("Battery", CellPos{11, 11, 0});
+    DEFN_REQUIRE(solar != kNoEntity);
+    DEFN_REQUIRE(battery != kNoEntity);
+    const Entity west = sim->things().spawn("Turret_Mini", CellPos{10, 11, 0});
+    const Entity east = sim->things().spawn("Turret_Mini", CellPos{19, 11, 0});
+    DEFN_REQUIRE(west != kNoEntity);
+    DEFN_REQUIRE(east != kNoEntity);
+    // The first day charges the battery; through the second, night included, both turrets stay powered.
+    while (sim->time().seconds < kSecondsPerDay) {
+        sim->step();
+    }
+    int dark = 0;
+    while (sim->time().seconds < 2 * kSecondsPerDay) {
+        sim->step();
+        if (sim->time().seconds % 600 == 0) {
+            dark += sim->power().running(west) && sim->power().running(east) ? 0 : 1;
+        }
+    }
+    CHECK(dark == 0);
+}
+
+TEST_CASE("Defense: the colony's fighters take no cover within the blast of their own turret") {
+    auto sim = defnSim();
+    const Entity turret = sim->things().spawn("Turret_Mini", CellPos{30, 30, 0});
+    DEFN_REQUIRE(turret != kNoEntity);
+    // The mini-turret's blast reaches 3.9 m.
+    CHECK(sim->defense().avoidsCell(kPlayerFaction, CellPos{31, 30, 0}));
+    CHECK(sim->defense().avoidsCell(kPlayerFaction, CellPos{32, 31, 0}));
+    CHECK_FALSE(sim->defense().avoidsCell(kPlayerFaction, CellPos{34, 30, 0}));
+    CHECK_FALSE(sim->defense().avoidsCell(2, CellPos{31, 30, 0}));  // raiders don't mind it
+
+    // A drafted rifleman with sandbags 5 m north and an unpowered turret just past their middle takes the sandbags
+    // at one end, out of the blast (right behind the middle is the best cover against the enemy 30 m north).
+    for (int x = 36; x <= 44; ++x) {
+        sim->things().spawn("Sandbags", CellPos{x, 45, 0});
+    }
+    const Entity guard = sim->things().spawn("Turret_Mini", CellPos{40, 46, 0});
+    DEFN_REQUIRE(guard != kNoEntity);
+    const Entity rifleman = sim->things().spawn("Human", CellPos{40, 40, 0});
+    DEFN_REQUIRE(rifleman != kNoEntity);
+    sim->things().registry().emplace<Colonist>(rifleman);
+    sim->combat().equip(rifleman, sim->things().make(sim->defs().idOf("Things", "Gun_BoltActionRifle")));
+    const Entity enemy = defnHostile(*sim, 41, 72);
+    sim->combat().equip(enemy, sim->things().make(sim->defs().idOf("Things", "Gun_Revolver")));
+    sim->submit(DraftCommand{rifleman, true});
+    for (int i = 0; i < 400; ++i) {
+        sim->things().registry().replace<Health>(rifleman, Health{});
+        sim->things().registry().replace<Health>(enemy, Health{});
+        sim->step();
+    }
+    const Fighter* f = sim->things().registry().try_get<Fighter>(rifleman);
+    DEFN_REQUIRE(f != nullptr);
+    CHECK(f->hasSpot);
+    MESSAGE("spot ", f->spot.x, ",", f->spot.y);
+    CHECK(f->spot.y == 44);  // behind the sandbags
+    CHECK(std::hypot(static_cast<float>(f->spot.x) + 0.5f - 40.5f, static_cast<float>(f->spot.y) + 0.5f - 46.5f) > 3.9f);
+}
+
+TEST_CASE("Defense: a lancer outranges the mini-turret (32.9 m against 28.9 m) and shoots it to pieces, as in RimWorld") {
+    // RimWorld's numbers (wiki): the turret can't hold off a lancer by itself; the colonists have to go out to it.
+    auto sim = defnSim();
+    const Entity turret = defnPoweredTurret(*sim);  // at 15,10
+    const Entity mech = sim->things().spawn("Mech_Lancer", CellPos{15, 43, 0});
+    DEFN_REQUIRE(mech != kNoEntity);
+    sim->combat().equip(mech, sim->things().make(sim->defs().idOf("Things", "Gun_ChargeLance")));
+    sim->submit(SetFactionCommand{mech, 3});
+    int turretShots = 0;
+    int mechShots = 0;
+    for (int i = 0; i < 30 * 120 && sim->things().registry().valid(turret); ++i) {
+        sim->step();
+        for (const Event& e : sim->events()) {
+            turretShots += e.type == EventType::ShotFired && e.thing == turret ? 1 : 0;
+            mechShots += e.type == EventType::ShotFired && e.thing == mech ? 1 : 0;
+        }
+    }
+    const Position& p = sim->things().registry().get<Position>(mech);
+    const float apart = std::hypot(p.x - 15.5f, p.y - 10.5f);
+    MESSAGE("turret shots ", turretShots, ", lancer shots ", mechShots, ", lancer ", apart, " m off");
+    CHECK_FALSE(sim->things().registry().valid(turret));
+    CHECK(mechShots > 0);
+    CHECK(apart > 28.9f);
+}
+
+namespace {
+// A powered mini-turret at 15,10 with a barricade in every free cell round it (7: the conduit west of it is taken),
+// and a lancer `away` metres north of it, hostile. Steps up to two minutes; counts both sides' shots.
+struct DefnBarricadeFight {
+    int turretShots = 0;
+    int mechShots = 0;
+    int standing = 0;
+    int turretHp = 0;
+    int barricadeHp = 0;     // left, all together
+    int barricadeHpMax = 0;  // at the start
+    bool mechAble = true;
+};
+
+DefnBarricadeFight defnBarricadeFight(int away, int seconds = 120) {
+    DefnBarricadeFight out;
+    auto sim = defnSim();
+    const Entity turret = defnPoweredTurret(*sim);
+    std::vector<Entity> barricades;
+    for (int dx = -1; dx <= 1; ++dx) {
+        for (int dy = -1; dy <= 1; ++dy) {
+            if ((dx != 0 || dy != 0) && sim->map().buildingAt(CellPos{15 + dx, 10 + dy, 0}) == kNoEntity) {
+                barricades.push_back(sim->things().spawn("Barricade", CellPos{15 + dx, 10 + dy, 0}));
+            }
+        }
+    }
+    CHECK(barricades.size() == 7u);
+    for (const Entity b : barricades) {
+        out.barricadeHpMax += sim->things().registry().get<HitPoints>(b).current;
+    }
+    const Entity mech = sim->things().spawn("Mech_Lancer", CellPos{15, 10 + away, 0});
+    CHECK(mech != kNoEntity);
+    sim->combat().equip(mech, sim->things().make(sim->defs().idOf("Things", "Gun_ChargeLance")));
+    sim->submit(SetFactionCommand{mech, 3});
+    for (int i = 0; i < 30 * seconds && sim->things().registry().valid(turret); ++i) {
+        sim->step();
+        for (const Event& e : sim->events()) {
+            out.turretShots += e.type == EventType::ShotFired && e.thing == turret ? 1 : 0;
+            out.mechShots += e.type == EventType::ShotFired && e.thing == mech ? 1 : 0;
+        }
+    }
+    out.standing = static_cast<int>(std::count_if(barricades.begin(), barricades.end(), [&](Entity b) { return sim->things().registry().valid(b); }));
+    for (const Entity b : barricades) {
+        out.barricadeHp += sim->things().registry().valid(b) ? sim->things().registry().get<HitPoints>(b).current : 0;
+    }
+    out.turretHp = sim->things().registry().valid(turret) ? sim->things().registry().get<HitPoints>(turret).current : 0;
+    const entt::registry& reg = sim->things().registry();
+    out.mechAble = reg.valid(mech) && !reg.get<Health>(mech).dead && reg.get<Posture>(mech).stance != Stance::Prone;
+    MESSAGE("lancer ", away, " m off, ", seconds, " s: turret shots ", out.turretShots, ", lancer shots ", out.mechShots, ", barricades standing ",
+            out.standing, " (hp ", out.barricadeHp, " of ", out.barricadeHpMax, "), turret hp ", out.turretHp, ", lancer ", out.mechAble ? "able" : "down");
+    return out;
+}
+}  // namespace
+
+TEST_CASE("Defense: barricades round the mini-turret take the lancer's shots, and the turret fires over them") {
+    // The player's answer to the lancer's longer reach (RimWorld's too): cover round the turret. The barricades
+    // (1.1 m) stand in front of the turret's 0.8 m body, and its gun (muzzle 1.3 m) fires over them. The gun shows over
+    // them, so the lancer knows the turret is there and shoots at it: the barricades take the hits.
+    SUBCASE("two minutes") {
+        const DefnBarricadeFight f = defnBarricadeFight(33);
+        CHECK(f.mechShots > 0);
+        CHECK(f.turretShots > 0);
+        CHECK(f.barricadeHp < f.barricadeHpMax);
+        CHECK(f.turretHp == 100);
+    }
+    SUBCASE("ten minutes: it breaks barricades down (it wrecks the turret in the open in under two)") {
+        const DefnBarricadeFight f = defnBarricadeFight(33, 600);
+        CHECK(f.standing < 7);
+    }
+}
+
+TEST_CASE("Defense: a turret leaves calm animals alone and shoots a manhunter and an attacking insect, as in RimWorld") {
+    // RimWorld's turrets shoot every hostile: insects and manhunting animals among them. Ours left every animal be, and
+    // an insect clawed four colonists to death beside the year run's gun post.
+    for (const char* kind : {"WildBoar", "Megascarab"}) {
+        CAPTURE(kind);
+        auto sim = defnSim();
+        const Entity turret = defnPoweredTurret(*sim);  // at 15,10
+        const Entity colonist = sim->things().spawn("Human", CellPos{12, 14, 0});
+        const Entity animal = sim->things().spawn(kind, CellPos{15, 30, 0});
+        CHECK(animal != kNoEntity);
+        sim->stepMany(5);
+        CHECK(sim->power().running(turret));
+        CHECK_FALSE(sim->animals().hostile(animal));
+        CHECK(defnShots(*sim, turret, 300) == 0);  // calm: left alone
+        CHECK(defnHurt(*sim, animal) == 0.0f);
+        const bool enraged = sim->animals().enrage(animal, AnimalTemper::Manhunter, colonist);
+        CHECK(enraged);
+        CHECK(sim->animals().hostile(animal));
+        const int shots = defnShots(*sim, turret, 30 * 60);
+        MESSAGE(std::string(kind), ": turret shots ", shots, ", animal hurt ", defnHurt(*sim, animal));
+        CHECK(shots > 0);
+        CHECK(defnHurt(*sim, animal) > 0.0f);
+    }
 }

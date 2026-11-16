@@ -49,8 +49,9 @@ unpowered or the pawn can't think. A `PawnAction::Research` event (target: the b
 Unreal's animation. Numbers: RimWorld's 0.00825 per tick is from the wiki; the skill curve is ours (a
 `ResearchRules` entry says so) until checked.
 
-Not done: the multi-analyzer's +0.1 speed and the `requiredFacility` check (the facility isn't defined yet; a
-project that names one is treated as a plain tier 2 project), skill XP from research (no skill XP exists in the
+Multi-analyzer: its +0.1 speed and the `requiredFacility` check are done (`multi-analyzer.md`).
+
+Not done: skill XP from research (no skill XP exists in the
 sim yet), research while hands-on in direct mode, research speed from light or recreation.
 
 ## Snapshot and save

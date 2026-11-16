@@ -56,6 +56,7 @@ enum class JobType : uint8_t {
     MendWorn,          // walk to a tailor bench and mend a piece of one's own clothes while wearing it (apparel-durability.md)
     ManArtillery,      // walk beside a mortar or rocket launcher and man it until ordered off (docs/design/artillery.md)
     LoadPod,           // carry a stack the player named into a transport pod (docs/design/transport-pods.md)
+    RemoveFloor,       // walk next to a cell marked to have its floor taken up and take it up (docs/design/build-menu.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

@@ -485,6 +485,10 @@ TEST_CASE("Surgery: fitting a peg leg takes the item to the patient and the pati
     sim.things().spawn("PegLeg", CellPos{12, 12, 0});
     sim.things().spawn("MedicineIndustrial", CellPos{13, 12, 0}, 2);
     const Entity doctor = surgColonist(sim, CellPos{10, 10, 0});
+    // A skilled doctor: at the default skill 8 the fitting fails one time in five, and any change in timing can roll that.
+    Colonist skilled;
+    skilled.skills.push_back(SkillRecord{"Medicine", 20, Passion::None, 0.0f, false});
+    sim.things().registry().emplace<Colonist>(doctor, skilled);
     const Entity patient = surgPatient(sim, CellPos{30, 30, 0});
     sim.step();
     surgDestroy(sim, patient, "left leg");

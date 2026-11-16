@@ -6,6 +6,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Monsters.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Rooms.h"
@@ -268,6 +269,89 @@ TEST_CASE("Raids: raiders head for the colony, the alarm sounds and the colony f
             CHECK_FALSE(reg.all_of<Fighter>(c));
         }
     }
+}
+
+TEST_CASE("Raids: Shelter never goes into a room with a brood mound in it") {
+    // The year run (docs/design/colony-scenario.md "Seventh pass"): an infestation comes up under overhead mountain, which
+    // counts as indoors, and unarmed colonists running for the nearest roofed cell ran into the hive's cave.
+    auto sim = raidTestSim(31, 128);
+    const std::vector<Entity> colonists = raidTestColonists(*sim);
+    RAID_REQUIRE(colonists.size() == 6);
+    const entt::registry& reg = sim->things().registry();
+    const Position home = reg.get<Position>(colonists[0]);
+    const int x0 = static_cast<int>(home.x) + 10;
+    const int y0 = static_cast<int>(home.y) - 3;
+    for (int y = y0; y <= y0 + 6; ++y) {
+        for (int x = x0; x <= x0 + 6; ++x) {
+            if (x == x0 || y == y0 || x == x0 + 6 || y == y0 + 6) {
+                sim->things().spawn(x == x0 && y == y0 + 3 ? "Door" : "Wall", CellPos{x, y, 0});
+            }
+        }
+    }
+    sim->step();
+    const CellPos inside{x0 + 3, y0 + 3, 0};
+    RAID_REQUIRE(sim->rooms().indoors(inside));
+    const Entity hive = sim->monsters().spawnHive(CellPos{x0 + 5, y0 + 5, 0});
+    RAID_REQUIRE(hive != kNoEntity);
+    sim->submit(MarkShelterCommand{inside, false});
+    sim->submit(SetDefenseRoleCommand{colonists[1], static_cast<uint8_t>(DefenseRole::Shelter), false, CellPos{}});
+    sim->submit(SoundAlarmCommand{true});
+    sim->stepMany(400);
+    RAID_REQUIRE(reg.all_of<Fighter>(colonists[1]));
+    CHECK(reg.get<Fighter>(colonists[1]).mode == FightMode::Shelter);
+    const Position& at = reg.get<Position>(colonists[1]);
+    const Position& mound = reg.get<Position>(hive);
+    MESSAGE("the sheltering colonist is " << std::hypot(at.x - mound.x, at.y - mound.y) << " m from the mound");
+    CHECK(std::hypot(at.x - mound.x, at.y - mound.y) >= 19.0f);
+    const bool inTheMoundsRoom = sim->rooms().indoors(cellOf(at)) && sim->rooms().roomOf(cellOf(at)) == sim->rooms().roomOf(inside);
+    CHECK_FALSE(inTheMoundsRoom);
+}
+
+TEST_CASE("Raids: a sheltering colonist moves on when an enemy comes close and can see it") {
+    // The year run (docs/design/colony-scenario.md "Eighth pass"): with no roofed cell to run to, unarmed colonists waited
+    // in the open where they first fled, and a raider walked up and shot them there. Now a shelterer an enemy can see
+    // within shelterDanger picks a new place.
+    auto sim = raidTestSim(31, 128);
+    const std::vector<Entity> colonists = raidTestColonists(*sim);
+    RAID_REQUIRE(colonists.size() == 6);
+    const entt::registry& reg = sim->things().registry();
+    for (const Entity c : colonists) {
+        sim->submit(SetDefenseRoleCommand{c, static_cast<uint8_t>(DefenseRole::Shelter), false, CellPos{}});
+    }
+    sim->submit(StartRaidCommand{"Pirate", 100.0f, 3});
+    sim->step();
+    const std::vector<Entity> raiders = raidTestRaiders(*sim);
+    RAID_REQUIRE(!raiders.empty());
+    // The first time the raider aims at a sheltering colonist, that colonist picks a new place within a few alarm checks.
+    bool aimed = false;
+    bool movedOn = false;
+    CellPos firstGoal;
+    Entity watched = kNoEntity;
+    int64_t aimedAt = 0;
+    for (int64_t i = 0; i < 12 * kSecondsPerHour && !movedOn; ++i) {
+        sim->step();
+        if (!reg.valid(raiders[0]) || !reg.all_of<Fighter>(raiders[0])) {
+            break;
+        }
+        if (!aimed) {
+            const Entity target = reg.get<Fighter>(raiders[0]).target;
+            const Fighter* theirs = target != kNoEntity && reg.valid(target) ? reg.try_get<Fighter>(target) : nullptr;
+            if (theirs != nullptr && theirs->mode == FightMode::Shelter && theirs->hasGoal && !sim->health().incapacitated(target)) {
+                aimed = true;
+                watched = target;
+                firstGoal = theirs->goal;
+                aimedAt = i;
+            }
+        } else {
+            const Fighter* f = reg.valid(watched) ? reg.try_get<Fighter>(watched) : nullptr;
+            movedOn = f != nullptr && f->goal != firstGoal;
+            if (i - aimedAt > 60) {
+                break;
+            }
+        }
+    }
+    RAID_REQUIRE(aimed);
+    CHECK(movedOn);
 }
 
 TEST_CASE("Raids: Shelter goes to the marked room, Keep working works until enemies come close") {
@@ -620,4 +704,81 @@ TEST_CASE("Raids: a colonist too hungry to stand at its post leaves the alarm to
     sim->stepMany(40);
     CHECK(reg.all_of<Fighter>(hungry));
     CHECK(reg.get<Fighter>(hungry).defending);
+
+    // But not with an enemy close by: the year run's hungry colonists ate while a raider shot them from a few metres.
+    sim->submit(StartRaidCommand{"Pirate", 100.0f, 3});
+    sim->step();
+    const std::vector<Entity> raiders = raidTestRaiders(*sim);
+    RAID_REQUIRE(!raiders.empty());
+    // Put the raider 6 m from the hungry colonist (a question about where pawns stand; no step runs).
+    const Position& a = reg.get<Position>(hungry);
+    Position& r = reg.get<Position>(raiders[0]);
+    const Position away = r;
+    r.x = a.x + 6.0f;
+    r.y = a.y;
+    reg.get<Needs>(hungry).food = 0.05f;
+    CHECK_FALSE(sim->raids().excusedToEat(hungry));
+    r = away;  // far off again: let off to eat
+    CHECK(sim->raids().excusedToEat(hungry));
+}
+
+TEST_CASE("Raids: a colonist resting in bed to get over an illness stays in bed when the alarm sounds") {
+    // Found by the year run (docs/design/colony-scenario.md "Ninth pass"): a raid two days after plague and malaria
+    // called the sick out of bed, and they died fighting at a fraction of their strength. A player leaves them undrafted.
+    auto sim = raidTestSim(21, 160);
+    const std::vector<Entity> colonists = raidTestColonists(*sim);
+    RAID_REQUIRE(colonists.size() == 6);
+    for (const Entity c : colonists) {
+        raidTestArm(*sim, c);
+    }
+    entt::registry& reg = sim->things().registry();
+    const Entity sick = colonists[0];
+    const Position& at = reg.get<Position>(sick);
+    sim->things().spawn("Bed", CellPos{static_cast<int>(at.x) + 3, static_cast<int>(at.y), 0});
+    sim->submit(ContractDiseaseCommand{sick, "Plague", 0.4f, -1});
+    bool resting = false;
+    for (int i = 0; i < 1200 && !resting; ++i) {
+        sim->step();
+        resting = reg.get<Worker>(sick).job.type == JobType::BedRest;
+    }
+    RAID_REQUIRE(resting);
+    sim->submit(SoundAlarmCommand{true});
+    sim->stepMany(40);
+    CHECK_FALSE(reg.all_of<Fighter>(sick));
+    CHECK(reg.get<Worker>(sick).job.type == JobType::BedRest);
+    for (size_t i = 1; i < colonists.size(); ++i) {
+        CHECK(reg.all_of<Fighter>(colonists[i]));  // the healthy are called up
+    }
+}
+
+TEST_CASE("Raids: the alarm's home is the middle of the colony's own buildings, not ruins, geysers or brood mounds") {
+    auto sim = raidTestSim();
+    for (int x = 60; x < 64; ++x) {
+        sim->things().spawn("RaidTestWall", CellPos{x, 60, 0});
+    }
+    float x0 = 0.0f;
+    float y0 = 0.0f;
+    CHECK(sim->raids().colonyMiddle(x0, y0));
+    // The map's own buildings far off: a ruin's ancient walls, a steam geyser and a brood mound.
+    for (int y = 100; y < 120; ++y) {
+        sim->things().spawn("AncientWall", CellPos{115, y, 0});
+    }
+    CHECK(sim->things().spawn("SteamGeyser", CellPos{10, 10, 0}) != kNoEntity);
+    CHECK(sim->things().spawn("Hive", CellPos{100, 20, 0}) != kNoEntity);
+    float x1 = 0.0f;
+    float y1 = 0.0f;
+    CHECK(sim->raids().colonyMiddle(x1, y1));
+    CHECK(x1 == doctest::Approx(x0));
+    CHECK(y1 == doctest::Approx(y0));
+    // A building of the colony's does move it, and the alarm takes it as home.
+    sim->things().spawn("RaidTestWall", CellPos{90, 60, 0});
+    float x2 = 0.0f;
+    float y2 = 0.0f;
+    CHECK(sim->raids().colonyMiddle(x2, y2));
+    CHECK(x2 > x1 + 1.0f);
+    sim->submit(SoundAlarmCommand{true});
+    sim->step();
+    CHECK(sim->raids().state().hasHome);
+    CHECK(sim->raids().state().homeX == doctest::Approx(x2));
+    CHECK(sim->raids().state().homeY == doctest::Approx(y2));
 }

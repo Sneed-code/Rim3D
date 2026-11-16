@@ -69,6 +69,10 @@ Breeding::Breeding(Things& things, const Map& map, AnimalSystem& animals, Husban
         rules_.followRadius = r->number("followRadius", rules_.followRadius);
         rules_.hatcheryRadius = r->number("hatcheryRadius", rules_.hatcheryRadius);
     }
+    // The life pace (Clock.h) shortens pregnancy, hatching and the rest between births; laying,
+    // milk and wool stay per day, as they are matched to what the animal eats.
+    const double pace = std::max(0.01, defs.tuning(kPaceLifeTuning));
+    rules_.birthCooldownDays /= pace;
     kinds_.assign(defs.size(), Kind{});
     isAnimal_.assign(defs.size(), 0);
     hatches_.assign(defs.size(), Hatch{});
@@ -82,7 +86,7 @@ Breeding::Breeding(Things& things, const Map& map, AnimalSystem& animals, Husban
         }
         if (def.has("hatches.into")) {
             hatches_[id.value].into = defs.idOf("Things", def.text("hatches.into"));
-            hatches_[id.value].seconds = def.number("hatches.days", 3.0) * static_cast<double>(kSecondsPerDay);
+            hatches_[id.value].seconds = def.number("hatches.days", 3.0) * static_cast<double>(kSecondsPerDay) / pace;
         }
         if (def.text("category") != "Pawn" || def.text("race.intelligence") != "Animal") {
             continue;
@@ -91,7 +95,7 @@ Breeding::Breeding(Things& things, const Map& map, AnimalSystem& animals, Husban
         Kind& k = kinds_[id.value];
         if (def.has("race.gestationDays")) {
             k.gestates = true;
-            k.gestationSeconds = def.number("race.gestationDays", 10.0) * static_cast<double>(kSecondsPerDay);
+            k.gestationSeconds = def.number("race.gestationDays", 10.0) * static_cast<double>(kSecondsPerDay) / pace;
             k.litterMin = std::max(1, static_cast<int>(def.number("race.litterSize.min", 1.0)));
             k.litterMax = std::max(k.litterMin, static_cast<int>(def.number("race.litterSize.max", static_cast<double>(k.litterMin))));
         }

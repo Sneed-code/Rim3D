@@ -92,6 +92,7 @@ SocialRules SocialRules::read(const DefDatabase& defs) {
     r.opinionMax = socFloat(*rules, "opinionMax", r.opinionMax);
     r.defaultXp = socFloat(*rules, "socialSkillXpPerInteraction", r.defaultXp);
     r.minGapMinutes = socFloat(*rules, "minGapMinutes", r.minGapMinutes);
+    r.talkShowSeconds = std::max(0.0f, socFloat(*rules, "talkShowSeconds", r.talkShowSeconds));
     r.tableChatMeanMinutes = std::max(0.01f, socFloat(*rules, "tableChatMeanMinutes", r.tableChatMeanMinutes));
     r.compatibilityMax = socFloat(*rules, "compatibilityMax", r.compatibilityMax);
     r.stackLimit = std::max(1, static_cast<int>(rules->integer("stackLimit", r.stackLimit)));
@@ -126,6 +127,22 @@ SocialRules SocialRules::read(const DefDatabase& defs) {
         const std::string key = std::string("orientation.") + kSocOrientationNames[i];
         r.orientationWeights[i] = std::max(0.0f, socFloat(*rules, key.c_str(), r.orientationWeights[i]));
     }
+    r.lovinThought = socTrigger(defs, rules->text("lovin.thought"));
+    r.lovinLabel = rules->text("lovin.label", r.lovinLabel);
+    r.lovinOpinion = socFloat(*rules, "lovin.opinion", r.lovinOpinion);
+    r.lovinOpinionDays = socFloat(*rules, "lovin.opinionDays", r.lovinOpinionDays);
+    r.lovinWindowMinutes = std::max(1.0f, socFloat(*rules, "lovin.windowMinutes", r.lovinWindowMinutes));
+    r.lovinMinMinutes = std::max(1.0f, socFloat(*rules, "lovin.minMinutes", r.lovinMinMinutes));
+    r.lovinMaxMinutes = std::max(r.lovinMinMinutes, socFloat(*rules, "lovin.maxMinutes", r.lovinMaxMinutes));
+    if (rules->count("lovin.intervalAges") > 0 && rules->count("lovin.intervalAges") == rules->count("lovin.intervalHours")) {
+        r.lovinIntervalHours.clear();
+        for (size_t i = 0; i < rules->count("lovin.intervalAges"); ++i) {
+            r.lovinIntervalHours.emplace_back(static_cast<float>(rules->numberAt("lovin.intervalAges", i)),
+                                              static_cast<float>(rules->numberAt("lovin.intervalHours", i)));
+        }
+    }
+    r.lovinIntervalSpread = std::max(0.0f, socFloat(*rules, "lovin.intervalSpread", r.lovinIntervalSpread));
+    r.lovinIntervalMin = std::max(0.01f, socFloat(*rules, "lovin.intervalMin", r.lovinIntervalMin));
     r.fightLabel = rules->text("fight.label", r.fightLabel);
     r.fightOffset = socFloat(*rules, "fight.offset", r.fightOffset);
     r.fightDays = socFloat(*rules, "fight.days", r.fightDays);
@@ -338,6 +355,12 @@ Entity SocialSystem::partner(Entity pawn) const {
         }
     }
     return lover;
+}
+
+const Talking* SocialSystem::talking(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Talking* t = reg.valid(pawn) ? reg.try_get<Talking>(pawn) : nullptr;
+    return t != nullptr && time_.seconds < t->until ? t : nullptr;
 }
 
 bool SocialSystem::fighting(Entity pawn) const {
@@ -620,6 +643,12 @@ void SocialSystem::perform(Entity initiator, Entity recipient, const SocialInter
 
     learn(initiator, interaction.xp > 0.0f ? static_cast<double>(interaction.xp) : static_cast<double>(rules_.defaultXp));
     push(EventType::Interaction, initiator, recipient, name, ok ? 1 : 0, opinion(recipient, initiator));
+    {
+        const int64_t until = time_.seconds + static_cast<int64_t>(std::llround(static_cast<double>(rules_.talkShowSeconds)));
+        entt::registry& reg = things_.registry();
+        reg.emplace_or_replace<Talking>(initiator, Talking{interaction.def, recipient, until, true, ok});
+        reg.emplace_or_replace<Talking>(recipient, Talking{interaction.def, initiator, until, false, ok});
+    }
 
     // An insult can turn into a fight (not with a wimp, nor with a kind soul, nor if one is already in one).
     if (name == "Insult") {
@@ -964,6 +993,19 @@ void SocialSystem::step(int64_t now) {
     }
     entt::registry& reg = things_.registry();
 
+    // Interactions that have stopped showing come off (AN1).
+    {
+        std::vector<Entity> done;
+        for (const auto [pawn, talk] : reg.view<const Talking>().each()) {
+            if (now >= talk.until) {
+                done.push_back(pawn);
+            }
+        }
+        for (const Entity pawn : done) {
+            reg.remove<Talking>(pawn);
+        }
+    }
+
     // New colonists get a social life.
     std::vector<Entity> made;
     for (const Entity pawn : reg.view<Needs>()) {
@@ -1001,6 +1043,7 @@ void SocialSystem::step(int64_t now) {
     }
 
     stepFights();
+    stepLovin(now, pawns);
 
     std::vector<Entity> talkers;
     for (const Entity pawn : pawns) {
@@ -1024,6 +1067,7 @@ void SocialSystem::hashThing(Entity e, StateHasher& h) const {
     const entt::registry& reg = things_.registry();
     if (const Social* social = reg.try_get<Social>(e)) {
         h.add(social->nextTalk);
+        h.add(social->nextLovin);
         h.add(social->mourned);
         h.add(static_cast<uint64_t>(social->memories.size()));
         for (const OpinionMemory& m : social->memories) {
@@ -1039,11 +1083,24 @@ void SocialSystem::hashThing(Entity e, StateHasher& h) const {
             h.add(b.since);
         }
     }
+    if (const Talking* talk = reg.try_get<Talking>(e)) {
+        h.add(talk->def.value);
+        h.add(socId(talk->with));
+        h.add(talk->until);
+        h.add(talk->started);
+        h.add(talk->ok);
+    }
     if (const SocialFight* fight = reg.try_get<SocialFight>(e)) {
         h.add(socId(fight->opponent));
         h.add(fight->startedAt);
         h.add(fight->endsBy);
         h.add(fight->nextMove);
+    }
+    if (const Lovin* lovin = reg.try_get<Lovin>(e)) {
+        h.add(socId(lovin->partner));
+        h.add(lovin->startedAt);
+        h.add(lovin->until);
+        h.add(static_cast<int>(lovin->pose));
     }
 }
 

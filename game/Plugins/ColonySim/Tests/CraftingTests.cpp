@@ -310,9 +310,10 @@ TEST_CASE("Crafting: the hand tailor bench is half as fast as a bench at full sp
     const int hand = timeAt("TailorBenchHand");
     CHECK(hand > 0);
     // The electric one has no power in the test, so it can't be compared: the speed factor is what the data says.
-    // A tuque is 1,728 s of work: at crafting 8 (speed 1.0) the hand bench takes about 3,456 s, plus walking.
-    CHECK(hand > 3300);
-    CHECK(hand < 4200);
+    // A tuque is 1,728 s of work: at crafting 8 (speed 1.0) the hand bench takes about 3,456 s, halved by the tuning's
+    // 2x bench speed (work.craftingSpeed), plus walking.
+    CHECK(hand > 1650);
+    CHECK(hand < 2400);
 }
 
 TEST_CASE("Crafting: the stonecutter turns a chunk into blocks") {
@@ -643,9 +644,10 @@ TEST_CASE("Crafting: the electric tailor bench still works without power, at hal
     sim.submit(UnlockResearchCommand{"ComplexClothing"});
     CRAFT_REQUIRE(table != kNoEntity && craftAdd(sim, table, "Make_Apparel_Tuque", BillMode::Count, 1) != 0);
     const int took = craftRunUntil(sim, 30000, [&] { return craftOnMap(sim, "Apparel_Tuque") == 1; });
-    // A tuque is 1,728 s of work at speed 1.0: with no power the bench runs at half that, like the hand bench.
-    CHECK(took > 3300);
-    CHECK(took < 4200);
+    // A tuque is 1,728 s of work at speed 1.0: with no power the bench runs at half that, like the hand bench, and the
+    // tuning's 2x bench speed (work.craftingSpeed) halves it again.
+    CHECK(took > 1650);
+    CHECK(took < 2400);
     const SkillRecord* crafting = sim.things().registry().get<Colonist>(pawn).skill("Crafting");
     CRAFT_REQUIRE(crafting != nullptr);
     CHECK((crafting->level > 8 || crafting->xp > 0.0f));

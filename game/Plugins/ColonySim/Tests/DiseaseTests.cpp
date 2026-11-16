@@ -188,7 +188,7 @@ TEST_CASE("Diseases: the race between immunity and severity (flu: 0.2388 immunit
 }
 
 TEST_CASE("Diseases: a hospital bed or good tending lets a healthy pawn win the race, and immunity stays") {
-    {   // A hospital bed: immunity gain x1.07 is enough, with a hair to spare.
+    {   // A hospital bed: immunity gain x1.221 (the wiki's 1.11, and 1.10 for resting) is enough.
         Sim sim = disSim();
         const Entity pawn = disPawn(sim);
         sim.step();
@@ -618,4 +618,24 @@ TEST_CASE("Diseases: an illness's cap on a capacity comes after every offset, as
         consciousness = line.name == "Consciousness" ? line.value : consciousness;
     }
     CHECK(consciousness == doctest::Approx(0.1f));
+}
+
+TEST_CASE("Diseases: plague in a bed, tended at quality 0.4, is beaten (the wiki's bed and resting factors)") {
+    // Found by the year run (docs/design/colony-scenario.md "Ninth pass"): plague tended at about 0.4 killed most who caught
+    // it. Our bed gave immunity x1.05 with no resting factor; the wiki's is x1.07 for a bed and x1.10 for resting. In a
+    // bed immunity comes on day 1.63 (0.5224 x 1.177 a day), while severity (0.666 - 0.3628 x 0.4 a day) would reach 1 on
+    // day 1.92.
+    Sim sim = disSim();
+    const Entity pawn = disPawn(sim);
+    sim.step();
+    const DefId plague = disId(sim, "Plague");
+    disHealth(sim, pawn).rest = RestKind::Bed;
+    sim.health().contract(pawn, plague);
+    DisLog log;
+    disRun(sim, log, pawn, static_cast<int64_t>(1.7f * 86400), 0.4f);
+    CHECK_FALSE(disHealth(sim, pawn).dead);
+    CHECK(sim.health().immunity(pawn, plague) == doctest::Approx(1.0f));
+    disRun(sim, log, pawn, 5 * 86400, 0.4f);
+    CHECK_FALSE(disHealth(sim, pawn).dead);
+    CHECK(sim.health().diseaseSeverity(pawn, plague) == 0.0f);
 }

@@ -131,6 +131,7 @@ NarratorSystem::NarratorSystem(RaidSystem& raids, const DefDatabase& defs, const
         n.perCycleMin = static_cast<int>(def.integer("threatCycle.incidentsPerCycle.0", 1));
         n.perCycleMax = std::max(n.perCycleMin, static_cast<int>(def.integer("threatCycle.incidentsPerCycle.1", n.perCycleMin)));
         n.firstThreatDay = static_cast<float>(def.number("threatCycle.firstThreatDay", 0.0));
+        n.minSpacingDays = std::max(0.0f, static_cast<float>(def.number("threatCycle.minSpacingDays", 0.0)));
         n.cycle = n.cycle && n.onDays + n.offDays > 0.0f;
         for (int c = 0; c < kIncidentCategoryCount; ++c) {
             const std::string key = std::string("mtbDays.") + incidentCategoryName(static_cast<IncidentCategory>(c));
@@ -376,10 +377,24 @@ void NarratorSystem::planCycle(int64_t start) {
     if (n == nullptr || !n->cycle) {
         return;
     }
-    const int count = n->perCycleMin + static_cast<int>(rng_.below(static_cast<uint32_t>(n->perCycleMax - n->perCycleMin + 1)));
+    int count = n->perCycleMin + static_cast<int>(rng_.below(static_cast<uint32_t>(n->perCycleMax - n->perCycleMin + 1)));
     const double onSeconds = static_cast<double>(n->onDays) * static_cast<double>(kSecondsPerDay);
+    // RimWorld's `minSpacingDays` (Cassandra's 1.9): the threats of one "on" part never come closer together than that.
+    // Without it two raids could land minutes apart and meet the colony as one (the year run lost six that way). The
+    // times are drawn in the on part shortened by the gaps, sorted, and pushed apart by one gap each, so they stay
+    // spread evenly over it. More threats than fit are dropped.
+    const double spacing = static_cast<double>(n->minSpacingDays) * static_cast<double>(kSecondsPerDay);
+    if (spacing > 0.0 && count > 1) {
+        count = std::min(count, 1 + static_cast<int>(onSeconds / spacing));
+    }
+    const double room = std::max(0.0, onSeconds - spacing * static_cast<double>(count - 1));
+    std::vector<double> draws;
     for (int i = 0; i < count; ++i) {
-        state_.threats.push_back(start + static_cast<int64_t>(static_cast<double>(rng_.unit()) * onSeconds));
+        draws.push_back(static_cast<double>(rng_.unit()) * room);
+    }
+    std::sort(draws.begin(), draws.end());
+    for (int i = 0; i < count; ++i) {
+        state_.threats.push_back(start + static_cast<int64_t>(draws[static_cast<size_t>(i)] + spacing * static_cast<double>(i)));
     }
     std::sort(state_.threats.begin(), state_.threats.end());
 }

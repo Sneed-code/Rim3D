@@ -3,24 +3,25 @@
     "defName": "Gun_MiniTurret", "label": "mini-turret gun", "source": "RimWorld wiki",
     "category": "Item", "stackLimit": 1, "turretGun": true,
     "visual": {"sound": {"shot": "Shot_Turret"},"parts": [{"shape": "box", "size": [0.5, 0.06, 0.06], "at": [0.1, 0, 0.04], "color": [0.2, 0.2, 0.22]}]},
-    "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 144, "accuracyTouch": 0.85, "accuracyShort": 0.8, "accuracyMedium": 0.7, "accuracyLong": 0.6 },
-    "verbs": [ { "range": 28.9, "warmupTime": 30, "burstShotCount": 3, "secondsBetweenBurstShots": 5, "defaultProjectile": "Bullet_MiniTurret" } ],
-    "unverified": ["stats", "verbs"],
-    "ours": ["turretGun", "visual"]
+    "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 144, "accuracyTouch": 0.77, "accuracyShort": 0.70, "accuracyMedium": 0.45, "accuracyLong": 0.24 },
+    "verbs": [ { "range": 28.9, "warmupTime": 0, "burstShotCount": 2, "secondsBetweenBurstShots": 4, "defaultProjectile": "Bullet_MiniTurret" } ],
+    "ours": ["turretGun", "visual", "stats.maxHitPoints"],
+    "note": "Wiki-checked 2026-11-15 (Mini-turret): range 28.9, no warm-up, cooldown 288 ticks (144 steps), burst of 2 shots 8 ticks (4 steps) apart, accuracy 77/70/45/24%."
   },
   {
     "defName": "Turret_Mini", "parent": "BuildingBase", "label": "mini-turret", "source": "RimWorld wiki",
     "researchPrerequisite": "GunTurrets",
     "size": [1, 1], "passability": "Impassable", "fillPercent": 0.4, "designationCategory": "Security",
-    "costs": { "Steel": 100, "ComponentIndustrial": 2 },
-    "visual": { "parts": [{"shape": "box", "size": [0.7, 0.7, 0.35], "color": [0.32, 0.34, 0.36]}, {"shape": "cylinder", "radius": 0.2, "height": 0.2, "at": [0, 0, 0.35], "color": [0.22, 0.24, 0.26]}, {"shape": "box", "size": [0.12, 0.7, 0.12], "at": [0, 0.25, 0.45], "color": [0.14, 0.14, 0.16]}] },
-    "stats": { "maxHitPoints": 100, "workToBuild": 1200, "flammability": 0.5 },
-    "power": { "consumption": 100 },
-    "turret": { "gun": "Gun_MiniTurret", "shootingSkill": 8, "muzzleHeight": 0.8 },
-    "explosion": { "damageDef": "Bomb", "damage": 25, "armorPenetration": 0.1, "radius": 2.9 },
-    "explodeWhenDestroyed": true,
-    "unverified": ["costs", "stats", "power", "fillPercent", "researchPrerequisite"],
-    "ours": ["turret", "explosion", "explodeWhenDestroyed", "visual"]
+    "costs": { "Steel": 100, "ComponentIndustrial": 3 },
+    "visual": { "parts": [{"shape": "box", "size": [0.7, 0.7, 0.35], "color": [0.32, 0.34, 0.36]}, {"shape": "cylinder", "radius": 0.08, "height": 0.85, "at": [0, 0, 0.35], "color": [0.22, 0.24, 0.26]}, {"shape": "cylinder", "radius": 0.2, "height": 0.2, "at": [0, 0, 1.15], "color": [0.22, 0.24, 0.26]}, {"shape": "box", "size": [0.12, 0.7, 0.12], "at": [0, 0.25, 1.24], "color": [0.14, 0.14, 0.16]}] },
+    "stats": { "maxHitPoints": 100, "workToBuild": 2592, "flammability": 0.5 },
+    "power": { "consumption": 80 },
+    "turret": { "gun": "Gun_MiniTurret", "shootingSkill": 8, "muzzleHeight": 1.3 },
+    "explosion": { "damageDef": "Bomb", "damage": 50, "armorPenetration": 0.1, "radius": 3.9 },
+    "explodeWhenDamaged": { "belowHealth": 0.2, "chance": 0.5, "delayTicks": 240 },
+    "unverified": ["researchPrerequisite", "explosion.armorPenetration"],
+    "ours": ["turret", "visual", "costs: the wiki's 30 metallic stuff plus 70 steel, taken as 100 steel"],
+    "note": "Wiki-checked 2026-11-15 (Mini-turret): 100 HP (steel), 80 W, 30 metallic stuff + 70 steel + 3 components, 1800 ticks of work (x 1.44 = 2592 game seconds), cover 40%; below 20% HP a 50% chance to spark for 240 ticks and explode, 50 bomb damage in 3.9 m. The barrel's 80 units of wear (refuelled with steel) are not in yet. Ours: the gun sits on a post, muzzle 1.3 m, so it fires over barricades and sandbags (1.1 m) round it as RimWorld turrets fire over adjacent cover; the 0.8 m body (fill 0.4) is what gets hit."
   },
   {
     "defName": "FoamTurret", "parent": "BuildingBase", "label": "foam turret", "source": "RimWorld wiki",
@@ -66,5 +67,14 @@
     "stats": { "maxHitPoints": 300, "workToBuild": 259.2, "flammability": 0.0, "beauty": -10 },
     "ours": ["visual"],
     "note": "Wiki-checked 2026-10-28: 5 fabric or leather, 300 HP, 180 ticks of work (x 1.44 = 259.2 game seconds), cover 55% (fill), path cost 42, beauty -10, 0% flammable, 1x1, no research. Siege camps build them (docs/design/sieges.md)."
+  },
+  {
+    "defName": "Barricade", "parent": "BuildingBase", "label": "barricade", "source": "RimWorld wiki",
+    "size": [1, 1], "passability": "PassThroughOnly", "pathCost": 42, "fillPercent": 0.55, "designationCategory": "Security",
+    "stuffCategories": ["Metallic", "Woody", "Stony"], "costStuffCount": 5,
+    "visual": { "parts": [{ "shape": "box", "size": [0.95, 0.4, 0.55], "stuff": true }] },
+    "stats": { "maxHitPoints": 300, "workToBuild": 460.8, "flammability": 1.0, "beauty": -3 },
+    "ours": ["visual"],
+    "note": "Wiki-checked 2026-11-15: 5 metallic, woody or stony stuff, 300 HP (before the stuff's factor), 320 ticks of work (x 1.44 = 460.8 game seconds), cover 55% (fill), path cost 42, beauty -3, 100% flammable before the stuff, 1x1, pass through only, no research. The year run's defence posts are wood barricades (docs/design/colony-scenario.md)."
   }
 ]

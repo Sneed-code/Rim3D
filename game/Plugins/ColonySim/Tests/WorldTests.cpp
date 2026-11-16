@@ -95,6 +95,33 @@ TEST_CASE("biomes follow temperature and rainfall") {
     }
 }
 
+TEST_CASE("every world has tropical swamps, wet and hot") {
+    // World 42 had none: its swamp noise missed the thin wet band at the equator. Each swampy rule
+    // now makes at least `minRuleShare` of the land fitting its temperature and rainfall swampy.
+    for (const uint64_t seed : {42ULL, 1ULL, 3ULL, 5ULL, 7ULL, 14ULL}) {
+        const World w = World::generate(worldTestDefs(), seed);
+        int swamps = 0;
+        int rainforest = 0;
+        for (int i = 0; i < w.tileCount(); ++i) {
+            const WorldTile& t = w.tile(i);
+            if (t.water) {
+                continue;
+            }
+            const std::string& b = w.biomeName(t);
+            if (b == "TropicalSwamp") {
+                ++swamps;
+                CHECK(t.rainfall >= 1500.0f);
+                CHECK(t.temperature > 19.0f);
+            } else if (b == "TropicalRainforest") {
+                ++rainforest;
+            }
+        }
+        INFO("seed " << seed);
+        CHECK(swamps > 0);
+        CHECK(rainforest > swamps);  // swamps are patches in the rainforest belt, not all of it
+    }
+}
+
 TEST_CASE("rivers flow downhill into the sea or a lake and get bigger") {
     const World w = World::generate(worldTestDefs(), 42);
     int rivers = 0;

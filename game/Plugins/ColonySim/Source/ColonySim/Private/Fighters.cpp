@@ -1,8 +1,10 @@
 #include "ColonySim/Fighters.h"
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Defense.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Explosives.h"
@@ -14,6 +16,7 @@
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Trade.h"
 #include "ColonySim/Melee.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Regions.h"
@@ -34,11 +37,16 @@ namespace {
 
 constexpr int kFightMaxRepaths = 3;
 constexpr uint16_t kFightHeldKeep = 5;  // steps held up on the way after which a walking fighter keeps its spot
-constexpr size_t kFightEffortPool = 3;  // times `refine` spots get their walk worked out by terrain and health
+constexpr size_t kFightEffortPool = 3;
+constexpr int kFightShotSearch = 16;    // more spots looked at for a shot when none of the best few has one (ours)
+constexpr int kFightShotSearchGap = 2;  // cells: a spot this near one without a shot is skipped in that search (ours)  // times `refine` spots get their walk worked out by terrain and health
 // Weights of the nearest threats a spot is scored against: the nearest counts most.
 constexpr float kFightThreatWeights[] = {1.0f, 0.7f, 0.5f, 0.35f, 0.25f, 0.2f, 0.15f, 0.1f};
 constexpr int kFightMaxThreats = static_cast<int>(sizeof kFightThreatWeights / sizeof kFightThreatWeights[0]);
 constexpr float kFightShotClearance = 0.3f;  // metres below the chest the shot's line must still clear the ground (our number)
+constexpr float kFightAimTopMargin = 0.15f;  // as Combat.cpp's kCombatAimTopMargin: the highest aim over a crest
+constexpr float kFightFriendSpread = 0.3f;   // metres to either side of the target's chest a shot may stray and still miss a friend (ours)
+constexpr float kFightFriendCorridor = 0.9f; // a friend this near the shot's line on the ground gets the exact check (ours)
 constexpr float kFightFallBackCap = 40.0f;  // metres from the nearest enemy beyond which falling back gains nothing
 
 float fightDist(float ax, float ay, float bx, float by) {
@@ -119,6 +127,10 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     num("minWalkShare", r.minWalkShare);
     num("rangeMargin", r.rangeMargin);
     num("walkStayBonus", r.walkStayBonus);
+    num("focusMetres", r.focusMetres);
+    num("ambushRange", r.ambushRange);
+    num("helpRange", r.helpRange);
+    num("helpReach", r.helpReach);
     r.throwEvery = std::max(1, r.throwEvery);
     r.planEvery = std::max(1, r.planEvery);
     r.threats = std::clamp(r.threats, 1, kFightMaxThreats);
@@ -150,7 +162,7 @@ FighterSystem::FighterSystem(Things& things, Map& map, CombatSystem& combat, Hea
 FighterSystem::~FighterSystem() = default;
 
 int64_t FighterSystem::now() const {
-    return time_.seconds;
+    return time_.steps;  // real time: aiming, dodging and planning keep their pace whatever the day length
 }
 
 FactionId FighterSystem::factionOf(Entity pawn) const {
@@ -384,7 +396,31 @@ void FighterSystem::step() {
             // others, its side, never saw it as an enemy (seed 42 of the year run).
             p.faction = kWildFaction;
         }
+        if (isBerserk(reg.try_get<MentalBreaker>(e))) {
+            // Nor a colonist gone berserk: on the rainforest start one beat four colonists to death in the barracks while
+            // the others stood by. Its friends fight it like any enemy now, and stop once it is down (the break ends).
+            p.faction = kWildFaction;
+        }
         p.stance = p.able ? posture.stance : Stance::Prone;
+        pawns_.push_back(p);
+    }
+    // The colony's turrets stand among the enemies a raider sees and shoots at, as in RimWorld; a bullet
+    // that hits one takes its hit points, and at none it is destroyed (docs/design/fighters.md "Turrets").
+    for (const auto [e, turret, thing, pos] : reg.view<const Turret, const Thing, const Position>().each()) {
+        (void)turret;
+        const HitPoints* hp = reg.try_get<HitPoints>(e);
+        if (!things_.spawned(e) || reg.all_of<ConstructionSite>(e) || (hp != nullptr && hp->current <= 0)) {
+            continue;
+        }
+        PawnInfo p;
+        p.pawn = e;
+        p.faction = kPlayerFaction;
+        p.x = pos.x;
+        p.y = pos.y;
+        p.level = pos.level;
+        p.able = true;
+        p.turret = true;
+        p.stance = Stance::Crouching;  // about a metre tall
         pawns_.push_back(p);
     }
     std::sort(pawns_.begin(), pawns_.end(), [](const PawnInfo& a, const PawnInfo& b) { return a.pawn < b.pawn; });
@@ -437,6 +473,7 @@ void FighterSystem::step() {
             f.nextPlan = now() + rules_.planEvery;
             plan(pawn, f);
         }
+        shieldAct(pawn, f);
         considerThrow(pawn, f);
         act(pawn, f);
     }
@@ -494,8 +531,9 @@ void FighterSystem::see(Entity pawn, Fighter& f, const PawnInfo& self) {
     const float range2 = sightRange * sightRange;
     const Viewpoint eye{self.x, self.y, self.level, Stance::Standing};
     size_t next = 0;  // walks f.known alongside pawns_, both in id order
+    const bool turrets = shootsTurrets(pawn);
     for (const PawnInfo& p : pawns_) {
-        if (p.faction == self.faction || p.animal || p.level != self.level) {
+        if (p.faction == self.faction || p.animal || p.level != self.level || (p.turret && !turrets)) {
             continue;
         }
         const float dx = p.x - self.x;
@@ -510,13 +548,21 @@ void FighterSystem::see(Entity pawn, Fighter& f, const PawnInfo& self) {
             continue;
         }
         ++sightChecks_;
-        if (map_.cover().lineOfSight(eye, Viewpoint{p.x, p.y, p.level, p.stance})) {
+        // A turret's gun on its post shows over the barricades round it (the mini-turret's muzzle is 1.3 m up), as a
+        // pawn behind sandbags shows itself standing up to shoot: it is known and shot at, and the barricades take the
+        // shots aimed at its low body until they are broken down (docs/design/fighters.md "Turrets").
+        const Stance shows = p.turret ? Stance::Standing : p.stance;
+        if (map_.cover().lineOfSight(eye, Viewpoint{p.x, p.y, p.level, shows})) {
             learn(KnownEnemy{p.pawn, p.x, p.y, p.level, t});
         }
     }
 }
 
-// The closest real threat; the downed only when nothing else is left (game design doc).
+// The closest real threat; the downed only when nothing else is left (game design doc): nobody of the downed one's side
+// still standing on the map. RimWorld's raiders never shoot the downed; ours did while another colonist fought on out of
+// their sight, and a colonist downed in the year run's small raids was always shot dead (docs/design/colony-scenario.md).
+// The colony's fighters focus fire as a player would: an enemy in range that friends are already shooting counts
+// `focusMetres` nearer for each of them (itself included, so it doesn't flip between two).
 Entity FighterSystem::chooseTarget(Entity pawn, const Fighter& f, const PawnInfo& self) const {
     if (f.forcedTarget != kNoEntity && info(f.forcedTarget) != nullptr && f.forcedTarget != pawn) {
         return f.forcedTarget;
@@ -526,19 +572,41 @@ Entity FighterSystem::chooseTarget(Entity pawn, const Fighter& f, const PawnInfo
     float bestDist = 0.0f;
     const entt::registry& reg = things_.registry();
     const Raider* raider = reg.try_get<Raider>(pawn);
+    const bool focuses = self.faction == kPlayerFaction;
+    const float range = focuses ? weaponRange(pawn) : 0.0f;
+    const auto standsOn = [&](FactionId side) {
+        return std::any_of(pawns_.begin(), pawns_.end(), [&](const PawnInfo& p) { return p.faction == side && p.able && !p.animal; });
+    };
+    const auto shootingAt = [&](Entity enemy) {
+        int n = f.target == enemy ? 1 : 0;
+        for (const PawnInfo& p : pawns_) {
+            if (p.fighter && p.able && p.pawn != pawn && p.faction == self.faction && reg.get<Fighter>(p.pawn).target == enemy) {
+                ++n;
+            }
+        }
+        return n;
+    };
+    // A turret is shot at, never charged: only a fighter with a gun that isn't set on melee takes one on.
+    const bool turrets = shootsTurrets(pawn);
     for (const KnownEnemy& k : f.known) {
         const PawnInfo* p = info(k.pawn);
-        if (p == nullptr) {
+        if (p == nullptr || (p->turret && !turrets)) {
             continue;
         }
         // Kidnappers (F12) carry the downed off instead of shooting them, and nobody shoots a colonist being carried off.
         if (!p->able && raider != nullptr && (raider->sparesDowned || raider->goalThing == k.pawn || reg.all_of<Kidnapped>(k.pawn))) {
             continue;
         }
+        if (!p->able && standsOn(p->faction)) {
+            continue;
+        }
         // Able before downed, seen just now before remembered, then the nearest.
         const int rank = (p->able ? 0 : 2) + (k.seenAt == now() ? 0 : 1);
-        const float d = fightDist(k.x, k.y, self.x, self.y);
-        if (best == kNoEntity || rank < bestRank || (rank == bestRank && d < bestDist)) {
+        float d = fightDist(k.x, k.y, self.x, self.y);
+        if (focuses && p->able && range > 0.0f && d <= range) {
+            d -= rules_.focusMetres * static_cast<float>(shootingAt(k.pawn));
+        }
+        if (best == kNoEntity || rank < bestRank || (rank == bestRank && (d < bestDist || (d == bestDist && k.pawn < best)))) {
             best = k.pawn;
             bestRank = rank;
             bestDist = d;
@@ -563,10 +631,73 @@ bool FighterSystem::shotClearsGround(Entity pawn, float x, float y, int level, S
     float targetAim = 0.0f;
     combat_.shotHeights(pawn, stance, muzzle, aim);
     combat_.shotHeights(target.pawn, target.stance, targetMuzzle, targetAim);
-    const TraceHit hit = combat_.trace(x, y, map_.heightAt(x, y) + muzzle, target.x, target.y,
-                                       map_.heightAt(target.x, target.y) + std::max(targetAim - kFightShotClearance, 0.1f), level,
-                                       pawn, CellPos{static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y)), level}, false);
-    return hit.kind != ProjectileHitKind::Ground && hit.kind != ProjectileHitKind::Rock;
+    const CellPos from{static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y)), level};
+    const float ground = map_.heightAt(target.x, target.y);
+    const auto clears = [&](float z) {
+        const TraceHit hit = combat_.trace(x, y, map_.heightAt(x, y) + muzzle, target.x, target.y, ground + std::max(z, 0.1f), level, pawn,
+                                           from, false);
+        return hit.kind != ProjectileHitKind::Ground && hit.kind != ProjectileHitKind::Rock;
+    };
+    if (clears(targetAim - kFightShotClearance)) {
+        return true;
+    }
+    // The shot's aim goes up over a crest to what shows of the target, at most to just under the top of its body
+    // (CombatSystem::shoot): the shot is there if that line still clears the ground by the spread's margin.
+    const float top = bodyHeight(target.stance) - kFightAimTopMargin;
+    return top - kFightShotClearance > targetAim - kFightShotClearance && clears(top - kFightShotClearance);
+}
+
+// A friend in the way (C25): the shot's line from the muzzle at (x, y) in `stance` to the target's chest, or a line
+// kFightFriendSpread to either side of it for the spread, meets a pawn of the shooter's side (or a pawn nobody fights:
+// a visitor, a prisoner, a calm animal) before the target. In the year run a colonist with a revolver shot at a chitinid
+// 2.6 m away through the colonist with a club fighting it, again and again, and downed it (seed 42, day 36).
+bool FighterSystem::friendInLine(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target) const {
+    const FactionId side = factionOf(pawn);
+    const float dx = target.x - x;
+    const float dy = target.y - y;
+    const float len2 = dx * dx + dy * dy;
+    if (len2 <= 0.0f) {
+        return false;
+    }
+    bool near = false;  // the cheap test first: any friend near the line on the ground
+    for (const PawnInfo& p : pawns_) {
+        if (p.pawn == pawn || p.pawn == target.pawn || p.level != level || (p.faction != side && !p.animal)) {
+            continue;
+        }
+        const float s = std::clamp(((p.x - x) * dx + (p.y - y) * dy) / len2, 0.0f, 1.0f);
+        const float ex = x + dx * s - p.x;
+        const float ey = y + dy * s - p.y;
+        if (ex * ex + ey * ey <= kFightFriendCorridor * kFightFriendCorridor) {
+            near = true;
+            break;
+        }
+    }
+    if (!near) {
+        return false;
+    }
+    float muzzle = 0.0f;
+    float aim = 0.0f;
+    float targetMuzzle = 0.0f;
+    float targetAim = 0.0f;
+    combat_.shotHeights(pawn, stance, muzzle, aim);
+    combat_.shotHeights(target.pawn, target.stance, targetMuzzle, targetAim);
+    const float len = std::sqrt(len2);
+    const float sideX = -dy / len;
+    const float sideY = dx / len;
+    const float az = map_.heightAt(x, y) + muzzle;
+    const float bz = map_.heightAt(target.x, target.y) + targetAim;
+    const CellPos from{static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y)), level};
+    for (const float off : {0.0f, kFightFriendSpread, -kFightFriendSpread}) {
+        const TraceHit hit = combat_.trace(x, y, az, target.x + sideX * off, target.y + sideY * off, bz, level, pawn, from, true);
+        if (hit.kind != ProjectileHitKind::Pawn || hit.thing == target.pawn) {
+            continue;
+        }
+        const PawnInfo* other = info(hit.thing);
+        if (other != nullptr && (other->faction == side || other->animal)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // How the fighter can shoot `target` (at its last known place tx, ty) from `cell`: crouched there,
@@ -609,8 +740,13 @@ bool FighterSystem::fireOption(Entity pawn, CellPos cell, const PawnInfo& target
             seen.x = tx;
             seen.y = ty;
             seen.stance = target.able ? Stance::Standing : target.stance;
+            // The shots go where it is, though: crouched behind a crest, the crest takes them (the year run, C25: 55 of
+            // a rifle colonist's 64 shots at a raider crouched behind a rise), so the ground is judged by how it stands now.
+            PawnInfo shot = seen;
+            shot.stance = target.stance;
             if (seesFrom(options[i], stance, seen) &&
-                shotClearsGround(pawn, fightCentre(options[i].x), fightCentre(options[i].y), options[i].level, stance, seen)) {
+                shotClearsGround(pawn, fightCentre(options[i].x), fightCentre(options[i].y), options[i].level, stance, shot) &&
+                !friendInLine(pawn, fightCentre(options[i].x), fightCentre(options[i].y), options[i].level, stance, seen)) {
                 c.fireCell = options[i];
                 c.fireStance = stance;
                 c.canFire = true;
@@ -662,9 +798,10 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
     Threat threats[kFightMaxThreats];
     int threatCount = 0;
     int enemiesNear = 0;
+    const bool turrets = shootsTurrets(pawn);  // one that can't take a turret on keeps to its fight as before
     for (const KnownEnemy& k : f.known) {
         const PawnInfo* p = info(k.pawn);
-        if (p == nullptr || !p->able || k.level != self.level) {
+        if (p == nullptr || !p->able || k.level != self.level || (p->turret && !turrets)) {
             continue;
         }
         const Threat t{k.x, k.y, fightDist(k.x, k.y, self.x, self.y), k.pawn};
@@ -703,7 +840,26 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
 
     // Armed for melee, or a Brawler: it runs at its target instead of taking cover (F8). A drafted
     // one only as far as its leash allows, unless the player ordered the attack.
-    if (melee_ != nullptr && targetInfo != nullptr && !f.fallingBack && melee_->charges(pawn)) {
+    // A defender armed for melee doesn't run across open ground at a gunman: it waits in cover (the scoring below, with
+    // no range to get into) until the gunman is within `ambushRange`, then charges. In the year run a colonist with a club
+    // charged two shotgun raiders from 10 m and was shot down on the way (docs/design/colony-scenario.md).
+    // Nor at a lone club or spear far out: in the year run (ninth pass) a colonist with a club ran 20 m from the
+    // others to two raiders with clubs and was beaten down, then the next one did the same. It waits with the others and
+    // lets the enemy come to their guns.
+    // Unless the enemy is at a friend already: then it runs in to help, so two or three beat one (a lone raider with a
+    // club beat the colonists one at a time while the others stood off).
+    const auto atFriend = [&]() {
+        if (fightDist(tx, ty, self.x, self.y) > rules_.helpRange) {
+            return false;
+        }
+        return std::any_of(pawns_.begin(), pawns_.end(), [&](const PawnInfo& p) {
+            return p.pawn != pawn && p.faction == self.faction && p.able && !p.animal && !p.turret && p.level == self.level &&
+                   fightDist(p.x, p.y, tx, ty) <= rules_.helpReach;
+        });
+    };
+    const bool lies = f.defending && f.forcedTarget != f.target && targetInfo != nullptr && targetInfo->able &&
+                      fightDist(tx, ty, self.x, self.y) > rules_.ambushRange && (weaponRange(f.target) > 0.0f || !atFriend());
+    if (melee_ != nullptr && targetInfo != nullptr && !f.fallingBack && !lies && melee_->charges(pawn)) {
         const CellPos goal = cellOf(Position{tx, ty, targetInfo->level});
         if (f.leash <= 0.0f || f.forcedTarget == f.target ||
             fightDist(fightCentre(goal.x), fightCentre(goal.y), fightCentre(f.anchor.x), fightCentre(f.anchor.y)) <=
@@ -898,8 +1054,55 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
             }
         }
     }
-    const Candidate& best = *std::min_element(candidates_.begin(), candidates_.begin() + static_cast<std::ptrdiff_t>(refine),
-                                              [](const Candidate& a, const Candidate& b) { return fightBetter(a, b); });
+    Candidate best = *std::min_element(candidates_.begin(), candidates_.begin() + static_cast<std::ptrdiff_t>(refine),
+                                       [](const Candidate& a, const Candidate& b) { return fightBetter(a, b); });
+    // None of the best few has a shot (all behind the same crest or wall): the quick score knows nothing of shots, so the
+    // best few are the cells round where it stands, and it stayed there for good. In the year run a rifle colonist held a
+    // spot behind a rise for hours with a raider 23 m away (C25). It looks further: the other cells in score order, spread
+    // out (none within kFightShotSearchGap of one already found without a shot), up to kFightShotSearch of them.
+    if (!best.canFire && targetInfo != nullptr && range > 0.0f && !f.fallingBack && candidates_.size() > refine) {
+        std::sort(candidates_.begin() + static_cast<std::ptrdiff_t>(refine), candidates_.end(),
+                  [](const Candidate& a, const Candidate& b) { return fightBetter(a, b); });
+        shotless_.clear();
+        for (size_t i = 0; i < refine; ++i) {
+            shotless_.push_back(candidates_[i].cell);
+        }
+        int looked = 0;
+        for (size_t i = refine; i < candidates_.size() && looked < kFightShotSearch; ++i) {
+            Candidate& cand = candidates_[i];
+            if (cand.score <= best.score) {
+                break;  // even with a shot and in cover it would be worse: the rest are worse still
+            }
+            const bool near = std::any_of(shotless_.begin(), shotless_.end(), [&](const CellPos& c) {
+                return std::abs(c.x - cand.cell.x) < kFightShotSearchGap && std::abs(c.y - cand.cell.y) < kFightShotSearchGap;
+            });
+            if (near || fightDist(fightCentre(cand.cell.x), fightCentre(cand.cell.y), tx, ty) > range) {
+                continue;
+            }
+            ++looked;
+            if (!fireOption(pawn, cand.cell, *targetInfo, range, tx, ty, cand)) {
+                shotless_.push_back(cand.cell);
+                continue;
+            }
+            cand.score -= (cand.fireStance == Stance::Standing ? rules_.standPenalty : 0.0f) +
+                          (cand.fireCell != cand.cell ? rules_.stepOutPenalty : 0.0f);
+            if (threatCount > 0) {
+                float exposed = 0.0f;
+                const Viewpoint crouched = Viewpoint::at(cand.cell, Stance::Crouching);
+                for (int t = 0; t < threatCount; ++t) {
+                    ++sightChecks_;
+                    if (cover.lineOfSight(Viewpoint{threats[t].x, threats[t].y, self.level, Stance::Standing}, crouched)) {
+                        exposed += kFightThreatWeights[t];
+                    }
+                }
+                cand.score -= rules_.exposedWeight * exposed / threatWeight;
+            }
+            if (fightBetter(cand, best)) {
+                best = cand;
+            }
+            break;  // the first with a shot is the best of those with one (or near enough)
+        }
+    }
     // An advancing fighter with no spot in reach from which it can shoot, and its target out of range from the best of
     // them: scoring cells within 10 m can't see round a cliff or a wall, so it follows its squad's way to the colony
     // instead of settling where it is.
@@ -1151,15 +1354,17 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
         }
         combat_.setStance(pawn, f.fireStance);
         ++sightChecks_;
-        const bool sees = map_.cover().lineOfSight(Viewpoint{pos.x, pos.y, pos.level, f.fireStance},
-                                                   Viewpoint{target->x, target->y, target->level,
-                                                             target->able ? Stance::Standing : target->stance});
-        // As for sight: the target as it shows itself to shoot. Crouched behind the crest, the crest is its cover.
-        PawnInfo shown = *target;
-        shown.stance = target->able ? Stance::Standing : target->stance;
+        // Checked from the middle of its cell, as the plan checked it: from where it happens to stand in the cell a
+        // steep slope can hide what the middle sees, and the plan and this check then disagreed for good: a colonist
+        // 6 m from a raider uphill held its fire for ten minutes with a shot planned at every plan (the year run, C25).
+        const Viewpoint eye = Viewpoint::at(here, f.fireStance);
+        const bool sees = map_.cover().lineOfSight(eye, Viewpoint{target->x, target->y, target->level,
+                                                                  target->able ? Stance::Standing : target->stance});
+        // The shot goes at the target as it stands now: crouched behind the crest, the crest is its cover.
         if (sees && fightDist(pos.x, pos.y, target->x, target->y) <= weaponRange(pawn) &&
-            shotClearsGround(pawn, pos.x, pos.y, pos.level, f.fireStance, shown) &&
-            combat_.shoot(pawn, f.target, 0.0f, 0.0f, 0.0f, false)) {
+            shotClearsGround(pawn, fightCentre(here.x), fightCentre(here.y), here.level, f.fireStance, *target) &&
+            !friendInLine(pawn, pos.x, pos.y, here.level, f.fireStance, *target) &&
+            fireAt(pawn, *target)) {
             return;
         }
         f.nextPlan = std::min(f.nextPlan, now() + 1);  // the shot isn't there any more: think again
@@ -1175,6 +1380,21 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
     if (phase == ShotPhase::Ready) {
         tacticalReload(pawn, f, canShoot);
     }
+}
+
+bool FighterSystem::shootsTurrets(Entity pawn) const {
+    return weaponRange(pawn) > 0.0f && (melee_ == nullptr || !melee_->charges(pawn));
+}
+
+// Fires an aimed shot at the target: a pawn by its own aim point, a turret at its middle.
+bool FighterSystem::fireAt(Entity pawn, const PawnInfo& target) {
+    if (!target.turret) {
+        return combat_.shoot(pawn, target.pawn, 0.0f, 0.0f, 0.0f, false);
+    }
+    float muzzle = 0.0f;
+    float aim = 0.0f;
+    combat_.shotHeights(target.pawn, target.stance, muzzle, aim);
+    return combat_.shoot(pawn, kNoEntity, target.x, target.y, map_.heightAt(target.x, target.y) + aim, false);
 }
 
 // A charge (F8): the spot is the cell the target was last seen in, walked to by the usual path. Once
@@ -1214,6 +1434,11 @@ bool FighterSystem::meleeAct(Entity pawn, Fighter& f) {
         return true;
     }
     if (weaponRange(pawn) > 0.0f) {
+        return false;
+    }
+    if (f.mode == FightMode::Flee) {
+        // Running off: no new swings. In the year run a routed raider beat two colonists down as it went: the alarm had
+        // stopped (a fleeing raider is no threat) and they stood about it unarmed in their minds (ninth pass).
         return false;
     }
     Entity victim = kNoEntity;
@@ -1257,6 +1482,84 @@ bool FighterSystem::meleeAct(Entity pawn, Fighter& f) {
         melee_->attack(pawn, victim, false);
     }
     return true;
+}
+
+// Shields (docs/design/shields.md): a fighter with a shield on its arm raises it when it sees a shot being aimed or
+// a swing wound up at it, and keeps it up `aiHoldSteps` after the last one, facing the attacker; it can walk and
+// reload meanwhile. It lowers it as soon as it can strike itself: a gun ready with a shot to take, or a melee weapon
+// ready with an enemy in reach. A shield the player raised is the player's to lower.
+void FighterSystem::shieldAct(Entity pawn, Fighter& f) {
+    entt::registry& reg = things_.registry();
+    const ApparelStats& stats = combat_.apparelStats();
+    if (stats.activeShield(reg, pawn) == kNoEntity) {
+        return;  // the combat step lowers a shield that is gone or slung
+    }
+    Blocking* up = reg.try_get<Blocking>(pawn);
+    if (up != nullptr && !up->ai) {
+        return;
+    }
+    const PawnInfo* self = info(pawn);
+    if (self == nullptr) {
+        return;
+    }
+    // The nearest enemy whose shot or swing is coming at it.
+    Entity threat = kNoEntity;
+    float nearest = 0.0f;
+    for (const PawnInfo& p : pawns_) {
+        if (p.pawn == pawn || p.faction == self->faction || p.animal || !p.able || p.level != self->level) {
+            continue;
+        }
+        const Shooter* s = reg.try_get<Shooter>(p.pawn);
+        const Melee* m = reg.try_get<Melee>(p.pawn);
+        const bool coming = (s != nullptr && s->target == pawn && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) ||
+                            (m != nullptr && m->target == pawn && m->phase == MeleePhase::Windup);
+        if (!coming) {
+            continue;
+        }
+        const float d = fightDist(p.x, p.y, self->x, self->y);
+        if (threat == kNoEntity || d < nearest) {
+            threat = p.pawn;
+            nearest = d;
+        }
+    }
+    // Whether it would rather strike now.
+    bool strike = false;
+    const Shooter* own = reg.try_get<Shooter>(pawn);
+    const ShotPhase phase = own != nullptr ? own->phase : ShotPhase::Ready;
+    if (phase == ShotPhase::Aiming || phase == ShotPhase::Firing || (melee_ != nullptr && melee_->winding(pawn))) {
+        strike = true;
+    } else if (f.mode == FightMode::Flee) {
+        strike = false;
+    } else if (weaponRange(pawn) > 0.0f) {
+        strike = phase == ShotPhase::Ready && f.canFire && info(f.target) != nullptr && !combat_.switching(pawn);
+    } else if (melee_ != nullptr) {
+        const Melee* m = reg.try_get<Melee>(pawn);
+        if ((m == nullptr || m->phase == MeleePhase::Ready) && !combat_.switching(pawn)) {
+            for (const PawnInfo& p : pawns_) {
+                if (p.faction != self->faction && !p.animal && p.able && p.level == self->level && !p.turret &&
+                    melee_->inReach(pawn, p.pawn)) {
+                    strike = true;
+                    break;
+                }
+            }
+        }
+    }
+    const int hold = stats.shieldRules().aiHoldSteps;
+    if (threat != kNoEntity && !strike) {
+        if (up == nullptr) {
+            combat_.setBlocking(pawn, true, nullptr, true, threat);
+        } else {
+            up->threat = threat;
+            up->holdSteps = hold;
+        }
+        return;
+    }
+    if (up == nullptr) {
+        return;
+    }
+    if (strike || --up->holdSteps <= 0) {
+        reg.remove<Blocking>(pawn);
+    }
 }
 
 // In cover with nothing to shoot just now: top the magazine up rather than run dry mid-fight.
@@ -1536,7 +1839,7 @@ bool FighterSystem::considerThrow(Entity pawn, const Fighter& f) {
     std::vector<Spot> spots;
     for (const KnownEnemy& k : f.known) {
         const PawnInfo* p = info(k.pawn);
-        if (p == nullptr || !p->able || p->animal || p->level != self->level || now() - k.seenAt > rules_.throwMemory) {
+        if (p == nullptr || !p->able || p->animal || p->turret || p->level != self->level || now() - k.seenAt > rules_.throwMemory) {
             continue;
         }
         const float distance = fightDist(self->x, self->y, p->x, p->y);

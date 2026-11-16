@@ -869,11 +869,17 @@ void DrugSystem::prune() {
 }
 
 void DrugSystem::hashState(StateHasher& h) const {
-    if (states_.empty()) {
+    // Records of pawns that are gone wait for the next prune, and a save leaves them out: they are not state.
+    const auto live = static_cast<uint64_t>(
+        std::count_if(states_.begin(), states_.end(), [this](const auto& entry) { return things_.exists(entry.first); }));
+    if (live == 0) {
         return;  // a game with no drugs hashes as it did before them
     }
-    h.add(static_cast<uint64_t>(states_.size()));
+    h.add(live);
     for (const auto& [pawn, s] : states_) {
+        if (!things_.exists(pawn)) {
+            continue;
+        }
         h.add(static_cast<uint64_t>(pawn));
         h.add(s.policy.data(), s.policy.size());
         h.add(s.searchAfter);

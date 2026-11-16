@@ -33,7 +33,11 @@ For every cell with fertility above 0:
    `min(fertility, 1)`. Sand (0.1) is therefore sparse and rich soil is no denser than soil.
 2. Among the biome's `wildPlants`, those whose `fertilityMin` the cell meets are weighted by
    commonality. Trees' weight swings between 0.2 and 1.8 times in 48 m patches, so there are forests
-   and meadows (RimWorld's clumping is not copied).
+   and meadows (RimWorld's clumping is not copied). A biome with `forestPatches` (ours; the tropical
+   rainforest, after sneed's G2 playtest) has two kinds of ground instead: `openShare` of the map
+   (0.5) is open ground where trees weigh `openTrees` (0.08: a tree here and there among the bushes
+   and grass) and the rest is dense forest at `denseTrees` (1.6), in `cellMetres` (64 m) patches with
+   an edge about 6 m wide. The split is taken from the map's own noise, so the share is exact.
 3. Start growth: a third of the plants are fully grown and older, the rest are anywhere on the way up.
 
 All of it comes from `Rng` streams made from the map seed, apart from the sim's own stream, so
@@ -49,7 +53,8 @@ adding a plant def never shifts anything else.
   `1 + (fertility - 1) x fertilitySensitivity` (never below 0). Thirteen growing hours a day make
   the wiki's "with rest" times: grass `2.5 x 24 / 13` = 4.6 days, an oak 55 days.
 
-Tune it all at once with the `plantGrowth` multiplier in `data/tuning.json` (1 if absent).
+Tune it all at once with the `plantGrowth` multiplier in `data/tuning.json` (1 if absent). The life pace
+`pace.life` (2.75, `docs/design/pace.md`) multiplies growth on top and shortens lifespans by the same factor.
 
 Not in yet, each for a later task: the light threshold (`growMinGlow`, with day and night light),
 temperature limits, plants spreading and sowing (C3 harvests, a farming task sows), blight, and

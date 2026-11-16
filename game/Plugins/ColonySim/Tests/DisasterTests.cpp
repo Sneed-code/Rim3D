@@ -174,7 +174,10 @@ TEST_CASE("Disasters: a short circuit empties the net, burns a conduit and says 
     CHECK(letter->message.find("Short circuit") == 0);
     bool circuit = false;
     for (const Event& e : sim->events()) {
-        circuit = circuit || e.type == EventType::ShortCircuit;
+        if (e.type == EventType::ShortCircuit) {
+            circuit = true;
+            CHECK(e.def == sim->defs().idOf("Things", "PowerConduit"));  // RimWorld's culprit is always a conduit
+        }
     }
     CHECK(circuit);
 
@@ -183,6 +186,28 @@ TEST_CASE("Disasters: a short circuit empties the net, burns a conduit and says 
     bare->submit(FireIncidentCommand{"ShortCircuit", 0.0f});
     bare->step();
     CHECK(disasterCommandFailures(*bare) == 1);
+
+    // Nor with a running generator but no conduit: lamps, stoves and generators never short out.
+    const auto lone = disasterSim();
+    disasterPut(*lone, "WoodFiredGenerator", 10, 10);
+    disasterRun(*lone, 3);
+    lone->submit(FireIncidentCommand{"ShortCircuit", 0.0f});
+    lone->step();
+    CHECK(disasterCommandFailures(*lone) == 1);
+
+    // Many shorts on a net of a generator, conduits, a battery and a lamp: the conduits are the only culprits.
+    for (uint64_t seed = 1; seed <= 12; ++seed) {
+        const auto again = disasterSim(0, 96, seed);
+        disasterPowerLine(*again);
+        disasterRun(*again, 3);
+        again->submit(FireIncidentCommand{"ShortCircuit", 0.0f});
+        again->step();
+        for (const Event& e : again->events()) {
+            if (e.type == EventType::ShortCircuit) {
+                CHECK(e.def == again->defs().idOf("Things", "PowerConduit"));
+            }
+        }
+    }
 }
 
 TEST_CASE("Disasters: a volcanic winter takes 7 degrees and 30% of the light, and gives them back") {

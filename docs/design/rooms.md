@@ -87,7 +87,11 @@ including the region rebuild they cause, take 0.7 ms.
 
 **Roles** (`RoomRules.roleOrder` and `roles`, ours; RimWorld scores every role, we take the first
 that fits): `Barracks` 2 or more beds, `Bedroom` 1 bed, `Kitchen` a stove, `DiningRoom` a table. So a
-room with a bed and a stove is a bedroom, and one with a stove and a table is a kitchen. Only a room
+room with a bed and a stove is a bedroom, and one with a stove and a table is a kitchen. A couple's
+room is a bedroom however many beds it has, as in RimWorld: when every bed in it has an owner and the
+owners are just two partners (spouses or lovers), the beds count as one. A spare bed or a stranger's
+makes it a barracks again. A change of bed owners or of partners is looked at once a step
+(`Rooms::noteBedOwners`). Only a room
 that is not outdoors has a role. More roles (hospital, workshop, storeroom, recreation room,
 prison) come with their buildings and need only a line in the rules and a count.
 

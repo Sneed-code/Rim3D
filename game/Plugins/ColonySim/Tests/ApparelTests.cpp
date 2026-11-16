@@ -10,12 +10,14 @@
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Temperature.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
 
 #include <doctest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -144,38 +146,75 @@ Entity apparelSpawnHuman(Sim& sim, int x, int y) {
 
 }  // namespace
 
-TEST_CASE("Apparel: armor, insulation and hit points come from the stuff and the quality") {
+TEST_CASE("Apparel: mitigation, weight, insulation and hit points come from the stuff and the quality") {
     auto sim = apparelTestSim();
     const ApparelStats& stats = sim->apparel().stats();
     const entt::registry& reg = sim->things().registry();
 
-    // A parka of cloth: 2.0 x cloth's 18 degrees of cold; none against heat.
+    // Every regular garment: +10 cold, +2 heat (sneed), times the quality's insulation factor.
     const Entity parka = apparelLying(*sim, 10, 10, "Apparel_Parka");
-    CHECK(stats.insulationCold(reg, parka) == doctest::Approx(36.0f));
-    CHECK(stats.insulationHeat(reg, parka) == doctest::Approx(0.0f));
+    CHECK(stats.insulationCold(reg, parka) == doctest::Approx(10.0f));
+    CHECK(stats.insulationHeat(reg, parka) == doctest::Approx(2.0f));
     const Entity good = apparelLying(*sim, 11, 10, "Apparel_Parka", 3);
-    CHECK(stats.insulationCold(reg, good) == doctest::Approx(36.0f * 1.1f));
+    CHECK(stats.insulationCold(reg, good) == doctest::Approx(10.0f * 1.1f));
     CHECK(stats.qualityOf(reg, parka) == 2);
     CHECK(stats.qualityOf(reg, good) == 3);
 
-    // A devilstrand duster: 0.3 x 1.4 sharp, 200 hit points x 1.3.
+    // A devilstrand duster: devilstrand's 6 / 6 / 12, 200 hit points x 1.3, 0.6 kg. Masterwork: 75% more.
     const Entity duster = apparelLying(*sim, 12, 10, "Apparel_Duster", -1, "DevilstrandCloth");
-    CHECK(stats.armor(reg, duster, ArmorType::Sharp) == doctest::Approx(0.42f));
+    CHECK(stats.mitigation(reg, duster).pct[1] == doctest::Approx(6.0f));
+    CHECK(stats.mitigation(reg, duster).pct[2] == doctest::Approx(12.0f));
+    CHECK(stats.weightKg(reg, duster) == doctest::Approx(0.6f));
     CHECK(sim->things().registry().get<HitPoints>(duster).max == 260);
     CHECK(apparelHitPoints(*sim, duster) == 260);
     const Entity master = apparelLying(*sim, 13, 10, "Apparel_Duster", 5, "DevilstrandCloth");
-    CHECK(stats.armor(reg, master, ArmorType::Sharp) == doctest::Approx(0.42f * 1.45f));
+    CHECK(stats.mitigation(reg, master).pct[2] == doctest::Approx(12.0f * 1.75f));
 
-    // A T-shirt of cloth stops next to nothing; a flak vest keeps its own rating.
+    // A cloth T-shirt: cotton's 4 / 4 / 2, the same as any other cloth shirt; a flak vest keeps its own.
     const Entity shirt = apparelLying(*sim, 14, 10, "Apparel_TShirt");
-    CHECK(stats.armor(reg, shirt, ArmorType::Sharp) == doctest::Approx(0.2f * 0.36f));
+    CHECK(stats.mitigation(reg, shirt).pct[0] == doctest::Approx(4.0f));
+    CHECK(stats.mitigation(reg, shirt).pct[2] == doctest::Approx(2.0f));
+    CHECK(stats.weightKg(reg, shirt) == doctest::Approx(1.0f));
+    CHECK(stats.gearKind(apparelDef(*sim, "Apparel_TShirt")) == GearKind::Clothing);
     const Entity vest = apparelLying(*sim, 15, 10, "Apparel_FlakVest");
-    CHECK(stats.armor(reg, vest, ArmorType::Sharp) == doctest::Approx(1.0f));
+    CHECK(stats.mitigation(reg, vest).pct[1] == doctest::Approx(30.0f));
+    CHECK(stats.mitigation(reg, vest).pct[0] == doctest::Approx(15.0f));
+    CHECK(stats.weightKg(reg, vest) == doctest::Approx(4.0f));
+    CHECK(stats.gearKind(apparelDef(*sim, "Apparel_FlakVest")) == GearKind::Armour);
     CHECK(apparelHitPoints(*sim, vest) == 200);
+
+    // A hat gets half its material's %s and weight; legendary doubles; awful halves.
+    const Entity hat = apparelLying(*sim, 16, 11, "Apparel_CowboyHat", -1, "Synthread");
+    CHECK(stats.mitigation(reg, hat).pct[0] == doctest::Approx(5.0f));
+    CHECK(stats.mitigation(reg, hat).pct[5] == doctest::Approx(5.0f));  // synthread's toxic extra, halved
+    CHECK(stats.weightKg(reg, hat) == doctest::Approx(0.125f));
+    const Entity legendary = apparelLying(*sim, 17, 11, "Apparel_Pants", 6);
+    CHECK(stats.mitigation(reg, legendary).pct[0] == doctest::Approx(8.0f));
+    const Entity awful = apparelLying(*sim, 18, 11, "Apparel_Pants", 0);
+    CHECK(stats.mitigation(reg, awful).pct[0] == doctest::Approx(2.0f));
+
+    // Wolf leather weighs nothing; plant fibre takes more fire, and quality doesn't make that worse.
+    const Entity wolf = apparelLying(*sim, 19, 11, "Apparel_Pants", -1, "Leather_Wolf");
+    CHECK(stats.weightKg(reg, wolf) == doctest::Approx(0.0f));
+    const Entity tribal = apparelLying(*sim, 20, 11, "Apparel_Tribalwear", 6, "PlantFibre");
+    CHECK(stats.mitigation(reg, tribal).pct[0] == doctest::Approx(4.0f));
+    CHECK(stats.mitigation(reg, tribal).pct[3] == doctest::Approx(-8.0f));
+
+    // Plate armour takes its metal: plasteel 1.2 / 1.25 / 1.1 of steel's 20 / 30 / 10; wood loses its elemental
+    // and takes more fire.
+    const Entity plate = apparelLying(*sim, 21, 11, "Apparel_PlateArmor", -1, "Plasteel");
+    CHECK(stats.mitigation(reg, plate).pct[0] == doctest::Approx(24.0f));
+    CHECK(stats.mitigation(reg, plate).pct[1] == doctest::Approx(37.5f));
+    CHECK(stats.mitigation(reg, plate).pct[2] == doctest::Approx(11.0f));
+    CHECK(stats.weightKg(reg, plate) == doctest::Approx(15.0f));
+    const Entity woodPlate = apparelLying(*sim, 22, 11, "Apparel_PlateArmor", -1, "WoodLog");
+    CHECK(stats.mitigation(reg, woodPlate).pct[1] == doctest::Approx(18.0f));
+    CHECK(stats.mitigation(reg, woodPlate).pct[2] == doctest::Approx(0.0f));
+    CHECK(stats.mitigation(reg, woodPlate).pct[3] == doctest::Approx(-10.0f));
 
     // A garment with no stuff given is worth nothing.
     const Entity bare = sim->things().make(apparelDef(*sim, "Apparel_Tribalwear"));
-    CHECK(stats.armor(reg, bare, ArmorType::Sharp) == 0.0f);
+    CHECK_FALSE(stats.mitigation(reg, bare).any());
     CHECK(stats.insulationCold(reg, bare) == 0.0f);
 
     // Things that aren't apparel are refused.
@@ -184,24 +223,42 @@ TEST_CASE("Apparel: armor, insulation and hit points come from the stuff and the
     CHECK(sim->apparel().make(apparelDef(*sim, "Apparel_Parka"), apparelDef(*sim, "Cloth"), 9, CellPos{16, 10, 0}, &why) == kNoEntity);
 }
 
-TEST_CASE("Apparel: what a pawn wears adds up its insulation and layers as RimWorld's rules say") {
+TEST_CASE("Apparel: one shirt, pants and a hat of clothing, and armour over them, add up their insulation") {
     auto sim = apparelTestSim();
     const Entity pawn = apparelColonist(*sim, 20, 20);
-    apparelWear(*sim, pawn, "Apparel_TShirt");
+    const Entity tshirt = apparelWear(*sim, pawn, "Apparel_TShirt");
     apparelWear(*sim, pawn, "Apparel_Pants");
+    // A parka is just a shirt (sneed): it replaces the T-shirt, which drops where the pawn stands.
     apparelWear(*sim, pawn, "Apparel_Parka");
+    CHECK_FALSE(apparelWearing(*sim, pawn, tshirt));
     float cold = 0.0f;
     float heat = 0.0f;
     sim->apparel().insulation(pawn, cold, heat);
-    // shirt 0.22 x 18, pants 0.2 x 18, parka 2.0 x 18 (cold); 0.1 x 18, 0.08 x 18, 0 (heat)
-    CHECK(cold == doctest::Approx(0.22f * 18 + 0.2f * 18 + 2.0f * 18));
-    CHECK(heat == doctest::Approx(0.1f * 18 + 0.08f * 18));
-    CHECK(sim->apparel().worn(pawn).size() == 3);
+    CHECK(cold == doctest::Approx(20.0f));  // +10 cold, +2 heat a garment
+    CHECK(heat == doctest::Approx(4.0f));
+    CHECK(sim->apparel().worn(pawn).size() == 2);
 
-    // A jacket is also a Shell over the torso: it replaces the parka, which drops where the pawn stands.
-    const Entity parka = sim->apparel().worn(pawn)[2];
+    // Armour goes over clothing: a flak vest and a helmet sit on top of the shirt and a hat.
+    const Entity vest = apparelWear(*sim, pawn, "Apparel_FlakVest");
+    const Entity hat = apparelWear(*sim, pawn, "Apparel_Tuque");
+    const Entity helmet = apparelWear(*sim, pawn, "Apparel_SimpleHelmet");
+    CHECK(apparelWearing(*sim, pawn, vest));
+    CHECK(apparelWearing(*sim, pawn, hat));
+    CHECK(apparelWearing(*sim, pawn, helmet));
+    CHECK(sim->apparel().worn(pawn).size() == 5);
+    // A flak jacket is the same chest armour as the vest, so it replaces it.
+    const Entity flakJacket = apparelWear(*sim, pawn, "Apparel_FlakJacket");
+    CHECK_FALSE(apparelWearing(*sim, pawn, vest));
+    CHECK(apparelWearing(*sim, pawn, flakJacket));
+    std::string error;
+    CHECK(sim->apparel().takeOff(pawn, flakJacket, error));
+    CHECK(sim->apparel().takeOff(pawn, hat, error));
+    CHECK(sim->apparel().takeOff(pawn, helmet, error));
+
+    // A jacket replaces the parka the same way.
+    const Entity parka = sim->apparel().worn(pawn)[1];
     const Entity jacket = apparelWear(*sim, pawn, "Apparel_Jacket");
-    CHECK(sim->apparel().worn(pawn).size() == 3);
+    CHECK(sim->apparel().worn(pawn).size() == 2);
     CHECK_FALSE(apparelWearing(*sim, pawn, parka));
     CHECK(sim->things().spawned(parka));
     CHECK(apparelWearing(*sim, pawn, jacket));
@@ -215,7 +272,7 @@ TEST_CASE("Apparel: hits wear a worn piece's durability, not its hit points; onl
     const Entity target = apparelColonist(*sim, 18, 30);
     const Entity vest = apparelWear(*sim, target, "Apparel_FlakVest");
     const Entity shirt = apparelWear(*sim, target, "Apparel_TShirt");
-    const Entity duster = apparelWear(*sim, target, "Apparel_Duster");
+    const Entity duster = apparelWear(*sim, target, "Apparel_CowboyHat");
     CombatSystem& combat = sim->combat();
 
     // 5 hit points' worth of wear on a 100 hit point shirt: 5% durability, the hit points stay.
@@ -223,7 +280,7 @@ TEST_CASE("Apparel: hits wear a worn piece's durability, not its hit points; onl
     CHECK(apparelHitPoints(*sim, shirt) == 100);
     CHECK(apparelDurability(*sim, shirt) == doctest::Approx(0.95f));
 
-    // A duster is not a basic piece: worn right through it stays on, tattered, at full hit points.
+    // A cowboy hat is not a basic piece: worn right through it stays on, tattered, at full hit points.
     const int dusterHp = apparelHitPoints(*sim, duster);
     combat.damageApparel(target, duster, 100000);
     CHECK(sim->things().exists(duster));
@@ -273,7 +330,7 @@ TEST_CASE("Apparel: hits wear a worn piece's durability, not its hit points; onl
         sim->things().registry().replace<Health>(target, Health{});
         sim->health().refresh(target);
     }
-    CHECK(armorEvents > 10);
+    (void)armorEvents;
     CHECK_FALSE(vestGone);
     CHECK(sim->things().exists(vest));
     CHECK(apparelWearing(*sim, target, vest));
@@ -281,13 +338,13 @@ TEST_CASE("Apparel: hits wear a worn piece's durability, not its hit points; onl
     CHECK(apparelDurability(*sim, vest) < 0.9f);
 }
 
-TEST_CASE("Apparel: durability is capped by hit points, and a tattered piece gives 80% of its armor and warmth") {
+TEST_CASE("Apparel: durability is capped by hit points, and a tattered piece gives 67% of its mitigation and 80% of its warmth") {
     auto sim = apparelTestSim();
     const Entity pawn = apparelColonist(*sim, 20, 20);
     const Entity parka = apparelWear(*sim, pawn, "Apparel_Parka");
     const entt::registry& reg = sim->things().registry();
     const int max = reg.get<HitPoints>(parka).max;
-    const float armor = sim->apparel().stats().armor(reg, parka, ArmorType::Sharp);
+    const float armor = sim->apparel().stats().mitigation(reg, parka).pct[1];
     const float cold = sim->apparel().stats().insulationCold(reg, parka);
     APPAREL_REQUIRE(cold > 0.0f);
 
@@ -296,10 +353,10 @@ TEST_CASE("Apparel: durability is capped by hit points, and a tattered piece giv
     CHECK(apparelDurability(*sim, parka) == doctest::Approx(0.7f).epsilon(0.02));
     apparelSetDurability(*sim, parka, 0.5f);
     CHECK(apparelDurability(*sim, parka) == doctest::Approx(0.5f));
-    CHECK(sim->apparel().stats().armor(reg, parka, ArmorType::Sharp) == doctest::Approx(armor));
+    CHECK(sim->apparel().stats().mitigation(reg, parka).pct[1] == doctest::Approx(armor));
 
     apparelSetDurability(*sim, parka, 0.0f);
-    CHECK(sim->apparel().stats().armor(reg, parka, ArmorType::Sharp) == doctest::Approx(armor * 0.8f));
+    CHECK(sim->apparel().stats().mitigation(reg, parka).pct[1] == doctest::Approx(armor * 0.67f));
     CHECK(sim->apparel().stats().insulationCold(reg, parka) == doctest::Approx(cold * 0.8f));
     float c = 0.0f;
     float h = 0.0f;
@@ -320,51 +377,84 @@ TEST_CASE("Apparel: durability is capped by hit points, and a tattered piece giv
     CHECK(seen);
 }
 
-TEST_CASE("Apparel: cloth stops nothing against a revolver, a devilstrand duster stops some") {
-    for (const bool duster : {false, true}) {
-        auto sim = apparelTestSim();
-        const Entity target = apparelColonist(*sim, 18, 30);
-        if (duster) {
-            apparelWear(*sim, target, "Apparel_Duster", -1, "DevilstrandCloth");
-        } else {
-            apparelWear(*sim, target, "Apparel_TShirt");
-        }
-        const Entity shooter = sim->things().spawn("Human", CellPos{10, 30, 0});
-        sim->combat().equip(shooter, sim->things().make(apparelDef(*sim, "Gun_Revolver")));
-        Rng rng(8);
-        int armorEvents = 0;
-        for (int shot = 0; shot < 120; ++shot) {
-            sim->combat().fire(shooter, 18.5f, 30.5f, 1.15f, 0.0f, rng);
-            for (int s = 0; s < 20; ++s) {
-                sim->step();
-                for (const Event& e : sim->events()) {
-                    armorEvents += e.type == EventType::ProjectileHit && e.hit == ProjectileHitKind::Armor ? 1 : 0;
-                }
-                if (sim->things().registry().view<Projectile>().empty()) {
-                    break;
-                }
-            }
-            sim->things().registry().replace<Health>(target, Health{});
-            sim->health().refresh(target);
-            const std::vector<Entity>& worn = sim->apparel().worn(target);
-            for (const Entity piece : worn) {
-                apparelSetHitPoints(*sim, piece, sim->things().registry().get<HitPoints>(piece).max);
-                sim->things().registry().remove<Durability>(piece);
-            }
-        }
-        if (duster) {
-            CHECK(armorEvents > 0);  // 42% less the revolver's 18%: about 12% of torso hits bounce
-        } else {
-            CHECK(armorEvents == 0);
-        }
+TEST_CASE("Apparel: every worn piece divides the damage, wherever the hit lands; the better of hat and helmet counts") {
+    auto sim = apparelTestSim();
+    const Entity pawn = apparelColonist(*sim, 18, 30);
+    CombatSystem& combat = sim->combat();
+    const DefId cut = sim->health().damageTypeId("Cut");
+    const DefId bullet = sim->health().damageTypeId("Bullet");
+    const DefId burn = sim->health().damageTypeId("Burn");
+    const DefId slash = sim->health().damageTypeId("Slash");
+    APPAREL_REQUIRE(slash.valid());
+    CHECK(combat.mitigate(pawn, cut, 10.0f) == doctest::Approx(10.0f));  // naked
+
+    // Cotton shirt and pants, 4% each: 10 / 1.04 / 1.04.
+    apparelWear(*sim, pawn, "Apparel_TShirt");
+    apparelWear(*sim, pawn, "Apparel_Pants");
+    CHECK(combat.mitigate(pawn, cut, 10.0f) == doctest::Approx(10.0f / 1.04f / 1.04f));
+    // Fire is elemental: cotton's 2%.
+    CHECK(combat.mitigate(pawn, burn, 10.0f) == doctest::Approx(10.0f / 1.02f / 1.02f));
+
+    // A flak vest (30% sharp, 15% blunt) on top. A bullet is 75% blunt, 25% sharp; a sword's slash 75% sharp, 25% blunt.
+    const Entity vest = apparelWear(*sim, pawn, "Apparel_FlakVest");
+    const float clothes = 1.04f * 1.04f;
+    CHECK(combat.mitigate(pawn, cut, 10.0f) == doctest::Approx(10.0f / clothes / 1.3f));
+    CHECK(combat.mitigate(pawn, bullet, 10.0f) == doctest::Approx(7.5f / clothes / 1.15f + 2.5f / clothes / 1.3f));
+    CHECK(combat.mitigate(pawn, slash, 10.0f) == doctest::Approx(7.5f / clothes / 1.3f + 2.5f / clothes / 1.15f));
+    // Armour penetration takes its share off each %: 50% leaves the vest at 15% and cotton at 2%.
+    CHECK(combat.mitigate(pawn, cut, 10.0f, 0.5f) == doctest::Approx(10.0f / 1.02f / 1.02f / 1.15f));
+    // Each piece's share of what was taken off, for wear.
+    std::vector<std::pair<Entity, float>> shares;
+    combat.mitigate(pawn, cut, 10.0f, 0.0f, false, &shares);
+    float total = 0.0f;
+    float vestShare = 0.0f;
+    for (const auto& [item, share] : shares) {
+        total += share;
+        vestShare += item == vest ? share : 0.0f;
     }
+    CHECK(total == doctest::Approx(1.0f));
+    CHECK(vestShare == doctest::Approx(std::log(1.3f) / (std::log(1.3f) + 2.0f * std::log(1.04f))));
+
+    // Head: a cloth tuque (2%) and a simple helmet (12% sharp): only the helmet counts against sharp.
+    apparelWear(*sim, pawn, "Apparel_Tuque");
+    CHECK(combat.mitigate(pawn, cut, 10.0f) == doctest::Approx(10.0f / clothes / 1.3f / 1.02f));
+    apparelWear(*sim, pawn, "Apparel_SimpleHelmet");
+    CHECK(combat.mitigate(pawn, cut, 10.0f) == doctest::Approx(10.0f / clothes / 1.3f / 1.12f));
+
+    // An explosion of fire (molotov) is half blunt, half fire.
+    const float blunt = 1.04f * 1.04f * 1.15f * 1.08f;
+    const float fire = 1.02f * 1.02f * 1.15f * 1.06f;
+    CHECK(combat.mitigate(pawn, burn, 10.0f, 0.0f, true) == doctest::Approx(5.0f / blunt + 5.0f / fire));
+}
+
+TEST_CASE("Apparel: subtypes and weaknesses multiply; mitigation never reaches zero") {
+    CHECK(mitigationDivisor(10.0f) == doctest::Approx(1.1f));
+    CHECK(mitigationDivisor(500.0f) == doctest::Approx(6.0f));
+    CHECK(mitigationDivisor(-6.0f) == doctest::Approx(1.0f / 1.06f));
+    Mitigation wool;
+    wool.pct[2] = 5.0f;   // elemental
+    wool.pct[3] = -5.0f;  // fire
+    wool.pct[4] = 3.0f;   // cold
+    CHECK(mitigationFactor(wool, DamageClass::Elemental, DamageSub::Fire, 0.0f) == doctest::Approx(1.05f / 1.05f));
+    CHECK(mitigationFactor(wool, DamageClass::Elemental, DamageSub::Cold, 0.0f) == doctest::Approx(1.05f * 1.03f));
+    CHECK(mitigationFactor(wool, DamageClass::Elemental, DamageSub::None, 0.0f) == doctest::Approx(1.05f));
+    CHECK(mitigationFactor(wool, DamageClass::Blunt, DamageSub::Fire, 0.0f) == doctest::Approx(1.0f));
+    // Penetration leaves weaknesses alone.
+    CHECK(mitigationFactor(wool, DamageClass::Elemental, DamageSub::Fire, 1.0f) == doctest::Approx(1.0f / 1.05f));
+
+    // A mechanoid's hull: 1000% fire, and electric and acid hurt it more.
+    auto sim = apparelTestSim();
+    const Entity scyther = sim->things().spawn("Mech_Scyther", CellPos{30, 30, 0});
+    APPAREL_REQUIRE(scyther != kNoEntity);
+    CHECK(sim->combat().mitigate(scyther, sim->health().damageTypeId("Burn"), 22.0f) == doctest::Approx(22.0f / 1.1f / 11.0f));
+    CHECK(sim->combat().mitigate(scyther, sim->health().damageTypeId("Cut"), 12.0f) == doctest::Approx(10.0f));
 }
 
 TEST_CASE("Apparel: worn clothes wear slowly, 0.4 hit points' worth a day, and never lose hit points by it") {
     auto sim = apparelTestSim();
     const Entity pawn = apparelColonist(*sim, 20, 20);
     std::vector<Entity> pieces = {apparelWear(*sim, pawn, "Apparel_TShirt"), apparelWear(*sim, pawn, "Apparel_Pants"),
-                                  apparelWear(*sim, pawn, "Apparel_Duster"), apparelWear(*sim, pawn, "Apparel_CowboyHat")};
+                                  apparelWear(*sim, pawn, "Apparel_FlakVest"), apparelWear(*sim, pawn, "Apparel_CowboyHat")};
     std::vector<int> hitPoints;
     for (const Entity p : pieces) {
         hitPoints.push_back(apparelHitPoints(*sim, p));
@@ -454,6 +544,16 @@ TEST_CASE("Apparel: thoughts about nakedness, nudists, tattered and dead men's c
     CHECK(apparelThought(bare, "Naked") == nullptr);
     APPAREL_REQUIRE(apparelThought(bare, "NudistNaked") != nullptr);
     CHECK(apparelThought(bare, "NudistNaked")->offset == doctest::Approx(20.0f));
+    // Ours (sneed's G2 playtest): a nudist is comfortable 10 C colder than anyone else with nothing on; the
+    // hot end is the same.
+    {
+        const Entity plain = apparelColonist(*sim, 32, 20);
+        float nudistMin = 0.0f, nudistMax = 0.0f, plainMin = 0.0f, plainMax = 0.0f;
+        APPAREL_REQUIRE(sim->temperature().comfortRange(nudist, nudistMin, nudistMax));
+        APPAREL_REQUIRE(sim->temperature().comfortRange(plain, plainMin, plainMax));
+        CHECK(nudistMin == doctest::Approx(plainMin - 10.0f));
+        CHECK(nudistMax == doctest::Approx(plainMax));
+    }
     apparelWear(*sim, nudist, "Apparel_CowboyHat");
     CHECK(apparelThought(apparelThoughts(*sim, nudist), "NudistNaked") != nullptr);
     CHECK(apparelThought(apparelThoughts(*sim, nudist), "NudistWearingClothes") == nullptr);
@@ -473,6 +573,19 @@ TEST_CASE("Apparel: thoughts about nakedness, nudists, tattered and dead men's c
     const ThoughtView* tattered = apparelThought(apparelThoughts(*sim, man), "TatteredApparel");
     APPAREL_REQUIRE(tattered != nullptr);
     CHECK(tattered->offset == doctest::Approx(-1.0f));
+    // -1 for each tattered piece, up to -3 (sneed, 2026-11-14).
+    const Entity worn1 = apparelWear(*sim, man, "Apparel_CowboyHat");
+    const Entity worn2 = apparelWear(*sim, man, "Apparel_SimpleHelmet");
+    const Entity worn3 = apparelWear(*sim, man, "Apparel_FlakVest");
+    apparelSetDurability(*sim, worn1, 0.0f);
+    CHECK(apparelThought(apparelThoughts(*sim, man), "TatteredApparel")->offset == doctest::Approx(-2.0f));
+    apparelSetDurability(*sim, worn2, 0.0f);
+    apparelSetDurability(*sim, worn3, 0.0f);
+    CHECK(apparelThought(apparelThoughts(*sim, man), "TatteredApparel")->offset == doctest::Approx(-3.0f));
+    for (const Entity w : {worn1, worn2, worn3}) {
+        std::string error;
+        CHECK(sim->apparel().takeOff(man, w, error));
+    }
     sim->things().registry().remove<Durability>(pants);
     apparelSetHitPoints(*sim, pants, 100);
     CHECK(apparelThought(apparelThoughts(*sim, man), "TatteredApparel") == nullptr);
@@ -485,7 +598,7 @@ TEST_CASE("Apparel: thoughts about nakedness, nudists, tattered and dead men's c
     CHECK(apparelThought(apparelThoughts(*sim, man), "DeadMansApparel")->offset == doctest::Approx(-8.0f));
     const Entity hat = apparelWear(*sim, man, "Apparel_CowboyHat");
     sim->things().registry().emplace<Tainted>(hat);
-    const Entity duster = apparelWear(*sim, man, "Apparel_Duster");
+    const Entity duster = apparelWear(*sim, man, "Apparel_FlakVest");
     sim->things().registry().emplace<Tainted>(duster);
     CHECK(apparelThought(apparelThoughts(*sim, man), "DeadMansApparel")->offset == doctest::Approx(-14.0f));
     const Entity violent = apparelColonist(*sim, 32, 20, false, "Bloodlust");
@@ -856,18 +969,21 @@ TEST_CASE("Apparel: the clothing commands record into a replay and play back the
     APPAREL_REQUIRE(pawn != kNoEntity);
     original.submit(AddOutfitCommand{"Replayed"});
     original.step();
+    const uint32_t replayed = apparelOutfitId(original, "Replayed");
     EditOutfitCommand edit;
-    edit.outfit = 5;
+    edit.outfit = replayed;
     edit.disallowed = {"Apparel_SimpleHelmet"};
     edit.hitPointsMin = 0.1f;
     edit.qualityMax = 4;
     original.submit(edit);
-    original.submit(SetOutfitCommand{pawn, 5});
+    original.submit(SetOutfitCommand{pawn, replayed});
+    original.submit(SetOutfitFightGearCommand{replayed, true, false});
+    original.submit(HideGearCommand{pawn, true});
     original.submit(StripCommand{pawn, true});  // not downed: fails, and is logged
     for (int i = 0; i < 800; ++i) {
         original.step();
     }
-    original.submit(RemoveOutfitCommand{5});
+    original.submit(RemoveOutfitCommand{replayed});
     original.step();
 
     const Replay recorded = recordReplay(original);
@@ -881,9 +997,227 @@ TEST_CASE("Apparel: the clothing commands record into a replay and play back the
     CHECK(again.stateHash() == original.stateHash());
 
     // Every command type is known by name.
-    for (const char* name : {"SetOutfit", "EditOutfit", "AddOutfit", "RemoveOutfit", "Strip"}) {
+    for (const char* name : {"SetOutfit", "EditOutfit", "AddOutfit", "RemoveOutfit", "Strip", "SetOutfitFightGear", "HideGear"}) {
         Command command;
         CHECK(commandFromName(name, command));
         CHECK(std::string(commandName(command)) == name);
     }
+}
+
+TEST_CASE("Apparel: worn weight slows walking; armour slows attacks and, a quarter as much, work") {
+    auto sim = apparelTestSim();
+    const entt::registry& reg = sim->things().registry();
+    const ApparelStats& stats = sim->apparel().stats();
+    const Entity pawn = apparelColonist(*sim, 20, 20);
+    CHECK(stats.moveFactor(reg, pawn) == doctest::Approx(1.0f));
+    // Cotton shirt and pants: 1 kg each, 2% slower, no slower to shoot or work.
+    apparelWear(*sim, pawn, "Apparel_TShirt");
+    apparelWear(*sim, pawn, "Apparel_Pants");
+    CHECK(stats.wornKg(reg, pawn) == doctest::Approx(2.0f));
+    CHECK(stats.moveFactor(reg, pawn) == doctest::Approx(1.0f / 1.02f));
+    CHECK(stats.attackTimeFactor(reg, pawn) == doctest::Approx(1.0f));
+    CHECK(stats.workFactor(reg, pawn) == doctest::Approx(1.0f));
+    // A cataphract suit (15 kg) and helmet (2 kg) over them; the tuque under the helmet weighs nothing.
+    apparelWear(*sim, pawn, "Apparel_Tuque");
+    apparelWear(*sim, pawn, "Apparel_CataphractArmor");
+    apparelWear(*sim, pawn, "Apparel_CataphractHelmet");
+    CHECK(stats.armourKg(reg, pawn) == doctest::Approx(17.0f));
+    CHECK(stats.wornKg(reg, pawn) == doctest::Approx(19.0f));
+    CHECK(stats.moveFactor(reg, pawn) == doctest::Approx(1.0f / 1.19f));
+    CHECK(stats.attackTimeFactor(reg, pawn) == doctest::Approx(1.17f));
+    CHECK(stats.workFactor(reg, pawn) == doctest::Approx(1.0f / (1.0f + 0.25f * 0.17f)));
+    // The weapon in its hands counts toward walking (a 2 kg longsword).
+    const Entity sword = sim->things().make(apparelDef(*sim, "Melee_Longsword"));
+    APPAREL_REQUIRE(sim->combat().equip(pawn, sword));
+    CHECK(stats.wornKg(reg, pawn) == doctest::Approx(21.0f));
+    // What it wears and holds is not in its carry load (sneed: it only slows the walk).
+    CHECK(sim->jobs().loadMass(pawn) == doctest::Approx(0.0));
+}
+
+TEST_CASE("Apparel: clothing goes on at once, armour takes 4 seconds, and a hit stops it") {
+    for (const bool hit : {false, true}) {
+        auto sim = apparelTestSim();
+        const Entity pawn = apparelColonist(*sim, 20, 20);
+        const Entity vest = apparelLying(*sim, 20, 20, "Apparel_FlakVest");
+        CHECK(sim->apparel().wearStepsFor(vest) == 120);
+        CHECK(sim->apparel().wearStepsFor(sim->things().make(apparelDef(*sim, "Apparel_TShirt"))) == 1);
+        int64_t started = -1;
+        int64_t worn = -1;
+        for (int i = 0; i < 400 && worn < 0; ++i) {
+            sim->step();
+            const Worker& w = sim->things().registry().get<Worker>(pawn);
+            if (started < 0 && w.job.type == JobType::WearApparel && w.job.thing == vest && w.job.progress > 0.0f) {
+                started = sim->time().seconds;
+                if (hit) {
+                    sim->step();
+                    sim->submit(DamagePawnCommand{pawn, "Cut", 2.0f, 0});
+                }
+            }
+            if (apparelWearing(*sim, pawn, vest)) {
+                worn = sim->time().seconds;
+            }
+            if (hit && started >= 0 && sim->time().seconds >= started + 121) {
+                break;
+            }
+        }
+        APPAREL_REQUIRE(started >= 0);
+        if (hit) {
+            CHECK(worn < 0);  // the hit stopped it
+        } else {
+            CHECK(worn - started >= 118);
+            CHECK(worn - started <= 124);
+        }
+    }
+}
+
+// ---- Fight gear in the bag (docs/design/armour.md) -------------------------------------------
+
+namespace {
+
+bool apparelInBag(const Sim& sim, Entity pawn, Entity item) {
+    const Gear* gear = sim.things().registry().try_get<Gear>(pawn);
+    return gear != nullptr && std::find(gear->inventory.begin(), gear->inventory.end(), item) != gear->inventory.end();
+}
+
+}  // namespace
+
+TEST_CASE("Apparel: armour for fights stays in the bag, goes on when drafted, legs-chest-helmet, and back after") {
+    auto sim = apparelTestSim();
+    const entt::registry& reg = sim->things().registry();
+    const Entity pawn = apparelColonist(*sim, 20, 20);
+    sim->submit(SetOutfitCommand{pawn, apparelOutfitId(*sim, "Armour for fights")});
+    const Entity shirt = apparelLying(*sim, 21, 20, "Apparel_TShirt");
+    const Entity vest = apparelLying(*sim, 22, 20, "Apparel_FlakVest");
+    const Entity pants = apparelLying(*sim, 22, 21, "Apparel_FlakPants");
+    const Entity helmet = apparelLying(*sim, 21, 21, "Apparel_FlakHelmet", -1, "Steel");
+    for (int i = 0; i < 600; ++i) {
+        sim->step();
+    }
+    // Clothes on, armour in the bag (and not slowing the walk as armour would).
+    CHECK(apparelWearing(*sim, pawn, shirt));
+    CHECK(apparelInBag(*sim, pawn, vest));
+    CHECK(apparelInBag(*sim, pawn, pants));
+    CHECK(apparelInBag(*sim, pawn, helmet));
+    CHECK(sim->apparel().stats().armourKg(reg, pawn) == doctest::Approx(0.0f));
+
+    sim->submit(DraftCommand{pawn, true});
+    sim->step();
+    sim->step();
+    // Legs first, 4 seconds a piece, no shooting meanwhile.
+    APPAREL_REQUIRE(reg.all_of<Dressing>(pawn));
+    CHECK(reg.get<Dressing>(pawn).item == pants);
+    CHECK(isDressing(reg, pawn));
+    std::vector<Entity> order;
+    for (int i = 0; i < 400; ++i) {
+        sim->step();
+        for (const Entity piece : {pants, vest, helmet}) {
+            if (apparelWearing(*sim, pawn, piece) && std::find(order.begin(), order.end(), piece) == order.end()) {
+                order.push_back(piece);
+                if (order.size() == 1) {
+                    CHECK(i >= 110);  // the legs took about 120 steps
+                }
+            }
+        }
+    }
+    CHECK(order == std::vector<Entity>{pants, vest, helmet});
+    CHECK_FALSE(isDressing(reg, pawn));
+    // The fight is over: the armour goes back in the bag.
+    sim->submit(DraftCommand{pawn, false});
+    for (int i = 0; i < 1200; ++i) {
+        sim->step();
+    }
+    CHECK(apparelInBag(*sim, pawn, vest));
+    CHECK(apparelInBag(*sim, pawn, pants));
+    CHECK(apparelInBag(*sim, pawn, helmet));
+    CHECK(apparelWearing(*sim, pawn, shirt));
+    CHECK_FALSE(reg.all_of<Dressing>(pawn));
+}
+
+TEST_CASE("Apparel: hit while putting on armour from the bag, a fighter gives up until the fight is over") {
+    auto sim = apparelTestSim();
+    const entt::registry& reg = sim->things().registry();
+    const Entity pawn = apparelColonist(*sim, 20, 20);
+    sim->submit(SetOutfitCommand{pawn, apparelOutfitId(*sim, "Armour for fights")});
+    const Entity vest = apparelLying(*sim, 21, 20, "Apparel_FlakVest");
+    for (int i = 0; i < 400; ++i) {
+        sim->step();
+    }
+    APPAREL_REQUIRE(apparelInBag(*sim, pawn, vest));
+    sim->submit(DraftCommand{pawn, true});
+    for (int i = 0; i < 30; ++i) {
+        sim->step();
+    }
+    APPAREL_REQUIRE(isDressing(reg, pawn));
+    sim->submit(DamagePawnCommand{pawn, "Cut", 2.0f, 0});
+    for (int i = 0; i < 300; ++i) {
+        sim->step();
+    }
+    CHECK(apparelInBag(*sim, pawn, vest));
+    CHECK_FALSE(isDressing(reg, pawn));
+    APPAREL_REQUIRE(reg.all_of<Dressing>(pawn));
+    CHECK(reg.get<Dressing>(pawn).gaveUp);
+    // Drafted again later, it tries again.
+    sim->submit(DraftCommand{pawn, false});
+    sim->step();
+    sim->step();
+    CHECK_FALSE(reg.all_of<Dressing>(pawn));
+}
+
+TEST_CASE("Apparel: a nudist dressed for fights keeps clothes in the bag and puts them on at once when drafted") {
+    auto sim = apparelTestSim();
+    const Entity pawn = apparelColonist(*sim, 20, 20, false, "Nudist");
+    sim->submit(SetOutfitCommand{pawn, apparelOutfitId(*sim, "Nudist, dressed for fights")});
+    const Entity shirt = apparelLying(*sim, 21, 20, "Apparel_TShirt");
+    const Entity pants = apparelLying(*sim, 22, 20, "Apparel_Pants");
+    const Entity hat = apparelLying(*sim, 21, 21, "Apparel_Tuque");
+    for (int i = 0; i < 600; ++i) {
+        sim->step();
+    }
+    CHECK(apparelInBag(*sim, pawn, shirt));
+    CHECK(apparelInBag(*sim, pawn, pants));
+    CHECK(apparelWearing(*sim, pawn, hat));  // hats stay on
+    CHECK_FALSE(sim->apparel().nudistClothed(pawn));
+    sim->submit(DraftCommand{pawn, true});
+    sim->step();
+    sim->step();
+    CHECK(apparelWearing(*sim, pawn, shirt));
+    CHECK(apparelWearing(*sim, pawn, pants));
+}
+
+TEST_CASE("Apparel: the hide-gear switch shows in the snapshot, fight gear settings save and load") {
+    auto sim = apparelTestSim();
+    const Entity pawn = apparelColonist(*sim, 20, 20);
+    const uint32_t outfit = apparelOutfitId(*sim, "Worker");
+    sim->submit(SetOutfitFightGearCommand{outfit, true, true});
+    sim->submit(HideGearCommand{pawn, true});
+    sim->submit(SetOutfitFightGearCommand{999, true, false});  // no such outfit: fails
+    sim->step();
+    CHECK(sim->apparel().gearHidden(pawn));
+    CHECK(sim->apparel().outfit(outfit)->armourInBag);
+    CHECK(sim->apparel().outfit(outfit)->clothesInBag);
+    Snapshot snapshot;
+    sim->writeSnapshot(snapshot);
+    const ThingView* seen = snapshot.find(pawn);
+    APPAREL_REQUIRE(seen != nullptr);
+    CHECK(seen->hideGear);
+    bool listed = false;
+    for (const OutfitView& view : snapshot.outfits) {
+        if (view.id == outfit) {
+            listed = true;
+            CHECK(view.armourInBag);
+            CHECK(view.clothesInBag);
+        }
+    }
+    CHECK(listed);
+
+    const std::vector<uint8_t> bytes = saveSim(*sim);
+    SaveLoadResult loaded = loadSim(bytes, apparelTestDefs());
+    APPAREL_REQUIRE(loaded.error.empty());
+    APPAREL_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+    CHECK(loaded.sim->apparel().gearHidden(pawn));
+    CHECK(loaded.sim->apparel().outfit(outfit)->armourInBag);
+    sim->submit(HideGearCommand{pawn, false});
+    sim->step();
+    CHECK_FALSE(sim->apparel().gearHidden(pawn));
 }

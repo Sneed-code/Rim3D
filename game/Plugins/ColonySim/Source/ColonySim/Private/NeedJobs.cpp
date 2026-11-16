@@ -2,6 +2,7 @@
 #include "ColonySim/Jobs.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/Combat.h"
 #include "ColonySim/Drugs.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Fire.h"
@@ -10,13 +11,16 @@
 #include "ColonySim/Needs.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Protagonist.h"
 #include "ColonySim/Rooms.h"
+#include "ColonySim/Social.h"
 #include "ColonySim/Spoilage.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace colony {
 
@@ -96,6 +100,9 @@ bool JobSystem::thinkSchedule(Entity pawn, Job& out) {
         case ScheduleKind::Sleep:
             return needs->rest < rules_.fallAsleepBelow && makeSleepJob(pawn, out);
         case ScheduleKind::Joy:
+            if (mindIsPlayersOwn(things_.registry(), pawn)) {
+                break;  // no recreation need: a joy hour is a free hour
+            }
             if (makeRecreationJob(pawn, out, recreation_.joyHoursUntil)) {
                 return true;
             }
@@ -193,6 +200,11 @@ void JobSystem::interruptForNeeds(Entity pawn) {
         return;
     }
     Job job;
+    if (thinkEmergency(pawn, job)) {  // a bleeding friend before bed or a meal (MedicineJobs.cpp)
+        endJob(pawn, JobEnd::Interrupted, "emergency");
+        startJob(pawn, std::move(job));
+        return;
+    }
     if (!(thinkNeeds(pawn, job) || thinkSchedule(pawn, job)) || (job.type != JobType::Ingest && job.type != JobType::LayDown)) {
         return;
     }
@@ -214,6 +226,7 @@ bool needJobsYieldsToCold(JobType type) {
         case JobType::Mine:
         case JobType::CutPlant:
         case JobType::HarvestPlant:
+        case JobType::RemoveFloor:
         case JobType::SowCrop:
         case JobType::DeliverResources:
         case JobType::BuildFrame:
@@ -407,6 +420,78 @@ bool JobSystem::findFood(Entity pawn, Job& out, bool commit) {
     return true;
 }
 
+// The protagonist's bag (sneed, 2026-11-16): below the seek level, before it gets hungry, it eats the best food it
+// carries at once, wherever it is and whatever it is doing, steered by the player or not: the best kind first (the
+// food tiers, tastiest last), the most filling of that kind next. Like any meal, as many as fill the stomach, up to
+// what is eaten at once. Food for desperate times only when ravenous. Not while down.
+bool JobSystem::autoEatFromBag(Entity pawn) {
+    entt::registry& reg = things_.registry();
+    if (!mindIsPlayersOwn(reg, pawn)) {
+        return false;
+    }
+    Needs* needs = reg.try_get<Needs>(pawn);
+    Gear* gear = reg.try_get<Gear>(pawn);
+    if (needs == nullptr || gear == nullptr || gear->inventory.empty() || needs->food >= rules_.foodSeekBelow ||
+        health_.incapacitated(pawn)) {
+        return false;
+    }
+    Entity best = kNoEntity;
+    int bestTier = -1;
+    float bestNutrition = 0.0f;
+    for (const Entity item : gear->inventory) {
+        if (!reg.valid(item) || !reg.all_of<Thing>(item)) {
+            continue;
+        }
+        const DefId def = reg.get<Thing>(item).def;
+        const int tier = def.value < foodTier_.size() ? foodTier_[def.value] : -1;
+        if (tier < 0 || (tier == 0 && needs->food >= rules_.foodRavenousBelow) || (drugs_ != nullptr && drugs_->isDrug(def))) {
+            continue;
+        }
+        const float nutrition = nutrition_[def.value];
+        if (best == kNoEntity || tier > bestTier || (tier == bestTier && (nutrition > bestNutrition || (nutrition == bestNutrition && item < best)))) {
+            best = item;
+            bestTier = tier;
+            bestNutrition = nutrition;
+        }
+    }
+    if (best == kNoEntity || bestNutrition <= 0.0f) {
+        return false;
+    }
+    const DefId def = reg.get<Thing>(best).def;
+    const StackCount* stack = reg.try_get<StackCount>(best);
+    const int have = stack != nullptr ? stack->count : 1;
+    const int wanted = std::max(1, static_cast<int>(std::ceil((1.0f - needs->food) / bestNutrition - 0.001f)));
+    const int count = std::min({have, static_cast<int>(maxIngest_[def.value]), wanted});
+    Entity eaten = best;
+    if (count < have) {
+        eaten = things_.splitOff(best, count);  // the rest stays in the bag
+        if (eaten == kNoEntity) {
+            return false;
+        }
+    } else {
+        gear->inventory.erase(std::find(gear->inventory.begin(), gear->inventory.end(), best));
+        reg.remove<EquippedBy>(best);
+    }
+    const float before = needs->food;
+    needs->food = std::min(1.0f, needs->food + bestNutrition * static_cast<float>(count));
+    needs->foodSearchAfter = 0;
+    if (spoilage_ != nullptr) {
+        spoilage_->eaten(pawn, eaten);
+    }
+    const bool humanIngredient = spoilage_ != nullptr && spoilage_->humanlikeIngredient(eaten);
+    things_.destroy(eaten);
+    Event event;
+    event.type = EventType::PawnAte;
+    event.thing = pawn;
+    event.def = def;
+    event.cell = cellOf(reg.get<Position>(pawn));
+    event.amount = needs->food - before;
+    event.message = "bag";
+    event.part = humanIngredient ? 1 : -1;
+    events_.push_back(std::move(event));
+    return true;
+}
+
 Entity JobSystem::findChair(Entity pawn, CellPos from, CellPos& cell) const {
     const entt::registry& reg = things_.registry();
     Entity best = kNoEntity;
@@ -548,7 +633,8 @@ bool JobSystem::bedSlotCell(Entity bed, Entity pawn, CellPos& out) const {
 }
 
 // The pawn's own bed, or else the nearest free one, which then becomes its own (RimWorld's
-// colonists claim a bed by sleeping in it). False: sleep on the ground.
+// colonists claim a bed by sleeping in it). A pawn whose partner's bed has a slot free moves in with it, and
+// colonists who are not partners don't share a bed (docs/design/lovin.md). False: sleep on the ground.
 bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
     entt::registry& reg = things_.registry();
     const Position& at = reg.get<Position>(pawn);
@@ -558,7 +644,42 @@ bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
                !avoiding(pawn, JobTarget{candidate, CellPos{}}) && canReach(pawnCell, c);
     };
 
+    const auto slotsOf = [&](Entity candidate) {
+        return std::max(1, static_cast<int>(defs_.get(reg.get<Thing>(candidate).def).integer("building.sleepingSlots", 1)));
+    };
+    const Entity partner = partnerOf_ ? partnerOf_(pawn) : kNoEntity;
+    // Two colonists with a social life share a bed only if they are partners (RimWorld's rule); pawns without one
+    // (no social rules) share as before.
+    const auto sharable = [&](const Bed& owners) {
+        if (!reg.all_of<Social>(pawn)) {
+            return true;
+        }
+        return std::all_of(owners.owners.begin(), owners.owners.end(),
+                           [&](Entity o) { return o == pawn || o == partner || !reg.valid(o) || !reg.all_of<Social>(o); });
+    };
+
     const Entity owned = bedOf(pawn);
+    // A partner's bed with a slot free (a double bed): the pawn moves into it, giving up its own.
+    if (partner != kNoEntity && things_.spawned(partner)) {
+        const Entity theirs = bedOf(partner);
+        if (theirs != kNoEntity && theirs != owned && things_.spawned(theirs) && isMedical_[reg.get<Thing>(theirs).def.value] == 0 &&
+            reg.all_of<PrisonBed>(theirs) == reg.all_of<Prisoner>(pawn)) {
+            Bed& shared = reg.get<Bed>(theirs);
+            const CellRect rect = reg.get<Footprint>(theirs).rect();
+            const int index = static_cast<int>(shared.owners.size());
+            const CellPos c{rect.minX + index % rect.sizeX, rect.minY + index / rect.sizeX, rect.level};
+            if (index < slotsOf(theirs) && index < rect.sizeX * rect.sizeY && sharable(shared) && usable(theirs, c)) {
+                if (owned != kNoEntity) {
+                    auto& mine = reg.get<Bed>(owned).owners;
+                    mine.erase(std::remove(mine.begin(), mine.end(), pawn), mine.end());
+                }
+                shared.owners.push_back(pawn);
+                bed = theirs;
+                cell = c;
+                return true;
+            }
+        }
+    }
     if (owned != kNoEntity) {
         CellPos c;
         if (bedSlotCell(owned, pawn, c) && usable(owned, c)) {
@@ -574,7 +695,8 @@ bool JobSystem::findBed(Entity pawn, Entity& bed, CellPos& cell) {
     for (const auto [candidate, thing, owners, footprint] : reg.view<const Thing, const Bed, const Footprint>().each()) {
         const int slots = std::max(1, static_cast<int>(defs_.get(thing.def).integer("building.sleepingSlots", 1)));
         // A medical bed is for patients: nobody claims one to sleep in (RimWorld's rule).
-        if (static_cast<int>(owners.owners.size()) >= slots || !things_.spawned(candidate) || isMedical_[thing.def.value] != 0) {
+        if (static_cast<int>(owners.owners.size()) >= slots || !things_.spawned(candidate) || isMedical_[thing.def.value] != 0 ||
+            !sharable(owners)) {
             continue;
         }
         // Prison beds are for prisoners and nobody else.
@@ -639,6 +761,17 @@ bool JobSystem::makeSleepJob(Entity pawn, Job& out) {
         out.cell = cell;
     } else {
         out.cell = cellOf(things_.registry().get<Position>(pawn));  // the ground, right here
+        // Not in a doorway, where it would hold the door open and stand in everyone's way (the year run, colony-scenario.md):
+        // the first free cell beside it.
+        if (map_.isDoor(out.cell)) {
+            for (const auto& [dx, dy] : {std::pair{1, 0}, std::pair{-1, 0}, std::pair{0, 1}, std::pair{0, -1}}) {
+                const CellPos c{out.cell.x + dx, out.cell.y + dy, out.cell.level};
+                if (map_.inBounds(c) && map_.walkable(c) && map_.obstacleDm(c) == 0 && !map_.isDoor(c)) {
+                    out.cell = c;
+                    break;
+                }
+            }
+        }
     }
     // Nobody lies down beside a fire, or while alight: it does something else (fights the fire, gets away) first.
     if (fireNear(out.cell, kFireBedRadius, pawn) || fireNear(cellOf(things_.registry().get<Position>(pawn)), kFireBedRadius)) {
@@ -673,6 +806,10 @@ JobSystem::StepResult JobSystem::lie(Entity pawn, Job& job, std::string&) {
     // Fire beside the bed, or the sleeper alight: it wakes (RimWorld wakes a sleeper that is hurt).
     if (now() % 15 == 0 && fireNear(job.cell, kFireBedRadius, pawn)) {
         return StepResult::Next;
+    }
+    // During lovin the pawn stays in bed with its partner whatever its rest (docs/design/lovin.md).
+    if (reg.all_of<Lovin>(pawn)) {
+        return StepResult::Running;
     }
     Needs& needs = reg.get<Needs>(pawn);
     if (needs.rest >= rules_.wakeAt) {

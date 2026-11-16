@@ -44,8 +44,11 @@ the hooks other tasks will use: lightning and short circuits (T3), the fire-star
 5. **Spread.** To every cell within a knight's move (the wiki: "2 straight, or 1 diagonal plus 1
    straight": 20 cells), the chance in a pass is `spreadPerTick x ticks x size x the target's
    flammability`; the 12 cells two away ("embers") need a fire of `emberMinSize` (0.7) and are
-   `emberFactor` (0.2) as likely. Walls do not stop embers, as in RimWorld; a stone wall just
-   can't burn. Targets are collected and lit after all fires have been looked at, so the order
+   `emberFactor` (0.2) as likely. An ember needs a clear line, as RimWorld's spark does (`Fire.TrySpread`
+   launches it only when `GenSight.LineOfSight` holds): a wall, a closed door or rock in a cell the line
+   crosses (the one cell between for a straight jump, both for a knight's move) stops it
+   (`Fire::emberBlocked`). So a fire outside a stone or steel wall can't light the room behind it, and the
+   year run's storeroom no longer burns from a fire next door (until 2026-11-14 embers went through walls). Targets are collected and lit after all fires have been looked at, so the order
    fires are visited in changes nothing.
 6. **Out.** A fire at size 0 is removed (`FireOut`, message "burnt out"). If it had burned two
    passes the cell is marked **burnt**; one that burned `floorBurnPasses` (10) on a flammable
@@ -104,8 +107,11 @@ has `homeArea`; saves keep it.
 **The job.** `ExtinguishFiresGiver` (task `ExtinguishFires`, the Firefighter work type) offers every
 fire in the home area, and every fire under a burning colonist anywhere. The job `ExtinguishFire`
 is two steps, `GotoTouch` (to a cell beside the fire, like mining) and `ExtinguishWork`: each game
-second it beats `beatPerTick` (0.00167, ours) of size off, converted to seconds, times the pawn's
-Manipulation. **Nothing is reserved**, so several colonists fight one fire together, which is how
+second it beats `beatPerTick` (0.00485) of size off, converted to seconds, times the pawn's
+Manipulation. That is RimWorld's beat as recalled from its code (`Verb_BeatFire`: 32 Extinguish damage every 1.1 s, and
+`DamageWorker_Extinguish` takes damage x 0.01 off the size: 0.32 a beat, a beat every 66 ticks), so a fire of the
+largest size is out in about six beats, under ten game minutes. Until 2026-11-14 it was 0.00167 (ours), and in the year
+run a burning greenhouse outgrew the colonists beating it cell by cell and spread into the storeroom. **Nothing is reserved**, so several colonists fight one fire together, which is how
 RimWorld does it. A fire already out when the colonist arrives ends the job as done, not failed.
 At size 0 the fire is out (`FireOut`, "beaten"), and so is any pawn burning there. A drafted
 colonist is not put on this job (drafted colonists skip the think list).
@@ -140,9 +146,9 @@ smoke and burnt ground from these ([fire-draw.md](fire-draw.md)); the home area 
 ## Numbers
 
 All in `FireRules`. Marked `unverified` (recalled from RimWorld, not on the wiki): `maxSize`,
-`growthPerTick`, the damage formula, `pawnFlammability`, `pawnDamagePerTick`, `pawnBurnTicks`. The
+`growthPerTick`, the damage formula, `pawnFlammability`, `pawnDamagePerTick`, `pawnBurnTicks`, `beatPerTick`. The
 wiki's own: 235 degrees, 2 damage a second, spread range. Everything else is ours and tunable;
-the ones to watch in a playtest are `spreadPerTick`, `plantDamageFactor` and `beatPerTick`
+the ones to watch in a playtest are `spreadPerTick` and `plantDamageFactor`
 (how big a grass fire gets before two colonists beat it).
 
 ## Saves

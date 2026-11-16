@@ -68,7 +68,7 @@ struct FFightHitRecord
 	FVector Where = FVector::ZeroVector;
 	/** Cm from the nearest of the pawn's hitboxes (0 on or inside one); -1 if the pawn had none. */
 	float MissCm = -1.0f;
-	int64 GameSeconds = 0;
+	int64 GameSeconds = 0;  // the step it happened in (USimSubsystem::GetSteps)
 };
 
 /**

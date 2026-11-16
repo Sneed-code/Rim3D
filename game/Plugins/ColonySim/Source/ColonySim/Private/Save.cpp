@@ -311,6 +311,7 @@ struct SaveSite {
     std::vector<SaveMaterial> materials;
     float workTotal = 0.0f;
     float workDone = 0.0f;
+    std::string floor;  // a floor plan's Terrain floor defName, empty for a building ("construction" 2)
 };
 
 struct SaveMark {};  // a building marked for deconstruction
@@ -343,6 +344,12 @@ struct SaveBeltStack {
 struct SaveBelt {
     std::vector<SaveBeltStack> stacks;
 };
+// The interaction showing on a pawn (AN1), its def by name.
+struct SaveTalking {
+    std::string def;  // Interactions def
+    Talking t;
+};
+
 struct SaveThrower {
     std::string item;  // Things def, empty if none
     Thrower t;
@@ -367,6 +374,11 @@ struct SaveApparel {
     int64_t nextCheck = 0;
     bool hasDurability = false;  // section version 2 on (docs/design/apparel-durability.md)
     float durability = 1.0f;
+    bool hideGear = false;       // section version 3 on (docs/design/armour.md)
+    bool hasDressing = false;
+    Dressing dressing;
+    bool hasBlocking = false;    // section version 4 on (docs/design/shields.md)
+    Blocking blocking;
 };
 
 // What the repair system keeps on an item: the repair mark, the upgrade part ordered fitted and the parts fitted, by
@@ -440,6 +452,9 @@ struct SaveEntity {
     std::optional<Melee> melee;             // section "melee" (F8)
     std::optional<Social> social;           // section "social" (C20)
     std::optional<SocialFight> socialFight; // section "social" (C20)
+    std::optional<Lovin> lovin;             // section "social" 2 (docs/design/lovin.md)
+    std::optional<SaveTalking> talking;     // section "social" 3 (AN1)
+    std::optional<Staggered> staggered;     // section "combat" 3 (AN1)
     std::optional<SaveApparel> apparel;     // section "apparel" (format 20 on)
     std::optional<RecoilKick> kick;         // section "feel"
     std::optional<DodgeRoll> roll;          // section "feel"
@@ -447,6 +462,7 @@ struct SaveEntity {
     std::optional<SaveOperations> operations;  // section "medicine" (H3, version 2 on)
     std::optional<std::vector<Entity>> stowed;  // section "weapons" (P1): Gear::stowed
     std::optional<WeaponSwitch> weaponSwitch;   // section "weapons"
+    std::optional<std::vector<Entity>> inventory;  // section "inventory": Gear::inventory (docs/design/inventory.md)
     std::optional<Turret> turret;           // section "defense" (F11)
     std::optional<Artillery> artillery;     // section "artillery" (mortars, rocketswarm launchers)
     std::optional<SaveShell> shell;
@@ -509,6 +525,7 @@ struct SaveDeep {
     std::vector<uint32_t> units;
     std::vector<CellPos> workAt;
     std::vector<double> work;
+    std::vector<std::string> tune;  // v2: a long-range scanner's ore per machine, "" for none
     uint64_t rngState = 0;
     uint64_t rngIncrement = 1;
     uint64_t found = 0;
@@ -550,6 +567,11 @@ struct SaveData {
     uint64_t defsHash = 0;
     SimSettings settings;
     int64_t seconds = 0;
+    // Section "clock" (docs/design/day-length.md). A save from before it has none: the step clock
+    // was the calendar's (-1 here) and the day 48 minutes.
+    int64_t steps = -1;
+    int dayMinutes = kBaseDayMinutes;
+    int calendarAcc = 0;
     uint64_t rngState = 0;
     uint64_t rngIncrement = 0;
     uint64_t groundHash = 0;
@@ -1289,7 +1311,10 @@ void saveTradeLine(Ar& ar, TradeLine& l) {
 template <typename Type>
 inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitCommand> || std::is_same_v<Type, TradeCommand> ||
                                             std::is_same_v<Type, AdjustGoodwillCommand> || std::is_same_v<Type, GiftCommand> ||
-                                            std::is_same_v<Type, CommsCommand>;
+                                            std::is_same_v<Type, CommsCommand> || std::is_same_v<Type, ScannerCommand> ||
+                                            std::is_same_v<Type, InventoryCommand> ||
+                                            std::is_same_v<Type, SetOutfitFightGearCommand> || std::is_same_v<Type, HideGearCommand> ||
+                                            std::is_same_v<Type, ShieldCommand> || std::is_same_v<Type, SetDayLengthCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1318,6 +1343,29 @@ void saveTradeCommand(Ar& ar, Type& c) {
         auto* goodwill = &c;
         ar.text("faction", goodwill->faction);
         ar.value("delta", goodwill->delta);
+    } else if constexpr (std::is_same_v<Type, ScannerCommand>) {
+        ar.value("building", c.building);
+        ar.text("ore", c.ore);
+    } else if constexpr (std::is_same_v<Type, InventoryCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("action", c.action);
+        ar.value("item", c.item);
+        ar.value("count", c.count);
+    } else if constexpr (std::is_same_v<Type, SetOutfitFightGearCommand>) {
+        ar.value("outfit", c.outfit);
+        ar.value("armourInBag", c.armourInBag);
+        ar.value("clothesInBag", c.clothesInBag);
+    } else if constexpr (std::is_same_v<Type, HideGearCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("hide", c.hide);
+    } else if constexpr (std::is_same_v<Type, SetDayLengthCommand>) {
+        ar.value("minutes", c.minutes);
+    } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("up", c.up);
+        ar.value("hasDir", c.hasDir);
+        ar.value("dirX", c.dirX);
+        ar.value("dirY", c.dirY);
     } else {
         static_assert(std::is_same_v<Type, GiftCommand>, "save every trade command here");
         auto* gift = &c;
@@ -1495,13 +1543,13 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 auto* designate = &c;
                 ar.group("area", [&] { saveRect(ar, designate->area); });
                 ar.value("kind", designate->kind);
-                ar.require(designate->kind >= DesignationKind::Mine && designate->kind <= DesignationKind::HarvestPlant,
+                ar.require(designate->kind >= DesignationKind::Mine && designate->kind <= DesignationKind::RemoveFloor,
                        "the save file has a bad designation kind");
             } else if constexpr (std::is_same_v<Type, CancelDesignationsCommand>) {
                 auto* cancelMarks = &c;
                 ar.group("area", [&] { saveRect(ar, cancelMarks->area); });
                 ar.value("kind", cancelMarks->kind);
-                ar.require(cancelMarks->kind <= DesignationKind::HarvestPlant, "the save file has a bad designation kind");
+                ar.require(cancelMarks->kind <= DesignationKind::RemoveFloor, "the save file has a bad designation kind");
             } else if constexpr (std::is_same_v<Type, DraftCommand>) {
                 auto* draft = &c;
                 ar.value("pawn", draft->pawn);
@@ -1987,6 +2035,23 @@ void saveApparelPart(Ar& ar, SaveApparel& a) {
         ar.value("durability", a.durability);
         ar.require(a.durability >= 0.0f && a.durability <= 1.0f, "the save file has an impossible durability");
     }
+    if (ar.sectionVersion() >= 3) {
+        ar.value("hideGear", a.hideGear);
+        ar.value("hasDressing", a.hasDressing);
+        ar.value("dressingItem", a.dressing.item);
+        ar.value("dressingSteps", a.dressing.stepsLeft);
+        ar.value("dressingInjuries", a.dressing.injuries);
+        ar.value("dressingGaveUp", a.dressing.gaveUp);
+    }
+    if (ar.sectionVersion() >= 4) {
+        ar.value("hasBlocking", a.hasBlocking);
+        ar.value("blockingThreat", a.blocking.threat);
+        ar.value("blockingAi", a.blocking.ai);
+        ar.value("blockingHold", a.blocking.holdSteps);
+        ar.value("blockingHasDir", a.blocking.hasDir);
+        ar.value("blockingDirX", a.blocking.dirX);
+        ar.value("blockingDirY", a.blocking.dirY);
+    }
 }
 
 template <typename Ar>
@@ -1998,6 +2063,10 @@ void saveOutfitPolicy(Ar& ar, OutfitPolicy& o) {
     ar.value("hitPointsMax", o.hitPointsMax);
     ar.value("qualityMin", o.qualityMin);
     ar.value("qualityMax", o.qualityMax);
+    if (ar.sectionVersion() >= 3) {
+        ar.value("armourInBag", o.armourInBag);
+        ar.value("clothesInBag", o.clothesInBag);
+    }
     ar.require(o.id != 0 && o.hitPointsMin >= 0.0f && o.hitPointsMax <= 1.0f && o.hitPointsMin <= o.hitPointsMax &&
                    o.qualityMin <= o.qualityMax,
                "the save file has an impossible outfit");
@@ -2066,6 +2135,9 @@ void saveSitePart(Ar& ar, SaveSite& s) {
     ar.value("workDone", s.workDone);
     ar.require(s.workTotal >= 0.0f && s.workTotal < 1.0e9f && s.workDone >= 0.0f && s.workDone < 1.0e9f,
                "the save file has impossible building work");
+    if (ar.sectionVersion() >= 2) {  // floor plans
+        ar.text("floor", s.floor);
+    }
 
 }
 
@@ -2452,8 +2524,11 @@ void saveMeleePart(Ar& ar, Melee& m) {
 }
 
 template <typename Ar>
-void saveSocialPart(Ar& ar, Social& social) {
+void saveSocialPart(Ar& ar, Social& social, bool withLovin) {
     ar.value("nextTalk", social.nextTalk);
+    if (withLovin) {  // social section 2: lovin
+        ar.value("nextLovin", social.nextLovin);
+    }
     ar.value("mourned", social.mourned);
     ar.list("memories", social.memories, [&](OpinionMemory& m) {
         ar.value("other", m.other);
@@ -2471,11 +2546,35 @@ void saveSocialPart(Ar& ar, Social& social) {
 }
 
 template <typename Ar>
+void saveTalkingPart(Ar& ar, SaveTalking& st) {
+    ar.text("def", st.def);
+    ar.value("with", st.t.with);
+    ar.value("until", st.t.until);
+    ar.value("started", st.t.started);
+    ar.value("ok", st.t.ok);
+}
+
+template <typename Ar>
+void saveStaggeredPart(Ar& ar, Staggered& s) {
+    ar.value("stepsLeft", s.stepsLeft);
+    ar.require(s.stepsLeft >= 0 && s.stepsLeft < 100000, "the save file has an impossible stagger");
+}
+
+template <typename Ar>
 void saveSocialFightPart(Ar& ar, SocialFight& f) {
     ar.value("opponent", f.opponent);
     ar.value("startedAt", f.startedAt);
     ar.value("endsBy", f.endsBy);
     ar.value("nextMove", f.nextMove);
+}
+
+template <typename Ar>
+void saveLovinPart(Ar& ar, Lovin& l) {
+    ar.value("partner", l.partner);
+    ar.value("startedAt", l.startedAt);
+    ar.value("until", l.until);
+    ar.value("pose", l.pose);
+    ar.require(l.pose <= LovinPose::Embracing, "the save file has a bad lovin pose");
 }
 
 template <typename Ar>
@@ -2485,6 +2584,10 @@ void saveTurretPart(Ar& ar, Turret& t) {
     ar.value("stepsLeft", t.stepsLeft);
     ar.value("shotsLeft", t.shotsLeft);
     ar.value("target", t.target);
+    if (ar.sectionVersion() >= 2) {
+        ar.value("fuse", t.fuse);
+        ar.value("fuseRolled", t.fuseRolled);
+    }
 }
 
 template <typename Ar>
@@ -3257,7 +3360,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("bills", 3, [&] {
         saveParts(ar, "bills", e, &SaveEntity::bills, [&](SaveBillList& list) { saveBillsPart(ar, list); });
     });
-    ar.section("construction", 1, [&] {
+    ar.section("construction", 2, [&] {
         saveParts(ar, "site", e, &SaveEntity::site, [&](SaveSite& s) { saveSitePart(ar, s); });
         saveParts(ar, "builtOf", e, &SaveEntity::builtOf, [&](std::string& stuff) { ar.text("stuff", stuff); });
         saveParts(ar, "marked", e, &SaveEntity::marked, [&](SaveMark&) {});
@@ -3265,13 +3368,16 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("mood", 1, [&] {
         saveParts(ar, "mood", e, &SaveEntity::mood, [&](Mood& m) { saveMoodPart(ar, m); });
     });
-    ar.section("combat", 2, [&] {
+    ar.section("combat", 3, [&] {
         saveParts(ar, "posture", e, &SaveEntity::posture, [&](Posture& p) { savePosturePart(ar, p); });
         saveParts(ar, "gear", e, &SaveEntity::gear, [&](Gear& g) { saveGearPart(ar, g); });
         saveParts(ar, "equippedBy", e, &SaveEntity::equippedBy, [&](EquippedBy& b) { saveEquippedByPart(ar, b); });
         saveParts(ar, "shooter", e, &SaveEntity::shooter, [&](Shooter& sh) { saveShooterPart(ar, sh); });
         saveParts(ar, "projectile", e, &SaveEntity::projectile, [&](SaveProjectile& sp) { saveProjectilePart(ar, sp); });
         saveParts(ar, "magazine", e, &SaveEntity::magazine, [&](Magazine& m) { saveMagazinePart(ar, m); });
+        if (ar.sectionVersion() >= 3) {  // AN1
+            saveParts(ar, "staggered", e, &SaveEntity::staggered, [&](Staggered& s) { saveStaggeredPart(ar, s); });
+        }
     });
     ar.section("doors", 1, [&] {
         saveParts(ar, "door", e, &SaveEntity::door, [&](Door& door) { saveDoorPart(ar, door); });
@@ -3435,11 +3541,17 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("melee", 1, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
     });
-    ar.section("social", 1, [&] {
-        saveParts(ar, "social", e, &SaveEntity::social, [&](Social& social) { saveSocialPart(ar, social); });
+    ar.section("social", 3, [&] {
+        saveParts(ar, "social", e, &SaveEntity::social, [&](Social& social) { saveSocialPart(ar, social, ar.sectionVersion() >= 2); });
         saveParts(ar, "fight", e, &SaveEntity::socialFight, [&](SocialFight& f) { saveSocialFightPart(ar, f); });
+        if (ar.sectionVersion() >= 2) {
+            saveParts(ar, "lovin", e, &SaveEntity::lovin, [&](Lovin& l) { saveLovinPart(ar, l); });
+        }
+        if (ar.sectionVersion() >= 3) {  // AN1
+            saveParts(ar, "talking", e, &SaveEntity::talking, [&](SaveTalking& t) { saveTalkingPart(ar, t); });
+        }
     });
-    ar.section("apparel", 2, [&] {
+    ar.section("apparel", 4, [&] {
         saveParts(ar, "apparel", e, &SaveEntity::apparel, [&](SaveApparel& a) { saveApparelPart(ar, a); });
         ar.value("nextOutfitId", d.nextOutfitId);
         ar.list("outfits", d.outfits, [&](OutfitPolicy& o) { saveOutfitPolicy(ar, o); });
@@ -3447,6 +3559,9 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("weapons", 1, [&] {
         saveParts(ar, "stowed", e, &SaveEntity::stowed, [&](std::vector<Entity>& items) { saveStowedPart(ar, items); });
         saveParts(ar, "switch", e, &SaveEntity::weaponSwitch, [&](WeaponSwitch& w) { saveWeaponSwitchPart(ar, w); });
+    });
+    ar.section("inventory", 1, [&] {
+        saveParts(ar, "bag", e, &SaveEntity::inventory, [&](std::vector<Entity>& items) { saveStowedPart(ar, items); });
     });
     ar.section("feel", 1, [&] {
         saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
@@ -3476,7 +3591,7 @@ void saveSections(Ar& ar, SaveData& d) {
             saveParts(ar, "young", e, &SaveEntity::young, [&](Young& y) { saveYoungPart(ar, y); });
         }
     });
-    ar.section("defense", 1, [&] {
+    ar.section("defense", 2, [&] {
         saveParts(ar, "turret", e, &SaveEntity::turret, [&](Turret& t) { saveTurretPart(ar, t); });
         saveParts(ar, "trap", e, &SaveEntity::trap, [&](Trap& t) { saveTrapPart(ar, t); });
     });
@@ -3606,7 +3721,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("area", p.second);
         });
     });
-    ar.section("deep", 1, [&] {
+    ar.section("deep", 2, [&] {
         ar.list("defs", d.deep.defs, [&](std::string& s) { ar.text(nullptr, s); });
         ar.list("cells", d.deep.cells, [&](uint32_t& v) { ar.value(nullptr, v); });
         ar.list("defIndex", d.deep.defIndex, [&](uint32_t& v) { ar.value(nullptr, v); });
@@ -3616,6 +3731,10 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.list("workAt", d.deep.workAt, [&](CellPos& c) { saveCell(ar, c); });
         ar.list("work", d.deep.work, [&](double& v) { ar.value(nullptr, v); });
         ar.require(d.deep.workAt.size() == d.deep.work.size(), "the save file's machine work lists don't match");
+        if (ar.sectionVersion() >= 2) {
+            ar.list("tune", d.deep.tune, [&](std::string& s) { ar.text(nullptr, s); });
+            ar.require(d.deep.tune.size() == d.deep.work.size(), "the save file's scanner tuning list doesn't match");
+        }
         ar.value("rngState", d.deep.rngState);
         ar.value("rngIncrement", d.deep.rngIncrement);
         ar.value("found", d.deep.found);
@@ -3685,7 +3804,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "away", e, &SaveEntity::away, [&](AwayPawn& a) {
             ar.value("tile", a.tile);
             ar.value("there", a.there);
-            ar.group("social", [&] { saveSocialPart(ar, a.social); });
+            ar.group("social", [&] { saveSocialPart(ar, a.social, false); });  // maps 1: no lovin pause (it starts again at 0)
         });
     });
     ar.section("comms", 1, [&] {  // the comms console's caravan requests (docs/design/comms-console.md)
@@ -3698,6 +3817,11 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.text("faction", c.faction);
             ar.value("at", c.at);
         });
+    });
+    ar.section("clock", 1, [&] {  // the step clock and the day length (docs/design/day-length.md)
+        ar.value("steps", d.steps);
+        ar.value("dayMinutes", d.dayMinutes);
+        ar.value("calendarAcc", d.calendarAcc);
     });
     // New sections go here, at the end.
 }
@@ -3927,6 +4051,7 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
         }
         s.workTotal = site->workTotal;
         s.workDone = site->workDone;
+        s.floor = site->floor.valid() ? sim.defs_->get(site->floor).defName() : std::string();
         out.site = std::move(s);
     }
     if (const BuiltOf* made = reg.try_get<BuiltOf>(e)) {
@@ -3940,8 +4065,10 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
         const Quality* quality = reg.try_get<Quality>(e);
         const PawnOutfit* outfit = reg.try_get<PawnOutfit>(e);
         const Durability* durability = reg.try_get<Durability>(e);
+        const Dressing* dressing = reg.try_get<Dressing>(e);
+        const Blocking* blocking = reg.try_get<Blocking>(e);
         if (made != nullptr || quality != nullptr || outfit != nullptr || durability != nullptr || reg.all_of<Tainted>(e) ||
-            reg.all_of<StripMark>(e)) {
+            reg.all_of<StripMark>(e) || reg.all_of<HideGear>(e) || dressing != nullptr || blocking != nullptr) {
             SaveApparel a;
             a.stuff = made != nullptr && made->stuff.valid() ? sim.defs_->get(made->stuff).defName() : std::string();
             a.quality = quality != nullptr ? static_cast<int>(quality->level) : -1;
@@ -3952,6 +4079,15 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
             a.nextCheck = outfit != nullptr ? outfit->nextCheck : 0;
             a.hasDurability = durability != nullptr;
             a.durability = durability != nullptr ? durability->share : 1.0f;
+            a.hideGear = reg.all_of<HideGear>(e);
+            a.hasDressing = dressing != nullptr;
+            if (dressing != nullptr) {
+                a.dressing = *dressing;
+            }
+            a.hasBlocking = blocking != nullptr;
+            if (blocking != nullptr) {
+                a.blocking = *blocking;
+            }
             out.apparel = std::move(a);
         }
     }
@@ -4066,6 +4202,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     if (const Gear* gear = reg.try_get<Gear>(e); gear != nullptr && !gear->stowed.empty()) {
         out.stowed = gear->stowed;
     }
+    if (const Gear* gear = reg.try_get<Gear>(e); gear != nullptr && !gear->inventory.empty()) {
+        out.inventory = gear->inventory;
+    }
     if (const WeaponSwitch* change = reg.try_get<WeaponSwitch>(e)) {
         out.weaponSwitch = *change;
     }
@@ -4144,6 +4283,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     if (const SocialFight* fight = reg.try_get<SocialFight>(e)) {
         out.socialFight = *fight;
     }
+    if (const Lovin* lovin = reg.try_get<Lovin>(e)) {
+        out.lovin = *lovin;
+    }
     if (const Projectile* p = reg.try_get<Projectile>(e)) {
         out.projectile = SaveProjectile{sim.defs_->get(p->def).defName(), sim.defs_->get(p->weapon).defName(), *p};
     }
@@ -4162,6 +4304,12 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     }
     if (const KnockedDown* k = reg.try_get<KnockedDown>(e)) {
         out.knocked = *k;
+    }
+    if (const Staggered* st = reg.try_get<Staggered>(e)) {
+        out.staggered = *st;
+    }
+    if (const Talking* talk = reg.try_get<Talking>(e)) {
+        out.talking = SaveTalking{talk->def.valid() ? sim.defs_->get(talk->def).defName() : std::string(), *talk};
     }
     if (const AwayPawn* away = reg.try_get<AwayPawn>(e)) {
         out.away = *away;
@@ -4285,6 +4433,13 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
         }
         site.workTotal = e.site->workTotal;
         site.workDone = e.site->workDone;
+        if (!e.site->floor.empty()) {
+            site.floor = sim.defs_->idOf("Terrain", e.site->floor);
+            if (!site.floor.valid()) {
+                error = "the save has a floor plan for '" + e.site->floor + "', which the data files no longer have";
+                return false;
+            }
+        }
         if (!e.thing || !e.position || e.thing->category != ThingCategory::Building) {
             error = "the save has a building plan that isn't a building on the map";
             return false;
@@ -4326,6 +4481,15 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
         }
         if (a.hasDurability) {
             reg.emplace<Durability>(entity, Durability{a.durability});
+        }
+        if (a.hideGear) {
+            reg.emplace<HideGear>(entity);
+        }
+        if (a.hasDressing) {
+            reg.emplace<Dressing>(entity, a.dressing);
+        }
+        if (a.hasBlocking) {
+            reg.emplace<Blocking>(entity, a.blocking);
         }
     }
     if (e.looks) {
@@ -4565,6 +4729,18 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     if (e.knocked) {
         reg.emplace<KnockedDown>(entity, *e.knocked);
     }
+    if (e.staggered) {
+        reg.emplace<Staggered>(entity, *e.staggered);
+    }
+    if (e.talking) {
+        Talking t = e.talking->t;
+        t.def = sim.defs_->idOf("Interactions", e.talking->def);
+        if (!t.def.valid()) {
+            error = "the save has a talk of '" + e.talking->def + "', which the data files no longer have";
+            return false;
+        }
+        reg.emplace<Talking>(entity, t);
+    }
     if (e.faction) {
         reg.emplace<Faction>(entity, *e.faction);
     }
@@ -4586,6 +4762,13 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
             return false;
         }
         reg.get<Gear>(entity).stowed = *e.stowed;
+    }
+    if (e.inventory) {
+        if (!reg.all_of<Gear>(entity)) {
+            error = "the save has a bag on a pawn without gear";
+            return false;
+        }
+        reg.get<Gear>(entity).inventory = *e.inventory;
     }
     if (e.weaponSwitch) {
         reg.emplace<WeaponSwitch>(entity, *e.weaponSwitch);
@@ -4681,6 +4864,9 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     }
     if (e.socialFight) {
         reg.emplace<SocialFight>(entity, *e.socialFight);
+    }
+    if (e.lovin) {
+        reg.emplace<Lovin>(entity, *e.lovin);
     }
     if (e.turret) {
         reg.emplace<Turret>(entity, *e.turret);
@@ -4840,6 +5026,7 @@ bool SimSaveAccess::moveThings(Sim& from, const std::vector<Entity>& roots, Sim&
         }
         e.playerControlled = false;
         e.socialFight.reset();
+        e.lovin.reset();
         if (!restoreEntity(to, e, error)) {
             return false;
         }
@@ -4926,6 +5113,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.nature = sim.nature_->state();
     d.fire = sim.fire_->saved();
     d.seconds = sim.time_.seconds;
+    d.steps = sim.time_.steps;
+    d.dayMinutes = sim.time_.dayMinutes;
+    d.calendarAcc = sim.calendarAcc_;
     d.rngState = sim.rng_.state();
     d.rngIncrement = sim.rng_.increment();
     d.groundHash = sim.groundHash_;
@@ -4973,6 +5163,9 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.zones.push_back(std::move(z));
     }
     for (const auto& [pawn, s] : sim.drugs_->states()) {
+        if (!sim.things_->exists(pawn)) {
+            continue;  // a pawn that is gone: the load would forget it anyway
+        }
         SaveDrugPawn saved;
         saved.pawn = pawn;
         saved.policy = s.policy;
@@ -5069,6 +5262,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         for (const DeepWork& w : deep.work) {
             d.deep.workAt.push_back(w.at);
             d.deep.work.push_back(w.work);
+            d.deep.tune.push_back(w.tune.valid() ? sim.defs_->get(w.tune).defName() : std::string());
         }
         d.deep.rngState = deep.rngState;
         d.deep.rngIncrement = deep.rngIncrement;
@@ -5209,6 +5403,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             for (const Entity a : gear.stowed) {
                 gearExists = gearExists && a != kNoEntity && reg.valid(a);
             }
+            for (const Entity a : gear.inventory) {
+                gearExists = gearExists && a != kNoEntity && reg.valid(a);
+            }
         }
         if ((e.worker && (!exists(e.worker->job.thing) || !exists(e.worker->job.chair) ||
                           !exists(e.worker->job.site))) ||
@@ -5329,7 +5526,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         std::vector<std::pair<int, DesignationKind>> marks;
         for (size_t i = 0; i < d.designations.cells.size(); ++i) {
-            if (d.designations.kinds[i] > static_cast<uint8_t>(DesignationKind::HarvestPlant)) {
+            if (d.designations.kinds[i] > static_cast<uint8_t>(DesignationKind::RemoveFloor)) {
                 error = "the save has a bad designation";
                 return false;
             }
@@ -5491,6 +5688,10 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
     }
     sim.time_.seconds = d.seconds;
+    sim.time_.steps = d.steps >= 0 ? d.steps : d.seconds;
+    sim.time_.tick = true;
+    sim.time_.dayMinutes = std::clamp(d.dayMinutes, kBaseDayMinutes, kMaxDayMinutes);
+    sim.calendarAcc_ = std::clamp(d.calendarAcc, 0, sim.time_.dayMinutes - 1);
     sim.rng_.restore(d.rngState, d.rngIncrement);
     sim.stockpileCell_ = d.stockpile;
     sim.stats_.hauls = d.hauls;
@@ -5555,7 +5756,11 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                                           static_cast<uint16_t>(d.deep.units[i])});
         }
         for (size_t i = 0; i < d.deep.work.size(); ++i) {
-            deep.work.push_back(DeepWork{d.deep.workAt[i], d.deep.work[i]});
+            DeepWork w{d.deep.workAt[i], d.deep.work[i], DefId{}};
+            if (i < d.deep.tune.size() && !d.deep.tune[i].empty()) {
+                w.tune = sim.defs_->idOf("Things", d.deep.tune[i]);
+            }
+            deep.work.push_back(w);
         }
         deep.rngState = d.deep.rngState;
         deep.rngIncrement = d.deep.rngIncrement;

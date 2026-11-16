@@ -33,6 +33,10 @@ struct PathPointView {
 };
 
 // One thing on the map. Things off the map (e.g. a carried item) are not in the snapshot.
+// How a pawn's body rests (AN1, docs/plans/animation.md "Sim hooks"): on its feet, sitting in a chair, or lying (in a
+// bed, on the ground to sleep, downed or knocked down).
+enum class PawnPosture : uint8_t { Stand, Sit, Lie };
+
 struct ThingView {
     Entity id = kNoEntity;
     DefId def;
@@ -79,6 +83,7 @@ struct ThingView {
     // buildings made of something also have `stuff`.
     ConstructionStage stage = ConstructionStage::Built;
     DefId stuff;
+    DefId floor;  // a floor plan (Thing def FloorPlan): the Terrain floor def it lays
     float buildProgress = 0.0f;
     int materialsHave = 0;
     int materialsNeeded = 0;
@@ -106,6 +111,12 @@ struct ThingView {
     // whether it is in a fight with fists.
     Entity partner = kNoEntity;
     bool socialFight = false;
+    // Having lovin (docs/design/lovin.md): the couple lies in its bed under the covers; Unreal shows a small hearts icon
+    // over them, nothing more.
+    // `lovinPose` is a LovinPose (0 side by side, 1 spooning, 2 embracing, cuddling under the covers; a kiss now and
+    // then is Unreal's to add). No nudity and no sex animation.
+    bool lovin = false;
+    int lovinPose = 0;
     // Recreation, comfort and outdoors needs (docs/design/recreation.md): 0 empty to 1 full, else -1.
     float joy = -1.0f;
     float comfort = -1.0f;
@@ -245,8 +256,24 @@ struct ThingView {
     // `stuff` and a `quality` too (C14).
     uint32_t outfit = 0;
     bool markedForStrip = false;
+    bool hideGear = false;     // the look-only switch: don't draw its clothes and armour (docs/design/armour.md)
+    int dressingSteps = 0;     // steps left putting a piece of armour on from its bag in a fight, 0 for none
+    bool shieldUp = false;     // holding its shield up (docs/design/shields.md); `facingX/Y` is where it points
+    bool shieldSlung = false;  // its shield hangs on its back behind a two-handed weapon
+    DefId shield;              // the shield it wears (invalid: none) and what it is made of, for drawing it
+    DefId shieldStuff;
     uint32_t firstApparel = 0;
     uint32_t apparelCount = 0;
+    // Inventory and carry weight (docs/design/inventory.md). Pawns: what they carry in kg (worn, weapons, bag,
+    // hauled stack) and what they can carry, and their bag: `inventoryCount` items from Snapshot::inventory[firstInventory].
+    float loadKg = 0.0f;
+    float capacityKg = 0.0f;
+    // Pawns: how fast they walk as a share of their def's speed (load, talents, a stagger, worn weight, hunger), which
+    // the player's own walk in direct mode follows; and whether they are starving (food 0: 75% speed, needs.md).
+    float moveFactor = 1.0f;
+    bool starving = false;
+    uint32_t firstInventory = 0;
+    uint32_t inventoryCount = 0;
     int quality = -1;
     bool tainted = false;
     // Repair and upgrades (docs/design/repair.md). Apparel and weapons on the map: whether a colonist is to repair them.
@@ -265,6 +292,27 @@ struct ThingView {
     int castStepsLeft = 0;
     // Pawns in a mental break (docs/design/mental-breaks.md): its MentalBreaks def, invalid when not in one.
     DefId mentalBreak;
+    // What the animation needs (AN1, docs/plans/animation.md "Sim hooks"). Pawns: posture and the chair or bed it uses
+    // (none on the ground); pain, 0 to 1 (health's total); the interaction showing on it now (Interactions def, invalid
+    // for none; the other pawn; whether this one spoke; whether it worked; game seconds it still shows); steps left of a
+    // bullet stagger (0: not staggered); the tool of the current or last melee swing (an index into its weapon's or
+    // body's tools, as the MeleeSwing event's `message` names it) and whether it is a strong one; for a pawn with a fight
+    // target, the height in metres of what stands in the next cell toward it (0 open, 25.5 a wall) and that direction
+    // (a Dir8 number); and while walking over a low obstacle in its cell (sandbags, a fence), how tall it is (metres).
+    PawnPosture posture = PawnPosture::Stand;
+    Entity seat = kNoEntity;
+    float pain = 0.0f;
+    DefId talkDef;
+    Entity talkWith = kNoEntity;
+    bool talkStarted = false;
+    bool talkOk = true;
+    int talkSecondsLeft = 0;
+    int staggeredFor = 0;
+    uint8_t meleeTool = 0;
+    bool meleeStrong = false;
+    float coverHeight = 0.0f;
+    uint8_t coverDir = 0;
+    float vaultHeight = 0.0f;
 };
 
 // One piece of worn apparel (Unreal draws each layer on the pawn, torn by `hitPointShare`).
@@ -278,10 +326,20 @@ struct ApparelView {
     bool tainted = false;
 };
 
+// One item in a pawn's bag (docs/design/inventory.md).
+struct InventoryItemView {
+    Entity item = kNoEntity;
+    DefId def;
+    int count = 1;
+    float massKg = 0.0f;  // the whole stack, as heavy as it is for this pawn (its skills make some things lighter)
+};
+
 // An outfit policy by the id the commands use.
 struct OutfitView {
     uint32_t id = 0;
     std::string name;
+    bool armourInBag = false;   // its armour is kept in the bag and put on for fights (docs/design/armour.md)
+    bool clothesInBag = false;  // ...and its clothes (not hats), for nudists
 };
 
 // A raid squad on the map (docs/design/raids.md). `state` is a SquadState: 0 Advance, 1 Hold,
@@ -649,7 +707,11 @@ struct AttunedView {
 };
 
 struct Snapshot {
-    int64_t gameSeconds = 0;  // Sim::time().seconds when it was written
+    int64_t gameSeconds = 0;  // Sim::time().seconds when it was written: the calendar (the clock, the sun)
+    // Sim::time().steps: one per step, real time. Use it, not gameSeconds, to tell whether a step has
+    // run (with a day longer than 48 minutes the calendar stands still on some steps).
+    int64_t steps = 0;
+    int dayMinutes = 48;  // real minutes a game day lasts at 1x (docs/design/day-length.md)
     int mapWidth = 0;
     int mapHeight = 0;
     std::vector<ThingView> things;  // sorted by id
@@ -705,6 +767,7 @@ struct Snapshot {
     std::vector<GoodwillView> goodwill;    // every faction's goodwill with the colony
     std::vector<QuestView> quests;         // offered, active and recently finished quests, by id
     std::vector<ApparelView> apparel;      // worn apparel, see ThingView
+    std::vector<InventoryItemView> inventory;  // pawns' bags, see ThingView
     std::vector<DefId> fittedParts;        // upgrade parts fitted to guns, see ThingView
     std::vector<OutfitView> outfits;       // the outfit policies, by id
     WeatherView weather;

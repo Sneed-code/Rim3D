@@ -229,6 +229,7 @@ struct RaidRules {
     float lineMoves = 6.0f;        // the line moves when the threat has moved it this far
     int shelterSearch = 4000;      // cells searched for an indoor cell when no shelter is marked
     float shelterFlee = 25.0f;     // no indoor cell: this far from the threat instead
+    float shelterDanger = 20.0f;   // a shelter cell is at least this far from an enemy and a brood mound (ours)
     // F12 (all ours): which strategy a raid picks when the caller doesn't say, and how each one works.
     float weightAssault = 60.0f;
     float weightSappers = 12.0f;   // times blockedBoost when walls shut the colony off from every edge
@@ -331,6 +332,9 @@ public:
     // Where outsiders walk in: `target` is the player's colonist nearest the middle (else the middle) and `entry` a cell
     // near a map edge (`edge` 0 to 3, or -1 for any) that can reach it. False, with a reason, if there is no way in.
     bool findEntry(int edge, CellPos& target, CellPos& entry, std::string& error);
+    // The colony's middle, as the alarm takes it for "home": the mean position of the colony's buildings (not ruins,
+    // geysers or brood mounds), else of its colonists. False when there are neither.
+    bool colonyMiddle(float& x, float& y) const;
     bool soundAlarm(bool on, std::string& error);
     bool setRole(Entity pawn, DefenseRole role, bool hasSpot, CellPos spot, std::string& error);
     // The room at `cell` is where Shelter colonists go; `clear` takes the mark off.
@@ -347,7 +351,8 @@ public:
     // A Faction id for a Factions def: the same def always gets the same id.
     FactionId factionId(const std::string& faction);
     DefenseRole roleOf(Entity pawn) const;
-    // Too hungry to answer the alarm (`RaidRules::alarmEatBelow`): it is let off to eat.
+    // Too hungry to answer the alarm (`RaidRules::alarmEatBelow`): it is let off to eat, unless an enemy that can see it is
+    // within `keepWorkingRadius`.
     bool excusedToEat(Entity pawn) const;
 
     const RaidState& state() const { return state_; }
@@ -365,6 +370,7 @@ private:
         struct Wear {
             std::string thing;
             float chance = 1.0f;
+            std::string stuff;  // what it is made of, for things made of a stuff (a clan warrior's wooden shield)
         };
         std::vector<Wear> apparel;
     };
@@ -401,6 +407,8 @@ private:
     void callUp(Entity pawn, const std::vector<Entity>& spotted);
     CellPos defensePoint(Entity pawn, const DefensePlan* plan);
     CellPos shelterCell(Entity pawn);
+    // Where the shelter rules see danger: able enemies (not calm animals, prisoners, visitors or the downed) and brood mounds.
+    std::vector<std::pair<float, float>> shelterDangers() const;
     CellPos exitCell(Entity pawn, const Squad& squad);
     bool nearestFree(float x, float y, int level, CellPos from, int radius, CellPos& out);
     float strength(Entity pawn) const;
@@ -423,7 +431,7 @@ private:
     float adaptGrowthRate_ = 1.0f;  // the difficulty's, not saved
     float adaptImpact_ = 1.0f;
     std::vector<float> marketValue_;  // per def id
-    std::vector<float> armor_;        // per def id: armorRatingSharp of apparel
+    std::vector<float> armor_;        // per def id: gear.mitigation.sharp / 50 of armour
     std::vector<Event>* events_ = nullptr;
     std::function<void(Entity, uint64_t, bool)> looks_;
     Construction* construction_ = nullptr;

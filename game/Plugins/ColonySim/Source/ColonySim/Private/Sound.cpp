@@ -1,6 +1,9 @@
 #include "ColonySim/Sound.h"
 
 #include "ColonySim/Map.h"
+#include "ColonySim/Random.h"
+
+#include <cstring>
 
 namespace colony {
 
@@ -133,7 +136,58 @@ void soundMeleeHit(const DefDatabase& db, const Event& e, std::vector<SoundPlay>
     out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));
 }
 
+// The voice slot of a pawn's gender ("femaleHit"), or null when it has no voice.
+const char* soundVoiceSlot(SoundGender gender, SoundVoice voice) {
+    if (gender == SoundGender::Female) return voice == SoundVoice::Hit ? "femaleHit" : "femaleScream";
+    if (gender == SoundGender::Male) return voice == SoundVoice::Hit ? "maleHit" : "maleScream";
+    return nullptr;
+}
+
+uint64_t soundFloatBits(float f) {
+    uint32_t bits = 0;
+    std::memcpy(&bits, &f, sizeof(bits));
+    return bits;
+}
+
+// The pawn's voice cue for this kind of cry; empty if it has none.
+std::string soundVoiceCue(const DefDatabase& db, const SoundDefOf& defOf, const SoundGenderOf& genderOf, Entity pawn,
+                          SoundVoice voice) {
+    if (!genderOf || pawn == kNoEntity) return {};
+    const char* slot = soundVoiceSlot(genderOf(pawn), voice);
+    const Def* def = soundDefOfEntity(db, defOf, pawn);
+    if (slot == nullptr || def == nullptr) return {};
+    return soundSlot(*def, slot);
+}
+
+SoundPlay soundVoiceOn(const std::string& cue, Entity pawn, SoundVoice voice, float x, float y, float z, bool hasPos) {
+    SoundPlay p = soundOn(cue, pawn);
+    p.voice = voice;
+    p.hasPos = hasPos;
+    p.x = x;
+    p.y = y;
+    p.z = z;
+    return p;
+}
+
+// A grunt from the one struck by a hard melee hit, some of the time.
+void soundHitVoice(const DefDatabase& db, const Event& e, const SoundDefOf& defOf, const SoundGenderOf& genderOf,
+                   std::vector<SoundPlay>& out) {
+    if (e.hit != ProjectileHitKind::Pawn || e.message != "hit") return;
+    const std::string cue = soundVoiceCue(db, defOf, genderOf, e.target, SoundVoice::Hit);
+    const Def* cueDef = cue.empty() ? nullptr : db.find("SoundCues", cue);
+    if (cueDef == nullptr || e.amount <= static_cast<float>(cueDef->number("minDamage", 3.0))) return;
+    const uint64_t roll = splitMix64(static_cast<uint64_t>(e.target) ^ (soundFloatBits(e.amount) << 32) ^
+                                     splitMix64(soundFloatBits(e.x) ^ (soundFloatBits(e.y) << 32)));
+    const double chance = cueDef->number("chance", 0.5);
+    if (static_cast<double>(roll >> 11) * 0x1.0p-53 >= chance) return;
+    out.push_back(soundVoiceOn(cue, e.target, SoundVoice::Hit, e.x, e.y, e.z, true));
+}
+
 }  // namespace
+
+bool soundViolentDeath(const std::string& cause) {
+    return cause == "a vital part destroyed" || cause == "organ failure" || cause == "executed";
+}
 
 std::string soundSlot(const Def& def, const char* slot) {
     return def.text((std::string("visual.sound.") + slot).c_str());
@@ -143,7 +197,8 @@ std::string soundStepCue(const DefDatabase& db, DefId terrain) {
     return soundSlotOr(soundDef(db, terrain), "step", "Step_Dirt");
 }
 
-void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defOf, std::vector<SoundPlay>& out) {
+void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defOf, std::vector<SoundPlay>& out,
+                   const SoundGenderOf& genderOf) {
     switch (e.type) {
         case EventType::ShotFired: {
             const std::string cue = soundSlotOr(soundDef(db, e.def), "shot", "Shot_Pistol");
@@ -171,7 +226,15 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
             if (!cue.empty()) out.push_back(soundOn(cue, e.thing));
             break;
         }
-        case EventType::MeleeHit: soundMeleeHit(db, e, out); break;
+        case EventType::MeleeHit:
+            soundMeleeHit(db, e, out);
+            soundHitVoice(db, e, defOf, genderOf, out);
+            break;
+        // A hit softened by a raised shield (docs/design/shields.md); one it stopped already sounds as a blocked blow or an
+        // armour impact.
+        case EventType::ShieldBlocked:
+            if (e.message == "softened") out.push_back(soundOn("Melee_Block", e.thing));
+            break;
         case EventType::Explosion: {
             const std::string cue = soundSlotOr(soundDef(db, e.def), "explosion", "Explosion_Blast");
             out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));
@@ -194,6 +257,12 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
             const char* slot = e.type == EventType::PawnDied ? "death" : "downed";
             const std::string cue = soundSlotOr(soundDefOfEntity(db, defOf, e.thing), slot, "");
             if (!cue.empty()) out.push_back(soundOn(cue, e.thing));
+            if (e.type == EventType::PawnDowned || soundViolentDeath(e.message)) {
+                const std::string scream = soundVoiceCue(db, defOf, genderOf, e.thing, SoundVoice::Scream);
+                if (!scream.empty()) out.push_back(soundVoiceOn(scream, e.thing, SoundVoice::Scream, static_cast<float>(e.cell.x) + 0.5f,
+                                                      static_cast<float>(e.cell.y) + 0.5f,
+                                                      static_cast<float>(e.cell.level) * Map::kLevelHeightM, true));
+            }
             break;
         }
         case EventType::PawnCaughtFire:

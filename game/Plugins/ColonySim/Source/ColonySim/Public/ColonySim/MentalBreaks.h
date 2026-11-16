@@ -68,6 +68,12 @@ struct MentalBreaker {
     std::vector<Entity> visited;  // targets it is finished with (insulted, or not worth trying again)
 };
 
+// On a Berserk break: it attacks anyone, so the colony's fighters and the alarm take it for an enemy until it is downed or
+// the break ends (docs/design/mental-breaks.md "Others and a berserker").
+inline bool isBerserk(const MentalBreaker* b) {
+    return b != nullptr && b->active && b->state == BreakState::Berserk;
+}
+
 // The numbers: MentalBreakRules (when) and MentalBreakBehaviour (what) in data/defs/Rules.
 struct COLONY_API MentalBreakRules {
     bool present = false;
@@ -161,6 +167,7 @@ private:
         BreakState state = BreakState::Wander;
         int count = 0;
         std::vector<std::string> needs;  // the def's `requires`
+        std::string trait;               // the def's `requiredTrait`: only pawns with it get this break
     };
     enum class Walk : uint8_t { None, Going, Arrived, Failed };
 

@@ -1,6 +1,8 @@
 #include "ColonySim/Health.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
+#include "ColonySim/Needs.h"
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Regions.h"
@@ -547,6 +549,33 @@ TEST_CASE("Movement: downed pawns lying in a doorway are stepped over") {
         sim.step();
         ++steps;
     }
+    CHECK_FALSE(moveTestMover(sim, walker).gaveUp);
+    CHECK(moveTestPos(sim, walker).x > 34.0f);
+    CHECK(steps < static_cast<int>(10.0f / kMoveTestSpeed) + 40);
+}
+
+TEST_CASE("Movement: a pawn asleep in a doorway is stepped over") {
+    // Year run, seed 1: a colonist lying down (LayDown) in a doorway held a walker on its way to eat for 90 minutes.
+    Sim sim = moveTestSim(64);
+    moveTestWall(sim, 30, 20, 30, 29);
+    moveTestWall(sim, 30, 31, 30, 40);  // a one-cell gap at y 30
+    const Entity sleeper = moveTestPawn(sim, 30, 30);
+    Needs tired;
+    tired.rest = 0.05f;  // it sleeps on through the test
+    sim.things().registry().emplace_or_replace<Needs>(sleeper, tired);
+    sim.jobs().addWorker(sleeper, {}, false);
+    Job& job = sim.things().registry().get<Worker>(sleeper).job;
+    job.type = JobType::LayDown;
+    job.step = kLayDownLieStep;
+    job.cell = CellPos{30, 30, 0};
+    const Entity walker = moveTestPawn(sim, 25, 30);
+    moveTestWalk(sim, walker, {CellPos{30, 30, 0}, CellPos{35, 30, 0}});
+    int steps = 0;
+    while (!moveTestMover(sim, walker).arrived() && !moveTestMover(sim, walker).gaveUp && steps < 1000) {
+        sim.step();
+        ++steps;
+    }
+    CHECK(jobIsLyingDown(sim.things().registry().get<Worker>(sleeper).job));
     CHECK_FALSE(moveTestMover(sim, walker).gaveUp);
     CHECK(moveTestPos(sim, walker).x > 34.0f);
     CHECK(steps < static_cast<int>(10.0f / kMoveTestSpeed) + 40);

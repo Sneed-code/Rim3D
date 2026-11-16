@@ -1,6 +1,12 @@
 #include "OrdersSubsystem.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "Framework/Application/IInputProcessor.h"
+#include "Framework/Application/SlateApplication.h"
+#include "UnrealClient.h"
+#include "Widgets/SViewport.h"
 #include "Components/SceneComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
@@ -24,8 +30,10 @@
 #include "VisualMesh.h"
 
 #include "ColonySim/Construction.h"
+#include "ColonySim/Farming.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Plants.h"
+#include "ColonySim/Research.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/UpperFloors.h"
 
@@ -33,6 +41,10 @@
 #include <vector>
 
 DEFINE_LOG_CATEGORY_STATIC(LogOrders, Log, All);
+
+static TAutoConsoleVariable<int32> CVarOrdersClickFirst(TEXT("Orders.ClickFirst"), 1,
+	TEXT("1: a left press on the world with an orders tool in hand is taken ahead of the ImGui overlay whenever no ImGui window is under the cursor. ")
+	TEXT("0: the old way, through ImGui's want-the-mouse flag and the overseer pawn's key binding (smoke test orders_world shows the difference)."));
 
 namespace
 {
@@ -50,6 +62,8 @@ namespace
 	constexpr int32 OrdDeconstruct = 4;
 	constexpr int32 OrdZoneTile = 5;
 	constexpr int32 OrdZoneRing = 6;
+	constexpr int32 OrdGrowTile = 7;
+	constexpr int32 OrdGrowRing = 8;
 	constexpr int32 OrdKeyScale = 10000;
 
 	constexpr int32 OrdMaxBuildOrigins = 200;
@@ -61,6 +75,7 @@ namespace
 	const FLinearColor OrdHarvestColor = FLinearColor::FromSRGBColor(FColor(245, 215, 50));
 	const FLinearColor OrdDeconstructColor = FLinearColor::FromSRGBColor(FColor(225, 50, 50));
 	const FLinearColor OrdZoneColor = FLinearColor::FromSRGBColor(FColor(60, 150, 230));
+	const FLinearColor OrdGrowColor = FLinearColor::FromSRGBColor(FColor(120, 200, 60));
 
 	uint64 OrdMix(uint64 Seed, uint64 Value)
 	{
@@ -152,6 +167,7 @@ namespace
 			case EOrderTool::Harvest: return FColor(245, 215, 50);
 			case EOrderTool::Stockpile: return FColor(60, 150, 230);
 			case EOrderTool::RemoveZone: return FColor(160, 160, 170);
+			case EOrderTool::Grow: return FColor(120, 200, 60);
 			case EOrderTool::Cancel: return FColor(255, 255, 255);
 			case EOrderTool::Deconstruct: return FColor(225, 50, 50);
 			default: return FColor(255, 255, 255);
@@ -168,13 +184,20 @@ namespace
 		return Out;
 	}
 
-	bool OrdButton(const FString& Label, bool bActive)
+	// `Rects` keeps where each button was drawn (ImGui pixels), so a test can click it with real mouse events.
+	bool OrdButton(const FString& Label, bool bActive, TMap<FString, FBox2D>* Rects = nullptr)
 	{
 		if (bActive)
 		{
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.45f, 0.75f, 1.0f));
 		}
 		const bool bClicked = ImGui::Button(TCHAR_TO_UTF8(*Label));
+		if (Rects)
+		{
+			const ImVec2 Min = ImGui::GetItemRectMin();
+			const ImVec2 Max = ImGui::GetItemRectMax();
+			Rects->Add(Label, FBox2D(FVector2D(Min.x, Min.y), FVector2D(Max.x, Max.y)));
+		}
 		if (bActive)
 		{
 			ImGui::PopStyleColor();
@@ -182,11 +205,74 @@ namespace
 		return bClicked;
 	}
 
+	const TCHAR* OrdToolName(EOrderTool Tool)
+	{
+		switch (Tool)
+		{
+			case EOrderTool::None: return TEXT("None");
+			case EOrderTool::Build: return TEXT("Build");
+			case EOrderTool::Stockpile: return TEXT("Stockpile");
+			case EOrderTool::RemoveZone: return TEXT("RemoveZone");
+			case EOrderTool::Mine: return TEXT("Mine");
+			case EOrderTool::Chop: return TEXT("Chop");
+			case EOrderTool::Harvest: return TEXT("Harvest");
+			case EOrderTool::Cancel: return TEXT("Cancel");
+			case EOrderTool::Deconstruct: return TEXT("Deconstruct");
+			case EOrderTool::Grow: return TEXT("Grow");
+		}
+		return TEXT("?");
+	}
+
 	void OrdText(const FString& Text)
 	{
 		const FTCHARToUTF8 Utf8(*Text);
 		ImGui::TextUnformatted(Utf8.Get(), Utf8.Get() + Utf8.Length());
 	}
+}
+
+namespace
+{
+	/**
+	 * Left button events for the orders tools, before the ImGui overlay's own input processor sees them. That processor swallows
+	 * every mouse press while ImGui's io.WantCaptureMouse is set, and that flag also stays set while ImGui believes some mouse button
+	 * is still held (a release it never got), so a press on the ground with a tool in hand could die there without a word, while
+	 * the bar's own buttons kept working. Here a world press needs only that no ImGui window or popup is under the cursor.
+	 */
+	class FOrdersClickProcessor : public IInputProcessor
+	{
+	public:
+		explicit FOrdersClickProcessor(UOrdersSubsystem* InOwner) : Owner(InOwner) {}
+
+		virtual void Tick(const float DeltaTime, FSlateApplication& SlateApp, TSharedRef<ICursor> Cursor) override {}
+
+		virtual bool HandleMouseButtonDownEvent(FSlateApplication& SlateApp, const FPointerEvent& Event) override
+		{
+			UOrdersSubsystem* Orders = Owner.Get();
+			return Orders && Event.GetEffectingButton() == EKeys::LeftMouseButton && Orders->HandleSlateLeftButton(true, FVector2D(Event.GetScreenSpacePosition()));
+		}
+
+		virtual bool HandleMouseButtonDoubleClickEvent(FSlateApplication& SlateApp, const FPointerEvent& Event) override
+		{
+			// A quick second click arrives as a double click; for a tool it is just another press.
+			return HandleMouseButtonDownEvent(SlateApp, Event);
+		}
+
+		virtual bool HandleMouseButtonUpEvent(FSlateApplication& SlateApp, const FPointerEvent& Event) override
+		{
+			UOrdersSubsystem* Orders = Owner.Get();
+			if (Orders && Event.GetEffectingButton() == EKeys::LeftMouseButton)
+			{
+				Orders->HandleSlateLeftButton(false, FVector2D(Event.GetScreenSpacePosition()));
+			}
+			// Everyone else (ImGui, the viewport) still gets the release.
+			return false;
+		}
+
+		virtual const TCHAR* GetDebugName() const override { return TEXT("OrdersClickProcessor"); }
+
+	private:
+		TWeakObjectPtr<UOrdersSubsystem> Owner;
+	};
 }
 
 bool UOrdersSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
@@ -207,6 +293,11 @@ void UOrdersSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UOrdersSubsystem::Deinitialize()
 {
+	if (ClickProcessor.IsValid() && FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().UnregisterInputPreProcessor(ClickProcessor);
+	}
+	ClickProcessor.Reset();
 	OverlayActor = nullptr;
 	OverlayComponents.Reset();
 	GhostGood = nullptr;
@@ -409,6 +500,23 @@ colony::DefId UOrdersSubsystem::BestStuffFor(colony::DefId Def) const
 
 // ---- Tools -------------------------------------------------------------------------------------
 
+bool UOrdersSubsystem::SetGrowCrop(const FString& DefName)
+{
+	const USimSubsystem* Bridge = GetBridge();
+	const colony::Sim* Sim = Bridge ? Bridge->GetSim() : nullptr;
+	if (!Sim)
+	{
+		return false;
+	}
+	const colony::DefId Crop = Sim->defs().idOf("Things", TCHAR_TO_UTF8(*DefName));
+	if (!Sim->farming().isCrop(Crop) || !Sim->research().unlocked(Sim->defs().get(Crop)))
+	{
+		return false;
+	}
+	GrowCrop = Crop;
+	return true;
+}
+
 void UOrdersSubsystem::SetTool(EOrderTool NewTool)
 {
 	bDragging = false;
@@ -532,6 +640,57 @@ bool UOrdersSubsystem::PlaceAtHover()
 
 // ---- Mouse and cells ---------------------------------------------------------------------------
 
+bool UOrdersSubsystem::ScreenToViewport(const FVector2D& ScreenSpace, FVector2D& OutPixel) const
+{
+	const UWorld* World = GetWorld();
+	UGameViewportClient* Client = World ? World->GetGameViewport() : nullptr;
+	const TSharedPtr<SViewport> Widget = Client ? Client->GetGameViewportWidget() : nullptr;
+	if (!Widget || !Client->Viewport)
+	{
+		return false;
+	}
+	const FGeometry& Geometry = Widget->GetTickSpaceGeometry();
+	const FVector2D LocalSize = FVector2D(Geometry.GetLocalSize());
+	const FIntPoint Size = Client->Viewport->GetSizeXY();
+	if (LocalSize.X <= 0.0 || LocalSize.Y <= 0.0 || Size.X <= 0 || Size.Y <= 0)
+	{
+		return false;
+	}
+	OutPixel = FVector2D(Geometry.AbsoluteToLocal(ScreenSpace)) * FVector2D(Size) / LocalSize;
+	return OutPixel.X >= 0.0 && OutPixel.Y >= 0.0 && OutPixel.X < Size.X && OutPixel.Y < Size.Y;
+}
+
+bool UOrdersSubsystem::CursorViewportPosition(FVector2D& OutPixel) const
+{
+	return FSlateApplication::IsInitialized() && ScreenToViewport(FVector2D(FSlateApplication::Get().GetCursorPos()), OutPixel);
+}
+
+bool UOrdersSubsystem::HandleSlateLeftButton(bool bPressed, const FVector2D& ScreenSpace)
+{
+	if (bPressed)
+	{
+		FVector2D Pixel;
+		if (CVarOrdersClickFirst.GetValueOnGameThread() == 0 || Tool == EOrderTool::None || !IsOverseerActive() || bMouseOverUi || !ScreenToViewport(ScreenSpace, Pixel))
+		{
+			return false;
+		}
+		return HandleLeftPressed(Pixel);
+	}
+	if (!bDragging)
+	{
+		return false;
+	}
+	FVector2D Pixel;
+	if (!ScreenToViewport(ScreenSpace, Pixel))
+	{
+		// Let go outside the game's view: the drag ends at the last cell it was over.
+		UE_LOG(LogOrders, Log, TEXT("Left release outside the view: tool %s, ends at the last hovered cell"), OrdToolName(Tool));
+		EndDrag(Hover);
+		return true;
+	}
+	return HandleLeftReleased(Pixel);
+}
+
 FSimPick UOrdersSubsystem::PickGroundAt(const FVector2D& Screen) const
 {
 	UWorld* World = GetWorld();
@@ -551,12 +710,21 @@ bool UOrdersSubsystem::HandleLeftPressed(const FVector2D& Screen)
 {
 	if (Tool == EOrderTool::None || !IsOverseerActive())
 	{
+		UE_LOG(LogOrders, Verbose, TEXT("Left press at (%.0f, %.0f): no tool in hand (tool %s, overseer %s)"), Screen.X, Screen.Y,
+			OrdToolName(Tool), IsOverseerActive() ? TEXT("on") : TEXT("off"));
 		return false;
 	}
 	const FSimPick Pick = PickGroundAt(Screen);
+	UE_LOG(LogOrders, Log, TEXT("Left press at (%.0f, %.0f): tool %s, ground %s"), Screen.X, Screen.Y, OrdToolName(Tool),
+		Pick.Kind == ESimPickKind::Cell ? *FString::Printf(TEXT("cell %d, %d, %d"), Pick.Cell.x, Pick.Cell.y, Pick.Cell.level) : TEXT("none"));
 	if (Pick.Kind == ESimPickKind::Cell)
 	{
 		BeginDrag(Pick.Cell);
+	}
+	else
+	{
+		// Say why nothing happens instead of failing silently (off the map, the sky, or the camera has no view).
+		Say(TEXT("Click on the ground"));
 	}
 	return true;
 }
@@ -568,6 +736,8 @@ bool UOrdersSubsystem::HandleLeftReleased(const FVector2D& Screen)
 		return false;
 	}
 	const FSimPick Pick = PickGroundAt(Screen);
+	UE_LOG(LogOrders, Log, TEXT("Left release at (%.0f, %.0f): tool %s, ground %s"), Screen.X, Screen.Y, OrdToolName(Tool),
+		Pick.Kind == ESimPickKind::Cell ? *FString::Printf(TEXT("cell %d, %d, %d"), Pick.Cell.x, Pick.Cell.y, Pick.Cell.level) : TEXT("none (ends at the last hovered cell)"));
 	EndDrag(Pick.Kind == ESimPickKind::Cell ? Pick.Cell : Hover);
 	return true;
 }
@@ -748,9 +918,27 @@ int32 UOrdersSubsystem::EndDrag(colony::CellPos Cell)
 			Say(FString::Printf(TEXT("Stockpile zone %d x %d"), Rect.sizeX, Rect.sizeY));
 			break;
 		case EOrderTool::RemoveZone:
+			// Stockpile and growing zones alike (each command fails quietly where it finds no zone of its kind).
 			Submit(colony::RemoveZoneCellsCommand{Rect});
+			Submit(colony::RemoveGrowingZoneCellsCommand{Rect});
 			Say(TEXT("Zone cells removed"));
 			break;
+		case EOrderTool::Grow:
+		{
+			if (!GrowCrop.valid())
+			{
+				SetGrowCrop(TEXT("Plant_Rice"));
+			}
+			if (!GrowCrop.valid())
+			{
+				Say(TEXT("No crop to sow"));
+				break;
+			}
+			const colony::Def& Crop = Bridge->GetSim()->defs().get(GrowCrop);
+			Submit(colony::CreateGrowingZoneCommand{Rect, Crop.defName()});
+			Say(FString::Printf(TEXT("Growing zone %d x %d: %s"), Rect.sizeX, Rect.sizeY, *OrdCapital(Crop.label())));
+			break;
+		}
 		case EOrderTool::Mine:
 			Submit(colony::DesignateCommand{Rect, colony::DesignationKind::Mine});
 			Say(FString::Printf(TEXT("Mine %d x %d"), Rect.sizeX, Rect.sizeY));
@@ -961,6 +1149,7 @@ void UOrdersSubsystem::EnsureOverlayActor()
 			return Material;
 		};
 		ZoneMaterial = Make(FLinearColor(OrdZoneColor.R, OrdZoneColor.G, OrdZoneColor.B, 0.30f));
+		GrowZoneMaterial = Make(FLinearColor(OrdGrowColor.R, OrdGrowColor.G, OrdGrowColor.B, 0.22f));
 		GhostGoodMaterial = Make(FLinearColor(0.15f, 0.85f, 0.25f, 0.42f));
 		GhostBadMaterial = Make(FLinearColor(0.95f, 0.18f, 0.15f, 0.42f));
 	}
@@ -1017,6 +1206,12 @@ UStaticMesh* UOrdersSubsystem::GetMarkMesh(int32 Kind, int32 TopCm)
 		case OrdZoneTile:
 			Box(FVector3f(96.0f, 96.0f, 3.0f), FVector3f::ZeroVector, OrdZoneColor);
 			break;
+		case OrdGrowTile:
+			Box(FVector3f(96.0f, 96.0f, 3.0f), FVector3f::ZeroVector, OrdGrowColor);
+			break;
+		case OrdGrowRing:
+			Ring(OrdGrowColor);
+			break;
 		default:
 			Ring(OrdZoneColor);
 			break;
@@ -1060,7 +1255,7 @@ void UOrdersSubsystem::RebuildMarks(const USimSubsystem& Bridge)
 	const UBuildingSubsystem* Buildings = GetWorld()->GetSubsystem<UBuildingSubsystem>();
 	TMap<int32, TArray<FTransform>> Batches;
 	TMap<int32, UMaterialInterface*> Materials;
-	Stats.MineMarks = Stats.CutMarks = Stats.HarvestMarks = Stats.DeconstructMarks = Stats.ZoneCells = 0;
+	Stats.MineMarks = Stats.CutMarks = Stats.HarvestMarks = Stats.DeconstructMarks = Stats.ZoneCells = Stats.GrowCells = 0;
 
 	// How high a plant stands, from its def's stem and crown, cm.
 	TMap<uint32, int32> PlantTop;
@@ -1132,6 +1327,13 @@ void UOrdersSubsystem::RebuildMarks(const USimSubsystem& Bridge)
 		Place(ZoneDraw ? OrdZoneTile : OrdZoneRing, 0, Cell.x, Cell.y, 2.0, ZoneDraw);
 		++Stats.ZoneCells;
 	}
+	// Growing zones: a faint green tile under the crop, so a freshly drawn field shows before anything is sown.
+	UMaterialInterface* GrowDraw = GrowZoneMaterial.Get();
+	for (const colony::CellPos& Cell : Snapshot.growingZoneCells)
+	{
+		Place(GrowDraw ? OrdGrowTile : OrdGrowRing, 0, Cell.x, Cell.y, 1.0, GrowDraw);
+		++Stats.GrowCells;
+	}
 
 	for (TPair<int32, TObjectPtr<UInstancedStaticMeshComponent>>& Pair : OverlayComponents)
 	{
@@ -1193,6 +1395,10 @@ void UOrdersSubsystem::RefreshOverlay()
 		for (const colony::CellPos& Cell : Snapshot.zoneCells)
 		{
 			Signature = OrdMix(Signature, OrdCellKey(Cell.x, Cell.y) ^ 0x5A5A5A5AULL);
+		}
+		for (const colony::CellPos& Cell : Snapshot.growingZoneCells)
+		{
+			Signature = OrdMix(Signature, OrdCellKey(Cell.x, Cell.y) ^ 0x67726F77ULL);
 		}
 		for (const colony::ThingView& View : Snapshot.things)
 		{
@@ -1366,12 +1572,20 @@ void UOrdersSubsystem::Tick(float DeltaTime)
 	}
 	if (bMouseDriven && Tool != EOrderTool::None && !bMouseOverUi)
 	{
+		// Slate's own cursor first: the viewport's cached mouse position only moves while the viewport gets mouse moves.
+		FVector2D Mouse;
 		float MouseX = 0.0f;
 		float MouseY = 0.0f;
 		const APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
-		if (PC && PC->GetMousePosition(MouseX, MouseY))
+		bool bHaveMouse = CursorViewportPosition(Mouse);
+		if (!bHaveMouse && PC && PC->GetMousePosition(MouseX, MouseY))
 		{
-			const FSimPick Pick = PickGroundAt(FVector2D(MouseX, MouseY));
+			Mouse = FVector2D(MouseX, MouseY);
+			bHaveMouse = true;
+		}
+		if (bHaveMouse)
+		{
+			const FSimPick Pick = PickGroundAt(Mouse);
 			if (Pick.Kind == ESimPickKind::Cell)
 			{
 				SetHoverCell(Pick.Cell);
@@ -1409,8 +1623,27 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 	const float Margin = 12.0f * Scale;
 	const ImGuiWindowFlags PanelFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
-	// ImGui knows from the last frame whether the cursor is over one of its windows.
-	bMouseOverUi = ImGui::GetIO().WantCaptureMouse;
+	// Ahead of ImGui's input processor, which is up by now (see FOrdersClickProcessor).
+	if (!bClickProcessorAtFront && FSlateApplication::IsInitialized())
+	{
+		if (ClickProcessor.IsValid())
+		{
+			FSlateApplication::Get().UnregisterInputPreProcessor(ClickProcessor);
+		}
+		ClickProcessor = MakeShared<FOrdersClickProcessor>(this);
+		FSlateApplication::Get().RegisterInputPreProcessor(ClickProcessor, 0);
+		bClickProcessorAtFront = true;
+	}
+	// ImGui knows from the last frame whether the cursor is over one of its windows (or a popup is open). Not io.WantCaptureMouse:
+	// that also stays on while ImGui thinks a mouse button is held.
+	bMouseOverUi = CVarOrdersClickFirst.GetValueOnGameThread() == 0 ? ImGui::GetIO().WantCaptureMouse
+		: ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) || ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopup);
+	if (ImGui::GetIO().WantCaptureMouse && !bMouseOverUi && !ImGui::IsAnyItemActive() && !bWarnedImGuiHeld)
+	{
+		bWarnedImGuiHeld = true;
+		UE_LOG(LogOrders, Warning, TEXT("ImGui wants the mouse with no window under it (it thinks a button is held); world clicks with a tool go through anyway"));
+	}
+	ButtonRects.Reset();
 
 	// The alarm, top right.
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - Margin, Viewport->Pos.y + Margin), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
@@ -1441,8 +1674,13 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 
 	// The architect bar, bottom middle.
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+	bBarShown = false;
 	if (ImGui::Begin("##OrdersBar", nullptr, PanelFlags))
 	{
+		const ImVec2 BarPos = ImGui::GetWindowPos();
+		const ImVec2 BarSize = ImGui::GetWindowSize();
+		BarRect = FBox2D(FVector2D(BarPos.x, BarPos.y), FVector2D(BarPos.x + BarSize.x, BarPos.y + BarSize.y));
+		bBarShown = true;
 		if (!Message.IsEmpty() && FPlatformTime::Seconds() < MessageUntil)
 		{
 			OrdText(Message);
@@ -1450,7 +1688,7 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 		// Categories.
 		const auto Category = [this](const FString& Name)
 		{
-			if (OrdButton(Name, OpenCategory == Name))
+			if (OrdButton(Name, OpenCategory == Name, &ButtonRects))
 			{
 				OpenCategory = OpenCategory == Name ? FString() : Name;
 			}
@@ -1462,7 +1700,7 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 		{
 			Category(Name);
 		}
-		if (Tool != EOrderTool::None && OrdButton(TEXT("Stop (Esc)"), false))
+		if (Tool != EOrderTool::None && OrdButton(TEXT("Stop (Esc)"), false, &ButtonRects))
 		{
 			CancelTool();
 		}
@@ -1471,7 +1709,7 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 		// What is in the open category.
 		const auto ToolButton = [this](const TCHAR* Label, EOrderTool ForTool)
 		{
-			if (OrdButton(Label, Tool == ForTool))
+			if (OrdButton(Label, Tool == ForTool, &ButtonRects))
 			{
 				SetTool(Tool == ForTool ? EOrderTool::None : ForTool);
 			}
@@ -1489,6 +1727,7 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 		else if (OpenCategory == TEXT("Zones"))
 		{
 			ToolButton(TEXT("Stockpile"), EOrderTool::Stockpile);
+			ToolButton(TEXT("Growing zone"), EOrderTool::Grow);
 			ToolButton(TEXT("Remove zone"), EOrderTool::RemoveZone);
 			ImGui::NewLine();
 		}
@@ -1500,7 +1739,7 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 				{
 					continue;
 				}
-				if (OrdButton(Option.Label, Tool == EOrderTool::Build && BuildDef == Option.Def))
+				if (OrdButton(Option.Label, Tool == EOrderTool::Build && BuildDef == Option.Def, &ButtonRects))
 				{
 					if (Tool == EOrderTool::Build && BuildDef == Option.Def)
 					{
@@ -1558,6 +1797,39 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 			}
 			ImGui::SameLine();
 			OrdText(FString::Printf(TEXT("Costs %s.  Click to plan; drag a line for walls."), *Cost));
+		}
+		else if (Tool == EOrderTool::Grow)
+		{
+			if (!GrowCrop.valid())
+			{
+				SetGrowCrop(TEXT("Plant_Rice"));
+			}
+			// The crops the colony may sow now (research done), with their growing time.
+			const FString Preview = GrowCrop.valid() ? OrdCapital(Sim.defs().get(GrowCrop).label()) : FString(TEXT("(none)"));
+			OrdText(TEXT("Crop"));
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(220.0f * Scale);
+			if (ImGui::BeginCombo("##OrdersCrop", TCHAR_TO_UTF8(*Preview)))
+			{
+				for (const colony::DefId Crop : Sim.farming().crops())
+				{
+					const colony::Def& Def = Sim.defs().get(Crop);
+					if (!Sim.research().unlocked(Def))
+					{
+						continue;
+					}
+					// Days to grow in good soil: growDays round the clock, 13 growing hours a day, times the life pace.
+					const double Days = Def.number("plant.growDays", 1.0) * 24.0 / 13.0 / FMath::Max(Sim.plants().growthTuning(), 0.01);
+					const FString Label = FString::Printf(TEXT("%s (%.1f days)"), *OrdCapital(Def.label()), Days);
+					if (ImGui::Selectable(TCHAR_TO_UTF8(*Label), Crop == GrowCrop))
+					{
+						GrowCrop = Crop;
+					}
+				}
+				ImGui::EndCombo();
+			}
+			ImGui::SameLine();
+			OrdText(TEXT("Drag a rectangle on open soil.  Colonists with Growing work sow it."));
 		}
 		else if (Tool != EOrderTool::None)
 		{

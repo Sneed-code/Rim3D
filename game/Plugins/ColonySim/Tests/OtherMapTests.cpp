@@ -78,13 +78,15 @@ Entity otherMapMeals(Sim& sim) {
     return best;
 }
 
-// A neighbouring land tile a caravan can reach.
+// A neighbouring land tile a caravan can reach, without a settlement (its people are colonists too;
+// settlements have their own tests).
 int otherMapNextTile(const Sim& sim) {
     const World& w = *sim.world();
     const int start = w.startTile();
     for (int d = 0; d < 8; ++d) {
         const int tile = w.neighbour(start, d);
-        if (tile >= 0 && w.canVisit(tile) && !sim.caravans().findPath(start, tile, 0).empty()) {
+        if (tile >= 0 && w.canVisit(tile) && w.tile(tile).settlement == kNoSettlement &&
+            !sim.caravans().findPath(start, tile, 0).empty()) {
             return tile;
         }
     }

@@ -12,13 +12,16 @@ The rule of the game: **the sim decides who is hit and who is stabbed, Unreal sh
 ## The mini-turret
 
 A building whose def has a `turret` block (`gun`, `shootingSkill`, `muzzleHeight`) gets a `Turret`
-component. It is a powered consumer (100 W, `power.consumption`) like any other: with no power, or
+component. It is a powered consumer (80 W for the mini-turret, `power.consumption`) like any other: with no power, or
 switched off (`FlickCommand`), it forgets its target and its burst and does nothing.
 
 - **Looking.** Every `scanEvery` steps (10, staggered by building id) an idle turret picks the nearest
-  pawn that is able (not downed, not dead), not an animal, not on the colony's side (`kPlayerFaction`),
-  within the gun's range, and seen: a line from the muzzle to the pawn's chest that ground, rock and
-  buildings do not stop (`CombatSystem::trace`; the turret's own cell never blocks).
+  pawn that is able (not downed, not dead), not a calm animal, not a prisoner or visitor, not on the colony's
+  side (`kPlayerFaction`), within the gun's range, and seen: a line from the muzzle to the pawn's chest that
+  ground, rock and buildings do not stop (`CombatSystem::trace`; the turret's own cell never blocks). A hostile
+  animal (`AnimalSystem::hostile`: insects on the attack, a manhunter, one out for revenge) is shot like a raider,
+  as RimWorld's turrets shoot every hostile (`DefenseSystem::setAnimals`; test "a turret leaves calm animals alone").
+  Calm insects by their mound are left be, so a turret doesn't stir up a hive.
 - **Shooting.** Warm-up (the gun's `warmupTime`), a burst of `burstShotCount` shots `secondsBetweenBurstShots`
   apart, then the gun's `rangedWeaponCooldown`. Every shot is a real projectile from `fireFrom`: the
   muzzle is `muzzleHeight` above the ground, the aim leads a walking target (`lead` 1: perfectly), and the
@@ -26,15 +29,32 @@ switched off (`FlickCommand`), it forgets its target and its burst and does noth
   accuracy table, so range, cover and armor work as for any gun. The target is checked every step; if it
   is downed, dead, out of range or hidden the turret cools down and looks again. The projectile's
   `launcher` is the turret, so ShotFired events say `thing` = the turret.
-- **Mini-turret numbers** (all `unverified`: recalled, not checked on the wiki): 100 HP, 100 W, 100 steel and
-  2 components, gun range 28.9 m, warm-up 30 steps, burst of 3, 5 steps apart, cooldown 144 steps, bullet
-  12 damage, 0.15 penetration. Research `GunTurrets` (needs Machining).
-- **Blowing up.** A building whose def has an `explosion` block and `explodeWhenDestroyed` goes up when
-  *combat* destroys it (shot or blasted to pieces): `DefenseSystem::onDestroy` is part of
-  `CombatSystem::setBeforeDestroy`'s hook, queues the blast, and the same step's `DefenseSystem::step` calls
-  `CombatSystem::explode` for it (a chain of turrets goes on over a few steps, at most 64 blasts a step).
-  Deconstruction and `DestroyThingCommand` never explode. The turret's blast (25 damage, radius 2.9 m)
-  is ours; RimWorld's is not recalled.
+- **Mini-turret numbers** (RimWorld wiki, checked 2026-11-15): 100 HP, 80 W, work 2592 s (1800 ticks), 100 steel
+  (RimWorld asks 30 of any metal plus 70 steel; ours: all steel) and 3 components. Gun: range 28.9 m, no warm-up,
+  a burst of 2 shots 4 steps apart (8 ticks), cooldown 144 steps (4.8 s), accuracy 77/70/45/24 % (touch, short,
+  medium, long); bullet 11 damage, 0.18 penetration. Research `GunTurrets` (needs Machining; unverified). Barrel
+  wear (RimWorld's turrets need refurbishing after so many shots) is not in yet.
+- **Outranged by mechanoids, on purpose.** The lancer's charge lance (32.9 m) and the pikeman's needle gun
+  (44.9 m) shoot farther than the mini-turret, as in RimWorld: a lancer stands off at about 30 m and shoots the
+  turret to pieces while it cannot answer (test "a lancer outranges the mini-turret"). The answer is the
+  player's, as in RimWorld: walls or barricades in front of the turret, heavier turrets, or fighters going out to
+  meet the mechs.
+- **Behind barricades.** The gun sits on a post (`turret.muzzleHeight` 1.3 m, ours) above its 0.8 m body (fill 0.4),
+  so it fires over barricades and sandbags (1.1 m) next to it, as RimWorld's turrets fire over adjacent cover. From
+  level ground the barricades stand in front of the body. The gun shows over them, so raiders know the turret is there
+  and shoot at it: the barricades take the hits until they break, then the turret does ([fighters.md](fighters.md)
+  "Turrets"; a lancer that wrecks a bare turret in under two minutes breaks two barricades and the turret within ten). From higher ground, or round a gap, the turret is hit
+  sooner.
+- **Blowing up when hurt (RimWorld's rule).** A building whose def has `explosion` and `explodeWhenDamaged`
+  (`belowHealth` 0.2, `chance` 0.5, `delayTicks` 240) may spark: the first time its HP drops below 20 %, it rolls
+  once (`colony::Rng`), and on a hit it blows up 120 steps (4 s) later unless it is gone by then
+  (`DefenseSystem::stepFuse`, `Turret::fuse`). Healed back above 20 % it may roll again next time. The blast
+  is the wiki's: Bomb, 50 damage, radius 3.9 m (penetration 0.1, unverified); it starts a little above the
+  turret so the turret's own body doesn't shield it. A turret shot to pieces at once, or pulled down, does not
+  blow up. `explodeWhenDestroyed` (any other building with an `explosion` block) still goes up when *combat*
+  destroys it: `DefenseSystem::onDestroy` is part of `CombatSystem::setBeforeDestroy`'s hook, queues the blast,
+  and the same step's `DefenseSystem::step` calls `CombatSystem::explode` for it (at most 64 blasts a step).
+  Deconstruction and `DestroyThingCommand` never explode.
 
 ## Heavy turrets (autocannon, uranium slug)
 
@@ -54,6 +74,14 @@ Autocannon: range 32.9 m, burst of 3 with 8.5 steps between, cooldown 105 steps,
 55 damage at 82% penetration, accuracy 22/33/44/95% (the last is the wiki's unlabelled 95%, taken as long range).
 Their blast (50 Bomb, 5.9 m) goes off when they are destroyed; RimWorld's comes 4 s after they drop below 20% HP.
 Tests: `HeavyTurretTests` (shots, ammunition, minimum range, a 2 x 2 turret shooting out of all 8 directions).
+
+## Sandbags and barricades
+
+Plain buildings with no code of their own: `fillPercent` 0.55 makes them 1.1 m of cover ([cover.md](cover.md)), so a
+crouching pawn hides behind them, and `PassThroughOnly` lets pawns walk over them slowly (path cost 42). Sandbags take 5
+fabric or leather and burn not at all; the **barricade** (wiki, checked 2026-11-15) takes 5 metallic, woody or stony stuff,
+320 ticks of work (460.8 game seconds), 300 HP and beauty -3, and burns as its stuff does. Siege camps build sandbags
+([sieges.md](sieges.md)); the year run builds wood barricades round the colony ([colony-scenario.md](colony-scenario.md)).
 
 ## Traps
 
@@ -83,7 +111,9 @@ A building whose def has a `trap` block gets a `Trap` component (`sprung`, `know
   them (`DefenseSystem::detour`, called after `smoothPath`): where a straight stretch of the route
   crosses a known trap's cell (and `avoidMargin`, 0.15 m, round it), it inserts the walkable cell within two
   cells of the trap that makes the shortest detour and misses every known trap, up to `detourTries` times.
-  A walk with no way round goes through. The colony's own fighters never avoid anything.
+  A walk with no way round goes through. The colony's own fighters avoid no trap, but take no cover within the blast
+  of one of their own turrets that may explode (3.9 m for the mini-turret): in the year run four colonists
+  crouched round a mini-turret were all downed when a mechanoid shot it to pieces. They still walk past it.
 
 ## Rearming
 
@@ -101,7 +131,7 @@ works for the player.
   IED), `TrapRearmed`, then `Explosion`, `PawnInjured` and the rest as they happen.
 - Command: `RearmTrapCommand{trap}` ("RearmTrap" in replay files). Fails for a thing that is not a trap, a trap
   that is armed already, or an IED.
-- Save section `defense` 1: per building `turret` (phase, steps, shots left, target) and `trap` (sprung, the
+- Save section `defense` 2: per building `turret` (phase, steps, shots left, target; from 2 the fuse and whether it rolled) and `trap` (sprung, the
   sides that know it). Both are in `Sim::stateHash`. Saves from before the section load with fresh turrets
   and armed traps.
 

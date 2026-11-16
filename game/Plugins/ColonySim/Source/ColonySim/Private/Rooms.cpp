@@ -1,6 +1,8 @@
 #include "ColonySim/Rooms.h"
 
 #include "ColonySim/Defs.h"
+#include "ColonySim/Needs.h"
+#include "ColonySim/Random.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -122,9 +124,10 @@ void Rooms::update() {
     regions.update();
     const uint64_t regionChanges = regions.changeCount();
     const uint64_t buildingChanges = map_.buildingChanges();
-    if (built_ && regionChanges == regionChanges_ && buildingChanges == buildingChanges_) {
+    if (built_ && regionChanges == regionChanges_ && buildingChanges == buildingChanges_ && !ownersChanged_) {
         return;
     }
+    ownersChanged_ = false;
     const bool structural = !built_ || regionChanges != regionChanges_;
     built_ = true;
     regionChanges_ = regionChanges;
@@ -393,10 +396,64 @@ std::vector<CellPos> Rooms::takeUnsupportedRoofs() {
     return out;
 }
 
+void Rooms::noteBedOwners() {
+    if (!partnerOf_) {
+        return;
+    }
+    // Order-free: a sum of mixed entries, so the registry's order does not matter.
+    uint64_t signature = 0;
+    for (const auto [bed, b] : things_.registry().view<const Bed>().each()) {
+        for (const Entity owner : b.owners) {
+            const uint64_t partner = owner == kNoEntity ? 0 : static_cast<uint64_t>(partnerOf_(owner));
+            signature += splitMix64((static_cast<uint64_t>(bed) << 32) ^ static_cast<uint64_t>(owner) ^ (partner << 20));
+        }
+    }
+    if (signature != ownerSignature_) {
+        ownerSignature_ = signature;
+        ownersChanged_ = true;
+    }
+}
+
+// Two beds or more that one couple owns between them, and nobody else: every bed has an owner, the
+// owners are two pawns at most, and two are each other's partners.
+bool Rooms::roomsCoupleOwnsBeds(const std::vector<Entity>& beds) const {
+    if (!partnerOf_) {
+        return false;
+    }
+    const entt::registry& reg = things_.registry();
+    Entity first = kNoEntity;
+    Entity second = kNoEntity;
+    for (const Entity bed : beds) {
+        const Bed* b = reg.try_get<Bed>(bed);
+        if (b == nullptr) {
+            return false;
+        }
+        bool owned = false;
+        for (const Entity owner : b->owners) {
+            if (owner == kNoEntity) {
+                continue;
+            }
+            owned = true;
+            if (first == kNoEntity || first == owner) {
+                first = owner;
+            } else if (second == kNoEntity || second == owner) {
+                second = owner;
+            } else {
+                return false;
+            }
+        }
+        if (!owned) {
+            return false;
+        }
+    }
+    return first != kNoEntity && second != kNoEntity && partnerOf_(first) == second && partnerOf_(second) == first;
+}
+
 // What is in each room and the role that gives it. Only enclosed rooms are looked at.
 void Rooms::scanContents() {
     const entt::registry& reg = things_.registry();
     std::vector<Entity> seen;
+    std::vector<Entity> beds;
     for (Room& room : rooms_) {
         room.beds = room.tables = room.chairs = room.stoves = 0;
         room.role = RoomRole::None;
@@ -427,8 +484,19 @@ void Rooms::scanContents() {
         if (room.outdoors()) {
             continue;
         }
+        // A couple's beds count as one for the role: their room is a bedroom, not a barracks (RimWorld).
+        int roleBeds = room.beds;
+        if (room.beds >= 2) {
+            beds.clear();
+            for (const Entity building : seen) {
+                if (isBed_[reg.get<Thing>(building).def.value] != 0) {
+                    beds.push_back(building);
+                }
+            }
+            roleBeds = roomsCoupleOwnsBeds(beds) ? 1 : room.beds;
+        }
         for (const RoomNumbers::RoleRule& rule : numbers_.roles) {
-            if (room.beds >= rule.minBeds && room.tables >= rule.minTables && room.chairs >= rule.minChairs &&
+            if (roleBeds >= rule.minBeds && room.tables >= rule.minTables && room.chairs >= rule.minChairs &&
                 room.stoves >= rule.minStoves) {
                 room.role = rule.role;
                 break;

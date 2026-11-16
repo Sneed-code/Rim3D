@@ -39,6 +39,18 @@ namespace
 		return static_cast<uint32>(entt::to_integral(Thing));
 	}
 
+	/** Loads "/Game/Folder/Asset" (the asset named like its package) or a full "/Game/Folder/Asset.Asset" path. */
+	template <typename T>
+	T* AnimalLoadPath(const FString& Path)
+	{
+		const FString Package = FPackageName::ObjectPathToPackageName(Path);
+		if (!FPackageName::DoesPackageExist(Package))
+		{
+			return nullptr;
+		}
+		return LoadObject<T>(nullptr, *(Path.Contains(TEXT(".")) ? Path : Path + TEXT(".") + FPackageName::GetShortName(Path)));
+	}
+
 	template <typename T>
 	T* AnimalLoad(const FString& Model, const FString& Name)
 	{
@@ -89,6 +101,40 @@ void USimAnimalSubsystem::LoadArtTable()
 			LengthsCm.Add(FName(*Pair.Key), static_cast<float>(Pair.Value->AsNumber() * 100.0));
 		}
 	}
+	const TArray<TSharedPtr<FJsonValue>>* Imports = nullptr;
+	if (Root->TryGetArrayField(TEXT("imports"), Imports))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Imports)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			double YawValue = -90.0, Walk = 140.0, Gallop = 450.0;
+			Entry->TryGetNumberField(TEXT("yaw"), YawValue);
+			Entry->TryGetNumberField(TEXT("walkCm"), Walk);
+			Entry->TryGetNumberField(TEXT("gallopCm"), Gallop);
+			const FName ModelName(*Entry->GetStringField(TEXT("model")));
+			ImportLooks.Add(ModelName, FVector3f(YawValue, Walk, Gallop));
+			if (const TSharedPtr<FJsonObject>* Paths = nullptr; Entry->TryGetObjectField(TEXT("assets"), Paths))
+			{
+				TMap<FString, FString>& Roles = ImportAssets.Add(ModelName);
+				for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*Paths)->Values)
+				{
+					Roles.Add(Pair.Key, Pair.Value->AsString());
+				}
+			}
+			if (const TArray<TSharedPtr<FJsonValue>>* PartList = nullptr; Entry->TryGetArrayField(TEXT("parts"), PartList))
+			{
+				TArray<FString>& Paths = ImportParts.Add(ModelName);
+				for (const TSharedPtr<FJsonValue>& Part : *PartList)
+				{
+					Paths.Add(Part->AsString());
+				}
+			}
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Defs = nullptr;
 	if (!Root->TryGetArrayField(TEXT("defs"), Defs))
 	{
@@ -135,12 +181,42 @@ const FSimAnimalModel* USimAnimalSubsystem::GetModelFor(FName DefName, FSimAnima
 	{
 		const FString Name = OutArt.Model.ToString();
 		Model.Mesh = AnimalLoad<USkeletalMesh>(Name, Name);
+		for (int32 Part = 0; Part < 32; ++Part)
+		{
+			USkeletalMesh* Piece = AnimalLoad<USkeletalMesh>(Name, FString::Printf(TEXT("%s_Part%d"), *Name, Part));
+			if (!Piece)
+			{
+				break;
+			}
+			Model.Parts.Add(Piece);
+			KeepAlive.Add(Piece);
+		}
 		const FString Prefix = Name + TEXT("AnimalArmature_");
 		Model.Idle = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Idle"));
 		Model.Walk = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Walk"));
 		Model.Gallop = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Gallop"));
 		Model.Eat = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Eating"));
 		Model.Death = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Death"));
+		if (const TMap<FString, FString>* Paths = ImportAssets.Find(OutArt.Model))
+		{
+			// A pack already in Unreal's format: the art table names each asset by its path.
+			const auto Clip = [Paths](const TCHAR* Role) { return Paths->Contains(Role) ? AnimalLoadPath<UAnimSequence>((*Paths)[Role]) : nullptr; };
+			Model.Mesh = Paths->Contains(TEXT("mesh")) ? AnimalLoadPath<USkeletalMesh>((*Paths)[TEXT("mesh")]) : nullptr;
+			Model.Idle = Clip(TEXT("Idle"));
+			Model.Walk = Clip(TEXT("Walk"));
+			Model.Gallop = Clip(TEXT("Gallop"));
+			Model.Eat = Clip(TEXT("Eating"));
+			Model.Death = Clip(TEXT("Death"));
+			Model.Parts.Reset();
+			for (const FString& Path : ImportParts.FindRef(OutArt.Model))
+			{
+				if (USkeletalMesh* Piece = AnimalLoadPath<USkeletalMesh>(Path))
+				{
+					Model.Parts.Add(Piece);
+					KeepAlive.Add(Piece);
+				}
+			}
+		}
 		if (!Model.Mesh || !Model.Idle || !Model.Walk)
 		{
 			UE_LOG(LogSimAnimals, Error, TEXT("Model %s is missing its mesh, idle or walk clip: run the AnimalArt commandlet (assets/animal_art.json)"), *Name);
@@ -150,7 +226,14 @@ const FSimAnimalModel* USimAnimalSubsystem::GetModelFor(FName DefName, FSimAnima
 		// A clip that is missing falls back on the idle.
 		if (!Model.Gallop) { Model.Gallop = Model.Walk; }
 		if (!Model.Eat) { Model.Eat = Model.Idle; }
+		Model.bHasDeath = Model.Death != nullptr;
 		if (!Model.Death) { Model.Death = Model.Idle; }
+		if (const FVector3f* Looks = ImportLooks.Find(OutArt.Model))
+		{
+			Model.YawOffset = Looks->X;
+			Model.WalkClipSpeed = FMath::Max(Looks->Y, 10.0f);
+			Model.GallopClipSpeed = FMath::Max(Looks->Z, 10.0f);
+		}
 		Model.Extent = Model.Mesh->GetBounds().BoxExtent;
 		const float NativeLength = FMath::Max(Model.Extent.X, Model.Extent.Y) * 2.0f;
 		const float* WantedLength = LengthsCm.Find(OutArt.Model);

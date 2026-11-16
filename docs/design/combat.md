@@ -2,7 +2,7 @@
 
 Code: `ColonySim/Combat.h`, `Private/Combat.cpp`. Tests: `Tests/CombatTests.cpp`. Data: `Things/Weapons.json`,
 `Things/Apparel.json`, `Projectiles/Bullets.json`, `Hitboxes/Hitboxes.json`, `Rules/CombatRules`,
-`armorCategory` in `DamageTypes`, the projectile speed multiplier in `data/tuning.json`. Task F2.
+the `mix` of `DamageTypes` ([armour.md](armour.md)), the projectile speed multiplier in `data/tuning.json`. Task F2.
 
 Every shot is a real projectile. It leaves the muzzle with spread, flies with speed and drop, and
 stops at the first thing it touches: the ground, rock, a building, or a pawn's hitbox. A pawn hit
@@ -111,16 +111,11 @@ inside hit also hurts the outside part over it.
 
 ## Armor
 
-RimWorld's rule, per apparel piece covering the part hit (its `apparel.bodyPartGroups` against the
-part's groups), outermost layer first (`apparelLayersOuterFirst`: Overhead, Shell, Middle, OnSkin):
-effective armor = armor rating (by the damage type's `armorCategory`) less the bullet's armor
-penetration; a roll under half of that deflects the bullet (`ProjectileHit` with `Armor`, no
-injury); under all of it halves the damage and turns a sharp hit blunt (a bruise or a crack); later
-layers still use their sharp rating. Flak vest (torso and neck, 100% sharp), flak pants (legs, 55%)
-and a simple helmet (upper head and ears, 45%, the steel one: RimWorld makes it from any metal and
-Crashlanded's is plasteel; materials come later). Against a revolver (18%) a flak vest stops 41% of
-torso hits and halves another 41%. Since C15 every piece has its own armor (stuff, quality) and wears down
-by what it absorbs ([apparel.md](apparel.md)), and the vest's and pants' movement penalty (`equippedStatOffsets`) isn't applied yet.
+**Replaced 2026-11-15** (sneed, decision 0009): RimWorld's deflect-and-halve rolls are gone. Every hit is a
+mix of blunt, sharp and elemental damage, and each worn piece and the creature's hide divides it by (1 + %),
+wherever it lands (`CombatSystem::armorPass` and `mitigate`); armour penetration takes its share off each %.
+No hit is deflected any more, so `ProjectileHit` with `Armor` and the melee "deflected" message no longer
+come up. Everything is in [armour.md](armour.md).
 
 ## Gear
 
@@ -141,6 +136,17 @@ The snapshot has each pawn's stance, facing, gun and `shotReadyIn`, and `Snapsho
 state hash and the save (format 12). The random choices of a hit (part, armor rolls) come from a seed
 each projectile gets when it is fired, so they don't depend on the order things are visited in;
 triggers fire in id order from the sim's random stream.
+
+## Stagger (AN1)
+
+RimWorld's rule, from the wiki (`unverified` in `CombatRules`): a bullet whose `projectile.stoppingPower` (0.5 when a
+def gives none) is at least the body size of the pawn it hits staggers it, armor or not, before the damage. A
+staggered pawn walks at `stagger.moveSpeedFactor` (0.17, about a sixth) for `stagger.steps` (48: RimWorld's 95 ticks,
+halved like every tick count here); it can still shoot, swing and work, and a new stagger restarts the time. So a
+revolver, recurve bow or bolt-action rifle (1 or more) staggers a man and an autopistol (0.5) does not; small animals
+are staggered by everything. Body size is the animal's (with its life stage) or the def's `race.baseBodySize`.
+`Staggered` component (saved in section `combat` 3, hashed), event `PawnStaggered` (`thing`, `amount` the steps),
+snapshot `staggeredFor`. Tests `AnimationHookTests`.
 
 ## Explosions
 

@@ -5,6 +5,8 @@
 #include "SmokeTest.h"
 
 #include "Components/DirectionalLightComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -38,6 +40,10 @@
 namespace
 {
 	const FVector LookSmokeOrigin(-1300000.0, 0.0, 0.0);
+	// The bench's map. Since the tropics focus (2026-11-13) the look tasks judge the rainforest; Crashlanded is the old
+	// temperate bench (pass -ini:Engine:[SystemSettings]:Look.Scenario=Crashlanded to compare with old sheets).
+	TAutoConsoleVariable<FString> GLookSmokeScenario(
+		TEXT("Look.Scenario"), TEXT("CrashlandedRainforest"), TEXT("The scenario the look bench (smoke test look) starts on."), ECVF_Default);
 	constexpr float LookSmokeMidsummer = 22.5f;
 	constexpr float LookSmokeMidwinter = 52.5f;
 	// The room: 7 x 6 cells with its walls, a door in the south wall.
@@ -219,7 +225,9 @@ void USmokeTestSubsystem::BuildLookPhases()
 		FSimStartOptions Options;
 		Options.Seed = 42;
 		Options.MapSize = 256;
-		Options.Scenario = TEXT("Crashlanded");
+		Options.Scenario = GLookSmokeScenario.GetValueOnGameThread();
+		// A biome scenario's biome comes from its world tile, so those start on the world map (as the playtest does).
+		Options.bWorld = Options.Scenario != TEXT("Crashlanded");
 		B->SetWorldOrigin(LookSmokeOrigin);
 		if (!B->StartSim(Options))
 		{
@@ -244,6 +252,29 @@ void USmokeTestSubsystem::BuildLookPhases()
 			return;
 		}
 		const auto At = [=](int32 DX, int32 DY) { return colony::CellPos{State->Room.x + DX, State->Room.y + DY, 0}; };
+		// A colony's clearing: no trees, bamboo or bushes within 22 cells of the room or 8 of home (grass and the ground cover stay),
+		// so the close-up, walls and night shots see the colony and not a wall of jungle.
+		{
+			colony::Sim* Clear = SimOf();
+			const colony::CellPos Mid{State->Room.x + LookRoomW / 2, State->Room.y + LookRoomH / 2, 0};
+			const auto Near = [](int32 X, int32 Y, colony::CellPos P, int32 R) { return (X - P.x) * (X - P.x) + (Y - P.y) * (Y - P.y) <= R * R; };
+			for (int32 Y = Mid.y - 24; Clear && Y <= Mid.y + 24; ++Y)
+			{
+				for (int32 X = Mid.x - 24; X <= Mid.x + 24; ++X)
+				{
+					const colony::CellPos C{X, Y, 0};
+					if (!Map.inBounds(C) || !Clear->plants().has(C) || !(Near(X, Y, Mid, 22) || Near(X, Y, State->Home, 8)))
+					{
+						continue;
+					}
+					const std::string Name = Clear->defs().get(Clear->plants().defAt(C)).defName();
+					if (Name.find("Tree") != std::string::npos || Name == "Plant_Bamboo" || Name == "Plant_Bush")
+					{
+						Clear->plants().remove(C);
+					}
+				}
+			}
+		}
 		// No trees or bushes in the room or on the sample wall's line.
 		for (int32 Y = LookSampleY - 1; Y <= LookSampleY + 2 * static_cast<int32>(UE_ARRAY_COUNT(LookSampleStuffs)); ++Y)
 		{
@@ -320,6 +351,29 @@ void USmokeTestSubsystem::BuildLookPhases()
 		State->bRoomBuilt = Sim->map().buildingAt(At(0, 0)) != colony::kNoEntity && Torches == 2;
 		Notes.Add(FString::Printf(TEXT("_prepare: home (%d, %d), room at (%d, %d), %d torches fuelled, %d sample walls"), State->Home.x, State->Home.y, State->Room.x, State->Room.y, Torches,
 			SampleWalls));
+		{
+			// Which plants the bench's map grows (the look tasks dress the common ones first).
+			TMap<FString, int32> Kinds;
+			const colony::Map& M = Sim->map();
+			for (int32 Y = 0; Y < M.height(); ++Y)
+			{
+				for (int32 X = 0; X < M.width(); ++X)
+				{
+					const colony::CellPos C{X, Y, 0};
+					if (Sim->plants().has(C))
+					{
+						++Kinds.FindOrAdd(UTF8_TO_TCHAR(Sim->defs().get(Sim->plants().defAt(C)).defName().c_str()));
+					}
+				}
+			}
+			Kinds.ValueSort([](int32 A, int32 B) { return A > B; });
+			FString List;
+			for (const TPair<FString, int32>& Kind : Kinds)
+			{
+				List += FString::Printf(TEXT("%s %d, "), *Kind.Key, Kind.Value);
+			}
+			Notes.Add(TEXT("_prepare: plants: ") + List);
+		}
 		RunFor(10 * colony::kSecondsPerHour);
 		SetClock(12.0f, LookSmokeMidsummer);
 		Aim(State->Home, -8.0f, 0.0f, 0.0f);
@@ -521,6 +575,57 @@ void USmokeTestSubsystem::BuildLookPhases()
 		}
 	};
 	Phases.Add(MoveTemp(Hud));
+
+	// 7b. Dawn mist (L2/L3 weather): ground mist at a quarter past six, looking east across the field into the low sun.
+	FPhase Mist;
+	Mist.Name = TEXT("dawn_mist");
+	Mist.WarmupSeconds = 5.0f;
+	Mist.MeasureSeconds = 2.0f;
+	Mist.Setup = [=, this]()
+	{
+		SetClock(6.25f, LookSmokeMidsummer);
+		const colony::CellPos C = RoomCentre();
+		const FVector From = CellWorld(C.x - 26.0f, C.y + 4.0f, 650.0);
+		const FVector To = CellWorld(C.x + 10.0f, C.y - 2.0f, 120.0);
+		ViewFrom(From, (To - From).Rotation());
+	};
+	Mist.Verify = [=, this]()
+	{
+		NoteShot(TEXT("dawn_mist"));
+		if (USkySubsystem* S = Sky(); S && S->GetFog())
+		{
+			const FVector Eye = GetWorld()->GetFirstPlayerController() && GetWorld()->GetFirstPlayerController()->PlayerCameraManager ? GetWorld()->GetFirstPlayerController()->PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector;
+			Notes.Add(FString::Printf(TEXT("dawn_mist: mist %.4f, its base %.0f cm (fog at %.0f), camera at %.0f cm"), S->GetState().MistDensity, S->GetFog()->SecondFogData.FogHeightOffset + S->GetFog()->GetComponentLocation().Z, S->GetFog()->GetComponentLocation().Z, Eye.Z));
+		}
+		if (USkySubsystem* S = Sky(); S && S->GetLook().MistDensity > 0.0f && S->GetState().MistDensity <= 0.0f)
+		{
+			Fail(TEXT("dawn_mist: no ground mist at dawn"));
+		}
+	};
+	Phases.Add(MoveTemp(Mist));
+
+	// 7c. A clear night: the overseer low over the room at eleven, tilted up so the star dome and the moonlit ground both show.
+	FPhase Night;
+	Night.Name = TEXT("clear_night");
+	Night.WarmupSeconds = 6.0f;
+	Night.MeasureSeconds = 2.0f;
+	Night.Setup = [=, this]()
+	{
+		SetClock(23.0f, LookSmokeMidsummer);
+		const colony::CellPos C = RoomCentre();
+		const FVector From = CellWorld(C.x - 3.0f, C.y + 18.0f, 260.0);
+		const FVector To = CellWorld(C.x + 2.0f, C.y - 30.0f, 1500.0);
+		ViewFrom(From, (To - From).Rotation());
+	};
+	Night.Verify = [=, this]()
+	{
+		NoteShot(TEXT("clear_night"));
+		if (USkySubsystem* S = Sky())
+		{
+			Notes.Add(FString::Printf(TEXT("clear_night: stars %.3f, mist %.4f"), S->GetState().StarBrightness, S->GetState().MistDensity));
+		}
+	};
+	Phases.Add(MoveTemp(Night));
 
 	// 8. The walls (L4): the sample wall of every building stuff, from the west at noon.
 	FPhase Walls;

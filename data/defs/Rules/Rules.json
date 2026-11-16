@@ -22,8 +22,9 @@
     "recoilKickRecoveryPerStep": 0.2,
     "recoilKickMaxDegrees": 10,
     "weaponSwitchSteps": { "Primary": 36, "Sidearm": 18, "Melee": 27 },
+    "stagger": { "steps": 48, "moveSpeedFactor": 0.17 },
     "dodgeRoll": { "startUpSteps": 3, "rollSteps": 15, "hitProofSteps": 12, "recoverySteps": 9, "cooldownSteps": 6, "distance": 4.0 },
-    "unverified": ["accuracyDistances", "minHitChance"],
+    "unverified": ["accuracyDistances", "minHitChance", "stagger"],
     "ours": ["defaultShootingSkill", "standardTarget", "playerSpreadDistance", "gravity", "recoilRecoveryPerSecond",
              "recoilSkillReduction", "maxFlightSeconds", "reactionStepsBySkill", "leadBySkill", "leadErrorBySkill",
              "reloadTimeFactorBySkill", "recoilKickHoldSteps", "recoilKickResetSteps", "recoilKickRecoveryPerStep",
@@ -92,7 +93,9 @@
       "malnutritionPerDay": 0.48,
       "ingestSeconds": 720,
       "maxNumToIngestAtOnce": 20,
-      "eatSpotRadius": 40
+      "eatSpotRadius": 40,
+      "nutritionFactor": { "MealSimple": 1.1, "MealFine": 1.25, "MealLavish": 1.5 },
+      "starvingSpeedFactor": 0.75
     },
     "rest": {
       "fallPerDay": { "Rested": 0.95, "Drowsy": 0.66, "Tired": 0.28, "Exhausted": 0.57 },
@@ -105,7 +108,7 @@
     },
     "schedule": { "sleepFromHour": 22, "sleepToHour": 5 },
     "unverified": ["food.ingestSeconds", "food.maxNumToIngestAtOnce", "rest.fallAsleepBelow", "rest.wakeAt", "schedule"],
-    "ours": ["food.eatSpotRadius", "food.ingestSeconds", "rest.wakeOutsideSleepAt", "rest.fallAsleepBelow", "rest.wakeAt"]
+    "ours": ["food.eatSpotRadius", "food.ingestSeconds", "food.nutritionFactor", "food.starvingSpeedFactor", "rest.wakeOutsideSleepAt", "rest.fallAsleepBelow", "rest.wakeAt"]
   },
   {
     "defName": "MoodRules", "source": "RimWorld wiki",
@@ -139,9 +142,12 @@
     "skillSpeedBase": 0.3,
     "skillSpeedPerLevel": 0.0875,
     "defaultSkillLevel": 8,
+    "removeFloorWork": 288,
+    "architectCategories": ["Structure", "Production", "Furniture", "Power", "Security", "Misc", "Floors", "Joy", "Ship", "Temperature"],
+    "architectLabels": {"Joy": "Recreation"},
     "unverified": ["buildWorkPerSecond", "deconstructWorkPerSecond", "deconstructWorkMin", "deconstructWorkMax",
-                   "deconstructRefundFactor", "skillSpeedBase", "skillSpeedPerLevel"],
-    "ours": ["defaultSkillLevel"]
+                   "deconstructRefundFactor", "skillSpeedBase", "skillSpeedPerLevel", "removeFloorWork"],
+    "ours": ["defaultSkillLevel", "architectCategories", "architectLabels"]
   },
   {
     "defName": "DoorRules", "source": "RimWorld wiki",
@@ -196,7 +202,8 @@
     },
     "plants": {
       "speedBase": 0.08, "speedPerLevel": 0.115,
-      "xpPerSecond": 0.059028
+      "xpPerSecond": 0.059028,
+      "skillCurve": { "lowLevel": 1, "lowFraction": 0.3333, "highLevel": 20, "normalLevel": 8 }
     },
     "construction": { "xpPerSecond": 0.173611 },
     "yieldByLevel": [0.6, 0.7, 0.8, 0.85, 0.9, 0.925, 0.95, 0.975, 1.0, 1.01, 1.02,
@@ -204,7 +211,22 @@
     "growthYieldFloor": 0.5,
     "unskilledSkillLevel": 8,
     "unverified": ["mining.hitDamage", "mining.hitSeconds", "mining.xpPerSecond", "plants.xpPerSecond", "construction.xpPerSecond", "yieldByLevel", "growthYieldFloor"],
-    "ours": ["mining.rockTypesPerMap", "mining.orePerTenThousandRockCells", "unskilledSkillLevel"]
+    "ours": ["mining.rockTypesPerMap", "mining.orePerTenThousandRockCells", "unskilledSkillLevel", "plants.skillCurve"]
+  },
+  {
+    "defName": "CarryRules", "source": "Rim3D (sneed 2026-11-14), docs/design/inventory.md",
+    "protagonistFactor": 2.0,
+    "traitKg": { "Tough": 15, "Brawler": 10 },
+    "lighter": {
+      "Mining": { "perLevel": 0.025, "items": "mined" },
+      "Plants": { "perLevel": 0.025, "items": "grown" },
+      "Melee": { "perLevel": 0.01, "items": "all" }
+    },
+    "minFactor": 0.3,
+    "freeFraction": 0.2,
+    "overloadSlowdown": 1.0,
+    "overloadMinFactor": 0.2,
+    "ours": ["protagonistFactor", "traitKg", "lighter", "minFactor", "freeFraction", "overloadSlowdown", "overloadMinFactor"]
   },
   {
     "defName": "LooksRules", "source": "Rim3D",
@@ -299,17 +321,17 @@
   {
     "defName": "QualityRules", "source": "RimWorld wiki",
     "levels": [
-      { "def": "Awful", "label": "awful", "armorFactor": 0.6, "insulationFactor": 0.8, "marketValueFactor": 0.5, "deteriorationFactor": 2, "beautyOffset": -0.1, "meleeDamageFactor": 0.8, "rangedAccuracyFactor": 0.8, "rangedDamageFactor": 0.9 },
-      { "def": "Poor", "label": "poor", "armorFactor": 0.8, "insulationFactor": 0.9, "marketValueFactor": 0.75, "deteriorationFactor": 1.5, "beautyOffset": 0.5, "meleeDamageFactor": 0.9, "rangedAccuracyFactor": 0.9, "rangedDamageFactor": 1.0 },
+      { "def": "Awful", "label": "awful", "armorFactor": 0.5, "insulationFactor": 0.8, "marketValueFactor": 0.5, "deteriorationFactor": 2, "beautyOffset": -0.1, "meleeDamageFactor": 0.8, "rangedAccuracyFactor": 0.8, "rangedDamageFactor": 0.9 },
+      { "def": "Poor", "label": "poor", "armorFactor": 0.75, "insulationFactor": 0.9, "marketValueFactor": 0.75, "deteriorationFactor": 1.5, "beautyOffset": 0.5, "meleeDamageFactor": 0.9, "rangedAccuracyFactor": 0.9, "rangedDamageFactor": 1.0 },
       { "def": "Normal", "label": "normal", "armorFactor": 1.0, "insulationFactor": 1.0, "marketValueFactor": 1.0, "deteriorationFactor": 1, "beautyOffset": 1, "meleeDamageFactor": 1, "rangedAccuracyFactor": 1, "rangedDamageFactor": 1 },
-      { "def": "Good", "label": "good", "armorFactor": 1.15, "insulationFactor": 1.1, "marketValueFactor": 1.25, "deteriorationFactor": 0.8, "beautyOffset": 2, "meleeDamageFactor": 1.1, "rangedAccuracyFactor": 1.1, "rangedDamageFactor": 1.0 },
-      { "def": "Excellent", "label": "excellent", "armorFactor": 1.3, "insulationFactor": 1.2, "marketValueFactor": 1.5, "deteriorationFactor": 0.6, "beautyOffset": 3, "meleeDamageFactor": 1.2, "rangedAccuracyFactor": 1.2, "rangedDamageFactor": 1.0 },
-      { "def": "Masterwork", "label": "masterwork", "armorFactor": 1.45, "insulationFactor": 1.5, "marketValueFactor": 2.5, "deteriorationFactor": 0.3, "beautyOffset": 5, "meleeDamageFactor": 1.45, "rangedAccuracyFactor": 1.35, "rangedDamageFactor": 1.25 },
-      { "def": "Legendary", "label": "legendary", "armorFactor": 1.8, "insulationFactor": 1.8, "marketValueFactor": 5, "deteriorationFactor": 0.1, "beautyOffset": 8, "meleeDamageFactor": 1.65, "rangedAccuracyFactor": 1.5, "rangedDamageFactor": 1.5 }
+      { "def": "Good", "label": "good", "armorFactor": 1.25, "insulationFactor": 1.1, "marketValueFactor": 1.25, "deteriorationFactor": 0.8, "beautyOffset": 2, "meleeDamageFactor": 1.1, "rangedAccuracyFactor": 1.1, "rangedDamageFactor": 1.0 },
+      { "def": "Excellent", "label": "excellent", "armorFactor": 1.5, "insulationFactor": 1.2, "marketValueFactor": 1.5, "deteriorationFactor": 0.6, "beautyOffset": 3, "meleeDamageFactor": 1.2, "rangedAccuracyFactor": 1.2, "rangedDamageFactor": 1.0 },
+      { "def": "Masterwork", "label": "masterwork", "armorFactor": 1.75, "insulationFactor": 1.5, "marketValueFactor": 2.5, "deteriorationFactor": 0.3, "beautyOffset": 5, "meleeDamageFactor": 1.45, "rangedAccuracyFactor": 1.35, "rangedDamageFactor": 1.25 },
+      { "def": "Legendary", "label": "legendary", "armorFactor": 2.0, "insulationFactor": 1.8, "marketValueFactor": 5, "deteriorationFactor": 0.1, "beautyOffset": 8, "meleeDamageFactor": 1.65, "rangedAccuracyFactor": 1.5, "rangedDamageFactor": 1.5 }
     ],
     "defaultLevel": "Normal",
     "unverified": ["levels.beautyOffset", "levels.deteriorationFactor"],
-    "ours": ["defaultLevel"]
+    "ours": ["defaultLevel", "levels.armorFactor: sneed's (2026-11-14), scales every mitigation % of apparel: awful -50% to legendary +100% (docs/design/armour.md)"]
   },
   {
     "defName": "ApparelRules", "source": "RimWorld wiki",
@@ -318,10 +340,17 @@
     "wearFactor": 1.0,
     "deathHpLoss": [0.15, 0.4],
     "tatteredBenefitFactor": 0.8,
+    "tatteredMitigationFactor": 0.67,
+    "clothingInsulationCold": 10,
+    "clothingInsulationHeat": 2,
     "durabilityNote": "Worn apparel wears its durability, not its hit points (sneed, 2026-10-27; docs/design/apparel-durability.md). wearHpLossChancePerDay is RimWorld's daily hit point loss, here a steady rate of durability (that many hit points' worth a day, times wearFactor); absorbed damage wears 1 hit point's worth per absorbDamageDivisor; deathHpLoss is the share of durability lost when the wearer dies. At 0 durability a piece is tattered: tatteredBenefitFactor of its armor and insulation.",
     "taintedStageCap": 4,
     "defaultOutfit": "Anything",
     "wearSteps": 60,
+    "clothingWearSteps": 1,
+    "armourWearSteps": 120,
+    "weightKgPerSlowdown": 100,
+    "workWeightShare": 0.25,
     "stripStepsPerPiece": 60,
     "checkEverySteps": 1200,
     "scoreBase": 0.1,
@@ -333,7 +362,16 @@
     "taintedScorePenalty": 0.2,
     "minGain": 0.05,
     "unverified": ["wearSteps", "stripStepsPerPiece"],
-    "ours": ["wearFactor", "tatteredBenefitFactor", "durabilityNote", "defaultOutfit", "wearSteps", "stripStepsPerPiece", "checkEverySteps", "scoreBase", "scoreSharp", "scoreBlunt", "scoreHeat", "scoreInsulationPerDegree", "scoreHpFloor", "taintedScorePenalty", "minGain"]
+    "ours": ["wearFactor", "tatteredBenefitFactor", "tatteredMitigationFactor: sneed, a worn-down piece mitigates 33% less", "clothingWearSteps", "armourWearSteps: sneed, 4 seconds a piece at 1x", "weightKgPerSlowdown", "workWeightShare: sneed, speed / (1 + kg / 100), work a quarter of armour kg", "clothingInsulationCold", "clothingInsulationHeat: sneed, every regular garment gives +10 cold and +2 heat", "durabilityNote", "defaultOutfit", "wearSteps", "stripStepsPerPiece", "checkEverySteps", "scoreBase", "scoreSharp", "scoreBlunt", "scoreHeat", "scoreInsulationPerDegree", "scoreHpFloor", "taintedScorePenalty", "minGain"]
+  },
+  {
+    "defName": "ShieldRules", "source": "ours",
+    "blockCut": 0.4,
+    "floorBaseDamage": 6,
+    "floorDamage": 1,
+    "arcDegrees": 60,
+    "aiHoldSteps": 15,
+    "ours": ["sneed's shields (2026-11-15, docs/design/shields.md): a hit on a raised shield loses blockCut (40%), then the material's shieldStuff.block (1 to 3), but a hit of floorBaseDamage (6) or more keeps floorDamage (1)", "arcDegrees: a raised shield catches hits from within this angle either side of its facing", "aiHoldSteps: a fighter keeps its shield up this long after the last attack it saw coming"]
   },
   {
     "defName": "MedicineRules", "source": "RimWorld wiki",
@@ -356,18 +394,19 @@
     "surgeryMaxOperations": 12,
     "immunityGainPerDayMultiplierWhenTended": 1.0,
     "infection": { "delayHoursMin": 6, "delayHoursMax": 18, "tendedChanceFactorAtQuality0": 0.85, "tendedChanceFactorAtQuality1": 0.05, "cleanlinessSlope": -0.25, "chanceFactorMin": 0.5, "chanceFactorMax": 2.0 },
-    "immunityGainSpeedByRest": { "Ground": 1.0, "Bed": 1.05, "HospitalBed": 1.07 },
+    "immunityGainSpeedByRest": { "Ground": 1.0, "Bed": 1.177, "HospitalBed": 1.221 },
+    "immunityGainSpeedByRestNote": "RimWorld wiki (Immunity Gain Speed, 2026-11-15): a bed x1.07, a hospital bed x1.11, and resting or sleeping x1.10 on top; a pawn in a bed here is lying in it, so Bed = 1.07 x 1.10 and HospitalBed = 1.11 x 1.10. Lying on the ground (x1.10) and the hunger and tiredness factors (x0.7 to x0.96) are not modelled.",
     "diseaseUpdateSeconds": 60,
     "diseaseOnsetMtbDays": { "Flu": 50, "Plague": 80, "Malaria": 80, "SleepingSickness": 80, "GutWorms": 80, "MuscleParasites": 80 },
     "foodPoisoningChancePerMeal": { "default": 0.0, "dirtyKitchen": 0.02, "rotten": 0.25 },
     "bodyTemperatureC": { "normal": 37.0, "hypothermiaBelow": 35.0, "heatstrokeAbove": 37.5 },
     "unverified": ["tendQualityNoMedicineFactor", "tendWorkSeconds", "tendXp", "selfTendQualityFactor", "surgeryFailDeathChanceFactor", "diseaseOnsetMtbDays", "foodPoisoningChancePerMeal", "bodyTemperatureC"],
-    "ours": ["immunityGainPerDayMultiplierWhenTended", "foodPoisoningChancePerMeal.dirtyKitchen", "careHerbalMaxPotency", "careNormalMaxPotency", "infection", "immunityGainSpeedByRest", "diseaseUpdateSeconds", "surgeryNoMedicineFactor", "surgeryMedicinePotencyWeight", "surgeryBotchHpFraction", "surgeryXp", "surgeryMaxOperations"]
+    "ours": ["immunityGainPerDayMultiplierWhenTended", "foodPoisoningChancePerMeal.dirtyKitchen", "careHerbalMaxPotency", "careNormalMaxPotency", "infection", "diseaseUpdateSeconds", "surgeryNoMedicineFactor", "surgeryMedicinePotencyWeight", "surgeryBotchHpFraction", "surgeryXp", "surgeryMaxOperations"]
   },
   {"defName": "MentalBreakRules", "source": "RimWorld", "meanDaysBetweenBreaks": {"Minor": 4.0, "Major": 1.5, "Extreme": 0.5}, "moodCurve": [[0, 0.1], [0.5, 0.5], [1, 1]], "moodCurveNote": "x is mood / threshold level, y multiplies the mean days between breaks (lower mood, shorter wait)", "catharsisThought": "Catharsis", "minHoursBetweenBreaks": 24, "recoveryMoodMargin": 0.1, "restOnlyWhenAwake": true, "unverified": ["meanDaysBetweenBreaks", "moodCurve", "minHoursBetweenBreaks", "recoveryMoodMargin"], "ours": ["restOnlyWhenAwake"]},
   {"defName": "JoyRules", "source": "RimWorld wiki (Recreation)", "fallPerHourHigh": 0.025, "fallPerHourMid": 0.0175, "fallPerHourLow": 0.01, "joyHours": [19, 21], "toleranceGainFraction": 0.6667, "boredAbove": 0.5, "boredBelow": 0.3, "toleranceMinGainFactor": 0.1, "toleranceMax": 1.0, "note": "Recreation falls an hour awake by fallPerHourHigh at 30% or more, fallPerHourMid from 15% to under 30%, fallPerHourLow under 15%, and not at all at 0 (wiki). It is done in the joy hours of the schedule (C18): the standard schedule has Joy from the first hour through the second, inclusive (19:00 to 21:59, three evening hours). Effective gain = joyPerHour x (1 - tolerance of the kind) x joyGainFactor, never under toleranceMinGainFactor. Tolerance grows by toleranceGainFraction (two thirds) of the joy gained and wears off by the kind's toleranceDecayPerDay (10%, the wiki's moderate wealth; wealth does not change it yet). A pawn is bored of a kind above boredAbove tolerance until it is under boredBelow, and then picks other kinds first.", "unverified": ["toleranceMinGainFactor"], "ours": ["joyHours", "toleranceMax"]},
   {"defName": "SocialRules", "source": "RimWorld", "friendOpinion": 20, "rivalOpinion": -20, "interactionMeanHours": 6, "maxDistance": 6, "opinionMin": -100, "opinionMax": 100, "socialSkillXpPerInteraction": 15,
-   "minGapMinutes": 20, "tableChatMeanMinutes": 15, "compatibilityMax": 10, "stackLimit": 3, "kindWordsMoodBelow": 40, "romanceOpinionScale": 100, "adultAge": 18,
+   "talkShowSeconds": 120, "minGapMinutes": 20, "tableChatMeanMinutes": 15, "compatibilityMax": 10, "stackLimit": 3, "kindWordsMoodBelow": 40, "romanceOpinionScale": 100, "adultAge": 18,
    "fightChance": 0.1, "fightPain": 0.25, "fightBloodLoss": 0.1, "fightMaxMinutes": 5, "fightWalkEvery": 2,
    "fight": {"label": "got in a fight with me", "offset": -20, "days": 30},
    "skillOpinionPerLevel": 0.05, "skillRomancePerLevel": 0.02,
@@ -376,7 +415,10 @@
    "cheatedThought": "CheatedOnMe", "witnessThought": "SawDeath", "witnessRadius": 12,
    "orientation": {"straight": 0.7, "gay": 0.1, "bisexual": 0.15, "asexual": 0.05}, "weddingGuestThought": "AttendedWedding", "weddingPartyThought": "WeddingParty",
    "partyMinutes": 60, "partyJoyPerHour": 0.4, "partyMaxDistance": 80,
+   "lovin": {"thought": "GotSomeLovin", "label": "lovin'", "opinion": 10, "opinionDays": 1, "windowMinutes": 30, "minMinutes": 6, "maxMinutes": 66,
+     "intervalAges": [16, 22, 30, 50, 75], "intervalHours": [1.5, 1.5, 4, 12, 36], "intervalSpread": 0.3, "intervalMin": 0.5,
+     "note": "docs/design/lovin.md. Abstract and adults only: partners lying in one bed have lovin now and then (they lie there together a while). minMinutes/maxMinutes are RimWorld's 0.1 to 1.1 hours and the interval curve and spread are RimWorld's (recalled, not on the wiki); windowMinutes is ours (we have no awake-in-bed state)."},
    "traitWeights": {"Kind": {"Slight": 0, "Insult": 0}, "Abrasive": {"Slight": 3, "Insult": 3}},
    "note": "C20 (docs/design/social.md). interactionMeanHours: a pawn with somebody in earshot starts a talk about this often; at a table or a game beside another pawn, tableChatMeanMinutes. traitWeights multiply an interaction's selectionWeight for the talker. A trait degree's `opinionOfMe` (Traits) is what everyone else thinks of its owner.",
-   "unverified": ["interactionMeanHours", "maxDistance"], "ours": ["opinionMin", "opinionMax", "socialSkillXpPerInteraction", "deadMansApparelDays", "minGapMinutes", "tableChatMeanMinutes", "compatibilityMax", "stackLimit", "kindWordsMoodBelow", "romanceOpinionScale", "adultAge", "fightChance", "fightPain", "fightBloodLoss", "fightMaxMinutes", "fightWalkEvery", "fight", "traitWeights", "skillOpinionPerLevel", "skillRomancePerLevel", "cheatWeightFactor", "cheatPartnerBelow", "jealousFightChance", "cheated", "tookPartner", "cheatedThought", "witnessThought", "witnessRadius", "orientation", "weddingGuestThought", "weddingPartyThought", "partyMinutes", "partyJoyPerHour", "partyMaxDistance"]}
+   "unverified": ["interactionMeanHours", "maxDistance"], "ours": ["talkShowSeconds", "opinionMin", "opinionMax", "socialSkillXpPerInteraction", "deadMansApparelDays", "minGapMinutes", "tableChatMeanMinutes", "compatibilityMax", "stackLimit", "kindWordsMoodBelow", "romanceOpinionScale", "adultAge", "fightChance", "fightPain", "fightBloodLoss", "fightMaxMinutes", "fightWalkEvery", "fight", "traitWeights", "skillOpinionPerLevel", "skillRomancePerLevel", "cheatWeightFactor", "cheatPartnerBelow", "jealousFightChance", "cheated", "tookPartner", "cheatedThought", "witnessThought", "witnessRadius", "orientation", "weddingGuestThought", "weddingPartyThought", "partyMinutes", "partyJoyPerHour", "partyMaxDistance"]}
 ]

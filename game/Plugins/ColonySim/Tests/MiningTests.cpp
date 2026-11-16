@@ -35,9 +35,8 @@ using namespace colony;
 namespace {
 
 // Small defs so the work is quick: rock of 160 hit points is two picks, a tree needs 200 work.
-std::shared_ptr<const DefDatabase> miningTestDefs() {
-    static const std::shared_ptr<const DefDatabase> defs = [] {
-        const std::vector<DefSource> sources = {
+std::vector<DefSource> miningTestSources() {
+        return {
             {"Things", "test.json", R"([
         {"defName": "Human", "category": "Pawn", "stats": {"moveSpeed": 0.15333}},
         {"defName": "Steel", "category": "Item", "stackLimit": 75},
@@ -68,9 +67,24 @@ std::shared_ptr<const DefDatabase> miningTestDefs() {
         "xpToNextLevel": [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000,
                           12000, 14000, 16000, 18000, 20000, 22000, 24000, 26000, 28000, 30000, 32000],
         "passionLearnFactor": {"None": 0.35, "Minor": 1.0, "Major": 1.5}}])"}};
+}
+
+std::shared_ptr<const DefDatabase> miningTestDefs() {
+    static const std::shared_ptr<const DefDatabase> defs = [] {
         auto db = std::make_shared<DefDatabase>();
         std::vector<std::string> errors;
-        DefDatabase::build(sources, "", *db, errors);
+        DefDatabase::build(miningTestSources(), "", *db, errors);
+        return db;
+    }();
+    return defs;
+}
+
+// The same defs with the work speed-ups of data/tuning.json's `values`.
+std::shared_ptr<const DefDatabase> miningTunedDefs() {
+    static const std::shared_ptr<const DefDatabase> defs = [] {
+        auto db = std::make_shared<DefDatabase>();
+        std::vector<std::string> errors;
+        DefDatabase::build(miningTestSources(), R"({"values": {"work.treeFellingSpeed": 10, "work.plantSpeed": 7.5, "work.miningSpeed": 2}})", *db, errors);
         return db;
     }();
     return defs;
@@ -478,6 +492,120 @@ TEST_CASE("Chopping: felling a grown tree gives wood by growth and skill, a sapl
     MINING_REQUIRE(miningRunUntil(two, log2, 6000, [&] { return !two.plants().has(CellPos{12, 8, 0}) && !two.plants().has(CellPos{12, 10, 0}); }));
     // 46 x 0.5 x 0.6 = 13.8 -> 14, and 46 x 1.0 x 0.6 = 27.6 -> 28.
     CHECK(miningItemCount(two, "WoodLog") == 42);
+}
+
+TEST_CASE("Chopping and mining: the tuning's work speed-ups fell a tree 10 times and dig rock 2 times faster") {
+    // How long the work itself takes, from the first blow to the plant or rock going.
+    const auto workSeconds = [](std::shared_ptr<const DefDatabase> defs, bool tree) {
+        Sim sim(SimSettings{5, 32, 0, 0, true}, defs);
+        const CellPos target{12, 8, 0};
+        if (tree) {
+            sim.plants().place(target, miningDef(sim, "Plant_TreeOak"), 1.0f);
+        } else {
+            miningPlaceRock(sim, target);
+        }
+        miningPawn(sim, CellPos{9, 8, 0});
+        sim.submit(DesignateCommand{CellRect{12, 8, 1, 1, 0}, tree ? DesignationKind::CutPlant : DesignationKind::Mine});
+        int64_t started = -1;
+        for (int i = 0; i < 2000; ++i) {
+            sim.step();
+            for (const Event& e : sim.events()) {
+                if (started < 0 && e.type == EventType::PawnAction && (e.action == PawnAction::Cut || e.action == PawnAction::Mine)) {
+                    started = sim.time().seconds;
+                }
+            }
+            if (tree ? !sim.plants().has(target) : !sim.mineables().has(target)) {
+                return started < 0 ? int64_t{-1} : sim.time().seconds - started;
+            }
+        }
+        return int64_t{-1};
+    };
+    const int64_t treePlain = workSeconds(miningTestDefs(), true);
+    const int64_t treeFast = workSeconds(miningTunedDefs(), true);
+    CAPTURE(treePlain);
+    CAPTURE(treeFast);
+    CHECK(treePlain >= 195);  // 200 work at 100% speed
+    CHECK(treeFast >= 18);
+    CHECK(treeFast <= 22);
+    const int64_t rockPlain = workSeconds(miningTestDefs(), false);
+    const int64_t rockFast = workSeconds(miningTunedDefs(), false);
+    CAPTURE(rockPlain);
+    CAPTURE(rockFast);
+    MINING_REQUIRE(rockPlain > 0);
+    MINING_REQUIRE(rockFast > 0);
+    CHECK(static_cast<double>(rockFast) == doctest::Approx(static_cast<double>(rockPlain) / 2.0).epsilon(0.05));
+}
+
+TEST_CASE("Plant work: the tuning's plant speed-up cuts grass and picks berries 7.5 times faster, and teaches as much") {
+    // How long the work takes from the first blow, and the Plants experience it gave.
+    struct Result {
+        int64_t seconds = -1;
+        float xp = 0.0f;
+    };
+    const auto work = [](std::shared_ptr<const DefDatabase> defs, const char* plant, DesignationKind kind) {
+        Sim sim(SimSettings{5, 32, 0, 0, true}, defs);
+        const CellPos target{12, 8, 0};
+        sim.plants().place(target, miningDef(sim, plant), 1.0f);
+        const Entity pawn = miningColonist(sim, CellPos{9, 8, 0}, 8, 8);
+        sim.submit(DesignateCommand{CellRect{12, 8, 1, 1, 0}, kind});
+        Result result;
+        int64_t started = -1;
+        for (int i = 0; i < 2000; ++i) {
+            sim.step();
+            for (const Event& e : sim.events()) {
+                if (started < 0 && e.type == EventType::PawnAction && (e.action == PawnAction::Cut || e.action == PawnAction::Harvest)) {
+                    started = sim.time().seconds;
+                }
+            }
+            if (started >= 0 && sim.designations().count() == 0) {
+                result.seconds = sim.time().seconds - started;
+                for (const SkillRecord& r : sim.things().registry().get<Colonist>(pawn).skills) {
+                    if (r.def == "Plants") {
+                        result.xp = r.xpToday;
+                    }
+                }
+                return result;
+            }
+        }
+        return result;
+    };
+    const Result grassPlain = work(miningTestDefs(), "Plant_Grass", DesignationKind::CutPlant);
+    const Result grassFast = work(miningTunedDefs(), "Plant_Grass", DesignationKind::CutPlant);
+    CAPTURE(grassPlain.seconds);
+    CAPTURE(grassFast.seconds);
+    CHECK(grassPlain.seconds >= 48);  // 50 work at 100% speed
+    CHECK(grassFast.seconds >= 6);    // 50 / 7.5 = 6.7
+    CHECK(grassFast.seconds <= 8);
+    CHECK(grassFast.xp == doctest::Approx(grassPlain.xp).epsilon(0.2));
+    const Result berryPlain = work(miningTestDefs(), "Plant_Berry", DesignationKind::HarvestPlant);
+    const Result berryFast = work(miningTunedDefs(), "Plant_Berry", DesignationKind::HarvestPlant);
+    CAPTURE(berryPlain.seconds);
+    CAPTURE(berryFast.seconds);
+    CHECK(berryPlain.seconds >= 98);  // 100 work
+    CHECK(berryFast.seconds >= 13);   // 100 / 7.5 = 13.3
+    CHECK(berryFast.seconds <= 15);
+}
+
+TEST_CASE("Plant work: with the game's data, Plants 1 works at a third of Plants 20, and Plants 8 at RimWorld's speed") {
+    Sim sim(SimSettings{5, 32, 0, 0, true}, miningRealDefs());
+    const auto speedAt = [&](int level, int x) {
+        return sim.jobs().plantWorkSpeed(miningColonist(sim, CellPos{x, 8, 0}, 8, level));
+    };
+    const double s0 = speedAt(0, 4);
+    const double s1 = speedAt(1, 5);
+    const double s8 = speedAt(8, 6);
+    const double s20 = speedAt(20, 7);
+    const double s25 = speedAt(25, 8);  // genes can lift a level past 20: still the top speed
+    MINING_REQUIRE(s20 > 0.0);
+    CHECK(s1 / s20 == doctest::Approx(1.0 / 3.0).epsilon(0.01));
+    CHECK(s8 / s20 == doctest::Approx((1.0 / 3.0 + (2.0 / 3.0) * 7.0 / 19.0)).epsilon(0.01));
+    CHECK(s0 < s1);
+    CHECK(s0 > 0.25 * s20);
+    CHECK(s25 == doctest::Approx(s20));
+    // The tuning's speed-ups: trees 10 times (felling), every other plant 7.5 times.
+    CHECK(sim.jobs().plantWorkFactor(sim.defs().idOf("Things", "Plant_Grass")) == doctest::Approx(7.5));
+    CHECK(sim.jobs().plantWorkFactor(sim.defs().idOf("Things", "Plant_Rice")) == doctest::Approx(7.5));
+    CHECK(sim.jobs().plantWorkFactor(sim.defs().idOf("Things", "Plant_TreeOak")) == doctest::Approx(10.0));
 }
 
 TEST_CASE("Harvesting: a berry bush is picked and grows back, a tree harvested comes down") {

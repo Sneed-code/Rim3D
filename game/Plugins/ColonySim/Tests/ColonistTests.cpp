@@ -531,3 +531,48 @@ TEST_CASE("Crashlanded: a starting colonist can be rerolled before the game star
     for (const Event& e : sim.events()) lateFailed = lateFailed || (e.type == EventType::CommandFailed && e.command == late);
     CHECK(lateFailed);
 }
+
+TEST_CASE("Crashlanded: no two starting colonists share a nickname or a first name") {
+    // The G2 playtest start had two colonists called Chip: 30 nicknames among 6 colonists clash
+    // in about 2 games of 5 when each is drawn on its own.
+    const auto defs = colonistTestDefs();
+    for (uint64_t seed = 1; seed <= 40; ++seed) {
+        SimSettings settings = colonistStartSettings(seed);
+        settings.mapSize = 128;
+        Sim sim(settings, defs);
+        const std::vector<Colonist> colonists = colonistsOf(sim);
+        std::set<std::string> nicks;
+        std::set<std::string> firsts;
+        for (const Colonist& c : colonists) {
+            nicks.insert(c.nickName);
+            firsts.insert(c.firstName);
+        }
+        INFO("seed " << seed);
+        CHECK(nicks.size() == colonists.size());
+        CHECK(firsts.size() == colonists.size());
+    }
+}
+
+TEST_CASE("Colonist names: a clashing name is redrawn, one that doesn't clash is kept") {
+    const auto defs = colonistTestDefs();
+    Colonist a;
+    Colonist b;
+    std::string error;
+    if (!generateColonist(*defs, 11, false, a, error) || !generateColonist(*defs, 12, false, b, error)) {
+        CHECK(false);
+        return;
+    }
+    b.female = a.female;
+    b.nickName = a.nickName;
+    b.firstName = a.firstName;
+    Colonist kept = b;
+    makeColonistNameUnique(*defs, 99, kept, {});
+    CHECK(kept.nickName == b.nickName);
+    makeColonistNameUnique(*defs, 99, b, {&a});
+    CHECK(b.nickName != a.nickName);
+    CHECK(b.firstName != a.firstName);
+    CHECK(b.lastName == kept.lastName);
+    Colonist again = kept;
+    makeColonistNameUnique(*defs, 99, again, {&a});
+    CHECK(again.nickName == b.nickName);  // the same seed redraws the same names
+}

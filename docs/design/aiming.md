@@ -52,6 +52,14 @@ shooter hits a man walking past about as often as one standing side on (test: 29
 both side on); a skill 0 shooter hits him 2% of the time. Seen from the side a man is a smaller
 target than from the front, which the hitboxes take care of by themselves.
 
+## Aiming over a crest
+
+An aimed shot goes at the target's chest. If that line meets ground or rock (a raider crouched behind a crest, only
+its shoulders and head showing), the aim goes up 0.1 m at a time, at most to 0.15 m under the top of the body, until
+the line clears (`CombatSystem` firing step, both numbers ours). In the year run's fights on hillsides half the
+colonists' shots and more hit the ground in front of them (C25). Test: a skill 20 rifleman at 12 m against a pawn
+crouched behind a 0.9 m crest put 0 of 34 shots into the crest and hit 28; aimed at the chest, the line ran into it.
+
 ## Magazines and reloading
 
 Each gun has `magazineSize` rounds and a `reloadTime` in steps (ours, roughly real guns at

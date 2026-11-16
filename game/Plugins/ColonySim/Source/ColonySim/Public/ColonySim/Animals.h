@@ -219,6 +219,9 @@ public:
     // Makes the animal an enemy of `target` (and of every colonist if `temper` is Manhunter) at once;
     // the incident tasks use it. False if it is no living animal that could.
     bool enrage(Entity animal, AnimalTemper temper, Entity target);
+    // Sends a calm wild animal that is standing about or wandering walking straight back toward `goal` (insects keep to
+    // their mounds, Monsters.h). False if it can't set off now: asleep, eating, fighting or fleeing, or not set up yet.
+    bool walkBack(Entity animal, CellPos goal);
     // Whether the fighter AI takes the animal for an enemy.
     bool hostile(Entity animal) const;
 

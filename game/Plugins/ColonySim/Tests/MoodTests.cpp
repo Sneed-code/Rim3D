@@ -129,6 +129,30 @@ TEST_CASE("Mood: a colonist starts at the base mood and trait offsets move it") 
     CHECK(snapshot.find(happy)->mood == doctest::Approx(62.0f));
 }
 
+TEST_CASE("Mood: the protagonist has no mood: no thoughts, no memories, held at the base level, none in the snapshot") {
+    Sim sim = moodSim();
+    const Entity pawn = moodPawn(sim, CellPos{5, 5, 0});
+    Colonist colonist;
+    colonist.protagonist = true;
+    colonist.traits.push_back(TraitRecord{"NaturalMood", -2});  // depressive: no matter
+    sim.things().registry().emplace<Colonist>(pawn, colonist);
+    sim.step();
+    MOOD_REQUIRE(sim.things().registry().all_of<Mood>(pawn));
+    sim.stepMany(8 * 3600);
+    moodNeeds(sim, pawn).food = 0.2f;  // hungry
+    moodNeeds(sim, pawn).rest = 0.1f;  // tired
+    sim.mood().remember(pawn, "SleptOnGround", sim.time().seconds);
+    sim.stepMany(3600);
+    CHECK(sim.mood().thoughts(pawn, sim.time().seconds).empty());
+    CHECK(moodOf(sim, pawn).memories.empty());
+    CHECK(moodOf(sim, pawn).level == doctest::Approx(50.0f));
+    CHECK(moodOf(sim, pawn).band == MoodBand::Stable);
+    Snapshot snapshot;
+    sim.writeSnapshot(snapshot);
+    MOOD_REQUIRE(snapshot.find(pawn) != nullptr);
+    CHECK(snapshot.find(pawn)->mood == -1.0f);
+}
+
 TEST_CASE("Mood: hunger and tiredness are thoughts while they last, and the level follows at 8 an hour down, 12 up") {
     Sim sim = moodSim();
     const Entity pawn = moodPawn(sim, CellPos{5, 5, 0});

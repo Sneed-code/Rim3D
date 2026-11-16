@@ -166,6 +166,12 @@ enum class EventType : uint8_t {
     // The comms console (docs/design/comms-console.md).
     CaravanRequested,      // `thing` asked the faction `message` for a trade caravan over the comms console; it comes in `amount` days
     CaravanRequestFailed,  // an asked-for caravan could not come: `message` "faction: why"
+    // The long-range mineral scanner (docs/design/mineral-scanner.md).
+    OreLumpFound,          // `thing` the scanner found a lump of ore on the surface: `def` the ore (a Mineable def), `cell` its middle, `count` its cells
+    // Lovin (docs/design/lovin.md): abstract, the couple lies in its bed a while.
+    Lovin,                 // `thing` and `target` the partners; `message` "started" (`amount` its seconds), "done" or "interrupted"
+    PawnStaggered,         // a bullet staggered `thing` (AN1, docs/design/combat.md "Stagger"): it walks slowly for `amount` steps; (x, y) where
+    ShieldBlocked,         // a hit landed on `thing`'s raised shield `target` (docs/design/shields.md): `amount` it took off, `message` "stopped" (all of it) or "softened"; (x, y) where
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -239,7 +245,8 @@ struct Event {
     // def (depth-first, torso 0), `amount` the hit points of damage dealt to it.
     int part = -1;
     // PawnAte: `thing` the pawn, `def` the food's Things def, `amount` the nutrition gained, `cell`
-    // where it stood and `message` "table" (in a chair at a table) or "ground". PawnWokeUp: `thing`
+    // where it stood and `message` "table" (in a chair at a table), "ground" or "bag" (the protagonist ate from its
+    // bag on the go, NeedJobs.cpp autoEatFromBag). PawnWokeUp: `thing`
     // the pawn, `target` the bed it slept in or none, `message` "bed" or "ground", `amount` its rest.
     // PawnMoodBand: `thing` the pawn, `message` the new band ("stable", "minor", "major", "extreme"),
     // `amount` its mood.

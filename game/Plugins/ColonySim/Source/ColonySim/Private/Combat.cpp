@@ -54,6 +54,7 @@ struct CombatModel {
         float damage = 0.0f;
         float penetration = 0.0f;
         float speed = 0.0f;  // metres per step, tuning applied
+        float stoppingPower = 0.5f;  // staggers pawns of this body size or smaller (RimWorld's default 0.5)
         // A rocket or shell: the projectile def's `explosion` block, set off where it lands (R2).
         float blastRadius = 0.0f;
         float blastDamage = 0.0f;
@@ -82,13 +83,15 @@ struct CombatModel {
         // hit on that hitbox can land on (by their share of the body), e.g. a hand and its fingers.
         std::vector<std::vector<int>> landsOn;  // by part index
         std::vector<BodyPartInfo> parts;
-        float natural[3] = {0, 0, 0};  // race.armor sharp, blunt, heat: a hide or hull under any apparel
+        Mitigation natural;  // naturalMitigation: a hide or hull under any apparel (docs/design/armour.md)
     };
 
     std::vector<Gun> guns;          // by Things DefId value
     std::vector<Apparel> apparel;   // by Things DefId value
     std::vector<Bullet> bullets;    // by Projectiles DefId value
-    std::vector<ArmorKind> armorKind;  // by DamageTypes DefId value
+    std::vector<ArmorKind> armorKind;  // by DamageTypes DefId value: the mix's main physical class (weapon stuff factors)
+    std::vector<DamageMix> mix;        // by DamageTypes DefId value: `mix`
+    std::vector<DamageMix> blastMix;   // `explosionMix`, else `mix`: the same type set off by an explosion
     std::vector<Kind> kinds;        // by Things DefId value
     std::vector<uint8_t> melee;     // by Things DefId value: 1 for a melee weapon (an item with `tools`, F8)
     // What a weapon's quality and stuff do to it (QualityRules levels, stuffProps.statFactors).
@@ -118,6 +121,8 @@ struct CombatModel {
     float recoilRecovery = 0.002f;
     float recoilSkillReduction = 0.025f;
     int maxFlight = 120;
+    int staggerSteps = 48;           // CombatRules stagger.steps (RimWorld's 95 ticks)
+    float staggerSpeed = 0.17f;      // CombatRules stagger.moveSpeedFactor
     std::vector<std::string> layerOrder;
     // F9's blasts: ExplosiveRules, and per damage type the explosion block of its def.
     struct Blast {
@@ -179,6 +184,9 @@ struct CombatModel {
 
 namespace {
 
+constexpr float kCombatAimRaiseStep = 0.1f;  // metres the aim goes up at a time over a crest (ours)
+constexpr float kCombatAimTopMargin = 0.15f;  // the highest aim over a crest: this far under the top of the body (ours)
+
 constexpr const char* kCombatThingsKind = "Things";
 constexpr const char* kCombatStanceNames[3] = {"Standing", "Crouching", "Prone"};
 
@@ -236,6 +244,8 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
     apparel.resize(defs.size());
     bullets.resize(defs.size());
     armorKind.resize(defs.size(), ArmorKind::None);
+    mix.resize(defs.size());
+    blastMix.resize(defs.size());
     kinds.resize(defs.size());
     blast.resize(defs.size());
     melee.resize(defs.size(), 0);
@@ -271,6 +281,8 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         recoilRecovery = combatNum(*rules, "recoilRecoveryPerSecond", recoilRecovery);
         recoilSkillReduction = combatNum(*rules, "recoilSkillReduction", recoilSkillReduction);
         maxFlight = static_cast<int>(rules->integer("maxFlightSeconds", maxFlight));
+        staggerSteps = std::max(0, static_cast<int>(rules->integer("stagger.steps", staggerSteps)));
+        staggerSpeed = std::clamp(static_cast<float>(rules->number("stagger.moveSpeedFactor", staggerSpeed)), 0.0f, 1.0f);
         for (size_t i = 0; i < rules->count("apparelLayersOuterFirst"); ++i) {
             layerOrder.push_back(rules->textAt("apparelLayersOuterFirst", i));
         }
@@ -331,11 +343,14 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
     }
 
     for (const DefId id : defs.idsOfKind("DamageTypes")) {
-        const std::string category = defs.get(id).text("armorCategory");
-        armorKind[id.value] = category == "Sharp"   ? ArmorKind::Sharp
-                              : category == "Blunt" ? ArmorKind::Blunt
-                              : category == "Heat"  ? ArmorKind::Heat
-                                                    : ArmorKind::None;
+        const Def& def = defs.get(id);
+        const DamageMix m = DamageMix::read(def, "mix");
+        mix[id.value] = m;
+        blastMix[id.value] = def.has("explosionMix") ? DamageMix::read(def, "explosionMix") : m;
+        armorKind[id.value] = m.share[1] > 0.0f && m.share[1] >= m.share[0] ? ArmorKind::Sharp
+                              : m.share[0] > 0.0f                           ? ArmorKind::Blunt
+                              : m.share[2] > 0.0f                           ? ArmorKind::Heat
+                                                                            : ArmorKind::None;
     }
     bluntDamage = defs.idOf("DamageTypes", "Blunt");
     for (const DefId id : defs.idsOfKind("DamageTypes")) {
@@ -359,6 +374,7 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         b.damage = combatNum(def, "projectile.damageAmountBase", 0.0);
         b.penetration = combatNum(def, "projectile.armorPenetrationBase", 0.0);
         b.speed = combatNum(def, "projectile.speed", 0.0);
+        b.stoppingPower = static_cast<float>(def.number("projectile.stoppingPower", 0.5));
         b.valid = b.damageType.valid() && b.speed > 0.0f;
         if (def.has("explosion")) {
             b.blastRadius = combatNum(def, "explosion.radius", 0.0);
@@ -417,9 +433,7 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
             const Def* boxes = defs.find("Hitboxes", def.text("race.hitboxes"));
             Kind& k = kinds[id.value];
             k.parts = health.bodyParts(id);
-            k.natural[0] = static_cast<float>(def.number("race.armor.sharp", 0.0));
-            k.natural[1] = static_cast<float>(def.number("race.armor.blunt", 0.0));
-            k.natural[2] = static_cast<float>(def.number("race.armor.heat", 0.0));
+            k.natural = Mitigation::read(def, "naturalMitigation");
             if (boxes == nullptr || k.parts.empty()) {
                 continue;
             }
@@ -1095,6 +1109,12 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     if (switching(pawn)) {
         return fail("switching weapons");
     }
+    if (isDressing(reg, pawn)) {
+        return fail("putting on armour");
+    }
+    if (reg.all_of<Blocking>(pawn)) {
+        return fail("holding up a shield");
+    }
     Shooter& s = reg.get_or_emplace<Shooter>(pawn);
     if (s.phase == ShotPhase::Reloading) {
         return fail("reloading");
@@ -1116,7 +1136,10 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     if (s.phase == ShotPhase::Ready || player) {
         s.shotsLeft = gun.burst;
         // Trigger-happy pawns spend half the aiming time, careful shooters a quarter more (TraitStats).
-        const int warmup = traits_ != nullptr ? static_cast<int>(std::lround(static_cast<float>(gun.warmup) * traits_->of(pawn).aimDelayFactor)) : gun.warmup;
+        // Worn armour's weight slows aiming, cooldown and reloading (docs/design/armour.md).
+        const float armourTime = apparelStats_->attackTimeFactor(reg, pawn);
+        const int warmup = static_cast<int>(std::lround(static_cast<float>(gun.warmup) * armourTime *
+                                                        (traits_ != nullptr ? traits_->of(pawn).aimDelayFactor : 1.0f)));
         s.phase = player || warmup <= 0 ? ShotPhase::Firing : ShotPhase::Aiming;
         s.stepsLeft = player ? 0 : warmup;
     }
@@ -1207,6 +1230,31 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
             leadPoint(pawn, s.target, lead, fx, fy, fz);
         }
     }
+    // Aim at what shows (C25): a pawn crouched behind a crest shows only its shoulders and head over it, and a shot at
+    // its chest went into the crest. In the year run's fights on hillsides half the colonists' shots and more hit the
+    // ground in front of them. If the line to the chest meets ground or rock, the aim goes up a hand at a time, at most to
+    // just under the top of the body, until the line clears.
+    if (s.target != kNoEntity && !s.player && reg.all_of<Position, Posture>(s.target)) {
+        float muzzle = 0.0f;
+        float chest = 0.0f;
+        shotHeights(pawn, combatStanceOf(reg, pawn), muzzle, chest);
+        const float mz = map_.heightAt(pos.x, pos.y) + muzzle;
+        const CellPos from{static_cast<int>(std::floor(pos.x)), static_cast<int>(std::floor(pos.y)), pos.level};
+        const auto blocked = [&](float z) {
+            const TraceHit hit = trace(pos.x, pos.y, mz, fx, fy, z, pos.level, pawn, from, false);
+            return hit.kind == ProjectileHitKind::Ground || hit.kind == ProjectileHitKind::Rock;
+        };
+        const Position& tp = reg.get<Position>(s.target);
+        const float top = map_.heightAt(tp.x, tp.y) + bodyHeight(combatStanceOf(reg, s.target)) - kCombatAimTopMargin;
+        if (blocked(fz)) {
+            for (float z = fz + kCombatAimRaiseStep; z <= top; z += kCombatAimRaiseStep) {
+                if (!blocked(z)) {
+                    fz = z;
+                    break;
+                }
+            }
+        }
+    }
     // The player's gun kick (P2): this shot goes where the shots before it have lifted the aim, then
     // its own kick is added for the next.
     constexpr float kDegreesToSlope = 0.0174533f;  // small angles: the tangent is the angle
@@ -1257,9 +1305,9 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
         s.stepsLeft = std::max(1, gun->burstGap);
         return;
     }
-    const int cooldown = inspirations_ != nullptr
-                             ? static_cast<int>(std::lround(static_cast<float>(gun->cooldown) * inspirations_->statFactor(pawn, "fireCooldown")))
-                             : gun->cooldown;
+    const int cooldown = static_cast<int>(std::lround(
+        static_cast<float>(gun->cooldown) * apparelStats_->attackTimeFactor(things_.registry(), pawn) *
+        (inspirations_ != nullptr ? static_cast<float>(inspirations_->statFactor(pawn, "fireCooldown")) : 1.0f)));
     s.phase = cooldown > 0 ? ShotPhase::Cooling : ShotPhase::Ready;
     s.stepsLeft = cooldown;
 }
@@ -1269,7 +1317,8 @@ void CombatSystem::startReload(Entity pawn, Shooter& s, Entity weapon, int extra
     CombatModel::Gun moddedGun;
     const CombatModel::Gun& gun = *combatGunOf(*model_, reg, weapon, moddedGun);
     const float factor = combatBySkill(model_->reloadFactor, shootingSkill(pawn)) *
-                         (talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "reloadTime")) : 1.0f);
+                         (talents_ != nullptr ? static_cast<float>(talents_->statFactor(pawn, "reloadTime")) : 1.0f) *
+                         apparelStats_->attackTimeFactor(reg, pawn);
     s.phase = ShotPhase::Reloading;
     s.shotsLeft = 0;
     s.stepsLeft = std::max(1, extraSteps + static_cast<int>(std::lround(static_cast<float>(gun.reloadTime) * factor)));
@@ -1313,6 +1362,9 @@ bool CombatSystem::reload(Entity pawn, std::string* why) {
     }
     if (switching(pawn)) {
         return fail("switching weapons");
+    }
+    if (isDressing(reg, pawn)) {
+        return fail("putting on armour");
     }
     Shooter& s = reg.get_or_emplace<Shooter>(pawn);
     if (s.phase == ShotPhase::Aiming || s.phase == ShotPhase::Firing || s.phase == ShotPhase::Reloading) {
@@ -1510,7 +1562,13 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
                 emitHit(projectile, p, h, 0.0f);
                 break;
             }
-            const PawnHitResult result = hitPawn(hit.thing, hit.part, bullet.damageType, bullet.damage * p.damageFactor, bullet.penetration * p.damageFactor, p.seed);
+            // RimWorld's stagger: before the damage, armor or not, a bullet with the stopping power for the body.
+            if (reg.valid(hit.thing) && bullet.stoppingPower > 0.0f &&
+                (bodySize_ ? bodySize_(hit.thing) : 1.0f) <= bullet.stoppingPower + 0.001f) {
+                stagger(hit.thing);
+            }
+            const PawnHitResult result = hitPawn(hit.thing, hit.part, bullet.damageType, bullet.damage * p.damageFactor,
+                                                 bullet.penetration * p.damageFactor, p.seed, HitFrom{true, h.x - p.vx, h.y - p.vy});
             h.part = result.part;
             if (result.deflected) {
                 h.kind = ProjectileHitKind::Armor;
@@ -1532,91 +1590,167 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
     }
 }
 
-// RimWorld's armor rule, per apparel piece covering the part hit, outermost layer first: armor
-// less penetration is the share of hits it changes; half of those bounce off (damage 0), the rest
-// do half damage and a sharp hit turns blunt. Bullets, melee blows and blast fragments all use it.
-PawnHitResult CombatSystem::armorPass(Entity pawn, int part, DefId damageType, float amount, float penetration,
-                                      Rng& rng) const {
+// sneed's mitigation (docs/design/armour.md): wherever the hit lands, each part of its mix is divided by
+// (1 + %) for every counted piece and the body's own hide. Clothing and armour on the chest and legs all
+// count (a suit or tribal wear once per slot it fills); on the head only the better of hat and helmet.
+// Armour penetration takes its share off each positive %. Nothing deflects and no roll is made; the
+// pieces wear by the share of the damage they took off, 1 hit point's worth per 4 damage in all.
+float CombatSystem::mitigate(Entity pawn, DefId damageType, float amount, float penetration, bool blast,
+                             std::vector<std::pair<Entity, float>>* contributions) const {
     const entt::registry& reg = things_.registry();
+    if (!damageType.valid() || damageType.value >= model_->mix.size()) {
+        return amount;
+    }
+    const DamageMix& mix = blast ? model_->blastMix[damageType.value] : model_->mix[damageType.value];
+    if (mix.total() <= 0.0f) {
+        return amount;
+    }
+    const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
+    const Gear* gear = reg.try_get<Gear>(pawn);
+    struct Piece {
+        Entity item;
+        Mitigation m;
+        int count;        // chest and legs slots it fills
+        bool head;
+        bool armour;
+        float weight;     // its share of what was taken off (log of its divisor, by the mix)
+    };
+    std::vector<Piece> pieces;
+    if (gear != nullptr) {
+        // A shield counts once, like a vest, while it is on the arm (docs/design/shields.md); slung, not at all.
+        const Entity shield = apparelStats_->activeShield(reg, pawn);
+        for (const Entity worn : gear->apparel) {
+            const DefId def = reg.get<Thing>(worn).def;
+            const GearKind gk = apparelStats_->gearKind(def);
+            if (gk != GearKind::Clothing && gk != GearKind::Armour) {
+                continue;
+            }
+            const bool isShield = apparelStats_->isShield(def);
+            if (isShield && worn != shield) {
+                continue;
+            }
+            const uint8_t slots = apparelStats_->gearSlots(def);
+            const int count = isShield ? 1 : ((slots & kGearChest) != 0 ? 1 : 0) + ((slots & kGearLegs) != 0 ? 1 : 0);
+            Piece p{worn, apparelStats_->mitigation(reg, worn), count, (slots & kGearHead) != 0, gk == GearKind::Armour, 0.0f};
+            pieces.push_back(p);
+        }
+    }
+    float after = 0.0f;
+    for (int c = 0; c < kDamageClasses; ++c) {
+        const float share = mix.share[c];
+        if (share <= 0.0f) {
+            continue;
+        }
+        const DamageClass cls = static_cast<DamageClass>(c);
+        float divisor = 1.0f;
+        int bestHead = -1;
+        float bestHeadFactor = 0.0f;
+        for (size_t i = 0; i < pieces.size(); ++i) {
+            Piece& p = pieces[i];
+            const float f = mitigationFactor(p.m, cls, mix.sub, penetration);
+            if (p.count > 0) {
+                divisor *= p.count == 2 ? f * f : f;
+                p.weight += share * static_cast<float>(p.count) * std::log(f);
+            }
+            if (p.head && (bestHead < 0 || f > bestHeadFactor || (f == bestHeadFactor && p.armour))) {
+                bestHead = static_cast<int>(i);
+                bestHeadFactor = f;
+            }
+        }
+        if (bestHead >= 0) {
+            divisor *= bestHeadFactor;
+            pieces[static_cast<size_t>(bestHead)].weight += share * std::log(bestHeadFactor);
+        }
+        if (kind != nullptr) {
+            divisor *= mitigationFactor(kind->natural, cls, mix.sub, penetration);
+        }
+        after += amount * share / divisor;
+    }
+    after /= mix.total();
+    if (contributions != nullptr) {
+        float total = 0.0f;
+        for (const Piece& p : pieces) {
+            total += std::max(0.0f, p.weight);
+        }
+        for (const Piece& p : pieces) {
+            if (p.weight > 0.0f && total > 0.0f) {
+                contributions->emplace_back(p.item, p.weight / total);
+            }
+        }
+    }
+    return after;
+}
+
+PawnHitResult CombatSystem::armorPass(Entity pawn, int part, DefId damageType, float amount, float penetration,
+                                      Rng& rng, bool blast, const HitFrom& from) const {
     PawnHitResult result;
     result.part = part;
     result.damageType = damageType;
     result.amount = amount;
-    const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
-    if (kind == nullptr) {
+    const entt::registry& reg = things_.registry();
+    if (model_->kind(reg.get<Thing>(pawn).def) == nullptr) {
         return result;
     }
-    const CombatModel::ArmorKind armorKind =
-        damageType.value < model_->armorKind.size() ? model_->armorKind[damageType.value] : CombatModel::ArmorKind::None;
-    const Gear* gear = reg.try_get<Gear>(pawn);
-    if (armorKind == CombatModel::ArmorKind::None) {
-        return result;
+    // A raised shield (docs/design/shields.md): a hit from the front lands on it with its catch chance, whatever the
+    // damage, and loses 40% and then the material's flat block, but a hit of 6 or more keeps at least 1. Then armour.
+    // The roll is made only for a pawn with its shield up, so fights without shields draw the same numbers.
+    const Blocking* blocking = reg.try_get<Blocking>(pawn);
+    const Entity shield = blocking != nullptr && from.known ? apparelStats_->activeShield(reg, pawn) : kNoEntity;
+    if (shield != kNoEntity && amount > 0.0f) {
+        const Position& pos = reg.get<Position>(pawn);
+        const Posture* posture = reg.try_get<Posture>(pawn);
+        float fx = blocking->hasDir ? blocking->dirX : posture != nullptr ? posture->facingX : 1.0f;
+        float fy = blocking->hasDir ? blocking->dirY : posture != nullptr ? posture->facingY : 0.0f;
+        const float dx = from.x - pos.x;
+        const float dy = from.y - pos.y;
+        const float len = std::sqrt(dx * dx + dy * dy);
+        const float flen = std::sqrt(fx * fx + fy * fy);
+        const ShieldRules& sr = apparelStats_->shieldRules();
+        const float cosArc = std::cos(sr.arcDegrees * 3.14159265f / 180.0f);
+        const bool front = len < 1e-4f || flen < 1e-4f || (fx * dx + fy * dy) / (len * flen) >= cosArc - 1e-6f;
+        if (front && rng.unit() < apparelStats_->catchChance(reg.get<Thing>(shield).def)) {
+            float left = amount * (1.0f - sr.blockCut) - apparelStats_->shieldBlock(reg, shield);
+            if (amount >= sr.floorBaseDamage) {
+                left = std::max(left, sr.floorDamage);
+            }
+            left = std::max(0.0f, std::min(left, amount));
+            result.shieldBlocked = true;
+            result.shield = shield;
+            result.shieldTook = amount - left;
+            // The shield wears for what it stopped, as armour does: 1 hit point's worth per 4 points.
+            const float lost = result.shieldTook / model_->absorbDivisor;
+            int points = static_cast<int>(lost);
+            if (rng.unit() < lost - static_cast<float>(points)) {
+                ++points;
+            }
+            if (points > 0) {
+                result.wear.emplace_back(shield, points);
+            }
+            amount = left;
+            result.amount = left;
+            if (left <= 0.0f) {
+                result.deflected = true;  // all of it stopped
+                return result;
+            }
+        }
     }
-    std::vector<std::pair<int, Entity>> layers;
-    for (const Entity worn : gear != nullptr ? gear->apparel : std::vector<Entity>{}) {
-        const CombatModel::Apparel* a = model_->wear(reg.get<Thing>(worn).def);
-        if (a == nullptr) {
-            continue;
-        }
-        bool covers = false;
-        for (const std::string& group : kind->parts[static_cast<size_t>(part)].groups) {
-            covers = covers || std::find(a->groups.begin(), a->groups.end(), group) != a->groups.end();
-        }
-        if (covers) {
-            layers.emplace_back(a->outerness, worn);
-        }
-    }
-    std::stable_sort(layers.begin(), layers.end(), [](const auto& l, const auto& r) { return l.first < r.first; });
-    const ArmorType armorType = armorKind == CombatModel::ArmorKind::Sharp   ? ArmorType::Sharp
-                                : armorKind == CombatModel::ArmorKind::Blunt ? ArmorType::Blunt
-                                                                             : ArmorType::Heat;
-    // A piece that stops or softens a hit takes 1 hit point of damage for every 4 points of the damage
-    // that reached it (C15, RimWorld wiki "Apparel"), rounded at random.
-    const auto wearOut = [&](Entity worn, float reaching) {
-        const float lost = reaching / model_->absorbDivisor;
+    std::vector<std::pair<Entity, float>> shares;
+    result.amount = mitigate(pawn, damageType, amount, penetration, blast, &shares);
+    // The pieces that took damage off share the wear a single layer took before: 1 hit point's worth for
+    // every 4 points of the hit (C15, RimWorld wiki "Apparel"), rounded at random.
+    for (const auto& [worn, share] : shares) {
+        const float lost = amount * share / model_->absorbDivisor;
         int points = static_cast<int>(lost);
         if (rng.unit() < lost - static_cast<float>(points)) {
             ++points;
         }
         result.wear.emplace_back(worn, points);
-    };
-    for (const auto& [outerness, worn] : layers) {
-        (void)outerness;
-        const float armor = std::max(0.0f, apparelStats_->armor(reg, worn, armorType) - penetration);
-        const float roll = rng.unit();
-        if (roll < armor * 0.5f) {
-            result.deflected = true;
-            wearOut(worn, result.amount);
-            result.amount = 0.0f;
-            return result;
-        }
-        if (roll < armor) {
-            wearOut(worn, result.amount);
-            result.amount *= 0.5f;
-            if (armorKind == CombatModel::ArmorKind::Sharp && model_->bluntDamage.valid()) {
-                result.damageType = model_->bluntDamage;
-            }
-        }
-    }
-    // The body's own armor (mechanoid hulls, chitin) is the innermost layer; nothing wears out.
-    const float natural = std::max(0.0f, kind->natural[static_cast<size_t>(armorType)] - penetration);
-    if (natural > 0.0f) {
-        const float roll = rng.unit();
-        if (roll < natural * 0.5f) {
-            result.deflected = true;
-            result.amount = 0.0f;
-        } else if (roll < natural) {
-            result.amount *= 0.5f;
-            if (armorKind == CombatModel::ArmorKind::Sharp && model_->bluntDamage.valid()) {
-                result.damageType = model_->bluntDamage;
-            }
-        }
     }
     return result;
 }
 
 PawnHitResult CombatSystem::hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
-                                    uint64_t seed) const {
+                                    uint64_t seed, const HitFrom& from) const {
     const entt::registry& reg = things_.registry();
     PawnHitResult result;
     result.damageType = damageType;
@@ -1649,7 +1783,7 @@ PawnHitResult CombatSystem::hitPawn(Entity pawn, int hitboxPart, DefId damageTyp
     }
     part = health_.goInside(pawn, damageType, part, rng);
     result.part = part;
-    return armorPass(pawn, part, damageType, amount, penetration, rng);
+    return armorPass(pawn, part, damageType, amount, penetration, rng, false, from);
 }
 
 bool CombatSystem::hurtPawn(Entity pawn, DefId damageType, float amount, Rng& rng) {
@@ -1774,6 +1908,7 @@ void CombatSystem::step(Rng& rng) {
             }
         }
     }
+    stepBlocking();
 
     // Triggers, in id order: they share the random stream.
     scratch_.clear();
@@ -1800,6 +1935,18 @@ void CombatSystem::step(Rng& rng) {
             posture->stance = k.before;
         }
         reg.remove<KnockedDown>(pawn);
+    }
+
+    // Staggered pawns walk at full speed again when their time is over (AN1).
+    scratch_.clear();
+    for (const Entity pawn : reg.view<Staggered>()) {
+        scratch_.push_back(pawn);
+    }
+    std::sort(scratch_.begin(), scratch_.end());
+    for (const Entity pawn : scratch_) {
+        if (--reg.get<Staggered>(pawn).stepsLeft <= 0) {
+            reg.remove<Staggered>(pawn);
+        }
     }
 
     // Projectiles, in id order: one may knock down a wall another would have hit.
@@ -1832,6 +1979,34 @@ void CombatSystem::step(Rng& rng) {
         p.y = ny;
         p.z = nz;
         p.vz -= g;
+    }
+}
+
+int CombatSystem::staggeredFor(Entity pawn) const {
+    const Staggered* s = things_.registry().valid(pawn) ? things_.registry().try_get<Staggered>(pawn) : nullptr;
+    return s != nullptr ? s->stepsLeft : 0;
+}
+
+float CombatSystem::staggerSpeedFactor(Entity pawn) const {
+    return staggeredFor(pawn) > 0 ? model_->staggerSpeed : 1.0f;
+}
+
+void CombatSystem::stagger(Entity pawn) {
+    entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || model_->staggerSteps <= 0 || health_.incapacitated(pawn)) {
+        return;
+    }
+    reg.get_or_emplace<Staggered>(pawn).stepsLeft = model_->staggerSteps;
+    if (events_ != nullptr) {
+        Event e;
+        e.type = EventType::PawnStaggered;
+        e.thing = pawn;
+        e.amount = static_cast<float>(model_->staggerSteps);
+        if (const Position* pos = reg.try_get<Position>(pawn)) {
+            e.x = pos->x;
+            e.y = pos->y;
+        }
+        events_->push_back(std::move(e));
     }
 }
 
@@ -1975,7 +2150,8 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
             if (part < 0) {
                 break;
             }
-            const PawnHitResult piece = armorPass(pawn, part, ex.damageType, amount * weights[i] / weightSum, ex.penetration, rng);
+            const PawnHitResult piece = armorPass(pawn, part, ex.damageType, amount * weights[i] / weightSum, ex.penetration, rng, true,
+                                                    HitFrom{true, bx, by});
             if (piece.deflected || piece.amount <= 0.0f) {
                 wearApparel(pawn, piece);
                 continue;
@@ -2141,6 +2317,7 @@ void CombatSystem::drop(Entity pawn, Entity item) {
         }
         gear->apparel.erase(std::remove(gear->apparel.begin(), gear->apparel.end(), item), gear->apparel.end());
         gear->stowed.erase(std::remove(gear->stowed.begin(), gear->stowed.end(), item), gear->stowed.end());
+        gear->inventory.erase(std::remove(gear->inventory.begin(), gear->inventory.end(), item), gear->inventory.end());
     }
     if (WeaponSwitch* change = reg.try_get<WeaponSwitch>(pawn); change != nullptr && change->stepsLeft > 0) {
         // Dropping the weapon switched to, or the one in the hands, ends the switch: nothing is left to swap.
@@ -2165,20 +2342,21 @@ bool CombatSystem::unequip(Entity pawn, Entity item) {
     const Gear* gear = reg.valid(pawn) ? reg.try_get<Gear>(pawn) : nullptr;
     if (gear == nullptr || !reg.valid(item) ||
         (gear->weapon != item && std::find(gear->apparel.begin(), gear->apparel.end(), item) == gear->apparel.end() &&
-         std::find(gear->stowed.begin(), gear->stowed.end(), item) == gear->stowed.end())) {
+         std::find(gear->stowed.begin(), gear->stowed.end(), item) == gear->stowed.end() &&
+         std::find(gear->inventory.begin(), gear->inventory.end(), item) == gear->inventory.end())) {
         return false;
     }
     drop(pawn, item);
     return true;
 }
 
-void CombatSystem::strikePawn(Entity pawn, DefId damageType, float amount, float penetration, Rng& rng) {
+void CombatSystem::strikePawn(Entity pawn, DefId damageType, float amount, float penetration, Rng& rng, const HitFrom& from) {
     const int part = pickOutsidePart(pawn, rng);
     if (part < 0) {
         health_.applyDamage(pawn, damageType, amount, -1, rng);
         return;
     }
-    const PawnHitResult hit = armorPass(pawn, part, damageType, amount, penetration, rng);
+    const PawnHitResult hit = armorPass(pawn, part, damageType, amount, penetration, rng, false, from);
     if (!hit.deflected && hit.amount > 0.0f) {
         health_.applyHit(pawn, hit.damageType, hit.amount, part);
     }
@@ -2186,8 +2364,109 @@ void CombatSystem::strikePawn(Entity pawn, DefId damageType, float amount, float
 }
 
 void CombatSystem::wearApparel(Entity pawn, const PawnHitResult& result) {
+    if (result.shieldBlocked && events_ != nullptr) {
+        Event e;
+        e.type = EventType::ShieldBlocked;
+        e.thing = pawn;
+        e.target = result.shield;
+        e.amount = result.shieldTook;
+        if (const Position* pos = things_.registry().try_get<Position>(pawn)) {
+            e.cell = cellOf(*pos);
+            e.x = pos->x;
+            e.y = pos->y;
+        }
+        e.message = result.deflected ? "stopped" : "softened";
+        events_->push_back(std::move(e));
+    }
     for (const auto& [item, points] : result.wear) {
         damageApparel(pawn, item, points);
+    }
+}
+
+bool CombatSystem::setBlocking(Entity pawn, bool up, std::string* why, bool ai, Entity threat, bool hasDir, float dirX,
+                               float dirY) {
+    entt::registry& reg = things_.registry();
+    const auto fail = [why](const char* message) {
+        if (why != nullptr) {
+            *why = message;
+        }
+        return false;
+    };
+    if (!reg.valid(pawn) || !reg.all_of<Thing>(pawn) || reg.get<Thing>(pawn).category != ThingCategory::Pawn) {
+        return fail("that is not a pawn");
+    }
+    if (!up) {
+        reg.remove<Blocking>(pawn);
+        return true;
+    }
+    if (apparelStats_->shieldWorn(reg, pawn) == kNoEntity) {
+        return fail("that pawn has no shield");
+    }
+    if (apparelStats_->activeShield(reg, pawn) == kNoEntity) {
+        return fail("the shield is slung behind a two-handed weapon");
+    }
+    if (health_.incapacitated(pawn)) {
+        return fail("that pawn can't raise a shield (downed or dead)");
+    }
+    if (reg.any_of<KnockedDown, Stunned>(pawn)) {
+        return fail("that pawn is knocked down or stunned");
+    }
+    if (const Shooter* s = reg.try_get<Shooter>(pawn); s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) {
+        return fail("busy shooting");
+    }
+    Blocking b;
+    b.ai = ai;
+    b.threat = threat;
+    b.holdSteps = ai ? apparelStats_->shieldRules().aiHoldSteps : 0;
+    const float len = std::sqrt(dirX * dirX + dirY * dirY);
+    b.hasDir = hasDir && len > 1e-4f;
+    if (b.hasDir) {
+        b.dirX = dirX / len;
+        b.dirY = dirY / len;
+    }
+    reg.emplace_or_replace<Blocking>(pawn, b);
+    return true;
+}
+
+bool CombatSystem::shieldUp(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    return reg.valid(pawn) && reg.all_of<Blocking>(pawn);
+}
+
+// Shields that can't stay up come down: none on the arm any more (dropped, or slung behind a two-handed weapon), the
+// pawn downed, knocked down or stunned. A shield up faces its threat (the AI's) or the player's way.
+void CombatSystem::stepBlocking() {
+    entt::registry& reg = things_.registry();
+    scratch_.clear();
+    for (const Entity pawn : reg.view<Blocking>()) {
+        scratch_.push_back(pawn);
+    }
+    std::sort(scratch_.begin(), scratch_.end());
+    for (const Entity pawn : scratch_) {
+        if (apparelStats_->activeShield(reg, pawn) == kNoEntity || !things_.spawned(pawn) || health_.incapacitated(pawn) ||
+            reg.any_of<KnockedDown, Stunned>(pawn)) {
+            reg.remove<Blocking>(pawn);
+            continue;
+        }
+        const Blocking& b = reg.get<Blocking>(pawn);
+        Posture* posture = reg.try_get<Posture>(pawn);
+        if (posture == nullptr) {
+            continue;
+        }
+        if (b.hasDir) {
+            posture->facingX = b.dirX;
+            posture->facingY = b.dirY;
+        } else if (b.threat != kNoEntity && reg.valid(b.threat) && things_.spawned(b.threat)) {
+            const Position& at = reg.get<Position>(pawn);
+            const Position& to = reg.get<Position>(b.threat);
+            const float dx = to.x - at.x;
+            const float dy = to.y - at.y;
+            const float len = std::sqrt(dx * dx + dy * dy);
+            if (len > 0.01f) {
+                posture->facingX = dx / len;
+                posture->facingY = dy / len;
+            }
+        }
     }
 }
 
@@ -2237,6 +2516,7 @@ void CombatSystem::dropGear(Entity pawn) {
     }
     std::vector<Entity> items = gear->apparel;
     items.insert(items.begin(), gear->stowed.begin(), gear->stowed.end());
+    items.insert(items.end(), gear->inventory.begin(), gear->inventory.end());
     if (gear->weapon != kNoEntity) {
         items.insert(items.begin(), gear->weapon);
     }
@@ -2291,6 +2571,16 @@ bool CombatSystem::equip(Entity pawn, Entity item, std::string* why) {
         for (const Entity worn : gear.apparel) {
             const CombatModel::Apparel* other = model_->wear(reg.get<Thing>(worn).def);
             bool clash = false;
+            // Clothing and armour (docs/design/armour.md): one piece of a kind per slot, whatever its layers.
+            const GearKind mine = apparelStats_ != nullptr ? apparelStats_->gearKind(def) : GearKind::None;
+            const GearKind theirs = apparelStats_ != nullptr ? apparelStats_->gearKind(reg.get<Thing>(worn).def) : GearKind::None;
+            const bool layered = mine == GearKind::Clothing || mine == GearKind::Armour;
+            if (layered && (theirs == GearKind::Clothing || theirs == GearKind::Armour)) {
+                if (mine == theirs && (apparelStats_->gearSlots(def) & apparelStats_->gearSlots(reg.get<Thing>(worn).def)) != 0) {
+                    replaced.push_back(worn);
+                }
+                continue;
+            }
             for (const std::string& layer : wear->layers) {
                 for (const std::string& group : wear->groups) {
                     clash = clash || (other != nullptr &&
@@ -2513,7 +2803,8 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
     const entt::registry& reg = things_.registry();
     const bool has[] = {reg.all_of<Posture>(e), reg.all_of<Gear>(e), reg.all_of<EquippedBy>(e), reg.all_of<Shooter>(e),
                         reg.all_of<Projectile>(e), reg.all_of<Magazine>(e), reg.all_of<RecoilKick>(e),
-                        reg.all_of<DodgeRoll>(e), reg.all_of<KnockedDown>(e), reg.all_of<WeaponSwitch>(e)};
+                        reg.all_of<DodgeRoll>(e), reg.all_of<KnockedDown>(e), reg.all_of<WeaponSwitch>(e),
+                        reg.all_of<Staggered>(e)};
     uint64_t mask = 0;
     for (size_t bit = 0; bit < sizeof has / sizeof has[0]; ++bit) {
         mask |= has[bit] ? (uint64_t{1} << bit) : 0;
@@ -2534,6 +2825,9 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
         for (const Entity a : g->stowed) {
             h.add(entt::to_integral(a));
         }
+    }
+    if (const Staggered* st = reg.try_get<Staggered>(e)) {
+        h.add(st->stepsLeft);
     }
     if (const WeaponSwitch* change = reg.try_get<WeaponSwitch>(e)) {
         h.add(entt::to_integral(change->to));

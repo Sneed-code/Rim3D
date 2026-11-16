@@ -12,7 +12,7 @@ public class Rim3DEditor : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"Core", "CoreUObject", "Engine", "UnrealEd", "AssetTools", "AssetRegistry",
-			"Json", "MeshDescription", "SkeletalMeshDescription", "StaticMeshDescription", "RigLogicModule", "MaterialEditor", "ImageCore", "RHI",
+			"Json", "MeshDescription", "SkeletalMeshDescription", "StaticMeshDescription", "RigLogicModule", "MaterialEditor", "ImageCore", "RHI", "InterchangePipelines", "InterchangeCore",
 			"Rim3D",
 		});
 		// PawnFaces: faces from the MetaHuman Creator presets, and its grooms (an editor-only plugin in Rim3D.uproject).

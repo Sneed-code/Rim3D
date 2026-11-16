@@ -93,6 +93,21 @@ struct FLookConfig
 	float LowSunMist = 0.03f;
 	float LowSunMistFromDeg = -3.0f;
 	float LowSunMistToDeg = 14.0f;
+	/** Ground mist (the fog's second layer, "morningMist"): thick and low at dawn, gone by mid morning; thicker after rain. */
+	float MistDensity = 0.0f;
+	float MistHeightFalloff = 0.9f;
+	float MistHeightOffsetCm = 0.0f;
+	float MistFromHour = 3.0f;
+	float MistPeakHour = 6.2f;
+	float MistToHour = 9.5f;
+	float MistEvening = 0.15f;
+	float MistAfterRain = 0.8f;
+	float MistBaseShare = 0.35f;
+
+	/** The night sky ("stars", docs/design/look.md "Night sky"): the star map's brightness, the colony's latitude. */
+	float StarBrightness = 0.6f;
+	float StarLatitudeDeg = 5.0f;
+	float StarCloudCut = 0.85f;
 
 	// Film and lens.
 	float FilmSlope = 0.88f;
@@ -147,6 +162,10 @@ struct FSkyState
 	float GroundLux = 0.0f;
 	float ExposureEV = 15.0f;
 	float FogDensity = 0.0f;
+	/** The ground mist layer's density (0: none), the stars' brightness (0 by day) and the sky's turn (radians: the local sidereal angle). */
+	float MistDensity = 0.0f;
+	float StarBrightness = 0.0f;
+	float StarTurn = 0.0f;
 	/** The grey or snow-white veil mixed into the fog's colour as the sky clouds over (the rest of its colour is the sky atmosphere's). */
 	FLinearColor FogVeil = FLinearColor::Black;
 	/** The cloud material's Cloud_GlobalCoverage: -0.4 a few wisps, 0 mostly cloud, 0.2 and more dark overcast. */
@@ -293,6 +312,11 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> CloudMaterial;
 	UPROPERTY()
 	TObjectPtr<UPostProcessComponent> Exposure;
+	/** The star dome: a huge sphere round the camera with the star map (made by the SkyArt commandlet; none without it). */
+	UPROPERTY()
+	TObjectPtr<class UStaticMeshComponent> StarDome;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> StarMaterial;
 	UPROPERTY()
 	TObjectPtr<UInstancedStaticMeshComponent> RainInstances;
 	UPROPERTY()
@@ -306,6 +330,10 @@ private:
 	/** The level's own sun, sky light, fog, atmosphere and clouds, put out while ours are in use. */
 	TArray<TWeakObjectPtr<USceneComponent>> LevelParts;
 	FLookConfig Look;
+	/** World height of the map's low ground (its 30th percentile), where the ground mist lies; -1e9 until worked out. */
+	double MistBaseZ = -1.0e9;
+	bool bMistBaseMoved = false;
+	void FindMistBase(const colony::Sim& Sim, const USimSubsystem& Source);
 	bool bLookLoaded = false;
 	int32 AppliedQuality = -1;
 	int32 ExposureCuts = 0;

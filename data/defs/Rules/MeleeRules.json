@@ -32,11 +32,12 @@
     "blockRecoverySteps": 12,
     "playerBlockSteps": 20,
     "dodgeHoldSteps": 3,
+    "strongPowerShare": 1.15,
     "unverified": ["armorPenetrationPerDamage", "hitChanceCurve.3"],
     "ours": [
       "bodyReach", "animalReachBase", "animalReachPerRoot", "weaponReach", "reachSlack", "closeIn", "standGround", "defaultWeaponReach", "shoulderBelowEye", "strikeDepth", "windupShare",
       "minWindup", "commitSteps", "reactionStepsBySkill", "reactionJitter", "blockChanceBySkill", "blockSteps",
-      "blockRecoverySteps", "playerBlockSteps", "dodgeHoldSteps", "chargeTraits"
+      "blockRecoverySteps", "playerBlockSteps", "dodgeHoldSteps", "chargeTraits", "strongPowerShare"
     ]
   }
 ]

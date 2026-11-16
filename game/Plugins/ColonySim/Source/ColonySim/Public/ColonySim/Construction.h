@@ -16,6 +16,7 @@ namespace colony {
 class Map;
 class Plants;
 class Rng;
+class Floors;
 class Things;
 class UpperFloors;
 
@@ -43,6 +44,7 @@ struct ConstructionSite {
     int sizeX = 1;  // as placed facing North
     int sizeY = 1;
     std::vector<MaterialCount> materials;
+    DefId floor;  // a floor plan: the Terrain floor def it lays (its Thing def is FloorPlan); invalid for a building
     float workTotal = 0.0f;  // game seconds of work at speed 1 (the def's `workToBuild` with the stuff's factor)
     float workDone = 0.0f;
 
@@ -70,6 +72,7 @@ struct ConstructionNumbers {
     double skillSpeedBase = 0.3;       // construction speed = base + perLevel x Construction skill
     double skillSpeedPerLevel = 0.0875;
     int defaultSkillLevel = 8;         // for a worker with no skills (a test pawn)
+    double removeFloorWork = 288.0;    // game seconds at speed 1 to take a floor up (RimWorld's 200 ticks)
 };
 
 class COLONY_API Construction {
@@ -88,6 +91,12 @@ public:
     // is laid (UpperFloors::lay) instead of a building spawned. Without this, none can be planned.
     void setUpperFloors(UpperFloors* floors) { upperFloors_ = floors; }
     bool isUpperFloor(DefId def) const;
+    // Ground floors (docs/design/construction.md "Floors"): a floor plan is a site of the FloorPlan
+    // def that lays a Terrain floor def when built. Without this, none can be planned.
+    void setFloors(Floors* floors) { floors_ = floors; }
+    const Floors* floors() const { return floors_; }
+    // True for a site that lays a ground floor.
+    bool isFloorPlan(Entity site) const;
     // Art (`building.art`, docs/design/art.md): sculptures. An artist builds them (Artistic skill, the Art
     // work type), the work follows the stuff's `workToMake` factor, and the finished piece has a quality.
     bool isArt(DefId def) const;
@@ -106,10 +115,22 @@ public:
     int maxHitPoints(DefId def, DefId stuff) const;  // 0 if the def has none
 
     // ---- Placing, cancelling, finishing -----------------------------------------------------
+    // Why a blueprint of `def` made of `stuff` can't go at `cell` facing `rot`, in plain words; empty if
+    // it can. The same rule placeBlueprint keeps (research is the caller's: Sim checks it). The build
+    // menu's ghosts ask this too (BuildPlanner, docs/design/build-menu.md).
+    std::string whyNotBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 rot) const;
+    // The same for a floor plan (placeFloorPlan's rule).
+    std::string whyNotFloorPlan(DefId floor, DefId stuff, CellPos cell) const;
     // A blueprint of `def` made of `stuff`, its footprint starting at `cell` facing `rot`. Every
     // cell must be on the map, walkable ground, free of buildings and of other sites. Returns
     // kNoEntity, with `error` in plain words, if it can't be placed.
     Entity placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 rot, std::string& error);
+    // A plan to lay the Terrain floor `floor` (made of `stuff` if it takes one) on one ground cell:
+    // the floor's `costs` and `costStuffCount`, its `workToBuild`. The cell must be on the map,
+    // ground a floor can lie on, without that floor already, without a building that blocks
+    // movement and without another plan. Pawns may stand on floor plans to work. Returns
+    // kNoEntity, with `error` in plain words, if it can't be placed.
+    Entity placeFloorPlan(DefId floor, DefId stuff, CellPos cell, std::string& error);
     // A blueprint or a frame is taken away and everything delivered to it is put back on the
     // ground; a building marked for deconstruction is unmarked. False, with `error`, if `thing`
     // is none of these.
@@ -126,6 +147,11 @@ public:
     // is built (full hit points) and the plants under it are gone. Returns the building, or kNoEntity if it can't stand there any
     // more (the materials are given back).
     Entity complete(Entity frame);
+    // Takes the floor on a ground cell up (RimWorld's remove-floor order) and puts back
+    // `deconstructRefundFactor` of its fixed `costs`, rounded at random, beside the cell. A floor made of a
+    // stuff gives none of the stuff back: the floor layer doesn't keep what it was made of. False if the
+    // cell has no floor.
+    bool removeFloor(CellPos cell);
     // Takes a finished building down and puts back `deconstructRefundFactor` of its materials,
     // rounded at random. False if it isn't a building.
     bool deconstruct(Entity building);
@@ -135,7 +161,8 @@ public:
     Entity siteAt(CellPos cell) const;
     // Work the job at a site or building needs: total game seconds at speed 1.
     float deconstructWork(Entity building) const;
-    // A walkable cell beside the rect (sharing a side, never a corner) that `from` can reach,
+    // A walkable cell beside the rect (sharing a side, never a corner) that `from` can reach (for a
+    // floor plan also the cell itself; cells under other floor plans may be stood on),
     // nearest to `from`; false if there is none. Where a pawn stands to build or take down. A rect
     // over open air on an upper level (an upper floor) can also be worked from the level below,
     // under it or beside that.
@@ -163,6 +190,7 @@ private:
     std::vector<Event>& events_;
     ConstructionNumbers numbers_;
     UpperFloors* upperFloors_ = nullptr;
+    Floors* floors_ = nullptr;
     std::unordered_map<uint64_t, Entity> siteAt_;  // by packed cell; looked up only, never iterated
 };
 

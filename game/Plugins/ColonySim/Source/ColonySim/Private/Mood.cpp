@@ -10,6 +10,7 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Protagonist.h"
 #include "ColonySim/Recreation.h"
 #include "ColonySim/RoomStats.h"
 #include "ColonySim/Rooms.h"
@@ -267,6 +268,9 @@ std::vector<ThoughtView> MoodSystem::thoughts(Entity pawn, int64_t now) const { 
 
 std::vector<ThoughtView> MoodSystem::thoughtList(Entity pawn, int64_t now, bool labels) const {
     std::vector<ThoughtView> out;
+    if (mindIsPlayersOwn(things_.registry(), pawn)) {
+        return out;  // the protagonist has no mood, so no thoughts
+    }
     const entt::registry& reg = things_.registry();
     const Needs* needs = reg.try_get<Needs>(pawn);
     if (needs != nullptr) {
@@ -453,7 +457,7 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
     for (const Entity pawn : pawns) {
         if (!reg.all_of<Mood>(pawn)) {
             Mood& mood = reg.emplace<Mood>(pawn);
-            mood.level = std::clamp(target(pawn, now), 0.0f, 100.0f);
+            mood.level = mindIsPlayersOwn(reg, pawn) ? rules_.baseMood : std::clamp(target(pawn, now), 0.0f, 100.0f);
         }
     }
 
@@ -587,6 +591,14 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
             continue;
         }
         Mood& mood = reg.get<Mood>(pawn);
+        if (mindIsPlayersOwn(reg, pawn)) {
+            // The protagonist has no mood (sneed, 2026-11-15): no thoughts, no psychic drone, no bands. The component
+            // stays, held at the base level, so every system that reads a mood still finds one.
+            mood.memories.clear();
+            mood.level = rules_.baseMood;
+            mood.band = MoodBand::Stable;
+            continue;
+        }
         mood.memories.erase(std::remove_if(mood.memories.begin(), mood.memories.end(),
                                            [&](const Memory& m) { return m.expires <= now; }),
                             mood.memories.end());

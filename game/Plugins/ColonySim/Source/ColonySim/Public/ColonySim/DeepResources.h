@@ -26,6 +26,7 @@ struct DeepCell {
 struct DeepWork {
     CellPos at;
     double work = 0.0;
+    DefId tune;  // a long-range scanner's chosen ore (a Mineable def); invalid: not tuned
 };
 
 // What is saved (section "deep").
@@ -102,6 +103,16 @@ public:
     // chance of a find (the find time is exponential, as RimWorld's), and work past the guaranteed time
     // always finds. A find resets the scanner's work. Returns true on a find (`out` says what).
     bool scanStep(CellPos building, double speed, DeepFind& out);
+    // The timing half of a scan: adds `speed` seconds of work for the scanner at `building`; true when a find
+    // is due (a chance of speed / average a second, or `guaranteed` seconds of work), and the work then resets.
+    // The long-range mineral scanner uses its own times; what a find is, is up to the caller.
+    bool scanDue(CellPos building, double speed, double averageSeconds, double guaranteedSeconds);
+    // A long-range scanner's tuned ore, kept across finds (it is not part of the work that resets).
+    void setTune(CellPos building, DefId ore);
+    DefId tuneOf(CellPos building) const;
+    // Picks where a surface lump of `minCells` to `maxCells` cells goes: a random ground cell `minDist` to `maxDist`
+    // cells from `from` with no building on it, grown over neighbouring free ground like deposits. False when no site was found.
+    bool lumpSite(CellPos from, int minDist, int maxDist, int minCells, int maxCells, std::vector<CellPos>& out);
     // Work done so far by that scanner or drill.
     double workAt(CellPos building) const;
 

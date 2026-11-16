@@ -42,10 +42,12 @@
 #include "ColonySim/Mineables.h"
 #include "ColonySim/Mood.h"
 #include "ColonySim/Recreation.h"
+#include "ColonySim/Cover.h"
 #include "ColonySim/Social.h"
 #include "ColonySim/Medicine.h"
 #include "ColonySim/Surgery.h"
 #include "ColonySim/Prisoners.h"
+#include "ColonySim/Protagonist.h"
 #include "ColonySim/Quests.h"
 #include "ColonySim/Ship.h"
 #include "ColonySim/Research.h"
@@ -207,6 +209,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
         startScenario();
     }
     animals_->populate(settings_.wildAnimals);  // after the colonists, so no herd starts on top of them
+    rooms_->noteBedOwners();
     rooms_->update();
     power_->update();
     lights_->update();
@@ -236,6 +239,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       rng_(splitMix64(settings.seed ^ 0x7061776EULL)),
       groundHash_(map_.contentHash()) {
     time_.seconds = settings_.startSecond;
+    time_.steps = settings_.startSecond;
+    time_.dayMinutes = std::clamp(settings_.dayMinutes, kBaseDayMinutes, kMaxDayMinutes);
     if (world_) {
         worldHash_ = world_->hash();
         if (world_->empty()) {
@@ -282,7 +287,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     power_->setSun([this](const GameTime&) { return static_cast<double>(lights_->skyGlow()); });
     power_->setOnChange([this] { lights_->markDirty(); });
     // A lamp that burns fuel is dark without it (FuelSystem marks the lamps dirty when that changes).
-    lights_->setActive([this](Entity building) { return power_->running(building) && jobs_->fuel().lit(building); });
+    lights_->setActive([this](Entity building) { return power_->running(building) && (jobs_ == nullptr || jobs_->fuel().lit(building)); });
     movement_->setLights(lights_.get());
     recreation_ = std::make_unique<RecreationSystem>(*things_, *defs_);
     recreation_->setRooms(rooms_.get());
@@ -300,15 +305,18 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     temperature_->setGround(groundTemperature());
     mood_->setTemperature(temperature_.get());
     // What a pawn wears widens its comfortable range (C15): cold insulation lowers the minimum, heat raises the maximum.
+    // A nudist's trait lowers the minimum too (ours, TraitStats::comfyMinOffset).
     temperature_->setComfortModifier([this](Entity pawn, float& min, float& max) {
         float cold = 0.0f;
         float heat = 0.0f;
         apparel_->insulation(pawn, cold, heat);
         min -= cold;
         max += heat;
+        min += traits_->of(pawn).comfyMinOffset;
     });
-    // A heater or cooler that draws power pushes heat only while it has it (E5); a campfire has no power part.
-    temperature_->setSourceRunning([this](Entity building) { return power_->running(building); });
+    // A heater or cooler that draws power pushes heat only while it has it (E5), and one that burns fuel (a campfire, a
+    // passive cooler) only while it has some: before, a campfire with no wood left still warmed its room.
+    temperature_->setSourceRunning([this](Entity building) { return power_->running(building) && (jobs_ == nullptr || jobs_->fuel().lit(building)); });
     spoilage_ = std::make_unique<SpoilageSystem>(map_, *things_, *temperature_, *roomStats_, *defs_,
                                                  splitMix64(settings.seed ^ 0x73706F696CULL));
     spoilage_->setEventLog(&events_);
@@ -332,8 +340,13 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     lights_->setWeather(weather_.get());
     jobs_ = std::make_unique<JobSystem>(map_, *things_, pathfinder_, *zones_, *construction_, *plants_, *mineables_,
                                         *designations_, *defs_, *health_, *needs_, time_, stats_, events_);
-    movement_->setSpeedFactor([this](Entity pawn) {
-        return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed"));
+    movement_->setSpeedFactor([this](Entity pawn) { return pawnMoveFactor(pawn); });
+    combat_->setBodySize([this](Entity pawn) {
+        const float animal = animals_->bodySize(pawn);
+        if (animal > 0.0f) {
+            return animal;
+        }
+        return static_cast<float>(defs_->get(things_->registry().get<Thing>(pawn).def).number("race.baseBodySize", 1.0));
     });
     movement_->setDoorSpeed([this](Entity door) {
         const int factor = static_cast<int>(defs_->get(things_->registry().get<Thing>(door).def).integer("door.openSpeedFactor", 1));
@@ -352,6 +365,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setRoomStats(roomStats_.get());
     jobs_->setTalents(talents_.get());
     jobs_->setTraits(traits_.get());
+    jobs_->setGearWorkFactor([this](Entity pawn) { return combat_->apparelStats().workFactor(things_->registry(), pawn); });
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
@@ -498,10 +512,12 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     roofCollapse_->setEventLog(&events_);
     roofCollapse_->setInterruptHandler([this](Entity pawn, const std::string& why) { jobs_->interrupt(pawn, why); });
     construction_->setUpperFloors(upperFloors_.get());
+    construction_->setFloors(floors_.get());
     animals_->setMelee(melee_.get());
     defense_ = std::make_unique<DefenseSystem>(*things_, map_, *combat_, *health_, *power_, *defs_, time_);
     defense_->setEventLog(&events_);
     defense_->setFuel(&jobs_->fuel());
+    defense_->setAnimals(animals_.get());
     defense_->setBeforeDestroy([this](Entity thing) {
         jobs_->forget(thing);
         raids_->forget(thing);
@@ -671,6 +687,18 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     social_ = std::make_unique<SocialSystem>(*things_, *rooms_, *health_, *melee_, *mood_, *jobs_, *defs_, time_,
                                              splitMix64(settings.seed ^ 0x736F6369616CULL));
     social_->setEventLog(&events_);
+    jobs_->setPartnerOf([this](Entity pawn) { return social_->partner(pawn); });
+    rooms_->setPartnerOf([this](Entity pawn) { return social_->partner(pawn); });
+    // Partners who don't share a bed want to (RimWorld's "want to sleep with partner"; docs/design/lovin.md): a partner
+    // on the map whom the pawn thinks well of, and no bed of theirs in common.
+    mood_->addSituation("wantToSleepWithPartner", [this](Entity pawn) {
+        const Entity partner = social_->partner(pawn);
+        if (partner == kNoEntity || !things_->spawned(partner) || !things_->spawned(pawn) || social_->opinion(pawn, partner) <= 0.0f) {
+            return -1;
+        }
+        const Entity bed = jobs_->bedOf(pawn);
+        return bed != kNoEntity && bed == jobs_->bedOf(partner) ? -1 : 0;
+    });
     resonance_ = std::make_unique<ResonanceSystem>(*things_, map_, *health_, *jobs_, *fighters_, *defs_, time_,
                                                    splitMix64(settings.seed ^ 0x7265736F6EULL));
     resonance_->setEventLog(&events_);
@@ -818,6 +846,7 @@ Entity Sim::makeJoiner(CellPos cell, uint64_t seed) {
     if (!generateColonist(*defs_, seed, false, colonist, error)) {
         return kNoEntity;
     }
+    makeNameUnique(colonist, seed);
     const Entity pawn = things_->spawn("Human", cell);
     if (pawn == kNoEntity || !things_->registry().all_of<Mover>(pawn)) {
         things_->destroy(pawn);
@@ -827,6 +856,15 @@ Entity Sim::makeJoiner(CellPos cell, uint64_t seed) {
     giveLooks(pawn, seed, colonist.female, "Baseline");
     things_->registry().emplace<Colonist>(pawn, std::move(colonist));
     return pawn;
+}
+
+void Sim::makeNameUnique(Colonist& colonist, uint64_t seed) const {
+    std::vector<const Colonist*> taken;
+    const entt::registry& reg = things_->registry();
+    for (const auto [entity, other] : reg.view<const Colonist>().each()) {
+        taken.push_back(&other);
+    }
+    makeColonistNameUnique(*defs_, seed, colonist, taken);
 }
 
 void Sim::giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage) {
@@ -976,6 +1014,43 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     // Apart from the chain below: MSVC stops at 128 nested else-ifs (C1061).
     if (const auto* pod = std::get_if<PodCommand>(&command)) {
         applyPodCommand(*pod, id);
+        return;
+    }
+    if (const auto* scanner = std::get_if<ScannerCommand>(&command)) {
+        applyScannerCommand(*scanner, id);
+        return;
+    }
+    if (const auto* bag = std::get_if<InventoryCommand>(&command)) {
+        applyInventoryCommand(*bag, id);
+        return;
+    }
+    if (const auto* fightGear = std::get_if<SetOutfitFightGearCommand>(&command)) {
+        std::string why;
+        if (!apparel_->setFightGear(fightGear->outfit, fightGear->armourInBag, fightGear->clothesInBag, why)) {
+            commandFailed(id, why);
+        }
+        return;
+    }
+    if (const auto* hideGear = std::get_if<HideGearCommand>(&command)) {
+        std::string why;
+        if (!apparel_->setHideGear(hideGear->pawn, hideGear->hide, why)) {
+            commandFailed(id, why);
+        }
+        return;
+    }
+    if (const auto* day = std::get_if<SetDayLengthCommand>(&command)) {
+        if (!dayMinutesValid(day->minutes)) {
+            commandFailed(id, "a day lasts 48 to 120 minutes, not " + std::to_string(day->minutes));
+        } else {
+            setDayMinutes(day->minutes);
+        }
+        return;
+    }
+    if (const auto* shield = std::get_if<ShieldCommand>(&command)) {
+        std::string why;
+        if (!combat_->setBlocking(shield->pawn, shield->up, &why, false, kNoEntity, shield->hasDir, shield->dirX, shield->dirY)) {
+            commandFailed(id, why);
+        }
         return;
     }
     // The comms console, before the long chain below (MSVC's limit on nested else-ifs).
@@ -1343,7 +1418,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* ignite = std::get_if<IgniteCommand>(&command)) {
         if (ignite->pawn != kNoEntity) {
-            if (!fire_->setPawnAlight(ignite->pawn, time_.seconds, ignite->force)) {
+            if (!fire_->setPawnAlight(ignite->pawn, time_.steps, ignite->force)) {
                 commandFailed(id, "that pawn can't catch fire");
             }
         } else if (!fire_->ignite(ignite->cell, ignite->size, ignite->force)) {
@@ -1481,7 +1556,17 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* place = std::get_if<PlaceBlueprintCommand>(&command)) {
         const DefId def = defs_->idOf("Things", place->def);
         const DefId stuff = place->stuff.empty() ? DefId{} : defs_->idOf("Things", place->stuff);
-        if (!def.valid()) {
+        const DefId floor = def.valid() ? DefId{} : defs_->idOf("Terrain", place->def);
+        if (floor.valid() && floors_->isFloorDef(floor)) {
+            // A floor (docs/design/construction.md "Floors"): a plan colonists lay, one cell.
+            if (!place->stuff.empty() && !stuff.valid()) {
+                commandFailed(id, "no Things def '" + place->stuff + "'");
+            } else if (!research_->unlocked(defs_->get(floor), error)) {
+                commandFailed(id, error);
+            } else if (construction_->placeFloorPlan(floor, stuff, place->cell, error) == kNoEntity) {
+                commandFailed(id, error);
+            }
+        } else if (!def.valid()) {
             commandFailed(id, "no Things def '" + place->def + "'");
         } else if (!place->stuff.empty() && !stuff.valid()) {
             commandFailed(id, "no Things def '" + place->stuff + "'");
@@ -1532,7 +1617,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         const CellRect& area = designate->area;
         int marked = 0;
         if (kind == DesignationKind::None) {
-            commandFailed(id, "Designate needs Mine, CutPlant or HarvestPlant (CancelDesignations takes marks off)");
+            commandFailed(id, "Designate needs Mine, CutPlant, HarvestPlant or RemoveFloor (CancelDesignations takes marks off)");
             return;
         }
         for (int y = std::max(0, area.minY); y < std::min(map_.height(), area.minY + area.sizeY); ++y) {
@@ -1544,6 +1629,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                 bool suits = false;
                 if (kind == DesignationKind::Mine) {
                     suits = mineables_->has(c);
+                } else if (kind == DesignationKind::RemoveFloor) {
+                    suits = floors_->at(c).valid();
                 } else if (plants_->has(c)) {
                     suits = kind == DesignationKind::CutPlant || defs_->get(plants_->defAt(c)).has("plant.harvestedThingDef");
                 }
@@ -1554,9 +1641,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             }
         }
         if (marked == 0) {
-            commandFailed(id, kind == DesignationKind::Mine ? "there is no rock to mine there"
-                                                            : (kind == DesignationKind::CutPlant ? "there is no plant to cut there"
-                                                                                                 : "there is nothing to harvest there"));
+            commandFailed(id, kind == DesignationKind::Mine          ? "there is no rock to mine there"
+                              : kind == DesignationKind::RemoveFloor ? "there is no floor to take up there"
+                              : kind == DesignationKind::CutPlant    ? "there is no plant to cut there"
+                                                                     : "there is nothing to harvest there");
         } else {
             Event changed;
             changed.type = EventType::DesignationsChanged;
@@ -1885,7 +1973,19 @@ void Sim::step() {
     }
 }
 
-void Sim::stepOnce(bool keepEvents) {
+void Sim::setDayMinutes(int minutes) {
+    time_.dayMinutes = std::clamp(minutes, kBaseDayMinutes, kMaxDayMinutes);
+    calendarAcc_ = std::min(calendarAcc_, time_.dayMinutes - 1);
+    for (OtherMap& m : otherMaps_) {
+        m.sim->setDayMinutes(time_.dayMinutes);  // stepped by the colony's ticks anyway; kept the same to be told right
+    }
+}
+
+// One step is one game second of action (walking, fighting, work: real time). The calendar moves
+// on with it on every step with the 48-minute day and on 48 of every `dayMinutes` steps with a
+// longer one; systems of calendar time (needs, health, mood, growth, rot, weather, the narrator...)
+// run only on those steps, so a longer day slows them and nothing else (docs/design/day-length.md).
+void Sim::stepOnce(bool keepEvents, int tick) {
     SimLap total(profile_, "total");
     if (profile_ != nullptr) {
         ++profile_->steps;
@@ -1893,6 +1993,17 @@ void Sim::stepOnce(bool keepEvents) {
     if (!keepEvents) {
         events_.clear();
     }
+    bool calendar = true;
+    if (tick >= 0) {
+        calendar = tick != 0;
+    } else {
+        calendarAcc_ += kBaseDayMinutes;
+        calendar = calendarAcc_ >= time_.dayMinutes;
+        if (calendar) {
+            calendarAcc_ -= time_.dayMinutes;
+        }
+    }
+    time_.tick = calendar;
     // A controlled pawn only has a velocity in the steps it was moved.
     for (const auto [pawn, mover] : things_->registry().view<Mover, const PlayerControl>().each()) {
         mover.vx = 0.0f;
@@ -1903,14 +2014,16 @@ void Sim::stepOnce(bool keepEvents) {
     applying.swap(pending_);
     for (auto& [id, command] : applying) {
         applyCommand(command, id);
-        commandLog_.push_back(LoggedCommand{time_.seconds, std::move(command)});
+        commandLog_.push_back(LoggedCommand{time_.steps, std::move(command)});
     }
     applying.clear();
     pending_.swap(applying);
 
     temperature_->setOutdoor(outdoorTemperature());
-    { SimLap lap(profile_, "health"); health_->step(time_.seconds, settings_.seed); }
-    { SimLap lap(profile_, "needs"); needs_->step(); }
+    if (calendar) {
+        { SimLap lap(profile_, "health"); health_->step(time_.seconds, settings_.seed); }
+        { SimLap lap(profile_, "needs"); needs_->step(); }
+    }
     // A controlled colonist who goes down or dies is let go: the player can't walk it any more.
     {
         entt::registry& reg = things_->registry();
@@ -1923,16 +2036,21 @@ void Sim::stepOnce(bool keepEvents) {
     }
     const size_t eventsBefore = events_.size();
     fieldCare_->invalidate();
-    { SimLap lap(profile_, "jobs"); jobs_->fuel().step(); }
-    { SimLap lap(profile_, "jobs"); jobs_->step(); }
-    // after the jobs, which leave caravan members alone; before movement walks them
-    { SimLap lap(profile_, "caravans"); caravans_->step(); }
-    {
-        SimLap lap(profile_, "pods");
-        pods_->step();
-        landPods();
+    if (calendar) {
+        SimLap lap(profile_, "jobs");
+        jobs_->fuel().step();  // fuel burns by the day
     }
-    { SimLap lap(profile_, "raids"); raids_->step(); }
+    { SimLap lap(profile_, "jobs"); jobs_->step(); }
+    if (calendar) {
+        // after the jobs, which leave caravan members alone; before movement walks them
+        { SimLap lap(profile_, "caravans"); caravans_->step(); }
+        {
+            SimLap lap(profile_, "pods");
+            pods_->step();
+            landPods();
+        }
+        { SimLap lap(profile_, "raids"); raids_->step(); }
+    }
     { SimLap lap(profile_, "fieldCare"); fieldCare_->step(); }
     {
         std::vector<Event> gained;
@@ -1941,24 +2059,26 @@ void Sim::stepOnce(bool keepEvents) {
     }
     { SimLap lap(profile_, "fighters"); fighters_->step(); }
     { SimLap lap(profile_, "resonance"); resonance_->step(); }
-    { SimLap lap(profile_, "prisoners"); prisoners_->step(); }
-    { SimLap lap(profile_, "trade"); trade_->step(events_); }
-    { SimLap lap(profile_, "quests"); quests_->step(); }
-    { SimLap lap(profile_, "ship"); ship_->step(); }
-    { SimLap lap(profile_, "recreation"); recreation_->step(); }
-    { SimLap lap(profile_, "drugs"); drugs_->step(time_.seconds); }
-    if (time_.seconds % kSecondsPerHour == 0) {
-        drugs_->prune();
+    if (calendar) {
+        { SimLap lap(profile_, "prisoners"); prisoners_->step(); }
+        { SimLap lap(profile_, "trade"); trade_->step(events_); }
+        { SimLap lap(profile_, "quests"); quests_->step(); }
+        { SimLap lap(profile_, "ship"); ship_->step(); }
+        { SimLap lap(profile_, "recreation"); recreation_->step(); }
+        { SimLap lap(profile_, "drugs"); drugs_->step(time_.seconds); }
+        if (time_.seconds % kSecondsPerHour == 0) {
+            drugs_->prune();
+        }
+        if (!travel_->freezingAnimals()) {
+            { SimLap lap(profile_, "animals"); animals_->step(); }
+            { SimLap lap(profile_, "husbandry"); husbandry_->step(); }
+            { SimLap lap(profile_, "breeding"); breeding_->step(); }
+        }
+        { SimLap lap(profile_, "social"); social_->step(time_.seconds); }
+        { SimLap lap(profile_, "mentalBreaks"); mentalBreaks_->step(time_.seconds, rng_); }  // before the mood system, which turns its events into memories
+        { SimLap lap(profile_, "mood"); mood_->step(time_.seconds, events_); }
+        { SimLap lap(profile_, "inspirations"); inspirations_->step(time_.seconds); }
     }
-    if (!travel_->freezingAnimals()) {
-        { SimLap lap(profile_, "animals"); animals_->step(); }
-        { SimLap lap(profile_, "husbandry"); husbandry_->step(); }
-        { SimLap lap(profile_, "breeding"); breeding_->step(); }
-    }
-    { SimLap lap(profile_, "social"); social_->step(time_.seconds); }
-    { SimLap lap(profile_, "mentalBreaks"); mentalBreaks_->step(time_.seconds, rng_); }  // before the mood system, which turns its events into memories
-    { SimLap lap(profile_, "mood"); mood_->step(time_.seconds, events_); }
-    { SimLap lap(profile_, "inspirations"); inspirations_->step(time_.seconds); }
     { SimLap lap(profile_, "movement"); movement_->step(things_->registry(), map_); }
     travel_->noteVisits();
     { SimLap lap(profile_, "melee"); melee_->step(); }
@@ -1970,58 +2090,66 @@ void Sim::stepOnce(bool keepEvents) {
     { SimLap lap(profile_, "monsters"); monsters_->step(events_, 0); }  // mounds make jelly, brood and spread; insects hunt (docs/design/monsters.md)
     {
         // Blasts of Burn damage start fires; a pawn that catches fire stops what it was doing.
-        { SimLap lap(profile_, "fire"); fire_->step(time_.seconds, 0); }
+        { SimLap lap(profile_, "fire"); fire_->step(time_.steps, 0); }  // fire spreads in real time
         for (size_t i = 0; i < events_.size(); ++i) {
             if (events_[i].type == EventType::PawnCaughtFire) {
                 jobs_->interrupt(events_[i].thing, "it caught fire");
             }
         }
     }
-    { SimLap lap(profile_, "apparel"); apparel_->step(time_.seconds, rng_, events_); }
+    { SimLap lap(profile_, "apparel"); apparel_->step(time_.seconds, rng_, events_, calendar); }
     { SimLap lap(profile_, "loot"); loot_->step(events_, 0, raids_->state(), time_.seconds); }  // raiders killed this step drop their packs
     { SimLap lap(profile_, "pathfinder"); pathfinder_.update(settings_.pathBudget); }  // paths asked for this step are ready next step at the earliest
-    { SimLap lap(profile_, "rooms"); rooms_->update(); }
+    { SimLap lap(profile_, "rooms"); rooms_->noteBedOwners(); rooms_->update(); }
     { SimLap lap(profile_, "roofCollapse"); roofCollapse_->step(rng_); }  // roofs and floors that lost their holders fall
-    { SimLap lap(profile_, "power"); power_->step(time_); }
+    if (calendar) {
+        SimLap lap(profile_, "power");
+        power_->step(time_);
+    }
     { SimLap lap(profile_, "lights"); lights_->update(); }
-    { SimLap lap(profile_, "filth"); filth_->step(); }
-    { SimLap lap(profile_, "roomStats"); roomStats_->step(time_.seconds); }
-    { SimLap lap(profile_, "temperature"); temperature_->step(time_.seconds); }
-    // From the weather as it is now, not left over from the last step: a loaded game has not had a last step.
-    spoilage_->setOutdoorFactor(weather_->deteriorationFactor());  // not saved: the weather says it, also on the first step after a load
-    { SimLap lap(profile_, "spoilage"); spoilage_->step(time_.seconds); }
-    if (time_.seconds % kBillUpkeepSeconds == 0) {
-        jobs_->bills().step();
-        crafting_->step();
-        repair_->step();
+    if (calendar) {
+        { SimLap lap(profile_, "filth"); filth_->step(); }
+        { SimLap lap(profile_, "roomStats"); roomStats_->step(time_.seconds); }
+        { SimLap lap(profile_, "temperature"); temperature_->step(time_.seconds); }
+        // From the weather as it is now, not left over from the last step: a loaded game has not had a last step.
+        spoilage_->setOutdoorFactor(weather_->deteriorationFactor());  // not saved: the weather says it, also on the first step after a load
+        { SimLap lap(profile_, "spoilage"); spoilage_->step(time_.seconds); }
+        if (time_.seconds % kBillUpkeepSeconds == 0) {
+            jobs_->bills().step();
+            crafting_->step();
+            repair_->step();
+        }
+        time_.seconds += 1;
     }
-    time_.seconds += 1;
-    { SimLap lap(profile_, "weather"); weather_->step(time_.seconds); }
-    if (time_.seconds % kSecondsPerDay == 0) {
-        jobs_->skillsNewDay();
-    }
-    // The plants of the hour that just ended grow a slice at a time over the next hour's first minute (G3).
-    const int64_t intoHour = time_.seconds % kSecondsPerHour;
-    if (time_.seconds >= kSecondsPerHour && intoHour < kSimPlantSlices) {
-        SimLap lap(profile_, "hourly");
-        plants_->growHourSlice(static_cast<int>(((time_.seconds - intoHour - 1) % kSecondsPerDay) / kSecondsPerHour), static_cast<int>(intoHour),
-                               static_cast<int>(kSimPlantSlices));
-    }
-    if (time_.seconds % kSecondsPerHour == 0) {
-        SimLap lap(profile_, "hourly");
-        farming_->growHour(time_.seconds);
-        filth_->fadeHour(weather_->effects().rainRate);
-        pruneDesignations();
-    }
-    if (!travel_->skipping()) {
-        { SimLap lap(profile_, "narrator"); narrator_->step(); }  // after the clock: incidents come on the narrator's checks (T1)
-        { SimLap lap(profile_, "disasters"); disasters_->step(); }  // T3: conditions end, work and strike (held while skipping, like the narrator)
+    time_.steps += 1;
+    if (calendar) {
+        { SimLap lap(profile_, "weather"); weather_->step(time_.seconds); }
+        if (time_.seconds % kSecondsPerDay == 0) {
+            jobs_->skillsNewDay();
+        }
+        // The plants of the hour that just ended grow a slice at a time over the next hour's first minute (G3).
+        const int64_t intoHour = time_.seconds % kSecondsPerHour;
+        if (time_.seconds >= kSecondsPerHour && intoHour < kSimPlantSlices) {
+            SimLap lap(profile_, "hourly");
+            plants_->growHourSlice(static_cast<int>(((time_.seconds - intoHour - 1) % kSecondsPerDay) / kSecondsPerHour), static_cast<int>(intoHour),
+                                   static_cast<int>(kSimPlantSlices));
+        }
+        if (time_.seconds % kSecondsPerHour == 0) {
+            SimLap lap(profile_, "hourly");
+            farming_->growHour(time_.seconds);
+            filth_->fadeHour(weather_->effects().rainRate);
+            pruneDesignations();
+        }
+        if (!travel_->skipping()) {
+            { SimLap lap(profile_, "narrator"); narrator_->step(); }  // after the clock: incidents come on the narrator's checks (T1)
+            { SimLap lap(profile_, "disasters"); disasters_->step(); }  // T3: conditions end, work and strike (held while skipping, like the narrator)
+        }
     }
     travel_->afterStep();
     narrator_->postpone(travel_->takeHold());  // a skip that ended (here or by a command) held the narrator back
     { SimLap lap(profile_, "otherMaps"); stepOtherMaps(); }  // W5: in step with the colony's clock
-    if (settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
-        checkpoints_.push_back(Checkpoint{time_.seconds, stateHash()});
+    if (calendar && settings_.checkpointEvery > 0 && time_.seconds % settings_.checkpointEvery == 0) {
+        checkpoints_.push_back(Checkpoint{time_.steps, stateHash()});
     }
 }
 
@@ -2065,6 +2193,8 @@ void Sim::pruneDesignations() {
 
 void Sim::writeSnapshot(Snapshot& out) const {
     out.gameSeconds = time_.seconds;
+    out.steps = time_.steps;
+    out.dayMinutes = time_.dayMinutes;
     out.mapWidth = map_.width();
     out.mapHeight = map_.height();
     out.things.clear();
@@ -2190,10 +2320,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
     }
     out.apparel.clear();
+    out.inventory.clear();
     out.fittedParts.clear();
     out.outfits.clear();
     for (const OutfitPolicy& outfit : apparel_->outfits()) {
-        out.outfits.push_back(OutfitView{outfit.id, outfit.name});
+        out.outfits.push_back(OutfitView{outfit.id, outfit.name, outfit.armourInBag, outfit.clothesInBag});
     }
     out.designations.clear();
     for (const auto& [index, kind] : designations_->all()) {
@@ -2278,6 +2409,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.sizeY = rect.sizeY;
             view.stage = site->stage;
             view.stuff = site->stuff;
+            view.floor = site->floor;
             view.buildProgress = site->workTotal > 0.0f ? std::min(1.0f, site->workDone / site->workTotal) : 0.0f;
             view.materialsHave = site->materialsHave();
             view.materialsNeeded = site->materialsNeeded();
@@ -2313,6 +2445,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
             view.dead = health->dead;
+            view.pain = std::clamp(health->pain, 0.0f, 1.0f);
             view.bloodLoss = health->bloodLoss;
             view.bleedPerDay = health->bleedPerDay;
             view.firstWound = static_cast<uint32_t>(out.wounds.size());
@@ -2353,24 +2486,45 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.food = needs->food;
             view.rest = needs->rest;
         }
-        if (const Joy* joy = reg.try_get<Joy>(entity)) {
+        const bool noMind = mindIsPlayersOwn(reg, entity);  // the protagonist: no mood, recreation or beauty need
+        if (const Joy* joy = noMind ? nullptr : reg.try_get<Joy>(entity)) {
             view.joy = joy->level;
             view.comfort = joy->comfort;
             view.outdoors = joy->outdoors;
         }
-        if (const Mood* mood = reg.try_get<Mood>(entity)) {
+        if (const Mood* mood = noMind ? nullptr : reg.try_get<Mood>(entity)) {
             view.mood = mood->level;
             view.moodBand = static_cast<int>(mood->band);
         }
         if (reg.all_of<Social>(entity)) {
             view.partner = social_->partner(entity);
             view.socialFight = social_->fighting(entity);
+            if (const Lovin* lovin = reg.try_get<Lovin>(entity)) {
+                view.lovin = true;
+                view.lovinPose = static_cast<int>(lovin->pose);
+            }
         }
-        if (const BeautyNeed* beauty = roomStats_->beautyNeed(entity)) {
+        if (const BeautyNeed* beauty = noMind ? nullptr : roomStats_->beautyNeed(entity)) {
             view.beautyNeed = beauty->level;
         }
         if (const Worker* worker = reg.try_get<Worker>(entity)) {
             view.asleep = jobIsLyingDown(worker->job);
+            const Job& job = worker->job;
+            if (jobIsLyingDown(job)) {
+                view.posture = PawnPosture::Lie;
+                view.seat = job.thing;
+            } else if ((job.type == JobType::Ingest || job.type == JobType::Recreate) && job.chair != kNoEntity &&
+                       job.step + 1 == jobStepCount(job.type)) {
+                view.posture = PawnPosture::Sit;
+                view.seat = job.chair;
+            }
+        }
+        if (const Talking* talk = social_->talking(entity)) {
+            view.talkDef = talk->def;
+            view.talkWith = talk->with;
+            view.talkStarted = talk->started;
+            view.talkOk = talk->ok;
+            view.talkSecondsLeft = static_cast<int>(talk->until - time_.seconds);
         }
         if (const MentalBreaker* breaker = reg.try_get<MentalBreaker>(entity); breaker != nullptr && breaker->active) {
             view.mentalBreak = defs_->idOf("MentalBreaks", breaker->def);
@@ -2397,6 +2551,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.grenades = explosives_->count(entity);
             view.throwReadyIn = explosives_->throwReadyIn(entity);
             view.knockedDown = combat_->knockedDownFor(entity) > 0;
+            view.staggeredFor = combat_->staggeredFor(entity);
             if (const Stunned* stunned = reg.try_get<Stunned>(entity)) {
                 view.stunnedFor = stunned->stepsLeft;
             }
@@ -2441,10 +2596,40 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 out.apparel.push_back(worn);
             }
             view.apparelCount = static_cast<uint32_t>(out.apparel.size()) - view.firstApparel;
+            view.firstInventory = static_cast<uint32_t>(out.inventory.size());
+            for (const Entity item : gear->inventory) {
+                InventoryItemView bagged;
+                bagged.item = item;
+                bagged.def = reg.get<Thing>(item).def;
+                const StackCount* stack = reg.try_get<StackCount>(item);
+                bagged.count = stack != nullptr ? stack->count : 1;
+                bagged.massKg = static_cast<float>(jobs_->itemMassFor(entity, item));
+                out.inventory.push_back(bagged);
+            }
+            view.inventoryCount = static_cast<uint32_t>(out.inventory.size()) - view.firstInventory;
+        }
+        if (view.category == ThingCategory::Pawn) {
+            view.loadKg = static_cast<float>(jobs_->loadMass(entity));
+            view.capacityKg = static_cast<float>(jobs_->carryCapacity(entity));
+            view.moveFactor = pawnMoveFactor(entity);
+            view.starving = isStarving(reg, entity);
         }
         if (view.category == ThingCategory::Pawn) {
             view.outfit = apparel_->outfitOf(entity);
             view.markedForStrip = apparel_->stripMarked(entity);
+            view.hideGear = apparel_->gearHidden(entity);
+            view.shieldUp = combat_->shieldUp(entity);
+            const Entity shield = combat_->apparelStats().shieldWorn(reg, entity);
+            view.shieldSlung = shield != kNoEntity && combat_->apparelStats().activeShield(reg, entity) == kNoEntity;
+            if (shield != kNoEntity) {
+                view.shield = reg.get<Thing>(shield).def;
+                if (const MadeOf* made = reg.try_get<MadeOf>(shield)) {
+                    view.shieldStuff = made->stuff;
+                }
+            }
+            if (const Dressing* dressing = reg.try_get<Dressing>(entity); dressing != nullptr && dressing->stepsLeft > 0) {
+                view.dressingSteps = dressing->stepsLeft;
+            }
         } else if (view.category == ThingCategory::Item && apparel_->stats().isApparel(thing.def)) {
             if (const MadeOf* made = reg.try_get<MadeOf>(entity)) {
                 view.stuff = made->stuff;
@@ -2534,6 +2719,36 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.meleeStepsLeft = melee->stepsLeft;
             view.meleeTarget = melee->phase == MeleePhase::Windup ? melee->target : kNoEntity;
             view.blocking = melee_->blocking(entity);
+            view.meleeTool = melee->tool;
+            view.meleeStrong = melee_->strongSwing(entity);
+        }
+        if (reg.all_of<Posture>(entity) && !view.dead) {
+            // AN1: a pawn down on the floor lies (in the bed under it, if any); cover toward its fight target; a low
+            // obstacle it walks over.
+            if (view.downed || view.knockedDown) {
+                view.posture = PawnPosture::Lie;
+                view.seat = view.downed ? jobs_->bedUnder(entity) : kNoEntity;
+            }
+            const CellPos here = cellOf(pos);
+            if (view.fightTarget != kNoEntity && reg.valid(view.fightTarget)) {
+                if (const Position* to = reg.try_get<Position>(view.fightTarget); to != nullptr && to->level == pos.level) {
+                    const float dx = to->x - pos.x;
+                    const float dy = to->y - pos.y;
+                    if (dx != 0.0f || dy != 0.0f) {
+                        const Dir8 dir = dir8Toward(dx, dy);
+                        const Dir8Step st = dir8Step(dir);
+                        const CellPos next{here.x + st.dx, here.y + st.dy, here.level};
+                        view.coverDir = static_cast<uint8_t>(dir);
+                        view.coverHeight = map_.inBounds(next) ? static_cast<float>(map_.obstacleDm(next)) * 0.1f : 0.0f;
+                    }
+                }
+            }
+            if ((view.vx != 0.0f || view.vy != 0.0f) && map_.inBounds(here)) {
+                const uint8_t dm = map_.obstacleDm(here);
+                if (dm > 0 && dm < kObstacleTallDm) {
+                    view.vaultHeight = static_cast<float>(dm) * 0.1f;
+                }
+            }
         }
         if (const Turret* turret = reg.try_get<Turret>(entity)) {
             view.turretPhase = static_cast<uint8_t>(turret->phase);
@@ -2757,6 +2972,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
 uint64_t Sim::stateHash() const {
     StateHasher h;
     h.add(time_.seconds);
+    // The step clock and the day length, only once they differ from the 48-minute day's (so hashes
+    // recorded before day lengths existed still match).
+    if (time_.steps != time_.seconds || time_.dayMinutes != kBaseDayMinutes || calendarAcc_ != 0) {
+        h.add(time_.steps);
+        h.add(static_cast<int64_t>(time_.dayMinutes));
+        h.add(static_cast<int64_t>(calendarAcc_));
+    }
     // The map's ground is fixed after generation, so its hash is taken once. Its building layer
     // follows from the buildings' footprints, hashed below. Map layers that change in play
     // (mining, plants, roofs) must keep their own running hash: hashing a 1 km map takes ~10 ms.
@@ -2940,6 +3162,9 @@ uint64_t Sim::stateHash() const {
             }
             h.add(site->workTotal);
             h.add(site->workDone);
+            if (site->floor.valid()) {
+                h.add(site->floor.value);  // only floor plans, so other games hash as before
+            }
         }
         if (const BuiltOf* made = reg.try_get<BuiltOf>(e)) {
             h.add(made->stuff.value);
@@ -3191,6 +3416,34 @@ void Sim::stepMany(int64_t steps) {
     for (int64_t i = 0; i < steps; ++i) {
         step();
     }
+}
+
+void Sim::applyScannerCommand(const ScannerCommand& command, uint64_t id) {
+    const Entity building = command.building;
+    if (!things_->spawned(building) || jobs_->deepKindOf(building) != DeepWorkKind::LongScan) {
+        commandFailed(id, "that is not a long-range mineral scanner");
+        return;
+    }
+    const Def& def = defs_->get(things_->registry().get<Thing>(building).def);
+    bool allowed = false;
+    for (size_t i = 0; i < def.count("deepWork.ores"); ++i) {
+        allowed = allowed || def.textAt("deepWork.ores", i) == command.ore;
+    }
+    const DefId ore = defs_->idOf("Things", command.ore);
+    if (!allowed || !ore.valid()) {
+        commandFailed(id, "the scanner can't be tuned to '" + command.ore + "'");
+        return;
+    }
+    deepResources_->setTune(things_->registry().get<Footprint>(building).origin, ore);
+}
+
+
+// How fast the pawn walks, as a share of its def's speed: its load, the moveSpeed talents, a bullet stagger, what it
+// wears and hunger (a starving pawn walks at 75%, needs.md "Starving"). The movement system and the snapshot (for the
+// player's own walk in direct mode) both use it.
+float Sim::pawnMoveFactor(Entity pawn) const {
+    return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed")) *
+           combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn);
 }
 
 }  // namespace colony

@@ -264,7 +264,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		const float Wanted = Velocity.Rotation().Yaw;
 		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * Speed);
 	}
-	else if ((Now.shotReadyIn > 0 || Now.fighting || Now.meleePhase != colony::MeleePhase::Ready || Now.blocking) && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
+	else if ((Now.shotReadyIn > 0 || Now.fighting || Now.meleePhase != colony::MeleePhase::Ready || Now.blocking || Now.shieldUp) && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
 	{
 		// Standing and shooting or swinging: face where the sim says the pawn aims (docs/design/fights.md).
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
@@ -313,7 +313,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	{
 		SwingMismatch = 0.0f;
 	}
-	ApplyBodyPose(GameDelta, Now.blocking && !Now.downed && !Now.dead);
+	ApplyBodyPose(GameDelta, (Now.blocking || Now.shieldUp) && !Now.downed && !Now.dead);
 
 	// Animation runs at the game's speed and stops while paused (and during a hit-stop).
 	Body->GlobalAnimRateScale = HitStopLeft > 0.0f ? 0.0f : static_cast<float>(Speed);

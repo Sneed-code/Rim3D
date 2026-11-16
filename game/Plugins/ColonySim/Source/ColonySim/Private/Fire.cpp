@@ -3,6 +3,7 @@
 
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Construction.h"
+#include "ColonySim/Cover.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Hash.h"
@@ -591,6 +592,35 @@ void Fire::burnThings(CellPos c, FireCell& fire, float damage, Rng& rng) {
     }
 }
 
+// A spark two cells away flies only with a clear line, as RimWorld's does (`Fire.TrySpread` launches a spark only when
+// `GenSight.LineOfSight` holds): a wall, a closed door or rock in a cell the line crosses stops it. So a fire outside a
+// stone or steel wall can't jump into the room behind it, and a room's contents only burn once the fire is inside.
+bool Fire::emberBlocked(CellPos from, int dx, int dy) const {
+    const int sx = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+    const int sy = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
+    // The cells the line from the fire's middle to the target's middle passes through on the way (one for a straight
+    // jump, two for a knight's move).
+    CellPos middle[2];
+    int count = 0;
+    if (dx == 2 || dx == -2) {
+        middle[count++] = CellPos{from.x + sx, from.y, from.level};
+        if (dy != 0) {
+            middle[count++] = CellPos{from.x + sx, from.y + sy, from.level};
+        }
+    } else {
+        middle[count++] = CellPos{from.x, from.y + sy, from.level};
+        if (dx != 0) {
+            middle[count++] = CellPos{from.x + sx, from.y + sy, from.level};
+        }
+    }
+    for (int i = 0; i < count; ++i) {
+        if (!map_.inBounds(middle[i]) || map_.obstacleDm(middle[i]) >= kObstacleTallDm) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Embers: each cell within reach that can burn catches with a chance that grows with the fire and the cell's
 // flammability. The cells are only listed here; the pass lights them once every fire has been looked at, so the
 // order fires are visited in changes nothing.
@@ -605,6 +635,9 @@ void Fire::spreadFrom(CellPos c, const FireCell& fire, int64_t now, int index, s
         }
         const CellPos n{c.x + off[0], c.y + off[1], c.level};
         if (!canBurnGround(n) || fires_.count(map_.index(n)) != 0) {
+            continue;
+        }
+        if (ember && emberBlocked(c, off[0], off[1])) {
             continue;
         }
         const float flam = flammabilityAt(n);

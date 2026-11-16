@@ -4,6 +4,7 @@
 #include "Components/InputComponent.h"
 #include "Components/SceneComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
 
 #include "HandsOnSubsystem.h"
@@ -21,8 +22,11 @@
 
 namespace
 {
-	// Degrees per mouse count.
-	constexpr float ProtagonistMouseTurn = 0.12f;
+	// Degrees per unit of the mouse axis (the engine has already scaled each count by the input's 0.07), so the
+	// default turns about 0.05 degrees a count, a usual shooter feel. 0.12 was 0.008 a count and much too slow
+	// (sneed's G2 playtest).
+	TAutoConsoleVariable<float> GProtagonistMouseTurn(TEXT("Protagonist.MouseTurn"), 0.7f,
+		TEXT("How fast the mouse turns the view in direct control: degrees per unit of mouse axis (0.7 default, higher turns faster)."));
 	constexpr float ProtagonistMaxPitch = 80.0f;
 	// One wheel notch scales the third person distance by this much.
 	constexpr float ProtagonistZoomPerNotch = 0.85f;
@@ -170,7 +174,8 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		PC->GetInputMouseDelta(MouseX, MouseY);
 		if (MouseX != 0.0f || MouseY != 0.0f)
 		{
-			Look(MouseX * ProtagonistMouseTurn, MouseY * ProtagonistMouseTurn);
+			const float Turn = FMath::Max(0.01f, GProtagonistMouseTurn.GetValueOnGameThread());
+			Look(MouseX * Turn, MouseY * Turn);
 		}
 	}
 	if (Thing != colony::kNoEntity)
@@ -178,7 +183,7 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		Move(Right, Forward, bWalk, DeltaTime);
 	}
 
-	// Holding aim: the right mouse button with a gun in hand (a melee weapon blocks with it instead).
+	// Holding aim: the right mouse button with a gun in hand (a melee weapon or a shield blocks instead).
 	bool bWantAim = false;
 	if (bScriptedAim)
 	{
@@ -192,7 +197,9 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	{
 		const USimSubsystem* Bridge = GetBridge();
 		const colony::ThingView* View = Bridge && Bridge->GetSim() ? Bridge->GetCurrentSnapshot().find(Thing) : nullptr;
-		bWantAim = View && !View->downed && !View->dead && View->weapon.valid() && Bridge->GetDefs() && Bridge->GetDefs()->get(View->weapon).has("verbs");
+		// With a shield on the arm the right mouse button holds it up instead (UWeaponDrawSubsystem, docs/design/shields.md).
+		bWantAim = View && !View->downed && !View->dead && View->weapon.valid() && Bridge->GetDefs() && Bridge->GetDefs()->get(View->weapon).has("verbs")
+			&& !(View->shield.valid() && !View->shieldSlung);
 	}
 	bAimHeld = bWantAim;
 	AimBlend = FMath::FInterpConstantTo(AimBlend, bAimHeld ? 1.0f : 0.0f, DeltaTime, ProtagonistAimBlendPerSecond);
@@ -245,8 +252,11 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 		// Ground and slope slow the walk the way they slow every pawn (the sim's own numbers).
 		const float Factor = colony::walkSpeedFactor(Map, static_cast<float>(Position.X), static_cast<float>(Position.Y),
 			static_cast<float>(Wanted.X), static_cast<float>(Wanted.Y));
+		// ... and so do load, worn weight and hunger (a starving colonist walks at 75%): the sim's own factor.
+		const colony::ThingView* Self = Bridge->GetCurrentSnapshot().find(Thing);
+		const float SimFactor = Self ? FMath::Clamp(Self->moveFactor, 0.05f, 2.0f) : 1.0f;
 		const float Speed = bWalk ? kWalkSpeed : (bSprinting ? FMath::Max(CruiseSpeed * kSprintFactor, kMinSprintSpeed) : CruiseSpeed);
-		Target = Wanted * Speed * Factor;
+		Target = Wanted * Speed * Factor * SimFactor;
 	}
 	TargetSpeed = static_cast<float>(Target.Size());
 	Velocity = FMath::Vector2DInterpTo(Velocity, Target, DeltaTime, ProtagonistAcceleration);

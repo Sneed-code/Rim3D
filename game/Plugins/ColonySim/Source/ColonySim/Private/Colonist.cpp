@@ -100,6 +100,28 @@ const Def* colonistPickBackstory(const DefDatabase& defs, const char* slot, cons
 
 }  // namespace
 
+void makeColonistNameUnique(const DefDatabase& defs, uint64_t seed, Colonist& colonist, const std::vector<const Colonist*>& taken) {
+    const auto nickTaken = [&](const std::string& name) {
+        return std::any_of(taken.begin(), taken.end(), [&](const Colonist* other) { return other != nullptr && other->nickName == name; });
+    };
+    const auto firstTaken = [&](const std::string& name) {
+        return std::any_of(taken.begin(), taken.end(), [&](const Colonist* other) { return other != nullptr && other->firstName == name; });
+    };
+    if (!nickTaken(colonist.nickName) && !firstTaken(colonist.firstName)) {
+        return;
+    }
+    const Def* nicks = defs.find("Names", "Nicknames");
+    const Def* firsts = defs.find("Names", colonist.female ? "FirstNamesFemale" : "FirstNamesMale");
+    Rng rng(splitMix64(seed ^ 0x756E697175656E6DULL), 5);
+    constexpr int kTries = 64;
+    for (int i = 0; nicks != nullptr && i < kTries && nickTaken(colonist.nickName); ++i) {
+        colonist.nickName = colonistName(*nicks, rng);
+    }
+    for (int i = 0; firsts != nullptr && i < kTries && firstTaken(colonist.firstName); ++i) {
+        colonist.firstName = colonistName(*firsts, rng);
+    }
+}
+
 bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, Colonist& out, std::string& error,
                       const std::string& category) {
     out = Colonist{};

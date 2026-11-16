@@ -30,6 +30,7 @@ struct ResearchProject {
     std::string techLevel;
     double baseCost = 0.0;
     int benchTier = 1;
+    std::string requiredFacility;            // a facility (a def's `building.researchFacility`) a bench must be linked to, or empty
     std::vector<std::string> prerequisites;  // visible and hidden ones together: all must be done
 };
 
@@ -50,6 +51,7 @@ struct COLONY_API ResearchRules {
 struct ResearchBenchInfo {
     int tier = 1;
     double speedFactor = 1.0;
+    double multiAnalyzerBonus = 0.0;  // added to the speed factor while a powered multi-analyzer is linked (0: it can't link)
 };
 
 // The saved state of the research system.
@@ -101,7 +103,8 @@ public:
     // Industrious researchers work faster (docs/design/traits.md); null: no trait does.
     void setTraits(const TraitBook* traits) { traits_ = traits; }
     // Points per game second for this pawn at this bench.
-    double speedAt(Entity pawn, const ResearchBenchInfo& bench) const;
+    // `facilityBonus` is the bench's `multiAnalyzerBonus` when a powered multi-analyzer is linked to it, else 0.
+    double speedAt(Entity pawn, const ResearchBenchInfo& bench, double facilityBonus = 0.0) const;
     // Adds points to the current project. Returns true when that finished it (the event is appended to `events`).
     bool addProgress(double points, Entity pawn, std::vector<Event>& events);
 

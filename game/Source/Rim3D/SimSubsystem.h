@@ -43,6 +43,9 @@ struct FSimStartOptions
 	int32 WorldWidth = 0;
 	int32 WorldHeight = 0;
 	int32 WorldStartTile = -1;
+	/** Real minutes a game day lasts at 1x, 48 to 120 (docs/design/day-length.md). The game's own start takes the
+	 *  player's setting (the Settings window); command line: -SimDayMinutes=<n>. */
+	int32 DayMinutes = 48;
 };
 
 /** Sim cost, averaged over about a second of real time. */
@@ -111,6 +114,17 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Colony")
 	int64 GetGameSeconds() const;
+
+	/** Steps run (real time). Use it, not GetGameSeconds, to tell whether a step has run: with a day longer
+	 *  than 48 minutes the calendar stands still on some steps (docs/design/day-length.md). */
+	int64 GetSteps() const;
+
+	/** The day length now, in real minutes at 1x (48 to 120). */
+	int32 GetDayMinutes() const;
+	/** Changes the day length of the running game and keeps it as the player's setting for new games. */
+	void SetDayMinutes(int32 Minutes);
+	/** The player's day length setting (48 if never set). */
+	static int32 GetSavedDayMinutes();
 
 	/** Writes the session so far as a replay file in Saved/Replays/ and returns its path, or an
 	 *  empty string if it could not be written. `simrun --replay FILE` plays it in the cloud. */

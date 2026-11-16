@@ -263,3 +263,312 @@ colonists fighting alone (one at 13 m, the others 30 m off, out of range), a sho
 ground about half the time on slopes, and the medic and others standing by. Next: a combat thread on why colonists
 lose these fights (`BACKLOG.md`).
 
+**Fourth pass (2026-11-13): small gunfights.** The verbose fight lines of the third pass's losses showed why five armed
+colonists lost to two shotgun raiders: the Medic and the Firefighter stood waiting, armed, 12 and 19 m from the raiders
+while they were shot dead (they fought only within 8 m); a colonist with a club charged the two shotguns from 10 m;
+each colonist shot its own nearest raider; the raiders shot downed colonists dead while others still fought out of
+their sight; shots at raiders crouched behind a crest went into the crest; and a colonist 6 m below a raider held its
+fire for ten minutes because the plan checked the shot from the middle of its cell and the trigger from where it stood.
+Fixes, each with a test: an on-duty Medic or Firefighter fights an enemy aiming at it from any distance (`field-care.md`);
+the downed are shot only once nobody of their side stands anywhere on the map; colonists focus fire; a defender with a
+club waits in cover until a gunman is within 6 m (`fighters.md`); an aimed shot whose line to the chest meets the ground
+goes higher, up to the shoulders and head (`aiming.md`); the trigger is checked from the middle of the cell. Also:
+walkers step over a pawn asleep on the ground, and nobody lies down to sleep in a doorway (`movement.md`). Results:
+
+| Seed | Alive on day 60 | What happened |
+| --- | --- | --- |
+| 1 | 0 | plague on day 22 with two raids on day 24 (four dead), then an infestation from day 44 |
+| 7 | 0 | two raids on day 34 (one dead), plague on day 41 (four dead on day 43), then raids |
+| 42 | 4 | a single raider breaching the wall killed one on day 35 (three in the run before the cell fix); plague took two on day 48 |
+
+In between, seed 7 had 6 of 6 alive on day 60 in one run; the runs stay chaotic. Plague is RimWorld's own numbers
+(severity +0.666 a day, immunity +0.5224, tending -0.3628 at quality 1) with doctors who tend at 0.33 to 0.40, so
+severity and immunity rise together and it is a coin toss; the seed 7 "starved" check was the last colonist lying downed
+with nobody left to feed it. What still kills: plague with weak doctors, two raids at once during an illness,
+infestations (the alarm sends the defenders at the hive), and a FireSpree break that burned the whole base on seed 1 in
+one run. Point-blank fights (a raider at 1 to 2 m after breaching a wall) look one-sided and are worth a test of their own.
+
+**Fifth pass (2026-11-14): close fights.** The point-blank losses were friendly fire. In a fresh seed 42 run a chitinid of
+the day 35 infestation got among the colonists: one with a club fought it hand to hand while one with a revolver, 1.7 m
+behind, shot at it 2.6 m away and hit the clubman again and again until it went down. Bullets are real pawns' hitboxes
+([combat.md](combat.md)), and nothing stopped a fighter from firing through a friend. Now a shot is planned and taken
+only when no friend stands in its line or 0.3 m to either side of the target ([fighters.md](fighters.md) "Friends in the
+line of fire"), so the gunman steps aside or holds its fire. A close-fight test (`Tests/CloseFightTests.cpp`) had the
+gunman hit its friend 2 to 4 times a fight before and never after, and three colonists beat a raider who comes through a
+gap in their wall 2 to 4 m away. Shots by colonists that hit a colonist they were not aimed at fell from 17 to 3 over the
+three runs (the 3 are strays at 22 to 50 m). Results:
+
+| Seed | Alive on day 60 (main before) | What happened |
+| --- | --- | --- |
+| 1 | 7 (0) | plague on day 22 passed with no death; one dead to a raid on day 24, one on day 44; joiners make 7 |
+| 7 | 0 (1) | an infection and malaria on days 34 and 35 with two raids (three dead), plague on day 41 finished it |
+| 42 | 4 (0) | malaria took two on day 48 |
+
+Main before this pass gave 0, 1 and 0 on the same day (the runs stay chaotic: plague and infestations on seed 42 that day,
+plague on seed 1). What still kills is disease when the medicine is gone: on seed 7 the plague was tended by hand at 0.15
+to 0.5, and a week of gut worms took 11 of seed 1's 30 crash-site medicine before the plague came. Next: the medicine plan.
+
+**Sixth pass (2026-11-14): a medicine plan.** The year script now plays medicine as a player does. Care by disease: Best
+(industrial medicine first) only for the diseases that kill (plague, malaria, flu, an infection), by hand for the ones
+that don't (gut worms, muscle parasites, sleeping sickness, food poisoning), herbal or none for wounds. Trade: when a
+trade caravan is on the map, the colony sells it the rice beyond 600 and then buys every medicine the trader has with its
+silver. The 6-hourly food line now shows the medicine and herbal medicine on the map, what was bought and the rice sold.
+Each seed bought 30 to 33 medicine from three caravans (the crash site's silver paid for it; no rice was spare when they
+came). Results:
+
+| Seed | Alive on day 60 (fifth pass) | What happened |
+| --- | --- | --- |
+| 1 | 0 (7) | plague on day 22 met two raids on day 24 (four dead, blood loss); malaria and infections took three on day 46, with the medicine all used; the last two froze |
+| 7 | 6 (0) | the day 41 plague was tended with bought medicine and nobody died of it |
+| 42 | 0 (4) | a short circuit on day 54 set the base on fire and burned every meal and all the rice; all seven starved on day 57 |
+
+The runs are chaotic (seed 1 and seed 42 swapped places with the fifth pass), so one run per seed says little; what the
+logs show is that the plague with medicine in hand is no longer a coin toss (seed 7), and that the colonies now die of
+raids during an illness, malaria late in the year once the bought medicine is gone, and fire. Next: infestations.
+
+**Seventh pass (2026-11-14): infestations.** Insects hunted every colonist within 60 m of them, so an infestation under
+the mountain behind the base went after the whole colony at once. Three sim fixes, each with a test: insects now guard
+their mounds (they go for a colonist within 18 m of a mound and calm down and go home once nobody is within 30 m,
+[monsters.md](monsters.md)); unarmed colonists sheltering from the alarm no longer run into the hive's cave (overhead
+mountain counts as indoors, and the nearest roofed cell was often the hive's; the shelter cell now keeps 20 m from
+enemies and mounds, [raids.md](raids.md)); and the alarm's defenders no longer walk toward the hive, which woke the rest
+of it and kept the alarm on. Results:
+
+| Seed | Alive on day 60 (sixth pass) | What happened |
+| --- | --- | --- |
+| 1 | 0 (0) | the day 44 infestation still killed two who were working near where it came up (a revolver against three insects on a hillside, two of three shots into the ground); illness and raids took the rest by day 54 |
+| 7 | 0 (6) | a two-raid day 34 killed six (no infestation in this run) |
+| 42 | 4 (0) | malaria and heatstroke took three; no fire this time |
+
+The year run stays chaotic; the infestation changes show in the fight lines (no colonist sheltering in a hive's cave, no
+defenders sent at a hive), not yet in the totals. What still kills: two raids at once, raids during an illness, and
+colonists who work near a new hive before anyone knows it is there (a "keep away from the hive" area or turrets would
+help; `BACKLOG.md`).
+
+
+**Eighth pass (2026-11-14): raids and food fires.** The seventh pass's open killers were two raids at once, raids during an
+illness and a fire that burned all the food. What the logs showed, and the fixes (each with a test):
+
+- **Two raids minutes apart.** Orrin's threat cycle drew its one or two big threats anywhere in the 4.6 "on" days; the
+  data's `minSpacingDays` (1.9, Cassandra's) was never read. Now the threats of a cycle are always 1.9 days apart
+  ([narrator.md](narrator.md)).
+- **Food fires.** A short circuit could hit any powered building (RimWorld's culprit is always a power conduit on a live
+  net, [disasters.md](disasters.md)); embers went through walls (RimWorld's sparks need a clear line, now a wall, a
+  closed door or rock stops them, [fire.md](fire.md)); and firefighters beat a fire at a third of RimWorld's rate
+  (0.00167 a tick, ours, now RimWorld's 0.32 a beat every 66 ticks), so on seed 42 a greenhouse fire outgrew them, ate
+  through the steel storeroom one cell away (steel burns at 40% of wood's flammability, as in RimWorld) and took every
+  meal, the rice, the medicine and the components. The year script now also keeps the storeroom and the greenhouse
+  3 cells clear of other buildings (`kBuildingGap`, a firebreak).
+- **Unarmed colonists shot where they hid.** With no safe roofed cell they ran 25 m and waited in the open, and a raider
+  walked up and shot them there. A shelterer that an enemy is aiming at, or that one within 20 m can see, now moves on
+  ([raids.md](raids.md)).
+- **Eating next to a raider.** "Hunger beats the alarm" let ravenous colonists sit over their meals while a raider shot
+  them from 1 to 6 m. Not while an enemy that can see them is within 20 m now ([raids.md](raids.md)).
+
+`--scenario year --start CrashlandedRainforest` now plays the year on a tropical rainforest tile (a world is made for it;
+the verbose header prints the biome).
+
+| Seed | Seventh pass | After the first three fixes | After all six | What happened in the last run |
+| --- | --- | --- | --- | --- |
+| 1 | 0 | 1 | 1 (2 in the run before the hunger fix) | a sapper and a lone tribal on days 11 and 13 (three dead hand to hand and point-blank), plague and a raid on day 23, illness on day 50 |
+| 7 | 0 | 0 | 7 (6) | one dead to a lone tribal with a spear on day 15, one on day 34; nothing else |
+| 42 | 4 | 0 (food burned on day 34) | 0 (0) | an infestation on day 44, malaria on 45 and a raid on 46 took five; the last starved downed |
+| 42, rainforest | - | - | 1 (1) | the same day 44 to 48 wave (the narrator's draws follow the seed) |
+
+No food fire on any seed in the last two rounds (seed 42's day 34 short circuit burned out a greenhouse conduit only).
+What still kills: one or two raiders who reach the colonists at point-blank range (a club or spear duel, a sapper inside
+the room, a shotgun at 1 m: "a vital part destroyed" from one hit), long gunfights where most shots go into a crest
+(a rifle colonist fired 64 shots at a raider crouched behind a rise 23 m away, 55 into the ground), downed colonists
+bleeding out during a long fight, and an infestation, malaria and a raid in three days.
+
+**Ninth pass (2026-11-15): close fights, shots into crests, the bleeding after a fight.** What the logs showed, and the
+fixes (each with a test):
+
+- **Clubs run out one at a time.** On seed 7 day 12 two raiders with clubs came in; a colonist with a club ran 20 m from
+  the others to them and was beaten down, then the next did the same. A defender armed for melee now waits for any
+  enemy (not only a gunman) until it is within 6 m, unless the enemy is already at a friend: then it runs in from up to
+  20 m to help, so they fight it two or three to one ([fighters.md](fighters.md)).
+- **A routed raider still swinging.** The alarm stops when the last raider flees, and the fleeing raider beat two
+  colonists down on its way out. A fighter in the Flee mode starts no swing now.
+- **Shots into a crest.** The plan judged a shot as if the target stood up, but the shots go at it as it is: crouched
+  behind a rise, the rise took them (64 shots, 55 into the ground). The ground check now takes the target's real stance
+  and the highest aim over a crest, and when none of the 10 best spots has a shot up to 16 more are tried, spread out,
+  so the fighter moves to one that has ([fighters.md](fighters.md)).
+- **Bleeding out after a night raid.** On seed 42 day 14 a raid ended at 2 at night, everyone went to bed, and a
+  colonist shot in the fight was tended at 5 with herbal medicine (53 industrial in the storeroom) and died. Doctors now
+  tend the bleeding and carry the downed before they sleep or eat, as RimWorld's emergency work does
+  ([medicine.md](medicine.md)), and the year script gives a downed colonist, or one bleeding 0.5 a day or with 30% blood
+  lost, the best medicine.
+
+| Seed | Before (main, same day) | After | What killed them |
+| --- | --- | --- | --- |
+| 1 | 5 | 0 | plague on day 22 took six by day 25; nobody died in the day 11 and 13 raids (one before) |
+| 7 | 0 | 0 | plague and malaria on day 32, then a raid on day 34 took eight; nobody in the day 12 and 15 raids (two before) |
+| 42 | 0 | 2 | two to a raid on day 32, two to mechanoids on day 36, one to plague; nobody in the day 11 and 13 raids (one before) |
+| 42, rainforest | 0 | 1 | the day 44 to 48 wave (infestation, malaria, raid) |
+
+The early raids, where the close fights were, now kill nobody on any seed. The year is still decided by disease: plague
+with tend quality around 0.4 (RimWorld's numbers) kills most of whoever gets it, and a raid a day or two after an
+outbreak finds the colonists sick and weak. Also seen: misses fired downhill land in the ground behind the target and
+count as "stopped on ground" in the verbose fight lines; those are not crest hits.
+
+**Ninth pass, second round (2026-11-15): plague and the sick.** Two more fixes:
+
+- **Immunity in bed.** Our bed gave immunity x1.05 and a hospital bed x1.07, with no factor for resting. The wiki's are
+  x1.07 and x1.11, times x1.10 for resting or sleeping: now 1.177 and 1.221 ([diseases.md](diseases.md)). Plague in a
+  bed tended at 0.4 is now won on day 1.63 (it was a coin toss).
+- **The sick stay in bed** when the alarm sounds ([raids.md](raids.md)).
+
+| Seed | First round | Second round | What killed them |
+| --- | --- | --- | --- |
+| 1 | 0 | 0 | a colonist's fire-setting break burned the barracks on day 22, then plague with no beds took six by day 25 |
+| 7 | 0 | 0 | plague on day 32 cost one; nobody in the day 34 raid (eight before); winter cold and then starvation from day 52 |
+| 42 | 2 | 6 | one in the day 32 raid |
+| 42, rainforest | 1 | 2 | the day 44 to 50 wave, then a raid on day 57 |
+
+**Tenth pass (2026-11-15): fire breaks and rebuilding.** Seeds 1 and 7 both lost the barracks to a colonist's
+fire-starting break (seed 1 day 22, seed 7 day 36). Neither colonist was a pyromaniac. With beds, stove and most of the rice
+gone, seed 1's plague patients had no beds and seed 7 froze and starved in the winter. Two fixes:
+
+- **Only pyromaniacs** go on a fire-starting spree, for 2.4 to 4 hours (wiki, Mental break). The def's new
+  `requiredTrait` keeps the break from anyone without the trait ([mental-breaks.md](mental-breaks.md)).
+- **The script rebuilds**, as a player would: every hour, where a planned building (barracks, storeroom, greenhouse) stood
+  once and is gone with no fire on its cell, its blueprint goes back. A rebuilt stove or butcher table gets its bill again.
+  The year line prints `rebuilt`.
+
+| Seed | Ninth pass, second round | Tenth pass | What killed them |
+| --- | --- | --- | --- |
+| 1 | 0 | 4 | plague on day 24 (two), raids on days 23, 25 and 35; the stove was lost late with no steel left to rebuild it, so the four left were starving by day 60 |
+| 7 | 0 | 5 | the day 36 raid (three) and one on day 46; through the winter with food |
+| 42 | 6 | 0 | an infestation beside the storeroom on day 44, then malaria and raids to day 55 (the run went a different way: no fire before) |
+| 42, rainforest | 2 | 6 | one in the day 44 raid |
+
+**Eleventh pass (2026-11-15): insect mounds and steel for rebuilds.** Run on the code with the protagonist's mood gone
+(#278), which changed every seed's story: seeds 1, 7 and 42 had no infestation and lost no stove. The rainforest start
+(seed 42) did: a mound came up under the mountain 40 to 60 m west of the colony on day 44, and its insects killed five
+colonists who went there to cut trees and hunt (one left on day 60). Three changes to the script, as a player plays:
+
+- **Keep clear of far mounds.** While a mound is within 70 m of the barracks or storeroom, every colonist is limited to an
+  allowed area, "Away from the hives": the whole map less the 51 x 51 square round each mound (25 m, past the insects'
+  18 m guard range). Nobody works, hauls or hunts there (areas limit work targets, [areas.md](areas.md)). The area is
+  painted again whenever the mounds change and deleted with the last of them. The year line prints `hiveAreas`.
+- **Hunt down near mounds.** A mound within 30 m of the barracks or storeroom (seed 42's old storeroom case) is hunted:
+  at least three armed, fit colonists are drafted, hold 14 m short of the mound and shoot its insects, then walk up and
+  shoot the mound itself; they give up after half a day, when fewer than two are left, or when a raid comes. A first try
+  that hunted every mound within 65 m failed on the rainforest: shots at insects in the cave above went into the hillside
+  for half a day, four times over.
+- **Steel for rebuilds.** Rebuilt steel walls and doors go up in wood once the map holds less than 200 steel, so a burned
+  stove (steel) can still be rebuilt.
+
+| Run | Without | With | What killed them |
+| --- | --- | --- | --- |
+| 1 | 6 | 6 | no infestation |
+| 7 | 6 | 6 | no infestation |
+| 42 | 2 | 2 | no infestation; raids and illness |
+| 42, rainforest | 1 | 3 | nobody to the insects; a raid on day 46 (two), one on day 56 |
+| 3, rainforest | | 3 | raids on days 32, 47 and 55 |
+| 7, rainforest | | 0 | **a heat wave** (+17 C for 5 days, from day 17) killed seven of heatstroke on days 19 and 20 |
+
+**Twelfth pass (2026-11-15): the heat plan.** On rainforest seed 7 a heat wave held the air at 42 to 49 C for three days
+and the barracks followed it to 47 C: seven colonists died of heatstroke on days 19 and 20, with nowhere cool to go.
+RimWorld's answer is a cooler. The year script now researches the passive cooler at the start (neolithic, no power) and,
+the first time the air passes 38 C, puts three in the barracks (east wall first, free cells only); they are rebuilt like
+the rest. Colonists already leave their work for a cooler room once heatstroke is serious (`makeShelterJob`); now there is
+one. Two sim fixes came with it: the passive cooler had made-up numbers (steel, -1.3, 9 C, no fuel), now the wiki's, and a
+fuel-burning heat source only runs while it has fuel. The year line prints `coolers`.
+
+| Run | Eleventh pass | Twelfth pass | What killed them |
+| --- | --- | --- | --- |
+| 7, rainforest | 0 | 8 | nobody: the heat wave on day 17 passed with the coolers in |
+| 42, rainforest | 3 | 6 | one in the day 46 raid |
+| 3, rainforest | 3 | 3 | raids on days 32 and 54 (two heat waves, nobody lost to them) |
+| 7 | 6 | 7 | one on day 42 |
+| 1, 42 | 6, 2 | 6, 2 | never past 38 C: no coolers, the same games |
+
+**Thirteenth pass (2026-11-15): the defence plan.** After the heat plan, raids and mechanoids were the main killer on every
+seed. A player sets up defences before the raids grow, so on day 6 the year script builds two things, rebuilt like the
+rest when broken:
+
+- **A gun post:** a 10 by 5 site found like the storeroom's (3 cells clear of other buildings), with a row of conduits
+  along its south edge joining a solar panel (4 by 4), a battery (for the nights) and a mini-turret at each end, 9 m
+  apart. The research for them (solar panel, battery, gun turrets) is done at the start, like the greenhouse's. The
+  battery is full by day 9 and holds the turrets through every night. Verbose runs print a `gun post:` line every 12 hours.
+- **A barricade ring:** twelve posts of three wood barricades (the wiki's barricade, new in `Things/Defense.json`,
+  [defense.md](defense.md)), 15 m round the colony's middle, where the alarm's defenders hold their line and pick cover
+  within 10 m. Posts that would land on a field, a stockpile, water, a building or within 2 cells of the barracks,
+  storeroom or gun post move up to 4 m in or out, or are left out (18 to 33 barricades on the test seeds).
+
+The year line prints `turrets`, `barricades` and `turretShots`. Two sim bugs came out of the runs:
+
+- **Home was off the colony.** The alarm's "home" (the middle of the colony's buildings, from which the defenders' line
+  is drawn) counted the ruins' ancient walls and the steam geysers across the map; on two seeds it lay 60 m from the
+  barracks, out in the open. They and brood mounds no longer count ([raids.md](raids.md)).
+- **Cover by the turret.** Defenders took the mini-turret as cover (it is 0.8 m tall); a mechanoid shot it to pieces and
+  its blast downed the four crouched round it, who bled out. The colony's fighters now take no cover within the blast of
+  their own turrets ([defense.md](defense.md)).
+
+| Run | Twelfth pass | Thirteenth pass | What killed them |
+| --- | --- | --- | --- |
+| 7, rainforest | 8 | 8 | illness and an injury on day 47; nobody in the raids |
+| 42, rainforest | 6 | 6 | one on day 55 (an infestation and a raid days 44 to 46 cost nobody) |
+| 3, rainforest | 3 | 6 | nobody in the raids (raids on days 32 and 54 killed before) |
+| 7 | 7 | 8 | one in the day 15 raid |
+| 1 | 6 | 5 | two raids on day 45 (three), illness |
+| 42 | 2 | 5 | an infestation on day 43 (two); nobody in four raids and a mechanoid cluster |
+
+38 alive on day 60 across the six runs, against 32. Raids now kill on two of six seeds. Seen on the way, not fixed: a
+colonist on a Berserk break beat four others to death in the barracks while they stood by (rainforest seed 3, first round),
+and colonists don't subdue a berserk friend.
+
+**Fourteenth pass (2026-11-15): barricades round the turrets.** Mechanoids outreach the mini-turret (RimWorld's numbers,
+[defense.md](defense.md)) and shot it to pieces in the open. Now the gun post also gets a wood barricade in every free cell
+next to each turret and in the three cells past the conduit row south of it (16 barricades on every test seed, verbose
+`gun post at x,y, N barricades round its turrets`, year line `postBarricades`). The turret's gun now sits on a post
+(muzzle 1.3 m, ours) so it fires over them, while its 0.8 m body hides behind them from level ground. Turrets were still
+lost to fire after short circuits (the battery blows and the wood burns), and rebuilt.
+
+| Run | #286 (wiki mini-turret) | Fourteenth pass |
+| --- | --- | --- |
+| 7, rainforest | 9 | 8 |
+| 42, rainforest | 3 | 5 |
+| 3, rainforest | 4 | 5 |
+| 7 | 5 | 9 |
+| 1 | 6 | 6 |
+| 42 | 6 | 5 |
+
+38 alive on day 60 across the six runs, against 33 with the wiki mini-turret alone (and 38 in the thirteenth pass, when
+the turret had our own weaker numbers but a third shot in each burst).
+
+**Fifteenth pass (2026-11-15): steel barricades, and raiders shoot at the turrets behind them.** The barricades round
+the gun post's turrets are steel now (80 steel; the colony has 400 or more on day 6): wood ones by the battery caught
+fire when a short circuit blew it. Steel burns at 40%, and a short circuit can still burn the post (rainforest seed 7
+lost its solar panel on day 6 and had no steel left to rebuild it). Raiders now know a turret behind barricades is
+there (its gun shows over them) and shoot at it, so the barricades take the hits and break, 3 to 17 a run
+([fighters.md](fighters.md) "Turrets"). A firebreak cut round the gun post as well was tried and dropped: with it two
+seeds lost everyone to an infestation and raids around day 45 (25 and 26 alive in two rounds).
+
+| Run | Fourteenth pass | Fifteenth pass |
+| --- | --- | --- |
+| 7, rainforest | 8 | 6 |
+| 42, rainforest | 5 | 7 |
+| 3, rainforest | 5 | 5 |
+| 7 | 9 | 7 |
+| 1 | 6 | 7 |
+| 42 | 5 | 6 |
+
+38 alive on day 60, as before.
+
+**Sixteenth pass (2026-11-15): turrets shoot insects.** An insect clawed four colonists to death 6 m from the gun post
+(seed 42) while the turrets, which left every animal alone, looked on. Turrets now shoot hostile animals (insects on the
+attack, manhunters, animals out for revenge) as RimWorld's do, and still leave calm ones be ([defense.md](defense.md)).
+Year runs, six seeds: 6,7,6,7,7,6 = 39 alive (38); turret shots rose on rainforest seed 3 (24 to 180) and seed 7 (4 to 14).
+
+**Seventeenth pass (2026-11-16): rebuilding the gun post.** On rainforest seed 7 a short circuit burned the new gun post on
+day 6; the rebuilt turrets took the last steel and the solar panel never came back, so the post stood unpowered all year.
+Now the post's turrets and battery are rebuilt only once its solar panel stands, and its steel barricades go back in wood
+when the colony has under 200 steel (as the steel walls already did). Seed 7 still ends with no power there: after the
+fires it has neither the steel nor the components for two turrets. Two more ideas made things worse and were dropped:
+buying steel and components from traders with the silver left after medicine (31 and 24 alive in two rounds; later
+traders then had less silver for medicine) and not rebuilding while a fire burns within two cells. Year runs, six seeds:
+8,6,6,7,6,6 = 39 alive (39).
+

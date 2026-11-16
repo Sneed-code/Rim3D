@@ -152,6 +152,10 @@ struct FighterRules {
     // F7 soak (docs/design/raid-soak.md): the walk to a spot counts what it costs this pawn, up a slope or hurt.
     float walkStayBonus = 3.0f;       // on top of stayBonus while walking to the spot: a pawn on its way doesn't change its mind for a small gain
     float rangeMargin = 1.0f;         // a spot has to be this far inside the gun's range to count as one it can shoot from
+    float focusMetres = 8.0f;         // colonists: each friend already shooting an enemy makes it count this much nearer (focus fire)
+    float ambushRange = 6.0f;         // a defending melee fighter waits until an enemy is this close, then charges
+    float helpRange = 20.0f;          // ... or runs in sooner, from this far, to an enemy at a friend
+    float helpReach = 2.5f;           // an enemy this near a friend is at it
     float minWalkShare = 0.25f;       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
 };
 
@@ -228,6 +232,7 @@ private:
         bool able = false;    // not downed
         bool fighter = false;
         bool animal = false;  // wild animals are nobody's enemy unless ordered or provoked (animal-life.md, N5)
+        bool turret = false;  // the colony's turret: an enemy to shoot at, never charged or carried off (fighters.md)
         Stance stance = Stance::Standing;  // as it stands now (prone when downed)
     };
     struct Candidate {
@@ -260,6 +265,10 @@ private:
     bool fireOption(Entity pawn, CellPos cell, const PawnInfo& target, float range, float tx, float ty, Candidate& c);
     bool seesFrom(CellPos cell, Stance stance, const PawnInfo& target);
     bool shotClearsGround(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target) const;
+    bool fireAt(Entity pawn, const PawnInfo& target);
+    // Whether the fighter takes on turrets: only one with a gun that isn't set on melee.
+    bool shootsTurrets(Entity pawn) const;
+    bool friendInLine(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target) const;
     void walkToSpot(Entity pawn, Fighter& f);
     void stepTo(Entity pawn, CellPos cell);
     void stop(Entity pawn, Fighter& f);
@@ -268,6 +277,8 @@ private:
     int64_t now() const;
     void planCharge(Entity pawn, Fighter& f, CellPos goal);
     bool meleeAct(Entity pawn, Fighter& f);
+    // Raises the shield at an attack it sees coming, lowers it to attack (docs/design/shields.md).
+    void shieldAct(Entity pawn, Fighter& f);
     // Rescue mode (FighterRescue.cpp): lifts the patient once in reach, keeps it with the fighter, lays it down at
     // the end. `endRescue` lays it where the fighter stands (if lifted) and sends the fighter back to Fight.
     void rescueStep(Entity pawn, Fighter& f);
@@ -286,6 +297,7 @@ private:
     std::vector<PawnInfo> pawns_;  // scratch: every pawn on the map this step, by id
     std::vector<Candidate> candidates_;
     std::vector<CellPos> friendSpots_;   // scratch for one plan
+    std::vector<CellPos> shotless_;      // scratch for one plan: spots looked at that have no shot
     std::vector<KnownEnemy> merged_;     // scratch for sharing what friends know
     std::vector<Entity> order_;
     std::vector<Incoming> incoming_;     // scratch: projectiles in flight this step, by id

@@ -26,7 +26,7 @@
     "blastIgniteChance": 0.6,
     "heatPerSecond": 14,
     "heatMaxC": 500,
-    "beatPerTick": 0.00167,
+    "beatPerTick": 0.00485,
     "floorBurnPasses": 10,
     "burntFadeDays": 6,
     "autoHomeRadius": 5,
@@ -35,9 +35,10 @@
     "waterRunRadius": 12,
     "panic": true,
     "unverified": ["maxSize", "growthPerTick", "damageBase", "damagePerSize", "damageMax", "pawnFlammability", "autoIgniteC",
-                   "pawnDamagePerTick", "pawnBurnTicks"],
+                   "pawnDamagePerTick", "pawnBurnTicks", "beatPerTick"],
+    "beatPerTickNote": "RimWorld's beat (Verb_BeatFire, recalled from the code): 32 Extinguish damage every 1.1 s (66 ticks), and DamageWorker_Extinguish takes damage x 0.01 off the fire size, so 0.32 / 66 = 0.00485 a tick. Was 0.00167 (ours) until 2026-11-14: a building fire outgrew the colonists beating it.",
     "ours": ["passSeconds", "startSize", "shrinkPerTick", "plantDamageFactor", "spreadPerTick", "emberFactor", "emberMinSize",
              "catchPerTick", "rainOutPerTick", "snowBlocksAt", "hotRoomIgniteChance", "hotPawnIgniteChance", "blastIgniteChance", "heatPerSecond",
-             "heatMaxC", "beatPerTick", "floorBurnPasses", "burntFadeDays", "autoHomeRadius", "startHomeRadius", "panic", "foamFadeHours", "waterRunRadius"]
+             "heatMaxC", "floorBurnPasses", "burntFadeDays", "autoHomeRadius", "startHomeRadius", "panic", "foamFadeHours", "waterRunRadius"]
   }
 ]

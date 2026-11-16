@@ -79,7 +79,7 @@ as smoothly as the body.
 | Tab (overseer view) | take control of the selected colonist, else the protagonist |
 | Tab (direct mode) | back to the overseer view, centred on the colonist, which is selected |
 | W A S D | walk, relative to where the camera looks; Ctrl for a slow walk |
-| mouse | look (yaw and pitch, up to 80 degrees) |
+| mouse | look (yaw and pitch, up to 80 degrees); `Protagonist.MouseTurn` (0.7 default, about 0.05 degrees a mouse count) sets how fast |
 | wheel | third person distance |
 | V | first and third person |
 | T | take over the colonist under the crosshair (within 25 m) |
@@ -140,8 +140,13 @@ to try W A S D, the mouse and Tab once.
 ## Mind rules: mood never takes the protagonist from the player
 
 The protagonist is *your* character; colonists and other pawns are people with minds of their own.
-Mood is still tracked and shown for the protagonist (it is part of survival), but it never takes
-control away. Today that means:
+**The protagonist has no mood and no recreation need** (sneed, 2026-11-15), and is immune to
+psychological effects. The `Mood` and `Joy` components stay (other systems read them), but every step
+the mood is held at the base level with no thoughts, memories or bands (so no psychic drone or soothe,
+no insult or lovin thoughts, no inspirations), and recreation, comfort and outdoors are held full, so
+nothing sends them to play; a Joy hour in their schedule is a free hour. The snapshot gives -1 for their
+mood, joy, comfort, outdoors and beauty need, so the UI shows none. Food, rest, health and temperature
+are still needs. Nothing takes control away either:
 
 - no mental breaks (C19): the natural roll skips them and `StartMentalBreakCommand` fails;
 - no social fights: an insult or a jealous rage never starts a fistfight with them;

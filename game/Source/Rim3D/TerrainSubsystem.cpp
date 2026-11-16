@@ -6,6 +6,10 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
+#include "Dom/JsonObject.h"
+#include "Misc/FileHelper.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "MeshDescription.h"
@@ -35,6 +39,11 @@ namespace
 		TEXT("Terrain.Roofs"), -1, TEXT("Roofs: -1 hidden in the overseer view and shown otherwise, 0 hidden, 1 shown."), ECVF_Default);
 	TAutoConsoleVariable<int32> GTerrainPlantScan(
 		TEXT("Terrain.PlantScan"), 24, TEXT("How many chunks a frame are checked for plants that grew, died or were built over."), ECVF_Default);
+
+	TAutoConsoleVariable<float> GTerrainGroundCover(
+		TEXT("Terrain.GroundCover"), 1.0f, TEXT("How thick the cosmetic ground cover is (data/look.json groundCover): 0 none, 1 as the file says. Read when the terrain is built."), ECVF_Default);
+	TAutoConsoleVariable<float> GTerrainWindDistance(
+		TEXT("Terrain.WindDistance"), 1.0f, TEXT("Times each plant kind's wind distance (visual.windDistance): past it the leaves stop moving. 0 turns plant wind off. Read when the terrain is built."), ECVF_Default);
 
 	TAutoConsoleVariable<int32> GTerrainTextured(
 		TEXT("Terrain.Textured"), 1, TEXT("1 draws the ground with the terrain textures (made by the TerrainMaterials commandlet), 0 with flat vertex colours. Read when the terrain is built."), ECVF_Default);
@@ -141,10 +150,11 @@ namespace
 			case colony::Terrain::UpperFloor: break;
 		}
 		const float Fertility = Plants.fertility(Cell);
-		// The grass texture is dull on its own; these push it toward green (dry ground yellower, rich ground darker).
-		const FLinearColor Dry(1.0f, 1.0f, 0.6f);
-		const FLinearColor Soil(0.62f, 0.98f, 0.45f);
-		const FLinearColor Rich(0.42f, 0.82f, 0.36f);
+		// The mossy jungle-floor texture (L3, Megascans) has its own colour: dry ground is paler and yellower, rich ground darker.
+		// The green now comes from the plants and the ground cover on top.
+		const FLinearColor Dry(1.05f, 0.95f, 0.75f);
+		const FLinearColor Soil(0.9f, 0.92f, 0.85f);
+		const FLinearColor Rich(0.68f, 0.72f, 0.62f);
 		const FLinearColor Tint = Fertility < 1.0f
 			? FMath::Lerp(Dry, Soil, FMath::Clamp((Fertility - 0.7f) / 0.3f, 0.0f, 1.0f))
 			: FMath::Lerp(Soil, Rich, FMath::Clamp((Fertility - 1.0f) / 0.4f, 0.0f, 1.0f));
@@ -543,12 +553,15 @@ void UTerrainSubsystem::LoadPlantVisuals(const colony::Sim& Sim)
 {
 	PlantVisuals.Reset();
 	PlantMeshes.Reset();
+	FoliageMaterials.Reset();
 	const colony::DefDatabase& Defs = Sim.defs();
 	VisualOfDef.Init(-1, static_cast<int32>(Defs.size()));
+	VariantsOfDef.Init(0, static_cast<int32>(Defs.size()));
 	if (!PlantMaterial)
 	{
 		PlantMaterial = LoadObject<UMaterialInterface>(nullptr, TerrMaterialPath);
 	}
+	const float WindScale = FMath::Max(GTerrainWindDistance.GetValueOnGameThread(), 0.0f);
 	for (const colony::DefId Id : Defs.idsOfKind("Things"))
 	{
 		const colony::Def& Def = Defs.get(Id);
@@ -561,6 +574,41 @@ void UTerrainSubsystem::LoadPlantVisuals(const colony::Sim& Sim)
 		Visual.CullDistanceCm = static_cast<float>(Def.number("visual.cullDistance", 0.0) * 100.0);
 		Visual.Scale = static_cast<float>(Def.number("visual.scale", 1.0));
 		Visual.Jitter = static_cast<float>(Def.number("visual.jitter", 0.15));
+		Visual.WindOffCm = static_cast<float>(Def.number("visual.windDistance", 0.0) * 100.0) * WindScale;
+
+		// Real plant meshes (L2): visual.meshes lists several, one picked per cell by its hash. Each is scaled so it stands
+		// visual.fitHeight metres tall when fully grown (times visual.scale and the matching entry of visual.meshScales).
+		const int32 First = PlantVisuals.Num();
+		const float FitHeightCm = static_cast<float>(Def.number("visual.fitHeight", 0.0) * 100.0);
+		const size_t MeshCount = FMath::Min<size_t>(Def.count("visual.meshes"), 32);
+		for (size_t Index = 0; Index < MeshCount; ++Index)
+		{
+			const std::string Path = Def.textAt("visual.meshes", Index);
+			UStaticMesh* Mesh = Path.empty() ? nullptr : LoadObject<UStaticMesh>(nullptr, UTF8_TO_TCHAR(Path.c_str()));
+			if (!Mesh)
+			{
+				UE_LOG(LogSimTerrain, Warning, TEXT("%s: mesh %s not found"), UTF8_TO_TCHAR(Def.defName().c_str()), UTF8_TO_TCHAR(Path.c_str()));
+				continue;
+			}
+			FPlantVisual Variant = Visual;
+			Variant.Mesh = Mesh;
+			Variant.Materials = FoliageFor(Mesh);
+			Variant.Scale *= static_cast<float>(Def.numberAt("visual.meshScales", Index, 1.0));
+			const float HeightCm = Mesh->GetBounds().GetBox().Max.Z;
+			if (FitHeightCm > 0.0f && HeightCm > 1.0f)
+			{
+				Variant.Scale *= FMath::Clamp(FitHeightCm / HeightCm, 0.3f, 4.0f);
+			}
+			Variant.bCastShadow = HeightCm * Variant.Scale >= 150.0f;
+			PlantMeshes.Add(Mesh);
+			PlantVisuals.Add(Variant);
+		}
+		if (PlantVisuals.Num() > First)
+		{
+			VisualOfDef[static_cast<int32>(Id.value)] = First;
+			VariantsOfDef[static_cast<int32>(Id.value)] = static_cast<uint8>(PlantVisuals.Num() - First);
+			continue;
+		}
 
 		// A mesh of the def's own (A1 sets visual.mesh), else one made from its stem and crown shapes.
 		const std::string MeshPath = Def.text("visual.mesh");
@@ -604,8 +652,103 @@ void UTerrainSubsystem::LoadPlantVisuals(const colony::Sim& Sim)
 		// Anything shorter than a metre and a half casts no shadow worth the cost.
 		Visual.bCastShadow = Visual.Mesh->GetBounds().BoxExtent.Z * 2.0f * Visual.Scale >= 150.0f;
 		VisualOfDef[static_cast<int32>(Id.value)] = PlantVisuals.Add(Visual);
+		VariantsOfDef[static_cast<int32>(Id.value)] = 1;
 	}
+	const USimSubsystem* Source = Bridge.Get();
+	LoadGroundCover(Source ? Source->GetDataRoot() / TEXT("look.json") : FString());
+	LoadRockScatter(Source ? Source->GetDataRoot() / TEXT("look.json") : FString());
 	Stats.PlantKinds = PlantVisuals.Num();
+}
+
+TArray<UMaterialInterface*> UTerrainSubsystem::FoliageFor(UStaticMesh* Mesh)
+{
+	// The Electric Dreams plant materials were saved with Substrate on and draw black here; the FoliageMaterials commandlet
+	// makes a plain copy of each (MI_<name>_R3D), which replaces it on the instances.
+	TArray<UMaterialInterface*> Out;
+	bool bAny = false;
+	for (int32 Slot = 0; Mesh && Slot < Mesh->GetStaticMaterials().Num(); ++Slot)
+	{
+		UMaterialInterface* Original = Mesh->GetMaterial(Slot);
+		UMaterialInterface* Mine = nullptr;
+		if (Original)
+		{
+			const FString Name = Original->GetName() + TEXT("_R3D");
+			Mine = LoadObject<UMaterialInterface>(nullptr, *FString::Printf(TEXT("/Game/Rim3D/Generated/Foliage/%s.%s"), *Name, *Name), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		}
+		if (Mine)
+		{
+			FoliageMaterials.AddUnique(Mine);
+			bAny = true;
+		}
+		Out.Add(Mine);
+	}
+	if (!bAny)
+	{
+		Out.Reset();
+	}
+	return Out;
+}
+
+void UTerrainSubsystem::LoadGroundCover(const FString& LookPath)
+{
+	Cover = FGroundCover();
+	const float Amount = FMath::Max(GTerrainGroundCover.GetValueOnGameThread(), 0.0f);
+	FString Text;
+	TSharedPtr<FJsonObject> Root;
+	if (Amount <= 0.0f || LookPath.IsEmpty() || !FFileHelper::LoadFileToString(Text, *LookPath)
+		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
+	{
+		return;
+	}
+	const TSharedPtr<FJsonObject>* CoverJson = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Meshes = nullptr;
+	if (!Root->TryGetObjectField(TEXT("groundCover"), CoverJson) || !(*CoverJson)->TryGetArrayField(TEXT("meshes"), Meshes))
+	{
+		return;
+	}
+	const TSharedPtr<FJsonObject>& Json = *CoverJson;
+	double FitHeight = 0.25, Cull = 45.0, Jitter = 0.25, WindDistance = 25.0;
+	Json->TryGetNumberField(TEXT("fitHeight"), FitHeight);
+	Json->TryGetNumberField(TEXT("cullDistance"), Cull);
+	Json->TryGetNumberField(TEXT("jitter"), Jitter);
+	Json->TryGetNumberField(TEXT("windDistance"), WindDistance);
+	Json->TryGetNumberField(TEXT("minFertility"), Cover.MinFertility);
+	Json->TryGetNumberField(TEXT("chancePoor"), Cover.ChancePoor);
+	Json->TryGetNumberField(TEXT("chanceRich"), Cover.ChanceRich);
+	Json->TryGetNumberField(TEXT("perCell"), Cover.PerCell);
+	Json->TryGetNumberField(TEXT("underPlants"), Cover.UnderPlants);
+	Cover.ChancePoor *= Amount;
+	Cover.ChanceRich *= Amount;
+	Cover.PerCell = FMath::Clamp(Cover.PerCell, 1, 6);
+	const float WindScale = FMath::Max(GTerrainWindDistance.GetValueOnGameThread(), 0.0f);
+	const int32 First = PlantVisuals.Num();
+	for (const TSharedPtr<FJsonValue>& Value : *Meshes)
+	{
+		UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *Value->AsString());
+		if (!Mesh)
+		{
+			UE_LOG(LogSimTerrain, Warning, TEXT("groundCover: mesh %s not found"), *Value->AsString());
+			continue;
+		}
+		FPlantVisual Visual;
+		Visual.Mesh = Mesh;
+		Visual.Materials = FoliageFor(Mesh);
+		Visual.CullDistanceCm = static_cast<float>(Cull * 100.0);
+		Visual.Jitter = static_cast<float>(Jitter);
+		Visual.WindOffCm = static_cast<float>(WindDistance * 100.0) * WindScale;
+		const float HeightCm = Mesh->GetBounds().GetBox().Max.Z;
+		// Megascans meshes are real size already; the fit only nudges them (flat ones, dead leaves, would blow up).
+		Visual.Scale = HeightCm > 1.0f ? FMath::Clamp(static_cast<float>(FitHeight * 100.0) / HeightCm, 0.6f, 2.5f) : 1.0f;
+		Visual.bCastShadow = false;
+		PlantMeshes.Add(Mesh);
+		PlantVisuals.Add(Visual);
+	}
+	if (PlantVisuals.Num() > First)
+	{
+		Cover.First = First;
+		Cover.Count = PlantVisuals.Num() - First;
+	}
+	UE_LOG(LogSimTerrain, Display, TEXT("Ground cover: %d meshes, chance %.2f to %.2f a try, %d tries a cell"), Cover.Count, Cover.ChancePoor, Cover.ChanceRich, Cover.PerCell);
 }
 
 void UTerrainSubsystem::ReadThinRoof(bool& bOutChanged)
@@ -773,6 +916,7 @@ void UTerrainSubsystem::RebuildChunkPlants(int32 ChunkX, int32 ChunkY)
 void UTerrainSubsystem::ApplyChunkPlants(FChunk& Chunk, TArray<TArray<FTransform>>& Transforms)
 {
 	int32 Count = 0;
+	int32 CoverCount = 0;
 	for (int32 Kind = 0; Kind < PlantVisuals.Num(); ++Kind)
 	{
 		const TArray<FTransform>& List = Transforms[Kind];
@@ -791,6 +935,13 @@ void UTerrainSubsystem::ApplyChunkPlants(FChunk& Chunk, TArray<TArray<FTransform
 			const FPlantVisual& Visual = PlantVisuals[Kind];
 			Component = NewObject<UInstancedStaticMeshComponent>(TerrainActor);
 			Component->SetStaticMesh(Visual.Mesh);
+			for (int32 Slot = 0; Slot < Visual.Materials.Num(); ++Slot)
+			{
+				if (Visual.Materials[Slot])
+				{
+					Component->SetMaterial(Slot, Visual.Materials[Slot]);
+				}
+			}
 			Component->SetMobility(EComponentMobility::Movable);
 			Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Component->SetCanEverAffectNavigation(false);
@@ -799,6 +950,12 @@ void UTerrainSubsystem::ApplyChunkPlants(FChunk& Chunk, TArray<TArray<FTransform
 			if (Visual.CullDistanceCm > 0.0f)
 			{
 				Component->SetCullDistances(static_cast<int32>(Visual.CullDistanceCm * 0.85f), static_cast<int32>(Visual.CullDistanceCm));
+			}
+			// Leaves move in the wind (the plant material's world position offset) only this close; past it they hold
+			// still, which costs nothing. 0 leaves the material as it is.
+			if (Visual.WindOffCm > 0.0f)
+			{
+				Component->SetWorldPositionOffsetDisableDistance(static_cast<int32>(Visual.WindOffCm));
 			}
 			Component->SetupAttachment(TerrainActor->GetRootComponent());
 			Component->RegisterComponent();
@@ -810,10 +967,12 @@ void UTerrainSubsystem::ApplyChunkPlants(FChunk& Chunk, TArray<TArray<FTransform
 		}
 		Component->AddInstances(List, false, false, false);
 		++Stats.PlantComponents;
-		Count += List.Num();
+		(IsCosmeticKind(Kind) ? CoverCount : Count) += List.Num();
 	}
 	Stats.PlantInstances += Count - Chunk.PlantCount;
 	Chunk.PlantCount = Count;
+	Stats.CoverInstances += CoverCount - Chunk.CoverCount;
+	Chunk.CoverCount = CoverCount;
 }
 
 uint64 UTerrainSubsystem::GatherChunkPlants(int32 ChunkX, int32 ChunkY, TArray<TArray<FTransform>>* Out) const
@@ -831,15 +990,28 @@ uint64 UTerrainSubsystem::GatherChunkPlants(int32 ChunkX, int32 ChunkY, TArray<T
 		for (int32 X = X0; X < X1; ++X)
 		{
 			const colony::CellPos Cell{X, Y, 0};
-			if (!Plants.has(Cell))
+			const bool bHasPlant = Plants.has(Cell);
+			if (Out && Cover.Count > 0)
+			{
+				GatherCover(Map, Plants, Cell, bHasPlant, *Out);
+			}
+			if (Out && Rocks.Count > 0)
+			{
+				GatherRocks(Map, Cell, *Out);
+			}
+			if (!bHasPlant)
 			{
 				continue;
 			}
 			const uint32 DefValue = Plants.defAt(Cell).value;
-			const int32 Kind = DefValue < static_cast<uint32>(VisualOfDef.Num()) ? VisualOfDef[static_cast<int32>(DefValue)] : -1;
+			int32 Kind = DefValue < static_cast<uint32>(VisualOfDef.Num()) ? VisualOfDef[static_cast<int32>(DefValue)] : -1;
 			if (Kind < 0)
 			{
 				continue;
+			}
+			if (const int32 Variants = VariantsOfDef[static_cast<int32>(DefValue)]; Variants > 1)
+			{
+				Kind += static_cast<int32>(TerrHash(static_cast<uint64>(Map.index(Cell)) * 31ULL + 0xA24BAED4ULL) % static_cast<uint64>(Variants));
 			}
 			const uint32 Growth = Plants.growthPpm(Cell);
 			const int32 Stage = Growth >= colony::kPlantFullGrowth
@@ -866,6 +1038,135 @@ uint64 UTerrainSubsystem::GatherChunkPlants(int32 ChunkX, int32 ChunkY, TArray<T
 		}
 	}
 	return Signature;
+}
+
+void UTerrainSubsystem::LoadRockScatter(const FString& LookPath)
+{
+	Rocks = FRockScatter();
+	FString Text;
+	TSharedPtr<FJsonObject> Root;
+	if (LookPath.IsEmpty() || !FFileHelper::LoadFileToString(Text, *LookPath) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
+	{
+		return;
+	}
+	const TSharedPtr<FJsonObject>* Json = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Meshes = nullptr;
+	if (!Root->TryGetObjectField(TEXT("rockScatter"), Json) || !(*Json)->TryGetArrayField(TEXT("meshes"), Meshes))
+	{
+		return;
+	}
+	double Size = 1.2, Cull = 250.0, Jitter = 0.45;
+	(*Json)->TryGetNumberField(TEXT("size"), Size);
+	(*Json)->TryGetNumberField(TEXT("cullDistance"), Cull);
+	(*Json)->TryGetNumberField(TEXT("jitter"), Jitter);
+	(*Json)->TryGetNumberField(TEXT("chance"), Rocks.Chance);
+	const int32 First = PlantVisuals.Num();
+	for (const TSharedPtr<FJsonValue>& Value : *Meshes)
+	{
+		UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *Value->AsString());
+		if (!Mesh)
+		{
+			UE_LOG(LogSimTerrain, Warning, TEXT("rockScatter: mesh %s not found (python tools/tree_art.py, TreeArt commandlet)"), *Value->AsString());
+			continue;
+		}
+		FPlantVisual Visual;
+		Visual.Mesh = Mesh;
+		Visual.CullDistanceCm = static_cast<float>(Cull * 100.0);
+		Visual.Jitter = static_cast<float>(Jitter);
+		// `size` is the metres across the rock's widest side, whatever size the model came at.
+		const FVector Extent = Mesh->GetBounds().BoxExtent;
+		const float Across = 2.0f * FMath::Max(Extent.X, Extent.Y);
+		Visual.Scale = Across > 1.0f ? static_cast<float>(Size * 100.0) / Across : 1.0f;
+		Visual.bCastShadow = true;
+		PlantMeshes.Add(Mesh);
+		PlantVisuals.Add(Visual);
+	}
+	if (PlantVisuals.Num() > First)
+	{
+		Rocks.First = First;
+		Rocks.Count = PlantVisuals.Num() - First;
+	}
+}
+
+void UTerrainSubsystem::GatherRocks(const colony::Map& Map, colony::CellPos Cell, TArray<TArray<FTransform>>& Out) const
+{
+	// Boulders and mossy stones on open ground beside rock, so a mountain's foot is not a clean cut between ground and
+	// block. Never on built or levelled cells. Where, which and how big come from the cell's hash.
+	const colony::Terrain Here = Map.terrain(Cell);
+	if ((Here != colony::Terrain::Soil && Here != colony::Terrain::Sand && Here != colony::Terrain::RoughStone) || Map.levelled(Cell) || Map.buildingAt(Cell) != colony::kNoEntity)
+	{
+		return;
+	}
+	int32 RockNear = 0;
+	for (int32 DY = -1; DY <= 1; ++DY)
+	{
+		for (int32 DX = -1; DX <= 1; ++DX)
+		{
+			const colony::CellPos N{Cell.x + DX, Cell.y + DY, 0};
+			RockNear += (DX != 0 || DY != 0) && Map.inBounds(N) && Map.terrain(N) == colony::Terrain::Rock ? 1 : 0;
+		}
+	}
+	if (RockNear == 0)
+	{
+		return;
+	}
+	const int32 Index = Map.index(Cell);
+	const uint64 H = TerrHash(static_cast<uint64>(Index) * 13ULL + 0x2F7A1B33ULL);
+	const float Roll = static_cast<float>(H & 0xFFFF) / 65535.0f;
+	if (Roll >= Rocks.Chance * FMath::Min(1.0f, 0.4f + 0.2f * static_cast<float>(RockNear)))
+	{
+		return;
+	}
+	const float R1 = static_cast<float>((H >> 16) & 0xFFFF) / 65535.0f;
+	const float R2 = static_cast<float>((H >> 32) & 0xFFFF) / 65535.0f;
+	const float R3 = static_cast<float>((H >> 48) & 0xFFFF) / 65535.0f;
+	const int32 Kind = Rocks.First + static_cast<int32>((H >> 8) % static_cast<uint64>(Rocks.Count));
+	const FPlantVisual& Visual = PlantVisuals[Kind];
+	const float PX = static_cast<float>(Cell.x) + 0.2f + R1 * 0.6f;
+	const float PY = static_cast<float>(Cell.y) + 0.2f + R2 * 0.6f;
+	const float Size = Visual.Scale * (1.0f + (R3 - 0.5f) * 2.0f * Visual.Jitter);
+	// Sunk a little so it sits in the ground rather than on it.
+	Out[Kind].Add(FTransform(FRotator(0.0, R3 * 7919.0f, 0.0), FVector(PX * 100.0f, PY * 100.0f, Map.heightAt(PX, PY) * 100.0f - 12.0f * Size), FVector(Size)));
+}
+
+void UTerrainSubsystem::GatherCover(const colony::Map& Map, const colony::Plants& Plants, colony::CellPos Cell, bool bHasPlant, TArray<TArray<FTransform>>& Out) const
+{
+	// Cosmetic ground cover (L2): low leafy tufts on open, fertile soil, thicker on rich ground. Never on built or levelled
+	// cells, under walls or inside roofed rooms. Where and how much comes from a hash of the cell; none of it is sim state.
+	if (Map.terrain(Cell) != colony::Terrain::Soil || Map.levelled(Cell) || Map.buildingAt(Cell) != colony::kNoEntity)
+	{
+		return;
+	}
+	const int32 Index = Map.index(Cell);
+	if (ThinRoof.IsValidIndex(Index) && ThinRoof[Index])
+	{
+		return;
+	}
+	const float Fertility = Plants.fertility(Cell);
+	if (Fertility < Cover.MinFertility)
+	{
+		return;
+	}
+	const float Rich = FMath::Clamp((Fertility - Cover.MinFertility) / FMath::Max(1.4f - Cover.MinFertility, 0.01f), 0.0f, 1.0f);
+	const float Chance = FMath::Lerp(Cover.ChancePoor, Cover.ChanceRich, Rich) * (bHasPlant ? Cover.UnderPlants : 1.0f);
+	for (int32 Try = 0; Try < Cover.PerCell; ++Try)
+	{
+		const uint64 H = TerrHash(static_cast<uint64>(Index) * 8ULL + static_cast<uint64>(Try) + 0x6C8E9CF5ULL);
+		const float Roll = static_cast<float>(H & 0xFFFF) / 65535.0f;
+		if (Roll >= Chance)
+		{
+			continue;
+		}
+		const float R1 = static_cast<float>((H >> 16) & 0xFFFF) / 65535.0f;
+		const float R2 = static_cast<float>((H >> 32) & 0xFFFF) / 65535.0f;
+		const float R3 = static_cast<float>((H >> 48) & 0xFFFF) / 65535.0f;
+		const int32 Kind = Cover.First + static_cast<int32>((H >> 8) % static_cast<uint64>(Cover.Count));
+		const FPlantVisual& Visual = PlantVisuals[Kind];
+		const float PX = static_cast<float>(Cell.x) + 0.05f + R1 * 0.9f;
+		const float PY = static_cast<float>(Cell.y) + 0.05f + R2 * 0.9f;
+		const float Size = Visual.Scale * (0.75f + 0.25f * Rich) * (1.0f + (R3 - 0.5f) * 2.0f * Visual.Jitter);
+		Out[Kind].Add(FTransform(FRotator(0.0, R3 * 7919.0f, 0.0), FVector(PX * 100.0f, PY * 100.0f, Map.heightAt(PX, PY) * 100.0f - 2.0f), FVector(Size)));
+	}
 }
 
 void UTerrainSubsystem::ScanPlants()
@@ -902,6 +1203,11 @@ void UTerrainSubsystem::FlushDirty()
 			if (Chunk.bGroundDirty)
 			{
 				RebuildChunkGround(CX, CY);
+				// The ground cover follows the ground (mined, levelled for a building, roofed over).
+				if (Cover.Count > 0 || Rocks.Count > 0)
+				{
+					Chunk.bPlantsDirty = true;
+				}
 			}
 			if (Chunk.bPlantsDirty)
 			{

@@ -54,6 +54,36 @@ The game design doc's rule: **the closest real threat; the downed only when noth
 An attack order wins. Otherwise, among the known enemies: able before downed, seen this step before
 only remembered, then the nearest by where it was last seen.
 
+"Nothing else left" means nobody of the downed one's side still standing anywhere on the map, seen or not
+(C25): raiders used to finish a downed colonist while another fought on out of their sight, so every colonist
+downed in the year run's small raids died. RimWorld's raiders never shoot the downed; ours do once the whole
+side is down.
+
+**Turrets** (2026-11-14): the colony's turrets (anything with a `Turret` part, built and with hit points
+left) are among the enemies a raider sees, remembers and shoots, as in RimWorld: a turret counts as an able
+enemy about a metre tall (crouching height) and is picked by the same rule, nearest first. A raider aims at
+its middle (an aimed shot at a point, `FighterSystem::fireAt`), and a bullet that hits it takes its hit
+points; at none it is destroyed (and a mini-turret blows up, [defense.md](defense.md)). Only a fighter with a
+gun that doesn't charge in melee takes a turret on: a raider with a club or bare hands leaves it be, and
+nobody throws a grenade at one. Colonists never target their own.
+Its gun shows over barricades round it (seen as at standing height, the mini-turret's muzzle being 1.3 m up),
+so raiders know it is there and shoot at its middle all the same: the barricades in front take the hits until
+they break (test "barricades round the mini-turret take the lancer's shots"; a lancer that wrecks the turret in the
+open in under two minutes breaks two barricades and the turret within ten minutes). Raiders don't otherwise target buildings.
+
+**Focus fire** (colonists only, C25): an able enemy within the colonist's gun range counts `focusMetres`
+(8 m, ours) nearer for each friend already shooting it, itself included (so two colonists on two raiders
+don't swap every plan). Three colonists facing two raiders all shoot the same one, as a player would order.
+
+**A defender with a club waits** (C25): a fighter the alarm called up (`defending`) that would charge in
+melee doesn't run at an enemy with a gun until it is within `ambushRange` (6 m, ours); until then it
+scores cover like a gunman with no range to get into. A drafted pawn or an attack order still charges. In the
+year run a colonist with a club ran 10 m across open ground at two shotgun raiders and was shot on the way. Since the
+ninth pass the same holds for an enemy with a club or spear (colonists ran out one at a time 20 m to two raiders with
+clubs and were beaten down), **unless that enemy is at a friend** already (within `helpReach`, 2.5 m, ours) and within
+`helpRange` (20 m, ours) of the defender: then it runs in to help, so two or three fight one. **A fighter in the Flee
+mode starts no swing** (a routed raider beat two colonists down on its way out after the alarm had stopped).
+
 ## Where to stand
 
 The plan scores every cell within 10 m (`searchRadius`) that the pawn can reach, stand on and isn't
@@ -91,7 +121,14 @@ ground and rock (`CombatSystem::trace` without pawns; buildings stay cover). The
 look at the target's eyes, so over a low crest a crouched fighter saw its enemy while every shot went into the crest:
 in the year run a colonist and a raider 14 m apart on a hillside fired about 200 shots at each other in two hours and
 nearly all of them hit the ground 4 to 5 m in front of the shooter. Now the fighter stands up to shoot over it, or
-picks another spot.
+picks another spot. The ground check takes the target **as it stands now** (sight still takes it standing up): the
+shots go at a crouched target's head over a crest (`CombatSystem::shoot` raises the aim, at most to 0.15 m under the
+top of the body), so the line to that highest aim, 0.3 m low, must clear too. Before the ninth pass the plan judged
+the shot as if the target stood up, and a rifle colonist fired 64 shots at a raider crouched behind a rise, 55 into the
+ground. **Looking further for a shot**: when none of the 10 best spots has a shot, up to 16 more cells are tried in
+score order, spread out (none within 2 cells of one already found without a shot), and the first with a shot wins if it
+scores better (`kFightShotSearch`, `kFightShotSearchGap`, ours). The quick score knows nothing of shots, so the 10 best
+were always the cells round where the fighter stood, all behind the same rise.
 
 **Going by the goal.** A fighter that advances and has a goal (a raider) but has no spot it can shoot from, and
 whose target is out of range from the best spot, doesn't settle where it is: scoring cells within 10 m can't see
@@ -111,6 +148,15 @@ that runs **at least as fast as it does** (the defs' `stats.moveSpeed`: a wolf, 
 stays where it is, stands and shoots from there (if it can shoot the target from its own cell). Walking to a better spot
 with a wolf on its heels only got it bitten in the back (found by the year run). A slower enemy is still kited.
 
+**Friends in the line of fire** (C25). A shot is planned and taken only if no friend is in its way: the line from the
+muzzle to the target's chest, and a line 0.3 m to either side of the chest for the spread (`kFightFriendSpread`, ours),
+must not meet a pawn of the shooter's side, or one nobody fights (a visitor, a prisoner, a calm animal), before the
+target (`friendInLine`, using `CombatSystem::trace` with pawns; a cheap test first skips it unless a friend stands within
+0.9 m of the line). The plan checks it for every way to shoot from a cell, so a gunman behind a friend fighting hand to
+hand steps to the side and shoots from there; in a corridor one cell wide it holds its fire. In the year run a colonist
+with a revolver shot at a chitinid 2.6 m away through the colonist with a club fighting it, again and again, and downed
+it (seed 42, day 36); bullets are real, so friendly fire is real, and a player would never take that shot.
+
 ## Acting
 
 Every step, for each fighter in id order (after the job system, before movement):
@@ -125,8 +171,10 @@ Every step, for each fighter in id order (after the job system, before movement)
    good asks for a new path, three times at most, then plans again.
 5. At the spot with a target it can shoot, a ready gun and its reaction time over (F5): step to the fire cell if that is the cell
    beside (a one-cell straight step), take the fire stance, check it still sees the target, that
-   it is in range and that the shot's line clears the ground, and give the aimed `shoot` order (F2's warm-up, spread
-   and burst follow).
+   it is in range, that the shot's line clears the ground and that no friend stands in it, and give the aimed `shoot` order (F2's warm-up, spread
+   and burst follow). Sight and the ground are checked from the middle of the cell, as the plan checked them: from
+   where the pawn happened to stand in its cell a steep slope hid what the middle saw, plan and check disagreed for
+   good, and a colonist 6 m below a raider held its fire for ten minutes with a shot planned every plan (C25).
 6. Between shots: back to the spot if it stepped out (unless the gun is ready again within 20 steps,
    `stepBackBelow`), and crouch. A fighter that knows no enemy stands. With no shot to take it tops up
    its magazine (F5): below half with enemies about, any time it is not full when none are.
@@ -173,6 +221,13 @@ steps as cover.md says.
 - Over a low crest 4.5 m in front (1.03 m high) a fighter stands up to shoot: crouched, 12 of 13 shots went into the
   crest; standing, none do.
 - Target choice: the closest able enemy; the downed one only when nobody else is left; an attack order wins.
+- A raider spares a downed colonist while another colonist stands, even one over 60 m off it can't see.
+- Three colonists against two raiders all shoot the same one (focus fire).
+- A defending colonist with a club stays over 6 m from a shotgun raider; drafted, it charges.
+- Close fights (`Tests/CloseFightTests.cpp`): a gunman behind a colonist fighting a raider hand to hand steps aside
+  and shoots without hitting its friend (before: 2 to 4 hits on the friend a fight); in a corridor it holds its fire;
+  beside a colonist fighting a chitinid it never hits the friend; three colonists with revolvers beat a raider with a
+  shotgun, a revolver or a mace who comes through a gap in their wall 2 to 4 m away.
 - One raider against three colonists falls back (13 m in the test); one against one holds.
 - A move order takes a drafted pawn across the map and it holds within 2 m.
 - Three against three among sandbags and walls: saving and loading mid-fight changes nothing, and

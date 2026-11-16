@@ -17,8 +17,10 @@ up by `colony::setUpPerfColony` (`ColonySim/PerfColony.h`), so the game's `perf`
 none of those.
 
 It prints, on stderr, a table of ms per step for each system, dearest first, and on stdout one JSON line
-(`avgStepMs`, `p99StepMs`, `maxStepMs`, `msPerFrameAt3x`, `worstStep` and `worstSystem`, `stateHash`, and
-`systems` with the same numbers as the table). With `--budget MS` it exits 1 if the average step is over.
+(`avgStepMs`, `p99StepMs`, `maxStepMs`, `firstStepMs`, `msPerFrameAt3x`, `worstStep` and `worstSystem`, `stateHash`, and
+`systems` with the same numbers as the table). The first step hands every colonist its first job at once,
+a one-off at load, so it is reported alone as `firstStepMs` and left out of `p99StepMs`, `maxStepMs` and
+`worstStep`. With `--budget MS` it exits 1 if the average step is over.
 The nightly workflow (`.github/workflows/nightly.yml`) runs a whole game day against the budget in
 `docs/decisions/0006-sim-cost-budget.md` and keeps the table as a build artifact. ctest runs a short one
 (`simrun_perf`, budget 10 ms) that only catches a step that has become several times dearer.
@@ -69,7 +71,8 @@ Before (1 game day, this machine, one core): 0.96 ms a step, 1.45 ms of every 60
   map, 14 ms in one step on 1 km, and in the game that frame took 22 to 27 ms (a dropped frame every 40 real
   seconds at 3x). The sim now grows a sixtieth of the map's cells in each of the next hour's first 60 steps
   (`Plants::growHourSlice`); every plant still grows once an hour, up to a minute later than before.
-  `maxStepMs` of `simrun --perf` is now the first step (30 colonists' first jobs, a one-off at load).
+  `maxStepMs` of `simrun --perf` was then the first step (30 colonists' first jobs, a one-off at load); that
+  step is now `firstStepMs` and left out of the worst step.
 - **Filth** is 8% of the step: a map lookup per pawn per step to see whether it entered a new cell. Keeping
   each pawn's last cell in a flat array would make it nearly free but changes what a save holds.
 - Mood still builds the thought list per colonist per step; the mood only moves a little a second, so

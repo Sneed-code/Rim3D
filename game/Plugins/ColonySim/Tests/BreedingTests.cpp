@@ -296,9 +296,10 @@ TEST_CASE("Breeding: tame animals of a kind mate, and a mating can leave the fem
         pregnant += f.br().pregnant(e) ? 1 : 0;
         if (f.br().pregnant(e)) {
             CHECK(f.br().female(e));
-            // A cow's gestation is 12 days and she carries one calf.
+            // A cow's gestation is 12 days (shortened by the life pace, docs/design/pace.md) and she carries one calf.
             CHECK(f.br().breed(e)->litter == 1);
-            CHECK(f.br().breed(e)->pregnantUntil > f.sim.time().seconds + 8 * kSecondsPerDay);
+            const double pace = f.sim.defs().tuning(kPaceLifeTuning);
+            CHECK(f.br().breed(e)->pregnantUntil > f.sim.time().seconds + static_cast<int64_t>(8 * kSecondsPerDay / pace));
         }
     }
     CHECK(pregnant >= 1);
@@ -443,11 +444,13 @@ TEST_CASE("Breeding: a hen lays eggs, a fertilized egg hatches into a tame chick
     BREED_REQUIRE(egg != kNoEntity);
     BREED_REQUIRE(f.reg().all_of<Hatching>(egg));
     const CellPos at = cellOf(f.reg().get<Position>(egg));
-    CHECK(f.reg().get<Hatching>(egg).hatchAt - f.sim.time().seconds > 3 * kSecondsPerDay);
+    // 3.8 days, shortened by the life pace (docs/design/pace.md).
+    const int64_t hatchIn = static_cast<int64_t>(3.8 * static_cast<double>(kSecondsPerDay) / f.sim.defs().tuning(kPaceLifeTuning));
+    CHECK(f.reg().get<Hatching>(egg).hatchAt - f.sim.time().seconds > hatchIn - kSecondsPerHour);
     CHECK(f.reg().get<StackCount>(egg).count == 1);
-    f.runFed(3 * kSecondsPerDay);
+    f.runFed(static_cast<int>(hatchIn - kSecondsPerHour));
     CHECK(f.livingAnimals("Chicken") == 1);
-    f.runFed(kSecondsPerDay);
+    f.runFed(static_cast<int>(2 * kSecondsPerHour));
     CHECK(f.livingAnimals("Chicken") == 2);
     CHECK_FALSE(f.sim.things().exists(egg));
     CHECK(f.br().stats().hatched == 1);
@@ -678,10 +681,11 @@ TEST_CASE("Breeding: a young animal has a share of its adult hit points that gro
     const float full = health.partMaxHitPoints(adult, 0);
     BREED_REQUIRE(full > 0.0f);
     CHECK(health.partMaxHitPoints(calf, 0) == doctest::Approx(full * 0.3f));  // baby: healthScaleFactor 0.3
-    f.reg().get<Animal>(calf).bornAt -= 14 * kSecondsPerDay;  // 0.2 years and more: a juvenile
+    const double pace = f.sim.defs().tuning(kPaceLifeTuning);  // ages are shortened by the life pace
+    f.reg().get<Animal>(calf).bornAt -= static_cast<int64_t>(14 * kSecondsPerDay / pace);  // 0.2 years and more: a juvenile
     f.run(kSecondsPerHour);
     CHECK(health.partMaxHitPoints(calf, 0) == doctest::Approx(full * 0.6f));
-    f.reg().get<Animal>(calf).bornAt -= 60 * kSecondsPerDay;  // grown
+    f.reg().get<Animal>(calf).bornAt -= static_cast<int64_t>(60 * kSecondsPerDay / pace);  // grown
     f.run(kSecondsPerHour);
     CHECK(health.partMaxHitPoints(calf, 0) == doctest::Approx(full));
 }

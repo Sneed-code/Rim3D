@@ -122,7 +122,7 @@ struct Carrying {
 
 // True for the jobs that work on a designated cell (rock or plant) and hold that cell.
 inline bool jobIsGather(JobType type) {
-    return type == JobType::Mine || type == JobType::CutPlant || type == JobType::HarvestPlant;
+    return type == JobType::Mine || type == JobType::CutPlant || type == JobType::HarvestPlant || type == JobType::RemoveFloor;
 }
 
 // True for the jobs done to an animal (docs/design/husbandry.md): `site` is the animal.
@@ -212,7 +212,7 @@ class Mineables;
 class Pathfinder;
 class Plants;
 class PowerGrid;
-enum class DeepWorkKind : uint8_t { None, Scan, Drill };
+enum class DeepWorkKind : uint8_t { None, Scan, Drill, LongScan };
 class ResearchSystem;
 class InspirationSystem;
 class TalentSystem;
@@ -333,6 +333,9 @@ public:
     bool assignBed(Entity bed, Entity pawn, std::string& error);
     // The bed a pawn owns, or kNoEntity.
     Entity bedOf(Entity pawn) const;
+    // Who a pawn's partner is (its spouse, else its lover; the social system answers): a pawn joins its partner's bed
+    // when there is a free slot in it, and two colonists who are not partners never share a bed (docs/design/lovin.md).
+    void setPartnerOf(std::function<Entity(Entity)> partnerOf) { partnerOf_ = std::move(partnerOf); }
     const NeedRules& needRules() const { return rules_; }
     // Whether a cell is indoors decides where a pawn can stroll or watch the clouds (Recreation); without rooms
     // everywhere is outdoors.
@@ -343,6 +346,9 @@ public:
     void setDeepResources(DeepResources* deep) { deep_ = deep; }
     DeepResources* deepResources() const { return deep_; }
     DeepWorkKind deepKindOf(Entity building) const;
+    // Whether a research bench is linked to a powered facility of this name (docs/design/multi-analyzer.md): a building with
+    // `building.researchFacility` == `facility` whose middle is within its `building.facilityRange` of the bench's middle.
+    bool benchLinkedTo(Entity bench, const std::string& facility) const;
     // Whether a scanner or drill can be worked now; `why` says what is wrong if not.
     bool deepWorkable(Entity building, std::string& why) const;
     // Taming, training and feeding animals (HusbandryJobs.cpp, docs/design/husbandry.md). Without it nobody handles animals.
@@ -375,6 +381,8 @@ public:
     void setInspirations(InspirationSystem* inspirations) { inspirations_ = inspirations; }
     // Hard workers work faster, fast learners learn faster, a great memory forgets slower (docs/design/traits.md).
     void setTraits(const TraitBook* traits) { traits_ = traits; }
+    // Times every work speed: worn armour's weight (docs/design/armour.md). Unset: 1.
+    void setGearWorkFactor(std::function<float(Entity)> f) { gearWorkFactor_ = std::move(f); }
     // Prisoners (PrisonerJobs.cpp, docs/design/prisoners.md); without it nobody captures, feeds or talks to prisoners, and prison
     // beds are ordinary beds.
     void setPrisoners(PrisonerSystem* prisoners) { prisoners_ = prisoners; }
@@ -509,7 +517,11 @@ public:
     // How fast `pawn` mines (1 is 100%): 4% plus 12% per Mining level, times its Manipulation.
     double miningSpeed(Entity pawn) const;
     // How fast it cuts and picks: 8% plus 11.5% per Plants level, times Manipulation, at least 10%.
+    // Plant work per second before the tuning's speed-ups (plantWorkFactor): Plants skill by the
+    // skill curve, Manipulation, light, health, traits, genes.
     double plantWorkSpeed(Entity pawn) const;
+    // The tuning's speed-up for work on this plant def: `work.treeFellingSpeed` for a tree, else `work.plantSpeed`.
+    double plantWorkFactor(DefId plant) const;
     // A skill level of a pawn: from its Colonist record, `unskilledLevel` for a pawn with none.
     int skillLevel(Entity pawn, const char* skill) const;
     // Experience in a skill, scaled by the pawn's passion for it (the social system's, C20).
@@ -532,9 +544,23 @@ public:
     // How many of an item def a pawn can carry at once: its `carryingCapacity` (RimWorld's 75 kg when
     // the pawn def has none) over the def's `stats.mass`, at least 1. It may be more than one stack.
     int carryLimit(Entity pawn, DefId def) const;
+    // What the pawn can carry in kg (docs/design/inventory.md): its def's `carryingCapacity`, times CarryRules
+    // `protagonistFactor` for the protagonist, plus CarryRules `traitKg` for its traits, times the talents' pack mule.
     double carryCapacity(Entity pawn) const;
     double massOf(DefId def) const;
-    // 1 with empty hands, down to 1 - `carrySlowdown` at a full load: what the pawn's walking speed is multiplied by.
+    // What one of `def` weighs for this pawn: `stats.mass` times the CarryRules `lighter` factors of its skills
+    // (a miner carries mined stone lighter, a farmer crops, a fighter everything).
+    double massFor(Entity pawn, DefId def) const;
+    double lighterFactor(Entity pawn, DefId def) const;
+    // What one item entity (a whole stack) weighs for this pawn.
+    double itemMassFor(Entity pawn, Entity item) const;
+    // Everything the pawn carries but a hauled stack: the weapons on its body (P1), the bag and, with CarryRules,
+    // the weapon in its hands and the apparel it wears.
+    double gearMass(Entity pawn) const;
+    // gearMass plus the hauled stack.
+    double loadMass(Entity pawn) const;
+    // What the pawn's walking speed is multiplied by for its load: 1 up to CarryRules `freeFraction` of its capacity
+    // (0 without CarryRules), down to 1 - `carrySlowdown` at a full load, and further down past it (overloaded).
     float loadSpeedFactor(Entity pawn) const;
     // The mass of the weapons the pawn carries on its body (P1); it counts in the load.
     double bodyWeaponMass(Entity pawn) const;
@@ -570,6 +596,7 @@ private:
 
     // The think list: each node may give a job; the first that does wins (docs/design/jobs.md).
     using ThinkNode = bool (JobSystem::*)(Entity pawn, Job& out);
+    bool thinkEmergency(Entity pawn, Job& out);
     bool thinkNeeds(Entity pawn, Job& out);
     // An addict's dose, a scheduled one, or one for joy, as the pawn's drug policy says (DrugJobs.cpp, docs/design/drugs.md).
     bool thinkDrugs(Entity pawn, Job& out);
@@ -589,7 +616,7 @@ private:
     bool thinkWork(Entity pawn, Job& out);
     // thinkWork's scan; `urgentOnly` asks only the emergency work types (doctor, patient...). With `dutyWork` (an
     // index in workTypes_) it asks only that work type, whatever its priority, and only targets FieldCare allows.
-    bool thinkWorkPass(Entity pawn, Job& out, bool urgentOnly, int dutyWork = -1);
+    bool thinkWorkPass(Entity pawn, Job& out, bool urgentOnly, int dutyWork = -1, int onlyWork = -1);
     // A Medic or Firefighter on duty (FieldCareJobs.cpp) instead of the think list: its duty's work on safe targets,
     // else StandBy at its place behind the line; a job it had that isn't its duty ends.
     void dutyStep(Entity pawn, int dutyWork);
@@ -605,6 +632,12 @@ private:
     float sleepBelow(ScheduleKind slot) const;
     // `commit` false only asks whether there is food: a nutrient paste dispenser then makes no meal.
     bool findFood(Entity pawn, Job& out, bool commit = true);
+public:
+    // sneed (2026-11-16): the protagonist eats the best food in its bag by itself before it gets hungry
+    // (needs.md "The protagonist eats from the bag"). Called for every pawn each step; does nothing for others.
+    // Returns true if it ate.
+    bool autoEatFromBag(Entity pawn);
+private:
     // Nutrient paste (NutrientPaste.cpp, docs/design/nutrient-paste.md): the raw food in the hoppers beside a dispenser
     // (nutrition), and whether the dispenser could make a meal now (powered, with enough in its hoppers).
     float pasteStock(Entity dispenser) const;
@@ -644,6 +677,7 @@ private:
     double deepDrillRadius(Entity building) const;
     bool failCheckResearch(Entity pawn, Job& job, std::string& why);
     StepResult researchWork(Entity pawn, Job& job, std::string& why);
+    StepResult longScanWork(Entity pawn, Job& job, double speed);
 
     // Medicine jobs (MedicineJobs.cpp, docs/design/medicine.md). TendPatient: `thing` the patient, `site` the medicine
     // (the stack, then the carried part). Rescue: `thing` the downed patient, `chair` the bed and `cell` the bed's
@@ -699,6 +733,7 @@ private:
     bool failCheckGather(Entity pawn, Job& job, std::string& why);
     StepResult goToTouch(Entity pawn, Job& job, std::string& why);
     StepResult mineRock(Entity pawn, Job& job, std::string& why);
+    StepResult removeFloorWork(Entity pawn, Job& job, std::string& why);
     StepResult plantWork(Entity pawn, Job& job, std::string& why);
     StepResult sowWork(Entity pawn, Job& job, std::string& why);
     void learnSkill(Entity pawn, const char* skill, double xp);
@@ -793,6 +828,7 @@ private:
     const NeedRules& rules_;
     const GameTime& time_;
     const Lights* lights_ = nullptr;
+    int emergencyWork_ = -1;  // the Doctor work type's index, found on first use (thinkEmergency)
     ApparelSystem* apparel_ = nullptr;
     SimStats& stats_;
     std::vector<Event>& events_;
@@ -811,8 +847,10 @@ private:
     CombatSystem* combat_ = nullptr;
     std::function<bool(Entity)> animalGate_;
     std::function<bool(Entity)> pauseGate_;
+    std::function<Entity(Entity)> partnerOf_;
     InspirationSystem* inspirations_ = nullptr;
     const TraitBook* traits_ = nullptr;
+    std::function<float(Entity)> gearWorkFactor_;
     const TalentSystem* talents_ = nullptr;  // build speed and carrying capacity (docs/design/talents.md)
     RecreationRules recreation_;
     std::unique_ptr<BillSystem> bills_;
@@ -824,6 +862,24 @@ private:
     std::vector<int> stackLimits_;    // per def id
     std::vector<double> masses_;      // per def id, `stats.mass` (1 if it has none)
     double carrySlowdown_ = 0.25;
+    // CarryRules (docs/design/inventory.md); without the def, RimWorld's hauling load as before.
+    struct CarryRules {
+        bool present = false;
+        double protagonistFactor = 1.0;
+        double freeFraction = 0.0;
+        double overloadSlowdown = 1.0;
+        double overloadMinFactor = 0.2;
+        double minFactor = 0.3;
+        std::vector<std::pair<std::string, double>> traitKg;
+        struct Lighter {
+            std::string skill;
+            double perLevel = 0.0;
+            int maxLevel = 20;
+            std::vector<uint8_t> applies;  // per Things def id; empty: every item
+        };
+        std::vector<Lighter> lighter;
+    } carry_;
+    void loadCarryRules();
     // Per def id, from the Things defs (NeedJobs.cpp): food tiers (-1 not food), nutrition and how
     // long a sitting takes; the kinds of building.
     std::vector<int8_t> foodTier_;
@@ -848,10 +904,25 @@ private:
         double plantSpeedBase = 0.08;
         double plantSpeedPerLevel = 0.115;
         double plantXpPerSecond = 0.059028;
+        // Our skill curve for plant work (WorkRules `plants.skillCurve`, sneed 2026-11-14): when set, speed is
+        // `lowFraction` of the level-`highLevel` speed at `lowLevel`, rising evenly to all of it at `highLevel`,
+        // scaled so a level-`normalLevel` pawn works at RimWorld's speed for that level. Off (RimWorld's straight
+        // line) when `plantCurveHigh` is 0.
+        int plantCurveLow = 1;
+        int plantCurveHigh = 0;
+        int plantCurveNormal = 8;
+        double plantCurveLowFraction = 1.0 / 3.0;
         double constructionXpPerSecond = 0.173611;
         double growthYieldFloor = 0.5;
         int unskilledLevel = 8;
         std::vector<double> yieldByLevel;
+        // Our speed-ups from data/tuning.json `values` (sneed's G2 playtest, docs/design/jobs.md "Work speed-ups"):
+        // felling a tree, building and taking down, mining and bench work go this many times faster.
+        double treeFellingSpeed = 1.0;
+        double plantSpeed = 1.0;  // all other plant work: cutting, harvesting, sowing
+        double constructionSpeed = 1.0;
+        double miningSpeed = 1.0;
+        double craftingSpeed = 1.0;
     } gather_;
     SkillRules skillRules_;
     int manipulationIndex_ = -1;  // position of the Manipulation capacity in Health::capacities, or -1

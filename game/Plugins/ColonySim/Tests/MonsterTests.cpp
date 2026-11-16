@@ -14,6 +14,7 @@
 #include <doctest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -111,13 +112,13 @@ TEST_CASE("Monsters: the wiki's numbers are in the defs") {
     const auto defs = monsterDefs();
     const Def& scyther = defs->get(defs->idOf("Things", "Mech_Scyther"));
     CHECK(scyther.number("race.baseHealthScale") == doctest::Approx(1.32));
-    CHECK(scyther.number("race.armor.sharp") == doctest::Approx(0.4));
+    CHECK(scyther.number("naturalMitigation.sharp") == doctest::Approx(20.0));  // half RimWorld's 40% (docs/design/armour.md)
     CHECK(scyther.number("race.combatPower") == 150);
     CHECK(scyther.number("stats.moveSpeed") * 30 == doctest::Approx(4.7).epsilon(0.001));
     CHECK(defs->get(defs->idOf("Things", "Mech_Lancer")).text("race.weapon") == "Gun_ChargeLance");
     CHECK(defs->get(defs->idOf("Things", "Mech_Centipede")).number("race.baseBodySize") == doctest::Approx(3.0));
     CHECK(defs->get(defs->idOf("Things", "Megaspider")).number("race.combatPower") == 150);
-    CHECK(defs->get(defs->idOf("Things", "Megascarab")).number("race.armor.sharp") == doctest::Approx(0.72));
+    CHECK(defs->get(defs->idOf("Things", "Megascarab")).number("naturalMitigation.sharp") == doctest::Approx(36.0));
     CHECK(defs->get(defs->idOf("Things", "Hive")).number("stats.maxHitPoints") == 130);
 }
 
@@ -140,21 +141,15 @@ TEST_CASE("Monsters: mechanoids neither bleed nor hurt, and their hulls turn blo
     CHECK(humanReport.bleedPerDay > 0.0f);
     CHECK(mechReport.bleedPerDay == 0.0f);
     CHECK(mechReport.pain == 0.0f);
-    // Armor: a scyther's 40% sharp armor deflects about a fifth of hits and halves another fifth.
+    // Hull: a scyther's 10% blunt and 20% sharp take a bullet (75% blunt, 25% sharp) down every time, never to 0.
     const DefId bullet = sim->health().damageTypeId("Bullet");
-    int deflected = 0, halved = 0, humanStopped = 0;
-    for (uint64_t seed = 1; seed <= 600; ++seed) {
+    for (uint64_t seed = 1; seed <= 50; ++seed) {
         const PawnHitResult r = sim->combat().hitPawn(mech, 0, bullet, 10.0f, 0.0f, seed);
-        deflected += r.deflected ? 1 : 0;
-        halved += !r.deflected && r.amount < 10.0f ? 1 : 0;
+        CHECK_FALSE(r.deflected);
+        CHECK(r.amount == doctest::Approx(7.5f / 1.1f + 2.5f / 1.2f));
         const PawnHitResult h = sim->combat().hitPawn(human, 0, bullet, 10.0f, 0.0f, seed);
-        humanStopped += h.amount < 10.0f ? 1 : 0;
+        CHECK(h.amount == doctest::Approx(10.0f));
     }
-    CHECK(deflected > 600 * 0.14);
-    CHECK(deflected < 600 * 0.26);
-    CHECK(halved > 600 * 0.14);
-    CHECK(halved < 600 * 0.26);
-    CHECK(humanStopped == 0);
 }
 
 TEST_CASE("Monsters: an infestation grows mounds and sends insects after the colony") {
@@ -166,18 +161,49 @@ TEST_CASE("Monsters: an infestation grows mounds and sends insects after the col
     const size_t insects = monsterCount(*sim, "Megascarab") + monsterCount(*sim, "Spelopede") + monsterCount(*sim, "Megaspider");
     CHECK(insects >= 3);
     sim->step();
-    bool hostile = false;
-    for (const auto [e, animal, thing] : sim->things().registry().view<const Animal, const Thing>().each()) {
-        (void)thing;
-        hostile = hostile || animal.temper == AnimalTemper::Manhunter;
-        (void)e;
-    }
-    CHECK(hostile);
     // No jelly yet; a day and a half later every mound has made some, and the nest has bred.
     CHECK(monsterJelly(*sim) == 0);
     const size_t hives = sim->monsters().hiveCount();
     sim->stepMany(kSecondsPerDay * 3 / 2);
     CHECK(monsterJelly(*sim) >= 20 * static_cast<int>(hives));
+}
+
+TEST_CASE("Monsters: insects guard their mound: they go for a colonist who comes near it and leave one far off alone") {
+    // RimWorld's insects defend their hive; ours hunted every colonist within 60 m, and the year run's infestations killed
+    // colonies that never went near the mound (docs/design/colony-scenario.md "Sixth pass").
+    auto sim = monsterSim(11, 128, false);
+    const Entity hive = sim->monsters().spawnHive(CellPos{60, 60, 0});
+    const Entity insect = sim->things().spawn("Megaspider", CellPos{72, 60, 0});  // 12 m from its mound
+    const Entity colonist = sim->things().spawn("Human", CellPos{110, 110, 0});
+    MONSTER_REQUIRE(hive != kNoEntity);
+    MONSTER_REQUIRE(insect != kNoEntity);
+    MONSTER_REQUIRE(colonist != kNoEntity);
+    (void)sim->things().registry().get_or_emplace<Colonist>(colonist);
+    entt::registry& reg = sim->things().registry();
+    const auto hold = [&](float x, float y, int seconds) {
+        for (int i = 0; i < seconds; ++i) {
+            Position& p = reg.get<Position>(colonist);
+            p.x = x;
+            p.y = y;
+            reg.emplace_or_replace<Stunned>(colonist, Stunned{5});
+            reg.replace<Health>(colonist, Health{});
+            sim->health().refresh(colonist);
+            sim->step();
+        }
+    };
+    const auto fromMound = [&]() {
+        const Position& p = reg.get<Position>(insect);
+        return std::hypot(p.x - 60.5f, p.y - 60.5f);
+    };
+    hold(110.5f, 110.5f, 900);  // 70 m off
+    CHECK(reg.get<Animal>(insect).temper == AnimalTemper::Calm);
+    CHECK_FALSE(sim->animals().hostile(insect));
+    CHECK(fromMound() < 11.0f);  // it walked home
+    hold(70.5f, 60.5f, 120);     // 10 m from the mound
+    CHECK(reg.get<Animal>(insect).temper == AnimalTemper::Manhunter);
+    hold(110.5f, 110.5f, 900);   // gone again, far off
+    CHECK(reg.get<Animal>(insect).temper == AnimalTemper::Calm);
+    CHECK(fromMound() < 11.0f);
 }
 
 TEST_CASE("Monsters: a destroyed mound leaves 30 jelly, and a mound takes no more than 40 around it") {

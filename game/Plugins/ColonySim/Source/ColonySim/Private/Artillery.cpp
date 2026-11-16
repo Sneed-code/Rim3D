@@ -605,7 +605,7 @@ void ArtillerySystem::stepBuilding(Entity building, Artillery& a, Rng& rng) {
             }
             target = a.aimPawn;
         } else if (info->autoTarget) {
-            if ((time_.seconds + static_cast<int64_t>(entt::to_integral(building))) % numbers_.scanEvery != 0) {
+            if ((time_.steps + static_cast<int64_t>(entt::to_integral(building))) % numbers_.scanEvery != 0) {
                 return;
             }
             target = pickTarget(building);

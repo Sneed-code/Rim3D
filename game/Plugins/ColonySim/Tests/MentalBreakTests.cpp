@@ -13,6 +13,7 @@
 #include "ColonySim/Needs.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
+#include "ColonySim/Raids.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Social.h"
@@ -406,7 +407,7 @@ TEST_CASE("Mental breaks: berserk swings at the nearest pawn with melee until it
     CHECK(std::count_if(log.events.begin(), log.events.end(), [&](const Event& e) {
               return e.type == EventType::PawnAction && e.action == PawnAction::Punch && e.target == victim;
           }) == 0);
-    CHECK(sim.things().registry().get<Health>(pawn).injuries.empty());
+    // (The victim may hit back: a berserker is an enemy to the colony, see the next test.)
     // Ended by hand: no catharsis for that.
     sim.submit(EndMentalBreakCommand{pawn});
     breakRun(sim, log, 2);
@@ -455,6 +456,66 @@ TEST_CASE("Mental breaks: a fire-starting spree lights fires near flammable thin
     CHECK(log.count(EventType::FireStarted) > 0);
     CHECK(sim.mentalBreaks().active(pawn));
     CHECK_FALSE(breakStart(sim, pawn, "NoSuchBreak", &error));
+}
+
+namespace {
+
+// Holds every pawn at an extreme-break mood for `days` (calm again as soon as a break begins) and returns the
+// breaks they had, by name.
+std::vector<std::string> breakExtremeRun(Sim& sim, const std::vector<Entity>& pawns, int64_t days) {
+    BreakLog log;
+    for (int64_t i = 0; i < days * 86400; ++i) {
+        for (const Entity pawn : pawns) {
+            if (!sim.things().registry().valid(pawn) || !sim.things().registry().all_of<Mood, Needs>(pawn)) {
+                continue;  // gave up and left
+            }
+            breakMood(sim, pawn).level = sim.mentalBreaks().active(pawn) ? 90.0f : 2.0f;
+            sim.things().registry().get<Needs>(pawn).food = 1.0f;
+            sim.things().registry().get<Needs>(pawn).rest = 1.0f;
+        }
+        breakRun(sim, log, 1);
+    }
+    std::vector<std::string> kinds;
+    for (const Event& e : log.events) {
+        if (e.type == EventType::PawnMentalBreak) {
+            kinds.push_back(e.message);
+        }
+    }
+    return kinds;
+}
+
+}  // namespace
+
+TEST_CASE("Mental breaks: only a pyromaniac goes on a fire-starting spree, and it is a pyromaniac's only extreme break") {
+    // RimWorld wiki, Mental break: the fire-starting spree is for pyromaniacs only, and replaces their other extreme breaks.
+    {
+        Sim sim = breakSim();
+        std::vector<Entity> plain;
+        for (int i = 0; i < 3; ++i) {
+            plain.push_back(breakColonist(sim, CellPos{12 + 8 * i, 24, 0}));
+        }
+        for (int i = 0; i < 3; ++i) {
+            sim.things().spawn("Table", CellPos{14 + 8 * i, 24, 0});  // something wooden to light, beside each
+        }
+        sim.step();
+        const std::vector<std::string> kinds = breakExtremeRun(sim, plain, 12);
+        CHECK(!kinds.empty());
+        for (const std::string& kind : kinds) {
+            CHECK_MESSAGE(kind != "FireSpree", kind);
+        }
+    }
+    {
+        Sim sim = breakSim();
+        const Entity pyro = breakColonist(sim, CellPos{24, 24, 0});
+        sim.things().registry().get<Colonist>(pyro).traits.push_back(TraitRecord{"Pyromaniac", 0});
+        sim.things().spawn("Table", CellPos{28, 24, 0});
+        sim.step();
+        const std::vector<std::string> kinds = breakExtremeRun(sim, {pyro}, 12);
+        CHECK(!kinds.empty());
+        for (const std::string& kind : kinds) {
+            CHECK_MESSAGE(kind == "FireSpree", kind);
+        }
+    }
 }
 
 TEST_CASE("Mental breaks: a colonist in a break takes no orders, and a drafted one is undrafted") {
@@ -561,5 +622,45 @@ TEST_CASE("Mental breaks: the protagonist never snaps, even at the lowest mood, 
     }
     CHECK(log.count(EventType::PawnMentalBreak) == 0);
     CHECK_FALSE(sim.mentalBreaks().active(pawn));
-    CHECK(breakMood(sim, pawn).level <= 5.0f);  // mood is still tracked
+    CHECK(breakMood(sim, pawn).level == doctest::Approx(50.0f));  // no mood: held at the base level
+}
+
+TEST_CASE("Mental breaks: the colony fights a berserk colonist down, and the break ends there") {
+    Sim sim = breakSim();
+    const Entity berserker = breakColonist(sim, CellPos{20, 24, 0});
+    const Entity a = breakColonist(sim, CellPos{27, 24, 0});
+    const Entity b = breakColonist(sim, CellPos{27, 26, 0});
+    for (const Entity p : {berserker, a, b}) {
+        sim.things().registry().emplace_or_replace<Posture>(p);
+    }
+    for (const Entity p : {a, b}) {
+        sim.combat().equip(p, sim.things().make(sim.defs().idOf("Things", "Gun_Revolver")));
+    }
+    sim.step();
+    CHECK(breakStart(sim, berserker, "Berserk"));
+    breakMood(sim, berserker).level = 5.0f;  // stays in the break until something else ends it
+    BreakLog log;
+    const bool downed = breakRunUntil(sim, log, 30 * 120, [&] { return sim.health().incapacitated(berserker); });
+    CHECK(downed);
+    CHECK(log.count(EventType::AlarmChanged) >= 1);
+    CHECK(std::count_if(log.events.begin(), log.events.end(), [&](const Event& e) {
+              return e.type == EventType::ShotFired && (e.thing == a || e.thing == b);
+          }) > 0);
+    breakRun(sim, log, 30 * 60);
+    CHECK_FALSE(sim.mentalBreaks().active(berserker));
+    const Event* ended = log.first(EventType::PawnMentalBreakEnded);
+    CHECK(ended != nullptr);
+    if (ended != nullptr) {
+        CHECK((ended->message == "downed" || ended->message == "died"));
+        MESSAGE("the break ended: ", ended->message);
+    }
+    // Once it is down nobody shoots it again, and the alarm stops.
+    const int64_t shotsBefore = std::count_if(log.events.begin(), log.events.end(), [](const Event& e) { return e.type == EventType::ShotFired; });
+    BreakLog after;
+    breakRun(sim, after, 30 * 60);
+    CHECK(after.count(EventType::ShotFired) == 0);
+    CHECK_FALSE(sim.raids().state().alarm);
+    CHECK_FALSE(sim.things().registry().get<Health>(a).dead);
+    CHECK_FALSE(sim.things().registry().get<Health>(b).dead);
+    MESSAGE("shots fired at the berserker: ", shotsBefore);
 }

@@ -111,6 +111,51 @@ decide). A full copy of 119,000 plants each step would be wasteful, and plants c
 - Grass and flowers have a cull distance (90 m for grass), so a hundred thousand tufts are never
   all drawn. Trees are drawn out to 1.5 km. Anything under 1.5 m tall casts no shadow.
 
+### Real plant meshes and the ground cover (L2, 2026-11-15)
+
+Since the look pass L2 the tropical plants are Megascans meshes from Epic's free Electric Dreams sample, copied into
+`game/Content/Megascans/` with their `/Game` paths unchanged by `tools/electric_dreams.ps1` (not in Git; a fresh clone
+draws the old shapes until it is run). A plant def lists several meshes in `visual.meshes`; the cell's hash picks one,
+so a field of grass or a jungle understorey is not one plant copied. Each mesh is scaled so it stands `visual.fitHeight`
+metres tall when fully grown (times `visual.scale` and the matching `visual.meshScales` entry). Every mesh is its own
+instance kind, so a chunk holds one component per mesh in use: keep the lists short (four to eight).
+
+| Def | Meshes (Electric Dreams) | Height |
+| --- | --- | --- |
+| Plant_Grass, Plant_TallGrass | Kikuyu grass, 4 each | 0.35 m, 0.8 m |
+| Plant_Bush | jungle ginger, taro, arrowhead plant, Boston fern, bird of paradise | 1.1 m |
+| Plant_Brambles | fern, silver lady fern | 0.6 m |
+| Plant_Dandelion | white windflower | 0.3 m |
+| Plant_Moss | moss clumps | 0.1 m |
+| Plant_TreePalm | Alexandra palm | 6 m |
+| Plant_Bamboo | cane palm | 5 m |
+| Plant_TreeTeak | Poly Haven island trees 01 and 02 (L6) | 8 m |
+| Plant_TreeCecropia | Poly Haven small tree 02, jacaranda (L6) | 7 m |
+
+**Trees (L6, 2026-11-15)**: `tools/tree_art.py` downloads the Poly Haven trees in `assets/tree_art.json`; the `TreeArt`
+commandlet imports each whole (one mesh, Nanite on with foliage keeping its area, full textures) into
+`/Game/Rim3D/Generated/Trees/`. The `FoliageMaterials` commandlet (run after it) gives every tree slot an instance of
+`M_FoliageTex` (the plant master for ordinary, non-virtual textures): leaves and branch cards masked, bark solid, all of a
+tree swaying alike. The glTF import's own materials drew the leaves black.
+
+**Rocks (L6)**: open soil, sand or rough stone beside rock gets a boulder or mossy stone now and then (`data/look.json`
+`"rockScatter"`: chance per cell, more with more rock neighbours; each scaled to `size` metres across; Poly Haven's
+mossy rock sets and boulder, imported by `TreeArt`, which keeps a set's pieces as separate meshes). Like the ground cover
+they are cosmetic, rebuilt with the chunk, and never on built cells. The terrain material puts moss (the soil layer) on
+the flat tops of rock blocks (`assets/terrain_textures.json` `slope.rockMoss`), so cliffs are green on top and bare on
+the sides.
+
+**Wind**: the Megascans foliage materials sway by world position offset. `visual.windDistance` (metres) is how far
+out a kind keeps moving (`SetWorldPositionOffsetDisableDistance`); past it the leaves hold still and cost nothing.
+`Terrain.WindDistance` scales every kind's distance (0 turns plant wind off), read when the terrain is built.
+
+**The ground cover** (`data/look.json` `"groundCover"`) is cosmetic and never a sim plant: low leafy tufts, clover and
+dead leaves on open soil with fertility at least `minFertility`. Each cell tries `perCell` times; a try succeeds with
+`chancePoor` at the lowest fertility up to `chanceRich` on rich soil, times `underPlants` where a sim plant grows. None
+on built or levelled cells, under any building, or inside a roofed room; a chunk's cover is rebuilt with its plants and
+whenever its ground is. It is drawn out to `cullDistance` (45 m) and casts no shadow. `Terrain.GroundCover` (0 to 1,
+read at build) thins it for slower PCs.
+
 ### The `visual` field of a plant def
 
 ```json

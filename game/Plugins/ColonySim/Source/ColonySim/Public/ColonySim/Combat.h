@@ -53,6 +53,8 @@ struct Gear {
     // Weapons carried on the body but not in the hands (P1): at most one per slot, counting the one in
     // the hands, so at most two here. They add to the load the pawn carries.
     std::vector<Entity> stowed;
+    // The pawn's bag (docs/design/inventory.md): items off the map it carries, owned by it (EquippedBy).
+    std::vector<Entity> inventory;
 };
 
 // On a pawn switching weapons (P1): the weapon in `to` (a stowed one) comes to the hands when the steps run out,
@@ -147,6 +149,13 @@ struct KnockedDown {
     Stance before = Stance::Standing;
 };
 
+// On a pawn staggered by a bullet whose stopping power is at least its body size (RimWorld's rule,
+// AN1, docs/design/combat.md "Stagger"): it walks at CombatRules `stagger.moveSpeedFactor` until the
+// steps run out. It can still shoot, swing and work.
+struct Staggered {
+    int stepsLeft = 0;
+};
+
 // On a stunned pawn (resonance's Stun, X2, docs/design/resonance.md): it can't walk, shoot, throw,
 // swing, block, cast or work until the steps run out; its stance stays as it was. ResonanceSystem
 // counts it down.
@@ -227,6 +236,18 @@ struct PawnHitResult {
     // Worn pieces that stopped or softened the hit and the hit points each loses (C15); the caller
     // passes the result to CombatSystem::wearApparel.
     std::vector<std::pair<Entity, int>> wear;
+    // The hit landed on a raised shield (docs/design/shields.md): `shield` took `shieldTook` off it before armour.
+    bool shieldBlocked = false;
+    Entity shield = kNoEntity;
+    float shieldTook = 0.0f;
+};
+
+// Where a hit comes from, for a raised shield (docs/design/shields.md): the shooter's side of a bullet, the
+// attacker of a blow, a blast's centre. Hits from nowhere (flames, traps) never land on a shield.
+struct HitFrom {
+    bool known = false;
+    float x = 0.0f;
+    float y = 0.0f;
 };
 
 // What a gun's def says, for fixed guns that fire without a pawn's hands (turrets, F11): range in
@@ -262,6 +283,8 @@ public:
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
     // Called when a bullet or a melee blow hurt a pawn (`victim`, `attacker`): animals react (N5, docs/design/animal-fights.md).
     void setHurtHook(std::function<void(Entity, Entity)> hook) { hurtHook_ = std::move(hook); }
+    // A pawn's body size in RimWorld's units (a man is 1) for the stagger rule; unset: 1 for everyone.
+    void setBodySize(std::function<float(Entity)> size) { bodySize_ = std::move(size); }
     void noteHurt(Entity victim, Entity attacker) const {
         if (hurtHook_) {
             hurtHook_(victim, attacker);
@@ -410,6 +433,11 @@ public:
     bool damageBuilding(Entity building, int damage);
     // Steps left of a pawn's knock-down (0: not knocked down).
     int knockedDownFor(Entity pawn) const;
+    // Steps left of a bullet's stagger (0: not staggered), and the share of its walking speed it keeps now.
+    int staggeredFor(Entity pawn) const;
+    float staggerSpeedFactor(Entity pawn) const;
+    // Staggers the pawn for CombatRules `stagger.steps` (a fresh stagger restarts the time) and sends PawnStaggered.
+    void stagger(Entity pawn);
 
     // Hashes the combat components of one thing (Sim::stateHash calls it for every thing).
     void hashThing(Entity e, StateHasher& h) const;
@@ -419,11 +447,18 @@ public:
     // layer first (RimWorld's rule). Every random choice comes from `seed`. Doesn't apply the damage:
     // the caller does (HealthSystem::applyHit), so bullets and melee strikes land the same way (F8).
     PawnHitResult hitPawn(Entity pawn, int hitboxPart, DefId damageType, float amount, float penetration,
-                          uint64_t seed) const;
+                          uint64_t seed, const HitFrom& from = HitFrom{}) const;
     // One blow that comes from no gun or hand (a spike trap's stab): lands on an outside part picked
     // by size, goes through the pawn's armor like a bullet (so armor wears) and hurts what is left.
     // A pawn with no hitboxes takes it on a part health picks.
-    void strikePawn(Entity pawn, DefId damageType, float amount, float penetration, Rng& rng);
+    void strikePawn(Entity pawn, DefId damageType, float amount, float penetration, Rng& rng,
+                    const HitFrom& from = HitFrom{});
+    // Shields (docs/design/shields.md): raises or lowers the pawn's shield. Up, it can walk and reload but not shoot
+    // or swing. Fails without a shield on its arm (none, or slung behind a two-handed weapon), or downed. `ai`: the
+    // fighter AI raised it at `threat`; `hasDir`: the player's block faces (dirX, dirY).
+    bool setBlocking(Entity pawn, bool up, std::string* why = nullptr, bool ai = false, Entity threat = kNoEntity,
+                     bool hasDir = false, float dirX = 0.0f, float dirY = 0.0f);
+    bool shieldUp(Entity pawn) const;
     // Damage of a kind with no aim behind it (flames): a random outside part, through the armor that
     // covers it (heat armor for Burn), worn pieces losing hit points. False if the pawn can't be hurt.
     bool hurtPawn(Entity pawn, DefId damageType, float amount, Rng& rng);
@@ -438,6 +473,11 @@ public:
     // 1 for a normal weapon of no stuff. The melee factor is by the blow's damage type (sharp or blunt
     // stuff factor times the quality's) and applies to damage and armor penetration alike.
     float meleeDamageFactor(Entity weapon, DefId damageType) const;
+    // The damage left of `amount` of `damageType` after the pawn's worn pieces and its own hide
+    // (docs/design/armour.md), and, when asked, each piece's share of what was taken off. `blast`:
+    // set off by an explosion (the type's explosionMix).
+    float mitigate(Entity pawn, DefId damageType, float amount, float penetration = 0.0f, bool blast = false,
+                   std::vector<std::pair<Entity, float>>* contributions = nullptr) const;
     float rangedAccuracyFactor(Entity weapon) const;
     float rangedDamageFactor(Entity weapon) const;
     bool isGun(DefId def) const;
@@ -455,6 +495,7 @@ private:
     const InspirationSystem* inspirations_ = nullptr;
     std::function<void(Entity)> beforeDestroy_;
     std::function<void(Entity, Entity)> hurtHook_;
+    std::function<float(Entity)> bodySize_;
     std::vector<Entity> scratch_;
 
     void emitHit(Entity projectile, const Projectile& p, const TraceHit& hit, float amount);
@@ -462,10 +503,12 @@ private:
     void updateShooter(Entity pawn, Shooter& s, Rng& rng);
     void startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps);
     void drop(Entity pawn, Entity item);
-    // The armor rolls of a hit on `part` (shared by bullets, blows and blast fragments): the damage
-    // left (deflected if the armor turned it away), the damage type (sharp may become blunt) and the
-    // wear on the pieces. Uses `rng`.
-    PawnHitResult armorPass(Entity pawn, int part, DefId damageType, float damage, float penetration, Rng& rng) const;
+    // The mitigation of a hit (shared by bullets, blows, flames and blast fragments): the damage left and
+    // the wear on the pieces (docs/design/armour.md). `blast` uses the type's explosionMix. Uses `rng`
+    // only to round the wear.
+    PawnHitResult armorPass(Entity pawn, int part, DefId damageType, float damage, float penetration, Rng& rng,
+                            bool blast = false, const HitFrom& from = HitFrom{}) const;
+    void stepBlocking();
     int pickOutsidePart(Entity pawn, Rng& rng) const;
     Entity launch(Entity launcher, DefId weaponDef, float ox, float oy, float oz, int level, CellPos startCell, float x,
                   float y, float z, float spreadSlope, Rng& rng, float kickUp, float kickSide, Posture* posture);

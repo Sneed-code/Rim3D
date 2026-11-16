@@ -96,6 +96,8 @@ if ($Packaged) {
         "-SmokeTest=$Test", "-SmokeTimeout=$TimeoutSeconds", "-SimData=`"$(Join-Path $Repo 'data')`"")
 }
 if (-not $Visible) { $gameArgs += "-RenderOffScreen" }
+# orders_world runs on the playtest's start (tools\play-rainforest.bat): the world, the rainforest colony, the moved origin.
+if ($Test -eq "orders_world") { $gameArgs += @("-SimWorld", "-SimScenario=CrashlandedRainforest", "-SimOriginX=300000", "-Overseer") }
 $gameArgs += $ExtraArgs
 Write-Host "Running smoke test '$Test' at $Resolution$(if ($Packaged) { ' (packaged build)' })..."
 $game = Start-Process -FilePath $exe -ArgumentList $gameArgs -PassThru

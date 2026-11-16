@@ -21,9 +21,6 @@ namespace
 	constexpr float AnimalTeleportDistance = 300.0f;
 	// Above this speed (cm/s) an animal gallops instead of walking.
 	constexpr float AnimalGallopSpeed = 280.0f;
-	// The speed (cm/s) the walk and gallop clips cover at play rate 1, for a model drawn at scale 1.
-	constexpr float AnimalWalkClipSpeed = 140.0f;
-	constexpr float AnimalGallopClipSpeed = 450.0f;
 	// Share of its adult size an animal is drawn at by life stage (baby, juvenile, adult).
 	constexpr float AnimalStageScale[3] = {0.5f, 0.75f, 1.0f};
 	// Moving slower than this (cm/s) counts as standing.
@@ -54,8 +51,35 @@ void ASimAnimalActor::Setup(const FSimAnimalModel& InModel, float InArtScale, co
 	Thing = InThing;
 	Body->SetSkeletalMesh(Model.Mesh);
 	Body->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+	for (USkeletalMesh* Piece : Model.Parts)
+	{
+		// Eyes, teeth, fur cards: drawn on the body's pose, no animation of their own.
+		USkeletalMeshComponent* Part = NewObject<USkeletalMeshComponent>(this);
+		Part->SetupAttachment(Body);
+		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Part->SetGenerateOverlapEvents(false);
+		Part->SetCanEverAffectNavigation(false);
+		Part->SetSkeletalMesh(Piece);
+		Part->RegisterComponent();
+		Part->SetLeaderPoseComponent(Body);
+	}
 	Body->SetRelativeScale3D(FVector(ArtScale));
 	DrawScale = ArtScale;
+	PlaceBody(false);
+}
+
+void ASimAnimalActor::PlaceBody(bool bOnSide)
+{
+	const FQuat Facing = FRotator(0.0, Model.YawOffset, 0.0).Quaternion();
+	if (!bOnSide)
+	{
+		Body->SetRelativeLocationAndRotation(FVector::ZeroVector, Facing);
+		return;
+	}
+	// Rolled onto its side about the actor's forward axis, lifted by half its width so it lies on the ground.
+	const FVector Size = Model.Mesh ? Model.Mesh->GetBounds().BoxExtent : FVector(20.0);
+	const FVector Side = Facing.RotateVector(FVector(Size.X, Size.Y, 0.0)).GetAbs();
+	Body->SetRelativeLocationAndRotation(FVector(0.0, 0.0, Side.Y * DrawScale), FQuat(FVector::ForwardVector, UE_HALF_PI) * Facing);
 }
 
 const UAnimSequence* ASimAnimalActor::GetClip() const
@@ -84,10 +108,15 @@ void ASimAnimalActor::SetPose(ESimAnimalPose NewPose, float PlayRate)
 			default: break;
 		}
 		const bool bWasPlaced = bPoseSet;
+		const bool bLieDown = NewPose == ESimAnimalPose::Dead && !Model.bHasDeath;
+		if (bLieDown || (bPoseSet && Pose == ESimAnimalPose::Dead))
+		{
+			PlaceBody(bLieDown);
+		}
 		Pose = NewPose;
 		bPoseSet = true;
 		Single->SetAnimationAsset(Clip, bLoop);
-		Single->SetPlaying(true);
+		Single->SetPlaying(!bLieDown);
 		if (NewPose == ESimAnimalPose::Dead && !bWasPlaced && Clip)
 		{
 			// It was already dead when we first saw it (a load): lie where it fell.
@@ -147,11 +176,11 @@ void ASimAnimalActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::T
 	}
 	else if (Moving > AnimalGallopSpeed)
 	{
-		SetPose(ESimAnimalPose::Gallop, FMath::Clamp(Moving / (AnimalGallopClipSpeed * DrawScale), 0.5f, 2.0f));
+		SetPose(ESimAnimalPose::Gallop, FMath::Clamp(Moving / (Model.GallopClipSpeed * DrawScale), 0.5f, 2.0f));
 	}
 	else if (Moving > AnimalStandingSpeed)
 	{
-		SetPose(ESimAnimalPose::Walk, FMath::Clamp(Moving / (AnimalWalkClipSpeed * DrawScale), 0.4f, 2.0f));
+		SetPose(ESimAnimalPose::Walk, FMath::Clamp(Moving / (Model.WalkClipSpeed * DrawScale), 0.4f, 2.0f));
 	}
 	else if (Before && Now.food > Before->food + 1.0e-5f)
 	{

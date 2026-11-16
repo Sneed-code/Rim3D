@@ -520,8 +520,33 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                     j["x"] = c.x;
                     j["y"] = c.y;
                 } else {
-                    static_assert(std::is_same_v<Type, RerollColonistCommand>, "write every command type");
-                    j["slot"] = c.slot;
+                    if constexpr (std::is_same_v<Type, ScannerCommand>) {
+                        j["building"] = entt::to_integral(c.building);
+                        j["ore"] = c.ore;
+                    } else if constexpr (std::is_same_v<Type, InventoryCommand>) {
+                        j["pawn"] = entt::to_integral(c.pawn);
+                        j["action"] = c.action;
+                        j["item"] = entt::to_integral(c.item);
+                        j["count"] = c.count;
+                    } else if constexpr (std::is_same_v<Type, SetOutfitFightGearCommand>) {
+                        j["outfit"] = c.outfit;
+                        j["armourInBag"] = c.armourInBag;
+                        j["clothesInBag"] = c.clothesInBag;
+                    } else if constexpr (std::is_same_v<Type, HideGearCommand>) {
+                        j["pawn"] = entt::to_integral(c.pawn);
+                        j["hide"] = c.hide;
+                    } else if constexpr (std::is_same_v<Type, SetDayLengthCommand>) {
+                        j["minutes"] = c.minutes;
+                    } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
+                        j["pawn"] = entt::to_integral(c.pawn);
+                        j["up"] = c.up;
+                        j["hasDir"] = c.hasDir;
+                        j["dirX"] = c.dirX;
+                        j["dirY"] = c.dirY;
+                    } else {
+                        static_assert(std::is_same_v<Type, RerollColonistCommand>, "write every command type");
+                        j["slot"] = c.slot;
+                    }
                 }
             }
         },
@@ -664,19 +689,19 @@ bool replayReadPriority(ReplayReader& r, const ReplayJson& j, const std::string&
 }
 
 
-// "kind": "Mine", "CutPlant" or "HarvestPlant"; "None" (cancelling only) means every kind.
+// "kind": "Mine", "CutPlant", "HarvestPlant" or "RemoveFloor"; "None" (cancelling only) means every kind.
 bool replayReadDesignation(ReplayReader& r, const ReplayJson& j, const std::string& where, DesignationKind& out) {
     std::string name = designationKindName(out);
     if (!r.text(j, "kind", name, where)) {
         return false;
     }
-    for (const DesignationKind k : {DesignationKind::None, DesignationKind::Mine, DesignationKind::CutPlant, DesignationKind::HarvestPlant}) {
+    for (const DesignationKind k : {DesignationKind::None, DesignationKind::Mine, DesignationKind::CutPlant, DesignationKind::HarvestPlant, DesignationKind::RemoveFloor}) {
         if (name == designationKindName(k)) {
             out = k;
             return true;
         }
     }
-    return r.fail(where + ".kind must be None, Mine, CutPlant or HarvestPlant");
+    return r.fail(where + ".kind must be None, Mine, CutPlant, HarvestPlant or RemoveFloor");
 }
 
 // "mode": "Count" (the default), "UntilHave" or "Forever"
@@ -954,7 +979,7 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         if (c.kind == DesignationKind::None) {
-            return r.fail(where + ".kind must be Mine, CutPlant or HarvestPlant");
+            return r.fail(where + ".kind must be Mine, CutPlant, HarvestPlant or RemoveFloor");
         }
         out.command = c;
     } else if (type == "CancelDesignations") {
@@ -1789,6 +1814,67 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         out.command = std::move(c);
     } else {
         // Nested, not one more else-if: MSVC stops at 128 nested blocks (C1061).
+        if (type == "Scanner") {
+            ScannerCommand c;
+            uint32_t building = entt::to_integral(kNoEntity);
+            if (!r.integer(j, "building", building, where) || !r.text(j, "ore", c.ore, where)) {
+                return false;
+            }
+            c.building = static_cast<Entity>(building);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "Inventory") {
+            InventoryCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            uint32_t item = entt::to_integral(kNoEntity);
+            if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "action", c.action, where) ||
+                !r.integer(j, "item", item, where) || !r.integer(j, "count", c.count, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            c.item = static_cast<Entity>(item);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetOutfitFightGear") {
+            SetOutfitFightGearCommand c;
+            if (!r.integer(j, "outfit", c.outfit, where) || !r.flag(j, "armourInBag", c.armourInBag, where) ||
+                !r.flag(j, "clothesInBag", c.clothesInBag, where)) {
+                return false;
+            }
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "HideGear") {
+            HideGearCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            if (!r.integer(j, "pawn", pawn, where) || !r.flag(j, "hide", c.hide, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetDayLength") {
+            SetDayLengthCommand c;
+            if (!r.integer(j, "minutes", c.minutes, where)) {
+                return false;
+            }
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "Shield") {
+            ShieldCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            if (!r.integer(j, "pawn", pawn, where) || !r.flag(j, "up", c.up, where) || !r.flag(j, "hasDir", c.hasDir, where) ||
+                !r.number(j, "dirX", c.dirX, where) || !r.number(j, "dirY", c.dirY, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            out.command = std::move(c);
+            return true;
+        }
         if (type != "Pod") {
             return r.fail(where + ".type: unknown command '" + type + "'");
         }
@@ -1813,7 +1899,7 @@ Replay recordReplay(const Sim& sim) {
     replay.settings = sim.settings();
     replay.commands = sim.commandLog();
     replay.checkpoints = sim.checkpoints();
-    replay.endStep = sim.time().seconds;
+    replay.endStep = sim.time().steps;
     replay.hasEndHash = true;
     replay.endHash = sim.stateHash();
     return replay;
@@ -1836,6 +1922,9 @@ std::string writeReplay(const Replay& replay) {
     }
     if (s.wildAnimals != 0) {
         settings["wildAnimals"] = s.wildAnimals;
+    }
+    if (s.dayMinutes != kBaseDayMinutes) {
+        settings["dayMinutes"] = s.dayMinutes;
     }
     if (s.world.enabled) {
         ReplayOrderedJson world = ReplayOrderedJson::object();
@@ -1911,8 +2000,11 @@ bool readReplay(const std::string& text, Replay& out, std::string& error) {
         !r.text(*settings, "haulItemDef", s.haulItemDef, where) ||
         !r.integer(*settings, "checkpointEvery", s.checkpointEvery, where) ||
         !r.integer(*settings, "pathBudget", s.pathBudget, where) || !r.text(*settings, "scenario", s.scenario, where) ||
-        !r.integer(*settings, "wildAnimals", s.wildAnimals, where)) {
+        !r.integer(*settings, "wildAnimals", s.wildAnimals, where) || !r.integer(*settings, "dayMinutes", s.dayMinutes, where)) {
         return false;
+    }
+    if (!dayMinutesValid(s.dayMinutes)) {
+        return r.fail("settings: dayMinutes must be 48 to 120");
     }
     if (s.mapSize <= 0 || s.mapSize > 4096 || s.pawns < 0 || s.items < 0 || s.checkpointEvery < 0 ||
         s.pathBudget <= 0 || s.wildAnimals < 0) {
@@ -2001,7 +2093,7 @@ bool saveReplayFile(const std::string& path, const Replay& replay, std::string& 
 }
 
 void ReplayFeeder::submitDue(Sim& sim) {
-    while (next_ < replay_.commands.size() && replay_.commands[next_].step <= sim.time().seconds) {
+    while (next_ < replay_.commands.size() && replay_.commands[next_].step <= sim.time().steps) {
         sim.submit(replay_.commands[next_].command);
         ++next_;
     }
@@ -2009,7 +2101,7 @@ void ReplayFeeder::submitDue(Sim& sim) {
 
 void playReplay(const Replay& replay, Sim& sim, int64_t endStep) {
     ReplayFeeder feeder(replay);
-    while (sim.time().seconds < endStep) {
+    while (sim.time().steps < endStep) {
         feeder.submitDue(sim);
         sim.step();
     }
@@ -2032,7 +2124,7 @@ ReplayCheck checkReplay(const Replay& expected, const Sim& sim) {
             return check;
         }
     }
-    if (expected.hasEndHash && expected.endStep == sim.time().seconds) {
+    if (expected.hasEndHash && expected.endStep == sim.time().steps) {
         ++check.compared;
         if (sim.stateHash() != expected.endHash) {
             check.firstMismatch = expected.endStep;

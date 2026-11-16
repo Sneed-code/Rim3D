@@ -8,6 +8,7 @@
 #include "ColonySim/Bills.h"
 #include "ColonySim/Crafting.h"
 #include "ColonySim/Construction.h"
+#include "ColonySim/Floors.h"
 #include "ColonySim/Defense.h"
 #include "ColonySim/DeepResources.h"
 #include "ColonySim/Designations.h"
@@ -312,6 +313,39 @@ public:
     bool makeJob(JobSystem&, Entity, const WorkCandidate& candidate, Job& out) override {
         out = Job{};
         out.type = JobType::Mine;
+        out.cell = candidate.target.cell;
+        return true;
+    }
+};
+
+// Taking up floors marked for it (RimWorld's WorkGiver_RemoveFloor, in the Construction work type).
+class RemoveFloorGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "RemoveFloor"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const Floors* floors = jobs.construction().floors();
+        if (!jobs.canUseHands(pawn) || floors == nullptr) {
+            return;
+        }
+        const Position& at = jobs.things().registry().get<Position>(pawn);
+        for (const auto& [index, kind] : jobs.designations().all()) {
+            if (kind != DesignationKind::RemoveFloor) {
+                continue;
+            }
+            const CellPos cell = jobs.map().cellAt(index);
+            if (cell.level != at.level || !floors->at(cell).valid()) {
+                continue;
+            }
+            const float dx = static_cast<float>(cell.x) + 0.5f - at.x;
+            const float dy = static_cast<float>(cell.y) + 0.5f - at.y;
+            out.push_back(WorkCandidate{JobTarget{kNoEntity, cell}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+        }
+    }
+
+    bool makeJob(JobSystem&, Entity, const WorkCandidate& candidate, Job& out) override {
+        out = Job{};
+        out.type = JobType::RemoveFloor;
         out.cell = candidate.target.cell;
         return true;
     }
@@ -660,6 +694,11 @@ public:
                     !jobs.buildingRuns(bench)) {
                     return;
                 }
+                // A project that needs a facility (the multi-analyzer) can only be worked at a bench linked to one.
+                const ResearchProject* project = research->find(research->current());
+                if (project != nullptr && !project->requiredFacility.empty() && !jobs.benchLinkedTo(bench, project->requiredFacility)) {
+                    return;
+                }
                 CellPos stand;
                 if (!jobs.construction().workCell(footprint.rect(), cellOf(at), stand)) {
                     return;
@@ -696,7 +735,7 @@ public:
         reg.view<const Thing, const Footprint, const Position>().each(
             [&](Entity machine, const Thing&, const Footprint& footprint, const Position& pos) {
                 std::string why;
-                if (pos.level != at.level || jobs.deepKindOf(machine) != kind_ || !jobs.deepWorkable(machine, why)) {
+                if (pos.level != at.level || !(jobs.deepKindOf(machine) == kind_ || (kind_ == DeepWorkKind::Scan && jobs.deepKindOf(machine) == DeepWorkKind::LongScan)) || !jobs.deepWorkable(machine, why)) {
                     return;
                 }
                 CellPos stand;
@@ -1249,6 +1288,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<ConstructFinishGiver>());
     givers.push_back(std::make_unique<ConstructArtGiver>());
     givers.push_back(std::make_unique<DeconstructGiver>());
+    givers.push_back(std::make_unique<RemoveFloorGiver>());
     givers.push_back(std::make_unique<MineGiver>());
     givers.push_back(std::make_unique<CutOrHarvestPlantsGiver>());
     givers.push_back(std::make_unique<HarvestCropsGiver>());

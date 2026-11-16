@@ -1,6 +1,7 @@
 #include "ColonySim/Raids.h"
 
 #include "ColonySim/Animals.h"
+#include "ColonySim/Apparel.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
@@ -11,6 +12,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Random.h"
@@ -20,6 +22,7 @@
 #include "ColonySim/Things.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cmath>
 #include <set>
 #include <utility>
@@ -106,6 +109,7 @@ void raidReadRules(const DefDatabase& defs, RaidRules& r) {
     num("lineMoves", r.lineMoves);
     whole("shelterSearch", r.shelterSearch);
     num("shelterFlee", r.shelterFlee);
+    num("shelterDanger", r.shelterDanger);
     num("weightAssault", r.weightAssault);
     num("weightSappers", r.weightSappers);
     num("weightDropPods", r.weightDropPods);
@@ -242,7 +246,8 @@ RaidSystem::RaidSystem(Things& things, Map& map, Rooms& rooms, CombatSystem& com
         const Def& def = defs_.get(id);
         marketValue_[id.value] = static_cast<float>(def.number("stats.marketValue", 0.0));
         if (def.has("apparel")) {
-            armor_[id.value] = static_cast<float>(def.number("stats.armorRatingSharp", 0.0));
+            // Armour's sharp mitigation, 50% counting like an old armor rating of 1 (docs/design/armour.md).
+            armor_[id.value] = static_cast<float>(def.number("gear.mitigation.sharp", 0.0)) / 50.0f;
         }
     }
 }
@@ -482,7 +487,8 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, R
         for (size_t a = 0; a < kindDef->count("apparel"); ++a) {
             const std::string ab = "apparel." + std::to_string(a);
             k.apparel.push_back(PawnKind::Wear{kindDef->text((ab + ".thing").c_str()),
-                                               static_cast<float>(kindDef->number((ab + ".chance").c_str(), 1.0))});
+                                               static_cast<float>(kindDef->number((ab + ".chance").c_str(), 1.0)),
+                                               kindDef->text((ab + ".stuff").c_str())});
         }
         if (k.combatPower <= 0.0f || !defs_.idOf("Things", k.race).valid()) {
             error = "pawn kind '" + k.defName + "' has no combat power or an unknown race";
@@ -695,6 +701,13 @@ bool RaidSystem::startRaid(const std::string& faction, float points, int edge, R
         for (const PawnKind::Wear& wear : kind.apparel) {
             if (rng_.unit() < wear.chance) {
                 const Entity item = things_.spawn(wear.thing, cell);
+                const DefId stuff = wear.stuff.empty() ? DefId{} : defs_.idOf("Things", wear.stuff);
+                if (item != kNoEntity && stuff.valid()) {
+                    // Made of its stuff, with the hit points that gives (docs/design/shields.md).
+                    reg.emplace_or_replace<MadeOf>(item, MadeOf{stuff});
+                    const int hp = combat_.apparelStats().maxHitPoints(reg.get<Thing>(item).def, stuff);
+                    reg.emplace_or_replace<HitPoints>(item, HitPoints{hp, hp});
+                }
                 if (item != kNoEntity && !combat_.equip(pawn, item)) {
                     things_.destroy(item);
                 }
@@ -1152,6 +1165,7 @@ void RaidSystem::leaveMap(Entity pawn) {
     if (const Gear* gear = reg.try_get<Gear>(pawn)) {
         std::vector<Entity> carried = gear->apparel;
         carried.insert(carried.end(), gear->stowed.begin(), gear->stowed.end());
+        carried.insert(carried.end(), gear->inventory.begin(), gear->inventory.end());
         if (gear->weapon != kNoEntity) {
             carried.push_back(gear->weapon);
         }
@@ -1687,6 +1701,7 @@ void RaidSystem::removeForGood(Entity pawn) {
     if (const Gear* gear = reg.try_get<Gear>(pawn)) {
         belongings.insert(belongings.end(), gear->apparel.begin(), gear->apparel.end());
         belongings.insert(belongings.end(), gear->stowed.begin(), gear->stowed.end());
+        belongings.insert(belongings.end(), gear->inventory.begin(), gear->inventory.end());
         if (gear->weapon != kNoEntity) {
             belongings.push_back(gear->weapon);
         }
@@ -1759,6 +1774,38 @@ bool RaidSystem::canSee(Entity watcher, Entity pawn) const {
     return map_.cover().lineOfSight(Viewpoint{a.x, a.y, a.level, Stance::Standing}, Viewpoint{b.x, b.y, b.level, stance});
 }
 
+bool RaidSystem::colonyMiddle(float& x, float& y) const {
+    // The middle of the colony's buildings, else of its colonists. Not the map's own buildings: the ruins' ancient walls and
+    // the steam geysers (`mapFeature` in their defs) and brood mounds are nobody's home; in the year run a ruin across the
+    // map put "home" 60 m from the barracks, so the defenders held their line out in the open. In id order, so the sum is the
+    // same after a load.
+    const entt::registry& reg = things_.registry();
+    std::vector<Entity> buildings;
+    std::vector<Entity> colonists;
+    for (const auto [e, thing, pos] : reg.view<const Thing, const Position>().each()) {
+        if (thing.category == ThingCategory::Building && reg.all_of<Footprint>(e)) {
+            const Def& def = defs_.get(thing.def);
+            if (!def.flag("mapFeature") && !def.has("hive")) {
+                buildings.push_back(e);
+            }
+        } else if (reg.all_of<Colonist>(e) && fighters_.factionOf(e) == kPlayerFaction) {
+            colonists.push_back(e);
+        }
+    }
+    std::vector<Entity>& from = buildings.empty() ? colonists : buildings;
+    std::sort(from.begin(), from.end());
+    float sx = 0.0f;
+    float sy = 0.0f;
+    const int n = static_cast<int>(from.size());
+    for (const Entity e : from) {
+        sx += reg.get<Position>(e).x;
+        sy += reg.get<Position>(e).y;
+    }
+    x = n > 0 ? sx / static_cast<float>(n) : 0.0f;
+    y = n > 0 ? sy / static_cast<float>(n) : 0.0f;
+    return n > 0;
+}
+
 void RaidSystem::setAlarm(bool on, const char* why) {
     entt::registry& reg = things_.registry();
     if (on == state_.alarm) {
@@ -1766,29 +1813,7 @@ void RaidSystem::setAlarm(bool on, const char* why) {
     }
     state_.alarm = on;
     if (on) {
-        // Home: the middle of the colony's buildings, else of its colonists.
-        // In id order, so the sum is the same after a load.
-        std::vector<Entity> buildings;
-        std::vector<Entity> colonists;
-        for (const auto [e, thing, pos] : reg.view<const Thing, const Position>().each()) {
-            if (thing.category == ThingCategory::Building && reg.all_of<Footprint>(e)) {
-                buildings.push_back(e);
-            } else if (reg.all_of<Colonist>(e) && fighters_.factionOf(e) == kPlayerFaction) {
-                colonists.push_back(e);
-            }
-        }
-        std::vector<Entity>& from = buildings.empty() ? colonists : buildings;
-        std::sort(from.begin(), from.end());
-        float x = 0.0f;
-        float y = 0.0f;
-        const int n = static_cast<int>(from.size());
-        for (const Entity e : from) {
-            x += reg.get<Position>(e).x;
-            y += reg.get<Position>(e).y;
-        }
-        state_.hasHome = n > 0;
-        state_.homeX = n > 0 ? x / static_cast<float>(n) : 0.0f;
-        state_.homeY = n > 0 ? y / static_cast<float>(n) : 0.0f;
+        state_.hasHome = colonyMiddle(state_.homeX, state_.homeY);
     } else {
         std::vector<Entity> called;
         for (const auto [pawn, f] : reg.view<const Fighter>().each()) {
@@ -1828,6 +1853,12 @@ void RaidSystem::thinkAlarm() {
         }
         hostiles.push_back(pawn);
     }
+    // A colonist on a Berserk break attacks anyone: an enemy until it is downed or the break ends.
+    for (const auto [pawn, breaker, pos] : reg.view<const MentalBreaker, const Position>().each()) {
+        if (isBerserk(&breaker) && !health_.incapacitated(pawn) && fighters_.factionOf(pawn) == kPlayerFaction) {
+            hostiles.push_back(pawn);
+        }
+    }
     std::sort(hostiles.begin(), hostiles.end());
     if (hostiles.empty()) {
         state_.suppressed = false;
@@ -1842,7 +1873,8 @@ void RaidSystem::thinkAlarm() {
     std::vector<Entity> ours;
     for (const auto [pawn, pos, mover] : reg.view<const Position, const Mover>().each()) {
         const Animal* animal = reg.try_get<Animal>(pawn);
-        if (fighters_.factionOf(pawn) == kPlayerFaction && !health_.incapacitated(pawn) && (animal == nullptr || animal->temper == AnimalTemper::Calm)) {
+        if (fighters_.factionOf(pawn) == kPlayerFaction && !health_.incapacitated(pawn) && (animal == nullptr || animal->temper == AnimalTemper::Calm) &&
+            !isBerserk(reg.try_get<MentalBreaker>(pawn))) {
             ours.push_back(pawn);
         }
     }
@@ -1886,6 +1918,12 @@ void RaidSystem::thinkAlarm() {
         if (!reg.all_of<Colonist>(pawn) || reg.all_of<PlayerControl>(pawn)) {
             continue;
         }
+        if (const Worker* w = reg.try_get<Worker>(pawn); w != nullptr && w->job.type == JobType::BedRest && reg.try_get<Fighter>(pawn) == nullptr) {
+            // Resting in bed to get over an illness or wounds: it stays there, as a player leaves the sick undrafted. In the
+            // year run (ninth pass) a raid two days after plague and malaria called the sick out of bed, and eight died
+            // fighting at a fraction of their strength.
+            continue;
+        }
         if (excusedToEat(pawn)) {
             if (const Fighter* f = reg.try_get<Fighter>(pawn); f != nullptr && f->defending) {
                 fighters_.standDown(pawn);  // off to eat; called up again once fed
@@ -1897,8 +1935,33 @@ void RaidSystem::thinkAlarm() {
 }
 
 bool RaidSystem::excusedToEat(Entity pawn) const {
-    const Needs* needs = things_.registry().try_get<Needs>(pawn);
-    return needs != nullptr && needs->food < rules_.alarmEatBelow;
+    const entt::registry& reg = things_.registry();
+    const Needs* needs = reg.try_get<Needs>(pawn);
+    if (needs == nullptr || !(needs->food < rules_.alarmEatBelow)) {
+        return false;
+    }
+    // Not with an enemy close by that can see it (keepWorkingRadius, the distance a Keep working colonist stops at): in
+    // the year run colonists let off to eat sat over their meals while a raider shot them from 1 to 6 m (colony-scenario.md
+    // "Eighth pass"). RimWorld's colonists answer a close enemy whatever job they are on.
+    const Position* at = reg.try_get<Position>(pawn);
+    if (at == nullptr) {
+        return true;
+    }
+    for (const auto [other, faction, p] : reg.view<const Faction, const Position>().each()) {
+        const Animal* wild = reg.try_get<Animal>(other);
+        if ((faction.id == kPlayerFaction && wild == nullptr) || (wild != nullptr && wild->temper == AnimalTemper::Calm) ||
+            p.level != at->level || health_.incapacitated(other) || reg.all_of<Prisoner>(other) || reg.all_of<Visitor>(other)) {
+            continue;
+        }
+        if (const Fighter* theirs = reg.try_get<Fighter>(other); theirs != nullptr && theirs->mode == FightMode::Flee) {
+            continue;
+        }
+        if (raidDist(p.x, p.y, at->x, at->y) <= rules_.keepWorkingRadius &&
+            map_.cover().lineOfSight(Viewpoint{p.x, p.y, p.level, Stance::Standing}, Viewpoint{at->x, at->y, at->level, Stance::Standing})) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // What one colonist does while the alarm is on, by its role.
@@ -1945,6 +2008,54 @@ void RaidSystem::callUp(Entity pawn, const std::vector<Entity>& spotted) {
     }
     if (role == DefenseRole::Shelter) {
         if (f != nullptr && f->mode == FightMode::Shelter) {
+            // It keeps its shelter while no enemy is shooting at it and none within shelterDanger can see it. In the year run
+            // raiders walked through the base to an unarmed colonist waiting in the open where it had first fled, and shot it
+            // there (colony-scenario.md "Eighth pass"): now it moves on, as a fleeing RimWorld colonist keeps fleeing: to a
+            // safe roofed cell if there is one, else straight away from the enemy after it.
+            bool chased = false;
+            float fromX = 0.0f;
+            float fromY = 0.0f;
+            float nearest = 0.0f;
+            for (const auto [other, faction, p] : reg.view<const Faction, const Position>().each()) {
+                if (faction.id == kPlayerFaction || health_.incapacitated(other) || reg.all_of<Prisoner>(other) ||
+                    reg.all_of<Visitor>(other) || p.level != pos.level) {
+                    continue;
+                }
+                const Fighter* theirs = reg.try_get<Fighter>(other);
+                const float d = raidDist(pos.x, pos.y, p.x, p.y);
+                const bool aims = theirs != nullptr && theirs->target == pawn && theirs->mode == FightMode::Fight;
+                if (!aims && (d >= rules_.shelterDanger || theirs == nullptr || theirs->mode != FightMode::Fight)) {
+                    continue;
+                }
+                if (!aims && !map_.cover().lineOfSight(Viewpoint{p.x, p.y, p.level, Stance::Standing},
+                                                       Viewpoint{pos.x, pos.y, pos.level, Stance::Standing})) {
+                    continue;
+                }
+                if (!chased || d < nearest) {
+                    chased = true;
+                    nearest = d;
+                    fromX = p.x;
+                    fromY = p.y;
+                }
+            }
+            if (chased) {
+                CellPos goal = shelterCell(pawn);
+                if (!rooms_.indoors(goal)) {
+                    const float dx = pos.x - fromX;
+                    const float dy = pos.y - fromY;
+                    const float d = std::sqrt(dx * dx + dy * dy);
+                    CellPos out;
+                    if (d > 0.0f && nearestFree(pos.x + dx / d * rules_.shelterFlee, pos.y + dy / d * rules_.shelterFlee, pos.level,
+                                                cellOf(pos), 8, out)) {
+                        goal = out;
+                    }
+                }
+                if (!f->hasGoal || goal != f->goal) {
+                    f->hasGoal = true;
+                    f->goal = goal;
+                    fighters_.replan(pawn);
+                }
+            }
             return;
         }
         const CellPos goal = shelterCell(pawn);
@@ -2032,11 +2143,54 @@ CellPos RaidSystem::defensePoint(Entity pawn, const DefensePlan* plan) {
     const float dx = state_.threatX - state_.homeX;
     const float dy = state_.threatY - state_.homeY;
     const float d = std::sqrt(dx * dx + dy * dy);
-    const float along = std::min(rules_.defenseLine, d * 0.5f);
-    const float px = d > 0.0f ? state_.homeX + dx / d * along : state_.homeX;
-    const float py = d > 0.0f ? state_.homeY + dy / d * along : state_.homeY;
+    // Not into a brood mound's reach: insects guard their mounds (monsters.md), and defenders sent toward an infestation
+    // woke every insect of it, the alarm stayed on, and more were sent (the year run, colony-scenario.md "Seventh pass").
+    std::vector<std::pair<float, float>> mounds;
+    for (const auto [b, thing, p] : things_.registry().view<const Thing, const Position>().each()) {
+        if (thing.category == ThingCategory::Building && things_.defs().get(thing.def).defName() == "Hive") {
+            mounds.emplace_back(p.x, p.y);
+        }
+    }
+    float along = std::min(rules_.defenseLine, d * 0.5f);
+    float px = state_.homeX;
+    float py = state_.homeY;
+    for (; along > 0.0f; along -= 1.0f) {
+        px = d > 0.0f ? state_.homeX + dx / d * along : state_.homeX;
+        py = d > 0.0f ? state_.homeY + dy / d * along : state_.homeY;
+        if (std::none_of(mounds.begin(), mounds.end(), [&](const std::pair<float, float>& m) {
+                return raidDist(px, py, m.first, m.second) < rules_.shelterDanger;
+            })) {
+            break;
+        }
+    }
+    if (along <= 0.0f) {
+        px = state_.homeX;
+        py = state_.homeY;
+    }
     CellPos out;
     return nearestFree(px, py, pos.level, here, 8, out) ? out : here;
+}
+
+// Danger: the enemies on the map and the brood mounds. An infestation comes up under overhead mountain, which counts
+// as indoors, so the nearest roofed cell was often the hive's cave: in the year run unarmed colonists ran into it and
+// were killed there (docs/design/colony-scenario.md "Seventh pass").
+std::vector<std::pair<float, float>> RaidSystem::shelterDangers() const {
+    const entt::registry& reg = things_.registry();
+    std::vector<std::pair<float, float>> danger;
+    for (const auto [other, faction, p] : reg.view<const Faction, const Position>().each()) {
+        const Animal* wild = reg.try_get<Animal>(other);
+        if ((faction.id == kPlayerFaction && wild == nullptr) || (wild != nullptr && wild->temper == AnimalTemper::Calm) ||
+            health_.incapacitated(other) || reg.all_of<Prisoner>(other) || reg.all_of<Visitor>(other)) {
+            continue;
+        }
+        danger.emplace_back(p.x, p.y);
+    }
+    for (const auto [b, thing, p] : reg.view<const Thing, const Position>().each()) {
+        if (thing.category == ThingCategory::Building && things_.defs().get(thing.def).defName() == "Hive") {
+            danger.emplace_back(p.x, p.y);
+        }
+    }
+    return danger;
 }
 
 // A cell in the marked shelter room no other sheltering colonist goes to, else the nearest
@@ -2051,8 +2205,16 @@ CellPos RaidSystem::shelterCell(Entity pawn) {
             taken.push_back(f.goal);
         }
     }
+    const std::vector<std::pair<float, float>> danger = shelterDangers();
     const auto isFree = [&](CellPos c) {
-        return map_.walkable(c) && map_.obstacleDm(c) == 0 && !map_.isDoor(c) && std::find(taken.begin(), taken.end(), c) == taken.end();
+        if (!map_.walkable(c) || map_.obstacleDm(c) != 0 || map_.isDoor(c) || std::find(taken.begin(), taken.end(), c) != taken.end()) {
+            return false;
+        }
+        const float cx = static_cast<float>(c.x) + 0.5f;
+        const float cy = static_cast<float>(c.y) + 0.5f;
+        return std::none_of(danger.begin(), danger.end(), [&](const std::pair<float, float>& d) {
+            return raidDist(cx, cy, d.first, d.second) < rules_.shelterDanger;
+        });
     };
     Regions& regions = map_.regions();
     if (state_.hasShelter && rooms_.indoors(state_.shelter)) {
@@ -2079,9 +2241,23 @@ CellPos RaidSystem::shelterCell(Entity pawn) {
             }
         }
     }
-    if (state_.hasThreat) {
-        const float dx = pos.x - state_.threatX;
-        const float dy = pos.y - state_.threatY;
+    // No safe roofed cell: away from the nearest danger if one is close, else from the threat.
+    float awayX = state_.threatX;
+    float awayY = state_.threatY;
+    bool away = state_.hasThreat;
+    float nearest = rules_.shelterDanger;
+    for (const std::pair<float, float>& d : danger) {
+        const float dd = raidDist(pos.x, pos.y, d.first, d.second);
+        if (dd < nearest) {
+            nearest = dd;
+            awayX = d.first;
+            awayY = d.second;
+            away = true;
+        }
+    }
+    if (away) {
+        const float dx = pos.x - awayX;
+        const float dy = pos.y - awayY;
         const float d = std::sqrt(dx * dx + dy * dy);
         if (d > 0.0f) {
             CellPos out;

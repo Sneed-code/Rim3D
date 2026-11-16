@@ -297,7 +297,7 @@ void UFightSubsystem::OnSimEvent(const colony::Event& Event)
 		const USimSubsystem* Bridge = BridgeSource.Get();
 		for (FFightHitRecord& Record : HitLog)
 		{
-			if (Bridge && Record.Pawn == Event.thing && Record.GameSeconds == Bridge->GetGameSeconds())
+			if (Bridge && Record.Pawn == Event.thing && Record.GameSeconds == Bridge->GetSteps())
 			{
 				Record.MissCm = -1.0f;
 			}
@@ -346,7 +346,7 @@ void UFightSubsystem::OnProjectileHit(const colony::Event& Event)
 		Record.Part = Event.part;
 		Record.Amount = Event.amount;
 		Record.Where = FVector(Event.x, Event.y, Event.z);
-		Record.GameSeconds = Bridge->GetGameSeconds();
+		Record.GameSeconds = Bridge->GetSteps();
 		Record.MissCm = DistanceToHitboxesCm(Event.target, Event.x, Event.y, Event.z);
 		if (HitLog.Num() < 512)
 		{
@@ -507,7 +507,7 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 			}
 			if (const USimSubsystem* Bridge = BridgeSource.Get())
 			{
-				RecentImpulse.Add(entt::to_integral(Tracer.Target), TPair<FVector, int64>(Dir * FMath::Min(Tracer.Amount * FightImpulsePerDamage, FightImpulseMax), Bridge->GetGameSeconds()));
+				RecentImpulse.Add(entt::to_integral(Tracer.Target), TPair<FVector, int64>(Dir * FMath::Min(Tracer.Amount * FightImpulsePerDamage, FightImpulseMax), Bridge->GetSteps()));
 			}
 			if (const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>(); Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == Tracer.Shooter)
 			{
@@ -844,7 +844,7 @@ void UFightSubsystem::SyncPawns()
 	{
 		return;
 	}
-	const int64 Now = Bridge->GetGameSeconds();
+	const int64 Now = Bridge->GetSteps();
 	for (const colony::ThingView& View : Bridge->GetCurrentSnapshot().things)
 	{
 		if (View.category != colony::ThingCategory::Pawn)
@@ -940,7 +940,7 @@ bool UFightSubsystem::Fire()
 		return false;
 	}
 	// One order per sim step; and only when the gun can take it (the sim refuses anything else).
-	if (Bridge->GetGameSeconds() <= LastFireStep || Bridge->GetSim()->combat().shotReadyIn(Pawn) > 0)
+	if (Bridge->GetSteps() <= LastFireStep || Bridge->GetSim()->combat().shotReadyIn(Pawn) > 0)
 	{
 		return false;
 	}
@@ -951,7 +951,7 @@ bool UFightSubsystem::Fire()
 	}
 	const FVector Sim = (Aim - Bridge->GetWorldOrigin()) / 100.0;
 	Bridge->Submit(colony::ShootCommand{Pawn, colony::kNoEntity, static_cast<float>(Sim.X), static_cast<float>(Sim.Y), static_cast<float>(Sim.Z), true});
-	LastFireStep = Bridge->GetGameSeconds();
+	LastFireStep = Bridge->GetSteps();
 	++FireOrders;
 	return true;
 }
@@ -1097,7 +1097,7 @@ bool UFightSubsystem::Roll(const FVector2D& Input)
 	}
 	const colony::Entity Pawn = Protagonist->GetControlled();
 	const colony::ThingView* View = Bridge->GetCurrentSnapshot().find(Pawn);
-	if (!View || View->downed || View->dead || View->rollPhase != 0 || Bridge->GetGameSeconds() <= LastFireStep)
+	if (!View || View->downed || View->dead || View->rollPhase != 0 || Bridge->GetSteps() <= LastFireStep)
 	{
 		return false;
 	}
@@ -1112,7 +1112,7 @@ bool UFightSubsystem::Roll(const FVector2D& Input)
 	}
 	Direction.Normalize();
 	Bridge->Submit(colony::DodgeRollCommand{Pawn, static_cast<float>(Direction.X), static_cast<float>(Direction.Y)});
-	LastFireStep = Bridge->GetGameSeconds();
+	LastFireStep = Bridge->GetSteps();
 	return true;
 }
 
@@ -1126,7 +1126,7 @@ bool UFightSubsystem::ThrowGrenade()
 	}
 	const colony::Entity Pawn = Protagonist->GetControlled();
 	const colony::ThingView* View = Bridge->GetCurrentSnapshot().find(Pawn);
-	if (!View || View->downed || View->dead || Bridge->GetGameSeconds() <= LastFireStep || Bridge->GetSim()->explosives().throwReadyIn(Pawn) > 0)
+	if (!View || View->downed || View->dead || Bridge->GetSteps() <= LastFireStep || Bridge->GetSim()->explosives().throwReadyIn(Pawn) > 0)
 	{
 		return false;
 	}
@@ -1137,7 +1137,7 @@ bool UFightSubsystem::ThrowGrenade()
 	}
 	const FVector Sim = (Aim - Bridge->GetWorldOrigin()) / 100.0;
 	Bridge->Submit(colony::ThrowCommand{Pawn, std::string(), colony::kNoEntity, static_cast<float>(Sim.X), static_cast<float>(Sim.Y), true});
-	LastFireStep = Bridge->GetGameSeconds();
+	LastFireStep = Bridge->GetSteps();
 	return true;
 }
 

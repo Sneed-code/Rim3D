@@ -156,6 +156,7 @@ MentalBreakSystem::MentalBreakSystem(Things& things, Map& map, HealthSystem& hea
         kind.hoursMin = def.numberAt("durationHours", 0, 0.0);
         kind.hoursMax = std::max(kind.hoursMin, def.numberAt("durationHours", 1, kind.hoursMin));
         kind.count = static_cast<int>(def.integer("count", 0));
+        kind.trait = def.text("requiredTrait");
         for (size_t i = 0; i < def.count("requires"); ++i) {
             kind.needs.push_back(def.textAt("requires", i));
         }
@@ -300,6 +301,9 @@ void MentalBreakSystem::natural(Entity pawn, int64_t now, Rng& rng) {
         if (pyromaniac && kind.state != BreakState::FireSpree) {
             continue;
         }
+        if (!kind.trait.empty() && !mood_.hasTrait(pawn, kind.trait)) {
+            continue;  // e.g. the fire-starting spree: pyromaniacs only
+        }
         if (kind.band == band && provided(kind) && kind.commonality > 0.0 && feasible(pawn, kind, rng)) {
             options.push_back(&kind);
             total += kind.commonality;
@@ -385,6 +389,8 @@ void MentalBreakSystem::begin(Entity pawn, const Kind& kind, int band, int64_t n
     if (const Fighter* fighter = reg.try_get<Fighter>(pawn); fighter != nullptr && fighter->drafted) {
         std::string ignored;
         fighters_.draft(pawn, false, ignored);
+    } else if (fighter != nullptr && fighter->defending) {
+        fighters_.standDown(pawn);  // called up by the alarm: the break runs it now, not the fighter AI
     }
     MentalBreaker& b = reg.get_or_emplace<MentalBreaker>(pawn);
     stopWalk(pawn, b);
@@ -466,7 +472,7 @@ void MentalBreakSystem::tick(Entity pawn, MentalBreaker& b, int64_t now, Rng& rn
         return;
     }
     // A pawn that is on fire runs about, whatever its break was doing.
-    if (fire_ != nullptr && reg.all_of<Burning>(pawn) && fire_->panicStep(pawn, now)) {
+    if (fire_ != nullptr && reg.all_of<Burning>(pawn) && fire_->panicStep(pawn, time_.steps)) {
         stopWalk(pawn, b);
         b.target = kNoEntity;
     } else switch (b.state) {

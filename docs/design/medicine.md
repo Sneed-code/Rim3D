@@ -93,6 +93,13 @@ ours go nearest first; this is **ours**). And every 10 game seconds a pawn on a 
 cleaning, research, mining, cutting, playing) asks those work types only (`interruptForEmergency`): a doctor drops a
 wait or a haul within ten seconds of someone bleeding.
 
+**Emergency before needs** (RimWorld's emergency `JobGiver_Work`, which comes before eating and sleeping): while a
+colonist on the map bleeds (`urgentlyNeedsTending`) or lies downed with nobody carrying it (`needsRescue`), a pawn that
+can doctor asks the Doctor work type first, before it goes to bed or to eat, unless it is tired (rest below 0.14) or
+ravenous (`JobSystem::thinkEmergency`, also asked when a need would interrupt a job). A pawn already asleep isn't woken.
+In the year run (ninth pass) a raid ended at 2 at night, everyone went to bed, and a colonist shot in the fight bled
+out before the doctor got up at 5.
+
 ## Save
 
 Section `medicine` (version 1): `medical`, the care setting of every pawn that has one. `Health` section is version 3:

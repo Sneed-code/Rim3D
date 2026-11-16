@@ -14,9 +14,15 @@ namespace colony {
 
 namespace {
 constexpr int kMaxArmedColonists = 3;  // ours
+// WearApparel's job.count: what it does with job.thing (docs/design/armour.md for the bag).
+constexpr int kWearPutOn = 0;     // put it on from the ground
+constexpr int kWearTakeOff = 1;   // take it off, onto the ground
+constexpr int kWearStow = 2;      // take it off, into the bag (fight gear)
+constexpr int kWearPickUp = 3;    // from the ground into the bag (fight gear)
 }  // namespace
 
-// The think node: take off what the outfit doesn't allow, else put on the clothes that gain most.
+// The think node: take off what the outfit doesn't allow, put fight gear in the bag, else put on the clothes that gain
+// most (or pick up the fight gear that gains most).
 // Once nothing is found a pawn doesn't look again for ApparelRules.checkEverySteps (it keeps looking
 // while it keeps finding something, so it dresses in one go).
 bool JobSystem::thinkApparel(Entity pawn, Job& out) {
@@ -37,19 +43,32 @@ bool JobSystem::thinkApparel(Entity pawn, Job& out) {
         out = Job{};
         out.type = JobType::WearApparel;
         out.thing = remove;
-        out.count = 1;
+        out.count = kWearTakeOff;
+        out.cell = at;
+        return true;
+    }
+    if (const Entity stow = apparel_->wornToBag(pawn); stow != kNoEntity) {
+        out = Job{};
+        out.type = JobType::WearApparel;
+        out.thing = stow;
+        out.count = kWearStow;
         out.cell = at;
         return true;
     }
     const Entity best = apparel_->bestToWear(pawn, [&](Entity item) {
         const JobTarget target{item, CellPos{}};
-        return !reservedByOther(target, pawn) && !avoiding(pawn, target) && canReach(at, cellOf(reg.get<Position>(item)));
+        if (reservedByOther(target, pawn) || avoiding(pawn, target) || !canReach(at, cellOf(reg.get<Position>(item)))) {
+            return false;
+        }
+        // Fight gear goes in the bag: only as much as the pawn can carry.
+        const DefId def = reg.get<Thing>(item).def;
+        return !apparel_->bagged(pawn, def) || loadMass(pawn) + massFor(pawn, def) <= carryCapacity(pawn);
     });
     if (best != kNoEntity) {
         out = Job{};
         out.type = JobType::WearApparel;
         out.thing = best;
-        out.count = 0;
+        out.count = apparel_->bagged(pawn, reg.get<Thing>(best).def) ? kWearPickUp : kWearPutOn;
         out.cell = cellOf(reg.get<Position>(best));
         return true;
     }
@@ -150,7 +169,7 @@ bool JobSystem::failCheckApparel(Entity pawn, Job& job, std::string& why) {
         return true;
     }
     if (job.type == JobType::WearApparel) {
-        if (job.count != 0) {
+        if (job.count == kWearTakeOff || job.count == kWearStow) {
             const std::vector<Entity>& worn = apparel_->worn(pawn);
             if (std::find(worn.begin(), worn.end(), job.thing) == worn.end()) {
                 why = "it isn't wearing that any more";
@@ -175,7 +194,7 @@ bool JobSystem::failCheckApparel(Entity pawn, Job& job, std::string& why) {
 }
 
 JobSystem::StepResult JobSystem::apparelGoto(Entity pawn, Job& job, std::string& why) {
-    if (job.count != 0) {
+    if (job.type == JobType::WearApparel && (job.count == kWearTakeOff || job.count == kWearStow)) {
         return StepResult::Next;  // a worn piece comes off where the pawn stands
     }
     return walkTo(pawn, job, cellOf(things_.registry().get<Position>(job.thing)), why);
@@ -183,12 +202,27 @@ JobSystem::StepResult JobSystem::apparelGoto(Entity pawn, Job& job, std::string&
 
 JobSystem::StepResult JobSystem::apparelWork(Entity pawn, Job& job, std::string& why) {
     entt::registry& reg = things_.registry();
-    if (job.count == 0 && cellOf(reg.get<Position>(pawn)) != cellOf(reg.get<Position>(job.thing))) {
+    const bool fromGround = job.type != JobType::WearApparel || job.count == kWearPutOn || job.count == kWearPickUp;
+    if (fromGround && cellOf(reg.get<Position>(pawn)) != cellOf(reg.get<Position>(job.thing))) {
         why = "the pawn isn't where the clothes lie";
         return StepResult::Failed;
     }
+    // Clothing goes on at once, armour takes 4 seconds a piece and a hit stops it (docs/design/armour.md).
+    const int steps = job.type != JobType::WearApparel ? apparel_->rules().wearSteps
+                      : job.count == kWearPickUp     ? apparel_->rules().clothingWearSteps
+                                                     : apparel_->wearStepsFor(job.thing);
+    if (job.type == JobType::WearApparel && job.count == kWearPutOn && steps > apparel_->rules().clothingWearSteps) {
+        const Health* health = reg.try_get<Health>(pawn);
+        const int64_t injuries = health != nullptr ? static_cast<int64_t>(health->injuries.size()) : 0;
+        if (job.until == 0) {
+            job.until = injuries + 1;  // the injuries it had when it started, plus one
+        } else if (injuries > job.until - 1) {
+            why = "hit while putting on armour";
+            return StepResult::Failed;
+        }
+    }
     job.progress += 1.0f;
-    if (job.progress < static_cast<float>(apparel_->rules().wearSteps)) {
+    if (job.progress < static_cast<float>(steps)) {
         return StepResult::Running;
     }
     std::string error;
@@ -205,7 +239,10 @@ JobSystem::StepResult JobSystem::apparelWork(Entity pawn, Job& job, std::string&
         }
         return StepResult::Next;
     }
-    const bool ok = job.count != 0 ? apparel_->takeOff(pawn, job.thing, error) : apparel_->putOn(pawn, job.thing, error);
+    const bool ok = job.count == kWearTakeOff ? apparel_->takeOff(pawn, job.thing, error)
+                    : job.count == kWearStow  ? apparel_->stow(pawn, job.thing, error)
+                    : job.count == kWearPickUp ? apparel_->pickUp(pawn, job.thing, error)
+                                               : apparel_->putOn(pawn, job.thing, error);
     if (!ok) {
         why = error;
         return StepResult::Failed;
@@ -224,7 +261,7 @@ JobSystem::StepResult JobSystem::stripWork(Entity pawn, Job& job, std::string& w
         return StepResult::Failed;
     }
     const Gear* gear = reg.try_get<Gear>(job.thing);
-    const size_t pieces = gear == nullptr ? 0 : gear->apparel.size() + gear->stowed.size() + (gear->weapon != kNoEntity ? 1 : 0);
+    const size_t pieces = gear == nullptr ? 0 : gear->apparel.size() + gear->stowed.size() + gear->inventory.size() + (gear->weapon != kNoEntity ? 1 : 0);
     job.progress += 1.0f;
     if (job.progress < static_cast<float>(pieces) * static_cast<float>(apparel_->rules().stripStepsPerPiece)) {
         return StepResult::Running;

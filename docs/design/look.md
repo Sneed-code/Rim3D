@@ -43,6 +43,29 @@ snow-white) veil lit by the sky's light is mixed in. The density still follows t
 mist (0.03) while the sun is between 3 degrees below and 14 above the horizon and it is not raining. Volumetric fog (High and
 Epic) out to 90 m makes the light shafts through the trees at dawn and dusk.
 
+## Ground mist (2026-11-15)
+
+The height fog's second layer is a low ground mist (`data/look.json` `"morningMist"`): it gathers from `fromHour`
+(03:00), is thickest at `peakHour` (06:12, about dawn) and has burnt off by `toHour` (09:30); a little comes back after
+dusk (`evening`). Every morning gets `baseShare` of it; wet ground (rain in the last hours) adds up to `afterRain` more, so
+the tropics' mornings after a night of rain are the foggiest. Falling rain or snow clears it (their own fog takes over).
+`heightFalloff` 1.0 keeps it in a layer a few metres deep (it halves about every 8 m) resting on the map's low ground (its 30th percentile height), so it fills hollows and river valleys and hilltops stand out of it. The
+volumetric fog lights it, which gives the light shafts through trees at sunrise. Bench shot `dawn_mist`.
+
+## Night sky (2026-11-15)
+
+A star dome: the engine's sphere scaled to 100 km across, kept centred on the camera, with `M_StarSky` (SkyArt
+commandlet): unlit and additive over the sky atmosphere, never fogged. The material turns each view direction into
+right ascension and declination for the colony's latitude (`stars.latitudeDeg`, 5 for the tropics) and the hour, and
+reads NASA's Deep Star Maps 2020 (every Gaia DR2 star and the Milky Way, linear HDR) there. The sky turns once a
+sidereal day. `stars.brightness` scales it (0.6: the Milky Way at about 0.02 cd/m2, a dark-sky site's faint band at
+the night exposure); it fades in once the sun is 4 degrees down and is gone by -14 degrees and under cloud
+(`cloudCut`). Bench shot `clear_night`.
+
+Judged against the two Sketchfab space skyboxes in `assets/raw/sketchfab/` ("alien space nebula" 1 and 2): those are
+deep-space art (a bright coloured nebula filling the sky, fractal filaments), what a ship sees in space, not a sky seen
+from the ground through air. They could serve a space scene (the ship ending) but not the colony's night.
+
 ## Film and grade
 
 The engine's filmic tone curve at its neutral numbers (slope 0.88, toe 0.55, shoulder 0.26, white clip 0.04), soft bloom

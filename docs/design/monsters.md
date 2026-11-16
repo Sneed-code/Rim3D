@@ -55,9 +55,16 @@ timings come from its entity id and the clock, so they need no saved state:
 - **Brood** (ours): one new insect every 0.4 to 0.6 day while the map has fewer than 6 per mound.
 - **Spread** (interval ours, 2 to 3.5 days): a new mound on a random roofed free cell within 10 m, not
   touching another mound, up to 30 mounds.
-- **Insects hunt** while a colonist is within 60 m: every check, an insect that is not already chasing
-  is enraged (`AnimalSystem::enrage`, Manhunter) at the nearest colonist. Insects are animals, so they
-  walk straight lines (no pathing round walls yet) and flee nothing.
+- **Insects guard their mounds** (C25, RimWorld's hive defence; the distances are ours): an insect goes for a colonist
+  who comes within 18 m of a mound (`kMonsterDefendRange`), and once no colonist, or not the one it chases, is within
+  30 m of a mound (`kMonsterLeash`) it calms down and walks back to within 8 m of the nearest mound
+  (`AnimalSystem::walkBack`); it never walks off the map. A new insect only comes out angry if a colonist is that near.
+  With every mound gone, the insects left hunt any colonist within 60 m of them. Before, every insect hunted any colonist
+  within 60 m, and the year run's infestations killed colonies that never went near the hive. Insects are animals, so
+  they walk straight lines (no pathing round walls yet) and flee nothing.
+- **The colony keeps clear** (`raids.md`): the alarm's shelter cell is never within 20 m of an enemy or a mound
+  (`shelterDanger`; overhead mountain counts as indoors, so the nearest roofed cell was often the hive's own cave), and a
+  defender's point between home and the threat is pulled back home until it is 20 m from every mound.
 
 **Remnant cluster.** Mechs bought with the points (random among those still affordable, at least one) walk
 in at an edge cell that can reach the colony, 3 m apart in a block. Each gets the `Remnant` faction,

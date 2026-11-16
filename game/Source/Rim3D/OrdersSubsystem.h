@@ -15,6 +15,7 @@
 #include "OrdersSubsystem.generated.h"
 
 class AActor;
+class IInputProcessor;
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
@@ -39,6 +40,8 @@ enum class EOrderTool : uint8
 	Cancel,
 	/** Drag a rectangle: marks the finished buildings in it to be taken down. */
 	Deconstruct,
+	/** Drag a rectangle: a growing zone of its free soil cells, sown with the chosen crop (GetGrowCrop). */
+	Grow,
 };
 
 /** What the orders overlay draws (smoke test `orders`). */
@@ -50,6 +53,8 @@ struct FOrdersStats
 	int32 HarvestMarks = 0;
 	int32 DeconstructMarks = 0;
 	int32 ZoneCells = 0;
+	/** Cells of growing zones drawn. */
+	int32 GrowCells = 0;
 	/** Instances of the placement ghost (valid, invalid). */
 	int32 GhostValid = 0;
 	int32 GhostInvalid = 0;
@@ -96,6 +101,10 @@ public:
 	/** Picks the Build tool for this building def (a Things defName), made of the stuff with the most in stock unless `Stuff` names one. False if the def can't be built. */
 	bool SelectBuilding(const FString& DefName, const FString& Stuff = FString());
 	colony::DefId GetBuildDef() const { return BuildDef; }
+	/** The crop the Grow tool sows (a Things def such as Plant_Rice); rice until the player picks another. */
+	colony::DefId GetGrowCrop() const { return GrowCrop; }
+	/** Picks the Grow tool's crop by def name; false if it is not a crop the colony may grow. */
+	bool SetGrowCrop(const FString& DefName);
 	colony::DefId GetBuildStuff() const { return BuildStuff; }
 	void SetBuildStuff(colony::DefId Stuff) { BuildStuff = Stuff; }
 	colony::Rot4 GetBuildRotation() const { return BuildRot; }
@@ -122,6 +131,16 @@ public:
 	bool HandleLeftPressed(const FVector2D& Screen);
 	/** Left button up: finishes the drag. True if it took the click. */
 	bool HandleLeftReleased(const FVector2D& Screen);
+	/**
+	 * A left button event straight from Slate (FOrdersClickProcessor, ahead of the ImGui overlay's input handler). With a tool in hand
+	 * and no ImGui window or popup under the cursor, a press on the world is the tool's, whatever ImGui's want-the-mouse flag or the
+	 * player controller's key state says; the release ends the drag. `ScreenSpace` is a desktop position. True if it took the event.
+	 */
+	bool HandleSlateLeftButton(bool bPressed, const FVector2D& ScreenSpace);
+	/** A desktop position as game viewport pixels; false outside the viewport. */
+	bool ScreenToViewport(const FVector2D& ScreenSpace, FVector2D& OutPixel) const;
+	/** Where Slate's cursor is, in game viewport pixels. */
+	bool CursorViewportPosition(FVector2D& OutPixel) const;
 	/** Right click: stops a tool, else with a drafted colonist selected a move or attack order. True if it did something. */
 	bool HandleRightClick(const FVector2D& Screen);
 	/** R: turns the building ghost, else drafts or undrafts the selected colonist. True if it did something. */
@@ -160,6 +179,25 @@ public:
 	const FString& GetLastMessage() const { return Message; }
 	/** Commands sent by the tools since the sim started. */
 	int32 GetCommandsSent() const { return CommandsSent; }
+	/** Where the architect bar drew the button with this label last frame, in ImGui pixels (smoke test `orders_world` clicks it). */
+	bool GetButtonRect(const FString& Label, FBox2D& Out) const
+	{
+		const FBox2D* Found = ButtonRects.Find(Label);
+		if (Found)
+		{
+			Out = *Found;
+		}
+		return Found != nullptr;
+	}
+	bool HasHoverCell() const { return bHasHover; }
+	colony::CellPos GetHoverCell() const { return Hover; }
+	bool IsMouseOverUi() const { return bMouseOverUi; }
+	/** The architect bar's rectangle last frame (ImGui pixels), so the inspect panel can stay clear of it. */
+	bool GetBarRect(FBox2D& Out) const
+	{
+		Out = BarRect;
+		return bBarShown;
+	}
 
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
@@ -205,6 +243,7 @@ private:
 	// What is in hand.
 	EOrderTool Tool = EOrderTool::None;
 	colony::DefId BuildDef;
+	colony::DefId GrowCrop;
 	colony::DefId BuildStuff;
 	colony::Rot4 BuildRot = colony::Rot4::North;
 	FString OpenCategory;
@@ -225,6 +264,13 @@ private:
 
 	FString Message;
 	double MessageUntil = 0.0;
+	TMap<FString, FBox2D> ButtonRects;
+	FBox2D BarRect = FBox2D(ForceInit);
+	bool bBarShown = false;
+	/** Takes world clicks ahead of the ImGui overlay (see HandleSlateLeftButton); moved to the front once ImGui is up. */
+	TSharedPtr<IInputProcessor> ClickProcessor;
+	bool bClickProcessorAtFront = false;
+	bool bWarnedImGuiHeld = false;
 	int32 CommandsSent = 0;
 
 	// The overlay: marks, zone tiles, ghost.
@@ -234,6 +280,8 @@ private:
 	TObjectPtr<UMaterialInterface> SolidMaterial;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ZoneMaterial;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> GrowZoneMaterial;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> GhostGoodMaterial;
 	UPROPERTY()

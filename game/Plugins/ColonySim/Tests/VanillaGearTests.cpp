@@ -186,11 +186,11 @@ TEST_CASE("Vanilla gear: numbers from the RimWorld wiki") {
     CHECK(mono->number("tools.1.power") == doctest::Approx(25.0));
     CHECK(mono->number("tools.1.armorPenetration") == doctest::Approx(0.90));
     CHECK(plasteel->number("stuffProps.statFactors.maxHitPoints") == doctest::Approx(2.8));
-    CHECK(plasteel->number("stuffProps.statFactors.armorRatingSharp") == doctest::Approx(1.14));
-    CHECK(marine->number("stats.armorRatingSharp") == doctest::Approx(1.06));
-    CHECK(marine->number("stats.armorRatingBlunt") == doctest::Approx(0.45));
-    CHECK(marine->number("stats.armorRatingHeat") == doctest::Approx(0.54));
-    CHECK(marine->number("stats.mass") == doctest::Approx(15.0));
+    CHECK(plasteel->number("armourStuff.factor.sharp") == doctest::Approx(1.25));
+    CHECK(marine->number("gear.mitigation.sharp") == doctest::Approx(55.0));  // sneed's (docs/design/armour.md)
+    CHECK(marine->number("gear.mitigation.blunt") == doctest::Approx(30.0));
+    CHECK(marine->number("gear.mitigation.fire") == doctest::Approx(30.0));
+    CHECK(marine->number("stats.mass") == doctest::Approx(13.0));
     CHECK(defs.find("Recipes", "MakeMarineArmor")->number("workAmount") == doctest::Approx(60000 * 1.44));
 }
 
@@ -204,8 +204,9 @@ TEST_CASE("Vanilla gear: apparel loads into the apparel system with its armor") 
     const Entity marine = sim->things().make(defs.idOf("Things", "Apparel_MarineArmor"));
     const Entity recon = sim->things().make(defs.idOf("Things", "Apparel_ReconArmor"));
     const entt::registry& reg = sim->things().registry();
-    CHECK(sim->apparel().stats().armor(reg, marine, ArmorType::Sharp) == doctest::Approx(1.06f));
-    CHECK(sim->apparel().stats().armor(reg, recon, ArmorType::Blunt) == doctest::Approx(0.40f));
+    CHECK(sim->apparel().stats().mitigation(reg, marine).pct[1] == doctest::Approx(55.0f));
+    CHECK(sim->apparel().stats().mitigation(reg, recon).pct[0] == doctest::Approx(25.0f));
+    CHECK(sim->apparel().stats().gearSlots(defs.idOf("Things", "Apparel_MarineArmor")) == (kGearChest | kGearLegs));
 }
 
 TEST_CASE("Vanilla gear: a rocket bursts where it lands and hurts a man nearby, a smoke or EMP shell hurts nobody") {

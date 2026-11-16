@@ -13,11 +13,12 @@
 //   simrun --load game.save --days 1 --save later.save    (continues a save; --days defaults to 0)
 //   simrun --load game.save --days 0 --save-json game.json   (readable dump of a save)
 //   simrun --seed 42 --size 128 --days 60 --weather   (a line a day: season, temperatures, weather, snow; E1)
+//   simrun --seed 42 --size 128 --days 2 --day-minutes 120   (a 2-hour day: --days counts game days)
 //   simrun --scenario colony [--seed 42] [--size 512] [--days 5] [--verbose]   (the colony test, C10;
 //                                     exit 1 if a check fails, docs/design/colony-scenario.md)
 //   simrun --perf [--seed 42] [--size 1024] [--days 1] [--budget MS]   (the sim cost check, S9: 30 colonists, 300 tame animals, crops
 //                                     and rooms; a table of what each system costs per step, exit 1 over --budget; docs/design/sim-cost.md)
-//   simrun --scenario year [--seed 42] [--days 60] [--narrator NAME]   (C25: the colony year with the narrator; docs/design/colony-scenario.md)
+//   simrun --scenario year [--seed 42] [--days 60] [--narrator NAME] [--start CrashlandedRainforest]   (C25: the colony year with the narrator; docs/design/colony-scenario.md)
 //   simrun --scenario house [--seed 42] [--days 3] [--png house.png] [--verbose]   (the two-storey house, M4: builds, sleeps and hauls
 //                                     across two levels, writes house-level0.png and house-level1.png; docs/design/house-scenario.md)
 //   simrun --world world.png [--seed 42] [--world-size 120x60] [--check]   (the world map: biomes, rivers, roads, settlements; docs/design/world-map.md)
@@ -111,6 +112,7 @@ struct Options {
     bool sizeGiven = false;
     double days = 1.0;
     bool daysGiven = false;
+    int dayMinutes = colony::kBaseDayMinutes;  // --day-minutes: the day length (docs/design/day-length.md)
     int pawns = 0;
     int items = 0;
     int pathBudget = colony::Pathfinder::kDefaultBudget;
@@ -175,6 +177,8 @@ bool parseOptions(int argc, char** argv, Options& out) {
         } else if (std::strcmp(arg, "--days") == 0 && hasValue) {
             out.days = std::atof(argv[++i]);
             out.daysGiven = true;
+        } else if (std::strcmp(arg, "--day-minutes") == 0 && hasValue) {
+            out.dayMinutes = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--pawns") == 0 && hasValue) {
             out.pawns = std::atoi(argv[++i]);
         } else if (std::strcmp(arg, "--items") == 0 && hasValue) {
@@ -307,6 +311,7 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
                 const std::string& ore = sim.defs().get(rock).defName();
                 if (ore == "Ore_Steel") { r = 90; g = 150; b = 230; }
                 else if (ore == "Ore_Silver") { r = 240; g = 240; b = 250; }
+                else if (ore == "Ore_Copper") { r = 200; g = 115; b = 60; }
                 else { r = 240; g = 140; b = 40; }
             }
             const float shade = 0.6f + 0.4f * (map.groundHeight(x, y) / 60.0f);
@@ -735,7 +740,7 @@ int main(int argc, char** argv) {
         if (options.scenario == "year") {
             // C25: the year run with the narrator, 60 game days unless --days says otherwise.
             return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 60.0, defs, options.verbose, true,
-                                       options.narrator.empty() ? "Orrin" : options.narrator);
+                                       options.narrator.empty() ? "Orrin" : options.narrator, options.start);
         }
         return colonyscenario::run(options.seed, options.size, options.daysGiven ? options.days : 5.0, defs, options.verbose, options.year);
     }
@@ -746,11 +751,14 @@ int main(int argc, char** argv) {
     settings.pathBudget = options.pathBudget;
     settings.scenario = options.start;
     settings.wildAnimals = options.animals;
+    settings.dayMinutes = options.dayMinutes;
     settings.world.enabled = options.onWorld;
     settings.world.width = options.worldWidth;
     settings.world.height = options.worldHeight;
     settings.world.startTile = options.worldTile;
-    int64_t steps = static_cast<int64_t>(options.days * static_cast<double>(colony::kSecondsPerDay));
+    // --days counts game days: a longer day has more steps in it.
+    int64_t steps = static_cast<int64_t>(options.days * static_cast<double>(colony::kSecondsPerDay) * options.dayMinutes /
+                                         colony::kBaseDayMinutes);
     if (!options.replay.empty()) {
         std::string error;
         if (!colony::loadReplayFile(options.replay, replay, error)) {
@@ -853,6 +861,13 @@ int main(int argc, char** argv) {
         const int mid = sim.map().width() / 2;
         const colony::CellRect area{mid - options.gather, mid - options.gather, 2 * options.gather, 2 * options.gather, 0};
         sim.submit(colony::DesignateCommand{area, colony::DesignationKind::Mine});
+        // Leave a pillar every 6 cells, as a player would: a mountain mined out wholesale brings its roof down on the
+        // miners (with mining twice as fast since the G2 playtest, that happened inside the two days).
+        for (int y = area.minY; y < area.minY + area.sizeY; y += 6) {
+            for (int x = area.minX; x < area.minX + area.sizeX; x += 6) {
+                sim.submit(colony::CancelDesignationsCommand{colony::CellRect{x, y, 1, 1, 0}, colony::DesignationKind::Mine});
+            }
+        }
         sim.submit(colony::DesignateCommand{area, colony::DesignationKind::HarvestPlant});
     }
 

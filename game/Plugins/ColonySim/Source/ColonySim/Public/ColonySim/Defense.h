@@ -21,6 +21,7 @@ namespace colony {
 
 class CombatSystem;
 class FuelSystem;
+class AnimalSystem;
 class HealthSystem;
 class Map;
 class PowerGrid;
@@ -56,6 +57,10 @@ struct Turret {
     int stepsLeft = 0;  // of the phase
     int shotsLeft = 0;  // in the burst, counting the next
     Entity target = kNoEntity;
+    // A def with `explodeWhenDamaged` (the mini-turret): below that share of its hit points it rolls once whether it goes
+    // up; if so it sparks for the delay (`fuse` steps left) and explodes. Repaired above the share, it may roll again.
+    int fuse = 0;
+    bool fuseRolled = false;
 };
 
 // On every building whose def has a `trap` block. Every field is saved and hashed.
@@ -92,6 +97,9 @@ public:
     // Ammunition: a turret whose def has a `fuel` block with `perUse` uses that much of it for every shot, and fires only
     // while it has it (colonists refuel it like any building, docs/design/fuel.md). Null: turrets never run dry.
     void setFuel(FuelSystem* fuel) { fuel_ = fuel; }
+    // Turrets shoot animals the fighter AI takes for enemies (insects on the attack, manhunters, an animal out for
+    // revenge), as RimWorld's shoot every hostile; calm animals are left alone. Without it no animal is shot.
+    void setAnimals(const AnimalSystem* animals) { animals_ = animals; }
     // Called before the system destroys a thing itself (a trap that went off), so jobs can let go of it.
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
     // Called for every fighter of a side that has just noticed a trap, so it plans its spot and walk again round it
@@ -114,7 +122,9 @@ public:
 
     // Whether a pawn knows where a trap is: pawns of its side, and pawns of a side that learned of it.
     bool knows(Entity pawn, Entity trap) const;
-    // The side `faction` knows an armed trap in `cell`: its fighters keep out of that cell and walk round it.
+    // The side `faction` knows an armed trap in `cell`: its fighters keep out of that cell and walk round it. For the
+    // colony's side: `cell` is within the blast of one of its turrets (one that explodes when destroyed), where its
+    // fighters don't take cover (they don't walk round it).
     bool avoidsCell(FactionId faction, CellPos cell) const;
     // Bends a walk (cells after the start, as the pathfinder and smoothPath give them) round the cells of armed traps
     // the side knows, with the detours `DefenseNumbers::detourTries` allows. The last cell is never changed.
@@ -159,6 +169,7 @@ private:
     HealthSystem& health_;
     PowerGrid& power_;
     FuelSystem* fuel_ = nullptr;
+    const AnimalSystem* animals_ = nullptr;
     const GameTime& time_;
     DefenseNumbers numbers_;
     std::unique_ptr<DefenseModel> model_;
@@ -184,7 +195,8 @@ private:
     void learn(Trap& trap, FactionId faction);
     FactionId factionOf(Entity pawn) const;
     bool segmentHits(float x0, float y0, float x1, float y1, CellPos cell) const;
-    void queueBlast(Entity building, const Position& pos);
+    void queueBlast(Entity building, const Position& pos, bool fuse = false);
+    void stepFuse(Entity building, Turret& turret, Rng& rng);
 };
 
 }  // namespace colony

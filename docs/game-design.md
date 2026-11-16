@@ -64,7 +64,7 @@ Colonists work exactly like RimWorld pawns, with RimWorld's numbers as the start
 - **Needs and mood:** food, rest, recreation, comfort, beauty, outdoors, temperature and the rest, feeding RimWorld's thought and mood system, with mental breaks at low mood.
 - **Health:** RimWorld's body-part health: injuries per part, bleeding, infections, diseases, pain, prosthetics and bionics. Wounds show on the body.
 - **Apparel:** RimWorld's layers (skin, middle, shell, headgear, belt) with hit points, quality, material and insulation. Damaged clothes look torn and fall off when destroyed.
-- **Social:** opinions, friendships, rivalries, social fights and partners and marriage as social bonds. There is no sexual activity of any kind, and no pregnancy.
+- **Social:** opinions, friendships, rivalries, social fights and partners and marriage as social bonds. Partners who share a double bed now and then have **lovin**, as in RimWorld: abstract and adults only (the couple lies in bed under the covers, cuddling, with a hearts icon; no nudity in it and no sex animation), and it lifts mood and opinion (`docs/design/lovin.md`, decision 0008). No pregnancy.
 - **Movement:** base speed about 4 m/s, a steady jog. Colonists move freely along smooth paths, not cell to cell, and are slowed by injuries, carried weight, terrain and slope.
 
 New colonists join through RimWorld's routes: wanderers, refugees, rescues, prisoner recruitment, quests and trade.
@@ -137,7 +137,7 @@ Your colony sits on one 1 km map, and the wider world is a RimWorld-style planet
 This is a private game for one player. These are the rules for now, and they can be revisited later.
 
 - **Adults only.** No children, no pregnancy, no growth stages. Biotech's gene systems apply to adults through lineage grafts and gene implanting.
-- **Nudity yes, sex no.** Unclothed colonists are anatomically complete, and nudity matters to mood through ideology and traits, as in RimWorld. There is no sexual content of any kind.
+- **Nudity yes, nothing explicit.** Unclothed colonists are anatomically complete, and nudity matters to mood through ideology and traits, as in RimWorld. Lovin between adult partners is the only intimacy, and it is abstract (decision 0008). Nothing involving anyone under adult age, ever.
 - **Gore yes.** Visible wounds, blood, dismemberment, bodies blown apart by explosions, ragdolls and corpses that rot.
 - **Our own setting and names.** The lore is ours ([lore.md](design/lore.md)) and RimWorld's proper names (peoples, factions, enemies, narrators, places) have our own names ([naming.md](design/naming.md)). Plain words such as steel or sniper rifle stay. Names live in data files, so renaming anything is a one-line change that doesn't affect gameplay.
 - **Free assets only.** Each third-party asset is logged with its source and licence. Art only needs to fill the same role as RimWorld's, not copy it.

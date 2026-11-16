@@ -345,7 +345,9 @@ TEST_CASE("Construction: a better skill builds faster") {
     const int unskilled = timeFor(0);
     BUILD_REQUIRE(skilled > 0);
     BUILD_REQUIRE(unskilled > 0);
-    CHECK(unskilled > 3 * skilled);  // 0.3 against 2.05 of construction speed on the work, walking aside
+    // 0.3 against 2.05 of construction speed on the work; the tuning's 2x building speed halves the work, so the
+    // same walk to the steel weighs more.
+    CHECK(unskilled > 2 * skilled);
 }
 
 TEST_CASE("Construction: cancelling a frame gives back what was delivered") {

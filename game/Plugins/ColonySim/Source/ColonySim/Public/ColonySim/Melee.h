@@ -95,6 +95,7 @@ struct MeleeRules {
     int blockRecoverySteps = 12;      // the blocker's stagger: no swing of its own meanwhile
     int playerBlockSteps = 20;        // how long the player's block holds
     int dodgeHoldSteps = 3;           // a fighter that sidestepped stays put this long after the hit
+    float strongPowerShare = 1.15f;   // a swing is strong when its tool's power is this share of the set's mean or more (AN1, ours)
 };
 
 class COLONY_API MeleeSystem {
@@ -120,6 +121,9 @@ public:
     bool ready(Entity pawn) const;
     bool winding(Entity pawn) const;
     bool blocking(Entity pawn) const;
+    // The swing under way (or the last one) uses a strong tool: one whose power is MeleeRules `strongPowerShare`
+    // of its set's mean or more (a longsword's cut against its point). Unreal plays a heavy blow for it (AN1).
+    bool strongSwing(Entity pawn) const;
     // Metres from the pawn's centre its strike reaches on the ground: its melee weapon's, else its body's.
     float reach(Entity pawn, bool fists = false) const;
     // The target's centre is within the pawn's reach (plus reachSlack: its front is).

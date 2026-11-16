@@ -71,7 +71,7 @@ FieldCare::FieldCare(Things& things, Map& map, HealthSystem& health, JobSystem& 
 }
 
 int64_t FieldCare::now() const {
-    return time_.seconds;
+    return time_.steps;  // real time, like the fight it happens in
 }
 
 void FieldCare::invalidate() {
@@ -220,7 +220,11 @@ void FieldCare::checkDuty(Entity pawn) {
     const Position& pos = reg.get<Position>(pawn);
     refreshHostiles();
     for (const Hostile& h : hostiles_) {
-        if (h.level != pos.level || careDist(h.x, h.y, pos.x, pos.y) > rules_.selfDefenseRadius) {
+        // Close by, or shooting at it from further off: in the year run the Medic and the Firefighter stood waiting 12 and
+        // 19 m from two raiders, armed, while the raiders shot them dead (docs/design/colony-scenario.md).
+        const Fighter* theirs = reg.try_get<Fighter>(h.pawn);
+        const bool aimsHere = theirs != nullptr && theirs->target == pawn;
+        if (h.level != pos.level || (!aimsHere && careDist(h.x, h.y, pos.x, pos.y) > rules_.selfDefenseRadius)) {
             continue;
         }
         if (!map_.cover().lineOfSight(Viewpoint{pos.x, pos.y, pos.level, Stance::Standing},

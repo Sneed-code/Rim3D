@@ -10,7 +10,7 @@ Colonists talk. A talk is an **interaction** (chitchat, deep talk, kind words, a
 romantic gesture, a marriage proposal, a breakup). Each changes what the listener thinks of the talker (an
 **opinion**), may leave a mood thought, and gives the talker Social experience. **Friends** and **rivals**
 follow from opinions; **lovers**, **spouses** and their **exes** are stored **bonds**. Romance and marriage
-are bonds only: no sex, no pregnancy, no children. An insult can start a **fight with fists**.
+are stored bonds; partners sharing a double bed have abstract, adults-only lovin ([lovin.md](lovin.md)). No pregnancy, no children. An insult can start a **fight with fists**.
 
 A pawn takes part if it has needs, is not an animal and is on the player's side. It gets a `Social`
 component the first step it exists (`nextTalk`, `memories`, `bonds`, `mourned`).
@@ -147,6 +147,14 @@ insult also lowers the target's opinion of the insulter and may start a fistfigh
   roll that could go either way, including whether an insult becomes a fight, -1 leaves it to the dice).
   It ignores the opinion limits and the kind-words mood; it does not ignore what an interaction needs
   (a lover, adults) or whether the two can talk (alive, awake, in earshot).
+
+## On screen while it is said (AN1)
+
+Each interaction puts a `Talking` part on both pawns: the Interactions def, the other pawn, whether this one spoke,
+whether it worked, and the game second it stops showing (`talkShowSeconds`, 120, ours; at 1x about four real
+seconds). The snapshot shows it as `talkDef`, `talkWith`, `talkStarted`, `talkOk` and `talkSecondsLeft`; Unreal plays
+the talking face, gestures and the emotion for the def (docs/plans/animation.md "Faces and emotions"). The part
+comes off when its time is over. Saved in section `social` 3, hashed.
 
 ## Save and hash
 

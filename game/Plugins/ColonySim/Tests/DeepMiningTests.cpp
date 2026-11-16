@@ -91,7 +91,7 @@ int deepItemCount(Sim& sim, const char* def) {
 // Puts a machine's work near the end of a cycle (or of the guaranteed scan time), so a test need not run days.
 void deepPreload(Sim& sim, CellPos building, double work) {
     DeepResourcesSaved s = sim.deepResources().saved();
-    s.work.push_back(DeepWork{building, work});
+    s.work.push_back(DeepWork{building, work, DefId{}});
     CHECK(sim.deepResources().restore(s));
 }
 
@@ -101,8 +101,9 @@ TEST_CASE("Deep: items with a deep object are the deposit kinds, with the wiki's
     auto owner = deepSim();
     Sim& sim = *owner;
     const DeepResources& deep = sim.deepResources();
-    CHECK(deep.kinds().size() == 6);
+    CHECK(deep.kinds().size() == 7);
     CHECK(deep.portionOf(deepDef(sim, "Steel")) == 45);
+    CHECK(deep.portionOf(deepDef(sim, "Copper")) == 45);  // ours (CopperTests)
     CHECK(deep.portionOf(deepDef(sim, "Silver")) == 40);
     CHECK(deep.portionOf(deepDef(sim, "Plasteel")) == 10);
     CHECK(deep.portionOf(deepDef(sim, "Uranium")) == 10);

@@ -109,7 +109,16 @@ private:
     int kindOfDef(DefId def) const;
     uint64_t cellHash(size_t i) const;
     void set(size_t i, uint16_t kind, uint32_t growth, uint32_t age);
-    void generate(uint64_t seed, double density);
+    // The biome's `forestPatches` (ours): the share of the map that is open ground, and the tree weight in
+    // open ground and in the dense forest. Without it trees swing smoothly between 0.2 and 1.8 times.
+    struct ForestPatches {
+        bool set = false;
+        double openShare = 0.5;
+        double openTrees = 0.1;
+        double denseTrees = 1.6;
+        float cellMetres = 48.0f;
+    };
+    void generate(uint64_t seed, double density, const ForestPatches& patches);
 
     const Map& map_;
     std::vector<Kind> kinds_;

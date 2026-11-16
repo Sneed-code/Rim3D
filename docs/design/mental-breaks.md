@@ -26,7 +26,8 @@ Then one break of the band is picked by `baseCommonality`, among those that can 
 needs food it can reach, hiding needs a bed or a roofed cell, a tantrum something to smash, an
 insulting spree another colonist, giving up an edge it can reach, and a break whose `requires` names
 a feature nothing provides (`FireSpree` needs `"fire"`, E4 calls `mentalBreaks().provide("fire")`)
-never starts. The random draws come from the sim's own stream, so the same seed and commands give
+never starts. A break with a `requiredTrait` only comes to a pawn with that trait (`FireSpree`:
+Pyromaniac). The random draws come from the sim's own stream, so the same seed and commands give
 the same breaks.
 
 The break's length is picked from `durationHours`. It ends when that time is up **and** the mood
@@ -48,7 +49,7 @@ threshold. Not when ended by the dev command, and not for dying or leaving.
 | `InsultingSpree` | major | Walks up to the nearest colonist it hasn't insulted, insults them (`PawnInsulted`), and on to the next; 3, then over |
 | `Berserk` | extreme | Goes for the nearest living pawn within 25 m (anyone, any side), else something to smash, and fights it with F8's melee: walks up until a swing reaches, then swings with the weapon in its hands or its fists (real wind-up, dodges, blocks and armour). Things that aren't pawns are still hit for 8 hit points every 2 seconds. Without the melee system it punches every 2 seconds (6 blunt damage) |
 | `GiveUp` | extreme | Walks to the nearest reachable edge of the map and leaves for good with what it carries, wears and holds; its bed is freed. `PawnLeftColony`, then the pawn is destroyed |
-| `FireSpree` | extreme | Picks one of the five nearest cells within 20 m that would burn and aren't alight, walks beside it, lights it (`Fire::ignite`), waits 5 seconds, and goes on. A burning pawn runs about (`panicStep`) as in the job system. Needs fire: `Sim` calls `setFire`, which provides the `fire` feature |
+| `FireSpree` | extreme | Picks one of the five nearest cells within 20 m that would burn and aren't alight, walks beside it, lights it (`Fire::ignite`), waits 5 seconds, and goes on. A burning pawn runs about (`panicStep`) as in the job system. Needs fire: `Sim` calls `setFire`, which provides the `fire` feature. **Pyromaniacs only** (the def's `requiredTrait`; wiki, Mental break), 2.4 to 4 hours |
 
 All the 15 m, 25 m, 2 second and damage numbers are ours (`MentalBreakBehaviour`); RimWorld's break
 numbers (rates, curve, lengths) are the D9 data. The tantrum's three-thing limit and the placeholder
@@ -62,6 +63,17 @@ fists (kept only for things that aren't pawns) are the two choices to revisit.
 - The protagonist while the player walks it (`PlayerControl`) never snaps.
 - A thing destroyed under a pawn's target is forgotten (`forget`); a target that goes away by itself
   (someone ate the food) is simply dropped and a new one found.
+
+## Others and a berserker
+
+A colonist on a Berserk break (`isBerserk`, `MentalBreaks.h`) is an enemy to its own colony until it is downed or the
+break ends: the alarm counts it among the hostiles once a colonist sees it (`RaidSystem::thinkAlarm`) and never calls it
+up, and the fighter AI puts it on no side (`kWildFaction`, as a mad animal), so armed colonists fight it like a raider and
+the unarmed shelter from it. Downed, the break ends (`downed`), it is the colony's again and nobody shoots it; doctors
+rescue and tend it. A colonist the alarm had called up is stood down when it snaps. RimWorld leaves this to the player
+(draft and beat the berserker down); in the year run nobody did, and one berserk colonist beat four others to death in
+the barracks while they stood by (colony-scenario.md, thirteenth pass). Guns can kill the berserker; a test with two
+revolvers downed it in four shots.
 
 ## What Unreal sees
 
@@ -88,5 +100,4 @@ goal, target, counters, visited targets). A save from before has none and loads 
 - The other breaks of RimWorld's DLCs, inspirations,
   and drug-induced states.
 - Animations and sounds for the break states; U-tasks read the events and the snapshot.
-- Other colonists reacting to a berserker (the defence plan, F6, treats everyone of the player's side
-  as a friend).
+

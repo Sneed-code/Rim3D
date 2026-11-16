@@ -28,9 +28,12 @@ Kept in `DisasterSystem` (saved as section `disasters`, in the state hash), one 
 
 ## Happens at once
 
-- **`ShortCircuit`** (RimWorld's "zzzt"): a random member of a random power net shorts out
-  (`PowerGrid::shortCircuit`: the net's batteries empty, the conduit or building burns out), then a Burn blast of
-  radius 1 + 0.1 times the square root of the energy released in Wd (up to 5 m) and fires round it.
+- **`ShortCircuit`** (RimWorld's "zzzt"): a random power conduit on a net with an active power source (a generator
+  making power or a battery holding some; RimWorld's `GetShortCircuitablePowerConduits`) shorts out
+  (`PowerGrid::shortCircuit`: the net's batteries empty, the conduit burns out), then a Burn blast of
+  radius 1 + 0.1 times the square root of the energy released in Wd (up to 5 m) and fires round it. Lamps, stoves,
+  heaters and generators never short out, and with no live conduit on the map it can't happen (until 2026-11-14 any
+  member of any net could, which set a year run's base alight).
 - **`Blight`** (spreads over days): a random sown crop plant in a growing zone is the centre; plants of that crop
   in growing zones within a 2 to 4 m circle catch it with chance 0.7 (the centre always). A blighted plant
   (`DisasterSystem::blighted()`, saved) withers 24 to 72 hours after catching it (`PlantRemoved`, message

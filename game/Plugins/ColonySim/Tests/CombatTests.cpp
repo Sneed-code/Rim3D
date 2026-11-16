@@ -1,3 +1,5 @@
+#include "ColonySim/Apparel.h"
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
@@ -267,7 +269,7 @@ TEST_CASE("Combat: hitboxes follow the stance and the hit lands in the part that
     CHECK(shootAtHeight(0.15f).hit == ProjectileHitKind::Pawn);
 }
 
-TEST_CASE("Combat: armor stops or softens hits on the parts it covers") {
+TEST_CASE("Combat: armor softens every hit by the same share, wherever it lands, and stops none") {
     auto sim = combatTestSim();
     const Entity shooter = combatTestPawn(*sim, 10, 30, "Gun_Revolver");
     const Entity target = combatTestPawn(*sim, 18, 30);
@@ -288,8 +290,16 @@ TEST_CASE("Combat: armor stops or softens hits on the parts it covers") {
                     combatTestIsUnder(*sim, target, e.part, "torso") && !combatTestIsUnder(*sim, target, e.part, "neck") &&
                     !combatTestIsUnder(*sim, target, e.part, "left shoulder") && !combatTestIsUnder(*sim, target, e.part, "right shoulder")) {
                     ++torso;
+                }
+                if (e.type == EventType::ProjectileHit && (e.hit == ProjectileHitKind::Armor || e.hit == ProjectileHitKind::Pawn)) {
                     stopped += e.hit == ProjectileHitKind::Armor ? 1 : 0;
-                    bruised += (e.hit == ProjectileHitKind::Pawn && e.amount == doctest::Approx(6.0f)) ? 1 : 0;
+                    // A revolver bullet, 12 damage, 75% blunt and 25% sharp, 18% penetration: the vest's 15% blunt
+                    // and 30% sharp work at 82% (docs/design/armour.md).
+                    const float expected = 9.0f / (1.0f + 0.15f * 0.82f) + 3.0f / (1.0f + 0.30f * 0.82f);
+                    if (e.amount != doctest::Approx(expected).epsilon(0.001)) {
+                        ++bruised;
+                        MESSAGE("amount " << e.amount << " expected " << expected);
+                    }
                 }
                 injuries += e.type == EventType::PawnInjured ? 1 : 0;
             }
@@ -301,11 +311,11 @@ TEST_CASE("Combat: armor stops or softens hits on the parts it covers") {
         // The vest wears out under fire (apparel.md); this test is about the armor roll, so mend it.
         HitPoints& vestHp = sim->things().registry().get<HitPoints>(vest);
         vestHp.current = vestHp.max;
+        sim->things().registry().remove<Durability>(vest);
     }
-    // Flak vest 100% sharp less the revolver's 18% penetration: 41% bounce off, 41% half damage.
     COMBAT_REQUIRE(torso > 200);
-    CHECK(static_cast<double>(stopped) / torso == doctest::Approx(0.41).epsilon(0.2));
-    CHECK(static_cast<double>(bruised) / torso == doctest::Approx(0.41).epsilon(0.2));
+    CHECK(stopped == 0);
+    CHECK(bruised == 0);  // every hit, torso or not, took the same damage
 }
 
 TEST_CASE("Combat: shoot orders wait for the warm-up, fire bursts and cool down") {
@@ -410,4 +420,42 @@ TEST_CASE("Combat: a firefight downs someone, and saving mid-flight changes noth
     CHECK(downedAt > 0);
     MESSAGE("someone went down after " << downedAt << " steps");
     CHECK(saved->stateHash() == straight->stateHash());
+}
+
+TEST_CASE("Combat: an aimed shot at a pawn crouched behind a crest goes at its head, not into the crest") {
+    // Found by the year run (docs/design/colony-scenario.md): on hillsides half the colonists' shots and more went into
+    // the ground in front of them. A raider crouched behind a crest shows its head; the shot at its chest hit the crest.
+    auto sim = combatTestSim();
+    for (int x = 0; x < sim->map().width(); ++x) {
+        sim->editMap().setGroundHeight(CellPos{x, 41, 0}, 0.9f);
+    }
+    const Entity shooter = combatTestPawn(*sim, 30, 30, "Gun_BoltActionRifle");
+    Colonist marksman;
+    marksman.skills.push_back(SkillRecord{"Shooting", 20});
+    sim->things().registry().emplace<Colonist>(shooter, marksman);
+    const Entity target = combatTestPawn(*sim, 30, 42);
+    sim->combat().setStance(target, Stance::Crouching);
+    int shots = 0;
+    int intoCrest = 0;
+    int pawnHits = 0;
+    for (int i = 0; i < 40; ++i) {
+        combatTestHeal(*sim, target);
+        sim->combat().setStance(target, Stance::Crouching);
+        sim->submit(ShootCommand{shooter, target, 0.0f, 0.0f, 0.0f, false});
+        for (int s = 0; s < 120; ++s) {
+            sim->step();
+            for (const Event& e : sim->events()) {
+                if (e.type == EventType::ShotFired && e.thing == shooter) {
+                    ++shots;
+                } else if (e.type == EventType::ProjectileHit) {
+                    intoCrest += (e.hit == ProjectileHitKind::Ground || e.hit == ProjectileHitKind::Rock) && e.y < 42.0f ? 1 : 0;
+                    pawnHits += e.hit == ProjectileHitKind::Pawn ? 1 : 0;
+                }
+            }
+        }
+    }
+    MESSAGE(shots << " shots, " << intoCrest << " into the crest, " << pawnHits << " hit the pawn");
+    CHECK(shots >= 20);
+    CHECK(intoCrest * 3 <= shots);
+    CHECK(pawnHits > 0);
 }
