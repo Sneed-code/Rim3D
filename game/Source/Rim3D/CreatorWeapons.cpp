@@ -1603,10 +1603,12 @@ namespace
 			}
 			Def.GiveGround = FMath::Min(Def.GiveGround, 250.0f);
 			// Drift back (a step or two in, about 70 cm a second) while there is room to spare, nothing is closing and
-			// nobody is down or getting up: given ground left at 25 cm a second kept them 3 m apart and swings missed.
+			// that one is not reacting, down or getting up (a body lying face down slid back across the grass): given ground
+			// left at 25 cm a second kept them 3 m apart and swings missed.
 			for (FCwPerson* P : {&A, &B})
 			{
-				if (Want <= 0.0f && Gap > MinGap + 10.0f && S.GapRate > -20.0f && P->GiveGround > 0.0f && P->AnchorT <= 0.0f && !P->bFloored)
+				if (Want <= 0.0f && Gap > MinGap + 10.0f && S.GapRate > -20.0f && P->GiveGround > 0.0f && P->AnchorT <= 0.0f && !P->bFloored &&
+					P->Role != ECwRole::React && P->Role != ECwRole::Dying && P->Role != ECwRole::Dead)
 				{
 					P->GiveGround = FMath::Max(0.0f, P->GiveGround - FMath::Min(70.0f * Dt, Gap - MinGap - 10.0f));
 				}
