@@ -20,6 +20,7 @@
 #include "UnrealClient.h"
 #include "Misc/Parse.h"
 
+#include "CreatorPeople.h"
 #include "CreatorWeapons.h"
 #include "MakeHumanAnimInstance.h"
 #include "PawnActor.h"
@@ -1682,4 +1683,44 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		}
 	};
 	Phases.Add(MoveTemp(Play));
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The randomizer for other scenes (CreatorPeople.h).
+
+namespace
+{
+	FCreatorPerson CreatorPeopleMake(int32 Seed, bool bFemale)
+	{
+		FCreatorPerson Person;
+		Person.bFemale = bFemale;
+		FRandomStream Random(Seed);
+		CreatorRandomize(Person, Random);
+		Person.Looks.bFemale = bFemale;
+		Person.Looks.MakeHuman = bFemale ? TEXT("CreatorFemale") : TEXT("CreatorMale");
+		return Person;
+	}
+}
+
+FSimPawnLooks CreatorPeople::RandomLooks(int32 Seed, bool bFemale, const FSimPawnLooks& From)
+{
+	const FCreatorPerson Person = CreatorPeopleMake(Seed, bFemale);
+	FSimPawnLooks Looks = From;
+	Looks.bFemale = bFemale;
+	Looks.MakeHuman = Person.Looks.MakeHuman;
+	Looks.Height = 1.0f;
+	Looks.Skin = FLinearColor(Person.Skin[0], Person.Skin[1], Person.Skin[2]);
+	return Looks;
+}
+
+bool CreatorPeople::ApplyRandom(int32 Seed, bool bFemale, ASimPawnActor& Pawn)
+{
+	FCreatorPerson Person = CreatorPeopleMake(Seed, bFemale);
+	if (!Pawn.GetMakeHumanMesh() || Pawn.GetLooks().MakeHuman != Person.Looks.MakeHuman)
+	{
+		return false;
+	}
+	Person.bBlink = false;
+	CreatorApply(Person, Pawn, false);
+	return true;
 }

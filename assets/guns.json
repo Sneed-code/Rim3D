@@ -1,0 +1,125 @@
+{
+  "comment": "The gun range's guns (docs/design/gun-range.md). Each entry ties a sim gun def (its numbers stay in data/defs) to a model and to how the first-person arms hold it. 'art' is read by the GunArt commandlet (import into /Game/Rim3D/Generated/Guns/<name>/); 'parts' pick the imported meshes by a piece of their name. Points are in the gun's own frame in cm after meshRotation and meshOffset: +X out of the muzzle, +Y right, +Z up, the origin where the firing hand's palm holds the grip. The game reads this file at start and again on F6, so the numbers can be tuned without a rebuild.",
+  "animRoot": "/Game/Rim3D/Generated/Animations/",
+  "guns": [
+    {
+      "def": "Gun_BoltActionRifle",
+      "label": "Bolt-action rifle",
+      "credit": "Codex (our own model)",
+      "art": {
+        "name": "BoltActionRifle",
+        "fbx": "assets/raw/guns/BoltActionRifle/BoltActionRifle_Game.fbx",
+        "textures": {
+          "baseColor": "assets/raw/guns/BoltActionRifle/T_BoltActionRifle_BaseColor.png",
+          "normal": "assets/raw/guns/BoltActionRifle/T_BoltActionRifle_Normal.png",
+          "orm": "assets/raw/guns/BoltActionRifle/T_BoltActionRifle_ORM.png"
+        }
+      },
+      "parts": [
+        {"name": "body", "match": "Body"},
+        {"name": "bolt", "match": "Bolt", "pivot": [8.5, 0, 3.2]},
+        {"name": "trigger", "match": "Trigger", "pivot": [4.7, 0, -3.5]}
+      ],
+      "meshRotation": [0, 0, 0],
+      "meshOffset": [0, 0, 0],
+      "grip": [0, 0, 0],
+      "offHand": [38, 0, -2],
+      "sight": [-6, 0, 12.5],
+      "muzzle": [94, 0, 3],
+      "rake": 18,
+      "stance": "Mixamo/Rifle/A_ProRifleIdleAiming",
+      "reload": "Mixamo/Firearms/A_Reloading",
+      "hip": [0, 9, -8],
+      "sightDistance": 9,
+      "kick": {"back": 7, "up": 5, "recover": 8},
+      "cycle": {"part": "bolt", "start": 0.25, "seconds": 0.9, "lift": 60, "back": -9},
+      "reloadBolt": true
+    },
+    {
+      "def": "Gun_AssaultRifle",
+      "label": "Assault rifle",
+      "credit": "Soviet Assault Rifle by SpatialNeglect (Fab, free)",
+      "art": {
+        "name": "AssaultRifle",
+        "fbx": "assets/raw/guns/AssaultRifle/ak47.fbx",
+        "combine": true,
+        "textures": {
+          "baseColor": "assets/raw/guns/AssaultRifle/BaseColor.png",
+          "normal": "assets/raw/guns/AssaultRifle/Normal.png",
+          "roughness": "assets/raw/guns/AssaultRifle/Roughness.png",
+          "metallic": "assets/raw/guns/AssaultRifle/Metallic.png"
+        }
+      },
+      "parts": [{"name": "body", "match": ""}],
+      "meshRotation": [0, 0, 0],
+      "meshOffset": [0, 0, 0],
+      "grip": [0, 0, 0],
+      "offHand": [30, 0, -1],
+      "sight": [-4, 0, 9],
+      "muzzle": [70, 0, 4],
+      "rake": 20,
+      "stance": "Mixamo/Rifle/A_ProRifleIdleAiming",
+      "reload": "Mixamo/Firearms/A_Reloading",
+      "magazine": {"from": [14, 0, -8], "out": 0.25, "in": 0.62},
+      "hip": [0, 9, -8],
+      "sightDistance": 10,
+      "kick": {"back": 3.5, "up": 2.2, "recover": 14}
+    },
+    {
+      "def": "Gun_Autopistol",
+      "label": "Pistol",
+      "credit": "Pistol 9mm Custom by DTry (Fab, free)",
+      "art": {
+        "name": "Pistol",
+        "fbx": "assets/raw/guns/Pistol/pistol.fbx",
+        "textures": {
+          "baseColor": "assets/raw/guns/Pistol/BaseColor.png",
+          "normal": "assets/raw/guns/Pistol/Normal.png",
+          "roughness": "assets/raw/guns/Pistol/Roughness.png",
+          "metallic": "assets/raw/guns/Pistol/Metallic.png"
+        }
+      },
+      "parts": [
+        {"name": "body", "match": "Pistol"},
+        {"name": "magazine", "match": "Magazine"}
+      ],
+      "meshRotation": [0, 0, 0],
+      "meshOffset": [0, 0, 0],
+      "grip": [0, 0, 0],
+      "sight": [-2, 0, 9],
+      "muzzle": [16, 0, 6],
+      "rake": 22,
+      "stance": "PistolAim/A_PistolAim",
+      "stanceHold": 1.0,
+      "reload": "Mixamo/Firearms/A_Reload",
+      "magazine": {"part": "magazine", "out": 0.2, "in": 0.6},
+      "hip": [0, 6, -7],
+      "sightDistance": 22,
+      "kick": {"back": 2.5, "up": 6, "recover": 16}
+    },
+    {
+      "def": "Gun_PumpShotgun",
+      "label": "Pump shotgun",
+      "credit": "Model 12 Pump Action Shotgun by the 9th Earl (Fab, free)",
+      "art": {
+        "name": "Shotgun",
+        "fbx": "assets/raw/guns/Shotgun/model12.fbx",
+        "combine": true
+      },
+      "parts": [{"name": "body", "match": ""}],
+      "meshRotation": [0, 0, 0],
+      "meshOffset": [0, 0, 0],
+      "grip": [0, 0, 0],
+      "offHand": [40, 0, -3],
+      "sight": [-6, 0, 7],
+      "muzzle": [85, 0, 4],
+      "rake": 18,
+      "stance": "Mixamo/Rifle/A_ProRifleIdleAiming",
+      "reload": "ShotgunReload/A_ShotgunReload",
+      "hip": [0, 9, -8],
+      "sightDistance": 10,
+      "kick": {"back": 9, "up": 7, "recover": 7},
+      "pump": {"start": 0.3, "seconds": 0.5}
+    }
+  ]
+}

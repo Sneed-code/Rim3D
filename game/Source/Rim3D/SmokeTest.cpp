@@ -149,6 +149,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildShowcasePhases();
 	}
+	else if (TestName == TEXT("gunrange"))
+	{
+		BuildGunRangePhases();
+	}
 	else if (TestName == TEXT("world"))
 	{
 		BuildWorldPhases();

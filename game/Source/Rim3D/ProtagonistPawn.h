@@ -100,6 +100,8 @@ public:
 	 *  roll's dip, so the crosshair is where the bullet goes. */
 	FVector GetViewLocation() const;
 	FVector GetViewDirection() const;
+	/** The view camera (the gun range hangs its first-person arms on it). */
+	UCameraComponent* GetCamera() const { return Camera; }
 
 	static constexpr float kEyeHeight = 165.0f;
 	static constexpr float kMinArm = 150.0f;
