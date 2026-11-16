@@ -216,6 +216,8 @@ def add_body_soft_bones(rig, body, log=print):
         log("no belly found")
 
     def limb(name, parent, a, b, radius, peak, back_extra, side):
+        # Copies: bone.head_local goes stale once the rig enters edit mode below (the weights read it afterwards).
+        a, b = a.copy(), b.copy()
         axis = b - a
         length = axis.length
         if length < 1e-4:

@@ -2365,6 +2365,11 @@ namespace
 					S.bEquip = true;
 					S.Style = Step.Style;
 					S.Attack = Step.Attack;
+					// -CwScriptStyle=<0-3>: the demos use that fighting style instead (0 club) for clips.
+					if (int32 DemoStyle = -1; Step.Attack < 0 && FParse::Value(FCommandLine::Get(), TEXT("CwScriptStyle="), DemoStyle) && DemoStyle >= 0 && DemoStyle < CwStyleCount)
+					{
+						S.Style = DemoStyle;
+					}
 					GCwPreviewDirty = true;
 					break;
 				case 1:

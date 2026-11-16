@@ -63,3 +63,13 @@ kicks. Kicks are queued on the game thread and handed to the node in `PreUpdate`
 sets off a blast 3 m in front of the picked one every s seconds (for clips).
 
 Bodies exported before this have no belly, thigh or arm bones; their springs simply aren't made.
+
+`-CreatorSoftDemo` (with `-CreatorRecord=<seconds>`, about 16) is the judging clip: the picked one stands still close up
+with a heavier, softer body (weight 0.6, muscle -0.4), is slapped on the belly at 1.5 and 6.5 s and blasted at 4 s with
+the soft parts on, then the same at 9.5, 12 and 14.5 s with them off. `-CwScriptStyle=<0-3>` makes the scripted weapon
+demos use one style (0 club).
+
+**First build (2026-11-16):** weights woman belly 205, thighs 276 each, arms 187 each (man 184, 274, 165); springs
+measured up to 6 cm, but the wobble was not visible in the 14 s creator clip (its own slider demo hid it) or the club
+clip at their camera distance. A first rebuild had lopsided limb weights: `bone.head_local` goes stale in edit mode,
+so `add_body_soft_bones` copies it first.

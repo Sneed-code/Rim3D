@@ -281,6 +281,8 @@ namespace
 		bool bBlastNow = false;
 		bool bSlapNow = false;
 		int32 Blasts = 0;
+		float SoftDemoT = -1.0f;   // -CreatorSoftDemo: seconds into the soft-body showcase
+		int32 SoftDemoStep = 0;
 	};
 
 	const FVector CreatorOrigin(-1695000.0, 4800.0, 0.0);
@@ -1074,7 +1076,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		}
 		// -CreatorRecord=<seconds> with -CreatorPlay: every frame of the clip at a fixed 30 a second (creator/rec_0000.png ...).
 		float PlayRecord = 0.0f;
-		if (State->bAutoPlayed && !FParse::Param(FCommandLine::Get(), TEXT("CreatorDemo")) && FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), PlayRecord)
+		if (State->bAutoPlayed && !FParse::Param(FCommandLine::Get(), TEXT("CreatorDemo")) && !FParse::Param(FCommandLine::Get(), TEXT("CreatorSoftDemo")) && FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), PlayRecord)
 			&& State->Recorded < FMath::RoundToInt32(PlayRecord * 30.0f))
 		{
 			if (State->Recorded == 0)
@@ -1141,6 +1143,46 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			{
 				State->bWalk = true;
 				State->LegTime = 99.0f;
+			}
+			if (RecordSeconds > 0.0f && State->Recorded < FMath::RoundToInt32(RecordSeconds * 30.0f))
+			{
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") / FString::Printf(TEXT("rec_%04d.png"), State->Recorded++), false, false);
+			}
+		}
+		// -CreatorSoftDemo (docs/design/soft-body.md): the picked one stands still, close up, with a heavier soft body; slaps on
+		// the belly and blasts with the soft parts on, then the same with them off, for a side-by-side judgement. With
+		// -CreatorRecord=<seconds> every frame is saved at a fixed 30 a second (creator/rec_0000.png ...).
+		if (FParse::Param(FCommandLine::Get(), TEXT("CreatorSoftDemo")) && PhaseTime > 4.5f && State->People.IsValidIndex(State->Selected))
+		{
+			float RecordSeconds = 0.0f;
+			FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), RecordSeconds);
+			FCreatorPerson& W = State->People[State->Selected];
+			if (State->SoftDemoT < 0.0f)
+			{
+				State->SoftDemoT = 0.0f;
+				State->bWalk = false;
+				State->BlastEvery = 0.0f;
+				State->CameraDistance = 170.0f;
+				State->CameraYaw = 215.0f;
+				W.Weight = 0.6f;
+				W.Muscle = -0.4f;
+				if (RecordSeconds > 0.0f)
+				{
+					FApp::SetUseFixedTimeStep(true);
+					FApp::SetFixedDeltaTime(1.0 / 30.0);
+				}
+			}
+			State->SoftDemoT += GetWorld()->GetDeltaSeconds();
+			// Soft parts on: slap 1.5 s, blast 4 s, slap 6.5 s; off from 8.5 s: slap 9.5 s, blast 12 s, slap 14.5 s.
+			static const float SoftTimes[] = {1.5f, 4.0f, 6.5f, 9.5f, 12.0f, 14.5f};
+			static const bool SoftBlast[] = {false, true, false, false, true, false};
+			W.bJiggle = State->SoftDemoT < 8.5f;
+			if (State->SoftDemoStep < static_cast<int32>(UE_ARRAY_COUNT(SoftTimes)) && State->SoftDemoT >= SoftTimes[State->SoftDemoStep])
+			{
+				(SoftBlast[State->SoftDemoStep] ? State->bBlastNow : State->bSlapNow) = true;
+				UE_LOG(LogTemp, Display, TEXT("Soft body demo: %s at %.1f s, soft parts %s"), SoftBlast[State->SoftDemoStep] ? TEXT("blast") : TEXT("slap"),
+					State->SoftDemoT, W.bJiggle ? TEXT("on") : TEXT("off"));
+				++State->SoftDemoStep;
 			}
 			if (RecordSeconds > 0.0f && State->Recorded < FMath::RoundToInt32(RecordSeconds * 30.0f))
 			{
