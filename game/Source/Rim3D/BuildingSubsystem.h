@@ -104,6 +104,8 @@ private:
 		bool bRead = false;
 		bool bItem = false;
 		bool bDoor = false;
+		/** Drawn by a subsystem of its own (visual.drawnBy, e.g. "shuttle": UShuttleSubsystem), so not here. */
+		bool bDrawnElsewhere = false;
 		/** Joins the walls, doors and rock beside it (visual.link, L4): drawn as a post with an arm to each, `LinkThicknessCm` thick. */
 		bool bLink = false;
 		float LinkThicknessCm = 50.0f;
