@@ -231,6 +231,10 @@ public:
     uint64_t plans() const { return plans_; }
     uint64_t sightChecks() const { return sightChecks_; }
 
+    // Cooldown bursts: a fighter's whole store goes in one burst, so each shot after the first asks again whether a
+    // friend (or a tame animal) has come into the line to `target`; true holds the rest (CombatSystem::setHoldFire).
+    bool friendInLineNow(Entity shooter, Entity target) const;
+
 private:
     struct PawnInfo {
         Entity pawn = kNoEntity;

@@ -1,7 +1,8 @@
 {
   "defs": {
     "Projectiles": {
-      "projectile.speed": 3.0
+      "projectile.speed": 3.0,
+      "projectile.damageAmountBase": 0.5
     },
     "Things": {
       "stats.carryingCapacity": 0.6666667

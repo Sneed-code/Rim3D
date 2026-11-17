@@ -419,6 +419,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setBreeding(breeding_.get());
     animals_->setHusbandry(husbandry_.get());
     animals_->setPathfinder(&pathfinder_);
+    combat_->setHoldFire([this](Entity shooter, Entity target) { return fighters_ && fighters_->friendInLineNow(shooter, target); });
     combat_->setHurtHook([this](Entity victim, Entity attacker) {
         animals_->hurt(victim, attacker);
         if (fighters_) {
@@ -2636,6 +2637,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.rounds = combat_->roundsLeft(entity);
             view.magazineSize = combat_->magazineSize(entity);
             view.reloading = combat_->reloading(entity);
+            combat_->shotStore(entity, view.shotStore, view.shotStoreSize, view.refillLeft, view.refillSteps);
             combat_->kickOf(entity, view.kickUp, view.kickSide);
             view.rollPhase = static_cast<uint8_t>(combat_->rollPhase(entity));
             if (view.rollPhase != 0) {

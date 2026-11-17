@@ -688,6 +688,26 @@ bool FighterSystem::shotClearsGround(Entity pawn, float x, float y, int level, S
 // kFightFriendSpread to either side of it for the spread, meets a pawn of the shooter's side (or a pawn nobody fights:
 // a visitor, a prisoner, a calm animal) before the target. In the year run a colonist with a revolver shot at a chitinid
 // 2.6 m away through the colonist with a club fighting it, again and again, and downed it (seed 42, day 36).
+bool FighterSystem::friendInLineNow(Entity shooter, Entity target) const {
+    const entt::registry& reg = things_.registry();
+    const Position* pos = reg.try_get<Position>(shooter);
+    const Posture* posture = reg.try_get<Posture>(shooter);
+    if (pos == nullptr || posture == nullptr || target == kNoEntity) {
+        return false;
+    }
+    for (const PawnInfo& p : pawns_) {
+        if (p.pawn == target) {
+            PawnInfo now = p;
+            if (const Position* tp = reg.try_get<Position>(target)) {
+                now.x = tp->x;
+                now.y = tp->y;
+            }
+            return friendInLine(shooter, pos->x, pos->y, pos->level, posture->stance, now);
+        }
+    }
+    return false;
+}
+
 bool FighterSystem::friendInLine(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target) const {
     const FactionId side = factionOf(pawn);
     const float dx = target.x - x;

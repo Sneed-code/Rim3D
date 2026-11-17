@@ -23,7 +23,7 @@
     "magazineSize": 15, "reloadTime": 60
   },
   {
-    "defName": "Gun_BoltActionRifle", "twoHanded": true, "researchPrerequisite": "Gunsmithing", "visual": {"sound": {"shot": "Shot_Rifle"}}, "parent": "GunBase", "label": "bolt-action rifle",
+    "defName": "Gun_BoltActionRifle", "keepBurst": true, "twoHanded": true, "researchPrerequisite": "Gunsmithing", "visual": {"sound": {"shot": "Shot_Rifle"}}, "parent": "GunBase", "label": "bolt-action rifle",
     "stats": { "mass": 3.5, "rangedWeaponCooldown": 45, "accuracyTouch": 0.65, "accuracyShort": 0.8, "accuracyMedium": 0.9, "accuracyLong": 0.8 },
     "verbs": [ { "range": 36.9, "warmupTime": 51, "burstShotCount": 1, "defaultProjectile": "Bullet_BoltActionRifle" } ],
     "recoilPerShot": 0.02,

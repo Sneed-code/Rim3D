@@ -388,20 +388,12 @@ void USmokeTestSubsystem::BuildFightsPhases()
 			return;
 		}
 		AimAt(State->Target);
-		// R once, when the gun is ready and the magazine is part empty; every other frame is the trigger.
-		const bool bReady = B->GetSim()->combat().shotReadyIn(State->Protagonist) == 0;
-		if (!State->bReloadTried && bReady && F->GetShotsSeen() - State->ShotsAtStart >= 2 && F->Reload())
-		{
-			State->bReloadTried = true;
-		}
-		else
-		{
-			F->Fire();
-		}
+		// Every frame is the trigger (guns don't reload: a hidden cooldown refills the gun's shots, sneed's cooldown bursts).
+		F->Fire();
 		State->MaxTracers = FMath::Max(State->MaxTracers, F->GetActiveTracers());
 		State->MaxParticles = FMath::Max(State->MaxParticles, F->GetActiveParticles());
 		const colony::ThingView* Me = Snapshot(State->Protagonist);
-		State->bReloadSeen = State->bReloadSeen || (Me && Me->reloading);
+		State->bReloadSeen = State->bReloadSeen || (Me && Me->refillSteps > 0 && Me->refillLeft > 0);
 	}, [=, this]()
 	{
 		UFightSubsystem* F = Fight();
@@ -470,7 +462,7 @@ void USmokeTestSubsystem::BuildFightsPhases()
 		}
 		if (!State->bReloadSeen)
 		{
-			Fail(TEXT("fire_at_pawn: R (reload) never showed as reloading in the snapshot"));
+			Fail(TEXT("fire_at_pawn: the gun's shot store never showed refilling in the snapshot (the yellow bar)"));
 		}
 		if (F->GetHitboxChecks() < 1)
 		{

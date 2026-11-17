@@ -1,6 +1,6 @@
 [
  {
-  "defName": "Gun_ChargeLance",
+  "defName": "Gun_ChargeLance", "keepBurst": true,
   "parent": "GunBase",
   "label": "charge lance",
   "source": "RimWorld wiki",
@@ -48,7 +48,7 @@
   }
  },
  {
-  "defName": "Gun_NeedleGun",
+  "defName": "Gun_NeedleGun", "keepBurst": true,
   "parent": "GunBase",
   "label": "needle gun",
   "source": "RimWorld wiki",

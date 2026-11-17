@@ -9,6 +9,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
+#include "GunRangeSubsystem.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -319,7 +320,13 @@ void UFightSubsystem::OnShotFired(const colony::Event& Event)
 		return;
 	}
 	EnsureEffects();
-	const FVector Muzzle = FightSimToWorldUnits(*Bridge, Event.x, Event.y, Event.z);
+	FVector Muzzle = FightSimToWorldUnits(*Bridge, Event.x, Event.y, Event.z);
+	// The bullet leaves from the drawn gun's muzzle (sneed): the flash and the tracer start there and fly to where the
+	// sim's bullet lands.
+	if (FindDrawnMuzzle(Event.thing, Muzzle))
+	{
+		++MuzzleShots;
+	}
 	SpawnFlash(Muzzle);
 	if (Tracers.Num() < FightMaxTracers)
 	{
@@ -904,6 +911,86 @@ void UFightSubsystem::UpdateLights(float GameDelta)
 	}
 }
 
+bool UFightSubsystem::FindDrawnMuzzle(colony::Entity Shooter, FVector& InOutMuzzle) const
+{
+	// Farther than this from the sim's muzzle point, the drawn gun is somewhere else (a ragdoll, a stale frame): keep the sim's.
+	constexpr double MaxOffCm = 160.0;
+	FVector Found = FVector::ZeroVector;
+	bool bFound = false;
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	const bool bMe = Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == Shooter;
+	if (bMe && Protagonist->GetBody() && Protagonist->GetBody()->IsFirstPerson())
+	{
+		if (const UGunRangeSubsystem* Range = GetWorld()->GetSubsystem<UGunRangeSubsystem>())
+		{
+			bFound = Range->GetViewMuzzle(Found);
+		}
+		if (!bFound)
+		{
+			return false;  // first person with no view gun drawn: the sim's point is at the eyes, which is right
+		}
+	}
+	if (!bFound)
+	{
+		const UStaticMeshComponent* Gun = GetHeldGun(Shooter);
+		if (!Gun || !Gun->IsVisible() || !Gun->GetStaticMesh())
+		{
+			return false;
+		}
+		// Guns are drawn with +X out of the barrel: the front face of the mesh's box, at its middle.
+		const FBox Box = Gun->GetStaticMesh()->GetBoundingBox();
+		const FVector Local(Box.Max.X, (Box.Min.Y + Box.Max.Y) * 0.5, (Box.Min.Z + Box.Max.Z) * 0.5);
+		Found = Gun->GetComponentTransform().TransformPosition(Local);
+		bFound = true;
+	}
+	if (!bFound || FVector::Dist(Found, InOutMuzzle) > MaxOffCm)
+	{
+		return false;
+	}
+	InOutMuzzle = Found;
+	return true;
+}
+
+void UFightSubsystem::DrawShotStore(const colony::ThingView& View, float Scale) const
+{
+	if (View.shotStoreSize <= 0)
+	{
+		return;
+	}
+	ImDrawList* Draw = ImGui::GetWindowDrawList();
+	const ImVec2 At = ImGui::GetCursorScreenPos();
+	const float Width = 240.0f * Scale;
+	const float BarHeight = 4.0f * Scale;
+	const float PipHeight = 3.0f * Scale;
+	const float Gap = 2.0f * Scale;
+	const bool bPips = View.shotStoreSize > 1;
+	const ImU32 Back = IM_COL32(25, 22, 10, 200);
+	const ImU32 Yellow = IM_COL32(255, 214, 40, 245);
+	const ImU32 Dim = IM_COL32(120, 100, 20, 230);
+	// The bar: full while the gun is full; after the first shot it empties and fills again over the hidden cooldown,
+	// like a stamina bar.
+	const float Filled = View.refillSteps > 0 ? FMath::Clamp(1.0f - static_cast<float>(View.refillLeft) / static_cast<float>(View.refillSteps), 0.0f, 1.0f) : 1.0f;
+	Draw->AddRectFilled(At, ImVec2(At.x + Width, At.y + BarHeight), Back, BarHeight * 0.5f);
+	if (Filled > 0.0f)
+	{
+		Draw->AddRectFilled(At, ImVec2(At.x + Width * Filled, At.y + BarHeight), View.refillSteps > 0 ? Dim : Yellow, BarHeight * 0.5f);
+	}
+	// The shots left in the store, one pip each, under it (a one-shot gun has the bar alone).
+	if (bPips)
+	{
+		const int32 Count = View.shotStoreSize;
+		const float PipGap = Count > 24 ? 1.0f * Scale : 2.0f * Scale;
+		const float PipWidth = FMath::Max(1.0f, (Width - PipGap * static_cast<float>(Count - 1)) / static_cast<float>(Count));
+		const float Top = At.y + BarHeight + Gap;
+		for (int32 I = 0; I < Count; ++I)
+		{
+			const float X = At.x + static_cast<float>(I) * (PipWidth + PipGap);
+			Draw->AddRectFilled(ImVec2(X, Top), ImVec2(X + PipWidth, Top + PipHeight), I < View.shotStore ? Yellow : Back);
+		}
+	}
+	ImGui::Dummy(ImVec2(Width, BarHeight + (bPips ? Gap + PipHeight : 0.0f) + Gap));
+}
+
 UStaticMeshComponent* UFightSubsystem::GetHeldGun(colony::Entity Pawn) const
 {
 	const UWeaponDrawSubsystem* Weapons = GetWorld()->GetSubsystem<UWeaponDrawSubsystem>();
@@ -1344,12 +1431,14 @@ void UFightSubsystem::DrawHud()
 			if (View->magazineSize > 0)
 			{
 				FightText(FString::Printf(TEXT("%s   %d / %d%s"), *Label, View->rounds, View->magazineSize, View->reloading ? TEXT("   reloading") : TEXT("")));
+				ImGui::TextUnformatted("Left mouse fire   R reload   C crouch   Z lie down");
 			}
 			else
 			{
 				FightText(Label);
+				DrawShotStore(*View, Scale);
+				ImGui::TextUnformatted("Left mouse fire   C crouch   Z lie down");
 			}
-			ImGui::TextUnformatted("Left mouse fire   R reload   C crouch   Z lie down");
 		}
 		else if (View->weapon.valid() && Bridge->GetDefs())
 		{

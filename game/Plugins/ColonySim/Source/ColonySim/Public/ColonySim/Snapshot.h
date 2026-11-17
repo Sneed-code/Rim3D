@@ -134,6 +134,12 @@ struct ThingView {
     int rounds = 0;
     int magazineSize = 0;
     bool reloading = false;
+    // sneed's cooldown bursts (docs/design/aiming.md): shots left in the gun's store of `shotStoreSize`, and the steps
+    // until it is full again of the `refillSteps` it started at (both 0 when full). For the player's yellow bar.
+    int shotStore = 0;
+    int shotStoreSize = 0;
+    int refillLeft = 0;
+    int refillSteps = 0;
     // The player's gun kick (P2, docs/design/shooter-feel.md): where the shots are going above and to
     // the right of where the player aims, in degrees, from the last shots; it wears off by itself. The
     // camera shows the same offset. Zero for everyone else.

@@ -26,11 +26,13 @@
     "poise": { "base": 50, "immuneSteps": 900, "staggerEverySteps": 150, "staggerPartShare": 0.1,
                "forceFactor": { "Blunt": 1.5, "Crush": 1.5, "Burn": 0 } },
     "dodgeRoll": { "startUpSteps": 3, "rollSteps": 15, "hitProofSteps": 12, "recoverySteps": 9, "cooldownSteps": 6, "distance": 4.0 },
+    "cooldownBursts": { "shotsFactor": 3, "gapFactor": 0.5, "reloads": false },
     "unverified": ["accuracyDistances", "minHitChance", "stagger"],
     "ours": ["defaultShootingSkill", "standardTarget", "playerSpreadDistance", "gravity", "recoilRecoveryPerSecond",
              "recoilSkillReduction", "maxFlightSeconds", "reactionStepsBySkill", "leadBySkill", "leadErrorBySkill",
              "reloadTimeFactorBySkill", "recoilKickHoldSteps", "recoilKickResetSteps", "recoilKickRecoveryPerStep",
-             "recoilKickMaxDegrees", "dodgeRoll", "weaponSwitchSteps", "poise"]
+             "recoilKickMaxDegrees", "dodgeRoll", "weaponSwitchSteps", "poise",
+             "cooldownBursts: sneed 2026-11-17, three times the shots, half the gap, the cooldown from the first shot, no reloads"]
   },
   {
     "defName": "PlantRules", "source": "RimWorld wiki",
