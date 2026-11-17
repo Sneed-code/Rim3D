@@ -4,7 +4,9 @@
 
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "HAL/IConsoleManager.h"
+#include "TextureResource.h"
 
 #include "OverseerSubsystem.h"
 #include "SimSubsystem.h"
@@ -194,7 +196,58 @@ namespace
 	{
 		FWaterSmokeShot River;
 		FWaterSmokeShot Lake;
+		// W2: a wader goes back and forth between two waist-deep cells, a swimmer (the controlled colonist) swims in deep water.
+		FIntPoint WadeA = FIntPoint(-1, -1);
+		FIntPoint WadeB = FIntPoint(-1, -1);
+		FVector2D Deep = FVector2D(-1.0, -1.0);
+		colony::Entity Wader = colony::kNoEntity;
+		colony::Entity Swimmer = colony::kNoEntity;
+		int32 MaxPushes = 0;
+		int64 StepsAtStart = 0;
+		bool bWaderInWater = false;
+		bool bSwimmerSwam = false;
 	};
+
+	float WaterSmokeDepth(const colony::Map& Map, int32 X, int32 Y)
+	{
+		const colony::CellPos C{X, Y, 0};
+		return WaterSmokeOpen(Map, X, Y) ? Map.waterSurface(C) - Map.groundHeight(C) : 0.0f;
+	}
+
+	/** The open water cell nearest a point whose depth lies in [Lo, Hi], within 30 m; (-1, -1) if none. */
+	FIntPoint WaterSmokeCellWithDepth(const colony::Map& Map, FVector2D Near, float Lo, float Hi, FIntPoint Avoid, float AvoidM)
+	{
+		FIntPoint Best(-1, -1);
+		double BestD = 1.0e30;
+		for (int32 DY = -30; DY <= 30; ++DY)
+		{
+			for (int32 DX = -30; DX <= 30; ++DX)
+			{
+				const int32 X = FMath::FloorToInt32(Near.X) + DX;
+				const int32 Y = FMath::FloorToInt32(Near.Y) + DY;
+				const float D = WaterSmokeDepth(Map, X, Y);
+				if (D < Lo || D > Hi)
+				{
+					continue;
+				}
+				if (Avoid.X >= 0)
+				{
+					const double FromAvoid = FVector2D::Distance(FVector2D(X, Y), FVector2D(Avoid));
+					if (FromAvoid < AvoidM || FromAvoid > AvoidM + 6.0)
+					{
+						continue;
+					}
+				}
+				const double Dist = FVector2D::DistSquared(FVector2D(X + 0.5, Y + 0.5), Near);
+				if (Dist < BestD)
+				{
+					BestD = Dist;
+					Best = FIntPoint(X, Y);
+				}
+			}
+		}
+		return Best;
+	}
 }
 
 void USmokeTestSubsystem::BuildWaterPhases()
@@ -405,5 +458,236 @@ void USmokeTestSubsystem::BuildWaterPhases()
 			ViewFrom(Eye, (Look - Eye).Rotation());
 		};
 		Phases.Add(Above);
+
+		// Close over the shallows at the camera's bank, looking down at 45 degrees: the bed must show through the first
+		// 30 to 50 cm and fade towards the channel; the shore line soft, no white outline.
+		FPhase Shallows;
+		Shallows.Name = TEXT("shallows");
+		Shallows.WarmupSeconds = 3.0f;
+		Shallows.MeasureSeconds = 2.0f;
+		Shallows.Setup = [=, this]()
+		{
+			USimSubsystem* B = Bridge();
+			if (!B || !B->GetSim() || !State->River.bFound)
+			{
+				return;
+			}
+			const colony::Map& Map = B->GetSim()->map();
+			const FVector2D Dir = (State->River.Look - State->River.Eye).GetSafeNormal();
+			FVector2D Edge = State->River.Eye;
+			for (int32 Step = 0; Step < 80 && !WaterSmokeOpen(Map, FMath::FloorToInt32(Edge.X), FMath::FloorToInt32(Edge.Y)); ++Step)
+			{
+				Edge += Dir * 0.5;
+			}
+			const float Surface = Map.waterTable();
+			const FVector2D LookAt = Edge + Dir * 2.0;
+			const FVector2D EyeAt = Edge - Dir * 1.5;
+			const FVector Look = WaterSmokeOrigin + FVector(LookAt.X * 100.0, LookAt.Y * 100.0, Surface * 100.0);
+			const FVector Eye = WaterSmokeOrigin + FVector(EyeAt.X * 100.0, EyeAt.Y * 100.0, Surface * 100.0 + 300.0);
+			ViewFrom(Eye, (Look - Eye).Rotation());
+		};
+		Phases.Add(Shallows);
+
+		// The low river shot again with the ripples three times as strong (to judge the ripple strength).
+		FPhase Strong;
+		Strong.Name = TEXT("river_ripples3");
+		Strong.WarmupSeconds = 2.0f;
+		Strong.MeasureSeconds = 1.0f;
+		Strong.Setup = [=]()
+		{
+			if (USimWaterSubsystem* W = Water())
+			{
+				W->SetWaterParam(TEXT("RippleStrength"), 3.6f);
+			}
+			Frame(State->River);
+		};
+		Strong.Verify = [=]()
+		{
+			if (USimWaterSubsystem* W = Water())
+			{
+				W->SetWaterParam(TEXT("RippleStrength"), 1.2f);
+			}
+		};
+		Phases.Add(Strong);
 	}
+
+	// W2: two colonists go to the river (drafted, moved by orders at 3x): one to a waist-deep cell, one to the edge of the
+	// deep channel; then the second is taken over and swims, the first wades back and forth. Their pushes must reach the
+	// wave simulation and its height field must be written.
+	FPhase Walk;
+	Walk.Name = TEXT("_walk");
+	Walk.WarmupSeconds = 22.0f;
+	Walk.MeasureSeconds = 0.5f;
+	Walk.Setup = [=, this]()
+	{
+		USimSubsystem* B = Bridge();
+		if (!B || !B->GetSim() || !State->River.bFound)
+		{
+			return;
+		}
+		const colony::Map& Map = B->GetSim()->map();
+		State->WadeA = WaterSmokeCellWithDepth(Map, State->River.Look, 0.6f, 1.0f, FIntPoint(-1, -1), 0.0f);
+		State->WadeB = State->WadeA.X >= 0 ? WaterSmokeCellWithDepth(Map, FVector2D(State->WadeA), 0.55f, 1.05f, State->WadeA, 6.0f) : FIntPoint(-1, -1);
+		const FIntPoint DeepCell = WaterSmokeCellWithDepth(Map, State->River.Look, 2.0f, 10.0f, FIntPoint(-1, -1), 0.0f);
+		const FIntPoint DeepEdge = DeepCell.X >= 0 ? WaterSmokeCellWithDepth(Map, FVector2D(DeepCell), 0.4f, 1.2f, FIntPoint(-1, -1), 0.0f) : FIntPoint(-1, -1);
+		if (State->WadeA.X < 0 || State->WadeB.X < 0 || DeepCell.X < 0 || DeepEdge.X < 0)
+		{
+			Fail(TEXT("water: no waist-deep or deep cells near the river shot"));
+			return;
+		}
+		State->Deep = FVector2D(DeepCell.X + 0.5, DeepCell.Y + 0.5);
+		Notes.Add(FString::Printf(TEXT("wade (%d, %d) <-> (%d, %d), %.2f m deep; swim at (%.1f, %.1f), %.2f m deep"), State->WadeA.X, State->WadeA.Y, State->WadeB.X, State->WadeB.Y,
+			WaterSmokeDepth(Map, State->WadeA.X, State->WadeA.Y), State->Deep.X, State->Deep.Y, WaterSmokeDepth(Map, DeepCell.X, DeepCell.Y)));
+		for (const colony::ThingView& View : B->GetCurrentSnapshot().things)
+		{
+			if (View.category == colony::ThingCategory::Pawn && !View.dead && !View.downed)
+			{
+				if (State->Wader == colony::kNoEntity)
+				{
+					State->Wader = View.id;
+				}
+				else if (State->Swimmer == colony::kNoEntity)
+				{
+					State->Swimmer = View.id;
+				}
+			}
+		}
+		if (State->Swimmer == colony::kNoEntity)
+		{
+			Fail(TEXT("water: fewer than two colonists"));
+			return;
+		}
+		B->Submit(colony::DraftCommand{State->Wader, true});
+		B->Submit(colony::DraftCommand{State->Swimmer, true});
+		B->Submit(colony::MoveOrderCommand{State->Wader, colony::CellPos{State->WadeA.X, State->WadeA.Y, 0}});
+		B->Submit(colony::MoveOrderCommand{State->Swimmer, colony::CellPos{DeepEdge.X, DeepEdge.Y, 0}});
+		B->SetSpeed(3);
+	};
+	Phases.Add(Walk);
+
+	FPhase Wake;
+	Wake.Name = TEXT("river_wake");
+	Wake.WarmupSeconds = 9.0f;
+	Wake.MeasureSeconds = 4.0f;
+	Wake.Setup = [=, this]()
+	{
+		USimSubsystem* B = Bridge();
+		if (!B || !B->GetSim() || State->Swimmer == colony::kNoEntity)
+		{
+			return;
+		}
+		B->SetSpeed(1);
+		B->Submit(colony::ControlPawnCommand{State->Swimmer});
+		B->Submit(colony::MoveOrderCommand{State->Wader, colony::CellPos{State->WadeB.X, State->WadeB.Y, 0}});
+		State->StepsAtStart = Water() ? Water()->GetWaveSteps() : 0;
+		const colony::ThingView* W = B->GetCurrentSnapshot().find(State->Wader);
+		const FVector2D At = W ? FVector2D(W->x, W->y) : FVector2D(State->WadeA);
+		const FVector2D Mid = (At + State->Deep) * 0.5;
+		const FVector2D Back = (State->River.Eye - Mid).GetSafeNormal();
+		const FVector Look = B->SimToWorld(static_cast<float>(Mid.X), static_cast<float>(Mid.Y), 0);
+		const FVector Eye = B->SimToWorld(static_cast<float>(Mid.X + Back.X * 6.0), static_cast<float>(Mid.Y + Back.Y * 6.0), 0) + FVector(0.0, 0.0, 400.0);
+		ViewFrom(Eye, (FVector(Look.X, Look.Y, WaterSmokeOrigin.Z + B->GetSim()->map().waterTable() * 100.0) - Eye).Rotation());
+	};
+	Wake.OnFrame = [=, this]()
+	{
+		USimSubsystem* B = Bridge();
+		USimWaterSubsystem* Wt = Water();
+		if (!B || !B->GetSim() || !Wt)
+		{
+			return;
+		}
+		State->MaxPushes = FMath::Max(State->MaxPushes, Wt->GetWavePushes());
+		const colony::Snapshot& Snap = B->GetCurrentSnapshot();
+		if (const colony::ThingView* S = Snap.find(State->Swimmer))
+		{
+			State->bSwimmerSwam |= S->swimming;
+			// Swim a slow circle round the deep point.
+			const double T = GetWorld()->GetTimeSeconds() * 0.35;
+			const FVector2D Target = State->Deep + FVector2D(FMath::Cos(T), FMath::Sin(T)) * 2.5;
+			B->Submit(colony::DirectMoveCommand{State->Swimmer, static_cast<float>(Target.X), static_cast<float>(Target.Y)});
+		}
+		if (const colony::ThingView* W = Snap.find(State->Wader))
+		{
+			State->bWaderInWater |= W->waterDepth > 0.3f;
+			// Back and forth between the two cells.
+			const FIntPoint Goal = FVector2D::Distance(FVector2D(W->x, W->y), FVector2D(State->WadeB) + 0.5) < 1.0 ? State->WadeA
+				: (FVector2D::Distance(FVector2D(W->x, W->y), FVector2D(State->WadeA) + 0.5) < 1.0 ? State->WadeB : FIntPoint(-1, -1));
+			if (Goal.X >= 0)
+			{
+				B->Submit(colony::MoveOrderCommand{State->Wader, colony::CellPos{Goal.X, Goal.Y, 0}});
+			}
+		}
+	};
+	Wake.Verify = [=, this]()
+	{
+		USimWaterSubsystem* Wt = Water();
+		if (!Wt || !Wt->GetWaveTarget())
+		{
+			Fail(TEXT("water: no wave simulation running (Water.Ripples 1)"));
+			return;
+		}
+		const int64 Steps = Wt->GetWaveSteps() - State->StepsAtStart;
+		// Read the newest height field back: bodies must have made waves.
+		float MaxAbs = 0.0f;
+		TArray<FFloat16Color> Pixels;
+		if (FTextureRenderTargetResource* Res = Wt->GetWaveTarget()->GameThread_GetRenderTargetResource(); Res && Res->ReadFloat16Pixels(Pixels))
+		{
+			for (const FFloat16Color& P : Pixels)
+			{
+				MaxAbs = FMath::Max(MaxAbs, FMath::Abs(P.R.GetFloat() - P.G.GetFloat()));
+			}
+		}
+		Notes.Add(FString::Printf(TEXT("waves: %lld steps this phase, up to %d bodies pushing, %lld entries, height field max |h| %.4f (%d pixels read); wader in water %d, swimmer swam %d"), Steps,
+			State->MaxPushes, Wt->GetWaveEntries(), MaxAbs, Pixels.Num(), State->bWaderInWater ? 1 : 0, State->bSwimmerSwam ? 1 : 0));
+		if (Steps <= 0 || State->MaxPushes <= 0 || MaxAbs <= 1.0e-4f)
+		{
+			Fail(TEXT("water: bodies in the water made no waves"));
+		}
+		if (!State->bWaderInWater || !State->bSwimmerSwam)
+		{
+			Fail(TEXT("water: the wader did not wade or the swimmer did not swim"));
+		}
+	};
+	Phases.Add(Wake);
+
+	// The same with the open-water mask off (to tell a broken mask from no waves).
+	FPhase NoMask;
+	NoMask.Name = TEXT("_wake_nomask");
+	NoMask.WarmupSeconds = 2.0f;
+	NoMask.MeasureSeconds = 1.0f;
+	NoMask.Setup = [=]() { WaterSmokeSet(TEXT("Water.RippleMask"), 0.0f); };
+	NoMask.OnFrame = Wake.OnFrame;
+	NoMask.Verify = [=, this]()
+	{
+		WaterSmokeSet(TEXT("Water.RippleMask"), 1.0f);
+		USimWaterSubsystem* Wt = Water();
+		float MaxAbs = 0.0f;
+		TArray<FFloat16Color> Pixels;
+		if (FTextureRenderTargetResource* Res = Wt && Wt->GetWaveTarget() ? Wt->GetWaveTarget()->GameThread_GetRenderTargetResource() : nullptr; Res && Res->ReadFloat16Pixels(Pixels))
+		{
+			for (const FFloat16Color& P : Pixels)
+			{
+				MaxAbs = FMath::Max(MaxAbs, FMath::Abs(P.R.GetFloat() - P.G.GetFloat()));
+			}
+		}
+		Notes.Add(FString::Printf(TEXT("waves without the mask: max |h| %.4f (%d pixels read)"), MaxAbs, Pixels.Num()));
+	};
+	Phases.Add(NoMask);
+
+	// The same moment with the wave simulation off, for the cost.
+	FPhase NoWake;
+	NoWake.Name = TEXT("river_wake_off");
+	NoWake.WarmupSeconds = 2.0f;
+	NoWake.MeasureSeconds = 3.0f;
+	NoWake.Setup = [=]() { WaterSmokeSet(TEXT("Water.Ripples"), 0.0f); };
+	NoWake.OnFrame = Wake.OnFrame;
+	Phases.Add(NoWake);
+
+	FPhase AllOff;
+	AllOff.Name = TEXT("river_wake_nowater");
+	AllOff.WarmupSeconds = 3.0f;
+	AllOff.MeasureSeconds = 3.0f;
+	AllOff.Setup = [=]() { WaterSmokeSet(TEXT("Water.Enable"), 0.0f); };
+	AllOff.OnFrame = Wake.OnFrame;
+	Phases.Add(AllOff);
 }
