@@ -110,6 +110,24 @@ file's name (`AssaultRifle_Game`). `meshTextures` gives meshes their own maps (t
   default, its own hair, fair skin), `CreatorPeople::DefaultLooks` / `ApplyDefault`. `-GunRangeRandomPlayer` gives the
   old random woman. Targets stay random creator women.
 
+## After sneed's combat range try (2026-11-17)
+
+- Two bodies in third person (the protagonist's bearded MetaHuman inside the woman): `ASimPawnActor::SetBodyHidden`
+  showed the MetaHuman again when the view left first person. A MakeHuman body now keeps it hidden for good.
+- No blood where the bullet went in: wounds and body stains were stuck to that hidden MetaHuman
+  (`GetDecalMesh`), so they never showed. It now gives the MakeHuman body. And the hit point moves from the sim's
+  hitbox onto the drawn skin: `ASimPawnActor::TraceDrawnBody` walks the bullet's line against the animated
+  mannequin's physics shapes (no collision needed), so the spray and the wound come out where it was shot. The
+  realistic spray needs the `-run=BloodArt` assets in the worktree's Content (the smoke test notes whether they are in).
+- Screams: every time she goes down and every time a fight kills her, again if she lay downed (also knocked out,
+  also bleeding out from her wounds); `soundViolentDeath` gained blood loss and wounds (sim, tested).
+- Corpses sinking into the ground: the ragdoll's floor now sits on the drawn ground (a trace, not the height map) and
+  4 cm above it, since the flesh lies outside the mannequin's shapes.
+- Targets in each group of four: one stands, one flees when hit, one fights back with her fists when hit (walks up
+  and punches with `MeleeCommand`), one flees as soon as you are within 20 m. Driven by the scene with ordinary
+  commands until the sim's own sight and flee settings land (stealth thread). Melee swings in the range may strike
+  them although they are on your side (`UWeaponDrawSubsystem::FindSwingTarget`).
+
 ## Not done
 
 - The shotgun's pump and the slide of the pistol don't move (the shotgun comes as one mesh; its own rig and reload

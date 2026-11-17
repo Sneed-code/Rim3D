@@ -29,6 +29,7 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Filth.h"
+#include "ColonySim/Grime.h"
 #include "ColonySim/Fire.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Health.h"
@@ -646,6 +647,7 @@ struct SaveData {
     std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
     RoofCollapseSaved roofs;           // section "roofs" (M3)
     AreasSaved areas;                  // section "areas": allowed areas and who is limited to one
+    GrimeState grime;                  // section "grime": dirt and blood on bodies (docs/design/grime.md)
     LandingSaved landing;              // section "landing": the landing zone and shuttles (docs/design/landing.md)
     SaveDeep deep;                     // section "deep"
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
@@ -1330,7 +1332,7 @@ inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitComma
                                             std::is_same_v<Type, SetOutfitFightGearCommand> || std::is_same_v<Type, HideGearCommand> ||
                                             std::is_same_v<Type, ShieldCommand> || std::is_same_v<Type, SetDayLengthCommand> ||
                                             std::is_same_v<Type, SleepCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||
-                                            std::is_same_v<Type, PatchCommand>;
+                                            std::is_same_v<Type, PatchCommand> || std::is_same_v<Type, SetAlertCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1385,6 +1387,9 @@ void saveTradeCommand(Ar& ar, Type& c) {
         ar.value("add", c.add);
     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
         ar.value("pawn", c.pawn);
+    } else if constexpr (std::is_same_v<Type, SetAlertCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("alert", c.alert);
     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("up", c.up);
@@ -2531,6 +2536,9 @@ void saveFighterPart(Ar& ar, Fighter& f) {
         ar.value("y", k.y);
         ar.value("level", k.level);
         ar.value("seenAt", k.seenAt);
+        if (ar.sectionVersion() >= 5) {
+            ar.value("firsthand", k.firsthand);
+        }
     });
     if (ar.version() >= 17) {
         ar.value("reactUntil", f.reactUntil);
@@ -2552,6 +2560,18 @@ void saveFighterPart(Ar& ar, Fighter& f) {
     }
     if (ar.sectionVersion() >= 4) {  // a Wimp falling back after a hit
         ar.value("cowerUntil", f.cowerUntil);
+    }
+    if (ar.sectionVersion() >= 5) {  // stealth (docs/design/stealth.md); older saves: alerted, as a fighter was
+        ar.value("alert", f.alert);
+        ar.require(static_cast<int>(f.alert) <= static_cast<int>(Alert::Alerted), "the save file has a bad alert state");
+        ar.value("onGuard", f.onGuard);
+        ar.value("called", f.called);
+        ar.value("alertAt", f.alertAt);
+        ar.value("hasSuspect", f.hasSuspect);
+        ar.value("suspectX", f.suspectX);
+        ar.value("suspectY", f.suspectY);
+        ar.value("suspect", f.suspect);
+        ar.value("suspectAt", f.suspectAt);
     }
 
 }
@@ -3459,7 +3479,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("doors", 1, [&] {
         saveParts(ar, "door", e, &SaveEntity::door, [&](Door& door) { saveDoorPart(ar, door); });
     });
-    ar.section("fighters", 4, [&] {
+    ar.section("fighters", 5, [&] {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
@@ -3929,6 +3949,22 @@ void saveSections(Ar& ar, SaveData& d) {
                 ar.text("kind", p.kind);
                 ar.value("role", p.role);
             });
+        });
+    });
+    ar.section("grime", 1, [&] {  // dirt and blood on bodies, clothes and weapons (docs/design/grime.md)
+        ar.list("pawns", d.grime.pawns, [&](GrimeState::Entry& g) {
+            ar.value("pawn", g.pawn);
+            ar.value("dirtLegs", g.dirtLegs);
+            ar.value("dirtBody", g.dirtBody);
+            ar.value("blood", g.blood);
+            ar.value("weaponBlood", g.weaponBlood);
+            ar.text("bloodKind", g.bloodKind);
+            ar.text("weaponKind", g.weaponKind);
+            ar.value("bloodAt", g.bloodAt);
+            ar.value("weaponAt", g.weaponAt);
+            ar.value("lastX", g.lastX);
+            ar.value("lastY", g.lastY);
+            ar.value("lastLevel", g.lastLevel);
         });
     });
     // New sections go here, at the end.
@@ -5376,6 +5412,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.roofs = sim.roofCollapse_->state();
     d.areas = sim.areas_->saved();
     d.landing = sim.landing_->saved();
+    d.grime = sim.grime_->state();
     {
         const DeepResourcesSaved deep = sim.deepResources_->saved();
         std::unordered_map<uint32_t, uint32_t> indexOf;
@@ -5862,6 +5899,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (!sim.filth_->restore(d.filth, error) || !sim.roomStats_->restore(d.roomStats, error)) {
             return false;
         }
+    }
+    if (!sim.grime_->restore(d.grime, error)) {
+        return false;
     }
     if (!sim.landing_->restore(d.landing, error)) {
         return false;

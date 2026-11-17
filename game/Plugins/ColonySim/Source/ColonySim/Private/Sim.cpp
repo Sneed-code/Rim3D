@@ -21,6 +21,7 @@
 #include "ColonySim/FieldCare.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
+#include "ColonySim/Grime.h"
 #include "ColonySim/Fire.h"
 #include "ColonySim/Traits.h"
 #include "ColonySim/Floors.h"
@@ -281,6 +282,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mood_->setRooms(rooms_.get());
     floors_ = std::make_unique<Floors>(map_, *defs_);
     filth_ = std::make_unique<Filth>(map_, *things_, *floors_, *defs_, settings.seed);
+    grime_ = std::make_unique<Grime>(map_, *things_, *floors_, *filth_, *defs_);
+    grime_->setBodyHeight([this](Entity pawn) { return bodyHeightM(pawn); });
     roomStats_ = std::make_unique<RoomStats>(map_, *things_, *rooms_, *floors_, *filth_, *plants_, *defs_);
     mood_->setRoomStats(roomStats_.get());
     power_ = std::make_unique<PowerGrid>(map_, *things_, *rooms_, *defs_, events_);
@@ -423,6 +426,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         animals_->hurt(victim, attacker);
         if (fighters_) {
             fighters_->hurt(victim, attacker);
+            fighters_->struck(victim, attacker);  // it knows it is under attack (stealth.md)
         }
         if (raids_) {
             raids_->hurt(victim, attacker);
@@ -521,6 +525,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         pods_->forget(thing);
     });
     fighters_->setWeather(weather_.get());
+    fighters_->setLights(lights_.get());
+    fighters_->setStaysAlerted(settings.world.visit);  // another map is a mission site (stealth.md)
     melee_ = std::make_unique<MeleeSystem>(*things_, map_, *combat_, *health_, *defs_, time_,
                                            splitMix64(settings.seed ^ 0x6D656C6565ULL));
     melee_->setEventLog(&events_);
@@ -1104,6 +1110,15 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     if (const auto* landingZone = std::get_if<SetLandingZoneCommand>(&command)) {
         if (landing_->paintZone(landingZone->area, landingZone->add) == 0) {
             commandFailed(id, "the landing zone is already so there");
+        }
+        return;
+    }
+    if (const auto* alert = std::get_if<SetAlertCommand>(&command)) {
+        std::string why;
+        if (alert->alert > static_cast<uint8_t>(Alert::Alerted)) {
+            commandFailed(id, "no such alert state");
+        } else if (!fighters_->setAlert(alert->pawn, static_cast<Alert>(alert->alert), why)) {
+            commandFailed(id, why);
         }
         return;
     }
@@ -2173,6 +2188,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     { SimLap lap(profile_, "combat"); combat_->step(rng_); }
     { SimLap lap(profile_, "explosives"); explosives_->step(rng_); }
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
+    fighters_->hear(events_, eventsBefore);  // and fighters in earshot hear them (stealth.md)
     { SimLap lap(profile_, "defense"); defense_->step(rng_); }
     { SimLap lap(profile_, "artillery"); artillery_->step(rng_); }
     raids_->takeFire();  // colonists hurt this step take cover or run (real-time-combat.md phase 3)
@@ -2198,6 +2214,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     { SimLap lap(profile_, "lights"); lights_->update(); }
     if (calendar) {
         { SimLap lap(profile_, "filth"); filth_->step(); }
+        { SimLap lap(profile_, "grime"); grime_->step(time_.seconds, events_, weather_->effects().rainRate); }
         { SimLap lap(profile_, "roomStats"); roomStats_->step(time_.seconds); }
         { SimLap lap(profile_, "temperature"); temperature_->step(time_.seconds); }
         // From the weather as it is now, not left over from the last step: a loaded game has not had a last step.
@@ -2471,6 +2488,19 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 const WaterContact water = waterContactAt(map_, view.x, view.y, 0, bodyHeightM(entity));
                 view.waterDepth = water.depth;
                 view.swimming = water.swimming();
+            }
+            if (const PawnGrime* grime = grime_->of(entity)) {
+                const auto filthDef = [&](int kind) {
+                    return kind >= 0 && static_cast<size_t>(kind) < filth_->kinds().size() ? filth_->kinds()[static_cast<size_t>(kind)].def : DefId{};
+                };
+                view.dirtLegs = grime->dirtLegs;
+                view.dirtBody = grime->dirtBody;
+                view.blood = grime->blood;
+                view.bloodFilth = filthDef(grime->bloodKind);
+                view.bloodAge = static_cast<float>(time_.seconds - grime->bloodAt);
+                view.weaponBlood = grime->weaponBlood;
+                view.weaponBloodFilth = filthDef(grime->weaponKind);
+                view.weaponBloodAge = static_cast<float>(time_.seconds - grime->weaponAt);
             }
             view.firstWaypoint = static_cast<uint32_t>(out.waypoints.size());
             for (size_t k = mover->next; k < mover->path.size(); ++k) {
@@ -2794,6 +2824,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.fightTarget = fighter->target;
             view.fightSpot = fighter->hasSpot ? fighter->spot : cellOf(pos);
             view.fallingBack = fighter->fallingBack;
+            view.alert = static_cast<uint8_t>(fighter->alert);
+            view.hasSuspect = fighter->hasSuspect;
+            view.suspectX = fighter->suspectX;
+            view.suspectY = fighter->suspectY;
             view.defending = fighter->defending;
             view.sheltering = fighter->mode == FightMode::Shelter;
             view.fleeing = fighter->mode == FightMode::Flee;
@@ -3158,6 +3192,7 @@ uint64_t Sim::stateHash() const {
     zones_->hashState(h);
     floors_->hashState(h);
     filth_->hashState(h);
+    grime_->hashState(h);
     roomStats_->hashState(h);
     animals_->hashState(h);
     husbandry_->hashState(h);
