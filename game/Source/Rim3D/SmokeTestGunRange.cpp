@@ -786,6 +786,11 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 						break;
 					}
 				}
+				// The blood seen from where the shooter stands, without the scope (sneed: it must read from afar too).
+				if (State->StepTime > 1.2f && State->StepTime - Dt <= 1.2f)
+				{
+					Picture(TEXT("downed_far"));
+				}
 				Body->SetScriptedAim(State->StepTime > 1.5f);
 				if (State->StepTime > 3.5f)
 				{
