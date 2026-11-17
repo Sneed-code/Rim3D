@@ -1,0 +1,14 @@
+[
+  {
+    "defName": "GrimeRules", "source": "ours (RimWorld has no grime on bodies; sneed 2026-11-16)",
+    "soilFullSeconds": 7200, "soilMax": 0.5,
+    "mudFullSeconds": 600,
+    "workFullSeconds": 10800, "workMax": 0.7,
+    "groundFullSeconds": 1200,
+    "bloodPerDamage": 0.03, "spatterPerDamage": 0.012, "weaponPerDamage": 0.05,
+    "rainWashSeconds": 9000, "ankleWashSeconds": 600, "waistWashSeconds": 900, "swimWashSeconds": 600,
+    "wearOffSeconds": 172800,
+    "ours": ["soilFullSeconds", "soilMax", "mudFullSeconds", "workFullSeconds", "workMax", "groundFullSeconds", "bloodPerDamage", "spatterPerDamage", "weaponPerDamage", "rainWashSeconds", "ankleWashSeconds", "waistWashSeconds", "swimWashSeconds", "wearOffSeconds"],
+    "note": "Dirt and blood on bodies, clothes and melee weapons, each 0 (clean) to 1 (docs/design/grime.md). Times are game seconds (one step; 30 a real second at 1x, so 9000 is 5 real minutes). A metre walked counts as a second. soil: bare soil, sand, rough stone dust the legs up to soilMax; mud and marsh cake them to 1. work: digging, planting, cutting, building, butchering, beating fires. ground: lying or crawling on bare ground (downed, dead). Blood: a wound that bleeds adds bloodPerDamage per point of damage in the body's own fluid; the melee attacker who drew it gets spatterPerDamage and its weapon weaponPerDamage. Rain (rainRate 1) under the open sky washes all of it in rainWashSeconds; ankle-deep water washes the legs, waist or chest deep the body too, swimming everything; without water it wears off in wearOffSeconds (not off a corpse)."
+  }
+]
