@@ -21,6 +21,7 @@
 #include "CreatorPeople.h"
 #include "FightSubsystem.h"
 #include "GunRangeSubsystem.h"
+#include "KillFeedSubsystem.h"
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
 #include "PawnSubsystem.h"
@@ -902,6 +903,12 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				Blood->GetMistSpawned(), Blood->GetWoundMarks(), Blood->GetBodyStainsMade(), Blood->GetSplatsMade()));
 		}
 		Notes.Add(FString::Printf(TEXT("gunrange: %d targets ran, %d punches thrown at you"), State->Fled, State->FistSwings));
+		if (UKillFeedSubsystem* Feed = GetWorld()->GetSubsystem<UKillFeedSubsystem>())
+		{
+			PhaseNumbers.Add(TEXT("killfeed_lines"), Feed->GetLinesShown());
+			PhaseNumbers.Add(TEXT("killfeed_mine"), Feed->GetPersonalKills());
+			PhaseNumbers.Add(TEXT("killfeed_frames"), Feed->GetFramesDrawn());
+		}
 		if (USoundSubsystem* S = GetWorld()->GetSubsystem<USoundSubsystem>())
 		{
 			PhaseNumbers.Add(TEXT("voice_femhit"), S->GetPlayCount(TEXT("Voice_FemHit")));
