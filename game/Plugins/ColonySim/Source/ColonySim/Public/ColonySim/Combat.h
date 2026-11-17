@@ -303,6 +303,8 @@ public:
     float performance(Entity pawn) const { return performance_ ? std::max(0.05f, performance_(pawn)) : 1.0f; }
     // Times for aiming, cooldown, reloading and swings are multiplied by this: worn armour's weight over performance.
     float attackTimeFactor(Entity pawn) const;
+    // Its traits' share of its melee damage (Wimp 0.9); 1 without traits.
+    float traitMeleeDamage(Entity pawn) const;
     void noteHurt(Entity victim, Entity attacker) const {
         if (hurtHook_) {
             hurtHook_(victim, attacker);

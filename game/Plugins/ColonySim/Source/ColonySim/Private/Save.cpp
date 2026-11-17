@@ -2,6 +2,7 @@
 
 #include "ColonySim/Animals.h"
 #include "ColonySim/Areas.h"
+#include "ColonySim/Landing.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Apparel.h"
 #include "ColonySim/BodyMotion.h"
@@ -645,6 +646,7 @@ struct SaveData {
     std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
     RoofCollapseSaved roofs;           // section "roofs" (M3)
     AreasSaved areas;                  // section "areas": allowed areas and who is limited to one
+    LandingSaved landing;              // section "landing": the landing zone and shuttles (docs/design/landing.md)
     SaveDeep deep;                     // section "deep"
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
@@ -1327,7 +1329,7 @@ inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitComma
                                             std::is_same_v<Type, InventoryCommand> ||
                                             std::is_same_v<Type, SetOutfitFightGearCommand> || std::is_same_v<Type, HideGearCommand> ||
                                             std::is_same_v<Type, ShieldCommand> || std::is_same_v<Type, SetDayLengthCommand> ||
-                                            std::is_same_v<Type, SleepCommand> ||
+                                            std::is_same_v<Type, SleepCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||
                                             std::is_same_v<Type, PatchCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
@@ -1378,6 +1380,9 @@ void saveTradeCommand(Ar& ar, Type& c) {
         ar.value("pawn", c.pawn);
         ar.value("bed", c.bed);
         ar.value("wake", c.wake);
+    } else if constexpr (std::is_same_v<Type, SetLandingZoneCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.value("add", c.add);
     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
         ar.value("pawn", c.pawn);
     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
@@ -3909,6 +3914,23 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("dayMinutes", d.dayMinutes);
         ar.value("calendarAcc", d.calendarAcc);
     });
+    ar.section("landing", 1, [&] {  // the landing zone and shuttles (docs/design/landing.md)
+        ar.value("nextId", d.landing.nextId);
+        ar.list("zone", d.landing.zone, [&](int& cell) { ar.value(nullptr, cell); });
+        ar.list("shuttles", d.landing.shuttles, [&](Shuttle& s) {
+            ar.value("id", s.id);
+            ar.value("building", s.building);
+            ar.group("origin", [&] { saveCell(ar, s.origin); });
+            ar.value("rot", s.rot);
+            ar.value("phase", s.phase);
+            ar.value("phaseStep", s.phaseStep);
+            ar.value("visit", s.visit);
+            ar.list("passengers", s.passengers, [&](ShuttlePassenger& p) {
+                ar.text("kind", p.kind);
+                ar.value("role", p.role);
+            });
+        });
+    });
     // New sections go here, at the end.
 }
 
@@ -5353,6 +5375,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.upperFloors = sim.map_.upperFloorCells();
     d.roofs = sim.roofCollapse_->state();
     d.areas = sim.areas_->saved();
+    d.landing = sim.landing_->saved();
     {
         const DeepResourcesSaved deep = sim.deepResources_->saved();
         std::unordered_map<uint32_t, uint32_t> indexOf;
@@ -5839,6 +5862,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (!sim.filth_->restore(d.filth, error) || !sim.roomStats_->restore(d.roomStats, error)) {
             return false;
         }
+    }
+    if (!sim.landing_->restore(d.landing, error)) {
+        return false;
     }
     if (!sim.areas_->restore(d.areas, error)) {
         return false;

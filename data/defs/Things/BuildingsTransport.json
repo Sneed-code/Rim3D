@@ -29,5 +29,19 @@
     "unverified": ["passability"],
     "ours": ["visual"],
     "note": "Wiki-checked 2026-10-28: 60 steel + 1 component, 1600 ticks, 250 HP, 50% flammable, cover 50%, 150 kg. It stands beside a pod launcher, which fuels it."
+  },
+  {
+    "defName": "Shuttle_VTOL", "parent": "BuildingBase", "label": "shuttle", "source": "ours",
+    "description": "A VTOL crew shuttle: two pilots, eight passengers and a storage locker. It sets down on eight belly thrusters and flies forward on two swivelling rear engines.",
+    "size": [6, 12], "passability": "Impassable", "fillPercent": 1.0,
+    "stats": { "maxHitPoints": 1000, "flammability": 0.0 },
+    "shuttle": { "pilotSeats": 2, "passengerSeats": 8, "lengthM": 12, "widthM": 6, "liftThrusters": 8, "rearThrusters": 2 },
+    "visual": { "parts": [
+      { "shape": "box", "size": [4.4, 11.5, 3.2], "at": [0, 0, 0.6], "color": [0.78, 0.79, 0.8] },
+      { "shape": "box", "size": [6.0, 2.4, 1.2], "at": [0, -3.8, 3.0], "color": [0.55, 0.57, 0.6] },
+      { "shape": "box", "size": [3.8, 1.6, 1.4], "at": [0, 5.0, 2.0], "color": [0.12, 0.13, 0.15] }
+    ] },
+    "ours": ["everything"],
+    "note": "sneed 2026-11-17: about 12 m long and 6 m wide, 8 rear seats, 2 pilot seats, a locker behind the pilots, 8 belly lift thrusters, 2 large rear thrusters that swivel for forward flight. Shaped after RimWorld's shuttle, not a copy. Not built by the player: it brings visitors and traders (docs/design/landing.md). The visual parts stand in until the Codex model is in the game."
   }
 ]
