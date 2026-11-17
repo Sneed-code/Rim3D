@@ -596,7 +596,7 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 	// The body's own height (docs/design/gear-size.md): every place below was measured on the 1.80 m man, so it is
 	// scaled to this body, and the gear itself grows or shrinks part of the way (LooksRules gearSizeFollow).
 	const USimSubsystem* Bridge = BridgeSource.Get();
-	const colony::DefDatabase* Defs = Bridge ? Bridge->GetDefs() : nullptr;
+	const colony::DefDatabase* Defs = Bridge ? Bridge->GetDefs().get() : nullptr;
 	const colony::GearSize Gear = Bridge && Bridge->GetSim() ? colony::gearSizeFor(Bridge->GetSim()->defs(), Actor.GetBodyScale())
 																: colony::GearSize{};
 	const double Place = Gear.place;

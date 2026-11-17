@@ -1056,7 +1056,7 @@ void UGunRangeSubsystem::UpdateHeldView(float Dt, ASimPawnActor& Player, const c
 	UCameraComponent* Camera = Body ? Body->GetCamera() : nullptr;
 	UGunViewAnimInstance* Anim = Cast<UGunViewAnimInstance>(Source->GetAnimInstance());
 	UMakeHumanAnimInstance* ArmsAnim = Cast<UMakeHumanAnimInstance>(Arms->GetAnimInstance());
-	const colony::DefDatabase* Defs = Bridge->GetDefs();
+	const colony::DefDatabase* Defs = Bridge->GetDefs().get();
 	if (!Camera || !Anim || !ArmsAnim || !Defs || !Weapons || !HoldDraw::HasHand(Arms, true))
 	{
 		HideAll();
