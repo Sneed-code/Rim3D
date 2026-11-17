@@ -328,6 +328,20 @@ UStaticMesh* UWeaponDrawSubsystem::ShieldMesh(colony::DefId Shield, colony::DefI
 		return nullptr;
 	}
 	const colony::DefDatabase& Defs = *Bridge->GetDefs();
+	// The real model for this material (visual.models, made by the ShieldArt commandlet), when it has been made.
+	if (Stuff.valid() && Stuff.value < Defs.size())
+	{
+		const std::string ModelPath = Defs.get(Shield).text(("visual.models." + Defs.get(Stuff).defName()).c_str());
+		if (!ModelPath.empty())
+		{
+			if (UStaticMesh* Model = LoadObject<UStaticMesh>(nullptr, UTF8_TO_TCHAR(ModelPath.c_str()), nullptr, LOAD_NoWarn | LOAD_Quiet))
+			{
+				ShieldMeshes.Add(Key, Model);
+				return Model;
+			}
+			UE_LOG(LogWeaponDraw, Warning, TEXT("Shield model %s is not made (run the ShieldArt commandlet); drawing plain shapes"), UTF8_TO_TCHAR(ModelPath.c_str()));
+		}
+	}
 	TArray<VisualMesh::FPart> Parts;
 	VisualMesh::ReadParts(Defs.get(Shield), "visual", FVector2f(100.0f, 100.0f), Parts);
 	if (Parts.IsEmpty())
@@ -338,7 +352,7 @@ UStaticMesh* UWeaponDrawSubsystem::ShieldMesh(colony::DefId Shield, colony::DefI
 		Fallback.bStuff = true;
 		Parts.Add(Fallback);
 	}
-	// The material's colour; plasteel and uranium have none in their defs.
+	// The material's colour; plasteel has none in its def.
 	FLinearColor Color(0.42f, 0.46f, 0.53f);
 	if (Stuff.valid() && Stuff.value < Defs.size())
 	{

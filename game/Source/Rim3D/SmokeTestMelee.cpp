@@ -3,6 +3,7 @@
 #include "SmokeTest.h"
 
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "HAL/IConsoleManager.h"
 
 #include "FightSubsystem.h"
@@ -1086,6 +1087,19 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			Fail(TEXT("shield: still up 2 seconds after the button was let go"));
 		}
+		// The real model (docs/design/shields.md "Models"), when the ShieldArt commandlet has made it: thin along the face
+		// (x), about 60 cm wide and 75 cm tall for a medium shield.
+		FString ModelNote = TEXT("plain shapes (the ShieldArt commandlet has not made the models)");
+		if (const UStaticMesh* Mesh = Shield->GetStaticMesh(); Mesh && Mesh->GetPathName().Contains(TEXT("/Generated/Shields/")))
+		{
+			const FVector Size = Mesh->GetBoundingBox().GetSize();
+			ModelNote = FString::Printf(TEXT("model %s, %.0f x %.0f x %.0f cm"), *Mesh->GetName(), Size.X, Size.Y, Size.Z);
+			if (Size.X > Size.Y || Size.X > Size.Z || Size.Z < 60.0 || Size.Z > 95.0 || Size.Y < 45.0 || Size.Y > 75.0)
+			{
+				Fail(FString::Printf(TEXT("shield: the medium shield model is %s, expected thin along x, about 60 wide and 75 tall (turned or scaled wrong on import)"), *ModelNote));
+			}
+		}
+		Notes.Add(FString::Printf(TEXT("shield: drawn as %s"), *ModelNote));
 		const int32 Blocks = W->GetShieldBlocksSeen() - State->ShieldBlocksAtStart;
 		const int32 Sparks = Fight()->GetImpactsOfKind(colony::ProjectileHitKind::Armor) - State->SparksAtStart;
 		if (State->bStaged && (Blocks < 1 || Sparks < 1))

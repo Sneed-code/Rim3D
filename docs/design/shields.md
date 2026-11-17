@@ -97,8 +97,9 @@ armor: 10 steel and 10 chemfuel make 20. It takes steel's armour factors; flat b
   times a second), and letting go sends the shield down. Without a shield the button does what it did before (a gun
   aims, a melee weapon blocks). Leaving direct mode, picking up a building, or taking over another colonist puts the
   shield down. With a shield on the arm a one-handed gun doesn't aim on the right button (`AProtagonistPawn`).
-- **The shield is drawn** from the def's `visual.parts` (placeholder plate and boss shapes until real models come),
-  tinted the material's colour (plasteel and uranium have fallback colours in code). It hangs on the left arm facing
+- **The shield is drawn** with its real model for its material (`visual.models`, below); when that model hasn't been
+  made, with the def's `visual.parts` (a plate and a boss) tinted the material's colour (plasteel has a fallback colour
+  in code). It hangs on the left arm facing
   out, swings up in front of the chest while `shieldUp`, and rides on the back while `shieldSlung`. It is hidden on a
   downed, dead or ragdolled pawn and with the look-only `hideGear` switch.
 - **Pose.** While the shield is up the body takes the block lean (`ASimPawnActor::ApplyBodyPose`) and the pawn turns
@@ -108,9 +109,25 @@ armor: 10 steel and 10 chemfuel make 20. It takes steel's armour factors; flat b
 - Smoke test `melee`, phase `shield`: a steel medium shield on the protagonist, the right button held from code
   (`ScriptRightMouse`), a clubber beats on it, then it is let go.
 
+## Models
+
+12 models, one per material and size (`SM_Shield_<Wood|Steel|Composite|Plasteel>_<Small|Medium|Tower>`), made by
+`tools/shield_models.py`, a Blender script Codex wrote for sneed (2026-11-16/17): real size in metres, face along +X,
+width along Y, up along Z, origin in the middle where the forearm sits; a grip across the forearm and a strap 25 cm
+toward the elbow on the back. Wood: planks, iron rim, rivets and boss. Steel: brushed plate, rivets, boss. Composite:
+a charcoal riot/ballistic shield with a rubber edge (the tower has a viewport). Plasteel: dark frame with pale plates
+and cyan light lines. Each is 60 to 400 KB, under 3000 / 4000 / 6000 triangles.
+
+    blender -b --python tools/shield_models.py -- game/Content/ThirdParty/Shields
+    UnrealEditor-Cmd game/Rim3D.uproject -run=ShieldArt -unattended -nosplash -AllowCommandletRendering
+
+The commandlet (`game/Source/Rim3DEditor/ShieldArtCommandlet.cpp`) imports each with its own materials into
+`/Game/Rim3D/Generated/Shields/<name>/<name>` (not in Git). The smoke test `melee` (phase `shield`) checks the model
+is drawn and stands the right way up (thin along x, about 60 x 75 cm for the medium).
+
 ## Not done yet
 
-- Real shield models (free realistic ones or sneed's own Blender ones) in place of the placeholder shapes; a proper
-  raised-shield animation for the body (now the procedural block lean).
+- A proper raised-shield animation for the body (now the procedural block lean); shields sized to the wielder (thread
+  "Scale weapons and gear to wielder size"). The plasteel and composite models could use a pass by hand in Blender.
 - Raiders and traders don't carry shields yet (no pawn kind lists them).
 - Shield bash, and blocking with the weapon (melee.md) together with a shield.
