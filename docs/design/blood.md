@@ -60,7 +60,7 @@ down in half a minute. Tended or stopped wounds stop; the run stays as a stain.
 
 **Splatter on the ground at every hit** (sneed, 2026-11-17: "realistic blood splatter, like Baldur's Gate 3 after combat",
 not a tint; it must read from afar): besides what the flying drops leave, each hit that draws blood lays a pattern on
-the ground at once: a spatter fan 30 to 100 cm across thrown the way the blow went (out of the exit of a shot through,
+the ground at once: a spatter fan 60 to 190 cm across, filled with 4 to 12 crowned drops, thrown the way the blow went (out of the exit of a shot through,
 back toward the shooter otherwise), 3 to 8 slanted drops with tails trailing further out, a few round drops near the
 feet and, for a bad wound or a body that is down, a patch under it. These are never culled by distance. Drops' own
 splats are bigger too (at least 2.4 cm across). On the body each such hit leaves the wound mark, a larger soaked patch

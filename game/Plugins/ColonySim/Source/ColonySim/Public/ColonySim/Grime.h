@@ -42,9 +42,9 @@ struct COLONY_API GrimeNumbers {
     float workFullSeconds = 10800.0f;  // digging, planting, cutting, building: body and legs clean to workMax
     float workMax = 0.7f;
     float groundFullSeconds = 1200.0f; // lying or crawling on bare ground: clean to 1
-    float bloodPerDamage = 0.03f;      // a bleeding wound: body blood per point of damage
-    float spatterPerDamage = 0.012f;   // the melee attacker who drew it
-    float weaponPerDamage = 0.05f;     // its melee weapon
+    float bloodPerDamage = 0.012f;      // a bleeding wound: body blood per point of damage
+    float spatterPerDamage = 0.005f;   // the melee attacker who drew it
+    float weaponPerDamage = 0.03f;     // its melee weapon
     float rainWashSeconds = 9000.0f;   // full rain (rainRate 1) under the open sky washes everything off in this long
     float ankleWashSeconds = 600.0f;   // feet in water: the legs
     float waistWashSeconds = 900.0f;   // waist or chest deep: the legs at once and the body at this pace

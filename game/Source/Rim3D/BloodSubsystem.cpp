@@ -628,16 +628,26 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 		const float Reach = (Kind == EBloodWound::Gunshot ? 55.0f : 35.0f) * FMath::Sqrt(Force);
 		const FVector Foot(Hit.At.X, Hit.At.Y, Hit.At.Z);
 		// The main fan.
-		const float FanHalf = FMath::Clamp(14.0f + 18.0f * Force, 12.0f, 50.0f);
-		Splat(BloodCellSpecks + Random.RandRange(0, 1), Foot + Throw * (Reach + FanHalf * 0.6f), Throw, FanHalf * 1.25f, FanHalf);
+		// (PC look, 2026-11-17: the first sizes read as a few small blotches from the firing line, so everything here is
+		// about twice as big and the fan is filled with crowned drops.)
+		const float FanHalf = FMath::Clamp(30.0f + 30.0f * Force, 28.0f, 95.0f);
+		const FVector FanAt = Foot + Throw * (Reach + FanHalf * 0.6f);
+		Splat(BloodCellSpecks + Random.RandRange(0, 1), FanAt, Throw, FanHalf * 1.25f, FanHalf);
+		Splat(BloodCellSpecks + Random.RandRange(0, 1), FanAt + Throw * FanHalf * 0.5f, Throw, FanHalf * 0.8f, FanHalf * 0.65f);
+		const FVector Across(-Throw.Y, Throw.X, 0.0f);
+		for (int32 I = 0; I < FMath::Clamp(FMath::RoundToInt((4.0f + 4.0f * Force) * BloodQualityScale()), 2, 12); ++I)
+		{
+			const float W = Random.FRandRange(4.0f, 11.0f) * (0.8f + 0.2f * Force);
+			Splat(BloodCellRound + Random.RandRange(0, 3), FanAt + Throw * Random.FRandRange(-0.9f, 1.1f) * FanHalf + Across * Random.FRandRange(-0.7f, 0.7f) * FanHalf, Throw, W, W);
+		}
 		// Slanted drops trailing further out.
 		const int32 Trail = FMath::Clamp(FMath::RoundToInt(2.0f + 3.0f * Force * BloodQualityScale()), 1, 8);
 		for (int32 I = 0; I < Trail; ++I)
 		{
 			const FVector Spread = FMath::VRandCone(Throw, FMath::DegreesToRadians(22.0f));
 			const FVector Along = FVector(Spread.X, Spread.Y, 0.0f).GetSafeNormal();
-			const float Out = Reach + FanHalf + Random.FRandRange(10.0f, 90.0f) * FMath::Sqrt(Force);
-			const float W = Random.FRandRange(2.0f, 5.0f) * (0.7f + 0.3f * Force);
+			const float Out = Reach + FanHalf + Random.FRandRange(20.0f, 160.0f) * FMath::Sqrt(Force);
+			const float W = Random.FRandRange(4.0f, 9.0f) * (0.7f + 0.3f * Force);
 			Splat(BloodCellDirectional + Random.RandRange(0, 3), Foot + Along * Out, Along, W * Random.FRandRange(1.8f, 3.0f), W);
 		}
 		// A few round drops close by.
@@ -650,7 +660,7 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 		// A patch where the body stands or lies: more for bad wounds.
 		if (Force >= 0.6f || (View && (View->downed || View->dead)))
 		{
-			const float PatchHalf = FMath::Clamp(8.0f + 10.0f * Force, 8.0f, 40.0f);
+			const float PatchHalf = FMath::Clamp(16.0f + 16.0f * Force, 16.0f, 60.0f);
 			Splat(BloodCellPool + Random.RandRange(0, 1), Foot, Throw, PatchHalf, PatchHalf * 0.8f);
 		}
 	}
