@@ -644,6 +644,13 @@ TEST_CASE("Melee: three brawlers against three armed raiders fight it out") {
     // A scenario over many steps: both sides close in, swing, block and dodge until one side is down.
     const auto fight = [](uint64_t seed, int& downed, uint64_t& swings, uint64_t& hits, uint64_t& hash) {
         auto sim = meleeTestSim(seed);
+        // Open ground, as the fight was tuned on: among trees the same seeds can end with raiders routed and gone
+        // and nobody down, which this test doesn't mean to judge (docs/design/plant-bodies.md).
+        for (int y = 0; y < sim->map().height(); ++y) {
+            for (int x = 0; x < sim->map().width(); ++x) {
+                sim->plants().remove(CellPos{x, y, 0});
+            }
+        }
         std::vector<Entity> all;
         const char* weapons[] = {"Melee_Knife", "Melee_Mace", "Melee_Gladius"};
         for (int i = 0; i < 3; ++i) {
