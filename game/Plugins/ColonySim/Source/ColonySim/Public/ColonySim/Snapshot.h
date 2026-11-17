@@ -69,6 +69,9 @@ struct ThingView {
     // stays where it fell. A full health report is `Sim::healthReport`.
     bool downed = false;
     bool dead = false;
+    // Pawns: health of its worst body part, 0 to 1 (a body zone's for people, else its most hurt part's): the focus HP bar
+    // (sneed, docs/design/focus.md). Pawns the player is focused on and the player's own pawn only; 1 for the rest.
+    float lowestPart = 1.0f;
     // Pawns: the job they are on (docs/design/jobs.md) and what it is about, and what they carry.
     JobType job = JobType::None;
     uint32_t area = 0;  // the allowed area a pawn is limited to (AreaView::id), 0 for none
@@ -257,6 +260,7 @@ struct ThingView {
     bool focusPlayer = false;
     bool footwork = false;
     FightResponse fightResponse = FightResponse::Attack;
+    bool sprinting = false;  // an AI fighter sprinting away from enemies or in to melee (1.5x its pace; focus.md)
     bool crawling = false;   // downed by the torso and awake: Unreal plays a crawl when it moves (body-health.md part D)
     // Pawns in water (docs/design/water.md): metres of water over the ground at their feet (the surface is z + waterDepth),
     // and whether it is past their shoulders, so they swim (a swim animation, the body floating at the surface).

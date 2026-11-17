@@ -181,7 +181,12 @@ struct FighterRules {
     float minWalkShare = 0.25f;
     // Fight responses (docs/design/focus.md, ours): Flee and FleeOnSight run this long after being hurt or the last sighting.
     float fleeResponseSeconds = 20.0f;
-    float fleeSightRange = 40.0f;     // FleeOnSight runs from an enemy it sees this close       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
+    float fleeSightRange = 40.0f;     // FleeOnSight runs from an enemy it sees this close
+    // Sprinting (sneed, 2026-11-17): fighters sprint only to run from enemies or to close in for melee; otherwise they move at
+    // their usual pace. The player's sprint is 1.5 times (ProtagonistPawn kSprintFactor); the AI's is the same.
+    float sprintFactor = 1.5f;
+    float sprintChargeMin = 3.0f;     // a melee charge sprints while the target is further than this...
+    float sprintChargeMax = 30.0f;    // ...and nearer than this       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
 };
 
 class COLONY_API FighterSystem {
@@ -210,6 +215,11 @@ public:
     void setMelee(MeleeSystem* melee) { melee_ = melee; }
     // Fog and the rest shorten how far a fighter under the open sky spots enemies (docs/design/weather.md).
     void setWeather(const Weather* weather) { weather_ = weather; }
+
+    // Sprinting now (sneed): running from enemies (routed, falling back, fleeing by its response, heading for shelter) or
+    // charging in to melee. The movement speed is times FighterRules sprintFactor. Never the player's pawn (its keys sprint).
+    bool sprinting(Entity pawn) const;
+    float sprintFactor() const { return rules_.sprintFactor; }
 
     // The pawn's fight response (MeleeSystem keeps it); Attack without melee.
     FightResponse responseOf(Entity pawn) const;

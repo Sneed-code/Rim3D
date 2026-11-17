@@ -50,6 +50,9 @@
     "helpRange": 20,
     "fleeResponseSeconds": 20,
     "fleeSightRange": 40,
+    "sprintFactor": 1.5,
+    "sprintChargeMin": 3,
+    "sprintChargeMax": 30,
     "helpReach": 2.5,
     "profiles": {
       "colonists": { "holdsForFriends": true },
@@ -63,6 +66,6 @@
              "diveMargin", "diveSafe", "throwEvery", "throwMinEnemies", "throwMemory", "throwSelfMargin", "throwFriendMargin",
              "switchMeleeRange", "switchSidearmRange", "switchMargin", "minWalkShare", "rangeMargin", "walkStayBonus",
              "focusMetres", "ambushRange", "helpRange", "helpReach", "profiles",
-             "fleeResponseSeconds", "fleeSightRange"]
+             "fleeResponseSeconds", "fleeSightRange", "sprintFactor", "sprintChargeMin", "sprintChargeMax"]
   }
 ]

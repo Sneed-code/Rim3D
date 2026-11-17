@@ -136,6 +136,9 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     num("helpRange", r.helpRange);
     num("fleeResponseSeconds", r.fleeResponseSeconds);
     num("fleeSightRange", r.fleeSightRange);
+    num("sprintFactor", r.sprintFactor);
+    num("sprintChargeMin", r.sprintChargeMin);
+    num("sprintChargeMax", r.sprintChargeMax);
     num("helpReach", r.helpReach);
     r.colonistsHoldForFriends = def->flag("profiles.colonists.holdsForFriends", r.colonistsHoldForFriends);
     r.raidersHoldForFriends = def->flag("profiles.raiders.holdsForFriends", r.raidersHoldForFriends);
@@ -549,6 +552,34 @@ void FighterSystem::aiFocus(Entity pawn, const Fighter& f) {
                       !panicked(pawn, f) && weaponRange(pawn) <= 0.0f && target->level == self->level &&
                       fightDist(target->x, target->y, self->x, self->y) <= melee_->rules().aiFocusRange;
     melee_->setAiFocus(pawn, keep ? f.target : kNoEntity);
+}
+
+bool FighterSystem::sprinting(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Fighter* f = reg.valid(pawn) ? reg.try_get<Fighter>(pawn) : nullptr;
+    if (f == nullptr || f->walk != 2 || reg.all_of<PlayerControl>(pawn)) {
+        return false;
+    }
+    if (f->mode == FightMode::Flee || f->mode == FightMode::Shelter) {
+        return !f->known.empty() || f->mode == FightMode::Flee;  // running from enemies it knows of, or routed
+    }
+    if (f->mode != FightMode::Fight) {
+        return false;
+    }
+    if (f->fallingBack || panicked(pawn, *f)) {
+        return !f->known.empty();
+    }
+    // Charging in to melee: no gun, after a target, not yet close.
+    if (melee_ == nullptr || weaponRange(pawn) > 0.0f || !melee_->charges(pawn)) {
+        return false;
+    }
+    const PawnInfo* self = info(pawn);
+    const PawnInfo* target = info(f->target);
+    if (self == nullptr || target == nullptr || f->spot != cellOf(Position{target->x, target->y, target->level})) {
+        return false;
+    }
+    const float d = fightDist(target->x, target->y, self->x, self->y);
+    return d > rules_.sprintChargeMin && d < rules_.sprintChargeMax;
 }
 
 bool FighterSystem::fleeResponse(FightResponse response) {

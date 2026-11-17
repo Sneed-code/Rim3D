@@ -68,6 +68,18 @@ step from the velocity, facing the focus).
 **Following an enemy that runs**: a fighter that swung at an enemy within `chaseSeconds` (6 s) follows it even when its
 side otherwise holds back for friends (the colonists' ambush rule). Raiders always charged.
 
+## Sprinting and the focus HP bar (sim)
+
+sneed (later the same day): enemies that flee sprint, and enemies running in to melee sprint. `FighterSystem::sprinting`:
+an AI fighter walking a path sprints at `sprintFactor` (1.5, the player's own sprint) while it is routed, heading for
+shelter from enemies it knows of, falling back or fleeing by its response with enemies known, or charging in to melee
+with no gun at a target between `sprintChargeMin` (3 m) and `sprintChargeMax` (30 m). Never the player's pawn (its keys
+sprint). Snapshot `sprinting`.
+
+The HP bar top-middle of the screen for the focused target: snapshot `lowestPart`, the health of its worst body part 0
+to 1 (a body zone for people, its most hurt part for animals), filled for pawns the player is focused on and the
+player's own pawn.
+
 ## Blows at the downed (sim)
 
 A swing at a downed or prone target sets `Melee::low` (snapshot `meleeLow` while the swing is under way). The strike already
@@ -89,7 +101,8 @@ The arm's-length "stand and fight" rule does not hold a fleeing pawn. Snapshot `
 
 ## Unreal (PC step, after the controls thread merges)
 
-- Tab sends `FocusCommand Next`, F1 `Clear`, behind the lock-on setting. Third-person lock-on camera: keeps the player and
+- Tab sends `FocusCommand Next`, F1 `Clear`, behind the lock-on setting (Tab no longer switches to overseer: that is O).
+- The focused target's HP bar top-middle: name, bar = `lowestPart` as a percentage. Third-person lock-on camera: keeps the player and
   the focus in frame; a small marker on the focused body. First person: the view turns toward the focus gently.
 - The player's mesh turns to the sim's facing while locked on (strafe animation from velocity).
 - Faces: a 0.6 s pain expression on every hit (`ProjectileHit`/`MeleeHit` events), an angry expression while the pawn

@@ -2415,6 +2415,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.mapWidth = map_.width();
     out.mapHeight = map_.height();
     out.things.clear();
+    // Pawns the player's pawn is focused on: their HP bar (focus.md).
+    std::vector<Entity> focusedByPlayer;
+    for (const auto [pawn, melee] : things_->registry().view<const Melee>().each()) {
+        if (melee.focusPlayer && melee.focus != kNoEntity) {
+            focusedByPlayer.push_back(melee.focus);
+        }
+    }
     out.waypoints.clear();
     out.bills.clear();
     out.zones.clear();
@@ -2972,6 +2979,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.focusPlayer = melee->focusPlayer;
             view.footwork = time_.steps < melee->footworkUntil;
             view.fightResponse = melee->response;
+        }
+        view.sprinting = fighters_->sprinting(entity);
+        if (std::find(focusedByPlayer.begin(), focusedByPlayer.end(), entity) != focusedByPlayer.end() ||
+            reg.all_of<PlayerControl>(entity)) {
+            view.lowestPart = lowestPartHealth(entity);
         }
         if (const Patching* patching = reg.try_get<Patching>(entity)) {
             view.patchZone = patching->zone;
@@ -3742,9 +3754,36 @@ float Sim::bodyHeightM(Entity pawn) const {
     return kPersonHeightM;
 }
 
+float Sim::lowestPartHealth(Entity pawn) const {
+    const entt::registry& reg = things_->registry();
+    const Health* h = reg.try_get<Health>(pawn);
+    if (h == nullptr || !reg.all_of<Thing>(pawn)) {
+        return 1.0f;
+    }
+    if (h->dead) {
+        return 0.0f;
+    }
+    float lowest = 1.0f;
+    if (!h->zones.empty()) {
+        for (const float z : h->zones) {
+            lowest = std::min(lowest, z);
+        }
+        return std::clamp(lowest, 0.0f, 1.0f);
+    }
+    const int parts = health_->partCount(reg.get<Thing>(pawn).def);
+    for (int i = 0; i < parts; ++i) {
+        const float max = health_->partMaxHitPoints(pawn, i);
+        if (max > 0.0f) {
+            lowest = std::min(lowest, health_->partHitPoints(pawn, i) / max);
+        }
+    }
+    return std::clamp(lowest, 0.0f, 1.0f);
+}
+
 float Sim::pawnMoveFactor(Entity pawn) const {
     return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed")) *
-           combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn);
+           combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn) *
+           (fighters_->sprinting(pawn) ? fighters_->sprintFactor() : 1.0f);  // fleeing or charging into melee (focus.md)
 }
 
 }  // namespace colony

@@ -179,6 +179,16 @@ TEST_CASE("Focus: Tab picks the nearest enemy in front first, cycles, and F1 let
     FOCUS_REQUIRE(view != nullptr);
     CHECK(view->focusTarget == front);
     CHECK(view->focusPlayer);
+    const ThingView* targetView = focusTestView(snap, front);
+    FOCUS_REQUIRE(targetView != nullptr);
+    CHECK(targetView->lowestPart == doctest::Approx(1.0f));  // the HP bar of a man unhurt
+    sim->things().registry().get<Health>(front).zones.assign(6, 1.0f);
+    sim->things().registry().get<Health>(front).zones[1] = 0.4f;
+    Snapshot hurt;
+    sim->writeSnapshot(hurt);
+    const ThingView* hurtView = focusTestView(hurt, front);
+    FOCUS_REQUIRE(hurtView != nullptr);
+    CHECK(hurtView->lowestPart == doctest::Approx(0.4f));  // its worst body part
 
     // F1 lets go; a second F1 has nothing to let go of.
     sim->submit(FocusCommand{hero, kNoEntity, FocusMode::Clear});
@@ -296,11 +306,18 @@ TEST_CASE("Focus: fight responses: flee on sight, flee when hurt, fists") {
     CHECK_FALSE(focusTestFailed(*sim));
     CHECK(sim->melee().responseOf(runner) == FightResponse::FleeOnSight);
     int runnerSwings = 0;
+    int runnerSprints = 0;
+    int hunterSprints = 0;
     for (int s = 0; s < 300; ++s) {
         sim->step();
         runnerSwings += focusTestSwings(*sim, runner);
+        runnerSprints += sim->fighters().sprinting(runner) ? 1 : 0;  // runs from the enemy at a sprint
+        hunterSprints += sim->fighters().sprinting(hunter) ? 1 : 0;  // and the knife sprints after it
     }
+    MESSAGE("runner sprinted " << runnerSprints << " steps, hunter " << hunterSprints);
     CHECK(runnerSwings == 0);
+    CHECK(runnerSprints > 30);
+    CHECK(hunterSprints > 30);
     CHECK(sim->things().registry().get<Fighter>(runner).fallingBack);
 
     // Flee: it fights until hurt, then runs and stops swinging.
