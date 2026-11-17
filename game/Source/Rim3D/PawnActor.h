@@ -117,6 +117,18 @@ public:
 	/** Hides or shows the whole pawn, MetaHuman included (first person view hides the player's own body). */
 	void SetBodyHidden(bool bHide);
 	bool IsBodyHidden() const { return IsHidden(); }
+	/** Hides the head (and what is on it: face, hair, hat, horns) and leaves the rest of the body drawn: first person
+	 *  with the free hand, where the view is inside the head but the arm and chest should show (docs/design/free-hand.md). */
+	void SetHeadHidden(bool bHide);
+	bool IsHeadHidden() const { return bHeadHidden; }
+	/** While standing, the body turns to face this yaw (degrees) instead of keeping its own: the free hand reaches where
+	 *  the player looks. Off with bOn false. */
+	void SetFacingOverride(bool bOn, float InYaw = 0.0f)
+	{
+		bFacingOverride = bOn;
+		FacingOverrideYaw = InYaw;
+	}
+
 	/** Hides the pawn while its level is cut away in the overseer view (docs/design/levels-draw.md), on top of SetBodyHidden. */
 	void SetCutAway(bool bCut);
 	bool IsCutAway() const { return bCutAway; }
@@ -308,6 +320,9 @@ private:
 	FString AppliedMakeHuman;
 	void ApplyMakeHuman(USimPawnSubsystem& Pawns);
 	bool bHairHidden = false;
+	bool bHeadHidden = false;
+	bool bFacingOverride = false;
+	float FacingOverrideYaw = 0.0f;
 	int32 ApparelRebuilds = 0;
 
 	void SpawnRagdollFloor();

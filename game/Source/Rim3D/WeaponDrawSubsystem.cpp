@@ -9,6 +9,7 @@
 #include "Materials/MaterialInterface.h"
 
 #include "FightSubsystem.h"
+#include "FreeHandSubsystem.h"
 #include "OrdersSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
@@ -580,8 +581,12 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		Shown.Component->SetRelativeScale3D(
 			FVector((Slot == static_cast<int32>(colony::WeaponSlot::Sidearm) ? WeaponSidearmScale : 1.0f) * Gear.size));
 
-		// 0 holstered to 1 in the hands.
+		// 0 holstered to 1 in the hands. The free hand puts the weapon away meanwhile (a slotted one: it has a holster).
 		float InHand = Slot == InHands ? 1.0f : 0.0f;
+		if (Slot < colony::kWeaponSlotCount)
+		{
+			InHand *= 1.0f - UFreeHandSubsystem::GetHolsterBlend(GetWorld(), View.id);
+		}
 		if (Incoming >= 0)
 		{
 			if (Slot == InHands)
@@ -970,7 +975,8 @@ void UWeaponDrawSubsystem::UpdatePlayerInput()
 	}
 	// With a building in hand the mouse buttons plan it and cancel it (UHandsOnSubsystem).
 	const UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
-	if (Orders && Orders->IsDirectBuilding())
+	// So does the free hand (docs/design/free-hand.md).
+	if ((Orders && Orders->IsDirectBuilding()) || UFreeHandSubsystem::IsActive(GetWorld()))
 	{
 		HoldShield(false);
 		return;

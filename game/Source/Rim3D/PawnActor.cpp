@@ -271,6 +271,11 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
 		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
 	}
+	else if (bFacingOverride)
+	{
+		// The free hand: standing, the body turns to where the player looks (in real time, also while paused).
+		Yaw = FMath::FixedTurn(Yaw, FacingOverrideYaw, PawnTurnRate * DeltaTime);
+	}
 	// Swimming: the body floats with its shoulders at the surface (docs/design/water.md, W4).
 	SwimLiftCm = WaterDraw::SwimLiftEase(SwimLiftCm, Bridge.GetSim() ? WaterDraw::SwimLiftTargetCm(Now, Bridge.GetSim()->bodyHeightM(Thing)) : 0.0f, DeltaTime, bTeleported);
 	Location.Z += SwimLiftCm;
@@ -1477,6 +1482,84 @@ void ASimPawnActor::SetBodyHidden(bool bHide)
 	if (MetaHuman)
 	{
 		MetaHuman->SetActorHiddenInGame(bAnyHidden);
+	}
+}
+
+void ASimPawnActor::SetHeadHidden(bool bHide)
+{
+	if (bHide == bHeadHidden)
+	{
+		return;
+	}
+	bHeadHidden = bHide;
+	static const FName Neck(TEXT("neck_01"));
+	// Every skinned mesh with a neck hides it and all under it (the head bone and its children).
+	TArray<USkeletalMeshComponent*> Meshes;
+	GetComponents(Meshes);
+	if (MetaHuman)
+	{
+		TArray<USkeletalMeshComponent*> Theirs;
+		MetaHuman->GetComponents(Theirs);
+		Meshes.Append(Theirs);
+	}
+	for (USkeletalMeshComponent* Mesh : Meshes)
+	{
+		if (!Mesh || Mesh->GetBoneIndex(Neck) == INDEX_NONE)
+		{
+			continue;
+		}
+		if (bHide)
+		{
+			Mesh->HideBoneByName(Neck, PBO_None);
+		}
+		else
+		{
+			Mesh->UnHideBoneByName(Neck);
+		}
+	}
+	// What is on the head: the MetaHuman face, grooms, hair cards, horns, and anything attached to a bone at or under the neck.
+	if (FaceMesh)
+	{
+		FaceMesh->SetHiddenInGame(bHide, true);
+	}
+	for (USceneComponent* Groom : Grooms)
+	{
+		if (Groom)
+		{
+			Groom->SetHiddenInGame(bHide);
+		}
+	}
+	if (HairCards)
+	{
+		HairCards->SetHiddenInGame(bHide);
+	}
+	for (UStaticMeshComponent* Horn : Horns)
+	{
+		if (Horn)
+		{
+			Horn->SetHiddenInGame(bHide);
+		}
+	}
+	TArray<USceneComponent*> Scene;
+	GetComponents(Scene);
+	if (MetaHuman)
+	{
+		TArray<USceneComponent*> Theirs;
+		MetaHuman->GetComponents(Theirs);
+		Scene.Append(Theirs);
+	}
+	for (USceneComponent* Component : Scene)
+	{
+		const USkeletalMeshComponent* Parent = Component ? Cast<USkeletalMeshComponent>(Component->GetAttachParent()) : nullptr;
+		const FName Socket = Component ? Component->GetAttachSocketName() : NAME_None;
+		if (!Parent || Socket.IsNone() || Parent->GetBoneIndex(Socket) == INDEX_NONE)
+		{
+			continue;
+		}
+		if (Socket == Neck || Parent->BoneIsChildOf(Socket, Neck))
+		{
+			Component->SetHiddenInGame(bHide, true);
+		}
 	}
 }
 

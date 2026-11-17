@@ -36,6 +36,11 @@ public:
 
 	/** A test capsule from A to B (cm, world) pressing on any body it reaches; Radius <= 0 takes it away. */
 	void SetProbe(const FVector& A, const FVector& B, float Radius);
+	/** The free hand's palm (docs/design/free-hand.md): a capsule from A to B pressing on any body but its owner's;
+	 *  Radius <= 0 takes it away. */
+	void SetHandPresser(const FVector& A, const FVector& B, float Radius, const USkeletalMeshComponent* Owner);
+	/** Squish on contact runs while this is set, whatever Pawns.SoftContact says (the free hand turns it on). */
+	void SetForcedOn(bool bForced) { bForcedOn = bForced; }
 	/** How many bodies had a row last frame and how many capsules touched them, for the tests. */
 	int32 GetBodiesLastFrame() const { return BodiesLastFrame; }
 	int32 GetContactsLastFrame() const { return ContactsLastFrame; }
@@ -63,6 +68,8 @@ private:
 	bool bTableMissing = false;
 	TArray<TWeakObjectPtr<USkeletalMeshComponent>> LastRows;
 	FCapsule Probe;
+	FCapsule HandPresser;
+	bool bForcedOn = false;
 	int32 BodiesLastFrame = 0;
 	int32 ContactsLastFrame = 0;
 	int32 MostContacts = 0;

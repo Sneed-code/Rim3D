@@ -7,6 +7,7 @@
 #include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
 
+#include "FreeHandSubsystem.h"
 #include "HandsOnSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
@@ -209,7 +210,9 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		float MouseX = 0.0f;
 		float MouseY = 0.0f;
 		PC->GetInputMouseDelta(MouseX, MouseY);
-		if (MouseX != 0.0f || MouseY != 0.0f)
+		// With the free hand the mouse moves the hand; the view turns only with the right mouse button held.
+		const bool bHandLook = !UFreeHandSubsystem::IsActive(GetWorld()) || PC->IsInputKeyDown(EKeys::RightMouseButton);
+		if ((MouseX != 0.0f || MouseY != 0.0f) && bHandLook)
 		{
 			const float Turn = FMath::Max(0.01f, GetMouseTurn());
 			Look(MouseX * Turn, MouseY * Turn);
@@ -228,7 +231,7 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	}
 	else if (const APlayerController* PC = GetPlayerController(); PC && Thing != colony::kNoEntity)
 	{
-		bWantAim = PC->IsInputKeyDown(EKeys::RightMouseButton);
+		bWantAim = PC->IsInputKeyDown(EKeys::RightMouseButton) && !UFreeHandSubsystem::IsActive(GetWorld());
 	}
 	if (bWantAim)
 	{
@@ -245,7 +248,8 @@ void AProtagonistPawn::Tick(float DeltaTime)
 
 bool AProtagonistPawn::IsBodyHiddenInView() const
 {
-	return bFirstPerson || (UShooterFeelSubsystem::IsAimFirstPerson() && AimBlend > 0.8f);
+	// With the free hand in first person the body shows, its head hidden (UProtagonistSubsystem), so the arm can be seen.
+	return (bFirstPerson && !UFreeHandSubsystem::IsActive(GetWorld())) || (UShooterFeelSubsystem::IsAimFirstPerson() && AimBlend > 0.8f);
 }
 
 float AProtagonistPawn::GetFieldOfView() const
@@ -363,7 +367,11 @@ void AProtagonistPawn::Look(float YawDegrees, float PitchDegrees)
 
 void AProtagonistPawn::Zoom(float Notches)
 {
-	// With a building in hand the wheel picks the building instead (U10).
+	// With a building in hand the wheel picks the building instead (U10); with the free hand it sets the hand's reach.
+	if (UFreeHandSubsystem::IsActive(GetWorld()))
+	{
+		return;
+	}
 	if (const UWorld* World = GetWorld())
 	{
 		if (UHandsOnSubsystem* Hands = World->GetSubsystem<UHandsOnSubsystem>(); Hands && Hands->HandleWheel(Notches))

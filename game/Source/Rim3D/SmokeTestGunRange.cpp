@@ -3,6 +3,8 @@
 // women stand and walk at 8 to 30 m. The sim does all the shooting, wounds, downing and dying; UGunRangeSubsystem draws
 // the arms and guns. N (or downing them all) brings a new group. -GunRangeScript runs a short tour by itself and saves
 // pictures to game/Saved/GunRange/ (each gun from the hip, aimed, firing and reloading, then a downed target).
+// A ninth woman, the partner, stands at arm's length ahead and to the side to try the free hand on (H,
+// docs/design/free-hand.md); -FreeHandScript runs a short free hand tour instead of the gun tour and checks it.
 
 #include "SmokeTest.h"
 
@@ -17,12 +19,14 @@
 
 #include "CreatorPeople.h"
 #include "FightSubsystem.h"
+#include "FreeHandSubsystem.h"
 #include "GunRangeSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
 #include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
+#include "SoftContactSubsystem.h"
 #include "SoundSubsystem.h"
 
 #include "ColonySim/Apparel.h"
@@ -78,6 +82,13 @@ namespace
 		int32 HitClipsAtStep = 0;
 		float HitSeenAt = -1.0f;
 		bool bHitPicture = false;
+		// The partner for the free hand, and the free hand tour.
+		colony::Entity Partner = colony::kNoEntity;
+		int32 PartnerSeed = 0;
+		TWeakObjectPtr<USkeletalMeshComponent> PartnerAppliedTo;
+		int32 HandStep = 0;
+		float HandTime = 0.0f;
+		int32 MostSquish = 0;
 	};
 
 	void GunRangeStrip(colony::Sim& Sim, USimSubsystem& B, colony::Entity Pawn)
@@ -98,7 +109,8 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 	const auto PawnsOf = [this]() { return GetWorld()->GetSubsystem<USimPawnSubsystem>(); };
 	const auto Range = [this]() { return GetWorld()->GetSubsystem<UGunRangeSubsystem>(); };
 	const auto Prot = [this]() { return GetWorld()->GetSubsystem<UProtagonistSubsystem>(); };
-	const bool bScript = FParse::Param(FCommandLine::Get(), TEXT("GunRangeScript"));
+	const bool bHandScript = FParse::Param(FCommandLine::Get(), TEXT("FreeHandScript"));
+	const bool bScript = FParse::Param(FCommandLine::Get(), TEXT("GunRangeScript")) && !bHandScript;
 	int32 BaseSeed = 1;
 	FParse::Value(FCommandLine::Get(), TEXT("GunRangeSeed="), BaseSeed);
 
@@ -188,7 +200,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 	FPhase Play;
 	Play.Name = TEXT("gunrange");
 	Play.WarmupSeconds = 6.0f;
-	float Minutes = bScript ? 2.0f : 240.0f;
+	float Minutes = bScript ? 2.0f : (bHandScript ? 0.75f : 240.0f);
 	FParse::Value(FCommandLine::Get(), TEXT("GunRangeMinutes="), Minutes);
 	Play.MeasureSeconds = Minutes * 60.0f;
 	Play.Setup = [=, this]()
@@ -330,7 +342,221 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		}
 		State->Rack = Rack;
 		G->SetRack(Rack);
+		// The partner: a random creator woman at arm's length, ahead and to one side (out of the line of fire), standing.
+		{
+			TSet<colony::Entity> Before;
+			for (const colony::ThingView& View : B->GetCurrentSnapshot().things)
+			{
+				Before.Add(View.id);
+			}
+			B->Submit(colony::SpawnThingCommand{"Human", colony::CellPos{State->Stand.x + 1, State->Stand.y + 1, 0}});
+			B->StepOnce();
+			for (const colony::ThingView& View : B->GetCurrentSnapshot().things)
+			{
+				if (View.category == colony::ThingCategory::Pawn && !Before.Contains(View.id))
+				{
+					State->Partner = View.id;
+					State->PartnerSeed = BaseSeed * 4441 + 99;
+					const colony::DefDatabase* Defs = B->GetDefs().get();
+					const FSimPawnLooks From = View.looks >= 0 ? USimPawnSubsystem::MakeLooks(B->GetCurrentSnapshot().looks[static_cast<size_t>(View.looks)], Defs) : FSimPawnLooks();
+					Pawns->SetLooksOverride(View.id, CreatorPeople::RandomLooks(State->PartnerSeed, true, From));
+					GunRangeStrip(*Sim, *B, View.id);
+					B->Submit(colony::SetFactionCommand{View.id, 1});
+					break;
+				}
+			}
+			if (State->Partner != colony::kNoEntity)
+			{
+				B->StepOnce();
+				B->Submit(colony::DraftCommand{State->Partner, true});
+			}
+			Notes.Add(FString::Printf(TEXT("gunrange: partner %s"), State->Partner != colony::kNoEntity ? TEXT("standing at arm's length") : TEXT("did not spawn")));
+		}
 		B->SetSpeed(1);
+	};
+
+	// -FreeHandScript: walk up to the partner in third person, free the hand, rest it on her cheek, hold, then her belly,
+	// then the same in first person, then hands back; pictures to game/Saved/GunRange/hand_*.png.
+	const auto RunFreeHandTour = [=, this]()
+	{
+		USimPawnSubsystem* Pawns = PawnsOf();
+		UProtagonistSubsystem* P = Prot();
+		UFreeHandSubsystem* Hand = GetWorld()->GetSubsystem<UFreeHandSubsystem>();
+		USoftContactSubsystem* Soft = GetWorld()->GetSubsystem<USoftContactSubsystem>();
+		AProtagonistPawn* Body = P ? P->GetBody() : nullptr;
+		ASimPawnActor* Partner = Pawns && State->Partner != colony::kNoEntity ? Pawns->FindPawn(State->Partner) : nullptr;
+		ASimPawnActor* Me = Pawns ? Pawns->FindPawn(State->Player) : nullptr;
+		APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+		USkeletalMeshComponent* Mesh = Partner ? (Partner->GetMakeHumanMesh() ? Partner->GetMakeHumanMesh() : Partner->GetBody()) : nullptr;
+		if (!Hand || !Body || !Me || !PC || !Mesh)
+		{
+			if (State->HandStep == 0 && PhaseTime > 20.0f)
+			{
+				Fail(TEXT("freehand: no partner, free hand or player body to try it with"));
+				State->HandStep = 99;
+			}
+			return;
+		}
+		State->HandTime += GetWorld()->GetDeltaSeconds();
+		if (Soft)
+		{
+			State->MostSquish = FMath::Max(State->MostSquish, Soft->GetContactsLastFrame());
+		}
+		const auto Picture = [=, this](const TCHAR* What)
+		{
+			const FString Path = FPaths::ProjectSavedDir() / TEXT("GunRange") / FString::Printf(TEXT("hand_%02d_%s.png"), State->Pictures++, What);
+			FScreenshotRequest::RequestScreenshot(Path, true, false);
+			const FFreeHandStats& S = Hand->GetStats();
+			Notes.Add(FString::Printf(TEXT("freehand: picture %s: state %d, wrist off %.1f cm (worst %.1f), touch frames %d, hold frames %d, kicks %d, squish contacts %d"),
+				*FPaths::GetCleanFilename(Path), static_cast<int32>(Hand->GetState()), S.WristError, S.WorstWristError, S.TouchFrames, S.HoldBodyFrames, S.Kicks,
+				State->MostSquish));
+		};
+		const auto MarkerAt = [PC](const FVector& World, FVector2D& Out)
+		{
+			FVector2D Pixel;
+			int32 X = 0, Y = 0;
+			PC->GetViewportSize(X, Y);
+			if (X <= 0 || Y <= 0 || !PC->ProjectWorldLocationToScreen(World, Pixel, false))
+			{
+				return false;
+			}
+			Out = FVector2D(Pixel.X / X * 2.0 - 1.0, 1.0 - Pixel.Y / Y * 2.0);
+			return true;
+		};
+		const auto LookAt = [Body](const FVector& World)
+		{
+			const FRotator Wanted = (World - Body->GetViewLocation()).Rotation();
+			Body->Look(FRotator::NormalizeAxis(Wanted.Yaw - Body->GetYaw()), Wanted.Pitch - Body->GetPitch());
+		};
+		const auto BoneAt = [Mesh](const TCHAR* Name) { return Mesh->GetBoneIndex(Name) != INDEX_NONE ? Mesh->GetSocketLocation(Name) : Mesh->GetComponentLocation(); };
+		const FVector ToMe = (Me->GetActorLocation() - Partner->GetActorLocation()).GetSafeNormal2D();
+		const FVector HeadUp = (BoneAt(TEXT("head")) - BoneAt(TEXT("neck_01"))).GetSafeNormal();
+		const FVector Cheek = BoneAt(TEXT("head")) + HeadUp * 6.0f + ToMe * 9.0f;
+		const FVector Belly = BoneAt(TEXT("spine_02")) + ToMe * 16.0f;
+		const auto Next = [=](int32 Step)
+		{
+			State->HandStep = Step;
+			State->HandTime = 0.0f;
+		};
+		const auto Aim = [&](const FVector& At, bool bGrip)
+		{
+			FVector2D M;
+			if (MarkerAt(At, M))
+			{
+				Hand->SetScripted(M, bGrip);
+			}
+		};
+		const float Apart = static_cast<float>(FVector::Dist2D(Me->GetActorLocation(), Partner->GetActorLocation()));
+		switch (State->HandStep)
+		{
+		case 0:  // third person, walk up to her
+			Body->SetFirstPerson(false);
+			LookAt(BoneAt(TEXT("spine_03")));
+			Body->SetScriptedInput(0.0, Apart > 72.0f ? 1.0 : 0.0, true);
+			if (Apart <= 72.0f || State->HandTime > 6.0f)
+			{
+				Body->SetScriptedInput(0.0, 0.0, true);
+				Notes.Add(FString::Printf(TEXT("freehand: %.0f cm from the partner"), Apart));
+				Next(1);
+			}
+			break;
+		case 1:  // the hand comes free (the gun goes to its holster)
+			LookAt(BoneAt(TEXT("spine_03")));
+			if (State->HandTime > 0.5f)
+			{
+				Hand->SetScripted(FVector2D(0.15, -0.2), false);
+				Hand->SetActive(true);
+				if (!Hand->IsOn())
+				{
+					Fail(TEXT("freehand: the free hand did not come on in direct control"));
+				}
+				Next(2);
+			}
+			break;
+		case 2:
+			if (State->HandTime > 1.5f)
+			{
+				Picture(TEXT("air"));
+				Next(3);
+			}
+			break;
+		case 3:  // the palm on her cheek
+			Aim(Cheek, false);
+			if (State->HandTime > 1.5f)
+			{
+				Picture(TEXT("touch_cheek"));
+				Next(4);
+			}
+			break;
+		case 4:  // hold it
+			Aim(Cheek, true);
+			if (State->HandTime > 1.5f)
+			{
+				Picture(TEXT("hold_cheek"));
+				Next(5);
+			}
+			break;
+		case 5:  // let go, the belly
+			Aim(Belly, false);
+			if (State->HandTime > 1.2f)
+			{
+				Picture(TEXT("touch_belly"));
+				Next(6);
+			}
+			break;
+		case 6:
+			Aim(Belly, true);
+			if (State->HandTime > 1.2f)
+			{
+				Picture(TEXT("hold_belly"));
+				Next(7);
+			}
+			break;
+		case 7:  // first person: the arm seen from the eyes, the head hidden
+			Body->SetFirstPerson(true);
+			if (State->HandTime < 0.3f)
+			{
+				LookAt(Belly);
+			}
+			Aim(Belly, false);
+			if (State->HandTime > 1.8f)
+			{
+				Picture(TEXT("first_person"));
+				Next(8);
+			}
+			break;
+		case 8:  // hands back
+			if (State->HandTime < 0.1f)
+			{
+				Hand->SetActive(false);
+				Hand->ClearScripted();
+			}
+			if (State->HandTime > 1.5f)
+			{
+				Picture(TEXT("off"));
+				const FFreeHandStats& S = Hand->GetStats();
+				if (S.TouchFrames == 0)
+				{
+					Fail(TEXT("freehand: the hand never rested on the partner"));
+				}
+				if (S.HoldBodyFrames == 0)
+				{
+					Fail(TEXT("freehand: gripping never held on to the partner"));
+				}
+				if (S.Kicks == 0)
+				{
+					Notes.Add(TEXT("freehand: no soft-part kicks (not a MakeHuman partner?)"));
+				}
+				if (State->MostSquish == 0)
+				{
+					Notes.Add(TEXT("freehand: the palm never squished her skin (no T_MH_SoftContacts?)"));
+				}
+				Next(9);
+			}
+			break;
+		default:
+			break;
+		}
 	};
 
 	Play.OnFrame = [=, this]()
@@ -369,6 +595,14 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			if (State->bRandomPlayer ? CreatorPeople::ApplyRandom(State->PlayerSeed, true, *Actor) : CreatorPeople::ApplyDefault(true, *Actor))
 			{
 				State->PlayerAppliedTo = Actor->GetMakeHumanMesh();
+			}
+		}
+		if (ASimPawnActor* Actor = State->Partner != colony::kNoEntity ? Pawns->FindPawn(State->Partner) : nullptr;
+			Actor && Actor->GetMakeHumanMesh() && State->PartnerAppliedTo.Get() != Actor->GetMakeHumanMesh())
+		{
+			if (CreatorPeople::ApplyRandom(State->PartnerSeed, true, *Actor))
+			{
+				State->PartnerAppliedTo = Actor->GetMakeHumanMesh();
 			}
 		}
 		int32 Standing = 0, Downed = 0, Dead = 0;
@@ -418,6 +652,11 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			}
 		}
 
+		if (bHandScript && State->bArmed)
+		{
+			RunFreeHandTour();
+			return;
+		}
 		if (!bScript || !State->bArmed)
 		{
 			return;
@@ -663,6 +902,14 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 	};
 	Play.Verify = [=, this]()
 	{
+		if (const UFreeHandSubsystem* Hand = GetWorld()->GetSubsystem<UFreeHandSubsystem>(); Hand && Hand->GetStats().FramesOn > 0)
+		{
+			PhaseNumbers.Add(TEXT("hand_touch_frames"), Hand->GetStats().TouchFrames);
+			PhaseNumbers.Add(TEXT("hand_hold_frames"), Hand->GetStats().HoldBodyFrames);
+			PhaseNumbers.Add(TEXT("hand_kicks"), Hand->GetStats().Kicks);
+			PhaseNumbers.Add(TEXT("hand_worst_wrist_cm"), Hand->GetStats().WorstWristError);
+			PhaseNumbers.Add(TEXT("hand_squish_contacts"), State->MostSquish);
+		}
 		if (UGunRangeSubsystem* G = Range())
 		{
 			PhaseNumbers.Add(TEXT("shots"), G->GetShotsSeen());

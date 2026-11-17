@@ -445,6 +445,11 @@ void UProtagonistSubsystem::ApplyBodyVisibility()
 	{
 		Actor->SetBodyHidden(Body->IsBodyHiddenInView());
 	}
+	// The free hand in first person: the body is drawn, but not the head the view is in (docs/design/free-hand.md).
+	if (Actor)
+	{
+		Actor->SetHeadHidden(Body->IsFirstPerson() && !Body->IsBodyHiddenInView());
+	}
 }
 
 void UProtagonistSubsystem::Tick(float DeltaTime)

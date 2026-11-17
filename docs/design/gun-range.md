@@ -20,7 +20,9 @@ woman, so the arms you see are hers); the rest leave. One of each gun lies in a 
 creator women (baseline humans, fair-weighted skin, seeded: `-GunRangeSeed=<n>`) stand at 10 to 30 m: the near four
 stand, the far four walk across the field and back. They are the player's own side, drafted and unarmed, so they never
 shoot back. They are drawn by the game's usual pawn drawing: hit reactions, blood, wound decals and ragdolls when downed
-or killed (FightSubsystem). N brings a new group; when all are down for 6 seconds a new group comes by itself.
+or killed (FightSubsystem). N brings a new group; when all are down for 6 seconds a new group comes by itself. A ninth woman, the partner, stands
+at arm's length ahead and to one side to try the free hand on (H, docs/design/free-hand.md); `-FreeHandScript` runs a
+free hand tour instead of the gun tour.
 
 ## The arms and the gun
 

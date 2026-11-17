@@ -22,6 +22,7 @@
 
 #include "GunViewAnim.h"
 #include "MakeHumanAnimInstance.h"
+#include "FreeHandSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
 #include "ProtagonistPawn.h"
@@ -835,7 +836,8 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 	{
 		Camera->SetFieldOfView(G.ScopeFov);
 	}
-	const bool bShow = ValidFrames >= 3 && !bScoped;
+	// The free hand puts the gun away: the body's own arm shows instead (docs/design/free-hand.md).
+	const bool bShow = ValidFrames >= 3 && !bScoped && !UFreeHandSubsystem::IsActive(GetWorld());
 	if (bShow != bShown || Arms->IsVisible() != bShow)
 	{
 		ViewRoot->SetVisibility(bShow, true);

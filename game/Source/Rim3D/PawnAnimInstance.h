@@ -69,6 +69,24 @@ public:
 	/** Set every frame by the pawn actor before the mesh ticks. */
 	FSimPawnAnimInputs Inputs;
 
+	/**
+	 * Free hand (docs/design/free-hand.md): the right wrist reaches `Target` (this mesh's component space, cm), the elbow
+	 * bent towards `Elbow` (same space); the palm turned towards `PalmFacing` (component space, unit; zero keeps the
+	 * wrist as animated) by `PalmWeight` (0 to 1); the fingers curled by `Curl` (0 as animated .. 1 a loose grip).
+	 * Alpha 0 is off (costs nothing). Set once a frame before the animation updates; followers through the leader pose
+	 * and MakeHuman bodies retargeted from this mesh take the same arm.
+	 */
+	void SetFreeHand(float Alpha, const FVector& Target, const FVector& Elbow, const FVector& PalmFacing, float PalmWeight, float Curl)
+	{
+		FreeHandAlpha = Alpha;
+		FreeHandTarget = Target;
+		FreeHandElbow = Elbow;
+		FreeHandPalm = PalmFacing;
+		FreeHandPalmWeight = PalmWeight;
+		FreeHandCurl = Curl;
+	}
+	float GetFreeHandAlpha() const { return FreeHandAlpha; }
+
 	const FSimPawnAnimStats& GetStats() const { return Stats; }
 
 protected:
@@ -92,6 +110,13 @@ private:
 
 	float WalkLoopSpeed = 150.0f;
 	float RunLoopSpeed = 400.0f;
+
+	float FreeHandAlpha = 0.0f;
+	FVector FreeHandTarget = FVector::ZeroVector;
+	FVector FreeHandElbow = FVector::ZeroVector;
+	FVector FreeHandPalm = FVector::ZeroVector;
+	float FreeHandPalmWeight = 0.0f;
+	float FreeHandCurl = 0.0f;
 
 	FSimPawnAnimStats Stats;
 };

@@ -56,6 +56,14 @@ void USoftContactSubsystem::SetProbe(const FVector& A, const FVector& B, float R
 	Probe.Radius = Radius;
 }
 
+void USoftContactSubsystem::SetHandPresser(const FVector& A, const FVector& B, float Radius, const USkeletalMeshComponent* Owner)
+{
+	HandPresser.A = A;
+	HandPresser.B = B;
+	HandPresser.Radius = Radius;
+	HandPresser.Owner = Owner;
+}
+
 void USoftContactSubsystem::AddBodyCapsules(const USkeletalMeshComponent* Mesh, TArray<FCapsule>& Out) const
 {
 	for (const FSoftCapsuleBone& Bone : SoftCapsuleBones)
@@ -146,7 +154,7 @@ void USoftContactSubsystem::Tick(float DeltaTime)
 	};
 	TArray<FSoftNear> Near;
 	TArray<USkeletalMeshComponent*> AllBodies;
-	if (Pawns && GSoftContact.GetValueOnGameThread() != 0)
+	if (Pawns && (GSoftContact.GetValueOnGameThread() != 0 || bForcedOn))
 	{
 		for (const auto& Pair : Pawns->GetPawns())
 		{
@@ -179,6 +187,10 @@ void USoftContactSubsystem::Tick(float DeltaTime)
 	if (Probe.Radius > 0.0f)
 	{
 		Pressers.Add(Probe);
+	}
+	if (HandPresser.Radius > 0.0f)
+	{
+		Pressers.Insert(HandPresser, 0);  // first, so a crowd of other capsules never pushes the palm out of a full row
 	}
 	// Fill the table: for each near body, the capsules of others that come within 3 cm of its flesh (its own capsules are
 	// thin cores, so allow 8 cm of flesh over them).

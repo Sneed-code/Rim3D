@@ -19,6 +19,7 @@
 
 #include <imgui.h>
 
+#include "FreeHandSubsystem.h"
 #include "OrdersSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
@@ -1156,7 +1157,8 @@ void UFightSubsystem::UpdatePlayerInput()
 	}
 	// With a building in hand the mouse button plans it and R turns it (UHandsOnSubsystem), so the gun stays quiet.
 	const UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
-	const bool bBuilding = Orders && Orders->IsDirectBuilding();
+	// The free hand has the mouse buttons too (docs/design/free-hand.md).
+	const bool bBuilding = (Orders && Orders->IsDirectBuilding()) || UFreeHandSubsystem::IsActive(GetWorld());
 	if (!bBuilding && PC->IsInputKeyDown(EKeys::LeftMouseButton))
 	{
 		Fire();

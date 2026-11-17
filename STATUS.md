@@ -2,6 +2,8 @@
 
 Updated 2026-11-17.
 
+Free hand (sneed, 2026-11-17; Unreal): in direct control H frees the right hand. The mouse moves a ring marker and the hand reaches for what is under it within arm's length, palm to the surface; held left click grips. Skin squishes under the palm and wobbles from the touch, a gripped body keeps the hand on that spot, loose physics things (ragdolls, debris) are pushed or carried and tossed, walls stop the hand. Wheel sets reach, right mouse looks around, the weapon is holstered meanwhile. First person shows your arm (head hidden). The gun range has a partner at arm's length to try it on. See `docs/design/free-hand.md`.
+
 Wimp melee (sneed, 2026-11-17; sim and data): a Wimp's melee blows do 10% less damage (Traits `meleeDamageFactor` 0.9), on top of running to cover for 12-20 s when hurt.
 
 Muffalo model (sneed, 2026-11-17; Unreal and data): the free **Buffalo_A1** is imported for the muffalo (Animated3D, CC BY; sneed's source.zip unzipped in `assets/raw/fab/buffalo-a1`), textured, 2.9 m, facing forward in the `animals_close` shot. The free version has **no walk or run clip** (only idle, death, lying and a turn), so the muffalo **stays on the Quaternius bull** until the buffalo has walk and run clips (one line in `assets/animal_art.json` swaps it); an animal model with no walk clip now falls back on its idle instead of not drawing. Every FBX import now gets its material moved onto the skinned copy of the engine master (no black models). **Next: a buffalo with walk and run clips to stop the sliding; check raptor and T-rex feet in play.**
