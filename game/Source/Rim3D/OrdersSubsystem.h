@@ -42,6 +42,10 @@ enum class EOrderTool : uint8
 	Deconstruct,
 	/** Drag a rectangle: a growing zone of its free soil cells, sown with the chosen crop (GetGrowCrop). */
 	Grow,
+	/** Drag a rectangle: adds its cells to the landing zone, where shuttles set down (docs/design/landing.md). */
+	LandingZone,
+	/** Drag a rectangle: takes its cells out of the landing zone. */
+	RemoveLandingZone,
 };
 
 /** What the orders overlay draws (smoke test `orders`). */
@@ -55,6 +59,8 @@ struct FOrdersStats
 	int32 ZoneCells = 0;
 	/** Cells of growing zones drawn. */
 	int32 GrowCells = 0;
+	/** Cells of the landing zone drawn. */
+	int32 LandingCells = 0;
 	/** Instances of the placement ghost (valid, invalid). */
 	int32 GhostValid = 0;
 	int32 GhostInvalid = 0;
@@ -282,6 +288,8 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> ZoneMaterial;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> GrowZoneMaterial;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> LandZoneMaterial;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> GhostGoodMaterial;
 	UPROPERTY()

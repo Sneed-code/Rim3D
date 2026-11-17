@@ -32,6 +32,8 @@ DEFINE_LOG_CATEGORY_STATIC(LogGunArt, Log, All);
 namespace
 {
 	const TCHAR* const GunArtRoot = TEXT("/Game/Rim3D/Generated/Guns");
+	/** Where the "vehicles" of a list go (assets/shuttle.json, docs/design/shuttle-draw.md). */
+	const TCHAR* const GunArtVehicleRoot = TEXT("/Game/Rim3D/Generated/Vehicles");
 
 	bool GunArtSave(UObject* Asset)
 	{
@@ -138,6 +140,14 @@ namespace
 		auto* Rough = Sample(TEXT("RoughnessMap"), 200, GunArtMaskTexture(TEXT("T_GunMaskWhite"), 255), SAMPLERTYPE_Masks);
 		auto* Metal = Sample(TEXT("MetallicMap"), 500, GunArtMaskTexture(TEXT("T_GunMaskBlack"), 0), SAMPLERTYPE_Masks);
 		auto* Orm = Sample(TEXT("ORMMap"), 800, GunArtMaskTexture(TEXT("T_GunMaskWhite"), 255), SAMPLERTYPE_Masks);
+		// Glow (lit panels, screens, nozzle rings): the emissive map times EmissiveStrength, 0 unless a model has one.
+		auto* Glow = Sample(TEXT("EmissiveMap"), 1400, GunArtDefaultTexture(TEXT("/Engine/EngineResources/Black")), SAMPLERTYPE_Color);
+		auto* GlowStrength = GunArtNode<UMaterialExpressionScalarParameter>(Material, -600, 1500);
+		GlowStrength->ParameterName = TEXT("EmissiveStrength");
+		GlowStrength->DefaultValue = 0.0f;
+		auto* GlowOut = GunArtNode<UMaterialExpressionMultiply>(Material, -200, 1450);
+		GunArtConnect(Glow, TEXT("RGB"), GlowOut, TEXT("A"));
+		GunArtConnect(GlowStrength, TEXT(""), GlowOut, TEXT("B"));
 		auto* UseOrm = GunArtNode<UMaterialExpressionScalarParameter>(Material, -600, 1100);
 		UseOrm->ParameterName = TEXT("UseORM");
 		UseOrm->DefaultValue = 0.0f;
@@ -185,6 +195,7 @@ namespace
 		GunArtConnectProperty(RoughOut, TEXT(""), MP_Roughness);
 		GunArtConnectProperty(MetalPick, TEXT(""), MP_Metallic);
 		GunArtConnectProperty(AoPick, TEXT(""), MP_AmbientOcclusion);
+		GunArtConnectProperty(GlowOut, TEXT(""), MP_EmissiveColor);
 		UMaterialEditingLibrary::RecompileMaterial(Material);
 		GunArtSave(Material);
 		return Material;
@@ -249,7 +260,10 @@ UGunArtCommandlet::UGunArtCommandlet()
 int32 UGunArtCommandlet::Main(const FString& Params)
 {
 	FString Text;
-	const FString ListFile = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("../assets/guns.json")));
+	// -List=assets/shuttle.json reads another list (relative to the repo); its "guns" and "vehicles" are both imported.
+	FString ListName = TEXT("assets/guns.json");
+	FParse::Value(*Params, TEXT("List="), ListName);
+	const FString ListFile = GunArtResolve(ListName);
 	TSharedPtr<FJsonObject> Root;
 	if (!FFileHelper::LoadFileToString(Text, *ListFile) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
 	{
@@ -264,8 +278,21 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 	IAssetTools& Tools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 	UMaterial* Master = GunArtMaster(Tools);
 	int32 Failed = Master ? 0 : 1;
-	for (const TSharedPtr<FJsonValue>& Value : Root->GetArrayField(TEXT("guns")))
+	TArray<TPair<TSharedPtr<FJsonValue>, const TCHAR*>> Entries;
+	for (const TPair<const TCHAR*, const TCHAR*> Section : {TPair<const TCHAR*, const TCHAR*>(TEXT("guns"), GunArtRoot), TPair<const TCHAR*, const TCHAR*>(TEXT("vehicles"), GunArtVehicleRoot)})
 	{
+		const TArray<TSharedPtr<FJsonValue>>* Array = nullptr;
+		if (Root->TryGetArrayField(Section.Key, Array))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Array)
+			{
+				Entries.Emplace(Value, Section.Value);
+			}
+		}
+	}
+	for (const TPair<TSharedPtr<FJsonValue>, const TCHAR*>& ListEntry : Entries)
+	{
+		const TSharedPtr<FJsonValue>& Value = ListEntry.Key;
 		const TSharedPtr<FJsonObject> Gun = Value->AsObject();
 		const TSharedPtr<FJsonObject>* ArtPtr = nullptr;
 		if (!Gun.IsValid() || !Gun->TryGetObjectField(TEXT("art"), ArtPtr))
@@ -284,7 +311,7 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 			UE_LOG(LogGunArt, Warning, TEXT("%s: %s is not there (download it first, docs/design/gun-range.md); skipped"), *Name, *File);
 			continue;
 		}
-		const FString Dest = FString(GunArtRoot) / Name;
+		const FString Dest = FString(ListEntry.Value) / Name;
 
 		// The model: every object its own static mesh, no collision, its materials made but replaced below.
 		UFbxImportUI* Options = NewObject<UFbxImportUI>();
@@ -362,6 +389,11 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 			Map(TEXT("normal"), TEXT("NormalMap"), true, false);
 			Map(TEXT("roughness"), TEXT("RoughnessMap"), false, true);
 			Map(TEXT("metallic"), TEXT("MetallicMap"), false, true);
+			if (Map(TEXT("emissive"), TEXT("EmissiveMap"), false, false))
+			{
+				const float Strength = Tex->HasField(TEXT("emissiveStrength")) ? static_cast<float>(Tex->GetNumberField(TEXT("emissiveStrength"))) : 1.0f;
+				Instance->SetScalarParameterValueEditorOnly(FMaterialParameterInfo(TEXT("EmissiveStrength")), Strength);
+			}
 			if (Map(TEXT("orm"), TEXT("ORMMap"), false, true))
 			{
 				Instance->SetScalarParameterValueEditorOnly(FMaterialParameterInfo(TEXT("UseORM")), 1.0f);

@@ -7,10 +7,13 @@
 #include "Engine/Texture2D.h"
 #include "Factories/MaterialFactoryNew.h"
 #include "Factories/MaterialInstanceConstantFactoryNew.h"
+#include "Factories/MaterialParameterCollectionFactoryNew.h"
 #include "IAssetTools.h"
 #include "MaterialEditingLibrary.h"
 #include "MaterialShared.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialExpressionAdd.h"
+#include "Materials/MaterialExpressionCollectionParameter.h"
 #include "Materials/MaterialExpressionComponentMask.h"
 #include "Materials/MaterialExpressionCustom.h"
 #include "Materials/MaterialExpressionObjectPositionWS.h"
@@ -19,6 +22,7 @@
 #include "Materials/MaterialExpressionTime.h"
 #include "Materials/MaterialExpressionWorldPosition.h"
 #include "Materials/MaterialInstanceConstant.h"
+#include "Materials/MaterialParameterCollection.h"
 #include "Misc/PackageName.h"
 #include "ShaderCompiler.h"
 #include "UObject/Package.h"
@@ -38,6 +42,24 @@ namespace
 		"float ph = dot(O.xy, float2(0.0131, 0.0173));\n"
 		"float s = sin(T * Speed + ph) + 0.35 * sin(T * Speed * 2.3 + ph * 1.7 + P.x * 0.02);\n"
 		"return float3(0.8, 0.6, 0.0) * (s * Amount * h * min(h, 2.0));\n");
+
+	// The shuttle's downwash (docs/design/shuttle-draw.md): each Wash is (x, y, radius, strength) in world cm, written by
+	// UShuttleSubsystem into MPC_Downwash; plants inside the radius lean away from the middle and flutter, the more the
+	// nearer and the taller. O is the plant's foot, P the pixel, T the time.
+	const TCHAR* const FolDownwashCode = TEXT(
+		"float3 acc = 0;\n"
+		"float h = max(P.z - O.z, 0.0) / 100.0;\n"
+		"float4 W[2] = { W0, W1 };\n"
+		"for (int i = 0; i < 2; ++i) {\n"
+		"  float2 d = O.xy - W[i].xy;\n"
+		"  float r = length(d);\n"
+		"  float f = saturate(1.0 - r / max(W[i].z, 1.0)) * W[i].w;\n"
+		"  float2 dir = r > 1.0 ? d / r : float2(1.0, 0.0);\n"
+		"  float flutter = 0.65 + 0.35 * sin(T * 14.0 + dot(O.xy, float2(0.051, 0.073)));\n"
+		"  acc.xy += dir * (f * flutter * h * min(h, 1.5) * 60.0);\n"
+		"  acc.z -= f * h * h * 10.0;\n"
+		"}\n"
+		"return acc * Amount;\n");
 
 	bool FolSave(UObject* Object)
 	{
@@ -70,6 +92,34 @@ namespace
 		FCustomInput& Input = Custom->Inputs.AddDefaulted_GetRef();
 		Input.InputName = Name;
 		Input.Input.Connect(Output, From);
+	}
+
+	/** MPC_Downwash: two Wash vectors, made once (the game writes them every frame). */
+	UMaterialParameterCollection* FolDownwashCollection()
+	{
+		const FString Path = FString(FolFolder) / TEXT("MPC_Downwash");
+		UMaterialParameterCollection* Collection = LoadObject<UMaterialParameterCollection>(nullptr, *(Path + TEXT(".MPC_Downwash")), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (!Collection)
+		{
+			IAssetTools& Tools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+			Collection = Cast<UMaterialParameterCollection>(Tools.CreateAsset(TEXT("MPC_Downwash"), FolFolder, UMaterialParameterCollection::StaticClass(), NewObject<UMaterialParameterCollectionFactoryNew>()));
+		}
+		if (!Collection)
+		{
+			return nullptr;
+		}
+		for (const TCHAR* Name : {TEXT("Wash0"), TEXT("Wash1")})
+		{
+			if (!Collection->GetParameterId(FName(Name)).IsValid())
+			{
+				FCollectionVectorParameter& Parameter = Collection->VectorParameters.AddDefaulted_GetRef();
+				Parameter.ParameterName = FName(Name);
+				Parameter.DefaultValue = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+			}
+		}
+		Collection->PostEditChange();
+		FolSave(Collection);
+		return Collection;
 	}
 
 	UMaterialExpressionCustom* FolCustom(UMaterial* Material, const TCHAR* Description, ECustomMaterialOutputType Output, const FString& Code, int32 Y)
@@ -150,7 +200,29 @@ namespace
 		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Ao, TEXT(""), MP_AmbientOcclusion);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Through, TEXT(""), MP_SubsurfaceColor);
-		UMaterialEditingLibrary::ConnectMaterialProperty(Wind, TEXT(""), MP_WorldPositionOffset);
+		// The shuttle's downwash on top of the wind (none without MPC_Downwash).
+		UMaterialExpression* Offset = Wind;
+		if (UMaterialParameterCollection* Collection = FolDownwashCollection())
+		{
+			auto* Wash = FolCustom(Material, TEXT("FoliageDownwash"), CMOT_Float3, FolDownwashCode, 1600);
+			FolInput(Wash, TEXT("P"), UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionWorldPosition::StaticClass(), -800, 1600));
+			FolInput(Wash, TEXT("O"), UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionObjectPositionWS::StaticClass(), -800, 1660));
+			FolInput(Wash, TEXT("T"), UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTime::StaticClass(), -800, 1720));
+			for (const TCHAR* Name : {TEXT("Wash0"), TEXT("Wash1")})
+			{
+				auto* Node = Cast<UMaterialExpressionCollectionParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCollectionParameter::StaticClass(), -800, Name[4] == '0' ? 1780 : 1840));
+				Node->Collection = Collection;
+				Node->ParameterName = FName(Name);
+				Node->ParameterId = Collection->GetParameterId(FName(Name));
+				FolInput(Wash, Name[4] == '0' ? TEXT("W0") : TEXT("W1"), Node);
+			}
+			FolInput(Wash, TEXT("Amount"), FolScalar(Material, TEXT("Downwash Amount"), 1.0f, 1900));
+			auto* Sum = Cast<UMaterialExpressionAdd>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionAdd::StaticClass(), -100, 1400));
+			Sum->A.Connect(0, Wind);
+			Sum->B.Connect(0, Wash);
+			Offset = Sum;
+		}
+		UMaterialEditingLibrary::ConnectMaterialProperty(Offset, TEXT(""), MP_WorldPositionOffset);
 		UMaterialEditingLibrary::RecompileMaterial(Material);
 		return Material;
 	}

@@ -243,7 +243,7 @@ LineFightResult lineFightRun(uint64_t seed, bool corridor) {
     sim->submit(SetFactionCommand{raider, 2});
     LineFightResult r;
     const Health& h = sim->things().registry().get<Health>(raider);
-    for (int i = 0; i < 600 && !h.dead && !h.downed; ++i) {
+    for (int i = 0; i < 1200 && !h.dead && !h.downed; ++i) {  // 40 s: the fighters step round each other now (focus.md)
         sim->step();
         for (const Event& e : sim->events()) {
             r.shots += e.type == EventType::ShotFired && e.thing == gunman ? 1 : 0;
