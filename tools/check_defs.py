@@ -147,6 +147,7 @@ EVENT_CUES = {
     "Work_Tailor", "Work_Research", "Work_Clean", "Work_Tend", "Work_Stonecut", "Work_Butcher", "Work_Eat",
     "Work_Refuel", "Work_Handle", "Work_Chat", "Work_Extinguish",
     "Voice_LovinCouple", "Voice_LovinFem",  # Unreal, from the Lovin event (soundLovinCue)
+    "Ui_KillConfirm",  # Unreal, the kill feed on the player's own kill (KillFeedSubsystem.cpp)
 }
 
 
