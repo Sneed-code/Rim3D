@@ -329,9 +329,13 @@ namespace
 
 		auto* Covered = BloodArtNode<UMaterialExpressionMultiply>(Material, -450, 450);
 		// Thin edges and fine spatter count for more: at their own strength they vanished into brown soil from a few metres.
+		// The faintest part is cut first: boosted too, it drew the picture's square edge.
+		auto* Cut = BloodArtNode<UMaterialExpressionAdd>(Material, -900, 450);
+		BloodArtConnect(Sample, TEXT("R"), Cut, TEXT("A"));
+		Cut->ConstB = -0.06f;
 		auto* Boosted = BloodArtNode<UMaterialExpressionMultiply>(Material, -750, 450);
-		BloodArtConnect(Sample, TEXT("R"), Boosted, TEXT("A"));
-		Boosted->ConstB = 1.7f;
+		BloodArtConnect(Cut, TEXT(""), Boosted, TEXT("A"));
+		Boosted->ConstB = 1.8f;
 		auto* Solid = BloodArtNode<UMaterialExpressionSaturate>(Material, -600, 450);
 		BloodArtConnect(Boosted, TEXT(""), Solid, TEXT(""));
 		BloodArtConnect(Solid, TEXT(""), Covered, TEXT("A"));

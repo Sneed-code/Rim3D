@@ -63,7 +63,15 @@ namespace
 	constexpr int32 BloodCellRun = 12;         // a run, top to bottom (+V down)
 	constexpr int32 BloodCellSmear = 13;       // a smear along U
 	constexpr int32 BloodCellHole = 14;        // a bullet hole or stab
-	constexpr float BloodBodyBrightness = 1.7f;  // blood on a body against the same blood on the ground
+	/**
+	 * The colour of blood on a body against the same blood on the ground: brighter, and with more of the two weaker
+	 * channels, because skin and cloth are mostly seen in open shade, where a pure red is black (PC look, 2026-11-18).
+	 */
+	FLinearColor BloodOnBody(const FLinearColor& Color)
+	{
+		const float Top = 1.7f * FMath::Max3(Color.R, Color.G, Color.B);
+		return FLinearColor(FMath::Max(Color.R * 1.7f, 0.3f * Top), FMath::Max(Color.G * 1.7f, 0.3f * Top), FMath::Max(Color.B * 1.7f, 0.3f * Top), Color.A);
+	}
 	constexpr int32 BloodCellGash = 15;        // a torn exit wound or a cut along U
 
 	constexpr int32 BloodTracesPerFrame = 320;
@@ -248,7 +256,7 @@ FLinearColor UBloodSubsystem::ColorAt(const FBloodFluid& Fluid, float Age) const
 	FLinearColor Color = FMath::Lerp(Fluid.Wet, Fluid.Dry, FMath::Clamp(T, 0.0f, 1.0f));
 	// A pure red goes black in the blue light of open shade (PC look, 2026-11-18: wounds on a shaded face were black
 	// smudges): keep a little of the other two channels.
-	const float Floor = 0.12f * Color.GetMax();
+	const float Floor = 0.12f * FMath::Max3(Color.R, Color.G, Color.B);  // (not GetMax: that counts alpha, and made it pink)
 	Color.R = FMath::Max(Color.R, Floor);
 	Color.G = FMath::Max(Color.G, Floor);
 	Color.B = FMath::Max(Color.B, Floor);
@@ -629,7 +637,7 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 			if (UDecalComponent* Decal = MakeWorldDecal(Cell, Ground, Up, Along, HalfLength, HalfWidth, Fresh))
 			{
 				Decal->SetFadeScreenSize(0.0f);
-				Decal->DecalSize.X = 20.0f;  // reaches over bumps and grass roots
+				Decal->DecalSize.X = 12.0f;  // reaches over bumps and grass roots (20 also painted dropped items)
 				AddStain(Decal, Ground, Up, FMath::Sqrt(HalfLength * HalfWidth), Fluid, false);
 			}
 		};
@@ -938,7 +946,7 @@ UDecalComponent* UBloodSubsystem::MakeBodyDecal(USkeletalMeshComponent* Mesh, in
 		FRotationMatrix::MakeFromXY(X, Y).Rotator(), EAttachLocation::KeepWorldPosition, 0.0f);
 	if (Decal)
 	{
-		Decal->SetDecalColor(FLinearColor(Color.R * BloodBodyBrightness, Color.G * BloodBodyBrightness, Color.B * BloodBodyBrightness, Color.A));
+		Decal->SetDecalColor(BloodOnBody(Color));
 		Decal->SetFadeScreenSize(0.0f);
 		Decal->SetSortOrder(Cell == BloodCellHole || Cell == BloodCellGash ? 3 : 2);
 	}
@@ -983,10 +991,8 @@ void UBloodSubsystem::AddBodyStain(UDecalComponent* Decal, USkeletalMeshComponen
 	Stain.Mesh = Mesh;
 	// Skin and cloth are mostly seen in softer light than the ground: blood on them is drawn brighter so it reads as red.
 	FBloodFluid Bright = Fluid;
-	Bright.Wet = Fluid.Wet * BloodBodyBrightness;
-	Bright.Dry = Fluid.Dry * BloodBodyBrightness;
-	Bright.Wet.A = Fluid.Wet.A;
-	Bright.Dry.A = Fluid.Dry.A;
+	Bright.Wet = BloodOnBody(Fluid.Wet);
+	Bright.Dry = BloodOnBody(Fluid.Dry);
 	Stain.Owner = Owner;
 	Stain.Fluid = Bright;
 	Stain.bWound = bWound;
