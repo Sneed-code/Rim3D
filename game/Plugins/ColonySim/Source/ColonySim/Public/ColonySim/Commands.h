@@ -1091,6 +1091,14 @@ struct PatchCommand {
     Entity pawn = kNoEntity;
 };
 
+// Stealth (docs/design/stealth.md): sets how watchful a fighter is, 0 unaware, 1 suspicious, 2 alerted. A dev and
+// scenario command (guards at their posts, the practice range's targets). Unaware and suspicious also make it forget
+// the enemies it knew. Fails for a pawn that isn't a fighter or a number above 2.
+struct SetAlertCommand {
+    Entity pawn = kNoEntity;
+    uint8_t alert = 0;
+};
+
 // Lock-on focus (sneed, 2026-11-17; docs/design/focus.md), Dark Souls style. Set: `pawn` locks on to `target` (any
 // living pawn within 25 m). Next: the next nearest target (Tab, WoW style): enemies within 20 m, nearest first, those in
 // front before those behind. Clear: let go (F1). A focused pawn faces its target, and the player's swing with no target
@@ -1142,7 +1150,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand,
                              InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand,
                              SleepCommand, SetLandingZoneCommand,
-                             PatchCommand, FocusCommand, SetFightResponseCommand>;
+                             PatchCommand, SetAlertCommand, FocusCommand, SetFightResponseCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
 // day) it was applied in. Failed commands are logged too.

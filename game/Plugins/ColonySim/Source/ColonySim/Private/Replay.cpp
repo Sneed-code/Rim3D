@@ -558,6 +558,9 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                         j["add"] = c.add;
                     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
+                    } else if constexpr (std::is_same_v<Type, SetAlertCommand>) {
+                        j["pawn"] = entt::to_integral(c.pawn);
+                        j["alert"] = c.alert;
                     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
                         j["up"] = c.up;
@@ -1929,6 +1932,18 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
                 return r.fail(where + ": no fight response \"" + response + "\"");
             }
             c.pawn = static_cast<Entity>(pawn);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetAlert") {
+            SetAlertCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            uint32_t alert = 0;
+            if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "alert", alert, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            c.alert = static_cast<uint8_t>(std::min<uint32_t>(alert, 255));
             out.command = std::move(c);
             return true;
         }
