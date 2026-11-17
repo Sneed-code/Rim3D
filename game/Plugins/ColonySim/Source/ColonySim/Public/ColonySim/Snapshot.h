@@ -597,6 +597,7 @@ struct FilthView {
     CellPos cell;
     DefId def;  // a Filth def
     int thickness = 1;
+    float age = 0.0f;  // game seconds since it was last added to (blood dries and fades by it)
 };
 
 // A fire in a cell, its size 0 to 1.75 (docs/design/fire.md).

@@ -2323,7 +2323,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     }
     { SimLap lap(profile_, "lights"); lights_->update(); }
     if (calendar) {
-        { SimLap lap(profile_, "filth"); filth_->step(); }
+        { SimLap lap(profile_, "filth"); filth_->step(time_.seconds); }
         { SimLap lap(profile_, "grime"); grime_->step(time_.seconds, events_, weather_->effects().rainRate); }
         { SimLap lap(profile_, "roomStats"); roomStats_->step(time_.seconds); }
         { SimLap lap(profile_, "temperature"); temperature_->step(time_.seconds); }
@@ -3160,7 +3160,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
         out.filth.clear();
         for (const auto& [index, piles] : filth_->all()) {
             for (const FilthPile& pile : piles) {
-                out.filth.push_back(FilthView{map_.cellAt(index), filth_->kinds()[pile.kind].def, pile.thickness});
+                out.filth.push_back(FilthView{map_.cellAt(index), filth_->kinds()[pile.kind].def, pile.thickness,
+                                              pile.wetAt >= 0 ? static_cast<float>(time_.seconds - pile.wetAt) : 0.0f});
             }
         }
     }
