@@ -4,6 +4,7 @@
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimNodeBase.h"
 #include "Animation/AnimSequence.h"
+#include "Animation/AnimationPoseData.h"
 #include "Animation/TrajectoryTypes.h"
 #include "BlendStack/AnimNode_BlendStack.h"
 #include "BonePose.h"
@@ -104,9 +105,34 @@ private:
  * an Animation Blueprint (its sequencer hook asks the anim class for subsystems a native class
  * doesn't have, and asserts).
  */
+/**
+ * The hold layer (docs/design/weapon-hold.md): over the locomotion, the held weapon's stance clip on the spine, arms and
+ * head (spine_01 turned in mesh space, so a stance that turns its hips still faces the way the clip's chest does over
+ * walking legs; the rest blended bone by bone), and a forward bend at the waist for a load on the back.
+ */
+struct FSimPawnUpperNode : public FAnimNode_Base
+{
+	FAnimNode_Base* Source = nullptr;
+	struct FSimPawnAnimInstanceProxy* Proxy = nullptr;
+
+	virtual void Initialize_AnyThread(const FAnimationInitializeContext& Context) override
+	{
+		FAnimNode_Base::Initialize_AnyThread(Context);
+		Source->Initialize_AnyThread(Context);
+	}
+	virtual void CacheBones_AnyThread(const FAnimationCacheBonesContext& Context) override;
+	virtual void Update_AnyThread(const FAnimationUpdateContext& Context) override { Source->Update_AnyThread(Context); }
+	virtual void Evaluate_AnyThread(FPoseContext& Output) override;
+
+private:
+	TArray<float> BoneWeights;  // by compact pose index: 0 the legs and hips, 1 the chest, arms and head
+	FCompactPoseBoneIndex Pelvis = FCompactPoseBoneIndex(INDEX_NONE);
+	FCompactPoseBoneIndex Spine = FCompactPoseBoneIndex(INDEX_NONE);
+};
+
 struct FSimPawnSlotNode : public FAnimNode_Base
 {
-	FSimPawnLocomotionNode* Source = nullptr;
+	FAnimNode_Base* Source = nullptr;
 
 	virtual void Initialize_AnyThread(const FAnimationInitializeContext& Context) override
 	{
@@ -174,8 +200,10 @@ struct FSimPawnAnimInstanceProxy : public FAnimInstanceProxy
 protected:
 	virtual void Initialize(UAnimInstance* InAnimInstance) override
 	{
-		// The graph is two native nodes: the montage slot (actions) over the locomotion.
-		Slot.Source = &Locomotion;
+		// The graph is three native nodes: the montage slot (actions) over the hold layer over the locomotion.
+		Slot.Source = &Upper;
+		Upper.Source = &Locomotion;
+		Upper.Proxy = this;
 		Locomotion.Proxy = this;
 		FAnimInstanceProxy::Initialize(InAnimInstance);
 	}
@@ -193,7 +221,28 @@ protected:
 		RunLoop = Instance->RunLoop;
 		WalkLoopSpeed = Instance->WalkLoopSpeed;
 		RunLoopSpeed = Instance->RunLoopSpeed;
+		USimPawnAnimInstance* Mutable = CastChecked<USimPawnAnimInstance>(InAnimInstance);
+		Mutable->AdvanceUpper(DeltaSeconds);
+		UpperClip = Mutable->UpperClip;
+		UpperOldClip = Mutable->UpperBlend < 1.0f ? Mutable->UpperOldClip.Get() : nullptr;
+		UpperTime = Mutable->UpperTime;
+		UpperOldTime = Mutable->UpperOldTime;
+		UpperBlend = Mutable->UpperBlend;
+		UpperWeight = Mutable->UpperWeight;
+		SpineBend = Mutable->SpineBend;
 	}
+
+public:
+	// The hold layer, copied before each update (game thread).
+	UAnimSequence* UpperClip = nullptr;
+	UAnimSequence* UpperOldClip = nullptr;
+	float UpperTime = 0.0f;
+	float UpperOldTime = 0.0f;
+	float UpperBlend = 1.0f;
+	float UpperWeight = 0.0f;
+	float SpineBend = 0.0f;
+
+protected:
 
 	virtual void PostUpdate(UAnimInstance* InAnimInstance) const override
 	{
@@ -203,8 +252,117 @@ protected:
 
 private:
 	FSimPawnSlotNode Slot;
+	FSimPawnUpperNode Upper;
 	FSimPawnLocomotionNode Locomotion;
 };
+
+// ---------------------------------------------------------------------------
+// The hold layer.
+
+namespace
+{
+	/** A looping clip's time, wrapped. */
+	float PawnUpperWrap(const UAnimSequence* Clip, float Time)
+	{
+		const float Length = Clip ? FMath::Max(Clip->GetPlayLength(), 0.001f) : 1.0f;
+		return FMath::Fmod(FMath::Max(Time, 0.0f), Length);
+	}
+
+	/** A bone's transform in component space, from a local pose: its own and each parent's, multiplied up. */
+	FTransform PawnUpperComponent(const FCompactPose& Pose, FCompactPoseBoneIndex Bone)
+	{
+		FTransform Out = Pose[Bone];
+		for (FCompactPoseBoneIndex At = Pose.GetParentBoneIndex(Bone); At.IsValid(); At = Pose.GetParentBoneIndex(At))
+		{
+			Out = Out * Pose[At];
+		}
+		return Out;
+	}
+}
+
+void FSimPawnUpperNode::CacheBones_AnyThread(const FAnimationCacheBonesContext& Context)
+{
+	Source->CacheBones_AnyThread(Context);
+	const FBoneContainer& Bones = Context.AnimInstanceProxy->GetRequiredBones();
+	const FReferenceSkeleton& Ref = Bones.GetReferenceSkeleton();
+	const int32 Count = Bones.GetCompactPoseNumBones();
+	BoneWeights.SetNumZeroed(Count);
+	const int32 PelvisRef = Ref.FindBoneIndex(TEXT("pelvis"));
+	const int32 SpineRef = Ref.FindBoneIndex(TEXT("spine_01"));
+	Pelvis = PelvisRef != INDEX_NONE ? Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(PelvisRef)) : FCompactPoseBoneIndex(INDEX_NONE);
+	Spine = SpineRef != INDEX_NONE ? Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(SpineRef)) : FCompactPoseBoneIndex(INDEX_NONE);
+	if (SpineRef == INDEX_NONE)
+	{
+		return;
+	}
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		const int32 RefIndex = Bones.MakeMeshPoseIndex(FCompactPoseBoneIndex(Index)).GetInt();
+		// Everything under spine_01 takes the stance; spine_01 itself is set in mesh space below.
+		for (int32 At = Ref.GetParentIndex(RefIndex); At != INDEX_NONE; At = Ref.GetParentIndex(At))
+		{
+			if (At == SpineRef)
+			{
+				BoneWeights[Index] = 1.0f;
+				break;
+			}
+		}
+	}
+}
+
+void FSimPawnUpperNode::Evaluate_AnyThread(FPoseContext& Output)
+{
+	Source->Evaluate_AnyThread(Output);
+	const FSimPawnAnimInstanceProxy* P = Proxy;
+	if (!P || Spine.GetInt() == INDEX_NONE || Pelvis.GetInt() == INDEX_NONE || BoneWeights.Num() != Output.Pose.GetNumBones())
+	{
+		return;
+	}
+	const float Weight = P->UpperClip ? FMath::Clamp(P->UpperWeight, 0.0f, 1.0f) : 0.0f;
+	if (Weight > ZERO_ANIMWEIGHT_THRESH)
+	{
+		FPoseContext Stance(Output);
+		{
+			FAnimationPoseData Data(Stance);
+			P->UpperClip->GetAnimationPose(Data, FAnimExtractContext(static_cast<double>(PawnUpperWrap(P->UpperClip, P->UpperTime)), false));
+		}
+		if (P->UpperOldClip && P->UpperBlend < 1.0f)
+		{
+			FPoseContext Old(Output);
+			FAnimationPoseData OldData(Old);
+			P->UpperOldClip->GetAnimationPose(OldData, FAnimExtractContext(static_cast<double>(PawnUpperWrap(P->UpperOldClip, P->UpperOldTime)), false));
+			for (FCompactPoseBoneIndex Bone : Stance.Pose.ForEachBoneIndex())
+			{
+				FTransform Mixed = Old.Pose[Bone];
+				Mixed.BlendWith(Stance.Pose[Bone], P->UpperBlend);
+				Stance.Pose[Bone] = Mixed;
+			}
+		}
+		// spine_01: the clip's chest direction in component space, under the walk's own hips.
+		const FQuat LocoPelvis = PawnUpperComponent(Output.Pose, Pelvis).GetRotation();
+		const FQuat ClipSpine = PawnUpperComponent(Stance.Pose, Spine).GetRotation();
+		const FQuat Wanted = (LocoPelvis.Inverse() * ClipSpine).GetNormalized();
+		Output.Pose[Spine].SetRotation(FQuat::Slerp(Output.Pose[Spine].GetRotation(), Wanted, Weight).GetNormalized());
+		for (FCompactPoseBoneIndex Bone : Output.Pose.ForEachBoneIndex())
+		{
+			const float W = BoneWeights[Bone.GetInt()] * Weight;
+			if (W > ZERO_ANIMWEIGHT_THRESH)
+			{
+				FTransform Mixed = Output.Pose[Bone];
+				Mixed.BlendWith(Stance.Pose[Bone], W);
+				Output.Pose[Bone] = Mixed;
+			}
+		}
+	}
+	// The bend: the whole upper body tips forward about spine_01. The mesh faces +Y, so forward is a turn about -X.
+	if (FMath::Abs(P->SpineBend) > 0.05f)
+	{
+		const FQuat PelvisRot = PawnUpperComponent(Output.Pose, Pelvis).GetRotation();
+		const FQuat Delta(FVector::XAxisVector, -FMath::DegreesToRadians(P->SpineBend));
+		const FQuat Local = Output.Pose[Spine].GetRotation();
+		Output.Pose[Spine].SetRotation((PelvisRot.Inverse() * Delta * PelvisRot * Local).GetNormalized());
+	}
+}
 
 // ---------------------------------------------------------------------------
 
@@ -555,4 +713,48 @@ FAnimInstanceProxy* USimPawnAnimInstance::CreateAnimInstanceProxy()
 void USimPawnAnimInstance::DestroyAnimInstanceProxy(FAnimInstanceProxy* InProxy)
 {
 	delete static_cast<FSimPawnAnimInstanceProxy*>(InProxy);
+}
+
+void USimPawnAnimInstance::SetUpperStance(UAnimSequence* Clip, float Weight, float BlendSeconds, float WeightRate)
+{
+	UpperWeightTarget = FMath::Clamp(Weight, 0.0f, 1.0f);
+	UpperWeightRate = FMath::Max(WeightRate, 0.1f);
+	if (Clip == UpperClip || !Clip)
+	{
+		// No clip: keep the last one while the weight fades out.
+		if (!Clip)
+		{
+			UpperWeightTarget = 0.0f;
+		}
+		return;
+	}
+	if (!UpperClip || UpperWeight <= 0.01f)
+	{
+		// Nothing showing: start straight on the new clip.
+		UpperClip = Clip;
+		UpperTime = 0.0f;
+		UpperBlend = 1.0f;
+		UpperOldClip = nullptr;
+		return;
+	}
+	UpperOldClip = UpperClip;
+	UpperOldTime = UpperTime;
+	UpperClip = Clip;
+	UpperTime = 0.0f;
+	UpperBlend = 0.0f;
+	UpperBlendRate = BlendSeconds > 0.0f ? 1.0f / BlendSeconds : 1000.0f;
+}
+
+void USimPawnAnimInstance::AdvanceUpper(float DeltaSeconds)
+{
+	const float Dt = FMath::Max(DeltaSeconds, 0.0f);
+	UpperTime += Dt;
+	UpperOldTime += Dt;
+	UpperBlend = FMath::Min(1.0f, UpperBlend + Dt * UpperBlendRate);
+	if (UpperBlend >= 1.0f)
+	{
+		UpperOldClip = nullptr;
+	}
+	UpperWeight = FMath::FInterpConstantTo(UpperWeight, UpperWeightTarget, Dt, UpperWeightRate);
+	SpineBend = FMath::FInterpConstantTo(SpineBend, SpineBendTarget, Dt, 60.0f);
 }

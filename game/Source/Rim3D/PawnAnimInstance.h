@@ -71,6 +71,19 @@ public:
 	/** Set every frame by the pawn actor before the mesh ticks. */
 	FSimPawnAnimInputs Inputs;
 
+	// --- The hold layer (docs/design/weapon-hold.md): the held weapon's stance on the spine and arms, over the walk. ---
+
+	/** The upper body plays Clip (looping) over the locomotion, cross-fading from the clip before over BlendSeconds; null
+	 *  for none. Weight is how much it shows (0 to 1), eased towards at WeightRate per second. */
+	void SetUpperStance(UAnimSequence* Clip, float Weight, float BlendSeconds = 0.2f, float WeightRate = 5.0f);
+	/** Bends the body forward at the waist by this many degrees (a load on the back), eased in and out. */
+	void SetSpineBend(float Degrees) { SpineBendTarget = Degrees; }
+	UAnimSequence* GetUpperStance() const { return UpperClip; }
+	float GetUpperWeight() const { return UpperWeight; }
+	float GetSpineBend() const { return SpineBend; }
+	/** Advances the layer's clocks and weights (game thread, from the proxy's PreUpdate). */
+	void AdvanceUpper(float DeltaSeconds);
+
 	const FSimPawnAnimStats& GetStats() const { return Stats; }
 
 protected:
@@ -96,4 +109,18 @@ private:
 	float RunLoopSpeed = 400.0f;
 
 	FSimPawnAnimStats Stats;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequence> UpperClip;
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequence> UpperOldClip;
+	float UpperTime = 0.0f;
+	float UpperOldTime = 0.0f;
+	float UpperBlend = 1.0f;       // the new clip's share against the old one
+	float UpperBlendRate = 5.0f;
+	float UpperWeight = 0.0f;      // how much the layer shows now
+	float UpperWeightTarget = 0.0f;
+	float UpperWeightRate = 5.0f;
+	float SpineBend = 0.0f;        // degrees now
+	float SpineBendTarget = 0.0f;
 };

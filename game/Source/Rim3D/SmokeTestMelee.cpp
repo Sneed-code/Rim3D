@@ -39,6 +39,35 @@ namespace
 	const FVector MeleeSmokeSidearmHolster(4.0, 23.0, 80.0);
 	const FVector MeleeSmokeMeleeHolster(-2.0, -23.0, 86.0);
 
+	// In the hand: hung on a hand bone (HoldDraw, docs/design/weapon-hold.md), or at the old fixed place when the hands
+	// are off (Weapons.Hands 0).
+	bool MeleeSmokeInHand(const USceneComponent* Component, const FVector& OldPlace, double Tolerance)
+	{
+		if (!Component)
+		{
+			return false;
+		}
+		const FName Socket = Component->GetAttachSocketName();
+		if (Socket == FName(TEXT("hand_r")) || Socket == FName(TEXT("hand_l")))
+		{
+			return true;
+		}
+		return Component->GetRelativeLocation().Equals(OldPlace, Tolerance);
+	}
+
+	// Where a component is in its actor's frame (cm), whatever it hangs from.
+	FVector MeleeSmokeActorSpace(const USceneComponent& Component)
+	{
+		const AActor* Owner = Component.GetOwner();
+		if (!Owner)
+		{
+			return Component.GetRelativeLocation();
+		}
+		FTransform Frame = Owner->GetActorTransform();
+		Frame.SetScale3D(FVector::OneVector);
+		return Frame.InverseTransformPosition(Component.GetComponentLocation());
+	}
+
 	struct FMeleeSmokeState
 	{
 		colony::Entity Me = colony::kNoEntity;
@@ -372,7 +401,11 @@ void USmokeTestSubsystem::BuildMeleePhases()
 				Fail(FString::Printf(TEXT("holsters: the %s is at %s, expected %s"), Name, Component ? *Component->GetRelativeLocation().ToString() : TEXT("nowhere"), *Where.ToString()));
 			}
 		};
-		Near(0, MeleeSmokeHands, TEXT("rifle in the hands"));
+		if (const UStaticMeshComponent* Rifle = W->GetSlotComponent(State->Me, 0); !MeleeSmokeInHand(Rifle, MeleeSmokeHands, 3.0))
+		{
+			Fail(FString::Printf(TEXT("holsters: the rifle is not in the hands (at %s on %s)"), Rifle ? *MeleeSmokeActorSpace(*Rifle).ToString() : TEXT("nowhere"),
+				Rifle ? *Rifle->GetAttachSocketName().ToString() : TEXT("nothing")));
+		}
 		Near(1, MeleeSmokeSidearmHolster, TEXT("sidearm on the hip"));
 		if (const UStaticMeshComponent* Melee = W->GetSlotComponent(State->Me, 2); !Melee || FMath::Abs(Melee->GetRelativeLocation().Y - MeleeSmokeMeleeHolster.Y) > 3.0 || Melee->GetRelativeLocation().Z > 100.0)
 		{
@@ -454,7 +487,7 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			Fail(TEXT("switch_key: the rifle is not on the back after the switch"));
 		}
-		if (!Revolver || !Revolver->GetRelativeLocation().Equals(MeleeSmokeHands, 3.0) || W->GetHandsComponent(State->Me) != Revolver)
+		if (!Revolver || !MeleeSmokeInHand(Revolver, MeleeSmokeHands, 3.0) || W->GetHandsComponent(State->Me) != Revolver)
 		{
 			Fail(TEXT("switch_key: the revolver is not in the hand after the switch"));
 		}
@@ -555,9 +588,9 @@ void USmokeTestSubsystem::BuildMeleePhases()
 			return;
 		}
 		// At rest the blade is held at the side, tip up and forward.
-		if (!Blade->GetRelativeLocation().Equals(FVector(24.0, 20.0, 100.0), 4.0))
+		if (!MeleeSmokeInHand(Blade, FVector(24.0, 20.0, 100.0), 4.0))
 		{
-			Fail(FString::Printf(TEXT("draw_melee: the gladius rests at %s"), *Blade->GetRelativeLocation().ToString()));
+			Fail(FString::Printf(TEXT("draw_melee: the gladius rests at %s, not in the hand"), *MeleeSmokeActorSpace(*Blade).ToString()));
 		}
 		if (W->IsGun(Me->weapon))
 		{
@@ -1032,7 +1065,7 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			if (const UStaticMeshComponent* Shield = Weapons()->GetShieldComponent(State->Me))
 			{
-				State->RaisedAt = Shield->GetRelativeLocation();
+				State->RaisedAt = MeleeSmokeActorSpace(*Shield);
 			}
 		}
 		if (!State->bStaged)
@@ -1078,9 +1111,11 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			Fail(FString::Printf(TEXT("shield: the sim raised it: %s; drawn up %.2f of the way"), State->bShieldUpSeen ? TEXT("yes") : TEXT("no"), State->MaxShieldRaise));
 		}
-		if (State->RaisedAt.X < 30.0 || FMath::Abs(State->RaisedAt.Y) > 15.0 || State->RaisedAt.Z < 100.0)
+		// On the forearm, the block clip lifts it before the chest and face (docs/design/weapon-hold.md): the left arm
+		// crosses the body, so it may sit a little right of the middle.
+		if (State->RaisedAt.X < 30.0 || FMath::Abs(State->RaisedAt.Y) > 25.0 || State->RaisedAt.Z < 100.0 || State->RaisedAt.Z > 150.0)
 		{
-			Fail(FString::Printf(TEXT("shield: raised it sits at %s, expected in front of the chest"), *State->RaisedAt.ToString()));
+			Fail(FString::Printf(TEXT("shield: raised it sits at %s, expected in front of the chest or face"), *State->RaisedAt.ToString()));
 		}
 		if (Me->shieldUp || W->GetShieldRaise(State->Me) > 0.01f)
 		{

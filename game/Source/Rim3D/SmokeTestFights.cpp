@@ -30,6 +30,19 @@ namespace
 {
 	const FVector FightSmokeOrigin(300000.0, 0.0, 0.0);
 
+	// How high a component is above its actor's feet (cm), whatever it hangs from (a held gun hangs from the hand bone).
+	double FightSmokeHeight(const USceneComponent& Component)
+	{
+		const AActor* Owner = Component.GetOwner();
+		if (!Owner)
+		{
+			return Component.GetRelativeLocation().Z;
+		}
+		FTransform Frame = Owner->GetActorTransform();
+		Frame.SetScale3D(FVector::OneVector);
+		return Frame.InverseTransformPosition(Component.GetComponentLocation()).Z;
+	}
+
 	struct FFightSmokeState
 	{
 		colony::Entity Protagonist = colony::kNoEntity;
@@ -323,7 +336,7 @@ void USmokeTestSubsystem::BuildFightsPhases()
 			{
 				Fail(TEXT("equip_and_aim: the sim does not have the protagonist crouching a second after C"));
 			}
-			if (const UStaticMeshComponent* Gun = F->GetHeldGun(State->Protagonist); !Gun || Gun->GetRelativeLocation().Z > 100.0)
+			if (const UStaticMeshComponent* Gun = F->GetHeldGun(State->Protagonist); !Gun || FightSmokeHeight(*Gun) > 100.0)
 			{
 				Fail(TEXT("equip_and_aim: the held gun did not come down with the crouch"));
 			}
@@ -344,7 +357,7 @@ void USmokeTestSubsystem::BuildFightsPhases()
 			Fail(TEXT("equip_and_aim: the protagonist did not stand up again"));
 		}
 		const UStaticMeshComponent* Gun = F->GetHeldGun(State->Protagonist);
-		if (!Gun || !Gun->IsVisible() || Gun->GetRelativeLocation().Z < 100.0)
+		if (!Gun || !Gun->IsVisible() || FightSmokeHeight(*Gun) < 100.0)
 		{
 			Fail(TEXT("equip_and_aim: no placeholder gun at the protagonist's chest"));
 		}
