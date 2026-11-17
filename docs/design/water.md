@@ -160,3 +160,7 @@ gets the wave simulation and splashes; far water keeps its flowing ripples. A Wa
 - The current pushing a swimmer sideways in the sim (it speeds or slows it along its way only); the
   player's colonist will drift in Unreal (W4) and the sim accepts its moves.
 - Watermills on generated rivers: `Map::setFlowing` is still never set by the map generator.
+- Body motion and deep water (body-motion.md, merged after this): a clip's travel is swept with the walker's
+  check (`BodyMotionSystem::fits` uses `pawnFitsAt`), so a roll, lunge or knock stops at the edge of deep water and
+  moves a swimmer nowhere. Nobody is trapped (the player's swimmer still moves by `DirectMoveCommand`), but a body
+  can't be knocked into the river yet. Whether it should is for the body-motion work and sneed to decide.
