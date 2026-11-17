@@ -45,6 +45,7 @@ enum class ERim3DAction : uint8
 	FreeHandLook,
 	FreeHandReachOut,
 	FreeHandReachIn,
+	Patch,           // patch a bleeding wound (body health part B)
 	Count
 };
 

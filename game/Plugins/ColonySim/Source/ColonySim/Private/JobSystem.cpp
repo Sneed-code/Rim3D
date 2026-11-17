@@ -2232,4 +2232,18 @@ bool JobSystem::afterLoad(std::string& error) {
     return true;
 }
 
+Entity JobSystem::carryingPawn(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Worker* worker = reg.valid(pawn) ? reg.try_get<Worker>(pawn) : nullptr;
+    if (worker == nullptr) {
+        return kNoEntity;
+    }
+    const Job& job = worker->job;
+    const JobsSteps steps = jobsStepsOf(job.type);
+    if (job.step >= steps.count || steps.steps[job.step] != JobStepKind::CarryPawn || !reg.valid(job.thing)) {
+        return kNoEntity;
+    }
+    return job.thing;
+}
+
 }  // namespace colony

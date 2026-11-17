@@ -150,6 +150,7 @@
       "hip": [18, 9, -6],
       "sightDistance": 18,
       "kick": {"back": 9, "up": 7, "recover": 7},
+      "reloadSteady": 0.75,
       "pump": {"start": 0.3, "seconds": 0.5},
       "cycle": {"part": "pump", "start": 0.3, "seconds": 0.5, "lift": 0, "back": -9}
     }

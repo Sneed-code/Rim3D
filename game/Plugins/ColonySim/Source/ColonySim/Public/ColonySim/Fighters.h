@@ -5,6 +5,7 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Explosives.h"
+#include "ColonySim/FightResponse.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/Stealth.h"
@@ -173,14 +174,19 @@ struct FighterRules {
     float ambushRange = 6.0f;         // a defending melee fighter waits until an enemy is this close, then charges
     float helpRange = 20.0f;          // ... or runs in sooner, from this far, to an enemy at a friend
     float helpReach = 2.5f;           // an enemy this near a friend is at it
-    // RimWorld's Sprint locomotion urgency: a move costs 0.75 of a jog, so 4/3 the speed. Our pawns use it only in a
-    // fight, fleeing or an emergency (sneed 2026-11-17, docs/design/movement.md "Sprinting"); otherwise they jog.
-    float sprintSpeedFactor = 1.3333333f;
     // Combat profiles (docs/design/real-time-combat.md): a disciplined side's melee fighters hold with the others (the
     // ambushRange / helpRange rule) even when drafted, unless ordered to attack; a reckless side charges.
     bool colonistsHoldForFriends = true;
     bool raidersHoldForFriends = false;
-    float minWalkShare = 0.25f;       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
+    float minWalkShare = 0.25f;
+    // Fight responses (docs/design/focus.md, ours): Flee and FleeOnSight run this long after being hurt or the last sighting.
+    float fleeResponseSeconds = 20.0f;
+    float fleeSightRange = 40.0f;     // FleeOnSight runs from an enemy it sees this close
+    // Sprinting (sneed, 2026-11-17): fighters sprint only to run from enemies or to close in for melee; otherwise they move at
+    // their usual pace. The player's sprint is 1.5 times (ProtagonistPawn kSprintFactor); the AI's is the same.
+    float sprintFactor = 1.5f;
+    float sprintChargeMin = 3.0f;     // a melee charge sprints while the target is further than this...
+    float sprintChargeMax = 30.0f;    // ...and nearer than this       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
 };
 
 class COLONY_API FighterSystem {
@@ -210,6 +216,14 @@ public:
     // Fog and the rest shorten how far a fighter under the open sky spots enemies (docs/design/weather.md).
     void setWeather(const Weather* weather) { weather_ = weather; }
 
+    // Sprinting now (sneed): running from enemies (routed, falling back, fleeing by its response, heading for shelter) or
+    // charging in to melee. The movement speed is times FighterRules sprintFactor. Never the player's pawn (its keys sprint).
+    bool sprinting(Entity pawn) const;
+    float sprintFactor() const { return rules_.sprintFactor; }
+
+    // The pawn's fight response (MeleeSystem keeps it); Attack without melee.
+    FightResponse responseOf(Entity pawn) const;
+    static bool fleeResponse(FightResponse response);
     // Stealth (docs/design/stealth.md, Stealth.cpp).
     const StealthRules& stealth() const { return stealth_; }
     // A target in the dark is seen from less far. Without it every cell counts as fully lit.
@@ -319,6 +333,8 @@ private:
     void stepTo(Entity pawn, CellPos cell);
     void stop(Entity pawn, Fighter& f);
     const PawnInfo* info(Entity pawn) const;
+    void aiFocus(Entity pawn, const Fighter& f);
+    bool panicked(Entity pawn, const Fighter& f) const;
     float weaponRange(Entity pawn) const;
     int64_t now() const;
     void planCharge(Entity pawn, Fighter& f, CellPos goal);

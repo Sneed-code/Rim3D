@@ -32,7 +32,8 @@ cancels; "Reset all keys to default" puts them back). Code reads keys only throu
 | V | first / third person |
 | O | overseer view and back (in the overseer view it takes control of the selected colonist). Was Tab, which is now focus |
 | Y | take over the colonist you look at. Was T, which is now roll / dash |
-| H | free hand mode on / off; while on, left mouse grips, right mouse looks, the wheel sets the reach (its own task) |
+| H | patch a bleeding wound (body health) |
+| J | free hand mode on / off (H was taken by patching); while on, left mouse grips, right mouse looks, the wheel sets the reach (its own task) |
 
 The page also has the **Lock-on focus** on / off setting for the focus task (`Rim3DKeys::IsLockOnFocusEnabled`).
 
@@ -42,9 +43,9 @@ resource stack within 1.5 m of your colonist goes into your bag, as much as fits
 
 ## AI pawns and sprinting
 
-AI pawns jog (RimWorld's normal pace, 4.6 m/s for a person) and **sprint only in a fight, fleeing or an emergency**, at
-RimWorld's Sprint pace: 4/3 the speed (`LocomotionUrgency.Sprint`, a move costs 0.75 of a jog; FighterRules
-`sprintSpeedFactor`). They sprint when they are falling back in a fight or charging their target hand to hand (gunmen moving between spots jog, as RimWorld's drafted pawns do; a sprinting gunman ran into its friends' line of fire), flee (a routed raider,
-a wimp cowering), head for a shelter when the alarm sounds, carry a downed friend to cover, rescue a downed colonist or
-beat out a fire (`Sim::pawnSprinting`). Visitors and traders never hurry; animals keep their own speeds. The player's
+AI pawns jog (RimWorld's normal pace) and **sprint only in a fight, fleeing or an emergency**, at FighterRules
+`sprintFactor` (1.5, the same as the player's sprint). Fighters sprint when they flee or fall back from enemies they
+know of, head for a shelter, or charge into melee from 3 to 30 m (`FighterSystem::sprinting`, [focus.md](focus.md));
+they also sprint carrying a downed friend to cover, and colonists sprint to rescue a downed colonist or beat out a fire
+(`Sim::pawnSprinting`). Visitors and traders never hurry; animals keep their own speeds. The player's
 colonist follows the sprint toggle above instead.

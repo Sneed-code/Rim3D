@@ -65,50 +65,29 @@ int ctrlBagCount(const Sim& sim, Entity pawn, const char* def) {
 
 }  // namespace
 
-TEST_CASE("Controls: AI pawns sprint only in a fight, fleeing or an emergency, at RimWorld's 4/3") {
+TEST_CASE("Controls: rescuing and carrying a downed friend are emergencies that sprint; the player's own pawn never") {
     auto sim = ctrlSim();
     const Entity pawn = ctrlColonist(*sim, CellPos{10, 10, 0});
     sim->step();
-    CHECK(sim->fighters().rules().sprintSpeedFactor == doctest::Approx(4.0f / 3.0f).epsilon(0.001));
     CHECK_FALSE(sim->pawnSprinting(pawn));  // at work or idle: it jogs
+    sim->things().registry().get<Worker>(pawn).job.type = JobType::Rescue;
+    CHECK(sim->pawnSprinting(pawn));
+    sim->things().registry().get<Worker>(pawn).job.type = JobType::ExtinguishFire;
+    CHECK(sim->pawnSprinting(pawn));
+    sim->things().registry().get<Worker>(pawn).job.type = JobType::None;
 
-    // Drafted with no enemy about: still a jog.
+    // Drafted with no enemy about: still a jog; carrying a downed friend to cover: a sprint.
     sim->submit(DraftCommand{pawn, true});
     sim->step();
     CTRL_REQUIRE(sim->things().registry().all_of<Fighter>(pawn));
     CHECK_FALSE(sim->pawnSprinting(pawn));
-
-    Fighter& fighter = sim->things().registry().get<Fighter>(pawn);
-    fighter.fallingBack = true;  // falling back in a fight
+    sim->things().registry().get<Fighter>(pawn).mode = FightMode::Rescue;
     CHECK(sim->pawnSprinting(pawn));
-    fighter.fallingBack = false;
-    fighter.mode = FightMode::Flee;
-    CHECK(sim->pawnSprinting(pawn));
-    fighter.mode = FightMode::Rescue;
-    CHECK(sim->pawnSprinting(pawn));
-    fighter.mode = FightMode::Seize;
-    CHECK_FALSE(sim->pawnSprinting(pawn));
 
     // The player's own colonist: Unreal's sprint toggle sets its speed, never the sim.
-    fighter.mode = FightMode::Flee;
     sim->submit(ControlPawnCommand{pawn});
     sim->step();
     CHECK_FALSE(sim->pawnSprinting(pawn));
-}
-
-TEST_CASE("Controls: a fighter charging an enemy it can't hit yet sprints") {
-    auto sim = ctrlSim();
-    const Entity pawn = ctrlColonist(*sim, CellPos{10, 10, 0});
-    sim->combat().equip(pawn, sim->things().make(sim->defs().idOf("Things", "Melee_Mace")));
-    sim->submit(DraftCommand{pawn, true});
-    const Entity enemy = sim->things().spawn("Human", CellPos{10, 30, 0});
-    sim->submit(SetFactionCommand{enemy, 2});
-    sim->stepMany(40);
-    CTRL_REQUIRE(sim->things().registry().all_of<Fighter>(pawn));
-    const Fighter& fighter = sim->things().registry().get<Fighter>(pawn);
-    CHECK(fighter.target == enemy);
-    CHECK_FALSE(fighter.canFire);
-    CHECK(sim->pawnSprinting(pawn));
 }
 
 TEST_CASE("Controls: the player's colonist picks up resources it walks past, but not chunks or stockpiled things") {

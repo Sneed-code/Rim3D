@@ -94,7 +94,7 @@ struct CareFixture {
             sim.health().applyDamage(pawn, sim.health().damageTypeId(type), amount, static_cast<int>(it - labels.begin()), rng);
         };
         for (const char* part : {"torso", "left leg", "right leg", "left arm"}) {
-            hit("Blunt", std::string(part) == "left leg" ? 60.0f : 20.0f, part);  // a leg under a quarter downs (body zones)
+            hit("Blunt", std::string(part) == "left leg" ? 74.0f : 20.0f, part);  // a leg under a quarter downs (body zones), and a leg this bad stays down for minutes (it heals: part F)
         }
         hit("Cut", 15.0f, "right arm");  // 70% of the arm: it bleeds
     }

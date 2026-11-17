@@ -18,6 +18,28 @@ enum class ESimPawnDetail : uint8
 	Simple,
 };
 
+/** The body zones the picture knows (docs/design/body-health.md part E): where a hit lands, what limps, what is patched. */
+enum class ESimPawnZone : uint8
+{
+	Head,
+	Torso,
+	ArmLeft,
+	ArmRight,
+	LegLeft,
+	LegRight,
+	Count,
+};
+
+/** A blow or a bullet landing on a zone: the struck part is knocked along `Direction` and springs back. */
+struct FSimPawnKick
+{
+	ESimPawnZone Zone = ESimPawnZone::Torso;
+	/** The way the blow travels, in the mesh's own space (the mannequin faces +Y there), unit length. */
+	FVector Direction = FVector::YAxisVector;
+	/** 0 to 1. */
+	float Strength = 0.5f;
+};
+
 /** What a pawn actor tells its animation before each update (game thread). World units (cm). */
 struct FSimPawnAnimInputs
 {
@@ -33,6 +55,17 @@ struct FSimPawnAnimInputs
 	ESimPawnDetail Detail = ESimPawnDetail::Full;
 	/** Set for one update when the pawn jumped (spawned, loaded): forgets the trajectory. */
 	bool bTeleported = true;
+	// --- The hit layer (docs/design/body-health.md part E), on top of whatever animation plays. ---
+	/** Hits since the animation last took them: it empties the list when it has. */
+	TArray<FSimPawnKick, TInlineAllocator<4>> Kicks;
+	/** How badly each leg is hurt, 0 (whole) to 1: the body lurches over a hurt leg while that foot is down. */
+	float LimpLeft = 0.0f;
+	float LimpRight = 0.0f;
+	/** 0 to 1: bent over a wound it is patching, and the zone. */
+	float Patch = 0.0f;
+	ESimPawnZone PatchZone = ESimPawnZone::Torso;
+	/** Off for a ragdoll and for far pawns: the layer does nothing and forgets its springs. */
+	bool bHitLayer = true;
 };
 
 /** What the animation did, copied back after each update. Read by the smoke test. */
@@ -46,12 +79,20 @@ struct FSimPawnAnimStats
 	/** Motion matching searches run and how many of them started a new animation. */
 	int32 Searches = 0;
 	int32 Jumps = 0;
+	// The hit layer: kicks taken so far, how far the most bent zone is off its animation now (degrees), the largest it
+	// has been, and how far the body leans over a hurt leg now (0 to 1).
+	int32 Kicks = 0;
+	float WobbleDegrees = 0.0f;
+	float MaxWobbleDegrees = 0.0f;
+	float LimpNow = 0.0f;
+	float MaxLimp = 0.0f;
 	/** Standing still: the breathing idle plays and motion matching rests (it shuffled the feet). */
 	bool bStandingIdle = false;
 };
 
 /**
- * The animation of one sim pawn, all in C++ (no Animation Blueprint): a montage slot over a
+ * The animation of one sim pawn, all in C++ (no Animation Blueprint): a hit layer (struck parts wobble and spring
+ * back, a limp, the patching bend; body-health.md part E) over a montage slot over a
  * locomotion node that either motion matches (ESimPawnDetail::Full) or plays loops by speed
  * (Simple), through Epic's blend stack. The trajectory for motion matching is the pawn's real
  * history plus a prediction along the sim's route. See docs/design/pawns.md.
@@ -70,6 +111,19 @@ public:
 
 	/** Set every frame by the pawn actor before the mesh ticks. */
 	FSimPawnAnimInputs Inputs;
+
+	// --- The hold layer (docs/design/weapon-hold.md): the held weapon's stance on the spine and arms, over the walk. ---
+
+	/** The upper body plays Clip (looping) over the locomotion, cross-fading from the clip before over BlendSeconds; null
+	 *  for none. Weight is how much it shows (0 to 1), eased towards at WeightRate per second. */
+	void SetUpperStance(UAnimSequence* Clip, float Weight, float BlendSeconds = 0.2f, float WeightRate = 5.0f);
+	/** Bends the body forward at the waist by this many degrees (a load on the back), eased in and out. */
+	void SetSpineBend(float Degrees) { SpineBendTarget = Degrees; }
+	UAnimSequence* GetUpperStance() const { return UpperClip; }
+	float GetUpperWeight() const { return UpperWeight; }
+	float GetSpineBend() const { return SpineBend; }
+	/** Advances the layer's clocks and weights (game thread, from the proxy's PreUpdate). */
+	void AdvanceUpper(float DeltaSeconds);
 
 	const FSimPawnAnimStats& GetStats() const { return Stats; }
 
@@ -96,4 +150,18 @@ private:
 	float RunLoopSpeed = 400.0f;
 
 	FSimPawnAnimStats Stats;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequence> UpperClip;
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequence> UpperOldClip;
+	float UpperTime = 0.0f;
+	float UpperOldTime = 0.0f;
+	float UpperBlend = 1.0f;       // the new clip's share against the old one
+	float UpperBlendRate = 5.0f;
+	float UpperWeight = 0.0f;      // how much the layer shows now
+	float UpperWeightTarget = 0.0f;
+	float UpperWeightRate = 5.0f;
+	float SpineBend = 0.0f;        // degrees now
+	float SpineBendTarget = 0.0f;
 };

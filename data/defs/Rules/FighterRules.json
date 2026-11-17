@@ -48,9 +48,12 @@
     "focusMetres": 8,
     "ambushRange": 6,
     "helpRange": 20,
+    "fleeResponseSeconds": 20,
+    "fleeSightRange": 40,
+    "sprintFactor": 1.5,
+    "sprintChargeMin": 3,
+    "sprintChargeMax": 30,
     "helpReach": 2.5,
-    "sprintSpeedFactor": 1.3333333,
-    "sprintComment": "RimWorld LocomotionUrgency.Sprint: a move costs 0.75 of a jog. Used only in fights, fleeing and emergencies (sneed 2026-11-17).",
     "profiles": {
       "colonists": { "holdsForFriends": true },
       "raiders": { "holdsForFriends": false }
@@ -62,6 +65,7 @@
              "stepBackBelow", "reloadBelow", "dodgeRadius", "dodgeClearance", "dodgeHoldSteps",
              "diveMargin", "diveSafe", "throwEvery", "throwMinEnemies", "throwMemory", "throwSelfMargin", "throwFriendMargin",
              "switchMeleeRange", "switchSidearmRange", "switchMargin", "minWalkShare", "rangeMargin", "walkStayBonus",
-             "focusMetres", "ambushRange", "helpRange", "helpReach", "profiles"]
+             "focusMetres", "ambushRange", "helpRange", "helpReach", "profiles",
+             "fleeResponseSeconds", "fleeSightRange", "sprintFactor", "sprintChargeMin", "sprintChargeMax"]
   }
 ]

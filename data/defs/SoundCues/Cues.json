@@ -151,5 +151,6 @@
   {"defName": "Amb_Arid_Day", "label": "arid shrubland by day", "loop": true, "volume": 0.3, "range": 0, "priority": 3, "tone": {"wave": "noise", "hz": 400, "seconds": 3.0}},
   {"defName": "Amb_Arid_Night", "label": "arid shrubland by night", "loop": true, "volume": 0.25, "range": 0, "priority": 3, "tone": {"wave": "noise", "hz": 300, "seconds": 3.0}},
   {"defName": "Amb_Indoor", "label": "room tone indoors", "loop": true, "volume": 0.1, "range": 0, "priority": 3, "tone": {"wave": "sine", "hz": 60, "seconds": 3.0}},
-  {"defName": "Amb_Cave", "label": "cave drip and hush", "loop": true, "volume": 0.15, "range": 0, "priority": 3, "tone": {"wave": "noise", "hz": 200, "seconds": 3.0}}
+  {"defName": "Amb_Cave", "label": "cave drip and hush", "loop": true, "volume": 0.15, "range": 0, "priority": 3, "tone": {"wave": "noise", "hz": 200, "seconds": 3.0}},
+  {"defName": "Ui_KillConfirm", "label": "kill confirmed", "loop": false, "volume": 0.6, "range": 0, "priority": 0, "tone": {"wave": "sine", "hz": 1320, "seconds": 0.25}, "note": "Plays only for the player when the pawn they control kills someone (kill feed, docs/design/kill-feed.md). Made for Rim3D (tools/sounds/kill_confirm.py)."}
 ]

@@ -303,6 +303,17 @@ public:
     Entity controlledPawn() const;
     // A pawn's colonist record (name, skills...), or null if it is not a colonist.
     const Colonist* colonistOf(Entity pawn) const;
+    // The kill feed (docs/design/kill-feed.md). A PawnDied event's `target` is the killer: whoever last hurt the pawn with
+    // a bullet, blow or blast within kKillCreditSteps, unless it died of something else (hunger, cold, illness...).
+    // Which colour a name shows in, seen from the player: friendly (the colony, its tame animals), enemy (raiders,
+    // other hostile sides, an animal on the attack) or neutral (wild animals, visitors, prisoners).
+    static constexpr int64_t kKillCreditSteps = 3600;  // a game hour of real-time steps: long enough to bleed out
+    enum class KillSide : uint8_t { Friendly, Enemy, Neutral };
+    KillSide killSideOf(Entity pawn) const;
+    // The short name a feed line shows: a person's nickname or first name, a tame animal's name, else its kind ("Deer").
+    std::string feedName(Entity pawn) const;
+    // Names the killer on every PawnDied event of this step that has none. Runs at the end of every step; tests call it.
+    void creditKills();
     // How a humanlike pawn looks (docs/design/looks.md), or null for other things.
     const PawnLooks* looksOf(Entity pawn) const;
     // A humanlike pawn's genes, made from its lineage (docs/design/genes.md), or null for other things.
@@ -513,12 +524,13 @@ public:
     float bodyHeightM(Entity pawn) const;
     // True when the pawn is in water past its shoulders: it swims, and can't roll, shoot or fight.
     bool pawnSwimming(Entity pawn) const;
-    // True while an AI pawn sprints (sneed 2026-11-17, docs/design/movement.md "Sprinting"): only in a fight (charging its
-    // target hand to hand, or falling back), fleeing, sheltering, carrying a downed friend to cover, rescuing a downed colonist or
-    // beating out a fire. Never for the player's pawn (Unreal's sprint toggle sets its speed) or animals.
+    // True while an AI pawn sprints (sneed 2026-11-17, docs/design/controls.md): a fighter fleeing or charging into melee
+    // (FighterSystem::sprinting) or carrying a downed friend to cover, or a colonist rescuing a downed colonist or beating
+    // out a fire. Never the player's pawn (Unreal's sprint toggle sets its speed), visitors or animals.
     bool pawnSprinting(Entity pawn) const;
 
 private:
+    float lowestPartHealth(Entity pawn) const;  // the focus HP bar (docs/design/focus.md)
     float pawnMoveFactor(Entity pawn) const;  // see Sim.cpp
     bool takeIntoBag(Entity pawn, Entity item, int count, std::string& error);  // Inventory.cpp
     void autoPickUp();                                                          // Inventory.cpp

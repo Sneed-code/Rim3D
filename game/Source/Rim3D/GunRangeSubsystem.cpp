@@ -22,20 +22,29 @@
 #include <imgui.h>
 
 #include "GunViewAnim.h"
+#include "HoldDraw.h"
 #include "MakeHumanAnimInstance.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
 #include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
+#include "WeaponDrawSubsystem.h"
 
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Hold.h"
+#include "ColonySim/Looks.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogGunRange, Log, All);
+
+static TAutoConsoleVariable<int32> GViewArms(TEXT("View.Arms"), 1,
+	TEXT("First person in the main game: 1 shows the player's arms holding what is in their hands (docs/design/weapon-hold.md), 0 shows nothing."));
 
 namespace
 {
@@ -224,6 +233,7 @@ bool UGunRangeSubsystem::LoadConfig()
 			G.PumpStart = GunRangeNum(*Pump, TEXT("start"), G.PumpStart);
 			G.PumpSeconds = GunRangeNum(*Pump, TEXT("seconds"), G.PumpSeconds);
 		}
+		G.ReloadSteady = FMath::Clamp(GunRangeNum(J, TEXT("reloadSteady"), 0.0f), 0.0f, 1.0f);
 		const TSharedPtr<FJsonObject>* Scope = nullptr;
 		if (J->TryGetObjectField(TEXT("scope"), Scope))
 		{
@@ -247,6 +257,7 @@ bool UGunRangeSubsystem::LoadConfig()
 		}
 	}
 	MeshCache.Reset();
+	MeshMisses.Reset();
 	const int32 Was = Current;
 	Current = -1;
 	CurrentDef.Reset();
@@ -283,6 +294,12 @@ UStaticMesh* UGunRangeSubsystem::FindMesh(const FString& Art, const FString& Mat
 	{
 		return Found->Get();
 	}
+	// A model that isn't imported is looked for again only after a while: the third-person hands ask every frame.
+	const double Now = FPlatformTime::Seconds();
+	if (const double* Missed = MeshMisses.Find(Key); Missed && Now - *Missed < 30.0)
+	{
+		return nullptr;
+	}
 	UStaticMesh* Best = nullptr;
 	if (!Art.IsEmpty())
 	{
@@ -313,7 +330,32 @@ UStaticMesh* UGunRangeSubsystem::FindMesh(const FString& Art, const FString& Mat
 		}
 	}
 	MeshCache.Add(Key, Best);
+	if (Best)
+	{
+		MeshMisses.Remove(Key);
+	}
+	else
+	{
+		MeshMisses.Add(Key, Now);
+	}
 	return Best;
+}
+
+const FGunRangeGun* UGunRangeSubsystem::FindGunByDef(const FString& Def)
+{
+	if (!bConfigTried && Guns.IsEmpty())
+	{
+		bConfigTried = true;
+		LoadConfig();
+	}
+	for (int32 i = 0; i < Guns.Num(); ++i)
+	{
+		if (Guns[i].Def == Def)
+		{
+			return HasModel(i) ? &Guns[i] : nullptr;
+		}
+	}
+	return nullptr;
 }
 
 bool UGunRangeSubsystem::HasModel(int32 Index) const
@@ -378,6 +420,20 @@ void UGunRangeSubsystem::HideAll()
 	{
 		Flash->SetVisibility(false);
 	}
+	HideHeld();
+}
+
+void UGunRangeSubsystem::HideHeld()
+{
+	bHeldView = false;
+	if (HeldWeapon)
+	{
+		HeldWeapon->SetVisibility(false);
+	}
+	if (HeldShield)
+	{
+		HeldShield->SetVisibility(false);
+	}
 }
 
 bool UGunRangeSubsystem::EnsureRig(ASimPawnActor& Player)
@@ -432,6 +488,18 @@ bool UGunRangeSubsystem::EnsureRig(ASimPawnActor& Player)
 		DroppedMag->SetMobility(EComponentMobility::Movable);
 		DroppedMag->RegisterComponent();
 		DroppedMag->SetVisibility(false);
+
+		for (TObjectPtr<UStaticMeshComponent>* Held : {&HeldWeapon, &HeldShield})
+		{
+			UStaticMeshComponent* Made = NewObject<UStaticMeshComponent>(Holder, Held == &HeldWeapon ? TEXT("GunViewHeldWeapon") : TEXT("GunViewHeldShield"));
+			Made->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Made->SetMobility(EComponentMobility::Movable);
+			Made->SetCastShadow(false);
+			Made->bReceivesDecals = false;
+			Made->RegisterComponent();
+			Made->SetVisibility(false);
+			*Held = Made;
+		}
 
 		Flash = NewObject<UPointLightComponent>(Holder, TEXT("GunViewFlash"));
 		Flash->SetupAttachment(ViewRoot);
@@ -616,8 +684,13 @@ void UGunRangeSubsystem::UpdateInput()
 void UGunRangeSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	if (!bEnabled)
+	// The range (rack, keys, panel) only where a scene turned it on; the arms in first person everywhere (View.Arms).
+	if (!bEnabled && GViewArms.GetValueOnGameThread() == 0)
 	{
+		if (bShown)
+		{
+			HideAll();
+		}
 		return;
 	}
 	USimSubsystem* Bridge = BridgeSource.Get();
@@ -627,39 +700,27 @@ void UGunRangeSubsystem::Tick(float DeltaTime)
 	{
 		return;
 	}
-	UpdateInput();
-	DrawPanel();
+	if (!bConfigTried && Guns.IsEmpty())
+	{
+		bConfigTried = true;
+		LoadConfig();
+	}
+	if (bEnabled)
+	{
+		UpdateInput();
+		DrawPanel();
+	}
 	AProtagonistPawn* Body = Protagonist->GetBody();
 	ASimPawnActor* Player = Protagonist->IsDirectMode() ? Pawns->FindPawn(Protagonist->GetControlled()) : nullptr;
 	const colony::ThingView* Me = Player ? Bridge->GetCurrentSnapshot().find(Protagonist->GetControlled()) : nullptr;
-	// What's in the hands, as a rack index; a melee weapon puts the view in third person (the main game draws the swings
-	// on the whole body), and taking a gun again brings first person back if the range was the one that left it.
-	if (Me && Body)
+	// What's in the hands, as a rack index. Melee weapons stay in first person now: the arms swing them.
+	const FString Def = Me && Me->weapon.valid() && Bridge->GetDefs() ? FString(UTF8_TO_TCHAR(Bridge->GetDefs()->get(Me->weapon).defName().c_str())) : FString();
+	HeldRack = -1;
+	for (int32 i = 0; i < Guns.Num() + Melee.Num(); ++i)
 	{
-		const FString Held = Me->weapon.valid() && Bridge->GetDefs() ? FString(UTF8_TO_TCHAR(Bridge->GetDefs()->get(Me->weapon).defName().c_str())) : FString();
-		HeldRack = -1;
-		for (int32 i = 0; i < Guns.Num() + Melee.Num(); ++i)
+		if (!Def.IsEmpty() && Def == (i < Guns.Num() ? Guns[i].Def : Melee[i - Guns.Num()].Def))
 		{
-			if (!Held.IsEmpty() && Held == (i < Guns.Num() ? Guns[i].Def : Melee[i - Guns.Num()].Def))
-			{
-				HeldRack = i;
-			}
-		}
-		// Only when the weapon changes, so V still works with either in the hands.
-		if (HeldRack != LastHeldRack)
-		{
-			LastHeldRack = HeldRack;
-			const bool bMeleeHeld = HeldRack >= Guns.Num();
-			if (bMeleeHeld && Body->IsFirstPerson())
-			{
-				Body->SetFirstPerson(false);
-				bAutoThirdPerson = true;
-			}
-			else if (!bMeleeHeld && HeldRack >= 0 && bAutoThirdPerson && !Body->IsFirstPerson())
-			{
-				Body->SetFirstPerson(true);
-				bAutoThirdPerson = false;
-			}
+			HeldRack = i;
 		}
 	}
 	if (!Body || !Player || !Me || Me->downed || Me->dead || !Body->IsFirstPerson() || !EnsureRig(*Player))
@@ -667,27 +728,29 @@ void UGunRangeSubsystem::Tick(float DeltaTime)
 		HideAll();
 		return;
 	}
-	// Which gun is in the hands (the sim says); one the range doesn't know shows nothing.
-	const FString Def = Me->weapon.valid() && Bridge->GetDefs() ? FString(UTF8_TO_TCHAR(Bridge->GetDefs()->get(Me->weapon).defName().c_str())) : FString();
+	// A gun with a model here is drawn as the range draws it; anything else by its hold style.
 	if (Def != CurrentDef)
 	{
 		CurrentDef = Def;
 		int32 Index = -1;
 		for (int32 i = 0; i < Guns.Num(); ++i)
 		{
-			if (Guns[i].Def == Def)
+			if (Guns[i].Def == Def && (bEnabled || HasModel(i)))
 			{
 				Index = i;
 			}
 		}
 		SetupGun(Index);
 	}
-	if (!Guns.IsValidIndex(Current))
+	if (Guns.IsValidIndex(Current))
 	{
-		HideAll();
-		return;
+		HideHeld();
+		UpdateView(DeltaTime, *Player);
 	}
-	UpdateView(DeltaTime, *Player);
+	else
+	{
+		UpdateHeldView(DeltaTime, *Player, *Me);
+	}
 }
 
 void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
@@ -775,6 +838,16 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 	else if (!bFrozen)
 	{
 		AimCorrection = FQuat::Slerp(AimCorrection, Target, 1.0f - FMath::Exp(-14.0f * Dt));
+		SteadyBase = AimCorrection;
+	}
+	else if (ActionWeight > 0.05f && Dip <= 0.6f && G.ReloadSteady > 0.0f)
+	{
+		// Through a reload the barrel keeps pointing ahead by ReloadSteady (its direction only: the clip still rolls and
+		// lifts the gun about it), so a reload that swings the stock about doesn't swing the muzzle across the view.
+		const FVector BarrelNow = SteadyBase.RotateVector(BarrelInRoot).GetSafeNormal();
+		const FQuat Full = FQuat::FindBetweenNormals(BarrelNow, FVector::ForwardVector) * SteadyBase;
+		const FQuat Desired = FQuat::Slerp(SteadyBase, Full, G.ReloadSteady);
+		AimCorrection = FQuat::Slerp(AimCorrection, Desired, 1.0f - FMath::Exp(-10.0f * Dt));
 	}
 
 	// --- Procedural layers: kick, sway, bob, the switch dip, sprinting. ---
@@ -958,7 +1031,13 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 		{
 			const FTransform GunWorld = GunFrame->GetComponentTransform();
 			const FTransform RightHand = Arms->GetSocketTransform(TEXT("hand_r"));
-			const FVector GripTarget = GunWorld.TransformPosition(G.OffHand);
+			// A pump gun: the hand rides the fore-end back and forward with it (the cycle part's slide).
+			FVector OffHand = G.OffHand;
+			if (G.bPump && G.bCycle)
+			{
+				OffHand.X += GunRangeBolt((SinceShot - G.CycleStart) / FMath::Max(G.CycleSeconds, 0.05f), G.CycleLift, G.CycleBack).Y;
+			}
+			const FVector GripTarget = GunWorld.TransformPosition(OffHand);
 			const FVector GripLocal = RightHand.InverseTransformPosition(GripTarget);
 			const FVector Elbow = GripTarget + Camera->GetComponentQuat().RotateVector(FVector(-25.0f, -25.0f, -35.0f));
 			ArmsAnim->SetLeftHandGrip(Alpha, GripLocal, Elbow);
@@ -978,6 +1057,212 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 		Flash->SetWorldLocation(GunFrame->GetComponentTransform().TransformPosition(G.Muzzle + FVector(6.0f, 0.0f, 0.0f)));
 		Flash->SetIntensity(6000.0f * (1.0f - FlashAge / GunRangeFlashSeconds));
 	}
+}
+
+// The first-person arms holding anything that isn't a gun model (docs/design/weapon-hold.md): a melee weapon, a gun
+// without a model, a shield, bare fists. The hold style picks the stance and block clips, the sim's swing clip plays
+// on the arms in step with the sim, the hands are raised into view while ready (not through a swing, whose clip brings
+// them across), and the weapon and shield go on the hands as on every body.
+void UGunRangeSubsystem::UpdateHeldView(float Dt, ASimPawnActor& Player, const colony::ThingView& Me)
+{
+	USimSubsystem* Bridge = BridgeSource.Get();
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	UWeaponDrawSubsystem* Weapons = GetWorld()->GetSubsystem<UWeaponDrawSubsystem>();
+	AProtagonistPawn* Body = Protagonist->GetBody();
+	UCameraComponent* Camera = Body ? Body->GetCamera() : nullptr;
+	UGunViewAnimInstance* Anim = Cast<UGunViewAnimInstance>(Source->GetAnimInstance());
+	UMakeHumanAnimInstance* ArmsAnim = Cast<UMakeHumanAnimInstance>(Arms->GetAnimInstance());
+	const colony::DefDatabase* Defs = Bridge->GetDefs().get();
+	if (!Camera || !Anim || !ArmsAnim || !Defs || !Weapons || !HoldDraw::HasHand(Arms, true))
+	{
+		HideAll();
+		return;
+	}
+	if (ViewRoot->GetAttachParent() != Camera)
+	{
+		ViewRoot->AttachToComponent(Camera, FAttachmentTransformRules::KeepRelativeTransform);
+	}
+	if (!bHeldView)
+	{
+		ValidFrames = 0;
+		HeldStance = nullptr;
+		HeldMotionDef = MAX_uint32;
+	}
+	bHeldView = true;
+	bScoped = false;
+
+	// --- What is held, and how: the weapon's hold style (fists for nothing), the shield on the arm. ---
+	colony::WeaponHold Hold;
+	colony::holdFor(*Defs, Me.weapon, Hold);
+	colony::WeaponHold ShieldHold;
+	const bool bShield = Me.shield.valid() && !Me.shieldSlung && colony::shieldHoldFor(*Defs, Me.shield, ShieldHold);
+	const bool bFists = Hold.grip == colony::HoldGrip::None;
+	const bool bBlock = Me.blocking || Me.shieldUp;
+
+	// --- The stance: the style's block clip while blocking, else its first-person stance. ---
+	UAnimSequence* Want = nullptr;
+	if (bBlock)
+	{
+		Want = bShield ? HoldDraw::StyleClip(*Defs, Hold, "shieldBlock") : HoldDraw::StyleClip(*Defs, Hold, "fpBlock", "block");
+		if (!Want && bShield)
+		{
+			Want = HoldDraw::StyleClip(*Defs, ShieldHold, "block");
+		}
+	}
+	if (!Want)
+	{
+		Want = bShield ? HoldDraw::StyleClip(*Defs, Hold, "shieldStance", "fpStance") : nullptr;
+		Want = Want ? Want : HoldDraw::StyleClip(*Defs, Hold, "fpStance", "stance");
+	}
+	if (Want != HeldStance.Get())
+	{
+		HeldStance = Want;
+		Anim->SetStance(Want, -1.0f, 0.2f);
+	}
+
+	// --- The swing: the sim's attack clip at the sim's moment and rate (as the body plays it in third person). ---
+	const colony::MotionClip* Clip = Me.motionClip.valid() && Bridge->GetSim() ? Bridge->GetSim()->combat().motion().clip(Me.motionClip) : nullptr;
+	UAnimSequence* SwingAsset = Clip && Clip->kind == "Attack" && !Clip->anim.empty() ? HoldDraw::LoadClip(UTF8_TO_TCHAR(Clip->anim.c_str())) : nullptr;
+	if (SwingAsset)
+	{
+		if (HeldMotionDef != Me.motionClip.value || Me.motionTime < HeldMotionTime - 0.02f)
+		{
+			HeldMotionDef = Me.motionClip.value;
+			const float To = FMath::Min(Clip->from + Clip->seconds, SwingAsset->GetPlayLength());
+			Anim->PlayAction(SwingAsset, Clip->from + Me.motionTime, To, FMath::Max(0.05f, Me.motionRate), 0.08f, 0.25f);
+			++HeldSwingsSeen;
+		}
+		HeldMotionTime = Me.motionTime;
+	}
+	else if (HeldMotionDef != MAX_uint32)
+	{
+		HeldMotionDef = MAX_uint32;
+		Anim->StopAction(0.25f);
+	}
+	// Bare fists have no swing clip: a jab when the blow lands (the sim's windup ends), the hands taking turns.
+	const uint8 Phase = static_cast<uint8>(Me.meleePhase);
+	if (bFists && !SwingAsset && LastMeleePhase == static_cast<uint8>(colony::MeleePhase::Windup) && Phase != LastMeleePhase)
+	{
+		PunchAge = 0.0f;
+		bPunchLeft = !bPunchLeft;
+		++HeldSwingsSeen;
+	}
+	LastMeleePhase = Phase;
+	PunchAge += Dt;
+	const float Punch = PunchAge < 0.1f ? GunRangeSmooth(PunchAge / 0.1f) : (PunchAge < 0.32f ? 1.0f - GunRangeSmooth((PunchAge - 0.1f) / 0.22f) : 0.0f);
+	const float SwingWeight = FMath::Clamp(Anim->GetActionWeight(), 0.0f, 1.0f);
+
+	// --- Procedural layers: sway with the mouse, bob with the steps, a dip when the weapon changes. ---
+	float MouseX = 0.0f, MouseY = 0.0f;
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
+	{
+		PC->GetInputMouseDelta(MouseX, MouseY);
+	}
+	Sway = FMath::Lerp(Sway, FVector2D(FMath::Clamp(-MouseX * 0.35f, -3.5f, 3.5f), FMath::Clamp(-MouseY * 0.35f, -3.5f, 3.5f)), 1.0f - FMath::Exp(-8.0f * Dt));
+	const float Speed = static_cast<float>(Body->GetLocalVelocity().Size());
+	BobPhase += Dt * Speed * 2.1f;
+	const float BobAmount = FMath::Min(Speed / 4.0f, 1.3f);
+	Dip = FMath::Max(0.0f, Dip - Dt / GunRangeSwitchSeconds);
+	const float DipEase = GunRangeSmooth(Dip);
+	SprintBlend = FMath::FInterpTo(SprintBlend, Body->IsSprinting() ? 1.0f : 0.0f, Dt, 7.0f);
+
+	// --- Place the body: facing the view (the mannequin faces +y), leaning half as far as the view pitches, the head
+	// pinned a little behind the eyes so the swings turn the arms about the view. ---
+	const FTransform RootWorld = ViewRoot->GetComponentTransform();
+	const FVector HeadInRoot = RootWorld.InverseTransformPosition(Arms->GetSocketLocation(TEXT("head")));
+	const float Pitch = static_cast<float>(Camera->GetComponentRotation().Pitch);
+	const FQuat Procedural = FRotator(-0.5f * Pitch + Sway.Y - 30.0f * DipEase - 10.0f * SprintBlend, Sway.X + 15.0f * SprintBlend, FMath::Sin(BobPhase) * 0.8f * BobAmount).Quaternion();
+	const FQuat RootRot = Procedural * FRotator(0.0f, -90.0f, 0.0f).Quaternion();
+	FVector RootLoc = HeadInView - RootRot.RotateVector(HeadInRoot);
+	RootLoc += FVector(0.0f, FMath::Sin(BobPhase) * 0.7f, -FMath::Abs(FMath::Cos(BobPhase)) * 0.6f) * BobAmount;
+	RootLoc += FVector(-4.0f, 4.0f, -20.0f) * DipEase;
+	ViewRoot->SetRelativeLocationAndRotation(RootLoc, RootRot);
+
+	// --- The hands raised into view while ready (the stance clips are third-person holds, low at the hips): spots in
+	// the view's frame (cm, x ahead, y right, z up), off through a swing so its clip moves them. ---
+	const FTransform CameraWorld = Camera->GetComponentTransform();
+	const FTransform ArmsWorld = Arms->GetComponentTransform();
+	const auto ToArms = [&CameraWorld, &ArmsWorld](const FVector& InView) { return ArmsWorld.InverseTransformPosition(CameraWorld.TransformPosition(InView)); };
+	// Partly kept through a swing so the hands stay in view while the clip moves them.
+	const float Reach = 1.0f - 0.6f * SwingWeight;
+	FVector RightSpot = bFists ? FVector(36.0f, 13.0f, -10.0f) : (Hold.hands >= 2 ? FVector(42.0f, 10.0f, -15.0f) : FVector(42.0f, 15.0f, -13.0f));
+	if (bBlock && !bShield)
+	{
+		RightSpot = bFists ? FVector(30.0f, 8.0f, -4.0f) : FVector(40.0f, 6.0f, -6.0f);
+	}
+	if (bFists && !bPunchLeft)
+	{
+		RightSpot = FMath::Lerp(RightSpot, FVector(62.0f, 4.0f, -10.0f), Punch);
+	}
+	ArmsAnim->SetRightHandReach(Reach, ToArms(RightSpot), ToArms(RightSpot + FVector(-28.0f, 26.0f, -32.0f)));
+
+	// --- The weapon on the right hand's grip, the shield on the left forearm. ---
+	const float Size = colony::gearSizeFor(*Defs, Player.GetBodyScale()).size;
+	const bool bSettled = ++ValidFrames >= 3;
+	FTransform WeaponWorld;
+	bool bWeapon = false;
+	if (!bFists && Me.weapon.valid())
+	{
+		FTransform Frame;
+		UStaticMesh* Mesh = Weapons->GetWeaponMesh(Me.weapon);
+		if (Mesh && HoldDraw::HandFrame(Arms, Hold, Frame))
+		{
+			WeaponWorld = HoldDraw::WeaponWorld(Frame, Hold, Size);
+			if (HeldWeapon->GetStaticMesh() != Mesh)
+			{
+				HeldWeapon->SetStaticMesh(Mesh);
+			}
+			HeldWeapon->SetWorldTransform(WeaponWorld);
+			bWeapon = true;
+		}
+	}
+	HeldWeapon->SetVisibility(bWeapon && bSettled);
+	bool bShieldShown = false;
+	if (bShield)
+	{
+		FTransform Frame;
+		UStaticMesh* Mesh = Weapons->GetShieldMesh(Me.shield, Me.shieldStuff);
+		if (Mesh && HoldDraw::ShieldFrame(Arms, Frame))
+		{
+			if (HeldShield->GetStaticMesh() != Mesh)
+			{
+				HeldShield->SetStaticMesh(Mesh);
+			}
+			HeldShield->SetWorldTransform(HoldDraw::WeaponWorld(Frame, ShieldHold, Size));
+			bShieldShown = true;
+		}
+	}
+	HeldShield->SetVisibility(bShieldShown && bSettled);
+
+	// --- The left hand: on a two-handed grip, else up as a guard (fists) or with the shield raised before the face. ---
+	const FVector ElbowOut = CameraWorld.TransformVector(FVector(-0.2f, -0.6f, -1.0f)).GetSafeNormal();
+	if (bWeapon && Hold.hasOff)
+	{
+		HoldDraw::SetOffHand(Arms, WeaponWorld, Hold, Size, 1.0f - DipEase, ElbowOut);
+	}
+	else if (bFists || bShield)
+	{
+		FVector LeftSpot = bShield ? (bBlock ? FVector(34.0f, -6.0f, -8.0f) : FVector(40.0f, -18.0f, -16.0f)) : (bBlock ? FVector(30.0f, -8.0f, -4.0f) : FVector(36.0f, -13.0f, -10.0f));
+		if (bFists && bPunchLeft)
+		{
+			LeftSpot = FMath::Lerp(LeftSpot, FVector(62.0f, -4.0f, -10.0f), Punch);
+		}
+		ArmsAnim->SetLeftHandReach(Reach, ToArms(LeftSpot), ToArms(LeftSpot + FVector(-28.0f, -26.0f, -32.0f)));
+	}
+	else
+	{
+		ArmsAnim->SetLeftHandGrip(0.0f, FVector::ZeroVector, FVector::ZeroVector);
+	}
+
+	// Shown once the pose has settled (the first frames have no animation yet); no gun parts, magazine or flash here.
+	if (bSettled != bShown || Arms->IsVisible() != bSettled)
+	{
+		ViewRoot->SetVisibility(bSettled, true);
+		Source->SetVisibility(false, false);
+		HeldMag->SetVisibility(false);
+		bShown = bSettled;
+	}
+	Flash->SetVisibility(false);
 }
 
 void UGunRangeSubsystem::DrawPanel()

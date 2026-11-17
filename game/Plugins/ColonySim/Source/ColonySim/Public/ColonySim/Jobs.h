@@ -308,6 +308,9 @@ public:
     bool sleepingByHand(Entity pawn) const;
     // How far along the pawn's job is, 0 to 1 (a swing of the pick, a plant, a frame); 0 with no job.
     float jobProgress(Entity pawn) const;
+    // The downed pawn or corpse this pawn is carrying on a job now (rescue, capture, a corpse to haul or butcher: after it
+    // was lifted and until it is put down); kNoEntity otherwise (docs/design/weapon-hold.md, "Carrying a body").
+    Entity carryingPawn(Entity pawn) const;
     // Puts down what the pawn carries on the nearest free cell. Used when the player lets a colonist go.
     void putDown(Entity pawn) { dropCarried(pawn); }
     // Ends the job of any pawn mining, cutting or picking at this cell, as interrupted: the mark was

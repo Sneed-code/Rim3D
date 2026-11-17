@@ -2,6 +2,8 @@
 #include "GunRangeSubsystem.h"
 #include "KeyBindings.h"
 
+#include "Animation/AnimSequence.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -11,8 +13,11 @@
 #include "Materials/MaterialInterface.h"
 
 #include "FightSubsystem.h"
+#include "GunRangeSubsystem.h"
+#include "HoldDraw.h"
 #include "OrdersSubsystem.h"
 #include "PawnActor.h"
+#include "PawnAnimInstance.h"
 #include "PawnSubsystem.h"
 #include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
@@ -23,6 +28,7 @@
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Hold.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Sim.h"
@@ -35,6 +41,20 @@ namespace
 {
 	TAutoConsoleVariable<int32> GWeaponDraw(
 		TEXT("Weapons.Draw"), 1, TEXT("1 draws the weapons pawns carry and their swings, 0 draws none."), ECVF_Default);
+
+	TAutoConsoleVariable<int32> GWeaponHands(
+		TEXT("Weapons.Hands"), 1, TEXT("1 puts held weapons in the hands by their grip points (docs/design/weapon-hold.md), 0 floats them as before."), ECVF_Default);
+	TAutoConsoleVariable<int32> GWeaponStances(
+		TEXT("Weapons.Stances"), 1, TEXT("1 plays the held weapon's upper-body stance, aim, block and reload clips, 0 none."), ECVF_Default);
+	TAutoConsoleVariable<int32> GWeaponHolsterIdle(
+		TEXT("Weapons.HolsterIdle"), 1, TEXT("1 holsters the weapon while a pawn is not drafted, fighting or the player's, 0 keeps it in the hands."), ECVF_Default);
+	TAutoConsoleVariable<int32> GWeaponGunArt(
+		TEXT("Weapons.GunModels"), 1, TEXT("1 draws guns with a real model (assets/guns.json) in third person too, 0 the defs' plain shapes."), ECVF_Default);
+
+	// How fast a weapon comes out of its holster or goes back (per real second: about 0.4 s), and how far a body on the
+	// back bends its carrier forward (degrees).
+	constexpr float WeaponReadyRate = 2.5f;
+	constexpr float WeaponCarryBend = 26.0f;
 
 	const TCHAR* const WeaponSolidMaterialPath = TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial");
 
@@ -64,11 +84,6 @@ namespace
 	FVector WeaponSimToWorld(const USimSubsystem& Bridge, float X, float Y, float Z)
 	{
 		return Bridge.GetWorldOrigin() + FVector(X * 100.0, Y * 100.0, Z * 100.0);
-	}
-
-	FRotator WeaponSlerp(const FRotator& A, const FRotator& B, float T)
-	{
-		return FQuat::Slerp(A.Quaternion(), B.Quaternion(), T).Rotator();
 	}
 }
 
@@ -356,6 +371,22 @@ UStaticMesh* UWeaponDrawSubsystem::ShieldMesh(colony::DefId Shield, colony::DefI
 	return Mesh;
 }
 
+float UWeaponDrawSubsystem::GetReady(colony::Entity Pawn) const
+{
+	const FPawnWeapons* Found = Weapons.Find(entt::to_integral(Pawn));
+	return Found ? Found->Ready : 0.0f;
+}
+
+UStaticMesh* UWeaponDrawSubsystem::GetWeaponMesh(colony::DefId Weapon)
+{
+	return Weapon.valid() ? WeaponMesh(Weapon) : nullptr;
+}
+
+UStaticMesh* UWeaponDrawSubsystem::GetShieldMesh(colony::DefId Shield, colony::DefId Stuff)
+{
+	return Shield.valid() ? ShieldMesh(Shield, Stuff) : nullptr;
+}
+
 bool UWeaponDrawSubsystem::IsGun(colony::DefId Weapon) const
 {
 	const USimSubsystem* Bridge = BridgeSource.Get();
@@ -403,6 +434,61 @@ UStaticMeshComponent* UWeaponDrawSubsystem::MakeComponent(ASimPawnActor& Actor, 
 	Weapon->SetupAttachment(Actor.GetRootComponent());
 	Weapon->RegisterComponent();
 	return Weapon;
+}
+
+void UWeaponDrawSubsystem::DestroyDisplayed(FDisplayed& Shown)
+{
+	for (const TWeakObjectPtr<UStaticMeshComponent>& Part : Shown.Parts)
+	{
+		if (Part.IsValid())
+		{
+			Part->DestroyComponent();
+		}
+	}
+	if (Shown.Component.IsValid())
+	{
+		Shown.Component->DestroyComponent();
+	}
+	Shown = FDisplayed();
+}
+
+// The weapon's meshes: a real gun model's parts (assets/guns.json: the body, then its moving parts on it), else the
+// def's own shapes.
+bool UWeaponDrawSubsystem::MakeDisplayed(ASimPawnActor& Actor, FDisplayed& Shown, colony::DefId Def, const FGunRangeGun* Art)
+{
+	UGunRangeSubsystem* Range = GetWorld()->GetSubsystem<UGunRangeSubsystem>();
+	UStaticMesh* Body = nullptr;
+	if (Art && Range && !Art->Parts.IsEmpty())
+	{
+		Body = Range->FindMesh(Art->ArtName, Art->Parts[0].Match);
+	}
+	UStaticMesh* Mesh = Body ? Body : WeaponMesh(Def);
+	if (!Mesh)
+	{
+		return false;
+	}
+	Shown.Component = MakeComponent(Actor, Mesh);
+	Shown.Def = Def;
+	Shown.bArt = Body != nullptr;
+	if (Body)
+	{
+		const FTransform MeshFix(Art->MeshRotation, Art->MeshOffset);
+		Shown.Component->SetCastShadow(true);
+		for (int32 i = 1; i < Art->Parts.Num(); ++i)
+		{
+			if (UStaticMesh* PartMesh = Range->FindMesh(Art->ArtName, Art->Parts[i].Match))
+			{
+				UStaticMeshComponent* Part = MakeComponent(Actor, PartMesh);
+				Part->SetCastShadow(true);
+				Part->AttachToComponent(Shown.Component.Get(), FAttachmentTransformRules::KeepRelativeTransform);
+				Part->SetRelativeTransform(FTransform::Identity);
+				Shown.Parts.Add(Part);
+			}
+		}
+		// The model's own fix-up (zero for the guns so far): the body carries it, the parts ride on the body.
+		(void)MeshFix;
+	}
+	return true;
 }
 
 // Where a carried weapon rides on the body (actor space, cm). `Height` is 1 standing, less crouching and prone.
@@ -512,9 +598,14 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 	// The body's own height (docs/design/gear-size.md): every place below was measured on the 1.80 m man, so it is
 	// scaled to this body, and the gear itself grows or shrinks part of the way (LooksRules gearSizeFollow).
 	const USimSubsystem* Bridge = BridgeSource.Get();
+	const colony::DefDatabase* Defs = Bridge ? Bridge->GetDefs().get() : nullptr;
 	const colony::GearSize Gear = Bridge && Bridge->GetSim() ? colony::gearSizeFor(Bridge->GetSim()->defs(), Actor.GetBodyScale())
 																: colony::GearSize{};
 	const double Place = Gear.place;
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	const bool bControlled = Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == View.id;
+	USkeletalMeshComponent* Mesh = HoldDraw::VisibleMesh(Actor);
+	UGunRangeSubsystem* Range = GetWorld()->GetSubsystem<UGunRangeSubsystem>();
 
 	// What sits in each display slot, and which one is in the hands.
 	colony::DefId Wanted[GWeaponDisplaySlots];
@@ -550,37 +641,89 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		Progress = FMath::Clamp(Progress, 0.0f, 1.0f);
 	}
 
+	// Ready (docs/design/weapon-hold.md): the weapon is in the hands while the pawn is drafted, fighting, blocking,
+	// swinging, reloading or switching, or is the player's own; otherwise it rides in its holster, so a colonist
+	// at work has free hands. Carrying a body on the back always holsters it.
+	const bool bCarrying = View.carryingPawn != colony::kNoEntity;
+	const bool bReady = !bCarrying && (GWeaponHolsterIdle.GetValueOnGameThread() == 0 || View.drafted || View.fighting || View.blocking ||
+		View.shieldUp || bControlled || View.reloading || Incoming >= 0 || Actor.IsInMotionClip() || Actor.GetSwing().IsActive());
+	Pawn.Ready = FMath::FInterpConstantTo(Pawn.Ready, bReady ? 1.0f : 0.0f, FrameDelta, WeaponReadyRate);
+	const float ReadyEase = MeleePose::EaseInOut(Pawn.Ready);
+	// Crouched or prone the body has no crouch clip yet (only the drawn height drops), so the weapon keeps the old
+	// lowered place instead of the standing hands.
+	const bool bHands = GWeaponHands.GetValueOnGameThread() != 0 && Mesh && Height > 0.9f && !View.swimming;
+
+	// The frame the holsters ride in: the actor's, carried along with the hips (a lunge), and through a roll, stagger or
+	// knockdown clip turned and moved with the pelvis as well (so holsters and a slung shield stay on the body), eased in
+	// and out with the clip.
+	FTransform BodyFrame = Actor.GetActorTransform();
+	BodyFrame.SetScale3D(FVector::OneVector);
+	if (Mesh && Mesh->GetBoneIndex(TEXT("pelvis")) != INDEX_NONE)
+	{
+		FTransform PelvisWorld = Mesh->GetSocketTransform(TEXT("pelvis"));
+		PelvisWorld.SetScale3D(FVector::OneVector);
+		const bool bClip = Actor.IsInMotionClip();
+		if (!bClip)
+		{
+			Pawn.PelvisRest = PelvisWorld.GetRelativeTransform(BodyFrame);
+			Pawn.bPelvisRest = true;
+		}
+		Pawn.PelvisFollow = FMath::FInterpConstantTo(Pawn.PelvisFollow, bClip && Pawn.bPelvisRest ? 1.0f : 0.0f, FrameDelta, 6.0f);
+		const FVector Off = PelvisWorld.GetLocation() - BodyFrame.GetLocation();
+		FTransform Flat = BodyFrame;
+		if (Off.Size2D() < 120.0)
+		{
+			Flat.AddToTranslation(FVector(Off.X, Off.Y, 0.0));
+		}
+		BodyFrame = Flat;
+		if (Pawn.PelvisFollow > 0.0f && Pawn.bPelvisRest)
+		{
+			const FTransform Follow = Pawn.PelvisRest.Inverse() * PelvisWorld;
+			if (FVector::Dist(Follow.GetLocation(), Flat.GetLocation()) < 150.0)
+			{
+				const float A = MeleePose::EaseInOut(Pawn.PelvisFollow);
+				BodyFrame.SetLocation(FMath::Lerp(Flat.GetLocation(), Follow.GetLocation(), static_cast<double>(A)));
+				BodyFrame.SetRotation(FQuat::Slerp(Flat.GetRotation(), Follow.GetRotation(), A));
+			}
+		}
+	}
+	Pawn.BodyFrame = BodyFrame;
+
+	colony::WeaponHold HandsHold;
+	bool bHandsHold = false;
+	FTransform HandsWeapon;
+	float HandsSize = Gear.size;
 	for (int32 Slot = 0; Slot < GWeaponDisplaySlots; ++Slot)
 	{
 		FDisplayed& Shown = Pawn.Slots[Slot];
 		const colony::DefId Def = Wanted[Slot];
 		if (!Def.valid())
 		{
-			if (Shown.Component.IsValid())
-			{
-				Shown.Component->DestroyComponent();
-			}
-			Shown = FDisplayed();
+			DestroyDisplayed(Shown);
 			continue;
 		}
-		if (!Shown.Component.IsValid() || Shown.Def != Def)
+		const FString DefName = Defs ? FString(UTF8_TO_TCHAR(Defs->get(Def).defName().c_str())) : FString();
+		const FGunRangeGun* Art = Range && IsGun(Def) && GWeaponGunArt.GetValueOnGameThread() != 0 ? Range->FindGunByDef(DefName) : nullptr;
+		if (!Shown.Component.IsValid() || Shown.Def != Def || Shown.bArt != (Art != nullptr))
 		{
-			if (Shown.Component.IsValid())
-			{
-				Shown.Component->DestroyComponent();
-			}
-			Shown = FDisplayed();
-			UStaticMesh* Mesh = WeaponMesh(Def);
-			if (!Mesh)
+			DestroyDisplayed(Shown);
+			if (!MakeDisplayed(Actor, Shown, Def, Art))
 			{
 				continue;
 			}
-			Shown.Component = MakeComponent(Actor, Mesh);
-			Shown.Def = Def;
 		}
-		// Set every frame: the looks (and so the height) can arrive after the weapon.
-		Shown.Component->SetRelativeScale3D(
-			FVector((Slot == static_cast<int32>(colony::WeaponSlot::Sidearm) ? WeaponSidearmScale : 1.0f) * Gear.size));
+		// How it is held: its hold style and grip points, or the gun model's own (assets/guns.json) for a real model.
+		colony::WeaponHold Hold;
+		const bool bHold = Defs && colony::holdFor(*Defs, Def, Hold);
+		if (Art)
+		{
+			Hold.main = colony::HoldPoint{static_cast<float>(Art->Grip.X), static_cast<float>(Art->Grip.Y), static_cast<float>(Art->Grip.Z)};
+			Hold.hasOff = Art->bOffHand;
+			Hold.off = colony::HoldPoint{static_cast<float>(Art->OffHand.X), static_cast<float>(Art->OffHand.Y), static_cast<float>(Art->OffHand.Z)};
+			Hold.rake = Art->Rake;
+		}
+		// The defs' guns share one shape, so a sidearm without a model of its own is drawn at half size.
+		const float Size = Gear.size * (!Art && Slot == static_cast<int32>(colony::WeaponSlot::Sidearm) ? WeaponSidearmScale : 1.0f);
 
 		// 0 holstered to 1 in the hands.
 		float InHand = Slot == InHands ? 1.0f : 0.0f;
@@ -595,33 +738,152 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 				InHand = Progress < 0.5f ? 0.0f : MeleePose::EaseInOut((Progress - 0.5f) / 0.5f);
 			}
 		}
+		// A weapon with no holster of its own (the fourth slot) stays in the hands.
+		if (Slot < colony::kWeaponSlotCount)
+		{
+			InHand *= ReadyEase;
+		}
 
 		FVector HolsterLocation;
 		FRotator HolsterRotation;
 		HolsterPose(Slot, Height, HolsterLocation, HolsterRotation);
-		FVector HandsLocation;
-		FRotator HandsRotation;
-		if (IsGun(Def))
+		const FTransform Holster = FTransform(HolsterRotation, HolsterLocation * Place) * BodyFrame;
+
+		// In the hands: on the hand's grip (HoldDraw), else floating where the old drawing put it.
+		FTransform Frame;
+		const bool bInHandFrame = bHands && bHold && HoldDraw::HandFrame(Mesh, Hold, Frame);
+		FTransform Hands;
+		if (bInHandFrame)
 		{
-			HoldPose(Slot, Height, HandsLocation, HandsRotation);
-			// The protagonist's gun follows the camera's pitch.
-			if (const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
-				Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == View.id && Protagonist->GetBody())
-			{
-				HandsRotation.Pitch = Protagonist->GetBody()->GetPitch();
-			}
+			Hands = HoldDraw::WeaponWorld(Frame, Hold, Size);
 		}
 		else
 		{
-			Actor.GetMeleeWeaponPose(HandsLocation, HandsRotation);
+			FVector HandsLocation;
+			FRotator HandsRotation;
+			if (IsGun(Def))
+			{
+				HoldPose(Slot, Height, HandsLocation, HandsRotation);
+				if (bControlled && Protagonist->GetBody())
+				{
+					HandsRotation.Pitch = Protagonist->GetBody()->GetPitch();
+				}
+			}
+			else
+			{
+				Actor.GetMeleeWeaponPose(HandsLocation, HandsRotation);
+			}
+			FTransform ActorFrame = Actor.GetActorTransform();
+			ActorFrame.SetScale3D(FVector::OneVector);
+			Hands = FTransform(HandsRotation, HandsLocation * Place) * ActorFrame;
 		}
-		const FVector Location = FMath::Lerp(HolsterLocation, HandsLocation, static_cast<double>(InHand)) * Place;
-		const FRotator Rotation = WeaponSlerp(HolsterRotation, HandsRotation, InHand);
-		Shown.Component->SetRelativeLocationAndRotation(Location, Rotation);
-		Shown.Component->SetVisibility(bShow);
+		FTransform World;
+		World.SetLocation(FMath::Lerp(Holster.GetLocation(), Hands.GetLocation(), static_cast<double>(InHand)));
+		World.SetRotation(FQuat::Slerp(Holster.GetRotation(), Hands.GetRotation(), InHand));
+		World.SetScale3D(FVector(Size));
+
+		// Hung on the hand bone once fully in it (so it moves with the hand between our updates), else on the actor.
+		UStaticMeshComponent* Component = Shown.Component.Get();
+		USceneComponent* Parent = InHand >= 0.999f && bInHandFrame ? static_cast<USceneComponent*>(Mesh) : Actor.GetRootComponent();
+		const FName Socket = Parent == Mesh ? HoldDraw::HandBone(Hold) : NAME_None;
+		if (Component->GetAttachParent() != Parent || Component->GetAttachSocketName() != Socket)
+		{
+			Component->AttachToComponent(Parent, FAttachmentTransformRules::KeepWorldTransform, Socket);
+		}
+		Component->SetWorldTransform(World);
+		Component->SetVisibility(bShow);
+		for (const TWeakObjectPtr<UStaticMeshComponent>& Part : Shown.Parts)
+		{
+			if (Part.IsValid())
+			{
+				Part->SetVisibility(bShow);
+			}
+		}
+		if (Slot == InHands && InHand >= 0.999f && bInHandFrame)
+		{
+			HandsHold = Hold;
+			bHandsHold = bHold;
+			HandsWeapon = World;
+			HandsSize = Size;
+		}
 	}
 
+	// The other hand on a two-handed grip, while the weapon is held up (not through a reload, which moves the hand itself).
+	const bool bOff = bShow && bHandsHold && HandsHold.hasOff && !View.reloading && Height > 0.9f;
+	Pawn.OffHand = FMath::FInterpConstantTo(Pawn.OffHand, bOff ? 1.0f : 0.0f, FrameDelta, 5.0f);
+	if (Mesh && (Pawn.OffHand > 0.0f || Pawn.bOffHandSet))
+	{
+		HoldDraw::SetOffHand(Mesh, HandsWeapon, HandsHold, HandsSize, bHandsHold ? Pawn.OffHand : 0.0f);
+		Pawn.bOffHandSet = Pawn.OffHand > 0.0f;
+	}
+
+	UpdateStance(Actor, View, Pawn, bShow && bHands, bControlled);
 	UpdateShield(Actor, View, Pawn, bShow && !View.hideGear, Height, Gear);
+}
+
+// The upper body's stance for what is in the hands (docs/design/weapon-hold.md): the hold style's stance clip while
+// ready, its aim clip while a gun is on a target, its block clip while blocking (the shield's with a shield on the arm),
+// its reload while reloading; none while working, lying, swimming or carrying.
+void UWeaponDrawSubsystem::UpdateStance(ASimPawnActor& Actor, const colony::ThingView& View, FPawnWeapons& Pawn, bool bShow, bool bControlled)
+{
+	USimPawnAnimInstance* Anim = Actor.GetAnim();
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	if (!Anim || !Bridge || !Bridge->GetDefs())
+	{
+		return;
+	}
+	const colony::DefDatabase& Defs = *Bridge->GetDefs();
+	UAnimSequence* Clip = nullptr;
+	float Weight = 0.0f;
+	colony::WeaponHold Hold;
+	if (bShow && GWeaponStances.GetValueOnGameThread() != 0 && !Actor.IsJumping() && colony::holdFor(Defs, View.weapon, Hold))
+	{
+		const bool bShieldArm = HasShieldOnArm(View);
+		const bool bGun = IsGun(View.weapon);
+		bool bAiming = bGun && View.fightTarget != colony::kNoEntity;
+		if (bControlled)
+		{
+			const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+			bAiming = bGun && Protagonist && Protagonist->GetBody() && Protagonist->GetBody()->GetAimBlend() > 0.3f;
+		}
+		if (View.reloading)
+		{
+			Clip = HoldDraw::StyleClip(Defs, Hold, "reload", "stance");
+		}
+		else if (View.blocking || View.shieldUp)
+		{
+			Clip = bShieldArm ? HoldDraw::StyleClip(Defs, Hold, "shieldBlock", "block") : HoldDraw::StyleClip(Defs, Hold, "block");
+			if (!Clip && View.shieldUp)
+			{
+				colony::WeaponHold Shield;
+				if (colony::shieldHoldFor(Defs, View.shield, Shield))
+				{
+					Clip = HoldDraw::StyleClip(Defs, Shield, "block");
+				}
+			}
+		}
+		else if (bAiming)
+		{
+			Clip = HoldDraw::StyleClip(Defs, Hold, "aim", "stance");
+		}
+		else
+		{
+			Clip = bShieldArm ? HoldDraw::StyleClip(Defs, Hold, "shieldStance", "stance") : HoldDraw::StyleClip(Defs, Hold, "stance");
+		}
+		// Fists show a guard only while blocking; the rest only while ready, held up fully once ready.
+		Weight = Hold.hands == 0 && !(View.blocking || View.shieldUp) ? 0.0f : MeleePose::EaseInOut(Pawn.Ready);
+		if (View.switchSlot < colony::kWeaponSlotCount)
+		{
+			Weight *= 0.5f;
+		}
+		if (Actor.GetStanceHeight() < 0.9f)
+		{
+			Weight *= 0.6f;  // crouched: the arms only
+		}
+	}
+	Anim->SetUpperStance(Clip, Clip ? Weight : 0.0f);
+	// A body on the back: bent forward under it (docs/design/weapon-hold.md, "Carrying a body").
+	Anim->SetSpineBend(View.carryingPawn != colony::kNoEntity && !View.downed && !View.dead ? WeaponCarryBend : 0.0f);
 }
 
 void UWeaponDrawSubsystem::UpdateShield(ASimPawnActor& Actor, const colony::ThingView& View, FPawnWeapons& Pawn, bool bShow, float Height,
@@ -661,15 +923,47 @@ void UWeaponDrawSubsystem::UpdateShield(ASimPawnActor& Actor, const colony::Thin
 
 	const float Raise = MeleePose::EaseInOut(Pawn.ShieldRaise);
 	const float Slung = MeleePose::EaseInOut(Pawn.ShieldSlung);
-	// Placed for this body (its height, then crouched or standing) and sized part of the way to it.
+	// The old places, actor space: on the arm, raised in front, slung on the back. Placed for this body (its height,
+	// then crouched or standing) and sized part of the way to it.
 	const FVector Scale = FVector(1.0, 1.0, Height) * static_cast<double>(Gear.place);
-	Pawn.Shield->SetRelativeScale3D(FVector(Gear.size));
-	FVector Location = FMath::Lerp(WeaponShieldLowered, WeaponShieldRaised, static_cast<double>(Raise)) * Scale;
-	FRotator Rotation = WeaponSlerp(WeaponShieldLoweredRotation, WeaponShieldRaisedRotation, Raise);
-	Location = FMath::Lerp(Location, WeaponShieldSlungAt * Scale, static_cast<double>(Slung));
-	Rotation = WeaponSlerp(Rotation, WeaponShieldSlungRotation, Slung);
-	Pawn.Shield->SetRelativeLocationAndRotation(Location, Rotation);
-	Pawn.Shield->SetVisibility(bShow);
+	FTransform ActorFrame = Actor.GetActorTransform();
+	ActorFrame.SetScale3D(FVector::OneVector);
+	const FTransform Lowered = FTransform(WeaponShieldLoweredRotation, WeaponShieldLowered * Scale) * ActorFrame;
+	const FTransform Raised = FTransform(WeaponShieldRaisedRotation, WeaponShieldRaised * Scale) * ActorFrame;
+	// Slung, it rides the holsters' frame (UpdatePawn), so it stays on the back through a roll or a fall.
+	const FTransform Back = FTransform(WeaponShieldSlungRotation, WeaponShieldSlungAt * Scale) * Pawn.BodyFrame;
+
+	// On the forearm by its straps (docs/design/weapon-hold.md): the block clip lifts the arm and the shield with it.
+	// Without the arm's bones (or the block clip) it floats where it did.
+	USkeletalMeshComponent* Mesh = HoldDraw::VisibleMesh(Actor);
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	colony::WeaponHold Hold;
+	FTransform Frame;
+	const bool bArm = GWeaponHands.GetValueOnGameThread() != 0 && Mesh && Height > 0.4f && !View.swimming && Bridge && Bridge->GetDefs() &&
+		colony::shieldHoldFor(*Bridge->GetDefs(), View.shield, Hold) && HoldDraw::ShieldFrame(Mesh, Frame);
+	const USimPawnAnimInstance* Anim = Actor.GetAnim();
+	const bool bClipRaises = Anim && Anim->GetUpperStance() && Anim->GetUpperWeight() > 0.5f;
+	FTransform OnArm = Lowered;
+	if (bArm)
+	{
+		OnArm = HoldDraw::WeaponWorld(Frame, Hold, Gear.size);
+	}
+	const float FloatRaise = bArm && bClipRaises ? 0.0f : Raise;
+	FTransform World;
+	World.SetLocation(FMath::Lerp(OnArm.GetLocation(), Raised.GetLocation(), static_cast<double>(FloatRaise)));
+	World.SetRotation(FQuat::Slerp(OnArm.GetRotation(), Raised.GetRotation(), FloatRaise));
+	World.SetLocation(FMath::Lerp(World.GetLocation(), Back.GetLocation(), static_cast<double>(Slung)));
+	World.SetRotation(FQuat::Slerp(World.GetRotation(), Back.GetRotation(), Slung));
+	World.SetScale3D(FVector(Gear.size));
+	UStaticMeshComponent* Shield = Pawn.Shield.Get();
+	USceneComponent* Parent = bArm && Slung <= 0.001f && FloatRaise <= 0.001f ? static_cast<USceneComponent*>(Mesh) : Actor.GetRootComponent();
+	const FName Socket = Parent == Mesh ? HoldDraw::HandBone(Hold) : NAME_None;
+	if (Shield->GetAttachParent() != Parent || Shield->GetAttachSocketName() != Socket)
+	{
+		Shield->AttachToComponent(Parent, FAttachmentTransformRules::KeepWorldTransform, Socket);
+	}
+	Shield->SetWorldTransform(World);
+	Shield->SetVisibility(bShow);
 }
 
 // ---------------------------------------------------------------------------
