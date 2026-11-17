@@ -19,6 +19,7 @@ class CombatSystem;
 class FighterSystem;
 class HealthSystem;
 class JobSystem;
+class LandingSystem;
 class Map;
 class RaidSystem;
 class Rng;
@@ -26,6 +27,7 @@ class StateHasher;
 class TalentSystem;
 class Things;
 struct GameTime;
+struct Shuttle;
 
 // Faction goodwill, visitors, traders and trade (task C23). See docs/design/trade.md.
 //
@@ -35,6 +37,9 @@ struct GameTime;
 // StartVisitCommand is the dev entry point). The colony trades with `TradeCommand`: goods it buys and sells at RimWorld's
 // prices, paid in silver items. Unreal does not include this header: it reads `visits` and `goodwill` from the snapshot
 // and sends TradeCommand.
+
+// StartVisitCommand's edge for "by shuttle" (docs/design/landing.md).
+inline constexpr int kShuttleEdge = -2;
 
 enum class VisitKind : uint8_t {
     Visitors,  // a group of the faction's villagers
@@ -188,6 +193,11 @@ public:
     // Whether a building does its job (PowerGrid::running): a comms console and a trade beacon need power. Without it
     // every built one counts.
     void setRunning(std::function<bool(Entity)> running) { running_ = std::move(running); }
+    // Shuttles (docs/design/landing.md): with them, some visitor groups and caravans come and go by shuttle, and walking
+    // visits gather at the landing zone when there is one. Without (null) everyone walks.
+    void setLanding(LandingSystem* landing) { landing_ = landing; }
+    // A visit's shuttle touched down: its passengers step out of the door. The landing system calls it.
+    void shuttleLanded(const Shuttle& shuttle);
 
     // ---- Goodwill ----
     // A faction's goodwill with the colony now.
@@ -209,7 +219,8 @@ public:
     void noteArrested(Entity pawn);
 
     // ---- Visits ----
-    // A visit of `faction` walks in at `edge` (0 north, 1 east, 2 south, 3 west, -1 any) or, for a ship, arrives.
+    // A visit of `faction` walks in at `edge` (0 north, 1 east, 2 south, 3 west, -1 any) or, for a ship, arrives. With
+    // shuttles, `edge` kShuttleEdge brings visitors or a caravan by shuttle, and -1 does so at LandingRules' chance.
     // `traderKind` names a TraderKinds def for a caravan or ship (empty: one of the faction's kinds for that way, by
     // chance). Fails, with a reason in plain words, for a faction that can't visit or trade, is hostile to the colony or has
     // no such kind. `id` is the new visit's.
@@ -307,6 +318,10 @@ private:
     // A cell for a settlement's pawn within its range of the spot, by chance.
     bool settlementCell(const Visit& visit, CellPos& out) const;
     CellPos edgeGoal(Entity pawn) const;
+    // Where a leaving pawn walks: its visit's shuttle door if it came by one that still stands, else the nearest edge.
+    CellPos leaveGoal(const Visit& visit, Entity pawn) const;
+    // Where a walking visit gathers: the landing zone's middle if there is one, else the colony's.
+    bool gatherSpot(float mx, float my, CellPos& spot) const;
     bool nearestFree(float x, float y, CellPos from, int radius, CellPos& out) const;
     void dropGoods(CellPos at, const std::string& thing, int count);
     // Where a visit's bought goods go down: its spot, or for a ship the first beacon.
@@ -336,6 +351,7 @@ private:
     TradeRules rules_;
     TradeState state_;
     const TalentSystem* talents_ = nullptr;
+    LandingSystem* landing_ = nullptr;
     float disadvantage_ = 0.0f;
     std::vector<Event>* events_ = nullptr;
     std::function<void(Entity, uint64_t, bool)> looks_;

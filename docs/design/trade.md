@@ -40,6 +40,8 @@ once drift (0.2 a day) or gifts bring it above -75.
 
 ## Visitors and traders on the map
 
+**By shuttle** ([landing.md](landing.md)): edge -2 brings visitors or a caravan by shuttle, and edge -1 (the narrator's) does so half the time; they step out at the shuttle's door when it lands, gather by it and fly off in it. With a landing zone painted, walking visits gather at the zone's middle instead of the colony's.
+
 The pawns walk in from a map edge and gather at a spot near the colony's middle (the average position of its colonists), made like raiders
 (`generateColonist`, looks, the pawn kind's weapons and clothes) with the `Visitor{visit, role}` component and the faction's `Faction`
 id (`RaidSystem::factionId`). **They are nobody's enemy**: fighters (`PawnInfo::animal`), turrets, the alarm, wardens and the capture

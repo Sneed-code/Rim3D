@@ -10,6 +10,7 @@
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Landing.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Random.h"
@@ -549,8 +550,13 @@ bool TradeSystem::startVisit(const std::string& faction, VisitKind kind, const s
         error = "no Factions def '" + faction + "'";
         return false;
     }
-    if (edge < -1 || edge > 3) {
-        error = "the edge must be -1 (any) or 0 to 3";
+    const bool shuttles = landing_ != nullptr && landing_->available();
+    if (edge < (shuttles ? kShuttleEdge : -1) || edge > 3) {
+        error = shuttles ? "the edge must be -2 (by shuttle), -1 (any) or 0 to 3" : "the edge must be -1 (any) or 0 to 3";
+        return false;
+    }
+    if (edge == kShuttleEdge && kind == VisitKind::Orbital) {
+        error = "an orbital trader stays in orbit";
         return false;
     }
     if (kind == VisitKind::Settlement) {
@@ -600,7 +606,7 @@ bool TradeSystem::startVisit(const std::string& faction, VisitKind kind, const s
     const float mx = n > 0 ? sx / static_cast<float>(n) : static_cast<float>(map_.width()) * 0.5f;
     const float my = n > 0 ? sy / static_cast<float>(n) : static_cast<float>(map_.height()) * 0.5f;
     CellPos spot;
-    if (!nearestFree(mx, my, CellPos{-1, -1, 0}, 40, spot)) {
+    if (!gatherSpot(mx, my, spot)) {
         error = "nowhere for visitors to go";
         return false;
     }
@@ -638,7 +644,12 @@ bool TradeSystem::startVisit(const std::string& faction, VisitKind kind, const s
         return true;
     }
 
-    if (!pickEntry(spot, edge, visit.entry)) {
+    // By shuttle or on foot (docs/design/landing.md). The draw is made only when shuttles can come at all.
+    bool byShuttle = edge == kShuttleEdge;
+    if (edge == -1 && shuttles) {
+        byShuttle = rng_.unit() < landing_->rules().visitShuttleChance;
+    }
+    if (!byShuttle && !pickEntry(spot, edge, visit.entry)) {
         error = "no way in from that edge to the colony";
         return false;
     }
@@ -664,6 +675,44 @@ bool TradeSystem::startVisit(const std::string& faction, VisitKind kind, const s
             return false;
         }
         infos.push_back(std::move(info));
+    }
+
+    if (byShuttle) {
+        // The shuttle claims a landing site now; its people step out when it touches down (shuttleLanded).
+        std::vector<ShuttlePassenger> passengers;
+        for (const auto& m : bring) {
+            passengers.push_back(ShuttlePassenger{m.first, static_cast<uint8_t>(m.second)});
+        }
+        uint32_t shuttle = 0;
+        std::string why;
+        if (landing_->land(state_.nextVisit, std::move(passengers), mx, my, shuttle, why)) {
+            const Shuttle* s = landing_->find(shuttle);
+            const CellPos door = landing_->door(*s);
+            visit.entry = door;
+            // They gather a few metres out from the door.
+            const float ox = tradeCentre(door.x) - landing_->centreX(*s);
+            const float oy = tradeCentre(door.y) - landing_->centreY(*s);
+            const float len = std::max(0.001f, std::sqrt(ox * ox + oy * oy));
+            if (!nearestFree(tradeCentre(door.x) + ox / len * 4.0f, tradeCentre(door.y) + oy / len * 4.0f, door, 6, visit.spot)) {
+                visit.spot = door;
+            }
+            visit.id = state_.nextVisit++;
+            visit.started = static_cast<int>(bring.size());
+            id = visit.id;
+            state_.visits.push_back(std::move(visit));
+            const Visit& added = state_.visits.back();
+            emit(EventType::VisitArrived, added.id, kNoEntity, static_cast<float>(kind), added.faction);
+            return true;
+        }
+        if (edge == kShuttleEdge) {
+            error = why;
+            return false;
+        }
+        // Nowhere to land: they walk in instead.
+        if (!pickEntry(spot, -1, visit.entry)) {
+            error = "no way in to the colony";
+            return false;
+        }
     }
 
     // Cells for them around the entry, a metre apart (every other cell).
@@ -1482,6 +1531,67 @@ CellPos TradeSystem::edgeGoal(Entity pawn) const {
     return here;
 }
 
+CellPos TradeSystem::leaveGoal(const Visit& visit, Entity pawn) const {
+    if (const Shuttle* s = landing_ != nullptr ? landing_->ofVisit(visit.id) : nullptr; s != nullptr && s->phase == ShuttlePhase::Landed) {
+        const CellPos door = landing_->door(*s);
+        const CellPos here = cellOf(things_.registry().get<Position>(pawn));
+        if (map_.regions().canReach(here, door)) {
+            return door;
+        }
+    }
+    return edgeGoal(pawn);
+}
+
+bool TradeSystem::gatherSpot(float mx, float my, CellPos& spot) const {
+    if (landing_ != nullptr) {
+        const std::vector<CellPos> zone = landing_->zoneCells();
+        if (!zone.empty()) {
+            float sx = 0.0f;
+            float sy = 0.0f;
+            for (const CellPos& c : zone) {
+                sx += tradeCentre(c.x);
+                sy += tradeCentre(c.y);
+            }
+            const float n = static_cast<float>(zone.size());
+            if (nearestFree(sx / n, sy / n, CellPos{-1, -1, 0}, 40, spot)) {
+                return true;
+            }
+        }
+    }
+    return nearestFree(mx, my, CellPos{-1, -1, 0}, 40, spot);
+}
+
+void TradeSystem::shuttleLanded(const Shuttle& shuttle) {
+    Visit* visit = nullptr;
+    for (Visit& v : state_.visits) {
+        if (v.id == shuttle.visit) {
+            visit = &v;
+        }
+    }
+    if (visit == nullptr || shuttle.passengers.empty()) {
+        return;
+    }
+    std::vector<std::pair<std::string, VisitorRole>> bring;
+    std::vector<KindInfo> infos;
+    for (const ShuttlePassenger& p : shuttle.passengers) {
+        KindInfo info;
+        std::string ignored;
+        if (p.role > static_cast<uint8_t>(VisitorRole::Guard) || !readKind(p.kind, info, ignored)) {
+            continue;  // a kind the data files dropped since it set out stays aboard
+        }
+        bring.emplace_back(p.kind, static_cast<VisitorRole>(p.role));
+        infos.push_back(std::move(info));
+    }
+    const std::vector<CellPos> cells = cellsAround(landing_->door(shuttle), bring.size());
+    spawnGroup(*visit, bring, infos, cells, false);
+    std::sort(visit->members.begin(), visit->members.end());
+    // Their stay is counted from the moment they step out.
+    const int64_t late = now() - visit->arrivedAt;
+    visit->arrivedAt += late;
+    visit->leaveAt += late;
+    visit->nextWander += late;
+}
+
 void TradeSystem::leave(Visit& visit) {
     entt::registry& reg = things_.registry();
     visit.phase = VisitPhase::Leaving;
@@ -1493,7 +1603,7 @@ void TradeSystem::leave(Visit& visit) {
         }
         f->mode = FightMode::Flee;
         f->hasGoal = true;
-        f->goal = edgeGoal(m);
+        f->goal = leaveGoal(visit, m);
         fighters_.replan(m);
     }
 }
@@ -1582,6 +1692,11 @@ void TradeSystem::step(const std::vector<Event>& events) {
             visit.trader = kNoEntity;
         }
         bool over = false;
+        const Shuttle* shuttle = landing_ != nullptr ? landing_->ofVisit(visit.id) : nullptr;
+        if (shuttle != nullptr && shuttle->phase == ShuttlePhase::Descending) {
+            ++i;  // still coming down: its people are aboard
+            continue;
+        }
         if (visit.kind == VisitKind::Orbital) {
             over = t >= visit.leaveAt;
         } else if (visit.kind == VisitKind::Settlement) {
@@ -1614,8 +1729,17 @@ void TradeSystem::step(const std::vector<Event>& events) {
         } else {
             std::vector<Entity> gone;
             const bool timedOut = t >= visit.leaveAt + rules_.leaveTimeoutSeconds;
+            const bool boarding = shuttle != nullptr && shuttle->phase == ShuttlePhase::Landed;
+            const CellPos door = boarding ? landing_->door(*shuttle) : CellPos{};
             for (const Entity m : visit.members) {
                 const CellPos c = cellOf(reg.get<Position>(m));
+                if (boarding) {
+                    // Within two cells of the door they climb aboard (one that couldn't reach it walks off the map instead).
+                    if (timedOut || (std::abs(c.x - door.x) <= 2 && std::abs(c.y - door.y) <= 2)) {
+                        gone.push_back(m);
+                        continue;
+                    }
+                }
                 // Within a few cells of the edge counts: a group's goal is shared, so the last ones stop a ring or two short of it.
                 if (timedOut || c.x <= kEdgeMargin || c.y <= kEdgeMargin || c.x >= w - 1 - kEdgeMargin || c.y >= h - 1 - kEdgeMargin) {
                     gone.push_back(m);
@@ -1628,6 +1752,9 @@ void TradeSystem::step(const std::vector<Event>& events) {
             over = visit.members.empty();
         }
         if (over) {
+            if (shuttle != nullptr) {
+                landing_->depart(shuttle->id);  // everyone aboard (or gone): it lifts off
+            }
             emit(EventType::VisitLeft, visit.id, kNoEntity, static_cast<float>(visit.kind), visit.faction);
             state_.visits.erase(state_.visits.begin() + static_cast<std::ptrdiff_t>(i));
         } else {
