@@ -242,7 +242,7 @@ struct SaveHealth {
     bool downed = false;  // health section 5 on: with `dirty`, so a wound not yet worked out is still pending after a load
     bool dirty = false;
     int64_t bleedStoppedAt = -1;  // health section 7 on
-    Gib gib = Gib::None;          // health section 8 on (body-health.md part F)
+    std::vector<int64_t> zoneHurtAt;  // health section 8 on (body-health.md part F)
 };
 
 // An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
@@ -2003,8 +2003,8 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
         ar.require(h.bleedStoppedAt >= -1, "the save file has an impossible bleeding time");
     }
     if (ar.sectionVersion() >= 8) {
-        ar.value("gib", h.gib);
-        ar.require(static_cast<int>(h.gib) <= static_cast<int>(Gib::Whole), "the save file has an impossible gib");
+        ar.list("zoneHurtAt", h.zoneHurtAt, [&](int64_t& at) { ar.value(nullptr, at); });
+        ar.require(h.zoneHurtAt.size() <= 64, "the save file has too many body zones");
     }
 }
 
@@ -4286,7 +4286,7 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
         }
         saved.bloodLoss = health->bloodLoss;
         saved.bleedStoppedAt = health->bleedStoppedAt;
-        saved.gib = health->gib;
+        saved.zoneHurtAt = health->zoneHurtAt;
         for (const EnvironmentHediff& env : health->environment) {
             saved.environment.push_back(SaveEnvironmentHediff{sim.defs_->get(env.def).defName(), env.severity});
         }
@@ -4767,7 +4767,7 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
         }
         health.bloodLoss = e.health->bloodLoss;
         health.bleedStoppedAt = e.health->bleedStoppedAt;
-        health.gib = e.health->gib;
+        health.zoneHurtAt = e.health->zoneHurtAt;
         for (const SaveEnvironmentHediff& env : e.health->environment) {
             const Def* hediff = sim.defs_->find("Hediffs", env.hediff);
             if (hediff == nullptr) {

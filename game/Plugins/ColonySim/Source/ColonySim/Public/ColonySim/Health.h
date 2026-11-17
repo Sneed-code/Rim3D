@@ -110,10 +110,6 @@ struct MissingPart {
     bool tended() const { return tendQuality >= 0.0f; }
 };
 
-// Dismemberment (docs/design/body-health.md part F). What burst apart: a head or a torso hit far beyond what it had left
-// (death), or the whole corpse when the killing blow's force was far over the pawn's poise.
-enum class Gib : uint8_t { None, Head, Torso, Whole };
-
 // The limbs a body has lost, for drawing (HealthSystem::severed). A whole arm or leg sets only its own bit.
 enum SeveredBit : uint16_t {
     kSeveredLeftForearm = 1u << 0,
@@ -143,7 +139,7 @@ struct Health {
     bool dead = false;
     DeathCause cause = DeathCause::None;
     int64_t bleedStoppedAt = -1;  // body zones: game second its bleeding stopped (blood comes back after a while); -1 while it bleeds
-    Gib gib = Gib::None;          // body zones, part F: what of the body burst apart
+    std::vector<int64_t> zoneHurtAt;  // body zones: the game second each zone was last hurt, -1 for never (it heals 10 real seconds on)
 
     // ---- Derived. Never saved or hashed.
     float stageHp = 1.0f;        // young animals: the life stage's healthScaleFactor, set by AnimalSystem (N4 leftovers)
@@ -161,6 +157,8 @@ struct Health {
     std::vector<float> zones;
     bool unconscious = false;    // body zones: head under 25%, or blood at 1000 or less
     bool crawls = false;         // body zones: downed by the torso and awake, so it crawls away from enemies (part D)
+    float limbAttack = 1.0f;     // body zones: arms under half slow every attack (HealthSystem::attackSpeedFactor)
+    float limbMove = 1.0f;       // ...and legs under half slow the walk (already in movingFactor)
     std::vector<uint8_t> zoneBleeds;  // body zones: each zone's bleeding, 0 none, 1 light, 2 moderate, 3 heavy
 
     bool incapacitated() const { return downed || dead; }
@@ -310,16 +308,15 @@ public:
     int partZone(Entity pawn, int part) const;
     float blood(Entity pawn) const;
     bool unconscious(Entity pawn) const;
-    // Dismemberment (part F). A hit that goes over what its zone had left by half the zone's hit points or more takes
-    // the limb off (an arm below the elbow or whole, a leg below the knee or whole: PawnDismembered), takes the head
-    // off (a cut or a slash) or bursts it, or bursts the torso (death; PawnGibbed). Never the protagonist.
-    // `severed`: the SeveredBits of what the body has lost. `gib`: what of it burst. `gibCorpse`: bursts the whole
-    // corpse of a pawn that is dead (the killing blow's force was over its poise by `gibForceOver`); false if it is
-    // alive, has no zones, is the protagonist or is gibbed whole already.
+    // sneed's rules of 2026-11-17 (docs/design/body-health.md "Part F as built").
+    // Arms under half slow attacks: 1 down to 0.5, half a percent for every percent an arm is under 50%, both arms
+    // added. 1 for a body without zones.
+    float attackSpeedFactor(Entity pawn) const;
+    // Dismemberment: only on the hit that kills, when it went over what the struck zone had left by a quarter of the
+    // zone's hit points. `severed`: the SeveredBits of what the body has lost (PawnDismembered says when).
     uint16_t severed(Entity pawn) const;
-    Gib gib(Entity pawn) const;
-    bool gibCorpse(Entity pawn);
-    float gibForceOver() const;
+    // Whether the pawn sleeps (its zones heal twice as fast).
+    void setAsleep(std::function<bool(Entity pawn)> asleep) { asleep_ = std::move(asleep); }
     // Patching (part B): a zone's bleeding (0 none, 1 light, 2 moderate, 3 heavy), the zone that bleeds worst (-1 for
     // none), and patching it: tends its untended bleeding wounds and lost parts at `quality`, returns how many.
     int zoneBleedLevel(Entity pawn, int zone) const;
@@ -437,6 +434,7 @@ private:
     std::function<float(Entity)> cleanliness_;
     const TraitBook* traits_ = nullptr;
     std::function<float(Entity)> immunityBonus_;
+    std::function<bool(Entity)> asleep_;
     std::vector<Entity> active_;  // scratch for step
     bool restoring_ = false;      // inside refreshAll: working out what a loaded save already was, so nobody stops walking for it
     std::vector<size_t> healable_;  // scratch for step: the injuries that can heal
@@ -457,7 +455,7 @@ private:
     bool hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter);
     bool damagePart(Entity pawn, Health& health, int part, DefId hediff, float amount);
     void destroyPart(Entity pawn, Health& health, int part, float amount);
-    bool dismember(Entity pawn, Health& health, int zone, int struck, float overkill, bool severs);
+    void dismember(Entity pawn, Health& health, int zone, int struck, float overkill);
     void leaveScar(Entity pawn, Health& health, const Injury& healed, Rng& rng);
     // Rolls whether a fresh wound will turn infected, and when.
     void rollInfection(Entity pawn, Health& health, Injury& injury);

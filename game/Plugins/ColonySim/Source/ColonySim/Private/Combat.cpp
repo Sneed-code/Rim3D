@@ -1350,7 +1350,8 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
 }
 
 float CombatSystem::attackTimeFactor(Entity pawn) const {
-    return apparelStats_->attackTimeFactor(things_.registry(), pawn) / performance(pawn);
+    // Armour weight, exhaustion, and arms under half their health (sneed, body-health.md part F).
+    return apparelStats_->attackTimeFactor(things_.registry(), pawn) / (performance(pawn) * health_.attackSpeedFactor(pawn));
 }
 
 void CombatSystem::startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps) {
@@ -2086,10 +2087,6 @@ bool CombatSystem::jolt(Entity pawn, int part, DefId damageType, float force, fl
     }
     const float factor = damageType.valid() && damageType.value < model_->poiseForce.size() ? model_->poiseForce[damageType.value] : 1.0f;
     const float push = force * factor;
-    // A blow that killed, with force far over the poise, bursts the whole corpse (body-health.md part F).
-    if (const Health* health = reg.try_get<Health>(pawn); health != nullptr && health->dead && push > model_->poiseBase + health_.gibForceOver()) {
-        health_.gibCorpse(pawn);
-    }
     if (health_.incapacitated(pawn) || !things_.spawned(pawn) || !reg.all_of<Posture, Position>(pawn)) {
         return true;
     }
