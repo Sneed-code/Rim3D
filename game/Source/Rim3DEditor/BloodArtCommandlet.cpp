@@ -286,8 +286,8 @@ namespace
 
 		// Base colour: thick blood darker, a wound's core near black.
 		auto* ThickShade = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -800, -200);
-		ThickShade->ConstA = 1.25f;
-		ThickShade->ConstB = 0.6f;
+		ThickShade->ConstA = 0.95f;  // (PC look, 2026-11-18: it read as bright paint; blood is a dark crimson)
+		ThickShade->ConstB = 0.4f;
 		BloodArtConnect(Sample, TEXT("G"), ThickShade, TEXT("Alpha"));
 		auto* CoreShade = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -800, -100);
 		CoreShade->ConstA = 1.0f;
@@ -301,10 +301,11 @@ namespace
 		BloodArtConnect(Shade, TEXT(""), Base, TEXT("B"));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Base, TEXT(""), MP_BaseColor);
 
-		// Roughness: matte when dry; wet blood is a mirror where it is thick.
+		// Roughness: matte when dry; wet blood shines where it is thick, but soaks into the ground: not a mirror
+		// (PC look, 2026-11-18: 0.04 made pools a glossy sheet of paint).
 		auto* WetRough = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -650, 0);
-		WetRough->ConstA = 0.22f;
-		WetRough->ConstB = 0.04f;
+		WetRough->ConstA = 0.5f;
+		WetRough->ConstB = 0.22f;
 		BloodArtConnect(Sample, TEXT("G"), WetRough, TEXT("Alpha"));
 		auto* DryRough = BloodArtNode<UMaterialExpressionConstant>(Material, -650, 100);
 		DryRough->R = 0.72f;
@@ -312,7 +313,7 @@ namespace
 		UMaterialEditingLibrary::ConnectMaterialProperty(Roughness, TEXT(""), MP_Roughness);
 		auto* Specular = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -450, 150);
 		Specular->ConstA = 0.3f;
-		Specular->ConstB = 0.65f;
+		Specular->ConstB = 0.5f;
 		BloodArtConnect(Wet, TEXT(""), Specular, TEXT("Alpha"));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Specular, TEXT(""), MP_Specular);
 
@@ -532,8 +533,8 @@ namespace
 		UMaterialExpression* DirtNoise = GrimeArtNoise(Material, -1200, -100, Position, NoiseScale, 1.0f, 0.0f);
 		UMaterialExpression* DirtCover = GrimeArtCover(Material, -800, -250, DirtAmount, 0.8f, DirtNoise, 3.0f);
 		auto* BloodAmount = BloodArtScalar(Material, TEXT("Blood"), 0.0f, -1200, 150);
-		UMaterialExpression* BloodNoise = GrimeArtNoise(Material, -1200, 300, Position, NoiseScale, 1.7f, 37.1f);
-		UMaterialExpression* BloodCover = GrimeArtCover(Material, -800, 200, BloodAmount, 0.5f, BloodNoise, 6.0f);
+		UMaterialExpression* BloodNoise = GrimeArtNoise(Material, -1200, 300, Position, NoiseScale, 5.0f, 37.1f);
+		UMaterialExpression* BloodCover = GrimeArtCover(Material, -800, 200, BloodAmount, 0.34f, BloodNoise, 9.0f);  // small flecks, never a coat: the wound marks carry the look
 
 		// Colour.
 		auto* DirtColor = BloodArtNode<UMaterialExpressionVectorParameter>(Material, -800, -500);
@@ -541,7 +542,7 @@ namespace
 		DirtColor->DefaultValue = FLinearColor(0.11f, 0.085f, 0.06f);
 		auto* BloodColor = BloodArtNode<UMaterialExpressionVectorParameter>(Material, -800, -400);
 		BloodColor->ParameterName = TEXT("BloodColor");
-		BloodColor->DefaultValue = FLinearColor(0.3f, 0.012f, 0.01f);
+		BloodColor->DefaultValue = FLinearColor(0.2f, 0.008f, 0.007f);
 		auto* Base = BloodArtLerp(Material, -500, -450, DirtColor, TEXT(""), BloodColor, TEXT(""), BloodCover, TEXT(""));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Base, TEXT(""), MP_BaseColor);
 
@@ -549,7 +550,7 @@ namespace
 		auto* Wet = BloodArtScalar(Material, TEXT("BloodWet"), 0.0f, -800, 400);
 		auto* BloodRough = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -650, 400);
 		BloodRough->ConstA = 0.75f;
-		BloodRough->ConstB = 0.12f;
+		BloodRough->ConstB = 0.3f;
 		BloodArtConnect(Wet, TEXT(""), BloodRough, TEXT("Alpha"));
 		auto* DirtRough = BloodArtNode<UMaterialExpressionConstant>(Material, -650, 500);
 		DirtRough->R = 0.92f;

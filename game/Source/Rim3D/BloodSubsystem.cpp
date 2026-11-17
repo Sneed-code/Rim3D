@@ -635,10 +635,29 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 		Splat(BloodCellSpecks + Random.RandRange(0, 1), FanAt, Throw, FanHalf * 1.25f, FanHalf);
 		Splat(BloodCellSpecks + Random.RandRange(0, 1), FanAt + Throw * FanHalf * 0.5f, Throw, FanHalf * 0.8f, FanHalf * 0.65f);
 		const FVector Across(-Throw.Y, Throw.X, 0.0f);
-		for (int32 I = 0; I < FMath::Clamp(FMath::RoundToInt((4.0f + 4.0f * Force) * BloodQualityScale()), 2, 12); ++I)
+		// (PC look, 2026-11-18: the fine spatter alone did not show from 9 m. The fan is now carried by solid shapes:
+		// two or three irregular splashes where most of it landed, then crowned drops, big near the body and small far
+		// out, widening as they go.)
+		for (int32 I = 0; I < (Force >= 0.6f ? 3 : 2); ++I)
 		{
-			const float W = Random.FRandRange(4.0f, 11.0f) * (0.8f + 0.2f * Force);
-			Splat(BloodCellRound + Random.RandRange(0, 3), FanAt + Throw * Random.FRandRange(-0.9f, 1.1f) * FanHalf + Across * Random.FRandRange(-0.7f, 0.7f) * FanHalf, Throw, W, W);
+			const float W = Random.FRandRange(9.0f, 16.0f) * (0.7f + 0.3f * Force);
+			const float T = Random.FRandRange(0.0f, 0.6f);
+			Splat(BloodCellPool + Random.RandRange(0, 1), Foot + Throw * (Reach * 0.6f + T * FanHalf * 1.6f) + Across * Random.FRandRange(-0.35f, 0.35f) * FanHalf * (0.3f + T),
+				FMath::VRandCone(Throw, FMath::DegreesToRadians(25.0f)), W * Random.FRandRange(1.2f, 1.9f), W);
+		}
+		for (int32 I = 0; I < FMath::Clamp(FMath::RoundToInt((9.0f + 8.0f * Force) * BloodQualityScale()), 5, 26); ++I)
+		{
+			const float T = FMath::Square(Random.FRand());  // 0 at the body, 1 at the far end; more of them near
+			const float W = FMath::Lerp(13.0f, 3.5f, T) * Random.FRandRange(0.6f, 1.2f) * (0.8f + 0.2f * Force);
+			const FVector Where = Foot + Throw * (Reach * 0.4f + T * FanHalf * 2.6f) + Across * Random.FRandRange(-1.0f, 1.0f) * FanHalf * (0.25f + 0.75f * T);
+			if (T > 0.35f && Random.FRand() < 0.5f)
+			{
+				Splat(BloodCellDirectional + Random.RandRange(0, 3), Where, (Where - Foot).GetSafeNormal2D(), W * Random.FRandRange(1.8f, 2.6f), W);
+			}
+			else
+			{
+				Splat(BloodCellRound + Random.RandRange(0, 3), Where, Throw, W, W);
+			}
 		}
 		// Slanted drops trailing further out.
 		const int32 Trail = FMath::Clamp(FMath::RoundToInt(2.0f + 3.0f * Force * BloodQualityScale()), 1, 8);
@@ -658,10 +677,24 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 			Splat(BloodCellRound + Random.RandRange(0, 3), Foot + FVector(Off.X, Off.Y, 0.0f) * Random.FRandRange(10.0f, 45.0f), Throw, W, W);
 		}
 		// A patch where the body stands or lies: more for bad wounds.
-		if (Force >= 0.6f || (View && (View->downed || View->dead)))
+		// Not again where one already lies (more hits on a downed body stacked them into one smooth sheet).
+		const int32 PatchesHere = Stains.FilterByPredicate([&Foot](const FStain& Stain) { return Stain.RadiusCm >= 9.0f && FVector::DistSquared2D(Stain.Position, Foot) < 50.0f * 50.0f; }).Num();
+		if (PatchesHere < 3 && (Force >= 0.6f || (View && (View->downed || View->dead))))
 		{
-			const float PatchHalf = FMath::Clamp(16.0f + 16.0f * Force, 16.0f, 60.0f);
-			Splat(BloodCellPool + Random.RandRange(0, 1), Foot, Throw, PatchHalf, PatchHalf * 0.8f);
+			// Two or three overlapping splashes with drops round the rim, not one smooth sheet.
+			const float PatchHalf = FMath::Clamp(12.0f + 10.0f * Force, 12.0f, 34.0f);
+			for (int32 I = 0; I < 3; ++I)
+			{
+				const FVector Off = FMath::VRandCone(Up, FMath::DegreesToRadians(89.0f)).GetSafeNormal2D();
+				const float W = PatchHalf * Random.FRandRange(0.55f, 1.0f);
+				Splat(BloodCellPool + Random.RandRange(0, 1), Foot + Off * (I == 0 ? 0.0f : PatchHalf * Random.FRandRange(0.5f, 0.9f)), Off, W, W * Random.FRandRange(0.6f, 0.85f));
+			}
+			for (int32 I = 0; I < 6; ++I)
+			{
+				const FVector Off = FMath::VRandCone(Up, FMath::DegreesToRadians(89.0f)).GetSafeNormal2D();
+				const float W = Random.FRandRange(2.5f, 7.0f);
+				Splat(BloodCellRound + Random.RandRange(0, 3), Foot + Off * PatchHalf * Random.FRandRange(1.0f, 1.9f), Off, W, W);
+			}
 		}
 	}
 
@@ -713,7 +746,8 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 		if (Kind != EBloodWound::Blunt || Hit.Damage >= 8.0f)
 		{
 			// Blood soaking out round the wound (into clothes where they cover it: they take the decal too).
-			const float Soak = 6.0f + 7.0f * Force;
+			// (PC look, 2026-11-18: at 6 + 7 x force these covered a whole head and read as cow-print blotches.)
+			const float Soak = 2.5f + 2.5f * Force;
 			AddBodyStain(MakeBodyDecal(Mesh, BloodCellPool + Random.RandRange(0, 1), Hit.At, Into, Side, Soak, Soak * 0.85f, DecalColorFor(Fluid, 0.0f, 0.95f)), Mesh,
 				Hit.Victim, Fluid, false);
 			if (bExit)
@@ -727,7 +761,7 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 		{
 			// Blood splashed over the skin and clothes round the wound: a spatter pattern and a couple of drops with tails
 			// running off it, so a hit body reads as bloodied at a glance, not tinted.
-			const float Size = 7.0f + 6.0f * Force;
+			const float Size = 6.0f + 4.0f * Force;
 			AddBodyStain(MakeBodyDecal(Mesh, BloodCellSpecks + Random.RandRange(0, 1), Hit.At + Side * Random.FRandRange(0.0f, 4.0f), Into, Side, Size, Size, Fresh), Mesh,
 				Hit.Victim, Fluid, false);
 			for (int32 I = 0; I < (Force >= 0.6f ? 2 : 1); ++I)
@@ -1438,14 +1472,28 @@ void UBloodSubsystem::UpdateBleeding(float Dt, float GameSeconds)
 					NewPool.Victim = Bleed.Victim;
 					NewPool.Stain = AddStain(Decal, Ground, FVector::UpVector, 6.0f, Bleed.Fluid, true);
 					NewPool.RadiusCm = 6.0f;
-					NewPool.MaxRadiusCm = 40.0f + 40.0f * FMath::Clamp(BloodLoss + 0.3f, 0.0f, 1.0f);
+					// Drops and a second lobe round it, so its edge is broken (it read as a smooth sheet of paint).
+					for (int32 I = 0; I < 7; ++I)
+					{
+						const FVector Off = FMath::VRandCone(FVector::UpVector, FMath::DegreesToRadians(89.0f)).GetSafeNormal2D();
+						const float W = I == 0 ? Random.FRandRange(14.0f, 22.0f) : Random.FRandRange(3.0f, 8.0f);
+						const FVector Where = Ground + Off * (I == 0 ? Random.FRandRange(18.0f, 30.0f) : Random.FRandRange(30.0f, 75.0f));
+						const FVector OnGround(Where.X, Where.Y, GroundBelow(Where + FVector(0, 0, 40), Ignore));
+						if (UDecalComponent* Rim = MakeWorldDecal(I == 0 ? BloodCellPool + Random.RandRange(0, 1) : BloodCellRound + Random.RandRange(0, 3), OnGround, FVector::UpVector, Off,
+							W, W * Random.FRandRange(0.7f, 1.0f), Fresh))
+						{
+							Rim->SetFadeScreenSize(0.0f);
+							AddStain(Rim, OnGround, FVector::UpVector, W, Bleed.Fluid, false);
+						}
+					}
+					NewPool.MaxRadiusCm = 26.0f + 26.0f * FMath::Clamp(BloodLoss + 0.3f, 0.0f, 1.0f);
 					Pools.Add(NewPool);
 					++PoolsMade;
 				}
 			}
 			else if (Pool)
 			{
-				Pool->MaxRadiusCm = FMath::Max(Pool->MaxRadiusCm, 40.0f + 40.0f * FMath::Clamp(BloodLoss + 0.3f, 0.0f, 1.0f));
+				Pool->MaxRadiusCm = FMath::Max(Pool->MaxRadiusCm, 26.0f + 26.0f * FMath::Clamp(BloodLoss + 0.3f, 0.0f, 1.0f));
 				const float Grown = FMath::Min(Pool->MaxRadiusCm, Pool->RadiusCm + Dt * (1.0f + 1.5f * Bleed.Rate) / FMath::Max(1.0f, Pool->RadiusCm / 20.0f));
 				if (Grown > Pool->RadiusCm + 0.05f)
 				{
@@ -1743,7 +1791,7 @@ void UBloodSubsystem::SyncFilth()
 			// One decal per pile, placed and turned by the cell so it does not jump when it thickens.
 			const uint32 Hash = static_cast<uint32>(CellIndex) * 2654435761u ^ (Pile.def.value * 40503u + 17u);
 			FRandomStream CellRandom(static_cast<int32>(Hash));
-			const float Radius = (Stain.bFluid ? 22.0f : 30.0f) + (Stain.bFluid ? 12.0f : 9.0f) * static_cast<float>(Pile.thickness);
+			const float Radius = (Stain.bFluid ? 16.0f : 30.0f) + (Stain.bFluid ? 7.0f : 9.0f) * static_cast<float>(Pile.thickness);
 			const int32 Cell = Stain.bFluid ? (Pile.thickness >= 2 ? BloodCellPool + CellRandom.RandRange(0, 1) : BloodCellRound + CellRandom.RandRange(0, 3))
 			                                : (CellRandom.RandRange(0, 2) == 0 ? BloodCellSmear : BloodCellSpecks + CellRandom.RandRange(0, 1));
 			const FVector Top = Bridge->SimToWorld(Pile.cell.x + 0.5f + CellRandom.FRandRange(-0.25f, 0.25f), Pile.cell.y + 0.5f + CellRandom.FRandRange(-0.25f, 0.25f), Pile.cell.level);
