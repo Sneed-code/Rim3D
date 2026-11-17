@@ -98,18 +98,19 @@ walkable cell within 24 m, carried by the current, and walks on from there.
   3x strength, shot `river_ripples3`): left to tune (a stronger normal texture, or the wave field below).
 - **Tuning from the console:** `Water.Param Name V` or `Water.Param Name R G B` sets any `M_Water` parameter on a dynamic
   instance (kept across rebuilds), e.g. `Water.Param Absorption 1.1 0.8 2.0`.
-- **W2 (written, compiled, not yet seen working):** `USimWaterSubsystem` runs a wave equation on three 256 x 256 half-float
+- **W2 (works, checked 2026-11-17):** `USimWaterSubsystem` runs a wave equation on three 256 x 256 half-float
   render targets in turn over 64 m round the camera (25 cm a texel, moved in whole texels), one step a frame drawn with
   `M_WaterWaveStep` (WaterArt commandlet): ripple speed 0.8 m/s, fading to a third in 1.2 s, kept to open water by a mask
   of the map's water cells. The 16 bodies nearest the camera with water over 5 cm push a soft dip sized by their height,
   harder with speed (a moving body leaves a wake), a faint bob when still, one strong push when they come into the water.
-  `M_Water` adds the field's slope to its ripples (`WaveStrength` 4). Console `Water.Ripples 0/1`, `Water.RipplePush`,
+  `M_Water` adds the field's slope to its ripples. Console `Water.Ripples 0/1`, `Water.RipplePush`,
   `Water.RippleMask`. The first runs wrote nothing: a material's emissive is kept at 0 or more, so the field is now stored
-  as (above 0, below 0) in red and green; that fix is built but not yet run. Smoke test: a drafted colonist wades between
+  as (above 0, below 0) in red and green. With that the wader leaves rings and a wake that reflect the bank (shot
+  `river_wake.png`); the field reaches |h| 0.84, so `WaveStrength` is 3. Smoke test: a drafted colonist wades between
   two cells 1 m deep and the controlled one swims circles in 3 m (both checked), then the field is read back.
 - Cost so far (1080p offscreen, river with the two bodies): GPU 6.1 ms with the surface and wave step, 6.1 ms with
   `Water.Ripples 0`, 5.6 ms with `Water.Enable 0`.
-- Left: W2 checked on screen, W3 splashes, W4 swim animation (no human swim clip on the PC: download Mixamo **Treading
+- Left: W3 splashes, W4 swim animation (no human swim clip on the PC: download Mixamo **Treading
   Water** and **Swimming**, in place, FBX without skin) and the underwater view.
 
 ## Unreal (planned, PC)

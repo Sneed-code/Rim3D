@@ -707,5 +707,5 @@ void USimWaterSubsystem::TickWaves(float DeltaTime)
 	WaterMID->SetVectorParameterValue(TEXT("WaveOrigin"), FLinearColor(CornerM.X, CornerM.Y, SizeM, 0.0f));
 	WaterMID->SetScalarParameterValue(TEXT("WaveRes"), WaterWaveRes);
 	const float* Strength = ScalarOverrides.Find(TEXT("WaveStrength"));
-	WaterMID->SetScalarParameterValue(TEXT("WaveStrength"), Strength ? *Strength : 4.0f);
+	WaterMID->SetScalarParameterValue(TEXT("WaveStrength"), Strength ? *Strength : 3.0f);
 }
