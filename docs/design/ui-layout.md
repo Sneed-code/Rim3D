@@ -74,6 +74,44 @@ clothes, made once and remade when the window closes or their look changes (not 
 
 ## Not decided yet
 
-- Whether the new layout stays ImGui or moves to Unreal's own UI (Slate/UMG) for the look sneed wants.
   Decide in the first U-thread; the sim side does not change either way.
 - Which resources a player can pin, and where pinned ones sit when the colonist bar is long.
+
+## As built (2026-11-17)
+
+Decided: the layout **stays ImGui**, with one shared look (`ColonyHudStyle.h`: the mock-up's colours,
+one border and radius, two text sizes, 1.2 s tooltips). Every subsystem that draws ImGui calls
+`ColonyHud::ApplyFrameStyle`. `UColonyHudSubsystem` owns the layout:
+
+- **Bottom bar** (`ColonyHudSubsystem.cpp`): the 11 tabs at equal width, Quests shows unseen offers
+  in amber; at the right Ship (once a reactor exists), Pause/1x/2x/3x, Keys (the hint box), Factions
+  and Menu (Settings, Message log, Key list, Quit). One click opens a tab, a second closes it. Build,
+  Work, Schedule, Quests and World are still drawn by Orders, Panels, QuestPanel and WorldScreen; the
+  bar opens and closes them. Console `Hud.Tab <name>`, `Hud.UI 0|1`.
+- **Date box** above the bar's right end: time, day, season, temperature, weather, Step while paused,
+  the level looked at with Up/Down. The old top-middle speed box is gone. Key hints sit above it.
+- **Build** (`OrdersSubsystem::DrawBuildMenu`): left window with a search box and the categories in
+  two columns (Orders first), a tile window with hotkey letters (Z X C V B N ...), Cancel and
+  Deconstruct first in Orders, locked research greyed with a tooltip saying what to research, and a
+  strip with name, description, material choice, drag shape (single, line, outline, filled), Turn (R)
+  and the plan's cost. Uses the sim's `BuildPlanner`. Remove floor is a new order.
+- **Work**: a Group column (sim `SetWorkGroupCommand`, saved and replayed; up to 24 letters) and
+  filter buttons Everyone / each group above the table; prisoners get rows that say they don't work.
+- **Assign** (outfit, drug policy, medical care, allowed area), **Animals** (name, kind, age and sex,
+  health, the four trainings, zone; right click renames or marks for slaughter), **Wildlife** (tame,
+  hunt), **Mechs** (colony robots; none yet), **Research** (tree by depth with lines, current
+  project bar, an info panel with Research this / Stop), **Inventory** (colony stock by category,
+  search, a star pins a resource under the colonist bar; silver pinned by default).
+- **Bottom left**: the hover readout (ground, walk speed, fertility, light) when nothing is selected
+  and no tab is open; the selected panel with the name large, **i** (the info window: Basics, the
+  thing's own table, its description) and x.
+- **Colonist bar**: a face picture per colonist (scene capture, remade when clothes or looks change),
+  name under it coloured by mood, a red edge while drafted, pinned resources below.
+- **Settings** (Menu): pages down the left, Game (day length, mouse speed, text size Normal/Bigger,
+  saved as `UI.TextSize`), Display, Sound, Feel and Controls. Other code adds pages with
+  `AddSettingsPage`; the hotkey rebind menu goes in Controls.
+- The **I inventory window** (playing as a pawn) now has a fixed place: centred, under the clock,
+  above the bottom edge, so the clock and the key hints stay readable.
+
+Still to do: a better Factions window (relations, goodwill history), icons for the bar's right-hand
+buttons, real tile icons for every building, the learning helper's lessons.

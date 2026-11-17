@@ -75,8 +75,8 @@ public:
 	static bool IsAimFirstPerson();
 	static float GetAimFov();
 
-	/** Draws the settings panel with ImGui (the overseer calls this inside its own ImGui scope). */
-	void DrawSettingsPanel(float ViewportWidth, float Scale);
+	/** Draws the Feel page of the Settings window (ImGui widgets, inside the open window). */
+	void DrawSettingsBody(float Scale);
 	/** Saves the settings to the user settings file. */
 	static void SaveSettings();
 

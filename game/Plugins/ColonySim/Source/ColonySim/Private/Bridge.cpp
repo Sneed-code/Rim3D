@@ -264,6 +264,8 @@ const char* commandName(const Command& command) {
                         return "Sleep";
                     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
                         return "Patch";
+                    } else if constexpr (std::is_same_v<Type, SetWorkGroupCommand>) {
+                        return "SetWorkGroup";
                     } else {
                         static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, SetLandingZoneCommand>,
                                       "name every command type");

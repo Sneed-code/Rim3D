@@ -1330,7 +1330,7 @@ inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitComma
                                             std::is_same_v<Type, SetOutfitFightGearCommand> || std::is_same_v<Type, HideGearCommand> ||
                                             std::is_same_v<Type, ShieldCommand> || std::is_same_v<Type, SetDayLengthCommand> ||
                                             std::is_same_v<Type, SleepCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||
-                                            std::is_same_v<Type, PatchCommand>;
+                                            std::is_same_v<Type, PatchCommand> || std::is_same_v<Type, SetWorkGroupCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1385,6 +1385,9 @@ void saveTradeCommand(Ar& ar, Type& c) {
         ar.value("add", c.add);
     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
         ar.value("pawn", c.pawn);
+    } else if constexpr (std::is_same_v<Type, SetWorkGroupCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("group", c.group);
     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("up", c.up);
@@ -1743,6 +1746,9 @@ void saveColonist(Ar& ar, Colonist& c) {
     });
     ar.list("disabledWorkTags", c.disabledWorkTags, [&](std::string& tag) { ar.text(nullptr, tag); });
     ar.value("protagonist", c.protagonist);
+    if (ar.sectionVersion() >= 3) {  // the Work tab's work groups
+        ar.text("workGroup", c.workGroup);
+    }
 }
 
 template <typename Ar>
@@ -3402,7 +3408,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "work", e, &SaveEntity::work, [&](SaveWorkSettings& w) { saveWorkPart(ar, w); });
         saveParts(ar, "carrying", e, &SaveEntity::carrying, [&](Carrying& c) { saveCarryingPart(ar, c); });
     });
-    ar.section("colonists", 2, [&] {
+    ar.section("colonists", 3, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
     ar.section("health", 7, [&] {

@@ -29,6 +29,7 @@ struct TraitRecord {
 };
 
 struct Colonist {
+    static constexpr std::size_t kMaxWorkGroupLength = 24;
     std::string firstName;
     std::string nickName;
     std::string lastName;
@@ -40,6 +41,7 @@ struct Colonist {
     std::vector<SkillRecord> skills;           // in Skills `listOrder`
     std::vector<std::string> disabledWorkTags;  // sorted, no repeats
     bool protagonist = false;                   // gets 2x part hit points (F1) and the talent tree later
+    std::string workGroup;                      // the player's work group for the Work tab (SetWorkGroupCommand), or empty
 
     const SkillRecord* skill(const std::string& def) const {
         for (const SkillRecord& s : skills) {

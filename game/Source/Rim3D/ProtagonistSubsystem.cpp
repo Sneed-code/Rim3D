@@ -9,6 +9,8 @@
 
 #include <imgui.h>
 
+#include "ColonyHudStyle.h"
+
 #include "OverseerPawn.h"
 #include "OverseerSubsystem.h"
 #include "PawnActor.h"
@@ -550,7 +552,7 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 	}
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	ColonyHud::ApplyFrameStyle(Scale);
 	const float Margin = 12.0f * Scale;
 	const ImGuiWindowFlags PanelFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;

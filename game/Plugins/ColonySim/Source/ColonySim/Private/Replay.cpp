@@ -546,6 +546,9 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                         j["add"] = c.add;
                     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
+                    } else if constexpr (std::is_same_v<Type, SetWorkGroupCommand>) {
+                        j["pawn"] = entt::to_integral(c.pawn);
+                        j["group"] = c.group;
                     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
                         j["up"] = c.up;
@@ -1882,6 +1885,16 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             if (!replayReadRect(r, j, where, c.area) || !r.flag(j, "add", c.add, where)) {
                 return false;
             }
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetWorkGroup") {
+            SetWorkGroupCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "group", c.group, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
             out.command = std::move(c);
             return true;
         }

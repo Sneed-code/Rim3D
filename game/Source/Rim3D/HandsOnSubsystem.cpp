@@ -8,6 +8,8 @@
 
 #include <imgui.h>
 
+#include "ColonyHudStyle.h"
+
 #include "OrdersSubsystem.h"
 #include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
@@ -447,7 +449,7 @@ void UHandsOnSubsystem::DrawHud(USimSubsystem& Bridge)
 	const colony::ThingView* Me = Protagonist ? Bridge.GetCurrentSnapshot().find(Protagonist->GetControlled()) : nullptr;
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	ColonyHud::ApplyFrameStyle(Scale);
 	const ImGuiWindowFlags Flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs;
 	const ImVec2 Centre(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.5f);

@@ -5,6 +5,8 @@
 
 #include <imgui.h>
 
+#include "ColonyHudStyle.h"
+
 #include "OverseerSubsystem.h"
 #include "PanelsSubsystem.h"
 #include "SimSubsystem.h"
@@ -369,7 +371,7 @@ void UShipPanelSubsystem::DrawWindow(USimSubsystem& Bridge)
 		return;
 	}
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	ColonyHud::ApplyFrameStyle(Scale);
 
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const colony::ShipView& Ship = Bridge.GetCurrentSnapshot().ship;
@@ -522,7 +524,7 @@ void UShipPanelSubsystem::DrawEnding(USimSubsystem& Bridge)
 		return;
 	}
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	ColonyHud::ApplyFrameStyle(Scale);
 	const colony::ShipView& Ship = Bridge.GetCurrentSnapshot().ship;
 
 	// A dark veil over the world, then the words in the middle.

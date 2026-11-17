@@ -20,6 +20,8 @@
 
 #include <imgui.h>
 
+#include "ColonyHudStyle.h"
+
 #include "GunViewAnim.h"
 #include "MakeHumanAnimInstance.h"
 #include "PawnActor.h"
@@ -992,7 +994,7 @@ void UGunRangeSubsystem::DrawPanel()
 		return;
 	}
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	ColonyHud::ApplyFrameStyle(Scale);
 	if (bScoped)
 	{
 		DrawScope();

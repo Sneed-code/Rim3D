@@ -298,9 +298,14 @@ void USmokeTestSubsystem::BuildOrdersWorldPhases()
 	const auto Row = [State](int32 X) { return colony::CellPos{State->Site.x + X, State->Site.y + State->RowOffset, 0}; };
 
 	// Clicks the Structure button, then the Wall button, with real events a few frames apart (ImGui needs a frame to see each).
-	const auto PickWallFrame = [this, State, Pointer, ButtonAbs](const FString& PhaseName)
+	const auto PickWallFrame = [this, State, Pointer, ButtonAbs, Orders](const FString& PhaseName)
 	{
 		const int32 F = ++State->Frame;
+		if (F == 1)
+		{
+			// The Build menu opens from the bottom bar's Build tab; Structure is one of its categories.
+			Orders()->SetBuildMenuOpen(true);
+		}
 		FVector2D Abs;
 		const TCHAR* Label = F < 14 ? TEXT("Structure") : TEXT("Wall");
 		const bool bPointerFrame = F == 2 || F == 4 || F == 6 || F == 9 || F == 16 || F == 18 || F == 20 || F == 23;
@@ -310,7 +315,7 @@ void USmokeTestSubsystem::BuildOrdersWorldPhases()
 		}
 		if (!ButtonAbs(Label, Abs))
 		{
-			Fail(FString::Printf(TEXT("%s: the architect bar has no %s button on screen"), *PhaseName, Label));
+			Fail(FString::Printf(TEXT("%s: the Build menu has no %s button on screen"), *PhaseName, Label));
 			State->Frame = 1000;
 			return;
 		}
@@ -675,7 +680,7 @@ void USmokeTestSubsystem::BuildOrdersWorldPhases()
 		State->bGhostSeen = false;
 		State->PreFrames = 0;
 	};
-	DragAgain.OnFrame = [State, DragFrame, Pointer, ButtonAbs, Note]()
+	DragAgain.OnFrame = [State, DragFrame, Pointer, ButtonAbs, Note, Orders]()
 	{
 		if (!State->bReady)
 		{
@@ -687,6 +692,10 @@ void USmokeTestSubsystem::BuildOrdersWorldPhases()
 		if (State->PreFrames < 8)
 		{
 			const int32 Pre = ++State->PreFrames;
+			if (Pre == 1)
+			{
+				Orders()->SetBuildMenuOpen(true);
+			}
 			FVector2D Abs;
 			if ((Pre == 1 || Pre == 3) && ButtonAbs(TEXT("Structure"), Abs))
 			{
