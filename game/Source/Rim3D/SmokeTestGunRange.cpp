@@ -67,16 +67,15 @@ namespace
 
 	/** She sees the player this close (the field is open; the sim's sight will replace this). */
 	constexpr float GunRangeSightMetres = 20.0f;
-	/** A fleeing woman runs this far from the player each time. */
-	constexpr float GunRangeFleeMetres = 18.0f;
 
 	struct FGunRangeTarget
 	{
 		colony::Entity Thing = colony::kNoEntity;
 		EGunRangeBehaviour Behaviour = EGunRangeBehaviour::Stand;
 		bool bFleeing = false;
-		float FleeUntil = 0.0f;
 		bool bAngry = false;
+		bool bTurned = false;   // struck and handed to the sim's fight response
+		bool bSprinted = false;
 		float NextOrder = 0.0f;
 		int32 Seed = 0;
 		TWeakObjectPtr<USkeletalMeshComponent> AppliedTo;
@@ -105,6 +104,7 @@ namespace
 		bool bListening = false;
 		int32 Fled = 0;
 		int32 FistSwings = 0;
+		int32 Sprinted = 0;
 		int32 PendingSpawn = 0;       // frames until the spawned pawns are looked for
 		int32 Group = 0;
 		float AllDownFor = 0.0f;
@@ -460,66 +460,42 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					T.AppliedTo = Actor->GetMakeHumanMesh();
 				}
 			}
-			// Each one's own way: run when she sees you or when struck, or come at you with her fists once struck.
+			// Each one's own way, by the sim's own fight responses (docs/design/focus.md) so the sim runs and sprints her:
+			// struck, she turns hostile (faction 2) and flees (FleeOnSight, so she keeps running while she sees you) or comes
+			// at you with her fists (Fists); the on-sight runner turns and flees once you are within 20 m (or she is struck).
 			const bool bUp = !View->downed && !View->dead;
-			const float ToPlayer = PlayerView ? FVector2D::Distance(FVector2D(View->x, View->y), FVector2D(PlayerView->x, PlayerView->y)) : 1e9f;
 			const bool bStruck = State->Attacked.Contains(T.Thing);
-			if (bUp && PlayerView && !PlayerView->dead)
+			const float ToPlayer = PlayerView ? FVector2D::Distance(FVector2D(View->x, View->y), FVector2D(PlayerView->x, PlayerView->y)) : 1e9f;
+			const bool bSpotted = T.Behaviour == EGunRangeBehaviour::FleeOnSight && ToPlayer <= GunRangeSightMetres;
+			if (bUp && !T.bTurned && (bSpotted || (bStruck && T.Behaviour != EGunRangeBehaviour::Stand)))
 			{
-				const bool bPanic = (T.Behaviour == EGunRangeBehaviour::FleeOnSight && ToPlayer <= GunRangeSightMetres) ||
-					(T.Behaviour == EGunRangeBehaviour::FleeWhenHit && bStruck);
-				if (bPanic && !T.bFleeing)
+				T.bTurned = true;
+				B->Submit(colony::SetFactionCommand{T.Thing, 2});
+				B->Submit(colony::SetFightResponseCommand{T.Thing,
+					T.Behaviour == EGunRangeBehaviour::Fists ? colony::FightResponse::Fists : colony::FightResponse::FleeOnSight});
+			}
+			if (bUp && T.bTurned)
+			{
+				if (View->sprinting && !T.bSprinted)
+				{
+					T.bSprinted = true;
+					++State->Sprinted;
+				}
+				if (View->fleeing && !T.bFleeing)
 				{
 					T.bFleeing = true;
-					T.NextOrder = 0.0f;
 					++State->Fled;
 				}
-				if (T.bFleeing)
-				{
-					// Keep running while you are near; she stops 20 s after she last had to run.
-					if (State->Clock >= T.NextOrder && ToPlayer < GunRangeSightMetres + 6.0f)
-					{
-						const FVector2D Away = (FVector2D(View->x, View->y) - FVector2D(PlayerView->x, PlayerView->y)).GetSafeNormal();
-						const FVector2D To = FVector2D(View->x, View->y) + (Away.IsNearlyZero() ? FVector2D(1.0, 0.0) : Away) * GunRangeFleeMetres;
-						const colony::Map& Map = B->GetSim()->map();
-						const colony::CellPos Cell{FMath::Clamp(FMath::FloorToInt32(To.X), 2, Map.width() - 3), FMath::Clamp(FMath::FloorToInt32(To.Y), 2, Map.height() - 3), 0};
-						B->Submit(colony::MoveOrderCommand{T.Thing, Cell});
-						T.NextOrder = State->Clock + 2.5f;
-						T.FleeUntil = State->Clock + 20.0f;
-					}
-					if (State->Clock > T.FleeUntil && T.Behaviour == EGunRangeBehaviour::FleeWhenHit)
-					{
-						T.bFleeing = false;
-						State->Attacked.Remove(T.Thing);
-					}
-					continue;
-				}
-				if (T.Behaviour == EGunRangeBehaviour::Fists && bStruck)
+				if (View->meleeTarget == State->Player && View->meleePhase != colony::MeleePhase::Ready && !T.bAngry)
 				{
 					T.bAngry = true;
 				}
-				if (T.bAngry)
+				if (T.bAngry && View->meleeTarget == State->Player && View->meleePhase == colony::MeleePhase::Windup && State->Clock >= T.NextOrder)
 				{
-					// Close in and punch; the sim says whether she is in reach and ready to swing.
-					if (State->Clock >= T.NextOrder)
-					{
-						if (B->GetSim()->melee().inReach(T.Thing, State->Player, true))
-						{
-							if (View->meleePhase == colony::MeleePhase::Ready)
-							{
-								B->Submit(colony::MeleeCommand{T.Thing, State->Player, colony::MeleeMode::Attack});
-								++State->FistSwings;
-							}
-							T.NextOrder = State->Clock + 0.25f;
-						}
-						else
-						{
-							B->Submit(colony::MoveOrderCommand{T.Thing, colony::CellPos{FMath::FloorToInt32(PlayerView->x), FMath::FloorToInt32(PlayerView->y), 0}});
-							T.NextOrder = State->Clock + 0.6f;
-						}
-					}
-					continue;
+					++State->FistSwings;
+					T.NextOrder = State->Clock + 0.5f;
 				}
+				continue;
 			}
 			// Walkers cross the field and back, a pause at each end.
 			if (T.bWalker && !View->downed && !View->dead && State->Clock >= T.NextMove)
@@ -901,7 +877,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				Blood->IsReady() ? TEXT("assets in") : TEXT("ASSETS MISSING (old simple blood)"), Blood->GetHits(), Blood->GetDropsSpawned(),
 				Blood->GetMistSpawned(), Blood->GetWoundMarks(), Blood->GetBodyStainsMade(), Blood->GetSplatsMade()));
 		}
-		Notes.Add(FString::Printf(TEXT("gunrange: %d targets ran, %d punches thrown at you"), State->Fled, State->FistSwings));
+		Notes.Add(FString::Printf(TEXT("gunrange: %d targets ran, %d sprinted, %d punches thrown at you"), State->Fled, State->Sprinted, State->FistSwings));
 		if (USoundSubsystem* S = GetWorld()->GetSubsystem<USoundSubsystem>())
 		{
 			PhaseNumbers.Add(TEXT("voice_femhit"), S->GetPlayCount(TEXT("Voice_FemHit")));

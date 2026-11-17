@@ -124,8 +124,10 @@ file's name (`AssaultRifle_Game`). `meshTextures` gives meshes their own maps (t
 - Corpses sinking into the ground: the ragdoll's floor now sits on the drawn ground (a trace, not the height map) and
   4 cm above it, since the flesh lies outside the mannequin's shapes.
 - Targets in each group of four: one stands, one flees when hit, one fights back with her fists when hit (walks up
-  and punches with `MeleeCommand`), one flees as soon as you are within 20 m. Driven by the scene with ordinary
-  commands until the sim's own sight and flee settings land (stealth thread). Melee swings in the range may strike
+  and punches), one flees as soon as you are within 20 m. Since 2026-11-17 the sim runs them: when struck (or, for
+  the on-sight one, when you come within 20 m) the scene hands her to faction 2 with the sim's own fight response
+  (`FleeOnSight` for the runners, `Fists` for the brawler, docs/design/focus.md), so she flees or charges and sprints
+  (`sprinting` in the snapshot) like any enemy. The smoke test notes how many ran, sprinted and punched. Melee swings in the range may strike
   them although they are on your side (`UWeaponDrawSubsystem::FindSwingTarget`).
 
 ## Not done
