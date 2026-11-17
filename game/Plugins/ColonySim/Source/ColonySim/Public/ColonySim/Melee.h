@@ -161,6 +161,9 @@ public:
     float engageDistance(Entity pawn, Entity target, bool fists = false) const;
     // The target's centre is within the pawn's engage distance (plus reachSlack).
     bool inReach(Entity pawn, Entity target, bool fists = false) const;
+    // The attack clips a melee weapon def (or a body def's own tools) swings with: its hold style's, the short ones
+    // (docs/design/weapon-hold.md, body-motion.md). Empty for a def with no melee tools.
+    std::vector<DefId> attackClipsOf(DefId def) const;
     // The fighter AI charges with this pawn: no gun, and a melee weapon in hand or a trait that says
     // so (Brawler). Others only strike back at enemies in reach.
     bool charges(Entity pawn) const;

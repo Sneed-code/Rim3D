@@ -24,6 +24,7 @@
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
 #include "SoundSubsystem.h"
+#include "WeaponDrawSubsystem.h"
 
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Commands.h"
@@ -78,6 +79,7 @@ namespace
 		int32 HitClipsAtStep = 0;
 		float HitSeenAt = -1.0f;
 		bool bHitPicture = false;
+		bool bSwingPicture = false;
 	};
 
 	void GunRangeStrip(colony::Sim& Sim, USimSubsystem& B, colony::Entity Pawn)
@@ -633,26 +635,42 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					Next(9);
 				}
 				break;
-			case 9:  // taking the melee weapon should turn third person on by itself (the main game draws the swing)
+			case 9:  // a melee weapon from the rack: first person stays on, the arms hold it and swing it
 				G->SelectGun(GunCount + FMath::Min(4, G->GetMelee().Num() - 1));
-				AimAtNearest();
-				if (State->StepTime > 2.0f && !State->bFiringPicture)
+				if (!Body->IsFirstPerson())
 				{
-					Notes.Add(FString::Printf(TEXT("gunrange: melee rack %d in hand, view %s"), G->GetHeldRackIndex(),
-						Body->IsFirstPerson() ? TEXT("first person (auto switch failed)") : TEXT("third person")));
+					Body->ToggleView();
+					Body->SnapCamera();
+				}
+				AimAtNearest();
+				if (State->StepTime > 1.5f && !State->bFiringPicture)
+				{
+					Notes.Add(FString::Printf(TEXT("gunrange: melee rack %d in hand, view %s, arms %s"), G->GetHeldRackIndex(),
+						Body->IsFirstPerson() ? TEXT("first person") : TEXT("third person (should stay first)"), G->IsHeldViewShown() ? TEXT("shown") : TEXT("NOT shown")));
 					Picture(TEXT("melee_held"));
 					State->bFiringPicture = true;
+					if (UWeaponDrawSubsystem* W = GetWorld()->GetSubsystem<UWeaponDrawSubsystem>())
+					{
+						W->Swing();
+					}
 				}
-				if (State->StepTime > 3.0f)
+				if (State->StepTime > 2.0f && !State->bSwingPicture)
 				{
+					State->bSwingPicture = true;
+					Picture(TEXT("melee_swing"));
+				}
+				if (State->StepTime > 3.5f)
+				{
+					Notes.Add(FString::Printf(TEXT("gunrange: first-person swings seen %d"), G->GetHeldSwingsSeen()));
 					G->SelectGun(0);
 					Next(11);
 				}
 				break;
-			case 11:  // a gun again: first person back
+			case 11:  // a gun again: its model in the hands
 				if (State->StepTime > 2.0f)
 				{
-					Notes.Add(FString::Printf(TEXT("gunrange: gun back in hand, view %s"), Body->IsFirstPerson() ? TEXT("first person") : TEXT("third person (switch back failed)")));
+					Notes.Add(FString::Printf(TEXT("gunrange: gun back in hand, view %s, gun model %s"), Body->IsFirstPerson() ? TEXT("first person") : TEXT("third person"),
+						G->IsViewShown() && !G->IsHeldViewShown() ? TEXT("shown") : TEXT("NOT shown")));
 					Picture(TEXT("gun_again"));
 					Next(10);
 				}

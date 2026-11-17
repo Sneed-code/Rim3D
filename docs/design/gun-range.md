@@ -103,9 +103,9 @@ file's name (`AssaultRifle_Game`). `meshTextures` gives meshes their own maps (t
 - sneed: "it will be just a combat range". `assets/guns.json` has a `melee` list after the guns (knife, club, gladius,
   mace, longsword, spear by def name); they lie on the same rack, guns first. Keys 1-9 and 0 (or the wheel) pick by
   rack place; the panel (now "COMBAT RANGE") lists both with `>` on the one in hand.
-- First person has no arms rig for melee, so taking a melee weapon switches the view to third person, where the main
-  game draws the swings (left mouse swing, right mouse block, Alt dodge, the normal `MeleeCommand`s); taking a gun
-  again switches back to first person. It acts only when the weapon changes, so V still works.
+- Melee weapons are held and swung by the first-person arms now ([weapon-hold.md](weapon-hold.md), 2026-11-17); the
+  view no longer switches to third person for them (left mouse swing, right mouse block, Alt dodge, the normal
+  `MeleeCommand`s). The arms are drawn in the main game's first person too (`View.Arms`).
 - The player is now the creator's generic woman: an untouched `FCreatorPerson` on CreatorFemale (every slider at its
   default, its own hair, fair skin), `CreatorPeople::DefaultLooks` / `ApplyDefault`. `-GunRangeRandomPlayer` gives the
   old random woman. Targets stay random creator women.

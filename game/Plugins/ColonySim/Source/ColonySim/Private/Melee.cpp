@@ -9,6 +9,7 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Hold.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Patch.h"
 #include "ColonySim/Map.h"
@@ -189,7 +190,15 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
             }
         }
         // The style's attack clips (body-motion.md): only the short, quick ones.
+        // The weapon's hold style says which attack clips it swings with (docs/design/weapon-hold.md); MeleeRules'
+        // weaponStyle can still override one weapon.
         std::string style = weapon ? std::string() : rules_.unarmedStyle;
+        if (weapon) {
+            WeaponHold hold;
+            if (holdFor(defs_, id, hold)) {
+                style = hold.attackStyle;
+            }
+        }
         for (const auto& [name, st] : rules_.weaponStyle) {
             if (weapon && name == def.defName()) {
                 style = st;
@@ -432,6 +441,13 @@ bool MeleeSystem::holdSwing(Entity pawn, Entity target) {
     const Position& to = reg.get<Position>(target);
     face(pawn, to.x, to.y);
     return true;
+}
+
+std::vector<DefId> MeleeSystem::attackClipsOf(DefId def) const {
+    if (!def.valid() || def.value >= tools_.size()) {
+        return {};
+    }
+    return tools_[def.value].attackClips;
 }
 
 bool MeleeSystem::ready(Entity pawn) const {
