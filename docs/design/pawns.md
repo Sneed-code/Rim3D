@@ -70,7 +70,18 @@ place and the sim moves the actor.
   current animation when it still fits. A new result blends in through the blend stack with the
   play rate the search wants (0.8 to 1.2).
 
-**Near and far: loops.** Idle, walk or run loop (`M_Neutral_*`), picked by speed (run above the
+**Standing still: the breathing idle.** A pawn that has stood for 0.3 s (under 30 cm/s, no route
+longer than 25 cm ahead) leaves motion matching and plays a calm Mixamo breathing idle with the feet
+planted (`Mixamo/MeleeAxe/A_ProMeleeAxeUnarmedIdle`, else `Mixamo/Longbow/A_ProLongbowUnarmedIdle01`,
+retargeted by `-run=MakeHumanArt -Clips`; without either the sample's `M_Neutral_Stand_Idle_Loop`),
+blended in over 0.4 s from a random point in the loop so a crowd does not breathe in step. When it
+moves again motion matching searches afresh and picks a start. Before this, motion matching over the
+sample's idle and turn-in-place databases kept choosing weight shifts and small steps, so standing
+pawns shuffled one foot and swayed on the spot (sneed, 2026-11-17). A standing pawn that turns to
+face a target turns as a whole for now (no turn-in-place clip). `GetStats().bStandingIdle` says
+when the idle plays.
+
+**Near and far: loops.** The breathing idle, or the walk or run loop (`M_Neutral_*`), picked by speed (run above the
 middle of the two loops' speeds, measured from their root motion: 200 and 500 cm/s) and played
 faster or slower to match it (0.6 to 1.5). A pawn that comes close again starts motion matching
 from that loop.

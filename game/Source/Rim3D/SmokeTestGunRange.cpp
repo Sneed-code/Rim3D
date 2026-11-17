@@ -5,11 +5,13 @@
 // pictures to game/Saved/GunRange/ (each gun from the hip, aimed, firing and reloading, then a downed target).
 
 #include "SmokeTest.h"
+#include "Camera/CameraActor.h"
 
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/App.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
@@ -19,6 +21,7 @@
 #include "FightSubsystem.h"
 #include "GunRangeSubsystem.h"
 #include "PawnActor.h"
+#include "PawnAnimInstance.h"
 #include "PawnSubsystem.h"
 #include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
@@ -78,6 +81,9 @@ namespace
 		int32 HitClipsAtStep = 0;
 		float HitSeenAt = -1.0f;
 		bool bHitPicture = false;
+		// -GunRangeIdleRecord=<seconds>: frames of a standing target close up (gunrange_idle/rec_0000.png ...).
+		int32 IdleRecorded = 0;
+		TWeakObjectPtr<ACameraActor> IdleCamera;
 	};
 
 	void GunRangeStrip(colony::Sim& Sim, USimSubsystem& B, colony::Entity Pawn)
@@ -398,6 +404,41 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			}
 		}
 		G->SetSceneLine(FString::Printf(TEXT("Targets: %d standing, %d down, %d dead   (group %d)"), Standing, Downed, Dead, State->Group));
+
+		// -GunRangeIdleRecord=<seconds>: a camera 3 m in front of a standing (not walking) target, every frame at a fixed
+		// 30 a second, to check that a standing pawn stands still and breathes (docs/design/pawns.md "Standing still").
+		// `ffmpeg -framerate 30 -i rec_%04d.png -pix_fmt yuv420p idle.mp4`
+		float IdleRecordSeconds = 0.0f;
+		if (FParse::Value(FCommandLine::Get(), TEXT("GunRangeIdleRecord="), IdleRecordSeconds) && State->Clock > 5.0f
+			&& State->IdleRecorded < FMath::RoundToInt32(IdleRecordSeconds * 30.0f))
+		{
+			if (!State->IdleCamera.IsValid())
+			{
+				for (const FGunRangeTarget& T : State->Targets)
+				{
+					const ASimPawnActor* Actor = T.bWalker ? nullptr : Pawns->FindPawn(T.Thing);
+					APlayerController* Viewer = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+					if (Actor && Viewer)
+					{
+						const FVector Feet = Actor->GetActorLocation();
+						const FVector Ahead = Actor->GetActorForwardVector();
+						const FVector Eye = Feet + Ahead * 300.0f + Actor->GetActorRightVector() * 60.0f + FVector(0.0, 0.0, 110.0);
+						const FRotator Look = (Feet + FVector(0.0, 0.0, 85.0) - Eye).Rotation();
+						State->IdleCamera = GetWorld()->SpawnActor<ACameraActor>(Eye, Look);
+						Viewer->SetViewTarget(State->IdleCamera.Get());
+						FApp::SetUseFixedTimeStep(true);
+						FApp::SetFixedDeltaTime(1.0 / 30.0);
+						Notes.Add(FString::Printf(TEXT("gunrange: idle record of %s, playing %s"), *Actor->GetName(),
+							Actor->GetAnim() ? *Actor->GetAnim()->GetStats().PlayingAsset.ToString() : TEXT("?")));
+						break;
+					}
+				}
+			}
+			if (State->IdleCamera.IsValid())
+			{
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/gunrange_idle") / FString::Printf(TEXT("rec_%04d.png"), State->IdleRecorded++), false, false);
+			}
+		}
 
 		// N: a new group now. By itself only after everyone has been down a full minute (or dead for 20 seconds), so the
 		// downed can still be shot and the bodies looked at (sneed: downed is not dead).
