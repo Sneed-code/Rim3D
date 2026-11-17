@@ -1,5 +1,7 @@
 # Orders: the architect menu, marks and fighting orders
 
+> 2026-11-17: placement replaced by the bottom tab bar layout, see [ui-layout.md](ui-layout.md) "As built". The Build menu and the Work tab changed with it.
+
 Code: `game/Source/Rim3D/OrdersSubsystem.*`, small hooks in `OverseerPawn.*`, `OverseerSubsystem.cpp`,
 `SimPicking.*` (`PickGroundFromRay`) and `BuildingSubsystem.*` (`GetWholeMesh`, `GetPlacedTransform`).
 Smoke test: `orders` (`tools/smoke.ps1 -Test orders`). Task U7. Unreal side only; the sim is untouched,
