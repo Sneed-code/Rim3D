@@ -164,6 +164,29 @@ What a hurt body shows, all in Unreal and all cosmetic (the sim decided the hit,
 - Not done here: blood on clothes (the blood system stains bodies; cloth comes with part F's wounds), and a limp for
   far pawns' simple loops is the same lean (no separate clip).
 
+## Part F as built (sim)
+
+- **The rule** (`HealthSystem::hitPart`, `HealthRules` `zones.dismember`): a hit that goes over what its zone had
+  left by half the zone's hit points or more dismembers. A whole arm (50) needs 75 in one hit, an arm with 20 left
+  needs 45; a whole leg (75) needs 113; a whole head 75; a whole torso 150. The dismemberment is the wound: the hit
+  does no other damage.
+- **Arm, leg**: the limb comes off below the elbow or the knee (the body's Hand or Foot part goes) or whole (the Arm
+  or Leg part), half and half by the pawn and the moment; a hit on the hand or the foot itself always takes the lower
+  limb. Event `PawnDismembered`, message "left forearm", "right arm", "left lower leg", "right leg". A lost leg
+  downs its owner (the zone is at 0), lost parts bleed as they always did.
+- **Head**: a cut or a slash (`severTypes`) takes it off (`PawnDismembered` "head"); anything else bursts it
+  (`PawnGibbed` "head", `Health::gib` Head). **Torso**: it bursts (`PawnGibbed` "torso", gib Torso). Both kill.
+- **Whole corpse**: a blow on a dead body whose force (as for poise: damage before armour, blunt 1.5x) is over the
+  poise by 25 (over 75) bursts all of it (`HealthSystem::gibCorpse`, `PawnGibbed` "whole", gib Whole), from
+  `CombatSystem::jolt`, so the blow that killed does it. The pawn stays in the sim as the same dead thing; Unreal
+  draws chunks instead of a body.
+- **Never** the protagonist, animals, mechanoids (bodies without zones).
+- **For drawing**: the snapshot's `severed` (SeveredBits: each forearm, arm, lower leg, leg, and the head; from the
+  lost parts, so an amputation or a destroyed hand shows too) and `gib`. `gib` is saved (health section 8) and hashed;
+  `severed` is worked out.
+- Not yet: severed parts as items (the head trophy needs them), Unreal's cut limbs, stump caps, gib chunks and
+  ragdolls (PC).
+
 ## Later (sneed, 2026-11-16)
 
 - **Ragdolls**: unconscious pawns, corpses and severed limbs are physics ragdolls in Unreal (cosmetic: the sim keeps

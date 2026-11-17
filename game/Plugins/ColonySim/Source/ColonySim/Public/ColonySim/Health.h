@@ -457,7 +457,7 @@ private:
     bool hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter);
     bool damagePart(Entity pawn, Health& health, int part, DefId hediff, float amount);
     void destroyPart(Entity pawn, Health& health, int part, float amount);
-    bool dismember(Entity pawn, Health& health, int zone, float overkill, bool severs);
+    bool dismember(Entity pawn, Health& health, int zone, int struck, float overkill, bool severs);
     void leaveScar(Entity pawn, Health& health, const Injury& healed, Rng& rng);
     // Rolls whether a fresh wound will turn infected, and when.
     void rollInfection(Entity pawn, Health& health, Injury& injury);

@@ -1659,7 +1659,7 @@ bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int targ
     // Far beyond what the zone had left: the limb comes off or the head or torso bursts, and that is the wound.
     if (zoneLeft >= 0.0f &&
         amount - zoneLeft >= model_->dismemberOverkill * body.zones[static_cast<size_t>(zone)].hp * healthHpFactor(*model_, body, health) &&
-        dismember(pawn, health, zone, amount - zoneLeft, type.severs)) {
+        dismember(pawn, health, zone, target, amount - zoneLeft, type.severs)) {
         recompute(pawn, health, true);
         return true;
     }
@@ -1681,7 +1681,7 @@ bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int targ
 
 // Part F: the zone took a hit far beyond what it had left. An arm or a leg comes off, below the elbow or the knee or
 // whole; a head comes off (a cut) or bursts; a torso bursts. The last two kill.
-bool HealthSystem::dismember(Entity pawn, Health& health, int zone, float overkill, bool severs) {
+bool HealthSystem::dismember(Entity pawn, Health& health, int zone, int struck, float overkill, bool severs) {
     const HealthModel::Kind* kind = healthKindOf(*model_, things_.registry(), pawn);
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
     const HealthModel::Zone& z = body.zones[static_cast<size_t>(zone)];
@@ -1710,7 +1710,9 @@ bool HealthSystem::dismember(Entity pawn, Health& health, int zone, float overki
             Rng rng(splitMix64(seed_ ^ (static_cast<uint64_t>(entt::to_integral(pawn)) * 0x9E3779B97F4A7C15ULL) ^
                                (static_cast<uint64_t>(health.injuries.size()) << 24) ^ (static_cast<uint64_t>(health.missing.size()) << 8) ^
                                static_cast<uint64_t>(zone)));
-            const bool takeLower = lower >= 0 && (whole < 0 || rng.unit() < model_->dismemberLowerChance);
+            // A hit on the hand or the foot itself takes the limb off below the joint; one higher up, either way.
+            const bool onLower = lower >= 0 && struck >= lower && struck < body.parts[static_cast<size_t>(lower)].end;
+            const bool takeLower = lower >= 0 && (onLower || whole < 0 || rng.unit() < model_->dismemberLowerChance);
             const int part = takeLower ? lower : whole;
             if (part < 0) {
                 return false;  // already gone
