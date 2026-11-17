@@ -12,6 +12,9 @@
 #include "SimSubsystem.h"
 
 #include "ColonySim/Commands.h"
+#include "ColonySim/Defs.h"
+#include "ColonySim/Map.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Trade.h"
@@ -39,14 +42,18 @@ void USmokeTestSubsystem::BuildShuttlePhases()
 	const auto Shuttle = [this]() { return GetWorld()->GetSubsystem<UShuttleSubsystem>(); };
 	const auto Orders = [this]() { return GetWorld()->GetSubsystem<UOrdersSubsystem>(); };
 	const auto Overseer = [this]() { return GetWorld()->GetSubsystem<UOverseerSubsystem>(); };
+	// At the shuttle's landing spot once there is one, else the zone's middle.
 	const auto Aim = [=, this](float Zoom)
 	{
 		AOverseerPawn* Pawn = Overseer() ? Overseer()->GetOverseerPawn() : nullptr;
 		if (Pawn)
 		{
+			const colony::Snapshot& Snapshot = Bridge()->GetCurrentSnapshot();
+			const float X = Snapshot.shuttles.empty() ? State->ZoneCorner.x + 5.0f : Snapshot.shuttles.front().x;
+			const float Y = Snapshot.shuttles.empty() ? State->ZoneCorner.y + 8.0f : Snapshot.shuttles.front().y;
 			Pawn->ResetView();
 			Pawn->Zoom(Zoom);
-			Pawn->FocusOn(Bridge()->SimToWorld(State->ZoneCorner.x + 5.0f, State->ZoneCorner.y + 8.0f, 0));
+			Pawn->FocusOn(Bridge()->SimToWorld(X, Y, 0));
 			Pawn->SnapCamera();
 		}
 	};
@@ -91,6 +98,7 @@ void USmokeTestSubsystem::BuildShuttlePhases()
 		FSimStartOptions Options;
 		Options.Seed = 42;
 		Options.MapSize = 256;
+		Options.bFlatMap = true;  // a zone on a hillside has no spot level enough
 		Options.Scenario = TEXT("Crashlanded");
 		B->SetWorldOrigin(ShuttleSmokeOrigin);
 		if (!B->StartSim(Options))
@@ -99,6 +107,11 @@ void USmokeTestSubsystem::BuildShuttlePhases()
 			return;
 		}
 		B->SetSpeed(0);
+		// Noon, so the shots show something.
+		if (IConsoleVariable* Hour = IConsoleManager::Get().FindConsoleVariable(TEXT("Sky.Hour")))
+		{
+			Hour->Set(12.0f, ECVF_SetByCode);
+		}
 		if (!Overseer()->EnterOverseerMode())
 		{
 			Fail(TEXT("The overseer camera did not start"));
@@ -107,6 +120,21 @@ void USmokeTestSubsystem::BuildShuttlePhases()
 		const colony::Sim* Sim = B->GetSim();
 		const colony::CellPos Home = Sim && Sim->stockpileCell() ? *Sim->stockpileCell() : colony::CellPos{128, 128, 0};
 		State->ZoneCorner = colony::CellPos{Home.x + 14, Home.y - 8, 0};
+		// Trees and bushes off the zone (a tree in it rules the zone out); the grass round it stays for the downwash.
+		if (colony::Sim* Mutable = const_cast<colony::Sim*>(Sim))
+		{
+			for (int32 Y = State->ZoneCorner.y - 2; Y <= State->ZoneCorner.y + 17; ++Y)
+			{
+				for (int32 X = State->ZoneCorner.x - 2; X <= State->ZoneCorner.x + 11; ++X)
+				{
+					const colony::CellPos C{X, Y, 0};
+					if (Mutable->map().inBounds(C) && Mutable->plants().has(C) && Mutable->defs().get(Mutable->plants().defAt(C)).defName() != "Plant_Grass")
+					{
+						Mutable->plants().remove(C);
+					}
+				}
+			}
+		}
 		Aim(3.0f);
 		// The zone with the tool, as the player paints it: a 10 x 16 rectangle (a shuttle needs 6 x 12).
 		UOrdersSubsystem* O = Orders();
@@ -146,8 +174,7 @@ void USmokeTestSubsystem::BuildShuttlePhases()
 	Approach.Name = TEXT("shuttle_approach");
 	Approach.WarmupSeconds = 2.5f;
 	Approach.MeasureSeconds = 2.0f;
-	Approach.Setup = [=, this]() { Aim(5.0f); };
-	Approach.OnFrame = Watch;
+	Approach.OnFrame = [=]() { Watch(); Aim(6.0f); };
 	Approach.Verify = [=, this]()
 	{
 		if (Bridge()->GetCurrentSnapshot().shuttles.empty() || Shuttle()->GetShuttlesDrawn() == 0)
@@ -215,7 +242,16 @@ void USmokeTestSubsystem::BuildShuttlePhases()
 			Fail(FString::Printf(TEXT("shuttle_down: climb pose wrong (mid up %.1f gear %.2f door %.2f; end back %.0f up %.1f nacelles %.2f)"),
 				Mid.UpM, Mid.Gear, Mid.Door, End.BackM, End.UpM, End.Nacelles));
 		}
-		Notes.Add(FString::Printf(TEXT("shuttle_down: landed at (%.1f, %.1f) facing %d, door open"), View.x, View.y, static_cast<int32>(View.rot)));
+		const bool bInZone = View.x > State->ZoneCorner.x && View.x < State->ZoneCorner.x + 10 && View.y > State->ZoneCorner.y && View.y < State->ZoneCorner.y + 16;
+		if (!bInZone)
+		{
+			Fail(FString::Printf(TEXT("shuttle_down: landed at (%.1f, %.1f), outside the landing zone"), View.x, View.y));
+		}
+		Notes.Add(FString::Printf(TEXT("shuttle_down: landed at (%.1f, %.1f) facing %d (zone from %d, %d), door open"), View.x, View.y, static_cast<int32>(View.rot), State->ZoneCorner.x, State->ZoneCorner.y));
+		if (IConsoleVariable* Hour = IConsoleManager::Get().FindConsoleVariable(TEXT("Sky.Hour")))
+		{
+			Hour->Set(-1.0f, ECVF_SetByCode);
+		}
 	};
 	Phases.Add(MoveTemp(Down));
 }

@@ -1165,7 +1165,7 @@ void UOrdersSubsystem::EnsureOverlayActor()
 		};
 		ZoneMaterial = Make(FLinearColor(OrdZoneColor.R, OrdZoneColor.G, OrdZoneColor.B, 0.30f));
 		GrowZoneMaterial = Make(FLinearColor(OrdGrowColor.R, OrdGrowColor.G, OrdGrowColor.B, 0.22f));
-		LandZoneMaterial = Make(FLinearColor(OrdLandColor.R, OrdLandColor.G, OrdLandColor.B, 0.26f));
+		LandZoneMaterial = Make(FLinearColor(OrdLandColor.R, OrdLandColor.G, OrdLandColor.B, 0.16f));
 		GhostGoodMaterial = Make(FLinearColor(0.15f, 0.85f, 0.25f, 0.42f));
 		GhostBadMaterial = Make(FLinearColor(0.95f, 0.18f, 0.15f, 0.42f));
 	}
