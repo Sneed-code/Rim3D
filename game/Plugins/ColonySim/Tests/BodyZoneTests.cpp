@@ -737,8 +737,8 @@ TEST_CASE("Dismemberment: never the protagonist, never an animal") {
 
 TEST_CASE("Dismemberment: a killing blow with force 25 over the poise bursts the whole corpse; it saves and loads") {
     auto sim = zoneTestSim();
-    const Entity soft = zoneTestPawn(*sim, 10, 10, true);
-    const Entity hard = zoneTestPawn(*sim, 14, 10, true);
+    const Entity soft = zoneTestPawn(*sim, 10, 10);
+    const Entity hard = zoneTestPawn(*sim, 14, 10);
     sim->step();
     const int torso = zoneTestPart(*sim, soft, "torso");
     const DefId cut = sim->defs().idOf("DamageTypes", "Cut");
@@ -761,7 +761,7 @@ TEST_CASE("Dismemberment: a killing blow with force 25 over the poise bursts the
     sim->combat().jolt(hard, torso, blunt, 90.0f, 40.0f);
     CHECK(zoneTestMessages(*sim, hard, EventType::PawnGibbed).size() == 1);
 
-    const Entity limbless = zoneTestPawn(*sim, 18, 10, true);
+    const Entity limbless = zoneTestPawn(*sim, 18, 10);
     CHECK(zoneTestHit(*sim, limbless, "Blunt", 120.0f, "left leg"));
     SaveLoadResult loaded = loadSim(saveSim(*sim), zoneTestDefs());
     CHECK(loaded.error == "");
