@@ -566,6 +566,17 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     construction_->setUpperFloors(upperFloors_.get());
     construction_->setFloors(floors_.get());
     animals_->setMelee(melee_.get());
+    // Tab picks enemies first (docs/design/focus.md): another side's pawn that isn't a visitor or prisoner, or a mad animal.
+    melee_->setHostile([this](Entity pawn, Entity other) {
+        const entt::registry& reg = things_->registry();
+        if (const Animal* wild = reg.try_get<Animal>(other)) {
+            return wild->temper != AnimalTemper::Calm;
+        }
+        if (reg.any_of<Visitor, Prisoner>(other)) {
+            return false;
+        }
+        return fighters_->factionOf(other) != fighters_->factionOf(pawn);
+    });
     defense_ = std::make_unique<DefenseSystem>(*things_, map_, *combat_, *health_, *power_, *defs_, time_);
     defense_->setEventLog(&events_);
     defense_->setFuel(&jobs_->fuel());
@@ -1196,6 +1207,20 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     if (const auto* landingZone = std::get_if<SetLandingZoneCommand>(&command)) {
         if (landing_->paintZone(landingZone->area, landingZone->add) == 0) {
             commandFailed(id, "the landing zone is already so there");
+        }
+        return;
+    }
+    if (const auto* focus = std::get_if<FocusCommand>(&command)) {
+        std::string why;
+        if (!melee_->focusCommand(focus->pawn, focus->target, focus->mode, &why)) {
+            commandFailed(id, why);
+        }
+        return;
+    }
+    if (const auto* response = std::get_if<SetFightResponseCommand>(&command)) {
+        std::string why;
+        if (!melee_->setResponse(response->pawn, response->response, &why)) {
+            commandFailed(id, why);
         }
         return;
     }
@@ -1887,12 +1912,11 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* swimMelee = std::get_if<MeleeCommand>(&command); swimMelee != nullptr && pawnSwimming(swimMelee->pawn)) {
         commandFailed(id, "can't fight while swimming");
     } else if (const auto* melee = std::get_if<MeleeCommand>(&command)) {
-        const bool done = melee->mode == MeleeMode::Block
-                              ? melee_->block(melee->pawn, &error)
-                              : melee_->attack(melee->pawn, melee->target,
-                                               things_->registry().valid(melee->pawn) &&
-                                                   things_->registry().all_of<PlayerControl>(melee->pawn),
-                                               &error);
+        const bool player = things_->registry().valid(melee->pawn) && things_->registry().all_of<PlayerControl>(melee->pawn);
+        // The player's swing with no target goes at its focus, or down at a body before it (docs/design/focus.md).
+        const Entity target = melee->target == kNoEntity && player ? melee_->playerTarget(melee->pawn) : melee->target;
+        const bool done = melee->mode == MeleeMode::Block ? melee_->block(melee->pawn, &error)
+                                                          : melee_->attack(melee->pawn, target, player, &error);
         if (!done) {
             commandFailed(id, error);
         }
@@ -2271,7 +2295,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     { SimLap lap(profile_, "movement"); movement_->step(things_->registry(), map_); }
     travel_->noteVisits();
     { SimLap lap(profile_, "melee"); melee_->step(); }
-    { SimLap lap(profile_, "combat"); combat_->step(rng_); }
+    { SimLap lap(profile_, "combat"); combat_->step(rng_); melee_->faceFocus(); }
     { SimLap lap(profile_, "explosives"); explosives_->step(rng_); }
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     fighters_->hear(events_, eventsBefore);  // and fighters in earshot hear them (stealth.md)
@@ -2391,6 +2415,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.mapWidth = map_.width();
     out.mapHeight = map_.height();
     out.things.clear();
+    // Pawns the player's pawn is focused on: their HP bar (focus.md).
+    std::vector<Entity> focusedByPlayer;
+    for (const auto [pawn, melee] : things_->registry().view<const Melee>().each()) {
+        if (melee.focusPlayer && melee.focus != kNoEntity) {
+            focusedByPlayer.push_back(melee.focus);
+        }
+    }
     out.waypoints.clear();
     out.bills.clear();
     out.zones.clear();
@@ -2943,6 +2974,16 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.blocking = melee_->blocking(entity);
             view.meleeTool = melee->tool;
             view.meleeStrong = melee_->strongSwing(entity);
+            view.meleeLow = melee->phase != MeleePhase::Ready && melee->low;
+            view.focusTarget = melee->focus;
+            view.focusPlayer = melee->focusPlayer;
+            view.footwork = time_.steps < melee->footworkUntil;
+            view.fightResponse = melee->response;
+        }
+        view.sprinting = fighters_->sprinting(entity);
+        if (std::find(focusedByPlayer.begin(), focusedByPlayer.end(), entity) != focusedByPlayer.end() ||
+            reg.all_of<PlayerControl>(entity)) {
+            view.lowestPart = lowestPartHealth(entity);
         }
         if (const Patching* patching = reg.try_get<Patching>(entity)) {
             view.patchZone = patching->zone;
@@ -3714,9 +3755,36 @@ float Sim::bodyHeightM(Entity pawn) const {
     return kPersonHeightM;
 }
 
+float Sim::lowestPartHealth(Entity pawn) const {
+    const entt::registry& reg = things_->registry();
+    const Health* h = reg.try_get<Health>(pawn);
+    if (h == nullptr || !reg.all_of<Thing>(pawn)) {
+        return 1.0f;
+    }
+    if (h->dead) {
+        return 0.0f;
+    }
+    float lowest = 1.0f;
+    if (!h->zones.empty()) {
+        for (const float z : h->zones) {
+            lowest = std::min(lowest, z);
+        }
+        return std::clamp(lowest, 0.0f, 1.0f);
+    }
+    const int parts = health_->partCount(reg.get<Thing>(pawn).def);
+    for (int i = 0; i < parts; ++i) {
+        const float max = health_->partMaxHitPoints(pawn, i);
+        if (max > 0.0f) {
+            lowest = std::min(lowest, health_->partHitPoints(pawn, i) / max);
+        }
+    }
+    return std::clamp(lowest, 0.0f, 1.0f);
+}
+
 float Sim::pawnMoveFactor(Entity pawn) const {
     return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed")) *
-           combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn);
+           combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn) *
+           (fighters_->sprinting(pawn) ? fighters_->sprintFactor() : 1.0f);  // fleeing or charging into melee (focus.md)
 }
 
 }  // namespace colony

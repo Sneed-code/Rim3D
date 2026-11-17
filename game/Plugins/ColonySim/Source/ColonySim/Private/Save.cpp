@@ -1332,7 +1332,8 @@ inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitComma
                                             std::is_same_v<Type, SetOutfitFightGearCommand> || std::is_same_v<Type, HideGearCommand> ||
                                             std::is_same_v<Type, ShieldCommand> || std::is_same_v<Type, SetDayLengthCommand> ||
                                             std::is_same_v<Type, SleepCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||
-                                            std::is_same_v<Type, PatchCommand> || std::is_same_v<Type, SetAlertCommand>;
+                                            std::is_same_v<Type, PatchCommand> || std::is_same_v<Type, SetAlertCommand> ||
+                                            std::is_same_v<Type, FocusCommand> || std::is_same_v<Type, SetFightResponseCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1390,6 +1391,15 @@ void saveTradeCommand(Ar& ar, Type& c) {
     } else if constexpr (std::is_same_v<Type, SetAlertCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("alert", c.alert);
+    } else if constexpr (std::is_same_v<Type, FocusCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("target", c.target);
+        ar.value("mode", c.mode);
+        ar.require(c.mode <= FocusMode::Clear, "the save file has a bad focus mode");
+    } else if constexpr (std::is_same_v<Type, SetFightResponseCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("response", c.response);
+        ar.require(c.response <= FightResponse::FleeOnSight, "the save file has a bad fight response");
     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("up", c.up);
@@ -2607,6 +2617,18 @@ void saveMeleePart(Ar& ar, Melee& m) {
         ar.value("guardWaitFrom", m.guardWaitFrom);
         ar.value("nextRollAt", m.nextRollAt);
     }
+    if (ar.sectionVersion() >= 4) {  // focus, footwork and the fight response (docs/design/focus.md)
+        ar.value("focus", m.focus);
+        ar.value("focusPlayer", m.focusPlayer);
+        ar.value("low", m.low);
+        ar.value("circleDir", m.circleDir);
+        ar.value("nextFootworkAt", m.nextFootworkAt);
+        ar.value("footworkUntil", m.footworkUntil);
+        ar.value("engagedAt", m.engagedAt);
+        ar.value("response", m.response);
+        ar.require(m.response <= FightResponse::FleeOnSight, "the save file has a bad fight response");
+        ar.require(m.circleDir == 1 || m.circleDir == -1, "the save file has a bad footwork direction");
+    }
 }
 
 template <typename Ar>
@@ -3641,7 +3663,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(s.rot >= 0.0f && s.rot < 1.0f && s.decay >= 0.0f && s.decay < 1.0f, "the save file has an impossible rot or wear");
         });
     });
-    ar.section("melee", 3, [&] {
+    ar.section("melee", 4, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
     });
     ar.section("social", 3, [&] {
