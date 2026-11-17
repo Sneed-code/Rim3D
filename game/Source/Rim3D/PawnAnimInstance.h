@@ -46,6 +46,8 @@ struct FSimPawnAnimStats
 	/** Motion matching searches run and how many of them started a new animation. */
 	int32 Searches = 0;
 	int32 Jumps = 0;
+	/** Standing still: the breathing idle plays and motion matching rests (it shuffled the feet). */
+	bool bStandingIdle = false;
 };
 
 /**
