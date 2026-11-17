@@ -1396,6 +1396,12 @@ namespace
 			UE_LOG(LogMakeHumanArt, Error, TEXT("Clip %s: no mannequin IK rig, its mesh or the template retargeter"), *Name);
 			return nullptr;
 		}
+		// Already made (a -Clips -Only run adds clips to what is there): used as it is.
+		const FString MadeName = TEXT("RTG_") + Name + TEXT("_to_UEFN");
+		if (UIKRetargeter* Made = LoadObject<UIKRetargeter>(nullptr, *(Source / MadeName + TEXT(".") + MadeName), nullptr, LOAD_NoWarn | LOAD_Quiet))
+		{
+			return Made;
+		}
 		// The clip's IK rig: the mannequin rig's chain names on the Mixamo bones.
 		UIKRigDefinition* Rig = Cast<UIKRigDefinition>(Tools.CreateAsset(TEXT("IK_") + Name + TEXT("_Source"), Source, UIKRigDefinition::StaticClass(), NewObject<UIKRigDefinitionFactory>()));
 		UIKRigController* RigController = UIKRigController::GetController(Rig);
@@ -2155,7 +2161,17 @@ int32 UMakeHumanArtCommandlet::Main(const FString& Params)
 	// -Clips: only the animation clips (assets/animations.json), retargeted onto the mannequin.
 	if (Params.Contains(TEXT("-Clips")))
 	{
-		IFileManager::Get().DeleteDirectory(*FPackageName::LongPackageNameToFilename(MhClipsFolder), false, true);
+		// -Only=<name>,<name>: just these clips, added to the ones already there (nothing else is deleted or redone).
+		FString OnlyText;
+		TArray<FString> Only;
+		if (FParse::Value(FCommandLine::Get(), TEXT("Only="), OnlyText, false))
+		{
+			OnlyText.ParseIntoArray(Only, TEXT(","));
+		}
+		if (Only.IsEmpty())
+		{
+			IFileManager::Get().DeleteDirectory(*FPackageName::LongPackageNameToFilename(MhClipsFolder), false, true);
+		}
 		// The asset registry still lists what was there (scanned at startup): rescanned, or the batch retarget's
 		// overwrite finds assets with no file and crashes.
 		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get().ScanPathsSynchronous({MhClipsFolder}, true);
@@ -2172,7 +2188,7 @@ int32 UMakeHumanArtCommandlet::Main(const FString& Params)
 		{
 			const TSharedPtr<FJsonObject> Clip = Value->AsObject();
 			FString Name, Fbx;
-			if (!Clip || !Clip->TryGetStringField(TEXT("name"), Name) || !Clip->TryGetStringField(TEXT("fbx"), Fbx))
+			if (!Clip || !Clip->TryGetStringField(TEXT("name"), Name) || !Clip->TryGetStringField(TEXT("fbx"), Fbx) || (!Only.IsEmpty() && !Only.Contains(Name)))
 			{
 				continue;
 			}
@@ -2212,9 +2228,15 @@ int32 UMakeHumanArtCommandlet::Main(const FString& Params)
 					const TSharedPtr<FJsonObject> Clip = ClipValue->AsObject();
 					FString File = Clip->GetStringField(TEXT("fbx"));
 					File = FPaths::IsRelative(File) ? RepoRoot / File : File;
-					Clips.Add(MakeTuple(Clip->GetStringField(TEXT("name")), Clip->GetStringField(TEXT("category")), File));
+					if (Only.IsEmpty() || Only.Contains(Clip->GetStringField(TEXT("name"))))
+					{
+						Clips.Add(MakeTuple(Clip->GetStringField(TEXT("name")), Clip->GetStringField(TEXT("category")), File));
+					}
 				}
-				Failures += MhMakeClipSet(Tools, SetName, Skeleton, Clips);
+				if (!Clips.IsEmpty())
+				{
+					Failures += MhMakeClipSet(Tools, SetName, Skeleton, Clips);
+				}
 			}
 		}
 		UE_LOG(LogMakeHumanArt, Display, TEXT("Animation clips: done, %d problems"), Failures);

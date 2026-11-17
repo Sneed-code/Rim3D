@@ -19,6 +19,8 @@
 #include "Sound/SoundAttenuation.h"
 
 #include "OverseerPawn.h"
+#include "PawnActor.h"
+#include "PawnSubsystem.h"
 #include "SimSubsystem.h"
 #include "SkySubsystem.h"
 
@@ -674,6 +676,15 @@ colony::SoundGender USoundSubsystem::GenderOf(colony::Entity Thing) const
 	if (!Source)
 	{
 		return colony::SoundGender::Unknown;
+	}
+	// The body as drawn: a looks override (the creator's people in the combat range and the demos) may give a woman to a
+	// pawn the sim rolled as a man, and her voice must be a woman's (sneed heard no screams from the range's women).
+	if (const USimPawnSubsystem* Pawns = GetWorld() ? GetWorld()->GetSubsystem<USimPawnSubsystem>() : nullptr)
+	{
+		if (const ASimPawnActor* Actor = Pawns->FindPawn(Thing); Actor && Actor->HasLooks())
+		{
+			return Actor->GetLooks().bFemale ? colony::SoundGender::Female : colony::SoundGender::Male;
+		}
 	}
 	const colony::Snapshot& Snap = Source->GetCurrentSnapshot();
 	if (const colony::ThingView* View = Snap.find(Thing))

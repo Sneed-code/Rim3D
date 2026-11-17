@@ -1,4 +1,5 @@
 #include "WeaponDrawSubsystem.h"
+#include "GunRangeSubsystem.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -802,9 +803,12 @@ colony::Entity UWeaponDrawSubsystem::FindSwingTarget() const
 	const colony::MeleeSystem& Melee = Bridge->GetSim()->melee();
 	colony::Entity Best = colony::kNoEntity;
 	float BestScore = WeaponSwingCone;
+	// The combat range's targets are on your side (so they never shoot back); there anyone in front of you can be struck.
+	const UGunRangeSubsystem* Range = GetWorld()->GetSubsystem<UGunRangeSubsystem>();
+	const bool bAnySide = Range && Range->IsEnabled();
 	for (const colony::ThingView& Other : Bridge->GetCurrentSnapshot().things)
 	{
-		if (Other.category != colony::ThingCategory::Pawn || Other.id == Me->id || Other.dead || Other.faction == Me->faction || !Melee.inReach(Me->id, Other.id))
+		if (Other.category != colony::ThingCategory::Pawn || Other.id == Me->id || Other.dead || (Other.faction == Me->faction && !bAnySide) || !Melee.inReach(Me->id, Other.id))
 		{
 			continue;
 		}
