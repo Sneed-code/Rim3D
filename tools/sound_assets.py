@@ -44,7 +44,8 @@ def download(src):
     elif how.startswith("page:"):
         base = "https://opengameart.org"
         links = findLinks(how[5:], r'(?:https://opengameart\.org)?/sites/default/files/[^"\s]+\.(?:ogg|wav|zip|txt)')
-        urls = [u if u.startswith("http") else base + u for u in links]
+        # Not the page's preview player or image styles (they 404 and would stop the whole pack).
+        urls = [u if u.startswith("http") else base + u for u in links if "/audio_preview/" not in u and "/styles/" not in u]
     else:
         urls = [how]
     if not urls:
