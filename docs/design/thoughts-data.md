@@ -15,7 +15,7 @@ Same two kinds as [mood.md](mood.md). New fields:
   system reads `situation.need` food or rest, and since C17 the five room and beauty conditions
   (`beautyNeed`, `roomSpace`, `roomImpressiveness`, `roomCleanliness`, `sleepSharedRoom`: [room-stats.md](room-stats.md)); the rest do nothing until their task.
 - **Memories** use `trigger`, `moodOffset`, `durationDays` as before. A trigger is an event name the
-  owning task raises (`KnowColonistDied`, `MentalBreakEnded`...).
+  owning task raises (`KnowPrisonerExecuted`, `MentalBreakEnded`...).
 
 Covered: temperature (E2), clothes and nudity (C15), beauty, space, impressiveness, cleanliness,
 barracks (C17), comfort, outdoors, recreation (C18), darkness (E3), pain, sickness, deaths and

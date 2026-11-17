@@ -1090,6 +1090,14 @@ struct PatchCommand {
     Entity pawn = kNoEntity;
 };
 
+// Stealth (docs/design/stealth.md): sets how watchful a fighter is, 0 unaware, 1 suspicious, 2 alerted. A dev and
+// scenario command (guards at their posts, the practice range's targets). Unaware and suspicious also make it forget
+// the enemies it knew. Fails for a pawn that isn't a fighter or a number above 2.
+struct SetAlertCommand {
+    Entity pawn = kNoEntity;
+    uint8_t alert = 0;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -1124,7 +1132,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand,
                              InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand,
                              SleepCommand, SetLandingZoneCommand,
-                             PatchCommand>;
+                             PatchCommand, SetAlertCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
 // day) it was applied in. Failed commands are logged too.

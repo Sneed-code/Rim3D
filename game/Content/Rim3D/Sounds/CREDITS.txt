@@ -28,3 +28,6 @@ cues/Amb_Tropical_Day/1.wav | soft distant birds, morning at a mangrove edge, Ch
 == Amb_Tropical_Night (45 s loop, mix of two recordings) ==
 cues/Amb_Tropical_Night/1.wav | night insect chorus before dawn, Cocle, Panama | Mario Frasca | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Sonus_naturalis_-_Soundscape_XC467480.mp3  (also https://xeno-canto.org/467480)
 cues/Amb_Tropical_Night/1.wav | night chorus of frogs and toads, Niger Delta, Nigeria (quieter layer) | ElemePodcast | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Night_Chorus_of_Frogs_and_Toads_in_Niger_Delta.ogg
+
+== Ui_KillConfirm (kill-confirm sound, 3 variations) ==
+cues/Ui_KillConfirm/1-3.wav | made for Rim3D from sine waves and noise by tools/sounds/kill_confirm.py | no third-party material
