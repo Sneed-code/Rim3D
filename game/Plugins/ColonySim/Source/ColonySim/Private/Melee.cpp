@@ -6,6 +6,7 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Hash.h"
@@ -931,6 +932,23 @@ void MeleeSystem::commit(Entity pawn, Melee& m) {
 // The hit moment: a level strike from the attacker's centre through the aimed point (as a bullet
 // would cross a man, so the hit chance table holds), as far as the reach allows, against hitboxes
 // and walls. What it meets first is hit.
+namespace {
+
+// What a weapon, shield, armour piece or building is made of, for the sound of a blow on it.
+DefId meleeSoundStuffOf(const entt::registry& reg, Entity thing) {
+    if (thing == kNoEntity || !reg.valid(thing)) return DefId{};
+    if (const MadeOf* made = reg.try_get<MadeOf>(thing)) return made->stuff;
+    if (const BuiltOf* built = reg.try_get<BuiltOf>(thing)) return built->stuff;
+    return DefId{};
+}
+
+void meleeSoundStruck(const entt::registry& reg, Entity thing, Event& e) {
+    if (const Thing* t = reg.try_get<Thing>(thing)) e.struckDef = t->def;
+    e.struckStuff = meleeSoundStuffOf(reg, thing);
+}
+
+}  // namespace
+
 void MeleeSystem::strike(Entity pawn, Melee& m) {
     entt::registry& reg = things_.registry();
     if (!m.committed) {
@@ -1030,6 +1048,12 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
     e.z = hit.kind == ProjectileHitKind::None ? ez : hit.z;
     e.cell = CellPos{static_cast<int>(std::floor(e.x)), static_cast<int>(std::floor(e.y)), pos.level};
     e.message = "missed";
+    if (m.weaponTool) {
+        e.stuff = meleeSoundStuffOf(reg, reg.get<Gear>(pawn).weapon);
+    }
+    if (hit.kind == ProjectileHitKind::Building && reg.valid(hit.thing)) {
+        meleeSoundStruck(reg, hit.thing, e);
+    }
     if (hit.kind == ProjectileHitKind::Pawn) {
         const Entity victim = hit.thing;
         Melee* vm = reg.try_get<Melee>(victim);
@@ -1040,6 +1064,9 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             // The weapon takes it, and the blocker staggers: no swing of its own for a moment.
             e.message = "blocked";
             ++blocks_;
+            if (const Gear* parry = reg.try_get<Gear>(victim); parry != nullptr && parry->weapon != kNoEntity && reg.valid(parry->weapon)) {
+                meleeSoundStruck(reg, parry->weapon, e);
+            }
             // Guard: parries each within guardWindowSteps of the last wear it down; the last one breaks it (a long stagger, no
             // parrying), so the next blow gets through unless it sidesteps.
             if (now() - vm->guardFrom > rules_.guardWindowSteps) {
@@ -1074,6 +1101,10 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             if (result.deflected) {
                 e.hit = ProjectileHitKind::Armor;
                 e.message = result.shieldBlocked ? "blocked" : "deflected";  // a raised shield stopped all of it
+                const Entity struck = result.shieldBlocked ? result.shield : (result.wear.empty() ? kNoEntity : result.wear.front().first);
+                if (struck != kNoEntity && reg.valid(struck)) {
+                    meleeSoundStruck(reg, struck, e);
+                }
             } else {
                 e.message = "hit";
                 e.amount = result.amount;
