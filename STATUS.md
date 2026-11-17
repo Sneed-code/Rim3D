@@ -2,6 +2,8 @@
 
 Updated 2026-11-17.
 
+Idle pawns stand still (sneed, 2026-11-17; Unreal): a pawn standing where it wants to be now breathes in a calm **Mixamo breathing idle** (`A_ProMeleeAxeUnarmedIdle`, the creator's standing idle) with its feet planted, at a random point of the loop so a crowd does not breathe in step. Motion matching over the sample's idle and turn-in-place clips had kept picking weight shifts and little steps, so standing pawns shuffled a foot and swayed. Moving again, motion matching picks a start as before. `docs/design/pawns.md` "Standing still". **Next: a turn-in-place for standing pawns that turn a long way.**
+
 Corpses rot, with flies and maggots (sneed, 2026-11-14 and 2026-11-17; sim, `docs/design/spoilage.md` "Corpses"): every dead body except a machine now rots by the warmth it lies in, like food: fresh, rotting from 2.5 days, dried out (dessicated) from 25 (RimWorld's numbers); a cold room or a freezer keeps it. The snapshot tells the PC side the stage and how many flies (within 15 minutes of death, a full swarm after 6 hours, sitting on the body when it is cold) and maggots (from day 1) to draw. Cosmetic only: no mood or disease from them. Save section `corpses` 1, tests in `SpoilageTests`. **Next (PC): draw the flies, maggots and a darker rotting body; real models for the three hive bugs (brood scarab, brood delver, brood stalker = Goliath birdeater) instead of plain shapes.**
 
 Wimp melee (sneed, 2026-11-17; sim and data): a Wimp's melee blows do 10% less damage (Traits `meleeDamageFactor` 0.9), on top of running to cover for 12-20 s when hurt.

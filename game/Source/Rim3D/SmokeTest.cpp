@@ -1901,7 +1901,8 @@ void USmokeTestSubsystem::BuildPawnsPhases()
 				if (bFull)
 				{
 					++State->FullSamples;
-					State->FullMatched += Stats.Database.IsNone() ? 0 : 1;
+					// Matched, or standing in the breathing idle (motion matching rests then).
+					State->FullMatched += (!Stats.Database.IsNone() || Stats.bStandingIdle) ? 1 : 0;
 					if (Speed > 150.0f)
 					{
 						++State->MovingFullSamples;
