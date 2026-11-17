@@ -19,6 +19,7 @@
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Water.h"
 
 namespace
 {
@@ -307,7 +308,8 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 	const FVector2D Tries[3] = {Delta, FVector2D(Delta.X, 0.0), FVector2D(0.0, Delta.Y)};
 	const auto Fits = [&](const FVector2D& Try)
 	{
-		return colony::pawnFitsAt(Map, static_cast<float>(Position.X + Try.X), static_cast<float>(Position.Y + Try.Y), colony::kPawnRadius, Level);
+		// The player may swim: deep water counts as open (docs/design/water.md), as the sim's DirectMove does.
+		return colony::swimmerFitsAt(Map, static_cast<float>(Position.X + Try.X), static_cast<float>(Position.Y + Try.Y), colony::kPawnRadius, Level);
 	};
 	// Pushing into stairs or a ladder (or back towards them from their head, into the stairwell over them, which may
 	// have a floor laid) climbs them.
