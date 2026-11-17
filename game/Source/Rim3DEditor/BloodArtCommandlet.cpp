@@ -26,7 +26,7 @@
 #include "Materials/MaterialExpressionOneMinus.h"
 #include "Materials/MaterialExpressionPerInstanceCustomData.h"
 #include "Materials/MaterialExpressionPower.h"
-#include "Materials/MaterialExpressionPreSkinnedLocalPosition.h"
+#include "Materials/MaterialExpressionPreSkinnedPosition.h"
 #include "Materials/MaterialExpressionSaturate.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Materials/MaterialExpressionSubtract.h"
@@ -490,7 +490,7 @@ namespace
 		bool bNeedsRecompile = false;
 		Material->SetMaterialUsage(bNeedsRecompile, MATUSAGE_SkeletalMesh);
 
-		auto* Position = BloodArtNode<UMaterialExpressionPreSkinnedLocalPosition>(Material, -2600, 0);
+		auto* Position = BloodArtNode<UMaterialExpressionPreSkinnedPosition>(Material, -2600, 0);
 		auto* NoiseScale = BloodArtScalar(Material, TEXT("NoiseScale"), 0.06f, -2600, 150);
 
 		// Height up the body.
