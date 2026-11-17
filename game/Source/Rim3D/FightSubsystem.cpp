@@ -466,9 +466,26 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 {
 	++Impacts;
 	++ImpactsByKind[FMath::Clamp(static_cast<int32>(Tracer.HitKind), 0, 7)];
-	const FVector At = Tracer.End;
 	const FVector Dir = Tracer.Dir.GetSafeNormal().IsNearlyZero() ? -FVector::UpVector : Tracer.Dir.GetSafeNormal();
 	const FVector Back = -Dir;
+	// The sim's point lies on its hitbox, which a slim drawn body may sit inside: on a body hit, where the bullet's line
+	// first meets the drawn body (the animated mannequin's physics shapes, which the MakeHuman body follows), so the
+	// wound and the spray come out of the skin where it was shot.
+	FVector At = Tracer.End;
+	if ((Tracer.HitKind == colony::ProjectileHitKind::Pawn || Tracer.HitKind == colony::ProjectileHitKind::Armor) && Tracer.bDirKnown)
+	{
+		if (const USimPawnSubsystem* SnapPawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
+		{
+			FVector OnSkin;
+			ASimPawnActor* Victim = SnapPawns->FindPawn(Tracer.Target);
+			if (Victim && Victim->TraceDrawnBody(Tracer.End - Dir * 80.0f, Tracer.End + Dir * 60.0f, OnSkin))
+			{
+				At = OnSkin;
+				++SnappedHits;
+				LastBodyHits.Add(entt::to_integral(Tracer.Target), At);
+			}
+		}
+	}
 	// Your bullet passed through a body lying on the ground (a dead one, which the sim no longer counts, or a downed one
 	// whose ragdoll lies off its hitboxes): the blood, a wound and a push, where the line met the body. Cosmetic; the sim
 	// decided the bullet's hit, and a dead body has nothing left for it to decide.
