@@ -1115,6 +1115,15 @@ float HealthSystem::partZoneHp(Entity pawn, int part) const {
     return body.zones[static_cast<size_t>(body.zoneOf[static_cast<size_t>(part)])].hp;
 }
 
+int HealthSystem::partZone(Entity pawn, int part) const {
+    const HealthModel::Kind* kind = healthKindOf(*model_, things_.registry(), pawn);
+    if (kind == nullptr || part < 0) {
+        return -1;
+    }
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    return static_cast<size_t>(part) < body.zoneOf.size() ? body.zoneOf[static_cast<size_t>(part)] : -1;
+}
+
 float HealthSystem::blood(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || !reg.all_of<Health>(pawn)) {

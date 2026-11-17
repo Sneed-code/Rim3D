@@ -287,6 +287,9 @@ public:
     float zoneHealth(Entity pawn, int zone) const;
     // The full hit points of the zone that body part `part` is in (part C's stagger rule); 0 for a body without zones.
     float partZoneHp(Entity pawn, int part) const;
+    // The zone that body part `part` is in, by its place in zoneNames (the left arm and leg come before the right);
+    // -1 for a body without zones. Unreal shows a hit on the zone it landed in (part E).
+    int partZone(Entity pawn, int part) const;
     float blood(Entity pawn) const;
     bool unconscious(Entity pawn) const;
     // Patching (part B): a zone's bleeding (0 none, 1 light, 2 moderate, 3 heavy), the zone that bleeds worst (-1 for

@@ -130,6 +130,40 @@ Code: `ColonySim/Patch.h`, `Private/Patch.cpp` (`PatchSystem`), `HealthSystem::p
   by many zones, or knocked out, it lies still; with no enemy near it lies still; a rescuer or a hauler carrying it
   stops it (`PatchSystem::crawl`). The snapshot's `crawling` tells Unreal to play a crawl when it moves.
 
+## Part E as built
+
+What a hurt body shows, all in Unreal and all cosmetic (the sim decided the hit, the stagger and the knockdown).
+
+- **The hit layer** (`FSimPawnHitLayerNode`, the root of the pawn's animation, over the montage slot and the
+  locomotion): each of the six zones is a damped spring about its joint (head; spine for the torso; upper arms;
+  thighs). A hit pushes the struck zone along the blow and it swings back with a wobble (about 3 swings a second,
+  gone in under a second), then sits exactly on the animation again. Nothing underneath is stopped, restarted or
+  blended out, so a hit never breaks a walk, a swing or a react clip, and a small hit that staggers nothing still
+  shows. The head and torso stand on their joint (the top goes with the blow), arms and legs hang (the far end does);
+  a struck torso drags the head, a struck arm turns the shoulders, a struck leg tips the body. Full strength is 20
+  damage; the bend is capped at 34 degrees. `ASimPawnActor::KickZone` takes the zone from the sim's body part
+  (`HealthSystem::partZone`), or from where the hit landed on the body when the sim named no part.
+- **Bullets and blows** both come through `UFightSubsystem::SpawnImpact`, which kicks the zone (a quarter strength
+  when armour stopped it) on top of the lean and the react clip that were there before.
+- **Limp**: a leg under 85% health makes the body tip over that leg and forward, drop a little and keep the head
+  level, while that foot is the lower one in the walk underneath; full at 35% and less. Only while walking.
+- **Patching**: while the sim patches (`patchZone`), the spine bends over the wound, the head looks down and a hand
+  goes to the place (the right hand, the left for the right arm), eased in and out over 0.3 s. Procedural: there is
+  no clip for it.
+- **Crawl**: a pawn downed by the torso and awake (`crawling`) is no ragdoll: it plays the forward crawl clip from
+  `Mixamo/Crawling` (found by name through the asset registry), as fast as the sim moves it and all but still when it
+  does not. The clip's travel is in its hips, so the body is set back by it like the clips of
+  [body-motion.md](body-motion.md). Knocked out or dead it goes limp as before.
+- **Damage numbers**: your hits float over where they landed (as before: bullets and blows); a hit **on you** shows in
+  red under the crosshair. `Fight.DamageNumbers 0` hides both.
+- **H** patches your worst bleeding zone when you play a pawn (`UFightSubsystem::Patch`); the gun panel says
+  "Bleeding   H patch the wound" while something bleeds and counts the patching down.
+- Smoke test `hurt` (`SmokeTestHurt.cpp`): six hits, one a zone, must bend the body 4 to 36 degrees and settle under 1
+  degree; a bruised leg must limp over a 14 m walk; a cut torso must be patched with the body bent over it; a colonist
+  downed by the torso must crawl and never be a ragdoll.
+- Not done here: blood on clothes (the blood system stains bodies; cloth comes with part F's wounds), and a limp for
+  far pawns' simple loops is the same lean (no separate clip).
+
 ## Later (sneed, 2026-11-16)
 
 - **Ragdolls**: unconscious pawns, corpses and severed limbs are physics ragdolls in Unreal (cosmetic: the sim keeps

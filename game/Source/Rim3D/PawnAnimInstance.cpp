@@ -50,6 +50,77 @@ namespace
 	{
 		return Value < Target ? FMath::Min(Value + MaxStep, Target) : FMath::Max(Value - MaxStep, Target);
 	}
+
+	// --- The hit layer (docs/design/body-health.md part E). ---
+	// A struck zone is a damped spring about its joint: how fast it swings back (radians a second), how soon the swing
+	// dies (0 never, 1 without a wobble), the furthest it may bend (radians), and the longest step it is worked out in.
+	constexpr float PawnKickFrequency = 20.0f;
+	constexpr float PawnKickDamping = 0.28f;
+	constexpr float PawnKickMaxAngle = 0.6f;
+	constexpr float PawnKickStep = 1.0f / 120.0f;
+	// How far a full-strength hit bends each zone at the top of its first swing (radians), by ESimPawnZone.
+	constexpr float PawnKickPeak[static_cast<int32>(ESimPawnZone::Count)] = {0.28f, 0.16f, 0.38f, 0.38f, 0.2f, 0.2f};
+	// A spring this damped reaches about 0.7 of (start speed / frequency) on its first swing.
+	constexpr float PawnKickPeakShare = 0.7f;
+	// The limp: over a hurt leg the body tips to that side and forward, the head stays level and the hips drop.
+	constexpr float PawnLimpSideDegrees = 8.0f;
+	constexpr float PawnLimpForwardDegrees = 4.0f;
+	constexpr float PawnLimpHeadDegrees = 3.5f;
+	constexpr float PawnLimpDipCm = 2.5f;
+	// One foot this much lower than the other (cm) carries all the weight.
+	constexpr float PawnLimpFootSpan = 6.0f;
+
+	FQuat PawnRotationOf(const FVector& RotationVector)
+	{
+		const double Angle = RotationVector.Size();
+		return Angle < 1.0e-5 ? FQuat::Identity : FQuat(RotationVector / Angle, Angle);
+	}
+
+	/** Turning about `Up x Along` by `Degrees`: the top of what turns goes along `Along` (mesh space). */
+	FQuat PawnLean(const FVector& Along, float Degrees)
+	{
+		const FVector Axis = FVector::CrossProduct(FVector::ZAxisVector, Along).GetSafeNormal();
+		return Axis.IsNearlyZero() ? FQuat::Identity : FQuat(Axis, FMath::DegreesToRadians(Degrees));
+	}
+
+	bool PawnBoneValid(const FCompactPose& Pose, FCompactPoseBoneIndex Bone)
+	{
+		return Bone.GetInt() != INDEX_NONE && Pose.IsValidIndex(Bone);
+	}
+
+	/** The rotation of a bone's parent in the mesh's space: every parent's own, multiplied down from the root. */
+	FQuat PawnParentRotation(const FCompactPose& Pose, FCompactPoseBoneIndex Bone)
+	{
+		FQuat Rotation = FQuat::Identity;
+		for (FCompactPoseBoneIndex Parent = Pose.GetParentBoneIndex(Bone); Parent.GetInt() != INDEX_NONE; Parent = Pose.GetParentBoneIndex(Parent))
+		{
+			Rotation = Pose[Parent].GetRotation() * Rotation;
+		}
+		return Rotation;
+	}
+
+	/** Turns a bone, and all that hangs on it, by `Delta` given in the mesh's space, about the bone's own joint. */
+	void PawnTurnBone(FCompactPose& Pose, FCompactPoseBoneIndex Bone, const FQuat& Delta)
+	{
+		if (!PawnBoneValid(Pose, Bone) || Delta.Equals(FQuat::Identity, 1.0e-6))
+		{
+			return;
+		}
+		const FQuat Parent = PawnParentRotation(Pose, Bone);
+		FTransform& Local = Pose[Bone];
+		Local.SetRotation((Parent.Inverse() * Delta * Parent * Local.GetRotation()).GetNormalized());
+	}
+
+	/** Where a bone is in the mesh's space. */
+	FVector PawnBonePlace(const FCompactPose& Pose, FCompactPoseBoneIndex Bone)
+	{
+		FTransform Place = Pose[Bone];
+		for (FCompactPoseBoneIndex Parent = Pose.GetParentBoneIndex(Bone); Parent.GetInt() != INDEX_NONE; Parent = Pose.GetParentBoneIndex(Parent))
+		{
+			Place = Place * Pose[Parent];
+		}
+		return Place.GetLocation();
+	}
 }
 
 /**
@@ -142,6 +213,67 @@ private:
 	float TotalNodeWeight = 0.0f;
 };
 
+/**
+ * The hit layer, over everything else (docs/design/body-health.md part E). A blow or a bullet knocks the zone it lands
+ * on along its way and the zone springs back with a wobble, whatever animation plays underneath (which is never
+ * stopped or restarted); a hurt leg makes the body lurch over it while that foot is down; a pawn patching a wound
+ * bends over it with a hand on the place. Runs on animation worker threads; it reads only the proxy.
+ */
+struct FSimPawnHitLayerNode : public FAnimNode_Base
+{
+	FSimPawnSlotNode* Source = nullptr;
+	struct FSimPawnAnimInstanceProxy* Proxy = nullptr;
+
+	virtual void Initialize_AnyThread(const FAnimationInitializeContext& Context) override
+	{
+		FAnimNode_Base::Initialize_AnyThread(Context);
+		Source->Initialize_AnyThread(Context);
+		Forget();
+	}
+
+	virtual void CacheBones_AnyThread(const FAnimationCacheBonesContext& Context) override;
+	virtual void Update_AnyThread(const FAnimationUpdateContext& Context) override;
+	virtual void Evaluate_AnyThread(FPoseContext& Output) override;
+
+	int32 Kicks = 0;
+	float WobbleDegrees = 0.0f;
+	float MaxWobbleDegrees = 0.0f;
+	float LimpNow = 0.0f;
+	float MaxLimp = 0.0f;
+
+private:
+	struct FSpring
+	{
+		/** How far the zone is turned off its animation (a rotation vector in the mesh's space, radians) and how fast it turns. */
+		FVector Angle = FVector::ZeroVector;
+		FVector Rate = FVector::ZeroVector;
+	};
+
+	void Forget();
+	void Kick(const FSimPawnKick& Hit);
+
+	FSpring Springs[static_cast<int32>(ESimPawnZone::Count)];
+	bool bOn = true;
+	/** 0 to 1: walking (the limp shows only then), and how much of the weight each hurt leg carries now. */
+	float Walking = 0.0f;
+	float WeightLeft = 0.5f;
+	float WeightRight = 0.5f;
+	float LimpLeft = 0.0f;
+	float LimpRight = 0.0f;
+	float Patch = 0.0f;
+	ESimPawnZone PatchZone = ESimPawnZone::Torso;
+
+	FCompactPoseBoneIndex Pelvis = FCompactPoseBoneIndex(INDEX_NONE);
+	FCompactPoseBoneIndex SpineLow = FCompactPoseBoneIndex(INDEX_NONE);
+	FCompactPoseBoneIndex SpineMid = FCompactPoseBoneIndex(INDEX_NONE);
+	FCompactPoseBoneIndex SpineHigh = FCompactPoseBoneIndex(INDEX_NONE);
+	FCompactPoseBoneIndex Head = FCompactPoseBoneIndex(INDEX_NONE);
+	FCompactPoseBoneIndex UpperArm[2] = {FCompactPoseBoneIndex(INDEX_NONE), FCompactPoseBoneIndex(INDEX_NONE)};
+	FCompactPoseBoneIndex LowerArm[2] = {FCompactPoseBoneIndex(INDEX_NONE), FCompactPoseBoneIndex(INDEX_NONE)};
+	FCompactPoseBoneIndex Thigh[2] = {FCompactPoseBoneIndex(INDEX_NONE), FCompactPoseBoneIndex(INDEX_NONE)};
+	FCompactPoseBoneIndex Foot[2] = {FCompactPoseBoneIndex(INDEX_NONE), FCompactPoseBoneIndex(INDEX_NONE)};
+};
+
 struct FSimPawnAnimInstanceProxy : public FAnimInstanceProxy
 {
 	explicit FSimPawnAnimInstanceProxy(USimPawnAnimInstance* InInstance)
@@ -160,18 +292,29 @@ struct FSimPawnAnimInstanceProxy : public FAnimInstanceProxy
 protected:
 	virtual void Initialize(UAnimInstance* InAnimInstance) override
 	{
-		// The graph is two native nodes: the montage slot (actions) over the locomotion.
+		// The graph is three native nodes: the hit layer over the montage slot (actions) over the locomotion.
+		HitLayer.Source = &Slot;
+		HitLayer.Proxy = this;
 		Slot.Source = &Locomotion;
 		Locomotion.Proxy = this;
 		FAnimInstanceProxy::Initialize(InAnimInstance);
 	}
 
-	virtual FAnimNode_Base* GetCustomRootNode() override { return &Slot; }
+	virtual FAnimNode_Base* GetCustomRootNode() override { return &HitLayer; }
 
 	virtual void PreUpdate(UAnimInstance* InAnimInstance, float DeltaSeconds) override
 	{
 		FAnimInstanceProxy::PreUpdate(InAnimInstance, DeltaSeconds);
-		const USimPawnAnimInstance* Instance = CastChecked<USimPawnAnimInstance>(InAnimInstance);
+		USimPawnAnimInstance* Instance = CastChecked<USimPawnAnimInstance>(InAnimInstance);
+		// Hits wait here until the hit layer takes them: an update can come without the graph running.
+		for (const FSimPawnKick& Hit : Instance->Inputs.Kicks)
+		{
+			if (PendingKicks.Num() < 8)
+			{
+				PendingKicks.Add(Hit);
+			}
+		}
+		Instance->Inputs.Kicks.Reset();
 		Inputs = Instance->Inputs;
 		Databases = Instance->Databases;
 		IdleLoop = Instance->IdleLoop;
@@ -184,10 +327,20 @@ protected:
 	virtual void PostUpdate(UAnimInstance* InAnimInstance) const override
 	{
 		FAnimInstanceProxy::PostUpdate(InAnimInstance);
-		CastChecked<USimPawnAnimInstance>(InAnimInstance)->Stats = Locomotion.Stats;
+		FSimPawnAnimStats& Out = CastChecked<USimPawnAnimInstance>(InAnimInstance)->Stats;
+		Out = Locomotion.Stats;
+		Out.Kicks = HitLayer.Kicks;
+		Out.WobbleDegrees = HitLayer.WobbleDegrees;
+		Out.MaxWobbleDegrees = HitLayer.MaxWobbleDegrees;
+		Out.LimpNow = HitLayer.LimpNow;
+		Out.MaxLimp = HitLayer.MaxLimp;
 	}
 
+public:
+	TArray<FSimPawnKick, TInlineAllocator<8>> PendingKicks;
+
 private:
+	FSimPawnHitLayerNode HitLayer;
 	FSimPawnSlotNode Slot;
 	FSimPawnLocomotionNode Locomotion;
 };
@@ -453,6 +606,246 @@ void FSimPawnLocomotionNode::UpdateLoops(const FAnimationUpdateContext& Context,
 	}
 	BlendStack.UpdatePlayRate(Rate);
 	Stats.PlayRate = Rate;
+}
+
+// ---------------------------------------------------------------------------
+
+void FSimPawnHitLayerNode::Forget()
+{
+	for (FSpring& Spring : Springs)
+	{
+		Spring = FSpring();
+	}
+	Walking = 0.0f;
+	WeightLeft = 0.5f;
+	WeightRight = 0.5f;
+	WobbleDegrees = 0.0f;
+	LimpNow = 0.0f;
+}
+
+void FSimPawnHitLayerNode::CacheBones_AnyThread(const FAnimationCacheBonesContext& Context)
+{
+	Source->CacheBones_AnyThread(Context);
+	const FBoneContainer& Bones = Context.AnimInstanceProxy->GetRequiredBones();
+	const auto Find = [&Bones](const TCHAR* Name)
+	{
+		const int32 MeshBone = Bones.GetPoseBoneIndexForBoneName(FName(Name));
+		return MeshBone == INDEX_NONE ? FCompactPoseBoneIndex(INDEX_NONE) : Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(MeshBone));
+	};
+	Pelvis = Find(TEXT("pelvis"));
+	SpineLow = Find(TEXT("spine_01"));
+	SpineMid = Find(TEXT("spine_02"));
+	SpineHigh = Find(TEXT("spine_04"));
+	Head = Find(TEXT("head"));
+	UpperArm[0] = Find(TEXT("upperarm_l"));
+	UpperArm[1] = Find(TEXT("upperarm_r"));
+	LowerArm[0] = Find(TEXT("lowerarm_l"));
+	LowerArm[1] = Find(TEXT("lowerarm_r"));
+	Thigh[0] = Find(TEXT("thigh_l"));
+	Thigh[1] = Find(TEXT("thigh_r"));
+	Foot[0] = Find(TEXT("foot_l"));
+	Foot[1] = Find(TEXT("foot_r"));
+}
+
+void FSimPawnHitLayerNode::Kick(const FSimPawnKick& Hit)
+{
+	const int32 Zone = FMath::Clamp(static_cast<int32>(Hit.Zone), 0, static_cast<int32>(ESimPawnZone::Count) - 1);
+	// The way the struck place is pushed, flat: a blow straight down bows the body forward.
+	FVector Along(Hit.Direction.X, Hit.Direction.Y, 0.0);
+	if (!Along.Normalize(0.2))
+	{
+		Along = FVector::YAxisVector;
+	}
+	const float Strength = FMath::Clamp(Hit.Strength, 0.0f, 1.0f);
+	const auto Push = [this](int32 At, const FVector& Axis, float Peak)
+	{
+		Springs[At].Rate += Axis * (Peak * PawnKickFrequency / PawnKickPeakShare);
+	};
+	// Head and torso stand on their joint, so their top goes with the blow; arms and legs hang from theirs, so their
+	// far end does.
+	const FVector Standing = FVector::CrossProduct(FVector::ZAxisVector, Along);
+	const bool bHangs = Zone >= static_cast<int32>(ESimPawnZone::ArmLeft);
+	Push(Zone, bHangs ? -Standing : Standing, PawnKickPeak[Zone] * Strength);
+	// What is struck drags its neighbours: the head lags behind a struck torso, a struck arm turns the shoulders, a
+	// struck leg tips the body over it.
+	const int32 TorsoZone = static_cast<int32>(ESimPawnZone::Torso);
+	if (Zone == TorsoZone)
+	{
+		Push(static_cast<int32>(ESimPawnZone::Head), -Standing, 0.4f * PawnKickPeak[0] * Strength);
+	}
+	else if (Zone == static_cast<int32>(ESimPawnZone::Head))
+	{
+		Push(TorsoZone, Standing, 0.25f * PawnKickPeak[TorsoZone] * Strength);
+	}
+	else if (Zone == static_cast<int32>(ESimPawnZone::ArmLeft) || Zone == static_cast<int32>(ESimPawnZone::ArmRight))
+	{
+		// Turned about the spine, away from the blow: the left shoulder is at +X in the mesh's space.
+		const double Side = Zone == static_cast<int32>(ESimPawnZone::ArmLeft) ? 1.0 : -1.0;
+		Push(TorsoZone, FVector::ZAxisVector * (Side * FVector::DotProduct(Along, FVector::YAxisVector)), 0.6f * PawnKickPeak[TorsoZone] * Strength);
+		Push(TorsoZone, Standing, 0.3f * PawnKickPeak[TorsoZone] * Strength);
+	}
+	else
+	{
+		Push(TorsoZone, -Standing, 0.35f * PawnKickPeak[TorsoZone] * Strength);
+	}
+	++Kicks;
+}
+
+void FSimPawnHitLayerNode::Update_AnyThread(const FAnimationUpdateContext& Context)
+{
+	check(Proxy);
+	Source->Update_AnyThread(Context);
+	const FSimPawnAnimInputs& In = Proxy->Inputs;
+	bOn = In.bHitLayer;
+	if (!bOn || In.bTeleported)
+	{
+		Forget();
+	}
+	if (bOn)
+	{
+		for (const FSimPawnKick& Hit : Proxy->PendingKicks)
+		{
+			Kick(Hit);
+		}
+	}
+	Proxy->PendingKicks.Reset();
+	LimpLeft = FMath::Clamp(In.LimpLeft, 0.0f, 1.0f);
+	LimpRight = FMath::Clamp(In.LimpRight, 0.0f, 1.0f);
+	PatchZone = In.PatchZone;
+
+	const float DeltaTime = FMath::Min(Context.GetDeltaTime(), 0.25f);
+	if (DeltaTime <= 0.0f || !bOn)
+	{
+		return;
+	}
+	Patch = PawnApproach(Patch, FMath::Clamp(In.Patch, 0.0f, 1.0f), DeltaTime / 0.3f);
+	Walking = PawnApproach(Walking, In.Velocity.Size2D() > PawnStandSpeed ? 1.0f : 0.0f, DeltaTime / 0.25f);
+
+	// The springs, in steps short enough to stay steady on a slow frame.
+	const int32 Steps = FMath::Clamp(FMath::CeilToInt32(DeltaTime / PawnKickStep), 1, 30);
+	const float Step = DeltaTime / Steps;
+	float Most = 0.0f;
+	for (FSpring& Spring : Springs)
+	{
+		if (Spring.Angle.IsNearlyZero(1.0e-4) && Spring.Rate.IsNearlyZero(1.0e-3))
+		{
+			Spring = FSpring();
+			continue;
+		}
+		for (int32 i = 0; i < Steps; ++i)
+		{
+			Spring.Rate += (Spring.Angle * (-PawnKickFrequency * PawnKickFrequency) - Spring.Rate * (2.0f * PawnKickDamping * PawnKickFrequency)) * Step;
+			Spring.Angle += Spring.Rate * Step;
+		}
+		const double Size = Spring.Angle.Size();
+		if (Size > PawnKickMaxAngle)
+		{
+			Spring.Angle *= PawnKickMaxAngle / Size;
+			// Stopped at the end of its reach: no speed left outwards.
+			const FVector Out = Spring.Angle / PawnKickMaxAngle;
+			Spring.Rate -= Out * FMath::Max(0.0, FVector::DotProduct(Spring.Rate, Out));
+		}
+		Most = FMath::Max(Most, static_cast<float>(Spring.Angle.Size()));
+	}
+	WobbleDegrees = FMath::RadiansToDegrees(Most);
+	MaxWobbleDegrees = FMath::Max(MaxWobbleDegrees, WobbleDegrees);
+}
+
+void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
+{
+	Source->Evaluate_AnyThread(Output);
+	if (!bOn)
+	{
+		return;
+	}
+	FCompactPose& Pose = Output.Pose;
+	const FVector Forward = FVector::YAxisVector;
+	// The left of the body is at +X in the mesh's space.
+	const FVector SideOf[2] = {FVector::XAxisVector, -FVector::XAxisVector};
+
+	// The limp: how much of the weight each hurt leg carries, from which foot is lower in the animation underneath.
+	FQuat LimpBody = FQuat::Identity;
+	FQuat LimpHead = FQuat::Identity;
+	float Dip = 0.0f;
+	LimpNow = 0.0f;
+	if (Walking > 0.01f && (LimpLeft > 0.01f || LimpRight > 0.01f) && PawnBoneValid(Pose, Foot[0]) && PawnBoneValid(Pose, Foot[1]))
+	{
+		const float Left = static_cast<float>(PawnBonePlace(Pose, Foot[0]).Z);
+		const float Right = static_cast<float>(PawnBonePlace(Pose, Foot[1]).Z);
+		const float Blend = FMath::Clamp(Output.AnimInstanceProxy->GetDeltaSeconds() * 14.0f, 0.0f, 1.0f);
+		WeightLeft = FMath::Lerp(WeightLeft, FMath::Clamp(0.5f + (Right - Left) / PawnLimpFootSpan, 0.0f, 1.0f), Blend);
+		WeightRight = FMath::Lerp(WeightRight, FMath::Clamp(0.5f + (Left - Right) / PawnLimpFootSpan, 0.0f, 1.0f), Blend);
+		const float Amount[2] = {LimpLeft * WeightLeft * Walking, LimpRight * WeightRight * Walking};
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			if (Amount[Side] <= 0.001f)
+			{
+				continue;
+			}
+			LimpBody = PawnLean(SideOf[Side], PawnLimpSideDegrees * Amount[Side]) * PawnLean(Forward, PawnLimpForwardDegrees * Amount[Side]) * LimpBody;
+			LimpHead = PawnLean(-SideOf[Side], PawnLimpHeadDegrees * Amount[Side]) * LimpHead;
+			Dip += PawnLimpDipCm * Amount[Side];
+			LimpNow = FMath::Max(LimpNow, Amount[Side]);
+		}
+		MaxLimp = FMath::Max(MaxLimp, LimpNow);
+	}
+
+	// Patching: bent over the wound with a hand on it (the left hand for the right arm, else the right).
+	FQuat PatchBody = FQuat::Identity;
+	FQuat PatchHead = FQuat::Identity;
+	FQuat PatchUpper = FQuat::Identity;
+	FQuat PatchLower = FQuat::Identity;
+	int32 PatchArm = 1;
+	if (Patch > 0.01f)
+	{
+		// Smooth in and out.
+		const float P = Patch * Patch * (3.0f - 2.0f * Patch);
+		float Bend = 12.0f, Nod = 16.0f, Raise = 35.0f, Inward = 25.0f, Fold = 80.0f;
+		switch (PatchZone)
+		{
+			case ESimPawnZone::Head:
+				Bend = 5.0f; Nod = 8.0f; Raise = 95.0f; Inward = 15.0f; Fold = 115.0f;
+				break;
+			case ESimPawnZone::ArmLeft:
+			case ESimPawnZone::ArmRight:
+				Bend = 10.0f; Nod = 18.0f; Raise = 30.0f; Inward = 45.0f; Fold = 90.0f;
+				PatchArm = PatchZone == ESimPawnZone::ArmRight ? 0 : 1;
+				break;
+			case ESimPawnZone::LegLeft:
+			case ESimPawnZone::LegRight:
+				Bend = 32.0f; Nod = 14.0f; Raise = 22.0f; Inward = PatchZone == ESimPawnZone::LegRight ? 0.0f : 22.0f; Fold = 15.0f;
+				break;
+			default:
+				break;
+		}
+		PatchBody = PawnLean(Forward, Bend * P);
+		PatchHead = PawnLean(Forward, Nod * P);
+		// The arm hangs, so its far end goes the way opposite to a lean: forward and across the body.
+		const FVector Across = -SideOf[PatchArm];
+		PatchUpper = PawnLean(-Across, Inward * P) * PawnLean(-Forward, Raise * P);
+		PatchLower = PawnLean(-(Across + Forward * 0.35).GetSafeNormal(), Fold * P);
+	}
+
+	// Parents before children: each turn is about the bone's own joint, on top of the turns above it.
+	if (Dip > 0.0f && PawnBoneValid(Pose, Pelvis))
+	{
+		Pose[Pelvis].AddToTranslation(PawnParentRotation(Pose, Pelvis).UnrotateVector(FVector(0.0, 0.0, -Dip)));
+	}
+	PawnTurnBone(Pose, SpineLow, PatchBody * LimpBody);
+	const FQuat Torso = PawnRotationOf(Springs[static_cast<int32>(ESimPawnZone::Torso)].Angle * 0.5);
+	PawnTurnBone(Pose, SpineMid, Torso);
+	PawnTurnBone(Pose, PawnBoneValid(Pose, SpineHigh) ? SpineHigh : SpineMid, Torso);
+	PawnTurnBone(Pose, Head, PawnRotationOf(Springs[static_cast<int32>(ESimPawnZone::Head)].Angle) * PatchHead * LimpHead);
+	for (int32 Side = 0; Side < 2; ++Side)
+	{
+		const bool bPatching = Patch > 0.01f && Side == PatchArm;
+		PawnTurnBone(Pose, UpperArm[Side], PawnRotationOf(Springs[static_cast<int32>(ESimPawnZone::ArmLeft) + Side].Angle) * (bPatching ? PatchUpper : FQuat::Identity));
+		if (bPatching)
+		{
+			PawnTurnBone(Pose, LowerArm[Side], PatchLower);
+		}
+		PawnTurnBone(Pose, Thigh[Side], PawnRotationOf(Springs[static_cast<int32>(ESimPawnZone::LegLeft) + Side].Angle));
+	}
 }
 
 // ---------------------------------------------------------------------------

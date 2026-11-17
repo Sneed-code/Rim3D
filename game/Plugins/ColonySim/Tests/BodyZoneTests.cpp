@@ -122,6 +122,22 @@ TEST_CASE("Body zones: a person has a head, a torso, two arms and two legs, with
     }
     CHECK(sim->health().blood(pawn) == doctest::Approx(3000.0f));
     CHECK_FALSE(sim->health().unconscious(pawn));
+    // Each part knows its zone, the left arm and leg before the right (Unreal shows a hit on the zone it landed in).
+    const std::vector<std::string> order = sim->health().zoneNames(pawn);
+    const int leftArm = sim->health().partZone(pawn, zoneTestPart(*sim, pawn, "left shoulder"));
+    const int rightArm = sim->health().partZone(pawn, zoneTestPart(*sim, pawn, "right shoulder"));
+    const int leftLeg = sim->health().partZone(pawn, zoneTestPart(*sim, pawn, "left leg"));
+    const int rightLeg = sim->health().partZone(pawn, zoneTestPart(*sim, pawn, "right leg"));
+    CHECK(leftArm >= 0);
+    CHECK(leftArm < rightArm);
+    CHECK(leftLeg >= 0);
+    CHECK(leftLeg < rightLeg);
+    if (leftArm >= 0 && rightLeg >= 0 && static_cast<size_t>(rightLeg) < order.size()) {
+        CHECK(order[static_cast<size_t>(leftArm)] == "Arm");
+        CHECK(order[static_cast<size_t>(rightLeg)] == "Leg");
+    }
+    CHECK(order[static_cast<size_t>(sim->health().partZone(pawn, zoneTestPart(*sim, pawn, "heart")))] == "Torso");
+    CHECK(sim->health().partZone(pawn, -1) == -1);
 
     // Animals keep RimWorld's rules.
     const Entity muffalo = sim->things().spawn("Muffalo", CellPos{20, 20, 0});
