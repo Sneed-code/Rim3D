@@ -157,6 +157,9 @@ struct FighterRules {
     float ambushRange = 6.0f;         // a defending melee fighter waits until an enemy is this close, then charges
     float helpRange = 20.0f;          // ... or runs in sooner, from this far, to an enemy at a friend
     float helpReach = 2.5f;           // an enemy this near a friend is at it
+    // RimWorld's Sprint locomotion urgency: a move costs 0.75 of a jog, so 4/3 the speed. Our pawns use it only in a
+    // fight, fleeing or an emergency (sneed 2026-11-17, docs/design/movement.md "Sprinting"); otherwise they jog.
+    float sprintSpeedFactor = 1.3333333f;
     // Combat profiles (docs/design/real-time-combat.md): a disciplined side's melee fighters hold with the others (the
     // ambushRange / helpRange rule) even when drafted, unless ordered to attack; a reckless side charges.
     bool colonistsHoldForFriends = true;

@@ -2168,6 +2168,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
         { SimLap lap(profile_, "inspirations"); inspirations_->step(time_.seconds); }
     }
     { SimLap lap(profile_, "movement"); movement_->step(things_->registry(), map_); }
+    { SimLap lap(profile_, "autoPickUp"); autoPickUp(); }  // the player's colonist picks up resources it walks past
     travel_->noteVisits();
     { SimLap lap(profile_, "melee"); melee_->step(); }
     { SimLap lap(profile_, "combat"); combat_->step(rng_); }
@@ -3593,7 +3594,34 @@ float Sim::bodyHeightM(Entity pawn) const {
 
 float Sim::pawnMoveFactor(Entity pawn) const {
     return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed")) *
-           combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn);
+           combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn) *
+           (pawnSprinting(pawn) ? fighters_->rules().sprintSpeedFactor : 1.0f);
+}
+
+bool Sim::pawnSprinting(Entity pawn) const {
+    const entt::registry& reg = things_->registry();
+    if (!reg.valid(pawn) || reg.any_of<PlayerControl, Animal, Visitor>(pawn)) {
+        return false;  // visitors walk as fleeing fighters (Trade.h) but are in no hurry
+    }
+    if (const Fighter* fighter = reg.try_get<Fighter>(pawn)) {
+        switch (fighter->mode) {
+            // In a fight: falling back, or charging its target hand to hand. Gunmen moving between spots jog, as RimWorld's
+            // drafted pawns do (a sprinting gunman ran past its friends' backs into their line of fire).
+            // Once in reach it steps about at a jog.
+            case FightMode::Fight:
+                return fighter->fallingBack || (fighter->target != kNoEntity && reg.valid(fighter->target) && melee_->charges(pawn) &&
+                                                !melee_->inReach(pawn, fighter->target));
+            case FightMode::Shelter:
+            case FightMode::Flee:
+            case FightMode::Rescue: return true;
+            case FightMode::Seize: return false;
+        }
+        return false;
+    }
+    if (const Worker* worker = reg.try_get<Worker>(pawn)) {
+        return worker->job.type == JobType::Rescue || worker->job.type == JobType::ExtinguishFire;
+    }
+    return false;
 }
 
 }  // namespace colony

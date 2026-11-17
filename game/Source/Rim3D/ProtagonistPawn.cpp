@@ -8,6 +8,7 @@
 #include "InputCoreTypes.h"
 
 #include "HandsOnSubsystem.h"
+#include "KeyBindings.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
 #include "ProtagonistSubsystem.h"
@@ -46,6 +47,8 @@ namespace
 	}
 	TAutoConsoleVariable<float> GProtagonistDepthOfField(TEXT("Look.DepthOfField"), 2.0f,
 		TEXT("The third person camera's cinematic depth of field: the lens f-stop, focused on the colonist (lower blurs the distance more; 0 turns it off). Fades out while aiming and in first person."));
+	// The sprint toggle belongs to the player, not the body: it carries over to the next colonist taken over.
+	bool bProtagonistSprintToggle = false;
 	constexpr float ProtagonistMaxPitch = 80.0f;
 	// One wheel notch scales the third person distance by this much.
 	constexpr float ProtagonistZoomPerNotch = 0.85f;
@@ -93,6 +96,16 @@ AProtagonistPawn::AProtagonistPawn()
 	Camera->bUsePawnControlRotation = false;
 }
 
+bool AProtagonistPawn::IsSprintToggleOn()
+{
+	return bProtagonistSprintToggle;
+}
+
+void AProtagonistPawn::SetSprintToggle(bool bOn)
+{
+	bProtagonistSprintToggle = bOn;
+}
+
 float AProtagonistPawn::GetMouseTurn()
 {
 	ProtagonistLoadMouseTurn();
@@ -125,12 +138,9 @@ APlayerController* AProtagonistPawn::GetPlayerController() const
 void AProtagonistPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
-	PlayerInputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &AProtagonistPawn::OnSwitchModePressed);
-	PlayerInputComponent->BindKey(EKeys::V, IE_Pressed, this, &AProtagonistPawn::OnToggleViewPressed);
-	PlayerInputComponent->BindKey(EKeys::T, IE_Pressed, this, &AProtagonistPawn::OnTakeOverPressed);
+	// The mouse wheel zooms; the other keys are rebindable (KeyBindings.h) and read in Tick.
 	PlayerInputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &AProtagonistPawn::OnZoomIn);
 	PlayerInputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &AProtagonistPawn::OnZoomOut);
-	PlayerInputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &AProtagonistPawn::OnJumpPressed);
 }
 
 bool AProtagonistPawn::Jump()
@@ -201,11 +211,34 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	}
 	else if (APlayerController* PC = GetPlayerController())
 	{
-		Right = (PC->IsInputKeyDown(EKeys::D) ? 1.0 : 0.0) - (PC->IsInputKeyDown(EKeys::A) ? 1.0 : 0.0);
-		Forward = (PC->IsInputKeyDown(EKeys::W) ? 1.0 : 0.0) - (PC->IsInputKeyDown(EKeys::S) ? 1.0 : 0.0);
-		bWalk = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl);
-		// Shift sprints (not while walking slowly or aiming).
-		bSprinting = !bWalk && !bAimHeld && (PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift));
+		using Rim3DKeys::IsDown;
+		using Rim3DKeys::WasPressed;
+		Right = (IsDown(PC, ERim3DAction::MoveRight) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveLeft) ? 1.0 : 0.0);
+		Forward = (IsDown(PC, ERim3DAction::MoveForward) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveBack) ? 1.0 : 0.0);
+		bWalk = IsDown(PC, ERim3DAction::WalkSlow);
+		// Sprint is a toggle (sneed 2026-11-17): on until pressed again, and it stays on when you take over another colonist.
+		// It doesn't sprint while walking slowly or aiming.
+		if (WasPressed(PC, ERim3DAction::Sprint))
+		{
+			SetSprintToggle(!IsSprintToggleOn());
+		}
+		bSprinting = IsSprintToggleOn() && !bWalk && !bAimHeld;
+		if (WasPressed(PC, ERim3DAction::Jump))
+		{
+			Jump();
+		}
+		if (WasPressed(PC, ERim3DAction::ToggleView))
+		{
+			OnToggleViewPressed();
+		}
+		if (WasPressed(PC, ERim3DAction::SwitchMode))
+		{
+			OnSwitchModePressed();
+		}
+		if (WasPressed(PC, ERim3DAction::TakeOver))
+		{
+			OnTakeOverPressed();
+		}
 		float MouseX = 0.0f;
 		float MouseY = 0.0f;
 		PC->GetInputMouseDelta(MouseX, MouseY);
@@ -228,7 +261,7 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	}
 	else if (const APlayerController* PC = GetPlayerController(); PC && Thing != colony::kNoEntity)
 	{
-		bWantAim = PC->IsInputKeyDown(EKeys::RightMouseButton);
+		bWantAim = Rim3DKeys::IsDown(PC, ERim3DAction::AimBlock);
 	}
 	if (bWantAim)
 	{
@@ -509,6 +542,7 @@ void AProtagonistPawn::UpdateCamera()
 		if (UShooterFeelSubsystem* Feel = World->GetSubsystem<UShooterFeelSubsystem>())
 		{
 			const FCameraFeel& Nudge = Feel->GetCameraFeel();
+			Camera->SetFieldOfView(FMath::Lerp(ProtagonistNormalFov, UShooterFeelSubsystem::GetAimFov(), Blend) + Nudge.FovAdd);
 			Camera->SetRelativeRotation(Nudge.Rotation);
 			Camera->SetRelativeLocation(Nudge.Location);
 			FPostProcessSettings& PostProcess = Camera->PostProcessSettings;

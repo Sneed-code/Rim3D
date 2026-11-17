@@ -1,4 +1,5 @@
 #include "InventoryPanelSubsystem.h"
+#include "KeyBindings.h"
 
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -221,7 +222,7 @@ void UInventoryPanelSubsystem::Tick(float DeltaTime)
 	}
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 	{
-		if (PC->WasInputKeyJustPressed(EKeys::I))
+		if (Rim3DKeys::WasPressed(PC, ERim3DAction::Inventory))
 		{
 			bOpen = !bOpen;
 		}

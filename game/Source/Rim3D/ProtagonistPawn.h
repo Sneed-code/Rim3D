@@ -18,9 +18,9 @@ class USimSubsystem;
  * per step. The sim has the last word: every step the local copy is pulled back to the sim's if it
  * drifted (docs/design/protagonist.md).
  *
- * Keys: W A S D walk (Ctrl slower), the mouse looks, the wheel zooms in third person, V toggles
- * first and third person, T takes over the colonist under the crosshair, Tab goes back to the
- * overseer view. The methods below are what the keys call, so tests can drive it without a keyboard.
+ * Keys (defaults; all rebindable, KeyBindings.h and docs/design/controls.md): W A S D walk (Ctrl slower, Shift
+ * toggles sprint), the mouse looks, the wheel zooms in third person, V toggles first and third person, Y takes over the
+ * colonist under the crosshair, O goes back to the overseer view. The methods below are what the keys call, so tests can drive it without a keyboard.
  *
  * Stairs and ladders (U17, docs/design/levels-draw.md): walking into the stairs from the cell at their foot, or back
  * towards them from the cell at their head, asks the sim to climb (ClimbCommand). The sim moves the colonist up or
@@ -113,10 +113,13 @@ public:
 	static constexpr float kMaxArm = 800.0f;
 	/** Slow walking pace, metres per second. */
 	static constexpr float kWalkSpeed = 1.5f;
-	/** Sprinting (Shift held): this much faster than the colonist's cruise speed, and at least kMinSprintSpeed m/s. */
+	/** Sprinting (the sprint toggle on): this much faster than the colonist's cruise speed, and at least kMinSprintSpeed m/s. */
 	static constexpr float kSprintFactor = 1.5f;
 	static constexpr float kMinSprintSpeed = 6.5f;
 	bool IsSprinting() const { return bSprinting; }
+	/** The sprint key is a toggle (sneed 2026-11-17): on until pressed again, kept across colonists you take over. */
+	static bool IsSprintToggleOn();
+	static void SetSprintToggle(bool bOn);
 	/** The speed the keys ask for now (walk, run or sprint, slowed by the ground), metres per second; 0 with none held. */
 	float GetTargetSpeed() const { return TargetSpeed; }
 	/** Space: the body jumps (an arc and the jump animations on the pawn actor; the sim keeps it on the ground). */

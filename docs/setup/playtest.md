@@ -21,7 +21,7 @@ materials) must have been made on this PC first (`docs/setup/pc-setup.md`).
 2. Double-click **play-rainforest.bat**. (Windows may ask "Do you want to run this file?": click
    **Run**.) A black window flashes and the game opens; the first start takes up to a minute while
    shaders warm up.
-3. The game opens on the overseer camera above the colony (Tab walks the protagonist). It starts at
+3. The game opens on the overseer camera above the colony (**O** walks the protagonist). It starts at
    midnight with the colonists asleep, running at normal speed. **F2** (or Space in the overseer view) pauses,
    **2** / **3** run faster until morning.
 4. Press **F1** any time for the list of keys (bottom right).
@@ -32,6 +32,9 @@ is another world and another rainforest tile). A windowed game: add `-windowed`.
 
 ## Keys
 
+All the protagonist keys can be changed in **Settings > Controls (change keys)** ([controls.md](../design/controls.md)).
+
+
 | Mode | Key | What it does |
 |---|---|---|
 | Any | F2 (or Space in the overseer view) | pause / unpause |
@@ -41,7 +44,7 @@ is another world and another rainforest tile). A windowed game: add `-windowed`.
 | Any | F5 / F9 | quick save / quick load |
 | Any | F8 | write a bug report (please press it when something looks wrong) |
 | Any | F7 | save a replay |
-| Any | Tab | switch between the overseer camera and walking the protagonist |
+| Any | O | switch between the overseer camera and walking the protagonist |
 | Overseer | W A S D or arrows | move the camera (Shift: faster) |
 | Overseer | Q / E | turn the camera; middle mouse drag also turns it |
 | Overseer | mouse wheel | zoom |
@@ -51,13 +54,13 @@ is another world and another rainforest tile). A windowed game: add `-windowed`.
 | Overseer | F | centre on the selection; Home resets the camera |
 | Overseer | Page Up / Page Down | floor levels |
 | Overseer | Esc | clear the selection |
-| Protagonist | W A S D | walk (Ctrl: slow walk) |
+| Protagonist | W A S D | walk (Ctrl: slow walk; Left Shift turns sprint on and off) |
 | Protagonist | mouse | look; right mouse aims, left mouse fires |
-| Protagonist | R | reload; Shift sprints; Space jumps; Left Alt rolls; G throws a grenade |
+| Protagonist | R | reload; Space jumps; T rolls (third person) or dashes (first person); G throws a grenade |
 | Protagonist | E | pick up the nearest gun; Q switches weapon; C crouch, Z prone |
-| Protagonist | V | first / third person; T takes over the colonist you look at |
+| Protagonist | V | first / third person; Y takes over the colonist you look at |
 | Protagonist | B | build mode (left click places, R turns, Q changes the material, right click or Esc cancels) |
-| Protagonist | F (hold) | hands-on work on what you look at; X puts down what you carry |
+| Protagonist | F (hold) | interact: work on, pick up or take (a weapon) what you look at; X puts down what you carry; resources are picked up as you walk by |
 
 Top left of the screen: **Work**, **Schedule** and **Log** buttons and a button per colonist (click
 selects, double click centres).

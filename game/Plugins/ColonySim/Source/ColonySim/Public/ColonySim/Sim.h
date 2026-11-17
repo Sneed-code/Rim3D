@@ -510,9 +510,15 @@ public:
     float bodyHeightM(Entity pawn) const;
     // True when the pawn is in water past its shoulders: it swims, and can't roll, shoot or fight.
     bool pawnSwimming(Entity pawn) const;
+    // True while an AI pawn sprints (sneed 2026-11-17, docs/design/movement.md "Sprinting"): only in a fight (charging its
+    // target hand to hand, or falling back), fleeing, sheltering, carrying a downed friend to cover, rescuing a downed colonist or
+    // beating out a fire. Never for the player's pawn (Unreal's sprint toggle sets its speed) or animals.
+    bool pawnSprinting(Entity pawn) const;
 
 private:
     float pawnMoveFactor(Entity pawn) const;  // see Sim.cpp
+    bool takeIntoBag(Entity pawn, Entity item, int count, std::string& error);  // Inventory.cpp
+    void autoPickUp();                                                          // Inventory.cpp
     friend class SimSaveAccess;  // saves read and restore the private state (Save.h)
 
     struct EmptyStart {};

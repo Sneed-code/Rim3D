@@ -818,6 +818,48 @@ void JobSystem::loadCarryRules() {
         }
         carry_.lighter.push_back(std::move(lighter));
     }
+    // What the player's colonist picks up by walking past (docs/design/inventory.md "Picking up resources"): the
+    // `items` sets ("mined", "grown"), defs in the `categories`, and the `extra` defs by name; never anything heavier
+    // than `maxUnitMass` kg a piece (stone chunks) or that doesn't stack.
+    carry_.autoPickUpRadius = static_cast<float>(std::max(0.0, rules->number("autoPickUp.radius", 0.0)));
+    carry_.autoPickUpEvery = std::max(1, static_cast<int>(rules->integer("autoPickUp.every", carry_.autoPickUpEvery)));
+    carry_.autoPickUp.assign(defs_.size(), 0);
+    if (carry_.autoPickUpRadius > 0.0f) {
+        const double maxMass = rules->number("autoPickUp.maxUnitMass", 5.0);
+        std::vector<uint8_t> wanted(defs_.size(), 0);
+        for (size_t i = 0; i < rules->count("autoPickUp.items"); ++i) {
+            const std::string set = rules->textAt("autoPickUp.items", i);
+            const std::vector<uint8_t>& from = set == "mined" ? mined : grown;
+            if (set == "mined" || set == "grown") {
+                for (size_t d = 0; d < from.size(); ++d) {
+                    wanted[d] = static_cast<uint8_t>(wanted[d] | from[d]);
+                }
+            }
+        }
+        std::vector<std::string> categories;
+        for (size_t i = 0; i < rules->count("autoPickUp.categories"); ++i) {
+            categories.push_back(rules->textAt("autoPickUp.categories", i));
+        }
+        for (size_t i = 0; i < rules->count("autoPickUp.extra"); ++i) {
+            const DefId extra = defs_.idOf("Things", rules->textAt("autoPickUp.extra", i));
+            if (extra.valid() && extra.value < wanted.size()) {
+                wanted[extra.value] = 1;
+            }
+        }
+        for (uint32_t i = 0; i < defs_.size(); ++i) {
+            const Def& def = defs_.get(DefId{i});
+            if (def.kind() != "Things" || def.text("category") != "Item") {
+                continue;
+            }
+            for (size_t c = 0; c < def.count("thingCategories") && wanted[i] == 0; ++c) {
+                const std::string category = def.textAt("thingCategories", c);
+                wanted[i] = std::find(categories.begin(), categories.end(), category) != categories.end() ? 1 : 0;
+            }
+            if (wanted[i] != 0 && stackLimit(DefId{i}) > 1 && massOf(DefId{i}) <= maxMass) {
+                carry_.autoPickUp[i] = 1;
+            }
+        }
+    }
 }
 
 double JobSystem::carryCapacity(Entity pawn) const {

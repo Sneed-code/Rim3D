@@ -262,7 +262,14 @@
     "freeFraction": 0.2,
     "overloadSlowdown": 1.0,
     "overloadMinFactor": 0.2,
-    "ours": ["protagonistFactor", "traitKg", "lighter", "minFactor", "freeFraction", "overloadSlowdown", "overloadMinFactor"]
+    "autoPickUp": {
+      "comment": "sneed 2026-11-17: the player's colonist picks resources up by walking past (docs/design/inventory.md). Not from stockpiles.",
+      "radius": 1.5, "every": 10, "maxUnitMass": 5,
+      "items": ["mined", "grown"],
+      "categories": ["Metals", "StoneBlocks", "Textiles", "Leathers"],
+      "extra": ["Steel", "WoodLog", "Silver", "Gold", "Jade", "Plasteel", "Uranium", "ComponentIndustrial", "ComponentSpacer", "Cloth"]
+    },
+    "ours": ["protagonistFactor", "traitKg", "lighter", "minFactor", "freeFraction", "overloadSlowdown", "overloadMinFactor", "autoPickUp"]
   },
   {
     "defName": "LooksRules", "source": "Rim3D",

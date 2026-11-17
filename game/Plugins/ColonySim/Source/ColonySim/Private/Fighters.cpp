@@ -134,6 +134,7 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     num("ambushRange", r.ambushRange);
     num("helpRange", r.helpRange);
     num("helpReach", r.helpReach);
+    num("sprintSpeedFactor", r.sprintSpeedFactor);
     r.colonistsHoldForFriends = def->flag("profiles.colonists.holdsForFriends", r.colonistsHoldForFriends);
     r.raidersHoldForFriends = def->flag("profiles.raiders.holdsForFriends", r.raidersHoldForFriends);
     r.throwEvery = std::max(1, r.throwEvery);
