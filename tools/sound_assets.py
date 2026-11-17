@@ -103,10 +103,11 @@ def peakDb(ffmpeg, src, start, chain):
     args = [ffmpeg, "-hide_banner", "-nostats"]
     if start:
         args += ["-ss", str(start)]
-    args += ["-i", src, "-af", ",".join(chain + ["volumedetect"]), "-f", "null", "-"]
+    # Measured in float: some .ogg files decode above full scale, which a 16-bit meter clamps to 0 dB (and they clipped).
+    args += ["-i", src, "-af", ",".join(chain + ["aformat=sample_fmts=flt", "astats=measure_perchannel=none"]), "-f", "null", "-"]
     out = subprocess.run(args, capture_output=True, text=True).stderr
-    m = re.search(r"max_volume: (-?[0-9.]+) dB", out)
-    return float(m.group(1)) if m else 0.0
+    m = re.findall(r"Peak level dB: (-?[0-9.]+|-inf)", out)
+    return float(m[-1]) if m and m[-1] != "-inf" else 0.0
 
 
 def cutOne(ffmpeg, src, out, channels, pick, music):
