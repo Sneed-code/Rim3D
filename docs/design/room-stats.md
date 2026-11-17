@@ -120,3 +120,9 @@ fast as a pile of one. While it rains, kinds with `filth.rainWashes` go `FilthRu
 as fast. Under a roof, filth stays until cleaned. `Filth::fadeHour(rainRate)`, called by the sim every game hour,
 draws from the layer's own random stream, so it is saved and replayed with the rest. This is what stops animal
 blood piling up over a year in the open, where nobody cleans (the home area is still to come).
+
+## Blood goes by its age
+
+(sneed, 2026-11-17.) A filth kind with `filth.fadeSeconds` (Blood, InsectBlood, MachineFluid: 10,200 game seconds,
+5 min 40 s at 1x) is gone that long after it was last added to, under a roof too (`Filth::step(now)`, checked every 30
+seconds). Ours: RimWorld's blood lasts days. See [blood.md](blood.md).

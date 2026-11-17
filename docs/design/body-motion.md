@@ -115,11 +115,13 @@ distance follows height, weapon and target size; a motion survives save and load
 
 ## The measured clips (PC, 2026-11-17)
 
-`assets/motion_clips.json` lists 23 Mixamo clips with their trims; `-run=MotionClips` wrote
+`assets/motion_clips.json` lists 26 Mixamo clips with their trims; `-run=MotionClips` wrote
 `data/defs/MotionClips/MotionClips.json` from them (`-List` and `-Trace=A_Name` show travel and hand speed, which is
 how the trims and hit times were chosen). Roll 3.6 m in 1.55 s; sidesteps about 1 m in 0.4 s; staggers 0.9 to 1.2 m;
 knockdowns (death falls that end lying) about 1 m; club, one-hand and two-hand attacks of 1.0 to 1.5 s with the blow
-at 0.47 to 0.63 s. No clean punch clip exists yet, so fists swing without a clip.
+at 0.47 to 0.63 s. Fists have three punches (Mixamo singles Lead Jab, Cross Punch and Hook Punch, category
+Fighting), each trimmed to 0.8 s with the blow at 0.32 to 0.37 s and at most 0.43 m of hip travel; the jab is thrown
+with the left (lead) hand, so its blow is set by hand at the left arm's full stretch.
 
 The dodge roll's distance now comes from its clip (3.6 m for a 1.80 m body), not from `dodgeRoll.distance`, which
 only the plain push uses; the clip is spread over start-up, roll and recovery, so the body leans in during start-up.
@@ -133,6 +135,6 @@ the end.
 ## Next
 
 - **PC:** weapons in the hand follow `hand_r` during a clip (now they stay in the ready pose while the arms swing)
-  and holstered guns follow the spine; flinch clips for bullets; punch clips; separate get-ups for face-up and
+  and holstered guns follow the spine; flinch clips for bullets; separate get-ups for face-up and
   face-down; the creator's fight demo moving its people the same way.
 - **World:** tree trunks as solid posts, plant and swamp slow-down, loose props shoved by weight, foliage bending.

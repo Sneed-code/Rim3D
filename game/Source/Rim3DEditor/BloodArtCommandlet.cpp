@@ -26,13 +26,14 @@
 #include "Materials/MaterialExpressionOneMinus.h"
 #include "Materials/MaterialExpressionPerInstanceCustomData.h"
 #include "Materials/MaterialExpressionPower.h"
-#include "Materials/MaterialExpressionPreSkinnedLocalPosition.h"
+#include "Materials/MaterialExpressionPreSkinnedPosition.h"
 #include "Materials/MaterialExpressionSaturate.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Materials/MaterialExpressionSubtract.h"
 #include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "Materials/MaterialExpressionTextureSample.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
+#include "Materials/MaterialExpressionVertexInterpolator.h"
 #include "Misc/PackageName.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
@@ -448,7 +449,7 @@ namespace
 		Noise->OutputMin = 0.0f;
 		Noise->OutputMax = 1.0f;
 		Noise->bTurbulence = false;
-		BloodArtConnect(Shifted, TEXT(""), Noise, TEXT("Position"));
+		BloodArtConnect(Shifted, TEXT(""), Noise, TEXT(""));  // the first input is Position (UE 5.8 will not connect it by name)
 		return Noise;
 	}
 
@@ -472,7 +473,8 @@ namespace
 	/**
 	 * M_GrimeOverlay (docs/design/grime.md): drawn over a whole pawn mesh (skin and clothes) or a weapon as its overlay
 	 * material. Patches stick to the body as it moves (pre-skinned local position). Height up the body
-	 * h = (local z - LocalMinZ) / LocalHeight; legs dirt fades out by h 0.52; body dirt everywhere; blood its own patches.
+	 * h = (local z - LocalMinZ) / LocalHeight; legs dirt fades out by h 0.52; body dirt everywhere; blood its own patches. The gains keep
+	 * even level 1 patchy (blood about half covered, as Grime.Strength 0.4 looked with the first gains on the PC): never a solid coat.
 	 * Parameters: DirtLegs, DirtBody, Blood, BloodWet (0 to 1), BloodColor, DirtColor, LocalMinZ, LocalHeight (cm),
 	 * NoiseScale (per cm).
 	 */
@@ -490,7 +492,10 @@ namespace
 		bool bNeedsRecompile = false;
 		Material->SetMaterialUsage(bNeedsRecompile, MATUSAGE_SkeletalMesh);
 
-		auto* Position = BloodArtNode<UMaterialExpressionPreSkinnedLocalPosition>(Material, -2600, 0);
+		// Pre-skinned position only exists in the vertex shader: carry it to the pixels through an interpolator.
+		auto* RawPosition = BloodArtNode<UMaterialExpressionPreSkinnedPosition>(Material, -2800, 0);
+		auto* Position = BloodArtNode<UMaterialExpressionVertexInterpolator>(Material, -2600, 0);
+		BloodArtConnect(RawPosition, TEXT(""), Position, TEXT(""));
 		auto* NoiseScale = BloodArtScalar(Material, TEXT("NoiseScale"), 0.06f, -2600, 150);
 
 		// Height up the body.
@@ -525,10 +530,10 @@ namespace
 		BloodArtConnect(DirtSum, TEXT(""), DirtAmount, TEXT(""));
 
 		UMaterialExpression* DirtNoise = GrimeArtNoise(Material, -1200, -100, Position, NoiseScale, 1.0f, 0.0f);
-		UMaterialExpression* DirtCover = GrimeArtCover(Material, -800, -250, DirtAmount, 1.25f, DirtNoise, 3.0f);
+		UMaterialExpression* DirtCover = GrimeArtCover(Material, -800, -250, DirtAmount, 0.8f, DirtNoise, 3.0f);
 		auto* BloodAmount = BloodArtScalar(Material, TEXT("Blood"), 0.0f, -1200, 150);
 		UMaterialExpression* BloodNoise = GrimeArtNoise(Material, -1200, 300, Position, NoiseScale, 1.7f, 37.1f);
-		UMaterialExpression* BloodCover = GrimeArtCover(Material, -800, 200, BloodAmount, 1.2f, BloodNoise, 5.0f);
+		UMaterialExpression* BloodCover = GrimeArtCover(Material, -800, 200, BloodAmount, 0.5f, BloodNoise, 6.0f);
 
 		// Colour.
 		auto* DirtColor = BloodArtNode<UMaterialExpressionVectorParameter>(Material, -800, -500);

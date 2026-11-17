@@ -178,10 +178,10 @@ TEST_CASE("Defense: a powered turret shoots a hostile in range and leaves its ow
         aimed = aimed || (t.phase != TurretPhase::Idle && t.target == raider);
     }
     CHECK(aimed);
-    CHECK(shots >= 3);  // a whole burst
+    CHECK(shots >= 2);  // a whole burst (the Mini turret fires 2)
     CHECK(defnHurt(*sim, raider) > 0.0f);
     CHECK(defnHurt(*sim, colonist) == 0.0f);
-    CHECK(sim->defense().shotsFired() >= 3);
+    CHECK(sim->defense().shotsFired() >= 2);
 }
 
 TEST_CASE("Defense: a turret with no power, out of range or behind a wall does not shoot") {

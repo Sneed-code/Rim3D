@@ -71,10 +71,9 @@ int surgPart(const Sim& sim, Entity pawn, const std::string& label) {
     return -1;
 }
 
-// Destroys a part with a blow far bigger than it.
+// A part lost and left untended. (A blow no longer takes a living person's limb off: body-health.md part F.)
 void surgDestroy(Sim& sim, Entity pawn, const std::string& label) {
-    Rng rng(5);
-    sim.health().applyDamage(pawn, sim.health().damageTypeId("Cut"), 500.0f, surgPart(sim, pawn, label), rng);
+    sim.health().removePart(pawn, surgPart(sim, pawn, label), -1.0f);
 }
 
 HealthReport surgReport(const Sim& sim, Entity pawn) {

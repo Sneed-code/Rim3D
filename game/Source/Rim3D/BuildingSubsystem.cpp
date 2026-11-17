@@ -342,6 +342,7 @@ void UBuildingSubsystem::ReadDefs(const colony::Sim& Sim)
 		Look.bRead = true;
 		Look.bItem = Category == "Item";
 		Look.bDoor = Def.text("thingClass") == "Building_Door";
+		Look.bDrawnElsewhere = !Def.text("visual.drawnBy").empty();
 		if (Def.has("visual.link"))
 		{
 			Look.bLink = true;
@@ -616,7 +617,7 @@ void UBuildingSubsystem::Refresh()
 		const FDefLook* Look = LookOfDef(View.def);
 		const int32 CX = BldChunkOf(View.x);
 		const int32 CY = BldChunkOf(View.y);
-		if (!Look || CX < 0 || CY < 0 || CX >= ChunksX || CY >= ChunksY || View.level < 0 || View.level >= colony::Map::kLevels)
+		if (!Look || Look->bDrawnElsewhere || CX < 0 || CY < 0 || CX >= ChunksX || CY >= ChunksY || View.level < 0 || View.level >= colony::Map::kLevels)
 		{
 			continue;
 		}

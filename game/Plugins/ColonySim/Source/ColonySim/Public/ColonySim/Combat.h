@@ -315,8 +315,17 @@ public:
     // Its traits' share of its melee damage (Wimp 0.9); 1 without traits.
     float traitMeleeDamage(Entity pawn) const;
     void noteHurt(Entity victim, Entity attacker) const {
+        noteHarm(victim, attacker);
         if (hurtHook_) {
             hurtHook_(victim, attacker);
+        }
+    }
+    // Called whenever someone's bullet, blow or blast hurt a pawn, also a blast's (which does not call the hurt hook): the
+    // kill feed credits the last one with a death (Sim::creditKills, docs/design/kill-feed.md). Changes nothing else.
+    void setHarmHook(std::function<void(Entity, Entity)> hook) { harmHook_ = std::move(hook); }
+    void noteHarm(Entity victim, Entity by) const {
+        if (harmHook_ && by != kNoEntity && by != victim) {
+            harmHook_(victim, by);
         }
     }
 
@@ -548,6 +557,7 @@ private:
     std::function<void(Entity)> beforeDestroy_;
     std::function<bool(Entity, Entity)> holdFire_;
     std::function<void(Entity, Entity)> hurtHook_;
+    std::function<void(Entity, Entity)> harmHook_;
     std::function<float(Entity)> bodySize_;
     std::function<float(Entity)> performance_;
     std::vector<Entity> scratch_;

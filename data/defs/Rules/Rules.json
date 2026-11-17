@@ -101,7 +101,22 @@
       "patchQuality": 0.3,
       "coverBlood": 1500,
       "minMoving": 0.4,
-      "crawlMoving": 0.1
+      "crawlMoving": 0.1,
+      "note2": "sneed 2026-11-17: dead with the head or torso at 0, or with deadLimbs arms and legs at 0 and the head or torso at deadLimbsCoreAtOrBelow; an arm (attacks) or leg (walking) under limbSlowBelow slows by limbSlowPerShare for every share under it, both limbs added; a zone not hurt for healDelaySeconds (real) and not bleeding heals healPerSecond of its missing hit points a real second, healAsleepFactor times that asleep",
+      "deadLimbs": 2,
+      "deadLimbsCoreAtOrBelow": 0.5,
+      "limbSlowBelow": 0.5,
+      "limbSlowPerShare": 0.5,
+      "healDelaySeconds": 10,
+      "healPerSecond": 0.001,
+      "healAsleepFactor": 2,
+      "dismember": {
+        "note": "sneed 2026-11-17 (body-health.md part F): only the hit that kills dismembers, when it went over what the struck zone had left by overkillShare of the zone's hit points: the arm or leg whole, or below the elbow or knee when the lower part was struck (lower, or a part in lowerAlso), the head, or for the torso the head and every limb",
+        "overkillShare": 0.25,
+        "arm": { "whole": "Arm", "lower": "Hand", "lowerAlso": ["Radius"] },
+        "leg": { "whole": "Leg", "lower": "Foot", "lowerAlso": ["Tibia"] },
+        "head": "Head"
+      }
     },
     "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss", "innerInjuryAlsoHurtsOuter"],
     "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter", "scarSeverity", "oldWoundFromHpLost", "zones"]

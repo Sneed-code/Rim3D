@@ -1480,7 +1480,8 @@ bool CombatSystem::shotStore(Entity pawn, int& stored, int& size, int& refillLef
 }
 
 float CombatSystem::attackTimeFactor(Entity pawn) const {
-    return apparelStats_->attackTimeFactor(things_.registry(), pawn) / performance(pawn);
+    // Armour weight, exhaustion, and arms under half their health (sneed, body-health.md part F).
+    return apparelStats_->attackTimeFactor(things_.registry(), pawn) / (performance(pawn) * health_.attackSpeedFactor(pawn));
 }
 
 void CombatSystem::startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps) {
@@ -2239,12 +2240,12 @@ bool CombatSystem::jolt(Entity pawn, int part, DefId damageType, float force, fl
     if (zoneHp <= 0.0f) {
         return false;
     }
+    const float factor = damageType.valid() && damageType.value < model_->poiseForce.size() ? model_->poiseForce[damageType.value] : 1.0f;
+    const float push = force * factor;
     if (health_.incapacitated(pawn) || !things_.spawned(pawn) || !reg.all_of<Posture, Position>(pawn)) {
         return true;
     }
     Poise* poise = reg.try_get<Poise>(pawn);
-    const float factor = damageType.valid() && damageType.value < model_->poiseForce.size() ? model_->poiseForce[damageType.value] : 1.0f;
-    const float push = force * factor;
     // Knock-down: the blow's force beats the pawn's poise, and it isn't still getting over the last one.
     if (push > model_->poiseBase && (poise == nullptr || poise->immuneLeft <= 0) && !reg.all_of<KnockedDown>(pawn)) {
         Posture& posture = reg.get<Posture>(pawn);
@@ -2456,6 +2457,7 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
             }
             const bool alive = health_.applyHit(pawn, piece.damageType, piece.amount, part);
             wearApparel(pawn, piece);
+            noteHarm(pawn, ex.instigator);
             if (!alive) {
                 break;
             }
