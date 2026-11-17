@@ -36,7 +36,9 @@ const char* bridgeLateCommandName() {
     } else if constexpr (std::is_same_v<Type, SetAlertCommand>) {
         return "SetAlert";
     } else {
-        static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, SetLandingZoneCommand>,
+        // FocusCommand and SetFightResponseCommand are named before the visit (commandName).
+        static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||
+                          std::is_same_v<Type, FocusCommand> || std::is_same_v<Type, SetFightResponseCommand>,
                       "name every command type");
         return std::is_same_v<Type, SetLandingZoneCommand> ? "SetLandingZone" : "RerollColonist";
     }
@@ -45,6 +47,12 @@ const char* bridgeLateCommandName() {
 }  // namespace
 
 const char* commandName(const Command& command) {
+    if (std::holds_alternative<FocusCommand>(command)) {
+        return "Focus";
+    }
+    if (std::holds_alternative<SetFightResponseCommand>(command)) {
+        return "SetFightResponse";
+    }
     return std::visit(
         [](const auto& c) -> const char* {
             using Type = std::decay_t<decltype(c)>;

@@ -40,6 +40,7 @@ namespace colony { class Map; }
  * levels (upper floors, stairs and ladders drawn, the overseer's Page Up / Page Down cutaway and picking, climbing stairs in direct mode),
  * perf (G3: the 1 km performance colony at 3x with rain, a fire and a 40-pirate raid; frame, GPU and sim cost).
  * sound (V20: the cues and their files, the voice budget, walls muffling, footsteps, loops, ambience, weather, music, the mixer).
+ * shuttle (the landing zone tool and overlay, a visitors' shuttle flying in, swinging its engines down, landing with flames, dust and leaning grass, door opening).
  * look (L1, the look bench: the same shots of seed 42 every run for the before and after sheets; tools/look_sheet.ps1).
  * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
  * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
@@ -98,6 +99,7 @@ private:
 	void BuildOrdersWorldPhases();  // SmokeTestOrdersWorld.cpp
 	void BuildPanelsPhases();       // SmokeTestPanels.cpp
 	void BuildTradePhases();        // SmokeTestTrade.cpp
+	void BuildShuttlePhases();      // SmokeTestShuttle.cpp
 	void BuildQuestsPhases();       // SmokeTestQuests.cpp
 	void BuildShipPhases();         // SmokeTestShip.cpp
 	void BuildWorldMapPhases();     // SmokeTestWorldMap.cpp
