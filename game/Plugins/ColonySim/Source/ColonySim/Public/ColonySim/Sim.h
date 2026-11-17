@@ -526,6 +526,7 @@ public:
     bool pawnSwimming(Entity pawn) const;
 
 private:
+    float lowestPartHealth(Entity pawn) const;  // the focus HP bar (docs/design/focus.md)
     float pawnMoveFactor(Entity pawn) const;  // see Sim.cpp
     friend class SimSaveAccess;  // saves read and restore the private state (Save.h)
 

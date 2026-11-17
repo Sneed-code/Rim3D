@@ -6,6 +6,7 @@
 #include "ColonySim/Cover.h"
 #include "ColonySim/BillMode.h"
 #include "ColonySim/Entity.h"
+#include "ColonySim/FightResponse.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Trade.h"
@@ -1098,6 +1099,23 @@ struct SetAlertCommand {
     uint8_t alert = 0;
 };
 
+// Lock-on focus (sneed, 2026-11-17; docs/design/focus.md), Dark Souls style. Set: `pawn` locks on to `target` (any
+// living pawn within 25 m). Next: the next nearest target (Tab, WoW style): enemies within 20 m, nearest first, those in
+// front before those behind. Clear: let go (F1). A focused pawn faces its target, and the player's swing with no target
+// goes at the focus's centre when it is in reach. Fails if the pawn isn't on the map, or there is nothing to lock on to.
+struct FocusCommand {
+    Entity pawn = kNoEntity;
+    Entity target = kNoEntity;
+    FocusMode mode = FocusMode::Next;
+};
+
+// What a pawn does about enemies (docs/design/focus.md "Fight response"): Attack (as now), Fists (fights back, with its
+// fists if unarmed), Flee (runs when attacked), FleeOnSight (runs when it sees an enemy). Fails if it isn't a pawn.
+struct SetFightResponseCommand {
+    Entity pawn = kNoEntity;
+    FightResponse response = FightResponse::Attack;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -1132,7 +1150,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand,
                              InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand,
                              SleepCommand, SetLandingZoneCommand,
-                             PatchCommand, SetAlertCommand>;
+                             PatchCommand, SetAlertCommand, FocusCommand, SetFightResponseCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
 // day) it was applied in. Failed commands are logged too.
