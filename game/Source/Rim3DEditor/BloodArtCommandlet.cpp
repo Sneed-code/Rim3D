@@ -286,8 +286,8 @@ namespace
 
 		// Base colour: thick blood darker, a wound's core near black.
 		auto* ThickShade = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -800, -200);
-		ThickShade->ConstA = 1.05f;  // (PC look, 2026-11-18: 1.25 to 0.6 read as bright paint, 0.95 to 0.4 as black on skin)
-		ThickShade->ConstB = 0.55f;
+		ThickShade->ConstA = 0.95f;  // (PC look, 2026-11-18: 1.25 to 0.6 read as bright paint, 0.95 to 0.4 as black on skin)
+		ThickShade->ConstB = 0.5f;
 		BloodArtConnect(Sample, TEXT("G"), ThickShade, TEXT("Alpha"));
 		auto* CoreShade = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -800, -100);
 		CoreShade->ConstA = 1.0f;
@@ -321,8 +321,8 @@ namespace
 		auto* Flat = BloodArtNode<UMaterialExpressionConstant3Vector>(Material, -800, 250);
 		Flat->Constant = FLinearColor(0.0f, 0.0f, 1.0f);
 		auto* Bump = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -650, 350);
-		Bump->ConstA = 0.3f;
-		Bump->ConstB = 0.6f;  // (at 1 round drops read as raised beads)
+		Bump->ConstA = 0.2f;
+		Bump->ConstB = 0.35f;  // (at 1 round drops read as raised beads)
 		BloodArtConnect(Wet, TEXT(""), Bump, TEXT("Alpha"));
 		auto* NormalOut = BloodArtLerp(Material, -450, 300, Flat, TEXT(""), NormalSample, TEXT("RGB"), Bump, TEXT(""));
 		UMaterialEditingLibrary::ConnectMaterialProperty(NormalOut, TEXT(""), MP_Normal);

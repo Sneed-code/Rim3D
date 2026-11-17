@@ -63,6 +63,7 @@ namespace
 	constexpr int32 BloodCellRun = 12;         // a run, top to bottom (+V down)
 	constexpr int32 BloodCellSmear = 13;       // a smear along U
 	constexpr int32 BloodCellHole = 14;        // a bullet hole or stab
+	constexpr float BloodBodyBrightness = 1.7f;  // blood on a body against the same blood on the ground
 	constexpr int32 BloodCellGash = 15;        // a torn exit wound or a cut along U
 
 	constexpr int32 BloodTracesPerFrame = 320;
@@ -244,7 +245,14 @@ FLinearColor UBloodSubsystem::ColorAt(const FBloodFluid& Fluid, float Age) const
 	const float DrySeconds = FMath::Max(10.0f, GBloodDryMinutes.GetValueOnGameThread() * 60.0f);
 	// Drying is quick at first (the surface skins over), then slow.
 	const float T = FMath::Clamp(1.0f - FMath::Exp(-2.6f * Age / DrySeconds), 0.0f, 1.0f) / (1.0f - FMath::Exp(-2.6f));
-	return FMath::Lerp(Fluid.Wet, Fluid.Dry, FMath::Clamp(T, 0.0f, 1.0f));
+	FLinearColor Color = FMath::Lerp(Fluid.Wet, Fluid.Dry, FMath::Clamp(T, 0.0f, 1.0f));
+	// A pure red goes black in the blue light of open shade (PC look, 2026-11-18: wounds on a shaded face were black
+	// smudges): keep a little of the other two channels.
+	const float Floor = 0.12f * Color.GetMax();
+	Color.R = FMath::Max(Color.R, Floor);
+	Color.G = FMath::Max(Color.G, Floor);
+	Color.B = FMath::Max(Color.B, Floor);
+	return Color;
 }
 
 FLinearColor UBloodSubsystem::DecalColorFor(const FBloodFluid& Fluid, float Age, float Opacity) const
@@ -930,7 +938,7 @@ UDecalComponent* UBloodSubsystem::MakeBodyDecal(USkeletalMeshComponent* Mesh, in
 		FRotationMatrix::MakeFromXY(X, Y).Rotator(), EAttachLocation::KeepWorldPosition, 0.0f);
 	if (Decal)
 	{
-		Decal->SetDecalColor(Color);
+		Decal->SetDecalColor(FLinearColor(Color.R * BloodBodyBrightness, Color.G * BloodBodyBrightness, Color.B * BloodBodyBrightness, Color.A));
 		Decal->SetFadeScreenSize(0.0f);
 		Decal->SetSortOrder(Cell == BloodCellHole || Cell == BloodCellGash ? 3 : 2);
 	}
@@ -973,8 +981,14 @@ void UBloodSubsystem::AddBodyStain(UDecalComponent* Decal, USkeletalMeshComponen
 	FBodyStain Stain;
 	Stain.Decal = Decal;
 	Stain.Mesh = Mesh;
+	// Skin and cloth are mostly seen in softer light than the ground: blood on them is drawn brighter so it reads as red.
+	FBloodFluid Bright = Fluid;
+	Bright.Wet = Fluid.Wet * BloodBodyBrightness;
+	Bright.Dry = Fluid.Dry * BloodBodyBrightness;
+	Bright.Wet.A = Fluid.Wet.A;
+	Bright.Dry.A = Fluid.Dry.A;
 	Stain.Owner = Owner;
-	Stain.Fluid = Fluid;
+	Stain.Fluid = Bright;
 	Stain.bWound = bWound;
 	Stain.WetSince = Clock;
 	Stain.LastVisit = Clock;
