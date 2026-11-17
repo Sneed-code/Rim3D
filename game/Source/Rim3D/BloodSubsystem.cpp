@@ -763,7 +763,7 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 		{
 			// Blood soaking out round the wound (into clothes where they cover it: they take the decal too).
 			// (PC look, 2026-11-18: at 6 + 7 x force these covered a whole head and read as cow-print blotches.)
-			const float Soak = 4.0f + 3.0f * Force;
+			const float Soak = 5.5f + 4.0f * Force;
 			AddBodyStain(MakeBodyDecal(Mesh, BloodCellPool + Random.RandRange(0, 1), Hit.At, Into, Side, Soak, Soak * 0.85f, DecalColorFor(Fluid, 0.0f, 0.95f)), Mesh,
 				Hit.Victim, Fluid, false);
 			if (bExit)
