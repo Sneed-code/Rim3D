@@ -84,6 +84,37 @@ walkable cell within 24 m, carried by the current, and walks on from there.
   shoreline follows the cell-sized bed heights, so diagonal banks show small steps; the seed-42 512 m map has no still
   lake (776 still cells, all lake rims), so the `lake` shots show the river; cover leaves on the shallows are the terrain's.
 
+## Unreal, W1 tuning and W2 so far (PC, 2026-11-17)
+
+- **The murk was 100 times too strong.** Unreal's Single Layer Water measures the depth behind the surface in
+  centimetres, so absorption and scattering per metre must be scaled by 0.01; `M_Water` now does that inside the material
+  and its `Absorption` (1.1, 0.8, 2.0) and `Scattering` (0.08, 0.1, 0.06) parameters stay per metre (ours: the bed shows
+  through the first 30 to 50 cm, gone by about 1.5 m). Shots `river_tuned`, `river_tuned_above`, `shallows_tuned` in
+  `OneDrive\Documents\Rimworld3D\water`.
+- **Shoreline:** UV 2.x is now the water's true depth before the skirt (it runs smoothly through the bank's line), the shore
+  foam is a broken froth between 3 and 15 cm deep that fades on both sides, and ripples calm in the last 30 cm. No more
+  white outline or cell-sized steps in it. The wet bed is a little lighter (terrain tints 0.52 / 0.72).
+- **Ripples:** a third, fine normal layer (0.45 m), strength 2.0, roughness 0.02. `RippleUnpack` (1) is the texture's
+  * 2 - 1 decode; set to 0 the water goes flat (shot `river_unpack`), so the decode is right and the swamp normal texture is
+  simply weak. Ripples read a little now; a stronger ripple texture is still left. The bodies' waves (W2) show clearly.
+- **Tuning from the console:** `Water.Param Name V` or `Water.Param Name R G B` sets any `M_Water` parameter on a dynamic
+  instance (kept across rebuilds), e.g. `Water.Param Absorption 1.1 0.8 2.0`.
+- **W2 (works, checked 2026-11-17):** `USimWaterSubsystem` runs a wave equation on three 256 x 256 half-float
+  render targets in turn over 64 m round the camera (25 cm a texel, moved in whole texels), one step a frame drawn with
+  `M_WaterWaveStep` (WaterArt commandlet): ripple speed 0.8 m/s, fading to a third in 1.2 s, kept to open water by a mask
+  of the map's water cells. The 16 bodies nearest the camera with water over 5 cm push a soft dip sized by their height,
+  harder with speed (a moving body leaves a wake), a faint bob when still, one strong push when they come into the water.
+  `M_Water` adds the field's slope to its ripples. Console `Water.Ripples 0/1`, `Water.RipplePush`,
+  `Water.RippleMask`. The first runs wrote nothing: a material's emissive is kept at 0 or more, so the field is now stored
+  as (above 0, below 0) in red and green. With that the wader leaves rings and a wake that reflect the bank (shot
+  `river_wake.png`); the field reaches |h| 0.84, so `WaveStrength` is 3. Smoke test: a drafted colonist wades between
+  two cells 1 m deep and the controlled one swims circles in 3 m (both checked), then the field is read back.
+- Cost so far (1080p offscreen, river with the two bodies): GPU 6.1 ms with the surface and wave step, 6.1 ms with
+  `Water.Ripples 0`, 5.6 ms with `Water.Enable 0`.
+- Left: a stronger ripple texture, W3 splashes, W4 swim animation and the underwater view. The Mixamo clips for W4 are on
+  the PC (not in Git): `assets/raw/mixamo/Treading Water.fbx` and `Swimming.fbx` (FBX, without skin, 30 fps, Swimming in
+  place), to retarget like the other clips.
+
 ## Unreal (planned, PC)
 
 How real water is done in today's games, and what we do. A true 3D fluid simulation (every litre of water
@@ -129,3 +160,7 @@ gets the wave simulation and splashes; far water keeps its flowing ripples. A Wa
 - The current pushing a swimmer sideways in the sim (it speeds or slows it along its way only); the
   player's colonist will drift in Unreal (W4) and the sim accepts its moves.
 - Watermills on generated rivers: `Map::setFlowing` is still never set by the map generator.
+- Body motion and deep water (body-motion.md, merged after this): a clip's travel is swept with the walker's
+  check (`BodyMotionSystem::fits` uses `pawnFitsAt`), so a roll, lunge or knock stops at the edge of deep water and
+  moves a swimmer nowhere. Nobody is trapped (the player's swimmer still moves by `DirectMoveCommand`), but a body
+  can't be knocked into the river yet. Whether it should is for the body-motion work and sneed to decide.

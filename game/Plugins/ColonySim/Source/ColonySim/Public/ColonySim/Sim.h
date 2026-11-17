@@ -36,6 +36,7 @@ class ArtillerySystem;
 class DefenseSystem;
 class DrugSystem;
 class Filth;
+class Grime;
 class Floors;
 class RoomStats;
 struct Colonist;
@@ -351,6 +352,8 @@ public:
     const Floors& floors() const { return *floors_; }
     Filth& filth() { return *filth_; }
     const Filth& filth() const { return *filth_; }
+    Grime& grime() { return *grime_; }
+    const Grime& grime() const { return *grime_; }
     RoomStats& roomStats() { return *roomStats_; }
     const RoomStats& roomStats() const { return *roomStats_; }
 
@@ -628,6 +631,7 @@ private:
     std::unique_ptr<FighterSystem> fighters_;  // after the job system
     std::unique_ptr<Floors> floors_;           // C17; filth and room stats read the floors
     std::unique_ptr<Filth> filth_;
+    std::unique_ptr<Grime> grime_;             // dirt and blood on bodies (grime.md)
     std::unique_ptr<RoomStats> roomStats_;
     std::unique_ptr<AnimalSystem> animals_;
     std::unique_ptr<UpperFloors> upperFloors_;  // M1
