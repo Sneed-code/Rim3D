@@ -11,6 +11,39 @@
 
 namespace colony {
 
+namespace {
+
+// The newest commands' names, apart from commandName's chain: MSVC stops at 128 nested blocks (C1061), and that chain
+// is at the limit. New commands go here.
+template <typename Type>
+const char* bridgeLateCommandName() {
+    if constexpr (std::is_same_v<Type, ScannerCommand>) {
+        return "Scanner";
+    } else if constexpr (std::is_same_v<Type, InventoryCommand>) {
+        return "Inventory";
+    } else if constexpr (std::is_same_v<Type, SetOutfitFightGearCommand>) {
+        return "SetOutfitFightGear";
+    } else if constexpr (std::is_same_v<Type, HideGearCommand>) {
+        return "HideGear";
+    } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
+        return "Shield";
+    } else if constexpr (std::is_same_v<Type, SetDayLengthCommand>) {
+        return "SetDayLength";
+    } else if constexpr (std::is_same_v<Type, SleepCommand>) {
+        return "Sleep";
+    } else if constexpr (std::is_same_v<Type, PatchCommand>) {
+        return "Patch";
+    } else if constexpr (std::is_same_v<Type, SetAlertCommand>) {
+        return "SetAlert";
+    } else {
+        static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, SetLandingZoneCommand>,
+                      "name every command type");
+        return std::is_same_v<Type, SetLandingZoneCommand> ? "SetLandingZone" : "RerollColonist";
+    }
+}
+
+}  // namespace
+
 const char* commandName(const Command& command) {
     return std::visit(
         [](const auto& c) -> const char* {
@@ -248,29 +281,7 @@ const char* commandName(const Command& command) {
                 if constexpr (std::is_same_v<Type, PodCommand>) {
                     return "Pod";
                 } else {
-                    if constexpr (std::is_same_v<Type, ScannerCommand>) {
-                        return "Scanner";
-                    } else if constexpr (std::is_same_v<Type, InventoryCommand>) {
-                        return "Inventory";
-                    } else if constexpr (std::is_same_v<Type, SetOutfitFightGearCommand>) {
-                        return "SetOutfitFightGear";
-                    } else if constexpr (std::is_same_v<Type, HideGearCommand>) {
-                        return "HideGear";
-                    } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
-                        return "Shield";
-                    } else if constexpr (std::is_same_v<Type, SetDayLengthCommand>) {
-                        return "SetDayLength";
-                    } else if constexpr (std::is_same_v<Type, SleepCommand>) {
-                        return "Sleep";
-                    } else if constexpr (std::is_same_v<Type, PatchCommand>) {
-                        return "Patch";
-                    } else if constexpr (std::is_same_v<Type, SetAlertCommand>) {
-                        return "SetAlert";
-                    } else {
-                        static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, SetLandingZoneCommand>,
-                                      "name every command type");
-                        return std::is_same_v<Type, SetLandingZoneCommand> ? "SetLandingZone" : "RerollColonist";
-                    }
+                    return bridgeLateCommandName<Type>();  // its own chain: this one is at MSVC's limit
                 }
             }
         },
