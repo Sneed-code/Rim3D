@@ -290,9 +290,9 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 			}
 		}
 	}
-	for (const TPair<TSharedPtr<FJsonValue>, const TCHAR*>& Entry : Entries)
+	for (const TPair<TSharedPtr<FJsonValue>, const TCHAR*>& ListEntry : Entries)
 	{
-		const TSharedPtr<FJsonValue>& Value = Entry.Key;
+		const TSharedPtr<FJsonValue>& Value = ListEntry.Key;
 		const TSharedPtr<FJsonObject> Gun = Value->AsObject();
 		const TSharedPtr<FJsonObject>* ArtPtr = nullptr;
 		if (!Gun.IsValid() || !Gun->TryGetObjectField(TEXT("art"), ArtPtr))
@@ -311,7 +311,7 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 			UE_LOG(LogGunArt, Warning, TEXT("%s: %s is not there (download it first, docs/design/gun-range.md); skipped"), *Name, *File);
 			continue;
 		}
-		const FString Dest = FString(Entry.Value) / Name;
+		const FString Dest = FString(ListEntry.Value) / Name;
 
 		// The model: every object its own static mesh, no collision, its materials made but replaced below.
 		UFbxImportUI* Options = NewObject<UFbxImportUI>();
