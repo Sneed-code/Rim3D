@@ -99,13 +99,21 @@ smash for clubs and hammers, a hack for blades and axes).
 
 The arm's-length "stand and fight" rule does not hold a fleeing pawn. Snapshot `fightResponse`.
 
-## Unreal (PC step, after the controls thread merges)
+## Unreal (built on the controls thread's key list)
 
-- Tab sends `FocusCommand Next`, F1 `Clear`, behind the lock-on setting (Tab no longer switches to overseer: that is O).
-- The focused target's HP bar top-middle: name, bar = `lowestPart` as a percentage. Third-person lock-on camera: keeps the player and
-  the focus in frame; a small marker on the focused body. First person: the view turns toward the focus gently.
-- The player's mesh turns to the sim's facing while locked on (strafe animation from velocity).
-- Faces: a 0.6 s pain expression on every hit (`ProjectileHit`/`MeleeHit` events), an angry expression while the pawn
-  is a fighter in a fight with a melee weapon (or fists) in hand; both on the MakeHuman expression shape keys.
-- Downward attack clips for `meleeLow` (Mixamo has stabbing-down and overhead clips; new mocap if they look wrong).
-- Footwork: strafe/back-step locomotion from velocity while `footwork`.
+Built (2026-11-18):
+
+- **Keys** (`UProtagonistSubsystem::UpdateFocus`): in direct control, `FocusNextTarget` (Tab) sends `FocusCommand Next`,
+  `EndFocus` (F1) sends `Clear`; nothing with Settings > Controls "Lock-on focus" off, and turning it off while locked on
+  lets go. While locked on F1 does not toggle the key help (`USimSubsystem::HandleKey`). The overseer switch is O.
+- **HP bar** top middle, under the clock (`DrawFocus`): the target's name (colonist name, else its kind) and a red bar of
+  `lowestPart` with the percentage.
+- **Marker**: a small dot on the target's chest (low over a body on the ground), `GetFocusPoint`.
+- **Camera** (`AProtagonistPawn::FollowFocus`): the view turns to keep the focus ahead, 360 degrees a second in third
+  person (the mouse only tilts it), 100 in first person (the mouse still turns, the focus pulls back). Not while aiming a
+  gun or rolling.
+- **Bodies**: every focused pawn's actor faces the sim's facing while it moves (`ASimPawnActor`), so it strafes and backs
+  off facing its enemy; the walk blends play from the velocity.
+- Smoke test `melee`, phase `focus`.
+
+Still to do: pain and angry faces, downward attack clips for `meleeLow`, a strafe check by eye.
