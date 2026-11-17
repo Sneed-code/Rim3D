@@ -772,19 +772,8 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 		ViewRoot->AttachToComponent(Camera, FAttachmentTransformRules::KeepRelativeTransform);
 	}
 
-	// --- The reload: the clip over the stance, stretched to the sim's reload time. ---
-	if (Me->reloading && !bWasReloading)
-	{
-		ReloadSeconds = FMath::Max(0.5f, static_cast<float>(Bridge->GetSim()->combat().shotReadyIn(Pawn)) / 30.0f);
-		ReloadClock = 0.0f;
-		bReloadPlaying = true;
-		++ReloadsSeen;
-		if (UAnimSequence* Clip = LoadClip(G.Reload))
-		{
-			const float To = G.ReloadTo > G.ReloadFrom ? G.ReloadTo : Clip->GetPlayLength();
-			Anim->PlayAction(Clip, G.ReloadFrom, To, (To - G.ReloadFrom) / ReloadSeconds, 0.25f, 0.35f);
-		}
-	}
+	// --- No reloads (sneed, 2026-11-17: guns refill by a hidden cooldown, docs/design/aiming.md "Cooldown bursts"), so no
+	// reload clip plays; the reload fraction below stays off. ---
 	bWasReloading = Me->reloading;
 	float ReloadF = -1.0f;
 	if (bReloadPlaying)
@@ -1264,6 +1253,16 @@ void UGunRangeSubsystem::UpdateHeldView(float Dt, ASimPawnActor& Player, const c
 	Flash->SetVisibility(false);
 }
 
+bool UGunRangeSubsystem::GetViewMuzzle(FVector& Out) const
+{
+	if (!bShown || bHeldView || !GunFrame || !Guns.IsValidIndex(Current))
+	{
+		return false;
+	}
+	Out = GunFrame->GetComponentTransform().TransformPosition(Guns[Current].Muzzle);
+	return true;
+}
+
 void UGunRangeSubsystem::DrawPanel()
 {
 	const ImGui::FScopedContext ScopedContext;
@@ -1308,7 +1307,7 @@ void UGunRangeSubsystem::DrawPanel()
 		}
 		else
 		{
-			ImGui::TextUnformatted("Left mouse fire   Right mouse aim   R reload");
+			ImGui::TextUnformatted("Left mouse fire   Right mouse aim");
 		}
 		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("1-%s or wheel: weapon   N: new targets   F2 pause"), *KeyName(FMath::Max(0, Guns.Num() + Melee.Num() - 1)))));
 		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("V: first/third person   [ ] mouse speed %.2f"), AProtagonistPawn::GetMouseTurn())));
