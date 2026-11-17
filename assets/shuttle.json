@@ -1,0 +1,106 @@
+{
+  "comment": "The VTOL shuttle's look (docs/design/shuttle-draw.md). 'vehicles' is read by the GunArt commandlet (gunart -List=assets/shuttle.json): the FBX is imported into /Game/Rim3D/Generated/Vehicles/<name>/, one static mesh per moving part. The rest is read by UShuttleSubsystem at start and again on F6, so it can be tuned without a rebuild. Points are in the model's own frame in cm, as Unreal imports it: +X out of the nose, +Y to the right (the door side), +Z up, the origin on the ground under the middle of the hull. Rotations are [pitch, yaw, roll] degrees in that frame. All numbers are ours.",
+  "vehicles": [
+    {
+      "def": "Shuttle_VTOL",
+      "credit": "Codex (our own model)",
+      "art": {
+        "name": "VTOLShuttle",
+        "fbx": "assets/raw/vehicles/VTOLShuttle/VTOLShuttle_Game.fbx",
+        "textures": {
+          "baseColor": "assets/raw/vehicles/VTOLShuttle/T_VTOLShuttle_BaseColor.png",
+          "normal": "assets/raw/vehicles/VTOLShuttle/T_VTOLShuttle_Normal.png",
+          "orm": "assets/raw/vehicles/VTOLShuttle/T_VTOLShuttle_ORM.png",
+          "emissive": "assets/raw/vehicles/VTOLShuttle/T_VTOLShuttle_Emissive.png",
+          "emissiveStrength": 4.0
+        }
+      }
+    }
+  ],
+  "shuttle": {
+    "art": "VTOLShuttle",
+    "artRoot": "/Game/Rim3D/Generated/Vehicles",
+    "modelCentre": [-5.45, 0, 0],
+    "groundLift": -6.1,
+    "parts": {
+      "Body": [0, 0, 0],
+      "PIVOT_Roof": [0, 0, 446],
+      "PIVOT_CabinetL": [240.05, 57.26, 313],
+      "PIVOT_CabinetR": [240.05, -57.26, 313],
+      "PIVOT_Door": [161.29, 217.78, 310],
+      "PIVOT_Step": [161.29, 225.29, 222],
+      "PIVOT_Lift1": [323.51, 138.93, 128],
+      "PIVOT_Lift2": [107.84, 138.93, 128],
+      "PIVOT_Lift3": [-107.84, 138.93, 128],
+      "PIVOT_Lift4": [-323.51, 138.93, 128],
+      "PIVOT_Lift5": [323.51, -138.93, 128],
+      "PIVOT_Lift6": [107.84, -138.93, 128],
+      "PIVOT_Lift7": [-107.84, -138.93, 128],
+      "PIVOT_Lift8": [-323.51, -138.93, 128],
+      "PIVOT_RearL": [-375.08, 225.29, 412],
+      "PIVOT_RearR": [-375.08, -225.29, 412],
+      "PIVOT_GearFL": [323.51, 101.38, 168],
+      "PIVOT_GearFR": [323.51, -101.38, 168],
+      "PIVOT_GearRL": [-328.2, 101.38, 168],
+      "PIVOT_GearRR": [-328.2, -101.38, 168]
+    },
+    "liftJets": [
+      [323.51, 138.93, 104.5], [107.84, 138.93, 104.5], [-107.84, 138.93, 104.5], [-323.51, 138.93, 104.5],
+      [323.51, -138.93, 104.5], [107.84, -138.93, 104.5], [-107.84, -138.93, 104.5], [-323.51, -138.93, 104.5]
+    ],
+    "rearJets": [[-607.46, 225.29, 412], [-607.46, -225.29, 412]],
+    "door": [161.29, 317.29, 212],
+    "seats": [
+      [314.13, 54.45, 281], [314.13, -54.45, 281],
+      [-23.44, 72.28, 268], [-23.44, -72.28, 268], [-126.59, 72.28, 268], [-126.59, -72.28, 268],
+      [-229.74, 72.28, 268], [-229.74, -72.28, 268], [-332.89, 72.28, 268], [-332.89, -72.28, 268]
+    ],
+    "landingLight": [521.37, 0, 177],
+    "gearUp": {
+      "PIVOT_GearFL": [0, 0, 88],
+      "PIVOT_GearRL": [0, 0, 88],
+      "PIVOT_GearFR": [0, 0, -88],
+      "PIVOT_GearRR": [0, 0, -88]
+    },
+    "nacelleHover": [90, 0, 0],
+    "liftVaneTilt": 15,
+    "doorOpen": [-140, 8, 0],
+    "stepStowed": [0, 0, -85],
+    "flight": {
+      "approachM": 160,
+      "cruiseHeightM": 45,
+      "hoverHeightM": 22,
+      "flareDeg": 8,
+      "hoverBobCm": 6,
+      "hoverWobbleDeg": 0.8,
+      "doorOpenAfterS": 2.0,
+      "spoolDownS": 2.5
+    },
+    "flames": {
+      "liftLengthCm": 150,
+      "liftRadiusCm": 22,
+      "rearLengthCm": 380,
+      "rearRadiusCm": 46,
+      "coreColor": [0.55, 0.75, 1.0],
+      "outerColor": [1.0, 0.55, 0.25],
+      "brightness": 12,
+      "lightCandelas": 400,
+      "lightRadiusCm": 2500
+    },
+    "dust": {
+      "fromHeightM": 18,
+      "perSecond": 90,
+      "lifeS": 2.4,
+      "speedCmS": 900,
+      "sizeCm": 90,
+      "growCm": 260,
+      "opacity": 0.35,
+      "color": [0.42, 0.37, 0.3],
+      "max": 600
+    },
+    "grass": {
+      "radiusM": 14,
+      "fromHeightM": 20
+    }
+  }
+}
