@@ -220,7 +220,7 @@ void UKillFeedSubsystem::DrawFeed(float DeltaTime)
 			// Your own kill: a thin white edge round the line, brightest when it comes up.
 			const float Glow = 0.55f + 0.45f * FMath::Clamp(1.0f - Line.Age / 0.6f, 0.0f, 1.0f);
 			Draw->AddRect(ImVec2(Start - 3.0f * Scale, At.y - 2.0f * Scale), ImVec2(At.x + 3.0f * Scale, At.y + Size + Pad + 2.0f * Scale),
-				IM_COL32(255, 255, 255, static_cast<int32>(200 * Alpha * Glow)), 3.0f * Scale, 0, 1.5f * Scale);
+				IM_COL32(255, 255, 255, static_cast<int32>(200 * Alpha * Glow)), 3.0f * Scale, 1.5f * Scale);
 		}
 	}
 	++FramesDrawn;
