@@ -168,6 +168,10 @@ public:
 	/** The dodge roll's somersault (U21): 0 when not rolling, then how far through the sim's 27 steps the roll is, and the angle the
 	 *  body has turned over its way, 0 to 360 (docs/design/shooter-feel-draw.md). The sim moves the body; this only turns it. */
 	float GetRollProgress() const { return RollProgress; }
+	/** Clips the sim moved this body along so far, and whether one is playing now (docs/design/body-motion.md). */
+	int32 GetMotionClipsPlayed() const { return MotionClipsPlayed; }
+	bool IsInMotionClip() const { return MotionClipDef != MAX_uint32; }
+	FVector GetMotionOffset() const { return MotionOffset; }
 	float GetRollAngle() const { return RollAngle; }
 	int32 GetRollsSeen() const { return RollsSeen; }
 	/** 1 standing, 0.66 crouching, 0.24 lying: what weapon heights are scaled by. */
@@ -348,6 +352,17 @@ private:
 	bool bJumpFalling = false;
 	int32 JumpsPlayed = 0;
 	float GroundSpeed = 0.0f;
+	// A clip the sim is moving the body along (docs/design/body-motion.md): the def playing, the montage, and how far
+	// the visible body is set back so that its hips stay exactly on the sim's position while the clip carries them.
+	uint32 MotionClipDef = MAX_uint32;
+	float MotionClipTime = 0.0f;
+	TWeakObjectPtr<class UAnimMontage> MotionMontage;
+	TWeakObjectPtr<class UAnimSequence> MotionAsset;
+	int32 MotionPelvisBone = INDEX_NONE;
+	FVector MotionPelvisStart = FVector::ZeroVector;
+	FVector MotionOffset = FVector::ZeroVector;
+	int32 MotionClipsPlayed = 0;
+	bool UpdateMotionClip(const USimSubsystem& Bridge, const colony::ThingView& Now, float GameDelta);
 	float RollProgress = 0.0f;
 	float RollAngle = 0.0f;
 	FVector RollDirection = FVector::ForwardVector;

@@ -213,6 +213,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildMeleePhases();
 	}
+	else if (TestName == TEXT("motion"))
+	{
+		BuildMotionPhases();
+	}
 	else if (TestName == TEXT("levels"))
 	{
 		BuildLevelsPhases();

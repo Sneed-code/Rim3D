@@ -8,6 +8,7 @@
     "rollClip": "Motion_Roll",
     "sidestepClip": {"left": "Motion_SidestepLeft", "right": "Motion_SidestepRight"},
     "staggerClip": {"back": "Motion_StaggerBack", "forward": "Motion_StaggerForward", "left": "Motion_StaggerLeft", "right": "Motion_StaggerRight"},
+    "flinchClip": {"back": "Motion_FlinchBack", "forward": "Motion_FlinchForward", "left": "Motion_FlinchLeft", "right": "Motion_FlinchRight"},
     "knockdownClip": {"back": "Motion_KnockdownBack", "forward": "Motion_KnockdownForward", "left": "Motion_KnockdownLeft", "right": "Motion_KnockdownRight"},
     "getUpClip": "Motion_GetUp",
     "staggerMetres": 0.5, "staggerSteps": 12,

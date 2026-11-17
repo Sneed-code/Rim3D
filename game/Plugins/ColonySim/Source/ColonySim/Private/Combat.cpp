@@ -1949,7 +1949,9 @@ void CombatSystem::step(Rng& rng) {
                 posture.facingX = dx / len;
                 posture.facingY = dy / len;
             }
-        } else if (!health_.incapacitated(pawn)) {
+        } else if (!health_.incapacitated(pawn) && !reg.all_of<BodyMotion>(pawn)) {
+            // A body a clip or a push is moving keeps the way it faced (or the clip's own turn): a stagger back
+            // doesn't turn it round to face its push (docs/design/body-motion.md).
             const float speed = std::sqrt(mover.vx * mover.vx + mover.vy * mover.vy);
             if (speed > 1e-4f) {
                 posture.facingX = mover.vx / speed;
