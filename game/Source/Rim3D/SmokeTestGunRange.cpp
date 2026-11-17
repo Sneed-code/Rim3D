@@ -235,7 +235,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 	FPhase Play;
 	Play.Name = TEXT("gunrange");
 	Play.WarmupSeconds = 6.0f;
-	float Minutes = bScript ? 2.0f : 240.0f;
+	float Minutes = bScript ? 2.3f : 240.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("GunRangeMinutes="), Minutes);
 	Play.MeasureSeconds = Minutes * 60.0f;
 	Play.Setup = [=, this]()
@@ -721,6 +721,27 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				if (State->StepTime > 1.7f)
 				{
 					Picture(TEXT("downed_shot"));
+					Body->SetScriptedAim(false);
+					Next(12);
+				}
+				break;
+			case 12:  // a close look at her wounds through the rifle's scope (the far pictures are too small to show them)
+				G->SelectGun(0);
+				for (const FGunRangeTarget& T : State->Targets)
+				{
+					const colony::ThingView* View = B->GetCurrentSnapshot().find(T.Thing);
+					FVector At;
+					if (View && (View->downed || View->dead) && B->GetBlendedLocation(T.Thing, At))
+					{
+						const FRotator Wanted = (At + FVector(0.0, 0.0, 15.0) - Body->GetViewLocation()).Rotation();
+						Body->Look(FRotator::NormalizeAxis(Wanted.Yaw - Body->GetYaw()), Wanted.Pitch - Body->GetPitch());
+						break;
+					}
+				}
+				Body->SetScriptedAim(State->StepTime > 1.5f);
+				if (State->StepTime > 3.5f)
+				{
+					Picture(TEXT("downed_scope"));
 					Body->SetScriptedAim(false);
 					Next(5);
 				}
