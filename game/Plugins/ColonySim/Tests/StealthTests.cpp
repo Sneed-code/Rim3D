@@ -1,9 +1,11 @@
 #include "ColonySim/Clock.h"
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
@@ -100,6 +102,8 @@ Entity stealthTestGuard(Sim& sim, int x, int y, float fx, float fy, const char* 
 // The player's own body: it stands where it is put until the test moves it.
 Entity stealthTestIntruder(Sim& sim, int x, int y) {
     const Entity pawn = sim.things().spawn("Human", CellPos{x, y, 0});
+    sim.things().registry().emplace<Colonist>(pawn);
+    sim.jobs().addWorker(pawn);
     sim.submit(ControlPawnCommand{pawn});
     sim.step();
     return pawn;
@@ -291,9 +295,9 @@ TEST_CASE("Stealth: footsteps behind a guard make it turn; a crouched walk gets 
         if (crouched) {
             sim->submit(SetStanceCommand{intruder, Stance::Crouching});
         }
-        // Walk up behind it at 0.1 m a step (3 m a real second) to 2 m from it.
+        // Walk up behind it at 0.1 m a step (3 m a real second) to 1.6 m from it (it looks and listens twice a second).
         float heardAt = -1.0f;
-        for (int i = 0; i < 400 && heardAt < 0.0f && stealthTestDist(*sim, guard, intruder) > 2.0f; ++i) {
+        for (int i = 0; i < 400 && heardAt < 0.0f && stealthTestDist(*sim, guard, intruder) > 1.6f; ++i) {
             stealthTestWalk(*sim, intruder, 60.5f, 60.5f, 0.1f, 1);
             if (stealthTestFighter(*sim, guard).alert != Alert::Unaware) {
                 heardAt = stealthTestDist(*sim, guard, intruder);
@@ -301,11 +305,14 @@ TEST_CASE("Stealth: footsteps behind a guard make it turn; a crouched walk gets 
         }
         CAPTURE(crouched);
         CAPTURE(heardAt);
+        const float endDist = stealthTestDist(*sim, guard, intruder);
+        CAPTURE(endDist);
+        CHECK(endDist < 3.2f);  // it did walk up
         if (crouched) {
             CHECK(heardAt < 0.0f);
             CHECK(stealthTestFighter(*sim, guard).alert == Alert::Unaware);
         } else {
-            CHECK(heardAt > 2.0f);
+            CHECK(heardAt > 1.5f);
             CHECK(heardAt <= sim->fighters().stealth().walkNoise + 0.2f);
             // It turned to look, and with the intruder now in front of it and near, the next look alerts it.
             sim->stepMany(20);
@@ -402,7 +409,7 @@ TEST_CASE("Stealth: a mission site that finds an intruder stays alerted for good
         auto sim = stealthTestSim();
         sim->fighters().setStaysAlerted(mission);
         const Entity a = stealthTestGuard(*sim, 60, 60, 1, 0);
-        const Entity far = stealthTestGuard(*sim, 60, 110, 0, 1);  // 50 m away: no call reaches it
+        const Entity far = stealthTestGuard(*sim, 60, 124, 0, 1);  // 64 m away: no call reaches it, and too far to see
         const Entity intruder = stealthTestIntruder(*sim, 66, 60);
         sim->stepMany(20);
         CAPTURE(mission);

@@ -127,7 +127,7 @@ hashes. `SetAlert` is in replays.
 - Within 8 m in front it is alerted at once.
 - A crouched intruder 45 m in front isn't seen; a standing one is.
 - At midnight an unaware guard doesn't see 30 m; told to be alerted it does.
-- Walking up behind a guard is heard within 3 m and it turns and is alerted; crouched, the intruder gets to 2 m unheard.
+- Walking up behind a guard is heard within 3 m and it turns and is alerted; crouched, the intruder gets to 1.6 m unheard.
 - A spots, B within 20 m is called (and knows the enemy secondhand), C 30 m from A but 15 m from B stays unaware.
 - A melee noise alerts at 6 m, not at 12; a real pistol shot alerts at 50 m and gives the shooter away, not at 100 m.
 - A mission site stays alerted half a game hour after the intruder is gone; elsewhere the guard is suspicious, then
