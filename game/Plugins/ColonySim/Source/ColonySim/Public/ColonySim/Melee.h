@@ -124,6 +124,7 @@ struct MeleeRules {
     std::string unarmedStyle = "Unarmed";
     float maxAttackClipSeconds = 1.6f;
     float maxAttackHitSeconds = 0.8f;
+    float maxAttackTravel = 0.8f;  // metres (for a 1.80 m man): a clip that carries the body further is left out too
 };
 
 class COLONY_API MeleeSystem {
