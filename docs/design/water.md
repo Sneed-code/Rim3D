@@ -94,8 +94,9 @@ walkable cell within 24 m, carried by the current, and walks on from there.
 - **Shoreline:** UV 2.x is now the water's true depth before the skirt (it runs smoothly through the bank's line), the shore
   foam is a broken froth between 3 and 15 cm deep that fades on both sides, and ripples calm in the last 30 cm. No more
   white outline or cell-sized steps in it. The wet bed is a little lighter (terrain tints 0.52 / 0.72).
-- **Ripples:** a third, fine normal layer (0.45 m), strength 1.2, roughness 0.02. Still faint from every camera (even at
-  3x strength, shot `river_ripples3`): left to tune (a stronger normal texture, or the wave field below).
+- **Ripples:** a third, fine normal layer (0.45 m), strength 2.0, roughness 0.02. `RippleUnpack` (1) is the texture's
+  * 2 - 1 decode; set to 0 the water goes flat (shot `river_unpack`), so the decode is right and the swamp normal texture is
+  simply weak. Ripples read a little now; a stronger ripple texture is still left. The bodies' waves (W2) show clearly.
 - **Tuning from the console:** `Water.Param Name V` or `Water.Param Name R G B` sets any `M_Water` parameter on a dynamic
   instance (kept across rebuilds), e.g. `Water.Param Absorption 1.1 0.8 2.0`.
 - **W2 (works, checked 2026-11-17):** `USimWaterSubsystem` runs a wave equation on three 256 x 256 half-float
@@ -110,8 +111,9 @@ walkable cell within 24 m, carried by the current, and walks on from there.
   two cells 1 m deep and the controlled one swims circles in 3 m (both checked), then the field is read back.
 - Cost so far (1080p offscreen, river with the two bodies): GPU 6.1 ms with the surface and wave step, 6.1 ms with
   `Water.Ripples 0`, 5.6 ms with `Water.Enable 0`.
-- Left: W3 splashes, W4 swim animation (no human swim clip on the PC: download Mixamo **Treading
-  Water** and **Swimming**, in place, FBX without skin) and the underwater view.
+- Left: a stronger ripple texture, W3 splashes, W4 swim animation and the underwater view. The Mixamo clips for W4 are on
+  the PC (not in Git): `assets/raw/mixamo/Treading Water.fbx` and `Swimming.fbx` (FBX, without skin, 30 fps, Swimming in
+  place), to retarget like the other clips.
 
 ## Unreal (planned, PC)
 

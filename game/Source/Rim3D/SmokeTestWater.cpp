@@ -488,16 +488,16 @@ void USmokeTestSubsystem::BuildWaterPhases()
 		};
 		Phases.Add(Shallows);
 
-		// The low river shot again with the ripples three times as strong (to judge the ripple strength).
+		// The low river shot again with the ripple texture decoded the other way (RippleUnpack 0, flat: shows the texture needs the unpack), to compare.
 		FPhase Strong;
-		Strong.Name = TEXT("river_ripples3");
+		Strong.Name = TEXT("river_unpack");
 		Strong.WarmupSeconds = 2.0f;
 		Strong.MeasureSeconds = 1.0f;
 		Strong.Setup = [=]()
 		{
 			if (USimWaterSubsystem* W = Water())
 			{
-				W->SetWaterParam(TEXT("RippleStrength"), 3.6f);
+				W->SetWaterParam(TEXT("RippleUnpack"), 0.0f);
 			}
 			Frame(State->River);
 		};
@@ -505,7 +505,7 @@ void USmokeTestSubsystem::BuildWaterPhases()
 		{
 			if (USimWaterSubsystem* W = Water())
 			{
-				W->SetWaterParam(TEXT("RippleStrength"), 1.2f);
+				W->SetWaterParam(TEXT("RippleUnpack"), 1.0f);
 			}
 		};
 		Phases.Add(Strong);

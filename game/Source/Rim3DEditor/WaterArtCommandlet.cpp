@@ -50,15 +50,19 @@ namespace
 
 	const TCHAR* const WaterArtNormalCode = TEXT(
 		"float2 pA = UV - offA; float2 pB = UV - offB;\n"
-		"float2 a1 = Texture2DSample(Tex, TexSampler, pA / Tile1).xy * 2.0 - 1.0;\n"
-		"float2 b1 = Texture2DSample(Tex, TexSampler, pB / Tile1 + 0.37).xy * 2.0 - 1.0;\n"
+		"float2 a1 = Texture2DSample(Tex, TexSampler, pA / Tile1).xy;\n"
+		"float2 b1 = Texture2DSample(Tex, TexSampler, pB / Tile1 + 0.37).xy;\n"
+		// A normal texture may come back already unpacked (-1..1) or packed (0..1); RippleUnpack 1 does the * 2 - 1.
+		"a1 = lerp(a1, a1 * 2.0 - 1.0, Unpack); b1 = lerp(b1, b1 * 2.0 - 1.0, Unpack);\n"
 		// The second, finer layer turned a quarter round, so the two never line up.
-		"float2 a2 = Texture2DSample(Tex, TexSampler, float2(pA.y, -pA.x) / Tile2 + 0.11).xy * 2.0 - 1.0;\n"
-		"float2 b2 = Texture2DSample(Tex, TexSampler, float2(pB.y, -pB.x) / Tile2 + 0.61).xy * 2.0 - 1.0;\n"
+		"float2 a2 = Texture2DSample(Tex, TexSampler, float2(pA.y, -pA.x) / Tile2 + 0.11).xy;\n"
+		"float2 b2 = Texture2DSample(Tex, TexSampler, float2(pB.y, -pB.x) / Tile2 + 0.61).xy;\n"
+		"a2 = lerp(a2, a2 * 2.0 - 1.0, Unpack); b2 = lerp(b2, b2 * 2.0 - 1.0, Unpack);\n"
 		"a2 = float2(-a2.y, a2.x); b2 = float2(-b2.y, b2.x);\n"
 		// A third, fine layer (cat's paws, the sun's sparkle) turned the other way.
-		"float2 a3 = Texture2DSample(Tex, TexSampler, float2(-pA.y, pA.x) / Tile3 + 0.29).xy * 2.0 - 1.0;\n"
-		"float2 b3 = Texture2DSample(Tex, TexSampler, float2(-pB.y, pB.x) / Tile3 + 0.83).xy * 2.0 - 1.0;\n"
+		"float2 a3 = Texture2DSample(Tex, TexSampler, float2(-pA.y, pA.x) / Tile3 + 0.29).xy;\n"
+		"float2 b3 = Texture2DSample(Tex, TexSampler, float2(-pB.y, pB.x) / Tile3 + 0.83).xy;\n"
+		"a3 = lerp(a3, a3 * 2.0 - 1.0, Unpack); b3 = lerp(b3, b3 * 2.0 - 1.0, Unpack);\n"
 		"a3 = float2(a3.y, -a3.x); b3 = float2(b3.y, -b3.x);\n"
 		"float keep = rsqrt(max(wA * wA + wB * wB, 0.0001));\n"
 		"float2 n = ((a1 * wA + b1 * wB) * 0.5 + (a2 * wA + b2 * wB) * 0.35 + (a3 * wA + b3 * wB) * 0.3) * keep;\n"
@@ -242,8 +246,9 @@ namespace
 		WaterArtInput(NormalNode, TEXT("Tile1"), WaterArtScalar(Material, TEXT("RippleTile1"), 3.2f, 520));
 		WaterArtInput(NormalNode, TEXT("Tile2"), WaterArtScalar(Material, TEXT("RippleTile2"), 1.3f, 580));
 		WaterArtInput(NormalNode, TEXT("Tile3"), WaterArtScalar(Material, TEXT("RippleTile3"), 0.45f, 600));
-		WaterArtInput(NormalNode, TEXT("Ripple"), WaterArtScalar(Material, TEXT("RippleStrength"), 1.2f, 640));
+		WaterArtInput(NormalNode, TEXT("Ripple"), WaterArtScalar(Material, TEXT("RippleStrength"), 2.0f, 640));
 		WaterArtInput(NormalNode, TEXT("Depth"), DepthX);
+		WaterArtInput(NormalNode, TEXT("Unpack"), WaterArtScalar(Material, TEXT("RippleUnpack"), 1.0f, 1640));
 		auto* WaveTex = Cast<UMaterialExpressionTextureObjectParameter>(WaterArtNode(Material, UMaterialExpressionTextureObjectParameter::StaticClass(), -1100, 1400));
 		WaveTex->ParameterName = TEXT("WaveTex");
 		WaveTex->Texture = LoadObject<UTexture>(nullptr, WaterArtBlankPath);
