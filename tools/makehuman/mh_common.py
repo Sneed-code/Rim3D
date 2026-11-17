@@ -1468,7 +1468,10 @@ def add_jewellery(rig, body, female, color=(0.8, 0.7, 0.45), log=print):
             poly.material_index = 0
         if bone not in bones:
             bone = "head" if "head" in bones else bones[0].name
-        if isinstance(through, str) and through == "each":
+        if callable(through):
+            # Weights worked out per vertex by the caller (a chain hanging between two limbs blends from one to the other).
+            _skin_to(obj, rig, {i: through(v.co) for i, v in enumerate(obj.data.vertices)})
+        elif isinstance(through, str) and through == "each":
             # Every point takes the skin weights under it (a chain lying on the body bends with it).
             per = {}
             for i, v in enumerate(obj.data.vertices):
@@ -1557,6 +1560,11 @@ def add_jewellery(rig, body, female, color=(0.8, 0.7, 0.45), log=print):
         tip = V(face[np.argmin(face[:, 1])])
         nost = V(pts[np.argmin(np.linalg.norm(pts - np.array(tuple(tip + Vector((0.011, 0.006, -0.012)))), axis=1))])
         piece(_torus("Jewel_NoseRing", nost + Vector((0.002, -0.003, -0.004)), Vector((1, 0, 0)), 0.005, 0.0009), "head", nost)
+    nipple_tips = {}
+    navel_at = None
+    neck_front = None
+    collar_front = None
+    shackles = {}
     # Nipple barbells: they take the nipple's own skin weights, so they move with the breast and not beyond it.
     for side, sx in (("L", 1.0), ("R", -1.0)):
         b = bones.get("breast_" + side.lower())
@@ -1572,6 +1580,7 @@ def add_jewellery(rig, body, female, color=(0.8, 0.7, 0.45), log=print):
                 parts.append(_torus("ball", centre + Vector((end, 0, 0)), Vector((1, 0, 0)), 0.0012, 0.0021, rings=10, segments=8))
             obj = _join(parts)
             piece(obj, "breast_" + side.lower(), tip)
+            nipple_tips[side] = centre
     # Navel: the deepest point of the belly's middle line between the hips and the ribs. A ring, a gem stud (a curved
     # bar with a gem above and a ball below) and a dangle.
     if "spine_01" in bones and "spine_02" in bones:
@@ -1580,6 +1589,7 @@ def add_jewellery(rig, body, female, color=(0.8, 0.7, 0.45), log=print):
         mid = pts[(np.abs(pts[:, 0] - cx) < 0.006) & (pts[:, 2] > z0) & (pts[:, 2] < z1) & (pts[:, 1] < bones["spine_01"].head_local.y)]
         if len(mid):
             navel = V(mid[np.argmax(mid[:, 1])])
+            navel_at = navel
             upper = navel + Vector((0, -0.002, 0.007))
             piece(_torus("Jewel_Navel", navel + Vector((0, -0.003, -0.006)), Vector((1, 0, 0)), 0.006, 0.0011), "spine_01", navel)
             gem = _join([_rod("bar", upper, navel + Vector((0, -0.001, -0.009)), 0.0008), _sphere("gem", upper + Vector((0, -0.0015, 0.002)), 0.0034),
@@ -1663,12 +1673,14 @@ def add_jewellery(rig, body, female, color=(0.8, 0.7, 0.45), log=print):
             surf = V(pts[j])
             normal = (surf - (base + Vector((0, 0, surf.z - base.z)))).normalized()
             path.append(surf + normal * 0.0025)
+        neck_front = path[36]
         chain = _chain("Jewel_Necklace", path)
         piece(chain, "neck_01", "each")
         tilt = (ax + Vector((0, -0.35, 0))).normalized()
         low = base + ax * 0.012 + Vector((0, -0.006, 0))
         centre, r = fit_ring(low, tilt, near=0.07, slab=0.008, share=60)
         piece(_band("Jewel_Collar", centre, tilt, r + 0.004, 0.028, 0.006), "neck_01")
+        collar_front = centre + Vector((0, -(r + 0.010), -0.016))
     # Cuffs on the wrists and shackles on the ankles.
     for side in ("l", "r"):
         for bone, at, name, h in (("lowerarm_" + side, 0.92, "Cuff", 0.035), ("calf_" + side, 0.9, "Shackle", 0.04)):
@@ -1676,9 +1688,121 @@ def add_jewellery(rig, body, female, color=(0.8, 0.7, 0.45), log=print):
                 b = bones[bone]
                 c = b.head_local.lerp(b.tail_local, at)
                 ax = b.tail_local - b.head_local
-                piece(_band("Jewel_" + name + side.upper(), c, ax, limb_radius(c, ax) + 0.004, h, 0.006), bone)
+                rad = limb_radius(c, ax) + 0.004
+                piece(_band("Jewel_" + name + side.upper(), c, ax, rad, h, 0.006), bone)
+                if name == "Shackle":
+                    shackles[side] = (c, rad)
+    add_body_chains(rig, bones, pts, piece, nipple_tips, navel_at, neck_front, collar_front, shackles, female)
     log("jewellery", len(made), made)
     return made
+
+
+def add_body_chains(rig, bones, pts, piece, nipple_tips, navel_at, neck_front, collar_front, shackles, female):
+    """Decorative chains (the creator shows each or not; generated pawns never get them), all of the necklace's links:
+    a waist chain round the hips, lower at the front; a body chain from the necklace's lowest point down the breastbone
+    and belly to the waist chain; a nipple chain hanging between the nipple barbells; a leash chain hanging from the
+    collar's front down the chest; and a hobble chain between the ankle shackles, sagging. Chains on the skin take the
+    skin weights under each link; the hobble chain blends from one calf to the other."""
+    import math
+    import numpy as np
+    from mathutils import Vector
+    cx = bones["pelvis"].head_local.x if "pelvis" in bones else 0.0
+
+    def front_y(x, z, half=0.008):
+        """The body's front (smallest y) near (x, z); None if no skin there."""
+        sel = pts[(np.abs(pts[:, 0] - x) < half) & (np.abs(pts[:, 2] - z) < 0.008)]
+        return float(sel[:, 1].min()) if len(sel) else None
+
+    def on_front(p, gap, half=0.008, only_inside=False):
+        y = front_y(p.x, p.z, half)
+        if y is None:
+            return p
+        if only_inside and p.y < y - gap:
+            return p
+        return Vector((p.x, y - gap, p.z))
+
+    # Waist chain: round the torso a little above the hip joints, 7 mm off the skin, sagging 4 cm at the front. The
+    # skin is found ray by ray from the body's middle among points near the middle line (the hands hang beside the
+    # hips: only the torso's own outline counts, the nearest surface outward from the centre).
+    waist_front = None
+    if "pelvis" in bones and "spine_01" in bones:
+        zc = bones["pelvis"].head_local.z * 0.45 + bones["spine_01"].head_local.z * 0.55
+        slab = pts[np.abs(pts[:, 2] - zc) < 0.03]
+        if len(slab):
+            yc = float(np.median(slab[:, 1]))
+            path = []
+            for i in range(97):
+                th = 2 * math.pi * i / 96
+                d = np.array((math.sin(th), math.cos(th)))  # th 0: the back (+Y), pi: the front
+                frontness = max(0.0, -math.cos(th))
+                z = zc - 0.04 * frontness ** 1.5
+                ring = pts[np.abs(pts[:, 2] - z) < 0.006]
+                rel = ring[:, :2] - np.array((cx, yc))
+                along = rel @ d
+                across = np.abs(rel[:, 0] * d[1] - rel[:, 1] * d[0])
+                hit = along[(across < 0.012) & (along > 0)]
+                if not len(hit):
+                    continue
+                # The first surface outward: the torso, not an arm further out on the same ray.
+                hit = np.sort(hit)
+                r = hit[0]
+                for h in hit[1:]:
+                    if h - r > 0.03:
+                        break
+                    r = h
+                path.append(Vector((cx + d[0] * (r + 0.007), yc + d[1] * (r + 0.007), z)))
+            if len(path) > 40:
+                path.append(path[0])
+                piece(_chain("Jewel_WaistChain", path), "pelvis", "each")
+                waist_front = min(path, key=lambda q: q.y)
+    # Body chain: from the necklace's lowest point down the middle line, lying on the breastbone (bridging the hollow
+    # between breasts) and the belly, past the navel to the waist chain.
+    if neck_front is not None:
+        bottom = waist_front if waist_front is not None else (navel_at - Vector((0, 0, 0.06)) if navel_at is not None else None)
+        if bottom is not None:
+            top = neck_front
+            path = []
+            n = 60
+            for i in range(n + 1):
+                t = i / n
+                q = Vector((cx, top.y, top.z + (bottom.z - top.z) * t))
+                path.append(on_front(q, 0.003, half=0.02))
+            piece(_chain("Jewel_BodyChain", path), "spine_03" if "spine_03" in bones else "spine_02", "each")
+    # Nipple chain: hanging between the barbells' outer ends, sagging below them, kept in front of the skin.
+    if "L" in nipple_tips and "R" in nipple_tips:
+        a, b = nipple_tips["L"] + Vector((-0.011, 0, 0)), nipple_tips["R"] + Vector((0.011, 0, 0))
+        sag = 0.05 if female else 0.03
+        path = []
+        for i in range(41):
+            t = i / 40
+            q = a.lerp(b, t) + Vector((0, 0, -sag * 4 * t * (1 - t)))
+            path.append(on_front(q, 0.004, only_inside=True))
+        piece(_chain("Jewel_NippleChain", path, link=0.006, wire=0.0009), "spine_03" if "spine_03" in bones else "spine_02", "each")
+    # Leash: from the collar's front down the chest, lying on it, 32 cm.
+    if collar_front is not None:
+        path = []
+        for i in range(41):
+            q = collar_front + Vector((0, 0, -0.32 * i / 40))
+            path.append(on_front(q, 0.004, half=0.02) if i > 2 else q)
+        piece(_chain("Jewel_CollarChain", path, link=0.011, wire=0.0016), "neck_01", "each")
+    # Hobble chain between the ankle shackles: from each shackle's inner side, sagging 6 cm; its links blend from the
+    # left calf to the right (smoothly, the ends ride rigidly with their shackle).
+    if "L" in shackles and "R" in shackles and "calf_l" in bones and "calf_r" in bones:
+        (cl, rl), (cr, rr) = shackles["L"], shackles["R"]
+        inward = (cr - cl)
+        inward.z = 0.0
+        inward.normalize()
+        a, b = cl + inward * rl, cr - inward * rr
+        path = [a.lerp(b, i / 40) + Vector((0, 0, -0.06 * 4 * (i / 40) * (1 - i / 40))) for i in range(41)]
+        span = (b - a)
+        length = max(span.length, 1e-4)
+
+        def blend(co):
+            t = min(max((co - a).dot(span) / (length * length), 0.0), 1.0)
+            t = t * t * (3 - 2 * t)
+            return {"calf_l": 1.0 - t, "calf_r": t} if 0.0 < t < 1.0 else ({"calf_l": 1.0} if t <= 0.0 else {"calf_r": 1.0})
+
+        piece(_chain("Jewel_AnkleChain", path, link=0.012, wire=0.0018), "calf_l", blend)
 
 
 # ---- Beast-Strain (cat): parts made for the body they go on, like the horns and the tail ----
