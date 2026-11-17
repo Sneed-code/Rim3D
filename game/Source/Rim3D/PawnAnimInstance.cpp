@@ -39,6 +39,12 @@ namespace
 	constexpr float PawnLoopBlendTime = 0.3f;
 	// Below this a pawn stands (cm/s).
 	constexpr float PawnStandSpeed = 30.0f;
+	// Standing this long (s) with no route ahead, a full-detail pawn leaves motion matching for the breathing idle, blended
+	// in over PawnStandBlendTime; the short wait lets a walk's stop clip plant the feet first.
+	constexpr float PawnStandDelay = 0.3f;
+	constexpr float PawnStandBlendTime = 0.4f;
+	// A route shorter than this (cm) is no walk: the pawn is where it wants to be.
+	constexpr float PawnStandRoute = 25.0f;
 
 	/** The mesh faces +Y in its own space, so it is turned -90 degrees under the actor. */
 	FQuat PawnMeshFacing(float ActorYaw)
@@ -143,6 +149,10 @@ private:
 	void PredictAlongRoute(const FSimPawnAnimInputs& In, float DeltaTime);
 	void UpdateMotionMatching(const FAnimationUpdateContext& Context, float DeltaTime);
 	void UpdateLoops(const FAnimationUpdateContext& Context, const FSimPawnAnimInputs& In, float BlendTime);
+	/** Whether the pawn stands where it wants to be: hardly moving and no route ahead. */
+	static bool IsStanding(const FSimPawnAnimInputs& In);
+	/** Plays the breathing idle (blending in once); false without one. */
+	bool UpdateStandingIdle(const FAnimationUpdateContext& Context, float BlendTime);
 
 	FAnimNode_BlendStack_Standalone BlendStack;
 	UE::PoseSearch::FPoseHistory History;
@@ -154,6 +164,10 @@ private:
 	float RecentSpeed = 0.0f;
 	/** The velocity smoothed over about 0.12 s: the player's pawn moves by the steps the keys send, uneven from step to step. */
 	FVector SmoothVelocity = FVector::ZeroVector;
+	/** How long the pawn has stood still (s); 0 while it moves. */
+	float StandTime = 0.0f;
+	/** Where in the breathing idle this pawn starts (0..1), so a crowd does not breathe in step. Cosmetic, not the sim's. */
+	float IdlePhase = 0.0f;
 };
 
 /**
@@ -355,6 +369,8 @@ void FSimPawnLocomotionNode::Initialize_AnyThread(const FAnimationInitializeCont
 	Trajectory.Samples.Reset();
 	State.Reset();
 	bResetHistory = true;
+	StandTime = 0.0f;
+	IdlePhase = FMath::FRand();
 }
 
 void FSimPawnLocomotionNode::CacheBones_AnyThread(const FAnimationCacheBonesContext& Context)
@@ -380,16 +396,39 @@ void FSimPawnLocomotionNode::Update_AnyThread(const FAnimationUpdateContext& Con
 		History.SetTrajectory(Trajectory);
 	}
 
+	StandTime = IsStanding(In) ? StandTime + DeltaTime : 0.0f;
+	Stats.bStandingIdle = false;
 	if (BlendStack.GetAnimAsset() == nullptr)
 	{
 		// Something to show from the first frame on, even while paused.
-		UpdateLoops(Context, In, 0.0f);
+		if (IsStanding(In) && UpdateStandingIdle(Context, 0.0f))
+		{
+			StandTime = PawnStandDelay;
+		}
+		else
+		{
+			UpdateLoops(Context, In, 0.0f);
+		}
 	}
 	else if (DeltaTime > 0.0f)
 	{
 		if (In.Detail == ESimPawnDetail::Full && !Proxy->Databases.IsEmpty())
 		{
-			UpdateMotionMatching(Context, DeltaTime);
+			// Standing still, the pawn breathes in the idle with its feet planted. Motion matching over the sample's idles
+			// and turn-in-place clips kept picking weight shifts and small steps, so a standing pawn shuffled on the spot.
+			if (StandTime >= PawnStandDelay && UpdateStandingIdle(Context, PawnStandBlendTime))
+			{
+				State.Reset();
+				Stats.Database = NAME_None;
+			}
+			else
+			{
+				if (BlendStack.GetAnimAsset() == Proxy->IdleLoop)
+				{
+					State.Reset();  // walking off: search afresh (the idle is in no database)
+				}
+				UpdateMotionMatching(Context, DeltaTime);
+			}
 		}
 		else
 		{
@@ -584,6 +623,40 @@ void FSimPawnLocomotionNode::UpdateMotionMatching(const FAnimationUpdateContext&
 	Stats.PlayRate = State.SearchResult.WantedPlayRate;
 }
 
+bool FSimPawnLocomotionNode::IsStanding(const FSimPawnAnimInputs& In)
+{
+	if (In.Velocity.Size2D() >= PawnStandSpeed)
+	{
+		return false;
+	}
+	float RouteLeft = 0.0f;
+	FVector From = In.Location;
+	for (const FVector& Point : In.Route)
+	{
+		RouteLeft += FVector::Dist2D(From, Point);
+		From = Point;
+	}
+	return RouteLeft < PawnStandRoute;
+}
+
+bool FSimPawnLocomotionNode::UpdateStandingIdle(const FAnimationUpdateContext& Context, float BlendTime)
+{
+	UAnimSequence* Idle = Proxy->IdleLoop;
+	if (!Idle)
+	{
+		return false;
+	}
+	if (BlendStack.GetAnimAsset() != Idle)
+	{
+		BlendStack.BlendTo(Context, Idle, IdlePhase * Idle->GetPlayLength(), true, false, nullptr, BlendTime, nullptr,
+			EAlphaBlendOption::HermiteCubic, false, NAME_None, FVector::ZeroVector, 1.0f);
+	}
+	BlendStack.UpdatePlayRate(1.0f);
+	Stats.PlayRate = 1.0f;
+	Stats.bStandingIdle = true;
+	return true;
+}
+
 void FSimPawnLocomotionNode::UpdateLoops(const FAnimationUpdateContext& Context, const FSimPawnAnimInputs& In, float BlendTime)
 {
 	const float Speed = In.Velocity.Size2D();
@@ -601,7 +674,7 @@ void FSimPawnLocomotionNode::UpdateLoops(const FAnimationUpdateContext& Context,
 	}
 	if (BlendStack.GetAnimAsset() != Loop)
 	{
-		BlendStack.BlendTo(Context, Loop, 0.0f, true, false, nullptr, BlendTime, nullptr, EAlphaBlendOption::HermiteCubic,
+		BlendStack.BlendTo(Context, Loop, Loop == Proxy->IdleLoop ? IdlePhase * Loop->GetPlayLength() : 0.0f, true, false, nullptr, BlendTime, nullptr, EAlphaBlendOption::HermiteCubic,
 			false, NAME_None, FVector::ZeroVector, Rate);
 	}
 	BlendStack.UpdatePlayRate(Rate);

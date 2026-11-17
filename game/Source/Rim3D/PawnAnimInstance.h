@@ -86,6 +86,8 @@ struct FSimPawnAnimStats
 	float MaxWobbleDegrees = 0.0f;
 	float LimpNow = 0.0f;
 	float MaxLimp = 0.0f;
+	/** Standing still: the breathing idle plays and motion matching rests (it shuffled the feet). */
+	bool bStandingIdle = false;
 };
 
 /**
