@@ -2561,7 +2561,8 @@ void HealthSystem::step(int64_t seconds, uint64_t seed) {
                                         (zone >= health.zoneHurtAt.size() || health.zoneHurtAt[zone] < 0 ||
                                          seconds - health.zoneHurtAt[zone] >= delay) &&
                                         (zone >= health.zoneBleeds.size() || health.zoneBleeds[zone] == 0);
-                    if (!rested || model_->hediffs[injury.hediff.value].permanent) {
+                    // A dirty wound on its way to an infection (rollInfection) festers until the infection has come.
+                    if (!rested || model_->hediffs[injury.hediff.value].permanent || injury.infectAt >= 0) {
                         ++i;
                         continue;
                     }
@@ -2569,7 +2570,11 @@ void HealthSystem::step(int64_t seconds, uint64_t seed) {
                     injury.severity *= keep;
                     healedAny = true;
                     if (injury.severity < model_->healGoneBelow) {
+                        const Injury healed = injury;
                         health.injuries.erase(health.injuries.begin() + static_cast<std::ptrdiff_t>(i));
+                        Rng scarRng(splitMix64(seed ^ (static_cast<uint64_t>(entt::to_integral(pawn)) * 0x9E3779B97F4A7C15ULL) ^
+                                               static_cast<uint64_t>(seconds) ^ (static_cast<uint64_t>(healed.part) << 40)));
+                        leaveScar(pawn, health, healed, scarRng);
                     } else {
                         ++i;
                     }
@@ -2805,7 +2810,7 @@ bool HealthSystem::removePart(Entity pawn, int part, float tendQuality) {
     destroyPart(pawn, health, part, 0.0f);
     for (MissingPart& m : health.missing) {
         if (m.part == part) {
-            m.tendQuality = std::max(0.0f, tendQuality);
+            m.tendQuality = tendQuality < 0.0f ? -1.0f : tendQuality;  // below 0: left untended
         }
     }
     recompute(pawn, health, true);

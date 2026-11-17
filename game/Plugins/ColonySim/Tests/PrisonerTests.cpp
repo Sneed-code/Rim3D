@@ -501,7 +501,9 @@ TEST_CASE("Prisoners: doctors tend a prisoner's wounds") {
         });
     }));
     CHECK(sim.prisoners().isPrisoner(camp.enemy));
-    CHECK(priCell(sim, camp.enemy) == CellPos{20, 20, 0});
+    // Still in the cell: in bed, or up again once the hurt has healed enough (body-health.md part F).
+    const CellPos at = priCell(sim, camp.enemy);
+    CHECK((at.x >= 18 && at.x <= 22 && at.y >= 18 && at.y <= 22));
 }
 
 TEST_CASE("Prisoners: a prisoner, its mode and a prison bed save and load, and the loaded game goes on the same") {

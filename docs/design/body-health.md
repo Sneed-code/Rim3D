@@ -21,7 +21,12 @@ for people changes. Animals keep RimWorld's rules for now.
 | Protagonist | never downed; about 100 hit points over the whole body; dies at 0 (not a pawn sneed pilots) |
 | Downed and dead | can still be shot |
 | Poise | base 50. An attack's force over the target's poise knocks it down; then 30 s before it can be knocked down again |
-| Dismemberment | overkill on a zone of at least 50% of its base HP. Arm: 50% below the elbow, 50% the whole arm; leg: below the knee or the whole leg; torso or head: death and a gib. Force over poise + 25 on a killing blow: the whole corpse gibs. Protagonist: never |
+| Death (2026-11-17) | head or torso at 0 (or blood at 0; poison later). Also: two or more limbs (arms, legs) at 0 with the head or the torso at 50% or less |
+| Hurt arms (2026-11-17) | an arm under 50% slows attacks by 0.5% for every percent under 50, both arms added (both at 25%: 25% slower) |
+| Hurt legs (2026-11-17) | the same for the walk |
+| Healing (2026-11-17) | a zone not hurt for 10 s with its bleeding patched gets back 0.1% of what it lost a second, 0.2% asleep |
+| Dismemberment (2026-11-17, replaces the 50% rule and the gibs) | only on death: the killing hit went over what the struck zone had left by 25% of the zone's hit points or more. Upper arm: the whole arm; lower arm: below the elbow; legs likewise; head: off; torso: the head, arms and legs come apart. No viscera yet. Protagonist: never |
+| Severed parts (2026-11-17, not built) | decay over 2 days; a head on a pike turns to bone over 4 days |
 
 "No active bleeding for now": no dripping effect on screen yet; the blood loss itself counts.
 
@@ -166,26 +171,37 @@ What a hurt body shows, all in Unreal and all cosmetic (the sim decided the hit,
 
 ## Part F as built (sim)
 
-- **The rule** (`HealthSystem::hitPart`, `HealthRules` `zones.dismember`): a hit that goes over what its zone had
-  left by half the zone's hit points or more dismembers. A whole arm (50) needs 75 in one hit, an arm with 20 left
-  needs 45; a whole leg (75) needs 113; a whole head 75; a whole torso 150. The dismemberment is the wound: the hit
-  does no other damage.
-- **Arm, leg**: the limb comes off below the elbow or the knee (the body's Hand or Foot part goes) or whole (the Arm
-  or Leg part), half and half by the pawn and the moment; a hit on the hand or the foot itself always takes the lower
-  limb. Event `PawnDismembered`, message "left forearm", "right arm", "left lower leg", "right leg". A lost leg
-  downs its owner (the zone is at 0), lost parts bleed as they always did.
-- **Head**: a cut or a slash (`severTypes`) takes it off (`PawnDismembered` "head"); anything else bursts it
-  (`PawnGibbed` "head", `Health::gib` Head). **Torso**: it bursts (`PawnGibbed` "torso", gib Torso). Both kill.
-- **Whole corpse**: a blow on a dead body whose force (as for poise: damage before armour, blunt 1.5x) is over the
-  poise by 25 (over 75) bursts all of it (`HealthSystem::gibCorpse`, `PawnGibbed` "whole", gib Whole), from
-  `CombatSystem::jolt`, so the blow that killed does it. The pawn stays in the sim as the same dead thing; Unreal
-  draws chunks instead of a body.
+sneed's rules of 2026-11-17 (the table above); the first version (50% overkill on the living, bursting heads and
+torsos, whole-corpse gibs) was never merged.
+
+- **Death** (`HealthSystem::derive`, `HealthRules` `zones.deadLimbs`, `deadLimbsCoreAtOrBelow`): a person dies
+  (cause Wounds) when the head or the torso zone is at 0, or when two or more arm and leg zones are at 0 and the
+  head or the torso is at half or less. Blood at 0 and RimWorld's vital organs kill as before. The protagonist keeps
+  its own rule (100 hit points over the body).
+- **A limb at 0 stays on** (`damagePart`): for bodies with zones, damage no longer destroys the zone's root, the Arm,
+  Hand, Leg, Foot or Head part: the part sits at 0 and can heal. Fingers, toes, eyes, ears and organs are still lost
+  the RimWorld way. A part at 0 takes no more damage, so a hit aimed at it does nothing.
+- **Hurt limbs** (`zones.limbSlowBelow` 0.5, `limbSlowPerShare` 0.5): `Health::limbAttack` is 1 minus half of every
+  arm's share under half, `limbMove` the same for legs. `HealthSystem::attackSpeedFactor` (never under 0.5) divides
+  `CombatSystem::attackTimeFactor`, so aiming, cooldown, reloading and melee swings all slow; `limbMove` multiplies
+  the walking factor after the 40% floor (two legs at 25% walk 25% slower than the floor).
+  Reading of sneed's example: the count starts at the 50% line, so one arm at 40% is 5% slower.
+- **Healing** (`HealthSystem::step`, `healDelaySeconds` 10, `healPerSecond` 0.001, `healAsleepFactor` 2,
+  `healGoneBelow` 0.25): once a real second (30 steps), every wound in a zone that was last hurt 10 real seconds ago
+  or more (`Health::zoneHurtAt`, saved in health section 8, hashed) and is not bleeding shrinks by 0.1%, 0.2% when
+  the pawn lies asleep (`setAsleep`, a worker lying down). A wound under a quarter of a hit point is gone. Scars and
+  old wounds never heal. RimWorld's slow daily healing still runs beside it.
+- **Dismemberment** (`hitPart`, `dismember`, `zones.dismember.overkillShare` 0.25): only the hit that kills, when
+  its damage is over what the struck zone had left by a quarter of the zone's hit points: 13 over for an arm or the
+  head, 19 for a leg, 25 for the torso. Struck on the hand, the foot, a part of them or the radius or tibia: the limb
+  comes off below the elbow or knee (the Hand or Foot part goes); anywhere else on the limb: the whole Arm or Leg.
+  Head zone: the Head part. Torso: the head and every limb. One `PawnDismembered` event for each piece, message
+  "left forearm", "right arm", "left lower leg", "right leg", "head". A corpse is never cut up further.
 - **Never** the protagonist, animals, mechanoids (bodies without zones).
-- **For drawing**: the snapshot's `severed` (SeveredBits: each forearm, arm, lower leg, leg, and the head; from the
-  lost parts, so an amputation or a destroyed hand shows too) and `gib`. `gib` is saved (health section 8) and hashed;
-  `severed` is worked out.
-- Not yet: severed parts as items (the head trophy needs them), Unreal's cut limbs, stump caps, gib chunks and
-  ragdolls (PC).
+- **For drawing**: the snapshot's `severed` (SeveredBits: each forearm, arm, lower leg, leg, and the head), worked out
+  from the lost parts, so a surgeon's amputation shows too.
+- Not yet: severed parts as items that decay over 2 days (and the head on a pike that turns to bone over 4), Unreal's
+  cut limbs, stump caps and ragdolls (PC).
 
 ## Later (sneed, 2026-11-16)
 
