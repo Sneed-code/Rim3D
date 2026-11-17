@@ -65,7 +65,8 @@ std::shared_ptr<const DefDatabase> motionTestDefs() {
         std::vector<DefSource> sources;
         std::vector<fs::path> files;
         for (const auto& entry : fs::recursive_directory_iterator(root / "defs")) {
-            if (entry.is_regular_file() && entry.path().extension() == ".json") {
+            // The measured clips are left out: these tests use clips with known paths, under the same names.
+            if (entry.is_regular_file() && entry.path().extension() == ".json" && entry.path().parent_path().filename() != "MotionClips") {
                 files.push_back(entry.path());
             }
         }
@@ -348,11 +349,15 @@ TEST_CASE("Motion: a staggering blow throws the body away from it, through the w
     sim->stepMany(3);
     motionTestFace(*sim, pawn, -1.0f, 0.0f);  // facing the blow, which comes from the west
     const Position start = motionTestPos(*sim, pawn);
-    sim->combat().stagger(pawn, HitFrom{true, start.x - 1.0f, start.y});
+    sim->combat().stagger(pawn, HitFrom{true, start.x - 1.0f, start.y, true});  // a blow by hand
     MOTION_REQUIRE(motion.moving(pawn));
     // A person plays the stagger clip for a blow from the front: the one that goes back.
     CHECK(sim->things().registry().get<BodyMotion>(pawn).clip == motion.clipId("Motion_StaggerBack"));
+    sim->stepMany(4);
+    // Thrown back, it still faces the blow: it doesn't turn round to face its own push.
+    CHECK(sim->things().registry().get<Posture>(pawn).facingX == doctest::Approx(-1.0f));
     motionTestFinish(*sim, pawn);
+    CHECK(sim->things().registry().get<Posture>(pawn).facingX == doctest::Approx(-1.0f));
     CHECK(motionTestPos(*sim, pawn).x == doctest::Approx(start.x + 0.6f * motion.sizeScale(pawn)).epsilon(0.01));
     const float endX = motionTestPos(*sim, pawn).x;
     sim->stepMany(150);
@@ -372,9 +377,18 @@ TEST_CASE("Motion: a staggering blow throws the body away from it, through the w
     const Entity cornered = motionTestPawn(*sim2, 30.6f, 30.5f);
     sim2->stepMany(3);
     motionTestFace(*sim2, cornered, -1.0f, 0.0f);
-    sim2->combat().stagger(cornered, HitFrom{true, 29.0f, 30.5f});
+    sim2->combat().stagger(cornered, HitFrom{true, 29.0f, 30.5f, true});
     motionTestFinish(*sim2, cornered);
     CHECK(motionTestPos(*sim2, cornered).x <= 31.0f - kPawnRadius + 1e-3f);
+
+    // A bullet's stagger is a flinch: with no flinch clip measured it leaves the body where it stands.
+    const Entity shot = motionTestPawn(*sim2, 40.5f, 30.5f);
+    sim2->stepMany(3);
+    const Position shotStart = motionTestPos(*sim2, shot);
+    sim2->combat().stagger(shot, HitFrom{true, 20.0f, 30.5f});
+    CHECK_FALSE(sim2->combat().motion().moving(shot));
+    sim2->stepMany(30);
+    CHECK(motionTestPos(*sim2, shot).x == doctest::Approx(shotStart.x));
 }
 
 TEST_CASE("Motion: a swing plays a short attack clip timed to the hit, steps the body in, and never a long flourish") {

@@ -36,6 +36,7 @@ class ArtillerySystem;
 class DefenseSystem;
 class DrugSystem;
 class Filth;
+class Grime;
 class Floors;
 class RoomStats;
 struct Colonist;
@@ -302,6 +303,17 @@ public:
     Entity controlledPawn() const;
     // A pawn's colonist record (name, skills...), or null if it is not a colonist.
     const Colonist* colonistOf(Entity pawn) const;
+    // The kill feed (docs/design/kill-feed.md). A PawnDied event's `target` is the killer: whoever last hurt the pawn with
+    // a bullet, blow or blast within kKillCreditSteps, unless it died of something else (hunger, cold, illness...).
+    // Which colour a name shows in, seen from the player: friendly (the colony, its tame animals), enemy (raiders,
+    // other hostile sides, an animal on the attack) or neutral (wild animals, visitors, prisoners).
+    static constexpr int64_t kKillCreditSteps = 3600;  // a game hour of real-time steps: long enough to bleed out
+    enum class KillSide : uint8_t { Friendly, Enemy, Neutral };
+    KillSide killSideOf(Entity pawn) const;
+    // The short name a feed line shows: a person's nickname or first name, a tame animal's name, else its kind ("Deer").
+    std::string feedName(Entity pawn) const;
+    // Names the killer on every PawnDied event of this step that has none. Runs at the end of every step; tests call it.
+    void creditKills();
     // How a humanlike pawn looks (docs/design/looks.md), or null for other things.
     const PawnLooks* looksOf(Entity pawn) const;
     // A humanlike pawn's genes, made from its lineage (docs/design/genes.md), or null for other things.
@@ -351,6 +363,8 @@ public:
     const Floors& floors() const { return *floors_; }
     Filth& filth() { return *filth_; }
     const Filth& filth() const { return *filth_; }
+    Grime& grime() { return *grime_; }
+    const Grime& grime() const { return *grime_; }
     RoomStats& roomStats() { return *roomStats_; }
     const RoomStats& roomStats() const { return *roomStats_; }
 
@@ -512,6 +526,7 @@ public:
     bool pawnSwimming(Entity pawn) const;
 
 private:
+    float lowestPartHealth(Entity pawn) const;  // the focus HP bar (docs/design/focus.md)
     float pawnMoveFactor(Entity pawn) const;  // see Sim.cpp
     friend class SimSaveAccess;  // saves read and restore the private state (Save.h)
 
@@ -622,6 +637,7 @@ private:
     std::unique_ptr<FighterSystem> fighters_;  // after the job system
     std::unique_ptr<Floors> floors_;           // C17; filth and room stats read the floors
     std::unique_ptr<Filth> filth_;
+    std::unique_ptr<Grime> grime_;             // dirt and blood on bodies (grime.md)
     std::unique_ptr<RoomStats> roomStats_;
     std::unique_ptr<AnimalSystem> animals_;
     std::unique_ptr<UpperFloors> upperFloors_;  // M1

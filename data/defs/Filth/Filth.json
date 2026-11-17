@@ -13,23 +13,26 @@
   },
   {
     "defName": "Blood", "parent": "FilthBase", "label": "blood",
+    "filth": { "fadeSeconds": 10200 },
     "stats": { "beauty": -30, "cleanliness": -10 }, "cleanTicks": 70,
     "look": { "fluid": true, "wet": [0.30, 0.012, 0.010], "dry": [0.075, 0.012, 0.010] },
-    "ours": ["look"],
-    "note": "look (Unreal only, docs/design/blood.md): the colour fresh and after drying (about 5 real minutes), linear RGB. fluid: drawn as wet splats that dry."
+    "ours": ["look", "filth.fadeSeconds"],
+    "note": "filth.fadeSeconds (sneed, 2026-11-17, ours: RimWorld's blood lasts days): blood fades 3% every 10 real seconds at 1x from when it lands, so the pile is gone 10,200 game seconds (5 min 40 s) after it was last added to, indoors too. look (Unreal only, docs/design/blood.md): the colour fresh and after drying (about 5 real minutes), linear RGB. fluid: drawn as wet splats that dry."
   },
   {
     "defName": "InsectBlood", "parent": "FilthBase", "label": "insect blood", "source": "RimWorld wiki (Filth_BloodInsect)",
+    "filth": { "fadeSeconds": 10200 },
     "stats": { "beauty": -30, "cleanliness": -10 }, "cleanTicks": 70,
     "look": { "fluid": true, "wet": [0.42, 0.40, 0.035], "dry": [0.16, 0.13, 0.02] },
-    "ours": ["look"], "unverified": ["stats", "cleanTicks"],
+    "ours": ["look", "filth.fadeSeconds"], "unverified": ["stats", "cleanTicks"],
     "note": "What chitinids bleed (Filth::bloodKindOf). Numbers as Blood."
   },
   {
     "defName": "MachineFluid", "parent": "FilthBase", "label": "machine fluid",
+    "filth": { "fadeSeconds": 10200 },
     "stats": { "beauty": -30, "cleanliness": -10 }, "cleanTicks": 70,
     "look": { "fluid": true, "wet": [0.02, 0.16, 0.55], "dry": [0.01, 0.05, 0.16] },
-    "ours": ["stats", "cleanTicks", "look"],
+    "ours": ["stats", "cleanTicks", "look", "filth.fadeSeconds"],
     "note": "Blue fluid that mechanical pawns leak when hit (sneed, 2026-11-16); RimWorld's mechanoids do not bleed. Numbers as Blood."
   },
   {

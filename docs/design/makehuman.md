@@ -327,8 +327,13 @@ Three Unreal problems led to this design:
 `assets/animations.json` "sets" points at the manifest. The commandlet imports the rig once and every clip onto its
 skeleton (saving the raw clips under `Source/Raw` for `-ProbeAnim`), then retargets a category at a time into
 `Animations/Mixamo/<category>/A_<name>`. The categories are each pack, plus the singles grouped as Injured, Falls,
-Crawling, Fear, Cover, Rolls, Firearms, Interact and Other. The creator's ANIMATIONS panel folds them by category and
+Crawling, Fear, Cover, Rolls, Fighting, Firearms, Interact and Other. The creator's ANIMATIONS panel folds them by category and
 has a search box.
+
+`-Clips -Only=<name>,<name>` imports just those clips (from `animations.json` or the manifest) and adds them to what is
+there: nothing is deleted and the set's IK rig and retargeter are reused. New Mixamo downloads go the same way: run
+`mixamo_prep.py` on a folder holding only them (same target rig), copy the prepared FBX next to the others and add
+them to `mixamo.json`, then `-Clips -Only=...` (how the punches went in, 2026-11-17).
 
 ## Not done (next, as of 2026-11-14)
 

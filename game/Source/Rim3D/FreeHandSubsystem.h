@@ -45,7 +45,7 @@ struct FFreeHandStats
 };
 
 /**
- * Free hand mode (docs/design/free-hand.md): in direct control, H frees the right hand. The mouse moves a marker and the
+ * Free hand mode (docs/design/free-hand.md): in direct control, J frees the right hand. The mouse moves a marker and the
  * hand reaches for whatever is under it within arm's length (a two-bone reach on the arm, the palm turned to the
  * surface); holding the left mouse button grips. Nothing is made for one thing: the hand only follows the marker and the
  * world reacts with the physics already there:
@@ -74,7 +74,7 @@ public:
 	/** 0 to 1: how far the weapon of this pawn should be put away for the free hand (the controlled pawn only). */
 	static float GetHolsterBlend(const UWorld* World, colony::Entity Pawn);
 
-	/** H: on or off. Only in direct control with the colonist up. Returns whether it is on now. */
+	/** J: on or off. Only in direct control with the colonist up. Returns whether it is on now. */
 	bool Toggle();
 	void SetActive(bool bOn);
 	bool IsOn() const { return bOn; }

@@ -4,8 +4,10 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/FightResponse.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 #include <utility>
@@ -69,6 +71,15 @@ struct Melee {
     // Phase 2 (melee section 3): when it began holding its swing at a raised guard; 0 when not waiting.
     int64_t guardWaitFrom = 0;
     int64_t nextRollAt = 0;      // an AI fighter rolls at most once every aiRollEverySteps
+    // Focus and footwork (melee section 4, docs/design/focus.md).
+    Entity focus = kNoEntity;    // the pawn it is locked on to: it faces it, and its swings go at its centre
+    bool focusPlayer = false;    // the player set it (FocusCommand); else the fighter AI did and keeps it up to date
+    bool low = false;            // the swing under way goes down at a body on the ground (Unreal plays a downward blow)
+    int8_t circleDir = 1;        // footwork: 1 circles to its left round the target, -1 to its right
+    int64_t nextFootworkAt = 0;  // the next footwork choice comes no sooner than this step
+    int64_t footworkUntil = 0;   // stepping round or back until this step (the snapshot's `footwork`)
+    int64_t engagedAt = 0;       // the step it last swung at an enemy (a fighter fresh from a swing follows one that runs)
+    FightResponse response = FightResponse::Attack;  // what it does about enemies (SetFightResponseCommand)
 };
 
 // The numbers (MeleeRules in data/defs/Rules/MeleeRules.json). Ours and sneed's: RimWorld's hit and dodge
@@ -124,6 +135,31 @@ struct MeleeRules {
     std::string unarmedStyle = "Unarmed";
     float maxAttackClipSeconds = 1.6f;
     float maxAttackHitSeconds = 0.8f;
+    float maxAttackTravel = 0.8f;  // metres (for a 1.80 m man): a clip that carries the body further is left out too
+    // Focus (sneed, 2026-11-17; docs/design/focus.md). Ours: Dark Souls' lock-on has no numbers to copy.
+    float focusRange = 20.0f;         // Tab picks targets this close
+    float focusBreakRange = 25.0f;    // a focus further off than this lets go by itself
+    float focusFrontCos = 0.5f;       // targets within 60 degrees of where it faces come first...
+    float focusBehindFactor = 2.0f;   // ...ones behind count this many times further off
+    float aiFocusRange = 8.0f;        // a melee fighter locks on to its target this close (and faces it)
+    // Footwork (sneed: "move around a bit without compromising their ability to attack"; ours). Between its own swings,
+    // in reach of its target, a melee fighter steps round it or back out of a blow it can't stop.
+    int footworkEverySteps = 24;      // a choice at most this often
+    float footworkChance[2] = {0.35f, 0.8f};  // at Melee skill 0 and 20: the chance it moves at a choice
+    float footworkTraitBonus = 0.2f;  // and this much more with a footwork trait (Nimble)
+    std::vector<std::string> footworkTraits = {"Nimble"};
+    float recklessFootwork = 0.5f;    // a reckless side (raiders) moves this share as often: it presses
+    float circleMetres = 0.6f;        // a step round the target...
+    int circleSteps = 18;             // ...over this many steps (2 m/s)
+    float circleFlip = 0.3f;          // the chance it changes the way it circles at a choice
+    float backShare = 0.5f;           // of the footwork chance: a step back from a blow it can't stop
+    float circleShare = 0.6f;         // of the footwork chance: a step round the enemy
+    float backMetres = 0.6f;          // a step back out of reach of a blow it can't stop
+    int backSteps = 12;
+    float crowdedShare = 0.6f;        // closer than this share of its engage distance it steps back to it
+    float lineOfFireRange = 30.0f;    // footwork keeps out of the line of a friend's gun at the target within this range...
+    float lineOfFireClearance = 0.8f; // ...by this many metres
+    float chaseSeconds = 6.0f;        // a fighter that swung within this long follows a target that runs (whatever its side)
 };
 
 class COLONY_API MeleeSystem {
@@ -160,6 +196,9 @@ public:
     float engageDistance(Entity pawn, Entity target, bool fists = false) const;
     // The target's centre is within the pawn's engage distance (plus reachSlack).
     bool inReach(Entity pawn, Entity target, bool fists = false) const;
+    // The attack clips a melee weapon def (or a body def's own tools) swings with: its hold style's, the short ones
+    // (docs/design/weapon-hold.md, body-motion.md). Empty for a def with no melee tools.
+    std::vector<DefId> attackClipsOf(DefId def) const;
     // The fighter AI charges with this pawn: no gun, and a melee weapon in hand or a trait that says
     // so (Brawler). Others only strike back at enemies in reach.
     bool charges(Entity pawn) const;
@@ -179,6 +218,30 @@ public:
     // and it has waited less than guardWaitSteps (real-time-combat.md phase 2). Keeps the wait in the pawn's Melee.
     bool holdSwing(Entity pawn, Entity target);
 
+    // Focus (docs/design/focus.md). The player's FocusCommand: lock on to `target`, cycle to the next nearest target
+    // (Tab), or let go (F1). False, with a reason, if it can't (no pawn, nothing to lock on to).
+    bool focusCommand(Entity pawn, Entity target, FocusMode mode, std::string* why = nullptr);
+    // The fighter AI: lock on to `target` (kNoEntity lets go). Never overrides a focus the player set.
+    void setAiFocus(Entity pawn, Entity target);
+    // The pawn it is locked on to, or kNoEntity.
+    Entity focusOf(Entity pawn) const;
+    // Which pawns count as enemies of a pawn, for Tab (Sim sets it: factions, mad animals). Unset: any other pawn.
+    void setHostile(std::function<bool(Entity, Entity)> hostile) { hostile_ = std::move(hostile); }
+    // Turns every pawn locked on to a target within reach of sight to face it (after movement turned it to its walk), so
+    // it steps sideways and back facing its enemy. Runs from the combat step.
+    void faceFocus();
+    // The player's swing with no target: its focus if in reach, else a body on the ground before it in reach (the blow
+    // goes down at it), else kNoEntity (straight ahead).
+    Entity playerTarget(Entity pawn) const;
+    // Footwork (the fighter AI between swings, in reach of `target`): maybe a step round it, or back out of a blow it
+    // can't stop. True if it moved. `reckless`: its side presses (moves less).
+    bool footwork(Entity pawn, Entity target, bool reckless);
+    // A fighter swung at an enemy within MeleeRules chaseSeconds: it follows one that runs.
+    bool engagedRecently(Entity pawn) const;
+    // The fight response (SetFightResponseCommand).
+    bool setResponse(Entity pawn, FightResponse response, std::string* why = nullptr);
+    FightResponse responseOf(Entity pawn) const;
+
     // One step: defenders act on swings they read, swings wind up, strike and recover. Runs after
     // movement (so strikes see where pawns are now) and before combat.
     void step();
@@ -192,6 +255,7 @@ public:
     uint64_t blocks() const { return blocks_; }
     uint64_t guardBreaks() const { return guardBreaks_; }
     uint64_t rolls() const { return rolls_; }
+    uint64_t footworks() const { return footworks_; }
 
 private:
     struct Tool {
@@ -235,12 +299,14 @@ private:
     std::vector<ToolSet> tools_;  // by Things DefId value: a melee weapon's tools, or a pawn def's body tools
     std::vector<Entity> order_;
     std::vector<Event>* events_ = nullptr;
+    std::function<bool(Entity, Entity)> hostile_;
     uint64_t swings_ = 0;
     uint64_t hits_ = 0;
     uint64_t dodges_ = 0;
     uint64_t blocks_ = 0;
     uint64_t guardBreaks_ = 0;
     uint64_t rolls_ = 0;
+    uint64_t footworks_ = 0;
 };
 
 }  // namespace colony

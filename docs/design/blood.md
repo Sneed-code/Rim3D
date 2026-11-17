@@ -58,12 +58,27 @@ gunshot, cut or stab (force >= 1.3, half of them) spurts with the heartbeat (eve
 lost), and a downed or dead body bleeds a pool that spreads (to 40-80 cm by blood loss). A dead body's bleeding runs
 down in half a minute. Tended or stopped wounds stop; the run stays as a stain.
 
+**Splatter on the ground at every hit** (sneed, 2026-11-17: "realistic blood splatter, like Baldur's Gate 3 after combat",
+not a tint; it must read from afar): besides what the flying drops leave, each hit that draws blood lays a pattern on
+the ground at once: a spatter fan 60 to 190 cm across, filled with 4 to 12 crowned drops, thrown the way the blow went (out of the exit of a shot through,
+back toward the shooter otherwise), 3 to 8 slanted drops with tails trailing further out, a few round drops near the
+feet and, for a bad wound or a body that is down, a patch under it. These are never culled by distance. Drops' own
+splats are bigger too (at least 2.4 cm across). On the body each such hit leaves the wound mark, a larger soaked patch
+at full strength, a spatter pattern 14 to 26 cm across and one or two drops with tails; a body keeps 32 stains (400 in
+all).
+
+**Fading** (sneed, 2026-11-17): every stain on the world and on bodies, and the blood layer of [grime.md](grime.md),
+loses 3% of its strength every 10 seconds from when it was put down (`Blood.FadeStep` 0.03, at game speed), so it is
+gone after about 5.5 minutes. The sim's blood piles (Blood, InsectBlood, MachineFluid: `filth.fadeSeconds` 10,200, ours)
+follow the same rule, indoors too: a pile is gone 5 min 40 s after blood last landed on it, and its decal fades by the
+pile's age from the snapshot (`FilthView::age`). Dirt, vomit and ash keep RimWorld's days.
+
 **Stains stay**: world stains, body stains and pools dry from the fluid's `wet` to `dry` colour over `Blood.DryMinutes`
 (5) at 1x, glossy and raised while wet, matte once dry. Outdoors, rain washes a fresh stain away in about 4 minutes of
 full rain (ours: spatter is thin), and without rain it lasts as long as the sim's blood filth (6 game days). Indoors it
 stays until a colonist cleans that cell (the sim's blood pile there thins or goes: stains within a cell of it go too).
-A body's stains wash off while it stands in the rain. Caps: `Blood.MaxStains` (900) on the world, oldest small spatter
-first; 20 per body, 260 on bodies.
+A body's stains wash off while it stands in the rain, swims (about 20 s at 1x) or wades waist deep (twice that). Caps: `Blood.MaxStains` (900) on the world, oldest small spatter
+first; 32 per body, 400 on bodies.
 
 **The sim's filth** (blood, insect blood, machine fluid, dirt, vomit, ash, animal filth) is drawn as one decal per pile,
 sized by thickness, placed and turned by its cell. Piles there when a game loads are dry; new ones dry like spray.
@@ -82,12 +97,13 @@ One instanced mesh each for drops, bits and mist; decals are the main cost, so t
 colours update a slice a frame (every stain about every half second, only when it changed). `Blood.Quality 0` for big
 fights on a slow PC.
 
-Console: `Blood.Enabled`, `Blood.Quality`, `Blood.MaxDrops`, `Blood.MaxStains`, `Blood.DryMinutes`, `Blood.Filth`,
+Console: `Blood.Enabled`, `Blood.Quality`, `Blood.MaxDrops`, `Blood.MaxStains`, `Blood.DryMinutes`, `Blood.FadeStep`, `Blood.Filth`,
 `Blood.DropScale`, `Blood.Bleeding`, `Blood.Bits`, `Blood.FlipU` / `Blood.FlipV` / `Blood.SwapUV` (if the stain pictures come out mirrored or turned),
 `Blood.Debug`.
 
 ## Later
 
 - Niagara fluid sims for close-ups (the creator) if this is not enough.
-- Blood soaking into clothes as its own layer; blood on weapons; showers wash bodies.
+- Showers wash bodies (dirt and blood on bodies, clothes and weapons, and washing them in rain and water, are in
+  [grime.md](grime.md)).
 - Wound decals that change as the sim's wound is tended (bandage) or scars.

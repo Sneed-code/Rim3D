@@ -39,11 +39,13 @@ struct FilthKind {
     int maxThickness = 3;
     float fadeHours = 0.0f;    // mean game hours a layer lasts under the open sky before it is gone; 0: it stays
     bool rainWashes = false;   // rain makes outdoor layers go quicker
+    float fadeSeconds = 0.0f;  // `filth.fadeSeconds`: a pile is gone this many game seconds after it was last added to, indoors too (blood: sneed's 5 minutes); 0: never
 };
 
 struct FilthPile {
     uint16_t kind = 0;  // index in Filth::kinds()
     uint8_t thickness = 1;
+    int64_t wetAt = -1;  // game second it was last added to; -1: not known yet (set at the next step)
 };
 
 // The numbers from the FilthRules def (these values when it is missing).
@@ -62,6 +64,7 @@ struct COLONY_API FilthNumbers {
 
 // What a pawn is carrying on its shoes, by kind index. Pawns that have walked get one.
 inline constexpr size_t kFilthTrackedKinds = 8;
+inline constexpr int64_t kFilthFadeEvery = 30;
 struct FilthCarrier {
     int lastCell = -1;  // the cell index it was in at the last step
     std::array<uint8_t, kFilthTrackedKinds> carried{};
@@ -73,6 +76,7 @@ struct FilthState {
         int cell = 0;
         std::string kind;  // Filth defName
         int thickness = 1;
+        int64_t wetAt = -1;
     };
     struct Carrier {
         uint32_t pawn = 0;
@@ -128,7 +132,8 @@ public:
 
     // One game second: pawns pick dirt up on bare ground and drop it on floors, track filth from
     // cell to cell, and bleeding pawns drop blood.
-    void step();
+    // Piles of a kind with `fadeSeconds` go once they are that old (checked every kFilthFadeEvery seconds).
+    void step(int64_t now = -1);
     // One game hour has passed: layers under the open sky go by their kind's `fadeHours` (and quicker in rain,
     // `rainRate` being the weather's), a pile of three layers three times as often as a pile of one.
     void fadeHour(float rainRate);
@@ -154,6 +159,7 @@ private:
     std::map<uint32_t, FilthCarrier> carriers_;  // by entity id
     Rng rng_;
     uint64_t changes_ = 0;
+    int64_t now_ = -1;  // the game second of the last step; -1 before the first
 };
 
 }  // namespace colony

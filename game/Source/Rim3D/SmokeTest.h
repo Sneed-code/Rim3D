@@ -33,11 +33,14 @@ namespace colony { class Map; }
  * sky (sun and moon from the sim's clock, the season's sun height, rain, snow in the air and on the ground, wet ground, fog,
  * thunderstorm flashes and the date readout).
  * melee (carried and holstered weapons, the weapon switch key, melee swings timed to the sim, blocks, dodges and hit-stop),
+ * hurt (body-health.md part E: a hit zone wobbles and settles, a hurt leg limps, patching bends over the wound, a torso-downed pawn crawls),
+ * motion (the sim's motion clips drawn: the hips stay on the sim's position through a roll, staggers, a sidestep and a knockdown),
  * clothes (worn apparel drawn on MetaHumans over a skin layer: stuff tint, torn look, hats and hair, taking off and stripping),
  * fire (the sim's lamps and fires as lights, flames, embers and smoke; burning pawns; burnt ground and ash),
  * levels (upper floors, stairs and ladders drawn, the overseer's Page Up / Page Down cutaway and picking, climbing stairs in direct mode),
  * perf (G3: the 1 km performance colony at 3x with rain, a fire and a 40-pirate raid; frame, GPU and sim cost).
  * sound (V20: the cues and their files, the voice budget, walls muffling, footsteps, loops, ambience, weather, music, the mixer).
+ * shuttle (the landing zone tool and overlay, a visitors' shuttle flying in, swinging its engines down, landing with flames, dust and leaning grass, door opening).
  * look (L1, the look bench: the same shots of seed 42 every run for the before and after sheets; tools/look_sheet.ps1).
  * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
  * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
@@ -96,6 +99,7 @@ private:
 	void BuildOrdersWorldPhases();  // SmokeTestOrdersWorld.cpp
 	void BuildPanelsPhases();       // SmokeTestPanels.cpp
 	void BuildTradePhases();        // SmokeTestTrade.cpp
+	void BuildShuttlePhases();      // SmokeTestShuttle.cpp
 	void BuildQuestsPhases();       // SmokeTestQuests.cpp
 	void BuildShipPhases();         // SmokeTestShip.cpp
 	void BuildWorldMapPhases();     // SmokeTestWorldMap.cpp
@@ -104,6 +108,8 @@ private:
 	void BuildAnimalsPhases();      // SmokeTestAnimals.cpp
 	void BuildSkyPhases();          // SmokeTestSky.cpp
 	void BuildMeleePhases();        // SmokeTestMelee.cpp
+	void BuildMotionPhases();       // SmokeTestMotion.cpp
+	void BuildHurtPhases();         // SmokeTestHurt.cpp
 	void BuildClothesPhases();      // SmokeTestClothes.cpp
 	void BuildLevelsPhases();       // SmokeTestLevels.cpp
 	void BuildFeelPhases();         // SmokeTestFeel.cpp

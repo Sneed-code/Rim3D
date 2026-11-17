@@ -107,6 +107,8 @@ public:
 	 *  not in direct mode, no gun, the game is paused, an order went out this step, or the gun isn't ready. */
 	bool Fire();
 	bool Reload();
+	/** Patches your worst bleeding zone (H; body-health.md part B). False if nothing bleeds, you are down or patching already. */
+	bool Patch();
 	/** Crouch or stand up. */
 	bool ToggleCrouch();
 	/** Lie down or stand up. */
@@ -137,6 +139,17 @@ public:
 	int32 GetShotsSeen() const { return ShotsSeen; }
 	int32 GetHitsSeen() const { return HitsSeen; }
 	int32 GetPawnHitsSeen() const { return PawnHitsSeen; }
+	int32 GetSnappedHits() const { return SnappedHits; }
+	/** Where the last bullet met this pawn's drawn body (for the smoke tests' close looks). */
+	bool GetLastBodyHit(colony::Entity Pawn, FVector& Out) const
+	{
+		const FVector* Found = LastBodyHits.Find(entt::to_integral(Pawn));
+		if (Found)
+		{
+			Out = *Found;
+		}
+		return Found != nullptr;
+	}
 	int32 GetFlashes() const { return Flashes; }
 	int32 GetTracersSpawned() const { return TracersSpawned; }
 	int32 GetTracersArrived() const { return TracersArrived; }
@@ -159,6 +172,10 @@ public:
 	int32 GetHitClips() const { return HitClipsPlayed; }
 	/** Damage numbers put up over your own hits so far. */
 	int32 GetDamageNumbersShown() const { return DamageNumbersShown; }
+	/** Of those, the hits on you (drawn red); zones knocked by hits (the hit layer, body-health.md part E); patch orders sent. */
+	int32 GetDamageNumbersOnMe() const { return DamageNumbersOnMe; }
+	int32 GetZoneKicks() const { return ZoneKicks; }
+	int32 GetPatchOrders() const { return PatchOrders; }
 	int32 GetBodyDecals() const { return BodyDecals; }
 	int32 GetGroundDecals() const { return GroundDecals; }
 	int32 GetRagdollsStarted() const { return RagdollsStarted; }
@@ -293,12 +310,20 @@ private:
 		float Amount = 0.0f;
 		float Age = 0.0f;
 		bool bArmour = false;
+		/** A hit on you (red), not one of yours. */
+		bool bOnMe = false;
 	};
 	TArray<FFightDamageNumber> DamageNumbers;
 	int32 DamageNumbersShown = 0;
-	void AddDamageNumber(const FFightTracer& Tracer, bool bArmour);
+	int32 DamageNumbersOnMe = 0;
+	int32 ZoneKicks = 0;
+	int32 PatchOrders = 0;
+	void AddDamageNumber(const FFightTracer& Tracer, bool bArmour, bool bOnMe);
 	void SpawnBodyThroughHit(const FFightTracer& Tracer);
 	int32 BodyThroughHits = 0;
+	/** Body hits whose point moved onto the drawn body (SpawnImpact). */
+	int32 SnappedHits = 0;
+	TMap<uint32, FVector> LastBodyHits;
 	void DrawDamageNumbers(float Scale);
 	float EquipMessageSeconds = 0.0f;
 

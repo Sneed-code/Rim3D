@@ -13,7 +13,7 @@ MakeHuman body's own wrist reach (`UMakeHumanAnimInstance::SetRightHandReach`); 
 
 | Key | What it does |
 |---|---|
-| H | free hand on or off (the weapon goes to its holster, the mouse buttons stop shooting, swinging and blocking) |
+| J | free hand on or off (H is taken: it patches wounds) (the weapon goes to its holster, the mouse buttons stop shooting, swinging and blocking) |
 | mouse | moves the hand's marker (a ring on screen); pushed past the screen's edge, the view turns |
 | left mouse, held | grip; let go to release (a carried piece keeps the hand's speed: a toss) |
 | wheel | how far the hand reaches into the air (35 % to all of the arm) |
@@ -50,7 +50,7 @@ ends, the colonist goes down, or a building is picked to place. Walking keeps wo
 
 ## Trying it
 
-`tools\play-gunrange.bat`: a partner woman stands at arm's length ahead and to one side. Walk up to her, press H.
+`tools\play-gunrange.bat`: a partner woman stands at arm's length ahead and to one side. Walk up to her, press J.
 `-FreeHandScript` (smoke test `gunrange`) runs a short tour instead of the gun tour: walks up, rests the palm on her cheek
 and holds it, then her belly, the same in first person, then hands back; pictures in `game/Saved/GunRange/hand_*.png`.
 

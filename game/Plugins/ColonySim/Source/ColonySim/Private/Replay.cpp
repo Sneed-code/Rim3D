@@ -60,6 +60,30 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
     ReplayOrderedJson j = ReplayOrderedJson::object();
     j["step"] = logged.step;
     j["type"] = commandName(logged.command);
+    // Written before the visit: its chain is at MSVC's nesting limit (C1061).
+    if (const auto* focus = std::get_if<FocusCommand>(&logged.command)) {
+        j["pawn"] = entt::to_integral(focus->pawn);
+        j["target"] = entt::to_integral(focus->target);
+        j["mode"] = static_cast<int>(focus->mode);
+        return j;
+    }
+    if (const auto* response = std::get_if<SetFightResponseCommand>(&logged.command)) {
+        j["pawn"] = entt::to_integral(response->pawn);
+        j["response"] = fightResponseName(response->response);
+        return j;
+    }
+    if (const auto* shield = std::get_if<ShieldCommand>(&logged.command)) {
+        j["pawn"] = entt::to_integral(shield->pawn);
+        j["up"] = shield->up;
+        j["hasDir"] = shield->hasDir;
+        j["dirX"] = shield->dirX;
+        j["dirY"] = shield->dirY;
+        return j;
+    }
+    if (const auto* reroll = std::get_if<RerollColonistCommand>(&logged.command)) {
+        j["slot"] = reroll->slot;
+        return j;
+    }
     std::visit(
         [&j](const auto& c) {
             using Type = std::decay_t<decltype(c)>;
@@ -546,15 +570,15 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                         j["add"] = c.add;
                     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
-                    } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
+                    } else if constexpr (std::is_same_v<Type, SetAlertCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
-                        j["up"] = c.up;
-                        j["hasDir"] = c.hasDir;
-                        j["dirX"] = c.dirX;
-                        j["dirY"] = c.dirY;
+                        j["alert"] = c.alert;
                     } else {
-                        static_assert(std::is_same_v<Type, RerollColonistCommand>, "write every command type");
-                        j["slot"] = c.slot;
+                        // Written before the visit (MSVC nesting limit).
+                        static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, ShieldCommand> ||
+                                          std::is_same_v<Type, FocusCommand> ||
+                                          std::is_same_v<Type, SetFightResponseCommand>,
+                                      "write every command type");
                     }
                 }
             }
@@ -1882,6 +1906,49 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             if (!replayReadRect(r, j, where, c.area) || !r.flag(j, "add", c.add, where)) {
                 return false;
             }
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "Focus") {
+            FocusCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            uint32_t target = entt::to_integral(kNoEntity);
+            int mode = 0;
+            if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "target", target, where) || !r.integer(j, "mode", mode, where)) {
+                return false;
+            }
+            if (mode < 0 || mode > static_cast<int>(FocusMode::Clear)) {
+                return r.fail(where + ": bad focus mode");
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            c.target = static_cast<Entity>(target);
+            c.mode = static_cast<FocusMode>(mode);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetFightResponse") {
+            SetFightResponseCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            std::string response;
+            if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "response", response, where)) {
+                return false;
+            }
+            if (!fightResponseFromName(response, c.response)) {
+                return r.fail(where + ": no fight response \"" + response + "\"");
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetAlert") {
+            SetAlertCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            uint32_t alert = 0;
+            if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "alert", alert, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            c.alert = static_cast<uint8_t>(std::min<uint32_t>(alert, 255));
             out.command = std::move(c);
             return true;
         }

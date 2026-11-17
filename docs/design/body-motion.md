@@ -49,7 +49,8 @@ sim was stopped by a wall the body stops there and the clip plays on against it.
 | --- | --- | --- |
 | Dodge roll (`CombatSystem::dodgeRoll`) | `rollClip`, stretched over start-up + roll + recovery | a push of `dodgeRoll.distance` over the rolling steps |
 | Sidestep (`MeleeSystem::sidestep`) | `sidestepClip.left/right` | a push of `sidestepMetres` (0.7) over `sidestepSteps` (9) |
-| Stagger (`CombatSystem::stagger`, bullets and blows) | `staggerClip.back/forward/left/right`, by the way the blow throws the body seen from the body | a blow by hand (`HitFrom::blow`): a push of `staggerMetres` (0.5) away from it; a bullet: nothing (a bullet doesn't shove a body, it only moves it as far as its flinch clip does) |
+| Stagger by a blow by hand (`CombatSystem::stagger`, `HitFrom::blow`) | `staggerClip.back/forward/left/right`, by the way the blow throws the body seen from the body (the measured ones stumble about 0.9 to 1.2 m) | a push of `staggerMetres` (0.5) away from it |
+| Stagger by a bullet | `flinchClip.*` (none measured yet: a bullet flinches on the spot, it doesn't send a body stumbling a metre) | nothing |
 | Knockdown by poise (`CombatSystem::jolt`) | `knockdownClip.*` | a push of `knockdownMetres` (1.0) |
 | Blast (`CombatSystem::explode`) | none | a push of the blast's knockback over `blastSteps` (12) |
 | Melee swing (`MeleeSystem::attack`) | one of the weapon style's attack clips | no body movement |
@@ -63,8 +64,9 @@ sneed: "all attacks should be fast, vicious, and sped up for higher speeds."
 
 - A weapon has a **style** (`MeleeRules.weaponStyle`: Club, OneHand, TwoHand; fists are Unarmed) and a style has a
   list of attack clips (`styleAttacks`).
-- A clip is **left out** if it is longer than `maxAttackClipSeconds` (1.6) or its blow comes later than
-  `maxAttackHitSeconds` (0.8). The six-second club flourish and the spins can never be picked in a fight.
+- A clip is **left out** if it is longer than `maxAttackClipSeconds` (1.6), its blow comes later than
+  `maxAttackHitSeconds` (0.8), or it carries the body further than `maxAttackTravel` (0.8 m: a running charge like
+  the 2.4 m sword lunge would run past the target). The six-second club flourish and the spins can never be picked in a fight.
 - A swing picks one of the remaining clips (by the swing's seed) and plays it so that the clip's blow lands exactly
   on the sim's hit step (`playTimed`). The sim's wind-up already shortens with Melee skill, traits and light armour,
   so a faster fighter plays the same clip faster; the rest of the clip runs at the same rate and is over well inside
@@ -111,8 +113,28 @@ one; bodies never pass through each other (equal bodies shoved, heavy ones stop 
 from the blow and it stays thrown; a swing plays a short clip timed to the hit and never the long one; engage
 distance follows height, weapon and target size; a motion survives save and load.
 
+## The measured clips (PC, 2026-11-17)
+
+`assets/motion_clips.json` lists 26 Mixamo clips with their trims; `-run=MotionClips` wrote
+`data/defs/MotionClips/MotionClips.json` from them (`-List` and `-Trace=A_Name` show travel and hand speed, which is
+how the trims and hit times were chosen). Roll 3.6 m in 1.55 s; sidesteps about 1 m in 0.4 s; staggers 0.9 to 1.2 m;
+knockdowns (death falls that end lying) about 1 m; club, one-hand and two-hand attacks of 1.0 to 1.5 s with the blow
+at 0.47 to 0.63 s. Fists have three punches (Mixamo singles Lead Jab, Cross Punch and Hook Punch, category
+Fighting), each trimmed to 0.8 s with the blow at 0.32 to 0.37 s and at most 0.43 m of hip travel; the jab is thrown
+with the left (lead) hand, so its blow is set by hand at the left arm's full stretch.
+
+The dodge roll's distance now comes from its clip (3.6 m for a 1.80 m body), not from `dodgeRoll.distance`, which
+only the plain push uses; the clip is spread over start-up, roll and recovery, so the body leans in during start-up.
+
+Unreal (`ASimPawnActor::UpdateMotionClip`): plays the clip as a montage at the sim's `motionTime` and sets the mesh
+back by the drawn pelvis's own travel (read from the animation, times the montage's blend weight), so the hips sit on
+the sim position through blend-in and blend-out. The actor keeps the sim's facing while a clip plays. The smoke test
+`motion` (`tools\smoke.ps1 -Test motion`) measures pelvis against actor every frame: within 4 to 7 cm, no pop at
+the end.
+
 ## Next
 
-- **PC:** the `MotionClips` commandlet (measure the clips, move hip travel into the root), `ASimPawnActor` playing
-  `motionClip` at `motionTime`, the creator's fight demo moving its people the same way.
+- **PC:** weapons in the hand follow `hand_r` during a clip (now they stay in the ready pose while the arms swing)
+  and holstered guns follow the spine; flinch clips for bullets; separate get-ups for face-up and
+  face-down; the creator's fight demo moving its people the same way.
 - **World:** tree trunks as solid posts, plant and swamp slow-down, loose props shoved by weight, foliage bending.

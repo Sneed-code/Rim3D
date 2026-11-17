@@ -94,6 +94,7 @@ BodyMotionSystem::BodyMotionSystem(Things& things, Map& map) : things_(things), 
         }
         for (int i = 0; i < 4; ++i) {
             rules_.staggerClip[i] = r->text((std::string("staggerClip.") + sides[i]).c_str(), rules_.staggerClip[i]);
+            rules_.flinchClip[i] = r->text((std::string("flinchClip.") + sides[i]).c_str(), rules_.flinchClip[i]);
             rules_.knockdownClip[i] = r->text((std::string("knockdownClip.") + sides[i]).c_str(), rules_.knockdownClip[i]);
         }
         rules_.getUpClip = r->text("getUpClip", rules_.getUpClip);
@@ -232,7 +233,7 @@ bool BodyMotionSystem::throwBody(Entity pawn, float pushX, float pushY, bool kno
     const Posture& posture = reg.get<Posture>(pawn);
     if (hasClips(pawn)) {
         const int side = motionSideOf(posture.facingX, posture.facingY, pushX, pushY);
-        const DefId c = clipId(knockdown ? rules_.knockdownClip[side] : rules_.staggerClip[side]);
+        const DefId c = clipId(knockdown ? rules_.knockdownClip[side] : plainPush ? rules_.staggerClip[side] : rules_.flinchClip[side]);
         if (c.valid() && play(pawn, c, posture.facingX, posture.facingY, 0, false)) {
             return true;
         }

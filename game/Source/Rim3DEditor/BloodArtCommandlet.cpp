@@ -16,17 +16,24 @@
 #include "Materials/MaterialExpressionDecalColor.h"
 #include "Materials/MaterialExpressionDepthFade.h"
 #include "Materials/MaterialExpressionDistance.h"
+#include "Materials/MaterialExpressionDivide.h"
 #include "Materials/MaterialExpressionFloor.h"
 #include "Materials/MaterialExpressionFrac.h"
 #include "Materials/MaterialExpressionLinearInterpolate.h"
+#include "Materials/MaterialExpressionMax.h"
 #include "Materials/MaterialExpressionMultiply.h"
+#include "Materials/MaterialExpressionNoise.h"
 #include "Materials/MaterialExpressionOneMinus.h"
 #include "Materials/MaterialExpressionPerInstanceCustomData.h"
 #include "Materials/MaterialExpressionPower.h"
+#include "Materials/MaterialExpressionPreSkinnedPosition.h"
 #include "Materials/MaterialExpressionSaturate.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
+#include "Materials/MaterialExpressionSubtract.h"
 #include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "Materials/MaterialExpressionTextureSample.h"
+#include "Materials/MaterialExpressionVectorParameter.h"
+#include "Materials/MaterialExpressionVertexInterpolator.h"
 #include "Misc/PackageName.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
@@ -423,6 +430,155 @@ namespace
 		UMaterialEditingLibrary::RecompileMaterial(Material);
 		Failures += BloodArtSave(Material) ? 0 : 1;
 	}
+
+	/** Patchy noise 0 to 1 at a position scaled by `Scale` and shifted by `Offset` (cm). */
+	UMaterialExpression* GrimeArtNoise(UMaterial* Material, int32 X, int32 Y, UMaterialExpression* Position, UMaterialExpression* Scale, float Extra, float Offset)
+	{
+		auto* Scaled = BloodArtNode<UMaterialExpressionMultiply>(Material, X - 300, Y);
+		BloodArtConnect(Position, TEXT(""), Scaled, TEXT("A"));
+		BloodArtConnect(Scale, TEXT(""), Scaled, TEXT("B"));
+		auto* Stretched = BloodArtNode<UMaterialExpressionMultiply>(Material, X - 200, Y);
+		BloodArtConnect(Scaled, TEXT(""), Stretched, TEXT("A"));
+		Stretched->ConstB = Extra;
+		auto* Shifted = BloodArtNode<UMaterialExpressionAdd>(Material, X - 100, Y);
+		BloodArtConnect(Stretched, TEXT(""), Shifted, TEXT("A"));
+		Shifted->ConstB = Offset;
+		auto* Noise = BloodArtNode<UMaterialExpressionNoise>(Material, X, Y);
+		Noise->Scale = 1.0f;
+		Noise->Levels = 4;
+		Noise->OutputMin = 0.0f;
+		Noise->OutputMax = 1.0f;
+		Noise->bTurbulence = false;
+		BloodArtConnect(Shifted, TEXT(""), Noise, TEXT(""));  // the first input is Position (UE 5.8 will not connect it by name)
+		return Noise;
+	}
+
+	/** saturate((Amount x Gain - Noise) x Sharp): patches that grow from the noise's low spots as Amount rises. */
+	UMaterialExpression* GrimeArtCover(UMaterial* Material, int32 X, int32 Y, UMaterialExpression* Amount, float Gain, UMaterialExpression* Noise, float Sharp)
+	{
+		auto* Gained = BloodArtNode<UMaterialExpressionMultiply>(Material, X - 300, Y);
+		BloodArtConnect(Amount, TEXT(""), Gained, TEXT("A"));
+		Gained->ConstB = Gain;
+		auto* Less = BloodArtNode<UMaterialExpressionSubtract>(Material, X - 200, Y);
+		BloodArtConnect(Gained, TEXT(""), Less, TEXT("A"));
+		BloodArtConnect(Noise, TEXT(""), Less, TEXT("B"));
+		auto* Sharpened = BloodArtNode<UMaterialExpressionMultiply>(Material, X - 100, Y);
+		BloodArtConnect(Less, TEXT(""), Sharpened, TEXT("A"));
+		Sharpened->ConstB = Sharp;
+		auto* Clamped = BloodArtNode<UMaterialExpressionSaturate>(Material, X, Y);
+		BloodArtConnect(Sharpened, TEXT(""), Clamped, TEXT(""));
+		return Clamped;
+	}
+
+	/**
+	 * M_GrimeOverlay (docs/design/grime.md): drawn over a whole pawn mesh (skin and clothes) or a weapon as its overlay
+	 * material. Patches stick to the body as it moves (pre-skinned local position). Height up the body
+	 * h = (local z - LocalMinZ) / LocalHeight; legs dirt fades out by h 0.52; body dirt everywhere; blood its own patches. The gains keep
+	 * even level 1 patchy (blood about half covered, as Grime.Strength 0.4 looked with the first gains on the PC): never a solid coat.
+	 * Parameters: DirtLegs, DirtBody, Blood, BloodWet (0 to 1), BloodColor, DirtColor, LocalMinZ, LocalHeight (cm),
+	 * NoiseScale (per cm).
+	 */
+	void BloodArtMakeGrimeOverlay(IAssetTools& Tools, int32& Failures)
+	{
+		UMaterial* Material = BloodArtNewMaterial(Tools, TEXT("M_GrimeOverlay"), Failures);
+		if (!Material)
+		{
+			return;
+		}
+		Material->MaterialDomain = MD_Surface;
+		Material->BlendMode = BLEND_Translucent;
+		Material->SetShadingModel(MSM_DefaultLit);
+		Material->TranslucencyLightingMode = TLM_SurfacePerPixelLighting;
+		bool bNeedsRecompile = false;
+		Material->SetMaterialUsage(bNeedsRecompile, MATUSAGE_SkeletalMesh);
+
+		// Pre-skinned position only exists in the vertex shader: carry it to the pixels through an interpolator.
+		auto* RawPosition = BloodArtNode<UMaterialExpressionPreSkinnedPosition>(Material, -2800, 0);
+		auto* Position = BloodArtNode<UMaterialExpressionVertexInterpolator>(Material, -2600, 0);
+		BloodArtConnect(RawPosition, TEXT(""), Position, TEXT(""));
+		auto* NoiseScale = BloodArtScalar(Material, TEXT("NoiseScale"), 0.06f, -2600, 150);
+
+		// Height up the body.
+		auto* Z = BloodArtMask(Material, -2400, -300, Position, TEXT(""), false, false, true, false);
+		auto* MinZ = BloodArtScalar(Material, TEXT("LocalMinZ"), 0.0f, -2400, -200);
+		auto* Height = BloodArtScalar(Material, TEXT("LocalHeight"), 180.0f, -2400, -100);
+		auto* Above = BloodArtNode<UMaterialExpressionSubtract>(Material, -2250, -300);
+		BloodArtConnect(Z, TEXT(""), Above, TEXT("A"));
+		BloodArtConnect(MinZ, TEXT(""), Above, TEXT("B"));
+		auto* H = BloodArtNode<UMaterialExpressionDivide>(Material, -2100, -300);
+		BloodArtConnect(Above, TEXT(""), H, TEXT("A"));
+		BloodArtConnect(Height, TEXT(""), H, TEXT("B"));
+		auto* LegsSlope = BloodArtNode<UMaterialExpressionMultiply>(Material, -1950, -300);
+		BloodArtConnect(H, TEXT(""), LegsSlope, TEXT("A"));
+		LegsSlope->ConstB = -2.6f;
+		auto* LegsRaw = BloodArtNode<UMaterialExpressionAdd>(Material, -1800, -300);
+		BloodArtConnect(LegsSlope, TEXT(""), LegsRaw, TEXT("A"));
+		LegsRaw->ConstB = 1.35f;
+		auto* Legs = BloodArtNode<UMaterialExpressionSaturate>(Material, -1650, -300);
+		BloodArtConnect(LegsRaw, TEXT(""), Legs, TEXT(""));
+
+		// Dirt amount: legs by height, plus the body all over.
+		auto* DirtLegs = BloodArtScalar(Material, TEXT("DirtLegs"), 0.0f, -1650, -450);
+		auto* DirtBody = BloodArtScalar(Material, TEXT("DirtBody"), 0.0f, -1500, -450);
+		auto* LegsDirt = BloodArtNode<UMaterialExpressionMultiply>(Material, -1500, -300);
+		BloodArtConnect(DirtLegs, TEXT(""), LegsDirt, TEXT("A"));
+		BloodArtConnect(Legs, TEXT(""), LegsDirt, TEXT("B"));
+		auto* DirtSum = BloodArtNode<UMaterialExpressionAdd>(Material, -1350, -350);
+		BloodArtConnect(LegsDirt, TEXT(""), DirtSum, TEXT("A"));
+		BloodArtConnect(DirtBody, TEXT(""), DirtSum, TEXT("B"));
+		auto* DirtAmount = BloodArtNode<UMaterialExpressionSaturate>(Material, -1200, -350);
+		BloodArtConnect(DirtSum, TEXT(""), DirtAmount, TEXT(""));
+
+		UMaterialExpression* DirtNoise = GrimeArtNoise(Material, -1200, -100, Position, NoiseScale, 1.0f, 0.0f);
+		UMaterialExpression* DirtCover = GrimeArtCover(Material, -800, -250, DirtAmount, 0.8f, DirtNoise, 3.0f);
+		auto* BloodAmount = BloodArtScalar(Material, TEXT("Blood"), 0.0f, -1200, 150);
+		UMaterialExpression* BloodNoise = GrimeArtNoise(Material, -1200, 300, Position, NoiseScale, 1.7f, 37.1f);
+		UMaterialExpression* BloodCover = GrimeArtCover(Material, -800, 200, BloodAmount, 0.5f, BloodNoise, 6.0f);
+
+		// Colour.
+		auto* DirtColor = BloodArtNode<UMaterialExpressionVectorParameter>(Material, -800, -500);
+		DirtColor->ParameterName = TEXT("DirtColor");
+		DirtColor->DefaultValue = FLinearColor(0.11f, 0.085f, 0.06f);
+		auto* BloodColor = BloodArtNode<UMaterialExpressionVectorParameter>(Material, -800, -400);
+		BloodColor->ParameterName = TEXT("BloodColor");
+		BloodColor->DefaultValue = FLinearColor(0.3f, 0.012f, 0.01f);
+		auto* Base = BloodArtLerp(Material, -500, -450, DirtColor, TEXT(""), BloodColor, TEXT(""), BloodCover, TEXT(""));
+		UMaterialEditingLibrary::ConnectMaterialProperty(Base, TEXT(""), MP_BaseColor);
+
+		// Wet blood is glossy, dry blood and dirt matte.
+		auto* Wet = BloodArtScalar(Material, TEXT("BloodWet"), 0.0f, -800, 400);
+		auto* BloodRough = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -650, 400);
+		BloodRough->ConstA = 0.75f;
+		BloodRough->ConstB = 0.12f;
+		BloodArtConnect(Wet, TEXT(""), BloodRough, TEXT("Alpha"));
+		auto* DirtRough = BloodArtNode<UMaterialExpressionConstant>(Material, -650, 500);
+		DirtRough->R = 0.92f;
+		auto* Roughness = BloodArtLerp(Material, -450, 450, DirtRough, TEXT(""), BloodRough, TEXT(""), BloodCover, TEXT(""));
+		UMaterialEditingLibrary::ConnectMaterialProperty(Roughness, TEXT(""), MP_Roughness);
+		auto* BloodSpec = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -650, 600);
+		BloodSpec->ConstA = 0.35f;
+		BloodSpec->ConstB = 0.7f;
+		BloodArtConnect(Wet, TEXT(""), BloodSpec, TEXT("Alpha"));
+		auto* DirtSpec = BloodArtNode<UMaterialExpressionConstant>(Material, -650, 700);
+		DirtSpec->R = 0.2f;
+		auto* Specular = BloodArtLerp(Material, -450, 650, DirtSpec, TEXT(""), BloodSpec, TEXT(""), BloodCover, TEXT(""));
+		UMaterialEditingLibrary::ConnectMaterialProperty(Specular, TEXT(""), MP_Specular);
+
+		// Opacity: the stronger of the two.
+		auto* DirtOpacity = BloodArtNode<UMaterialExpressionMultiply>(Material, -500, -150);
+		BloodArtConnect(DirtCover, TEXT(""), DirtOpacity, TEXT("A"));
+		DirtOpacity->ConstB = 0.8f;
+		auto* BloodOpacity = BloodArtNode<UMaterialExpressionMultiply>(Material, -500, 150);
+		BloodArtConnect(BloodCover, TEXT(""), BloodOpacity, TEXT("A"));
+		BloodOpacity->ConstB = 0.92f;
+		auto* Opacity = BloodArtNode<UMaterialExpressionMax>(Material, -300, 0);
+		BloodArtConnect(DirtOpacity, TEXT(""), Opacity, TEXT("A"));
+		BloodArtConnect(BloodOpacity, TEXT(""), Opacity, TEXT("B"));
+		UMaterialEditingLibrary::ConnectMaterialProperty(Opacity, TEXT(""), MP_Opacity);
+
+		UMaterialEditingLibrary::RecompileMaterial(Material);
+		Failures += BloodArtSave(Material) ? 0 : 1;
+	}
 }
 
 UBloodArtCommandlet::UBloodArtCommandlet()
@@ -457,6 +613,10 @@ int32 UBloodArtCommandlet::Main(const FString& Params)
 	if (BloodArtWanted(TEXT("M_BloodMist"), bForce))
 	{
 		BloodArtMakeMist(Tools, Failures);
+	}
+	if (BloodArtWanted(TEXT("M_GrimeOverlay"), bForce))
+	{
+		BloodArtMakeGrimeOverlay(Tools, Failures);
 	}
 	UE_LOG(LogBloodArt, Display, TEXT("Blood art done, %d failures"), Failures);
 	return Failures == 0 ? 0 : 1;

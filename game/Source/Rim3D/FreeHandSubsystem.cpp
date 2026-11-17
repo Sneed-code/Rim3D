@@ -509,8 +509,8 @@ void UFreeHandSubsystem::Tick(float DeltaTime)
 	APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
 	const bool bDirect = Protagonist && Protagonist->IsDirectMode();
 
-	// H: on and off (only in direct control).
-	if (bDirect && PC && !bScripted && PC->WasInputKeyJustPressed(EKeys::H))
+	// J: on and off (H patches wounds) (only in direct control).
+	if (bDirect && PC && !bScripted && PC->WasInputKeyJustPressed(EKeys::J))
 	{
 		Toggle();
 	}
@@ -823,7 +823,7 @@ void UFreeHandSubsystem::DrawHud(const FVector2D& ScreenPoint, bool bOnScreen)
 	Draw->AddCircle(At, 9.0f * Scale, Colour, 24, 2.0f * Scale);
 	Draw->AddCircleFilled(At, 2.0f * Scale, Colour);
 	// The keys, small, at the bottom.
-	static const char* const Help = "Free hand   move: mouse   hold: left click   reach: wheel   look: hold right mouse   H: hands back";
+	static const char* const Help = "Free hand   move: mouse   hold: left click   reach: wheel   look: hold right mouse   J: hands back";
 	const ImVec2 Size = ImGui::CalcTextSize(Help);
 	const ImVec2 TextAt(Viewport->Pos.x + (Viewport->Size.x - Size.x) * 0.5f, Viewport->Pos.y + Viewport->Size.y - Size.y - 64.0f * Scale);
 	Draw->AddRectFilled(ImVec2(TextAt.x - 10.0f, TextAt.y - 5.0f), ImVec2(TextAt.x + Size.x + 10.0f, TextAt.y + Size.y + 5.0f), IM_COL32(0, 0, 0, 110), 4.0f);

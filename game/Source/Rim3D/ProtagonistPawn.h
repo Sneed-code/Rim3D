@@ -20,7 +20,7 @@ class USimSubsystem;
  *
  * Keys: W A S D walk (Ctrl slower), the mouse looks, the wheel zooms in third person, V toggles
  * first and third person, T takes over the colonist under the crosshair, Tab goes back to the
- * overseer view, H frees the right hand (UFreeHandSubsystem, docs/design/free-hand.md). The methods below are what the
+ * overseer view, J frees the right hand (UFreeHandSubsystem, docs/design/free-hand.md). The methods below are what the
  * keys call, so tests can drive it without a keyboard.
  *
  * Stairs and ladders (U17, docs/design/levels-draw.md): walking into the stairs from the cell at their foot, or back
