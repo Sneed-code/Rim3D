@@ -15,6 +15,7 @@
 #include "ColonySim/Random.h"
 #include "ColonySim/Traits.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Lights.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Prisoners.h"
 #include "ColonySim/Trade.h"
@@ -155,6 +156,11 @@ FighterSystem::FighterSystem(Things& things, Map& map, CombatSystem& combat, Hea
       defs_(defs),
       time_(time) {
     fightReadRules(defs_, rules_);
+    stealth_ = stealthReadRules(defs_);
+    noise_.assign(defs_.size(), 0.0f);
+    for (const DefId id : defs_.idsOfKind("Things")) {
+        noise_[id.value] = static_cast<float>(defs_.get(id).number("noiseRadius", 0.0));  // a quiet or loud weapon (stealth.md)
+    }
     range_.assign(defs_.size(), 0.0f);
     for (const DefId id : defs_.idsOfKind("Things")) {
         const Def& def = defs_.get(id);
@@ -439,6 +445,9 @@ void FighterSystem::step() {
             p.faction = kWildFaction;
         }
         p.stance = p.able ? posture.stance : Stance::Prone;
+        if (const Mover* mover = reg.try_get<Mover>(e)) {
+            p.speed = std::sqrt(mover->vx * mover->vx + mover->vy * mover->vy);
+        }
         pawns_.push_back(p);
     }
     // The colony's turrets stand among the enemies a raider sees and shoots at, as in RimWorld; a bullet
@@ -516,7 +525,10 @@ void FighterSystem::step() {
     }
 }
 
-// What the fighter sees now, and what its friends know: they share what they spot.
+// What the fighter sees now, and what friends near it call out (docs/design/stealth.md). It sees an enemy that is in
+// its sight cone (all round once alerted), near enough for the light on it and its stance, with a clear line. Far off
+// and not yet alerted it is suspicious first and sure at a second look. Friends within `calloutRadius` of one who saw
+// or heard an enemy for itself learn where it is; what was only called out is not passed on.
 void FighterSystem::see(Entity pawn, Fighter& f, const PawnInfo& self) {
     const int64_t t = now();
     f.known.erase(std::remove_if(f.known.begin(), f.known.end(),
@@ -524,58 +536,88 @@ void FighterSystem::see(Entity pawn, Fighter& f, const PawnInfo& self) {
                                      return info(k.pawn) == nullptr || t - k.seenAt > rules_.memorySeconds;
                                  }),
                   f.known.end());
+    calmDown(pawn, f);
     // Friends' lists and this one are both in pawn id order: merge, keeping the newer sighting.
+    bool news = false;
     const auto merge = [&](const std::vector<KnownEnemy>& theirs) {
         merged_.clear();
         size_t a = 0;
         size_t b = 0;
         while (a < f.known.size() || b < theirs.size()) {
-            if (b < theirs.size() && t - theirs[b].seenAt > rules_.memorySeconds) {
-                ++b;
-            } else if (b == theirs.size() || (a < f.known.size() && f.known[a].pawn < theirs[b].pawn)) {
+            if (b == theirs.size() || (a < f.known.size() && f.known[a].pawn < theirs[b].pawn)) {
                 merged_.push_back(f.known[a++]);
             } else if (a == f.known.size() || theirs[b].pawn < f.known[a].pawn) {
                 merged_.push_back(theirs[b++]);
+                news = true;
             } else {
-                merged_.push_back(theirs[b].seenAt > f.known[a].seenAt ? theirs[b] : f.known[a]);
+                if (theirs[b].seenAt > f.known[a].seenAt) {
+                    merged_.push_back(theirs[b]);
+                    news = true;
+                } else {
+                    merged_.push_back(f.known[a]);
+                }
                 ++a;
                 ++b;
             }
         }
         f.known.swap(merged_);
     };
-    const auto learn = [&](const KnownEnemy& k) {
-        const auto it = std::lower_bound(f.known.begin(), f.known.end(), k.pawn,
-                                         [](const KnownEnemy& a, Entity e) { return a.pawn < e; });
-        if (it != f.known.end() && it->pawn == k.pawn) {
-            if (k.seenAt > it->seenAt) {
-                *it = k;
-            }
-        } else {
-            f.known.insert(it, k);
-        }
-    };
-    // What friends know first: an enemy one of them saw this very step needs no look of its own.
-    const entt::registry& reg = things_.registry();
+    // What friends call out first: an enemy one of them saw this very step needs no look of its own.
+    entt::registry& reg = things_.registry();
+    const float call2 = stealth_.calloutRadius * stealth_.calloutRadius;
     for (const PawnInfo& p : pawns_) {
-        if (!p.fighter || p.pawn == pawn || p.faction != self.faction) {
+        if (!p.fighter || p.pawn == pawn || p.faction != self.faction || p.level != self.level || !p.able) {
             continue;
         }
-        merge(reg.get<Fighter>(p.pawn).known);
+        if ((p.x - self.x) * (p.x - self.x) + (p.y - self.y) * (p.y - self.y) > call2) {
+            continue;
+        }
+        const Fighter& friendly = reg.get<Fighter>(p.pawn);
+        if (friendly.called && !stealth_.calledCanCall) {
+            continue;
+        }
+        called_.clear();
+        for (const KnownEnemy& k : friendly.known) {
+            if (k.firsthand && t - k.seenAt <= rules_.memorySeconds) {
+                called_.push_back(k);
+                called_.back().firsthand = false;
+            }
+        }
+        if (!called_.empty()) {
+            merge(called_);
+        }
     }
+    if (news) {
+        alertTo(pawn, f, Alert::Alerted, "called", true);
+    }
+    const bool wide = f.alert == Alert::Alerted;
     const float sightRange =
         rules_.sightRange * (weather_ != nullptr ? weather_->sightAt(CellPos{static_cast<int>(std::floor(self.x)), static_cast<int>(std::floor(self.y)), self.level}) : 1.0f);
     const float range2 = sightRange * sightRange;
     const Viewpoint eye{self.x, self.y, self.level, Stance::Standing};
+    const Posture& posture = reg.get<Posture>(pawn);
+    const float cone = wide ? stealth_.alertedConeDegrees : stealth_.coneDegrees;
     size_t next = 0;  // walks f.known alongside pawns_, both in id order
     const bool turrets = shootsTurrets(pawn);
+    bool sawOne = false;         // an enemy it is sure of, by its own eyes
+    bool suspectInView = false;  // the one it half saw is still there
+    Entity glimpsed = kNoEntity; // the nearest enemy seen too far off to be sure of yet
+    float glimpsed2 = 0.0f;
+    float glimpsedX = 0.0f;
+    float glimpsedY = 0.0f;
+    bool steps = false;          // the nearest footsteps heard but not seen
+    float steps2 = 0.0f;
+    float stepsX = 0.0f;
+    float stepsY = 0.0f;
+    learned_.clear();
     for (const PawnInfo& p : pawns_) {
         if (p.faction == self.faction || p.animal || p.level != self.level || (p.turret && !turrets)) {
             continue;
         }
         const float dx = p.x - self.x;
         const float dy = p.y - self.y;
-        if (dx * dx + dy * dy > range2) {
+        const float d2 = dx * dx + dy * dy;
+        if (d2 > range2) {
             continue;
         }
         while (next < f.known.size() && f.known[next].pawn < p.pawn) {
@@ -584,13 +626,62 @@ void FighterSystem::see(Entity pawn, Fighter& f, const PawnInfo& self) {
         if (next < f.known.size() && f.known[next].pawn == p.pawn && f.known[next].seenAt == t) {
             continue;
         }
-        ++sightChecks_;
         // A turret's gun on its post shows over the barricades round it (the mini-turret's muzzle is 1.3 m up), as a
         // pawn behind sandbags shows itself standing up to shoot: it is known and shot at, and the barricades take the
         // shots aimed at its low body until they are broken down (docs/design/fighters.md "Turrets").
         const Stance shows = p.turret ? Stance::Standing : p.stance;
-        if (map_.cover().lineOfSight(eye, Viewpoint{p.x, p.y, p.level, shows})) {
-            learn(KnownEnemy{p.pawn, p.x, p.y, p.level, t});
+        const float light = lights_ != nullptr && !wide ? lights_->lightAt(CellPos{static_cast<int>(std::floor(p.x)), static_cast<int>(std::floor(p.y)), p.level}) : 1.0f;
+        const float reach = sightRange * stealthSightShare(stealth_, light, shows, wide);
+        const float close2 = stealth_.closeSense * stealth_.closeSense;
+        bool seen = false;
+        if (d2 <= reach * reach && (d2 <= close2 || stealthInCone(posture.facingX, posture.facingY, dx, dy, cone))) {
+            ++sightChecks_;
+            seen = map_.cover().lineOfSight(eye, Viewpoint{p.x, p.y, p.level, shows});
+        }
+        if (!seen) {
+            // Not seen, but near enough to hear it walk (a crouched pawn makes no sound).
+            const float carry = p.turret ? 0.0f : stealthStepNoise(stealth_, p.speed, p.stance);
+            if (!wide && d2 <= carry * carry && (!steps || d2 < steps2)) {
+                steps = true;
+                steps2 = d2;
+                stepsX = p.x;
+                stepsY = p.y;
+            }
+            continue;
+        }
+        const bool sure = wide || d2 <= stealth_.instantRange * stealth_.instantRange ||
+                          (f.suspect == p.pawn && t - f.suspectAt >= stealth_.noticeSteps);
+        if (sure) {
+            learned_.push_back(KnownEnemy{p.pawn, p.x, p.y, p.level, t, true});
+            sawOne = true;
+        } else if (f.suspect == p.pawn) {
+            suspectInView = true;
+            glimpsedX = p.x;
+            glimpsedY = p.y;
+        } else if (glimpsed == kNoEntity || d2 < glimpsed2) {
+            glimpsed = p.pawn;
+            glimpsed2 = d2;
+            if (!suspectInView) {
+                glimpsedX = p.x;
+                glimpsedY = p.y;
+            }
+        }
+    }
+    for (const KnownEnemy& k : learned_) {
+        learnEnemy(f, k);
+    }
+    if (sawOne) {
+        alertTo(pawn, f, Alert::Alerted, "saw", false);
+    } else if (suspectInView) {
+        noticePoint(pawn, f, glimpsedX, glimpsedY, "glimpsed");
+    } else if (glimpsed != kNoEntity) {
+        f.suspect = glimpsed;
+        f.suspectAt = t;
+        noticePoint(pawn, f, glimpsedX, glimpsedY, "glimpsed");
+    } else {
+        f.suspect = kNoEntity;
+        if (steps) {
+            noticePoint(pawn, f, stepsX, stepsY, "heard steps");
         }
     }
 }
@@ -2065,6 +2156,9 @@ void FighterSystem::hashThing(Entity e, StateHasher& h) const {
             h.add(k.y);
             h.add(k.level);
             h.add(k.seenAt);
+            if (!k.firsthand) {
+                h.add(7);  // only when set, as below
+            }
         }
         h.add(f->reactUntil);
         h.add(f->dodgeUntil);
@@ -2077,6 +2171,18 @@ void FighterSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(entt::to_integral(f->rescuing));
         h.add(f->lifted);
         cell(f->rescueTo);
+        // Stealth: only away from a new fighter's values, so hashes recorded before it still hold.
+        if (f->alert != Alert::Alerted || f->onGuard || f->called || f->hasSuspect || f->suspect != kNoEntity) {
+            h.add(static_cast<int>(f->alert));
+            h.add(f->onGuard);
+            h.add(f->called);
+            h.add(f->alertAt);
+            h.add(f->hasSuspect);
+            h.add(f->suspectX);
+            h.add(f->suspectY);
+            h.add(entt::to_integral(f->suspect));
+            h.add(f->suspectAt);
+        }
     }
 }
 

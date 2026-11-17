@@ -40,9 +40,12 @@ The player can still fire by hand (`ShootCommand`) or take a drafted colonist ov
 Each fighter keeps a list of **known enemies** (`Fighter::known`): who, where it was last seen, when.
 At every plan it looks at each enemy within 60 m (`sightRange`) from its standing eye height to the
 enemy's eyes in the enemy's own stance (`Cover::lineOfSight`), so a crouched pawn behind sandbags
-is not spotted until it stands up to shoot. Friends share: a fighter first takes what the other
-fighters of its side know (the newer sighting wins), and doesn't look again at an enemy a friend saw
-in this very step. An enemy not seen for 300 game seconds (10 real seconds, `memorySeconds`) is
+is not spotted until it stands up to shoot. Since stealth ([stealth.md](stealth.md), 2026-11-17) a fighter
+that isn't alerted sees only inside its sight cone, less far in the dark and at crouched targets, and
+fighters also hear shots, blows and footsteps. Friends share, but only near: a fighter first takes what
+friends **within 20 m** saw or heard themselves (the newer sighting wins; what was called out is not
+passed on), and doesn't look again at an enemy a friend saw in this very step. Before stealth the whole
+side shared everything across the map. An enemy not seen for 300 game seconds (10 real seconds, `memorySeconds`) is
 forgotten; the dead are dropped at once.
 
 So fighters react to what their side has seen, not to what the sim knows. An enemy nobody has seen
