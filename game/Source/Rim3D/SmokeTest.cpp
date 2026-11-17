@@ -237,6 +237,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildLookPhases();
 	}
+	else if (TestName == TEXT("water"))
+	{
+		BuildWaterPhases();
+	}
 	else
 	{
 		Fail(FString::Printf(TEXT("Unknown smoke test '%s'"), *TestName));

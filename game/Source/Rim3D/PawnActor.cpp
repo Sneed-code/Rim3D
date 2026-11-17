@@ -1,4 +1,5 @@
 #include "PawnActor.h"
+#include "WaterDraw.h"
 
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimSequence.h"
@@ -270,6 +271,9 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
 		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
 	}
+	// Swimming: the body floats with its shoulders at the surface (docs/design/water.md, W4).
+	SwimLiftCm = WaterDraw::SwimLiftEase(SwimLiftCm, Bridge.GetSim() ? WaterDraw::SwimLiftTargetCm(Now, Bridge.GetSim()->bodyHeightM(Thing)) : 0.0f, DeltaTime, bTeleported);
+	Location.Z += SwimLiftCm;
 	SetActorLocationAndRotation(Location, FRotator(0.0, Yaw, 0.0));
 	if (bRagdoll)
 	{

@@ -1,4 +1,5 @@
 #include "AnimalActor.h"
+#include "WaterDraw.h"
 
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimSingleNodeInstance.h"
@@ -7,6 +8,7 @@
 
 #include "AnimalSubsystem.h"
 #include "SimSubsystem.h"
+#include "ColonySim/Sim.h"
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Snapshot.h"
@@ -157,6 +159,9 @@ void ASimAnimalActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::T
 	{
 		Yaw = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
 	}
+	// Swimming: the body floats with its back at the surface (docs/design/water.md, W4).
+	SwimLiftCm = WaterDraw::SwimLiftEase(SwimLiftCm, Bridge.GetSim() ? WaterDraw::SwimLiftTargetCm(Now, Bridge.GetSim()->bodyHeightM(Thing)) : 0.0f, DeltaTime, bTeleported);
+	Location.Z += SwimLiftCm;
 	SetActorLocationAndRotation(Location, FRotator(0.0, Yaw, 0.0));
 
 	const int32 Stage = FMath::Clamp(Now.lifeStage, 0, 2);

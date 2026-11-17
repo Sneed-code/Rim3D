@@ -1,5 +1,7 @@
 #include "ColonySim/Movement.h"
 
+#include "ColonySim/Water.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -60,11 +62,31 @@ float slopeSpeedFactor(float slope) {
     return kMoveSlopeFactors[i] + (kMoveSlopeFactors[i + 1] - kMoveSlopeFactors[i]) * f;
 }
 
-float walkSpeedFactor(const Map& map, float x, float y, float dirX, float dirY) {
+float groundSpeedFactor(const Map& map, float x, float y, float bodyHeightM, int level) {
     const CellPos cell{std::clamp(static_cast<int>(std::floor(x)), 0, map.width() - 1),
                        std::clamp(static_cast<int>(std::floor(y)), 0, map.height() - 1), 0};
+    const Terrain t = map.terrain(cell);
+    if (level != 0) {
+        return terrainSpeedFactor(t);
+    }
+    // Water by its depth against the body (docs/design/water.md): shallow water's cost to the waist,
+    // chest-deep water's beyond, then swimming. Marsh and mud keep their own cost until the water is deeper.
+    const WaterBand band = waterBandFor(map.waterDepthAt(x, y, 0), bodyHeightM);
+    if (t == Terrain::Water || t == Terrain::ShallowWater) {
+        return waterSpeedFactor(band == WaterBand::Dry ? WaterBand::Ankle : band);
+    }
+    const float own = terrainSpeedFactor(t);
+    return band >= WaterBand::Waist ? std::min(own, waterSpeedFactor(band)) : own;
+}
+
+float walkSpeedFactor(const Map& map, float x, float y, float dirX, float dirY, float bodyHeightM, int level) {
     const float rise = map.heightAt(x + dirX * 0.5f, y + dirY * 0.5f) - map.heightAt(x - dirX * 0.5f, y - dirY * 0.5f);
-    return terrainSpeedFactor(map.terrain(cell)) * slopeSpeedFactor(rise);
+    // A swimmer floats: the bottom's slope does not slow it.
+    const float ground = groundSpeedFactor(map, x, y, bodyHeightM, level);
+    if (level == 0 && waterBandFor(map.waterDepthAt(x, y, 0), bodyHeightM) == WaterBand::Swimming) {
+        return ground;
+    }
+    return ground * slopeSpeedFactor(rise);
 }
 
 float walkEffort(const Map& map, float x0, float y0, float x1, float y1) {

@@ -56,6 +56,10 @@ constexpr float kRockAbove = 0.62f;
 constexpr float kRiverDeepBed = 0.17f;     // fractions of max height
 constexpr float kRiverShallowBed = 0.20f;
 constexpr float kRiverBank = 6.0f;         // the ground slopes up to its old height over this far
+constexpr float kRiverBankLift = 0.15f;    // metres: a bank never sinks below the water table plus this
+constexpr float kRiverEdgeDepth = 0.25f;   // metres of water at the outer edge of the shallows
+constexpr float kRiverFlowMax = 1.0f;      // m/s in the middle of the channel (ours: a lowland tropical river)
+constexpr float kRiverFlowEdge = 0.35f;    // share of that at the edge of the shallows
 constexpr int kMapGenWorldMin = 192;       // maps smaller than this (test maps) are made as before S8: no
                                            // shallow shores, rivers, marsh or mud
 constexpr float kRiverFordHalf = 8.0f;     // along the river: no deep water this far from the ford
@@ -136,6 +140,47 @@ void Map::setFlowing(CellPos c, bool present) {
         flowing_.assign(static_cast<size_t>(width_) * static_cast<size_t>(height_), 0);
     }
     flowing_[static_cast<size_t>(index(c))] = present ? 1 : 0;
+}
+
+void Map::setFlow(CellPos c, float vx, float vy) {
+    if (!onGround(c)) {
+        return;
+    }
+    if (flow_.empty()) {
+        flow_.assign(static_cast<size_t>(width_) * static_cast<size_t>(height_) * 2, 0);
+    }
+    const size_t i = static_cast<size_t>(index(c)) * 2;
+    flow_[i] = static_cast<int16_t>(std::lround(std::clamp(vx, -300.0f, 300.0f) * 100.0f));
+    flow_[i + 1] = static_cast<int16_t>(std::lround(std::clamp(vy, -300.0f, 300.0f) * 100.0f));
+}
+
+float Map::waterSurface(CellPos c) const {
+    if (!onGround(c)) {
+        return std::nanf("");
+    }
+    const Terrain t = terrain_[static_cast<size_t>(index(c))];
+    const float ground = groundHeight_[static_cast<size_t>(index(c))];
+    if (t == Terrain::Marsh) {
+        return ground + kMarshFilmM;
+    }
+    if (t != Terrain::Water && t != Terrain::ShallowWater) {
+        return std::nanf("");
+    }
+    const float own = ground + (t == Terrain::Water ? kHandDeepM : kHandShallowM);
+    // The table, unless the cell's ground stands above it (water put down by hand up a hill).
+    return !std::isnan(waterTable_) && waterTable_ > ground ? waterTable_ : own;
+}
+
+float Map::waterDepthAt(float x, float y, int level) const {
+    if (level != 0) {
+        return 0.0f;
+    }
+    const CellPos c{std::clamp(static_cast<int>(std::floor(x)), 0, width_ - 1), std::clamp(static_cast<int>(std::floor(y)), 0, height_ - 1), 0};
+    const float surface = waterSurface(c);
+    if (std::isnan(surface)) {
+        return 0.0f;
+    }
+    return std::max(0.0f, surface - heightAt(x, y, 0));
 }
 
 void Map::dryWater(CellPos c) {
@@ -512,6 +557,7 @@ uint64_t Map::upperFloorHash() const {
 
 void Map::generate() {
     const bool world = std::min(width_, height_) >= kMapGenWorldMin;
+    waterTable_ = kWaterBelow * kMapGenMaxHeight;  // every water cell lies below it (docs/design/water.md)
     for (int y = 0; y < height_; ++y) {
         for (int x = 0; x < width_; ++x) {
             float sum = 0.0f;
@@ -584,11 +630,22 @@ void Map::carveRivers() {
             deepHalf[static_cast<size_t>(a)] = deep;
             shallowHalf[static_cast<size_t>(a)] = deep + (2.0f + 2.0f * mapGenValueNoise(seed_, af, 0.0f, 60.0f, id + 4)) * river_;
         }
+        // Which way it flows along its length, from the seed (docs/design/water.md).
+        const float downstream = (mapGenHash(seed_, r, 3, id) & 1) == 0 ? 1.0f : -1.0f;
+        if (flow_.empty()) {
+            flow_.assign(static_cast<size_t>(width_) * static_cast<size_t>(height_) * 2, 0);
+        }
         for (int a = 0; a < length; ++a) {
             const float mid = centre[static_cast<size_t>(a)];
             const float deepH = deepHalf[static_cast<size_t>(a)];
             const float shallowH = shallowHalf[static_cast<size_t>(a)];
             const float reach = shallowH + kRiverBank;
+            // The course's direction here: along the river, turned by how its middle line wanders.
+            const float bend = (centre[static_cast<size_t>(std::min(a + 1, length - 1))] -
+                                centre[static_cast<size_t>(std::max(a - 1, 0))]) * 0.5f;
+            const float courseLen = std::sqrt(1.0f + bend * bend);
+            const float alongU = downstream / courseLen;
+            const float acrossU = downstream * bend / courseLen;
             const int from = std::max(0, static_cast<int>(std::floor(mid - reach)));
             const int to = std::min(across - 1, static_cast<int>(std::ceil(mid + reach)));
             for (int c = from; c <= to; ++c) {
@@ -602,13 +659,23 @@ void Map::carveRivers() {
                 const float old = groundHeight_[i];
                 if (d <= shallowH) {
                     const bool deep = d <= deepH;
-                    const float bed = (deep ? kRiverDeepBed : kRiverShallowBed) * kMapGenMaxHeight;
+                    // The shallows' bed rises from the channel's edge to just under the water table at the shore.
+                    const float shelf = shallowH > deepH ? mapGenClamp01((d - deepH) / (shallowH - deepH)) : 1.0f;
+                    const float shallowBed = kRiverShallowBed * kMapGenMaxHeight +
+                                             (waterTable_ - kRiverEdgeDepth - kRiverShallowBed * kMapGenMaxHeight) * shelf;
+                    const float bed = deep ? kRiverDeepBed * kMapGenMaxHeight : shallowBed;
                     groundHeight_[i] = std::min(old, bed);
                     terrain_[i] = deep ? Terrain::Water : Terrain::ShallowWater;
                     roof_[i] = Roof::None;
+                    const float across01 = d / std::max(shallowH, 0.5f);
+                    const float speed = kRiverFlowMax * (kRiverFlowEdge + (1.0f - kRiverFlowEdge) * (1.0f - across01 * across01));
+                    const float fx = alongY ? acrossU * speed : alongU * speed;
+                    const float fy = alongY ? alongU * speed : acrossU * speed;
+                    flow_[i * 2] = static_cast<int16_t>(std::lround(fx * 100.0f));
+                    flow_[i * 2 + 1] = static_cast<int16_t>(std::lround(fy * 100.0f));
                 } else {
                     const float t = 1.0f - mapGenSmooth(mapGenClamp01((d - shallowH) / kRiverBank));
-                    const float bed = kRiverShallowBed * kMapGenMaxHeight;
+                    const float bed = waterTable_ + kRiverBankLift;  // dry banks stand above the water
                     groundHeight_[i] = old + (std::min(old, bed) - old) * t;
                     if (terrain_[i] == Terrain::Rock && t > 0.2f) {
                         terrain_[i] = Terrain::Soil;  // the river cuts a valley through the mountain

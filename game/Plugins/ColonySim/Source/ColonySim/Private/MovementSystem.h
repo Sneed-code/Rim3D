@@ -40,6 +40,8 @@ public:
     void setWeather(const Weather* weather) { weather_ = weather; }
     // How many times faster a door opens than a plain one (an autodoor with power: 4); 1 if none set.
     void setDoorSpeed(std::function<int(Entity)> speed) { doorSpeed_ = std::move(speed); }
+    // How tall a pawn is, metres, which decides how deep water is for it (docs/design/water.md); 1.8 if none set.
+    void setBodyHeight(std::function<float(Entity)> height) { bodyHeight_ = std::move(height); }
     void step(entt::registry& registry, Map& map);
 
     // Pawns whose walk was held up by other pawns this step, for the stats simrun prints.
@@ -76,6 +78,7 @@ private:
     std::function<float(Entity)> speedFactor_;
     const Weather* weather_ = nullptr;
     std::function<int(Entity)> doorSpeed_;
+    std::function<float(Entity)> bodyHeight_;
     std::vector<Entity> doorRequests_;  // doors a pawn is in, waiting at or about to walk into this step
 };
 

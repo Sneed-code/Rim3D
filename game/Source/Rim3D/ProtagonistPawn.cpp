@@ -19,6 +19,7 @@
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Water.h"
 
 namespace
 {
@@ -307,7 +308,8 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 	const FVector2D Tries[3] = {Delta, FVector2D(Delta.X, 0.0), FVector2D(0.0, Delta.Y)};
 	const auto Fits = [&](const FVector2D& Try)
 	{
-		return colony::pawnFitsAt(Map, static_cast<float>(Position.X + Try.X), static_cast<float>(Position.Y + Try.Y), colony::kPawnRadius, Level);
+		// The player may swim: deep water counts as open (docs/design/water.md), as the sim's DirectMove does.
+		return colony::swimmerFitsAt(Map, static_cast<float>(Position.X + Try.X), static_cast<float>(Position.Y + Try.Y), colony::kPawnRadius, Level);
 	};
 	// Pushing into stairs or a ladder (or back towards them from their head, into the stairwell over them, which may
 	// have a floor laid) climbs them.
@@ -463,6 +465,8 @@ void AProtagonistPawn::UpdateCamera()
 		if (const ASimPawnActor* Drawn = Thing != colony::kNoEntity ? Pawns->FindPawn(Thing) : nullptr)
 		{
 			BodyScale = FMath::Clamp(Drawn->GetBodyScale(), 0.5f, 1.5f);
+			// A swimming body floats up from the bottom; the eyes and the camera go with it (docs/design/water.md, W4).
+			Feet.Z += Drawn->GetSwimLiftCm();
 		}
 	}
 	const FVector Eye = Feet + FVector(0.0, 0.0, kEyeHeight * BodyScale) + FRotator(0.0, Yaw, 0.0).Vector() * ProtagonistEyeForward;

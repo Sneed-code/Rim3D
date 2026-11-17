@@ -236,6 +236,10 @@ struct ThingView {
     Entity meleeTarget = kNoEntity;
     bool blocking = false;
     bool crawling = false;   // downed by the torso and awake: Unreal plays a crawl when it moves (body-health.md part D)
+    // Pawns in water (docs/design/water.md): metres of water over the ground at their feet (the surface is z + waterDepth),
+    // and whether it is past their shoulders, so they swim (a swim animation, the body floating at the surface).
+    float waterDepth = 0.0f;
+    bool swimming = false;
     int patchZone = -1;      // patching this body zone itself (body-health.md part B), -1 when not patching
     int patchStepsLeft = 0;
     // Turrets and traps (docs/design/defense.md). A turret: what it is doing (a TurretPhase number) and the pawn it
