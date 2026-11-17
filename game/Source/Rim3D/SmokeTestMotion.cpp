@@ -1,5 +1,5 @@
 // Smoke test `motion` (docs/design/body-motion.md): a colonist plays the sim's motion clips (a roll, staggers, a
-// sidestep, a knockdown) and every frame the drawn hips are measured against the sim's position. The hips must stay
+// sidestep, a knockdown, the three punches) and every frame the drawn hips are measured against the sim's position. The hips must stay
 // on the sim's position through the clip and must not jump when it ends.
 #include "SmokeTest.h"
 
@@ -177,7 +177,8 @@ void USmokeTestSubsystem::BuildMotionPhases()
 		Phases.Add(MoveTemp(Phase));
 	}
 
-	for (const TCHAR* ClipName : {TEXT("Motion_Roll"), TEXT("Motion_StaggerBack"), TEXT("Motion_StaggerLeft"), TEXT("Motion_SidestepRight"), TEXT("Motion_KnockdownForward")})
+	for (const TCHAR* ClipName : {TEXT("Motion_Roll"), TEXT("Motion_StaggerBack"), TEXT("Motion_StaggerLeft"), TEXT("Motion_SidestepRight"), TEXT("Motion_KnockdownForward"),
+			 TEXT("Motion_Unarmed_Jab"), TEXT("Motion_Unarmed_Cross"), TEXT("Motion_Unarmed_Hook")})
 	{
 		const FString Name = ClipName;
 		FPhase Phase;

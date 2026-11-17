@@ -69,6 +69,8 @@ namespace
 	// A ragdoll's floor: a slab this many metres across and thick, its top at the ground.
 	constexpr float PawnRagdollFloorSize = 10.0f;
 	constexpr float PawnRagdollFloorThickness = 0.5f;
+	/** cm the ragdoll's floor sits above the drawn ground (the flesh outside the physics shapes). */
+	constexpr float PawnRagdollFloorLift = 4.0f;
 	const TCHAR* const PawnRagdollPhysicsAssetPath = TEXT("/Game/Characters/UEFN_Mannequin/Rigs/PA_UEFN_Mannequin.PA_UEFN_Mannequin");
 	const TCHAR* const PawnCubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
 	// The mannequin faces +Y in its own space.
@@ -1772,8 +1774,22 @@ void ASimPawnActor::SpawnRagdollFloor()
 	const colony::Map& Map = Bridge->GetSim()->map();
 	const float X = static_cast<float>(Here.X);
 	const float Y = static_cast<float>(Here.Y);
-	const FVector Normal = FVector((Map.heightAt(X - 1.0f, Y) - Map.heightAt(X + 1.0f, Y)) * 0.5f, (Map.heightAt(X, Y - 1.0f) - Map.heightAt(X, Y + 1.0f)) * 0.5f, 1.0f).GetSafeNormal();
-	const FVector Ground = Bridge->SimToWorld(X, Y, 0);
+	const FVector SimNormal = FVector((Map.heightAt(X - 1.0f, Y) - Map.heightAt(X + 1.0f, Y)) * 0.5f, (Map.heightAt(X, Y - 1.0f) - Map.heightAt(X, Y + 1.0f)) * 0.5f, 1.0f).GetSafeNormal();
+	FVector Ground = Bridge->SimToWorld(X, Y, 0);
+	FVector Normal = SimNormal;
+	// The ground that is drawn, where it differs from the height map (sneed saw corpses sunk into it).
+	FHitResult GroundHit;
+	FCollisionQueryParams GroundParams(SCENE_QUERY_STAT(PawnRagdollGround), false, this);
+	const FVector Over(GetActorLocation().X, GetActorLocation().Y, Ground.Z);
+	if (GetWorld()->LineTraceSingleByChannel(GroundHit, Over + FVector(0, 0, 150), Over - FVector(0, 0, 300), ECC_Visibility, GroundParams) &&
+		!Cast<ASimPawnActor>(GroundHit.GetActor()) && FMath::Abs(GroundHit.ImpactPoint.Z - Ground.Z) < 30.0)  // not a plant or a crate
+	{
+		Ground = GroundHit.ImpactPoint;
+		Normal = GroundHit.ImpactNormal.Z > 0.7 ? FVector(GroundHit.ImpactNormal) : SimNormal;
+	}
+	// A little above it: the body falls on the mannequin's physics shapes, and the drawn flesh (hips, chest, back)
+	// sits outside them, so a floor right at the ground lets it sink in.
+	Ground += Normal * PawnRagdollFloorLift;
 
 	RagdollFloor = NewObject<UStaticMeshComponent>(this, TEXT("RagdollFloor"));
 	RagdollFloor->SetStaticMesh(Cube);
@@ -1873,8 +1889,46 @@ bool ASimPawnActor::GetRagdollPelvis(FVector& OutLocation) const
 	return true;
 }
 
+bool ASimPawnActor::TraceDrawnBody(const FVector& From, const FVector& To, FVector& OutHit)
+{
+	if (!Body || !Body->GetSkeletalMeshAsset())
+	{
+		return false;
+	}
+	if (!Body->GetPhysicsAsset())
+	{
+		if (UPhysicsAsset* Asset = LoadObject<UPhysicsAsset>(nullptr, PawnRagdollPhysicsAssetPath))
+		{
+			Body->SetPhysicsAsset(Asset, false);
+		}
+	}
+	if (!Body->GetPhysicsAsset())
+	{
+		return false;
+	}
+	// March along the line in 1.5 cm steps; the first step on or in a shape is the skin.
+	const FVector Line = To - From;
+	const int32 Steps = FMath::Clamp(FMath::CeilToInt(static_cast<float>(Line.Size()) / 1.5f), 1, 200);
+	for (int32 i = 0; i <= Steps; ++i)
+	{
+		const FVector At = From + Line * (static_cast<double>(i) / Steps);
+		FClosestPointOnPhysicsAsset Closest;
+		if (Body->GetClosestPointOnPhysicsAsset(At, Closest, false) && Closest.Distance <= 0.75f)
+		{
+			OutHit = At;
+			return true;
+		}
+	}
+	return false;
+}
+
 USkeletalMeshComponent* ASimPawnActor::GetDecalMesh() const
 {
+	// The body that is drawn: a MakeHuman body hides the MetaHuman, so wounds and blood stuck to that would never show.
+	if (MakeHumanMesh)
+	{
+		return MakeHumanMesh.Get();
+	}
 	return MetaHumanBody ? MetaHumanBody.Get() : Body.Get();
 }
 
@@ -1885,7 +1939,9 @@ void ASimPawnActor::SetBodyHidden(bool bHide)
 	SetActorHiddenInGame(bAnyHidden);
 	if (MetaHuman)
 	{
-		MetaHuman->SetActorHiddenInGame(bAnyHidden);
+		// A MakeHuman body replaces the MetaHuman for good: showing the pawn again (third person after first) must not
+		// bring the MetaHuman back over it (sneed saw the protagonist's bearded MetaHuman inside the woman).
+		MetaHuman->SetActorHiddenInGame(bAnyHidden || MakeHumanMesh != nullptr);
 	}
 }
 

@@ -2302,6 +2302,7 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
             }
             const bool alive = health_.applyHit(pawn, piece.damageType, piece.amount, part);
             wearApparel(pawn, piece);
+            noteHarm(pawn, ex.instigator);
             if (!alive) {
                 break;
             }

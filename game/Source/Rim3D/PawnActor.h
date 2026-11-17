@@ -162,6 +162,9 @@ public:
 
 	/** The mesh that wears wound decals: the MetaHuman's body if there is one, else the mannequin. */
 	USkeletalMeshComponent* GetDecalMesh() const;
+	/** Where the line From-To first meets the drawn body (the animated mannequin's physics shapes, which every body
+	 *  follows; no collision needed). False if it misses. */
+	bool TraceDrawnBody(const FVector& From, const FVector& To, FVector& OutHit);
 
 	static constexpr float kHitReactionSeconds = 0.55f;
 
