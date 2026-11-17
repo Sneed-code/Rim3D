@@ -640,7 +640,7 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 		// out, widening as they go.)
 		for (int32 I = 0; I < (Force >= 0.6f ? 3 : 2); ++I)
 		{
-			const float W = Random.FRandRange(9.0f, 16.0f) * (0.7f + 0.3f * Force);
+			const float W = Random.FRandRange(12.0f, 21.0f) * (0.7f + 0.3f * Force);
 			const float T = Random.FRandRange(0.0f, 0.6f);
 			Splat(BloodCellPool + Random.RandRange(0, 1), Foot + Throw * (Reach * 0.6f + T * FanHalf * 1.6f) + Across * Random.FRandRange(-0.35f, 0.35f) * FanHalf * (0.3f + T),
 				FMath::VRandCone(Throw, FMath::DegreesToRadians(25.0f)), W * Random.FRandRange(1.2f, 1.9f), W);
@@ -648,7 +648,7 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 		for (int32 I = 0; I < FMath::Clamp(FMath::RoundToInt((9.0f + 8.0f * Force) * BloodQualityScale()), 5, 26); ++I)
 		{
 			const float T = FMath::Square(Random.FRand());  // 0 at the body, 1 at the far end; more of them near
-			const float W = FMath::Lerp(13.0f, 3.5f, T) * Random.FRandRange(0.6f, 1.2f) * (0.8f + 0.2f * Force);
+			const float W = FMath::Lerp(16.0f, 4.5f, T) * Random.FRandRange(0.6f, 1.2f) * (0.8f + 0.2f * Force);
 			const FVector Where = Foot + Throw * (Reach * 0.4f + T * FanHalf * 2.6f) + Across * Random.FRandRange(-1.0f, 1.0f) * FanHalf * (0.25f + 0.75f * T);
 			if (T > 0.35f && Random.FRand() < 0.5f)
 			{
@@ -747,7 +747,7 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 		{
 			// Blood soaking out round the wound (into clothes where they cover it: they take the decal too).
 			// (PC look, 2026-11-18: at 6 + 7 x force these covered a whole head and read as cow-print blotches.)
-			const float Soak = 2.5f + 2.5f * Force;
+			const float Soak = 4.0f + 3.0f * Force;
 			AddBodyStain(MakeBodyDecal(Mesh, BloodCellPool + Random.RandRange(0, 1), Hit.At, Into, Side, Soak, Soak * 0.85f, DecalColorFor(Fluid, 0.0f, 0.95f)), Mesh,
 				Hit.Victim, Fluid, false);
 			if (bExit)

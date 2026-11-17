@@ -51,7 +51,9 @@ now also wash off while swimming or wading waist deep.
 
 **Cost:** one dynamic material per pawn shown (and per bloody weapon), updated four times a second; a clean pawn or
 one further than `Grime.MaxDistance` (60 m) from the camera has no overlay and costs nothing. Console:
-`Grime.Enabled`, `Grime.MaxDistance`, `Grime.Strength` (0 to 2).
+`Grime.Enabled`, `Grime.MaxDistance`, `Grime.Strength` (0 to 2). `Grime.BodyBlood` (0 to 1, default 0): how much of the blood level shows as flecks all over a
+body. On the PC (2026-11-18) the flecks read as a cow print on skin and hair, so bodies show blood through the wound
+marks of `UBloodSubsystem` alone (docs/design/blood.md); the overlay still draws dirt, and blood on weapons.
 
 Seen on the PC (2026-11-17): with the first numbers a body went solid glossy red after a hit or two. Blood per damage
 is now 0.012 (a 12-point bullet 0.14, about seven to fill) and the material's gains keep even a full level patchy (about
