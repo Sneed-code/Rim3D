@@ -541,6 +541,9 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                         j["pawn"] = entt::to_integral(c.pawn);
                         j["bed"] = entt::to_integral(c.bed);
                         j["wake"] = c.wake;
+                    } else if constexpr (std::is_same_v<Type, SetLandingZoneCommand>) {
+                        j["area"] = replayRectJson(c.area);
+                        j["add"] = c.add;
                     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
                     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
@@ -1871,6 +1874,14 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             }
             c.pawn = static_cast<Entity>(pawn);
             c.bed = static_cast<Entity>(bed);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetLandingZone") {
+            SetLandingZoneCommand c;
+            if (!replayReadRect(r, j, where, c.area) || !r.flag(j, "add", c.add, where)) {
+                return false;
+            }
             out.command = std::move(c);
             return true;
         }

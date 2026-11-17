@@ -262,6 +262,8 @@ const char* commandName(const Command& command) {
                         return "SetDayLength";
                     } else if constexpr (std::is_same_v<Type, SleepCommand>) {
                         return "Sleep";
+                    } else if constexpr (std::is_same_v<Type, SetLandingZoneCommand>) {
+                        return "SetLandingZone";
                     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
                         return "Patch";
                     } else {

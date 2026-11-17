@@ -76,6 +76,7 @@ class PowerGrid;
 class Regions;
 class PrisonerSystem;
 class TradeSystem;
+class LandingSystem;
 class QuestSystem;
 class ShipSystem;
 class CaravanSystem;
@@ -445,6 +446,8 @@ public:
     // Faction goodwill, visitors, trade caravans, orbital traders and trade (docs/design/trade.md).
     TradeSystem& trade() { return *trade_; }
     const TradeSystem& trade() const { return *trade_; }
+    LandingSystem& landing() { return *landing_; }
+    const LandingSystem& landing() const { return *landing_; }
 
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
@@ -623,6 +626,7 @@ private:
     std::unique_ptr<MonsterSystem> monsters_;  // after raids_ and animals_
     std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
     std::unique_ptr<TradeSystem> trade_;         // after the raids
+    std::unique_ptr<LandingSystem> landing_;     // shuttles and the landing zone, beside trade
     std::unique_ptr<QuestSystem> quests_;        // after the raids
     std::unique_ptr<ShipSystem> ship_;           // after the raids
     std::unique_ptr<CaravanSystem> caravans_;    // after the job system
