@@ -169,17 +169,6 @@ SoundPlay soundVoiceOn(const std::string& cue, Entity pawn, SoundVoice voice, fl
     return p;
 }
 
-// Killed while lying downed and awake: does she scream once more? A hash of the event decides, like the hit grunt.
-bool soundDownedDeathRoll(const DefDatabase& db, const SoundDefOf& defOf, const SoundGenderOf& genderOf, const Event& e) {
-    const std::string cue = soundVoiceCue(db, defOf, genderOf, e.thing, SoundVoice::Scream);
-    const Def* cueDef = cue.empty() ? nullptr : db.find("SoundCues", cue);
-    if (cueDef == nullptr) return false;
-    const double chance = cueDef->number("downedDeathChance", 0.5);
-    const uint64_t roll = splitMix64(static_cast<uint64_t>(e.thing) ^ (static_cast<uint64_t>(static_cast<uint32_t>(e.cell.x)) << 20) ^
-                                     (static_cast<uint64_t>(static_cast<uint32_t>(e.cell.y)) << 40) ^ 0x5C2EA4ull);
-    return static_cast<double>(roll >> 11) * 0x1.0p-53 < chance;
-}
-
 // A grunt from the one struck by a hard hit (melee or shot), some of the time.
 void soundHitVoice(const DefDatabase& db, const Event& e, const SoundDefOf& defOf, const SoundGenderOf& genderOf,
                    std::vector<SoundPlay>& out) {
@@ -207,7 +196,8 @@ std::string soundLovinCue(SoundGender a, SoundGender b) {
 }
 
 bool soundViolentDeath(const std::string& cause) {
-    return cause == "a vital part destroyed" || cause == "organ failure" || cause == "executed";
+    return cause == "a vital part destroyed" || cause == "organ failure" || cause == "executed" || cause == "blood loss" ||
+           cause == "wounds" || cause == "slaughtered";
 }
 
 std::string soundSlot(const Def& def, const char* slot) {
@@ -279,12 +269,9 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
             const char* slot = e.type == EventType::PawnDied ? "death" : "downed";
             const std::string cue = soundSlotOr(soundDefOfEntity(db, defOf, e.thing), slot, "");
             if (!cue.empty()) out.push_back(soundOn(cue, e.thing));
-            // A woman screams every time she goes down, and when violence kills her outright. Killed while she lay downed: a
-            // last scream some of the time (the cue's `downedDeathChance`, 0.5) if she was still awake, none if knocked out.
-            bool screams = e.type == EventType::PawnDowned;
-            if (e.type == EventType::PawnDied && soundViolentDeath(e.message)) {
-                screams = e.amount < 0.5f || (e.amount < 1.5f && soundDownedDeathRoll(db, defOf, genderOf, e));
-            }
+            // A woman screams every time she goes down, and every time a fight kills her: outright, or again while she
+            // lies downed (sneed, 2026-11-17: "when downed - they will scream again if killed"). Cold, hunger or illness: no.
+            const bool screams = e.type == EventType::PawnDowned || soundViolentDeath(e.message);
             if (screams) {
                 const std::string scream = soundVoiceCue(db, defOf, genderOf, e.thing, SoundVoice::Scream);
                 if (!scream.empty()) out.push_back(soundVoiceOn(scream, e.thing, SoundVoice::Scream, static_cast<float>(e.cell.x) + 0.5f,

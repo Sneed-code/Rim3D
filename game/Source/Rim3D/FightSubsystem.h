@@ -137,6 +137,7 @@ public:
 	int32 GetShotsSeen() const { return ShotsSeen; }
 	int32 GetHitsSeen() const { return HitsSeen; }
 	int32 GetPawnHitsSeen() const { return PawnHitsSeen; }
+	int32 GetSnappedHits() const { return SnappedHits; }
 	int32 GetFlashes() const { return Flashes; }
 	int32 GetTracersSpawned() const { return TracersSpawned; }
 	int32 GetTracersArrived() const { return TracersArrived; }
@@ -299,6 +300,8 @@ private:
 	void AddDamageNumber(const FFightTracer& Tracer, bool bArmour);
 	void SpawnBodyThroughHit(const FFightTracer& Tracer);
 	int32 BodyThroughHits = 0;
+	/** Body hits whose point moved onto the drawn body (SpawnImpact). */
+	int32 SnappedHits = 0;
 	void DrawDamageNumbers(float Scale);
 	float EquipMessageSeconds = 0.0f;
 
