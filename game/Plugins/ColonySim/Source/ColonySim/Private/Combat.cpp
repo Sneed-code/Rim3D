@@ -1304,9 +1304,9 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
             s.target = kNoEntity;
         }
     }
-    // Cooldown bursts: a fighter's long burst stops when a friend comes into the line; the store keeps the rest.
-    if (gun->store && !s.player && s.target != kNoEntity && s.stored >= 0 && s.stored < gun->burst && holdFire_ &&
-        holdFire_(pawn, s.target)) {
+    // Cooldown bursts: a fighter's burst stops when a friend comes into the line, during the aim or between shots (bodies
+    // shove each other in a melee next to it); the store keeps the rest.
+    if (gun->store && !s.player && s.target != kNoEntity && holdFire_ && holdFire_(pawn, s.target)) {
         s.shotsLeft = 0;
         s.phase = ShotPhase::Cooling;
         s.stepsLeft = std::max(0, gun->burstGap - 1);

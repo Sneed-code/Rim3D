@@ -301,8 +301,8 @@ public:
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
     // Called when a bullet or a melee blow hurt a pawn (`victim`, `attacker`): animals react (N5, docs/design/animal-fights.md).
     void setHurtHook(std::function<void(Entity, Entity)> hook) { hurtHook_ = std::move(hook); }
-    // Cooldown bursts: asked before each shot after the first of a fighter's burst at a pawn (`shooter`, `target`);
-    // true holds the rest of the burst (a friend stepped into the line). Unset: never.
+    // Cooldown bursts: asked before each shot of a fighter's burst at a pawn (`shooter`, `target`), the first too (after
+    // its aim); true holds the rest of the burst (a friend stepped into the line). Unset: never.
     void setHoldFire(std::function<bool(Entity, Entity)> hook) { holdFire_ = std::move(hook); }
     // A pawn's body size in RimWorld's units (a man is 1) for the stagger rule; unset: 1 for everyone.
     void setBodySize(std::function<float(Entity)> size) { bodySize_ = std::move(size); }

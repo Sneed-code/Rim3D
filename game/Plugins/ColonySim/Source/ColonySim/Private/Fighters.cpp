@@ -702,13 +702,13 @@ bool FighterSystem::friendInLineNow(Entity shooter, Entity target) const {
                 now.x = tp->x;
                 now.y = tp->y;
             }
-            return friendInLine(shooter, pos->x, pos->y, pos->level, posture->stance, now);
+            return friendInLine(shooter, pos->x, pos->y, pos->level, posture->stance, now, true);
         }
     }
     return false;
 }
 
-bool FighterSystem::friendInLine(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target) const {
+bool FighterSystem::friendInLine(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target, bool live) const {
     const FactionId side = factionOf(pawn);
     const float dx = target.x - x;
     const float dy = target.y - y;
@@ -717,7 +717,14 @@ bool FighterSystem::friendInLine(Entity pawn, float x, float y, int level, Stanc
         return false;
     }
     bool near = false;  // the cheap test first: any friend near the line on the ground
-    for (const PawnInfo& p : pawns_) {
+    for (const PawnInfo& info : pawns_) {
+        PawnInfo p = info;
+        if (live) {  // mid-burst: where everyone stands this step, not at the last plan
+            if (const Position* now = things_.registry().try_get<Position>(p.pawn)) {
+                p.x = now->x;
+                p.y = now->y;
+            }
+        }
         if (p.pawn == pawn || p.pawn == target.pawn || p.level != level || (p.faction != side && !p.animal)) {
             continue;
         }
@@ -744,8 +751,13 @@ bool FighterSystem::friendInLine(Entity pawn, float x, float y, int level, Stanc
     const float az = map_.heightAt(x, y) + muzzle;
     const float bz = map_.heightAt(target.x, target.y) + targetAim;
     const CellPos from{static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y)), level};
-    for (const float off : {0.0f, kFightFriendSpread, -kFightFriendSpread}) {
-        const TraceHit hit = combat_.trace(x, y, az, target.x + sideX * off, target.y + sideY * off, bz, level, pawn, from, true);
+    // Strays to either side, and up and down (a shot at a small animal low on the ground that strays up meets the legs
+    // of a friend fighting it; cooldown bursts and halved damage made those fights long enough to show it).
+    const float offsets[5][2] = {{0.0f, 0.0f}, {kFightFriendSpread, 0.0f}, {-kFightFriendSpread, 0.0f}, {0.0f, kFightFriendSpread},
+                                 {0.0f, -kFightFriendSpread}};
+    for (const auto& o : offsets) {
+        const float off = o[0];
+        const TraceHit hit = combat_.trace(x, y, az, target.x + sideX * off, target.y + sideY * off, bz + o[1], level, pawn, from, true);
         if (hit.kind != ProjectileHitKind::Pawn || hit.thing == target.pawn) {
             continue;
         }

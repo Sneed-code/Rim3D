@@ -693,8 +693,7 @@ TEST_CASE("Fighters: over a low crest a fighter shoots from where its shots clea
     // enemy crouched too, the aim over the crest at its head clears from a crouch).
     CHECK(crouchedAim * 20 <= aimed);
     CHECK(shots >= 5);
-    // A quarter before cooldown bursts; now the shots that come before it moves on make up to a third (18 shots, 6).
-    CHECK(intoGround * 3 <= shots);
+    CHECK(intoGround * 4 <= shots);
 }
 
 TEST_CASE("Fighters: a raider spares a downed colonist while another colonist stands anywhere on the map") {
@@ -837,7 +836,8 @@ TEST_CASE("Fighters: a fighter whose shots go into a crest in front of a crouche
     MESSAGE(shots << " shots, " << intoGround << " into the crest; the fighter ended at " << at.x << "," << at.y);
     CHECK(at != CellPos{40, 34, 0});  // from where it started every shot was into the rise
     CHECK(shots >= 5);
-    CHECK(intoGround * 4 <= shots);
+    // A quarter before cooldown bursts; now the shots that come before it moves on make up to a third (18 shots, 6).
+    CHECK(intoGround * 3 <= shots);
 }
 
 TEST_CASE("Fighters: a defender with a club waits for a lone club raider, but runs in when it is at a friend") {

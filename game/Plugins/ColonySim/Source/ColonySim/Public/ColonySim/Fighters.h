@@ -281,7 +281,8 @@ private:
     bool fireAt(Entity pawn, const PawnInfo& target);
     // Whether the fighter takes on turrets: only one with a gun that isn't set on melee.
     bool shootsTurrets(Entity pawn) const;
-    bool friendInLine(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target) const;
+    // `live`: read everyone's position now rather than at the last plan (a fighter's burst under way).
+    bool friendInLine(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target, bool live = false) const;
     void walkToSpot(Entity pawn, Fighter& f);
     void stepTo(Entity pawn, CellPos cell);
     void stop(Entity pawn, Fighter& f);
