@@ -114,24 +114,74 @@ void soundPawnAction(const DefDatabase& db, const Event& e, const SoundDefOf& de
     }
 }
 
-void soundMeleeHit(const DefDatabase& db, const Event& e, std::vector<SoundPlay>& out) {
-    const std::string& m = e.message;
-    const char* special = nullptr;
-    if (m == "missed") return;
-    if (m == "deflected" || e.hit == ProjectileHitKind::Armor) special = "Melee_Clang";
-    else if (m == "blocked") special = "Melee_Block";
-    else if (m == "dodged") special = "Dodge";
-    else if (e.hit == ProjectileHitKind::Building) special = "Impact_Building";
-    if (special != nullptr) {
-        out.push_back(soundAt(special, e.x, e.y, e.z));
-        return;
+}  // namespace
+
+std::string soundMaterialOf(const DefDatabase& db, DefId def) {
+    const Def* d = soundDef(db, def);
+    if (d == nullptr) return {};
+    const std::string said = d->text("visual.sound.material");
+    if (!said.empty()) return said;
+    for (size_t i = 0; i < d->count("stuffProps.categories"); ++i) {
+        const std::string c = d->textAt("stuffProps.categories", i);
+        if (c == "Metallic" || c == "Composite") return "Steel";
+        if (c == "Woody") return "Wood";
+        if (c == "Stony") return "Stone";
+        if (c == "Fabric" || c == "Leathery") return "Flesh";  // cloth and leather give like a body
     }
-    // A wielded weapon says what it sounds like; fists, teeth and claws are told by the tool's name.
-    std::string cue;
-    if (const Def* weapon = soundDef(db, e.def)) cue = soundSlot(*weapon, "hit");
-    if (cue.empty()) {
-        if (m.find("fist") != std::string::npos) cue = "Punch";
-        else cue = "Flesh_Bite";
+    const std::string surface = d->text("visual.surface");
+    if (surface == "wood") return "Wood";
+    if (surface == "steel" || surface == "plasteel" || surface == "uranium") return "Steel";
+    if (!surface.empty()) return "Stone";
+    return {};
+}
+
+std::string soundMeleeCue(const DefDatabase& db, const Event& e) {
+    const std::string& m = e.message;
+    // A blow into a wall or rock comes as "missed" (no pawn was struck) with `hit` Building or Rock.
+    if (m == "missed" && e.hit != ProjectileHitKind::Building && e.hit != ProjectileHitKind::Rock) return {};
+    if (m == "dodged") return "Dodge";
+    // The weapon's material (its stuff, else its def), wood or steel: a stone club rings hard like steel, a cloth one is wood.
+    std::string weapon = soundMaterialOf(db, e.stuff);
+    if (weapon.empty()) weapon = soundMaterialOf(db, e.def);
+    if (weapon == "Stone") weapon = "Steel";
+    if (weapon == "Flesh") weapon = "Wood";
+    const bool flesh = m == "hit" && e.hit == ProjectileHitKind::Pawn;
+    const Def* weaponDef = soundDef(db, e.def);
+    const std::string slot = weaponDef != nullptr ? soundSlot(*weaponDef, "hit") : std::string();
+    if (flesh) {
+        // A blade sounds like itself in flesh (its `hit`: Flesh_Cut, Flesh_Stab); a blunt blow by what it is made of.
+        if (!slot.empty() && slot != "Flesh_Blunt") return slot;
+        if (!weapon.empty() && !slot.empty()) return "Hit_" + weapon + "_Flesh";
+        if (!slot.empty()) return slot;
+        return weaponDef != nullptr && weaponDef->text("race.intelligence") == "Humanlike" ? "Punch" : "Flesh_Bite";
+    }
+    // Struck something else: the parrying weapon, a shield, armour, a wall, or rock.
+    std::string surface = soundMaterialOf(db, e.struckStuff);
+    if (surface.empty()) surface = soundMaterialOf(db, e.struckDef);
+    if (surface.empty()) {
+        if (e.hit == ProjectileHitKind::Rock) surface = "Stone";
+        else if (e.hit == ProjectileHitKind::Building) surface = "Stone";
+        else if (m == "deflected" || e.hit == ProjectileHitKind::Armor) surface = "Steel";  // plate turns a blow
+        else if (m == "blocked") surface = "Steel";
+    }
+    if (weapon.empty() || slot.empty()) {
+        // Fists, teeth and claws.
+        return surface == "Steel" || surface == "Stone" ? "Melee_Clang" : "Punch";
+    }
+    if (surface.empty()) return {};
+    return "Hit_" + weapon + "_" + surface;
+}
+
+namespace {
+
+void soundMeleeHit(const DefDatabase& db, const Event& e, std::vector<SoundPlay>& out) {
+    std::string cue = soundMeleeCue(db, e);
+    if (cue.empty()) return;
+    if (db.find("SoundCues", cue) == nullptr) {
+        // A pairing with no cue of its own falls back to the old general sounds.
+        const std::string& m = e.message;
+        cue = m == "blocked" ? "Melee_Block" : (m == "deflected" || e.hit == ProjectileHitKind::Armor) ? "Melee_Clang"
+              : e.hit == ProjectileHitKind::Building ? "Impact_Building" : "Flesh_Blunt";
     }
     out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));
 }
@@ -207,7 +257,7 @@ std::string soundLovinCue(SoundGender a, SoundGender b) {
 }
 
 bool soundViolentDeath(const std::string& cause) {
-    return cause == "a vital part destroyed" || cause == "organ failure" || cause == "executed";
+    return cause == "a vital part destroyed" || cause == "organ failure" || cause == "executed" || cause == "wounds";
 }
 
 std::string soundSlot(const Def& def, const char* slot) {
@@ -280,7 +330,7 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
             const std::string cue = soundSlotOr(soundDefOfEntity(db, defOf, e.thing), slot, "");
             if (!cue.empty()) out.push_back(soundOn(cue, e.thing));
             // A woman screams every time she goes down, and when violence kills her outright. Killed while she lay downed: a
-            // last scream some of the time (the cue's `downedDeathChance`, 0.5) if she was still awake, none if knocked out.
+            // last scream (the cue's `downedDeathChance`, 1 now) if she was still awake, none if knocked out.
             bool screams = e.type == EventType::PawnDowned;
             if (e.type == EventType::PawnDied && soundViolentDeath(e.message)) {
                 screams = e.amount < 0.5f || (e.amount < 1.5f && soundDownedDeathRoll(db, defOf, genderOf, e));

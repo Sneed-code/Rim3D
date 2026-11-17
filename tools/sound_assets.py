@@ -43,7 +43,7 @@ def download(src):
         urls = links[:1]
     elif how.startswith("page:"):
         base = "https://opengameart.org"
-        links = findLinks(how[5:], r'(?:https://opengameart\.org)?/sites/default/files/[^"\s]+\.(?:ogg|txt)')
+        links = findLinks(how[5:], r'(?:https://opengameart\.org)?/sites/default/files/[^"\s]+\.(?:ogg|wav|zip|txt)')
         urls = [u if u.startswith("http") else base + u for u in links]
     else:
         urls = [how]
@@ -93,7 +93,8 @@ def pickProblems(picks, cues):
 def expand(patterns):
     files = []
     for pat in patterns:
-        files += [h for h in sorted(glob.glob(str(DEST / pat))) if h not in files]
+        found = sorted(glob.glob(str(DEST / pat), recursive=True))
+        files += [h for h in found if h not in files and h.lower().endswith((".wav", ".ogg", ".mp3", ".flac"))]
     return files
 
 
@@ -115,6 +116,11 @@ def cutOne(ffmpeg, src, out, channels, pick, music):
     if pick.get("seconds"):
         chain.append("atrim=duration=%g" % pick["seconds"])
         chain.append("areverse,afade=t=in:d=0.04,areverse")  # no click where it is cut
+    if pick.get("pad"):
+        chain.append("apad=pad_dur=%g" % pick["pad"])  # room for an echo tail the filters add
+    chain += pick.get("filter", [])  # extra ffmpeg filters: a far layer made from a near shot (lowpass, aecho)
+    if pick.get("pad"):
+        chain.append("areverse,silenceremove=start_periods=1:start_threshold=-60dB,afade=t=in:d=0.3,areverse")
     if pick.get("loop"):
         chain.append("afade=t=in:d=0.02,areverse,afade=t=in:d=0.02,areverse")
     if music:

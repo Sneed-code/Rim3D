@@ -318,6 +318,13 @@ struct Event {
     float y = 0.0f;
     float z = 0.0f;
     ProjectileHitKind hit = ProjectileHitKind::None;
+    // MeleeHit, for its sound (docs/design/sound.md "Melee by material"): `stuff` what the weapon is made of (invalid for
+    // fists, teeth or a weapon of no stuff, whose def then says), and what the blow struck when it was not flesh: the
+    // parrying weapon, the raised shield, the armour piece that turned it or the building, as `struckDef` and its
+    // `struckStuff` (invalid when it has none). A blow into natural rock has `hit` Rock and neither.
+    DefId stuff;
+    DefId struckDef;
+    DefId struckStuff;
     // MeleeSwing: `thing` the attacker, `target` whom it swings at (none: straight ahead), `def` its
     // melee weapon's Things def (or its own def for fists, teeth...), `message` the tool ("blade",
     // "left fist"), `amount` steps to the hit moment, `cell` where it stands. MeleeHit: the same

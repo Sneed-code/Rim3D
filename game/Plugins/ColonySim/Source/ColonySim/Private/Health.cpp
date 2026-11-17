@@ -1210,6 +1210,9 @@ bool HealthSystem::downedAwake(const Health& health) const {
     if (!health.downed || health.dead) {
         return false;
     }
+    if (!health.zones.empty()) {
+        return !health.unconscious;  // body zones say it themselves (head under 25% or blood too low: out)
+    }
     const int c = model_->consciousnessCapacity;
     if (c < 0 || static_cast<size_t>(c) >= health.capacities.size()) {
         return true;
