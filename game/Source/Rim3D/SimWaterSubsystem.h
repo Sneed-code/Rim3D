@@ -6,6 +6,7 @@
 #include "SimWaterSubsystem.generated.h"
 
 class AActor;
+class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UProceduralMeshComponent;
 class USimSubsystem;
@@ -57,6 +58,17 @@ public:
 
 	bool IsBuilt() const { return Holder != nullptr; }
 	const FWaterStats& GetStats() const { return Stats; }
+	/** Sets a parameter of the water material on every chunk (kept across rebuilds). Console: `Water.Param Name V` or `Water.Param Name R G B`. */
+	void SetWaterParam(FName Name, float Value);
+	void SetWaterVector(FName Name, const FLinearColor& Value);
+
+	/** W2: the wave simulation's newest height field (null while off), how many steps it ran, bodies that pushed it last
+	 *  frame and bodies that came into the water. */
+	class UTextureRenderTarget2D* GetWaveTarget() const;
+	int64 GetWaveSteps() const { return WaveSteps; }
+	int32 GetWavePushes() const { return WavePushes; }
+	int64 GetWaveEntries() const { return WaveEntries; }
+
 	/** The chunk mesh (tests), null if none. */
 	UProceduralMeshComponent* GetChunkMesh(int32 ChunkX, int32 ChunkY) const;
 
@@ -82,6 +94,42 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> Material;
+
+	/** M_Water with the parameters set here (the chunks draw with it). */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WaterMID;
+
+	/** W2 wave simulation (docs/design/water.md): three height fields in turn (before, now, next), a step material per
+	 *  turn, and the map's open water as a mask. */
+	UPROPERTY()
+	TObjectPtr<class UTextureRenderTarget2D> WaveTargets[3];
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WaveStepMIDs[3];
+	UPROPERTY()
+	TObjectPtr<class UTexture2D> WaveMask;
+
+	struct FWaveBody
+	{
+		FVector2D Last = FVector2D::ZeroVector;
+		float Entry = 0.0f;
+		bool bIn = false;
+		uint64 SeenFrame = 0;
+	};
+	TMap<uint32, FWaveBody> WaveBodies;
+	void TickWaves(float DeltaTime);
+	void BuildWaveMask(const colony::Map& Map);
+	void StopWaves();
+	int32 WaveTurn = 0;
+	FIntPoint WaveCorner = FIntPoint(MAX_int32, MAX_int32);
+	bool bWaveMaskDirty = true;
+	uint64 WaveFrame = 0;
+	double WaveTime = 0.0;
+	int64 WaveSteps = 0;
+	int32 WavePushes = 0;
+	int64 WaveEntries = 0;
+
+	TMap<FName, float> ScalarOverrides;
+	TMap<FName, FLinearColor> VectorOverrides;
 
 	TArray<FChunk> Chunks;
 	const colony::Sim* BuiltSim = nullptr;
