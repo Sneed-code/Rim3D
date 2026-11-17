@@ -102,7 +102,7 @@ TEST_CASE("Heavy turrets: the wiki's numbers") {
     CHECK(sim.combat().gunStats(sim.defs().idOf("Things", "Gun_AutocannonTurret"), stats));
     CHECK(stats.range == doctest::Approx(32.9f));
     CHECK(stats.minRange == doctest::Approx(8.9f));
-    CHECK(stats.burst == 3);
+    CHECK(stats.burst == 9);  // the wiki's 3, times 3 (cooldown bursts)
     CHECK(sim.combat().gunStats(sim.defs().idOf("Things", "Gun_UraniumSlugTurret"), stats));
     CHECK(stats.range == doctest::Approx(45.9f));
     CHECK(stats.minRange == doctest::Approx(11.9f));

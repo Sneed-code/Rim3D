@@ -760,7 +760,7 @@ TEST_CASE("Defense: a lancer outranges the mini-turret (32.9 m against 28.9 m) a
     sim->submit(SetFactionCommand{mech, 3});
     int turretShots = 0;
     int mechShots = 0;
-    for (int i = 0; i < 30 * 120 && sim->things().registry().valid(turret); ++i) {
+    for (int i = 0; i < 30 * 240 && sim->things().registry().valid(turret); ++i) {  // longer with ranged damage halved
         sim->step();
         for (const Event& e : sim->events()) {
             turretShots += e.type == EventType::ShotFired && e.thing == turret ? 1 : 0;

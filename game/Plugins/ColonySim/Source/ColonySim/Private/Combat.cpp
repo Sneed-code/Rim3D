@@ -744,6 +744,10 @@ const CombatModel::Gun* combatGunOf(const CombatModel& model, const entt::regist
         const int scaled = static_cast<int>(std::lround(static_cast<float>(base->magazine) * mods->magazine));
         scratch.magazine = mods->magazine > 1.0f ? std::max(base->magazine + 1, scaled) : std::max(1, scaled);
     }
+    if (base->store) {  // cooldown bursts: an extended magazine holds more shots in the store
+        const int scaled = static_cast<int>(std::lround(static_cast<float>(base->burst) * mods->magazine));
+        scratch.burst = mods->magazine > 1.0f ? std::max(base->burst + 1, scaled) : std::max(1, scaled);
+    }
     scratch.reloadTime = static_cast<int>(std::lround(static_cast<float>(base->reloadTime) * mods->reload));
     scratch.cooldown = static_cast<int>(std::lround(static_cast<float>(base->cooldown) * mods->cooldown));
     scratch.warmup = static_cast<int>(std::lround(static_cast<float>(base->warmup) * mods->warmup));

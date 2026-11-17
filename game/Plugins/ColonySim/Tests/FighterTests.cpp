@@ -693,7 +693,8 @@ TEST_CASE("Fighters: over a low crest a fighter shoots from where its shots clea
     // enemy crouched too, the aim over the crest at its head clears from a crouch).
     CHECK(crouchedAim * 20 <= aimed);
     CHECK(shots >= 5);
-    CHECK(intoGround * 4 <= shots);
+    // A quarter before cooldown bursts; now the shots that come before it moves on make up to a third (18 shots, 6).
+    CHECK(intoGround * 3 <= shots);
 }
 
 TEST_CASE("Fighters: a raider spares a downed colonist while another colonist stands anywhere on the map") {
