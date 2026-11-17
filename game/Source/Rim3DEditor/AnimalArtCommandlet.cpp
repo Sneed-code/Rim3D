@@ -6,6 +6,8 @@
 #include "AssetToolsModule.h"
 #include "Dom/JsonObject.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/StaticMesh.h"
+#include "InterchangePipelineBase.h"
 #include "IAssetTools.h"
 #include "Engine/Texture.h"
 #include "Materials/Material.h"
@@ -286,6 +288,65 @@ namespace
 		}
 		return bOk;
 	}
+
+	/**
+	 * One small static model from the art table's `staticImports` (the corpse fly): imports `file` as a static mesh
+	 * (any skeleton and clips are dropped) into `folder` and names it `name`. UCorpseLifeSubsystem scales it to size.
+	 */
+	bool AnimalArtImportStatic(IAssetTools& Tools, const TSharedPtr<FJsonObject>& Entry)
+	{
+		const FString Name = Entry->GetStringField(TEXT("name"));
+		const FString Folder = Entry->GetStringField(TEXT("folder"));
+		const FString File = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), Entry->GetStringField(TEXT("file"))));
+		if (!FPaths::FileExists(File))
+		{
+			UE_LOG(LogAnimalArt, Error, TEXT("%s is missing (Sketchfab download, assets/raw/sketchfab)"), *File);
+			return false;
+		}
+		const FString Scratch = Folder + TEXT("/_") + Name;
+		IFileManager::Get().DeleteDirectory(*FPackageName::LongPackageNameToFilename(Scratch), false, true);
+		UAssetImportTask* Task = NewObject<UAssetImportTask>();
+		Task->Filename = File;
+		Task->DestinationPath = Scratch;
+		Task->bAutomated = true;
+		Task->bReplaceExisting = true;
+		Task->bSave = true;
+		UInterchangeGenericAssetsPipeline* Pipeline = NewObject<UInterchangeGenericAssetsPipeline>();
+		if (Pipeline->CommonMeshesProperties)
+		{
+			Pipeline->CommonMeshesProperties->ForceAllMeshAsType = EInterchangeForceMeshType::IFMT_StaticMesh;
+		}
+		if (Pipeline->MeshPipeline)
+		{
+			Pipeline->MeshPipeline->bCombineStaticMeshes = true;
+		}
+		Task->Options = Pipeline;
+		Tools.ImportAssetTasks({Task});
+		UStaticMesh* Mesh = nullptr;
+		for (UObject* Object : Task->GetObjects())
+		{
+			Mesh = Mesh ? Mesh : Cast<UStaticMesh>(Object);
+		}
+		if (!Mesh)
+		{
+			TArray<FAssetData> Found;
+			FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get().GetAssetsByPath(FName(*Scratch), Found, true);
+			for (const FAssetData& Data : Found)
+			{
+				Mesh = Mesh ? Mesh : Cast<UStaticMesh>(Data.GetAsset());
+			}
+		}
+		if (!Mesh)
+		{
+			UE_LOG(LogAnimalArt, Error, TEXT("%s: the import made no static mesh"), *Name);
+			return false;
+		}
+		const FBox Box = Mesh->GetBoundingBox();
+		UE_LOG(LogAnimalArt, Display, TEXT("%s: static mesh %.2f x %.2f x %.2f cm, %d materials"), *Name, Box.GetSize().X, Box.GetSize().Y,
+			Box.GetSize().Z, Mesh->GetStaticMaterials().Num());
+		// The materials and textures stay in the scratch folder next to it; only the mesh moves.
+		return AnimalArtRename(Tools, Mesh, Folder, Name);
+	}
 }
 
 UAnimalArtCommandlet::UAnimalArtCommandlet()
@@ -328,6 +389,17 @@ int32 UAnimalArtCommandlet::Main(const FString& Params)
 		{
 			// An entry with `assets` instead of `file` is already in Unreal's format (a Fab pack): nothing to import.
 			if (Value->AsObject()->HasField(TEXT("file")) && Wanted(Value->AsObject()->GetStringField(TEXT("model"))) && !AnimalArtImportGltf(Tools, Value->AsObject()))
+			{
+				++Failed;
+			}
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Statics = nullptr;
+	if (Root->TryGetArrayField(TEXT("staticImports"), Statics))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Statics)
+		{
+			if (Wanted(Value->AsObject()->GetStringField(TEXT("name"))) && !AnimalArtImportStatic(Tools, Value->AsObject()))
 			{
 				++Failed;
 			}
