@@ -46,6 +46,7 @@
     "reachHeightFollow": 0.5,
     "maxAttackClipSeconds": 1.6,
     "maxAttackHitSeconds": 0.8,
+    "maxAttackTravel": 0.8,
     "unarmedStyle": "Unarmed",
     "weaponStyle": {
       "Melee_Knife": "OneHand", "Melee_Club": "Club", "Melee_Mace": "Club", "Melee_Gladius": "OneHand",
@@ -70,7 +71,7 @@
       "guardWindowSteps", "guardBreakSteps", "dodgeRecoverySteps", "recoveryNoDefendSteps", "guardWaitSteps", "guardFacingCos", "rollClearance", "aiRollEverySteps",
       "blockRecoverySteps", "playerBlockSteps", "dodgeHoldSteps", "chargeTraits", "strongPowerShare",
       "arcHalfDegrees", "arcRaysPerSide", "arcDamageTypes",
-      "reachHeightFollow", "maxAttackClipSeconds", "maxAttackHitSeconds", "unarmedStyle", "weaponStyle", "styleAttacks",
+      "reachHeightFollow", "maxAttackClipSeconds", "maxAttackHitSeconds", "maxAttackTravel", "unarmedStyle", "weaponStyle", "styleAttacks",
       "focusRange", "focusBreakRange", "focusFrontCos", "focusBehindFactor", "aiFocusRange", "footworkEverySteps",
       "footworkChanceBySkill", "footworkTraitBonus", "footworkTraits", "recklessFootwork", "circleMetres", "circleSteps", "circleFlip",
       "backMetres", "backSteps", "crowdedShare", "chaseSeconds", "lineOfFireRange", "lineOfFireClearance"

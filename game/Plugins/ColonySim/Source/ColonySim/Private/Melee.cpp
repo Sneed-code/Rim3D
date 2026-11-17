@@ -104,6 +104,7 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     num("reachHeightFollow", r.reachHeightFollow);
     num("maxAttackClipSeconds", r.maxAttackClipSeconds);
     num("maxAttackHitSeconds", r.maxAttackHitSeconds);
+    num("maxAttackTravel", r.maxAttackTravel);
     num("focusRange", r.focusRange);
     num("focusBreakRange", r.focusBreakRange);
     num("focusFrontCos", r.focusFrontCos);
@@ -231,6 +232,14 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
                 const MotionClip* c = motion.clip(clipName);
                 if (c == nullptr || c->hitSeconds <= 0.0f || c->hitSeconds > rules_.maxAttackHitSeconds ||
                     c->seconds > rules_.maxAttackClipSeconds) {
+                    continue;
+                }
+                // A clip that carries the body further than this is a charge, not a swing: it would run past the target.
+                float travel = 0.0f;
+                for (size_t i = 0; i < c->forward.size() && i < c->right.size(); ++i) {
+                    travel = std::max(travel, std::sqrt(c->forward[i] * c->forward[i] + c->right[i] * c->right[i]));
+                }
+                if (travel > rules_.maxAttackTravel) {
                     continue;
                 }
                 const float lunge = std::max(0.0f, motion.forwardAt(c->def, c->hitSeconds));

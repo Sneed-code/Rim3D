@@ -135,6 +135,7 @@ struct MeleeRules {
     std::string unarmedStyle = "Unarmed";
     float maxAttackClipSeconds = 1.6f;
     float maxAttackHitSeconds = 0.8f;
+    float maxAttackTravel = 0.8f;  // metres (for a 1.80 m man): a clip that carries the body further is left out too
     // Focus (sneed, 2026-11-17; docs/design/focus.md). Ours: Dark Souls' lock-on has no numbers to copy.
     float focusRange = 20.0f;         // Tab picks targets this close
     float focusBreakRange = 25.0f;    // a focus further off than this lets go by itself

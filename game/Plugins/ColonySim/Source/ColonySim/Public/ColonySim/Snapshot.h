@@ -256,6 +256,17 @@ struct ThingView {
     // and whether it is past their shoulders, so they swim (a swim animation, the body floating at the surface).
     float waterDepth = 0.0f;
     bool swimming = false;
+    // Pawns: dirt and blood on the body, its clothes and its melee weapon (docs/design/grime.md), each 0 clean to 1.
+    // The blood is the Filth def `bloodFilth` (its `look` has the wet and dry colours) and `bloodAge` game seconds old
+    // (it dries from wet to dry over Blood.DryMinutes); the weapon's likewise. A def that is not valid: no blood.
+    float dirtLegs = 0.0f;
+    float dirtBody = 0.0f;
+    float blood = 0.0f;
+    DefId bloodFilth;
+    float bloodAge = 0.0f;
+    float weaponBlood = 0.0f;
+    DefId weaponBloodFilth;
+    float weaponBloodAge = 0.0f;
     int patchZone = -1;      // patching this body zone itself (body-health.md part B), -1 when not patching
     int patchStepsLeft = 0;
     // Turrets and traps (docs/design/defense.md). A turret: what it is doing (a TurretPhase number) and the pawn it
