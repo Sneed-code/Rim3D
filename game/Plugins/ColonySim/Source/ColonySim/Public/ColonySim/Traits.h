@@ -25,6 +25,7 @@ struct COLONY_API TraitStats {
     float comfyMinOffset = 0.0f;     // degrees C added to the coldest comfortable temperature (Nudist, ours)
     float fleeHurtMin = 0.0f;        // hurt in a fight, it falls back to cover for this many real seconds..
     float fleeHurtMax = 0.0f;        // ..to this many (Wimp, sneed's `fleeWhenHurtSeconds`); 0 for no
+    float meleeDamageFactor = 1.0f;  // times its melee blows' damage (Wimp 0.9, sneed's `meleeDamageFactor`)
 };
 
 // The TraitStats of colonists, worked out on first ask and kept (a colonist's traits don't change).

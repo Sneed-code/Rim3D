@@ -803,7 +803,7 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
         const Gear* held = reg.try_get<Gear>(pawn);
         blow = held != nullptr ? combat_.meleeDamageFactor(held->weapon, tool->damageType) : 1.0f;
     }
-    blow *= swingDamage(pawn);  // melee skill (real-time-combat.md)
+    blow *= swingDamage(pawn) * combat_.traitMeleeDamage(pawn);  // melee skill (real-time-combat.md) and traits (Wimp)
     const float power = tool->power * blow;
     const float penetration = tool->penetration * blow;
     const Position& pos = reg.get<Position>(pawn);
