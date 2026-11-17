@@ -23,6 +23,7 @@ SINGLE_GROUPS = [
     ("Fear", ("scared", "terrified", "ducking", "hiding", "cower")),
     ("Cover", ("cover",)),
     ("Rolls", ("roll",)),
+    ("Fighting", ("punch", "jab")),
     ("Firearms", ("reload", "gunplay", "focus")),
     ("Interact", ("pick", "rummaging", "searching", "pull heavy", "throw object")),
 ]
