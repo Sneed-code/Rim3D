@@ -2556,6 +2556,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
             view.crawling = health->downed && health->crawls;
+            view.gib = static_cast<uint8_t>(health->gib);
+            view.severed = health->missing.empty() ? uint16_t{0} : health_->severed(entity);
             view.dead = health->dead;
             view.pain = std::clamp(health->pain, 0.0f, 1.0f);
             view.bloodLoss = health->bloodLoss;
@@ -3522,6 +3524,9 @@ uint64_t Sim::stateHash() const {
             h.add(health->bloodLoss);
             if (health->bleedStoppedAt >= 0) {
                 h.add(health->bleedStoppedAt);
+            }
+            if (health->gib != Gib::None) {
+                h.add(static_cast<int>(health->gib));
             }
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));

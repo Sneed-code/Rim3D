@@ -243,6 +243,8 @@ struct ThingView {
     int meleeStepsLeft = 0;
     Entity meleeTarget = kNoEntity;
     bool blocking = false;
+    uint16_t severed = 0;    // the limbs it has lost, SeveredBits (Health.h; body-health.md part F): Unreal hides them and caps the stump
+    uint8_t gib = 0;         // Gib (Health.h): 1 its head burst, 2 its torso, 3 the whole corpse
     bool crawling = false;   // downed by the torso and awake: Unreal plays a crawl when it moves (body-health.md part D)
     // Pawns in water (docs/design/water.md): metres of water over the ground at their feet (the surface is z + waterDepth),
     // and whether it is past their shoulders, so they swim (a swim animation, the body floating at the surface).

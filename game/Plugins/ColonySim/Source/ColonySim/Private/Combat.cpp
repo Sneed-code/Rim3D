@@ -2084,12 +2084,16 @@ bool CombatSystem::jolt(Entity pawn, int part, DefId damageType, float force, fl
     if (zoneHp <= 0.0f) {
         return false;
     }
+    const float factor = damageType.valid() && damageType.value < model_->poiseForce.size() ? model_->poiseForce[damageType.value] : 1.0f;
+    const float push = force * factor;
+    // A blow that killed, with force far over the poise, bursts the whole corpse (body-health.md part F).
+    if (const Health* health = reg.try_get<Health>(pawn); health != nullptr && health->dead && push > model_->poiseBase + health_.gibForceOver()) {
+        health_.gibCorpse(pawn);
+    }
     if (health_.incapacitated(pawn) || !things_.spawned(pawn) || !reg.all_of<Posture, Position>(pawn)) {
         return true;
     }
     Poise* poise = reg.try_get<Poise>(pawn);
-    const float factor = damageType.valid() && damageType.value < model_->poiseForce.size() ? model_->poiseForce[damageType.value] : 1.0f;
-    const float push = force * factor;
     // Knock-down: the blow's force beats the pawn's poise, and it isn't still getting over the last one.
     if (push > model_->poiseBase && (poise == nullptr || poise->immuneLeft <= 0) && !reg.all_of<KnockedDown>(pawn)) {
         Posture& posture = reg.get<Posture>(pawn);

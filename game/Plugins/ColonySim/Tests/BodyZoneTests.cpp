@@ -589,3 +589,188 @@ TEST_CASE("Crawling: the snapshot tells Unreal who crawls") {
     CHECK(view != nullptr);
     CHECK((view != nullptr && view->crawling));
 }
+
+// ---- Part F: dismemberment -------------------------------------------------------------------------
+
+namespace {
+
+// The messages of the events of one type about one pawn, in order.
+std::vector<std::string> zoneTestMessages(const Sim& sim, Entity pawn, EventType type) {
+    std::vector<std::string> out;
+    for (const Event& e : sim.events()) {
+        if (e.type == type && e.thing == pawn) {
+            out.push_back(e.message);
+        }
+    }
+    return out;
+}
+
+}  // namespace
+
+TEST_CASE("Dismemberment: a hit half a zone's hit points over what it had left takes an arm off, below the elbow or whole") {
+    auto sim = zoneTestSim();
+    // A whole arm has 50: 74 is 24 over (no), 75 is 25 over (yes).
+    const Entity spared = zoneTestPawn(*sim, 6, 6, true);
+    CHECK(zoneTestHit(*sim, spared, "Blunt", 74.0f, "left shoulder"));
+    CHECK(zoneTestMessages(*sim, spared, EventType::PawnDismembered).empty());
+    // 60 on the shoulder (50) destroys the shoulder itself by RimWorld's rule, which is no dismemberment.
+    int forearms = 0;
+    int arms = 0;
+    for (int i = 0; i < 16; ++i) {
+        const Entity pawn = zoneTestPawn(*sim, 8 + 2 * i, 12, true);
+        const bool right = i % 2 == 1;
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 75.0f, right ? "right arm" : "left arm"));
+        const std::vector<std::string> said = zoneTestMessages(*sim, pawn, EventType::PawnDismembered);
+        CHECK(said.size() == 1);
+        if (said.size() != 1) {
+            continue;
+        }
+        const std::string side = right ? "right " : "left ";
+        const uint16_t mask = sim->health().severed(pawn);
+        if (said[0] == side + "forearm") {
+            ++forearms;
+            CHECK(mask == (right ? kSeveredRightForearm : kSeveredLeftForearm));
+        } else {
+            CHECK(said[0] == side + "arm");
+            ++arms;
+            CHECK(mask == (right ? kSeveredRightArm : kSeveredLeftArm));
+        }
+        CHECK_FALSE(zoneTestHealth(*sim, pawn).dead);
+        CHECK(sim->health().gib(pawn) == Gib::None);
+        Snapshot snap;
+        sim->writeSnapshot(snap);
+        const ThingView* view = snap.find(pawn);
+        CHECK(view != nullptr);
+        if (view != nullptr) {
+            CHECK(view->severed == mask);
+        }
+    }
+    // Half and half, by the pawn: both happen.
+    CHECK(forearms >= 3);
+    CHECK(arms >= 3);
+}
+
+TEST_CASE("Dismemberment: a hurt limb comes off more easily; a leg goes below the knee or whole and its owner goes down") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
+    // The arm has 20 left: 44 is 24 over, 45 is 25 over.
+    CHECK(zoneTestHit(*sim, pawn, "Blunt", 30.0f, "left arm"));
+    CHECK(zoneTestMessages(*sim, pawn, EventType::PawnDismembered).empty());
+    CHECK(zoneTestHit(*sim, pawn, "Cut", 45.0f, "left arm"));
+    CHECK(zoneTestMessages(*sim, pawn, EventType::PawnDismembered).size() == 1);
+
+    // A leg has 75: 112 is 37 over (under 37.5), 113 is over.
+    const Entity kept = zoneTestPawn(*sim, 14, 10, true);
+    CHECK(zoneTestHit(*sim, kept, "Blunt", 112.0f, "left leg"));
+    CHECK(zoneTestMessages(*sim, kept, EventType::PawnDismembered).empty());
+    const Entity lost = zoneTestPawn(*sim, 18, 10, true);
+    CHECK(zoneTestHit(*sim, lost, "Blunt", 113.0f, "right leg"));
+    const std::vector<std::string> said = zoneTestMessages(*sim, lost, EventType::PawnDismembered);
+    CHECK(said.size() == 1);
+    if (said.size() == 1) {
+        CHECK((said[0] == "right leg" || said[0] == "right lower leg"));
+    }
+    CHECK((sim->health().severed(lost) & (kSeveredRightLeg | kSeveredRightLowerLeg)) != 0);
+    CHECK(zoneTestHealth(*sim, lost).downed);
+    CHECK_FALSE(zoneTestHealth(*sim, lost).dead);
+}
+
+TEST_CASE("Dismemberment: a cut takes the head off, a blunt blow bursts it, a torso bursts; all three kill") {
+    auto sim = zoneTestSim();
+    const Entity beheaded = zoneTestPawn(*sim, 10, 10, true);
+    CHECK(zoneTestHit(*sim, beheaded, "Cut", 75.0f, "head"));
+    CHECK(zoneTestMessages(*sim, beheaded, EventType::PawnDismembered) == std::vector<std::string>{"head"});
+    CHECK(zoneTestHealth(*sim, beheaded).dead);
+    CHECK(sim->health().gib(beheaded) == Gib::None);
+    CHECK((sim->health().severed(beheaded) & kSeveredHead) != 0);
+    CHECK(zoneTestMessages(*sim, beheaded, EventType::PawnDied).size() == 1);
+
+    const Entity burst = zoneTestPawn(*sim, 14, 10, true);
+    CHECK(zoneTestHit(*sim, burst, "Blunt", 75.0f, "head"));
+    CHECK(zoneTestMessages(*sim, burst, EventType::PawnGibbed) == std::vector<std::string>{"head"});
+    CHECK(zoneTestMessages(*sim, burst, EventType::PawnDismembered).empty());
+    CHECK(zoneTestHealth(*sim, burst).dead);
+    CHECK(sim->health().gib(burst) == Gib::Head);
+    Snapshot snap;
+    sim->writeSnapshot(snap);
+    const ThingView* view = snap.find(burst);
+    CHECK(view != nullptr);
+    if (view != nullptr) {
+        CHECK(view->gib == 1);
+    }
+
+    // A head hit under the line kills as it always did, with the head still on.
+    const Entity whole = zoneTestPawn(*sim, 18, 10, true);
+    CHECK(zoneTestHit(*sim, whole, "Blunt", 60.0f, "head"));
+    CHECK(sim->health().gib(whole) == Gib::None);
+    CHECK(zoneTestMessages(*sim, whole, EventType::PawnGibbed).empty());
+
+    const Entity torso = zoneTestPawn(*sim, 22, 10, true);
+    CHECK(zoneTestHit(*sim, torso, "Blunt", 150.0f, "torso"));
+    CHECK(zoneTestMessages(*sim, torso, EventType::PawnGibbed) == std::vector<std::string>{"torso"});
+    CHECK(zoneTestHealth(*sim, torso).dead);
+    CHECK(sim->health().gib(torso) == Gib::Torso);
+    CHECK(zoneTestMessages(*sim, torso, EventType::PawnDied).size() == 1);
+}
+
+TEST_CASE("Dismemberment: never the protagonist, never an animal") {
+    auto sim = zoneTestSim();
+    const Entity hero = zoneTestPawn(*sim);
+    sim->things().registry().get<Health>(hero).protagonist = true;
+    sim->health().refresh(hero);
+    CHECK(zoneTestHit(*sim, hero, "Cut", 90.0f, "left arm"));
+    CHECK(zoneTestMessages(*sim, hero, EventType::PawnDismembered).empty());
+    CHECK(zoneTestMessages(*sim, hero, EventType::PawnGibbed).empty());
+    CHECK(sim->health().gib(hero) == Gib::None);
+    CHECK_FALSE(sim->health().gibCorpse(hero));
+
+    const Entity muffalo = sim->things().spawn("Muffalo", CellPos{20, 20, 0});
+    if (muffalo != kNoEntity && sim->health().tracks(muffalo)) {
+        Rng rng(3);
+        sim->health().applyDamage(muffalo, sim->health().damageTypeId("Blunt"), 500.0f, -1, rng);
+        CHECK(zoneTestMessages(*sim, muffalo, EventType::PawnDismembered).empty());
+        CHECK(zoneTestMessages(*sim, muffalo, EventType::PawnGibbed).empty());
+        CHECK(sim->health().severed(muffalo) == 0);
+        CHECK_FALSE(sim->health().gibCorpse(muffalo));
+    }
+}
+
+TEST_CASE("Dismemberment: a killing blow with force 25 over the poise bursts the whole corpse; it saves and loads") {
+    auto sim = zoneTestSim();
+    const Entity soft = zoneTestPawn(*sim, 10, 10, true);
+    const Entity hard = zoneTestPawn(*sim, 14, 10, true);
+    sim->step();
+    const int torso = zoneTestPart(*sim, soft, "torso");
+    const DefId cut = sim->defs().idOf("DamageTypes", "Cut");
+    const DefId blunt = sim->defs().idOf("DamageTypes", "Blunt");
+    // Alive: nothing bursts, however hard the blow.
+    sim->combat().jolt(soft, torso, cut, 200.0f, 5.0f);
+    CHECK(sim->health().gib(soft) == Gib::None);
+    // Killed by a wound that leaves the body whole (the heart), then the blow's force: 75 is not over 50 + 25, 76 is;
+    // a blunt blow counts half again (51 blunt is 76.5).
+    CHECK(zoneTestHit(*sim, soft, "Cut", 40.0f, "heart"));
+    CHECK(zoneTestHit(*sim, hard, "Cut", 40.0f, "heart"));
+    CHECK(zoneTestHealth(*sim, soft).dead);
+    CHECK(zoneTestHealth(*sim, hard).dead);
+    sim->combat().jolt(soft, torso, cut, 75.0f, 40.0f);
+    CHECK(sim->health().gib(soft) == Gib::None);
+    sim->combat().jolt(hard, torso, blunt, 51.0f, 40.0f);
+    CHECK(sim->health().gib(hard) == Gib::Whole);
+    CHECK(zoneTestMessages(*sim, hard, EventType::PawnGibbed) == std::vector<std::string>{"whole"});
+    // Once.
+    sim->combat().jolt(hard, torso, blunt, 90.0f, 40.0f);
+    CHECK(zoneTestMessages(*sim, hard, EventType::PawnGibbed).size() == 1);
+
+    const Entity limbless = zoneTestPawn(*sim, 18, 10, true);
+    CHECK(zoneTestHit(*sim, limbless, "Blunt", 120.0f, "left leg"));
+    SaveLoadResult loaded = loadSim(saveSim(*sim), zoneTestDefs());
+    CHECK(loaded.error == "");
+    if (loaded.sim == nullptr) {
+        return;
+    }
+    CHECK(loaded.sim->health().gib(hard) == Gib::Whole);
+    CHECK(loaded.sim->health().gib(soft) == Gib::None);
+    CHECK(loaded.sim->health().severed(limbless) == sim->health().severed(limbless));
+    CHECK(loaded.sim->health().severed(limbless) != 0);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+}

@@ -172,6 +172,9 @@ enum class EventType : uint8_t {
     Lovin,                 // `thing` and `target` the partners; `message` "started" (`amount` its seconds), "done" or "interrupted"
     PawnStaggered,         // a bullet staggered `thing` (AN1, docs/design/combat.md "Stagger"): it walks slowly for `amount` steps; (x, y) where
     ShieldBlocked,         // a hit landed on `thing`'s raised shield `target` (docs/design/shields.md): `amount` it took off, `message` "stopped" (all of it) or "softened"; (x, y) where
+    // Dismemberment (docs/design/body-health.md part F).
+    PawnDismembered,       // a blow took a limb or the head off `thing`: `part` the body part that went (a PawnPartLost came just before), `amount` the damage beyond what the zone had left, `message` "left forearm", "right arm", "left lower leg", "right leg" or "head"
+    PawnGibbed,            // `thing`'s head or torso burst (it dies), or its whole corpse did: `message` "head", "torso" or "whole", `amount` the damage beyond what the zone had left (0 for whole)
 };
 
 // What stopped a projectile (ProjectileHit).

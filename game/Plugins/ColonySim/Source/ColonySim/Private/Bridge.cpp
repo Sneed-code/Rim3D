@@ -332,6 +332,8 @@ const char* eventTypeName(EventType type) {
         case EventType::GrenadeLanded: return "GrenadeLanded";
         case EventType::Explosion: return "Explosion";
         case EventType::PawnKnockedDown: return "PawnKnockedDown";
+        case EventType::PawnDismembered: return "PawnDismembered";
+        case EventType::PawnGibbed: return "PawnGibbed";
         case EventType::RaidArrived: return "RaidArrived";
         case EventType::SquadChanged: return "SquadChanged";
         case EventType::AlarmChanged: return "AlarmChanged";

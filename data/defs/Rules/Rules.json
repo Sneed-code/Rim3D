@@ -99,7 +99,17 @@
       "patchQuality": 0.3,
       "coverBlood": 1500,
       "minMoving": 0.4,
-      "crawlMoving": 0.1
+      "crawlMoving": 0.1,
+      "dismember": {
+        "note": "sneed's dismemberment (body-health.md part F): a hit over what its zone had left by overkillShare of the zone's hit points takes an arm (below the elbow or whole) or a leg (below the knee or whole) off, takes the head off (severTypes) or bursts it, or bursts the torso; a killing blow whose force is gibForceOver above the poise bursts the whole corpse",
+        "overkillShare": 0.5,
+        "lowerChance": 0.5,
+        "gibForceOver": 25,
+        "arm": { "whole": "Arm", "lower": "Hand" },
+        "leg": { "whole": "Leg", "lower": "Foot" },
+        "head": "Head",
+        "severTypes": ["Cut", "Slash"]
+      }
     },
     "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss", "innerInjuryAlsoHurtsOuter"],
     "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter", "scarSeverity", "oldWoundFromHpLost", "zones"]
