@@ -86,12 +86,33 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cctype>
 #include <cstdlib>
 #include <utility>
 
 namespace colony {
 
 namespace {
+
+// Who last hurt a pawn with a bullet, blow or blast, and in which step: the kill feed's credit (Sim::creditKills). Not saved:
+// it only names a killer on the PawnDied event and changes nothing in the game.
+struct SimKillCredit {
+    Entity by = kNoEntity;
+    int64_t step = 0;
+};
+
+bool simKillCountsAsKill(DeathCause cause) {
+    switch (cause) {
+        case DeathCause::BloodLoss:
+        case DeathCause::VitalPartLost:
+        case DeathCause::VitalCapacity:
+        case DeathCause::Wounds:
+        case DeathCause::None:
+            return true;
+        default:
+            return false;  // hunger, cold, heat, drugs, illness, surgery, slaughter, execution: nobody's kill
+    }
+}
 
 constexpr int64_t kBillUpkeepSeconds = 60;  // "until you have" bills with a restart stock look at their stock this often
 constexpr int64_t kSimPlantSlices = 60;      // the hourly plant pass runs over this many steps (G3, docs/design/sim-cost.md)
@@ -422,6 +443,11 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setBreeding(breeding_.get());
     animals_->setHusbandry(husbandry_.get());
     animals_->setPathfinder(&pathfinder_);
+    combat_->setHarmHook([this](Entity victim, Entity by) {
+        if (things_->exists(victim)) {
+            things_->registry().emplace_or_replace<SimKillCredit>(victim, SimKillCredit{by, time_.steps});
+        }
+    });
     combat_->setHurtHook([this](Entity victim, Entity attacker) {
         animals_->hurt(victim, attacker);
         if (fighters_) {
@@ -940,6 +966,66 @@ Entity Sim::controlledPawn() const {
 
 const Colonist* Sim::colonistOf(Entity pawn) const {
     return things_->exists(pawn) ? things_->registry().try_get<Colonist>(pawn) : nullptr;
+}
+
+void Sim::creditKills() {
+    entt::registry& reg = things_->registry();
+    for (Event& event : events_) {
+        if (event.type != EventType::PawnDied || event.target != kNoEntity || !things_->exists(event.thing)) {
+            continue;
+        }
+        const SimKillCredit* credit = reg.try_get<SimKillCredit>(event.thing);
+        const Health* health = reg.try_get<Health>(event.thing);
+        if (credit == nullptr || time_.steps - credit->step > kKillCreditSteps || !things_->exists(credit->by) ||
+            (health != nullptr && !simKillCountsAsKill(health->cause))) {
+            continue;
+        }
+        event.target = credit->by;
+    }
+}
+
+Sim::KillSide Sim::killSideOf(Entity pawn) const {
+    if (!things_->exists(pawn)) {
+        return KillSide::Neutral;
+    }
+    const entt::registry& reg = things_->registry();
+    if (reg.all_of<Prisoner>(pawn) || reg.all_of<Visitor>(pawn)) {
+        return KillSide::Neutral;
+    }
+    const Faction* faction = reg.try_get<Faction>(pawn);
+    const FactionId side = faction != nullptr ? faction->id : kPlayerFaction;
+    if (side == kPlayerFaction) {
+        return KillSide::Friendly;
+    }
+    if (const Animal* animal = reg.try_get<Animal>(pawn)) {
+        return animal->temper != AnimalTemper::Calm ? KillSide::Enemy : KillSide::Neutral;
+    }
+    return side == kWildFaction ? KillSide::Neutral : KillSide::Enemy;
+}
+
+std::string Sim::feedName(Entity pawn) const {
+    if (!things_->exists(pawn)) {
+        return "Someone";
+    }
+    const entt::registry& reg = things_->registry();
+    if (const Colonist* person = reg.try_get<Colonist>(pawn)) {
+        const std::string& name = !person->nickName.empty() ? person->nickName : person->firstName;
+        if (!name.empty()) {
+            return name;
+        }
+    }
+    if (const AnimalCare* care = husbandry_->care(pawn); care != nullptr && !care->name.empty()) {
+        return care->name;
+    }
+    const Thing* thing = reg.try_get<Thing>(pawn);
+    if (thing == nullptr || !thing->def.valid()) {
+        return "Someone";
+    }
+    std::string label = defs_->get(thing->def).label();
+    if (!label.empty()) {
+        label[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(label[0])));
+    }
+    return label;
 }
 
 int Sim::itemsLeft() const {
@@ -2251,6 +2337,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
             { SimLap lap(profile_, "disasters"); disasters_->step(); }  // T3: conditions end, work and strike (held while skipping, like the narrator)
         }
     }
+    creditKills();
     travel_->afterStep();
     narrator_->postpone(travel_->takeHold());  // a skip that ended (here or by a command) held the narrator back
     { SimLap lap(profile_, "otherMaps"); stepOtherMaps(); }  // W5: in step with the colony's clock
