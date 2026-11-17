@@ -3,6 +3,7 @@
 #include "ColonySim/Api.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/BillMode.h"
+#include "ColonySim/CorpseStage.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Entity.h"
@@ -69,6 +70,14 @@ struct ThingView {
     // stays where it fell. A full health report is `Sim::healthReport`.
     bool downed = false;
     bool dead = false;
+    // Dead bodies (docs/design/spoilage.md "Corpses"): rot-days so far, the rot stage, and the flies and
+    // maggots to draw on it, 0 none to 1 a full swarm; `fliesFlying` is the share of the flies on the
+    // wing (the rest sit on the body). All 0 and None for the living, machines and a body not yet looked at.
+    float corpseDays = 0.0f;
+    CorpseStage corpseStage = CorpseStage::None;
+    float flies = 0.0f;
+    float fliesFlying = 0.0f;
+    float maggots = 0.0f;
     // Pawns: health of its worst body part, 0 to 1 (a body zone's for people, else its most hurt part's): the focus HP bar
     // (sneed, docs/design/focus.md). Pawns the player is focused on and the player's own pawn only; 1 for the rest.
     float lowestPart = 1.0f;

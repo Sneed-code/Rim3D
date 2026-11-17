@@ -6,6 +6,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Filth.h"
+#include "ColonySim/Health.h"
 #include "FuelTestHelper.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
@@ -332,4 +333,98 @@ TEST_CASE("Spoilage: wear under the open sky goes on the same after a save and l
     original.stepMany(600);
     loaded.sim->stepMany(600);
     CHECK(loaded.sim->stateHash() == original.stateHash());
+}
+
+// ---- Corpses (docs/design/spoilage.md "Corpses")
+
+namespace {
+
+Entity spoilBody(Sim& sim, const char* def, CellPos cell) {
+    const Entity body = sim.things().spawn(def, cell);
+    if (body != kNoEntity) {
+        Health* health = sim.things().registry().try_get<Health>(body);
+        if (health != nullptr) {
+            health->dead = true;
+        }
+    }
+    return body;
+}
+
+const ThingView* spoilViewOf(const Snapshot& snapshot, Entity e) {
+    for (const ThingView& v : snapshot.things) {
+        if (v.id == e) {
+            return &v;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+TEST_CASE("Corpses: fresh with flies, rotting with maggots, then dessicated with neither") {
+    auto sim = spoilSim(25.0f);
+    const SpoilageSystem& spoilage = sim->spoilage();
+    CHECK(spoilage.corpseLook(0.0f, 25.0f).stage == CorpseStage::Fresh);
+    CHECK(spoilage.corpseLook(0.0f, 25.0f).flies == 0.0f);
+    const CorpseLook hour = spoilage.corpseLook(0.1f, 25.0f);
+    CHECK(hour.flies > 0.0f);
+    CHECK(hour.flying == 1.0f);
+    CHECK(hour.maggots == 0.0f);
+    const CorpseLook day3 = spoilage.corpseLook(3.0f, 25.0f);
+    CHECK(day3.stage == CorpseStage::Rotting);
+    CHECK(day3.flies == 1.0f);
+    CHECK(day3.maggots > 0.9f);
+    CHECK(spoilage.corpseLook(3.0f, 5.0f).flying == 0.0f);  // cold: the flies sit on the body
+    CHECK(spoilage.corpseLook(20.0f, 25.0f).maggots == 0.0f);
+    const CorpseLook dry = spoilage.corpseLook(25.0f, 25.0f);
+    CHECK(dry.stage == CorpseStage::Dessicated);
+    CHECK(dry.flies == 0.0f);
+    CHECK(dry.maggots == 0.0f);
+}
+
+TEST_CASE("Corpses: a body rots by the warmth it lies in, machines do not, and the rot survives a save") {
+    auto sim = spoilSim(25.0f);
+    spoilClock = 0;
+    const Entity body = spoilBody(*sim, "Human", CellPos{10, 10, 0});
+    const Entity bug = spoilBody(*sim, "Megaspider", CellPos{14, 10, 0});
+    const Entity mech = spoilBody(*sim, "Mech_Scyther", CellPos{18, 10, 0});
+    const Entity alive = sim->things().spawn("Human", CellPos{22, 10, 0});
+    SPOIL_REQUIRE(body != kNoEntity && bug != kNoEntity && mech != kNoEntity && alive != kNoEntity);
+    spoilDays(*sim, 3.0);
+    entt::registry& reg = sim->things().registry();
+    SPOIL_REQUIRE(reg.all_of<CorpseRot>(body));
+    CHECK(reg.get<CorpseRot>(body).days == doctest::Approx(3.0f).epsilon(0.01));
+    CHECK(reg.all_of<CorpseRot>(bug));
+    CHECK(!reg.all_of<CorpseRot>(mech));
+    CHECK(!reg.all_of<CorpseRot>(alive));
+
+    Snapshot snapshot;
+    sim->writeSnapshot(snapshot);
+    const ThingView* view = spoilViewOf(snapshot, body);
+    SPOIL_REQUIRE(view != nullptr);
+    CHECK(view->corpseStage == CorpseStage::Rotting);
+    CHECK(view->flies > 0.9f);
+    CHECK(view->maggots > 0.9f);
+    const ThingView* mechView = spoilViewOf(snapshot, mech);
+    SPOIL_REQUIRE(mechView != nullptr);
+    CHECK(mechView->corpseStage == CorpseStage::None);
+    CHECK(mechView->flies == 0.0f);
+
+    SaveLoadResult loaded = loadSim(saveSim(*sim), spoilDefs());
+    SPOIL_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+    const entt::registry& again = loaded.sim->things().registry();
+    SPOIL_REQUIRE(again.all_of<CorpseRot>(body));
+    CHECK(again.get<CorpseRot>(body).days == reg.get<CorpseRot>(body).days);
+
+    // Frozen, a body keeps; it stops at dessicated.
+    auto cold = spoilSim(-5.0f);
+    spoilClock = 0;
+    const Entity frozen = spoilBody(*cold, "Human", CellPos{10, 10, 0});
+    spoilDays(*cold, 2.0);
+    SPOIL_REQUIRE(cold->things().registry().all_of<CorpseRot>(frozen));
+    CHECK(cold->things().registry().get<CorpseRot>(frozen).days == 0.0f);
+    spoilClock = 0;
+    spoilDays(*sim, 30.0);
+    CHECK(reg.get<CorpseRot>(body).days == doctest::Approx(sim->spoilage().numbers().corpseDessicatedDays));
 }

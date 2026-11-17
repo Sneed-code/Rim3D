@@ -2688,6 +2688,14 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.downed = health->downed;
             view.crawling = health->downed && health->crawls;
             view.dead = health->dead;
+            if (const CorpseRot* corpse = reg.try_get<CorpseRot>(entity)) {
+                const CorpseLook look = spoilage_->corpseLook(corpse->days, temperature_->temperatureAt(cellOf(reg.get<Position>(entity))));
+                view.corpseDays = corpse->days;
+                view.corpseStage = look.stage;
+                view.flies = look.flies;
+                view.fliesFlying = look.flying;
+                view.maggots = look.maggots;
+            }
             view.pain = std::clamp(health->pain, 0.0f, 1.0f);
             view.bloodLoss = health->bloodLoss;
             view.bleedPerDay = health->bleedPerDay;
@@ -3670,6 +3678,9 @@ uint64_t Sim::stateHash() const {
             }
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
+            if (const CorpseRot* corpse = reg.try_get<CorpseRot>(e)) {
+                h.add(corpse->days);
+            }
             if (!health->environment.empty()) {
                 h.add(static_cast<uint64_t>(health->environment.size()));
                 for (const EnvironmentHediff& env : health->environment) {

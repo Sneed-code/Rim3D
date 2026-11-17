@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ColonySim/Api.h"
+#include "ColonySim/CorpseStage.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
@@ -41,8 +42,35 @@ struct COLONY_API SpoilageNumbers {
     float dirtiest = -1.1f;         // kitchens this dirty (RoomStats "very dirty") add all of it
     float unskilledChance = 0.04f;  // chance a meal is poisoned by a cook of skill 0
     int skillSafe = 8;              // cooks of this skill or better add none
+    // Corpses (the `corpse` block, docs/design/spoilage.md "Corpses"). Days are rot-days: a day at full rot speed.
+    float corpseRotStartDays = 2.5f;     // fresh until here, then rotting (RimWorld's corpse daysToRotStart)
+    float corpseDessicatedDays = 25.0f;  // dessicated (bones and dry skin) from here (RimWorld's daysToDessicated)
+    float fliesFromDays = 0.01f;         // the first flies find a body
+    float fliesFullDays = 0.25f;         // a full swarm
+    float fliesFadeFromDays = 12.0f;     // the swarm thins from here and is gone when dessicated
+    float fliesColdC = 10.0f;            // flies sit still at or below this
+    float fliesWarmC = 20.0f;            // and are all on the wing at or above this
+    float maggotsFromDays = 1.0f;        // the first maggots hatch
+    float maggotsFullDays = 2.5f;        // the body crawls with them
+    float maggotsGoneDays = 18.0f;       // and they are gone (the body is picked clean)
 
     static SpoilageNumbers read(const DefDatabase& defs);
+};
+
+// A dead body's rot (on any dead pawn that is not a machine, from the first spoilage pass after it died).
+// `days` are rot-days: they grow by the rot speed of the body's cell, so a cold room or a freezer keeps
+// a body as it keeps food. They stop growing at `corpseDessicatedDays`.
+struct CorpseRot {
+    float days = 0.0f;
+};
+
+// What a body looks like for the PC side: its rot stage, and how many flies and maggots are on it,
+// each 0 (none) to 1 (a full swarm). Flies and maggots are cosmetic: they change nothing in the sim.
+struct CorpseLook {
+    CorpseStage stage = CorpseStage::None;
+    float flies = 0.0f;    // round the body
+    float flying = 0.0f;   // the share of them on the wing (0 in the cold: they sit on the body)
+    float maggots = 0.0f;  // crawling on it
 };
 
 // What is saved besides the items' components: the random stream.
@@ -67,6 +95,10 @@ public:
 
     // How fast food rots in this temperature: 0 to 1.
     float rotSpeedAt(float celsius) const;
+    // How a body that has rotted `rotDays` and lies at `celsius` looks.
+    CorpseLook corpseLook(float rotDays, float celsius) const;
+    // Whether bodies of this pawn def rot (machines do not).
+    bool corpseRots(DefId pawnDef) const;
 
     // A new item (not yet put down) was cooked by `cook` standing at `cell` from `used`: it
     // remembers the ingredients, and is poisoned by chance if it is a meal.
@@ -89,6 +121,7 @@ public:
 private:
     bool sheltered(CellPos cell) const;
     void report(Entity item, DefId def, CellPos cell, const char* how);
+    void rotCorpses(float days);
 
     Map& map_;
     Things& things_;
@@ -103,6 +136,7 @@ private:
     std::vector<float> deterioration_;   // by def id: hit points a game day
     std::vector<uint8_t> isMeal_;
     std::vector<uint8_t> shelters_;      // by def id: a building that keeps what lies on it dry
+    std::vector<uint8_t> noCorpseRot_;   // by def id: a machine, whose body does not rot
     std::vector<Entity> scratch_;
 };
 
