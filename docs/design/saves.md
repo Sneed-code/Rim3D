@@ -54,6 +54,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | World (section `world`) | `SimSettings::world` (on, seed, width, height, start tile) and the world's hash; the world itself is made again from them and checked against the hash ([world-map.md](world-map.md)) |
 | Caravans (section `caravans`) | the next id; each caravan's state, members (walk state, tries, path ticket), items, tile, came-from, destination, path, progress, cost, exit cell, formed time ([caravans.md](caravans.md)) |
 | Other maps (section `maps`) | each visited tile's map: tile, when it was made, its whole sim as a save of its own; per colonist away its `away` part (tile, entity there, bonds and memories as it left) ([other-maps.md](other-maps.md)) |
+| Grime (section `grime`) | per pawn its dirt on the legs and body, blood on the body and its weapon, the fluid of each **by Filth `defName`**, when each was fresh, and where it stood last step ([grime.md](grime.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
