@@ -22,6 +22,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Jobs.h"
 #include "ColonySim/Sim.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogProtagonist, Log, All);
@@ -263,6 +264,7 @@ void UProtagonistSubsystem::ExitDirectMode()
 	{
 		return;
 	}
+	WakeUp();  // a sleeper gets up before it is let go
 	UWorld* World = GetWorld();
 	USimSubsystem* Bridge = BridgeSource.Get();
 	const colony::Entity Released = Controlled;
@@ -298,6 +300,30 @@ void UProtagonistSubsystem::ExitDirectMode()
 		}
 	}
 	UE_LOG(LogProtagonist, Log, TEXT("Back to the overseer view; #%u is on its own again"), static_cast<uint32>(entt::to_integral(Released)));
+}
+
+bool UProtagonistSubsystem::IsAsleep() const
+{
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	return bDirect && Bridge && Bridge->GetSim() && Bridge->GetSim()->jobs().sleepingByHand(Controlled);
+}
+
+void UProtagonistSubsystem::SleepHere()
+{
+	USimSubsystem* Bridge = BridgeSource.Get();
+	if (bDirect && Bridge && Bridge->GetSim() && !IsAsleep())
+	{
+		Bridge->Submit(colony::SleepCommand{Controlled, colony::kNoEntity, false});
+	}
+}
+
+void UProtagonistSubsystem::WakeUp()
+{
+	USimSubsystem* Bridge = BridgeSource.Get();
+	if (Bridge && IsAsleep())
+	{
+		Bridge->Submit(colony::SleepCommand{Controlled, colony::kNoEntity, true});
+	}
 }
 
 void UProtagonistSubsystem::ToggleMode()
@@ -370,6 +396,10 @@ void UProtagonistSubsystem::OnBeforeStep()
 	{
 		Bridge->Submit(colony::ClimbCommand{Controlled, static_cast<float>(ClimbDirection.X), static_cast<float>(ClimbDirection.Y)});
 		++ClimbsSent;
+	}
+	if (Bridge->GetSim()->jobs().sleepingByHand(Controlled))
+	{
+		return;  // lying still till morning: the sim ignores moves meanwhile
 	}
 	const FVector2D& Position = Body->GetSimPosition();
 	Bridge->Submit(colony::DirectMoveCommand{Controlled, static_cast<float>(Position.X), static_cast<float>(Position.Y)});
@@ -480,6 +510,28 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 			++ReconcileCount;
 		}
 	}
+	// Sleep (docs/design/needs.md "The protagonist sleeps the night away"): N lies down where you stand, F on a bed is
+	// the hands-on layer's; the movement keys, N or Esc get up again.
+	const bool bAsleep = IsAsleep();
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
+	{
+		if (bAsleep)
+		{
+			for (const FKey& Key : {EKeys::W, EKeys::A, EKeys::S, EKeys::D, EKeys::N, EKeys::Escape})
+			{
+				if (PC->WasInputKeyJustPressed(Key))
+				{
+					WakeUp();
+					break;
+				}
+			}
+		}
+		else if (PC->WasInputKeyJustPressed(EKeys::N))
+		{
+			SleepHere();
+		}
+	}
+	SleepFade = FMath::Clamp(SleepFade + (bAsleep ? DeltaTime : -DeltaTime) * 1.5f, 0.0f, 1.0f);
 	ApplyBodyVisibility();
 	DrawHud(*Bridge);
 }
@@ -538,6 +590,29 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 	}
 	ImGui::End();
 
+	// Asleep: the screen goes dark while the night runs on, with the clock.
+	if (SleepFade > 0.0f)
+	{
+		ImDrawList* Dark = ImGui::GetBackgroundDrawList();
+		Dark->AddRectFilled(Viewport->Pos, ImVec2(Viewport->Pos.x + Viewport->Size.x, Viewport->Pos.y + Viewport->Size.y),
+			IM_COL32(0, 0, 0, static_cast<int>(235.0f * SleepFade)));
+		if (IsAsleep())
+		{
+			const colony::GameTime& Time = Sim.time();
+			ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+			ImGui::SetNextWindowBgAlpha(0.0f);
+			if (ImGui::Begin("##DirectSleep", nullptr, PanelFlags | ImGuiWindowFlags_NoInputs))
+			{
+				ProtagonistText(FString::Printf(TEXT("Sleeping...   %02d:%02d"), Time.hourOfDay(),
+					static_cast<int32>((Time.seconds % colony::kSecondsPerHour) / colony::kSecondsPerMinute)));
+				ImGui::TextUnformatted("WASD, N or Esc: get up");
+			}
+			ImGui::End();
+			++HudFramesDrawn;
+			return;  // no crosshair or hints over the dark
+		}
+	}
+
 	// Crosshair, and who is under it.
 	const ImVec2 Centre(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.5f);
 	ImDrawList* Draw = ImGui::GetForegroundDrawList();
@@ -571,6 +646,7 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 		ImGui::TextUnformatted("V first / third person   wheel zoom");
 		ImGui::TextUnformatted("F hold: work / pick up   X put down   B build");
 		ImGui::TextUnformatted("T take over   Tab overseer view");
+		ImGui::TextUnformatted("N sleep here (18:00 to 6:00)   F on a bed: sleep   F5 quicksave");
 	}
 	ImGui::End();
 

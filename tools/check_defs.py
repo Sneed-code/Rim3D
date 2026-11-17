@@ -145,6 +145,7 @@ EVENT_CUES = {
     "Research_Done", "Work_Mine", "Work_Chop", "Work_Harvest", "Work_Build", "Work_Cook", "Work_Smith", "Work_Craft",
     "Work_Tailor", "Work_Research", "Work_Clean", "Work_Tend", "Work_Stonecut", "Work_Butcher", "Work_Eat",
     "Work_Refuel", "Work_Handle", "Work_Chat", "Work_Extinguish",
+    "Voice_LovinCouple", "Voice_LovinFem",  # Unreal, from the Lovin event (soundLovinCue)
 }
 
 

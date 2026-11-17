@@ -11,6 +11,9 @@
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Framework/Application/SlateApplication.h"
+#include "GameFramework/PlayerInput.h"
+#include "InputCoreTypes.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/ReverbEffect.h"
 #include "Sound/SoundAttenuation.h"
@@ -53,6 +56,16 @@ namespace
 	/** A scream does not start again over its own first seconds (downed and killed in the same moment scream once). */
 	constexpr double SoundScreamRepeatS = 2.0;
 	const FName SoundReverbTag(TEXT("Rim3D.Place"));
+	TAutoConsoleVariable<int32> GSoundMusicMuted(TEXT("Sound.MusicMuted"), 0, TEXT("1 mutes the music (Ctrl+M)."));
+	TAutoConsoleVariable<int32> GSoundBirds(TEXT("Sound.Birds"), 1, TEXT("0 turns off the bird calls (they are ambience)."));
+
+	/** Each wall or shut door between makes a sound this loud (about -12 dB): a closed room keeps its sounds in. */
+	constexpr float SoundWallGain = 0.25f;
+	/** Lovin's sound starts this many real seconds in (sooner for a short one). */
+	constexpr double SoundLovinLeadS = 10.0;
+	/** Birds: share of a day's real length they may sing, and the share of days with any at all. */
+	constexpr float SoundBirdShareOfDay = 0.02f;
+	constexpr float SoundBirdDayChance = 0.6f;
 
 	const TCHAR* SoundConfigSection = TEXT("/Script/Rim3D.Sound");
 	const TCHAR* SoundGroupKeys[] = {TEXT("Effects"), TEXT("Ambience"), TEXT("Voices"), TEXT("Music")};
@@ -69,6 +82,7 @@ namespace
 		Everywhere = 4,
 		Bed = 5,
 		Weather = 6,
+		Lovin = 7,
 	};
 
 	uint64 SoundKey(ESoundKey Kind, uint64 Id) { return (static_cast<uint64>(Kind) << 56) | (Id & 0x00FFFFFFFFFFFFFFull); }
@@ -334,6 +348,18 @@ void USoundSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			}
 		}
 	}
+	if (GConfig)
+	{
+		bool bMuted = false;
+		if (GConfig->GetBool(SoundConfigSection, TEXT("MusicMuted"), bMuted, GGameUserSettingsIni))
+		{
+			GSoundMusicMuted.AsVariable()->Set(bMuted ? 1 : 0, ECVF_SetByCode);
+		}
+		if (GConfig->GetBool(SoundConfigSection, TEXT("AllMuted"), bMuted, GGameUserSettingsIni) && bMuted)
+		{
+			GSoundEnable.AsVariable()->Set(0, ECVF_SetByCode);
+		}
+	}
 	MusicFiles.SetNum(SoundMusicMoods);
 }
 
@@ -385,6 +411,7 @@ void USoundSubsystem::LoadCues()
 	}
 	const bool bFirst = Cues.Num() == 0;
 	Cues.Reset();
+	TArray<TPair<FString, FString>> AlsoPlays;
 	const FString CueFolder = FPaths::Combine(SoundFolder(), TEXT("cues"));
 	const FString OwnFolder = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Rim3D"), TEXT("Sounds"), TEXT("cues"));
 	int32 FileCount = 0;
@@ -424,7 +451,25 @@ void USoundSubsystem::LoadCues()
 			}
 		}
 		FileCount += Cue.Clips.Num();
+		const std::string Also = Def.text("alsoPlays");
+		if (!Also.empty())
+		{
+			AlsoPlays.Emplace(Cue.Name, UTF8_TO_TCHAR(Also.c_str()));
+		}
 		Cues.Add(Cue.Name, MoveTemp(Cue));
+	}
+	// `alsoPlays`: a cue that picks from another cue's files too (a couple's lovin from the women's ones as well).
+	for (const TPair<FString, FString>& Pair : AlsoPlays)
+	{
+		FCue* To = Cues.Find(Pair.Key);
+		const FCue* From = Cues.Find(Pair.Value);
+		if (To && From)
+		{
+			for (const TSharedPtr<const FSoundClip>& Clip : From->Clips)
+			{
+				To->Clips.AddUnique(Clip);
+			}
+		}
 	}
 	if (bFirst)
 	{
@@ -464,6 +509,10 @@ int32 USoundSubsystem::GetVoiceBudget() const
 
 float USoundSubsystem::GroupVolume(ESoundMix Group) const
 {
+	if (Group == ESoundMix::Music && GSoundMusicMuted.GetValueOnGameThread() != 0)
+	{
+		return 0.0f;
+	}
 	return FMath::Clamp(SoundGroupVar(Group).GetValueOnGameThread(), 0.0f, 1.0f) * FMath::Clamp(GSoundMaster.GetValueOnGameThread(), 0.0f, 1.0f);
 }
 
@@ -489,6 +538,8 @@ void USoundSubsystem::SaveMixer() const
 	{
 		GConfig->SetFloat(SoundConfigSection, SoundGroupKeys[G], SoundGroupVar(static_cast<ESoundMix>(G)).GetValueOnGameThread(), GGameUserSettingsIni);
 	}
+	GConfig->SetBool(SoundConfigSection, TEXT("MusicMuted"), GSoundMusicMuted.GetValueOnGameThread() != 0, GGameUserSettingsIni);
+	GConfig->SetBool(SoundConfigSection, TEXT("AllMuted"), GSoundEnable.GetValueOnGameThread() == 0, GGameUserSettingsIni);
 	GConfig->Flush(false, GGameUserSettingsIni);
 }
 
@@ -524,6 +575,13 @@ void USoundSubsystem::ResetForSim()
 	VoicesCut = 0;
 	VoicesSkipped = 0;
 	PawnVoices.Reset();
+	Lovins.Reset();
+	LovinPlays = 0;
+	BirdDay = -1;
+	BirdPlays = 0;
+	BirdSecondsPlayed = 0.0f;
+	BirdBurstUntil = -1.0;
+	LastWeatherLoop.Reset();
 	bAlarmOn = false;
 	SeenFlashes = -1;
 	BedCue.Reset();
@@ -564,6 +622,42 @@ void USoundSubsystem::OnSimEvent(const colony::Event& Event)
 	if (Event.type == colony::EventType::Letter && GSoundEnable.GetValueOnGameThread() != 0)
 	{
 		bStingerWanted = true;
+	}
+	if (Event.type == colony::EventType::Lovin)
+	{
+		if (Event.message == "started")
+		{
+			// The lovin lasts `amount` game seconds; its sound starts 10 real seconds in, or a fifth of the way in for a
+			// short one (at speed), and fades out when it ends.
+			const double GameSecondsPerRealSecond = FMath::Max(1.0, 30.0 * FMath::Max(1, Source->GetSpeed()) * 48.0 / FMath::Max(1, Source->GetDayMinutes()));
+			const double RealLength = Event.amount / GameSecondsPerRealSecond;
+			FLovin L;
+			L.A = Event.thing;
+			L.B = Event.target;
+			L.StartedAt = Now;
+			L.PlayAt = Now + FMath::Min(SoundLovinLeadS, 0.2 * RealLength);
+			Lovins.Add(L);
+		}
+		else
+		{
+			for (int32 I = Lovins.Num() - 1; I >= 0; --I)
+			{
+				const FLovin& L = Lovins[I];
+				if ((L.A == Event.thing && L.B == Event.target) || (L.A == Event.target && L.B == Event.thing) || L.A == Event.thing)
+				{
+					const int32* Index = L.Key != 0 ? LoopsByKey.Find(L.Key) : nullptr;
+					if (Index && Sounds.IsValidIndex(*Index) && !Sounds[*Index].bDead && Sounds[*Index].Key == L.Key)
+					{
+						CutSound(*Index, Event.message == "done" ? 1.5f : 0.3f);
+					}
+					if (L.Key != 0)
+					{
+						LoopsByKey.Remove(L.Key);
+					}
+					Lovins.RemoveAt(I);
+				}
+			}
+		}
 	}
 	if (Event.type == colony::EventType::AlarmChanged)
 	{
@@ -761,7 +855,7 @@ void USoundSubsystem::PlayVoice(const FCue& Cue, const colony::SoundPlay& Play, 
 	}
 }
 
-void USoundSubsystem::CutSound(int32 Index)
+void USoundSubsystem::CutSound(int32 Index, float FadeSeconds)
 {
 	if (!Sounds.IsValidIndex(Index))
 	{
@@ -773,14 +867,165 @@ void USoundSubsystem::CutSound(int32 Index)
 		FVoice& Voice = Voices[Sound.Voice];
 		if (Voice.Component)
 		{
-			Voice.Component->FadeOut(0.04f, 0.0f);
+			Voice.Component->FadeOut(FadeSeconds, 0.0f);
 		}
 		Voice.Sound = -1;
 		Voice.Wave = nullptr;
-		Voice.BusyUntil = Now + 0.08;
+		Voice.BusyUntil = Now + FadeSeconds + 0.04;
 	}
 	Sound.Voice = -1;
 	Sound.bDead = true;
+}
+
+void USoundSubsystem::UpdateLovin()
+{
+	// Lovin (docs/design/sound.md "Lovin"): a man and a woman pick from all six of sneed's recordings, women (two, or one
+	// alone) from the three women's ones, men nothing. It is an ordinary sound at the bed, so a closed room keeps it in.
+	for (FLovin& L : Lovins)
+	{
+		if (L.bPlayed || Now < L.PlayAt)
+		{
+			continue;
+		}
+		L.bPlayed = true;
+		const FString Name = UTF8_TO_TCHAR(colony::soundLovinCue(GenderOf(L.A), GenderOf(L.B)).c_str());
+		const FCue* Cue = Name.IsEmpty() ? nullptr : FindCue(Name);
+		if (!Cue)
+		{
+			continue;
+		}
+		FVector Where = FVector::ZeroVector;
+		EntityLocation(L.A, Where);
+		L.Key = SoundKey(ESoundKey::Lovin, SoundEntityId(L.A));
+		AddSound(*Cue, Where, false, L.A, L.Key);
+		++LovinPlays;
+	}
+}
+
+void USoundSubsystem::StartLovinForTest(colony::Entity A, colony::Entity B)
+{
+	FLovin L;
+	L.A = A;
+	L.B = B;
+	L.StartedAt = Now;
+	L.PlayAt = Now;
+	Lovins.Add(L);
+}
+
+void USoundSubsystem::UpdateBirds(const colony::Sim& Sim, const colony::Snapshot& Snap)
+{
+	(void)Snap;
+	// A burst when rain comes in: the weather's loop turning to rain.
+	const bool bRaining = WeatherCue.Contains(TEXT("Rain"));
+	const bool bRainComing = bRaining && !LastWeatherLoop.Contains(TEXT("Rain"));
+	LastWeatherLoop = WeatherCue;
+	const USimSubsystem* Source = Bridge.Get();
+	const colony::Def* Biome = Source && Source->GetDefs() ? Source->GetDefs()->find("Biomes", Sim.biome()) : nullptr;
+	const std::string Slot = Biome ? colony::soundSlot(*Biome, "birds") : std::string();
+	const FCue* Cue = Slot.empty() ? nullptr : FindCue(UTF8_TO_TCHAR(Slot.c_str()));
+	if (!Cue || GSoundBirds.GetValueOnGameThread() == 0)
+	{
+		return;
+	}
+	// A new day: will the birds sing at all today (not every day), and how long they may (2% of the day's real length,
+	// about a minute with the 48-minute day).
+	const int64 Day = static_cast<int64>(Sim.time().day());
+	if (Day != BirdDay)
+	{
+		BirdDay = Day;
+		bBirdDay = Random.FRand() < SoundBirdDayChance;
+		BirdSecondsLeft = SoundBirdShareOfDay * static_cast<float>(FMath::Max(1, Sim.dayMinutes())) * 60.0f;
+		BirdSecondsPlayed = 0.0f;
+	}
+	if (bRainComing)
+	{
+		BirdBurstUntil = Now + 20.0;
+	}
+	if (Now < NextBirdCheck)
+	{
+		return;
+	}
+	NextBirdCheck = Now + 8.0;
+	const double HourSeconds = static_cast<double>(colony::kSecondsPerHour);
+	const float Hour = static_cast<float>(FMath::Fmod(static_cast<double>(Sim.time().seconds), 24.0 * HourSeconds) / HourSeconds);
+	const bool bDawnOrDusk = (Hour >= 5.5f && Hour < 7.5f) || (Hour >= 17.5f && Hour < 19.5f);
+	const bool bBurst = Now < BirdBurstUntil;
+	if (BirdSecondsLeft <= 0.0f || (!bBirdDay && !bBurst) || (bRaining && !bBurst))
+	{
+		return;
+	}
+	const float Chance = bBurst ? 0.5f : bDawnOrDusk ? 0.07f : 0.0f;
+	if (Chance <= 0.0f || Random.FRand() >= Chance)
+	{
+		return;
+	}
+	// Somewhere in the trees round the ears, 15 to 40 m off and up in the canopy, so distance, walls and echo apply.
+	const float Angle = Random.FRandRange(0.0f, 2.0f * PI);
+	const float Dist = Random.FRandRange(1500.0f, 4000.0f);
+	const FVector Where = Ears + FVector(FMath::Cos(Angle) * Dist, FMath::Sin(Angle) * Dist, 400.0f);
+	const int32 Index = AddSound(*Cue, Where, false, colony::kNoEntity, 0);
+	const float Length = Sounds[Index].Clip ? Sounds[Index].Clip->Seconds() : 0.0f;
+	BirdSecondsLeft -= Length;
+	BirdSecondsPlayed += Length;
+	++BirdPlays;
+	if (bBurst)
+	{
+		BirdBurstUntil = -1.0;
+	}
+}
+
+bool USoundSubsystem::IsMusicMuted() const
+{
+	return GSoundMusicMuted.GetValueOnGameThread() != 0;
+}
+
+bool USoundSubsystem::IsAllMuted() const
+{
+	return GSoundEnable.GetValueOnGameThread() == 0;
+}
+
+void USoundSubsystem::ToggleMusicMute()
+{
+	const bool bMute = !IsMusicMuted();
+	GSoundMusicMuted.AsVariable()->Set(bMute ? 1 : 0, ECVF_SetByCode);
+	SaveMixer();
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(0x50D1, 2.5f, FColor::White, bMute ? TEXT("Music muted (Ctrl+M)") : TEXT("Music on (Ctrl+M)"));
+	}
+}
+
+void USoundSubsystem::ToggleAllMute()
+{
+	const bool bMute = !IsAllMuted();
+	GSoundEnable.AsVariable()->Set(bMute ? 0 : 1, ECVF_SetByCode);
+	SaveMixer();
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(0x50D1, 2.5f, FColor::White, bMute ? TEXT("All sound muted (Ctrl+S)") : TEXT("Sound on (Ctrl+S)"));
+	}
+}
+
+void USoundSubsystem::UpdateMuteKeys()
+{
+	UWorld* World = GetWorld();
+	APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	if (!PC || !(PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl)))
+	{
+		return;
+	}
+	if (ImGui::GetCurrentContext() && ImGui::GetIO().WantTextInput)
+	{
+		return;  // typing in a text box
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::M))
+	{
+		ToggleMusicMute();
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::S))
+	{
+		ToggleAllMute();
+	}
 }
 
 FString USoundSubsystem::GetPawnVoice(colony::Entity Pawn) const
@@ -952,6 +1197,9 @@ void USoundSubsystem::Tick(float DeltaTime)
 	}
 	PendingPlays.clear();
 	ReadSnapshot(*Source, DeltaTime);
+	UpdateLovin();
+	UpdateBirds(*Source->GetSim(), Source->GetCurrentSnapshot());
+	UpdateMuteKeys();
 	MixAndAssign(Source, DeltaTime);
 	UpdateMusic(Source->GetCurrentSnapshot(), DeltaTime);
 
@@ -1000,7 +1248,7 @@ int32 USoundSubsystem::OcclusionAt(const FVector& Location) const
 		return 0;
 	}
 	int32 Count = 0;
-	// Walls on the line between (a door counts as open), not the ends themselves.
+	// Walls and shut doors on the line between, not the ends themselves.
 	const int32 DX = EarCell.x - From.x;
 	const int32 DY = EarCell.y - From.y;
 	const int32 Steps = FMath::Max(FMath::Abs(DX), FMath::Abs(DY));
@@ -1008,9 +1256,18 @@ int32 USoundSubsystem::OcclusionAt(const FVector& Location) const
 	for (int32 S = 1; S < Steps && Count < 3; ++S)
 	{
 		const colony::CellPos C{From.x + FMath::RoundToInt(DX * float(S) / Steps), From.y + FMath::RoundToInt(DY * float(S) / Steps), From.level};
-		if ((C.x != Last.x || C.y != Last.y) && Map.inBounds(C) && Map.passage(C) == colony::Passage::Blocked)
+		if ((C.x != Last.x || C.y != Last.y) && Map.inBounds(C))
 		{
-			++Count;
+			const colony::Passage Pass = Map.passage(C);
+			bool bShut = Pass == colony::Passage::Blocked;
+			if (Pass == colony::Passage::Door)
+			{
+				// A shut door muffles like a wall; an open one lets it through.
+				const colony::Entity Door = Map.buildingAt(C);
+				const float* Open = DoorOpen.Find(SoundEntityId(Door));
+				bShut = !Open || *Open < 0.3f;
+			}
+			Count += bShut ? 1 : 0;
 		}
 		Last = C;
 	}
@@ -1472,7 +1729,7 @@ void USoundSubsystem::MixAndAssign(const USimSubsystem* Source, float Delta)
 			Air = AirCutoff(Sound.Cue->RangeM, Sound.DistanceM);
 		}
 		Sound.Cutoff = FMath::Min(Air, 20000.0f / (1.0f + 3.0f * Sound.Occlusion));
-		Sound.Volume = bOn && Sound.Clip ? Sound.Cue->Volume * GroupVolume(Sound.Cue->Group) * Sound.Gain * Distance * FMath::Pow(0.55f, static_cast<float>(Sound.Occlusion)) : 0.0f;
+		Sound.Volume = bOn && Sound.Clip ? Sound.Cue->Volume * GroupVolume(Sound.Cue->Group) * Sound.Gain * Distance * FMath::Pow(SoundWallGain, static_cast<float>(Sound.Occlusion)) : 0.0f;
 		if (Sound.Volume > 0.001f)
 		{
 			Audible.Add(I);

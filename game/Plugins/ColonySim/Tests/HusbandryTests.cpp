@@ -685,7 +685,7 @@ TEST_CASE("Husbandry: an animal trained to Rescue carries a downed colonist to a
         Rng rng(99);
         const std::vector<std::string> labels = f.sim.health().partLabels(f.reg().get<Thing>(patient).def);
         const int idx = static_cast<int>(std::find(labels.begin(), labels.end(), part) - labels.begin());
-        f.sim.health().applyDamage(patient, f.sim.health().damageTypeId("Blunt"), 20.0f, idx, rng);
+        f.sim.health().applyDamage(patient, f.sim.health().damageTypeId("Blunt"), std::string(part) == "left leg" ? 60.0f : 20.0f, idx, rng);
     }
     HUSB_REQUIRE(f.reg().get<Health>(patient).downed);
     const bool laid = f.runUntil(4000, [&] { return f.sim.jobs().bedUnder(patient) == bed; });

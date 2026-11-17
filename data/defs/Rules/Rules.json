@@ -23,12 +23,14 @@
     "recoilKickMaxDegrees": 10,
     "weaponSwitchSteps": { "Primary": 36, "Sidearm": 18, "Melee": 27 },
     "stagger": { "steps": 48, "moveSpeedFactor": 0.17 },
+    "poise": { "base": 50, "immuneSteps": 900, "staggerEverySteps": 150, "staggerPartShare": 0.1,
+               "forceFactor": { "Blunt": 1.5, "Crush": 1.5, "Burn": 0 } },
     "dodgeRoll": { "startUpSteps": 3, "rollSteps": 15, "hitProofSteps": 12, "recoverySteps": 9, "cooldownSteps": 6, "distance": 4.0 },
     "unverified": ["accuracyDistances", "minHitChance", "stagger"],
     "ours": ["defaultShootingSkill", "standardTarget", "playerSpreadDistance", "gravity", "recoilRecoveryPerSecond",
              "recoilSkillReduction", "maxFlightSeconds", "reactionStepsBySkill", "leadBySkill", "leadErrorBySkill",
              "reloadTimeFactorBySkill", "recoilKickHoldSteps", "recoilKickResetSteps", "recoilKickRecoveryPerStep",
-             "recoilKickMaxDegrees", "dodgeRoll", "weaponSwitchSteps"]
+             "recoilKickMaxDegrees", "dodgeRoll", "weaponSwitchSteps", "poise"]
   },
   {
     "defName": "PlantRules", "source": "RimWorld wiki",
@@ -72,8 +74,35 @@
     "medicineMaxTendQuality": { "None": 0.7, "Herbal": 0.7, "Medicine": 1.0, "Lumen": 1.3 },
     "protagonistPartHitPointsFactor": 2.0,
     "innerInjuryAlsoHurtsOuter": true,
+    "zones": {
+      "note": "sneed's body health (docs/design/body-health.md), for the bodies listed: zone hit points, downing, unconscious, bleeding (blood a real second), blood store",
+      "bodies": ["Human"],
+      "list": [
+        { "name": "Head", "root": "Neck", "hp": 50 },
+        { "name": "Torso", "root": "Torso", "hp": 100 },
+        { "name": "Arm", "root": "Shoulder", "hp": 50 },
+        { "name": "Leg", "root": "Leg", "hp": 75 }
+      ],
+      "downBelow": 0.25,
+      "manyBelow": 0.5,
+      "manyCount": 3,
+      "headUnconsciousBelow": 0.25,
+      "bloodMax": 3000,
+      "bloodUnconscious": 1000,
+      "bleedAt": [0.75, 0.5, 0.25],
+      "bleedPerSecond": [1, 2, 3],
+      "bloodRegenDelaySeconds": 30,
+      "bloodRegenPerSecond": 10,
+      "stepsPerRealSecond": 30,
+      "protagonistHp": 100,
+      "patchSeconds": [1, 2, 3],
+      "patchQuality": 0.3,
+      "coverBlood": 1500,
+      "minMoving": 0.4,
+      "crawlMoving": 0.1
+    },
     "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss", "innerInjuryAlsoHurtsOuter"],
-    "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter", "scarSeverity", "oldWoundFromHpLost"]
+    "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter", "scarSeverity", "oldWoundFromHpLost", "zones"]
   },
   {
     "defName": "JobRules", "source": "Rim3D",
@@ -98,17 +127,24 @@
       "starvingSpeedFactor": 0.75
     },
     "rest": {
-      "fallPerDay": { "Rested": 0.95, "Drowsy": 0.66, "Tired": 0.28, "Exhausted": 0.57 },
-      "drowsyBelow": 0.28, "tiredBelow": 0.14, "exhaustedBelow": 0.01,
-      "gainPerDay": 2.285714,
+      "fallPerDay": { "Rested": 0.6, "Drowsy": 0.6, "Tired": 0.6, "Exhausted": 0.6 },
+      "drowsyBelow": 0.001, "tiredBelow": 0.001, "exhaustedBelow": 0.001,
+      "gainPerDay": 1.5,
       "groundEffectiveness": 0.8,
-      "fallAsleepBelow": 0.75,
+      "fallAsleepBelow": 0.85,
+      "sleepThroughNight": false,
       "wakeAt": 1.0,
-      "wakeOutsideSleepAt": 0.7
+      "wakeOutsideSleepAt": 0.5,
+      "napBelow": 0.1,
+      "napBelowWork": 0.001,
+      "exhaustedPerformance": 0.75,
+      "nightFromHour": 18,
+      "nightToHour": 6
     },
+    "restNote": "sneed 2026-11-16 (replaces RimWorld's rest bands): a 16-hour waking day uses 40% rest (0.6 a day awake) and a regular 8-hour sleep in a bed gives back 50% (1.5 a day lying down; 40% on the ground), so a pawn catches up. No effect until rest reaches 0 (the Exhausted band, under 0.001): then the Exhausted mood and 25% slower work, aiming, cooldowns, reloads and swings and 25% less shooting accuracy. Pawns go to bed every night (fallAsleepBelow 0.85: after any normal day they are under it) and get up once full (sleepThroughNight false: staying in bed till 6:00 cost the year colony about half its survivors, too few work hours); outside them they nap below 10% (Work hours only at 0) and wake at 50%. The protagonist has no rest need; their sleep passes the night from nightFromHour to nightToHour (SleepCommand).",
     "schedule": { "sleepFromHour": 22, "sleepToHour": 5 },
-    "unverified": ["food.ingestSeconds", "food.maxNumToIngestAtOnce", "rest.fallAsleepBelow", "rest.wakeAt", "schedule"],
-    "ours": ["food.eatSpotRadius", "food.ingestSeconds", "food.nutritionFactor", "food.starvingSpeedFactor", "rest.wakeOutsideSleepAt", "rest.fallAsleepBelow", "rest.wakeAt"]
+    "unverified": ["food.ingestSeconds", "food.maxNumToIngestAtOnce", "schedule"],
+    "ours": ["food.eatSpotRadius", "food.ingestSeconds", "food.nutritionFactor", "food.starvingSpeedFactor", "rest"]
   },
   {
     "defName": "MoodRules", "source": "RimWorld wiki",

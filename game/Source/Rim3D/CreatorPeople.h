@@ -18,4 +18,8 @@ namespace CreatorPeople
 	/** Puts the random person's sliders (build, face, hair style and colour, skin) on the pawn's MakeHuman body.
 	 *  False if its creator base is not on yet (call again next frame). */
 	bool ApplyRandom(int32 Seed, bool bFemale, ASimPawnActor& Pawn);
+	/** The creator's untouched base person (every slider at its default, the base's own hair and fair skin): the
+	 *  generic woman or man. Looks and apply as for the random ones. */
+	FSimPawnLooks DefaultLooks(bool bFemale, const FSimPawnLooks& From);
+	bool ApplyDefault(bool bFemale, ASimPawnActor& Pawn);
 }

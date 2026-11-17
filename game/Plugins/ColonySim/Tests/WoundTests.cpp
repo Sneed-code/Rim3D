@@ -102,7 +102,7 @@ TEST_CASE("Wounds: a gunshot shows on its part with its kind, region and share o
     const Entity pawn = woundTestPawn(*sim);
     const Entity bystander = woundTestPawn(*sim, 14, 10);
     CHECK(woundTestWounds(*sim, pawn).empty());
-    WOUND_REQUIRE(woundTestHit(*sim, pawn, "Bullet", 6.0f, "left arm"));
+    WOUND_REQUIRE(woundTestHit(*sim, pawn, "Bullet", 15.0f, "left arm"));  // 70% of the arm zone: it bleeds
     sim->step();
     float bloodLoss = -1.0f;
     float bleedPerDay = -1.0f;
@@ -113,7 +113,7 @@ TEST_CASE("Wounds: a gunshot shows on its part with its kind, region and share o
     CHECK(w.kind == WoundKind::Gunshot);
     CHECK(w.region == WoundRegion::LeftArm);
     CHECK(sim->defs().get(w.partDef).defName() == "Arm");
-    CHECK(w.severity == doctest::Approx(6.0f / 30.0f).epsilon(0.05));  // the arm has 30 hit points; a second of healing is allowed
+    CHECK(w.severity == doctest::Approx(15.0f / 50.0f).epsilon(0.05));  // the arm has 50 hit points (body zones); a second of healing is allowed
     CHECK(w.bleeding);
     CHECK_FALSE(w.tended);
     CHECK(w.tendQuality < 0.0f);
@@ -125,7 +125,7 @@ TEST_CASE("Wounds: a gunshot shows on its part with its kind, region and share o
 TEST_CASE("Wounds: tending wraps the wound in a bandage and stops it bleeding") {
     auto sim = woundTestSim();
     const Entity pawn = woundTestPawn(*sim);
-    WOUND_REQUIRE(woundTestHit(*sim, pawn, "Cut", 5.0f, "right leg"));
+    WOUND_REQUIRE(woundTestHit(*sim, pawn, "Cut", 20.0f, "right leg"));  // under 75% of the leg zone: it bleeds
     sim->step();
     float bleedPerDay = 0.0f;
     std::vector<WoundView> wounds = woundTestWounds(*sim, pawn, nullptr, &bleedPerDay);

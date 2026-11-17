@@ -2,8 +2,10 @@
 
 #include "ColonySim/Animals.h"
 #include "ColonySim/Areas.h"
+#include "ColonySim/Landing.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Apparel.h"
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Fuel.h"
@@ -61,6 +63,7 @@
 #include "ColonySim/Research.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Resonance.h"
+#include "ColonySim/Patch.h"
 #include "ColonySim/Trade.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Version.h"
@@ -237,6 +240,7 @@ struct SaveHealth {
     DeathCause cause = DeathCause::None;
     bool downed = false;  // health section 5 on: with `dirty`, so a wound not yet worked out is still pending after a load
     bool dirty = false;
+    int64_t bleedStoppedAt = -1;  // health section 7 on
 };
 
 // An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
@@ -401,6 +405,12 @@ struct SaveCasting {
     Casting c;
 };
 
+// A body being moved by a clip (docs/design/body-motion.md). The clip goes by name.
+struct SaveMotion {
+    std::string clip;
+    BodyMotion m;
+};
+
 struct SaveEntity {
     uint32_t id = 0;
     std::optional<SaveThing> thing;
@@ -455,9 +465,11 @@ struct SaveEntity {
     std::optional<Lovin> lovin;             // section "social" 2 (docs/design/lovin.md)
     std::optional<SaveTalking> talking;     // section "social" 3 (AN1)
     std::optional<Staggered> staggered;     // section "combat" 3 (AN1)
+    std::optional<Poise> poise;             // section "combat" 4 (body-health.md part C)
     std::optional<SaveApparel> apparel;     // section "apparel" (format 20 on)
     std::optional<RecoilKick> kick;         // section "feel"
     std::optional<DodgeRoll> roll;          // section "feel"
+    std::optional<SaveMotion> motion;       // section "motion"
     std::optional<MedicalSettings> medical;  // section "medicine"
     std::optional<SaveOperations> operations;  // section "medicine" (H3, version 2 on)
     std::optional<std::vector<Entity>> stowed;  // section "weapons" (P1): Gear::stowed
@@ -470,6 +482,7 @@ struct SaveEntity {
     std::optional<SaveAttunement> attunement;   // section "resonance" (X2)
     std::optional<SaveCasting> casting;         // section "resonance"
     std::optional<Stunned> stunned;             // section "resonance"
+    std::optional<Patching> patching;           // section "patch" (body-health.md part B)
     std::optional<ResonanceEffects> resonanceFx;  // section "resonance"
     std::optional<Prisoner> prisoner;       // section "prisoners" (C22)
     std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
@@ -633,6 +646,7 @@ struct SaveData {
     std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
     RoofCollapseSaved roofs;           // section "roofs" (M3)
     AreasSaved areas;                  // section "areas": allowed areas and who is limited to one
+    LandingSaved landing;              // section "landing": the landing zone and shuttles (docs/design/landing.md)
     SaveDeep deep;                     // section "deep"
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
@@ -1314,7 +1328,9 @@ inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitComma
                                             std::is_same_v<Type, CommsCommand> || std::is_same_v<Type, ScannerCommand> ||
                                             std::is_same_v<Type, InventoryCommand> ||
                                             std::is_same_v<Type, SetOutfitFightGearCommand> || std::is_same_v<Type, HideGearCommand> ||
-                                            std::is_same_v<Type, ShieldCommand> || std::is_same_v<Type, SetDayLengthCommand>;
+                                            std::is_same_v<Type, ShieldCommand> || std::is_same_v<Type, SetDayLengthCommand> ||
+                                            std::is_same_v<Type, SleepCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||
+                                            std::is_same_v<Type, PatchCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1360,6 +1376,15 @@ void saveTradeCommand(Ar& ar, Type& c) {
         ar.value("hide", c.hide);
     } else if constexpr (std::is_same_v<Type, SetDayLengthCommand>) {
         ar.value("minutes", c.minutes);
+    } else if constexpr (std::is_same_v<Type, SleepCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("bed", c.bed);
+        ar.value("wake", c.wake);
+    } else if constexpr (std::is_same_v<Type, SetLandingZoneCommand>) {
+        ar.group("area", [&] { saveRect(ar, c.area); });
+        ar.value("add", c.add);
+    } else if constexpr (std::is_same_v<Type, PatchCommand>) {
+        ar.value("pawn", c.pawn);
     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("up", c.up);
@@ -1965,10 +1990,14 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     }
     ar.value("dead", h.dead);
     ar.value("cause", h.cause);
-    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Withdrawal), "the save file has a bad cause of death");
+    ar.require(static_cast<int>(h.cause) <= static_cast<int>(DeathCause::Wounds), "the save file has a bad cause of death");
     if (ar.sectionVersion() >= 6) {
         ar.value("downed", h.downed);
         ar.value("dirty", h.dirty);
+    }
+    if (ar.sectionVersion() >= 7) {
+        ar.value("bleedStoppedAt", h.bleedStoppedAt);
+        ar.require(h.bleedStoppedAt >= -1, "the save file has an impossible bleeding time");
     }
 }
 
@@ -2333,6 +2362,30 @@ void saveRollPart(Ar& ar, DodgeRoll& r) {
 }
 
 template <typename Ar>
+void saveMotionPart(Ar& ar, SaveMotion& sm) {
+    BodyMotion& m = sm.m;
+    ar.text("clip", sm.clip);
+    ar.value("time", m.time);
+    ar.value("rate", m.rate);
+    ar.value("faceX", m.faceX);
+    ar.value("faceY", m.faceY);
+    ar.value("scale", m.scale);
+    ar.value("doneF", m.doneF);
+    ar.value("doneR", m.doneR);
+    ar.value("doneYaw", m.doneYaw);
+    ar.value("pushMetres", m.pushMetres);
+    ar.value("pushSteps", m.pushSteps);
+    ar.value("pushFrom", m.pushFrom);
+    ar.value("pushTo", m.pushTo);
+    ar.value("turnBody", m.turnBody);
+    ar.value("lost", m.lost);
+    ar.require(std::isfinite(m.time) && std::isfinite(m.rate) && m.rate > 0.0f && std::isfinite(m.faceX) && std::isfinite(m.faceY) &&
+                   std::isfinite(m.scale) && std::isfinite(m.doneF) && std::isfinite(m.doneR) && std::isfinite(m.doneYaw) &&
+                   std::isfinite(m.pushMetres) && m.pushSteps >= 0 && m.pushFrom >= 0 && m.pushTo >= m.pushFrom && std::isfinite(m.lost),
+               "the save file has a bad body motion");
+}
+
+template <typename Ar>
 void saveProjectilePart(Ar& ar, SaveProjectile& sp) {
     ar.text("def", sp.def);
     ar.text("weapon", sp.weapon);
@@ -2497,6 +2550,9 @@ void saveFighterPart(Ar& ar, Fighter& f) {
         ar.value("lifted", f.lifted);
         ar.group("rescueTo", [&] { saveCell(ar, f.rescueTo); });
     }
+    if (ar.sectionVersion() >= 4) {  // a Wimp falling back after a hit
+        ar.value("cowerUntil", f.cowerUntil);
+    }
 
 }
 
@@ -2568,6 +2624,14 @@ template <typename Ar>
 void saveStaggeredPart(Ar& ar, Staggered& s) {
     ar.value("stepsLeft", s.stepsLeft);
     ar.require(s.stepsLeft >= 0 && s.stepsLeft < 100000, "the save file has an impossible stagger");
+}
+
+template <typename Ar>
+void savePoisePart(Ar& ar, Poise& p) {
+    ar.value("immuneLeft", p.immuneLeft);
+    ar.value("staggerWait", p.staggerWait);
+    ar.require(p.immuneLeft >= 0 && p.immuneLeft < 1000000 && p.staggerWait >= 0 && p.staggerWait < 1000000,
+               "the save file has an impossible poise");
 }
 
 template <typename Ar>
@@ -3341,7 +3405,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("colonists", 2, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 6, [&] {
+    ar.section("health", 7, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -3378,7 +3442,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("mood", 1, [&] {
         saveParts(ar, "mood", e, &SaveEntity::mood, [&](Mood& m) { saveMoodPart(ar, m); });
     });
-    ar.section("combat", 3, [&] {
+    ar.section("combat", 4, [&] {
         saveParts(ar, "posture", e, &SaveEntity::posture, [&](Posture& p) { savePosturePart(ar, p); });
         saveParts(ar, "gear", e, &SaveEntity::gear, [&](Gear& g) { saveGearPart(ar, g); });
         saveParts(ar, "equippedBy", e, &SaveEntity::equippedBy, [&](EquippedBy& b) { saveEquippedByPart(ar, b); });
@@ -3388,11 +3452,14 @@ void saveSections(Ar& ar, SaveData& d) {
         if (ar.sectionVersion() >= 3) {  // AN1
             saveParts(ar, "staggered", e, &SaveEntity::staggered, [&](Staggered& s) { saveStaggeredPart(ar, s); });
         }
+        if (ar.sectionVersion() >= 4) {  // poise (part C)
+            saveParts(ar, "poise", e, &SaveEntity::poise, [&](Poise& p) { savePoisePart(ar, p); });
+        }
     });
     ar.section("doors", 1, [&] {
         saveParts(ar, "door", e, &SaveEntity::door, [&](Door& door) { saveDoorPart(ar, door); });
     });
-    ar.section("fighters", 3, [&] {
+    ar.section("fighters", 4, [&] {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
@@ -3580,6 +3647,9 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
         saveParts(ar, "roll", e, &SaveEntity::roll, [&](DodgeRoll& r) { saveRollPart(ar, r); });
     });
+    ar.section("motion", 1, [&] {
+        saveParts(ar, "motion", e, &SaveEntity::motion, [&](SaveMotion& m) { saveMotionPart(ar, m); });
+    });
     ar.section("weather", 1, [&] {
         d.hasWeather = true;
         saveWeather(ar, d.weather);
@@ -3696,6 +3766,14 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "casting", e, &SaveEntity::casting, [&](SaveCasting& c) { saveCastingPart(ar, c); });
         saveParts(ar, "stunned", e, &SaveEntity::stunned, [&](Stunned& s) { ar.value("stepsLeft", s.stepsLeft); });
         saveParts(ar, "effects", e, &SaveEntity::resonanceFx, [&](ResonanceEffects& fx) { saveResonanceFxPart(ar, fx); });
+    });
+    ar.section("patch", 1, [&] {
+        saveParts(ar, "patching", e, &SaveEntity::patching, [&](Patching& p) {
+            ar.value("zone", p.zone);
+            ar.value("stepsLeft", p.stepsLeft);
+            ar.value("player", p.player);
+            ar.require(p.zone >= 0 && p.zone < 64 && p.stepsLeft >= 0 && p.stepsLeft < 100000, "the save file has an impossible patch");
+        });
     });
     ar.section("prisoners", 3, [&] {
         saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
@@ -3835,6 +3913,23 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("steps", d.steps);
         ar.value("dayMinutes", d.dayMinutes);
         ar.value("calendarAcc", d.calendarAcc);
+    });
+    ar.section("landing", 1, [&] {  // the landing zone and shuttles (docs/design/landing.md)
+        ar.value("nextId", d.landing.nextId);
+        ar.list("zone", d.landing.zone, [&](int& cell) { ar.value(nullptr, cell); });
+        ar.list("shuttles", d.landing.shuttles, [&](Shuttle& s) {
+            ar.value("id", s.id);
+            ar.value("building", s.building);
+            ar.group("origin", [&] { saveCell(ar, s.origin); });
+            ar.value("rot", s.rot);
+            ar.value("phase", s.phase);
+            ar.value("phaseStep", s.phaseStep);
+            ar.value("visit", s.visit);
+            ar.list("passengers", s.passengers, [&](ShuttlePassenger& p) {
+                ar.text("kind", p.kind);
+                ar.value("role", p.role);
+            });
+        });
     });
     // New sections go here, at the end.
 }
@@ -4167,6 +4262,7 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
             saved.added.push_back(SaveAddedPart{added.part, sim.defs_->get(added.hediff).defName()});
         }
         saved.bloodLoss = health->bloodLoss;
+        saved.bleedStoppedAt = health->bleedStoppedAt;
         for (const EnvironmentHediff& env : health->environment) {
             saved.environment.push_back(SaveEnvironmentHediff{sim.defs_->get(env.def).defName(), env.severity});
         }
@@ -4211,6 +4307,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     }
     if (const DodgeRoll* roll = reg.try_get<DodgeRoll>(e)) {
         out.roll = *roll;
+    }
+    if (const BodyMotion* motion = reg.try_get<BodyMotion>(e)) {
+        out.motion = SaveMotion{motion->clip.valid() ? sim.defs_->get(motion->clip).defName() : std::string(), *motion};
     }
     if (const Gear* gear = reg.try_get<Gear>(e); gear != nullptr && !gear->stowed.empty()) {
         out.stowed = gear->stowed;
@@ -4284,6 +4383,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     if (const Stunned* s = reg.try_get<Stunned>(e)) {
         out.stunned = *s;
     }
+    if (const Patching* p = reg.try_get<Patching>(e)) {
+        out.patching = *p;
+    }
     if (const ResonanceEffects* fx = reg.try_get<ResonanceEffects>(e)) {
         out.resonanceFx = *fx;
     }
@@ -4320,6 +4422,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     }
     if (const Staggered* st = reg.try_get<Staggered>(e)) {
         out.staggered = *st;
+    }
+    if (const Poise* poise = reg.try_get<Poise>(e)) {
+        out.poise = *poise;
     }
     if (const Talking* talk = reg.try_get<Talking>(e)) {
         out.talking = SaveTalking{talk->def.valid() ? sim.defs_->get(talk->def).defName() : std::string(), *talk};
@@ -4637,6 +4742,7 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
             health.added.push_back(AddedPart{added.part, hediff->id()});
         }
         health.bloodLoss = e.health->bloodLoss;
+        health.bleedStoppedAt = e.health->bleedStoppedAt;
         for (const SaveEnvironmentHediff& env : e.health->environment) {
             const Def* hediff = sim.defs_->find("Hediffs", env.hediff);
             if (hediff == nullptr) {
@@ -4745,6 +4851,9 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     if (e.staggered) {
         reg.emplace<Staggered>(entity, *e.staggered);
     }
+    if (e.poise) {
+        reg.emplace<Poise>(entity, *e.poise);
+    }
     if (e.talking) {
         Talking t = e.talking->t;
         t.def = sim.defs_->idOf("Interactions", e.talking->def);
@@ -4768,6 +4877,14 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     }
     if (e.roll) {
         reg.emplace<DodgeRoll>(entity, *e.roll);
+    }
+    if (e.motion) {
+        // A clip this game no longer has ends the motion where the body is.
+        BodyMotion m = e.motion->m;
+        m.clip = e.motion->clip.empty() ? DefId{} : sim.defs_->idOf("MotionClips", e.motion->clip);
+        if (e.motion->clip.empty() || m.clip.valid()) {
+            reg.emplace<BodyMotion>(entity, m);
+        }
     }
     if (e.stowed) {
         if (!reg.all_of<Gear>(entity)) {
@@ -4929,6 +5046,9 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     }
     if (e.stunned) {
         reg.emplace<Stunned>(entity, *e.stunned);
+    }
+    if (e.patching) {
+        reg.emplace<Patching>(entity, *e.patching);
     }
     if (e.resonanceFx) {
         reg.emplace<ResonanceEffects>(entity, *e.resonanceFx);
@@ -5255,6 +5375,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.upperFloors = sim.map_.upperFloorCells();
     d.roofs = sim.roofCollapse_->state();
     d.areas = sim.areas_->saved();
+    d.landing = sim.landing_->saved();
     {
         const DeepResourcesSaved deep = sim.deepResources_->saved();
         std::unordered_map<uint32_t, uint32_t> indexOf;
@@ -5741,6 +5862,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (!sim.filth_->restore(d.filth, error) || !sim.roomStats_->restore(d.roomStats, error)) {
             return false;
         }
+    }
+    if (!sim.landing_->restore(d.landing, error)) {
+        return false;
     }
     if (!sim.areas_->restore(d.areas, error)) {
         return false;

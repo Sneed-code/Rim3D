@@ -135,6 +135,7 @@ Second batch (2026-11-16): Protofactor's free African Animals Pack is already in
 and the commandlet skips them; the pack sits in `game/Content/AfricanAnimalsPack` (not in Git, in
 `DirectoriesToAlwaysCook`). Elephant, rhinoceros and lion use it; the lioness stands in for the cougar.
 The Akhal-Teke horse imports near-black, so the thrumbo stays on the Quaternius white horse for now.
+Animated3D's free Buffalo_A1 (CC BY, FBX with embedded textures, 2.9 m) is imported for the muffalo (2026-11-17), but it has no walk or run clip, so the muffalo stays on the bull until it gets one (a model with no walk clip would move on its idle and slide).
 Animation cost goes by distance to the camera: every frame within `Animals.NearDistance` (40 m), 8 times
 a second within `Animals.MidDistance` (120 m), a frozen pose (no skeleton update) within
 `Animals.HideDistance` (400 m), not drawn beyond. Smoke test `animals` (`tools\smoke.ps1 -Test animals`).

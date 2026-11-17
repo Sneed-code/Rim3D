@@ -9,6 +9,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Mineables.h"
+#include "ColonySim/Needs.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Things.h"
 
@@ -67,6 +68,10 @@ HandsOnPlan JobSystem::planHandsOn(Entity pawn, Entity thing, CellPos cell) cons
         plan.error = "you are down";
         return plan;
     }
+    if (sleepingByHand(pawn)) {
+        plan.error = "you are asleep";
+        return plan;
+    }
     if (!canUseHands(pawn)) {
         plan.error = "your hands can't do that";
         return plan;
@@ -109,6 +114,23 @@ HandsOnPlan JobSystem::planHandsOn(Entity pawn, Entity thing, CellPos cell) cons
                 return plan;
             }
             plan.error = "the " + name + " needs materials: pick some up and bring them";
+            return plan;
+        }
+        if (reg.all_of<Bed, Footprint>(thing)) {
+            plan.kind = HandsOnKind::Sleep;
+            plan.label = "sleep till morning";
+            plan.inReach = handsReach(at.x, at.y, at.level, reg.get<Footprint>(thing).rect());
+            const int hour = time_.hourOfDay();
+            const bool night = rules_.nightFromHour <= rules_.nightToHour ? (hour >= rules_.nightFromHour && hour < rules_.nightToHour)
+                                                                          : (hour >= rules_.nightFromHour || hour < rules_.nightToHour);
+            CellPos slot;
+            if (!night) {
+                plan.error = "you can sleep from " + std::to_string(rules_.nightFromHour) + ":00 to " + std::to_string(rules_.nightToHour) + ":00";
+            } else if (!bedSlotCell(thing, pawn, slot) &&
+                       static_cast<int>(reg.get<Bed>(thing).owners.size()) >=
+                           std::max(1, static_cast<int>(defs_.get(reg.get<Thing>(thing).def).integer("building.sleepingSlots", 1)))) {
+                plan.error = "that bed is someone else's";
+            }
             return plan;
         }
         if (reg.all_of<StackCount>(thing)) {
@@ -188,6 +210,10 @@ bool JobSystem::handsOn(Entity pawn, Entity thing, CellPos cell, std::string& er
     }
     entt::registry& reg = things_.registry();
     const Job& running = reg.get<Worker>(pawn).job;
+    if (plan.kind == HandsOnKind::Sleep) {
+        error = "sleeping is SleepCommand";
+        return false;
+    }
     if (plan.kind == HandsOnKind::PickUp) {
         interrupt(pawn, "the player picked something up");
         return handsOnPickUp(pawn, thing, error);
@@ -262,6 +288,82 @@ void JobSystem::handsOnStop(Entity pawn) {
     if (reg.valid(pawn) && reg.all_of<Worker>(pawn) && reg.get<Worker>(pawn).job.handsOn != 0) {
         endJob(pawn, JobEnd::Interrupted, "the player let go");
     }
+}
+
+bool JobSystem::handsOnSleep(Entity pawn, Entity bed, std::string& error) {
+    entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<PlayerControl, Worker, Position>(pawn)) {
+        error = "you aren't controlling a colonist";
+        return false;
+    }
+    if (health_.incapacitated(pawn)) {
+        error = "you are down";
+        return false;
+    }
+    if (sleepingByHand(pawn)) {
+        error = "you are asleep already";
+        return false;
+    }
+    Position& at = reg.get<Position>(pawn);
+    Job job;
+    job.type = JobType::LayDown;
+    job.handsOn = 1;
+    job.cell = cellOf(at);
+    if (bed != kNoEntity) {
+        if (!things_.spawned(bed) || !reg.all_of<Bed, Footprint>(bed)) {
+            error = "that isn't a bed";
+            return false;
+        }
+        if (!handsReach(at.x, at.y, at.level, reg.get<Footprint>(bed).rect())) {
+            error = "get closer to the bed";
+            return false;
+        }
+        CellPos slot;
+        if (!bedSlotCell(bed, pawn, slot)) {
+            if (reg.all_of<Needs>(pawn)) {
+                if (!assignBed(bed, pawn, error)) {
+                    return false;
+                }
+            } else {
+                error = "you can't sleep in that bed";
+                return false;
+            }
+            if (!bedSlotCell(bed, pawn, slot)) {
+                error = "that bed is full";
+                return false;
+            }
+        }
+        if (reservedByOther(JobTarget{kNoEntity, slot}, pawn)) {
+            error = "someone is in that bed";
+            return false;
+        }
+        job.thing = bed;
+        job.cell = slot;
+    }
+    if (fireNear(job.cell, kFireBedRadius, pawn)) {
+        error = "not beside a fire";
+        return false;
+    }
+    interrupt(pawn, "the player went to sleep");
+    dropCarried(pawn);
+    // Into the bed (the walk is skipped, as for all hands-on work).
+    if (job.thing != kNoEntity) {
+        at.x = static_cast<float>(job.cell.x) + 0.5f;
+        at.y = static_cast<float>(job.cell.y) + 0.5f;
+        at.level = job.cell.level;
+    }
+    if (Mover* mover = reg.try_get<Mover>(pawn)) {
+        mover->vx = 0.0f;
+        mover->vy = 0.0f;
+    }
+    startJob(pawn, std::move(job));
+    return true;
+}
+
+bool JobSystem::sleepingByHand(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Worker* worker = reg.valid(pawn) ? reg.try_get<Worker>(pawn) : nullptr;
+    return worker != nullptr && worker->job.type == JobType::LayDown && worker->job.handsOn != 0;
 }
 
 float JobSystem::jobProgress(Entity pawn) const {

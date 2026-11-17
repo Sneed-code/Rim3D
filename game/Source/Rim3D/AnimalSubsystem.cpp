@@ -217,9 +217,11 @@ const FSimAnimalModel* USimAnimalSubsystem::GetModelFor(FName DefName, FSimAnima
 				}
 			}
 		}
-		if (!Model.Mesh || !Model.Idle || !Model.Walk)
+		// A model with no walk clip (the free Buffalo_A1) walks on its idle: the body glides, but nothing spins or jerks.
+		if (!Model.Walk) { Model.Walk = Model.Idle; }
+		if (!Model.Mesh || !Model.Idle)
 		{
-			UE_LOG(LogSimAnimals, Error, TEXT("Model %s is missing its mesh, idle or walk clip: run the AnimalArt commandlet (assets/animal_art.json)"), *Name);
+			UE_LOG(LogSimAnimals, Error, TEXT("Model %s is missing its mesh or idle clip: run the AnimalArt commandlet (assets/animal_art.json)"), *Name);
 			Warned.Add(OutArt.Model);
 			return nullptr;
 		}

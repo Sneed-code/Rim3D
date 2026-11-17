@@ -63,6 +63,7 @@ class RecreationSystem;
 class SocialSystem;
 class ResearchSystem;
 class ResonanceSystem;
+class PatchSystem;
 class TalentSystem;
 class TraitBook;
 class TravelSystem;
@@ -75,6 +76,7 @@ class PowerGrid;
 class Regions;
 class PrisonerSystem;
 class TradeSystem;
+class LandingSystem;
 class QuestSystem;
 class ShipSystem;
 class CaravanSystem;
@@ -444,6 +446,8 @@ public:
     // Faction goodwill, visitors, trade caravans, orbital traders and trade (docs/design/trade.md).
     TradeSystem& trade() { return *trade_; }
     const TradeSystem& trade() const { return *trade_; }
+    LandingSystem& landing() { return *landing_; }
+    const LandingSystem& landing() const { return *landing_; }
 
     // Taming, training, animal zones and pens (docs/design/husbandry.md).
     Husbandry& husbandry() { return *husbandry_; }
@@ -472,6 +476,8 @@ public:
     // Attunement, strain, focus and the powers of resonance (docs/design/resonance.md).
     ResonanceSystem& resonance() { return *resonance_; }
     const ResonanceSystem& resonance() const { return *resonance_; }
+    PatchSystem& patches() { return *patches_; }
+    const PatchSystem& patches() const { return *patches_; }
 
     // Power nets, generators, batteries and who has power (docs/design/power.md). Stepped at the end
     // of every step, after rooms (the sun needs roofs).
@@ -499,6 +505,11 @@ public:
     // Path requests go through its queue, which runs once per step (docs/design/pathfinding.md).
     Pathfinder& pathfinder() { return pathfinder_; }
     const Pathfinder& pathfinder() const { return pathfinder_; }
+    // How tall a pawn is, metres, which decides how deep water is for it (docs/design/water.md): a person
+    // 1.80 m times their looks' height, an animal 0.9 m times the square root of its body size (ours).
+    float bodyHeightM(Entity pawn) const;
+    // True when the pawn is in water past its shoulders: it swims, and can't roll, shoot or fight.
+    bool pawnSwimming(Entity pawn) const;
 
 private:
     float pawnMoveFactor(Entity pawn) const;  // see Sim.cpp
@@ -510,6 +521,7 @@ private:
     Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart);
 
     void applyCommand(const Command& command, uint64_t id);
+    void applySleepCommand(const SleepCommand& sleep, uint64_t id);
     // One game second. `keepEvents`: the events of the steps before it in this Sim::step stay (a skip's batch).
     // `tick`: whether the calendar moves on this step; -1 lets the day length decide (another map
     // is told by the colony's, so the two keep the same time).
@@ -619,6 +631,7 @@ private:
     std::unique_ptr<MonsterSystem> monsters_;  // after raids_ and animals_
     std::unique_ptr<PrisonerSystem> prisoners_;  // after the raids
     std::unique_ptr<TradeSystem> trade_;         // after the raids
+    std::unique_ptr<LandingSystem> landing_;     // shuttles and the landing zone, beside trade
     std::unique_ptr<QuestSystem> quests_;        // after the raids
     std::unique_ptr<ShipSystem> ship_;           // after the raids
     std::unique_ptr<CaravanSystem> caravans_;    // after the job system
@@ -644,6 +657,7 @@ private:
     std::unique_ptr<NatureEvents> nature_;      // after narrator_ (T2)
     std::unique_ptr<SocialSystem> social_;    // after the mood, melee and job systems it uses
     std::unique_ptr<ResonanceSystem> resonance_;  // after the fighters and the job system it holds
+    std::unique_ptr<PatchSystem> patches_;        // after the fighters (body health part B)
     std::unique_ptr<TravelSystem> travel_;    // after nearly everything: it asks the others about threats
     std::vector<OtherMap> otherMaps_;         // W5, by the order they were made
 };

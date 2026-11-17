@@ -109,6 +109,21 @@ struct MeleeRules {
     int playerBlockSteps = 20;        // how long the player's block holds
     int dodgeHoldSteps = 3;           // a fighter that sidestepped stays put this long after the hit
     float strongPowerShare = 1.15f;   // a swing is strong when its tool's power is this share of the set's mean or more (AN1, ours)
+    float arcHalfDegrees = 30.0f;     // a sweeping blow (part C) can meet a pawn this far either side of its aimed line
+    int arcRaysPerSide = 2;           // lines traced on each side of the aimed one
+    std::vector<std::string> arcDamageTypes = {"Cut", "Slash", "Blunt", "Crush", "Scratch"};  // the sweeping blows
+    // Body motion (docs/design/body-motion.md). A person's reach follows this share of their height (arm and weapon:
+    // the weapon is the same in anyone's hands, the arm isn't).
+    float reachHeightFollow = 0.5f;
+    // Attack clips by fighting style, and each melee weapon's style (fists: unarmedStyle). A swing plays one of its
+    // style's clips, timed so the clip's blow lands on the sim's hit step; the clip's step forward really moves the body.
+    // Clips longer than maxAttackClipSeconds, or whose blow comes later than maxAttackHitSeconds, are left out: fights
+    // are fast (sneed).
+    std::vector<std::pair<std::string, std::vector<std::string>>> styleAttacks;
+    std::vector<std::pair<std::string, std::string>> weaponStyle;
+    std::string unarmedStyle = "Unarmed";
+    float maxAttackClipSeconds = 1.6f;
+    float maxAttackHitSeconds = 0.8f;
 };
 
 class COLONY_API MeleeSystem {
@@ -139,7 +154,11 @@ public:
     bool strongSwing(Entity pawn) const;
     // Metres from the pawn's centre its strike reaches on the ground: its melee weapon's, else its body's.
     float reach(Entity pawn, bool fists = false) const;
-    // The target's centre is within the pawn's reach (plus reachSlack: its front is).
+    // How far from the target's centre the pawn can start a swing that lands: its reach (which follows its height),
+    // plus the part of a big target's body that sticks out towards it (a man's body is already counted), plus the step
+    // forward its attack clips take before the blow.
+    float engageDistance(Entity pawn, Entity target, bool fists = false) const;
+    // The target's centre is within the pawn's engage distance (plus reachSlack).
     bool inReach(Entity pawn, Entity target, bool fists = false) const;
     // The fighter AI charges with this pawn: no gun, and a melee weapon in hand or a trait that says
     // so (Brawler). Others only strike back at enemies in reach.
@@ -186,6 +205,8 @@ private:
     struct ToolSet {
         std::vector<Tool> tools;
         float reach = 0.0f;
+        std::vector<DefId> attackClips;  // MotionClips of its style that are short enough
+        float lunge = 0.0f;              // the least any of them steps forward by its blow (a man's metres)
     };
 
     const ToolSet* toolsOf(Entity pawn, bool& weapon, bool fists = false) const;
@@ -196,6 +217,7 @@ private:
     bool roll(Entity defender, Melee& d);
     void commit(Entity pawn, Melee& m);
     void strike(Entity pawn, Melee& m);
+    bool arcSwing(DefId damageType) const;
     void face(Entity pawn, float x, float y);
     bool shoulder(Entity pawn, float& x, float& y, float& z) const;
     float swingTimeFactor(Entity pawn) const;
@@ -209,6 +231,7 @@ private:
     const GameTime& time_;
     uint64_t seed_;
     MeleeRules rules_;
+    std::vector<uint8_t> arcTypes_;  // by DamageTypes DefId value: 1 for a sweeping blow
     std::vector<ToolSet> tools_;  // by Things DefId value: a melee weapon's tools, or a pawn def's body tools
     std::vector<Entity> order_;
     std::vector<Event>* events_ = nullptr;

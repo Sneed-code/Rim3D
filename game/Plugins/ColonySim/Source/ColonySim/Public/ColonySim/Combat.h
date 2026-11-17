@@ -18,6 +18,7 @@
 namespace colony {
 
 class ApparelStats;
+class BodyMotionSystem;
 class HealthSystem;
 class InspirationSystem;
 class TalentSystem;
@@ -156,6 +157,15 @@ struct Staggered {
     int stepsLeft = 0;
 };
 
+// sneed's poise (part C, docs/design/body-health.md), on a pawn with body zones that was hit lately. A blow whose
+// force (damage before armour times its type's force factor) is over the pawn's poise (50) knocks it down, and then
+// no blow can for `immuneLeft` steps (30 s). A hit staggers it only if it took over 10% of that zone's hit points, and
+// at most once per `staggerWait` steps (5 s). The component goes when both run out.
+struct Poise {
+    int immuneLeft = 0;
+    int staggerWait = 0;
+};
+
 // On a stunned pawn (resonance's Stun, X2, docs/design/resonance.md): it can't walk, shoot, throw,
 // swing, block, cast or work until the steps run out; its stance stays as it was. ResonanceSystem
 // counts it down.
@@ -248,6 +258,8 @@ struct HitFrom {
     bool known = false;
     float x = 0.0f;
     float y = 0.0f;
+    // A blow by hand (a club, a fist, teeth), which shoves a body; a bullet only moves it as far as its flinch clip does.
+    bool blow = false;
 };
 
 // What a gun's def says, for fixed guns that fire without a pawn's hands (turrets, F11): range in
@@ -285,6 +297,14 @@ public:
     void setHurtHook(std::function<void(Entity, Entity)> hook) { hurtHook_ = std::move(hook); }
     // A pawn's body size in RimWorld's units (a man is 1) for the stagger rule; unset: 1 for everyone.
     void setBodySize(std::function<float(Entity)> size) { bodySize_ = std::move(size); }
+    // How well the pawn performs, 1 normally (an Exhausted pawn 0.75, NeedsSystem::performanceFactor): aim, cooldown,
+    // reload and swing times are divided by it, shooting accuracy multiplied.
+    void setPerformance(std::function<float(Entity)> performance) { performance_ = std::move(performance); }
+    float performance(Entity pawn) const { return performance_ ? std::max(0.05f, performance_(pawn)) : 1.0f; }
+    // Times for aiming, cooldown, reloading and swings are multiplied by this: worn armour's weight over performance.
+    float attackTimeFactor(Entity pawn) const;
+    // Its traits' share of its melee damage (Wimp 0.9); 1 without traits.
+    float traitMeleeDamage(Entity pawn) const;
     void noteHurt(Entity victim, Entity attacker) const {
         if (hurtHook_) {
             hurtHook_(victim, attacker);
@@ -440,7 +460,21 @@ public:
     int staggeredFor(Entity pawn) const;
     float staggerSpeedFactor(Entity pawn) const;
     // Staggers the pawn for CombatRules `stagger.steps` (a fresh stagger restarts the time) and sends PawnStaggered.
-    void stagger(Entity pawn);
+    // A blow from `from` (when known) also throws the body back along the blow (docs/design/body-motion.md).
+    void stagger(Entity pawn, const HitFrom& from = HitFrom{});
+    // Part C: a blow on a pawn with body zones, after its damage went in. `force` is the damage before armour, `dealt`
+    // what got through, `part` the body part hit. May knock the pawn down (poise) or stagger it (sneed's 5 s / 10%
+    // rule). True if the pawn has body zones (the caller then skips RimWorld's stopping-power stagger).
+    // A blow from `from` (when known) throws the body back along the blow: a stagger or a knockdown clip moves it
+    // through the world (docs/design/body-motion.md).
+    bool jolt(Entity pawn, int part, DefId damageType, float force, float dealt, const HitFrom& from = HitFrom{});
+    // Clips that move bodies (docs/design/body-motion.md): rolls, sidesteps, staggers, knockdowns, blasts and
+    // lunging swings all move pawns through this, and it is stepped with combat.
+    BodyMotionSystem& motion() { return *motion_; }
+    const BodyMotionSystem& motion() const { return *motion_; }
+    // Steps left of a pawn's knock-down immunity and stagger wait (0 when free).
+    int poiseImmuneFor(Entity pawn) const;
+    int staggerWaitFor(Entity pawn) const;
 
     // Hashes the combat components of one thing (Sim::stateHash calls it for every thing).
     void hashThing(Entity e, StateHasher& h) const;
@@ -491,6 +525,7 @@ private:
     HealthSystem& health_;
     std::unique_ptr<CombatModel> model_;
     std::unique_ptr<ApparelStats> apparelStats_;
+    std::unique_ptr<BodyMotionSystem> motion_;
     std::vector<Event>* events_ = nullptr;
     const Weather* weather_ = nullptr;
     const TraitBook* traits_ = nullptr;
@@ -499,6 +534,7 @@ private:
     std::function<void(Entity)> beforeDestroy_;
     std::function<void(Entity, Entity)> hurtHook_;
     std::function<float(Entity)> bodySize_;
+    std::function<float(Entity)> performance_;
     std::vector<Entity> scratch_;
 
     void emitHit(Entity projectile, const Projectile& p, const TraceHit& hit, float amount);

@@ -1,0 +1,20 @@
+[
+  {
+    "defName": "LandingRules",
+    "source": "ours",
+    "shuttleDef": "Shuttle_VTOL",
+    "descendSteps": 360,
+    "ascendSteps": 300,
+    "maxSlopeM": 1.5,
+    "searchRadiusM": [
+      14,
+      60
+    ],
+    "searchTries": 300,
+    "visitShuttleChance": 0.5,
+    "ours": [
+      "everything"
+    ],
+    "notes": "sneed 2026-11-17: shuttles land in the landing zone the player paints; with none (or no room) at a clear random spot near the colony, flattening small plants; only hard things (rock, deep water, buildings, trees, items, roofs, steep ground) stop it. Steps are real time (30 a second at 1x): 12 s down, 10 s up. Half of visitor groups and trade caravans come by shuttle, the rest walk in."
+  }
+]

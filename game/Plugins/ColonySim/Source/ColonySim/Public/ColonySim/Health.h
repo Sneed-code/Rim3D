@@ -43,7 +43,8 @@ enum class DeathCause : uint8_t {
     Surgery,        // an operation went wrong (Surgery.h)
     Executed,       // a warden executed a prisoner (Prisoners.h)
     Overdose,       // the Overdose hediff reached its lethal severity (Drugs.h)
-    Withdrawal      // a withdrawal hediff did (luciferium)
+    Withdrawal,     // a withdrawal hediff did (luciferium)
+    Wounds          // the protagonist's hit points ran out (body zones, docs/design/body-health.md)
 };
 
 COLONY_API const char* deathCauseName(DeathCause cause);
@@ -124,6 +125,7 @@ struct Health {
     std::vector<Immunity> immunities;    // by def id, only those above 0 or with the disease (H2)
     bool dead = false;
     DeathCause cause = DeathCause::None;
+    int64_t bleedStoppedAt = -1;  // body zones: game second its bleeding stopped (blood comes back after a while); -1 while it bleeds
 
     // ---- Derived. Never saved or hashed.
     float stageHp = 1.0f;        // young animals: the life stage's healthScaleFactor, set by AnimalSystem (N4 leftovers)
@@ -136,6 +138,12 @@ struct Health {
     std::vector<float> capacities;  // by position in the Capacities defs (by id)
     bool dirty = true;           // injuries changed: work the derived values out again
     int bloodStage = -1;         // current BloodLoss stage, -1 for none
+    // Body zones (docs/design/body-health.md), for a body that has them: each zone's health 0 to 1, in the body's zone
+    // order (HealthSystem::zoneNames); empty otherwise.
+    std::vector<float> zones;
+    bool unconscious = false;    // body zones: head under 25%, or blood at 1000 or less
+    bool crawls = false;         // body zones: downed by the torso and awake, so it crawls away from enemies (part D)
+    std::vector<uint8_t> zoneBleeds;  // body zones: each zone's bleeding, 0 none, 1 light, 2 moderate, 3 heavy
 
     bool incapacitated() const { return downed || dead; }
 };
@@ -273,6 +281,22 @@ public:
     void refreshAll();
 
     bool incapacitated(Entity pawn) const;
+    // Body zones (docs/design/body-health.md). The zones of the pawn's body ("Head", "Torso", "Arm", "Leg"... one per
+    // zone, so two "Arm"s), empty for a body without zones; a zone's health 0 to 1 (1 for none); blood 0 to 3000.
+    std::vector<std::string> zoneNames(Entity pawn) const;
+    float zoneHealth(Entity pawn, int zone) const;
+    // The full hit points of the zone that body part `part` is in (part C's stagger rule); 0 for a body without zones.
+    float partZoneHp(Entity pawn, int part) const;
+    float blood(Entity pawn) const;
+    bool unconscious(Entity pawn) const;
+    // Patching (part B): a zone's bleeding (0 none, 1 light, 2 moderate, 3 heavy), the zone that bleeds worst (-1 for
+    // none), and patching it: tends its untended bleeding wounds and lost parts at `quality`, returns how many.
+    int zoneBleedLevel(Entity pawn, int zone) const;
+    int worstBleedingZone(Entity pawn) const;
+    int patchZone(Entity pawn, int zone, float quality);
+    int patchSteps(int level) const;  // steps it takes to patch a zone bleeding at that level (1, 2 or 3 real seconds)
+    float patchQuality() const;
+    float coverBlood() const;         // blood under which a bleeding fighter falls back to patch (1500)
     // Kills a pawn for a cause that is not an injury (starvation). False if it has no tracked
     // health or is dead already.
     bool kill(Entity pawn, DeathCause cause);
@@ -395,7 +419,10 @@ private:
     void emit(EventType type, Entity pawn, DefId def = DefId{}, int part = -1, float amount = 0.0f,
               const char* message = nullptr);
     void stopWalking(Entity pawn);
-    void die(Entity pawn, Health& health, DeathCause cause, bool announce);
+    // `downedAwake`: it was lying downed but still conscious when it died. PawnDied's `amount` says how it lay: 0 up,
+    // 1 downed and awake (a sound can give it a last scream), 2 downed and knocked out.
+    void die(Entity pawn, Health& health, DeathCause cause, bool announce, bool downedAwake = false);
+    bool downedAwake(const Health& health) const;
     bool hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter);
     bool damagePart(Entity pawn, Health& health, int part, DefId hediff, float amount);
     void destroyPart(Entity pawn, Health& health, int part, float amount);

@@ -498,3 +498,23 @@ TEST_CASE("Animals: a replay with wild animals plays back to the same hashes") {
     CHECK(check.compared > 3);
     CHECK(check.matched());
 }
+
+TEST_CASE("Animals: raptors and the tyrannosaurus are wild animals of their size") {
+    Sim sim(animalFlat(), animalTestDefs());
+    sim.submit(SpawnThingCommand{"Raptor", CellPos{20, 20, 0}});
+    sim.submit(SpawnThingCommand{"TRex", CellPos{40, 40, 0}});
+    sim.stepMany(5);
+    const std::vector<Entity> animals = animalsOf(sim);
+    ANIMAL_REQUIRE(animals.size() == 2);
+    Snapshot snap;
+    sim.writeSnapshot(snap);
+    std::map<std::string, float> sizes;
+    for (const Entity e : animals) {
+        const ThingView* view = snap.find(e);
+        ANIMAL_REQUIRE(view != nullptr);
+        CHECK(view->faction == kWildFaction);
+        sizes[animalName(sim, e)] = view->bodySize;
+    }
+    CHECK(sizes["Raptor"] == doctest::Approx(1.0f));
+    CHECK(sizes["TRex"] == doctest::Approx(6.0f));
+}

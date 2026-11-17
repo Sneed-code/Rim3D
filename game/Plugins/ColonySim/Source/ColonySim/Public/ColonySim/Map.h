@@ -223,6 +223,38 @@ public:
         return c.level == 0 && inBounds(c) && !flowing_.empty() && flowing_[static_cast<size_t>(index(c))] != 0 &&
                terrain(c) == Terrain::Water;
     }
+    // Water as a surface (docs/design/water.md). The height in metres of the water's surface over a
+    // ground cell, NaN where there is none. Lakes, rivers and their shallow rims share one water
+    // table on a generated map (kWaterTableShare of the top height, 13.2 m); water put down by hand
+    // (tests, flat maps), or above that table, stands kHandDeepM or kHandShallowM over its ground.
+    // Marsh has a film kMarshFilmM deep. Upper levels have none.
+    static constexpr float kHandDeepM = 2.5f;     // ours
+    static constexpr float kHandShallowM = 0.5f;  // ours
+    static constexpr float kMarshFilmM = 0.1f;    // ours: ankle-deep standing water in a marsh
+    float waterSurface(CellPos c) const;
+    // How deep the water is at a point of a level (metres): the cell's surface above the ground
+    // under the point (heightAt), 0 where there is no water or the ground stands above it.
+    float waterDepthAt(float x, float y, int level = 0) const;
+    // How fast the water in a ground cell moves, metres per real second at 1x (30 steps), as a vector; zero in lakes,
+    // marsh and dry cells. A river flows along its course, fastest in the middle of the channel.
+    // Made from the seed with the map, not saved.
+    void flowAt(CellPos c, float& vx, float& vy) const {
+        if (flow_.empty() || !onGround(c)) {
+            vx = 0.0f;
+            vy = 0.0f;
+            return;
+        }
+        const size_t i = static_cast<size_t>(index(c)) * 2;
+        vx = static_cast<float>(flow_[i]) * 0.01f;
+        vy = static_cast<float>(flow_[i + 1]) * 0.01f;
+    }
+    // Sets a ground cell's flow, metres per real second at 1x (tests; the map generator sets the rivers').
+    void setFlow(CellPos c, float vx, float vy);
+    bool hasFlow() const { return !flow_.empty(); }
+    // The water table's height in metres; NaN on a flat map.
+    float waterTable() const { return waterTable_; }
+    // Sets the water table by hand (tests; the map generator sets a generated map's).
+    void setWaterTable(float metres) { waterTable_ = metres; }
     // Where a building can stand: walkable ground, or for a building made for moving water, moving water.
     bool groundBuildable(CellPos c, bool onFlowingWater) const {
         return onFlowingWater ? flowing(c) : groundWalkable(c);
@@ -351,6 +383,8 @@ private:
     uint64_t rockChanges_ = 0;
     std::vector<uint8_t> geyser_;  // 1 where a steam geyser vents
     std::vector<uint8_t> flowing_;  // 1 where the water moves (a river)
+    std::vector<int16_t> flow_;     // per ground cell: x then y flow in cm/s; empty until a river is made
+    float waterTable_ = std::nanf("");  // the water table's height, NaN on a flat map (docs/design/water.md)
     std::vector<uint32_t> dried_;   // cells a moisture pump dried, in the order it did
     std::vector<float> levelBase_;     // per ground cell, NaN where nothing levelled it; empty until first used
     std::vector<uint8_t> levelMoved_;  // 1 where the levelling moved a corner

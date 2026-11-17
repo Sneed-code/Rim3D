@@ -26,6 +26,10 @@ They carry on as normal during the skip. The colonist under control is let go wh
 goes to bed if it is tired); the `SkipStarted` and `SkipEnded` events carry its id so Unreal can take control again.
 Sleepers wake as they always do (rested to 1.0, or the schedule changes), so most are up by 6:00.
 
+The player's own sleep (`SleepCommand`, [needs.md](needs.md) "The protagonist sleeps the night away") is a night skip that
+starts from 18:00, ends at 6:00, needs nobody else in bed and keeps the colonist under control; it ends early when the
+sleeper gets up.
+
 ## Fast travel
 
 `FastTravelCommand{pawn, x, y}` moves the controlled colonist to a place it has **visited**. The sim marks the 8 m blocks

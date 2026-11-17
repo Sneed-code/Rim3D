@@ -44,6 +44,11 @@ const TraitStats& TraitBook::of(Entity pawn) const {
             stats.painShockOffset += offset("painShockThreshold");
             stats.comfyMinOffset += offset("comfyTemperatureMin");
             stats.skillLossFactor *= static_cast<float>(trait->number((base + ".skillLossFactor").c_str(), 1.0));
+            stats.meleeDamageFactor *= static_cast<float>(trait->number((base + ".meleeDamageFactor").c_str(), 1.0));
+            if (trait->count((base + ".fleeWhenHurtSeconds").c_str()) >= 2) {
+                stats.fleeHurtMin = std::max(stats.fleeHurtMin, static_cast<float>(trait->numberAt((base + ".fleeWhenHurtSeconds").c_str(), 0, 0.0)));
+                stats.fleeHurtMax = std::max(stats.fleeHurtMax, static_cast<float>(trait->numberAt((base + ".fleeWhenHurtSeconds").c_str(), 1, 0.0)));
+            }
         }
     }
     stats.workSpeed = std::max(0.0f, 1.0f + workSpeed);

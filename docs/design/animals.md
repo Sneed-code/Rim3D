@@ -49,3 +49,7 @@ trees (`ours`).
 
 N1 puts these animals on the map, makes them wander, graze and sleep, and fills and empties the edges:
 [animal-life.md](animal-life.md).
+
+## Raptor and tyrannosaurus (sneed, 2026-11-16)
+
+Not in RimWorld, so all their numbers are ours (`ours` in the defs): `Raptor` (body size 1, health 1, 6.5 cells/s, carnivore predator, packs of 3 to 5, bite 13 and two sickle claws 11) and `TRex` (body size 6, health 7, 4.5 cells/s, rare, `manhunterOnDamage`, bite 45, head 20, feet 16, food 9.6 a day, 700 meat). Both are wild in `TropicalRainforest` (0.1 and 0.02). They borrow `QuadrupedAnimal` and the quadruped hitboxes until a two-legged animal body is written; sounds are placeholder tones (`Animal_Raptor_*`, `Animal_TRex_*`).

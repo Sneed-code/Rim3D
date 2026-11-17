@@ -56,6 +56,7 @@ const char* deathCauseName(DeathCause cause) {
         case DeathCause::Disease: return "illness";
         case DeathCause::Surgery: return "a failed operation";
         case DeathCause::Executed: return "executed";
+        case DeathCause::Wounds: return "wounds";
     }
     return "";
 }
@@ -81,9 +82,25 @@ public:
         bool lethal = false;
         std::vector<int> children;
     };
+    // Body zones (docs/design/body-health.md): sneed's head, torso, arms and legs with their own hit points.
+    enum class ZoneKind : uint8_t { Head, Torso, Arm, Leg, Other };
+    struct Zone {
+        std::string name;
+        int root = 0;
+        float hp = 100.0f;
+        ZoneKind kind = ZoneKind::Other;
+    };
     struct Body {
         std::vector<Part> parts;
         std::unordered_map<std::string, std::vector<int>> byDef;
+        std::vector<Zone> zones;   // empty: RimWorld's rules
+        std::vector<int> zoneOf;   // by part: its zone
+        int headZone = -1;
+    };
+    struct ZoneRule {
+        std::string name;
+        std::string root;
+        float hp = 100.0f;
     };
     enum class Combine : uint8_t { Average, Importance, BestWeighted };
     struct Entry {
@@ -219,6 +236,27 @@ public:
     float bleedMinForBloodLoss = 0.1f;
     float protagonistFactor = 2.0f;
     bool innerHurtsOuter = true;
+    // Body zones (HealthRules `zones`, docs/design/body-health.md; sneed's numbers).
+    std::vector<std::string> zoneBodies = {"Human"};
+    std::vector<ZoneRule> zoneRules = {{"Head", "Neck", 50.0f}, {"Torso", "Torso", 100.0f}, {"Arm", "Shoulder", 50.0f}, {"Leg", "Leg", 75.0f}};
+    float zoneDownBelow = 0.25f;      // torso, head or a leg under this: downed
+    float zoneManyBelow = 0.5f;       // ...or this many zones under this
+    int zoneManyCount = 3;
+    float zoneHeadUnconscious = 0.25f;
+    float bloodMax = 3000.0f;
+    float bloodUnconscious = 1000.0f;
+    float zoneBleedAt[3] = {0.75f, 0.5f, 0.25f};
+    float zoneBleedPerSecond[3] = {1.0f, 2.0f, 3.0f};  // blood a real second, by those thresholds
+    float bloodRegenDelaySeconds = 30.0f;
+    float bloodRegenPerSecond = 10.0f;
+    float stepsPerRealSecond = 30.0f;
+    float protagonistZoneHp = 100.0f;  // the protagonist: never downed, dies when this much damage is on its zones
+    float patchSeconds[3] = {1.0f, 2.0f, 3.0f};  // patching a zone that bleeds lightly, moderately, heavily (real seconds)
+    float patchQuality = 0.3f;                   // the tend quality of a patch
+    float coverBlood = 1500.0f;                  // under this a bleeding fighter falls back to cover to patch
+    float minMoving = 0.4f;                      // a person on their feet (body zones) limps, never slower than this share
+    float crawlMoving = 0.1f;                    // a torso-downed person crawls at this share of its walk (part D)
+    void buildZones();
     // Scars (H1): the chance a healed injury leaves one grows from 0 at scarMinHp hit points lost to scarMax at scarFullHp.
     float scarMax = 0.02f;
     float scarMinHp = 4.0f;
@@ -553,7 +591,46 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
         scarFullHp = static_cast<float>(rules->number("scarChance.fullAtHpLost", scarFullHp));
         scarSeverity = static_cast<float>(rules->number("scarSeverity", scarSeverity));
         oldWoundFromHp = static_cast<float>(rules->number("oldWoundFromHpLost", oldWoundFromHp));
+        if (rules->has("zones")) {
+            zoneBodies.clear();
+            for (size_t i = 0; i < rules->count("zones.bodies"); ++i) {
+                zoneBodies.push_back(rules->textAt("zones.bodies", i));
+            }
+            if (rules->has("zones.list")) {
+                zoneRules.clear();
+                for (size_t i = 0; i < rules->count("zones.list"); ++i) {
+                    const std::string at = "zones.list." + std::to_string(i);
+                    zoneRules.push_back(ZoneRule{rules->text((at + ".name").c_str()), rules->text((at + ".root").c_str()),
+                                                 static_cast<float>(rules->number((at + ".hp").c_str(), 100.0))});
+                }
+            }
+            const auto num = [&](const char* key, float& out) { out = static_cast<float>(rules->number(key, out)); };
+            num("zones.downBelow", zoneDownBelow);
+            num("zones.manyBelow", zoneManyBelow);
+            zoneManyCount = static_cast<int>(rules->integer("zones.manyCount", zoneManyCount));
+            num("zones.headUnconsciousBelow", zoneHeadUnconscious);
+            num("zones.bloodMax", bloodMax);
+            num("zones.bloodUnconscious", bloodUnconscious);
+            for (size_t i = 0; i < 3; ++i) {
+                zoneBleedAt[i] = static_cast<float>(rules->numberAt("zones.bleedAt", i, zoneBleedAt[i]));
+                zoneBleedPerSecond[i] = static_cast<float>(rules->numberAt("zones.bleedPerSecond", i, zoneBleedPerSecond[i]));
+            }
+            num("zones.bloodRegenDelaySeconds", bloodRegenDelaySeconds);
+            num("zones.bloodRegenPerSecond", bloodRegenPerSecond);
+            num("zones.stepsPerRealSecond", stepsPerRealSecond);
+            num("zones.protagonistHp", protagonistZoneHp);
+            for (size_t i = 0; i < 3; ++i) {
+                patchSeconds[i] = static_cast<float>(rules->numberAt("zones.patchSeconds", i, patchSeconds[i]));
+            }
+            num("zones.patchQuality", patchQuality);
+            num("zones.coverBlood", coverBlood);
+            num("zones.minMoving", minMoving);
+            num("zones.crawlMoving", crawlMoving);
+            bloodMax = std::max(1.0f, bloodMax);
+            stepsPerRealSecond = std::max(1.0f, stepsPerRealSecond);
+        }
     }
+    buildZones();
     if (const Def* rules = defs.find(kHealthRulesKind, "MedicineRules")) {
         diseaseUpdate = std::max<int64_t>(1, rules->integer("diseaseUpdateSeconds", diseaseUpdate));
         infectDelayMin = static_cast<int64_t>(std::llround(rules->number("infection.delayHoursMin", 12.0) * static_cast<double>(kSecondsPerHour)));
@@ -571,6 +648,84 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
             const DefId disease = defs.idOf(kHealthHediffsKind, key);
             if (disease.valid()) {
                 onsetMtbDays.emplace_back(disease, static_cast<float>(rules->number(("diseaseOnsetMtbDays." + key).c_str())));
+            }
+        }
+    }
+}
+
+// Body zones (docs/design/body-health.md): each zone rule's root part def starts a zone (every part of that def does:
+// two shoulders, two arms); the rule whose root is the body's core part takes everything left over. Every part in a zone
+// has its hit points scaled so the zone's root has the zone's hit points.
+void HealthModel::buildZones() {
+    for (const std::string& name : zoneBodies) {
+        const auto found = bodyIndex.find(name);
+        if (found == bodyIndex.end()) {
+            continue;
+        }
+        if (bodies[static_cast<size_t>(found->second)].parts.empty()) {
+            continue;
+        }
+        // Zones are for people: a mechanoid on the same body (a lancer) keeps RimWorld's rules on an unzoned copy.
+        int copy = -1;
+        for (Kind& kind : kinds) {
+            if (kind.body == found->second && kind.mechanical) {
+                if (copy < 0) {
+                    copy = static_cast<int>(bodies.size());
+                    bodies.push_back(bodies[static_cast<size_t>(found->second)]);
+                }
+                kind.body = copy;
+            }
+        }
+        Body& body = bodies[static_cast<size_t>(found->second)];
+        body.zoneOf.assign(body.parts.size(), -1);
+        const auto kindOf = [](const std::string& n) {
+            return n == "Head" ? ZoneKind::Head : n == "Torso" ? ZoneKind::Torso : n == "Arm" ? ZoneKind::Arm : n == "Leg" ? ZoneKind::Leg : ZoneKind::Other;
+        };
+        const ZoneRule* core = nullptr;
+        for (const ZoneRule& rule : zoneRules) {
+            if (rule.root == body.parts[0].def) {
+                core = &rule;
+                continue;
+            }
+            const auto parts = body.byDef.find(rule.root);
+            if (parts == body.byDef.end()) {
+                continue;
+            }
+            for (const int root : parts->second) {
+                if (body.zoneOf[static_cast<size_t>(root)] >= 0) {
+                    continue;  // inside a zone already
+                }
+                const int z = static_cast<int>(body.zones.size());
+                body.zones.push_back(Zone{rule.name, root, rule.hp, kindOf(rule.name)});
+                for (int i = root; i < body.parts[static_cast<size_t>(root)].end; ++i) {
+                    body.zoneOf[static_cast<size_t>(i)] = z;
+                }
+            }
+        }
+        if (core != nullptr) {
+            const int z = static_cast<int>(body.zones.size());
+            body.zones.push_back(Zone{core->name, 0, core->hp, kindOf(core->name)});
+            for (int& zone : body.zoneOf) {
+                if (zone < 0) {
+                    zone = z;
+                }
+            }
+        }
+        if (body.zones.empty()) {
+            body.zoneOf.clear();
+            continue;
+        }
+        for (size_t z = 0; z < body.zones.size(); ++z) {
+            const Zone& zone = body.zones[z];
+            const float rootHp = body.parts[static_cast<size_t>(zone.root)].hitPoints;
+            const float factor = rootHp > 0.0f ? zone.hp / rootHp : 1.0f;
+            for (size_t i = 0; i < body.parts.size(); ++i) {
+                if (body.zoneOf[i] == static_cast<int>(z)) {
+                    body.parts[i].hitPoints *= factor;
+                }
+            }
+            if (zone.kind == ZoneKind::Head && body.headZone < 0) {
+                body.headZone = static_cast<int>(z);
             }
         }
     }
@@ -594,6 +749,10 @@ struct HealthEval {
     std::vector<uint8_t> state;  // 0 not yet, 1 in progress, 2 done
     float pain = 0.0f;
     float bleedPerDay = 0.0f;
+    std::vector<float> zoneDamage;  // body zones: hit points lost on each zone's outside parts
+    std::vector<float> zoneHealth;  // ...and its health, 0 to 1
+    float zoneBleed = 0.0f;         // blood lost a real second, over the zones
+    std::vector<uint8_t> zoneLevel;  // ...and each zone's bleeding: 0 none, 1 light, 2 moderate, 3 heavy
 
     HealthEval(const HealthModel& m, const HealthModel::Body& b, const Health& h, float factor)
         : model(m), body(b), health(h), hpFactor(factor), damage(b.parts.size(), 0.0f), gone(b.parts.size(), 0),
@@ -688,6 +847,60 @@ struct HealthEval {
         }
     }
 
+    // Body zones (docs/design/body-health.md): a zone's damage is what its outside parts lost (an inside hit hurts the
+    // outside part over it too, so each blow counts once), a lost part its full hit points. A zone at 75% or less with an
+    // untended bleeding wound (or lost part) in it bleeds 1, 2 or 3 blood a real second.
+    void workOutZones() {
+        const size_t count = body.zones.size();
+        zoneDamage.assign(count, 0.0f);
+        zoneHealth.assign(count, 1.0f);
+        std::vector<uint8_t> open(count, 0);
+        for (size_t p = 0; p < body.parts.size(); ++p) {
+            const int z = body.zoneOf[p];
+            if (z < 0 || gone[p] != 0 || covered[p] != 0 || (body.parts[p].inside && model.innerHurtsOuter)) {
+                continue;
+            }
+            zoneDamage[static_cast<size_t>(z)] += std::min(damage[p], maxHp(static_cast<int>(p)));
+        }
+        for (const MissingPart& missing : health.missing) {
+            if (missing.part >= body.parts.size()) {
+                continue;
+            }
+            const int parent = body.parts[missing.part].parent;
+            const int z = body.zoneOf[missing.part];
+            if (z < 0 || (parent >= 0 && gone[static_cast<size_t>(parent)] != 0)) {
+                continue;  // under a lost part: that one counts
+            }
+            zoneDamage[static_cast<size_t>(z)] += maxHp(static_cast<int>(missing.part));
+            open[static_cast<size_t>(z)] = open[static_cast<size_t>(z)] != 0 || !missing.tended() ? 1 : 0;
+        }
+        for (const Injury& injury : health.injuries) {
+            // Only wounds that bleed (cuts, stabs, gunshots: not bruises or burns) keep a zone bleeding.
+            const bool bleeds = injury.hediff.valid() && injury.hediff.value < model.hediffs.size() &&
+                                model.hediffs[injury.hediff.value].bleedRate > 0.0f;
+            if (bleeds && injury.part < body.parts.size() && body.zoneOf[injury.part] >= 0 && gone[injury.part] == 0 &&
+                !injury.tended()) {
+                open[static_cast<size_t>(body.zoneOf[injury.part])] = 1;
+            }
+        }
+        zoneBleed = 0.0f;
+        zoneLevel.assign(count, 0);
+        for (size_t z = 0; z < count; ++z) {
+            const float hp = body.zones[z].hp * hpFactor;
+            zoneHealth[z] = hp > 0.0f ? std::clamp(1.0f - zoneDamage[z] / hp, 0.0f, 1.0f) : 1.0f;
+            if (open[z] == 0) {
+                continue;
+            }
+            for (int level = 2; level >= 0; --level) {
+                if (zoneHealth[z] <= model.zoneBleedAt[level]) {
+                    zoneBleed += model.zoneBleedPerSecond[level];
+                    zoneLevel[z] = static_cast<uint8_t>(level + 1);
+                    break;
+                }
+            }
+        }
+    }
+
     float capacity(int index) {
         const size_t i = static_cast<size_t>(index);
         if (state[i] == 2) {
@@ -757,7 +970,8 @@ struct HealthEval {
                 cap = which == index ? std::min(cap, maximum) : cap;
             }
         };
-        const int stage = model.stageOf(health.bloodLoss);
+        // With body zones blood loss works by sneed's thresholds (unconscious at 1000), not RimWorld's stages.
+        const int stage = body.zones.empty() ? model.stageOf(health.bloodLoss) : -1;
         if (stage >= 0) {
             add(model.bloodStages[static_cast<size_t>(stage)]);
         }
@@ -824,8 +1038,9 @@ const HealthModel::Kind* healthKindOf(const HealthModel& model, const entt::regi
     return model.kindOf(reg.get<Thing>(pawn).def);
 }
 
-float healthHpFactor(const HealthModel& model, const Health& health) {
-    return (health.protagonist ? model.protagonistFactor : 1.0f) * health.stageHp;
+float healthHpFactor(const HealthModel& model, const HealthModel::Body& body, const Health& health) {
+    // With body zones the protagonist has its own rule (protagonistZoneHp) instead of doubled parts.
+    return (health.protagonist && body.zones.empty() ? model.protagonistFactor : 1.0f) * health.stageHp;
 }
 
 // Whether a disease has reached a stage the pawn would notice.
@@ -869,13 +1084,138 @@ bool HealthSystem::incapacitated(Entity pawn) const {
     return reg.valid(pawn) && reg.all_of<Health>(pawn) && reg.get<Health>(pawn).incapacitated();
 }
 
+std::vector<std::string> HealthSystem::zoneNames(Entity pawn) const {
+    std::vector<std::string> out;
+    if (const HealthModel::Kind* kind = healthKindOf(*model_, things_.registry(), pawn)) {
+        for (const HealthModel::Zone& zone : model_->bodies[static_cast<size_t>(kind->body)].zones) {
+            out.push_back(zone.name);
+        }
+    }
+    return out;
+}
+
+float HealthSystem::zoneHealth(Entity pawn, int zone) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Health>(pawn) || zone < 0) {
+        return 1.0f;
+    }
+    const std::vector<float>& zones = reg.get<Health>(pawn).zones;
+    return static_cast<size_t>(zone) < zones.size() ? zones[static_cast<size_t>(zone)] : 1.0f;
+}
+
+float HealthSystem::partZoneHp(Entity pawn, int part) const {
+    const HealthModel::Kind* kind = healthKindOf(*model_, things_.registry(), pawn);
+    if (kind == nullptr || part < 0) {
+        return 0.0f;
+    }
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    if (static_cast<size_t>(part) >= body.zoneOf.size() || body.zoneOf[static_cast<size_t>(part)] < 0) {
+        return 0.0f;
+    }
+    return body.zones[static_cast<size_t>(body.zoneOf[static_cast<size_t>(part)])].hp;
+}
+
+float HealthSystem::blood(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Health>(pawn)) {
+        return model_->bloodMax;
+    }
+    return model_->bloodMax * std::clamp(1.0f - reg.get<Health>(pawn).bloodLoss, 0.0f, 1.0f);
+}
+
+int HealthSystem::zoneBleedLevel(Entity pawn, int zone) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Health>(pawn) || zone < 0) {
+        return 0;
+    }
+    const Health& health = reg.get<Health>(pawn);
+    return !health.dead && static_cast<size_t>(zone) < health.zoneBleeds.size() ? health.zoneBleeds[static_cast<size_t>(zone)] : 0;
+}
+
+int HealthSystem::worstBleedingZone(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Health>(pawn) || reg.get<Health>(pawn).dead) {
+        return -1;
+    }
+    const std::vector<uint8_t>& levels = reg.get<Health>(pawn).zoneBleeds;
+    int best = -1;
+    for (size_t z = 0; z < levels.size(); ++z) {
+        if (levels[z] > 0 && (best < 0 || levels[z] > levels[static_cast<size_t>(best)])) {
+            best = static_cast<int>(z);
+        }
+    }
+    return best;
+}
+
+int HealthSystem::patchZone(Entity pawn, int zone, float quality) {
+    entt::registry& reg = things_.registry();
+    const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+    if (kind == nullptr || reg.get<Health>(pawn).dead || zone < 0) {
+        return 0;
+    }
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    if (static_cast<size_t>(zone) >= body.zones.size()) {
+        return 0;
+    }
+    Health& health = reg.get<Health>(pawn);
+    quality = std::max(0.0f, quality);
+    int patched = 0;
+    for (Injury& injury : health.injuries) {
+        const HealthModel::Hediff& h = model_->hediffs[injury.hediff.value];
+        if (!injury.tended() && !h.permanent && h.bleedRate > 0.0f && injury.part < body.zoneOf.size() &&
+            body.zoneOf[injury.part] == zone) {
+            injury.tendQuality = quality;
+            ++patched;
+        }
+    }
+    for (MissingPart& missing : health.missing) {
+        if (!missing.tended() && missing.part < body.zoneOf.size() && body.zoneOf[missing.part] == zone) {
+            missing.tendQuality = quality;
+            ++patched;
+        }
+    }
+    if (patched > 0) {
+        recompute(pawn, health, true);
+    }
+    return patched;
+}
+
+int HealthSystem::patchSteps(int level) const {
+    const int i = std::clamp(level, 1, 3) - 1;
+    return std::max(1, static_cast<int>(std::lround(model_->patchSeconds[i] * model_->stepsPerRealSecond)));
+}
+
+float HealthSystem::patchQuality() const { return model_->patchQuality; }
+
+float HealthSystem::coverBlood() const { return model_->coverBlood; }
+
+bool HealthSystem::unconscious(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    return reg.valid(pawn) && reg.all_of<Health>(pawn) && !reg.get<Health>(pawn).dead && reg.get<Health>(pawn).unconscious;
+}
+
 bool HealthSystem::kill(Entity pawn, DeathCause cause) {
     entt::registry& reg = things_.registry();
     if (!tracks(pawn) || !reg.all_of<Health>(pawn) || reg.get<Health>(pawn).dead) {
         return false;
     }
-    die(pawn, reg.get<Health>(pawn), cause, true);
+    Health& health = reg.get<Health>(pawn);
+    die(pawn, health, cause, true, downedAwake(health));
     return true;
+}
+
+bool HealthSystem::downedAwake(const Health& health) const {
+    // Downed, and its consciousness still above the line where it would go down for that alone (0.3): down from pain
+    // or legs, not knocked out.
+    if (!health.downed || health.dead) {
+        return false;
+    }
+    const int c = model_->consciousnessCapacity;
+    if (c < 0 || static_cast<size_t>(c) >= health.capacities.size()) {
+        return true;
+    }
+    const HealthModel::Capacity& cap = model_->capacities[static_cast<size_t>(c)];
+    return !cap.hasDownedBelow || health.capacities[static_cast<size_t>(c)] >= cap.downedBelow;
 }
 
 void HealthSystem::emit(EventType type, Entity pawn, DefId def, int part, float amount, const char* message) {
@@ -907,24 +1247,25 @@ void HealthSystem::stopWalking(Entity pawn) {
     }
 }
 
-void HealthSystem::die(Entity pawn, Health& health, DeathCause cause, bool announce) {
+void HealthSystem::die(Entity pawn, Health& health, DeathCause cause, bool announce, bool downedAwake) {
     if (health.dead) {
         return;
     }
+    const bool wasDowned = health.downed;
     health.dead = true;
     health.cause = cause;
     health.downed = false;
     health.movingFactor = 0.0f;
     stopWalking(pawn);
     if (announce) {
-        emit(EventType::PawnDied, pawn, DefId{}, -1, 0.0f, deathCauseName(cause));
+        emit(EventType::PawnDied, pawn, DefId{}, -1, wasDowned ? (downedAwake ? 1.0f : 2.0f) : 0.0f, deathCauseName(cause));
     }
 }
 
 void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, const HealthMods& mods, Health& health, DeathCause& cause,
                           bool& shouldBeDown, float painShockOffset) const {
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(bodyIndex)];
-    HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
+    HealthEval eval(*model_, body, health, healthHpFactor(*model_, body, health));
     eval.workOutPainAndBleeding();
     // The stages of the pawn's environment hediffs (a drug high) scale pain, work speed and hunger.
     float painFactor = 1.0f;
@@ -947,6 +1288,19 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
         if (stage >= 0) {
             health.pain += def->stages[static_cast<size_t>(stage)].painOffset;
         }
+    }
+    const bool zoned = !body.zones.empty();
+    if (zoned) {
+        eval.workOutZones();
+        health.zones = eval.zoneHealth;
+        health.zoneBleeds = mechanical ? std::vector<uint8_t>(eval.zoneLevel.size(), 0) : eval.zoneLevel;
+        // Blood a real second over the 3000 store, as blood loss a day.
+        eval.bleedPerDay = eval.zoneBleed * static_cast<float>(kSecondsPerDay) /
+                           (model_->stepsPerRealSecond * model_->bloodMax * std::max(model_->bloodPerDayPerBleed, 1e-6f));
+    } else {
+        health.zones.clear();
+        health.zoneBleeds.clear();
+        health.unconscious = false;
     }
     health.bleedPerDay = mechanical ? 0.0f : eval.bleedPerDay;
     health.bloodStage = model_->stageOf(health.bloodLoss);
@@ -987,6 +1341,40 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
             cause = DeathCause::Disease;
         }
     }
+    if (zoned) {
+        // sneed's rules: torso, head or a leg under 25%, or 3 zones under 50%; unconscious with the head under 25% or
+        // 1000 blood or less. The protagonist is never downed and dies when its zones have lost 100 hit points.
+        bool down = false;
+        bool torsoDown = false;
+        bool headOut = false;
+        int low = 0;
+        float lost = 0.0f;
+        for (size_t z = 0; z < body.zones.size(); ++z) {
+            const HealthModel::ZoneKind kind = body.zones[z].kind;
+            const float f = eval.zoneHealth[z];
+            lost += eval.zoneDamage[z];
+            low += f < model_->zoneManyBelow ? 1 : 0;
+            if (f < model_->zoneDownBelow &&
+                (kind == HealthModel::ZoneKind::Head || kind == HealthModel::ZoneKind::Torso || kind == HealthModel::ZoneKind::Leg)) {
+                down = true;
+                torsoDown = torsoDown || kind == HealthModel::ZoneKind::Torso;
+            }
+            headOut = headOut || (kind == HealthModel::ZoneKind::Head && f < model_->zoneHeadUnconscious);
+        }
+        health.crawls = false;
+        if (health.protagonist) {
+            health.unconscious = false;
+            shouldBeDown = false;
+            if (cause == DeathCause::None && lost >= model_->protagonistZoneHp * eval.hpFactor) {
+                cause = DeathCause::Wounds;
+            }
+        } else {
+            health.unconscious = headOut || health.bloodLoss >= 1.0f - model_->bloodUnconscious / model_->bloodMax;
+            shouldBeDown = down || low >= model_->zoneManyCount || health.unconscious;
+            health.crawls = torsoDown && !health.unconscious;
+        }
+        return;
+    }
     shouldBeDown = health.pain > model_->painShock + painShockOffset;
     for (size_t c = 0; c < model_->capacities.size(); ++c) {
         const HealthModel::Capacity& cap = model_->capacities[c];
@@ -1007,11 +1395,12 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
     if (mods_) {
         mods_(pawn, mods);
     }
+    const bool wasDownedAwake = downedAwake(health);  // before this step's wounds count
     derive(kind->body, kind->healthScale, kind->mechanical, mods, health, cause, shouldBeDown,
            traits_ != nullptr ? traits_->of(pawn).painShockOffset : 0.0f);
 
     if (!health.dead && cause != DeathCause::None) {
-        die(pawn, health, cause, announce);
+        die(pawn, health, cause, announce, wasDownedAwake);
     }
     if (!health.dead) {
         const bool wasDowned = health.downed;
@@ -1028,6 +1417,13 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
         health.movingFactor = model_->movingCapacity >= 0
                                   ? std::clamp(health.capacities[static_cast<size_t>(model_->movingCapacity)], 0.0f, 1.0f)
                                   : 1.0f;
+        // Body zones: pain no longer downs a person, so it doesn't leave one crawling on its feet either; a bad leg is a
+        // limp (sneed), and a leg under a quarter downs.
+        if (!health.zones.empty()) {
+            health.movingFactor = std::max(health.movingFactor, model_->minMoving);
+        }
+    } else if (health.crawls && !health.dead) {
+        health.movingFactor = model_->crawlMoving;  // part D: downed by the torso, it can still drag itself along
     }
 }
 
@@ -1131,7 +1527,7 @@ bool HealthSystem::applyDamage(Entity pawn, DefId damageType, float amount, int 
     const HealthModel::DamageType& type = model_->damageTypes[damageType.value];
     Health& health = reg.get<Health>(pawn);
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
-    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
+    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, body, health));
 
     int target = part;
     if (part >= 0) {
@@ -1157,7 +1553,7 @@ bool HealthSystem::applyHit(Entity pawn, DefId damageType, float amount, int par
     }
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
     const Health& health = reg.get<Health>(pawn);
-    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
+    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, body, health));
     if (static_cast<size_t>(part) >= body.parts.size() || eval.gone[static_cast<size_t>(part)] != 0) {
         return false;
     }
@@ -1173,7 +1569,7 @@ int HealthSystem::goInside(Entity pawn, DefId damageType, int part, Rng& rng) co
     }
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
     const Health& health = reg.get<Health>(pawn);
-    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
+    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, body, health));
     if (static_cast<size_t>(part) >= body.parts.size() || eval.gone[static_cast<size_t>(part)] != 0) {
         return part;
     }
@@ -1213,7 +1609,7 @@ bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int targ
             outer = body.parts[static_cast<size_t>(outer)].parent;
         }
         // The covering part may have just been destroyed along with the part hit.
-        const HealthEval after(*model_, body, health, healthHpFactor(*model_, health));
+        const HealthEval after(*model_, body, health, healthHpFactor(*model_, body, health));
         if (outer >= 0 && after.gone[static_cast<size_t>(outer)] == 0) {
             damagePart(pawn, health, outer, hediffFor(outer), amount);
         }
@@ -1228,7 +1624,7 @@ bool HealthSystem::damagePart(Entity pawn, Health& health, int part, DefId hedif
         return false;
     }
     const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
-    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
+    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, body, health));
     const HealthModel::Part& p = body.parts[static_cast<size_t>(part)];
     const float remaining = eval.maxHp(part) - eval.damage[static_cast<size_t>(part)];
     if (remaining <= 0.0f) {
@@ -1474,7 +1870,7 @@ bool HealthSystem::addInjury(Entity pawn, int part, DefId hediff, float severity
     if (health.dead || part < 0 || static_cast<size_t>(part) >= body.parts.size()) {
         return false;
     }
-    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
+    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, body, health));
     if (eval.gone[static_cast<size_t>(part)] != 0) {
         return false;
     }
@@ -1866,12 +2262,28 @@ void HealthSystem::step(int64_t seconds, uint64_t seed) {
 
         // Bleeding: blood loss rises while the total bleed rate is at least the minimum, and
         // recovers slowly when it is not.
+        // Body zones: once the bleeding stops (every bleeding zone patched), blood comes back at bloodRegenPerSecond after
+        // bloodRegenDelaySeconds (real seconds, so steps).
+        const bool zoned = !health.zones.empty();
+        const float unconsciousLoss = 1.0f - model_->bloodUnconscious / model_->bloodMax;
+        const bool lowBefore = zoned && health.bloodLoss >= unconsciousLoss;
         if (health.bleedPerDay >= model_->bleedMinForBloodLoss) {
             health.bloodLoss += health.bleedPerDay * model_->bloodPerDayPerBleed / kSecondsPerDayF;
+            health.bleedStoppedAt = -1;
+        } else if (zoned) {
+            if (health.bloodLoss <= 0.0f) {
+                health.bleedStoppedAt = -1;
+            } else if (health.bleedStoppedAt < 0) {
+                health.bleedStoppedAt = seconds;
+            } else if (static_cast<float>(seconds - health.bleedStoppedAt) >= model_->bloodRegenDelaySeconds * model_->stepsPerRealSecond) {
+                health.bloodLoss =
+                    std::max(0.0f, health.bloodLoss - model_->bloodRegenPerSecond / (model_->stepsPerRealSecond * model_->bloodMax));
+            }
         } else if (health.bloodLoss > 0.0f) {
             health.bloodLoss = std::max(0.0f, health.bloodLoss - model_->bloodRecoveryPerDay / kSecondsPerDayF);
         }
-        if (model_->stageOf(health.bloodLoss) != health.bloodStage || health.bloodLoss >= model_->bloodLethal) {
+        const bool lowAfter = zoned && health.bloodLoss >= unconsciousLoss;
+        if (model_->stageOf(health.bloodLoss) != health.bloodStage || health.bloodLoss >= model_->bloodLethal || lowBefore != lowAfter) {
             recompute(pawn, health, true);
             if (health.dead) {
                 continue;
@@ -1934,7 +2346,7 @@ float HealthSystem::partMaxHitPoints(Entity pawn, int part) const {
     if (part < 0 || static_cast<size_t>(part) >= body.parts.size()) {
         return 0.0f;
     }
-    return body.parts[static_cast<size_t>(part)].hitPoints * healthHpFactor(*model_, reg.get<Health>(pawn));
+    return body.parts[static_cast<size_t>(part)].hitPoints * healthHpFactor(*model_, body, reg.get<Health>(pawn));
 }
 
 // ---- Surgery (task H3) ------------------------------------------------------------------------------
@@ -1956,7 +2368,7 @@ PartCondition HealthSystem::partCondition(Entity pawn, int part, bool* ok) const
         *ok = true;
     }
     const Health& health = reg.get<Health>(pawn);
-    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
+    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, body, health));
     const size_t i = static_cast<size_t>(part);
     if (eval.covered[i] != 0) {
         return PartCondition::Covered;
@@ -2136,7 +2548,7 @@ void HealthSystem::botch(Entity pawn, int part, float fraction) {
         return;
     }
     // A cut never destroys the part: it leaves one hit point at least.
-    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
+    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, body, health));
     const float room = eval.maxHp(target) - eval.damage[static_cast<size_t>(target)] - 1.0f;
     if (room <= 0.0f) {
         return;
@@ -2157,7 +2569,7 @@ float HealthSystem::partHitPoints(Entity pawn, int part) const {
         return 0.0f;
     }
     const Health& health = reg.get<Health>(pawn);
-    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, health));
+    const HealthEval eval(*model_, body, health, healthHpFactor(*model_, body, health));
     return eval.hpFraction(part) * eval.maxHp(part);
 }
 

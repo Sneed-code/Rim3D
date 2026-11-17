@@ -780,6 +780,13 @@ struct SetHomeAreaCommand {
     bool add = true;
 };
 
+// Paints the landing zone where shuttles set down (docs/design/landing.md): adds the rectangle's ground cells (or takes
+// them off). Fails if no cell changed.
+struct SetLandingZoneCommand {
+    CellRect area;
+    bool add = true;
+};
+
 // Resonance (task X2, docs/design/resonance.md). Attune sets a pawn's attunement level, 0 to 6 (0 takes it away);
 // each new level teaches one power of that level at random. Stands in for RimWorld's neuroformer and titles.
 struct AttuneCommand {
@@ -1055,6 +1062,17 @@ struct SetDayLengthCommand {
     int minutes = kBaseDayMinutes;
 };
 
+// The player's own sleep (docs/design/needs.md "The protagonist sleeps the night away", Palworld's). The colonist under
+// control lies down in `bed` (within reach; its own or a free slot) or, with kNoEntity, on the ground where it stands, and
+// the night is skipped to morning (NeedRules `nightToHour`) like SkipNightCommand, but the colonist stays the player's.
+// `wake` true gets up now and ends the skip. Fails when it isn't night (`nightFromHour` to `nightToHour`), for a pawn not
+// under control or downed, a bed out of reach or full, or while anything threatens the colony.
+struct SleepCommand {
+    Entity pawn = kNoEntity;
+    Entity bed = kNoEntity;
+    bool wake = false;
+};
+
 // Shields (docs/design/shields.md): `up` raises the pawn's shield, false lowers it. Held up, the pawn can walk and
 // reload but not shoot or swing. `hasDir`: the shield faces (dirX, dirY) (the player's camera), else where the pawn
 // faces. Fails without a shield on its arm (none, or slung behind a two-handed weapon).
@@ -1064,6 +1082,12 @@ struct ShieldCommand {
     bool hasDir = false;
     float dirX = 0.0f;
     float dirY = 0.0f;
+};
+
+// Patching (docs/design/body-health.md, part B): the pawn stops and patches its worst bleeding body zone, 1 to 3 real
+// seconds. Fails if nothing bleeds, the pawn is downed or busy (stunned, casting) or patching already.
+struct PatchCommand {
+    Entity pawn = kNoEntity;
 };
 
 // New commands go at the end: a save names a command by its place in this list.
@@ -1098,7 +1122,9 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              FitUpgradeCommand, CreateAreaCommand, PaintAreaCommand, DeleteAreaCommand,
                              AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand,
                              ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand,
-                             InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand>;
+                             InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand,
+                             SleepCommand, SetLandingZoneCommand,
+                             PatchCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
 // day) it was applied in. Failed commands are logged too.

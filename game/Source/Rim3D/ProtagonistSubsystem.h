@@ -57,6 +57,11 @@ public:
 	void RequestControl(colony::Entity Pawn) { RequestedControl = Pawn; }
 
 	bool IsDirectMode() const;
+	/** The controlled colonist is sleeping the night away (SleepCommand, docs/design/needs.md). */
+	bool IsAsleep() const;
+	/** N: sleep where you stand (a bed is F while looking at it). Any of W, A, S, D, N or Esc wakes you. */
+	void SleepHere();
+	void WakeUp();
 	colony::Entity GetControlled() const { return Controlled; }
 	AProtagonistPawn* GetBody() const;
 
@@ -101,4 +106,6 @@ private:
 	int32 ReconcileCount = 0;
 	int64 MovesSent = 0;
 	int64 ClimbsSent = 0;
+	/** Real seconds the screen has been dark for the night skip (fades in and out). */
+	float SleepFade = 0.0f;
 };

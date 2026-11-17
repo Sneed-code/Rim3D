@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <cmath>
 #include <utility>
+#include <string>
+#include <vector>
 
 namespace colony {
 
@@ -123,8 +125,14 @@ bool NatureEvents::refugee(IncidentFiring& f) {
     for (int i = 0; i < blows && !health_.incapacitated(pawn); ++i) {
         health_.applyDamage(pawn, blunt, 6.0f, -1, rng_);
     }
-    for (int i = 0; i < 12 && !health_.incapacitated(pawn); ++i) {
-        health_.applyDamage(pawn, blunt, 6.0f, -1, rng_);
+    // Then a leg takes the rest (a person goes down with a leg under a quarter, docs/design/body-health.md; one without
+    // body zones goes down from the pain sooner).
+    const std::vector<std::string> labels = health_.partLabels(things_.registry().get<Thing>(pawn).def);
+    const std::string side = rng_.below(2) == 0 ? "left leg" : "right leg";
+    const auto leg = std::find(labels.begin(), labels.end(), side);
+    const int legPart = leg != labels.end() ? static_cast<int>(leg - labels.begin()) : -1;
+    for (int i = 0; i < 20 && !health_.incapacitated(pawn); ++i) {
+        health_.applyDamage(pawn, blunt, 6.0f, legPart, rng_);
     }
     const Colonist& c = things_.registry().get<Colonist>(pawn);
     f.hasCell = true;

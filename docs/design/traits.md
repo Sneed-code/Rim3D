@@ -13,7 +13,7 @@ A trait degree lists its numbers in `statOffsets` and `statFactors`. `TraitBook:
 | Fast walker, jogger, slowpoke | walking speed (`SpeedOffset`, metres per step) | `MovementSystem` |
 | Careful shooter / trigger-happy | +5 / -5 shooting skill levels for the aim; aiming takes 1.25x / 0.5x as long | `CombatSystem::shootingSkill`, `aim` start |
 | Tough | half the damage on every hit | `HealthSystem::hitPart` |
-| Wimp | pain level that downs the pawn -0.5 | `HealthSystem::derive` |
+| Wimp | hurt by an enemy in a fight: falls back to cover for 12-20 real seconds (sneed, `fleeWhenHurtSeconds`); melee blows do 10% less damage (sneed, `meleeDamageFactor` 0.9); pain level that downs the pawn -0.5 (only bodies without zones: people have body zones, body-health.md) | `FighterSystem::hurt`, `CombatSystem::traitMeleeDamage`, `HealthSystem::derive` |
 | Fast / slow learner, Too smart | experience learned x1.75 / x0.25 | `JobSystem::learnSkill` |
 | Great memory | high skills lose half as much a day | `skillDayPassed` |
 | Brawler | -10 mood while a gun is in the hands (`BrawlerRangedWeapon`) | situation `wieldsRanged` |

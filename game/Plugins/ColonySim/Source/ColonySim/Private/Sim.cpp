@@ -5,6 +5,7 @@
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Apparel.h"
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Drugs.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
@@ -33,6 +34,7 @@
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Areas.h"
+#include "ColonySim/Landing.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
@@ -52,6 +54,7 @@
 #include "ColonySim/Ship.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Resonance.h"
+#include "ColonySim/Patch.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Trade.h"
 #include "ColonySim/Needs.h"
@@ -70,6 +73,7 @@
 #include "ColonySim/Things.h"
 #include "ColonySim/RoofCollapse.h"
 #include "ColonySim/UpperFloors.h"
+#include "ColonySim/Water.h"
 #include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
 #include "ColonySim/Disasters.h"
@@ -348,6 +352,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         }
         return static_cast<float>(defs_->get(things_->registry().get<Thing>(pawn).def).number("race.baseBodySize", 1.0));
     });
+    movement_->setBodyHeight([this](Entity pawn) { return bodyHeightM(pawn); });
     movement_->setDoorSpeed([this](Entity door) {
         const int factor = static_cast<int>(defs_->get(things_->registry().get<Thing>(door).def).integer("door.openSpeedFactor", 1));
         return factor > 1 && !power_->running(door) ? 1 : factor;
@@ -365,7 +370,11 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setRoomStats(roomStats_.get());
     jobs_->setTalents(talents_.get());
     jobs_->setTraits(traits_.get());
-    jobs_->setGearWorkFactor([this](Entity pawn) { return combat_->apparelStats().workFactor(things_->registry(), pawn); });
+    // Worn armour's weight, and being exhausted (rest at 0: sneed's -25%), slow work.
+    jobs_->setGearWorkFactor([this](Entity pawn) {
+        return combat_->apparelStats().workFactor(things_->registry(), pawn) * needs_->performanceFactor(pawn);
+    });
+    combat_->setPerformance([this](Entity pawn) { return needs_->performanceFactor(pawn); });
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
@@ -412,6 +421,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     animals_->setPathfinder(&pathfinder_);
     combat_->setHurtHook([this](Entity victim, Entity attacker) {
         animals_->hurt(victim, attacker);
+        if (fighters_) {
+            fighters_->hurt(victim, attacker);
+        }
         if (raids_) {
             raids_->hurt(victim, attacker);
         }
@@ -433,6 +445,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     trade_->setTalents(talents_.get());
     trade_->setRunning([this](Entity building) { return power_->running(building); });
     trade_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    landing_ = std::make_unique<LandingSystem>(*things_, map_, *plants_, *defs_, time_, rng_);
+    trade_->setLanding(landing_.get());
+    landing_->setOnLanded([this](const Shuttle& shuttle) { trade_->shuttleLanded(shuttle); });
     prisoners_->setTrade(trade_.get());
     jobs_->setPrisoners(prisoners_.get());
     quests_ = std::make_unique<QuestSystem>(*things_, map_, *raids_, *fighters_, *health_, *defs_, time_, rng_);
@@ -708,7 +723,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                                    splitMix64(settings.seed ^ 0x7265736F6EULL));
     resonance_->setEventLog(&events_);
     health_->setMods([this](Entity pawn, HealthMods& mods) { resonance_->healthMods(pawn, mods); });
-    jobs_->setPauseGate([this](Entity pawn) { return things_->registry().any_of<Stunned, Casting>(pawn); });
+    patches_ = std::make_unique<PatchSystem>(*things_, map_, *health_, *fighters_, time_);
+    patches_->setEventLog(&events_);
+    jobs_->setPauseGate([this](Entity pawn) { return things_->registry().any_of<Stunned, Casting, Patching>(pawn); });
     mentalBreaks_->setEventLog(&events_);
     mentalBreaks_->setMelee(melee_.get());
     mentalBreaks_->setFire(fire_.get());
@@ -995,6 +1012,43 @@ bool Sim::startClimb(Entity pawn, float dx, float dy, std::string& error) {
     return true;
 }
 
+void Sim::applySleepCommand(const SleepCommand& sleep, uint64_t id) {
+    std::string error;
+    if (sleep.wake) {
+        if (!jobs_->sleepingByHand(sleep.pawn)) {
+            commandFailed(id, "you aren't asleep");
+            return;
+        }
+        jobs_->handsOnStop(sleep.pawn);
+        if (travel_->kind() == SkipKind::Night) {
+            travel_->cancel("you woke up", error);
+        }
+        return;
+    }
+    if (!travel_->playerNightNow()) {
+        const NeedRules& rules = needs_->rules();
+        commandFailed(id, "you can sleep from " + std::to_string(rules.nightFromHour) + ":00 to " + std::to_string(rules.nightToHour) + ":00");
+        return;
+    }
+    if (travel_->skipping()) {
+        commandFailed(id, "time is already being skipped");
+        return;
+    }
+    const std::string threat = travel_->threat();
+    if (!threat.empty()) {
+        commandFailed(id, "you can't sleep now: " + threat);
+        return;
+    }
+    if (!jobs_->handsOnSleep(sleep.pawn, sleep.bed, error)) {
+        commandFailed(id, error);
+        return;
+    }
+    if (!travel_->startPlayerNight(sleep.pawn, error)) {
+        jobs_->handsOnStop(sleep.pawn);
+        commandFailed(id, error);
+    }
+}
+
 void Sim::applyCommand(const Command& command, uint64_t id) {
     std::string error;
     // A colonist in a mental break takes no orders: it isn't the player's to command until it is over.
@@ -1039,6 +1093,23 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     if (const auto* hideGear = std::get_if<HideGearCommand>(&command)) {
         std::string why;
         if (!apparel_->setHideGear(hideGear->pawn, hideGear->hide, why)) {
+            commandFailed(id, why);
+        }
+        return;
+    }
+    if (const auto* sleep = std::get_if<SleepCommand>(&command)) {
+        applySleepCommand(*sleep, id);
+        return;
+    }
+    if (const auto* landingZone = std::get_if<SetLandingZoneCommand>(&command)) {
+        if (landing_->paintZone(landingZone->area, landingZone->add) == 0) {
+            commandFailed(id, "the landing zone is already so there");
+        }
+        return;
+    }
+    if (const auto* patch = std::get_if<PatchCommand>(&command)) {
+        std::string why;
+        if (!patches_->patch(patch->pawn, true, why)) {
             commandFailed(id, why);
         }
         return;
@@ -1433,6 +1504,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (fire_->setHome(home->area, home->add) == 0) {
             commandFailed(id, "the home area is already so there");
         }
+
     } else if (const auto* gun = std::get_if<ArtilleryCommand>(&command)) {
         bool ok = false;
         if (gun->action == "Man") {
@@ -1507,9 +1579,11 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "that pawn isn't under direct control");
         } else if (health_->incapacitated(move->pawn)) {
             commandFailed(id, "that colonist is downed or dead");
-        } else if (combat_->rollLocked(move->pawn) || reg.any_of<Stunned, Casting>(move->pawn)) {
+        } else if (combat_->rollLocked(move->pawn) || reg.any_of<Stunned, Casting, BodyMotion>(move->pawn)) {
             // Rolling (P2), stunned or winding up a power (X2): the player's position is ignored, without a failure
             // because Unreal sends one every step.
+        } else if (jobs_->sleepingByHand(move->pawn)) {
+            // Asleep (SleepCommand): lying still until morning or SleepCommand{wake}; the same, no failure.
         } else if (reg.get<Mover>(move->pawn).climbing(reg.get<Position>(move->pawn).level)) {
             // Climbing (U17): the movement system takes it up or down; the same, no failure.
         } else {
@@ -1527,7 +1601,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             float moveX = 0.0f;
             float moveY = 0.0f;
             for (const auto& t : tries) {
-                if ((t[0] != 0.0f || t[1] != 0.0f) && pawnFitsAt(map_, pos.x + t[0], pos.y + t[1], kPawnRadius, pos.level)) {
+                // The player's body may swim out into deep water (docs/design/water.md).
+                if ((t[0] != 0.0f || t[1] != 0.0f) && swimmerFitsAt(map_, pos.x + t[0], pos.y + t[1], kPawnRadius, pos.level)) {
                     moveX = t[0];
                     moveY = t[1];
                     break;
@@ -1547,6 +1622,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (things_->exists(roll->pawn) && reg.all_of<Mover, Position>(roll->pawn) &&
             reg.get<Mover>(roll->pawn).climbing(reg.get<Position>(roll->pawn).level)) {
             commandFailed(id, "that pawn is climbing");
+        } else if (pawnSwimming(roll->pawn)) {
+            commandFailed(id, "can't roll while swimming");
         } else if (!combat_->dodgeRoll(roll->pawn, roll->dx, roll->dy, &error)) {
             commandFailed(id, error);
         }
@@ -1609,6 +1686,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* shoot = std::get_if<ShootCommand>(&command)) {
         if (explosives_->throwing(shoot->pawn)) {
             commandFailed(id, "that pawn is throwing");
+        } else if (pawnSwimming(shoot->pawn)) {
+            commandFailed(id, "can't shoot while swimming");
         } else if (!combat_->shoot(shoot->pawn, shoot->target, shoot->x, shoot->y, shoot->z, shoot->player, &error)) {
             commandFailed(id, error);
         }
@@ -1704,6 +1783,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!jobs_->bills().removeBill(removeBill->building, removeBill->bill, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* swimMelee = std::get_if<MeleeCommand>(&command); swimMelee != nullptr && pawnSwimming(swimMelee->pawn)) {
+        commandFailed(id, "can't fight while swimming");
     } else if (const auto* melee = std::get_if<MeleeCommand>(&command)) {
         const bool done = melee->mode == MeleeMode::Block
                               ? melee_->block(melee->pawn, &error)
@@ -2063,7 +2144,9 @@ void Sim::stepOnce(bool keepEvents, int tick) {
         events_.insert(events_.end(), gained.begin(), gained.end());
     }
     { SimLap lap(profile_, "fighters"); fighters_->step(); }
+    { SimLap lap(profile_, "landing"); landing_->step(); }
     { SimLap lap(profile_, "resonance"); resonance_->step(); }
+    { SimLap lap(profile_, "patches"); patches_->step(); }
     if (calendar) {
         { SimLap lap(profile_, "prisoners"); prisoners_->step(); }
         { SimLap lap(profile_, "trade"); trade_->step(events_); }
@@ -2384,6 +2467,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
                     view.z += (map_.heightAt(tx, ty, to.level) - view.z) * t;
                 }
             }
+            if (view.level == 0 && view.climb == 0.0f) {
+                const WaterContact water = waterContactAt(map_, view.x, view.y, 0, bodyHeightM(entity));
+                view.waterDepth = water.depth;
+                view.swimming = water.swimming();
+            }
             view.firstWaypoint = static_cast<uint32_t>(out.waypoints.size());
             for (size_t k = mover->next; k < mover->path.size(); ++k) {
                 out.waypoints.push_back(PathPointView{static_cast<float>(mover->path[k].x) + 0.5f,
@@ -2450,6 +2538,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
+            view.crawling = health->downed && health->crawls;
             view.dead = health->dead;
             view.pain = std::clamp(health->pain, 0.0f, 1.0f);
             view.bloodLoss = health->bloodLoss;
@@ -2488,11 +2577,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.jobTarget = worker->job.thing;
             view.jobProgress = worker->job.type != JobType::None ? jobs_->jobProgress(entity) : 0.0f;
         }
+        const bool noMind = mindIsPlayersOwn(reg, entity);  // the protagonist: no mood, recreation, beauty or rest need
         if (const Needs* needs = reg.try_get<Needs>(entity)) {
             view.food = needs->food;
-            view.rest = needs->rest;
+            view.rest = noMind ? -1.0f : needs->rest;
         }
-        const bool noMind = mindIsPlayersOwn(reg, entity);  // the protagonist: no mood, recreation or beauty need
         if (const Joy* joy = noMind ? nullptr : reg.try_get<Joy>(entity)) {
             view.joy = joy->level;
             view.comfort = joy->comfort;
@@ -2554,6 +2643,12 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 combat_->rollDirection(entity, view.rollDirX, view.rollDirY);
             }
             view.hitProof = combat_->hitProof(entity);
+            if (const BodyMotion* motion = things_->registry().try_get<BodyMotion>(entity)) {
+                view.motionClip = motion->clip;
+                view.motionTime = motion->clip.valid() ? motion->time : 0.0f;
+                view.motionRate = motion->rate;
+                view.motionPush = !motion->clip.valid();
+            }
             view.grenades = explosives_->count(entity);
             view.throwReadyIn = explosives_->throwReadyIn(entity);
             view.knockedDown = combat_->knockedDownFor(entity) > 0;
@@ -2728,6 +2823,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.meleeTool = melee->tool;
             view.meleeStrong = melee_->strongSwing(entity);
         }
+        if (const Patching* patching = reg.try_get<Patching>(entity)) {
+            view.patchZone = patching->zone;
+            view.patchStepsLeft = patching->stepsLeft;
+        }
         if (reg.all_of<Posture>(entity) && !view.dead) {
             // AN1: a pawn down on the floor lies (in the bed under it, if any); cover toward its fight target; a low
             // obstacle it walks over.
@@ -2806,6 +2905,25 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.stock.push_back(StockView{line.thing, line.count});
         }
         out.visits.push_back(std::move(view));
+    }
+    out.shuttles.clear();
+    for (const Shuttle& s : landing_->shuttles()) {
+        ShuttleView view;
+        view.id = s.id;
+        view.building = s.building;
+        view.x = landing_->centreX(s);
+        view.y = landing_->centreY(s);
+        view.ground = map_.heightAt(view.x, view.y);
+        view.rot = static_cast<uint8_t>(s.rot);
+        view.phase = static_cast<uint8_t>(s.phase);
+        view.progress = landing_->progress(s);
+        view.visit = s.visit;
+        view.door = landing_->door(s);
+        out.shuttles.push_back(view);
+    }
+    if (out.landingZoneChanges != landing_->zoneChanges()) {
+        out.landingZoneChanges = landing_->zoneChanges();
+        out.landingZone = landing_->zoneCells();
     }
     out.goodwill.clear();
     for (const DefId factionId : defs_->idsOfKind("Factions")) {
@@ -3037,6 +3155,7 @@ uint64_t Sim::stateHash() const {
     }
     roofCollapse_->hashState(h);
     areas_->hashState(h);
+    landing_->hashState(h);
     spoilage_->hashState(h);
     narrator_->hashState(h);
     disasters_->hashState(h);
@@ -3383,6 +3502,9 @@ uint64_t Sim::stateHash() const {
                 h.add(added.hediff.value);
             }
             h.add(health->bloodLoss);
+            if (health->bleedStoppedAt >= 0) {
+                h.add(health->bleedStoppedAt);
+            }
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
             if (!health->environment.empty()) {
@@ -3410,6 +3532,7 @@ uint64_t Sim::stateHash() const {
         defense_->hashThing(e, h);
         artillery_->hashThing(e, h);
         resonance_->hashThing(e, h);
+        patches_->hashThing(e, h);
         apparel_->hashThing(e, h);
         mentalBreaks_->hashThing(e, h);
         inspirations_->hashThing(e, h);
@@ -3447,6 +3570,27 @@ void Sim::applyScannerCommand(const ScannerCommand& command, uint64_t id) {
 // How fast the pawn walks, as a share of its def's speed: its load, the moveSpeed talents, a bullet stagger, what it
 // wears and hunger (a starving pawn walks at 75%, needs.md "Starving"). The movement system and the snapshot (for the
 // player's own walk in direct mode) both use it.
+bool Sim::pawnSwimming(Entity pawn) const {
+    const entt::registry& reg = things_->registry();
+    const Position* pos = reg.valid(pawn) ? reg.try_get<Position>(pawn) : nullptr;
+    return pos != nullptr && waterContactAt(map_, pos->x, pos->y, pos->level, bodyHeightM(pawn)).swimming();
+}
+
+float Sim::bodyHeightM(Entity pawn) const {
+    const entt::registry& reg = things_->registry();
+    if (!reg.valid(pawn)) {
+        return kPersonHeightM;
+    }
+    if (const PawnLooks* looks = reg.try_get<PawnLooks>(pawn)) {
+        return kPersonHeightM * std::clamp(looks->height, 0.5f, 1.5f);
+    }
+    const float animal = animals_ ? animals_->bodySize(pawn) : 0.0f;
+    if (animal > 0.0f) {
+        return std::clamp(0.9f * std::sqrt(animal), 0.25f, 3.0f);
+    }
+    return kPersonHeightM;
+}
+
 float Sim::pawnMoveFactor(Entity pawn) const {
     return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed")) *
            combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn);

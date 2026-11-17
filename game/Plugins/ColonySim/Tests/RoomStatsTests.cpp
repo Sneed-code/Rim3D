@@ -11,6 +11,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
 
@@ -263,7 +264,14 @@ TEST_CASE("Filth: a bleeding pawn leaves blood") {
     Sim sim = rsSim();
     const Entity pawn = sim.things().spawn("Human", CellPos{20, 20, 0});
     RS_REQUIRE(pawn != kNoEntity);
-    sim.submit(DamagePawnCommand{pawn, "Cut", 12.0f, -1});
+    // Under the player's hand, so it doesn't patch itself (body zones part B) and keeps bleeding.
+    sim.things().registry().emplace<Colonist>(pawn);
+    sim.jobs().addWorker(pawn);
+    sim.things().registry().emplace<PlayerControl>(pawn);
+    // 30 of a leg's 75: it bleeds a blood a second (body zones).
+    const std::vector<std::string> labels = sim.health().partLabels(sim.things().registry().get<Thing>(pawn).def);
+    const int leg = static_cast<int>(std::find(labels.begin(), labels.end(), "left leg") - labels.begin());
+    sim.submit(DamagePawnCommand{pawn, "Cut", 30.0f, leg});
     for (int i = 0; i < 4 * 3600; ++i) {
         sim.step();
         if (sim.filth().totalLayers() > 0) {
@@ -280,6 +288,36 @@ TEST_CASE("Filth: a bleeding pawn leaves blood") {
         }
     }
     CHECK(found);
+}
+
+TEST_CASE("Filth: each body bleeds its own fluid (docs/design/blood.md)") {
+    Sim sim = rsSim();
+    const DefDatabase& defs = sim.defs();
+    CHECK(sim.filth().bloodKindOf(defs.idOf("Things", "Human")) == sim.filth().kindIndex("Blood"));
+    CHECK(sim.filth().bloodKindOf(defs.idOf("Things", "Megascarab")) == sim.filth().kindIndex("InsectBlood"));
+    CHECK(sim.filth().bloodKindOf(defs.idOf("Things", "Mech_Scyther")) == sim.filth().kindIndex("MachineFluid"));
+    CHECK(sim.filth().kindIndex("InsectBlood") >= 0);
+    CHECK(sim.filth().kindIndex("MachineFluid") >= 0);
+    CHECK(sim.filth().bloodKindOf(DefId{}) == -1);
+
+    // A cut chitinid leaves insect blood, not red blood.
+    const Entity bug = sim.things().spawn("Megaspider", CellPos{20, 20, 0});
+    RS_REQUIRE(bug != kNoEntity);
+    sim.submit(DamagePawnCommand{bug, "Cut", 12.0f, -1});
+    for (int i = 0; i < 4 * 3600 && sim.filth().totalLayers() == 0; ++i) {
+        sim.step();
+    }
+    bool insect = false;
+    bool red = false;
+    for (const auto& [index, piles] : sim.filth().all()) {
+        (void)index;
+        for (const FilthPile& pile : piles) {
+            insect = insect || static_cast<int>(pile.kind) == sim.filth().kindIndex("InsectBlood");
+            red = red || static_cast<int>(pile.kind) == sim.filth().kindIndex("Blood");
+        }
+    }
+    CHECK(insect);
+    CHECK_FALSE(red);
 }
 
 TEST_CASE("Cleaning: a colonist cleans indoor filth a layer at a time, and leaves the outdoors") {

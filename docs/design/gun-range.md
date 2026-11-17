@@ -98,6 +98,18 @@ file's name (`AssaultRifle_Game`). `meshTextures` gives meshes their own maps (t
   so the downed can be shot. A bullet of yours that goes through a dead body, or a downed one's ragdoll off its sim
   hitboxes, throws blood, leaves a wound and pushes the ragdoll (cosmetic; the sim's hit stands).
 
+## Combat range (sneed, 2026-11-16)
+
+- sneed: "it will be just a combat range". `assets/guns.json` has a `melee` list after the guns (knife, club, gladius,
+  mace, longsword, spear by def name); they lie on the same rack, guns first. Keys 1-9 and 0 (or the wheel) pick by
+  rack place; the panel (now "COMBAT RANGE") lists both with `>` on the one in hand.
+- First person has no arms rig for melee, so taking a melee weapon switches the view to third person, where the main
+  game draws the swings (left mouse swing, right mouse block, Alt dodge, the normal `MeleeCommand`s); taking a gun
+  again switches back to first person. It acts only when the weapon changes, so V still works.
+- The player is now the creator's generic woman: an untouched `FCreatorPerson` on CreatorFemale (every slider at its
+  default, its own hair, fair skin), `CreatorPeople::DefaultLooks` / `ApplyDefault`. `-GunRangeRandomPlayer` gives the
+  old random woman. Targets stay random creator women.
+
 ## Not done
 
 - The shotgun's pump and the slide of the pistol don't move (the shotgun comes as one mesh; its own rig and reload

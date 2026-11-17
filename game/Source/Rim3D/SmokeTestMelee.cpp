@@ -147,6 +147,16 @@ namespace
 		}
 	}
 
+	/** A training dummy: the enemy the player's swings are tried on reads no swing, so it neither sidesteps, rolls nor
+	    parries (real-time combat, docs/design/real-time-combat.md: AI pawns defend by reaction time). */
+	void MeleeSmokeDummy(colony::Sim& Sim, colony::Entity Pawn)
+	{
+		if (Pawn != colony::kNoEntity && Sim.things().spawned(Pawn))
+		{
+			Sim.things().registry().get_or_emplace<colony::Melee>(Pawn).noDefendUntil = TNumericLimits<int64>::Max() / 2;
+		}
+	}
+
 	void MeleeSmokeSkill(colony::Sim& Sim, colony::Entity Pawn, int Level)
 	{
 		colony::Colonist& Record = Sim.things().registry().get_or_emplace<colony::Colonist>(Pawn);
@@ -238,6 +248,15 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		for (const colony::Entity Pawn : {State->Me, State->Enemy, State->Attacker, State->Defender})
 		{
 			MeleeSmokeHeal(Sim, Pawn);
+		}
+	};
+
+	// The enemy of the swing phases stands as a dummy that doesn't defend.
+	const auto HoldDummy = [=, this]()
+	{
+		if (Bridge() && Bridge()->GetSim())
+		{
+			MeleeSmokeDummy(*const_cast<colony::Sim*>(Bridge()->GetSim()), State->Enemy);
 		}
 	};
 
@@ -589,6 +608,7 @@ void USmokeTestSubsystem::BuildMeleePhases()
 			}
 			return;
 		}
+		HoldDummy();
 		SideView(State->Me, State->Enemy, 260.0, 130.0);
 		if (State->bPaused)
 		{
@@ -661,6 +681,7 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		USimSubsystem* B = Bridge();
 		ASimPawnActor* Actor = ActorOf(State->Me);
 		UWeaponDrawSubsystem* W = Weapons();
+		HoldDummy();
 		if (!Actor || State->bPaused)
 		{
 			return;
@@ -729,6 +750,7 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		}
 		SideView(State->Me, State->Enemy, 260.0, 130.0);
 		KeepAlive();
+		HoldDummy();
 		Weapons()->Swing();
 		State->MaxLean = FMath::Max(State->MaxLean, Actor->GetMeleeBodyDegrees());
 	}, [=, this]()

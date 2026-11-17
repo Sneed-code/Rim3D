@@ -77,7 +77,9 @@
   },
   {
     "defName": "Wimp", "parent": "TraitBase", "conflictingTraits": ["Brawler"],
-    "degreeDatas": [{ "degree": 0, "label": "wimp", "statOffsets": { "painShockThreshold": -0.5, "marketValue": -0.15 } }]
+    "degreeDatas": [{ "degree": 0, "label": "wimp", "statOffsets": { "painShockThreshold": -0.5, "marketValue": -0.15 },
+                     "fleeWhenHurtSeconds": [12, 20], "meleeDamageFactor": 0.9 }],
+    "note": "fleeWhenHurtSeconds and meleeDamageFactor are sneed's (2026-11-16/17): hurt in a fight, it runs to cover for 12 to 20 real seconds, then fights again; its melee blows do 10% less damage"
   },
   {
     "defName": "Kind", "parent": "TraitBase", "commonality": 2, "conflictingTraits": ["Abrasive", "Psychopath"],

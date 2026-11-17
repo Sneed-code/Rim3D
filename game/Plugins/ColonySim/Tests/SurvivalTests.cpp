@@ -121,7 +121,7 @@ TEST_CASE("Feeding patients: a doctor brings food to a hungry colonist who is do
     // Bruises on the legs and body: down with pain and broken legs, for days.
     Rng rng(99);
     for (const char* part : {"torso", "left leg", "right leg", "left arm"}) {
-        sim.health().applyDamage(patient, sim.health().damageTypeId("Blunt"), 20.0f, survivalPart(sim, patient, part), rng);
+        sim.health().applyDamage(patient, sim.health().damageTypeId("Blunt"), std::string(part) == "left leg" ? 60.0f : 20.0f, survivalPart(sim, patient, part), rng);
     }
     sim.step();
     SURVIVAL_REQUIRE(sim.things().registry().get<Health>(patient).downed);

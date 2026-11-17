@@ -14,6 +14,7 @@
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Water.h"
 #include "ColonySim/Weather.h"
 
 #include <algorithm>
@@ -928,7 +929,8 @@ void Fire::pass(int64_t now) {
             reg.remove<Burning>(pawn);
             continue;
         }
-        if (now >= reg.get<Burning>(pawn).until) {
+        // Gone past its knees into water (docs/design/water.md): the flames are out.
+        if (now >= reg.get<Burning>(pawn).until || map_.waterDepthAt(pos->x, pos->y, pos->level) >= kWaterQuenchDepthM) {
             putOutPawn(pawn);
             continue;
         }

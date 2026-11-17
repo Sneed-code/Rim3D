@@ -1,6 +1,8 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
+#include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Fighters.h"
 #include "ColonySim/Fire.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
@@ -18,20 +20,15 @@
 #include <string>
 #include <vector>
 
+#include "ZonelessDefs.h"
+
 using namespace colony;
 
 namespace {
 
-// The game's real data: trait numbers, thoughts and the health model are part of what is tested.
-std::shared_ptr<const DefDatabase> traitFxDefs() {
-    static std::shared_ptr<const DefDatabase> defs = [] {
-        auto db = std::make_shared<DefDatabase>();
-        std::vector<std::string> errors;
-        DefDatabase::loadDirectory(COLONY_DATA_DIR, *db, errors);
-        return std::shared_ptr<const DefDatabase>(db);
-    }();
-    return defs;
-}
+// The game's real data: trait numbers, thoughts and the health model are part of what is tested. Without body zones:
+// Wimp moves the pain shock threshold, which downs only a body without zones (docs/design/body-health.md).
+std::shared_ptr<const DefDatabase> traitFxDefs() { return zonelessTestDefs(); }
 
 std::unique_ptr<Sim> traitFxSim() {
     return std::make_unique<Sim>(SimSettings{5, 64, 0, 0, true}, traitFxDefs());
@@ -143,6 +140,39 @@ TEST_CASE("Trait effects: a wimp is downed by less pain") {
     CHECK(hits > 0);
     CHECK(!sim->health().incapacitated(plain));
     CHECK(sim->health().incapacitated(wimp));
+}
+
+TEST_CASE("Trait effects: a wimp hurt in a fight runs to cover for 12 to 20 seconds, then fights again") {
+    auto sim = traitFxSim();
+    const Entity plain = traitFxPawn(*sim, CellPos{10, 10, 0});
+    const Entity wimp = traitFxPawn(*sim, CellPos{14, 10, 0}, "Wimp");
+    const Entity enemy = traitFxPawn(*sim, CellPos{40, 10, 0});
+    sim->submit(DraftCommand{plain, true});
+    sim->submit(DraftCommand{wimp, true});
+    sim->submit(SetFactionCommand{enemy, 2});
+    sim->step();
+    entt::registry& reg = sim->things().registry();
+    CHECK(reg.all_of<Fighter>(wimp));
+    const TraitBook book(reg, sim->defs());
+    CHECK(book.of(wimp).fleeHurtMin == doctest::Approx(12.0f));
+    CHECK(book.of(wimp).fleeHurtMax == doctest::Approx(20.0f));
+    // A skirmisher: its melee blows do 10% less (sneed, 2026-11-17).
+    CHECK(book.of(wimp).meleeDamageFactor == doctest::Approx(0.9f));
+    CHECK(book.of(plain).meleeDamageFactor == doctest::Approx(1.0f));
+    CHECK(sim->combat().traitMeleeDamage(wimp) == doctest::Approx(0.9f));
+    const int64_t now = sim->time().steps;
+    sim->fighters().hurt(plain, enemy);
+    sim->fighters().hurt(wimp, enemy);
+    sim->fighters().hurt(wimp, plain);  // a friend's stray hit is not the enemy
+    CHECK(reg.get<Fighter>(plain).cowerUntil == 0);
+    const int64_t until = reg.get<Fighter>(wimp).cowerUntil;
+    CHECK(until >= now + 12 * 30);
+    CHECK(until <= now + 20 * 30);
+    sim->step();
+    CHECK(reg.get<Fighter>(wimp).fallingBack);
+    CHECK_FALSE(reg.get<Fighter>(plain).fallingBack);
+    sim->stepMany(static_cast<int>(until - sim->time().steps) + 30);
+    CHECK_FALSE(reg.get<Fighter>(wimp).fallingBack);
 }
 
 TEST_CASE("Trait effects: fast learners learn faster and slow ones slower") {
