@@ -339,7 +339,7 @@ too. Run it as part of `unit`; a task that adds a system adds its commands and i
 Every section is version 1 at format 20. A task that changes a section adds a line here, e.g.
 "`fighters` 2 (F9): ...". New sections are listed in the table above.
 
-- `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name.
+- `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name. Version 2: each filth pile's `wetAt` (the game second it was last added to; blood fades by its age, [blood.md](blood.md)); a version 1 pile counts as fresh on load.
 - The loader accepts two jobs on one cell (the later one keeps the reservation) instead of refusing the file (audit).
 - `health` 2 (E2): each pawn's environment hediffs (hypothermia, heatstroke...), a list of def name and severity before `dead`. Version 1 files load with none.
 - `world` 1 (W2): new section, see the table. Saves without it have no world.

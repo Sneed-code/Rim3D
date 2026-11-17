@@ -47,6 +47,17 @@ namespace
 		return FMath::Lerp(Fluid.Wet, Fluid.Dry, FMath::Clamp(T, 0.0f, 1.0f));
 	}
 
+	/** sneed: blood fades 3% every 10 s from when it was put on (Blood.FadeStep), as the stains do. */
+	float GrimeBloodFade(float AgeSeconds)
+	{
+		float Step = 0.03f;
+		if (const IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("Blood.FadeStep")))
+		{
+			Step = FMath::Max(0.0f, Var->GetFloat());
+		}
+		return FMath::Clamp(1.0f - Step * FMath::FloorToFloat(FMath::Max(0.0f, AgeSeconds) / 10.0f), 0.0f, 1.0f);
+	}
+
 	void GrimeCollectMeshes(AActor* Actor, TArray<TWeakObjectPtr<UMeshComponent>>& Out, float& OutMinZ, float& OutHeight)
 	{
 		if (!Actor)
@@ -214,7 +225,7 @@ void UGrimeSubsystem::Tick(float DeltaTime)
 			const FLinearColor BloodColor = GrimeBloodColor(Fluid, Age, Wet);
 			Material->SetScalarParameterValue(TEXT("DirtLegs"), FMath::Clamp(View->dirtLegs * Strength, 0.0f, 1.0f));
 			Material->SetScalarParameterValue(TEXT("DirtBody"), FMath::Clamp(View->dirtBody * Strength, 0.0f, 1.0f));
-			Material->SetScalarParameterValue(TEXT("Blood"), FMath::Clamp(View->blood * Strength, 0.0f, 1.0f));
+			Material->SetScalarParameterValue(TEXT("Blood"), FMath::Clamp(View->blood * GrimeBloodFade(Age) * Strength, 0.0f, 1.0f));
 			Material->SetScalarParameterValue(TEXT("BloodWet"), Wet);
 			Material->SetScalarParameterValue(TEXT("LocalMinZ"), Grime->LocalMinZ);
 			Material->SetScalarParameterValue(TEXT("LocalHeight"), Grime->LocalHeight);
@@ -263,7 +274,7 @@ void UGrimeSubsystem::Tick(float DeltaTime)
 			Material->SetScalarParameterValue(TEXT("DirtLegs"), 0.0f);
 			Material->SetScalarParameterValue(TEXT("DirtBody"), 0.0f);
 			// A weapon shows its blood plainly: it is small and the eye goes to it.
-			Material->SetScalarParameterValue(TEXT("Blood"), FMath::Clamp(View->weaponBlood * Strength * 1.3f, 0.0f, 1.0f));
+			Material->SetScalarParameterValue(TEXT("Blood"), FMath::Clamp(View->weaponBlood * GrimeBloodFade(View->weaponBloodAge / static_cast<float>(colony::kStepsPerRealSecondAt1x)) * Strength * 1.3f, 0.0f, 1.0f));
 			Material->SetScalarParameterValue(TEXT("BloodWet"), Wet);
 			Material->SetScalarParameterValue(TEXT("NoiseScale"), 0.15f);
 			Material->SetVectorParameterValue(TEXT("BloodColor"), BloodColor);
