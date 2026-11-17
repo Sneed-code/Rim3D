@@ -33,6 +33,7 @@
 #include "ColonySim/Temperature.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Areas.h"
+#include "ColonySim/Landing.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Lights.h"
@@ -443,6 +444,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     trade_->setTalents(talents_.get());
     trade_->setRunning([this](Entity building) { return power_->running(building); });
     trade_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    landing_ = std::make_unique<LandingSystem>(*things_, map_, *plants_, *defs_, time_, rng_);
+    trade_->setLanding(landing_.get());
+    landing_->setOnLanded([this](const Shuttle& shuttle) { trade_->shuttleLanded(shuttle); });
     prisoners_->setTrade(trade_.get());
     jobs_->setPrisoners(prisoners_.get());
     quests_ = std::make_unique<QuestSystem>(*things_, map_, *raids_, *fighters_, *health_, *defs_, time_, rng_);
@@ -1096,6 +1100,12 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         applySleepCommand(*sleep, id);
         return;
     }
+    if (const auto* landingZone = std::get_if<SetLandingZoneCommand>(&command)) {
+        if (landing_->paintZone(landingZone->area, landingZone->add) == 0) {
+            commandFailed(id, "the landing zone is already so there");
+        }
+        return;
+    }
     if (const auto* patch = std::get_if<PatchCommand>(&command)) {
         std::string why;
         if (!patches_->patch(patch->pawn, true, why)) {
@@ -1493,6 +1503,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (fire_->setHome(home->area, home->add) == 0) {
             commandFailed(id, "the home area is already so there");
         }
+
     } else if (const auto* gun = std::get_if<ArtilleryCommand>(&command)) {
         bool ok = false;
         if (gun->action == "Man") {
@@ -2132,6 +2143,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
         events_.insert(events_.end(), gained.begin(), gained.end());
     }
     { SimLap lap(profile_, "fighters"); fighters_->step(); }
+    { SimLap lap(profile_, "landing"); landing_->step(); }
     { SimLap lap(profile_, "resonance"); resonance_->step(); }
     { SimLap lap(profile_, "patches"); patches_->step(); }
     if (calendar) {
@@ -2887,6 +2899,25 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         out.visits.push_back(std::move(view));
     }
+    out.shuttles.clear();
+    for (const Shuttle& s : landing_->shuttles()) {
+        ShuttleView view;
+        view.id = s.id;
+        view.building = s.building;
+        view.x = landing_->centreX(s);
+        view.y = landing_->centreY(s);
+        view.ground = map_.heightAt(view.x, view.y);
+        view.rot = static_cast<uint8_t>(s.rot);
+        view.phase = static_cast<uint8_t>(s.phase);
+        view.progress = landing_->progress(s);
+        view.visit = s.visit;
+        view.door = landing_->door(s);
+        out.shuttles.push_back(view);
+    }
+    if (out.landingZoneChanges != landing_->zoneChanges()) {
+        out.landingZoneChanges = landing_->zoneChanges();
+        out.landingZone = landing_->zoneCells();
+    }
     out.goodwill.clear();
     for (const DefId factionId : defs_->idsOfKind("Factions")) {
         const Def& faction = defs_->get(factionId);
@@ -3117,6 +3148,7 @@ uint64_t Sim::stateHash() const {
     }
     roofCollapse_->hashState(h);
     areas_->hashState(h);
+    landing_->hashState(h);
     spoilage_->hashState(h);
     narrator_->hashState(h);
     disasters_->hashState(h);

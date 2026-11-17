@@ -231,6 +231,20 @@ bool UGunRangeSubsystem::LoadConfig()
 		Read.Add(MoveTemp(G));
 	}
 	Guns = MoveTemp(Read);
+	// The melee weapons on the rack after the guns (the combat range): drawn and swung by the main game, in third person.
+	Melee.Reset();
+	const TArray<TSharedPtr<FJsonValue>>* MeleeList = nullptr;
+	if (Root->TryGetArrayField(TEXT("melee"), MeleeList))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *MeleeList)
+		{
+			const TSharedPtr<FJsonObject> J = Value->AsObject();
+			if (J.IsValid())
+			{
+				Melee.Add({GunRangeStr(J, TEXT("def")), GunRangeStr(J, TEXT("label"))});
+			}
+		}
+	}
 	MeshCache.Reset();
 	const int32 Was = Current;
 	Current = -1;
@@ -325,7 +339,8 @@ bool UGunRangeSubsystem::SelectGun(int32 Index)
 	{
 		return false;
 	}
-	if (Me->weapon.valid() && Bridge->GetDefs() && Guns.IsValidIndex(Index) && Bridge->GetDefs()->get(Me->weapon).defName() == TCHAR_TO_UTF8(*Guns[Index].Def))
+	const FString Wanted = Guns.IsValidIndex(Index) ? Guns[Index].Def : (Melee.IsValidIndex(Index - Guns.Num()) ? Melee[Index - Guns.Num()].Def : FString());
+	if (Me->weapon.valid() && Bridge->GetDefs() && !Wanted.IsEmpty() && Bridge->GetDefs()->get(Me->weapon).defName() == TCHAR_TO_UTF8(*Wanted))
 	{
 		return true;  // in the hands already
 	}
@@ -571,7 +586,7 @@ void UGunRangeSubsystem::UpdateInput()
 	{
 		return;
 	}
-	static const FKey Keys[] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six};
+	static const FKey Keys[] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine, EKeys::Zero};
 	for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Keys)) && i < Rack.Num(); ++i)
 	{
 		if (PC->WasInputKeyJustPressed(Keys[i]))
@@ -583,7 +598,7 @@ void UGunRangeSubsystem::UpdateInput()
 	if (Count > 0 && (PC->WasInputKeyJustPressed(EKeys::MouseScrollUp) || PC->WasInputKeyJustPressed(EKeys::MouseScrollDown)))
 	{
 		const int32 Step = PC->WasInputKeyJustPressed(EKeys::MouseScrollUp) ? -1 : 1;
-		SelectGun(((Current < 0 ? 0 : Current) + Step + Count) % Count);
+		SelectGun(((HeldRack < 0 ? (Current < 0 ? 0 : Current) : HeldRack) + Step + Count) % Count);
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::F6))
 	{
@@ -616,6 +631,36 @@ void UGunRangeSubsystem::Tick(float DeltaTime)
 	AProtagonistPawn* Body = Protagonist->GetBody();
 	ASimPawnActor* Player = Protagonist->IsDirectMode() ? Pawns->FindPawn(Protagonist->GetControlled()) : nullptr;
 	const colony::ThingView* Me = Player ? Bridge->GetCurrentSnapshot().find(Protagonist->GetControlled()) : nullptr;
+	// What's in the hands, as a rack index; a melee weapon puts the view in third person (the main game draws the swings
+	// on the whole body), and taking a gun again brings first person back if the range was the one that left it.
+	if (Me && Body)
+	{
+		const FString Held = Me->weapon.valid() && Bridge->GetDefs() ? FString(UTF8_TO_TCHAR(Bridge->GetDefs()->get(Me->weapon).defName().c_str())) : FString();
+		HeldRack = -1;
+		for (int32 i = 0; i < Guns.Num() + Melee.Num(); ++i)
+		{
+			if (!Held.IsEmpty() && Held == (i < Guns.Num() ? Guns[i].Def : Melee[i - Guns.Num()].Def))
+			{
+				HeldRack = i;
+			}
+		}
+		// Only when the weapon changes, so V still works with either in the hands.
+		if (HeldRack != LastHeldRack)
+		{
+			LastHeldRack = HeldRack;
+			const bool bMeleeHeld = HeldRack >= Guns.Num();
+			if (bMeleeHeld && Body->IsFirstPerson())
+			{
+				Body->SetFirstPerson(false);
+				bAutoThirdPerson = true;
+			}
+			else if (!bMeleeHeld && HeldRack >= 0 && bAutoThirdPerson && !Body->IsFirstPerson())
+			{
+				Body->SetFirstPerson(true);
+				bAutoThirdPerson = false;
+			}
+		}
+	}
 	if (!Body || !Player || !Me || Me->downed || Me->dead || !Body->IsFirstPerson() || !EnsureRig(*Player))
 	{
 		HideAll();
@@ -958,15 +1003,29 @@ void UGunRangeSubsystem::DrawPanel()
 	ImGui::SetNextWindowBgAlpha(0.55f);
 	if (ImGui::Begin("##GunRange", nullptr, Flags))
 	{
-		ImGui::TextUnformatted("GUN RANGE");
+		ImGui::TextUnformatted("COMBAT RANGE");
+		const auto KeyName = [](int32 i) { return i < 9 ? FString::FromInt(i + 1) : FString(TEXT("0")); };
 		for (int32 i = 0; i < Guns.Num(); ++i)
 		{
-			const FString Line = FString::Printf(TEXT("%s%d  %s%s"), i == Current ? TEXT("> ") : TEXT("   "), i + 1, *Guns[i].Label, HasModel(i) ? TEXT("") : TEXT("  (no model yet)"));
+			const FString Line = FString::Printf(TEXT("%s%s  %s%s"), i == HeldRack ? TEXT("> ") : TEXT("   "), *KeyName(i), *Guns[i].Label, HasModel(i) ? TEXT("") : TEXT("  (no model yet)"));
+			ImGui::TextUnformatted(TCHAR_TO_UTF8(*Line));
+		}
+		for (int32 m = 0; m < Melee.Num(); ++m)
+		{
+			const int32 i = Guns.Num() + m;
+			const FString Line = FString::Printf(TEXT("%s%s  %s"), i == HeldRack ? TEXT("> ") : TEXT("   "), *KeyName(i), *Melee[m].Label);
 			ImGui::TextUnformatted(TCHAR_TO_UTF8(*Line));
 		}
 		ImGui::Separator();
-		ImGui::TextUnformatted("Left mouse fire   Right mouse aim   R reload");
-		ImGui::TextUnformatted("1-4 or wheel: gun   N: new targets   F2 pause");
+		if (HeldRack >= Guns.Num())
+		{
+			ImGui::TextUnformatted("Left mouse swing   Right mouse block   Alt dodge");
+		}
+		else
+		{
+			ImGui::TextUnformatted("Left mouse fire   Right mouse aim   R reload");
+		}
+		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("1-%s or wheel: weapon   N: new targets   F2 pause"), *KeyName(FMath::Max(0, Guns.Num() + Melee.Num() - 1)))));
 		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("V: first/third person   [ ] mouse speed %.2f"), AProtagonistPawn::GetMouseTurn())));
 		if (!SceneLine.IsEmpty())
 		{

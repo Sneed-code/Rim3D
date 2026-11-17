@@ -387,6 +387,23 @@ struct VisitView {
     std::vector<StockView> stock;
 };
 
+// A shuttle (docs/design/landing.md). `phase` is a ShuttlePhase (0 descending, 1 landed, 2 ascending) and `progress` runs 0 to
+// 1 through it (1 while landed). (x, y) is the footprint's middle in metres and `ground` the ground height there; `rot` is the
+// Rot4 (0 North: the nose points to +y, the door is on the -x side). `building` is the impassable Things building it stands
+// as. Unreal draws the flight path, the thrusters, the flames and the dust from these.
+struct ShuttleView {
+    uint32_t id = 0;
+    Entity building = kNoEntity;
+    float x = 0.0f;
+    float y = 0.0f;
+    float ground = 0.0f;
+    uint8_t rot = 0;
+    uint8_t phase = 0;
+    float progress = 0.0f;
+    uint32_t visit = 0;
+    CellPos door;  // where people step out and board
+};
+
 // What a faction thinks of the colony: goodwill from -100 to 100 and its relation (0 hostile, 1 neutral, 2 ally).
 struct GoodwillView {
     std::string faction;
@@ -765,6 +782,10 @@ struct Snapshot {
     uint64_t deepChanges = ~0ULL;
     std::vector<CellPos> homeArea;
     uint64_t homeChanges = ~0ULL;
+    // The landing zone (docs/design/landing.md), in row order; rewritten when `landingZoneChanges` moves.
+    std::vector<CellPos> landingZone;
+    uint64_t landingZoneChanges = ~0ULL;
+    std::vector<ShuttleView> shuttles;
     // The colony alarm (docs/design/raids.md): on, and whether the player sounded it (only the
     // player stops that one); the raid squads on the map.
     bool alarm = false;

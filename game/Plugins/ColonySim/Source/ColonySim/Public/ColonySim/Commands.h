@@ -780,6 +780,13 @@ struct SetHomeAreaCommand {
     bool add = true;
 };
 
+// Paints the landing zone where shuttles set down (docs/design/landing.md): adds the rectangle's ground cells (or takes
+// them off). Fails if no cell changed.
+struct SetLandingZoneCommand {
+    CellRect area;
+    bool add = true;
+};
+
 // Resonance (task X2, docs/design/resonance.md). Attune sets a pawn's attunement level, 0 to 6 (0 takes it away);
 // each new level teaches one power of that level at random. Stands in for RimWorld's neuroformer and titles.
 struct AttuneCommand {
@@ -1116,7 +1123,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              AssignAreaCommand, SkipNightCommand, FastTravelCommand, CancelSkipCommand, CaravanCommand, RerollColonistCommand,
                              ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand,
                              InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand,
-                             SleepCommand,
+                             SleepCommand, SetLandingZoneCommand,
                              PatchCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
