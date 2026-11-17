@@ -146,6 +146,14 @@ struct ThingView {
     float rollDirX = 0.0f;
     float rollDirY = 0.0f;
     bool hitProof = false;
+    // A clip that is moving the body (docs/design/body-motion.md): the MotionClips def (invalid: none, or a plain
+    // push), the clip seconds played so far, and its play rate (clip seconds per real second). Unreal plays
+    // that clip at that time with its root motion dropped (a time that went back means the clip began again): the
+    // position above already follows the clip's path.
+    DefId motionClip;
+    float motionTime = 0.0f;
+    float motionRate = 0.0f;
+    bool motionPush = false;  // a plain push is moving it (no clip)
     // Several weapons (P1, docs/design/weapons.md): the weapon def carried in each slot (Primary, Sidearm, Melee;
     // invalid for none), in the hands or on the body, and while the pawn switches the slot it switches to and
     // the steps left (255 and 0 when it does not).

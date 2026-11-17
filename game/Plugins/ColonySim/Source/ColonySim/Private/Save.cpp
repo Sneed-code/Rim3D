@@ -5,6 +5,7 @@
 #include "ColonySim/Landing.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Apparel.h"
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Husbandry.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Fuel.h"
@@ -404,6 +405,12 @@ struct SaveCasting {
     Casting c;
 };
 
+// A body being moved by a clip (docs/design/body-motion.md). The clip goes by name.
+struct SaveMotion {
+    std::string clip;
+    BodyMotion m;
+};
+
 struct SaveEntity {
     uint32_t id = 0;
     std::optional<SaveThing> thing;
@@ -462,6 +469,7 @@ struct SaveEntity {
     std::optional<SaveApparel> apparel;     // section "apparel" (format 20 on)
     std::optional<RecoilKick> kick;         // section "feel"
     std::optional<DodgeRoll> roll;          // section "feel"
+    std::optional<SaveMotion> motion;       // section "motion"
     std::optional<MedicalSettings> medical;  // section "medicine"
     std::optional<SaveOperations> operations;  // section "medicine" (H3, version 2 on)
     std::optional<std::vector<Entity>> stowed;  // section "weapons" (P1): Gear::stowed
@@ -2354,6 +2362,30 @@ void saveRollPart(Ar& ar, DodgeRoll& r) {
 }
 
 template <typename Ar>
+void saveMotionPart(Ar& ar, SaveMotion& sm) {
+    BodyMotion& m = sm.m;
+    ar.text("clip", sm.clip);
+    ar.value("time", m.time);
+    ar.value("rate", m.rate);
+    ar.value("faceX", m.faceX);
+    ar.value("faceY", m.faceY);
+    ar.value("scale", m.scale);
+    ar.value("doneF", m.doneF);
+    ar.value("doneR", m.doneR);
+    ar.value("doneYaw", m.doneYaw);
+    ar.value("pushMetres", m.pushMetres);
+    ar.value("pushSteps", m.pushSteps);
+    ar.value("pushFrom", m.pushFrom);
+    ar.value("pushTo", m.pushTo);
+    ar.value("turnBody", m.turnBody);
+    ar.value("lost", m.lost);
+    ar.require(std::isfinite(m.time) && std::isfinite(m.rate) && m.rate > 0.0f && std::isfinite(m.faceX) && std::isfinite(m.faceY) &&
+                   std::isfinite(m.scale) && std::isfinite(m.doneF) && std::isfinite(m.doneR) && std::isfinite(m.doneYaw) &&
+                   std::isfinite(m.pushMetres) && m.pushSteps >= 0 && m.pushFrom >= 0 && m.pushTo >= m.pushFrom && std::isfinite(m.lost),
+               "the save file has a bad body motion");
+}
+
+template <typename Ar>
 void saveProjectilePart(Ar& ar, SaveProjectile& sp) {
     ar.text("def", sp.def);
     ar.text("weapon", sp.weapon);
@@ -3615,6 +3647,9 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
         saveParts(ar, "roll", e, &SaveEntity::roll, [&](DodgeRoll& r) { saveRollPart(ar, r); });
     });
+    ar.section("motion", 1, [&] {
+        saveParts(ar, "motion", e, &SaveEntity::motion, [&](SaveMotion& m) { saveMotionPart(ar, m); });
+    });
     ar.section("weather", 1, [&] {
         d.hasWeather = true;
         saveWeather(ar, d.weather);
@@ -4273,6 +4308,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     if (const DodgeRoll* roll = reg.try_get<DodgeRoll>(e)) {
         out.roll = *roll;
     }
+    if (const BodyMotion* motion = reg.try_get<BodyMotion>(e)) {
+        out.motion = SaveMotion{motion->clip.valid() ? sim.defs_->get(motion->clip).defName() : std::string(), *motion};
+    }
     if (const Gear* gear = reg.try_get<Gear>(e); gear != nullptr && !gear->stowed.empty()) {
         out.stowed = gear->stowed;
     }
@@ -4839,6 +4877,14 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     }
     if (e.roll) {
         reg.emplace<DodgeRoll>(entity, *e.roll);
+    }
+    if (e.motion) {
+        // A clip this game no longer has ends the motion where the body is.
+        BodyMotion m = e.motion->m;
+        m.clip = e.motion->clip.empty() ? DefId{} : sim.defs_->idOf("MotionClips", e.motion->clip);
+        if (e.motion->clip.empty() || m.clip.valid()) {
+            reg.emplace<BodyMotion>(entity, m);
+        }
     }
     if (e.stowed) {
         if (!reg.all_of<Gear>(entity)) {
