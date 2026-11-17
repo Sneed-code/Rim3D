@@ -152,6 +152,8 @@ struct MeleeRules {
     float circleMetres = 0.6f;        // a step round the target...
     int circleSteps = 18;             // ...over this many steps (2 m/s)
     float circleFlip = 0.3f;          // the chance it changes the way it circles at a choice
+    float backShare = 0.5f;           // of the footwork chance: a step back from a blow it can't stop
+    float circleShare = 0.6f;         // of the footwork chance: a step round the enemy
     float backMetres = 0.6f;          // a step back out of reach of a blow it can't stop
     int backSteps = 12;
     float crowdedShare = 0.6f;        // closer than this share of its engage distance it steps back to it

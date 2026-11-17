@@ -123,6 +123,8 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     num("circleMetres", r.circleMetres);
     whole("circleSteps", r.circleSteps);
     num("circleFlip", r.circleFlip);
+    num("backShare", r.backShare);
+    num("circleShare", r.circleShare);
     num("backMetres", r.backMetres);
     whole("backSteps", r.backSteps);
     num("crowdedShare", r.crowdedShare);
@@ -1457,9 +1459,25 @@ bool MeleeSystem::footwork(Entity pawn, Entity target, bool reckless) {
     }
     Rng rng(splitMix64(seed_ ^ (static_cast<uint64_t>(now()) << 24) ^ (uint64_t{entt::to_integral(pawn)} * 0xF00DF00DULL)));
     const float engage = engageDistance(pawn, target);
-    // A blow coming at it that it can't stop (its own swing just spent, or its guard broken): a step back out of reach.
+    // How often it moves: more for a skilled or nimble fighter, less for one that presses or is hurt in the legs.
+    float chance = meleeBySkill(rules_.footworkChance, meleeSkill(pawn));
+    if (const Colonist* colonist = reg.try_get<Colonist>(pawn)) {
+        for (const TraitRecord& trait : colonist->traits) {
+            if (std::find(rules_.footworkTraits.begin(), rules_.footworkTraits.end(), trait.def) != rules_.footworkTraits.end()) {
+                chance += rules_.footworkTraitBonus;
+            }
+        }
+    }
+    if (reckless) {
+        chance *= rules_.recklessFootwork;
+    }
+    if (const Health* h = reg.try_get<Health>(pawn)) {
+        chance *= std::clamp(h->movingFactor, 0.0f, 1.0f);
+    }
+    // A blow coming at it while it recovers from its own (past the punish window right after its swing, which stays open)
+    // or with its guard broken: sometimes a step back out of reach. Not always: a fight that is all stepping back never ends.
     const Melee* tm = reg.try_get<Melee>(target);
-    const bool open = m.phase == MeleePhase::Recovery || now() < m.noDefendUntil || guardBroken(pawn);
+    const bool open = (m.phase == MeleePhase::Recovery && now() >= m.noDefendUntil) || guardBroken(pawn);
     const bool incoming = tm != nullptr && tm->phase == MeleePhase::Windup && tm->target == pawn;
     const auto move = [&](float mx, float my, float metres, int steps) {
         if (!combat_.motion().push(pawn, mx, my, metres, steps)) {
@@ -1470,7 +1488,10 @@ bool MeleeSystem::footwork(Entity pawn, Entity target, bool reckless) {
         return true;
     };
     if (incoming && open) {
-        return move(dx, dy, rules_.backMetres, rules_.backSteps);
+        if (rng.unit() < chance * rules_.backShare) {
+            return move(dx, dy, rules_.backMetres, rules_.backSteps);
+        }
+        return false;
     }
     // A friend aiming or firing at the same enemy: hold still, so the shot it lined up stays clear of it.
     const FactionId own = reg.all_of<Faction>(pawn) ? reg.get<Faction>(pawn).id : kPlayerFaction;
@@ -1484,22 +1505,7 @@ bool MeleeSystem::footwork(Entity pawn, Entity target, bool reckless) {
     if (d < engage * rules_.crowdedShare) {
         return move(dx, dy, std::min(rules_.backMetres, engage * rules_.crowdedShare - d + 0.1f), rules_.backSteps);
     }
-    // Otherwise maybe a step round the target, more often for a skilled or nimble fighter, less for one that presses.
-    float chance = meleeBySkill(rules_.footworkChance, meleeSkill(pawn));
-    if (const Colonist* colonist = reg.try_get<Colonist>(pawn)) {
-        for (const TraitRecord& trait : colonist->traits) {
-            if (std::find(rules_.footworkTraits.begin(), rules_.footworkTraits.end(), trait.def) != rules_.footworkTraits.end()) {
-                chance += rules_.footworkTraitBonus;
-            }
-        }
-    }
-    if (reckless) {
-        chance *= rules_.recklessFootwork;
-    }
-    if (const Health* h = reg.try_get<Health>(pawn)) {
-        chance *= std::clamp(h->movingFactor, 0.0f, 1.0f);  // a hurt leg keeps it where it is
-    }
-    if (rng.unit() >= chance) {
+    if (rng.unit() >= chance * rules_.circleShare) {
         return false;
     }
     if (rng.unit() < rules_.circleFlip) {

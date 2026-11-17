@@ -49,12 +49,17 @@ Snapshot: `focusTarget`, `focusPlayer` (the lock-on camera follows it, a marker 
 `MeleeSystem::footwork`, called by the fighter AI's melee step when its victim is in reach and it is not swinging: between
 its own blows, or while it waits out a raised guard. At most one choice every `footworkEverySteps` (0.8 s):
 
-1. **Back out of a blow it can't stop**: the enemy is winding up at it while it is recovering from its own swing, just
-   sidestepped, or its guard is broken: a step back of `backMetres` (0.6 m in 0.4 s).
+1. **Back out of a blow it can't stop**: the enemy is winding up at it while it is recovering from its own swing (after
+   the punish window right after the swing, which stays open) or its guard is broken: sometimes (`backShare`, half the
+   footwork chance) a step back of `backMetres` (0.6 m in 0.4 s). Stepping back every time made three-on-three fights
+   last three times as long.
 2. **Too close** (under `crowdedShare` of its engage distance): a step back to it.
 3. Otherwise **maybe a step round** the enemy (`circleMetres` 0.6 m in 0.6 s), pulled to the distance it fights at, the same
-   way as last time or the other way (30%). The chance: 35% at Melee 0 to 80% at Melee 20, +20% Nimble, half for a
-   reckless side (raiders press), times its Moving (a hurt leg keeps it still).
+   way as last time or the other way (30%), never into a friend's line of fire at the enemy (and not at all while a friend
+   is aiming at it). The chance is `circleShare` (0.6) of the footwork chance: 35% at Melee 0 to 80% at Melee 20, +20%
+   Nimble, half for a reckless side (raiders press), times its Moving (a hurt leg keeps it still).
+
+A gunman whose friend steps into its line while it aims ends the shot and lines up again.
 
 Moves go through the body motion system (`push`, collision sweeps, never through walls or bodies), and it still swings the
 moment it is ready: footwork never delays a blow. Snapshot `footwork` is true while it steps (Unreal plays a strafe or back

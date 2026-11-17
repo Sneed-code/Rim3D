@@ -60,6 +60,18 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
     ReplayOrderedJson j = ReplayOrderedJson::object();
     j["step"] = logged.step;
     j["type"] = commandName(logged.command);
+    // Written before the visit: its chain is at MSVC's nesting limit (C1061).
+    if (const auto* focus = std::get_if<FocusCommand>(&logged.command)) {
+        j["pawn"] = entt::to_integral(focus->pawn);
+        j["target"] = entt::to_integral(focus->target);
+        j["mode"] = static_cast<int>(focus->mode);
+        return j;
+    }
+    if (const auto* response = std::get_if<SetFightResponseCommand>(&logged.command)) {
+        j["pawn"] = entt::to_integral(response->pawn);
+        j["response"] = fightResponseName(response->response);
+        return j;
+    }
     std::visit(
         [&j](const auto& c) {
             using Type = std::decay_t<decltype(c)>;
@@ -546,13 +558,6 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                         j["add"] = c.add;
                     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
-                    } else if constexpr (std::is_same_v<Type, FocusCommand>) {
-                        j["pawn"] = entt::to_integral(c.pawn);
-                        j["target"] = entt::to_integral(c.target);
-                        j["mode"] = static_cast<int>(c.mode);
-                    } else if constexpr (std::is_same_v<Type, SetFightResponseCommand>) {
-                        j["pawn"] = entt::to_integral(c.pawn);
-                        j["response"] = fightResponseName(c.response);
                     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
                         j["up"] = c.up;
@@ -560,8 +565,12 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                         j["dirX"] = c.dirX;
                         j["dirY"] = c.dirY;
                     } else {
-                        static_assert(std::is_same_v<Type, RerollColonistCommand>, "write every command type");
-                        j["slot"] = c.slot;
+                        static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, FocusCommand> ||
+                                          std::is_same_v<Type, SetFightResponseCommand>,
+                                      "write every command type");
+                        if constexpr (std::is_same_v<Type, RerollColonistCommand>) {
+                            j["slot"] = c.slot;
+                        }
                     }
                 }
             }
