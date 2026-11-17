@@ -1330,7 +1330,7 @@ inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitComma
                                             std::is_same_v<Type, SetOutfitFightGearCommand> || std::is_same_v<Type, HideGearCommand> ||
                                             std::is_same_v<Type, ShieldCommand> || std::is_same_v<Type, SetDayLengthCommand> ||
                                             std::is_same_v<Type, SleepCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||
-                                            std::is_same_v<Type, PatchCommand>;
+                                            std::is_same_v<Type, PatchCommand> || std::is_same_v<Type, SetAlertCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1385,6 +1385,9 @@ void saveTradeCommand(Ar& ar, Type& c) {
         ar.value("add", c.add);
     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
         ar.value("pawn", c.pawn);
+    } else if constexpr (std::is_same_v<Type, SetAlertCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("alert", c.alert);
     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("up", c.up);
@@ -2531,6 +2534,9 @@ void saveFighterPart(Ar& ar, Fighter& f) {
         ar.value("y", k.y);
         ar.value("level", k.level);
         ar.value("seenAt", k.seenAt);
+        if (ar.sectionVersion() >= 5) {
+            ar.value("firsthand", k.firsthand);
+        }
     });
     if (ar.version() >= 17) {
         ar.value("reactUntil", f.reactUntil);
@@ -2552,6 +2558,18 @@ void saveFighterPart(Ar& ar, Fighter& f) {
     }
     if (ar.sectionVersion() >= 4) {  // a Wimp falling back after a hit
         ar.value("cowerUntil", f.cowerUntil);
+    }
+    if (ar.sectionVersion() >= 5) {  // stealth (docs/design/stealth.md); older saves: alerted, as a fighter was
+        ar.value("alert", f.alert);
+        ar.require(static_cast<int>(f.alert) <= static_cast<int>(Alert::Alerted), "the save file has a bad alert state");
+        ar.value("onGuard", f.onGuard);
+        ar.value("called", f.called);
+        ar.value("alertAt", f.alertAt);
+        ar.value("hasSuspect", f.hasSuspect);
+        ar.value("suspectX", f.suspectX);
+        ar.value("suspectY", f.suspectY);
+        ar.value("suspect", f.suspect);
+        ar.value("suspectAt", f.suspectAt);
     }
 
 }
@@ -3459,7 +3477,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("doors", 1, [&] {
         saveParts(ar, "door", e, &SaveEntity::door, [&](Door& door) { saveDoorPart(ar, door); });
     });
-    ar.section("fighters", 4, [&] {
+    ar.section("fighters", 5, [&] {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });

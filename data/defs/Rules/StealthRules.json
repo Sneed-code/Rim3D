@@ -1,0 +1,28 @@
+[
+  {
+    "defName": "StealthRules", "source": "ours and sneed's (docs/design/stealth.md): RimWorld has no stealth",
+    "coneDegrees": 120,
+    "alertedConeDegrees": 360,
+    "closeSense": 1.5,
+    "instantRange": 8,
+    "noticeSteps": 30,
+    "darkSight": 0.3,
+    "fullLight": 0.5,
+    "crouchSight": 0.6,
+    "proneSight": 0.4,
+    "calloutRadius": 20,
+    "calledCanCall": false,
+    "searchSeconds": 900,
+    "suspiciousSeconds": 600,
+    "surpriseSteps": 30,
+    "walkNoise": 3,
+    "runNoise": 7,
+    "runSpeed": 6,
+    "crouchNoise": 0,
+    "gunNoise": 90,
+    "meleeNoise": 8,
+    "hitNoise": 8,
+    "explosionNoise": 150,
+    "note": "A fighter that isn't alerted sees only inside coneDegrees round its facing (anyone within closeSense is noticed all the same); alerted it looks all round. A target is seen from the sight range (FighterRules sightRange, less in fog) times a share for the light on it (darkSight in pitch dark up to 1 at fullLight) and, for a watcher that isn't alerted, for its stance (crouchSight, proneSight). Seen within instantRange it alerts at once; further off the watcher is suspicious first and alerted if the target is still in view noticeSteps later. Steps are game seconds, 30 a real second. Friends within calloutRadius of one who saw or heard an enemy itself learn where it is (sneed: 20 m); one alerted only by such a call doesn't call others (calledCanCall). Noise radii in metres: footsteps by gait (running is runSpeed metres a real second or more), gunNoise for a shot and meleeNoise for a blow unless the weapon's def has its own noiseRadius (bows 15, sneed's 8 m for melee), hitNoise round a pawn struck by a bullet, explosionNoise for a blast. With no enemy known an alerted fighter that nobody sent to fight is suspicious again after searchSeconds and unaware after suspiciousSeconds more. A fighter caught unaware waits surpriseSteps longer before it strikes back."
+  }
+]

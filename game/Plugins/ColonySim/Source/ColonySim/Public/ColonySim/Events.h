@@ -231,6 +231,9 @@ enum class PawnAction : uint8_t {
     TakeCover,    // a working colonist hurt by `target` dropped its job: `message` "fights back" or "runs" (real-time-combat.md)
     Patch,        // patching a bleeding body zone itself (body-health.md): `part` the zone, `message` "patching" (`amount` steps
                   // it takes) or "patched" (`count` 1)
+    Alert,        // a fighter's alert state changed (stealth.md): `amount` 0 unaware, 1 suspicious, 2 alerted; `message` why
+                  // ("saw", "glimpsed", "heard steps", "heard a shot", "called", "site raised", "calm"...); (x, y) where it
+                  // noticed something, if it did
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.

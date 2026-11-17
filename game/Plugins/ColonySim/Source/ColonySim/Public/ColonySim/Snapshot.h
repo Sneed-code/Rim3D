@@ -174,6 +174,12 @@ struct ThingView {
     Entity fightTarget = kNoEntity;
     CellPos fightSpot;
     bool fallingBack = false;
+    // Stealth (docs/design/stealth.md), for fighters: 0 unaware, 1 suspicious, 2 alerted, and where it last noticed
+    // something (for a "?" or "!" over its head and the way it looks).
+    uint8_t alert = 2;
+    bool hasSuspect = false;
+    float suspectX = 0.0f;
+    float suspectY = 0.0f;
     // F6 (docs/design/raids.md): the colony's colonists' defense role (0 Defender, 1 Shelter, 2 Keep
     // working); whether the alarm called it up; a fighter heading for a shelter or fleeing the map;
     // and for raiders their squad (0 for none).

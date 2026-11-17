@@ -264,6 +264,8 @@ const char* commandName(const Command& command) {
                         return "Sleep";
                     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
                         return "Patch";
+                    } else if constexpr (std::is_same_v<Type, SetAlertCommand>) {
+                        return "SetAlert";
                     } else {
                         static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, SetLandingZoneCommand>,
                                       "name every command type");
@@ -496,6 +498,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Cornered: return "Cornered";
         case PawnAction::TakeCover: return "TakeCover";
         case PawnAction::Patch: return "Patch";
+        case PawnAction::Alert: return "Alert";
     }
     return "?";
 }
