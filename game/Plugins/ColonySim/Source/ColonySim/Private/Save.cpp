@@ -455,6 +455,7 @@ struct SaveEntity {
     std::optional<Young> young;             // section "breeding" version 3
     std::optional<Burning> burning;         // section "fire" (E4)
     std::optional<SaveSpoilage> spoilage;   // section "spoilage"
+    std::optional<CorpseRot> corpse;        // section "corpses"
     std::optional<SaveGrenade> grenade;     // section "explosives"
     std::optional<SaveBelt> belt;           // section "explosives"
     std::optional<SaveThrower> thrower;     // section "explosives"
@@ -3618,6 +3619,12 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(s.rot >= 0.0f && s.rot < 1.0f && s.decay >= 0.0f && s.decay < 1.0f, "the save file has an impossible rot or wear");
         });
     });
+    ar.section("corpses", 1, [&] {  // dead bodies' rot (docs/design/spoilage.md "Corpses")
+        saveParts(ar, "corpse", e, &SaveEntity::corpse, [&](CorpseRot& c) {
+            ar.value("days", c.days);
+            ar.require(c.days >= 0.0f && c.days <= 1000.0f, "the save file has an impossible corpse rot");
+        });
+    });
     ar.section("melee", 3, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
     });
@@ -4090,6 +4097,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
             saved.ingredients.push_back(sim.defs_->get(ingredient).defName());
         }
         out.spoilage = std::move(saved);
+    }
+    if (const CorpseRot* corpse = reg.try_get<CorpseRot>(e)) {
+        out.corpse = *corpse;
     }
     if (const Joy* joy = reg.try_get<Joy>(e)) {
         SaveJoy saved;
@@ -4985,6 +4995,9 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
         reg.emplace_or_replace<Spoilage>(entity, std::move(spoilage));
     } else if (e.thing && e.thing->category == ThingCategory::Item && thingHasSpoilage(sim.defs_->get(reg.get<Thing>(entity).def))) {
         reg.emplace<Spoilage>(entity);  // saved before items could spoil
+    }
+    if (e.corpse) {
+        reg.emplace_or_replace<CorpseRot>(entity, *e.corpse);
     }
     if (e.melee) {
         reg.emplace<Melee>(entity, *e.melee);
