@@ -85,6 +85,10 @@ namespace
 		colony::CellPos B;
 		bool bToB = true;
 		float NextMove = 0.0f;
+		// A guard group (U, docs/design/stealth.md): she walks a few steps away from you, then at `GuardAt` goes over to a
+		// hostile side, unaware, her back to you. From then on the sim's own sight, hearing and fighting drive her.
+		float GuardAt = 0.0f;
+		bool bGuard = false;
 	};
 
 	struct FGunRangeState
@@ -107,6 +111,9 @@ namespace
 		int32 FistSwings = 0;
 		int32 PendingSpawn = 0;       // frames until the spawned pawns are looked for
 		int32 Group = 0;
+		bool bGuards = false;         // this group are unaware hostile guards to sneak up on (U)
+		int32 GuardsSet = 0;
+		bool bStopAlarm = false;      // the colony alarm went off at the guards: the range switches it off again
 		float AllDownFor = 0.0f;
 		float Clock = 0.0f;
 		// The scripted tour.
@@ -226,14 +233,26 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			T.A = colony::CellPos{Here.x, State->Stand.y - 9, 0};
 			T.B = colony::CellPos{Here.x, State->Stand.y + 9, 0};
 			T.NextMove = State->Clock + 1.0f + i * 0.7f;
+			if (State->bGuards)
+			{
+				// Guards: nobody walks or follows the scene's own behaviours; each turns her back by walking 3 m away.
+				T.bWalker = false;
+				T.Behaviour = EGunRangeBehaviour::Stand;
+				T.GuardAt = State->Clock + 6.0f;
+				T.A = colony::CellPos{Here.x + 3, Here.y, 0};
+			}
 			State->Targets.Add(T);
 		}
 		B->StepOnce();
 		for (const FGunRangeTarget& T : State->Targets)
 		{
 			B->Submit(colony::DraftCommand{T.Thing, true});
+			if (State->bGuards)
+			{
+				B->Submit(colony::MoveOrderCommand{T.Thing, T.A});
+			}
 		}
-		Notes.Add(FString::Printf(TEXT("gunrange: group %d, %d targets"), State->Group, State->Targets.Num()));
+		Notes.Add(FString::Printf(TEXT("gunrange: group %d, %d targets%s"), State->Group, State->Targets.Num(), State->bGuards ? TEXT(", unaware guards") : TEXT("")));
 		for (const FGunRangeTarget& T : State->Targets)
 		{
 			Notes.Add(FString::Printf(TEXT("gunrange:   target %u %s%s"), entt::to_integral(T.Thing), GunRangeBehaviourName(T.Behaviour), T.bWalker ? TEXT(", walking") : TEXT("")));
@@ -359,6 +378,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			B->Submit(colony::SpawnThingCommand{TCHAR_TO_UTF8(*Def), State->RackCell, 1});
 		}
 		B->StepOnce();
+		State->bGuards = FParse::Param(FCommandLine::Get(), TEXT("GunRangeGuards"));
 		SpawnGroup();
 		B->StepOnce();
 		B->StepOnce();
@@ -414,9 +434,19 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				{
 					Shared->Attacked.Add(Event.target);
 				}
+				if (Shared && Event.type == colony::EventType::AlarmChanged && Event.message.rfind("on", 0) == 0)
+				{
+					Shared->bStopAlarm = true;
+				}
 			});
 		}
 		const colony::ThingView* PlayerView = Snapshot.find(State->Player);
+		if (State->bStopAlarm)
+		{
+			// No klaxon in the range: stopped by hand, it stays off while the guards are about.
+			State->bStopAlarm = false;
+			B->Submit(colony::SoundAlarmCommand{false});
+		}
 
 		// Take control once the body is drawn, in first person, facing the field.
 		if (!State->bControlled && PhaseTime > 1.0f)
@@ -459,6 +489,18 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				{
 					T.AppliedTo = Actor->GetMakeHumanMesh();
 				}
+			}
+			// A guard: once she has walked off, a hostile side and unaware; the sim does the rest (stealth.md).
+			if (T.GuardAt > 0.0f)
+			{
+				if (!T.bGuard && State->Clock >= T.GuardAt && !View->downed && !View->dead)
+				{
+					B->Submit(colony::SetFactionCommand{T.Thing, 2});
+					B->Submit(colony::SetAlertCommand{T.Thing, 0});
+					T.bGuard = true;
+					++State->GuardsSet;
+				}
+				continue;
 			}
 			// Each one's own way: run when she sees you or when struck, or come at you with her fists once struck.
 			const bool bUp = !View->downed && !View->dead;
@@ -529,7 +571,14 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				T.NextMove = State->Clock + 8.0f + FMath::Frac(T.Seed * 0.0137f) * 4.0f;
 			}
 		}
-		G->SetSceneLine(FString::Printf(TEXT("Targets: %d standing, %d down, %d dead   (group %d)\nEach pair: one stands, one flees on sight,\none flees when hit, one fights back with fists"), Standing, Downed, Dead, State->Group));
+		if (State->bGuards)
+		{
+			G->SetSceneLine(FString::Printf(TEXT("Guards: %d standing, %d down, %d dead   (group %d)\nUnaware, backs turned: crouch to creep up, walking is heard at 3 m\nN: ordinary targets   U: new guards"), Standing, Downed, Dead, State->Group));
+		}
+		else
+		{
+			G->SetSceneLine(FString::Printf(TEXT("Targets: %d standing, %d down, %d dead   (group %d)\nEach pair: one stands, one flees on sight,\none flees when hit, one fights back with fists\nU: unaware guards to sneak up on"), Standing, Downed, Dead, State->Group));
+		}
 
 		// -GunRangeIdleRecord=<seconds>: a camera 3 m in front of a standing (not walking) target, every frame at a fixed
 		// 30 a second, to check that a standing pawn stands still and breathes (docs/design/pawns.md "Standing still").
@@ -572,8 +621,11 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		const bool bAllDown = !State->Targets.IsEmpty() && Standing == 0;
 		State->AllDownFor = bAllDown ? State->AllDownFor + Dt : 0.0f;
 		const float NewGroupAfter = Downed == 0 ? 20.0f : 60.0f;
-		if (State->PendingSpawn == 0 && ((PC && PC->WasInputKeyJustPressed(EKeys::N)) || State->AllDownFor > NewGroupAfter))
+		const bool bWantGuards = PC && PC->WasInputKeyJustPressed(EKeys::U);
+		if (State->PendingSpawn == 0 && (bWantGuards || (PC && PC->WasInputKeyJustPressed(EKeys::N)) || State->AllDownFor > NewGroupAfter))
 		{
+			// U: unaware guards; N: ordinary targets; by itself: the same kind again.
+			State->bGuards = bWantGuards || (State->bGuards && !(PC && PC->WasInputKeyJustPressed(EKeys::N)));
 			SpawnGroup();
 		}
 		else if (State->PendingSpawn > 0)
@@ -902,6 +954,10 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				Blood->GetMistSpawned(), Blood->GetWoundMarks(), Blood->GetBodyStainsMade(), Blood->GetSplatsMade()));
 		}
 		Notes.Add(FString::Printf(TEXT("gunrange: %d targets ran, %d punches thrown at you"), State->Fled, State->FistSwings));
+		if (const UFightSubsystem* Marks = GetWorld()->GetSubsystem<UFightSubsystem>())
+		{
+			Notes.Add(FString::Printf(TEXT("gunrange: %d guards set unaware, %d alert events, %d alert marks drawn"), State->GuardsSet, Marks->GetAlertEventsSeen(), Marks->GetAlertMarksDrawn()));
+		}
 		if (USoundSubsystem* S = GetWorld()->GetSubsystem<USoundSubsystem>())
 		{
 			PhaseNumbers.Add(TEXT("voice_femhit"), S->GetPlayCount(TEXT("Voice_FemHit")));

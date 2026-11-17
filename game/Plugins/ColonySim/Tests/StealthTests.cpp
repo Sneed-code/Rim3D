@@ -488,3 +488,41 @@ TEST_CASE("Stealth: a suspicious guard is the same after a save and load") {
     CHECK(stealthTestFighter(*sim, guard).alert == Alert::Alerted);
     CHECK(stealthTestFighter(*sim, b).alert == Alert::Alerted);
 }
+
+// The combat range's guards (SmokeTestGunRange.cpp, U): a target on the player's side is drafted and walked 3 m away from
+// the player, then put on another side and set unaware, with the same commands the range sends.
+TEST_CASE("Stealth: a range guard walked off and set unaware keeps its back turned until it sees or hears") {
+    auto sim = stealthTestSim();
+    const Entity player = stealthTestIntruder(*sim, 50, 64);
+    const Entity guard = sim->things().spawn("Human", CellPos{62, 64, 0});
+    sim->submit(SetFactionCommand{guard, 1});
+    sim->step();
+    sim->submit(DraftCommand{guard, true});
+    sim->submit(MoveOrderCommand{guard, CellPos{65, 64, 0}});
+    for (int i = 0; i < 180; ++i) {
+        sim->step();
+    }
+    const Position at = sim->things().registry().get<Position>(guard);
+    CHECK(at.x > 64.5f);
+    sim->submit(SetFactionCommand{guard, 2});
+    sim->submit(SetAlertCommand{guard, 0});
+    sim->step();
+    STEALTH_REQUIRE(sim->things().registry().all_of<Fighter>(guard));
+    CHECK(stealthTestFighter(*sim, guard).alert == Alert::Unaware);
+    CHECK(sim->things().registry().get<Posture>(guard).facingX > 0.9f);
+    // The player stands 15 m behind it for 20 real seconds: nothing.
+    for (int i = 0; i < 600; ++i) {
+        sim->step();
+    }
+    CHECK(stealthTestFighter(*sim, guard).alert == Alert::Unaware);
+    CHECK(sim->things().registry().get<Posture>(guard).facingX > 0.9f);
+    CHECK(stealthTestDist(*sim, guard, player) > 14.0f);
+    const Position still = sim->things().registry().get<Position>(guard);
+    CHECK(std::abs(still.x - at.x) < 0.5f);
+    // Walking up behind it is heard: it turns, sees and is alerted.
+    for (int i = 0; i < 400 && stealthTestFighter(*sim, guard).alert != Alert::Alerted; ++i) {
+        stealthTestWalk(*sim, player, still.x, still.y, 0.1f, 1);
+    }
+    CHECK(stealthTestFighter(*sim, guard).alert == Alert::Alerted);
+    CHECK(stealthTestKnows(*sim, guard, player));
+}

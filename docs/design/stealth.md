@@ -105,19 +105,28 @@ know there is a threat, not where: hiding again breaks their line of sight, not 
 
 ## For Unreal
 
-Built (2026-11-17, `UFightSubsystem::DrawAlertMarks`, direct mode only): a yellow **"?"** over an enemy fighter that is
-suspicious (from the snapshot) and a red **"!"** for 1.5 s over one that has just been alerted (from the `Alert`
-event). Nothing over an unaware one or your own side. The combat range's targets are on the player's side, so the
-marks don't show there until the range has hostile, unaware targets.
+Built (2026-11-18):
 
-Still to do: a bark, the head turning to the suspect point, unaware targets in the range. The sim gives:
+- **Marks** (`UFightSubsystem::DrawAlertMarks`, direct mode only): a yellow **"?"** over an enemy fighter that is
+  suspicious (from the snapshot) and a red **"!"** for 1.5 s over one that has just been alerted (from the `Alert`
+  event). Nothing over an unaware one or your own side.
+- **Stings** (sim `soundForEvent`, cues `Alert_Suspicious` and `Alert_Spotted`, [sound.md](sound.md)): a soft tone
+  when a fighter grows suspicious, a sharp one when it is alerted. Placeholder tones; a spoken bark needs recordings.
+- **Turning to look**: the sim turns the whole body to the suspect point (`noticePoint`), and the pawn drawing follows
+  the sim's facing, so a suspicious guard is seen to turn. No separate head turn.
+- **Guards in the combat range** (`SmokeTestGunRange.cpp`, [gun-range.md](gun-range.md)): **U** brings eight guards
+  instead of the usual targets (`-GunRangeGuards` starts with them). Each walks 3 m away from you, then goes over to
+  side 2 with `SetFactionCommand` and is set unaware with `SetAlertCommand{pawn, 0}`, her back to you. From then on the
+  sim drives her: creep up crouched, or walk and be heard at 3 m; once alerted she comes at you with her fists and the
+  others within 20 m are called. The range switches the colony alarm off again when it goes off at them.
 
-- Snapshot `ThingView::alert` (0, 1, 2), `hasSuspect`, `suspectX`, `suspectY`: a "?" or "!" over the head, the head
-  turning to the suspect point.
+The sim gives:
+
+- Snapshot `ThingView::alert` (0, 1, 2), `hasSuspect`, `suspectX`, `suspectY`.
 - Event `PawnAction::Alert`: `thing` the pawn, `amount` the new state, `message` why ("saw", "glimpsed", "heard
   steps", "heard a shot", "heard a blow", "a friend was hit", "heard a blast", "was hit", "called", "site raised",
-  "lost them", "calm", "ordered"): a sound sting, a bark.
-- `SetAlertCommand{pawn, 0..2}`: the practice range sets its targets unaware.
+  "lost them", "calm", "ordered").
+- `SetAlertCommand{pawn, 0..2}`.
 
 ## Saves, hash, replays
 
@@ -141,10 +150,12 @@ hashes. `SetAlert` is in replays.
   unaware.
 - A drafted colonist never calms down; a hit alerts and names the attacker.
 - A suspicious guard is the same after a save and load.
+- A range guard, walked off and set unaware by the range's own commands, keeps its back turned for 20 real seconds
+  with the player 15 m behind, then hears the player walk up, turns and is alerted.
 
 ## Not yet
 
-- Unreal: the indicators, the bark, crouch-sneak animation, the practice range's unaware targets (needs the PC).
+- Unreal: a spoken bark (recordings), a crouch-sneak animation.
 - Guards **looking round or patrolling** (an unaware guard keeps the facing it has), and a suspicious or alerted one
   **walking over to look** at where it heard something.
 - Plants and tall grass hiding a crouched pawn; walls muffling noise; hearing loss (the Hearing capacity).

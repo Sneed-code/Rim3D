@@ -49,6 +49,7 @@ everywhere).
 | --- | --- |
 | `ShotFired` | the gun's `shot` at the muzzle |
 | `ProjectileHit` | pawn: the projectile's damage type `hit`; armor, building, ground, rock: `Impact_*`; gone: none |
+| `PawnAction` Alert (stealth) | `Alert_Suspicious` when a fighter grows suspicious, `Alert_Spotted` when it is alerted (saw, heard, was hit, was called); none when it calms down, is ordered, or a whole site is raised. Placeholder tones until there are recordings |
 | `MeleeSwing` / `MeleeHit` | the weapon's `swing` / `hit`; deflected `Melee_Clang`, blocked `Melee_Block`, dodged `Dodge`, missed none; fists `Punch`, teeth `Flesh_Bite` |
 | `Explosion` | the damage type's `explosion` (default `Explosion_Blast`) |
 | `GrenadeThrown`, `GrenadeLanded`, `TrapSprung`, `TrapRearmed` | `Grenade_*`, `Trap_*` |

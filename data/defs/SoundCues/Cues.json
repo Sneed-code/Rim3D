@@ -24,6 +24,8 @@
   {"defName": "Melee_Clang", "label": "blow deflected", "loop": false, "volume": 0.6, "range": 60, "priority": 1, "tone": {"wave": "square", "hz": 1500, "seconds": 0.1}},
   {"defName": "Melee_Block", "label": "blow blocked", "loop": false, "volume": 0.5, "range": 50, "priority": 1, "tone": {"wave": "square", "hz": 1100, "seconds": 0.08}},
   {"defName": "Punch", "label": "punch", "loop": false, "volume": 0.4, "range": 25, "priority": 2, "tone": {"wave": "noise", "hz": 160, "seconds": 0.07}},
+  {"defName": "Alert_Suspicious", "label": "a fighter grows suspicious", "loop": false, "volume": 0.35, "range": 40, "near": 3, "priority": 2, "cooldown": 0.3, "tone": {"wave": "sine", "hz": 520, "seconds": 0.18}},
+  {"defName": "Alert_Spotted", "label": "a fighter is alerted", "loop": false, "volume": 0.55, "range": 60, "near": 4, "priority": 1, "cooldown": 0.3, "tone": {"wave": "square", "hz": 880, "seconds": 0.22}},
   {"defName": "Dodge", "label": "dodge", "loop": false, "volume": 0.3, "range": 15, "priority": 3, "tone": {"wave": "noise", "hz": 900, "seconds": 0.05}},
   {"defName": "Explosion_Blast", "label": "explosion", "loop": false, "volume": 1.0, "range": 600, "priority": 0, "tone": {"wave": "noise", "hz": 60, "seconds": 0.7}},
   {"defName": "Explosion_Fire", "label": "fire blast", "loop": false, "volume": 0.9, "range": 500, "priority": 0, "tone": {"wave": "noise", "hz": 90, "seconds": 0.8}},

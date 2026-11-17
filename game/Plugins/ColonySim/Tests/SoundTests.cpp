@@ -195,6 +195,23 @@ TEST_CASE("sound: events turn into cues") {
     CHECK(soundTestPlay(db, act).at(0).hasPos);
     act.action = PawnAction::Roll;
     CHECK(soundTestPlay(db, act).at(0).cue == "Dodge");
+
+    // Stealth: a sting when a fighter grows suspicious or is alerted, none when it calms down or is ordered.
+    act.action = PawnAction::Alert;
+    act.amount = 1.0f;
+    act.message = "heard steps";
+    CHECK(soundTestPlay(db, act).at(0).cue == "Alert_Suspicious");
+    act.amount = 2.0f;
+    act.message = "saw";
+    CHECK(soundTestPlay(db, act).at(0).cue == "Alert_Spotted");
+    act.message = "ordered";
+    CHECK(soundTestPlay(db, act).empty());
+    act.amount = 1.0f;
+    act.message = "lost them";
+    CHECK(soundTestPlay(db, act).empty());
+    act.amount = 0.0f;
+    act.message = "calm";
+    CHECK(soundTestPlay(db, act).empty());
 }
 
 TEST_CASE("sound: same event, same cues") {
