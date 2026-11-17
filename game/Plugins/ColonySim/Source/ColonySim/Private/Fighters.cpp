@@ -835,6 +835,7 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
     Threat threats[kFightMaxThreats];
     int threatCount = 0;
     int enemiesNear = 0;
+    int enemiesPressing = 0;
     const bool turrets = shootsTurrets(pawn);  // one that can't take a turret on keeps to its fight as before
     for (const KnownEnemy& k : f.known) {
         const PawnInfo* p = info(k.pawn);
@@ -843,6 +844,9 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
         }
         const Threat t{k.x, k.y, fightDist(k.x, k.y, self.x, self.y), k.pawn};
         enemiesNear += t.d <= rules_.countRadius ? 1 : 0;
+        // An enemy that is itself falling back isn't pressing this fighter.
+        const Fighter* theirs = things_.registry().try_get<Fighter>(k.pawn);
+        enemiesPressing += t.d <= rules_.countRadius && !(theirs != nullptr && theirs->fallingBack) ? 1 : 0;
         int slot = threatCount < rules_.threats ? threatCount++ : rules_.threats;
         while (slot > 0 && (threats[slot - 1].d > t.d || (threats[slot - 1].d == t.d && threats[slot - 1].pawn > t.pawn))) {
             if (slot < rules_.threats) {
@@ -873,7 +877,10 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
     const bool overwhelming = static_cast<float>(friendsNear) >= rules_.outnumberedRatio * static_cast<float>(enemiesNear);
     f.fallingBack = f.retreat || now() < f.cowerUntil ||
                     (enemiesNear > 0 && (static_cast<float>(enemiesNear) >= rules_.outnumberedRatio * static_cast<float>(friendsNear) ||
-                                         (badlyHurt(pawn) && (!overwhelming || bleedingLow(pawn)))));
+                                         // Badly hurt, it backs off from enemies that press it, or to patch a bad bleed. When
+                                         // every enemy near is backing off too there is nothing to back off from: two hurt
+                                         // sides that both fell back stood looking at each other for ever (body-motion.md).
+                                         (badlyHurt(pawn) && ((!overwhelming && enemiesPressing > 0) || bleedingLow(pawn)))));
     // With an enemy already at arm's length there is no getting away on foot: it stands and fights (F8).
     if (f.fallingBack && melee_ != nullptr && threatCount > 0 && threats[0].d <= melee_->reach(pawn) + melee_->rules().standGround) {
         f.fallingBack = false;
@@ -1515,7 +1522,7 @@ bool FighterSystem::meleeAct(Entity pawn, Fighter& f) {
         // A charge walks on until the target is well inside its reach, not just at the edge of it.
         const Position& a = things_.registry().get<Position>(pawn);
         const Position& b = things_.registry().get<Position>(victim);
-        const float close = std::max(0.7f, melee_->reach(pawn) - melee_->rules().closeIn);
+        const float close = std::max(0.7f, melee_->engageDistance(pawn, victim) - melee_->rules().closeIn);
         if (fightDist(a.x, a.y, b.x, b.y) > close) {
             return false;
         }

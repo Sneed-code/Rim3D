@@ -1,0 +1,5 @@
+{
+  "comment": "Clips the sim moves bodies along (docs/design/body-motion.md). The MotionClips commandlet (-run=MotionClips) measures each animation's hip travel and writes data/defs/MotionClips/MotionClips.json. `anim` is relative to /Game/Rim3D/Generated/Animations. `kind` Attack gets hitSeconds (the list's own, else the moment the weapon hand is fastest). `from`/`to` trim a clip (seconds). `turn` keeps the clip's turning. `keepWhenDown` for falls. The def names are the ones Rules/MotionRules.json and Rules/MeleeRules.json (styleAttacks) ask for.",
+  "metresScale": 1.0,
+  "clips": []
+}

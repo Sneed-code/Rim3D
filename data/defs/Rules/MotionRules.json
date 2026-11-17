@@ -1,0 +1,20 @@
+[
+  {
+    "defName": "MotionRules", "source": "ours and sneed's (docs/design/body-motion.md): RimWorld has no body motion",
+    "stepMetres": 0.05,
+    "bodyRadius": 0.25, "minBodyRadius": 0.12, "maxBodyRadius": 1.2,
+    "heightFollow": 1.0,
+    "animalScalePerRoot": 1.0,
+    "rollClip": "Motion_Roll",
+    "sidestepClip": {"left": "Motion_SidestepLeft", "right": "Motion_SidestepRight"},
+    "staggerClip": {"back": "Motion_StaggerBack", "forward": "Motion_StaggerForward", "left": "Motion_StaggerLeft", "right": "Motion_StaggerRight"},
+    "knockdownClip": {"back": "Motion_KnockdownBack", "forward": "Motion_KnockdownForward", "left": "Motion_KnockdownLeft", "right": "Motion_KnockdownRight"},
+    "getUpClip": "Motion_GetUp",
+    "staggerMetres": 0.5, "staggerSteps": 12,
+    "knockdownMetres": 1.0, "knockdownSteps": 20,
+    "sidestepMetres": 0.7, "sidestepSteps": 9,
+    "blastSteps": 12,
+    "ours": ["stepMetres", "bodyRadius", "minBodyRadius", "maxBodyRadius", "heightFollow", "animalScalePerRoot", "staggerMetres", "staggerSteps",
+             "knockdownMetres", "knockdownSteps", "sidestepMetres", "sidestepSteps", "blastSteps"]
+  }
+]

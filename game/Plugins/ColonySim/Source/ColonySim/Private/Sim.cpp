@@ -5,6 +5,7 @@
 #include "ColonySim/Animals.h"
 #include "ColonySim/Breeding.h"
 #include "ColonySim/Apparel.h"
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Drugs.h"
 #include "ColonySim/Bills.h"
 #include "ColonySim/Colonist.h"
@@ -1565,7 +1566,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "that pawn isn't under direct control");
         } else if (health_->incapacitated(move->pawn)) {
             commandFailed(id, "that colonist is downed or dead");
-        } else if (combat_->rollLocked(move->pawn) || reg.any_of<Stunned, Casting>(move->pawn)) {
+        } else if (combat_->rollLocked(move->pawn) || reg.any_of<Stunned, Casting, BodyMotion>(move->pawn)) {
             // Rolling (P2), stunned or winding up a power (X2): the player's position is ignored, without a failure
             // because Unreal sends one every step.
         } else if (jobs_->sleepingByHand(move->pawn)) {
@@ -2616,6 +2617,12 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 combat_->rollDirection(entity, view.rollDirX, view.rollDirY);
             }
             view.hitProof = combat_->hitProof(entity);
+            if (const BodyMotion* motion = things_->registry().try_get<BodyMotion>(entity)) {
+                view.motionClip = motion->clip;
+                view.motionTime = motion->clip.valid() ? motion->time : 0.0f;
+                view.motionRate = motion->rate;
+                view.motionPush = !motion->clip.valid();
+            }
             view.grenades = explosives_->count(entity);
             view.throwReadyIn = explosives_->throwReadyIn(entity);
             view.knockedDown = combat_->knockedDownFor(entity) > 0;

@@ -1,10 +1,12 @@
 #include "ColonySim/Combat.h"
 
 #include "ColonySim/Apparel.h"
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Inspirations.h"
+#include "ColonySim/Looks.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
@@ -676,7 +678,26 @@ CombatSystem::CombatSystem(Things& things, Map& map, HealthSystem& health)
       map_(map),
       health_(health),
       model_(std::make_unique<CombatModel>(things.defs(), health)),
-      apparelStats_(std::make_unique<ApparelStats>(things.defs())) {}
+      apparelStats_(std::make_unique<ApparelStats>(things.defs())),
+      motion_(std::make_unique<BodyMotionSystem>(things, map)) {
+    motion_->setMass([this](Entity pawn) { return bodySize_ ? bodySize_(pawn) : 1.0f; });
+    motion_->setAble([this](Entity pawn) { return !health_.incapacitated(pawn); });
+    // Bodies on the ground (downed, knocked down, lying prone) don't stand in the way: they are stepped over.
+    motion_->setSolid([this](Entity pawn) {
+        const entt::registry& reg = things_.registry();
+        const Posture& posture = reg.get<Posture>(pawn);
+        return posture.stance != Stance::Prone && !health_.incapacitated(pawn);
+    });
+    motion_->setHasClips([this](Entity pawn) {
+        const Thing* thing = things_.registry().try_get<Thing>(pawn);
+        return thing != nullptr && thing->category == ThingCategory::Pawn &&
+               things_.defs().get(thing->def).text("race.intelligence", "Humanlike") == "Humanlike";
+    });
+    motion_->setHeight([this](Entity pawn) {
+        const PawnLooks* looks = things_.registry().try_get<PawnLooks>(pawn);
+        return looks != nullptr ? looks->height : 0.0f;
+    });
+}
 
 CombatSystem::~CombatSystem() = default;
 
@@ -1587,7 +1608,7 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
             const bool zoned = reg.valid(hit.thing) && health_.partZoneHp(hit.thing, 0) > 0.0f;
             if (!zoned && reg.valid(hit.thing) && bullet.stoppingPower > 0.0f &&
                 (bodySize_ ? bodySize_(hit.thing) : 1.0f) <= bullet.stoppingPower + 0.001f) {
-                stagger(hit.thing);
+                stagger(hit.thing, HitFrom{true, h.x - p.vx, h.y - p.vy});
             }
             const PawnHitResult result = hitPawn(hit.thing, hit.part, bullet.damageType, bullet.damage * p.damageFactor,
                                                  bullet.penetration * p.damageFactor, p.seed, HitFrom{true, h.x - p.vx, h.y - p.vy});
@@ -1602,7 +1623,8 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
             health_.applyHit(hit.thing, result.damageType, result.amount, result.part);
             wearApparel(hit.thing, result);
             if (zoned) {
-                jolt(hit.thing, result.part, bullet.damageType, bullet.damage * p.damageFactor, result.amount);
+                jolt(hit.thing, result.part, bullet.damageType, bullet.damage * p.damageFactor, result.amount,
+                     HitFrom{true, h.x - p.vx, h.y - p.vy});
             }
             if (p.launcher != kNoEntity) {
                 noteHurt(hit.thing, p.launcher);
@@ -1905,6 +1927,7 @@ bool CombatSystem::isGun(DefId def) const {
 void CombatSystem::step(Rng& rng) {
     entt::registry& reg = things_.registry();
     stepRolls();
+    motion_->step();  // rolls, sidesteps, staggers, knockdowns and lunging swings move their bodies
     stepKicks();
     stepSwitches();
     // Pawns face where they aim, else where they walk.
@@ -2030,12 +2053,16 @@ float CombatSystem::staggerSpeedFactor(Entity pawn) const {
     return staggeredFor(pawn) > 0 ? model_->staggerSpeed : 1.0f;
 }
 
-void CombatSystem::stagger(Entity pawn) {
+void CombatSystem::stagger(Entity pawn, const HitFrom& from) {
     entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || model_->staggerSteps <= 0 || health_.incapacitated(pawn)) {
         return;
     }
     reg.get_or_emplace<Staggered>(pawn).stepsLeft = model_->staggerSteps;
+    // The blow throws the body back along it, through the world (docs/design/body-motion.md). A roll keeps its own path.
+    if (const Position* at = reg.try_get<Position>(pawn); from.known && at != nullptr && !rollLocked(pawn)) {
+        motion_->throwBody(pawn, at->x - from.x, at->y - from.y, false, 1.0f, from.blow);
+    }
     if (events_ != nullptr) {
         Event e;
         e.type = EventType::PawnStaggered;
@@ -2049,7 +2076,7 @@ void CombatSystem::stagger(Entity pawn) {
     }
 }
 
-bool CombatSystem::jolt(Entity pawn, int part, DefId damageType, float force, float dealt) {
+bool CombatSystem::jolt(Entity pawn, int part, DefId damageType, float force, float dealt, const HitFrom& from) {
     entt::registry& reg = things_.registry();
     const float zoneHp = reg.valid(pawn) ? health_.partZoneHp(pawn, part) : 0.0f;
     if (zoneHp <= 0.0f) {
@@ -2081,6 +2108,10 @@ bool CombatSystem::jolt(Entity pawn, int part, DefId damageType, float force, fl
         }
         poise = &reg.get_or_emplace<Poise>(pawn);
         poise->immuneLeft = model_->poiseImmuneSteps;
+        // Knocked off its feet: the body goes down along the blow, through the world (docs/design/body-motion.md).
+        if (const Position& here = reg.get<Position>(pawn); from.known) {
+            motion_->throwBody(pawn, here.x - from.x, here.y - from.y, true);
+        }
         if (events_ != nullptr) {
             const Position& at = reg.get<Position>(pawn);
             Event e;
@@ -2100,7 +2131,7 @@ bool CombatSystem::jolt(Entity pawn, int part, DefId damageType, float force, fl
     }
     // Stagger: only a hit that took over a tenth of the zone's hit points, and once per 5 s.
     if (dealt > model_->staggerPartShare * zoneHp && (poise == nullptr || poise->staggerWait <= 0) && !reg.all_of<KnockedDown>(pawn)) {
-        stagger(pawn);
+        stagger(pawn, from);
         reg.get_or_emplace<Poise>(pawn).staggerWait = model_->staggerEverySteps;
     }
     return true;
@@ -2297,15 +2328,9 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
             len = 1.0f;
         }
         const float share = std::clamp(1.0f - nearest / ex.radius, 0.0f, 1.0f);
-        for (const float scale : {1.0f, 0.5f}) {
-            const float push = model_->knockbackMetres * share * scale;
-            const float nx = at.x + pushX / len * push;
-            const float ny = at.y + pushY / len * push;
-            if (push > 0.01f && straightWalkIsClear(map_, at.x, at.y, nx, ny, kPawnRadius, at.level)) {
-                at.x = nx;
-                at.y = ny;
-                break;
-            }
+        // Thrown away from the blast over a few steps, against walls and bodies (docs/design/body-motion.md).
+        if (const float push = model_->knockbackMetres * share; push > 0.01f) {
+            motion_->push(pawn, pushX, pushY, push, motion_->rules().blastSteps);
         }
         if (Mover* mover = reg.try_get<Mover>(pawn)) {
             mover->path.clear();
@@ -2907,6 +2932,7 @@ void CombatSystem::stepSwitches() {
 
 void CombatSystem::hashThing(Entity e, StateHasher& h) const {
     const entt::registry& reg = things_.registry();
+    motion_->hashThing(e, h);
     const bool has[] = {reg.all_of<Posture>(e), reg.all_of<Gear>(e), reg.all_of<EquippedBy>(e), reg.all_of<Shooter>(e),
                         reg.all_of<Projectile>(e), reg.all_of<Magazine>(e), reg.all_of<RecoilKick>(e),
                         reg.all_of<DodgeRoll>(e), reg.all_of<KnockedDown>(e), reg.all_of<WeaponSwitch>(e),
@@ -3095,6 +3121,14 @@ bool CombatSystem::dodgeRoll(Entity pawn, float dx, float dy, std::string* why, 
     roll.proof = false;
     posture.facingX = roll.dirX;
     posture.facingY = roll.dirY;
+    // The body really goes (docs/design/body-motion.md): the roll clip's own path when there is one, stretched over
+    // the roll's start-up, roll and recovery; else a plain push over the rolling steps.
+    const int total = model_->rollStartUp + model_->rollActive + model_->rollRecovery;
+    const DefId rollClip = motion_->clipId(motion_->rules().rollClip);
+    if (!rollClip.valid() || !motion_->play(pawn, rollClip, roll.dirX, roll.dirY, total, false)) {
+        motion_->push(pawn, roll.dirX, roll.dirY, model_->rollDistance * motion_->sizeScale(pawn), total, model_->rollStartUp,
+                      model_->rollStartUp + model_->rollActive);
+    }
     // The roll ends a shot being aimed or fired; a reload goes on.
     if (Shooter* s = reg.try_get<Shooter>(pawn); s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) {
         s->phase = ShotPhase::Ready;
@@ -3148,27 +3182,7 @@ void CombatSystem::stepRolls() {
             case RollPhase::Rolling: {
                 roll.proof = roll.rolled < model_->rollHitProof;
                 ++roll.rolled;
-                Position& pos = reg.get<Position>(pawn);
-                const float stride = model_->rollDistance / static_cast<float>(model_->rollActive);
-                const float dx = roll.dirX * stride;
-                const float dy = roll.dirY * stride;
-                // The whole move, or sliding along one axis (a wall), or staying where it is.
-                const float tries[3][2] = {{dx, dy}, {dx, 0.0f}, {0.0f, dy}};
-                float moveX = 0.0f;
-                float moveY = 0.0f;
-                for (const auto& t : tries) {
-                    if ((t[0] != 0.0f || t[1] != 0.0f) && pawnFitsAt(map_, pos.x + t[0], pos.y + t[1], kPawnRadius, pos.level)) {
-                        moveX = t[0];
-                        moveY = t[1];
-                        break;
-                    }
-                }
-                pos.x += moveX;
-                pos.y += moveY;
-                if (Mover* mover = reg.try_get<Mover>(pawn)) {
-                    mover->vx = moveX;
-                    mover->vy = moveY;
-                }
+                // The body moves by its BodyMotion (started with the roll), against walls and bodies.
                 if (--roll.stepsLeft <= 0) {
                     roll.phase = RollPhase::Recovery;
                     roll.stepsLeft = model_->rollRecovery;

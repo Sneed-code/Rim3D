@@ -18,6 +18,7 @@
 namespace colony {
 
 class ApparelStats;
+class BodyMotionSystem;
 class HealthSystem;
 class InspirationSystem;
 class TalentSystem;
@@ -257,6 +258,8 @@ struct HitFrom {
     bool known = false;
     float x = 0.0f;
     float y = 0.0f;
+    // A blow by hand (a club, a fist, teeth), which shoves a body; a bullet only moves it as far as its flinch clip does.
+    bool blow = false;
 };
 
 // What a gun's def says, for fixed guns that fire without a pawn's hands (turrets, F11): range in
@@ -455,11 +458,18 @@ public:
     int staggeredFor(Entity pawn) const;
     float staggerSpeedFactor(Entity pawn) const;
     // Staggers the pawn for CombatRules `stagger.steps` (a fresh stagger restarts the time) and sends PawnStaggered.
-    void stagger(Entity pawn);
+    // A blow from `from` (when known) also throws the body back along the blow (docs/design/body-motion.md).
+    void stagger(Entity pawn, const HitFrom& from = HitFrom{});
     // Part C: a blow on a pawn with body zones, after its damage went in. `force` is the damage before armour, `dealt`
     // what got through, `part` the body part hit. May knock the pawn down (poise) or stagger it (sneed's 5 s / 10%
     // rule). True if the pawn has body zones (the caller then skips RimWorld's stopping-power stagger).
-    bool jolt(Entity pawn, int part, DefId damageType, float force, float dealt);
+    // A blow from `from` (when known) throws the body back along the blow: a stagger or a knockdown clip moves it
+    // through the world (docs/design/body-motion.md).
+    bool jolt(Entity pawn, int part, DefId damageType, float force, float dealt, const HitFrom& from = HitFrom{});
+    // Clips that move bodies (docs/design/body-motion.md): rolls, sidesteps, staggers, knockdowns, blasts and
+    // lunging swings all move pawns through this, and it is stepped with combat.
+    BodyMotionSystem& motion() { return *motion_; }
+    const BodyMotionSystem& motion() const { return *motion_; }
     // Steps left of a pawn's knock-down immunity and stagger wait (0 when free).
     int poiseImmuneFor(Entity pawn) const;
     int staggerWaitFor(Entity pawn) const;
@@ -513,6 +523,7 @@ private:
     HealthSystem& health_;
     std::unique_ptr<CombatModel> model_;
     std::unique_ptr<ApparelStats> apparelStats_;
+    std::unique_ptr<BodyMotionSystem> motion_;
     std::vector<Event>* events_ = nullptr;
     const Weather* weather_ = nullptr;
     const TraitBook* traits_ = nullptr;

@@ -43,6 +43,21 @@
     "arcHalfDegrees": 30,
     "arcRaysPerSide": 2,
     "arcDamageTypes": ["Cut", "Slash", "Blunt", "Crush", "Scratch"],
+    "reachHeightFollow": 0.5,
+    "maxAttackClipSeconds": 1.6,
+    "maxAttackHitSeconds": 0.8,
+    "unarmedStyle": "Unarmed",
+    "weaponStyle": {
+      "Melee_Knife": "OneHand", "Melee_Club": "Club", "Melee_Mace": "Club", "Melee_Gladius": "OneHand",
+      "Melee_BreachAxe": "TwoHand", "Melee_Longsword": "TwoHand", "Melee_Spear": "TwoHand",
+      "Melee_Monosword": "TwoHand", "Melee_Plasmasword": "TwoHand", "Melee_Zeushammer": "TwoHand"
+    },
+    "styleAttacks": {
+      "Club": ["Motion_Club_Downward", "Motion_Club_Horizontal", "Motion_Club_Backhand"],
+      "OneHand": ["Motion_OneHand_Slash1", "Motion_OneHand_Slash3", "Motion_OneHand_Slash5", "Motion_OneHand_Attack2"],
+      "TwoHand": ["Motion_TwoHand_Slash1", "Motion_TwoHand_Slash2", "Motion_TwoHand_Slash3", "Motion_TwoHand_Attack"],
+      "Unarmed": ["Motion_Unarmed_Jab", "Motion_Unarmed_Cross", "Motion_Unarmed_Hook"]
+    },
     "unverified": ["armorPenetrationPerDamage"],
     "ours": [
       "bodyReach", "animalReachBase", "animalReachPerRoot", "weaponReach", "reachSlack", "closeIn", "standGround", "defaultWeaponReach", "shoulderBelowEye", "strikeDepth", "windupShare",
@@ -50,7 +65,8 @@
       "defaultMeleeSkill", "skillSpeedBySkill", "skillDamageBySkill", "aimWobbleBySkill", "reactionTraitSteps", "guardBlocks",
       "guardWindowSteps", "guardBreakSteps", "dodgeRecoverySteps", "recoveryNoDefendSteps", "guardWaitSteps", "guardFacingCos", "rollClearance", "aiRollEverySteps",
       "blockRecoverySteps", "playerBlockSteps", "dodgeHoldSteps", "chargeTraits", "strongPowerShare",
-      "arcHalfDegrees", "arcRaysPerSide", "arcDamageTypes"
+      "arcHalfDegrees", "arcRaysPerSide", "arcDamageTypes",
+      "reachHeightFollow", "maxAttackClipSeconds", "maxAttackHitSeconds", "unarmedStyle", "weaponStyle", "styleAttacks"
     ]
   }
 ]
