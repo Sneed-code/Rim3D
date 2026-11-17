@@ -1,6 +1,8 @@
 # Status
 
-Updated 2026-11-16.
+Updated 2026-11-17.
+
+Water on screen, W1 (sneed, 2026-11-17; Unreal, `docs/design/water.md` "W1 as built"): rivers and lakes are now a **real water surface** instead of a blue floor: murky green-brown tropical water (Single Layer Water) that is clear at the edge, with ripples that flow with the current, foam at the shore and in fast water, refraction and Lumen reflections; the bank cuts the shoreline and the bed under the water is wet mud and sand. A **swimming body floats** with its shoulders at the surface (the camera follows) instead of walking on the bottom. Costs about 0.3 ms a frame. `Water.Enable 0` brings the old look back. New WaterArt commandlet (run once on each PC), smoke test `water`. **Next: sneed looks at it in play (play-rainforest.bat after running the WaterArt commandlet); tune clarity and ripples; then W2 (bodies make waves) and W3 (splashes).**
 
 Body health part D (sneed, 2026-11-16; sim): a person **downed by the torso** and awake now crawls away from enemies within 20 m, slowly (a tenth of a walk); downed by a leg or knocked out they lie still. The snapshot's `crawling` is for a crawl animation on the PC.
 

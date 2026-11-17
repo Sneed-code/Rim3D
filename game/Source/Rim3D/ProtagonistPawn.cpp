@@ -465,6 +465,8 @@ void AProtagonistPawn::UpdateCamera()
 		if (const ASimPawnActor* Drawn = Thing != colony::kNoEntity ? Pawns->FindPawn(Thing) : nullptr)
 		{
 			BodyScale = FMath::Clamp(Drawn->GetBodyScale(), 0.5f, 1.5f);
+			// A swimming body floats up from the bottom; the eyes and the camera go with it (docs/design/water.md, W4).
+			Feet.Z += Drawn->GetSwimLiftCm();
 		}
 	}
 	const FVector Eye = Feet + FVector(0.0, 0.0, kEyeHeight * BodyScale) + FRotator(0.0, Yaw, 0.0).Vector() * ProtagonistEyeForward;

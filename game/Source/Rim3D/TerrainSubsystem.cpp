@@ -20,6 +20,7 @@
 #include "SimSubsystem.h"
 #include "TerrainDraw.h"
 #include "VisualMesh.h"
+#include "SimWaterSubsystem.h"
 
 #include "ColonySim/Defs.h"
 #include "ColonySim/Map.h"
@@ -61,6 +62,8 @@ namespace
 	constexpr int32 TerrBuildBatch = 64;
 
 	const FColor TerrWaterColor(40, 90, 170);
+	/** Whether the water surface (USimWaterSubsystem) is drawn over water cells; then their ground is the wet bed under it. Set on the game thread before a build. */
+	bool GTerrWaterBed = false;
 	const FColor TerrSandColor(210, 195, 140);
 	const FColor TerrRoughStoneColor(150, 140, 125);
 	const FColor TerrRockTopColor(122, 117, 112);
@@ -91,8 +94,8 @@ namespace
 		const colony::CellPos Cell{X, Y, 0};
 		switch (Map.terrain(Cell))
 		{
-			case colony::Terrain::Water: return TerrWaterColor;
-			case colony::Terrain::ShallowWater: return FColor(90, 150, 205);
+			case colony::Terrain::Water: return GTerrWaterBed ? FColor(70, 62, 48) : TerrWaterColor;
+			case colony::Terrain::ShallowWater: return GTerrWaterBed ? FColor(120, 108, 84) : FColor(90, 150, 205);
 			case colony::Terrain::Marsh: return FColor(70, 110, 80);
 			case colony::Terrain::Mud: return FColor(105, 85, 55);
 			case colony::Terrain::Sand: return TerrSandColor;
@@ -138,8 +141,9 @@ namespace
 		const colony::CellPos Cell{X, Y, 0};
 		switch (Map.terrain(Cell))
 		{
-			case colony::Terrain::Water: return FTerrLook(FLinearColor::White, 0.0f, 0.0f, 0.0f, 1.0f);
-			case colony::Terrain::ShallowWater: return FTerrLook(FLinearColor(1.1f, 1.1f, 1.1f), 0.5f, 0.0f, 0.0f, 0.7f);
+			// Under the water surface the bed shows through: wet, dark mud and gravel in deep water, wet sand in the shallows.
+			case colony::Terrain::Water: return GTerrWaterBed ? FTerrLook(FLinearColor(0.42f, 0.38f, 0.30f), 0.3f, 0.0f, 0.7f, 0.0f) : FTerrLook(FLinearColor::White, 0.0f, 0.0f, 0.0f, 1.0f);
+			case colony::Terrain::ShallowWater: return GTerrWaterBed ? FTerrLook(FLinearColor(0.62f, 0.56f, 0.45f), 0.75f, 0.0f, 0.25f, 0.0f) : FTerrLook(FLinearColor(1.1f, 1.1f, 1.1f), 0.5f, 0.0f, 0.0f, 0.7f);
 			case colony::Terrain::Marsh: return FTerrLook(FLinearColor(0.55f, 0.65f, 0.5f), 0.0f, 0.0f, 0.0f, 0.0f);
 			case colony::Terrain::Mud: return FTerrLook(FLinearColor(0.5f, 0.38f, 0.25f), 0.0f, 0.0f, 0.5f, 0.0f);
 			case colony::Terrain::Sand: return FTerrLook(FLinearColor(1.15f, 1.0f, 0.75f), 1.0f, 0.0f, 0.0f, 0.0f);
@@ -1224,6 +1228,7 @@ void UTerrainSubsystem::RebuildAll()
 {
 	USimSubsystem* Sim = Bridge.Get();
 	Teardown();
+	GTerrWaterBed = USimWaterSubsystem::WantsSurface();
 	if (!Sim || !Sim->GetSim() || !GetWorld())
 	{
 		return;
@@ -1334,8 +1339,9 @@ void UTerrainSubsystem::Tick(float DeltaTime)
 		return;
 	}
 
-	if (!bBuilt || BuiltGeneration != Sim->GetSimGeneration() || BuiltSim != Sim->GetSim())
+	if (!bBuilt || BuiltGeneration != Sim->GetSimGeneration() || BuiltSim != Sim->GetSim() || GTerrWaterBed != USimWaterSubsystem::WantsSurface())
 	{
+		GTerrWaterBed = USimWaterSubsystem::WantsSurface();
 		RebuildAll();
 		return;
 	}

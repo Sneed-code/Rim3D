@@ -57,6 +57,33 @@ walkable cell within 24 m, carried by the current, and walks on from there.
 `z + waterDepth`) and `ThingView::swimming`. Unreal reads `Map::waterSurface`, `Map::waterTable` and
 `Map::flowAt` to build and animate the surface.
 
+## Unreal, W1 as built (PC, 2026-11-17)
+
+- `USimWaterSubsystem` (`SimWaterSubsystem.h/.cpp`; the engine's Water plugin owns the name `WaterSubsystem`) builds a
+  surface mesh per 32 m chunk over every Water and ShallowWater cell with a surface, plus **two cells of margin** under
+  the bank. A vertex stands at the cell's `waterSurface`; on the margin's outer edge it dives 0.15 m under the ground (a
+  skirt), so the surface is always cut by the bank and never ends in the air. UV 0 is the map position in metres, UV 1 the
+  flow (m/s), UV 2.x the depth over the ground (negative under the bank). Marsh is left to the terrain material. A few
+  chunks a frame (`Water.ChunksPerFrame`, 4) are hashed and remade when their open water changed (a moisture pump).
+  `GetStats()`: chunks, triangles, vertices, full build and rebuild ms. Seed 42, 512 m rainforest: 31 chunks, 16,626
+  triangles, built in 25 ms.
+- `M_Water` from the **WaterArt commandlet** (`-run=WaterArt`, needs the terrain's `T_water_normal`, so run
+  TerrainMaterials first): Single Layer Water; absorption (0.9, 0.6, 1.6)/m and scattering (0.05, 0.06, 0.035)/m (ours,
+  murky green-brown, nearly clear in the first 20 to 30 cm); two ripple normal layers (3.2 m and 1.3 m, the second turned
+  a quarter) advected along the flow with the two-phase flow-map blend (4 s cycle), a slow wind drift on still water,
+  ripples stronger with speed; foam from the vertex depth at the shore (under 0.2 m) and where flow is over 0.7 m/s,
+  through the Opacity pin; refraction 1.33; reflections from Lumen. All numbers are material parameters.
+- The terrain paints Water/ShallowWater cells as a **wet bed** (dark mud and gravel, wet sand in the shallows) while the
+  surface is drawn; `Water.Enable 0` (or no `M_Water`) brings back the old opaque water colour.
+- **Bodies (W4 minimum):** `WaterDraw.h`: a swimming pawn or animal is drawn floating, its feet 80% of its body height
+  (`Sim::bodyHeightM`) under the surface, eased in and out; the protagonist's camera follows the floating body. Not yet
+  seen in a smoke test (compiled only).
+- Cost (smoke test `water`, 1080p offscreen, river scene): GPU 5.2 ms without the surface, 5.5 ms with it (+0.3 ms);
+  render thread +0.3 ms; game thread unchanged.
+- Left: the water still reads a little flat and opaque from above (tune absorption/ripple strength in play); the
+  shoreline follows the cell-sized bed heights, so diagonal banks show small steps; the seed-42 512 m map has no still
+  lake (776 still cells, all lake rims), so the `lake` shots show the river; cover leaves on the shallows are the terrain's.
+
 ## Unreal (planned, PC)
 
 How real water is done in today's games, and what we do. A true 3D fluid simulation (every litre of water
