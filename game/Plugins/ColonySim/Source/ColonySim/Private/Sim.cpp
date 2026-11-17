@@ -71,6 +71,7 @@
 #include "ColonySim/Things.h"
 #include "ColonySim/RoofCollapse.h"
 #include "ColonySim/UpperFloors.h"
+#include "ColonySim/Water.h"
 #include "ColonySim/Weather.h"
 #include "ColonySim/Zones.h"
 #include "ColonySim/Disasters.h"
@@ -349,6 +350,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         }
         return static_cast<float>(defs_->get(things_->registry().get<Thing>(pawn).def).number("race.baseBodySize", 1.0));
     });
+    movement_->setBodyHeight([this](Entity pawn) { return bodyHeightM(pawn); });
     movement_->setDoorSpeed([this](Entity door) {
         const int factor = static_cast<int>(defs_->get(things_->registry().get<Thing>(door).def).integer("door.openSpeedFactor", 1));
         return factor > 1 && !power_->running(door) ? 1 : factor;
@@ -1587,7 +1589,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             float moveX = 0.0f;
             float moveY = 0.0f;
             for (const auto& t : tries) {
-                if ((t[0] != 0.0f || t[1] != 0.0f) && pawnFitsAt(map_, pos.x + t[0], pos.y + t[1], kPawnRadius, pos.level)) {
+                // The player's body may swim out into deep water (docs/design/water.md).
+                if ((t[0] != 0.0f || t[1] != 0.0f) && swimmerFitsAt(map_, pos.x + t[0], pos.y + t[1], kPawnRadius, pos.level)) {
                     moveX = t[0];
                     moveY = t[1];
                     break;
@@ -1607,6 +1610,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (things_->exists(roll->pawn) && reg.all_of<Mover, Position>(roll->pawn) &&
             reg.get<Mover>(roll->pawn).climbing(reg.get<Position>(roll->pawn).level)) {
             commandFailed(id, "that pawn is climbing");
+        } else if (pawnSwimming(roll->pawn)) {
+            commandFailed(id, "can't roll while swimming");
         } else if (!combat_->dodgeRoll(roll->pawn, roll->dx, roll->dy, &error)) {
             commandFailed(id, error);
         }
@@ -1669,6 +1674,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* shoot = std::get_if<ShootCommand>(&command)) {
         if (explosives_->throwing(shoot->pawn)) {
             commandFailed(id, "that pawn is throwing");
+        } else if (pawnSwimming(shoot->pawn)) {
+            commandFailed(id, "can't shoot while swimming");
         } else if (!combat_->shoot(shoot->pawn, shoot->target, shoot->x, shoot->y, shoot->z, shoot->player, &error)) {
             commandFailed(id, error);
         }
@@ -1764,6 +1771,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (!jobs_->bills().removeBill(removeBill->building, removeBill->bill, error)) {
             commandFailed(id, error);
         }
+    } else if (const auto* swimMelee = std::get_if<MeleeCommand>(&command); swimMelee != nullptr && pawnSwimming(swimMelee->pawn)) {
+        commandFailed(id, "can't fight while swimming");
     } else if (const auto* melee = std::get_if<MeleeCommand>(&command)) {
         const bool done = melee->mode == MeleeMode::Block
                               ? melee_->block(melee->pawn, &error)
@@ -2444,6 +2453,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
                     view.y = pos.y + (ty - pos.y) * t;
                     view.z += (map_.heightAt(tx, ty, to.level) - view.z) * t;
                 }
+            }
+            if (view.level == 0 && view.climb == 0.0f) {
+                const WaterContact water = waterContactAt(map_, view.x, view.y, 0, bodyHeightM(entity));
+                view.waterDepth = water.depth;
+                view.swimming = water.swimming();
             }
             view.firstWaypoint = static_cast<uint32_t>(out.waypoints.size());
             for (size_t k = mover->next; k < mover->path.size(); ++k) {
@@ -3517,6 +3531,27 @@ void Sim::applyScannerCommand(const ScannerCommand& command, uint64_t id) {
 // How fast the pawn walks, as a share of its def's speed: its load, the moveSpeed talents, a bullet stagger, what it
 // wears and hunger (a starving pawn walks at 75%, needs.md "Starving"). The movement system and the snapshot (for the
 // player's own walk in direct mode) both use it.
+bool Sim::pawnSwimming(Entity pawn) const {
+    const entt::registry& reg = things_->registry();
+    const Position* pos = reg.valid(pawn) ? reg.try_get<Position>(pawn) : nullptr;
+    return pos != nullptr && waterContactAt(map_, pos->x, pos->y, pos->level, bodyHeightM(pawn)).swimming();
+}
+
+float Sim::bodyHeightM(Entity pawn) const {
+    const entt::registry& reg = things_->registry();
+    if (!reg.valid(pawn)) {
+        return kPersonHeightM;
+    }
+    if (const PawnLooks* looks = reg.try_get<PawnLooks>(pawn)) {
+        return kPersonHeightM * std::clamp(looks->height, 0.5f, 1.5f);
+    }
+    const float animal = animals_ ? animals_->bodySize(pawn) : 0.0f;
+    if (animal > 0.0f) {
+        return std::clamp(0.9f * std::sqrt(animal), 0.25f, 3.0f);
+    }
+    return kPersonHeightM;
+}
+
 float Sim::pawnMoveFactor(Entity pawn) const {
     return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed")) *
            combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn);

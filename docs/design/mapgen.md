@@ -26,7 +26,8 @@ wanders (noise at 200 m and 50 m), and its width varies: the deep channel is 0 t
 with 2 to 4 m of shallow water beside it, times the biome's `mapGen.river`. Each river has a **ford**
 (no deep water for about 30 m) at a place from the seed, so the land is never cut in two. The bed
 is cut into the ground and the banks slope back up over 6 m; a river cuts a valley through a
-mountain. Natural lakes get a shallow rim (the lowest 11% of the water band).
+mountain. Since water became a surface ([water.md](water.md)) the shallows' bed rises to just under the water table at
+the shore, the banks stop 0.15 m above it, and every river cell has a current. Natural lakes get a shallow rim (the lowest 11% of the water band).
 
 ## Marsh and mud
 

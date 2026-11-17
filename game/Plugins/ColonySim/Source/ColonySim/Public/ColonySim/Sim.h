@@ -502,6 +502,11 @@ public:
     // Path requests go through its queue, which runs once per step (docs/design/pathfinding.md).
     Pathfinder& pathfinder() { return pathfinder_; }
     const Pathfinder& pathfinder() const { return pathfinder_; }
+    // How tall a pawn is, metres, which decides how deep water is for it (docs/design/water.md): a person
+    // 1.80 m times their looks' height, an animal 0.9 m times the square root of its body size (ours).
+    float bodyHeightM(Entity pawn) const;
+    // True when the pawn is in water past its shoulders: it swims, and can't roll, shoot or fight.
+    bool pawnSwimming(Entity pawn) const;
 
 private:
     float pawnMoveFactor(Entity pawn) const;  // see Sim.cpp
