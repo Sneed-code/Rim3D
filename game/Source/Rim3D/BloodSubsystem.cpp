@@ -20,6 +20,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Clock.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Wounds.h"
@@ -1721,8 +1722,12 @@ void UBloodSubsystem::SyncFilth()
 				}
 				Stain.Fluid = Fluid;
 				Stain.bFluid = bFluid;
-				// Piles there when the game loaded are old and dry; new ones are wet.
-				Stain.WetSince = bFilthSeenOnce ? Clock : Clock - 100000.0f;
+				// Its age is the sim's (game seconds; the clock here is real seconds at game speed).
+				Stain.WetSince = Clock - Pile.age / static_cast<float>(colony::kStepsPerRealSecondAt1x);
+			}
+			else if (Pile.thickness > Existing->Thickness)
+			{
+				Stain.WetSince = Clock;  // fresh blood on it
 			}
 			Stain.Thickness = Pile.thickness;
 			// One decal per pile, placed and turned by the cell so it does not jump when it thickens.
@@ -1738,7 +1743,7 @@ void UBloodSubsystem::SyncFilth()
 				Stain.Decal->DestroyComponent();
 			}
 			UDecalComponent* Decal = MakeWorldDecal(Cell, At, FVector::UpVector, FVector(CellRandom.FRandRange(-1.0f, 1.0f), CellRandom.FRandRange(-1.0f, 1.0f), 0.0f), Radius,
-				Radius * CellRandom.FRandRange(0.75f, 1.0f), DecalColorFor(Stain.Fluid, Stain.bFluid ? Clock - Stain.WetSince : 100000.0f, Stain.bFluid ? 0.9f : 0.75f));
+				Radius * CellRandom.FRandRange(0.75f, 1.0f), DecalColorFor(Stain.Fluid, Stain.bFluid ? Clock - Stain.WetSince : 100000.0f, Stain.bFluid ? 0.9f * BloodAgeFade(Clock - Stain.WetSince) : 0.75f));
 			if (!Decal)
 			{
 				continue;
@@ -1775,10 +1780,10 @@ void UBloodSubsystem::SyncFilth()
 			continue;
 		}
 		const float Age = Clock - Stain.WetSince;
-		if (Age - Stain.LastColorAge > 4.0f && Age < 2.0f * 60.0f * FMath::Max(1.0f, GBloodDryMinutes.GetValueOnGameThread()))
+		if (Age - Stain.LastColorAge > 4.0f)
 		{
 			Stain.LastColorAge = Age;
-			Stain.Decal->SetDecalColor(DecalColorFor(Stain.Fluid, Age, 0.9f));
+			Stain.Decal->SetDecalColor(DecalColorFor(Stain.Fluid, Age, 0.9f * BloodAgeFade(Age)));
 			if (--Budget <= 0)
 			{
 				break;

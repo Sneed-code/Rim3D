@@ -252,3 +252,43 @@ TEST_CASE("Grime: it lives in the sim's step and survives a save") {
     CHECK(g->bloodKind == blood);
     CHECK(loaded.sim->stateHash() == hash);
 }
+
+TEST_CASE("Filth: blood on the ground is gone 5 minutes 40 after it last landed, indoors too; dirt stays") {
+    auto sim = grimeTestSim();
+    const CellPos cell{10, 10, 0};
+    sim->editMap().setThickRoof(cell, true);
+    sim->filth().step(0);
+    CHECK(sim->filth().add(cell, "Blood"));
+    CHECK(sim->filth().add(cell, "Dirt"));
+    CHECK(sim->filth().add(CellPos{12, 10, 0}, "InsectBlood"));
+    const int blood = sim->filth().kindIndex("Blood");
+    const float fade = sim->filth().kinds()[static_cast<size_t>(blood)].fadeSeconds;
+    CHECK(fade == doctest::Approx(10200.0f));
+    const auto has = [&](CellPos c, const char* name) {
+        const int kind = sim->filth().kindIndex(name);
+        for (const FilthPile& pile : sim->filth().at(c)) {
+            if (pile.kind == kind) {
+                return true;
+            }
+        }
+        return false;
+    };
+    // Half way a fresh layer lands: the pile starts over.
+    sim->filth().step(5100);
+    CHECK(sim->filth().add(cell, "Blood"));
+    sim->filth().step(10200);
+    CHECK(has(cell, "Blood"));
+    CHECK_FALSE(has(CellPos{12, 10, 0}, "InsectBlood"));
+    sim->filth().step(15270);
+    CHECK(has(cell, "Blood"));
+    sim->filth().step(15300);
+    CHECK_FALSE(has(cell, "Blood"));
+    CHECK(has(cell, "Dirt"));
+
+    // The age is in the snapshot and survives a save.
+    CHECK(sim->filth().add(CellPos{14, 10, 0}, "Blood"));
+    const std::vector<uint8_t> bytes = saveSim(*sim);
+    SaveLoadResult loaded = loadSim(bytes, grimeTestDefs());
+    GRIME_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+}

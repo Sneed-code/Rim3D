@@ -69,7 +69,9 @@ all).
 
 **Fading** (sneed, 2026-11-17): every stain on the world and on bodies, and the blood layer of [grime.md](grime.md),
 loses 3% of its strength every 10 seconds from when it was put down (`Blood.FadeStep` 0.03, at game speed), so it is
-gone after about 5.5 minutes. The sim's blood filth piles (which colonists clean and rooms count) are not faded this way.
+gone after about 5.5 minutes. The sim's blood piles (Blood, InsectBlood, MachineFluid: `filth.fadeSeconds` 10,200, ours)
+follow the same rule, indoors too: a pile is gone 5 min 40 s after blood last landed on it, and its decal fades by the
+pile's age from the snapshot (`FilthView::age`). Dirt, vomit and ash keep RimWorld's days.
 
 **Stains stay**: world stains, body stains and pools dry from the fluid's `wet` to `dry` colour over `Blood.DryMinutes`
 (5) at 1x, glossy and raised while wet, matte once dry. Outdoors, rain washes a fresh stain away in about 4 minutes of

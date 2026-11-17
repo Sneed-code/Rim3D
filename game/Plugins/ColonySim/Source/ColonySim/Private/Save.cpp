@@ -3076,6 +3076,9 @@ void saveRoomStatsSection(Ar& ar, SaveData& d) {
         ar.value("cell", e.cell);
         ar.text("kind", e.kind);
         ar.value("thickness", e.thickness);
+        if (ar.sectionVersion() >= 2) {
+            ar.value("wetAt", e.wetAt);  // 2: when the pile was last added to (blood fades by its age)
+        }
     });
     ar.list("carriers", d.filth.carriers, [&](FilthState::Carrier& c) {
         ar.value("pawn", c.pawn);
@@ -3524,7 +3527,7 @@ void saveSections(Ar& ar, SaveData& d) {
     });
     ar.section("talents", 1, [&] { saveTalents(ar, d); });
     ar.section("drugs", 2, [&] { saveDrugs(ar, d); });
-    ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
+    ar.section("roomstats", 2, [&] { saveRoomStatsSection(ar, d); });
     ar.section("terrain", 2, [&] {
         ar.list("dried", d.driedCells, [&](uint32_t& cell) { ar.value(nullptr, cell); });
         if (ar.sectionVersion() >= 2) {
