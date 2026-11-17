@@ -72,6 +72,18 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
         j["response"] = fightResponseName(response->response);
         return j;
     }
+    if (const auto* shield = std::get_if<ShieldCommand>(&logged.command)) {
+        j["pawn"] = entt::to_integral(shield->pawn);
+        j["up"] = shield->up;
+        j["hasDir"] = shield->hasDir;
+        j["dirX"] = shield->dirX;
+        j["dirY"] = shield->dirY;
+        return j;
+    }
+    if (const auto* reroll = std::get_if<RerollColonistCommand>(&logged.command)) {
+        j["slot"] = reroll->slot;
+        return j;
+    }
     std::visit(
         [&j](const auto& c) {
             using Type = std::decay_t<decltype(c)>;
@@ -561,19 +573,12 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                     } else if constexpr (std::is_same_v<Type, SetAlertCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
                         j["alert"] = c.alert;
-                    } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
-                        j["pawn"] = entt::to_integral(c.pawn);
-                        j["up"] = c.up;
-                        j["hasDir"] = c.hasDir;
-                        j["dirX"] = c.dirX;
-                        j["dirY"] = c.dirY;
                     } else {
-                        static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, FocusCommand> ||
+                        // Written before the visit (MSVC nesting limit).
+                        static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, ShieldCommand> ||
+                                          std::is_same_v<Type, FocusCommand> ||
                                           std::is_same_v<Type, SetFightResponseCommand>,
                                       "write every command type");
-                        if constexpr (std::is_same_v<Type, RerollColonistCommand>) {
-                            j["slot"] = c.slot;
-                        }
                     }
                 }
             }
