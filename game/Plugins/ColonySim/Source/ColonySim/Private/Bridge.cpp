@@ -262,13 +262,12 @@ const char* commandName(const Command& command) {
                         return "SetDayLength";
                     } else if constexpr (std::is_same_v<Type, SleepCommand>) {
                         return "Sleep";
-                    } else if constexpr (std::is_same_v<Type, SetLandingZoneCommand>) {
-                        return "SetLandingZone";
                     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
                         return "Patch";
                     } else {
-                        static_assert(std::is_same_v<Type, RerollColonistCommand>, "name every command type");
-                        return "RerollColonist";
+                        static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, SetLandingZoneCommand>,
+                                      "name every command type");
+                        return std::is_same_v<Type, SetLandingZoneCommand> ? "SetLandingZone" : "RerollColonist";
                     }
                 }
             }
