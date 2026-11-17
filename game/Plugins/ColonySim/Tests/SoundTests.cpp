@@ -291,7 +291,7 @@ TEST_CASE("sound: a woman grunts at some hard melee hits and screams when downed
     down.thing = man;
     CHECK(voices(down).empty());
 
-    // Killed by violence screams; bleeding out, cold or illness do not.
+    // Killed in a fight screams, bleeding out from it too; cold or illness do not.
     Event died;
     died.type = EventType::PawnDied;
     died.thing = woman;
@@ -300,34 +300,18 @@ TEST_CASE("sound: a woman grunts at some hard melee hits and screams when downed
     died.message = "executed";
     CHECK(voices(died).size() == 1);
     died.message = "blood loss";
-    CHECK(voices(died).empty());
+    CHECK(voices(died).size() == 1);
     died.message = "hypothermia";
     CHECK(voices(died).empty());
+    died.message = "illness";
+    CHECK(voices(died).empty());
 
-    // Killed while she lay downed: awake, a last scream (the cue's downedDeathChance, now 1); knocked out, none.
+    // Killed while she lay downed (awake or knocked out): she screams again, every time.
     died.message = "a vital part destroyed";
-    int last = 0;
-    bool knockedOut = false;
-    for (int i = 0; i < 400; ++i) {
-        died.thing = static_cast<Entity>(100 + i);
-        died.cell = {i % 23, i / 23, 0};
-        const Entity who = died.thing;
-        const SoundGenderOf allFemale = [](Entity) { return SoundGender::Female; };
-        const SoundDefOf allHuman = [&](Entity) { return human; };
-        const auto count = [&](float amount) {
-            died.amount = amount;
-            std::vector<SoundPlay> out;
-            soundForEvent(db, died, allHuman, out, allFemale);
-            int n = 0;
-            for (const SoundPlay& p : out) n += p.voice == SoundVoice::Scream && p.entity == who ? 1 : 0;
-            return n;
-        };
-        CHECK(count(0.0f) == 1);  // was up: killed outright, always
-        last += count(1.0f);
-        knockedOut = knockedOut || count(2.0f) != 0;
+    for (const float amount : {0.0f, 1.0f, 2.0f}) {
+        died.amount = amount;
+        CHECK(voices(died).size() == 1);
     }
-    CHECK(last == 400);  // sneed: she screams again when killed (downedDeathChance 1)
-    CHECK(!knockedOut);
 }
 
 TEST_CASE("sound: a woman grunts at some hard shots too") {

@@ -52,6 +52,13 @@ namespace
 
 	const TCHAR* const PawnBodyMeshPath = TEXT("/Game/Characters/UEFN_Mannequin/Meshes/SKM_UEFN_Mannequin.SKM_UEFN_Mannequin");
 	const TCHAR* const PawnMetaHumanClassPath = TEXT("/Game/MetaHumans/Kellan/BP_Kellan.BP_Kellan_C");
+	// Standing still: a calm Mixamo breathing idle (feet planted, chest and shoulders rise and fall), the first one found,
+	// retargeted onto the mannequin by the MakeHumanArt commandlet. The sample's own idle (and motion matching over its
+	// idle database) shifted the weight and shuffled a foot every few seconds, so standing pawns never stood still.
+	const TCHAR* const PawnStandIdlePaths[] = {
+		TEXT("/Game/Rim3D/Generated/Animations/Mixamo/MeleeAxe/A_ProMeleeAxeUnarmedIdle.A_ProMeleeAxeUnarmedIdle"),
+		TEXT("/Game/Rim3D/Generated/Animations/Mixamo/Longbow/A_ProLongbowUnarmedIdle01.A_ProLongbowUnarmedIdle01"),
+	};
 	const TCHAR* const PawnIdlePath = TEXT("/Game/Characters/UEFN_Mannequin/Animations/Idle/M_Neutral_Stand_Idle_Loop.M_Neutral_Stand_Idle_Loop");
 	const TCHAR* const PawnWalkPath = TEXT("/Game/Characters/UEFN_Mannequin/Animations/Walk/M_Neutral_Walk_Loop_F.M_Neutral_Walk_Loop_F");
 	const TCHAR* const PawnRunPath = TEXT("/Game/Characters/UEFN_Mannequin/Animations/Run/M_Neutral_Run_Loop_F.M_Neutral_Run_Loop_F");
@@ -135,7 +142,18 @@ void USimPawnSubsystem::LoadAssets()
 	}
 	bAssetsTried = true;
 	BodyMesh = LoadObject<USkeletalMesh>(nullptr, PawnBodyMeshPath);
-	IdleLoop = LoadObject<UAnimSequence>(nullptr, PawnIdlePath);
+	for (const TCHAR* Path : PawnStandIdlePaths)
+	{
+		if (!IdleLoop)
+		{
+			IdleLoop = LoadObject<UAnimSequence>(nullptr, Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
+		}
+	}
+	if (!IdleLoop)
+	{
+		UE_LOG(LogSimPawns, Warning, TEXT("No Mixamo breathing idle (run -run=MakeHumanArt -Clips): standing pawns use the sample's idle"));
+		IdleLoop = LoadObject<UAnimSequence>(nullptr, PawnIdlePath);
+	}
 	WalkLoop = LoadObject<UAnimSequence>(nullptr, PawnWalkPath);
 	RunLoop = LoadObject<UAnimSequence>(nullptr, PawnRunPath);
 	CrouchPose = LoadObject<UAnimSequence>(nullptr, PawnCrouchPath);
@@ -156,8 +174,8 @@ void USimPawnSubsystem::LoadAssets()
 	bAssetsLoaded = BodyMesh && IdleLoop && WalkLoop && RunLoop && !Databases.IsEmpty();
 	if (bAssetsLoaded)
 	{
-		UE_LOG(LogSimPawns, Display, TEXT("Pawn animation: %d motion matching databases, walk loop %.0f cm/s, run loop %.0f cm/s"),
-			Databases.Num(), WalkLoopSpeed, RunLoopSpeed);
+		UE_LOG(LogSimPawns, Display, TEXT("Pawn animation: %d motion matching databases, walk loop %.0f cm/s, run loop %.0f cm/s, standing idle %s"),
+			Databases.Num(), WalkLoopSpeed, RunLoopSpeed, *IdleLoop->GetName());
 	}
 	else
 	{

@@ -4,6 +4,7 @@
 #include "ColonySim/Genes.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Mood.h"
+#include "ColonySim/Random.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Traits.h"
 
@@ -256,6 +257,25 @@ public:
     float coverBlood = 1500.0f;                  // under this a bleeding fighter falls back to cover to patch
     float minMoving = 0.4f;                      // a person on their feet (body zones) limps, never slower than this share
     float crawlMoving = 0.1f;                    // a torso-downed person crawls at this share of its walk (part D)
+    // sneed's rules of 2026-11-17 (HealthRules `zones`, body-health.md part F).
+    int deadLimbs = 2;                 // this many arms and legs at 0 ...
+    float deadLimbsCore = 0.5f;        // ...with the head or the torso at this or less: dead
+    float limbSlowBelow = 0.5f;        // an arm or a leg under this slows attacks or the walk ...
+    float limbSlowPerShare = 0.5f;     // ...by this for every share of its health under it (both limbs added)
+    float healDelaySeconds = 10.0f;    // a zone not hurt for this long (real seconds) and not bleeding ...
+    float healPerSecond = 0.001f;      // ...heals this share of its missing hit points a real second
+    float healAsleepFactor = 2.0f;     // ...times this asleep
+    float healGoneBelow = 0.25f;       // a wound healed down to under this many hit points is gone
+    // Dismemberment: the hit that kills takes the struck piece off when it went over what the zone had left by this
+    // share of the zone's hit points (0: never).
+    float dismemberOverkill = 0.25f;
+    std::string dismemberArmWhole = "Arm";
+    std::string dismemberArmLower = "Hand";
+    std::vector<std::string> dismemberArmLowerAlso = {"Radius"};
+    std::string dismemberLegWhole = "Leg";
+    std::string dismemberLegLower = "Foot";
+    std::vector<std::string> dismemberLegLowerAlso = {"Tibia"};
+    std::string dismemberHead = "Head";
     void buildZones();
     // Scars (H1): the chance a healed injury leaves one grows from 0 at scarMinHp hit points lost to scarMax at scarFullHp.
     float scarMax = 0.02f;
@@ -626,6 +646,35 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
             num("zones.coverBlood", coverBlood);
             num("zones.minMoving", minMoving);
             num("zones.crawlMoving", crawlMoving);
+            deadLimbs = static_cast<int>(rules->integer("zones.deadLimbs", deadLimbs));
+            num("zones.deadLimbsCoreAtOrBelow", deadLimbsCore);
+            num("zones.limbSlowBelow", limbSlowBelow);
+            num("zones.limbSlowPerShare", limbSlowPerShare);
+            num("zones.healDelaySeconds", healDelaySeconds);
+            num("zones.healPerSecond", healPerSecond);
+            num("zones.healAsleepFactor", healAsleepFactor);
+            num("zones.healGoneBelow", healGoneBelow);
+            num("zones.dismember.overkillShare", dismemberOverkill);
+            const auto word = [&](const char* key, std::string& out) {
+                if (rules->has(key)) {
+                    out = rules->text(key);
+                }
+            };
+            const auto words = [&](const char* key, std::vector<std::string>& out) {
+                if (rules->has(key)) {
+                    out.clear();
+                    for (size_t i = 0; i < rules->count(key); ++i) {
+                        out.push_back(rules->textAt(key, i));
+                    }
+                }
+            };
+            word("zones.dismember.arm.whole", dismemberArmWhole);
+            word("zones.dismember.arm.lower", dismemberArmLower);
+            words("zones.dismember.arm.lowerAlso", dismemberArmLowerAlso);
+            word("zones.dismember.leg.whole", dismemberLegWhole);
+            word("zones.dismember.leg.lower", dismemberLegLower);
+            words("zones.dismember.leg.lowerAlso", dismemberLegLowerAlso);
+            word("zones.dismember.head", dismemberHead);
             bloodMax = std::max(1.0f, bloodMax);
             stepsPerRealSecond = std::max(1.0f, stepsPerRealSecond);
         }
@@ -1115,6 +1164,15 @@ float HealthSystem::partZoneHp(Entity pawn, int part) const {
     return body.zones[static_cast<size_t>(body.zoneOf[static_cast<size_t>(part)])].hp;
 }
 
+int HealthSystem::partZone(Entity pawn, int part) const {
+    const HealthModel::Kind* kind = healthKindOf(*model_, things_.registry(), pawn);
+    if (kind == nullptr || part < 0) {
+        return -1;
+    }
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    return static_cast<size_t>(part) < body.zoneOf.size() ? body.zoneOf[static_cast<size_t>(part)] : -1;
+}
+
 float HealthSystem::blood(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || !reg.all_of<Health>(pawn)) {
@@ -1347,15 +1405,29 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
     if (zoned) {
         // sneed's rules: torso, head or a leg under 25%, or 3 zones under 50%; unconscious with the head under 25% or
         // 1000 blood or less. The protagonist is never downed and dies when its zones have lost 100 hit points.
+        // Dead (sneed, 2026-11-17) with the head or the torso at 0, or with two limbs at 0 and the head or torso at half
+        // or less. An arm under half slows attacks, a leg under half the walk: half a percent for every percent under.
         bool down = false;
         bool torsoDown = false;
         bool headOut = false;
         int low = 0;
         float lost = 0.0f;
+        bool coreGone = false;
+        bool coreLow = false;
+        int limbsGone = 0;
+        float armSlow = 0.0f;
+        float legSlow = 0.0f;
         for (size_t z = 0; z < body.zones.size(); ++z) {
             const HealthModel::ZoneKind kind = body.zones[z].kind;
             const float f = eval.zoneHealth[z];
             lost += eval.zoneDamage[z];
+            if (kind == HealthModel::ZoneKind::Head || kind == HealthModel::ZoneKind::Torso) {
+                coreGone = coreGone || f <= 0.0f;
+                coreLow = coreLow || f <= model_->deadLimbsCore;
+            } else if (kind == HealthModel::ZoneKind::Arm || kind == HealthModel::ZoneKind::Leg) {
+                limbsGone += f <= 0.0f ? 1 : 0;
+                (kind == HealthModel::ZoneKind::Arm ? armSlow : legSlow) += model_->limbSlowPerShare * std::max(0.0f, model_->limbSlowBelow - f);
+            }
             low += f < model_->zoneManyBelow ? 1 : 0;
             if (f < model_->zoneDownBelow &&
                 (kind == HealthModel::ZoneKind::Head || kind == HealthModel::ZoneKind::Torso || kind == HealthModel::ZoneKind::Leg)) {
@@ -1365,6 +1437,8 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
             headOut = headOut || (kind == HealthModel::ZoneKind::Head && f < model_->zoneHeadUnconscious);
         }
         health.crawls = false;
+        health.limbAttack = std::clamp(1.0f - armSlow, 0.0f, 1.0f);
+        health.limbMove = std::clamp(1.0f - legSlow, 0.0f, 1.0f);
         if (health.protagonist) {
             health.unconscious = false;
             shouldBeDown = false;
@@ -1372,6 +1446,9 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
                 cause = DeathCause::Wounds;
             }
         } else {
+            if (cause == DeathCause::None && (coreGone || (limbsGone >= model_->deadLimbs && coreLow))) {
+                cause = DeathCause::Wounds;
+            }
             health.unconscious = headOut || health.bloodLoss >= 1.0f - model_->bloodUnconscious / model_->bloodMax;
             shouldBeDown = down || low >= model_->zoneManyCount || health.unconscious;
             health.crawls = torsoDown && !health.unconscious;
@@ -1423,7 +1500,7 @@ void HealthSystem::recompute(Entity pawn, Health& health, bool announce) {
         // Body zones: pain no longer downs a person, so it doesn't leave one crawling on its feet either; a bad leg is a
         // limp (sneed), and a leg under a quarter downs.
         if (!health.zones.empty()) {
-            health.movingFactor = std::max(health.movingFactor, model_->minMoving);
+            health.movingFactor = std::max(health.movingFactor, model_->minMoving) * health.limbMove;
         }
     } else if (health.crawls && !health.dead) {
         health.movingFactor = model_->crawlMoving;  // part D: downed by the torso, it can still drag itself along
@@ -1605,6 +1682,24 @@ bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int targ
         const DefId solid = type.hediffSolid;
         return body.parts[static_cast<size_t>(p)].solid && solid.valid() ? solid : type.hediff;
     };
+    const bool wasDead = health.dead;
+    // Dismemberment (part F): what the struck zone had left before this hit.
+    const int zone = body.zoneOf.empty() ? -1 : body.zoneOf[static_cast<size_t>(target)];
+    float zoneLeft = -1.0f;
+    if (zone >= 0) {
+        if (health.dirty) {
+            recompute(pawn, health, true);
+            if (health.dead) {
+                return false;
+            }
+        }
+        if (static_cast<size_t>(zone) < health.zones.size()) {
+            zoneLeft = health.zones[static_cast<size_t>(zone)] * body.zones[static_cast<size_t>(zone)].hp * healthHpFactor(*model_, body, health);
+        }
+        // Healing waits 10 real seconds from the last hurt (sneed).
+        health.zoneHurtAt.resize(body.zones.size(), -1);
+        health.zoneHurtAt[static_cast<size_t>(zone)] = clock_ != nullptr ? *clock_ : 0;
+    }
     bool hurt = damagePart(pawn, health, target, hediffFor(target), amount);
     if (hurt && hurtOuter && model_->innerHurtsOuter && body.parts[static_cast<size_t>(target)].inside) {
         int outer = body.parts[static_cast<size_t>(target)].parent;
@@ -1618,8 +1713,144 @@ bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int targ
         }
     }
     recompute(pawn, health, true);
+    // The hit that killed, a quarter of the zone's hit points or more over what the zone had left: the piece comes off.
+    if (hurt && health.dead && !wasDead && zoneLeft >= 0.0f && !health.protagonist && model_->dismemberOverkill > 0.0f &&
+        amount - zoneLeft >= model_->dismemberOverkill * body.zones[static_cast<size_t>(zone)].hp * healthHpFactor(*model_, body, health)) {
+        dismember(pawn, health, zone, target, amount - zoneLeft);
+        recompute(pawn, health, false);
+    }
     return hurt;
 }
+
+// Part F (sneed, 2026-11-17): the blow that killed went far over what its zone had left. An arm or a leg comes off,
+// whole, or below the elbow or the knee when the lower limb was struck; the head comes off; a torso comes apart: the
+// head and every limb it still had.
+void HealthSystem::dismember(Entity pawn, Health& health, int zone, int struck, float overkill) {
+    const HealthModel::Kind* kind = healthKindOf(*model_, things_.registry(), pawn);
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    const auto sideOf = [&](int z) {
+        int nth = 0;
+        for (int i = 0; i < z; ++i) {
+            nth += body.zones[static_cast<size_t>(i)].kind == body.zones[static_cast<size_t>(z)].kind ? 1 : 0;
+        }
+        return nth == 0 ? "left " : "right ";
+    };
+    // The part of that def in the zone, if it is still there.
+    const auto find = [&](int z, const std::string& def) {
+        const HealthEval eval(*model_, body, health, healthHpFactor(*model_, body, health));
+        const int root = body.zones[static_cast<size_t>(z)].root;
+        for (int i = root; i < body.parts[static_cast<size_t>(root)].end; ++i) {
+            if (body.parts[static_cast<size_t>(i)].def == def && eval.gone[static_cast<size_t>(i)] == 0 &&
+                body.parts[static_cast<size_t>(i)].destroyable) {
+                return i;
+            }
+        }
+        return -1;
+    };
+    const auto take = [&](int part, const std::string& what) {
+        if (part >= 0) {
+            destroyPart(pawn, health, part, overkill);
+            emit(EventType::PawnDismembered, pawn, DefId{}, part, overkill, what.c_str());
+        }
+    };
+    const auto takeLimb = [&](int z, bool lowerOnly) {
+        const bool arm = body.zones[static_cast<size_t>(z)].kind == HealthModel::ZoneKind::Arm;
+        const int whole = find(z, arm ? model_->dismemberArmWhole : model_->dismemberLegWhole);
+        const int lower = find(z, arm ? model_->dismemberArmLower : model_->dismemberLegLower);
+        const bool takeLower = lowerOnly && lower >= 0;
+        take(takeLower ? lower : whole, std::string(sideOf(z)) + (arm ? (takeLower ? "forearm" : "arm") : (takeLower ? "lower leg" : "leg")));
+    };
+    const HealthModel::Zone& z = body.zones[static_cast<size_t>(zone)];
+    switch (z.kind) {
+        case HealthModel::ZoneKind::Arm:
+        case HealthModel::ZoneKind::Leg: {
+            // Struck below the elbow or the knee: the hand or the foot, a part of it, or the bone beside it.
+            const bool arm = z.kind == HealthModel::ZoneKind::Arm;
+            const int lower = find(zone, arm ? model_->dismemberArmLower : model_->dismemberLegLower);
+            const std::vector<std::string>& also = arm ? model_->dismemberArmLowerAlso : model_->dismemberLegLowerAlso;
+            const std::string& struckDef = body.parts[static_cast<size_t>(struck)].def;
+            const bool onLower = (lower >= 0 && struck >= lower && struck < body.parts[static_cast<size_t>(lower)].end) ||
+                                 std::find(also.begin(), also.end(), struckDef) != also.end();
+            takeLimb(zone, onLower);
+            break;
+        }
+        case HealthModel::ZoneKind::Head:
+            take(find(zone, model_->dismemberHead), "head");
+            break;
+        case HealthModel::ZoneKind::Torso:
+            for (int other = 0; other < static_cast<int>(body.zones.size()); ++other) {
+                const HealthModel::ZoneKind k = body.zones[static_cast<size_t>(other)].kind;
+                if (k == HealthModel::ZoneKind::Head) {
+                    take(find(other, model_->dismemberHead), "head");
+                } else if (k == HealthModel::ZoneKind::Arm || k == HealthModel::ZoneKind::Leg) {
+                    takeLimb(other, false);
+                }
+            }
+            break;
+        case HealthModel::ZoneKind::Other:
+            break;
+    }
+}
+
+float HealthSystem::attackSpeedFactor(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Health>(pawn)) {
+        return 1.0f;
+    }
+    // Never to a stop: a pawn with both arms gone still gets its blows off, at half speed.
+    return std::max(0.5f, reg.get<Health>(pawn).limbAttack);
+}
+
+uint16_t HealthSystem::severed(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+    if (kind == nullptr || !reg.all_of<Health>(pawn)) {
+        return 0;
+    }
+    const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+    const Health& health = reg.get<Health>(pawn);
+    if (body.zones.empty() || health.missing.empty()) {
+        return 0;
+    }
+    uint16_t out = 0;
+    for (const MissingPart& lost : health.missing) {
+        const int part = static_cast<int>(lost.part);
+        if (static_cast<size_t>(part) >= body.zoneOf.size() || body.zoneOf[static_cast<size_t>(part)] < 0) {
+            continue;
+        }
+        const int zone = body.zoneOf[static_cast<size_t>(part)];
+        const HealthModel::Zone& z = body.zones[static_cast<size_t>(zone)];
+        // Whether the lost part is the part of that def in this zone, or one it hangs on.
+        const auto takes = [&](const std::string& def) {
+            for (int i = part; i < body.parts[static_cast<size_t>(part)].end; ++i) {
+                if (body.parts[static_cast<size_t>(i)].def == def) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        int nth = 0;
+        for (int i = 0; i < zone; ++i) {
+            nth += body.zones[static_cast<size_t>(i)].kind == z.kind ? 1 : 0;
+        }
+        const int shift = nth == 0 ? 0 : 2;
+        if (z.kind == HealthModel::ZoneKind::Arm) {
+            out |= static_cast<uint16_t>(takes(model_->dismemberArmWhole) ? kSeveredLeftArm << shift : takes(model_->dismemberArmLower) ? kSeveredLeftForearm << shift : 0);
+        } else if (z.kind == HealthModel::ZoneKind::Leg) {
+            out |= static_cast<uint16_t>(takes(model_->dismemberLegWhole) ? kSeveredLeftLeg << shift : takes(model_->dismemberLegLower) ? kSeveredLeftLowerLeg << shift : 0);
+        } else if (z.kind == HealthModel::ZoneKind::Head) {
+            out |= static_cast<uint16_t>(takes(model_->dismemberHead) ? kSeveredHead : 0);
+        }
+    }
+    // A whole limb gone says it all.
+    for (const uint16_t whole : {kSeveredLeftArm, kSeveredRightArm, kSeveredLeftLeg, kSeveredRightLeg}) {
+        if ((out & whole) != 0) {
+            out = static_cast<uint16_t>(out & ~(whole >> 1));
+        }
+    }
+    return out;
+}
+
 
 bool HealthSystem::damagePart(Entity pawn, Health& health, int part, DefId hediff, float amount) {
     const HealthModel::Kind* kind = healthKindOf(*model_, things_.registry(), pawn);
@@ -1634,14 +1865,25 @@ bool HealthSystem::damagePart(Entity pawn, Health& health, int part, DefId hedif
         return false;
     }
     if (amount >= remaining) {
-        if (p.destroyable) {
+        // Body zones (sneed, 2026-11-17): an arm, a leg or the head at 0 stays on, and can heal; only the blow that kills
+        // takes it off (dismember). Fingers, eyes and the like are still lost the old way.
+        bool staysOn = false;
+        if (!health.zones.empty() && static_cast<size_t>(part) < body.zoneOf.size() && body.zoneOf[static_cast<size_t>(part)] >= 0) {
+            const HealthModel::Zone& zone = body.zones[static_cast<size_t>(body.zoneOf[static_cast<size_t>(part)])];
+            staysOn = part == zone.root || p.def == model_->dismemberArmWhole || p.def == model_->dismemberArmLower ||
+                      p.def == model_->dismemberLegWhole || p.def == model_->dismemberLegLower || p.def == model_->dismemberHead;
+        }
+        if (staysOn) {
+            amount = remaining;
+        } else if (p.destroyable) {
             destroyPart(pawn, health, part, amount);
             return true;
-        }
-        // A part that can't be destroyed (skull, ribcage...) is left with one hit point.
-        amount = remaining - 1.0f;
-        if (amount <= 0.0f) {
-            return false;
+        } else {
+            // A part that can't be destroyed (skull, ribcage...) is left with one hit point.
+            amount = remaining - 1.0f;
+            if (amount <= 0.0f) {
+                return false;
+            }
         }
     }
     bool merged = false;
@@ -2302,6 +2544,53 @@ void HealthSystem::step(int64_t seconds, uint64_t seed) {
             }
         }
 
+        // Body zones: a zone that has not been hurt for healDelaySeconds (real seconds) and is not bleeding gets back
+        // healPerSecond of its missing hit points once a real second, healAsleepFactor times that asleep.
+        if (zoned && !health.injuries.empty()) {
+            const int64_t perSecond = std::max<int64_t>(1, static_cast<int64_t>(std::lround(model_->stepsPerRealSecond)));
+            const HealthModel::Kind* kind = healthKindOf(*model_, reg, pawn);
+            if (kind != nullptr && (seconds + static_cast<int64_t>(entt::to_integral(pawn))) % perSecond == 0) {
+                const HealthModel::Body& body = model_->bodies[static_cast<size_t>(kind->body)];
+                const int64_t delay = static_cast<int64_t>(model_->healDelaySeconds * model_->stepsPerRealSecond);
+                const float keep =
+                    std::max(0.0f, 1.0f - model_->healPerSecond * (asleep_ && asleep_(pawn) ? model_->healAsleepFactor : 1.0f));
+                bool healedAny = false;
+                for (size_t i = 0; i < health.injuries.size();) {
+                    Injury& injury = health.injuries[i];
+                    const size_t zone = injury.part < body.zoneOf.size() && body.zoneOf[injury.part] >= 0
+                                            ? static_cast<size_t>(body.zoneOf[injury.part])
+                                            : body.zones.size();
+                    const bool rested = zone < body.zones.size() &&
+                                        (zone >= health.zoneHurtAt.size() || health.zoneHurtAt[zone] < 0 ||
+                                         seconds - health.zoneHurtAt[zone] >= delay) &&
+                                        (zone >= health.zoneBleeds.size() || health.zoneBleeds[zone] == 0);
+                    // A dirty wound on its way to an infection (rollInfection) festers until the infection has come.
+                    if (!rested || model_->hediffs[injury.hediff.value].permanent || injury.infectAt >= 0) {
+                        ++i;
+                        continue;
+                    }
+                    injury.peak = std::max(injury.peak, injury.severity);
+                    injury.severity *= keep;
+                    healedAny = true;
+                    if (injury.severity < model_->healGoneBelow) {
+                        const Injury healed = injury;
+                        health.injuries.erase(health.injuries.begin() + static_cast<std::ptrdiff_t>(i));
+                        Rng scarRng(splitMix64(seed ^ (static_cast<uint64_t>(entt::to_integral(pawn)) * 0x9E3779B97F4A7C15ULL) ^
+                                               static_cast<uint64_t>(seconds) ^ (static_cast<uint64_t>(healed.part) << 40)));
+                        leaveScar(pawn, health, healed, scarRng);
+                    } else {
+                        ++i;
+                    }
+                }
+                if (healedAny) {
+                    recompute(pawn, health, true);
+                    if (health.dead) {
+                        continue;
+                    }
+                }
+            }
+        }
+
         // Natural healing: every healInterval seconds (offset by the pawn's id so they don't all
         // heal in the same step), one random injury heals by the day's rate times a small factor.
         const int64_t interval = model_->healInterval;
@@ -2524,7 +2813,7 @@ bool HealthSystem::removePart(Entity pawn, int part, float tendQuality) {
     destroyPart(pawn, health, part, 0.0f);
     for (MissingPart& m : health.missing) {
         if (m.part == part) {
-            m.tendQuality = std::max(0.0f, tendQuality);
+            m.tendQuality = tendQuality < 0.0f ? -1.0f : tendQuality;  // below 0: left untended
         }
     }
     recompute(pawn, health, true);

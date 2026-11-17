@@ -54,6 +54,7 @@ readable dump. `simrun --load a.save --days 0 --save-json a.json` turns any save
 | World (section `world`) | `SimSettings::world` (on, seed, width, height, start tile) and the world's hash; the world itself is made again from them and checked against the hash ([world-map.md](world-map.md)) |
 | Caravans (section `caravans`) | the next id; each caravan's state, members (walk state, tries, path ticket), items, tile, came-from, destination, path, progress, cost, exit cell, formed time ([caravans.md](caravans.md)) |
 | Other maps (section `maps`) | each visited tile's map: tile, when it was made, its whole sim as a save of its own; per colonist away its `away` part (tile, entity there, bonds and memories as it left) ([other-maps.md](other-maps.md)) |
+| Grime (section `grime`) | per pawn its dirt on the legs and body, blood on the body and its weapon, the fluid of each **by Filth `defName`**, when each was fresh, and where it stood last step ([grime.md](grime.md)) |
 | Path queue (format 2) | every request with its answer if it has one, the free tickets, the queue order and the work done on the search in hand ([pathfinding.md](pathfinding.md)) |
 
 **Not saved, because it is rebuilt:** the map's ground (generated again from the seed; the file holds
@@ -338,7 +339,7 @@ too. Run it as part of `unit`; a task that adds a system adds its commands and i
 Every section is version 1 at format 20. A task that changes a section adds a line here, e.g.
 "`fighters` 2 (F9): ...". New sections are listed in the table above.
 
-- `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name.
+- `roomstats` 1 (C17): floors, filth, carried filth, the filth rng, beauty needs ([room-stats.md](room-stats.md)). Commands `PlaceFloor` and `AddFilth` by name. Version 2: each filth pile's `wetAt` (the game second it was last added to; blood fades by its age, [blood.md](blood.md)); a version 1 pile counts as fresh on load.
 - The loader accepts two jobs on one cell (the later one keeps the reservation) instead of refusing the file (audit).
 - `health` 2 (E2): each pawn's environment hediffs (hypothermia, heatstroke...), a list of def name and severity before `dead`. Version 1 files load with none.
 - `world` 1 (W2): new section, see the table. Saves without it have no world.

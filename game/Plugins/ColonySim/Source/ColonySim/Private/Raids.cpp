@@ -2541,7 +2541,11 @@ void RaidSystem::takeFire() {
         }
         const Position& pos = reg.get<Position>(pawn);
         const Gear* gear = reg.try_get<Gear>(pawn);
-        const bool armed = gear != nullptr && gear->weapon != kNoEntity && reg.valid(gear->weapon);
+        // The fight response (docs/design/focus.md): Flee and FleeOnSight run for shelter armed or not; Fists fights back
+        // unarmed too (its fists).
+        const FightResponse response = fighters_.responseOf(pawn);
+        const bool armed = !FighterSystem::fleeResponse(response) &&
+                           ((gear != nullptr && gear->weapon != kNoEntity && reg.valid(gear->weapon)) || response == FightResponse::Fists);
         Fighter& f = fighters_.enlist(pawn, "under fire");
         f.defending = true;
         if (armed) {

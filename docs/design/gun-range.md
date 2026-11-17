@@ -103,12 +103,30 @@ file's name (`AssaultRifle_Game`). `meshTextures` gives meshes their own maps (t
 - sneed: "it will be just a combat range". `assets/guns.json` has a `melee` list after the guns (knife, club, gladius,
   mace, longsword, spear by def name); they lie on the same rack, guns first. Keys 1-9 and 0 (or the wheel) pick by
   rack place; the panel (now "COMBAT RANGE") lists both with `>` on the one in hand.
-- First person has no arms rig for melee, so taking a melee weapon switches the view to third person, where the main
-  game draws the swings (left mouse swing, right mouse block, Alt dodge, the normal `MeleeCommand`s); taking a gun
-  again switches back to first person. It acts only when the weapon changes, so V still works.
+- Melee weapons are held and swung by the first-person arms now ([weapon-hold.md](weapon-hold.md), 2026-11-17); the
+  view no longer switches to third person for them (left mouse swing, right mouse block, Alt dodge, the normal
+  `MeleeCommand`s). The arms are drawn in the main game's first person too (`View.Arms`).
 - The player is now the creator's generic woman: an untouched `FCreatorPerson` on CreatorFemale (every slider at its
   default, its own hair, fair skin), `CreatorPeople::DefaultLooks` / `ApplyDefault`. `-GunRangeRandomPlayer` gives the
   old random woman. Targets stay random creator women.
+
+## After sneed's combat range try (2026-11-17)
+
+- Two bodies in third person (the protagonist's bearded MetaHuman inside the woman): `ASimPawnActor::SetBodyHidden`
+  showed the MetaHuman again when the view left first person. A MakeHuman body now keeps it hidden for good.
+- No blood where the bullet went in: wounds and body stains were stuck to that hidden MetaHuman
+  (`GetDecalMesh`), so they never showed. It now gives the MakeHuman body. And the hit point moves from the sim's
+  hitbox onto the drawn skin: `ASimPawnActor::TraceDrawnBody` walks the bullet's line against the animated
+  mannequin's physics shapes (no collision needed), so the spray and the wound come out where it was shot. The
+  realistic spray needs the `-run=BloodArt` assets in the worktree's Content (the smoke test notes whether they are in).
+- Screams: every time she goes down and every time a fight kills her, again if she lay downed (also knocked out,
+  also bleeding out from her wounds); `soundViolentDeath` gained blood loss and wounds (sim, tested).
+- Corpses sinking into the ground: the ragdoll's floor now sits on the drawn ground (a trace, not the height map) and
+  4 cm above it, since the flesh lies outside the mannequin's shapes.
+- Targets in each group of four: one stands, one flees when hit, one fights back with her fists when hit (walks up
+  and punches with `MeleeCommand`), one flees as soon as you are within 20 m. Driven by the scene with ordinary
+  commands until the sim's own sight and flee settings land (stealth thread). Melee swings in the range may strike
+  them although they are on your side (`UWeaponDrawSubsystem::FindSwingTarget`).
 
 ## Not done
 

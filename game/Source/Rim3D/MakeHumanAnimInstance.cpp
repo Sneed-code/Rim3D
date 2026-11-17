@@ -506,6 +506,8 @@ void FMakeHumanAnimProxy::PreUpdate(UAnimInstance* Instance, float DeltaSeconds)
 	if (const UMakeHumanAnimInstance* MakeHuman = Cast<UMakeHumanAnimInstance>(Instance))
 	{
 		Retarget.IKRetargeterAsset = MakeHuman->GetRetargeter();
+		LeftHandIK.EffectorLocationSpace = MakeHuman->bLeftReach ? BCS_ComponentSpace : BCS_BoneSpace;
+		LeftHandIK.JointTargetLocationSpace = MakeHuman->bLeftReach ? BCS_ComponentSpace : BCS_WorldSpace;
 		LeftHandIK.Alpha = MakeHuman->LeftGripAlpha;
 		LeftHandIK.EffectorLocation = MakeHuman->LeftGripOffset;
 		LeftHandIK.JointTargetLocation = MakeHuman->LeftElbowWorld;

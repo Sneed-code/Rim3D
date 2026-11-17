@@ -147,7 +147,7 @@ us to start on the voice (the files had 0.1 to 0.4 s of silence first), mono, 44
 | Cue | When | Rules |
 | --- | --- | --- |
 | `Voice_FemHit` | a woman takes a melee hit or a shot (bullet, arrow, shard on flesh, not armour) of more than `minDamage` (3) | `chance` 0.5; at most one per pawn every `cooldown` (5) real seconds |
-| `Voice_FemScream` | a woman is downed (every time), or killed by violence (a vital part destroyed, organ failure, executed): always if she was up, `downedDeathChance` (1: again) if she lay downed and awake, never if knocked out | no cooldown; cuts her own hit grunt |
+| `Voice_FemScream` | a woman is downed (every time), or killed in a fight (a vital part destroyed, organ failure, executed, wounds, blood loss): every time, again if she lay downed (sneed, 2026-11-17); not for cold, hunger or illness | no cooldown; cuts her own hit grunt |
 
 - The sim decides (`soundForEvent` with a `SoundGenderOf` callback): the Human def's slots `femaleHit`, `femaleScream`
   (`maleHit`, `maleScream` when there are male recordings), the 50% from a hash of the event, so the game's random

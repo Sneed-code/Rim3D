@@ -211,7 +211,8 @@ TEST_CASE("Wounds: injuries to organs and bones inside the body are not drawn, t
 TEST_CASE("Wounds: a lost part shows as a stump, without its children, and a bandage once tended") {
     auto sim = woundTestSim();
     const Entity pawn = woundTestPawn(*sim);
-    WOUND_REQUIRE(woundTestHit(*sim, pawn, "Cut", 200.0f, "left hand"));
+    // Lost and untended. (A blow no longer takes a living person's hand off: body-health.md part F.)
+    WOUND_REQUIRE(sim->health().removePart(pawn, woundTestPart(*sim, pawn, "left hand"), -1.0f));
     std::vector<WoundView> wounds = woundTestWounds(*sim, pawn);
     int missing = 0;
     for (const WoundView& w : wounds) {

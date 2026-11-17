@@ -177,6 +177,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildTradePhases();
 	}
+	else if (TestName == TEXT("shuttle"))
+	{
+		BuildShuttlePhases();
+	}
 	else if (TestName == TEXT("quests"))
 	{
 		BuildQuestsPhases();
@@ -212,6 +216,14 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	else if (TestName == TEXT("melee"))
 	{
 		BuildMeleePhases();
+	}
+	else if (TestName == TEXT("motion"))
+	{
+		BuildMotionPhases();
+	}
+	else if (TestName == TEXT("hurt"))
+	{
+		BuildHurtPhases();
 	}
 	else if (TestName == TEXT("levels"))
 	{
@@ -1274,7 +1286,7 @@ void USmokeTestSubsystem::Tick(float DeltaTime)
 		bScreenshotTaken = true;
 		const FString Path = FPaths::ProjectSavedDir() / TEXT("Smoke") / TestName / (Phase.Name + TEXT(".png"));
 		// The sim tests show the on-screen sim timings and the overseer its ImGui panels, which count as UI.
-		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist") || TestName == TEXT("orders") || TestName == TEXT("orders_world") || TestName == TEXT("panels") || TestName == TEXT("trade") || TestName == TEXT("quests") || TestName == TEXT("ship") || TestName == TEXT("worldmap") || TestName == TEXT("fights") || TestName == TEXT("handson") || TestName == TEXT("sky") || TestName == TEXT("melee") || TestName == TEXT("levels") || TestName == TEXT("creator") || (TestName == TEXT("look") && Phase.Name == TEXT("hud")), false);
+		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist") || TestName == TEXT("orders") || TestName == TEXT("orders_world") || TestName == TEXT("panels") || TestName == TEXT("trade") || TestName == TEXT("shuttle") || TestName == TEXT("quests") || TestName == TEXT("ship") || TestName == TEXT("worldmap") || TestName == TEXT("fights") || TestName == TEXT("handson") || TestName == TEXT("sky") || TestName == TEXT("melee") || TestName == TEXT("levels") || TestName == TEXT("creator") || (TestName == TEXT("look") && Phase.Name == TEXT("hud")), false);
 	}
 	if (PhaseTime >= Phase.WarmupSeconds + Phase.MeasureSeconds)
 	{
@@ -1897,7 +1909,8 @@ void USmokeTestSubsystem::BuildPawnsPhases()
 				if (bFull)
 				{
 					++State->FullSamples;
-					State->FullMatched += Stats.Database.IsNone() ? 0 : 1;
+					// Matched, or standing in the breathing idle (motion matching rests then).
+					State->FullMatched += (!Stats.Database.IsNone() || Stats.bStandingIdle) ? 1 : 0;
 					if (Speed > 150.0f)
 					{
 						++State->MovingFullSamples;

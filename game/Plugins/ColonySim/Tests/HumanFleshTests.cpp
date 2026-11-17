@@ -268,25 +268,17 @@ TEST_CASE("Human flesh: the rest of the colony knows about a butchered person, u
     CHECK(t->offset == doctest::Approx(-5.0f));
 }
 
-TEST_CASE("Mood: every other living colonist knows when a colonist dies; a dead animal is no one's loss") {
+TEST_CASE("Mood: a colonist's death costs nothing to colonists without a bond to them (sneed, decision 0011)") {
     FleshFixture f;
     const Entity dead = f.colonist(CellPos{10, 10, 0});
-    const Entity friendly = f.colonist(CellPos{8, 8, 0});
-    const Entity cold = f.colonist(CellPos{8, 10, 0}, "Psychopath");
+    const Entity near = f.colonist(CellPos{11, 10, 0});  // saw it happen, right next to it
     f.sim.stepMany(2);
+    const size_t before = f.reg().get<Mood>(near).memories.size();
     f.sim.submit(DamagePawnCommand{dead, "Bullet", 500.0f, 0});
     f.sim.stepMany(3);
-    CHECK(f.remembers(friendly, "KnowColonistDied"));
-    CHECK_FALSE(f.remembers(cold, "KnowColonistDied"));
-    CHECK_FALSE(f.remembers(dead, "KnowColonistDied"));
-}
-
-TEST_CASE("Mood: an animal's death is not a colonist's death") {
-    FleshFixture f;
-    const Entity friendly = f.colonist(CellPos{8, 8, 0});
-    const Entity deer = f.sim.things().spawn("Deer", CellPos{18, 12, 0});
-    f.sim.stepMany(2);
-    f.sim.submit(DamagePawnCommand{deer, "Bullet", 500.0f, 0});
-    f.sim.stepMany(3);
-    CHECK_FALSE(f.remembers(friendly, "KnowColonistDied"));
+    FLESH_REQUIRE(f.reg().get<Health>(dead).dead);
+    CHECK(f.reg().get<Mood>(near).memories.size() == before);
+    CHECK(f.sim.defs().find("Thoughts", "KnowColonistDied") == nullptr);
+    CHECK(f.sim.defs().find("Thoughts", "WitnessedDeathAlly") == nullptr);
+    CHECK(f.sim.defs().find("Thoughts", "ObservedLayingCorpse") == nullptr);
 }

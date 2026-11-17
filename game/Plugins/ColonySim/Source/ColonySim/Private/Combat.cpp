@@ -1350,7 +1350,8 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
 }
 
 float CombatSystem::attackTimeFactor(Entity pawn) const {
-    return apparelStats_->attackTimeFactor(things_.registry(), pawn) / performance(pawn);
+    // Armour weight, exhaustion, and arms under half their health (sneed, body-health.md part F).
+    return apparelStats_->attackTimeFactor(things_.registry(), pawn) / (performance(pawn) * health_.attackSpeedFactor(pawn));
 }
 
 void CombatSystem::startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps) {
@@ -1948,7 +1949,9 @@ void CombatSystem::step(Rng& rng) {
                 posture.facingX = dx / len;
                 posture.facingY = dy / len;
             }
-        } else if (!health_.incapacitated(pawn)) {
+        } else if (!health_.incapacitated(pawn) && !reg.all_of<BodyMotion>(pawn)) {
+            // A body a clip or a push is moving keeps the way it faced (or the clip's own turn): a stagger back
+            // doesn't turn it round to face its push (docs/design/body-motion.md).
             const float speed = std::sqrt(mover.vx * mover.vx + mover.vy * mover.vy);
             if (speed > 1e-4f) {
                 posture.facingX = mover.vx / speed;
@@ -2082,12 +2085,12 @@ bool CombatSystem::jolt(Entity pawn, int part, DefId damageType, float force, fl
     if (zoneHp <= 0.0f) {
         return false;
     }
+    const float factor = damageType.valid() && damageType.value < model_->poiseForce.size() ? model_->poiseForce[damageType.value] : 1.0f;
+    const float push = force * factor;
     if (health_.incapacitated(pawn) || !things_.spawned(pawn) || !reg.all_of<Posture, Position>(pawn)) {
         return true;
     }
     Poise* poise = reg.try_get<Poise>(pawn);
-    const float factor = damageType.valid() && damageType.value < model_->poiseForce.size() ? model_->poiseForce[damageType.value] : 1.0f;
-    const float push = force * factor;
     // Knock-down: the blow's force beats the pawn's poise, and it isn't still getting over the last one.
     if (push > model_->poiseBase && (poise == nullptr || poise->immuneLeft <= 0) && !reg.all_of<KnockedDown>(pawn)) {
         Posture& posture = reg.get<Posture>(pawn);
@@ -2299,6 +2302,7 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
             }
             const bool alive = health_.applyHit(pawn, piece.damageType, piece.amount, part);
             wearApparel(pawn, piece);
+            noteHarm(pawn, ex.instigator);
             if (!alive) {
                 break;
             }
