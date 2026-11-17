@@ -651,6 +651,7 @@ struct SaveData {
     AreasSaved areas;                  // section "areas": allowed areas and who is limited to one
     GrimeState grime;                  // section "grime": dirt and blood on bodies (docs/design/grime.md)
     LandingSaved landing;              // section "landing": the landing zone and shuttles (docs/design/landing.md)
+    SeveredSaved severed;              // section "severed": cut-off limbs and heads lying about (body-health.md part F)
     SaveDeep deep;                     // section "deep"
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
@@ -3988,6 +3989,19 @@ void saveSections(Ar& ar, SaveData& d) {
             });
         });
     });
+    ar.section("severed", 1, [&] {  // cut-off limbs and heads lying about (docs/design/body-health.md part F)
+        ar.value("nextId", d.severed.nextId);
+        ar.list("pieces", d.severed.pieces, [&](SeveredPiece& p) {
+            ar.value("id", p.id);
+            ar.value("from", p.from);
+            ar.value("bit", p.bit);
+            ar.value("x", p.x);
+            ar.value("y", p.y);
+            ar.value("level", p.level);
+            ar.value("at", p.at);
+            ar.require(p.bit != 0 && (p.bit & (p.bit - 1)) == 0 && p.bit <= kSeveredHead, "the save file has an impossible severed piece");
+        });
+    });
     ar.section("grime", 1, [&] {  // dirt and blood on bodies, clothes and weapons (docs/design/grime.md)
         ar.list("pawns", d.grime.pawns, [&](GrimeState::Entry& g) {
             ar.value("pawn", g.pawn);
@@ -5457,6 +5471,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.roofs = sim.roofCollapse_->state();
     d.areas = sim.areas_->saved();
     d.landing = sim.landing_->saved();
+    d.severed = sim.health_->severedSaved();
     d.grime = sim.grime_->state();
     {
         const DeepResourcesSaved deep = sim.deepResources_->saved();
@@ -5951,6 +5966,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.landing_->restore(d.landing, error)) {
         return false;
     }
+    sim.health_->restoreSevered(d.severed);
     if (!sim.areas_->restore(d.areas, error)) {
         return false;
     }

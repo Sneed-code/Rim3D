@@ -442,6 +442,19 @@ struct VisitView {
 // 1 through it (1 while landed). (x, y) is the footprint's middle in metres and `ground` the ground height there; `rot` is the
 // Rot4 (0 North: the nose points to +y, the door is on the -x side). `building` is the impassable Things building it stands
 // as. Unreal draws the flight path, the thrusters, the flames and the dust from these.
+// A severed limb or head on the ground (body-health.md part F): which piece (a SeveredBit, Health.h), the body it came off
+// (for its looks; the body may be gone), where it fell and how far it has rotted (0 fresh to 1 gone). Unreal drops a
+// physics prop there; where the prop comes to rest is its own business.
+struct SeveredPieceView {
+    uint32_t id = 0;
+    Entity from = kNoEntity;
+    uint16_t bit = 0;
+    float x = 0.0f;
+    float y = 0.0f;
+    int level = 0;
+    float decay = 0.0f;
+};
+
 struct ShuttleView {
     uint32_t id = 0;
     Entity building = kNoEntity;
@@ -838,6 +851,7 @@ struct Snapshot {
     std::vector<CellPos> landingZone;
     uint64_t landingZoneChanges = ~0ULL;
     std::vector<ShuttleView> shuttles;
+    std::vector<SeveredPieceView> severedPieces;  // by id
     // The colony alarm (docs/design/raids.md): on, and whether the player sounded it (only the
     // player stops that one); the raid squads on the map.
     bool alarm = false;

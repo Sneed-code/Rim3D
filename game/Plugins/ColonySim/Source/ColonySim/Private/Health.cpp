@@ -269,6 +269,7 @@ public:
     // Dismemberment: the hit that kills takes the struck piece off when it went over what the zone had left by this
     // share of the zone's hit points (0: never).
     float dismemberOverkill = 0.25f;
+    float pieceDecayDays = 2.0f;       // a severed piece lies this many game days
     std::string dismemberArmWhole = "Arm";
     std::string dismemberArmLower = "Hand";
     std::vector<std::string> dismemberArmLowerAlso = {"Radius"};
@@ -655,6 +656,7 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
             num("zones.healAsleepFactor", healAsleepFactor);
             num("zones.healGoneBelow", healGoneBelow);
             num("zones.dismember.overkillShare", dismemberOverkill);
+            num("zones.dismember.pieceDecayDays", pieceDecayDays);
             const auto word = [&](const char* key, std::string& out) {
                 if (rules->has(key)) {
                     out = rules->text(key);
@@ -1757,6 +1759,7 @@ void HealthSystem::dismember(Entity pawn, Health& health, int zone, int struck, 
         const bool takeLower = lowerOnly && lower >= 0;
         take(takeLower ? lower : whole, std::string(sideOf(z)) + (arm ? (takeLower ? "forearm" : "arm") : (takeLower ? "lower leg" : "leg")));
     };
+    const uint16_t severedBefore = severed(pawn);
     const HealthModel::Zone& z = body.zones[static_cast<size_t>(zone)];
     switch (z.kind) {
         case HealthModel::ZoneKind::Arm:
@@ -1787,7 +1790,28 @@ void HealthSystem::dismember(Entity pawn, Health& health, int zone, int struck, 
         case HealthModel::ZoneKind::Other:
             break;
     }
+    // What came off lies where the body was.
+    const uint16_t fresh = static_cast<uint16_t>(severed(pawn) & ~severedBefore);
+    const Position* at = things_.registry().try_get<Position>(pawn);
+    for (uint16_t bit = 1; bit != 0 && bit <= kSeveredHead; bit = static_cast<uint16_t>(bit << 1)) {
+        if ((fresh & bit) == 0) {
+            continue;
+        }
+        SeveredPiece piece;
+        piece.id = severedPieces_.nextId++;
+        piece.from = pawn;
+        piece.bit = bit;
+        if (at != nullptr) {
+            piece.x = at->x;
+            piece.y = at->y;
+            piece.level = at->level;
+        }
+        piece.at = clock_ != nullptr ? *clock_ : 0;
+        severedPieces_.pieces.push_back(piece);
+    }
 }
+
+float HealthSystem::severedDecayDays() const { return model_->pieceDecayDays; }
 
 float HealthSystem::attackSpeedFactor(Entity pawn) const {
     const entt::registry& reg = things_.registry();
@@ -2482,6 +2506,11 @@ void HealthSystem::registerSituations(MoodSystem& mood) const {
 
 void HealthSystem::step(int64_t seconds, uint64_t seed) {
     entt::registry& reg = things_.registry();
+    // Severed pieces rot away (looked at once a game minute).
+    if (!severedPieces_.pieces.empty() && seconds % 60 == 0) {
+        const int64_t life = static_cast<int64_t>(model_->pieceDecayDays * static_cast<float>(kSecondsPerDay));
+        std::erase_if(severedPieces_.pieces, [&](const SeveredPiece& p) { return seconds - p.at >= life; });
+    }
     active_.clear();
     for (const auto [entity, health] : reg.view<Health>().each()) {
         if (!health.dead && (health.dirty || !health.injuries.empty() || !health.missing.empty() || health.bloodLoss > 0.0f ||

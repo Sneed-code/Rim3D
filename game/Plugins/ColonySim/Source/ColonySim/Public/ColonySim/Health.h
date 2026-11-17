@@ -123,6 +123,24 @@ enum SeveredBit : uint16_t {
     kSeveredHead = 1u << 8,
 };
 
+// A piece the killing blow took off a body (body-health.md part F): it lies where it fell until it has rotted away
+// (HealthRules zones.dismember.pieceDecayDays). Not a thing yet: nobody can pick it up.
+struct SeveredPiece {
+    uint32_t id = 0;
+    Entity from = kNoEntity;  // the body it came off (it may be gone by now)
+    uint16_t bit = 0;         // one SeveredBit
+    float x = 0.0f;           // where the body was, metres
+    float y = 0.0f;
+    int level = 0;
+    int64_t at = 0;           // game second it came off
+};
+
+// What is saved of them.
+struct SeveredSaved {
+    uint32_t nextId = 1;
+    std::vector<SeveredPiece> pieces;  // by id
+};
+
 // Every pawn whose def names a body (`race.body`) has one. What is saved and hashed is the first
 // block; the second is worked out from it again after any change (and after loading).
 struct Health {
@@ -315,6 +333,11 @@ public:
     // Dismemberment: only on the hit that kills, when it went over what the struck zone had left by a quarter of the
     // zone's hit points. `severed`: the SeveredBits of what the body has lost (PawnDismembered says when).
     uint16_t severed(Entity pawn) const;
+    // The pieces lying about, by id; how many game days one lies before it is gone.
+    const std::vector<SeveredPiece>& severedPieces() const { return severedPieces_.pieces; }
+    float severedDecayDays() const;
+    const SeveredSaved& severedSaved() const { return severedPieces_; }
+    void restoreSevered(SeveredSaved saved) { severedPieces_ = std::move(saved); }
     // Whether the pawn sleeps (its zones heal twice as fast).
     void setAsleep(std::function<bool(Entity pawn)> asleep) { asleep_ = std::move(asleep); }
     // Patching (part B): a zone's bleeding (0 none, 1 light, 2 moderate, 3 heavy), the zone that bleeds worst (-1 for
@@ -435,6 +458,7 @@ private:
     const TraitBook* traits_ = nullptr;
     std::function<float(Entity)> immunityBonus_;
     std::function<bool(Entity)> asleep_;
+    SeveredSaved severedPieces_;
     std::vector<Entity> active_;  // scratch for step
     bool restoring_ = false;      // inside refreshAll: working out what a loaded save already was, so nobody stops walking for it
     std::vector<size_t> healable_;  // scratch for step: the injuries that can heal
