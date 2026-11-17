@@ -2737,6 +2737,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.area = areas_->areaOf(entity);
             view.jobTarget = worker->job.thing;
             view.jobProgress = worker->job.type != JobType::None ? jobs_->jobProgress(entity) : 0.0f;
+            view.carryingPawn = jobs_->carryingPawn(entity);
         }
         const bool noMind = mindIsPlayersOwn(reg, entity);  // the protagonist: no mood, recreation, beauty or rest need
         if (const Needs* needs = reg.try_get<Needs>(entity)) {
@@ -2962,6 +2963,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.sheltering = fighter->mode == FightMode::Shelter;
             view.fleeing = fighter->mode == FightMode::Flee;
             view.rescuing = fighter->mode == FightMode::Rescue ? fighter->rescuing : kNoEntity;
+            if (fighter->mode == FightMode::Rescue && fighter->lifted && reg.valid(fighter->rescuing)) {
+                view.carryingPawn = fighter->rescuing;
+            }
         }
         if (reg.all_of<Colonist>(entity) && view.faction == kPlayerFaction) {
             view.defenseRole = static_cast<uint8_t>(raids_->roleOf(entity));
@@ -3052,6 +3056,17 @@ void Sim::writeSnapshot(Snapshot& out) const {
     }
     std::sort(out.things.begin(), out.things.end(),
               [](const ThingView& a, const ThingView& b) { return a.id < b.id; });
+    // Who carries whom, on the carried body too (weapon-hold.md, "Carrying a body").
+    for (const ThingView& carrier : out.things) {
+        if (carrier.carryingPawn == kNoEntity) {
+            continue;
+        }
+        const auto it = std::lower_bound(out.things.begin(), out.things.end(), carrier.carryingPawn,
+                                         [](const ThingView& view, Entity value) { return view.id < value; });
+        if (it != out.things.end() && it->id == carrier.carryingPawn) {
+            it->carriedBy = carrier.id;
+        }
+    }
 
     out.alarm = raids_->state().alarm;
     out.alarmManual = raids_->state().manual;

@@ -156,6 +156,8 @@ public:
 	/** Gets up again: the animation takes over. */
 	void StopRagdoll();
 	bool IsRagdoll() const { return bRagdoll; }
+	/** The ragdoll's floor taken away (carried on a back, BodyCarrySubsystem) or made again under where the pawn is now. */
+	void ResetRagdollFloor(bool bWanted);
 	/** Where the ragdoll's pelvis is now (world cm); false if the pawn is not a ragdoll. */
 	bool GetRagdollPelvis(FVector& OutLocation) const;
 	int32 GetRagdollsStarted() const { return RagdollsStarted; }

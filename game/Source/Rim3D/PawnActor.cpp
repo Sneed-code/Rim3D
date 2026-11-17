@@ -1757,6 +1757,19 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 	Body->SetRelativeLocationAndRotation(Offset, RootQuat.Inverse() * RollWorld * LeanWorld * RootQuat * MeleeLocal * PawnBodyRelativeRotation.Quaternion());
 }
 
+void ASimPawnActor::ResetRagdollFloor(bool bWanted)
+{
+	if (RagdollFloor)
+	{
+		RagdollFloor->DestroyComponent();
+		RagdollFloor = nullptr;
+	}
+	if (bWanted && bRagdoll)
+	{
+		SpawnRagdollFloor();
+	}
+}
+
 void ASimPawnActor::SpawnRagdollFloor()
 {
 	if (RagdollFloor)

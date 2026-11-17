@@ -213,6 +213,10 @@ struct ThingView {
     // F10 (docs/design/field-care.md): defenseRole 3 is Medic and 4 Firefighter; a fighter carrying a downed friend
     // to cover has it in `rescuing` (the friend's position follows the fighter's after the LiftPawn action).
     Entity rescuing = kNoEntity;
+    // Carrying a body on the back (docs/design/weapon-hold.md): the downed pawn or corpse this pawn carries now (a
+    // fighter's rescue once lifted, or a rescue, capture or corpse-hauling job), and on the carried one, who carries it.
+    Entity carryingPawn = kNoEntity;
+    Entity carriedBy = kNoEntity;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
     // Pawns with a body (docs/design/wounds.md): their wounds and lost parts that show on the skin, `woundCount` from
