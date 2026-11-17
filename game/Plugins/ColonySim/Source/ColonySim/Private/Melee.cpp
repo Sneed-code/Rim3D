@@ -1,6 +1,7 @@
 #include "ColonySim/Melee.h"
 
 #include "ColonySim/Apparel.h"
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
@@ -8,6 +9,7 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Looks.h"
 #include "ColonySim/Patch.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
@@ -98,6 +100,22 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
             r.arcDamageTypes.push_back(def->textAt("arcDamageTypes", i));
         }
     }
+    num("reachHeightFollow", r.reachHeightFollow);
+    num("maxAttackClipSeconds", r.maxAttackClipSeconds);
+    num("maxAttackHitSeconds", r.maxAttackHitSeconds);
+    num("maxAttackTravel", r.maxAttackTravel);
+    r.unarmedStyle = def->text("unarmedStyle", r.unarmedStyle);
+    for (const std::string& style : def->keys("styleAttacks")) {
+        std::vector<std::string> clips;
+        const std::string path = "styleAttacks." + style;
+        for (size_t i = 0; i < def->count(path.c_str()); ++i) {
+            clips.push_back(def->textAt(path.c_str(), i));
+        }
+        r.styleAttacks.emplace_back(style, std::move(clips));
+    }
+    for (const std::string& weapon : def->keys("weaponStyle")) {
+        r.weaponStyle.emplace_back(weapon, def->text(("weaponStyle." + weapon).c_str()));
+    }
     r.arcRaysPerSide = std::clamp(r.arcRaysPerSide, 0, 8);
     r.minWindup = std::max(1, r.minWindup);
     r.commitSteps = std::max(0, r.commitSteps);
@@ -168,6 +186,37 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
             set.reach = rules_.defaultWeaponReach;
             if (rulesDef != nullptr) {
                 set.reach = static_cast<float>(rulesDef->number(("weaponReach." + def.defName()).c_str(), set.reach));
+            }
+        }
+        // The style's attack clips (body-motion.md): only the short, quick ones.
+        std::string style = weapon ? std::string() : rules_.unarmedStyle;
+        for (const auto& [name, st] : rules_.weaponStyle) {
+            if (weapon && name == def.defName()) {
+                style = st;
+            }
+        }
+        const BodyMotionSystem& motion = combat_.motion();
+        for (const auto& [name, clips] : rules_.styleAttacks) {
+            if (name != style) {
+                continue;
+            }
+            for (const std::string& clipName : clips) {
+                const MotionClip* c = motion.clip(clipName);
+                if (c == nullptr || c->hitSeconds <= 0.0f || c->hitSeconds > rules_.maxAttackHitSeconds ||
+                    c->seconds > rules_.maxAttackClipSeconds) {
+                    continue;
+                }
+                // A clip that carries the body further than this is a charge, not a swing: it would run past the target.
+                float travel = 0.0f;
+                for (size_t i = 0; i < c->forward.size() && i < c->right.size(); ++i) {
+                    travel = std::max(travel, std::sqrt(c->forward[i] * c->forward[i] + c->right[i] * c->right[i]));
+                }
+                if (travel > rules_.maxAttackTravel) {
+                    continue;
+                }
+                const float lunge = std::max(0.0f, motion.forwardAt(c->def, c->hitSeconds));
+                set.lunge = set.attackClips.empty() ? lunge : std::min(set.lunge, lunge);
+                set.attackClips.push_back(c->def);
             }
         }
     }
@@ -241,7 +290,31 @@ const MeleeSystem::Tool* MeleeSystem::toolOf(Entity pawn, const Melee& m) const 
 float MeleeSystem::reach(Entity pawn, bool fists) const {
     bool weapon = false;
     const ToolSet* set = toolsOf(pawn, weapon, fists);
-    return set != nullptr ? set->reach : 0.0f;
+    if (set == nullptr) {
+        return 0.0f;
+    }
+    // A taller person reaches further (their arm, not their weapon: reachHeightFollow).
+    const PawnLooks* looks = things_.registry().try_get<PawnLooks>(pawn);
+    const float height = looks != nullptr ? std::clamp(looks->height, 0.5f, 1.5f) : 1.0f;
+    return set->reach * (1.0f + (height - 1.0f) * rules_.reachHeightFollow);
+}
+
+float MeleeSystem::engageDistance(Entity pawn, Entity target, bool fists) const {
+    const entt::registry& reg = things_.registry();
+    bool weapon = false;
+    const ToolSet* set = toolsOf(pawn, weapon, fists);
+    if (set == nullptr) {
+        return 0.0f;
+    }
+    const BodyMotionSystem& motion = combat_.motion();
+    float d = reach(pawn, fists);
+    if (reg.valid(target)) {
+        d += std::max(0.0f, motion.bodyRadius(target) - motion.rules().bodyRadius);  // a big body's flank is nearer than its centre
+    }
+    if (motion.hasClips(pawn)) {
+        d += set->lunge * motion.sizeScale(pawn);  // its clips step in before the blow
+    }
+    return d;
 }
 
 bool MeleeSystem::inReach(Entity pawn, Entity target, bool fists) const {
@@ -253,7 +326,7 @@ bool MeleeSystem::inReach(Entity pawn, Entity target, bool fists) const {
     const Position& b = reg.get<Position>(target);
     const float dx = b.x - a.x;
     const float dy = b.y - a.y;
-    const float r = reach(pawn, fists) + rules_.reachSlack;
+    const float r = engageDistance(pawn, target, fists) + rules_.reachSlack;
     return a.level == b.level && dx * dx + dy * dy <= r * r;
 }
 
@@ -465,6 +538,16 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         face(pawn, to.x, to.y);
         prepareDefense(target, pawn, windup, m.seed);
     }
+    // A person's swing is one of its style's attack clips, timed so the clip's blow lands on the hit step; the clip's
+    // step forward moves the body through the world (docs/design/body-motion.md). Faster swings play the clip faster.
+    if (!set->attackClips.empty() && combat_.motion().hasClips(pawn) && !reg.all_of<BodyMotion>(pawn)) {
+        Rng pick(splitMix64(m.seed ^ 0xC11FULL));
+        const DefId clipDef = set->attackClips[static_cast<size_t>(pick.unit() * static_cast<float>(set->attackClips.size())) %
+                                               set->attackClips.size()];
+        const Posture& posture = reg.get<Posture>(pawn);
+        combat_.motion().playTimed(pawn, clipDef, combat_.motion().clip(clipDef)->hitSeconds, windup, posture.facingX, posture.facingY,
+                                   false);
+    }
     if (events_ != nullptr) {
         Event e;
         e.type = EventType::MeleeSwing;
@@ -670,7 +753,11 @@ void MeleeSystem::sidestep(Entity defender, Melee& d) {
                                  kPawnRadius, here.level)) {
             continue;
         }
-        reg.get<Mover>(defender).walkTo(pos.x, pos.y, std::vector<CellPos>{n});
+        // A quick step that way: the body really moves there, against walls and bodies (docs/design/body-motion.md).
+        Mover& mover = reg.get<Mover>(defender);
+        mover.path.clear();
+        mover.next = 0;
+        combat_.motion().sidestep(defender, -dy * sign, dx * sign);
         d.dodged = true;
         ++dodges_;
         d.noDefendUntil = std::max(d.noDefendUntil, now() + reg.get<Melee>(d.threat).stepsLeft + rules_.dodgeRecoverySteps);
@@ -844,7 +931,8 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
                 const float along = std::clamp((t.x - ox) * lx + (t.y - oy) * ly, 0.0f, length);
                 const float cx = ox + lx * along - t.x;
                 const float cy = oy + ly * along - t.y;
-                if (cx * cx + cy * cy <= kPawnRadius * kPawnRadius && t.level == pos.level) {
+                const float body = std::max(kPawnRadius, combat_.motion().bodyRadius(m.target));
+                if (cx * cx + cy * cy <= body * body && t.level == pos.level) {
                     found.kind = ProjectileHitKind::Pawn;
                     found.thing = m.target;
                     found.part = -1;
@@ -943,7 +1031,7 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             }
             combat_.wearApparel(victim, result);
             if (!result.deflected) {
-                combat_.jolt(victim, result.part, tool->damageType, power, result.amount);  // poise and stagger (part C)
+                combat_.jolt(victim, result.part, tool->damageType, power, result.amount, HitFrom{true, pos.x, pos.y, true});  // poise and stagger (part C)
                 combat_.noteHurt(victim, pawn);
             }
             return;

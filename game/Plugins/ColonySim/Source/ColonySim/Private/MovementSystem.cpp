@@ -1,6 +1,7 @@
 #include "MovementSystem.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
@@ -224,7 +225,7 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             continue;
         }
         // Working standing still, knocked down by a blast or stunned: it stays where it is. Others still steer around it.
-        bool stays = mover.hold || reg.any_of<KnockedDown, Stunned>(a.entity);
+        bool stays = mover.hold || reg.any_of<KnockedDown, Stunned, BodyMotion>(a.entity);  // a clip moves its own body
         float base = 0.0f;
         if (!stays) {
             // Injuries slow a pawn down (its Moving capacity); a downed or dead one doesn't walk.

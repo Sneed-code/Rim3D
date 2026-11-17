@@ -1,4 +1,5 @@
 #include "ColonySim/Colonist.h"
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
@@ -89,6 +90,14 @@ Entity meleeTestPawn(Sim& sim, float x, float y, const char* weapon = nullptr) {
     return pawn;
 }
 
+// Puts a pawn back on its spot, standing still: blows that stagger throw the body back (docs/design/body-motion.md).
+void meleeTestPlace(Sim& sim, Entity pawn, float x, float y) {
+    sim.combat().motion().stop(pawn);
+    Position& pos = sim.things().registry().get<Position>(pawn);
+    pos.x = x;
+    pos.y = y;
+}
+
 void meleeTestSkill(Sim& sim, Entity pawn, int level, const char* trait = nullptr) {
     Colonist& c = sim.things().registry().get_or_emplace<Colonist>(pawn);
     c.skills.clear();
@@ -135,6 +144,8 @@ double meleeTestHitRate(int skill, int swings, uint64_t seed) {
     meleeTestFace(*sim, target, -1.0f, 0.0f);  // facing the attacker, as the hit chance table assumes
     int hits = 0;
     for (int i = 0; i < swings; ++i) {
+        meleeTestPlace(*sim, target, 31.5f, 30.5f);  // a staggering blow throws him back (body-motion.md): he steps up again
+        meleeTestPlace(*sim, attacker, 30.5f, 30.5f);  // and the swing's own step forward moved the attacker
         sim->submit(MeleeCommand{attacker, target, MeleeMode::Attack});
         for (int s = 0; s < 80; ++s) {
             sim->step();
@@ -418,6 +429,8 @@ TEST_CASE("Melee: a pawn with a melee weapon parries swings from the front until
     bool staggered = true;
     for (int i = 0; i < 80; ++i) {
         meleeTestHeal(*sim, blocker);
+        meleeTestPlace(*sim, blocker, 31.5f, 30.5f);  // a blow that got through threw it back (body-motion.md)
+        meleeTestPlace(*sim, attacker, 30.5f, 30.5f);  // and the swing's own step forward moved the attacker
         meleeTestFace(*sim, blocker, -1.0f, 0.0f);
         sim->submit(MeleeCommand{attacker, blocker, MeleeMode::Attack});
         for (int s = 0; s < 120; ++s) {
@@ -453,6 +466,8 @@ TEST_CASE("Melee: a pawn with a melee weapon parries swings from the front until
     int blockedBehind = 0;
     for (int i = 0; i < 20; ++i) {
         meleeTestHeal(*sim, blocker);
+        meleeTestPlace(*sim, blocker, 31.5f, 30.5f);
+        meleeTestPlace(*sim, attacker, 30.5f, 30.5f);
         meleeTestFace(*sim, blocker, 1.0f, 0.0f);
         sim->submit(MeleeCommand{attacker, blocker, MeleeMode::Attack});
         for (int s = 0; s < 120; ++s) {
