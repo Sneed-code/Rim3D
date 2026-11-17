@@ -122,6 +122,7 @@ namespace
 		float HitSeenAt = -1.0f;
 		bool bHitPicture = false;
 		bool bSwingPicture = false;
+		bool bKillFeedLines = false;
 		// -GunRangeIdleRecord=<seconds>: frames of a standing target close up (gunrange_idle/rec_0000.png ...).
 		int32 IdleRecorded = 0;
 		TWeakObjectPtr<ACameraActor> IdleCamera;
@@ -871,6 +872,20 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					Notes.Add(FString::Printf(TEXT("gunrange: gun back in hand, view %s, gun model %s"), Body->IsFirstPerson() ? TEXT("first person") : TEXT("third person"),
 						G->IsViewShown() && !G->IsHeldViewShown() ? TEXT("shown") : TEXT("NOT shown")));
 					Picture(TEXT("gun_again"));
+					Next(13);
+				}
+				break;
+			case 13:  // the kill feed at the top left: sample lines (one of them yours, with its sound), then a picture
+				if (UKillFeedSubsystem* Feed = GetWorld()->GetSubsystem<UKillFeedSubsystem>(); Feed && !State->bKillFeedLines)
+				{
+					State->bKillFeedLines = true;
+					Feed->AddLine(TEXT("You"), 0, TEXT("Raider"), 1, true);
+					Feed->AddLine(TEXT("Raider"), 1, TEXT("Bo"), 0, false);
+					Feed->AddLine(FString(), 0, TEXT("Deer"), 2, false);
+				}
+				if (State->StepTime > 1.0f)
+				{
+					Picture(TEXT("kill_feed"));
 					Next(10);
 				}
 				break;
