@@ -2,6 +2,14 @@
   "comment": "The gun range's guns (docs/design/gun-range.md). Each entry ties a sim gun def (its numbers stay in data/defs) to a model and to how the first-person arms hold it. 'art' is read by the GunArt commandlet (import into /Game/Rim3D/Generated/Guns/<name>/); 'parts' pick the imported meshes by a piece of their name. Points are in the gun's own frame in cm after meshRotation and meshOffset: +X out of the muzzle, +Y right, +Z up, the origin where the firing hand's palm holds the grip. The game reads this file at start and again on F6, so the numbers can be tuned without a rebuild. headInView, scope, reloadSpot and reach: see the doc's Aim and Scope.",
   "animRoot": "/Game/Rim3D/Generated/Animations/",
   "headInView": [-8, 0, -7],
+  "melee": [
+    {"def": "Melee_Knife", "label": "Knife"},
+    {"def": "Melee_Club", "label": "Club"},
+    {"def": "Melee_Gladius", "label": "Gladius"},
+    {"def": "Melee_Mace", "label": "Mace"},
+    {"def": "Melee_Longsword", "label": "Longsword"},
+    {"def": "Melee_Spear", "label": "Spear"}
+  ],
   "guns": [
     {
       "def": "Gun_BoltActionRifle",
