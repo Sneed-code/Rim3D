@@ -256,6 +256,7 @@ bool UGunRangeSubsystem::LoadConfig()
 		}
 	}
 	MeshCache.Reset();
+	MeshMisses.Reset();
 	const int32 Was = Current;
 	Current = -1;
 	CurrentDef.Reset();
@@ -292,6 +293,12 @@ UStaticMesh* UGunRangeSubsystem::FindMesh(const FString& Art, const FString& Mat
 	{
 		return Found->Get();
 	}
+	// A model that isn't imported is looked for again only after a while: the third-person hands ask every frame.
+	const double Now = FPlatformTime::Seconds();
+	if (const double* Missed = MeshMisses.Find(Key); Missed && Now - *Missed < 30.0)
+	{
+		return nullptr;
+	}
 	UStaticMesh* Best = nullptr;
 	if (!Art.IsEmpty())
 	{
@@ -322,6 +329,14 @@ UStaticMesh* UGunRangeSubsystem::FindMesh(const FString& Art, const FString& Mat
 		}
 	}
 	MeshCache.Add(Key, Best);
+	if (Best)
+	{
+		MeshMisses.Remove(Key);
+	}
+	else
+	{
+		MeshMisses.Add(Key, Now);
+	}
 	return Best;
 }
 
@@ -1167,11 +1182,12 @@ void UGunRangeSubsystem::UpdateHeldView(float Dt, ASimPawnActor& Player, const c
 	const FTransform CameraWorld = Camera->GetComponentTransform();
 	const FTransform ArmsWorld = Arms->GetComponentTransform();
 	const auto ToArms = [&CameraWorld, &ArmsWorld](const FVector& InView) { return ArmsWorld.InverseTransformPosition(CameraWorld.TransformPosition(InView)); };
-	const float Reach = 1.0f - SwingWeight;
-	FVector RightSpot = bFists ? FVector(34.0f, 13.0f, -17.0f) : (Hold.hands >= 2 ? FVector(36.0f, 10.0f, -26.0f) : FVector(38.0f, 15.0f, -22.0f));
+	// Partly kept through a swing so the hands stay in view while the clip moves them.
+	const float Reach = 1.0f - 0.6f * SwingWeight;
+	FVector RightSpot = bFists ? FVector(36.0f, 13.0f, -10.0f) : (Hold.hands >= 2 ? FVector(42.0f, 10.0f, -15.0f) : FVector(42.0f, 15.0f, -13.0f));
 	if (bBlock && !bShield)
 	{
-		RightSpot = bFists ? FVector(28.0f, 8.0f, -9.0f) : FVector(36.0f, 6.0f, -12.0f);
+		RightSpot = bFists ? FVector(30.0f, 8.0f, -4.0f) : FVector(40.0f, 6.0f, -6.0f);
 	}
 	if (bFists && !bPunchLeft)
 	{
@@ -1225,7 +1241,7 @@ void UGunRangeSubsystem::UpdateHeldView(float Dt, ASimPawnActor& Player, const c
 	}
 	else if (bFists || bShield)
 	{
-		FVector LeftSpot = bShield ? (bBlock ? FVector(30.0f, -6.0f, -12.0f) : FVector(34.0f, -18.0f, -28.0f)) : (bBlock ? FVector(28.0f, -8.0f, -9.0f) : FVector(34.0f, -13.0f, -17.0f));
+		FVector LeftSpot = bShield ? (bBlock ? FVector(34.0f, -6.0f, -8.0f) : FVector(40.0f, -18.0f, -16.0f)) : (bBlock ? FVector(30.0f, -8.0f, -4.0f) : FVector(36.0f, -13.0f, -10.0f));
 		if (bFists && bPunchLeft)
 		{
 			LeftSpot = FMath::Lerp(LeftSpot, FVector(62.0f, -4.0f, -10.0f), Punch);

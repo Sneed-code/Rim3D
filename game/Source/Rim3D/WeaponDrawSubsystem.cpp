@@ -648,7 +648,9 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		View.shieldUp || bControlled || View.reloading || Incoming >= 0 || Actor.IsInMotionClip() || Actor.GetSwing().IsActive());
 	Pawn.Ready = FMath::FInterpConstantTo(Pawn.Ready, bReady ? 1.0f : 0.0f, FrameDelta, WeaponReadyRate);
 	const float ReadyEase = MeleePose::EaseInOut(Pawn.Ready);
-	const bool bHands = GWeaponHands.GetValueOnGameThread() != 0 && Mesh && Height > 0.4f && !View.swimming;
+	// Crouched or prone the body has no crouch clip yet (only the drawn height drops), so the weapon keeps the old
+	// lowered place instead of the standing hands.
+	const bool bHands = GWeaponHands.GetValueOnGameThread() != 0 && Mesh && Height > 0.9f && !View.swimming;
 
 	// The frame the holsters ride in: the actor's, carried along with the hips (a lunge), and through a roll, stagger or
 	// knockdown clip turned and moved with the pelvis as well (so holsters and a slung shield stay on the body), eased in

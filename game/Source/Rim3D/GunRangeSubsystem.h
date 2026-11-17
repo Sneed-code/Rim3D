@@ -179,6 +179,7 @@ private:
 	TMap<FString, TWeakObjectPtr<UAnimSequence>> Clips;
 	TSet<FString> MissingClips;
 	TMap<FString, TWeakObjectPtr<UStaticMesh>> MeshCache;
+	TMap<FString, double> MeshMisses;
 
 	TWeakObjectPtr<USimSubsystem> BridgeSource;
 	FDelegateHandle EventHandle;

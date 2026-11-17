@@ -75,6 +75,8 @@ turns it off.
 
 ## Not done
 
+- Crouched or prone there is no crouch clip yet (only the drawn height drops), so the weapon keeps its old lowered place
+  there instead of the hands.
 - No proper carry clip exists in the library; the stoop and the arm reach stand in. Bow drawing on the arms in first
   person uses the generic path (no arrow nocking yet).
 - The unarmed swing clips named in MeleeRules (`Motion_Unarmed_*`) have no defs yet; fists use the procedural jab.
