@@ -170,6 +170,9 @@ public:
 	int32 GetHitClips() const { return HitClipsPlayed; }
 	/** Damage numbers put up over your own hits so far. */
 	int32 GetDamageNumbersShown() const { return DamageNumbersShown; }
+	/** Stealth marks drawn over heads so far: "?" for a suspicious enemy, "!" when one is alerted (docs/design/stealth.md). */
+	int32 GetAlertMarksDrawn() const { return AlertMarksDrawn; }
+	int32 GetAlertEventsSeen() const { return AlertEventsSeen; }
 	int32 GetBodyDecals() const { return BodyDecals; }
 	int32 GetGroundDecals() const { return GroundDecals; }
 	int32 GetRagdollsStarted() const { return RagdollsStarted; }
@@ -307,6 +310,12 @@ private:
 	};
 	TArray<FFightDamageNumber> DamageNumbers;
 	int32 DamageNumbersShown = 0;
+	/** Stealth (docs/design/stealth.md): seconds since each enemy was alerted (by entity id), for the "!" that flashes
+	    over its head; a "?" stays over a suspicious one from the snapshot. Direct mode only. */
+	TMap<uint32, float> AlertFlash;
+	int32 AlertMarksDrawn = 0;
+	int32 AlertEventsSeen = 0;
+	void DrawAlertMarks(float Scale);
 	void AddDamageNumber(const FFightTracer& Tracer, bool bArmour);
 	void SpawnBodyThroughHit(const FFightTracer& Tracer);
 	int32 BodyThroughHits = 0;

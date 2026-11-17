@@ -103,7 +103,14 @@ On another map (`world.visit`, [other-maps.md](other-maps.md): today the settlem
 own eyes or ears, **its whole side on that map is alerted for good** (`Fighter::onGuard`, event "site raised"). They
 know there is a threat, not where: hiding again breaks their line of sight, not their guard.
 
-## For Unreal (not built yet: needs the PC)
+## For Unreal
+
+Built (2026-11-17, `UFightSubsystem::DrawAlertMarks`, direct mode only): a yellow **"?"** over an enemy fighter that is
+suspicious (from the snapshot) and a red **"!"** for 1.5 s over one that has just been alerted (from the `Alert`
+event). Nothing over an unaware one or your own side. The combat range's targets are on the player's side, so the
+marks don't show there until the range has hostile, unaware targets.
+
+Still to do: a bark, the head turning to the suspect point, unaware targets in the range. The sim gives:
 
 - Snapshot `ThingView::alert` (0, 1, 2), `hasSuspect`, `suspectX`, `suspectY`: a "?" or "!" over the head, the head
   turning to the suspect point.
