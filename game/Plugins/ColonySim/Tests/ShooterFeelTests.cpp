@@ -249,11 +249,13 @@ TEST_CASE("Feel: a dodge roll goes through start-up, roll and recovery, and move
     }
     CHECK(sawEvent);
 
-    // Steps 1 to 3 are start-up: the same place, shootable. (The command's own step counted as 1.)
+    // Steps 1 to 3 are start-up: shootable. (The command's own step counted as 1.) The body goes where the roll's own
+    // clip takes it (docs/design/body-motion.md), which has it leaning into the roll already.
     CHECK(sim->combat().rollPhase(pawn) == RollPhase::StartUp);
     CHECK(feelProbe(*sim, pawn) == ProjectileHitKind::Pawn);
     sim->stepMany(2);
-    CHECK(feelPos(*sim, pawn).x == doctest::Approx(startX));
+    CHECK(feelPos(*sim, pawn).x >= startX);
+    CHECK(feelPos(*sim, pawn).x < startX + 0.6f);
     CHECK(sim->combat().rollPhase(pawn) == RollPhase::Rolling);
 
     // Rolling: 15 steps, bullets pass through for the first 12.
@@ -272,8 +274,10 @@ TEST_CASE("Feel: a dodge roll goes through start-up, roll and recovery, and move
     }
     CHECK(rolling == 15);
     CHECK(proof == 12);
-    CHECK(feelPos(*sim, pawn).x == doctest::Approx(startX + 4.0f).epsilon(0.001));
-    CHECK(feelPos(*sim, pawn).y == doctest::Approx(startY));
+    // Most of the clip's travel is over by now: the measured roll carries a 1.80 m body 3.6 m, straight.
+    CHECK(feelPos(*sim, pawn).x > startX + 2.5f);
+    CHECK(feelPos(*sim, pawn).x < startX + 4.2f);
+    CHECK(std::fabs(feelPos(*sim, pawn).y - startY) < 0.15f);
 
     // Recovery: 9 steps standing still and shootable, then the wait, then free.
     CHECK(sim->combat().rollPhase(pawn) == RollPhase::Recovery);
@@ -319,7 +323,7 @@ TEST_CASE("Feel: the sim moves a rolling pawn; the player's position is ignored 
     sim->step();
     CHECK(feelFailed(*sim, shoot));
     CHECK(feelPos(*sim, pawn).x < startX);
-    CHECK(feelPos(*sim, pawn).y == doctest::Approx(40.5f));
+    CHECK(std::fabs(feelPos(*sim, pawn).y - 40.5f) < 0.15f);
 
     // A snapshot says what the animation needs.
     Snapshot snapshot;

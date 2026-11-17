@@ -142,8 +142,8 @@ namespace
 		switch (Map.terrain(Cell))
 		{
 			// Under the water surface the bed shows through: wet, dark mud and gravel in deep water, wet sand in the shallows.
-			case colony::Terrain::Water: return GTerrWaterBed ? FTerrLook(FLinearColor(0.42f, 0.38f, 0.30f), 0.3f, 0.0f, 0.7f, 0.0f) : FTerrLook(FLinearColor::White, 0.0f, 0.0f, 0.0f, 1.0f);
-			case colony::Terrain::ShallowWater: return GTerrWaterBed ? FTerrLook(FLinearColor(0.62f, 0.56f, 0.45f), 0.75f, 0.0f, 0.25f, 0.0f) : FTerrLook(FLinearColor(1.1f, 1.1f, 1.1f), 0.5f, 0.0f, 0.0f, 0.7f);
+			case colony::Terrain::Water: return GTerrWaterBed ? FTerrLook(FLinearColor(0.52f, 0.47f, 0.37f), 0.3f, 0.0f, 0.7f, 0.0f) : FTerrLook(FLinearColor::White, 0.0f, 0.0f, 0.0f, 1.0f);
+			case colony::Terrain::ShallowWater: return GTerrWaterBed ? FTerrLook(FLinearColor(0.72f, 0.65f, 0.52f), 0.75f, 0.0f, 0.25f, 0.0f) : FTerrLook(FLinearColor(1.1f, 1.1f, 1.1f), 0.5f, 0.0f, 0.0f, 0.7f);
 			case colony::Terrain::Marsh: return FTerrLook(FLinearColor(0.55f, 0.65f, 0.5f), 0.0f, 0.0f, 0.0f, 0.0f);
 			case colony::Terrain::Mud: return FTerrLook(FLinearColor(0.5f, 0.38f, 0.25f), 0.0f, 0.0f, 0.5f, 0.0f);
 			case colony::Terrain::Sand: return FTerrLook(FLinearColor(1.15f, 1.0f, 0.75f), 1.0f, 0.0f, 0.0f, 0.0f);

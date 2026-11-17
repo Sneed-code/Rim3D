@@ -34,7 +34,7 @@ class Things;
 
 // One clip's root path. Index i is the body's offset from where the clip began at i/30 clip seconds, in the frame the
 // body faced then: metres forward and to the right for a 1.80 m man, degrees turned to the right. Right is the pawn's own right as the game draws it: (-y, x) of a facing (x, y).
-struct MotionClip {
+struct COLONY_API MotionClip {
     DefId def;
     std::string name;   // the def's name
     std::string kind;   // Roll, Sidestep, Stagger, Knockdown, Attack, GetUp, Blast...
@@ -87,6 +87,9 @@ struct MotionRules {
     std::string sidestepClip[2] = {"Motion_SidestepLeft", "Motion_SidestepRight"};
     // By the way the blow throws the body: back, forward, left, right.
     std::string staggerClip[4] = {"Motion_StaggerBack", "Motion_StaggerForward", "Motion_StaggerLeft", "Motion_StaggerRight"};
+    // A bullet's stagger: a flinch on the spot, not the stumble a blow by hand gives. Without these clips a bullet
+    // leaves the body where it is.
+    std::string flinchClip[4] = {"Motion_FlinchBack", "Motion_FlinchForward", "Motion_FlinchLeft", "Motion_FlinchRight"};
     std::string knockdownClip[4] = {"Motion_KnockdownBack", "Motion_KnockdownForward", "Motion_KnockdownLeft", "Motion_KnockdownRight"};
     std::string getUpClip = "Motion_GetUp";
     // Plain pushes, for bodies with no clips (animals) or clips not there yet.

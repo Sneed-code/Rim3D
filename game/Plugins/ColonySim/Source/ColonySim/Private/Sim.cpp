@@ -21,6 +21,7 @@
 #include "ColonySim/FieldCare.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
+#include "ColonySim/Grime.h"
 #include "ColonySim/Fire.h"
 #include "ColonySim/Traits.h"
 #include "ColonySim/Floors.h"
@@ -281,6 +282,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mood_->setRooms(rooms_.get());
     floors_ = std::make_unique<Floors>(map_, *defs_);
     filth_ = std::make_unique<Filth>(map_, *things_, *floors_, *defs_, settings.seed);
+    grime_ = std::make_unique<Grime>(map_, *things_, *floors_, *filth_, *defs_);
+    grime_->setBodyHeight([this](Entity pawn) { return bodyHeightM(pawn); });
     roomStats_ = std::make_unique<RoomStats>(map_, *things_, *rooms_, *floors_, *filth_, *plants_, *defs_);
     mood_->setRoomStats(roomStats_.get());
     power_ = std::make_unique<PowerGrid>(map_, *things_, *rooms_, *defs_, events_);
@@ -2199,6 +2202,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     { SimLap lap(profile_, "lights"); lights_->update(); }
     if (calendar) {
         { SimLap lap(profile_, "filth"); filth_->step(); }
+        { SimLap lap(profile_, "grime"); grime_->step(time_.seconds, events_, weather_->effects().rainRate); }
         { SimLap lap(profile_, "roomStats"); roomStats_->step(time_.seconds); }
         { SimLap lap(profile_, "temperature"); temperature_->step(time_.seconds); }
         // From the weather as it is now, not left over from the last step: a loaded game has not had a last step.
@@ -2472,6 +2476,19 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 const WaterContact water = waterContactAt(map_, view.x, view.y, 0, bodyHeightM(entity));
                 view.waterDepth = water.depth;
                 view.swimming = water.swimming();
+            }
+            if (const PawnGrime* grime = grime_->of(entity)) {
+                const auto filthDef = [&](int kind) {
+                    return kind >= 0 && static_cast<size_t>(kind) < filth_->kinds().size() ? filth_->kinds()[static_cast<size_t>(kind)].def : DefId{};
+                };
+                view.dirtLegs = grime->dirtLegs;
+                view.dirtBody = grime->dirtBody;
+                view.blood = grime->blood;
+                view.bloodFilth = filthDef(grime->bloodKind);
+                view.bloodAge = static_cast<float>(time_.seconds - grime->bloodAt);
+                view.weaponBlood = grime->weaponBlood;
+                view.weaponBloodFilth = filthDef(grime->weaponKind);
+                view.weaponBloodAge = static_cast<float>(time_.seconds - grime->weaponAt);
             }
             view.firstWaypoint = static_cast<uint32_t>(out.waypoints.size());
             for (size_t k = mover->next; k < mover->path.size(); ++k) {
@@ -3145,6 +3162,7 @@ uint64_t Sim::stateHash() const {
     zones_->hashState(h);
     floors_->hashState(h);
     filth_->hashState(h);
+    grime_->hashState(h);
     roomStats_->hashState(h);
     animals_->hashState(h);
     husbandry_->hashState(h);
