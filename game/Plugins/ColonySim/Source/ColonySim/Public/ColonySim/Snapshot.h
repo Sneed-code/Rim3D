@@ -243,6 +243,14 @@ struct ThingView {
     int meleeStepsLeft = 0;
     Entity meleeTarget = kNoEntity;
     bool blocking = false;
+    // Focus and footwork (docs/design/focus.md): the swing under way goes down at a body on the ground (a downward poke,
+    // smash or hack); the pawn it is locked on to (it faces it; the player's lock-on camera follows it when focusPlayer);
+    // stepping round or back from its enemy (a strafe or back step, facing the focus); what it does about enemies.
+    bool meleeLow = false;
+    Entity focusTarget = kNoEntity;
+    bool focusPlayer = false;
+    bool footwork = false;
+    FightResponse fightResponse = FightResponse::Attack;
     bool crawling = false;   // downed by the torso and awake: Unreal plays a crawl when it moves (body-health.md part D)
     // Pawns in water (docs/design/water.md): metres of water over the ground at their feet (the surface is z + waterDepth),
     // and whether it is past their shoulders, so they swim (a swim animation, the body floating at the surface).

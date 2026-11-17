@@ -534,6 +534,17 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     construction_->setUpperFloors(upperFloors_.get());
     construction_->setFloors(floors_.get());
     animals_->setMelee(melee_.get());
+    // Tab picks enemies first (docs/design/focus.md): another side's pawn that isn't a visitor or prisoner, or a mad animal.
+    melee_->setHostile([this](Entity pawn, Entity other) {
+        const entt::registry& reg = things_->registry();
+        if (const Animal* wild = reg.try_get<Animal>(other)) {
+            return wild->temper != AnimalTemper::Calm;
+        }
+        if (reg.any_of<Visitor, Prisoner>(other)) {
+            return false;
+        }
+        return fighters_->factionOf(other) != fighters_->factionOf(pawn);
+    });
     defense_ = std::make_unique<DefenseSystem>(*things_, map_, *combat_, *health_, *power_, *defs_, time_);
     defense_->setEventLog(&events_);
     defense_->setFuel(&jobs_->fuel());
@@ -1104,6 +1115,20 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     if (const auto* landingZone = std::get_if<SetLandingZoneCommand>(&command)) {
         if (landing_->paintZone(landingZone->area, landingZone->add) == 0) {
             commandFailed(id, "the landing zone is already so there");
+        }
+        return;
+    }
+    if (const auto* focus = std::get_if<FocusCommand>(&command)) {
+        std::string why;
+        if (!melee_->focusCommand(focus->pawn, focus->target, focus->mode, &why)) {
+            commandFailed(id, why);
+        }
+        return;
+    }
+    if (const auto* response = std::get_if<SetFightResponseCommand>(&command)) {
+        std::string why;
+        if (!melee_->setResponse(response->pawn, response->response, &why)) {
+            commandFailed(id, why);
         }
         return;
     }
@@ -1786,12 +1811,11 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* swimMelee = std::get_if<MeleeCommand>(&command); swimMelee != nullptr && pawnSwimming(swimMelee->pawn)) {
         commandFailed(id, "can't fight while swimming");
     } else if (const auto* melee = std::get_if<MeleeCommand>(&command)) {
-        const bool done = melee->mode == MeleeMode::Block
-                              ? melee_->block(melee->pawn, &error)
-                              : melee_->attack(melee->pawn, melee->target,
-                                               things_->registry().valid(melee->pawn) &&
-                                                   things_->registry().all_of<PlayerControl>(melee->pawn),
-                                               &error);
+        const bool player = things_->registry().valid(melee->pawn) && things_->registry().all_of<PlayerControl>(melee->pawn);
+        // The player's swing with no target goes at its focus, or down at a body before it (docs/design/focus.md).
+        const Entity target = melee->target == kNoEntity && player ? melee_->playerTarget(melee->pawn) : melee->target;
+        const bool done = melee->mode == MeleeMode::Block ? melee_->block(melee->pawn, &error)
+                                                          : melee_->attack(melee->pawn, target, player, &error);
         if (!done) {
             commandFailed(id, error);
         }
@@ -2170,7 +2194,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     { SimLap lap(profile_, "movement"); movement_->step(things_->registry(), map_); }
     travel_->noteVisits();
     { SimLap lap(profile_, "melee"); melee_->step(); }
-    { SimLap lap(profile_, "combat"); combat_->step(rng_); }
+    { SimLap lap(profile_, "combat"); combat_->step(rng_); melee_->faceFocus(); }
     { SimLap lap(profile_, "explosives"); explosives_->step(rng_); }
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     { SimLap lap(profile_, "defense"); defense_->step(rng_); }
@@ -2822,6 +2846,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.blocking = melee_->blocking(entity);
             view.meleeTool = melee->tool;
             view.meleeStrong = melee_->strongSwing(entity);
+            view.meleeLow = melee->phase != MeleePhase::Ready && melee->low;
+            view.focusTarget = melee->focus;
+            view.focusPlayer = melee->focusPlayer;
+            view.footwork = time_.steps < melee->footworkUntil;
+            view.fightResponse = melee->response;
         }
         if (const Patching* patching = reg.try_get<Patching>(entity)) {
             view.patchZone = patching->zone;

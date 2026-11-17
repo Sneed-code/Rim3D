@@ -5,6 +5,7 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Explosives.h"
+#include "ColonySim/FightResponse.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Pathfinder.h"
 #include "ColonySim/ThreatMap.h"
@@ -161,7 +162,10 @@ struct FighterRules {
     // ambushRange / helpRange rule) even when drafted, unless ordered to attack; a reckless side charges.
     bool colonistsHoldForFriends = true;
     bool raidersHoldForFriends = false;
-    float minWalkShare = 0.25f;       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
+    float minWalkShare = 0.25f;
+    // Fight responses (docs/design/focus.md, ours): Flee and FleeOnSight run this long after being hurt or the last sighting.
+    float fleeResponseSeconds = 20.0f;
+    float fleeSightRange = 40.0f;     // FleeOnSight runs from an enemy it sees this close       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
 };
 
 class COLONY_API FighterSystem {
@@ -190,6 +194,10 @@ public:
     void setMelee(MeleeSystem* melee) { melee_ = melee; }
     // Fog and the rest shorten how far a fighter under the open sky spots enemies (docs/design/weather.md).
     void setWeather(const Weather* weather) { weather_ = weather; }
+
+    // The pawn's fight response (MeleeSystem keeps it); Attack without melee.
+    FightResponse responseOf(Entity pawn) const;
+    static bool fleeResponse(FightResponse response);
 
     // A pawn's side (kPlayerFaction without a Faction component). Different factions are enemies.
     FactionId factionOf(Entity pawn) const;
@@ -282,6 +290,8 @@ private:
     void stepTo(Entity pawn, CellPos cell);
     void stop(Entity pawn, Fighter& f);
     const PawnInfo* info(Entity pawn) const;
+    void aiFocus(Entity pawn, const Fighter& f);
+    bool panicked(Entity pawn, const Fighter& f) const;
     float weaponRange(Entity pawn) const;
     int64_t now() const;
     void planCharge(Entity pawn, Fighter& f, CellPos goal);

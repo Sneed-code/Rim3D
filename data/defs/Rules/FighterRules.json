@@ -48,6 +48,8 @@
     "focusMetres": 8,
     "ambushRange": 6,
     "helpRange": 20,
+    "fleeResponseSeconds": 20,
+    "fleeSightRange": 40,
     "helpReach": 2.5,
     "profiles": {
       "colonists": { "holdsForFriends": true },
@@ -60,6 +62,7 @@
              "stepBackBelow", "reloadBelow", "dodgeRadius", "dodgeClearance", "dodgeHoldSteps",
              "diveMargin", "diveSafe", "throwEvery", "throwMinEnemies", "throwMemory", "throwSelfMargin", "throwFriendMargin",
              "switchMeleeRange", "switchSidearmRange", "switchMargin", "minWalkShare", "rangeMargin", "walkStayBonus",
-             "focusMetres", "ambushRange", "helpRange", "helpReach", "profiles"]
+             "focusMetres", "ambushRange", "helpRange", "helpReach", "profiles",
+             "fleeResponseSeconds", "fleeSightRange"]
   }
 ]

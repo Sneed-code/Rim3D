@@ -133,6 +133,8 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     num("focusMetres", r.focusMetres);
     num("ambushRange", r.ambushRange);
     num("helpRange", r.helpRange);
+    num("fleeResponseSeconds", r.fleeResponseSeconds);
+    num("fleeSightRange", r.fleeSightRange);
     num("helpReach", r.helpReach);
     r.colonistsHoldForFriends = def->flag("profiles.colonists.holdsForFriends", r.colonistsHoldForFriends);
     r.raidersHoldForFriends = def->flag("profiles.raiders.holdsForFriends", r.raidersHoldForFriends);
@@ -192,6 +194,12 @@ void FighterSystem::hurt(Entity victim, Entity attacker) {
     Fighter* f = reg.valid(victim) ? reg.try_get<Fighter>(victim) : nullptr;
     if (f == nullptr || reg.all_of<PlayerControl>(victim) || !reg.valid(attacker) || factionOf(attacker) == factionOf(victim) ||
         now() < f->cowerUntil) {
+        return;
+    }
+    // The Flee and FleeOnSight responses (docs/design/focus.md): attacked, it runs for fleeResponseSeconds and doesn't fight.
+    if (melee_ != nullptr && fleeResponse(melee_->responseOf(victim))) {
+        f->cowerUntil = now() + static_cast<int64_t>(std::lround(rules_.fleeResponseSeconds * 30.0f));
+        f->nextPlan = now();
         return;
     }
     const TraitStats& traits = TraitBook(reg, defs_).of(victim);
@@ -385,6 +393,9 @@ void FighterSystem::standDown(Entity pawn) {
         }
         stop(pawn, *f);
         reg.remove<Fighter>(pawn);
+        if (melee_ != nullptr) {
+            melee_->setAiFocus(pawn, kNoEntity);
+        }
         if (things_.spawned(pawn)) {
             combat_.setStance(pawn, Stance::Standing);
         }
@@ -513,7 +524,34 @@ void FighterSystem::step() {
         shieldAct(pawn, f);
         considerThrow(pawn, f);
         act(pawn, f);
+        aiFocus(pawn, f);
     }
+}
+
+// Focus (docs/design/focus.md): a fighter without a gun locks on to its target when it is near, so it faces it while it
+// steps round it, back or after it; it lets go when it falls back, runs or loses the target.
+void FighterSystem::aiFocus(Entity pawn, const Fighter& f) {
+    if (melee_ == nullptr) {
+        return;
+    }
+    const PawnInfo* self = info(pawn);
+    const PawnInfo* target = info(f.target);
+    const bool keep = self != nullptr && target != nullptr && !target->turret && f.mode == FightMode::Fight && !f.fallingBack &&
+                      !panicked(pawn, f) && weaponRange(pawn) <= 0.0f && target->level == self->level &&
+                      fightDist(target->x, target->y, self->x, self->y) <= melee_->rules().aiFocusRange;
+    melee_->setAiFocus(pawn, keep ? f.target : kNoEntity);
+}
+
+bool FighterSystem::fleeResponse(FightResponse response) {
+    return response == FightResponse::Flee || response == FightResponse::FleeOnSight;
+}
+
+bool FighterSystem::panicked(Entity pawn, const Fighter& f) const {
+    return melee_ != nullptr && now() < f.cowerUntil && fleeResponse(melee_->responseOf(pawn));
+}
+
+FightResponse FighterSystem::responseOf(Entity pawn) const {
+    return melee_ != nullptr ? melee_->responseOf(pawn) : FightResponse::Attack;
 }
 
 // What the fighter sees now, and what its friends know: they share what they spot.
@@ -862,6 +900,18 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
     for (int i = 0; i < threatCount; ++i) {
         threatWeight += kFightThreatWeights[i];
     }
+    // FleeOnSight (docs/design/focus.md): an enemy it sees now sends it running, for fleeResponseSeconds after the last.
+    if (melee_ != nullptr && melee_->responseOf(pawn) == FightResponse::FleeOnSight) {
+        for (const KnownEnemy& k : f.known) {
+            const PawnInfo* p = info(k.pawn);
+            if (p != nullptr && p->able && !p->turret && k.seenAt >= now() - rules_.planEvery &&
+                fightDist(k.x, k.y, self.x, self.y) <= rules_.fleeSightRange) {
+                f.cowerUntil = std::max(f.cowerUntil, now() + static_cast<int64_t>(std::lround(rules_.fleeResponseSeconds * 30.0f)));
+                break;
+            }
+        }
+    }
+    const bool scared = panicked(pawn, f);
 
     // Outnumbered or badly hurt: fall back (game design doc).
     int friendsNear = 0;
@@ -882,7 +932,7 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
                                          // sides that both fell back stood looking at each other for ever (body-motion.md).
                                          (badlyHurt(pawn) && ((!overwhelming && enemiesPressing > 0) || bleedingLow(pawn)))));
     // With an enemy already at arm's length there is no getting away on foot: it stands and fights (F8).
-    if (f.fallingBack && melee_ != nullptr && threatCount > 0 && threats[0].d <= melee_->reach(pawn) + melee_->rules().standGround) {
+    if (f.fallingBack && !scared && melee_ != nullptr && threatCount > 0 && threats[0].d <= melee_->reach(pawn) + melee_->rules().standGround) {
         f.fallingBack = false;
     }
 
@@ -909,7 +959,9 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
     // player drafted them; an attack order still sends them.
     const bool disciplined =
         f.defending || (self.faction == kPlayerFaction ? rules_.colonistsHoldForFriends : rules_.raidersHoldForFriends);
+    // A fighter fresh from a swing at the enemy follows it when it runs (sneed: "they move if enemies flee").
     const bool lies = disciplined && f.forcedTarget != f.target && targetInfo != nullptr && targetInfo->able &&
+                      !(melee_ != nullptr && f.target != kNoEntity && melee_->engagedRecently(pawn)) &&
                       fightDist(tx, ty, self.x, self.y) > rules_.ambushRange && (weaponRange(f.target) > 0.0f || !atFriend());
     if (melee_ != nullptr && targetInfo != nullptr && !f.fallingBack && !lies && melee_->charges(pawn)) {
         const CellPos goal = cellOf(Position{tx, ty, targetInfo->level});
@@ -1335,6 +1387,16 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
     const CellPos here = cellOf(pos);
     const Shooter* shooter = reg.try_get<Shooter>(pawn);
     const ShotPhase phase = shooter != nullptr ? shooter->phase : ShotPhase::Ready;
+    if (phase == ShotPhase::Aiming && shooter->target != kNoEntity) {
+        // Fighters step round each other now (docs/design/focus.md): a friend that came into the line while it aimed
+        // ends the shot; it lines up again.
+        const PawnInfo* aimedAt = info(shooter->target);
+        if (aimedAt != nullptr && friendInLine(pawn, pos.x, pos.y, pos.level, reg.get<Posture>(pawn).stance, *aimedAt)) {
+            combat_.cancelAim(pawn);
+            f.nextPlan = std::min(f.nextPlan, now() + 1);
+            return;
+        }
+    }
     if (phase == ShotPhase::Aiming || phase == ShotPhase::Firing) {
         return;  // holds still and exposed until the burst is out, even if the plan has moved on
     }
@@ -1399,7 +1461,7 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
     }
 
     const PawnInfo* target = info(f.target);
-    const bool canShoot = target != nullptr && f.canFire;
+    const bool canShoot = target != nullptr && f.canFire && !panicked(pawn, f);
     if (canShoot && phase == ShotPhase::Ready && now() >= f.reactUntil) {
         if (here != f.fireCell) {
             stepTo(pawn, f.fireCell);  // lean out round the corner
@@ -1489,6 +1551,9 @@ bool FighterSystem::meleeAct(Entity pawn, Fighter& f) {
     if (weaponRange(pawn) > 0.0f) {
         return false;
     }
+    if (panicked(pawn, f)) {
+        return false;  // running from enemies by its fight response
+    }
     if (f.mode == FightMode::Flee) {
         // Running off: no new swings. In the year run a routed raider beat two colonists down as it went: the alarm had
         // stopped (a fleeing raider is no threat) and they stood about it unarmed in their minds (ninth pass).
@@ -1533,6 +1598,12 @@ bool FighterSystem::meleeAct(Entity pawn, Fighter& f) {
     combat_.setStance(pawn, Stance::Standing);
     if (melee_->ready(pawn) && !melee_->holdSwing(pawn, victim)) {
         melee_->attack(pawn, victim, false);
+    } else {
+        // Between its swings, or waiting out a raised guard: footwork round the enemy, or back out of a blow it can't stop
+        // (docs/design/focus.md). A reckless side presses and moves less.
+        const FactionId side = factionOf(pawn);
+        const bool disciplined = f.defending || (side == kPlayerFaction ? rules_.colonistsHoldForFriends : rules_.raidersHoldForFriends);
+        melee_->footwork(pawn, victim, !disciplined);
     }
     return true;
 }

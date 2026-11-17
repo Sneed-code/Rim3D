@@ -546,6 +546,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                         j["add"] = c.add;
                     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
+                    } else if constexpr (std::is_same_v<Type, FocusCommand>) {
+                        j["pawn"] = entt::to_integral(c.pawn);
+                        j["target"] = entt::to_integral(c.target);
+                        j["mode"] = static_cast<int>(c.mode);
+                    } else if constexpr (std::is_same_v<Type, SetFightResponseCommand>) {
+                        j["pawn"] = entt::to_integral(c.pawn);
+                        j["response"] = fightResponseName(c.response);
                     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
                         j["up"] = c.up;
@@ -1882,6 +1889,37 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             if (!replayReadRect(r, j, where, c.area) || !r.flag(j, "add", c.add, where)) {
                 return false;
             }
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "Focus") {
+            FocusCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            uint32_t target = entt::to_integral(kNoEntity);
+            int mode = 0;
+            if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "target", target, where) || !r.integer(j, "mode", mode, where)) {
+                return false;
+            }
+            if (mode < 0 || mode > static_cast<int>(FocusMode::Clear)) {
+                return r.fail(where + ": bad focus mode");
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            c.target = static_cast<Entity>(target);
+            c.mode = static_cast<FocusMode>(mode);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetFightResponse") {
+            SetFightResponseCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            std::string response;
+            if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "response", response, where)) {
+                return false;
+            }
+            if (!fightResponseFromName(response, c.response)) {
+                return r.fail(where + ": no fight response \"" + response + "\"");
+            }
+            c.pawn = static_cast<Entity>(pawn);
             out.command = std::move(c);
             return true;
         }
