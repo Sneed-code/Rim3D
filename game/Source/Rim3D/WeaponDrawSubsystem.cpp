@@ -403,6 +403,18 @@ UStaticMesh* UWeaponDrawSubsystem::WeaponMesh(colony::DefId Weapon)
 	{
 		return nullptr;
 	}
+	// A melee weapon with a real model (assets/guns.json "melee" art, GunArt commandlet): that, in the def's frame.
+	if (!IsGun(Weapon) && GWeaponGunArt.GetValueOnGameThread() != 0)
+	{
+		if (UGunRangeSubsystem* Range = GetWorld()->GetSubsystem<UGunRangeSubsystem>())
+		{
+			if (UStaticMesh* Real = Range->FindMeleeMesh(UTF8_TO_TCHAR(Bridge->GetDefs()->get(Weapon).defName().c_str())))
+			{
+				Meshes.Add(Weapon.value, Real);
+				return Real;
+			}
+		}
+	}
 	if (!LoadSolidMaterial())
 	{
 		return nullptr;

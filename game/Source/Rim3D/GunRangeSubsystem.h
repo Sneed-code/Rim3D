@@ -84,6 +84,10 @@ struct FGunRangeMelee
 {
 	FString Def;
 	FString Label;
+	/** Its real model's folder under /Game/Rim3D/Generated/Guns (GunArt commandlet, the entry's "art"), empty for the
+	 *  def's own shapes. Frame as the def's shapes: +X along the weapon to the tip, origin where the def puts it (the
+	 *  palm at the hold's `main`), +Z the edge or the head's top. */
+	FString ArtName;
 };
 
 /**
@@ -128,6 +132,9 @@ public:
 	/** The gun art for a weapon def (assets/guns.json, read on first use), null if it has none or its model is not
 	 *  imported: the third-person hands and the first-person arms hold this model instead of the def's own shapes. */
 	const FGunRangeGun* FindGunByDef(const FString& Def);
+	/** The real model of a melee weapon def (assets/guns.json "melee" entries with "art"), null if it has none or it
+	 *  is not imported: drawn instead of the def's own shapes, in the hands and in first person. */
+	UStaticMesh* FindMeleeMesh(const FString& Def);
 	/** The largest imported mesh of a gun's art whose name has Match in it (cached). */
 	UStaticMesh* FindMesh(const FString& Art, const FString& Match);
 	/** A line for the panel from the scene (targets left and so on). */
