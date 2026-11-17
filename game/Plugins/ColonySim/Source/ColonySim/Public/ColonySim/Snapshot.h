@@ -146,6 +146,14 @@ struct ThingView {
     float rollDirX = 0.0f;
     float rollDirY = 0.0f;
     bool hitProof = false;
+    // A clip that is moving the body (docs/design/body-motion.md): the MotionClips def (invalid: none, or a plain
+    // push), the clip seconds played so far, and its play rate (clip seconds per real second). Unreal plays
+    // that clip at that time with its root motion dropped (a time that went back means the clip began again): the
+    // position above already follows the clip's path.
+    DefId motionClip;
+    float motionTime = 0.0f;
+    float motionRate = 0.0f;
+    bool motionPush = false;  // a plain push is moving it (no clip)
     // Several weapons (P1, docs/design/weapons.md): the weapon def carried in each slot (Primary, Sidearm, Melee;
     // invalid for none), in the hands or on the body, and while the pawn switches the slot it switches to and
     // the steps left (255 and 0 when it does not).
@@ -236,6 +244,10 @@ struct ThingView {
     Entity meleeTarget = kNoEntity;
     bool blocking = false;
     bool crawling = false;   // downed by the torso and awake: Unreal plays a crawl when it moves (body-health.md part D)
+    // Pawns in water (docs/design/water.md): metres of water over the ground at their feet (the surface is z + waterDepth),
+    // and whether it is past their shoulders, so they swim (a swim animation, the body floating at the surface).
+    float waterDepth = 0.0f;
+    bool swimming = false;
     int patchZone = -1;      // patching this body zone itself (body-health.md part B), -1 when not patching
     int patchStepsLeft = 0;
     // Turrets and traps (docs/design/defense.md). A turret: what it is doing (a TurretPhase number) and the pawn it

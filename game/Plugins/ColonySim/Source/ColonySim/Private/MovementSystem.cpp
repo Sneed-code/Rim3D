@@ -1,6 +1,7 @@
 #include "MovementSystem.h"
 
 #include "ColonySim/Clock.h"
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Genes.h"
 #include "ColonySim/Health.h"
@@ -11,6 +12,7 @@
 #include "ColonySim/Random.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Traits.h"
+#include "ColonySim/Water.h"
 #include "ColonySim/Weather.h"
 
 #include <algorithm>
@@ -49,6 +51,10 @@ constexpr int kMoveGhostSteps = 30;               // and for how many steps
 constexpr int kMoveWallCheckAfter = 10;           // steps held back before looking for a wall across the way
 constexpr float kMoveWallCheckRadius = 0.05f;     // metres: only a cell that can't be walked on counts, not a corner
 constexpr int kMoveCandidates = 17 + 9 + 2 + 1;   // turns at full speed, turns at half, two axis parts, standing still
+constexpr int kMoveShoreRadius = 24;             // metres a swimmer looks for the nearest shore (ours)
+// Flow is in metres per real second at 1x; a pawn moves in metres per step, 30 steps to that second.
+constexpr float kMoveFlowPerStep = 1.0f / static_cast<float>(kStepsPerRealSecondAt1x);
+constexpr float kMoveCurrentFloor = 0.25f;        // against the current a wader keeps at least this share of its pace (ours)
 constexpr float kMoveDoorLookAhead = 8.0f;        // steps ahead the pawn the player walks asks a door to open
 
 // Unit vectors every 22.5 degrees (cos, sin), counter-clockwise on a map with y up. Written out
@@ -219,7 +225,7 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             continue;
         }
         // Working standing still, knocked down by a blast or stunned: it stays where it is. Others still steer around it.
-        bool stays = mover.hold || reg.any_of<KnockedDown, Stunned>(a.entity);
+        bool stays = mover.hold || reg.any_of<KnockedDown, Stunned, BodyMotion>(a.entity);  // a clip moves its own body
         float base = 0.0f;
         if (!stays) {
             // Injuries slow a pawn down (its Moving capacity); a downed or dead one doesn't walk.
@@ -243,6 +249,35 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             continue;
         }
         const float accel = base * kMoveAccelFraction;
+        const float bodyHeight = bodyHeight_ ? bodyHeight_(a.entity) : kPersonHeightM;
+
+        // In deep water off any path (let go by the player mid-swim): it swims for the nearest shore, carried by the
+        // current, and walks on from there (docs/design/water.md).
+        if (a.level == 0 && map.inBounds(here) && map.terrain(here) == Terrain::Water && !map.walkable(here)) {
+            const WaterContact water = waterContactAt(map, a.x, a.y, 0, bodyHeight);
+            float vx = water.flowX * water.carry * kMoveFlowPerStep;
+            float vy = water.flowY * water.carry * kMoveFlowPerStep;
+            CellPos shore;
+            if (nearestShore(map, a.x, a.y, 0, kMoveShoreRadius, shore)) {
+                const float sx = static_cast<float>(shore.x) + 0.5f - a.x;
+                const float sy = static_cast<float>(shore.y) + 0.5f - a.y;
+                const float dist = std::sqrt(sx * sx + sy * sy);
+                if (dist > 1.0e-4f) {
+                    const float swim = std::min(base * kSwimSpeedFactor, dist);
+                    vx += sx / dist * swim;
+                    vy += sy / dist * swim;
+                }
+            }
+            if (!swimmerFitsAt(map, a.x + vx, a.y + vy, kPawnRadius, 0)) {
+                vx = 0.0f;
+                vy = 0.0f;
+            }
+            a.newVx = vx;
+            a.newVy = vy;
+            mover.blockedSteps = 0;
+            mover.heldSteps = 0;
+            continue;
+        }
 
         // Where to: skip the waypoints already reached (a waypoint on another level is reached by
         // climbing, below).
@@ -334,8 +369,7 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         // The velocity it wants and the fastest it may go.
         float wantX = 0.0f;
         float wantY = 0.0f;
-        float topSpeed = base * terrainSpeedFactor(map.terrain(CellPos{std::clamp(static_cast<int>(std::floor(a.x)), 0, map.width() - 1),
-                                                                        std::clamp(static_cast<int>(std::floor(a.y)), 0, map.height() - 1), 0}));
+        float topSpeed = base * groundSpeedFactor(map, a.x, a.y, bodyHeight, a.level);
         const bool walking = !mover.arrived();
         if (walking) {
             // Walk the line from where it started to the waypoint, aiming a little ahead of the
@@ -373,7 +407,14 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             const float wdx = wx - a.x;
             const float wdy = wy - a.y;
             const float wpDist = std::sqrt(wdx * wdx + wdy * wdy);
-            float speed = base * walkSpeedFactor(map, a.x, a.y, ux, uy);
+            float speed = base * walkSpeedFactor(map, a.x, a.y, ux, uy, bodyHeight, a.level);
+            if (a.level == 0) {
+                // The current helps a wader or swimmer downstream and holds it back upstream (docs/design/water.md).
+                const WaterContact water = waterContactAt(map, a.x, a.y, 0, bodyHeight);
+                if (water.carry > 0.0f) {
+                    speed = std::max(speed * kMoveCurrentFloor, speed + (water.flowX * ux + water.flowY * uy) * water.carry * kMoveFlowPerStep);
+                }
+            }
             if (mover.next + 1 == mover.path.size()) {
                 speed = std::min(speed, 0.9f * std::sqrt(2.0f * accel * wpDist));  // brake into the goal
             } else {

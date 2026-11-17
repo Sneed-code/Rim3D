@@ -175,6 +175,8 @@ public:
 	/** How tall the body is drawn, times the 1.80 m man (the looks' height; 1 before the looks arrive). Weapons and
 	 *  shields place themselves by it (docs/design/gear-size.md). */
 	float GetBodyScale() const { return bHasLooks ? Looks.Height : 1.0f; }
+	/** Centimetres the body is drawn above the ground at its feet while it swims (WaterDraw.h). */
+	float GetSwimLiftCm() const { return SwimLiftCm; }
 	/** Where the held melee weapon is now, in this actor's space (cm, degrees): the swing or the block,
 	 *  the dodge and the body's twist and lunge together. */
 	void GetMeleeWeaponPose(FVector& OutLocation, FRotator& OutRotation) const;
@@ -357,6 +359,7 @@ private:
 	ESimPawnDetail Detail = ESimPawnDetail::Full;
 	float CruiseSpeed = 400.0f;
 	float Yaw = 0.0f;
+	float SwimLiftCm = 0.0f;
 	bool bPlaced = false;
 	bool bBodyHidden = false;
 	bool bCutAway = false;

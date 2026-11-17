@@ -351,6 +351,22 @@ TEST_CASE("Fire: a pawn that cannot burn does not catch fire") {
     CHECK(f.fire().setPawnAlight(pawn, f.sim.time().seconds, true));
 }
 
+TEST_CASE("Fire: wading in past the knees puts out a burning body") {
+    FireFixture f;
+    for (int x = 2; x < 6; ++x) {
+        const_cast<Map&>(f.sim.map()).setTerrain(CellPos{x, 5, 0}, Terrain::ShallowWater);  // 0.5 m deep (docs/design/water.md)
+    }
+    const Entity wet = f.sim.things().spawn("Human", CellPos{3, 5, 0});
+    const Entity dry = f.sim.things().spawn("Human", CellPos{40, 40, 0});
+    CHECK(f.fire().setPawnAlight(wet, f.sim.time().seconds, true));
+    CHECK(f.fire().setPawnAlight(dry, f.sim.time().seconds, true));
+    for (int i = 0; i < 400 && f.fire().pawnBurning(wet); ++i) {
+        f.sim.step();
+    }
+    CHECK(!f.fire().pawnBurning(wet));
+    CHECK(f.fire().pawnBurning(dry));  // the one on dry ground burns on
+}
+
 TEST_CASE("Fire: a colonist with the Firefighter work type beats out a fire in the home area, and ignores one outside") {
     FireFixture f;
     f.sim.submit(SetHomeAreaCommand{CellRect{8, 8, 20, 20, 0}, true});

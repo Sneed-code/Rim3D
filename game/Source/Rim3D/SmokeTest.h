@@ -119,6 +119,7 @@ private:
 	void BuildGunRangePhases();     // SmokeTestGunRange.cpp (the first-person gun range to play, docs/design/gun-range.md)
 	void BuildSoundPhases();        // SmokeTestSound.cpp
 	void BuildLookPhases();         // SmokeTestLook.cpp
+	void BuildWaterPhases();        // SmokeTestWater.cpp
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();

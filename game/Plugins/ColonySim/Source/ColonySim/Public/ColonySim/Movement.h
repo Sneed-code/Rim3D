@@ -28,9 +28,14 @@ COLONY_API float terrainSpeedFactor(Terrain t);
 // hiking function scaled to 1 on flat ground. A little faster on a gentle downhill, slower on the
 // steep and on any uphill. Slopes beyond +-0.5 count as +-0.5.
 COLONY_API float slopeSpeedFactor(float slope);
-// Speed factor (ground and slope) for a pawn at (x, y) metres heading along the unit vector
-// (dirX, dirY). Slope is measured over the metre around the pawn.
-COLONY_API float walkSpeedFactor(const Map& map, float x, float y, float dirX, float dirY);
+// Share of its speed a pawn of `bodyHeightM` keeps on the ground at (x, y) metres, slope aside: the
+// terrain's cost, or in water its depth against the body (docs/design/water.md, Water.h).
+COLONY_API float groundSpeedFactor(const Map& map, float x, float y, float bodyHeightM = 1.8f, int level = 0);
+// Speed factor (ground, water and slope) for a pawn at (x, y) metres heading along the unit vector
+// (dirX, dirY). Slope is measured over the metre around the pawn; a swimmer ignores it. `bodyHeightM`
+// decides how deep the water is for it (1.8 m: the average man).
+COLONY_API float walkSpeedFactor(const Map& map, float x, float y, float dirX, float dirY, float bodyHeightM = 1.8f,
+                                 int level = 0);
 // Effort of walking the straight line: its metres divided by the speed factor, summed along it.
 // Divide by a pawn's `moveSpeed` for game seconds.
 COLONY_API float walkEffort(const Map& map, float x0, float y0, float x1, float y1);

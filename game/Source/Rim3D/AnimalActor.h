@@ -79,4 +79,5 @@ private:
 	float ArtScale = 1.0f;
 	float DrawScale = 1.0f;
 	float Yaw = 0.0f;
+	float SwimLiftCm = 0.0f;
 };

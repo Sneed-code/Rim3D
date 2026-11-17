@@ -153,7 +153,8 @@ TEST_CASE("Animal fights: shots hit animals now that they have hitboxes, and a m
     CHECK(sim->animals().hostile(boar));
     CHECK(sim->animals().stats().manhunters == 1);
     // 1200 steps: the rifle's weight slows the rifleman a little since sneed's weight rule (docs/design/armour.md).
-    sim->stepMany(1200);
+    // 1800: a bite that staggers now throws the rifleman back half a metre (docs/design/body-motion.md), which costs him shots.
+    sim->stepMany(1800);
     CHECK(fightDead(*sim, boar));
 }
 
