@@ -1,6 +1,6 @@
 [
  {
-  "defName": "Gun_ChargeLance",
+  "defName": "Gun_ChargeLance", "hold": {"style": "Hold_Rifle", "off": [25, 0, 0]},
   "parent": "GunBase",
   "label": "charge lance",
   "source": "RimWorld wiki",
@@ -48,7 +48,7 @@
   }
  },
  {
-  "defName": "Gun_NeedleGun",
+  "defName": "Gun_NeedleGun", "hold": {"style": "Hold_Rifle", "off": [25, 0, 0]},
   "parent": "GunBase",
   "label": "needle gun",
   "source": "RimWorld wiki",
@@ -96,7 +96,7 @@
   }
  },
  {
-  "defName": "Gun_HeavyChargeBlaster",
+  "defName": "Gun_HeavyChargeBlaster", "hold": {"style": "Hold_Rifle", "off": [25, 0, 0]},
   "parent": "GunBase",
   "label": "heavy charge blaster",
   "source": "RimWorld wiki",

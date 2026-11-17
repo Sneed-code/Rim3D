@@ -107,6 +107,8 @@ public:
 	 *  not in direct mode, no gun, the game is paused, an order went out this step, or the gun isn't ready. */
 	bool Fire();
 	bool Reload();
+	/** Patches your worst bleeding zone (H; body-health.md part B). False if nothing bleeds, you are down or patching already. */
+	bool Patch();
 	/** Crouch or stand up. */
 	bool ToggleCrouch();
 	/** Lie down or stand up. */
@@ -173,6 +175,10 @@ public:
 	/** Stealth marks drawn over heads so far: "?" for a suspicious enemy, "!" when one is alerted (docs/design/stealth.md). */
 	int32 GetAlertMarksDrawn() const { return AlertMarksDrawn; }
 	int32 GetAlertEventsSeen() const { return AlertEventsSeen; }
+	/** Of those, the hits on you (drawn red); zones knocked by hits (the hit layer, body-health.md part E); patch orders sent. */
+	int32 GetDamageNumbersOnMe() const { return DamageNumbersOnMe; }
+	int32 GetZoneKicks() const { return ZoneKicks; }
+	int32 GetPatchOrders() const { return PatchOrders; }
 	int32 GetBodyDecals() const { return BodyDecals; }
 	int32 GetGroundDecals() const { return GroundDecals; }
 	int32 GetRagdollsStarted() const { return RagdollsStarted; }
@@ -307,6 +313,8 @@ private:
 		float Amount = 0.0f;
 		float Age = 0.0f;
 		bool bArmour = false;
+		/** A hit on you (red), not one of yours. */
+		bool bOnMe = false;
 	};
 	TArray<FFightDamageNumber> DamageNumbers;
 	int32 DamageNumbersShown = 0;
@@ -316,7 +324,10 @@ private:
 	int32 AlertMarksDrawn = 0;
 	int32 AlertEventsSeen = 0;
 	void DrawAlertMarks(float Scale);
-	void AddDamageNumber(const FFightTracer& Tracer, bool bArmour);
+	int32 DamageNumbersOnMe = 0;
+	int32 ZoneKicks = 0;
+	int32 PatchOrders = 0;
+	void AddDamageNumber(const FFightTracer& Tracer, bool bArmour, bool bOnMe);
 	void SpawnBodyThroughHit(const FFightTracer& Tracer);
 	int32 BodyThroughHits = 0;
 	/** Body hits whose point moved onto the drawn body (SpawnImpact). */

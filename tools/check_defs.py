@@ -23,6 +23,7 @@ ROOT = Path(ARGS[0]) if ARGS else Path(__file__).resolve().parent.parent / "data
 # "parts" lists (the body tree).
 REFERENCES = [
     ("Things", "plant.harvestedThingDef", "Things"),
+    ("Things", "hold.style", "HoldStyles"),
     ("Things", "mineable.dropDef", "Things"),
     ("Things", "race.body", "Bodies"),
     ("Things", "costs{}", "Things"),
@@ -243,6 +244,41 @@ def check_sound_cues(defs_by_kind):
     return problems, used
 
 
+def check_hold_styles(defs_by_kind):
+    """Hold styles (docs/design/weapon-hold.md): grip, hand and hands are known words, points are [x, y, z], a two-handed
+    style has an off point, and attackStyle is a MeleeRules.styleAttacks list."""
+    problems = []
+    rules = defs_by_kind.get("Rules", {}).get("MeleeRules")
+    attack_styles = set((rules[1].get("styleAttacks") or {}).keys()) if rules else set()
+    point = lambda v: isinstance(v, list) and len(v) == 3 and all(isinstance(x, (int, float)) for x in v)
+    for name, (file, entry) in defs_by_kind.get("HoldStyles", {}).items():
+        if entry.get("grip", "Blade") not in ("None", "Blade", "Gun", "Bow", "Shield"):
+            problems.append(f"{file}: HoldStyles '{name}' grip must be None, Blade, Gun, Bow or Shield")
+        if entry.get("hand", "Right") not in ("Right", "Left"):
+            problems.append(f"{file}: HoldStyles '{name}' hand must be Right or Left")
+        if entry.get("hands", 1) not in (0, 1, 2):
+            problems.append(f"{file}: HoldStyles '{name}' hands must be 0, 1 or 2")
+        for key in ("main", "off"):
+            if key in entry and not point(entry[key]):
+                problems.append(f"{file}: HoldStyles '{name}' {key} must be [x, y, z]")
+        if entry.get("hands", 1) == 2 and entry.get("grip") != "Bow" and "off" not in entry:
+            problems.append(f"{file}: HoldStyles '{name}' is two-handed and needs an off point")
+        style = entry.get("attackStyle", "")
+        if style and attack_styles and style not in attack_styles:
+            problems.append(f"{file}: HoldStyles '{name}' attackStyle '{style}' is not a MeleeRules.styleAttacks list")
+    for name, (file, entry) in defs_by_kind.get("Things", {}).items():
+        hold = entry.get("hold")
+        if hold is None:
+            continue
+        if not isinstance(hold, dict) or "style" not in hold:
+            problems.append(f"{file}: Things '{name}' hold needs a style")
+            continue
+        for key in ("main", "off"):
+            if key in hold and not point(hold[key]):
+                problems.append(f"{file}: Things '{name}' hold.{key} must be [x, y, z]")
+    return problems
+
+
 def main() -> int:
     problems = []
     defs_by_kind = {}
@@ -294,6 +330,9 @@ def main() -> int:
 
     if CHECK_REFERENCES and "Research" in defs_by_kind:
         problems.extend(check_research_unlocks(defs_by_kind))
+
+    if CHECK_REFERENCES and "HoldStyles" in defs_by_kind:
+        problems.extend(check_hold_styles(defs_by_kind))
 
     if CHECK_REFERENCES and "SoundCues" in defs_by_kind:
         sound_problems, used = check_sound_cues(defs_by_kind)

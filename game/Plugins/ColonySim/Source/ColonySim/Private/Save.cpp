@@ -242,6 +242,7 @@ struct SaveHealth {
     bool downed = false;  // health section 5 on: with `dirty`, so a wound not yet worked out is still pending after a load
     bool dirty = false;
     int64_t bleedStoppedAt = -1;  // health section 7 on
+    std::vector<int64_t> zoneHurtAt;  // health section 8 on (body-health.md part F)
 };
 
 // An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
@@ -456,6 +457,7 @@ struct SaveEntity {
     std::optional<Young> young;             // section "breeding" version 3
     std::optional<Burning> burning;         // section "fire" (E4)
     std::optional<SaveSpoilage> spoilage;   // section "spoilage"
+    std::optional<CorpseRot> corpse;        // section "corpses"
     std::optional<SaveGrenade> grenade;     // section "explosives"
     std::optional<SaveBelt> belt;           // section "explosives"
     std::optional<SaveThrower> thrower;     // section "explosives"
@@ -2014,6 +2016,10 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
         ar.value("bleedStoppedAt", h.bleedStoppedAt);
         ar.require(h.bleedStoppedAt >= -1, "the save file has an impossible bleeding time");
     }
+    if (ar.sectionVersion() >= 8) {
+        ar.list("zoneHurtAt", h.zoneHurtAt, [&](int64_t& at) { ar.value(nullptr, at); });
+        ar.require(h.zoneHurtAt.size() <= 64, "the save file has too many body zones");
+    }
 }
 
 template <typename Ar>
@@ -3098,6 +3104,9 @@ void saveRoomStatsSection(Ar& ar, SaveData& d) {
         ar.value("cell", e.cell);
         ar.text("kind", e.kind);
         ar.value("thickness", e.thickness);
+        if (ar.sectionVersion() >= 2) {
+            ar.value("wetAt", e.wetAt);  // 2: when the pile was last added to (blood fades by its age)
+        }
     });
     ar.list("carriers", d.filth.carriers, [&](FilthState::Carrier& c) {
         ar.value("pawn", c.pawn);
@@ -3447,7 +3456,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("colonists", 2, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 7, [&] {
+    ar.section("health", 8, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -3546,7 +3555,7 @@ void saveSections(Ar& ar, SaveData& d) {
     });
     ar.section("talents", 1, [&] { saveTalents(ar, d); });
     ar.section("drugs", 2, [&] { saveDrugs(ar, d); });
-    ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
+    ar.section("roomstats", 2, [&] { saveRoomStatsSection(ar, d); });
     ar.section("terrain", 2, [&] {
         ar.list("dried", d.driedCells, [&](uint32_t& cell) { ar.value(nullptr, cell); });
         if (ar.sectionVersion() >= 2) {
@@ -3658,6 +3667,12 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("poisoned", s.poisoned);
             ar.list("ingredients", s.ingredients, [&](std::string& name) { ar.text(nullptr, name); });
             ar.require(s.rot >= 0.0f && s.rot < 1.0f && s.decay >= 0.0f && s.decay < 1.0f, "the save file has an impossible rot or wear");
+        });
+    });
+    ar.section("corpses", 1, [&] {  // dead bodies' rot (docs/design/spoilage.md "Corpses")
+        saveParts(ar, "corpse", e, &SaveEntity::corpse, [&](CorpseRot& c) {
+            ar.value("days", c.days);
+            ar.require(c.days >= 0.0f && c.days <= 1000.0f, "the save file has an impossible corpse rot");
         });
     });
     ar.section("melee", 4, [&] {
@@ -4149,6 +4164,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
         }
         out.spoilage = std::move(saved);
     }
+    if (const CorpseRot* corpse = reg.try_get<CorpseRot>(e)) {
+        out.corpse = *corpse;
+    }
     if (const Joy* joy = reg.try_get<Joy>(e)) {
         SaveJoy saved;
         saved.joy = *joy;
@@ -4321,6 +4339,7 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
         }
         saved.bloodLoss = health->bloodLoss;
         saved.bleedStoppedAt = health->bleedStoppedAt;
+        saved.zoneHurtAt = health->zoneHurtAt;
         for (const EnvironmentHediff& env : health->environment) {
             saved.environment.push_back(SaveEnvironmentHediff{sim.defs_->get(env.def).defName(), env.severity});
         }
@@ -4801,6 +4820,7 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
         }
         health.bloodLoss = e.health->bloodLoss;
         health.bleedStoppedAt = e.health->bleedStoppedAt;
+        health.zoneHurtAt = e.health->zoneHurtAt;
         for (const SaveEnvironmentHediff& env : e.health->environment) {
             const Def* hediff = sim.defs_->find("Hediffs", env.hediff);
             if (hediff == nullptr) {
@@ -5043,6 +5063,9 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
         reg.emplace_or_replace<Spoilage>(entity, std::move(spoilage));
     } else if (e.thing && e.thing->category == ThingCategory::Item && thingHasSpoilage(sim.defs_->get(reg.get<Thing>(entity).def))) {
         reg.emplace<Spoilage>(entity);  // saved before items could spoil
+    }
+    if (e.corpse) {
+        reg.emplace_or_replace<CorpseRot>(entity, *e.corpse);
     }
     if (e.melee) {
         reg.emplace<Melee>(entity, *e.melee);

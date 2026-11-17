@@ -381,6 +381,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         const int factor = static_cast<int>(defs_->get(things_->registry().get<Thing>(door).def).integer("door.openSpeedFactor", 1));
         return factor > 1 && !power_->running(door) ? 1 : factor;
     });
+    health_->setAsleep([this](Entity pawn) {
+        const Worker* worker = things_->registry().try_get<Worker>(pawn);
+        return worker != nullptr && jobIsLyingDown(worker->job);
+    });
     health_->setImmunityBonus([this](Entity pawn) { return jobs_->bedMonitored(jobs_->bedUnder(pawn)) ? 0.02f : 0.0f; });
     jobs_->setLights(lights_.get());
     jobs_->setPower(power_.get());
@@ -2323,7 +2327,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     }
     { SimLap lap(profile_, "lights"); lights_->update(); }
     if (calendar) {
-        { SimLap lap(profile_, "filth"); filth_->step(); }
+        { SimLap lap(profile_, "filth"); filth_->step(time_.seconds); }
         { SimLap lap(profile_, "grime"); grime_->step(time_.seconds, events_, weather_->effects().rainRate); }
         { SimLap lap(profile_, "roomStats"); roomStats_->step(time_.seconds); }
         { SimLap lap(profile_, "temperature"); temperature_->step(time_.seconds); }
@@ -2687,7 +2691,16 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
             view.crawling = health->downed && health->crawls;
+            view.severed = health->missing.empty() ? uint16_t{0} : health_->severed(entity);
             view.dead = health->dead;
+            if (const CorpseRot* corpse = reg.try_get<CorpseRot>(entity)) {
+                const CorpseLook look = spoilage_->corpseLook(corpse->days, temperature_->temperatureAt(cellOf(reg.get<Position>(entity))));
+                view.corpseDays = corpse->days;
+                view.corpseStage = look.stage;
+                view.flies = look.flies;
+                view.fliesFlying = look.flying;
+                view.maggots = look.maggots;
+            }
             view.pain = std::clamp(health->pain, 0.0f, 1.0f);
             view.bloodLoss = health->bloodLoss;
             view.bleedPerDay = health->bleedPerDay;
@@ -2724,6 +2737,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.area = areas_->areaOf(entity);
             view.jobTarget = worker->job.thing;
             view.jobProgress = worker->job.type != JobType::None ? jobs_->jobProgress(entity) : 0.0f;
+            view.carryingPawn = jobs_->carryingPawn(entity);
         }
         const bool noMind = mindIsPlayersOwn(reg, entity);  // the protagonist: no mood, recreation, beauty or rest need
         if (const Needs* needs = reg.try_get<Needs>(entity)) {
@@ -2949,6 +2963,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.sheltering = fighter->mode == FightMode::Shelter;
             view.fleeing = fighter->mode == FightMode::Flee;
             view.rescuing = fighter->mode == FightMode::Rescue ? fighter->rescuing : kNoEntity;
+            if (fighter->mode == FightMode::Rescue && fighter->lifted && reg.valid(fighter->rescuing)) {
+                view.carryingPawn = fighter->rescuing;
+            }
         }
         if (reg.all_of<Colonist>(entity) && view.faction == kPlayerFaction) {
             view.defenseRole = static_cast<uint8_t>(raids_->roleOf(entity));
@@ -3039,6 +3056,17 @@ void Sim::writeSnapshot(Snapshot& out) const {
     }
     std::sort(out.things.begin(), out.things.end(),
               [](const ThingView& a, const ThingView& b) { return a.id < b.id; });
+    // Who carries whom, on the carried body too (weapon-hold.md, "Carrying a body").
+    for (const ThingView& carrier : out.things) {
+        if (carrier.carryingPawn == kNoEntity) {
+            continue;
+        }
+        const auto it = std::lower_bound(out.things.begin(), out.things.end(), carrier.carryingPawn,
+                                         [](const ThingView& view, Entity value) { return view.id < value; });
+        if (it != out.things.end() && it->id == carrier.carryingPawn) {
+            it->carriedBy = carrier.id;
+        }
+    }
 
     out.alarm = raids_->state().alarm;
     out.alarmManual = raids_->state().manual;
@@ -3152,7 +3180,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
         out.filth.clear();
         for (const auto& [index, piles] : filth_->all()) {
             for (const FilthPile& pile : piles) {
-                out.filth.push_back(FilthView{map_.cellAt(index), filth_->kinds()[pile.kind].def, pile.thickness});
+                out.filth.push_back(FilthView{map_.cellAt(index), filth_->kinds()[pile.kind].def, pile.thickness,
+                                              pile.wetAt >= 0 ? static_cast<float>(time_.seconds - pile.wetAt) : 0.0f});
             }
         }
     }
@@ -3668,8 +3697,16 @@ uint64_t Sim::stateHash() const {
             if (health->bleedStoppedAt >= 0) {
                 h.add(health->bleedStoppedAt);
             }
+            for (const int64_t hurtAt : health->zoneHurtAt) {
+                if (hurtAt >= 0) {
+                    h.add(hurtAt);
+                }
+            }
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
+            if (const CorpseRot* corpse = reg.try_get<CorpseRot>(e)) {
+                h.add(corpse->days);
+            }
             if (!health->environment.empty()) {
                 h.add(static_cast<uint64_t>(health->environment.size()));
                 for (const EnvironmentHediff& env : health->environment) {

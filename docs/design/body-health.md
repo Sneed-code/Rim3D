@@ -21,7 +21,12 @@ for people changes. Animals keep RimWorld's rules for now.
 | Protagonist | never downed; about 100 hit points over the whole body; dies at 0 (not a pawn sneed pilots) |
 | Downed and dead | can still be shot |
 | Poise | base 50. An attack's force over the target's poise knocks it down; then 30 s before it can be knocked down again |
-| Dismemberment | overkill on a zone of at least 50% of its base HP. Arm: 50% below the elbow, 50% the whole arm; leg: below the knee or the whole leg; torso or head: death and a gib. Force over poise + 25 on a killing blow: the whole corpse gibs. Protagonist: never |
+| Death (2026-11-17) | head or torso at 0 (or blood at 0; poison later). Also: two or more limbs (arms, legs) at 0 with the head or the torso at 50% or less |
+| Hurt arms (2026-11-17) | an arm under 50% slows attacks by 0.5% for every percent under 50, both arms added (both at 25%: 25% slower) |
+| Hurt legs (2026-11-17) | the same for the walk |
+| Healing (2026-11-17) | a zone not hurt for 10 s with its bleeding patched gets back 0.1% of what it lost a second, 0.2% asleep |
+| Dismemberment (2026-11-17, replaces the 50% rule and the gibs) | only on death: the killing hit went over what the struck zone had left by 25% of the zone's hit points or more. Upper arm: the whole arm; lower arm: below the elbow; legs likewise; head: off; torso: the head, arms and legs come apart. No viscera yet. Protagonist: never |
+| Severed parts (2026-11-17, not built) | decay over 2 days; a head on a pike turns to bone over 4 days |
 
 "No active bleeding for now": no dripping effect on screen yet; the blood loss itself counts.
 
@@ -129,6 +134,74 @@ Code: `ColonySim/Patch.h`, `Private/Patch.cpp` (`PatchSystem`), `HealthSystem::p
   within 20 m, one cell at a time, at 10% of its walk (`zones.crawlMoving`, ours; about 6 m in 20 s). Downed by a leg,
   by many zones, or knocked out, it lies still; with no enemy near it lies still; a rescuer or a hauler carrying it
   stops it (`PatchSystem::crawl`). The snapshot's `crawling` tells Unreal to play a crawl when it moves.
+
+## Part E as built
+
+What a hurt body shows, all in Unreal and all cosmetic (the sim decided the hit, the stagger and the knockdown).
+
+- **The hit layer** (`FSimPawnHitLayerNode`, the root of the pawn's animation, over the montage slot and the
+  locomotion): each of the six zones is a damped spring about its joint (head; spine for the torso; upper arms;
+  thighs). A hit pushes the struck zone along the blow and it swings back with a wobble (about 3 swings a second,
+  gone in under a second), then sits exactly on the animation again. Nothing underneath is stopped, restarted or
+  blended out, so a hit never breaks a walk, a swing or a react clip, and a small hit that staggers nothing still
+  shows. The head and torso stand on their joint (the top goes with the blow), arms and legs hang (the far end does);
+  a struck torso drags the head, a struck arm turns the shoulders, a struck leg tips the body. Full strength is 20
+  damage; the bend is capped at 34 degrees. `ASimPawnActor::KickZone` takes the zone from the sim's body part
+  (`HealthSystem::partZone`), or from where the hit landed on the body when the sim named no part.
+- **Bullets and blows** both come through `UFightSubsystem::SpawnImpact`, which kicks the zone (a quarter strength
+  when armour stopped it) on top of the lean and the react clip that were there before.
+- **Limp**: a leg under 85% health makes the body tip over that leg and forward, drop a little and keep the head
+  level, while that foot is the lower one in the walk underneath; full at 35% and less. Only while walking.
+- **Patching**: while the sim patches (`patchZone`), the spine bends over the wound, the head looks down and a hand
+  goes to the place (the right hand, the left for the right arm), eased in and out over 0.3 s. Procedural: there is
+  no clip for it.
+- **Crawl**: a pawn downed by the torso and awake (`crawling`) is no ragdoll: it plays the forward crawl clip from
+  `Mixamo/Crawling` (found by name through the asset registry), as fast as the sim moves it and all but still when it
+  does not. The clip's travel is in its hips, so the body is set back by it like the clips of
+  [body-motion.md](body-motion.md). Knocked out or dead it goes limp as before.
+- **Damage numbers**: your hits float over where they landed (as before: bullets and blows); a hit **on you** shows in
+  red under the crosshair. `Fight.DamageNumbers 0` hides both.
+- **H** patches your worst bleeding zone when you play a pawn (`UFightSubsystem::Patch`); the gun panel says
+  "Bleeding   H patch the wound" while something bleeds and counts the patching down.
+- Smoke test `hurt` (`SmokeTestHurt.cpp`): six hits, one a zone, must bend the body 4 to 36 degrees and settle under 1
+  degree; a bruised leg must limp over a 14 m walk; a cut torso must be patched with the body bent over it; a colonist
+  downed by the torso must crawl and never be a ragdoll.
+- Not done here: blood on clothes (the blood system stains bodies; cloth comes with part F's wounds), and a limp for
+  far pawns' simple loops is the same lean (no separate clip).
+
+## Part F as built (sim)
+
+sneed's rules of 2026-11-17 (the table above); the first version (50% overkill on the living, bursting heads and
+torsos, whole-corpse gibs) was never merged.
+
+- **Death** (`HealthSystem::derive`, `HealthRules` `zones.deadLimbs`, `deadLimbsCoreAtOrBelow`): a person dies
+  (cause Wounds) when the head or the torso zone is at 0, or when two or more arm and leg zones are at 0 and the
+  head or the torso is at half or less. Blood at 0 and RimWorld's vital organs kill as before. The protagonist keeps
+  its own rule (100 hit points over the body).
+- **A limb at 0 stays on** (`damagePart`): for bodies with zones, damage no longer destroys the zone's root, the Arm,
+  Hand, Leg, Foot or Head part: the part sits at 0 and can heal. Fingers, toes, eyes, ears and organs are still lost
+  the RimWorld way. A part at 0 takes no more damage, so a hit aimed at it does nothing.
+- **Hurt limbs** (`zones.limbSlowBelow` 0.5, `limbSlowPerShare` 0.5): `Health::limbAttack` is 1 minus half of every
+  arm's share under half, `limbMove` the same for legs. `HealthSystem::attackSpeedFactor` (never under 0.5) divides
+  `CombatSystem::attackTimeFactor`, so aiming, cooldown, reloading and melee swings all slow; `limbMove` multiplies
+  the walking factor after the 40% floor (two legs at 25% walk 25% slower than the floor).
+  Reading of sneed's example: the count starts at the 50% line, so one arm at 40% is 5% slower.
+- **Healing** (`HealthSystem::step`, `healDelaySeconds` 10, `healPerSecond` 0.001, `healAsleepFactor` 2,
+  `healGoneBelow` 0.25): once a real second (30 steps), every wound in a zone that was last hurt 10 real seconds ago
+  or more (`Health::zoneHurtAt`, saved in health section 8, hashed) and is not bleeding shrinks by 0.1%, 0.2% when
+  the pawn lies asleep (`setAsleep`, a worker lying down). A wound under a quarter of a hit point is gone. Scars and
+  old wounds never heal. RimWorld's slow daily healing still runs beside it.
+- **Dismemberment** (`hitPart`, `dismember`, `zones.dismember.overkillShare` 0.25): only the hit that kills, when
+  its damage is over what the struck zone had left by a quarter of the zone's hit points: 13 over for an arm or the
+  head, 19 for a leg, 25 for the torso. Struck on the hand, the foot, a part of them or the radius or tibia: the limb
+  comes off below the elbow or knee (the Hand or Foot part goes); anywhere else on the limb: the whole Arm or Leg.
+  Head zone: the Head part. Torso: the head and every limb. One `PawnDismembered` event for each piece, message
+  "left forearm", "right arm", "left lower leg", "right leg", "head". A corpse is never cut up further.
+- **Never** the protagonist, animals, mechanoids (bodies without zones).
+- **For drawing**: the snapshot's `severed` (SeveredBits: each forearm, arm, lower leg, leg, and the head), worked out
+  from the lost parts, so a surgeon's amputation shows too.
+- Not yet: severed parts as items that decay over 2 days (and the head on a pike that turns to bone over 4), Unreal's
+  cut limbs, stump caps and ragdolls (PC).
 
 ## Later (sneed, 2026-11-16)
 

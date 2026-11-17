@@ -4,13 +4,18 @@
     "intervalSeconds": 60,
     "rot": { "stopsBelowC": 0, "fullSpeedAboveC": 10 },
     "outdoorDeteriorationFactor": 1.0,
+    "corpse": {
+      "daysToRotStart": 2.5, "daysToDessicated": 25,
+      "flies": { "fromDays": 0.01, "fullDays": 0.25, "fadeFromDays": 12, "stillAtOrBelowC": 10, "allFlyingAtC": 20 },
+      "maggots": { "fromDays": 1.0, "fullDays": 2.5, "goneDays": 18 }
+    },
     "poison": {
       "onIngestChance": 0.35,
       "dirtyKitchenChance": 0.15, "cleanAtLeast": 0.4, "dirtiestAt": -1.1,
       "unskilledChance": 0.04, "skillSafeAt": 8
     },
-    "note": "Rot speed is 0 at or below stopsBelowC, 1 at or above fullSpeedAboveC, linear between, by the temperature of the cell an item lies in (docs/design/spoilage.md). Items with stats.deteriorationRate (hit points a game day) lose it under the open sky, times outdoorDeteriorationFactor (E1 raises it in rain). A meal is poisoned by chance when it is cooked: dirtyKitchenChance in a kitchen at dirtiestAt or worse (nothing at cleanAtLeast or better, linear between) plus unskilledChance for a cook of skill 0 (nothing from skillSafeAt up); eating a poisoned meal gives food poisoning with onIngestChance.",
-    "unverified": ["rot.stopsBelowC", "rot.fullSpeedAboveC", "poison.onIngestChance"],
-    "ours": ["intervalSeconds", "outdoorDeteriorationFactor", "poison.dirtyKitchenChance", "poison.cleanAtLeast", "poison.dirtiestAt", "poison.unskilledChance", "poison.skillSafeAt"]
+    "note": "Rot speed is 0 at or below stopsBelowC, 1 at or above fullSpeedAboveC, linear between, by the temperature of the cell an item lies in (docs/design/spoilage.md). Items with stats.deteriorationRate (hit points a game day) lose it under the open sky, times outdoorDeteriorationFactor (E1 raises it in rain). A meal is poisoned by chance when it is cooked: dirtyKitchenChance in a kitchen at dirtiestAt or worse (nothing at cleanAtLeast or better, linear between) plus unskilledChance for a cook of skill 0 (nothing from skillSafeAt up); eating a poisoned meal gives food poisoning with onIngestChance. corpse: a dead body that is not a machine rots by the same temperature speed (rot-days), is rotting from daysToRotStart and dessicated from daysToDessicated; flies (cosmetic) find it within minutes, are a full swarm by fullDays, thin from fadeFromDays and are gone when it is dessicated, and sit on the body in the cold; maggots hatch from fromDays, are at their most at fullDays and gone by goneDays (sneed, 2026-11-14: flies and maggots on corpses).",
+    "unverified": ["rot.stopsBelowC", "rot.fullSpeedAboveC", "poison.onIngestChance", "corpse.daysToRotStart", "corpse.daysToDessicated"],
+    "ours": ["intervalSeconds", "outdoorDeteriorationFactor", "poison.dirtyKitchenChance", "poison.cleanAtLeast", "poison.dirtiestAt", "poison.unskilledChance", "poison.skillSafeAt", "corpse.flies", "corpse.maggots"]
   }
 ]

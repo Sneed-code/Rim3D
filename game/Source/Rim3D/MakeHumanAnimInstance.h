@@ -185,6 +185,7 @@ public:
 	 *  towards ElbowWorld; Alpha 0 is off. Read once a frame before the animation updates (creator weapons). */
 	void SetLeftHandGrip(float Alpha, const FVector& InRightHandOffset, const FVector& InElbowWorld)
 	{
+		bLeftReach = false;
 		LeftGripAlpha = Alpha;
 		LeftGripOffset = InRightHandOffset;
 		LeftElbowWorld = InElbowWorld;
@@ -197,6 +198,16 @@ public:
 		RightReachTarget = InTargetComponent;
 		RightElbowComponent = InElbowComponent;
 	}
+	/** The left hand's wrist moved to a point in this component's space instead (a guard, a shield raised, hands under a
+	 *  carried body's legs), the elbow bent towards a point in the same space; Alpha 0 is off. Replaces the grip. */
+	void SetLeftHandReach(float Alpha, const FVector& InTargetComponent, const FVector& InElbowComponent)
+	{
+		bLeftReach = true;
+		LeftGripAlpha = Alpha;
+		LeftGripOffset = InTargetComponent;
+		LeftElbowWorld = InElbowComponent;
+	}
+	bool bLeftReach = false;
 	float RightReachAlpha = 0.0f;
 	FVector RightReachTarget = FVector::ZeroVector;
 	FVector RightElbowComponent = FVector::ZeroVector;
