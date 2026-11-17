@@ -725,15 +725,22 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					Next(12);
 				}
 				break;
-			case 12:  // a close look at her wounds through the rifle's scope (the far pictures are too small to show them)
+			case 12:  // a close look at her wounds through the rifle's scope (the far pictures are too small to show them):
+				      // at the place the last bullet met her drawn body
 				G->SelectGun(0);
 				for (const FGunRangeTarget& T : State->Targets)
 				{
 					const colony::ThingView* View = B->GetCurrentSnapshot().find(T.Thing);
 					FVector At;
-					if (View && (View->downed || View->dead) && B->GetBlendedLocation(T.Thing, At))
+					if (View && (View->downed || View->dead) && Fight->GetLastBodyHit(T.Thing, At))
 					{
-						const FRotator Wanted = (At + FVector(0.0, 0.0, 15.0) - Body->GetViewLocation()).Rotation();
+						if (!State->bFiringPicture)
+						{
+							State->bFiringPicture = true;
+							Notes.Add(FString::Printf(TEXT("gunrange: close look at %u's last wound, %.0f m away"), entt::to_integral(T.Thing),
+								FVector::Distance(At, Body->GetViewLocation()) / 100.0f));
+						}
+						const FRotator Wanted = (At - Body->GetViewLocation()).Rotation();
 						Body->Look(FRotator::NormalizeAxis(Wanted.Yaw - Body->GetYaw()), Wanted.Pitch - Body->GetPitch());
 						break;
 					}

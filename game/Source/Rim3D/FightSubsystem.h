@@ -138,6 +138,16 @@ public:
 	int32 GetHitsSeen() const { return HitsSeen; }
 	int32 GetPawnHitsSeen() const { return PawnHitsSeen; }
 	int32 GetSnappedHits() const { return SnappedHits; }
+	/** Where the last bullet met this pawn's drawn body (for the smoke tests' close looks). */
+	bool GetLastBodyHit(colony::Entity Pawn, FVector& Out) const
+	{
+		const FVector* Found = LastBodyHits.Find(entt::to_integral(Pawn));
+		if (Found)
+		{
+			Out = *Found;
+		}
+		return Found != nullptr;
+	}
 	int32 GetFlashes() const { return Flashes; }
 	int32 GetTracersSpawned() const { return TracersSpawned; }
 	int32 GetTracersArrived() const { return TracersArrived; }
@@ -302,6 +312,7 @@ private:
 	int32 BodyThroughHits = 0;
 	/** Body hits whose point moved onto the drawn body (SpawnImpact). */
 	int32 SnappedHits = 0;
+	TMap<uint32, FVector> LastBodyHits;
 	void DrawDamageNumbers(float Scale);
 	float EquipMessageSeconds = 0.0f;
 

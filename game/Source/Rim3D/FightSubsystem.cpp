@@ -482,6 +482,7 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 			{
 				At = OnSkin;
 				++SnappedHits;
+				LastBodyHits.Add(entt::to_integral(Tracer.Target), At);
 			}
 		}
 	}
