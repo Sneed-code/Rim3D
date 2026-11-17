@@ -144,7 +144,10 @@ void USimPawnSubsystem::LoadAssets()
 	BodyMesh = LoadObject<USkeletalMesh>(nullptr, PawnBodyMeshPath);
 	for (const TCHAR* Path : PawnStandIdlePaths)
 	{
-		IdleLoop = IdleLoop ? IdleLoop : LoadObject<UAnimSequence>(nullptr, Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (!IdleLoop)
+		{
+			IdleLoop = LoadObject<UAnimSequence>(nullptr, Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
+		}
 	}
 	if (!IdleLoop)
 	{
