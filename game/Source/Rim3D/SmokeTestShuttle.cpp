@@ -174,6 +174,7 @@ void USmokeTestSubsystem::BuildShuttlePhases()
 	Approach.Name = TEXT("shuttle_approach");
 	Approach.WarmupSeconds = 2.5f;
 	Approach.MeasureSeconds = 2.0f;
+	Approach.Setup = [=]() { Aim(6.0f); };  // StartPhase always calls Setup
 	Approach.OnFrame = [=]() { Watch(); Aim(6.0f); };
 	Approach.Verify = [=, this]()
 	{
