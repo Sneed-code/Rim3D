@@ -29,6 +29,7 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Filth.h"
+#include "ColonySim/Grime.h"
 #include "ColonySim/Fire.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Health.h"
@@ -647,6 +648,7 @@ struct SaveData {
     std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
     RoofCollapseSaved roofs;           // section "roofs" (M3)
     AreasSaved areas;                  // section "areas": allowed areas and who is limited to one
+    GrimeState grime;                  // section "grime": dirt and blood on bodies (docs/design/grime.md)
     LandingSaved landing;              // section "landing": the landing zone and shuttles (docs/design/landing.md)
     SaveDeep deep;                     // section "deep"
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
@@ -3938,6 +3940,22 @@ void saveSections(Ar& ar, SaveData& d) {
             });
         });
     });
+    ar.section("grime", 1, [&] {  // dirt and blood on bodies, clothes and weapons (docs/design/grime.md)
+        ar.list("pawns", d.grime.pawns, [&](GrimeState::Entry& g) {
+            ar.value("pawn", g.pawn);
+            ar.value("dirtLegs", g.dirtLegs);
+            ar.value("dirtBody", g.dirtBody);
+            ar.value("blood", g.blood);
+            ar.value("weaponBlood", g.weaponBlood);
+            ar.text("bloodKind", g.bloodKind);
+            ar.text("weaponKind", g.weaponKind);
+            ar.value("bloodAt", g.bloodAt);
+            ar.value("weaponAt", g.weaponAt);
+            ar.value("lastX", g.lastX);
+            ar.value("lastY", g.lastY);
+            ar.value("lastLevel", g.lastLevel);
+        });
+    });
     // New sections go here, at the end.
 }
 
@@ -5389,6 +5407,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.roofs = sim.roofCollapse_->state();
     d.areas = sim.areas_->saved();
     d.landing = sim.landing_->saved();
+    d.grime = sim.grime_->state();
     {
         const DeepResourcesSaved deep = sim.deepResources_->saved();
         std::unordered_map<uint32_t, uint32_t> indexOf;
@@ -5875,6 +5894,9 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         if (!sim.filth_->restore(d.filth, error) || !sim.roomStats_->restore(d.roomStats, error)) {
             return false;
         }
+    }
+    if (!sim.grime_->restore(d.grime, error)) {
+        return false;
     }
     if (!sim.landing_->restore(d.landing, error)) {
         return false;

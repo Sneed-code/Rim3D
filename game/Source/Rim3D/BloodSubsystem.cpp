@@ -71,6 +71,8 @@ namespace
 	constexpr float BloodRainWashSeconds = 240.0f;
 	// A stain on skin in the rain.
 	constexpr float BloodBodyRainWashSeconds = 300.0f;
+	// A stain on skin under water while swimming (the sim's GrimeRules swimWashSeconds is 600 game seconds: 20 s at 1x).
+	constexpr float BloodBodySwimWashSeconds = 20.0f;
 	constexpr float BloodGoingSeconds = 1.5f;
 
 	FVector BloodAnyPerpendicular(const FVector& V, FRandomStream& Random)
@@ -1538,15 +1540,24 @@ void UBloodSubsystem::UpdateStains(float Dt, float GameSeconds)
 			continue;
 		}
 		Stain.LastVisit = Clock;
-		if (Snapshot && Rain > 0.001f && Stain.Owner != colony::kNoEntity)
+		if (Snapshot && Stain.Owner != colony::kNoEntity)
 		{
 			if (const colony::ThingView* View = Snapshot->find(Stain.Owner))
 			{
 				const colony::Map& Map = Sim->map();
 				const colony::CellPos Cell{FMath::FloorToInt(View->x), FMath::FloorToInt(View->y), View->level};
-				if (Map.inBounds(Cell) && Map.roof(Cell) == colony::Roof::None)
+				if (Rain > 0.001f && Map.inBounds(Cell) && Map.roof(Cell) == colony::Roof::None)
 				{
 					Stain.WashLeft -= Elapsed * FMath::Clamp(Rain, 0.2f, 1.5f) / BloodBodyRainWashSeconds;
+				}
+				// Water washes it too (docs/design/grime.md): swimming quickly, waist-deep slower.
+				if (View->swimming)
+				{
+					Stain.WashLeft -= Elapsed / BloodBodySwimWashSeconds;
+				}
+				else if (View->waterDepth >= 0.6f)
+				{
+					Stain.WashLeft -= Elapsed / (2.0f * BloodBodySwimWashSeconds);
 				}
 			}
 		}
