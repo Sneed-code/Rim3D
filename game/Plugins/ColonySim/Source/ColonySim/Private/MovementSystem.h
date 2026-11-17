@@ -14,6 +14,7 @@ namespace colony {
 
 class Lights;
 class Map;
+class Plants;
 class TraitBook;
 class Weather;
 
@@ -42,6 +43,10 @@ public:
     void setDoorSpeed(std::function<int(Entity)> speed) { doorSpeed_ = std::move(speed); }
     // How tall a pawn is, metres, which decides how deep water is for it (docs/design/water.md); 1.8 if none set.
     void setBodyHeight(std::function<float(Entity)> height) { bodyHeight_ = std::move(height); }
+    // Plants slow the walk a little and tree trunks are solid (docs/design/plant-bodies.md); null: neither.
+    void setPlants(const Plants* plants) { plants_ = plants; }
+    // A body's radius against trunks (BodyMotionSystem::bodyRadius); 0.25 m if none set.
+    void setBodyRadius(std::function<float(Entity)> radius) { bodyRadius_ = std::move(radius); }
     void step(entt::registry& registry, Map& map);
 
     // Pawns whose walk was held up by other pawns this step, for the stats simrun prints.
@@ -79,6 +84,8 @@ private:
     const Weather* weather_ = nullptr;
     std::function<int(Entity)> doorSpeed_;
     std::function<float(Entity)> bodyHeight_;
+    std::function<float(Entity)> bodyRadius_;
+    const Plants* plants_ = nullptr;
     std::vector<Entity> doorRequests_;  // doors a pawn is in, waiting at or about to walk into this step
 };
 

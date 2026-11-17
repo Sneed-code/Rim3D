@@ -13,6 +13,7 @@
 namespace colony {
 
 class Map;
+class Plants;
 class StateHasher;
 class Things;
 
@@ -97,6 +98,14 @@ struct MotionRules {
     float sidestepMetres = 0.7f;
     int sidestepSteps = 9;
     int blastSteps = 12;         // a blast throws a body its knockback metres over this many steps
+    // Against tree trunks a body is never wider than this (an elephant or a T-rex still gets through a jungle the
+    // pathfinder thinks it can walk). docs/design/plant-bodies.md.
+    float trunkBodyRadiusMax = 0.4f;
+    // Loose props (items whose def says `minor`): a body walking or thrown into one shoves it by weight.
+    float propRadius = 0.15f;        // a prop's size on the ground
+    float bodyKgPerSize = 60.0f;     // a body's weight per body size (RimWorld: a human's mass is 60)
+    float propMaxMassShare = 0.5f;   // a prop heavier than this share of the body isn't moved (stepped round or over)
+    float propCellMargin = 0.1f;     // a prop stays this far inside its own cell (storage and hauling go by cell)
 };
 
 class COLONY_API BodyMotionSystem {
@@ -137,6 +146,9 @@ public:
     // A quick step along (dx, dy): to the body's left or right it is the sidestep clip, otherwise (or with no clip)
     // a plain push of sidestepMetres.
     bool sidestep(Entity pawn, float dx, float dy);
+    // Tree trunks are solid posts the sweep stops at (docs/design/plant-bodies.md); null: no trunks.
+    void setPlants(const Plants* plants) { plants_ = plants; }
+    const Plants* plants() const { return plants_; }
     // Whether the pawn has clips (a person: a humanlike race); animals get plain pushes.
     void setHasClips(std::function<bool(Entity)> hasClips) { hasClips_ = std::move(hasClips); }
     bool hasClips(Entity pawn) const { return !hasClips_ || hasClips_(pawn); }
@@ -154,6 +166,15 @@ public:
     float mass(Entity pawn) const;
     float sizeScale(Entity pawn) const;
 
+    // A body's radius against tree trunks: its body radius, at most trunkBodyRadiusMax.
+    float trunkRadius(Entity pawn) const;
+    // Every standing body shoves the loose props it overlaps out of its way, by the share of the push their weight
+    // allows, keeping each in its own cell. Called once a step after walking and motion.
+    void shoveProps();
+    // A prop's weight in kg if its def is `minor` (the whole stack), or a negative number if it is not a loose prop.
+    float propMass(Entity item) const;
+    uint64_t propShoves() const { return propShoves_; }
+
     // One step of every motion, in entity order.
     void step();
     void hashThing(Entity e, StateHasher& h) const;
@@ -163,11 +184,12 @@ public:
     uint64_t stopped() const { return stopped_; }
 
 private:
-    bool fits(Entity pawn, float x, float y, int level) const;
+    bool fits(Entity pawn, float fromX, float fromY, float x, float y, int level) const;
     void gatherBodies(Entity pawn, float x, float y, int level, float range);
 
     Things& things_;
     Map& map_;
+    const Plants* plants_ = nullptr;
     MotionRules rules_;
     std::vector<MotionClip> clips_;
     std::unordered_map<std::string, size_t> byName_;
@@ -182,6 +204,8 @@ private:
     uint64_t sweeps_ = 0;
     uint64_t shoves_ = 0;
     uint64_t stopped_ = 0;
+    uint64_t propShoves_ = 0;
+    std::vector<float> propKg_;  // by DefId value: a minor item's mass per unit, negative for anything else
 };
 
 }  // namespace colony

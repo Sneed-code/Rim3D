@@ -1,7 +1,8 @@
 [
   {
     "defName": "ItemBase", "abstract": true, "source": "RimWorld wiki",
-    "category": "Item", "stackLimit": 75
+    "category": "Item", "stackLimit": 75,
+    "minor": true, "ours": ["minor"], "note": "minor: a loose prop a body shoves by weight (docs/design/plant-bodies.md)"
   },
   {
     "defName": "Steel", "armourStuff": {"factor": {"blunt": 1, "sharp": 1, "elemental": 1}}, "shieldStuff": {"block": 2, "mass": 1}, "visual": {"surface": "steel", "color": [0.42, 0.46, 0.53], "pieces": 6, "layer": 0.1, "parts": [{"shape": "box", "size": [0.34, 0.17, 0.1], "color": [0.5, 0.54, 0.6]}]}, "parent": "ItemBase", "label": "steel", "unverified": ["stats.maxHitPoints"], "deep": {"lumpSize": [20, 40], "commonality": 4.0, "portion": 45},
@@ -92,7 +93,7 @@
     "note": "Dried meat and fruit that keeps for 150 days; the long-lasting food of a colony with no cold room."
   },
   {
-    "defName": "ChunkBase", "visual": {"parts": [{"shape": "sphere", "radius": 0.28, "height": 0.3, "at": [0, 0, 0], "color": [0.55, 0.53, 0.5]}]}, "parent": "ItemBase", "abstract": true, "stackLimit": 1,
+    "defName": "ChunkBase", "minor": false, "visual": {"parts": [{"shape": "sphere", "radius": 0.28, "height": 0.3, "at": [0, 0, 0], "color": [0.55, 0.53, 0.5]}]}, "parent": "ItemBase", "abstract": true, "stackLimit": 1,
     "unverified": ["stats.marketValue", "stats.flammability"],
     "stats": { "maxHitPoints": 300, "marketValue": 0, "mass": 20, "flammability": 0 }
   },

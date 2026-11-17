@@ -82,6 +82,24 @@ public:
     // takes the cell's index and returns the fertility, or a negative number for none. Not saved.
     void setFertilityOverride(std::function<float(size_t)> override) { fertilityOverride_ = std::move(override); }
 
+    // ---- Plants and bodies (docs/design/plant-bodies.md) ----
+    // A tree's trunk is a solid round post: bodies walking, rolling or thrown stop at it or slide round it. It stands
+    // where Unreal draws the tree (the cell's centre moved by stemOffset) and is `plant.trunkRadius` wide at full
+    // growth, scaled by the growth stage the tree is drawn at. False for a cell with no plant or a plant with no trunk.
+    bool trunkAt(CellPos c, float& x, float& y, float& radius) const;
+    // The widest trunk any plant kind has, metres (0: no plant has one): how far round a body to look for trunks.
+    float maxTrunkRadius() const { return maxTrunkRadius_; }
+    // Where in its cell a plant stands, metres from the cell's centre: (-0.35..0.35, -0.35..0.35) from a hash of the
+    // cell's index. Unreal draws the plant at the same place (TerrainSubsystem::GatherChunkPlants).
+    static void stemOffset(int cellIndex, float& dx, float& dy);
+    // The size a plant is drawn at for its growth, from a sprout's 0.2 to 1 (six steps, as Unreal draws it).
+    static float drawnSize(uint32_t growthPpm);
+    // Share of its speed a body keeps walking through the plant in a cell: RimWorld's `pathCost` of the plant times
+    // PlantRules `walkCostShare` (sneed: plants bend and only slow a little), scaled by its growth. A tree with a
+    // trunk has no cost (the trunk is solid instead). 1 with no plant.
+    float walkFactor(CellPos c) const;
+    float walkCostShare() const { return walkCostShare_; }
+
     size_t count() const { return count_; }
     size_t countOf(DefId def) const;
     // Fingerprint of the layer; kept up to date as plants change, so asking costs nothing.
@@ -102,6 +120,8 @@ private:
         uint32_t lifespanHours = 0;
         double commonality = 0.0;  // weight in the biome's wild plants; 0 if absent
         bool isTree = false;
+        float pathCost = 0.0f;     // RimWorld's path cost of the plant (Things def `pathCost`)
+        float trunkRadius = 0.0f;  // ours: metres at full growth, 0 for a plant that bends out of the way
     };
 
     size_t indexOf(CellPos c) const;
@@ -124,6 +144,8 @@ private:
     std::vector<Kind> kinds_;
     std::vector<int> kindOfDef_;  // by DefId.value: index into kinds_, or -1
     double growthTuning_ = 1.0;
+    float walkCostShare_ = 0.1f;
+    float maxTrunkRadius_ = 0.0f;
     int growStartHour_ = 6;
     int growEndHour_ = 19;
     std::vector<float> fertility_;

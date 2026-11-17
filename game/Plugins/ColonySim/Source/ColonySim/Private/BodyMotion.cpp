@@ -104,6 +104,19 @@ BodyMotionSystem::BodyMotionSystem(Things& things, Map& map) : things_(things), 
         rules_.sidestepMetres = std::max(0.0f, static_cast<float>(r->number("sidestepMetres", rules_.sidestepMetres)));
         rules_.sidestepSteps = std::max(1, static_cast<int>(r->integer("sidestepSteps", rules_.sidestepSteps)));
         rules_.blastSteps = std::max(1, static_cast<int>(r->integer("blastSteps", rules_.blastSteps)));
+        rules_.trunkBodyRadiusMax = std::max(0.05f, static_cast<float>(r->number("trunkBodyRadiusMax", rules_.trunkBodyRadiusMax)));
+        rules_.propRadius = std::max(0.0f, static_cast<float>(r->number("propRadius", rules_.propRadius)));
+        rules_.bodyKgPerSize = std::max(1.0f, static_cast<float>(r->number("bodyKgPerSize", rules_.bodyKgPerSize)));
+        rules_.propMaxMassShare = std::max(0.0f, static_cast<float>(r->number("propMaxMassShare", rules_.propMaxMassShare)));
+        rules_.propCellMargin = std::clamp(static_cast<float>(r->number("propCellMargin", rules_.propCellMargin)), 0.0f, 0.5f);
+    }
+    // Loose props: items whose def (or a parent) says `minor`.
+    propKg_.assign(defs.size(), -1.0f);
+    for (const DefId id : defs.idsOfKind("Things")) {
+        const Def& def = defs.get(id);
+        if (def.text("category") == "Item" && def.flag("minor", false)) {
+            propKg_[id.value] = std::max(0.0f, static_cast<float>(def.number("stats.mass", 1.0)));
+        }
     }
     byDef_.assign(defs.size(), -1);
     for (const DefId id : defs.idsOfKind("MotionClips")) {
@@ -287,10 +300,94 @@ float BodyMotionSystem::forwardAt(DefId clipDef, float t) const {
     return f;
 }
 
-bool BodyMotionSystem::fits(Entity, float x, float y, int level) const {
+bool BodyMotionSystem::fits(Entity pawn, float fromX, float fromY, float x, float y, int level) const {
     // Between walls a body is as wide as the pathfinder thinks (kPawnRadius), so a body never ends up where no path
-    // can get it out.
-    return pawnFitsAt(map_, x, y, kPawnRadius, level);
+    // can get it out. Tree trunks stop the body itself (its own radius); one already against a trunk may leave it.
+    if (!pawnFitsAt(map_, x, y, kPawnRadius, level)) {
+        return false;
+    }
+    return plants_ == nullptr || trunksAllow(*plants_, fromX, fromY, x, y, trunkRadius(pawn), level);
+}
+
+float BodyMotionSystem::trunkRadius(Entity pawn) const {
+    return std::min(bodyRadius(pawn), rules_.trunkBodyRadiusMax);
+}
+
+float BodyMotionSystem::propMass(Entity item) const {
+    const entt::registry& reg = things_.registry();
+    const Thing* thing = reg.try_get<Thing>(item);
+    if (thing == nullptr || thing->def.value >= propKg_.size() || propKg_[thing->def.value] < 0.0f) {
+        return -1.0f;
+    }
+    const StackCount* stack = reg.try_get<StackCount>(item);
+    return propKg_[thing->def.value] * static_cast<float>(stack != nullptr ? std::max(1, stack->count) : 1);
+}
+
+void BodyMotionSystem::shoveProps() {
+    if (rules_.propRadius <= 0.0f) {
+        return;
+    }
+    entt::registry& reg = things_.registry();
+    order_.clear();
+    for (const auto [e, pos, posture] : reg.view<const Position, const Posture>().each()) {
+        (void)pos;
+        (void)posture;
+        if (things_.spawned(e) && (!solid_ || solid_(e))) {
+            order_.push_back(e);
+        }
+    }
+    std::sort(order_.begin(), order_.end());
+    for (const Entity pawn : order_) {
+        const Position& at = reg.get<Position>(pawn);
+        const float bodyKg = mass(pawn) * rules_.bodyKgPerSize;
+        const float minD = bodyRadius(pawn) + rules_.propRadius;
+        const int minX = static_cast<int>(std::floor(at.x - minD));
+        const int maxX = static_cast<int>(std::floor(at.x + minD));
+        const int minY = static_cast<int>(std::floor(at.y - minD));
+        const int maxY = static_cast<int>(std::floor(at.y + minD));
+        for (int cy = minY; cy <= maxY; ++cy) {
+            for (int cx = minX; cx <= maxX; ++cx) {
+                const CellPos cell{cx, cy, at.level};
+                if (!map_.inBounds(cell)) {
+                    continue;
+                }
+                for (const Entity item : things_.itemsAt(cell)) {
+                    const float kg = propMass(item);
+                    if (kg < 0.0f || kg > bodyKg * rules_.propMaxMassShare) {
+                        continue;
+                    }
+                    Position& ip = reg.get<Position>(item);
+                    float ox = ip.x - at.x;
+                    float oy = ip.y - at.y;
+                    const float d2 = ox * ox + oy * oy;
+                    if (d2 >= minD * minD) {
+                        continue;
+                    }
+                    float d = std::sqrt(d2);
+                    if (d < 1e-4f) {
+                        // Right under the body: out the way the body faces, else along +x.
+                        const Posture* posture = reg.try_get<Posture>(pawn);
+                        const float fl = posture != nullptr ? std::sqrt(posture->facingX * posture->facingX + posture->facingY * posture->facingY) : 0.0f;
+                        ox = fl > 1e-6f ? posture->facingX / fl : 1.0f;
+                        oy = fl > 1e-6f ? posture->facingY / fl : 0.0f;
+                        d = 0.0f;
+                    } else {
+                        ox /= d;
+                        oy /= d;
+                    }
+                    const float shove = (minD - d) * bodyKg / (bodyKg + kg);
+                    const float lo = rules_.propCellMargin;
+                    const float nx = std::clamp(ip.x + ox * shove, static_cast<float>(cx) + lo, static_cast<float>(cx + 1) - lo);
+                    const float ny = std::clamp(ip.y + oy * shove, static_cast<float>(cy) + lo, static_cast<float>(cy + 1) - lo);
+                    if (nx != ip.x || ny != ip.y) {
+                        ip.x = nx;
+                        ip.y = ny;
+                        ++propShoves_;
+                    }
+                }
+            }
+        }
+    }
 }
 
 void BodyMotionSystem::gatherBodies(Entity pawn, float x, float y, int level, float range) {
@@ -334,7 +431,7 @@ float BodyMotionSystem::sweep(Entity pawn, float dx, float dy) {
         const float tries[3][2] = {{sx, sy}, {sx, 0.0f}, {0.0f, sy}};
         bool found = false;
         for (const auto& t : tries) {
-            if ((t[0] != 0.0f || t[1] != 0.0f) && fits(pawn, pos.x + t[0], pos.y + t[1], pos.level)) {
+            if ((t[0] != 0.0f || t[1] != 0.0f) && fits(pawn, pos.x, pos.y, pos.x + t[0], pos.y + t[1], pos.level)) {
                 px = t[0];
                 py = t[1];
                 found = true;
@@ -374,7 +471,7 @@ float BodyMotionSystem::sweep(Entity pawn, float dx, float dy) {
             const float share = myMass / (myMass + theirMass);
             float shove = overlap * share;
             if (shove > 0.0f) {
-                if (fits(other, op.x + ox * shove, op.y + oy * shove, op.level)) {
+                if (fits(other, op.x, op.y, op.x + ox * shove, op.y + oy * shove, op.level)) {
                     op.x += ox * shove;
                     op.y += oy * shove;
                     ++shoves_;
@@ -386,7 +483,7 @@ float BodyMotionSystem::sweep(Entity pawn, float dx, float dy) {
             if (back > 0.0f) {
                 const float bx = nx - ox * back;
                 const float by = ny - oy * back;
-                if (fits(pawn, bx, by, pos.level)) {
+                if (fits(pawn, pos.x, pos.y, bx, by, pos.level)) {
                     nx = bx;
                     ny = by;
                 } else {

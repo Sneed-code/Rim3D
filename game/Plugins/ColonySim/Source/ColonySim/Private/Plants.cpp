@@ -62,6 +62,7 @@ Plants::Plants(const Map& map, const DefDatabase& defs, uint64_t seed, const std
     if (const Def* rules = defs.find("Rules", "PlantRules")) {
         growStartHour_ = static_cast<int>(rules->numberAt("growHours", 0, growStartHour_));
         growEndHour_ = static_cast<int>(rules->numberAt("growHours", 1, growEndHour_));
+        walkCostShare_ = static_cast<float>(rules->number("walkCostShare", walkCostShare_));
     }
     const Def* biomeDef = defs.find("Biomes", biome);
     kindOfDef_.assign(defs.size(), -1);
@@ -80,6 +81,9 @@ Plants::Plants(const Map& map, const DefDatabase& defs, uint64_t seed, const std
         k.fertilitySensitivity = static_cast<float>(def.number("plant.fertilitySensitivity", 0.0));
         k.lifespanHours = static_cast<uint32_t>(std::max<long>(1, std::lround(growDays * def.number("plant.lifespanDaysPerGrowDays", 8.0) * 24.0 / pace)));
         k.isTree = def.flag("plant.isTree");
+        k.pathCost = static_cast<float>(def.number("pathCost", 0.0));
+        k.trunkRadius = static_cast<float>(std::max(0.0, def.number("plant.trunkRadius", 0.0)));
+        maxTrunkRadius_ = std::max(maxTrunkRadius_, k.trunkRadius);
         if (biomeDef != nullptr) {
             k.commonality = biomeDef->number(("wildPlants." + def.defName()).c_str(), 0.0);
         }
@@ -380,6 +384,77 @@ bool Plants::restore(const std::vector<PlantRecord>& records) {
         set(static_cast<size_t>(r.cell), static_cast<uint16_t>(k + 1), r.growth, r.ageHours);
     }
     return true;
+}
+
+namespace {
+
+// The same mix as Unreal's TerrHash (TerrainSubsystem.cpp), so the trunk stands where the tree is drawn.
+uint64_t plantsStemHash(uint64_t value) {
+    value += 0x9E3779B97F4A7C15ULL;
+    value = (value ^ (value >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    value = (value ^ (value >> 27)) * 0x94D049BB133111EBULL;
+    return value ^ (value >> 31);
+}
+
+constexpr int kPlantsDrawStages = 6;         // Unreal: TerrGrowthStages
+constexpr float kPlantsSproutSize = 0.2f;    // Unreal: TerrSproutScale
+constexpr float kPlantsStemSpread = 0.7f;    // Unreal: a plant stands up to 0.35 m off its cell's centre
+constexpr float kPlantsPathCostSlowing = 0.077f;  // RimWorld: each point of path cost adds 7.7% to the time
+
+}  // namespace
+
+void Plants::stemOffset(int cellIndex, float& dx, float& dy) {
+    const uint64_t h = plantsStemHash(static_cast<uint64_t>(cellIndex) + 0x517CC1B7ULL);
+    const float r1 = static_cast<float>(h & 0xFFFF) / 65535.0f;
+    const float r2 = static_cast<float>((h >> 16) & 0xFFFF) / 65535.0f;
+    dx = (r1 - 0.5f) * kPlantsStemSpread;
+    dy = (r2 - 0.5f) * kPlantsStemSpread;
+}
+
+float Plants::drawnSize(uint32_t growthPpm) {
+    const int stage = growthPpm >= kPlantFullGrowth
+                          ? kPlantsDrawStages
+                          : static_cast<int>(static_cast<uint64_t>(growthPpm) * kPlantsDrawStages / kPlantFullGrowth);
+    return kPlantsSproutSize + (1.0f - kPlantsSproutSize) * static_cast<float>(stage) / static_cast<float>(kPlantsDrawStages);
+}
+
+bool Plants::trunkAt(CellPos c, float& x, float& y, float& radius) const {
+    if (maxTrunkRadius_ <= 0.0f || !map_.onGround(c)) {
+        return false;
+    }
+    const size_t i = indexOf(c);
+    const uint16_t kind = kind_[i];
+    if (kind == 0) {
+        return false;
+    }
+    const Kind& k = kinds_[kind - 1u];
+    if (k.trunkRadius <= 0.0f) {
+        return false;
+    }
+    float dx = 0.0f;
+    float dy = 0.0f;
+    stemOffset(static_cast<int>(i), dx, dy);
+    x = static_cast<float>(c.x) + 0.5f + dx;
+    y = static_cast<float>(c.y) + 0.5f + dy;
+    radius = k.trunkRadius * drawnSize(growth_[i]);
+    return true;
+}
+
+float Plants::walkFactor(CellPos c) const {
+    if (!map_.onGround(c)) {
+        return 1.0f;
+    }
+    const size_t i = indexOf(c);
+    const uint16_t kind = kind_[i];
+    if (kind == 0) {
+        return 1.0f;
+    }
+    const Kind& k = kinds_[kind - 1u];
+    if (k.trunkRadius > 0.0f || k.pathCost <= 0.0f) {
+        return 1.0f;
+    }
+    const float grown = static_cast<float>(growth_[i]) / static_cast<float>(kPlantFullGrowth);
+    return 1.0f / (1.0f + k.pathCost * walkCostShare_ * grown * kPlantsPathCostSlowing);
 }
 
 }  // namespace colony

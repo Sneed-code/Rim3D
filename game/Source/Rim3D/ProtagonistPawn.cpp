@@ -14,10 +14,13 @@
 #include "ShooterFeelSubsystem.h"
 #include "SimSubsystem.h"
 
+#include "ColonySim/BodyMotion.h"
+#include "ColonySim/Combat.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Movement.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Water.h"
 
@@ -352,6 +355,18 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 	if (!bMoved)
 	{
 		Velocity = FVector2D::ZeroVector;
+	}
+	// Tree trunks are solid posts: walking into one slides round it, as the sim's DirectMove does
+	// (docs/design/plant-bodies.md), so the body here never walks through a tree the sim stops it at.
+	else if (const colony::Sim* Sim = Bridge->GetSim(); Thing != colony::kNoEntity && Sim->things().exists(Thing))
+	{
+		float X = static_cast<float>(Position.X);
+		float Y = static_cast<float>(Position.Y);
+		if (colony::pushOutOfTrunks(Sim->plants(), X, Y, Sim->combat().motion().trunkRadius(Thing), Level)
+			&& colony::swimmerFitsAt(Map, X, Y, colony::kPawnRadius, Level))
+		{
+			Position = FVector2D(X, Y);
+		}
 	}
 }
 

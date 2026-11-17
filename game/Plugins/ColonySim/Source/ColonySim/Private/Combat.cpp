@@ -1928,6 +1928,7 @@ void CombatSystem::step(Rng& rng) {
     entt::registry& reg = things_.registry();
     stepRolls();
     motion_->step();  // rolls, sidesteps, staggers, knockdowns and lunging swings move their bodies
+    motion_->shoveProps();  // and every standing body pushes the loose props it walked or was thrown into
     stepKicks();
     stepSwitches();
     // Pawns face where they aim, else where they walk.

@@ -9,6 +9,7 @@
 #include "ColonySim/Looks.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
@@ -109,7 +110,14 @@ std::unique_ptr<Sim> motionTestSim(uint64_t seed = 5) {
     settings.mapSize = 64;
     settings.flatMap = true;
     settings.checkpointEvery = 50;
-    return std::make_unique<Sim>(settings, motionTestDefs());
+    auto sim = std::make_unique<Sim>(settings, motionTestDefs());
+    // Open ground: these tests are about walls and bodies; trees have their own (PlantBodyTests.cpp).
+    for (int y = 0; y < sim->map().height(); ++y) {
+        for (int x = 0; x < sim->map().width(); ++x) {
+            sim->plants().remove(CellPos{x, y, 0});
+        }
+    }
+    return sim;
 }
 
 Entity motionTestPawn(Sim& sim, float x, float y, const char* weapon = nullptr, const char* def = "Human") {

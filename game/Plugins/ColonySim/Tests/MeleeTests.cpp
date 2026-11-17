@@ -7,6 +7,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Melee.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
@@ -696,6 +697,12 @@ TEST_CASE("Melee: three brawlers against three armed raiders fight it out") {
 TEST_CASE("Melee: an AI fighter rolls clear of a heavy blow and sidesteps a light one") {
     // docs/design/real-time-combat.md phase 2: the player's dodge roll, used by the AI against strong swings.
     auto sim = meleeTestSim(61);
+    // Open ground: a tree trunk behind the defender would stop its rolls (docs/design/plant-bodies.md).
+    for (int y = 0; y < sim->map().height(); ++y) {
+        for (int x = 0; x < sim->map().width(); ++x) {
+            sim->plants().remove(CellPos{x, y, 0});
+        }
+    }
     const Entity attacker = meleeTestPawn(*sim, 30.5f, 30.5f, "Melee_Longsword");
     const Entity defender = meleeTestPawn(*sim, 31.5f, 30.5f);
     meleeTestSkill(*sim, attacker, 10);

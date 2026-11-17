@@ -255,7 +255,8 @@ TEST_CASE("Travel: the controlled colonist marks where it has been, and can fast
     float x = 20.5f;
     for (int i = 0; i < 130; ++i) {
         x += 0.5f;
-        sim.submit(DirectMoveCommand{pawn, x, 20.5f});
+        // Straight east, as Unreal sends it: from where the body is (a tree trunk in the way slides it round).
+        sim.submit(DirectMoveCommand{pawn, x, sim.things().registry().get<Position>(pawn).y});
         travelStep(sim, log);
     }
     const Position& pos = sim.things().registry().get<Position>(pawn);
@@ -304,7 +305,8 @@ TEST_CASE("Travel: a fire stops fast travel and leaves the colonist where it was
     float x = 20.5f;
     for (int i = 0; i < 100; ++i) {
         x += 0.5f;
-        sim.submit(DirectMoveCommand{pawn, x, 20.5f});
+        // Straight east, as Unreal sends it: from where the body is (a tree trunk in the way slides it round).
+        sim.submit(DirectMoveCommand{pawn, x, sim.things().registry().get<Position>(pawn).y});
         travelStep(sim, log);
     }
     sim.submit(FastTravelCommand{pawn, 22.5f, 20.5f});

@@ -9,6 +9,7 @@
 #include "ColonySim/Lights.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Movement.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/Traits.h"
@@ -55,6 +56,10 @@ constexpr int kMoveShoreRadius = 24;             // metres a swimmer looks for t
 // Flow is in metres per real second at 1x; a pawn moves in metres per step, 30 steps to that second.
 constexpr float kMoveFlowPerStep = 1.0f / static_cast<float>(kStepsPerRealSecondAt1x);
 constexpr float kMoveCurrentFloor = 0.25f;        // against the current a wader keeps at least this share of its pace (ours)
+constexpr float kMoveTrunkLookAhead = 1.2f;       // metres ahead a walker looks for a trunk in its way
+constexpr float kMoveTrunkSpace = 0.05f;          // metres a waypoint moved off a trunk keeps clear of it
+constexpr float kMoveTrunkCellInset = 0.02f;      // metres inside its cell's edge a waypoint moved off a trunk stays
+constexpr float kMoveBodyRadius = 0.25f;          // a man's body against trunks when no radius is set (MotionRules bodyRadius)
 constexpr float kMoveDoorLookAhead = 8.0f;        // steps ahead the pawn the player walks asks a door to open
 
 // Unit vectors every 22.5 degrees (cos, sin), counter-clockwise on a map with y up. Written out
@@ -250,6 +255,53 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         }
         const float accel = base * kMoveAccelFraction;
         const float bodyHeight = bodyHeight_ ? bodyHeight_(a.entity) : kPersonHeightM;
+        // Plants (docs/design/plant-bodies.md): grass, bushes and crops bend and slow the walk a little; tree trunks are
+        // solid posts, steered round like walls (unless it is walking through others to get unstuck: then it squeezes
+        // past them too, so dense jungle never traps anyone).
+        const bool trunks = plants_ != nullptr && a.level == 0 && mover.ghostSteps == 0 && plants_->maxTrunkRadius() > 0.0f;
+        const float myRadius = bodyRadius_ ? bodyRadius_(a.entity) : kMoveBodyRadius;
+        const float plantFactor = plants_ != nullptr && a.level == 0 ? plants_->walkFactor(here) : 1.0f;
+        // Trunks within reach of where a candidate can take it are tested like walls (by the body's own radius).
+        const bool trunksNear = trunks && trunkNear(*plants_, a.x, a.y, myRadius + kMoveTrunkLookAhead, 0);
+        // Where a waypoint is: its cell's centre, or, when a trunk stands there, the nearest spot in the same cell clear
+        // of it (the jobs and fighters go by the cell a pawn stands in, so the spot never leaves it). Some spot of the
+        // cell's corners is clear of one trunk for a man: a trunk stands at most 0.35 m off the centre and is at most 0.3 m wide.
+        // Returns true if it moved the waypoint off its cell's centre.
+        const auto waypointAt = [&](const CellPos& wp, float& x, float& y) {
+            x = static_cast<float>(wp.x) + 0.5f;
+            y = static_cast<float>(wp.y) + 0.5f;
+            if (!trunks || wp.level != 0) {
+                return false;
+            }
+            const float clear = myRadius + kMoveTrunkSpace;
+            float tx = x;
+            float ty = y;
+            if (!pushOutOfTrunks(*plants_, tx, ty, clear, 0)) {
+                return false;
+            }
+            const float lo = kMoveTrunkCellInset;
+            const float hi = 1.0f - kMoveTrunkCellInset;
+            const float bx = static_cast<float>(wp.x);
+            const float by = static_cast<float>(wp.y);
+            const float spots[9][2] = {{std::clamp(tx - bx, lo, hi), std::clamp(ty - by, lo, hi)},
+                                       {lo, lo}, {0.5f, lo}, {hi, lo}, {lo, 0.5f}, {hi, 0.5f}, {lo, hi}, {0.5f, hi}, {hi, hi}};
+            // The spot least in a trunk, the nearest of those.
+            float bestOverlap = 1.0e30f;
+            float best = 1.0e30f;
+            for (const auto& spot : spots) {
+                const float sx = bx + spot[0];
+                const float sy = by + spot[1];
+                const float overlap = trunkOverlap(*plants_, sx, sy, clear, 0);
+                const float d2 = (sx - tx) * (sx - tx) + (sy - ty) * (sy - ty);
+                if (overlap < bestOverlap - 1.0e-5f || (overlap <= bestOverlap + 1.0e-5f && d2 < best)) {
+                    bestOverlap = std::min(bestOverlap, overlap);
+                    best = d2;
+                    x = sx;
+                    y = sy;
+                }
+            }
+            return true;
+        };
 
         // In deep water off any path (let go by the player mid-swim): it swims for the nearest shore, carried by the
         // current, and walks on from there (docs/design/water.md).
@@ -283,20 +335,27 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         // climbing, below).
         while (!mover.arrived() && !mover.climbing(a.level)) {
             const CellPos wp = mover.path[mover.next];
-            const float dx = static_cast<float>(wp.x) + 0.5f - a.x;
-            const float dy = static_cast<float>(wp.y) + 0.5f - a.y;
+            float wpX = 0.0f;
+            float wpY = 0.0f;
+            const bool movedOff = waypointAt(wp, wpX, wpY);
+            const float dx = wpX - a.x;
+            const float dy = wpY - a.y;
             const float d2 = dx * dx + dy * dy;
             const bool last = mover.next + 1 == mover.path.size();
             const float reachDist = last ? kMoveReachGoal : kMoveReachWaypoint;
             bool reached = d2 <= reachDist * reachDist;
+            if (reached && last && movedOff) {
+                // A goal moved off a trunk lies near its cell's edge: arriving means standing in the cell too.
+                reached = static_cast<int>(std::floor(a.x)) == wp.x && static_cast<int>(std::floor(a.y)) == wp.y;
+            }
             if (last && !reached && mover.blockedSteps >= kMoveArrivedBlockedSteps) {
                 reached = static_cast<int>(std::floor(a.x)) == wp.x && static_cast<int>(std::floor(a.y)) == wp.y;
             }
             if (!reached) {
                 break;
             }
-            mover.fromX = static_cast<float>(wp.x) + 0.5f;
-            mover.fromY = static_cast<float>(wp.y) + 0.5f;
+            mover.fromX = wpX;
+            mover.fromY = wpY;
             ++mover.next;
             mover.blockedSteps = 0;
         }
@@ -368,16 +427,22 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
 
         // The velocity it wants and the fastest it may go.
         float wantX = 0.0f;
+        // The way to the waypoint before turning round a trunk: progress is measured along it, so a body wedged between
+        // two trunks and only shuffling along their sides counts as held up (and squeezes through in time).
+        float aimUx = 0.0f;
+        float aimUy = 0.0f;
+        bool turnedRound = false;
         float wantY = 0.0f;
-        float topSpeed = base * groundSpeedFactor(map, a.x, a.y, bodyHeight, a.level);
+        float topSpeed = base * groundSpeedFactor(map, a.x, a.y, bodyHeight, a.level) * plantFactor;
         const bool walking = !mover.arrived();
         if (walking) {
             // Walk the line from where it started to the waypoint, aiming a little ahead of the
             // closest point on it: a pawn pushed off the line comes back to it, and the line was
             // checked for room, so it never cuts a corner.
             const CellPos wp = mover.path[mover.next];
-            const float wx = static_cast<float>(wp.x) + 0.5f;
-            const float wy = static_cast<float>(wp.y) + 0.5f;
+            float wx = 0.0f;
+            float wy = 0.0f;
+            (void)waypointAt(wp, wx, wy);
             const float sx = wx - mover.fromX;
             const float sy = wy - mover.fromY;
             const float segLen2 = sx * sx + sy * sy;
@@ -407,7 +472,7 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             const float wdx = wx - a.x;
             const float wdy = wy - a.y;
             const float wpDist = std::sqrt(wdx * wdx + wdy * wdy);
-            float speed = base * walkSpeedFactor(map, a.x, a.y, ux, uy, bodyHeight, a.level);
+            float speed = base * walkSpeedFactor(map, a.x, a.y, ux, uy, bodyHeight, a.level) * plantFactor;
             if (a.level == 0) {
                 // The current helps a wader or swimmer downstream and holds it back upstream (docs/design/water.md).
                 const WaterContact water = waterContactAt(map, a.x, a.y, 0, bodyHeight);
@@ -428,8 +493,17 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
                 speed = std::min(speed, std::sqrt(speed * speed * keep * keep + 2.0f * accel * wpDist));
             }
             topSpeed = speed;
-            wantX = ux * speed;
-            wantY = uy * speed;
+            float wx2 = ux;
+            float wy2 = uy;
+            // A trunk in the way: walk the tangent past it, so the want itself goes round (a post isn't on the cell
+            // path, and steering at it head-on finds nothing better than standing still).
+            aimUx = ux;
+            aimUy = uy;
+            if (trunksNear) {
+                turnedRound = steerRoundTrunks(*plants_, a.x, a.y, myRadius, kMoveTrunkSpace, std::min(kMoveTrunkLookAhead, wpDist + 0.5f), wx2, wy2, 0);
+            }
+            wantX = wx2 * speed;
+            wantY = wy2 * speed;
         }
 
         // The nearest pawns on the same level.
@@ -591,6 +665,10 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
                            !pawnFitsAt(map, a.x + nvx * rest, a.y + nvy * rest, kPawnRadius, a.level))) {
                 cost += kMoveWallPenalty;
             }
+            if (trunksNear && (!trunksAllow(*plants_, a.x, a.y, a.x + nvx, a.y + nvy, myRadius, 0) ||
+                               trunkOverlap(*plants_, a.x + nvx * rest, a.y + nvy * rest, myRadius, 0) > 0.0f)) {
+                cost += kMoveWallPenalty;
+            }
             if (!ghost) {
                 for (int k = 0; k < count; ++k) {
                     const MoveNeighbour& n = closest[k];
@@ -648,6 +726,30 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
                 }
             }
         }
+        // Never into a trunk: a body that would end up in one is set beside it instead (it slides round), as long as
+        // that is ground it can stand on; otherwise it keeps only what doesn't push it deeper.
+        if (trunksNear && (bestVx != 0.0f || bestVy != 0.0f) &&
+            trunkOverlap(*plants_, a.x + bestVx, a.y + bestVy, myRadius, 0) > 0.0f) {
+            float nx = a.x + bestVx;
+            float ny = a.y + bestVy;
+            pushOutOfTrunks(*plants_, nx, ny, myRadius, 0);
+            const CellPos to{static_cast<int>(std::floor(nx)), static_cast<int>(std::floor(ny)), a.level};
+            const float mx = nx - a.x;
+            const float my = ny - a.y;
+            const float limit = std::max(base, std::sqrt(bestVx * bestVx + bestVy * bestVy));
+            const float m2 = mx * mx + my * my;
+            if ((to == here || map.walkable(to)) && m2 <= limit * limit) {
+                bestVx = mx;
+                bestVy = my;
+            } else if ((to == here || map.walkable(to)) && m2 > 1.0e-12f &&
+                       trunksAllow(*plants_, a.x, a.y, a.x + mx * limit / std::sqrt(m2), a.y + my * limit / std::sqrt(m2), myRadius, 0)) {
+                bestVx = mx * limit / std::sqrt(m2);  // the slide, no longer than it may go in a step
+                bestVy = my * limit / std::sqrt(m2);
+            } else if (!trunksAllow(*plants_, a.x, a.y, a.x + bestVx, a.y + bestVy, myRadius, 0)) {
+                bestVx = 0.0f;
+                bestVy = 0.0f;
+            }
+        }
         a.newVx = bestVx;
         a.newVy = bestVy;
 
@@ -656,7 +758,10 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         const bool wantsToWalk = walking && wantLen > 1.0e-6f;
         // How much of the wanted velocity it gets: along the wanted direction, so sliding sideways along a
         // wall it can't go through is not progress (it used to count, and the pawn never gave up).
-        const float got = wantLen > 1.0e-6f ? (bestVx * wantX + bestVy * wantY) / wantLen : 0.0f;
+        float got = wantLen > 1.0e-6f ? (bestVx * wantX + bestVy * wantY) / wantLen : 0.0f;
+        if (turnedRound) {
+            got = std::min(got, bestVx * aimUx + bestVy * aimUy);
+        }
         if (mover.ghostSteps > 0) {
             --mover.ghostSteps;
         } else if (wantsToWalk && got < kMoveHeldBackShare * wantLen) {

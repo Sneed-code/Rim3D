@@ -428,7 +428,8 @@ TEST_CASE("Save audit: saved in the middle of a night skip and of a fast travel"
         const CellPos here = cellOf(sim.things().registry().get<Position>(pawn));
         sim.submit(DirectMoveCommand{pawn, static_cast<float>(here.x) + 30.5f, static_cast<float>(here.y) + 0.5f});
         for (int i = 0; i < 100; ++i) {
-            sim.submit(DirectMoveCommand{pawn, static_cast<float>(here.x) + 0.5f + 0.5f * static_cast<float>(i + 1), static_cast<float>(here.y) + 0.5f});
+            // From where the body is, as Unreal sends it (a tree trunk in the way slides it round).
+            sim.submit(DirectMoveCommand{pawn, static_cast<float>(here.x) + 0.5f + 0.5f * static_cast<float>(i + 1), sim.things().registry().get<Position>(pawn).y});
             sim.step();
         }
         sim.submit(FastTravelCommand{pawn, static_cast<float>(here.x) + 0.5f, static_cast<float>(here.y) + 0.5f});
