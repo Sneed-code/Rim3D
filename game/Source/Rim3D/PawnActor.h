@@ -134,6 +134,21 @@ public:
 	/** The lean now, in degrees (0 when still). */
 	float GetLeanDegrees() const { return LeanDegrees; }
 
+	// --- The hit layer (docs/design/body-health.md part E). All cosmetic. ---
+
+	/** A blow or a bullet landed: the zone it hit is knocked along `DirectionWorld` and springs back with a wobble, on
+	 *  top of whatever the body is doing (USimPawnAnimInstance's hit layer). `Part` is the sim's body part (the zone is
+	 *  the one the sim has it in); without one the zone is taken from how high `AtWorld` is on the body and which side.
+	 *  `Strength` is 0 to 1. */
+	void KickZone(const USimSubsystem& Bridge, int32 Part, const FVector& AtWorld, const FVector& DirectionWorld, float Strength);
+	int32 GetZoneKicks() const { return ZoneKicks; }
+	ESimPawnZone GetLastKickZone() const { return LastKickZone; }
+	/** The crawl of a pawn downed by its torso and awake: whether the crawl clip plays now, and how often it started. */
+	bool IsCrawling() const { return bCrawling; }
+	int32 GetCrawlsPlayed() const { return CrawlsPlayed; }
+	/** Whether the body is bent over a wound it is patching. */
+	bool IsPatchPosed() const { return bPatchPosed; }
+
 	/** Downed and dead pawns go limp: the mannequin simulates physics on a floor made under it, and the
 	 *  MetaHuman follows it. `Impulse` is a velocity change in cm/s (the shot that did it). Cosmetic: the
 	 *  sim already has the pawn lying prone where it fell. */
@@ -368,6 +383,28 @@ private:
 	FVector MotionOffset = FVector::ZeroVector;
 	int32 MotionClipsPlayed = 0;
 	bool UpdateMotionClip(const USimSubsystem& Bridge, const colony::ThingView& Now, float GameDelta);
+	// The hit layer (body-health.md part E): the zone a sim body part or a sim zone is on screen, hits so far, the hurt
+	// legs (looked up a few times a second), and the crawl clip with its own set-back (its travel is in its hips too).
+	ESimPawnZone ZoneOfSimZone(const USimSubsystem& Bridge, int32 SimZone) const;
+	void UpdateHurt(const USimSubsystem& Bridge, const colony::ThingView& Now, float DeltaTime);
+	void UpdateCrawl(const colony::ThingView& Now, float GameDelta);
+	int32 ZoneKicks = 0;
+	ESimPawnZone LastKickZone = ESimPawnZone::Torso;
+	float HurtAge = 1.0f;
+	float LimpLeft = 0.0f;
+	float LimpRight = 0.0f;
+	bool bPatchPosed = false;
+	ESimPawnZone PatchZone = ESimPawnZone::Torso;
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> CrawlClip;
+	bool bCrawlClipTried = false;
+	bool bCrawling = false;
+	int32 CrawlsPlayed = 0;
+	TWeakObjectPtr<class UAnimMontage> CrawlMontage;
+	int32 CrawlPelvisBone = INDEX_NONE;
+	FVector CrawlPelvisStart = FVector::ZeroVector;
+	float CrawlClipSpeed = 40.0f;
+	FVector CrawlOffset = FVector::ZeroVector;
 	float RollProgress = 0.0f;
 	float RollAngle = 0.0f;
 	FVector RollDirection = FVector::ForwardVector;

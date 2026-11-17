@@ -265,6 +265,7 @@ struct ThingView {
     int meleeStepsLeft = 0;
     Entity meleeTarget = kNoEntity;
     bool blocking = false;
+    uint16_t severed = 0;    // the limbs it has lost, SeveredBits (Health.h; body-health.md part F): Unreal hides them and caps the stump
     // Focus and footwork (docs/design/focus.md): the swing under way goes down at a body on the ground (a downward poke,
     // smash or hack); the pawn it is locked on to (it faces it; the player's lock-on camera follows it when focusPlayer);
     // stepping round or back from its enemy (a strafe or back step, facing the focus); what it does about enemies.

@@ -7,6 +7,7 @@
 #include "Retargeter/IKRetargeter.h"
 #include "MakeHumanAnimInstance.h"
 #include "AnimationRuntime.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "Components/DecalComponent.h"
 #include "Components/MeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -34,6 +35,7 @@
 #include "ColonySim/BodyMotion.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
@@ -75,6 +77,17 @@ namespace
 	const FRotator PawnBodyRelativeRotation(0.0, -90.0, 0.0);
 	const float PawnMotionBlendIn = 0.08f;   // a clip the sim moves the body along (docs/design/body-motion.md)
 	const float PawnMotionBlendOut = 0.2f;
+	// The hit layer (docs/design/body-health.md part E). A leg limps from 85% health down, fully at 35% and less.
+	constexpr float PawnLimpFrom = 0.85f;
+	constexpr float PawnLimpFull = 0.35f;
+	// The hurt legs are looked up this often (real seconds).
+	constexpr float PawnHurtInterval = 0.3f;
+	// The crawl: the clips' folder, the blend, and the speed (cm/s) a clip that stays in place is taken to crawl at.
+	const TCHAR* const PawnCrawlFolder = TEXT("/Game/Rim3D/Generated/Animations/Mixamo/Crawling");
+	constexpr float PawnCrawlBlend = 0.3f;
+	constexpr float PawnCrawlDefaultSpeed = 40.0f;
+	// Slower than this (cm/s) a crawling pawn lies still (and keeps facing the way it faced).
+	constexpr float PawnCrawlStill = 4.0f;
 }
 
 ASimPawnActor::ASimPawnActor()
@@ -274,7 +287,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
 		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
 	}
-	else if (Velocity.Size2D() > PawnTurnSpeed)
+	else if (Velocity.Size2D() > (Now.crawling ? PawnCrawlStill : PawnTurnSpeed))
 	{
 		const float Wanted = Velocity.Rotation().Yaw;
 		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * Speed);
@@ -318,6 +331,8 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		Swing.Abort();
 		DodgeAge = kDodgeSeconds;
 	}
+	UpdateCrawl(Now, DeltaTime * Speed);
+	UpdateHurt(Bridge, Now, DeltaTime);
 
 	// The hit-stop holds the swing, the flinch and the animation for a moment of real time.
 	float GameDelta = DeltaTime * Speed;
@@ -352,6 +367,11 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		In.CruiseSpeed = Pace;
 		In.Detail = Detail;
 		In.bTeleported = bTeleported;
+		In.bHitLayer = true;
+		In.LimpLeft = LimpLeft;
+		In.LimpRight = LimpRight;
+		In.Patch = bPatchPosed ? 1.0f : 0.0f;
+		In.PatchZone = PatchZone;
 		In.Route.Reset();
 		const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
 		for (uint32 i = 0; i < Now.waypointCount && In.Route.Num() < 8; ++i)
@@ -1420,6 +1440,245 @@ void ASimPawnActor::GetMeleeWeaponPose(FVector& OutLocation, FRotator& OutRotati
 	OutRotation = (Twist * Pose.WeaponRotation.Quaternion()).Rotator();
 }
 
+// ---------------------------------------------------------------------------
+// The hit layer (docs/design/body-health.md part E).
+
+namespace
+{
+	/** The crawl clip: the one in the Mixamo crawling folder that crawls forward (not backward, not a way in or out of
+	 *  the crawl), an injured or slow one before the others. Null if the folder has none. */
+	UAnimSequence* PawnFindCrawlClip()
+	{
+		IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		TArray<FAssetData> Assets;
+		Registry.GetAssetsByPath(FName(PawnCrawlFolder), Assets, true);
+		const FAssetData* Best = nullptr;
+		int32 BestScore = -1;
+		for (const FAssetData& Asset : Assets)
+		{
+			if (Asset.AssetClassPath != UAnimSequence::StaticClass()->GetClassPathName())
+			{
+				continue;
+			}
+			const FString Name = Asset.AssetName.ToString();
+			if (!Name.Contains(TEXT("Crawl"), ESearchCase::CaseSensitive) || Name.Contains(TEXT("Back"), ESearchCase::CaseSensitive) || Name.Contains(TEXT("To"), ESearchCase::CaseSensitive) || Name.Contains(TEXT("Stand"), ESearchCase::CaseSensitive) || Name.Contains(TEXT("Idle"), ESearchCase::CaseSensitive))
+			{
+				continue;
+			}
+			// Low on the belly before hands and knees; ties go to the name first in the alphabet, so every run picks the same.
+			const int32 Score = (Name.Contains(TEXT("Injured"), ESearchCase::CaseSensitive) ? 4 : 0) + (Name.Contains(TEXT("Prone"), ESearchCase::CaseSensitive) || Name.Contains(TEXT("Low"), ESearchCase::CaseSensitive) ? 2 : 0) + (Name.Contains(TEXT("Run"), ESearchCase::CaseSensitive) || Name.Contains(TEXT("Fast"), ESearchCase::CaseSensitive) ? 0 : 1);
+			if (Score > BestScore || (Score == BestScore && Best && Name < Best->AssetName.ToString()))
+			{
+				Best = &Asset;
+				BestScore = Score;
+			}
+		}
+		return Best ? Cast<UAnimSequence>(Best->GetAsset()) : nullptr;
+	}
+}
+
+ESimPawnZone ASimPawnActor::ZoneOfSimZone(const USimSubsystem& Bridge, int32 SimZone) const
+{
+	const colony::Sim* Sim = Bridge.GetSim();
+	if (!Sim || SimZone < 0)
+	{
+		return ESimPawnZone::Torso;
+	}
+	// The sim's zones come in the body's order, the left arm and leg before the right.
+	const std::vector<std::string> Names = Sim->health().zoneNames(Thing);
+	if (static_cast<size_t>(SimZone) >= Names.size())
+	{
+		return ESimPawnZone::Torso;
+	}
+	const std::string& Name = Names[static_cast<size_t>(SimZone)];
+	bool bSecond = false;
+	for (int32 i = 0; i < SimZone; ++i)
+	{
+		bSecond |= Names[static_cast<size_t>(i)] == Name;
+	}
+	if (Name == "Head")
+	{
+		return ESimPawnZone::Head;
+	}
+	if (Name == "Arm")
+	{
+		return bSecond ? ESimPawnZone::ArmRight : ESimPawnZone::ArmLeft;
+	}
+	if (Name == "Leg")
+	{
+		return bSecond ? ESimPawnZone::LegRight : ESimPawnZone::LegLeft;
+	}
+	return ESimPawnZone::Torso;
+}
+
+void ASimPawnActor::KickZone(const USimSubsystem& Bridge, int32 Part, const FVector& AtWorld, const FVector& DirectionWorld, float Strength)
+{
+	USimPawnAnimInstance* Anim = GetAnim();
+	if (!Anim || bRagdoll)
+	{
+		return;
+	}
+	const colony::Sim* Sim = Bridge.GetSim();
+	const int32 SimZone = Sim && Part >= 0 ? Sim->health().partZone(Thing, Part) : -1;
+	ESimPawnZone Zone = ESimPawnZone::Torso;
+	if (SimZone >= 0)
+	{
+		Zone = ZoneOfSimZone(Bridge, SimZone);
+	}
+	else
+	{
+		// By where it landed: how far up the body (as it stands, crouches or lies), and how far to a side.
+		const float Height = (bHasLooks ? Looks.Height : 1.0f) * 180.0f * StanceHeight;
+		const FVector Local = GetActorTransform().InverseTransformPositionNoScale(AtWorld);
+		const float Up = Height > 1.0f ? static_cast<float>(Local.Z) / Height : 0.6f;
+		const bool bRightSide = Local.Y > 0.0;
+		if (Up > 0.86f)
+		{
+			Zone = ESimPawnZone::Head;
+		}
+		else if (Up < 0.5f)
+		{
+			Zone = bRightSide ? ESimPawnZone::LegRight : ESimPawnZone::LegLeft;
+		}
+		else if (FMath::Abs(Local.Y) > 18.0 * (bHasLooks ? Looks.Height : 1.0f))
+		{
+			Zone = bRightSide ? ESimPawnZone::ArmRight : ESimPawnZone::ArmLeft;
+		}
+	}
+	FSimPawnKick Hit;
+	Hit.Zone = Zone;
+	// Into the mesh's own space, as the body is turned now (leaning, swinging).
+	Hit.Direction = Body->GetComponentTransform().InverseTransformVectorNoScale(DirectionWorld.GetSafeNormal());
+	Hit.Strength = FMath::Clamp(Strength, 0.0f, 1.0f);
+	if (Anim->Inputs.Kicks.Num() < 4)
+	{
+		Anim->Inputs.Kicks.Add(Hit);
+	}
+	LastKickZone = Zone;
+	++ZoneKicks;
+}
+
+void ASimPawnActor::UpdateHurt(const USimSubsystem& Bridge, const colony::ThingView& Now, float DeltaTime)
+{
+	bPatchPosed = Now.patchZone >= 0 && !Now.downed && !Now.dead;
+	if (bPatchPosed)
+	{
+		PatchZone = ZoneOfSimZone(Bridge, Now.patchZone);
+	}
+	HurtAge += DeltaTime;
+	if (HurtAge < PawnHurtInterval)
+	{
+		return;
+	}
+	HurtAge = 0.0f;
+	LimpLeft = 0.0f;
+	LimpRight = 0.0f;
+	const colony::Sim* Sim = Bridge.GetSim();
+	if (!Sim || Now.pain <= 0.0f || Now.downed || Now.dead)
+	{
+		return;
+	}
+	const std::vector<std::string> Names = Sim->health().zoneNames(Thing);
+	bool bSecond = false;
+	for (size_t i = 0; i < Names.size(); ++i)
+	{
+		if (Names[i] != "Leg")
+		{
+			continue;
+		}
+		const float Health = Sim->health().zoneHealth(Thing, static_cast<int>(i));
+		(bSecond ? LimpRight : LimpLeft) = FMath::Clamp((PawnLimpFrom - Health) / (PawnLimpFrom - PawnLimpFull), 0.0f, 1.0f);
+		bSecond = true;
+	}
+}
+
+/**
+ * A pawn downed by its torso and awake crawls (part D): it lies in the crawl clip instead of going limp, the clip
+ * running as fast as the sim moves it and holding still when it does not. The clip's travel is in its hips, as with the
+ * clips of body-motion.md, so the body is set back by it and stays on the sim's position.
+ */
+void ASimPawnActor::UpdateCrawl(const colony::ThingView& Now, float GameDelta)
+{
+	USimPawnAnimInstance* Anim = GetAnim();
+	const bool bWanted = Anim && !bRagdoll && Now.crawling && Now.downed && !Now.dead && !Now.motionClip.valid();
+	if (bWanted && !bCrawlClipTried)
+	{
+		bCrawlClipTried = true;
+		CrawlClip = PawnFindCrawlClip();
+		if (CrawlClip)
+		{
+			const USkeleton* Skeleton = CrawlClip->GetSkeleton();
+			CrawlPelvisBone = Skeleton ? Skeleton->GetReferenceSkeleton().FindBoneIndex(FName(TEXT("pelvis"))) : INDEX_NONE;
+			CrawlClipSpeed = PawnCrawlDefaultSpeed;
+			if (CrawlPelvisBone != INDEX_NONE && CrawlClip->GetPlayLength() > 0.1f)
+			{
+				CrawlPelvisStart = PawnMotionBoneAt(*CrawlClip, CrawlPelvisBone, 0.0);
+				const double Travel = (PawnMotionBoneAt(*CrawlClip, CrawlPelvisBone, CrawlClip->GetPlayLength()) - CrawlPelvisStart).Size2D();
+				if (Travel > 10.0)
+				{
+					CrawlClipSpeed = static_cast<float>(Travel) / CrawlClip->GetPlayLength();
+				}
+			}
+		}
+	}
+	if (!bWanted || !CrawlClip)
+	{
+		if (bCrawling)
+		{
+			bCrawling = false;
+			if (Anim && CrawlMontage.IsValid())
+			{
+				Anim->Montage_Stop(PawnCrawlBlend, CrawlMontage.Get());
+			}
+		}
+	}
+	else
+	{
+		const float Height = bHasLooks ? Looks.Height : 1.0f;
+		const float Rate = GroundSpeed > PawnCrawlStill ? FMath::Clamp(GroundSpeed / (CrawlClipSpeed * Height), 0.4f, 2.0f) : 0.02f;  // all but still: lying where it is
+		if (!bCrawling || !CrawlMontage.IsValid() || !Anim->Montage_IsPlaying(CrawlMontage.Get()))
+		{
+			CrawlMontage = Anim->PlaySlotAnimationAsDynamicMontage(CrawlClip, FAnimSlotGroup::DefaultSlotName, PawnCrawlBlend, PawnCrawlBlend, 1.0f, 2000);
+			bCrawling = true;
+			ActionEndSeconds = 0.0;
+			++CrawlsPlayed;
+		}
+		if (CrawlMontage.IsValid())
+		{
+			Anim->Montage_SetPlayRate(CrawlMontage.Get(), Rate);
+		}
+	}
+
+	// The set-back, as UpdateMotionClip's: the hips' travel since the clip's first frame at the moment that is drawn,
+	// as much as the montage shows.
+	const FAnimMontageInstance* Shown = nullptr;
+	if (Anim && CrawlMontage.IsValid())
+	{
+		for (const FAnimMontageInstance* Instance : Anim->MontageInstances)
+		{
+			if (Instance && Instance->Montage == CrawlMontage.Get() && Instance->IsValid() && (!Shown || Instance->GetWeight() > Shown->GetWeight()))
+			{
+				Shown = Instance;
+			}
+		}
+	}
+	if (Shown && CrawlClip && CrawlPelvisBone != INDEX_NONE && CrawlClip->GetPlayLength() > 0.1f)
+	{
+		const float Ahead = HitStopLeft > 0.0f ? 0.0f : GameDelta * Shown->GetPlayRate();
+		const double At = FMath::Fmod(static_cast<double>(Shown->GetPosition() + Ahead), static_cast<double>(CrawlClip->GetPlayLength()));
+		const FVector Travel = PawnMotionBoneAt(*CrawlClip, CrawlPelvisBone, At) - CrawlPelvisStart;
+		CrawlOffset = FVector(-Travel.Y, Travel.X, 0.0) * Shown->GetWeight() * (bHasLooks ? Looks.Height : 1.0f);
+	}
+	else
+	{
+		CrawlOffset = FVector::ZeroVector;
+		if (!bCrawling)
+		{
+			CrawlMontage.Reset();
+		}
+	}
+}
+
 float ASimPawnActor::GetMeleeBodyDegrees() const
 {
 	const FMeleePose Pose = ComputeMeleePose();
@@ -1439,7 +1698,7 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 	const bool bRolling = RollProgress > 0.0f;
 	AdvanceJump(GameDelta);
 	const float JumpHeight = GetJumpHeight();
-	const bool bMotion = !MotionOffset.IsNearlyZero(0.01);
+	const bool bMotion = !MotionOffset.IsNearlyZero(0.01) || !CrawlOffset.IsNearlyZero(0.01);
 	if (!bReacting && !bMelee && !bRolling && !bMotion && JumpHeight <= 0.0f)
 	{
 		if (bBodyPosed)
@@ -1494,6 +1753,7 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 	}
 	Offset.Z += JumpHeight;
 	Offset += MotionOffset;  // a clip's own travel is taken out: the sim's position already has it (body-motion.md)
+	Offset += CrawlOffset;   // and the crawl clip's
 	Body->SetRelativeLocationAndRotation(Offset, RootQuat.Inverse() * RollWorld * LeanWorld * RootQuat * MeleeLocal * PawnBodyRelativeRotation.Quaternion());
 }
 
@@ -1585,6 +1845,20 @@ void ASimPawnActor::StartRagdoll(const FVector& Impulse)
 	DodgeAge = kDodgeSeconds;
 	HitStopLeft = 0.0f;
 	bBodyPosed = false;
+	bCrawling = false;
+	CrawlOffset = FVector::ZeroVector;
+	bPatchPosed = false;
+	if (USimPawnAnimInstance* Anim = GetAnim())
+	{
+		// The hit layer forgets its springs: the physics body has the hit now.
+		Anim->Inputs.bHitLayer = false;
+		Anim->Inputs.Kicks.Reset();
+		if (CrawlMontage.IsValid())
+		{
+			Anim->Montage_Stop(0.0f, CrawlMontage.Get());
+		}
+	}
+	CrawlMontage.Reset();
 	Body->SetRelativeLocationAndRotation(FVector::ZeroVector, PawnBodyRelativeRotation);
 	Body->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	Body->SetCollisionProfileName(TEXT("Ragdoll"));

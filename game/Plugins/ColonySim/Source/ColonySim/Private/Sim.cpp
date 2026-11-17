@@ -381,6 +381,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         const int factor = static_cast<int>(defs_->get(things_->registry().get<Thing>(door).def).integer("door.openSpeedFactor", 1));
         return factor > 1 && !power_->running(door) ? 1 : factor;
     });
+    health_->setAsleep([this](Entity pawn) {
+        const Worker* worker = things_->registry().try_get<Worker>(pawn);
+        return worker != nullptr && jobIsLyingDown(worker->job);
+    });
     health_->setImmunityBonus([this](Entity pawn) { return jobs_->bedMonitored(jobs_->bedUnder(pawn)) ? 0.02f : 0.0f; });
     jobs_->setLights(lights_.get());
     jobs_->setPower(power_.get());
@@ -2687,6 +2691,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
             view.crawling = health->downed && health->crawls;
+            view.severed = health->missing.empty() ? uint16_t{0} : health_->severed(entity);
             view.dead = health->dead;
             if (const CorpseRot* corpse = reg.try_get<CorpseRot>(entity)) {
                 const CorpseLook look = spoilage_->corpseLook(corpse->days, temperature_->temperatureAt(cellOf(reg.get<Position>(entity))));
@@ -3691,6 +3696,11 @@ uint64_t Sim::stateHash() const {
             h.add(health->bloodLoss);
             if (health->bleedStoppedAt >= 0) {
                 h.add(health->bleedStoppedAt);
+            }
+            for (const int64_t hurtAt : health->zoneHurtAt) {
+                if (hurtAt >= 0) {
+                    h.add(hurtAt);
+                }
             }
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
