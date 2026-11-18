@@ -7,7 +7,7 @@ and WoW have none to copy) and live in `data/defs/Rules/MeleeRules.json` and `Fi
 ## What sneed asked for
 
 - **Focus like Dark Souls**: pawns face the enemy they fight. The player locks on in third person with **Tab**, which
-  cycles to the next nearest target like WoW; **F1** ends focus; a game setting turns lock-on off. Focus makes melee
+  cycles to the next nearest target like WoW; **middle mouse** locks on or lets go (sneed 2026-11-18; was F1, which also hit Unreal's wireframe view); a game setting turns lock-on off. Focus makes melee
   easier: the swing goes at the centre of the focused body.
 - **Smart melee movement**: fighters don't stand still. They follow an enemy that runs and move round a bit between
   blows without hurting their attack, varying with who they are.
@@ -28,7 +28,7 @@ State is on the `Melee` component (melee save section 4): `focus`, `focusPlayer`
   - `Next` (Tab): the pawns within `focusRange` (20 m), never its own side; enemies first (another side that isn't a
     visitor or prisoner, or a mad animal), and only others if there are no enemies; nearest first, with pawns more than
     60 degrees off its facing counted `focusBehindFactor` (2x) as far. Picks the one after the current focus, round again.
-  - `Clear` (F1): let go. Fails if not focused.
+  - `Clear` (middle mouse while locked on): let go. Fails if not focused.
 - A focus lets go by itself when the target dies, leaves, changes level or goes beyond 25 m (the AI's beyond
   `aiFocusRange` + 2 m), or the pawn is downed. A downed target keeps the focus (to finish it).
 - **Facing** (`MeleeSystem::faceFocus`, after the combat step): every focused pawn faces its focus, so it walks sideways
@@ -39,7 +39,7 @@ State is on the `Melee` component (melee save section 4): `focus`, `focusPlayer`
   blow goes at its centre whichever way the camera looks; else a body on the ground in reach within 60 degrees ahead; else
   straight ahead as before.
 
-The lock-on **setting** is Unreal-side: with it off, Tab and F1 send nothing (the controls thread adds the keys and the
+The lock-on **setting** is Unreal-side: with it off, Tab and middle mouse send nothing (the controls thread adds the keys and the
 checkbox: `FocusNextTarget`, `EndFocus`, `Rim3DKeys::IsLockOnFocusEnabled()`).
 
 Snapshot: `focusTarget`, `focusPlayer` (the lock-on camera follows it, a marker on the target).
@@ -128,8 +128,8 @@ The arm's-length "stand and fight" rule does not hold a fleeing pawn. Snapshot `
 Built (2026-11-18):
 
 - **Keys** (`UProtagonistSubsystem::UpdateFocus`): in direct control, `FocusNextTarget` (Tab) sends `FocusCommand Next`,
-  `EndFocus` (F1) sends `Clear`; nothing with Settings > Controls "Lock-on focus" off, and turning it off while locked on
-  lets go. While locked on F1 does not toggle the key help (`USimSubsystem::HandleKey`). The overseer switch is O.
+  `EndFocus` (middle mouse) sends `Clear` when locked on, else locks on like Tab; nothing with Settings > Controls "Lock-on focus" off, and turning it off while locked on
+  lets go. F1 is key help; DefaultInput.ini clears the engine debug keys (F1 wireframe, F2 unlit, F5 shader complexity). The overseer switch is O.
 - **HP bar** top middle, under the clock (`DrawFocus`): the target's name (`Sim::feedName`: a colonist's or raider's name, a named animal's, a spawned pawn's `PawnLooks::name`, else its kind) and a red bar of
   `lowestPart` with the percentage.
 - **Marker**: a small dot on the target's chest (low over a body on the ground), `GetFocusPoint`.

@@ -507,7 +507,13 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 	if (Bridge->GetSim()->controlledPawn() == Controlled)
 	{
 		Body->FollowSim(FVector2D(View->x, View->y), View->level, View->climb > 0.0f);
-		if (!Body->IsClimbing() && Body->Reconcile(FVector2D(View->x, View->y)))
+		if (!Body->IsClimbing() && (View->motionClip.valid() || View->motionPush) && !View->motionFreeFeet && View->rollPhase == 0)
+		{
+			// A stagger or a knockdown carries the colonist: the keys wait and the body is where the sim's clip takes it,
+			// so nothing snaps back a metre when it ends. (The player's own swings leave the feet to the keys.)
+			Body->SetSimPosition(FVector2D(View->x, View->y));
+		}
+		else if (!Body->IsClimbing() && Body->Reconcile(FVector2D(View->x, View->y)))
 		{
 			++ReconcileCount;
 		}
@@ -674,7 +680,7 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Lock-on focus (docs/design/focus.md, sneed 2026-11-17): Tab locks on to the next nearest enemy, Dark Souls and WoW
-// style; F1 lets go; Settings > Controls turns it off. The sim keeps the focus (FocusCommand) and turns the body to face
+// style; middle mouse locks on or lets go (sneed 2026-11-18); Settings > Controls turns it off. The sim keeps the focus (FocusCommand) and turns the body to face
 // it; here are the keys, the HP bar top middle, the marker on the target and (AProtagonistPawn) the camera.
 
 colony::Entity UProtagonistSubsystem::GetFocusTarget() const
@@ -737,9 +743,17 @@ void UProtagonistSubsystem::UpdateFocus(APlayerController& PC, USimSubsystem& Br
 	{
 		FocusNext();
 	}
-	else if (Focus != colony::kNoEntity && Rim3DKeys::WasPressed(&PC, ERim3DAction::EndFocus))
+	else if (Rim3DKeys::WasPressed(&PC, ERim3DAction::EndFocus))
 	{
-		EndFocus();
+		// Middle mouse (sneed 2026-11-18, like Elden Ring's lock-on button): locks on when free, lets go when locked on.
+		if (Focus != colony::kNoEntity)
+		{
+			EndFocus();
+		}
+		else
+		{
+			FocusNext();
+		}
 	}
 }
 

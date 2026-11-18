@@ -11,6 +11,7 @@
 #include "Components/SkeletalMeshComponent.h"
 
 #include "PawnActor.h"
+#include "PawnAnimInstance.h"
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
 
@@ -39,6 +40,8 @@ namespace
 		bool bHaveLast = false;
 		double MaxOff = 0.0;      // hips from the sim's position while the clip plays (cm)
 		double MaxOffAfter = 0.0; // and in the 0.3 s after it ends (the blend-out)
+		int32 UpperFrames = 0;    // frames an upper-body clip played, and of those the frames the legs walked
+		int32 LegFrames = 0;
 		double MaxJump = 0.0;     // the hips' largest one-frame move beyond the actor's own (cm)
 		double MaxJumpAfter = 0.0;
 		double Travel = 0.0;      // how far the sim moved the body (cm)
@@ -253,6 +256,11 @@ void USmokeTestSubsystem::BuildMotionPhases()
 				{
 					Fail(FString::Printf(TEXT("%s: the sim would not play it"), *Name));
 				}
+				// A stagger is drawn on the upper body over walking legs, as a blow's stagger is (BodyMotionSystem::throwBody).
+				if (Name.Contains(TEXT("Stagger")))
+				{
+					Sim.combat().motion().setLayers(State->Pawn, true, false);
+				}
 				State->bStarted = true;
 				State->Start = Actor->GetActorLocation();
 				State->StartYaw = Actor->GetActorRotation().Yaw;
@@ -283,6 +291,13 @@ void USmokeTestSubsystem::BuildMotionPhases()
 			if (bInClip)
 			{
 				State->bSeenClip = true;
+				// The legs under an upper-body clip: walking (motion matching off the idle), not standing still.
+				if (Actor->IsMotionClipUpper())
+				{
+					++State->UpperFrames;
+					const USimPawnAnimInstance* Anim = Actor->GetAnim();
+					State->LegFrames += Anim && !Anim->GetStats().bStandingIdle && Actor->GetGroundSpeed() > 20.0f ? 1 : 0;
+				}
 			}
 			if (bInClip && !bSkip)
 			{
@@ -341,6 +356,20 @@ void USmokeTestSubsystem::BuildMotionPhases()
 			if (State->MaxOff > 15.0 || State->MaxOffAfter > 15.0)
 			{
 				Fail(FString::Printf(TEXT("%s: the hips left the sim's position by %.1f cm"), *Name, FMath::Max(State->MaxOff, State->MaxOffAfter)));
+			}
+			if (Name.Contains(TEXT("Stagger")))
+			{
+				PhaseNumbers.Add(TEXT("upperFrames"), State->UpperFrames);
+				PhaseNumbers.Add(TEXT("walkingLegFrames"), State->LegFrames);
+				if (State->UpperFrames == 0)
+				{
+					Fail(FString::Printf(TEXT("%s: the stagger was not drawn on the upper body"), *Name));
+				}
+				else if (State->LegFrames * 3 < State->UpperFrames)
+				{
+					Fail(FString::Printf(TEXT("%s: the legs walked in only %d of %d frames of the stagger (they should carry the stumble)"), *Name,
+						State->LegFrames, State->UpperFrames));
+				}
 			}
 			if (State->MaxJumpAfter > 8.0)
 			{

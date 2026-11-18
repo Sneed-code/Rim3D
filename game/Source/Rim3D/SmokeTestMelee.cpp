@@ -979,7 +979,7 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		P->EndFocus();
 		if (P->GetFocusCommandsSent() != Sent + 1)
 		{
-			Fail(TEXT("focus: F1 (EndFocus) sent no Clear"));
+			Fail(TEXT("focus: middle mouse (EndFocus) sent no Clear"));
 		}
 	});
 

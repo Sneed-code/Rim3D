@@ -78,6 +78,13 @@ namespace
 	const FRotator PawnBodyRelativeRotation(0.0, -90.0, 0.0);
 	const float PawnMotionBlendIn = 0.08f;   // a clip the sim moves the body along (docs/design/body-motion.md)
 	const float PawnMotionBlendOut = 0.2f;
+
+	/** A clip or a push the sim is carrying the body along (walking waits); false for the player's own swings, which
+	 *  leave the feet to the keys (docs/design/body-motion.md "Upper-body clips"). */
+	bool PawnMotionHolds(const colony::ThingView& View)
+	{
+		return (View.motionClip.valid() || View.motionPush) && !View.motionFreeFeet;
+	}
 	// The hit layer (docs/design/body-health.md part E). A leg limps from 85% health down, fully at 35% and less.
 	constexpr float PawnLimpFrom = 0.85f;
 	constexpr float PawnLimpFull = 0.35f;
@@ -268,7 +275,8 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	// so it would jerk and its animation would see a stuttering speed. It is drawn where the player's body is (moved
 	// every frame, at most a metre from the sim's: ProtagonistPawn reconciles) at its smooth velocity.
 	if (const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
-		Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == Thing && Now.rollPhase == 0 && Now.climb <= 0.0f)
+		Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == Thing && Now.rollPhase == 0 && Now.climb <= 0.0f &&
+		!PawnMotionHolds(Now))
 	{
 		if (const AProtagonistPawn* Player = Protagonist->GetBody(); Player && Player->GetSimLevel() == Now.level && !Player->IsClimbing())
 		{
@@ -281,18 +289,23 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	}
 	GroundSpeed = Velocity.Size2D();
 
+	// Whether the body keeps a facing of its own while it moves (a clip, a lock-on): the walk then steps sideways or
+	// backwards under it instead of turning the hips the way it goes.
+	bool bHoldFacing = false;
 	if (Now.motionClip.valid() && !bRagdoll && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
 	{
 		// A clip the sim moves the body along plays facing the way the sim has the body face, not the way it is
 		// thrown: a stagger back must not turn the body round to face its own push (docs/design/body-motion.md).
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
 		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		bHoldFacing = true;
 	}
 	else if (Now.focusTarget != colony::kNoEntity && Now.rollPhase == 0 && !Now.downed && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
 	{
 		// Locked on (docs/design/focus.md): the body keeps facing its focus and walks sideways or backwards (strafes).
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
 		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		bHoldFacing = true;
 	}
 	else if (Velocity.Size2D() > (Now.crawling ? PawnCrawlStill : PawnTurnSpeed))
 	{
@@ -376,6 +389,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		In.CruiseSpeed = Pace;
 		In.Detail = Detail;
 		In.bTeleported = bTeleported;
+		In.bHoldFacing = bHoldFacing;
 		In.bHitLayer = true;
 		In.LimpLeft = LimpLeft;
 		In.LimpRight = LimpRight;
@@ -1435,9 +1449,14 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 		const float Rate = FMath::Max(0.05f, Now.motionRate);
 		MotionClipFrom = Clip->from;
 		MotionClipHit = Clip->hitSeconds;
-		if (MotionClipDef != Now.motionClip.value || Now.motionTime < MotionClipTime - 0.02f || !MotionMontage.IsValid() || !Anim->Montage_IsPlaying(MotionMontage.Get()))
+		if (MotionClipDef != Now.motionClip.value || Now.motionTime < MotionClipTime - 0.02f || Now.motionUpper != bMotionUpper || !MotionMontage.IsValid() ||
+			!Anim->Montage_IsPlaying(MotionMontage.Get()))
 		{
-			MotionMontage = Anim->PlaySlotAnimationAsDynamicMontage(Asset, FAnimSlotGroup::DefaultSlotName, PawnMotionBlendIn, PawnMotionBlendOut, Rate, 1, -1.0f, Want);
+			// A stagger, a flinch or the player's own swing plays on the upper body, over legs that walk the way the body
+			// really goes (sneed 2026-11-18); a roll, a sidestep, a knockdown or an AI's lunging swing plays whole.
+			bMotionUpper = Now.motionUpper;
+			MotionMontage = Anim->PlaySlotAnimationAsDynamicMontage(Asset, bMotionUpper ? USimPawnAnimInstance::UpperBodySlot : FAnimSlotGroup::DefaultSlotName,
+				PawnMotionBlendIn, PawnMotionBlendOut, Rate, 1, -1.0f, Want);
 			MotionClipDef = Now.motionClip.value;
 			ActionEndSeconds = 0.0;
 			++MotionClipsPlayed;
@@ -1478,7 +1497,7 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 		}
 	}
 	const UAnimSequence* ShownAsset = MotionAsset.Get();
-	if (Shown && ShownAsset && MotionPelvisBone != INDEX_NONE)
+	if (Shown && ShownAsset && MotionPelvisBone != INDEX_NONE && !bMotionUpper)
 	{
 		// The pawns update after the bodies' animation has moved on for this frame (a tickable subsystem runs after the
 		// tick groups), so the montage's moment and weight now are the ones drawn this frame.

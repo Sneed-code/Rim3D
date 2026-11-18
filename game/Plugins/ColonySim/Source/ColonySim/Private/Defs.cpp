@@ -77,25 +77,30 @@ struct DefsRaw {
 };
 
 // Multiplies the number at `path` (dotted) inside `def`. Integers stay integers (rounded).
-void defsMultiply(Json& def, const std::string& path, double factor) {
-    Json* cur = &def;
-    size_t p = 0;
-    while (true) {
-        const size_t dot = path.find('.', p);
-        const std::string part = path.substr(p, dot == std::string::npos ? std::string::npos : dot - p);
-        if (!cur->is_object()) return;
-        const auto it = cur->find(part);
-        if (it == cur->end()) return;
-        cur = &*it;
-        if (dot == std::string::npos) break;
-        p = dot + 1;
+// Multiplies the number at a dotted path. A step that reaches an array goes on into every element (so
+// "tools.cooldownTime" scales every tool's cooldown).
+void defsMultiplyFrom(Json& cur, const std::string& path, size_t p, double factor) {
+    if (cur.is_array()) {
+        for (Json& element : cur) defsMultiplyFrom(element, path, p, factor);
+        return;
     }
-    if (cur->is_number_integer()) {
-        *cur = static_cast<int64_t>(std::llround(cur->get<double>() * factor));
-    } else if (cur->is_number()) {
-        *cur = cur->get<double>() * factor;
+    if (p >= path.size()) {
+        if (cur.is_number_integer()) {
+            cur = static_cast<int64_t>(std::llround(cur.get<double>() * factor));
+        } else if (cur.is_number()) {
+            cur = cur.get<double>() * factor;
+        }
+        return;
     }
+    if (!cur.is_object()) return;
+    const size_t dot = path.find('.', p);
+    const std::string part = path.substr(p, dot == std::string::npos ? std::string::npos : dot - p);
+    const auto it = cur.find(part);
+    if (it == cur.end()) return;
+    defsMultiplyFrom(*it, path, dot == std::string::npos ? path.size() : dot + 1, factor);
 }
+
+void defsMultiply(Json& def, const std::string& path, double factor) { defsMultiplyFrom(def, path, 0, factor); }
 
 }  // namespace
 
@@ -300,6 +305,10 @@ bool DefDatabase::build(const std::vector<DefSource>& sourcesIn, const std::stri
                 defsMerge(merged, layer);
             }
             if (const auto t = tuneDefs.find(kind); t != tuneDefs.end()) {
+                for (const auto& [path, factor] : t->second) defsMultiply(merged, path, factor);
+            }
+            // "Kind/defName": that one def only, after the whole kind's.
+            if (const auto t = tuneDefs.find(kind + "/" + defName); t != tuneDefs.end()) {
                 for (const auto& [path, factor] : t->second) defsMultiply(merged, path, factor);
             }
 

@@ -577,6 +577,26 @@ TEST_CASE("Crawling: a person downed by the torso crawls away from an enemy near
     CHECK(std::abs(run("left leg", 60.0f, true)) < 0.01f);
 }
 
+TEST_CASE("Crawling: a downed enemy crawls away from the player's own colonist, drafted or not") {
+    // sneed (2026-11-18): downed raiders near the player lay there "trying to crawl" and never moved, because only
+    // fighters counted as a threat and the player's colonist is no fighter until drafted.
+    auto sim = zoneTestSim();
+    const Entity downed = zoneTestPawn(*sim, 20, 20);
+    sim->submit(SetFactionCommand{downed, 2});
+    const Entity player = zoneTestPawn(*sim, 15, 20, true);
+    sim->step();
+    sim->things().registry().emplace<Stunned>(player).stepsLeft = 100000;  // stands where it is
+    CHECK_FALSE(sim->things().registry().all_of<Fighter>(player));
+    CHECK(zoneTestHit(*sim, downed, "Blunt", 80.0f, "torso"));
+    sim->step();
+    CHECK(sim->health().incapacitated(downed));
+    const Position start = sim->things().registry().get<Position>(downed);
+    sim->stepMany(600);
+    const Position& end = sim->things().registry().get<Position>(downed);
+    MESSAGE("crawled " << end.x - start.x << " m east in 20 s");
+    CHECK(end.x - start.x > 1.5f);  // away from the player, who stands to the west
+}
+
 TEST_CASE("Crawling: the snapshot tells Unreal who crawls") {
     auto sim = zoneTestSim();
     const Entity pawn = zoneTestPawn(*sim, 20, 20);

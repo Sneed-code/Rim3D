@@ -133,6 +133,7 @@ namespace
 		float HitSeenAt = -1.0f;
 		bool bHitPicture = false;
 		bool bSwingPicture = false;
+		int32 MeleeTour = 0;  // step 15: every rack melee weapon in the hand, first and third person
 		bool bKillFeedLines = false;
 		// Tab on the range's own-side targets: the sim's Next takes enemies only, so the range locks on itself (FocusCommand Set).
 		float TabAt = -1.0f;
@@ -273,7 +274,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 	FPhase Play;
 	Play.Name = TEXT("gunrange");
 	Play.WarmupSeconds = 6.0f;
-	float Minutes = bScript ? 2.3f : 240.0f;
+	float Minutes = bScript ? 2.9f : 240.0f;  // the melee line-up (step 15) adds about 25 s
 	FParse::Value(FCommandLine::Get(), TEXT("GunRangeMinutes="), Minutes);
 	Play.MeasureSeconds = Minutes * 60.0f;
 	Play.Setup = [=, this]()
@@ -955,10 +956,56 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				if (State->StepTime > 3.5f)
 				{
 					Notes.Add(FString::Printf(TEXT("gunrange: first-person swings seen %d"), G->GetHeldSwingsSeen()));
-					G->SelectGun(0);
-					Next(11);
+					State->MeleeTour = 0;
+					State->bSwingPicture = false;
+					Next(15);
 				}
 				break;
+			case 15:  // each melee weapon in the hand: a first-person and a third-person picture (is it in the palm, pointing right?)
+			{
+				const TArray<FGunRangeMelee>& Rack = G->GetMelee();
+				if (State->StepTime < Dt * 1.5f)
+				{
+					G->SelectGun(GunCount + State->MeleeTour);
+					if (!Body->IsFirstPerson())
+					{
+						Body->ToggleView();
+						Body->SnapCamera();
+					}
+				}
+				AimAtNearest();
+				if (State->StepTime > 2.2f && !State->bFiringPicture)  // after the view change back has settled (no blur)
+				{
+					State->bFiringPicture = true;
+					Picture(*FString::Printf(TEXT("melee_%s_fp"), *Rack[State->MeleeTour].Label));
+					Body->ToggleView();
+					Body->SnapCamera();
+				}
+				if (State->StepTime > 3.8f && !State->bSwingPicture)
+				{
+					State->bSwingPicture = true;
+					Picture(*FString::Printf(TEXT("melee_%s_3p"), *Rack[State->MeleeTour].Label));
+				}
+				if (State->StepTime > 4.0f)
+				{
+					if (!Body->IsFirstPerson())
+					{
+						Body->ToggleView();
+						Body->SnapCamera();
+					}
+					State->bSwingPicture = false;
+					if (++State->MeleeTour < Rack.Num())
+					{
+						Next(15);
+					}
+					else
+					{
+						G->SelectGun(0);
+						Next(11);
+					}
+				}
+				break;
+			}
 			case 11:  // a gun again: its model in the hands
 				if (State->StepTime > 2.0f)
 				{
@@ -1027,9 +1074,9 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		}
 		if (UBloodSubsystem* Blood = GetWorld()->GetSubsystem<UBloodSubsystem>())
 		{
-			Notes.Add(FString::Printf(TEXT("gunrange: blood %s: %d hits, %d drops, %d mist, %d wound marks, %d body stains, %d ground splats"),
+			Notes.Add(FString::Printf(TEXT("gunrange: blood %s: %d hits, %d drops, %d mist, %d wound marks, %d body stains, %d ground splats, %d painted into skin (%d bodies now)"),
 				Blood->IsReady() ? TEXT("assets in") : TEXT("ASSETS MISSING (old simple blood)"), Blood->GetHits(), Blood->GetDropsSpawned(),
-				Blood->GetMistSpawned(), Blood->GetWoundMarks(), Blood->GetBodyStainsMade(), Blood->GetSplatsMade()));
+				Blood->GetMistSpawned(), Blood->GetWoundMarks(), Blood->GetBodyStainsMade(), Blood->GetSplatsMade(), Blood->GetSkinPaints(), Blood->GetSkinMasks()));
 		}
 		Notes.Add(FString::Printf(TEXT("gunrange: %d targets ran, %d sprinted, %d charged you, %d punches thrown at you, %d range lock-ons"), State->Fled, State->Sprinted, State->Charged, State->FistSwings, State->RangeFocusSets));
 		if (const UFightSubsystem* Marks = GetWorld()->GetSubsystem<UFightSubsystem>())

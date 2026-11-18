@@ -236,6 +236,8 @@ enum class PawnAction : uint8_t {
     Alert,        // a fighter's alert state changed (stealth.md): `amount` 0 unaware, 1 suspicious, 2 alerted; `message` why
                   // ("saw", "glimpsed", "heard steps", "heard a shot", "called", "site raised", "calm"...); (x, y) where it
                   // noticed something, if it did
+    Callout,      // a fighter shouted to its friends (team-play.md): `amount` the Callout, `message` the words ("suppressing",
+                  // "flanking left", "pushing", "falling back", "man down", "enemy down"), `target` whom it is about
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
