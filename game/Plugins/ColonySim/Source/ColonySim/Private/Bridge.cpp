@@ -519,6 +519,7 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::TakeCover: return "TakeCover";
         case PawnAction::Patch: return "Patch";
         case PawnAction::Alert: return "Alert";
+        case PawnAction::Callout: return "Callout";
     }
     return "?";
 }

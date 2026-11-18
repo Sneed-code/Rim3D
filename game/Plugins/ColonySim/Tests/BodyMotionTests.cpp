@@ -614,4 +614,128 @@ TEST_CASE("Motion: a spear thrusts with its own clip; a weapon without one swing
     for (const DefId clip : sim->melee().attackClipsOf(defs.idOf("Things", "Melee_Knife"))) {
         CHECK(clip != thrust);
     }
+TEST_CASE("Motion: the player's own swing leaves the feet free: walking goes on, the clip doesn't carry the body") {
+    // sneed (2026-11-18): "it resets my position if I try to move while meleeing ... it's critical I can move while
+    // meleeing". The swing is the arms' and the chest's; the walking keys keep the body.
+    auto sim = motionTestSim();
+    BodyMotionSystem& motion = sim->combat().motion();
+    const Entity player = motionTestPawn(*sim, 20.5f, 30.5f, "Melee_Club");
+    const Entity target = motionTestPawn(*sim, 21.7f, 30.5f);
+    motionTestControl(*sim, player);
+    motionTestFace(*sim, player, 1.0f, 0.0f);
+    sim->stepMany(2);
+    sim->submit(MeleeCommand{player, target, MeleeMode::Attack});
+    sim->step();
+    MOTION_REQUIRE(sim->melee().winding(player));
+    MOTION_REQUIRE(motion.moving(player));
+    const BodyMotion& m = sim->things().registry().get<BodyMotion>(player);
+    CHECK(m.upper);
+    CHECK(m.freeFeet);
+    CHECK_FALSE(motion.holdsBody(player));
+    Snapshot snap;
+    sim->writeSnapshot(snap);
+    const ThingView* view = snap.find(player);
+    MOTION_REQUIRE(view != nullptr);
+    CHECK(view->motionUpper);
+    CHECK(view->motionFreeFeet);
+    // Walking sideways through the swing: every step's move is taken, and the clip adds nothing of its own.
+    const Position start = motionTestPos(*sim, player);
+    float y = start.y;
+    for (int i = 0; i < 10 && motion.moving(player); ++i) {
+        y -= 0.04f;
+        sim->submit(DirectMoveCommand{player, start.x, y});
+        sim->step();
+        CHECK(motionTestPos(*sim, player).y == doctest::Approx(y));
+        CHECK(motionTestPos(*sim, player).x == doctest::Approx(start.x));
+    }
+    // The swing still lands: its reach makes up for the step the clip no longer takes.
+    for (int s = 0; s < 120 && sim->melee().winding(player); ++s) {
+        sim->submit(DirectMoveCommand{player, start.x, y});
+        sim->step();
+    }
+    CHECK(sim->melee().hits() >= 1);
+
+    // A blow at someone on the ground (a stomp, an overhead smash) is still the whole body's.
+    auto sim2 = motionTestSim();
+    const Entity player2 = motionTestPawn(*sim2, 20.5f, 30.5f, "Melee_Club");
+    const Entity lying = motionTestPawn(*sim2, 21.5f, 30.5f);
+    motionTestControl(*sim2, player2);
+    sim2->things().registry().get<Health>(lying).downed = true;
+    sim2->things().registry().get<Posture>(lying).stance = Stance::Prone;
+    sim2->submit(MeleeCommand{player2, lying, MeleeMode::Attack});
+    sim2->step();
+    MOTION_REQUIRE(sim2->combat().motion().moving(player2));
+    CHECK_FALSE(sim2->things().registry().get<BodyMotion>(player2).freeFeet);
+    CHECK(sim2->combat().motion().holdsBody(player2));
+}
+
+TEST_CASE("Motion: a stagger is drawn on the upper body and still carries the body; a knockdown is the whole body's") {
+    // sneed (2026-11-18, third time): staggered people slid in the stagger clip. The clip now plays on the chest and
+    // arms and the legs walk the stumble the sim carries the body through.
+    auto sim = motionTestSim();
+    BodyMotionSystem& motion = sim->combat().motion();
+    const Entity pawn = motionTestPawn(*sim, 30.5f, 30.5f);
+    sim->stepMany(3);
+    motionTestFace(*sim, pawn, -1.0f, 0.0f);
+    const Position start = motionTestPos(*sim, pawn);
+    sim->combat().stagger(pawn, HitFrom{true, start.x - 1.0f, start.y, true});
+    MOTION_REQUIRE(motion.moving(pawn));
+    CHECK(sim->things().registry().get<BodyMotion>(pawn).upper);
+    CHECK_FALSE(sim->things().registry().get<BodyMotion>(pawn).freeFeet);
+    CHECK(motion.holdsBody(pawn));
+    sim->stepMany(4);
+    // The snapshot's speed is the stumble's, so the legs have something to walk.
+    Snapshot snap;
+    sim->writeSnapshot(snap);
+    const ThingView* view = snap.find(pawn);
+    MOTION_REQUIRE(view != nullptr);
+    CHECK(view->motionUpper);
+    CHECK(view->vx > 0.0f);
+    motionTestFinish(*sim, pawn);
+    CHECK(motionTestPos(*sim, pawn).x > start.x + 0.3f);
+
+    const Entity other = motionTestPawn(*sim, 40.5f, 30.5f);
+    sim->stepMany(3);
+    motionTestFace(*sim, other, -1.0f, 0.0f);
+    MOTION_REQUIRE(motion.throwBody(other, 1.0f, 0.0f, true));
+    CHECK_FALSE(sim->things().registry().get<BodyMotion>(other).upper);
+}
+
+TEST_CASE("Motion: the player walks into people and stops, slides round them, and can always walk away") {
+    // sneed (2026-11-18): "enemies should have physical collision so I can't run through them".
+    auto sim = motionTestSim();
+    BodyMotionSystem& motion = sim->combat().motion();
+    const Entity player = motionTestPawn(*sim, 20.5f, 30.5f);
+    const Entity man = motionTestPawn(*sim, 22.0f, 30.5f);
+    motionTestControl(*sim, player);
+    sim->things().registry().emplace<Stunned>(man).stepsLeft = 100000;  // stands where it is
+    const float touching = motion.bodyRadius(player) + motion.bodyRadius(man);
+    for (int i = 0; i < 40; ++i) {
+        const Position& p = motionTestPos(*sim, player);
+        sim->submit(DirectMoveCommand{player, p.x + 0.1f, p.y});
+        sim->step();
+        CHECK(motionTestDist(*sim, player, man) >= touching - 1e-4f);
+    }
+    CHECK(motionTestPos(*sim, player).x > 21.0f);  // it did walk up to him
+    CHECK(motionTestPos(*sim, man).x == doctest::Approx(22.0f));  // and didn't shove him along
+    // Walking diagonally into him it slides along (the move across him is kept).
+    const float y0 = motionTestPos(*sim, player).y;
+    for (int i = 0; i < 5; ++i) {
+        const Position& p = motionTestPos(*sim, player);
+        sim->submit(DirectMoveCommand{player, p.x + 0.1f, p.y + 0.1f});
+        sim->step();
+    }
+    CHECK(motionTestPos(*sim, player).y > y0 + 0.2f);
+    // Stuck inside someone (a body shoved into it), walking out is always allowed.
+    Position& p = sim->things().registry().get<Position>(player);
+    p.x = 21.8f;
+    p.y = 30.5f;
+    sim->submit(DirectMoveCommand{player, 21.6f, 30.5f});
+    sim->step();
+    CHECK(motionTestPos(*sim, player).x == doctest::Approx(21.6f));
+    // Bodies on the ground are stepped over.
+    sim->things().registry().get<Health>(man).downed = true;
+    sim->health().refresh(man);
+    sim->things().registry().get<Posture>(man).stance = Stance::Prone;
+    CHECK(motion.bodiesClear(player, 21.6f, 30.5f, 22.0f, 30.5f, 0));
 }

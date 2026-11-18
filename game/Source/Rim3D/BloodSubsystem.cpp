@@ -16,6 +16,7 @@
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
+#include "SkinBlood.h"
 
 #include "ColonySim/Defs.h"
 #include "ColonySim/Filth.h"
@@ -171,6 +172,17 @@ void UBloodSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		EventHandle = Bridge->OnSimEvent.AddUObject(this, &UBloodSubsystem::OnSimEvent);
 	}
 	Collection.InitializeDependency<USimPawnSubsystem>();
+	SkinBlood = NewObject<USkinBlood>(this);
+}
+
+int32 UBloodSubsystem::GetSkinPaints() const
+{
+	return SkinBlood ? SkinBlood->GetPaints() : 0;
+}
+
+int32 UBloodSubsystem::GetSkinMasks() const
+{
+	return SkinBlood ? SkinBlood->GetMasks() : 0;
 }
 
 void UBloodSubsystem::Deinitialize()
@@ -391,6 +403,10 @@ void UBloodSubsystem::ResetAll()
 	Pools.Reset();
 	Pending.Reset();
 	Injuries.Reset();
+	if (SkinBlood)
+	{
+		SkinBlood->Reset();
+	}
 	SimHitSteps.Reset();
 	for (TPair<uint64, FFilthStain>& Pair : FilthDecals)
 	{
@@ -714,8 +730,107 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 		}
 	}
 
-	// The marks on the body, stuck to the nearest bone.
-	if (Mesh)
+	// The marks on the body: painted into the skin where the body can take it (USkinBlood: it moves and bends with the
+	// skin and never slides), else decals stuck to the nearest bone.
+	USkinBlood* Skin = SkinBlood && Mesh && SkinBlood->CanPaint(Mesh) ? SkinBlood.Get() : nullptr;
+	if (Skin)
+	{
+		const FName Bone = Mesh->FindClosestBone(Hit.At);
+		const FVector BoneAt = Bone != NAME_None ? Mesh->GetSocketLocation(Bone) : Mesh->Bounds.Origin;
+		FVector Into = Kind == EBloodWound::Gunshot ? Dir : (BoneAt - Hit.At).GetSafeNormal();
+		if (Into.IsNearlyZero())
+		{
+			Into = Dir;
+		}
+		FSkinBloodPaint Mark;
+		Mark.At = Hit.At;
+		Mark.To = Hit.At;
+		Mark.Inward = Into;
+		bool bPaint = true;
+		switch (Kind)
+		{
+			case EBloodWound::Gunshot:
+				Mark.Core = 1.3f + 0.6f * Force;
+				Mark.Soak = 4.5f + 3.0f * Force;
+				Mark.Spatter = 8.0f + 4.0f * Force;
+				Mark.Run = 6.0f + 6.0f * Force;
+				Mark.Hole = 1.0f;
+				break;
+			case EBloodWound::Cut:
+			{
+				FVector Along = FVector::VectorPlaneProject(Dir, Into).GetSafeNormal();
+				if (Along.IsNearlyZero())
+				{
+					Along = BloodAnyPerpendicular(Into, Random);
+				}
+				const float HalfLength = 3.0f + 3.0f * Force;
+				Mark.At = Hit.At - Along * HalfLength;
+				Mark.To = Hit.At + Along * HalfLength;
+				Mark.Core = 0.8f + 0.4f * Force;
+				Mark.Soak = 3.5f + 2.5f * Force;
+				Mark.Spatter = 7.0f + 3.0f * Force;
+				Mark.Run = 6.0f + 6.0f * Force;
+				Mark.Hole = 0.8f;
+				break;
+			}
+			case EBloodWound::Stab:
+				Mark.Core = 1.5f + 0.5f * Force;
+				Mark.Soak = 4.0f + 2.5f * Force;
+				Mark.Spatter = 5.0f;
+				Mark.Run = 6.0f + 6.0f * Force;
+				Mark.Hole = 1.0f;
+				break;
+			case EBloodWound::Bite:
+				Mark.Core = 2.5f + 1.0f * Force;
+				Mark.Soak = 5.0f + 2.0f * Force;
+				Mark.Spatter = 6.0f;
+				Mark.Run = 5.0f + 5.0f * Force;
+				Mark.Hole = 0.6f;
+				break;
+			case EBloodWound::Blast:
+				Mark.Core = 2.0f;
+				Mark.Soak = 6.0f + 3.0f * Force;
+				Mark.Spatter = 14.0f;
+				Mark.Run = 6.0f;
+				Mark.Hole = 0.5f;
+				break;
+			case EBloodWound::Blunt:
+				bPaint = Hit.Damage >= 8.0f;  // a lighter blow only bruises
+				Mark.Core = 1.6f + 0.8f * Force;
+				Mark.Soak = 3.5f + 2.0f * Force;
+				Mark.Spatter = 4.0f;
+				Mark.Run = 4.0f + 4.0f * Force;
+				Mark.Hole = 0.3f;
+				break;
+			default:
+				Mark.Core = 1.5f;
+				Mark.Soak = 4.0f;
+				Mark.Spatter = 6.0f;
+				Mark.Run = 6.0f;
+				break;
+		}
+		if (bPaint && Skin->Paint(Mesh, Mark, Fluid, Clock))
+		{
+			++WoundMarks;
+		}
+		if (bPaint && bExit)
+		{
+			// The torn way out: bigger, more blood, more spray over the skin round it. Where it is is a guess along the
+			// shot (the body's thickness), so take skin a good way along the line.
+			FSkinBloodPaint Exit;
+			Exit.At = ExitAt;
+			Exit.To = ExitAt;
+			Exit.Inward = -Dir;
+			Exit.Depth = FMath::Max(6.0f, Half * 0.75f);
+			Exit.Core = 2.4f + 1.2f * Force;
+			Exit.Soak = 6.0f + 4.0f * Force;
+			Exit.Spatter = 12.0f + 6.0f * Force;
+			Exit.Run = 10.0f + 8.0f * Force;
+			Exit.Hole = 1.0f;
+			Skin->Paint(Mesh, Exit, Fluid, Clock);
+		}
+	}
+	else if (Mesh)
 	{
 		const FName Bone = Mesh->FindClosestBone(Hit.At);
 		const FVector BoneAt = Bone != NAME_None ? Mesh->GetSocketLocation(Bone) : Mesh->Bounds.Origin;
@@ -1076,6 +1191,26 @@ void UBloodSubsystem::Land(const FDrop& Drop, const FVector& At, const FVector& 
 	// On a body: a splash that moves with it.
 	if (USkeletalMeshComponent* Mesh = Cast<USkeletalMeshComponent>(What))
 	{
+		if (SkinBlood && SkinBlood->CanPaint(Mesh))
+		{
+			if (Drop.RadiusCm < 0.25f)
+			{
+				return;  // fine spray: as dots all over a body it read as freckles (PC look, 2026-11-18)
+			}
+			// Into the skin: a small splash, longer the flatter it came in, with a short run if it was a big one.
+			FSkinBloodPaint Mark;
+			Mark.At = At - Along * (HalfLength - HalfWidth) * 0.5f;
+			Mark.To = At + Along * (HalfLength - HalfWidth) * 0.5f;
+			Mark.Inward = -N;
+			Mark.Depth = 4.0f;
+			Mark.Core = FMath::Clamp(HalfWidth * 0.35f, 0.3f, 2.5f);
+			Mark.Soak = 0.0f;
+			Mark.Spatter = 0.0f;
+			Mark.Run = Drop.RadiusCm > 0.35f ? FMath::Clamp(HalfWidth * 1.5f, 0.0f, 8.0f) : 0.0f;
+			Mark.Strength = 0.9f;
+			SkinBlood->Paint(Mesh, Mark, Drop.Fluid, Clock);
+			return;
+		}
 		const int32 Cell = Elongation > 1.6f ? BloodCellDirectional + Random.RandRange(0, 3) : BloodCellSpecks + Random.RandRange(0, 1);
 		colony::Entity Owner = colony::kNoEntity;
 		if (const ASimPawnActor* Pawn = Cast<ASimPawnActor>(Mesh->GetOwner()))
@@ -1247,6 +1382,16 @@ void UBloodSubsystem::Tick(float DeltaTime)
 	UpdateMist(Dt);
 	UpdateBleeding(Dt, GameSeconds);
 	UpdateStains(Dt, GameSeconds);
+	if (SkinBlood)
+	{
+		const colony::Snapshot* Snapshot = bSim ? &Bridge->GetCurrentSnapshot() : nullptr;
+		SkinBlood->Tick(Clock, [Snapshot](const USkeletalMeshComponent* Mesh)
+		{
+			const ASimPawnActor* Pawn = Snapshot && Mesh ? Cast<ASimPawnActor>(Mesh->GetOwner()) : nullptr;
+			const colony::ThingView* View = Pawn ? Snapshot->find(Pawn->GetThing()) : nullptr;
+			return View ? View->blood : -1.0f;
+		});
+	}
 	if (bSim)
 	{
 		SyncFilth();
@@ -1431,8 +1576,32 @@ void UBloodSubsystem::UpdateBleeding(float Dt, float GameSeconds)
 				++Spurts;
 			}
 		}
-		// A run down the skin while upright.
-		if (!bDown && !bDead)
+		// A run down the skin while upright: painted into the skin, longer as it bleeds on, or a decal.
+		const bool bSkinRun = SkinBlood && SkinBlood->CanPaint(Mesh);
+		if (!bDown && !bDead && bSkinRun)
+		{
+			const float MaxRun = 35.0f + Bleed.Force * 15.0f;
+			Bleed.RunLengthCm = FMath::Min(MaxRun, Bleed.RunLengthCm + Dt * (1.5f + Bleed.Rate));
+			if (Bleed.RunLengthCm - Bleed.SkinRunPainted >= 3.0f)
+			{
+				if (Bleed.SkinSeed < 0.0f)
+				{
+					Bleed.SkinSeed = Random.FRandRange(0.0f, 97.0f);
+				}
+				FSkinBloodPaint Mark;
+				Mark.At = At;
+				Mark.To = At;
+				Mark.Inward = -Outward;
+				Mark.Depth = 5.0f;
+				Mark.Core = 0.7f + 0.3f * Bleed.Force;
+				Mark.Run = Bleed.RunLengthCm;
+				Mark.Strength = 0.9f;
+				Mark.Seed = Bleed.SkinSeed;
+				SkinBlood->Paint(Mesh, Mark, Bleed.Fluid, Clock);
+				Bleed.SkinRunPainted = Bleed.RunLengthCm;
+			}
+		}
+		if (!bDown && !bDead && !bSkinRun)
 		{
 			const float MaxRun = 35.0f + Bleed.Force * 15.0f;
 			const float Before = Bleed.RunLengthCm;

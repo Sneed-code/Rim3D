@@ -2409,6 +2409,10 @@ void saveMotionPart(Ar& ar, SaveMotion& sm) {
     ar.value("pushTo", m.pushTo);
     ar.value("turnBody", m.turnBody);
     ar.value("lost", m.lost);
+    if (ar.sectionVersion() >= 2) {  // upper-body clips and the player's free feet (2026-11-18)
+        ar.value("upper", m.upper);
+        ar.value("freeFeet", m.freeFeet);
+    }
     ar.require(std::isfinite(m.time) && std::isfinite(m.rate) && m.rate > 0.0f && std::isfinite(m.faceX) && std::isfinite(m.faceY) &&
                    std::isfinite(m.scale) && std::isfinite(m.doneF) && std::isfinite(m.doneR) && std::isfinite(m.doneYaw) &&
                    std::isfinite(m.pushMetres) && m.pushSteps >= 0 && m.pushFrom >= 0 && m.pushTo >= m.pushFrom && std::isfinite(m.lost),
@@ -2597,6 +2601,18 @@ void saveFighterPart(Ar& ar, Fighter& f) {
         ar.value("suspectY", f.suspectY);
         ar.value("suspect", f.suspect);
         ar.value("suspectAt", f.suspectAt);
+    }
+    if (ar.sectionVersion() >= 6) {  // team play (docs/design/team-play.md)
+        ar.value("role", f.role);
+        ar.require(static_cast<int>(f.role) <= static_cast<int>(TeamRole::FallBack), "the save file has a bad team role");
+        ar.value("roleSince", f.roleSince);
+        ar.value("flankSide", f.flankSide);
+        ar.value("lastCall", f.lastCall);
+        ar.require(static_cast<int>(f.lastCall) <= static_cast<int>(Callout::EnemyDown), "the save file has a bad call-out");
+        ar.value("calloutAt", f.calloutAt);
+        ar.value("alliesDown", f.alliesDown);
+        ar.value("allyDownAt", f.allyDownAt);
+        ar.value("suppressedUntil", f.suppressedUntil);
     }
 
 }
@@ -3519,7 +3535,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("doors", 1, [&] {
         saveParts(ar, "door", e, &SaveEntity::door, [&](Door& door) { saveDoorPart(ar, door); });
     });
-    ar.section("fighters", 5, [&] {
+    ar.section("fighters", 6, [&] {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
@@ -3713,7 +3729,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
         saveParts(ar, "roll", e, &SaveEntity::roll, [&](DodgeRoll& r) { saveRollPart(ar, r); });
     });
-    ar.section("motion", 1, [&] {
+    ar.section("motion", 2, [&] {
         saveParts(ar, "motion", e, &SaveEntity::motion, [&](SaveMotion& m) { saveMotionPart(ar, m); });
     });
     ar.section("weather", 1, [&] {

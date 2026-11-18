@@ -134,16 +134,25 @@ Entity PatchSystem::crawlThreat(Entity pawn) const {
     const FactionId side = fighters_.factionOf(pawn);
     Entity best = kNoEntity;
     float bestD = rules_.crawlRange;
-    for (const auto [other, f, at] : reg.view<const Fighter, const Position>().each()) {
+    const auto consider = [&](Entity other, const Position& at) {
         if (other == pawn || at.level != pos->level || fighters_.factionOf(other) == side || health_.incapacitated(other) ||
             !things_.spawned(other)) {
-            continue;
+            return;
         }
         const float d = std::hypot(at.x - pos->x, at.y - pos->y);
         if (d < bestD || (d == bestD && best != kNoEntity && other < best)) {
             bestD = d;
             best = other;
         }
+    };
+    for (const auto [other, f, at] : reg.view<const Fighter, const Position>().each()) {
+        (void)f;
+        consider(other, at);
+    }
+    // The player's own colonist is a threat whether or not it is drafted (sneed 2026-11-18: downed enemies near the
+    // player lay there "trying to crawl" and never moved).
+    for (const auto [other, at] : reg.view<const PlayerControl, const Position>().each()) {
+        consider(other, at);
     }
     return best;
 }
