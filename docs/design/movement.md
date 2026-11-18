@@ -146,5 +146,5 @@ butcher table (found by the year run).
 
 ## Sprinting
 
-sneed, 2026-11-17: AI pawns jog and sprint (FighterRules `sprintFactor`) only in a fight, fleeing or an emergency. The rule and its cases are in [controls.md](controls.md) "AI pawns and sprinting" (`Sim::pawnSprinting`,
+sneed, 2026-11-17: AI pawns jog and sprint (FighterRules `sprintSpeedFactor`, RimWorld 4/3) only in a fight, fleeing or an emergency. The rule and its cases are in [controls.md](controls.md) "AI pawns and sprinting" (`Sim::pawnSprinting`,
 folded into the movement speed factor).

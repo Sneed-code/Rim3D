@@ -162,6 +162,15 @@ public:
 	bool GetRagdollPelvis(FVector& OutLocation) const;
 	int32 GetRagdollsStarted() const { return RagdollsStarted; }
 
+	/** Dismemberment (body-health.md part F): the limbs and head the sim says are gone (SeveredBits) are folded away on
+	 *  every mesh, and what hung on them is hidden. Only ever more: a body does not grow them back. */
+	void ApplySevered(uint16 Bits);
+	uint16 GetSeveredShown() const { return SeveredShown; }
+	/** How many stumps got their flesh cap. */
+	int32 GetSeveredCaps() const { return SeveredCaps; }
+	/** The piece itself, as the body has it now, thrown clear (SeveredPieceActor.cpp). Null if the body has no such bone. */
+	class ASeveredPieceActor* SpawnSeveredPiece(uint16 Bit);
+
 	/** The mesh that wears wound decals: the MetaHuman's body if there is one, else the mannequin. */
 	USkeletalMeshComponent* GetDecalMesh() const;
 	/** Where the line From-To first meets the drawn body (the animated mannequin's physics shapes, which every body
@@ -192,6 +201,9 @@ public:
 	int32 GetMotionClipsPlayed() const { return MotionClipsPlayed; }
 	bool IsInMotionClip() const { return MotionClipDef != MAX_uint32; }
 	FVector GetMotionOffset() const { return MotionOffset; }
+	/** While an attack clip is on screen: the seconds of the clip still to play before its blow (negative once past it) and
+	 *  the rate it plays at. False when no clip with a blow is playing. */
+	bool GetMotionClipToHit(float& OutSeconds, float& OutRate) const;
 	float GetRollAngle() const { return RollAngle; }
 	int32 GetRollsSeen() const { return RollsSeen; }
 	/** 1 standing, 0.66 crouching, 0.24 lying: what weapon heights are scaled by. */
@@ -348,6 +360,10 @@ private:
 	FSimPawnLooks Looks;
 	bool bHasLooks = false;
 	bool bRagdoll = false;
+	uint16 SeveredShown = 0;
+	int32 SeveredCaps = 0;
+	/** Meshes hidden whole because the head is off (a MetaHuman face); they still go into the head's piece. */
+	TSet<TWeakObjectPtr<class USkinnedMeshComponent>> SeveredHidden;
 	int32 RagdollsStarted = 0;
 	float ReactionAge = kHitReactionSeconds;
 	int32 HitClipsPlayed = 0;
@@ -376,6 +392,8 @@ private:
 	// the visible body is set back so that its hips stay exactly on the sim's position while the clip carries them.
 	uint32 MotionClipDef = MAX_uint32;
 	float MotionClipTime = 0.0f;
+	float MotionClipFrom = 0.0f;  // the clip def's trim start and blow, in the animation's and the clip's seconds
+	float MotionClipHit = 0.0f;
 	TWeakObjectPtr<class UAnimMontage> MotionMontage;
 	TWeakObjectPtr<class UAnimSequence> MotionAsset;
 	int32 MotionPelvisBone = INDEX_NONE;

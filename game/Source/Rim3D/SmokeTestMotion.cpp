@@ -1,7 +1,12 @@
 // Smoke test `motion` (docs/design/body-motion.md): a colonist plays the sim's motion clips (a roll, staggers, a
 // sidestep, a knockdown, the three punches) and every frame the drawn hips are measured against the sim's position. The hips must stay
 // on the sim's position through the clip and must not jump when it ends.
+//
+// The hips are read at the end of each frame (after the pawns update), as they are drawn: this test's own tick runs
+// before the pawn subsystem's, where the body's animation has already moved on for the frame but its set-back has not.
 #include "SmokeTest.h"
+
+#include "Engine/World.h"
 
 #include "Components/SkeletalMeshComponent.h"
 
@@ -37,7 +42,6 @@ namespace
 		double MaxJump = 0.0;     // the hips' largest one-frame move beyond the actor's own (cm)
 		double MaxJumpAfter = 0.0;
 		double Travel = 0.0;      // how far the sim moved the body (cm)
-		bool bAfterStall = false;
 		bool bPrevSkipped = false;
 		double StartYaw = 0.0;
 		FVector LastSpot = FVector::ZeroVector;
@@ -45,6 +49,17 @@ namespace
 		int32 StillFrames = 0;
 		double MaxTurn = 0.0;     // how far the drawn body turned while the clip played (degrees)
 		int32 Skipped = 0;
+		bool bStallBefore = false;  // a stall one and two frames ago (the end-of-frame sample is a frame old)
+		bool bStallBefore2 = false;
+	};
+
+	/** The hips and the actor as drawn, read at the end of the last frame (FWorldDelegates::OnWorldPostActorTick). */
+	struct FMotionSmokeSample
+	{
+		bool bValid = false;
+		FVector2D Local = FVector2D::ZeroVector;  // the hips against the actor, in the actor's frame (cm)
+		FVector2D Hips = FVector2D::ZeroVector;
+		FVector2D Actor = FVector2D::ZeroVector;
 	};
 
 	FVector2D MotionSmokeHips(const ASimPawnActor& Actor)
@@ -77,6 +92,8 @@ namespace
 void USmokeTestSubsystem::BuildMotionPhases()
 {
 	const TSharedRef<FMotionSmokeState> State = MakeShared<FMotionSmokeState>();
+	const TSharedRef<FMotionSmokeSample> Sample = MakeShared<FMotionSmokeSample>();
+	const TSharedRef<FDelegateHandle> SampleHook = MakeShared<FDelegateHandle>();
 	const auto Bridge = [this]() { return GetWorld()->GetSubsystem<USimSubsystem>(); };
 	const auto Pawns = [this]() { return GetWorld()->GetSubsystem<USimPawnSubsystem>(); };
 	const auto ActorOf = [=]() -> ASimPawnActor* { return Pawns() ? Pawns()->FindPawn(State->Pawn) : nullptr; };
@@ -131,6 +148,24 @@ void USmokeTestSubsystem::BuildMotionPhases()
 				return;
 			}
 			B->Submit(colony::DraftCommand{State->Pawn, true});
+			const TWeakObjectPtr<USmokeTestSubsystem> Self(this);
+			*SampleHook = FWorldDelegates::OnWorldPostActorTick.AddLambda([Self, State, Sample](UWorld* World, ELevelTick, float)
+			{
+				const USmokeTestSubsystem* Smoke = Self.Get();
+				const USimPawnSubsystem* P = Smoke && World == Smoke->GetWorld() ? World->GetSubsystem<USimPawnSubsystem>() : nullptr;
+				const ASimPawnActor* Actor = P ? P->FindPawn(State->Pawn) : nullptr;
+				if (!Smoke || World != Smoke->GetWorld())
+				{
+					return;
+				}
+				Sample->bValid = Actor != nullptr;
+				if (Actor)
+				{
+					Sample->Local = MotionSmokeLocal(*Actor);
+					Sample->Hips = MotionSmokeHips(*Actor);
+					Sample->Actor = FVector2D(Actor->GetActorLocation());
+				}
+			});
 		};
 		Phase.WarmupSeconds = 3.0f;
 		Phase.MeasureSeconds = 0.5f;
@@ -159,9 +194,9 @@ void USmokeTestSubsystem::BuildMotionPhases()
 		Phase.OnFrame = [=]()
 		{
 			View();
-			if (const ASimPawnActor* Actor = ActorOf())
+			if (ActorOf() && Sample->bValid)
 			{
-				State->IdleOffset += MotionSmokeLocal(*Actor);
+				State->IdleOffset += Sample->Local;
 				++State->IdleSamples;
 			}
 		};
@@ -177,10 +212,12 @@ void USmokeTestSubsystem::BuildMotionPhases()
 		Phases.Add(MoveTemp(Phase));
 	}
 
-	for (const TCHAR* ClipName : {TEXT("Motion_Roll"), TEXT("Motion_StaggerBack"), TEXT("Motion_StaggerLeft"), TEXT("Motion_SidestepRight"), TEXT("Motion_KnockdownForward"),
-			 TEXT("Motion_Unarmed_Jab"), TEXT("Motion_Unarmed_Cross"), TEXT("Motion_Unarmed_Hook")})
+	const TCHAR* const MotionSmokeClips[] = {TEXT("Motion_Roll"), TEXT("Motion_StaggerBack"), TEXT("Motion_StaggerLeft"), TEXT("Motion_SidestepRight"),
+		TEXT("Motion_KnockdownForward"), TEXT("Motion_Unarmed_Jab"), TEXT("Motion_Unarmed_Cross"), TEXT("Motion_Unarmed_Hook")};
+	for (const TCHAR* ClipName : MotionSmokeClips)
 	{
 		const FString Name = ClipName;
+		const bool bLastClip = ClipName == MotionSmokeClips[UE_ARRAY_COUNT(MotionSmokeClips) - 1];
 		FPhase Phase;
 		Phase.Name = Name;
 		Phase.WarmupSeconds = 0.0f;
@@ -194,7 +231,7 @@ void USmokeTestSubsystem::BuildMotionPhases()
 			View();
 			USimSubsystem* B = Bridge();
 			ASimPawnActor* Actor = ActorOf();
-			if (!B || !B->GetSim() || !Actor)
+			if (!B || !B->GetSim() || !Actor || !Sample->bValid)
 			{
 				return;
 			}
@@ -222,9 +259,9 @@ void USmokeTestSubsystem::BuildMotionPhases()
 				return;
 			}
 			// The hips against the sim's position, less the idle pose's own offset.
-			const FVector2D Off = MotionSmokeLocal(*Actor) - State->IdleOffset;
-			const FVector2D Hips = MotionSmokeHips(*Actor);
-			const FVector2D At(Actor->GetActorLocation());
+			const FVector2D Off = Sample->Local - State->IdleOffset;
+			const FVector2D Hips = Sample->Hips;
+			const FVector2D At = Sample->Actor;
 			const double RawJump = State->bHaveLast ? FVector2D::Distance(Hips - State->LastHips, At - State->LastActor) : 0.0;
 			State->LastHips = Hips;
 			State->LastActor = At;
@@ -232,9 +269,11 @@ void USmokeTestSubsystem::BuildMotionPhases()
 			const bool bInClip = Actor->IsInMotionClip();
 			// A stalled frame (the harness's screenshot, about 0.1 s) and the one after it, when the sim catches up,
 			// are left out: the actor and the animation move on in different orders across a stall.
+			// The sample is from the end of the last frame, so a stall shows a frame later: two frames after it are left out.
 			const bool bStall = GetWorld()->GetDeltaSeconds() > 0.05f;
-			const bool bSkip = bStall || State->bAfterStall;
-			State->bAfterStall = bStall;
+			const bool bSkip = bStall || State->bStallBefore || State->bStallBefore2;
+			State->bStallBefore2 = State->bStallBefore;
+			State->bStallBefore = bStall;
 			const double Jump = bSkip || State->bPrevSkipped ? 0.0 : RawJump;
 			State->bPrevSkipped = bSkip;
 			if (bSkip)
@@ -274,6 +313,10 @@ void USmokeTestSubsystem::BuildMotionPhases()
 		};
 		Phase.Verify = [=, this]()
 		{
+			if (bLastClip)
+			{
+				FWorldDelegates::OnWorldPostActorTick.Remove(*SampleHook);
+			}
 			PhaseNumbers.Add(TEXT("simTravelCm"), State->Travel);
 			PhaseNumbers.Add(TEXT("maxHipsOffCm"), State->MaxOff);
 			PhaseNumbers.Add(TEXT("maxHipsOffAfterCm"), State->MaxOffAfter);

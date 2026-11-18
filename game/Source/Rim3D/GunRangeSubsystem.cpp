@@ -1337,7 +1337,8 @@ void UGunRangeSubsystem::DrawPanel()
 	}
 	const ImGuiWindowFlags Flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs;
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + 14.0f * Scale, Viewport->Pos.y + 14.0f * Scale), ImGuiCond_Always);
+	// Below the kill feed's corner (UKillFeedSubsystem draws up to six lines at the top left).
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + 14.0f * Scale, Viewport->Pos.y + 250.0f * Scale), ImGuiCond_Always);
 	ImGui::SetNextWindowBgAlpha(0.55f);
 	if (ImGui::Begin("##GunRange", nullptr, Flags))
 	{
@@ -1363,7 +1364,7 @@ void UGunRangeSubsystem::DrawPanel()
 		{
 			ImGui::TextUnformatted("Left mouse fire   Right mouse aim");
 		}
-		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("1-%s or wheel: weapon   K: new targets   F2 pause"), *KeyName(FMath::Max(0, Guns.Num() + Melee.Num() - 1)))));
+		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("1-%s or wheel: weapon   K: new targets   U: guards   F2 pause"), *KeyName(FMath::Max(0, Guns.Num() + Melee.Num() - 1)))));
 		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("V: first/third person   [ ] mouse speed %.2f"), AProtagonistPawn::GetMouseTurn())));
 		if (!SceneLine.IsEmpty())
 		{

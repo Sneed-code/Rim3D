@@ -184,7 +184,7 @@ struct FighterRules {
     float fleeSightRange = 40.0f;     // FleeOnSight runs from an enemy it sees this close
     // Sprinting (sneed, 2026-11-17): fighters sprint only to run from enemies or to close in for melee; otherwise they move at
     // their usual pace. The player's sprint is 1.5 times (ProtagonistPawn kSprintFactor); the AI's is the same.
-    float sprintFactor = 1.5f;
+    float sprintSpeedFactor = 1.3333333f;  // RimWorld LocomotionUrgency.Sprint: a move costs 0.75 of a jog
     float sprintChargeMin = 3.0f;     // a melee charge sprints while the target is further than this...
     float sprintChargeMax = 30.0f;    // ...and nearer than this       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
 };
@@ -217,9 +217,9 @@ public:
     void setWeather(const Weather* weather) { weather_ = weather; }
 
     // Sprinting now (sneed): running from enemies (routed, falling back, fleeing by its response, heading for shelter) or
-    // charging in to melee. The movement speed is times FighterRules sprintFactor. Never the player's pawn (its keys sprint).
+    // charging in to melee. The movement speed is times FighterRules sprintSpeedFactor. Never the player's pawn (its keys sprint).
     bool sprinting(Entity pawn) const;
-    float sprintFactor() const { return rules_.sprintFactor; }
+    float sprintFactor() const { return rules_.sprintSpeedFactor; }
 
     // The pawn's fight response (MeleeSystem keeps it); Attack without melee.
     FightResponse responseOf(Entity pawn) const;

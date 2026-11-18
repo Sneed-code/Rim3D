@@ -200,8 +200,41 @@ torsos, whole-corpse gibs) was never merged.
 - **Never** the protagonist, animals, mechanoids (bodies without zones).
 - **For drawing**: the snapshot's `severed` (SeveredBits: each forearm, arm, lower leg, leg, and the head), worked out
   from the lost parts, so a surgeon's amputation shows too.
-- Not yet: severed parts as items that decay over 2 days (and the head on a pike that turns to bone over 4), Unreal's
-  cut limbs, stump caps and ragdolls (PC).
+- **Severed pieces** (`HealthSystem::severedPieces`, `SeveredPiece`): each piece the killing blow took off is
+  remembered with an id, the body it came off, which piece it is (one SeveredBit) and where the body was. It rots away
+  after `zones.dismember.pieceDecayDays` (2 game days, looked at once a game minute). Saved (section `severed`),
+  hashed, and in the snapshot as `severedPieces` with `decay` 0 to 1. It is not a thing yet: nobody can pick it up.
+- Not yet: pieces as things to carry (the head trophy, and the head on a pike that turns to bone over 4 days), blood
+  and a flesh cap at the cut.
+
+## Part F as built (Unreal)
+
+- **The body** (`ASimPawnActor::ApplySevered`, `SeveredPieceActor.cpp`): for every bit in the snapshot's `severed`,
+  every skinned mesh of the pawn (body, clothes, face) hides the bone and all below it (`lowerarm`, `upperarm`,
+  `calf`, `thigh`, `head`), which folds that part of the mesh into the joint, so the limb is gone and the hole closes
+  on a point. What hangs on a socket of it (a hat, horns, a held thing) and the hair (for the head) is hidden.
+- **The piece** (`ASimPawnActor::SpawnSeveredPiece`, `ASeveredPieceActor`): when the snapshot first shows a piece, the
+  fight subsystem has its body throw it: a copy of each visible mesh (same materials and colours) as a poseable mesh,
+  the piece's bones where the body has them at that moment and every other bone folded into the cut. It is thrown up
+  and away from the body, tumbles, bounces on the sim's ground height and comes to rest (its own small sums: the
+  drawn ground has no physics shape). It goes when the sim drops the piece. Cosmetic: where it lands is not in the sim.
+- **Flesh and blood**: a ball of the blood drops' wet red (`M_BloodDrop`) sits over each stump (on the bone above
+  the cut, so it moves with the body) and over the cut end of each piece, sized to the limb. When the piece is thrown
+  the blood system gets a heavy cut at the stump (a gush along the limb that left, a bleeding wound, a pool), and a
+  small splash where the piece first lands.
+- **Clothes**: the piece copies every visible skinned mesh, so the sleeve, trouser leg, boot or hat comes off with
+  it, and the same garments are folded away on the body.
+- Bones are hidden (`HideBoneByName`) only on the mannequin and on meshes that show another's pose (clothes, a
+  MetaHuman body). A mesh with its own animation must not have bones hidden: the bone drops out of its pose and its
+  nodes read bone -1 (a crash). The MakeHuman body folds the bone at the end of its own animation
+  (`FMakeHumanSeverNode`, `SetSeveredBones`); a MetaHuman face is hidden whole when the head goes and still joins
+  the head's piece.
+- Corpses and the unconscious were already ragdolls (`StartRagdoll`); a cut limb's physics shapes stay on the ragdoll,
+  unseen.
+- Smoke test `hurt`, phase `dismember`: a 400 blow to the downed colonist's torso; the sim must take off the head and
+  four limbs and leave 5 pieces, the body must show the same bits with 5 flesh caps, 5 pieces must be drawn and come
+  to rest. The phase switches to the real, dressed bodies (`Pawns.MetaHumans 1`), where the pieces must have at least
+  two meshes each (skin and clothes).
 
 ## Later (sneed, 2026-11-16)
 

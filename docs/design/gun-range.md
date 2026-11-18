@@ -22,6 +22,11 @@ stand, the far four walk across the field and back. They are the player's own si
 shoot back. They are drawn by the game's usual pawn drawing: hit reactions, blood, wound decals and ragdolls when downed
 or killed (FightSubsystem). K brings a new group (N is the game's sleep key since the controls rework); a new group comes by itself as below.
 
+**Guards to sneak up on** (U, or `-GunRangeGuards` from the start; [stealth.md](stealth.md)): eight women who walk 3 m
+away from you and then become unaware guards of another side, backs turned. The sim's sight and hearing drive them: a
+"?" shows over one that is suspicious and a "!" when she is alerted, and then she comes at you with her fists. K brings
+the ordinary targets back.
+
 ## The arms and the gun
 
 Hung on the view camera, so they move with the gun kick and shake of the shooter feel:

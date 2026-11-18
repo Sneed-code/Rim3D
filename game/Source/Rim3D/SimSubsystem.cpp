@@ -14,6 +14,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
+#include "KeyBindings.h"
 #include "ProtagonistSubsystem.h"
 
 #include "ColonySim/Map.h"
@@ -819,7 +820,12 @@ bool USimSubsystem::HandleKey(const FKey& Key)
 	}
 	else if (Key == EKeys::F1)
 	{
-		GSimBridgeKeyHelp->Set(IsKeyHelpShown() ? 0 : 1, ECVF_SetByCode);
+		// While you are locked on to an enemy F1 (EndFocus, the default key) lets go instead (docs/design/focus.md).
+		const UProtagonistSubsystem* Protagonist = GetWorld() ? GetWorld()->GetSubsystem<UProtagonistSubsystem>() : nullptr;
+		if (!Protagonist || Protagonist->GetFocusTarget() == colony::kNoEntity || Rim3DKeys::Get(ERim3DAction::EndFocus) != EKeys::F1)
+		{
+			GSimBridgeKeyHelp->Set(IsKeyHelpShown() ? 0 : 1, ECVF_SetByCode);
+		}
 	}
 	else if (Key == EKeys::F5)
 	{

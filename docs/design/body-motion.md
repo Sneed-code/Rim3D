@@ -128,9 +128,13 @@ only the plain push uses; the clip is spread over start-up, roll and recovery, s
 
 Unreal (`ASimPawnActor::UpdateMotionClip`): plays the clip as a montage at the sim's `motionTime` and sets the mesh
 back by the drawn pelvis's own travel (read from the animation, times the montage's blend weight), so the hips sit on
-the sim position through blend-in and blend-out. The actor keeps the sim's facing while a clip plays. The smoke test
-`motion` (`tools\smoke.ps1 -Test motion`) measures pelvis against actor every frame: within 4 to 7 cm, no pop at
-the end.
+the sim position through blend-in and blend-out. The set-back reads the montage's moment and weight as they are when
+the pawns update (after the bodies' animation has moved on for the frame), which is what that frame draws. A clip that
+falls behind the sim's moment (a hit-stop froze it) plays faster until it is back, so an attack's blow still lands on
+its step. The actor keeps the sim's facing while a clip plays. The smoke test `motion` (`tools\smoke.ps1 -Test
+motion`) reads pelvis against actor at the end of every frame, as drawn (its own tick runs before the pawns'): within
+1 cm while a clip plays; in the 0.3 s after, up to about 10 cm, which is the pawn's walk pose as it turns back to its
+post, not the clip.
 
 ## Next
 
