@@ -6,6 +6,7 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Looks.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Replay.h"
@@ -392,4 +393,26 @@ TEST_CASE("Focus: focus, footwork and responses survive a save and a replay") {
     }
     CHECK(focus == 1);
     CHECK(response == 1);
+}
+
+TEST_CASE("Focus: a spawned pawn has a name for the HP bar and the kill feed, kept by a save") {
+    auto sim = focusTestSim(88);
+    sim->submit(SpawnThingCommand{"Human", CellPos{20, 20, 0}, 1});
+    sim->submit(SpawnThingCommand{"Human", CellPos{24, 20, 0}, 1});
+    sim->step();
+    std::vector<Entity> spawned;
+    for (const auto [e, looks] : sim->things().registry().view<const PawnLooks>().each()) {
+        spawned.push_back(e);
+    }
+    FOCUS_REQUIRE(spawned.size() == 2);
+    for (const Entity e : spawned) {
+        const std::string name = sim->feedName(e);
+        MESSAGE("spawned pawn named " << name);
+        CHECK_FALSE(name.empty());
+        CHECK(name != "Human");
+    }
+    SaveLoadResult loaded = loadSim(saveSim(*sim), focusTestDefs());
+    FOCUS_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+    CHECK(loaded.sim->feedName(spawned[0]) == sim->feedName(spawned[0]));
 }
