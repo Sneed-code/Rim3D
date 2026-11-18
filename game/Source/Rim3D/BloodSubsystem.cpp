@@ -1193,6 +1193,10 @@ void UBloodSubsystem::Land(const FDrop& Drop, const FVector& At, const FVector& 
 	{
 		if (SkinBlood && SkinBlood->CanPaint(Mesh))
 		{
+			if (Drop.RadiusCm < 0.25f)
+			{
+				return;  // fine spray: as dots all over a body it read as freckles (PC look, 2026-11-18)
+			}
 			// Into the skin: a small splash, longer the flatter it came in, with a short run if it was a big one.
 			FSkinBloodPaint Mark;
 			Mark.At = At - Along * (HalfLength - HalfWidth) * 0.5f;
@@ -1201,7 +1205,7 @@ void UBloodSubsystem::Land(const FDrop& Drop, const FVector& At, const FVector& 
 			Mark.Depth = 4.0f;
 			Mark.Core = FMath::Clamp(HalfWidth * 0.35f, 0.3f, 2.5f);
 			Mark.Soak = 0.0f;
-			Mark.Spatter = FMath::Clamp(HalfWidth * 0.9f, 0.0f, 6.0f);
+			Mark.Spatter = 0.0f;
 			Mark.Run = Drop.RadiusCm > 0.35f ? FMath::Clamp(HalfWidth * 1.5f, 0.0f, 8.0f) : 0.0f;
 			Mark.Strength = 0.9f;
 			SkinBlood->Paint(Mesh, Mark, Drop.Fluid, Clock);
