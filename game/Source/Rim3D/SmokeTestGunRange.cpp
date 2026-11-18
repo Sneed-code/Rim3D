@@ -1,7 +1,7 @@
 // The gun range (docs/design/gun-range.md): a first-person scene to play, not a check. The player's colonist (a random
 // creator woman) stands at one end of a cleared flat field with the guns of assets/guns.json in a rack; random creator
 // women stand and walk at 8 to 30 m. The sim does all the shooting, wounds, downing and dying; UGunRangeSubsystem draws
-// the arms and guns. N (or downing them all) brings a new group. -GunRangeScript runs a short tour by itself and saves
+// the arms and guns. K (or downing them all) brings a new group. -GunRangeScript runs a short tour by itself and saves
 // pictures to game/Saved/GunRange/ (each gun from the hip, aimed, firing and reloading, then a downed target).
 
 #include "SmokeTest.h"
@@ -542,13 +542,13 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			}
 		}
 
-		// N: a new group now. By itself only after everyone has been down a full minute (or dead for 20 seconds), so the
+		// K (N is sleep now): a new group now. By itself only after everyone has been down a full minute (or dead for 20 seconds), so the
 		// downed can still be shot and the bodies looked at (sneed: downed is not dead).
 		APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
 		const bool bAllDown = !State->Targets.IsEmpty() && Standing == 0;
 		State->AllDownFor = bAllDown ? State->AllDownFor + Dt : 0.0f;
 		const float NewGroupAfter = Downed == 0 ? 20.0f : 60.0f;
-		if (State->PendingSpawn == 0 && ((PC && PC->WasInputKeyJustPressed(EKeys::N)) || State->AllDownFor > NewGroupAfter))
+		if (State->PendingSpawn == 0 && ((PC && PC->WasInputKeyJustPressed(EKeys::K)) || State->AllDownFor > NewGroupAfter))
 		{
 			SpawnGroup();
 		}
