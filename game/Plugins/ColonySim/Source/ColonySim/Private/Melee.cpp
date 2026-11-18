@@ -682,8 +682,8 @@ void MeleeSystem::prepareDefense(Entity defender, Entity attacker, int stepsToHi
         now() < d.noDefendUntil) {
         return;
     }
-    if (combat_.apparelStats().activeShield(reg, defender) != kNoEntity && reg.all_of<Fighter>(defender)) {
-        return;  // the fighter AI raises the shield (shields.md)
+    if (combat_.apparelStats().activeShield(reg, defender) != kNoEntity && (reg.all_of<Fighter>(defender) || reg.all_of<Blocking>(defender))) {
+        return;  // the fighter AI raises the shield, or it is up already: the shield takes the blow, not a weapon parry (shields.md)
     }
     Rng rng(splitMix64(seed ^ 0xD0D6EULL ^ (uint64_t{entt::to_integral(defender)} << 32)));
     const float reaction = reactionSteps(defender) + (2.0f * rng.unit() - 1.0f) * rules_.reactionJitter;

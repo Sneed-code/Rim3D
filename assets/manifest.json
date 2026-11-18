@@ -179,6 +179,15 @@
       "installedTo": "assets/raw/guns/PumpShotgun/ (not in Git), imported to /Game/Rim3D/Generated/Guns by the GunArt commandlet (assets/guns.json)",
       "usedFor": "the gun range's pump shotgun (Gun_PumpShotgun)",
       "reinstall": "download the FBX from the Fab page above (model-12-pump-action-shotgun-free-standard.zip; unzip the inner source zip too), unzip it into assets/raw/guns/PumpShotgun/, then UnrealEditor-Cmd game/Rim3D.uproject -run=GunArt -unattended -nosplash"
+    },
+    {
+      "name": "Shield models (ours, made with Codex)",
+      "source": "tools/shield_models.py, a Blender script written by Codex (sneed's ChatGPT plan, 2026-11-16/17) that builds the 12 shields",
+      "licence": "ours",
+      "version": "12 GLBs SM_Shield_<Wood|Steel|Composite|Plasteel>_<Small|Medium|Tower>.glb, 60-400 KB each",
+      "installedTo": "game/Content/ThirdParty/Shields/ (not in Git), imported to /Game/Rim3D/Generated/Shields by the ShieldArt commandlet",
+      "usedFor": "the shields on the arm and back (Apparel_Shield* visual.models, docs/design/shields.md)",
+      "reinstall": "blender -b --python tools/shield_models.py -- game/Content/ThirdParty/Shields, then UnrealEditor-Cmd game/Rim3D.uproject -run=ShieldArt -unattended -nosplash -AllowCommandletRendering"
     }
   ]
 }
