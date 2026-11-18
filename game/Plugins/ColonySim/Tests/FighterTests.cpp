@@ -634,6 +634,10 @@ TEST_CASE("Fighters: a caravan guard standing by a colonist never swings at it; 
             // The colonist holds still: since real-time-combat.md an unarmed fighter sidesteps a swing it reads, and the
             // two would then stand out of each other's reach.
             sim->things().registry().emplace_or_replace<Stunned>(colonist, Stunned{5});
+            // Nor does a blow knock it out of reach (punches go at the head since lock-on.md, and throw it back).
+            Position& held = sim->things().registry().get<Position>(colonist);
+            held.x = 40.5f;
+            held.y = 40.5f;
             sim->step();
             for (const Event& e : sim->events()) {
                 swings += e.type == EventType::MeleeSwing && e.thing == guard && e.target == colonist ? 1 : 0;
