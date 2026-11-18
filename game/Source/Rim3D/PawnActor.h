@@ -199,6 +199,9 @@ public:
 	int32 GetMotionClipsPlayed() const { return MotionClipsPlayed; }
 	bool IsInMotionClip() const { return MotionClipDef != MAX_uint32; }
 	FVector GetMotionOffset() const { return MotionOffset; }
+	/** While an attack clip is on screen: the seconds of the clip still to play before its blow (negative once past it) and
+	 *  the rate it plays at. False when no clip with a blow is playing. */
+	bool GetMotionClipToHit(float& OutSeconds, float& OutRate) const;
 	float GetRollAngle() const { return RollAngle; }
 	int32 GetRollsSeen() const { return RollsSeen; }
 	/** 1 standing, 0.66 crouching, 0.24 lying: what weapon heights are scaled by. */
@@ -384,6 +387,8 @@ private:
 	// the visible body is set back so that its hips stay exactly on the sim's position while the clip carries them.
 	uint32 MotionClipDef = MAX_uint32;
 	float MotionClipTime = 0.0f;
+	float MotionClipFrom = 0.0f;  // the clip def's trim start and blow, in the animation's and the clip's seconds
+	float MotionClipHit = 0.0f;
 	TWeakObjectPtr<class UAnimMontage> MotionMontage;
 	TWeakObjectPtr<class UAnimSequence> MotionAsset;
 	int32 MotionPelvisBone = INDEX_NONE;

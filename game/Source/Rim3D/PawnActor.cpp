@@ -1330,6 +1330,8 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 	{
 		const float Want = Clip->from + Now.motionTime;
 		const float Rate = FMath::Max(0.05f, Now.motionRate);
+		MotionClipFrom = Clip->from;
+		MotionClipHit = Clip->hitSeconds;
 		if (MotionClipDef != Now.motionClip.value || Now.motionTime < MotionClipTime - 0.02f || !MotionMontage.IsValid() || !Anim->Montage_IsPlaying(MotionMontage.Get()))
 		{
 			MotionMontage = Anim->PlaySlotAnimationAsDynamicMontage(Asset, FAnimSlotGroup::DefaultSlotName, PawnMotionBlendIn, PawnMotionBlendOut, Rate, 1, -1.0f, Want);
@@ -1343,11 +1345,18 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 		}
 		else
 		{
-			// Kept in step with the sim: its rate, and its moment if the picture drifted (a pause, a hitch, a hit-stop).
-			Anim->Montage_SetPlayRate(MotionMontage.Get(), Rate);
-			if (FMath::Abs(Anim->Montage_GetPosition(MotionMontage.Get()) - Want) > 0.08f)
+			// Kept in step with the sim: its rate, and its moment if the picture drifted (a pause, a hitch, a hit-stop). A
+			// picture a little behind (a hit-stop froze it while the sim went on) plays faster until it is back, within about
+			// 0.1 s, so the blow still lands on its step; the sim's moment is whole steps, so a picture up to a step ahead is right.
+			const float Drift = Want - Anim->Montage_GetPosition(MotionMontage.Get());
+			if (FMath::Abs(Drift) > 0.08f)
 			{
 				Anim->Montage_SetPosition(MotionMontage.Get(), Want);
+				Anim->Montage_SetPlayRate(MotionMontage.Get(), Rate);
+			}
+			else
+			{
+				Anim->Montage_SetPlayRate(MotionMontage.Get(), Rate + FMath::Max(0.0f, Drift) / 0.1f);
 			}
 		}
 		MotionClipTime = Now.motionTime;
@@ -1368,10 +1377,9 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 	const UAnimSequence* ShownAsset = MotionAsset.Get();
 	if (Shown && ShownAsset && MotionPelvisBone != INDEX_NONE)
 	{
-		// The bones are drawn after the montage moves on by this frame's time, so the set-back is read there (else a long
-		// frame shows the hips ahead of the sim's position by that frame's travel).
-		const float Ahead = HitStopLeft > 0.0f ? 0.0f : GameDelta * Shown->GetPlayRate();
-		const double At = FMath::Clamp(static_cast<double>(Shown->GetPosition() + Ahead), 0.0, static_cast<double>(ShownAsset->GetPlayLength()));
+		// The pawns update after the bodies' animation has moved on for this frame (a tickable subsystem runs after the
+		// tick groups), so the montage's moment and weight now are the ones drawn this frame.
+		const double At = FMath::Clamp(static_cast<double>(Shown->GetPosition()), 0.0, static_cast<double>(ShownAsset->GetPlayLength()));
 		const FVector Travel = PawnMotionBoneAt(*ShownAsset, MotionPelvisBone, At) - MotionPelvisStart;
 		// The mannequin faces +Y in its own space and the actor +X, so the mesh's +Y is the actor's +X and its -X the
 		// actor's +Y (right); the body is scaled by the pawn's height, and so is its hips' travel.
@@ -1394,6 +1402,18 @@ void ASimPawnActor::BeginMeleeSwing(EMeleeStyle Style, float StepsToHit)
 {
 	Swing.Begin(Style, StepsToHit, StanceHeight);
 	SwingMismatch = 0.0f;
+}
+
+bool ASimPawnActor::GetMotionClipToHit(float& OutSeconds, float& OutRate) const
+{
+	const USimPawnAnimInstance* Anim = GetAnim();
+	if (!IsInMotionClip() || MotionClipHit <= 0.0f || !Anim || !MotionMontage.IsValid() || !Anim->Montage_IsPlaying(MotionMontage.Get()))
+	{
+		return false;
+	}
+	OutSeconds = MotionClipHit - (Anim->Montage_GetPosition(MotionMontage.Get()) - MotionClipFrom);
+	OutRate = FMath::Max(0.05f, Anim->Montage_GetPlayRate(MotionMontage.Get()));
+	return true;
 }
 
 void ASimPawnActor::MeleeHitMoment()
@@ -1671,8 +1691,7 @@ void ASimPawnActor::UpdateCrawl(const colony::ThingView& Now, float GameDelta)
 	}
 	if (Shown && CrawlClip && CrawlPelvisBone != INDEX_NONE && CrawlClip->GetPlayLength() > 0.1f)
 	{
-		const float Ahead = HitStopLeft > 0.0f ? 0.0f : GameDelta * Shown->GetPlayRate();
-		const double At = FMath::Fmod(static_cast<double>(Shown->GetPosition() + Ahead), static_cast<double>(CrawlClip->GetPlayLength()));
+		const double At = FMath::Fmod(static_cast<double>(Shown->GetPosition()), static_cast<double>(CrawlClip->GetPlayLength()));
 		const FVector Travel = PawnMotionBoneAt(*CrawlClip, CrawlPelvisBone, At) - CrawlPelvisStart;
 		CrawlOffset = FVector(-Travel.Y, Travel.X, 0.0) * Shown->GetWeight() * (bHasLooks ? Looks.Height : 1.0f);
 	}

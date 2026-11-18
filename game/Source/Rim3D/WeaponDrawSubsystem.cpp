@@ -210,6 +210,18 @@ void UWeaponDrawSubsystem::OnMeleeHit(const colony::Event& Event)
 			MaxStepsBehind = FMath::Max(MaxStepsBehind, Behind);
 			(Behind <= 2.5f ? HitsOnTime : HitsLate) += 1;
 		}
+		else if (float ToHit = 0.0f, Rate = 1.0f; Attacker->GetMotionClipToHit(ToHit, Rate))
+		{
+			// An attack clip (body-motion.md): the sim times it so its blow falls on this step. What is left of the clip
+			// before its blow, at the rate it plays, is how far behind the picture is.
+			const float Behind = FMath::Max(0.0f, ToHit) / Rate * colony::kStepsPerRealSecondAt1x;
+			MaxStepsBehind = FMath::Max(MaxStepsBehind, Behind);
+			(Behind <= 2.5f ? HitsOnTime : HitsLate) += 1;
+		}
+		else
+		{
+			HitsUntimed += 1;  // the body shows no swing to time (pushed into a stagger mid-swing, say)
+		}
 		Attacker->MeleeHitMoment();
 	}
 
