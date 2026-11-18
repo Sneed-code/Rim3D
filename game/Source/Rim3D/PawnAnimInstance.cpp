@@ -789,7 +789,7 @@ void FSimPawnLocomotionNode::Initialize_AnyThread(const FAnimationInitializeCont
 	FAnimNode_Base::Initialize_AnyThread(Context);
 	// The default of 4 blends at once was too few for motion matching's jumps: the oldest blend was dropped while it
 	// still showed, and the body popped.
-	BlendStack.MaxActiveBlends = PawnBlendStackMax;
+	BlendStack.SetMaxActiveBlends(PawnBlendStackMax);  // protected in UE 5.8: set through its setter
 	BlendStack.Initialize_AnyThread(Context);
 	History.Initialize_AnyThread(PawnHistoryPoses, PawnHistoryPoseInterval);
 	Trajectory.Samples.Reset();
