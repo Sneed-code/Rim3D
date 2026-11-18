@@ -106,7 +106,7 @@ Built (2026-11-18):
 - **Keys** (`UProtagonistSubsystem::UpdateFocus`): in direct control, `FocusNextTarget` (Tab) sends `FocusCommand Next`,
   `EndFocus` (F1) sends `Clear`; nothing with Settings > Controls "Lock-on focus" off, and turning it off while locked on
   lets go. While locked on F1 does not toggle the key help (`USimSubsystem::HandleKey`). The overseer switch is O.
-- **HP bar** top middle, under the clock (`DrawFocus`): the target's name (colonist name, else its kind) and a red bar of
+- **HP bar** top middle, under the clock (`DrawFocus`): the target's name (`Sim::feedName`: a colonist's or raider's name, a named animal's, a spawned pawn's `PawnLooks::name`, else its kind) and a red bar of
   `lowestPart` with the percentage.
 - **Marker**: a small dot on the target's chest (low over a body on the ground), `GetFocusPoint`.
 - **Camera** (`AProtagonistPawn::FollowFocus`): the view turns to keep the focus ahead, 360 degrees a second in third
