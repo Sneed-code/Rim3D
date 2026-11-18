@@ -2,7 +2,7 @@
 // creator woman) stands at one end of a cleared flat field with the guns of assets/guns.json in a rack; random creator
 // women stand and walk at 8 to 30 m. The sim does all the shooting, wounds, downing and dying; UGunRangeSubsystem draws
 // the arms and guns. K (or downing them all) brings a new group. -GunRangeScript runs a short tour by itself and saves
-// pictures to game/Saved/GunRange/ (each gun from the hip, aimed, firing and reloading, then a downed target).
+// pictures to game/Saved/GunRange/ (each gun from the hip, aimed, firing and cooling down, then a downed target).
 
 #include "SmokeTest.h"
 #include "Camera/CameraActor.h"
@@ -565,7 +565,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		{
 			return;
 		}
-		// The tour: each gun from the hip, aimed, firing at the nearest standing woman, reloading; then down one.
+		// The tour: each gun from the hip, aimed, firing at the nearest standing woman, its cooldown bar; then down one.
 		UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>();
 		AProtagonistPawn* Body = P->GetBody();
 		if (!Fight || !Body)
@@ -661,22 +661,18 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				if (State->StepTime > 2.0f)
 				{
 					Body->SetScriptedAim(false);
-					Fight->Reload();
+					Notes.Add(FString::Printf(TEXT("gunrange: gun %d fired %d shots in 2 s (no reloads: bursts and a cooldown)"), State->Gun + 1,
+						G->GetShotsSeen() - State->Shots));
 					Next(3);
 				}
 				break;
-			case 3:  // reload: pictures at a third and two thirds of it
-				if (G->GetReloadFraction() > 0.33f && State->Shots >= 0)
+			case 3:  // the cooldown: the thin yellow refill bar under the gun's name (no reloads, sneed 2026-11-17)
+				if (State->StepTime > 0.4f && State->Shots >= 0)
 				{
-					Picture(*FString::Printf(TEXT("gun%d_reload_a"), State->Gun + 1));
+					Picture(*FString::Printf(TEXT("gun%d_cooldown"), State->Gun + 1));
 					State->Shots = -1;
 				}
-				if (G->GetReloadFraction() > 0.66f && State->Shots == -1)
-				{
-					Picture(*FString::Printf(TEXT("gun%d_reload_b"), State->Gun + 1));
-					State->Shots = -2;
-				}
-				if (State->StepTime > 6.0f || (State->StepTime > 1.0f && G->GetReloadFraction() < 0.0f))
+				if (State->StepTime > 1.5f)
 				{
 					++State->Gun;
 					Next(State->Gun < GunCount ? 0 : 4);
