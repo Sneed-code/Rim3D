@@ -10,7 +10,7 @@
     "note": "Wiki-checked 2026-10-28: range 32.9, minimum 8.9, burst of 3, 17 ticks apart, cooldown 210 ticks, accuracy 28/72/66/50%. Times are ticks / 2 (steps). The wiki gives no warm-up: 1.5 s is a guess."
   },
   {
-    "defName": "Gun_UraniumSlugTurret", "label": "uranium slug turret gun", "source": "RimWorld wiki",
+    "defName": "Gun_UraniumSlugTurret", "keepBurst": true, "label": "uranium slug turret gun", "source": "RimWorld wiki",
     "category": "Item", "stackLimit": 1, "turretGun": true,
     "visual": { "sound": { "shot": "Shot_Turret" }, "parts": [{ "shape": "box", "size": [1.2, 0.12, 0.12], "at": [0.3, 0, 0.04], "color": [0.18, 0.2, 0.18] }] },
     "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 120, "accuracyTouch": 0.22, "accuracyShort": 0.33, "accuracyMedium": 0.44, "accuracyLong": 0.95 },

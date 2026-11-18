@@ -60,7 +60,45 @@ the line clears (`CombatSystem` firing step, both numbers ours). In the year run
 colonists' shots and more hit the ground in front of them (C25). Test: a skill 20 rifleman at 12 m against a pawn
 crouched behind a 0.9 m crest put 0 of 34 shots into the crest and hit 28; aimed at the chest, the line ran into it.
 
-## Magazines and reloading
+## Cooldown bursts (sneed, 2026-11-17)
+
+sneed found the guns too slow and jarring, so guns no longer reload. `CombatRules` `cooldownBursts`
+(`shotsFactor` 3, `gapFactor` 0.5, `reloads` false) turns every gun's burst into a **store of shots**:
+
+- **Three times the shots.** The store holds the def's `burstShotCount` times 3: autopistol 3 (it
+  fired one), assault rifle 9, LMG 18, minigun 75. Guns marked `keepBurst` keep their own count:
+  bolt-action and sniper rifle, charge lance, needle gun, bows, pila, the launchers, the uranium slug
+  turret, the mortar and the rocketswarm, with their gaps. A one-shot gun has a store of 1.
+- **Half the gap.** Shots of the store come at least `secondsBetweenBurstShots` x 0.5 steps apart
+  (at least 1); a gun that used to fire one shot gets half its cooldown as the gap, so the autopistol
+  fires every 15 steps (half a second), almost semi-automatic.
+- **A hidden cooldown from the first shot.** The first shot from a full store starts the gun's
+  cooldown (`rangedWeaponCooldown`, slowed by worn armour and tiredness, quicker in a shooting
+  frenzy). Later shots don't add to it. When it runs out the store is full again, however many
+  shots were fired. sneed's example: a 3-shot gun with a 2 s cooldown fires once, waits 1 s, fires
+  again: the store is full 1 s later. An empty store waits for the rest of the cooldown.
+- **Who fires how.** The player fires one shot per pull, and holding the trigger fires one every gap
+  until the store is empty. A fighter fires all that is left in the store as one burst (after its
+  aiming time, as before), then waits for the refill (`shotReadyIn` counts it, so it ducks back into
+  cover).
+- **No reloads.** `magazineSize` and `reloadTime` stay in the defs but are not read while `reloads`
+  is false: the snapshot's `magazineSize` is 0, `Reload` is refused, and the reload paths below are
+  idle.
+- **Turrets** get the same shots and gaps; their cooldown counts from the burst's first shot.
+- **Ranged damage is halved for now** to make up for it: `data/tuning.json` multiplies every
+  projectile's `damageAmountBase` by 0.5 (bullets, arrows, the pila; explosions keep theirs).
+
+State: `Shooter::stored` (-1 full), `refill`, `refillFrom` and `storeGun` (another weapon in the
+hands starts full), saved in the `combat` section from version 5. The snapshot has `shotStore`,
+`shotStoreSize`, `refillLeft` and `refillSteps` for the player's **thin yellow bar** under the gun's
+name: full while the gun is full, empty after the first shot and filling over the cooldown like a
+stamina bar, with a pip per shot left under it. Tests: "Cooldown bursts" in `Tests/AimingTests.cpp`.
+
+On screen the flash and the tracer now start at the **drawn gun's muzzle** (the first-person view
+gun's `muzzle` from `assets/guns.json`, else the front of the gun mesh in the pawn's hands) and fly
+to where the sim's bullet lands (`UFightSubsystem::FindDrawnMuzzle`).
+
+## Magazines and reloading (off while cooldown bursts are on)
 
 Each gun has `magazineSize` rounds and a `reloadTime` in steps (ours, roughly real guns at
 RimWorld's pace):

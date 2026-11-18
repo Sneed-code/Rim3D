@@ -142,6 +142,8 @@ public:
 
 	// For the smoke test.
 	bool IsViewShown() const { return bShown; }
+	/** The first-person view gun's muzzle in the world (its guns.json `muzzle`), false while no view gun is drawn. */
+	bool GetViewMuzzle(FVector& Out) const;
 	int32 GetCurrentGun() const { return Current; }
 	bool HasModel(int32 Index) const;
 	int32 GetShotsSeen() const { return ShotsSeen; }

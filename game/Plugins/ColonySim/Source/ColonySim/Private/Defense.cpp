@@ -345,7 +345,10 @@ void DefenseSystem::stepTurret(Entity building, Turret& turret, Rng& rng) {
                 turret.stepsLeft = std::max(1, gun.burstGap);
             } else {
                 turret.phase = TurretPhase::Cooling;
-                turret.stepsLeft = gun.cooldown;
+                // Cooldown bursts (sneed): the cooldown counted from the burst's first shot.
+                turret.stepsLeft = combat_.cooldownBursts()
+                                       ? std::max(1, gun.cooldown - (gun.burst - 1) * std::max(1, gun.burstGap))
+                                       : gun.cooldown;
                 turret.target = kNoEntity;
             }
             return;

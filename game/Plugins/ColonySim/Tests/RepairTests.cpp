@@ -371,10 +371,13 @@ TEST_CASE("Repair: a machining table fits a scope and an extended magazine, whic
     sim.step();
     CHECK(repairFailed(sim));
 
-    // The extended magazine: 5 rounds become 8 (7.5 rounded), reloading takes longer.
+    // The extended magazine: with cooldown bursts (no reloads) it holds more shots in the gun's store, the bolt-action
+    // rifle's one becoming two (at least one more).
+    int stored = 0, size = 0, left = 0, from = 0;
     sim.submit(CarryWeaponCommand{pawn, rifle});
     sim.step();
-    CHECK(sim.combat().magazineSize(pawn) == 5);
+    REPAIR_REQUIRE(sim.combat().shotStore(pawn, stored, size, left, from));
+    CHECK(size == 1);
     const Entity bare = repairSpawn(sim, "Gun_BoltActionRifle", CellPos{21, 19, 0});
     sim.submit(FitUpgradeCommand{bare, "WeaponPart_ExtendedMagazine", true});
     sim.step();
@@ -382,8 +385,9 @@ TEST_CASE("Repair: a machining table fits a scope and an extended magazine, whic
     REPAIR_REQUIRE(repairRunUntil(sim, 4000, [&] { return !sim.repair().fitted(bare).empty(); }) >= 0);
     sim.submit(CarryWeaponCommand{pawn, bare});  // replaces the first in the Primary slot
     sim.step();
-    CHECK(sim.combat().magazineSize(pawn) == 8);
-    CHECK(sim.combat().roundsLeft(pawn) == 8);  // a gun never fired is full to its new size
+    REPAIR_REQUIRE(sim.combat().shotStore(pawn, stored, size, left, from));
+    CHECK(size == 2);
+    CHECK(stored == 2);  // a gun never fired is full to its new size
 
     // The snapshot lists the parts.
     Snapshot snapshot;
@@ -444,7 +448,9 @@ TEST_CASE("Repair: fitted parts change how the gun shoots: magazine, reload, rec
     const Entity rifle = repairSpawn(sim, "Gun_AssaultRifle", CellPos{21, 20, 0});
     sim.submit(CarryWeaponCommand{pawn, rifle});
     sim.step();
-    CHECK(sim.combat().magazineSize(pawn) == 30);
+    int stored = 0, size = 0, left = 0, from = 0;
+    REPAIR_REQUIRE(sim.combat().shotStore(pawn, stored, size, left, from));
+    CHECK(size == 9);
     // Fit by hand (the job is tested above): scope and long barrel, then a magazine.
     entt::registry& reg = sim.things().registry();
     sim.repair().finishFit(rifle, repairDef(sim, "WeaponPart_Scope"));
@@ -455,7 +461,8 @@ TEST_CASE("Repair: fitted parts change how the gun shoots: magazine, reload, rec
     CHECK(mods.accuracy == doctest::Approx(1.05f * 1.05f));
     CHECK(mods.magazine == doctest::Approx(1.5f));
     CHECK(mods.reload == doctest::Approx(1.2f));
-    CHECK(sim.combat().magazineSize(pawn) == 45);
+    REPAIR_REQUIRE(sim.combat().shotStore(pawn, stored, size, left, from));
+    CHECK(size == 14);  // 9 x 1.5, rounded
 }
 
 TEST_CASE("Repair: the commands go through replay files, the same commands give the same game, and a save keeps parts and marks") {

@@ -281,6 +281,10 @@ public:
     uint64_t plans() const { return plans_; }
     uint64_t sightChecks() const { return sightChecks_; }
 
+    // Cooldown bursts: a fighter's whole store goes in one burst, so each shot after the first asks again whether a
+    // friend (or a tame animal) has come into the line to `target`; true holds the rest (CombatSystem::setHoldFire).
+    bool friendInLineNow(Entity shooter, Entity target) const;
+
 private:
     struct PawnInfo {
         Entity pawn = kNoEntity;
@@ -328,7 +332,8 @@ private:
     bool fireAt(Entity pawn, const PawnInfo& target);
     // Whether the fighter takes on turrets: only one with a gun that isn't set on melee.
     bool shootsTurrets(Entity pawn) const;
-    bool friendInLine(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target) const;
+    // `live`: read everyone's position now rather than at the last plan (a fighter's burst under way).
+    bool friendInLine(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target, bool live = false) const;
     void walkToSpot(Entity pawn, Fighter& f);
     void stepTo(Entity pawn, CellPos cell);
     void stop(Entity pawn, Fighter& f);
