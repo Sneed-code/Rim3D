@@ -507,7 +507,13 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 	if (Bridge->GetSim()->controlledPawn() == Controlled)
 	{
 		Body->FollowSim(FVector2D(View->x, View->y), View->level, View->climb > 0.0f);
-		if (!Body->IsClimbing() && Body->Reconcile(FVector2D(View->x, View->y)))
+		if (!Body->IsClimbing() && (View->motionClip.valid() || View->motionPush) && !View->motionFreeFeet && View->rollPhase == 0)
+		{
+			// A stagger or a knockdown carries the colonist: the keys wait and the body is where the sim's clip takes it,
+			// so nothing snaps back a metre when it ends. (The player's own swings leave the feet to the keys.)
+			Body->SetSimPosition(FVector2D(View->x, View->y));
+		}
+		else if (!Body->IsClimbing() && Body->Reconcile(FVector2D(View->x, View->y)))
 		{
 			++ReconcileCount;
 		}
