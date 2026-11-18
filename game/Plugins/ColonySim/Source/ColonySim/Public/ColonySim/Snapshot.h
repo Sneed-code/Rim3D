@@ -3,6 +3,7 @@
 #include "ColonySim/Api.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/BillMode.h"
+#include "ColonySim/CorpseStage.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/Entity.h"
@@ -69,6 +70,17 @@ struct ThingView {
     // stays where it fell. A full health report is `Sim::healthReport`.
     bool downed = false;
     bool dead = false;
+    // Dead bodies (docs/design/spoilage.md "Corpses"): rot-days so far, the rot stage, and the flies and
+    // maggots to draw on it, 0 none to 1 a full swarm; `fliesFlying` is the share of the flies on the
+    // wing (the rest sit on the body). All 0 and None for the living, machines and a body not yet looked at.
+    float corpseDays = 0.0f;
+    CorpseStage corpseStage = CorpseStage::None;
+    float flies = 0.0f;
+    float fliesFlying = 0.0f;
+    float maggots = 0.0f;
+    // Pawns: health of its worst body part, 0 to 1 (a body zone's for people, else its most hurt part's): the focus HP bar
+    // (sneed, docs/design/focus.md). Pawns the player is focused on and the player's own pawn only; 1 for the rest.
+    float lowestPart = 1.0f;
     // Pawns: the job they are on (docs/design/jobs.md) and what it is about, and what they carry.
     JobType job = JobType::None;
     uint32_t area = 0;  // the allowed area a pawn is limited to (AreaView::id), 0 for none
@@ -134,6 +146,12 @@ struct ThingView {
     int rounds = 0;
     int magazineSize = 0;
     bool reloading = false;
+    // sneed's cooldown bursts (docs/design/aiming.md): shots left in the gun's store of `shotStoreSize`, and the steps
+    // until it is full again of the `refillSteps` it started at (both 0 when full). For the player's yellow bar.
+    int shotStore = 0;
+    int shotStoreSize = 0;
+    int refillLeft = 0;
+    int refillSteps = 0;
     // The player's gun kick (P2, docs/design/shooter-feel.md): where the shots are going above and to
     // the right of where the player aims, in degrees, from the last shots; it wears off by itself. The
     // camera shows the same offset. Zero for everyone else.
@@ -174,6 +192,12 @@ struct ThingView {
     Entity fightTarget = kNoEntity;
     CellPos fightSpot;
     bool fallingBack = false;
+    // Stealth (docs/design/stealth.md), for fighters: 0 unaware, 1 suspicious, 2 alerted, and where it last noticed
+    // something (for a "?" or "!" over its head and the way it looks).
+    uint8_t alert = 2;
+    bool hasSuspect = false;
+    float suspectX = 0.0f;
+    float suspectY = 0.0f;
     // F6 (docs/design/raids.md): the colony's colonists' defense role (0 Defender, 1 Shelter, 2 Keep
     // working); whether the alarm called it up; a fighter heading for a shelter or fleeing the map;
     // and for raiders their squad (0 for none).
@@ -195,6 +219,10 @@ struct ThingView {
     // F10 (docs/design/field-care.md): defenseRole 3 is Medic and 4 Firefighter; a fighter carrying a downed friend
     // to cover has it in `rescuing` (the friend's position follows the fighter's after the LiftPawn action).
     Entity rescuing = kNoEntity;
+    // Carrying a body on the back (docs/design/weapon-hold.md): the downed pawn or corpse this pawn carries now (a
+    // fighter's rescue once lifted, or a rescue, capture or corpse-hauling job), and on the carried one, who carries it.
+    Entity carryingPawn = kNoEntity;
+    Entity carriedBy = kNoEntity;
     // Humanlike pawns: their looks, Snapshot::looks[looks]; -1 for other things.
     int32_t looks = -1;
     // Pawns with a body (docs/design/wounds.md): their wounds and lost parts that show on the skin, `woundCount` from
@@ -243,11 +271,32 @@ struct ThingView {
     int meleeStepsLeft = 0;
     Entity meleeTarget = kNoEntity;
     bool blocking = false;
+    uint16_t severed = 0;    // the limbs it has lost, SeveredBits (Health.h; body-health.md part F): Unreal hides them and caps the stump
+    // Focus and footwork (docs/design/focus.md): the swing under way goes down at a body on the ground (a downward poke,
+    // smash or hack); the pawn it is locked on to (it faces it; the player's lock-on camera follows it when focusPlayer);
+    // stepping round or back from its enemy (a strafe or back step, facing the focus); what it does about enemies.
+    bool meleeLow = false;
+    Entity focusTarget = kNoEntity;
+    bool focusPlayer = false;
+    bool footwork = false;
+    FightResponse fightResponse = FightResponse::Attack;
+    bool sprinting = false;  // an AI fighter sprinting away from enemies or in to melee (1.5x its pace; focus.md)
     bool crawling = false;   // downed by the torso and awake: Unreal plays a crawl when it moves (body-health.md part D)
     // Pawns in water (docs/design/water.md): metres of water over the ground at their feet (the surface is z + waterDepth),
     // and whether it is past their shoulders, so they swim (a swim animation, the body floating at the surface).
     float waterDepth = 0.0f;
     bool swimming = false;
+    // Pawns: dirt and blood on the body, its clothes and its melee weapon (docs/design/grime.md), each 0 clean to 1.
+    // The blood is the Filth def `bloodFilth` (its `look` has the wet and dry colours) and `bloodAge` game seconds old
+    // (it dries from wet to dry over Blood.DryMinutes); the weapon's likewise. A def that is not valid: no blood.
+    float dirtLegs = 0.0f;
+    float dirtBody = 0.0f;
+    float blood = 0.0f;
+    DefId bloodFilth;
+    float bloodAge = 0.0f;
+    float weaponBlood = 0.0f;
+    DefId weaponBloodFilth;
+    float weaponBloodAge = 0.0f;
     int patchZone = -1;      // patching this body zone itself (body-health.md part B), -1 when not patching
     int patchStepsLeft = 0;
     // Turrets and traps (docs/design/defense.md). A turret: what it is doing (a TurretPhase number) and the pawn it
@@ -399,6 +448,19 @@ struct VisitView {
 // 1 through it (1 while landed). (x, y) is the footprint's middle in metres and `ground` the ground height there; `rot` is the
 // Rot4 (0 North: the nose points to +y, the door is on the -x side). `building` is the impassable Things building it stands
 // as. Unreal draws the flight path, the thrusters, the flames and the dust from these.
+// A severed limb or head on the ground (body-health.md part F): which piece (a SeveredBit, Health.h), the body it came off
+// (for its looks; the body may be gone), where it fell and how far it has rotted (0 fresh to 1 gone). Unreal drops a
+// physics prop there; where the prop comes to rest is its own business.
+struct SeveredPieceView {
+    uint32_t id = 0;
+    Entity from = kNoEntity;
+    uint16_t bit = 0;
+    float x = 0.0f;
+    float y = 0.0f;
+    int level = 0;
+    float decay = 0.0f;
+};
+
 struct ShuttleView {
     uint32_t id = 0;
     Entity building = kNoEntity;
@@ -559,6 +621,7 @@ struct FilthView {
     CellPos cell;
     DefId def;  // a Filth def
     int thickness = 1;
+    float age = 0.0f;  // game seconds since it was last added to (blood dries and fades by it)
 };
 
 // A fire in a cell, its size 0 to 1.75 (docs/design/fire.md).
@@ -794,6 +857,7 @@ struct Snapshot {
     std::vector<CellPos> landingZone;
     uint64_t landingZoneChanges = ~0ULL;
     std::vector<ShuttleView> shuttles;
+    std::vector<SeveredPieceView> severedPieces;  // by id
     // The colony alarm (docs/design/raids.md): on, and whether the player sounded it (only the
     // player stops that one); the raid squads on the map.
     bool alarm = false;

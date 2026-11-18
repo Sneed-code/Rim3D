@@ -172,6 +172,8 @@ enum class EventType : uint8_t {
     Lovin,                 // `thing` and `target` the partners; `message` "started" (`amount` its seconds), "done" or "interrupted"
     PawnStaggered,         // a bullet staggered `thing` (AN1, docs/design/combat.md "Stagger"): it walks slowly for `amount` steps; (x, y) where
     ShieldBlocked,         // a hit landed on `thing`'s raised shield `target` (docs/design/shields.md): `amount` it took off, `message` "stopped" (all of it) or "softened"; (x, y) where
+    // Dismemberment (docs/design/body-health.md part F).
+    PawnDismembered,       // the blow that killed `thing` took a piece off it: `part` the body part that went (a PawnPartLost came just before), `amount` the damage beyond what the zone had left, `message` "left forearm", "right arm", "left lower leg", "right leg" or "head"; a torso that comes apart sends one for the head and each limb it still had
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -231,6 +233,9 @@ enum class PawnAction : uint8_t {
     TakeCover,    // a working colonist hurt by `target` dropped its job: `message` "fights back" or "runs" (real-time-combat.md)
     Patch,        // patching a bleeding body zone itself (body-health.md): `part` the zone, `message` "patching" (`amount` steps
                   // it takes) or "patched" (`count` 1)
+    Alert,        // a fighter's alert state changed (stealth.md): `amount` 0 unaware, 1 suspicious, 2 alerted; `message` why
+                  // ("saw", "glimpsed", "heard steps", "heard a shot", "called", "site raised", "calm"...); (x, y) where it
+                  // noticed something, if it did
 };
 
 // One flat struct for every event type; each type uses only the fields named for it.
@@ -318,6 +323,13 @@ struct Event {
     float y = 0.0f;
     float z = 0.0f;
     ProjectileHitKind hit = ProjectileHitKind::None;
+    // MeleeHit, for its sound (docs/design/sound.md "Melee by material"): `stuff` what the weapon is made of (invalid for
+    // fists, teeth or a weapon of no stuff, whose def then says), and what the blow struck when it was not flesh: the
+    // parrying weapon, the raised shield, the armour piece that turned it or the building, as `struckDef` and its
+    // `struckStuff` (invalid when it has none). A blow into natural rock has `hit` Rock and neither.
+    DefId stuff;
+    DefId struckDef;
+    DefId struckStuff;
     // MeleeSwing: `thing` the attacker, `target` whom it swings at (none: straight ahead), `def` its
     // melee weapon's Things def (or its own def for fists, teeth...), `message` the tool ("blade",
     // "left fist"), `amount` steps to the hit moment, `cell` where it stands. MeleeHit: the same

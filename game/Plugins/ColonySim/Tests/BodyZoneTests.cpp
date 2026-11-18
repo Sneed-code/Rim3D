@@ -122,6 +122,22 @@ TEST_CASE("Body zones: a person has a head, a torso, two arms and two legs, with
     }
     CHECK(sim->health().blood(pawn) == doctest::Approx(3000.0f));
     CHECK_FALSE(sim->health().unconscious(pawn));
+    // Each part knows its zone, the left arm and leg before the right (Unreal shows a hit on the zone it landed in).
+    const std::vector<std::string> order = sim->health().zoneNames(pawn);
+    const int leftArm = sim->health().partZone(pawn, zoneTestPart(*sim, pawn, "left shoulder"));
+    const int rightArm = sim->health().partZone(pawn, zoneTestPart(*sim, pawn, "right shoulder"));
+    const int leftLeg = sim->health().partZone(pawn, zoneTestPart(*sim, pawn, "left leg"));
+    const int rightLeg = sim->health().partZone(pawn, zoneTestPart(*sim, pawn, "right leg"));
+    CHECK(leftArm >= 0);
+    CHECK(leftArm < rightArm);
+    CHECK(leftLeg >= 0);
+    CHECK(leftLeg < rightLeg);
+    if (leftArm >= 0 && rightLeg >= 0 && static_cast<size_t>(rightLeg) < order.size()) {
+        CHECK(order[static_cast<size_t>(leftArm)] == "Arm");
+        CHECK(order[static_cast<size_t>(rightLeg)] == "Leg");
+    }
+    CHECK(order[static_cast<size_t>(sim->health().partZone(pawn, zoneTestPart(*sim, pawn, "heart")))] == "Torso");
+    CHECK(sim->health().partZone(pawn, -1) == -1);
 
     // Animals keep RimWorld's rules.
     const Entity muffalo = sim->things().spawn("Muffalo", CellPos{20, 20, 0});
@@ -527,7 +543,7 @@ TEST_CASE("Body zones: a person on their feet limps at 40% or better, however mu
     const Health& h = sim->things().registry().get<Health>(pawn);
     MESSAGE("pain " << h.pain << ", moving " << h.movingFactor);
     CHECK_FALSE(sim->health().incapacitated(pawn));
-    CHECK(h.movingFactor >= 0.4f - 1e-4f);
+    CHECK(h.movingFactor >= 0.4f * h.limbMove - 1e-4f);
 }
 
 // ---- Part D: crawling away.
@@ -572,4 +588,352 @@ TEST_CASE("Crawling: the snapshot tells Unreal who crawls") {
     const ThingView* view = snap.find(pawn);
     CHECK(view != nullptr);
     CHECK((view != nullptr && view->crawling));
+}
+
+// ---- Part F: dismemberment -------------------------------------------------------------------------
+
+namespace {
+
+// The messages of the events of one type about one pawn, in order.
+std::vector<std::string> zoneTestMessages(const Sim& sim, Entity pawn, EventType type) {
+    std::vector<std::string> out;
+    for (const Event& e : sim.events()) {
+        if (e.type == type && e.thing == pawn) {
+            out.push_back(e.message);
+        }
+    }
+    return out;
+}
+
+}  // namespace
+
+// How much of a zone is left, 0 to 1.
+float zoneTestLeft(const Sim& sim, Entity pawn, const std::string& name, int nth = 0) {
+    const int zone = zoneTestZone(sim, pawn, name, nth);
+    const Health& health = zoneTestHealth(sim, pawn);
+    return zone >= 0 && static_cast<size_t>(zone) < health.zones.size() ? health.zones[static_cast<size_t>(zone)] : -1.0f;
+}
+
+TEST_CASE("Death (sneed's rule): the head or the torso at 0 kills; so do two limbs at 0 with the head or torso at half") {
+    SUBCASE("the torso at 0") {
+        auto sim = zoneTestSim();
+        const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 90.0f, "torso"));
+        CHECK_FALSE(zoneTestHealth(*sim, pawn).dead);
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 12.0f, "torso"));
+        CHECK(zoneTestHealth(*sim, pawn).dead);
+        CHECK(zoneTestMessages(*sim, pawn, EventType::PawnDied).size() == 1);
+        // 2 over what was left: nothing comes off.
+        CHECK(zoneTestMessages(*sim, pawn, EventType::PawnDismembered).empty());
+        CHECK(sim->health().severed(pawn) == 0);
+    }
+    SUBCASE("the head at 0") {
+        auto sim = zoneTestSim();
+        const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 45.0f, "head"));
+        CHECK_FALSE(zoneTestHealth(*sim, pawn).dead);
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 8.0f, "head"));
+        CHECK(zoneTestHealth(*sim, pawn).dead);
+        CHECK(sim->health().severed(pawn) == 0);
+    }
+    SUBCASE("two limbs at 0 are not enough with the head and the torso over half") {
+        auto sim = zoneTestSim();
+        const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 60.0f, "left arm"));
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 60.0f, "right arm"));
+        CHECK(zoneTestLeft(*sim, pawn, "Arm", 0) == doctest::Approx(0.0f));
+        CHECK(zoneTestLeft(*sim, pawn, "Arm", 1) == doctest::Approx(0.0f));
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 49.0f, "torso"));
+        CHECK_FALSE(zoneTestHealth(*sim, pawn).dead);
+        // The arms are still on: nothing is cut from the living.
+        CHECK(sim->health().severed(pawn) == 0);
+        CHECK(zoneTestMessages(*sim, pawn, EventType::PawnDismembered).empty());
+        // The torso at half: dead.
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 1.0f, "torso"));
+        CHECK(zoneTestHealth(*sim, pawn).dead);
+    }
+    SUBCASE("the torso at half, then an arm and a leg") {
+        auto sim = zoneTestSim();
+        const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 50.0f, "torso"));
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 55.0f, "left arm"));
+        CHECK_FALSE(zoneTestHealth(*sim, pawn).dead);
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 80.0f, "right leg"));
+        CHECK(zoneTestHealth(*sim, pawn).dead);
+        // 5 over a leg's 75 is under a quarter of it.
+        CHECK(sim->health().severed(pawn) == 0);
+    }
+    SUBCASE("one limb at 0 never kills") {
+        auto sim = zoneTestSim();
+        const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 60.0f, "torso"));
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 500.0f, "left arm"));
+        CHECK_FALSE(zoneTestHealth(*sim, pawn).dead);
+        CHECK(sim->health().severed(pawn) == 0);
+    }
+}
+
+TEST_CASE("Hurt limbs (sneed's rule): arms under half slow attacks, legs under half the walk, half a percent a percent") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
+    CHECK(sim->health().attackSpeedFactor(pawn) == doctest::Approx(1.0f));
+    // Half an arm left: nothing yet.
+    CHECK(zoneTestHit(*sim, pawn, "Blunt", 25.0f, "left arm"));
+    CHECK(sim->health().attackSpeedFactor(pawn) == doctest::Approx(1.0f));
+    // 40% left: 10 under, 5% slower.
+    CHECK(zoneTestHit(*sim, pawn, "Blunt", 5.0f, "left arm"));
+    CHECK(sim->health().attackSpeedFactor(pawn) == doctest::Approx(0.95f));
+    // Both arms at 25%: 25% slower (sneed's example).
+    CHECK(zoneTestHit(*sim, pawn, "Blunt", 7.5f, "left arm"));
+    CHECK(zoneTestHit(*sim, pawn, "Blunt", 37.5f, "right arm"));
+    CHECK(sim->health().attackSpeedFactor(pawn) == doctest::Approx(0.75f));
+    const float armourOnly = sim->combat().attackTimeFactor(zoneTestPawn(*sim, 20, 20, true));
+    CHECK(sim->combat().attackTimeFactor(pawn) == doctest::Approx(armourOnly / 0.75f));
+    // Arms don't slow the walk.
+    CHECK(zoneTestHealth(*sim, pawn).limbMove == doctest::Approx(1.0f));
+
+    const Entity walker = zoneTestPawn(*sim, 14, 10, true);
+    const float before = zoneTestHealth(*sim, walker).movingFactor;
+    CHECK(zoneTestHit(*sim, walker, "Blunt", 45.0f, "left leg"));  // 40% left
+    CHECK(zoneTestHealth(*sim, walker).limbMove == doctest::Approx(0.95f));
+    CHECK(zoneTestHealth(*sim, walker).movingFactor < before);
+    CHECK(sim->health().attackSpeedFactor(walker) == doctest::Approx(1.0f));
+}
+
+TEST_CASE("Healing (sneed's rule): a zone left alone for 10 seconds, not bleeding, gets back 0.1% of what it lost a second") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
+    const Entity sleeper = zoneTestPawn(*sim, 14, 10, true);
+    const Entity cut = zoneTestPawn(*sim, 18, 10, true);
+    sim->health().setAsleep([sleeper](Entity e) { return e == sleeper; });
+    zoneTestRun(*sim, 2);
+    CHECK(zoneTestHit(*sim, pawn, "Blunt", 20.0f, "left arm"));
+    CHECK(zoneTestHit(*sim, sleeper, "Blunt", 20.0f, "left arm"));
+    CHECK(zoneTestHit(*sim, cut, "Cut", 20.0f, "left arm"));
+    const int zoneTestArm = zoneTestZone(*sim, cut, "Arm");
+    const auto lost = [&](Entity e) { return (1.0f - zoneTestLeft(*sim, e, "Arm")) * 50.0f; };
+    CHECK(lost(pawn) == doctest::Approx(20.0f));
+    // Nothing for the first 10 real seconds (300 steps).
+    zoneTestRun(*sim, 290);
+    CHECK(lost(pawn) == doctest::Approx(20.0f).epsilon(0.0005));
+    // Then 10 more: 0.999 ten times over awake, 0.998 asleep.
+    zoneTestRun(*sim, 310);
+    CHECK(lost(pawn) == doctest::Approx(20.0f * std::pow(0.999f, 10.0f)).epsilon(0.002));
+    CHECK(lost(sleeper) == doctest::Approx(20.0f * std::pow(0.998f, 10.0f)).epsilon(0.002));
+    // The bleeding arm does not heal until it is patched.
+    CHECK(sim->health().zoneBleedLevel(cut, zoneTestArm) > 0);
+    CHECK(lost(cut) == doctest::Approx(20.0f).epsilon(0.0005));
+    CHECK(sim->health().patchZone(cut, zoneTestArm, 0.3f) > 0);
+    zoneTestRun(*sim, 300);
+    CHECK(lost(cut) < 19.9f);
+    // A new hit starts the wait again.
+    CHECK(zoneTestHit(*sim, pawn, "Blunt", 5.0f, "left arm"));
+    const float after = lost(pawn);
+    zoneTestRun(*sim, 290);
+    CHECK(lost(pawn) == doctest::Approx(after).epsilon(0.0005));
+
+    // The wait is saved.
+    sim->things().registry().remove<PlayerControl>(sleeper);
+    sim->things().registry().remove<PlayerControl>(cut);
+    SaveLoadResult loaded = loadSim(saveSim(*sim), zoneTestDefs());
+    CHECK(loaded.error == "");
+    if (loaded.sim == nullptr) {
+        return;
+    }
+    CHECK(zoneTestHealth(*loaded.sim, pawn).zoneHurtAt == zoneTestHealth(*sim, pawn).zoneHurtAt);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+}
+
+TEST_CASE("Healing: a limb at 0 is still on, and comes back") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
+    CHECK(zoneTestHit(*sim, pawn, "Blunt", 70.0f, "left arm"));
+    CHECK(zoneTestLeft(*sim, pawn, "Arm") == doctest::Approx(0.0f));
+    CHECK(sim->health().severed(pawn) == 0);
+    zoneTestRun(*sim, 900);
+    CHECK(zoneTestLeft(*sim, pawn, "Arm") > 0.0f);
+}
+
+TEST_CASE("Dismemberment: only the hit that kills, a quarter of the zone over what it had left; an arm whole or below the elbow") {
+    auto sim = zoneTestSim();
+    // Torso at half and a leg at 0, so the next limb at 0 kills. An arm has 50: 62 is 12 over (no), 63 is 13 over (yes).
+    const auto ready = [&](int x, int y) {
+        const Entity pawn = zoneTestPawn(*sim, x, y, true);
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 50.0f, "torso"));
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 75.0f, "right leg"));
+        CHECK_FALSE(zoneTestHealth(*sim, pawn).dead);
+        return pawn;
+    };
+    const Entity whole = ready(6, 6);
+    CHECK(zoneTestHit(*sim, whole, "Cut", 62.0f, "left arm"));
+    CHECK(zoneTestHealth(*sim, whole).dead);
+    CHECK(sim->health().severed(whole) == 0);
+
+    const Entity upper = ready(10, 6);
+    CHECK(zoneTestHit(*sim, upper, "Cut", 63.0f, "left arm"));
+    CHECK(zoneTestHealth(*sim, upper).dead);
+    CHECK(zoneTestMessages(*sim, upper, EventType::PawnDismembered) == std::vector<std::string>{"left arm"});
+    CHECK(sim->health().severed(upper) == kSeveredLeftArm);
+    CHECK(zoneTestMessages(*sim, upper, EventType::PawnDied).size() == 1);
+
+    const Entity lower = ready(14, 6);
+    // A hand takes no more than a hand's worth: the arm is nearly gone first (5 left), then 18 on the hand is 13 over.
+    CHECK(zoneTestHit(*sim, lower, "Blunt", 45.0f, "right arm"));
+    CHECK_FALSE(zoneTestHealth(*sim, lower).dead);
+    CHECK(zoneTestHit(*sim, lower, "Cut", 18.0f, "right hand"));
+    CHECK(zoneTestHealth(*sim, lower).dead);
+    CHECK(zoneTestMessages(*sim, lower, EventType::PawnDismembered) == std::vector<std::string>{"right forearm"});
+    CHECK(sim->health().severed(lower) == kSeveredRightForearm);
+
+    // A hurt arm comes off more easily: 20 left, 33 is 13 over.
+    const Entity hurt = ready(18, 6);
+    CHECK(zoneTestHit(*sim, hurt, "Blunt", 30.0f, "left arm"));
+    CHECK(zoneTestHit(*sim, hurt, "Cut", 33.0f, "left shoulder"));
+    CHECK(zoneTestHealth(*sim, hurt).dead);
+    CHECK(sim->health().severed(hurt) == kSeveredLeftArm);
+
+    Snapshot snap;
+    sim->writeSnapshot(snap);
+    const ThingView* view = snap.find(lower);
+    CHECK(view != nullptr);
+    if (view != nullptr) {
+        CHECK(view->severed == kSeveredRightForearm);
+    }
+    // Nothing more comes off a corpse.
+    zoneTestHit(*sim, lower, "Cut", 200.0f, "left leg");
+    CHECK(sim->health().severed(lower) == kSeveredRightForearm);
+}
+
+TEST_CASE("Dismemberment: a leg whole or below the knee, the head off, a torso comes apart") {
+    auto sim = zoneTestSim();
+    const auto ready = [&](int x, int y) {
+        const Entity pawn = zoneTestPawn(*sim, x, y, true);
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 50.0f, "torso"));
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 50.0f, "left arm"));
+        return pawn;
+    };
+    // A leg has 75: 19 over is a quarter.
+    const Entity leg = ready(6, 6);
+    CHECK(zoneTestHit(*sim, leg, "Cut", 94.0f, "right leg"));
+    CHECK(zoneTestMessages(*sim, leg, EventType::PawnDismembered) == std::vector<std::string>{"right leg"});
+    CHECK(sim->health().severed(leg) == kSeveredRightLeg);
+    const Entity foot = ready(10, 6);
+    CHECK(zoneTestHit(*sim, foot, "Blunt", 70.0f, "left leg"));
+    CHECK_FALSE(zoneTestHealth(*sim, foot).dead);
+    CHECK(zoneTestHit(*sim, foot, "Cut", 24.0f, "left foot"));
+    CHECK(zoneTestMessages(*sim, foot, EventType::PawnDismembered) == std::vector<std::string>{"left lower leg"});
+    CHECK(sim->health().severed(foot) == kSeveredLeftLowerLeg);
+
+    // A head has 50: 62 kills with the head on, 63 takes it off, cut or blunt.
+    const Entity kept = zoneTestPawn(*sim, 14, 6, true);
+    CHECK(zoneTestHit(*sim, kept, "Blunt", 62.0f, "head"));
+    CHECK(zoneTestHealth(*sim, kept).dead);
+    CHECK(sim->health().severed(kept) == 0);
+    const Entity beheaded = zoneTestPawn(*sim, 18, 6, true);
+    CHECK(zoneTestHit(*sim, beheaded, "Blunt", 63.0f, "head"));
+    CHECK(zoneTestHealth(*sim, beheaded).dead);
+    CHECK(zoneTestMessages(*sim, beheaded, EventType::PawnDismembered) == std::vector<std::string>{"head"});
+    CHECK(sim->health().severed(beheaded) == kSeveredHead);
+    CHECK(zoneTestMessages(*sim, beheaded, EventType::PawnDied).size() == 1);
+
+    // A torso has 100: 125 takes the head and all four limbs off.
+    const Entity dead = zoneTestPawn(*sim, 22, 6, true);
+    CHECK(zoneTestHit(*sim, dead, "Blunt", 124.0f, "torso"));
+    CHECK(zoneTestHealth(*sim, dead).dead);
+    CHECK(sim->health().severed(dead) == 0);
+    const Entity apart = zoneTestPawn(*sim, 26, 6, true);
+    CHECK(zoneTestHit(*sim, apart, "Blunt", 125.0f, "torso"));
+    CHECK(zoneTestHealth(*sim, apart).dead);
+    CHECK(zoneTestMessages(*sim, apart, EventType::PawnDismembered).size() == 5);
+    CHECK(sim->health().severed(apart) == (kSeveredHead | kSeveredLeftArm | kSeveredRightArm | kSeveredLeftLeg | kSeveredRightLeg));
+    CHECK(zoneTestMessages(*sim, apart, EventType::PawnDied).size() == 1);
+
+    for (const Entity e : {leg, foot, kept, beheaded, dead}) {
+        sim->things().registry().remove<PlayerControl>(e);
+    }
+    SaveLoadResult loaded = loadSim(saveSim(*sim), zoneTestDefs());
+    CHECK(loaded.error == "");
+    if (loaded.sim == nullptr) {
+        return;
+    }
+    CHECK(loaded.sim->health().severed(apart) == sim->health().severed(apart));
+    CHECK(loaded.sim->health().severed(foot) == kSeveredLeftLowerLeg);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+}
+
+TEST_CASE("Dismemberment: never the protagonist, never an animal") {
+    auto sim = zoneTestSim();
+    const Entity hero = zoneTestPawn(*sim);
+    sim->things().registry().get<Health>(hero).protagonist = true;
+    sim->health().refresh(hero);
+    CHECK(zoneTestHit(*sim, hero, "Cut", 300.0f, "torso"));
+    CHECK(zoneTestHealth(*sim, hero).dead);
+    CHECK(zoneTestMessages(*sim, hero, EventType::PawnDismembered).empty());
+    CHECK(sim->health().severed(hero) == 0);
+
+    const Entity muffalo = sim->things().spawn("Muffalo", CellPos{20, 20, 0});
+    if (muffalo != kNoEntity && sim->health().tracks(muffalo)) {
+        Rng rng(3);
+        sim->health().applyDamage(muffalo, sim->health().damageTypeId("Blunt"), 500.0f, -1, rng);
+        CHECK(zoneTestMessages(*sim, muffalo, EventType::PawnDismembered).empty());
+        CHECK(sim->health().severed(muffalo) == 0);
+    }
+}
+
+TEST_CASE("Severed pieces: what the killing blow took off lies where the body was for 2 days, and saves and loads") {
+    auto sim = zoneTestSim();
+    const Entity apart = zoneTestPawn(*sim, 26, 6);
+    const Entity beheaded = zoneTestPawn(*sim, 18, 6);
+    sim->step();
+    CHECK(sim->health().severedPieces().empty());
+    CHECK(zoneTestHit(*sim, apart, "Blunt", 125.0f, "torso"));
+    CHECK(zoneTestHit(*sim, beheaded, "Cut", 63.0f, "head"));
+    const std::vector<SeveredPiece>& pieces = sim->health().severedPieces();
+    CHECK(pieces.size() == 6);
+    if (pieces.size() != 6) {
+        return;
+    }
+    uint16_t bits = 0;
+    for (size_t i = 0; i < 5; ++i) {
+        CHECK(pieces[i].from == apart);
+        CHECK(pieces[i].id == static_cast<uint32_t>(i + 1));
+        CHECK(cellOf(Position{pieces[i].x, pieces[i].y, pieces[i].level}) == CellPos{26, 6, 0});
+        bits = static_cast<uint16_t>(bits | pieces[i].bit);
+    }
+    CHECK(bits == (kSeveredHead | kSeveredLeftArm | kSeveredRightArm | kSeveredLeftLeg | kSeveredRightLeg));
+    CHECK(pieces[5].from == beheaded);
+    CHECK(pieces[5].bit == kSeveredHead);
+
+    Snapshot snap;
+    sim->writeSnapshot(snap);
+    CHECK(snap.severedPieces.size() == 6);
+    if (snap.severedPieces.size() == 6) {
+        CHECK(snap.severedPieces[5].from == beheaded);
+        CHECK(snap.severedPieces[5].bit == kSeveredHead);
+        CHECK(snap.severedPieces[5].decay == doctest::Approx(0.0f).epsilon(0.01));
+    }
+
+    SaveLoadResult loaded = loadSim(saveSim(*sim), zoneTestDefs());
+    CHECK(loaded.error == "");
+    if (loaded.sim == nullptr) {
+        return;
+    }
+    CHECK(loaded.sim->health().severedPieces().size() == 6);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+
+    // A day on they are half gone, after two they are gone; the next piece gets a new id.
+    zoneTestRun(*sim, 86400);
+    sim->writeSnapshot(snap);
+    CHECK(snap.severedPieces.size() == 6);
+    if (!snap.severedPieces.empty()) {
+        CHECK(snap.severedPieces[0].decay == doctest::Approx(0.5f).epsilon(0.01));
+    }
+    zoneTestRun(*sim, 86400 + 60);  // (looked at once a game minute)
+    CHECK(sim->health().severedPieces().empty());
+    const Entity late = zoneTestPawn(*sim, 30, 6);
+    CHECK(zoneTestHit(*sim, late, "Cut", 63.0f, "head"));
+    CHECK(sim->health().severedPieces().size() == 1);
+    if (!sim->health().severedPieces().empty()) {
+        CHECK(sim->health().severedPieces()[0].id == 7);
+    }
 }

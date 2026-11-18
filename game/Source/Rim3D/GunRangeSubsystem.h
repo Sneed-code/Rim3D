@@ -18,6 +18,7 @@ class USimSubsystem;
 class USkeletalMeshComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
+namespace colony { struct ThingView; }
 
 /** One gun of the range as assets/guns.json describes it (docs/design/gun-range.md). Points in cm, the gun's frame. */
 struct FGunRangeGun
@@ -70,12 +71,15 @@ struct FGunRangeGun
 	bool bPump = false;
 	float PumpStart = 0.3f;
 	float PumpSeconds = 0.5f;
+	/** How much the barrel keeps pointing ahead through a reload (0: it goes wherever the clip swings it, 1: held on the
+	 *  view's line; the clip still turns it about the barrel). A shotgun's shell-by-shell reload swings the stock about. */
+	float ReloadSteady = 0.0f;
 	/** A telescopic sight: fully aimed, the view goes through it (this field of view, a scope ring drawn over it, the arms
 	 *  and gun hidden). 0: open sights, the gun stays in view. */
 	float ScopeFov = 0.0f;
 };
 
-/** A melee weapon on the combat range's rack, after the guns: the main game draws and swings it (third person). */
+/** A melee weapon on the combat range's rack, after the guns: drawn on the first-person arms like any weapon. */
 struct FGunRangeMelee
 {
 	FString Def;
@@ -90,7 +94,12 @@ struct FGunRangeMelee
  * kick, sway and bob, and the sights lined up on the crosshair while aiming (right mouse button).
  *
  * Keys while it is on: 1-4 or the mouse wheel pick a gun from the rack (EquipCommand), F6 reads assets/guns.json again.
- * Off unless a scene turns it on (the gunrange smoke test).
+ * The range itself (its rack, keys and panel) is off unless a scene turns it on (the gunrange smoke test).
+ *
+ * The first-person arms are drawn in the main game too (View.Arms, docs/design/weapon-hold.md): a gun with a model
+ * here as above, and anything else the player holds (a melee weapon, a gun without a model, a shield, bare fists)
+ * through its hold style: the style's first-person stance and block clips, the sim's swing clip played on the arms in
+ * step with the sim, the weapon on the hand's grip and the other hand on a two-handed one.
  */
 UCLASS()
 class RIM3D_API UGunRangeSubsystem : public UTickableWorldSubsystem
@@ -116,11 +125,18 @@ public:
 	bool SelectGun(int32 Index);
 	/** Reads assets/guns.json again. */
 	bool LoadConfig();
+	/** The gun art for a weapon def (assets/guns.json, read on first use), null if it has none or its model is not
+	 *  imported: the third-person hands and the first-person arms hold this model instead of the def's own shapes. */
+	const FGunRangeGun* FindGunByDef(const FString& Def);
+	/** The largest imported mesh of a gun's art whose name has Match in it (cached). */
+	UStaticMesh* FindMesh(const FString& Art, const FString& Match);
 	/** A line for the panel from the scene (targets left and so on). */
 	void SetSceneLine(const FString& Line) { SceneLine = Line; }
 
 	// For the smoke test.
 	bool IsViewShown() const { return bShown; }
+	/** The first-person view gun's muzzle in the world (its guns.json `muzzle`), false while no view gun is drawn. */
+	bool GetViewMuzzle(FVector& Out) const;
 	int32 GetCurrentGun() const { return Current; }
 	bool HasModel(int32 Index) const;
 	int32 GetShotsSeen() const { return ShotsSeen; }
@@ -132,6 +148,10 @@ public:
 	float GetSightOffCm() const { return SightOffCm; }
 	/** Where the arms' main bones are in the view (cm, x ahead, y right, z up), for the smoke test's notes. */
 	const FString& GetBoneLine() const { return BoneLine; }
+	/** Whether the arms show a weapon by its hold style this frame (a melee weapon, fists, a shield), not a gun model. */
+	bool IsHeldViewShown() const { return bShown && bHeldView; }
+	/** Swing clips the first-person arms have started. */
+	int32 GetHeldSwingsSeen() const { return HeldSwingsSeen; }
 
 private:
 	void OnSimEvent(const colony::Event& Event);
@@ -140,21 +160,20 @@ private:
 	void CopyLooks(ASimPawnActor& Player);
 	void SetupGun(int32 Index);
 	UAnimSequence* LoadClip(const FString& Rel);
-	UStaticMesh* FindMesh(const FString& Art, const FString& Match);
 	void UpdateInput();
 	void UpdateView(float Dt, ASimPawnActor& Player);
+	void UpdateHeldView(float Dt, ASimPawnActor& Player, const colony::ThingView& Me);
+	void HideHeld();
 	void DrawPanel();
 	void DrawScope();
 
 	bool bEnabled = false;
+	bool bConfigTried = false;
 	bool bShown = false;
 	TArray<FGunRangeGun> Guns;
 	TArray<FGunRangeMelee> Melee;
 	TArray<colony::Entity> Rack;
 	int32 HeldRack = -1;
-	int32 LastHeldRack = -1;
-	/** The range turned third person on for a melee weapon (and turns first person back on for a gun). */
-	bool bAutoThirdPerson = false;
 	FString AnimRoot = TEXT("/Game/Rim3D/Generated/Animations/");
 	/** Where the arms' head bone sits in the view (cm, x ahead): a little behind and below the eyes. */
 	FVector HeadInView = FVector(-8.0f, 0.0f, -7.0f);
@@ -162,6 +181,7 @@ private:
 	TMap<FString, TWeakObjectPtr<UAnimSequence>> Clips;
 	TSet<FString> MissingClips;
 	TMap<FString, TWeakObjectPtr<UStaticMesh>> MeshCache;
+	TMap<FString, double> MeshMisses;
 
 	TWeakObjectPtr<USimSubsystem> BridgeSource;
 	FDelegateHandle EventHandle;
@@ -186,6 +206,11 @@ private:
 	TObjectPtr<UPointLightComponent> Flash;
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> FallbackMesh;
+	/** The held weapon and shield of the hold-style path (not a gun model). */
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> HeldWeapon;
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> HeldShield;
 
 	TWeakObjectPtr<USkeletalMeshComponent> CopiedFrom;
 	float LooksCopyTimer = 0.0f;
@@ -196,6 +221,8 @@ private:
 	float ReloadClock = 0.0f;
 	bool bReloadPlaying = false;
 	FQuat AimCorrection = FQuat::Identity;
+	/** The aim correction when a reload began (ReloadSteady works from it). */
+	FQuat SteadyBase = FQuat::Identity;
 	bool bHaveCorrection = false;
 	int32 ValidFrames = 0;
 	float Kick = 0.0f;
@@ -219,4 +246,14 @@ private:
 	/** Looking through a scope this frame (see FGunRangeGun::ScopeFov). */
 	bool bScoped = false;
 	FString BoneLine;
+	// The hold-style path.
+	bool bHeldView = false;
+	TWeakObjectPtr<UAnimSequence> HeldStance;
+	uint32 HeldMotionDef = MAX_uint32;
+	float HeldMotionTime = 0.0f;
+	int32 HeldSwingsSeen = 0;
+	/** Bare fists: a punch (0..1 through it) when the sim's swing lands without a clip, and which hand throws it. */
+	float PunchAge = 99.0f;
+	bool bPunchLeft = false;
+	uint8 LastMeleePhase = 0;
 };

@@ -122,10 +122,12 @@ TEST_CASE("Feel: a burst lifts the player's aim shot by shot from the weapon's k
     CHECK(up == 0.0f);
     CHECK(side == 0.0f);
 
-    // The player's trigger: three shots of a burst, five steps apart.
-    sim->submit(ShootCommand{pawn, kNoEntity, 60.5f, 40.5f, 1.0f, true});
+    // The player's trigger held: three shots, a gap apart (one shot an order with cooldown bursts).
     std::vector<std::pair<float, float>> after;  // the kick just after each shot
     for (int i = 0; i < 20 && after.size() < 3; ++i) {
+        if (sim->combat().shotReadyIn(pawn) == 0) {
+            sim->submit(ShootCommand{pawn, kNoEntity, 60.5f, 40.5f, 1.0f, true});
+        }
         sim->step();
         const bool shot = std::any_of(sim->events().begin(), sim->events().end(),
                                       [&](const Event& e) { return e.type == EventType::ShotFired && e.thing == pawn; });
@@ -247,11 +249,13 @@ TEST_CASE("Feel: a dodge roll goes through start-up, roll and recovery, and move
     }
     CHECK(sawEvent);
 
-    // Steps 1 to 3 are start-up: the same place, shootable. (The command's own step counted as 1.)
+    // Steps 1 to 3 are start-up: shootable. (The command's own step counted as 1.) The body goes where the roll's own
+    // clip takes it (docs/design/body-motion.md), which has it leaning into the roll already.
     CHECK(sim->combat().rollPhase(pawn) == RollPhase::StartUp);
     CHECK(feelProbe(*sim, pawn) == ProjectileHitKind::Pawn);
     sim->stepMany(2);
-    CHECK(feelPos(*sim, pawn).x == doctest::Approx(startX));
+    CHECK(feelPos(*sim, pawn).x >= startX);
+    CHECK(feelPos(*sim, pawn).x < startX + 0.6f);
     CHECK(sim->combat().rollPhase(pawn) == RollPhase::Rolling);
 
     // Rolling: 15 steps, bullets pass through for the first 12.
@@ -270,8 +274,10 @@ TEST_CASE("Feel: a dodge roll goes through start-up, roll and recovery, and move
     }
     CHECK(rolling == 15);
     CHECK(proof == 12);
-    CHECK(feelPos(*sim, pawn).x == doctest::Approx(startX + 4.0f).epsilon(0.001));
-    CHECK(feelPos(*sim, pawn).y == doctest::Approx(startY));
+    // Most of the clip's travel is over by now: the measured roll carries a 1.80 m body 3.6 m, straight.
+    CHECK(feelPos(*sim, pawn).x > startX + 2.5f);
+    CHECK(feelPos(*sim, pawn).x < startX + 4.2f);
+    CHECK(std::fabs(feelPos(*sim, pawn).y - startY) < 0.15f);
 
     // Recovery: 9 steps standing still and shootable, then the wait, then free.
     CHECK(sim->combat().rollPhase(pawn) == RollPhase::Recovery);
@@ -317,7 +323,7 @@ TEST_CASE("Feel: the sim moves a rolling pawn; the player's position is ignored 
     sim->step();
     CHECK(feelFailed(*sim, shoot));
     CHECK(feelPos(*sim, pawn).x < startX);
-    CHECK(feelPos(*sim, pawn).y == doctest::Approx(40.5f));
+    CHECK(std::fabs(feelPos(*sim, pawn).y - 40.5f) < 0.15f);
 
     // A snapshot says what the animation needs.
     Snapshot snapshot;
@@ -372,14 +378,19 @@ TEST_CASE("Feel: a roll ends a shot being aimed or fired, keeps a reload, and is
     sim->submit(SetStanceCommand{pawn, Stance::Standing});
     sim->step();
 
-    // A reload goes on through a roll.
-    sim->submit(ReloadCommand{pawn});
+    // The gun's shots go on refilling through a roll (cooldown bursts: no reloads).
+    sim->stepMany(120);
+    sim->submit(ShootCommand{pawn, kNoEntity, 60.5f, 40.5f, 1.0f, true});
     sim->step();
-    CHECK(sim->combat().roundsLeft(pawn) < sim->combat().magazineSize(pawn));
-    CHECK(sim->combat().reloading(pawn));
+    int stored = 0, size = 0, left = 0, from = 0;
+    FEEL_REQUIRE(sim->combat().shotStore(pawn, stored, size, left, from));
+    CHECK(stored < size);
+    const int before = left;
+    FEEL_REQUIRE(before > 4);
     sim->submit(DodgeRollCommand{pawn, 1.0f, 0.0f});
     sim->stepMany(3);
-    CHECK(sim->combat().reloading(pawn));
+    FEEL_REQUIRE(sim->combat().shotStore(pawn, stored, size, left, from));
+    CHECK(left == before - 3);
 }
 
 TEST_CASE("Feel: a roll stops at the edge of the map") {

@@ -30,6 +30,19 @@ namespace
 {
 	const FVector FightSmokeOrigin(300000.0, 0.0, 0.0);
 
+	// How high a component is above its actor's feet (cm), whatever it hangs from (a held gun hangs from the hand bone).
+	double FightSmokeHeight(const USceneComponent& Component)
+	{
+		const AActor* Owner = Component.GetOwner();
+		if (!Owner)
+		{
+			return Component.GetRelativeLocation().Z;
+		}
+		FTransform Frame = Owner->GetActorTransform();
+		Frame.SetScale3D(FVector::OneVector);
+		return Frame.InverseTransformPosition(Component.GetComponentLocation()).Z;
+	}
+
 	struct FFightSmokeState
 	{
 		colony::Entity Protagonist = colony::kNoEntity;
@@ -323,7 +336,7 @@ void USmokeTestSubsystem::BuildFightsPhases()
 			{
 				Fail(TEXT("equip_and_aim: the sim does not have the protagonist crouching a second after C"));
 			}
-			if (const UStaticMeshComponent* Gun = F->GetHeldGun(State->Protagonist); !Gun || Gun->GetRelativeLocation().Z > 100.0)
+			if (const UStaticMeshComponent* Gun = F->GetHeldGun(State->Protagonist); !Gun || FightSmokeHeight(*Gun) > 100.0)
 			{
 				Fail(TEXT("equip_and_aim: the held gun did not come down with the crouch"));
 			}
@@ -344,7 +357,7 @@ void USmokeTestSubsystem::BuildFightsPhases()
 			Fail(TEXT("equip_and_aim: the protagonist did not stand up again"));
 		}
 		const UStaticMeshComponent* Gun = F->GetHeldGun(State->Protagonist);
-		if (!Gun || !Gun->IsVisible() || Gun->GetRelativeLocation().Z < 100.0)
+		if (!Gun || !Gun->IsVisible() || FightSmokeHeight(*Gun) < 100.0)
 		{
 			Fail(TEXT("equip_and_aim: no placeholder gun at the protagonist's chest"));
 		}
@@ -388,20 +401,12 @@ void USmokeTestSubsystem::BuildFightsPhases()
 			return;
 		}
 		AimAt(State->Target);
-		// R once, when the gun is ready and the magazine is part empty; every other frame is the trigger.
-		const bool bReady = B->GetSim()->combat().shotReadyIn(State->Protagonist) == 0;
-		if (!State->bReloadTried && bReady && F->GetShotsSeen() - State->ShotsAtStart >= 2 && F->Reload())
-		{
-			State->bReloadTried = true;
-		}
-		else
-		{
-			F->Fire();
-		}
+		// Every frame is the trigger (guns don't reload: a hidden cooldown refills the gun's shots, sneed's cooldown bursts).
+		F->Fire();
 		State->MaxTracers = FMath::Max(State->MaxTracers, F->GetActiveTracers());
 		State->MaxParticles = FMath::Max(State->MaxParticles, F->GetActiveParticles());
 		const colony::ThingView* Me = Snapshot(State->Protagonist);
-		State->bReloadSeen = State->bReloadSeen || (Me && Me->reloading);
+		State->bReloadSeen = State->bReloadSeen || (Me && Me->refillSteps > 0 && Me->refillLeft > 0);
 	}, [=, this]()
 	{
 		UFightSubsystem* F = Fight();
@@ -470,7 +475,7 @@ void USmokeTestSubsystem::BuildFightsPhases()
 		}
 		if (!State->bReloadSeen)
 		{
-			Fail(TEXT("fire_at_pawn: R (reload) never showed as reloading in the snapshot"));
+			Fail(TEXT("fire_at_pawn: the gun's shot store never showed refilling in the snapshot (the yellow bar)"));
 		}
 		if (F->GetHitboxChecks() < 1)
 		{

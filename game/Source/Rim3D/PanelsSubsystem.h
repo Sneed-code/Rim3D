@@ -103,6 +103,9 @@ public:
 
 	// ---- State for tests --------------------------------------------------------------------
 	const FPanelsStats& GetStats() const { return Stats; }
+	/** Where the menu and colonist bar at the top left ended (px from the top of the view) if they were drawn in the last
+	 *  two frames, else 0: the kill feed starts below them. */
+	float GetTopLeftBottom() const { return GFrameCounter - TopLeftFrame <= 2 ? TopLeftBottom : 0.0f; }
 	const TArray<FColonyLogLine>& GetLog() const { return Log; }
 	/** The colonists the tabs list, in the order of the snapshot. */
 	void GetColonists(TArray<colony::Entity>& Out) const;
@@ -151,4 +154,6 @@ private:
 	bool bThermoDragging = false;
 
 	FPanelsStats Stats;
+	float TopLeftBottom = 0.0f;
+	uint64 TopLeftFrame = 0;
 };

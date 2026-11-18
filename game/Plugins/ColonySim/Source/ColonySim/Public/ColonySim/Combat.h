@@ -90,6 +90,12 @@ struct Shooter {
     float aimZ = 0.0f;
     bool player = false;  // the player's own trigger: no aiming time, the gun's own spread only
     float recoil = 0.0f;  // extra spread from the shots just fired, as a slope; wears off
+    // sneed's cooldown bursts (CombatRules cooldownBursts, docs/design/aiming.md): the gun's store of shots. The first
+    // shot from a full store starts `refill`; when it runs out the store is full again, however many were fired.
+    int stored = -1;              // shots left in the store; -1: full
+    int refill = 0;               // steps until the store is full again; 0: full, not counting
+    int refillFrom = 0;           // the steps `refill` started at
+    Entity storeGun = kNoEntity;  // the weapon the store is for; another one in the hands starts full
 };
 
 // On a gun item once it has been fired: the rounds left in its magazine (F5). A gun without one
@@ -295,6 +301,9 @@ public:
     void setBeforeDestroy(std::function<void(Entity)> hook) { beforeDestroy_ = std::move(hook); }
     // Called when a bullet or a melee blow hurt a pawn (`victim`, `attacker`): animals react (N5, docs/design/animal-fights.md).
     void setHurtHook(std::function<void(Entity, Entity)> hook) { hurtHook_ = std::move(hook); }
+    // Cooldown bursts: asked before each shot of a fighter's burst at a pawn (`shooter`, `target`), the first too (after
+    // its aim); true holds the rest of the burst (a friend stepped into the line). Unset: never.
+    void setHoldFire(std::function<bool(Entity, Entity)> hook) { holdFire_ = std::move(hook); }
     // A pawn's body size in RimWorld's units (a man is 1) for the stagger rule; unset: 1 for everyone.
     void setBodySize(std::function<float(Entity)> size) { bodySize_ = std::move(size); }
     // How well the pawn performs, 1 normally (an Exhausted pawn 0.75, NeedsSystem::performanceFactor): aim, cooldown,
@@ -306,8 +315,17 @@ public:
     // Its traits' share of its melee damage (Wimp 0.9); 1 without traits.
     float traitMeleeDamage(Entity pawn) const;
     void noteHurt(Entity victim, Entity attacker) const {
+        noteHarm(victim, attacker);
         if (hurtHook_) {
             hurtHook_(victim, attacker);
+        }
+    }
+    // Called whenever someone's bullet, blow or blast hurt a pawn, also a blast's (which does not call the hurt hook): the
+    // kill feed credits the last one with a death (Sim::creditKills, docs/design/kill-feed.md). Changes nothing else.
+    void setHarmHook(std::function<void(Entity, Entity)> hook) { harmHook_ = std::move(hook); }
+    void noteHarm(Entity victim, Entity by) const {
+        if (harmHook_ && by != kNoEntity && by != victim) {
+            harmHook_(victim, by);
         }
     }
 
@@ -358,6 +376,11 @@ public:
     bool setStance(Entity pawn, Stance stance);
     // Steps until the pawn can start a new shot (0: ready now), a reload included.
     int shotReadyIn(Entity pawn) const;
+    // Cooldown bursts (the player's yellow bar): shots left in the gun's store and its size, and the steps until it is
+    // full again and how many that started at (both 0 when full). False if the pawn has no gun or the rule is off.
+    bool shotStore(Entity pawn, int& stored, int& size, int& refillLeft, int& refillSteps) const;
+    // True with sneed's cooldown bursts on (CombatRules cooldownBursts): a gun's cooldown counts from the first shot.
+    bool cooldownBursts() const;
 
     // Magazines (F5). A gun's `magazineSize` rounds, then a reload of `reloadTime` steps (faster with
     // Shooting skill) that starts by itself after the shot that empties it. reload() starts one early:
@@ -532,7 +555,9 @@ private:
     const TalentSystem* talents_ = nullptr;
     const InspirationSystem* inspirations_ = nullptr;
     std::function<void(Entity)> beforeDestroy_;
+    std::function<bool(Entity, Entity)> holdFire_;
     std::function<void(Entity, Entity)> hurtHook_;
+    std::function<void(Entity, Entity)> harmHook_;
     std::function<float(Entity)> bodySize_;
     std::function<float(Entity)> performance_;
     std::vector<Entity> scratch_;
@@ -541,6 +566,10 @@ private:
     void impact(Entity projectile, Projectile& p, const TraceHit& hit);
     void updateShooter(Entity pawn, Shooter& s, Rng& rng);
     void startReload(Entity pawn, Shooter& s, Entity weapon, int extraSteps);
+    // Cooldown bursts: the steps a gun's store takes to fill again for this pawn (its cooldown, slowed by armour and
+    // tiredness, quicker in a shooting frenzy), and the store made to belong to `weapon` (full if it was another's).
+    int refillSteps(Entity pawn, int cooldown) const;
+    static void storeFor(Shooter& s, Entity weapon);
     void drop(Entity pawn, Entity item);
     // The mitigation of a hit (shared by bullets, blows, flames and blast fragments): the damage left and
     // the wear on the pieces (docs/design/armour.md). `blast` uses the type's explosionMix. Uses `rng`

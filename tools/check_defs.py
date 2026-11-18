@@ -23,6 +23,7 @@ ROOT = Path(ARGS[0]) if ARGS else Path(__file__).resolve().parent.parent / "data
 # "parts" lists (the body tree).
 REFERENCES = [
     ("Things", "plant.harvestedThingDef", "Things"),
+    ("Things", "hold.style", "HoldStyles"),
     ("Things", "mineable.dropDef", "Things"),
     ("Things", "race.body", "Bodies"),
     ("Things", "costs{}", "Things"),
@@ -146,6 +147,10 @@ EVENT_CUES = {
     "Work_Tailor", "Work_Research", "Work_Clean", "Work_Tend", "Work_Stonecut", "Work_Butcher", "Work_Eat",
     "Work_Refuel", "Work_Handle", "Work_Chat", "Work_Extinguish",
     "Voice_LovinCouple", "Voice_LovinFem",  # Unreal, from the Lovin event (soundLovinCue)
+    # MeleeHit by material (soundMeleeCue): weapon wood or steel on flesh, wood, steel or stone
+    "Hit_Wood_Flesh", "Hit_Wood_Wood", "Hit_Wood_Steel", "Hit_Wood_Stone",
+    "Hit_Steel_Flesh", "Hit_Steel_Wood", "Hit_Steel_Steel", "Hit_Steel_Stone",
+    "Ui_KillConfirm",  # Unreal, the kill feed on the player's own kill (KillFeedSubsystem.cpp)
 }
 
 
@@ -228,11 +233,23 @@ def check_sound_cues(defs_by_kind):
                 problems.append(f"{file}: {kind} '{name}' visual.sound must be an object of slot: cue")
                 continue
             for slot, cue in sound.items():
+                if slot == "material":  # what it sounds like when struck or striking (melee by material)
+                    if cue not in ("Wood", "Steel", "Stone", "Flesh"):
+                        problems.append(f"{file}: {kind} '{name}' visual.sound.material must be Wood, Steel, Stone or Flesh")
+                    continue
                 if not isinstance(cue, str) or cue not in cues:
                     problems.append(f"{file}: {kind} '{name}' visual.sound.{slot} names unknown SoundCues def '{cue}'")
                 else:
                     used.add(cue)
     for name, (file, entry) in cues.items():
+        far = entry.get("far")
+        if far is not None:  # the distant layer a shot or a blast turns into (sound.md "Distance layers")
+            if far not in cues:
+                problems.append(f"{file}: SoundCues '{name}' far names unknown SoundCues def '{far}'")
+            elif not isinstance(entry.get("farFrom"), (int, float)) or entry["farFrom"] <= 0:
+                problems.append(f"{file}: SoundCues '{name}' with far needs farFrom (metres)")
+            else:
+                used.add(far)
         tone = entry.get("tone")
         if not isinstance(tone, dict) or tone.get("wave") not in ("sine", "square", "saw", "noise") or not tone.get("hz") or not tone.get("seconds"):
             problems.append(f"{file}: SoundCues '{name}' needs tone {{wave, hz, seconds}}")
@@ -240,6 +257,41 @@ def check_sound_cues(defs_by_kind):
         if entry.get("loop") not in (True, False) or not isinstance(volume, (int, float)) or not 0 < volume <= 1 or entry.get("priority") not in (0, 1, 2, 3):
             problems.append(f"{file}: SoundCues '{name}' needs loop, volume (0 to 1) and priority (0 to 3)")
     return problems, used
+
+
+def check_hold_styles(defs_by_kind):
+    """Hold styles (docs/design/weapon-hold.md): grip, hand and hands are known words, points are [x, y, z], a two-handed
+    style has an off point, and attackStyle is a MeleeRules.styleAttacks list."""
+    problems = []
+    rules = defs_by_kind.get("Rules", {}).get("MeleeRules")
+    attack_styles = set((rules[1].get("styleAttacks") or {}).keys()) if rules else set()
+    point = lambda v: isinstance(v, list) and len(v) == 3 and all(isinstance(x, (int, float)) for x in v)
+    for name, (file, entry) in defs_by_kind.get("HoldStyles", {}).items():
+        if entry.get("grip", "Blade") not in ("None", "Blade", "Gun", "Bow", "Shield"):
+            problems.append(f"{file}: HoldStyles '{name}' grip must be None, Blade, Gun, Bow or Shield")
+        if entry.get("hand", "Right") not in ("Right", "Left"):
+            problems.append(f"{file}: HoldStyles '{name}' hand must be Right or Left")
+        if entry.get("hands", 1) not in (0, 1, 2):
+            problems.append(f"{file}: HoldStyles '{name}' hands must be 0, 1 or 2")
+        for key in ("main", "off"):
+            if key in entry and not point(entry[key]):
+                problems.append(f"{file}: HoldStyles '{name}' {key} must be [x, y, z]")
+        if entry.get("hands", 1) == 2 and entry.get("grip") != "Bow" and "off" not in entry:
+            problems.append(f"{file}: HoldStyles '{name}' is two-handed and needs an off point")
+        style = entry.get("attackStyle", "")
+        if style and attack_styles and style not in attack_styles:
+            problems.append(f"{file}: HoldStyles '{name}' attackStyle '{style}' is not a MeleeRules.styleAttacks list")
+    for name, (file, entry) in defs_by_kind.get("Things", {}).items():
+        hold = entry.get("hold")
+        if hold is None:
+            continue
+        if not isinstance(hold, dict) or "style" not in hold:
+            problems.append(f"{file}: Things '{name}' hold needs a style")
+            continue
+        for key in ("main", "off"):
+            if key in hold and not point(hold[key]):
+                problems.append(f"{file}: Things '{name}' hold.{key} must be [x, y, z]")
+    return problems
 
 
 def main() -> int:
@@ -293,6 +345,9 @@ def main() -> int:
 
     if CHECK_REFERENCES and "Research" in defs_by_kind:
         problems.extend(check_research_unlocks(defs_by_kind))
+
+    if CHECK_REFERENCES and "HoldStyles" in defs_by_kind:
+        problems.extend(check_hold_styles(defs_by_kind))
 
     if CHECK_REFERENCES and "SoundCues" in defs_by_kind:
         sound_problems, used = check_sound_cues(defs_by_kind)

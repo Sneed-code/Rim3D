@@ -147,14 +147,14 @@ us to start on the voice (the files had 0.1 to 0.4 s of silence first), mono, 44
 | Cue | When | Rules |
 | --- | --- | --- |
 | `Voice_FemHit` | a woman takes a melee hit or a shot (bullet, arrow, shard on flesh, not armour) of more than `minDamage` (3) | `chance` 0.5; at most one per pawn every `cooldown` (5) real seconds |
-| `Voice_FemScream` | a woman is downed (every time), or killed by violence (a vital part destroyed, organ failure, executed): always if she was up, `downedDeathChance` (0.5) if she lay downed and awake, never if knocked out | no cooldown; cuts her own hit grunt |
+| `Voice_FemScream` | a woman is downed (every time), or killed in a fight (a vital part destroyed, organ failure, executed, wounds, blood loss): every time, again if she lay downed (sneed, 2026-11-17); not for cold, hunger or illness | no cooldown; cuts her own hit grunt |
 
 - The sim decides (`soundForEvent` with a `SoundGenderOf` callback): the Human def's slots `femaleHit`, `femaleScream`
   (`maleHit`, `maleScream` when there are male recordings), the 50% from a hash of the event, so the game's random
   numbers are never touched and the same fight always gives the same grunts. Bleeding out, cold or illness: no scream.
-  PawnDied's `amount` says how she lay (0 up, 1 downed and awake, 2 downed with consciousness under 0.3, knocked out).
+  PawnDied's `amount` says how she lay (0 up, 1 downed and awake, 2 knocked out: body zones' `unconscious`, else consciousness under 0.3).
 - Unreal keeps **one voice per pawn** (`PlayVoice`): a scream cuts that pawn's grunt with a 40 ms fade (no click), a grunt
-  never plays over a scream, a scream does not restart within 2 s (downed and killed together scream once). Other sounds,
+  never plays over a scream, a scream does not restart within 0.3 s (was 2 s, which ate the scream of a quick kill after the downing). Other sounds,
   even the same pawn's footsteps or the club's thud, are never touched. The grunt's 5 s are counted in real time, from
   the last grunt that played.
 - Smoke test `sound`, phase `sound_voices`.
@@ -224,3 +224,49 @@ range), so a close voice is dry and clear and a far scream is mostly what comes 
   settings (`Sound.MusicMuted`, `Sound.Enable`). A short note on screen says which.
 - The bird and bed files come from free recordings (Wikimedia Commons, credited in `game/Content/Rim3D/Sounds/CREDITS.txt`),
   picked and cut on the PC because the cloud cannot reach those sites.
+
+## Melee by material, far shots and real ranges (sneed, 2026-11-17)
+
+### Melee by material
+
+A blow sounds like what strikes what (`soundMeleeCue`). The sim puts on each MeleeHit what the weapon is made of (`stuff`)
+and what it struck when it was not flesh (`struckDef`, `struckStuff`: the parrying weapon, the raised shield, the armour
+piece that turned it, the wall). `soundMaterialOf` reads a def's `visual.sound.material`, else its stuff categories
+(Metallic and Composite steel, Woody wood, Stony stone, Fabric and Leathery soft like flesh), else its `visual.surface`.
+
+| Blow | Cue |
+| --- | --- |
+| a blade in flesh | its own `hit` (`Flesh_Cut`, `Flesh_Stab`) |
+| a blunt weapon in flesh | `Hit_Wood_Flesh` or `Hit_Steel_Flesh` by its stuff (a club of steel smacks, of wood thuds) |
+| parried by a weapon, on a shield, turned by armour, into a wall or rock | `Hit_<Wood or Steel>_<Flesh, Wood, Steel or Stone>` |
+| fists | `Punch` on a body, `Melee_Clang` on plate or stone |
+
+A weapon of no stuff falls back to its def (`MeleeWeaponBase` steel, the club wood); a stone weapon rings like steel.
+Armour that says nothing is steel (plate turns a blow), a building that says nothing is stone. Blows into walls and rock
+come as "missed" with `hit` Building or Rock and now sound too (they made no sound before).
+
+### Far shots and blasts (Unreal)
+
+- **Speed of sound** (`Sound.SpeedOfSound`, on): a sound with a place is heard distance / 343 m/s after it happened, so a
+  shot 340 m off bangs a second after its flash. Under 10 m there is no delay.
+- **Distance layers**: a cue's `far` names its distant layer and `farFrom` where it starts. Both play; from `farFrom` to four
+  times it the near sound fades out and the far one in (equal power, so the level keeps following the -6 dB per doubling
+  of the main cue). Guns: `Shot_Far_Pistol`, `Shot_Far_Rifle`, `Shot_Far_Shotgun` from 40 m; blasts `Explosion_Far` from
+  100 to 120 m, a dull low thud with its echo. The air's low-pass (`AirCutoff`) still dulls both with distance.
+- The far layers are made from the near recordings by `sound_assets.py` (`filter`: low-pass at 700 Hz and a rolling
+  echo of four taps out to 1.5 s, `pad` room for the tail), so every gun keeps its own character far away.
+
+### Ranges
+
+`range` is where a sound fades out, `near` where it is at full volume; between them -6 dB per doubling. Rifle 2.5 km,
+assault rifle and turret 2 km, shotgun 1.8 km, revolver 1.6 km, pistol 1.5 km (near 10 m); blasts 4 km and 3 km (near
+25 to 30 m); steel on steel 160 m, steel on stone 130 m, wood and steel on wood 90 to 110 m, blows on flesh 40 to 50 m,
+a clang off armour 150 m, bullet impacts 60 to 150 m, swings 12 m, a punch 30 m, a scream 250 m, a hit grunt 80 m,
+the alarm 600 m, the raid horn 1.5 km. The voice budget and the same-cue limit keep a far battle from crowding out
+what is near.
+
+### Recordings (PC)
+
+`assets/sound_picks.json` names Kenney impacts for the material cues (punch and soft thuds, wood and plank knocks, metal
+plates, mining clinks for stone), StarNinjas' CC0 sword clashes for steel on steel, EZduzziteh's CC0 explosions and
+NenadSimic's CC0 distant explosion. Picked by file name, not by ear: sneed should judge them in play.

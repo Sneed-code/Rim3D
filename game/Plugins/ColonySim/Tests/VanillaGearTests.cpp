@@ -178,7 +178,7 @@ TEST_CASE("Vanilla gear: numbers from the RimWorld wiki") {
     CHECK(sniper->number("verbs.0.warmupTime") == doctest::Approx(105.0));   // 210 ticks
     CHECK(sniper->number("stats.rangedWeaponCooldown") == doctest::Approx(45.0));  // 90 ticks
     CHECK(sniper->number("stats.accuracyLong") == doctest::Approx(0.90));
-    CHECK(bullet->number("projectile.damageAmountBase") == doctest::Approx(25.0));
+    CHECK(bullet->number("projectile.damageAmountBase") == doctest::Approx(13.0));  // 25, halved by tuning.json and rounded
     CHECK(bullet->number("projectile.armorPenetrationBase") == doctest::Approx(0.38));
     CHECK(lmg->integer("verbs.0.burstShotCount") == 6);
     CHECK(minigun->integer("verbs.0.burstShotCount") == 25);

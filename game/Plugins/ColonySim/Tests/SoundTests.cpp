@@ -34,6 +34,7 @@ TEST_CASE("sound: every cue a def names is a SoundCues def, with a placeholder t
         for (DefId id : db.idsOfKind(kind)) {
             const Def& def = db.get(id);
             for (const std::string& slot : def.keys("visual.sound")) {
+                if (slot == "material") continue;  // what it is made of, not a cue
                 const std::string cue = soundSlot(def, slot.c_str());
                 const Def* c = db.find("SoundCues", cue);
                 CHECK_MESSAGE(c != nullptr, def.defName() << " " << slot << " -> " << cue);
@@ -126,10 +127,10 @@ TEST_CASE("sound: events turn into cues") {
     mh.def = db.idOf("Things", "Melee_Club");
     mh.message = "hit";
     mh.hit = ProjectileHitKind::Pawn;
-    CHECK(soundTestPlay(db, mh).at(0).cue == "Flesh_Blunt");
+    CHECK(soundTestPlay(db, mh).at(0).cue == "Hit_Wood_Flesh");
     mh.message = "deflected";
     mh.hit = ProjectileHitKind::Armor;
-    CHECK(soundTestPlay(db, mh).at(0).cue == "Melee_Clang");
+    CHECK(soundTestPlay(db, mh).at(0).cue == "Hit_Wood_Steel");
     mh.message = "missed";
     CHECK(soundTestPlay(db, mh).empty());
     mh.message = "hit";
@@ -252,8 +253,8 @@ TEST_CASE("sound: a woman grunts at some hard melee hits and screams when downed
     }
     CHECK(grunts > 160);
     CHECK(grunts < 240);
-    // The club's own hit sound still plays with it.
-    CHECK(soundTestPlay(db, mh, defOf).at(0).cue == "Flesh_Blunt");
+    // The club's own hit sound (wood on flesh) still plays with it.
+    CHECK(soundTestPlay(db, mh, defOf).at(0).cue == "Hit_Wood_Flesh");
 
     // 3 damage or less, a blocked or deflected blow, a man (no male voice yet), an animal, or no gender callback: no grunt.
     bool any = false;
@@ -290,7 +291,7 @@ TEST_CASE("sound: a woman grunts at some hard melee hits and screams when downed
     down.thing = man;
     CHECK(voices(down).empty());
 
-    // Killed by violence screams; bleeding out, cold or illness do not.
+    // Killed in a fight screams, bleeding out from it too; cold or illness do not.
     Event died;
     died.type = EventType::PawnDied;
     died.thing = woman;
@@ -299,35 +300,18 @@ TEST_CASE("sound: a woman grunts at some hard melee hits and screams when downed
     died.message = "executed";
     CHECK(voices(died).size() == 1);
     died.message = "blood loss";
-    CHECK(voices(died).empty());
+    CHECK(voices(died).size() == 1);
     died.message = "hypothermia";
     CHECK(voices(died).empty());
+    died.message = "illness";
+    CHECK(voices(died).empty());
 
-    // Killed while she lay downed: awake, a last scream about half the time (by the event alone); knocked out, none.
+    // Killed while she lay downed (awake or knocked out): she screams again, every time.
     died.message = "a vital part destroyed";
-    int last = 0;
-    bool knockedOut = false;
-    for (int i = 0; i < 400; ++i) {
-        died.thing = static_cast<Entity>(100 + i);
-        died.cell = {i % 23, i / 23, 0};
-        const Entity who = died.thing;
-        const SoundGenderOf allFemale = [](Entity) { return SoundGender::Female; };
-        const SoundDefOf allHuman = [&](Entity) { return human; };
-        const auto count = [&](float amount) {
-            died.amount = amount;
-            std::vector<SoundPlay> out;
-            soundForEvent(db, died, allHuman, out, allFemale);
-            int n = 0;
-            for (const SoundPlay& p : out) n += p.voice == SoundVoice::Scream && p.entity == who ? 1 : 0;
-            return n;
-        };
-        CHECK(count(0.0f) == 1);  // was up: killed outright, always
-        last += count(1.0f);
-        knockedOut = knockedOut || count(2.0f) != 0;
+    for (const float amount : {0.0f, 1.0f, 2.0f}) {
+        died.amount = amount;
+        CHECK(voices(died).size() == 1);
     }
-    CHECK(last > 160);
-    CHECK(last < 240);
-    CHECK(!knockedOut);
 }
 
 TEST_CASE("sound: a woman grunts at some hard shots too") {
@@ -406,4 +390,90 @@ TEST_CASE("sound: lovin sounds by who is in the bed") {
     if (rain == nullptr) { CHECK(false); return; }
     CHECK(soundSlot(*rain, "birds") == "Amb_Birds_Tropical");
     CHECK(soundSlot(*rain, "night") == "Amb_Tropical_Night");
+}
+
+TEST_CASE("sound: melee blows sound by what strikes what") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    const DefId club = db.idOf("Things", "Melee_Club");
+    const DefId mace = db.idOf("Things", "Melee_Mace");
+    const DefId knife = db.idOf("Things", "Melee_Knife");
+    const DefId steel = db.idOf("Things", "Steel");
+    const DefId wood = db.idOf("Things", "WoodLog");
+    CHECK(soundMaterialOf(db, steel) == "Steel");
+    CHECK(soundMaterialOf(db, wood) == "Wood");
+    CHECK(soundMaterialOf(db, club) == "Wood");
+    CHECK(soundMaterialOf(db, mace) == "Steel");
+    Event e;
+    e.type = EventType::MeleeHit;
+    e.hit = ProjectileHitKind::Pawn;
+    e.message = "hit";
+    // Blunt blows on flesh by the weapon's stuff (or its def): a wooden club thuds, a steel one or a mace smacks.
+    e.def = club;
+    CHECK(soundMeleeCue(db, e) == "Hit_Wood_Flesh");
+    e.stuff = steel;
+    CHECK(soundMeleeCue(db, e) == "Hit_Steel_Flesh");
+    e.stuff = DefId{};
+    e.def = mace;
+    CHECK(soundMeleeCue(db, e) == "Hit_Steel_Flesh");
+    // A blade sounds like itself.
+    e.def = knife;
+    CHECK(soundMeleeCue(db, e) == "Flesh_Cut");
+    // Parried by a wooden club, blocked by a steel shield, turned by armour, into a wall or rock.
+    e.def = mace;
+    e.message = "blocked";
+    e.struckDef = club;
+    e.struckStuff = wood;
+    CHECK(soundMeleeCue(db, e) == "Hit_Steel_Wood");
+    e.def = club;
+    e.struckStuff = steel;
+    CHECK(soundMeleeCue(db, e) == "Hit_Wood_Steel");
+    e.message = "deflected";
+    e.hit = ProjectileHitKind::Armor;
+    e.struckDef = DefId{};
+    e.struckStuff = DefId{};
+    CHECK(soundMeleeCue(db, e) == "Hit_Wood_Steel");
+    e.message = "missed";
+    e.hit = ProjectileHitKind::None;
+    CHECK(soundMeleeCue(db, e).empty());  // a swing through air
+    // Into rock or a wall the sim says "missed" (no pawn struck) with what it hit.
+    e.hit = ProjectileHitKind::Rock;
+    e.def = knife;
+    e.stuff = steel;
+    CHECK(soundMeleeCue(db, e) == "Hit_Steel_Stone");
+    e.hit = ProjectileHitKind::Building;
+    e.struckDef = db.idOf("Things", "Wall");
+    e.struckStuff = wood;
+    CHECK(soundMeleeCue(db, e) == "Hit_Steel_Wood");
+    // Every pairing has its cue.
+    for (const char* w : {"Wood", "Steel"}) {
+        for (const char* s2 : {"Flesh", "Wood", "Steel", "Stone"}) {
+            CHECK_MESSAGE(db.find("SoundCues", std::string("Hit_") + w + "_" + s2) != nullptr, w << " " << s2);
+        }
+    }
+    // Fists: a punch on a body, a clang on plate.
+    e = Event();
+    e.type = EventType::MeleeHit;
+    e.def = db.idOf("Things", "Human");
+    e.hit = ProjectileHitKind::Pawn;
+    e.message = "hit";
+    CHECK(soundMeleeCue(db, e) == "Punch");
+    e.message = "deflected";
+    e.hit = ProjectileHitKind::Armor;
+    CHECK(soundMeleeCue(db, e) == "Melee_Clang");
+}
+
+TEST_CASE("sound: shots and blasts have a far layer and carry like real ones") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    for (const char* shot : {"Shot_Revolver", "Shot_Pistol", "Shot_Rifle", "Shot_Shotgun", "Shot_AssaultRifle", "Shot_Turret",
+                             "Explosion_Blast", "Explosion_Fire"}) {
+        const Def* c = db.find("SoundCues", shot);
+        if (c == nullptr) { CHECK_MESSAGE(false, shot); continue; }
+        CHECK_MESSAGE(db.find("SoundCues", c->text("far")) != nullptr, shot);
+        CHECK_MESSAGE(c->number("farFrom") > 0.0, shot);
+        CHECK_MESSAGE(c->number("range") >= 1000.0, shot);  // a gunshot carries a kilometre and more
+    }
+    CHECK(db.find("SoundCues", "Shot_Rifle")->number("range") > db.find("SoundCues", "Shot_Pistol")->number("range"));
+    CHECK(db.find("SoundCues", "Explosion_Blast")->number("range") > db.find("SoundCues", "Shot_Rifle")->number("range"));
 }

@@ -64,7 +64,7 @@ COLONY_API std::string soundStepCue(const DefDatabase& db, DefId terrain);
 // same defs always give the same cues. With `genderOf`, pawns with a `visual.sound` slot for their gender's voice
 // (`femaleHit`, `femaleScream`, `maleHit`, `maleScream`) also cry out: a hit grunt for a melee hit or a shot that does more than
 // the cue's `minDamage` (3), `chance` of the time (0.5, decided by a hash of the event so it never touches the game's
-// random numbers), and a scream when downed or killed by violence (a vital part destroyed, organ failure, executed).
+// random numbers), and a scream every time when downed and every time a fight kills them (downed first or not).
 COLONY_API void soundForEvent(const DefDatabase& db, const Event& event, const SoundDefOf& defOf,
                               std::vector<SoundPlay>& out, const SoundGenderOf& genderOf = {});
 
@@ -73,7 +73,13 @@ COLONY_API void soundForEvent(const DefDatabase& db, const Event& event, const S
 // nothing (empty).
 COLONY_API std::string soundLovinCue(SoundGender a, SoundGender b);
 
-// The death causes that make a pawn scream (PawnDied's `message`): violence, not bleeding out, cold or illness.
+// Melee by material (docs/design/sound.md): "Wood", "Steel", "Stone" or "Flesh" (cloth, leather) for a stuff or a def
+// (its `visual.sound.material`, its stuff categories, its `visual.surface`); empty when it says nothing.
+COLONY_API std::string soundMaterialOf(const DefDatabase& db, DefId def);
+// The cue a MeleeHit plays: a blade in flesh its own `hit`; a blunt blow `Hit_<Wood|Steel>_Flesh`; a blow on a parrying
+// weapon, shield, armour, wall or rock `Hit_<Wood|Steel>_<Flesh|Wood|Steel|Stone>`; fists `Punch` or `Melee_Clang`.
+COLONY_API std::string soundMeleeCue(const DefDatabase& db, const Event& event);
+// The death causes that make a pawn scream (PawnDied's `message`): violence and the blood loss it caused, not cold or illness.
 COLONY_API bool soundViolentDeath(const std::string& cause);
 
 }  // namespace colony

@@ -5,8 +5,10 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Explosives.h"
+#include "ColonySim/FightResponse.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Pathfinder.h"
+#include "ColonySim/Stealth.h"
 #include "ColonySim/ThreatMap.h"
 
 #include <cstdint>
@@ -21,6 +23,7 @@ class DefenseSystem;
 class ExplosiveSystem;
 class HealthSystem;
 class JobSystem;
+class Lights;
 class Map;
 class MeleeSystem;
 class StateHasher;
@@ -53,6 +56,9 @@ struct KnownEnemy {
     float y = 0.0f;
     int level = 0;
     int64_t seenAt = 0;
+    // Seen or heard by the fighter itself; false when a friend called it out. Only firsthand knowledge is passed on
+    // (docs/design/stealth.md).
+    bool firsthand = true;
 };
 
 // What a fighter is doing (F6, docs/design/raids.md): fighting, hiding in a shelter (the alarm's
@@ -98,6 +104,17 @@ struct Fighter {
     bool lifted = false;
     CellPos rescueTo;
     int64_t cowerUntil = 0;  // a Wimp hurt in a fight falls back to cover until this step (sneed, traits.md)
+    // Stealth (docs/design/stealth.md). A new fighter is alerted (drafted, called up, raiding: it was sent to fight);
+    // guards at their posts are set Unaware, and anyone left alone long enough calms down.
+    Alert alert = Alert::Alerted;
+    bool onGuard = false;    // never calms down again (a mission site that has been raised)
+    bool called = false;     // alerted by a friend's call, not its own eyes or ears: it calls nobody in turn
+    int64_t alertAt = 0;     // game second of its last reason to be alert (0: not looked yet)
+    bool hasSuspect = false; // where it last noticed something without knowing who
+    float suspectX = 0.0f;
+    float suspectY = 0.0f;
+    Entity suspect = kNoEntity;  // whom it half saw, and since when: still in view `noticeSteps` later, it is sure
+    int64_t suspectAt = 0;
 };
 
 // The fighter going to carry `pawn`, a downed friend, to cover (F10), or kNoEntity.
@@ -161,7 +178,15 @@ struct FighterRules {
     // ambushRange / helpRange rule) even when drafted, unless ordered to attack; a reckless side charges.
     bool colonistsHoldForFriends = true;
     bool raidersHoldForFriends = false;
-    float minWalkShare = 0.25f;       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
+    float minWalkShare = 0.25f;
+    // Fight responses (docs/design/focus.md, ours): Flee and FleeOnSight run this long after being hurt or the last sighting.
+    float fleeResponseSeconds = 20.0f;
+    float fleeSightRange = 40.0f;     // FleeOnSight runs from an enemy it sees this close
+    // Sprinting (sneed, 2026-11-17): fighters sprint only to run from enemies or to close in for melee; otherwise they move at
+    // their usual pace. The player's sprint is 1.5 times (ProtagonistPawn kSprintFactor); the AI's is the same.
+    float sprintFactor = 1.5f;
+    float sprintChargeMin = 3.0f;     // a melee charge sprints while the target is further than this...
+    float sprintChargeMax = 30.0f;    // ...and nearer than this       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
 };
 
 class COLONY_API FighterSystem {
@@ -190,6 +215,31 @@ public:
     void setMelee(MeleeSystem* melee) { melee_ = melee; }
     // Fog and the rest shorten how far a fighter under the open sky spots enemies (docs/design/weather.md).
     void setWeather(const Weather* weather) { weather_ = weather; }
+
+    // Sprinting now (sneed): running from enemies (routed, falling back, fleeing by its response, heading for shelter) or
+    // charging in to melee. The movement speed is times FighterRules sprintFactor. Never the player's pawn (its keys sprint).
+    bool sprinting(Entity pawn) const;
+    float sprintFactor() const { return rules_.sprintFactor; }
+
+    // The pawn's fight response (MeleeSystem keeps it); Attack without melee.
+    FightResponse responseOf(Entity pawn) const;
+    static bool fleeResponse(FightResponse response);
+    // Stealth (docs/design/stealth.md, Stealth.cpp).
+    const StealthRules& stealth() const { return stealth_; }
+    // A target in the dark is seen from less far. Without it every cell counts as fully lit.
+    void setLights(const Lights* lights) { lights_ = lights; }
+    // A mission site: once one fighter of a side other than the player's is alerted there, its whole side is, for good.
+    void setStaysAlerted(bool stays) { staysAlerted_ = stays; }
+    bool staysAlerted() const { return staysAlerted_; }
+    // A sound at (x, y) on `level` heard `radius` metres away: fighters in earshot are alerted. Made by an enemy they
+    // also learn where it is (`knowsMaker`: a shot or a blow gives its maker away, a blast or a bullet striking doesn't).
+    void noise(float x, float y, int level, float radius, Entity maker, bool knowsMaker, const char* why);
+    // The noises of this step's events from `from` on: shots, melee blows, bullets striking pawns, blasts.
+    void hear(const std::vector<Event>& events, size_t from);
+    // The combat hurt hook: a fighter that is hit knows it is under attack, and by whom.
+    void struck(Entity victim, Entity attacker);
+    // Dev and scenario command (SetAlertCommand): sets how watchful a fighter is.
+    bool setAlert(Entity pawn, Alert alert, std::string& error);
 
     // A pawn's side (kPlayerFaction without a Faction component). Different factions are enemies.
     FactionId factionOf(Entity pawn) const;
@@ -231,6 +281,10 @@ public:
     uint64_t plans() const { return plans_; }
     uint64_t sightChecks() const { return sightChecks_; }
 
+    // Cooldown bursts: a fighter's whole store goes in one burst, so each shot after the first asks again whether a
+    // friend (or a tame animal) has come into the line to `target`; true holds the rest (CombatSystem::setHoldFire).
+    bool friendInLineNow(Entity shooter, Entity target) const;
+
 private:
     struct PawnInfo {
         Entity pawn = kNoEntity;
@@ -242,6 +296,7 @@ private:
         bool fighter = false;
         bool animal = false;  // wild animals are nobody's enemy unless ordered or provoked (animal-life.md, N5)
         bool turret = false;  // the colony's turret: an enemy to shoot at, never charged or carried off (fighters.md)
+        float speed = 0.0f;   // metres a step it moves at now: its footsteps are heard (stealth.md)
         Stance stance = Stance::Standing;  // as it stands now (prone when downed)
     };
     struct Candidate {
@@ -277,11 +332,14 @@ private:
     bool fireAt(Entity pawn, const PawnInfo& target);
     // Whether the fighter takes on turrets: only one with a gun that isn't set on melee.
     bool shootsTurrets(Entity pawn) const;
-    bool friendInLine(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target) const;
+    // `live`: read everyone's position now rather than at the last plan (a fighter's burst under way).
+    bool friendInLine(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target, bool live = false) const;
     void walkToSpot(Entity pawn, Fighter& f);
     void stepTo(Entity pawn, CellPos cell);
     void stop(Entity pawn, Fighter& f);
     const PawnInfo* info(Entity pawn) const;
+    void aiFocus(Entity pawn, const Fighter& f);
+    bool panicked(Entity pawn, const Fighter& f) const;
     float weaponRange(Entity pawn) const;
     int64_t now() const;
     void planCharge(Entity pawn, Fighter& f, CellPos goal);
@@ -292,6 +350,14 @@ private:
     // the end. `endRescue` lays it where the fighter stands (if lifted) and sends the fighter back to Fight.
     void rescueStep(Entity pawn, Fighter& f);
     void endRescue(Entity pawn, Fighter& f, bool laid);
+    // Stealth.cpp. `alertTo` changes the state (an event, the surprise delay, raising a mission site); `learnEnemy`
+    // adds or refreshes a known enemy, keeping the list in id order; `noticePoint` is something half seen or heard.
+    void alertTo(Entity pawn, Fighter& f, Alert to, const char* why, bool viaCall);
+    static bool learnEnemy(Fighter& f, const KnownEnemy& k);
+    void noticePoint(Entity pawn, Fighter& f, float x, float y, const char* why);
+    void calmDown(Entity pawn, Fighter& f);
+    bool staysAlert(const Fighter& f) const;
+    float noiseOf(DefId def, float fallback) const;
 
     Things& things_;
     Map& map_;
@@ -318,6 +384,13 @@ private:
     uint64_t plans_ = 0;
     uint64_t sightChecks_ = 0;
     const Weather* weather_ = nullptr;
+    StealthRules stealth_;
+    const Lights* lights_ = nullptr;
+    bool staysAlerted_ = false;
+    std::vector<float> noise_;           // per def id: the weapon's own `noiseRadius`, 0 for none
+    std::vector<KnownEnemy> called_;     // scratch for one friend's firsthand knowledge
+    std::vector<KnownEnemy> learned_;    // scratch for one look
+    std::vector<Entity> hearers_;        // scratch for one noise
 };
 
 }  // namespace colony

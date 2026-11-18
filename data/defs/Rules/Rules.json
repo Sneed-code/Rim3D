@@ -26,11 +26,13 @@
     "poise": { "base": 50, "immuneSteps": 900, "staggerEverySteps": 150, "staggerPartShare": 0.1,
                "forceFactor": { "Blunt": 1.5, "Crush": 1.5, "Burn": 0 } },
     "dodgeRoll": { "startUpSteps": 3, "rollSteps": 15, "hitProofSteps": 12, "recoverySteps": 9, "cooldownSteps": 6, "distance": 4.0 },
+    "cooldownBursts": { "shotsFactor": 3, "gapFactor": 0.5, "reloads": false },
     "unverified": ["accuracyDistances", "minHitChance", "stagger"],
     "ours": ["defaultShootingSkill", "standardTarget", "playerSpreadDistance", "gravity", "recoilRecoveryPerSecond",
              "recoilSkillReduction", "maxFlightSeconds", "reactionStepsBySkill", "leadBySkill", "leadErrorBySkill",
              "reloadTimeFactorBySkill", "recoilKickHoldSteps", "recoilKickResetSteps", "recoilKickRecoveryPerStep",
-             "recoilKickMaxDegrees", "dodgeRoll", "weaponSwitchSteps", "poise"]
+             "recoilKickMaxDegrees", "dodgeRoll", "weaponSwitchSteps", "poise",
+             "cooldownBursts: sneed 2026-11-17, three times the shots, half the gap, the cooldown from the first shot, no reloads"]
   },
   {
     "defName": "PlantRules", "source": "RimWorld wiki",
@@ -99,7 +101,23 @@
       "patchQuality": 0.3,
       "coverBlood": 1500,
       "minMoving": 0.4,
-      "crawlMoving": 0.1
+      "crawlMoving": 0.1,
+      "note2": "sneed 2026-11-17: dead with the head or torso at 0, or with deadLimbs arms and legs at 0 and the head or torso at deadLimbsCoreAtOrBelow; an arm (attacks) or leg (walking) under limbSlowBelow slows by limbSlowPerShare for every share under it, both limbs added; a zone not hurt for healDelaySeconds (real) and not bleeding heals healPerSecond of its missing hit points a real second, healAsleepFactor times that asleep",
+      "deadLimbs": 2,
+      "deadLimbsCoreAtOrBelow": 0.5,
+      "limbSlowBelow": 0.5,
+      "limbSlowPerShare": 0.5,
+      "healDelaySeconds": 10,
+      "healPerSecond": 0.001,
+      "healAsleepFactor": 2,
+      "dismember": {
+        "note": "sneed 2026-11-17 (body-health.md part F): only the hit that kills dismembers, when it went over what the struck zone had left by overkillShare of the zone's hit points: the arm or leg whole, or below the elbow or knee when the lower part was struck (lower, or a part in lowerAlso), the head, or for the torso the head and every limb",
+        "overkillShare": 0.25,
+        "pieceDecayDays": 2,
+        "arm": { "whole": "Arm", "lower": "Hand", "lowerAlso": ["Radius"] },
+        "leg": { "whole": "Leg", "lower": "Foot", "lowerAlso": ["Tibia"] },
+        "head": "Head"
+      }
     },
     "unverified": ["bloodLossPerDayPerBleedRate", "bloodLossRecoveryPerDay", "bleedRateMinForBloodLoss", "innerInjuryAlsoHurtsOuter"],
     "ours": ["protagonistPartHitPointsFactor", "innerInjuryAlsoHurtsOuter", "scarSeverity", "oldWoundFromHpLost", "zones"]
@@ -262,7 +280,14 @@
     "freeFraction": 0.2,
     "overloadSlowdown": 1.0,
     "overloadMinFactor": 0.2,
-    "ours": ["protagonistFactor", "traitKg", "lighter", "minFactor", "freeFraction", "overloadSlowdown", "overloadMinFactor"]
+    "autoPickUp": {
+      "comment": "sneed 2026-11-17: the player's colonist picks resources up by walking past (docs/design/inventory.md). Not from stockpiles.",
+      "radius": 1.5, "every": 10, "maxUnitMass": 5,
+      "items": ["mined", "grown"],
+      "categories": ["Metals", "StoneBlocks", "Textiles", "Leathers"],
+      "extra": ["Steel", "WoodLog", "Silver", "Gold", "Jade", "Plasteel", "Uranium", "ComponentIndustrial", "ComponentSpacer", "Cloth"]
+    },
+    "ours": ["protagonistFactor", "traitKg", "lighter", "minFactor", "freeFraction", "overloadSlowdown", "overloadMinFactor", "autoPickUp"]
   },
   {
     "defName": "LooksRules", "source": "Rim3D",

@@ -110,6 +110,37 @@ struct MissingPart {
     bool tended() const { return tendQuality >= 0.0f; }
 };
 
+// The limbs a body has lost, for drawing (HealthSystem::severed). A whole arm or leg sets only its own bit.
+enum SeveredBit : uint16_t {
+    kSeveredLeftForearm = 1u << 0,
+    kSeveredLeftArm = 1u << 1,
+    kSeveredRightForearm = 1u << 2,
+    kSeveredRightArm = 1u << 3,
+    kSeveredLeftLowerLeg = 1u << 4,
+    kSeveredLeftLeg = 1u << 5,
+    kSeveredRightLowerLeg = 1u << 6,
+    kSeveredRightLeg = 1u << 7,
+    kSeveredHead = 1u << 8,
+};
+
+// A piece the killing blow took off a body (body-health.md part F): it lies where it fell until it has rotted away
+// (HealthRules zones.dismember.pieceDecayDays). Not a thing yet: nobody can pick it up.
+struct SeveredPiece {
+    uint32_t id = 0;
+    Entity from = kNoEntity;  // the body it came off (it may be gone by now)
+    uint16_t bit = 0;         // one SeveredBit
+    float x = 0.0f;           // where the body was, metres
+    float y = 0.0f;
+    int level = 0;
+    int64_t at = 0;           // game second it came off
+};
+
+// What is saved of them.
+struct SeveredSaved {
+    uint32_t nextId = 1;
+    std::vector<SeveredPiece> pieces;  // by id
+};
+
 // Every pawn whose def names a body (`race.body`) has one. What is saved and hashed is the first
 // block; the second is worked out from it again after any change (and after loading).
 struct Health {
@@ -126,6 +157,7 @@ struct Health {
     bool dead = false;
     DeathCause cause = DeathCause::None;
     int64_t bleedStoppedAt = -1;  // body zones: game second its bleeding stopped (blood comes back after a while); -1 while it bleeds
+    std::vector<int64_t> zoneHurtAt;  // body zones: the game second each zone was last hurt, -1 for never (it heals 10 real seconds on)
 
     // ---- Derived. Never saved or hashed.
     float stageHp = 1.0f;        // young animals: the life stage's healthScaleFactor, set by AnimalSystem (N4 leftovers)
@@ -143,6 +175,8 @@ struct Health {
     std::vector<float> zones;
     bool unconscious = false;    // body zones: head under 25%, or blood at 1000 or less
     bool crawls = false;         // body zones: downed by the torso and awake, so it crawls away from enemies (part D)
+    float limbAttack = 1.0f;     // body zones: arms under half slow every attack (HealthSystem::attackSpeedFactor)
+    float limbMove = 1.0f;       // ...and legs under half slow the walk (already in movingFactor)
     std::vector<uint8_t> zoneBleeds;  // body zones: each zone's bleeding, 0 none, 1 light, 2 moderate, 3 heavy
 
     bool incapacitated() const { return downed || dead; }
@@ -287,8 +321,25 @@ public:
     float zoneHealth(Entity pawn, int zone) const;
     // The full hit points of the zone that body part `part` is in (part C's stagger rule); 0 for a body without zones.
     float partZoneHp(Entity pawn, int part) const;
+    // The zone that body part `part` is in, by its place in zoneNames (the left arm and leg come before the right);
+    // -1 for a body without zones. Unreal shows a hit on the zone it landed in (part E).
+    int partZone(Entity pawn, int part) const;
     float blood(Entity pawn) const;
     bool unconscious(Entity pawn) const;
+    // sneed's rules of 2026-11-17 (docs/design/body-health.md "Part F as built").
+    // Arms under half slow attacks: 1 down to 0.5, half a percent for every percent an arm is under 50%, both arms
+    // added. 1 for a body without zones.
+    float attackSpeedFactor(Entity pawn) const;
+    // Dismemberment: only on the hit that kills, when it went over what the struck zone had left by a quarter of the
+    // zone's hit points. `severed`: the SeveredBits of what the body has lost (PawnDismembered says when).
+    uint16_t severed(Entity pawn) const;
+    // The pieces lying about, by id; how many game days one lies before it is gone.
+    const std::vector<SeveredPiece>& severedPieces() const { return severedPieces_.pieces; }
+    float severedDecayDays() const;
+    const SeveredSaved& severedSaved() const { return severedPieces_; }
+    void restoreSevered(SeveredSaved saved) { severedPieces_ = std::move(saved); }
+    // Whether the pawn sleeps (its zones heal twice as fast).
+    void setAsleep(std::function<bool(Entity pawn)> asleep) { asleep_ = std::move(asleep); }
     // Patching (part B): a zone's bleeding (0 none, 1 light, 2 moderate, 3 heavy), the zone that bleeds worst (-1 for
     // none), and patching it: tends its untended bleeding wounds and lost parts at `quality`, returns how many.
     int zoneBleedLevel(Entity pawn, int zone) const;
@@ -406,6 +457,8 @@ private:
     std::function<float(Entity)> cleanliness_;
     const TraitBook* traits_ = nullptr;
     std::function<float(Entity)> immunityBonus_;
+    std::function<bool(Entity)> asleep_;
+    SeveredSaved severedPieces_;
     std::vector<Entity> active_;  // scratch for step
     bool restoring_ = false;      // inside refreshAll: working out what a loaded save already was, so nobody stops walking for it
     std::vector<size_t> healable_;  // scratch for step: the injuries that can heal
@@ -426,6 +479,7 @@ private:
     bool hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter);
     bool damagePart(Entity pawn, Health& health, int part, DefId hediff, float amount);
     void destroyPart(Entity pawn, Health& health, int part, float amount);
+    void dismember(Entity pawn, Health& health, int zone, int struck, float overkill);
     void leaveScar(Entity pawn, Health& health, const Injury& healed, Rng& rng);
     // Rolls whether a fresh wound will turn infected, and when.
     void rollInfection(Entity pawn, Health& health, Injury& injury);

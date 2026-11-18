@@ -43,8 +43,9 @@ def download(src):
         urls = links[:1]
     elif how.startswith("page:"):
         base = "https://opengameart.org"
-        links = findLinks(how[5:], r'(?:https://opengameart\.org)?/sites/default/files/[^"\s]+\.(?:ogg|txt)')
-        urls = [u if u.startswith("http") else base + u for u in links]
+        links = findLinks(how[5:], r'(?:https://opengameart\.org)?/sites/default/files/[^"\s]+\.(?:ogg|wav|zip|txt)')
+        # Not the page's preview player or image styles (they 404 and would stop the whole pack).
+        urls = [u if u.startswith("http") else base + u for u in links if "/audio_preview/" not in u and "/styles/" not in u]
     else:
         urls = [how]
     if not urls:
@@ -93,7 +94,8 @@ def pickProblems(picks, cues):
 def expand(patterns):
     files = []
     for pat in patterns:
-        files += [h for h in sorted(glob.glob(str(DEST / pat))) if h not in files]
+        found = sorted(glob.glob(str(DEST / pat), recursive=True))
+        files += [h for h in found if h not in files and h.lower().endswith((".wav", ".ogg", ".mp3", ".flac"))]
     return files
 
 
@@ -101,10 +103,11 @@ def peakDb(ffmpeg, src, start, chain):
     args = [ffmpeg, "-hide_banner", "-nostats"]
     if start:
         args += ["-ss", str(start)]
-    args += ["-i", src, "-af", ",".join(chain + ["volumedetect"]), "-f", "null", "-"]
+    # Measured in float: some .ogg files decode above full scale, which a 16-bit meter clamps to 0 dB (and they clipped).
+    args += ["-i", src, "-af", ",".join(chain + ["aformat=sample_fmts=flt", "astats=measure_perchannel=none"]), "-f", "null", "-"]
     out = subprocess.run(args, capture_output=True, text=True).stderr
-    m = re.search(r"max_volume: (-?[0-9.]+) dB", out)
-    return float(m.group(1)) if m else 0.0
+    m = re.findall(r"Peak level dB: (-?[0-9.]+|-inf)", out)
+    return float(m[-1]) if m and m[-1] != "-inf" else 0.0
 
 
 def cutOne(ffmpeg, src, out, channels, pick, music):
@@ -115,6 +118,11 @@ def cutOne(ffmpeg, src, out, channels, pick, music):
     if pick.get("seconds"):
         chain.append("atrim=duration=%g" % pick["seconds"])
         chain.append("areverse,afade=t=in:d=0.04,areverse")  # no click where it is cut
+    if pick.get("pad"):
+        chain.append("apad=pad_dur=%g" % pick["pad"])  # room for an echo tail the filters add
+    chain += pick.get("filter", [])  # extra ffmpeg filters: a far layer made from a near shot (lowpass, aecho)
+    if pick.get("pad"):
+        chain.append("areverse,silenceremove=start_periods=1:start_threshold=-60dB,afade=t=in:d=0.3,areverse")
     if pick.get("loop"):
         chain.append("afade=t=in:d=0.02,areverse,afade=t=in:d=0.02,areverse")
     if music:

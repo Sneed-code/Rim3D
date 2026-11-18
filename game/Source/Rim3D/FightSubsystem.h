@@ -107,6 +107,8 @@ public:
 	 *  not in direct mode, no gun, the game is paused, an order went out this step, or the gun isn't ready. */
 	bool Fire();
 	bool Reload();
+	/** Patches your worst bleeding zone (H; body-health.md part B). False if nothing bleeds, you are down or patching already. */
+	bool Patch();
 	/** Crouch or stand up. */
 	bool ToggleCrouch();
 	/** Lie down or stand up. */
@@ -137,8 +139,20 @@ public:
 	int32 GetShotsSeen() const { return ShotsSeen; }
 	int32 GetHitsSeen() const { return HitsSeen; }
 	int32 GetPawnHitsSeen() const { return PawnHitsSeen; }
+	int32 GetSnappedHits() const { return SnappedHits; }
+	/** Where the last bullet met this pawn's drawn body (for the smoke tests' close looks). */
+	bool GetLastBodyHit(colony::Entity Pawn, FVector& Out) const
+	{
+		const FVector* Found = LastBodyHits.Find(entt::to_integral(Pawn));
+		if (Found)
+		{
+			Out = *Found;
+		}
+		return Found != nullptr;
+	}
 	int32 GetFlashes() const { return Flashes; }
 	int32 GetTracersSpawned() const { return TracersSpawned; }
+	int32 GetMuzzleShots() const { return MuzzleShots; }
 	int32 GetTracersArrived() const { return TracersArrived; }
 	/** Tracers given up on: the bullet never showed in a snapshot, or flew too far or too long without a hit. */
 	int32 GetTracersDropped() const { return TracersDropped; }
@@ -159,9 +173,16 @@ public:
 	int32 GetHitClips() const { return HitClipsPlayed; }
 	/** Damage numbers put up over your own hits so far. */
 	int32 GetDamageNumbersShown() const { return DamageNumbersShown; }
+	/** Of those, the hits on you (drawn red); zones knocked by hits (the hit layer, body-health.md part E); patch orders sent. */
+	int32 GetDamageNumbersOnMe() const { return DamageNumbersOnMe; }
+	int32 GetZoneKicks() const { return ZoneKicks; }
+	int32 GetPatchOrders() const { return PatchOrders; }
 	int32 GetBodyDecals() const { return BodyDecals; }
 	int32 GetGroundDecals() const { return GroundDecals; }
 	int32 GetRagdollsStarted() const { return RagdollsStarted; }
+	/** Severed limbs and heads on the ground now, and how many were thrown since the start (body-health.md part F). */
+	int32 GetSeveredPiecesShown() const;
+	int32 GetSeveredPiecesThrown() const { return SeveredPiecesThrown; }
 	int32 GetFireOrders() const { return FireOrders; }
 	int32 GetHitMarkers() const { return HitMarkers; }
 	int32 GetActiveTracers() const { return Tracers.Num(); }
@@ -222,6 +243,11 @@ private:
 	void OnProjectileHit(const colony::Event& Event);
 	void SpawnImpact(const FFightTracer& Tracer);
 	void SpawnFlash(const FVector& Muzzle);
+	/** Where the drawn gun's muzzle is for a shot by Shooter: the first-person view gun's, else the front end of the gun
+	 *  in its hands. False (Out unchanged) when no drawn gun is near the sim's muzzle point. */
+	bool FindDrawnMuzzle(colony::Entity Shooter, FVector& InOutMuzzle) const;
+	/** The player's thin yellow bar under the gun's name: how far the gun's shots have refilled, and pips for the shots left. */
+	void DrawShotStore(const colony::ThingView& View, float Scale) const;
 	void SpawnBurst(EFightParticle Kind, const FVector& At, const FVector& Direction, int32 Count, float Speed, float Spread, float SizeCm, float Life, float Gravity);
 	void SpawnBodyDecal(ASimPawnActor& Actor, const FVector& At, const FVector& Direction, float Amount);
 	void SpawnGroundDecal(const FVector& At, float RadiusCm);
@@ -293,12 +319,20 @@ private:
 		float Amount = 0.0f;
 		float Age = 0.0f;
 		bool bArmour = false;
+		/** A hit on you (red), not one of yours. */
+		bool bOnMe = false;
 	};
 	TArray<FFightDamageNumber> DamageNumbers;
 	int32 DamageNumbersShown = 0;
-	void AddDamageNumber(const FFightTracer& Tracer, bool bArmour);
+	int32 DamageNumbersOnMe = 0;
+	int32 ZoneKicks = 0;
+	int32 PatchOrders = 0;
+	void AddDamageNumber(const FFightTracer& Tracer, bool bArmour, bool bOnMe);
 	void SpawnBodyThroughHit(const FFightTracer& Tracer);
 	int32 BodyThroughHits = 0;
+	/** Body hits whose point moved onto the drawn body (SpawnImpact). */
+	int32 SnappedHits = 0;
+	TMap<uint32, FVector> LastBodyHits;
 	void DrawDamageNumbers(float Scale);
 	float EquipMessageSeconds = 0.0f;
 
@@ -307,6 +341,8 @@ private:
 	int32 PawnHitsSeen = 0;
 	int32 Flashes = 0;
 	int32 TracersSpawned = 0;
+	/** Shots whose flash and tracer started at the drawn gun's muzzle. */
+	int32 MuzzleShots = 0;
 	int32 TracersArrived = 0;
 	int32 TracersDropped = 0;
 	int32 Impacts = 0;
@@ -316,6 +352,8 @@ private:
 	int32 BodyDecals = 0;
 	int32 GroundDecals = 0;
 	int32 RagdollsStarted = 0;
+	TMap<uint32, TWeakObjectPtr<class ASeveredPieceActor>> SeveredPieces;  // by the sim's piece id
+	int32 SeveredPiecesThrown = 0;
 	int32 FireOrders = 0;
 	int32 HitMarkers = 0;
 	int32 HitboxesDrawn = 0;

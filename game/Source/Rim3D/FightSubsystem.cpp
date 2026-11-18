@@ -1,4 +1,5 @@
 #include "FightSubsystem.h"
+#include "SeveredPieceActor.h"
 
 #include "BloodSubsystem.h"
 
@@ -9,6 +10,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
+#include "GunRangeSubsystem.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -19,6 +21,7 @@
 
 #include <imgui.h>
 
+#include "KeyBindings.h"
 #include "OrdersSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
@@ -32,6 +35,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Defs.h"
@@ -319,7 +323,13 @@ void UFightSubsystem::OnShotFired(const colony::Event& Event)
 		return;
 	}
 	EnsureEffects();
-	const FVector Muzzle = FightSimToWorldUnits(*Bridge, Event.x, Event.y, Event.z);
+	FVector Muzzle = FightSimToWorldUnits(*Bridge, Event.x, Event.y, Event.z);
+	// The bullet leaves from the drawn gun's muzzle (sneed): the flash and the tracer start there and fly to where the
+	// sim's bullet lands.
+	if (FindDrawnMuzzle(Event.thing, Muzzle))
+	{
+		++MuzzleShots;
+	}
 	SpawnFlash(Muzzle);
 	if (Tracers.Num() < FightMaxTracers)
 	{
@@ -466,9 +476,26 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 {
 	++Impacts;
 	++ImpactsByKind[FMath::Clamp(static_cast<int32>(Tracer.HitKind), 0, 7)];
-	const FVector At = Tracer.End;
 	const FVector Dir = Tracer.Dir.GetSafeNormal().IsNearlyZero() ? -FVector::UpVector : Tracer.Dir.GetSafeNormal();
 	const FVector Back = -Dir;
+	// The sim's point lies on its hitbox, which a slim drawn body may sit inside: on a body hit, where the bullet's line
+	// first meets the drawn body (the animated mannequin's physics shapes, which the MakeHuman body follows), so the
+	// wound and the spray come out of the skin where it was shot.
+	FVector At = Tracer.End;
+	if ((Tracer.HitKind == colony::ProjectileHitKind::Pawn || Tracer.HitKind == colony::ProjectileHitKind::Armor) && Tracer.bDirKnown)
+	{
+		if (const USimPawnSubsystem* SnapPawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
+		{
+			FVector OnSkin;
+			ASimPawnActor* Victim = SnapPawns->FindPawn(Tracer.Target);
+			if (Victim && Victim->TraceDrawnBody(Tracer.End - Dir * 80.0f, Tracer.End + Dir * 60.0f, OnSkin))
+			{
+				At = OnSkin;
+				++SnappedHits;
+				LastBodyHits.Add(entt::to_integral(Tracer.Target), At);
+			}
+		}
+	}
 	// Your bullet passed through a body lying on the ground (a dead one, which the sim no longer counts, or a downed one
 	// whose ragdoll lies off its hitboxes): the blood, a wound and a push, where the line met the body. Cosmetic; the sim
 	// decided the bullet's hit, and a dead body has nothing left for it to decide.
@@ -500,11 +527,18 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 				{
 					Actor->PlayHitReaction(Dir, 0.3f);
 					++HitReactionsPlayed;
+					// Stopped by the armour, but the body still feels it: a small wobble where it landed (body-health.md part E).
+					if (const USimSubsystem* KickBridge = BridgeSource.Get())
+					{
+						Actor->KickZone(*KickBridge, Tracer.Part, At, Dir, 0.25f);
+						++ZoneKicks;
+					}
 				}
 			}
-			if (const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>(); Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == Tracer.Shooter)
+			if (const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+				Protagonist && Protagonist->IsDirectMode() && (Protagonist->GetControlled() == Tracer.Shooter || Protagonist->GetControlled() == Tracer.Target))
 			{
-				AddDamageNumber(Tracer, true);
+				AddDamageNumber(Tracer, true, Protagonist->GetControlled() == Tracer.Target);
 			}
 			break;
 		case colony::ProjectileHitKind::Pawn:
@@ -535,6 +569,13 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 					}
 					Actor->PlayHitReaction(Dir, Strength);
 					++HitReactionsPlayed;
+					// The struck zone is knocked along the hit and wobbles back, whatever else the body does: small hits
+					// that stagger nothing too (body-health.md part E).
+					if (StaggerBridge)
+					{
+						Actor->KickZone(*StaggerBridge, Tracer.Part, At, Dir, FMath::Clamp(Tracer.Amount / 20.0f, 0.25f, 1.0f));
+						++ZoneKicks;
+					}
 				}
 				if (bFullBlood)
 				{
@@ -560,11 +601,19 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 			{
 				RecentImpulse.Add(entt::to_integral(Tracer.Target), TPair<FVector, int64>(Dir * FMath::Min(Tracer.Amount * FightImpulsePerDamage, FightImpulseMax), Bridge->GetSteps()));
 			}
-			if (const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>(); Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == Tracer.Shooter)
+			if (const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>(); Protagonist && Protagonist->IsDirectMode())
 			{
-				HitMarkerSeconds = 0.18f;
-				++HitMarkers;
-				AddDamageNumber(Tracer, false);
+				if (Protagonist->GetControlled() == Tracer.Shooter)
+				{
+					HitMarkerSeconds = 0.18f;
+					++HitMarkers;
+					AddDamageNumber(Tracer, false, false);
+				}
+				else if (Protagonist->GetControlled() == Tracer.Target)
+				{
+					// What a hit took from you, in red.
+					AddDamageNumber(Tracer, false, true);
+				}
 			}
 			break;
 		}
@@ -904,6 +953,86 @@ void UFightSubsystem::UpdateLights(float GameDelta)
 	}
 }
 
+bool UFightSubsystem::FindDrawnMuzzle(colony::Entity Shooter, FVector& InOutMuzzle) const
+{
+	// Farther than this from the sim's muzzle point, the drawn gun is somewhere else (a ragdoll, a stale frame): keep the sim's.
+	constexpr double MaxOffCm = 160.0;
+	FVector Found = FVector::ZeroVector;
+	bool bFound = false;
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	const bool bMe = Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == Shooter;
+	if (bMe && Protagonist->GetBody() && Protagonist->GetBody()->IsFirstPerson())
+	{
+		if (const UGunRangeSubsystem* Range = GetWorld()->GetSubsystem<UGunRangeSubsystem>())
+		{
+			bFound = Range->GetViewMuzzle(Found);
+		}
+		if (!bFound)
+		{
+			return false;  // first person with no view gun drawn: the sim's point is at the eyes, which is right
+		}
+	}
+	if (!bFound)
+	{
+		const UStaticMeshComponent* Gun = GetHeldGun(Shooter);
+		if (!Gun || !Gun->IsVisible() || !Gun->GetStaticMesh())
+		{
+			return false;
+		}
+		// Guns are drawn with +X out of the barrel: the front face of the mesh's box, at its middle.
+		const FBox Box = Gun->GetStaticMesh()->GetBoundingBox();
+		const FVector Local(Box.Max.X, (Box.Min.Y + Box.Max.Y) * 0.5, (Box.Min.Z + Box.Max.Z) * 0.5);
+		Found = Gun->GetComponentTransform().TransformPosition(Local);
+		bFound = true;
+	}
+	if (!bFound || FVector::Dist(Found, InOutMuzzle) > MaxOffCm)
+	{
+		return false;
+	}
+	InOutMuzzle = Found;
+	return true;
+}
+
+void UFightSubsystem::DrawShotStore(const colony::ThingView& View, float Scale) const
+{
+	if (View.shotStoreSize <= 0)
+	{
+		return;
+	}
+	ImDrawList* Draw = ImGui::GetWindowDrawList();
+	const ImVec2 At = ImGui::GetCursorScreenPos();
+	const float Width = 240.0f * Scale;
+	const float BarHeight = 4.0f * Scale;
+	const float PipHeight = 3.0f * Scale;
+	const float Gap = 2.0f * Scale;
+	const bool bPips = View.shotStoreSize > 1;
+	const ImU32 Back = IM_COL32(25, 22, 10, 200);
+	const ImU32 Yellow = IM_COL32(255, 214, 40, 245);
+	const ImU32 Dim = IM_COL32(120, 100, 20, 230);
+	// The bar: full while the gun is full; after the first shot it empties and fills again over the hidden cooldown,
+	// like a stamina bar.
+	const float Filled = View.refillSteps > 0 ? FMath::Clamp(1.0f - static_cast<float>(View.refillLeft) / static_cast<float>(View.refillSteps), 0.0f, 1.0f) : 1.0f;
+	Draw->AddRectFilled(At, ImVec2(At.x + Width, At.y + BarHeight), Back, BarHeight * 0.5f);
+	if (Filled > 0.0f)
+	{
+		Draw->AddRectFilled(At, ImVec2(At.x + Width * Filled, At.y + BarHeight), View.refillSteps > 0 ? Dim : Yellow, BarHeight * 0.5f);
+	}
+	// The shots left in the store, one pip each, under it (a one-shot gun has the bar alone).
+	if (bPips)
+	{
+		const int32 Count = View.shotStoreSize;
+		const float PipGap = Count > 24 ? 1.0f * Scale : 2.0f * Scale;
+		const float PipWidth = FMath::Max(1.0f, (Width - PipGap * static_cast<float>(Count - 1)) / static_cast<float>(Count));
+		const float Top = At.y + BarHeight + Gap;
+		for (int32 I = 0; I < Count; ++I)
+		{
+			const float X = At.x + static_cast<float>(I) * (PipWidth + PipGap);
+			Draw->AddRectFilled(ImVec2(X, Top), ImVec2(X + PipWidth, Top + PipHeight), I < View.shotStore ? Yellow : Back);
+		}
+	}
+	ImGui::Dummy(ImVec2(Width, BarHeight + (bPips ? Gap + PipHeight : 0.0f) + Gap));
+}
+
 UStaticMeshComponent* UFightSubsystem::GetHeldGun(colony::Entity Pawn) const
 {
 	const UWeaponDrawSubsystem* Weapons = GetWorld()->GetSubsystem<UWeaponDrawSubsystem>();
@@ -959,7 +1088,8 @@ void UFightSubsystem::SyncPawns()
 		{
 			continue;
 		}
-		const bool bDown = View.downed || View.dead;
+		// A pawn downed by its torso and awake crawls instead of going limp (body-health.md parts D and E).
+		const bool bDown = (View.downed && !View.crawling) || View.dead;
 		if (bDown && !Actor->IsRagdoll())
 		{
 			FVector Impulse = FVector::ZeroVector;
@@ -978,6 +1108,44 @@ void UFightSubsystem::SyncPawns()
 			Actor->StopRagdoll();
 		}
 	}
+	// Severed pieces (body-health.md part F): one thrown from its body when the sim first shows it, gone when the sim
+	// has let it rot away. A piece whose body has no actor yet waits for it.
+	TSet<uint32> Lying;
+	for (const colony::SeveredPieceView& Piece : Bridge->GetCurrentSnapshot().severedPieces)
+	{
+		Lying.Add(Piece.id);
+		if (SeveredPieces.Contains(Piece.id))
+		{
+			continue;
+		}
+		if (ASimPawnActor* From = Pawns->FindPawn(Piece.from))
+		{
+			ASeveredPieceActor* Thrown = From->SpawnSeveredPiece(Piece.bit);
+			SeveredPieces.Add(Piece.id, Thrown);
+			SeveredPiecesThrown += Thrown ? 1 : 0;
+		}
+	}
+	for (auto It = SeveredPieces.CreateIterator(); It; ++It)
+	{
+		if (!Lying.Contains(It.Key()))
+		{
+			if (ASeveredPieceActor* Gone = It.Value().Get())
+			{
+				Gone->Destroy();
+			}
+			It.RemoveCurrent();
+		}
+	}
+}
+
+int32 UFightSubsystem::GetSeveredPiecesShown() const
+{
+	int32 Shown = 0;
+	for (const TPair<uint32, TWeakObjectPtr<ASeveredPieceActor>>& Piece : SeveredPieces)
+	{
+		Shown += Piece.Value.IsValid() ? 1 : 0;
+	}
+	return Shown;
 }
 
 // ---------------------------------------------------------------------------
@@ -1077,6 +1245,25 @@ bool UFightSubsystem::Reload()
 	return true;
 }
 
+bool UFightSubsystem::Patch()
+{
+	USimSubsystem* Bridge = BridgeSource.Get();
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	if (!Bridge || !Bridge->GetSim() || !Protagonist || !Protagonist->IsDirectMode() || Bridge->GetSpeed() == 0)
+	{
+		return false;
+	}
+	const colony::Entity Pawn = Protagonist->GetControlled();
+	const colony::ThingView* View = Bridge->GetCurrentSnapshot().find(Pawn);
+	if (!View || View->downed || View->dead || View->patchZone >= 0 || Bridge->GetSim()->health().worstBleedingZone(Pawn) < 0)
+	{
+		return false;
+	}
+	Bridge->Submit(colony::PatchCommand{Pawn});
+	++PatchOrders;
+	return true;
+}
+
 bool UFightSubsystem::ToggleCrouch()
 {
 	USimSubsystem* Bridge = BridgeSource.Get();
@@ -1157,34 +1344,40 @@ void UFightSubsystem::UpdatePlayerInput()
 	// With a building in hand the mouse button plans it and R turns it (UHandsOnSubsystem), so the gun stays quiet.
 	const UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
 	const bool bBuilding = Orders && Orders->IsDirectBuilding();
-	if (!bBuilding && PC->IsInputKeyDown(EKeys::LeftMouseButton))
+	using Rim3DKeys::IsDown;
+	using Rim3DKeys::WasPressed;
+	if (!bBuilding && IsDown(PC, ERim3DAction::Attack))
 	{
 		Fire();
 	}
-	if (!bBuilding && PC->WasInputKeyJustPressed(EKeys::R))
+	if (!bBuilding && WasPressed(PC, ERim3DAction::Reload))
 	{
 		Reload();
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::C))
+	if (WasPressed(PC, ERim3DAction::Patch))
+	{
+		Patch();
+	}
+	if (WasPressed(PC, ERim3DAction::Crouch))
 	{
 		ToggleCrouch();
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::Z))
+	if (WasPressed(PC, ERim3DAction::Prone))
 	{
 		ToggleProne();
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::E))
+	if (WasPressed(PC, ERim3DAction::EquipWeapon))
 	{
 		EquipNearest();
 	}
-	// Left Alt rolls the way the movement keys point (U21; it was Left Shift, which sprints now); G throws a grenade at the
-	// crosshair.
-	if (PC->WasInputKeyJustPressed(EKeys::LeftAlt))
+	// T (sneed 2026-11-17): a dodge roll the way the movement keys point in third person, a dash in first person (the same
+	// move in the sim; the first person camera stays level and blurs, UShooterFeelSubsystem). Left Alt no longer rolls.
+	if (WasPressed(PC, ERim3DAction::RollDash))
 	{
-		Roll(FVector2D((PC->IsInputKeyDown(EKeys::D) ? 1.0 : 0.0) - (PC->IsInputKeyDown(EKeys::A) ? 1.0 : 0.0),
-			(PC->IsInputKeyDown(EKeys::W) ? 1.0 : 0.0) - (PC->IsInputKeyDown(EKeys::S) ? 1.0 : 0.0)));
+		Roll(FVector2D((IsDown(PC, ERim3DAction::MoveRight) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveLeft) ? 1.0 : 0.0),
+			(IsDown(PC, ERim3DAction::MoveForward) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveBack) ? 1.0 : 0.0)));
 	}
-	if (!bBuilding && PC->WasInputKeyJustPressed(EKeys::G))
+	if (!bBuilding && WasPressed(PC, ERim3DAction::Grenade))
 	{
 		ThrowGrenade();
 	}
@@ -1344,12 +1537,14 @@ void UFightSubsystem::DrawHud()
 			if (View->magazineSize > 0)
 			{
 				FightText(FString::Printf(TEXT("%s   %d / %d%s"), *Label, View->rounds, View->magazineSize, View->reloading ? TEXT("   reloading") : TEXT("")));
+				ImGui::TextUnformatted("Left mouse fire   R reload   C crouch   Z lie down");
 			}
 			else
 			{
 				FightText(Label);
+				DrawShotStore(*View, Scale);
+				ImGui::TextUnformatted("Left mouse fire   C crouch   Z lie down");
 			}
-			ImGui::TextUnformatted("Left mouse fire   R reload   C crouch   Z lie down");
 		}
 		else if (View->weapon.valid() && Bridge->GetDefs())
 		{
@@ -1363,6 +1558,15 @@ void UFightSubsystem::DrawHud()
 			{
 				ImGui::TextUnformatted("No gun within reach");
 			}
+		}
+		// Bleeding: the key that patches it (body-health.md part B), or how long the patching still takes.
+		if (View->patchZone >= 0)
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "Patching...  %.1f s", static_cast<float>(View->patchStepsLeft) / static_cast<float>(colony::kStepsPerRealSecondAt1x));
+		}
+		else if (!View->downed && !View->dead && Sim.health().worstBleedingZone(Pawn) >= 0)
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.3f, 1.0f), "%s", TCHAR_TO_UTF8(*FString::Printf(TEXT("Bleeding   %s patch the wound"), *Rim3DKeys::GetKeyLabel(ERim3DAction::Patch))));
 		}
 		if (Weapons)
 		{
@@ -1396,7 +1600,7 @@ void UFightSubsystem::DrawHud()
 	++HudFramesDrawn;
 }
 
-void UFightSubsystem::AddDamageNumber(const FFightTracer& Tracer, bool bArmour)
+void UFightSubsystem::AddDamageNumber(const FFightTracer& Tracer, bool bArmour, bool bOnMe)
 {
 	if (GFightDamageNumbers.GetValueOnGameThread() == 0)
 	{
@@ -1404,7 +1608,10 @@ void UFightSubsystem::AddDamageNumber(const FFightTracer& Tracer, bool bArmour)
 	}
 	// A little to the side at random so a burst's numbers don't sit on each other.
 	const FVector Jitter(Random.FRandRange(-8.0f, 8.0f), Random.FRandRange(-8.0f, 8.0f), Random.FRandRange(0.0f, 10.0f));
-	DamageNumbers.Add({Tracer.End + Jitter, Tracer.Amount, 0.0f, bArmour});
+	// A hit on you has no place in the world to float over that you could see (in first person it is behind the camera):
+	// it shows under the crosshair, and `At` is its offset there in 1080p pixels.
+	DamageNumbers.Add({bOnMe ? FVector(Random.FRandRange(-70.0f, 70.0f), Random.FRandRange(0.0f, 24.0f), 0.0f) : Tracer.End + Jitter, Tracer.Amount, 0.0f, bArmour, bOnMe});
+	DamageNumbersOnMe += bOnMe ? 1 : 0;
 	if (DamageNumbers.Num() > 24)
 	{
 		DamageNumbers.RemoveAt(0);
@@ -1425,7 +1632,11 @@ void UFightSubsystem::DrawDamageNumbers(float Scale)
 	for (const FFightDamageNumber& Number : DamageNumbers)
 	{
 		FVector2D Screen;
-		if (!PC->ProjectWorldLocationToScreen(Number.At, Screen, true))
+		if (Number.bOnMe)
+		{
+			Screen = FVector2D(Viewport->Size.x * 0.5f + Number.At.X * Scale, Viewport->Size.y * 0.64f + Number.At.Y * Scale);
+		}
+		else if (!PC->ProjectWorldLocationToScreen(Number.At, Screen, true))
 		{
 			continue;
 		}
@@ -1437,7 +1648,8 @@ void UFightSubsystem::DrawDamageNumbers(float Scale)
 		const FTCHARToUTF8 Utf8(*Text);
 		const ImVec2 Extent = Font->CalcTextSizeA(Size, FLT_MAX, 0.0f, Utf8.Get());
 		const ImVec2 At(Viewport->Pos.x + static_cast<float>(Screen.X) - Extent.x * 0.5f, Viewport->Pos.y + static_cast<float>(Screen.Y) - Extent.y - 50.0f * Scale * T);
-		const ImU32 Colour = Number.bArmour ? IM_COL32(170, 200, 255, static_cast<int>(255 * Alpha))
+		const ImU32 Colour = Number.bOnMe ? IM_COL32(255, 70, 60, static_cast<int>(255 * Alpha))
+			: Number.bArmour ? IM_COL32(170, 200, 255, static_cast<int>(255 * Alpha))
 			: (Number.Amount >= 15.0f ? IM_COL32(255, 210, 60, static_cast<int>(255 * Alpha)) : IM_COL32(255, 255, 255, static_cast<int>(255 * Alpha)));
 		const ImU32 Shadow = IM_COL32(0, 0, 0, static_cast<int>(200 * Alpha));
 		Draw->AddText(Font, Size, ImVec2(At.x + 2.0f, At.y + 2.0f), Shadow, Utf8.Get());

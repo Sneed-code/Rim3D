@@ -74,20 +74,23 @@ as smoothly as the body.
 
 ## Keys
 
+These are the defaults; all are rebindable and the full list is in [controls.md](controls.md).
+
+
 | Key | Does |
 | --- | --- |
-| Tab (overseer view) | take control of the selected colonist, else the protagonist |
-| Tab (direct mode) | back to the overseer view, centred on the colonist, which is selected |
+| O (overseer view) | take control of the selected colonist, else the protagonist (was Tab until 2026-11-17) |
+| O (direct mode) | back to the overseer view, centred on the colonist, which is selected |
 | W A S D | walk, relative to where the camera looks; Ctrl for a slow walk |
 | mouse | look (yaw and pitch, up to 80 degrees); `Protagonist.MouseTurn` (0.7 default, about 0.05 degrees a mouse count) sets how fast |
 | wheel | third person distance |
 | V | first and third person |
-| T | take over the colonist under the crosshair (within 25 m) |
+| Y | take over the colonist under the crosshair (within 25 m; was T) |
 | Space, 1 | pause, 1x (2 and 3 stay at 1x) |
 | F5, F9, F8, F7 | the bridge's keys (F5 quicksave, F9 quickload); a save made in direct mode puts you back in direct mode when you load it |
 | N, F on a bed | sleep the night away, 18:00 to 6:00 (W A S D, N or Esc: get up) |
 
-The overseer's inspect panel also has a **Take control (Tab)** button for a selected colonist. The
+The overseer's inspect panel also has a **Take control (O)** button for a selected colonist. The
 console has `Protagonist.Enter` and `Protagonist.Exit`. The game starts in direct mode with `-Direct`
 (use `-SimScenario=Crashlanded` so there is a protagonist; without a scenario the sim has no
 colonists and the game says so in the log).
