@@ -121,7 +121,7 @@ Now:
   the label into the part index) and the spot in that pawn's frame as drawn (metres forward along its yaw, left, up from
   the ground under it). The sim aims at that spot on the pawn as the sim has it (a frame of lag in the drawing doesn't
   move it), and the bullet carries it (`DrawnAim` on `Shooter` and `Projectile`). A bullet that passes within
-  `kDrawnAimRadius` (7 cm) of the spot, where the pawn stands when the bullet gets there, hits that part, whatever the
+  `kDrawnAimRadius` (7 cm) of the spot, where the pawn stands when the bullet gets there, hits that part, at the spot itself (the wound goes where you aimed), whatever the
   stock hitboxes say; one that misses the spot (spread, or the target moved) still meets the stock hitboxes, other
   pawns, walls and the ground as before. Everything the sim decides stays in the sim and in the command log: replays
   and saves keep the spot (commands section 5, combat section 6), so the game stays deterministic.

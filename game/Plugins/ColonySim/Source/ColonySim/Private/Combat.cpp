@@ -1030,7 +1030,12 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
                                         ? t <= best.t
                                         : (t < best.t || (t == best.t && best.kind == ProjectileHitKind::Pawn && pawn < best.thing));
                 if (better) {
-                    at(t, best);
+                    // It lands on the spot itself: the drawn body's surface where the crosshair was, not the edge of
+                    // the 7 cm allowance round it (the wound and blood go where the player aimed).
+                    best.t = t;
+                    best.x = sx;
+                    best.y = sy;
+                    best.z = sz;
                     best.kind = ProjectileHitKind::Pawn;
                     best.thing = pawn;
                     best.part = drawn->part;

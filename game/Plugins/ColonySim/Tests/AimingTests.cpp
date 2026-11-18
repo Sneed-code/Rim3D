@@ -615,6 +615,9 @@ TEST_CASE("Crosshair: a bullet passing the drawn spot hits that part, a miss fal
     CHECK(hit.kind == ProjectileHitKind::Pawn);
     CHECK(hit.thing == target);
     CHECK(hit.part == head);
+    CHECK(hit.x == doctest::Approx(pos.x));  // on the spot itself, not the edge of the allowance
+    CHECK(hit.y == doctest::Approx(y));
+    CHECK(hit.z == doctest::Approx(1.65f));
     // A line through the chest misses the spot: the stock torso box takes it.
     const TraceHit chest = sim->combat().trace(20.5f, pos.y, 1.15f, 60.0f, pos.y, 1.15f, 0, kNoEntity, nowhere, true, &drawn);
     CHECK(chest.kind == ProjectileHitKind::Pawn);
