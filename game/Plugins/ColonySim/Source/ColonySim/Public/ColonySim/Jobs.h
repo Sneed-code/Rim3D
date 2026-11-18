@@ -561,6 +561,14 @@ public:
     // What one of `def` weighs for this pawn: `stats.mass` times the CarryRules `lighter` factors of its skills
     // (a miner carries mined stone lighter, a farmer crops, a fighter everything).
     double massFor(Entity pawn, DefId def) const;
+    // The player's colonist picks resources up by walking past them (sneed 2026-11-17, docs/design/inventory.md
+    // "Picking up resources"): whether `def` is one (CarryRules `autoPickUp`), how near it must lie (metres) and how
+    // many game seconds apart it looks. Radius 0 turns it off (no CarryRules, or none set).
+    bool autoPicksUp(DefId def) const {
+        return def.valid() && def.value < carry_.autoPickUp.size() && carry_.autoPickUp[def.value] != 0;
+    }
+    float autoPickUpRadius() const { return carry_.autoPickUpRadius; }
+    int autoPickUpEvery() const { return carry_.autoPickUpEvery; }
     double lighterFactor(Entity pawn, DefId def) const;
     // What one item entity (a whole stack) weighs for this pawn.
     double itemMassFor(Entity pawn, Entity item) const;
@@ -888,6 +896,9 @@ private:
             std::vector<uint8_t> applies;  // per Things def id; empty: every item
         };
         std::vector<Lighter> lighter;
+        std::vector<uint8_t> autoPickUp;  // per Things def id
+        float autoPickUpRadius = 0.0f;
+        int autoPickUpEvery = 10;
     } carry_;
     void loadCarryRules();
     // Per def id, from the Things defs (NeedJobs.cpp): food tiers (-1 not food), nutrition and how

@@ -2343,7 +2343,12 @@ void saveShooterPart(Ar& ar, Shooter& sh) {
     ar.value("aimZ", sh.aimZ);
     ar.value("player", sh.player);
     ar.value("recoil", sh.recoil);
-
+    if (ar.sectionVersion() >= 5) {  // sneed's cooldown bursts
+        ar.value("stored", sh.stored);
+        ar.value("refill", sh.refill);
+        ar.value("refillFrom", sh.refillFrom);
+        ar.value("storeGun", sh.storeGun);
+    }
 }
 
 template <typename Ar>
@@ -3493,7 +3498,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("mood", 1, [&] {
         saveParts(ar, "mood", e, &SaveEntity::mood, [&](Mood& m) { saveMoodPart(ar, m); });
     });
-    ar.section("combat", 4, [&] {
+    ar.section("combat", 5, [&] {
         saveParts(ar, "posture", e, &SaveEntity::posture, [&](Posture& p) { savePosturePart(ar, p); });
         saveParts(ar, "gear", e, &SaveEntity::gear, [&](Gear& g) { saveGearPart(ar, g); });
         saveParts(ar, "equippedBy", e, &SaveEntity::equippedBy, [&](EquippedBy& b) { saveEquippedByPart(ar, b); });

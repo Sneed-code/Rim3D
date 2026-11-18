@@ -56,7 +56,10 @@ namespace
 	TAutoConsoleVariable<int32> GSoundEcho(TEXT("Sound.Echo"), 1, TEXT("0 turns off the echo of the place (outdoors, room, cave)."));
 
 	/** A scream does not start again over its own first seconds (downed and killed in the same moment scream once). */
-	constexpr double SoundScreamRepeatS = 2.0;
+	constexpr double SoundScreamRepeatS = 0.3;
+	TAutoConsoleVariable<int32> GSoundSpeedOfSound(TEXT("Sound.SpeedOfSound"), 1,
+		TEXT("1: a sound is heard as late as sound takes to come that far (343 m/s), so a far shot's bang follows its flash."));
+	constexpr double SoundMetresPerSecond = 343.0;
 	const FName SoundReverbTag(TEXT("Rim3D.Place"));
 	TAutoConsoleVariable<int32> GSoundMusicMuted(TEXT("Sound.MusicMuted"), 0, TEXT("1 mutes the music (Ctrl+M)."));
 	TAutoConsoleVariable<int32> GSoundBirds(TEXT("Sound.Birds"), 1, TEXT("0 turns off the bird calls (they are ambience)."));
@@ -429,6 +432,8 @@ void USoundSubsystem::LoadCues()
 		Cue.CooldownS = static_cast<float>(Def.number("cooldown", 0.0));
 		Cue.Priority = static_cast<int32>(Def.integer("priority", 2));
 		Cue.Group = SoundGroupOf(Cue.Name);
+		Cue.FarCue = UTF8_TO_TCHAR(Def.text("far").c_str());
+		Cue.FarFromM = static_cast<float>(Def.number("farFrom", 0.0));
 		Cue.Tone = SoundMakeTone(UTF8_TO_TCHAR(Def.text("tone.wave", "sine").c_str()), static_cast<float>(Def.number("tone.hz", 440.0)),
 			static_cast<float>(Def.number("tone.seconds", 0.2)), Cue.bLoop, GetTypeHash(Cue.Name));
 		if (const TArray<TSharedPtr<const FSoundClip>>* Have = Files.Find(Cue.Name); Have && !bFirst)
@@ -722,12 +727,29 @@ int32 USoundSubsystem::AddSound(const FCue& Cue, const FVector& Location, bool b
 	Sound.Clip = PickClip(Cue);
 	Sound.StartedAt = Now;
 	Sound.Pitch = Cue.bLoop || Cue.Group == ESoundMix::Ambience ? 1.0f : Random.FRandRange(0.95f, 1.05f);
-	Sound.EndsAt = Now + (Sound.Clip ? Sound.Clip->Seconds() / Sound.Pitch : 0.0) + 0.5;
 	++PlaysTotal;
 	PlayCounts.FindOrAdd(Cue.Name) += 1;
 	if (Follow != colony::kNoEntity)
 	{
 		EntityLocation(Follow, Sound.Location);
+	}
+	if (!Cue.bLoop && !Sound.bEverywhere && GSoundSpeedOfSound.GetValueOnGameThread() != 0)
+	{
+		// Sound takes its time: a shot 340 m off is heard a second after its flash. Under 10 m it is not worth a frame.
+		const double Metres = FVector::Dist(Sound.Location, Ears) / 100.0;
+		Sound.StartedAt = Now + (Metres > 10.0 ? Metres / SoundMetresPerSecond : 0.0);
+	}
+	Sound.EndsAt = Sound.StartedAt + (Sound.Clip ? Sound.Clip->Seconds() / Sound.Pitch : 0.0) + 0.5;
+	// A shot or a blast with a distant layer plays both, crossfaded by distance in MixAndAssign.
+	const FCue* Far = !Cue.FarCue.IsEmpty() && Cue.FarFromM > 0.0f && !Cue.bLoop ? Cues.Find(Cue.FarCue) : nullptr;
+	if (Far && Far->Clips.Num() > 0 && Sound.Clip)
+	{
+		FSound Layer = Sound;
+		Layer.Layer = 2;
+		Layer.Clip = PickClip(*Far);
+		Layer.EndsAt = Layer.StartedAt + (Layer.Clip ? Layer.Clip->Seconds() / Layer.Pitch : 0.0) + 0.5;
+		Sound.Layer = 1;
+		Sounds.Add(MoveTemp(Layer));
 	}
 	const int32 Index = Sounds.Add(MoveTemp(Sound));
 	if (Key != 0)
@@ -1678,6 +1700,10 @@ void USoundSubsystem::MixAndAssign(const USimSubsystem* Source, float Delta)
 		{
 			continue;
 		}
+		if (Now < Sound.StartedAt)
+		{
+			continue;  // still on its way at the speed of sound
+		}
 		const bool bLoop = Sound.Cue->bLoop;
 		if (!bLoop)
 		{
@@ -1738,6 +1764,13 @@ void USoundSubsystem::MixAndAssign(const USimSubsystem* Source, float Delta)
 		{
 			Distance = DistanceGain(Sound.Cue->NearM, Sound.Cue->RangeM, Sound.DistanceM);
 			Air = AirCutoff(Sound.Cue->RangeM, Sound.DistanceM);
+		}
+		if (Sound.Layer != 0)
+		{
+			// Near layer out, far layer in, from `farFrom` to four times it (equal power, so the sum stays as loud).
+			const float From = Sound.Cue->FarFromM;
+			const float T = FMath::SmoothStep(From, From * 4.0f, Sound.DistanceM);
+			Distance *= Sound.Layer == 1 ? FMath::Cos(T * UE_HALF_PI) : FMath::Sin(T * UE_HALF_PI);
 		}
 		Sound.Cutoff = FMath::Min(Air, 20000.0f / (1.0f + 3.0f * Sound.Occlusion));
 		Sound.Volume = bOn && Sound.Clip ? Sound.Cue->Volume * GroupVolume(Sound.Cue->Group) * Sound.Gain * Distance * FMath::Pow(SoundWallGain, static_cast<float>(Sound.Occlusion)) : 0.0f;

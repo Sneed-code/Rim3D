@@ -147,6 +147,9 @@ EVENT_CUES = {
     "Work_Tailor", "Work_Research", "Work_Clean", "Work_Tend", "Work_Stonecut", "Work_Butcher", "Work_Eat",
     "Work_Refuel", "Work_Handle", "Work_Chat", "Work_Extinguish",
     "Voice_LovinCouple", "Voice_LovinFem",  # Unreal, from the Lovin event (soundLovinCue)
+    # MeleeHit by material (soundMeleeCue): weapon wood or steel on flesh, wood, steel or stone
+    "Hit_Wood_Flesh", "Hit_Wood_Wood", "Hit_Wood_Steel", "Hit_Wood_Stone",
+    "Hit_Steel_Flesh", "Hit_Steel_Wood", "Hit_Steel_Steel", "Hit_Steel_Stone",
     "Ui_KillConfirm",  # Unreal, the kill feed on the player's own kill (KillFeedSubsystem.cpp)
 }
 
@@ -230,11 +233,23 @@ def check_sound_cues(defs_by_kind):
                 problems.append(f"{file}: {kind} '{name}' visual.sound must be an object of slot: cue")
                 continue
             for slot, cue in sound.items():
+                if slot == "material":  # what it sounds like when struck or striking (melee by material)
+                    if cue not in ("Wood", "Steel", "Stone", "Flesh"):
+                        problems.append(f"{file}: {kind} '{name}' visual.sound.material must be Wood, Steel, Stone or Flesh")
+                    continue
                 if not isinstance(cue, str) or cue not in cues:
                     problems.append(f"{file}: {kind} '{name}' visual.sound.{slot} names unknown SoundCues def '{cue}'")
                 else:
                     used.add(cue)
     for name, (file, entry) in cues.items():
+        far = entry.get("far")
+        if far is not None:  # the distant layer a shot or a blast turns into (sound.md "Distance layers")
+            if far not in cues:
+                problems.append(f"{file}: SoundCues '{name}' far names unknown SoundCues def '{far}'")
+            elif not isinstance(entry.get("farFrom"), (int, float)) or entry["farFrom"] <= 0:
+                problems.append(f"{file}: SoundCues '{name}' with far needs farFrom (metres)")
+            else:
+                used.add(far)
         tone = entry.get("tone")
         if not isinstance(tone, dict) or tone.get("wave") not in ("sine", "square", "saw", "noise") or not tone.get("hz") or not tone.get("seconds"):
             problems.append(f"{file}: SoundCues '{name}' needs tone {{wave, hz, seconds}}")

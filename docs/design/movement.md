@@ -143,3 +143,8 @@ A pawn that carries a downed pawn or a corpse (rescue, corpse hauling, butcher j
 step, so the body lies exactly where the carrier stands. A body that cannot move (Moving capacity 0) at exactly that spot is
 left out of the carrier's neighbours; before this the carrier steered round its own load and froze for hours on a walk to the
 butcher table (found by the year run).
+
+## Sprinting
+
+sneed, 2026-11-17: AI pawns jog and sprint (FighterRules `sprintFactor`) only in a fight, fleeing or an emergency. The rule and its cases are in [controls.md](controls.md) "AI pawns and sprinting" (`Sim::pawnSprinting`,
+folded into the movement speed factor).

@@ -7,6 +7,7 @@
 
 #include "Engine/Engine.h"
 #include "GraphicsOptionsSubsystem.h"
+#include "KeyBindings.h"
 #include "OverseerSubsystem.h"
 #include "ProtagonistPawn.h"
 #include "QuestPanelSubsystem.h"
@@ -1336,6 +1337,13 @@ void UPanelsSubsystem::DrawSettings(USimSubsystem& Bridge, float Scale, float Ma
 			AProtagonistPawn::SetMouseTurn(AProtagonistPawn::kDefaultMouseTurn);
 		}
 		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("How fast the mouse turns the view when you play as a pawn."));
+
+		// Keys (sneed 2026-11-17, docs/design/controls.md): every player key can be rebound; saved with the settings.
+		ImGui::Separator();
+		if (ImGui::CollapsingHeader("Controls (change keys)"))
+		{
+			Rim3DKeys::DrawControlsPage(Scale);
+		}
 
 		// Graphics: quality, ray tracing, upscaler (docs/design/graphics-options.md).
 		if (UGraphicsOptionsSubsystem* Graphics = GEngine ? GEngine->GetEngineSubsystem<UGraphicsOptionsSubsystem>() : nullptr)

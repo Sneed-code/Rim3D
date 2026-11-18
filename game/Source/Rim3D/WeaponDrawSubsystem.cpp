@@ -1,5 +1,6 @@
 #include "WeaponDrawSubsystem.h"
 #include "GunRangeSubsystem.h"
+#include "KeyBindings.h"
 
 #include "Animation/AnimSequence.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -1273,14 +1274,14 @@ void UWeaponDrawSubsystem::UpdatePlayerInput()
 		HoldShield(false);
 		return;
 	}
-	if (PC->IsInputKeyDown(EKeys::LeftMouseButton))
+	if (Rim3DKeys::IsDown(PC, ERim3DAction::Attack))
 	{
 		Swing();
 	}
 	// The right mouse button holds up the shield when one is on the arm, else the weapon (a gun aims, ProtagonistPawn).
 	USimSubsystem* Bridge = nullptr;
 	const colony::ThingView* Me = ControlledView(Bridge);
-	const bool bRight = bScriptedRight ? bScriptRightHeld : PC->IsInputKeyDown(EKeys::RightMouseButton);
+	const bool bRight = bScriptedRight ? bScriptRightHeld : Rim3DKeys::IsDown(PC, ERim3DAction::AimBlock);
 	if (!Me)
 	{
 		// Paused, downed or dead: leave the shield as it is (the sim lowers it for a downed pawn).
@@ -1301,7 +1302,7 @@ void UWeaponDrawSubsystem::UpdatePlayerInput()
 			Block();
 		}
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::Q))
+	if (Rim3DKeys::WasPressed(PC, ERim3DAction::SwitchWeapon))
 	{
 		SwitchNext();
 	}

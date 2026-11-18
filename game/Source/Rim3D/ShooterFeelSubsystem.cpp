@@ -1,4 +1,5 @@
 #include "ShooterFeelSubsystem.h"
+#include "KeyBindings.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -17,6 +18,7 @@
 
 #include <imgui.h>
 
+#include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
 #include "VisualMesh.h"
@@ -514,13 +516,26 @@ void UShooterFeelSubsystem::UpdateKick(float DeltaTime, const colony::Sim& Sim, 
 	// A dodge roll ducks the camera under it and kicks the blur: from where the sim has the roll (27 steps in all).
 	float Dip = 0.0f;
 	float RollBlur = 0.0f;
+	float Dash = 0.0f;
 	if (View && View->rollPhase > 0)
 	{
 		const float Progress = FMath::Clamp(1.0f - static_cast<float>(View->rollStepsLeft) / 27.0f, 0.0f, 1.0f);
-		Dip = FMath::Sin(PI * Progress);
-		RollBlur = View->rollPhase == 2 ? 0.7f : 0.25f;
+		// In first person the same move is a dash (sneed 2026-11-17): the view stays level, blurs hard and widens a little.
+		const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+		const AProtagonistPawn* Body = Protagonist ? Protagonist->GetBody() : nullptr;
+		if (Body && Body->IsFirstPerson())
+		{
+			Dash = FMath::Sin(PI * Progress);
+			RollBlur = View->rollPhase == 2 ? 1.0f : 0.5f;
+		}
+		else
+		{
+			Dip = FMath::Sin(PI * Progress);
+			RollBlur = View->rollPhase == 2 ? 0.7f : 0.25f;
+		}
 	}
 	RollDip = FMath::FInterpTo(RollDip, Dip, DeltaTime, 18.0f);
+	DashKick = FMath::FInterpTo(DashKick, Dash, DeltaTime, 14.0f);
 	BlurPulse = FMath::Max(BlurPulse - DeltaTime * 1.4f, RollBlur);
 	VignettePulse = FMath::Max(0.0f, VignettePulse - DeltaTime * 1.1f);
 }
@@ -563,6 +578,7 @@ void UShooterFeelSubsystem::Advance(float DeltaTime)
 	Feel.Rotation = FRotator(KickPitch + Shake.Pitch - RollDip * 9.0f, KickYaw + Shake.Yaw, Shake.Roll);
 	Feel.Location = ShakeMove + FVector(0.0, 0.0, -RollDip * 55.0f);
 	const float Blur = GetBlurScale();
+	Feel.FovAdd = DashKick * 9.0f;
 	Feel.MotionBlur = Blur <= 0.0f ? 0.0f : FMath::Clamp(0.5f * Blur + BlurPulse * 0.8f * Blur, 0.0f, 1.0f);
 	Feel.Vignette = VignettePulse * FMath::Min(Blur, 1.0f);
 	Feel.Fringe = FMath::Min(1.5f, BlurPulse * 1.2f + VignettePulse) * FMath::Min(Blur, 1.0f);
@@ -730,7 +746,7 @@ void UShooterFeelSubsystem::Tick(float DeltaTime)
 		LastGeneration = Source->GetSimGeneration();
 		Teardown();
 		Shakes.Reset();
-		KickPitch = KickYaw = RollDip = BlurPulse = VignettePulse = 0.0f;
+		KickPitch = KickYaw = RollDip = DashKick = BlurPulse = VignettePulse = 0.0f;
 	}
 	GetCameraFeel();
 	if (Holder)
@@ -790,7 +806,8 @@ void UShooterFeelSubsystem::DrawSettingsPanel(float ViewportWidth, float Scale)
 		bChanged = true;
 	}
 	ImGui::TextUnformatted("0 turns shake, blur or kick off. Hold the right mouse");
-	ImGui::TextUnformatted("button with a gun to aim; Left Shift rolls; G throws a grenade.");
+	ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("button with a gun to aim; %s rolls (dashes in first person); %s throws a grenade."),
+		*Rim3DKeys::GetKeyLabel(ERim3DAction::RollDash), *Rim3DKeys::GetKeyLabel(ERim3DAction::Grenade))));
 	if (bChanged)
 	{
 		SaveSettings();

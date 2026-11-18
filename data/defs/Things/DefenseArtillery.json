@@ -1,6 +1,6 @@
 [
   {
-    "defName": "Gun_Mortar", "label": "mortar", "source": "RimWorld wiki",
+    "defName": "Gun_Mortar", "keepBurst": true, "label": "mortar", "source": "RimWorld wiki",
     "category": "Item", "stackLimit": 1, "turretGun": true,
     "visual": { "sound": { "shot": "Shot_Turret" }, "parts": [{ "shape": "cylinder", "radius": 0.12, "height": 1.1, "rot": [0, 50, 0], "at": [0, 0, 0.3], "color": [0.22, 0.24, 0.22] }] },
     "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 840, "accuracyTouch": 1, "accuracyShort": 1, "accuracyMedium": 1, "accuracyLong": 1 },
@@ -9,7 +9,7 @@
     "note": "Wiki-checked 2026-10-28: range 29.9 to 500, warm-up 240 ticks, cooldown 1680 ticks (counted only while a colonist mans it), one shell a shot. Times are ticks / 2 (steps)."
   },
   {
-    "defName": "Gun_RocketswarmLauncher", "label": "rocketswarm launcher", "source": "RimWorld wiki",
+    "defName": "Gun_RocketswarmLauncher", "keepBurst": true, "label": "rocketswarm launcher", "source": "RimWorld wiki",
     "category": "Item", "stackLimit": 1, "turretGun": true,
     "visual": { "sound": { "shot": "Shot_Turret" }, "parts": [{ "shape": "box", "size": [0.9, 0.9, 0.5], "at": [0, 0, 0.3], "color": [0.26, 0.24, 0.2] }] },
     "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 3600, "accuracyTouch": 1, "accuracyShort": 1, "accuracyMedium": 1, "accuracyLong": 1 },

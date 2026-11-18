@@ -447,6 +447,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setBreeding(breeding_.get());
     animals_->setHusbandry(husbandry_.get());
     animals_->setPathfinder(&pathfinder_);
+    combat_->setHoldFire([this](Entity shooter, Entity target) { return fighters_ && fighters_->friendInLineNow(shooter, target); });
     combat_->setHarmHook([this](Entity victim, Entity by) {
         if (things_->exists(victim)) {
             things_->registry().emplace_or_replace<SimKillCredit>(victim, SimKillCredit{by, time_.steps});
@@ -2297,6 +2298,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
         { SimLap lap(profile_, "inspirations"); inspirations_->step(time_.seconds); }
     }
     { SimLap lap(profile_, "movement"); movement_->step(things_->registry(), map_); }
+    { SimLap lap(profile_, "autoPickUp"); autoPickUp(); }  // the player's colonist picks up resources it walks past
     travel_->noteVisits();
     { SimLap lap(profile_, "melee"); melee_->step(); }
     { SimLap lap(profile_, "combat"); combat_->step(rng_); melee_->faceFocus(); }
@@ -2798,6 +2800,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.rounds = combat_->roundsLeft(entity);
             view.magazineSize = combat_->magazineSize(entity);
             view.reloading = combat_->reloading(entity);
+            combat_->shotStore(entity, view.shotStore, view.shotStoreSize, view.refillLeft, view.refillSteps);
             combat_->kickOf(entity, view.kickUp, view.kickSide);
             view.rollPhase = static_cast<uint8_t>(combat_->rollPhase(entity));
             if (view.rollPhase != 0) {
@@ -3820,7 +3823,23 @@ float Sim::lowestPartHealth(Entity pawn) const {
 float Sim::pawnMoveFactor(Entity pawn) const {
     return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed")) *
            combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn) *
-           (fighters_->sprinting(pawn) ? fighters_->sprintFactor() : 1.0f);  // fleeing or charging into melee (focus.md)
+           (pawnSprinting(pawn) ? fighters_->sprintFactor() : 1.0f);
+}
+
+bool Sim::pawnSprinting(Entity pawn) const {
+    const entt::registry& reg = things_->registry();
+    if (!reg.valid(pawn) || reg.any_of<PlayerControl, Animal, Visitor>(pawn)) {
+        return false;  // visitors walk as fleeing fighters (Trade.h) but are in no hurry
+    }
+    // Fighters: fleeing or charging into melee (FighterSystem::sprinting, focus.md); carrying a downed friend to cover too.
+    if (const Fighter* fighter = reg.try_get<Fighter>(pawn)) {
+        return fighters_->sprinting(pawn) || fighter->mode == FightMode::Rescue;
+    }
+    // Emergencies at work (sneed 2026-11-17, controls.md): rescuing a downed colonist, beating out a fire.
+    if (const Worker* worker = reg.try_get<Worker>(pawn)) {
+        return worker->job.type == JobType::Rescue || worker->job.type == JobType::ExtinguishFire;
+    }
+    return false;
 }
 
 }  // namespace colony
