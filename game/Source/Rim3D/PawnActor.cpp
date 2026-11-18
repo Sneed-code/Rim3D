@@ -1324,6 +1324,8 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 	{
 		const float Want = Clip->from + Now.motionTime;
 		const float Rate = FMath::Max(0.05f, Now.motionRate);
+		MotionClipFrom = Clip->from;
+		MotionClipHit = Clip->hitSeconds;
 		if (MotionClipDef != Now.motionClip.value || Now.motionTime < MotionClipTime - 0.02f || !MotionMontage.IsValid() || !Anim->Montage_IsPlaying(MotionMontage.Get()))
 		{
 			MotionMontage = Anim->PlaySlotAnimationAsDynamicMontage(Asset, FAnimSlotGroup::DefaultSlotName, PawnMotionBlendIn, PawnMotionBlendOut, Rate, 1, -1.0f, Want);
@@ -1388,6 +1390,18 @@ void ASimPawnActor::BeginMeleeSwing(EMeleeStyle Style, float StepsToHit)
 {
 	Swing.Begin(Style, StepsToHit, StanceHeight);
 	SwingMismatch = 0.0f;
+}
+
+bool ASimPawnActor::GetMotionClipToHit(float& OutSeconds, float& OutRate) const
+{
+	const USimPawnAnimInstance* Anim = GetAnim();
+	if (!IsInMotionClip() || MotionClipHit <= 0.0f || !Anim || !MotionMontage.IsValid())
+	{
+		return false;
+	}
+	OutSeconds = MotionClipHit - (Anim->Montage_GetPosition(MotionMontage.Get()) - MotionClipFrom);
+	OutRate = FMath::Max(0.05f, Anim->Montage_GetPlayRate(MotionMontage.Get()));
+	return true;
 }
 
 void ASimPawnActor::MeleeHitMoment()
