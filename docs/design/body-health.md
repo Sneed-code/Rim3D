@@ -224,6 +224,11 @@ torsos, whole-corpse gibs) was never merged.
   small splash where the piece first lands.
 - **Clothes**: the piece copies every visible skinned mesh, so the sleeve, trouser leg, boot or hat comes off with
   it, and the same garments are folded away on the body.
+- Bones are hidden (`HideBoneByName`) only on the mannequin and on meshes that show another's pose (clothes, a
+  MetaHuman body). A mesh with its own animation must not have bones hidden: the bone drops out of its pose and its
+  nodes read bone -1 (a crash). The MakeHuman body folds the bone at the end of its own animation
+  (`FMakeHumanSeverNode`, `SetSeveredBones`); a MetaHuman face is hidden whole when the head goes and still joins
+  the head's piece.
 - Corpses and the unconscious were already ragdolls (`StartRagdoll`); a cut limb's physics shapes stay on the ragdoll,
   unseen.
 - Smoke test `hurt`, phase `dismember`: a 400 blow to the downed colonist's torso; the sim must take off the head and

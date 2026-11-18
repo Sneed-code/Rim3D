@@ -11,6 +11,7 @@
 #include "GroomComponent.h"
 
 #include "BloodSubsystem.h"
+#include "MakeHumanAnimInstance.h"
 #include "PawnActor.h"
 #include "SimSubsystem.h"
 
@@ -210,11 +211,33 @@ void ASimPawnActor::ApplySevered(uint16 Bits)
 			continue;
 		}
 		// Each mesh folds the bone and all below it into the cut: the limb is gone and the hole closes on a point.
+		// Only a mesh that shows another's pose (clothes, a MetaHuman body) or the mannequin can hide a bone: hiding
+		// drops the bone from the pose, and a mesh with an animation of its own that still uses it then reads bone -1
+		// (the crash on dressed bodies). The MakeHuman body folds the bone in its own animation; any other such mesh
+		// (a MetaHuman face) goes whole with the head and otherwise stays.
 		for (USkinnedMeshComponent* Mesh : Skinned)
 		{
-			if (Mesh && Mesh->GetBoneIndex(Bone) != INDEX_NONE)
+			if (!Mesh || Mesh->GetBoneIndex(Bone) == INDEX_NONE)
+			{
+				continue;
+			}
+			if (Mesh == Body.Get() || Mesh->LeaderPoseComponent.IsValid())
 			{
 				Mesh->HideBoneByName(Bone, PBO_None);
+			}
+			else if (Mesh == MakeHumanMesh.Get())
+			{
+				if (UMakeHumanAnimInstance* Anim = Cast<UMakeHumanAnimInstance>(MakeHumanMesh->GetAnimInstance()))
+				{
+					TArray<FName> Gone = Anim->GetSeveredBones();
+					Gone.AddUnique(Bone);
+					Anim->SetSeveredBones(Gone);
+				}
+			}
+			else if (Bit == colony::kSeveredHead && Mesh->IsVisible())
+			{
+				SeveredHidden.Add(Mesh);
+				Mesh->SetVisibility(false, true);
 			}
 		}
 		// Wet flesh over the stump, on the bone above the cut.
@@ -247,7 +270,7 @@ void ASimPawnActor::ApplySevered(uint16 Bits)
 				continue;
 			}
 			const FName Held = On->GetSocketBoneName(Socket);
-			if (!Held.IsNone() && (Held == Bone || On->BoneIsChildOf(Held, Bone)))
+			if (!Held.IsNone() && (Held == Bone || (On->GetBoneIndex(Bone) != INDEX_NONE && On->BoneIsChildOf(Held, Bone))))
 			{
 				Part->SetVisibility(false, true);
 			}
@@ -281,9 +304,9 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 	for (USkinnedMeshComponent* Source : Skinned)
 	{
 		USkeletalMesh* Asset = Source ? Cast<USkeletalMesh>(Source->GetSkinnedAsset()) : nullptr;
-		if (!Asset || !Source->IsVisible())
+		if (!Asset || (!Source->IsVisible() && !SeveredHidden.Contains(Source)))
 		{
-			continue;
+			continue;  // (a face hidden because the head is off still goes into the head's piece)
 		}
 		const FReferenceSkeleton& Skeleton = Asset->GetRefSkeleton();
 		const int32 CutIndex = Skeleton.FindBoneIndex(Bone);
@@ -327,7 +350,18 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 			{
 				continue;  // a bone only this mesh has: it keeps its place under its parent
 			}
-			Copy->SetBoneTransformByName(Name, Pose->GetBoneTransform(From).GetRelativeTransform(ToCopy), EBoneSpaces::ComponentSpace);
+			FTransform Now = Pose->GetBoneTransform(From);
+			if (Now.GetScale3D().GetAbsMax() < 0.1)
+			{
+				// Already folded away on the body (a piece made after the cut was shown): the mannequin's bone instead.
+				const int32 Under = Pose != Body.Get() ? Body->GetBoneIndex(Name) : INDEX_NONE;
+				if (Under == INDEX_NONE)
+				{
+					continue;
+				}
+				Now = Body->GetBoneTransform(Under);
+			}
+			Copy->SetBoneTransformByName(Name, Now.GetRelativeTransform(ToCopy), EBoneSpaces::ComponentSpace);
 		}
 		Piece->AddMesh(Copy);
 	}

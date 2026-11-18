@@ -359,6 +359,8 @@ private:
 	bool bRagdoll = false;
 	uint16 SeveredShown = 0;
 	int32 SeveredCaps = 0;
+	/** Meshes hidden whole because the head is off (a MetaHuman face); they still go into the head's piece. */
+	TSet<TWeakObjectPtr<class USkinnedMeshComponent>> SeveredHidden;
 	int32 RagdollsStarted = 0;
 	float ReactionAge = kHitReactionSeconds;
 	int32 HitClipsPlayed = 0;
