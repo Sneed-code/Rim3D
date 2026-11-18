@@ -7,6 +7,7 @@
 #include "Misc/ConfigCacheIni.h"
 
 #include <imgui.h>
+#include <string>
 
 namespace
 {
