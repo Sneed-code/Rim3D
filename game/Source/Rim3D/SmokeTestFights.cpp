@@ -20,6 +20,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
 
@@ -78,6 +79,7 @@ namespace
 		int32 GroundDecalsAtStart = 0;
 		int32 RagdollsAtStart = 0;
 		int32 ImpactsAtStart = 0;
+		int32 HitLogAtStart = 0;
 		int32 PawnImpactsAtStart = 0;
 		int32 MarkersAtStart = 0;
 		int32 FireOrdersAtStart = 0;
@@ -493,6 +495,67 @@ void USmokeTestSubsystem::BuildFightsPhases()
 		Notes.Add(FString::Printf(TEXT("fire_at_pawn: %d shots, %d hits on pawns, %d impacts, %d flinches, %d wound decals, %d blood decals, hits within %.1f cm of the hitboxes, at most %d tracers and %d particles at once"),
 			Shots, PawnHits, F->GetImpacts() - State->ImpactsAtStart, F->GetHitReactions() - State->ReactionsAtStart, F->GetBodyDecals() - State->BodyDecalsAtStart,
 			F->GetGroundDecals() - State->GroundDecalsAtStart, F->GetMaxHitboxMissCm(), State->MaxTracers, State->MaxParticles));
+	});
+
+	// 3b. Aim at the drawn head (docs/design/aiming.md "Shots go where the crosshair is"): the hits land on the head.
+	AddPhase(TEXT("head_shots"), [=, this]()
+	{
+		MarkBaselines();
+		State->HitLogAtStart = Fight()->GetHitLog().Num();
+		State->Target = PickTarget();
+	}, 0.3f, 5.0f, [=, this]()
+	{
+		UFightSubsystem* F = Fight();
+		UProtagonistSubsystem* P = Prot();
+		State->Target = FightSmokeAlive(*Bridge(), State->Target) ? State->Target : PickTarget();
+		const ASimPawnActor* Actor = State->Target != colony::kNoEntity ? Pawns()->FindPawn(State->Target) : nullptr;
+		FVector Head;
+		if (!Actor || !P || !P->IsDirectMode() || !Actor->GetDrawnHeadCentre(Head))
+		{
+			return;
+		}
+		AProtagonistPawn* Body = P->GetBody();
+		const FRotator Wanted = (Head - Body->GetViewLocation()).Rotation();
+		Body->Look(FRotator::NormalizeAxis(Wanted.Yaw - Body->GetYaw()), Wanted.Pitch - Body->GetPitch());
+		Body->SnapCamera();
+		F->Fire();
+	}, [=, this]()
+	{
+		USimSubsystem* B = Bridge();
+		const TArray<FFightHitRecord>& Log = Fight()->GetHitLog();
+		int32 Hits = 0;
+		int32 Heads = 0;
+		FString Parts;
+		for (int32 i = State->HitLogAtStart; i < Log.Num(); ++i)
+		{
+			const FFightHitRecord& Record = Log[i];
+			const colony::ThingView* Hit = FightSmokeFind(*B, Record.Pawn);
+			if (!Hit || Record.Part < 0)
+			{
+				continue;
+			}
+			const std::vector<colony::BodyPartInfo> BodyParts = B->GetSim()->health().bodyParts(Hit->def);
+			bool bHead = false;
+			for (int32 Part = Record.Part; Part >= 0 && Part < static_cast<int32>(BodyParts.size()); Part = BodyParts[static_cast<size_t>(Part)].parent)
+			{
+				bHead |= BodyParts[static_cast<size_t>(Part)].label == "head";
+			}
+			if (Record.Part < static_cast<int32>(BodyParts.size()))
+			{
+				Parts += FString::Printf(TEXT("%s%s"), Parts.IsEmpty() ? TEXT("") : TEXT(", "), UTF8_TO_TCHAR(BodyParts[static_cast<size_t>(Record.Part)].label.c_str()));
+			}
+			++Hits;
+			Heads += bHead ? 1 : 0;
+		}
+		Notes.Add(FString::Printf(TEXT("head_shots: %d of %d hits on the head (%s)"), Heads, Hits, *Parts));
+		if (Hits < 2)
+		{
+			Fail(FString::Printf(TEXT("head_shots: only %d hits in 5 s aimed at a head from 12 m"), Hits));
+		}
+		else if (Heads * 10 < Hits * 7)
+		{
+			Fail(FString::Printf(TEXT("head_shots: only %d of %d hits aimed at the drawn head landed on the head (%s)"), Heads, Hits, *Parts));
+		}
 	});
 
 	// 4. One shot, frozen while its tracer is in the air: the screenshot shows the muzzle flash, the light and the streak.

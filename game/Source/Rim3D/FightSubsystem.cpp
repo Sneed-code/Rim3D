@@ -380,6 +380,19 @@ void UFightSubsystem::OnProjectileHit(const colony::Event& Event)
 		Record.Where = FVector(Event.x, Event.y, Event.z);
 		Record.GameSeconds = Bridge->GetSteps();
 		Record.MissCm = DistanceToHitboxesCm(Event.target, Event.x, Event.y, Event.z);
+		// The player's shots hit the body as drawn (docs/design/aiming.md "Shots go where the crosshair is"): a hit on the
+		// drawn body counts as on the body, whichever is nearer.
+		if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
+		{
+			if (const ASimPawnActor* Actor = Pawns->FindPawn(Event.target))
+			{
+				const double Drawn = Actor->DistanceToDrawnBodyCm(FightSimToWorldUnits(*Bridge, Event.x, Event.y, Event.z));
+				if (Drawn >= 0.0 && (Record.MissCm < 0.0f || Drawn < Record.MissCm))
+				{
+					Record.MissCm = static_cast<float>(Drawn);
+				}
+			}
+		}
 		if (HitLog.Num() < 512)
 		{
 			HitLog.Add(Record);

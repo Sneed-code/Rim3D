@@ -2094,6 +2094,34 @@ bool ASimPawnActor::TraceDrawnBody(const FVector& Start, const FVector& Directio
 	return DrawnHit::Trace(*Mesh, GetBodyScale(), Start, Direction, MaxCm, Out);
 }
 
+double ASimPawnActor::DistanceToDrawnBodyCm(const FVector& Point) const
+{
+	const USkeletalMeshComponent* Mesh = GetDecalMesh();
+	if (Mesh && !DrawnHit::HasSkeleton(*Mesh))
+	{
+		Mesh = Body.Get();
+	}
+	return Mesh && DrawnHit::HasSkeleton(*Mesh) ? DrawnHit::DistanceCm(*Mesh, GetBodyScale(), Point) : -1.0;
+}
+
+bool ASimPawnActor::GetDrawnHeadCentre(FVector& Out) const
+{
+	const USkeletalMeshComponent* Mesh = GetDecalMesh();
+	if (Mesh && !DrawnHit::HasSkeleton(*Mesh))
+	{
+		Mesh = Body.Get();
+	}
+	if (!Mesh || !DrawnHit::HasSkeleton(*Mesh))
+	{
+		return false;
+	}
+	const FVector Neck = Mesh->GetBoneLocation(TEXT("neck_01"));
+	const FVector Head = Mesh->GetBoneLocation(TEXT("head"));
+	// Halfway up the head capsule DrawnHit uses (4 to 13 cm over the head bone, for a 1.80 m body).
+	Out = Head + (Head - Neck).GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector) * (8.5 * FMath::Clamp(GetBodyScale(), 0.5f, 1.5f));
+	return true;
+}
+
 void ASimPawnActor::SetBodyHidden(bool bHide)
 {
 	bBodyHidden = bHide;

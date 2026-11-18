@@ -172,3 +172,19 @@ bool DrawnHit::Trace(const USkeletalMeshComponent& Mesh, float Scale, const FVec
 	Out.Part = BestPart;
 	return true;
 }
+
+double DrawnHit::DistanceCm(const USkeletalMeshComponent& Mesh, float Scale, const FVector& Point)
+{
+	TArray<FDrawnHitCapsule, TInlineAllocator<24>> Capsules;
+	DrawnHitCapsules(Mesh, Scale, Capsules);
+	double Best = -1.0;
+	for (const FDrawnHitCapsule& C : Capsules)
+	{
+		const FVector Ba = C.B - C.A;
+		const double Len2 = Ba.SizeSquared();
+		const double T = Len2 > 1e-6 ? FMath::Clamp(FVector::DotProduct(Point - C.A, Ba) / Len2, 0.0, 1.0) : 0.0;
+		const double D = FMath::Max(0.0, FVector::Dist(Point, C.A + Ba * T) - C.R);
+		Best = Best < 0.0 ? D : FMath::Min(Best, D);
+	}
+	return Best;
+}

@@ -133,7 +133,10 @@ Now:
 - **Hitboxes scale with the body** (`CombatSystem::hitboxScale`, PawnLooks height clamped to 0.5 to 1.5 as Unreal
   draws it): shapes, aim point and muzzle height, for bullets, blasts and melee alike.
 
-Tests: "Crosshair" in `Tests/AimingTests.cpp`. Not yet: fighters' shots and melee still use the stock hitboxes posed
+Tests: "Crosshair" in `Tests/AimingTests.cpp`; smoke test `fights` phase `head_shots` aims at the drawn head from 12 m
+and logs the struck parts, and its hit check counts a hit on the drawn body as on the body. Note: the drawn MakeHuman
+bodies are not exactly 1.80 m times their PawnLooks height (the PC's `hitbox_view` saw 181 cm of hitboxes on a 154 cm
+body), so the stock hitboxes AI shots use can still be off by that much; the player's shots don't depend on them. Not yet: fighters' shots and melee still use the stock hitboxes posed
 by stance only (a baked per-clip pose for them is a later step), and the drawn capsules are round where a chest is flat.
 
 ## Magazines and reloading (off while cooldown bursts are on)

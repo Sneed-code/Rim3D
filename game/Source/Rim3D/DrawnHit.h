@@ -22,6 +22,9 @@ namespace DrawnHit
 	 *  the body's height factor (radii grow with it). False if it meets none, or the mesh lacks the bones. */
 	bool Trace(const USkeletalMeshComponent& Mesh, float Scale, const FVector& Start, const FVector& Direction, double MaxCm, FResult& Out);
 
+	/** How far `Point` is from the drawn body's capsules (0 on or inside one), cm; -1 without the bones. */
+	double DistanceCm(const USkeletalMeshComponent& Mesh, float Scale, const FVector& Point);
+
 	/** Whether the mesh has the bones the capsules need (a humanlike skeleton). */
 	bool HasSkeleton(const USkeletalMeshComponent& Mesh);
 }
