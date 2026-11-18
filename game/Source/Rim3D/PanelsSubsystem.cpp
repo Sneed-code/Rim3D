@@ -539,6 +539,8 @@ void UPanelsSubsystem::DrawPanels(USimSubsystem& Bridge)
 
 	float MenuBottom = Margin;
 	DrawMenuAndColonistBar(Bridge, Scale, Margin, MenuBottom);
+	TopLeftBottom = MenuBottom;
+	TopLeftFrame = GFrameCounter;
 
 	if (Tab == EColonyTab::Work)
 	{
