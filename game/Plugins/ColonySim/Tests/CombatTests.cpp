@@ -218,13 +218,13 @@ TEST_CASE("Combat: walls stop bullets and break, sandbags hide a crouching pawn"
         CHECK(hit.hit == ProjectileHitKind::Building);
         CHECK(hit.target == wall);
         CHECK(hit.x == doctest::Approx(20.0f).epsilon(0.001));
-        CHECK(sim->things().registry().get<HitPoints>(wall).current == 300 - 18);
+        CHECK(sim->things().registry().get<HitPoints>(wall).current == 300 - 9);  // 18, halved by tuning.json
         int shots = 1;
-        while (sim->things().exists(wall) && shots < 40) {
+        while (sim->things().exists(wall) && shots < 60) {
             combatTestShot(*sim, shooter, target, 0.0f, rng);
             ++shots;
         }
-        CHECK(shots == 17);  // 300 hit points, 18 a shot
+        CHECK(shots == 34);  // 300 hit points, 9 a shot
         CHECK(!sim->things().exists(wall));
         CHECK(combatTestShot(*sim, shooter, target, 0.0f, rng).hit == ProjectileHitKind::Pawn);
     }
@@ -293,9 +293,9 @@ TEST_CASE("Combat: armor softens every hit by the same share, wherever it lands,
                 }
                 if (e.type == EventType::ProjectileHit && (e.hit == ProjectileHitKind::Armor || e.hit == ProjectileHitKind::Pawn)) {
                     stopped += e.hit == ProjectileHitKind::Armor ? 1 : 0;
-                    // A revolver bullet, 12 damage, 75% blunt and 25% sharp, 18% penetration: the vest's 15% blunt
-                    // and 30% sharp work at 82% (docs/design/armour.md).
-                    const float expected = 9.0f / (1.0f + 0.15f * 0.82f) + 3.0f / (1.0f + 0.30f * 0.82f);
+                    // A revolver bullet, 12 damage halved by tuning.json to 6, 75% blunt and 25% sharp, 18% penetration:
+                    // the vest's 15% blunt and 30% sharp work at 82% (docs/design/armour.md).
+                    const float expected = 4.5f / (1.0f + 0.15f * 0.82f) + 1.5f / (1.0f + 0.30f * 0.82f);
                     if (e.amount != doctest::Approx(expected).epsilon(0.001)) {
                         ++bruised;
                         MESSAGE("amount " << e.amount << " expected " << expected);
@@ -350,10 +350,12 @@ TEST_CASE("Combat: shoot orders wait for the warm-up, fire bursts and cool down"
     CHECK(failed == 2);
     COMBAT_REQUIRE(rifleShots.size() == 1);
     CHECK(rifleShots[0] == 50);  // 51 steps of warm-up, counting the step the order came in
-    COMBAT_REQUIRE(burstShots.size() == 3);
+    // Cooldown bursts: the assault rifle's whole store of 9 (3 x 3), half the 5-step gap apart (3, rounded up).
+    COMBAT_REQUIRE(burstShots.size() == 9);
     CHECK(burstShots[0] == 29);
-    CHECK(burstShots[1] - burstShots[0] == 5);
-    CHECK(burstShots[2] - burstShots[1] == 5);
+    for (size_t k = 1; k < burstShots.size(); ++k) {
+        CHECK(burstShots[k] - burstShots[k - 1] == 3);
+    }
     Snapshot snap;
     sim->writeSnapshot(snap);
     CHECK(snap.find(rifleman)->facingX > 0.6f);  // turned toward the target

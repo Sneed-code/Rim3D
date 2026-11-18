@@ -127,7 +127,8 @@ bool animShoot(Sim& sim, Entity shooter, Entity target, std::vector<Event>* stag
 
 TEST_CASE("Animation hooks: a bullet with the stopping power staggers a man and slows him; a weaker one does not") {
     auto sim = animSim();
-    const Entity shooter = animPawn(*sim, 10, 10, "Gun_Revolver");     // stopping power 1
+    // A sniper bullet: over a tenth of the torso even with ranged damage halved (the revolver's 6 no longer is).
+    const Entity shooter = animPawn(*sim, 10, 10, "Gun_SniperRifle");
     const Entity target = animPawn(*sim, 16, 10);
     std::vector<Event> staggers;
     ANIM_REQUIRE(animShoot(*sim, shooter, target, &staggers));
