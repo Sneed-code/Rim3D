@@ -19,6 +19,7 @@
 
 #include <imgui.h>
 
+#include "KeyBindings.h"
 #include "OrdersSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
@@ -1217,38 +1218,40 @@ void UFightSubsystem::UpdatePlayerInput()
 	// With a building in hand the mouse button plans it and R turns it (UHandsOnSubsystem), so the gun stays quiet.
 	const UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
 	const bool bBuilding = Orders && Orders->IsDirectBuilding();
-	if (!bBuilding && PC->IsInputKeyDown(EKeys::LeftMouseButton))
+	using Rim3DKeys::IsDown;
+	using Rim3DKeys::WasPressed;
+	if (!bBuilding && IsDown(PC, ERim3DAction::Attack))
 	{
 		Fire();
 	}
-	if (!bBuilding && PC->WasInputKeyJustPressed(EKeys::R))
+	if (!bBuilding && WasPressed(PC, ERim3DAction::Reload))
 	{
 		Reload();
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::H))
+	if (WasPressed(PC, ERim3DAction::Patch))
 	{
 		Patch();
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::C))
+	if (WasPressed(PC, ERim3DAction::Crouch))
 	{
 		ToggleCrouch();
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::Z))
+	if (WasPressed(PC, ERim3DAction::Prone))
 	{
 		ToggleProne();
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::E))
+	if (WasPressed(PC, ERim3DAction::EquipWeapon))
 	{
 		EquipNearest();
 	}
-	// Left Alt rolls the way the movement keys point (U21; it was Left Shift, which sprints now); G throws a grenade at the
-	// crosshair.
-	if (PC->WasInputKeyJustPressed(EKeys::LeftAlt))
+	// T (sneed 2026-11-17): a dodge roll the way the movement keys point in third person, a dash in first person (the same
+	// move in the sim; the first person camera stays level and blurs, UShooterFeelSubsystem). Left Alt no longer rolls.
+	if (WasPressed(PC, ERim3DAction::RollDash))
 	{
-		Roll(FVector2D((PC->IsInputKeyDown(EKeys::D) ? 1.0 : 0.0) - (PC->IsInputKeyDown(EKeys::A) ? 1.0 : 0.0),
-			(PC->IsInputKeyDown(EKeys::W) ? 1.0 : 0.0) - (PC->IsInputKeyDown(EKeys::S) ? 1.0 : 0.0)));
+		Roll(FVector2D((IsDown(PC, ERim3DAction::MoveRight) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveLeft) ? 1.0 : 0.0),
+			(IsDown(PC, ERim3DAction::MoveForward) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveBack) ? 1.0 : 0.0)));
 	}
-	if (!bBuilding && PC->WasInputKeyJustPressed(EKeys::G))
+	if (!bBuilding && WasPressed(PC, ERim3DAction::Grenade))
 	{
 		ThrowGrenade();
 	}
@@ -1435,7 +1438,7 @@ void UFightSubsystem::DrawHud()
 		}
 		else if (!View->downed && !View->dead && Sim.health().worstBleedingZone(Pawn) >= 0)
 		{
-			ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.3f, 1.0f), "Bleeding   H patch the wound");
+			ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.3f, 1.0f), "%s", TCHAR_TO_UTF8(*FString::Printf(TEXT("Bleeding   %s patch the wound"), *Rim3DKeys::GetKeyLabel(ERim3DAction::Patch))));
 		}
 		if (Weapons)
 		{
