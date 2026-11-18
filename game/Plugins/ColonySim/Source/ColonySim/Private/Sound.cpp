@@ -99,6 +99,15 @@ void soundPawnAction(const DefDatabase& db, const Event& e, const SoundDefOf& de
         out.push_back(soundOn(soundSlotOr(soundDefOfEntity(db, defOf, e.target), slot, fallback), e.thing));
         return;
     }
+    if (e.action == PawnAction::Alert) {
+        // Stealth (docs/design/stealth.md): a sting when a fighter grows suspicious and a sharper one when it is
+        // alerted by what it saw, heard or was called to. Calming down, an order and a whole site raised are silent.
+        const std::string& why = e.message;
+        if (why == "calm" || why == "lost them" || why == "ordered" || why == "site raised") return;
+        if (e.amount >= 1.5f) out.push_back(soundOn("Alert_Spotted", e.thing));
+        else if (e.amount >= 0.5f) out.push_back(soundOn("Alert_Suspicious", e.thing));
+        return;
+    }
     const char* cue = soundWorkCue(e.action);
     if (cue == nullptr) return;
     std::string name = cue;

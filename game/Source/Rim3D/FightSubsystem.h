@@ -173,6 +173,9 @@ public:
 	int32 GetHitClips() const { return HitClipsPlayed; }
 	/** Damage numbers put up over your own hits so far. */
 	int32 GetDamageNumbersShown() const { return DamageNumbersShown; }
+	/** Stealth marks drawn over heads so far: "?" for a suspicious enemy, "!" when one is alerted (docs/design/stealth.md). */
+	int32 GetAlertMarksDrawn() const { return AlertMarksDrawn; }
+	int32 GetAlertEventsSeen() const { return AlertEventsSeen; }
 	/** Of those, the hits on you (drawn red); zones knocked by hits (the hit layer, body-health.md part E); patch orders sent. */
 	int32 GetDamageNumbersOnMe() const { return DamageNumbersOnMe; }
 	int32 GetZoneKicks() const { return ZoneKicks; }
@@ -324,6 +327,12 @@ private:
 	};
 	TArray<FFightDamageNumber> DamageNumbers;
 	int32 DamageNumbersShown = 0;
+	/** Stealth (docs/design/stealth.md): seconds since each enemy was alerted (by entity id), for the "!" that flashes
+	    over its head; a "?" stays over a suspicious one from the snapshot. Direct mode only. */
+	TMap<uint32, float> AlertFlash;
+	int32 AlertMarksDrawn = 0;
+	int32 AlertEventsSeen = 0;
+	void DrawAlertMarks(float Scale);
 	int32 DamageNumbersOnMe = 0;
 	int32 ZoneKicks = 0;
 	int32 PatchOrders = 0;
