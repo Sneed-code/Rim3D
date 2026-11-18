@@ -229,6 +229,12 @@ torsos, whole-corpse gibs) was never merged.
   nodes read bone -1 (a crash). The MakeHuman body folds the bone at the end of its own animation
   (`FMakeHumanSeverNode`, `SetSeveredBones`); a MetaHuman face is hidden whole when the head goes and still joins
   the head's piece.
+- As built after looking at it on the PC (#355): the flesh at a cut is a flat disc across the limb (a ball read as a
+  pom-pom); a piece takes only meshes with skin on it (a head only what is mostly head: a shirt collar drawn out
+  from the head bone was a jagged shard); below the cut the piece is in the mesh's reference pose (straight);
+  a limb falls over to lie flat once it lands; pieces and discs take no decals; hair cards and hats go with the
+  head (hair strands cannot: an unbound groom copy did not draw). Smoke test `hurt` takes noon close-ups of each
+  piece from two sides (`dismember_close<N>a/b.png`).
 - Corpses and the unconscious were already ragdolls (`StartRagdoll`); a cut limb's physics shapes stay on the ragdoll,
   unseen.
 - Smoke test `hurt`, phase `dismember`: a 400 blow to the downed colonist's torso; the sim must take off the head and

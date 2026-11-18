@@ -398,6 +398,12 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 				Copy->SetBoneTransformByName(Name, Folded, EBoneSpaces::ComponentSpace);
 				continue;
 			}
+			if (i != CutIndex)
+			{
+				// Below the cut the piece lies as the mesh was made (its reference pose, straight): a limb cut off while
+				// the falling body had it bent double was a stubby tube with its hand or shoe tucked out of sight.
+				continue;
+			}
 			const int32 From = Pose->GetBoneIndex(Name);
 			if (From == INDEX_NONE)
 			{
@@ -422,40 +428,7 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 	}
 	// What sat on the bone as a plain mesh (hair cards, a hat, horns) goes with the piece. Hair strands (grooms) cannot
 	// be copied, so the hair cards stand in for them on a severed head even up close.
-	// The hair, brows and beard of a head seen from close by are strands (grooms): each goes with the head as it grew
-	// (unbound, so in its rest shape), set where the head is now. From further off the hair cards stand in (below).
-	const bool bStrands = Bit == colony::kSeveredHead && Detail == ESimPawnDetail::Full;
-	if (bStrands)
-	{
-		for (USceneComponent* Candidate : Grooms)
-		{
-			const UGroomComponent* Groom = Cast<UGroomComponent>(Candidate);
-			const USkinnedMeshComponent* Face = Groom ? Cast<USkinnedMeshComponent>(Groom->GetAttachParent()) : nullptr;
-			const USkeletalMesh* FaceAsset = Face ? Cast<USkeletalMesh>(Face->GetSkinnedAsset()) : nullptr;
-			if (!FaceAsset || !Groom->GroomAsset || EmptyGrooms.Contains(Groom->GetFName()) || (bHairHidden && Groom->GetName().Contains(TEXT("Hair"))))
-			{
-				continue;
-			}
-			const int32 Head = FaceAsset->GetRefSkeleton().FindBoneIndex(Bone);
-			const USkinnedMeshComponent* Pose = SeveredPoseOf(Face);
-			const int32 From = Pose->GetBoneIndex(Bone);
-			if (Head == INDEX_NONE || From == INDEX_NONE)
-			{
-				continue;
-			}
-			const FTransform Rest = FAnimationRuntime::GetComponentSpaceTransformRefPose(FaceAsset->GetRefSkeleton(), Head);
-			UGroomComponent* Copy = NewObject<UGroomComponent>(Piece);
-			Copy->SetGroomAsset(Groom->GroomAsset);
-			for (int32 i = 0; i < Groom->GetNumMaterials(); ++i)
-			{
-				Copy->SetMaterial(i, Groom->GetMaterial(i));
-			}
-			Copy->SetupAttachment(Piece->GetRootComponent());
-			Copy->RegisterComponent();
-			Copy->SetWorldTransform(Groom->GetRelativeTransform() * Rest.Inverse() * Pose->GetBoneTransform(From));
-			UE_LOG(LogTemp, Log, TEXT("Severed piece 0x%x: strands %s (%s)"), Bit, *Groom->GetName(), *Groom->GroomAsset->GetName());
-		}
-	}
+	// Hair strands (grooms) do not go with a head: an unbound copy did not draw. The hair cards stand in, up close too.
 	TInlineComponentArray<UStaticMeshComponent*> Worn;
 	GetComponents(Worn);
 	if (MetaHuman)
@@ -468,7 +441,7 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 	{
 		const USkinnedMeshComponent* On = Part ? Cast<USkinnedMeshComponent>(Part->GetAttachParent()) : nullptr;
 		const FName Socket = Part ? Part->GetAttachSocketName() : NAME_None;
-		if (!On || Socket.IsNone() || !Part->GetStaticMesh() || (bStrands && Part == HairCards.Get()))
+		if (!On || Socket.IsNone() || !Part->GetStaticMesh())
 		{
 			continue;
 		}
