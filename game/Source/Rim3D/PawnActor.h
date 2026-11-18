@@ -213,6 +213,7 @@ public:
 	/** Clips the sim moved this body along so far, and whether one is playing now (docs/design/body-motion.md). */
 	int32 GetMotionClipsPlayed() const { return MotionClipsPlayed; }
 	bool IsInMotionClip() const { return MotionClipDef != MAX_uint32; }
+	bool IsMotionClipUpper() const { return IsInMotionClip() && bMotionUpper; }
 	FVector GetMotionOffset() const { return MotionOffset; }
 	/** While an attack clip is on screen: the seconds of the clip still to play before its blow (negative once past it) and
 	 *  the rate it plays at. False when no clip with a blow is playing. */
@@ -413,6 +414,8 @@ private:
 	FVector MotionPelvisStart = FVector::ZeroVector;
 	FVector MotionOffset = FVector::ZeroVector;
 	int32 MotionClipsPlayed = 0;
+	/** The clip playing is drawn on the upper body only (the hips are the walk's: no set-back). */
+	bool bMotionUpper = false;
 	bool UpdateMotionClip(const USimSubsystem& Bridge, const colony::ThingView& Now, float GameDelta);
 	// The hit layer (body-health.md part E): the zone a sim body part or a sim zone is on screen, hits so far, the hurt
 	// legs (looked up a few times a second), and the crawl clip with its own set-back (its travel is in its hips too).

@@ -25,7 +25,7 @@ cancels; "Reset all keys to default" puts them back). Code reads keys only throu
 | left mouse | shoot or swing |
 | right mouse (hold) | aim a gun, or block with a melee weapon or shield |
 | Tab | focus the next enemy (lock-on focus, its own task) |
-| F1 | end focus (lock-on focus) |
+| Middle mouse | lock on / let go (lock-on focus; Tab shuffles targets). Unreal's F-key debug views are cleared in DefaultInput.ini |
 | N | sleep here at night |
 | I | inventory |
 | B | build mode |

@@ -85,7 +85,7 @@ public:
 
 	/** Lock-on focus (docs/design/focus.md): the pawn the controlled colonist is locked on to, kNoEntity for none. */
 	colony::Entity GetFocusTarget() const;
-	/** Tab: lock on to the next nearest enemy (FocusCommand Next); F1: let go. Both do nothing with the setting off. */
+	/** Tab: lock on to the next nearest enemy (FocusCommand Next); middle mouse: lock on or let go. Both do nothing with the setting off. */
 	void FocusNext();
 	void EndFocus();
 	/** FocusCommands sent so far (smoke tests). */

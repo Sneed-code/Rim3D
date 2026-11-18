@@ -15,6 +15,8 @@
 #include "ShooterFeelSubsystem.h"
 #include "SimSubsystem.h"
 
+#include "ColonySim/BodyMotion.h"
+#include "ColonySim/Combat.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Snapshot.h"
@@ -343,6 +345,7 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 		return;
 	}
 	const colony::Map& Map = Bridge->GetSim()->map();
+	const colony::BodyMotionSystem& Bodies = Bridge->GetSim()->combat().motion();
 
 	const double YawRadians = FMath::DegreesToRadians(static_cast<double>(Yaw));
 	const FVector2D Ahead(FMath::Cos(YawRadians), FMath::Sin(YawRadians));
@@ -373,8 +376,12 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 	const FVector2D Tries[3] = {Delta, FVector2D(Delta.X, 0.0), FVector2D(0.0, Delta.Y)};
 	const auto Fits = [&](const FVector2D& Try)
 	{
-		// The player may swim: deep water counts as open (docs/design/water.md), as the sim's DirectMove does.
-		return colony::swimmerFitsAt(Map, static_cast<float>(Position.X + Try.X), static_cast<float>(Position.Y + Try.Y), colony::kPawnRadius, Level);
+		// The player may swim: deep water counts as open (docs/design/water.md), as the sim's DirectMove does. Other
+		// standing bodies stop the walk the same way (sneed 2026-11-18: no running through people).
+		const float ToX = static_cast<float>(Position.X + Try.X);
+		const float ToY = static_cast<float>(Position.Y + Try.Y);
+		return colony::swimmerFitsAt(Map, ToX, ToY, colony::kPawnRadius, Level) &&
+			Bodies.bodiesClear(Thing, static_cast<float>(Position.X), static_cast<float>(Position.Y), ToX, ToY, Level);
 	};
 	// Pushing into stairs or a ladder (or back towards them from their head, into the stairwell over them, which may
 	// have a floor laid) climbs them.
