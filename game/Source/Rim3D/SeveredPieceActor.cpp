@@ -6,6 +6,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
+#include "Rendering/SkeletalMeshRenderData.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "GroomComponent.h"
@@ -80,6 +81,7 @@ namespace
 		Cap->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Cap->SetCanEverAffectNavigation(false);
 		Cap->SetCastShadow(false);
+		Cap->bReceivesDecals = false;
 		Cap->SetupAttachment(Parent, Socket);
 		Cap->RegisterComponent();
 		const FVector Axis = Along.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
@@ -101,6 +103,35 @@ namespace
 			MetaHuman->GetComponents(Found);
 			Out.Append(Found);
 		}
+	}
+
+	/** Whether a mesh is really drawn: its own flags and its actor's (a hidden second body still has "visible" set). */
+	bool SeveredDrawn(const USkinnedMeshComponent& Mesh)
+	{
+		const AActor* Owner = Mesh.GetOwner();
+		return Mesh.IsVisible() && !Mesh.bHiddenInGame && !(Owner && Owner->IsHidden());
+	}
+
+	/** Whether any of a mesh's skin hangs on a bone or on a bone under it. */
+	bool SeveredSkinnedTo(const USkeletalMesh& Asset, int32 Bone)
+	{
+		const FSkeletalMeshRenderData* Data = Asset.GetResourceForRendering();
+		if (!Data || Data->LODRenderData.Num() == 0)
+		{
+			return true;
+		}
+		const FReferenceSkeleton& Skeleton = Asset.GetRefSkeleton();
+		for (const FSkelMeshRenderSection& Section : Data->LODRenderData[0].RenderSections)
+		{
+			for (const FBoneIndexType Index : Section.BoneMap)
+			{
+				if (Index == Bone || Skeleton.BoneIsChildOf(Index, Bone))
+				{
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/** The component whose pose a mesh shows: itself, or the top of its leader chain. */
@@ -164,8 +195,8 @@ void ASeveredPieceActor::Tick(float DeltaSeconds)
 				Hit.At = At;
 				Hit.Direction = FVector(Velocity.X * 0.3, Velocity.Y * 0.3, -200.0);
 				Hit.Kind = EBloodWound::Blunt;
-				Hit.Damage = 12.0f;
-				Hit.Force = 0.7f;
+				Hit.Damage = 8.0f;
+				Hit.Force = 0.4f;
 				Blood->AddHit(Hit);
 			}
 		}
@@ -182,7 +213,16 @@ void ASeveredPieceActor::Tick(float DeltaSeconds)
 			Velocity = FVector::ZeroVector;
 		}
 	}
-	SetActorLocationAndRotation(At, (GetActorQuat() * (Spin * Step).Quaternion()).GetNormalized());
+	FQuat Turned = (GetActorQuat() * (Spin * Step).Quaternion()).GetNormalized();
+	if (bLanded && !LimbAxis.IsNearlyZero())
+	{
+		// Once it has touched the ground a limb falls over towards lying flat (quickly; flat when it stops).
+		const FVector Now = Turned.RotateVector(LimbAxis);
+		const FVector Flat = FVector(Now.X, Now.Y, 0.0).GetSafeNormal(UE_SMALL_NUMBER, FVector::ForwardVector);
+		const FQuat Down = FQuat::FindBetweenNormals(Now, Flat);
+		Turned = (FQuat::Slerp(FQuat::Identity, Down, bAtRest ? 1.0f : FMath::Clamp(Step * 8.0f, 0.0f, 1.0f)) * Turned).GetNormalized();
+	}
+	SetActorLocationAndRotation(At, Turned);
 }
 
 // ---------------------------------------------------------------------------
@@ -309,20 +349,21 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 	for (USkinnedMeshComponent* Source : Skinned)
 	{
 		USkeletalMesh* Asset = Source ? Cast<USkeletalMesh>(Source->GetSkinnedAsset()) : nullptr;
-		if (!Asset || (!Source->IsVisible() && !SeveredHidden.Contains(Source)))
+		if (!Asset || (!SeveredDrawn(*Source) && !SeveredHidden.Contains(Source)))
 		{
 			continue;  // (a face hidden because the head is off still goes into the head's piece)
 		}
 		const FReferenceSkeleton& Skeleton = Asset->GetRefSkeleton();
 		const int32 CutIndex = Skeleton.FindBoneIndex(Bone);
-		if (CutIndex == INDEX_NONE)
+		if (CutIndex == INDEX_NONE || !SeveredSkinnedTo(*Asset, CutIndex))
 		{
-			continue;
+			continue;  // nothing of this mesh is on the piece (a face has arm bones, but no arm)
 		}
 		UPoseableMeshComponent* Copy = NewObject<UPoseableMeshComponent>(Piece);
 		Copy->SetSkinnedAssetAndUpdate(Asset);
 		Copy->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Copy->SetCanEverAffectNavigation(false);
+		Copy->bReceivesDecals = false;  // the pools it lands in would paint it red all over
 		for (int32 i = 0; i < Source->GetNumMaterials(); ++i)
 		{
 			Copy->SetMaterial(i, Source->GetMaterial(i));
@@ -401,9 +442,14 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		{
 			Copy->SetMaterial(i, Part->GetMaterial(i));
 		}
+		const TArray<float>& WornData = Part->GetCustomPrimitiveData().Data;
+		for (int32 i = 0; i < WornData.Num(); ++i)
+		{
+			Copy->SetCustomPrimitiveDataFloat(i, WornData[i]);
+		}
+		Copy->bReceivesDecals = false;
 		Copy->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Copy->SetCanEverAffectNavigation(false);
-		Copy->SetCastShadow(false);
 		Copy->SetupAttachment(Piece->GetRootComponent());
 		Copy->RegisterComponent();
 		Copy->SetWorldTransform(Part->GetComponentTransform());
@@ -423,8 +469,8 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		Hit.At = Cut;
 		Hit.Direction = Out;
 		Hit.Kind = EBloodWound::Cut;
-		Hit.Damage = 60.0f;
-		Hit.Force = 2.5f;
+		Hit.Damage = 35.0f;
+		Hit.Force = 1.2f;
 		Hit.Victim = Thing;
 		Hit.Mesh = GetDecalMesh();
 		Blood->AddHit(Hit);
@@ -441,6 +487,10 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 	}
 	const FVector Velocity = Away * FMath::FRandRange(120.0f, 260.0f) + FVector(FMath::FRandRange(-60.0f, 60.0f), FMath::FRandRange(-60.0f, 60.0f), FMath::FRandRange(220.0f, 380.0f));
 	const FRotator Spin(FMath::FRandRange(-360.0f, 360.0f), FMath::FRandRange(-360.0f, 360.0f), FMath::FRandRange(-360.0f, 360.0f));
+	if (Bit != colony::kSeveredHead)
+	{
+		Piece->SetLimbAxis(Middle - Cut);
+	}
 	Piece->Throw(Velocity, Spin, Bit == colony::kSeveredHead ? 10.0f : 6.0f);
 	return Piece;
 }

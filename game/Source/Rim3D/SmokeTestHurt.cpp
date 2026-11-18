@@ -462,7 +462,7 @@ void USmokeTestSubsystem::BuildHurtPhases()
 		// On the real, dressed bodies: the sleeve and the trouser leg must come off with the limb.
 		Phase.Setup = []() { HurtSmokeRealBodies(true); };
 		Phase.WarmupSeconds = 0.0f;
-		Phase.MeasureSeconds = 15.0f;
+		Phase.MeasureSeconds = 21.0f;
 		Phase.ScreenshotAt = 7.5f;  // after the cut (2.5 s in) and the pieces' landing: the picture shows the result
 		Phase.OnFrame = [=, this]()
 		{
@@ -477,17 +477,20 @@ void USmokeTestSubsystem::BuildHurtPhases()
 				}
 				Close.Sort([](const AActor& A, const AActor& B) { return A.GetName() < B.GetName(); });
 				Close.Add(ActorOf());
-				const int32 Which = FMath::FloorToInt(PhaseTime - 8.0f);
+				// Each from two opposite sides (a head has a face on one of them).
+				const int32 Shot = FMath::FloorToInt(PhaseTime - 8.0f);
+				const int32 Which = Shot / 2;
 				if (Close.IsValidIndex(Which) && Close[Which])
 				{
 					const bool bCorpse = Which == Close.Num() - 1;
+					const double Side = Shot % 2 == 0 ? 1.0 : -1.0;
 					const FVector P = Close[Which]->GetActorLocation() + FVector(0.0, 0.0, bCorpse ? 20.0 : 0.0);
-					const FVector Eye = P + (bCorpse ? FVector(170.0, 130.0, 130.0) : FVector(75.0, 60.0, 65.0));
+					const FVector Eye = P + (bCorpse ? FVector(70.0 * Side, 50.0 * Side, 260.0) : FVector(75.0 * Side, 60.0 * Side, 65.0));
 					ViewFrom(Eye, (P - Eye).Rotation());
-					if (State->CloseUpsTaken == Which && PhaseTime - 8.0f - Which > 0.5f)
+					if (State->CloseUpsTaken == Shot && PhaseTime - 8.0f - Shot > 0.5f)
 					{
 						++State->CloseUpsTaken;
-						FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke") / TEXT("hurt") / FString::Printf(TEXT("dismember_close%d.png"), Which), false, false);
+						FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke") / TEXT("hurt") / FString::Printf(TEXT("dismember_close%d%s.png"), Which, Shot % 2 == 0 ? TEXT("a") : TEXT("b")), false, false);
 					}
 				}
 			}
