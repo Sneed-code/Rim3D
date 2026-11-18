@@ -820,7 +820,7 @@ bool USimSubsystem::HandleKey(const FKey& Key)
 	}
 	else if (Key == EKeys::F1)
 	{
-		// While you are locked on to an enemy F1 (EndFocus, the default key) lets go instead (docs/design/focus.md).
+		// While you are locked on with F1 bound to the lock-on key (rebound by hand), F1 is that instead (docs/design/focus.md).
 		const UProtagonistSubsystem* Protagonist = GetWorld() ? GetWorld()->GetSubsystem<UProtagonistSubsystem>() : nullptr;
 		if (!Protagonist || Protagonist->GetFocusTarget() == colony::kNoEntity || Rim3DKeys::Get(ERim3DAction::EndFocus) != EKeys::F1)
 		{
