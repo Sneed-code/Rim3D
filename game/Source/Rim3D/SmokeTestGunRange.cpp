@@ -78,6 +78,8 @@ namespace
 		bool bAngry = false;
 		bool bTurned = false;   // struck and handed to the sim's fight response
 		bool bSprinted = false;
+		bool bCharged = false;
+		float TurnedDist = 0.0f;
 		float NextOrder = 0.0f;
 		int32 Seed = 0;
 		TWeakObjectPtr<USkeletalMeshComponent> AppliedTo;
@@ -111,6 +113,7 @@ namespace
 		int32 Fled = 0;
 		int32 FistSwings = 0;
 		int32 Sprinted = 0;
+		int32 Charged = 0;
 		int32 PendingSpawn = 0;       // frames until the spawned pawns are looked for
 		int32 Group = 0;
 		bool bGuards = false;         // this group are unaware hostile guards to sneak up on (U)
@@ -522,6 +525,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			if (bUp && !T.bTurned && (bSpotted || (bStruck && T.Behaviour != EGunRangeBehaviour::Stand)))
 			{
 				T.bTurned = true;
+				T.TurnedDist = ToPlayer;
 				B->Submit(colony::SetFactionCommand{T.Thing, 2});
 				B->Submit(colony::SetFightResponseCommand{T.Thing,
 					T.Behaviour == EGunRangeBehaviour::Fists ? colony::FightResponse::Fists : colony::FightResponse::FleeOnSight});
@@ -533,10 +537,18 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					T.bSprinted = true;
 					++State->Sprinted;
 				}
-				if (View->fleeing && !T.bFleeing)
+				// "Ran": a runner moving away from you (the sim's flee response puts her in a fall-back, not the map-leaving
+				// `fleeing`); "charged": the brawler sprinting in.
+				if (!T.bFleeing && T.Behaviour != EGunRangeBehaviour::Fists && PlayerView &&
+					(View->fleeing || View->sprinting || ToPlayer > T.TurnedDist + 3.0f))
 				{
 					T.bFleeing = true;
 					++State->Fled;
+				}
+				if (!T.bCharged && T.Behaviour == EGunRangeBehaviour::Fists && View->sprinting)
+				{
+					T.bCharged = true;
+					++State->Charged;
 				}
 				if (View->meleeTarget == State->Player && View->meleePhase != colony::MeleePhase::Ready && !T.bAngry)
 				{
@@ -1001,6 +1013,10 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			{
 				Notes.Add(FString::Printf(TEXT("gunrange: %s: %s"), *G->GetGuns()[i].Label, G->HasModel(i) ? TEXT("model") : TEXT("no model (box)")));
 			}
+			for (const FGunRangeMelee& M : G->GetMelee())
+			{
+				Notes.Add(FString::Printf(TEXT("gunrange: %s (melee): %s"), *M.Label, G->FindMeleeMesh(M.Def) ? TEXT("model") : TEXT("no model (placeholder)")));
+			}
 		}
 		if (UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>())
 		{
@@ -1015,7 +1031,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				Blood->IsReady() ? TEXT("assets in") : TEXT("ASSETS MISSING (old simple blood)"), Blood->GetHits(), Blood->GetDropsSpawned(),
 				Blood->GetMistSpawned(), Blood->GetWoundMarks(), Blood->GetBodyStainsMade(), Blood->GetSplatsMade()));
 		}
-		Notes.Add(FString::Printf(TEXT("gunrange: %d targets ran, %d sprinted, %d punches thrown at you, %d range lock-ons"), State->Fled, State->Sprinted, State->FistSwings, State->RangeFocusSets));
+		Notes.Add(FString::Printf(TEXT("gunrange: %d targets ran, %d sprinted, %d charged you, %d punches thrown at you, %d range lock-ons"), State->Fled, State->Sprinted, State->Charged, State->FistSwings, State->RangeFocusSets));
 		if (const UFightSubsystem* Marks = GetWorld()->GetSubsystem<UFightSubsystem>())
 		{
 			Notes.Add(FString::Printf(TEXT("gunrange: %d guards set unaware, %d alert events, %d alert marks drawn"), State->GuardsSet, Marks->GetAlertEventsSeen(), Marks->GetAlertMarksDrawn()));
