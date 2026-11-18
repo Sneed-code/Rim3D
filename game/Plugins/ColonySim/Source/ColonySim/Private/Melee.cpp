@@ -145,6 +145,14 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
         }
         r.styleAttacks.emplace_back(style, std::move(clips));
     }
+    for (const std::string& key : def->keys("lowAttacks")) {
+        std::vector<std::string> clips;
+        const std::string path = "lowAttacks." + key;
+        for (size_t i = 0; i < def->count(path.c_str()); ++i) {
+            clips.push_back(def->textAt(path.c_str(), i));
+        }
+        r.lowAttacks.emplace_back(key, std::move(clips));
+    }
     for (const std::string& weapon : def->keys("weaponStyle")) {
         r.weaponStyle.emplace_back(weapon, def->text(("weaponStyle." + weapon).c_str()));
     }
@@ -236,27 +244,48 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
             }
         }
         const BodyMotionSystem& motion = combat_.motion();
+        // Only short, quick clips that stay near the target.
+        const auto usable = [&](const std::string& clipName) -> const MotionClip* {
+            const MotionClip* c = motion.clip(clipName);
+            if (c == nullptr || c->hitSeconds <= 0.0f || c->hitSeconds > rules_.maxAttackHitSeconds ||
+                c->seconds > rules_.maxAttackClipSeconds) {
+                return nullptr;
+            }
+            // A clip that carries the body further than this is a charge, not a swing: it would run past the target.
+            float travel = 0.0f;
+            for (size_t i = 0; i < c->forward.size() && i < c->right.size(); ++i) {
+                travel = std::max(travel, std::sqrt(c->forward[i] * c->forward[i] + c->right[i] * c->right[i]));
+            }
+            return travel > rules_.maxAttackTravel ? nullptr : c;
+        };
         for (const auto& [name, clips] : rules_.styleAttacks) {
             if (name != style) {
                 continue;
             }
             for (const std::string& clipName : clips) {
-                const MotionClip* c = motion.clip(clipName);
-                if (c == nullptr || c->hitSeconds <= 0.0f || c->hitSeconds > rules_.maxAttackHitSeconds ||
-                    c->seconds > rules_.maxAttackClipSeconds) {
-                    continue;
-                }
-                // A clip that carries the body further than this is a charge, not a swing: it would run past the target.
-                float travel = 0.0f;
-                for (size_t i = 0; i < c->forward.size() && i < c->right.size(); ++i) {
-                    travel = std::max(travel, std::sqrt(c->forward[i] * c->forward[i] + c->right[i] * c->right[i]));
-                }
-                if (travel > rules_.maxAttackTravel) {
+                const MotionClip* c = usable(clipName);
+                if (c == nullptr) {
                     continue;
                 }
                 const float lunge = std::max(0.0f, motion.forwardAt(c->def, c->hitSeconds));
                 set.lunge = set.attackClips.empty() ? lunge : std::min(set.lunge, lunge);
                 set.attackClips.push_back(c->def);
+            }
+        }
+        // Blows at the downed: the weapon's own list if it has one, else its style's (a body's tools: the unarmed style).
+        const std::vector<std::string>* low = nullptr;
+        for (const auto& [key, clips] : rules_.lowAttacks) {
+            if (weapon && key == def.defName()) {
+                low = &clips;
+            } else if (low == nullptr && key == style) {
+                low = &clips;
+            }
+        }
+        if (low != nullptr && !set.attackClips.empty()) {
+            for (const std::string& clipName : *low) {
+                if (const MotionClip* c = usable(clipName)) {
+                    set.lowAttackClips.push_back(c->def);
+                }
             }
         }
     }
@@ -484,6 +513,13 @@ std::vector<DefId> MeleeSystem::attackClipsOf(DefId def) const {
     return tools_[def.value].attackClips;
 }
 
+std::vector<DefId> MeleeSystem::lowAttackClipsOf(DefId def) const {
+    if (!def.valid() || def.value >= tools_.size()) {
+        return {};
+    }
+    return tools_[def.value].lowAttackClips;
+}
+
 bool MeleeSystem::ready(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || !meleeAble(reg, pawn)) {
@@ -597,10 +633,11 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     }
     // A person's swing is one of its style's attack clips, timed so the clip's blow lands on the hit step; the clip's
     // step forward moves the body through the world (docs/design/body-motion.md). Faster swings play the clip faster.
+    // A blow at a body on the ground plays one of the downward clips when the weapon has any (focus.md).
     if (!set->attackClips.empty() && combat_.motion().hasClips(pawn) && !reg.all_of<BodyMotion>(pawn)) {
+        const std::vector<DefId>& clips = m.low && !set->lowAttackClips.empty() ? set->lowAttackClips : set->attackClips;
         Rng pick(splitMix64(m.seed ^ 0xC11FULL));
-        const DefId clipDef = set->attackClips[static_cast<size_t>(pick.unit() * static_cast<float>(set->attackClips.size())) %
-                                               set->attackClips.size()];
+        const DefId clipDef = clips[static_cast<size_t>(pick.unit() * static_cast<float>(clips.size())) % clips.size()];
         const Posture& posture = reg.get<Posture>(pawn);
         combat_.motion().playTimed(pawn, clipDef, combat_.motion().clip(clipDef)->hitSeconds, windup, posture.facingX, posture.facingY,
                                    false);

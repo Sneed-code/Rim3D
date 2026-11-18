@@ -83,8 +83,32 @@ player's own pawn.
 ## Blows at the downed (sim)
 
 A swing at a downed or prone target sets `Melee::low` (snapshot `meleeLow` while the swing is under way). The strike already
-aims at the body's aim point on the ground; Unreal plays a downward blow (a stab down for knives and spears, an overhead
-smash for clubs and hammers, a hack for blades and axes).
+aims at the body's aim point on the ground, and the swing plays a downward clip through the body motion system
+([body-motion.md](body-motion.md): the clip's root path moves the body, timed so its blow lands on the hit step): a stab
+down for knives and spears, an overhead smash for clubs and hammers, a hack for blades and axes, a stomp for fists.
+`MeleeRules.lowAttacks` lists the clips by attack style or by weapon def name (a weapon's own list wins); they pass the
+same short-and-quick filter as the usual swings, and a weapon with none measured swings its usual clips
+(`MeleeSystem::lowAttackClipsOf`). Unreal needs nothing new: it plays the snapshot's `motionClip` as for any swing.
+
+Clips (Mixamo, free): club and hammer `Motion_Club_Downward` (the axe pack's downward attack, already measured); knife
+`Motion_Knife_Stab_Low` ("Stabbing", rear hand reverse grip, Target Height 0); spear `Motion_Spear_Stab_Low` ("Bayonet
+Stab", Height 0); one-hand blades `Motion_OneHand_Hack_Low` ("Sword And Shield Slash", the downward one); two-hand blades
+and axes `Motion_TwoHand_Hack_Low` ("Great Sword Slash", the downward one); fists `Motion_Unarmed_Stomp` ("Stomping").
+Until a clip is measured into `MotionClips` its weapon swings as usual.
+
+## Faces (Unreal)
+
+A pain face for 0.6 s on every hit that reaches a body or its armour (`ASimPawnActor::PlayHitReaction`, so every
+ProjectileHit and landed MeleeHit), and an angry face while the pawn fights hand to hand: swinging, blocking without a
+gun, locked on without a gun in its hands, or in a fist fight, held 4 s after the last of those so it does not drop
+between blows (never while downed or dead). Pain wins over anger while it lasts. They ease in and out (pain 0.06 s in,
+0.2 s out; anger 0.3 s in, 0.8 s out).
+
+They are the creator's own "In pain" and "Angry" expressions (`PawnExpressions.h`), laid on the MakeHuman body's
+`Face_<Unit>` morphs (the creator bases already carry MakeHuman's 34 expression units, makehuman.md "Facial
+expressions") over the face it had before, which comes back when they fade; the skin's wrinkle map (custom primitive
+data 8 to 11) furrows the brow with them. A MetaHuman face has no such morphs and shows nothing.
+`GetPainFace`/`GetAngryFace`/`GetPainFacesShown` for tests.
 
 ## Fight responses (sim)
 
@@ -116,4 +140,4 @@ Built (2026-11-18):
   off facing its enemy; the walk blends play from the velocity.
 - Smoke test `melee`, phase `focus`.
 
-Still to do: pain and angry faces, downward attack clips for `meleeLow`, a strafe check by eye.
+Still to do: a strafe check by eye. Faces and downward blows: see above (built 2026-11-18; downward clips need their PC import).
