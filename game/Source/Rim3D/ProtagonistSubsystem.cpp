@@ -772,26 +772,26 @@ namespace
 void UProtagonistSubsystem::UpdateTurnAway(USimSubsystem& Bridge)
 {
 	const colony::Entity Focus = GetFocusTarget();
-	AProtagonistPawn* Body = GetBody();
+	AProtagonistPawn* Player = GetBody();
 	const colony::ThingView* Target = Focus != colony::kNoEntity ? Bridge.GetCurrentSnapshot().find(Focus) : nullptr;
-	if (!bDirect || !Body || !Target)
+	if (!bDirect || !Player || !Target)
 	{
 		TurnAwaySeconds = 0.0f;
 		return;
 	}
-	const FVector2D To(Target->x - Body->GetSimPosition().X, Target->y - Body->GetSimPosition().Y);
+	const FVector2D To(Target->x - Player->GetSimPosition().X, Target->y - Player->GetSimPosition().Y);
 	const FVector2D Dir = To.GetSafeNormal();
 	if (Dir.IsNearlyZero())
 	{
 		TurnAwaySeconds = 0.0f;
 		return;
 	}
-	const double Away = -FVector2D::DotProduct(Body->GetLocalVelocity(), Dir);
-	const double YawRadians = FMath::DegreesToRadians(static_cast<double>(Body->GetYaw()));
+	const double Away = -FVector2D::DotProduct(Player->GetLocalVelocity(), Dir);
+	const double YawRadians = FMath::DegreesToRadians(static_cast<double>(Player->GetYaw()));
 	const FVector2D View(FMath::Cos(YawRadians), FMath::Sin(YawRadians));
-	const bool bTurned = Body->HasGunDrawn()
+	const bool bTurned = Player->HasGunDrawn()
 		? FVector2D::DotProduct(View, Dir) < FMath::Cos(FMath::DegreesToRadians(LockTurnAwayDegrees))
-		: Body->IsSprinting();
+		: Player->IsSprinting();
 	const UWorld* World = GetWorld();
 	TurnAwaySeconds = (Away > LockTurnAwayMetresPerSecond && bTurned && World) ? TurnAwaySeconds + World->GetDeltaSeconds() : 0.0f;
 	if (TurnAwaySeconds >= LockTurnAwaySeconds)
