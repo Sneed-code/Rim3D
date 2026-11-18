@@ -65,6 +65,8 @@ public:
 	void SetScriptedAim(bool bHeld) { bScriptedAim = true; bScriptAimHeld = bHeld; }
 	void ClearScriptedAim() { bScriptedAim = false; }
 	bool IsAimHeld() const { return bAimHeld; }
+	/** Locked on to an enemy (docs/design/focus.md): the view turns to keep it ahead; in third person the mouse only tilts. */
+	bool IsFocusLocked() const { return bFocusLocked; }
 	/** 0 not aiming to 1 fully aimed (eased). */
 	float GetAimBlend() const { return AimBlend; }
 	/** The third person distance now, cm: the zoomed one, closer while aiming. Shots start this far along the view. */
@@ -157,6 +159,8 @@ private:
 	float ArmLength = 350.0f;
 	bool bFirstPerson = false;
 	bool bAimHeld = false;
+	bool bFocusLocked = false;
+	void FollowFocus(float DeltaTime);
 	bool bScriptedAim = false;
 	bool bScriptAimHeld = false;
 	float AimBlend = 0.0f;

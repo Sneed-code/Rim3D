@@ -124,6 +124,8 @@ public:
 	 *  behind (it is then snapped to the blow), and the most steps it was behind. */
 	int32 GetHitsOnTime() const { return HitsOnTime; }
 	int32 GetHitsLate() const { return HitsLate; }
+	/** Blows that landed while the attacker's body showed no swing to time them by (pushed into a stagger mid-swing). */
+	int32 GetHitsUntimed() const { return HitsUntimed; }
 	float GetMaxStepsBehind() const { return MaxStepsBehind; }
 
 protected:
@@ -226,5 +228,6 @@ private:
 	int64 LastHitStep = -1;
 	int32 HitsOnTime = 0;
 	int32 HitsLate = 0;
+	int32 HitsUntimed = 0;
 	float MaxStepsBehind = 0.0f;
 };

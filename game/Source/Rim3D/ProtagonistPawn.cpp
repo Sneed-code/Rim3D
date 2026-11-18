@@ -71,6 +71,9 @@ namespace
 	constexpr float ProtagonistAimArm = 120.0f;
 	constexpr float ProtagonistAimShoulder = 42.0f;
 	constexpr float ProtagonistNormalFov = 80.0f;
+	// Locked on (docs/design/focus.md): how fast the view turns to keep the focus ahead, degrees a second.
+	constexpr float ProtagonistFocusTurnThird = 360.0f;
+	constexpr float ProtagonistFocusTurnFirst = 100.0f;
 	// The engine's default vignette, which the pulses add to.
 	constexpr float ProtagonistBaseVignette = 0.4f;
 
@@ -245,11 +248,13 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		if (MouseX != 0.0f || MouseY != 0.0f)
 		{
 			const float Turn = FMath::Max(0.01f, GetMouseTurn());
-			Look(MouseX * Turn, MouseY * Turn);
+			// Locked on in third person the camera keeps the enemy ahead: the mouse only tilts it (Dark Souls).
+			Look(bFocusLocked && !bFirstPerson ? 0.0f : MouseX * Turn, MouseY * Turn);
 		}
 	}
 	if (Thing != colony::kNoEntity)
 	{
+		FollowFocus(DeltaTime);
 		Move(Right, Forward, bWalk, DeltaTime);
 	}
 
@@ -274,6 +279,33 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	bAimHeld = bWantAim;
 	AimBlend = FMath::FInterpConstantTo(AimBlend, bAimHeld ? 1.0f : 0.0f, DeltaTime, ProtagonistAimBlendPerSecond);
 	UpdateCamera();
+}
+
+void AProtagonistPawn::FollowFocus(float DeltaTime)
+{
+	// The sim turns the body to face the focus (MeleeSystem::faceFocus); the view turns after it so WASD strafes round the
+	// enemy: quickly in third person, gently in first. Not while aiming a gun (the aim leads) or rolling.
+	bFocusLocked = false;
+	const USimSubsystem* Bridge = GetBridge();
+	const colony::ThingView* Me = Bridge && Bridge->GetSim() ? Bridge->GetCurrentSnapshot().find(Thing) : nullptr;
+	if (!Me || Me->focusTarget == colony::kNoEntity || bAimHeld || Me->rollPhase > 0)
+	{
+		return;
+	}
+	const colony::ThingView* Target = Bridge->GetCurrentSnapshot().find(Me->focusTarget);
+	if (!Target || Target->level != Level)
+	{
+		return;
+	}
+	const FVector2D To(Target->x - Position.X, Target->y - Position.Y);
+	if (To.SizeSquared() < 0.09)
+	{
+		return;
+	}
+	bFocusLocked = true;
+	const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(To.Y), static_cast<float>(To.X)));
+	const float Rate = bFirstPerson ? ProtagonistFocusTurnFirst : ProtagonistFocusTurnThird;
+	Yaw = FRotator::NormalizeAxis(FMath::FixedTurn(Yaw, Wanted, Rate * DeltaTime));
 }
 
 bool AProtagonistPawn::IsBodyHiddenInView() const

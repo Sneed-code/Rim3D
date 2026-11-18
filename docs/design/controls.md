@@ -44,7 +44,7 @@ resource stack within 1.5 m of your colonist goes into your bag, as much as fits
 ## AI pawns and sprinting
 
 AI pawns jog (RimWorld's normal pace) and **sprint only in a fight, fleeing or an emergency**, at FighterRules
-`sprintFactor` (1.5, the same as the player's sprint). Fighters sprint when they flee or fall back from enemies they
+`sprintSpeedFactor` (RimWorld's Sprint, 4/3 of a jog). Fighters sprint when they flee or fall back from enemies they
 know of, head for a shelter, or charge into melee from 3 to 30 m (`FighterSystem::sprinting`, [focus.md](focus.md));
 they also sprint carrying a downed friend to cover, and colonists sprint to rescue a downed colonist or beat out a fire
 (`Sim::pawnSprinting`). Visitors and traders never hurry; animals keep their own speeds. The player's

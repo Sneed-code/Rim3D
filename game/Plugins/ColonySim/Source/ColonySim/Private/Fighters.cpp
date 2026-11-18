@@ -136,7 +136,7 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     num("helpRange", r.helpRange);
     num("fleeResponseSeconds", r.fleeResponseSeconds);
     num("fleeSightRange", r.fleeSightRange);
-    num("sprintFactor", r.sprintFactor);
+    num("sprintSpeedFactor", r.sprintSpeedFactor);
     num("sprintChargeMin", r.sprintChargeMin);
     num("sprintChargeMax", r.sprintChargeMax);
     num("helpReach", r.helpReach);
@@ -1737,8 +1737,11 @@ bool FighterSystem::meleeAct(Entity pawn, Fighter& f) {
     if (victim == kNoEntity) {
         return false;
     }
-    if (victim == f.target && f.walk != 0 && melee_->charges(pawn)) {
-        // A charge walks on until the target is well inside its reach, not just at the edge of it.
+    const Mover* mover = things_.registry().try_get<Mover>(pawn);
+    const bool stillWalking = f.walk == 1 || (mover != nullptr && mover->next < mover->path.size());
+    if (victim == f.target && f.walk != 0 && stillWalking && melee_->charges(pawn)) {
+        // A charge walks on until the target is well inside its reach, not just at the edge of it (but not once its path
+        // has run out: then it stood in reach and never swung).
         const Position& a = things_.registry().get<Position>(pawn);
         const Position& b = things_.registry().get<Position>(victim);
         const float close = std::max(0.7f, melee_->engageDistance(pawn, victim) - melee_->rules().closeIn);
