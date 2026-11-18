@@ -132,6 +132,10 @@ struct MeleeRules {
     // are fast (sneed).
     std::vector<std::pair<std::string, std::vector<std::string>>> styleAttacks;
     std::vector<std::pair<std::string, std::string>> weaponStyle;
+    // Blows at a body on the ground (Melee::low; docs/design/focus.md "Blows at the downed"): clips by style or by weapon
+    // def name (a weapon's own list wins): a stab down for knives and spears, an overhead smash for clubs and hammers,
+    // a hack for blades and axes. A style with none of them measured swings its usual clips.
+    std::vector<std::pair<std::string, std::vector<std::string>>> lowAttacks;
     std::string unarmedStyle = "Unarmed";
     float maxAttackClipSeconds = 1.6f;
     float maxAttackHitSeconds = 0.8f;
@@ -199,6 +203,8 @@ public:
     // The attack clips a melee weapon def (or a body def's own tools) swings with: its hold style's, the short ones
     // (docs/design/weapon-hold.md, body-motion.md). Empty for a def with no melee tools.
     std::vector<DefId> attackClipsOf(DefId def) const;
+    // The clips it swings with at a body on the ground (focus.md); empty: it uses attackClipsOf.
+    std::vector<DefId> lowAttackClipsOf(DefId def) const;
     // The fighter AI charges with this pawn: no gun, and a melee weapon in hand or a trait that says
     // so (Brawler). Others only strike back at enemies in reach.
     bool charges(Entity pawn) const;
@@ -270,6 +276,7 @@ private:
         std::vector<Tool> tools;
         float reach = 0.0f;
         std::vector<DefId> attackClips;  // MotionClips of its style that are short enough
+        std::vector<DefId> lowAttackClips;  // the same for blows at a body on the ground (MeleeRules lowAttacks)
         float lunge = 0.0f;              // the least any of them steps forward by its blow (a man's metres)
     };
 
