@@ -1537,8 +1537,8 @@ void UFightSubsystem::DrawAlertMarks(float Scale)
 		{
 			continue;
 		}
-		// Above the head: 2.1 m over the ground it stands on.
-		const FVector Head = FightSimToWorldUnits(*Bridge, View.x, View.y, View.z + 2.1f);
+		// Just above the head: 1.85 m over the ground it stands on (the mark is drawn upward from there).
+		const FVector Head = FightSimToWorldUnits(*Bridge, View.x, View.y, View.z + 1.85f);
 		FVector2D Screen;
 		if (!PC->ProjectWorldLocationToScreen(Head, Screen, true))
 		{
