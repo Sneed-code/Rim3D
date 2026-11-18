@@ -53,7 +53,8 @@ raised shield with its catch chance, whatever the damage type. Then, before armo
 - what is left goes through armour as usual, the shield's own % included.
 
 Where the hit comes from: the bullet's flight, the attacker of a blow, a blast's centre (each fragment rolls).
-Flames, traps and other hits from nowhere never land on a shield. The roll is made only for a pawn with its shield up,
+Flames, traps and other hits from nowhere never land on a shield. A pawn with its shield up never parries with its weapon as well (`MeleeSystem::prepareDefense`): the shield takes
+the blow. The roll is made only for a pawn with its shield up,
 so games without shields draw the same numbers as before.
 
 The player's block faces where the pawn faces, or the way the command gives (the camera). The fighter AI's faces the

@@ -1083,6 +1083,17 @@ void USmokeTestSubsystem::BuildMeleePhases()
 			B->Submit(colony::SetFactionCommand{State->Basher, 2});
 			return;
 		}
+		// The player keeps the camera, and so the shield, on the clubber: its footwork takes it round the side of a shield
+		// left facing one way (that, and a gladius parry, made this phase see no blows on the shield half the time).
+		if (const colony::ThingView* Basher = Snapshot(State->Basher))
+		{
+			UProtagonistSubsystem* P = Prot();
+			const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Basher->y - Me->y, Basher->x - Me->x));
+			if (P && P->GetBody())
+			{
+				P->GetBody()->Look(FRotator::NormalizeAxis(Wanted - P->GetBody()->GetYaw()), 0.0f);
+			}
+		}
 		if (PhaseTime < 8.0f && B->GetGameSeconds() > State->LastOrderStep && Sim.melee().ready(State->Basher) && Sim.melee().inReach(State->Basher, State->Me))
 		{
 			B->Submit(colony::MeleeCommand{State->Basher, State->Me, colony::MeleeMode::Attack});
