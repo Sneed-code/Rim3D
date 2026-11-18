@@ -218,10 +218,18 @@ torsos, whole-corpse gibs) was never merged.
   the piece's bones where the body has them at that moment and every other bone folded into the cut. It is thrown up
   and away from the body, tumbles, bounces on the sim's ground height and comes to rest (its own small sums: the
   drawn ground has no physics shape). It goes when the sim drops the piece. Cosmetic: where it lands is not in the sim.
+- **Flesh and blood**: a ball of the blood drops' wet red (`M_BloodDrop`) sits over each stump (on the bone above
+  the cut, so it moves with the body) and over the cut end of each piece, sized to the limb. When the piece is thrown
+  the blood system gets a heavy cut at the stump (a gush along the limb that left, a bleeding wound, a pool), and a
+  small splash where the piece first lands.
+- **Clothes**: the piece copies every visible skinned mesh, so the sleeve, trouser leg, boot or hat comes off with
+  it, and the same garments are folded away on the body.
 - Corpses and the unconscious were already ragdolls (`StartRagdoll`); a cut limb's physics shapes stay on the ragdoll,
   unseen.
 - Smoke test `hurt`, phase `dismember`: a 400 blow to the downed colonist's torso; the sim must take off the head and
-  four limbs and leave 5 pieces, the body must show the same bits, 5 pieces must be drawn and come to rest.
+  four limbs and leave 5 pieces, the body must show the same bits with 5 flesh caps, 5 pieces must be drawn and come
+  to rest. The phase switches to the real, dressed bodies (`Pawns.MetaHumans 1`), where the pieces must have at least
+  two meshes each (skin and clothes).
 
 ## Later (sneed, 2026-11-16)
 

@@ -3,10 +3,14 @@
 #include "Components/PoseableMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "GroomComponent.h"
 
+#include "BloodSubsystem.h"
 #include "PawnActor.h"
 #include "SimSubsystem.h"
 
@@ -38,6 +42,46 @@ namespace
 		case colony::kSeveredHead: OutBone = TEXT("head"); OutEnd = NAME_None; return true;
 		default: return false;
 		}
+	}
+
+	/** How thick the limb is at the cut, cm (a grown body; scaled by the pawn's height). */
+	float SeveredCapRadius(uint16 Bit)
+	{
+		switch (Bit)
+		{
+		case colony::kSeveredLeftForearm:
+		case colony::kSeveredRightForearm: return 3.6f;
+		case colony::kSeveredLeftArm:
+		case colony::kSeveredRightArm: return 4.8f;
+		case colony::kSeveredLeftLowerLeg:
+		case colony::kSeveredRightLowerLeg: return 5.4f;
+		case colony::kSeveredLeftLeg:
+		case colony::kSeveredRightLeg: return 7.8f;
+		default: return 5.6f;  // the neck
+		}
+	}
+
+	/** Wet flesh over a cut: a ball of the blood drops' glossy red where the folded mesh closes on a point. */
+	UStaticMeshComponent* SeveredCap(AActor* Owner, USceneComponent* Parent, FName Socket, const FVector& At, float RadiusCm)
+	{
+		UStaticMesh* Ball = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+		if (!Owner || !Parent || !Ball)
+		{
+			return nullptr;
+		}
+		UStaticMeshComponent* Cap = NewObject<UStaticMeshComponent>(Owner);
+		Cap->SetStaticMesh(Ball);
+		if (UMaterialInterface* Flesh = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Rim3D/Generated/Blood/M_BloodDrop.M_BloodDrop")))
+		{
+			Cap->SetMaterial(0, Flesh);
+		}
+		Cap->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Cap->SetCanEverAffectNavigation(false);
+		Cap->SetupAttachment(Parent, Socket);
+		Cap->RegisterComponent();
+		Cap->SetWorldLocation(At);
+		Cap->SetWorldScale3D(FVector(RadiusCm / 50.0f));
+		return Cap;
 	}
 
 	/** Every skinned mesh of the pawn: the mannequin, the MetaHuman or MakeHuman body, its clothes, its face. */
@@ -105,6 +149,21 @@ void ASeveredPieceActor::Tick(float DeltaSeconds)
 	if (At.Z <= Floor)
 	{
 		At.Z = Floor;
+		if (!bLanded)
+		{
+			// It leaves blood where it first comes down.
+			bLanded = true;
+			if (UBloodSubsystem* Blood = GetWorld()->GetSubsystem<UBloodSubsystem>(); Blood && Blood->IsReady())
+			{
+				FBloodHit Hit;
+				Hit.At = At;
+				Hit.Direction = FVector(Velocity.X * 0.3, Velocity.Y * 0.3, -200.0);
+				Hit.Kind = EBloodWound::Blunt;
+				Hit.Damage = 12.0f;
+				Hit.Force = 0.7f;
+				Blood->AddHit(Hit);
+			}
+		}
 		if (Velocity.Z < 0.0f)
 		{
 			Velocity.Z = -Velocity.Z * SeveredBounce;
@@ -157,6 +216,17 @@ void ASimPawnActor::ApplySevered(uint16 Bits)
 			{
 				Mesh->HideBoneByName(Bone, PBO_None);
 			}
+		}
+		// Wet flesh over the stump, on the bone above the cut.
+		USkeletalMeshComponent* Skin = GetDecalMesh();
+		if (!Skin || Skin->GetBoneIndex(Bone) == INDEX_NONE)
+		{
+			Skin = Body;
+		}
+		if (Skin && Skin->GetBoneIndex(Bone) != INDEX_NONE &&
+			SeveredCap(this, Skin, Skin->GetParentBone(Bone), Skin->GetBoneLocation(Bone, EBoneSpaces::WorldSpace), SeveredCapRadius(Bit) * GetBodyScale()))
+		{
+			++SeveredCaps;
 		}
 		// What hangs on a socket of it (a hat, horns, a held thing) or grows from it (hair) goes with it.
 		for (USceneComponent* Part : Parts)
@@ -266,6 +336,23 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		Piece->Destroy();
 		return nullptr;
 	}
+	// Blood gushes out of the stump, along the limb that left.
+	if (UBloodSubsystem* Blood = GetWorld()->GetSubsystem<UBloodSubsystem>(); Blood && Blood->IsReady())
+	{
+		FVector Out = Middle - Cut;
+		Out.Z += 20.0;
+		FBloodHit Hit;
+		Hit.At = Cut;
+		Hit.Direction = Out;
+		Hit.Kind = EBloodWound::Cut;
+		Hit.Damage = 60.0f;
+		Hit.Force = 2.5f;
+		Hit.Victim = Thing;
+		Hit.Mesh = GetDecalMesh();
+		Blood->AddHit(Hit);
+	}
+	// Wet flesh over its cut end too.
+	SeveredCap(Piece, Piece->GetRootComponent(), NAME_None, Cut, SeveredCapRadius(Bit) * GetBodyScale());
 	// Thrown up and away from the body's middle, tumbling.
 	FVector Away = Middle - GetActorLocation();
 	Away.Z = 0.0;

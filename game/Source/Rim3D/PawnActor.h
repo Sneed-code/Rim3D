@@ -166,6 +166,8 @@ public:
 	 *  every mesh, and what hung on them is hidden. Only ever more: a body does not grow them back. */
 	void ApplySevered(uint16 Bits);
 	uint16 GetSeveredShown() const { return SeveredShown; }
+	/** How many stumps got their flesh cap. */
+	int32 GetSeveredCaps() const { return SeveredCaps; }
 	/** The piece itself, as the body has it now, thrown clear (SeveredPieceActor.cpp). Null if the body has no such bone. */
 	class ASeveredPieceActor* SpawnSeveredPiece(uint16 Bit);
 
@@ -356,6 +358,7 @@ private:
 	bool bHasLooks = false;
 	bool bRagdoll = false;
 	uint16 SeveredShown = 0;
+	int32 SeveredCaps = 0;
 	int32 RagdollsStarted = 0;
 	float ReactionAge = kHitReactionSeconds;
 	int32 HitClipsPlayed = 0;

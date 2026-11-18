@@ -39,4 +39,5 @@ private:
 	FRotator Spin = FRotator::ZeroRotator;
 	float Radius = 8.0f;
 	bool bAtRest = false;
+	bool bLanded = false;
 };
