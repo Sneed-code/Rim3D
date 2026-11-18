@@ -55,6 +55,7 @@ namespace
 		TEXT("Fight.DamageNumbers"), 1, TEXT("1 floats the damage of your own hits over where they landed (playing as a pawn), 0 hides them."), ECVF_Default);
 	constexpr float FightDamageNumberSeconds = 1.0f;
 
+	const float FightMuzzleSmokeMinCameraCm = 150.0f;
 	const TCHAR* const FightSolidMaterialPath = TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial");
 	const TCHAR* const FightDecalMaterialPath = TEXT("/Game/Rim3D/Generated/Fights/M_WoundDecal.M_WoundDecal");
 
@@ -89,7 +90,7 @@ namespace
 			case EFightParticle::Chip: return {FLinearColor(0.32f, 0.32f, 0.34f), false};
 			case EFightParticle::Spark: return {FLinearColor(1.0f, 0.62f, 0.18f), false};
 			case EFightParticle::Blood: return {FLinearColor(0.42f, 0.01f, 0.01f), true};  // drops, stretched along their flight
-			case EFightParticle::Smoke: return {FLinearColor(0.55f, 0.55f, 0.58f), true};
+			case EFightParticle::Smoke: return {FLinearColor(0.36f, 0.36f, 0.38f), true};  // opaque mesh, so kept small and dim
 			default: return {FLinearColor(1.0f, 0.92f, 0.62f), true};
 		}
 	}
@@ -457,7 +458,13 @@ void UFightSubsystem::SpawnFlash(const FVector& Muzzle)
 		Small.Life = 0.1f;
 		Particles.Add(Small);
 	}
-	SpawnBurst(EFightParticle::Smoke, Muzzle, FVector::UpVector, 2, 70.0f, 0.5f, 7.0f, 0.8f, -45.0f);
+	// A few small wisps. The particle mesh is opaque, so big puffs read as solid blobs; and none right in front of the
+	// camera (a first-person gun's muzzle is a hand's length from the eye).
+	const APlayerCameraManager* FlashCamera = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0);
+	if (!FlashCamera || FVector::Dist(FlashCamera->GetCameraLocation(), Muzzle) > FightMuzzleSmokeMinCameraCm)
+	{
+		SpawnBurst(EFightParticle::Smoke, Muzzle, FVector::UpVector, 3, 60.0f, 0.6f, 2.5f, 0.5f, -40.0f);
+	}
 	if (Lights.Num() > 0)
 	{
 		const int32 Index = NextLight++ % Lights.Num();
@@ -506,7 +513,7 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 	{
 		case colony::ProjectileHitKind::Ground:
 			SpawnBurst(EFightParticle::Dust, At, FVector::UpVector, 9, 300.0f, 0.8f, 8.0f, 0.9f, 980.0f);
-			SpawnBurst(EFightParticle::Smoke, At, FVector::UpVector, 2, 60.0f, 0.4f, 12.0f, 1.0f, -30.0f);
+			SpawnBurst(EFightParticle::Smoke, At, FVector::UpVector, 3, 60.0f, 0.5f, 5.0f, 0.8f, -30.0f);
 			break;
 		case colony::ProjectileHitKind::Rock:
 			SpawnBurst(EFightParticle::Dust, At, Back + FVector::UpVector * 0.5f, 6, 280.0f, 0.8f, 8.0f, 0.8f, 980.0f);
@@ -898,7 +905,7 @@ void UFightSubsystem::UpdateParticles(float GameDelta)
 		}
 		else if (Particle.Kind == EFightParticle::Smoke)
 		{
-			Scale *= (0.4f + T * 1.4f) * (T > 0.7f ? (1.0f - T) / 0.3f : 1.0f);
+			Scale *= (0.5f + T * 0.8f) * (T > 0.6f ? (1.0f - T) / 0.4f : 1.0f);
 		}
 		else if (T > 0.7f)
 		{
