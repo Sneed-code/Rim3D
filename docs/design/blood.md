@@ -106,7 +106,11 @@ texture**, as Baldur's Gate 3 does:
   washes (the sim's blood level falls to nothing) or when a newer body needs the room.
 - Head and neck wounds darken and redden the hair (its `Tint`), fading the same way. Hair takes no stamps.
 - Bodies without a position map (MetaHumans, animals) keep the decals. `Blood.SkinPaint 0` goes back to decals.
-- Not yet: blood on clothes (they show nothing of a wound under them for now).
+- Clothes: each wound also leaves a **cloth spot** (its place in the body's bind pose, radius 1.5 x soak + 2 x core,
+  8 newest per body, fading and drying like the skin). `UGrimeSubsystem` gives every mesh but the skin its own copy of
+  `M_GrimeOverlay` with the spots (`Spot0-7`, `SpotAmountA/B`), which soaks an uneven dark blot into the cloth there.
+  It relies on clothes sharing the body's bind pose. MakeHuman bodies wear no clothes yet (only MetaHumans do, and
+  they keep decals, which land on their clothes), so this shows once MakeHuman clothes come.
 
 ## Assets
 

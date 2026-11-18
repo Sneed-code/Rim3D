@@ -68,6 +68,11 @@ public:
 	/** Wipes every mask (sim reload, the creator's Clean up). */
 	void Reset();
 
+	/** Blood soaked into the clothes over a body's wounds: up to 8 spots in the body's bind pose (xyz cm, w radius;
+	 *  newest first) and how much is left of each, and how wet the newest still is. Clothes share the body's bind pose, so
+	 *  M_GrimeOverlay on them draws the spots where the wounds are. Returns how many. */
+	int32 GetClothSpots(const USkeletalMeshComponent* Body, FLinearColor OutSpots[8], float OutAmounts[8], float& OutWet) const;
+
 	/** For smoke tests. */
 	int32 GetPaints() const { return Paints; }
 	int32 GetMasks() const { return Masks.Num(); }
@@ -79,6 +84,13 @@ private:
 		TWeakObjectPtr<UMaterialInstanceDynamic> Material;
 		FLinearColor Original = FLinearColor::White;
 		FLinearColor Written = FLinearColor::White;
+	};
+	struct FClothSpot
+	{
+		FVector3f At = FVector3f::ZeroVector;
+		float Radius = 0.0f;
+		float Strength = 1.0f;
+		float Clock = 0.0f;
 	};
 	struct FMask
 	{
@@ -92,6 +104,7 @@ private:
 		float LastSimBlood = -1.0f;
 		FBloodFluid Fluid;
 		TArray<FHairTint> Hair;
+		TArray<FClothSpot> ClothSpots;  // oldest first, at most 8
 	};
 
 	bool EnsureAssets();
@@ -116,4 +129,5 @@ private:
 	TArray<FMask> Masks;
 	bool bTried = false;
 	int32 Paints = 0;
+	float LastClock = 0.0f;
 };

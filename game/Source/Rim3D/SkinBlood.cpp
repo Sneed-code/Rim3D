@@ -404,6 +404,21 @@ bool USkinBlood::Paint(USkeletalMeshComponent* Mesh, const FSkinBloodPaint& Mark
 	PaintMaterial->SetVectorParameterValue(TEXT("Shape"), FLinearColor(Mark.Core, Mark.Soak, Mark.Spatter, Mark.Run));
 	Draw(*Mask);
 	ApplyToSkin(*Mask, true);
+	LastClock = Clock;
+
+	// A wound (not a drop or a run) soaks the clothes over it, wider than on the skin: cloth wicks.
+	if (Mark.Soak > 0.0f || Mark.Core >= 1.0f)
+	{
+		if (Mask->ClothSpots.Num() >= 8)
+		{
+			Mask->ClothSpots.RemoveAt(0);
+		}
+		FClothSpot& Spot = Mask->ClothSpots.AddDefaulted_GetRef();
+		Spot.At = FVector3f(0.5f * (At + To));
+		Spot.Radius = (Mark.Soak * 1.5f + Mark.Core * 2.0f + 0.5f * static_cast<float>(FVector::Dist(At, To))) * FMath::Clamp(Mark.Strength, 0.3f, 1.0f);
+		Spot.Strength = FMath::Clamp(Mark.Strength, 0.0f, 1.0f);
+		Spot.Clock = Clock;
+	}
 
 	// A wound on the head or neck soaks the hair.
 	const FString BoneName = Asset->GetRefSkeleton().GetBoneName(Bone).ToString().ToLower();
@@ -418,6 +433,7 @@ bool USkinBlood::Paint(USkeletalMeshComponent* Mesh, const FSkinBloodPaint& Mark
 
 void USkinBlood::Tick(float Clock, TFunctionRef<float(const USkeletalMeshComponent*)> SimBlood)
 {
+	LastClock = Clock;
 	if (Masks.IsEmpty())
 	{
 		return;
@@ -467,4 +483,40 @@ void USkinBlood::Tick(float Clock, TFunctionRef<float(const USkeletalMeshCompone
 			ApplyToHair(Mask, false);
 		}
 	}
+}
+
+int32 USkinBlood::GetClothSpots(const USkeletalMeshComponent* Body, FLinearColor OutSpots[8], float OutAmounts[8], float& OutWet) const
+{
+	OutWet = 0.0f;
+	for (int32 Index = 0; Index < 8; ++Index)
+	{
+		OutSpots[Index] = FLinearColor::Transparent;
+		OutAmounts[Index] = 0.0f;
+	}
+	const FMask* Mask = Masks.FindByPredicate([Body](const FMask& M) { return M.Mesh.Get() == Body; });
+	if (!Body || !Mask)
+	{
+		return 0;
+	}
+	const float Step = FMath::Max(0.0f, SkinBloodConsole(TEXT("Blood.FadeStep"), 0.03f));
+	const float DrySeconds = FMath::Max(10.0f, SkinBloodConsole(TEXT("Blood.DryMinutes"), 5.0f) * 60.0f);
+	int32 Count = 0;
+	for (int32 Index = Mask->ClothSpots.Num() - 1; Index >= 0 && Count < 8; --Index)
+	{
+		const FClothSpot& Spot = Mask->ClothSpots[Index];
+		const float Age = FMath::Max(0.0f, LastClock - Spot.Clock);
+		const float Left = Spot.Strength * FMath::Clamp(1.0f - Step * FMath::FloorToFloat(Age / 10.0f), 0.0f, 1.0f);
+		if (Left <= 0.01f)
+		{
+			continue;
+		}
+		if (Count == 0)
+		{
+			OutWet = FMath::Clamp(1.0f - Age / DrySeconds, 0.0f, 1.0f);
+		}
+		OutSpots[Count] = FLinearColor(Spot.At.X, Spot.At.Y, Spot.At.Z, Spot.Radius);
+		OutAmounts[Count] = Left;
+		++Count;
+	}
+	return Count;
 }
