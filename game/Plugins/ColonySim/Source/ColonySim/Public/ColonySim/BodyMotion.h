@@ -72,6 +72,12 @@ struct BodyMotion {
     int pushTo = 0;
     bool turnBody = true;   // the clip's turn turns the pawn (attacks and rolls set their own facing: off)
     float lost = 0.0f;      // metres of the path lost against walls and heavier bodies
+    // Drawn on the upper body only, over legs that walk the way the body really moves (staggers, flinches, the
+    // player's swings): sneed (2026-11-18), a staggered body must not slide on still legs.
+    bool upper = false;
+    // The feet stay the player's: the clip doesn't carry the body and the player's walking goes on under it (the
+    // player's own swings; sneed 2026-11-18: "it's critical I can move while meleeing").
+    bool freeFeet = false;
 };
 
 // The numbers (Rules/MotionRules). Ours: RimWorld has no body motion.
@@ -130,6 +136,15 @@ public:
     // Plays the clip so that clip time `atSeconds` comes after `steps` steps (an attack's hit lands on the sim's hit
     // step); the rest of the clip plays at the same rate.
     bool playTimed(Entity pawn, DefId clip, float atSeconds, int steps, float faceX, float faceY, bool turnBody);
+    // Marks the motion playing on the pawn as drawn on the upper body (`upper`) and as leaving the feet to the player
+    // (`freeFeet`: its path no longer moves the body). Nothing if no motion plays.
+    void setLayers(Entity pawn, bool upper, bool freeFeet);
+    // Whether a motion holds the body: plays and carries it, so walking and steering wait (false for freeFeet).
+    bool holdsBody(Entity pawn) const;
+    // Whether a pawn standing at (x, y) on `level`, coming from (fromX, fromY), runs into no standing body more than it
+    // already did: the player's walking stops against bodies (sneed 2026-11-18: "I can't run through them") but can
+    // always walk out of an overlap.
+    bool bodiesClear(Entity pawn, float fromX, float fromY, float x, float y, int level) const;
     // A plain push: `metres` along (dx, dy) over `steps` steps, moving only from step `from` to step `to`.
     bool push(Entity pawn, float dx, float dy, float metres, int steps, int from = 0, int to = -1);
     // A blow throws the body along (pushX, pushY): a person plays the stagger (or knockdown) clip for the way it goes,

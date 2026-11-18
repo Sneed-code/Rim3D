@@ -28,6 +28,12 @@ namespace colony {
 
 namespace {
 
+// The player's own swing at someone standing: the clip is drawn on the upper body and the feet stay the player's
+// (BodyMotion::freeFeet). A blow at someone on the ground keeps the whole body's clip.
+bool meleeFreeFeet(const Melee& m) {
+    return m.player && !m.low;
+}
+
 // Names are prefixed because Unreal's unity builds merge .cpp files together.
 
 float meleeLerp(float a, float b, float t) { return a + (b - a) * t; }
@@ -641,6 +647,11 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         const Posture& posture = reg.get<Posture>(pawn);
         combat_.motion().playTimed(pawn, clipDef, combat_.motion().clip(clipDef)->hitSeconds, windup, posture.facingX, posture.facingY,
                                    false);
+        // The player's swing is the arms' and the chest's: the player keeps walking under it (sneed 2026-11-18). A
+        // blow at someone on the ground (a stomp, an overhead smash) stays the whole body's.
+        if (meleeFreeFeet(m)) {
+            combat_.motion().setLayers(pawn, true, true);
+        }
     }
     if (events_ != nullptr) {
         Event e;
@@ -1018,8 +1029,16 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
         dx /= flat;
         dy /= flat;
     }
-    // As far as the aimed point and a little past it, but never further than the reach.
-    const float length = std::min(flat + rules_.strikeDepth, reach(pawn));
+    // As far as the aimed point and a little past it, but never further than the reach. The player's swing doesn't
+    // step the body in (its feet are the player's), so its blow reaches as far as the clip's step would have taken it.
+    float strikeReach = reach(pawn);
+    if (meleeFreeFeet(m)) {
+        bool weaponHeld = false;
+        if (const ToolSet* set = toolsOf(pawn, weaponHeld, !m.weaponTool)) {
+            strikeReach += set->lunge * combat_.motion().sizeScale(pawn);
+        }
+    }
+    const float length = std::min(flat + rules_.strikeDepth, strikeReach);
     const float ez = oz;
     // One line of the blow at `angle` radians off the aimed line: walls and hitboxes first, then a target without
     // hitboxes (animals until they get theirs), hit if the line passes within its body, which is then hurt where
