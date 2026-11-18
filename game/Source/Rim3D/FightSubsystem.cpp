@@ -444,24 +444,26 @@ void UFightSubsystem::SpawnBurst(EFightParticle Kind, const FVector& At, const F
 void UFightSubsystem::SpawnFlash(const FVector& Muzzle)
 {
 	++Flashes;
-	if (Particles.Num() + 4 < FightMaxParticles)
+	// The flash and smoke shapes are opaque meshes, so they stay small, and none are drawn right in front of the camera
+	// (a first-person gun's muzzle is a hand's length from the eye, where they fill the screen as solid blobs); the
+	// flash light below still lights the scene there.
+	const APlayerCameraManager* FlashCamera = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0);
+	const bool bNearCamera = FlashCamera && FVector::Dist(FlashCamera->GetCameraLocation(), Muzzle) <= FightMuzzleSmokeMinCameraCm;
+	if (!bNearCamera && Particles.Num() + 4 < FightMaxParticles)
 	{
 		FParticle Big;
 		Big.Kind = EFightParticle::Flash;
 		Big.Position = Muzzle;
-		Big.SizeCm = 22.0f;
-		Big.Life = 0.05f;
+		Big.SizeCm = 9.0f;
+		Big.Life = 0.04f;
 		Big.Gravity = 0.0f;
 		Particles.Add(Big);
 		FParticle Small = Big;
-		Small.SizeCm = 11.0f;
-		Small.Life = 0.1f;
+		Small.SizeCm = 5.0f;
+		Small.Life = 0.08f;
 		Particles.Add(Small);
 	}
-	// A few small wisps. The particle mesh is opaque, so big puffs read as solid blobs; and none right in front of the
-	// camera (a first-person gun's muzzle is a hand's length from the eye).
-	const APlayerCameraManager* FlashCamera = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0);
-	if (!FlashCamera || FVector::Dist(FlashCamera->GetCameraLocation(), Muzzle) > FightMuzzleSmokeMinCameraCm)
+	if (!bNearCamera)
 	{
 		SpawnBurst(EFightParticle::Smoke, Muzzle, FVector::UpVector, 3, 60.0f, 0.6f, 2.5f, 0.5f, -40.0f);
 	}
