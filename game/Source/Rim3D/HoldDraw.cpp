@@ -2,6 +2,7 @@
 
 #include "Animation/AnimSequence.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/Actor.h"
 #include "Misc/Paths.h"
 
 #include "MakeHumanAnimInstance.h"
@@ -158,6 +159,17 @@ bool HoldDraw::PoleFrame(const USkeletalMeshComponent* Mesh, bool bRight, FTrans
 		return true;
 	}
 	X.Normalize();
+	// The point goes where the body faces (2026-11-19: the rifle idle's hands lay it across the body): the holder's
+	// facing, tilted up or down by the hands' line, at most 35 degrees.
+	if (const AActor* Holder = Mesh->GetOwner())
+	{
+		const FVector Ahead = Holder->GetActorForwardVector().GetSafeNormal2D();
+		if (!Ahead.IsNearlyZero())
+		{
+			const double Pitch = FMath::Clamp(FMath::Asin(FMath::Clamp(X.Z, -1.0, 1.0)), FMath::DegreesToRadians(-35.0), FMath::DegreesToRadians(35.0));
+			X = (Ahead * FMath::Cos(Pitch) + FVector::UpVector * FMath::Sin(Pitch)).GetSafeNormal();
+		}
+	}
 	// Up across the shaft: the world's up, or the holding hand's fingers when the shaft stands upright.
 	FVector Z = FVector::UpVector - X * FVector::DotProduct(FVector::UpVector, X);
 	if (Z.SizeSquared() < 0.05)

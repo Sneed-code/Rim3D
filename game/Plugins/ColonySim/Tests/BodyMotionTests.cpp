@@ -93,7 +93,7 @@ std::shared_ptr<const DefDatabase> motionTestDefs() {
         clips += R"({"defName": "Motion_OneHand_Hack_Low", "kind": "Attack", "hitSeconds": 0.5, "root": [)" + motionTestRoot(0.2f, 0.5f, 1.0f, 0.2f) + "]},";
         clips += R"({"defName": "Motion_Unarmed_Jab", "kind": "Attack", "hitSeconds": 0.4, "root": [)" + motionTestRoot(0.2f, 0.4f, 0.8f, 0.2f) + "]},";
         // The spear's own thrust (MeleeRules.styleAttacks.Melee_Spear); its lunge is not measured here.
-        clips += R"({"defName": "Motion_Spear_Thrust", "kind": "Attack", "hitSeconds": 0.45, "root": [)" + motionTestRoot(0.3f, 0.45f, 0.9f, 0.2f) + "]},";
+        clips += R"({"defName": "Motion_Spear_Stab", "kind": "Attack", "hitSeconds": 0.45, "root": [)" + motionTestRoot(0.3f, 0.45f, 0.9f, 0.2f) + "]},";
         // A six second flourish: never used in a fight.
         clips += R"({"defName": "Motion_Club_Horizontal", "kind": "Attack", "hitSeconds": 3.0, "root": [)" + motionTestRoot(0.5f, 3.0f, 6.0f) + "]}";
         clips += "]";
@@ -603,7 +603,7 @@ TEST_CASE("Motion: a blow at a body on the ground plays the weapon's downward cl
 TEST_CASE("Motion: a spear thrusts with its own clip; a weapon without one swings its style's") {
     auto sim = motionTestSim(12);
     const BodyMotionSystem& motion = sim->combat().motion();
-    const DefId thrust = motion.clipId("Motion_Spear_Thrust");
+    const DefId thrust = motion.clipId("Motion_Spear_Stab");
     MOTION_REQUIRE(thrust.valid());
     const DefDatabase& defs = sim->defs();
     // The weapon's own list wins (sneed 2026-11-18: the spear must thrust, not slash); its unmeasured lunge is skipped.
@@ -614,6 +614,8 @@ TEST_CASE("Motion: a spear thrusts with its own clip; a weapon without one swing
     for (const DefId clip : sim->melee().attackClipsOf(defs.idOf("Things", "Melee_Knife"))) {
         CHECK(clip != thrust);
     }
+}
+
 TEST_CASE("Motion: the player's own swing leaves the feet free: walking goes on, the clip doesn't carry the body") {
     // sneed (2026-11-18): "it resets my position if I try to move while meleeing ... it's critical I can move while
     // meleeing". The swing is the arms' and the chest's; the walking keys keep the body.

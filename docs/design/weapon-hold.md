@@ -89,8 +89,10 @@ The spear was carried point-up across the back (the SpearGuard mocap stance) and
   stance decides where the point goes. The stance is the rifle idle (rear hand at the hip, front hand ahead): a low
   forward guard, point at the enemy.
 - **Thrusts**: `MeleeRules.styleAttacks` takes a weapon def name as a key too, and a weapon's own list wins when any
-  of its clips is measured (`MeleeSystem`, like `lowAttacks`). `Melee_Spear`: `Motion_Spear_Thrust` (one lunge out of
-  the mocap fencing loop) and `Motion_Spear_Lunge` (mocap clip 13). Both still need their trim and blow picked on the PC
-  (`-run=MotionClips -Trace=Motion_Spear_Thrust,Motion_Spear_Lunge`, then `from`/`to`/`hitSeconds` in
-  `assets/motion_clips.json`); until then the spear swings its style's clips.
+  of its clips is measured (`MeleeSystem`, like `lowAttacks`). `Melee_Spear`: `Motion_Spear_Stab`, Mixamo's "Bayonet
+  Stab" at chest height (the low one is the blow at the downed), still to download and import. The mocap fencing and
+  sword-lunge thrusts were measured on 2026-11-19 (`Motion_Spear_Thrust`, `Motion_Spear_Lunge`) but are not used: those
+  performers stand side-on, so the lunge travels to the pawn's right and would stab sideways.
+- **Facing**: the rifle idle's hands laid the shaft across the body (PC picture 2026-11-19), so `PoleFrame` points the
+  shaft where the holder faces, tilted by the hands' line (at most 35 degrees up or down).
 - PC check: the range tour's step 15 pictures the spear in first and third person.

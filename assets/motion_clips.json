@@ -199,16 +199,28 @@
       "hitSeconds": 1.25
     },
     {
+      "defName": "Motion_Spear_Stab",
+      "anim": "Mixamo/Fighting/A_SpearStab",
+      "kind": "Attack",
+      "note": "the spear's thrust at a standing target: Mixamo 'Bayonet Stab' with Target Height raised to chest level (the low one is Motion_Spear_Stab_Low); to download, import and trim on the PC (sneed's Mixamo sign-in)"
+    },
+    {
       "defName": "Motion_Spear_Thrust",
       "anim": "FencingAttacks/A_FencingAttacks",
       "kind": "Attack",
-      "note": "spear thrust at a standing target (sneed 2026-11-18): one lunge out of the mocap fencing loop; from/to and the blow still to be picked with -Trace=Motion_Spear_Thrust (until then too long, so the spear swings its style's clips)"
+      "from": 4.4,
+      "to": 5.6,
+      "hitSeconds": 4.8,
+      "note": "spear thrust at a standing target (sneed 2026-11-18): NOT USED: the fencer stands side-on, so this lunge travels to the pawn's right (0.58 m) and would stab sideways; kept measured for a later facing offset. One lunge out of the mocap fencing loop (4.4-5.6 s, blow at the front hand's fastest, 4.8 s; picked with -Trace=A_FencingAttacks on 2026-11-19)"
     },
     {
       "defName": "Motion_Spear_Lunge",
       "anim": "SwordLunge/A_SwordLunge",
       "kind": "Attack",
-      "note": "spear lunge (mocap clip 13); trim with -Trace=Motion_Spear_Lunge so the hips travel at most MeleeRules.maxAttackTravel"
+      "from": 0.1,
+      "to": 1.4,
+      "hitSeconds": 0.63,
+      "note": "NOT USED: side-on like the fencing clip (travels 0.54 m to the right). Spear lunge (mocap clip 13): the first lunge, 0.1-1.4 s, blow at 0.63 s (front hand fastest; -Trace=A_SwordLunge, 2026-11-19); hips 0.6 m at most"
     },
     {
       "defName": "Motion_OneHand_Hack_Low",
