@@ -32,7 +32,7 @@ Hurting yourself (your own grenade) credits nobody.
 `Sim::killSideOf(pawn)` gives the colour (`KillSide` Friendly, Enemy, Neutral) and `Sim::feedName(pawn)` the name: a
 person's nickname or first name, a tame animal's name, else the kind of creature ("Deer"). Tests: `KillFeedTests`.
 
-## Unreal (follow-up PR, after the PC compile)
+## Unreal
 
 `UKillFeedSubsystem` (ImGui foreground drawing, like the damage numbers). Console: `KillFeed.Enable 0` hides it,
 `KillFeed.Test` puts up three sample lines. The `gunrange` smoke test reports `killfeed_lines`, `killfeed_mine` and
