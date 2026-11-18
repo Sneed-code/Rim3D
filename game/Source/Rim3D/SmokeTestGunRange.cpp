@@ -21,6 +21,7 @@
 #include "CreatorPeople.h"
 #include "FightSubsystem.h"
 #include "GunRangeSubsystem.h"
+#include "KeyBindings.h"
 #include "KillFeedSubsystem.h"
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
@@ -130,6 +131,10 @@ namespace
 		bool bHitPicture = false;
 		bool bSwingPicture = false;
 		bool bKillFeedLines = false;
+		// Tab on the range's own-side targets: the sim's Next takes enemies only, so the range locks on itself (FocusCommand Set).
+		float TabAt = -1.0f;
+		colony::Entity FocusBefore = colony::kNoEntity;
+		int32 RangeFocusSets = 0;
 		// -GunRangeIdleRecord=<seconds>: frames of a standing target close up (gunrange_idle/rec_0000.png ...).
 		int32 IdleRecorded = 0;
 		TWeakObjectPtr<ACameraActor> IdleCamera;
@@ -618,6 +623,55 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			}
 		}
 
+		// Tab (lock-on): the sim's own Next picks enemies (the turned and the guards). The ordinary targets are the player's
+		// side, which Next never takes, so when it locked on to nobody the range picks the next nearest woman ahead itself.
+		if (PC && State->bControlled && Rim3DKeys::IsLockOnFocusEnabled() && Rim3DKeys::WasPressed(PC, ERim3DAction::FocusNextTarget))
+		{
+			State->TabAt = State->Clock;
+			State->FocusBefore = PlayerView ? PlayerView->focusTarget : colony::kNoEntity;
+		}
+		if (State->TabAt >= 0.0f && State->Clock > State->TabAt + 0.2f)
+		{
+			State->TabAt = -1.0f;
+			if (PlayerView && PlayerView->focusTarget == State->FocusBefore)
+			{
+				const FVector2D Me(PlayerView->x, PlayerView->y);
+				const float FacingYaw = FMath::DegreesToRadians(P->GetBody() ? P->GetBody()->GetYaw() : 0.0f);
+				const FVector2D Facing(FMath::Cos(FacingYaw), FMath::Sin(FacingYaw));
+				TArray<TPair<float, colony::Entity>> Picks;
+				for (const FGunRangeTarget& T : State->Targets)
+				{
+					const colony::ThingView* View = Snapshot.find(T.Thing);
+					if (!View || View->dead)
+					{
+						continue;
+					}
+					const FVector2D To = FVector2D(View->x, View->y) - Me;
+					const float D = To.Size();
+					if (D > 24.0f)
+					{
+						continue;
+					}
+					const bool bAhead = D < 0.01f || FVector2D::DotProduct(To / D, Facing) > 0.5f;
+					Picks.Add({bAhead ? D : D * 2.0f, T.Thing});
+				}
+				Picks.Sort([](const TPair<float, colony::Entity>& A, const TPair<float, colony::Entity>& Bp) { return A.Key < Bp.Key; });
+				if (!Picks.IsEmpty())
+				{
+					int32 Index = 0;
+					for (int32 i = 0; i < Picks.Num(); ++i)
+					{
+						if (Picks[i].Value == PlayerView->focusTarget)
+						{
+							Index = (i + 1) % Picks.Num();
+						}
+					}
+					B->Submit(colony::FocusCommand{State->Player, Picks[Index].Value, colony::FocusMode::Set});
+					++State->RangeFocusSets;
+				}
+			}
+		}
+
 		if (!bScript || !State->bArmed)
 		{
 			return;
@@ -913,6 +967,23 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				if (State->StepTime > 1.0f)
 				{
 					Picture(TEXT("kill_feed"));
+					Next(14);
+				}
+				break;
+			case 14:  // Tab: lock on to the nearest woman; the HP bar top middle and the marker on her
+				if (State->StepTime < Dt * 1.5f)
+				{
+					AimAtNearest();
+					P->FocusNext();
+					State->TabAt = State->Clock;
+					State->FocusBefore = P->GetFocusTarget();
+				}
+				if (State->StepTime > 1.5f)
+				{
+					Notes.Add(FString::Printf(TEXT("gunrange: Tab focus on %u (%s), HP bar frames %d"), entt::to_integral(P->GetFocusTarget()),
+						P->GetFocusTarget() != colony::kNoEntity ? TEXT("locked on") : TEXT("NOTHING FOCUSED"), P->GetFocusBarFramesDrawn()));
+					Picture(TEXT("focus_hpbar"));
+					P->EndFocus();
 					Next(10);
 				}
 				break;
@@ -944,7 +1015,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				Blood->IsReady() ? TEXT("assets in") : TEXT("ASSETS MISSING (old simple blood)"), Blood->GetHits(), Blood->GetDropsSpawned(),
 				Blood->GetMistSpawned(), Blood->GetWoundMarks(), Blood->GetBodyStainsMade(), Blood->GetSplatsMade()));
 		}
-		Notes.Add(FString::Printf(TEXT("gunrange: %d targets ran, %d sprinted, %d punches thrown at you"), State->Fled, State->Sprinted, State->FistSwings));
+		Notes.Add(FString::Printf(TEXT("gunrange: %d targets ran, %d sprinted, %d punches thrown at you, %d range lock-ons"), State->Fled, State->Sprinted, State->FistSwings, State->RangeFocusSets));
 		if (const UFightSubsystem* Marks = GetWorld()->GetSubsystem<UFightSubsystem>())
 		{
 			Notes.Add(FString::Printf(TEXT("gunrange: %d guards set unaware, %d alert events, %d alert marks drawn"), State->GuardsSet, Marks->GetAlertEventsSeen(), Marks->GetAlertMarksDrawn()));
