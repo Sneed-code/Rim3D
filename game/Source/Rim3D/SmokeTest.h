@@ -74,6 +74,9 @@ private:
 		/** Take the screenshot half a second before the measuring starts, so its slow frame is not measured
 		 *  (the perf test; at 1440p a screenshot frame takes about 400 ms). */
 		bool bScreenshotInWarmup = false;
+		/** Seconds into the measuring at which the screenshot is taken; under 0: a second in (or earlier in a short
+		 *  phase). For a phase whose result only shows late (the dismember phase: after the pieces have landed). */
+		float ScreenshotAt = -1.0f;
 	};
 
 	struct FFrameSample
