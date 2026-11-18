@@ -94,7 +94,7 @@ Clips (Mixamo, free): club and hammer `Motion_Club_Downward` (the axe pack's dow
 `Motion_Knife_Stab_Low` ("Stabbing", rear hand reverse grip, Target Height 0); spear `Motion_Spear_Stab_Low` ("Bayonet
 Stab", Height 0); one-hand blades `Motion_OneHand_Hack_Low` ("Sword And Shield Slash", the downward one); two-hand blades
 and axes `Motion_TwoHand_Hack_Low` ("Great Sword Slash", the downward one); fists `Motion_Unarmed_Stomp` ("Stomping").
-Until a clip is measured into `MotionClips` its weapon swings as usual.
+All five were imported and measured on the PC on 2026-11-18 (`assets/motion_clips.json`; the stomp's blow is the right foot's fastest moment, measured in Blender): 1.25 to 1.6 s, blows 0.43 to 0.75 s in, at most 0.46 m of hip travel.
 
 ## Faces (Unreal)
 
@@ -140,4 +140,4 @@ Built (2026-11-18):
   off facing its enemy; the walk blends play from the velocity.
 - Smoke test `melee`, phase `focus`.
 
-Still to do: a strafe check by eye. Faces and downward blows: see above (built 2026-11-18; downward clips need their PC import).
+Still to do: a strafe check by eye. Faces and downward blows: see above (built 2026-11-18, compiled on the PC: smoke tests melee and gunrange pass, the pain face seen on a hit target).

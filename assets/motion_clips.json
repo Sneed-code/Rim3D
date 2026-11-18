@@ -1,5 +1,5 @@
 {
-  "comment": "Clips the sim moves bodies along (docs/design/body-motion.md). The MotionClips commandlet (-run=MotionClips) measures each animation's hip travel and writes data/defs/MotionClips/MotionClips.json. `anim` is relative to /Game/Rim3D/Generated/Animations. `kind` Attack gets hitSeconds (the list's own, else the moment the weapon hand is fastest). `from`/`to` trim a clip (seconds). `turn` keeps the clip's turning. `keepWhenDown` for falls. The def names are the ones Rules/MotionRules.json and Rules/MeleeRules.json (styleAttacks) ask for. `hitSeconds` and `from`/`to` are in the animation's own time. Trims and blows were chosen from -run=MotionClips -Trace=<names> (each sample's hip travel and hand speeds). Unarmed Jab/Cross/Hook are Mixamo singles (Lead Jab, Cross Punch, Hook Punch; category Fighting); the jab is thrown with the left (lead) hand, so its blow is set by hand from the left hand reaching full stretch.",
+  "comment": "Clips the sim moves bodies along (docs/design/body-motion.md). The MotionClips commandlet (-run=MotionClips) measures each animation's hip travel and writes data/defs/MotionClips/MotionClips.json. `anim` is relative to /Game/Rim3D/Generated/Animations. `kind` Attack gets hitSeconds (the list's own, else the moment the weapon hand is fastest). `from`/`to` trim a clip (seconds). `turn` keeps the clip's turning. `keepWhenDown` for falls. The def names are the ones Rules/MotionRules.json and Rules/MeleeRules.json (styleAttacks) ask for. `hitSeconds` and `from`/`to` are in the animation's own time. Trims and blows were chosen from -run=MotionClips -Trace=<names> (each sample's hip travel and hand speeds). Unarmed Jab/Cross/Hook are Mixamo singles (Lead Jab, Cross Punch, Hook Punch; category Fighting); the jab is thrown with the left (lead) hand, so its blow is set by hand from the left hand reaching full stretch. The low blows at the downed (KnifeStabLow, SpearStabLow, OneHandHackLow, TwoHandHackLow, UnarmedStomp) are Mixamo singles too (Stabbing, Bayonet Stab, Sword And Shield Slash, Great Sword Slash, Stomping; category Fighting); the stomp's blow is the right foot's fastest moment, measured in Blender, as -Trace has no feet.",
   "metresScale": 1.0,
   "clips": [
     {
@@ -181,6 +181,46 @@
       "from": 0.7,
       "to": 1.5,
       "hitSeconds": 1.02
+    },
+    {
+      "defName": "Motion_Knife_Stab_Low",
+      "anim": "Mixamo/Fighting/A_KnifeStabLow",
+      "kind": "Attack",
+      "from": 0.6,
+      "to": 2.0,
+      "hitSeconds": 1.35
+    },
+    {
+      "defName": "Motion_Spear_Stab_Low",
+      "anim": "Mixamo/Fighting/A_SpearStabLow",
+      "kind": "Attack",
+      "from": 0.5,
+      "to": 2.1,
+      "hitSeconds": 1.25
+    },
+    {
+      "defName": "Motion_OneHand_Hack_Low",
+      "anim": "Mixamo/Fighting/A_OneHandHackLow",
+      "kind": "Attack",
+      "from": 0.0,
+      "to": 1.4,
+      "hitSeconds": 0.6
+    },
+    {
+      "defName": "Motion_TwoHand_Hack_Low",
+      "anim": "Mixamo/Fighting/A_TwoHandHackLow",
+      "kind": "Attack",
+      "from": 0.0,
+      "to": 1.25,
+      "hitSeconds": 0.57
+    },
+    {
+      "defName": "Motion_Unarmed_Stomp",
+      "anim": "Mixamo/Fighting/A_UnarmedStomp",
+      "kind": "Attack",
+      "from": 0.2,
+      "to": 1.5,
+      "hitSeconds": 0.63
     }
   ]
 }
