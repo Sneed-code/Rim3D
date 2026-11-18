@@ -119,6 +119,8 @@ public:
 	static constexpr float kSprintFactor = 1.5f;
 	static constexpr float kMinSprintSpeed = 6.5f;
 	bool IsSprinting() const { return bSprinting; }
+	/** A gun in hand (the sim's weapon has verbs): lock-on keeps the target but not the facing or the view (lock-on.md). */
+	bool HasGunDrawn() const;
 	/** The sprint key is a toggle (sneed 2026-11-17): on until pressed again, kept across colonists you take over. */
 	static bool IsSprintToggleOn();
 	static void SetSprintToggle(bool bOn);

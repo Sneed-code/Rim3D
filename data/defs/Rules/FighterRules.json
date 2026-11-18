@@ -46,6 +46,8 @@
     "rangeMargin": 1,
     "walkStayBonus": 3,
     "focusMetres": 8,
+    "meleeThreatMetres": 4,
+    "backpedalRange": 5, "backpedalMetres": 0.8, "backpedalSteps": 15,
     "ambushRange": 6,
     "helpRange": 20,
     "fleeResponseSeconds": 20,
@@ -66,7 +68,7 @@
              "stepBackBelow", "reloadBelow", "dodgeRadius", "dodgeClearance", "dodgeHoldSteps",
              "diveMargin", "diveSafe", "throwEvery", "throwMinEnemies", "throwMemory", "throwSelfMargin", "throwFriendMargin",
              "switchMeleeRange", "switchSidearmRange", "switchMargin", "minWalkShare", "rangeMargin", "walkStayBonus",
-             "focusMetres", "ambushRange", "helpRange", "helpReach", "profiles",
+             "focusMetres", "meleeThreatMetres", "backpedalRange", "backpedalMetres", "backpedalSteps", "ambushRange", "helpRange", "helpReach", "profiles",
              "fleeResponseSeconds", "fleeSightRange", "sprintChargeMin", "sprintChargeMax"]
   }
 ]

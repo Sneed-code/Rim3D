@@ -2648,6 +2648,9 @@ void saveMeleePart(Ar& ar, Melee& m) {
         ar.require(m.response <= FightResponse::FleeOnSight, "the save file has a bad fight response");
         ar.require(m.circleDir == 1 || m.circleDir == -1, "the save file has a bad footwork direction");
     }
+    if (ar.sectionVersion() >= 5) {  // lock-on, Elden Ring style (docs/design/lock-on.md)
+        ar.value("focusSeenAt", m.focusSeenAt);
+    }
 }
 
 template <typename Ar>
@@ -3688,7 +3691,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(c.days >= 0.0f && c.days <= 1000.0f, "the save file has an impossible corpse rot");
         });
     });
-    ar.section("melee", 4, [&] {
+    ar.section("melee", 5, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
     });
     ar.section("social", 3, [&] {

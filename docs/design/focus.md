@@ -1,5 +1,7 @@
 # Focus, footwork and fight responses
 
+The player's lock-on was rebuilt Elden Ring style on 2026-11-18: see [lock-on.md](lock-on.md), which wins where the two differ.
+
 sneed, 2026-11-17 (thread "Add focus lock and smart melee AI"). Builds on [real-time-combat.md](real-time-combat.md),
 [melee.md](melee.md), [fighters.md](fighters.md) and [body-motion.md](body-motion.md). All numbers are ours (Dark Souls
 and WoW have none to copy) and live in `data/defs/Rules/MeleeRules.json` and `FighterRules.json`.

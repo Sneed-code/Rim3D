@@ -2,8 +2,8 @@
 
 sneed, 2026-11-18 (thread "Rebuild lock-on like Elden Ring"), after playing the combat range. Replaces the player-facing
 parts of [focus.md](focus.md) (Tab/F1 lock-on, facing, the player's swing); the sim's `FocusCommand`, the fighter AI's
-focus, footwork and the HP bar stay. Queued after "Make melee move freely and staggers keep legs" and "Make gun hits
-match the aim": this doc is the design; the code waits for those two.
+focus, footwork and the HP bar stay. Built on "Make melee move freely and staggers keep legs" (#361) and the range follow-up
+(#363, middle mouse toggles the lock); merged after them.
 
 Elden Ring was not watched on the PC: the design is from how its lock-on is known to play. All numbers below are ours
 (FromSoftware publishes none) and go in `data/defs/Rules/MeleeRules.json`.
@@ -79,18 +79,31 @@ When a swing, stab or punch starts while locked on (player or pawn):
 1. **Focus point** (`MeleeSystem::focusPoint`): humanoid torso centre (the chest hitbox); with fists, the head hitbox;
    for a creature of body size over `lockBigBodySize` (2.0, a bear and up), the centre of its hitbox nearest the
    attacker, picked fresh at each swing. Animals without hitboxes yet: their body centre as now.
-2. **Wind-up tracking**: during the wind-up the body turns toward the focus point at `windupTurnDegPerSec` (720), then
-   the turn locks when the strike starts (`strikeTurnDegPerSec` 90), so a dodge at the last moment still works.
+2. **Wind-up tracking**: during the wind-up the body follows the target, and the strike's line is fixed `commitSteps`
+   (0.2 s) before the blow (as built for real-time combat), so a dodge at the last moment still works.
 3. **Aim**: the swing's line goes at the focus point's height (no camera aim needed). Spear and knife thrusts go straight
    at it; cuts and smashes pass through it in their arc.
-4. **Short lunge**: if the focus point is up to `lungeMetres` (0.5 m) beyond reach, the swing's root motion steps in that
-   far (through the body motion system, collision swept). Further than that, the blow whiffs.
+4. **Short lunge**: the swing's own step forward already counts in its reach (`engageDistance` adds the attack clips'
+   `lunge`, and the player's free-feet swing reaches that far, #361). Beyond that the blow whiffs. No extra number.
 5. **The hit stays physical**: the strike is the existing swept line and arc against hitboxes (`MeleeSystem::strike`).
    Homing only decides where it is aimed. An arm or shield in the way takes the blow; a head that ducks is missed.
 
 Without a lock, swings go where the camera looks, as now.
 
 ### Pawns
+
+sneed (2026-11-18, after approving the plan): the AI's lock-on is mainly for melee fighters; every other AI rule stays
+(fleeing, cover when shot at, weapon swaps by range). Added with it:
+
+- **The nearer threat first**: a fighter without a gun counts an enemy swinging at it, or within reach of it while going
+  for it, `meleeThreatMetres` (4 m) nearer when it picks its target (`FighterSystem::threatensInMelee`), and a new enemy
+  winding up at it, nearer than its target, makes it think again at once rather than at its next plan
+  (`attackedByOther`). It doesn't let one man cut it down while it goes for another further off.
+- **Gunmen backpedal**: an enemy without a gun within `backpedalRange` (5 m) that it knows of: between shots the gunman
+  steps back `backpedalMetres` (0.8 m in 0.5 s) away from it through the body motion system, and fires at it from where
+  it stands as soon as its gun is ready (`FighterSystem::backpedal`). Closer than `switchMeleeRange` (2.5 m) it takes up a
+  melee weapon if it carries one, as before.
+- Smarter squad play (pinning and flanking, call-outs) is a later thread.
 
 The fighter AI already locks a melee fighter on within `aiFocusRange` (8 m). Pawns use the same homing (1 to 5) and the
 same movement rules: melee pawns circle with footwork facing the target, gun pawns keep the lock without being turned
@@ -101,7 +114,20 @@ by it (they face their aim). The AI's wobble by skill (`aimWobbleBySkill`) stays
 An aimed ability asks `focusPoint(target)` for its aim when the caster is locked on, else the camera's aim. Guns never do
 (sneed: free aim).
 
-## Building it
+## As built (2026-11-18)
+
+- Sim: `MeleeSystem::focusPoint` (used by every swing at a standing target, player or AI), `orbitMove` (DirectMove while
+  locked with melee: a step whose part toward or away from the target is under `orbitRadialShare` (35%) of it is put back
+  on the circle), `faceFocus` skips a pawn with a gun in hand and lets the player's lock go after `lockSightLostSteps` (90)
+  without line of sight (melee save section 5: `focusSeenAt`). Tests: `LockOnTests.cpp`.
+- Unreal (not compiled yet): `UProtagonistSubsystem::UpdateTurnAway` (turned away and moving away at over 1.5 m/s for
+  0.75 s lets go: with a gun the view more than 100 degrees off, with melee sprinting), `AProtagonistPawn::FollowFocus`
+  doesn't pull the view with a gun in hand or while sprinting.
+- Not yet: the mouse-flick target switch, the marker moving to the head with fists, nearest-to-view-centre first pick
+  (Tab's nearest-in-front pick is used), and the body turning to run while sprinting locked on (the lock lets go after
+  0.75 s instead).
+
+## The original build plan
 
 - **Sim (cloud)**: `focusPoint`, wind-up turn rate, lunge, letting go (turn-away and sight timers), "locked but don't
   face" with a gun (`faceFocus` skips a pawn with a gun drawn, not only one aiming), circle-strafe move for the player's

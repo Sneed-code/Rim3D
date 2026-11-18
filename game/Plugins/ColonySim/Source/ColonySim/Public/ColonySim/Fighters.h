@@ -170,6 +170,10 @@ struct FighterRules {
     // F7 soak (docs/design/raid-soak.md): the walk to a spot counts what it costs this pawn, up a slope or hurt.
     float walkStayBonus = 3.0f;       // on top of stayBonus while walking to the spot: a pawn on its way doesn't change its mind for a small gain
     float rangeMargin = 1.0f;         // a spot has to be this far inside the gun's range to count as one it can shoot from
+    float backpedalRange = 5.0f;      // a gunman backs off from an enemy without a gun this close, between its shots
+    float backpedalMetres = 0.8f;     // a step back
+    int backpedalSteps = 15;          // over this many steps
+    float meleeThreatMetres = 4.0f;   // a fighter without a gun: an enemy swinging at it, or in reach of it, counts this much nearer
     float focusMetres = 8.0f;         // colonists: each friend already shooting an enemy makes it count this much nearer (focus fire)
     float ambushRange = 6.0f;         // a defending melee fighter waits until an enemy is this close, then charges
     float helpRange = 20.0f;          // ... or runs in sooner, from this far, to an enemy at a friend
@@ -341,6 +345,9 @@ private:
     void aiFocus(Entity pawn, const Fighter& f);
     bool panicked(Entity pawn, const Fighter& f) const;
     float weaponRange(Entity pawn) const;
+    bool threatensInMelee(Entity enemy, Entity pawn) const;
+    bool attackedByOther(Entity pawn, const Fighter& f) const;
+    bool backpedal(Entity pawn, Fighter& f);
     int64_t now() const;
     void planCharge(Entity pawn, Fighter& f, CellPos goal);
     bool meleeAct(Entity pawn, Fighter& f);
