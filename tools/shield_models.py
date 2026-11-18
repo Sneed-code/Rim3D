@@ -7,6 +7,8 @@ from pathlib import Path
 
 OUT = Path(sys.argv[sys.argv.index('--') + 1]).resolve() if '--' in sys.argv else Path(__file__).resolve().parent
 random.seed(42)
+# With an output folder (the game's), only the .glb files are written; without, previews and a contact sheet too.
+PREVIEWS = '--' not in sys.argv
 results=[]
 
 def mat(name, color, metal=0, rough=.5, emission=None, alpha=1):
@@ -270,11 +272,20 @@ def build(tier,size):
             if key in seen: duplicates.append((ob.name,poly.index,seen[key]))
             else: seen[key]=(ob.name,poly.index)
     print('COINCIDENT_FACE_CHECK',tier,size,'duplicates',len(duplicates),duplicates[:5],flush=True)
-    bpy.ops.object.select_all(action='SELECT')
-    path=OUT/('SM_Shield_%s_%s.glb'%(tier,size))
-    if tier in ('Composite','Plasteel'):
-        bpy.ops.export_scene.gltf(filepath=str(path),export_format='GLB',use_selection=True,export_yup=True)
     triangles=sum(sum(len(p.vertices)-2 for p in ob.data.polygons) for ob in obs if ob.type=='MESH')
+    # One object per shield (its parts' materials kept as slots), so Unreal imports it as one static mesh.
+    bpy.ops.object.select_all(action='DESELECT')
+    parts=[ob for ob in bpy.context.scene.objects if ob.type in ('MESH','CURVE')]
+    for ob in parts: ob.select_set(True)
+    bpy.context.view_layer.objects.active=parts[0]
+    bpy.ops.object.convert(target='MESH')
+    bpy.ops.object.join()
+    joined=bpy.context.view_layer.objects.active; joined.name='SM_Shield_%s_%s'%(tier,size)
+    bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)  # origin at the middle of the shield
+    path=OUT/('SM_Shield_%s_%s.glb'%(tier,size))
+    bpy.ops.export_scene.gltf(filepath=str(path),export_format='GLB',use_selection=True,export_yup=True)
+    results.append((path.name,path.stat().st_size/1024,triangles))
+    if not PREVIEWS: return
     # Presentation only, after export.
     scene=bpy.context.scene; scene.render.engine='CYCLES' if False else 'BLENDER_EEVEE'; scene.render.resolution_x=512; scene.render.resolution_y=512; scene.render.resolution_percentage=100
     scene.render.image_settings.file_format='PNG'; scene.render.film_transparent=False
@@ -288,12 +299,14 @@ def build(tier,size):
     if tier=='Steel' and size=='Medium':
         cam.location=(-3.5,-2.0,.75); cam.rotation_euler=(Vector((0,0,0))-cam.location).to_track_quat('-Z','Y').to_euler()
         scene.render.filepath=str(OUT/'back.png'); bpy.ops.render.render(write_still=True)
-    if tier in ('Composite','Plasteel'): results.append((path.name,path.stat().st_size/1024,triangles))
 
 for t in ('Wood','Steel','Composite','Plasteel'):
     for s in ('Small','Medium','Tower'): build(t,s)
 
 # Compose four tier rows and three size columns from the finished previews.
+if not PREVIEWS:
+    for name,kb,tris in results: print('{:<38} {:>9.1f} {:>10}'.format(name,kb,tris),flush=True)
+    sys.exit(0)
 import numpy as np
 sheet=np.empty((2048,1536,4),dtype=np.float32)
 for r,t in enumerate(('Wood','Steel','Composite','Plasteel')):

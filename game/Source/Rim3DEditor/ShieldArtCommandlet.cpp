@@ -69,20 +69,21 @@ int32 UShieldArtCommandlet::Main(const FString& Params)
 		Task->bSave = true;
 		Task->Options = Pipeline;
 		Tools.ImportAssetTasks({Task});
-		UStaticMesh* Mesh = nullptr;
+		TArray<UStaticMesh*> Meshes;
 		for (UObject* Object : Task->GetObjects())
 		{
 			if (UStaticMesh* Found = Cast<UStaticMesh>(Object))
 			{
-				Mesh = Found;
-				break;
+				Meshes.Add(Found);
 			}
 		}
-		if (!Mesh)
+		if (Meshes.Num() != 1)
 		{
-			UE_LOG(LogShieldArt, Error, TEXT("Importing %s made no static mesh"), *Name);
+			// tools/shield_models.py joins each shield into one object; separate pieces mean an old .glb.
+			UE_LOG(LogShieldArt, Error, TEXT("Importing %s made %d static meshes, not one: make the models again with tools/shield_models.py"), *Name, Meshes.Num());
 			continue;
 		}
+		UStaticMesh* Mesh = Meshes[0];
 		// Named after the file, so the defs can name it.
 		if (Mesh->GetName() != Id)
 		{
