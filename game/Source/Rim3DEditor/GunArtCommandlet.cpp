@@ -4,6 +4,7 @@
 #include "AssetToolsModule.h"
 #include "Dom/JsonObject.h"
 #include "Engine/StaticMesh.h"
+#include "Math/RotationMatrix.h"
 #include "StaticMeshResources.h"
 #include "Engine/Texture2D.h"
 #include "Factories/FbxImportUI.h"
@@ -326,21 +327,84 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 		Options->StaticMeshImportData->bAutoGenerateCollision = false;
 		Options->StaticMeshImportData->bGenerateLightmapUVs = false;
 		Options->StaticMeshImportData->ImportUniformScale = Art->HasField(TEXT("scale")) ? static_cast<float>(Art->GetNumberField(TEXT("scale"))) : 1.0f;
-		UAssetImportTask* Task = NewObject<UAssetImportTask>();
-		Task->Filename = File;
-		Task->DestinationPath = Dest;
-		Task->bAutomated = true;
-		Task->bReplaceExisting = true;
-		Task->bSave = true;
-		Task->Options = Options;
-		Tools.ImportAssetTasks({Task});
-		TArray<UStaticMesh*> Meshes;
-		for (UObject* Object : Task->GetObjects())
+		// "importRotation" [pitch, yaw, roll] and "importOffset" [x, y, z] cm (applied after the rotation) put a model into the
+		// frame the game draws it in. "autoOrient": the longest side becomes +X with the far end (the tip, away from the grip
+		// at the origin) forward and the second longest +Z (a blade's edge), checked after a first import.
+		const auto ArtVec = [&Art](const TCHAR* Key, FVector& Out)
 		{
-			if (UStaticMesh* Mesh = Cast<UStaticMesh>(Object))
+			const TArray<TSharedPtr<FJsonValue>>* V = nullptr;
+			if (Art->TryGetArrayField(Key, V) && V->Num() == 3)
 			{
-				Meshes.Add(Mesh);
+				Out = FVector((*V)[0]->AsNumber(), (*V)[1]->AsNumber(), (*V)[2]->AsNumber());
+				return true;
 			}
+			return false;
+		};
+		FVector RotationIn = FVector::ZeroVector;
+		FVector OffsetIn = FVector::ZeroVector;
+		ArtVec(TEXT("importRotation"), RotationIn);
+		ArtVec(TEXT("importOffset"), OffsetIn);
+		Options->StaticMeshImportData->ImportRotation = FRotator(RotationIn.X, RotationIn.Y, RotationIn.Z);
+		Options->StaticMeshImportData->ImportTranslation = OffsetIn;
+		TArray<UStaticMesh*> Meshes;
+		const auto RunImport = [&]()
+		{
+			UAssetImportTask* Task = NewObject<UAssetImportTask>();
+			Task->Filename = File;
+			Task->DestinationPath = Dest;
+			Task->bAutomated = true;
+			Task->bReplaceExisting = true;
+			Task->bSave = true;
+			Task->Options = Options;
+			Tools.ImportAssetTasks({Task});
+			Meshes.Reset();
+			for (UObject* Object : Task->GetObjects())
+			{
+				if (UStaticMesh* Mesh = Cast<UStaticMesh>(Object))
+				{
+					Meshes.Add(Mesh);
+				}
+			}
+		};
+		RunImport();
+		if (Meshes.Num() == 1 && Art->HasField(TEXT("autoOrient")) && Art->GetBoolField(TEXT("autoOrient")))
+		{
+			// Measured with no offset: undo it from the bounds (the rotation is redone from scratch below).
+			const FBox Box = Meshes[0]->GetBoundingBox().ShiftBy(-OffsetIn);
+			const FVector Size = Box.GetSize();
+			int32 Long = 0;
+			for (int32 Axis = 1; Axis < 3; ++Axis)
+			{
+				Long = Size[Axis] > Size[Long] ? Axis : Long;
+			}
+			int32 Second = Long == 0 ? 1 : 0;
+			for (int32 Axis = 0; Axis < 3; ++Axis)
+			{
+				Second = Axis != Long && Size[Axis] > Size[Second] ? Axis : Second;
+			}
+			const auto AxisDir = [&Box](int32 Axis)
+			{
+				FVector Dir = FVector::ZeroVector;
+				Dir[Axis] = FMath::Abs(Box.Max[Axis]) >= FMath::Abs(Box.Min[Axis]) ? 1.0 : -1.0;
+				return Dir;
+			};
+			const FVector SrcX = AxisDir(Long);
+			const FVector SrcZ = AxisDir(Second);
+			// Rotation taking the model's tip direction to +X and its edge direction to +Z, on top of the one given.
+			const FQuat Fix = FRotationMatrix::MakeFromXZ(SrcX, SrcZ).ToQuat().Inverse();
+			if (!Fix.Equals(FQuat::Identity, 1e-3))
+			{
+				const FQuat Total = Fix * Options->StaticMeshImportData->ImportRotation.Quaternion();
+				Options->StaticMeshImportData->ImportRotation = Total.Rotator();
+				UE_LOG(LogGunArt, Display, TEXT("%s: turned to the game's frame (long side was %s, edge %s): import rotation %s"), *Name,
+					*SrcX.ToString(), *SrcZ.ToString(), *Total.Rotator().ToString());
+				RunImport();
+			}
+		}
+		for (const UStaticMesh* Mesh : Meshes)
+		{
+			const FBox Box = Mesh->GetBoundingBox();
+			UE_LOG(LogGunArt, Display, TEXT("%s: %s bounds %s .. %s cm"), *Name, *Mesh->GetName(), *Box.Min.ToString(), *Box.Max.ToString());
 		}
 		if (Meshes.IsEmpty())
 		{

@@ -1,7 +1,7 @@
 @echo off
 rem The combat range (docs/design/gun-range.md): first person with real gun and melee models, random creator women.
 rem Keys: WASD walk, mouse look, left mouse fire / swing, right mouse aim / block, 1-0 or the mouse wheel pick a weapon,
-rem K new targets, U guards, Tab focus, F1 end focus, Shift sprint, T roll / dash, F2 pause, Esc quit. No reloads: guns cool down.
+rem K new targets, U guards, Tab focus, middle mouse lock on or let go, Shift sprint, T roll / dash, F2 pause, Esc quit. No reloads: guns cool down.
 rem Needs the editor build (tools\smoke.ps1 -Test load -BuildOnly), the creator bases and clips (MakeHumanArt) and the
 rem gun models (GunArt commandlet). Extra arguments are passed on, e.g. -GunRangeSeed=7 for other women.
 set "REPO=%~dp0.."
