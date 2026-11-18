@@ -258,19 +258,28 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
             }
             return travel > rules_.maxAttackTravel ? nullptr : c;
         };
-        for (const auto& [name, clips] : rules_.styleAttacks) {
-            if (name != style) {
-                continue;
-            }
-            for (const std::string& clipName : clips) {
-                const MotionClip* c = usable(clipName);
-                if (c == nullptr) {
+        // The weapon's own list (a spear thrusts, sneed 2026-11-18) wins when any of its clips is measured; else its style's.
+        const auto takeClips = [&](const std::string& key) {
+            for (const auto& [name, clips] : rules_.styleAttacks) {
+                if (name != key) {
                     continue;
                 }
-                const float lunge = std::max(0.0f, motion.forwardAt(c->def, c->hitSeconds));
-                set.lunge = set.attackClips.empty() ? lunge : std::min(set.lunge, lunge);
-                set.attackClips.push_back(c->def);
+                for (const std::string& clipName : clips) {
+                    const MotionClip* c = usable(clipName);
+                    if (c == nullptr) {
+                        continue;
+                    }
+                    const float lunge = std::max(0.0f, motion.forwardAt(c->def, c->hitSeconds));
+                    set.lunge = set.attackClips.empty() ? lunge : std::min(set.lunge, lunge);
+                    set.attackClips.push_back(c->def);
+                }
             }
+        };
+        if (weapon) {
+            takeClips(def.defName());
+        }
+        if (set.attackClips.empty()) {
+            takeClips(style);
         }
         // Blows at the downed: the weapon's own list if it has one, else its style's (a body's tools: the unarmed style).
         const std::vector<std::string>* low = nullptr;

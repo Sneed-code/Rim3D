@@ -15,7 +15,7 @@ only its `hold` block (or nothing: it falls back by its kind).
 | Hold_OneHandBlade | Blade | 1 | OneHand | stance, block, shieldStance, shieldBlock |
 | Hold_Club | Blade | 1 | Club | stance, block |
 | Hold_TwoHandBlade | Blade | 2 | TwoHand | stance, block |
-| Hold_Spear | Blade | 2 | TwoHand | stance, fpStance |
+| Hold_Spear | Pole | 2 | TwoHand (the spear's own `Melee_Spear` thrusts first) | stance (rifle idle: a low forward guard), block, fpStance |
 | Hold_Pistol | Gun | 1 | | stance, aim, reload |
 | Hold_Rifle | Gun | 2 | | stance, aim, reload |
 | Hold_Bow | Bow (left hand) | 1 | | stance, aim, draw |
@@ -39,7 +39,8 @@ weapon); `MeleeSystem::attackClipsOf` lists them.
 `HoldDraw` (`game/Source/Rim3D/HoldDraw.h`) is the only code that knows how a hand closes on a weapon, used by every
 body (third person, the first-person arms):
 
-- the hand's frame from its bones (`BladeFrame` a fist round a hilt, `GunFrame` a pistol grip raked back,
+- the hand's frame from its bones (`BladeFrame` a fist round a hilt, `PoleFrame` a shaft from the holding fist through
+  the other one (spears: whatever the arms do, the shaft lies along both hands, point ahead of the front hand), `GunFrame` a pistol grip raked back,
   `ShieldFrame` the left forearm's strap);
 - the weapon placed so its `main` point sits in that frame (`WeaponWorld`, sized by gear size, [gear-size.md](gear-size.md));
 - the other hand pulled onto `off` by the MakeHuman body's two-bone IK (`SetOffHand`);
@@ -80,3 +81,16 @@ turns it off.
 - No proper carry clip exists in the library; the stoop and the arm reach stand in. Bow drawing on the arms in first
   person uses the generic path (no arrow nocking yet).
 - The unarmed swing clips named in MeleeRules (`Motion_Unarmed_*`) have no defs yet; fists use the procedural jab.
+
+## Spear guard and thrust (sneed 2026-11-18)
+
+The spear was carried point-up across the back (the SpearGuard mocap stance) and slashed like a greatsword. Now:
+- **Pole grip** (`HoldGrip::Pole`, `HoldDraw::PoleFrame`): the shaft runs from the right fist through the left, so the
+  stance decides where the point goes. The stance is the rifle idle (rear hand at the hip, front hand ahead): a low
+  forward guard, point at the enemy.
+- **Thrusts**: `MeleeRules.styleAttacks` takes a weapon def name as a key too, and a weapon's own list wins when any
+  of its clips is measured (`MeleeSystem`, like `lowAttacks`). `Melee_Spear`: `Motion_Spear_Thrust` (one lunge out of
+  the mocap fencing loop) and `Motion_Spear_Lunge` (mocap clip 13). Both still need their trim and blow picked on the PC
+  (`-run=MotionClips -Trace=Motion_Spear_Thrust,Motion_Spear_Lunge`, then `from`/`to`/`hitSeconds` in
+  `assets/motion_clips.json`); until then the spear swings its style's clips.
+- PC check: the range tour's step 15 pictures the spear in first and third person.

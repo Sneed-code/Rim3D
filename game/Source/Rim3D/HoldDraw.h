@@ -36,6 +36,10 @@ namespace HoldDraw
 	 *  the little finger to the index finger, the origin in the palm. False without the hand's bones. */
 	bool GunFrame(const USkeletalMeshComponent* Mesh, bool bRight, float RakeDegrees, FTransform& Out);
 
+	// A pole (spear) in both fists: from the holding hand's grip through the other hand's, so whatever pose the arms take
+	// (guard, thrust) the shaft lies along both hands; one hand alone (or the hands together) falls back to BladeFrame.
+	bool PoleFrame(const USkeletalMeshComponent* Mesh, bool bRight, FTransform& Out);
+
 	/** A shield on the left forearm: its face (+x of a shield def's parts, which stand in the y-z plane) out from the
 	 *  back of the arm, its z along the forearm towards the hand. */
 	bool ShieldFrame(const USkeletalMeshComponent* Mesh, FTransform& Out);

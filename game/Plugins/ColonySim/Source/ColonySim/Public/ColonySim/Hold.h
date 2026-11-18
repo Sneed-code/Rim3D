@@ -33,6 +33,7 @@ enum class HoldGrip : uint8_t {
     Gun,     // a pistol grip: the barrel along the hand, raked back
     Bow,     // a bow's riser in the fist, upright
     Shield,  // straps on the forearm
+    Pole,    // a long shaft in both fists: it runs from the holding hand through the other (spears, sneed 2026-11-18)
 };
 
 struct WeaponHold {

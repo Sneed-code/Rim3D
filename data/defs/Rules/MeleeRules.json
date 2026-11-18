@@ -52,7 +52,8 @@
       "Club": ["Motion_Club_Downward", "Motion_Club_Horizontal", "Motion_Club_Backhand"],
       "OneHand": ["Motion_OneHand_Slash1", "Motion_OneHand_Slash3", "Motion_OneHand_Slash5", "Motion_OneHand_Attack2"],
       "TwoHand": ["Motion_TwoHand_Slash1", "Motion_TwoHand_Slash2", "Motion_TwoHand_Slash3", "Motion_TwoHand_Attack"],
-      "Unarmed": ["Motion_Unarmed_Jab", "Motion_Unarmed_Cross", "Motion_Unarmed_Hook"]
+      "Unarmed": ["Motion_Unarmed_Jab", "Motion_Unarmed_Cross", "Motion_Unarmed_Hook"],
+      "Melee_Spear": ["Motion_Spear_Thrust", "Motion_Spear_Lunge"]
     },
     "lowAttacks": {
       "Club": ["Motion_Club_Downward"],

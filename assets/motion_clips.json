@@ -199,6 +199,18 @@
       "hitSeconds": 1.25
     },
     {
+      "defName": "Motion_Spear_Thrust",
+      "anim": "FencingAttacks/A_FencingAttacks",
+      "kind": "Attack",
+      "note": "spear thrust at a standing target (sneed 2026-11-18): one lunge out of the mocap fencing loop; from/to and the blow still to be picked with -Trace=Motion_Spear_Thrust (until then too long, so the spear swings its style's clips)"
+    },
+    {
+      "defName": "Motion_Spear_Lunge",
+      "anim": "SwordLunge/A_SwordLunge",
+      "kind": "Attack",
+      "note": "spear lunge (mocap clip 13); trim with -Trace=Motion_Spear_Lunge so the hips travel at most MeleeRules.maxAttackTravel"
+    },
+    {
       "defName": "Motion_OneHand_Hack_Low",
       "anim": "Mixamo/Fighting/A_OneHandHackLow",
       "kind": "Attack",

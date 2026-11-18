@@ -267,8 +267,8 @@ def check_hold_styles(defs_by_kind):
     attack_styles = set((rules[1].get("styleAttacks") or {}).keys()) if rules else set()
     point = lambda v: isinstance(v, list) and len(v) == 3 and all(isinstance(x, (int, float)) for x in v)
     for name, (file, entry) in defs_by_kind.get("HoldStyles", {}).items():
-        if entry.get("grip", "Blade") not in ("None", "Blade", "Gun", "Bow", "Shield"):
-            problems.append(f"{file}: HoldStyles '{name}' grip must be None, Blade, Gun, Bow or Shield")
+        if entry.get("grip", "Blade") not in ("None", "Blade", "Gun", "Bow", "Shield", "Pole"):
+            problems.append(f"{file}: HoldStyles '{name}' grip must be None, Blade, Gun, Bow, Shield or Pole")
         if entry.get("hand", "Right") not in ("Right", "Left"):
             problems.append(f"{file}: HoldStyles '{name}' hand must be Right or Left")
         if entry.get("hands", 1) not in (0, 1, 2):

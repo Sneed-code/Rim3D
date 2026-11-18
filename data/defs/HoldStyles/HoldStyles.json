@@ -58,13 +58,14 @@
     "label": "spear",
     "source": "ours (docs/design/weapon-hold.md)",
     "hands": 2,
-    "grip": "Blade",
+    "grip": "Pole",
     "attackStyle": "TwoHand",
     "main": [0, 0, 0],
     "off": [45, 0, 0],
-    "stance": "SpearGuard/A_SpearGuard",
+    "comment": "sneed 2026-11-18: the spear was carried point-up across the back (the SpearGuard mocap clip). Now a low forward guard: the rifle idle puts the rear hand at the hip and the front hand ahead, and the Pole grip lays the shaft through both fists, point forward.",
+    "stance": "Mixamo/Rifle/A_ProRifleIdle",
     "block": "Mixamo/GreatSword/A_GreatSwordGreatSwordBlocking",
-    "fpStance": "Mixamo/GreatSword/A_GreatSwordGreatSwordIdle",
+    "fpStance": "Mixamo/Rifle/A_ProRifleIdle",
     "holster": "Back"
   },
   {

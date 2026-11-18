@@ -138,6 +138,37 @@ bool HoldDraw::GunFrame(const USkeletalMeshComponent* Mesh, bool bRight, float R
 	return true;
 }
 
+bool HoldDraw::PoleFrame(const USkeletalMeshComponent* Mesh, bool bRight, FTransform& Out)
+{
+	FTransform Main, Other;
+	if (!BladeFrame(Mesh, bRight, Main))
+	{
+		return false;
+	}
+	if (!BladeFrame(Mesh, !bRight, Other))
+	{
+		Out = Main;
+		return true;
+	}
+	const FVector Grip = Main.GetLocation();
+	FVector X = Other.GetLocation() - Grip;
+	if (X.Size() < 8.0)  // hands together on the shaft: no line to follow
+	{
+		Out = Main;
+		return true;
+	}
+	X.Normalize();
+	// Up across the shaft: the world's up, or the holding hand's fingers when the shaft stands upright.
+	FVector Z = FVector::UpVector - X * FVector::DotProduct(FVector::UpVector, X);
+	if (Z.SizeSquared() < 0.05)
+	{
+		Z = Main.GetUnitAxis(EAxis::Z) - X * FVector::DotProduct(Main.GetUnitAxis(EAxis::Z), X);
+	}
+	Z.Normalize();
+	Out = FTransform(FRotationMatrix::MakeFromXZ(X, Z).ToQuat(), Grip);
+	return true;
+}
+
 bool HoldDraw::ShieldFrame(const USkeletalMeshComponent* Mesh, FTransform& Out)
 {
 	if (!HdHas(Mesh, TEXT("lowerarm_l")) || !HdHas(Mesh, TEXT("hand_l")))
@@ -184,6 +215,7 @@ bool HoldDraw::HandFrame(const USkeletalMeshComponent* Mesh, const colony::Weapo
 	{
 		case colony::HoldGrip::Gun: return GunFrame(Mesh, bRight, Hold.rake, Out);
 		case colony::HoldGrip::Shield: return ShieldFrame(Mesh, Out);
+		case colony::HoldGrip::Pole: return PoleFrame(Mesh, bRight, Out);
 		case colony::HoldGrip::None: return false;
 		case colony::HoldGrip::Bow:
 		case colony::HoldGrip::Blade:

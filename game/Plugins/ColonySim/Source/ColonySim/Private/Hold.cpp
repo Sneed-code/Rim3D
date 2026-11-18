@@ -22,6 +22,7 @@ HoldGrip holdGripFrom(const std::string& text) {
     if (text == "Gun") return HoldGrip::Gun;
     if (text == "Bow") return HoldGrip::Bow;
     if (text == "Shield") return HoldGrip::Shield;
+    if (text == "Pole") return HoldGrip::Pole;
     return HoldGrip::Blade;
 }
 
@@ -110,6 +111,7 @@ const char* holdGripName(HoldGrip grip) {
         case HoldGrip::Gun: return "Gun";
         case HoldGrip::Bow: return "Bow";
         case HoldGrip::Shield: return "Shield";
+        case HoldGrip::Pole: return "Pole";
     }
     return "Blade";
 }
