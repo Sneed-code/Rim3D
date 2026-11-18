@@ -3099,6 +3099,19 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         out.visits.push_back(std::move(view));
     }
+    out.severedPieces.clear();
+    for (const SeveredPiece& p : health_->severedPieces()) {
+        SeveredPieceView view;
+        view.id = p.id;
+        view.from = p.from;
+        view.bit = p.bit;
+        view.x = p.x;
+        view.y = p.y;
+        view.level = p.level;
+        const float life = health_->severedDecayDays() * static_cast<float>(kSecondsPerDay);
+        view.decay = life > 0.0f ? std::clamp(static_cast<float>(time_.seconds - p.at) / life, 0.0f, 1.0f) : 1.0f;
+        out.severedPieces.push_back(view);
+    }
     out.shuttles.clear();
     for (const Shuttle& s : landing_->shuttles()) {
         ShuttleView view;
@@ -3351,6 +3364,14 @@ uint64_t Sim::stateHash() const {
     roofCollapse_->hashState(h);
     areas_->hashState(h);
     landing_->hashState(h);
+    for (const SeveredPiece& p : health_->severedPieces()) {  // only once something was cut off, so older hashes stay
+        h.add(p.id);
+        h.add(static_cast<uint64_t>(entt::to_integral(p.from)));
+        h.add(static_cast<int>(p.bit));
+        h.add(p.x);
+        h.add(p.y);
+        h.add(p.at);
+    }
     spoilage_->hashState(h);
     narrator_->hashState(h);
     disasters_->hashState(h);

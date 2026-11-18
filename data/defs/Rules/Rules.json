@@ -113,6 +113,7 @@
       "dismember": {
         "note": "sneed 2026-11-17 (body-health.md part F): only the hit that kills dismembers, when it went over what the struck zone had left by overkillShare of the zone's hit points: the arm or leg whole, or below the elbow or knee when the lower part was struck (lower, or a part in lowerAlso), the head, or for the torso the head and every limb",
         "overkillShare": 0.25,
+        "pieceDecayDays": 2,
         "arm": { "whole": "Arm", "lower": "Hand", "lowerAlso": ["Radius"] },
         "leg": { "whole": "Leg", "lower": "Foot", "lowerAlso": ["Tibia"] },
         "head": "Head"
