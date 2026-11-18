@@ -3,6 +3,9 @@
 #include "SmokeTest.h"
 
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
 
 #include "FightSubsystem.h"
@@ -11,6 +14,7 @@
 #include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
+#include "TerrainSubsystem.h"
 #include "WeaponDrawSubsystem.h"
 
 #include "ColonySim/Apparel.h"
@@ -22,6 +26,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/WeaponSlot.h"
@@ -261,6 +266,29 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		const FVector P = Actor->GetActorLocation();
 		const FVector Eye = P + Actor->GetActorRightVector() * Right + Actor->GetActorForwardVector() * Forward + FVector(0.0, 0.0, Height);
 		ViewFrom(Eye, (P + FVector(0.0, 0.0, 100.0) - Eye).Rotation());
+	};
+
+	// Like BodyView, but pulls the camera in front of a tree or wall between it and the pawn.
+	const auto ClearBodyView = [=, this](colony::Entity Pawn, double Right, double Forward, double Height)
+	{
+		const ASimPawnActor* Actor = ActorOf(Pawn);
+		if (!Actor)
+		{
+			return;
+		}
+		const FVector Focus = Actor->GetActorLocation() + FVector(0.0, 0.0, 100.0);
+		FVector Eye = Actor->GetActorLocation() + Actor->GetActorRightVector() * Right + Actor->GetActorForwardVector() * Forward + FVector(0.0, 0.0, Height);
+		FCollisionQueryParams Params(FName(TEXT("MeleeSmokeCamera")), false);
+		for (TActorIterator<ASimPawnActor> It(GetWorld()); It; ++It)
+		{
+			Params.AddIgnoredActor(*It);
+		}
+		FHitResult Hit;
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Focus, Eye, ECC_Visibility, Params))
+		{
+			Eye = Focus + (Hit.Location - Focus) * 0.85;
+		}
+		ViewFrom(Eye, (Focus - Eye).Rotation());
 	};
 
 	const auto MarkBaselines = [=]()
@@ -1157,6 +1185,22 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		State->SparksAtStart = Fight()->GetImpactsOfKind(colony::ProjectileHitKind::Armor);
 		// Away from the duel, the protagonist facing east with the gladius in hand.
 		const colony::CellPos A{State->Cell.x - 12, State->Cell.y - 30, 0};
+		// No trees or bushes in the screenshot's way.
+		for (int32 Dy = -6; Dy <= 6; ++Dy)
+		{
+			for (int32 Dx = -6; Dx <= 6; ++Dx)
+			{
+				const colony::CellPos C{A.x + Dx, A.y + Dy, 0};
+				if (Sim.map().inBounds(C) && Sim.plants().has(C) && Sim.defs().get(Sim.plants().defAt(C)).defName() != "Plant_Grass")
+				{
+					Sim.plants().remove(C);
+					if (UTerrainSubsystem* Terrain = GetWorld()->GetSubsystem<UTerrainSubsystem>())
+					{
+						Terrain->MarkPlantDirty(C);
+					}
+				}
+			}
+		}
 		colony::Position& MeAt = Registry.get<colony::Position>(State->Me);
 		MeAt.x = A.x + 0.5f;
 		MeAt.y = A.y + 0.5f;
@@ -1168,10 +1212,11 @@ void USmokeTestSubsystem::BuildMeleePhases()
 			B->Submit(colony::SwitchWeaponCommand{State->Me, colony::WeaponSlot::Melee});
 		}
 		std::string Why;
-		State->Shield = Sim.apparel().make(Sim.defs().idOf("Things", "Apparel_ShieldMedium"), Sim.defs().idOf("Things", "Steel"), -1, A, &Why);
+		// Wood: the brightest model, easy to see in the screenshot.
+		State->Shield = Sim.apparel().make(Sim.defs().idOf("Things", "Apparel_ShieldMedium"), Sim.defs().idOf("Things", "WoodLog"), -1, A, &Why);
 		if (State->Shield == colony::kNoEntity || !Sim.apparel().putOn(State->Me, State->Shield, Why))
 		{
-			Fail(FString::Printf(TEXT("shield: could not put a steel medium shield on the protagonist: %s"), UTF8_TO_TCHAR(Why.c_str())));
+			Fail(FString::Printf(TEXT("shield: could not put a wooden medium shield on the protagonist: %s"), UTF8_TO_TCHAR(Why.c_str())));
 		}
 		B->Submit(colony::SpawnThingCommand{"Human", colony::CellPos{A.x + 1, A.y, 0}, 1});
 		B->Submit(colony::SpawnThingCommand{"Melee_Club", colony::CellPos{A.x + 1, A.y + 2, 0}, 1});
@@ -1190,7 +1235,8 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		}
 		colony::Sim& Sim = *const_cast<colony::Sim*>(B->GetSim());
 		const colony::CellPos A{State->Cell.x - 12, State->Cell.y - 30, 0};
-		BodyView(State->Me, 260.0, 120.0, 150.0);
+		// From the front left and a little above, the shield arm's side, in front of any trunk in the way.
+		ClearBodyView(State->Me, -170.0, 190.0, 190.0);
 		KeepAlive();
 		MeleeSmokeHeal(Sim, State->Basher);
 		// Held for the first 8 seconds, then let go.
@@ -1217,6 +1263,17 @@ void USmokeTestSubsystem::BuildMeleePhases()
 			B->Submit(colony::EquipCommand{State->Basher, Club});
 			B->Submit(colony::SetFactionCommand{State->Basher, 2});
 			return;
+		}
+		// The player keeps the camera, and so the shield, on the clubber: its footwork takes it round the side of a shield
+		// left facing one way (that, and a gladius parry, made this phase see no blows on the shield half the time).
+		if (const colony::ThingView* Basher = Snapshot(State->Basher))
+		{
+			UProtagonistSubsystem* P = Prot();
+			const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Basher->y - Me->y, Basher->x - Me->x));
+			if (P && P->GetBody())
+			{
+				P->GetBody()->Look(FRotator::NormalizeAxis(Wanted - P->GetBody()->GetYaw()), 0.0f);
+			}
 		}
 		if (PhaseTime < 8.0f && B->GetGameSeconds() > State->LastOrderStep && Sim.melee().ready(State->Basher) && Sim.melee().inReach(State->Basher, State->Me))
 		{
@@ -1257,6 +1314,19 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			Fail(TEXT("shield: still up 2 seconds after the button was let go"));
 		}
+		// The real model (docs/design/shields.md "Models"), when the ShieldArt commandlet has made it: thin along the face
+		// (x), about 60 cm wide and 75 cm tall for a medium shield.
+		FString ModelNote = TEXT("plain shapes (the ShieldArt commandlet has not made the models)");
+		if (const UStaticMesh* Mesh = Shield->GetStaticMesh(); Mesh && Mesh->GetPathName().Contains(TEXT("/Generated/Shields/")))
+		{
+			const FVector Size = Mesh->GetBoundingBox().GetSize();
+			ModelNote = FString::Printf(TEXT("model %s, %.0f x %.0f x %.0f cm"), *Mesh->GetName(), Size.X, Size.Y, Size.Z);
+			if (Size.X > Size.Y || Size.X > Size.Z || Size.Z < 60.0 || Size.Z > 95.0 || Size.Y < 45.0 || Size.Y > 75.0)
+			{
+				Fail(FString::Printf(TEXT("shield: the medium shield model is %s, expected thin along x, about 60 wide and 75 tall (turned or scaled wrong on import)"), *ModelNote));
+			}
+		}
+		Notes.Add(FString::Printf(TEXT("shield: drawn as %s"), *ModelNote));
 		const int32 Blocks = W->GetShieldBlocksSeen() - State->ShieldBlocksAtStart;
 		const int32 Sparks = Fight()->GetImpactsOfKind(colony::ProjectileHitKind::Armor) - State->SparksAtStart;
 		if (State->bStaged && (Blocks < 1 || Sparks < 1))

@@ -6,9 +6,13 @@
 
 #include "Components/SkeletalMeshComponent.h"
 #include "EngineUtils.h"
+#include "HAL/IConsoleManager.h"
+#include "Misc/Paths.h"
+#include "UnrealClient.h"
 
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
+#include "BloodSubsystem.h"
 #include "FightSubsystem.h"
 #include "PawnSubsystem.h"
 #include "SeveredPieceActor.h"
@@ -53,7 +57,23 @@ namespace
 		bool bKillSent = false;
 		int32 MaxPiecesShown = 0;
 		int32 PiecesAtRest = 0;
+		int32 BloodHitsAtStart = 0;
+		int32 CloseUpsTaken = 0;
 	};
+
+	/** The real bodies with their clothes instead of the bare mannequins (the pawn actors are made again). */
+	void HurtSmokeRealBodies(bool bOn)
+	{
+		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.MetaHumans")))
+		{
+			Var->Set(bOn ? 1 : 0, ECVF_SetByCode);
+		}
+		// Noon while they are on: the cut body and its pieces are looked at in the pictures.
+		if (IConsoleVariable* Hour = IConsoleManager::Get().FindConsoleVariable(TEXT("Sky.Hour")))
+		{
+			Hour->Set(bOn ? 12.0f : -1.0f, ECVF_SetByCode);
+		}
+	}
 
 	int32 HurtSmokePart(const colony::Sim& Sim, const colony::ThingView& View, const char* Label)
 	{
@@ -383,6 +403,7 @@ void USmokeTestSubsystem::BuildHurtPhases()
 		Phase.Setup = []() {};
 		Phase.WarmupSeconds = 0.0f;
 		Phase.MeasureSeconds = 8.0f;
+		Phase.ScreenshotAt = 6.5f;  // after the blows that down it: the picture shows the crawl
 		Phase.OnFrame = [=, this]()
 		{
 			View();
@@ -438,14 +459,47 @@ void USmokeTestSubsystem::BuildHurtPhases()
 		// limbs are folded away on the corpse and lie about as five pieces.
 		FPhase Phase;
 		Phase.Name = TEXT("dismember");
-		Phase.Setup = []() {};
+		// On the real, dressed bodies: the sleeve and the trouser leg must come off with the limb.
+		Phase.Setup = []() { HurtSmokeRealBodies(true); };
 		Phase.WarmupSeconds = 0.0f;
-		Phase.MeasureSeconds = 6.0f;
+		Phase.MeasureSeconds = 21.0f;
+		Phase.ScreenshotAt = 7.5f;  // after the cut (2.5 s in) and the pieces' landing: the picture shows the result
 		Phase.OnFrame = [=, this]()
 		{
 			View();
-			if (!State->bKillSent && PhaseTime > 0.5f)
+			// From 8 s on, a second on each piece from close by, then the corpse: dismember_close<N>.png, to judge the look.
+			if (PhaseTime >= 8.0f)
 			{
+				TArray<const AActor*> Close;
+				for (TActorIterator<ASeveredPieceActor> It(GetWorld()); It; ++It)
+				{
+					Close.Add(*It);
+				}
+				Close.Sort([](const AActor& A, const AActor& B) { return A.GetName() < B.GetName(); });
+				Close.Add(ActorOf());
+				// Each from two opposite sides (a head has a face on one of them).
+				const int32 Shot = FMath::FloorToInt(PhaseTime - 8.0f);
+				const int32 Which = Shot / 2;
+				if (Close.IsValidIndex(Which) && Close[Which])
+				{
+					const bool bCorpse = Which == Close.Num() - 1;
+					const double Side = Shot % 2 == 0 ? 1.0 : -1.0;
+					const FVector P = Close[Which]->GetActorLocation() + FVector(0.0, 0.0, bCorpse ? 20.0 : 0.0);
+					const FVector Eye = P + (bCorpse ? FVector(70.0 * Side, 50.0 * Side, 260.0) : FVector(75.0 * Side, 60.0 * Side, 65.0));
+					ViewFrom(Eye, (P - Eye).Rotation());
+					if (State->CloseUpsTaken == Shot && PhaseTime - 8.0f - Shot > 0.5f)
+					{
+						++State->CloseUpsTaken;
+						FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke") / TEXT("hurt") / FString::Printf(TEXT("dismember_close%d%s.png"), Which, Shot % 2 == 0 ? TEXT("a") : TEXT("b")), false, false);
+					}
+				}
+			}
+			if (!State->bKillSent && PhaseTime > 2.5f)
+			{
+				if (const UBloodSubsystem* Blood = GetWorld()->GetSubsystem<UBloodSubsystem>())
+				{
+					State->BloodHitsAtStart = Blood->GetHits();
+				}
 				State->bKillSent = Damage("Blunt", 400.0f, "torso");
 			}
 			if (const UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>())
@@ -464,6 +518,13 @@ void USmokeTestSubsystem::BuildHurtPhases()
 			PhaseNumbers.Add(TEXT("pieces_shown"), State->MaxPiecesShown);
 			PhaseNumbers.Add(TEXT("severed_sim"), Now ? Now->severed : 0);
 			PhaseNumbers.Add(TEXT("severed_shown"), Actor ? Actor->GetSeveredShown() : 0);
+			PhaseNumbers.Add(TEXT("stump_caps"), Actor ? Actor->GetSeveredCaps() : 0);
+			PhaseNumbers.Add(TEXT("real_body"), Actor && Actor->GetMetaHuman() ? 1 : 0);
+			if (const UBloodSubsystem* Blood = GetWorld()->GetSubsystem<UBloodSubsystem>())
+			{
+				PhaseNumbers.Add(TEXT("blood_hits"), Blood->GetHits() - State->BloodHitsAtStart);
+			}
+			HurtSmokeRealBodies(false);
 			if (!Now || !Now->dead)
 			{
 				Fail(TEXT("dismember: 400 blunt damage to the torso did not kill the colonist"));
@@ -490,11 +551,20 @@ void USmokeTestSubsystem::BuildHurtPhases()
 			}
 			PhaseNumbers.Add(TEXT("pieces_at_rest"), AtRest);
 			PhaseNumbers.Add(TEXT("piece_meshes"), Meshes);
+			if (Actor && Actor->GetSeveredCaps() != 5)
+			{
+				Fail(FString::Printf(TEXT("dismember: %d of 5 stumps got a flesh cap"), Actor->GetSeveredCaps()));
+			}
+			if (Actor && Actor->GetMetaHuman() && Meshes < 2 * State->MaxPiecesShown)
+			{
+				Fail(FString::Printf(TEXT("dismember: the %d pieces of a dressed body have only %d meshes (skin and clothes expected)"), State->MaxPiecesShown, Meshes));
+			}
 			if (AtRest != State->MaxPiecesShown)
 			{
 				Fail(FString::Printf(TEXT("dismember: %d of %d pieces had come to rest after 5 s"), AtRest, State->MaxPiecesShown));
 			}
-			Notes.Add(FString::Printf(TEXT("dismember: head and four limbs off; %d pieces thrown, %d meshes in them, %d at rest"), State->MaxPiecesShown, Meshes, AtRest));
+			Notes.Add(FString::Printf(TEXT("dismember: head and four limbs off a %s body; %d pieces thrown, %d meshes in them, %d at rest"), Actor && Actor->GetMetaHuman() ? TEXT("real, dressed") : TEXT("mannequin (NO REAL BODY: clothes not checked)"),
+				State->MaxPiecesShown, Meshes, AtRest));
 		};
 		Phases.Add(MoveTemp(Phase));
 	}

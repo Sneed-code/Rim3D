@@ -836,19 +836,20 @@ FString ASimPawnActor::GetGroomName(FName Component) const
 
 void ASimPawnActor::RefreshGroomVisibility()
 {
+	const bool bHeadOff = (SeveredShown & colony::kSeveredHead) != 0;  // the hair went with the head
 	for (USceneComponent* Groom : Grooms)
 	{
 		if (Groom)
 		{
 			// Hair under a helmet or a tuque stays hidden at every detail.
 			const bool bCovered = bHairHidden && Groom->GetName().Contains(TEXT("Hair"));
-			Groom->SetVisibility(Detail == ESimPawnDetail::Full && !bCovered && !EmptyGrooms.Contains(Groom->GetFName()));
+			Groom->SetVisibility(!bHeadOff && Detail == ESimPawnDetail::Full && !bCovered && !EmptyGrooms.Contains(Groom->GetFName()));
 		}
 	}
 	// Hair cards stand in for the hair strands away from full detail.
 	if (HairCards)
 	{
-		HairCards->SetVisibility(Detail != ESimPawnDetail::Full && !bHairHidden && HairCards->GetStaticMesh() != nullptr && GPawnsHairCards.GetValueOnGameThread() != 0);
+		HairCards->SetVisibility(!bHeadOff && Detail != ESimPawnDetail::Full && !bHairHidden && HairCards->GetStaticMesh() != nullptr && GPawnsHairCards.GetValueOnGameThread() != 0);
 	}
 }
 
