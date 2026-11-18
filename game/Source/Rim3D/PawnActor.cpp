@@ -2074,6 +2074,26 @@ USkeletalMeshComponent* ASimPawnActor::GetDecalMesh() const
 	return MetaHumanBody ? MetaHumanBody.Get() : Body.Get();
 }
 
+bool ASimPawnActor::TraceDrawnBody(const FVector& Start, const FVector& Direction, double MaxCm, DrawnHit::FResult& Out, bool& bOutHasSkeleton) const
+{
+	bOutHasSkeleton = false;
+	const USkeletalMeshComponent* Mesh = GetDecalMesh();
+	if (Mesh && !DrawnHit::HasSkeleton(*Mesh))
+	{
+		Mesh = Body.Get();
+	}
+	if (!Mesh || !DrawnHit::HasSkeleton(*Mesh))
+	{
+		return false;
+	}
+	bOutHasSkeleton = true;
+	if (IsHidden())
+	{
+		return false;
+	}
+	return DrawnHit::Trace(*Mesh, GetBodyScale(), Start, Direction, MaxCm, Out);
+}
+
 void ASimPawnActor::SetBodyHidden(bool bHide)
 {
 	bBodyHidden = bHide;

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 
+#include "DrawnHit.h"
 #include "MeleePose.h"
 #include "PawnAnimInstance.h"
 #include "PawnSubsystem.h"
@@ -178,6 +179,9 @@ public:
 
 	/** The mesh that wears wound decals: the MetaHuman's body if there is one, else the mannequin. */
 	USkeletalMeshComponent* GetDecalMesh() const;
+	/** The player's crosshair against the body as it is drawn this frame (DrawnHit, docs/design/aiming.md). False if
+	 *  hidden or missed; `bOutHasSkeleton` false if the body has no humanlike bones (animals: the sim's hitboxes decide). */
+	bool TraceDrawnBody(const FVector& Start, const FVector& Direction, double MaxCm, DrawnHit::FResult& Out, bool& bOutHasSkeleton) const;
 	/** Where the line From-To first meets the drawn body (the animated mannequin's physics shapes, which every body
 	 *  follows; no collision needed). False if it misses. */
 	bool TraceDrawnBody(const FVector& From, const FVector& To, FVector& OutHit);

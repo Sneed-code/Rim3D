@@ -152,6 +152,11 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["target"] = entt::to_integral(c.target);
                 j["point"] = {static_cast<double>(c.x), static_cast<double>(c.y), static_cast<double>(c.z)};
                 j["player"] = c.player;
+                if (c.aimPawn != kNoEntity) {  // the crosshair on a drawn body (docs/design/aiming.md)
+                    j["aimPawn"] = entt::to_integral(c.aimPawn);
+                    j["aimPart"] = c.aimPart;
+                    j["aimSpot"] = {static_cast<double>(c.aimForward), static_cast<double>(c.aimLeft), static_cast<double>(c.aimUp)};
+                }
             } else if constexpr (std::is_same_v<Type, SetStanceCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["stance"] = kReplayStanceNames[static_cast<int>(c.stance)];
@@ -984,6 +989,21 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             c.y = (*point)[1].get<float>();
             c.z = (*point)[2].get<float>();
         }
+        uint32_t aimPawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "aimPawn", aimPawn, where) || !r.integer(j, "aimPart", c.aimPart, where)) {
+            return false;
+        }
+        const auto spot = j.find("aimSpot");
+        if (spot != j.end()) {
+            if (!spot->is_array() || spot->size() != 3 || !(*spot)[0].is_number() || !(*spot)[1].is_number() ||
+                !(*spot)[2].is_number()) {
+                return r.fail(where + ".aimSpot must be [forward, left, up]");
+            }
+            c.aimForward = (*spot)[0].get<float>();
+            c.aimLeft = (*spot)[1].get<float>();
+            c.aimUp = (*spot)[2].get<float>();
+        }
+        c.aimPawn = static_cast<Entity>(aimPawn);
         c.pawn = static_cast<Entity>(pawn);
         c.target = static_cast<Entity>(target);
         out.command = c;

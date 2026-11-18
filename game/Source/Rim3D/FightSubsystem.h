@@ -20,7 +20,7 @@ class USceneComponent;
 class USimSubsystem;
 class UStaticMesh;
 class UStaticMeshComponent;
-namespace colony { class Sim; struct HitboxView; struct ThingView; }
+namespace colony { class Sim; struct DrawnAim; struct HitboxView; struct ThingView; }
 
 /** What the particles are (each has its own mesh and colour). */
 enum class EFightParticle : uint8
@@ -121,9 +121,11 @@ public:
 	bool Roll(const FVector2D& Input);
 	/** Throws the first grenade on the belt at the crosshair's point (F9's ThrowCommand with `player`). */
 	bool ThrowGrenade();
-	/** Where the crosshair points, in Unreal world units: the sim's trace from the view along the look
-	 *  direction (ground, rock, building or pawn hitbox), else a point 150 m out. False if not in direct mode. */
-	bool ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* OutPawnHit = nullptr) const;
+	/** Where the crosshair points, in Unreal world units: the nearest of the sim's ground, rock and buildings and the
+	 *  bodies as they are drawn this frame (DrawnHit; animals by the sim's hitboxes), else a point 150 m out. On a drawn
+	 *  body `OutDrawn` gets the pawn, the sim body part and the spot in that pawn's frame (docs/design/aiming.md).
+	 *  False if not in direct mode. */
+	bool ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* OutPawnHit = nullptr, colony::DrawnAim* OutDrawn = nullptr) const;
 
 	// --- Hitbox debug view ---
 

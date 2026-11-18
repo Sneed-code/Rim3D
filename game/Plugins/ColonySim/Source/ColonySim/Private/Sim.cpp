@@ -1819,7 +1819,9 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "that pawn is throwing");
         } else if (pawnSwimming(shoot->pawn)) {
             commandFailed(id, "can't shoot while swimming");
-        } else if (!combat_->shoot(shoot->pawn, shoot->target, shoot->x, shoot->y, shoot->z, shoot->player, &error)) {
+        } else if (const DrawnAim drawn{shoot->aimPawn, shoot->aimPart, shoot->aimForward, shoot->aimLeft, shoot->aimUp};
+                   !combat_->shoot(shoot->pawn, shoot->target, shoot->x, shoot->y, shoot->z, shoot->player, &error,
+                                   shoot->aimPawn != kNoEntity ? &drawn : nullptr)) {
             commandFailed(id, error);
         }
     } else if (const auto* stance = std::get_if<SetStanceCommand>(&command)) {
