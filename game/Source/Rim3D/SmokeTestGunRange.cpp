@@ -1074,9 +1074,9 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		}
 		if (UBloodSubsystem* Blood = GetWorld()->GetSubsystem<UBloodSubsystem>())
 		{
-			Notes.Add(FString::Printf(TEXT("gunrange: blood %s: %d hits, %d drops, %d mist, %d wound marks, %d body stains, %d ground splats"),
+			Notes.Add(FString::Printf(TEXT("gunrange: blood %s: %d hits, %d drops, %d mist, %d wound marks, %d body stains, %d ground splats, %d painted into skin (%d bodies now)"),
 				Blood->IsReady() ? TEXT("assets in") : TEXT("ASSETS MISSING (old simple blood)"), Blood->GetHits(), Blood->GetDropsSpawned(),
-				Blood->GetMistSpawned(), Blood->GetWoundMarks(), Blood->GetBodyStainsMade(), Blood->GetSplatsMade()));
+				Blood->GetMistSpawned(), Blood->GetWoundMarks(), Blood->GetBodyStainsMade(), Blood->GetSplatsMade(), Blood->GetSkinPaints(), Blood->GetSkinMasks()));
 		}
 		Notes.Add(FString::Printf(TEXT("gunrange: %d targets ran, %d sprinted, %d charged you, %d punches thrown at you, %d range lock-ons"), State->Fled, State->Sprinted, State->Charged, State->FistSwings, State->RangeFocusSets));
 		if (const UFightSubsystem* Marks = GetWorld()->GetSubsystem<UFightSubsystem>())
