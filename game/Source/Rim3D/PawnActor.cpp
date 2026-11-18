@@ -25,6 +25,7 @@
 #include "Misc/Crc.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 
+#include "PawnExpressions.h"
 #include "PawnFaces.h"
 #include "PawnLooks.h"
 #include "PawnSubsystem.h"
@@ -309,6 +310,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	Location.Z += SwimLiftCm;
 	SetActorLocationAndRotation(Location, FRotator(0.0, Yaw, 0.0));
 	ApplySevered(Now.severed);
+	UpdateFightFace(Bridge, Now, DeltaTime * Speed);
 	if (bRagdoll)
 	{
 		return;  // the physics body is on its own until the pawn gets up
@@ -1233,6 +1235,106 @@ void ASimPawnActor::PlayHitReaction(const FVector& ShotDirection, float Strength
 	ReactionStrength = FMath::Clamp(Strength, 0.0f, 1.0f);
 	ReactionAge = 0.0f;
 	++HitReactions;
+	// Every hit that reaches the body (or its armour) shows a moment of pain on the face (docs/design/focus.md "Faces").
+	PainFaceLeft = PawnPainFaceSeconds;
+	++PainFacesShown;
+}
+
+// ---------------------------------------------------------------------------
+// Fight faces (sneed, docs/design/focus.md "Faces"). Cosmetic.
+
+void ASimPawnActor::UpdateFightFace(const USimSubsystem& Bridge, const colony::ThingView& Now, float GameDelta)
+{
+	// Angry while it fights hand to hand: swinging, blocking, or locked on with a melee weapon or bare hands (a gun in the
+	// hands is not a melee fight), or in a fist fight; held a few seconds so it does not drop between blows.
+	const bool bGun = Now.weapon.valid() && Bridge.GetDefs() && Bridge.GetDefs()->get(Now.weapon).has("verbs");
+	const bool bMelee = Now.meleePhase != colony::MeleePhase::Ready || (Now.blocking && !bGun) || Now.socialFight ||
+		(Now.focusTarget != colony::kNoEntity && !bGun);
+	if (Now.downed || Now.dead)
+	{
+		AngryHoldLeft = 0.0f;
+	}
+	else if (bMelee)
+	{
+		AngryHoldLeft = PawnAngryHoldSeconds;
+	}
+	else
+	{
+		AngryHoldLeft = FMath::Max(0.0f, AngryHoldLeft - GameDelta);
+	}
+	PainFaceLeft = Now.dead ? 0.0f : FMath::Max(0.0f, PainFaceLeft - GameDelta);
+	const float PainWanted = PainFaceLeft > 0.0f ? 1.0f : 0.0f;
+	const float AngryWanted = AngryHoldLeft > 0.0f ? 1.0f : 0.0f;
+	const float PainRate = GameDelta / (PainWanted > PainFace ? PawnPainFaceIn : PawnPainFaceOut);
+	const float AngryRate = GameDelta / (AngryWanted > AngryFace ? PawnAngryFaceIn : PawnAngryFaceOut);
+	const float OldPain = PainFace;
+	const float OldAngry = AngryFace;
+	PainFace = FMath::Clamp(PainFace + FMath::Clamp(PainWanted - PainFace, -PainRate, PainRate), 0.0f, 1.0f);
+	AngryFace = FMath::Clamp(AngryFace + FMath::Clamp(AngryWanted - AngryFace, -AngryRate, AngryRate), 0.0f, 1.0f);
+	if (PainFace != OldPain || AngryFace != OldAngry || (FaceBaseMesh.Get() != MakeHumanMesh.Get() && (PainFace > 0.0f || AngryFace > 0.0f)))
+	{
+		ApplyFightFace();
+	}
+}
+
+void ASimPawnActor::ApplyFightFace()
+{
+	USkeletalMeshComponent* Mesh = MakeHumanMesh.Get();
+	// The body changed under the faces (looks applied again): its own face is the new base.
+	if (FaceBaseMesh.Get() != Mesh)
+	{
+		FaceBase.Reset();
+		FaceBaseMesh = Mesh;
+	}
+	if (!Mesh || !Mesh->GetSkeletalMeshAsset())
+	{
+		return;
+	}
+	const bool bShowing = PainFace > 0.0f || AngryFace > 0.0f;
+	if (FaceBase.IsEmpty())
+	{
+		if (!bShowing)
+		{
+			return;
+		}
+		// Keep the face it has now (the creator's or randomizer's expression units): the fight faces go on top of it.
+		for (const FPawnExpressionUnit& Unit : PawnExpressionPain)
+		{
+			FaceBase.Add(Unit.Morph, Mesh->GetMorphTarget(Unit.Morph));
+		}
+		for (const FPawnExpressionUnit& Unit : PawnExpressionAngry)
+		{
+			FaceBase.Add(Unit.Morph, Mesh->GetMorphTarget(Unit.Morph));
+		}
+		const TArray<float>& Data = Mesh->GetCustomPrimitiveData().Data;
+		const auto At = [&Data](int32 i) { return Data.IsValidIndex(i) ? Data[i] : 0.0f; };
+		FaceBaseWrinkles = FVector4f(At(8), At(9), At(10), At(11));
+	}
+	// Pain wins over anger while it lasts.
+	const float Pain = PainFace;
+	const float Angry = AngryFace * (1.0f - PainFace);
+	TMap<FName, float> Face = FaceBase;
+	for (const FPawnExpressionUnit& Unit : PawnExpressionPain)
+	{
+		Face.FindOrAdd(Unit.Morph) += Unit.Weight * Pain;
+	}
+	for (const FPawnExpressionUnit& Unit : PawnExpressionAngry)
+	{
+		Face.FindOrAdd(Unit.Morph) += Unit.Weight * Angry;
+	}
+	for (const TPair<FName, float>& Morph : Face)
+	{
+		Mesh->SetMorphTarget(Morph.Key, FMath::Clamp(Morph.Value, 0.0f, 1.0f), false);
+	}
+	// The skin's wrinkle map (custom primitive data 8 to 11: forehead, brow furrow, smile, nose), as the creator sets it.
+	const float Furrow = FMath::Max(FaceBaseWrinkles.Y, FMath::Max(Pain * 0.9f, Angry));
+	const float Nose = FMath::Max(FaceBaseWrinkles.W, FMath::Max(Pain * 0.25f, Angry * 0.5f));
+	const float Forehead = FMath::Max(FaceBaseWrinkles.X, Pain * 0.1f);
+	Mesh->SetCustomPrimitiveDataVector4(8, FVector4(Forehead, Furrow, FaceBaseWrinkles.Z, Nose));
+	if (!bShowing)
+	{
+		FaceBase.Reset();  // back to its own face; the next fight takes it afresh
+	}
 }
 
 namespace

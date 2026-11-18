@@ -86,6 +86,12 @@ std::shared_ptr<const DefDatabase> motionTestDefs() {
         clips += R"({"defName": "Motion_StaggerBack", "kind": "Stagger", "root": [)" + motionTestRoot(-0.6f, 0.4f, 0.6f) + "]},";
         clips += R"({"defName": "Motion_KnockdownBack", "kind": "Knockdown", "keepWhenDown": true, "root": [)" + motionTestRoot(-1.2f, 0.6f, 1.0f) + "]},";
         clips += R"({"defName": "Motion_Club_Downward", "kind": "Attack", "hitSeconds": 0.5, "root": [)" + motionTestRoot(0.3f, 0.5f, 1.0f, 0.2f) + "]},";
+        // One-hand and unarmed swings, and downward blows at a body on the ground (focus.md): the knife's own stab, the
+        // one-hand style's hack; fists have none, so they punch down with their usual clip.
+        clips += R"({"defName": "Motion_OneHand_Slash1", "kind": "Attack", "hitSeconds": 0.5, "root": [)" + motionTestRoot(0.2f, 0.5f, 1.0f, 0.2f) + "]},";
+        clips += R"({"defName": "Motion_Knife_Stab_Low", "kind": "Attack", "hitSeconds": 0.5, "root": [)" + motionTestRoot(0.2f, 0.5f, 1.0f, 0.2f) + "]},";
+        clips += R"({"defName": "Motion_OneHand_Hack_Low", "kind": "Attack", "hitSeconds": 0.5, "root": [)" + motionTestRoot(0.2f, 0.5f, 1.0f, 0.2f) + "]},";
+        clips += R"({"defName": "Motion_Unarmed_Jab", "kind": "Attack", "hitSeconds": 0.4, "root": [)" + motionTestRoot(0.2f, 0.4f, 0.8f, 0.2f) + "]},";
         // A six second flourish: never used in a fight.
         clips += R"({"defName": "Motion_Club_Horizontal", "kind": "Attack", "hitSeconds": 3.0, "root": [)" + motionTestRoot(0.5f, 3.0f, 6.0f) + "]}";
         clips += "]";
@@ -528,4 +534,66 @@ TEST_CASE("Motion: the snapshot names the clip and its time, and a pawn in a cli
     sim->submit(DirectMoveCommand{pawn, motionTestPos(*sim, pawn).x, y + 0.1f});
     sim->step();
     CHECK(motionTestPos(*sim, pawn).y == doctest::Approx(y));
+}
+
+TEST_CASE("Motion: a blow at a body on the ground plays the weapon's downward clip, and only then") {
+    auto sim = motionTestSim(11);
+    BodyMotionSystem& motion = sim->combat().motion();
+    const DefId slash = motion.clipId("Motion_OneHand_Slash1");
+    const DefId stab = motion.clipId("Motion_Knife_Stab_Low");
+    const DefId hack = motion.clipId("Motion_OneHand_Hack_Low");
+    const DefId jab = motion.clipId("Motion_Unarmed_Jab");
+    const DefId smash = motion.clipId("Motion_Club_Downward");
+    MOTION_REQUIRE(slash.valid());
+    MOTION_REQUIRE(stab.valid());
+    MOTION_REQUIRE(hack.valid());
+    MOTION_REQUIRE(jab.valid());
+    const DefDatabase& defs = sim->defs();
+    // What each weapon swings with: the knife's own stab (a weapon's list wins over its style's), the gladius its
+    // one-hand style's hack, the club the overhead smash; fists have no downward clip measured here.
+    CHECK(sim->melee().lowAttackClipsOf(defs.idOf("Things", "Melee_Knife")) == std::vector<DefId>{stab});
+    CHECK(sim->melee().lowAttackClipsOf(defs.idOf("Things", "Melee_Gladius")) == std::vector<DefId>{hack});
+    CHECK(sim->melee().lowAttackClipsOf(defs.idOf("Things", "Melee_Club")) == std::vector<DefId>{smash});
+    CHECK(sim->melee().lowAttackClipsOf(defs.idOf("Things", "Human")).empty());
+    // The downward clips are never among the usual swings.
+    for (const DefId clip : sim->melee().attackClipsOf(defs.idOf("Things", "Melee_Knife"))) {
+        CHECK(clip != stab);
+        CHECK(clip != hack);
+    }
+
+    struct Case {
+        const char* weapon;
+        bool down;
+        DefId wanted;
+    };
+    const Case cases[] = {{"Melee_Knife", false, slash}, {"Melee_Knife", true, stab}, {"Melee_Gladius", false, slash},
+                          {"Melee_Gladius", true, hack},  {nullptr, false, jab},          {nullptr, true, jab}};
+    float x = 10.5f;
+    for (const Case& c : cases) {
+        x += 6.0f;
+        const Entity attacker = motionTestPawn(*sim, x, 30.5f, c.weapon);
+        const Entity target = motionTestPawn(*sim, x + 1.0f, 30.5f);
+        sim->stepMany(3);
+        if (c.down) {
+            sim->things().registry().get<Health>(target).downed = true;
+            sim->things().registry().get<Posture>(target).stance = Stance::Prone;
+        }
+        sim->submit(MeleeCommand{attacker, target, MeleeMode::Attack});
+        sim->step();
+        CAPTURE(c.weapon == nullptr ? "fists" : c.weapon);
+        CAPTURE(c.down);
+        MOTION_REQUIRE(sim->melee().winding(attacker));
+        MOTION_REQUIRE(motion.moving(attacker));
+        CHECK(sim->things().registry().get<BodyMotion>(attacker).clip == c.wanted);
+        Snapshot snap;
+        sim->writeSnapshot(snap);
+        const ThingView* view = snap.find(attacker);
+        MOTION_REQUIRE(view != nullptr);
+        CHECK(view->meleeLow == c.down);
+        CHECK(view->motionClip == c.wanted);
+        // Out of the way of the next pair.
+        motion.stop(attacker);
+        sim->things().destroy(attacker);
+        sim->things().destroy(target);
+    }
 }
