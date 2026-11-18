@@ -110,6 +110,7 @@ namespace
 		int32 HitsAtStart = 0;
 		int32 OnTimeAtStart = 0;
 		int32 LateAtStart = 0;
+		int32 UntimedAtStart = 0;
 		int32 StopsAtStart = 0;
 		int32 ImpactsAtStart = 0;
 		int32 ReactionsAtStart = 0;
@@ -270,6 +271,7 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		State->HitsAtStart = W->GetHitsSeen();
 		State->OnTimeAtStart = W->GetHitsOnTime();
 		State->LateAtStart = W->GetHitsLate();
+		State->UntimedAtStart = W->GetHitsUntimed();
 		State->StopsAtStart = W->GetHitStopsPlayed();
 		State->ImpactsAtStart = F->GetImpactsOfKind(colony::ProjectileHitKind::Pawn);
 		State->ReactionsAtStart = F->GetHitReactions();
@@ -873,13 +875,16 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		const int32 Hits = W->GetHitsSeen() - State->HitsAtStart;
 		const int32 OnTime = W->GetHitsOnTime() - State->OnTimeAtStart;
 		const int32 Late = W->GetHitsLate() - State->LateAtStart;
+		const int32 Untimed = W->GetHitsUntimed() - State->UntimedAtStart;
 		if (Swings < 4 || Hits < 3)
 		{
 			Fail(FString::Printf(TEXT("swing_flow: %d swings and %d hits in 9 s, expected at least 4 and 3"), Swings, Hits));
 		}
-		if (OnTime < Hits || Late > 0)
+		// Every blow the body shows a swing for lands on time. A blow can also land while the swinger's body plays no swing
+		// (the sim lets a swing finish though a push threw the swinger into a stagger): no moment to time, but most must have one.
+		if (OnTime < Hits - Untimed || Late > 0 || Untimed * 2 > Hits)
 		{
-			Fail(FString::Printf(TEXT("swing_flow: %d blows landed on time and %d late (the picture was up to %.1f steps behind), expected all on time"), OnTime, Late, W->GetMaxStepsBehind()));
+			Fail(FString::Printf(TEXT("swing_flow: %d blows landed on time, %d late, %d with no swing on screen (the picture was up to %.1f steps behind), expected all on time"), OnTime, Late, Untimed, W->GetMaxStepsBehind()));
 		}
 		if (W->GetHitStopsPlayed() - State->StopsAtStart < Hits)
 		{
@@ -893,7 +898,7 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			Fail(FString::Printf(TEXT("swing_flow: the body hardly moved in the swings (bent %.1f degrees, right hand moved %.0f cm)"), State->MaxLean, State->MaxHandMove));
 		}
-		Notes.Add(FString::Printf(TEXT("swing_flow: %d swings, %d hits, %d on time, %d late, %d hit-stops, enemy flinched %d times, body bent up to %.0f degrees, right hand moved up to %.0f cm%s"), Swings, Hits, OnTime, Late,
+		Notes.Add(FString::Printf(TEXT("swing_flow: %d swings, %d hits, %d on time, %d late, %d with no swing on screen, %d hit-stops, enemy flinched %d times, body bent up to %.0f degrees, right hand moved up to %.0f cm%s"), Swings, Hits, OnTime, Late, Untimed,
 			W->GetHitStopsPlayed() - State->StopsAtStart, Enemy ? Enemy->GetHitReactions() : 0, State->MaxLean, State->MaxHandMove, State->bClipSwing ? TEXT(" (attack clips)") : TEXT("")));
 	});
 
