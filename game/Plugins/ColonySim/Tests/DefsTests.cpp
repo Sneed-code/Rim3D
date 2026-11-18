@@ -142,6 +142,20 @@ TEST_CASE("defs: tuning multipliers") {
     CHECK(errors.size() == 2);
 }
 
+TEST_CASE("defs: tuning one def, and paths through arrays") {
+    const std::vector<DefSource> src = {{"Things", "w.json", R"([
+        {"defName":"Knife","tools":[{"cooldownTime":48},{"cooldownTime":60.0}]},
+        {"defName":"Club","tools":[{"cooldownTime":60}]}
+    ])"}};
+    const std::string tuning = R"({"defs": {"Things": {"tools.cooldownTime": 0.5}, "Things/Knife": {"tools.cooldownTime": 0.5}}})";
+    DefDatabase db;
+    std::vector<std::string> errors;
+    if (!(defsTestBuild(src, tuning, db, errors))) { CHECK(false); return; }
+    CHECK(db.find("Things", "Knife")->integer("tools.0.cooldownTime") == 12);
+    CHECK(db.find("Things", "Knife")->number("tools.1.cooldownTime") == doctest::Approx(15.0));
+    CHECK(db.find("Things", "Club")->integer("tools.0.cooldownTime") == 30);
+}
+
 TEST_CASE("defs: the real data folder loads") {
     DefDatabase db;
     std::vector<std::string> errors;

@@ -45,7 +45,7 @@ namespace
 			{ERim3DAction::Attack, TEXT("Attack"), TEXT("Shoot / swing"), TEXT("Fighting"), EKeys::LeftMouseButton},
 			{ERim3DAction::AimBlock, TEXT("AimBlock"), TEXT("Aim / block (hold)"), TEXT("Fighting"), EKeys::RightMouseButton},
 			{ERim3DAction::FocusNextTarget, TEXT("FocusNextTarget"), TEXT("Focus the next enemy"), TEXT("Fighting"), EKeys::Tab},
-			{ERim3DAction::EndFocus, TEXT("EndFocus"), TEXT("End focus"), TEXT("Fighting"), EKeys::F1},
+			{ERim3DAction::EndFocus, TEXT("EndFocus"), TEXT("Lock on / let go"), TEXT("Fighting"), EKeys::MiddleMouseButton},
 			{ERim3DAction::SleepHere, TEXT("SleepHere"), TEXT("Sleep here"), TEXT("Other"), EKeys::N},
 			{ERim3DAction::Inventory, TEXT("Inventory"), TEXT("Inventory"), TEXT("Other"), EKeys::I},
 			{ERim3DAction::BuildMode, TEXT("BuildMode"), TEXT("Build"), TEXT("Other"), EKeys::B},
