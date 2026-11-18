@@ -539,6 +539,7 @@ TEST_CASE("Stealth: a range guard walked off and set unaware keeps its back turn
         }
     }
     CHECK(stealthTestDist(*sim, guard, player) < 3.0f);
-    CHECK(stealthTestDist(*sim, guard, player) < apart);
+    // Alerted fighters sprint (#348), so she may keep up while the player backs off: then she is close already.
+    CHECK((apart < 3.0f || stealthTestDist(*sim, guard, player) < apart));
     CHECK(swings > 0);
 }
