@@ -1803,6 +1803,9 @@ void saveLooks(Ar& ar, PawnLooks& l) {
         ar.text("beard", l.beard);
         ar.value("naturalBodyHair", l.naturalBodyHair);
         ar.value("bodyHair", l.bodyHair);
+        if (ar.sectionVersion() >= 3) {  // a name for pawns with no Colonist record (focus HP bar, kill feed)
+            ar.text("name", l.name);
+        }
         ar.require(l.faceShape >= 0.0f && l.faceShape <= 1.0f && l.brow >= 0.0f && l.brow <= 1.0f && l.nose >= 0.0f &&
                        l.nose <= 1.0f && l.jaw >= 0.0f && l.jaw <= 1.0f && l.bodyHair >= 0.0f && l.bodyHair <= 1.0f &&
                        l.naturalBodyHair >= 0.0f && l.naturalBodyHair <= 1.0f,
@@ -3543,7 +3546,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
-    ar.section("looks", 2, [&] {
+    ar.section("looks", 3, [&] {
         saveParts(ar, "looks", e, &SaveEntity::looks, [&](PawnLooks& l) { saveLooksPart(ar, l); });
     });
     ar.section("paths", 1, [&] { savePaths(ar, d.paths); });

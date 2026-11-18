@@ -279,7 +279,7 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 	UMaterial* Master = GunArtMaster(Tools);
 	int32 Failed = Master ? 0 : 1;
 	TArray<TPair<TSharedPtr<FJsonValue>, const TCHAR*>> Entries;
-	for (const TPair<const TCHAR*, const TCHAR*> Section : {TPair<const TCHAR*, const TCHAR*>(TEXT("guns"), GunArtRoot), TPair<const TCHAR*, const TCHAR*>(TEXT("vehicles"), GunArtVehicleRoot)})
+	for (const TPair<const TCHAR*, const TCHAR*> Section : {TPair<const TCHAR*, const TCHAR*>(TEXT("guns"), GunArtRoot), TPair<const TCHAR*, const TCHAR*>(TEXT("melee"), GunArtRoot), TPair<const TCHAR*, const TCHAR*>(TEXT("vehicles"), GunArtVehicleRoot)})
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Array = nullptr;
 		if (Root->TryGetArrayField(Section.Key, Array))

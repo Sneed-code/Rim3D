@@ -1,13 +1,13 @@
 # Gun range (first person)
 
-A scene to play, asked for by sneed (2026-11-16): first person with real gun models, unlimited ammunition but real
-reloads, and random creator women to shoot at who stand, walk, flinch, fall down and die. `tools\play-gunrange.bat`
+A scene to play, asked for by sneed (2026-11-16): first person with real gun models, unlimited ammunition (no reloads since 2026-11-17: guns fire bursts and cool
+down, aiming.md), and random creator women to shoot at who stand, walk, flinch, fall down and die. `tools\play-gunrange.bat`
 (smoke test `gunrange`, which checks nothing unless `-GunRangeScript` is given).
 
 **The sim decides, Unreal shows.** Shooting, spread, hits, armour, wounds, downing and death are the game's own
 (docs/design/fights.md, armour.md, aiming.md): the player's left mouse button sends the same `ShootCommand` as anywhere in
-direct mode, R the `ReloadCommand`. Magazines already refill without ammunition items (aiming.md), so ammunition is
-unlimited and only the reload time counts. Everything below is drawing.
+direct mode. There are no reloads: a gun fires bursts and refills by a hidden cooldown (aiming.md "Cooldown bursts"),
+shown by the thin yellow bar under its name. Everything below is drawing.
 
 Code: `game/Source/Rim3D/GunRangeSubsystem.*` (the arms and guns), `GunViewAnim.*` (their animator),
 `SmokeTestGunRange.cpp` (the scene), `CreatorPeople.h` (the creator's randomizer for other scenes, in
@@ -20,11 +20,11 @@ woman, so the arms you see are hers); the rest leave. One of each gun lies in a 
 creator women (baseline humans, fair-weighted skin, seeded: `-GunRangeSeed=<n>`) stand at 10 to 30 m: the near four
 stand, the far four walk across the field and back. They are the player's own side, drafted and unarmed, so they never
 shoot back. They are drawn by the game's usual pawn drawing: hit reactions, blood, wound decals and ragdolls when downed
-or killed (FightSubsystem). N brings a new group; when all are down for 6 seconds a new group comes by itself.
+or killed (FightSubsystem). K brings a new group (N is the game's sleep key since the controls rework); a new group comes by itself as below.
 
 **Guards to sneak up on** (U, or `-GunRangeGuards` from the start; [stealth.md](stealth.md)): eight women who walk 3 m
 away from you and then become unaware guards of another side, backs turned. The sim's sight and hearing drive them: a
-"?" shows over one that is suspicious and a "!" when she is alerted, and then she comes at you with her fists. N brings
+"?" shows over one that is suspicious and a "!" when she is alerted, and then she comes at you with her fists. K brings
 the ordinary targets back.
 
 ## The arms and the gun
@@ -32,8 +32,8 @@ the ordinary targets back.
 Hung on the view camera, so they move with the gun kick and shake of the shooter feel:
 
 - A hidden mannequin plays the gun's **stance** clip (Mixamo rifle aiming idle, the mocap pistol aim) through
-  `UGunViewAnimInstance`, which samples and cross-fades clips natively (no animation graph). A **reload** clip blends
-  over it, stretched to the sim's reload time.
+  `UGunViewAnimInstance`, which samples and cross-fades clips natively (no animation graph). (The reload clips in guns.json no longer
+  play: there are no reloads.)
 - The player's own MakeHuman body is retargeted from it like every pawn's (`UMakeHumanAnimInstance`), with the head,
   hair and legs hidden (`HideBoneByName`), no shadow. Skin, build and materials are copied from the player's body.
 - The **gun** sits in the right hand from the knuckles: the grip runs from the little finger's knuckle to the index
@@ -41,16 +41,15 @@ Hung on the view camera, so they move with the gun kick and shake of the shooter
 - **Aim**: the body hangs from its head, which sits at `headInView` (top of guns.json: a little behind and below the
   eye), and turns so the barrel runs along the view. The right hand then reaches (a two-bone IK on `hand_r`, its
   rotation kept from the clip) until the gun's `sight` point sits `sightDistance` before the eye, or `hip` lower right
-  of that from the hip; through a reload it reaches to `reloadSpot` instead, so the gun stays in view while the clip
-  turns it. (Moving the whole body to bring the sight there put the camera inside a shoulder: the Mixamo stances don't
+  of that from the hip. (Moving the whole body to bring the sight there put the camera inside a shoulder: the Mixamo stances don't
   hold the sight before the eye.) Right mouse button blends to the sights (the field of view narrows as anywhere in
   direct mode). `"reach": false` leaves a gun in the clip's own hold.
 - **Scope**: a gun with `"scope": {"fov": n}` (the bolt-action rifle's side-mounted scope) goes through it once fully
   aimed: the arms and gun hide, the view narrows to `fov`, and a scope ring and post reticle are drawn over it. On the
   way up the scope's eyepiece comes to the eye (its `sight` is the eyepiece on the scope's axis).
-- The **left hand** goes to the `offHand` point (the fore-end) with the MakeHuman two-bone IK, off through the reload.
-- **Moving parts**: the bolt-action rifle's bolt lifts and runs back after each shot and opens for the reload (the Codex
-  model's own parts and pivots), triggers pull. A gun with a separate magazine mesh drops the empty one and the left
+- The **left hand** goes to the `offHand` point (the fore-end) with the MakeHuman two-bone IK.
+- **Moving parts**: the bolt-action rifle's bolt lifts and runs back after each shot (the Codex model's own parts and
+  pivots), triggers pull. A gun with a separate magazine mesh drops the empty one and the left
   hand brings the full one.
 - **Kick** (a snap back and up per shot, fading by the gun's `recover`), **sway** against the mouse, **bob** with the
   walk, a **dip** when switching guns, lowered while sprinting, and a short warm light at the muzzle.
@@ -129,8 +128,10 @@ file's name (`AssaultRifle_Game`). `meshTextures` gives meshes their own maps (t
 - Corpses sinking into the ground: the ragdoll's floor now sits on the drawn ground (a trace, not the height map) and
   4 cm above it, since the flesh lies outside the mannequin's shapes.
 - Targets in each group of four: one stands, one flees when hit, one fights back with her fists when hit (walks up
-  and punches with `MeleeCommand`), one flees as soon as you are within 20 m. Driven by the scene with ordinary
-  commands until the sim's own sight and flee settings land (stealth thread). Melee swings in the range may strike
+  and punches), one flees as soon as you are within 20 m. Since 2026-11-17 the sim runs them: when struck (or, for
+  the on-sight one, when you come within 20 m) the scene hands her to faction 2 with the sim's own fight response
+  (`FleeOnSight` for the runners, `Fists` for the brawler, docs/design/focus.md), so she flees or charges and sprints
+  (`sprinting` in the snapshot) like any enemy. The smoke test notes how many ran, sprinted and punched. Melee swings in the range may strike
   them although they are on your side (`UWeaponDrawSubsystem::FindSwingTarget`).
 
 ## Not done
