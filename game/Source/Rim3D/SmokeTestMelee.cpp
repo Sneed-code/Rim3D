@@ -4,6 +4,8 @@
 
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
 
 #include "FightSubsystem.h"
@@ -244,6 +246,29 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		const FVector P = Actor->GetActorLocation();
 		const FVector Eye = P + Actor->GetActorRightVector() * Right + Actor->GetActorForwardVector() * Forward + FVector(0.0, 0.0, Height);
 		ViewFrom(Eye, (P + FVector(0.0, 0.0, 100.0) - Eye).Rotation());
+	};
+
+	// Like BodyView, but pulls the camera in front of a tree or wall between it and the pawn.
+	const auto ClearBodyView = [=, this](colony::Entity Pawn, double Right, double Forward, double Height)
+	{
+		const ASimPawnActor* Actor = ActorOf(Pawn);
+		if (!Actor)
+		{
+			return;
+		}
+		const FVector Focus = Actor->GetActorLocation() + FVector(0.0, 0.0, 100.0);
+		FVector Eye = Actor->GetActorLocation() + Actor->GetActorRightVector() * Right + Actor->GetActorForwardVector() * Forward + FVector(0.0, 0.0, Height);
+		FCollisionQueryParams Params(FName(TEXT("MeleeSmokeCamera")), false);
+		for (TActorIterator<ASimPawnActor> It(GetWorld()); It; ++It)
+		{
+			Params.AddIgnoredActor(*It);
+		}
+		FHitResult Hit;
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Focus, Eye, ECC_Visibility, Params))
+		{
+			Eye = Focus + (Hit.Location - Focus) * 0.85;
+		}
+		ViewFrom(Eye, (Focus - Eye).Rotation());
 	};
 
 	const auto MarkBaselines = [=]()
@@ -1056,8 +1081,8 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		}
 		colony::Sim& Sim = *const_cast<colony::Sim*>(B->GetSim());
 		const colony::CellPos A{State->Cell.x - 12, State->Cell.y - 30, 0};
-		// From the front left, the shield arm's side.
-		BodyView(State->Me, -200.0, 170.0, 150.0);
+		// From the front left and a little above, the shield arm's side, in front of any trunk in the way.
+		ClearBodyView(State->Me, -170.0, 190.0, 190.0);
 		KeepAlive();
 		MeleeSmokeHeal(Sim, State->Basher);
 		// Held for the first 8 seconds, then let go.
