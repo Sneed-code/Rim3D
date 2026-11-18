@@ -84,8 +84,8 @@ int32 UShieldArtCommandlet::Main(const FString& Params)
 			continue;
 		}
 		UStaticMesh* Mesh = Meshes[0];
-		// Named after the file, so the defs can name it.
-		if (Mesh->GetName() != Id)
+		// At <folder>/<id>/<id>, so the defs can name it (Interchange puts it in a StaticMeshes subfolder).
+		if (Mesh->GetOutermost()->GetName() != Folder / Id)
 		{
 			TArray<FAssetRenameData> Rename;
 			Rename.Emplace(Mesh, Folder, Id);

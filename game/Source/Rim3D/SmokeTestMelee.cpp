@@ -1033,10 +1033,11 @@ void USmokeTestSubsystem::BuildMeleePhases()
 			B->Submit(colony::SwitchWeaponCommand{State->Me, colony::WeaponSlot::Melee});
 		}
 		std::string Why;
-		State->Shield = Sim.apparel().make(Sim.defs().idOf("Things", "Apparel_ShieldMedium"), Sim.defs().idOf("Things", "Steel"), -1, A, &Why);
+		// Wood: the brightest model, easy to see in the screenshot.
+		State->Shield = Sim.apparel().make(Sim.defs().idOf("Things", "Apparel_ShieldMedium"), Sim.defs().idOf("Things", "WoodLog"), -1, A, &Why);
 		if (State->Shield == colony::kNoEntity || !Sim.apparel().putOn(State->Me, State->Shield, Why))
 		{
-			Fail(FString::Printf(TEXT("shield: could not put a steel medium shield on the protagonist: %s"), UTF8_TO_TCHAR(Why.c_str())));
+			Fail(FString::Printf(TEXT("shield: could not put a wooden medium shield on the protagonist: %s"), UTF8_TO_TCHAR(Why.c_str())));
 		}
 		B->Submit(colony::SpawnThingCommand{"Human", colony::CellPos{A.x + 1, A.y, 0}, 1});
 		B->Submit(colony::SpawnThingCommand{"Melee_Club", colony::CellPos{A.x + 1, A.y + 2, 0}, 1});
@@ -1055,7 +1056,8 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		}
 		colony::Sim& Sim = *const_cast<colony::Sim*>(B->GetSim());
 		const colony::CellPos A{State->Cell.x - 12, State->Cell.y - 30, 0};
-		BodyView(State->Me, 260.0, 120.0, 150.0);
+		// From the front left, the shield arm's side.
+		BodyView(State->Me, -200.0, 170.0, 150.0);
 		KeepAlive();
 		MeleeSmokeHeal(Sim, State->Basher);
 		// Held for the first 8 seconds, then let go.
