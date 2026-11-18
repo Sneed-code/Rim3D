@@ -1,4 +1,5 @@
 #include "GunRangeSubsystem.h"
+#include "KeyBindings.h"
 
 #include "Animation/AnimSequence.h"
 #include "Animation/MorphTarget.h"
@@ -1304,7 +1305,7 @@ void UGunRangeSubsystem::DrawPanel()
 		ImGui::Separator();
 		if (HeldRack >= Guns.Num())
 		{
-			ImGui::TextUnformatted("Left mouse swing   Right mouse block   Alt dodge");
+			ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("Left mouse swing   Right mouse block   %s roll / dash"), *Rim3DKeys::GetKeyLabel(ERim3DAction::RollDash))));
 		}
 		else
 		{

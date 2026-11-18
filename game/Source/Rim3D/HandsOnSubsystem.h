@@ -92,6 +92,8 @@ protected:
 private:
 	void OnSimEvent(const colony::Event& Event);
 	void Say(const FString& Text);
+	/** A weapon lying within reach of the pawn: F picks it up into the hands. */
+	bool IsLooseWeapon(const USimSubsystem& Bridge, colony::Entity Thing, colony::Entity Pawn) const;
 	void Interact(USimSubsystem& Bridge, bool bDown);
 	void UpdateBuilding(USimSubsystem& Bridge, class APlayerController* PC);
 	void DrawHud(USimSubsystem& Bridge);

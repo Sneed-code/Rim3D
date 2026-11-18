@@ -56,6 +56,16 @@ over, to no less than 20% of its speed (`overloadSlowdown`, `overloadMinFactor`)
 fits: hauling takes only what fits next to its gear, and `Take` stops at the limit. With CarryRules missing (the
 test defs), the load is the old one: weapons on the body plus the hauled stack, slowing from the first kg.
 
+## Picking up resources
+
+sneed, 2026-11-17: the player's colonist picks resources up by walking past them, with no key (`Sim::autoPickUp`,
+CarryRules `autoPickUp`). Every `every` (10) game seconds, each stack within `radius` (1.5 m) on its level goes into its
+bag, as much as fits: what mining or plants give (the "mined" and "grown" sets above), the `categories` Metals,
+StoneBlocks, Textiles and Leathers, and the `extra` defs (steel, wood, silver, gold, jade, plasteel, uranium,
+components, cloth). Never a thing heavier than `maxUnitMass` (5 kg) a piece or that doesn't stack (stone chunks), one
+in storage (a stockpile), one someone owns, or one another colonist is about to take. Food and medicine are left for F
+(pick up into the hands) or the inventory screen. Other pawns don't do this.
+
 ## Snapshot
 
 Pawns: `loadKg` and `capacityKg`, and `inventoryCount` items from `Snapshot::inventory[firstInventory]` (item,
