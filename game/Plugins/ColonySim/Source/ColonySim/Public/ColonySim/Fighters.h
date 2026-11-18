@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace colony {
@@ -68,6 +69,18 @@ struct KnownEnemy {
 // enemies and shoots.
 enum class FightMode : uint8_t { Fight, Shelter, Flee, Seize, Rescue };
 
+// Team play (sneed, 2026-11-18; docs/design/team-play.md): there are no fixed squads. Every fighter always knows where
+// the friends near it are and what they are doing, and picks its own part from that each plan, F.E.A.R. style:
+// Suppress (nobody near is shooting its target: it takes a spot with a shot and holds it), Flank (a friend is pinning
+// the target: it works round the side the target's cover doesn't face), Push (the target is hurt, its gun is cooling
+// down or it is backing off: it closes in; a melee fighter charges instead of waiting), FallBack (outnumbered, badly hurt
+// or friends dropping round it). None holds and shoots as before. How bold it is (its aggression) comes from its side,
+// traits, skill and a seeded roll of its own.
+enum class TeamRole : uint8_t { None, Suppress, Flank, Push, FallBack };
+// What a fighter shouts (PawnAction Callout, `amount` this, `message` the words): for barks on the PC side.
+enum class Callout : uint8_t { None, Suppressing, Flanking, Pushing, FallingBack, ManDown, EnemyDown };
+COLONY_API const char* calloutWords(Callout c);
+
 // On a pawn that fights instead of working: a drafted colonist, a colonist the colony alarm called
 // up, or every pawn of another faction. The job system leaves it alone. Every field is saved.
 struct Fighter {
@@ -115,6 +128,16 @@ struct Fighter {
     float suspectY = 0.0f;
     Entity suspect = kNoEntity;  // whom it half saw, and since when: still in view `noticeSteps` later, it is sure
     int64_t suspectAt = 0;
+    // Team play (docs/design/team-play.md). `role` is picked each plan from what the friends near it do; `flankSide`
+    // (+1 or -1) is which way round the pinning friend's line it goes; friends going down near it shake it.
+    TeamRole role = TeamRole::None;
+    int64_t roleSince = 0;
+    int8_t flankSide = 0;
+    Callout lastCall = Callout::None;
+    int64_t calloutAt = 0;        // game second of its last call-out
+    uint8_t alliesDown = 0;       // friends near it downed or killed lately...
+    int64_t allyDownAt = 0;       // ...the last of them at this game second
+    int64_t suppressedUntil = 0;  // enemy shots passing close: it keeps its head down (cover counts more) until then
 };
 
 // The fighter going to carry `pawn`, a downed friend, to cover (F10), or kNoEntity.
@@ -186,7 +209,36 @@ struct FighterRules {
     // their usual pace. The player's sprint is 1.5 times (ProtagonistPawn kSprintFactor); the AI's is the same.
     float sprintSpeedFactor = 1.3333333f;  // RimWorld LocomotionUrgency.Sprint: a move costs 0.75 of a jog
     float sprintChargeMin = 3.0f;     // a melee charge sprints while the target is further than this...
-    float sprintChargeMax = 30.0f;    // ...and nearer than this       // a hurt pawn's walk costs at most this many times more (its Moving capacity, but never under this)
+    float sprintChargeMax = 30.0f;    // ...and nearer than this
+    // Team play (docs/design/team-play.md, ours: RimWorld has none). `teamPlay` false turns all of it off: fighters
+    // behave exactly as before it (no parts, no suppression, no shaking, no going round, no call-outs).
+    bool teamPlay = true;
+    float allyRadius = 30.0f;          // friends within this many metres are the ones it plays with
+    float aggressionColonists = 0.45f; // how bold a fighter is, 0 cautious to 1 reckless, by side...
+    float aggressionRaiders = 0.6f;
+    float aggressionVariety = 0.15f;   // ...plus or minus up to this, rolled once per pawn from the world seed
+    float aggressionPerSkill = 0.015f; // ...plus this per level of its best fighting skill over 10 (minus under)
+    std::vector<std::pair<std::string, float>> aggressionTraits;  // ...plus these for traits (Brawler, Wimp...)
+    int roleHoldSteps = 90;            // a part is kept at least this long while it still makes sense
+    float suppressStayBonus = 2.0f;    // a suppressor keeps its spot
+    float suppressNoShot = 3.0f;       // and wants one with a shot more than anyone
+    int maxFlankers = 2;               // fighters going round one target at once
+    float flankWeight = 10.0f;         // a cell round the side by flankDegrees or more from the pinning friend is worth this
+    float flankTravel = 0.5f;          // and the walk there costs a flanker only this share (it means to move)
+    float flankDegrees = 70.0f;
+    float flankOtherSide = 0.3f;       // the part of it a cell on the other side gets
+    float flankExposeWeight = 3.0f;    // the target's cover against the cell counts against it
+    float pushWeight = 0.6f;           // a pusher wants each metre nearer its target this much
+    float pushExposed = 0.5f;          // and minds being seen this much less
+    float pushTooClose = 2.0f;         // and comes this close
+    int pushCooldownSteps = 30;        // the target's gun is empty with this many steps of cooldown left: push
+    float suppressRadius = 1.5f;       // an enemy shot passing this close keeps its head down...
+    int suppressSteps = 60;            // ...for this long
+    float suppressedCover = 1.6f;      // cover counts this many times more then (less for the bold)
+    int allyDownSteps = 450;           // friends going down within this long count together
+    int calloutEvery = 150;            // steps between one fighter's call-outs
+    float calloutHearing = 15.0f;      // the same call by a friend this near, lately, isn't repeated
+    float surroundMin = 3.0f;          // a melee fighter further than this from a target a friend is at goes round to its far side
 };
 
 class COLONY_API FighterSystem {
@@ -215,6 +267,14 @@ public:
     void setMelee(MeleeSystem* melee) { melee_ = melee; }
     // Fog and the rest shorten how far a fighter under the open sky spots enemies (docs/design/weather.md).
     void setWeather(const Weather* weather) { weather_ = weather; }
+    // The world seed, for each fighter's own roll of how bold it is (team play).
+    void setSeed(uint64_t seed) { seed_ = seed; }
+    // How bold `pawn` is, 0 to 1 (team play): side, traits, skill and its own roll.
+    float aggression(Entity pawn) const;
+    // Team play: friends downed or killed this step shake those near them; enemies downed are called out.
+    void noteLosses(const std::vector<Event>& events, size_t from);
+    // Counters for tests and simrun: how often each part was taken up.
+    uint64_t roleCount(TeamRole role) const { return roleCounts_[static_cast<int>(role)]; }
 
     // Sprinting now (sneed): running from enemies (routed, falling back, fleeing by its response, heading for shelter) or
     // charging in to melee. The movement speed is times FighterRules sprintSpeedFactor. Never the player's pawn (its keys sprint).
@@ -358,6 +418,26 @@ private:
     void calmDown(Entity pawn, Fighter& f);
     bool staysAlert(const Fighter& f) const;
     float noiseOf(DefId def, float fallback) const;
+    // FighterTeam.cpp (team play).
+    void suppressionStep();
+    void chooseRole(Entity pawn, Fighter& f, const PawnInfo& self, const PawnInfo* target, float tx, float ty, float range);
+    bool pushReason(Entity pawn, const Fighter& f, const PawnInfo& target, float range) const;
+    bool shaken(const Fighter& f, Entity pawn) const;
+    void callOut(Entity pawn, Fighter& f, Callout c);
+    // Where a melee fighter runs to: the target's cell, or its far side from a friend already at it.
+    CellPos chargeGoal(Entity pawn, const PawnInfo& self, CellPos targetCell, float tx, float ty) const;
+    // The part's terms in a spot's score (Suppress, Flank, Push).
+    struct TeamTerms {
+        TeamRole role = TeamRole::None;
+        bool hasPin = false;
+        float tx = 0.0f, ty = 0.0f;   // the target, as last seen
+        CellPos targetCell;
+        float pinX = 0.0f, pinY = 0.0f;  // where the friends pinning it shoot from (their middle)
+        float selfX = 0.0f, selfY = 0.0f;
+        int8_t side = 0;
+    };
+    TeamTerms teamTerms(Entity pawn, const Fighter& f, const PawnInfo* target, float tx, float ty) const;
+    float teamScore(const TeamTerms& t, const Fighter& f, CellPos c, float cx, float cy);
 
     Things& things_;
     Map& map_;
@@ -391,6 +471,8 @@ private:
     std::vector<KnownEnemy> called_;     // scratch for one friend's firsthand knowledge
     std::vector<KnownEnemy> learned_;    // scratch for one look
     std::vector<Entity> hearers_;        // scratch for one noise
+    uint64_t seed_ = 0;
+    uint64_t roleCounts_[5] = {};
 };
 
 }  // namespace colony
