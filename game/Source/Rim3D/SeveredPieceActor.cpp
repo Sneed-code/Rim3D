@@ -1,5 +1,6 @@
 #include "SeveredPieceActor.h"
 
+#include "AnimationRuntime.h"
 #include "Components/PoseableMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -9,6 +10,7 @@
 #include "Rendering/SkeletalMeshRenderData.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
+#include "GroomAsset.h"
 #include "GroomComponent.h"
 
 #include "BloodSubsystem.h"
@@ -112,26 +114,27 @@ namespace
 		return Mesh.IsVisible() && !Mesh.bHiddenInGame && !(Owner && Owner->IsHidden());
 	}
 
-	/** Whether any of a mesh's skin hangs on a bone or on a bone under it. */
-	bool SeveredSkinnedTo(const USkeletalMesh& Asset, int32 Bone)
+	/** How much of a mesh's skin hangs on a bone or under it: the share of the bones its skin uses, 0 to 1. */
+	float SeveredSkinnedTo(const USkeletalMesh& Asset, int32 Bone)
 	{
 		const FSkeletalMeshRenderData* Data = Asset.GetResourceForRendering();
 		if (!Data || Data->LODRenderData.Num() == 0)
 		{
-			return true;
+			return 1.0f;
 		}
 		const FReferenceSkeleton& Skeleton = Asset.GetRefSkeleton();
+		TSet<int32> Used;
+		int32 OnPiece = 0;
 		for (const FSkelMeshRenderSection& Section : Data->LODRenderData[0].RenderSections)
 		{
 			for (const FBoneIndexType Index : Section.BoneMap)
 			{
-				if (Index == Bone || Skeleton.BoneIsChildOf(Index, Bone))
-				{
-					return true;
-				}
+				bool bSeen = false;
+				Used.Add(Index, &bSeen);
+				OnPiece += !bSeen && (Index == Bone || Skeleton.BoneIsChildOf(Index, Bone)) ? 1 : 0;
 			}
 		}
-		return false;
+		return Used.IsEmpty() ? 0.0f : static_cast<float>(OnPiece) / static_cast<float>(Used.Num());
 	}
 
 	/** The component whose pose a mesh shows: itself, or the top of its leader chain. */
@@ -355,9 +358,13 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		}
 		const FReferenceSkeleton& Skeleton = Asset->GetRefSkeleton();
 		const int32 CutIndex = Skeleton.FindBoneIndex(Bone);
-		if (CutIndex == INDEX_NONE || !SeveredSkinnedTo(*Asset, CutIndex))
+		// Nothing of this mesh on the piece (a face has arm bones, but no arm): left out. A head only takes what is
+		// mostly head (the face, a hat): a shirt's collar or the body's neck skin, a little of it hanging on the head
+		// bone, was drawn out into a jagged shard under the head.
+		const float Share = CutIndex == INDEX_NONE ? 0.0f : SeveredSkinnedTo(*Asset, CutIndex);
+		if (Share < 0.01f || (Bit == colony::kSeveredHead && Share < 0.5f))
 		{
-			continue;  // nothing of this mesh is on the piece (a face has arm bones, but no arm)
+			continue;
 		}
 		UPoseableMeshComponent* Copy = NewObject<UPoseableMeshComponent>(Piece);
 		Copy->SetSkinnedAssetAndUpdate(Asset);
@@ -415,6 +422,40 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 	}
 	// What sat on the bone as a plain mesh (hair cards, a hat, horns) goes with the piece. Hair strands (grooms) cannot
 	// be copied, so the hair cards stand in for them on a severed head even up close.
+	// The hair, brows and beard of a head seen from close by are strands (grooms): each goes with the head as it grew
+	// (unbound, so in its rest shape), set where the head is now. From further off the hair cards stand in (below).
+	const bool bStrands = Bit == colony::kSeveredHead && Detail == ESimPawnDetail::Full;
+	if (bStrands)
+	{
+		for (USceneComponent* Candidate : Grooms)
+		{
+			const UGroomComponent* Groom = Cast<UGroomComponent>(Candidate);
+			const USkinnedMeshComponent* Face = Groom ? Cast<USkinnedMeshComponent>(Groom->GetAttachParent()) : nullptr;
+			const USkeletalMesh* FaceAsset = Face ? Cast<USkeletalMesh>(Face->GetSkinnedAsset()) : nullptr;
+			if (!FaceAsset || !Groom->GroomAsset || EmptyGrooms.Contains(Groom->GetFName()) || (bHairHidden && Groom->GetName().Contains(TEXT("Hair"))))
+			{
+				continue;
+			}
+			const int32 Head = FaceAsset->GetRefSkeleton().FindBoneIndex(Bone);
+			const USkinnedMeshComponent* Pose = SeveredPoseOf(Face);
+			const int32 From = Pose->GetBoneIndex(Bone);
+			if (Head == INDEX_NONE || From == INDEX_NONE)
+			{
+				continue;
+			}
+			const FTransform Rest = FAnimationRuntime::GetComponentSpaceTransformRefPose(FaceAsset->GetRefSkeleton(), Head);
+			UGroomComponent* Copy = NewObject<UGroomComponent>(Piece);
+			Copy->SetGroomAsset(Groom->GroomAsset);
+			for (int32 i = 0; i < Groom->GetNumMaterials(); ++i)
+			{
+				Copy->SetMaterial(i, Groom->GetMaterial(i));
+			}
+			Copy->SetupAttachment(Piece->GetRootComponent());
+			Copy->RegisterComponent();
+			Copy->SetWorldTransform(Groom->GetRelativeTransform() * Rest.Inverse() * Pose->GetBoneTransform(From));
+			UE_LOG(LogTemp, Log, TEXT("Severed piece 0x%x: strands %s (%s)"), Bit, *Groom->GetName(), *Groom->GroomAsset->GetName());
+		}
+	}
 	TInlineComponentArray<UStaticMeshComponent*> Worn;
 	GetComponents(Worn);
 	if (MetaHuman)
@@ -427,7 +468,7 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 	{
 		const USkinnedMeshComponent* On = Part ? Cast<USkinnedMeshComponent>(Part->GetAttachParent()) : nullptr;
 		const FName Socket = Part ? Part->GetAttachSocketName() : NAME_None;
-		if (!On || Socket.IsNone() || !Part->GetStaticMesh())
+		if (!On || Socket.IsNone() || !Part->GetStaticMesh() || (bStrands && Part == HairCards.Get()))
 		{
 			continue;
 		}
