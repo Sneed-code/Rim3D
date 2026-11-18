@@ -1,4 +1,5 @@
 #include "FightSubsystem.h"
+#include "SeveredPieceActor.h"
 
 #include "BloodSubsystem.h"
 
@@ -1107,6 +1108,44 @@ void UFightSubsystem::SyncPawns()
 			Actor->StopRagdoll();
 		}
 	}
+	// Severed pieces (body-health.md part F): one thrown from its body when the sim first shows it, gone when the sim
+	// has let it rot away. A piece whose body has no actor yet waits for it.
+	TSet<uint32> Lying;
+	for (const colony::SeveredPieceView& Piece : Bridge->GetCurrentSnapshot().severedPieces)
+	{
+		Lying.Add(Piece.id);
+		if (SeveredPieces.Contains(Piece.id))
+		{
+			continue;
+		}
+		if (ASimPawnActor* From = Pawns->FindPawn(Piece.from))
+		{
+			ASeveredPieceActor* Thrown = From->SpawnSeveredPiece(Piece.bit);
+			SeveredPieces.Add(Piece.id, Thrown);
+			SeveredPiecesThrown += Thrown ? 1 : 0;
+		}
+	}
+	for (auto It = SeveredPieces.CreateIterator(); It; ++It)
+	{
+		if (!Lying.Contains(It.Key()))
+		{
+			if (ASeveredPieceActor* Gone = It.Value().Get())
+			{
+				Gone->Destroy();
+			}
+			It.RemoveCurrent();
+		}
+	}
+}
+
+int32 UFightSubsystem::GetSeveredPiecesShown() const
+{
+	int32 Shown = 0;
+	for (const TPair<uint32, TWeakObjectPtr<ASeveredPieceActor>>& Piece : SeveredPieces)
+	{
+		Shown += Piece.Value.IsValid() ? 1 : 0;
+	}
+	return Shown;
 }
 
 // ---------------------------------------------------------------------------

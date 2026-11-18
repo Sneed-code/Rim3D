@@ -162,6 +162,13 @@ public:
 	bool GetRagdollPelvis(FVector& OutLocation) const;
 	int32 GetRagdollsStarted() const { return RagdollsStarted; }
 
+	/** Dismemberment (body-health.md part F): the limbs and head the sim says are gone (SeveredBits) are folded away on
+	 *  every mesh, and what hung on them is hidden. Only ever more: a body does not grow them back. */
+	void ApplySevered(uint16 Bits);
+	uint16 GetSeveredShown() const { return SeveredShown; }
+	/** The piece itself, as the body has it now, thrown clear (SeveredPieceActor.cpp). Null if the body has no such bone. */
+	class ASeveredPieceActor* SpawnSeveredPiece(uint16 Bit);
+
 	/** The mesh that wears wound decals: the MetaHuman's body if there is one, else the mannequin. */
 	USkeletalMeshComponent* GetDecalMesh() const;
 	/** Where the line From-To first meets the drawn body (the animated mannequin's physics shapes, which every body
@@ -348,6 +355,7 @@ private:
 	FSimPawnLooks Looks;
 	bool bHasLooks = false;
 	bool bRagdoll = false;
+	uint16 SeveredShown = 0;
 	int32 RagdollsStarted = 0;
 	float ReactionAge = kHitReactionSeconds;
 	int32 HitClipsPlayed = 0;
