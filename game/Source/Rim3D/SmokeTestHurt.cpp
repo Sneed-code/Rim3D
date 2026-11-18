@@ -18,6 +18,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Things.h"
 
 namespace
 {
@@ -130,7 +131,9 @@ void USmokeTestSubsystem::BuildHurtPhases()
 			B->SetSpeed(1);
 			for (const colony::ThingView& Thing : B->GetCurrentSnapshot().things)
 			{
-				if (Thing.category == colony::ThingCategory::Pawn && B->GetSim()->colonistOf(Thing.id))
+				// Not the protagonist: plot armour means no bleeding to patch, no downing and no dismemberment.
+				const colony::Health* Health = B->GetSim()->things().registry().try_get<colony::Health>(Thing.id);
+				if (Thing.category == colony::ThingCategory::Pawn && B->GetSim()->colonistOf(Thing.id) && Health && !Health->protagonist)
 				{
 					State->Pawn = Thing.id;
 					break;
@@ -138,7 +141,7 @@ void USmokeTestSubsystem::BuildHurtPhases()
 			}
 			if (State->Pawn == colony::kNoEntity)
 			{
-				Fail(TEXT("setup: no colonist"));
+				Fail(TEXT("setup: no colonist besides the protagonist"));
 				return;
 			}
 			B->Submit(colony::DraftCommand{State->Pawn, true});
@@ -323,12 +326,13 @@ void USmokeTestSubsystem::BuildHurtPhases()
 	}
 
 	{
-		// A cut on the torso bleeds; the colonist patches it (on the order, or by itself first).
+		// A cut that takes the torso to 70% bleeds (a zone bleeds at 75% or less); the colonist patches it (on the order,
+		// or by itself first).
 		FPhase Phase;
 		Phase.Name = TEXT("patch");
 		Phase.Setup = [=, this]()
 		{
-			if (!Damage("Cut", 14.0f, "torso"))
+			if (!Damage("Cut", 30.0f, "torso"))
 			{
 				Fail(TEXT("patch: could not cut the torso"));
 			}
