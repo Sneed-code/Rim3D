@@ -1160,15 +1160,6 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.value("pawn", c.pawn);
         ar.value("dx", c.dx);
         ar.value("dy", c.dy);
-    } else if constexpr (std::is_same_v<Type, LevelEarthCommand>) {
-        auto* level = &c;
-        ar.group("area", [&] { saveRect(ar, level->area); });
-        ar.value("baseCm", level->baseCm);
-    } else if constexpr (std::is_same_v<Type, CancelEarthworksCommand>) {
-        auto* cancelEarth = &c;
-        ar.group("area", [&] { saveRect(ar, cancelEarth->area); });
-    } else if constexpr (std::is_same_v<Type, UnstuckCommand>) {
-        ar.value("pawn", c.pawn);
     } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
         ar.value("pawn", c.pawn);
         ar.text("care", c.care);
@@ -1325,6 +1316,15 @@ void saveCommandTail(Ar& ar, Type& c) {
             ar.text("arrival", c.arrival);
             ar.value("x", c.x);
             ar.value("y", c.y);
+        } else if constexpr (std::is_same_v<Type, LevelEarthCommand>) {
+            auto* level = &c;
+            ar.group("area", [&] { saveRect(ar, level->area); });
+            ar.value("baseCm", level->baseCm);
+        } else if constexpr (std::is_same_v<Type, CancelEarthworksCommand>) {
+            auto* cancelEarth = &c;
+            ar.group("area", [&] { saveRect(ar, cancelEarth->area); });
+        } else if constexpr (std::is_same_v<Type, UnstuckCommand>) {
+            ar.value("pawn", c.pawn);
         } else {
             static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
         }

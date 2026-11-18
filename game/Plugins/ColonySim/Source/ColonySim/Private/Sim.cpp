@@ -1182,6 +1182,26 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         return;
     }
     // Apart from the chain below: MSVC stops at 128 nested else-ifs (C1061).
+    if (const auto* levelEarth = std::get_if<LevelEarthCommand>(&command)) {
+        const float base = std::round(static_cast<float>(levelEarth->baseCm) / 100.0f / Map::kLevelStepM) * Map::kLevelStepM;
+        if (construction_->planLevelEarth(levelEarth->area, base) == 0) {
+            commandFailed(id, "no ground there can be levelled to that height");
+        }
+        return;
+    }
+    if (const auto* cancelEarth = std::get_if<CancelEarthworksCommand>(&command)) {
+        if (construction_->cancelEarthworks(cancelEarth->area) == 0) {
+            commandFailed(id, "no earthworks planned there");
+        }
+        return;
+    }
+    if (const auto* unstuck = std::get_if<UnstuckCommand>(&command)) {
+        std::string why;
+        if (!unstuckPawn(unstuck->pawn, why)) {
+            commandFailed(id, why);
+        }
+        return;
+    }
     if (const auto* pod = std::get_if<PodCommand>(&command)) {
         applyPodCommand(*pod, id);
         return;
@@ -1753,19 +1773,6 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* climb = std::get_if<ClimbCommand>(&command)) {
         if (!startClimb(climb->pawn, climb->dx, climb->dy, error)) {
-            commandFailed(id, error);
-        }
-    } else if (const auto* levelEarth = std::get_if<LevelEarthCommand>(&command)) {
-        const float base = std::round(static_cast<float>(levelEarth->baseCm) / 100.0f / Map::kLevelStepM) * Map::kLevelStepM;
-        if (construction_->planLevelEarth(levelEarth->area, base) == 0) {
-            commandFailed(id, "no ground there can be levelled to that height");
-        }
-    } else if (const auto* cancelEarth = std::get_if<CancelEarthworksCommand>(&command)) {
-        if (construction_->cancelEarthworks(cancelEarth->area) == 0) {
-            commandFailed(id, "no earthworks planned there");
-        }
-    } else if (const auto* unstuck = std::get_if<UnstuckCommand>(&command)) {
-        if (!unstuckPawn(unstuck->pawn, error)) {
             commandFailed(id, error);
         }
     } else if (const auto* roll = std::get_if<DodgeRollCommand>(&command)) {
