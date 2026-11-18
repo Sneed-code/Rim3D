@@ -454,6 +454,7 @@ void USmokeTestSubsystem::BuildHurtPhases()
 		Phase.Setup = []() { HurtSmokeRealBodies(true); };
 		Phase.WarmupSeconds = 0.0f;
 		Phase.MeasureSeconds = 9.0f;
+		Phase.ScreenshotAt = 7.5f;  // after the cut (2.5 s in) and the pieces' landing: the picture shows the result
 		Phase.OnFrame = [=, this]()
 		{
 			View();
