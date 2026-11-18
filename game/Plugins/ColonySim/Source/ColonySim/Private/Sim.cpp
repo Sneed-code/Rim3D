@@ -1033,6 +1033,9 @@ std::string Sim::feedName(Entity pawn) const {
     if (const AnimalCare* care = husbandry_->care(pawn); care != nullptr && !care->name.empty()) {
         return care->name;
     }
+    if (const PawnLooks* looks = reg.try_get<PawnLooks>(pawn); looks != nullptr && !looks->name.empty()) {
+        return looks->name;
+    }
     const Thing* thing = reg.try_get<Thing>(pawn);
     if (thing == nullptr || !thing->def.valid()) {
         return "Someone";
@@ -1282,7 +1285,11 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             jobs_->addWorker(thing);  // until factions: every pawn is a colonist
             const uint64_t looksSeed = splitMix64(settings_.seed ^ 0x7370617776ULL ^ (static_cast<uint64_t>(time_.seconds) << 20) ^
                                                   entt::to_integral(thing));
-            giveLooks(thing, looksSeed, (splitMix64(looksSeed) & 1) != 0, "Baseline");
+            const bool female = (splitMix64(looksSeed) & 1) != 0;
+            giveLooks(thing, looksSeed, female, "Baseline");
+            if (PawnLooks* looks = things_->registry().try_get<PawnLooks>(thing)) {
+                looks->name = randomFirstName(*defs_, looksSeed, looks->female);  // so the HP bar and the kill feed name it
+            }
         }
     } else if (const auto* destroy = std::get_if<DestroyThingCommand>(&command)) {
         if (!things_->exists(destroy->thing) || !things_->registry().all_of<Thing>(destroy->thing)) {
@@ -3534,6 +3541,7 @@ uint64_t Sim::stateHash() const {
             h.add(looks->hairStyle.data(), looks->hairStyle.size());
             h.add(looks->naturalBeard.data(), looks->naturalBeard.size());
             h.add(looks->beard.data(), looks->beard.size());
+            h.add(looks->name.data(), looks->name.size());
             h.add(looks->naturalBodyHair);
             h.add(looks->bodyHair);
             for (const std::vector<LooksMark>* marks : {&looks->tattoos, &looks->scars}) {
