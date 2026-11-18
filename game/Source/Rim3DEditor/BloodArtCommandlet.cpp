@@ -304,8 +304,8 @@ namespace
 		// Roughness: matte when dry; wet blood shines where it is thick, but soaks into the ground: not a mirror
 		// (PC look, 2026-11-18: 0.04 made pools a glossy sheet of paint).
 		auto* WetRough = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -650, 0);
-		WetRough->ConstA = 0.5f;
-		WetRough->ConstB = 0.22f;
+		WetRough->ConstA = 0.62f;  // (close-ups of pools, 2026-11-18: 0.5 to 0.22 still shone like plastic)
+		WetRough->ConstB = 0.42f;
 		BloodArtConnect(Sample, TEXT("G"), WetRough, TEXT("Alpha"));
 		auto* DryRough = BloodArtNode<UMaterialExpressionConstant>(Material, -650, 100);
 		DryRough->R = 0.72f;
@@ -313,7 +313,7 @@ namespace
 		UMaterialEditingLibrary::ConnectMaterialProperty(Roughness, TEXT(""), MP_Roughness);
 		auto* Specular = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -450, 150);
 		Specular->ConstA = 0.3f;
-		Specular->ConstB = 0.5f;
+		Specular->ConstB = 0.38f;
 		BloodArtConnect(Wet, TEXT(""), Specular, TEXT("Alpha"));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Specular, TEXT(""), MP_Specular);
 
