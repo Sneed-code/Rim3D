@@ -1,6 +1,8 @@
 # Status
 
-Updated 2026-11-17.
+Updated 2026-11-18.
+
+Combat range rebuilt on today's game (sneed, 2026-11-18; Unreal and data, `docs/design/gun-range.md`): `tools\play-gunrange.bat` now plays everything merged today: **no reloads** (bursts, then the thin yellow cooldown bar), **Tab** locks on (also to the range's own women) with the HP bar top middle, F1 lets go, the **six Codex melee models** (GPT 6.2 Sol: knife, gladius, longsword, mace, club, spear; FBX in `assets/raw/melee/`, GunArt imports them) held and swung by the first-person arms (raised into view), the runners and the brawler are run by the sim's own fight responses so they **sprint**, K new targets (N is sleep now), U stealth guards. Smoke test passes on the PC (39 shots, 0 reloads, Tab locked on, every melee weapon a model, blood and screams). Not seen in the test: the brawler charging and punching (she was shot down first); the HP bar names her "human".
 
 Melee by material, far shots and real ranges (sneed, 2026-11-17; sim, data, tools and Unreal): melee blows sound by what strikes what (**wood or steel weapons on flesh, wood, steel or stone**: parries, shields, armour, walls, rock); gunshots and blasts are **heard as late as sound travels** and turn into a low boom and echo with distance (far explosions a dull thud); every cue has a real hearing range (rifle 2.5 km, pistol 1.5 km, blasts 4 km, steel clash 160 m). Screams: every downing, and again when killed while awake (the quick second scream was blocked). `docs/design/sound.md` "Melee by material...". **Next: run `tools/sound_assets.py` on the PC for the new recordings, then sneed listens.**
 
