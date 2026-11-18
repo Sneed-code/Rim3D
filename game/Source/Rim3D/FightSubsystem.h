@@ -152,6 +152,7 @@ public:
 	}
 	int32 GetFlashes() const { return Flashes; }
 	int32 GetTracersSpawned() const { return TracersSpawned; }
+	int32 GetMuzzleShots() const { return MuzzleShots; }
 	int32 GetTracersArrived() const { return TracersArrived; }
 	/** Tracers given up on: the bullet never showed in a snapshot, or flew too far or too long without a hit. */
 	int32 GetTracersDropped() const { return TracersDropped; }
@@ -179,6 +180,9 @@ public:
 	int32 GetBodyDecals() const { return BodyDecals; }
 	int32 GetGroundDecals() const { return GroundDecals; }
 	int32 GetRagdollsStarted() const { return RagdollsStarted; }
+	/** Severed limbs and heads on the ground now, and how many were thrown since the start (body-health.md part F). */
+	int32 GetSeveredPiecesShown() const;
+	int32 GetSeveredPiecesThrown() const { return SeveredPiecesThrown; }
 	int32 GetFireOrders() const { return FireOrders; }
 	int32 GetHitMarkers() const { return HitMarkers; }
 	int32 GetActiveTracers() const { return Tracers.Num(); }
@@ -239,6 +243,11 @@ private:
 	void OnProjectileHit(const colony::Event& Event);
 	void SpawnImpact(const FFightTracer& Tracer);
 	void SpawnFlash(const FVector& Muzzle);
+	/** Where the drawn gun's muzzle is for a shot by Shooter: the first-person view gun's, else the front end of the gun
+	 *  in its hands. False (Out unchanged) when no drawn gun is near the sim's muzzle point. */
+	bool FindDrawnMuzzle(colony::Entity Shooter, FVector& InOutMuzzle) const;
+	/** The player's thin yellow bar under the gun's name: how far the gun's shots have refilled, and pips for the shots left. */
+	void DrawShotStore(const colony::ThingView& View, float Scale) const;
 	void SpawnBurst(EFightParticle Kind, const FVector& At, const FVector& Direction, int32 Count, float Speed, float Spread, float SizeCm, float Life, float Gravity);
 	void SpawnBodyDecal(ASimPawnActor& Actor, const FVector& At, const FVector& Direction, float Amount);
 	void SpawnGroundDecal(const FVector& At, float RadiusCm);
@@ -332,6 +341,8 @@ private:
 	int32 PawnHitsSeen = 0;
 	int32 Flashes = 0;
 	int32 TracersSpawned = 0;
+	/** Shots whose flash and tracer started at the drawn gun's muzzle. */
+	int32 MuzzleShots = 0;
 	int32 TracersArrived = 0;
 	int32 TracersDropped = 0;
 	int32 Impacts = 0;
@@ -341,6 +352,8 @@ private:
 	int32 BodyDecals = 0;
 	int32 GroundDecals = 0;
 	int32 RagdollsStarted = 0;
+	TMap<uint32, TWeakObjectPtr<class ASeveredPieceActor>> SeveredPieces;  // by the sim's piece id
+	int32 SeveredPiecesThrown = 0;
 	int32 FireOrders = 0;
 	int32 HitMarkers = 0;
 	int32 HitboxesDrawn = 0;

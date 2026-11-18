@@ -5,16 +5,20 @@
 #include "SmokeTest.h"
 
 #include "Components/SkeletalMeshComponent.h"
+#include "EngineUtils.h"
 
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
+#include "FightSubsystem.h"
 #include "PawnSubsystem.h"
+#include "SeveredPieceActor.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Commands.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Things.h"
 
 namespace
 {
@@ -45,6 +49,10 @@ namespace
 		bool bCrawlSeen = false;
 		bool bCrawlPlayed = false;
 		bool bRagdollWhileCrawling = false;
+		// dismember
+		bool bKillSent = false;
+		int32 MaxPiecesShown = 0;
+		int32 PiecesAtRest = 0;
 	};
 
 	int32 HurtSmokePart(const colony::Sim& Sim, const colony::ThingView& View, const char* Label)
@@ -123,7 +131,9 @@ void USmokeTestSubsystem::BuildHurtPhases()
 			B->SetSpeed(1);
 			for (const colony::ThingView& Thing : B->GetCurrentSnapshot().things)
 			{
-				if (Thing.category == colony::ThingCategory::Pawn && B->GetSim()->colonistOf(Thing.id))
+				// Not the protagonist: plot armour means no bleeding to patch, no downing and no dismemberment.
+				const colony::Health* Health = B->GetSim()->things().registry().try_get<colony::Health>(Thing.id);
+				if (Thing.category == colony::ThingCategory::Pawn && B->GetSim()->colonistOf(Thing.id) && Health && !Health->protagonist)
 				{
 					State->Pawn = Thing.id;
 					break;
@@ -131,7 +141,7 @@ void USmokeTestSubsystem::BuildHurtPhases()
 			}
 			if (State->Pawn == colony::kNoEntity)
 			{
-				Fail(TEXT("setup: no colonist"));
+				Fail(TEXT("setup: no colonist besides the protagonist"));
 				return;
 			}
 			B->Submit(colony::DraftCommand{State->Pawn, true});
@@ -316,12 +326,13 @@ void USmokeTestSubsystem::BuildHurtPhases()
 	}
 
 	{
-		// A cut on the torso bleeds; the colonist patches it (on the order, or by itself first).
+		// A cut that takes the torso to 70% bleeds (a zone bleeds at 75% or less); the colonist patches it (on the order,
+		// or by itself first).
 		FPhase Phase;
 		Phase.Name = TEXT("patch");
 		Phase.Setup = [=, this]()
 		{
-			if (!Damage("Cut", 14.0f, "torso"))
+			if (!Damage("Cut", 30.0f, "torso"))
 			{
 				Fail(TEXT("patch: could not cut the torso"));
 			}
@@ -418,6 +429,72 @@ void USmokeTestSubsystem::BuildHurtPhases()
 			}
 			Notes.Add(FString::Printf(TEXT("crawl: downed by the torso after %d blows; crawl clip %s (played %d times)"), State->Blows, State->bCrawlPlayed ? TEXT("playing") : TEXT("missing"),
 				Actor ? Actor->GetCrawlsPlayed() : 0));
+		};
+		Phases.Add(MoveTemp(Phase));
+	}
+
+	{
+		// Part F: a blow to the torso far over what it has left kills, and the body comes apart: the head and all four
+		// limbs are folded away on the corpse and lie about as five pieces.
+		FPhase Phase;
+		Phase.Name = TEXT("dismember");
+		Phase.Setup = []() {};
+		Phase.WarmupSeconds = 0.0f;
+		Phase.MeasureSeconds = 6.0f;
+		Phase.OnFrame = [=, this]()
+		{
+			View();
+			if (!State->bKillSent && PhaseTime > 0.5f)
+			{
+				State->bKillSent = Damage("Blunt", 400.0f, "torso");
+			}
+			if (const UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>())
+			{
+				State->MaxPiecesShown = FMath::Max(State->MaxPiecesShown, Fight->GetSeveredPiecesShown());
+			}
+		};
+		Phase.Verify = [=, this]()
+		{
+			USimSubsystem* B = Bridge();
+			const ASimPawnActor* Actor = ActorOf();
+			const colony::ThingView* Now = B ? B->GetCurrentSnapshot().find(State->Pawn) : nullptr;
+			const uint16 All = colony::kSeveredHead | colony::kSeveredLeftArm | colony::kSeveredRightArm | colony::kSeveredLeftLeg | colony::kSeveredRightLeg;
+			const int32 SimPieces = B ? static_cast<int32>(B->GetCurrentSnapshot().severedPieces.size()) : 0;
+			PhaseNumbers.Add(TEXT("sim_pieces"), SimPieces);
+			PhaseNumbers.Add(TEXT("pieces_shown"), State->MaxPiecesShown);
+			PhaseNumbers.Add(TEXT("severed_sim"), Now ? Now->severed : 0);
+			PhaseNumbers.Add(TEXT("severed_shown"), Actor ? Actor->GetSeveredShown() : 0);
+			if (!Now || !Now->dead)
+			{
+				Fail(TEXT("dismember: 400 blunt damage to the torso did not kill the colonist"));
+				return;
+			}
+			if (Now->severed != All || SimPieces != 5)
+			{
+				Fail(FString::Printf(TEXT("dismember: the sim took off 0x%x (0x%x expected) and left %d pieces (5 expected)"), Now->severed, All, SimPieces));
+			}
+			if (!Actor || Actor->GetSeveredShown() != Now->severed)
+			{
+				Fail(FString::Printf(TEXT("dismember: the body shows 0x%x cut off, the sim says 0x%x"), Actor ? Actor->GetSeveredShown() : 0, Now->severed));
+			}
+			if (State->MaxPiecesShown != SimPieces)
+			{
+				Fail(FString::Printf(TEXT("dismember: %d pieces drawn for the sim's %d"), State->MaxPiecesShown, SimPieces));
+			}
+			int32 AtRest = 0;
+			int32 Meshes = 0;
+			for (TActorIterator<ASeveredPieceActor> It(GetWorld()); It; ++It)
+			{
+				AtRest += It->IsAtRest() ? 1 : 0;
+				Meshes += It->GetMeshCount();
+			}
+			PhaseNumbers.Add(TEXT("pieces_at_rest"), AtRest);
+			PhaseNumbers.Add(TEXT("piece_meshes"), Meshes);
+			if (AtRest != State->MaxPiecesShown)
+			{
+				Fail(FString::Printf(TEXT("dismember: %d of %d pieces had come to rest after 5 s"), AtRest, State->MaxPiecesShown));
+			}
+			Notes.Add(FString::Printf(TEXT("dismember: head and four limbs off; %d pieces thrown, %d meshes in them, %d at rest"), State->MaxPiecesShown, Meshes, AtRest));
 		};
 		Phases.Add(MoveTemp(Phase));
 	}

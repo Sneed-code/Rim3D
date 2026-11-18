@@ -38,6 +38,7 @@ struct CombatModel {
         int burstGap = 0;  // steps
         float accuracy[4] = {1.0f, 1.0f, 1.0f, 1.0f};  // touch, short, medium, long
         float recoil = 0.0f;
+        bool store = false;  // sneed's cooldown bursts: the shots are a store refilled by the cooldown (no magazine)
         int magazine = 0;    // rounds; 0 for none (never reloads)
         int reloadTime = 0;  // steps, at the skill where reloadTimeFactorBySkill is 1
         // The player's gun kick per shot of a spray (P2), degrees: up, then to the right. The shot
@@ -108,6 +109,9 @@ struct CombatModel {
     std::vector<float> stuffBlunt;  // meleeBluntDamage
     std::vector<uint8_t> slot;      // by Things DefId value: the WeaponSlot of a weapon, 255 for none (P1)
     int switchSteps[kWeaponSlotCount] = {36, 18, 27};  // CombatRules weaponSwitchSteps, by the slot switched to
+    // CombatRules cooldownBursts (sneed): a gun's shots are a store that refills `cooldown` steps after the first of
+    // them, fired one at a time by the player, all at once by fighters. Off: RimWorld's burst, then the cooldown.
+    bool cooldownBursts = false;
     DefId bluntDamage;
 
     float accuracyBySkill[21] = {};
@@ -402,6 +406,19 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         }
     }
 
+    struct {
+        bool on = false;
+        float shotsFactor = 1.0f;
+        float gapFactor = 1.0f;
+        bool reloads = true;
+    } bursts;
+    if (const Def* rules = defs.find("Rules", "CombatRules"); rules != nullptr && rules->has("cooldownBursts")) {
+        bursts.on = true;
+        bursts.shotsFactor = combatNum(*rules, "cooldownBursts.shotsFactor", 1.0);
+        bursts.gapFactor = combatNum(*rules, "cooldownBursts.gapFactor", 1.0);
+        bursts.reloads = rules->flag("cooldownBursts.reloads", true);
+    }
+    cooldownBursts = bursts.on;
     for (const DefId id : defs.idsOfKind(kCombatThingsKind)) {
         const Def& def = defs.get(id);
         if (def.has("verbs.0.defaultProjectile")) {
@@ -413,12 +430,22 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
             g.cooldown = static_cast<int>(std::lround(def.number("stats.rangedWeaponCooldown")));
             g.burst = std::max(1, static_cast<int>(def.integer("verbs.0.burstShotCount", 1)));
             g.burstGap = static_cast<int>(std::lround(def.number("verbs.0.secondsBetweenBurstShots")));
+            // sneed's cooldown bursts (docs/design/aiming.md "Cooldown bursts"): three times the shots, half the gap
+            // between them (half the cooldown for a gun that fired one), the cooldown counted from the first shot and
+            // no reloads. Snipers, bows and launchers (`keepBurst`) keep their shots and gaps.
+            // A gun marked `reloads` keeps RimWorld's burst and its magazine.
+            g.store = bursts.on && !bursts.reloads && !def.flag("reloads");
+            if (g.store && !def.flag("keepBurst")) {
+                const int gap = g.burst > 1 ? g.burstGap : g.cooldown;
+                g.burst = std::max(1, static_cast<int>(std::lround(static_cast<float>(g.burst) * bursts.shotsFactor)));
+                g.burstGap = std::max(1, static_cast<int>(std::lround(static_cast<float>(gap) * bursts.gapFactor)));
+            }
             const char* acc[4] = {"stats.accuracyTouch", "stats.accuracyShort", "stats.accuracyMedium", "stats.accuracyLong"};
             for (int i = 0; i < 4; ++i) {
                 g.accuracy[i] = combatNum(def, acc[i], 1.0);
             }
             g.recoil = combatNum(def, "recoilPerShot", 0.0);
-            g.magazine = std::max(0, static_cast<int>(def.integer("magazineSize", 0)));
+            g.magazine = g.store ? 0 : std::max(0, static_cast<int>(def.integer("magazineSize", 0)));
             g.reloadTime = std::max(0, static_cast<int>(std::lround(def.number("reloadTime"))));
             for (size_t k = 0; k < def.count("recoilKicks"); ++k) {
                 const std::string at = "recoilKicks." + std::to_string(k);
@@ -716,6 +743,10 @@ const CombatModel::Gun* combatGunOf(const CombatModel& model, const entt::regist
     if (base->magazine > 0) {
         const int scaled = static_cast<int>(std::lround(static_cast<float>(base->magazine) * mods->magazine));
         scratch.magazine = mods->magazine > 1.0f ? std::max(base->magazine + 1, scaled) : std::max(1, scaled);
+    }
+    if (base->store) {  // cooldown bursts: an extended magazine holds more shots in the store
+        const int scaled = static_cast<int>(std::lround(static_cast<float>(base->burst) * mods->magazine));
+        scratch.burst = mods->magazine > 1.0f ? std::max(base->burst + 1, scaled) : std::max(1, scaled);
     }
     scratch.reloadTime = static_cast<int>(std::lround(static_cast<float>(base->reloadTime) * mods->reload));
     scratch.cooldown = static_cast<int>(std::lround(static_cast<float>(base->cooldown) * mods->cooldown));
@@ -1161,6 +1192,12 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     }
     CombatModel::Gun moddedGun;
     const CombatModel::Gun& gun = *combatGunOf(*model_, reg, gear->weapon, moddedGun);
+    if (gun.store) {
+        storeFor(s, gear->weapon);
+        if (s.stored == 0) {
+            return fail("not ready to fire yet");
+        }
+    }
     if (gun.magazine > 0 && roundsLeft(pawn) <= 0) {
         startReload(pawn, s, gear->weapon, 0);
         return fail("reloading");
@@ -1171,7 +1208,8 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     s.aimZ = z;
     s.player = player;
     if (s.phase == ShotPhase::Ready || player) {
-        s.shotsLeft = gun.burst;
+        // Cooldown bursts: the player fires one shot a pull (held, one every gap), a fighter what the store holds.
+        s.shotsLeft = !gun.store ? gun.burst : player ? 1 : (s.stored < 0 ? gun.burst : s.stored);
         // Trigger-happy pawns spend half the aiming time, careful shooters a quarter more (TraitStats).
         // Worn armour's weight slows aiming, cooldown and reloading (docs/design/armour.md).
         const float armourTime = attackTimeFactor(pawn);
@@ -1199,6 +1237,15 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     CombatModel::Gun moddedGun;
     const CombatModel::Gun* gun =
         gear != nullptr && gear->weapon != kNoEntity ? combatGunOf(*model_, reg, gear->weapon, moddedGun) : nullptr;
+    if (model_->cooldownBursts) {
+        if (gun != nullptr && gun->store) {
+            storeFor(s, gear->weapon);
+        }
+        if (s.refill > 0 && --s.refill == 0) {
+            s.stored = -1;  // the cooldown since the store's first shot is over: full again
+            s.refillFrom = 0;
+        }
+    }
     if (s.phase == ShotPhase::Aiming || s.phase == ShotPhase::Firing || s.phase == ShotPhase::Reloading) {
         if (gun == nullptr || (s.phase != ShotPhase::Reloading &&
                                   (health_.incapacitated(pawn) || !things_.spawned(pawn) || reg.any_of<KnockedDown, Stunned>(pawn)))) {
@@ -1212,6 +1259,14 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
         case ShotPhase::Ready:
             return;
         case ShotPhase::Cooling:
+            if (gun != nullptr && gun->store) {
+                // The gap before the next shot, and an empty store waits for its refill.
+                s.stepsLeft = std::max(0, s.stepsLeft - 1);
+                if (s.stepsLeft == 0 && s.stored != 0) {
+                    s.phase = ShotPhase::Ready;
+                }
+                return;
+            }
             if (--s.stepsLeft <= 0) {
                 s.phase = ShotPhase::Ready;
                 s.stepsLeft = 0;
@@ -1248,6 +1303,17 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
         } else if (!aimPoint(s.target, s.aimX, s.aimY, s.aimZ)) {
             s.target = kNoEntity;
         }
+    }
+    // Cooldown bursts: a fighter's burst stops when a friend comes into the line, during the aim or between shots (bodies
+    // shove each other in a melee next to it); the store keeps the rest.
+    if (gun->store && !s.player && s.target != kNoEntity && holdFire_ && holdFire_(pawn, s.target)) {
+        s.shotsLeft = 0;
+        s.phase = ShotPhase::Cooling;
+        s.stepsLeft = std::max(0, gun->burstGap - 1);
+        if (s.stepsLeft == 0) {
+            s.phase = ShotPhase::Ready;
+        }
+        return;
     }
     const Position& pos = reg.get<Position>(pawn);
     const float dx = s.aimX - pos.x;
@@ -1330,6 +1396,29 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
         ++kick.shots;
         kick.sinceShot = 0;
     }
+    if (gun->store) {
+        if (s.stored < 0) {
+            s.stored = gun->burst;
+        }
+        if (s.refill <= 0) {  // the first shot from a full store: the cooldown starts now, and later shots don't add to it
+            // One step less: the next order comes in the step after the store shows full, so shots are the cooldown apart.
+            s.refill = std::max(1, refillSteps(pawn, gun->cooldown) - 1);
+            s.refillFrom = s.refill;
+        }
+        --s.stored;
+        if (--s.shotsLeft > 0 && s.stored > 0) {
+            s.stepsLeft = std::max(1, gun->burstGap);
+            return;
+        }
+        s.shotsLeft = 0;
+        s.phase = ShotPhase::Cooling;
+        // The gap, less the step the next order takes to come in (as with the refill).
+        s.stepsLeft = s.stored > 0 ? std::max(0, gun->burstGap - 1) : 0;
+        if (s.stepsLeft == 0 && s.stored > 0) {
+            s.phase = ShotPhase::Ready;
+        }
+        return;
+    }
     if (gun->magazine > 0) {
         Magazine& magazine = reg.get_or_emplace<Magazine>(gear->weapon, Magazine{gun->magazine});
         if (--magazine.rounds <= 0) {
@@ -1347,6 +1436,47 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
         (inspirations_ != nullptr ? static_cast<float>(inspirations_->statFactor(pawn, "fireCooldown")) : 1.0f)));
     s.phase = cooldown > 0 ? ShotPhase::Cooling : ShotPhase::Ready;
     s.stepsLeft = cooldown;
+}
+
+bool CombatSystem::cooldownBursts() const {
+    return model_->cooldownBursts;
+}
+
+int CombatSystem::refillSteps(Entity pawn, int cooldown) const {
+    return std::max(1, static_cast<int>(std::lround(
+                           static_cast<float>(cooldown) * attackTimeFactor(pawn) *
+                           (inspirations_ != nullptr ? static_cast<float>(inspirations_->statFactor(pawn, "fireCooldown")) : 1.0f))));
+}
+
+void CombatSystem::storeFor(Shooter& s, Entity weapon) {
+    if (s.storeGun != weapon) {
+        s.storeGun = weapon;
+        s.stored = -1;
+        s.refill = 0;
+        s.refillFrom = 0;
+    }
+}
+
+bool CombatSystem::shotStore(Entity pawn, int& stored, int& size, int& refillLeft, int& refillFrom) const {
+    stored = size = refillLeft = refillFrom = 0;
+    const entt::registry& reg = things_.registry();
+    const Gear* gear = reg.valid(pawn) ? reg.try_get<Gear>(pawn) : nullptr;
+    if (!model_->cooldownBursts || gear == nullptr || gear->weapon == kNoEntity) {
+        return false;
+    }
+    CombatModel::Gun moddedGun;
+    const CombatModel::Gun* gun = combatGunOf(*model_, reg, gear->weapon, moddedGun);
+    if (gun == nullptr || !gun->store) {
+        return false;
+    }
+    size = gun->burst;
+    stored = size;
+    if (const Shooter* s = reg.try_get<Shooter>(pawn); s != nullptr && s->storeGun == gear->weapon) {
+        stored = s->stored < 0 ? size : s->stored;
+        refillLeft = s->refill;
+        refillFrom = s->refillFrom;
+    }
+    return true;
 }
 
 float CombatSystem::attackTimeFactor(Entity pawn) const {
@@ -1525,6 +1655,31 @@ bool CombatSystem::gunStats(DefId weapon, GunStats& out) const {
 
 int CombatSystem::shotReadyIn(Entity pawn) const {
     const Shooter* s = things_.registry().try_get<Shooter>(pawn);
+    const Gear* storeGear = s != nullptr && model_->cooldownBursts ? things_.registry().try_get<Gear>(pawn) : nullptr;
+    CombatModel::Gun storeModded;
+    const CombatModel::Gun* storeGun = storeGear != nullptr && storeGear->weapon != kNoEntity
+                                           ? combatGunOf(*model_, things_.registry(), storeGear->weapon, storeModded)
+                                           : nullptr;
+    if (storeGun != nullptr && storeGun->store) {
+        const CombatModel::Gun* gun = storeGun;
+        const bool sameGun = storeGear->weapon == s->storeGun;
+        if (s->phase == ShotPhase::Ready || s->phase == ShotPhase::Cooling) {
+            if (!sameGun) {
+                return s->phase == ShotPhase::Cooling ? s->stepsLeft : 0;
+            }
+            return s->stored == 0 ? std::max(1, s->refill) : (s->phase == ShotPhase::Cooling ? s->stepsLeft : 0);
+        }
+        if (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing) {
+            const int gap = std::max(1, gun->burstGap);
+            const int volley = s->stepsLeft + std::max(0, s->shotsLeft - 1) * gap;
+            const int stored = !sameGun || s->stored < 0 ? gun->burst : s->stored;
+            if (stored - s->shotsLeft > 0) {
+                return volley + gap;
+            }
+            const int refill = sameGun && s->refill > 0 ? s->refill : refillSteps(pawn, gun->cooldown);
+            return std::max(volley + 1, refill);
+        }
+    }
     if (s == nullptr || s->phase == ShotPhase::Ready) {
         return 0;
     }
@@ -2991,6 +3146,10 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(s->aimZ);
         h.add(s->player);
         h.add(s->recoil);
+        h.add(s->stored);
+        h.add(s->refill);
+        h.add(s->refillFrom);
+        h.add(entt::to_integral(s->storeGun));
     }
     if (const Projectile* p = reg.try_get<Projectile>(e)) {
         h.add(p->def.value);

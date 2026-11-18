@@ -240,24 +240,25 @@ TEST_CASE("Weapons: a switch is refused when it can't be done") {
     CHECK(sim->combat().switchWeapon(pawn, WeaponSlot::Primary, &why) == false);  // switching already
 }
 
-TEST_CASE("Weapons: each gun keeps its own magazine through a switch") {
+TEST_CASE("Weapons: a gun switched into the hands has a full store of shots") {
+    // sneed's cooldown bursts: no magazines; each gun's shots refill by its cooldown, and the gun just taken up is full.
     auto sim = weapSim();
-    const Entity pawn = weapArmed(*sim, 30.5f, 30.5f, {"Gun_BoltActionRifle", "Gun_Revolver"});
+    const Entity pawn = weapArmed(*sim, 30.5f, 30.5f, {"Gun_AssaultRifle", "Gun_Revolver"});
     const Entity enemy = weapPawn(*sim, 45.5f, 30.5f);
     sim->step();
-    const int rifleSize = sim->combat().magazineSize(pawn);
-    WEAP_REQUIRE(rifleSize > 1);
+    CHECK(sim->combat().magazineSize(pawn) == 0);
     CHECK(sim->combat().shoot(pawn, enemy, 0.0f, 0.0f, 0.0f, true));
-    sim->stepMany(120);
-    const int riflerounds = sim->combat().roundsLeft(pawn);
-    CHECK(riflerounds == rifleSize - 1);
+    sim->stepMany(2);
+    int stored = 0, size = 0, left = 0, from = 0;
+    WEAP_REQUIRE(sim->combat().shotStore(pawn, stored, size, left, from));
+    CHECK(stored == size - 1);
+    CHECK(left > 0);
     CHECK(sim->combat().switchWeapon(pawn, WeaponSlot::Sidearm));
     sim->stepMany(weapSwitchSteps(*sim, "Sidearm") + 1);
-    CHECK(sim->combat().magazineSize(pawn) != rifleSize);
-    CHECK(sim->combat().roundsLeft(pawn) == sim->combat().magazineSize(pawn));  // a full revolver
-    CHECK(sim->combat().switchWeapon(pawn, WeaponSlot::Primary));
-    sim->stepMany(weapSwitchSteps(*sim, "Primary") + 1);
-    CHECK(sim->combat().roundsLeft(pawn) == riflerounds);
+    WEAP_REQUIRE(sim->combat().shotStore(pawn, stored, size, left, from));
+    CHECK(size == 3);  // the revolver
+    CHECK(stored == 3);
+    CHECK(left == 0);
 }
 
 TEST_CASE("Weapons: everything carried is dropped, stripped or lost with the pawn") {

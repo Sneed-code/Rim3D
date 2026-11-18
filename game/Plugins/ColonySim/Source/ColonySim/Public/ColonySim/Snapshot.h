@@ -146,6 +146,12 @@ struct ThingView {
     int rounds = 0;
     int magazineSize = 0;
     bool reloading = false;
+    // sneed's cooldown bursts (docs/design/aiming.md): shots left in the gun's store of `shotStoreSize`, and the steps
+    // until it is full again of the `refillSteps` it started at (both 0 when full). For the player's yellow bar.
+    int shotStore = 0;
+    int shotStoreSize = 0;
+    int refillLeft = 0;
+    int refillSteps = 0;
     // The player's gun kick (P2, docs/design/shooter-feel.md): where the shots are going above and to
     // the right of where the player aims, in degrees, from the last shots; it wears off by itself. The
     // camera shows the same offset. Zero for everyone else.
@@ -442,6 +448,19 @@ struct VisitView {
 // 1 through it (1 while landed). (x, y) is the footprint's middle in metres and `ground` the ground height there; `rot` is the
 // Rot4 (0 North: the nose points to +y, the door is on the -x side). `building` is the impassable Things building it stands
 // as. Unreal draws the flight path, the thrusters, the flames and the dust from these.
+// A severed limb or head on the ground (body-health.md part F): which piece (a SeveredBit, Health.h), the body it came off
+// (for its looks; the body may be gone), where it fell and how far it has rotted (0 fresh to 1 gone). Unreal drops a
+// physics prop there; where the prop comes to rest is its own business.
+struct SeveredPieceView {
+    uint32_t id = 0;
+    Entity from = kNoEntity;
+    uint16_t bit = 0;
+    float x = 0.0f;
+    float y = 0.0f;
+    int level = 0;
+    float decay = 0.0f;
+};
+
 struct ShuttleView {
     uint32_t id = 0;
     Entity building = kNoEntity;
@@ -838,6 +857,7 @@ struct Snapshot {
     std::vector<CellPos> landingZone;
     uint64_t landingZoneChanges = ~0ULL;
     std::vector<ShuttleView> shuttles;
+    std::vector<SeveredPieceView> severedPieces;  // by id
     // The colony alarm (docs/design/raids.md): on, and whether the player sounded it (only the
     // player stops that one); the raid squads on the map.
     bool alarm = false;

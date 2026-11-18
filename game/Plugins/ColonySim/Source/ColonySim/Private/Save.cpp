@@ -651,6 +651,7 @@ struct SaveData {
     AreasSaved areas;                  // section "areas": allowed areas and who is limited to one
     GrimeState grime;                  // section "grime": dirt and blood on bodies (docs/design/grime.md)
     LandingSaved landing;              // section "landing": the landing zone and shuttles (docs/design/landing.md)
+    SeveredSaved severed;              // section "severed": cut-off limbs and heads lying about (body-health.md part F)
     SaveDeep deep;                     // section "deep"
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
@@ -2343,7 +2344,12 @@ void saveShooterPart(Ar& ar, Shooter& sh) {
     ar.value("aimZ", sh.aimZ);
     ar.value("player", sh.player);
     ar.value("recoil", sh.recoil);
-
+    if (ar.sectionVersion() >= 5) {  // sneed's cooldown bursts
+        ar.value("stored", sh.stored);
+        ar.value("refill", sh.refill);
+        ar.value("refillFrom", sh.refillFrom);
+        ar.value("storeGun", sh.storeGun);
+    }
 }
 
 template <typename Ar>
@@ -3493,7 +3499,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("mood", 1, [&] {
         saveParts(ar, "mood", e, &SaveEntity::mood, [&](Mood& m) { saveMoodPart(ar, m); });
     });
-    ar.section("combat", 4, [&] {
+    ar.section("combat", 5, [&] {
         saveParts(ar, "posture", e, &SaveEntity::posture, [&](Posture& p) { savePosturePart(ar, p); });
         saveParts(ar, "gear", e, &SaveEntity::gear, [&](Gear& g) { saveGearPart(ar, g); });
         saveParts(ar, "equippedBy", e, &SaveEntity::equippedBy, [&](EquippedBy& b) { saveEquippedByPart(ar, b); });
@@ -3986,6 +3992,19 @@ void saveSections(Ar& ar, SaveData& d) {
                 ar.text("kind", p.kind);
                 ar.value("role", p.role);
             });
+        });
+    });
+    ar.section("severed", 1, [&] {  // cut-off limbs and heads lying about (docs/design/body-health.md part F)
+        ar.value("nextId", d.severed.nextId);
+        ar.list("pieces", d.severed.pieces, [&](SeveredPiece& p) {
+            ar.value("id", p.id);
+            ar.value("from", p.from);
+            ar.value("bit", p.bit);
+            ar.value("x", p.x);
+            ar.value("y", p.y);
+            ar.value("level", p.level);
+            ar.value("at", p.at);
+            ar.require(p.bit != 0 && (p.bit & (p.bit - 1)) == 0 && p.bit <= kSeveredHead, "the save file has an impossible severed piece");
         });
     });
     ar.section("grime", 1, [&] {  // dirt and blood on bodies, clothes and weapons (docs/design/grime.md)
@@ -5457,6 +5476,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.roofs = sim.roofCollapse_->state();
     d.areas = sim.areas_->saved();
     d.landing = sim.landing_->saved();
+    d.severed = sim.health_->severedSaved();
     d.grime = sim.grime_->state();
     {
         const DeepResourcesSaved deep = sim.deepResources_->saved();
@@ -5951,6 +5971,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.landing_->restore(d.landing, error)) {
         return false;
     }
+    sim.health_->restoreSevered(d.severed);
     if (!sim.areas_->restore(d.areas, error)) {
         return false;
     }

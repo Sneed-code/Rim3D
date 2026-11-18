@@ -879,3 +879,61 @@ TEST_CASE("Dismemberment: never the protagonist, never an animal") {
         CHECK(sim->health().severed(muffalo) == 0);
     }
 }
+
+TEST_CASE("Severed pieces: what the killing blow took off lies where the body was for 2 days, and saves and loads") {
+    auto sim = zoneTestSim();
+    const Entity apart = zoneTestPawn(*sim, 26, 6);
+    const Entity beheaded = zoneTestPawn(*sim, 18, 6);
+    sim->step();
+    CHECK(sim->health().severedPieces().empty());
+    CHECK(zoneTestHit(*sim, apart, "Blunt", 125.0f, "torso"));
+    CHECK(zoneTestHit(*sim, beheaded, "Cut", 63.0f, "head"));
+    const std::vector<SeveredPiece>& pieces = sim->health().severedPieces();
+    CHECK(pieces.size() == 6);
+    if (pieces.size() != 6) {
+        return;
+    }
+    uint16_t bits = 0;
+    for (size_t i = 0; i < 5; ++i) {
+        CHECK(pieces[i].from == apart);
+        CHECK(pieces[i].id == static_cast<uint32_t>(i + 1));
+        CHECK(cellOf(Position{pieces[i].x, pieces[i].y, pieces[i].level}) == CellPos{26, 6, 0});
+        bits = static_cast<uint16_t>(bits | pieces[i].bit);
+    }
+    CHECK(bits == (kSeveredHead | kSeveredLeftArm | kSeveredRightArm | kSeveredLeftLeg | kSeveredRightLeg));
+    CHECK(pieces[5].from == beheaded);
+    CHECK(pieces[5].bit == kSeveredHead);
+
+    Snapshot snap;
+    sim->writeSnapshot(snap);
+    CHECK(snap.severedPieces.size() == 6);
+    if (snap.severedPieces.size() == 6) {
+        CHECK(snap.severedPieces[5].from == beheaded);
+        CHECK(snap.severedPieces[5].bit == kSeveredHead);
+        CHECK(snap.severedPieces[5].decay == doctest::Approx(0.0f).epsilon(0.01));
+    }
+
+    SaveLoadResult loaded = loadSim(saveSim(*sim), zoneTestDefs());
+    CHECK(loaded.error == "");
+    if (loaded.sim == nullptr) {
+        return;
+    }
+    CHECK(loaded.sim->health().severedPieces().size() == 6);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+
+    // A day on they are half gone, after two they are gone; the next piece gets a new id.
+    zoneTestRun(*sim, 86400);
+    sim->writeSnapshot(snap);
+    CHECK(snap.severedPieces.size() == 6);
+    if (!snap.severedPieces.empty()) {
+        CHECK(snap.severedPieces[0].decay == doctest::Approx(0.5f).epsilon(0.01));
+    }
+    zoneTestRun(*sim, 86400 + 60);  // (looked at once a game minute)
+    CHECK(sim->health().severedPieces().empty());
+    const Entity late = zoneTestPawn(*sim, 30, 6);
+    CHECK(zoneTestHit(*sim, late, "Cut", 63.0f, "head"));
+    CHECK(sim->health().severedPieces().size() == 1);
+    if (!sim->health().severedPieces().empty()) {
+        CHECK(sim->health().severedPieces()[0].id == 7);
+    }
+}
