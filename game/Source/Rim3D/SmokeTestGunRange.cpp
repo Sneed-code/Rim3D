@@ -274,7 +274,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 	FPhase Play;
 	Play.Name = TEXT("gunrange");
 	Play.WarmupSeconds = 6.0f;
-	float Minutes = bScript ? 2.7f : 240.0f;  // the melee line-up (step 15) adds about 20 s
+	float Minutes = bScript ? 2.9f : 240.0f;  // the melee line-up (step 15) adds about 25 s
 	FParse::Value(FCommandLine::Get(), TEXT("GunRangeMinutes="), Minutes);
 	Play.MeasureSeconds = Minutes * 60.0f;
 	Play.Setup = [=, this]()
@@ -974,19 +974,19 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					}
 				}
 				AimAtNearest();
-				if (State->StepTime > 1.2f && !State->bFiringPicture)
+				if (State->StepTime > 2.2f && !State->bFiringPicture)  // after the view change back has settled (no blur)
 				{
 					State->bFiringPicture = true;
 					Picture(*FString::Printf(TEXT("melee_%s_fp"), *Rack[State->MeleeTour].Label));
 					Body->ToggleView();
 					Body->SnapCamera();
 				}
-				if (State->StepTime > 2.8f && !State->bSwingPicture)
+				if (State->StepTime > 3.8f && !State->bSwingPicture)
 				{
 					State->bSwingPicture = true;
 					Picture(*FString::Printf(TEXT("melee_%s_3p"), *Rack[State->MeleeTour].Label));
 				}
-				if (State->StepTime > 3.2f)
+				if (State->StepTime > 4.0f)
 				{
 					if (!Body->IsFirstPerson())
 					{
