@@ -172,6 +172,8 @@ struct ThingView {
     float motionTime = 0.0f;
     float motionRate = 0.0f;
     bool motionPush = false;  // a plain push is moving it (no clip)
+    bool motionUpper = false;  // the clip is drawn on the upper body over walking legs (staggers, the player's swings)
+    bool motionFreeFeet = false;  // the clip leaves the feet to the player: it doesn't move the body
     // Several weapons (P1, docs/design/weapons.md): the weapon def carried in each slot (Primary, Sidearm, Melee;
     // invalid for none), in the hands or on the body, and while the pawn switches the slot it switches to and
     // the steps left (255 and 0 when it does not).
