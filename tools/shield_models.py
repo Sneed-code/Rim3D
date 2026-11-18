@@ -11,6 +11,10 @@ random.seed(42)
 PREVIEWS = '--' not in sys.argv
 results=[]
 
+def srgb(c):
+    # Image pixels are stored as sRGB, but the colours here are worked out in linear light: encode them, or the maps come out far too dark.
+    c=np.clip(c,0,1); return np.where(c<=.0031308,c*12.92,1.055*np.power(c,1/2.4)-.055)
+
 def mat(name, color, metal=0, rough=.5, emission=None, alpha=1):
     m=bpy.data.materials.new(name); m.diffuse_color=(*color,alpha); m.use_nodes=True
     p=m.node_tree.nodes.get('Principled BSDF'); p.inputs['Base Color'].default_value=(*color,alpha); p.inputs['Metallic'].default_value=metal; p.inputs['Roughness'].default_value=rough
@@ -118,7 +122,7 @@ def bake_surface(tier, size, h):
             variation+=mark*rng.choice([-.13,.10])
         col=np.stack([.31*variation,.34*variation,.35*variation],axis=-1)
         rough=.48
-    rgba=np.concatenate((np.clip(col,0,1),np.ones((512,512,1))),axis=2).astype(np.float32)
+    rgba=np.concatenate((srgb(col),np.ones((512,512,1))),axis=2).astype(np.float32)
     im=bpy.data.images.new(tier+' baked wear '+size,width=512,height=512,alpha=True)
     im.pixels.foreach_set(rgba.ravel()); im.pack()
     m=mat(tier+' worn surface',(.4,.4,.4),.78 if tier=='Steel' else 0,rough)
@@ -142,7 +146,7 @@ def build(tier,size):
         weave=(np.sin(yy+0.48*np.sin(zz))**8 + np.sin(zz+0.48*np.sin(yy))**8)
         variation=.88+.14*weave
         c=np.array([.075,.085,.095],dtype=np.float32)
-        rgba=np.concatenate((np.clip(c[None,None,:]*variation[:,:,None],0,1),np.ones((512,512,1))),axis=2).astype(np.float32)
+        rgba=np.concatenate((srgb(c[None,None,:]*variation[:,:,None]),np.ones((512,512,1))),axis=2).astype(np.float32)
         im=bpy.data.images.new('Charcoal fibre weave',width=512,height=512,alpha=True); im.pixels.foreach_set(rgba.ravel()); im.pack()
         tex=polymer.node_tree.nodes.new('ShaderNodeTexImage'); tex.image=im; bsdf=polymer.node_tree.nodes.get('Principled BSDF'); polymer.node_tree.links.new(tex.outputs['Color'],bsdf.inputs['Base Color'])
         bump=polymer.node_tree.nodes.new('ShaderNodeBump'); bump.inputs['Strength'].default_value=.14; bump.inputs['Distance'].default_value=.0015; polymer.node_tree.links.new(tex.outputs['Color'],bump.inputs['Height']); polymer.node_tree.links.new(bump.outputs['Normal'],bsdf.inputs['Normal'])
