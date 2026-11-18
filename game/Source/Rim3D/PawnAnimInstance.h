@@ -58,6 +58,9 @@ struct FSimPawnAnimInputs
 	/** The body keeps a facing of its own (a clip, a lock-on): the walk steps sideways or backwards under it rather than
 	 *  predicting a turn towards where it goes. */
 	bool bHoldFacing = false;
+	/** Standing, a turn twists the upper body over planted feet (docs/design/pawns.md "Standing still"); off while a
+	 *  whole-body clip, a roll, a jump or a crawl has the body. */
+	bool bStandTwist = true;
 	// --- The hit layer (docs/design/body-health.md part E), on top of whatever animation plays. ---
 	/** Hits since the animation last took them: it empties the list when it has. */
 	TArray<FSimPawnKick, TInlineAllocator<4>> Kicks;
@@ -89,8 +92,14 @@ struct FSimPawnAnimStats
 	float MaxWobbleDegrees = 0.0f;
 	float LimpNow = 0.0f;
 	float MaxLimp = 0.0f;
-	/** Standing still: the breathing idle plays and motion matching rests (it shuffled the feet). */
+	/** Standing still: a standing idle plays and motion matching rests (it shuffled the feet). */
 	bool bStandingIdle = false;
+	/** Standing idles started (each stop picks one at random) and drifts from one to another while standing. */
+	int32 IdlesStarted = 0;
+	int32 IdleDrifts = 0;
+	/** Degrees the upper body is twisted over planted feet now (a standing turn), and the most it has been. */
+	float StandTwistDegrees = 0.0f;
+	float MaxStandTwistDegrees = 0.0f;
 };
 
 /**
@@ -108,9 +117,10 @@ class RIM3D_API USimPawnAnimInstance : public UAnimInstance
 public:
 	USimPawnAnimInstance();
 
-	/** The databases to search and the loops for simple detail. Call once, before the first update. */
-	void SetAssets(const TArray<TObjectPtr<const UPoseSearchDatabase>>& InDatabases, UAnimSequence* InIdle,
-		UAnimSequence* InWalk, float InWalkSpeed, UAnimSequence* InRun, float InRunSpeed);
+	/** The databases to search, the standing idles (with the footprint each stands on: USimPawnSubsystem::GetIdleFeet)
+	 *  and the loops for simple detail. Call once, before the first update. */
+	void SetAssets(const TArray<TObjectPtr<const UPoseSearchDatabase>>& InDatabases, const TArray<TObjectPtr<UAnimSequence>>& InIdles,
+		const TArray<int32>& InIdleFeet, UAnimSequence* InWalk, float InWalkSpeed, UAnimSequence* InRun, float InRunSpeed);
 
 	/** Set every frame by the pawn actor before the mesh ticks. */
 	FSimPawnAnimInputs Inputs;
@@ -145,7 +155,11 @@ private:
 	TArray<TObjectPtr<const UPoseSearchDatabase>> Databases;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UAnimSequence> IdleLoop;
+	TObjectPtr<UAnimSequence> IdleLoop;  // the first of IdleLoops
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UAnimSequence>> IdleLoops;
+	TArray<int32> IdleFeet;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimSequence> WalkLoop;

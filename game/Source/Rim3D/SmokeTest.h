@@ -112,6 +112,7 @@ private:
 	void BuildSkyPhases();          // SmokeTestSky.cpp
 	void BuildMeleePhases();        // SmokeTestMelee.cpp
 	void BuildMotionPhases();       // SmokeTestMotion.cpp
+	void BuildIdlePhases();         // SmokeTestIdle.cpp
 	void BuildHurtPhases();         // SmokeTestHurt.cpp
 	void BuildClothesPhases();      // SmokeTestClothes.cpp
 	void BuildLevelsPhases();       // SmokeTestLevels.cpp

@@ -373,6 +373,10 @@ private:
 	int32 RagdollsStarted = 0;
 	float ReactionAge = kHitReactionSeconds;
 	int32 HitClipsPlayed = 0;
+	// The react to a hit playing on the upper body, how long it has played (game seconds) and when it is let go.
+	TWeakObjectPtr<class UAnimMontage> HitMontage;
+	float HitClipAge = 0.0f;
+	float HitClipEndSeconds = 0.0f;
 	float ReactionStrength = 0.0f;
 	FVector ReactionDirection = FVector::ForwardVector;
 	float LeanDegrees = 0.0f;
@@ -408,6 +412,11 @@ private:
 	int32 MotionClipsPlayed = 0;
 	/** The clip playing is drawn on the upper body only (the hips are the walk's: no set-back). */
 	bool bMotionUpper = false;
+	// The whole-body clip the one now playing took over from, while it fades out: its share of the set-back.
+	TWeakObjectPtr<class UAnimMontage> MotionOutMontage;
+	TWeakObjectPtr<class UAnimSequence> MotionOutAsset;
+	int32 MotionOutPelvisBone = INDEX_NONE;
+	FVector MotionOutPelvisStart = FVector::ZeroVector;
 	bool UpdateMotionClip(const USimSubsystem& Bridge, const colony::ThingView& Now, float GameDelta);
 	// The hit layer (body-health.md part E): the zone a sim body part or a sim zone is on screen, hits so far, the hurt
 	// legs (looked up a few times a second), and the crawl clip with its own set-back (its travel is in its hips too).

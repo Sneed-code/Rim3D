@@ -46,6 +46,31 @@ namespace
 	constexpr float PawnStandBlendTime = 0.4f;
 	// A route shorter than this (cm) is no walk: the pawn is where it wants to be.
 	constexpr float PawnStandRoute = 25.0f;
+	// Still this long (s) with a route ahead (waiting at a door, for a friend to pass, between swings), the pawn stands
+	// in its idle too: motion matching has no idle clips any more (they shuffled), so it must not be left to it.
+	constexpr float PawnStillDelay = 0.6f;
+	// A pawn standing a long time drifts to another standing idle on the same footprint now and then (s), blended slowly.
+	constexpr float PawnIdleDriftMin = 14.0f;
+	constexpr float PawnIdleDriftMax = 40.0f;
+	constexpr float PawnIdleDriftBlendTime = 1.2f;
+	// Standing turns (docs/design/pawns.md "Standing still"): the feet stay planted and the upper body twists towards the
+	// new facing, up to this many degrees; past it the feet pivot round under the body (at PawnFeetPivotRate, degrees a
+	// second) until they are within PawnFeetSettle of it. Moving, the feet follow the body at PawnFeetFollowRate.
+	constexpr float PawnStandTwistMax = 50.0f;
+	constexpr float PawnFeetPivotRate = 200.0f;
+	constexpr float PawnFeetSettle = 4.0f;
+	constexpr float PawnFeetFollowRate = 300.0f;
+	// How the twist is shared out from the hips up (the pelvis turns back by the whole twist, so the legs and feet keep
+	// their place on the ground): spine_01, spine_02, spine_04, head. Adds up to 1, so the head faces the body's way.
+	constexpr float PawnTwistShare[4] = {0.35f, 0.25f, 0.2f, 0.2f};
+	// Planted feet (docs/design/pawns.md "Standing still"): standing, each foot is held where it was when the pawn
+	// stopped, the legs bent to reach it, so the blend from the walk's stop into a standing idle (whose feet stand a
+	// little differently), a drift between idles and a standing turn move the body over the feet and never slide them.
+	// The hold lets go over PawnFootLockRelease when the pawn walks off, and lets go if the body drifts this far from
+	// where it stopped (cm) or a foot would have to stretch further than this past where the animation has it (cm).
+	constexpr float PawnFootLockRelease = 0.15f;
+	constexpr float PawnFootLockDrift = 25.0f;
+	constexpr float PawnFootLockReach = 40.0f;
 
 	/** The mesh faces +Y in its own space, so it is turned -90 degrees under the actor. */
 	FQuat PawnMeshFacing(float ActorYaw)
@@ -128,6 +153,72 @@ namespace
 		}
 		return Place.GetLocation();
 	}
+
+	/** A bone's whole transform in the mesh's space. */
+	FTransform PawnBoneInMesh(const FCompactPose& Pose, FCompactPoseBoneIndex Bone)
+	{
+		FTransform Place = Pose[Bone];
+		for (FCompactPoseBoneIndex Parent = Pose.GetParentBoneIndex(Bone); Parent.GetInt() != INDEX_NONE; Parent = Pose.GetParentBoneIndex(Parent))
+		{
+			Place = Place * Pose[Parent];
+		}
+		return Place;
+	}
+
+	/**
+	 * Bends a leg (thigh, calf, foot; all valid, the calf the thigh's child and the foot the calf's) so the foot reaches
+	 * Target (mesh space), the knee staying on the side it is on now; the foot keeps its own turn in the mesh's space.
+	 */
+	void PawnReachLeg(FCompactPose& Pose, FCompactPoseBoneIndex Thigh, FCompactPoseBoneIndex Calf, FCompactPoseBoneIndex Foot, const FVector& Target)
+	{
+		const FCompactPoseBoneIndex Hip = Pose.GetParentBoneIndex(Thigh);
+		const FTransform HipMesh = Hip.GetInt() != INDEX_NONE ? PawnBoneInMesh(Pose, Hip) : FTransform::Identity;
+		const FTransform ThighMesh = Pose[Thigh] * HipMesh;
+		const FTransform CalfMesh = Pose[Calf] * ThighMesh;
+		const FTransform FootMesh = Pose[Foot] * CalfMesh;
+		const FVector A = ThighMesh.GetLocation();
+		const FVector B = CalfMesh.GetLocation();
+		const FVector C = FootMesh.GetLocation();
+		const double Upper = (B - A).Size();
+		const double Lower = (C - B).Size();
+		if (Upper < 1.0 || Lower < 1.0)
+		{
+			return;
+		}
+		FVector Along = Target - A;
+		const double Reach = FMath::Clamp(Along.Size(), FMath::Abs(Upper - Lower) + 0.5, Upper + Lower - 0.05);
+		if (!Along.Normalize())
+		{
+			return;
+		}
+		// The knee's side: where it is now, off the hip-to-foot line.
+		FVector Knee = (B - A) - Along * FVector::DotProduct(B - A, Along);
+		if (!Knee.Normalize())
+		{
+			Knee = FVector::YAxisVector;  // forward in the mesh's space
+		}
+		const double CosHip = FMath::Clamp((Upper * Upper + Reach * Reach - Lower * Lower) / (2.0 * Upper * Reach), -1.0, 1.0);
+		const FVector NewB = A + Along * (Upper * CosHip) + Knee * (Upper * FMath::Sqrt(FMath::Max(0.0, 1.0 - CosHip * CosHip)));
+		const FVector NewC = A + Along * Reach;
+		// Turn the thigh onto the new knee, then the calf onto the new foot.
+		const FQuat ThighTurn = FQuat::FindBetweenNormals((B - A).GetSafeNormal(), (NewB - A).GetSafeNormal());
+		FTransform NewThigh = ThighMesh;
+		NewThigh.SetRotation((ThighTurn * ThighMesh.GetRotation()).GetNormalized());
+		const FVector CalfWay = ThighTurn.RotateVector((C - B).GetSafeNormal());
+		const FQuat CalfTurn = FQuat::FindBetweenNormals(CalfWay, (NewC - NewB).GetSafeNormal());
+		FTransform NewCalf = CalfMesh;
+		NewCalf.SetLocation(NewB);
+		NewCalf.SetRotation((CalfTurn * ThighTurn * CalfMesh.GetRotation()).GetNormalized());
+		FTransform NewFoot = FootMesh;
+		NewFoot.SetLocation(NewC);
+		// Back to each bone's own space under its parent.
+		Pose[Thigh] = NewThigh.GetRelativeTransform(HipMesh);
+		Pose[Calf] = NewCalf.GetRelativeTransform(NewThigh);
+		Pose[Foot] = NewFoot.GetRelativeTransform(NewCalf);
+		Pose[Thigh].NormalizeRotation();
+		Pose[Calf].NormalizeRotation();
+		Pose[Foot].NormalizeRotation();
+	}
 }
 
 /**
@@ -152,8 +243,13 @@ private:
 	void UpdateLoops(const FAnimationUpdateContext& Context, const FSimPawnAnimInputs& In, float BlendTime);
 	/** Whether the pawn stands where it wants to be: hardly moving and no route ahead. */
 	static bool IsStanding(const FSimPawnAnimInputs& In);
-	/** Plays the breathing idle (blending in once); false without one. */
-	bool UpdateStandingIdle(const FAnimationUpdateContext& Context, float BlendTime);
+	/** Plays this pawn's standing idle (picking one when it starts standing, drifting to another on the same footprint
+	 *  after a while); false without one. */
+	bool UpdateStandingIdle(const FAnimationUpdateContext& Context, float BlendTime, float DeltaTime);
+	/** Whether Asset is one of the standing idles. */
+	bool IsIdleAsset(const UAnimationAsset* Asset) const;
+	/** A standing idle at random, not the one played last if there is a choice; with Feet >= 0 only those on that footprint. */
+	int32 PickIdle(int32 Feet);
 
 	FAnimNode_BlendStack_Standalone BlendStack;
 	UE::PoseSearch::FPoseHistory History;
@@ -165,10 +261,15 @@ private:
 	float RecentSpeed = 0.0f;
 	/** The velocity smoothed over about 0.12 s: the player's pawn moves by the steps the keys send, uneven from step to step. */
 	FVector SmoothVelocity = FVector::ZeroVector;
-	/** How long the pawn has stood still (s); 0 while it moves. */
+	/** How long the pawn has stood still (s); 0 while it moves. StillTime the same, route or not. */
 	float StandTime = 0.0f;
-	/** Where in the breathing idle this pawn starts (0..1), so a crowd does not breathe in step. Cosmetic, not the sim's. */
-	float IdlePhase = 0.0f;
+	float StillTime = 0.0f;
+	/** The standing idle this pawn plays (index into the proxy's IdleLoops), INDEX_NONE before the first. */
+	int32 IdleIndex = INDEX_NONE;
+	/** Seconds until it drifts to another idle on the same footprint while it keeps standing. */
+	float IdleDriftIn = 0.0f;
+	/** Cosmetic randomness (which idle, where in it to start, when to drift): not the sim's. */
+	FRandomStream Random;
 };
 
 /**
@@ -325,6 +426,9 @@ struct FSimPawnHitLayerNode : public FAnimNode_Base
 	float MaxWobbleDegrees = 0.0f;
 	float LimpNow = 0.0f;
 	float MaxLimp = 0.0f;
+	/** The standing turn: how far the upper body is twisted over the planted feet now (degrees), and the most so far. */
+	float TwistDegrees = 0.0f;
+	float MaxTwistDegrees = 0.0f;
 
 private:
 	struct FSpring
@@ -347,6 +451,19 @@ private:
 	float LimpRight = 0.0f;
 	float Patch = 0.0f;
 	ESimPawnZone PatchZone = ESimPawnZone::Torso;
+	/** The way the feet face (actor yaw, degrees): held while the pawn stands, so a turn twists the body over them. */
+	float FeetYaw = 0.0f;
+	bool bFeetSet = false;
+	bool bFeetPivoting = false;
+	/** Planted feet: wanted now (set in the update), how much the hold shows (0 to 1), where the body stood when it
+	 *  took hold (world), the feet's yaw then, and each foot's place then against that spot (world, cm). */
+	bool bWantFootLock = false;
+	bool bFootLocked = false;
+	float FootLockWeight = 0.0f;
+	FVector FootLockCentre = FVector::ZeroVector;
+	float FootLockYaw = 0.0f;
+	FVector FootLockOffset[2] = {FVector::ZeroVector, FVector::ZeroVector};
+	FCompactPoseBoneIndex Calf[2] = {FCompactPoseBoneIndex(INDEX_NONE), FCompactPoseBoneIndex(INDEX_NONE)};
 
 	FCompactPoseBoneIndex Pelvis = FCompactPoseBoneIndex(INDEX_NONE);
 	FCompactPoseBoneIndex SpineLow = FCompactPoseBoneIndex(INDEX_NONE);
@@ -369,6 +486,10 @@ struct FSimPawnAnimInstanceProxy : public FAnimInstanceProxy
 	FSimPawnAnimInputs Inputs;
 	TArray<TObjectPtr<const UPoseSearchDatabase>> Databases;
 	UAnimSequence* IdleLoop = nullptr;
+	TArray<UAnimSequence*, TInlineAllocator<8>> IdleLoops;
+	TArray<int32, TInlineAllocator<8>> IdleFeet;
+	/** Set by the locomotion each update: a standing idle plays (the hit layer then keeps the feet planted on turns). */
+	bool bStandingIdleNow = false;
 	UAnimSequence* WalkLoop = nullptr;
 	UAnimSequence* RunLoop = nullptr;
 	float WalkLoopSpeed = 150.0f;
@@ -407,6 +528,16 @@ protected:
 		Inputs = Instance->Inputs;
 		Databases = Instance->Databases;
 		IdleLoop = Instance->IdleLoop;
+		if (IdleLoops.Num() != Instance->IdleLoops.Num())
+		{
+			IdleLoops.Reset();
+			IdleFeet.Reset();
+			for (int32 i = 0; i < Instance->IdleLoops.Num(); ++i)
+			{
+				IdleLoops.Add(Instance->IdleLoops[i].Get());
+				IdleFeet.Add(Instance->IdleFeet.IsValidIndex(i) ? Instance->IdleFeet[i] : 0);
+			}
+		}
 		WalkLoop = Instance->WalkLoop;
 		RunLoop = Instance->RunLoop;
 		WalkLoopSpeed = Instance->WalkLoopSpeed;
@@ -444,6 +575,8 @@ protected:
 		Out.MaxWobbleDegrees = HitLayer.MaxWobbleDegrees;
 		Out.LimpNow = HitLayer.LimpNow;
 		Out.MaxLimp = HitLayer.MaxLimp;
+		Out.StandTwistDegrees = HitLayer.TwistDegrees;
+		Out.MaxStandTwistDegrees = HitLayer.MaxTwistDegrees;
 	}
 
 public:
@@ -640,7 +773,10 @@ void FSimPawnLocomotionNode::Initialize_AnyThread(const FAnimationInitializeCont
 	State.Reset();
 	bResetHistory = true;
 	StandTime = 0.0f;
-	IdlePhase = FMath::FRand();
+	StillTime = 0.0f;
+	IdleIndex = INDEX_NONE;
+	IdleDriftIn = 0.0f;
+	Random.Initialize(FMath::Rand());
 }
 
 void FSimPawnLocomotionNode::CacheBones_AnyThread(const FAnimationCacheBonesContext& Context)
@@ -667,11 +803,13 @@ void FSimPawnLocomotionNode::Update_AnyThread(const FAnimationUpdateContext& Con
 	}
 
 	StandTime = IsStanding(In) ? StandTime + DeltaTime : 0.0f;
+	StillTime = In.Velocity.Size2D() < PawnStandSpeed ? StillTime + DeltaTime : 0.0f;
+	const bool bStand = StandTime >= PawnStandDelay || StillTime >= PawnStillDelay;
 	Stats.bStandingIdle = false;
 	if (BlendStack.GetAnimAsset() == nullptr)
 	{
 		// Something to show from the first frame on, even while paused.
-		if (IsStanding(In) && UpdateStandingIdle(Context, 0.0f))
+		if (IsStanding(In) && UpdateStandingIdle(Context, 0.0f, 0.0f))
 		{
 			StandTime = PawnStandDelay;
 		}
@@ -684,16 +822,17 @@ void FSimPawnLocomotionNode::Update_AnyThread(const FAnimationUpdateContext& Con
 	{
 		if (In.Detail == ESimPawnDetail::Full && !Proxy->Databases.IsEmpty())
 		{
-			// Standing still, the pawn breathes in the idle with its feet planted. Motion matching over the sample's idles
-			// and turn-in-place clips kept picking weight shifts and small steps, so a standing pawn shuffled on the spot.
-			if (StandTime >= PawnStandDelay && UpdateStandingIdle(Context, PawnStandBlendTime))
+			// Standing still, the pawn plays its standing idle with its feet planted. Motion matching over the sample's idles
+			// and turn-in-place clips kept picking weight shifts and small steps, so a standing pawn shuffled on the spot
+			// (those databases are no longer loaded at all).
+			if (bStand && UpdateStandingIdle(Context, PawnStandBlendTime, DeltaTime))
 			{
 				State.Reset();
 				Stats.Database = NAME_None;
 			}
 			else
 			{
-				if (BlendStack.GetAnimAsset() == Proxy->IdleLoop)
+				if (IsIdleAsset(BlendStack.GetAnimAsset()))
 				{
 					State.Reset();  // walking off: search afresh (the idle is in no database)
 				}
@@ -710,6 +849,7 @@ void FSimPawnLocomotionNode::Update_AnyThread(const FAnimationUpdateContext& Con
 	}
 
 	BlendStack.Update_AnyThread(Context);
+	Proxy->bStandingIdleNow = Stats.bStandingIdle;
 	Stats.Detail = In.Detail;
 	Stats.PlayingAsset = BlendStack.GetAnimAsset() ? BlendStack.GetAnimAsset()->GetFName() : NAME_None;
 }
@@ -909,17 +1049,80 @@ bool FSimPawnLocomotionNode::IsStanding(const FSimPawnAnimInputs& In)
 	return RouteLeft < PawnStandRoute;
 }
 
-bool FSimPawnLocomotionNode::UpdateStandingIdle(const FAnimationUpdateContext& Context, float BlendTime)
+bool FSimPawnLocomotionNode::IsIdleAsset(const UAnimationAsset* Asset) const
 {
-	UAnimSequence* Idle = Proxy->IdleLoop;
-	if (!Idle)
+	if (!Asset)
 	{
 		return false;
 	}
-	if (BlendStack.GetAnimAsset() != Idle)
+	for (const UAnimSequence* Idle : Proxy->IdleLoops)
 	{
-		BlendStack.BlendTo(Context, Idle, IdlePhase * Idle->GetPlayLength(), true, false, nullptr, BlendTime, nullptr,
+		if (Idle == Asset)
+		{
+			return true;
+		}
+	}
+	return Asset == Proxy->IdleLoop;
+}
+
+int32 FSimPawnLocomotionNode::PickIdle(int32 Feet)
+{
+	TArray<int32, TInlineAllocator<8>> Choices;
+	for (int32 i = 0; i < Proxy->IdleLoops.Num(); ++i)
+	{
+		if (Proxy->IdleLoops[i] && i != IdleIndex && (Feet < 0 || (Proxy->IdleFeet.IsValidIndex(i) && Proxy->IdleFeet[i] == Feet)))
+		{
+			Choices.Add(i);
+		}
+	}
+	if (Choices.IsEmpty())
+	{
+		return Proxy->IdleLoops.IsValidIndex(IdleIndex) && Proxy->IdleLoops[IdleIndex] ? IdleIndex : (Proxy->IdleLoops.IsEmpty() ? INDEX_NONE : 0);
+	}
+	return Choices[Random.RandRange(0, Choices.Num() - 1)];
+}
+
+bool FSimPawnLocomotionNode::UpdateStandingIdle(const FAnimationUpdateContext& Context, float BlendTime, float DeltaTime)
+{
+	if (Proxy->IdleLoops.IsEmpty())
+	{
+		return false;
+	}
+	UAnimationAsset* Playing = BlendStack.GetAnimAsset();
+	if (!IsIdleAsset(Playing))
+	{
+		// Starting to stand: an idle at random (each stop may bring another), from a random point in it so a crowd does
+		// not breathe in step.
+		IdleIndex = PickIdle(-1);
+		UAnimSequence* Idle = Proxy->IdleLoops.IsValidIndex(IdleIndex) ? Proxy->IdleLoops[IdleIndex] : nullptr;
+		if (!Idle)
+		{
+			return false;
+		}
+		BlendStack.BlendTo(Context, Idle, Random.FRand() * Idle->GetPlayLength(), true, false, nullptr, BlendTime, nullptr,
 			EAlphaBlendOption::HermiteCubic, false, NAME_None, FVector::ZeroVector, 1.0f);
+		IdleDriftIn = Random.FRandRange(PawnIdleDriftMin, PawnIdleDriftMax);
+		++Stats.IdlesStarted;
+	}
+	else
+	{
+		// Standing on: now and then it drifts to another idle on the same footprint (the feet stand in the same place, so
+		// the slow blend moves only the body above them).
+		IdleDriftIn -= DeltaTime;
+		const int32 Feet = Proxy->IdleFeet.IsValidIndex(IdleIndex) ? Proxy->IdleFeet[IdleIndex] : 0;
+		if (IdleDriftIn <= 0.0f)
+		{
+			IdleDriftIn = Random.FRandRange(PawnIdleDriftMin, PawnIdleDriftMax);
+			const int32 Next = PickIdle(Feet);
+			if (Next != IdleIndex && Proxy->IdleLoops.IsValidIndex(Next) && Proxy->IdleLoops[Next])
+			{
+				IdleIndex = Next;
+				UAnimSequence* Idle = Proxy->IdleLoops[Next];
+				BlendStack.BlendTo(Context, Idle, Random.FRand() * Idle->GetPlayLength(), true, false, nullptr, PawnIdleDriftBlendTime, nullptr,
+					EAlphaBlendOption::HermiteCubic, false, NAME_None, FVector::ZeroVector, 1.0f);
+				++Stats.IdleDrifts;
+			}
+		}
 	}
 	BlendStack.UpdatePlayRate(1.0f);
 	Stats.PlayRate = 1.0f;
@@ -930,7 +1133,7 @@ bool FSimPawnLocomotionNode::UpdateStandingIdle(const FAnimationUpdateContext& C
 void FSimPawnLocomotionNode::UpdateLoops(const FAnimationUpdateContext& Context, const FSimPawnAnimInputs& In, float BlendTime)
 {
 	const float Speed = In.Velocity.Size2D();
-	UAnimSequence* Loop = Proxy->IdleLoop;
+	UAnimSequence* Loop = Proxy->IdleLoops.IsValidIndex(IdleIndex) ? Proxy->IdleLoops[IdleIndex] : Proxy->IdleLoop;
 	float Rate = 1.0f;
 	if (Speed >= PawnStandSpeed)
 	{
@@ -944,7 +1147,12 @@ void FSimPawnLocomotionNode::UpdateLoops(const FAnimationUpdateContext& Context,
 	}
 	if (BlendStack.GetAnimAsset() != Loop)
 	{
-		BlendStack.BlendTo(Context, Loop, Loop == Proxy->IdleLoop ? IdlePhase * Loop->GetPlayLength() : 0.0f, true, false, nullptr, BlendTime, nullptr, EAlphaBlendOption::HermiteCubic,
+		const bool bIdle = IsIdleAsset(Loop);
+		if (bIdle && !Proxy->IdleLoops.IsValidIndex(IdleIndex))
+		{
+			IdleIndex = Proxy->IdleLoops.IndexOfByKey(Loop);
+		}
+		BlendStack.BlendTo(Context, Loop, bIdle ? Random.FRand() * Loop->GetPlayLength() : 0.0f, true, false, nullptr, BlendTime, nullptr, EAlphaBlendOption::HermiteCubic,
 			false, NAME_None, FVector::ZeroVector, Rate);
 	}
 	BlendStack.UpdatePlayRate(Rate);
@@ -964,6 +1172,12 @@ void FSimPawnHitLayerNode::Forget()
 	WeightRight = 0.5f;
 	WobbleDegrees = 0.0f;
 	LimpNow = 0.0f;
+	TwistDegrees = 0.0f;
+	bFeetSet = false;
+	bFeetPivoting = false;
+	bWantFootLock = false;
+	bFootLocked = false;
+	FootLockWeight = 0.0f;
 }
 
 void FSimPawnHitLayerNode::CacheBones_AnyThread(const FAnimationCacheBonesContext& Context)
@@ -986,6 +1200,8 @@ void FSimPawnHitLayerNode::CacheBones_AnyThread(const FAnimationCacheBonesContex
 	LowerArm[1] = Find(TEXT("lowerarm_r"));
 	Thigh[0] = Find(TEXT("thigh_l"));
 	Thigh[1] = Find(TEXT("thigh_r"));
+	Calf[0] = Find(TEXT("calf_l"));
+	Calf[1] = Find(TEXT("calf_r"));
 	Foot[0] = Find(TEXT("foot_l"));
 	Foot[1] = Find(TEXT("foot_r"));
 }
@@ -1063,6 +1279,46 @@ void FSimPawnHitLayerNode::Update_AnyThread(const FAnimationUpdateContext& Conte
 	}
 	Patch = PawnApproach(Patch, FMath::Clamp(In.Patch, 0.0f, 1.0f), DeltaTime / 0.3f);
 	Walking = PawnApproach(Walking, In.Velocity.Size2D() > PawnStandSpeed ? 1.0f : 0.0f, DeltaTime / 0.25f);
+
+	// Standing turns (docs/design/pawns.md "Standing still"): while the standing idle plays the feet keep facing where
+	// they stood and the upper body twists towards the body's new facing; a turn past PawnStandTwistMax pivots the feet
+	// round under it. Moving (or in any other animation) the feet catch up quickly and the twist is gone.
+	if (!bFeetSet)
+	{
+		FeetYaw = In.Yaw;
+		bFeetSet = true;
+	}
+	float Off = FMath::FindDeltaAngleDegrees(FeetYaw, In.Yaw);
+	if (Proxy->bStandingIdleNow && In.bStandTwist)
+	{
+		if (FMath::Abs(Off) > PawnStandTwistMax)
+		{
+			bFeetPivoting = true;
+		}
+		if (bFeetPivoting)
+		{
+			const float FeetStep = FMath::Min(FMath::Abs(Off), PawnFeetPivotRate * DeltaTime);
+			FeetYaw = FRotator::NormalizeAxis(FeetYaw + FMath::Sign(Off) * FeetStep);
+			Off = FMath::FindDeltaAngleDegrees(FeetYaw, In.Yaw);
+			bFeetPivoting = FMath::Abs(Off) > PawnFeetSettle;
+		}
+	}
+	else
+	{
+		const float FeetStep = FMath::Min(FMath::Abs(Off), PawnFeetFollowRate * DeltaTime);
+		FeetYaw = FRotator::NormalizeAxis(FeetYaw + FMath::Sign(Off) * FeetStep);
+		Off = FMath::FindDeltaAngleDegrees(FeetYaw, In.Yaw);
+		bFeetPivoting = false;
+	}
+	// Never more than the most the waist can turn, whatever came before (a big turn while blending into the idle).
+	if (FMath::Abs(Off) > PawnStandTwistMax + 10.0f)
+	{
+		FeetYaw = FRotator::NormalizeAxis(In.Yaw - FMath::Sign(Off) * (PawnStandTwistMax + 10.0f));
+		Off = FMath::FindDeltaAngleDegrees(FeetYaw, In.Yaw);
+	}
+	TwistDegrees = Off;
+	MaxTwistDegrees = FMath::Max(MaxTwistDegrees, FMath::Abs(TwistDegrees));
+	bWantFootLock = Proxy->bStandingIdleNow && In.bStandTwist;
 
 	// The springs, in steps short enough to stay steady on a slow frame.
 	const int32 Steps = FMath::Clamp(FMath::CeilToInt32(DeltaTime / PawnKickStep), 1, 30);
@@ -1169,16 +1425,32 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 		PatchLower = PawnLean(-(Across + Forward * 0.35).GetSafeNormal(), Fold * P);
 	}
 
+	// The standing twist: the hips turn back by the whole twist, legs and all, so the feet keep their place and facing on
+	// the ground (the actor, and with it the mesh, has turned to the new facing; the hips stand over the actor's middle
+	// within a few cm in every standing idle). The pelvis, not the root, since the bodies' retargeters carry the pelvis
+	// over and not the root. The spine and head turn it forward again bit by bit, so the chest and head face the new way
+	// over planted feet. In the mesh's space a turn about +Z goes the way a growing actor yaw does.
+	FQuat TwistAt[4] = {FQuat::Identity, FQuat::Identity, FQuat::Identity, FQuat::Identity};
+	if (FMath::Abs(TwistDegrees) > 0.05f && PawnBoneValid(Pose, Pelvis))
+	{
+		const float Radians = FMath::DegreesToRadians(TwistDegrees);
+		PawnTurnBone(Pose, Pelvis, FQuat(FVector::ZAxisVector, -Radians));
+		for (int32 i = 0; i < 4; ++i)
+		{
+			TwistAt[i] = FQuat(FVector::ZAxisVector, Radians * PawnTwistShare[i]);
+		}
+	}
+
 	// Parents before children: each turn is about the bone's own joint, on top of the turns above it.
 	if (Dip > 0.0f && PawnBoneValid(Pose, Pelvis))
 	{
 		Pose[Pelvis].AddToTranslation(PawnParentRotation(Pose, Pelvis).UnrotateVector(FVector(0.0, 0.0, -Dip)));
 	}
-	PawnTurnBone(Pose, SpineLow, PatchBody * LimpBody);
+	PawnTurnBone(Pose, SpineLow, TwistAt[0] * PatchBody * LimpBody);
 	const FQuat Torso = PawnRotationOf(Springs[static_cast<int32>(ESimPawnZone::Torso)].Angle * 0.5);
-	PawnTurnBone(Pose, SpineMid, Torso);
-	PawnTurnBone(Pose, PawnBoneValid(Pose, SpineHigh) ? SpineHigh : SpineMid, Torso);
-	PawnTurnBone(Pose, Head, PawnRotationOf(Springs[static_cast<int32>(ESimPawnZone::Head)].Angle) * PatchHead * LimpHead);
+	PawnTurnBone(Pose, SpineMid, TwistAt[1] * Torso);
+	PawnTurnBone(Pose, PawnBoneValid(Pose, SpineHigh) ? SpineHigh : SpineMid, TwistAt[2] * Torso);
+	PawnTurnBone(Pose, Head, TwistAt[3] * PawnRotationOf(Springs[static_cast<int32>(ESimPawnZone::Head)].Angle) * PatchHead * LimpHead);
 	for (int32 Side = 0; Side < 2; ++Side)
 	{
 		const bool bPatching = Patch > 0.01f && Side == PatchArm;
@@ -1188,6 +1460,57 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 			PawnTurnBone(Pose, LowerArm[Side], PatchLower);
 		}
 		PawnTurnBone(Pose, Thigh[Side], PawnRotationOf(Springs[static_cast<int32>(ESimPawnZone::LegLeft) + Side].Angle));
+	}
+
+	// Planted feet, last, over everything above: each foot held where it stood when the pawn stopped (turned round the
+	// spot with the feet's yaw when they pivot), the leg bent to reach it.
+	const float Dt = Output.AnimInstanceProxy->GetDeltaSeconds();
+	const FTransform& ToWorld = Output.AnimInstanceProxy->GetComponentTransform();
+	const bool bLegs = PawnBoneValid(Pose, Thigh[0]) && PawnBoneValid(Pose, Thigh[1]) && PawnBoneValid(Pose, Calf[0]) && PawnBoneValid(Pose, Calf[1]) &&
+		PawnBoneValid(Pose, Foot[0]) && PawnBoneValid(Pose, Foot[1]);
+	if (!bLegs)
+	{
+		return;
+	}
+	bool bWant = bWantFootLock;
+	if (bFootLocked && FVector::Dist2D(ToWorld.GetLocation(), FootLockCentre) > PawnFootLockDrift)
+	{
+		bWant = false;  // the body has walked off its spot without the walk taking over (a slow shuffle of the sim's)
+	}
+	if (bWant && !bFootLocked && FootLockWeight <= 0.0f)
+	{
+		// Take hold where the feet are now: nothing moves this frame.
+		FootLockCentre = ToWorld.GetLocation();
+		FootLockYaw = FeetYaw;
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			FootLockOffset[Side] = ToWorld.TransformPosition(PawnBonePlace(Pose, Foot[Side])) - FootLockCentre;
+		}
+		bFootLocked = true;
+		FootLockWeight = 1.0f;
+	}
+	else if (!bWant && bFootLocked)
+	{
+		FootLockWeight = FMath::Max(0.0f, FootLockWeight - Dt / PawnFootLockRelease);
+		if (FootLockWeight <= 0.0f)
+		{
+			bFootLocked = false;
+		}
+	}
+	if (!bFootLocked || FootLockWeight <= 0.0f)
+	{
+		return;
+	}
+	const FRotator Pivot(0.0, FMath::FindDeltaAngleDegrees(FootLockYaw, FeetYaw), 0.0);
+	for (int32 Side = 0; Side < 2; ++Side)
+	{
+		const FVector Held = ToWorld.InverseTransformPosition(FootLockCentre + Pivot.RotateVector(FootLockOffset[Side]));
+		const FVector Animated = PawnBonePlace(Pose, Foot[Side]);
+		if (FVector::Dist(Held, Animated) > PawnFootLockReach)
+		{
+			continue;  // too far to reach: the animation's foot (rare: a big jump of the body while standing)
+		}
+		PawnReachLeg(Pose, Thigh[Side], Calf[Side], Foot[Side], FMath::Lerp(Animated, Held, static_cast<double>(FootLockWeight)));
 	}
 }
 
@@ -1199,11 +1522,13 @@ USimPawnAnimInstance::USimPawnAnimInstance()
 	RootMotionMode = ERootMotionMode::IgnoreRootMotion;
 }
 
-void USimPawnAnimInstance::SetAssets(const TArray<TObjectPtr<const UPoseSearchDatabase>>& InDatabases, UAnimSequence* InIdle,
-	UAnimSequence* InWalk, float InWalkSpeed, UAnimSequence* InRun, float InRunSpeed)
+void USimPawnAnimInstance::SetAssets(const TArray<TObjectPtr<const UPoseSearchDatabase>>& InDatabases, const TArray<TObjectPtr<UAnimSequence>>& InIdles,
+	const TArray<int32>& InIdleFeet, UAnimSequence* InWalk, float InWalkSpeed, UAnimSequence* InRun, float InRunSpeed)
 {
 	Databases = InDatabases;
-	IdleLoop = InIdle;
+	IdleLoops = InIdles;
+	IdleFeet = InIdleFeet;
+	IdleLoop = IdleLoops.IsEmpty() ? nullptr : IdleLoops[0].Get();
 	WalkLoop = InWalk;
 	RunLoop = InRun;
 	WalkLoopSpeed = FMath::Max(InWalkSpeed, 50.0f);

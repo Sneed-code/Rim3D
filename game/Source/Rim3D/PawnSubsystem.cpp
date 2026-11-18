@@ -52,12 +52,22 @@ namespace
 
 	const TCHAR* const PawnBodyMeshPath = TEXT("/Game/Characters/UEFN_Mannequin/Meshes/SKM_UEFN_Mannequin.SKM_UEFN_Mannequin");
 	const TCHAR* const PawnMetaHumanClassPath = TEXT("/Game/MetaHumans/Kellan/BP_Kellan.BP_Kellan_C");
-	// Standing still: a calm Mixamo breathing idle (feet planted, chest and shoulders rise and fall), the first one found,
-	// retargeted onto the mannequin by the MakeHumanArt commandlet. The sample's own idle (and motion matching over its
-	// idle database) shifted the weight and shuffled a foot every few seconds, so standing pawns never stood still.
-	const TCHAR* const PawnStandIdlePaths[] = {
-		TEXT("/Game/Rim3D/Generated/Animations/Mixamo/MeleeAxe/A_ProMeleeAxeUnarmedIdle.A_ProMeleeAxeUnarmedIdle"),
-		TEXT("/Game/Rim3D/Generated/Animations/Mixamo/Longbow/A_ProLongbowUnarmedIdle01.A_ProLongbowUnarmedIdle01"),
+	// Standing still: calm Mixamo standing idles with the feet planted, retargeted onto the mannequin by the MakeHumanArt
+	// commandlet (docs/design/pawns.md "Standing still"). Each was measured from its FBX (2026-11-18): neither foot moves
+	// more than 0.3 cm over the clip. Clips with the same Feet number stand on the same footprint (to the millimetre), so
+	// a pawn may drift from one to another while it stands; between groups it changes only when it stops again. Left
+	// out on purpose: Action Adventure "idle (2)" (one foot well forward), "idle (3)" (steps with the right foot), the
+	// fighting crouches and the bow and magic idles with raised arms. The sample's own idles shuffled a foot.
+	struct FPawnStandIdle
+	{
+		const TCHAR* Path;
+		int32 Feet;
+	};
+	const FPawnStandIdle PawnStandIdles[] = {
+		{TEXT("/Game/Rim3D/Generated/Animations/Mixamo/MeleeAxe/A_ProMeleeAxeUnarmedIdle.A_ProMeleeAxeUnarmedIdle"), 0},
+		{TEXT("/Game/Rim3D/Generated/Animations/Mixamo/MeleeAxe/A_ProMeleeAxeUnarmedIdleLookingVer1.A_ProMeleeAxeUnarmedIdleLookingVer1"), 0},
+		{TEXT("/Game/Rim3D/Generated/Animations/Mixamo/MeleeAxe/A_ProMeleeAxeUnarmedIdleLookingVer2.A_ProMeleeAxeUnarmedIdleLookingVer2"), 0},
+		{TEXT("/Game/Rim3D/Generated/Animations/Mixamo/Longbow/A_ProLongbowUnarmedIdle01.A_ProLongbowUnarmedIdle01"), 1},
 	};
 	const TCHAR* const PawnIdlePath = TEXT("/Game/Characters/UEFN_Mannequin/Animations/Idle/M_Neutral_Stand_Idle_Loop.M_Neutral_Stand_Idle_Loop");
 	const TCHAR* const PawnWalkPath = TEXT("/Game/Characters/UEFN_Mannequin/Animations/Walk/M_Neutral_Walk_Loop_F.M_Neutral_Walk_Loop_F");
@@ -67,9 +77,11 @@ namespace
 
 	// The sample's standing locomotion databases (its crouch, jump and traversal ones are left out). The sprint ones only
 	// match the player's body sprinting (Shift): every other pawn moves at its cruise speed or slower.
+	// Not the sample's idle or turn-in-place databases: their clips shift the weight, step a foot forward and shuffle, and
+	// motion matching reached for them whenever a pawn was nearly still (turning to face, between swings, just stopped),
+	// so the shuffle kept coming back after the standing idle was added (sneed, 2026-11-17 and 2026-11-18). A standing
+	// pawn plays the standing idles above; small turns twist the upper body over planted feet (the hit layer).
 	const TCHAR* const PawnDatabaseNames[] = {
-		TEXT("PSD_Dense_Stand_Idles"),
-		TEXT("PSD_Dense_Stand_TurnInPlace"),
 		TEXT("PSD_Dense_Stand_Walk_Loops"),
 		TEXT("PSD_Dense_Stand_Walk_Starts"),
 		TEXT("PSD_Dense_Stand_Walk_Stops"),
@@ -142,18 +154,30 @@ void USimPawnSubsystem::LoadAssets()
 	}
 	bAssetsTried = true;
 	BodyMesh = LoadObject<USkeletalMesh>(nullptr, PawnBodyMeshPath);
-	for (const TCHAR* Path : PawnStandIdlePaths)
+	IdleLoops.Reset();
+	IdleFeet.Reset();
+	for (const FPawnStandIdle& Stand : PawnStandIdles)
 	{
-		if (!IdleLoop)
+		if (UAnimSequence* Idle = LoadObject<UAnimSequence>(nullptr, Stand.Path, nullptr, LOAD_NoWarn | LOAD_Quiet))
 		{
-			IdleLoop = LoadObject<UAnimSequence>(nullptr, Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
+			IdleLoops.Add(Idle);
+			IdleFeet.Add(Stand.Feet);
+		}
+		else
+		{
+			UE_LOG(LogSimPawns, Warning, TEXT("Standing idle missing (run -run=MakeHumanArt -Clips): %s"), Stand.Path);
 		}
 	}
-	if (!IdleLoop)
+	if (IdleLoops.IsEmpty())
 	{
-		UE_LOG(LogSimPawns, Warning, TEXT("No Mixamo breathing idle (run -run=MakeHumanArt -Clips): standing pawns use the sample's idle"));
-		IdleLoop = LoadObject<UAnimSequence>(nullptr, PawnIdlePath);
+		UE_LOG(LogSimPawns, Warning, TEXT("No Mixamo standing idle (run -run=MakeHumanArt -Clips): standing pawns use the sample's idle"));
+		if (UAnimSequence* Idle = LoadObject<UAnimSequence>(nullptr, PawnIdlePath))
+		{
+			IdleLoops.Add(Idle);
+			IdleFeet.Add(0);
+		}
 	}
+	IdleLoop = IdleLoops.IsEmpty() ? nullptr : IdleLoops[0].Get();
 	WalkLoop = LoadObject<UAnimSequence>(nullptr, PawnWalkPath);
 	RunLoop = LoadObject<UAnimSequence>(nullptr, PawnRunPath);
 	CrouchPose = LoadObject<UAnimSequence>(nullptr, PawnCrouchPath);
@@ -174,8 +198,8 @@ void USimPawnSubsystem::LoadAssets()
 	bAssetsLoaded = BodyMesh && IdleLoop && WalkLoop && RunLoop && !Databases.IsEmpty();
 	if (bAssetsLoaded)
 	{
-		UE_LOG(LogSimPawns, Display, TEXT("Pawn animation: %d motion matching databases, walk loop %.0f cm/s, run loop %.0f cm/s, standing idle %s"),
-			Databases.Num(), WalkLoopSpeed, RunLoopSpeed, *IdleLoop->GetName());
+		UE_LOG(LogSimPawns, Display, TEXT("Pawn animation: %d motion matching databases, walk loop %.0f cm/s, run loop %.0f cm/s, %d standing idles (first %s)"),
+			Databases.Num(), WalkLoopSpeed, RunLoopSpeed, IdleLoops.Num(), *IdleLoop->GetName());
 	}
 	else
 	{

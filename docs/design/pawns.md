@@ -70,16 +70,46 @@ place and the sim moves the actor.
   current animation when it still fits. A new result blends in through the blend stack with the
   play rate the search wants (0.8 to 1.2).
 
-**Standing still: the breathing idle.** A pawn that has stood for 0.3 s (under 30 cm/s, no route
-longer than 25 cm ahead) leaves motion matching and plays a calm Mixamo breathing idle with the feet
-planted (`Mixamo/MeleeAxe/A_ProMeleeAxeUnarmedIdle`, else `Mixamo/Longbow/A_ProLongbowUnarmedIdle01`,
-retargeted by `-run=MakeHumanArt -Clips`; without either the sample's `M_Neutral_Stand_Idle_Loop`),
-blended in over 0.4 s from a random point in the loop so a crowd does not breathe in step. When it
-moves again motion matching searches afresh and picks a start. Before this, motion matching over the
-sample's idle and turn-in-place databases kept choosing weight shifts and small steps, so standing
-pawns shuffled one foot and swayed on the spot (sneed, 2026-11-17). A standing pawn that turns to
-face a target turns as a whole for now (no turn-in-place clip). `GetStats().bStandingIdle` says
-when the idle plays.
+**Standing still: standing idles with planted feet** (sneed 2026-11-17, again 2026-11-18: "0 animation resets").
+A pawn that has stood for 0.3 s (under 30 cm/s, no route longer than 25 cm ahead), or has been still for 0.6 s
+whatever its route says, leaves motion matching and plays one of the **standing idles**, picked at random each time it
+stops and blended in over 0.4 s from a random point in the clip (so a crowd does not breathe in step). The idles are
+Mixamo clips retargeted by `-run=MakeHumanArt -Clips`, each measured from its FBX so that neither foot moves more than
+0.3 cm (`USimPawnSubsystem` `PawnStandIdles`):
+
+| Idle | Footprint |
+|---|---|
+| `Mixamo/MeleeAxe/A_ProMeleeAxeUnarmedIdle` (calm breathing, 1.9 s) | 0 |
+| `Mixamo/MeleeAxe/A_ProMeleeAxeUnarmedIdleLookingVer1` (looks round, 11 s) | 0 |
+| `Mixamo/MeleeAxe/A_ProMeleeAxeUnarmedIdleLookingVer2` (looks round, 7.8 s) | 0 |
+| `Mixamo/Longbow/A_ProLongbowUnarmedIdle01` (relaxed, 4.9 s) | 1 |
+
+Clips with the same footprint stand on the same spots to the millimetre, so a pawn that keeps standing **drifts to
+another idle of its footprint** every 14 to 40 s over a slow 1.2 s blend; it changes footprint only when it stops again.
+Left out after measuring: Action Adventure `idle (2)` (one foot 54 cm ahead of the other), `idle (3)` (steps with the
+right foot), the fighting crouches, and the bow, magic and examine idles with raised arms.
+
+Why the shuffle survived #327: the sample's `PSD_Dense_Stand_Idles` and `PSD_Dense_Stand_TurnInPlace` databases were
+still searched, and motion matching reached for them whenever a pawn was *nearly* still (turning to face a target,
+locked on, between swings, the moment after stopping): those clips step a foot forward and shuffle. They are no longer
+loaded; standing is always the standing idles.
+
+**Planted feet.** While the standing idle plays, each foot is held where it was when the pawn stopped and the leg is
+bent to reach it (`FSimPawnHitLayerNode`, last in the graph), so the blend from the walk's stop into an idle that
+stands a little differently, a drift between idles and a standing turn move the body over the feet and never slide
+them. The hold lets go over 0.15 s when the pawn walks off, and if the body creeps more than 25 cm from its spot.
+**Standing turns** twist instead of shuffling: the hips turn back by the twist (legs and feet stay facing where they
+stood) and spine_01, spine_02, spine_04 and the head turn forward by 35/25/20/20% of it, so chest and head face the new
+way. Past 50 degrees the feet pivot round under the body at 200 degrees a second until they are within 4 degrees.
+Off while a whole-body clip, a roll, a jump or a crawl has the body. `GetStats()` reports `bStandingIdle`,
+`IdlesStarted`, `IdleDrifts` and `StandTwistDegrees`.
+
+**No pops** (sneed 2026-11-18). Every switch is a blend from the pose the body is in, never a restart: a hit react
+plays on the upper-body slot (0.12 s in, 0.3 s out) over legs that keep walking or standing, is not played over a clip
+the sim is moving the body along, and is not restarted by every bullet of a burst (0.35 s apart at least; the hit
+layer's wobble shows the rest). A clip the sim moves the body along blends in over 0.1 s, or 0.16 s when it takes over
+from one still playing (the next swing), and the clip going out keeps its share of the set-back while it fades (the
+body used to jump forward by the old clip's travel the moment a second swing began). Smoke test `idle` measures it.
 
 **Near and far: loops.** The breathing idle, or the walk or run loop (`M_Neutral_*`), picked by speed (run above the
 middle of the two loops' speeds, measured from their root motion: 200 and 500 cm/s) and played

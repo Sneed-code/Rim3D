@@ -221,6 +221,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildMotionPhases();
 	}
+	else if (TestName == TEXT("idle"))
+	{
+		BuildIdlePhases();
+	}
 	else if (TestName == TEXT("hurt"))
 	{
 		BuildHurtPhases();
@@ -1921,8 +1925,8 @@ void USmokeTestSubsystem::BuildPawnsPhases()
 				{
 					++State->SimpleSamples;
 					const FName Asset = Stats.PlayingAsset;
-					State->SimpleOnLoops += (Asset == Pawns->GetIdleLoop()->GetFName() || Asset == Pawns->GetWalkLoop()->GetFName()
-						|| Asset == Pawns->GetRunLoop()->GetFName()) ? 1 : 0;
+					const bool bIdle = Pawns->GetIdleLoops().ContainsByPredicate([Asset](const TObjectPtr<UAnimSequence>& Idle) { return Idle && Idle->GetFName() == Asset; });
+					State->SimpleOnLoops += (bIdle || Asset == Pawns->GetWalkLoop()->GetFName() || Asset == Pawns->GetRunLoop()->GetFName()) ? 1 : 0;
 				}
 			}
 			if (Pawn->GetMetaHuman())
