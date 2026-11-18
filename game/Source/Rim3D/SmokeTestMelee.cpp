@@ -819,6 +819,59 @@ void USmokeTestSubsystem::BuildMeleePhases()
 			W->GetHitStopsPlayed() - State->StopsAtStart, Enemy ? Enemy->GetHitReactions() : 0, State->MaxLean));
 	});
 
+	// Lock-on focus (docs/design/focus.md): Tab locks on to the enemy in front, the HP bar shows top middle, the body and the
+	// camera face it; F1 lets go.
+	AddPhase(TEXT("focus"), [=, this]()
+	{
+		State->LastHealSeconds = 0.0f;
+		State->bSent = false;
+		Bridge()->SetSpeed(1);
+		Prot()->FocusNext();
+	}, 1.0f, 2.0f, [=, this]()
+	{
+		SideView(State->Me, State->Enemy, 260.0, 130.0);
+		KeepAlive();
+		HoldDummy();
+	}, [=, this]()
+	{
+		UProtagonistSubsystem* P = Prot();
+		const ASimPawnActor* Actor = ActorOf(State->Me);
+		const ASimPawnActor* Enemy = ActorOf(State->Enemy);
+		if (P->GetFocusTarget() != State->Enemy)
+		{
+			Fail(FString::Printf(TEXT("focus: Tab locked on to #%u, expected the enemy #%u"), static_cast<uint32>(entt::to_integral(P->GetFocusTarget())),
+				static_cast<uint32>(entt::to_integral(State->Enemy))));
+		}
+		if (P->GetFocusBarFramesDrawn() <= 0)
+		{
+			Fail(TEXT("focus: no HP bar was drawn for the focused enemy"));
+		}
+		FVector Point;
+		if (!P->GetFocusPoint(Point))
+		{
+			Fail(TEXT("focus: no marker point on the focused enemy"));
+		}
+		float Off = 180.0f;
+		if (Actor && Enemy)
+		{
+			const float Wanted = (Enemy->GetActorLocation() - Actor->GetActorLocation()).Rotation().Yaw;
+			Off = FMath::Abs(FRotator::NormalizeAxis(Actor->GetActorRotation().Yaw - Wanted));
+			if (Off > 30.0f)
+			{
+				Fail(FString::Printf(TEXT("focus: the body faces %.0f degrees off the enemy"), Off));
+			}
+		}
+		const colony::ThingView* Target = Bridge()->GetCurrentSnapshot().find(State->Enemy);
+		Notes.Add(FString::Printf(TEXT("focus: locked on, bar drawn %d frames, body %.0f degrees off, enemy worst part %.0f%%"), P->GetFocusBarFramesDrawn(), Off,
+			Target ? Target->lowestPart * 100.0f : -1.0f));
+		const int64 Sent = P->GetFocusCommandsSent();
+		P->EndFocus();
+		if (P->GetFocusCommandsSent() != Sent + 1)
+		{
+			Fail(TEXT("focus: F1 (EndFocus) sent no Clear"));
+		}
+	});
+
 	// 9. The right mouse button: the blade comes across the chest and stays there.
 	AddPhase(TEXT("block"), [=, this]()
 	{

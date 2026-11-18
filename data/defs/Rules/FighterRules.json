@@ -50,7 +50,8 @@
     "helpRange": 20,
     "fleeResponseSeconds": 20,
     "fleeSightRange": 40,
-    "sprintFactor": 1.5,
+    "sprintSpeedFactor": 1.3333333,
+    "sprintComment": "RimWorld LocomotionUrgency.Sprint: a move costs 0.75 of a jog. AI pawns sprint only in fights, fleeing and emergencies (sneed 2026-11-17).",
     "sprintChargeMin": 3,
     "sprintChargeMax": 30,
     "helpReach": 2.5,
@@ -66,6 +67,6 @@
              "diveMargin", "diveSafe", "throwEvery", "throwMinEnemies", "throwMemory", "throwSelfMargin", "throwFriendMargin",
              "switchMeleeRange", "switchSidearmRange", "switchMargin", "minWalkShare", "rangeMargin", "walkStayBonus",
              "focusMetres", "ambushRange", "helpRange", "helpReach", "profiles",
-             "fleeResponseSeconds", "fleeSightRange", "sprintFactor", "sprintChargeMin", "sprintChargeMax"]
+             "fleeResponseSeconds", "fleeSightRange", "sprintChargeMin", "sprintChargeMax"]
   }
 ]
