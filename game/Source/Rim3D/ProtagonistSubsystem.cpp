@@ -768,11 +768,8 @@ void UProtagonistSubsystem::DrawFocus(USimSubsystem& Bridge, float Top, float Sc
 		return;
 	}
 	const colony::Sim& Sim = *Bridge.GetSim();
-	FString Name = ColonistLabel(Sim, Focus);
-	if (Name.IsEmpty() && Bridge.GetDefs() && Target->def.valid())
-	{
-		Name = UTF8_TO_TCHAR(Bridge.GetDefs()->get(Target->def).label().c_str());
-	}
+	// Its name: a colonist's or raider's, a named animal's, a spawned pawn's, else its kind (as the kill feed names it).
+	const FString Name = UTF8_TO_TCHAR(Sim.feedName(Focus).c_str());
 	const float Health = FMath::Clamp(Target->dead ? 0.0f : Target->lowestPart, 0.0f, 1.0f);
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 
