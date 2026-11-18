@@ -140,7 +140,7 @@ RESEARCH_GATED_KINDS = ("Things", "Recipes", "Terrain")
 
 # Cues the sim plays for an event with no def to name them (Sound.cpp, docs/design/sound.md).
 EVENT_CUES = {
-    "Impact_Armor", "Impact_Building", "Impact_Ground", "Impact_Rock", "Melee_Clang", "Melee_Block", "Punch", "Dodge",
+    "Impact_Armor", "Impact_Building", "Impact_Ground", "Impact_Rock", "Melee_Clang", "Melee_Block", "Punch", "Dodge", "Alert_Suspicious", "Alert_Spotted",
     "Grenade_Throw", "Grenade_Landed", "Trap_Spring", "Trap_Rearm", "Item_PickUp", "Item_PutDown", "Power_On",
     "Power_Off", "Short_Circuit", "Roof_Collapse", "Fire_Ignite", "Fire_Burning", "Fire_Out", "Alarm", "Raid_Horn",
     "Research_Done", "Work_Mine", "Work_Chop", "Work_Harvest", "Work_Build", "Work_Cook", "Work_Smith", "Work_Craft",

@@ -55,6 +55,7 @@ namespace
 	TAutoConsoleVariable<int32> GFightDamageNumbers(
 		TEXT("Fight.DamageNumbers"), 1, TEXT("1 floats the damage of your own hits over where they landed (playing as a pawn), 0 hides them."), ECVF_Default);
 	constexpr float FightDamageNumberSeconds = 1.0f;
+	constexpr float FightAlertFlashSeconds = 2.5f;  // how long the "!" stays over a newly alerted enemy
 
 	const TCHAR* const FightSolidMaterialPath = TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial");
 	const TCHAR* const FightDecalMaterialPath = TEXT("/Game/Rim3D/Generated/Fights/M_WoundDecal.M_WoundDecal");
@@ -292,6 +293,20 @@ void UFightSubsystem::ResetEffects()
 
 void UFightSubsystem::OnSimEvent(const colony::Event& Event)
 {
+	// Stealth: an enemy that has just been alerted gets a "!" over its head for a moment.
+	if (Event.type == colony::EventType::PawnAction && Event.action == colony::PawnAction::Alert)
+	{
+		++AlertEventsSeen;
+		if (Event.amount >= 2.0f)
+		{
+			AlertFlash.Add(entt::to_integral(Event.thing), 0.0f);
+		}
+		else
+		{
+			AlertFlash.Remove(entt::to_integral(Event.thing));
+		}
+		return;
+	}
 	if (Event.type == colony::EventType::ShotFired)
 	{
 		OnShotFired(Event);
@@ -772,6 +787,14 @@ void UFightSubsystem::Tick(float DeltaTime)
 		Number.Age += DeltaTime;
 	}
 	DamageNumbers.RemoveAll([](const FFightDamageNumber& Number) { return Number.Age >= FightDamageNumberSeconds; });
+	for (auto It = AlertFlash.CreateIterator(); It; ++It)
+	{
+		It.Value() += DeltaTime;
+		if (It.Value() >= FightAlertFlashSeconds)
+		{
+			It.RemoveCurrent();
+		}
+	}
 	EquipMessageSeconds = FMath::Max(0.0f, EquipMessageSeconds - DeltaTime);
 	DrawHitboxes();
 	DrawHud();
@@ -1596,6 +1619,7 @@ void UFightSubsystem::DrawHud()
 		}
 	}
 	DrawDamageNumbers(Scale);
+	DrawAlertMarks(Scale);
 	(void)Sim;
 	++HudFramesDrawn;
 }
@@ -1617,6 +1641,53 @@ void UFightSubsystem::AddDamageNumber(const FFightTracer& Tracer, bool bArmour, 
 		DamageNumbers.RemoveAt(0);
 	}
 	++DamageNumbersShown;
+}
+
+// Stealth marks (docs/design/stealth.md): a yellow "?" over an enemy that is suspicious, a red "!" for a moment when
+// one is alerted. Nothing over one that is unaware, or over your own side.
+void UFightSubsystem::DrawAlertMarks(float Scale)
+{
+	USimSubsystem* Bridge = BridgeSource.Get();
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	if (!Bridge || !PC)
+	{
+		return;
+	}
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	ImDrawList* Draw = ImGui::GetForegroundDrawList();
+	ImFont* Font = ImGui::GetFont();
+	for (const colony::ThingView& View : Bridge->GetCurrentSnapshot().things)
+	{
+		if (View.category != colony::ThingCategory::Pawn || !View.fighting || View.faction == 1 || View.dead || View.downed)
+		{
+			continue;
+		}
+		const float* Flash = AlertFlash.Find(entt::to_integral(View.id));
+		const bool bSuspicious = View.alert == 1;
+		if (!Flash && !bSuspicious)
+		{
+			continue;
+		}
+		// Just above the head: 1.85 m over the ground it stands on (the mark is drawn upward from there).
+		const FVector Head = FightSimToWorldUnits(*Bridge, View.x, View.y, View.z + 1.85f);
+		FVector2D Screen;
+		if (!PC->ProjectWorldLocationToScreen(Head, Screen, true))
+		{
+			continue;
+		}
+		const float T = Flash ? *Flash / FightAlertFlashSeconds : 0.0f;
+		// The "!" pops in big and fades over its last third; the "?" stays as long as the enemy is unsure.
+		const float Size = ImGui::GetFontSize() * (Flash ? (T < 0.1f ? 3.4f - T * 8.0f : 2.6f) : 2.2f);
+		const float Alpha = Flash ? (T < 0.66f ? 1.0f : 1.0f - (T - 0.66f) / 0.34f) : 1.0f;
+		const char* Text = Flash ? "!" : "?";
+		const ImVec2 Extent = Font->CalcTextSizeA(Size, FLT_MAX, 0.0f, Text);
+		const ImVec2 At(Viewport->Pos.x + static_cast<float>(Screen.X) - Extent.x * 0.5f, Viewport->Pos.y + static_cast<float>(Screen.Y) - Extent.y);
+		const ImU32 Colour = Flash ? IM_COL32(255, 60, 50, static_cast<int>(255 * Alpha)) : IM_COL32(255, 215, 60, 255);
+		const ImU32 Shadow = IM_COL32(0, 0, 0, static_cast<int>(220 * Alpha));
+		Draw->AddText(Font, Size, ImVec2(At.x + 2.0f * Scale, At.y + 2.0f * Scale), Shadow, Text);
+		Draw->AddText(Font, Size, At, Colour, Text);
+		++AlertMarksDrawn;
+	}
 }
 
 void UFightSubsystem::DrawDamageNumbers(float Scale)
