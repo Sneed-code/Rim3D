@@ -25,6 +25,8 @@ namespace
 {
 	TAutoConsoleVariable<int32> GGrimeEnabled(TEXT("Grime.Enabled"), 1, TEXT("1 draws the sim's dirt and blood on bodies, clothes and weapons."), ECVF_Default);
 	TAutoConsoleVariable<float> GGrimeMaxDistance(TEXT("Grime.MaxDistance"), 60.0f, TEXT("Metres from the camera within which bodies show dirt and blood."), ECVF_Default);
+	TAutoConsoleVariable<float> GGrimeBodyBlood(TEXT("Grime.BodyBlood"), 0.0f,
+		TEXT("How much of the sim's blood level shows as flecks all over a body (0 to 1). 0: the wound marks alone carry it (as flecks it read as a cow print)."), ECVF_Default);
 	TAutoConsoleVariable<float> GGrimeStrength(TEXT("Grime.Strength"), 1.0f, TEXT("Multiplies how much dirt and blood shows (0 to 2)."), ECVF_Default);
 
 	const TCHAR* const GrimeOverlayPath = TEXT("/Game/Rim3D/Generated/Blood/M_GrimeOverlay.M_GrimeOverlay");
@@ -225,7 +227,7 @@ void UGrimeSubsystem::Tick(float DeltaTime)
 			const FLinearColor BloodColor = GrimeBloodColor(Fluid, Age, Wet);
 			Material->SetScalarParameterValue(TEXT("DirtLegs"), FMath::Clamp(View->dirtLegs * Strength, 0.0f, 1.0f));
 			Material->SetScalarParameterValue(TEXT("DirtBody"), FMath::Clamp(View->dirtBody * Strength, 0.0f, 1.0f));
-			Material->SetScalarParameterValue(TEXT("Blood"), FMath::Clamp(View->blood * GrimeBloodFade(Age) * Strength, 0.0f, 1.0f));
+			Material->SetScalarParameterValue(TEXT("Blood"), FMath::Clamp(View->blood * GrimeBloodFade(Age) * Strength * FMath::Clamp(GGrimeBodyBlood.GetValueOnGameThread(), 0.0f, 1.0f), 0.0f, 1.0f));
 			Material->SetScalarParameterValue(TEXT("BloodWet"), Wet);
 			Material->SetScalarParameterValue(TEXT("LocalMinZ"), Grime->LocalMinZ);
 			Material->SetScalarParameterValue(TEXT("LocalHeight"), Grime->LocalHeight);
