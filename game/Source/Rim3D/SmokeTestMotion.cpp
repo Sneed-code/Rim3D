@@ -54,6 +54,8 @@ namespace
 		int32 Skipped = 0;
 		bool bStallBefore = false;  // a stall one and two frames ago (the end-of-frame sample is a frame old)
 		bool bStallBefore2 = false;
+		FVector2D StillHips = FVector2D::ZeroVector;  // the hips against the actor summed over the still frames before the clip
+		int32 StillHipsSamples = 0;
 	};
 
 	/** The hips and the actor as drawn, read at the end of the last frame (FWorldDelegates::OnWorldPostActorTick). */
@@ -244,6 +246,18 @@ void USmokeTestSubsystem::BuildMotionPhases()
 				const FVector Here = Actor->GetActorLocation();
 				const double Turned = FMath::Abs(FMath::FindDeltaAngleDegrees(State->LastYaw, Actor->GetActorRotation().Yaw));
 				State->StillFrames = FVector::Dist2D(Here, State->LastSpot) < 0.05 && Turned < 0.05 ? State->StillFrames + 1 : 0;
+				// The idle hips of the standing idle playing now (each stop picks one of several, and they stand
+				// their hips a few cm differently): measured over the still frames just before the clip.
+				if (State->StillFrames == 1)
+				{
+					State->StillHips = FVector2D::ZeroVector;
+					State->StillHipsSamples = 0;
+				}
+				if (State->StillFrames > 0)
+				{
+					State->StillHips += Sample->Local;
+					++State->StillHipsSamples;
+				}
 				State->LastSpot = Here;
 				State->LastYaw = Actor->GetActorRotation().Yaw;
 				if (State->StillFrames < 30 && PhaseTime < 6.0f)
@@ -260,6 +274,10 @@ void USmokeTestSubsystem::BuildMotionPhases()
 				if (Name.Contains(TEXT("Stagger")))
 				{
 					Sim.combat().motion().setLayers(State->Pawn, true, false);
+				}
+				if (State->StillHipsSamples >= 10)
+				{
+					State->IdleOffset = State->StillHips / static_cast<double>(State->StillHipsSamples);
 				}
 				State->bStarted = true;
 				State->Start = Actor->GetActorLocation();

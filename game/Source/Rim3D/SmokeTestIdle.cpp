@@ -71,7 +71,12 @@ namespace
 		FVector World[IdleSmokeBoneCount];
 		bool bStandingIdle = false;
 		float TwistDegrees = 0.0f;
+		float FootHold = 0.0f;   // the feet held on the ground (they are then measured in the world, not against the actor)
+		bool bStepping = false;  // a standing step under way
+		float PlayRate = 1.0f;
 		FName Playing;
+		FVector ActorAt = FVector::ZeroVector;
+		float ActorYaw = 0.0f;
 	};
 
 	struct FIdleSmokeState
@@ -100,6 +105,7 @@ namespace
 		float MaxTwist = 0.0f;
 		// Walking feet: every sample's feet (world) and time, judged in Verify.
 		TArray<double> WalkTimes;
+		TArray<FName> WalkPlaying;
 		TArray<FVector> WalkFeet[IdleSmokeFeetCount];
 		int32 Step = 0;  // the phase's own script
 		double StepAt = 0.0;
@@ -124,7 +130,12 @@ namespace
 		const USimPawnAnimInstance* Anim = Actor.GetAnim();
 		Out.bStandingIdle = Anim && Anim->GetStats().bStandingIdle;
 		Out.TwistDegrees = Anim ? Anim->GetStats().StandTwistDegrees : 0.0f;
+		Out.FootHold = Anim ? Anim->GetStats().FootHold : 0.0f;
+		Out.bStepping = Anim && Anim->GetStats().bFootStepping;
+		Out.PlayRate = Anim ? Anim->GetStats().PlayRate : 1.0f;
 		Out.Playing = Anim ? Anim->GetStats().PlayingAsset : NAME_None;
+		Out.ActorAt = Actor.GetActorLocation();
+		Out.ActorYaw = static_cast<float>(Actor.GetActorRotation().Yaw);
 	}
 }
 
@@ -178,12 +189,28 @@ void USmokeTestSubsystem::BuildIdlePhases()
 		{
 			const double Dt1 = State->Last[0].Seconds - State->Last[1].Seconds;
 			const double Dt2 = Now.Seconds - State->Last[0].Seconds;
+			// Feet held on the ground are measured where they are, in the world (against a turning actor they swing
+			// round although they stand still); everything else against the actor, so its own travel is not counted.
+			const bool bHeld = Now.FootHold > 0.0f && State->Last[0].FootHold > 0.0f && State->Last[1].FootHold > 0.0f;
 			for (int32 i = 0; i < IdleSmokeBoneCount; ++i)
 			{
-				const FVector V1 = (State->Last[0].Local[i] - State->Last[1].Local[i]) / Dt1;
-				const FVector V2 = (Now.Local[i] - State->Last[0].Local[i]) / Dt2;
-				const double Accel = (V2 - V1).Size() / (0.5 * (Dt1 + Dt2)) / 100.0;  // m/s^2
 				const int32 Group = static_cast<int32>(IdleSmokeBones[i].Group);
+				const bool bWorld = bHeld && Group == static_cast<int32>(EIdleSmokeGroup::Feet);
+				const FVector& P0 = bWorld ? State->Last[1].World[i] : State->Last[1].Local[i];
+				const FVector& P1 = bWorld ? State->Last[0].World[i] : State->Last[0].Local[i];
+				const FVector& P2 = bWorld ? Now.World[i] : Now.Local[i];
+				const FVector V1 = (P1 - P0) / Dt1;
+				const FVector V2 = (P2 - P1) / Dt2;
+				const double Accel = (V2 - V1).Size() / (0.5 * (Dt1 + Dt2)) / 100.0;  // m/s^2
+				const double Limits[3] = {IdleSmokePopBody, IdleSmokePopFeet, IdleSmokePopHands};
+				if (Accel > 0.5 * Limits[Group])
+				{
+					// Every frame near or over a limit, with what was going on, for finding the cause in the log.
+					UE_LOG(LogTemp, Log, TEXT("IDLETRACE %s t=%.3f bone=%s accel=%.0f %s playing=%s rate=%.2f standing=%d hold=%.2f step=%d twist=%.1f yaw=%.1f dyaw=%.2f speed=%.0f"),
+						*PhaseName(), PhaseTime, IdleSmokeBones[i].Name, Accel, bWorld ? TEXT("world") : TEXT("local"), *Now.Playing.ToString(), Now.PlayRate,
+						Now.bStandingIdle ? 1 : 0, Now.FootHold, Now.bStepping ? 1 : 0, Now.TwistDegrees, Now.ActorYaw,
+						FMath::FindDeltaAngleDegrees(State->Last[0].ActorYaw, Now.ActorYaw), FVector::Dist2D(Now.ActorAt, State->Last[0].ActorAt) / Dt2);
+				}
 				if (Accel > State->MaxPop[Group])
 				{
 					State->MaxPop[Group] = Accel;
@@ -201,7 +228,8 @@ void USmokeTestSubsystem::BuildIdlePhases()
 
 		// Standing: the feet stay where they were planted (after the 0.4 s blend into the idle has settled), through idle
 		// drifts and standing turns, until the pawn moves or its feet pivot round (a turn past the twist's reach).
-		const bool bPivotLimit = FMath::Abs(Now.TwistDegrees) > 45.0f;
+		// A standing step is a foot meant to move: the place is taken again once it has landed.
+		const bool bPivotLimit = Now.bStepping;
 		if (Now.bStandingIdle)
 		{
 			++State->StandingFrames;
@@ -399,15 +427,7 @@ void USmokeTestSubsystem::BuildIdlePhases()
 			const int32 Drifts = Anim ? Anim->GetStats().IdleDrifts - State->IdleDriftsAtStart : 0;
 			PhaseNumbers.Add(TEXT("idleDrifts"), Drifts);
 			const USimPawnSubsystem* P = Pawns();
-			int32 SameFeet = 0;
-			if (P)
-			{
-				for (int32 Feet : P->GetIdleFeet())
-				{
-					SameFeet += Feet == 0 ? 1 : 0;
-				}
-			}
-			if (Drifts < 1 && SameFeet >= 2)
+			if (Drifts < 1 && P && P->GetIdleLoops().Num() >= 2)
 			{
 				Fail(TEXT("stand: in 50 s of standing the pawn never drifted to another standing idle"));
 			}
@@ -465,6 +485,7 @@ void USmokeTestSubsystem::BuildIdlePhases()
 		{
 			State->Step = 0;
 			State->WalkTimes.Reset();
+			State->WalkPlaying.Reset();
 			for (TArray<FVector>& Foot : State->WalkFeet)
 			{
 				Foot.Reset();
@@ -489,6 +510,7 @@ void USmokeTestSubsystem::BuildIdlePhases()
 			if (Sample->bValid && GetWorld()->GetDeltaSeconds() <= 0.05f)
 			{
 				State->WalkTimes.Add(Sample->Seconds);
+				State->WalkPlaying.Add(Sample->Playing);
 				for (int32 i = 0; i < IdleSmokeFeetCount; ++i)
 				{
 					State->WalkFeet[i].Add(Sample->World[IdleSmokeFeetFirst + i]);
@@ -509,19 +531,36 @@ void USmokeTestSubsystem::BuildIdlePhases()
 				{
 					continue;
 				}
-				double Lowest = TNumericLimits<double>::Max();
-				for (const FVector& P : Foot)
+				// The foot's lowest within half a second either side: the ground under it then (the map is flat, but
+				// this way a gentle slope does not count as lifted feet).
+				const auto LowestNear = [&](int32 k)
 				{
-					Lowest = FMath::Min(Lowest, P.Z);
-				}
+					double Lowest = TNumericLimits<double>::Max();
+					for (int32 j = k; j >= 0 && State->WalkTimes[k] - State->WalkTimes[j] < 0.5; --j)
+					{
+						Lowest = FMath::Min(Lowest, Foot[j].Z);
+					}
+					for (int32 j = k; j < Foot.Num() && State->WalkTimes[j] - State->WalkTimes[k] < 0.5; ++j)
+					{
+						Lowest = FMath::Min(Lowest, Foot[j].Z);
+					}
+					return Lowest;
+				};
 				double Moved = 0.0;
 				double Time = 0.0;
 				for (int32 k = 1; k < Foot.Num(); ++k)
 				{
 					const double Dt = State->WalkTimes[k] - State->WalkTimes[k - 1];
-					if (Dt <= 0.0 || Dt > 0.05 || Foot[k].Z > Lowest + IdleSmokeGroundBand || Foot[k - 1].Z > Lowest + IdleSmokeGroundBand)
+					const double Ground = LowestNear(k);
+					if (Dt <= 0.0 || Dt > 0.05 || Foot[k].Z > Ground + IdleSmokeGroundBand || Foot[k - 1].Z > Ground + IdleSmokeGroundBand)
 					{
 						continue;
+					}
+					const double Speed = FVector::Dist2D(Foot[k], Foot[k - 1]) / Dt;
+					if (Speed > 2.0 * IdleSmokeWalkSlip)
+					{
+						UE_LOG(LogTemp, Log, TEXT("IDLETRACE walk-slip foot=%s t=%.2f speed=%.0f cm/s playing=%s"), IdleSmokeBones[IdleSmokeFeetFirst + i].Name,
+							State->WalkTimes[k] - State->WalkTimes[0], Speed, *State->WalkPlaying[k].ToString());
 					}
 					Moved += FVector::Dist2D(Foot[k], Foot[k - 1]);
 					Time += Dt;

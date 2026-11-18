@@ -84,15 +84,21 @@ Mixamo clips retargeted by `-run=MakeHumanArt -Clips`, each measured from its FB
 | `Mixamo/MeleeAxe/A_ProMeleeAxeUnarmedIdleLookingVer2` (looks round, 7.8 s) | 0 |
 | `Mixamo/Longbow/A_ProLongbowUnarmedIdle01` (relaxed, 4.9 s) | 1 |
 
-Clips with the same footprint stand on the same spots to the millimetre, so a pawn that keeps standing **drifts to
-another idle of its footprint** every 14 to 40 s over a slow 1.2 s blend; it changes footprint only when it stops again.
+A pawn that keeps standing **drifts to another idle** every 14 to 40 s over a slow 1.2 s blend (any of them: the feet
+are held where they stand, so only the body above them moves; clips with the same footprint stand on the same spots to
+the millimetre).
 Left out after measuring: Action Adventure `idle (2)` (one foot 54 cm ahead of the other), `idle (3)` (steps with the
 right foot), the fighting crouches, and the bow, magic and examine idles with raised arms.
 
 Why the shuffle survived #327: the sample's `PSD_Dense_Stand_Idles` and `PSD_Dense_Stand_TurnInPlace` databases were
 still searched, and motion matching reached for them whenever a pawn was *nearly* still (turning to face a target,
 locked on, between swings, the moment after stopping): those clips step a foot forward and shuffle. They are no longer
-loaded; standing is always the standing idles.
+loaded; standing is always the standing idles. The **starts and pivots** databases are gone too (2026-11-19, from the
+first `idle` test run): their "reface" clips turn the body by their own root, which is dropped here (the actor's yaw
+follows the sim), so setting off or turning back spun the legs round under the body. Setting off blends from the
+standing idle into the walk, run or sprint loop; stops stay. Motion matching keeps up to 12 blends (the default 4
+dropped one half shown: a pop), jumps at most every 0.15 s while the clip playing has time left, and may play a clip
+at 0.6 to 1.6 times its speed so planted feet keep up with the real pace.
 
 **Planted feet.** While the standing idle plays, each foot is held where it was when the pawn stopped and the leg is
 bent to reach it (`FSimPawnHitLayerNode`, last in the graph), so the blend from the walk's stop into an idle that
@@ -100,8 +106,11 @@ stands a little differently, a drift between idles and a standing turn move the 
 them. The hold lets go over 0.15 s when the pawn walks off, and if the body creeps more than 25 cm from its spot.
 **Standing turns** twist instead of shuffling: the hips turn back by the twist (legs and feet stay facing where they
 stood) and spine_01, spine_02, spine_04 and the head turn forward by 35/25/20/20% of it, so chest and head face the new
-way. Past 50 degrees the feet pivot round under the body at 200 degrees a second until they are within 4 degrees.
-Off while a whole-body clip, a roll, a jump or a crawl has the body. `GetStats()` reports `bStandingIdle`,
+way. Past 40 degrees the pawn takes **two small steps**, one foot then the other (0.3 s each, lifted 5 cm), to where
+its idle wants the feet for the new facing; the twist never passes 60 degrees. A foot more than 22 cm from where the
+idle wants it (after a drift) steps the same way. Leaving, the twist and the hold fade out over 0.2 s. Off while a
+whole-body clip, a roll, a jump or a crawl has the body. `GetStats()` also reports `FootHold`, `bFootStepping` and
+`FootSteps`. `GetStats()` reports `bStandingIdle`,
 `IdlesStarted`, `IdleDrifts` and `StandTwistDegrees`.
 
 **No pops** (sneed 2026-11-18). Every switch is a blend from the pose the body is in, never a restart: a hit react

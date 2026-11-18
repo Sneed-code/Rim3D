@@ -54,8 +54,8 @@ namespace
 	const TCHAR* const PawnMetaHumanClassPath = TEXT("/Game/MetaHumans/Kellan/BP_Kellan.BP_Kellan_C");
 	// Standing still: calm Mixamo standing idles with the feet planted, retargeted onto the mannequin by the MakeHumanArt
 	// commandlet (docs/design/pawns.md "Standing still"). Each was measured from its FBX (2026-11-18): neither foot moves
-	// more than 0.3 cm over the clip. Clips with the same Feet number stand on the same footprint (to the millimetre), so
-	// a pawn may drift from one to another while it stands; between groups it changes only when it stops again. Left
+	// more than 0.3 cm over the clip. Clips with the same Feet number stand on the same footprint (to the millimetre); a
+	// pawn drifts between any of them while it stands (its feet are held where they stand, the legs bend). Left
 	// out on purpose: Action Adventure "idle (2)" (one foot well forward), "idle (3)" (steps with the right foot), the
 	// fighting crouches and the bow and magic idles with raised arms. The sample's own idles shuffled a foot.
 	struct FPawnStandIdle
@@ -80,20 +80,18 @@ namespace
 	// Not the sample's idle or turn-in-place databases: their clips shift the weight, step a foot forward and shuffle, and
 	// motion matching reached for them whenever a pawn was nearly still (turning to face, between swings, just stopped),
 	// so the shuffle kept coming back after the standing idle was added (sneed, 2026-11-17 and 2026-11-18). A standing
-	// pawn plays the standing idles above; small turns twist the upper body over planted feet (the hit layer).
+	// pawn plays the standing idles above. Nor the starts and pivots: their "reface" clips turn the body round by their
+	// own root, which is dropped here (the actor's yaw follows the sim), so a pawn setting off or turning back spun its
+	// legs and feet round under it (the `idle` smoke test, 2026-11-19: feet jumping 10 cm a frame). Setting off now
+	// blends from the standing idle straight into the walk, run or sprint loop, and a turn is the loop turning with the
+	// body; stops stay (they plant the feet the standing idle then holds).
 	const TCHAR* const PawnDatabaseNames[] = {
 		TEXT("PSD_Dense_Stand_Walk_Loops"),
-		TEXT("PSD_Dense_Stand_Walk_Starts"),
 		TEXT("PSD_Dense_Stand_Walk_Stops"),
-		TEXT("PSD_Dense_Stand_Walk_Pivots"),
 		TEXT("PSD_Dense_Stand_Run_Loops"),
-		TEXT("PSD_Dense_Stand_Run_Starts"),
 		TEXT("PSD_Dense_Stand_Run_Stops"),
-		TEXT("PSD_Dense_Stand_Run_Pivots"),
 		TEXT("PSD_Dense_Stand_Sprint_Loops"),
-		TEXT("PSD_Dense_Stand_Sprint_Starts"),
 		TEXT("PSD_Dense_Stand_Sprint_Stops"),
-		TEXT("PSD_Dense_Stand_Sprint_Pivots"),
 	};
 	const TCHAR* const PawnDatabaseFolder = TEXT("/Game/Characters/UEFN_Mannequin/Animations/MotionMatchingData/Databases/Dense/");
 

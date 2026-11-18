@@ -100,6 +100,10 @@ struct FSimPawnAnimStats
 	/** Degrees the upper body is twisted over planted feet now (a standing turn), and the most it has been. */
 	float StandTwistDegrees = 0.0f;
 	float MaxStandTwistDegrees = 0.0f;
+	/** Standing feet: how much the hold on them shows (0 to 1), whether a foot is stepping round now, steps so far. */
+	float FootHold = 0.0f;
+	bool bFootStepping = false;
+	int32 FootSteps = 0;
 };
 
 /**
