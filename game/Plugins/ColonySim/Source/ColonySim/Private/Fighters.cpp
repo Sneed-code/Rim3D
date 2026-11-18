@@ -136,7 +136,7 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     num("helpRange", r.helpRange);
     num("fleeResponseSeconds", r.fleeResponseSeconds);
     num("fleeSightRange", r.fleeSightRange);
-    num("sprintFactor", r.sprintFactor);
+    num("sprintSpeedFactor", r.sprintSpeedFactor);
     num("sprintChargeMin", r.sprintChargeMin);
     num("sprintChargeMax", r.sprintChargeMax);
     num("helpReach", r.helpReach);

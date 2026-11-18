@@ -71,7 +71,7 @@ side otherwise holds back for friends (the colonists' ambush rule). Raiders alwa
 ## Sprinting and the focus HP bar (sim)
 
 sneed (later the same day): enemies that flee sprint, and enemies running in to melee sprint. `FighterSystem::sprinting`:
-an AI fighter walking a path sprints at `sprintFactor` (1.5, the player's own sprint) while it is routed, heading for
+an AI fighter walking a path sprints (`Sim::pawnSprinting`, at RimWorld's 4/3 `sprintSpeedFactor`) while it is routed, heading for
 shelter from enemies it knows of, falling back or fleeing by its response with enemies known, or charging in to melee
 with no gun at a target between `sprintChargeMin` (3 m) and `sprintChargeMax` (30 m). Never the player's pawn (its keys
 sprint). Snapshot `sprinting`.

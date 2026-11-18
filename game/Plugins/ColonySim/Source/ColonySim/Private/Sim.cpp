@@ -2998,7 +2998,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.footwork = time_.steps < melee->footworkUntil;
             view.fightResponse = melee->response;
         }
-        view.sprinting = fighters_->sprinting(entity);
+        view.sprinting = pawnSprinting(entity);
         if (std::find(focusedByPlayer.begin(), focusedByPlayer.end(), entity) != focusedByPlayer.end() ||
             reg.all_of<PlayerControl>(entity)) {
             view.lowestPart = lowestPartHealth(entity);
