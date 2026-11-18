@@ -91,7 +91,7 @@ int32 UShieldArtCommandlet::Main(const FString& Params)
 			Rename.Emplace(Mesh, Folder, Id);
 			Tools.RenameAssets(Rename);
 			// Drop the StaticMeshes folder the move leaves empty (only removed when empty).
-			IFileManager::Get().DeleteDirectory(*FPackageName::LongPackageNameToFilename(Folder / Id / Id / TEXT("StaticMeshes")), false, false);
+			IFileManager::Get().DeleteDirectory(*FPackageName::LongPackageNameToFilename(Folder / Id / TEXT("StaticMeshes")), false, false);
 		}
 		Mesh->NaniteSettings.bEnabled = false;
 		Mesh->PostEditChange();

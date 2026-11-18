@@ -14,6 +14,7 @@
 #include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
+#include "TerrainSubsystem.h"
 #include "WeaponDrawSubsystem.h"
 
 #include "ColonySim/Apparel.h"
@@ -25,6 +26,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/WeaponSlot.h"
@@ -1183,6 +1185,22 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		State->SparksAtStart = Fight()->GetImpactsOfKind(colony::ProjectileHitKind::Armor);
 		// Away from the duel, the protagonist facing east with the gladius in hand.
 		const colony::CellPos A{State->Cell.x - 12, State->Cell.y - 30, 0};
+		// No trees or bushes in the screenshot's way.
+		for (int32 Dy = -6; Dy <= 6; ++Dy)
+		{
+			for (int32 Dx = -6; Dx <= 6; ++Dx)
+			{
+				const colony::CellPos C{A.x + Dx, A.y + Dy, 0};
+				if (Sim.map().inBounds(C) && Sim.plants().has(C) && Sim.defs().get(Sim.plants().defAt(C)).defName() != "Plant_Grass")
+				{
+					Sim.plants().remove(C);
+					if (UTerrainSubsystem* Terrain = GetWorld()->GetSubsystem<UTerrainSubsystem>())
+					{
+						Terrain->MarkPlantDirty(C);
+					}
+				}
+			}
+		}
 		colony::Position& MeAt = Registry.get<colony::Position>(State->Me);
 		MeAt.x = A.x + 0.5f;
 		MeAt.y = A.y + 0.5f;
