@@ -284,6 +284,8 @@ def build(tier,size):
     bpy.context.view_layer.objects.active=parts[0]
     bpy.ops.object.convert(target='MESH')
     bpy.ops.object.join()
+    joined=bpy.context.view_layer.objects.active
+    while len(joined.data.uv_layers)>1: joined.data.uv_layers.remove(joined.data.uv_layers[-1])  # only UV0: the extra map was all one point
     joined=bpy.context.view_layer.objects.active; joined.name='SM_Shield_%s_%s'%(tier,size)
     bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)  # origin at the middle of the shield
     path=OUT/('SM_Shield_%s_%s.glb'%(tier,size))

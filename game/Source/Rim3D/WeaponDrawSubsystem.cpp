@@ -457,6 +457,8 @@ UStaticMeshComponent* UWeaponDrawSubsystem::MakeComponent(ASimPawnActor& Actor, 
 	Weapon->SetCanEverAffectNavigation(false);
 	Weapon->SetCastShadow(false);
 	Weapon->bReceivesDecals = false;
+	// A thin held plate or blade in the distance-field scene shades itself black under Lumen; it moves too fast to occlude anything anyway.
+	Weapon->bAffectDistanceFieldLighting = false;
 	Weapon->SetupAttachment(Actor.GetRootComponent());
 	Weapon->RegisterComponent();
 	return Weapon;
