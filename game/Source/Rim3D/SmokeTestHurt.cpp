@@ -7,6 +7,8 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/Paths.h"
+#include "UnrealClient.h"
 
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
@@ -56,6 +58,7 @@ namespace
 		int32 MaxPiecesShown = 0;
 		int32 PiecesAtRest = 0;
 		int32 BloodHitsAtStart = 0;
+		int32 CloseUpsTaken = 0;
 	};
 
 	/** The real bodies with their clothes instead of the bare mannequins (the pawn actors are made again). */
@@ -64,6 +67,11 @@ namespace
 		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.MetaHumans")))
 		{
 			Var->Set(bOn ? 1 : 0, ECVF_SetByCode);
+		}
+		// Noon while they are on: the cut body and its pieces are looked at in the pictures.
+		if (IConsoleVariable* Hour = IConsoleManager::Get().FindConsoleVariable(TEXT("Sky.Hour")))
+		{
+			Hour->Set(bOn ? 12.0f : -1.0f, ECVF_SetByCode);
 		}
 	}
 
@@ -395,6 +403,7 @@ void USmokeTestSubsystem::BuildHurtPhases()
 		Phase.Setup = []() {};
 		Phase.WarmupSeconds = 0.0f;
 		Phase.MeasureSeconds = 8.0f;
+		Phase.ScreenshotAt = 6.5f;  // after the blows that down it: the picture shows the crawl
 		Phase.OnFrame = [=, this]()
 		{
 			View();
@@ -453,10 +462,38 @@ void USmokeTestSubsystem::BuildHurtPhases()
 		// On the real, dressed bodies: the sleeve and the trouser leg must come off with the limb.
 		Phase.Setup = []() { HurtSmokeRealBodies(true); };
 		Phase.WarmupSeconds = 0.0f;
-		Phase.MeasureSeconds = 9.0f;
+		Phase.MeasureSeconds = 21.0f;
+		Phase.ScreenshotAt = 7.5f;  // after the cut (2.5 s in) and the pieces' landing: the picture shows the result
 		Phase.OnFrame = [=, this]()
 		{
 			View();
+			// From 8 s on, a second on each piece from close by, then the corpse: dismember_close<N>.png, to judge the look.
+			if (PhaseTime >= 8.0f)
+			{
+				TArray<const AActor*> Close;
+				for (TActorIterator<ASeveredPieceActor> It(GetWorld()); It; ++It)
+				{
+					Close.Add(*It);
+				}
+				Close.Sort([](const AActor& A, const AActor& B) { return A.GetName() < B.GetName(); });
+				Close.Add(ActorOf());
+				// Each from two opposite sides (a head has a face on one of them).
+				const int32 Shot = FMath::FloorToInt(PhaseTime - 8.0f);
+				const int32 Which = Shot / 2;
+				if (Close.IsValidIndex(Which) && Close[Which])
+				{
+					const bool bCorpse = Which == Close.Num() - 1;
+					const double Side = Shot % 2 == 0 ? 1.0 : -1.0;
+					const FVector P = Close[Which]->GetActorLocation() + FVector(0.0, 0.0, bCorpse ? 20.0 : 0.0);
+					const FVector Eye = P + (bCorpse ? FVector(70.0 * Side, 50.0 * Side, 260.0) : FVector(75.0 * Side, 60.0 * Side, 65.0));
+					ViewFrom(Eye, (P - Eye).Rotation());
+					if (State->CloseUpsTaken == Shot && PhaseTime - 8.0f - Shot > 0.5f)
+					{
+						++State->CloseUpsTaken;
+						FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke") / TEXT("hurt") / FString::Printf(TEXT("dismember_close%d%s.png"), Which, Shot % 2 == 0 ? TEXT("a") : TEXT("b")), false, false);
+					}
+				}
+			}
 			if (!State->bKillSent && PhaseTime > 2.5f)
 			{
 				if (const UBloodSubsystem* Blood = GetWorld()->GetSubsystem<UBloodSubsystem>())
