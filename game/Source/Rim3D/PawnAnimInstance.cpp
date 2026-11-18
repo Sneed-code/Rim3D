@@ -254,6 +254,51 @@ private:
 };
 
 /**
+ * The upper-body slot (USimPawnAnimInstance::UpperBodySlot): a montage there takes the chest, arms and head, and the
+ * legs and hips keep what plays under it, so a staggered pawn stumbles on walking legs and the player swings while
+ * walking (sneed 2026-11-18; docs/design/body-motion.md "Upper-body clips"). spine_01 is set in mesh space, as the
+ * hold layer does, so the clip's chest faces the way it does in the clip over whatever the hips are doing.
+ */
+struct FSimPawnUpperSlotNode : public FAnimNode_Base
+{
+	FAnimNode_Base* Source = nullptr;
+
+	virtual void Initialize_AnyThread(const FAnimationInitializeContext& Context) override
+	{
+		FAnimNode_Base::Initialize_AnyThread(Context);
+		Source->Initialize_AnyThread(Context);
+		SlotNodeWeight = 0.0f;
+		SourceWeight = 1.0f;
+		TotalNodeWeight = 0.0f;
+		if (!Registered.IsSynchronized_Counter(Context.AnimInstanceProxy->GetSlotNodeInitializationCounter()))
+		{
+			Registered.SynchronizeWith(Context.AnimInstanceProxy->GetSlotNodeInitializationCounter());
+			Context.AnimInstanceProxy->RegisterSlotNodeWithAnimInstance(USimPawnAnimInstance::UpperBodySlot);
+		}
+	}
+
+	virtual void CacheBones_AnyThread(const FAnimationCacheBonesContext& Context) override;
+
+	virtual void Update_AnyThread(const FAnimationUpdateContext& Context) override
+	{
+		Context.AnimInstanceProxy->GetSlotWeight(USimPawnAnimInstance::UpperBodySlot, SlotNodeWeight, SourceWeight, TotalNodeWeight);
+		Context.AnimInstanceProxy->UpdateSlotNodeWeight(USimPawnAnimInstance::UpperBodySlot, SlotNodeWeight, Context.GetFinalBlendWeight());
+		Source->Update_AnyThread(Context);
+	}
+
+	virtual void Evaluate_AnyThread(FPoseContext& Output) override;
+
+private:
+	FGraphTraversalCounter Registered;
+	float SlotNodeWeight = 0.0f;
+	float SourceWeight = 1.0f;
+	float TotalNodeWeight = 0.0f;
+	TArray<float> BoneWeights;  // by compact pose index: 0 the legs and hips, 1 under spine_01
+	FCompactPoseBoneIndex Pelvis = FCompactPoseBoneIndex(INDEX_NONE);
+	FCompactPoseBoneIndex Spine = FCompactPoseBoneIndex(INDEX_NONE);
+};
+
+/**
  * The hit layer, over everything else (docs/design/body-health.md part E). A blow or a bullet knocks the zone it lands
  * on along its way and the zone springs back with a wobble, whatever animation plays underneath (which is never
  * stopped or restarted); a hurt leg makes the body lurch over it while that foot is down; a pawn patching a wound
@@ -261,7 +306,7 @@ private:
  */
 struct FSimPawnHitLayerNode : public FAnimNode_Base
 {
-	FSimPawnSlotNode* Source = nullptr;
+	FAnimNode_Base* Source = nullptr;
 	struct FSimPawnAnimInstanceProxy* Proxy = nullptr;
 
 	virtual void Initialize_AnyThread(const FAnimationInitializeContext& Context) override
@@ -332,10 +377,11 @@ struct FSimPawnAnimInstanceProxy : public FAnimInstanceProxy
 protected:
 	virtual void Initialize(UAnimInstance* InAnimInstance) override
 	{
-		// The graph is four native nodes: the hit layer over the montage slot (actions) over the hold layer over the
-		// locomotion.
-		HitLayer.Source = &Slot;
+		// The graph is five native nodes: the hit layer over the upper-body slot (staggers, the player's swings) over
+		// the montage slot (actions, whole-body clips) over the hold layer over the locomotion.
+		HitLayer.Source = &UpperSlot;
 		HitLayer.Proxy = this;
+		UpperSlot.Source = &Slot;
 		Slot.Source = &Upper;
 		Upper.Source = &Locomotion;
 		Upper.Proxy = this;
@@ -405,6 +451,7 @@ public:
 
 private:
 	FSimPawnHitLayerNode HitLayer;
+	FSimPawnUpperSlotNode UpperSlot;
 	FSimPawnSlotNode Slot;
 	FSimPawnUpperNode Upper;
 	FSimPawnLocomotionNode Locomotion;
@@ -516,6 +563,70 @@ void FSimPawnUpperNode::Evaluate_AnyThread(FPoseContext& Output)
 		const FQuat Local = Output.Pose[Spine].GetRotation();
 		Output.Pose[Spine].SetRotation((PelvisRot.Inverse() * Delta * PelvisRot * Local).GetNormalized());
 	}
+}
+
+// ---------------------------------------------------------------------------
+// The upper-body slot.
+
+const FName USimPawnAnimInstance::UpperBodySlot(TEXT("UpperBody"));
+
+void FSimPawnUpperSlotNode::CacheBones_AnyThread(const FAnimationCacheBonesContext& Context)
+{
+	Source->CacheBones_AnyThread(Context);
+	const FBoneContainer& Bones = Context.AnimInstanceProxy->GetRequiredBones();
+	const FReferenceSkeleton& Ref = Bones.GetReferenceSkeleton();
+	const int32 Count = Bones.GetCompactPoseNumBones();
+	BoneWeights.SetNumZeroed(Count);
+	const int32 PelvisRef = Ref.FindBoneIndex(TEXT("pelvis"));
+	const int32 SpineRef = Ref.FindBoneIndex(TEXT("spine_01"));
+	Pelvis = PelvisRef != INDEX_NONE ? Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(PelvisRef)) : FCompactPoseBoneIndex(INDEX_NONE);
+	Spine = SpineRef != INDEX_NONE ? Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(SpineRef)) : FCompactPoseBoneIndex(INDEX_NONE);
+	if (SpineRef == INDEX_NONE)
+	{
+		return;
+	}
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		const int32 RefIndex = Bones.MakeMeshPoseIndex(FCompactPoseBoneIndex(Index)).GetInt();
+		for (int32 At = Ref.GetParentIndex(RefIndex); At != INDEX_NONE; At = Ref.GetParentIndex(At))
+		{
+			if (At == SpineRef)
+			{
+				BoneWeights[Index] = 1.0f;
+				break;
+			}
+		}
+	}
+}
+
+void FSimPawnUpperSlotNode::Evaluate_AnyThread(FPoseContext& Output)
+{
+	Source->Evaluate_AnyThread(Output);
+	if (SlotNodeWeight <= ZERO_ANIMWEIGHT_THRESH || Spine.GetInt() == INDEX_NONE || Pelvis.GetInt() == INDEX_NONE ||
+		BoneWeights.Num() != Output.Pose.GetNumBones())
+	{
+		return;
+	}
+	// The whole-body pose the montage makes over what plays under it (blended in and out by the montage's weight) ...
+	FPoseContext Slotted(Output);
+	{
+		const FAnimationPoseData SourcePose(Output);
+		FAnimationPoseData SlottedPose(Slotted);
+		Output.AnimInstanceProxy->SlotEvaluatePose(USimPawnAnimInstance::UpperBodySlot, SourcePose, SourceWeight, SlottedPose, SlotNodeWeight, TotalNodeWeight);
+	}
+	// ... of which the legs and hips are left as they were: spine_01 takes the slotted chest's direction in mesh space
+	// under the walk's own hips, and every bone above it the slotted pose.
+	const FQuat LocoPelvis = PawnUpperComponent(Output.Pose, Pelvis).GetRotation();
+	const FQuat SlottedSpine = PawnUpperComponent(Slotted.Pose, Spine).GetRotation();
+	Output.Pose[Spine].SetRotation((LocoPelvis.Inverse() * SlottedSpine).GetNormalized());
+	for (FCompactPoseBoneIndex Bone : Output.Pose.ForEachBoneIndex())
+	{
+		if (BoneWeights[Bone.GetInt()] > 0.0f)
+		{
+			Output.Pose[Bone] = Slotted.Pose[Bone];
+		}
+	}
+	Output.Curve.Combine(Slotted.Curve);
 }
 
 // ---------------------------------------------------------------------------
@@ -714,7 +825,7 @@ void FSimPawnLocomotionNode::PredictAlongRoute(const FSimPawnAnimInputs& In, flo
 			{
 				Position += Heading * Distance;
 			}
-			if (!Heading.IsNearlyZero() && Speed > PawnStandSpeed)
+			if (!Heading.IsNearlyZero() && Speed > PawnStandSpeed && !In.bHoldFacing)
 			{
 				Yaw = Heading.Rotation().Yaw;
 			}

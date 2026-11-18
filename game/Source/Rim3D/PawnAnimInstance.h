@@ -55,6 +55,9 @@ struct FSimPawnAnimInputs
 	ESimPawnDetail Detail = ESimPawnDetail::Full;
 	/** Set for one update when the pawn jumped (spawned, loaded): forgets the trajectory. */
 	bool bTeleported = true;
+	/** The body keeps a facing of its own (a clip, a lock-on): the walk steps sideways or backwards under it rather than
+	 *  predicting a turn towards where it goes. */
+	bool bHoldFacing = false;
 	// --- The hit layer (docs/design/body-health.md part E), on top of whatever animation plays. ---
 	/** Hits since the animation last took them: it empties the list when it has. */
 	TArray<FSimPawnKick, TInlineAllocator<4>> Kicks;
@@ -92,7 +95,7 @@ struct FSimPawnAnimStats
 
 /**
  * The animation of one sim pawn, all in C++ (no Animation Blueprint): a hit layer (struck parts wobble and spring
- * back, a limp, the patching bend; body-health.md part E) over a montage slot over a
+ * back, a limp, the patching bend; body-health.md part E) over an upper-body montage slot over a montage slot over a
  * locomotion node that either motion matches (ESimPawnDetail::Full) or plays loops by speed
  * (Simple), through Epic's blend stack. The trajectory for motion matching is the pawn's real
  * history plus a prediction along the sim's route. See docs/design/pawns.md.
@@ -111,6 +114,10 @@ public:
 
 	/** Set every frame by the pawn actor before the mesh ticks. */
 	FSimPawnAnimInputs Inputs;
+
+	/** The montage slot drawn on the chest, arms and head only, over whatever the legs do (walking, the default slot):
+	 *  staggers, flinches and the player's swings (docs/design/body-motion.md "Upper-body clips"). */
+	static const FName UpperBodySlot;
 
 	// --- The hold layer (docs/design/weapon-hold.md): the held weapon's stance on the spine and arms, over the walk. ---
 

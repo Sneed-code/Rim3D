@@ -2409,6 +2409,10 @@ void saveMotionPart(Ar& ar, SaveMotion& sm) {
     ar.value("pushTo", m.pushTo);
     ar.value("turnBody", m.turnBody);
     ar.value("lost", m.lost);
+    if (ar.sectionVersion() >= 2) {  // upper-body clips and the player's free feet (2026-11-18)
+        ar.value("upper", m.upper);
+        ar.value("freeFeet", m.freeFeet);
+    }
     ar.require(std::isfinite(m.time) && std::isfinite(m.rate) && m.rate > 0.0f && std::isfinite(m.faceX) && std::isfinite(m.faceY) &&
                    std::isfinite(m.scale) && std::isfinite(m.doneF) && std::isfinite(m.doneR) && std::isfinite(m.doneYaw) &&
                    std::isfinite(m.pushMetres) && m.pushSteps >= 0 && m.pushFrom >= 0 && m.pushTo >= m.pushFrom && std::isfinite(m.lost),
@@ -3725,7 +3729,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
         saveParts(ar, "roll", e, &SaveEntity::roll, [&](DodgeRoll& r) { saveRollPart(ar, r); });
     });
-    ar.section("motion", 1, [&] {
+    ar.section("motion", 2, [&] {
         saveParts(ar, "motion", e, &SaveEntity::motion, [&](SaveMotion& m) { saveMotionPart(ar, m); });
     });
     ar.section("weather", 1, [&] {
