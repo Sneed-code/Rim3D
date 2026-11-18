@@ -60,6 +60,7 @@
 
 #include "MakeHumanArt.h"
 #include "PawnLooks.h"
+#include "SkinBloodMaterial.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogMakeHumanArt, Log, All);
 
@@ -909,6 +910,7 @@ namespace
 			}
 		}
 		MhAddWetness(Material, 0.78f, 0.12f);
+		SkinBloodMaterial::Add(Material);  // blood painted into the skin (USkinBlood), off until a pawn bleeds
 		Material->PostEditChange();
 		MhSave(Material);
 		UE_LOG(LogMakeHumanArt, Display, TEXT("skin material with micro detail and dents: %s"), *Material->GetName());

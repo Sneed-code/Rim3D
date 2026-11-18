@@ -83,13 +83,39 @@ first; 32 per body, 400 on bodies.
 **The sim's filth** (blood, insect blood, machine fluid, dirt, vomit, ash, animal filth) is drawn as one decal per pile,
 sized by thickness, placed and turned by its cell. Piles there when a game loads are dry; new ones dry like spray.
 
+## Blood in the skin (`USkinBlood`, sneed 2026-11-18)
+
+Decals on a moving body slid, clipped and went into the hair. A MakeHuman body now takes its blood **in its skin
+texture**, as Baldur's Gate 3 does:
+
+- Each bloodied body near the camera (at most `Blood.SkinMasks`, 8; 16 MB each) gets a **blood mask**, a 1024 x 1024
+  render target in its skin's UV space. R: how much blood, G: how wet, B: a wound's dark open core.
+- `-run=BloodArt` bakes one **position map** per body base (`T_SkinPos_<Base>`): the bind-pose position of the skin
+  at each texel. A hit is taken back into the bind pose through the bone it moves with (the nearest bone span with a
+  physics body, through the mesh's inverse bind matrix), and `M_SkinBloodPaint` adds the marks on the GPU: the wound,
+  blood soaked round it, spatter, and runs down from it along the bind-pose "down" of that moment, broken up by noise.
+  Only skin near the shot line takes it (not the far side). Because it is painted in body space, seams match and the
+  blood bends and stretches with the skin.
+- Sizes: gunshot core 1.3 + 0.6 x force cm, soak 4.5 + 3 x force, spatter 8 + 4 x force, run 6 + 6 x force; the exit
+  bigger; a cut a short gash along the blade; stab, bite, blast and heavy blunt blows their own. Drops landing on the
+  body paint small splashes; a bleeding wound paints its run longer as it bleeds (same pattern each time).
+- The skin material (`M_MH_SkinDetail`, the blood added by BloodArt and by MakeHumanArt when it makes it) reads the
+  mask: a pink-brown stain where there is little, the body's fluid colour where there is more, **wet: bright, glossy
+  and a little raised; dry: dark brown and matte** over `Blood.DryMinutes`; the core of a hole or gash darker and sunk.
+  Every 10 s a fade pass takes 3% off (`Blood.FadeStep`) and dries it; the mask goes when it is all gone, when the pawn
+  washes (the sim's blood level falls to nothing) or when a newer body needs the room.
+- Head and neck wounds darken and redden the hair (its `Tint`), fading the same way. Hair takes no stamps.
+- Bodies without a position map (MetaHumans, animals) keep the decals. `Blood.SkinPaint 0` goes back to decals.
+- Not yet: blood on clothes (they show nothing of a wound under them for now).
+
 ## Assets
 
 `UnrealEditor-Cmd.exe Rim3D.uproject -run=BloodArt` (game/Source/Rim3DEditor/BloodArtCommandlet.cpp) makes
 `/Game/Rim3D/Generated/Blood`: `T_BloodAtlas` (4 x 4 splat pictures drawn from shapes in `BloodSplatAtlas.h`: crowned
 drops, slanted drops with tails, fine spatter, pools, a run, a smear, a hole, a gash; R coverage, G thickness, B wound
 core), `T_BloodAtlasN` (normals from thickness), `M_BloodSplatter` (the decal; its decal colour's alpha packs wetness
-and opacity), `M_BloodDrop` and `M_BloodMist`. Without them the fights keep their old simple blood.
+and opacity), `M_BloodDrop` and `M_BloodMist`; `T_SkinPos_<Base>` and `M_SkinBloodPaint` for blood in the skin, and the mask
+added to `M_MH_SkinDetail` (with `-force` it is taken out and added again). Without them the fights keep their old simple blood.
 
 ## Cost
 
@@ -99,7 +125,7 @@ fights on a slow PC.
 
 Console: `Blood.Enabled`, `Blood.Quality`, `Blood.MaxDrops`, `Blood.MaxStains`, `Blood.DryMinutes`, `Blood.FadeStep`, `Blood.Filth`,
 `Blood.DropScale`, `Blood.Bleeding`, `Blood.Bits`, `Blood.FlipU` / `Blood.FlipV` / `Blood.SwapUV` (if the stain pictures come out mirrored or turned),
-`Blood.Debug`.
+`Blood.SkinPaint`, `Blood.SkinMasks`, `Blood.Debug`.
 
 ## Later
 
