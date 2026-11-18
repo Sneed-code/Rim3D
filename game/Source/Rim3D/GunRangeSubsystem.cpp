@@ -252,7 +252,13 @@ bool UGunRangeSubsystem::LoadConfig()
 			const TSharedPtr<FJsonObject> J = Value->AsObject();
 			if (J.IsValid())
 			{
-				Melee.Add({GunRangeStr(J, TEXT("def")), GunRangeStr(J, TEXT("label"))});
+				FGunRangeMelee M{GunRangeStr(J, TEXT("def")), GunRangeStr(J, TEXT("label"))};
+				const TSharedPtr<FJsonObject>* MeleeArt = nullptr;
+				if (J->TryGetObjectField(TEXT("art"), MeleeArt))
+				{
+					M.ArtName = GunRangeStr(*MeleeArt, TEXT("name"));
+				}
+				Melee.Add(MoveTemp(M));
 			}
 		}
 	}
@@ -353,6 +359,23 @@ const FGunRangeGun* UGunRangeSubsystem::FindGunByDef(const FString& Def)
 		if (Guns[i].Def == Def)
 		{
 			return HasModel(i) ? &Guns[i] : nullptr;
+		}
+	}
+	return nullptr;
+}
+
+UStaticMesh* UGunRangeSubsystem::FindMeleeMesh(const FString& Def)
+{
+	if (!bConfigTried && Guns.IsEmpty())
+	{
+		bConfigTried = true;
+		LoadConfig();
+	}
+	for (const FGunRangeMelee& M : Melee)
+	{
+		if (M.Def == Def)
+		{
+			return M.ArtName.IsEmpty() ? nullptr : FindMesh(M.ArtName, FString());
 		}
 	}
 	return nullptr;
@@ -1172,12 +1195,42 @@ void UGunRangeSubsystem::UpdateHeldView(float Dt, ASimPawnActor& Player, const c
 	const FTransform CameraWorld = Camera->GetComponentTransform();
 	const FTransform ArmsWorld = Arms->GetComponentTransform();
 	const auto ToArms = [&CameraWorld, &ArmsWorld](const FVector& InView) { return ArmsWorld.InverseTransformPosition(CameraWorld.TransformPosition(InView)); };
-	// Partly kept through a swing so the hands stay in view while the clip moves them.
-	const float Reach = 1.0f - 0.6f * SwingWeight;
-	FVector RightSpot = bFists ? FVector(36.0f, 13.0f, -10.0f) : (Hold.hands >= 2 ? FVector(42.0f, 10.0f, -15.0f) : FVector(42.0f, 15.0f, -13.0f));
+	// The hands stay on their spots through a swing (the third-person clips carry them out of view, sneed saw an empty
+	// frame): the swing itself is an arc of the spot across the view, timed by the sim's clip.
+	const float Reach = 1.0f - 0.15f * SwingWeight;
+	FVector RightSpot = bFists ? FVector(34.0f, 12.0f, -7.0f) : (Hold.hands >= 2 ? FVector(38.0f, 9.0f, -9.0f) : FVector(38.0f, 13.0f, -8.0f));
 	if (bBlock && !bShield)
 	{
-		RightSpot = bFists ? FVector(30.0f, 8.0f, -4.0f) : FVector(40.0f, 6.0f, -6.0f);
+		RightSpot = bFists ? FVector(30.0f, 8.0f, -2.0f) : FVector(38.0f, 6.0f, -3.0f);
+	}
+	if (SwingAsset && Clip && Clip->seconds > 0.0f)
+	{
+		// Wind up high and to the right, then cut down and across to the low left, then come back (a thrust for a spear
+		// or a knife: drawn back, then driven straight out). The sim's hit lands about two thirds through its clip.
+		const float T = FMath::Clamp(Me.motionTime / Clip->seconds, 0.0f, 1.0f);
+		const bool bThrust = Hold.styleName.find("Spear") != std::string::npos || Hold.styleName.find("Knife") != std::string::npos ||
+			Clip->anim.find("Stab") != std::string::npos || Clip->anim.find("Thrust") != std::string::npos;
+		const FVector Ready = RightSpot;
+		const FVector Windup = bThrust ? Ready + FVector(-12.0f, 2.0f, 1.0f) : FVector(30.0f, 24.0f, 6.0f);
+		const FVector Strike = bThrust ? Ready + FVector(26.0f, -6.0f, 0.0f) : FVector(46.0f, -14.0f, -16.0f);
+		// The blade meets the target when the sim's blow lands.
+		const float Hit = Clip->hitSeconds > 0.0f ? FMath::Clamp(Clip->hitSeconds / Clip->seconds, 0.3f, 0.9f) : 0.66f;
+		const float WindEnd = FMath::Max(0.1f, Hit - 0.2f);
+		const float StrikeEnd = FMath::Min(0.95f, Hit + 0.04f);
+		FVector Arc;
+		if (T < WindEnd)
+		{
+			Arc = FMath::Lerp(Ready, Windup, GunRangeSmooth(T / WindEnd));
+		}
+		else if (T < StrikeEnd)
+		{
+			Arc = FMath::Lerp(Windup, Strike, GunRangeSmooth((T - WindEnd) / (StrikeEnd - WindEnd)));
+		}
+		else
+		{
+			Arc = FMath::Lerp(Strike, Ready, GunRangeSmooth((T - StrikeEnd) / (1.0f - StrikeEnd)));
+		}
+		RightSpot = Arc;
 	}
 	if (bFists && !bPunchLeft)
 	{
@@ -1311,7 +1364,7 @@ void UGunRangeSubsystem::DrawPanel()
 		{
 			ImGui::TextUnformatted("Left mouse fire   Right mouse aim");
 		}
-		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("1-%s or wheel: weapon   N: new targets   F2 pause"), *KeyName(FMath::Max(0, Guns.Num() + Melee.Num() - 1)))));
+		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("1-%s or wheel: weapon   K: new targets   U: guards   F2 pause"), *KeyName(FMath::Max(0, Guns.Num() + Melee.Num() - 1)))));
 		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("V: first/third person   [ ] mouse speed %.2f"), AProtagonistPawn::GetMouseTurn())));
 		if (!SceneLine.IsEmpty())
 		{
