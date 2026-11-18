@@ -280,7 +280,7 @@ void USmokeTestSubsystem::BuildIdlePhases()
 		State->OffIdleFrames = 0;
 		State->MaxTwist = 0.0f;
 	};
-	const auto Cell = [=](int32 Dx, int32 Dy) { return colony::CellPos{State->Home.x + Dx, State->Home.y + Dy, State->Home.z}; };
+	const auto Cell = [=](int32 Dx, int32 Dy) { return colony::CellPos{State->Home.x + Dx, State->Home.y + Dy, State->Home.level}; };
 
 	{
 		FPhase Phase;

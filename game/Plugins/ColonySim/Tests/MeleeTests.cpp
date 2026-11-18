@@ -740,7 +740,7 @@ TEST_CASE("Melee: an AI fighter rolls clear of a heavy blow and sidesteps a ligh
     }
     MESSAGE("40 swings, " << strong << " strong; " << rolled << " rolls, " << dodged << " dodged");
     CHECK(strong >= 5);
-    CHECK(rolled >= 8);       // rolls from heavy blows, at most one every aiRollEverySteps...
+    CHECK(rolled >= 5);       // rolls from heavy blows (fewer since tuning.json halved two-handed cooldowns), at most one every aiRollEverySteps...
     CHECK(rolled <= strong);  // ...and none from the light ones (sidesteps)
-    CHECK(dodged >= 30);
+    CHECK(dodged >= 10);      // twice-as-fast longsword swings leave less time to step aside
 }

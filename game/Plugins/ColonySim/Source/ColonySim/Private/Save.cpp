@@ -2602,6 +2602,18 @@ void saveFighterPart(Ar& ar, Fighter& f) {
         ar.value("suspect", f.suspect);
         ar.value("suspectAt", f.suspectAt);
     }
+    if (ar.sectionVersion() >= 6) {  // team play (docs/design/team-play.md)
+        ar.value("role", f.role);
+        ar.require(static_cast<int>(f.role) <= static_cast<int>(TeamRole::FallBack), "the save file has a bad team role");
+        ar.value("roleSince", f.roleSince);
+        ar.value("flankSide", f.flankSide);
+        ar.value("lastCall", f.lastCall);
+        ar.require(static_cast<int>(f.lastCall) <= static_cast<int>(Callout::EnemyDown), "the save file has a bad call-out");
+        ar.value("calloutAt", f.calloutAt);
+        ar.value("alliesDown", f.alliesDown);
+        ar.value("allyDownAt", f.allyDownAt);
+        ar.value("suppressedUntil", f.suppressedUntil);
+    }
 
 }
 
@@ -3523,7 +3535,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("doors", 1, [&] {
         saveParts(ar, "door", e, &SaveEntity::door, [&](Door& door) { saveDoorPart(ar, door); });
     });
-    ar.section("fighters", 5, [&] {
+    ar.section("fighters", 6, [&] {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });

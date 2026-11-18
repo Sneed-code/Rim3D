@@ -562,6 +562,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                            splitMix64(settings.seed ^ 0x6D656C6565ULL));
     melee_->setEventLog(&events_);
     fighters_->setMelee(melee_.get());
+    fighters_->setSeed(splitMix64(settings.seed ^ 0x7EA3ULL));  // each fighter's temper (team play)
     upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_, plants_.get());
     areas_ = std::make_unique<Areas>();
     jobs_->setAreas(areas_.get());
@@ -2315,6 +2316,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     { SimLap lap(profile_, "explosives"); explosives_->step(rng_); }
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     fighters_->hear(events_, eventsBefore);  // and fighters in earshot hear them (stealth.md)
+    fighters_->noteLosses(events_, eventsBefore);  // friends going down shake those near (team-play.md)
     { SimLap lap(profile_, "defense"); defense_->step(rng_); }
     { SimLap lap(profile_, "artillery"); artillery_->step(rng_); }
     raids_->takeFire();  // colonists hurt this step take cover or run (real-time-combat.md phase 3)
