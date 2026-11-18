@@ -323,6 +323,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["dx"] = static_cast<double>(c.dx);
                 j["dy"] = static_cast<double>(c.dy);
+            } else if constexpr (std::is_same_v<Type, LevelEarthCommand>) {
+                j["area"] = replayRectJson(c.area);
+                j["baseCm"] = c.baseCm;
+            } else if constexpr (std::is_same_v<Type, CancelEarthworksCommand>) {
+                j["area"] = replayRectJson(c.area);
+            } else if constexpr (std::is_same_v<Type, UnstuckCommand>) {
+                j["pawn"] = entt::to_integral(c.pawn);
             } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["outfit"] = c.outfit;
@@ -1347,6 +1354,26 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             }
             *field = static_cast<float>(it->get<double>());
         }
+        out.command = c;
+    } else if (type == "LevelEarth") {
+        LevelEarthCommand c;
+        if (!replayReadRect(r, j, where, c.area) || !r.integer(j, "baseCm", c.baseCm, where)) {
+            return false;
+        }
+        out.command = c;
+    } else if (type == "CancelEarthworks") {
+        CancelEarthworksCommand c;
+        if (!replayReadRect(r, j, where, c.area)) {
+            return false;
+        }
+        out.command = c;
+    } else if (type == "Unstuck") {
+        UnstuckCommand c;
+        uint32_t pawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "pawn", pawn, where)) {
+            return false;
+        }
+        c.pawn = static_cast<Entity>(pawn);
         out.command = c;
     } else if (type == "DodgeRoll") {
         DodgeRollCommand c;

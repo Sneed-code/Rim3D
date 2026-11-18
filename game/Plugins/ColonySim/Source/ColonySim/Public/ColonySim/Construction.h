@@ -73,6 +73,13 @@ struct ConstructionNumbers {
     double skillSpeedPerLevel = 0.0875;
     int defaultSkillLevel = 8;         // for a worker with no skills (a test pawn)
     double removeFloorWork = 288.0;    // game seconds at speed 1 to take a floor up (RimWorld's 200 ticks)
+    // Earthworks (docs/design/earthworks.md, ours): work for one unit (one corner kEarthUnitM up or down);
+    // 51 is 30 game seconds (one real second at 1x) for a pawn at speed 1. Ground between walls up to
+    // `betweenWallsCells` apart is planned flat with them, and no earthworks dig or fill more than
+    // `earthMaxM` (twice a wall's height).
+    double earthWorkPerUnit = 51.0;
+    int betweenWallsCells = 6;
+    double earthMaxM = 6.0;
 };
 
 class COLONY_API Construction {
@@ -175,7 +182,19 @@ public:
     // sites overlap or one stands where a building is.
     bool afterLoad(std::string& error);
 
+    // ---- Earthworks (docs/design/earthworks.md) -------------------------------------------------
+    // Plans the ground of `area` (ground cells with no building or plan, not rock or water) dug or
+    // filled to `base`. Cells whose corners are more than earthMaxM from `base` are left out. Returns
+    // how many cells were planned.
+    int planLevelEarth(const CellRect& area, float base);
+    // Drops earthworks planned on `area` that no building plan needs. Returns how many cells had some.
+    int cancelEarthworks(const CellRect& area);
+
 private:
+    // Open ground squeezed between walls near a new wall plan (inside an L, a corridor, between two
+    // walls up to betweenWallsCells apart) is planned flat with them.
+    void planBetweenWalls(const CellRect& rect);
+    bool wallLike(CellPos c) const;
     void indexSite(Entity site, bool add);
     // Puts `count` of an item def on the ground near a rect, in stacks (not inside the rect if `skipRect`).
     void dropNear(DefId item, int count, const CellRect& rect, bool skipRect = false);

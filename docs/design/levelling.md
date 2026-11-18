@@ -1,5 +1,8 @@
 # Level ground for structures
 
+Since 2026-11-18 the ground is planned here but dug by pawns: see [earthworks.md](earthworks.md) (plans no longer
+level at once, sandbags lean with the slope, furniture is refused on slopes).
+
 Code: `ColonySim/Map.h` (`levelGround`, `levelCells`, `levelBase`, `levelledCorners`, `LevelState`),
 `Private/Map.cpp`; called from `Things::spawnAt`, `Construction::placeBlueprint`, `UpperFloors::lay`, the
 `PlaceFloorCommand` handler in `Sim.cpp` and `Rooms::levelRooms`. Tests: `Tests/LevellingTests.cpp`.

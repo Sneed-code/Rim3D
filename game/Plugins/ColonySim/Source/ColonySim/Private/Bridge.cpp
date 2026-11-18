@@ -186,6 +186,12 @@ const char* commandName(const Command& command) {
                 return "Melee";
             } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
                 return "DodgeRoll";
+            } else if constexpr (std::is_same_v<Type, LevelEarthCommand>) {
+                return "LevelEarth";
+            } else if constexpr (std::is_same_v<Type, CancelEarthworksCommand>) {
+                return "CancelEarthworks";
+            } else if constexpr (std::is_same_v<Type, UnstuckCommand>) {
+                return "Unstuck";
             } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
                 return "SetOutfit";
             } else if constexpr (std::is_same_v<Type, EditOutfitCommand>) {

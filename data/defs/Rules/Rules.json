@@ -197,11 +197,15 @@
     "skillSpeedPerLevel": 0.0875,
     "defaultSkillLevel": 8,
     "removeFloorWork": 288,
+    "earthWorkPerUnit": 51,
+    "betweenWallsCells": 6,
+    "earthMaxM": 6.0,
     "architectCategories": ["Structure", "Production", "Furniture", "Power", "Security", "Misc", "Floors", "Joy", "Ship", "Temperature"],
     "architectLabels": {"Joy": "Recreation"},
     "unverified": ["buildWorkPerSecond", "deconstructWorkPerSecond", "deconstructWorkMin", "deconstructWorkMax",
                    "deconstructRefundFactor", "skillSpeedBase", "skillSpeedPerLevel", "removeFloorWork"],
-    "ours": ["defaultSkillLevel", "architectCategories", "architectLabels"]
+    "ours": ["defaultSkillLevel", "architectCategories", "architectLabels", "earthWorkPerUnit", "betweenWallsCells", "earthMaxM"],
+    "note": "Earthworks (docs/design/earthworks.md) are ours: RimWorld's ground is flat. One unit is one corner 0.25 m up or down; 51 work is 30 game seconds (1 real second at 1x) at speed 1. The limit is twice a 3 m wall."
   },
   {
     "defName": "DoorRules", "source": "RimWorld wiki",

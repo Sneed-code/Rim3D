@@ -48,6 +48,7 @@ bool grimeDirtyWork(JobType type) {
         case JobType::BuildFrame:
         case JobType::Deconstruct:
         case JobType::RemoveFloor:
+        case JobType::Earthworks:
         case JobType::Butcher:
         case JobType::ExtinguishFire:
             return true;
