@@ -1,6 +1,8 @@
 # Status
 
-Updated 2026-11-17.
+Updated 2026-11-18.
+
+Fight faces and downward blows (sneed, 2026-11-18; sim, data and Unreal, `docs/design/focus.md` "Faces" and "Blows at the downed"): a pawn **pulls a pain face for about half a second on every hit**, and **looks angry while it fights hand to hand** (swinging, blocking, locked on without a gun, fist fights), using the creator's own "In pain" and "Angry" expressions on the MakeHuman face shapes, brow wrinkles included. **A blow at someone on the ground plays a downward clip** through the body motion system: clubs and hammers the overhead smash (works now), knives a low stab, spears a low thrust, blades a downward hack, fists a stomp (MeleeRules `lowAttacks`; test in `BodyMotionTests`). All five Mixamo clips imported and measured; compiled on the PC, smoke tests `melee` and `gunrange` pass, the pain face shows on a hit target. **Next: sneed tries it (the angry face wants a close look in a fist fight); a smoke phase with a downed target would show the downward blows on screen.**
 
 Melee by material, far shots and real ranges (sneed, 2026-11-17; sim, data, tools and Unreal): melee blows sound by what strikes what (**wood or steel weapons on flesh, wood, steel or stone**: parries, shields, armour, walls, rock); gunshots and blasts are **heard as late as sound travels** and turn into a low boom and echo with distance (far explosions a dull thud); every cue has a real hearing range (rifle 2.5 km, pistol 1.5 km, blasts 4 km, steel clash 160 m). Screams: every downing, and again when killed while awake (the quick second scream was blocked). `docs/design/sound.md` "Melee by material...". **Next: run `tools/sound_assets.py` on the PC for the new recordings, then sneed listens.**
 

@@ -130,6 +130,11 @@ public:
 	bool PlayHitClip(const FVector& ShotDirection, bool bStaggered);
 	int32 GetHitClipsPlayed() const { return HitClipsPlayed; }
 	int32 GetHitReactions() const { return HitReactions; }
+	/** Fight faces (docs/design/focus.md "Faces"): how far the pain and angry faces show now (0 to 1), and how many pain
+	 *  faces a hit started. Cosmetic. */
+	float GetPainFace() const { return PainFace; }
+	float GetAngryFace() const { return AngryFace; }
+	int32 GetPainFacesShown() const { return PainFacesShown; }
 	bool IsReacting() const { return ReactionAge < kHitReactionSeconds; }
 	/** The lean now, in degrees (0 when still). */
 	float GetLeanDegrees() const { return LeanDegrees; }
@@ -406,6 +411,18 @@ private:
 	ESimPawnZone ZoneOfSimZone(const USimSubsystem& Bridge, int32 SimZone) const;
 	void UpdateHurt(const USimSubsystem& Bridge, const colony::ThingView& Now, float DeltaTime);
 	void UpdateCrawl(const colony::ThingView& Now, float GameDelta);
+	// Fight faces (docs/design/focus.md "Faces"): the pain face after a hit and the angry face in melee, eased 0 to 1 and
+	// laid on the MakeHuman body's Face_ morphs over the face it had before (kept in FaceBase while either shows).
+	void UpdateFightFace(const USimSubsystem& Bridge, const colony::ThingView& Now, float GameDelta);
+	void ApplyFightFace();
+	float PainFaceLeft = 0.0f;
+	float AngryHoldLeft = 0.0f;
+	float PainFace = 0.0f;
+	float AngryFace = 0.0f;
+	TMap<FName, float> FaceBase;
+	FVector4f FaceBaseWrinkles = FVector4f(0.0f, 0.0f, 0.0f, 0.0f);
+	TWeakObjectPtr<USkeletalMeshComponent> FaceBaseMesh;
+	int32 PainFacesShown = 0;
 	int32 ZoneKicks = 0;
 	ESimPawnZone LastKickZone = ESimPawnZone::Torso;
 	float HurtAge = 1.0f;
