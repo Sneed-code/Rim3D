@@ -21,6 +21,7 @@
 #include "CreatorPeople.h"
 #include "FightSubsystem.h"
 #include "GunRangeSubsystem.h"
+#include "KillFeedSubsystem.h"
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
 #include "PawnSubsystem.h"
@@ -128,6 +129,7 @@ namespace
 		float HitSeenAt = -1.0f;
 		bool bHitPicture = false;
 		bool bSwingPicture = false;
+		bool bKillFeedLines = false;
 		// -GunRangeIdleRecord=<seconds>: frames of a standing target close up (gunrange_idle/rec_0000.png ...).
 		int32 IdleRecorded = 0;
 		TWeakObjectPtr<ACameraActor> IdleCamera;
@@ -925,6 +927,20 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					Notes.Add(FString::Printf(TEXT("gunrange: gun back in hand, view %s, gun model %s"), Body->IsFirstPerson() ? TEXT("first person") : TEXT("third person"),
 						G->IsViewShown() && !G->IsHeldViewShown() ? TEXT("shown") : TEXT("NOT shown")));
 					Picture(TEXT("gun_again"));
+					Next(13);
+				}
+				break;
+			case 13:  // the kill feed at the top left: sample lines (one of them yours, with its sound), then a picture
+				if (UKillFeedSubsystem* Feed = GetWorld()->GetSubsystem<UKillFeedSubsystem>(); Feed && !State->bKillFeedLines)
+				{
+					State->bKillFeedLines = true;
+					Feed->AddLine(TEXT("You"), 0, TEXT("Raider"), 1, true);
+					Feed->AddLine(TEXT("Raider"), 1, TEXT("Bo"), 0, false);
+					Feed->AddLine(FString(), 0, TEXT("Deer"), 2, false);
+				}
+				if (State->StepTime > 1.0f)
+				{
+					Picture(TEXT("kill_feed"));
 					Next(10);
 				}
 				break;
@@ -960,6 +976,12 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		if (const UFightSubsystem* Marks = GetWorld()->GetSubsystem<UFightSubsystem>())
 		{
 			Notes.Add(FString::Printf(TEXT("gunrange: %d guards set unaware, %d alert events, %d alert marks drawn"), State->GuardsSet, Marks->GetAlertEventsSeen(), Marks->GetAlertMarksDrawn()));
+		}
+		if (UKillFeedSubsystem* Feed = GetWorld()->GetSubsystem<UKillFeedSubsystem>())
+		{
+			PhaseNumbers.Add(TEXT("killfeed_lines"), Feed->GetLinesShown());
+			PhaseNumbers.Add(TEXT("killfeed_mine"), Feed->GetPersonalKills());
+			PhaseNumbers.Add(TEXT("killfeed_frames"), Feed->GetFramesDrawn());
 		}
 		if (USoundSubsystem* S = GetWorld()->GetSubsystem<USoundSubsystem>())
 		{
