@@ -506,6 +506,7 @@ TEST_CASE("Stealth: a range guard walked off and set unaware keeps its back turn
     CHECK(at.x > 64.5f);
     sim->submit(SetFactionCommand{guard, 2});
     sim->submit(SetAlertCommand{guard, 0});
+    sim->submit(SetFightResponseCommand{guard, FightResponse::Fists});
     sim->step();
     STEALTH_REQUIRE(sim->things().registry().all_of<Fighter>(guard));
     CHECK(stealthTestFighter(*sim, guard).alert == Alert::Unaware);
@@ -525,4 +526,19 @@ TEST_CASE("Stealth: a range guard walked off and set unaware keeps its back turn
     }
     CHECK(stealthTestFighter(*sim, guard).alert == Alert::Alerted);
     CHECK(stealthTestKnows(*sim, guard, player));
+    // Unarmed, with the Fists response the range gives her, she comes at the player and swings.
+    for (int i = 0; i < 200; ++i) {
+        stealthTestWalk(*sim, player, 50.5f, 64.5f, 0.2f, 1);  // the player backs off 15 m again
+    }
+    const float apart = stealthTestDist(*sim, guard, player);
+    int swings = 0;
+    for (int i = 0; i < 900; ++i) {
+        sim->step();
+        for (const Event& e : sim->events()) {
+            swings += e.type == EventType::MeleeSwing && e.thing == guard ? 1 : 0;
+        }
+    }
+    CHECK(stealthTestDist(*sim, guard, player) < 3.0f);
+    CHECK(stealthTestDist(*sim, guard, player) < apart);
+    CHECK(swings > 0);
 }

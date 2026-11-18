@@ -52,7 +52,7 @@ namespace
 	TAutoConsoleVariable<int32> GFightDamageNumbers(
 		TEXT("Fight.DamageNumbers"), 1, TEXT("1 floats the damage of your own hits over where they landed (playing as a pawn), 0 hides them."), ECVF_Default);
 	constexpr float FightDamageNumberSeconds = 1.0f;
-	constexpr float FightAlertFlashSeconds = 1.5f;  // how long the "!" stays over a newly alerted enemy
+	constexpr float FightAlertFlashSeconds = 2.5f;  // how long the "!" stays over a newly alerted enemy
 
 	const TCHAR* const FightSolidMaterialPath = TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial");
 	const TCHAR* const FightDecalMaterialPath = TEXT("/Game/Rim3D/Generated/Fights/M_WoundDecal.M_WoundDecal");

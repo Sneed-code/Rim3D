@@ -108,7 +108,7 @@ know there is a threat, not where: hiding again breaks their line of sight, not 
 Built (2026-11-18):
 
 - **Marks** (`UFightSubsystem::DrawAlertMarks`, direct mode only): a yellow **"?"** over an enemy fighter that is
-  suspicious (from the snapshot) and a red **"!"** for 1.5 s over one that has just been alerted (from the `Alert`
+  suspicious (from the snapshot) and a red **"!"** for 2.5 s over one that has just been alerted (from the `Alert`
   event). Nothing over an unaware one or your own side.
 - **Stings** (sim `soundForEvent`, cues `Alert_Suspicious` and `Alert_Spotted`, [sound.md](sound.md)): a soft tone
   when a fighter grows suspicious, a sharp one when it is alerted. Placeholder tones; a spoken bark needs recordings.
@@ -117,8 +117,9 @@ Built (2026-11-18):
 - **Guards in the combat range** (`SmokeTestGunRange.cpp`, [gun-range.md](gun-range.md)): **U** brings eight guards
   instead of the usual targets (`-GunRangeGuards` starts with them). Each walks 3 m away from you, then goes over to
   side 2 with `SetFactionCommand` and is set unaware with `SetAlertCommand{pawn, 0}`, her back to you. From then on the
-  sim drives her: creep up crouched, or walk and be heard at 3 m; once alerted she comes at you with her fists and the
-  others within 20 m are called. The range switches the colony alarm off again when it goes off at them.
+  sim drives her: creep up crouched, or walk and be heard at 3 m; once alerted three of four come at you with their fists
+  and the fourth runs (`SetFightResponseCommand` Fists or FleeOnSight: an unarmed fighter with the default response
+  only stands there), and the others within 20 m are called. The range switches the colony alarm off again when it goes off at them.
 
 The sim gives:
 

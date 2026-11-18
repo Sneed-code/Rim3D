@@ -237,7 +237,8 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			{
 				// Guards: nobody walks or follows the scene's own behaviours; each turns her back by walking 3 m away.
 				T.bWalker = false;
-				T.Behaviour = EGunRangeBehaviour::Stand;
+				// Three of four come at you with their fists once alerted; the fourth runs as soon as she sees you.
+				T.Behaviour = i % 4 == 3 ? EGunRangeBehaviour::FleeOnSight : EGunRangeBehaviour::Fists;
 				T.GuardAt = State->Clock + 6.0f;
 				T.A = colony::CellPos{Here.x + 3, Here.y, 0};
 			}
@@ -497,6 +498,8 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				{
 					B->Submit(colony::SetFactionCommand{T.Thing, 2});
 					B->Submit(colony::SetAlertCommand{T.Thing, 0});
+					// Unarmed, she would only stand there once alerted: the sim's fight response sends her at you or away.
+					B->Submit(colony::SetFightResponseCommand{T.Thing, T.Behaviour == EGunRangeBehaviour::FleeOnSight ? colony::FightResponse::FleeOnSight : colony::FightResponse::Fists});
 					T.bGuard = true;
 					++State->GuardsSet;
 				}
@@ -573,7 +576,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		}
 		if (State->bGuards)
 		{
-			G->SetSceneLine(FString::Printf(TEXT("Guards: %d standing, %d down, %d dead   (group %d)\nUnaware, backs turned: crouch to creep up, walking is heard at 3 m\nN: ordinary targets   U: new guards"), Standing, Downed, Dead, State->Group));
+			G->SetSceneLine(FString::Printf(TEXT("Guards: %d standing, %d down, %d dead   (group %d)\nUnaware, backs turned: crouch to creep up, walking is heard at 3 m.\nAlerted, most come at you with their fists, some run\nN: ordinary targets   U: new guards"), Standing, Downed, Dead, State->Group));
 		}
 		else
 		{
