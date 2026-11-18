@@ -378,6 +378,43 @@ void FMakeHumanHairNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 	}
 }
 
+bool FMakeHumanSeverNode::IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones)
+{
+	return !Names.IsEmpty();
+}
+
+void FMakeHumanSeverNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms)
+{
+	const FBoneContainer& Container = Output.Pose.GetPose().GetBoneContainer();
+	TArray<FCompactPoseBoneIndex, TInlineAllocator<12>> Cut;
+	for (const FName& Name : Names)
+	{
+		FBoneReference Bone;
+		Bone.BoneName = Name;
+		if (Bone.Initialize(Container) && Bone.IsValidToEvaluate(Container))
+		{
+			Cut.Add(Bone.GetCompactPoseIndex(Container));
+		}
+	}
+	for (const FCompactPoseBoneIndex Index : Cut)
+	{
+		// A bone under another cut is folded with it already.
+		bool bUnderAnother = false;
+		for (const FCompactPoseBoneIndex Other : Cut)
+		{
+			bUnderAnother = bUnderAnother || (Other != Index && Container.BoneIsChildOf(Index, Other));
+		}
+		if (bUnderAnother)
+		{
+			continue;
+		}
+		FTransform Folded = Output.Pose.GetComponentSpaceTransform(Index);
+		Folded.SetScale3D(FVector(0.001));
+		OutBoneTransforms.Add(FBoneTransform(Index, Folded));
+	}
+	OutBoneTransforms.Sort(FCompareBoneTransformIndex());
+}
+
 void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 {
 	// The graph is linked up first: the engine's Initialize takes the root node (GetCustomRootNode) there and keeps it, so
@@ -463,7 +500,9 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 		RightHandIK.bAllowStretching = false;
 		RightHandIK.Alpha = 0.0f;
 	}
-	bPhysics = !Dynamics.IsEmpty() || !Jiggle.Bodies.IsEmpty() || !Tail.Bones.IsEmpty() || !Hair.Chains.IsEmpty() || bHandIK;
+	// Always through component space: the sever node at the end must be in the graph before anything is cut off (the
+	// engine keeps the root node it is given here).
+	bPhysics = true;
 	if (bPhysics)
 	{
 		ToComponent.LocalPose.SetLinkNode(&Retarget);
@@ -495,6 +534,8 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 			Node->ComponentPose.SetLinkNode(Previous);
 			Previous = Node.Get();
 		}
+		Sever.ComponentPose.SetLinkNode(Previous);
+		Previous = &Sever;
 		ToLocal.ComponentPose.SetLinkNode(Previous);
 	}
 	FAnimInstanceProxy::Initialize(Instance);
@@ -506,6 +547,7 @@ void FMakeHumanAnimProxy::PreUpdate(UAnimInstance* Instance, float DeltaSeconds)
 	if (const UMakeHumanAnimInstance* MakeHuman = Cast<UMakeHumanAnimInstance>(Instance))
 	{
 		Retarget.IKRetargeterAsset = MakeHuman->GetRetargeter();
+		Sever.Names = MakeHuman->GetSeveredBones();
 		LeftHandIK.EffectorLocationSpace = MakeHuman->bLeftReach ? BCS_ComponentSpace : BCS_BoneSpace;
 		LeftHandIK.JointTargetLocationSpace = MakeHuman->bLeftReach ? BCS_ComponentSpace : BCS_WorldSpace;
 		LeftHandIK.Alpha = MakeHuman->LeftGripAlpha;
