@@ -66,6 +66,9 @@ subsystem is missing, it runs past `-SmokeTimeout` (default 300 s), or the game 
 The full blood ([blood.md](blood.md)) needs `game/Content/Rim3D/Generated/Blood` (not in Git): make it once on each machine with
 `UnrealEditor-Cmd.exe game\Rim3D.uproject -run=BloodArt -unattended -nosplash -nullrhi`. With it `fights` checks the blood's hits, wound marks and drops instead of the old decals; without it the old simple blood is drawn.
 
+The realistic blasts ([blast-draw.md](blast-draw.md)) need `game/Content/Rim3D/Generated/Blast` (not in Git): make it once on each machine with
+`UnrealEditor-Cmd.exe game\Rim3D.uproject -run=BlastArt -unattended -nosplash -nullrhi`. With it `feel` checks and pictures them (`blast_*` phases); without it the old simple blast is drawn.
+
 `buildings` and `orders` need `game/Content/Rim3D/Generated/Buildings/M_BuildingGhost` (not in Git): make it once on each machine with
 `UnrealEditor-Cmd.exe game\Rim3D.uproject -run=BuildingMaterials -unattended -nosplash -nullrhi`. Without it the game still runs and draws plans solid.
 

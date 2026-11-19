@@ -6,6 +6,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Misc/ConfigCacheIni.h"
 
+#include "BlastFxSubsystem.h"
 #include "FightSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
@@ -40,6 +41,9 @@ namespace
 		float MaxRollAngle = 0.0f;
 		float MaxFlash = 0.0f;
 		int32 MaxBlast = 0;
+		int32 MaxSmoke = 0;
+		int32 BlastsAtStart = 0;
+		int32 ScorchesAtStart = 0;
 		int32 MaxGrenades = 0;
 		int32 MaxDebris = 0;
 		int32 ShotsAtStart = 0;
@@ -57,7 +61,7 @@ namespace
 		void Reset()
 		{
 			MaxKickPitch = MaxFeelPitch = MinFeelPitch = MaxAimDirectionError = MaxShake = MaxBlur = MaxRollAngle = MaxFlash = 0.0f;
-			MaxBlast = MaxGrenades = MaxDebris = 0;
+			MaxBlast = MaxGrenades = MaxDebris = MaxSmoke = 0;
 			MaxCameraTrail = CameraTrailAtEnd = 0.0;
 		}
 	};
@@ -102,6 +106,12 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		State->MaxShake = FMath::Max(State->MaxShake, F->GetLargestShakeSeen());
 		State->MaxBlur = FMath::Max(State->MaxBlur, Body->GetMotionBlurAmount());
 		State->MaxFlash = FMath::Max(State->MaxFlash, F->GetFlashIntensity());
+		if (const UBlastFxSubsystem* Fx = GetWorld()->GetSubsystem<UBlastFxSubsystem>())
+		{
+			State->MaxFlash = FMath::Max(State->MaxFlash, Fx->GetFlashCandelas());
+			State->MaxBlast = FMath::Max(State->MaxBlast, Fx->GetSpritesAlive());
+			State->MaxSmoke = FMath::Max(State->MaxSmoke, Fx->GetSmokeAlive());
+		}
 		State->MaxCameraTrail = FMath::Max(State->MaxCameraTrail, Body->GetCameraTrail());
 		State->CameraTrailAtEnd = Body->GetCameraTrail();
 		State->MaxBlast = FMath::Max(State->MaxBlast, F->GetBlastParticles());
@@ -535,4 +545,95 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		FeelSmokeSet(TEXT("Sky.DayOfYear"), -1.0f);
 	};
 	Phases.Add(MoveTemp(Big));
+
+	// 8. The realistic blast look (docs/design/blast-draw.md, needs -run=BlastArt): a frag blast 14 m ahead in daylight,
+	// pictured at its fireball, its rising smoke and its lingering cloud and scorch; then a molotov's splash of fire.
+	const auto Fx = [this]() { return GetWorld()->GetSubsystem<UBlastFxSubsystem>(); };
+	FPhase Fireball;
+	Fireball.Name = TEXT("blast_fireball");
+	Fireball.WarmupSeconds = 0.2f;
+	Fireball.MeasureSeconds = 1.0f;
+	Fireball.ScreenshotAt = 0.1f;
+	Fireball.Setup = [=, this]()
+	{
+		State->Reset();
+		FeelSmokeSet(TEXT("Sky.Hour"), 14.0f);
+		const colony::ThingView* Me = MyView();
+		State->BlastsAtStart = Fx() ? Fx()->GetBlastsDrawn() : 0;
+		State->ScorchesAtStart = Fx() ? Fx()->GetScorchMarks() : 0;
+		Bridge()->Submit(colony::ExplodeCommand{Me->x + 14.0f, Me->y, 1.9f, 50.0f, "Bomb", 0.1f});
+	};
+	Fireball.OnFrame = Watch;
+	Fireball.Verify = [=, this]()
+	{
+		if (!Fx() || !Fx()->IsReady())
+		{
+			Notes.Add(TEXT("blast_fireball: no blast art (run -run=BlastArt); the simple look was drawn"));
+			return;
+		}
+		Notes.Add(FString::Printf(TEXT("blast_fireball: %d blast(s) drawn, %d sprites at most, light up to %.0f cd"), Fx()->GetBlastsDrawn() - State->BlastsAtStart, State->MaxBlast, State->MaxFlash));
+		if (Fx()->GetBlastsDrawn() - State->BlastsAtStart < 1 || State->MaxBlast < 40 || State->MaxFlash < 2000.0f)
+		{
+			Fail(FString::Printf(TEXT("blast_fireball: %d blasts drawn, %d sprites, %.0f cd"), Fx()->GetBlastsDrawn() - State->BlastsAtStart, State->MaxBlast, State->MaxFlash));
+		}
+		if (Fx()->GetScorchMarks() - State->ScorchesAtStart < 1)
+		{
+			Fail(TEXT("blast_fireball: the blast left no scorch mark"));
+		}
+	};
+	Phases.Add(MoveTemp(Fireball));
+
+	FPhase Rising;
+	Rising.Name = TEXT("blast_smoke");
+	Rising.WarmupSeconds = 0.0f;
+	Rising.MeasureSeconds = 3.0f;
+	Rising.ScreenshotAt = 2.5f;
+	Rising.Setup = [=]() { State->MaxSmoke = 0; };
+	Rising.OnFrame = Watch;
+	Phases.Add(MoveTemp(Rising));
+
+	FPhase Lingering;
+	Lingering.Name = TEXT("blast_linger");
+	Lingering.WarmupSeconds = 0.0f;
+	Lingering.MeasureSeconds = 7.0f;
+	Lingering.ScreenshotAt = 6.5f;
+	Lingering.Setup = [=]() { State->MaxSmoke = 0; };
+	Lingering.OnFrame = Watch;
+	Lingering.Verify = [=, this]()
+	{
+		if (!Fx() || !Fx()->IsReady())
+		{
+			return;
+		}
+		// About 11 s after the blast: the smoke still hangs and the scorch is still there.
+		Notes.Add(FString::Printf(TEXT("blast_linger: %d smoke puffs at the end, %d scorch marks"), Fx()->GetSmokeAlive(), Fx()->GetScorchMarks()));
+		if (Fx()->GetSmokeAlive() < 3)
+		{
+			Fail(FString::Printf(TEXT("blast_linger: only %d smoke puffs left 11 s after the blast"), Fx()->GetSmokeAlive()));
+		}
+		if (Fx()->GetScorchMarks() < 1)
+		{
+			Fail(TEXT("blast_linger: the scorch mark is gone already"));
+		}
+	};
+	Phases.Add(MoveTemp(Lingering));
+
+	FPhase Molotov;
+	Molotov.Name = TEXT("blast_molotov");
+	Molotov.WarmupSeconds = 0.2f;
+	Molotov.MeasureSeconds = 1.5f;
+	Molotov.ScreenshotAt = 0.3f;
+	Molotov.Setup = [=, this]()
+	{
+		State->Reset();
+		const colony::ThingView* Me = MyView();
+		Bridge()->Submit(colony::ExplodeCommand{Me->x + 12.0f, Me->y + 4.0f, 1.1f, 10.0f, "Burn", 0.0f});
+	};
+	Molotov.OnFrame = Watch;
+	Molotov.Verify = [=, this]()
+	{
+		Notes.Add(FString::Printf(TEXT("blast_molotov: %d sprites at most, light up to %.0f cd"), State->MaxBlast, State->MaxFlash));
+		FeelSmokeSet(TEXT("Sky.Hour"), -1.0f);
+	};
+	Phases.Add(MoveTemp(Molotov));
 }
