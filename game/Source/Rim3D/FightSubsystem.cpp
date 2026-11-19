@@ -649,7 +649,7 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 				ASimPawnActor* Actor = Pawns->FindPawn(Tracer.Target);
 				if (Actor)
 				{
-					// A whole-body react with steps (a stumble back when the sim staggered it); the lean goes on top.
+					// A react on the upper body (a stumble when the sim staggered it) over legs that keep what they were doing; the lean goes on top.
 					if (HitView && !HitView->downed && !HitView->dead && Actor->PlayHitClip(Dir, HitView->staggeredFor > 0))
 					{
 						++HitClipsPlayed;

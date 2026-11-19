@@ -188,7 +188,11 @@ public:
 
 	USkeletalMesh* GetBodyMesh() const { return BodyMesh; }
 	const TArray<TObjectPtr<const UPoseSearchDatabase>>& GetDatabases() const { return Databases; }
+	/** The first standing idle (for the smoke test), and all of them with the footprint each stands on (same number:
+	 *  the feet stand in the same place, so a pawn may blend from one to the other without a foot sliding). */
 	UAnimSequence* GetIdleLoop() const { return IdleLoop; }
+	const TArray<TObjectPtr<UAnimSequence>>& GetIdleLoops() const { return IdleLoops; }
+	const TArray<int32>& GetIdleFeet() const { return IdleFeet; }
 	UAnimSequence* GetWalkLoop() const { return WalkLoop; }
 	UAnimSequence* GetRunLoop() const { return RunLoop; }
 	float GetWalkLoopSpeed() const { return WalkLoopSpeed; }
@@ -239,6 +243,10 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UAnimSequence> IdleLoop;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UAnimSequence>> IdleLoops;
+	TArray<int32> IdleFeet;
 
 	UPROPERTY()
 	TObjectPtr<UAnimSequence> WalkLoop;
