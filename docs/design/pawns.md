@@ -168,6 +168,12 @@ spun round in a frame); now it starts from the facing taken, and **the turn a fo
 a stiff spring** (30/s), so no hand-over can spin the toes at once. **The hips are not pulled over a standing idle**
 (its hips belong where they are over its feet; pulling them shifted the body and its holsters), easing out and in over
 the idle's 0.4 s blend.
+Eighth round: **a whole-body clip plays at the moment drawn**, between the last two steps' moments as the body's place
+is between their places (the newest step's moment jumped 1/30 s at each step and the catch-up sped the clip up and down
+30 times a second: every bone jittered through a lunge or a roll); the catch-up allows for the frame the montage is
+about to play and is gentle both ways. **A lifted foot lets go at the speed its held ankle really had** (the swing over
+the ball included; the old guess, capped at 4 m/s, jolted the foot at lift-off). A standing foot's turn follows the
+holds' with their own speed fed forward (no lag while the body twists over it), up to 60 degrees.
 
 **Near and far: loops.** The breathing idle, or the walk or run loop (`M_Neutral_*`), picked by speed (run above the
 middle of the two loops' speeds, measured from their root motion: 200 and 500 cm/s) and played

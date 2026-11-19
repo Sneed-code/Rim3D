@@ -1510,7 +1510,16 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 	}
 	else
 	{
-		const float Want = Clip->from + Now.motionTime;
+		// The clip's moment drawn: between the last two steps' moments, as the body's place is between their places (the
+		// newest step's moment alone jumped 1/30 s at every step, and the catch-up below sped the clip up and down 30 times
+		// a second: every bone jittered).
+		float ShownTime = Now.motionTime;
+		if (const colony::ThingView* Prev = Bridge.GetPreviousSnapshot().find(Thing);
+			Prev && Prev->motionClip.value == Now.motionClip.value && Prev->motionTime <= Now.motionTime)
+		{
+			ShownTime = FMath::Lerp(Prev->motionTime, Now.motionTime, Bridge.GetBlendAlpha());
+		}
+		const float Want = Clip->from + ShownTime;
 		const float Rate = FMath::Max(0.05f, Now.motionRate);
 		MotionClipFrom = Clip->from;
 		MotionClipHit = Clip->hitSeconds;
@@ -1545,7 +1554,10 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 			// Kept in step with the sim: its rate, and its moment if the picture drifted (a pause, a hitch, a hit-stop). A
 			// picture a little behind (a hit-stop froze it while the sim went on) plays faster until it is back, within about
 			// 0.1 s, so the blow still lands on its step; the sim's moment is whole steps, so a picture up to a step ahead is right.
-			const float Drift = Want - Anim->Montage_GetPosition(MotionMontage.Get());
+			// The montage moves on by this frame's time after this (the meshes tick after the pawns): where it will be drawn.
+			const UWorld* ClipWorld = GetWorld();
+			const float Ahead = ClipWorld ? ClipWorld->GetDeltaSeconds() * Anim->Montage_GetPlayRate(MotionMontage.Get()) : 0.0f;
+			const float Drift = Want - (Anim->Montage_GetPosition(MotionMontage.Get()) + Ahead);
 			if (FMath::Abs(Drift) > 0.08f)
 			{
 				Anim->Montage_SetPosition(MotionMontage.Get(), Want);
@@ -1553,7 +1565,8 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 			}
 			else
 			{
-				Anim->Montage_SetPlayRate(MotionMontage.Get(), Rate + FMath::Max(0.0f, Drift) / 0.1f);
+				// Gently back in step, either way (the moment drawn is smooth now, so this stays small).
+				Anim->Montage_SetPlayRate(MotionMontage.Get(), FMath::Max(0.05f, Rate + FMath::Clamp(Drift / 0.25f, -0.3f * Rate, 0.3f * Rate)));
 			}
 		}
 		MotionClipTime = Now.motionTime;

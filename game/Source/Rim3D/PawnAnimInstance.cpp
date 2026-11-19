@@ -104,7 +104,7 @@ namespace
 	constexpr float PawnWalkLockFollowRate = 22.0f;
 	constexpr float PawnWalkLockMaxOff = 50.0f;
 	constexpr float PawnWalkLockRelease = 0.15f;
-	constexpr float PawnWalkLockMaxSpeed = 400.0f;
+	constexpr float PawnWalkLockMaxSpeed = 1500.0f;
 	constexpr float PawnWalkLockBlend = 0.15f;
 	// The hips stay over the sim's position (docs/design/body-motion.md): the sample's stop and transition clips lead or
 	// trail their root by up to 20 cm, and the root is not where the sim has the body; past PawnHipsReach cm from the
@@ -120,10 +120,11 @@ namespace
 	// would otherwise spin the toes round the ankle (a slide at the toes). Held up to these many degrees off the
 	// animation's facing; a let-go foot turns back to the animation's facing over PawnWalkLockRelease, at the rate it had.
 	constexpr float PawnWalkYawMax = 35.0f;
-	constexpr float PawnStandYawMax = 40.0f;
+	constexpr float PawnStandYawMax = 60.0f;
 	constexpr float PawnWalkYawMaxRate = 540.0f;
 	// The foot's drawn turn follows the holds' as a critically damped spring at this rate (1/s).
 	constexpr float PawnFootTurnRate = 30.0f;
+	constexpr float PawnFootTurnFeed = 600.0f;
 
 	/** The facing of a foot (degrees, world yaw) from its ankle to its ball. */
 	float PawnFootYaw(const FVector& Ankle, const FVector& Ball)
@@ -601,6 +602,8 @@ private:
 	/** A held foot's speed left from landing (world, cm/s, dying away) and its following speed last frame. */
 	FVector WalkVel[2] = {FVector::ZeroVector, FVector::ZeroVector};
 	FVector WalkFollow[2] = {FVector::ZeroVector, FVector::ZeroVector};
+	/** A held ankle's speed over the ground last frame (world, cm/s), all told. */
+	FVector WalkHeldVel[2] = {FVector::ZeroVector, FVector::ZeroVector};
 	/** The let-go foot's offset when it let go and how fast that offset was changing then. */
 	FVector WalkGap[2] = {FVector::ZeroVector, FVector::ZeroVector};
 	FVector WalkGapVel[2] = {FVector::ZeroVector, FVector::ZeroVector};
@@ -631,6 +634,7 @@ private:
 	/** Each foot's turn drawn (degrees) and how fast it turns: a spring after the holds' wanted turn. */
 	float FootTurn[2] = {0.0f, 0.0f};
 	float FootTurnRate[2] = {0.0f, 0.0f};
+	float FootTurnWanted[2] = {0.0f, 0.0f};
 	FCompactPoseBoneIndex Calf[2] = {FCompactPoseBoneIndex(INDEX_NONE), FCompactPoseBoneIndex(INDEX_NONE)};
 
 	FCompactPoseBoneIndex Pelvis = FCompactPoseBoneIndex(INDEX_NONE);
@@ -1450,6 +1454,7 @@ void FSimPawnHitLayerNode::Forget()
 	bStandYawTake[0] = bStandYawTake[1] = false;
 	FootTurn[0] = FootTurn[1] = 0.0f;
 	FootTurnRate[0] = FootTurnRate[1] = 0.0f;
+	FootTurnWanted[0] = FootTurnWanted[1] = 0.0f;
 	bWalkGroundKnown = false;
 	bWantFootLock = false;
 	bFootLocked = false;
@@ -1745,7 +1750,7 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 				FVector Gap = WalkPlant[Side] - Wanted[Side];
 				Gap.Z = 0.0;
 				WalkGap[Side] = Gap;
-				WalkGapVel[Side] = (WalkVel[Side] + WalkFollow[Side] - WantedVel).GetClampedToMaxSize(PawnWalkLockMaxSpeed);
+				WalkGapVel[Side] = (WalkHeldVel[Side] - WantedVel).GetClampedToMaxSize(PawnWalkLockMaxSpeed);
 				WalkYawGap[Side] = WalkYaw[Side];
 				WalkYawGapRate[Side] = FMath::Clamp(-WantedYawRate, -PawnWalkYawMaxRate, PawnWalkYawMaxRate);
 				WalkFade[Side] = 1.0f;
@@ -1768,6 +1773,7 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 			}
 			if (bWalkHeld[Side])
 			{
+				const FVector PlantBefore = WalkPlant[Side];
 				if (bToes)
 				{
 					// The facing held, within its reach (past it the held facing comes round with the animation's).
@@ -1799,6 +1805,10 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 					WalkPlant[Side] = Wanted[Side] + Gap * (PawnWalkLockMaxOff / Gap.Size2D());
 				}
 				WalkTarget[Side] = FVector(WalkPlant[Side].X, WalkPlant[Side].Y, Wanted[Side].Z);
+				// How fast the held ankle really moves (the landing's speed dying away, a follow, the swing over the
+				// ball): a lift lets go at exactly that speed.
+				WalkHeldVel[Side] = bLanded || Dt <= 0.0f ? WalkVel[Side] : (WalkPlant[Side] - PlantBefore) / static_cast<double>(Dt);
+				WalkHeldVel[Side].Z = 0.0;
 			}
 			else
 			{
@@ -2016,12 +2026,16 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 			// The turn put on follows the one wanted as a stiff damped spring (PawnFootTurnRate): the holds change it
 			// smoothly anyway, but no hand-over between them (a hold taken, a step, a lock fading) can then spin the
 			// toes round in a frame.
+			// The wanted turn's own speed is fed forward (so a body turning steadily over a held foot is followed without
+			// lag: a lag slid the toes), up to PawnFootTurnFeed: a jump in it is still eased.
 			const float Want = FMath::Clamp(WalkTurn + StandTurn, -PawnStandYawMax, PawnStandYawMax);
+			const float WantRate = Dt > 0.0f ? FMath::Clamp((Want - FootTurnWanted[Side]) / Dt, -PawnFootTurnFeed, PawnFootTurnFeed) : 0.0f;
+			FootTurnWanted[Side] = Want;
 			const int32 TurnSteps = FMath::Clamp(FMath::CeilToInt32(Dt * 240.0f), 1, 60);
 			for (int32 i = 0; i < TurnSteps; ++i)
 			{
 				const float H = Dt / TurnSteps;
-				FootTurnRate[Side] += (PawnFootTurnRate * PawnFootTurnRate * (Want - FootTurn[Side]) - 2.0f * PawnFootTurnRate * FootTurnRate[Side]) * H;
+				FootTurnRate[Side] += (PawnFootTurnRate * PawnFootTurnRate * (Want - FootTurn[Side]) + 2.0f * PawnFootTurnRate * (WantRate - FootTurnRate[Side])) * H;
 				FootTurn[Side] += FootTurnRate[Side] * H;
 			}
 			if (FMath::Abs(FootTurn[Side]) > 0.01f)
@@ -2036,6 +2050,7 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 		bStandYawTake[0] = bStandYawTake[1] = false;
 		FootTurn[0] = FootTurn[1] = 0.0f;
 		FootTurnRate[0] = FootTurnRate[1] = 0.0f;
+		FootTurnWanted[0] = FootTurnWanted[1] = 0.0f;
 	}
 }
 
