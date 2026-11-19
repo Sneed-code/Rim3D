@@ -104,6 +104,8 @@ struct FSimPawnAnimStats
 	/** Walking feet: how much the walking foot lock shows (0 to 1) and how many feet it holds now. */
 	float WalkLock = 0.0f;
 	int32 WalkFeetHeld = 0;
+	/** Which feet the walking lock holds fully now: bit 0 the left, bit 1 the right. */
+	int32 WalkHeldMask = 0;
 	/** Degrees the upper body is twisted over planted feet now (a standing turn), and the most it has been. */
 	float StandTwistDegrees = 0.0f;
 	float MaxStandTwistDegrees = 0.0f;

@@ -79,6 +79,7 @@ namespace
 		float ActorYaw = 0.0f;
 		float WalkLock = 0.0f;  // the walking foot lock's weight, and the feet it holds
 		int32 WalkFeetHeld = 0;
+		int32 WalkHeldMask = 0;  // which feet the walking lock holds fully (bit 0 left, bit 1 right)
 	};
 
 	struct FIdleSmokeState
@@ -142,6 +143,7 @@ namespace
 		Out.ActorYaw = static_cast<float>(Actor.GetActorRotation().Yaw);
 		Out.WalkLock = Anim ? Anim->GetStats().WalkLock : 0.0f;
 		Out.WalkFeetHeld = Anim ? Anim->GetStats().WalkFeetHeld : 0;
+		Out.WalkHeldMask = Anim ? Anim->GetStats().WalkHeldMask : 0;
 	}
 }
 
@@ -206,7 +208,11 @@ void USmokeTestSubsystem::BuildIdlePhases()
 			for (int32 i = 0; i < IdleSmokeBoneCount; ++i)
 			{
 				const int32 Group = static_cast<int32>(IdleSmokeBones[i].Group);
-				const bool bWorld = bHeld && Group == static_cast<int32>(EIdleSmokeGroup::Feet);
+				// A walking foot held down where it landed is measured in the world too (against an actor whose speed
+				// wavers frame to frame it would seem to jump while it stands still): its own side, all three samples.
+				const int32 SideBit = FString(IdleSmokeBones[i].Name).EndsWith(TEXT("_r")) ? 2 : 1;
+				const bool bWalkHeld = (Now.WalkHeldMask & State->Last[0].WalkHeldMask & State->Last[1].WalkHeldMask & SideBit) != 0;
+				const bool bWorld = (bHeld || bWalkHeld) && Group == static_cast<int32>(EIdleSmokeGroup::Feet);
 				const FVector& P0 = bWorld ? State->Last[1].World[i] : State->Last[1].Local[i];
 				const FVector& P1 = bWorld ? State->Last[0].World[i] : State->Last[0].Local[i];
 				const FVector& P2 = bWorld ? Now.World[i] : Now.Local[i];

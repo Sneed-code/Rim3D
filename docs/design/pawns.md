@@ -132,6 +132,15 @@ the leg bent to reach, let go as the animation lifts them with the gap closing o
 20 cm; the lock fades in and out over 0.15 s and is off for whole-body clips, jumps, rolls and crawling. The smoke tests
 read the bones at the start of the next frame (what was drawn), and `idle` fails on any frame that plays a turn clip.
 
+Third PC round (2026-11-19): nothing in the walking lock changes a foot's speed at once (a foot lands with the speed it
+came down at, dying away over 0.025 s; a hold more than 8 cm behind the animation's foot follows it at 22 times the
+excess a second, 50 cm at most; a lifted foot lets go along a curve that starts at its own speed). The standing hold
+and the walking lock fade in and out eased, not linearly. **The hips stay within 8 cm of the sim's position** under
+walking legs (the sample's stop and transition clips lead or trail their root by up to 20 cm: staggers, and the walk
+back after a roll or a knockdown, drew the hips 17 to 22 cm off), and **the upper body comes round after a fast turn**
+as a damped spring (25/s, at most 25 degrees behind) instead of snapping with the actor. The `idle` test measures a
+walking foot the lock holds in the world, like a standing one.
+
 **Near and far: loops.** The breathing idle, or the walk or run loop (`M_Neutral_*`), picked by speed (run above the
 middle of the two loops' speeds, measured from their root motion: 200 and 500 cm/s) and played
 faster or slower to match it (0.6 to 1.5). A pawn that comes close again starts motion matching
