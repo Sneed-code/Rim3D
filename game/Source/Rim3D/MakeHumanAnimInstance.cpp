@@ -534,8 +534,8 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 	{
 		const FMakeHumanHandGoal& Goal = Goals[Side];
 		FArm& Arm = Arms[Side];
-		const float Alpha = FMath::Clamp(Goal.Alpha, 0.0f, 1.0f);
-		if (!Arm.bValid || Alpha <= 0.0f)
+		const float GoalAlpha = FMath::Clamp(Goal.Alpha, 0.0f, 1.0f);
+		if (!Arm.bValid || GoalAlpha <= 0.0f)
 		{
 			continue;
 		}
@@ -673,9 +673,9 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 		HandRot.Normalize();
 
 		// Blended in by the goal's alpha, the bones rebuilt down the chain so they keep their lengths.
-		const FQuat UpperB = FQuat::Slerp(UpperT.GetRotation(), UpperRot, Alpha).GetNormalized();
-		const FQuat LowerB = FQuat::Slerp(LowerT.GetRotation(), LowerRot, Alpha).GetNormalized();
-		const FQuat HandB = FQuat::Slerp(HandT.GetRotation(), HandRot, Alpha).GetNormalized();
+		const FQuat UpperB = FQuat::Slerp(UpperT.GetRotation(), UpperRot, GoalAlpha).GetNormalized();
+		const FQuat LowerB = FQuat::Slerp(LowerT.GetRotation(), LowerRot, GoalAlpha).GetNormalized();
+		const FQuat HandB = FQuat::Slerp(HandT.GetRotation(), HandRot, GoalAlpha).GetNormalized();
 		const FVector EB = S + UpperB.RotateVector(UpperT.GetRotation().UnrotateVector(E0 - S));
 		const FVector WB = EB + LowerB.RotateVector(LowerT.GetRotation().UnrotateVector(W0 - E0));
 		OutBoneTransforms.Add(FBoneTransform(UpperI, FTransform(UpperB, S, UpperT.GetScale3D())));
