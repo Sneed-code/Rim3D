@@ -110,7 +110,7 @@ def bake_surface(tier, size, h):
         joint=np.zeros_like(yy)
         for edge in boundaries[1:-1]: joint+=np.exp(-((yy-edge)/.004)**2)*.19
         variation=np.clip(tones+grain-joint, .56,1.2)
-        col=np.stack([.32*variation,.165*variation,.075*variation],axis=-1)
+        col=np.stack([.44*variation,.235*variation,.11*variation],axis=-1)  # lighter oak: the noon smoke picture read darker than a mannequin
         rough=.82
     else:
         variation=.88+.028*np.sin(yy*680)+.018*np.sin(yy*1310)+.012*np.sin(yy*1930)
