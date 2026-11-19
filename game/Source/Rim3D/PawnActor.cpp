@@ -1600,7 +1600,12 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 		const double Ahead = Playing.IsPlaying() ? FrameAhead * static_cast<double>(Playing.GetPlayRate()) : 0.0;
 		const double At = FMath::Clamp(static_cast<double>(Playing.GetPosition()) + Ahead, 0.0, static_cast<double>(PlayingAsset.GetPlayLength()));
 		const FVector Travel = PawnMotionBoneAt(PlayingAsset, Pelvis, At) - PelvisStart;
-		return FVector(-Travel.Y, Travel.X, 0.0) * Playing.GetWeight() * Height;
+		// Its weight a frame on too, where it is drawn (tenth PC round): read a frame old, the weight lagged the moment
+		// while a clip blended in or out, by an amount that changed with every frame's length (frames of 3 to 8 ms in the
+		// PC test), and the hips jittered through every lunge's blends.
+		FAlphaBlend Blend = Playing.GetBlend();
+		Blend.Update(static_cast<float>(FrameAhead));
+		return FVector(-Travel.Y, Travel.X, 0.0) * static_cast<double>(Blend.GetBlendedValue()) * Height;
 	};
 	// The bodies' meshes tick after the pawns (TG_PostUpdateWork), so the moments and weights read here are a frame
 	// old; the hips' travel is read a frame on (the montage's moment plus this frame's play), which is where it is drawn.

@@ -109,6 +109,19 @@ namespace
 	constexpr float PawnWalkLockRelease = 0.15f;
 	constexpr float PawnWalkLockMaxSpeed = 1500.0f;
 	constexpr float PawnWalkLockBlend = 0.15f;
+	// A held foot the body has left behind steps instead of being dragged (tenth PC round: held feet were dragged up to
+	// 5 m/s over the ground when setting off with a big turn, and a leg stretched past its length pinned the foot to the
+	// hip, which jolted it at 1000 m/s^2 and more when it came back within reach). It lets go and steps to the
+	// animation's foot along the let-go curve, lifted PawnWalkStepLift cm at the middle on a curve that starts and ends
+	// flat, when it lies more than PawnWalkStepGap cm from the animation's foot, when its facing is held past
+	// PawnWalkYawMax, or when the leg would have to reach further than the animation's own leg does and more than
+	// PawnWalkStepReach of its length. One foot steps at a time; it does not land again until the step is over.
+	constexpr float PawnWalkStepGap = 16.0f;
+	constexpr float PawnWalkStepLift = 6.0f;
+	constexpr double PawnWalkStepReach = 0.95;
+	// A leg asked to reach further than it can comes to its full length softly, over the last PawnLegSoftReach cm (a hard
+	// stop turned the foot's speed round in one frame).
+	constexpr double PawnLegSoftReach = 2.5;
 	// The hips stay over the sim's position (docs/design/body-motion.md): the sample's stop and transition clips lead or
 	// trail their root by up to 20 cm, and the root is not where the sim has the body; past PawnHipsReach cm from the
 	// mesh's origin the hips are pulled back to it (the held feet stay put, the legs reach).
@@ -299,7 +312,15 @@ namespace
 			return;
 		}
 		FVector Along = Target - A;
-		const double Reach = FMath::Clamp(Along.Size(), FMath::Abs(Upper - Lower) + 0.5, Upper + Lower - 0.05);
+		const double Longest = Upper + Lower - 0.05;
+		const double SoftFrom = Longest - PawnLegSoftReach;
+		double Wanted = Along.Size();
+		if (Wanted > SoftFrom)
+		{
+			// tanh: slope 1 where it starts, never past the leg's length.
+			Wanted = SoftFrom + PawnLegSoftReach * FMath::Tanh((Wanted - SoftFrom) / PawnLegSoftReach);
+		}
+		const double Reach = FMath::Clamp(Wanted, FMath::Abs(Upper - Lower) + 0.5, Longest);
 		if (!Along.Normalize())
 		{
 			return;
@@ -429,6 +450,64 @@ private:
 	bool bSmoothReset = true;
 };
 
+/**
+ * The montage slots' key easing (tenth PC round): a montage's keys are 1/30 s apart and played straight from one to the
+ * next, so every bone's speed changed at once at each key (head and chest jolts through hit reacts and swings). Each bone
+ * the slot shows follows its pose with the locomotion's ease (PawnKeySmooth), as much as the slot shows (so a slot
+ * fading out ends exactly on the pose under it). The hips' place over the ground is left as the clip has it: the sim's
+ * set-back takes out the clip's travel key for key, and easing one and not the other would wobble the body.
+ */
+struct FSimPawnSlotEase
+{
+	TArray<FTransform> Smoothed;
+	bool bLive = false;
+
+	/** Only: bones (by compact index) eased where above nought, or every bone if null; Extra is eased as well; KeepFlat's
+	 *  place across the ground is not eased. */
+	void Apply(FCompactPose& Pose, float Dt, float Weight, const TArray<float>* Only, FCompactPoseBoneIndex Extra, FCompactPoseBoneIndex KeepFlat)
+	{
+		const int32 Count = Pose.GetNumBones();
+		if (Weight <= ZERO_ANIMWEIGHT_THRESH || Dt > 0.2f || Smoothed.Num() != Count || (Only && Only->Num() != Count))
+		{
+			bLive = false;
+		}
+		if (!bLive)
+		{
+			Smoothed.SetNum(Count);
+			for (FCompactPoseBoneIndex Bone : Pose.ForEachBoneIndex())
+			{
+				Smoothed[Bone.GetInt()] = Pose[Bone];
+			}
+			bLive = Weight > ZERO_ANIMWEIGHT_THRESH;
+			return;
+		}
+		const float Follow = Dt > 0.0f ? 1.0f - FMath::Exp(-Dt / PawnKeySmooth) : 0.0f;
+		const float Show = FMath::Clamp(Weight, 0.0f, 1.0f);
+		for (FCompactPoseBoneIndex Bone : Pose.ForEachBoneIndex())
+		{
+			FTransform& Eased = Smoothed[Bone.GetInt()];
+			const FTransform Now = Pose[Bone];
+			if (Only && (*Only)[Bone.GetInt()] <= 0.0f && Bone != Extra)
+			{
+				Eased = Now;
+				continue;
+			}
+			Eased.SetRotation(FQuat::Slerp(Eased.GetRotation(), Now.GetRotation(), Follow).GetNormalized());
+			FVector Place = FMath::Lerp(Eased.GetTranslation(), Now.GetTranslation(), static_cast<double>(Follow));
+			if (Bone == KeepFlat)
+			{
+				Place.X = Now.GetTranslation().X;
+				Place.Y = Now.GetTranslation().Y;
+			}
+			Eased.SetTranslation(Place);
+			Eased.SetScale3D(Now.GetScale3D());
+			FTransform Mixed = Now;
+			Mixed.BlendWith(Eased, Show);
+			Pose[Bone] = Mixed;
+		}
+	}
+};
+
 struct FSimPawnSlotNode : public FAnimNode_Base
 {
 	FAnimNode_Base* Source = nullptr;
@@ -450,10 +529,15 @@ struct FSimPawnSlotNode : public FAnimNode_Base
 	virtual void CacheBones_AnyThread(const FAnimationCacheBonesContext& Context) override
 	{
 		Source->CacheBones_AnyThread(Context);
+		const FBoneContainer& Bones = Context.AnimInstanceProxy->GetRequiredBones();
+		const int32 PelvisRef = Bones.GetReferenceSkeleton().FindBoneIndex(TEXT("pelvis"));
+		Pelvis = PelvisRef != INDEX_NONE ? Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(PelvisRef)) : FCompactPoseBoneIndex(INDEX_NONE);
+		Ease.bLive = false;
 	}
 
 	virtual void Update_AnyThread(const FAnimationUpdateContext& Context) override
 	{
+		EaseDt = FMath::Max(0.0f, Context.GetDeltaTime());
 		Context.AnimInstanceProxy->GetSlotWeight(FAnimSlotGroup::DefaultSlotName, SlotNodeWeight, SourceWeight, TotalNodeWeight);
 		Context.AnimInstanceProxy->UpdateSlotNodeWeight(FAnimSlotGroup::DefaultSlotName, SlotNodeWeight, Context.GetFinalBlendWeight());
 		// Locomotion always updates, so the pawn walks on under an action.
@@ -465,6 +549,7 @@ struct FSimPawnSlotNode : public FAnimNode_Base
 		if (SlotNodeWeight <= ZERO_ANIMWEIGHT_THRESH)
 		{
 			Source->Evaluate_AnyThread(Output);
+			Ease.bLive = false;
 			return;
 		}
 		FPoseContext SourceContext(Output);
@@ -472,6 +557,7 @@ struct FSimPawnSlotNode : public FAnimNode_Base
 		const FAnimationPoseData SourcePose(SourceContext);
 		FAnimationPoseData OutputPose(Output);
 		Output.AnimInstanceProxy->SlotEvaluatePose(FAnimSlotGroup::DefaultSlotName, SourcePose, SourceWeight, OutputPose, SlotNodeWeight, TotalNodeWeight);
+		Ease.Apply(Output.Pose, EaseDt, SlotNodeWeight, nullptr, FCompactPoseBoneIndex(INDEX_NONE), Pelvis);
 	}
 
 private:
@@ -479,6 +565,9 @@ private:
 	float SlotNodeWeight = 0.0f;
 	float SourceWeight = 1.0f;
 	float TotalNodeWeight = 0.0f;
+	FCompactPoseBoneIndex Pelvis = FCompactPoseBoneIndex(INDEX_NONE);
+	FSimPawnSlotEase Ease;
+	float EaseDt = 0.0f;
 };
 
 /**
@@ -509,6 +598,7 @@ struct FSimPawnUpperSlotNode : public FAnimNode_Base
 
 	virtual void Update_AnyThread(const FAnimationUpdateContext& Context) override
 	{
+		EaseDt = FMath::Max(0.0f, Context.GetDeltaTime());
 		Context.AnimInstanceProxy->GetSlotWeight(USimPawnAnimInstance::UpperBodySlot, SlotNodeWeight, SourceWeight, TotalNodeWeight);
 		Context.AnimInstanceProxy->UpdateSlotNodeWeight(USimPawnAnimInstance::UpperBodySlot, SlotNodeWeight, Context.GetFinalBlendWeight());
 		Source->Update_AnyThread(Context);
@@ -524,6 +614,8 @@ private:
 	TArray<float> BoneWeights;  // by compact pose index: 0 the legs and hips, 1 under spine_01
 	FCompactPoseBoneIndex Pelvis = FCompactPoseBoneIndex(INDEX_NONE);
 	FCompactPoseBoneIndex Spine = FCompactPoseBoneIndex(INDEX_NONE);
+	FSimPawnSlotEase Ease;
+	float EaseDt = 0.0f;
 };
 
 /**
@@ -564,6 +656,8 @@ struct FSimPawnHitLayerNode : public FAnimNode_Base
 	float WalkLockWeight = 0.0f;
 	int32 WalkFeetHeld = 0;
 	int32 WalkHeldMask = 0;
+	/** Steps a held walking foot took because the body left it behind (PawnWalkStep*). */
+	int32 WalkSteps = 0;
 
 private:
 	struct FSpring
@@ -606,6 +700,9 @@ private:
 	 *  left when it let go (world, closing as WalkFade goes to nought) and the lowest it has been lately (mesh space). */
 	bool bWantWalkLock = false;
 	bool bWalkHeld[2] = {false, false};
+	/** A held foot left behind stepping to the animation's foot (PawnWalkStep*), and how high it is lifted now (cm). */
+	bool bWalkStepping[2] = {false, false};
+	float WalkLift[2] = {0.0f, 0.0f};
 	FVector WalkPlant[2] = {FVector::ZeroVector, FVector::ZeroVector};
 	/** A held foot's speed left from landing (world, cm/s, dying away) and its following speed last frame. */
 	FVector WalkVel[2] = {FVector::ZeroVector, FVector::ZeroVector};
@@ -764,6 +861,7 @@ protected:
 		Out.WalkLock = HitLayer.WalkLockWeight;
 		Out.WalkFeetHeld = HitLayer.WalkFeetHeld;
 		Out.WalkHeldMask = HitLayer.WalkLockWeight >= 0.999f ? HitLayer.WalkHeldMask : 0;
+		Out.WalkSteps = HitLayer.WalkSteps;
 	}
 
 public:
@@ -986,6 +1084,7 @@ void FSimPawnUpperSlotNode::Evaluate_AnyThread(FPoseContext& Output)
 	if (SlotNodeWeight <= ZERO_ANIMWEIGHT_THRESH || Spine.GetInt() == INDEX_NONE || Pelvis.GetInt() == INDEX_NONE ||
 		BoneWeights.Num() != Output.Pose.GetNumBones())
 	{
+		Ease.bLive = false;
 		return;
 	}
 	// The whole-body pose the montage makes over what plays under it (blended in and out by the montage's weight) ...
@@ -1007,6 +1106,8 @@ void FSimPawnUpperSlotNode::Evaluate_AnyThread(FPoseContext& Output)
 			Output.Pose[Bone] = Slotted.Pose[Bone];
 		}
 	}
+	// Its keys eased (FSimPawnSlotEase): the chest, arms and head, and spine_01's turn.
+	Ease.Apply(Output.Pose, EaseDt, SlotNodeWeight, &BoneWeights, Spine, FCompactPoseBoneIndex(INDEX_NONE));
 	Output.Curve.Combine(Slotted.Curve);
 }
 
@@ -1485,6 +1586,8 @@ void FSimPawnHitLayerNode::Forget()
 	WalkHeldMask = 0;
 	bWantWalkLock = false;
 	bWalkHeld[0] = bWalkHeld[1] = false;
+	bWalkStepping[0] = bWalkStepping[1] = false;
+	WalkLift[0] = WalkLift[1] = 0.0f;
 	WalkFade[0] = WalkFade[1] = 0.0f;
 	WalkYaw[0] = WalkYaw[1] = 0.0f;
 	WalkYawGap[0] = WalkYawGap[1] = 0.0f;
@@ -1752,6 +1855,8 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 	if (!bLegs || WalkLockWeight <= 0.0f)
 	{
 		bWalkHeld[0] = bWalkHeld[1] = false;
+		bWalkStepping[0] = bWalkStepping[1] = false;
+		WalkLift[0] = WalkLift[1] = 0.0f;
 		WalkFade[0] = WalkFade[1] = 0.0f;
 		WalkYaw[0] = WalkYaw[1] = 0.0f;
 		WalkYawGap[0] = WalkYawGap[1] = 0.0f;
@@ -1782,8 +1887,23 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 			PawnWalkRelease(WalkGap[Side], WalkGapVel[Side], WalkFade[Side], Offset, Rate);
 			float YawOffset = 0.0f, YawRate = 0.0f;
 			PawnWalkYawRelease(WalkYawGap[Side], WalkYawGapRate[Side], WalkFade[Side], YawOffset, YawRate);
+			// A held foot left behind steps (PawnWalkStep*), one foot at a time.
+			bool bStep = false;
+			if (bWalkHeld[Side] && bDown && !bWalkStepping[1 - Side])
+			{
+				FVector Behind = WalkPlant[Side] - Wanted[Side];
+				Behind.Z = 0.0;
+				const bool bYawOut = bToes && FMath::Abs(FMath::FindDeltaAngleDegrees(WantedYaw[Side], WalkYawHeld[Side])) > PawnWalkYawMax + 1.0f;
+				const FVector Hip = ToWorld.TransformPosition(PawnBonePlace(Pose, Thigh[Side]));
+				const FVector Knee = ToWorld.TransformPosition(PawnBonePlace(Pose, Calf[Side]));
+				const double Leg = (Knee - Hip).Size() + (Wanted[Side] - Knee).Size();
+				const FVector PlantAt(WalkPlant[Side].X, WalkPlant[Side].Y, Wanted[Side].Z);
+				const double Need = (PlantAt - Hip).Size();
+				const bool bOverReach = Need > PawnWalkStepReach * Leg && Need > (Wanted[Side] - Hip).Size() + 2.0;
+				bStep = Behind.Size2D() > PawnWalkStepGap || bYawOut || bOverReach;
+			}
 			bool bLanded = false;
-			if (bWalkHeld[Side] && !bDown)
+			if (bWalkHeld[Side] && (!bDown || bStep))
 			{
 				// Lifted: let go from where it is, at the speed it has, the offset closing to nought; the facing the same.
 				FVector Gap = WalkPlant[Side] - Wanted[Side];
@@ -1794,10 +1914,12 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 				WalkYawGapRate[Side] = FMath::Clamp(-WantedYawRate, -PawnWalkYawMaxRate, PawnWalkYawMaxRate);
 				WalkFade[Side] = 1.0f;
 				bWalkHeld[Side] = false;
+				bWalkStepping[Side] = bStep;
+				WalkSteps += bStep ? 1 : 0;
 				PawnWalkRelease(WalkGap[Side], WalkGapVel[Side], WalkFade[Side], Offset, Rate);
 				PawnWalkYawRelease(WalkYawGap[Side], WalkYawGapRate[Side], WalkFade[Side], YawOffset, YawRate);
 			}
-			else if (!bWalkHeld[Side] && bDown)
+			else if (!bWalkHeld[Side] && bDown && !bWalkStepping[Side])
 			{
 				// Down: held from where it is drawn now, keeping the speed it came down at for a moment, facing the way
 				// it is drawn now.
@@ -1856,6 +1978,17 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 				PawnWalkYawRelease(WalkYawGap[Side], WalkYawGapRate[Side], WalkFade[Side], YawOffset, YawRate);
 				WalkTarget[Side] = Wanted[Side] + Offset;
 				WalkYaw[Side] = bToes ? YawOffset : 0.0f;
+				if (bWalkStepping[Side])
+				{
+					// The step's lift: 16 s^2 (1 - s)^2, flat at both ends, PawnWalkStepLift at the middle.
+					const float S = 1.0f - WalkFade[Side];
+					WalkLift[Side] = PawnWalkStepLift * 16.0f * S * S * (1.0f - S) * (1.0f - S);
+					bWalkStepping[Side] = WalkFade[Side] > 0.0f;
+				}
+			}
+			if (!bWalkStepping[Side])
+			{
+				WalkLift[Side] = 0.0f;
 			}
 			Shown[Side] = Wanted[Side] + (WalkTarget[Side] - Wanted[Side]) * WalkShow;
 			WalkFeetHeld += bWalkHeld[Side] ? 1 : 0;
@@ -2024,6 +2157,7 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 				FVector Gap = ToWorld.InverseTransformPosition(WalkTarget[Side]) - ToWorld.InverseTransformPosition(Wanted[Side]);
 				Gap.Z = 0.0;
 				Target += Gap * static_cast<double>(WalkShow);
+				Target.Z += static_cast<double>(WalkLift[Side] * WalkShow);
 			}
 			if (HoldShow > 0.0f)
 			{

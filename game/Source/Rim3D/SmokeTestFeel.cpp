@@ -2,6 +2,7 @@
 // grenades and blasts with debris, and the feel settings, in the game, offscreen.
 #include "SmokeTest.h"
 
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/ConfigCacheIni.h"
@@ -51,6 +52,12 @@ namespace
 		bool bThrown = false;
 		FVector RollFrom = FVector::ZeroVector;
 		double RollMoved = 0.0;
+		// The roll as drawn (since the roll is a measured clip, the actor's procedural tumble stays at nought): the turn of
+		// the body's pelvis-to-head line about the roll's side axis, added up frame by frame (degrees).
+		FVector RollWay = FVector::ZeroVector;
+		float RollTumble = 0.0f;
+		float LastTumble = 0.0f;
+		bool bTumbleKnown = false;
 
 		void Reset()
 		{
@@ -105,6 +112,20 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		if (const ASimPawnActor* Actor = Pawns() ? Pawns()->FindPawn(State->Me) : nullptr)
 		{
 			State->MaxRollAngle = FMath::Max(State->MaxRollAngle, Actor->GetRollAngle());
+			const USkeletalMeshComponent* Mesh = Actor->GetBody();
+			if (State->bRollSent && !State->RollWay.IsNearlyZero() && Mesh && Mesh->GetBoneIndex(TEXT("head")) != INDEX_NONE &&
+				Mesh->GetBoneIndex(TEXT("pelvis")) != INDEX_NONE)
+			{
+				const FVector Line = Mesh->GetBoneLocation(TEXT("head")) - Mesh->GetBoneLocation(TEXT("pelvis"));
+				const float Tumble = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(Line | State->RollWay), static_cast<float>(Line.Z)));
+				if (State->bTumbleKnown)
+				{
+					State->RollTumble += FMath::FindDeltaAngleDegrees(State->LastTumble, Tumble);
+				}
+				State->LastTumble = Tumble;
+				State->bTumbleKnown = true;
+				State->MaxRollAngle = FMath::Max(State->MaxRollAngle, FMath::Abs(State->RollTumble));
+			}
 		}
 	};
 
@@ -361,6 +382,9 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		State->bRollSent = false;
 		State->bRollRefused = false;
 		State->RollMoved = 0.0;
+		State->RollWay = FVector::ZeroVector;
+		State->RollTumble = State->LastTumble = 0.0f;
+		State->bTumbleKnown = false;
 		AProtagonistPawn* Body = Prot()->GetBody();
 		Body->SetFirstPerson(false);
 		Body->SnapCamera();
@@ -380,6 +404,7 @@ void USmokeTestSubsystem::BuildFeelPhases()
 			Bridge()->GetBlendedLocation(State->Me, Here);
 			State->RollFrom = Here;
 			State->bRollSent = Fight()->Roll(FVector2D(0.0, 1.0));
+			State->RollWay = Prot()->GetBody()->GetViewDirection().GetSafeNormal2D();
 		}
 		if (State->bRollSent && Me->rollPhase != 0 && !State->bRollRefused)
 		{

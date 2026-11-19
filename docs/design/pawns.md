@@ -179,6 +179,20 @@ exponential ease, in the hold layer under the montage slot). The sample's keys a
 from one to the next, so a bone's speed changed all at once at every key; at a few hundred frames a second a running
 foot (free, not held) jolted at each key of the walk-to-run clips. Eased, the same motion plays 1/30 s later with the
 corners rounded off. The sim's own clips (rolls, staggers, swings) are above it and play unchanged.
+Tenth round (follow-up thread, from the traces of a326cc2 and eb14602): **a held walking foot the body leaves behind
+steps** instead of being dragged. Setting off with a big turn held both feet while the body spun and ran off over them,
+so they were dragged up to 5 m/s, and a leg stretched past its length pinned its foot to the hip, which turned the
+foot's speed round in a frame (the 1000 to 1600 m/s^2 "free foot" blips came as such a foot came back within reach).
+A held foot now lets go along the let-go curve, lifted 6 cm at the middle (flat at both ends), when it lies more than
+16 cm from the animation's foot, when its facing is held past 35 degrees, or when its leg would reach further than the
+animation's own and past 95% of its length; one foot at a time, and it does not land again until the step is done.
+**A leg reaches its full length softly** (a tanh over the last 2.5 cm) instead of stopping dead. **The montage slots'
+keys are eased** like the locomotion's (each bone follows its pose over 1/30 s, as much as the slot shows; the hips'
+place over the ground left as the clip has it, since the set-back takes out the clip's travel key for key): hit reacts
+and swings jolted the head and chest at every 30 fps key. **A clip's set-back uses its weight a frame on**, where it is
+drawn, like its moment: read a frame old it lagged through every blend in or out by a different amount each frame
+(frames were 3 to 8 ms), and the hips jittered through the AI's lunges. The `idle` test logs `IDLETRACE stand-drift` lines
+for a standing foot wandering past 2 cm and reports `walkStepsAllPhases`.
 
 **Near and far: loops.** The breathing idle, or the walk or run loop (`M_Neutral_*`), picked by speed (run above the
 middle of the two loops' speeds, measured from their root motion: 200 and 500 cm/s) and played
