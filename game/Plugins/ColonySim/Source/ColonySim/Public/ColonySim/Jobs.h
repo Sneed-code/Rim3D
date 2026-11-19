@@ -122,7 +122,8 @@ struct Carrying {
 
 // True for the jobs that work on a designated cell (rock or plant) and hold that cell.
 inline bool jobIsGather(JobType type) {
-    return type == JobType::Mine || type == JobType::CutPlant || type == JobType::HarvestPlant || type == JobType::RemoveFloor;
+    return type == JobType::Mine || type == JobType::CutPlant || type == JobType::HarvestPlant || type == JobType::RemoveFloor ||
+           type == JobType::WindowWork;
 }
 
 // True for the jobs done to an animal (docs/design/husbandry.md): `site` is the animal.
@@ -208,6 +209,7 @@ class PrisonerSystem;
 class Areas;
 class Husbandry;
 class Lights;
+class Windows;
 class Map;
 class Mineables;
 class Pathfinder;
@@ -507,6 +509,8 @@ public:
     ApparelSystem* apparel() const { return apparel_; }
     // Work slows in the dark (docs/design/light.md). Null: it doesn't.
     void setLights(const Lights* lights) { lights_ = lights; }
+    void setWindows(Windows* windows) { windows_ = windows; }  // docs/design/windows.md
+    const Windows* windows() const { return windows_; }
     // The factor on a pawn's work speed from the light where it stands (1 in daylight) and from its drugs (wake-up).
     float workFactor(Entity pawn) const;
     // The old name (work started before drugs also used it): the same factor.
@@ -754,6 +758,7 @@ private:
     StepResult goToTouch(Entity pawn, Job& job, std::string& why);
     StepResult mineRock(Entity pawn, Job& job, std::string& why);
     StepResult removeFloorWork(Entity pawn, Job& job, std::string& why);
+    StepResult windowWork(Entity pawn, Job& job, std::string& why);
     StepResult plantWork(Entity pawn, Job& job, std::string& why);
     StepResult sowWork(Entity pawn, Job& job, std::string& why);
     void learnSkill(Entity pawn, const char* skill, double xp);
@@ -854,6 +859,7 @@ private:
     const NeedRules& rules_;
     const GameTime& time_;
     const Lights* lights_ = nullptr;
+    Windows* windows_ = nullptr;
     int emergencyWork_ = -1;  // the Doctor work type's index, found on first use (thinkEmergency)
     ApparelSystem* apparel_ = nullptr;
     SimStats& stats_;
