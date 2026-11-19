@@ -89,6 +89,9 @@ Construction::Construction(Map& map, Things& things, Plants& plants, const DefDa
         numbers_.skillSpeedPerLevel = rules->number("skillSpeedPerLevel", numbers_.skillSpeedPerLevel);
         numbers_.defaultSkillLevel = static_cast<int>(rules->integer("defaultSkillLevel", numbers_.defaultSkillLevel));
         numbers_.removeFloorWork = rules->number("removeFloorWork", numbers_.removeFloorWork);
+        numbers_.earthWorkPerUnit = rules->number("earthWorkPerUnit", numbers_.earthWorkPerUnit);
+        numbers_.betweenWallsCells = static_cast<int>(rules->integer("betweenWallsCells", numbers_.betweenWallsCells));
+        numbers_.earthMaxM = rules->number("earthMaxM", numbers_.earthMaxM);
     }
 }
 
@@ -249,7 +252,7 @@ Entity Construction::placeFloorPlan(DefId floor, DefId stuff, CellPos cell, std:
     }
     const DefId planDef = defs_.idOf("Things", "FloorPlan");
     const Def& d = defs_.get(floor);
-    map_.levelGround(CellRect{cell.x, cell.y, 1, 1, cell.level});  // a floor lies flat (docs/design/levelling.md)
+    map_.planGround(CellRect{cell.x, cell.y, 1, 1, cell.level});  // a floor lies flat, dug when work starts (docs/design/earthworks.md)
 
     ConstructionSite site;
     site.stuff = stuff;
@@ -321,6 +324,34 @@ std::string Construction::whyNotBlueprint(DefId def, DefId stuff, CellPos cell, 
             }
         }
     }
+    if (!onWater && !upperFloor && rect.level == 0 && groundFitOf(d) == GroundFit::Flat) {
+        // Furniture and the like can't stand on a slope (docs/design/earthworks.md). The ground counts as it will be once
+        // the earthworks planned on it are done (Level earth, a wall's footprint, ground between walls).
+        float lowest = 1.0e9f;
+        float highest = -1.0e9f;
+        for (int cy = rect.minY; cy <= std::min(rect.minY + rect.sizeY, map_.height() - 1); ++cy) {
+            for (int cx = rect.minX; cx <= std::min(rect.minX + rect.sizeX, map_.width() - 1); ++cx) {
+                const int corner = cy * map_.width() + cx;
+                const float target = map_.earthTarget(corner);
+                const float h = std::isnan(target) ? map_.groundHeight(cx, cy) : target;
+                lowest = std::min(lowest, h);
+                highest = std::max(highest, h);
+            }
+        }
+        bool planned = true;  // or planned flat to one base (its edge corners may ramp to a neighbour)
+        const float base = map_.levelBase(CellPos{rect.minX, rect.minY, 0});
+        for (int y = rect.minY; y < rect.minY + rect.sizeY && planned; ++y) {
+            for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
+                if (std::isnan(base) || map_.levelBase(CellPos{x, y, 0}) != base) {
+                    planned = false;
+                    break;
+                }
+            }
+        }
+        if (!planned && highest - lowest > kFlatMaxRiseM + 1.0e-3f) {
+            return "too steep: level the earth first";
+        }
+    }
     return {};
 }
 
@@ -336,9 +367,14 @@ Entity Construction::placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 r
     const CellRect rect = footprintRect(cell, sizeX, sizeY, rot);
     const bool onWater = d.flag("building.onFlowingWater");
 
-    // The plan levels its ground at once, so the player sees where it will stand (docs/design/levelling.md).
-    if (!onWater && !upperFloor) {
-        map_.levelGround(rect);
+    // The plan marks its ground to be dug or filled flat; a builder does that earthwork first, when it starts on
+    // the frame (docs/design/earthworks.md). Sandbags and the like lean with the slope instead.
+    const GroundFit fit = groundFitOf(d);
+    if (!onWater && !upperFloor && fit != GroundFit::Conform) {
+        map_.planGround(rect);
+        if (fit == GroundFit::Level && rect.level == 0) {
+            planBetweenWalls(rect);
+        }
     }
 
     ConstructionSite site;
@@ -376,6 +412,18 @@ bool Construction::cancel(Entity thing, std::string& error) {
     }
     if (const ConstructionSite* site = reg.try_get<ConstructionSite>(thing)) {
         const ConstructionSite copy = *site;
+        const Def& d = defs_.get(reg.get<Thing>(thing).def);
+        const CellRect rect = copy.rect();
+        if (rect.level == 0 && (copy.floor.valid() || groundFitOf(d) != GroundFit::Conform)) {
+            // Earthworks not started yet are dropped with the plan (docs/design/earthworks.md).
+            std::vector<CellPos> cells;
+            for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
+                for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
+                    cells.push_back(CellPos{x, y, 0});
+                }
+            }
+            map_.cancelEarth(cells);
+        }
         indexSite(thing, false);
         things_.destroy(thing);
         for (const MaterialCount& m : copy.materials) {
@@ -752,6 +800,131 @@ float Construction::skillSpeed(Entity pawn, const char* skillName) const {
         level = std::max(0, level + geneAptitude(*genes, skillName));
     }
     return static_cast<float>(std::max(0.0, numbers_.skillSpeedBase + numbers_.skillSpeedPerLevel * level));
+}
+
+bool Construction::wallLike(CellPos c) const {
+    const entt::registry& reg = things_.registry();
+    Entity e = map_.buildingAt(c);
+    if (e == kNoEntity) {
+        e = siteAt(c);
+        if (e == kNoEntity || reg.get<ConstructionSite>(e).floor.valid()) {
+            return false;
+        }
+    }
+    const Def& d = defs_.get(reg.get<Thing>(e).def);
+    return groundFitOf(d) == GroundFit::Level && (d.text("passability") == "Impassable" || d.text("thingClass") == "Building_Door");
+}
+
+void Construction::planBetweenWalls(const CellRect& rect) {
+    // A cell is between walls if, looking along the rows and columns no further than betweenWallsCells, it meets
+    // a wall both ways along one line (a corridor, two parallel walls) or one way along each (inside an L).
+    const int reach = std::max(numbers_.betweenWallsCells, 0);
+    if (reach == 0) {
+        return;
+    }
+    const int dirX[4] = {1, -1, 0, 0};
+    const int dirY[4] = {0, 0, 1, -1};
+    std::vector<std::pair<float, CellPos>> found;
+    for (int y = rect.minY - reach; y < rect.minY + rect.sizeY + reach; ++y) {
+        for (int x = rect.minX - reach; x < rect.minX + rect.sizeX + reach; ++x) {
+            const CellPos c{x, y, 0};
+            if (!map_.inBounds(c) || !map_.groundBuildable(c, false) || map_.buildingAt(c) != kNoEntity ||
+                siteAt(c) != kNoEntity || map_.levelled(c)) {
+                continue;
+            }
+            bool hit[4] = {false, false, false, false};
+            float base = 1.0e9f;
+            for (int k = 0; k < 4; ++k) {
+                for (int step = 1; step <= reach; ++step) {
+                    const CellPos n{x + dirX[k] * step, y + dirY[k] * step, 0};
+                    if (!map_.inBounds(n)) {
+                        break;
+                    }
+                    if (wallLike(n)) {
+                        const float b = map_.levelBase(n);
+                        if (!std::isnan(b)) {
+                            hit[k] = true;
+                            base = std::min(base, b);
+                        }
+                        break;
+                    }
+                    if (!map_.groundBuildable(n, false) || map_.buildingAt(n) != kNoEntity) {
+                        break;  // rock, water or furniture closes the line
+                    }
+                }
+            }
+            const bool across = (hit[0] && hit[1]) || (hit[2] && hit[3]);
+            const bool corner = (hit[0] || hit[1]) && (hit[2] || hit[3]);
+            if (!across && !corner) {
+                continue;
+            }
+            float lowest = 0.0f;
+            float highest = 0.0f;
+            map_.cornerRange(CellRect{x, y, 1, 1, 0}, lowest, highest);
+            if (highest - base > static_cast<float>(numbers_.earthMaxM) || base - lowest > static_cast<float>(numbers_.earthMaxM)) {
+                continue;
+            }
+            found.emplace_back(base, c);
+        }
+    }
+    // One plan per base, in the order found (row order), so the result never depends on hashing.
+    while (!found.empty()) {
+        const float base = found.front().first;
+        std::vector<CellPos> cells;
+        std::vector<std::pair<float, CellPos>> rest;
+        for (const auto& [b, c] : found) {
+            if (b == base) {
+                cells.push_back(c);
+            } else {
+                rest.emplace_back(b, c);
+            }
+        }
+        map_.planCells(cells, base);
+        found = std::move(rest);
+    }
+}
+
+int Construction::planLevelEarth(const CellRect& area, float base) {
+    if (area.level != 0) {
+        return 0;
+    }
+    std::vector<CellPos> cells;
+    for (int y = area.minY; y < area.minY + area.sizeY; ++y) {
+        for (int x = area.minX; x < area.minX + area.sizeX; ++x) {
+            const CellPos c{x, y, 0};
+            if (!map_.inBounds(c) || !map_.groundBuildable(c, false) || map_.buildingAt(c) != kNoEntity || siteAt(c) != kNoEntity) {
+                continue;
+            }
+            float lowest = 0.0f;
+            float highest = 0.0f;
+            map_.cornerRange(CellRect{x, y, 1, 1, 0}, lowest, highest);
+            if (highest - base > static_cast<float>(numbers_.earthMaxM) + 1.0e-3f || base - lowest > static_cast<float>(numbers_.earthMaxM) + 1.0e-3f) {
+                continue;
+            }
+            cells.push_back(c);
+        }
+    }
+    if (!cells.empty()) {
+        map_.planCells(cells, base);
+    }
+    return static_cast<int>(cells.size());
+}
+
+int Construction::cancelEarthworks(const CellRect& area) {
+    if (area.level != 0) {
+        return 0;
+    }
+    std::vector<CellPos> cells;
+    for (int y = area.minY; y < area.minY + area.sizeY; ++y) {
+        for (int x = area.minX; x < area.minX + area.sizeX; ++x) {
+            const CellPos c{x, y, 0};
+            if (map_.inBounds(c) && map_.earthPending(c) && siteAt(c) == kNoEntity && map_.buildingAt(c) == kNoEntity) {
+                cells.push_back(c);
+            }
+        }
+    }
+    map_.cancelEarth(cells);
+    return static_cast<int>(cells.size());
 }
 
 bool Construction::afterLoad(std::string& error) {

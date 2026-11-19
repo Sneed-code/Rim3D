@@ -1517,6 +1517,10 @@ void UFightSubsystem::UpdatePlayerInput()
 		return;
 	}
 	// With a building in hand the mouse button plans it and R turns it (UHandsOnSubsystem), so the gun stays quiet.
+	if (Protagonist->IsUnstucking())
+	{
+		return;  // F12 Unstuck: no actions while waiting (docs/design/earthworks.md)
+	}
 	const UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
 	const bool bBuilding = Orders && Orders->IsDirectBuilding();
 	using Rim3DKeys::IsDown;
@@ -1696,6 +1700,21 @@ void UFightSubsystem::DrawHud()
 	const colony::Sim& Sim = *Bridge->GetSim();
 	const colony::Entity Pawn = Protagonist->GetControlled();
 	const colony::ThingView* View = Bridge->GetCurrentSnapshot().find(Pawn);
+
+	// F12 Unstuck: a countdown in the middle of the screen (docs/design/earthworks.md).
+	if (Protagonist->IsUnstucking())
+	{
+		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.62f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+		ImGui::SetNextWindowBgAlpha(0.6f);
+		if (ImGui::Begin("##Unstuck", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+				ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs))
+		{
+			const float Left = Protagonist->GetUnstuckSecondsLeft();
+			ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("Getting unstuck in %d..."), FMath::CeilToInt32(Left))));
+			ImGui::ProgressBar(1.0f - Left / 5.0f, ImVec2(220.0f * Scale, 6.0f * Scale), "");
+		}
+		ImGui::End();
+	}
 
 	// The gun, bottom middle.
 	const ImGuiWindowFlags PanelFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |

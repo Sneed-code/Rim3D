@@ -1124,6 +1124,26 @@ struct SetFightResponseCommand {
     FightResponse response = FightResponse::Attack;
 };
 
+// Earthworks (docs/design/earthworks.md): plans the ground of `area` dug or filled flat to `baseCm`
+// (centimetres, snapped to Map::kLevelStepM), for pawns to do. Cells with a building or plan, rock,
+// water, or more than ConstructionRules earthMaxM from the height are left out. Fails if no cell was planned.
+struct LevelEarthCommand {
+    CellRect area;
+    int baseCm = 0;
+};
+
+// Drops earthworks planned on `area` (not those a building plan needs). Fails if there were none.
+struct CancelEarthworksCommand {
+    CellRect area;
+};
+
+// Unstuck (docs/design/earthworks.md "Stuck"): puts the pawn on the nearest clear spot within 12 m (walkable,
+// room to stand, open round it), stopping its walk. Unreal sends it after the player's 5-second F12 wait.
+// Fails if the pawn can't be moved or there is no clear spot.
+struct UnstuckCommand {
+    Entity pawn = kNoEntity;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -1158,7 +1178,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand,
                              InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand,
                              SleepCommand, SetLandingZoneCommand,
-                             PatchCommand, SetAlertCommand, FocusCommand, SetFightResponseCommand>;
+                             PatchCommand, SetAlertCommand, FocusCommand, SetFightResponseCommand,
+                             LevelEarthCommand, CancelEarthworksCommand, UnstuckCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
 // day) it was applied in. Failed commands are logged too.

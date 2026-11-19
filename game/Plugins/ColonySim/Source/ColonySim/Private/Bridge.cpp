@@ -35,6 +35,12 @@ const char* bridgeLateCommandName() {
         return "Patch";
     } else if constexpr (std::is_same_v<Type, SetAlertCommand>) {
         return "SetAlert";
+    } else if constexpr (std::is_same_v<Type, LevelEarthCommand>) {
+        return "LevelEarth";
+    } else if constexpr (std::is_same_v<Type, CancelEarthworksCommand>) {
+        return "CancelEarthworks";
+    } else if constexpr (std::is_same_v<Type, UnstuckCommand>) {
+        return "Unstuck";
     } else {
         // FocusCommand and SetFightResponseCommand are named before the visit (commandName).
         static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||

@@ -403,6 +403,11 @@ void UProtagonistSubsystem::OnBeforeStep()
 	{
 		return;  // lying still till morning: the sim ignores moves meanwhile
 	}
+	if (UnstuckSkipMoves > 0)
+	{
+		--UnstuckSkipMoves;
+		return;
+	}
 	const FVector2D& Position = Body->GetSimPosition();
 	Bridge->Submit(colony::DirectMoveCommand{Controlled, static_cast<float>(Position.X), static_cast<float>(Position.Y)});
 	++MovesSent;
@@ -449,6 +454,14 @@ void UProtagonistSubsystem::ApplyBodyVisibility()
 	}
 }
 
+void UProtagonistSubsystem::StartUnstuck()
+{
+	if (Controlled != colony::kNoEntity && UnstuckSecondsLeft <= 0.0f)
+	{
+		UnstuckSecondsLeft = 5.0f;
+	}
+}
+
 void UProtagonistSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -458,6 +471,20 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 		return;
 	}
 
+	if (UnstuckSecondsLeft > 0.0f)
+	{
+		UnstuckSecondsLeft -= DeltaTime;
+		if (UnstuckSecondsLeft <= 0.0f)
+		{
+			UnstuckSecondsLeft = 0.0f;
+			if (Controlled != colony::kNoEntity)
+			{
+				Bridge->Submit(colony::UnstuckCommand{Controlled});
+				UnstuckSkipMoves = 3;  // no DirectMove from the old spot until the body has been pulled to the new one
+				UE_LOG(LogProtagonist, Log, TEXT("Unstuck: moved to the nearest clear spot"));
+			}
+		}
+	}
 	if (bExitRequested)
 	{
 		bExitRequested = false;

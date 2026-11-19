@@ -634,6 +634,7 @@ struct SaveData {
     bool hasRoomStats = false;
     std::vector<uint32_t> driedCells;  // section "terrain": water cells a moisture pump dried, in order
     Map::LevelState levelled;          // section "terrain" 2: ground levelled for structures (docs/design/levelling.md)
+    Map::EarthState earth;             // section "terrain" 3: corners waiting for earthworks (docs/design/earthworks.md)
     std::vector<SaveFloor> floors;
     FilthState filth;
     RoomStatsState roomStats;
@@ -1315,6 +1316,15 @@ void saveCommandTail(Ar& ar, Type& c) {
             ar.text("arrival", c.arrival);
             ar.value("x", c.x);
             ar.value("y", c.y);
+        } else if constexpr (std::is_same_v<Type, LevelEarthCommand>) {
+            auto* level = &c;
+            ar.group("area", [&] { saveRect(ar, level->area); });
+            ar.value("baseCm", level->baseCm);
+        } else if constexpr (std::is_same_v<Type, CancelEarthworksCommand>) {
+            auto* cancelEarth = &c;
+            ar.group("area", [&] { saveRect(ar, cancelEarth->area); });
+        } else if constexpr (std::is_same_v<Type, UnstuckCommand>) {
+            ar.value("pawn", c.pawn);
         } else {
             static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
         }
@@ -1887,6 +1897,12 @@ void saveMoverPart(Ar& ar, Mover& m, const std::optional<Position>& position) {
         if (ar.sectionVersion() >= 2) {  // M2: stairs and ladders
             ar.value("climbed", m.climbed);
         }
+        if (ar.sectionVersion() >= 3) {  // the stuck watchdog (docs/design/earthworks.md)
+            ar.value("stuckSteps", m.stuckSteps);
+            ar.value("phaseSteps", m.phaseSteps);
+            ar.value("stuckX", m.stuckX);
+            ar.value("stuckY", m.stuckY);
+        }
     } else if (position) {
         // Older saves: a pawn mid-walk sets off along the line from where it stands.
         m.fromX = position->x;
@@ -1899,7 +1915,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::LoadPod, "the save file has a bad job");
+    ar.require(job.type <= JobType::Earthworks, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -3496,7 +3512,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("commands", 5, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
-    ar.section("movement", 2, [&] {
+    ar.section("movement", 3, [&] {
         saveParts(ar, "mover", e, &SaveEntity::mover, [&](Mover& m) { saveMoverPart(ar, m, std::nullopt); });
     });
     ar.section("jobs", 1, [&] {
@@ -3607,13 +3623,17 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("talents", 1, [&] { saveTalents(ar, d); });
     ar.section("drugs", 2, [&] { saveDrugs(ar, d); });
     ar.section("roomstats", 2, [&] { saveRoomStatsSection(ar, d); });
-    ar.section("terrain", 2, [&] {
+    ar.section("terrain", 3, [&] {
         ar.list("dried", d.driedCells, [&](uint32_t& cell) { ar.value(nullptr, cell); });
         if (ar.sectionVersion() >= 2) {
             ar.list("levelCells", d.levelled.cells, [&](uint32_t& cell) { ar.value(nullptr, cell); });
             ar.list("levelBases", d.levelled.cellBaseCm, [&](int32_t& cm) { ar.value(nullptr, cm); });
             ar.list("levelCorners", d.levelled.corners, [&](uint32_t& corner) { ar.value(nullptr, corner); });
             ar.list("levelHeights", d.levelled.cornerCm, [&](int32_t& cm) { ar.value(nullptr, cm); });
+        }
+        if (ar.sectionVersion() >= 3) {
+            ar.list("earthCorners", d.earth.corners, [&](uint32_t& corner) { ar.value(nullptr, corner); });
+            ar.list("earthTargets", d.earth.targetCm, [&](int32_t& cm) { ar.value(nullptr, cm); });
         }
     });
     ar.section("animals", 2, [&] {
@@ -5509,6 +5529,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     }
     d.driedCells = sim.map_.dried();
     d.levelled = sim.map_.levelState();
+    d.earth = sim.map_.earthState();
     d.hasRoomStats = true;
     for (const auto& [cell, def] : sim.floors_->all()) {
         d.floors.push_back(SaveFloor{static_cast<uint32_t>(cell), sim.defs_->get(def).defName()});
@@ -5995,6 +6016,10 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     sim.map_.restoreDried(d.driedCells);
     if (!sim.map_.restoreLevelState(d.levelled)) {
         error = "the save has levelled ground off the map";
+        return false;
+    }
+    if (!sim.map_.restoreEarthState(d.earth)) {
+        error = "the save has earthworks off the map";
         return false;
     }
     if (d.hasRoomStats) {

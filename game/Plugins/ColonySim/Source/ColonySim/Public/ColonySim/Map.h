@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cmath>
+#include <functional>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -281,6 +282,40 @@ public:
     float levelGround(CellRect rect);
     // Levels the given ground cells to `base`.
     void levelCells(const std::vector<CellPos>& cells, float base);
+    // Earthworks (docs/design/earthworks.md): planning ground sets the cells' bases at once (so later plans
+    // join them) but moves no corner; each corner that must move gets a target, and pawns dig or fill it
+    // one unit (kEarthUnitM up or down) at a time with digEarth. levelGround/levelCells still level at once
+    // (map generation, scenarios, dev floors) and drop any target on the corners they move.
+    static constexpr float kEarthUnitM = 0.25f;
+    // Like levelGround, but only plans: returns the base, NaN off the ground.
+    float planGround(CellRect rect);
+    // Plans the given ground cells to `base`.
+    void planCells(const std::vector<CellPos>& cells, float base);
+    // The lowest and highest corner under a footprint (for "too steep" and the earthworks limits).
+    void cornerRange(CellRect rect, float& lowest, float& highest) const;
+    // A corner of the cell waits for earthworks.
+    bool earthPending(CellPos c) const;
+    // Units of work left on the cell's corners (a corner shared by two cells counts in both).
+    int earthUnits(CellPos c) const;
+    int earthUnits(CellRect rect) const;
+    // The target of a corner (by index, like groundHeight), NaN if none.
+    float earthTarget(int corner) const;
+    // One unit of work on the cell: its corner farthest from its target moves kEarthUnitM (or what is
+    // left) towards it. Returns the corner moved, or -1 if the cell has nothing left.
+    // `allowed`, if given, says which corners may be worked now (not under a tree or a building plan).
+    int digEarth(CellPos c, const std::function<bool(int)>& allowed = {});
+    // Drops the plans on these cells: their bases where none of their corners moved yet, and every
+    // target that no other planned cell still wants. Corners already dug stay where they are.
+    void cancelEarth(const std::vector<CellPos>& cells);
+    // Every corner waiting for earthworks, by index; and a count that goes up whenever that changes.
+    const std::vector<uint32_t>& earthCorners() const { return earthList_; }
+    uint64_t earthChanges() const { return earthChanges_; }
+    struct EarthState {
+        std::vector<uint32_t> corners;
+        std::vector<int32_t> targetCm;
+    };
+    EarthState earthState() const;
+    bool restoreEarthState(const EarthState& state);
     // Every corner the levelling moved, in order (a corner can come more than once): Unreal redraws
     // the ground around the ones it has not seen yet.
     const std::vector<uint32_t>& levelledCorners() const { return levelLog_; }
@@ -389,6 +424,11 @@ private:
     std::vector<float> levelBase_;     // per ground cell, NaN where nothing levelled it; empty until first used
     std::vector<uint8_t> levelMoved_;  // 1 where the levelling moved a corner
     std::vector<uint32_t> levelLog_;   // corners moved, in order
+    std::vector<float> earthTarget_;   // per corner, NaN where no earthworks wait; empty until first used
+    std::vector<uint32_t> earthList_;  // corners with a target, sorted
+    uint64_t earthChanges_ = 0;
+    void setEarthTarget(int corner, float metres);  // NaN clears
+    void assignBases(const std::vector<CellPos>& cells, float base, bool plan);
     void setLevelCorner(int corner, float metres);
     std::vector<int> hollow_;  // mined-out ground cells that still have the thick roof
     std::vector<LevelLink> levelLinks_;

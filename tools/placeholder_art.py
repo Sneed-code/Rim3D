@@ -34,8 +34,30 @@ def download(mesh_id):
     print("downloaded", mesh_id)
 
 
+def closing_brace(text, start):
+    """Index of the } that closes the object whose { is just before `start` (strings may hold braces)."""
+    depth, i, in_string = 1, start, False
+    while i < len(text):
+        ch = text[i]
+        if in_string:
+            if ch == "\\":
+                i += 1
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return len(text)
+
+
 def set_defs(meshes):
-    """Put "mesh": "<path>" first in the def's visual object; a def without its own visual object gets one."""
+    """Set "mesh": "<path>" in the def's visual object (first if it had none); a def without its own visual object gets one."""
     for path in sorted((ROOT / "data" / "defs" / "Things").glob("*.json")):
         text = path.read_text(encoding="utf-8")
         original = text
@@ -47,13 +69,18 @@ def set_defs(meshes):
                 continue
             nxt = text.find('"defName"', found.end())
             block = text[found.end():nxt if nxt >= 0 else len(text)]
-            own = re.search(r'"visual":\s*\{(\s*"mesh":\s*"[^"]*"\s*,?)?', block)
+            own = re.search(r'"visual":\s*\{', block)
             if own:
-                a, b = found.end() + own.start(), found.end() + own.end()
-                rest = text[b:].lstrip()
-                comma = "" if rest.startswith("}") else ","
-                gap = "" if text[b:b + 1].isspace() else " "
-                text = text[:a] + '"visual": { "mesh": "%s"%s' % (asset, comma) + gap + text[b:]
+                start = found.end() + own.end()
+                end = closing_brace(text, start)
+                inner = text[start:end]
+                mesh = re.search(r'"mesh":\s*"[^"]*"', inner)
+                if mesh:
+                    # Already has a mesh (anywhere in the object): point it at ours rather than adding a second key.
+                    text = text[:start + mesh.start()] + '"mesh": "%s"' % asset + text[start + mesh.end():]
+                else:
+                    comma = "" if inner.strip() == "" else ","
+                    text = text[:start] + ' "mesh": "%s"%s' % (asset, comma) + text[start:]
             else:
                 text = text[:found.end()] + ' "visual": { "mesh": "%s" },' % asset + text[found.end():]
         if text != original:

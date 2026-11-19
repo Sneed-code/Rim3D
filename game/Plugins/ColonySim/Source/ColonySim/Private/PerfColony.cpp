@@ -13,6 +13,7 @@
 #include "ColonySim/Things.h"
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 namespace colony {
@@ -91,6 +92,9 @@ std::string setUpPerfColony(Sim& sim, PerfColonyCounts& counts) {
             sim.submit(PlaceBlueprintCommand{"Wall", "Steel", CellPos{origin.x, origin.y + y, 0}});
             sim.submit(PlaceBlueprintCommand{"Wall", "Steel", CellPos{origin.x + kPerfRoomWidth - 1, origin.y + y, 0}});
         }
+        // The floor inside is levelled first, as a player on a slope would (docs/design/earthworks.md): furniture won't go on a slope.
+        const int floorCm = static_cast<int>(std::lround(sim.map().groundHeight(origin.x, origin.y) * 100.0f));
+        sim.submit(LevelEarthCommand{CellRect{origin.x + 1, origin.y + 1, kPerfRoomWidth - 2, kPerfRoomHeight - 2, 0}, floorCm});
         for (int bed = 0; bed < kPerfBeds; ++bed) {
             sim.submit(PlaceBlueprintCommand{"Bed", "Steel", CellPos{origin.x + 1 + bed, origin.y + kPerfRoomHeight - 3, 0}});
         }

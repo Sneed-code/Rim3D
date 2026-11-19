@@ -57,6 +57,7 @@ enum class JobType : uint8_t {
     ManArtillery,      // walk beside a mortar or rocket launcher and man it until ordered off (docs/design/artillery.md)
     LoadPod,           // carry a stack the player named into a transport pod (docs/design/transport-pods.md)
     RemoveFloor,       // walk next to a cell marked to have its floor taken up and take it up (docs/design/build-menu.md)
+    Earthworks,        // walk to ground planned flat and dig or fill it (docs/design/earthworks.md)
 };
 
 COLONY_API const char* jobTypeName(JobType type);

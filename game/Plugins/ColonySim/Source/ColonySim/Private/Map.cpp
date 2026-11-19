@@ -227,7 +227,11 @@ void Map::setLevelCorner(int corner, float metres) {
     }
 }
 
-void Map::levelCells(const std::vector<CellPos>& cells, float base) {
+void Map::levelCells(const std::vector<CellPos>& cells, float base) { assignBases(cells, base, false); }
+
+void Map::planCells(const std::vector<CellPos>& cells, float base) { assignBases(cells, base, true); }
+
+void Map::assignBases(const std::vector<CellPos>& cells, float base, bool plan) {
     if (levelBase_.empty()) {
         levelBase_.assign(groundHeight_.size(), std::nanf(""));
     }
@@ -256,8 +260,57 @@ void Map::levelCells(const std::vector<CellPos>& cells, float base) {
                         }
                     }
                 }
-                if (!shared) {
-                    setLevelCorner(index(CellPos{cx, cy, 0}), base);
+                if (shared) {
+                    continue;
+                }
+                const int corner = index(CellPos{cx, cy, 0});
+                if (plan) {
+                    setEarthTarget(corner, std::fabs(groundHeight_[static_cast<size_t>(corner)] - base) < 1.0e-4f ? std::nanf("") : base);
+                } else {
+                    setEarthTarget(corner, std::nanf(""));
+                    setLevelCorner(corner, base);
+                }
+            }
+        }
+    }
+}
+
+namespace {
+// The base for a footprint: its lowest corner snapped to the step, or a planned base beside it within the join.
+float mapChooseBase(const Map& map, CellRect rect, float natural) {
+    const float snapped = std::round(natural / Map::kLevelStepM) * Map::kLevelStepM;
+    float base = snapped;
+    float bestDiff = Map::kLevelJoinM + 1.0f;
+    for (int y = rect.minY - 1; y <= rect.minY + rect.sizeY; ++y) {
+        for (int x = rect.minX - 1; x <= rect.minX + rect.sizeX; ++x) {
+            const float other = map.levelBase(CellPos{x, y, 0});
+            if (std::isnan(other)) {
+                continue;
+            }
+            const float diff = std::fabs(other - snapped);
+            if (diff <= Map::kLevelJoinM && (diff < bestDiff || (diff == bestDiff && other < base))) {
+                base = other;
+                bestDiff = diff;
+            }
+        }
+    }
+    return base;
+}
+}  // namespace
+
+void Map::cornerRange(CellRect rect, float& lowest, float& highest) const {
+    lowest = 1.0e9f;
+    highest = -1.0e9f;
+    for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
+        for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
+            if (!inBounds(CellPos{x, y, 0})) {
+                continue;
+            }
+            for (int cy = y; cy <= std::min(y + 1, height_ - 1); ++cy) {
+                for (int cx = x; cx <= std::min(x + 1, width_ - 1); ++cx) {
+                    const float h = groundHeight_[static_cast<size_t>(cy * width_ + cx)];
+                    lowest = std::min(lowest, h);
+                    highest = std::max(highest, h);
                 }
             }
         }
@@ -268,44 +321,234 @@ float Map::levelGround(CellRect rect) {
     if (rect.level != 0) {
         return std::nanf("");
     }
-    float natural = 1.0e9f;
     std::vector<CellPos> cells;
     for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
         for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
-            const CellPos c{x, y, 0};
-            if (!inBounds(c)) {
-                continue;
-            }
-            cells.push_back(c);
-            for (int cy = y; cy <= std::min(y + 1, height_ - 1); ++cy) {
-                for (int cx = x; cx <= std::min(x + 1, width_ - 1); ++cx) {
-                    natural = std::min(natural, groundHeight_[static_cast<size_t>(cy * width_ + cx)]);
-                }
+            if (inBounds(CellPos{x, y, 0})) {
+                cells.push_back(CellPos{x, y, 0});
             }
         }
     }
     if (cells.empty()) {
         return std::nanf("");
     }
-    // The fixed steps: every structure stands at a whole number of kLevelStepM.
-    const float snapped = std::round(natural / kLevelStepM) * kLevelStepM;
-    float base = snapped;
-    float bestDiff = kLevelJoinM + 1.0f;
-    for (int y = rect.minY - 1; y <= rect.minY + rect.sizeY; ++y) {
-        for (int x = rect.minX - 1; x <= rect.minX + rect.sizeX; ++x) {
-            const float other = levelBase(CellPos{x, y, 0});
-            if (std::isnan(other)) {
+    float natural = 0.0f;
+    float highest = 0.0f;
+    cornerRange(rect, natural, highest);
+    const float base = mapChooseBase(*this, rect, natural);
+    levelCells(cells, base);
+    return base;
+}
+
+float Map::planGround(CellRect rect) {
+    if (rect.level != 0) {
+        return std::nanf("");
+    }
+    std::vector<CellPos> cells;
+    for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
+        for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
+            if (inBounds(CellPos{x, y, 0})) {
+                cells.push_back(CellPos{x, y, 0});
+            }
+        }
+    }
+    if (cells.empty()) {
+        return std::nanf("");
+    }
+    float natural = 0.0f;
+    float highest = 0.0f;
+    cornerRange(rect, natural, highest);
+    const float base = mapChooseBase(*this, rect, natural);
+    planCells(cells, base);
+    return base;
+}
+
+void Map::setEarthTarget(int corner, float metres) {
+    const size_t i = static_cast<size_t>(corner);
+    const bool had = !earthTarget_.empty() && !std::isnan(earthTarget_[i]);
+    if (std::isnan(metres)) {
+        if (!had) {
+            return;
+        }
+        earthTarget_[i] = metres;
+        const auto it = std::lower_bound(earthList_.begin(), earthList_.end(), static_cast<uint32_t>(corner));
+        if (it != earthList_.end() && *it == static_cast<uint32_t>(corner)) {
+            earthList_.erase(it);
+        }
+        ++earthChanges_;
+        return;
+    }
+    if (earthTarget_.empty()) {
+        earthTarget_.assign(groundHeight_.size(), std::nanf(""));
+    }
+    if (had && earthTarget_[i] == metres) {
+        return;
+    }
+    earthTarget_[i] = metres;
+    if (!had) {
+        earthList_.insert(std::lower_bound(earthList_.begin(), earthList_.end(), static_cast<uint32_t>(corner)), static_cast<uint32_t>(corner));
+    }
+    ++earthChanges_;
+}
+
+float Map::earthTarget(int corner) const {
+    return earthTarget_.empty() || corner < 0 || static_cast<size_t>(corner) >= earthTarget_.size() ? std::nanf("")
+                                                                                                       : earthTarget_[static_cast<size_t>(corner)];
+}
+
+namespace {
+int mapEarthUnitsOf(float height, float target) {
+    return static_cast<int>(std::ceil(std::fabs(target - height) / Map::kEarthUnitM - 1.0e-3f));
+}
+}  // namespace
+
+bool Map::earthPending(CellPos c) const {
+    if (earthList_.empty() || !onGround(c)) {
+        return false;
+    }
+    for (int cy = c.y; cy <= std::min(c.y + 1, height_ - 1); ++cy) {
+        for (int cx = c.x; cx <= std::min(c.x + 1, width_ - 1); ++cx) {
+            if (!std::isnan(earthTarget_[static_cast<size_t>(cy * width_ + cx)])) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+int Map::earthUnits(CellPos c) const {
+    if (earthList_.empty() || !onGround(c)) {
+        return 0;
+    }
+    int units = 0;
+    for (int cy = c.y; cy <= std::min(c.y + 1, height_ - 1); ++cy) {
+        for (int cx = c.x; cx <= std::min(c.x + 1, width_ - 1); ++cx) {
+            const size_t i = static_cast<size_t>(cy * width_ + cx);
+            if (!std::isnan(earthTarget_[i])) {
+                units += std::max(1, mapEarthUnitsOf(groundHeight_[i], earthTarget_[i]));
+            }
+        }
+    }
+    return units;
+}
+
+int Map::earthUnits(CellRect rect) const {
+    if (earthList_.empty() || rect.level != 0) {
+        return 0;
+    }
+    // Each corner once, though four cells share it.
+    int units = 0;
+    for (int cy = std::max(rect.minY, 0); cy <= std::min(rect.minY + rect.sizeY, height_ - 1); ++cy) {
+        for (int cx = std::max(rect.minX, 0); cx <= std::min(rect.minX + rect.sizeX, width_ - 1); ++cx) {
+            const size_t i = static_cast<size_t>(cy * width_ + cx);
+            if (!std::isnan(earthTarget_[i])) {
+                units += std::max(1, mapEarthUnitsOf(groundHeight_[i], earthTarget_[i]));
+            }
+        }
+    }
+    return units;
+}
+
+int Map::digEarth(CellPos c, const std::function<bool(int)>& allowed) {
+    if (earthList_.empty() || !onGround(c)) {
+        return -1;
+    }
+    int best = -1;
+    float bestDiff = -1.0f;
+    for (int cy = c.y; cy <= std::min(c.y + 1, height_ - 1); ++cy) {
+        for (int cx = c.x; cx <= std::min(c.x + 1, width_ - 1); ++cx) {
+            const size_t i = static_cast<size_t>(cy * width_ + cx);
+            if (std::isnan(earthTarget_[i]) || (allowed && !allowed(static_cast<int>(i)))) {
                 continue;
             }
-            const float diff = std::fabs(other - snapped);
-            if (diff <= kLevelJoinM && (diff < bestDiff || (diff == bestDiff && other < base))) {
-                base = other;
+            const float diff = std::fabs(earthTarget_[i] - groundHeight_[i]);
+            if (diff > bestDiff) {
+                best = static_cast<int>(i);
                 bestDiff = diff;
             }
         }
     }
-    levelCells(cells, base);
-    return base;
+    if (best < 0) {
+        return -1;
+    }
+    const size_t i = static_cast<size_t>(best);
+    const float target = earthTarget_[i];
+    const float h = groundHeight_[i];
+    if (bestDiff <= kEarthUnitM + 1.0e-4f) {
+        setEarthTarget(best, std::nanf(""));
+        setLevelCorner(best, target);
+    } else {
+        // Whole centimetres, so a save (in cm) puts back exactly this height.
+        const float moved = h + (target > h ? kEarthUnitM : -kEarthUnitM);
+        setLevelCorner(best, std::round(moved * 100.0f) / 100.0f);
+    }
+    return best;
+}
+
+void Map::cancelEarth(const std::vector<CellPos>& cells) {
+    if (levelBase_.empty()) {
+        return;
+    }
+    std::vector<int> corners;
+    for (const CellPos& c : cells) {
+        if (!onGround(c)) {
+            continue;
+        }
+        bool moved = false;
+        for (int cy = c.y; cy <= std::min(c.y + 1, height_ - 1); ++cy) {
+            for (int cx = c.x; cx <= std::min(c.x + 1, width_ - 1); ++cx) {
+                const size_t i = static_cast<size_t>(cy * width_ + cx);
+                moved = moved || (!levelMoved_.empty() && levelMoved_[i] != 0);
+                corners.push_back(static_cast<int>(i));
+            }
+        }
+        if (!moved) {
+            levelBase_[static_cast<size_t>(index(c))] = std::nanf("");
+        }
+    }
+    for (const int corner : corners) {
+        const float target = earthTarget(corner);
+        if (std::isnan(target)) {
+            continue;
+        }
+        const CellPos k = cellAt(corner);
+        bool wanted = false;
+        for (int ny = k.y - 1; ny <= k.y && !wanted; ++ny) {
+            for (int nx = k.x - 1; nx <= k.x; ++nx) {
+                if (levelBase(CellPos{nx, ny, 0}) == target) {
+                    wanted = true;
+                    break;
+                }
+            }
+        }
+        if (!wanted) {
+            setEarthTarget(corner, std::nanf(""));
+        }
+    }
+}
+
+Map::EarthState Map::earthState() const {
+    EarthState state;
+    for (const uint32_t corner : earthList_) {
+        state.corners.push_back(corner);
+        state.targetCm.push_back(static_cast<int32_t>(std::lround(earthTarget_[corner] * 100.0f)));
+    }
+    return state;
+}
+
+bool Map::restoreEarthState(const EarthState& state) {
+    earthTarget_.clear();
+    earthList_.clear();
+    if (state.corners.size() != state.targetCm.size()) {
+        return false;
+    }
+    for (size_t k = 0; k < state.corners.size(); ++k) {
+        if (state.corners[k] >= groundHeight_.size()) {
+            return false;
+        }
+        setEarthTarget(static_cast<int>(state.corners[k]), static_cast<float>(state.targetCm[k]) / 100.0f);
+    }
+    return true;
 }
 
 Map::LevelState Map::levelState() const {
@@ -371,6 +614,10 @@ uint64_t Map::levelHash() const {
             mix(i);
             mix(static_cast<uint64_t>(std::lround(groundHeight_[i] * 100.0f)));
         }
+    }
+    for (const uint32_t corner : earthList_) {
+        mix(0xEA27ULL + corner);
+        mix(static_cast<uint64_t>(std::lround(earthTarget_[corner] * 100.0f)));
     }
     return hash;
 }

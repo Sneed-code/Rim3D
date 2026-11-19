@@ -46,6 +46,11 @@ enum class EOrderTool : uint8
 	LandingZone,
 	/** Drag a rectangle: takes its cells out of the landing zone. */
 	RemoveLandingZone,
+	/** Drag a rectangle: plans its ground dug or filled flat to the height of the cell the drag starts on, nudged by
+	 *  the Raise / Lower buttons (docs/design/earthworks.md). */
+	LevelEarth,
+	/** Drag a rectangle: drops the earthworks planned in it. */
+	CancelEarth,
 };
 
 /** What the orders overlay draws (smoke test `orders`). */
@@ -230,6 +235,8 @@ private:
 	void RefreshStuffOptions();
 	colony::DefId BestStuffFor(colony::DefId Def) const;
 	colony::CellRect DragRect() const;
+	/** The ground height at a cell's middle, cm on the 25 cm step (Level earth). */
+	int32 LevelHeightAtCm(colony::CellPos Cell) const;
 	void Submit(colony::Command Command);
 	void FlushIfPaused();
 	bool SetDraft(colony::Entity Pawn, bool bDraft);
@@ -261,6 +268,9 @@ private:
 	colony::CellPos Hover;
 	bool bDragging = false;
 	colony::CellPos DragStart;
+	/** Level earth: the height the drag started on (cm, on a 25 cm step), and the player's nudge on top of it. */
+	int32 LevelStartCm = 0;
+	int32 LevelNudgeCm = 0;
 
 	// Menu contents, read from the defs once per sim.
 	TArray<FBuildOption> BuildOptions;
