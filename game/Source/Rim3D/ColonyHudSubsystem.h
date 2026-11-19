@@ -34,6 +34,16 @@ enum class EHudTab : uint8
 	Count
 };
 
+/** The manager windows opened from the Assign tab (ColonyHudScreens.cpp), one at a time. */
+enum class EHudScreen : uint8
+{
+	None,
+	Outfits,
+	Areas,
+	Medical,
+	Prisoners,
+};
+
 /** What the overseer's screen drew (smoke test `hud`). */
 struct FHudStats
 {
@@ -44,6 +54,8 @@ struct FHudStats
 	int32 SettingsFrames = 0;
 	int32 MugshotsMade = 0;
 	int32 CommandsSent = 0;
+	int32 ScreenFrames = 0;
+	int32 MainMenuFrames = 0;
 };
 
 /**
@@ -93,6 +105,18 @@ public:
 	void OpenInfo(colony::Entity Thing) { InfoThing = Thing; }
 	void CloseInfo() { InfoThing = colony::kNoEntity; }
 	colony::Entity GetInfoThing() const { return InfoThing; }
+
+	// ---- Manager windows (Outfits, Areas, Medical, Prisoners) ----------------------------------
+	void OpenScreen(EHudScreen Screen) { OpenedScreen = Screen; }
+	EHudScreen GetOpenScreen() const { return OpenedScreen; }
+
+	// ---- The main menu (new colony, load, settings, quit) ------------------------------------
+	/** Shown at launch when the game was started without a scenario (not in smoke tests), and from Menu > New colony. */
+	void SetMainMenuOpen(bool bOpen) { bMainMenuOpen = bOpen; }
+	bool IsMainMenuOpen() const { return bMainMenuOpen; }
+	/** Starts a new colony with the main menu's choices (scenario, narrator, difficulty, seed); the site is the scenario
+	 *  biome's unless bPickSite, which opens the world map to pick one. True if the sim started. */
+	bool StartNewColony(bool bPickSite);
 
 	// ---- Pinned resources ---------------------------------------------------------------------
 	bool IsPinned(const FString& DefName) const { return Pinned.Contains(DefName); }
@@ -149,6 +173,16 @@ private:
 	void DrawSettings(USimSubsystem& Bridge, float Scale);
 	void DrawKeyListPage(float Scale);
 
+	// The manager windows and the main menu (ColonyHudScreens.cpp).
+	void DrawScreen(USimSubsystem& Bridge, float Scale);
+	void DrawOutfitsScreen(USimSubsystem& Bridge, float Scale);
+	void DrawAreasScreen(USimSubsystem& Bridge, float Scale);
+	void DrawMedicalScreen(USimSubsystem& Bridge, float Scale);
+	void DrawPrisonersScreen(USimSubsystem& Bridge, float Scale);
+	void DrawMainMenu(USimSubsystem& Bridge);
+	/** Sends the narrator and difficulty picked in the main menu once the new sim runs. */
+	void SendPendingNarrator(USimSubsystem& Bridge);
+
 	// The tabs this subsystem draws itself (ColonyHudTabs.cpp).
 	void DrawAssignTab(USimSubsystem& Bridge, float Scale);
 	void DrawAnimalsTab(USimSubsystem& Bridge, float Scale, bool bWild);
@@ -182,6 +216,28 @@ private:
 	// The Animals and Wildlife tabs: name being typed.
 	colony::Entity RenamingAnimal = colony::kNoEntity;
 	char AnimalName[32] = {};
+
+	// Manager windows.
+	EHudScreen OpenedScreen = EHudScreen::None;
+	uint32 OutfitPicked = 1;
+	float HpDrag[2] = {0.0f, 100.0f};
+	bool bHpDragging = false;
+	char NewName[32] = {};
+	uint32 AreaPicked = 0;
+	colony::Entity PatientPicked = colony::kNoEntity;
+
+	// The main menu: its page and the new colony's choices.
+	bool bMainMenuOpen = false;
+	bool bMainMenuChecked = false;
+	int32 MainMenuPage = 0;  // 0 the menu, 1 new colony, 2 load
+	FString NewScenario = TEXT("CrashlandedRainforest");
+	FString NewNarrator = TEXT("Orrin");
+	FString NewDifficulty = TEXT("StriveToSurvive");
+	int32 NewSeed = 42;
+	int32 NewMapSize = 512;
+	bool bNarratorPending = false;
+	int32 NarratorGeneration = -1;
+	TArray<FString> SaveSlots;
 
 	// Mugshots: render targets by entity, one capture component that takes each picture.
 	TMap<uint32, FMugshot> Mugshots;

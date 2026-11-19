@@ -1,5 +1,6 @@
 // Smoke test `hud` (docs/design/ui-layout.md): the overseer's bottom tab bar opens every tab in turn on a Crashlanded colony,
-// then Build with its Structure tiles, the info window and Settings > Controls; one screenshot each, in the game, offscreen.
+// then Build with its Structure tiles, the info window, the Outfits, Areas, Medical and Prisoners windows,
+// the main menu and Settings > Controls; one screenshot each, in the game, offscreen.
 #include "SmokeTest.h"
 
 #include "HAL/IConsoleManager.h"
@@ -11,6 +12,7 @@
 #include "PanelsSubsystem.h"
 #include "SimSubsystem.h"
 
+#include "ColonySim/Commands.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 
@@ -180,7 +182,90 @@ void USmokeTestSubsystem::BuildHudPhases()
 	};
 	Phases.Add(MoveTemp(Info));
 
-	// 5. Settings, the Controls page with the key rebind list.
+	// 5. The manager windows from the Assign tab: Outfits, Areas (with one area made and painted), Medical, Prisoners.
+	const struct
+	{
+		const TCHAR* Name;
+		EHudScreen Screen;
+	} Screens[] = {
+		{TEXT("hud_outfits"), EHudScreen::Outfits},
+		{TEXT("hud_areas"), EHudScreen::Areas},
+		{TEXT("hud_medical"), EHudScreen::Medical},
+		{TEXT("hud_prisoners"), EHudScreen::Prisoners},
+	};
+	for (const auto& Entry : Screens)
+	{
+		const FString Name = Entry.Name;
+		const EHudScreen Screen = Entry.Screen;
+		FPhase Phase;
+		Phase.Name = Name;
+		Phase.WarmupSeconds = 1.5f;
+		Phase.MeasureSeconds = 0.5f;
+		Phase.Setup = [=, this]()
+		{
+			State->TabFramesBefore = Hud()->GetStats().ScreenFrames;
+			if (Screen == EHudScreen::Areas)
+			{
+				// One area, painted 12 x 8 round the stockpile, with the Paint tool in hand so its cells show.
+				USimSubsystem* B = Bridge();
+				const colony::Sim* Sim = B->GetSim();
+				const colony::CellPos Home = Sim && Sim->stockpileCell() ? *Sim->stockpileCell() : colony::CellPos{128, 128, 0};
+				// A fresh sim's first area is number 1 (docs/design/areas.md); both commands go in the same step.
+				B->Submit(colony::CreateAreaCommand{"Home base"});
+				const uint32 Area = 1;
+				colony::CellRect Rect;
+				Rect.minX = Home.x - 6;
+				Rect.minY = Home.y - 4;
+				Rect.sizeX = 12;
+				Rect.sizeY = 8;
+				B->Submit(colony::PaintAreaCommand{Area, Rect, true});
+				B->StepOnce();
+				Orders()->SetAreaTool(Area, true);
+			}
+			Hud()->OpenScreen(Screen);
+		};
+		Phase.Verify = [=, this]()
+		{
+			if (Hud()->GetStats().ScreenFrames == State->TabFramesBefore)
+			{
+				Fail(FString::Printf(TEXT("%s: the window was never drawn"), *Name));
+			}
+			if (Screen == EHudScreen::Areas)
+			{
+				const std::vector<colony::AreaView>& Areas = Bridge()->GetCurrentSnapshot().areas;
+				if (Areas.empty() || Areas.back().cellCount != 96)
+				{
+					Fail(FString::Printf(TEXT("hud_areas: the painted area has %u cells, wanted 96"), Areas.empty() ? 0u : Areas.back().cellCount));
+				}
+				Orders()->SetAreaTool(0, true);
+			}
+			Hud()->OpenScreen(EHudScreen::None);
+			Hud()->CloseTabs();
+		};
+		Phases.Add(MoveTemp(Phase));
+	}
+
+	// 6. The main menu's New colony page (over the running colony; nothing is started).
+	FPhase Menu;
+	Menu.Name = TEXT("hud_main_menu");
+	Menu.WarmupSeconds = 1.5f;
+	Menu.MeasureSeconds = 0.5f;
+	Menu.Setup = [=, this]()
+	{
+		State->TabFramesBefore = Hud()->GetStats().MainMenuFrames;
+		Hud()->SetMainMenuOpen(true);
+	};
+	Menu.Verify = [=, this]()
+	{
+		if (Hud()->GetStats().MainMenuFrames == State->TabFramesBefore)
+		{
+			Fail(TEXT("hud_main_menu: the main menu was never drawn"));
+		}
+		Hud()->SetMainMenuOpen(false);
+	};
+	Phases.Add(MoveTemp(Menu));
+
+	// 7. Settings, the Controls page with the key rebind list.
 	FPhase Settings;
 	Settings.Name = TEXT("hud_settings_controls");
 	Settings.WarmupSeconds = 1.5f;

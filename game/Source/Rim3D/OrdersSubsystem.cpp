@@ -71,6 +71,7 @@ namespace
 	constexpr int32 OrdGrowRing = 8;
 	constexpr int32 OrdLandTile = 9;
 	constexpr int32 OrdLandRing = 10;
+	constexpr int32 OrdAreaRing = 11;
 	constexpr int32 OrdKeyScale = 10000;
 
 	constexpr int32 OrdMaxBuildOrigins = 600;
@@ -87,6 +88,7 @@ namespace
 	const FLinearColor OrdZoneColor = FLinearColor::FromSRGBColor(FColor(60, 150, 230));
 	const FLinearColor OrdGrowColor = FLinearColor::FromSRGBColor(FColor(120, 200, 60));
 	const FLinearColor OrdLandColor = FLinearColor::FromSRGBColor(FColor(250, 185, 40));
+	const FLinearColor OrdAreaColor = FLinearColor::FromSRGBColor(FColor(120, 150, 240));
 
 	uint64 OrdMix(uint64 Seed, uint64 Value)
 	{
@@ -186,6 +188,8 @@ namespace
 			case EOrderTool::RemoveFloor: return FColor(200, 120, 60);
 			case EOrderTool::LevelEarth: return FColor(170, 120, 70);
 			case EOrderTool::CancelEarth: return FColor(160, 160, 170);
+			case EOrderTool::PaintArea: return FColor(120, 150, 240);
+			case EOrderTool::EraseArea: return FColor(160, 160, 170);
 			default: return FColor(255, 255, 255);
 		}
 	}
@@ -237,6 +241,8 @@ namespace
 			case EOrderTool::RemoveLandingZone: return TEXT("RemoveLandingZone");
 			case EOrderTool::LevelEarth: return TEXT("LevelEarth");
 			case EOrderTool::CancelEarth: return TEXT("CancelEarth");
+			case EOrderTool::PaintArea: return TEXT("PaintArea");
+			case EOrderTool::EraseArea: return TEXT("EraseArea");
 		}
 		return TEXT("?");
 	}
@@ -518,6 +524,14 @@ void UOrdersSubsystem::SetTool(EOrderTool NewTool)
 			}
 		}
 	}
+}
+
+void UOrdersSubsystem::SetAreaTool(uint32 Area, bool bAdd)
+{
+	AreaToolArea = Area;
+	SetTool(Area == 0 ? EOrderTool::None : (bAdd ? EOrderTool::PaintArea : EOrderTool::EraseArea));
+	// The overlay shows the area's cells now, so it is worked out again at once.
+	OverlaySeconds = -1;
 }
 
 bool UOrdersSubsystem::SelectBuilding(const FString& DefName, const FString& Stuff)
@@ -1008,6 +1022,14 @@ int32 UOrdersSubsystem::EndDrag(colony::CellPos Cell)
 			Submit(colony::CancelEarthworksCommand{Rect});
 			Say(TEXT("Earthworks cancelled"));
 			break;
+		case EOrderTool::PaintArea:
+		case EOrderTool::EraseArea:
+		{
+			const bool bAdd = Tool == EOrderTool::PaintArea;
+			Submit(colony::PaintAreaCommand{AreaToolArea, Rect, bAdd});
+			Say(bAdd ? FString::Printf(TEXT("Area painted %d x %d"), Rect.sizeX, Rect.sizeY) : FString(TEXT("Area cells taken off")));
+			break;
+		}
 		case EOrderTool::Deconstruct:
 			for (const colony::ThingView& View : Snapshot.things)
 			{
@@ -1254,6 +1276,9 @@ UStaticMesh* UOrdersSubsystem::GetMarkMesh(int32 Kind, int32 TopCm)
 		case OrdLandRing:
 			Ring(OrdLandColor);
 			break;
+		case OrdAreaRing:
+			Ring(OrdAreaColor);
+			break;
 		default:
 			Ring(OrdZoneColor);
 			break;
@@ -1389,6 +1414,23 @@ void UOrdersSubsystem::RebuildMarks(const USimSubsystem& Bridge)
 		++Stats.LandingCells;
 	}
 
+	// The allowed area being painted (docs/design/areas.md): a blue ring on each of its cells while an area tool is in hand.
+	if (AreaToolArea != 0 && (Tool == EOrderTool::PaintArea || Tool == EOrderTool::EraseArea))
+	{
+		for (const colony::AreaView& Area : Snapshot.areas)
+		{
+			if (Area.id != AreaToolArea)
+			{
+				continue;
+			}
+			for (uint32 Index = Area.firstCell; Index < Area.firstCell + Area.cellCount && Index < Snapshot.areaCells.size(); ++Index)
+			{
+				const colony::CellPos& Cell = Snapshot.areaCells[Index];
+				Place(OrdAreaRing, 0, Cell.x, Cell.y, 5.0, nullptr);
+			}
+		}
+	}
+
 	// Earthworks waiting (docs/design/earthworks.md): an amber ring on every cell round a corner still to be dug or filled.
 	{
 		const colony::Map& Map = Sim.map();
@@ -1482,6 +1524,14 @@ void UOrdersSubsystem::RefreshOverlay()
 			Signature = OrdMix(Signature, OrdCellKey(Cell.x, Cell.y) ^ 0x67726F77ULL);
 		}
 		Signature = OrdMix(Signature, Snapshot.landingZoneChanges ^ 0x4C414E44ULL);
+		if (AreaToolArea != 0 && (Tool == EOrderTool::PaintArea || Tool == EOrderTool::EraseArea))
+		{
+			Signature = OrdMix(Signature, (static_cast<uint64>(AreaToolArea) << 32) ^ 0x41524541ULL);
+			for (const colony::AreaView& Area : Snapshot.areas)
+			{
+				Signature = OrdMix(Signature, Area.id == AreaToolArea ? static_cast<uint64>(Area.cellCount) : 0);
+			}
+		}
 		Signature = OrdMix(Signature, Bridge->GetSim()->map().earthChanges() ^ 0x45415254ULL);
 		Signature = OrdMix(Signature, static_cast<uint64>(Bridge->GetSim()->map().levelledCorners().size()));
 		for (const colony::ThingView& View : Snapshot.things)

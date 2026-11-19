@@ -54,6 +54,10 @@ enum class EOrderTool : uint8
 	LevelEarth,
 	/** Drag a rectangle: drops the earthworks planned in it. */
 	CancelEarth,
+	/** Drag a rectangle: adds its cells to the allowed area picked with SetAreaTool (docs/design/areas.md). */
+	PaintArea,
+	/** Drag a rectangle: takes its cells out of that area. */
+	EraseArea,
 };
 
 /** What the orders overlay draws (smoke test `orders`). */
@@ -143,6 +147,10 @@ public:
 	void RotateBuilding();
 	/** Stops the tool and any drag. True if there was one. */
 	bool CancelTool();
+	/** Picks the PaintArea (bAdd) or EraseArea tool for allowed area `Area` (AreaView::id): the Areas window's Paint / Erase. */
+	void SetAreaTool(uint32 Area, bool bAdd);
+	/** The allowed area the area tools work on, and whose cells the overlay shows while one is in hand (0 for none). */
+	uint32 GetAreaToolArea() const { return AreaToolArea; }
 
 	// ---- Walking the colony (task U10, docs/design/handson.md) ---------------------------------
 	/** In direct mode the Build tool still works: the crosshair aims the ghost, one click plans it. */
@@ -314,6 +322,7 @@ private:
 	/** Level earth: the height the drag started on (cm, on a 25 cm step), and the player's nudge on top of it. */
 	int32 LevelStartCm = 0;
 	int32 LevelNudgeCm = 0;
+	uint32 AreaToolArea = 0;
 
 	// Menu contents, read from the defs once per sim.
 	TArray<FBuildOption> BuildOptions;

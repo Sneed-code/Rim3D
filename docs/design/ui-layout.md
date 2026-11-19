@@ -117,5 +117,30 @@ one border and radius, two text sizes, 1.2 s tooltips). Every subsystem that dra
 - The **I inventory window** (playing as a pawn) now has a fixed place: centred, under the clock,
   above the bottom edge, so the clock and the key hints stay readable.
 
+## Screens (2026-11-19)
+
+`ColonyHudScreens.cpp`. The Assign tab has four buttons that swap the tab for a manager window
+(Close brings the tab back; opening any tab closes the window):
+
+- **Manage outfits**: the outfits down the left (Add outfit with a name, Remove for any but the
+  first), and for the picked one the condition range (two sliders, sent when let go), the quality
+  range, "keep armour in the bag", Allow all / none and a tick per apparel def grouped by its outer
+  layer (headgear, outer, middle, on the skin, belts). Sends `EditOutfitCommand` and friends.
+- **Manage areas**: each allowed area with its cell count and how many pawns are limited to it,
+  Paint / Erase (the Orders tools `PaintArea` / `EraseArea`, drag rectangles; the area's cells show
+  as blue rings while one is in hand), Delete with a yes/no, and New area with a name.
+- **Medical**: colonists and prisoners with their state and medical care; for the picked one the
+  health report (injuries, missing and added parts, diseases), the planned operations with Remove,
+  and "Add an operation" listing every recipe and part `SurgerySystem::targets` allows now.
+- **Prisoners**: each prisoner's resistance and mode (no interaction, reduce resistance, recruit,
+  release, execute), and every built bed with a "for prisoners" tick.
+
+**Main menu**: shown at launch when the game starts without `-SimScenario` (not in smoke tests;
+`-NoMenu` skips it) and from Menu > New colony / load. New colony picks the scenario (rainforest
+first), narrator, difficulty, seed and map size, then Start (the scenario's biome picks the site) or
+Pick a site on the world map (the World screen's Start here). The new game gets `SetNarratorCommand`,
+which no start sent before, so playtests until now had no narrator events. Load a game lists
+`Saved/Saves/*.save`. Settings opens over it.
+
 Still to do: a better Factions window (relations, goodwill history), icons for the bar's right-hand
 buttons, real tile icons for every building, the learning helper's lessons.

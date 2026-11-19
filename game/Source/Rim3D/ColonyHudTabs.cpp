@@ -129,6 +129,30 @@ void UColonyHudSubsystem::DrawAssignTab(USimSubsystem& Bridge, float Scale)
 		++Stats.TabWindowFrames;
 		ColonyHud::Title(TEXT("Assign"));
 		ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("What each colonist may wear, take and be treated with, and where they may go."));
+		// The manager windows (ColonyHudScreens.cpp).
+		const struct
+		{
+			const TCHAR* Label;
+			EHudScreen Screen;
+			const TCHAR* Tip;
+		} Managers[] = {
+			{TEXT("Manage outfits"), EHudScreen::Outfits, TEXT("Make outfits and say what each allows")},
+			{TEXT("Manage areas"), EHudScreen::Areas, TEXT("Make allowed areas and paint them on the map")},
+			{TEXT("Medical"), EHudScreen::Medical, TEXT("Health, medical care and operations of colonists and prisoners")},
+			{TEXT("Prisoners"), EHudScreen::Prisoners, TEXT("What wardens do with each prisoner, and prison beds")},
+		};
+		for (const auto& Manager : Managers)
+		{
+			if (ColonyHud::Button(Manager.Label, OpenedScreen == Manager.Screen))
+			{
+				// The window takes the tab's place; its Close brings the tab back.
+				OpenedScreen = Manager.Screen;
+				CloseTabs();
+			}
+			ColonyHud::Tip(Manager.Tip);
+			ImGui::SameLine();
+		}
+		ImGui::NewLine();
 		const std::vector<colony::DefId> Policies = Sim.defs().idsOfKind("DrugPolicies");
 		const std::string DefaultPolicy = Sim.drugs().rules().defaultPolicy;
 		const float Combo = 190.0f * Scale;

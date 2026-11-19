@@ -9,7 +9,9 @@
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Misc/CommandLine.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/Parse.h"
 
 #include <imgui.h>
 
@@ -458,8 +460,23 @@ void UColonyHudSubsystem::Tick(float DeltaTime)
 		OwnTab = EHudTab::None;
 		ResearchPicked.Reset();
 		RenamingAnimal = colony::kNoEntity;
+		PatientPicked = colony::kNoEntity;
+		AreaPicked = 0;
 		Mugshots.Reset();
 		MugshotTargets.Reset();
+	}
+	SendPendingNarrator(*Bridge);
+	// The main menu at launch: a plain start (no scenario on the command line), not in a smoke test (-NoMenu skips it).
+	if (!bMainMenuChecked)
+	{
+		bMainMenuChecked = true;
+		const TCHAR* Line = FCommandLine::Get();
+		bMainMenuOpen = Bridge->GetStartOptions().Scenario.IsEmpty() && !FParse::Param(Line, TEXT("NoMenu")) && !FString(Line).Contains(TEXT("-SmokeTest="));
+	}
+	if (bMainMenuOpen)
+	{
+		DrawMainMenu(*Bridge);
+		return;
 	}
 	UpdateMugshots(*Bridge);
 	if (!IsOverseerActive() || GHudShowUi.GetValueOnGameThread() == 0)
@@ -509,6 +526,7 @@ void UColonyHudSubsystem::DrawHud(USimSubsystem& Bridge)
 		case EHudTab::Inventory: DrawInventoryTab(Bridge, Scale); break;
 		default: break;
 	}
+	DrawScreen(Bridge, Scale);
 	DrawHoverReadout(Bridge, Scale);
 	DrawInfoWindow(Bridge, Scale);
 	if (bSettingsOpen)
@@ -680,6 +698,12 @@ void UColonyHudSubsystem::DrawMenuPopup(USimSubsystem& Bridge, float Scale)
 	if (ColonyHud::Button(TEXT("Settings"), bSettingsOpen, ImVec2(Width, 0.0f)))
 	{
 		bSettingsOpen = !bSettingsOpen;
+		ImGui::CloseCurrentPopup();
+	}
+	if (ColonyHud::Button(TEXT("New colony / load"), false, ImVec2(Width, 0.0f)))
+	{
+		bMainMenuOpen = true;
+		MainMenuPage = 0;
 		ImGui::CloseCurrentPopup();
 	}
 	UPanelsSubsystem* Panels = GetWorld()->GetSubsystem<UPanelsSubsystem>();
