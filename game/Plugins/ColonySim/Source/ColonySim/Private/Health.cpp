@@ -269,6 +269,7 @@ public:
     // Dismemberment: the hit that kills takes the struck piece off when it went over what the zone had left by this
     // share of the zone's hit points (0: never).
     float dismemberOverkill = 0.25f;
+    float dismemberTorsoSingleHit = 1.0f;  // 1: the torso comes apart only from one hit that alone went far enough past 0
     float pieceDecayDays = 2.0f;       // a severed piece lies this many game days
     std::string dismemberArmWhole = "Arm";
     std::string dismemberArmLower = "Hand";
@@ -657,6 +658,7 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
             num("zones.healGoneBelow", healGoneBelow);
             num("zones.dismember.overkillShare", dismemberOverkill);
             num("zones.dismember.pieceDecayDays", pieceDecayDays);
+            num("zones.dismember.torsoSingleHit", dismemberTorsoSingleHit);
             const auto word = [&](const char* key, std::string& out) {
                 if (rules->has(key)) {
                     out = rules->text(key);
@@ -1726,6 +1728,7 @@ bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int targ
     // body is dead a zone with a quarter of its hit points piled up past 0 comes off. The zone hit goes first; on the
     // blow that kills, any other zone already piled high enough comes off with it.
     bool piled = false;
+    const float overThisHit = zone >= 0 && zoneLeft >= 0.0f ? std::max(0.0f, amount - zoneLeft) : 0.0f;
     if (cuts && zone >= 0 && zoneLeft >= 0.0f && amount > zoneLeft) {
         health.zoneOverkill.resize(body.zones.size(), 0.0f);
         health.zoneOverkill[static_cast<size_t>(zone)] += amount - zoneLeft;
@@ -1740,7 +1743,14 @@ bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int targ
                 continue;
             }
             const float pile = health.zoneOverkill[static_cast<size_t>(z)];
-            if (pile > 0.0f && pile >= model_->dismemberOverkill * body.zones[static_cast<size_t>(z)].hp * factor) {
+            const float enough = model_->dismemberOverkill * body.zones[static_cast<size_t>(z)].hp * factor;
+            // A torso only comes apart from one hit that alone went far enough past 0 (a blast, a huge blow), not from
+            // stabs piling up on a corpse's chest (sneed's pick, 2026-11-19).
+            if (body.zones[static_cast<size_t>(z)].kind == HealthModel::ZoneKind::Torso && model_->dismemberTorsoSingleHit > 0.0f &&
+                (z != zone || overThisHit < enough)) {
+                continue;
+            }
+            if (pile > 0.0f && pile >= enough) {
                 health.zoneOverkill[static_cast<size_t>(z)] = 0.0f;  // what is left of the limb piles up again
                 dismember(pawn, health, z, z == zone ? target : body.zones[static_cast<size_t>(z)].root, pile);
                 cut = true;

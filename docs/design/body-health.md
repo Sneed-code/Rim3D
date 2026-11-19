@@ -197,7 +197,7 @@ torsos, whole-corpse gibs) was never merged.
   whatever a hit does past what its zone had left piles up on that zone (`Health::zoneOverkill`, saved in health
   section 9 and hashed), hit after hit, on the living and the dead; a zone that heals back above 0 starts again from
   nothing. Once the body is dead, a zone with a quarter of its hit points piled up comes off: 13 for an arm or the
-  head, 19 for a leg, 25 for the torso. So one big killing blow still does it, and so do many knife stabs at a corpse.
+  head, 19 for a leg, 25 for the torso. So one big killing blow still does it, and so do many knife stabs at a corpse. The torso is the exception (`torsoSingleHit` 1, sneed's pick): it piles up too, but comes apart only from one hit that alone went 25 past 0 (a blast, a huge blow), not from stabs piling up on a chest.
   The struck zone is looked at on every hit; on the blow that kills every other zone too (a leg already battered
   past 0 comes off with the death). After a cut the zone's pile starts again, so a forearm comes off first and the
   rest of the arm later. A corpse that can be cut up (`takesCorpseHits`: a body with zones, not the protagonist)

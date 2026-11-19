@@ -950,8 +950,19 @@ TEST_CASE("Dismemberment: damage past 0 piles up over many hits, on the living a
     CHECK(zoneTestLeft(*sim, healing, "Arm") > 0.0f);
     CHECK(sim->health().zoneOverkill(healing, healingArm) == doctest::Approx(0.0f));
 
+    // A torso doesn't come apart from blows piling up on a corpse's chest, only from one big enough on its own.
+    const Entity chest = zoneTestPawn(*sim, 22, 6, true);
+    CHECK(zoneTestHit(*sim, chest, "Blunt", 124.0f, "torso"));
+    CHECK(zoneTestHealth(*sim, chest).dead);
+    for (int i = 0; i < 5; ++i) {
+        CHECK(zoneTestCorpseHit(*sim, chest, "Stab", 10.0f, "torso"));
+    }
+    CHECK(sim->health().severed(chest) == 0);
+    CHECK(zoneTestCorpseHit(*sim, chest, "Bomb", 25.0f, "torso"));
+    CHECK(sim->health().severed(chest) == (kSeveredHead | kSeveredLeftArm | kSeveredRightArm | kSeveredLeftLeg | kSeveredRightLeg));
+
     // The piles save and load.
-    for (const Entity e : {pawn, living, healing}) {
+    for (const Entity e : {pawn, living, healing, chest}) {
         sim->things().registry().remove<PlayerControl>(e);
     }
     const Entity piled = zoneTestPawn(*sim, 18, 6, false);
