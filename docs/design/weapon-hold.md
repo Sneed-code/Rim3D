@@ -94,5 +94,7 @@ The spear was carried point-up across the back (the SpearGuard mocap stance) and
   sword-lunge thrusts were measured on 2026-11-19 (`Motion_Spear_Thrust`, `Motion_Spear_Lunge`) but are not used: those
   performers stand side-on, so the lunge travels to the pawn's right and would stab sideways.
 - **Facing**: the rifle idle's hands laid the shaft across the body (PC picture 2026-11-19), so `PoleFrame` points the
-  shaft where the holder faces, tilted by the hands' line (at most 35 degrees up or down).
+  shaft where the holder faces, tilted by the hands' line (at most 35 degrees up or down). With one hand on it, or the
+  hands closer than 8 cm, it still points ahead, level (the next PC picture showed it standing upright along the leg,
+  following the single fist).
 - PC check: the range tour's step 15 pictures the spear in first and third person.
