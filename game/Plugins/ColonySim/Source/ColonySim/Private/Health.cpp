@@ -1093,7 +1093,7 @@ const HealthModel::Kind* healthKindOf(const HealthModel& model, const entt::regi
 
 float healthHpFactor(const HealthModel& model, const HealthModel::Body& body, const Health& health) {
     // With body zones the protagonist has its own rule (protagonistZoneHp) instead of doubled parts.
-    return (health.protagonist && body.zones.empty() ? model.protagonistFactor : 1.0f) * health.stageHp;
+    return (health.protagonist && body.zones.empty() ? model.protagonistFactor : 1.0f) * health.stageHp * health.lineageHp;
 }
 
 // Whether a disease has reached a stage the pawn would notice.
@@ -1346,7 +1346,7 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
             health.hungerFactor *= st.hunger;
         }
     }
-    health.pain = mechanical ? 0.0f : eval.pain / healthScale * painFactor * mods.painFactor;
+    health.pain = mechanical ? 0.0f : eval.pain / healthScale * painFactor * mods.painFactor * mods.debuffFactor;
     for (const Disease& disease : health.diseases) {
         const HealthModel::DiseaseDef* def = model_->diseaseOf(disease.def);
         const int stage = def != nullptr ? HealthModel::stageIn(def->stages, disease.severity) : -1;
@@ -1367,13 +1367,14 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
         health.zoneBleeds.clear();
         health.unconscious = false;
     }
-    health.bleedPerDay = mechanical ? 0.0f : eval.bleedPerDay;
+    // A bigger blood pool (Orcoid +10%) loses the same blood as a smaller share, so every blood-loss stage comes later.
+    health.bleedPerDay = mechanical ? 0.0f : eval.bleedPerDay / std::max(0.1f, health.lineageHp);
     health.bloodStage = model_->stageOf(health.bloodLoss);
     // Pain feeds the capacities, so they get the divided value.
     eval.pain = health.pain;
     health.capacities.resize(model_->capacities.size());
     for (size_t i = 0; i < model_->capacities.size(); ++i) {
-        health.capacities[i] = eval.capacity(static_cast<int>(i));
+        health.capacities[i] = geneWorsen(eval.capacity(static_cast<int>(i)), mods.debuffFactor);  // cat-strain: losses a third worse
     }
     if (model_->movingCapacity >= 0 && mods.movingMax < 1.0f) {
         float& moving = health.capacities[static_cast<size_t>(model_->movingCapacity)];
@@ -1430,7 +1431,8 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
                 coreLow = coreLow || f <= model_->deadLimbsCore;
             } else if (kind == HealthModel::ZoneKind::Arm || kind == HealthModel::ZoneKind::Leg) {
                 limbsGone += f <= 0.0f ? 1 : 0;
-                (kind == HealthModel::ZoneKind::Arm ? armSlow : legSlow) += model_->limbSlowPerShare * std::max(0.0f, model_->limbSlowBelow - f);
+                (kind == HealthModel::ZoneKind::Arm ? armSlow : legSlow) +=
+                    model_->limbSlowPerShare * std::max(0.0f, model_->limbSlowBelow - f) * mods.debuffFactor;
             }
             low += f < model_->zoneManyBelow ? 1 : 0;
             if (f < model_->zoneDownBelow &&

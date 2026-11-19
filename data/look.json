@@ -23,12 +23,14 @@
   "lightningLux": 30000,
 
   "exposure": {
-    "_about": "The camera is held near a target that follows the light: noonEV at a clear midsummer noon, and for every stop darker the scene is, the target drops `follow` stops (1 would make night as bright as day). The auto exposure may move `brighterEV` below and `darkerEV` above the target, for rooms and bright snow.",
+    "_about": "The camera is held near a target that follows the light: noonEV at a clear midsummer noon, and for every stop darker the scene is, the target drops `follow` stops (1 would make night as bright as day). The auto exposure may move `brighterEV` below and `darkerEV` above the target, for rooms and bright snow. With the camera under a roof it may go `indoorBrighterEV` below instead, easing in and out at `indoorEase` (share per second), so rooms lit through windows read as lit.",
     "noonEV": 15.0,
     "follow": 0.88,
     "minEV": -1.5,
     "maxEV": 16.0,
     "brighterEV": 0.75,
+    "indoorBrighterEV": 3.0,
+    "indoorEase": 1.5,
     "darkerEV": 0.25,
     "speedUp": 2.0,
     "speedDown": 1.5,

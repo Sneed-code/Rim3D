@@ -17,7 +17,7 @@
   ]
  },
  {
-  "defName": "PowerConduit", "researchPrerequisite": "Electricity",
+  "defName": "PowerConduit", "visual": {"cable": {"thickness": 0.07, "height": 0.05, "color": [0.12, 0.12, 0.13]}, "parts": [{"shape": "box", "size": [0.14, 0.14, 0.05], "color": [0.12, 0.12, 0.13]}]}, "researchPrerequisite": "Electricity",
   "parent": "PowerBase",
   "label": "power conduit",
   "size": [
@@ -43,7 +43,7 @@
   "ours": ["costs: RimWorld's 1 steel is 1 copper here (sneed, 2026-11-15: copper is for wiring)"]
  },
  {
-  "defName": "PowerSwitch", "researchPrerequisite": "Electricity",
+  "defName": "PowerSwitch", "visual": {"cable": {"thickness": 0.07, "height": 0.05, "color": [0.12, 0.12, 0.13]}, "parts": [{"shape": "box", "size": [0.14, 0.14, 0.05], "color": [0.12, 0.12, 0.13]}, {"shape": "box", "size": [0.08, 0.08, 0.95], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [0.3, 0.16, 0.4], "at": [0, 0, 0.8], "color": [0.55, 0.6, 0.55]}, {"shape": "box", "size": [0.05, 0.06, 0.18], "at": [0.06, 0.1, 0.95], "rot": [0, 0, 0], "color": [0.75, 0.15, 0.1]}]}, "researchPrerequisite": "Electricity",
   "parent": "PowerBase",
   "label": "power switch",
   "size": [
@@ -101,7 +101,7 @@
   ]
  },
  {
-  "defName": "ChemfuelGenerator", "visual": {"sound": {"loop": "Hum_Generator"}}, "researchPrerequisite": "Electricity",
+  "defName": "ChemfuelGenerator", "visual": {"sound": {"loop": "Hum_Generator"}, "parts": [{"shape": "box", "size": [1.6, 1.1, 1.05], "at": [0, -0.3, 0], "color": [0.33, 0.4, 0.33]}, {"shape": "box", "size": [1.4, 0.05, 0.5], "at": [0, -0.86, 0.35], "color": [0.15, 0.15, 0.16]}, {"shape": "cylinder", "radius": 0.12, "height": 0.5, "at": [0.55, -0.3, 1.05], "color": [0.2, 0.2, 0.2]}, {"shape": "cylinder", "radius": 0.3, "height": 1.3, "at": [0, 0.6, -0.33], "rot": [90, 0, 0], "color": [0.6, 0.16, 0.1]}]}, "researchPrerequisite": "Electricity",
   "parent": "PowerBase",
   "label": "chemfuel generator",
   "size": [2, 2],
@@ -151,7 +151,7 @@
   "ours": ["dries"]
  },
  {
-  "defName": "SolarGenerator", "researchPrerequisite": "SolarPanel",
+  "defName": "SolarGenerator", "visual": {"parts": [{"shape": "box", "size": [0.1, 0.1, 1.0], "at": [-1.5, 0, 0], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [0.1, 0.1, 1.0], "at": [0, 0, 0], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [0.1, 0.1, 1.0], "at": [1.5, 0, 0], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [3.5, 0.12, 0.12], "at": [0, 0, 0.9], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [3.9, 3.9, 0.05], "at": [0, 0, 0.98], "rot": [0, 0, 20], "color": [0.72, 0.74, 0.77]}, {"shape": "box", "size": [3.8, 3.8, 0.06], "at": [0, 0, 1.0], "rot": [0, 0, 20], "color": [0.06, 0.1, 0.22]}]}, "researchPrerequisite": "SolarPanel",
   "parent": "PowerBase",
   "label": "solar generator",
   "size": [
@@ -178,7 +178,7 @@
   ]
  },
  {
-  "defName": "WindTurbine", "visual": {"sound": {"loop": "Hum_Wind"}}, "researchPrerequisite": "Electricity",
+  "defName": "WindTurbine", "visual": {"sound": {"loop": "Hum_Wind"}, "parts": [{"shape": "box", "size": [1.2, 1.2, 0.3], "color": [0.55, 0.55, 0.55]}, {"shape": "cylinder", "radius": 0.2, "height": 6.6, "at": [0, 0, 0.3], "color": [0.85, 0.86, 0.88]}, {"shape": "box", "size": [0.6, 1.5, 0.6], "at": [0, -0.1, 6.7], "color": [0.85, 0.86, 0.88]}, {"shape": "sphere", "radius": 0.25, "at": [0, 0.75, 6.75], "color": [0.8, 0.8, 0.82]}, {"shape": "box", "size": [0.28, 0.06, 2.6], "at": [0, 0.8, 7.0], "color": [0.9, 0.9, 0.92]}, {"shape": "box", "size": [0.28, 0.06, 2.6], "at": [1.126, 0.8, 5.05], "rot": [-120, 0, 0], "color": [0.9, 0.9, 0.92]}, {"shape": "box", "size": [0.28, 0.06, 2.6], "at": [-1.126, 0.8, 5.05], "rot": [120, 0, 0], "color": [0.9, 0.9, 0.92]}]}, "researchPrerequisite": "Electricity",
   "parent": "PowerBase",
   "label": "wind turbine",
   "size": [
@@ -271,7 +271,8 @@
    "heatPerSecond": 21,
    "maxTemp": 21,
    "adjustable": true,
-   "switchesOffAbove": true
+   "switchesOffAbove": true,
+   "lowPowerFactor": 0.1
   },
   "unverified": [
    "costs",
@@ -281,18 +282,22 @@
   ]
  },
  {
-  "defName": "Cooler", "visual": {"sound": {"loop": "Hum_Climate"}, "mesh": "/Game/Rim3D/Generated/Art/SM_Cooler.SM_Cooler" }, "researchPrerequisite": "AirConditioning",
+  "defName": "Cooler", "visual": {"sound": {"loop": "Hum_Climate"}, "joinsWalls": true, "parts": [{"shape": "box", "size": [0, 0.5, 3.0], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [0.72, 0.06, 0.46], "at": [0, 0.25, 1.8], "color": [0.86, 0.88, 0.9]}, {"shape": "box", "size": [0.64, 0.07, 0.04], "at": [0, 0.25, 1.88], "color": [0.3, 0.32, 0.35]}, {"shape": "box", "size": [0.64, 0.07, 0.04], "at": [0, 0.25, 2.0], "color": [0.3, 0.32, 0.35]}, {"shape": "box", "size": [0.64, 0.07, 0.04], "at": [0, 0.25, 2.12], "color": [0.3, 0.32, 0.35]}, {"shape": "box", "size": [0.82, 0.34, 0.66], "at": [0, -0.42, 0.3], "color": [0.8, 0.81, 0.82]}, {"shape": "cylinder", "radius": 0.24, "height": 0.03, "at": [0, -0.6, 0.615], "rot": [0, 0, 90], "color": [0.18, 0.18, 0.2]}, {"shape": "cylinder", "radius": 0.05, "height": 0.05, "at": [0, -0.61, 0.605], "rot": [0, 0, 90], "color": [0.6, 0.6, 0.62]}]}, "researchPrerequisite": "AirConditioning",
   "parent": "ClimateBase",
   "label": "cooler",
   "size": [
-   2,
+   1,
    1
   ],
+  "passability": "Impassable",
+  "building": {
+   "holdsRoof": true
+  },
   "costs": {
    "Steel": 100,
    "ComponentIndustrial": 1
   },
-  "fillPercent": 0.5,
+  "fillPercent": 1.0,
   "stats": {
    "maxHitPoints": 100,
    "workToBuild": 1728.0
@@ -302,9 +307,15 @@
   },
   "heatPusher": {
    "heatPerSecond": -21,
-   "minTemp": 10,
-   "adjustable": true
+   "minTemp": 21,
+   "adjustable": true,
+   "inWall": true,
+   "exhaustFactor": 1.25,
+   "efficiencyHotStartC": 40,
+   "efficiencySpanC": 130,
+   "lowPowerFactor": 0.1
   },
+  "note": "RimWorld's Building_Cooler: 1 x 1 in a wall; cools the room in front (the way it faces, -21 heat a second) and pushes 1.25 times that heat into the cell behind; efficiency 1 - max(hot - cold, hot - 40) / 130; 10% power while idle (CompTempControl.lowPowerConsumptionFactor); default target 21 C. Needs open cells on both sides.",
   "unverified": [
    "costs",
    "stats.workToBuild",
@@ -313,7 +324,7 @@
   ]
  },
  {
-  "defName": "Vent", "researchPrerequisite": "ComplexFurniture",
+  "defName": "Vent", "visual": {"joinsWalls": true, "parts": [{"shape": "box", "size": [0, 0.5, 3.0], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [0.5, 0.54, 0.32], "at": [0, 0, 2.0], "color": [0.3, 0.32, 0.34]}, {"shape": "box", "size": [0.46, 0.56, 0.03], "at": [0, 0, 2.08], "color": [0.75, 0.77, 0.8]}, {"shape": "box", "size": [0.46, 0.56, 0.03], "at": [0, 0, 2.18], "color": [0.75, 0.77, 0.8]}]}, "researchPrerequisite": "ComplexFurniture",
   "parent": "ClimateBase",
   "label": "vent",
   "size": [
@@ -340,7 +351,7 @@
   ]
  },
  {
-  "defName": "PassiveCooler", "researchPrerequisite": "PassiveCooler",
+  "defName": "PassiveCooler", "visual": {"parts": [{"shape": "box", "size": [0.8, 0.8, 0.7], "color": [0.52, 0.38, 0.24]}, {"shape": "box", "size": [0.82, 0.06, 0.5], "at": [0, 0.4, 0.1], "color": [0.36, 0.26, 0.16]}, {"shape": "box", "size": [0.88, 0.88, 0.06], "at": [0, 0, 0.7], "color": [0.42, 0.3, 0.19]}, {"shape": "box", "size": [0.72, 0.72, 0.02], "at": [0, 0, 0.75], "color": [0.22, 0.42, 0.52]}]}, "researchPrerequisite": "PassiveCooler",
   "parent": "ClimateBase",
   "label": "passive cooler",
   "size": [

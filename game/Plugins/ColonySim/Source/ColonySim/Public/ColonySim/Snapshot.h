@@ -38,6 +38,9 @@ struct PathPointView {
 // bed, on the ground to sleep, downed or knocked down).
 enum class PawnPosture : uint8_t { Stand, Sit, Lie };
 
+// Share of a wall climb spent on the face; the rest is the mantle over the top (docs/design/climbing.md).
+inline constexpr float kWallMantleFrom = 0.8f;
+
 // A wall's window (docs/design/windows.md).
 enum class WindowState : uint8_t { None, Glass, Broken };
 
@@ -59,6 +62,12 @@ struct ThingView {
     // Pawns on stairs or a ladder: how far along the climb, 0 to 1; x, y and z are already that
     // share of the way to the end, `level` is the one it started on (docs/design/levels.md).
     float climb = 0.0f;
+    // The climb is up (or down) the face of a wall (docs/design/climbing.md): until kWallMantleFrom
+    // of the way the pawn hangs on the face, rising; after it, it mantles over the top onto the floor.
+    bool wallClimb = false;
+    bool wallClimbUp = false;  // going up (else down); facingX/Y point at the wall either way
+    // Times the height of its jump (its lineage: cat-strain 2), for Unreal's jump.
+    float jumpHeight = 1.0f;
     uint32_t firstWaypoint = 0;
     uint32_t waypointCount = 0;
     Rot4 rotation = Rot4::North;  // buildings

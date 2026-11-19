@@ -332,6 +332,8 @@ public:
     // How well the pawn performs, 1 normally (an Exhausted pawn 0.75, NeedsSystem::performanceFactor): aim, cooldown,
     // reload and swing times are divided by it, shooting accuracy multiplied.
     void setPerformance(std::function<float(Entity)> performance) { performance_ = std::move(performance); }
+    // Times a shooter's aim from its lineage (docs/design/races.md); more is steadier. Unset: 1.
+    void setAimFactor(std::function<float(Entity)> aim) { aimFactor_ = std::move(aim); }
     float performance(Entity pawn) const { return performance_ ? std::max(0.05f, performance_(pawn)) : 1.0f; }
     // Times for aiming, cooldown, reloading and swings are multiplied by this: worn armour's weight over performance.
     float attackTimeFactor(Entity pawn) const;
@@ -597,6 +599,7 @@ private:
     std::function<void(Entity, Entity)> harmHook_;
     std::function<float(Entity)> bodySize_;
     std::function<float(Entity)> performance_;
+    std::function<float(Entity)> aimFactor_;
     std::vector<Entity> scratch_;
 
     void emitHit(Entity projectile, const Projectile& p, const TraceHit& hit, float amount);

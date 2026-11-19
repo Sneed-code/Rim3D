@@ -163,6 +163,7 @@ struct Health {
     std::vector<float> zoneOverkill;
 
     // ---- Derived. Never saved or hashed.
+    float lineageHp = 1.0f;      // the lineage's hit points and blood (Orcoid 1.1), set with the genes; not saved
     float stageHp = 1.0f;        // young animals: the life stage's healthScaleFactor, set by AnimalSystem (N4 leftovers)
     bool downed = false;
     float pain = 0.0f;
@@ -191,6 +192,7 @@ struct Health {
 struct HealthMods {
     float painFactor = 1.0f;
     float movingMax = 1.0f;
+    float debuffFactor = 1.0f;  // the lineage's (cat-strain 1.33): pain, lost capacities and limb slows this much worse
 };
 
 // Everything a health panel shows, with names instead of ids. Filled by HealthSystem::report.

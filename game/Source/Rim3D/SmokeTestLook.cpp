@@ -22,6 +22,7 @@
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
 #include "SkySubsystem.h"
+#include "WindowLightSubsystem.h"
 #include "SnowSubsystem.h"
 
 #include "ColonySim/Clock.h"
@@ -670,7 +671,17 @@ void USmokeTestSubsystem::BuildLookPhases()
 		const FVector From = CellWorld(static_cast<float>(State->Room.x) + 3.5f, NorthY - 3.6f, 165.0);
 		ViewFrom(From, (To - From).Rotation());
 	};
-	WindowsShot.Verify = [=]() { NoteShot(TEXT("windows")); };
+	WindowsShot.Verify = [=, this]()
+	{
+		NoteShot(TEXT("windows"));
+		const UWindowLightSubsystem* WinLights = GetWorld()->GetSubsystem<UWindowLightSubsystem>();
+		const USkySubsystem* SkyNow = Sky();
+		Notes.Add(FString::Printf(TEXT("windows: %d window lights shining, indoor exposure share %.2f"), WinLights ? WinLights->GetShining() : -1, SkyNow ? SkyNow->GetIndoorShare() : -1.0f));
+		if (!WinLights || WinLights->GetShining() < 2)
+		{
+			Fail(TEXT("windows: the room's two windows should each have a daylight light"));
+		}
+	};
 	Phases.Add(MoveTemp(WindowsShot));
 
 	// 9. A snowy day: a new game on the same seed snows hard through the cold night, then the overseer looks at it at eleven

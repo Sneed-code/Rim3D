@@ -149,6 +149,7 @@ TEST_CASE("Stairs: a staircase and a ladder link the cell in front of the foot t
 
 TEST_CASE("Stairs: built stairs join the ground and the upper floor in one reachability group, and taking them away parts them") {
     auto sim = stairsSim();
+    sim->mapRules().setWallClimb(0.0f, 3.5f);  // the stand-in wall at the stairs' place could be climbed (ClimbTests.cpp)
     Regions& regions = sim->regions();
     // Without stairs the upper floor is a group of its own.
     stairsHouse(*sim, "Wall");  // a wall where the stairs go: no link

@@ -166,6 +166,31 @@ namespace
 		Layer(Thickness + 2.0f * BldCapLedgeCm, Height - Body, Body, BldCapShade);
 	}
 
+	/**
+	 * A power cable (visual.cable) in a 1 x 1 cell facing north: a small junction in the middle and a low arm out to each
+	 * side in `Link` (1 north, 2 east, 4 south, 8 west), all in the cable's own colour (not the stuff's).
+	 */
+	void BldCableParts(int32 Link, float Thickness, float Height, const FLinearColor& Color, TArray<VisualMesh::FPart>& Out)
+	{
+		const auto Add = [&Out, &Color](float SizeX, float SizeY, float SizeZ, float AtX, float AtY)
+		{
+			VisualMesh::FPart Part;
+			Part.Shape = VisualMesh::EShape::Box;
+			Part.Size = FVector3f(SizeX, SizeY, SizeZ);
+			Part.At = FVector3f(AtX, AtY, 0.0f);
+			Part.Color = Color;
+			Out.Add(Part);
+		};
+		const float Junction = Thickness * 2.0f;
+		Add(Junction, Junction, Height * 1.2f, 0.0f, 0.0f);
+		const float Length = 50.0f;
+		const float Middle = Length * 0.5f;
+		if (Link & 1) { Add(Thickness, Length, Height, 0.0f, Middle); }
+		if (Link & 2) { Add(Length, Thickness, Height, Middle, 0.0f); }
+		if (Link & 4) { Add(Thickness, Length, Height, 0.0f, -Middle); }
+		if (Link & 8) { Add(Length, Thickness, Height, -Middle, 0.0f); }
+	}
+
 	// A window's frame and the gap round the glass (docs/design/windows.md).
 	constexpr float BldWindowJambCm = 10.0f;    // wall left at a cell's edge beside the opening
 	constexpr float BldWindowFrameCm = 5.0f;    // the frame's width round the pane
@@ -476,7 +501,17 @@ void UBuildingSubsystem::ReadDefs(const colony::Sim& Sim)
 		Look.bItem = Category == "Item";
 		Look.bDoor = Def.text("thingClass") == "Building_Door";
 		Look.bConform = Category == "Building" && colony::groundFitOf(Def) == colony::GroundFit::Conform;
+		Look.bDeck = Category == "Building" && colony::bridgeKindOf(Def) != colony::BridgeKind::None;
 		Look.bDrawnElsewhere = !Def.text("visual.drawnBy").empty();
+		Look.bJoinsWalls = Def.flag("visual.joinsWalls");
+		Look.bPowered = Category == "Building" && Def.has("power");
+		if (Def.has("visual.cable"))
+		{
+			Look.bCable = true;
+			Look.CableThicknessCm = FMath::Clamp(static_cast<float>(Def.number("visual.cable.thickness", 0.07)) * 100.0f, 1.0f, 30.0f);
+			Look.CableHeightCm = FMath::Clamp(static_cast<float>(Def.number("visual.cable.height", 0.05)) * 100.0f, 1.0f, 30.0f);
+			Look.CableColor = VisualMesh::ReadColor(Def, "visual.cable.color", Look.CableColor);
+		}
 		if (Def.has("visual.link"))
 		{
 			Look.bLink = true;
@@ -564,8 +599,8 @@ int32 UBuildingSubsystem::GetLook(colony::DefId Def, colony::DefId Stuff, int32 
 	{
 		return -1;
 	}
-	Link = DefLook->bLink ? Link : -1;
-	Window = Link >= 0 ? FMath::Clamp(Window, 0, 2) : 0;
+	Link = DefLook->bLink || DefLook->bCable ? Link : -1;
+	Window = Link >= 0 && DefLook->bLink ? FMath::Clamp(Window, 0, 2) : 0;
 	const uint64 Key = (static_cast<uint64>(Def.value) << 32) | (static_cast<uint64>(Window) << 29) | (static_cast<uint64>(Link + 1) << 24) |
 		(Stuff.valid() ? static_cast<uint64>(Stuff.value) + 1 : 0);
 	if (const int32* Found = LookIndex.Find(Key))
@@ -580,7 +615,11 @@ int32 UBuildingSubsystem::GetLook(colony::DefId Def, colony::DefId Stuff, int32 
 	UMaterialInterface* Surface = SurfaceOf(Stuff);
 	TArray<VisualMesh::FPart> LinkParts;
 	TArray<VisualMesh::FPart> GlassParts;
-	if (Link >= 0 && Window > 0)
+	if (Link >= 0 && DefLook->bCable)
+	{
+		BldCableParts(Link, DefLook->CableThicknessCm, DefLook->CableHeightCm, DefLook->CableColor, LinkParts);
+	}
+	else if (Link >= 0 && Window > 0)
 	{
 		const colony::WindowNumbers& Numbers = BuiltSim->windows().numbers();
 		BldWindowParts(Link, DefLook->LinkThicknessCm, DefLook->HeightCm, static_cast<float>(Numbers.sillDm) * 10.0f,
@@ -738,12 +777,25 @@ void UBuildingSubsystem::Refresh()
 	const int32 ThingCount = static_cast<int32>(Snapshot.things.size());
 	ScanLinks.Init(-1, ThingCount);
 	TSet<uint64> LinkCells;
+	TSet<uint64> PowerCells;  // every cell of a built building with a power part: cables run up to them
 	for (const colony::ThingView& View : Snapshot.things)
 	{
 		const FDefLook* Look = View.category == colony::ThingCategory::Building ? LookOfDef(View.def) : nullptr;
-		if (Look && (Look->bLink || Look->bDoor))
+		if (Look && (Look->bLink || Look->bDoor || Look->bJoinsWalls))
 		{
 			LinkCells.Add(BldCellKey(FMath::FloorToInt32(View.x), FMath::FloorToInt32(View.y), View.level));
+		}
+		if (Look && Look->bPowered && View.stage == colony::ConstructionStage::Built)
+		{
+			const int32 MinX = FMath::RoundToInt32(View.x - static_cast<float>(View.sizeX) * 0.5f);
+			const int32 MinY = FMath::RoundToInt32(View.y - static_cast<float>(View.sizeY) * 0.5f);
+			for (int32 CellY = MinY; CellY < MinY + View.sizeY; ++CellY)
+			{
+				for (int32 CellX = MinX; CellX < MinX + View.sizeX; ++CellX)
+				{
+					PowerCells.Add(BldCellKey(CellX, CellY, View.level));
+				}
+			}
 		}
 	}
 	const auto Joins = [&Map, &LinkCells](int32 X, int32 Y, int32 Level)
@@ -761,6 +813,14 @@ void UBuildingSubsystem::Refresh()
 			const int32 Y = FMath::FloorToInt32(View.y);
 			ScanLinks[I] = static_cast<int8>((Joins(X, Y + 1, View.level) ? 1 : 0) | (Joins(X + 1, Y, View.level) ? 2 : 0) |
 				(Joins(X, Y - 1, View.level) ? 4 : 0) | (Joins(X - 1, Y, View.level) ? 8 : 0));
+		}
+		else if (Look && Look->bCable && View.stage == colony::ConstructionStage::Built)
+		{
+			// A cable runs to the powered buildings (and other cables) on its four sides, as the sim's nets join them.
+			const int32 X = FMath::FloorToInt32(View.x);
+			const int32 Y = FMath::FloorToInt32(View.y);
+			const auto Wired = [&PowerCells, &View](int32 CellX, int32 CellY) { return PowerCells.Contains(BldCellKey(CellX, CellY, View.level)); };
+			ScanLinks[I] = static_cast<int8>((Wired(X, Y + 1) ? 1 : 0) | (Wired(X + 1, Y) ? 2 : 0) | (Wired(X, Y - 1) ? 4 : 0) | (Wired(X - 1, Y) ? 8 : 0));
 		}
 	}
 	int32 Built = 0, Frames = 0, Blueprints = 0, Items = 0, Doors = 0;
@@ -938,7 +998,7 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 		const int32 OriginX = FMath::RoundToInt32(View.x - static_cast<float>(View.sizeX) * 0.5f);
 		const int32 OriginY = FMath::RoundToInt32(View.y - static_cast<float>(View.sizeY) * 0.5f);
 		float Base = View.z;
-		for (int32 Y = OriginY; Y <= OriginY + View.sizeY; ++Y)
+		for (int32 Y = OriginY; Y <= OriginY + View.sizeY && !DefLook->bDeck; ++Y)
 		{
 			for (int32 X = OriginX; X <= OriginX + View.sizeX; ++X)
 			{

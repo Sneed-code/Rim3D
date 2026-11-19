@@ -86,6 +86,11 @@ ground, preferably within 10 m of rock. Both keep 45 m clear of the map's middle
 on flat soil or sand. Steam power and eruptions come with the events later; for now a geyser is a landmark.
 Neither def has a `designationCategory`, so nobody can build them.
 
+## Roads
+
+A map made for a world tile with roads gets them, with old stone bridges where they cross water: see
+[roads-bridges.md](roads-bridges.md). Laid after the ruins and geysers.
+
 ## Numbers
 
 A 1,024 m map is generated in about 0.18 s (Release, one core). On a 512 m map from seed 42: about
