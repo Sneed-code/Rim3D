@@ -276,7 +276,7 @@ private:
         return defs_.idOf("Things", std::string(prefix) + (cut == std::string::npos ? name : name.substr(cut + 1)));
     }
 
-    // A spot for a small prop: open, away from the middle; the first `nearRockTries` tries want rock close by.
+    // A spot for a small prop: open, away from the middle; the first `nearRockTries` tries want rock or hills close by.
     bool smallSpot(int nearRockTries, CellPos& out, DefId& rock) {
         for (int t = 0; t < kMapPropTries; ++t) {
             const CellPos c = randomCell();
@@ -284,7 +284,8 @@ private:
                 continue;
             }
             rock = rockNear(c, 12);
-            if (t < nearRockTries && !rock.valid()) {
+            // The first tries want rock close by or hill ground (Map::hillGround: over 18 m on generated maps).
+            if (t < nearRockTries && !rock.valid() && !map_.hillGround(c)) {
                 continue;
             }
             out = c;

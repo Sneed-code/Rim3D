@@ -109,12 +109,12 @@ on most maps but gives no numbers). Everything it puts down is a normal thing in
   (35%) a second one a few metres off, with 2 to 5 `ChunkSlagSteel` items around. Taking a ship chunk
   down gives the wiki's 20 steel and 5 or 6 components (its `costs`, half back); an electric smelter
   turns a slag chunk into 15 steel (`SmeltSlag`).
-- **Boulders**: a group of 1 to 3 per 14,000 cells (about 75 groups on 1 km), 60% of them near rock,
+- **Boulders**: a group of 1 to 3 per 14,000 cells (about 75 groups on 1 km), 60% of them near rock or on hill ground (`Map::hillGround`),
   of the rock next to them (else one of the map's rock types): `Boulder<Rock>` buildings, impassable,
   75% cover. Taken down, one chunk of that rock.
 - **Fallen logs**: one per 9,000 cells on soil with a tree within 5 m: `FallenLog`, 3 by 1, along x or
   y. Pawns climb over (path cost 42), 40% cover, burns; taken down, 25 wood.
-- **Stone chunks**: a cluster of 2 to 6 per 16,000 cells within 4 cells, 60% near rock; the chunk of the
+- **Stone chunks**: a cluster of 2 to 6 per 16,000 cells within 4 cells, 60% near rock or on hills; the chunk of the
   rock beside them, else one of the map's rock types.
 
 Small props keep 20 m off the middle, big ones 45 m; nothing goes on a road, a building, an item, water,
