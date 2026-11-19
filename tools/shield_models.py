@@ -110,7 +110,7 @@ def bake_surface(tier, size, h):
         joint=np.zeros_like(yy)
         for edge in boundaries[1:-1]: joint+=np.exp(-((yy-edge)/.004)**2)*.19
         variation=np.clip(tones+grain-joint, .56,1.2)
-        col=np.stack([.32*variation,.165*variation,.075*variation],axis=-1)
+        col=np.stack([.44*variation,.235*variation,.11*variation],axis=-1)  # lighter oak: the noon smoke picture read darker than a mannequin
         rough=.82
     else:
         variation=.88+.028*np.sin(yy*680)+.018*np.sin(yy*1310)+.012*np.sin(yy*1930)
@@ -284,6 +284,8 @@ def build(tier,size):
     bpy.context.view_layer.objects.active=parts[0]
     bpy.ops.object.convert(target='MESH')
     bpy.ops.object.join()
+    joined=bpy.context.view_layer.objects.active
+    while len(joined.data.uv_layers)>1: joined.data.uv_layers.remove(joined.data.uv_layers[-1])  # only UV0: the extra map was all one point
     joined=bpy.context.view_layer.objects.active; joined.name='SM_Shield_%s_%s'%(tier,size)
     bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)  # origin at the middle of the shield
     path=OUT/('SM_Shield_%s_%s.glb'%(tier,size))

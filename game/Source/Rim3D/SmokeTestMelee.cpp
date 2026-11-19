@@ -1183,6 +1183,11 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		State->ShieldOrdersAtStart = Weapons()->GetShieldOrders();
 		State->ShieldBlocksAtStart = Weapons()->GetShieldBlocksSeen();
 		State->SparksAtStart = Fight()->GetImpactsOfKind(colony::ProjectileHitKind::Armor);
+		// Noon: the shield's colour is judged in the picture, and the night leaves a face turned from the moon black.
+		if (IConsoleVariable* Hour = IConsoleManager::Get().FindConsoleVariable(TEXT("Sky.Hour")))
+		{
+			Hour->Set(12.0f, ECVF_SetByCode);
+		}
 		// Away from the duel, the protagonist facing east with the gladius in hand.
 		const colony::CellPos A{State->Cell.x - 12, State->Cell.y - 30, 0};
 		// No trees or bushes in the screenshot's way.
@@ -1284,8 +1289,16 @@ void USmokeTestSubsystem::BuildMeleePhases()
 	{
 		UWeaponDrawSubsystem* W = Weapons();
 		W->ScriptRightMouse(false, false);
+		if (IConsoleVariable* Hour = IConsoleManager::Get().FindConsoleVariable(TEXT("Sky.Hour")))
+		{
+			Hour->Set(-1.0f, ECVF_SetByCode);
+		}
 		const colony::ThingView* Me = Snapshot(State->Me);
 		const UStaticMeshComponent* Shield = W->GetShieldComponent(State->Me);
+		if (Shield)
+		{
+			Notes.Add(FString::Printf(TEXT("shield: materials %s"), *UWeaponDrawSubsystem::DescribeMaterials(Shield->GetStaticMesh())));
+		}
 		if (!Me || !Me->shield.valid() || Me->shieldSlung)
 		{
 			Fail(TEXT("shield: the snapshot does not show a shield on the protagonist's arm"));

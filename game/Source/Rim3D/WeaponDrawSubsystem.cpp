@@ -6,10 +6,13 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/Texture.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialInstance.h"
 #include "Materials/MaterialInterface.h"
 
 #include "FightSubsystem.h"
@@ -344,6 +347,39 @@ bool UWeaponDrawSubsystem::LoadSolidMaterial()
 	return SolidMaterial != nullptr;
 }
 
+FString UWeaponDrawSubsystem::DescribeMaterials(const UStaticMesh* Mesh)
+{
+	if (!Mesh)
+	{
+		return TEXT("no mesh");
+	}
+	TArray<FString> Slots;
+	const TArray<FStaticMaterial>& Materials = Mesh->GetStaticMaterials();
+	for (int32 Index = 0; Index < Materials.Num(); ++Index)
+	{
+		const UMaterialInterface* Material = Materials[Index].MaterialInterface;
+		if (!Material)
+		{
+			Slots.Add(FString::Printf(TEXT("[%d] none"), Index));
+			continue;
+		}
+		const UMaterialInstance* Instance = Cast<UMaterialInstance>(Material);
+		UTexture* Colour = nullptr;
+		FLinearColor Factor = FLinearColor(-1.0f, -1.0f, -1.0f, -1.0f);
+		float Metallic = -1.0f;
+		float Roughness = -1.0f;
+		Material->GetTextureParameterValue(FHashedMaterialParameterInfo(TEXT("BaseColorTexture")), Colour);
+		Material->GetVectorParameterValue(FHashedMaterialParameterInfo(TEXT("BaseColorFactor")), Factor);
+		Material->GetScalarParameterValue(FHashedMaterialParameterInfo(TEXT("MetallicFactor")), Metallic);
+		Material->GetScalarParameterValue(FHashedMaterialParameterInfo(TEXT("RoughnessFactor")), Roughness);
+		const UMaterial* Base = Material->GetMaterial();
+		Slots.Add(FString::Printf(TEXT("[%d] %s (parent %s, base %s%s) colour map %s, colour %s, metallic %.2f, roughness %.2f"), Index, *Material->GetName(),
+			Instance && Instance->Parent ? *Instance->Parent->GetName() : TEXT("none"), Base ? *Base->GetName() : TEXT("none"),
+			Base && Base->IsTwoSided() ? TEXT(", two-sided") : TEXT(""), Colour ? *Colour->GetName() : TEXT("none"), *Factor.ToString(), Metallic, Roughness));
+	}
+	return FString::Join(Slots, TEXT("; "));
+}
+
 UStaticMesh* UWeaponDrawSubsystem::ShieldMesh(colony::DefId Shield, colony::DefId Stuff)
 {
 	const uint64 Key = (static_cast<uint64>(Shield.value) << 32) | static_cast<uint64>(Stuff.value);
@@ -366,6 +402,7 @@ UStaticMesh* UWeaponDrawSubsystem::ShieldMesh(colony::DefId Shield, colony::DefI
 			if (UStaticMesh* Model = LoadObject<UStaticMesh>(nullptr, UTF8_TO_TCHAR(ModelPath.c_str()), nullptr, LOAD_NoWarn | LOAD_Quiet))
 			{
 				ShieldMeshes.Add(Key, Model);
+				UE_LOG(LogWeaponDraw, Display, TEXT("Shield model %s: %s"), *Model->GetName(), *DescribeMaterials(Model));
 				return Model;
 			}
 			UE_LOG(LogWeaponDraw, Warning, TEXT("Shield model %s is not made (run the ShieldArt commandlet); drawing plain shapes"), UTF8_TO_TCHAR(ModelPath.c_str()));
@@ -469,6 +506,8 @@ UStaticMeshComponent* UWeaponDrawSubsystem::MakeComponent(ASimPawnActor& Actor, 
 	Weapon->SetCanEverAffectNavigation(false);
 	Weapon->SetCastShadow(false);
 	Weapon->bReceivesDecals = false;
+	// A thin held plate or blade in the distance-field scene shades itself black under Lumen; it moves too fast to occlude anything anyway.
+	Weapon->bAffectDistanceFieldLighting = false;
 	Weapon->SetupAttachment(Actor.GetRootComponent());
 	Weapon->RegisterComponent();
 	return Weapon;
