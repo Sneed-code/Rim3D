@@ -572,8 +572,9 @@ struct SetMedicalCareCommand {
 };
 
 // Prisoners (task C22, docs/design/prisoners.md): what wardens do with a prisoner. `mode` is NoInteraction, ReduceResistance,
-// AttemptRecruit or Release (prisonerModeName). Fails for a pawn that is no prisoner, or a name that isn't one; Release also fails
-// for a prisoner who can't walk.
+// AttemptRecruit, Release, Execute, Enslave or ReduceWill (prisonerModeName). Fails for a pawn that is no prisoner, or a name that
+// isn't one; Release also fails for a prisoner who can't walk. For a slave `mode` is "Emancipate" (it becomes a free colonist)
+// or "Release" (it goes back to its side and walks off the map).
 struct SetPrisonerModeCommand {
     Entity pawn = kNoEntity;
     std::string mode;

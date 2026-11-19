@@ -117,6 +117,17 @@ public:
     bool walkable(CellPos c) const { return inBounds(c) && groundWalkable(c) && passage(c) != Passage::Blocked; }
     // A walkable cell with a door in it.
     bool isDoor(CellPos c) const { return walkable(c) && passage(c) == Passage::Door; }
+    // A walkable ground cell with a fence or a fence gate in it (docs/design/husbandry.md, Fences): people step over
+    // it, animals can't. Kept up to date by Things with the building layer.
+    bool isFence(CellPos c) const {
+        return c.level == 0 && !fence_.empty() && inBounds(c) && fence_[static_cast<size_t>(index(c))] != 0 && walkable(c);
+    }
+    // A fence gate (a fence cell that is a gate): a tame animal outside its pen is let in through it.
+    bool isFenceGate(CellPos c) const { return isFence(c) && fence_[static_cast<size_t>(index(c))] == 2; }
+    // What an animal can't walk into: a door (animals don't open doors) or a fence.
+    bool blocksAnimals(CellPos c) const { return isDoor(c) || isFence(c); }
+    // `kind` 0 clears the cell, 1 is a fence, 2 a fence gate.
+    void setFence(CellPos c, int kind);
 
     // Height in metres of what a pawn stands on in the cell: the ground on level 0, the ground
     // plus kLevelHeightM per level above it (an upper floor runs parallel to the ground under it).
@@ -407,6 +418,7 @@ private:
     std::vector<Entity> building_;
     std::vector<Passage> passage_;
     std::vector<uint8_t> obstacle_;
+    std::vector<uint8_t> fence_;  // per ground cell, 1 under a fence or fence gate; empty until the first
     std::vector<Roof> roof_;
     int chunksX_ = 0;
     int chunksY_ = 0;

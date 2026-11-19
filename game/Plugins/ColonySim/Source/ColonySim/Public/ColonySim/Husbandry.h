@@ -78,6 +78,7 @@ struct AnimalCare {
     PathTicket path;             // while its mode is AnimalMode::WaitPath
     CellPos pathGoal;            // ... and where the path goes
     AnimalMode pathMode = AnimalMode::Wander;  // ... and what it does on arriving
+    Entity bed = kNoEntity;      // the animal bed (sleeping spot, box or bed) it sleeps in; none: on the ground
 };
 
 struct TrainableRule {
@@ -218,8 +219,20 @@ public:
     const std::vector<AnimalZone>& zones() const { return saved_.zones; }
     const AnimalZone* findZone(AnimalZoneId id) const;
     AnimalZoneId zoneAt(CellPos cell) const;
-    // A zone whose cells are all walled in: the walkable cells joined to it (not through doors) are all in the zone.
+    // A zone whose cells are all walled in: the walkable cells joined to it (not through doors or fences) are all in the zone.
     bool isPen(AnimalZoneId zone) const;
+
+    // ---- Animal beds (docs/design/husbandry.md, Animal beds)
+    // Whether the building is an animal bed (`building.animalBed`) the animal fits (`building.maxBodySize`, 0 any) and may use:
+    // in its zone, or within `homeRadius` of its home when it has none.
+    bool bedSuits(Entity animal, Entity bed) const;
+    // The animal bed a tame animal sleeps in: the one it has while that suits, else the nearest suitable one no other animal
+    // has (it becomes its own). None if there is none.
+    Entity bedFor(Entity animal);
+    // The cell an animal lies in on the bed.
+    CellPos bedCell(Entity bed) const;
+    // How many animal beds stand on the map (0 skips the bed search).
+    bool anyAnimalBeds() const;
     uint64_t zoneChanges() const { return zoneChanges_; }
 
     // ---- For the jobs and the animals
@@ -294,6 +307,7 @@ private:
     std::vector<int> kindOfDef_;
     std::vector<float> nutrition_;       // by DefId.value
     std::vector<uint8_t> foodType_;       // by DefId.value: bit mask of rules_.dietFoods the item belongs to (1 << diet), 0 none
+    std::vector<float> bedMaxBody_;      // by DefId.value: -1 no animal bed, 0 fits any animal, else the largest body size
     std::vector<AnimalZoneId> zoneOf_;   // per cell of level 0
     uint64_t zoneChanges_ = 0;
     mutable uint64_t penStamp_[2] = {~0ULL, ~0ULL};  // zone changes and region changes the cache is for

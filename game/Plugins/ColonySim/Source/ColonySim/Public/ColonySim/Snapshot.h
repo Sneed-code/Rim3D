@@ -213,6 +213,11 @@ struct ThingView {
     bool prisoner = false;
     uint8_t prisonerMode = 0;
     float resistance = 0.0f;
+    float will = 0.0f;           // a prisoner's will (Enslave and ReduceWill wear it down)
+    // Slaves (docs/design/prisoners.md, Slaves): the colony's slave, and its suppression (0 to 1; low means it may rebel).
+    // The player frees one with SetPrisonerModeCommand "Emancipate" or "Release".
+    bool slave = false;
+    float suppression = 0.0f;
     // Visitors (docs/design/trade.md): a pawn of a visit (a VisitorRole number: 0 visitor, 1 trader, 2 guard) and the visit's id.
     bool visitor = false;
     uint8_t visitRole = 0;

@@ -33,13 +33,15 @@ const char* prisonerModeName(PrisonerMode mode) {
         case PrisonerMode::AttemptRecruit: return "AttemptRecruit";
         case PrisonerMode::Release: return "Release";
         case PrisonerMode::Execute: return "Execute";
+        case PrisonerMode::Enslave: return "Enslave";
+        case PrisonerMode::ReduceWill: return "ReduceWill";
     }
     return "?";
 }
 
 bool prisonerModeFromName(const std::string& name, PrisonerMode& out) {
     for (const PrisonerMode mode : {PrisonerMode::NoInteraction, PrisonerMode::ReduceResistance, PrisonerMode::AttemptRecruit,
-                                    PrisonerMode::Release, PrisonerMode::Execute}) {
+                                    PrisonerMode::Release, PrisonerMode::Execute, PrisonerMode::Enslave, PrisonerMode::ReduceWill}) {
         if (name == prisonerModeName(mode)) {
             out = mode;
             return true;
@@ -85,6 +87,45 @@ PrisonerRules PrisonerRules::read(const DefDatabase& defs) {
     r.edgeSearch = static_cast<int>(rules->integer("edgeSearch", r.edgeSearch));
     if (r.initialResistanceMax < r.initialResistanceMin) {
         r.initialResistanceMax = r.initialResistanceMin;
+    }
+    // Slaves.
+    const auto curve = [&](const char* key, std::vector<std::pair<float, float>>& out) {
+        if (const size_t n = rules->count(key)) {
+            out.clear();
+            for (size_t i = 0; i < n; ++i) {
+                const std::string at = std::string(key) + "." + std::to_string(i);
+                out.emplace_back(static_cast<float>(rules->number((at + ".0").c_str())), static_cast<float>(rules->number((at + ".1").c_str())));
+            }
+            std::sort(out.begin(), out.end());
+        }
+    };
+    num("slaves.initialWill.0", r.initialWillMin);
+    num("slaves.initialWill.1", r.initialWillMax);
+    if (r.initialWillMax < r.initialWillMin) {
+        r.initialWillMax = r.initialWillMin;
+    }
+    num("slaves.willPerChat", r.willPerChat);
+    num("slaves.startSuppression", r.startSuppression);
+    curve("slaves.suppressionFall", r.suppressionFall);
+    std::reverse(r.suppressionFall.begin(), r.suppressionFall.end());  // highest share first
+    num("slaves.suppressBelow", r.suppressBelow);
+    r.suppressIntervalSeconds = std::max<int64_t>(1, rules->integer("slaves.suppressIntervalSeconds", r.suppressIntervalSeconds));
+    r.suppressWorkSeconds = std::max<int64_t>(1, rules->integer("slaves.suppressWorkSeconds", r.suppressWorkSeconds));
+    num("slaves.suppressPowerBase", r.suppressPowerBase);
+    num("slaves.suppressPowerPerLevel", r.suppressPowerPerLevel);
+    curve("slaves.suppressCurve", r.suppressCurve);
+    num("slaves.suppressXp", r.suppressXp);
+    num("slaves.rebellionMtbDays", r.rebellionMtbDays);
+    curve("slaves.rebellionSuppression", r.rebellionSuppression);
+    curve("slaves.rebellionSlaveCount", r.rebellionSlaveCount);
+    curve("slaves.rebellionMood", r.rebellionMood);
+    num("slaves.rebellionUnattended", r.rebellionUnattended);
+    num("slaves.workSpeed", r.slaveWorkSpeed);
+    if (const size_t n = rules->count("slaves.disabledWorkTags")) {
+        r.slaveDisabledWorkTags.clear();
+        for (size_t i = 0; i < n; ++i) {
+            r.slaveDisabledWorkTags.push_back(rules->textAt("slaves.disabledWorkTags", i));
+        }
     }
     return r;
 }
@@ -359,6 +400,11 @@ bool PrisonerSystem::imprison(Entity pawn, Entity bed, Entity warden, std::strin
     if (ownSide) {
         prisoner.mode = PrisonerMode::NoInteraction;
     }
+    // Its will, from the pawn and the second (not the sim's shared random numbers, so older recordings play as before).
+    if (!ownSide) {
+        Rng willRoll(splitMix64(static_cast<uint64_t>(now()) ^ (static_cast<uint64_t>(entt::to_integral(pawn)) << 20) ^ 0x77696C6CULL));
+        prisoner.will = willRoll.range(rules_.initialWillMin, rules_.initialWillMax);
+    }
     prisoner.capturedAt = now();
     prisoner.nextChat = now();
     // A raider harmed the colony just now (the wiki's 24 hours); anyone else was only caught.
@@ -422,6 +468,9 @@ bool PrisonerSystem::chatDue(Entity prisoner) const {
     if (p.mode == PrisonerMode::ReduceResistance && p.resistance <= 0.0f) {
         return false;  // nothing left to wear down
     }
+    if (p.mode == PrisonerMode::ReduceWill && p.will <= 0.0f) {
+        return false;
+    }
     return true;
 }
 
@@ -438,6 +487,19 @@ void PrisonerSystem::interact(Entity warden, Entity prisoner) {
     p.nextChat = now() + rules_.chatIntervalSeconds;
     if (p.mode == PrisonerMode::Release) {
         release(prisoner, warden);
+        return;
+    }
+    if (p.mode == PrisonerMode::Enslave || p.mode == PrisonerMode::ReduceWill) {
+        if (p.will > 0.0f) {
+            // The wiki: will works like resistance, with the same factors.
+            const float reduction = resistanceReduction(warden, prisoner) * (rules_.willPerChat / std::max(0.0001f, rules_.resistancePerChat));
+            p.will = std::max(0.0f, p.will - reduction);
+            emit(EventType::PrisonerChatted, warden, prisoner, p.will, "will reduced");
+            return;
+        }
+        if (p.mode == PrisonerMode::Enslave) {
+            enslave(prisoner, warden);
+        }
         return;
     }
     if (p.resistance > 0.0f) {
@@ -490,6 +552,232 @@ bool PrisonerSystem::recruit(Entity prisoner, Entity warden) {
                                                                                                  : std::vector<std::string>{}));
     emit(EventType::PrisonerRecruited, prisoner, warden, 0.0f, "");
     return true;
+}
+
+// ---- Slaves ---------------------------------------------------------------------------------------
+
+bool PrisonerSystem::isSlave(Entity pawn) const {
+    return things_.registry().valid(pawn) && things_.registry().all_of<Slave>(pawn);
+}
+
+int PrisonerSystem::slaveCount() const {
+    int n = 0;
+    for (const auto [pawn, slave] : things_.registry().view<const Slave>().each()) {
+        (void)slave;
+        const Health* h = things_.registry().try_get<Health>(pawn);
+        if (things_.spawned(pawn) && (h == nullptr || !h->dead)) {
+            ++n;
+        }
+    }
+    return n;
+}
+
+namespace {
+
+std::vector<std::string> prisonerSlaveTags(const entt::registry& reg, Entity pawn, const std::vector<std::string>& slaveTags) {
+    std::vector<std::string> tags = slaveTags;
+    if (const Colonist* colonist = reg.try_get<Colonist>(pawn)) {
+        tags.insert(tags.end(), colonist->disabledWorkTags.begin(), colonist->disabledWorkTags.end());
+    }
+    return tags;
+}
+
+}  // namespace
+
+bool PrisonerSystem::enslave(Entity prisoner, Entity warden) {
+    entt::registry& reg = things_.registry();
+    if (!isPrisoner(prisoner) || !reg.all_of<Health>(prisoner) || reg.get<Health>(prisoner).dead) {
+        return false;
+    }
+    const FactionId home = fighters_.factionOf(prisoner);
+    jobs_.interrupt(prisoner, "enslaved");
+    reg.remove<Prisoner>(prisoner);
+    prisonerLeaveBed(reg, prisoner);
+    std::string error;
+    fighters_.setFaction(prisoner, kPlayerFaction, error);
+    reg.emplace_or_replace<WorkSettings>(prisoner, jobs_.defaultWorkSettings(prisonerSlaveTags(reg, prisoner, rules_.slaveDisabledWorkTags)));
+    Slave slave;
+    slave.suppression = std::clamp(rules_.startSuppression, 0.0f, 1.0f);
+    slave.enslavedAt = now();
+    slave.nextSuppress = now();
+    slave.homeFaction = home;
+    reg.emplace_or_replace<Slave>(prisoner, slave);
+    emit(EventType::PrisonerEnslaved, prisoner, warden, slave.suppression, "");
+    return true;
+}
+
+bool PrisonerSystem::suppressDue(Entity slave) const {
+    const entt::registry& reg = things_.registry();
+    if (!isSlave(slave) || !things_.spawned(slave) || !reg.all_of<Health, Position>(slave)) {
+        return false;
+    }
+    const Slave& s = reg.get<Slave>(slave);
+    const Health& health = reg.get<Health>(slave);
+    return s.suppression < rules_.suppressBelow && now() >= s.nextSuppress && !health.downed && !health.dead;
+}
+
+float PrisonerSystem::suppressAmount(Entity warden, Entity slave) const {
+    const entt::registry& reg = things_.registry();
+    if (!isSlave(slave)) {
+        return 0.0f;
+    }
+    const int level = jobs_.skillLevel(warden, "Social");
+    const float power = std::max(0.0f, rules_.suppressPowerBase + rules_.suppressPowerPerLevel * static_cast<float>(level)) *
+                        std::max(0.0f, health_.capacityValue(warden, "Talking"));
+    return power * prisonerCurve(rules_.suppressCurve, reg.get<Slave>(slave).suppression);
+}
+
+void PrisonerSystem::suppress(Entity warden, Entity slave) {
+    entt::registry& reg = things_.registry();
+    if (!isSlave(slave)) {
+        return;
+    }
+    Slave& s = reg.get<Slave>(slave);
+    s.nextSuppress = now() + rules_.suppressIntervalSeconds;
+    s.suppression = std::min(1.0f, s.suppression + suppressAmount(warden, slave));
+    emit(EventType::SlaveSuppressed, warden, slave, s.suppression, "");
+}
+
+void PrisonerSystem::runOff(Entity pawn, uint32_t side, const char* why) {
+    entt::registry& reg = things_.registry();
+    jobs_.interrupt(pawn, why);
+    reg.remove<WorkSettings>(pawn);
+    std::string error;
+    if (side != kPlayerFaction && side != 0) {
+        fighters_.setFaction(pawn, side, error);
+    }
+    if (!things_.spawned(pawn) || health_.incapacitated(pawn)) {
+        return;
+    }
+    Fighter& f = fighters_.enlist(pawn, why);
+    f.mode = FightMode::Flee;
+    f.advances = false;
+    f.hasGoal = true;
+    f.goal = edgeGoal(pawn);
+    fighters_.replan(pawn);
+}
+
+bool PrisonerSystem::slaveOrder(Entity slave, const std::string& order, std::string& error) {
+    entt::registry& reg = things_.registry();
+    if (!isSlave(slave)) {
+        error = "that pawn is no slave";
+        return false;
+    }
+    if (order == "Emancipate") {
+        reg.remove<Slave>(slave);
+        const Colonist* colonist = reg.try_get<Colonist>(slave);
+        reg.emplace_or_replace<WorkSettings>(slave, jobs_.defaultWorkSettings(colonist != nullptr ? colonist->disabledWorkTags
+                                                                                                 : std::vector<std::string>{}));
+        emit(EventType::SlaveEmancipated, slave, kNoEntity, 0.0f, "");
+        return true;
+    }
+    if (order == "Release") {
+        if (!things_.spawned(slave) || health_.incapacitated(slave)) {
+            error = "a slave who can't walk can't be released";
+            return false;
+        }
+        const FactionId home = reg.get<Slave>(slave).homeFaction;
+        reg.remove<Slave>(slave);
+        runOff(slave, home == kPlayerFaction ? kWildFaction : home, "freed");
+        emit(EventType::PrisonerReleased, slave, kNoEntity, 0.0f, "slave");
+        return true;
+    }
+    error = "no slave order '" + order + "' (Emancipate or Release)";
+    return false;
+}
+
+float PrisonerSystem::rebellionChance(Entity slave, int64_t seconds) const {
+    const entt::registry& reg = things_.registry();
+    if (!isSlave(slave)) {
+        return 0.0f;
+    }
+    // A free colonist able to stand on the map watches them; with none the slaves rise far sooner.
+    bool watched = false;
+    for (const auto [pawn, worker] : reg.view<const Worker>().each()) {
+        (void)worker;
+        if (fighters_.factionOf(pawn) == kPlayerFaction && !reg.any_of<Slave, Prisoner, Animal>(pawn) && things_.spawned(pawn) && !health_.incapacitated(pawn)) {
+            watched = true;
+            break;
+        }
+    }
+    const float factors = prisonerCurve(rules_.rebellionSuppression, reg.get<Slave>(slave).suppression) *
+                          prisonerCurve(rules_.rebellionSlaveCount, static_cast<float>(std::max(1, slaveCount()))) *
+                          prisonerCurve(rules_.rebellionMood, moodOf(slave)) * (watched ? 1.0f : rules_.rebellionUnattended);
+    const double mtb = static_cast<double>(rules_.rebellionMtbDays) * static_cast<double>(kSecondsPerDay) / std::max(0.0001, static_cast<double>(factors));
+    return static_cast<float>(1.0 - std::exp(-static_cast<double>(seconds) / std::max(1.0, mtb)));
+}
+
+int PrisonerSystem::rebel(Entity leader) {
+    entt::registry& reg = things_.registry();
+    std::vector<Entity> rising;
+    for (const auto [pawn, slave] : reg.view<const Slave>().each()) {
+        (void)slave;
+        if (things_.spawned(pawn) && !health_.incapacitated(pawn)) {
+            rising.push_back(pawn);
+        }
+    }
+    std::sort(rising.begin(), rising.end());
+    for (const Entity pawn : rising) {
+        const FactionId home = reg.get<Slave>(pawn).homeFaction;
+        reg.remove<Slave>(pawn);
+        runOff(pawn, home == kPlayerFaction || home == 0 ? kWildFaction : home, "rebelled");
+    }
+    if (!rising.empty() && events_ != nullptr) {
+        Event e;
+        e.type = EventType::SlaveRebellion;
+        e.thing = leader;
+        e.count = static_cast<int>(rising.size());
+        e.message = "slave rebellion";
+        events_->push_back(std::move(e));
+    }
+    return static_cast<int>(rising.size());
+}
+
+float PrisonerSystem::workSpeedFactor(Entity pawn) const {
+    return isSlave(pawn) ? rules_.slaveWorkSpeed : 1.0f;
+}
+
+int64_t PrisonerSystem::talkSeconds(Entity pawn) const {
+    return isSlave(pawn) ? rules_.suppressWorkSeconds : rules_.chatWorkSeconds;
+}
+
+void PrisonerSystem::stepSlaves(int64_t seconds) {
+    entt::registry& reg = things_.registry();
+    if (reg.view<const Slave>().empty()) {
+        return;
+    }
+    std::vector<Entity> slaves;
+    for (const auto [pawn, slave] : reg.view<Slave>().each()) {
+        const Health* h = reg.try_get<Health>(pawn);
+        if (h != nullptr && h->dead) {
+            continue;
+        }
+        // Suppression falls all the time, asleep too (the wiki), faster the higher it is.
+        float perDay = 0.0f;
+        for (const auto& [from, rate] : rules_.suppressionFall) {
+            if (slave.suppression >= from) {
+                perDay = rate;
+                break;
+            }
+        }
+        slave.suppression = std::max(0.0f, slave.suppression - perDay * static_cast<float>(seconds) / static_cast<float>(kSecondsPerDay));
+        slaves.push_back(pawn);
+    }
+    std::sort(slaves.begin(), slaves.end());
+    for (const Entity pawn : slaves) {
+        if (!things_.spawned(pawn) || health_.incapacitated(pawn)) {
+            continue;
+        }
+        const Worker* worker = reg.try_get<Worker>(pawn);
+        if (worker != nullptr && jobIsLyingDown(worker->job)) {
+            continue;  // only awake slaves start a rebellion
+        }
+        Rng roll(splitMix64(static_cast<uint64_t>(now()) ^ (static_cast<uint64_t>(entt::to_integral(pawn)) << 24) ^ 0x726562656CULL));
+        if (roll.unit() < rebellionChance(pawn, seconds)) {
+            rebel(pawn);
+            return;
+        }
+    }
 }
 
 CellPos PrisonerSystem::edgeGoal(Entity pawn) const {
@@ -658,6 +946,7 @@ void PrisonerSystem::step() {
     for (const Entity pawn : leaving) {
         raids_.leaveMap(pawn);
     }
+    stepSlaves(15);
 }
 
 void PrisonerSystem::hashThing(Entity e, StateHasher& h) const {
@@ -668,6 +957,15 @@ void PrisonerSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(p->capturedAt);
         h.add(p->nextChat);
         h.add(p->guiltyUntil);
+        if (p->will > 0.0f) {  // only with a will, so older recordings hash as before
+            h.add(p->will);
+        }
+    }
+    if (const Slave* s = reg.try_get<Slave>(e)) {
+        h.add(s->suppression);
+        h.add(s->enslavedAt);
+        h.add(s->nextSuppress);
+        h.add(s->homeFaction);
     }
     if (const ArrestOrder* order = reg.try_get<ArrestOrder>(e)) {
         h.add(static_cast<uint32_t>(entt::to_integral(order->by)));

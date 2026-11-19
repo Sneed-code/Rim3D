@@ -208,9 +208,14 @@ void Things::placeFootprint(Entity thing, const CellRect& rect, const Footprint&
     const Passage passage = footprint.blocksMovement ? Passage::Blocked
                             : footprint.isDoor       ? Passage::Door
                                                      : Passage::Open;
+    // A fence or fence gate: animals can't cross it (docs/design/husbandry.md, Fences). From the def, so a loaded game has it too.
+    const Thing* t = registry_.try_get<Thing>(thing);
+    const Def* fenceDef = t != nullptr && t->def.valid() ? &defs_->get(t->def) : nullptr;
+    const int fence = fenceDef == nullptr || !fenceDef->flag("building.fence") ? 0 : fenceDef->flag("building.gate") ? 2 : 1;
     for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
         for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
             map_.setBuilding(CellPos{x, y, rect.level}, thing, passage, footprint.obstacleDm);
+            map_.setFence(CellPos{x, y, rect.level}, fence);
         }
     }
 }

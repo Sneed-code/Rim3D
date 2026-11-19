@@ -10,6 +10,7 @@
 #include "ColonySim/Farming.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Genes.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Mineables.h"
@@ -126,7 +127,8 @@ float JobSystem::workFactor(Entity pawn) const {
     const Position* at = lights_ != nullptr ? things_.registry().try_get<Position>(pawn) : nullptr;
     // The light on the pawn, its drugs and its own nature: industrious works faster, lazy slower (TraitStats).
     return (at != nullptr ? lights_->workSpeedAt(cellOf(*at)) : 1.0f) * health_.workSpeedFactor(pawn) *
-           (traits_ != nullptr ? traits_->of(pawn).workSpeed : 1.0f) * (gearWorkFactor_ ? gearWorkFactor_(pawn) : 1.0f);
+           (traits_ != nullptr ? traits_->of(pawn).workSpeed : 1.0f) * (gearWorkFactor_ ? gearWorkFactor_(pawn) : 1.0f) *
+           (prisoners_ != nullptr ? prisoners_->workSpeedFactor(pawn) : 1.0f);  // a slave works at 85%
 }
 
 double JobSystem::miningSpeed(Entity pawn) const {
