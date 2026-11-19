@@ -1,0 +1,86 @@
+gunrange: 3695 of 50698 hand-frames with a hand off its grip (see the HAND OFF ITS GRIP notes)
+gunrange: 5296 hand-frames with an arm outside human joint limits (see the ARM OUT OF RANGE notes)
+gunrange: ARM OUT OF RANGE other first person right: solved elbow 11 twist -39 wrist 70/28; drawn elbow 11 twist -30 wrist 46/-75
+gunrange: ARM OUT OF RANGE other first person left: solved elbow 11 twist 33 wrist 70/-28; drawn elbow 11 twist 5 wrist 55/81
+gunrange: ARM OUT OF RANGE other first person right: solved elbow 11 twist -40 wrist 70/28; drawn elbow 11 twist -31 wrist 46/-75
+gunrange: ARM OUT OF RANGE other first person left: solved elbow 11 twist 34 wrist 70/-28; drawn elbow 11 twist 5 wrist 55/81
+gunrange: ARM OUT OF RANGE Bolt-action rifle first person left: solved elbow 11 twist 85 wrist -6/-12; drawn elbow 11 twist 71 wrist -12/-43
+gunrange: ARM OUT OF RANGE Bolt-action rifle first person left: solved elbow 11 twist 3 wrist -28/-28; drawn elbow 11 twist 137 wrist -11/-45
+gunrange: HAND OFF ITS GRIP Bolt-action rifle first person left: out of reach by 3.9 cm, drawn 3.9 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 46, right 9, up 6)
+gunrange: HAND OFF ITS GRIP Bolt-action rifle first person left: out of reach by 5.0 cm, drawn 5.0 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 47, right 9, up 6)
+gunrange: ARM OUT OF RANGE Assault rifle first person left: solved elbow 11 twist 85 wrist -9/-10; drawn elbow 11 twist 69 wrist -15/-48
+gunrange: ARM OUT OF RANGE Assault rifle first person left: solved elbow 11 twist 42 wrist -44/-16; drawn elbow 11 twist 140 wrist -14/-51
+gunrange: HAND OFF ITS GRIP Assault rifle first person left: out of reach by 3.9 cm, drawn 3.9 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 46, right 5, up 8)
+gunrange: HAND OFF ITS GRIP Assault rifle first person left: out of reach by 4.8 cm, drawn 4.8 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 47, right 5, up 8)
+gunrange: ARM OUT OF RANGE Pump shotgun first person left: solved elbow 11 twist 47 wrist -51/28; drawn elbow 12 twist 138 wrist -8/-46
+gunrange: HAND OFF ITS GRIP Pump shotgun first person left: out of reach by 13.3 cm, drawn 13.4 cm from the goal, shoulder forward 5.6 cm, goal from shoulder (ahead 56, right 9, up 4)
+gunrange: ARM OUT OF RANGE Pump shotgun first person left: solved elbow 11 twist 51 wrist -51/28; drawn elbow 12 twist 140 wrist -10/-47
+gunrange: HAND OFF ITS GRIP Pump shotgun first person left: out of reach by 13.0 cm, drawn 13.0 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 55, right 9, up 4)
+gunrange: ARM OUT OF RANGE Grenade launcher first person left: solved elbow 11 twist 21 wrist -42/4; drawn elbow 11 twist 136 wrist -8/-45
+gunrange: ARM OUT OF RANGE Grenade launcher first person left: solved elbow 11 twist 54 wrist -51/28; drawn elbow 11 twist 141 wrist -12/-47
+gunrange: ARM OUT OF RANGE Rocket launcher first person left: solved elbow 11 twist 85 wrist 10/-14; drawn elbow 11 twist 59 wrist -6/-48
+gunrange: ARM OUT OF RANGE Rocket launcher first person left: solved elbow 11 twist 38 wrist -43/12; drawn elbow 11 twist 136 wrist -6/-51
+gunrange: HAND OFF ITS GRIP Rocket launcher first person left: out of reach by 3.6 cm, drawn 3.6 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 47, right 6, up 1)
+gunrange: HAND OFF ITS GRIP Rocket launcher first person left: out of reach by 4.4 cm, drawn 4.4 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 47, right 6, up 0)
+gunrange: ARM OUT OF RANGE Bolt-action rifle third person left: solved elbow 11 twist 0 wrist -34/26; drawn elbow 11 twist 136 wrist -2/-45
+gunrange: ARM OUT OF RANGE Bolt-action rifle third person left: solved elbow 11 twist 52 wrist -47/28; drawn elbow 11 twist 166 wrist -29/-48
+gunrange: HAND OFF ITS GRIP Bolt-action rifle third person left: out of reach by 3.1 cm, drawn 3.1 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 43, right 6, up -16)
+gunrange: HAND OFF ITS GRIP Bolt-action rifle third person left: out of reach by 4.7 cm, drawn 4.7 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 43, right 7, up -20)
+gunrange: HAND OFF ITS GRIP Bolt-action rifle third person right: out of reach by 3.7 cm, drawn 3.7 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 42, right 5, up -21)
+gunrange: HAND OFF ITS GRIP Bolt-action rifle third person right: out of reach by 5.0 cm, drawn 5.0 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 42, right 5, up -23)
+gunrange: ARM OUT OF RANGE Bolt-action rifle third person right: solved elbow 11 twist 85 wrist -55/28; drawn elbow 11 twist -27 wrist 35/43
+gunrange: ARM OUT OF RANGE Bolt-action rifle third person right: solved elbow 11 twist 85 wrist -54/28; drawn elbow 11 twist -28 wrist 35/45
+gunrange: ARM OUT OF RANGE Longsword first person right: solved elbow 11 twist 10 wrist 22/-21; drawn elbow 11 twist 8 wrist 11/44
+gunrange: HAND OFF ITS GRIP Longsword first person right: out of reach by 3.8 cm, drawn 3.8 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 47, right -3, up 5)
+gunrange: ARM OUT OF RANGE Longsword first person right: solved elbow 11 twist 12 wrist 23/-17; drawn elbow 11 twist 8 wrist 10/44
+gunrange: HAND OFF ITS GRIP Longsword first person right: out of reach by 3.2 cm, drawn 3.2 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 46, right -3, up 5)
+gunrange: ARM OUT OF RANGE Knife first person right: solved elbow 11 twist 74 wrist 70/28; drawn elbow 11 twist -94 wrist 168/161
+gunrange: ARM OUT OF RANGE Knife first person right: solved elbow 11 twist 74 wrist 70/28; drawn elbow 11 twist -97 wrist 167/161
+gunrange: HAND OFF ITS GRIP Knife first person right: out of reach by 3.1 cm, drawn 3.1 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 44, right 13, up -7)
+gunrange: HAND OFF ITS GRIP Knife first person right: out of reach by 3.6 cm, drawn 3.6 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 45, right 13, up -6)
+gunrange: HAND OFF ITS GRIP Knife third person right: out of reach by 9.1 cm, drawn 9.1 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 35, right 25, up -29)
+gunrange: HAND OFF ITS GRIP Knife third person right: out of reach by 9.2 cm, drawn 9.2 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 36, right 25, up -29)
+gunrange: ARM OUT OF RANGE Knife third person right: solved elbow 11 twist -59 wrist -69/-28; drawn elbow 11 twist -101 wrist 25/9
+gunrange: ARM OUT OF RANGE Knife third person right: solved elbow 11 twist -60 wrist -69/-28; drawn elbow 11 twist -102 wrist 25/9
+gunrange: ARM OUT OF RANGE Club third person right: solved elbow 11 twist -85 wrist 70/-28; drawn elbow 11 twist 107 wrist -177/169
+gunrange: ARM OUT OF RANGE Club third person right: solved elbow 11 twist -85 wrist 70/-28; drawn elbow 11 twist 106 wrist -177/170
+gunrange: ARM OUT OF RANGE Gladius first person right: solved elbow 11 twist 37 wrist 70/28; drawn elbow 11 twist -159 wrist -178/167
+gunrange: ARM OUT OF RANGE Gladius first person right: solved elbow 11 twist 38 wrist 70/28; drawn elbow 11 twist -162 wrist -178/168
+gunrange: HAND OFF ITS GRIP Gladius third person right: out of reach by 9.2 cm, drawn 9.2 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 35, right 25, up -29)
+gunrange: HAND OFF ITS GRIP Gladius third person right: out of reach by 9.2 cm, drawn 9.2 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 36, right 25, up -29)
+gunrange: ARM OUT OF RANGE Gladius third person right: solved elbow 11 twist -60 wrist -69/-28; drawn elbow 11 twist -101 wrist 25/9
+gunrange: ARM OUT OF RANGE Gladius third person right: solved elbow 11 twist -60 wrist -69/-28; drawn elbow 11 twist -102 wrist 25/9
+gunrange: ARM OUT OF RANGE Mace third person right: solved elbow 11 twist -85 wrist 70/-28; drawn elbow 11 twist 107 wrist -177/169
+gunrange: ARM OUT OF RANGE Mace third person right: solved elbow 11 twist -85 wrist 70/-28; drawn elbow 11 twist 106 wrist -177/170
+gunrange: ARM OUT OF RANGE Spear first person left: solved elbow 11 twist -85 wrist -2/19; drawn elbow 12 twist 1 wrist 175/-96
+gunrange: HAND OFF ITS GRIP Spear first person left: out of reach by 5.3 cm, drawn 5.3 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 44, right 21, up 0)
+gunrange: ARM OUT OF RANGE Spear first person left: solved elbow 11 twist -85 wrist -2/19; drawn elbow 12 twist 0 wrist 175/-96
+gunrange: HAND OFF ITS GRIP Spear first person left: out of reach by 5.0 cm, drawn 5.0 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 43, right 21, up 1)
+gunrange: ARM OUT OF RANGE Spear third person left: solved elbow 11 twist -85 wrist 1/20; drawn elbow 11 twist 8 wrist 140/-93
+gunrange: HAND OFF ITS GRIP Spear third person left: out of reach by 19.8 cm, drawn 19.8 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 48, right 22, up -34)
+gunrange: ARM OUT OF RANGE Spear third person left: solved elbow 11 twist -85 wrist 1/21; drawn elbow 11 twist 8 wrist 140/-93
+gunrange: HAND OFF ITS GRIP Spear third person left: out of reach by 19.8 cm, drawn 19.8 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 48, right 22, up -34)
+gunrange: ARM OUT OF RANGE Assault rifle third person left: solved elbow 11 twist 49 wrist 70/28; drawn elbow 11 twist 64 wrist 149/-176
+gunrange: HAND OFF ITS GRIP Assault rifle third person left: out of reach by 10.1 cm, drawn 10.1 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 34, right 9, up -40)
+gunrange: ARM OUT OF RANGE Assault rifle third person left: solved elbow 11 twist 49 wrist 70/28; drawn elbow 11 twist 64 wrist 149/-176
+gunrange: HAND OFF ITS GRIP Assault rifle third person left: out of reach by 10.1 cm, drawn 10.1 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 34, right 9, up -40)
+gunrange: ARM OUT OF RANGE Pistol third person right: solved elbow 11 twist 54 wrist 70/28; drawn elbow 11 twist -110 wrist -144/174
+gunrange: HAND OFF ITS GRIP Pistol third person right: out of reach by 3.7 cm, drawn 3.7 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 43, right -13, up 15)
+gunrange: ARM OUT OF RANGE Pistol third person right: solved elbow 11 twist 52 wrist 70/28; drawn elbow 11 twist -116 wrist -143/175
+gunrange: HAND OFF ITS GRIP Pistol third person right: out of reach by 4.5 cm, drawn 4.5 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 43, right -14, up 16)
+gunrange: HAND OFF ITS GRIP Pump shotgun first person right: out of reach by 5.5 cm, drawn 5.5 cm from the goal, shoulder forward 0.0 cm, goal from shoulder (ahead 1, right -6, up -5)
+gunrange: HAND OFF ITS GRIP Pump shotgun first person right: out of reach by 5.6 cm, drawn 5.6 cm from the goal, shoulder forward 0.0 cm, goal from shoulder (ahead 1, right -6, up -5)
+gunrange: HAND OFF ITS GRIP Pump shotgun third person right: out of reach by 5.1 cm, drawn 5.1 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 40, right 6, up -27)
+gunrange: ARM OUT OF RANGE Pump shotgun third person left: solved elbow 11 twist 42 wrist -45/28; drawn elbow 11 twist -166 wrist -27/-24
+gunrange: HAND OFF ITS GRIP Pump shotgun third person left: out of reach by 40.8 cm, drawn 40.8 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 58, right 8, up -60)
+gunrange: HAND OFF ITS GRIP Pump shotgun third person right: out of reach by 5.1 cm, drawn 5.1 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 40, right 6, up -27)
+gunrange: ARM OUT OF RANGE Pump shotgun third person left: solved elbow 11 twist 42 wrist -45/28; drawn elbow 11 twist -167 wrist -27/-25
+gunrange: HAND OFF ITS GRIP Pump shotgun third person left: out of reach by 40.8 cm, drawn 40.8 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 58, right 8, up -60)
+gunrange: ARM OUT OF RANGE Pump shotgun third person right: solved elbow 11 twist 85 wrist -55/28; drawn elbow 11 twist -27 wrist 36/43
+gunrange: ARM OUT OF RANGE Pump shotgun third person right: solved elbow 11 twist 85 wrist -55/28; drawn elbow 11 twist -27 wrist 36/43
+gunrange: HAND OFF ITS GRIP Grenade launcher first person right: out of reach by 6.8 cm, drawn 6.8 cm from the goal, shoulder forward 0.0 cm, goal from shoulder (ahead 4, right 2, up -4)
+gunrange: HAND OFF ITS GRIP Grenade launcher first person right: out of reach by 5.0 cm, drawn 5.0 cm from the goal, shoulder forward 0.0 cm, goal from shoulder (ahead 7, right 2, up -4)
+gunrange: ARM OUT OF RANGE Grenade launcher third person left: solved elbow 11 twist 9 wrist -51/28; drawn elbow 11 twist 169 wrist 10/-20
+gunrange: ARM OUT OF RANGE Grenade launcher third person left: solved elbow 11 twist 10 wrist -51/28; drawn elbow 11 twist 169 wrist 10/-20
+gunrange: ARM OUT OF RANGE Rocket launcher third person left: solved elbow 11 twist 9 wrist -51/28; drawn elbow 11 twist 168 wrist 10/-20
+gunrange: ARM OUT OF RANGE Rocket launcher third person left: solved elbow 11 twist 10 wrist -51/28; drawn elbow 11 twist 169 wrist 10/-20
