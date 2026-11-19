@@ -320,6 +320,7 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
         }
         case EventType::TrapSprung: out.push_back(soundAt("Trap_Spring", e.x, e.y, e.z)); break;
         case EventType::TrapRearmed: out.push_back(soundAtCell("Trap_Rearm", e.cell)); break;
+        case EventType::WindowBroken: out.push_back(soundAt("Window_Shatter", e.x, e.y, e.z)); break;
         case EventType::PawnAction: soundPawnAction(db, e, defOf, out); break;
         case EventType::WeaponSwitched: break;  // the PawnAction Switch already sounded
         case EventType::PawnInjured:

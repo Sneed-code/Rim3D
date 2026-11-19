@@ -290,6 +290,11 @@ namespace
 		float SoftDemoT = -1.0f;   // -CreatorSoftDemo: seconds into the soft-body showcase
 		int32 SoftDemoStep = 0;
 		TWeakObjectPtr<AActor> SoftBall;  // the soft-body demo's pressing ball
+		float HairDemoT = -1.0f;   // -CreatorHairDemo: seconds into the long hair showcase
+		int32 HairDemoStep = 0;
+		int32 HairDemoShot = 0;
+		float HairDeepest[3] = {0.0f, 0.0f, 0.0f};          // per part of the demo: hair into the body, cm
+		float HairAnimatedDeepest[3] = {0.0f, 0.0f, 0.0f};  // the same hair as animated (no physics)
 		int32 SoftPressFrames = 0;      // frames in which the ball's press reached the skin table
 	};
 
@@ -1162,7 +1167,8 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		}
 		// -CreatorRecord=<seconds> with -CreatorPlay: every frame of the clip at a fixed 30 a second (creator/rec_0000.png ...).
 		float PlayRecord = 0.0f;
-		if (State->bAutoPlayed && !FParse::Param(FCommandLine::Get(), TEXT("CreatorDemo")) && !FParse::Param(FCommandLine::Get(), TEXT("CreatorSoftDemo")) && FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), PlayRecord)
+		if (State->bAutoPlayed && !FParse::Param(FCommandLine::Get(), TEXT("CreatorDemo")) && !FParse::Param(FCommandLine::Get(), TEXT("CreatorSoftDemo")) &&
+			!FParse::Param(FCommandLine::Get(), TEXT("CreatorHairDemo")) && FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), PlayRecord)
 			&& State->Recorded < FMath::RoundToInt32(PlayRecord * 30.0f))
 		{
 			if (State->Recorded == 0)
@@ -1279,6 +1285,76 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				++State->SoftDemoStep;
 			}
 			if (RecordSeconds > 0.0f && State->Recorded < FMath::RoundToInt32(RecordSeconds * 30.0f))
+			{
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") / FString::Printf(TEXT("rec_%04d.png"), State->Recorded++), false, false);
+			}
+		}
+		// -CreatorHairDemo (docs/design/hair-physics.md): the picked one, seen from behind, fights the air with long hair:
+		// physics on (0-12 s), the same with the hair as animated (12-24 s), then on with the collision capsules drawn
+		// (24-36 s). Pictures at set moments (creator/hair_NN_*.png); with -CreatorRecord=<seconds> every frame at 30 a second.
+		if (FParse::Param(FCommandLine::Get(), TEXT("CreatorHairDemo")) && PhaseTime > 4.5f && State->bClipsListed && State->People.IsValidIndex(State->Selected))
+		{
+			float RecordSeconds = 0.0f;
+			FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), RecordSeconds);
+			if (State->HairDemoT < 0.0f)
+			{
+				State->HairDemoT = 0.0f;
+				State->bWalk = false;
+				State->CameraDistance = 230.0f;
+				State->CameraYaw = 30.0f;  // from behind, a little to her left
+				State->CameraPitch = -8.0f;
+				if (RecordSeconds > 0.0f)
+				{
+					FApp::SetUseFixedTimeStep(true);
+					FApp::SetFixedDeltaTime(1.0 / 30.0);
+				}
+			}
+			State->HairDemoT += GetWorld()->GetDeltaSeconds();
+			const float T = State->HairDemoT;
+			const int32 Part = T < 12.0f ? 0 : (T < 24.0f ? 1 : 2);
+			// Looked up once (a lookup every frame makes the engine warn).
+			static IConsoleVariable* const HairPhysicsVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.HairPhysics"));
+			static IConsoleVariable* const HairDebugVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.HairDebug"));
+			if (HairPhysicsVar && HairPhysicsVar->GetInt() != (Part == 1 ? 0 : 2))
+			{
+				HairPhysicsVar->Set(Part == 1 ? 0 : 2);
+			}
+			if (HairDebugVar && HairDebugVar->GetInt() != (Part == 2 ? 1 : 0))
+			{
+				HairDebugVar->Set(Part == 2 ? 1 : 0);
+			}
+			// Each part: shadowboxing (turns, punches, ducks), then sword swings (big arm and shoulder moves).
+			static const float ClipTimes[] = {0.0f, 6.0f, 12.0f, 18.0f, 24.0f, 30.0f};
+			static const TCHAR* const ClipNames[] = {TEXT("Shadowbox"), TEXT("SwordSwings"), TEXT("Shadowbox"), TEXT("SwordSwings"), TEXT("Shadowbox"), TEXT("SwordSwings")};
+			if (State->HairDemoStep < static_cast<int32>(UE_ARRAY_COUNT(ClipTimes)) && T >= ClipTimes[State->HairDemoStep])
+			{
+				const int32 Clip = State->ClipNames.IndexOfByKey(FString(ClipNames[State->HairDemoStep]));
+				while (State->Playing.Num() < State->People.Num()) { State->Playing.Add(-1); }
+				CreatorPlay(*State, State->Selected, Clip, Pawns->FindPawn(State->People[State->Selected].Thing), true);
+				UE_LOG(LogTemp, Display, TEXT("Hair demo: %s at %.1f s, hair physics %s"), ClipNames[State->HairDemoStep], T, Part == 1 ? TEXT("off") : TEXT("on"));
+				++State->HairDemoStep;
+			}
+			static const float ShotTimes[] = {2.0f, 4.0f, 8.0f, 10.0f, 14.0f, 16.0f, 20.0f, 22.0f, 26.0f, 32.0f};
+			bool bShotThisFrame = false;  // one screenshot request a frame: a later one replaces it, so the recording skips this frame
+			if (State->HairDemoShot < static_cast<int32>(UE_ARRAY_COUNT(ShotTimes)) && T >= ShotTimes[State->HairDemoShot])
+			{
+				static const TCHAR* const PartNames[] = {TEXT("on"), TEXT("off"), TEXT("capsules")};
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") /
+					FString::Printf(TEXT("hair_%02d_%s.png"), State->HairDemoShot, PartNames[Part]), false, false);
+				++State->HairDemoShot;
+				bShotThisFrame = true;
+			}
+			if (const ASimPawnActor* Pawn = Pawns->FindPawn(State->People[State->Selected].Thing))
+			{
+				const USkeletalMeshComponent* Mesh = Pawn->GetMakeHumanMesh();
+				if (UMakeHumanAnimInstance* Anim = Mesh ? Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()) : nullptr)
+				{
+					float Animated = 0.0f;
+					State->HairDeepest[Part] = FMath::Max(State->HairDeepest[Part], Anim->TakeLargestHairPenetration(&Animated));
+					State->HairAnimatedDeepest[Part] = FMath::Max(State->HairAnimatedDeepest[Part], Animated);
+				}
+			}
+			if (!bShotThisFrame && RecordSeconds > 0.0f && State->Recorded < FMath::RoundToInt32(RecordSeconds * 30.0f))
 			{
 				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") / FString::Printf(TEXT("rec_%04d.png"), State->Recorded++), false, false);
 			}
@@ -1882,6 +1958,15 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		for (int32 i = 0; i < State->People.Num(); ++i)
 		{
 			Notes.Add(FString::Printf(TEXT("creator: %s"), *State->People[i].Label(i)));
+		}
+		if (State->HairDemoT >= 0.0f)
+		{
+			static const TCHAR* const PartNames[] = {TEXT("physics on"), TEXT("as animated (measured with physics off: none)"), TEXT("physics on, capsules drawn")};
+			for (int32 p = 0; p < 3; ++p)
+			{
+				Notes.Add(FString::Printf(TEXT("creator hair demo, %s: hair up to %.1f cm into the body; as animated it would have gone %.1f cm in"),
+					PartNames[p], State->HairDeepest[p], State->HairAnimatedDeepest[p]));
+			}
 		}
 	};
 	Phases.Add(MoveTemp(Play));

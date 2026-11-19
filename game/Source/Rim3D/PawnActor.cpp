@@ -1946,7 +1946,18 @@ float ASimPawnActor::GetMeleeBodyDegrees() const
 
 void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 {
-	BlockBlend = FMath::FInterpConstantTo(BlockBlend, bBlocking ? 1.0f : 0.0f, GameDelta, 8.0f);
+	// A parry: up fast (a fast swing read late leaves only a few steps between the guard going up and the blow, sneed
+	// 2026-11-19), and held a moment after the sim lets go, so the blade meets the blow and doesn't flick.
+	if (bBlocking)
+	{
+		BlockHoldLeft = 0.25f;
+	}
+	else
+	{
+		BlockHoldLeft = FMath::Max(0.0f, BlockHoldLeft - GameDelta);
+	}
+	const bool bGuardUp = bBlocking || BlockHoldLeft > 0.0f;
+	BlockBlend = FMath::FInterpConstantTo(BlockBlend, bGuardUp ? 1.0f : 0.0f, GameDelta, bGuardUp ? 20.0f : 8.0f);
 	Swing.Advance(GameDelta * colony::kStepsPerRealSecondAt1x);
 	if (DodgeAge < kDodgeSeconds)
 	{
@@ -2111,6 +2122,7 @@ void ASimPawnActor::StartRagdoll(const FVector& Impulse)
 	LeanDegrees = 0.0f;
 	Swing.Reset();
 	BlockBlend = 0.0f;
+	BlockHoldLeft = 0.0f;
 	DodgeAge = kDodgeSeconds;
 	HitStopLeft = 0.0f;
 	bBodyPosed = false;

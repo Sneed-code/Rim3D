@@ -228,6 +228,12 @@
     "ours": ["moveSpeedByGlow", "blockingHeightDm"]
   },
   {
+    "defName": "WindowRules", "source": "ours (RimWorld has no windows; sneed, 2026-11-19)",
+    "sillDm": 9, "lintelDm": 21, "lightRadius": 6, "lightGlow": 0.8, "addWork": 300, "removeWork": 300,
+    "ours": ["sillDm", "lintelDm", "lightRadius", "lightGlow", "addWork", "removeWork"],
+    "note": "Windows in walls (docs/design/windows.md): free, cut and filled in by builders. Heights in decimetres above the ground; work in game seconds at construction speed, like taking up a floor."
+  },
+  {
     "defName": "RoomRules", "source": "RimWorld wiki",
     "roofSupportRadius": 6.9,
     "hugeRoomCells": 2000,
