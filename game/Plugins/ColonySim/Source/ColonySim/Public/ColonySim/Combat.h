@@ -492,6 +492,8 @@ public:
     void shotHeights(Entity pawn, Stance stance, float& muzzle, float& aim) const;
     // The pawn's hitboxes as they stand now; false if it has none (no Hitboxes def, dead).
     bool hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const;
+    // The pawn's body size (a man 1, an animal its race's): what setBodySize was given, 1 without it.
+    float bodySizeOf(Entity pawn) const { return bodySize_ ? bodySize_(pawn) : 1.0f; }
 
     // An explosion (F9, docs/design/explosives.md). Every living pawn in the radius is hurt by the share of
     // its body the blast can see (ground, rock and buildings stop it), less with distance and for a
