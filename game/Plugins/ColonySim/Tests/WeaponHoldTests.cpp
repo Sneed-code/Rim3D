@@ -60,6 +60,11 @@ TEST_CASE("Weapon hold: every weapon in the game is held through a style, with i
     CHECK(fists.styleName == "Hold_Unarmed");
     CHECK(fists.hands == 0);
     CHECK(fists.grip == HoldGrip::None);
+    // The spear's shaft runs through both fists (the Pole grip), not across one fist like a sword's hilt.
+    const WeaponHold spearHold = holdTestOf(*defs, "Melee_Spear");
+    CHECK(spearHold.grip == HoldGrip::Pole);
+    CHECK(spearHold.hasOff);
+    CHECK(std::string(holdGripName(HoldGrip::Pole)) == "Pole");
     CHECK(fists.attackStyle == "Unarmed");
 
     // A one-handed blade: one hand, the palm on the middle of the hilt, no second hand.
@@ -210,7 +215,8 @@ TEST_CASE("Weapon hold: a melee weapon swings the attack clips of its hold style
     CHECK_FALSE(spear.empty());
     CHECK_FALSE(gladius.empty());
     CHECK(allStartWith(mace, "Motion_Club_"));
-    CHECK(allStartWith(spear, "Motion_TwoHand_"));
+    // The spear's own thrusts once they are measured (MeleeRules.styleAttacks.Melee_Spear), else its two-hand style's.
+    CHECK((allStartWith(spear, "Motion_Spear_") || allStartWith(spear, "Motion_TwoHand_")));
     CHECK(allStartWith(gladius, "Motion_OneHand_"));
 }
 
