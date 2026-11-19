@@ -76,6 +76,7 @@
 #include "ColonySim/UpperFloors.h"
 #include "ColonySim/Water.h"
 #include "ColonySim/Weather.h"
+#include "ColonySim/Windows.h"
 #include "ColonySim/Zones.h"
 #include "ColonySim/Disasters.h"
 #include "ColonySim/Narrator.h"
@@ -309,6 +310,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mood_->setRoomStats(roomStats_.get());
     power_ = std::make_unique<PowerGrid>(map_, *things_, *rooms_, *defs_, events_);
     lights_ = std::make_unique<Lights>(map_, *things_, *rooms_, *defs_, time_);
+    windows_ = std::make_unique<Windows>(map_, *things_, *defs_);
     // The sun for solar panels is the light grid's; a lamp that draws power glows only while it has it,
     // and the lamps are made again when that changes.
     power_->setWind([this](const GameTime&) { return weather_->wind(); });
@@ -387,6 +389,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     });
     health_->setImmunityBonus([this](Entity pawn) { return jobs_->bedMonitored(jobs_->bedUnder(pawn)) ? 0.02f : 0.0f; });
     jobs_->setLights(lights_.get());
+    jobs_->setWindows(windows_.get());
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
     jobs_->setTemperature(temperature_.get());
@@ -1811,6 +1814,17 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             } else if (construction_->placeFloorPlan(floor, stuff, place->cell, error) == kNoEntity) {
                 commandFailed(id, error);
             }
+        } else if (const BuildTool tool = buildToolOf(*defs_, place->def); tool != BuildTool::None) {
+            // A build-menu tool (docs/design/windows.md): marks the cell for a builder instead of planning a building.
+            const std::string why = tool == BuildTool::AddWindow ? windows_->whyNotAdd(place->cell) : windows_->whyNotRemove(place->cell);
+            if (!why.empty()) {
+                commandFailed(id, why);
+            } else {
+                designations_->set(place->cell, tool == BuildTool::AddWindow ? DesignationKind::AddWindow : DesignationKind::RemoveWindow);
+                Event changed;
+                changed.type = EventType::DesignationsChanged;
+                events_.push_back(std::move(changed));
+            }
         } else if (!def.valid()) {
             commandFailed(id, "no Things def '" + place->def + "'");
         } else if (!place->stuff.empty() && !stuff.valid()) {
@@ -1866,7 +1880,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         const CellRect& area = designate->area;
         int marked = 0;
         if (kind == DesignationKind::None) {
-            commandFailed(id, "Designate needs Mine, CutPlant, HarvestPlant or RemoveFloor (CancelDesignations takes marks off)");
+            commandFailed(id, "Designate needs Mine, CutPlant, HarvestPlant, RemoveFloor, AddWindow or RemoveWindow (CancelDesignations takes marks off)");
             return;
         }
         for (int y = std::max(0, area.minY); y < std::min(map_.height(), area.minY + area.sizeY); ++y) {
@@ -1880,6 +1894,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                     suits = mineables_->has(c);
                 } else if (kind == DesignationKind::RemoveFloor) {
                     suits = floors_->at(c).valid();
+                } else if (kind == DesignationKind::AddWindow) {
+                    suits = windows_->whyNotAdd(c).empty();
+                } else if (kind == DesignationKind::RemoveWindow) {
+                    suits = windows_->whyNotRemove(c).empty();
                 } else if (plants_->has(c)) {
                     suits = kind == DesignationKind::CutPlant || defs_->get(plants_->defAt(c)).has("plant.harvestedThingDef");
                 }
@@ -1892,6 +1910,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (marked == 0) {
             commandFailed(id, kind == DesignationKind::Mine          ? "there is no rock to mine there"
                               : kind == DesignationKind::RemoveFloor ? "there is no floor to take up there"
+                              : kind == DesignationKind::AddWindow   ? "there is no wall to put a window in there"
+                              : kind == DesignationKind::RemoveWindow ? "there is no window there"
                               : kind == DesignationKind::CutPlant    ? "there is no plant to cut there"
                                                                      : "there is nothing to harvest there");
         } else {
@@ -2676,6 +2696,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.markedForDeconstruct = reg.all_of<MarkedForDeconstruct>(entity);
             if (const Door* door = reg.try_get<Door>(entity)) {
                 view.doorOpen = door->openFraction(doorNumbers_);
+            }
+            if (const Window* window = reg.try_get<Window>(entity)) {
+                view.window = window->broken ? WindowState::Broken : WindowState::Glass;
             }
             if (const PowerPart* part = reg.try_get<PowerPart>(entity)) {
                 view.power = power_->stateOf(entity);
@@ -3467,6 +3490,10 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<int>(f->obstacleDm));
             simHashCell(h, f->origin);
             h.add(static_cast<int>(f->rotation));
+        }
+        if (const Window* window = reg.try_get<Window>(e)) {
+            h.add(uint64_t{0x3D1A0});  // only walls with a window add anything, so older hashes stay as they were
+            h.add(window->broken);
         }
         if (const StackCount* stack = reg.try_get<StackCount>(e)) {
             h.add(stack->count);
