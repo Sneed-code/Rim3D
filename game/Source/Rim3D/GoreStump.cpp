@@ -102,7 +102,8 @@ namespace
 	// The tissue colours (linear).
 	const FLinearColor GoreMuscleDark(0.11f, 0.006f, 0.005f);
 	const FLinearColor GoreMuscleLight(0.30f, 0.020f, 0.016f);
-	const FLinearColor GoreFat(0.80f, 0.52f, 0.10f);
+	const FLinearColor GoreFat(0.92f, 0.66f, 0.16f);
+	const FLinearColor GoreCloth(0.035f, 0.03f, 0.03f);
 	const FLinearColor GoreDermis(0.40f, 0.07f, 0.05f);
 	const FLinearColor GoreBlood(0.18f, 0.008f, 0.006f);
 	const FLinearColor GoreBone(0.90f, 0.86f, 0.74f);
@@ -164,8 +165,9 @@ namespace
 }
 
 UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, FName Socket, const FVector& At, const FVector& Outward,
-	const FVector& Front, float RadiusCm, EGoreStumpKind Kind, const FLinearColor& Skin, int32 Seed)
+	const FVector& Front, float RadiusCm, EGoreStumpKind Kind, const FLinearColor& Skin, int32 Seed, float ClothOuter)
 {
+	const bool bClothed = ClothOuter > 1.01f;
 	if (!Owner || !Parent || RadiusCm <= 0.0f)
 	{
 		return nullptr;
@@ -186,19 +188,20 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 	// curls up in a lip at the edge and then hangs back over the limb.
 	const auto FaceZ = [&](float F, float Theta) -> float
 	{
-		if (F < 0.80f)
+		if (F < 0.82f)
 		{
 			return 0.13f * R * (1.0f - F * F) * (0.65f + 0.35f * Bulge.At(Theta * 1.3f + F * 2.0f)) + 0.06f * R * Fibres.At(Theta * 2.0f + F * 7.0f) * F;
 		}
-		if (F < 0.91f)
+		if (F < 0.92f)
 		{
-			return 0.035f * R;
+			// The fat stands a little proud of the muscle's edge, so it catches the light instead of lying in shadow.
+			return 0.07f * R * (0.85f + 0.15f * Edge.At(Theta * 3.0f));
 		}
 		if (F < 1.0f)
 		{
-			return 0.035f * R + 0.03f * R * FMath::Sin((F - 0.91f) / 0.09f * PI) * (0.7f + 0.3f * Edge.At(Theta));
+			return 0.04f * R + 0.03f * R * FMath::Sin((F - 0.91f) / 0.09f * PI) * (0.7f + 0.3f * Edge.At(Theta));
 		}
-		return FMath::Lerp(0.0f, -0.06f * R, (F - 1.0f) / 0.06f);
+		return bClothed ? 0.02f * R : FMath::Lerp(0.0f, -0.06f * R, (F - 1.0f) / 0.06f);
 	};
 	const FLinearColor SkinBloodied = FMath::Lerp(Skin, GoreBlood, 0.4f);
 	Mesh.AddRingGrid(RingCount + 1, Cols,
@@ -209,7 +212,9 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			const float F = Rings[FMath::Min(Row, RingCount - 1)];
 			// The edge is torn, not round: the outer rings wander in and out.
 			const float Torn = F >= 0.94f ? 1.0f + 0.05f * Edge.At(Theta) + (bSkirt ? 0.03f * Random.FRandRange(-1.0f, 1.0f) : 0.0f) : 1.0f;
-			const float Radius = R * F * Torn * (bSkirt ? 0.99f : 1.0f);
+			// Clothed: the rings past the skin stretch out over the sleeve or trouser leg as torn, soaked cloth.
+			const float Spread = bClothed && F > 1.0f ? 1.0f + (F - 1.0f) / 0.05f * (ClothOuter - 1.0f) : F;
+			const float Radius = R * Spread * Torn * (bSkirt ? 0.99f : 1.0f);
 			const float Z = bSkirt ? -Skirt * (0.75f + 0.25f * Edge.At(Theta * 1.7f + 1.0f)) : FaceZ(F, Theta) + (F < 0.8f ? 0.04f * R * Random.FRandRange(-0.5f, 0.5f) : 0.0f);
 			return FVector(Radius * FMath::Cos(Theta), Radius * FMath::Sin(Theta), Z);
 		},
@@ -219,6 +224,10 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			const float F = Rings[FMath::Min(Row, RingCount - 1)];
 			const float Wobble = 0.03f * Edge.At(Theta * 2.0f);
 			const float G = F + Wobble;
+			if (bClothed && (Row == RingCount || F > 1.0f))
+			{
+				return GoreWet(FMath::Lerp(GoreCloth, GoreBlood, 0.3f + 0.5f * Random.FRand()), 0.4f);
+			}
 			if (Row == RingCount)
 			{
 				return GoreWet(FMath::Lerp(Skin, GoreBlood, 0.35f + 0.3f * Random.FRand()), 0.35f);
@@ -231,7 +240,7 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			}
 			if (G < 0.92f)
 			{
-				return GoreWet(FMath::Lerp(GoreFat, GoreBlood, 0.15f + 0.35f * Random.FRand()), 0.12f);
+				return GoreWet(FMath::Lerp(GoreFat, GoreBlood, 0.04f + 0.14f * Random.FRand()), 0.3f);
 			}
 			if (G < 0.975f)
 			{

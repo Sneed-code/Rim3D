@@ -22,7 +22,9 @@ enum class EGoreStumpKind : uint8
  *
  * `At`: the middle of the cut (world). `Outward`: away from what is left, the way the missing part went. `Front`: for
  * the neck, the way the face looked (the windpipe goes there, the spine behind). `Skin`: the body's skin colour.
- * Attached to `Parent` at `Socket`, so it moves with that bone. Cosmetic.
+ * `ClothOuter` over 1: the limb is clothed, and a ring of torn, blood-soaked cloth reaches out to that many radii over
+ * the sleeve or trouser leg (else its tube showed hollow round the meat). Attached to `Parent` at `Socket`, so it
+ * moves with that bone. Cosmetic.
  */
 UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, FName Socket, const FVector& At, const FVector& Outward,
-	const FVector& Front, float RadiusCm, EGoreStumpKind Kind, const FLinearColor& Skin, int32 Seed);
+	const FVector& Front, float RadiusCm, EGoreStumpKind Kind, const FLinearColor& Skin, int32 Seed, float ClothOuter = 1.0f);

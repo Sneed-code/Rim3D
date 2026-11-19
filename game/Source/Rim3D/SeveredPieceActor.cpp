@@ -36,6 +36,8 @@ namespace
 
 	TAutoConsoleVariable<float> GSeveredDripSeconds(TEXT("Gore.DripSeconds"), 120.0f,
 		TEXT("How long blood keeps dripping from a fresh stump, seconds at 1x (a severed piece drips for 40% of it)."), ECVF_Default);
+	TAutoConsoleVariable<float> GSeveredClothRim(TEXT("Gore.ClothRim"), 1.35f,
+		TEXT("On a clothed limb, how far the stump's torn, soaked cloth ring reaches over the sleeve or trouser leg (limb radii)."), ECVF_Default);
 	TAutoConsoleVariable<float> GSeveredStumpScale(TEXT("Gore.StumpScale"), 1.08f,
 		TEXT("Stump caps' size against the limb's usual thickness at the cut (bigger hides more of the flattened skin's edge)."), ECVF_Default);
 
@@ -169,8 +171,8 @@ namespace
 		Hit.At = At;
 		Hit.Direction = Outward + FVector(0.0, 0.0, -0.6);
 		Hit.Kind = EBloodWound::Cut;
-		Hit.Damage = 6.0f;
-		Hit.Force = 0.25f;
+		Hit.Damage = 3.0f;
+		Hit.Force = 0.15f;
 		Hit.Mesh = Mesh;
 		Hit.BleedSecondsWithoutSim = Seconds;
 		Blood->AddHit(Hit);
@@ -218,6 +220,30 @@ namespace
 			}
 		}
 		return Used.IsEmpty() ? 0.0f : static_cast<float>(OnPiece) / static_cast<float>(Used.Num());
+	}
+
+	/** How far a cut's torn cloth reaches (radii): Gore.ClothRim if another drawn mesh than the skin (a sleeve, a
+	 *  trouser leg) covers the cut limb, else 1. Not for the neck. */
+	float SeveredClothOuter(const TArray<USkinnedMeshComponent*>& Skinned, const USkinnedMeshComponent* SkinMesh, FName Bone, uint16 Bit)
+	{
+		if (Bit == colony::kSeveredHead)
+		{
+			return 1.0f;
+		}
+		for (const USkinnedMeshComponent* Mesh : Skinned)
+		{
+			const USkeletalMesh* Asset = Mesh ? Cast<USkeletalMesh>(Mesh->GetSkinnedAsset()) : nullptr;
+			if (!Asset || Mesh == SkinMesh || !SeveredDrawn(*Mesh))
+			{
+				continue;
+			}
+			const int32 Index = Asset->GetRefSkeleton().FindBoneIndex(Bone);
+			if (Index != INDEX_NONE && SeveredSkinnedTo(*Asset, Index) >= 0.01f)
+			{
+				return GSeveredClothRim.GetValueOnGameThread();
+			}
+		}
+		return 1.0f;
 	}
 
 	/** The component whose pose a mesh shows: itself, or the top of its leader chain. */
@@ -386,7 +412,7 @@ void ASimPawnActor::ApplySevered(uint16 Bits)
 		FVector Front;
 		if (Skin && Skin->GetBoneIndex(Bone) != INDEX_NONE && SeveredCutFrame(*Skin, Bone, At, Along, Front) &&
 			GoreMakeStump(this, Skin, Skin->GetParentBone(Bone), At, Along, Front, SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread(), SeveredStumpKind(Bit),
-				SeveredSkinColour(*this), static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 31u + Bit)))
+				SeveredSkinColour(*this), static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 31u + Bit), SeveredClothOuter(Skinned, Skin, Bone, Bit)))
 		{
 			++SeveredCaps;
 			SeveredDrip(GetWorld(), At, Along, Skin, GSeveredDripSeconds.GetValueOnGameThread());
@@ -608,7 +634,8 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 			Along = Bit == colony::kSeveredHead ? FVector::UpVector : (Middle - Cut).GetSafeNormal();
 		}
 		if (USceneComponent* Stump = GoreMakeStump(Piece, Piece->GetRootComponent(), NAME_None, At, -Along, Front, SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread(),
-				SeveredStumpKind(Bit), SeveredSkinColour(*this), static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 17u + Bit * 7u)))
+				SeveredStumpKind(Bit), SeveredSkinColour(*this), static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 17u + Bit * 7u),
+				SeveredClothOuter(Skinned, Skin, Bone, Bit)))
 		{
 			Piece->SetCutEnd(Stump);
 		}
