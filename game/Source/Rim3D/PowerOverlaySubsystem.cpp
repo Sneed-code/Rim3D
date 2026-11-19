@@ -13,6 +13,7 @@
 #include "SimSubsystem.h"
 
 #include "ColonySim/Commands.h"
+#include "ColonySim/Map.h"
 #include "ColonySim/Power.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
@@ -24,6 +25,67 @@ namespace
 		TEXT("Overlay.Power"), 0, TEXT("1 shows the power view in the overseer screen: grids, power made and used, batteries."), ECVF_Default);
 	TAutoConsoleVariable<int32> GOverlayTemperature(
 		TEXT("Overlay.Temperature"), 0, TEXT("1 shows the temperature view in the overseer screen: each room's temperature, coolers' sides."), ECVF_Default);
+
+	void PowerOverlaySpawn(USimSubsystem& Bridge, const char* Def, int32 X, int32 Y, colony::Rot4 Rot = colony::Rot4::North, int32 Count = 1)
+	{
+		colony::SpawnThingCommand Command;
+		Command.def = Def;
+		Command.cell = colony::CellPos{X, Y, 0};
+		Command.rot = Rot;
+		Command.count = Count;
+		Bridge.Submit(Command);
+	}
+
+	/**
+	 * Overlay.Demo [x y]: a dev scene for checking the power and temperature views by eye (map centre by default): a
+	 * walled room with a cooler in its north wall (cold side in, hot side out), a vent and a passive cooler; a wood-fired
+	 * generator with wood, a battery, a switch, a lamp, a solar panel and a wind turbine joined by conduits; and an
+	 * unwired heater outdoors (no power).
+	 */
+	FAutoConsoleCommandWithWorldAndArgs GPowerOverlayDemoCommand(
+		TEXT("Overlay.Demo"), TEXT("Overlay.Demo [x y]: spawns a small powered room, a cooler, generators and conduits to check the power and temperature views."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			USimSubsystem* Bridge = World ? World->GetSubsystem<USimSubsystem>() : nullptr;
+			if (!Bridge || !Bridge->GetSim())
+			{
+				return;
+			}
+			const colony::Map& Map = Bridge->GetSim()->map();
+			const int32 OX = Args.Num() >= 2 ? FCString::Atoi(*Args[0]) : Map.width() / 2 - 8;
+			const int32 OY = Args.Num() >= 2 ? FCString::Atoi(*Args[1]) : Map.height() / 2 - 8;
+			for (int32 DY = 0; DY <= 6; ++DY)
+			{
+				for (int32 DX = 0; DX <= 6; ++DX)
+				{
+					const bool bRing = DX == 0 || DX == 6 || DY == 0 || DY == 6;
+					const bool bGap = (DX == 3 && DY == 6) || (DX == 6 && DY == 3);
+					if (bRing && !bGap)
+					{
+						PowerOverlaySpawn(*Bridge, "Wall", OX + DX, OY + DY);
+					}
+				}
+			}
+			PowerOverlaySpawn(*Bridge, "Cooler", OX + 3, OY + 6, colony::Rot4::South);  // cools the room, blows out north
+			PowerOverlaySpawn(*Bridge, "Vent", OX + 6, OY + 3);
+			PowerOverlaySpawn(*Bridge, "PassiveCooler", OX + 2, OY + 2);
+			PowerOverlaySpawn(*Bridge, "PowerConduit", OX + 3, OY + 7);
+			PowerOverlaySpawn(*Bridge, "PowerConduit", OX + 3, OY + 8);
+			PowerOverlaySpawn(*Bridge, "WoodFiredGenerator", OX + 3, OY + 9);
+			PowerOverlaySpawn(*Bridge, "WoodLog", OX + 2, OY + 10, colony::Rot4::North, 75);
+			PowerOverlaySpawn(*Bridge, "PowerConduit", OX + 4, OY + 8);
+			PowerOverlaySpawn(*Bridge, "PowerConduit", OX + 5, OY + 8);
+			PowerOverlaySpawn(*Bridge, "Battery", OX + 5, OY + 9);
+			PowerOverlaySpawn(*Bridge, "PowerSwitch", OX + 6, OY + 8);
+			PowerOverlaySpawn(*Bridge, "PowerConduit", OX + 7, OY + 8);
+			PowerOverlaySpawn(*Bridge, "StandingLamp", OX + 8, OY + 8);
+			PowerOverlaySpawn(*Bridge, "PowerConduit", OX + 9, OY + 8);
+			PowerOverlaySpawn(*Bridge, "SolarGenerator", OX + 10, OY + 8);
+			PowerOverlaySpawn(*Bridge, "PowerConduit", OX + 12, OY + 12);
+			PowerOverlaySpawn(*Bridge, "WindTurbine", OX + 10, OY + 13);
+			PowerOverlaySpawn(*Bridge, "ChemfuelGenerator", OX + 16, OY + 8);
+			PowerOverlaySpawn(*Bridge, "Heater", OX + 9, OY + 2);
+		}));
 
 	/** Markers further than this from the camera are not drawn (metres). */
 	constexpr float PowerOverlayMaxDistanceM = 160.0f;

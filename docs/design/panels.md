@@ -106,4 +106,4 @@ Code: `game/Source/Rim3D/PowerOverlaySubsystem.*`. Overseer screen only, hidden 
   grid's numbers, and a *Switch off / Switch on* button (*Open / Close switch* for a power switch) that sends
   `FlickCommand`. Plain conduits and batteries have no button, as in RimWorld.
 
-No smoke test yet: check by eye with `Overlay.Power 1` in the rainforest playtest.
+No smoke test yet: check by eye. `Overlay.Demo [x y]` (console) spawns a test scene at the map centre: a walled room with a cooler in its north wall, a vent and a passive cooler, a wood-fired generator with wood, a battery, a switch, a lamp, a solar panel and a wind turbine on conduits, a chemfuel generator and an unwired heater.
