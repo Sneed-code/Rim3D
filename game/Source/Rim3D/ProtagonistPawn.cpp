@@ -436,7 +436,8 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 			Bodies.bodiesClear(Thing, static_cast<float>(Position.X), static_cast<float>(Position.Y), ToX, ToY, Level);
 	};
 	// Pushing into stairs or a ladder (or back towards them from their head, into the stairwell over them, which may
-	// have a floor laid) climbs them.
+	// have a floor laid) climbs them. A climbable wall is the same (docs/design/climbing.md): walking into it climbs it,
+	// walking off its top edge climbs back down.
 	if (!Wanted.IsNearlyZero() && !Delta.IsNearlyZero(1.0e-7) && ClimbWait <= 0.0f)
 	{
 		const colony::CellPos Here{FMath::FloorToInt32(Position.X), FMath::FloorToInt32(Position.Y), Level};

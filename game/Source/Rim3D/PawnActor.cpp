@@ -305,7 +305,15 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	// Whether the body keeps a facing of its own while it moves (a clip, a lock-on): the walk then steps sideways or
 	// backwards under it instead of turning the hips the way it goes.
 	bool bHoldFacing = false;
-	if (Now.motionClip.valid() && !bRagdoll && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
+	JumpHeightFactor = Now.jumpHeight;
+	if (Now.wallClimb && !bRagdoll && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
+	{
+		// On a wall: facing it, up or down (docs/design/climbing.md).
+		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		bHoldFacing = true;
+	}
+	else if (Now.motionClip.valid() && !bRagdoll && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
 	{
 		// A clip the sim moves the body along plays facing the way the sim has the body face, not the way it is
 		// thrown: a stagger back must not turn the body round to face its own push (docs/design/body-motion.md).
@@ -390,6 +398,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		DodgeAge = kDodgeSeconds;
 	}
 	UpdateCrawl(Now, DeltaTime * Speed);
+	UpdateWallClimb(Now);
 	UpdateHurt(Bridge, Now, DeltaTime);
 
 	// The hit-stop holds the swing, the flinch and the animation for a moment of real time.
@@ -525,6 +534,7 @@ bool ASimPawnActor::StartJump()
 	}
 	JumpAge = 0.0f;
 	JumpSpeed = GroundSpeed;
+	JumpFactor = FMath::Clamp(JumpHeightFactor, 0.5f, 3.0f);
 	bJumpFalling = false;
 	JumpStartLength = 0.0f;
 	if (UAnimSequence* Start = PawnJumpAnimation(FString::Printf(TEXT("M_Neutral_Jump_F_Start_%s_Lfoot"), PawnJumpGait(JumpSpeed))))
@@ -545,9 +555,10 @@ float ASimPawnActor::GetJumpHeight() const
 	{
 		return 0.0f;
 	}
-	// A thrown body: up at the speed that reaches kJumpHeight halfway through, back down by kJumpSeconds.
-	const float T = FMath::Clamp(JumpAge / kJumpSeconds, 0.0f, 1.0f);
-	return 4.0f * kJumpHeight * T * (1.0f - T);
+	// A thrown body: up at the speed that reaches kJumpHeight halfway through, back down by kJumpSeconds. A higher jump
+	// (the lineage's factor) takes longer by its square root, as a thrown body does.
+	const float T = FMath::Clamp(JumpAge / (kJumpSeconds * FMath::Sqrt(JumpFactor)), 0.0f, 1.0f);
+	return 4.0f * kJumpHeight * JumpFactor * T * (1.0f - T);
 }
 
 void ASimPawnActor::AdvanceJump(float GameDelta)
@@ -558,7 +569,7 @@ void ASimPawnActor::AdvanceJump(float GameDelta)
 	}
 	USimPawnAnimInstance* Anim = GetAnim();
 	JumpAge += GameDelta;
-	const float Left = kJumpSeconds - JumpAge;
+	const float Left = kJumpSeconds * FMath::Sqrt(JumpFactor) - JumpAge;
 	// The take-off animation runs out before the ground comes: the fall loop holds the body in the air.
 	if (Anim && !bJumpFalling && JumpAge > JumpStartLength - 0.15f && Left > 0.2f)
 	{
@@ -1938,6 +1949,74 @@ void ASimPawnActor::UpdateCrawl(const colony::ThingView& Now, float GameDelta)
 	}
 }
 
+namespace
+{
+	/** The Game Animation Sample's climb from standing onto a 2.5 m ledge: jump, catch the edge, pull up and over. */
+	const TCHAR* const PawnWallClimbClipPath =
+		TEXT("/Game/Characters/UEFN_Mannequin/Animations/Traversal/Climb/M_Neutral_Traversal_Climb_Start_2_5_stand_F_Lfoot.M_Neutral_Traversal_Climb_Start_2_5_stand_F_Lfoot");
+	/** Share of the clip up to the moment the hands have the edge: the sim's time on the face plays up to here, its
+	 *  mantle (colony::kWallMantleFrom on) the rest. To be tuned by eye on the PC. */
+	constexpr float PawnWallClimbGrab = 0.45f;
+	constexpr float PawnWallClimbBlend = 0.2f;
+}
+
+void ASimPawnActor::UpdateWallClimb(const colony::ThingView& Now)
+{
+	USimPawnAnimInstance* Anim = GetAnim();
+	const bool bOn = Now.wallClimb && Now.climb > 0.0f && Anim && !bRagdoll;
+	if (bOn && !bWallClimbClipTried)
+	{
+		bWallClimbClipTried = true;
+		WallClimbClip = LoadObject<UAnimSequence>(nullptr, PawnWallClimbClipPath);
+		if (!WallClimbClip)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Wall climb: no clip at %s"), PawnWallClimbClipPath);
+		}
+	}
+	if (!bOn || !WallClimbClip || WallClimbClip->GetPlayLength() <= 0.1f)
+	{
+		if (Anim && WallClimbMontage.IsValid())
+		{
+			Anim->Montage_Stop(PawnWallClimbBlend, WallClimbMontage.Get());
+		}
+		WallClimbMontage.Reset();
+		WallClimbOffset = FVector::ZeroVector;
+		return;
+	}
+	if (!WallClimbMontage.IsValid() || !Anim->Montage_IsPlaying(WallClimbMontage.Get()))
+	{
+		WallClimbMontage = Anim->PlaySlotAnimationAsDynamicMontage(WallClimbClip, FAnimSlotGroup::DefaultSlotName, PawnWallClimbBlend,
+			PawnWallClimbBlend, 1.0f, 1);
+		ActionEndSeconds = 0.0;
+		++WallClimbsPlayed;
+	}
+	if (!WallClimbMontage.IsValid())
+	{
+		return;
+	}
+	// The clip's time follows the climb: going up, the face to the catch, then the pull over the top; going down, the
+	// same backwards. Eased on the face so the jump and the catch don't crawl.
+	const float U = Now.wallClimbUp ? Now.climb : 1.0f - Now.climb;
+	const float Length = WallClimbClip->GetPlayLength();
+	float Share = 0.0f;
+	if (U < colony::kWallMantleFrom)
+	{
+		const float K = U / colony::kWallMantleFrom;
+		Share = PawnWallClimbGrab * FMath::Sin(K * HALF_PI);
+	}
+	else
+	{
+		const float K = (U - colony::kWallMantleFrom) / (1.0f - colony::kWallMantleFrom);
+		Share = PawnWallClimbGrab + (1.0f - PawnWallClimbGrab) * K;
+	}
+	const float At = FMath::Clamp(Share, 0.0f, 1.0f) * Length;
+	Anim->Montage_SetPlayRate(WallClimbMontage.Get(), 0.0f);
+	Anim->Montage_SetPosition(WallClimbMontage.Get(), At);
+	// The clip carries the body up and forward in its root; the sim already moves it, so that travel is taken out.
+	const FTransform Travel = WallClimbClip->ExtractRootMotionFromRange(0.0, At, FAnimExtractContext());
+	WallClimbOffset = -PawnBodyRelativeRotation.RotateVector(Travel.GetTranslation()) * (bHasLooks ? Looks.Height : 1.0f);
+}
+
 float ASimPawnActor::GetMeleeBodyDegrees() const
 {
 	const FMeleePose Pose = ComputeMeleePose();
@@ -1968,7 +2047,7 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 	const bool bRolling = RollProgress > 0.0f;
 	AdvanceJump(GameDelta);
 	const float JumpHeight = GetJumpHeight();
-	const bool bMotion = !MotionOffset.IsNearlyZero(0.01) || !CrawlOffset.IsNearlyZero(0.01);
+	const bool bMotion = !MotionOffset.IsNearlyZero(0.01) || !CrawlOffset.IsNearlyZero(0.01) || !WallClimbOffset.IsNearlyZero(0.01);
 	if (!bReacting && !bMelee && !bRolling && !bMotion && JumpHeight <= 0.0f)
 	{
 		if (bBodyPosed)
@@ -2034,6 +2113,7 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 	Offset.Z += JumpHeight;
 	Offset += MotionOffset;  // a clip's own travel is taken out: the sim's position already has it (body-motion.md)
 	Offset += CrawlOffset;   // and the crawl clip's
+	Offset += WallClimbOffset;  // and the wall climb's
 	Body->SetRelativeLocationAndRotation(Offset, RootQuat.Inverse() * RollWorld * LeanWorld * RootQuat * MeleeLocal * PawnBodyRelativeRotation.Quaternion());
 }
 
@@ -2138,8 +2218,14 @@ void ASimPawnActor::StartRagdoll(const FVector& Impulse)
 		{
 			Anim->Montage_Stop(0.0f, CrawlMontage.Get());
 		}
+		if (WallClimbMontage.IsValid())
+		{
+			Anim->Montage_Stop(0.0f, WallClimbMontage.Get());
+		}
 	}
 	CrawlMontage.Reset();
+	WallClimbMontage.Reset();
+	WallClimbOffset = FVector::ZeroVector;
 	Body->SetRelativeLocationAndRotation(FVector::ZeroVector, PawnBodyRelativeRotation);
 	Body->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	Body->SetCollisionProfileName(TEXT("Ragdoll"));
