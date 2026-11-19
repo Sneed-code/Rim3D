@@ -26,9 +26,9 @@
     "shieldBlock": "Mixamo/SwordandShield/A_ProSwordAndShieldSwordAndShieldBlockIdle",
     "holster": "LeftHip",
     "places": {
-      "ready": {"anchor": "Chest", "at": [30, 16, -34], "turn": [45, -10, 180]},
+      "ready": {"anchor": "Chest", "at": [24, 14, -30], "turn": [45, -10, 180]},
       "block": {"anchor": "Chest", "at": [32, 14, 0], "turn": [12, -80, 90]},
-      "fpReady": {"anchor": "View", "at": [38, 16, -24], "turn": [55, -12, 180]},
+      "fpReady": {"anchor": "View", "at": [34, 15, -24], "turn": [55, -12, 180]},
       "fpBlock": {"anchor": "View", "at": [40, 12, -8], "turn": [12, -80, 90]}
     }
   },
@@ -112,7 +112,7 @@
     "offTurn": [68, 0, 135],
     "places": {
       "ready": {"anchor": "Chest", "at": [26, 6, -22], "turn": [-40, 0, 0]},
-      "aim": {"anchor": "Head", "point": "Sight", "at": [46, 3, 7], "turn": [0, 0, 0]},
+      "aim": {"anchor": "Head", "point": "Sight", "at": [40, 3, 6], "turn": [0, 0, 0]},
       "fpReady": {"anchor": "View", "point": "Sight", "at": [30, 10, -12], "turn": [0, 0, 0]},
       "fpAim": {"anchor": "View", "point": "Sight", "at": [34, 0, 0], "turn": [0, 0, 0]}
     }
