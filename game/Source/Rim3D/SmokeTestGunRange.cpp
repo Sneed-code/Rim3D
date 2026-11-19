@@ -137,6 +137,9 @@ namespace
 		bool bSwingPicture = false;
 		int32 MeleeTour = 0;  // step 15: every rack melee weapon in the hand, first and third person
 		bool bKillFeedLines = false;
+		colony::Entity FlickFrom = colony::kNoEntity;  // step 14: the lock before the flick
+		bool bFlickLeftTried = false;
+		bool bFlickTried = false;
 		// -GunRangeIdleRecord=<seconds>: frames of a standing target close up (gunrange_idle/rec_0000.png ...).
 		int32 IdleRecorded = 0;
 		TWeakObjectPtr<ACameraActor> IdleCamera;
@@ -1024,11 +1027,32 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					AimAtNearest();
 					P->FocusNext();
 				}
-				if (State->StepTime > 1.5f)
+				if (State->StepTime > 1.5f && !State->bFlickTried)
 				{
 					Notes.Add(FString::Printf(TEXT("gunrange: Tab focus on %u (%s), HP bar frames %d"), entt::to_integral(P->GetFocusTarget()),
 						P->GetFocusTarget() != colony::kNoEntity ? TEXT("locked on") : TEXT("NOTHING FOCUSED"), P->GetFocusBarFramesDrawn()));
 					Picture(TEXT("focus_hpbar"));
+					// A mouse flick (lock-on.md): to the right, else (nobody there) to the left.
+					State->bFlickTried = true;
+					State->FlickFrom = P->GetFocusTarget();
+					P->FlickFocus(true);
+				}
+				if (State->StepTime > 2.0f && State->FlickFrom != colony::kNoEntity && !State->bFlickLeftTried && P->GetFocusTarget() == State->FlickFrom)
+				{
+					State->bFlickLeftTried = true;
+					P->FlickFocus(false);
+				}
+				if (State->StepTime > 2.6f)
+				{
+					const bool bSwitched = State->FlickFrom != colony::kNoEntity && P->GetFocusTarget() != State->FlickFrom;
+					Notes.Add(FString::Printf(TEXT("gunrange: flick from %u to %u (%s), %d flicks"), entt::to_integral(State->FlickFrom),
+						entt::to_integral(P->GetFocusTarget()), bSwitched ? TEXT("switched") : TEXT("DID NOT SWITCH"), P->GetFlicksSent()));
+					if (!bSwitched)
+					{
+						Fail(TEXT("gunrange: a mouse flick did not switch the lock-on target"));
+					}
+					Picture(TEXT("focus_flick"));
+					State->FlickFrom = colony::kNoEntity;
 					P->EndFocus();
 					Next(10);
 				}

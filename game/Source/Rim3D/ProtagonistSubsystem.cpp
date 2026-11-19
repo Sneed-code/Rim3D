@@ -805,6 +805,16 @@ namespace
 	constexpr float LockFlickCooldownSeconds = 0.4f;
 }
 
+void UProtagonistSubsystem::FlickFocus(bool bRight)
+{
+	USimSubsystem* Bridge = BridgeSource.Get();
+	if (bDirect && Bridge && Bridge->GetSim() && Controlled != colony::kNoEntity && GetFocusTarget() != colony::kNoEntity)
+	{
+		SubmitFocus(*Bridge, bRight ? colony::FocusMode::Right : colony::FocusMode::Left);
+		++FlicksSent;
+	}
+}
+
 void UProtagonistSubsystem::UpdateFlick(APlayerController& PC, USimSubsystem& Bridge, colony::Entity Focus)
 {
 	const UWorld* World = GetWorld();
@@ -830,8 +840,7 @@ void UProtagonistSubsystem::UpdateFlick(APlayerController& PC, USimSubsystem& Br
 	FlickX += MouseX;
 	if (FlickCooldown <= 0.0f && FMath::Abs(FlickX) >= Threshold)
 	{
-		SubmitFocus(Bridge, FlickX > 0.0f ? colony::FocusMode::Right : colony::FocusMode::Left);
-		++FlicksSent;
+		FlickFocus(FlickX > 0.0f);
 		FlickX = 0.0f;
 		FlickAge = 0.0f;
 		FlickCooldown = LockFlickCooldownSeconds;

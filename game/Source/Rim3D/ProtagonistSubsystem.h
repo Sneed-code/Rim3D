@@ -90,6 +90,8 @@ public:
 	void EndFocus();
 	/** Tab and flicks may lock on to the player's own side too (the practice range's targets). */
 	void SetFocusAnySide(bool bAny) { bFocusAnySide = bAny; }
+	/** A flick: switch the lock to the nearest enemy to the right (or left) of the one held (the mouse flick, smoke tests). */
+	void FlickFocus(bool bRight);
 	/** Mouse flicks that switched the lock-on target (smoke tests). */
 	int32 GetFlicksSent() const { return FlicksSent; }
 	/** FocusCommands sent so far (smoke tests). */
