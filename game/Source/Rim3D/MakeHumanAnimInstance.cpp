@@ -1,6 +1,7 @@
 #include "MakeHumanAnimInstance.h"
 
 #include "Components/SkeletalMeshComponent.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
@@ -9,7 +10,15 @@
 namespace
 {
 	TAutoConsoleVariable<int32> GMakeHumanPhysics(TEXT("Pawns.MakeHumanPhysics"), 1,
-		TEXT("1 runs jiggle (breast bones) and hair sway (ponytail bones) on MakeHuman characters; read when a character's animation starts."), ECVF_Default);
+		TEXT("1 runs jiggle (soft-tissue bones) and long hair on MakeHuman characters; read when a character's animation starts."), ECVF_Default);
+	TAutoConsoleVariable<int32> GMakeHumanHair(TEXT("Pawns.HairPhysics"), 2,
+		TEXT("Long hair on MakeHuman characters: 2 hangs, swings and rests on the body; 1 only pushed out of the body; 0 as animated (stiff)."), ECVF_Default);
+	TAutoConsoleVariable<float> GMakeHumanHairSimFar(TEXT("Pawns.HairSimFar"), 2500.0f,
+		TEXT("Long hair simulates fully within this many cm of the camera; further off it is only pushed out of the body."), ECVF_Default);
+	TAutoConsoleVariable<float> GMakeHumanHairCollideFar(TEXT("Pawns.HairCollideFar"), 5000.0f,
+		TEXT("Beyond this many cm from the camera long hair stays as animated (not even pushed out of the body)."), ECVF_Default);
+	TAutoConsoleVariable<int32> GMakeHumanHairDebug(TEXT("Pawns.HairDebug"), 0,
+		TEXT("1 draws the body's hair collision capsules (green) and the hair strands (yellow) on MakeHuman characters."), ECVF_Default);
 	TAutoConsoleVariable<int32> GMakeHumanHandIK(TEXT("Pawns.MakeHumanHandIK"), 1,
 		TEXT("1 lets the creator's weapons put the left hand on a two-handed hilt (two-bone IK, off until asked for); read when a character's animation starts."), ECVF_Default);
 	TAutoConsoleVariable<float> GMakeHumanSoftNear(TEXT("Pawns.SoftBodyNear"), 1300.0f,
@@ -48,31 +57,6 @@ namespace
 		{TEXT("arm_soft_l"), 220.0f, 6.0f, 2.5f, true, 0.0f},
 		{TEXT("arm_soft_r"), 220.0f, 6.0f, 2.5f, true, 0.0f},
 	};
-
-
-	// A swinging chain (hair): each bone a body hanging from the last, limited to a cone.
-	TSharedPtr<FAnimNode_AnimDynamics> MakeChain(FName First, FName Last, const FReferenceSkeleton& Ref, float Gravity = 1.0f, float Spring = 120.0f,
-		float Cone = 25.0f)
-	{
-		TSharedPtr<FAnimNode_AnimDynamics> Node = MakeShared<FAnimNode_AnimDynamics>();
-		Node->bChain = true;
-		Node->BoundBone.BoneName = First;
-		Node->ChainEnd.BoneName = Last;
-		Node->SimulationSpace = AnimPhysSimSpaceType::World;
-		Node->GravityScale = Gravity;
-		Node->bAngularSpring = true;
-		Node->AngularSpringConstant = Spring;
-		Node->bOverrideAngularDamping = true;
-		Node->AngularDampingOverride = 0.5f;
-		Node->UpdateChainPhysicsBodyDefinitions(Ref);
-		for (FAnimPhysBodyDefinition& Body : Node->PhysicsBodyDefinitions)
-		{
-			Body.BoxExtents = FVector(3.0f, 3.0f, 6.0f);
-			Body.ConstraintSetup.AngularConstraintType = AnimPhysAngularConstraintType::Cone;
-			Body.ConstraintSetup.ConeAngle = Cone;
-		}
-		return Node;
-	}
 }
 
 void FMakeHumanJiggleNode::UpdateInternal(const FAnimationUpdateContext& Context)
@@ -272,12 +256,11 @@ void FMakeHumanHairNode::UpdateInternal(const FAnimationUpdateContext& Context)
 
 bool FMakeHumanHairNode::IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones)
 {
-	return !Chains.IsEmpty() && Head.IsValidToEvaluate(RequiredBones);
+	return !Chains.IsEmpty() && Mode > 0;
 }
 
 void FMakeHumanHairNode::InitializeBoneReferences(const FBoneContainer& RequiredBones)
 {
-	Head.Initialize(RequiredBones);
 	for (TArray<FBoneReference>& Chain : Chains)
 	{
 		for (FBoneReference& Bone : Chain)
@@ -285,97 +268,248 @@ void FMakeHumanHairNode::InitializeBoneReferences(const FBoneContainer& Required
 			Bone.Initialize(RequiredBones);
 		}
 	}
+	for (FShape& Shape : Shapes)
+	{
+		Shape.Bone.Initialize(RequiredBones);
+	}
+}
+
+namespace
+{
+	colony::HairVec MhHairVec(const FVector& V) { return {static_cast<float>(V.X), static_cast<float>(V.Y), static_cast<float>(V.Z)}; }
+	FVector MhHairFVector(const colony::HairVec& V) { return FVector(V.x, V.y, V.z); }
+}
+
+void FMakeHumanHairNode::Setup(const FReferenceSkeleton& Ref)
+{
+	Chains.Reset();
+	Shapes.Reset();
+	Strands.reset();
+	// The reference pose in component space: the pose the hair was styled and weighted in, lying on the body.
+	const TArray<FTransform>& Local = Ref.GetRefBonePose();
+	TArray<FTransform> RefCS;
+	RefCS.SetNum(Ref.GetNum());
+	for (int32 i = 0; i < Ref.GetNum(); ++i)
+	{
+		const int32 Parent = Ref.GetParentIndex(i);
+		RefCS[i] = Parent == INDEX_NONE ? Local[i] : Local[i] * RefCS[Parent];
+	}
+	const auto Find = [&Ref](const FString& Name) { return Ref.FindBoneIndex(FName(*Name)); };
+	// Long scalp hair (mh_common.add_hair_bones: chains down the back, back corners and sides, shared by the long, bob and
+	// braid styles), then MakeHuman's ponytail sub-rig (ponytail1 ... under the head). Two bones at least each.
+	TArray<TArray<int32>> ChainBones;
+	for (int32 c = 1; c < 10; ++c)
+	{
+		TArray<int32> Bones;
+		for (int32 i = 1; i < 12 && Find(FString::Printf(TEXT("hair_c%d_%d"), c, i)) != INDEX_NONE; ++i)
+		{
+			Bones.Add(Find(FString::Printf(TEXT("hair_c%d_%d"), c, i)));
+		}
+		if (Bones.Num() >= 2)
+		{
+			ChainBones.Add(Bones);
+		}
+	}
+	const int32 SheetChains = ChainBones.Num();
+	{
+		TArray<int32> Bones;
+		for (int32 i = 1; i < 12 && Find(FString::Printf(TEXT("ponytail%d"), i)) != INDEX_NONE; ++i)
+		{
+			Bones.Add(Find(FString::Printf(TEXT("ponytail%d"), i)));
+		}
+		if (Bones.Num() >= 2)
+		{
+			ChainBones.Add(Bones);
+		}
+	}
+	const int32 HeadIndex = Find(TEXT("head"));
+	const int32 PelvisIndex = Find(TEXT("pelvis"));
+	if (ChainBones.IsEmpty() || HeadIndex == INDEX_NONE || PelvisIndex == INDEX_NONE)
+	{
+		return;
+	}
+	// The rest shape of each strand: its joints and a tip past the last one (as long as the bone before it).
+	std::vector<std::vector<colony::HairVec>> Rest;
+	std::vector<colony::HairVec> Roots;
+	for (const TArray<int32>& Bones : ChainBones)
+	{
+		TArray<FBoneReference>& Chain = Chains.AddDefaulted_GetRef();
+		std::vector<colony::HairVec>& Points = Rest.emplace_back();
+		for (const int32 Bone : Bones)
+		{
+			Chain.Emplace(Ref.GetBoneName(Bone));
+			Points.push_back(MhHairVec(RefCS[Bone].GetLocation()));
+		}
+		const FVector Last = RefCS[Bones.Last()].GetLocation();
+		Points.push_back(MhHairVec(Last + (Last - RefCS[Bones[Bones.Num() - 2]].GetLocation())));
+		if (static_cast<int32>(Roots.size()) < SheetChains)
+		{
+			Roots.push_back(Points.front());
+		}
+	}
+	// The body's bones in the reference pose, and the shapes fitted to them and to the hair lying on them.
+	colony::HairBodyBones Body;
+	Body.pelvis = MhHairVec(RefCS[PelvisIndex].GetLocation());
+	Body.head = MhHairVec(RefCS[HeadIndex].GetLocation());
+	const int32 NeckIndex = Find(TEXT("neck_01"));
+	Body.hasNeck = NeckIndex != INDEX_NONE;
+	if (Body.hasNeck)
+	{
+		Body.neck = MhHairVec(RefCS[NeckIndex].GetLocation());
+	}
+	TArray<int32> Spine;
+	for (int32 i = 1; i <= 5; ++i)
+	{
+		const int32 Index = Find(FString::Printf(TEXT("spine_%02d"), i));
+		if (Index != INDEX_NONE)
+		{
+			Spine.Add(Index);
+			Body.spine.push_back(MhHairVec(RefCS[Index].GetLocation()));
+		}
+	}
+	const TCHAR* const ArmNames[3][2] = {{TEXT("clavicle_l"), TEXT("clavicle_r")}, {TEXT("upperarm_l"), TEXT("upperarm_r")}, {TEXT("lowerarm_l"), TEXT("lowerarm_r")}};
+	int32 Arm[3][2];
+	Body.hasArms = true;
+	for (int32 j = 0; j < 3; ++j)
+	{
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			Arm[j][Side] = Find(ArmNames[j][Side]);
+			Body.hasArms = Body.hasArms && Arm[j][Side] != INDEX_NONE;
+		}
+	}
+	if (Body.hasArms)
+	{
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			Body.clavicle[Side] = MhHairVec(RefCS[Arm[0][Side]].GetLocation());
+			Body.upperArm[Side] = MhHairVec(RefCS[Arm[1][Side]].GetLocation());
+			Body.lowerArm[Side] = MhHairVec(RefCS[Arm[2][Side]].GetLocation());
+		}
+	}
+	const std::vector<colony::HairShape> Fitted = colony::buildHairShapes(Body, Rest);
+	for (const colony::HairShape& Fit : Fitted)
+	{
+		int32 Bone = INDEX_NONE;
+		switch (Fit.bone)
+		{
+		case colony::HairBone::Head: Bone = HeadIndex; break;
+		case colony::HairBone::Neck: Bone = NeckIndex; break;
+		case colony::HairBone::SpineTop: Bone = Spine.IsEmpty() ? INDEX_NONE : Spine.Last(); break;
+		case colony::HairBone::SpineMid: Bone = Spine.IsValidIndex(Body.spineMid) ? Spine[Body.spineMid] : INDEX_NONE; break;
+		case colony::HairBone::ClavicleL: Bone = Arm[0][0]; break;
+		case colony::HairBone::ClavicleR: Bone = Arm[0][1]; break;
+		case colony::HairBone::UpperArmL: Bone = Arm[1][0]; break;
+		case colony::HairBone::UpperArmR: Bone = Arm[1][1]; break;
+		}
+		if (Bone == INDEX_NONE)
+		{
+			continue;
+		}
+		FShape& Shape = Shapes.AddDefaulted_GetRef();
+		Shape.Bone.BoneName = Ref.GetBoneName(Bone);
+		Shape.A = RefCS[Bone].InverseTransformPosition(MhHairFVector(Fit.capsule.a));
+		Shape.B = RefCS[Bone].InverseTransformPosition(MhHairFVector(Fit.capsule.b));
+		Shape.Radius = Fit.capsule.radius;
+	}
+	Strands.setSheetNeighbours(colony::hairSheetNeighbours(Roots, Body.head, colony::HairVec{0.0f, 0.0f, 1.0f}));
 }
 
 void FMakeHumanHairNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms)
 {
 	const FTransform Component = Output.AnimInstanceProxy->GetComponentTransform();
 	const FBoneContainer& Container = Output.Pose.GetPose().GetBoneContainer();
-	const float Dt = FMath::Clamp(DeltaTime, 0.0f, 0.05f);
-	// The head's motion in the world: its acceleration swings the hair the other way.
-	const FVector HeadWorld = Component.TransformPosition(Output.Pose.GetComponentSpaceTransform(Head.GetCompactPoseIndex(Container)).GetLocation());
-	FVector Accel = FVector::ZeroVector;
-	if (bStarted && Dt > 1.0e-4f)
+	const float Scale = static_cast<float>(Component.GetMaximumAxisScale());
+	// Where the animation puts each strand (component space and world), its bones' transforms kept to turn them after.
+	TArray<TArray<FCompactPoseBoneIndex, TInlineAllocator<12>>, TInlineAllocator<8>> Index;
+	TArray<TArray<FTransform, TInlineAllocator<12>>, TInlineAllocator<8>> Original;
+	Index.SetNum(Chains.Num());
+	Original.SetNum(Chains.Num());
+	Goals.resize(static_cast<size_t>(Chains.Num()));
+	for (int32 c = 0; c < Chains.Num(); ++c)
 	{
-		const FVector Velocity = (HeadWorld - LastHead) / Dt;
-		if (Velocity.Size() < 1500.0f)  // not a teleport or a jump of the mesh
-		{
-			Accel = (Velocity - HeadVelocity) / Dt;
-			HeadVelocity = Velocity;
-		}
-		else
-		{
-			HeadVelocity = FVector::ZeroVector;
-		}
-	}
-	LastHead = HeadWorld;
-	bStarted = true;
-	FVector Target = -Accel * 0.012f;  // degrees per cm/s^2
-	Target.Z = 0.0;
-	Target = Target.GetClampedToMaxSize(22.0f);
-	// A damped spring (a little under critical: one soft overshoot), small steps.
-	for (float Left = Dt; Left > 1.0e-5f;)
-	{
-		const float Step = FMath::Min(Left, 1.0f / 120.0f);
-		SwingVelocity += (55.0f * (Target - Swing) - 11.0f * SwingVelocity) * Step;
-		Swing += SwingVelocity * Step;
-		Swing = Swing.GetClampedToMaxSize(25.0f);
-		Left -= Step;
-	}
-	const FVector DownC = Component.InverseTransformVectorNoScale(FVector::DownVector);
-	const FVector SwingAxisC = Component.InverseTransformVectorNoScale(FVector::CrossProduct(FVector::UpVector, Swing.GetSafeNormal()));
-	const float SwingAngle = static_cast<float>(Swing.Size());
-	for (const TArray<FBoneReference>& Chain : Chains)
-	{
-		TArray<FCompactPoseBoneIndex, TInlineAllocator<8>> Index;
-		TArray<FTransform, TInlineAllocator<8>> Original;
-		for (const FBoneReference& Bone : Chain)
+		for (const FBoneReference& Bone : Chains[c])
 		{
 			if (!Bone.IsValidToEvaluate(Container))
 			{
 				break;
 			}
-			Index.Add(Bone.GetCompactPoseIndex(Container));
-			Original.Add(Output.Pose.GetComponentSpaceTransform(Index.Last()));
+			Index[c].Add(Bone.GetCompactPoseIndex(Container));
+			Original[c].Add(Output.Pose.GetComponentSpaceTransform(Index[c].Last()));
 		}
-		const int32 N = Index.Num();
-		if (N < 2)
+		if (Index[c].Num() < Chains[c].Num())
+		{
+			Strands.reset();  // a lower detail level without the hair bones: as animated
+			return;
+		}
+		std::vector<colony::HairVec>& Points = Goals[static_cast<size_t>(c)];
+		Points.clear();
+		for (const FTransform& T : Original[c])
+		{
+			Points.push_back(MhHairVec(Component.TransformPosition(T.GetLocation())));
+		}
+		const int32 N = Original[c].Num();
+		const FVector Tip = Original[c][N - 1].GetLocation() * 2.0 - Original[c][N - 2].GetLocation();
+		Points.push_back(MhHairVec(Component.TransformPosition(Tip)));
+	}
+	// The body where it is drawn this frame.
+	Capsules.clear();
+	for (const FShape& Shape : Shapes)
+	{
+		if (!Shape.Bone.IsValidToEvaluate(Container))
 		{
 			continue;
 		}
-		// Hanging: the chain's line (root to tip) turned most of the way towards the ground, at most 70 degrees.
-		const FVector Root = Original[0].GetLocation();
-		const FVector Tip = Original[N - 1].GetLocation() + (Original[N - 1].GetLocation() - Original[N - 2].GetLocation());
-		const FVector Line = (Tip - Root).GetSafeNormal();
-		FQuat Hang = FQuat::FindBetweenNormals(Line, FMath::Lerp(Line, DownC, 0.75f).GetSafeNormal());
-		FVector HangAxis;
-		float HangAngle;
-		Hang.ToAxisAndAngle(HangAxis, HangAngle);
-		HangAngle = FMath::Min(HangAngle, FMath::DegreesToRadians(70.0f));
-		// Both spread down the chain, more of it at the root for the hang, more at the tip for the swing.
-		FQuat Total = FQuat::Identity;
-		FVector Joint = Root;
-		const float Sum = N * (N + 1) * 0.5f;
-		for (int32 i = 0; i < N; ++i)
+		const FTransform BoneCS = Output.Pose.GetComponentSpaceTransform(Shape.Bone.GetCompactPoseIndex(Container));
+		Capsules.push_back({MhHairVec(Component.TransformPosition(BoneCS.TransformPosition(Shape.A))),
+			MhHairVec(Component.TransformPosition(BoneCS.TransformPosition(Shape.B))), Shape.Radius * Scale});
+	}
+	if (Mode >= 2)
+	{
+		Strands.step(FMath::Max(DeltaTime, 0.0f), Goals, Capsules, Settings);
+	}
+	else
+	{
+		Strands.pose(Goals, Capsules, Settings);
+	}
+	const std::vector<std::vector<colony::HairVec>>& Solved = Strands.points();
+	if (Solved.size() != Goals.size())
+	{
+		return;
+	}
+	LargestPenetration = FMath::Max(LargestPenetration, colony::hairDeepestPenetration(Solved, Capsules));
+	LargestAnimatedPenetration = FMath::Max(LargestAnimatedPenetration, colony::hairDeepestPenetration(Goals, Capsules));
+	// Each bone turned from where the animation points it to where its strand now runs, from the root down.
+	for (int32 c = 0; c < Chains.Num(); ++c)
+	{
+		const int32 N = Original[c].Num();
+		const std::vector<colony::HairVec>& Q = Solved[static_cast<size_t>(c)];
+		FVector Joint = Original[c][0].GetLocation();
+		for (int32 k = 0; k < N; ++k)
 		{
-			if (i > 0)
-			{
-				Joint += Total.RotateVector(Original[i].GetLocation() - Original[i - 1].GetLocation());
-			}
-			const float HangShare = (N - i) / Sum;
-			const float SwingShare = (i + 1) / Sum;
-			FQuat Turn = FQuat(HangAxis, HangAngle * HangShare);
-			if (SwingAngle > 0.01f && !SwingAxisC.IsNearlyZero())
-			{
-				Turn = FQuat(SwingAxisC.GetSafeNormal(), FMath::DegreesToRadians(SwingAngle) * SwingShare) * Turn;
-			}
-			Total = (Turn * Total).GetNormalized();
-			FTransform Moved = Original[i];
+			const FVector From = Original[c][k].GetLocation();
+			const FVector To = k + 1 < N ? Original[c][k + 1].GetLocation() : From * 2.0 - Original[c][k - 1].GetLocation();
+			const FVector Animated = To - From;
+			const double Length = Animated.Size();
+			const FVector Now = Component.InverseTransformPosition(MhHairFVector(Q[static_cast<size_t>(k) + 1])) -
+				Component.InverseTransformPosition(MhHairFVector(Q[static_cast<size_t>(k)]));
+			const FVector AnimatedDir = Animated.GetSafeNormal();
+			const FVector NowDir = Now.GetSafeNormal();
+			FTransform Moved = Original[c][k];
 			Moved.SetLocation(Joint);
-			Moved.SetRotation((Total * Original[i].GetRotation()).GetNormalized());
-			OutBoneTransforms.Add(FBoneTransform(Index[i], Moved));
+			if (!AnimatedDir.IsNearlyZero() && !NowDir.IsNearlyZero())
+			{
+				Moved.SetRotation((FQuat::FindBetweenNormals(AnimatedDir, NowDir) * Original[c][k].GetRotation()).GetNormalized());
+				Joint += NowDir * Length;
+			}
+			else
+			{
+				Joint += Animated;
+			}
+			OutBoneTransforms.Add(FBoneTransform(Index[c][k], Moved));
 		}
 	}
+	OutBoneTransforms.Sort(FCompareBoneTransformIndex());
 }
 
 bool FMakeHumanSeverNode::IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones)
@@ -420,7 +554,6 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 	// The graph is linked up first: the engine's Initialize takes the root node (GetCustomRootNode) there and keeps it, so
 	// linking afterwards left the jiggle and hair nodes out of the graph.
 	Retarget.RetargetFrom = ERetargetSourceMode::ParentSkeletalMeshComponent;
-	Dynamics.Reset();
 	const USkeletalMeshComponent* Mesh = Instance ? Instance->GetSkelMeshComponent() : nullptr;
 	const USkeletalMesh* Asset = Mesh ? Mesh->GetSkeletalMeshAsset() : nullptr;
 	if (Asset && GMakeHumanPhysics.GetValueOnGameThread() != 0)
@@ -443,40 +576,8 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 				Body.Squash = Part.Squash;
 			}
 		}
-		// MakeHuman's ponytail sub-rig: ponytail, ponytail1 ... ponytail4 under the head.
-		if (Ref.FindBoneIndex(TEXT("ponytail1")) != INDEX_NONE)
-		{
-			FName Last = TEXT("ponytail1");
-			for (int32 i = 2; i < 12 && Ref.FindBoneIndex(FName(*FString::Printf(TEXT("ponytail%d"), i))) != INDEX_NONE; ++i)
-			{
-				Last = FName(*FString::Printf(TEXT("ponytail%d"), i));
-			}
-			Dynamics.Add(MakeChain(TEXT("ponytail1"), Last, Ref));
-		}
-		// Long scalp hair (mh_common.add_hair_bones: hair_c1_1 ... chains down the back, back corners and sides, shared by
-		// the long, bob and braid styles): stiffer and in a narrower cone than the ponytail, so the sheet sways and does
-		// not fly up into the body.
-		for (int32 c = 1; c < 10; ++c)
-		{
-			const FName First(*FString::Printf(TEXT("hair_c%d_1"), c));
-			if (Ref.FindBoneIndex(First) == INDEX_NONE)
-			{
-				continue;
-			}
-			FName Last = First;
-			for (int32 i = 2; i < 12 && Ref.FindBoneIndex(FName(*FString::Printf(TEXT("hair_c%d_%d"), c, i))) != INDEX_NONE; ++i)
-			{
-				Last = FName(*FString::Printf(TEXT("hair_c%d_%d"), c, i));
-			}
-			// Our own spring (FMakeHumanHairNode), not AnimDynamics: those chains flung the hair into a sheet now and then.
-			TArray<FBoneReference>& Chain = Hair.Chains.AddDefaulted_GetRef();
-			for (int32 i = 1; i < 12 && Ref.FindBoneIndex(FName(*FString::Printf(TEXT("hair_c%d_%d"), c, i))) != INDEX_NONE; ++i)
-			{
-				Chain.Emplace(FName(*FString::Printf(TEXT("hair_c%d_%d"), c, i)));
-			}
-			(void)Last;
-		}
-		Hair.Head.BoneName = TEXT("head");
+		// Long hair and a ponytail: strands with the body's collision shapes fitted to this skeleton.
+		Hair.Setup(Ref);
 		// A tail (mh_export.py's add_tail: tail_01 ... under the pelvis): its own swish (FMakeHumanTailNode).
 		Tail.Bones.Reset();
 		for (int32 i = 1; i < 30 && Ref.FindBoneIndex(FName(*FString::Printf(TEXT("tail_%02d"), i))) != INDEX_NONE; ++i)
@@ -529,11 +630,6 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 			Hair.ComponentPose.SetLinkNode(Previous);
 			Previous = &Hair;
 		}
-		for (const TSharedPtr<FAnimNode_AnimDynamics>& Node : Dynamics)
-		{
-			Node->ComponentPose.SetLinkNode(Previous);
-			Previous = Node.Get();
-		}
 		Sever.ComponentPose.SetLinkNode(Previous);
 		Previous = &Sever;
 		ToLocal.ComponentPose.SetLinkNode(Previous);
@@ -571,6 +667,7 @@ void FMakeHumanAnimProxy::PreUpdate(UAnimInstance* Instance, float DeltaSeconds)
 	}
 	// The soft parts fade out between Pawns.SoftBodyNear and Pawns.SoftBodyFar from the camera (the view last drawn).
 	Jiggle.Fade = 1.0f;
+	float HairDistance = 0.0f;  // no view drawn yet (a test without a camera): as if near
 	const UWorld* World = Instance ? Instance->GetWorld() : nullptr;
 	const USkeletalMeshComponent* Mesh = Instance ? Instance->GetSkelMeshComponent() : nullptr;
 	if (World && Mesh && !World->ViewLocationsRenderedLastFrame.IsEmpty())
@@ -583,13 +680,45 @@ void FMakeHumanAnimProxy::PreUpdate(UAnimInstance* Instance, float DeltaSeconds)
 		const float Near = GMakeHumanSoftNear.GetValueOnGameThread();
 		const float Far = FMath::Max(GMakeHumanSoftFar.GetValueOnGameThread(), Near + 1.0f);
 		Jiggle.Fade = 1.0f - FMath::Clamp((Closest - Near) / (Far - Near), 0.0f, 1.0f);
+		HairDistance = Closest;
+	}
+	// Long hair: fully simulated near the camera, only pushed out of the body further off, as animated beyond that.
+	int32 HairMode = FMath::Clamp(GMakeHumanHair.GetValueOnGameThread(), 0, 2);
+	if (HairMode == 2 && HairDistance > GMakeHumanHairSimFar.GetValueOnGameThread())
+	{
+		HairMode = 1;
+	}
+	if (HairDistance > GMakeHumanHairCollideFar.GetValueOnGameThread())
+	{
+		HairMode = 0;
+	}
+	if (HairMode == 0)
+	{
+		Hair.Strands.reset();  // starts again from the animated pose when it comes back
+	}
+	Hair.Mode = HairMode;
+	// Pawns.HairDebug: the last frame's collision capsules and strands (the evaluation has finished by now).
+	if (World && GMakeHumanHairDebug.GetValueOnGameThread() != 0 && HairMode > 0)
+	{
+		for (const colony::HairCapsule& Cap : Hair.Capsules)
+		{
+			const FVector A(Cap.a.x, Cap.a.y, Cap.a.z);
+			const FVector B(Cap.b.x, Cap.b.y, Cap.b.z);
+			const FVector Axis = B - A;
+			const FQuat Turn = Axis.IsNearlyZero() ? FQuat::Identity : FRotationMatrix::MakeFromZ(Axis.GetSafeNormal()).ToQuat();
+			DrawDebugCapsule(World, (A + B) * 0.5, static_cast<float>(Axis.Size()) * 0.5f + Cap.radius, Cap.radius, Turn, FColor::Green, false, -1.0f, 0, 0.3f);
+		}
+		for (const std::vector<colony::HairVec>& Points : Hair.Strands.points())
+		{
+			for (size_t k = 1; k < Points.size(); ++k)
+			{
+				DrawDebugLine(World, FVector(Points[k - 1].x, Points[k - 1].y, Points[k - 1].z), FVector(Points[k].x, Points[k].y, Points[k].z),
+					FColor::Yellow, false, -1.0f, 1, 0.5f);
+			}
+		}
 	}
 	Retarget.RetargetFrom = ERetargetSourceMode::ParentSkeletalMeshComponent;
 	Retarget.PreUpdate(Instance);
-	for (const TSharedPtr<FAnimNode_AnimDynamics>& Node : Dynamics)
-	{
-		Node->PreUpdate(Instance);
-	}
 }
 
 void UMakeHumanAnimInstance::SetRetargeter(UIKRetargeter* InRetargeter)
@@ -600,7 +729,7 @@ void UMakeHumanAnimInstance::SetRetargeter(UIKRetargeter* InRetargeter)
 int32 UMakeHumanAnimInstance::GetPhysicsChains() const
 {
 	const FMakeHumanAnimProxy& Proxy = GetProxyOnGameThread<FMakeHumanAnimProxy>();
-	return Proxy.Dynamics.Num() + Proxy.Jiggle.Bodies.Num() + (Proxy.Tail.Bones.IsEmpty() ? 0 : 1);
+	return Proxy.Hair.Chains.Num() + Proxy.Jiggle.Bodies.Num() + (Proxy.Tail.Bones.IsEmpty() ? 0 : 1);
 }
 
 void UMakeHumanAnimInstance::SetSoftTissueEnabled(bool bEnabled)
@@ -731,6 +860,24 @@ void UMakeHumanAnimInstance::AddBlastKick(const FVector& At, float Speed, float 
 		return;
 	}
 	PendingKicks.Add({At, FVector::ZeroVector, Speed, Radius, true});
+}
+
+int32 UMakeHumanAnimInstance::GetHairStrands() const
+{
+	return GetProxyOnGameThread<FMakeHumanAnimProxy>().Hair.Chains.Num();
+}
+
+float UMakeHumanAnimInstance::TakeLargestHairPenetration(float* OutAnimated)
+{
+	FMakeHumanAnimProxy& Proxy = GetProxyOnGameThread<FMakeHumanAnimProxy>();
+	const float Largest = Proxy.Hair.LargestPenetration;
+	Proxy.Hair.LargestPenetration = 0.0f;
+	if (OutAnimated)
+	{
+		*OutAnimated = Proxy.Hair.LargestAnimatedPenetration;
+	}
+	Proxy.Hair.LargestAnimatedPenetration = 0.0f;
+	return Largest;
 }
 
 float UMakeHumanAnimInstance::TakeLargestTailSwing()
