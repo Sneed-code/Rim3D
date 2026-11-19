@@ -180,6 +180,11 @@ int32 UBloodSubsystem::GetSkinPaints() const
 	return SkinBlood ? SkinBlood->GetPaints() : 0;
 }
 
+USkinBlood* UBloodSubsystem::GetSkinBlood() const
+{
+	return SkinBlood.Get();
+}
+
 int32 UBloodSubsystem::GetSkinMasks() const
 {
 	return SkinBlood ? SkinBlood->GetMasks() : 0;
