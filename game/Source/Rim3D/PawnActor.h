@@ -400,6 +400,8 @@ private:
 
 	FMeleeSwingTrack Swing;
 	float BlockBlend = 0.0f;
+	/** Seconds the drawn guard stays up after the sim's block ends. */
+	float BlockHoldLeft = 0.0f;
 	float StanceHeight = 1.0f;
 	float DodgeAge = kDodgeSeconds;
 	float DodgeSide = 1.0f;

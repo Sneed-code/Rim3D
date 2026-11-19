@@ -31,6 +31,7 @@
 #include "ColonySim/Research.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Windows.h"
 
 #include <algorithm>
 #include <cmath>
@@ -346,6 +347,40 @@ public:
     bool makeJob(JobSystem&, Entity, const WorkCandidate& candidate, Job& out) override {
         out = Job{};
         out.type = JobType::RemoveFloor;
+        out.cell = candidate.target.cell;
+        return true;
+    }
+};
+
+// Cutting a window in a wall, glazing a broken one or filling one in (docs/design/windows.md), in the Construction work type.
+class WindowGiver final : public WorkGiver {
+public:
+    const char* task() const override { return "WindowWork"; }
+
+    void scan(JobSystem& jobs, Entity pawn, std::vector<WorkCandidate>& out) override {
+        const Windows* windows = jobs.windows();
+        if (!jobs.canUseHands(pawn) || windows == nullptr) {
+            return;
+        }
+        const Position& at = jobs.things().registry().get<Position>(pawn);
+        for (const auto& [index, kind] : jobs.designations().all()) {
+            if (kind != DesignationKind::AddWindow && kind != DesignationKind::RemoveWindow) {
+                continue;
+            }
+            const CellPos cell = jobs.map().cellAt(index);
+            if (cell.level != at.level ||
+                !(kind == DesignationKind::AddWindow ? windows->whyNotAdd(cell) : windows->whyNotRemove(cell)).empty()) {
+                continue;
+            }
+            const float dx = static_cast<float>(cell.x) + 0.5f - at.x;
+            const float dy = static_cast<float>(cell.y) + 0.5f - at.y;
+            out.push_back(WorkCandidate{JobTarget{kNoEntity, cell}, dx * dx + dy * dy, 0, 0, false, CellPos{}});
+        }
+    }
+
+    bool makeJob(JobSystem&, Entity, const WorkCandidate& candidate, Job& out) override {
+        out = Job{};
+        out.type = JobType::WindowWork;
         out.cell = candidate.target.cell;
         return true;
     }
@@ -1289,6 +1324,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     givers.push_back(std::make_unique<ConstructArtGiver>());
     givers.push_back(std::make_unique<DeconstructGiver>());
     givers.push_back(std::make_unique<RemoveFloorGiver>());
+    givers.push_back(std::make_unique<WindowGiver>());
     givers.push_back(std::make_unique<MineGiver>());
     givers.push_back(std::make_unique<CutOrHarvestPlantsGiver>());
     givers.push_back(std::make_unique<HarvestCropsGiver>());

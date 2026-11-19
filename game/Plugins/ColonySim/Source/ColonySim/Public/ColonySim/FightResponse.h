@@ -20,6 +20,6 @@ COLONY_API const char* fightResponseName(FightResponse response);
 COLONY_API bool fightResponseFromName(const std::string& name, FightResponse& out);
 
 // Lock-on focus (FocusCommand): set a target, cycle to the next nearest (Tab), or let go (F1).
-enum class FocusMode : uint8_t { Set, Next, Clear };
+enum class FocusMode : uint8_t { Set, Next, Clear, Left, Right };
 
 }  // namespace colony

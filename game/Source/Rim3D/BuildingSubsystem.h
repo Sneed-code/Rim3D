@@ -130,6 +130,8 @@ private:
 		UStaticMesh* Fixed = nullptr;
 		UStaticMesh* Sliding = nullptr;
 		UStaticMesh* All = nullptr;
+		/** A window's glass (docs/design/windows.md), drawn see-through and casting no shadow; null for none. */
+		UStaticMesh* Glass = nullptr;
 	};
 
 	/** One instance component and the instances put in it by the last rebuild of its chunk. */
@@ -159,8 +161,9 @@ private:
 	/**
 	 * The index in Looks of this def made of this stuff (invalid for none), made if it is new; -1 if the def has no picture.
 	 * `Link` is a linked def's neighbours (1 north, 2 east, 4 south, 8 west); -1 draws its plain parts (the placement ghost).
+	 * `Window` is a linked wall's window (docs/design/windows.md): 0 none, 1 with glass, 2 with the glass broken.
 	 */
-	int32 GetLook(colony::DefId Def, colony::DefId Stuff, int32 Link = -1);
+	int32 GetLook(colony::DefId Def, colony::DefId Stuff, int32 Link = -1, int32 Window = 0);
 	/** The surface material of a stuff (its visual.surface, made by the SurfaceMaterials commandlet); null for none. */
 	UMaterialInterface* SurfaceOf(colony::DefId Stuff);
 	void RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, const TArray<int32>& ThingIndexes, const colony::Snapshot& Snapshot);
@@ -179,6 +182,10 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> GhostMaterial;
+
+	/** Window glass (docs/design/windows.md), made by the BuildingMaterials commandlet; null draws open windows. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> GlassMaterial;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMesh>> KeepMeshes;
