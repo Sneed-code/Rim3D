@@ -127,8 +127,17 @@ public:
 	 *  where the view looks; zero is a backstep). False (and nothing sent) if not in direct mode, the pawn can't roll now or
 	 *  an order went out this step. */
 	bool Roll(const FVector2D& Input);
-	/** Throws the first grenade on the belt at the crosshair's point (F9's ThrowCommand with `player`). */
+	/** Throws the chosen grenade (R picks; the first on the belt if none): at the locked-on enemy in third person, else at
+	 *  the crosshair's point (F9's ThrowCommand with `player`). G held shows the arc first (DrawGrenadeArc); letting go throws. */
 	bool ThrowGrenade();
+	/** R: the next kind of grenade on the belt. False if the belt holds one kind or none. */
+	bool NextGrenade();
+	/** The grenade G throws now (a Things def), invalid with an empty belt. */
+	colony::DefId GetGrenadeChoice() const;
+	/** G is held: the throw's arc and landing ring are drawn. */
+	bool IsAimingGrenade() const { return bAimingGrenade; }
+	/** Frames the aim arc was drawn (smoke tests). */
+	int32 GetGrenadeArcFrames() const { return GrenadeArcFrames; }
 	/** Where the crosshair points, in Unreal world units: the nearest of the sim's ground, rock and buildings and the
 	 *  bodies as they are drawn this frame (DrawnHit; animals by the sim's hitboxes), else a point 150 m out. On a drawn
 	 *  body `OutDrawn` gets the pawn, the sim body part and the spot in that pawn's frame (docs/design/aiming.md).
@@ -279,6 +288,10 @@ private:
 	void UpdatePlayerInput();
 	void DrawHitboxes();
 	void DrawHud();
+	/** While G is held: the arc the grenade would fly and a ring where it bursts, on the screen. */
+	void DrawGrenadeArc(USimSubsystem& Bridge, colony::Entity Pawn);
+	/** The world point a throw goes to now: the crosshair's, pulled in to the arm's range. False with no aim. */
+	bool GrenadeAimSim(USimSubsystem& Bridge, colony::Entity Pawn, colony::DefId Item, float& OutX, float& OutY) const;
 	bool EffectsOn() const;
 
 	UPROPERTY()
@@ -325,6 +338,9 @@ private:
 	bool bDecalMaterialMissing = false;
 	int32 NextLight = 0;
 	int64 LastFireStep = -1;
+	colony::DefId GrenadeChoice;
+	bool bAimingGrenade = false;
+	int32 GrenadeArcFrames = 0;
 	bool bHaveKeyState = false;
 	bool bNoGunMessage = false;
 	float HitMarkerSeconds = 0.0f;

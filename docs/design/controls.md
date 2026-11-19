@@ -21,7 +21,8 @@ cancels; "Reset all keys to default" puts them back). Code reads keys only throu
 | Q | switch weapon |
 | R | reload |
 | C / Z | crouch / prone, on and off |
-| G | throw a grenade |
+| G | throw a grenade: in third person while locked on, at the target at once; otherwise hold G to see the arc and the blast ring, let go to throw where the crosshair is (sneed 2026-11-19) |
+| R | the next kind of grenade on the belt (frag, molotov...) |
 | left mouse | shoot or swing |
 | right mouse (hold) | aim a gun, or block with a melee weapon or shield |
 | Tab | focus the next enemy (lock-on focus, its own task) |

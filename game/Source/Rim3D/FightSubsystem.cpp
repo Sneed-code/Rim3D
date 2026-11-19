@@ -1556,8 +1556,33 @@ void UFightSubsystem::UpdatePlayerInput()
 		Roll(FVector2D((IsDown(PC, ERim3DAction::MoveRight) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveLeft) ? 1.0 : 0.0),
 			(IsDown(PC, ERim3DAction::MoveForward) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveBack) ? 1.0 : 0.0)));
 	}
-	if (!bBuilding && WasPressed(PC, ERim3DAction::Grenade))
+	// Grenades (sneed 2026-11-19): R picks the kind. G in third person while locked on throws at the target at once;
+	// otherwise G held shows the arc and letting go throws where the crosshair is.
+	if (!bBuilding && WasPressed(PC, ERim3DAction::NextGrenade))
 	{
+		NextGrenade();
+	}
+	if (bBuilding)
+	{
+		bAimingGrenade = false;
+	}
+	else if (WasPressed(PC, ERim3DAction::Grenade))
+	{
+		const UProtagonistSubsystem* GrenadeProt = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+		const AProtagonistPawn* Body = GrenadeProt ? GrenadeProt->GetBody() : nullptr;
+		const bool bThirdPerson = Body && !Body->IsFirstPerson();
+		if (bThirdPerson && GrenadeProt->GetFocusTarget() != colony::kNoEntity)
+		{
+			ThrowGrenade();
+		}
+		else
+		{
+			bAimingGrenade = true;
+		}
+	}
+	else if (bAimingGrenade && !IsDown(PC, ERim3DAction::Grenade))
+	{
+		bAimingGrenade = false;
 		ThrowGrenade();
 	}
 }
@@ -1591,6 +1616,74 @@ bool UFightSubsystem::Roll(const FVector2D& Input)
 	return true;
 }
 
+colony::DefId UFightSubsystem::GetGrenadeChoice() const
+{
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	if (!Bridge || !Bridge->GetSim() || !Protagonist)
+	{
+		return colony::DefId{};
+	}
+	const colony::ExplosiveSystem& Explosives = Bridge->GetSim()->explosives();
+	const colony::Entity Pawn = Protagonist->GetControlled();
+	if (GrenadeChoice.valid() && Explosives.count(Pawn, GrenadeChoice) > 0)
+	{
+		return GrenadeChoice;
+	}
+	return Explosives.firstItem(Pawn);
+}
+
+bool UFightSubsystem::NextGrenade()
+{
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	if (!Bridge || !Bridge->GetSim() || !Protagonist || !Protagonist->IsDirectMode())
+	{
+		return false;
+	}
+	const std::vector<colony::BeltStack> Stacks = Bridge->GetSim()->explosives().stacks(Protagonist->GetControlled());
+	if (Stacks.size() < 2)
+	{
+		return false;
+	}
+	const colony::DefId Now = GetGrenadeChoice();
+	size_t Index = 0;
+	for (size_t I = 0; I < Stacks.size(); ++I)
+	{
+		if (Stacks[I].item == Now)
+		{
+			Index = I;
+			break;
+		}
+	}
+	GrenadeChoice = Stacks[(Index + 1) % Stacks.size()].item;
+	return true;
+}
+
+bool UFightSubsystem::GrenadeAimSim(USimSubsystem& Bridge, colony::Entity Pawn, colony::DefId Item, float& OutX, float& OutY) const
+{
+	const colony::ThingView* View = Bridge.GetCurrentSnapshot().find(Pawn);
+	FVector Aim;
+	if (!View || !ComputeAimPoint(Aim))
+	{
+		return false;
+	}
+	const FVector Sim = (Aim - Bridge.GetWorldOrigin()) / 100.0;
+	OutX = static_cast<float>(Sim.X);
+	OutY = static_cast<float>(Sim.Y);
+	// Past the arm's reach the throw goes as far as the arm does (the sim does the same), so the arc shows that.
+	const float Range = Bridge.GetSim()->explosives().throwRange(Item);
+	const float Dx = OutX - View->x;
+	const float Dy = OutY - View->y;
+	const float Flat = FMath::Sqrt(Dx * Dx + Dy * Dy);
+	if (Range > 0.0f && Flat > Range)
+	{
+		OutX = View->x + Dx / Flat * Range;
+		OutY = View->y + Dy / Flat * Range;
+	}
+	return true;
+}
+
 bool UFightSubsystem::ThrowGrenade()
 {
 	USimSubsystem* Bridge = BridgeSource.Get();
@@ -1605,15 +1698,110 @@ bool UFightSubsystem::ThrowGrenade()
 	{
 		return false;
 	}
-	FVector Aim;
-	if (!ComputeAimPoint(Aim))
+	const colony::DefId Item = GetGrenadeChoice();
+	if (!Item.valid() || !Bridge->GetDefs())
 	{
 		return false;
 	}
-	const FVector Sim = (Aim - Bridge->GetWorldOrigin()) / 100.0;
-	Bridge->Submit(colony::ThrowCommand{Pawn, std::string(), colony::kNoEntity, static_cast<float>(Sim.X), static_cast<float>(Sim.Y), true});
+	const std::string ItemName = Bridge->GetDefs()->get(Item).defName();
+	// Third person and locked on: at the target (the sim aims at the ground under it as it stands at the release).
+	const AProtagonistPawn* Body = Protagonist->GetBody();
+	const colony::Entity Focus = Protagonist->GetFocusTarget();
+	if (Body && !Body->IsFirstPerson() && Focus != colony::kNoEntity && Bridge->GetCurrentSnapshot().find(Focus))
+	{
+		Bridge->Submit(colony::ThrowCommand{Pawn, ItemName, Focus, 0.0f, 0.0f, true});
+		LastFireStep = Bridge->GetSteps();
+		return true;
+	}
+	float X = 0.0f;
+	float Y = 0.0f;
+	if (!GrenadeAimSim(*Bridge, Pawn, Item, X, Y))
+	{
+		return false;
+	}
+	Bridge->Submit(colony::ThrowCommand{Pawn, ItemName, colony::kNoEntity, X, Y, true});
 	LastFireStep = Bridge->GetSteps();
 	return true;
+}
+
+void UFightSubsystem::DrawGrenadeArc(USimSubsystem& Bridge, colony::Entity Pawn)
+{
+	const colony::DefId Item = GetGrenadeChoice();
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	float X = 0.0f;
+	float Y = 0.0f;
+	colony::ThrowPlan Plan;
+	if (!Item.valid() || !PC || !GrenadeAimSim(Bridge, Pawn, Item, X, Y) || !Bridge.GetSim()->explosives().planThrow(Pawn, Item, X, Y, Plan))
+	{
+		return;
+	}
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	ImDrawList* Draw = ImGui::GetBackgroundDrawList();
+	const ImU32 Line = Plan.reaches ? IM_COL32(255, 230, 120, 220) : IM_COL32(255, 120, 80, 220);
+	const float Gravity = Bridge.GetSim()->combat().gravity();
+	const auto Screen = [&](float SX, float SY, float SZ, ImVec2& Out)
+	{
+		FVector2D P;
+		if (!PC->ProjectWorldLocationToScreen(Bridge.GetWorldOrigin() + FVector(SX, SY, SZ) * 100.0, P, true))
+		{
+			return false;
+		}
+		Out = ImVec2(Viewport->Pos.x + static_cast<float>(P.X), Viewport->Pos.y + static_cast<float>(P.Y));
+		return true;
+	};
+	// The flight as the sim steps it, a dash every other step.
+	float PX = Plan.startX;
+	float PY = Plan.startY;
+	float PZ = Plan.startZ;
+	float VZ = Plan.vz;
+	const int32 Steps = FMath::Clamp(Plan.flightSteps, 1, 600);
+	ImVec2 Last;
+	bool bLast = Screen(PX, PY, PZ, Last);
+	for (int32 Step = 1; Step <= Steps; ++Step)
+	{
+		PX += Plan.vx;
+		PY += Plan.vy;
+		PZ += VZ - 0.5f * Gravity;
+		VZ -= Gravity;
+		if (Step == Steps)
+		{
+			PX = Plan.landX;
+			PY = Plan.landY;
+			PZ = Plan.landZ;
+		}
+		ImVec2 Now;
+		const bool bNow = Screen(PX, PY, PZ, Now);
+		if (bLast && bNow && (Step % 2) == 0)
+		{
+			Draw->AddLine(Last, Now, Line, 2.0f);
+		}
+		Last = Now;
+		bLast = bNow;
+	}
+	// The blast's reach on the ground where it comes to rest.
+	const float Radius = Bridge.GetSim()->explosives().blastRadius(Item);
+	if (Radius > 0.0f)
+	{
+		const colony::Map& Map = Bridge.GetSim()->map();
+		ImVec2 Ring[33];
+		int32 Count = 0;
+		for (int32 I = 0; I <= 32; ++I)
+		{
+			const float A = static_cast<float>(I) / 32.0f * 2.0f * PI;
+			const float RX = Plan.landX + Radius * FMath::Cos(A);
+			const float RY = Plan.landY + Radius * FMath::Sin(A);
+			ImVec2 P;
+			if (Screen(RX, RY, Map.heightAt(RX, RY) + 0.05f, P))
+			{
+				Ring[Count++] = P;
+			}
+		}
+		if (Count > 2)
+		{
+			Draw->AddPolyline(Ring, Count, Line, 2.0f, 0);
+		}
+	}
+	++GrenadeArcFrames;
 }
 
 // ---------------------------------------------------------------------------
@@ -1753,6 +1941,27 @@ void UFightSubsystem::DrawHud()
 				ImGui::TextUnformatted("No gun within reach");
 			}
 		}
+		// Grenades on the belt (sneed 2026-11-19): the kind G throws, how many, and the keys.
+		if (View->grenades > 0 && Bridge->GetDefs())
+		{
+			const colony::DefId Item = GetGrenadeChoice();
+			if (Item.valid())
+			{
+				const int32 Count = Sim.explosives().count(Pawn, Item);
+				const bool bKinds = Sim.explosives().stacks(Pawn).size() > 1;
+				const FString Line = FString::Printf(TEXT("%s x%d   %s throw (hold to aim)%s%s"), UTF8_TO_TCHAR(Bridge->GetDefs()->get(Item).label().c_str()), Count,
+					*Rim3DKeys::GetKeyLabel(ERim3DAction::Grenade), bKinds ? TEXT("   ") : TEXT(""),
+					bKinds ? *FString::Printf(TEXT("%s next kind"), *Rim3DKeys::GetKeyLabel(ERim3DAction::NextGrenade)) : TEXT(""));
+				if (View->throwReadyIn > 0)
+				{
+					ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", TCHAR_TO_UTF8(*Line));
+				}
+				else
+				{
+					ImGui::TextUnformatted(TCHAR_TO_UTF8(*Line));
+				}
+			}
+		}
 		// Bleeding: the key that patches it (body-health.md part B), or how long the patching still takes.
 		if (View->patchZone >= 0)
 		{
@@ -1772,6 +1981,11 @@ void UFightSubsystem::DrawHud()
 		}
 	}
 	ImGui::End();
+
+	if (bAimingGrenade && View && !View->dead)
+	{
+		DrawGrenadeArc(*Bridge, Pawn);
+	}
 
 	// A flash of red lines round the crosshair when a shot of yours hits someone.
 	if (HitMarkerSeconds > 0.0f)

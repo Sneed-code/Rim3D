@@ -121,6 +121,8 @@ namespace
 		bool bStopAlarm = false;      // the colony alarm went off at the guards: the range switches it off again
 		float AllDownFor = 0.0f;
 		float Clock = 0.0f;
+		float GrenadesNextCheck = 0.0f; // the belt is topped up when empty (sneed 2026-11-19)
+		bool bGrenadesSpawned = false;
 		// The scripted tour.
 		int32 Step = 0;
 		float StepTime = 0.0f;
@@ -458,6 +460,42 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			// No klaxon in the range: stopped by hand, it stays off while the guards are about.
 			State->bStopAlarm = false;
 			B->Submit(colony::SoundAlarmCommand{false});
+		}
+
+		// Grenades (sneed 2026-11-19): five frag grenades and five molotovs on the belt, topped up when it is empty. They are
+		// laid at your feet and put on the belt, the sim's way (EquipCommand), so the throw is the game's own.
+		if (State->bControlled && PlayerView && !PlayerView->dead && State->Clock >= State->GrenadesNextCheck)
+		{
+			const colony::CellPos Feet{FMath::FloorToInt32(PlayerView->x), FMath::FloorToInt32(PlayerView->y), 0};
+			if (PlayerView->grenades > 0)
+			{
+				State->bGrenadesSpawned = false;
+				State->GrenadesNextCheck = State->Clock + 1.0f;
+			}
+			else if (!State->bGrenadesSpawned)
+			{
+				B->Submit(colony::SpawnThingCommand{"Grenade_Frag", Feet, 5});
+				B->Submit(colony::SpawnThingCommand{"Grenade_Molotov", Feet, 5});
+				State->bGrenadesSpawned = true;
+				State->GrenadesNextCheck = State->Clock + 0.3f;
+			}
+			else
+			{
+				for (const colony::ThingView& View : Snapshot.things)
+				{
+					if (View.category != colony::ThingCategory::Item || !View.def.valid() || FMath::Abs(View.x - PlayerView->x) > 3.0f || FMath::Abs(View.y - PlayerView->y) > 3.0f)
+					{
+						continue;
+					}
+					const std::string Name = B->GetDefs()->get(View.def).defName();
+					if (Name == "Grenade_Frag" || Name == "Grenade_Molotov")
+					{
+						B->Submit(colony::EquipCommand{State->Player, View.id});
+					}
+				}
+				State->bGrenadesSpawned = false;
+				State->GrenadesNextCheck = State->Clock + 2.0f;
+			}
 		}
 
 		// Take control once the body is drawn, in first person, facing the field.
