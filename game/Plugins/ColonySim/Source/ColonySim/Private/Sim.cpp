@@ -1580,8 +1580,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* prisonerMode = std::get_if<SetPrisonerModeCommand>(&command)) {
         PrisonerMode mode = PrisonerMode::NoInteraction;
         std::string why;
-        if (!prisonerModeFromName(prisonerMode->mode, mode)) {
-            commandFailed(id, "no prisoner mode '" + prisonerMode->mode + "' (NoInteraction, ReduceResistance, AttemptRecruit, Release or Execute)");
+        if (prisoners_->isSlave(prisonerMode->pawn)) {
+            // A slave: Emancipate or Release (docs/design/prisoners.md, Slaves).
+            if (!prisoners_->slaveOrder(prisonerMode->pawn, prisonerMode->mode, why)) {
+                commandFailed(id, why);
+            }
+        } else if (!prisonerModeFromName(prisonerMode->mode, mode)) {
+            commandFailed(id, "no prisoner mode '" + prisonerMode->mode +
+                                  "' (NoInteraction, ReduceResistance, AttemptRecruit, Release, Execute, Enslave or ReduceWill)");
         } else if (!prisoners_->setMode(prisonerMode->pawn, mode, why)) {
             commandFailed(id, why);
         }
@@ -3196,6 +3202,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.prisoner = true;
             view.prisonerMode = static_cast<uint8_t>(prisoner->mode);
             view.resistance = prisoner->resistance;
+            view.will = prisoner->will;
+        }
+        if (const Slave* slave = reg.try_get<Slave>(entity)) {
+            view.slave = true;
+            view.suppression = slave->suppression;
         }
         view.prisonBed = reg.all_of<PrisonBed>(entity);
         if (const Visitor* visitor = reg.try_get<Visitor>(entity)) {

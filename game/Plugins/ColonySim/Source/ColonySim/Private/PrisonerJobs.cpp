@@ -167,12 +167,20 @@ public:
                 out.push_back(WorkCandidate{JobTarget{prisoner, CellPos{}}, prisonDistSq(at, pos), 0, 0, false, CellPos{}});
             }
         }
+        // Slaves whose suppression is low (docs/design/prisoners.md, Slaves).
+        for (const auto [slave, s, pos] : reg.view<const Slave, const Position>().each()) {
+            (void)s;
+            if (slave != pawn && pos.level == at.level && prisoners->suppressDue(slave)) {
+                out.push_back(WorkCandidate{JobTarget{slave, CellPos{}}, prisonDistSq(at, pos), 0, 0, false, CellPos{}});
+            }
+        }
     }
 
     bool makeJob(JobSystem& jobs, Entity pawn, const WorkCandidate& candidate, Job& out) override {
         const entt::registry& reg = jobs.things().registry();
         const Entity prisoner = candidate.target.thing;
-        if (jobs.prisoners() == nullptr || !jobs.prisoners()->chatDue(prisoner) || prisoner == pawn) {
+        if (jobs.prisoners() == nullptr || prisoner == pawn ||
+            !(jobs.prisoners()->chatDue(prisoner) || jobs.prisoners()->suppressDue(prisoner))) {
             return false;
         }
         out = Job{};
@@ -280,6 +288,13 @@ bool JobSystem::failCheckPrisoner(Entity pawn, Job& job, std::string& why) {
             why = "the patient needs no feeding now";
             return false;
         }
+    } else if (job.type == JobType::WardenInteract && prisoners_->isSlave(job.site)) {
+        // Suppressing a slave (docs/design/prisoners.md, Slaves).
+        if (!things_.spawned(job.site) || !prisoners_->suppressDue(job.site)) {
+            why = "the slave needs no suppressing now";
+            return false;
+        }
+        return true;
     } else if (!prisoners_->isPrisoner(job.site) || !things_.spawned(job.site)) {
         why = "the prisoner is gone";
         return false;
@@ -411,7 +426,8 @@ JobSystem::StepResult JobSystem::chatWork(Entity pawn, Job& job, std::string& wh
         why = "the prisoner moved away";
         return StepResult::Failed;
     }
-    if (reg.get<Prisoner>(prisoner).mode == PrisonerMode::Execute) {
+    const bool slave = prisoners_->isSlave(prisoner);
+    if (!slave && reg.get<Prisoner>(prisoner).mode == PrisonerMode::Execute) {
         // An execution: the same walk up, a short job, and no Social experience.
         if (job.walk == 0) {
             job.walk = 2;
@@ -429,8 +445,13 @@ JobSystem::StepResult JobSystem::chatWork(Entity pawn, Job& job, std::string& wh
         pawnDid(pawn, PawnAction::Chat, prisoner);
     }
     job.progress += static_cast<float>(std::max(0.1f, health_.capacityValue(pawn, "Talking")));
-    if (job.progress < static_cast<float>(prisoners_->rules().chatWorkSeconds)) {
+    if (job.progress < static_cast<float>(prisoners_->talkSeconds(prisoner))) {
         return StepResult::Running;
+    }
+    if (slave) {
+        prisoners_->suppress(pawn, prisoner);
+        learnSkill(pawn, "Social", static_cast<double>(prisoners_->rules().suppressXp));
+        return StepResult::Next;
     }
     prisoners_->interact(pawn, prisoner);
     learnSkill(pawn, "Social", static_cast<double>(prisoners_->rules().chatXp));

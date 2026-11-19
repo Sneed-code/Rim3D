@@ -42,6 +42,8 @@ enum class PrisonerMode : uint8_t {
     AttemptRecruit,    // the same, and once the resistance is 0 each talk tries to recruit it
     Release,           // the next talk sets it free (it walks off the map)
     Execute,           // a warden kills it (docs/design/prisoners.md, Executions)
+    Enslave,           // each talk lowers its will; once the will is 0 the next talk makes it the colony's slave (Slaves)
+    ReduceWill,        // each talk lowers its will, down to 0, and no more
 };
 
 COLONY_API const char* prisonerModeName(PrisonerMode mode);
@@ -55,6 +57,17 @@ struct Prisoner {
     int64_t capturedAt = 0;    // game second
     int64_t nextChat = 0;      // game second from which a warden may talk to it again
     int64_t guiltyUntil = 0;   // it harmed the colony (it was captured in a raid) until this game second; an execution before is justified
+    float will = 0.0f;         // worn down by Enslave and ReduceWill; 0 when it can be enslaved
+};
+
+// On a pawn the colony holds as a slave (docs/design/prisoners.md, Slaves): it is on the player's side and works, but not as a
+// warden, hunter, artist or researcher, and slower; its suppression falls by itself, wardens raise it, and slaves whose
+// suppression is low may rise up. Every field is saved.
+struct Slave {
+    float suppression = 0.5f;   // 0 to 1
+    int64_t enslavedAt = 0;     // game second
+    int64_t nextSuppress = 0;   // game second from which a warden may suppress it again
+    uint32_t homeFaction = 0;   // the side (FactionId) it was taken from; a rebel or a freed slave goes back to it
 };
 
 // On a colonist or visitor the player has ordered arrested: a warden takes it to a prison bed. `by` is the warden carrying it, none until
@@ -92,6 +105,30 @@ struct COLONY_API PrisonerRules {
     int64_t executeWorkSeconds = 60;       // ours: the cut itself is quick
     int64_t guiltyHours = 24;              // RimWorld wiki: a prisoner is guilty if it harmed the colony in the past 24 hours
     int edgeSearch = 40;                   // cells along the map edge looked at for a way out
+    // Slaves (Ideology; docs/design/prisoners.md, Slaves).
+    float initialWillMin = 1.0f;           // ours: the wiki says only that will starts much lower than resistance
+    float initialWillMax = 3.0f;
+    float willPerChat = 1.0f;              // the wiki: will works like resistance (times the same factors)
+    float startSuppression = 0.5f;         // ours
+    // Suppression lost per day while at or above each share, highest share first (RimWorld wiki: 20% from 30%, 10% from 15%, 5% below).
+    std::vector<std::pair<float, float>> suppressionFall = {{0.3f, 0.2f}, {0.15f, 0.1f}, {0.0f, 0.05f}};
+    float suppressBelow = 0.7f;            // ours: wardens suppress a slave whose suppression is under this
+    int64_t suppressIntervalSeconds = 10800;  // ours
+    int64_t suppressWorkSeconds = 259;     // RimWorld wiki: 180 ticks (x 1.44)
+    // Suppression power = base + perLevel x Social, times Talking (ours, fitted to the wiki's Social 10: 28%).
+    float suppressPowerBase = 0.08f;
+    float suppressPowerPerLevel = 0.02f;
+    // The suppression a slave has against the factor on a warden's power (the wiki's 2x at 0%; the rest ours).
+    std::vector<std::pair<float, float>> suppressCurve = {{0.0f, 2.0f}, {0.5f, 1.0f}, {1.0f, 0.5f}};
+    float suppressXp = 50.0f;              // ours
+    // Rebellion: mean time between rebellions for one awake slave, divided by the factors (RimWorld wiki).
+    float rebellionMtbDays = 45.0f;
+    std::vector<std::pair<float, float>> rebellionSuppression = {{0.0f, 5.0f}, {0.333f, 1.5f}, {0.5f, 1.0f}, {1.0f, 0.25f}};
+    std::vector<std::pair<float, float>> rebellionSlaveCount = {{1.0f, 1.0f}, {2.0f, 0.75f}, {5.0f, 0.5f}, {10.0f, 0.3f}, {20.0f, 0.2f}};
+    std::vector<std::pair<float, float>> rebellionMood = {{0.0f, 1.5f}, {50.0f, 1.0f}, {100.0f, 0.8f}};
+    float rebellionUnattended = 20.0f;     // no free colonist able to stand on the map
+    float slaveWorkSpeed = 0.85f;          // RimWorld wiki: 85% global work speed
+    std::vector<std::string> slaveDisabledWorkTags = {"Social", "Violent", "Artistic", "Intellectual"};  // warden, hunt, art, research
 
     static PrisonerRules read(const DefDatabase& defs);
 };
@@ -166,8 +203,33 @@ public:
     // its own side's fight, with no weapon, walking off the map; a PrisonBreak event). Returns how many.
     int breakOut(const char* why);
 
-    // Freed prisoners that reach the map edge leave it, and an arrest whose warden dropped the job lets the pawn go. Runs once
-    // a step, after the fighters.
+    // ---- Slaves (docs/design/prisoners.md, Slaves)
+    bool isSlave(Entity pawn) const;
+    int slaveCount() const;
+    // The prisoner becomes the colony's slave (its side becomes the player's, it works within the slave limits). False if it is
+    // no living prisoner.
+    bool enslave(Entity prisoner, Entity warden);
+    // Whether a warden may suppress this slave now: its suppression is under `suppressBelow`, its time has come, and it is up.
+    bool suppressDue(Entity slave) const;
+    // How much a warden's suppression raises this slave's suppression now.
+    float suppressAmount(Entity warden, Entity slave) const;
+    // One suppression talk.
+    void suppress(Entity warden, Entity slave);
+    // What the player can do with a slave: "Emancipate" (it becomes a free colonist) or "Release" (it goes back to its own
+    // side and walks off the map). False, with a reason, when it can't be done.
+    bool slaveOrder(Entity slave, const std::string& order, std::string& error);
+    // The chance that one awake slave starts a rebellion in the next `seconds` (for tests and the info panel).
+    float rebellionChance(Entity slave, int64_t seconds) const;
+    // Every slave who can walk rises up: it is a slave no more, goes back to its own side and runs for the map edge.
+    // `leader` started it. Returns how many. Event SlaveRebellion.
+    int rebel(Entity leader);
+    // The work speed factor for a pawn: `slaveWorkSpeed` for a slave, else 1.
+    float workSpeedFactor(Entity pawn) const;
+    // How long a warden's talk with the pawn takes (a suppression is shorter than a prisoner's talk).
+    int64_t talkSeconds(Entity pawn) const;
+
+    // Freed prisoners that reach the map edge leave it, and an arrest whose warden dropped the job lets the pawn go. Slaves'
+    // suppression falls and they may rebel. Runs once a step, after the fighters.
     void step();
 
     // A warden's inspired recruitment gives its next attempt a better chance (docs/design/inspirations.md).
@@ -182,6 +244,9 @@ private:
     CellPos edgeGoal(Entity pawn) const;
     // A seized visitor whose arrest was cancelled: no longer a visitor, it walks off the map.
     void letGo(Entity pawn);
+    // A pawn that is no longer held goes back to `side` and runs for the map edge.
+    void runOff(Entity pawn, uint32_t side, const char* why);
+    void stepSlaves(int64_t seconds);
     void emit(EventType type, Entity thing, Entity target, float amount, const char* message) const;
 
     Things& things_;

@@ -494,6 +494,7 @@ struct SaveEntity {
     std::optional<Prisoner> prisoner;       // section "prisoners" (C22)
     std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
     std::optional<ArrestOrder> arrest;      // section "prisoners" version 3
+    std::optional<Slave> slave;             // section "prisoners" version 4 (slaves)
     std::optional<Fuel> fuel;               // "fuel" section (C11)
     std::optional<StoreIn> storeIn;         // "crafting" section (C14)
     std::optional<SaveRepair> repair;       // "repair" section (P4)
@@ -2334,6 +2335,9 @@ void saveCarePart(Ar& ar, AnimalCare& c) {
     ar.group("pathGoal", [&] { saveCell(ar, c.pathGoal); });
     ar.value("pathMode", c.pathMode);
     ar.require(static_cast<int>(c.pathMode) <= static_cast<int>(AnimalMode::EatItem), "the save file has a bad animal path mode");
+    if (ar.sectionVersion() >= 4) {  // animal beds
+        ar.value("bed", c.bed);
+    }
 }
 
 template <typename Ar>
@@ -3680,7 +3684,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.require(d.wildAnimals >= 0 && d.animals.percent >= 0, "the save file has a bad wild animal density");
         saveParts(ar, "animal", e, &SaveEntity::animal, [&](Animal& a) { saveAnimalPart(ar, a); });
     });
-    ar.section("husbandry", 3, [&] {
+    ar.section("husbandry", 4, [&] {
         ar.value("nextZone", d.husbandry.nextZone);
         ar.list("zones", d.husbandry.zones, [&](AnimalZone& z) {
             ar.value("id", z.id);
@@ -3924,7 +3928,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(p.zone >= 0 && p.zone < 64 && p.stepsLeft >= 0 && p.stepsLeft < 100000, "the save file has an impossible patch");
         });
     });
-    ar.section("prisoners", 3, [&] {
+    ar.section("prisoners", 4, [&] {
         saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
             ar.value("mode", p.mode);
             ar.value("resistance", p.resistance);
@@ -3933,8 +3937,20 @@ void saveSections(Ar& ar, SaveData& d) {
             if (ar.sectionVersion() >= 2) {  // executions
                 ar.value("guiltyUntil", p.guiltyUntil);
             }
-            ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::Execute), "the save file has a bad prisoner mode");
+            if (ar.sectionVersion() >= 4) {  // slaves
+                ar.value("will", p.will);
+            }
+            ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::ReduceWill), "the save file has a bad prisoner mode");
         });
+        if (ar.sectionVersion() >= 4) {
+            saveParts(ar, "slave", e, &SaveEntity::slave, [&](Slave& s) {
+                ar.value("suppression", s.suppression);
+                ar.value("enslavedAt", s.enslavedAt);
+                ar.value("nextSuppress", s.nextSuppress);
+                ar.value("homeFaction", s.homeFaction);
+                ar.require(s.suppression >= 0.0f && s.suppression <= 1.0f, "the save file has a bad slave suppression");
+            });
+        }
         saveParts(ar, "prisonBed", e, &SaveEntity::prisonBed, [&](PrisonBed& b) { ar.value("marked", b.marked); });
         if (ar.sectionVersion() >= 3) {  // arrests
             saveParts(ar, "arrest", e, &SaveEntity::arrest, [&](ArrestOrder& a) { ar.value("by", a.by); });
@@ -4517,6 +4533,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     }
     if (const ArrestOrder* arrest = reg.try_get<ArrestOrder>(e)) {
         out.arrest = *arrest;
+    }
+    if (const Slave* slave = reg.try_get<Slave>(e)) {
+        out.slave = *slave;
     }
     if (const Operations* operations = reg.try_get<Operations>(e)) {
         SaveOperations saved;
@@ -5141,6 +5160,9 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     }
     if (e.arrest) {
         reg.emplace<ArrestOrder>(entity, *e.arrest);
+    }
+    if (e.slave) {
+        reg.emplace<Slave>(entity, *e.slave);
     }
     if (e.defense) {
         reg.emplace<DefensePlan>(entity, *e.defense);

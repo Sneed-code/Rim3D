@@ -177,6 +177,11 @@ enum class EventType : uint8_t {
     // Windows (docs/design/windows.md).
     WindowBroken,          // the glass of the window in wall `thing` broke at (x, y, z), in `cell`: `target` the shooter or thrower, if known
     WindowChanged,         // a builder cut a window in wall `thing` at `cell` (`message` "added"), glazed a broken one ("glazed") or filled one in ("removed")
+    // Slavery (docs/design/prisoners.md, Slaves).
+    PrisonerEnslaved,      // a prisoner whose will was worn down became the colony's slave: `thing` the slave, `target` the warden
+    SlaveSuppressed,       // a warden suppressed a slave: `thing` the warden, `target` the slave, `amount` its suppression now (0 to 1)
+    SlaveRebellion,        // slaves rose up and run for the map edge: `count` how many, `thing` the one who started it
+    SlaveEmancipated,      // a slave was freed and joined the colony as a colonist: `thing` the pawn
 };
 
 // What stopped a projectile (ProjectileHit).
