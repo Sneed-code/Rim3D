@@ -72,7 +72,7 @@ struct BuildCostLine {
     int onMap = 0;
 };
 
-struct BuildPreview {
+struct COLONY_API BuildPreview {
     std::string whyNot;  // the whole order can't be given (unknown def, wrong stuff, research missing)
     std::vector<PlannedSpot> spots;
     int plannable = 0;
