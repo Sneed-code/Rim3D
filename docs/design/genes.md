@@ -22,8 +22,9 @@ A stat is `(base + sum of offsets) * product of factors`, over all of a pawn's g
 
 | Lineage | RimWorld | Genes | Metabolic efficiency | Complexity |
 | --- | --- | --- | --- | --- |
-| Baseline | baseliner | none | 0 | 0 |
-| Emberkin | Impid | 15 | 0 | 11 |
+| Baseline | baseliner | QuickLearner (sneed) | 0 | 0 |
+| Emberkin ("Impid") | Impid | sneed's 3 stat genes + fire spew + 4 cosmetic | 0 | 11 |
+| Orcoid, Drow, CatStrain | (sneed's) | see [races.md](races.md) | 0 | 0 |
 | Frostkin | Yttakin | 12 | -1 | 13 |
 | Warbred | Hussar | 14 | +2 | 16 (17 on the Hussar page) |
 | Ashborn | Waster | 9 | 0 | 13 |
@@ -38,6 +39,9 @@ Cosmetic alternatives (the wiki's three skin and hair choices for Emberkin) are 
 here. Not built: the drug dependency genes (Warbred, Ashborn: drugs are Stage 3), pollution
 stimulus, the Frostkin voice, hulk body and no-hair genes, sleep length, UV and indoor-dweller
 effects, abilities (fire spew, animal warcall). Each is in the data with a `later` note.
+
+sneed's races (2026-11-19) are in [races.md](races.md): their genes are in `Genes/RaceGenes.json` and replace the
+wiki's Emberkin genes.
 
 ## What the sim reads now
 

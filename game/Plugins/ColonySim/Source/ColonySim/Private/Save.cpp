@@ -1,5 +1,7 @@
 #include "ColonySim/Save.h"
 
+#include "ColonySim/Genes.h"
+
 #include "ColonySim/Animals.h"
 #include "ColonySim/Areas.h"
 #include "ColonySim/Landing.h"
@@ -4984,6 +4986,12 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     } else if (e.thing && e.thing->category == ThingCategory::Pawn &&
                sim.defs_->get(reg.get<Thing>(entity).def).has("race.body")) {
         reg.emplace<Health>(entity);  // saved before pawns had health
+    }
+    // The lineage's hit points (Orcoid +10%) follow the genes, made above from the looks; not saved.
+    if (Health* loadedHealth = reg.try_get<Health>(entity)) {
+        if (const PawnGenes* loadedGenes = reg.try_get<PawnGenes>(entity)) {
+            loadedHealth->lineageHp = loadedGenes->effects.healthScale;
+        }
     }
     if (e.playerControlled) {
         reg.emplace<PlayerControl>(entity);

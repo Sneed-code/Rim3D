@@ -1,4 +1,5 @@
 #include "ColonySim/Combat.h"
+#include "ColonySim/Genes.h"
 
 #include "ColonySim/Apparel.h"
 #include "ColonySim/BodyMotion.h"
@@ -1130,7 +1131,9 @@ Entity CombatSystem::fire(Entity pawn, float x, float y, float z, float spreadSl
     const Entity shot = launch(pawn, weaponDef, pos.x, pos.y, map_.heightAt(pos.x, pos.y) + muzzle, pos.level, cellOf(pos), x, y,
                                z, spreadSlope, rng, kickUp, kickSide, &reg.get<Posture>(pawn));
     if (shot != kNoEntity) {
-        reg.get<Projectile>(shot).damageFactor = rangedDamageFactor(weapon);
+        // The weapon's quality and stuff, and the shooter's lineage (drow +10%, docs/design/races.md).
+        const PawnGenes* genes = reg.try_get<PawnGenes>(pawn);
+        reg.get<Projectile>(shot).damageFactor = rangedDamageFactor(weapon) * (genes != nullptr ? genes->effects.rangedDamage : 1.0f);
     }
     return shot;
 }
@@ -1487,7 +1490,9 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     const float partsAccuracy = mods != nullptr ? mods->accuracy : 1.0f;
     const float quality = rangedAccuracyFactor(gear->weapon);
     const Entity shot = fire(pawn, fx, fy, fz,
-                             spread(weaponDef, skill, distance, s.player, accuracyFactor * quality * partsAccuracy * performance(pawn)) * steady + s.recoil,
+                             spread(weaponDef, skill, distance, s.player,
+                                    accuracyFactor * quality * partsAccuracy * performance(pawn) * (aimFactor_ ? std::max(0.05f, aimFactor_(pawn)) : 1.0f)) *
+                                     steady + s.recoil,
                              rng, kickUp, kickSide);
     if (shot != kNoEntity && s.player) {
         reg.get<Projectile>(shot).drawn = s.drawn;
@@ -2411,7 +2416,9 @@ bool CombatSystem::jolt(Entity pawn, int part, DefId damageType, float force, fl
 }
 
 float CombatSystem::traitMeleeDamage(Entity pawn) const {
-    return traits_ != nullptr ? traits_->of(pawn).meleeDamageFactor : 1.0f;
+    // Wimp's trait factor and the lineage's (Orcoid +10%, docs/design/races.md).
+    const PawnGenes* genes = things_.registry().valid(pawn) ? things_.registry().try_get<PawnGenes>(pawn) : nullptr;
+    return (traits_ != nullptr ? traits_->of(pawn).meleeDamageFactor : 1.0f) * (genes != nullptr ? genes->effects.meleeDamage : 1.0f);
 }
 
 int CombatSystem::poiseImmuneFor(Entity pawn) const {
@@ -2692,8 +2699,17 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
                 factor *= blast.wallFactor;
             }
         }
+        const Def& targetDef = things_.defs().get(reg.get<Thing>(target.building).def);
+        if (targetDef.flag("building.blastProof")) {
+            continue;  // a heavy bridge (RimWorld 1.6: immune to explosions)
+        }
         const int damage = std::max(1, static_cast<int>(std::lround(ex.damage * falloff(target.distance) * factor)));
         hp->current -= damage;
+        // A wooden bridge goes at once under a big enough blast (RimWorld: destroyOnBombDamageThreshold, 35 for a bridge).
+        const double bombThreshold = targetDef.number("building.bombThreshold", 0.0);
+        if (bombThreshold > 0.0 && ex.damageType == things_.defs().idOf("DamageTypes", "Bomb") && static_cast<double>(ex.damage * falloff(target.distance)) >= bombThreshold) {
+            hp->current = 0;
+        }
         ++result.buildingsHit;
         if (hp->current <= 0) {
             ++result.buildingsDestroyed;

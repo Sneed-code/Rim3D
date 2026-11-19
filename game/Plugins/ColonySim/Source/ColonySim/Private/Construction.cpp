@@ -226,10 +226,13 @@ std::string Construction::whyNotFloorPlan(DefId floor, DefId stuff, CellPos cell
         return "that isn't a floor that can be laid";
     }
     const Def& d = defs_.get(floor);
+    if (d.count("costs") == 0 && !d.has("costStuffCount") && !d.flag("smoothedFromRoughStone")) {
+        return "that floor is only found on roads";  // packed dirt, broken asphalt (docs/design/roads-bridges.md)
+    }
     if (!stuffFits(floor, stuff)) {
         return d.count("stuffCategories") == 0 ? "that floor is not made of anything" : "that floor can't be made of that";
     }
-    if (!map_.inBounds(cell) || cell.level != 0 || !map_.groundBuildable(cell, false)) {
+    if (!map_.inBounds(cell) || cell.level != 0 || !map_.groundBuildable(cell, false) || map_.hasDeck(cell)) {
         return "can't lay a floor on " + constructionCellText(cell);
     }
     if (floors_->at(cell) == floor) {
@@ -295,7 +298,7 @@ std::string Construction::whyNotBlueprint(DefId def, DefId stuff, CellPos cell, 
     const int sizeX = upperFloor ? 1 : std::max(1, static_cast<int>(d.numberAt("size", 0, 1.0)));
     const int sizeY = upperFloor ? 1 : std::max(1, static_cast<int>(d.numberAt("size", 1, 1.0)));
     const CellRect rect = footprintRect(cell, sizeX, sizeY, rot);
-    const bool onWater = d.flag("building.onFlowingWater");
+    const bool onWater = standsOnWater(d);  // a watermill or a bridge: no levelling
     if (d.has("building.climb") && rect.level + 1 >= Map::kLevels) {
         return "there is no level above " + constructionCellText(cell) + " to climb to";
     }
@@ -313,8 +316,10 @@ std::string Construction::whyNotBlueprint(DefId def, DefId stuff, CellPos cell, 
                 if (const std::string why = upperFloors_->whyNotLay(c); !why.empty()) {
                     return why;
                 }
-            } else if (!map_.inBounds(c) || !map_.groundBuildable(c, onWater)) {
-                return "can't build on " + constructionCellText(c);
+            } else if (!buildingFitsCell(map_, d, c)) {
+                return bridgeKindOf(d) == BridgeKind::Light   ? "a bridge goes on shallow water, marsh or mud, not " + constructionCellText(c)
+                       : bridgeKindOf(d) != BridgeKind::None ? "a heavy bridge goes on shallow water, marsh, mud or a river, not " + constructionCellText(c)
+                                                             : "can't build on " + constructionCellText(c);
             }
             if (map_.buildingAt(c) != kNoEntity) {
                 return "there is a building at " + constructionCellText(c);
@@ -365,7 +370,7 @@ Entity Construction::placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 r
     const int sizeX = upperFloor ? 1 : std::max(1, static_cast<int>(d.numberAt("size", 0, 1.0)));
     const int sizeY = upperFloor ? 1 : std::max(1, static_cast<int>(d.numberAt("size", 1, 1.0)));
     const CellRect rect = footprintRect(cell, sizeX, sizeY, rot);
-    const bool onWater = d.flag("building.onFlowingWater");
+    const bool onWater = standsOnWater(d);  // a watermill or a bridge: no levelling
 
     // The plan marks its ground to be dug or filled flat; a builder does that earthwork first, when it starts on
     // the frame (docs/design/earthworks.md). Sandbags and the like lean with the slope instead.

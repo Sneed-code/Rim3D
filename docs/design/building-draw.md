@@ -117,10 +117,11 @@ the size in metres it stands in, which footprint axis its long side takes, the t
 | TailorBenchHand, TailorBenchElectric, StonecutterTable, ButcherTable | wooden_table_03, wooden_table_01, wooden_table_03, wooden_table_02 (stretched to the footprint) |
 | FueledSmithy, Heater | scandinavian_masonry_heater; ElectricSmithy metal_tool_chest; MachiningTable and Dresser drawer_cabinet (stretched) |
 | ElectricStove, HospitalBed, CraftingSpot, ChessTable, BilliardsTable | electric_stove, old_bed_frame, wooden_cutting_board, wooden_table_01, dining_table |
-| WoodFiredGenerator, Battery, Cooler, Campfire | portable_generator, old_military_crate, exterior_aircon_unit, stone_fire_pit |
+| WoodFiredGenerator, Battery, Campfire | portable_generator, old_military_crate, stone_fire_pit |
 | StandingLamp, SunLamp, TorchLamp | street_lamp_01 (two heights), vintage_oil_lamp |
 | Armchair, EndTable, PlantPot | ArmChair_01, painted_wooden_nightstand, potted_plant_01 |
-| *Still shapes* | walls, PowerConduit, PowerSwitch, SolarGenerator, WindTurbine, Vent, PassiveCooler, Column, HorseshoesPin (no fitting free model), and floors (floors are terrain defs, drawn by the terrain, not as meshes) |
+| *Still shapes* | walls, Column, HorseshoesPin (no fitting free model), and floors (floors are terrain defs, drawn by the terrain, not as meshes) |
+| *Shapes in the data* (2026-11-19, power thread) | PowerConduit and PowerSwitch (a low dark cable stub; the switch a post with a box and a red lever), SolarGenerator (a dark blue panel tilted 20 degrees on three posts), WindTurbine (a 6.6 m white mast, nacelle and three blades), ChemfuelGenerator (an engine block with a red tank), Cooler (a piece of wall with a grille high on its cold side and a fan unit low on its hot side; the old aircon mesh stood loose in the room and is gone since the cooler went into the wall), Vent (a piece of wall with a louvred grille through it), PassiveCooler (a wooden box with a water tray) |
 
 Wall, steel, silver, the survival pack, components, medicine, chunks and guns stay as shapes: Poly Haven has no
 plain wall or ingot, and a box already reads as both.
@@ -180,6 +181,17 @@ from the snapshot on every refresh and folded into the chunk's signature, so a w
 A linked building is never turned (its arms point at the map's neighbours). One mesh is made per def, stuff and neighbour set
 (at most 16 a stuff). The placement ghost of the architect menu still shows the whole cell. Door frames (lintel and jambs) are
 as deep as a wall now, 0.5 m.
+
+**Walls join coolers and vents** (power thread, 2026-11-19): a def with `visual.joinsWalls` (the cooler and the vent, which
+stand in a wall line) counts as a neighbour for the walls beside it, as a door does, so the wall's arm reaches it and
+there is no gap.
+
+**Power cables** (power thread, 2026-11-19): a def with `visual.cable` (`thickness` and `height` in metres, `color`; the
+power conduit and the power switch) is drawn, once built, as a small junction with a low arm out to each side where a
+built building with a power part stands (another conduit or switch, a generator, battery or machine, any of its
+footprint cells), the way the sim's nets join them (power.md "Nets"). Like walls the neighbour set is in the chunk's
+signature and one mesh is made per neighbour set. The colour is the cable's own, not the stuff's. Before it is built,
+and on a machine without this code, the def's `parts` (a small dark stub) are drawn.
 
 The look bench (`look` smoke test) builds its room of wood and a sample wall of every block, steel and plasteel west of
 it, and takes an extra shot, `walls`, of the sample at noon. Spawned buildings have no stuff, so the test sets each wall's

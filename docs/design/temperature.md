@@ -61,6 +61,25 @@ with no wood still warmed its room. The **passive cooler** has the RimWorld wiki
 second -11, no lower than 17 C, a 50-wood tank burning 10 a day; one in a 25 cell room holds it well under 40 C on a
 49 C day.
 
+**The cooler stands in a wall** (sneed, 2026-11-19: "refrigeration, coolers"; RimWorld's `Building_Cooler`, def flag
+`heatPusher.inWall`). It is 1 x 1, impassable and holds the roof, so it is part of the wall and the rooms on its two sides
+stay two rooms. It **cools the cell in front of it** (the way it faces: north for a cooler placed facing north) and
+**pushes 1.25 times the heat it took out into the cell behind** (`exhaustFactor`). Pointed out of a building it blows its
+heat outdoors, where it is lost; pointed into another room it heats that room. Its output falls with how hot the back
+is: efficiency `1 - max(hot - cold, hot - 40) / 130`, floored at 0 (`efficiencyHotStartC`, `efficiencySpanC`), so one
+whose back is at 170 C or more does nothing. Both sides must be open (not a wall, rock or other blocking building), and
+the front must be an enclosed room, or it does nothing. Its default target is 21 C as RimWorld's (the thermostat
+goes to -50, so a freezer is a cooler set below 0). `TemperatureSystem::sidesOf(cooler, cold, hot)` gives the cells.
+RimWorld pushes the cooler's whole output out the back whenever it cools at all; **ours pushes 1.25 times what was
+really taken out** (ours), because with our slower walls the whole output boiled a room behind a cooler that only
+topped up.
+
+**Low power at the target** (RimWorld's `CompTempControl.lowPowerConsumptionFactor`, `heatPusher.lowPowerFactor` 0.1 on
+the heater and the cooler): every interval a running heater or cooler that changed its room's temperature draws its full
+power; one that idles at its target, or can do nothing (outdoors, a blocked side), draws a tenth (`Sim` sets
+`PowerGrid::setDraw` through `TemperatureSystem::setDrawFactor`). `TemperatureSystem::working(building)` tells which.
+A heater holding 21 C in a mild night now costs 17.5 W instead of 175.
+
 **Fire** (E4) pushes heat with `TemperatureSystem::addHeat(cell, heatPerSecond, seconds, maxTemp)`: the same formula as a
 pusher, once per fire pass, into the enclosed room the cell is in ([fire.md](fire.md)).
 

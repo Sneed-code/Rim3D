@@ -74,6 +74,11 @@ TemperatureSystem::TemperatureSystem(Map& map, Things& things, Rooms& rooms, Hea
         s.adjustable = d.flag("heatPusher.adjustable");
         s.isWall = d.flag("building.holdsRoof");
         s.isVent = d.flag("building.vent");
+        s.inWall = d.flag("heatPusher.inWall");
+        s.exhaustFactor = tempFloat(d, "heatPusher.exhaustFactor", s.exhaustFactor);
+        s.efficiencyHotStartC = tempFloat(d, "heatPusher.efficiencyHotStartC", s.efficiencyHotStartC);
+        s.efficiencySpanC = std::max(1.0f, tempFloat(d, "heatPusher.efficiencySpanC", s.efficiencySpanC));
+        s.lowPowerFactor = std::clamp(tempFloat(d, "heatPusher.lowPowerFactor", 0.0f), 0.0f, 1.0f);
     }
     hypothermia_ = defs.idOf("Hediffs", "Hypothermia");
     heatstroke_ = defs.idOf("Hediffs", "Heatstroke");
@@ -401,6 +406,8 @@ void TemperatureSystem::exchange() {
             now[room.id] += flow_[room.id];
         }
     }
+    working_.clear();
+    const double perInterval = kTempEnergyPerGameSecond * static_cast<double>(numbers_.intervalSeconds);
     for (const Entity source : sources_) {
         if (running_ && !running_(source)) {
             continue;
@@ -408,30 +415,96 @@ void TemperatureSystem::exchange() {
         const SourceDef& s = sourceDefs_[reg.get<Thing>(source).def.value];
         const auto target = thermostats_.find(source);
         const float limit = target != thermostats_.end() ? target->second : (s.heatPerSecond > 0.0f ? s.maxTemp : s.minTemp);
-        const RoomId id = roomOfSource(source);
-        if (id == kNoRoom || !usesRoomTemperature(list[id])) {
-            continue;  // heat pushed outdoors is lost
+        float heat = s.heatPerSecond;  // this interval's heat per second into the room it works on
+        RoomId id = kNoRoom;
+        RoomId exhaust = kNoRoom;      // in-wall pushers: the room behind, which takes the heat taken out
+        if (s.inWall) {
+            // RimWorld's Building_Cooler.TickRare: both sides must be open; the efficiency falls with how hot the
+            // hot side is, relative to the cold side or to 40 degrees, whichever is more.
+            CellPos cold;
+            CellPos hot;
+            if (sidesOf(source, cold, hot) && map_.inBounds(cold) && map_.inBounds(hot) &&
+                map_.passage(cold) != Passage::Blocked && map_.passage(hot) != Passage::Blocked &&
+                map_.terrain(cold) != Terrain::Rock && map_.terrain(hot) != Terrain::Rock) {
+                id = rooms_.roomAt(cold);
+                if (id != kNoRoom && usesRoomTemperature(list[id])) {
+                    const float hotT = temperatureBeyond(hot);
+                    const float coldT = frozen_[id];
+                    const float span = std::max(hotT - coldT, hotT - s.efficiencyHotStartC);
+                    heat = s.heatPerSecond * std::max(0.0f, 1.0f - span / s.efficiencySpanC);
+                    const RoomId behind = rooms_.roomAt(hot);
+                    exhaust = behind != kNoRoom && usesRoomTemperature(list[behind]) ? behind : kNoRoom;
+                }
+            }
+        } else {
+            id = roomOfSource(source);
         }
-        float& t = now[id];
-        const float dt = static_cast<float>(static_cast<double>(s.heatPerSecond) * kTempEnergyPerGameSecond *
-                                            static_cast<double>(numbers_.intervalSeconds) /
-                                            static_cast<double>(list[id].cellCount));
-        if (s.heatPerSecond > 0.0f) {
-            if (!s.hasMax) {
-                t += dt;
-            } else if (t < limit) {
-                t = std::min(limit, t + dt);
+        bool changed = false;
+        float taken = 0.0f;  // degrees the room it works on moved this interval
+        if (id != kNoRoom && usesRoomTemperature(list[id])) {
+            float& t = now[id];
+            const float before = t;
+            const float dt = static_cast<float>(static_cast<double>(heat) * perInterval / static_cast<double>(list[id].cellCount));
+            if (heat > 0.0f) {
+                if (!s.hasMax) {
+                    t += dt;
+                } else if (t < limit) {
+                    t = std::min(limit, t + dt);
+                }
+            } else if (heat < 0.0f) {
+                if (!s.hasMin) {
+                    t += dt;
+                } else if (t > limit) {
+                    t = std::max(limit, t + dt);
+                }
             }
-        } else if (s.heatPerSecond < 0.0f) {
-            if (!s.hasMin) {
-                t += dt;
-            } else if (t > limit) {
-                t = std::max(limit, t + dt);
+            changed = t != before;
+            taken = before - t;
+        }  // else: heat pushed outdoors is lost
+        if (changed) {
+            working_.push_back(source);
+            if (exhaust != kNoRoom) {
+                // The heat taken out of the cold side, and a quarter more, goes into the room behind; outdoors it is
+                // lost. RimWorld pushes the cooler's whole output whenever it cools at all; ours pushes what was really
+                // taken out (ours: with our slower walls the whole output boiled a room behind a cooler holding its target).
+                now[exhaust] += static_cast<float>(static_cast<double>(taken) * static_cast<double>(list[id].cellCount) *
+                                                   static_cast<double>(s.exhaustFactor) / static_cast<double>(list[exhaust].cellCount));
             }
+        }
+        if (s.lowPowerFactor > 0.0f && drawFactor_) {
+            drawFactor_(source, changed ? 1.0 : static_cast<double>(s.lowPowerFactor));
         }
     }
     roomTemp_ = std::move(now);
     storeCells();
+}
+
+bool TemperatureSystem::working(Entity building) const {
+    return std::binary_search(working_.begin(), working_.end(), building);
+}
+
+bool TemperatureSystem::sidesOf(Entity building, CellPos& cold, CellPos& hot) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(building)) {
+        return false;
+    }
+    const Thing* thing = reg.try_get<Thing>(building);
+    const Footprint* footprint = reg.try_get<Footprint>(building);
+    if (thing == nullptr || footprint == nullptr || thing->def.value >= sourceDefs_.size() || !sourceDefs_[thing->def.value].inWall) {
+        return false;
+    }
+    const CellRect rect = footprint->rect();
+    int dx = 0;
+    int dy = 0;
+    switch (footprint->rotation) {
+        case Rot4::North: dy = 1; break;
+        case Rot4::East: dx = 1; break;
+        case Rot4::South: dy = -1; break;
+        case Rot4::West: dx = -1; break;
+    }
+    cold = CellPos{rect.minX + dx, rect.minY + dy, rect.level};
+    hot = CellPos{rect.minX - dx, rect.minY - dy, rect.level};
+    return true;
 }
 
 // The enclosed room a heat source is in: the room of one of its cells, else of a cell next to it.
@@ -483,10 +556,13 @@ void TemperatureSystem::exposePawns(int64_t now) {
         const float ambient = ambientOf(pawn);
         const float safeMin = min - numbers_.safeMarginC;
         const float safeMax = max + numbers_.safeMarginC;
+        // An Impid's thermal resistance: heat and cold injuries build up 90% slower (docs/design/races.md).
+        const PawnGenes* genes = reg.try_get<PawnGenes>(pawn);
+        const float thermal = genes != nullptr ? genes->effects.thermalDamage : 1.0f;
         if (hypothermia_.valid()) {
             const float before = health_.environmentSeverity(pawn, hypothermia_);
             if (ambient < safeMin) {
-                health_.setEnvironmentSeverity(pawn, hypothermia_, before + (safeMin - ambient) * coldPerDay_ * days);
+                health_.setEnvironmentSeverity(pawn, hypothermia_, before + (safeMin - ambient) * coldPerDay_ * days * thermal);
             } else if (before > 0.0f) {
                 health_.setEnvironmentSeverity(pawn, hypothermia_, before - coldRecoverPerDay_ * days);
             }
@@ -494,7 +570,7 @@ void TemperatureSystem::exposePawns(int64_t now) {
         if (heatstroke_.valid()) {
             const float before = health_.environmentSeverity(pawn, heatstroke_);
             if (ambient > safeMax) {
-                health_.setEnvironmentSeverity(pawn, heatstroke_, before + (ambient - safeMax) * hotPerDay_ * days);
+                health_.setEnvironmentSeverity(pawn, heatstroke_, before + (ambient - safeMax) * hotPerDay_ * days * thermal);
             } else if (before > 0.0f) {
                 health_.setEnvironmentSeverity(pawn, heatstroke_, before - hotRecoverPerDay_ * days);
             }

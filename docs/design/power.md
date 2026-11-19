@@ -82,7 +82,7 @@ none after 19:00; ours) for a grid with no sun source set; wind follows E1's wea
 | `netOf(b)`, `net(id)`, `nets()`, `membersOf(id)` | nets and what is on them |
 | `wattsOf(b)`, `storedIn(b)`, `capacityOf(b)` | power now (+ making, - drawing) and battery charge |
 | `flick(b, on, error)` | a switch opens or closes; a consumer or generator is switched on or off. Batteries and plain conduits cannot be flicked |
-| `setDraw(b, watts)` | a consumer asks for less than its full draw (a heater that reached its temperature: E2), or negative for the def's value |
+| `setDraw(b, watts)` | a consumer asks for less than its full draw, or negative for the def's value. A heater or cooler at its target draws a tenth (temperature.md, "Low power at the target") |
 | `shortCircuit(b, released, error)` | empties every battery on b's net, returns the energy in Wd, and sends a `ShortCircuit` event with it |
 
 **Hooks** (set on the grid by `Sim` or by the system that owns the source):

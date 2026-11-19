@@ -205,6 +205,14 @@ Entity Things::make(DefId defId, int stackCount) {
 }
 
 void Things::placeFootprint(Entity thing, const CellRect& rect, const Footprint& footprint) {
+    const Def* def = buildingDef(thing);
+    if (def != nullptr && bridgeKindOf(*def) != BridgeKind::None && rect.level == 0) {
+        for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
+            for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
+                map_.setDeck(CellPos{x, y, 0});
+            }
+        }
+    }
     const Passage passage = footprint.blocksMovement ? Passage::Blocked
                             : footprint.isDoor       ? Passage::Door
                                                      : Passage::Open;
@@ -235,6 +243,40 @@ GroundFit groundFitOf(const Def& d) {
     return category.empty() || category == "Structure" ? GroundFit::Level : GroundFit::Flat;
 }
 
+BridgeKind bridgeKindOf(const Def& d) {
+    const std::string kind = d.text("building.bridge");
+    if (kind == "Light") {
+        return BridgeKind::Light;
+    }
+    if (kind == "Heavy") {
+        return BridgeKind::Heavy;
+    }
+    if (kind == "Ancient") {
+        return BridgeKind::Ancient;
+    }
+    return BridgeKind::None;
+}
+
+bool standsOnWater(const Def& d) {
+    return d.flag("building.onFlowingWater") || bridgeKindOf(d) != BridgeKind::None;
+}
+
+bool buildingFitsCell(const Map& map, const Def& d, CellPos c) {
+    if (!map.inBounds(c)) {
+        return false;
+    }
+    const BridgeKind bridge = bridgeKindOf(d);
+    if (bridge != BridgeKind::None) {
+        return map.bridgeable(c, bridge != BridgeKind::Light, bridge == BridgeKind::Ancient);
+    }
+    return map.groundBuildable(c, d.flag("building.onFlowingWater"));
+}
+
+const Def* Things::buildingDef(Entity thing) const {
+    const Thing* t = registry_.try_get<Thing>(thing);
+    return t != nullptr && t->def.valid() ? &defs_->get(t->def) : nullptr;
+}
+
 bool Things::standsOnFlowingWater(Entity thing) const {
     const Thing* t = registry_.try_get<Thing>(thing);
     return t != nullptr && t->def.valid() && defs_->get(t->def).flag("building.onFlowingWater");
@@ -258,11 +300,15 @@ bool Things::spawnAt(Entity thing, CellPos cell, Rot4 rot) {
     }
 
     const CellRect rect = footprintRect(cell, footprint->sizeX, footprint->sizeY, rot);
-    const bool onWater = standsOnFlowingWater(thing);
+    const Def* placedDef = buildingDef(thing);
+    const bool onWater = placedDef != nullptr && standsOnWater(*placedDef);
+    const auto thingCellFits = [&](CellPos c) {
+        return placedDef != nullptr ? buildingFitsCell(map_, *placedDef, c) : map_.inBounds(c) && map_.groundWalkable(c);
+    };
     for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
         for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
             const CellPos c{x, y, rect.level};
-            if (!map_.inBounds(c) || !map_.groundBuildable(c, onWater) || map_.buildingAt(c) != kNoEntity) {
+            if (!thingCellFits(c) || map_.buildingAt(c) != kNoEntity) {
                 return false;
             }
         }
@@ -295,11 +341,14 @@ bool Things::relink(Entity thing) {
         return true;
     }
     const CellRect rect = footprint->rect();
-    const bool onWater = standsOnFlowingWater(thing);
+    const Def* placedDef = buildingDef(thing);
+    const auto thingCellFits = [&](CellPos c) {
+        return placedDef != nullptr ? buildingFitsCell(map_, *placedDef, c) : map_.inBounds(c) && map_.groundWalkable(c);
+    };
     for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
         for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
             const CellPos c{x, y, rect.level};
-            if (!map_.inBounds(c) || !map_.groundBuildable(c, onWater) || map_.buildingAt(c) != kNoEntity) {
+            if (!thingCellFits(c) || map_.buildingAt(c) != kNoEntity) {
                 return false;
             }
         }
@@ -318,6 +367,7 @@ void Things::despawn(Entity thing) {
         for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
             for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
                 map_.clearBuilding(CellPos{x, y, rect.level});
+                map_.clearDeck(CellPos{x, y, rect.level});  // a bridge's deck goes with it (nothing else has one)
             }
         }
         map_.removeLevelLinks(thing);

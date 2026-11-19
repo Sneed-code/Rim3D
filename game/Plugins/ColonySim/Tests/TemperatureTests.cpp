@@ -248,15 +248,15 @@ TEST_CASE("Temperature: a heater warms a room to its limit and holds it, a coole
         tempHours(*sim, 48.0);
         CHECK(tempAt(*sim, 13, 13) < 3.0f);
     }
-    // Summer: a cooler holds a 40 degree room at 10.
+    // Summer: a cooler in the wall, facing in, holds a 40 degree room at its 21 (RimWorld's default target).
     {
         auto sim = tempSim(40.0f);
-        tempRing(*sim, 10, 10, 16, 16);
-        TEMP_REQUIRE(sim->things().spawn("Cooler", CellPos{12, 12, 0}) != kNoEntity);
+        tempRing(*sim, 10, 10, 16, 16, {CellPos{13, 16, 0}});
+        TEMP_REQUIRE(sim->things().spawn("Cooler", CellPos{13, 16, 0}, 1, Rot4::South) != kNoEntity);
         sim->rooms().update();
         tempClock = 0;
         tempHours(*sim, 48.0);
-        CHECK(tempAt(*sim, 13, 13) == doctest::Approx(10.0f).epsilon(0.002));
+        CHECK(tempAt(*sim, 13, 13) == doctest::Approx(21.0f).epsilon(0.002));
     }
     // A campfire inside warms a cold room, but not past its own 28 degrees.
     {
@@ -617,9 +617,9 @@ TEST_CASE("Temperature: a thermostat sets what a heater or cooler holds, and it 
         auto sim = tempSim(-10.0f, 48, false);
         sim->temperature().setSourceRunning([](Entity) { return true; });
         tempRing(*sim, 10, 10, 16, 16);
-        tempRing(*sim, 16, 10, 22, 16);
+        tempRing(*sim, 16, 10, 22, 16, {CellPos{22, 12, 0}});
         heater = sim->things().spawn("Heater", CellPos{12, 12, 0});
-        cooler = sim->things().spawn("Cooler", CellPos{19, 12, 0});
+        cooler = sim->things().spawn("Cooler", CellPos{22, 12, 0}, 1, Rot4::West);  // in the east wall, cold side in
         sim->rooms().update();
         return sim;
     };
@@ -628,10 +628,10 @@ TEST_CASE("Temperature: a thermostat sets what a heater or cooler holds, and it 
     auto sim = make(heater, cooler);
     TEMP_REQUIRE(heater != kNoEntity && cooler != kNoEntity);
 
-    // Without a setting the def's limits hold: the heater 21, the cooler 10.
+    // Without a setting the def's limits hold: the heater 21, the cooler 21.
     CHECK_FALSE(sim->temperature().hasThermostat(heater));
     CHECK(sim->temperature().thermostat(heater) == 21.0f);
-    CHECK(sim->temperature().thermostat(cooler) == 10.0f);
+    CHECK(sim->temperature().thermostat(cooler) == 21.0f);
     tempClock = 0;
     tempHours(*sim, 12.0);
     CHECK(tempAt(*sim, 13, 13) == doctest::Approx(21.0f).epsilon(0.02));
@@ -687,4 +687,130 @@ TEST_CASE("Temperature: a thermostat sets what a heater or cooler holds, and it 
     sim->things().destroy(heater);
     sim->step();
     CHECK(sim->temperature().thermostats().size() == 1);
+}
+
+TEST_CASE("Temperature: a cooler stands in a wall, cools the room it faces and blows a quarter more heat out the back") {
+    // Two 5 x 5 rooms (inside 11..15) side by side, sharing the wall x = 16; the cooler sits in that wall facing west.
+    auto sim = tempSim(30.0f);
+    tempRing(*sim, 10, 10, 16, 16, {CellPos{16, 13, 0}});
+    tempRing(*sim, 16, 10, 22, 16, {CellPos{16, 13, 0}});
+    const Entity cooler = sim->things().spawn("Cooler", CellPos{16, 13, 0}, 1, Rot4::West);
+    TEMP_REQUIRE(cooler != kNoEntity);
+    sim->rooms().update();
+    CellPos cold;
+    CellPos hot;
+    TEMP_REQUIRE(sim->temperature().sidesOf(cooler, cold, hot));
+    CHECK(cold == CellPos{15, 13, 0});
+    CHECK(hot == CellPos{17, 13, 0});
+    CHECK(sim->rooms().roomAt(cold) != sim->rooms().roomAt(hot));  // the cooler is a wall: two rooms
+    CHECK(sim->map().passage(CellPos{16, 13, 0}) == Passage::Blocked);
+    tempClock = 0;
+    tempHours(*sim, 1.0);
+    CHECK(sim->temperature().working(cooler));
+    CHECK(tempAt(*sim, 13, 13) < 25.0f);  // the west room cools fast
+    CHECK(tempAt(*sim, 19, 13) > 34.0f);  // the east room takes the heat
+    tempHours(*sim, 47.0);
+    CHECK(tempAt(*sim, 13, 13) == doctest::Approx(21.0f).epsilon(0.002));
+    CHECK(tempAt(*sim, 19, 13) > 31.0f);
+    // The east room ends up warmer than it would be with the cooler off: it took the heat and a quarter more.
+    // With the outdoors colder than its target it idles.
+    sim->setOutdoorOverride(10.0f);
+    tempHours(*sim, 72.0);
+    CHECK(tempAt(*sim, 13, 13) < 20.0f);
+    CHECK_FALSE(sim->temperature().working(cooler));
+
+    // A heater is not an in-wall pusher.
+    const Entity heater = sim->things().spawn("Heater", CellPos{12, 12, 0});
+    TEMP_REQUIRE(heater != kNoEntity);
+    CHECK_FALSE(sim->temperature().sidesOf(heater, cold, hot));
+}
+
+TEST_CASE("Temperature: a cooler works less the hotter its back, nothing with a blocked side, and nothing facing the open") {
+    // Its back in a furnace room at 200 C: no cooling at all (efficiency 1 - (200 - 40) / 130 is below 0).
+    {
+        auto sim = tempSim(30.0f);
+        tempRing(*sim, 10, 10, 16, 16, {CellPos{16, 13, 0}});
+        tempRing(*sim, 16, 10, 22, 16, {CellPos{16, 13, 0}});
+        const Entity cooler = sim->things().spawn("Cooler", CellPos{16, 13, 0}, 1, Rot4::West);
+        TEMP_REQUIRE(cooler != kNoEntity);
+        sim->rooms().update();
+        tempClock = 0;
+        tempHours(*sim, 0.02);
+        sim->temperature().addHeat(CellPos{19, 13, 0}, 1.0e6, 60.0, 200.0f);  // the back room at 200 C
+        const float back = tempAt(*sim, 19, 13);
+        TEMP_REQUIRE(back > 175.0f);
+        const float before = tempAt(*sim, 13, 13);
+        tempHours(*sim, 0.05);
+        CHECK(tempAt(*sim, 13, 13) >= before - 0.05f);  // hardly any cooling
+        CHECK_FALSE(sim->temperature().working(cooler));
+    }
+    // A wall behind it: it can do nothing.
+    {
+        auto sim = tempSim(40.0f);
+        tempRing(*sim, 10, 10, 16, 16, {CellPos{13, 16, 0}});
+        const Entity cooler = sim->things().spawn("Cooler", CellPos{13, 16, 0}, 1, Rot4::South);
+        TEMP_REQUIRE(cooler != kNoEntity);
+        TEMP_REQUIRE(sim->things().spawn("Wall", CellPos{13, 17, 0}) != kNoEntity);
+        sim->rooms().update();
+        tempClock = 0;
+        tempHours(*sim, 24.0);
+        CHECK(tempAt(*sim, 13, 13) > 39.0f);
+        CHECK_FALSE(sim->temperature().working(cooler));
+    }
+    // Facing out of the room (cold side outdoors, hot side in): it heats nothing and cools nothing.
+    {
+        auto sim = tempSim(40.0f);
+        tempRing(*sim, 10, 10, 16, 16, {CellPos{13, 16, 0}});
+        const Entity cooler = sim->things().spawn("Cooler", CellPos{13, 16, 0}, 1, Rot4::North);
+        TEMP_REQUIRE(cooler != kNoEntity);
+        sim->rooms().update();
+        tempClock = 0;
+        tempHours(*sim, 24.0);
+        CHECK(tempAt(*sim, 13, 13) == doctest::Approx(40.0f).epsilon(0.01));
+        CHECK_FALSE(sim->temperature().working(cooler));
+    }
+    // A freezer: set to -10 in a 35 degree jungle, a cooler venting outdoors brings a small room below freezing.
+    {
+        auto sim = tempSim(35.0f);
+        tempRing(*sim, 10, 10, 14, 14, {CellPos{12, 14, 0}});
+        const Entity cooler = sim->things().spawn("Cooler", CellPos{12, 14, 0}, 1, Rot4::South);
+        TEMP_REQUIRE(cooler != kNoEntity);
+        sim->rooms().update();
+        std::string why;
+        TEMP_REQUIRE(sim->temperature().setThermostat(cooler, -10.0f, &why));
+        tempClock = 0;
+        tempHours(*sim, 48.0);
+        CHECK(tempAt(*sim, 12, 12) < 0.0f);
+    }
+}
+
+TEST_CASE("Temperature: a heater or cooler at its target draws a tenth of its power, and full power while it works") {
+    auto sim = tempSim(-10.0f, 48, true);
+    tempRing(*sim, 10, 10, 16, 16);
+    const Entity heater = sim->things().spawn("Heater", CellPos{11, 11, 0});
+    TEMP_REQUIRE(heater != kNoEntity);
+    // A wood-fired generator (always fuelled here) in the room, joined to the heater by three conduits.
+    const Entity generator = sim->things().spawn("WoodFiredGenerator", CellPos{13, 13, 0});
+    TEMP_REQUIRE(generator != kNoEntity);
+    for (int y = 11; y <= 13; ++y) {
+        TEMP_REQUIRE(sim->things().spawn("PowerConduit", CellPos{12, y, 0}) != kNoEntity);
+    }
+    sim->power().setFuel([](Entity) { return true; });
+    sim->temperature().setSourceRunning([&sim](Entity b) { return sim->power().running(b); });
+    sim->rooms().update();
+    sim->step();
+    TEMP_REQUIRE(sim->power().running(heater));
+    sim->temperature().step(0);
+    sim->step();
+    CHECK(sim->temperature().working(heater));
+    CHECK(sim->power().wattsOf(heater) == doctest::Approx(-175.0));
+    tempClock = 60;
+    tempHours(*sim, 48.0);
+    sim->step();
+    // Held at 21 against a -10 outdoors it tops up now and then; with the outdoors at 21 it only idles.
+    sim->setOutdoorOverride(21.0f);
+    tempHours(*sim, 96.0);
+    sim->step();
+    CHECK_FALSE(sim->temperature().working(heater));
+    CHECK(sim->power().wattsOf(heater) == doctest::Approx(-17.5));
 }

@@ -126,9 +126,22 @@ bool JobSystem::canUseHands(Entity pawn) const {
 
 float JobSystem::workFactor(Entity pawn) const {
     const Position* at = lights_ != nullptr ? things_.registry().try_get<Position>(pawn) : nullptr;
-    // The light on the pawn, its drugs and its own nature: industrious works faster, lazy slower (TraitStats).
-    return (at != nullptr ? lights_->workSpeedAt(cellOf(*at)) : 1.0f) * health_.workSpeedFactor(pawn) *
-           (traits_ != nullptr ? traits_->of(pawn).workSpeed : 1.0f) * (gearWorkFactor_ ? gearWorkFactor_(pawn) : 1.0f) *
+    const PawnGenes* genes = things_.registry().valid(pawn) ? things_.registry().try_get<PawnGenes>(pawn) : nullptr;
+    const GeneEffects* fx = genes != nullptr ? &genes->effects : nullptr;
+    // The light on the pawn (none of its slowdown with dark vision), its drugs and its own nature: industrious works
+    // faster, lazy slower (TraitStats). Its lineage: Orcoid slower, drow faster in the dark and slower in sunlight.
+    float light = 1.0f;
+    float lineage = fx != nullptr ? fx->workSpeed : 1.0f;
+    if (at != nullptr) {
+        const CellPos cell = cellOf(*at);
+        light = geneLightFactor(fx, lights_->workSpeedAt(cell));
+        if (fx != nullptr) {
+            const bool sunlit = lights_->skyGlow() > fx->sunAbove && lights_->underOpenSky(cell);
+            lineage = geneWorkFactor(*fx, lights_->lightAt(cell), sunlit);
+        }
+    }
+    return light * lineage * health_.workSpeedFactor(pawn) * (traits_ != nullptr ? traits_->of(pawn).workSpeed : 1.0f) *
+           (gearWorkFactor_ ? gearWorkFactor_(pawn) : 1.0f) *
            (prisoners_ != nullptr ? prisoners_->workSpeedFactor(pawn) : 1.0f);  // a slave works at 85%
 }
 
@@ -173,7 +186,10 @@ void JobSystem::learnSkill(Entity pawn, const char* skill, double xp) {
     }
     for (SkillRecord& record : colonist->skills) {
         if (record.def == skill) {
-            learnSkillXp(skillRules_, record, traits_ != nullptr ? xp * traits_->of(pawn).learningFactor : xp);
+            // Learners learn faster, and so does a lineage: baseline +20%, Orcoid -10% (docs/design/races.md).
+            const PawnGenes* learnerGenes = things_.registry().try_get<PawnGenes>(pawn);
+            const double geneLearn = learnerGenes != nullptr ? learnerGenes->effects.learning : 1.0;
+            learnSkillXp(skillRules_, record, (traits_ != nullptr ? xp * traits_->of(pawn).learningFactor : xp) * geneLearn);
             return;
         }
     }

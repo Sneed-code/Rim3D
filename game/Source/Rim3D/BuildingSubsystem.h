@@ -106,11 +106,22 @@ private:
 		bool bDoor = false;
 		/** Leans with the slope instead of standing on dug ground (building.groundFit Conform: sandbags, barricades, traps). */
 		bool bConform = false;
+		/** A bridge (building.bridge, docs/design/roads-bridges.md): stands at its deck's height (the snapshot's z), not on the river bed. */
+		bool bDeck = false;
 		/** Drawn by a subsystem of its own (visual.drawnBy, e.g. "shuttle": UShuttleSubsystem), so not here. */
 		bool bDrawnElsewhere = false;
 		/** Joins the walls, doors and rock beside it (visual.link, L4): drawn as a post with an arm to each, `LinkThicknessCm` thick. */
 		bool bLink = false;
 		float LinkThicknessCm = 50.0f;
+		/** Walls join it as they join a door (visual.joinsWalls: the cooler and the vent, which stand in a wall line). */
+		bool bJoinsWalls = false;
+		/** Has a power part (def `power`): power cables run up to it. */
+		bool bPowered = false;
+		/** A power cable (visual.cable: conduits, switches): a low run with an arm to each powered building beside it. */
+		bool bCable = false;
+		float CableThicknessCm = 7.0f;
+		float CableHeightCm = 5.0f;
+		FLinearColor CableColor = FLinearColor(0.12f, 0.12f, 0.13f);
 		FVector2f FootprintCm = FVector2f(100.0f, 100.0f);
 		TArray<VisualMesh::FPart> Parts;
 		bool bHasSliding = false;
