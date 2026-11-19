@@ -182,6 +182,17 @@ A linked building is never turned (its arms point at the map's neighbours). One 
 (at most 16 a stuff). The placement ghost of the architect menu still shows the whole cell. Door frames (lintel and jambs) are
 as deep as a wall now, 0.5 m.
 
+**Walls join coolers and vents** (power thread, 2026-11-19): a def with `visual.joinsWalls` (the cooler and the vent, which
+stand in a wall line) counts as a neighbour for the walls beside it, as a door does, so the wall's arm reaches it and
+there is no gap.
+
+**Power cables** (power thread, 2026-11-19): a def with `visual.cable` (`thickness` and `height` in metres, `color`; the
+power conduit and the power switch) is drawn, once built, as a small junction with a low arm out to each side where a
+built building with a power part stands (another conduit or switch, a generator, battery or machine, any of its
+footprint cells), the way the sim's nets join them (power.md "Nets"). Like walls the neighbour set is in the chunk's
+signature and one mesh is made per neighbour set. The colour is the cable's own, not the stuff's. Before it is built,
+and on a machine without this code, the def's `parts` (a small dark stub) are drawn.
+
 The look bench (`look` smoke test) builds its room of wood and a sample wall of every block, steel and plasteel west of
 it, and takes an extra shot, `walls`, of the sample at noon. Spawned buildings have no stuff, so the test sets each wall's
 `BuiltOf` itself.
