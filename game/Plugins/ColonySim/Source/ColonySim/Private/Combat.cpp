@@ -2661,8 +2661,17 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
                 factor *= blast.wallFactor;
             }
         }
+        const Def& targetDef = things_.defs().get(reg.get<Thing>(target.building).def);
+        if (targetDef.flag("building.blastProof")) {
+            continue;  // a heavy bridge (RimWorld 1.6: immune to explosions)
+        }
         const int damage = std::max(1, static_cast<int>(std::lround(ex.damage * falloff(target.distance) * factor)));
         hp->current -= damage;
+        // A wooden bridge goes at once under a big enough blast (RimWorld: destroyOnBombDamageThreshold, 35 for a bridge).
+        const double bombThreshold = targetDef.number("building.bombThreshold", 0.0);
+        if (bombThreshold > 0.0 && ex.damageType == things_.defs().idOf("DamageTypes", "Bomb") && static_cast<double>(ex.damage * falloff(target.distance)) >= bombThreshold) {
+            hp->current = 0;
+        }
         ++result.buildingsHit;
         if (hp->current <= 0) {
             ++result.buildingsDestroyed;

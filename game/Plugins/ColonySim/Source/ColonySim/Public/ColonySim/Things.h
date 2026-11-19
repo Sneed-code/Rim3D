@@ -56,6 +56,17 @@ enum class GroundFit : uint8_t { Level, Flat, Conform };
 inline constexpr float kFlatMaxRiseM = 0.25f;
 COLONY_API GroundFit groundFitOf(const Def& d);
 
+// Bridges (docs/design/roads-bridges.md), the def's `building.bridge`: Light (a wooden bridge: shallow water,
+// marsh, mud), Heavy (a steel heavy bridge: those and a river's deep water) or Ancient (the old bridges map
+// generation lays where a road crosses water: any water). A bridge lays a deck its cell can be walked on.
+enum class BridgeKind : uint8_t { None, Light, Heavy, Ancient };
+COLONY_API BridgeKind bridgeKindOf(const Def& d);
+// The building stands on water (a watermill or a bridge), so its ground is never levelled.
+COLONY_API bool standsOnWater(const Def& d);
+// A ground cell a building of this def can stand on (ignoring other buildings): moving water for a watermill,
+// bridgeable water for a bridge, else walkable ground.
+COLONY_API bool buildingFitsCell(const Map& map, const Def& d, CellPos c);
+
 // Buildings. Size and blocking come from the def (`size`, `passability`). A door is a def with
 // `thingClass` Building_Door, as in RimWorld, and never blocks movement. `fillPercent` makes it
 // block sight and give cover. Origin and rotation are set while the building is spawned.
@@ -244,6 +255,7 @@ private:
 
     void indexItem(Entity thing, CellPos cell, bool add);
     bool standsOnFlowingWater(Entity thing) const;  // def flag `building.onFlowingWater`: a watermill
+    const Def* buildingDef(Entity thing) const;      // the def of a thing, null if it has none
     void placeFootprint(Entity thing, const CellRect& rect, const Footprint& footprint);
     void report(EventType type, Entity thing, CellPos cell = CellPos{});
 };

@@ -171,6 +171,61 @@ float Map::waterSurface(CellPos c) const {
     return !std::isnan(waterTable_) && waterTable_ > ground ? waterTable_ : own;
 }
 
+bool Map::bridgeable(CellPos c, bool deepRiver, bool anyWater) const {
+    if (!onGround(c) || hasDeck(c)) {
+        return false;
+    }
+    const Terrain t = terrain(c);
+    if (t == Terrain::ShallowWater || t == Terrain::Marsh || t == Terrain::Mud) {
+        return true;
+    }
+    return t == Terrain::Water && (anyWater || (deepRiver && flowing(c)));
+}
+
+void Map::setDeck(CellPos c) {
+    if (!onGround(c)) {
+        return;
+    }
+    if (deck_.empty()) {
+        deck_.assign(groundHeight_.size(), std::nanf(""));
+    }
+    const size_t i = static_cast<size_t>(index(c));
+    float top = groundHeight_[i];
+    const int x1 = std::min(c.x + 1, width_ - 1);
+    const int y1 = std::min(c.y + 1, height_ - 1);
+    top = std::max({top, groundHeight_[static_cast<size_t>(c.y * width_ + x1)], groundHeight_[static_cast<size_t>(y1 * width_ + c.x)],
+                    groundHeight_[static_cast<size_t>(y1 * width_ + x1)]});
+    const float surface = waterSurface(c);
+    if (!std::isnan(surface)) {
+        top = std::max(top, surface);
+    }
+    const bool had = !std::isnan(deck_[i]);
+    deck_[i] = top + kDeckLiftM;
+    if (!had) {
+        ++deckCount_;
+        regions_->markDirty(c);
+        cover_->markDirty(c);
+    }
+}
+
+void Map::clearDeck(CellPos c) {
+    if (!hasDeck(c)) {
+        return;
+    }
+    const size_t i = static_cast<size_t>(index(c));
+    deck_[i] = std::nanf("");
+    --deckCount_;
+    deckLost_.push_back(static_cast<uint32_t>(i));
+    regions_->markDirty(c);
+    cover_->markDirty(c);
+}
+
+std::vector<uint32_t> Map::takeLostDecks() {
+    std::vector<uint32_t> lost;
+    lost.swap(deckLost_);
+    return lost;
+}
+
 float Map::waterDepthAt(float x, float y, int level) const {
     if (level != 0) {
         return 0.0f;
@@ -993,6 +1048,12 @@ float Map::heightAt(float x, float y, int level) const {
     const int y1 = std::min(y0 + 1, height_ - 1);
     const float fx = x - static_cast<float>(x0);
     const float fy = y - static_cast<float>(y0);
+    if (!deck_.empty() && level == 0) {
+        const float deck = deck_[static_cast<size_t>(y0 * width_ + x0)];
+        if (!std::isnan(deck)) {
+            return deck;  // a bridge deck is flat
+        }
+    }
     const auto h = [this](int cx, int cy) { return groundHeight_[static_cast<size_t>(cy * width_ + cx)]; };
     const float top = h(x0, y0) + (h(x1, y0) - h(x0, y0)) * fx;
     const float bottom = h(x0, y1) + (h(x1, y1) - h(x0, y1)) * fx;
