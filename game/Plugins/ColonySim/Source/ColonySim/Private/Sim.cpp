@@ -383,6 +383,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         return static_cast<float>(defs_->get(things_->registry().get<Thing>(pawn).def).number("race.baseBodySize", 1.0));
     });
     movement_->setBodyHeight([this](Entity pawn) { return bodyHeightM(pawn); });
+    // Plants and bodies (docs/design/plant-bodies.md): trunks are solid for walking and for thrown bodies alike.
+    movement_->setPlants(plants_.get());
+    movement_->setBodyRadius([this](Entity pawn) { return combat_->motion().trunkRadius(pawn); });
+    combat_->motion().setPlants(plants_.get());
     movement_->setDoorSpeed([this](Entity door) {
         const int factor = static_cast<int>(defs_->get(things_->registry().get<Thing>(door).def).integer("door.openSpeedFactor", 1));
         return factor > 1 && !power_->running(door) ? 1 : factor;
@@ -1778,6 +1782,27 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                     break;
                 }
             }
+            // Tree trunks are solid: walking into one slides round it (docs/design/plant-bodies.md).
+            if ((moveX != 0.0f || moveY != 0.0f) && pos.level == 0 && trunkNear(*plants_, pos.x, pos.y, kDirectMaxStep + 0.5f, 0)) {
+                // In 5 cm pieces, each set beside any trunk it would end in, so a long move slides round a trunk too.
+                const float radius = combat_->motion().trunkRadius(move->pawn);
+                const float moveLength = std::sqrt(moveX * moveX + moveY * moveY);
+                const int pieces = std::max(1, static_cast<int>(std::ceil(moveLength / 0.05f)));
+                float x = pos.x;
+                float y = pos.y;
+                for (int i = 0; i < pieces; ++i) {
+                    float nx = x + moveX / static_cast<float>(pieces);
+                    float ny = y + moveY / static_cast<float>(pieces);
+                    pushOutOfTrunks(*plants_, nx, ny, radius, 0);
+                    if (!swimmerFitsAt(map_, nx, ny, kPawnRadius, 0) || !trunksAllow(*plants_, x, y, nx, ny, radius, 0)) {
+                        break;
+                    }
+                    x = nx;
+                    y = ny;
+                }
+                moveX = x - pos.x;
+                moveY = y - pos.y;
+            }
             pos.x += moveX;
             pos.y += moveY;
             mover.vx = moveX;
@@ -2942,6 +2967,14 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.loadKg = static_cast<float>(jobs_->loadMass(entity));
             view.capacityKg = static_cast<float>(jobs_->carryCapacity(entity));
             view.moveFactor = pawnMoveFactor(entity);
+            // The player walks in Unreal by this factor and the ground's: grass and bushes slow it a little too
+            // (docs/design/plant-bodies.md). The AI's walk gets the plant factor in the movement system.
+            if (reg.all_of<PlayerControl, Position>(entity)) {
+                const Position& at = reg.get<Position>(entity);
+                if (at.level == 0) {
+                    view.moveFactor *= plants_->walkFactor(cellOf(at));
+                }
+            }
             view.starving = isStarving(reg, entity);
         }
         if (view.category == ThingCategory::Pawn) {

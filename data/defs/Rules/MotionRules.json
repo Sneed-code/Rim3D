@@ -15,7 +15,9 @@
     "knockdownMetres": 1.0, "knockdownSteps": 20,
     "sidestepMetres": 0.7, "sidestepSteps": 9,
     "blastSteps": 12,
-    "ours": ["stepMetres", "bodyRadius", "minBodyRadius", "maxBodyRadius", "heightFollow", "animalScalePerRoot", "staggerMetres", "staggerSteps",
+    "trunkBodyRadiusMax": 0.4,
+    "propRadius": 0.15, "bodyKgPerSize": 60, "propMaxMassShare": 0.5, "propCellMargin": 0.1,
+    "ours": ["trunkBodyRadiusMax", "propRadius", "propMaxMassShare", "propCellMargin", "stepMetres", "bodyRadius", "minBodyRadius", "maxBodyRadius", "heightFollow", "animalScalePerRoot", "staggerMetres", "staggerSteps",
              "knockdownMetres", "knockdownSteps", "sidestepMetres", "sidestepSteps", "blastSteps"]
   }
 ]

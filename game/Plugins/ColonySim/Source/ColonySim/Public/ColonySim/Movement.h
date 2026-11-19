@@ -10,6 +10,8 @@
 
 namespace colony {
 
+class Plants;
+
 // Smooth movement (task S4, docs/design/movement.md): how fast a pawn walks over ground, how a
 // cell path is straightened into long lines, and how pawns steer around each other.
 
@@ -39,6 +41,25 @@ COLONY_API float walkSpeedFactor(const Map& map, float x, float y, float dirX, f
 // Effort of walking the straight line: its metres divided by the speed factor, summed along it.
 // Divide by a pawn's `moveSpeed` for game seconds.
 COLONY_API float walkEffort(const Map& map, float x0, float y0, float x1, float y1);
+
+// ---- Tree trunks (docs/design/plant-bodies.md) ------------------------------------------------
+
+// How deep a body of `radius` at (x, y) sinks into the trunk it overlaps most, metres; 0 when clear of every trunk.
+// Only the ground level has plants.
+COLONY_API float trunkOverlap(const Plants& plants, float x, float y, float radius, int level = 0);
+// True when moving a body from (x0, y0) to (x1, y1) doesn't push it deeper into a trunk: a body clear of trunks stays
+// clear, and one a tree grew round (or that was spawned on one) can always move out.
+COLONY_API bool trunksAllow(const Plants& plants, float x0, float y0, float x1, float y1, float radius, int level = 0);
+// Moves a body out of every trunk it overlaps, to just touching (a few rounds, for two trunks at once). Returns true if
+// it moved. Doesn't look at walls: the caller checks the ground where the body ends up.
+COLONY_API bool pushOutOfTrunks(const Plants& plants, float& x, float& y, float radius, int level = 0);
+// True if any trunk is within `range` metres of the body's edge at (x, y).
+COLONY_API bool trunkNear(const Plants& plants, float x, float y, float range, int level = 0);
+// Turns the walking direction (ux, uy), a unit vector, round the trunks in its way: the nearest trunk whose post the
+// body would touch within `lookAhead` metres sends it along the tangent past the trunk's side away from it (plus
+// `space` metres of room), a few times over for trunks behind each other. Returns true if it turned.
+COLONY_API bool steerRoundTrunks(const Plants& plants, float x, float y, float radius, float space, float lookAhead,
+                                 float& ux, float& uy, int level = 0);
 
 // ---- Straight lines --------------------------------------------------------------------------
 

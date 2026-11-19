@@ -180,4 +180,4 @@ post, not the clip.
 - **PC:** weapons in the hand follow `hand_r` during a clip (now they stay in the ready pose while the arms swing)
   and holstered guns follow the spine; flinch clips for bullets; separate get-ups for face-up and
   face-down; the creator's fight demo moving its people the same way.
-- **World:** tree trunks as solid posts, plant and swamp slow-down, loose props shoved by weight, foliage bending.
+- **World:** done in the sim ([plant-bodies.md](plant-bodies.md)): tree trunks as solid posts, plants slowing the walk a little, loose props shoved by weight. Foliage bending round bodies is the PC part left.

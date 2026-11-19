@@ -1,5 +1,6 @@
 #include "ColonySim/Movement.h"
 
+#include "ColonySim/Plants.h"
 #include "ColonySim/Water.h"
 
 #include <algorithm>
@@ -106,6 +107,162 @@ float walkEffort(const Map& map, float x0, float y0, float x1, float y1) {
         effort += ds / walkSpeedFactor(map, x0 + dx * t, y0 + dy * t, ux, uy);
     }
     return effort;
+}
+
+namespace {
+
+// Calls visit(tx, ty, tr) for every trunk whose post could come within `reach` of (x, y). A plant stands at most
+// 0.35 m off its cell's centre, so its post lies between 0.15 and 0.85 m into the cell.
+template <typename Visit>
+void moveForTrunks(const Plants& plants, float x, float y, float reach, Visit&& visit) {
+    const float r = reach + plants.maxTrunkRadius();
+    const int minX = static_cast<int>(std::floor(x - r - 0.85f));
+    const int maxX = static_cast<int>(std::floor(x + r - 0.15f));
+    const int minY = static_cast<int>(std::floor(y - r - 0.85f));
+    const int maxY = static_cast<int>(std::floor(y + r - 0.15f));
+    for (int cy = minY; cy <= maxY; ++cy) {
+        for (int cx = minX; cx <= maxX; ++cx) {
+            float tx = 0.0f;
+            float ty = 0.0f;
+            float tr = 0.0f;
+            if (plants.trunkAt(CellPos{cx, cy, 0}, tx, ty, tr)) {
+                visit(tx, ty, tr);
+            }
+        }
+    }
+}
+
+}  // namespace
+
+float trunkOverlap(const Plants& plants, float x, float y, float radius, int level) {
+    if (level != 0 || plants.maxTrunkRadius() <= 0.0f) {
+        return 0.0f;
+    }
+    float deepest = 0.0f;
+    moveForTrunks(plants, x, y, radius, [&](float tx, float ty, float tr) {
+        const float dx = x - tx;
+        const float dy = y - ty;
+        const float minD = radius + tr;
+        const float d2 = dx * dx + dy * dy;
+        if (d2 < minD * minD) {
+            deepest = std::max(deepest, minD - std::sqrt(d2));
+        }
+    });
+    return deepest;
+}
+
+bool trunksAllow(const Plants& plants, float x0, float y0, float x1, float y1, float radius, int level) {
+    const float after = trunkOverlap(plants, x1, y1, radius, level);
+    if (after <= 0.0f) {
+        return true;
+    }
+    return after <= trunkOverlap(plants, x0, y0, radius, level) + 1.0e-4f;
+}
+
+bool pushOutOfTrunks(const Plants& plants, float& x, float& y, float radius, int level) {
+    if (level != 0 || plants.maxTrunkRadius() <= 0.0f) {
+        return false;
+    }
+    bool moved = false;
+    for (int round = 0; round < 3; ++round) {
+        bool any = false;
+        moveForTrunks(plants, x, y, radius, [&](float tx, float ty, float tr) {
+            float dx = x - tx;
+            float dy = y - ty;
+            const float minD = radius + tr;
+            const float d2 = dx * dx + dy * dy;
+            if (d2 >= minD * minD) {
+                return;
+            }
+            const float d = std::sqrt(d2);
+            if (d < 1.0e-4f) {
+                dx = 1.0f;  // dead centre: out along +x, the same every time
+                dy = 0.0f;
+            } else {
+                dx /= d;
+                dy /= d;
+            }
+            const float out = minD - d + 1.0e-4f;
+            x += dx * out;
+            y += dy * out;
+            any = true;
+        });
+        if (!any) {
+            break;
+        }
+        moved = true;
+    }
+    return moved;
+}
+
+bool trunkNear(const Plants& plants, float x, float y, float range, int level) {
+    if (level != 0 || plants.maxTrunkRadius() <= 0.0f) {
+        return false;
+    }
+    bool found = false;
+    moveForTrunks(plants, x, y, range, [&](float tx, float ty, float tr) {
+        const float dx = x - tx;
+        const float dy = y - ty;
+        const float r = range + tr;
+        if (dx * dx + dy * dy < r * r) {
+            found = true;
+        }
+    });
+    return found;
+}
+
+bool steerRoundTrunks(const Plants& plants, float x, float y, float radius, float space, float lookAhead, float& ux,
+                      float& uy, int level) {
+    if (level != 0 || plants.maxTrunkRadius() <= 0.0f) {
+        return false;
+    }
+    bool turned = false;
+    for (int round = 0; round < 3; ++round) {
+        // The nearest trunk along the way.
+        float bestAlong = 1.0e30f;
+        float bestCx = 0.0f;
+        float bestCy = 0.0f;
+        float bestR = 0.0f;
+        moveForTrunks(plants, x, y, lookAhead + radius + space, [&](float tx, float ty, float tr) {
+            const float cx = tx - x;
+            const float cy = ty - y;
+            const float r = radius + tr + space;
+            const float along = cx * ux + cy * uy;
+            const float side = ux * cy - uy * cx;
+            if (along <= 0.0f || side * side >= r * r) {
+                return;  // behind it, or the way passes clear
+            }
+            const float meet = along - std::sqrt(r * r - side * side);
+            if (meet < lookAhead && along < bestAlong) {
+                bestAlong = along;
+                bestCx = cx;
+                bestCy = cy;
+                bestR = r;
+            }
+        });
+        if (bestAlong >= 1.0e30f) {
+            break;
+        }
+        // Along the tangent on the side of the way the trunk is not on (to the right when dead ahead).
+        const float d = std::sqrt(bestCx * bestCx + bestCy * bestCy);
+        if (d < 1.0e-4f) {
+            break;
+        }
+        const float dx = bestCx / d;
+        const float dy = bestCy / d;
+        const float sinA = std::min(1.0f, bestR / d);
+        const float cosA = std::sqrt(std::max(0.0f, 1.0f - sinA * sinA));
+        const float side = ux * bestCy - uy * bestCx;  // > 0: the trunk is anticlockwise of the way
+        if (side > 0.0f || side == 0.0f) {
+            ux = cosA * dx + sinA * dy;  // clockwise from the trunk's direction
+            uy = -sinA * dx + cosA * dy;
+        } else {
+            ux = cosA * dx - sinA * dy;  // anticlockwise
+            uy = sinA * dx + cosA * dy;
+        }
+        turned = true;
+    }
+    return turned;
 }
 
 bool pawnFitsAt(const Map& map, float x, float y, float radius, int level) {
