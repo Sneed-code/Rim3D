@@ -13,7 +13,7 @@ MODEL_ARGS=()
 
 names=("$@")
 if [ ${#names[@]} -eq 0 ]; then
-  for f in "$HERE"/*.md; do b="$(basename "$f" .md)"; [ "$b" = "_common" ] || names+=("$b"); done
+  for f in "$HERE"/*.md; do b="$(basename "$f" .md)"; case "$b" in _common|README) ;; *) names+=("$b") ;; esac; done
 fi
 
 run_one() {
