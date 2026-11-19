@@ -1209,7 +1209,7 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 	}
 	NextMugshotCheck = Now + 0.25;
 	UWorld* World = GetWorld();
-	UPawnSubsystem* Pawns = World ? World->GetSubsystem<UPawnSubsystem>() : nullptr;
+	USimPawnSubsystem* Pawns = World ? World->GetSubsystem<USimPawnSubsystem>() : nullptr;
 	if (!Pawns)
 	{
 		return;

@@ -2087,7 +2087,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 				{
 					const ImVec2 A(IconCentre.x - IconSize * 0.5f, IconCentre.y - IconSize * 0.5f);
 					const ImVec2 B(IconCentre.x + IconSize * 0.5f, IconCentre.y + IconSize * 0.5f);
-					Draw->AddRect(A, B, IconColor, 2.0f, 0, 1.5f);
+					Draw->AddRect(A, B, IconColor, 2.0f, 1.5f, 0);
 					for (int32 Line = 1; Line < 4; ++Line)
 					{
 						const float T = IconSize * Line / 4.0f;

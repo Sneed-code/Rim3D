@@ -636,7 +636,7 @@ void UPanelsSubsystem::DrawMenuAndColonistBar(USimSubsystem& Bridge, float Scale
 			// Drafted: a red edge; downed: greyed.
 			if (View->drafted)
 			{
-				ImGui::GetWindowDrawList()->AddRect(Corner, ImGui::GetItemRectMax(), ImGui::GetColorU32(ColonyHud::Bad()), 4.0f * Scale, 0, 2.0f * Scale);
+				ImGui::GetWindowDrawList()->AddRect(Corner, ImGui::GetItemRectMax(), ImGui::GetColorU32(ColonyHud::Bad()), 4.0f * Scale, 2.0f * Scale, 0);
 			}
 			ImGui::PushStyleColor(ImGuiCol_Text, View->downed ? ImVec4(0.6f, 0.6f, 0.6f, 1.0f) : MoodColor(View->moodBand));
 			FString Name = NameOf(Pawn);
