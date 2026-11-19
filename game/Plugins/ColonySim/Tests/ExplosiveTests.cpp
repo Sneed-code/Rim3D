@@ -3,6 +3,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Explosives.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Fire.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
@@ -553,4 +554,118 @@ TEST_CASE("Explosives: the throw and the blast go through a replay file and play
     playReplay(loaded, replayed, loaded.endStep);
     CHECK(replayed.stateHash() == original.stateHash());
     CHECK(checkReplay(loaded, replayed).matched());
+}
+
+// sneed 2026-11-19: molotovs, the grenade launcher and the rocket launchers.
+TEST_CASE("Explosives: a molotov bursts where it lands and sets the spot alight") {
+    auto sim = exploSim();
+    const Entity thrower = exploPawn(*sim, 40, 40);
+    const DefId molotov = sim->defs().idOf("Things", "Grenade_Molotov");
+    EXPLO_REQUIRE(molotov.valid());
+    const int before = sim->explosives().count(thrower, molotov);
+    const int given = sim->explosives().give(thrower, molotov, 2);  // not inside EXPLO_REQUIRE: it evaluates twice
+    EXPLO_REQUIRE(given == 2);
+    sim->submit(ThrowCommand{thrower, "Grenade_Molotov", kNoEntity, 47.5f, 40.5f, true});
+    int landedAt = -1;
+    int blastAt = -1;
+    Event blast;
+    for (int i = 0; i < 200 && blastAt < 0; ++i) {
+        sim->step();
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::GrenadeLanded) {
+                landedAt = i;
+            } else if (e.type == EventType::Explosion) {
+                blastAt = i;
+                blast = e;
+            }
+        }
+    }
+    EXPLO_REQUIRE(landedAt >= 0);
+    CHECK(blastAt == landedAt);  // no fuse: it bursts on landing
+    CHECK(blast.def == sim->defs().idOf("DamageTypes", "Burn"));
+    CHECK(blast.amount == doctest::Approx(1.1));
+    // The fire layer lights the cell it burst in on the next step, even on bare ground.
+    sim->step();
+    CHECK(sim->fire().burning(CellPos{static_cast<int>(std::floor(blast.x)), static_cast<int>(std::floor(blast.y)), 0}));
+    CHECK(sim->explosives().count(thrower, molotov) == before + 1);
+}
+
+TEST_CASE("Explosives: the grenade launcher lobs a frag shell that bursts like a grenade") {
+    auto sim = exploSim();
+    const Entity shooter = exploPawn(*sim, 30, 40, "Gun_GrenadeLauncher");
+    EXPLO_REQUIRE(sim->defs().find("Projectiles", "Shell_Frag") != nullptr);
+    const Entity target = exploPawn(*sim, 55, 40);
+    exploHeal(*sim, target);
+    sim->submit(ShootCommand{shooter, kNoEntity, 55.5f, 40.5f, sim->map().heightAt(55.5f, 40.5f), true});
+    bool fired = false;
+    bool rose = false;
+    float startZ = 0.0f;
+    Event blast;
+    bool blew = false;
+    for (int i = 0; i < 300 && !blew; ++i) {
+        sim->step();
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::ShotFired && e.thing == shooter) {
+                fired = true;
+                startZ = e.z;
+            } else if (e.type == EventType::Explosion) {
+                blew = true;
+                blast = e;
+            }
+        }
+        Snapshot snap;
+        sim->writeSnapshot(snap);
+        for (const ProjectileView& p : snap.projectiles) {
+            rose = rose || (fired && p.vz > 0.0f && p.z >= startZ - 0.5f);  // aimed up into an arc, though the target is below the muzzle
+        }
+    }
+    EXPLO_REQUIRE(fired);
+    EXPLO_REQUIRE(blew);
+    CHECK(rose);
+    CHECK(blast.def == sim->defs().idOf("DamageTypes", "Bomb"));
+    CHECK(blast.amount == doctest::Approx(1.9));
+    CHECK(std::hypot(blast.x - 55.5f, blast.y - 40.5f) < 2.5f);
+    CHECK(exploHurt(*sim, target) > 0.0f);
+}
+
+TEST_CASE("Explosives: the triple rocket launcher's rocket bursts at the target") {
+    auto sim = exploSim();
+    const Entity shooter = exploPawn(*sim, 30, 40, "Gun_TripleRocketLauncher");
+    sim->submit(ShootCommand{shooter, kNoEntity, 55.5f, 40.5f, sim->map().heightAt(55.5f, 40.5f), true});
+    Event blast;
+    bool blew = false;
+    for (int i = 0; i < 300 && !blew; ++i) {
+        sim->step();
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::Explosion) {
+                blew = true;
+                blast = e;
+            }
+        }
+    }
+    EXPLO_REQUIRE(blew);
+    CHECK(blast.amount == doctest::Approx(3.9));
+    CHECK(std::hypot(blast.x - 55.5f, blast.y - 40.5f) < 3.0f);
+}
+
+TEST_CASE("Explosives: the belt's stacks and a throw plan's start, for the player's aim arc") {
+    auto sim = exploSim();
+    const Entity pawn = exploPawn(*sim, 40, 40);
+    const DefId frag = exploItem(*sim);
+    const DefId molotov = sim->defs().idOf("Things", "Grenade_Molotov");
+    CHECK(sim->explosives().stacks(pawn).empty());
+    sim->explosives().give(pawn, frag, 3);
+    sim->explosives().give(pawn, molotov, 2);
+    const std::vector<BeltStack> stacks = sim->explosives().stacks(pawn);
+    EXPLO_REQUIRE(stacks.size() == 2);
+    CHECK(stacks[0].item == frag);
+    CHECK(stacks[0].count == 3);
+    CHECK(stacks[1].item == molotov);
+    CHECK(stacks[1].count == 2);
+    ThrowPlan plan;
+    EXPLO_REQUIRE(sim->explosives().planThrow(pawn, molotov, 46.5f, 40.5f, plan));
+    CHECK(plan.reaches);
+    CHECK(plan.startX == doctest::Approx(40.5f));
+    CHECK(plan.startZ > sim->map().heightAt(40.5f, 40.5f) + 0.5f);
+    CHECK(plan.landX == doctest::Approx(46.5f).epsilon(0.1));
 }
