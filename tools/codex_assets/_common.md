@@ -13,7 +13,7 @@ Work only inside the current folder. Use Blender 5.x from the command line (`ble
 remade.
 
 ## Must deliver (in this folder)
-1. `<Name>.glb`: one glTF binary, metres, +Z up, real-world scale (check it with a 1.8 m reference human
+1. `<Name>.glb`: one glTF binary exported with Blender's glTF exporter at its default settings (it writes the file Y-up, as glTF requires; do NOT turn off +Y up), metres, +Z up in Blender, real-world scale (check it with a 1.8 m reference human
    while you work), textures embedded.
 2. PBR textures, made procedurally or painted by you (no downloaded textures): BaseColor (sRGB, NO baked
    lighting, NO baked shadows or AO in the colour), Normal (OpenGL / +Y), and ORM packed (R = ambient
