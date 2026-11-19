@@ -283,6 +283,14 @@ void USmokeTestSubsystem::BuildIdlePhases()
 			const double Drift = FVector::Dist2D(Now.World[IdleSmokeFeetFirst + i], State->Planted[i]);
 			if (Drift > State->MaxStandDrift)
 			{
+				if (Drift > 0.66 * IdleSmokeStandDrift)
+				{
+					// What the standing feet were doing as one wandered (the toe slide in fights was ~5 cm, cause not yet seen).
+					const FVector Moved = Now.World[IdleSmokeFeetFirst + i] - State->Planted[i];
+					UE_LOG(LogTemp, Log, TEXT("IDLETRACE stand-drift %s t=%.3f foot=%s drift=%.2f moved=(%.1f,%.1f,%.1f) playing=%s hold=%.2f step=%d twist=%.1f yaw=%.1f walklock=%.2f walkheld=%d"),
+						*PhaseName(), PhaseTime, IdleSmokeBones[IdleSmokeFeetFirst + i].Name, Drift, Moved.X, Moved.Y, Moved.Z, *Now.Playing.ToString(), Now.FootHold,
+						Now.bStepping ? 1 : 0, Now.TwistDegrees, Now.ActorYaw, Now.WalkLock, Now.WalkFeetHeld);
+				}
 				State->MaxStandDrift = Drift;
 				State->MaxStandDriftAt = FString::Printf(TEXT("%s in phase %s at %.2f s, playing %s, twist %.0f degrees"),
 					IdleSmokeBones[IdleSmokeFeetFirst + i].Name, *PhaseName(), PhaseTime, *Now.Playing.ToString(), Now.TwistDegrees);
@@ -709,6 +717,8 @@ void USmokeTestSubsystem::BuildIdlePhases()
 			{
 				// Turn, pivot and reface clips (and run clips at a walk) motion matching picked and was not let play.
 				PhaseNumbers.Add(TEXT("bannedPicksAllPhases"), Anim->GetStats().BannedPicks);
+				// Held walking feet the body left behind that stepped instead of being dragged.
+				PhaseNumbers.Add(TEXT("walkStepsAllPhases"), Anim->GetStats().WalkSteps);
 			}
 			VerifyPops(TEXT("swings"));
 			VerifyStand(TEXT("swings"));
