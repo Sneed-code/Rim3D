@@ -280,7 +280,7 @@ TEST_CASE("defs: D8 production data (work tables, blocks, melee weapons)") {
     if (spear == nullptr) { CHECK(false); return; }
     CHECK(spear->text("equipmentType") == "Primary");  // from MeleeWeaponBase
     CHECK(spear->number("stats.marketValue") == doctest::Approx(186));
-    CHECK(spear->number("tools.0.cooldownTime") == doctest::Approx(2.6 * 30 * 0.5));  // RimWorld seconds x 30, x0.5 two-handed (tuning.json)
+    CHECK(spear->number("tools.0.cooldownTime") == doctest::Approx(2.6 * 30 / 3.0));  // RimWorld seconds x 30, x0.5 two-handed then x1/1.5 (tuning.json)
     for (const char* w : {"Knife", "Club", "Gladius", "Spear", "Mace", "Longsword", "BreachAxe"}) {
         CHECK(db.find("Things", std::string("Melee_") + w) != nullptr);
         CHECK(db.find("Recipes", std::string("Make") + w) != nullptr);
