@@ -5,6 +5,8 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Looks.h"
+#include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
@@ -549,4 +551,173 @@ TEST_CASE("Cooldown bursts: the gun's store survives a save and load") {
     sim->stepMany(100);
     loaded.sim->stepMany(100);
     CHECK(loaded.sim->stateHash() == sim->stateHash());
+}
+
+// --- Shots go where the crosshair is (sneed 2026-11-18, docs/design/aiming.md) ---
+
+namespace {
+
+// Is `part` the labelled part or under it?
+bool aimTestUnder(const Sim& sim, Entity pawn, int part, const std::string& label) {
+    const std::vector<BodyPartInfo> parts = sim.health().bodyParts(sim.things().registry().get<Thing>(pawn).def);
+    for (int p = part; p >= 0 && static_cast<size_t>(p) < parts.size(); p = parts[static_cast<size_t>(p)].parent) {
+        if (parts[static_cast<size_t>(p)].label == label) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// A target standing at (42, 40) facing west, toward a shooter at (20, 40).
+Entity aimTestFacingTarget(Sim& sim) {
+    const Entity target = aimTestPawn(sim, 42, 40);
+    aimTestHold(sim, target);
+    sim.things().registry().get<Posture>(target) = Posture{Stance::Standing, -1.0f, 0.0f};
+    return target;
+}
+
+}  // namespace
+
+TEST_CASE("Crosshair: the player's own spread is small with every gun") {
+    auto sim = aimTestSim();
+    const char* guns[] = {"Gun_Revolver", "Gun_Autopistol", "Gun_BoltActionRifle", "Gun_PumpShotgun", "Gun_AssaultRifle"};
+    float bolt = 1.0f;
+    for (const char* gun : guns) {
+        const DefId id = sim->defs().idOf("Things", gun);
+        const float slope = sim->combat().spread(id, 8, 30.0f, true, 1.0f);
+        MESSAGE(std::string(gun) << ": the player's cone is " << slope * 3000.0f << " cm wide at 30 m (radius)");
+        // A head is about 20 cm across: at 30 m every gun's cone stays well inside it.
+        CHECK(slope * 30.0f < 0.05f);
+        if (std::string(gun) == "Gun_BoltActionRifle") {
+            bolt = slope;
+        }
+    }
+    CHECK(bolt > 0.0f);
+    // Fighters keep RimWorld's spread: much wider.
+    CHECK(sim->combat().spread(sim->defs().idOf("Things", "Gun_BoltActionRifle"), 8, 30.0f, false, 1.0f) > bolt * 3.0f);
+}
+
+TEST_CASE("Crosshair: a bullet passing the drawn spot hits that part, a miss falls back on the hitboxes") {
+    auto sim = aimTestSim();
+    const Entity target = aimTestFacingTarget(*sim);
+    const Position pos = sim->things().registry().get<Position>(target);
+    const int head = sim->combat().hitboxPart(target, "head");
+    AIM_REQUIRE(head >= 0);
+    CHECK(sim->combat().hitboxPart(target, "left arm") >= 0);
+    CHECK(sim->combat().hitboxPart(target, "tail") == -1);
+    // The drawn head leans 0.3 m to the pawn's left of where the stock hitbox is (a clip leaning it over).
+    const DrawnAim drawn{target, head, 0.0f, -0.3f, 1.65f};  // facing west, its left is south
+    const float y = pos.y - 0.3f;  // facing west, its left is south
+    const CellPos nowhere{-1, -1, 0};
+    const TraceHit plain = sim->combat().trace(20.5f, y, 1.65f, 60.0f, y, 1.65f, 0, kNoEntity, nowhere);
+    CHECK(plain.kind == ProjectileHitKind::None);
+    const TraceHit hit = sim->combat().trace(20.5f, y, 1.65f, 60.0f, y, 1.65f, 0, kNoEntity, nowhere, true, &drawn);
+    CHECK(hit.kind == ProjectileHitKind::Pawn);
+    CHECK(hit.thing == target);
+    CHECK(hit.part == head);
+    CHECK(hit.x == doctest::Approx(pos.x));  // on the spot itself, not the edge of the allowance
+    CHECK(hit.y == doctest::Approx(y));
+    CHECK(hit.z == doctest::Approx(1.65f));
+    // A line through the chest misses the spot: the stock torso box takes it.
+    const TraceHit chest = sim->combat().trace(20.5f, pos.y, 1.15f, 60.0f, pos.y, 1.15f, 0, kNoEntity, nowhere, true, &drawn);
+    CHECK(chest.kind == ProjectileHitKind::Pawn);
+    CHECK(aimTestUnder(*sim, target, chest.part, "torso"));
+    // The trace's own pawn (the shooter's skip) is never hit, drawn spot or not.
+    const TraceHit other = sim->combat().trace(20.5f, y, 1.65f, 60.0f, y, 1.65f, 0, target, nowhere, true, &drawn);
+    CHECK(other.kind == ProjectileHitKind::None);
+}
+
+TEST_CASE("Crosshair: the player's bolt-action shots at a drawn head hit the head") {
+    auto sim = aimTestSim();
+    const Entity shooter = aimTestPawn(*sim, 20, 40, "Gun_BoltActionRifle");
+    const Entity target = aimTestFacingTarget(*sim);
+    const int head = sim->combat().hitboxPart(target, "head");
+    AIM_REQUIRE(head >= 0);
+    const Position pos = sim->things().registry().get<Position>(target);
+    int fired = 0;
+    int heads = 0;
+    for (int i = 0; i < 4000 && (fired < 12 || !sim->things().registry().view<Projectile>().empty()); ++i) {
+        if (fired < 12 && sim->combat().shotReadyIn(shooter) == 0) {
+            // Unreal's crosshair on the drawn head, 0.25 m left of the stock hitbox's head.
+            ShootCommand shot{shooter, kNoEntity, pos.x, pos.y - 0.25f, 1.62f, true};
+            shot.aimPawn = target;
+            shot.aimPart = head;
+            shot.aimDx = 0.0f;
+            shot.aimDy = -0.25f;
+            shot.aimUp = 1.62f;
+            sim->submit(shot);
+        }
+        sim->step();
+        fired += aimTestEvent(*sim, EventType::ShotFired, shooter) ? 1 : 0;
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::ProjectileHit && e.hit == ProjectileHitKind::Pawn && e.target == target) {
+                heads += aimTestUnder(*sim, target, e.part, "head") ? 1 : 0;
+                aimTestHeal(*sim, target);
+            }
+        }
+    }
+    AIM_REQUIRE(fired == 12);
+    MESSAGE("bolt-action at 22 m: " << heads << " of 12 on the head");
+    CHECK(heads == 12);
+}
+
+TEST_CASE("Crosshair: hitboxes grow and shrink with the body's height") {
+    auto sim = aimTestSim();
+    const Entity target = aimTestFacingTarget(*sim);
+    const Position pos = sim->things().registry().get<Position>(target);
+    const CellPos nowhere{-1, -1, 0};
+    const auto at = [&](float z) { return sim->combat().trace(20.5f, pos.y, z, 60.0f, pos.y, z, 0, kNoEntity, nowhere); };
+    CHECK(at(1.7f).kind == ProjectileHitKind::Pawn);  // the stock 1.80 m man
+    PawnLooks looks;
+    looks.height = 0.8f;  // 1.44 m
+    sim->things().registry().emplace_or_replace<PawnLooks>(target, looks);
+    CHECK(sim->combat().hitboxScale(target) == doctest::Approx(0.8f));
+    CHECK(at(1.6f).kind == ProjectileHitKind::None);
+    const TraceHit head = at(1.33f);
+    CHECK(head.kind == ProjectileHitKind::Pawn);
+    CHECK(aimTestUnder(*sim, target, head.part, "head"));
+    float x = 0.0f, y = 0.0f, z = 0.0f;
+    AIM_REQUIRE(sim->combat().aimPoint(target, x, y, z));
+    CHECK(z == doctest::Approx(1.15f * 0.8f).epsilon(0.01));
+}
+
+TEST_CASE("Crosshair: a shot at a drawn part survives a save, a load and a replay") {
+    auto sim = aimTestSim();
+    const Entity shooter = aimTestPawn(*sim, 20, 40, "Gun_BoltActionRifle");
+    const Entity target = aimTestFacingTarget(*sim);
+    const Position pos = sim->things().registry().get<Position>(target);
+    ShootCommand shot{shooter, kNoEntity, pos.x, pos.y - 0.25f, 1.62f, true};
+    shot.aimPawn = target;
+    shot.aimPart = sim->combat().hitboxPart(target, "head");
+    shot.aimDy = -0.25f;
+    shot.aimUp = 1.62f;
+    sim->submit(shot);
+    // Saved with the command still waiting, then again with the bullet in the air.
+    SaveLoadResult waiting = loadSim(saveSim(*sim), aimTestDefs());
+    AIM_REQUIRE(waiting.sim != nullptr);
+    sim->step();
+    waiting.sim->step();
+    CHECK(waiting.sim->stateHash() == sim->stateHash());
+    SaveLoadResult flying = loadSim(saveSim(*sim), aimTestDefs());
+    AIM_REQUIRE(flying.sim != nullptr);
+    sim->stepMany(20);
+    flying.sim->stepMany(20);
+    waiting.sim->stepMany(20);
+    CHECK(flying.sim->stateHash() == sim->stateHash());
+    CHECK(waiting.sim->stateHash() == sim->stateHash());
+    // The replay file keeps the drawn spot.
+    Replay read;
+    std::string error;
+    AIM_REQUIRE(readReplay(writeReplay(recordReplay(*sim)), read, error));
+    bool found = false;
+    for (const LoggedCommand& logged : read.commands) {
+        if (const auto* s = std::get_if<ShootCommand>(&logged.command)) {
+            found = true;
+            CHECK(s->aimPawn == target);
+            CHECK(s->aimPart == shot.aimPart);
+            CHECK(s->aimDy == doctest::Approx(-0.25f));
+            CHECK(s->aimUp == doctest::Approx(1.62f));
+        }
+    }
+    CHECK(found);
 }

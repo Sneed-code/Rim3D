@@ -80,6 +80,22 @@ enum class ShotPhase : uint8_t {
     Reloading,  // the cooldown, then a new magazine (F5); the gun is full when it ends
 };
 
+// The player's crosshair on a drawn body (docs/design/aiming.md "Shots go where the crosshair is"): Unreal traces the
+// camera's ray against the body as it is drawn now (animated, at its own height) and says which pawn and body part it
+// is on, and where on that pawn: metres east (dx) and north (dy) of its position and up from the ground under it (map
+// axes, not the pawn's facing: the drawn body turns on its own and its yaw need not be the sim's facing). The shot is
+// aimed there, and a bullet that passes within `kDrawnAimRadius` of that spot (as the pawn stands when the bullet gets
+// there) hits that part, on the spot, whatever the pawn's stock hitboxes say. A bullet that misses the spot still meets
+// the hitboxes.
+struct DrawnAim {
+    Entity pawn = kNoEntity;  // none: an ordinary shot
+    int part = -1;            // body part index (outside part, as a hitbox names it)
+    float dx = 0.0f;
+    float dy = 0.0f;
+    float up = 0.0f;
+};
+inline constexpr float kDrawnAimRadius = 0.07f;  // metres, ours: about a limb's thickness
+
 struct Shooter {
     ShotPhase phase = ShotPhase::Ready;
     int stepsLeft = 0;  // of the phase
@@ -96,6 +112,7 @@ struct Shooter {
     int refill = 0;               // steps until the store is full again; 0: full, not counting
     int refillFrom = 0;           // the steps `refill` started at
     Entity storeGun = kNoEntity;  // the weapon the store is for; another one in the hands starts full
+    DrawnAim drawn;               // the player's shot: the part of a drawn body under the crosshair
 };
 
 // On a gun item once it has been fired: the rounds left in its magazine (F5). A gun without one
@@ -219,6 +236,7 @@ struct Projectile {
     CellPos startCell;      // the shooter's cell: buildings there never stop the shot (a doorway)
     uint64_t seed = 0;      // where the hit's choices (part, armor) come from
     float damageFactor = 1.0f;  // the gun's quality: times the bullet's damage and armor penetration
+    DrawnAim drawn;             // a player's shot at a drawn body part (DrawnAim)
 };
 
 // A hitbox in the world, for the debug view (CombatSystem::hitboxesOf).
@@ -371,7 +389,14 @@ public:
     // Shooting skill (RimWorld's hit chance); a player shot fires at once with the gun's own spread.
     // During warm-up a new order changes the aim. False if the pawn can't shoot now (no gun,
     // downed, mid-burst or cooling down).
-    bool shoot(Entity pawn, Entity target, float x, float y, float z, bool player, std::string* why = nullptr);
+    // `drawn` (player shots only): the drawn body part under the crosshair; the shot aims at it as the pawn stands.
+    bool shoot(Entity pawn, Entity target, float x, float y, float z, bool player, std::string* why = nullptr,
+               const DrawnAim* drawn = nullptr);
+    // The body part index of the pawn's hitbox labelled `label` ("head", "left arm"...); -1 if none. For Unreal's
+    // crosshair on a drawn body (DrawnAim).
+    int hitboxPart(Entity pawn, const std::string& label) const;
+    // How big the pawn is drawn, times the stock hitboxes (PawnLooks height, 0.5 to 1.5 as Unreal draws it; 1 without).
+    float hitboxScale(Entity pawn) const;
 
     bool setStance(Entity pawn, Stance stance);
     // Steps until the pawn can start a new shot (0: ready now), a reload included.
@@ -457,8 +482,9 @@ public:
     // What the straight stretch from a to b meets first: ground, rock, a building (not in
     // `skipCell`'s cell) or a pawn's hitbox (not `skipPawn`). Kind None if nothing.
     // With `pawns` false only the ground, rock and buildings count (blast lines of sight).
+    // `drawn`: a player's shot at a drawn body part (DrawnAim); passing near that spot hits the part.
     TraceHit trace(float ax, float ay, float az, float bx, float by, float bz, int level, Entity skipPawn,
-                   CellPos skipCell, bool pawns = true) const;
+                   CellPos skipCell, bool pawns = true, const DrawnAim* drawn = nullptr) const;
     // The point other pawns aim at on this pawn (its chest), world metres. False if not a pawn
     // on the map.
     bool aimPoint(Entity pawn, float& x, float& y, float& z) const;

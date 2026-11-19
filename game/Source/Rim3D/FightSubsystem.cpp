@@ -38,6 +38,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Cover.h"
 #include "ColonySim/Explosives.h"
+#include "ColonySim/Map.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
@@ -63,6 +64,9 @@ namespace
 
 	// How far the crosshair reaches, metres.
 	constexpr float FightAimRangeM = 150.0f;
+	// How far the drawn body may move on between the trigger and the bullet's arrival before a hit on it counts as off
+	// the body in the hit check (docs/design/aiming.md "Shots go where the crosshair is").
+	constexpr double FightDrawnDriftCm = 5.0;
 	// A gun lying this close (metres) is picked up by E.
 	constexpr float FightEquipRangeM = 8.0f;
 	// Bullets that never report a hit are dropped after this long (real seconds) or this far (cm).
@@ -379,6 +383,32 @@ void UFightSubsystem::OnProjectileHit(const colony::Event& Event)
 		Record.Where = FVector(Event.x, Event.y, Event.z);
 		Record.GameSeconds = Bridge->GetSteps();
 		Record.MissCm = DistanceToHitboxesCm(Event.target, Event.x, Event.y, Event.z);
+		Record.StockCm = Record.MissCm;
+		if (const colony::ThingView* Hit = Bridge->GetCurrentSnapshot().find(Event.target))
+		{
+			Record.SimAt = FVector(Hit->x, Hit->y, 0.0f);
+			Record.SimYaw = FMath::RadiansToDegrees(FMath::Atan2(Hit->facingY, Hit->facingX));
+		}
+		// The player's shots hit the body as drawn (docs/design/aiming.md "Shots go where the crosshair is"): a hit on the
+		// drawn body counts as on the body, whichever is nearer.
+		if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
+		{
+			if (const ASimPawnActor* Actor = Pawns->FindPawn(Event.target))
+			{
+				const double Drawn = Actor->DistanceToDrawnBodyCm(FightSimToWorldUnits(*Bridge, Event.x, Event.y, Event.z));
+				Record.DrawnCm = static_cast<float>(Drawn);
+				Record.DrawnAt = Actor->GetActorLocation();
+				Record.DrawnYaw = Actor->GetActorRotation().Yaw;
+				// The spot is on the drawn body when the trigger is pulled; by the time the bullet arrives (a step or two) the
+				// body has moved on in its clip and the wobble from the shot before springs back (PC: 7 to 8 cm at worst,
+				// drawn and sim positions and yaws equal). That much is allowed before it counts as a miss.
+				const float Allowed = static_cast<float>(FMath::Max(0.0, Drawn - FightDrawnDriftCm));
+				if (Drawn >= 0.0 && (Record.MissCm < 0.0f || Allowed < Record.MissCm))
+				{
+					Record.MissCm = Allowed;
+				}
+			}
+		}
 		if (HitLog.Num() < 512)
 		{
 			HitLog.Add(Record);
@@ -416,6 +446,39 @@ void UFightSubsystem::OnProjectileHit(const colony::Event& Event)
 	Immediate.Part = Event.part;
 	Immediate.Amount = Event.amount;
 	SpawnImpact(Immediate);
+}
+
+FString UFightSubsystem::DescribeWorstHit() const
+{
+	const FFightHitRecord* Worst = nullptr;
+	for (const FFightHitRecord& Record : HitLog)
+	{
+		if (Record.MissCm >= 0.0f && (!Worst || Record.MissCm > Worst->MissCm))
+		{
+			Worst = &Record;
+		}
+	}
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	if (!Worst || !Bridge)
+	{
+		return FString();
+	}
+	const FVector HitWorld = FightSimToWorldUnits(*Bridge, Worst->Where.X, Worst->Where.Y, Worst->Where.Z);
+	const FVector SimWorld = FightSimToWorldUnits(*Bridge, Worst->SimAt.X, Worst->SimAt.Y, 0.0f);
+	FString Part = FString::FromInt(Worst->Part);
+	if (const colony::ThingView* Hit = Bridge->GetCurrentSnapshot().find(Worst->Pawn); Hit && Bridge->GetSim() && Worst->Part >= 0)
+	{
+		const std::vector<colony::BodyPartInfo> Parts = Bridge->GetSim()->health().bodyParts(Hit->def);
+		if (Worst->Part < static_cast<int32>(Parts.size()))
+		{
+			Part = UTF8_TO_TCHAR(Parts[static_cast<size_t>(Worst->Part)].label.c_str());
+		}
+	}
+	return FString::Printf(TEXT("worst hit: pawn %u part %s at sim (%.2f, %.2f, %.2f); %.1f cm from the sim hitboxes, %.1f cm from the drawn body; ")
+		TEXT("drawn body at (%.0f, %.0f) yaw %.0f, sim pawn at (%.0f, %.0f) yaw %.0f (world cm): %.1f cm apart, %.0f deg apart; hit %.0f cm above the drawn feet"),
+		static_cast<uint32>(entt::to_integral(Worst->Pawn)), *Part, Worst->Where.X, Worst->Where.Y, Worst->Where.Z, Worst->StockCm, Worst->DrawnCm,
+		Worst->DrawnAt.X, Worst->DrawnAt.Y, Worst->DrawnYaw, SimWorld.X, SimWorld.Y, Worst->SimYaw, FVector::Dist2D(Worst->DrawnAt, SimWorld),
+		FMath::Abs(FRotator::NormalizeAxis(Worst->DrawnYaw - Worst->SimYaw)), HitWorld.Z - Worst->DrawnAt.Z);
 }
 
 float UFightSubsystem::DistanceToHitboxesCm(colony::Entity Pawn, float X, float Y, float Z) const
@@ -1183,13 +1246,17 @@ int32 UFightSubsystem::GetSeveredPiecesShown() const
 // ---------------------------------------------------------------------------
 // The protagonist's gun.
 
-bool UFightSubsystem::ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* OutPawnHit) const
+bool UFightSubsystem::ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* OutPawnHit, colony::DrawnAim* OutDrawn) const
 {
 	const USimSubsystem* Bridge = BridgeSource.Get();
 	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
 	if (OutPawnHit)
 	{
 		*OutPawnHit = colony::kNoEntity;
+	}
+	if (OutDrawn)
+	{
+		*OutDrawn = colony::DrawnAim{};
 	}
 	if (!Bridge || !Bridge->GetSim() || !Protagonist || !Protagonist->IsDirectMode() || !Protagonist->GetBody())
 	{
@@ -1203,21 +1270,90 @@ bool UFightSubsystem::ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* Ou
 	const FVector A = (Start - Bridge->GetWorldOrigin()) / 100.0;
 	const FVector B = A + Direction * FightAimRangeM;
 	const colony::Entity Pawn = Protagonist->GetControlled();
-	const colony::ThingView* View = Bridge->GetCurrentSnapshot().find(Pawn);
+	const colony::Snapshot& Snap = Bridge->GetCurrentSnapshot();
+	const colony::ThingView* View = Snap.find(Pawn);
 	const colony::CellPos OwnCell{FMath::FloorToInt32(View ? View->x : 0.0f), FMath::FloorToInt32(View ? View->y : 0.0f), 0};
-	const colony::TraceHit Hit = Bridge->GetSim()->combat().trace(static_cast<float>(A.X), static_cast<float>(A.Y), static_cast<float>(A.Z),
-		static_cast<float>(B.X), static_cast<float>(B.Y), static_cast<float>(B.Z), 0, Pawn, OwnCell);
-	if (Hit.kind != colony::ProjectileHitKind::None)
+	const colony::CombatSystem& Combat = Bridge->GetSim()->combat();
+	const float Ax = static_cast<float>(A.X), Ay = static_cast<float>(A.Y), Az = static_cast<float>(A.Z);
+	const float Bx = static_cast<float>(B.X), By = static_cast<float>(B.Y), Bz = static_cast<float>(B.Z);
+	// The world: ground, rock and buildings (bodies come next, as they are drawn).
+	const colony::TraceHit World = Combat.trace(Ax, Ay, Az, Bx, By, Bz, 0, Pawn, OwnCell, false);
+	double BestCm = (World.kind != colony::ProjectileHitKind::None ? static_cast<double>(World.t) : 1.0) * FightAimRangeM * 100.0;
+	FVector BestPoint = World.kind != colony::ProjectileHitKind::None ? FightSimToWorldUnits(*Bridge, World.x, World.y, World.z)
+	                                                                  : FightSimToWorldUnits(*Bridge, Bx, By, Bz);
+	colony::Entity BestPawn = colony::kNoEntity;
+	const char* BestPart = nullptr;
+	// Bodies as drawn this frame: what the crosshair is on is what gets hit (docs/design/aiming.md).
+	TSet<uint32> NoSkeleton;
+	if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
 	{
-		OutWorldPoint = FightSimToWorldUnits(*Bridge, Hit.x, Hit.y, Hit.z);
-		if (OutPawnHit && Hit.kind == colony::ProjectileHitKind::Pawn)
+		for (const TPair<uint32, TObjectPtr<ASimPawnActor>>& Entry : Pawns->GetPawns())
 		{
-			*OutPawnHit = Hit.thing;
+			const ASimPawnActor* Actor = Entry.Value.Get();
+			if (!Actor || Actor->GetThing() == Pawn)
+			{
+				continue;
+			}
+			const colony::ThingView* Other = Snap.find(Actor->GetThing());
+			if (!Other || Other->dead)
+			{
+				continue;  // dead bodies don't stop bullets in the sim
+			}
+			// Quick test: the body's middle against the ray, with room for a reach or a lying body.
+			const FVector Middle = Actor->GetActorLocation() + FVector(0.0, 0.0, 90.0 * Actor->GetBodyScale());
+			const double Along = FVector::DotProduct(Middle - Start, Direction);
+			if (Along < 0.0 || Along > BestCm + 250.0 || FVector::DistSquared(Start + Direction * Along, Middle) > FMath::Square(250.0 * Actor->GetBodyScale()))
+			{
+				continue;
+			}
+			DrawnHit::FResult Hit;
+			bool bSkeleton = false;
+			if (Actor->TraceDrawnBody(Start, Direction, BestCm, Hit, bSkeleton) && Hit.DistanceCm < BestCm)
+			{
+				BestCm = Hit.DistanceCm;
+				BestPoint = Hit.Point;
+				BestPawn = Actor->GetThing();
+				BestPart = Hit.Part;
+			}
+			if (!bSkeleton)
+			{
+				NoSkeleton.Add(Entry.Key);
+			}
 		}
 	}
-	else
+	// Animals and other bodies without humanlike bones: the sim's own hitboxes.
+	const colony::TraceHit Sims = Combat.trace(Ax, Ay, Az, Bx, By, Bz, 0, Pawn, OwnCell);
+	if (Sims.kind == colony::ProjectileHitKind::Pawn && NoSkeleton.Contains(entt::to_integral(Sims.thing)) &&
+		static_cast<double>(Sims.t) * FightAimRangeM * 100.0 < BestCm)
 	{
-		OutWorldPoint = FightSimToWorldUnits(*Bridge, static_cast<float>(B.X), static_cast<float>(B.Y), static_cast<float>(B.Z));
+		BestPoint = FightSimToWorldUnits(*Bridge, Sims.x, Sims.y, Sims.z);
+		BestPawn = Sims.thing;
+		BestPart = nullptr;
+	}
+	OutWorldPoint = BestPoint;
+	if (OutPawnHit)
+	{
+		*OutPawnHit = BestPawn;
+	}
+	const colony::ThingView* Target = BestPawn != colony::kNoEntity && BestPart ? Snap.find(BestPawn) : nullptr;
+	const USimPawnSubsystem* PawnsNow = GetWorld()->GetSubsystem<USimPawnSubsystem>();
+	const ASimPawnActor* TargetActor = Target && PawnsNow ? PawnsNow->FindPawn(BestPawn) : nullptr;
+	if (OutDrawn && Target && TargetActor)
+	{
+		const int Part = Combat.hitboxPart(BestPawn, BestPart);
+		if (Part >= 0)
+		{
+			// The spot as offsets on the map from where the sim has the pawn now (not its drawn yaw: the drawn body turns on
+			// its own, so a spot in its frame landed tens of cm off on the sim's facing). The sim puts it back on the pawn as
+			// it stands when the shot goes.
+			const FVector SimPoint = (BestPoint - Bridge->GetWorldOrigin()) / 100.0;
+			const float Ground = Bridge->GetSim()->map().heightAt(Target->x, Target->y);
+			OutDrawn->pawn = BestPawn;
+			OutDrawn->part = Part;
+			OutDrawn->dx = static_cast<float>(SimPoint.X) - Target->x;
+			OutDrawn->dy = static_cast<float>(SimPoint.Y) - Target->y;
+			OutDrawn->up = static_cast<float>(SimPoint.Z) - Ground;
+		}
 	}
 	return true;
 }
@@ -1248,12 +1384,19 @@ bool UFightSubsystem::Fire()
 		return false;
 	}
 	FVector Aim;
-	if (!ComputeAimPoint(Aim))
+	colony::DrawnAim Drawn;
+	if (!ComputeAimPoint(Aim, nullptr, &Drawn))
 	{
 		return false;
 	}
 	const FVector Sim = (Aim - Bridge->GetWorldOrigin()) / 100.0;
-	Bridge->Submit(colony::ShootCommand{Pawn, colony::kNoEntity, static_cast<float>(Sim.X), static_cast<float>(Sim.Y), static_cast<float>(Sim.Z), true});
+	colony::ShootCommand Shot{Pawn, colony::kNoEntity, static_cast<float>(Sim.X), static_cast<float>(Sim.Y), static_cast<float>(Sim.Z), true};
+	Shot.aimPawn = Drawn.pawn;
+	Shot.aimPart = Drawn.part;
+	Shot.aimDx = Drawn.dx;
+	Shot.aimDy = Drawn.dy;
+	Shot.aimUp = Drawn.up;
+	Bridge->Submit(Shot);
 	LastFireStep = Bridge->GetSteps();
 	++FireOrders;
 	return true;

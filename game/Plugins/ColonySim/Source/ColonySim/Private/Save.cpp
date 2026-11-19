@@ -1587,6 +1587,13 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("y", shoot->y);
                 ar.value("z", shoot->z);
                 ar.value("player", shoot->player);
+                if (ar.sectionVersion() >= 5) {  // the crosshair on a drawn body (docs/design/aiming.md)
+                    ar.value("aimPawn", shoot->aimPawn);
+                    ar.value("aimPart", shoot->aimPart);
+                    ar.value("aimDx", shoot->aimDx);
+                    ar.value("aimDy", shoot->aimDy);
+                    ar.value("aimUp", shoot->aimUp);
+                }
             } else if constexpr (std::is_same_v<Type, SetStanceCommand>) {
                 auto* stance = &c;
                 ar.value("pawn", stance->pawn);
@@ -2351,6 +2358,16 @@ void saveEquippedByPart(Ar& ar, EquippedBy& b) {
 }
 
 template <typename Ar>
+void saveDrawnAim(Ar& ar, DrawnAim& d) {
+    ar.value("drawnPawn", d.pawn);
+    ar.value("drawnPart", d.part);
+    ar.value("drawnDx", d.dx);
+    ar.value("drawnDy", d.dy);
+    ar.value("drawnUp", d.up);
+    ar.require(std::isfinite(d.dx) && std::isfinite(d.dy) && std::isfinite(d.up), "the save file has a bad aim");
+}
+
+template <typename Ar>
 void saveShooterPart(Ar& ar, Shooter& sh) {
     ar.value("phase", sh.phase);
     ar.require(static_cast<int>(sh.phase) <= static_cast<int>(ar.version() >= 17 ? ShotPhase::Reloading : ShotPhase::Cooling),
@@ -2368,6 +2385,9 @@ void saveShooterPart(Ar& ar, Shooter& sh) {
         ar.value("refill", sh.refill);
         ar.value("refillFrom", sh.refillFrom);
         ar.value("storeGun", sh.storeGun);
+    }
+    if (ar.sectionVersion() >= 6) {  // the crosshair on a drawn body
+        saveDrawnAim(ar, sh.drawn);
     }
 }
 
@@ -2452,6 +2472,9 @@ void saveProjectilePart(Ar& ar, SaveProjectile& sp) {
     ar.value("seed", sp.p.seed);
     if (ar.sectionVersion() >= 2) {
         ar.value("damageFactor", sp.p.damageFactor);
+    }
+    if (ar.sectionVersion() >= 6) {
+        saveDrawnAim(ar, sp.p.drawn);
     }
 }
 
@@ -3486,7 +3509,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("repaths", d.repaths);
         ar.list("setupErrors", d.setupErrors, [&](std::string& s) { ar.text(nullptr, s); });
     });
-    ar.section("commands", 4, [&] { saveCommandsSection(ar, d); });
+    ar.section("commands", 5, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
     ar.section("movement", 3, [&] {
@@ -3537,7 +3560,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("mood", 1, [&] {
         saveParts(ar, "mood", e, &SaveEntity::mood, [&](Mood& m) { saveMoodPart(ar, m); });
     });
-    ar.section("combat", 5, [&] {
+    ar.section("combat", 6, [&] {
         saveParts(ar, "posture", e, &SaveEntity::posture, [&](Posture& p) { savePosturePart(ar, p); });
         saveParts(ar, "gear", e, &SaveEntity::gear, [&](Gear& g) { saveGearPart(ar, g); });
         saveParts(ar, "equippedBy", e, &SaveEntity::equippedBy, [&](EquippedBy& b) { saveEquippedByPart(ar, b); });
