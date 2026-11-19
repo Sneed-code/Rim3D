@@ -20,7 +20,7 @@ class USceneComponent;
 class USimSubsystem;
 class UStaticMesh;
 class UStaticMeshComponent;
-namespace colony { class Sim; struct HitboxView; struct ThingView; }
+namespace colony { class Sim; struct DrawnAim; struct HitboxView; struct ThingView; }
 
 /** What the particles are (each has its own mesh and colour). */
 enum class EFightParticle : uint8
@@ -68,6 +68,14 @@ struct FFightHitRecord
 	FVector Where = FVector::ZeroVector;
 	/** Cm from the nearest of the pawn's hitboxes (0 on or inside one); -1 if the pawn had none. */
 	float MissCm = -1.0f;
+	/** The two distances MissCm is the nearer of: the sim's hitboxes and the body as drawn (-1: not measured). */
+	float StockCm = -1.0f;
+	float DrawnCm = -1.0f;
+	/** For the report: where the drawn body stood and faced (world cm, degrees) and where the sim had it (sim metres). */
+	FVector DrawnAt = FVector::ZeroVector;
+	float DrawnYaw = 0.0f;
+	FVector SimAt = FVector::ZeroVector;
+	float SimYaw = 0.0f;
 	int64 GameSeconds = 0;  // the step it happened in (USimSubsystem::GetSteps)
 };
 
@@ -121,9 +129,11 @@ public:
 	bool Roll(const FVector2D& Input);
 	/** Throws the first grenade on the belt at the crosshair's point (F9's ThrowCommand with `player`). */
 	bool ThrowGrenade();
-	/** Where the crosshair points, in Unreal world units: the sim's trace from the view along the look
-	 *  direction (ground, rock, building or pawn hitbox), else a point 150 m out. False if not in direct mode. */
-	bool ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* OutPawnHit = nullptr) const;
+	/** Where the crosshair points, in Unreal world units: the nearest of the sim's ground, rock and buildings and the
+	 *  bodies as they are drawn this frame (DrawnHit; animals by the sim's hitboxes), else a point 150 m out. On a drawn
+	 *  body `OutDrawn` gets the pawn, the sim body part and the spot in that pawn's frame (docs/design/aiming.md).
+	 *  False if not in direct mode. */
+	bool ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* OutPawnHit = nullptr, colony::DrawnAim* OutDrawn = nullptr) const;
 
 	// --- Hitbox debug view ---
 
@@ -192,7 +202,8 @@ public:
 	int32 GetActiveParticles() const { return Particles.Num(); }
 	int32 GetLiveDecals() const;
 	int32 GetHeldGuns() const;
-	/** Largest distance (cm) between a pawn hit and the pawn's hitboxes over all hits seen. */
+	/** Largest distance (cm) between a pawn hit and the pawn's hitboxes or drawn body (the nearer; the drawn body less the
+	 *  5 cm it may move on while the bullet flies) over all hits seen. */
 	float GetMaxHitboxMissCm() const
 	{
 		float Max = 0.0f;
@@ -202,6 +213,8 @@ public:
 		}
 		return Max;
 	}
+	/** The worst checked hit, spelled out for a smoke test's failure message (empty if none). */
+	FString DescribeWorstHit() const;
 	/** Hits that could be checked: a hit that downed the pawn or took off a part is not (its hitboxes changed in the same step). */
 	int32 GetHitboxChecks() const
 	{

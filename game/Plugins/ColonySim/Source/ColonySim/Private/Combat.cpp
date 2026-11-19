@@ -123,6 +123,7 @@ struct CombatModel {
     std::vector<float> spreadRadius;
     std::vector<float> hitShare;
     float playerSpreadDistance = 25.0f;
+    float playerSpreadFactor = 1.0f;  // times the player's cone (sneed 2026-11-18: shots go where the crosshair is)
     float gravity = 0.0109f;
     float recoilRecovery = 0.002f;
     float recoilSkillReduction = 0.025f;
@@ -289,6 +290,7 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         minHitChance = combatNum(*rules, "minHitChance", minHitChance);
         defaultSkill = static_cast<int>(rules->integer("defaultShootingSkill", defaultSkill));
         playerSpreadDistance = combatNum(*rules, "playerSpreadDistance", playerSpreadDistance);
+        playerSpreadFactor = combatNum(*rules, "playerSpreadFactor", playerSpreadFactor);
         gravity = combatNum(*rules, "gravity", gravity);
         recoilRecovery = combatNum(*rules, "recoilRecoveryPerSecond", recoilRecovery);
         recoilSkillReduction = combatNum(*rules, "recoilSkillReduction", recoilSkillReduction);
@@ -793,9 +795,12 @@ float CombatSystem::spread(DefId weapon, int skill, float distance, bool player,
         return acc[3];
     };
     if (player) {
+        // The gun's best accuracy at any distance (a pistol is as true as a rifle up close; its poor long-range numbers
+        // are RimWorld's stand-in for a shooter's wobble, which the player supplies), as if aimed at 25 m.
         const float d = model_->playerSpreadDistance;
-        const float hit = std::clamp(gunAccuracy(d) * accuracyFactor, model_->minHitChance, 1.0f);
-        return model_->radiusFor(hit) / d;
+        const float best = std::max(std::max(gun->accuracy[0], gun->accuracy[1]), std::max(gun->accuracy[2], gun->accuracy[3]));
+        const float hit = std::clamp(best * accuracyFactor, model_->minHitChance, 1.0f);
+        return model_->radiusFor(hit) / d * model_->playerSpreadFactor;
     }
     const float d = std::max(distance, 1.0f);
     const float shooter = combatPowDistance(model_->accuracyBySkill[std::clamp(skill, 0, 20)], d);
@@ -819,10 +824,39 @@ bool CombatSystem::aimPoint(Entity pawn, float& x, float& y, float& z) const {
         return true;
     }
     const float* a = kind->poses[static_cast<int>(combatStanceOf(reg, pawn))].aim;
-    x = pos.x + a[0] * posture.facingX - a[1] * posture.facingY;
-    y = pos.y + a[0] * posture.facingY + a[1] * posture.facingX;
-    z = ground + a[2];
+    const float k = hitboxScale(pawn);
+    x = pos.x + k * (a[0] * posture.facingX - a[1] * posture.facingY);
+    y = pos.y + k * (a[0] * posture.facingY + a[1] * posture.facingX);
+    z = ground + k * a[2];
     return true;
+}
+
+float CombatSystem::hitboxScale(Entity pawn) const {
+    // The stock hitboxes are a 1.80 m man; bodies are drawn at their own height (PawnLooks), so the boxes grow and
+    // shrink with them, the way Unreal scales the mesh.
+    const entt::registry& reg = things_.registry();
+    const PawnLooks* looks = reg.valid(pawn) ? reg.try_get<PawnLooks>(pawn) : nullptr;
+    return looks != nullptr && looks->height > 0.0f ? std::clamp(looks->height, 0.5f, 1.5f) : 1.0f;
+}
+
+int CombatSystem::hitboxPart(Entity pawn, const std::string& label) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Thing>(pawn)) {
+        return -1;
+    }
+    const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
+    if (kind == nullptr) {
+        return -1;
+    }
+    for (const CombatModel::Pose& pose : kind->poses) {
+        for (const CombatModel::Shape& shape : pose.shapes) {
+            if (shape.part >= 0 && static_cast<size_t>(shape.part) < kind->parts.size() &&
+                kind->parts[static_cast<size_t>(shape.part)].label == label) {
+                return shape.part;
+            }
+        }
+    }
+    return -1;
 }
 
 void CombatSystem::shotHeights(Entity pawn, Stance stance, float& muzzle, float& aim) const {
@@ -833,8 +867,9 @@ void CombatSystem::shotHeights(Entity pawn, Stance stance, float& muzzle, float&
         aim = eyeHeight(stance) * 0.7f;
         return;
     }
-    muzzle = kind->poses[static_cast<int>(stance)].muzzle;
-    aim = kind->poses[static_cast<int>(stance)].aim[2];
+    const float k = hitboxScale(pawn);
+    muzzle = kind->poses[static_cast<int>(stance)].muzzle * k;
+    aim = kind->poses[static_cast<int>(stance)].aim[2] * k;
 }
 
 bool CombatSystem::hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const {
@@ -853,10 +888,11 @@ bool CombatSystem::hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const {
     const float ground = map_.heightAt(pos.x, pos.y);
     const float fx = posture.facingX;
     const float fy = posture.facingY;
+    const float k = hitboxScale(pawn);
     const auto world = [&](const float* l, float& wx, float& wy, float& wz) {
-        wx = pos.x + l[0] * fx - l[1] * fy;
-        wy = pos.y + l[0] * fy + l[1] * fx;
-        wz = ground + l[2];
+        wx = pos.x + k * (l[0] * fx - l[1] * fy);
+        wy = pos.y + k * (l[0] * fy + l[1] * fx);
+        wz = ground + k * l[2];
     };
     for (const CombatModel::Shape& shape : kind->poses[static_cast<int>(combatStanceOf(reg, pawn))].shapes) {
         if (health_.partHitPoints(pawn, shape.part) <= 0.0f) {
@@ -871,13 +907,13 @@ bool CombatSystem::hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const {
             const float centre[3] = {0.5f * (shape.a[0] + shape.b[0]), 0.5f * (shape.a[1] + shape.b[1]),
                                      0.5f * (shape.a[2] + shape.b[2])};
             world(centre, v.ax, v.ay, v.az);
-            v.bx = 0.5f * (shape.b[0] - shape.a[0]);
-            v.by = 0.5f * (shape.b[1] - shape.a[1]);
-            v.bz = 0.5f * (shape.b[2] - shape.a[2]);
+            v.bx = 0.5f * k * (shape.b[0] - shape.a[0]);
+            v.by = 0.5f * k * (shape.b[1] - shape.a[1]);
+            v.bz = 0.5f * k * (shape.b[2] - shape.a[2]);
         } else {
             world(shape.a, v.ax, v.ay, v.az);
             world(shape.b, v.bx, v.by, v.bz);
-            v.radius = shape.r;
+            v.radius = shape.r * k;
         }
         out.push_back(v);
     }
@@ -885,7 +921,7 @@ bool CombatSystem::hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const {
 }
 
 TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, float bz, int level, Entity skipPawn,
-                             CellPos skipCell, bool pawns) const {
+                             CellPos skipCell, bool pawns, const DrawnAim* drawn) const {
     TraceHit best;
     const float dx = bx - ax;
     const float dy = by - ay;
@@ -977,6 +1013,36 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
             continue;
         }
         const CombatModel::Pose& pose = kind->poses[static_cast<int>(combatStanceOf(reg, pawn))];
+        const float k = hitboxScale(pawn);
+        const float ground = map_.heightAt(pos.x, pos.y);
+        const float fx = posture.facingX;
+        const float fy = posture.facingY;
+        // A player's shot at a drawn body part (DrawnAim): passing near the spot the crosshair was on hits that part.
+        if (drawn != nullptr && pawn == drawn->pawn && drawn->part >= 0 && health_.partHitPoints(pawn, drawn->part) > 0.0f) {
+            const float sx = pos.x + drawn->dx;
+            const float sy = pos.y + drawn->dy;
+            const float sz = ground + drawn->up;
+            const CombatVec spot{0.0f, 0.0f, 0.0f};
+            const float t = combatSegmentCapsule(CombatVec{ax - sx, ay - sy, az - sz}, CombatVec{dx, dy, dz}, spot, spot,
+                                                 kDrawnAimRadius);
+            if (t >= 0.0f) {
+                const bool better = best.kind == ProjectileHitKind::None
+                                        ? t <= best.t
+                                        : (t < best.t || (t == best.t && best.kind == ProjectileHitKind::Pawn && pawn < best.thing));
+                if (better) {
+                    // It lands on the spot itself: the drawn body's surface where the crosshair was, not the edge of
+                    // the 7 cm allowance round it (the wound and blood go where the player aimed).
+                    best.t = t;
+                    best.x = sx;
+                    best.y = sy;
+                    best.z = sz;
+                    best.kind = ProjectileHitKind::Pawn;
+                    best.thing = pawn;
+                    best.part = drawn->part;
+                }
+                continue;  // the drawn body decided this pawn
+            }
+        }
         // Quick test: the line's closest approach to the pawn on the ground.
         const float px = pos.x - ax;
         const float py = pos.y - ay;
@@ -984,20 +1050,19 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
         s = std::clamp(s, 0.0f, 1.0f);
         const float ex = ax + dx * s - pos.x;
         const float ey = ay + dy * s - pos.y;
-        if (ex * ex + ey * ey > pose.reach * pose.reach) {
+        if (ex * ex + ey * ey > pose.reach * pose.reach * k * k) {
             continue;
         }
-        const float ground = map_.heightAt(pos.x, pos.y);
-        if (std::min(az, bz) > ground + pose.top || std::max(az, bz) < ground) {
+        if (std::min(az, bz) > ground + pose.top * k || std::max(az, bz) < ground) {
             continue;
         }
-        // Into the pawn's frame: x forward, y left, z up from the ground under it.
-        const float fx = posture.facingX;
-        const float fy = posture.facingY;
+        // Into the pawn's frame: x forward, y left, z up from the ground under it, shrunk to the stock 1.80 m body
+        // (the line's own 0-to-1 measure doesn't change when both are scaled alike).
         const float rx = ax - pos.x;
         const float ry = ay - pos.y;
-        const CombatVec lp{rx * fx + ry * fy, -rx * fy + ry * fx, az - ground};
-        const CombatVec ld{dx * fx + dy * fy, -dx * fy + dy * fx, dz};
+        const float ik = 1.0f / k;
+        const CombatVec lp{(rx * fx + ry * fy) * ik, (-rx * fy + ry * fx) * ik, (az - ground) * ik};
+        const CombatVec ld{(dx * fx + dy * fy) * ik, (-dx * fy + dy * fx) * ik, dz * ik};
         for (const CombatModel::Shape& shape : pose.shapes) {
             float t = -1.0f;
             if (shape.box) {
@@ -1038,7 +1103,7 @@ Entity CombatSystem::fire(Entity pawn, float x, float y, float z, float spreadSl
     const Position pos = reg.get<Position>(pawn);
     const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
     const Stance stance = combatStanceOf(reg, pawn);
-    const float muzzle = kind != nullptr ? kind->poses[static_cast<int>(stance)].muzzle : eyeHeight(stance) - 0.15f;
+    const float muzzle = kind != nullptr ? kind->poses[static_cast<int>(stance)].muzzle * hitboxScale(pawn) : eyeHeight(stance) - 0.15f;
     const Entity shot = launch(pawn, weaponDef, pos.x, pos.y, map_.heightAt(pos.x, pos.y) + muzzle, pos.level, cellOf(pos), x, y,
                                z, spreadSlope, rng, kickUp, kickSide, &reg.get<Posture>(pawn));
     if (shot != kNoEntity) {
@@ -1144,7 +1209,8 @@ Entity CombatSystem::launch(Entity pawn, DefId weaponDef, float ox, float oy, fl
     return shot;
 }
 
-bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, bool player, std::string* why) {
+bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, bool player, std::string* why,
+                         const DrawnAim* drawn) {
     entt::registry& reg = things_.registry();
     const auto fail = [why](const char* message) {
         if (why != nullptr) {
@@ -1207,6 +1273,12 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     s.aimY = y;
     s.aimZ = z;
     s.player = player;
+    s.drawn = DrawnAim{};
+    if (player && drawn != nullptr && drawn->pawn != pawn && drawn->part >= 0 && things_.spawned(drawn->pawn) &&
+        reg.all_of<Posture>(drawn->pawn) && std::isfinite(drawn->dx) && std::isfinite(drawn->dy) &&
+        std::isfinite(drawn->up)) {
+        s.drawn = *drawn;
+    }
     if (s.phase == ShotPhase::Ready || player) {
         // Cooldown bursts: the player fires one shot a pull (held, one every gap), a fighter what the store holds.
         s.shotsLeft = !gun.store ? gun.burst : player ? 1 : (s.stored < 0 ? gun.burst : s.stored);
@@ -1304,6 +1376,18 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
             s.target = kNoEntity;
         }
     }
+    // The player's crosshair on a drawn body part: aim at that spot on the pawn as it stands now.
+    if (s.player && s.drawn.pawn != kNoEntity) {
+        const Health* health = reg.valid(s.drawn.pawn) ? reg.try_get<Health>(s.drawn.pawn) : nullptr;
+        if (!things_.spawned(s.drawn.pawn) || !reg.all_of<Position, Posture>(s.drawn.pawn) || (health != nullptr && health->dead)) {
+            s.drawn = DrawnAim{};
+        } else {
+            const Position& tp = reg.get<Position>(s.drawn.pawn);
+            s.aimX = tp.x + s.drawn.dx;
+            s.aimY = tp.y + s.drawn.dy;
+            s.aimZ = map_.heightAt(tp.x, tp.y) + s.drawn.up;
+        }
+    }
     // Cooldown bursts: a fighter's burst stops when a friend comes into the line, during the aim or between shots (bodies
     // shove each other in a melee next to it); the store keeps the rest.
     if (gun->store && !s.player && s.target != kNoEntity && holdFire_ && holdFire_(pawn, s.target)) {
@@ -1379,8 +1463,12 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     const WeaponMods* mods = reg.try_get<WeaponMods>(gear->weapon);
     const float partsAccuracy = mods != nullptr ? mods->accuracy : 1.0f;
     const float quality = rangedAccuracyFactor(gear->weapon);
-    fire(pawn, fx, fy, fz, spread(weaponDef, skill, distance, s.player, accuracyFactor * quality * partsAccuracy * performance(pawn)) * steady + s.recoil, rng,
-         kickUp, kickSide);
+    const Entity shot = fire(pawn, fx, fy, fz,
+                             spread(weaponDef, skill, distance, s.player, accuracyFactor * quality * partsAccuracy * performance(pawn)) * steady + s.recoil,
+                             rng, kickUp, kickSide);
+    if (shot != kNoEntity && s.player) {
+        reg.get<Projectile>(shot).drawn = s.drawn;
+    }
     const float skillFactor = std::max(0.0f, 1.0f - model_->recoilSkillReduction * static_cast<float>(skill));
     s.recoil += gun->recoil * skillFactor;
     if (kicks) {
@@ -2182,7 +2270,8 @@ void CombatSystem::step(Rng& rng) {
         const float nx = p.x + p.vx;
         const float ny = p.y + p.vy;
         const float nz = p.z + p.vz - 0.5f * g;
-        TraceHit hit = trace(p.x, p.y, p.z, nx, ny, nz, p.level, p.launcher, p.startCell);
+        TraceHit hit = trace(p.x, p.y, p.z, nx, ny, nz, p.level, p.launcher, p.startCell, true,
+                             p.drawn.pawn != kNoEntity ? &p.drawn : nullptr);
         const CellPos next{static_cast<int>(std::floor(nx)), static_cast<int>(std::floor(ny)), p.level};
         if (hit.kind == ProjectileHitKind::None && (p.age > model_->maxFlight || !map_.inBounds(next))) {
             hit.kind = ProjectileHitKind::Gone;
@@ -3150,6 +3239,11 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(s->refill);
         h.add(s->refillFrom);
         h.add(entt::to_integral(s->storeGun));
+        h.add(entt::to_integral(s->drawn.pawn));
+        h.add(s->drawn.part);
+        h.add(s->drawn.dx);
+        h.add(s->drawn.dy);
+        h.add(s->drawn.up);
     }
     if (const Projectile* p = reg.try_get<Projectile>(e)) {
         h.add(p->def.value);
@@ -3164,6 +3258,11 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(p->startCell.y);
         h.add(p->startCell.level);
         h.add(p->seed);
+        h.add(entt::to_integral(p->drawn.pawn));
+        h.add(p->drawn.part);
+        h.add(p->drawn.dx);
+        h.add(p->drawn.dy);
+        h.add(p->drawn.up);
     }
     if (const Magazine* m = reg.try_get<Magazine>(e)) {
         h.add(m->rounds);

@@ -195,6 +195,14 @@ struct ShootCommand {
     float y = 0.0f;
     float z = 0.0f;
     bool player = false;
+    // Player shots: the drawn body part under the crosshair (CombatSystem DrawnAim, docs/design/aiming.md). `aimPawn`
+    // none for an ordinary shot at the point. The spot: metres east (dx) and north (dy) of the aimed pawn's position
+    // and up from the ground under it.
+    Entity aimPawn = kNoEntity;
+    int aimPart = -1;
+    float aimDx = 0.0f;
+    float aimDy = 0.0f;
+    float aimUp = 0.0f;
 };
 
 // Stands, crouches or lies down: changes the pawn's hitboxes, muzzle height and what hides it
