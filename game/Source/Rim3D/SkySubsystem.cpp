@@ -187,6 +187,8 @@ bool FLookConfig::Load(const FString& Path, FString& OutError)
 	LookNumber(ExposureJson, TEXT("minEV"), MinEV);
 	LookNumber(ExposureJson, TEXT("maxEV"), MaxEV);
 	LookNumber(ExposureJson, TEXT("brighterEV"), BrighterEV);
+	LookNumber(ExposureJson, TEXT("indoorBrighterEV"), IndoorBrighterEV);
+	LookNumber(ExposureJson, TEXT("indoorEase"), IndoorEase);
 	LookNumber(ExposureJson, TEXT("darkerEV"), DarkerEV);
 	LookNumber(ExposureJson, TEXT("speedUp"), SpeedUp);
 	LookNumber(ExposureJson, TEXT("speedDown"), SpeedDown);
@@ -881,7 +883,7 @@ void USkySubsystem::ApplyState(const FSkyState& New)
 	if (Exposure)
 	{
 		FPostProcessSettings& P = Exposure->Settings;
-		P.AutoExposureMinBrightness = State.ExposureEV - Look.BrighterEV;
+		P.AutoExposureMinBrightness = State.ExposureEV - FMath::Lerp(Look.BrighterEV, FMath::Max(Look.BrighterEV, Look.IndoorBrighterEV), IndoorShare);
 		P.AutoExposureMaxBrightness = State.ExposureEV + Look.DarkerEV;
 		const FLookSeason Grade = Look.GradeFor(State.DayOfYear);
 		P.WhiteTemp = Grade.White;
@@ -1013,6 +1015,28 @@ void USkySubsystem::FindMistBase(const colony::Sim& Sim, const USimSubsystem& So
 	Heights.Sort();
 	MistBaseZ = Source.GetWorldOrigin().Z + static_cast<double>(Heights[Heights.Num() * 3 / 10]) * 100.0;
 	bMistBaseMoved = true;
+}
+
+void USkySubsystem::UpdateIndoorShare(const colony::Sim& Sim, const USimSubsystem& Source, float RealDelta)
+{
+	// Indoors means the camera is in a roofed cell and below the roof (about 3.2 m over the floor), as when playing as a pawn
+	// or with the camera dropped into a room. Then the eye may open up more than outdoors, so a room lit through its windows
+	// reads as lit instead of black next to the bright outside, as a real eye does after a moment.
+	float Wanted = 0.0f;
+	if (const APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0))
+	{
+		const FVector CamAt = CameraManager->GetCameraLocation();
+		const FVector Origin = Source.GetWorldOrigin();
+		const colony::CellPos CamCell{FMath::FloorToInt32((CamAt.X - Origin.X) * 0.01), FMath::FloorToInt32((CamAt.Y - Origin.Y) * 0.01), 0};
+		const colony::Map& Map = Sim.map();
+		if (Map.inBounds(CamCell) && Map.roof(CamCell) != colony::Roof::None &&
+			CamAt.Z < Origin.Z + static_cast<double>(Map.groundHeight(CamCell.x, CamCell.y)) * 100.0 + 320.0)
+		{
+			Wanted = 1.0f;
+		}
+	}
+	const float Step = FMath::Max(Look.IndoorEase, 0.01f) * FMath::Min(RealDelta, 0.25f);
+	IndoorShare = FMath::Clamp(IndoorShare + FMath::Clamp(Wanted - IndoorShare, -Step, Step), 0.0f, 1.0f);
 }
 
 double USkySubsystem::GroundZ(const colony::Sim& Sim, const USimSubsystem& Source, double X, double Y) const
@@ -1273,6 +1297,7 @@ void USkySubsystem::Tick(float DeltaTime)
 	{
 		DayOfYear = FMath::Fmod(GSkyDayOfYear.GetValueOnGameThread(), SkyDaysPerYear);
 	}
+	UpdateIndoorShare(Sim, *Source, DeltaTime);
 	ApplyState(ComputeState(Sim, Hour, DayOfYear));
 	// The star dome stays centred on the camera, so the stars sit at the same place in the sky wherever it looks from.
 	if (StarDome && StarDome->IsVisible())
