@@ -364,6 +364,8 @@ private:
 	/** The hit reaction's lean and the melee pose, applied to the body together. */
 	void ApplyBodyPose(float GameDelta, bool bBlocking);
 	void AdvanceJump(float GameDelta);
+	/** Animate after this frame's move: the meshes tick in TG_PostUpdateWork (TG_PrePhysics while a ragdoll). */
+	void UpdateMeshTickGroups();
 	/** The swing or block, plus the dodge: what the body and the weapon do now. */
 	FMeleePose ComputeMeleePose() const;
 
@@ -374,6 +376,9 @@ private:
 	FSimPawnLooks Looks;
 	bool bHasLooks = false;
 	bool bRagdoll = false;
+	/** The tick group the meshes were last put in, and how many meshes that was (more come with looks). */
+	int32 MeshTickGroup = -1;
+	int32 MeshTickCount = 0;
 	uint16 SeveredShown = 0;
 	int32 SeveredCaps = 0;
 	/** Meshes hidden whole because the head is off (a MetaHuman face); they still go into the head's piece. */
@@ -381,9 +386,16 @@ private:
 	int32 RagdollsStarted = 0;
 	float ReactionAge = kHitReactionSeconds;
 	int32 HitClipsPlayed = 0;
+	// The react to a hit playing on the upper body, how long it has played (game seconds) and when it is let go.
+	TWeakObjectPtr<class UAnimMontage> HitMontage;
+	float HitClipAge = 0.0f;
+	float HitClipEndSeconds = 0.0f;
 	float ReactionStrength = 0.0f;
 	FVector ReactionDirection = FVector::ForwardVector;
 	float LeanDegrees = 0.0f;
+	/** The hit lean drawn last, and the one a new hit took over from (eased out under the new one). */
+	FQuat LeanShown = FQuat::Identity;
+	FQuat LeanCarry = FQuat::Identity;
 	int32 HitReactions = 0;
 
 	FMeleeSwingTrack Swing;
@@ -416,6 +428,11 @@ private:
 	int32 MotionClipsPlayed = 0;
 	/** The clip playing is drawn on the upper body only (the hips are the walk's: no set-back). */
 	bool bMotionUpper = false;
+	// The whole-body clip the one now playing took over from, while it fades out: its share of the set-back.
+	TWeakObjectPtr<class UAnimMontage> MotionOutMontage;
+	TWeakObjectPtr<class UAnimSequence> MotionOutAsset;
+	int32 MotionOutPelvisBone = INDEX_NONE;
+	FVector MotionOutPelvisStart = FVector::ZeroVector;
 	bool UpdateMotionClip(const USimSubsystem& Bridge, const colony::ThingView& Now, float GameDelta);
 	// The hit layer (body-health.md part E): the zone a sim body part or a sim zone is on screen, hits so far, the hurt
 	// legs (looked up a few times a second), and the crawl clip with its own set-back (its travel is in its hips too).
@@ -462,6 +479,12 @@ private:
 	ESimPawnDetail Detail = ESimPawnDetail::Full;
 	float CruiseSpeed = 400.0f;
 	float Yaw = 0.0f;
+	/** The facing drawn (degrees): Yaw, through a damped spring, so a body the sim turns 30 degrees in a few frames
+	 *  starts and stops turning smoothly; and how fast it turns (degrees a second). */
+	float DrawnYaw = 0.0f;
+	float DrawnYawRate = 0.0f;
+	/** How much of a whole-body clip shows now (the clip playing and the one fading out). */
+	float LegsClipWeight = 0.0f;
 	float SwimLiftCm = 0.0f;
 	bool bPlaced = false;
 	bool bBodyHidden = false;

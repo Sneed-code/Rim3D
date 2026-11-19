@@ -175,6 +175,12 @@ DefId ExplosiveSystem::firstItem(Entity pawn) const {
     return DefId{};
 }
 
+std::vector<BeltStack> ExplosiveSystem::stacks(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Belt* belt = reg.valid(pawn) ? reg.try_get<Belt>(pawn) : nullptr;
+    return belt != nullptr ? belt->stacks : std::vector<BeltStack>{};
+}
+
 int ExplosiveSystem::give(Entity pawn, DefId item, int amount) {
     entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || !reg.all_of<Posture>(pawn) || !isThrown(item) || amount <= 0) {
@@ -441,6 +447,10 @@ bool ExplosiveSystem::planThrow(Entity pawn, DefId item, float tx, float ty, Thr
             out.vz = g.vz;
             out.landX = ex;
             out.landY = ey;
+            out.landZ = ez;
+            out.startX = g.x;
+            out.startY = g.y;
+            out.startZ = g.z;
             out.flightSteps = steps;
         }
         if (miss <= model_->landingTolerance) {
@@ -635,9 +645,11 @@ void ExplosiveSystem::flyOrBlow(Entity grenade, Rng& rng) {
             e.cell = CellPos{static_cast<int>(std::floor(g.x)), static_cast<int>(std::floor(g.y)), g.level};
             events_->push_back(std::move(e));
         }
-        return;
-    }
-    if (--g.fuse > 0) {
+        if (g.fuse > 0) {
+            return;
+        }
+        // No fuse (a molotov): it bursts where it lands, in the same step.
+    } else if (--g.fuse > 0) {
         return;
     }
     Explosion ex;

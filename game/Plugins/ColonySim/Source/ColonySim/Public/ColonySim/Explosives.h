@@ -105,6 +105,10 @@ struct ThrowPlan {
     float vz = 0.0f;
     float landX = 0.0f;     // where the grenade comes to rest if thrown so
     float landY = 0.0f;
+    float landZ = 0.0f;
+    float startX = 0.0f;    // where it leaves the hand (Unreal draws the arc from here)
+    float startY = 0.0f;
+    float startZ = 0.0f;
     int flightSteps = 0;
 };
 
@@ -141,6 +145,8 @@ public:
     int count(Entity pawn, DefId item = DefId{}) const;
     // The Things def the next throw uses: the first stack that has one. Invalid if none.
     DefId firstItem(Entity pawn) const;
+    // The stacks on the pawn's belt, in order (empty if it has none). For the player's grenade choice.
+    std::vector<BeltStack> stacks(Entity pawn) const;
 
     // Orders a throw: the pawn winds up, then throws one grenade of `item` (the first stack if
     // invalid) at the ground under `target` if it is a pawn on the map, else at (x, y). A player's

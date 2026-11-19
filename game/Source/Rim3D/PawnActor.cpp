@@ -76,8 +76,20 @@ namespace
 	const TCHAR* const PawnCubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
 	// The mannequin faces +Y in its own space.
 	const FRotator PawnBodyRelativeRotation(0.0, -90.0, 0.0);
-	const float PawnMotionBlendIn = 0.08f;   // a clip the sim moves the body along (docs/design/body-motion.md)
-	const float PawnMotionBlendOut = 0.2f;
+	// A clip the sim moves the body along (docs/design/body-motion.md): blended in short (its blow is timed to the
+	// sim's step), a little longer from a clip still playing (the next swing, a stagger on a stagger: 0.08 s was a
+	// visible snap), out over 0.25 s. Blending never shifts the clip's moment, only how much of it shows.
+	const float PawnMotionBlendIn = 0.1f;
+	const float PawnMotionFollowBlendIn = 0.16f;
+	const float PawnMotionBlendOut = 0.25f;
+	// A react to a hit (upper body): blended in over 0.12 s, out over 0.3 s, and not restarted within 0.35 s.
+	const float PawnHitClipBlendIn = 0.12f;
+	const float PawnHitClipBlendOut = 0.3f;
+	const float PawnHitClipMinGap = 0.35f;
+	// The facing drawn: a damped spring onto the sim's facing, PawnDrawnYawRate radians a second, at most
+	// PawnDrawnYawMaxLag degrees behind.
+	const float PawnDrawnYawRate = 20.0f;
+	const float PawnDrawnYawMaxLag = 30.0f;
 
 	/** A clip or a push the sim is carrying the body along (walking waits); false for the player's own swings, which
 	 *  leave the feet to the keys (docs/design/body-motion.md "Upper-body clips"). */
@@ -122,7 +134,7 @@ void ASimPawnActor::Setup(USimPawnSubsystem& Pawns, colony::Entity InThing, floa
 	Body->SetAnimInstanceClass(USimPawnAnimInstance::StaticClass());
 	if (USimPawnAnimInstance* Anim = GetAnim())
 	{
-		Anim->SetAssets(Pawns.GetDatabases(), Pawns.GetIdleLoop(), Pawns.GetWalkLoop(), Pawns.GetWalkLoopSpeed(),
+		Anim->SetAssets(Pawns.GetDatabases(), Pawns.GetIdleLoops(), Pawns.GetIdleFeet(), Pawns.GetWalkLoop(), Pawns.GetWalkLoopSpeed(),
 			Pawns.GetRunLoop(), Pawns.GetRunLoopSpeed());
 	}
 
@@ -257,6 +269,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	}
 	const bool bTeleported = !bPlaced || FVector::Dist(Location, GetActorLocation()) > PawnTeleportDistance;
 	bPlaced = true;
+	UpdateMeshTickGroups();
 
 	// Metres per step to cm per second at 1x, blended like the position.
 	const float Alpha = Bridge.GetBlendAlpha();
@@ -321,7 +334,30 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	// Swimming: the body floats with its shoulders at the surface (docs/design/water.md, W4).
 	SwimLiftCm = WaterDraw::SwimLiftEase(SwimLiftCm, Bridge.GetSim() ? WaterDraw::SwimLiftTargetCm(Now, Bridge.GetSim()->bodyHeightM(Thing)) : 0.0f, DeltaTime, bTeleported);
 	Location.Z += SwimLiftCm;
-	SetActorLocationAndRotation(Location, FRotator(0.0, Yaw, 0.0));
+	// The facing drawn follows Yaw as a damped spring (PawnDrawnYawRate): the sim turns a body up to 30 degrees in a few
+	// frames, and a facing that starts or stops turning at once jolts every bone (docs/design/pawns.md "No pops").
+	if (bTeleported || DeltaTime * Speed <= 0.0f)
+	{
+		DrawnYaw = bTeleported ? Yaw : DrawnYaw;
+		DrawnYawRate = bTeleported ? 0.0f : DrawnYawRate;
+	}
+	else
+	{
+		const float YawDelta = DeltaTime * Speed;
+		const int32 YawSteps = FMath::Clamp(FMath::CeilToInt32(YawDelta * 120.0f), 1, 30);
+		for (int32 i = 0; i < YawSteps; ++i)
+		{
+			const float Off = FMath::FindDeltaAngleDegrees(DrawnYaw, Yaw);
+			DrawnYawRate += (PawnDrawnYawRate * PawnDrawnYawRate * Off - 2.0f * PawnDrawnYawRate * DrawnYawRate) * (YawDelta / YawSteps);
+			DrawnYaw = FRotator::NormalizeAxis(DrawnYaw + DrawnYawRate * (YawDelta / YawSteps));
+		}
+		const float Behind = FMath::FindDeltaAngleDegrees(Yaw, DrawnYaw);
+		if (FMath::Abs(Behind) > PawnDrawnYawMaxLag)
+		{
+			DrawnYaw = FRotator::NormalizeAxis(Yaw + FMath::Sign(Behind) * PawnDrawnYawMaxLag);
+		}
+	}
+	SetActorLocationAndRotation(Location, FRotator(0.0, DrawnYaw, 0.0));
 	ApplySevered(Now.severed);
 	UpdateFightFace(Bridge, Now, DeltaTime * Speed);
 	if (bRagdoll)
@@ -384,12 +420,14 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	{
 		FSimPawnAnimInputs& In = Anim->Inputs;
 		In.Location = Location;
-		In.Yaw = Yaw;
+		In.Yaw = DrawnYaw;
 		In.Velocity = Velocity;
 		In.CruiseSpeed = Pace;
 		In.Detail = Detail;
 		In.bTeleported = bTeleported;
 		In.bHoldFacing = bHoldFacing;
+		In.bStandTwist = !(IsInMotionClip() && !bMotionUpper) && RollProgress <= 0.0f && !IsJumping() && !Now.crawling && !Now.downed;
+		In.bLegsFromClip = LegsClipWeight > 0.001f || ActionEndSeconds > 0.0 || (IsInMotionClip() && !bMotionUpper);
 		In.bHitLayer = true;
 		In.LimpLeft = LimpLeft;
 		In.LimpRight = LimpRight;
@@ -403,6 +441,19 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 			In.Route.Add(Bridge.SimToWorld(Point.x, Point.y, Now.level));
 		}
 
+		if (HitMontage.IsValid())
+		{
+			HitClipAge += DeltaTime * Speed;
+			if (HitClipEndSeconds > 0.0f && HitClipAge >= HitClipEndSeconds)
+			{
+				Anim->Montage_Stop(PawnHitClipBlendOut, HitMontage.Get());
+				HitClipEndSeconds = 0.0f;
+			}
+			else if (HitClipEndSeconds <= 0.0f && !Anim->Montage_IsPlaying(HitMontage.Get()))
+			{
+				HitMontage.Reset();
+			}
+		}
 		if (ActionEndSeconds > 0.0)
 		{
 			ActionEndSeconds -= DeltaTime * Speed;
@@ -1247,6 +1298,7 @@ void ASimPawnActor::PlayHitReaction(const FVector& ShotDirection, float Strength
 		ReactionDirection = GetActorForwardVector();
 	}
 	ReactionStrength = FMath::Clamp(Strength, 0.0f, 1.0f);
+	LeanCarry = ReactionAge < kHitReactionSeconds ? LeanShown : FQuat::Identity;
 	ReactionAge = 0.0f;
 	++HitReactions;
 	// Every hit that reaches the body (or its armour) shows a moment of pain on the face (docs/design/focus.md "Faces").
@@ -1382,14 +1434,27 @@ bool ASimPawnActor::PlayHitClip(const FVector& ShotDirection, bool bStaggered)
 	const double Ahead = FVector::DotProduct(From, GetActorForwardVector());
 	const double Right = FVector::DotProduct(From, GetActorRightVector());
 	const int32 Side = FMath::Abs(Ahead) >= FMath::Abs(Right) ? (Ahead >= 0.0 ? 0 : 2) : (Right >= 0.0 ? 1 : 3);
-	UAnimSequence* Clip = PawnHitClipLoad(bStaggered ? PawnHitClipLarge[Side] : PawnHitClipSmall[Side]);
-	if (!Clip || !Anim->PlaySlotAnimationAsDynamicMontage(Clip, FAnimSlotGroup::DefaultSlotName, 0.06f, 0.3f))
+	// A clip the sim moves the body along (a stagger, a swing) already shows the hit: it is not cut off for a react.
+	// Nor is a react restarted by every bullet of a burst (each restart snapped the body back to the clip's start):
+	// the hit layer's wobble shows the later ones.
+	if (IsInMotionClip() || (HitMontage.IsValid() && Anim->Montage_IsPlaying(HitMontage.Get()) && HitClipAge < PawnHitClipMinGap))
 	{
 		return false;
 	}
+	UAnimSequence* Clip = PawnHitClipLoad(bStaggered ? PawnHitClipLarge[Side] : PawnHitClipSmall[Side]);
+	// On the upper body only (sneed 2026-11-18: no animation resets): the legs keep walking or standing as they were
+	// and the react blends in over the pose the body is in, instead of the whole body jumping into the clip's stance
+	// and stepping where the sim does not move it.
+	UAnimMontage* Montage = Clip ? Anim->PlaySlotAnimationAsDynamicMontage(Clip, USimPawnAnimInstance::UpperBodySlot, PawnHitClipBlendIn, PawnHitClipBlendOut) : nullptr;
+	if (!Montage)
+	{
+		return false;
+	}
+	HitMontage = Montage;
+	HitClipAge = 0.0f;
 	// The stumble lasts while the sim slows the walk (its stagger is about 1.6 s at 1x), the flinch a short moment; the
 	// walk or idle takes over again after.
-	ActionEndSeconds = FMath::Min(static_cast<double>(Clip->GetPlayLength()), bStaggered ? 1.3 : 0.7);
+	HitClipEndSeconds = FMath::Min(Clip->GetPlayLength(), bStaggered ? 1.3f : 0.7f);
 	++HitClipsPlayed;
 	return true;
 }
@@ -1445,7 +1510,16 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 	}
 	else
 	{
-		const float Want = Clip->from + Now.motionTime;
+		// The clip's moment drawn: between the last two steps' moments, as the body's place is between their places (the
+		// newest step's moment alone jumped 1/30 s at every step, and the catch-up below sped the clip up and down 30 times
+		// a second: every bone jittered).
+		float ShownTime = Now.motionTime;
+		if (const colony::ThingView* Prev = Bridge.GetPreviousSnapshot().find(Thing);
+			Prev && Prev->motionClip.value == Now.motionClip.value && Prev->motionTime <= Now.motionTime)
+		{
+			ShownTime = FMath::Lerp(Prev->motionTime, Now.motionTime, Bridge.GetBlendAlpha());
+		}
+		const float Want = Clip->from + ShownTime;
 		const float Rate = FMath::Max(0.05f, Now.motionRate);
 		MotionClipFrom = Clip->from;
 		MotionClipHit = Clip->hitSeconds;
@@ -1454,9 +1528,19 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 		{
 			// A stagger, a flinch or the player's own swing plays on the upper body, over legs that walk the way the body
 			// really goes (sneed 2026-11-18); a roll, a sidestep, a knockdown or an AI's lunging swing plays whole.
+			// A clip that follows another (the next swing, a stagger on a stagger) cross-fades from it a little longer, and
+			// the one going out keeps its share of the set-back below while it fades, so the body does not jump.
+			const bool bFollows = MotionMontage.IsValid() && Anim->Montage_IsPlaying(MotionMontage.Get());
+			if (bFollows && !bMotionUpper && MotionAsset.IsValid() && MotionPelvisBone != INDEX_NONE)
+			{
+				MotionOutMontage = MotionMontage;
+				MotionOutAsset = MotionAsset;
+				MotionOutPelvisBone = MotionPelvisBone;
+				MotionOutPelvisStart = MotionPelvisStart;
+			}
 			bMotionUpper = Now.motionUpper;
 			MotionMontage = Anim->PlaySlotAnimationAsDynamicMontage(Asset, bMotionUpper ? USimPawnAnimInstance::UpperBodySlot : FAnimSlotGroup::DefaultSlotName,
-				PawnMotionBlendIn, PawnMotionBlendOut, Rate, 1, -1.0f, Want);
+				bFollows ? PawnMotionFollowBlendIn : PawnMotionBlendIn, PawnMotionBlendOut, Rate, 1, -1.0f, Want);
 			MotionClipDef = Now.motionClip.value;
 			ActionEndSeconds = 0.0;
 			++MotionClipsPlayed;
@@ -1470,7 +1554,10 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 			// Kept in step with the sim: its rate, and its moment if the picture drifted (a pause, a hitch, a hit-stop). A
 			// picture a little behind (a hit-stop froze it while the sim went on) plays faster until it is back, within about
 			// 0.1 s, so the blow still lands on its step; the sim's moment is whole steps, so a picture up to a step ahead is right.
-			const float Drift = Want - Anim->Montage_GetPosition(MotionMontage.Get());
+			// The montage moves on by this frame's time after this (the meshes tick after the pawns): where it will be drawn.
+			const UWorld* ClipWorld = GetWorld();
+			const float Ahead = ClipWorld ? ClipWorld->GetDeltaSeconds() * Anim->Montage_GetPlayRate(MotionMontage.Get()) : 0.0f;
+			const float Drift = Want - (Anim->Montage_GetPosition(MotionMontage.Get()) + Ahead);
 			if (FMath::Abs(Drift) > 0.08f)
 			{
 				Anim->Montage_SetPosition(MotionMontage.Get(), Want);
@@ -1478,44 +1565,68 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 			}
 			else
 			{
-				Anim->Montage_SetPlayRate(MotionMontage.Get(), Rate + FMath::Max(0.0f, Drift) / 0.1f);
+				// Gently back in step, either way (the moment drawn is smooth now, so this stays small).
+				Anim->Montage_SetPlayRate(MotionMontage.Get(), FMath::Max(0.05f, Rate + FMath::Clamp(Drift / 0.25f, -0.3f * Rate, 0.3f * Rate)));
 			}
 		}
 		MotionClipTime = Now.motionTime;
 	}
 
-	// The set-back: the drawn hips' travel at the montage's own moment, as much as the montage shows (blending in or out).
-	const FAnimMontageInstance* Shown = nullptr;
-	if (Anim && MotionMontage.IsValid())
+	// The set-back: the drawn hips' travel at each montage's own moment, as much as each shows (blending in or out): the
+	// clip now playing, and the one it took over from while that fades out (without it the body jumped forward by the
+	// old clip's travel the moment a second swing or stagger began).
+	const auto MontageShown = [Anim](const TWeakObjectPtr<UAnimMontage>& Montage) -> const FAnimMontageInstance*
 	{
-		for (const FAnimMontageInstance* Instance : Anim->MontageInstances)
+		const FAnimMontageInstance* Best = nullptr;
+		if (Anim && Montage.IsValid())
 		{
-			if (Instance && Instance->Montage == MotionMontage.Get() && Instance->IsValid() && (!Shown || Instance->GetWeight() > Shown->GetWeight()))
+			for (const FAnimMontageInstance* Each : Anim->MontageInstances)
 			{
-				Shown = Instance;
+				if (Each && Each->Montage == Montage.Get() && Each->IsValid() && (!Best || Each->GetWeight() > Best->GetWeight()))
+				{
+					Best = Each;
+				}
 			}
 		}
-	}
+		return Best;
+	};
+	// The mannequin faces +Y in its own space and the actor +X, so the mesh's +Y is the actor's +X and its -X the
+	// actor's +Y (right); the body is scaled by the pawn's height, and so is its hips' travel.
+	const float Height = bHasLooks ? Looks.Height : 1.0f;
+	const UWorld* World = GetWorld();
+	const double FrameAhead = World ? static_cast<double>(World->GetDeltaSeconds()) : 0.0;
+	const auto SetBack = [Height, FrameAhead](const FAnimMontageInstance& Playing, const UAnimSequence& PlayingAsset, int32 Pelvis, const FVector& PelvisStart)
+	{
+		const double Ahead = Playing.IsPlaying() ? FrameAhead * static_cast<double>(Playing.GetPlayRate()) : 0.0;
+		const double At = FMath::Clamp(static_cast<double>(Playing.GetPosition()) + Ahead, 0.0, static_cast<double>(PlayingAsset.GetPlayLength()));
+		const FVector Travel = PawnMotionBoneAt(PlayingAsset, Pelvis, At) - PelvisStart;
+		return FVector(-Travel.Y, Travel.X, 0.0) * Playing.GetWeight() * Height;
+	};
+	// The bodies' meshes tick after the pawns (TG_PostUpdateWork), so the moments and weights read here are a frame
+	// old; the hips' travel is read a frame on (the montage's moment plus this frame's play), which is where it is drawn.
+	const FAnimMontageInstance* Shown = MontageShown(MotionMontage);
 	const UAnimSequence* ShownAsset = MotionAsset.Get();
+	MotionOffset = FVector::ZeroVector;
+	LegsClipWeight = Shown && !bMotionUpper ? Shown->GetWeight() : 0.0f;
 	if (Shown && ShownAsset && MotionPelvisBone != INDEX_NONE && !bMotionUpper)
 	{
-		// The pawns update after the bodies' animation has moved on for this frame (a tickable subsystem runs after the
-		// tick groups), so the montage's moment and weight now are the ones drawn this frame.
-		const double At = FMath::Clamp(static_cast<double>(Shown->GetPosition()), 0.0, static_cast<double>(ShownAsset->GetPlayLength()));
-		const FVector Travel = PawnMotionBoneAt(*ShownAsset, MotionPelvisBone, At) - MotionPelvisStart;
-		// The mannequin faces +Y in its own space and the actor +X, so the mesh's +Y is the actor's +X and its -X the
-		// actor's +Y (right); the body is scaled by the pawn's height, and so is its hips' travel.
-		const float Height = bHasLooks ? Looks.Height : 1.0f;
-		MotionOffset = FVector(-Travel.Y, Travel.X, 0.0) * Shown->GetWeight() * Height;
+		MotionOffset += SetBack(*Shown, *ShownAsset, MotionPelvisBone, MotionPelvisStart);
+	}
+	else if (!Asset)
+	{
+		MotionMontage.Reset();
+		MotionAsset.Reset();
+	}
+	const FAnimMontageInstance* Out = MotionOutMontage != MotionMontage ? MontageShown(MotionOutMontage) : nullptr;
+	if (Out && MotionOutAsset.IsValid() && MotionOutPelvisBone != INDEX_NONE)
+	{
+		LegsClipWeight = FMath::Max(LegsClipWeight, Out->GetWeight());
+		MotionOffset += SetBack(*Out, *MotionOutAsset.Get(), MotionOutPelvisBone, MotionOutPelvisStart);
 	}
 	else
 	{
-		MotionOffset = FVector::ZeroVector;
-		if (!Asset)
-		{
-			MotionMontage.Reset();
-			MotionAsset.Reset();
-		}
+		MotionOutMontage.Reset();
+		MotionOutAsset.Reset();
 	}
 	return Asset != nullptr;
 }
@@ -1864,16 +1975,26 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 	{
 		ReactionAge += GameDelta;
 		const float T = FMath::Clamp(ReactionAge / kHitReactionSeconds, 0.0f, 1.0f);
-		// Snaps over in the first 15%, then settles back.
-		const float Envelope = T < 0.15f ? T / 0.15f : FMath::Square(1.0f - (T - 0.15f) / 0.85f);
+		// Over in the first 20%, then back; eased at both ends of both, so the body never starts or stops at once
+		// (docs/design/pawns.md "No pops").
+		const auto Ease = [](float X) { X = FMath::Clamp(X, 0.0f, 1.0f); return X * X * (3.0f - 2.0f * X); };
+		const float Envelope = T < 0.2f ? Ease(T / 0.2f) : 1.0f - Ease((T - 0.2f) / 0.8f);
 		LeanDegrees = PawnHitLeanDegrees * ReactionStrength * Envelope;
 		// The top of the body goes along the shot: turn about up x direction.
 		const FVector Axis = FVector::CrossProduct(FVector::UpVector, ReactionDirection).GetSafeNormal();
 		LeanWorld = FQuat(Axis, FMath::DegreesToRadians(LeanDegrees));
+		// A hit before the last one's lean is over: that lean eases out over the new one's way in (it used to jump back).
+		if (!LeanCarry.Equals(FQuat::Identity, 1.0e-5))
+		{
+			LeanWorld = FQuat::Slerp(LeanCarry, FQuat::Identity, Ease(T / 0.2f)) * LeanWorld;
+		}
+		LeanShown = LeanWorld;
 	}
 	else
 	{
 		LeanDegrees = 0.0f;
+		LeanCarry = FQuat::Identity;
+		LeanShown = FQuat::Identity;
 	}
 
 	FQuat MeleeLocal = FQuat::Identity;
@@ -2018,6 +2139,37 @@ void ASimPawnActor::StartRagdoll(const FVector& Impulse)
 	{
 		Body->AddImpulse(Impulse, NAME_None, true);
 	}
+}
+
+void ASimPawnActor::UpdateMeshTickGroups()
+{
+	// The pawn subsystem moves and turns the actor as a tickable, after TG_PrePhysics: a mesh animated there draws a pose
+	// made for last frame's place and facing, so every turn and step swings the feet by one frame's move and back
+	// (docs/design/pawns.md "No pops"). TG_PostUpdateWork comes after the tickables: the pose is made for the place it
+	// is drawn at. A ragdoll keeps TG_PrePhysics, where physics expects its body.
+	const ETickingGroup Group = bRagdoll ? TG_PrePhysics : TG_PostUpdateWork;
+	TInlineComponentArray<USkeletalMeshComponent*> Meshes(this);
+	if (MetaHuman)
+	{
+		TInlineComponentArray<USkeletalMeshComponent*> More(MetaHuman.Get());
+		Meshes.Append(More);
+	}
+	if (MeshTickGroup == static_cast<int32>(Group) && MeshTickCount == Meshes.Num())
+	{
+		return;
+	}
+	for (USkeletalMeshComponent* Mesh : Meshes)
+	{
+		Mesh->PrimaryComponentTick.TickGroup = Group;
+		Mesh->PrimaryComponentTick.EndTickGroup = Group;
+		if (Mesh != Body.Get())
+		{
+			// Copies of the body's pose (the MakeHuman retarget, MetaHuman parts) come after it.
+			Mesh->PrimaryComponentTick.AddPrerequisite(Body.Get(), Body->PrimaryComponentTick);
+		}
+	}
+	MeshTickGroup = static_cast<int32>(Group);
+	MeshTickCount = Meshes.Num();
 }
 
 void ASimPawnActor::StopRagdoll()

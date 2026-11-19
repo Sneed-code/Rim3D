@@ -312,7 +312,12 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
             break;
         }
         case EventType::GrenadeThrown: out.push_back(soundAt("Grenade_Throw", e.x, e.y, e.z)); break;
-        case EventType::GrenadeLanded: out.push_back(soundAt("Grenade_Landed", e.x, e.y, e.z)); break;
+        case EventType::GrenadeLanded: {
+            // The Projectiles def's `landed` (a molotov's bottle shatters), else a grenade's clunk.
+            const std::string cue = soundSlotOr(soundDef(db, e.def), "landed", "Grenade_Landed");
+            out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));
+            break;
+        }
         case EventType::TrapSprung: out.push_back(soundAt("Trap_Spring", e.x, e.y, e.z)); break;
         case EventType::TrapRearmed: out.push_back(soundAtCell("Trap_Rearm", e.cell)); break;
         case EventType::PawnAction: soundPawnAction(db, e, defOf, out); break;

@@ -88,6 +88,11 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override;
 
+	/** Runs this frame's steps and sets the blend, once a frame, whichever asks first: the sim's own tick, or a
+	 *  subsystem that draws the blend (the pawns), which may tick before it. Without it the pawns were drawn with the
+	 *  last frame's blend on some frames: moved by the last frame's time, so their speed wavered frame to frame. */
+	void AdvanceFrame(float DeltaTime);
+
 	/** Starts a new sim, replacing the running one. Returns false if the data folder has broken defs
 	 *  (the sim then starts with no defs, and the problems are in the log). */
 	bool StartSim(const FSimStartOptions& Options);
@@ -232,6 +237,8 @@ private:
 	colony::Snapshot Previous;
 	colony::Snapshot Current;
 	float BlendAlpha = 0.0f;
+	/** The frame (GFrameCounter) AdvanceFrame last ran on. */
+	uint64 AdvancedFrame = MAX_uint64;
 
 	double StepAccumulator = 0.0;
 	int32 Speed = 1;
