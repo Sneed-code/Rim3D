@@ -202,7 +202,8 @@ public:
 	int32 GetActiveParticles() const { return Particles.Num(); }
 	int32 GetLiveDecals() const;
 	int32 GetHeldGuns() const;
-	/** Largest distance (cm) between a pawn hit and the pawn's hitboxes or drawn body (the nearer) over all hits seen. */
+	/** Largest distance (cm) between a pawn hit and the pawn's hitboxes or drawn body (the nearer; the drawn body less the
+	 *  5 cm it may move on while the bullet flies) over all hits seen. */
 	float GetMaxHitboxMissCm() const
 	{
 		float Max = 0.0f;

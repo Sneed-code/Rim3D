@@ -134,9 +134,15 @@ Now:
   draws it): shapes, aim point and muzzle height, for bullets, blasts and melee alike.
 
 Tests: "Crosshair" in `Tests/AimingTests.cpp`; smoke test `fights` phase `head_shots` aims at the drawn head from 12 m
-and logs the struck parts, and its hit check counts a hit on the drawn body as on the body. Note: the drawn MakeHuman
-bodies are not exactly 1.80 m times their PawnLooks height (the PC's `hitbox_view` saw 181 cm of hitboxes on a 154 cm
-body), so the stock hitboxes AI shots use can still be off by that much; the player's shots don't depend on them. Not yet: fighters' shots and melee still use the stock hitboxes posed
+and logs the struck parts (PC 2026-11-19: 7 of 7 on the head). Its hit check takes the nearer of the stock hitboxes
+and the drawn body, allowing the drawn body 5 cm of movement between the trigger and the bullet's arrival (the clip goes
+on and the previous hit's wobble springs back: 7 to 8 cm at worst on the PC, positions and yaws equal); the worst hit is
+written out in full. Note on heights: the sim's hitboxes follow PawnLooks height on a 1.80 m man, which
+matches the game's MetaHuman bodies. The smoke tests and the range dress pawns as creator MakeHuman people through an
+Unreal-only looks override the sim never sees, and those meshes have their own height (measured on the PC: CreatorFemale
+163 cm, CreatorMale 165, Woman 156, PetitePale 150, Imp 139, at scale 1). So there the stock hitboxes run about 20 cm
+tall (hitbox_view 184 against 163). That only touches fighters' shots and melee; when the creator bodies come to the
+real game through the sim's looks, the sim should scale by the chosen mesh's height. Not yet: fighters' shots and melee still use the stock hitboxes posed
 by stance only (a baked per-clip pose for them is a later step), and the drawn capsules are round where a chest is flat.
 
 ## Magazines and reloading (off while cooldown bursts are on)

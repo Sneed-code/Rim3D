@@ -64,6 +64,9 @@ namespace
 
 	// How far the crosshair reaches, metres.
 	constexpr float FightAimRangeM = 150.0f;
+	// How far the drawn body may move on between the trigger and the bullet's arrival before a hit on it counts as off
+	// the body in the hit check (docs/design/aiming.md "Shots go where the crosshair is").
+	constexpr double FightDrawnDriftCm = 5.0;
 	// A gun lying this close (metres) is picked up by E.
 	constexpr float FightEquipRangeM = 8.0f;
 	// Bullets that never report a hit are dropped after this long (real seconds) or this far (cm).
@@ -396,9 +399,13 @@ void UFightSubsystem::OnProjectileHit(const colony::Event& Event)
 				Record.DrawnCm = static_cast<float>(Drawn);
 				Record.DrawnAt = Actor->GetActorLocation();
 				Record.DrawnYaw = Actor->GetActorRotation().Yaw;
-				if (Drawn >= 0.0 && (Record.MissCm < 0.0f || Drawn < Record.MissCm))
+				// The spot is on the drawn body when the trigger is pulled; by the time the bullet arrives (a step or two) the
+				// body has moved on in its clip and the wobble from the shot before springs back (PC: 7 to 8 cm at worst,
+				// drawn and sim positions and yaws equal). That much is allowed before it counts as a miss.
+				const float Allowed = static_cast<float>(FMath::Max(0.0, Drawn - FightDrawnDriftCm));
+				if (Drawn >= 0.0 && (Record.MissCm < 0.0f || Allowed < Record.MissCm))
 				{
-					Record.MissCm = static_cast<float>(Drawn);
+					Record.MissCm = Allowed;
 				}
 			}
 		}
