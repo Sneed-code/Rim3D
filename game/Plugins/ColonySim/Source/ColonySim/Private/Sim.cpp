@@ -367,6 +367,12 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     // A heater or cooler that draws power pushes heat only while it has it (E5), and one that burns fuel (a campfire, a
     // passive cooler) only while it has some: before, a campfire with no wood left still warmed its room.
     temperature_->setSourceRunning([this](Entity building) { return power_->running(building) && (jobs_ == nullptr || jobs_->fuel().lit(building)); });
+    // A heater or cooler at its target (or a cooler that can do nothing) draws a tenth of its power, as RimWorld's
+    // CompTempControl.lowPowerConsumptionFactor.
+    temperature_->setDrawFactor([this](Entity building, double factor) {
+        const double full = power_->info(things_->registry().get<Thing>(building).def).consumption;
+        power_->setDraw(building, factor >= 1.0 ? -1.0 : full * factor);
+    });
     spoilage_ = std::make_unique<SpoilageSystem>(map_, *things_, *temperature_, *roomStats_, *defs_,
                                                  splitMix64(settings.seed ^ 0x73706F696CULL));
     spoilage_->setEventLog(&events_);

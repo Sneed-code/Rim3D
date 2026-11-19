@@ -84,6 +84,16 @@ public:
     // Whether a heater, cooler or campfire is running right now. Until power (E5) and fuel (C11)
     // install their test, every one is, so a heater needs no power yet.
     void setSourceRunning(std::function<bool(Entity)> running) { running_ = std::move(running); }
+    // Called every interval for each running pusher whose def has `heatPusher.lowPowerFactor` (the heater and the
+    // cooler): 1 while it is changing its room's temperature, the def's factor (RimWorld's 0.1) while it idles at its
+    // target or can do nothing. `Sim` installs it to set the building's power draw (`PowerGrid::setDraw`).
+    void setDrawFactor(std::function<void(Entity, double)> drawFactor) { drawFactor_ = std::move(drawFactor); }
+    // Whether a heater or cooler changed its room's temperature at the last interval (false for one that idles at
+    // its target, is switched off, or is a cooler with a blocked or outdoor side).
+    bool working(Entity building) const;
+    // An in-wall pusher's (the cooler's) cold and hot cells: the cell in front of it (the way it faces) and the one
+    // behind. False for a building that is not an in-wall pusher.
+    bool sidesOf(Entity building, CellPos& cold, CellPos& hot) const;
     // Moves a pawn's comfortable range (min, max) for what it wears: C15 installs it.
     void setComfortModifier(std::function<void(Entity, float&, float&)> modifier) { modifier_ = std::move(modifier); }
 
@@ -148,6 +158,13 @@ private:
         bool adjustable = false;
         bool isWall = false;
         bool isVent = false;
+        // RimWorld's Building_Cooler: it stands in a wall, cools the room in front of it and pushes
+        // `exhaustFactor` times that heat into the cell behind; it works less the hotter that side is.
+        bool inWall = false;
+        float exhaustFactor = 1.25f;
+        float efficiencyHotStartC = 40.0f;
+        float efficiencySpanC = 130.0f;
+        float lowPowerFactor = 0.0f;  // 0: the draw is not changed
     };
 
     void syncRooms();
@@ -174,6 +191,8 @@ private:
     float outdoor_ = 10.0f;
     float ground_ = 10.0f;
     std::function<bool(Entity)> running_;
+    std::function<void(Entity, double)> drawFactor_;
+    std::vector<Entity> working_;  // pushers that changed a room's temperature at the last interval, by id
     std::function<void(Entity, float&, float&)> modifier_;
 
     std::vector<SourceDef> sourceDefs_;  // by def id
