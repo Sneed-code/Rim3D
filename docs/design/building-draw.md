@@ -117,10 +117,11 @@ the size in metres it stands in, which footprint axis its long side takes, the t
 | TailorBenchHand, TailorBenchElectric, StonecutterTable, ButcherTable | wooden_table_03, wooden_table_01, wooden_table_03, wooden_table_02 (stretched to the footprint) |
 | FueledSmithy, Heater | scandinavian_masonry_heater; ElectricSmithy metal_tool_chest; MachiningTable and Dresser drawer_cabinet (stretched) |
 | ElectricStove, HospitalBed, CraftingSpot, ChessTable, BilliardsTable | electric_stove, old_bed_frame, wooden_cutting_board, wooden_table_01, dining_table |
-| WoodFiredGenerator, Battery, Cooler, Campfire | portable_generator, old_military_crate, exterior_aircon_unit, stone_fire_pit |
+| WoodFiredGenerator, Battery, Campfire | portable_generator, old_military_crate, stone_fire_pit |
 | StandingLamp, SunLamp, TorchLamp | street_lamp_01 (two heights), vintage_oil_lamp |
 | Armchair, EndTable, PlantPot | ArmChair_01, painted_wooden_nightstand, potted_plant_01 |
-| *Still shapes* | walls, PowerConduit, PowerSwitch, SolarGenerator, WindTurbine, Vent, PassiveCooler, Column, HorseshoesPin (no fitting free model), and floors (floors are terrain defs, drawn by the terrain, not as meshes) |
+| *Still shapes* | walls, Column, HorseshoesPin (no fitting free model), and floors (floors are terrain defs, drawn by the terrain, not as meshes) |
+| *Shapes in the data* (2026-11-19, power thread) | PowerConduit and PowerSwitch (a low dark cable stub; the switch a post with a box and a red lever), SolarGenerator (a dark blue panel tilted 20 degrees on three posts), WindTurbine (a 6.6 m white mast, nacelle and three blades), ChemfuelGenerator (an engine block with a red tank), Cooler (a piece of wall with a grille high on its cold side and a fan unit low on its hot side; the old aircon mesh stood loose in the room and is gone since the cooler went into the wall), Vent (a piece of wall with a louvred grille through it), PassiveCooler (a wooden box with a water tray) |
 
 Wall, steel, silver, the survival pack, components, medicine, chunks and guns stay as shapes: Poly Haven has no
 plain wall or ingot, and a box already reads as both.
