@@ -16,6 +16,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Windows.h"
 
 #include <string>
 
@@ -29,6 +30,7 @@ namespace
 	// The same flat-colour material as the terrain, and the see-through one the BuildingMaterials commandlet makes for the ghosts.
 	const TCHAR* const BldSolidMaterialPath = TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial");
 	const TCHAR* const BldGhostMaterialPath = TEXT("/Game/Rim3D/Generated/Buildings/M_BuildingGhost.M_BuildingGhost");
+	const TCHAR* const BldGlassMaterialPath = TEXT("/Game/Rim3D/Generated/Buildings/M_WindowGlass.M_WindowGlass");
 	const FLinearColor BldGhostColor(0.18f, 0.42f, 0.95f, 0.38f);
 
 	// What a component draws: the fixed parts of a finished building, a door's leaf, a frame (all parts, solid), a ghost (all parts, see-through).
@@ -36,6 +38,8 @@ namespace
 	constexpr int32 BldSliding = 1;
 	constexpr int32 BldAll = 2;
 	constexpr int32 BldGhost = 3;
+	constexpr int32 BldGlass = 4;  // a window's pane (docs/design/windows.md)
+	constexpr int32 BldVariants = 8;  // batch and component keys are Look * BldVariants + variant
 
 	// A frame is drawn this fraction of its height with nothing delivered, and a full height when it is done.
 	constexpr float BldFrameMinScale = 0.1f;
@@ -185,6 +189,134 @@ namespace
 		if (Link & 2) { Add(Length, Thickness, Height, Middle, 0.0f); }
 		if (Link & 4) { Add(Thickness, Length, Height, 0.0f, -Middle); }
 		if (Link & 8) { Add(Length, Thickness, Height, -Middle, 0.0f); }
+	}
+
+	// A window's frame and the gap round the glass (docs/design/windows.md).
+	constexpr float BldWindowJambCm = 10.0f;    // wall left at a cell's edge beside the opening
+	constexpr float BldWindowFrameCm = 5.0f;    // the frame's width round the pane
+	constexpr float BldWindowFrameDepthCm = 7.0f;
+	constexpr float BldWindowPaneCm = 1.5f;     // the glass's thickness
+	const FLinearColor BldWindowFrameColor(0.16f, 0.15f, 0.14f);
+
+	/**
+	 * A linked wall with a window in it (docs/design/windows.md): the wall below the sill and above the lintel as BldLinkParts
+	 * makes it, and between the two the opening along the wall's line with a frame round it. `Glass` (if not null) gets the
+	 * pane, one box per opening, drawn by its own see-through mesh. A corner or a T keeps its post whole and opens only the
+	 * arms along the line. Heights in centimetres.
+	 */
+	void BldWindowParts(int32 Link, float Thickness, float Height, float SillCm, float LintelCm, TArray<VisualMesh::FPart>& Out,
+		TArray<VisualMesh::FPart>* Glass)
+	{
+		const float Body = FMath::Max(Height - BldCapHeightCm, BldBaseHeightCm + 1.0f);
+		SillCm = FMath::Clamp(SillCm, BldBaseHeightCm, Body - 20.0f);
+		LintelCm = FMath::Clamp(LintelCm, SillCm + 20.0f, Body - 5.0f);
+		const float Band = LintelCm - SillCm;
+		// The line the wall runs along: east-west if it joins anything that way (or nothing at all), else north-south.
+		const bool bAlongX = (Link & (2 | 8)) != 0 || (Link & (1 | 4)) == 0;
+		const int32 PosBit = bAlongX ? 2 : 1;
+		const int32 NegBit = bAlongX ? 8 : 4;
+		const int32 PerpBits = bAlongX ? (1 | 4) : (2 | 8);
+		// Boxes are given along the line (u) and across it (v), and turned into x and y here.
+		const auto Add = [&](TArray<VisualMesh::FPart>& To, float SizeU, float SizeV, float SizeZ, float AtU, float AtV, float AtZ,
+			const FLinearColor& Color, bool bStuff)
+		{
+			VisualMesh::FPart Part;
+			Part.Shape = VisualMesh::EShape::Box;
+			Part.Size = bAlongX ? FVector3f(SizeU, SizeV, SizeZ) : FVector3f(SizeV, SizeU, SizeZ);
+			Part.At = bAlongX ? FVector3f(AtU, AtV, AtZ) : FVector3f(AtV, AtU, AtZ);
+			Part.Color = Color;
+			Part.bStuff = bStuff;
+			To.Add(Part);
+		};
+		// Below the sill and above the lintel: the plain wall, cut short. BldLinkParts gives base course, body and cap; the
+		// lower part keeps the base course and the body up to the sill, the upper part the body from the lintel and the cap.
+		{
+			TArray<VisualMesh::FPart> Whole;
+			BldLinkParts(Link, Thickness, Height, Whole);
+			for (const VisualMesh::FPart& Part : Whole)
+			{
+				const float Bottom = Part.At.Z;
+				const float Top = Part.At.Z + Part.Size.Z;
+				if (Top <= SillCm || Bottom >= LintelCm)
+				{
+					Out.Add(Part);  // the base course, the cap
+					continue;
+				}
+				if (Bottom < SillCm)
+				{
+					VisualMesh::FPart Low = Part;
+					Low.Size.Z = SillCm - Bottom;
+					Out.Add(Low);
+				}
+				if (Top > LintelCm)
+				{
+					VisualMesh::FPart High = Part;
+					High.At.Z = LintelCm;
+					High.Size.Z = Top - LintelCm;
+					Out.Add(High);
+				}
+			}
+		}
+		// Between them: the arms across the line stay whole, and so does the post if there are any.
+		const float Half = Thickness * 0.5f;
+		const float ArmLength = 50.0f - Half;
+		const bool bPerp = (Link & PerpBits) != 0;
+		if (ArmLength > 0.0f)
+		{
+			const int32 PerpPos = bAlongX ? 1 : 2;  // north for an east-west wall, east for a north-south one
+			const int32 PerpNeg = bAlongX ? 4 : 8;
+			if (Link & PerpPos) { Add(Out, Thickness, ArmLength, Band, 0.0f, Half + ArmLength * 0.5f, SillCm, FLinearColor::White, true); }
+			if (Link & PerpNeg) { Add(Out, Thickness, ArmLength, Band, 0.0f, -Half - ArmLength * 0.5f, SillCm, FLinearColor::White, true); }
+		}
+		if (bPerp)
+		{
+			Add(Out, Thickness, Thickness, Band, 0.0f, 0.0f, SillCm, FLinearColor::White, true);
+		}
+		// The openings along the line, with a jamb of wall where one meets the cell's edge.
+		const float PosEnd = (Link & PosBit) ? 50.0f : Half;
+		const float NegEnd = (Link & NegBit) ? -50.0f : -Half;
+		struct FSpan { float From; float To; };
+		TArray<FSpan, TInlineAllocator<2>> Openings;
+		if (bPerp)
+		{
+			if (Link & PosBit) { Openings.Add({Half, PosEnd - BldWindowJambCm}); }
+			if (Link & NegBit) { Openings.Add({NegEnd + BldWindowJambCm, -Half}); }
+		}
+		else
+		{
+			Openings.Add({NegEnd + BldWindowJambCm, PosEnd - BldWindowJambCm});
+		}
+		if (Link & PosBit || !bPerp)
+		{
+			Add(Out, BldWindowJambCm, Thickness, Band, PosEnd - BldWindowJambCm * 0.5f, 0.0f, SillCm, FLinearColor::White, true);
+		}
+		if (Link & NegBit || !bPerp)
+		{
+			Add(Out, BldWindowJambCm, Thickness, Band, NegEnd + BldWindowJambCm * 0.5f, 0.0f, SillCm, FLinearColor::White, true);
+		}
+		for (const FSpan& Span : Openings)
+		{
+			const float Length = Span.To - Span.From;
+			if (Length < 2.0f * BldWindowFrameCm + 5.0f)
+			{
+				// Too short to open: wall.
+				Add(Out, FMath::Max(Length, 0.0f), Thickness, Band, (Span.From + Span.To) * 0.5f, 0.0f, SillCm, FLinearColor::White, true);
+				continue;
+			}
+			const float Mid = (Span.From + Span.To) * 0.5f;
+			// A stone sill a little proud of the wall, then the frame: bottom, top and two sides, at the middle of the wall's depth.
+			Add(Out, Length, Thickness + 6.0f, 3.0f, Mid, 0.0f, SillCm - 3.0f, BldCapShade, true);
+			Add(Out, Length, BldWindowFrameDepthCm, BldWindowFrameCm, Mid, 0.0f, SillCm, BldWindowFrameColor, false);
+			Add(Out, Length, BldWindowFrameDepthCm, BldWindowFrameCm, Mid, 0.0f, LintelCm - BldWindowFrameCm, BldWindowFrameColor, false);
+			Add(Out, BldWindowFrameCm, BldWindowFrameDepthCm, Band, Span.From + BldWindowFrameCm * 0.5f, 0.0f, SillCm, BldWindowFrameColor, false);
+			Add(Out, BldWindowFrameCm, BldWindowFrameDepthCm, Band, Span.To - BldWindowFrameCm * 0.5f, 0.0f, SillCm, BldWindowFrameColor, false);
+			// The reveal: the opening's top and bottom faces are the wall cut back, which the parts above already are.
+			if (Glass)
+			{
+				Add(*Glass, Length - 2.0f * BldWindowFrameCm, BldWindowPaneCm, Band - 2.0f * BldWindowFrameCm, Mid, 0.0f,
+					SillCm + BldWindowFrameCm, FLinearColor(0.85f, 0.92f, 0.96f), false);
+			}
+		}
 	}
 
 	struct FBldBatch
@@ -459,7 +591,7 @@ UMaterialInterface* UBuildingSubsystem::SurfaceOf(colony::DefId Stuff)
 	return Material;
 }
 
-int32 UBuildingSubsystem::GetLook(colony::DefId Def, colony::DefId Stuff, int32 Link)
+int32 UBuildingSubsystem::GetLook(colony::DefId Def, colony::DefId Stuff, int32 Link, int32 Window)
 {
 	const FDefLook* DefLook = LookOfDef(Def);
 	if (!DefLook || !BuiltSim)
@@ -467,7 +599,9 @@ int32 UBuildingSubsystem::GetLook(colony::DefId Def, colony::DefId Stuff, int32 
 		return -1;
 	}
 	Link = DefLook->bLink || DefLook->bCable ? Link : -1;
-	const uint64 Key = (static_cast<uint64>(Def.value) << 32) | (static_cast<uint64>(Link + 1) << 24) | (Stuff.valid() ? static_cast<uint64>(Stuff.value) + 1 : 0);
+	Window = Link >= 0 && DefLook->bLink ? FMath::Clamp(Window, 0, 2) : 0;
+	const uint64 Key = (static_cast<uint64>(Def.value) << 32) | (static_cast<uint64>(Window) << 29) | (static_cast<uint64>(Link + 1) << 24) |
+		(Stuff.valid() ? static_cast<uint64>(Stuff.value) + 1 : 0);
 	if (const int32* Found = LookIndex.Find(Key))
 	{
 		return *Found;
@@ -479,9 +613,16 @@ int32 UBuildingSubsystem::GetLook(colony::DefId Def, colony::DefId Stuff, int32 
 	}
 	UMaterialInterface* Surface = SurfaceOf(Stuff);
 	TArray<VisualMesh::FPart> LinkParts;
+	TArray<VisualMesh::FPart> GlassParts;
 	if (Link >= 0 && DefLook->bCable)
 	{
 		BldCableParts(Link, DefLook->CableThicknessCm, DefLook->CableHeightCm, DefLook->CableColor, LinkParts);
+	}
+	else if (Link >= 0 && Window > 0)
+	{
+		const colony::WindowNumbers& Numbers = BuiltSim->windows().numbers();
+		BldWindowParts(Link, DefLook->LinkThicknessCm, DefLook->HeightCm, static_cast<float>(Numbers.sillDm) * 10.0f,
+			static_cast<float>(Numbers.lintelDm) * 10.0f, LinkParts, Window == 1 && GlassMaterial ? &GlassParts : nullptr);
 	}
 	else if (Link >= 0)
 	{
@@ -515,6 +656,15 @@ int32 UBuildingSubsystem::GetLook(colony::DefId Def, colony::DefId Stuff, int32 
 	else
 	{
 		Look.All = Look.Fixed;
+	}
+	if (!GlassParts.IsEmpty())
+	{
+		Look.Glass = VisualMesh::MakeMesh(this, GlassMaterial, GlassParts, VisualMesh::EPartSet::All, nullptr, false);
+		if (Look.Glass)
+		{
+			KeepMeshes.Add(Look.Glass);
+			++Stats.Meshes;
+		}
 	}
 	const int32 Index = Looks.Add(Look);
 	LookIndex.Add(Key, Index);
@@ -590,6 +740,11 @@ void UBuildingSubsystem::RebuildAll()
 		// Made by the BuildingMaterials commandlet (docs/design/building-draw.md); without it plans are drawn solid.
 		UE_LOG(LogSimBuildings, Warning, TEXT("%s not found: blueprints are drawn solid. Run the BuildingMaterials commandlet (assets/manifest.json)."), BldGhostMaterialPath);
 		GhostMaterial = nullptr;
+	}
+	GlassMaterial = LoadObject<UMaterialInterface>(nullptr, BldGlassMaterialPath);
+	if (!GlassMaterial)
+	{
+		UE_LOG(LogSimBuildings, Warning, TEXT("%s not found: windows are drawn without glass. Run the BuildingMaterials commandlet (assets/manifest.json)."), BldGlassMaterialPath);
 	}
 	ReadDefs(Core);
 
@@ -717,6 +872,10 @@ void UBuildingSubsystem::Refresh()
 			{
 				H = BldCombine(H, 0x11C0ULL + static_cast<uint64>(ScanLinks[I]));
 			}
+			if (View.window != colony::WindowState::None)
+			{
+				H = BldCombine(H, 0x3D1AULL + static_cast<uint64>(View.window));
+			}
 		}
 		const int32 Chunk = ChunkIndex(View.level, CX, CY);
 		ScanSignatures[Chunk] += H;
@@ -790,7 +949,7 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 
 	const auto Add = [&Batches](int32 Look, int32 Variant, UStaticMesh* Mesh, bool bGhost, bool bItem, bool bShadow, const FTransform& Transform) -> int32
 	{
-		FBldBatch& Batch = Batches.FindOrAdd(Look * 4 + Variant);
+		FBldBatch& Batch = Batches.FindOrAdd(Look * BldVariants + Variant);
 		Batch.Mesh = Mesh;
 		Batch.bGhost = bGhost;
 		Batch.bItem = bItem;
@@ -850,7 +1009,9 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 		// A linked building's arms point at its neighbours on the map, so it is never turned.
 		const float Yaw = bDoorBuilt ? (BldDoorAlongY(Map, View) ? 90.0f : 0.0f) : (Link >= 0 ? 0.0f : BldYawOf(View.rotation));
 		FVector Location(View.x * 100.0f, View.y * 100.0f, Base * 100.0f);
-		const int32 LookId = GetLook(View.def, View.stuff, Link);
+		// A finished wall's window (docs/design/windows.md); plans and frames are drawn whole.
+		const int32 Window = View.stage == colony::ConstructionStage::Built ? static_cast<int32>(View.window) : 0;
+		const int32 LookId = GetLook(View.def, View.stuff, Link, Window);
 		if (LookId < 0)
 		{
 			continue;
@@ -886,10 +1047,15 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 				{
 					Add(LookId, BldFixed, Look.Fixed, false, false, true, Placed);
 				}
+				if (Look.Glass)
+				{
+					// No shadow, so the sun comes in through it.
+					Add(LookId, BldGlass, Look.Glass, false, false, false, Placed);
+				}
 				if (Look.Sliding)
 				{
 					const int32 Index = Add(LookId, BldSliding, Look.Sliding, false, false, true, Placed);
-					Pending.Add({static_cast<uint32>(View.id), LookId * 4 + BldSliding, Index, Placed, FRotator(0.0, Yaw, 0.0).RotateVector(FVector::XAxisVector), DefLook->SlideCm});
+					Pending.Add({static_cast<uint32>(View.id), LookId * BldVariants + BldSliding, Index, Placed, FRotator(0.0, Yaw, 0.0).RotateVector(FVector::XAxisVector), DefLook->SlideCm});
 				}
 				break;
 			case colony::ConstructionStage::Frame:

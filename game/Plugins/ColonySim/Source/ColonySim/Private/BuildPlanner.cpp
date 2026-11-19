@@ -5,6 +5,7 @@
 #include "ColonySim/Research.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Windows.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -66,7 +67,13 @@ bool BuildPlanner::entry(const std::string& defName, BuildMenuEntry& out) const 
     const Construction& construction = sim_.construction();
     const Def* def = defs.find("Things", defName);
     bool floor = false;
-    if (def != nullptr) {
+    bool tool = false;
+    if (def != nullptr && buildToolOf(defs, defName) != BuildTool::None) {
+        if (!def->has("designationCategory")) {
+            return false;
+        }
+        tool = true;
+    } else if (def != nullptr) {
         if (def->text("category") != "Building" || !def->has("designationCategory") || !construction.buildable(def->id())) {
             return false;
         }
@@ -81,7 +88,8 @@ bool BuildPlanner::entry(const std::string& defName, BuildMenuEntry& out) const 
     out.defName = defName;
     out.label = buildPlanCapital(def->label());
     out.floor = floor;
-    if (!floor) {
+    out.tool = tool;
+    if (!floor && !tool) {
         out.sizeX = std::max(1, static_cast<int>(def->numberAt("size", 0, 1.0)));
         out.sizeY = std::max(1, static_cast<int>(def->numberAt("size", 1, 1.0)));
     }
@@ -236,6 +244,17 @@ BuildPreview BuildPlanner::preview(const std::string& defName, const std::string
     }
     if (!item.locked.empty()) {
         out.whyNot = item.locked;
+        return out;
+    }
+    if (item.tool) {
+        // A tool marks cells for a builder: each spot is fine if the sim would take the mark, and it costs nothing.
+        const BuildTool tool = buildToolOf(defs, defName);
+        const Windows& windows = sim_.windows();
+        for (const CellPos cell : dragCells(from, to, shape)) {
+            PlannedSpot spot{cell, tool == BuildTool::AddWindow ? windows.whyNotAdd(cell) : windows.whyNotRemove(cell)};
+            out.plannable += spot.whyNot.empty() ? 1 : 0;
+            out.spots.push_back(std::move(spot));
+        }
         return out;
     }
     const DefId def = defs.idOf(item.floor ? "Terrain" : "Things", defName);
