@@ -246,6 +246,7 @@ struct SaveHealth {
     bool dirty = false;
     int64_t bleedStoppedAt = -1;  // health section 7 on
     std::vector<int64_t> zoneHurtAt;  // health section 8 on (body-health.md part F)
+    std::vector<float> zoneOverkill;  // health section 9 on: damage piled up past each zone's 0
 };
 
 // An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
@@ -2057,6 +2058,13 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
         ar.list("zoneHurtAt", h.zoneHurtAt, [&](int64_t& at) { ar.value(nullptr, at); });
         ar.require(h.zoneHurtAt.size() <= 64, "the save file has too many body zones");
     }
+    if (ar.sectionVersion() >= 9) {
+        ar.list("zoneOverkill", h.zoneOverkill, [&](float& pile) {
+            ar.value(nullptr, pile);
+            ar.require(pile >= 0.0f && pile < 1.0e6f, "the save file has an impossible pile of damage");
+        });
+        ar.require(h.zoneOverkill.size() <= 64, "the save file has too many body zones");
+    }
 }
 
 template <typename Ar>
@@ -3540,7 +3548,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("colonists", 2, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 8, [&] {
+    ar.section("health", 9, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -4456,6 +4464,7 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
         saved.bloodLoss = health->bloodLoss;
         saved.bleedStoppedAt = health->bleedStoppedAt;
         saved.zoneHurtAt = health->zoneHurtAt;
+        saved.zoneOverkill = health->zoneOverkill;
         for (const EnvironmentHediff& env : health->environment) {
             saved.environment.push_back(SaveEnvironmentHediff{sim.defs_->get(env.def).defName(), env.severity});
         }
@@ -4943,6 +4952,7 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
         health.bloodLoss = e.health->bloodLoss;
         health.bleedStoppedAt = e.health->bleedStoppedAt;
         health.zoneHurtAt = e.health->zoneHurtAt;
+        health.zoneOverkill = e.health->zoneOverkill;
         for (const SaveEnvironmentHediff& env : e.health->environment) {
             const Def* hediff = sim.defs_->find("Hediffs", env.hediff);
             if (hediff == nullptr) {

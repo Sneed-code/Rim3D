@@ -10,10 +10,14 @@
 #include "Rendering/SkeletalMeshRenderData.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
+#include "ProceduralMeshComponent.h"
 #include "GroomAsset.h"
 #include "GroomComponent.h"
 
 #include "BloodSubsystem.h"
+#include "GoreCut.h"
+#include "GoreStump.h"
 #include "MakeHumanAnimInstance.h"
 #include "PawnActor.h"
 #include "SimSubsystem.h"
@@ -29,6 +33,13 @@ namespace
 	constexpr float SeveredGrip = 0.55f;      // the share of its sideways speed a piece keeps at each bounce
 	constexpr float SeveredRestSpeed = 35.0f;
 	constexpr float SeveredFold = 0.001f;     // bones outside the piece shrink to this, at the cut
+
+	TAutoConsoleVariable<float> GSeveredDripSeconds(TEXT("Gore.DripSeconds"), 120.0f,
+		TEXT("How long blood keeps dripping from a fresh stump, seconds at 1x (a severed piece drips for 40% of it)."), ECVF_Default);
+	TAutoConsoleVariable<float> GSeveredClothRim(TEXT("Gore.ClothRim"), 1.35f,
+		TEXT("On a clothed limb, how far the stump's torn, soaked cloth ring reaches over the sleeve or trouser leg (limb radii)."), ECVF_Default);
+	TAutoConsoleVariable<float> GSeveredStumpScale(TEXT("Gore.StumpScale"), 1.08f,
+		TEXT("Stump caps' size against the limb's usual thickness at the cut (bigger hides more of the flattened skin's edge)."), ECVF_Default);
 
 	/** The bone a piece hangs from, and a bone further down it (None: none) to find its middle. */
 	bool SeveredBones(uint16 Bit, FName& OutBone, FName& OutEnd)
@@ -65,32 +76,106 @@ namespace
 		}
 	}
 
-	/** Wet flesh over a cut: a flat disc of the blood drops' glossy dark red across the limb (Along: the way the limb
-	 *  runs), where the folded mesh closes on a point. A full ball there read as a pom-pom stuck on the stump. */
-	UStaticMeshComponent* SeveredCap(AActor* Owner, USceneComponent* Parent, FName Socket, const FVector& At, const FVector& Along, float RadiusCm)
+	/** What the cut goes through. */
+	EGoreStumpKind SeveredStumpKind(uint16 Bit)
 	{
-		UStaticMesh* Ball = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-		if (!Owner || !Parent || !Ball)
+		switch (Bit)
 		{
-			return nullptr;
+		case colony::kSeveredLeftForearm:
+		case colony::kSeveredRightForearm:
+		case colony::kSeveredLeftLowerLeg:
+		case colony::kSeveredRightLowerLeg: return EGoreStumpKind::TwoBones;
+		case colony::kSeveredHead: return EGoreStumpKind::Neck;
+		default: return EGoreStumpKind::OneBone;
 		}
-		UStaticMeshComponent* Cap = NewObject<UStaticMeshComponent>(Owner);
-		Cap->SetStaticMesh(Ball);
-		if (UMaterialInterface* Flesh = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Rim3D/Generated/Blood/M_BloodDrop.M_BloodDrop")))
+	}
+
+	/**
+	 * Where a cut lies on a mesh as drawn now (GoreCut.h): the joint, the way the lost part went (the flat face's
+	 * normal: the cut bone straightened onto its parent, as the sever node draws it) and, for the neck, the way the face
+	 * looked. World space. False if the mesh lacks the bone or its parent.
+	 */
+	bool SeveredCutFrame(const USkinnedMeshComponent& Skin, FName Bone, FVector& OutAt, FVector& OutAlong, FVector& OutFront)
+	{
+		const USkinnedAsset* Asset = Skin.GetSkinnedAsset();
+		const int32 Index = Skin.GetBoneIndex(Bone);
+		const FName ParentName = Index != INDEX_NONE ? Skin.GetParentBone(Bone) : NAME_None;
+		const int32 Parent = ParentName.IsNone() ? INDEX_NONE : Skin.GetBoneIndex(ParentName);
+		if (!Asset || Parent == INDEX_NONE)
 		{
-			Cap->SetMaterial(0, Flesh);
+			return false;
 		}
-		Cap->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Cap->SetCanEverAffectNavigation(false);
-		Cap->SetCastShadow(false);
-		Cap->bReceivesDecals = false;
-		Cap->SetupAttachment(Parent, Socket);
-		Cap->RegisterComponent();
-		const FVector Axis = Along.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
-		Cap->SetWorldLocationAndRotation(At, FRotationMatrix::MakeFromZ(Axis).ToQuat());
-		const float Across = RadiusCm * 0.9f / 50.0f;
-		Cap->SetWorldScale3D(FVector(Across, Across, Across * 0.3f));
-		return Cap;
+		const FReferenceSkeleton& Ref = Asset->GetRefSkeleton();
+		const int32 RefIndex = Ref.FindBoneIndex(Bone);
+		if (RefIndex == INDEX_NONE)
+		{
+			return false;
+		}
+		const FTransform Straight = Ref.GetRefBonePose()[RefIndex] * Skin.GetBoneTransform(Parent);
+		OutAt = Straight.GetLocation();
+		OutAlong = Straight.GetRotation().RotateVector(GoreCut::FaceNormalLocal(GoreCut::AxisLocal(Ref, RefIndex))).GetSafeNormal();
+		OutFront = Straight.GetRotation().RotateVector(GoreCut::FrontLocal(Ref, RefIndex));
+		return !OutAlong.IsNearlyZero();
+	}
+
+	/**
+	 * The same for the piece's side: where its cut bone is now (straightened onto the parent if the body has flattened it
+	 * already) and the normal of the flat face its flattened parent leaves (GoreCut::FlattenParent), pointing down the
+	 * piece.
+	 */
+	bool SeveredPieceCutFrame(const USkinnedMeshComponent& Skin, FName Bone, FVector& OutAt, FVector& OutAlong, FVector& OutFront)
+	{
+		const USkinnedAsset* Asset = Skin.GetSkinnedAsset();
+		const int32 Index = Skin.GetBoneIndex(Bone);
+		const FName ParentName = Index != INDEX_NONE ? Skin.GetParentBone(Bone) : NAME_None;
+		const int32 Parent = ParentName.IsNone() ? INDEX_NONE : Skin.GetBoneIndex(ParentName);
+		if (!Asset || Parent == INDEX_NONE)
+		{
+			return false;
+		}
+		const FReferenceSkeleton& Ref = Asset->GetRefSkeleton();
+		const int32 RefIndex = Ref.FindBoneIndex(Bone);
+		if (RefIndex == INDEX_NONE)
+		{
+			return false;
+		}
+		const FTransform& RefLocal = Ref.GetRefBonePose()[RefIndex];
+		FTransform CutWorld = Skin.GetBoneTransform(Index);
+		if (CutWorld.GetScale3D().GetAbsMin() < 0.1)
+		{
+			CutWorld = RefLocal * Skin.GetBoneTransform(Parent);
+		}
+		const FVector Axis = GoreCut::AxisLocal(Ref, RefIndex);
+		const FQuat ParentRot = CutWorld.GetRotation() * RefLocal.GetRotation().Inverse();
+		OutAt = CutWorld.GetLocation();
+		OutAlong = ParentRot.RotateVector(GoreCut::FaceNormalLocal(RefLocal.GetRotation().RotateVector(Axis))).GetSafeNormal();
+		OutFront = CutWorld.GetRotation().RotateVector(GoreCut::FrontLocal(Ref, RefIndex));
+		return !OutAlong.IsNearlyZero();
+	}
+
+	/** The pawn's skin colour for the torn rim of a cut. */
+	FLinearColor SeveredSkinColour(const ASimPawnActor& Pawn)
+	{
+		return Pawn.HasLooks() ? Pawn.GetLooks().Skin : FLinearColor(0.45f, 0.26f, 0.2f);
+	}
+
+	/** Blood that keeps dripping from an open cut for a while (a hit of its own that bleeds without the sim). */
+	void SeveredDrip(UWorld* World, const FVector& At, const FVector& Outward, USkeletalMeshComponent* Mesh, float Seconds)
+	{
+		UBloodSubsystem* Blood = World ? World->GetSubsystem<UBloodSubsystem>() : nullptr;
+		if (!Blood || !Blood->IsReady())
+		{
+			return;
+		}
+		FBloodHit Hit;
+		Hit.At = At;
+		Hit.Direction = Outward + FVector(0.0, 0.0, -0.6);
+		Hit.Kind = EBloodWound::Cut;
+		Hit.Damage = 3.0f;
+		Hit.Force = 0.15f;
+		Hit.Mesh = Mesh;
+		Hit.BleedSecondsWithoutSim = Seconds;
+		Blood->AddHit(Hit);
 	}
 
 	/** Every skinned mesh of the pawn: the mannequin, the MetaHuman or MakeHuman body, its clothes, its face. */
@@ -135,6 +220,30 @@ namespace
 			}
 		}
 		return Used.IsEmpty() ? 0.0f : static_cast<float>(OnPiece) / static_cast<float>(Used.Num());
+	}
+
+	/** How far a cut's torn cloth reaches (radii): Gore.ClothRim if another drawn mesh than the skin (a sleeve, a
+	 *  trouser leg) covers the cut limb, else 1. Not for the neck. */
+	float SeveredClothOuter(const TArray<USkinnedMeshComponent*>& Skinned, const USkinnedMeshComponent* SkinMesh, FName Bone, uint16 Bit)
+	{
+		if (Bit == colony::kSeveredHead)
+		{
+			return 1.0f;
+		}
+		for (const USkinnedMeshComponent* Mesh : Skinned)
+		{
+			const USkeletalMesh* Asset = Mesh ? Cast<USkeletalMesh>(Mesh->GetSkinnedAsset()) : nullptr;
+			if (!Asset || Mesh == SkinMesh || !SeveredDrawn(*Mesh))
+			{
+				continue;
+			}
+			const int32 Index = Asset->GetRefSkeleton().FindBoneIndex(Bone);
+			if (Index != INDEX_NONE && SeveredSkinnedTo(*Asset, Index) >= 0.01f)
+			{
+				return GSeveredClothRim.GetValueOnGameThread();
+			}
+		}
+		return 1.0f;
 	}
 
 	/** The component whose pose a mesh shows: itself, or the top of its leader chain. */
@@ -190,8 +299,12 @@ void ASeveredPieceActor::Tick(float DeltaSeconds)
 		At.Z = Floor;
 		if (!bLanded)
 		{
-			// It leaves blood where it first comes down.
+			// It leaves blood where it first comes down, and drips from its open end for a while.
 			bLanded = true;
+			if (CutEnd)
+			{
+				SeveredDrip(GetWorld(), CutEnd->GetComponentLocation(), CutEnd->GetUpVector(), nullptr, GSeveredDripSeconds.GetValueOnGameThread() * 0.4f);
+			}
 			if (UBloodSubsystem* Blood = GetWorld()->GetSubsystem<UBloodSubsystem>(); Blood && Blood->IsReady())
 			{
 				FBloodHit Hit;
@@ -287,17 +400,22 @@ void ASimPawnActor::ApplySevered(uint16 Bits)
 				Mesh->SetVisibility(false, true);
 			}
 		}
-		// Wet flesh over the stump, on the bone above the cut.
+		// The open stump (skin rim, fat, muscle, bone) over the flat end, on the bone above the cut, and blood that keeps
+		// dripping from it for a couple of minutes.
 		USkeletalMeshComponent* Skin = GetDecalMesh();
 		if (!Skin || Skin->GetBoneIndex(Bone) == INDEX_NONE)
 		{
 			Skin = Body;
 		}
-		if (Skin && Skin->GetBoneIndex(Bone) != INDEX_NONE &&
-			SeveredCap(this, Skin, Skin->GetParentBone(Bone), Skin->GetBoneLocation(Bone, EBoneSpaces::WorldSpace),
-				Skin->GetBoneLocation(Bone, EBoneSpaces::WorldSpace) - Skin->GetBoneLocation(Skin->GetParentBone(Bone), EBoneSpaces::WorldSpace), SeveredCapRadius(Bit) * GetBodyScale()))
+		FVector At;
+		FVector Along;
+		FVector Front;
+		if (Skin && Skin->GetBoneIndex(Bone) != INDEX_NONE && SeveredCutFrame(*Skin, Bone, At, Along, Front) &&
+			GoreMakeStump(this, Skin, Skin->GetParentBone(Bone), At, Along, Front, SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread(), SeveredStumpKind(Bit),
+				SeveredSkinColour(*this), static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 31u + Bit), SeveredClothOuter(Skinned, Skin, Bone, Bit)))
 		{
 			++SeveredCaps;
+			SeveredDrip(GetWorld(), At, Along, Skin, GSeveredDripSeconds.GetValueOnGameThread());
 		}
 		// What hangs on a socket of it (a hat, horns, a held thing) or grows from it (hair) goes with it.
 		for (USceneComponent* Part : Parts)
@@ -384,18 +502,46 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		Copy->RegisterComponent();
 		Copy->SetWorldTransform(Source->GetComponentTransform());
 
-		// The piece's bones stand where the body has them now; every other bone is folded into the cut, so the rest of
-		// the mesh shrinks to a point there (which also closes the open end).
+		// The piece's bones stand where the body has them now. The bone above the cut is flattened onto the joint across
+		// the piece's line (GoreCut.h), so the piece ends in a flat face under its cap; every other bone is folded into
+		// the middle of the cut (and the parent too where it can't be flattened cleanly).
 		const USkinnedMeshComponent* Pose = SeveredPoseOf(Source);
 		const FTransform ToCopy = Copy->GetComponentTransform();
 		const FTransform Folded(FQuat::Identity, ToCopy.InverseTransformPosition(Cut), FVector(SeveredFold));
+		const int32 ParentIndex = Skeleton.GetParentIndex(CutIndex);
+		// Where the cut bone is now, in the copy's space: as posed on the body, or straightened onto its parent if the
+		// body has folded or flattened it already (a piece made after the cut was shown).
+		FTransform CutNow = Folded;
+		bool bCutNow = false;
+		if (const int32 From = Pose->GetBoneIndex(Skeleton.GetBoneName(CutIndex)); From != INDEX_NONE)
+		{
+			FTransform Now = Pose->GetBoneTransform(From);
+			const FName PoseParent = Pose->GetParentBone(Skeleton.GetBoneName(CutIndex));
+			if (Now.GetScale3D().GetAbsMin() < 0.1 && !PoseParent.IsNone() && Pose->GetBoneIndex(PoseParent) != INDEX_NONE)
+			{
+				Now = Skeleton.GetRefBonePose()[CutIndex] * Pose->GetBoneTransform(Pose->GetBoneIndex(PoseParent));
+			}
+			Now.SetScale3D(Source->GetComponentTransform().GetScale3D());
+			CutNow = Now.GetRelativeTransform(ToCopy);
+			CutNow.SetScale3D(FVector::OneVector);
+			bCutNow = true;
+		}
 		for (int32 i = 0; i < Skeleton.GetNum(); ++i)
 		{
 			const FName Name = Skeleton.GetBoneName(i);
 			const bool bInPiece = i == CutIndex || Skeleton.BoneIsChildOf(i, CutIndex);
 			if (!bInPiece)
 			{
-				Copy->SetBoneTransformByName(Name, Folded, EBoneSpaces::ComponentSpace);
+				FTransform Flat;
+				if (i == ParentIndex && bCutNow &&
+					GoreCut::FlattenParent(CutNow, Skeleton.GetRefBonePose()[CutIndex], GoreCut::AxisLocal(Skeleton, CutIndex), Flat))
+				{
+					Copy->SetBoneTransformByName(Name, Flat, EBoneSpaces::ComponentSpace);
+				}
+				else
+				{
+					Copy->SetBoneTransformByName(Name, Folded, EBoneSpaces::ComponentSpace);
+				}
 				continue;
 			}
 			if (i != CutIndex)
@@ -404,23 +550,10 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 				// the falling body had it bent double was a stubby tube with its hand or shoe tucked out of sight.
 				continue;
 			}
-			const int32 From = Pose->GetBoneIndex(Name);
-			if (From == INDEX_NONE)
+			if (bCutNow)
 			{
-				continue;  // a bone only this mesh has: it keeps its place under its parent
+				Copy->SetBoneTransformByName(Name, CutNow, EBoneSpaces::ComponentSpace);
 			}
-			FTransform Now = Pose->GetBoneTransform(From);
-			if (Now.GetScale3D().GetAbsMax() < 0.1)
-			{
-				// Already folded away on the body (a piece made after the cut was shown): the mannequin's bone instead.
-				const int32 Under = Pose != Body.Get() ? Body->GetBoneIndex(Name) : INDEX_NONE;
-				if (Under == INDEX_NONE)
-				{
-					continue;
-				}
-				Now = Body->GetBoneTransform(Under);
-			}
-			Copy->SetBoneTransformByName(Name, Now.GetRelativeTransform(ToCopy), EBoneSpaces::ComponentSpace);
 		}
 		Piece->AddMesh(Copy);
 		UE_LOG(LogTemp, Log, TEXT("Severed piece 0x%x: %s (%s), material %s, %.0f cm across"), Bit, *Source->GetName(), *Asset->GetName(),
@@ -489,8 +622,24 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		Hit.Mesh = GetDecalMesh();
 		Blood->AddHit(Hit);
 	}
-	// Wet flesh over its cut end too.
-	SeveredCap(Piece, Piece->GetRootComponent(), NAME_None, Cut, Bit == colony::kSeveredHead ? FVector::UpVector : Middle - Cut, SeveredCapRadius(Bit) * GetBodyScale());
+	// Its open end, capped the same way, facing back where the body was; it drips once it has come down.
+	{
+		FVector At = Cut;
+		FVector Along = Middle - Cut;
+		FVector Front = GetActorForwardVector();
+		USkeletalMeshComponent* Skin = GetDecalMesh();
+		if (!Skin || !SeveredPieceCutFrame(*Skin, Bone, At, Along, Front))
+		{
+			At = Cut;
+			Along = Bit == colony::kSeveredHead ? FVector::UpVector : (Middle - Cut).GetSafeNormal();
+		}
+		if (USceneComponent* Stump = GoreMakeStump(Piece, Piece->GetRootComponent(), NAME_None, At, -Along, Front, SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread(),
+				SeveredStumpKind(Bit), SeveredSkinColour(*this), static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 17u + Bit * 7u),
+				SeveredClothOuter(Skinned, Skin, Bone, Bit)))
+		{
+			Piece->SetCutEnd(Stump);
+		}
+	}
 	// Thrown up and away from the body's middle, tumbling.
 	FVector Away = Middle - GetActorLocation();
 	Away.Z = 0.0;

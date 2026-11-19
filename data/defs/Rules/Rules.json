@@ -112,9 +112,10 @@
       "healPerSecond": 0.001,
       "healAsleepFactor": 2,
       "dismember": {
-        "note": "sneed 2026-11-17 (body-health.md part F): only the hit that kills dismembers, when it went over what the struck zone had left by overkillShare of the zone's hit points: the arm or leg whole, or below the elbow or knee when the lower part was struck (lower, or a part in lowerAlso), the head, or for the torso the head and every limb",
+        "note": "sneed 2026-11-17, piling up 2026-11-19 (body-health.md part F): damage past a zone's 0 piles up over hits; on a dead body a zone with overkillShare of its hit points piled up comes off (the torso, with torsoSingleHit 1, only from one hit that alone went that far): the arm or leg whole, or below the elbow or knee when the lower part was struck (lower, or a part in lowerAlso), the head, or for the torso the head and every limb",
         "overkillShare": 0.25,
         "pieceDecayDays": 2,
+        "torsoSingleHit": 1,
         "arm": { "whole": "Arm", "lower": "Hand", "lowerAlso": ["Radius"] },
         "leg": { "whole": "Leg", "lower": "Foot", "lowerAlso": ["Tibia"] },
         "head": "Head"
