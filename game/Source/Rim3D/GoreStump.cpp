@@ -100,10 +100,10 @@ namespace
 	}
 
 	// The tissue colours (linear).
-	const FLinearColor GoreMuscleDark(0.11f, 0.006f, 0.005f);
-	const FLinearColor GoreMuscleLight(0.30f, 0.020f, 0.016f);
+	const FLinearColor GoreMuscleDark(0.20f, 0.014f, 0.010f);
+	const FLinearColor GoreMuscleLight(0.46f, 0.045f, 0.032f);
 	const FLinearColor GoreFat(0.92f, 0.66f, 0.16f);
-	const FLinearColor GoreCloth(0.035f, 0.03f, 0.03f);
+	const FLinearColor GoreCloth(0.10f, 0.02f, 0.016f);
 	const FLinearColor GoreDermis(0.40f, 0.07f, 0.05f);
 	const FLinearColor GoreBlood(0.18f, 0.008f, 0.006f);
 	const FLinearColor GoreBone(0.90f, 0.86f, 0.74f);
@@ -214,7 +214,10 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			const float Torn = F >= 0.94f ? 1.0f + 0.05f * Edge.At(Theta) + (bSkirt ? 0.03f * Random.FRandRange(-1.0f, 1.0f) : 0.0f) : 1.0f;
 			// Clothed: the rings past the skin stretch out over the sleeve or trouser leg as torn, soaked cloth.
 			const float Spread = bClothed && F > 1.0f ? 1.0f + (F - 1.0f) / 0.05f * (ClothOuter - 1.0f) : F;
-			const float Radius = R * Spread * Torn * (bSkirt ? 0.99f : 1.0f);
+			// The skirt hangs back onto the limb: bare skin just inside its own edge, soaked cloth folded back down onto
+			// the sleeve rather than standing off it as a wide hollow collar.
+			const float SkirtSpread = bClothed ? 1.0f + 0.25f * (ClothOuter - 1.0f) : 0.99f;
+			const float Radius = R * (bSkirt ? SkirtSpread : Spread) * Torn;
 			const float Z = bSkirt ? -Skirt * (0.75f + 0.25f * Edge.At(Theta * 1.7f + 1.0f)) : FaceZ(F, Theta) + (F < 0.8f ? 0.04f * R * Random.FRandRange(-0.5f, 0.5f) : 0.0f);
 			return FVector(Radius * FMath::Cos(Theta), Radius * FMath::Sin(Theta), Z);
 		},
@@ -226,7 +229,7 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			const float G = F + Wobble;
 			if (bClothed && (Row == RingCount || F > 1.0f))
 			{
-				return GoreWet(FMath::Lerp(GoreCloth, GoreBlood, 0.3f + 0.5f * Random.FRand()), 0.4f);
+				return GoreWet(FMath::Lerp(GoreCloth, GoreBlood, 0.2f + 0.4f * Random.FRand()), 0.45f);
 			}
 			if (Row == RingCount)
 			{
