@@ -112,6 +112,28 @@ target, aim), `knockedDown`; per grenade entity `grenade` (defs by name, positio
 fuse, start cell, seed). All in `Sim::stateHash`. New commands `Throw` and `Explode` are in the
 command log, replay files and saves by name. No format number changes (S7).
 
+## Molotovs, launchers and the player's throw (sneed 2026-11-19)
+
+- **Molotov** (`Grenade_Molotov` throws `Proj_GrenadeMolotov`): `thrown.fuse` 0, so it **bursts where it lands**, in the
+  same step as `GrenadeLanded` (RimWorld's molotov has no explosion delay). The blast is Burn, 10, radius 1.1: the fire
+  layer lights every flammable cell and pawn in the radius with `blastIgniteChance` and always the cell it burst in
+  ([fire.md](fire.md)), and from there fire spreads through grass (1.3) and trees (0.8) and dies in rain. Its landing
+  sounds as `Molotov_Shatter` (the Projectiles def's `visual.sound.landed`; other grenades keep `Grenade_Landed`).
+- **Grenade launcher** (`Gun_GrenadeLauncher`, ours: RimWorld has none): the incendiary launcher's gun firing
+  `Shell_Frag`, which bursts like a frag grenade (Bomb 50, 10%, radius 1.9) wherever it ends. Its speed is 0.45 (40 m/s
+  after tuning's x3) so the shell flies a visible arc (`CombatSystem::launch` takes the low arc to the aimed point).
+  Under cooldown bursts it is a one-shot gun (`keepBurst`). The incendiary, EMP and smoke launchers sound the same
+  (`Shot_Launcher`); the rocket launchers `Shot_Rocket`.
+- **Rocket launchers**: RimWorld's triple rocket launcher (3 rockets a store, radius 3.9) and doomsday launcher (7.8),
+  unchanged. Placeholder box shapes (`visual.parts`) until the Codex and Fab models come in.
+- **Trails**: a Projectiles def's `visual.trail` says what Unreal draws behind it in flight: `rocket` (smoke and flame),
+  `flame` (a molotov's burning rag, the incendiary shell), `puff` (the frag shell).
+- **The player's throw** (Unreal, `UFightSubsystem`): R picks the kind on the belt (`ExplosiveSystem::stacks`). In third
+  person while locked on, G throws at the target at once (`ThrowCommand` with the target; the sim aims at the ground under
+  it). Otherwise G held draws the arc (`planThrow`, from `ThrowPlan::start*` to `land*`) and the blast ring, yellow when it
+  gets there and red when something is in the way; letting go throws at the crosshair's point, pulled in to the arm's range.
+- Blasts keep RimWorld's damage: tuning's ranged x0.5 is on bullets (`projectile.damageAmountBase`), not explosions.
+
 ## Not done yet
 
 - Unreal: throw and dive animations, the grenade mesh in flight (`Proj_GrenadeFrag.visual`), the

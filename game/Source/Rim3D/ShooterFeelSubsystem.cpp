@@ -377,6 +377,29 @@ void UShooterFeelSubsystem::OnExplosion(const colony::Event& Event)
 		VignettePulse = FMath::Max(VignettePulse, 0.6f * Closeness);
 	}
 
+	// A fire blast (a molotov, an incendiary shell; sneed 2026-11-19): a wide low splash of burning fuel and black smoke, a
+	// soft flash and a small push on the camera, no fragments or debris. The sim lights the ground (FireSubsystem draws it).
+	const colony::DefId Type = Event.def;
+	if (Type.valid() && Source->GetDefs() && Source->GetDefs()->get(Type).text("mix.sub") == "Fire")
+	{
+		const float FireScale = FMath::Max(RadiusM / 1.1f, 0.6f);
+		Burst(EBlastParticle::FireOuter, At + FVector(0.0, 0.0, 15.0), FMath::RoundToInt(14 * FireScale), 260.0f * FireScale, 0.25f, 60.0f * FireScale, 0.7f, 0.0f);
+		Burst(EBlastParticle::FireCore, At + FVector(0.0, 0.0, 25.0), FMath::RoundToInt(8 * FireScale), 120.0f * FireScale, 0.9f, 50.0f * FireScale, 0.6f, -30.0f);
+		Burst(EBlastParticle::Smoke, At + FVector(0.0, 0.0, 60.0), FMath::RoundToInt(10 * FireScale), 80.0f * FireScale, 1.0f, 60.0f * FireScale, 3.0f, -60.0f);
+		Burst(EBlastParticle::Spark, At + FVector(0.0, 0.0, 10.0), FMath::RoundToInt(12 * FireScale), 350.0f * FireScale, 0.6f, 1.5f, 0.6f, 980.0f);
+		FlashAt = At + FVector(0.0, 0.0, 80.0);
+		FlashPeak = 4000.0f * FMath::Clamp(FireScale, 0.6f, 2.0f);
+		FlashAge = 0.0f;
+		for (UPointLightComponent* Light : FlashLights)
+		{
+			if (Light)
+			{
+				Light->SetWorldLocation(FlashAt);
+			}
+		}
+		return;
+	}
+
 	// Fireball, smoke, sparks and dust.
 	const float Scale = RadiusM / 1.9f;
 	Burst(EBlastParticle::FireCore, At + FVector(0.0, 0.0, 30.0), FMath::RoundToInt(5 + 3 * Scale), 140.0f * Scale, 0.8f, 55.0f * Scale, 0.35f + 0.1f * Scale, 0.0f);
@@ -513,7 +536,7 @@ void UShooterFeelSubsystem::UpdateKick(float DeltaTime, const colony::Sim& Sim, 
 	KickPitch = FMath::FInterpTo(KickPitch, WantPitch, DeltaTime, 40.0f);
 	KickYaw = FMath::FInterpTo(KickYaw, WantYaw, DeltaTime, 40.0f);
 
-	// A dodge roll ducks the camera under it and kicks the blur: from where the sim has the roll (27 steps in all).
+	// A dodge roll kicks the blur (and in first person widens the view): from where the sim has the roll (27 steps in all).
 	float Dip = 0.0f;
 	float RollBlur = 0.0f;
 	float Dash = 0.0f;
@@ -530,8 +553,9 @@ void UShooterFeelSubsystem::UpdateKick(float DeltaTime, const colony::Sim& Sim, 
 		}
 		else
 		{
-			Dip = FMath::Sin(PI * Progress);
-			RollBlur = View->rollPhase == 2 ? 0.7f : 0.25f;
+			// Third person: no duck (sneed 2026-11-19, Elden Ring): the camera keeps its height and distance and glides
+			// after the body (AProtagonistPawn's soft follow); only a light blur.
+			RollBlur = View->rollPhase == 2 ? 0.4f : 0.15f;
 		}
 	}
 	RollDip = FMath::FInterpTo(RollDip, Dip, DeltaTime, 18.0f);
@@ -673,6 +697,27 @@ void UShooterFeelSubsystem::UpdateParticles(float DeltaTime, const USimSubsystem
 			{
 				At = FMath::Lerp(FeelSimToWorld(Source, Old.x, Old.y, Old.z), At, Alpha);
 				break;
+			}
+		}
+		// In flight, what it trails (the Projectiles def's visual.trail, sneed 2026-11-19): a rocket's smoke and flame, a
+		// molotov's burning rag, a launcher shell's thin puff. About one puff per 60th of a second whatever the frame rate.
+		if (View.fuse < 0 && DeltaTime > 0.0f && Source.GetSpeed() > 0)
+		{
+			const std::string Trail = Source.GetDefs()->get(View.def).text("visual.trail");
+			const int32 Puffs = FMath::Clamp(FMath::FloorToInt32(DeltaTime * 60.0f + Random.FRand()), 0, 4);
+			const FVector Back = -FVector(View.vx, View.vy, View.vz).GetSafeNormal() * 25.0;
+			if (Trail == "rocket" && Puffs > 0)
+			{
+				Burst(EBlastParticle::Smoke, At + Back, Puffs * 2, 25.0f, 0.3f, 22.0f, 1.8f, -15.0f);
+				Burst(EBlastParticle::FireCore, At + Back * 0.6, Puffs, 15.0f, 0.2f, 14.0f, 0.12f, 0.0f);
+			}
+			else if (Trail == "flame" && Puffs > 0)
+			{
+				Burst(EBlastParticle::FireCore, At + FVector(0.0, 0.0, 6.0), Puffs, 10.0f, 0.8f, 7.0f, 0.18f, -60.0f);
+			}
+			else if (Trail == "puff" && Puffs > 0)
+			{
+				Burst(EBlastParticle::Smoke, At + Back, Puffs, 10.0f, 0.3f, 8.0f, 0.6f, -10.0f);
 			}
 		}
 		// A lit fuse blinks quicker as it runs out.

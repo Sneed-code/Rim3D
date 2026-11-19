@@ -681,7 +681,7 @@ void UGunRangeSubsystem::UpdateInput()
 	{
 		return;
 	}
-	static const FKey Keys[] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine, EKeys::Zero};
+	static const FKey Keys[] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine, EKeys::Zero, EKeys::Hyphen, EKeys::Equals};
 	for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Keys)) && i < Rack.Num(); ++i)
 	{
 		if (PC->WasInputKeyJustPressed(Keys[i]))
@@ -1483,7 +1483,7 @@ void UGunRangeSubsystem::DrawPanel()
 	if (ImGui::Begin("##GunRange", nullptr, Flags))
 	{
 		ImGui::TextUnformatted("COMBAT RANGE");
-		const auto KeyName = [](int32 i) { return i < 9 ? FString::FromInt(i + 1) : FString(TEXT("0")); };
+		const auto KeyName = [](int32 i) { return i < 9 ? FString::FromInt(i + 1) : FString(i == 9 ? TEXT("0") : (i == 10 ? TEXT("-") : (i == 11 ? TEXT("=") : TEXT("wheel")))); };
 		for (int32 i = 0; i < Guns.Num(); ++i)
 		{
 			const FString Line = FString::Printf(TEXT("%s%s  %s%s"), i == HeldRack ? TEXT("> ") : TEXT("   "), *KeyName(i), *Guns[i].Label, HasModel(i) ? TEXT("") : TEXT("  (no model yet)"));
@@ -1505,6 +1505,7 @@ void UGunRangeSubsystem::DrawPanel()
 			ImGui::TextUnformatted("Left mouse fire   Right mouse aim");
 		}
 		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("1-%s or wheel: weapon   K: new targets   U: guards   F2 pause"), *KeyName(FMath::Max(0, Guns.Num() + Melee.Num() - 1)))));
+		ImGui::TextUnformatted("G: grenade (hold to aim, at the locked-on enemy in third person)   R: frag / molotov");
 		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("V: first/third person   [ ] mouse speed %.2f"), AProtagonistPawn::GetMouseTurn())));
 		if (!SceneLine.IsEmpty())
 		{

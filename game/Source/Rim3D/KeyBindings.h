@@ -47,6 +47,7 @@ enum class ERim3DAction : uint8
 	FreeHandReachIn,
 	Patch,           // patch a bleeding wound (body health part B)
 	Unstuck,         // F12: after 5 s standing still, moved to the nearest clear spot (docs/design/earthworks.md)
+	NextGrenade,     // R: the next kind of grenade on the belt (frag, molotov...) for G
 	Count
 };
 

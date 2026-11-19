@@ -56,7 +56,7 @@ public:
 	void SetFirstPerson(bool bFirst);
 	bool IsFirstPerson() const { return bFirstPerson; }
 	void ToggleView() { SetFirstPerson(!bFirstPerson); }
-	/** Puts the camera where it is heading right now (after switching bodies or views). */
+	/** Puts the camera where it is heading right now (after switching bodies or views), with no soft follow. */
 	void SnapCamera();
 
 	/** Holding aim (right mouse button with a gun in hand): the view blends to the aimed one over about a fifth of a second
@@ -69,6 +69,8 @@ public:
 	bool IsFocusLocked() const { return bFocusLocked; }
 	/** 0 not aiming to 1 fully aimed (eased). */
 	float GetAimBlend() const { return AimBlend; }
+	/** Centimetres the third person camera's pivot trails the drawn body on the ground (its soft follow). */
+	double GetCameraTrail() const { return CameraTrail; }
 	/** The third person distance now, cm: the zoomed one, closer while aiming. Shots start this far along the view. */
 	float GetEffectiveArmLength() const { return EffectiveArm; }
 	/** Whether the body is hidden because the view is at its eyes: first person, or aimed in with the first person aim view. */
@@ -163,6 +165,17 @@ private:
 	bool bAimHeld = false;
 	bool bFocusLocked = false;
 	void FollowFocus(float DeltaTime);
+	/** Real seconds since the last roll ended (large when none): the lock-on view eases back in over this. */
+	float SinceRoll = 100.0f;
+	/** The third person camera's pivot, following the drawn body softly (Elden Ring: the camera glides after a roll,
+	 *  it isn't bolted to the body). Cleared by SnapCamera. */
+	FVector SmoothFeet = FVector::ZeroVector;
+	bool bSmoothFeetValid = false;
+	bool bRollingNow = false;
+	/** 0 running to 1 rolling, eased: how softly the camera follows. */
+	float RollFollow = 0.0f;
+	float CameraDelta = 0.0f;
+	double CameraTrail = 0.0;
 	bool bScriptedAim = false;
 	bool bScriptAimHeld = false;
 	float AimBlend = 0.0f;
