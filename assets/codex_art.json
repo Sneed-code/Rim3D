@@ -2,7 +2,13 @@
  "comment": "Codex models for buildings and items (docs/design/codex-models.md). 'prep' is read by tools/codex_prep.py (Blender: GLB from sneed's Rim3D_Codex folder -> assets/raw/codex/<Name>/, not in Git). 'buildings' is read by the GunArt commandlet (-List=assets/codex_art.json): each FBX is imported as one combined mesh, /Game/Rim3D/Generated/Buildings/<name>/SM_<name>, with M_GunPBR instances from the T_<slot>_* maps; the def's visual.mesh names it. The launchers' art is in assets/guns.json. All numbers are ours.",
  "prep": {
   "GrenadeLauncher": {
-   "kind": "gun"
+   "kind": "gun",
+   "align": [
+    "Barrel"
+   ],
+   "drop": [
+    "Round40mm"
+   ]
   },
   "TripleRocketLauncher": {
    "kind": "gun"

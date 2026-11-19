@@ -211,7 +211,23 @@ def prep(src_root, name, entry):
     for o in list(bpy.context.scene.objects):
         if o not in meshes:
             bpy.data.objects.remove(o, do_unlink=True)
+    pivots = {o.name: o.matrix_world.translation.copy() for o in meshes}  # each object's own origin, before baking
     apply_all(meshes)
+    # "align": parts posed open in the model (a break-open barrel) are turned about their own origin, in the gun's
+    # side plane, until their long axis runs along +X again.
+    import numpy as np
+    for o in meshes:
+        if not any(o.name.startswith(a) for a in entry.get("align", [])):
+            continue
+        pts = world_points([o])
+        c = pts - pts.mean(axis=0)
+        axis = np.linalg.svd(c, full_matrices=False)[2][0]
+        if axis[0] < 0:
+            axis = -axis
+        angle = math.atan2(axis[2], axis[0])
+        piv = pivots[o.name]
+        o.data.transform(mathutils.Matrix.Translation(piv) @ mathutils.Matrix.Rotation(angle, 4, "Y") @ mathutils.Matrix.Translation(-piv))
+        print(f"CODEXPREP {name}: {o.name} turned {math.degrees(angle):.1f} degrees about its pivot {tuple(round(v, 3) for v in piv)}")
     turn = "none"
     if kind in ("building", "item"):
         turn = stand_up(meshes, empties, entry.get("size"))
