@@ -1312,8 +1312,17 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			State->HairDemoT += GetWorld()->GetDeltaSeconds();
 			const float T = State->HairDemoT;
 			const int32 Part = T < 12.0f ? 0 : (T < 24.0f ? 1 : 2);
-			IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.HairPhysics"))->Set(Part == 1 ? 0 : 2);
-			IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.HairDebug"))->Set(Part == 2 ? 1 : 0);
+			// Looked up once (a lookup every frame makes the engine warn).
+			static IConsoleVariable* const HairPhysicsVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.HairPhysics"));
+			static IConsoleVariable* const HairDebugVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.HairDebug"));
+			if (HairPhysicsVar && HairPhysicsVar->GetInt() != (Part == 1 ? 0 : 2))
+			{
+				HairPhysicsVar->Set(Part == 1 ? 0 : 2);
+			}
+			if (HairDebugVar && HairDebugVar->GetInt() != (Part == 2 ? 1 : 0))
+			{
+				HairDebugVar->Set(Part == 2 ? 1 : 0);
+			}
 			// Each part: shadowboxing (turns, punches, ducks), then sword swings (big arm and shoulder moves).
 			static const float ClipTimes[] = {0.0f, 6.0f, 12.0f, 18.0f, 24.0f, 30.0f};
 			static const TCHAR* const ClipNames[] = {TEXT("Shadowbox"), TEXT("SwordSwings"), TEXT("Shadowbox"), TEXT("SwordSwings"), TEXT("Shadowbox"), TEXT("SwordSwings")};
