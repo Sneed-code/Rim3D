@@ -11,6 +11,7 @@
 #include "ColonySim/Things.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <map>
 #include <memory>
 #include <set>
@@ -204,8 +205,18 @@ TEST_CASE("Crashlanded: the protagonist, five colonists and the starting items")
     }
 
     // Starting, nearby and scattered things add up to the scenario's counts.
+    // (Not the loot sealed in an ancient danger room, which map generation puts by its caskets.)
+    std::vector<CellPos> caskets;
+    const DefId casketDef = sim.defs().idOf("Things", "AncientCryptosleepCasket");
+    sim.things().registry().view<const Thing, const Position>().each([&](const Thing& t, const Position& p) {
+        if (t.def == casketDef) caskets.push_back(cellOf(p));
+    });
     std::map<std::string, int> items;
-    sim.things().registry().view<const Thing, const StackCount>().each([&](const Thing& t, const StackCount& s) {
+    sim.things().registry().view<const Thing, const StackCount, const Position>().each([&](const Thing& t, const StackCount& s, const Position& p) {
+        const CellPos c = cellOf(p);
+        for (const CellPos& k : caskets) {
+            if (std::abs(c.x - k.x) <= 15 && std::abs(c.y - k.y) <= 15) return;
+        }
         items[sim.defs().get(t.def).defName()] += s.count;
     });
     CHECK(items["Silver"] == 800);
