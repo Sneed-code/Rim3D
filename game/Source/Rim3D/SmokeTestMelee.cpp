@@ -132,6 +132,11 @@ namespace
 		float MaxShieldRaise = 0.0f;
 		bool bShieldUpSeen = false;
 		FVector RaisedAt = FVector::ZeroVector;
+		// Where the shield sits while held up, summed over every frame it is fully up (RaisedAt is the mean), and the
+		// highest it went: one frame (a blow's jolt, a turn) does not decide the place.
+		FVector RaisedSum = FVector::ZeroVector;
+		int32 RaisedFrames = 0;
+		double RaisedTop = 0.0;
 	};
 
 	const colony::ThingView* MeleeSmokeFind(const USimSubsystem& Bridge, colony::Entity Thing)
@@ -1252,7 +1257,11 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			if (const UStaticMeshComponent* Shield = Weapons()->GetShieldComponent(State->Me))
 			{
-				State->RaisedAt = MeleeSmokeActorSpace(*Shield);
+				const FVector Here = MeleeSmokeActorSpace(*Shield);
+				State->RaisedSum += Here;
+				++State->RaisedFrames;
+				State->RaisedAt = State->RaisedSum / static_cast<double>(State->RaisedFrames);
+				State->RaisedTop = FMath::Max(State->RaisedTop, Here.Z);
 			}
 		}
 		if (!State->bStaged)
@@ -1346,7 +1355,8 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			Fail(FString::Printf(TEXT("shield: %d blows landed on the shield, %d sparks"), Blocks, Sparks));
 		}
-		Notes.Add(FString::Printf(TEXT("shield: raised at %s, %d blows on the shield, %d sparks, %d commands"), *State->RaisedAt.ToString(), Blocks, Sparks,
+		Notes.Add(FString::Printf(TEXT("shield: raised at %s on average over %d frames (top %.1f), %d blows on the shield, %d sparks, %d commands"),
+			*State->RaisedAt.ToString(), State->RaisedFrames, State->RaisedTop, Blocks, Sparks,
 			W->GetShieldOrders() - State->ShieldOrdersAtStart));
 	});
 }
