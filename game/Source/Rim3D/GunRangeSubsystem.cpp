@@ -905,7 +905,11 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 		{
 			HoldDraw::ApplyPinned(Arms, GunHold, Pinned, static_cast<uint8>(EMakeHumanGoalSpace::Component), NAME_None, HandsOn, HandsOn * (1.0f - DipEase));
 			// How far forward the body must lean so both shoulders reach their grips (with a little to spare).
+			// The farthest forward a shoulder may come is where its hand would bunch up (under 0.55 of the arm), so a
+			// long gun's lean never pushes the grip hand back into the shoulder (round 2: the pump's and the
+			// launcher's grips ended at the shoulder). The chest's turn in the arm solver does the rest (blading).
 			float Need = 0.0f;
+			float Limit = 25.0f;
 			const auto Reach = [&](const TCHAR* Upper, const TCHAR* Lower, const TCHAR* Hand, const FVector& GoalWorld)
 			{
 				const double Arm = (FVector::Dist(Arms->GetSocketLocation(Upper), Arms->GetSocketLocation(Lower)) +
@@ -917,13 +921,15 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 				{
 					Need = FMath::Max(Need, static_cast<float>((Goal.X - Shoulder.X) - FMath::Sqrt(Arm * Arm - Side)));
 				}
+				const double Near = Arm * 0.55;
+				Limit = FMath::Min(Limit, static_cast<float>((Goal.X - Shoulder.X) - FMath::Sqrt(FMath::Max(0.0, Near * Near - Side))));
 			};
 			Reach(TEXT("upperarm_r"), TEXT("lowerarm_r"), TEXT("hand_r"), Pinned.MainHand.GetLocation());
 			if (Pinned.bOff)
 			{
 				Reach(TEXT("upperarm_l"), TEXT("lowerarm_l"), TEXT("hand_l"), (Pinned.OffInMain * Pinned.MainHand).GetLocation());
 			}
-			ArmsLean = FMath::FInterpTo(ArmsLean, FMath::Clamp(Need, 0.0f, 25.0f), Dt, 10.0f);
+			ArmsLean = FMath::FInterpTo(ArmsLean, FMath::Clamp(FMath::Min(Need, Limit), 0.0f, 25.0f), Dt, 10.0f);
 		}
 	}
 	const FVector SightInRoot = GunInRoot.TransformPosition(G.Sight);

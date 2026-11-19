@@ -176,6 +176,7 @@ struct FMakeHumanArmsNode : public FAnimNode_SkeletalControlBase
 		bool bValid = false;
 	};
 	FArm Arms[2];                        // 0 left, 1 right
+	FBoneReference Spine, Neck;          // optional: the chest turns about the body's up axis to reach a long gun (the neck turns back)
 	FMakeHumanHandGoal Goals[2];
 	/** The body's axes in component space (up, forward, right), from the owner each update unless overridden. */
 	FVector Up = FVector::UpVector;
@@ -189,6 +190,7 @@ struct FMakeHumanArmsNode : public FAnimNode_SkeletalControlBase
 	/** The goal each hand was solved to (component space) and how far the shoulder was brought forward for it (cm). */
 	FTransform GoalCS[2];
 	float ShoulderReach[2] = {0.0f, 0.0f};
+	float ChestTurn = 0.0f;              // degrees the chest turned for the last solve (+ brings the left shoulder forward)
 
 	virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) override;
 	virtual bool IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones) override;

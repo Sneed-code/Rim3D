@@ -88,9 +88,9 @@
     "holster": "Back",
     "offTurn": [0, 0, 80],
     "places": {
-      "ready": {"anchor": "Chest", "at": [14, 15, -44], "turn": [8, -8, 180]},
+      "ready": {"anchor": "Chest", "at": [-5, 16, -42], "turn": [10, -15, 180]},
       "block": {"anchor": "Chest", "at": [26, 24, -8], "turn": [10, -80, 90]},
-      "fpReady": {"anchor": "View", "at": [24, 15, -34], "turn": [6, -6, 180]},
+      "fpReady": {"anchor": "View", "at": [0, 16, -50], "turn": [12, -14, 180]},
       "fpBlock": {"anchor": "View", "at": [30, 22, -14], "turn": [10, -80, 90]}
     }
   },
@@ -134,7 +134,7 @@
     "holster": "Back",
     "offTurn": [0, 0, 80],
     "places": {
-      "ready": {"anchor": "Chest", "point": "Stock", "at": [4, 15, -4], "turn": [-35, -6, 0]},
+      "ready": {"anchor": "Chest", "at": [6, 14, -22], "turn": [-20, -12, 0]},
       "aim": {"anchor": "Head", "point": "Sight", "at": [19, 3.5, 7], "turn": [0, 0, 0]},
       "fpReady": {"anchor": "View", "point": "Sight", "at": [22, 10, -6], "turn": [0, 0, 0]},
       "fpAim": {"anchor": "View", "point": "Sight", "at": [10, 0, 0], "turn": [0, 0, 0]}

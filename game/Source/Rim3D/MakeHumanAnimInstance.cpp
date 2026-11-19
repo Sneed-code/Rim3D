@@ -485,6 +485,8 @@ bool FMakeHumanArmsNode::IsValidToEvaluate(const USkeleton* Skeleton, const FBon
 
 void FMakeHumanArmsNode::InitializeBoneReferences(const FBoneContainer& RequiredBones)
 {
+	Spine.Initialize(RequiredBones);
+	Neck.Initialize(RequiredBones);
 	for (int32 Side = 0; Side < 2; ++Side)
 	{
 		FArm& Arm = Arms[Side];
@@ -531,6 +533,105 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 		Order[1] = 1;
 	}
 	const V3 BodyUp = MhV(Up), BodyForward = MhV(Forward), BodyRight = MhV(Right);
+
+	// The chest turns about the body's up axis (at most 40 degrees either way) when that brings grips into reach: a
+	// long gun's fore-end is past the far arm's reach with the shoulders square, and a shooter blades the body (left
+	// shoulder forward for a right-handed hold). The neck turns back so the head keeps looking where it did.
+	const auto GoalInComponent = [&Output, &Container](const FMakeHumanHandGoal& G, FTransform& OutT)
+	{
+		OutT = G.Target;
+		if (G.Space == EMakeHumanGoalSpace::Anchor)
+		{
+			FBoneReference AnchorBone;
+			AnchorBone.BoneName = G.Anchor;
+			if (!AnchorBone.Initialize(Container) || !AnchorBone.IsValidToEvaluate(Container))
+			{
+				return false;
+			}
+			OutT.AddToTranslation(Output.Pose.GetComponentSpaceTransform(AnchorBone.GetCompactPoseIndex(Container)).GetLocation());
+		}
+		return G.Space != EMakeHumanGoalSpace::OtherHand;
+	};
+	FQuat ChestQuat = FQuat::Identity;
+	FVector ChestPivot = FVector::ZeroVector;
+	ChestTurn = 0.0f;
+	const FVector UpAxis = Up.GetSafeNormal();
+	if (Spine.IsValidToEvaluate(Container) && !UpAxis.IsNearlyZero())
+	{
+		const FCompactPoseBoneIndex SpineI = Spine.GetCompactPoseIndex(Container);
+		const FTransform SpineT = Output.Pose.GetComponentSpaceTransform(SpineI);
+		ChestPivot = SpineT.GetLocation();
+		FVector ChestShoulder[2], ChestGoal[2];
+		double ChestReach[2] = {0.0, 0.0}, ChestNear[2] = {0.0, 0.0};
+		bool bChestUse[2] = {false, false};
+		float ChestAlpha = 0.0f;
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			const FArm& A = Arms[Side];
+			FTransform GoalT;
+			if (!A.bValid || Goals[Side].Alpha <= 0.0f || !GoalInComponent(Goals[Side], GoalT))
+			{
+				continue;
+			}
+			const FVector Sh = Output.Pose.GetComponentSpaceTransform(A.Upper.GetCompactPoseIndex(Container)).GetLocation();
+			const FVector El = Output.Pose.GetComponentSpaceTransform(A.Lower.GetCompactPoseIndex(Container)).GetLocation();
+			const FVector Wr = Output.Pose.GetComponentSpaceTransform(A.Hand.GetCompactPoseIndex(Container)).GetLocation();
+			const double Len = FVector::Dist(Sh, El) + FVector::Dist(El, Wr);
+			ChestShoulder[Side] = Sh;
+			ChestGoal[Side] = GoalT.GetLocation();
+			ChestReach[Side] = Len * Human.reachShare;
+			ChestNear[Side] = Len * 0.45;  // closer than this bunches the arm up
+			bChestUse[Side] = Len > 1.0;
+			ChestAlpha = FMath::Max(ChestAlpha, FMath::Clamp(Goals[Side].Alpha, 0.0f, 1.0f));
+		}
+		const auto ChestCost = [&](double Radians)
+		{
+			const FQuat Q(UpAxis, Radians);
+			double Cost = 0.01 * FMath::Abs(FMath::RadiansToDegrees(Radians));
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				if (bChestUse[Side])
+				{
+					const double D = FVector::Dist(ChestPivot + Q.RotateVector(ChestShoulder[Side] - ChestPivot), ChestGoal[Side]);
+					Cost += FMath::Max(0.0, D - ChestReach[Side]) + FMath::Max(0.0, ChestNear[Side] - D);
+				}
+			}
+			return Cost;
+		};
+		if (bChestUse[0] || bChestUse[1])
+		{
+			double Best = 0.0, BestCost = ChestCost(0.0);
+			for (int32 Step = -16; Step <= 16; ++Step)
+			{
+				const double Radians = FMath::DegreesToRadians(2.5 * Step);
+				const double Cost = ChestCost(Radians);
+				if (Cost < BestCost - 1e-6)
+				{
+					Best = Radians;
+					BestCost = Cost;
+				}
+			}
+			if (FMath::Abs(Best) > 1e-4)
+			{
+				ChestQuat = FQuat(UpAxis, Best * ChestAlpha);
+				ChestTurn = static_cast<float>(FMath::RadiansToDegrees(Best * ChestAlpha));
+				OutBoneTransforms.Add(FBoneTransform(SpineI, FTransform((ChestQuat * SpineT.GetRotation()).GetNormalized(), ChestPivot, SpineT.GetScale3D())));
+				if (Neck.IsValidToEvaluate(Container))
+				{
+					const FCompactPoseBoneIndex NeckI = Neck.GetCompactPoseIndex(Container);
+					const FTransform NeckT = Output.Pose.GetComponentSpaceTransform(NeckI);
+					OutBoneTransforms.Add(FBoneTransform(NeckI, FTransform(NeckT.GetRotation(), ChestPivot + ChestQuat.RotateVector(NeckT.GetLocation() - ChestPivot), NeckT.GetScale3D())));
+				}
+			}
+		}
+	}
+	// A bone under the chest, carried by its turn.
+	const auto ChestCarry = [&ChestQuat, &ChestPivot](FTransform& T)
+	{
+		T.SetLocation(ChestPivot + ChestQuat.RotateVector(T.GetLocation() - ChestPivot));
+		T.SetRotation((ChestQuat * T.GetRotation()).GetNormalized());
+	};
+
 	for (const int32 Side : Order)
 	{
 		const FMakeHumanHandGoal& Goal = Goals[Side];
@@ -544,9 +645,15 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 		const FCompactPoseBoneIndex UpperI = Arm.Upper.GetCompactPoseIndex(Container);
 		const FCompactPoseBoneIndex LowerI = Arm.Lower.GetCompactPoseIndex(Container);
 		const FCompactPoseBoneIndex HandI = Arm.Hand.GetCompactPoseIndex(Container);
+		// As animated (the hand's frame below is read from these: its knuckles move rigidly with the hand bone), then
+		// carried by the chest's turn.
+		const FTransform HandAnimated = Output.Pose.GetComponentSpaceTransform(HandI);
 		FTransform UpperT = Output.Pose.GetComponentSpaceTransform(UpperI);
 		FTransform LowerT = Output.Pose.GetComponentSpaceTransform(LowerI);
-		FTransform HandT = Output.Pose.GetComponentSpaceTransform(HandI);
+		FTransform HandT = HandAnimated;
+		ChestCarry(UpperT);
+		ChestCarry(LowerT);
+		ChestCarry(HandT);
 		const double UpperLen = FVector::Dist(UpperT.GetLocation(), LowerT.GetLocation());
 		const double LowerLen = FVector::Dist(LowerT.GetLocation(), HandT.GetLocation());
 		if (UpperLen < 1.0 || LowerLen < 1.0)
@@ -576,6 +683,7 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 					continue;
 				}
 				OtherHand = Output.Pose.GetComponentSpaceTransform(Arms[Other].Hand.GetCompactPoseIndex(Container));
+				ChestCarry(OtherHand);
 			}
 			OtherHand.SetScale3D(FVector::OneVector);
 			Target = Goal.Target * OtherHand;
@@ -588,7 +696,8 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 		if (Arm.Clavicle.IsValidToEvaluate(Container))
 		{
 			const FCompactPoseBoneIndex ClavI = Arm.Clavicle.GetCompactPoseIndex(Container);
-			const FTransform ClavT = Output.Pose.GetComponentSpaceTransform(ClavI);
+			FTransform ClavT = Output.Pose.GetComponentSpaceTransform(ClavI);
+			ChestCarry(ClavT);
 			const FVector Pivot = ClavT.GetLocation();
 			const FVector Shoulder = UpperT.GetLocation();
 			const double MaxReach = (UpperLen + LowerLen) * Human.reachShare;
@@ -622,6 +731,24 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 				Swing(HandT);
 				OutBoneTransforms.Add(FBoneTransform(ClavI, FTransform(ClavNew.GetRotation(), Pivot, ClavT.GetScale3D())));
 				ShoulderReach[Side] = static_cast<float>(FVector::Dist(Shoulder, UpperT.GetLocation()));
+			}
+		}
+		// Still out of reach with the other hand on the same weapon: the second hand (the support hand) slides back along the weapon towards
+		// the other grip (a support hand further back on the fore-end), at most 15 cm.
+		{
+			const double MaxReach = (UpperLen + LowerLen) * Human.reachShare;
+			const double Over = FVector::Dist(UpperT.GetLocation(), Target.GetLocation()) - MaxReach;
+			FTransform OtherGoal;
+			const int32 Other = 1 - Side;
+			if (Side == Order[1] && Over > 0.0 && Arms[Other].bValid && Goals[Other].Alpha > 0.0f && GoalInComponent(Goals[Other], OtherGoal))
+			{
+				const FVector Along = OtherGoal.GetLocation() - Target.GetLocation();
+				const double Slide = FMath::Min3(Over, 15.0, Along.Size() * 0.6);
+				if (Slide > 0.0)
+				{
+					Target.AddToTranslation(Along.GetSafeNormal() * Slide);
+					GoalCS[Side] = Target;
+				}
 			}
 		}
 		const FVector S = UpperT.GetLocation(), E0 = LowerT.GetLocation(), W0 = HandT.GetLocation();
@@ -696,9 +823,10 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 			Tip = Loc(Arm.IndexTip);
 		}
 		FVector Fingers0, Palm0;
-		if (MhHandFrame(W0, Loc(Arm.Index), Loc(Arm.Pinky), Loc(Arm.Middle), bTip ? &Tip : nullptr, bRight, Fingers0, Palm0))
+		if (MhHandFrame(HandAnimated.GetLocation(), Loc(Arm.Index), Loc(Arm.Pinky), Loc(Arm.Middle), bTip ? &Tip : nullptr, bRight, Fingers0, Palm0))
 		{
-			const FQuat HandInv = HandT.GetRotation().Inverse();
+			// The frame as animated, carried to the goal's turn by the hand bone's own rotation (as animated too).
+			const FQuat HandInv = HandAnimated.GetRotation().Inverse();
 			const FVector FingersWant = WantRot.RotateVector(HandInv.RotateVector(Fingers0));
 			const FVector PalmWant = WantRot.RotateVector(HandInv.RotateVector(Palm0));
 			if (bLimits && !HingeWant.IsNearlyZero())
@@ -880,6 +1008,8 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 			Arm.IndexTip.BoneName = FName(*FString::Printf(TEXT("index_03_%s"), S));
 			Arm.Clavicle.BoneName = FName(*FString::Printf(TEXT("clavicle_%s"), S));
 		}
+		ArmsIK.Spine.BoneName = FName(TEXT("spine_05"));
+		ArmsIK.Neck.BoneName = FName(TEXT("neck_01"));
 		ArmsIK.Alpha = 1.0f;
 	}
 	// Always through component space: the sever node at the end must be in the graph before anything is cut off (the

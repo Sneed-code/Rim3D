@@ -141,6 +141,11 @@ sim's plain C++ `colony::arm` (`ArmPose.h`), so it is unit tested:
 - **No stretching**: a grip past the arm's reach first brings the shoulder forward (the clavicle turns up to 25
   degrees, as a person reaching out does); still out of reach, the hand stops at 99.5% of the arm's length, short on
   the line to it (and the first-person rig leans forward up to 25 cm until the shoulders reach, `ArmsLean`).
+- **The chest turns to reach** (up to 40 degrees about the body's up axis, the neck turning back so the head keeps its
+  look): a long gun's fore-end is past the far arm with square shoulders, so the body blades as a shooter's does.
+  Still out of reach, the **support hand slides back along the weapon** towards the grip hand, at most 15 cm.
+  Long guns at the ready are held low (grip before the belly, stock tucked under the arm, muzzle down and across the
+  body) and the spear's guard has the rear hand at the hip, so both hands reach on every body (PC run 2026-11-19).
 - **The weapon stays at its place** while the hands hold it there (third person too): a hand the wrist limits hold
   back never turns the weapon; the other hand goes to its own grip at the place, not after the main hand. Only a swing
   or a full-body clip carries the weapon in the hand.

@@ -317,12 +317,14 @@ TEST_CASE("Weapon hold: every held weapon has a place on the body, and the hands
     }
     CHECK(weapons > 20);
 
-    // A rifle: aimed, the sight goes before the eye; ready, the stock sits at the shoulder, muzzle down; the support hand's
-    // palm lies under the fore-end.
+    // A rifle: aimed, the sight goes before the eye; ready, a low ready with the grip before the belly and the stock
+    // tucked under the arm, muzzle down and across the body (both hands within reach: PC run 2026-11-19); the support
+    // hand's palm lies under the fore-end.
     const WeaponHold rifle = holdTestOf(*defs, "Gun_AssaultRifle");
     CHECK(rifle.aim.set);
-    CHECK(rifle.ready.point == HoldPlacePoint::Stock);
-    CHECK(rifle.ready.pitch < -20.0f);
+    CHECK(rifle.aim.point == HoldPlacePoint::Sight);
+    CHECK(rifle.ready.pitch < -10.0f);
+    CHECK(rifle.ready.yaw < 0.0f);
     CHECK(rifle.hasOff);
     CHECK(rifle.offRoll > 45.0f);
     // A pistol is one-handed for the sim, with a support hand for drawing.
