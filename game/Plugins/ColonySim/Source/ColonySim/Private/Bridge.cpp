@@ -360,6 +360,8 @@ const char* eventTypeName(EventType type) {
         case EventType::Explosion: return "Explosion";
         case EventType::PawnKnockedDown: return "PawnKnockedDown";
         case EventType::PawnDismembered: return "PawnDismembered";
+        case EventType::WindowBroken: return "WindowBroken";
+        case EventType::WindowChanged: return "WindowChanged";
         case EventType::PrisonerEnslaved: return "PrisonerEnslaved";
         case EventType::SlaveSuppressed: return "SlaveSuppressed";
         case EventType::SlaveRebellion: return "SlaveRebellion";

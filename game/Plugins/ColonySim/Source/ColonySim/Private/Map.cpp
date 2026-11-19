@@ -55,7 +55,7 @@ constexpr float kRockAbove = 0.62f;
 // Rivers (docs/design/mapgen.md). Distances are metres from the river's middle line.
 constexpr float kRiverDeepBed = 0.17f;     // fractions of max height
 constexpr float kRiverShallowBed = 0.20f;
-constexpr float kRiverBank = 6.0f;         // the ground slopes up to its old height over this far
+constexpr float kRiverBank = 8.0f;         // the ground slopes up to its old height over this far
 constexpr float kRiverBankLift = 0.15f;    // metres: a bank never sinks below the water table plus this
 constexpr float kRiverEdgeDepth = 0.25f;   // metres of water at the outer edge of the shallows
 constexpr float kRiverFlowMax = 1.0f;      // m/s in the middle of the channel (ours: a lowland tropical river)
@@ -65,8 +65,27 @@ constexpr int kMapGenWorldMin = 192;       // maps smaller than this (test maps)
 constexpr float kRiverFordHalf = 8.0f;     // along the river: no deep water this far from the ford
 constexpr float kRiverFordFade = 12.0f;
 
+// Flat ground (maps of 192 m or more; docs/design/mapgen.md "Flat ground"). Ours, in metres: most of
+// the map is open plain a couple of metres above the water table, the hills are a few big patches
+// (MapSettings::hills of the map) that rise gently from the plain, and a few lakes sink into it.
+constexpr float kPlainLowM = 15.0f;        // the plain's lowest ground
+constexpr float kPlainRiseM = 2.0f;        // and how much higher it rolls, over hundreds of metres
+constexpr float kHillFootprint = 1.7f;    // the hill share is ground over 2 m above the plain; the foot slopes are this much more
+constexpr float kHillRamp = 0.20f;         // hill noise from the edge of a hill area to its full height
+constexpr float kHillTopM = 26.0f;         // how high the tallest hills stand over the plain
+constexpr float kRockOfHills = 1.0f / 6.0f; // of the hill share, the highest ground is bare rock
+constexpr float kHillRockMinM = 8.0f;      // but only ground standing this far over the plain
+constexpr float kHillRockMaxM = 14.0f;     // and always ground standing this far over it
+constexpr float kLakeShare = 0.025f;       // of the map, times the biome's river (at most 1)
+constexpr float kLakeRamp = 0.18f;
+constexpr float kLakeBedM = 10.5f;         // the deepest lake bed
+constexpr float kBeachAboveWaterM = 1.2f;  // sand up to this far over the water table
+constexpr float kMiddleClearM = 150.0f;    // hills and lakes keep away from the middle, where colonies start
+constexpr float kRiverBankSlope = 0.3f;    // a river bank never falls faster than this (rise over run, on average)
+constexpr float kRiverBankMax = 60.0f;     // metres: the widest bank, down from a hill
+
 // Marsh and mud: low ground where a slow noise is high, and the shores of water.
-constexpr float kMarshBelow = 0.34f;       // fractions of max height
+constexpr float kMarshBelow = 15.5f / 60.0f;  // fractions of max height: the plain's lowest third and lakesides
 constexpr float kMarshAbove = 0.58f;       // wetness times the biome's marsh, from here it is marsh
 constexpr float kMudAbove = 0.72f;
 constexpr float kShoreMarshAbove = 0.35f;
@@ -91,7 +110,8 @@ Map::Map(const MapSettings& settings)
       regions_(std::make_unique<Regions>(*this)),
       cover_(std::make_unique<Cover>(*this)),
       river_(settings.river),
-      marsh_(settings.marsh) {
+      marsh_(settings.marsh),
+      hills_(settings.hills) {
     if (!settings.flat) {
         generate();
     }
@@ -820,9 +840,108 @@ uint64_t Map::upperFloorHash() const {
     return hash;
 }
 
+float mapHillShare(int hilliness) {
+    static constexpr float kShares[] = {0.15f, 0.20f, 0.25f, 0.30f, 0.35f};  // Flat ... Impassable
+    return kShares[std::clamp(hilliness, 0, 4)];
+}
+
+namespace {
+
+// The value of `field` that `share` of the cells are above, from every fourth cell each way.
+float mapGenThreshold(const std::vector<float>& field, int width, int height, float share) {
+    std::vector<float> sample;
+    sample.reserve(static_cast<size_t>((width / 4 + 1) * (height / 4 + 1)));
+    for (int y = 0; y < height; y += 4) {
+        for (int x = 0; x < width; x += 4) {
+            sample.push_back(field[static_cast<size_t>(y * width + x)]);
+        }
+    }
+    const float keep = mapGenClamp01(1.0f - share);
+    const size_t k = std::min(sample.size() - 1, static_cast<size_t>(keep * static_cast<float>(sample.size())));
+    std::nth_element(sample.begin(), sample.begin() + static_cast<std::ptrdiff_t>(k), sample.end());
+    return sample[k];
+}
+
+}  // namespace
+
+void Map::generateFlatLand() {
+    const size_t cells = static_cast<size_t>(width_) * static_cast<size_t>(height_);
+    const float midX = static_cast<float>(width_) * 0.5f;
+    const float midY = static_cast<float>(height_) * 0.5f;
+    std::vector<float> hill(cells);
+    std::vector<float> lake(cells);
+    for (int y = 0; y < height_; ++y) {
+        for (int x = 0; x < width_; ++x) {
+            const float fx = static_cast<float>(x);
+            const float fy = static_cast<float>(y);
+            const float dx = fx - midX;
+            const float dy = fy - midY;
+            const float middle = mapGenSmooth(mapGenClamp01(1.0f - std::sqrt(dx * dx + dy * dy) / kMiddleClearM));
+            const size_t i = static_cast<size_t>(y * width_ + x);
+            hill[i] = 0.65f * mapGenValueNoise(seed_, fx, fy, 260.0f, 70) + 0.35f * mapGenValueNoise(seed_, fx, fy, 110.0f, 71) -
+                      0.5f * middle;
+            lake[i] = 0.8f * mapGenValueNoise(seed_, fx, fy, 170.0f, 80) + 0.2f * mapGenValueNoise(seed_, fx, fy, 60.0f, 81) -
+                      0.6f * middle;
+        }
+    }
+    const float hillAt = mapGenThreshold(hill, width_, height_, hills_ * kHillFootprint);
+    // Lakes stay out of the hill areas, so they are chosen from the rest (pushed down smoothly, so no lake
+    // shore is cut off sharp at a hill's foot).
+    for (size_t i = 0; i < cells; ++i) {
+        lake[i] -= mapGenSmooth(mapGenClamp01((hill[i] - (hillAt - 2.0f * kHillRamp)) / kHillRamp));
+    }
+    const float lakeAt = mapGenThreshold(lake, width_, height_, kLakeShare * std::min(1.0f, river_));
+    const float deepBelowM = kDeepBelow * kMapGenMaxHeight;
+    std::vector<float> rise(cells, 0.0f);
+    for (int y = 0; y < height_; ++y) {
+        for (int x = 0; x < width_; ++x) {
+            const float fx = static_cast<float>(x);
+            const float fy = static_cast<float>(y);
+            const size_t i = static_cast<size_t>(y * width_ + x);
+            const float roll = 0.75f * mapGenValueNoise(seed_, fx, fy, 220.0f, 60) + 0.25f * mapGenValueNoise(seed_, fx, fy, 90.0f, 61);
+            float ground = kPlainLowM + kPlainRiseM * roll;
+            const float up = mapGenClamp01((hill[i] - hillAt) / kHillRamp);
+            if (up > 0.0f) {
+                const float detail = 0.7f * mapGenValueNoise(seed_, fx, fy, 48.0f, 72) + 0.3f * mapGenValueNoise(seed_, fx, fy, 20.0f, 73);
+                rise[i] = kHillTopM * mapGenSmooth(up) * (0.6f + 0.4f * detail);
+                ground += rise[i];
+            }
+            const float down = mapGenClamp01((lake[i] - lakeAt) / kLakeRamp);
+            if (down > 0.0f) {
+                ground += (kLakeBedM - ground) * mapGenSmooth(down);
+            }
+            groundHeight_[i] = ground;
+        }
+    }
+    // The highest hilltops are bare rock: a share of the map that follows the hills, so every seed has
+    // stone and ore to mine, but never on a low mound nor only on the very tops.
+    const float rockAt = std::clamp(mapGenThreshold(rise, width_, height_, hills_ * kRockOfHills), kHillRockMinM, kHillRockMaxM);
+    for (size_t i = 0; i < cells; ++i) {
+        const float ground = groundHeight_[i];
+        if (ground < deepBelowM) {
+            terrain_[i] = Terrain::Water;
+        } else if (ground < waterTable_) {
+            terrain_[i] = Terrain::ShallowWater;
+        } else if (ground < waterTable_ + kBeachAboveWaterM) {
+            terrain_[i] = Terrain::Sand;
+        } else if (rise[i] > rockAt) {
+            terrain_[i] = Terrain::Rock;
+            roof_[i] = Roof::Thick;
+        } else {
+            terrain_[i] = Terrain::Soil;
+        }
+    }
+}
+
 void Map::generate() {
     const bool world = std::min(width_, height_) >= kMapGenWorldMin;
     waterTable_ = kWaterBelow * kMapGenMaxHeight;  // every water cell lies below it (docs/design/water.md)
+    if (world) {
+        generateFlatLand();
+        carveRivers();
+        addWetlands();
+        return;
+    }
     for (int y = 0; y < height_; ++y) {
         for (int x = 0; x < width_; ++x) {
             float sum = 0.0f;
@@ -839,10 +958,8 @@ void Map::generate() {
             const float h = sum / total;
             const size_t i = static_cast<size_t>(index(CellPos{x, y, 0}));
             groundHeight_[i] = h * kMapGenMaxHeight;
-            if (h < kDeepBelow || (h < kWaterBelow && !world)) {
+            if (h < kWaterBelow) {
                 terrain_[i] = Terrain::Water;
-            } else if (h < kWaterBelow) {
-                terrain_[i] = Terrain::ShallowWater;
             } else if (h < kSandBelow) {
                 terrain_[i] = Terrain::Sand;
             } else if (h > kRockAbove) {
@@ -852,10 +969,6 @@ void Map::generate() {
                 terrain_[i] = Terrain::Soil;
             }
         }
-    }
-    if (world) {
-        carveRivers();
-        addWetlands();
     }
 }
 
@@ -904,7 +1017,7 @@ void Map::carveRivers() {
             const float mid = centre[static_cast<size_t>(a)];
             const float deepH = deepHalf[static_cast<size_t>(a)];
             const float shallowH = shallowHalf[static_cast<size_t>(a)];
-            const float reach = shallowH + kRiverBank;
+            const float reach = shallowH + kRiverBankMax;
             // The course's direction here: along the river, turned by how its middle line wanders.
             const float bend = (centre[static_cast<size_t>(std::min(a + 1, length - 1))] -
                                 centre[static_cast<size_t>(std::max(a - 1, 0))]) * 0.5f;
@@ -939,8 +1052,13 @@ void Map::carveRivers() {
                     flow_[i * 2] = static_cast<int16_t>(std::lround(fx * 100.0f));
                     flow_[i * 2 + 1] = static_cast<int16_t>(std::lround(fy * 100.0f));
                 } else {
-                    const float t = 1.0f - mapGenSmooth(mapGenClamp01((d - shallowH) / kRiverBank));
                     const float bed = waterTable_ + kRiverBankLift;  // dry banks stand above the water
+                    // The bank widens where the ground stands high (a hill), so it never drops as a cliff.
+                    const float bank = std::clamp((old - bed) / kRiverBankSlope, kRiverBank, kRiverBankMax);
+                    if (d - shallowH > bank) {
+                        continue;
+                    }
+                    const float t = 1.0f - mapGenSmooth(mapGenClamp01((d - shallowH) / bank));
                     groundHeight_[i] = old + (std::min(old, bed) - old) * t;
                     if (terrain_[i] == Terrain::Rock && t > 0.2f) {
                         terrain_[i] = Terrain::Soil;  // the river cuts a valley through the mountain

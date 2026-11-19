@@ -18,6 +18,7 @@
 #include "ColonySim/Regions.h"
 #include "ColonySim/Lights.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Windows.h"
 #include "ColonySim/Traits.h"
 
 #include <algorithm>
@@ -205,6 +206,7 @@ std::string JobSystem::activeSkill(Entity pawn) const {
         case JobType::Deconstruct:
         case JobType::RemoveFloor:
         case JobType::Earthworks:
+        case JobType::WindowWork:
             return "Construction";
         case JobType::DoBill: {
             const Bill* bill = bills_->find(job.site, job.bill);
@@ -323,6 +325,19 @@ bool JobSystem::failCheckGather(Entity pawn, Job& job, std::string& why) {
                 return false;
             }
             return true;
+        case JobType::WindowWork: {
+            const DesignationKind mark = designations_.at(job.cell);
+            if (mark != DesignationKind::AddWindow && mark != DesignationKind::RemoveWindow) {
+                why = "the order was cancelled";
+                return false;
+            }
+            if (windows_ == nullptr) {
+                why = "no windows here";
+                return false;
+            }
+            why = mark == DesignationKind::AddWindow ? windows_->whyNotAdd(job.cell) : windows_->whyNotRemove(job.cell);
+            return why.empty();
+        }
         case JobType::RemoveFloor:
             if (designations_.at(job.cell) != DesignationKind::RemoveFloor) {
                 why = "the order was cancelled";
@@ -442,6 +457,43 @@ JobSystem::StepResult JobSystem::removeFloorWork(Entity pawn, Job& job, std::str
         return StepResult::Failed;
     }
     designations_.set(job.cell, DesignationKind::None);
+    Event changed;
+    changed.type = EventType::DesignationsChanged;
+    events_.push_back(std::move(changed));
+    return StepResult::Next;
+}
+
+// A window (docs/design/windows.md): `WindowRules` addWork or removeWork game seconds at construction speed, like taking
+// up a floor; then the wall has its window (or a broken one is glazed again), or is whole again. No materials either way.
+JobSystem::StepResult JobSystem::windowWork(Entity pawn, Job& job, std::string& why) {
+    const DesignationKind mark = designations_.at(job.cell);
+    if (windows_ == nullptr || (mark != DesignationKind::AddWindow && mark != DesignationKind::RemoveWindow)) {
+        why = "the order was cancelled";
+        return StepResult::Failed;
+    }
+    if (job.walk == 0) {
+        job.walk = 2;  // work steps don't walk: this marks that the animation event went out
+        gatherEvent(pawn, PawnAction::Build, job.cell);
+    }
+    job.progress += constructionSpeed(pawn) * static_cast<float>(construction_.numbers().buildWorkPerSecond);
+    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond * gather_.constructionSpeed);
+    const bool adding = mark == DesignationKind::AddWindow;
+    if (static_cast<double>(job.progress) < (adding ? windows_->numbers().addWork : windows_->numbers().removeWork)) {
+        return StepResult::Running;
+    }
+    const Window* before = windows_->at(job.cell);
+    const bool glazing = adding && before != nullptr && before->broken;
+    if (!(adding ? windows_->add(job.cell) : windows_->remove(job.cell))) {
+        why = adding ? windows_->whyNotAdd(job.cell) : windows_->whyNotRemove(job.cell);
+        return StepResult::Failed;
+    }
+    designations_.set(job.cell, DesignationKind::None);
+    Event done;
+    done.type = EventType::WindowChanged;
+    done.thing = windows_->wallAt(job.cell);
+    done.cell = job.cell;
+    done.message = glazing ? "glazed" : adding ? "added" : "removed";
+    events_.push_back(std::move(done));
     Event changed;
     changed.type = EventType::DesignationsChanged;
     events_.push_back(std::move(changed));

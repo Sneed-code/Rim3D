@@ -20,6 +20,8 @@ the lamps' light. `sim.lights().lightAt(cell)` is the one call others use.
   least `blockingHeightDm` tall (1.5 m: walls and rock; sandbags are lower) between the lamp and the cell casts a shadow
   (a straight line of cells from the lamp; doors don't block). Blueprints and frames give no light.
   The brightest lamp wins in a cell; they don't add up.
+- **Windows.** A window in a wall lets the sky's light into the roofed room behind it, and lamps shine through it
+  ([windows.md](windows.md)): `windowShareAt(cell)` times the sky's glow now.
 - **Rebuilt, not saved.** The lamp layer is worked out again when a building, a roof or the regions
   change (or after `markDirty()`), so it is neither in the save nor in the state hash. Loading a
   save and stepping once gives the same light. Cost: a rebuild is a few hundred cells per lamp.
