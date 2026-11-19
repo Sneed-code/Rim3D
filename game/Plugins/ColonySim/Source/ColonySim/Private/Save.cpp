@@ -1410,7 +1410,12 @@ void saveTradeCommand(Ar& ar, Type& c) {
         ar.value("pawn", c.pawn);
         ar.value("target", c.target);
         ar.value("mode", c.mode);
-        ar.require(c.mode <= FocusMode::Clear, "the save file has a bad focus mode");
+        ar.require(c.mode <= FocusMode::Right, "the save file has a bad focus mode");
+        if (ar.sectionVersion() >= 6) {  // Tab and flicks take the view (sneed 2026-11-19)
+            ar.value("viewX", c.viewX);
+            ar.value("viewY", c.viewY);
+            ar.value("anySide", c.anySide);
+        }
     } else if constexpr (std::is_same_v<Type, SetFightResponseCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("response", c.response);
@@ -2674,7 +2679,7 @@ void saveMeleePart(Ar& ar, Melee& m) {
     ar.value("seed", m.seed);
     ar.value("threat", m.threat);
     ar.value("defense", m.defense);
-    ar.require(m.defense <= MeleeDefense::Block, "the save file has a bad melee defense");
+    ar.require(m.defense <= MeleeDefense::Backstep, "the save file has a bad melee defense");
     ar.value("reactAt", m.reactAt);
     ar.value("blockFrom", m.blockFrom);
     ar.value("blockUntil", m.blockUntil);
@@ -2703,6 +2708,10 @@ void saveMeleePart(Ar& ar, Melee& m) {
     }
     if (ar.sectionVersion() >= 5) {  // lock-on, Elden Ring style (docs/design/lock-on.md)
         ar.value("focusSeenAt", m.focusSeenAt);
+    }
+    if (ar.sectionVersion() >= 6) {  // Tab's round (sneed 2026-11-19)
+        ar.list("focusTried", m.focusTried, [&](Entity& e) { ar.value(nullptr, e); });
+        ar.value("focusTriedAt", m.focusTriedAt);
     }
 }
 
@@ -3511,7 +3520,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("repaths", d.repaths);
         ar.list("setupErrors", d.setupErrors, [&](std::string& s) { ar.text(nullptr, s); });
     });
-    ar.section("commands", 5, [&] { saveCommandsSection(ar, d); });
+    ar.section("commands", 6, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
     ar.section("movement", 3, [&] {
@@ -3748,7 +3757,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(c.days >= 0.0f && c.days <= 1000.0f, "the save file has an impossible corpse rot");
         });
     });
-    ar.section("melee", 5, [&] {
+    ar.section("melee", 6, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
     });
     ar.section("social", 3, [&] {

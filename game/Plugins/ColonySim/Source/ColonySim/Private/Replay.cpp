@@ -65,6 +65,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
         j["pawn"] = entt::to_integral(focus->pawn);
         j["target"] = entt::to_integral(focus->target);
         j["mode"] = static_cast<int>(focus->mode);
+        if (focus->viewX != 0.0f || focus->viewY != 0.0f) {
+            j["viewX"] = focus->viewX;
+            j["viewY"] = focus->viewY;
+        }
+        if (focus->anySide) {
+            j["anySide"] = true;
+        }
         return j;
     }
     if (const auto* response = std::get_if<SetFightResponseCommand>(&logged.command)) {
@@ -1980,8 +1987,12 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "target", target, where) || !r.integer(j, "mode", mode, where)) {
                 return false;
             }
-            if (mode < 0 || mode > static_cast<int>(FocusMode::Clear)) {
+            if (mode < 0 || mode > static_cast<int>(FocusMode::Right)) {
                 return r.fail(where + ": bad focus mode");
+            }
+            if ((j.contains("viewX") && !r.number(j, "viewX", c.viewX, where)) || (j.contains("viewY") && !r.number(j, "viewY", c.viewY, where)) ||
+                (j.contains("anySide") && !r.flag(j, "anySide", c.anySide, where))) {
+                return false;
             }
             c.pawn = static_cast<Entity>(pawn);
             c.target = static_cast<Entity>(target);

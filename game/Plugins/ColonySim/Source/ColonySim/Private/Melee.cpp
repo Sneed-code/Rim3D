@@ -121,6 +121,17 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     num("lockBigBodySize", r.lockBigBodySize);
     whole("lockSightLostSteps", r.lockSightLostSteps);
     num("orbitRadialShare", r.orbitRadialShare);
+    whole("focusRoundSteps", r.focusRoundSteps);
+    num("flickMaxDegrees", r.flickMaxDegrees);
+    num("assistCos", r.assistCos);
+    num("playerReachSlack", r.playerReachSlack);
+    num("strikeTrackDegrees", r.strikeTrackDegrees);
+    bySkill("defendChanceBySkill", r.defendChance);
+    num("parryShare", r.parryShare);
+    num("backstepShare", r.backstepShare);
+    num("backstepMetres", r.backstepMetres);
+    whole("backstepSteps", r.backstepSteps);
+    r.backstepSteps = std::max(1, r.backstepSteps);
     whole("footworkEverySteps", r.footworkEverySteps);
     bySkill("footworkChanceBySkill", r.footworkChance);
     num("footworkTraitBonus", r.footworkTraitBonus);
@@ -605,7 +616,9 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         if (target == pawn || !things_.spawned(target) || !reg.all_of<Posture>(target) || (h != nullptr && h->dead)) {
             return fail("the target isn't a living pawn on the map");
         }
-        if (!inReach(pawn, target, fists)) {
+        // The player walks on under its swing (#361), so a target a little past its reach still gets it: it lands only if
+        // the player really closes in (the blow itself is as long as the reach).
+        if (!inReach(pawn, target, fists) && !(player && inPlayerReach(pawn, target))) {
             return fail("the target is out of reach");
         }
     }
@@ -752,16 +765,23 @@ void MeleeSystem::prepareDefense(Entity defender, Entity attacker, int stepsToHi
     if (noticed >= hitAt) {
         return;  // too quick for it
     }
+    // Read in time, it defends as often as its skill says (sneed 2026-11-19: enemies that dodge, by skill): a parry
+    // with a weapon in hand (parryShare of the time for a fighter, which can also get out of the way), else a step back
+    // or aside (a roll from a heavy blow).
+    if (rng.unit() >= meleeBySkill(rules_.defendChance, meleeSkill(defender))) {
+        return;
+    }
     bool weapon = false;
     toolsOf(defender, weapon);
-    if (weapon && !guardBroken(defender)) {
+    const bool fighter = reg.all_of<Fighter>(defender);
+    if (weapon && !guardBroken(defender) && (!fighter || rng.unit() < rules_.parryShare)) {
         d.defense = MeleeDefense::Block;
         d.reactAt = noticed;
         d.blockFrom = noticed + rules_.blockSteps;
         d.blockUntil = hitAt + 1;
-    } else if (reg.all_of<Fighter>(defender)) {
+    } else if (fighter) {
         // It moves once the attacker is committed to the line (moving sooner, the swing would follow it).
-        d.defense = MeleeDefense::Dodge;
+        d.defense = rng.unit() < rules_.backstepShare ? MeleeDefense::Backstep : MeleeDefense::Dodge;
         d.reactAt = std::max(noticed, hitAt - rules_.commitSteps);
     }
 }
@@ -794,9 +814,9 @@ void MeleeSystem::defend(Entity defender, Melee& d) {
         }
         return;
     }
-    if (defense == MeleeDefense::Dodge && swing->stepsLeft > 0) {
-        // A heavy blow is worth a roll clear of it (phase 2); a light one a sidestep.
-        if (!(strongSwing(d.threat) && roll(defender, d))) {
+    if ((defense == MeleeDefense::Dodge || defense == MeleeDefense::Backstep) && swing->stepsLeft > 0) {
+        // A heavy blow is worth a roll clear of it (phase 2); a light one a step back out of reach or aside.
+        if (!(strongSwing(d.threat) && roll(defender, d)) && !(defense == MeleeDefense::Backstep && backstep(defender, d))) {
             sidestep(defender, d);
         }
     }
@@ -850,6 +870,51 @@ bool MeleeSystem::roll(Entity defender, Melee& d) {
         return true;
     }
     return false;
+}
+
+// A quick step straight back from the attacker, out of its reach (sneed 2026-11-19), through the body motion system
+// (against walls and bodies). False if the way back is blocked.
+bool MeleeSystem::backstep(Entity defender, Melee& d) {
+    entt::registry& reg = things_.registry();
+    const Position& pos = reg.get<Position>(defender);
+    const Position& from = reg.get<Position>(d.threat);
+    float ax = pos.x - from.x;
+    float ay = pos.y - from.y;
+    const float len = std::sqrt(ax * ax + ay * ay);
+    if (len < 0.01f) {
+        return false;
+    }
+    ax /= len;
+    ay /= len;
+    if (!straightWalkIsClear(map_, pos.x, pos.y, pos.x + ax * rules_.backstepMetres, pos.y + ay * rules_.backstepMetres, kPawnRadius,
+                             pos.level)) {
+        return false;
+    }
+    Mover& mover = reg.get<Mover>(defender);
+    mover.path.clear();
+    mover.next = 0;
+    if (!combat_.motion().push(defender, ax, ay, rules_.backstepMetres, rules_.backstepSteps)) {
+        return false;
+    }
+    d.dodged = true;
+    ++dodges_;
+    const Melee& swing = reg.get<Melee>(d.threat);
+    d.noDefendUntil = std::max(d.noDefendUntil, now() + swing.stepsLeft + rules_.dodgeRecoverySteps);
+    if (Fighter* f = reg.try_get<Fighter>(defender)) {
+        f->dodgeUntil = std::max(f->dodgeUntil, now() + std::max(swing.stepsLeft, rules_.backstepSteps) + rules_.dodgeHoldSteps);
+        f->nextPlan = std::min(f->nextPlan, f->dodgeUntil);
+    }
+    if (events_ != nullptr) {
+        Event e;
+        e.type = EventType::PawnAction;
+        e.action = PawnAction::Dodge;
+        e.thing = defender;
+        e.def = reg.get<Thing>(defender).def;
+        e.target = d.threat;
+        e.cell = cellOf(reg.get<Position>(defender));
+        events_->push_back(std::move(e));
+    }
+    return true;
 }
 
 // A one-cell step to the side of the line from the attacker, whichever side is free. Nothing if
@@ -934,6 +999,13 @@ bool MeleeSystem::shoulder(Entity pawn, float& x, float& y, float& z) const {
 void MeleeSystem::commit(Entity pawn, Melee& m) {
     entt::registry& reg = things_.registry();
     m.committed = true;
+    if (m.player && m.target == kNoEntity) {
+        // Swung at nobody (no lock in reach when the key went down): whoever walked into it since.
+        const Entity late = playerTarget(pawn);
+        if (late != kNoEntity && inPlayerReach(pawn, late)) {
+            m.target = late;
+        }
+    }
     float ox = 0.0f;
     float oy = 0.0f;
     float oz = 0.0f;
@@ -992,6 +1064,56 @@ void MeleeSystem::commit(Entity pawn, Melee& m) {
     m.aimZ += uz * w * radius;
 }
 
+// sneed 2026-11-19 ("when I'm swinging at someone it doesn't always hit, and they don't dodge"): the line fixed at
+// commit lets a dodge read in time get away, but a target that only shuffled (footwork, a walk) was missed too. A target
+// that didn't dodge this blow is followed to it, if it moved no more than strikeTrackDegrees off the line; the blow is
+// still only as long as the reach, so one that stepped out of reach is missed.
+void MeleeSystem::followToBlow(Entity pawn, Melee& m) {
+    entt::registry& reg = things_.registry();
+    if (m.target == kNoEntity || !reg.valid(m.target) || !things_.spawned(m.target) || !reg.all_of<Position>(pawn)) {
+        return;
+    }
+    const Melee* tm = reg.try_get<Melee>(m.target);
+    if (tm != nullptr && tm->dodged && tm->threat == pawn) {
+        return;
+    }
+    const Position& pos = reg.get<Position>(pawn);
+    const float oldX = m.aimX;
+    const float oldY = m.aimY;
+    const float oldZ = m.aimZ;
+    Posture& posture = reg.get<Posture>(pawn);
+    const float faceX = posture.facingX;
+    const float faceY = posture.facingY;
+    commit(pawn, m);  // the same choice (seeded), at where the target is now
+    const float ax = oldX - pos.x;
+    const float ay = oldY - pos.y;
+    const float bx = m.aimX - pos.x;
+    const float by = m.aimY - pos.y;
+    const float la = std::sqrt(ax * ax + ay * ay);
+    const float lb = std::sqrt(bx * bx + by * by);
+    const float most = std::cos(rules_.strikeTrackDegrees * 3.14159265f / 180.0f);
+    if (la > 0.01f && lb > 0.01f && (ax * bx + ay * by) / (la * lb) < most) {
+        m.aimX = oldX;  // it got off the line: the blow goes where it was going
+        m.aimY = oldY;
+        m.aimZ = oldZ;
+        posture.facingX = faceX;
+        posture.facingY = faceY;
+    }
+}
+
+bool MeleeSystem::inPlayerReach(Entity pawn, Entity target) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.valid(target) || !reg.all_of<Position>(pawn) || !reg.all_of<Position>(target)) {
+        return false;
+    }
+    const Position& a = reg.get<Position>(pawn);
+    const Position& b = reg.get<Position>(target);
+    const float dx = b.x - a.x;
+    const float dy = b.y - a.y;
+    const float r = engageDistance(pawn, target) + rules_.reachSlack + rules_.playerReachSlack;
+    return a.level == b.level && dx * dx + dy * dy <= r * r;
+}
+
 // The hit moment: a level strike from the attacker's centre through the aimed point (as a bullet
 // would cross a man, so the hit chance table holds), as far as the reach allows, against hitboxes
 // and walls. What it meets first is hit.
@@ -1016,6 +1138,8 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
     entt::registry& reg = things_.registry();
     if (!m.committed) {
         commit(pawn, m);
+    } else {
+        followToBlow(pawn, m);
     }
     const Tool* tool = toolOf(pawn, m);
     if (tool == nullptr || !reg.all_of<Position>(pawn)) {
@@ -1299,6 +1423,11 @@ void MeleeSystem::hashThing(Entity e, StateHasher& h) const {
     h.add(entt::to_integral(m->focus));
     h.add(m->focusPlayer);
     h.add(m->focusSeenAt);
+    h.add(static_cast<uint64_t>(m->focusTried.size()));
+    for (const Entity tried : m->focusTried) {
+        h.add(entt::to_integral(tried));
+    }
+    h.add(m->focusTriedAt);
     h.add(m->low);
     h.add(static_cast<int>(m->circleDir));
     h.add(m->nextFootworkAt);
@@ -1381,7 +1510,8 @@ bool meleeFocusable(const Things& things, Entity pawn, Entity target, float rang
 
 }  // namespace
 
-bool MeleeSystem::focusCommand(Entity pawn, Entity target, FocusMode mode, std::string* why) {
+bool MeleeSystem::focusCommand(Entity pawn, Entity target, FocusMode mode, std::string* why, float viewX, float viewY,
+                               bool anySide) {
     entt::registry& reg = things_.registry();
     const auto fail = [why](const char* message) {
         if (why != nullptr) {
@@ -1411,19 +1541,54 @@ bool MeleeSystem::focusCommand(Entity pawn, Entity target, FocusMode mode, std::
         m.focusSeenAt = now();
         return true;
     }
-    if (mode != FocusMode::Next) {
+    if (mode != FocusMode::Next && mode != FocusMode::Left && mode != FocusMode::Right) {
         return fail("no such focus mode");
     }
-    // Tab (sneed: "nearest target shuffle like WoW"): the pawns within focusRange, enemies before anyone else (never its
-    // own side), nearest first with ones behind it counted further off; the next after the one it holds, round again.
+    return focusNext(pawn, mode, viewX, viewY, anySide, why);
+}
+
+// Tab and flicks (sneed 2026-11-19: "tab doesn't shuffle or work intuitively to target closest"). The old Tab took the
+// next one after the held target in a list sorted by distance each press; walking to the second nearest made it the
+// nearest, so Tab swapped between the two nearest for ever. Now a round: each Tab gives the nearest not yet given.
+bool MeleeSystem::focusNext(Entity pawn, FocusMode mode, float viewX, float viewY, bool anySide, std::string* why) {
+    entt::registry& reg = things_.registry();
+    const auto fail = [why](const char* message) {
+        if (why != nullptr) {
+            *why = message;
+        }
+        return false;
+    };
     const Position& pos = reg.get<Position>(pawn);
     const Posture& posture = reg.get<Posture>(pawn);
+    float lookX = viewX;
+    float lookY = viewY;
+    if (const float l = std::sqrt(lookX * lookX + lookY * lookY); l > 1e-4f) {
+        lookX /= l;
+        lookY /= l;
+    } else {
+        lookX = posture.facingX;
+        lookY = posture.facingY;
+    }
     const FactionId own = reg.all_of<Faction>(pawn) ? reg.get<Faction>(pawn).id : kPlayerFaction;
     struct Pick {
-        int group = 0;  // 0 enemies, 1 the rest
+        int group = 0;  // 0 standing enemies, 1 downed enemies, 2 standing others, 3 downed others
         float score = 0.0f;
+        float angle = 0.0f;  // radians anticlockwise from the reference direction (flicks)
         Entity pawn = kNoEntity;
     };
+    Melee& m = reg.get_or_emplace<Melee>(pawn);
+    const bool holding = m.focus != kNoEntity && reg.valid(m.focus) && reg.all_of<Position>(m.focus);
+    // A flick turns from the target held (else from the view).
+    float refX = lookX;
+    float refY = lookY;
+    if (holding) {
+        const Position& t = reg.get<Position>(m.focus);
+        const float l = std::sqrt((t.x - pos.x) * (t.x - pos.x) + (t.y - pos.y) * (t.y - pos.y));
+        if (l > 0.01f) {
+            refX = (t.x - pos.x) / l;
+            refY = (t.y - pos.y) / l;
+        }
+    }
     std::vector<Pick> picks;
     for (const auto [e, thing, p] : reg.view<const Thing, const Position>().each()) {
         if (!meleeFocusable(things_, pawn, e, rules_.focusRange)) {
@@ -1431,14 +1596,16 @@ bool MeleeSystem::focusCommand(Entity pawn, Entity target, FocusMode mode, std::
         }
         const bool enemy = hostile_ ? hostile_(pawn, e) : true;
         const FactionId side = reg.all_of<Faction>(e) ? reg.get<Faction>(e).id : kPlayerFaction;
-        if (!enemy && side == own && !reg.all_of<Animal>(e)) {
+        if (!anySide && !enemy && side == own && !reg.all_of<Animal>(e)) {
             continue;  // its own side
         }
+        const bool down = health_.incapacitated(e);
         const float dx = p.x - pos.x;
         const float dy = p.y - pos.y;
         const float d = std::sqrt(dx * dx + dy * dy);
-        const bool front = d < 0.01f || (dx * posture.facingX + dy * posture.facingY) / d >= rules_.focusFrontCos;
-        picks.push_back(Pick{enemy ? 0 : 1, front ? d : d * rules_.focusBehindFactor, e});
+        const bool front = d < 0.01f || (dx * lookX + dy * lookY) / d >= rules_.focusFrontCos;
+        const float angle = d < 0.01f ? 0.0f : std::atan2(refX * dy - refY * dx, refX * dx + refY * dy);
+        picks.push_back(Pick{(enemy ? 0 : 2) + (down ? 1 : 0), front ? d : d * rules_.focusBehindFactor, angle, e});
     }
     if (picks.empty()) {
         return fail("nobody near enough to focus on");
@@ -1452,18 +1619,68 @@ bool MeleeSystem::focusCommand(Entity pawn, Entity target, FocusMode mode, std::
         }
         return a.pawn < b.pawn;
     });
-    if (picks.front().group == 0) {
-        picks.erase(std::remove_if(picks.begin(), picks.end(), [](const Pick& p) { return p.group != 0; }), picks.end());
+    if (picks.front().group <= 1 && !anySide) {
+        // Enemies about: nobody else (the practice range keeps everyone: its targets turn on you one by one).
+        picks.erase(std::remove_if(picks.begin(), picks.end(), [](const Pick& p) { return p.group > 1; }), picks.end());
     }
-    Melee& m = reg.get_or_emplace<Melee>(pawn);
-    size_t next = 0;
-    for (size_t i = 0; i < picks.size(); ++i) {
-        if (picks[i].pawn == m.focus) {
-            next = (i + 1) % picks.size();
-            break;
+    Entity chosen = kNoEntity;
+    if (mode == FocusMode::Left || mode == FocusMode::Right) {
+        // The nearest turn that way from the held target (standing ones first), within flickMaxDegrees. Right turns from
+        // +x towards +y: on screen (Unreal's +Y is to the right of +X) the player's right.
+        const float sign = mode == FocusMode::Right ? 1.0f : -1.0f;
+        const float most = rules_.flickMaxDegrees * 3.14159265f / 180.0f;
+        int bestGroup = 99;
+        float best = 0.0f;
+        for (const Pick& p : picks) {
+            const float turn = p.angle * sign;
+            if (p.pawn == m.focus || turn <= 0.01f || turn > most) {
+                continue;
+            }
+            const int g = p.group % 2;
+            if (chosen == kNoEntity || g < bestGroup || (g == bestGroup && turn < best)) {
+                chosen = p.pawn;
+                best = turn;
+                bestGroup = g;
+            }
         }
+        if (chosen == kNoEntity) {
+            return fail("nobody that way to focus on");
+        }
+    } else {
+        // Tab: a round starts again after focusRoundSteps without a Tab; the target held counts as given.
+        if (now() - m.focusTriedAt > rules_.focusRoundSteps) {
+            m.focusTried.clear();
+        }
+        const auto tried = [&m](Entity e) { return std::find(m.focusTried.begin(), m.focusTried.end(), e) != m.focusTried.end(); };
+        if (holding && !tried(m.focus)) {
+            m.focusTried.push_back(m.focus);
+        }
+        for (const Pick& p : picks) {
+            if (!tried(p.pawn)) {
+                chosen = p.pawn;
+                break;
+            }
+        }
+        if (chosen == kNoEntity) {
+            // Everyone given: round again from the nearest, not the one held.
+            m.focusTried.clear();
+            for (const Pick& p : picks) {
+                if (p.pawn != m.focus) {
+                    chosen = p.pawn;
+                    break;
+                }
+            }
+            if (chosen == kNoEntity) {
+                chosen = picks.front().pawn;
+            }
+            if (holding) {
+                m.focusTried.push_back(m.focus);
+            }
+        }
+        m.focusTried.push_back(chosen);
+        m.focusTriedAt = now();
     }
-    m.focus = picks[next].pawn;
+    m.focus = chosen;
     m.focusPlayer = true;
     m.focusSeenAt = now();
     return true;
@@ -1635,29 +1852,38 @@ Entity MeleeSystem::playerTarget(Entity pawn) const {
     }
     const Melee* m = reg.try_get<Melee>(pawn);
     if (m != nullptr && m->focus != kNoEntity && meleeFocusable(things_, pawn, m->focus, rules_.focusBreakRange) &&
-        inReach(pawn, m->focus)) {
+        inPlayerReach(pawn, m->focus)) {
         return m->focus;
     }
-    // No focus in reach: a body on the ground before it (within 60 degrees), nearest first. Swung straight ahead, a level
-    // blow passes over a man lying at its feet.
+    // No focus in reach: a body on the ground before it (within 60 degrees), nearest first (swung straight ahead, a level
+    // blow passes over a man lying at its feet); else an enemy on its feet ahead (within assistCos), nearest first
+    // (sneed 2026-11-19: swings that land).
     const Position& pos = reg.get<Position>(pawn);
     const Posture& posture = reg.get<Posture>(pawn);
     Entity best = kNoEntity;
     float bestD = 0.0f;
+    bool bestDown = false;
     for (const auto [e, thing, p] : reg.view<const Thing, const Position>().each()) {
-        if (thing.category != ThingCategory::Pawn || !meleeFocusable(things_, pawn, e, reach(pawn) + 2.0f) ||
-            !health_.incapacitated(e) || !inReach(pawn, e)) {
+        if (thing.category != ThingCategory::Pawn || !meleeFocusable(things_, pawn, e, reach(pawn) + 3.0f) || !inPlayerReach(pawn, e)) {
+            continue;
+        }
+        const bool down = health_.incapacitated(e);
+        if (!down && !(hostile_ && hostile_(pawn, e))) {
             continue;
         }
         const float dx = p.x - pos.x;
         const float dy = p.y - pos.y;
         const float d = std::sqrt(dx * dx + dy * dy);
-        if (d > 0.01f && (dx * posture.facingX + dy * posture.facingY) / d < 0.5f) {
+        if (d > 0.01f && (dx * posture.facingX + dy * posture.facingY) / d < (down ? 0.5f : rules_.assistCos)) {
             continue;
         }
-        if (best == kNoEntity || d < bestD) {
+        if (down && !inReach(pawn, e)) {
+            continue;
+        }
+        if (best == kNoEntity || (down && !bestDown) || (down == bestDown && d < bestD)) {
             best = e;
             bestD = d;
+            bestDown = down;
         }
     }
     return best;
