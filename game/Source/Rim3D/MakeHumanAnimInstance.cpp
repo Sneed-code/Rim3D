@@ -415,20 +415,20 @@ void FMakeHumanSeverNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseC
 		// Where that can't be done the bone folds to a point as before.
 		const FCompactPoseBoneIndex Parent = Container.GetParentBoneIndex(Index);
 		const FMeshPoseBoneIndex MeshIndex = Container.MakeMeshPoseIndex(Index);
-		FTransform Cut = Output.Pose.GetComponentSpaceTransform(Index);
+		FTransform CutPose = Output.Pose.GetComponentSpaceTransform(Index);
 		bool bFlat = false;
 		if (Parent.IsValid() && MeshIndex.IsValid() && MeshIndex.GetInt() < Container.GetReferenceSkeleton().GetNum())
 		{
 			const FReferenceSkeleton& Ref = Container.GetReferenceSkeleton();
 			bFlat = GoreCut::FlattenCut(Output.Pose.GetComponentSpaceTransform(Parent), Ref.GetRefBonePose()[MeshIndex.GetInt()],
-				GoreCut::AxisLocal(Ref, MeshIndex.GetInt()), Cut);
+				GoreCut::AxisLocal(Ref, MeshIndex.GetInt()), CutPose);
 		}
 		if (!bFlat)
 		{
-			Cut.SetScale3D(FVector(GoreCut::Flat));
+			CutPose.SetScale3D(FVector(GoreCut::Flat));
 		}
-		OutBoneTransforms.Add(FBoneTransform(Index, Cut));
-		const FTransform Gone(Cut.GetRotation(), Cut.GetTranslation(), FVector(GoreCut::Flat));
+		OutBoneTransforms.Add(FBoneTransform(Index, CutPose));
+		const FTransform Gone(CutPose.GetRotation(), CutPose.GetTranslation(), FVector(GoreCut::Flat));
 		for (FCompactPoseBoneIndex Below(Index.GetInt() + 1); Below.GetInt() < Container.GetCompactPoseNumBones(); ++Below)
 		{
 			if (Container.BoneIsChildOf(Below, Index))

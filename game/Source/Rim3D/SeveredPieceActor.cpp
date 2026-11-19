@@ -607,10 +607,10 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 			At = Cut;
 			Along = Bit == colony::kSeveredHead ? FVector::UpVector : (Middle - Cut).GetSafeNormal();
 		}
-		if (USceneComponent* End = GoreMakeStump(Piece, Piece->GetRootComponent(), NAME_None, At, -Along, Front, SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread(),
+		if (USceneComponent* Stump = GoreMakeStump(Piece, Piece->GetRootComponent(), NAME_None, At, -Along, Front, SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread(),
 				SeveredStumpKind(Bit), SeveredSkinColour(*this), static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 17u + Bit * 7u)))
 		{
-			Piece->SetCutEnd(End);
+			Piece->SetCutEnd(Stump);
 		}
 	}
 	// Thrown up and away from the body's middle, tumbling.
