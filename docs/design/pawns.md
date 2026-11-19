@@ -174,11 +174,6 @@ is between their places (the newest step's moment jumped 1/30 s at each step and
 about to play and is gentle both ways. **A lifted foot lets go at the speed its held ankle really had** (the swing over
 the ball included; the old guess, capped at 4 m/s, jolted the foot at lift-off). A standing foot's turn follows the
 holds' with their own speed fed forward (no lag while the body twists over it), up to 60 degrees.
-Ninth round: **the locomotion's pose is eased toward its animation** (each bone, in its own space, with a 1/30 s
-exponential ease, in the hold layer under the montage slot). The sample's keys are 1/30 s apart and played straight
-from one to the next, so a bone's speed changed all at once at every key; at a few hundred frames a second a running
-foot (free, not held) jolted at each key of the walk-to-run clips. Eased, the same motion plays 1/30 s later with the
-corners rounded off. The sim's own clips (rolls, staggers, swings) are above it and play unchanged.
 
 **Near and far: loops.** The breathing idle, or the walk or run loop (`M_Neutral_*`), picked by speed (run above the
 middle of the two loops' speeds, measured from their root motion: 200 and 500 cm/s) and played
