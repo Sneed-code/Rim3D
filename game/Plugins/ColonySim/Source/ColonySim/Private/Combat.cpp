@@ -15,6 +15,7 @@
 #include "ColonySim/Things.h"
 #include "ColonySim/Traits.h"
 #include "ColonySim/Weather.h"
+#include "ColonySim/Windows.h"
 
 #include <algorithm>
 #include <cmath>
@@ -710,6 +711,7 @@ CombatSystem::CombatSystem(Things& things, Map& map, HealthSystem& health)
       model_(std::make_unique<CombatModel>(things.defs(), health)),
       apparelStats_(std::make_unique<ApparelStats>(things.defs())),
       motion_(std::make_unique<BodyMotionSystem>(things, map)) {
+    windowLintelDm_ = static_cast<float>(WindowNumbers::read(things.defs()).lintelDm);
     motion_->setMass([this](Entity pawn) { return bodySize_ ? bodySize_(pawn) : 1.0f; });
     motion_->setAble([this](Entity pawn) { return !health_.incapacitated(pawn); });
     // Bodies on the ground (downed, knocked down, lying prone) don't stand in the way: they are stepped over.
@@ -970,6 +972,27 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
                     best.kind = ProjectileHitKind::Building;
                     best.thing = map_.buildingAt(c);
                     break;
+                }
+                // A window (docs/design/windows.md): the wall counts up to the sill, and again above the lintel.
+                const Entity wall = obstacle == kObstacleTallDm ? kNoEntity : map_.buildingAt(c);
+                const entt::registry& walls = things_.registry();
+                const Window* window = wall != kNoEntity && walls.valid(wall) ? walls.try_get<Window>(wall) : nullptr;
+                if (window != nullptr) {
+                    const float lintel = map_.groundHeight(c) + 0.1f * windowLintelDm_;
+                    if (std::max(z0, z1) > lintel) {
+                        const float t = z0 > lintel ? tIn : tIn + (tOut - tIn) * (lintel - z0) / (z1 - z0);
+                        at(t, best);
+                        best.kind = ProjectileHitKind::Building;
+                        best.thing = wall;
+                        break;
+                    }
+                    if (!window->broken && best.glass == kNoEntity) {
+                        best.glass = wall;
+                        best.glassT = tIn;
+                        best.glassX = ax + dx * tIn;
+                        best.glassY = ay + dy * tIn;
+                        best.glassZ = z0;
+                    }
                 }
             }
             const float g0 = map_.heightAt(ax + dx * tIn, ay + dy * tIn);
@@ -2284,6 +2307,9 @@ void CombatSystem::step(Rng& rng) {
             hit.y = ny;
             hit.z = nz;
         }
+        if (hit.glass != kNoEntity && (hit.kind == ProjectileHitKind::None || hit.glassT <= hit.t)) {
+            breakWindow(hit.glass, hit.glassX, hit.glassY, hit.glassZ, p.launcher);
+        }
         if (hit.kind != ProjectileHitKind::None) {
             impact(shot, p, hit);
             reg.destroy(shot);
@@ -2656,6 +2682,11 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
         }
     }
     for (const BlastTarget& target : targets) {
+        if (reg.all_of<Window>(target.building)) {
+            // The blast blows the glass out (docs/design/windows.md).
+            const Position* wallAt = reg.try_get<Position>(target.building);
+            breakWindow(target.building, wallAt != nullptr ? wallAt->x : ex.x, wallAt != nullptr ? wallAt->y : ex.y, ex.z, ex.instigator);
+        }
         HitPoints* hp = reg.try_get<HitPoints>(target.building);
         if (hp == nullptr) {
             continue;
@@ -2680,6 +2711,26 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
         }
     }
     return result;
+}
+
+bool CombatSystem::breakWindow(Entity wall, float x, float y, float z, Entity by) {
+    if (!Windows::breakGlass(things_, wall)) {
+        return false;
+    }
+    if (events_ != nullptr) {
+        Event e;
+        e.type = EventType::WindowBroken;
+        e.thing = wall;
+        e.target = by;
+        e.x = x;
+        e.y = y;
+        e.z = z;
+        if (const Footprint* footprint = things_.registry().try_get<Footprint>(wall)) {
+            e.cell = footprint->origin;
+        }
+        events_->push_back(std::move(e));
+    }
+    return true;
 }
 
 bool CombatSystem::damageBuilding(Entity building, int damage) {

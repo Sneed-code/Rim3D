@@ -48,6 +48,12 @@ missing research, and adds up the cost of the spots that can be planned against 
 Everything snaps to the 1 m grid: the sim decides walking, seats, rooms and cover by cell (sneed
 agreed, 2026-11-14). A finer grid for small decor and a cosmetic nudge are in `BACKLOG.md`.
 
+## Tools: windows
+
+A Things def of category `BuildTool` (`buildTool`: `AddWindow`, `RemoveWindow`) is on the menu with `tool` set: one cell,
+no stuff, no cost. Its preview asks the windows whether each cell can take the order, and its `PlaceBlueprintCommand` marks the
+cell for a builder instead of planning a building ([windows.md](windows.md)).
+
 ## Removing a floor
 
 `DesignateCommand{area, RemoveFloor}` marks every cell of the area with a floor (none: refused).

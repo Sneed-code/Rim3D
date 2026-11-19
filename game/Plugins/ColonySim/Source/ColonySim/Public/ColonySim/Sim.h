@@ -53,6 +53,7 @@ class MentalBreakSystem;
 class NatureEvents;
 class JobSystem;
 class Lights;
+class Windows;
 class MeleeSystem;
 class DeepResources;
 class Mineables;
@@ -368,6 +369,8 @@ public:
     const Farming& farming() const { return *farming_; }
     Lights& lights() { return *lights_; }
     const Lights& lights() const { return *lights_; }
+    Windows& windows() { return *windows_; }
+    const Windows& windows() const { return *windows_; }
     // Floors, filth, room stats and the beauty need (docs/design/room-stats.md).
     Floors& floors() { return *floors_; }
     const Floors& floors() const { return *floors_; }
@@ -617,6 +620,7 @@ private:
     std::unique_ptr<Rooms> rooms_;
     std::unique_ptr<PowerGrid> power_;
     std::unique_ptr<Lights> lights_;
+    std::unique_ptr<Windows> windows_;  // docs/design/windows.md
     std::unique_ptr<TemperatureSystem> temperature_;  // after rooms_ and health_
     std::unique_ptr<Farming> farming_;                // after temperature_, lights_ and zones_
     std::unique_ptr<SpoilageSystem> spoilage_;        // after temperature_ and roomStats_

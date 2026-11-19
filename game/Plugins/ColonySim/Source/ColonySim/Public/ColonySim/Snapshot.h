@@ -41,6 +41,9 @@ enum class PawnPosture : uint8_t { Stand, Sit, Lie };
 // Share of a wall climb spent on the face; the rest is the mantle over the top (docs/design/climbing.md).
 inline constexpr float kWallMantleFrom = 0.8f;
 
+// A wall's window (docs/design/windows.md).
+enum class WindowState : uint8_t { None, Glass, Broken };
+
 struct ThingView {
     Entity id = kNoEntity;
     DefId def;
@@ -111,6 +114,7 @@ struct ThingView {
     bool markedForDeconstruct = false;
     // Doors: 0 closed to 1 open (it opens over about 0.75 real seconds while a pawn waits).
     float doorOpen = 0.0f;
+    WindowState window = WindowState::None;  // walls: a window with glass, or with the glass broken
     // Work buildings with bills (docs/design/bills.md): `billCount` bills from Snapshot::bills[firstBill].
     uint32_t firstBill = 0;
     uint32_t billCount = 0;

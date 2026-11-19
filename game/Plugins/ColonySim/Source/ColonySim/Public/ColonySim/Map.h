@@ -5,6 +5,7 @@
 #include "ColonySim/Grid.h"
 
 #include <array>
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <cstddef>
@@ -71,7 +72,13 @@ struct MapSettings {
     // How much river and how much marsh the biome gets, as multiples of the usual (0: none).
     float river = 1.0f;
     float marsh = 1.0f;
+    // Share of a map of 192 m or more that lies in its hill areas; the rest is flat open ground
+    // (sneed: about 15% on a flat tile, in a few big patches; docs/design/mapgen.md "Flat ground").
+    float hills = 0.15f;
 };
+
+// The hill share for a world tile's hilliness (ours: sneed's 15% for flat, a little more for hillier tiles).
+COLONY_API float mapHillShare(int hilliness);
 
 // The map grid: one flat array per layer, generated from a seed.
 //
@@ -117,6 +124,13 @@ public:
     }
     // Pawns can stand here: in bounds, walkable ground and no building that blocks movement.
     bool walkable(CellPos c) const { return inBounds(c) && groundWalkable(c) && passage(c) != Passage::Blocked; }
+    // On a generated map of 192 m or more: the cell is in one of the hill areas (its ground stands
+    // over kHillGroundM; the plain lies 15 to 17 m up). Always false on smaller and flat maps.
+    static constexpr float kHillGroundM = 18.0f;
+    bool hillGround(CellPos c) const {
+        return std::min(width_, height_) >= 192 && !std::isnan(waterTable_) && onGround(c) &&
+               groundHeight_[static_cast<size_t>(index(c))] > kHillGroundM;
+    }
     // A walkable cell with a door in it.
     bool isDoor(CellPos c) const { return walkable(c) && passage(c) == Passage::Door; }
 
@@ -222,6 +236,8 @@ public:
     // Counts up every time a building is set or cleared in any cell, so a system that reads the
     // building layer can tell its picture is stale (Rooms).
     uint64_t buildingChanges() const { return buildingChanges_; }
+    // Counts a change to a building that keeps its cells (a window cut in a wall): the light is worked out again.
+    void noteBuildingChange() { ++buildingChanges_; }
 
     // Steam geysers (ground level): a geothermal generator over one makes power (docs/design/power.md).
     // Map generation (S8) places them from the seed; they are not saved, so whoever places them must do
@@ -407,6 +423,7 @@ private:
     Roof& roofSlot(CellPos c);
 
     void generate();
+    void generateFlatLand();
     void carveRivers();
     void addWetlands();
 
@@ -459,6 +476,7 @@ private:
     std::unique_ptr<Cover> cover_;
     float river_;
     float marsh_;
+    float hills_;
 };
 
 }  // namespace colony
