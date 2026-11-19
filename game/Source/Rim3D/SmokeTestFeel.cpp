@@ -51,11 +51,14 @@ namespace
 		bool bThrown = false;
 		FVector RollFrom = FVector::ZeroVector;
 		double RollMoved = 0.0;
+		double MaxCameraTrail = 0.0;
+		double CameraTrailAtEnd = 0.0;
 
 		void Reset()
 		{
 			MaxKickPitch = MaxFeelPitch = MinFeelPitch = MaxAimDirectionError = MaxShake = MaxBlur = MaxRollAngle = MaxFlash = 0.0f;
 			MaxBlast = MaxGrenades = MaxDebris = 0;
+			MaxCameraTrail = CameraTrailAtEnd = 0.0;
 		}
 	};
 
@@ -99,6 +102,8 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		State->MaxShake = FMath::Max(State->MaxShake, F->GetLargestShakeSeen());
 		State->MaxBlur = FMath::Max(State->MaxBlur, Body->GetMotionBlurAmount());
 		State->MaxFlash = FMath::Max(State->MaxFlash, F->GetFlashIntensity());
+		State->MaxCameraTrail = FMath::Max(State->MaxCameraTrail, Body->GetCameraTrail());
+		State->CameraTrailAtEnd = Body->GetCameraTrail();
 		State->MaxBlast = FMath::Max(State->MaxBlast, F->GetBlastParticles());
 		State->MaxGrenades = FMath::Max(State->MaxGrenades, F->GetGrenadesDrawn());
 		State->MaxDebris = FMath::Max(State->MaxDebris, F->GetDebrisAlive());
@@ -350,7 +355,8 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	};
 	Phases.Add(MoveTemp(Off));
 
-	// 5. A dodge roll: the sim moves the pawn four metres in 27 steps, the body tumbles over once in its middle, the camera ducks.
+	// 5. A dodge roll: the sim moves the pawn four metres in 27 steps, the body tumbles over once in its middle; the camera
+	// doesn't duck but glides after the body and settles back on it (Elden Ring, sneed 2026-11-19).
 	FPhase Roll;
 	Roll.Name = TEXT("feel_roll");
 	Roll.WarmupSeconds = 0.5f;
@@ -395,8 +401,8 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	Roll.Verify = [=, this]()
 	{
 		const ASimPawnActor* Actor = Pawns()->FindPawn(State->Me);
-		Notes.Add(FString::Printf(TEXT("feel_roll: moved %.0f cm, the body turned over %.0f degrees, the camera ducked %.1f degrees, blur up to %.2f, rolls drawn %d"), State->RollMoved, State->MaxRollAngle,
-			-State->MinFeelPitch, State->MaxBlur, Actor ? Actor->GetRollsSeen() : 0));
+		Notes.Add(FString::Printf(TEXT("feel_roll: moved %.0f cm, the body turned over %.0f degrees, the camera ducked %.1f degrees, trailed up to %.0f cm and %.0f cm at the end, blur up to %.2f, rolls drawn %d"), State->RollMoved, State->MaxRollAngle,
+			-State->MinFeelPitch, State->MaxCameraTrail, State->CameraTrailAtEnd, State->MaxBlur, Actor ? Actor->GetRollsSeen() : 0));
 		if (!State->bRollSent)
 		{
 			Fail(TEXT("feel_roll: the roll command was not sent"));
@@ -414,9 +420,13 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		{
 			Fail(FString::Printf(TEXT("feel_roll: the body turned over %.0f degrees at most and %.0f now (rolls drawn %d)"), State->MaxRollAngle, Actor ? Actor->GetRollAngle() : -1.0f, Actor ? Actor->GetRollsSeen() : 0));
 		}
-		if (State->MinFeelPitch > -2.0f || State->MaxBlur < 0.8f)
+		if (State->MinFeelPitch < -1.0f || State->MaxBlur < 0.8f)
 		{
-			Fail(FString::Printf(TEXT("feel_roll: the camera ducked %.1f degrees and the blur reached %.2f"), -State->MinFeelPitch, State->MaxBlur));
+			Fail(FString::Printf(TEXT("feel_roll: the camera ducked %.1f degrees (none wanted) and the blur reached %.2f"), -State->MinFeelPitch, State->MaxBlur));
+		}
+		if (State->MaxCameraTrail < 20.0 || State->MaxCameraTrail > 145.0 || State->CameraTrailAtEnd > 5.0)
+		{
+			Fail(FString::Printf(TEXT("feel_roll: the camera trailed the body by up to %.0f cm and %.0f cm at the end (a soft follow of 20 to 140 cm that settles)"), State->MaxCameraTrail, State->CameraTrailAtEnd));
 		}
 		const colony::ThingView* Me = MyView();
 		if (!Me || Me->rollPhase != 0)
