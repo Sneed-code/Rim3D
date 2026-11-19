@@ -158,6 +158,11 @@ turning over a foot nor an idle swivelling it spins the toes round the ankle; a 
 curve as its place. **The play rate eases** (0.2 s) to the one motion matching wants instead of jumping at each search
 (every bone's speed scaled at once), and the hit lean (the whole body tipped along a shot) eases in and out and eases
 out of a lean still showing when the next hit comes (it used to jump back upright).
+Sixth round: the hips' pull **eases in** (a tanh curve from 4 cm that never passes 8 cm), since a hard stop at 8 cm
+stopped the hips' outward speed in one frame (a jolt of every bone as a stop clip's hips led out); a foot **lands only
+while the animation's foot moves under 1.5 m/s** over the ground (a running foot swinging low past the ground was taken
+for a landing, its speed cut at once); a standing foot the leg can hardly reach any more **steps** before the
+stretched leg would drag it.
 
 **Near and far: loops.** The breathing idle, or the walk or run loop (`M_Neutral_*`), picked by speed (run above the
 middle of the two loops' speeds, measured from their root motion: 200 and 500 cm/s) and played

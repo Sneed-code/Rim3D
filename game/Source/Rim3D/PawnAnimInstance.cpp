@@ -65,6 +65,8 @@ namespace
 	constexpr float PawnStandRelease = 0.2f;
 	// A foot further than this (cm) from where the idle wants it steps too (an idle drift, a body that crept).
 	constexpr float PawnStandStepFar = 22.0f;
+	// A held foot further from its hip than this share of the leg's length steps (the leg straight is 1).
+	constexpr double PawnStandReachShare = 0.97;
 	constexpr float PawnTwistShare[4] = {0.35f, 0.25f, 0.2f, 0.2f};
 	// Planted feet (docs/design/pawns.md "Standing still"): standing, each foot is held where it was when the pawn
 	// stopped, the legs bent to reach it, so the blend from the walk's stop into a standing idle (whose feet stand a
@@ -108,6 +110,12 @@ namespace
 	// trail their root by up to 20 cm, and the root is not where the sim has the body; past PawnHipsReach cm from the
 	// mesh's origin the hips are pulled back to it (the held feet stay put, the legs reach).
 	constexpr float PawnHipsReach = 8.0f;
+	// The pull starts gently past PawnHipsEase cm and nears PawnHipsReach without ever passing it (a tanh curve, so the
+	// hips' speed never changes at once where the pull begins: a hard stop at 8 cm was a one-frame jolt of every bone).
+	constexpr float PawnHipsEase = 4.0f;
+	// A foot only lands while the animation's foot moves slower than this over the ground (cm/s, world): a running foot
+	// swinging low past the ground is not a landing (holding it cut its speed at once, a foot pop, and dragged it).
+	constexpr float PawnWalkLockLandSpeed = 150.0f;
 	// A planted foot keeps its facing too (degrees, world): the body turning over it, or the animation swivelling it,
 	// would otherwise spin the toes round the ankle (a slide at the toes). Held up to these many degrees off the
 	// animation's facing; a let-go foot turns back to the animation's facing over PawnWalkLockRelease, at the rate it had.
@@ -833,9 +841,12 @@ void FSimPawnUpperNode::Evaluate_AnyThread(FPoseContext& Output)
 	{
 		const FVector At = PawnBonePlace(Output.Pose, Pelvis);
 		const double Flat = FVector2D(At.X, At.Y).Size();
-		if (Flat > PawnHipsReach)
+		if (Flat > PawnHipsEase)
 		{
-			const double Pull = (Flat - PawnHipsReach) / Flat * HipsShow;
+			const double Span = PawnHipsReach - PawnHipsEase;
+			const double Fall = FMath::Exp(-2.0 * (Flat - PawnHipsEase) / Span);
+			const double Kept = PawnHipsEase + Span * (1.0 - Fall) / (1.0 + Fall);  // tanh, which starts at slope 1
+			const double Pull = (Flat - Kept) / Flat * HipsShow;
 			Output.Pose[Pelvis].AddToTranslation(PawnParentRotation(Output.Pose, Pelvis).UnrotateVector(FVector(-At.X * Pull, -At.Y * Pull, 0.0)));
 		}
 	}
@@ -1708,9 +1719,9 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 				WalkBallGround[Side] = bWalkGroundKnown ? FMath::Min(WalkBallGround[Side] + PawnWalkLockGroundRise * Dt, BallZ) : BallZ;
 				bToeDown = BallZ <= WalkBallGround[Side] + PawnWalkLockContact;
 			}
-			const bool bDown = bHeelDown || bToeDown;
 			FVector WantedVel = bWalkGroundKnown && Dt > 0.0f ? (Wanted[Side] - WalkLastWanted[Side]) / static_cast<double>(Dt) : FVector::ZeroVector;
 			WantedVel.Z = 0.0;
+			const bool bDown = (bHeelDown || bToeDown) && (bWalkHeld[Side] || WantedVel.Size2D() < PawnWalkLockLandSpeed);
 			WalkLastWanted[Side] = Wanted[Side];
 			const float WantedYawRate = bToes && bWalkGroundKnown && Dt > 0.0f ? FMath::FindDeltaAngleDegrees(WalkLastYaw[Side], WantedYaw[Side]) / Dt : 0.0f;
 			WalkLastYaw[Side] = WantedYaw[Side];
@@ -1834,10 +1845,27 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 		float Off = FMath::FindDeltaAngleDegrees(FeetYaw, BodyYaw);
 		if (StepFoot == INDEX_NONE)
 		{
-			const double Far0 = FVector::Dist2D(FootPlant[0], Wanted[0]);
-			const double Far1 = FVector::Dist2D(FootPlant[1], Wanted[1]);
+			double Far0 = FVector::Dist2D(FootPlant[0], Wanted[0]);
+			double Far1 = FVector::Dist2D(FootPlant[1], Wanted[1]);
+			// A held foot the leg can hardly reach any more (a lunge, a push, the hips swaying away) steps before the
+			// stretched leg would drag it: it goes first.
+			bool bOverReach = false;
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				const FVector Hip = PawnBonePlace(Pose, Thigh[Side]);
+				const FVector Knee = PawnBonePlace(Pose, Calf[Side]);
+				const FVector Ankle = PawnBonePlace(Pose, Foot[Side]);
+				const double Leg = (Knee - Hip).Size() + (Ankle - Knee).Size();
+				// Not past the animation's own reach (a standing idle's legs are nearly straight), but before the leg is.
+				const double Reach = FMath::Max(PawnStandReachShare * Leg, FMath::Min((Ankle - Hip).Size() + 2.0, Leg - 0.5));
+				if (FVector::Dist(ToWorld.InverseTransformPosition(FootPlant[Side]), Hip) > Reach)
+				{
+					bOverReach = true;
+					(Side == 0 ? Far0 : Far1) += 1000.0;
+				}
+			}
 			const bool bTurn = FMath::Abs(Off) > PawnStandStepAt || (bSecondStepDue && FMath::Abs(Off) > PawnStandStepAgain);
-			if (bTurn || FMath::Max(Far0, Far1) > PawnStandStepFar || (bSecondStepDue && FMath::Max(Far0, Far1) > 8.0))
+			if (bTurn || bOverReach || FMath::Max(Far0, Far1) > PawnStandStepFar || (bSecondStepDue && FMath::Max(Far0, Far1) > 8.0))
 			{
 				// The foot furthest from where it should be goes first; the other follows.
 				StepFoot = Far1 > Far0 ? 1 : 0;

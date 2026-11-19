@@ -111,6 +111,7 @@ namespace
 		// Walking feet: every sample's feet (world) and time, judged in Verify.
 		TArray<double> WalkTimes;
 		TArray<FName> WalkPlaying;
+		TArray<int32> WalkHeld;  // the walking lock's held feet then (bit 0 left, 1 right), for the trace
 		TArray<FVector> WalkFeet[IdleSmokeFeetCount];
 		int32 Step = 0;  // the phase's own script
 		double StepAt = 0.0;
@@ -523,6 +524,7 @@ void USmokeTestSubsystem::BuildIdlePhases()
 			State->Step = 0;
 			State->WalkTimes.Reset();
 			State->WalkPlaying.Reset();
+			State->WalkHeld.Reset();
 			for (TArray<FVector>& Foot : State->WalkFeet)
 			{
 				Foot.Reset();
@@ -548,6 +550,7 @@ void USmokeTestSubsystem::BuildIdlePhases()
 			{
 				State->WalkTimes.Add(Sample->Seconds);
 				State->WalkPlaying.Add(Sample->Playing);
+				State->WalkHeld.Add(Sample->WalkHeldMask);
 				for (int32 i = 0; i < IdleSmokeFeetCount; ++i)
 				{
 					State->WalkFeet[i].Add(Sample->World[IdleSmokeFeetFirst + i]);
@@ -596,8 +599,9 @@ void USmokeTestSubsystem::BuildIdlePhases()
 					const double Speed = FVector::Dist2D(Foot[k], Foot[k - 1]) / Dt;
 					if (Speed > 2.0 * IdleSmokeWalkSlip)
 					{
-						UE_LOG(LogTemp, Log, TEXT("IDLETRACE walk-slip foot=%s t=%.2f speed=%.0f cm/s playing=%s"), IdleSmokeBones[IdleSmokeFeetFirst + i].Name,
-							State->WalkTimes[k] - State->WalkTimes[0], Speed, *State->WalkPlaying[k].ToString());
+						const int32 SideBit = FString(IdleSmokeBones[IdleSmokeFeetFirst + i].Name).EndsWith(TEXT("_r")) ? 2 : 1;
+						UE_LOG(LogTemp, Log, TEXT("IDLETRACE walk-slip foot=%s t=%.2f speed=%.0f cm/s playing=%s held=%d"), IdleSmokeBones[IdleSmokeFeetFirst + i].Name,
+							State->WalkTimes[k] - State->WalkTimes[0], Speed, *State->WalkPlaying[k].ToString(), (State->WalkHeld[k] & SideBit) != 0 ? 1 : 0);
 					}
 					Moved += FVector::Dist2D(Foot[k], Foot[k - 1]);
 					Time += Dt;
