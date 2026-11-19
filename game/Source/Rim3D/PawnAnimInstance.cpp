@@ -80,6 +80,9 @@ namespace
 	constexpr float PawnMotionMatchRateMax = 1.6f;
 	// How fast the drawn play rate follows the wanted one (s, the time constant of an exponential ease).
 	constexpr float PawnPlayRateEase = 0.2f;
+	// The locomotion's pose follows its animation with this time constant (s): one key's time (PawnKeySmooth in the hold
+	// layer). A bone's speed that the keys change at once then changes over about this long.
+	constexpr float PawnKeySmooth = 1.0f / 30.0f;
 	// Enough blends at once that none is ever dropped half shown (dropping one was a pop).
 	constexpr int32 PawnBlendStackMax = 12;
 	// A standing idle never wraps from its last frame to its first (most do not match up: a pop every loop). Before
@@ -124,7 +127,7 @@ namespace
 	constexpr float PawnWalkYawMaxRate = 540.0f;
 	// The foot's drawn turn follows the holds' as a critically damped spring at this rate (1/s).
 	constexpr float PawnFootTurnRate = 30.0f;
-	constexpr float PawnFootTurnFeed = 600.0f;
+	constexpr float PawnFootTurnFeed = 1500.0f;
 
 	/** The facing of a foot (degrees, world yaw) from its ankle to its ball. */
 	float PawnFootYaw(const FVector& Ankle, const FVector& Ball)
@@ -419,6 +422,11 @@ private:
 	FCompactPoseBoneIndex Spine = FCompactPoseBoneIndex(INDEX_NONE);
 	/** How much the hips are pulled over the sim's position (PawnHipsReach), 0 to 1, eased in Evaluate. */
 	float HipsWeight = 0.0f;
+	/** The locomotion's pose smoothed (PawnKeySmooth), bone by bone in each bone's own space; this update's time, and
+	 *  whether to start again from the pose as it is (the first frame, a teleport). */
+	TArray<FTransform> Smoothed;
+	float SmoothDt = 0.0f;
+	bool bSmoothReset = true;
 };
 
 struct FSimPawnSlotNode : public FAnimNode_Base
@@ -834,6 +842,8 @@ void FSimPawnUpperNode::Update_AnyThread(const FAnimationUpdateContext& Context)
 	const float Want = In && In->bHitLayer && (In->bStandTwist || In->bLegsFromClip) && !Proxy->bStandingIdleNow ? 1.0f : 0.0f;
 	const float Dt = FMath::Min(Context.GetDeltaTime(), 0.25f);
 	HipsWeight = In && In->bTeleported ? Want : PawnApproach(HipsWeight, Want, Dt / PawnStandBlendTime);
+	SmoothDt = FMath::Max(0.0f, Context.GetDeltaTime());
+	bSmoothReset = bSmoothReset || (In && In->bTeleported);
 }
 
 void FSimPawnUpperNode::Evaluate_AnyThread(FPoseContext& Output)
@@ -843,6 +853,35 @@ void FSimPawnUpperNode::Evaluate_AnyThread(FPoseContext& Output)
 	if (!P || Spine.GetInt() == INDEX_NONE || Pelvis.GetInt() == INDEX_NONE || BoneWeights.Num() != Output.Pose.GetNumBones())
 	{
 		return;
+	}
+	// The locomotion's keys are 1/30 s apart and played straight from one to the next, so every bone's speed changes
+	// at each key all at once: at a few hundred frames a second a running foot jolted at every key. Each bone follows
+	// its animation with a short exponential ease (PawnKeySmooth), which rounds those corners off; to the eye it is the
+	// same motion 1/30 s later. Under the montage slot, so the sim's clips (rolls, staggers, swings) play unchanged.
+	{
+		const int32 Count = Output.Pose.GetNumBones();
+		if (bSmoothReset || Smoothed.Num() != Count || SmoothDt > 0.2f)
+		{
+			Smoothed.SetNum(Count);
+			for (FCompactPoseBoneIndex Bone : Output.Pose.ForEachBoneIndex())
+			{
+				Smoothed[Bone.GetInt()] = Output.Pose[Bone];
+			}
+			bSmoothReset = false;
+		}
+		else if (SmoothDt > 0.0f)
+		{
+			const float Follow = 1.0f - FMath::Exp(-SmoothDt / PawnKeySmooth);
+			for (FCompactPoseBoneIndex Bone : Output.Pose.ForEachBoneIndex())
+			{
+				FTransform& Eased = Smoothed[Bone.GetInt()];
+				const FTransform& Now = Output.Pose[Bone];
+				Eased.SetRotation(FQuat::Slerp(Eased.GetRotation(), Now.GetRotation(), Follow).GetNormalized());
+				Eased.SetTranslation(FMath::Lerp(Eased.GetTranslation(), Now.GetTranslation(), static_cast<double>(Follow)));
+				Eased.SetScale3D(Now.GetScale3D());
+				Output.Pose[Bone] = Eased;
+			}
+		}
 	}
 	// The hips over the sim's position (PawnHipsReach), on the locomotion's own pose, under the montage slot: a roll or
 	// a sidestep then cross-fades from the pulled walk to its own hips, and the clip's set-back (which takes out exactly
