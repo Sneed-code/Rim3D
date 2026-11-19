@@ -880,8 +880,8 @@ bool CombatSystem::hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const {
     }
     const Health* health = reg.try_get<Health>(pawn);
     const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
-    if (kind == nullptr || (health != nullptr && health->dead)) {
-        return false;
+    if (kind == nullptr || (health != nullptr && health->dead && !health_.takesCorpseHits(pawn))) {
+        return false;  // (a corpse that can still be cut up lies there to be hit, sneed 2026-11-19)
     }
     const Position& pos = reg.get<Position>(pawn);
     const Posture& posture = reg.get<Posture>(pawn);
@@ -1009,7 +1009,7 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
         }
         const Health* health = reg.try_get<Health>(pawn);
         const CombatModel::Kind* kind = model_->kind(thing.def);
-        if (kind == nullptr || (health != nullptr && health->dead)) {
+        if (kind == nullptr || (health != nullptr && health->dead && !health_.takesCorpseHits(pawn))) {
             continue;
         }
         const CombatModel::Pose& pose = kind->poses[static_cast<int>(combatStanceOf(reg, pawn))];
@@ -1018,7 +1018,7 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
         const float fx = posture.facingX;
         const float fy = posture.facingY;
         // A player's shot at a drawn body part (DrawnAim): passing near the spot the crosshair was on hits that part.
-        if (drawn != nullptr && pawn == drawn->pawn && drawn->part >= 0 && health_.partHitPoints(pawn, drawn->part) > 0.0f) {
+        if (drawn != nullptr && pawn == drawn->pawn && drawn->part >= 0 && health_.hasPart(pawn, drawn->part)) {
             const float sx = pos.x + drawn->dx;
             const float sy = pos.y + drawn->dy;
             const float sz = ground + drawn->up;
@@ -1864,13 +1864,15 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
                 return;
             }
             emitHit(projectile, p, h, result.amount);
+            // A corpse takes the damage (it piles up until the piece comes off) but nobody is credited or angered.
+            const bool corpse = health_.tracks(hit.thing) && reg.get<Health>(hit.thing).dead;
             health_.applyHit(hit.thing, result.damageType, result.amount, result.part);
             wearApparel(hit.thing, result);
-            if (zoned) {
+            if (zoned && !corpse) {
                 jolt(hit.thing, result.part, bullet.damageType, bullet.damage * p.damageFactor, result.amount,
                      HitFrom{true, h.x - p.vx, h.y - p.vy});
             }
-            if (p.launcher != kNoEntity) {
+            if (p.launcher != kNoEntity && !corpse) {
                 noteHurt(hit.thing, p.launcher);
             }
             break;
@@ -2409,9 +2411,16 @@ int CombatSystem::pickOutsidePart(Entity pawn, Rng& rng) const {
     if (kind == nullptr) {
         return -1;
     }
+    // On a corpse that can be cut up a part at 0 still takes hits (they pile up past 0); otherwise only parts with hit
+    // points left.
+    const Health* health = things_.registry().try_get<Health>(pawn);
+    const bool corpse = health != nullptr && health->dead && health_.takesCorpseHits(pawn);
+    const auto open = [&](size_t q) {
+        return corpse ? health_.hasPart(pawn, static_cast<int>(q)) : health_.partHitPoints(pawn, static_cast<int>(q)) > 0.0f;
+    };
     float total = 0.0f;
     for (size_t q = 0; q < kind->parts.size(); ++q) {
-        if (!kind->parts[q].inside && health_.partHitPoints(pawn, static_cast<int>(q)) > 0.0f) {
+        if (!kind->parts[q].inside && open(q)) {
             total += kind->parts[q].ownOutside;
         }
     }
@@ -2422,7 +2431,7 @@ int CombatSystem::pickOutsidePart(Entity pawn, Rng& rng) const {
     float acc = 0.0f;
     int pick = -1;
     for (size_t q = 0; q < kind->parts.size(); ++q) {
-        if (kind->parts[q].inside || health_.partHitPoints(pawn, static_cast<int>(q)) <= 0.0f || kind->parts[q].ownOutside <= 0.0f) {
+        if (kind->parts[q].inside || !open(q) || kind->parts[q].ownOutside <= 0.0f) {
             continue;
         }
         acc += kind->parts[q].ownOutside;
@@ -2484,9 +2493,10 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
     for (const Entity pawn : pawns) {
         const Health* health = reg.try_get<Health>(pawn);
         const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
-        if (kind == nullptr || (health != nullptr && health->dead)) {
+        if (kind == nullptr || (health != nullptr && health->dead && !health_.takesCorpseHits(pawn))) {
             continue;
         }
+        const bool corpse = health != nullptr && health->dead;
         const Position pos = reg.get<Position>(pawn);
         const int stance = static_cast<int>(combatStanceOf(reg, pawn));
         const float ground = map_.heightAt(pos.x, pos.y);
@@ -2546,13 +2556,15 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
             }
             const bool alive = health_.applyHit(pawn, piece.damageType, piece.amount, part);
             wearApparel(pawn, piece);
-            noteHarm(pawn, ex.instigator);
+            if (!corpse) {
+                noteHarm(pawn, ex.instigator);
+            }
             if (!alive) {
                 break;
             }
             dealt += piece.amount;
         }
-        if (dealt > 0.0f) {
+        if (dealt > 0.0f && !corpse) {
             ++result.pawnsHurt;
         }
         // Knock-down: the blast throws the pawn down and away, armor or not.

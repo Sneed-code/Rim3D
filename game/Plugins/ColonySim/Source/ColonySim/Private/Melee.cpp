@@ -1184,11 +1184,13 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             if (events_ != nullptr) {
                 events_->push_back(e);
             }
+            // A corpse takes the blow (it piles up until the piece comes off) but staggers no one and angers no one.
+            const bool corpse = health_.tracks(victim) && reg.get<Health>(victim).dead;
             if (!result.deflected) {
                 health_.applyHit(victim, result.damageType, result.amount, result.part);
             }
             combat_.wearApparel(victim, result);
-            if (!result.deflected) {
+            if (!result.deflected && !corpse) {
                 combat_.jolt(victim, result.part, tool->damageType, power, result.amount, HitFrom{true, pos.x, pos.y, true});  // poise and stagger (part C)
                 combat_.noteHurt(victim, pawn);
             }

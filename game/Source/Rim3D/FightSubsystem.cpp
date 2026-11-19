@@ -1295,9 +1295,9 @@ bool UFightSubsystem::ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* Ou
 				continue;
 			}
 			const colony::ThingView* Other = Snap.find(Actor->GetThing());
-			if (!Other || Other->dead)
+			if (!Other || (Other->dead && !Bridge->GetSim()->health().takesCorpseHits(Actor->GetThing())))
 			{
-				continue;  // dead bodies don't stop bullets in the sim
+				continue;  // a dead body that can't be cut up doesn't stop bullets in the sim (a person's corpse does)
 			}
 			// Quick test: the body's middle against the ray, with room for a reach or a lying body.
 			const FVector Middle = Actor->GetActorLocation() + FVector(0.0, 0.0, 90.0 * Actor->GetBodyScale());

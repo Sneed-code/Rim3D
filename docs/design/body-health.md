@@ -25,7 +25,7 @@ for people changes. Animals keep RimWorld's rules for now.
 | Hurt arms (2026-11-17) | an arm under 50% slows attacks by 0.5% for every percent under 50, both arms added (both at 25%: 25% slower) |
 | Hurt legs (2026-11-17) | the same for the walk |
 | Healing (2026-11-17) | a zone not hurt for 10 s with its bleeding patched gets back 0.1% of what it lost a second, 0.2% asleep |
-| Dismemberment (2026-11-17, replaces the 50% rule and the gibs) | only on death: the killing hit went over what the struck zone had left by 25% of the zone's hit points or more. Upper arm: the whole arm; lower arm: below the elbow; legs likewise; head: off; torso: the head, arms and legs come apart. No viscera yet. Protagonist: never |
+| Dismemberment (2026-11-17, replaces the 50% rule and the gibs; piling up 2026-11-19) | only on a dead body: damage past a zone's 0 piles up over any number of hits (before or after death), and once the body is dead a zone with 25% of its hit points piled up comes off. Corpses still take bullets, blows and blasts. Upper arm: the whole arm; lower arm: below the elbow; legs likewise; head: off; torso: the head, arms and legs come apart. No viscera yet. Protagonist: never |
 | Severed parts (2026-11-17, not built) | decay over 2 days; a head on a pike turns to bone over 4 days |
 
 "No active bleeding for now": no dripping effect on screen yet; the blood loss itself counts.
@@ -193,12 +193,20 @@ torsos, whole-corpse gibs) was never merged.
   or more (`Health::zoneHurtAt`, saved in health section 8, hashed) and is not bleeding shrinks by 0.1%, 0.2% when
   the pawn lies asleep (`setAsleep`, a worker lying down). A wound under a quarter of a hit point is gone. Scars and
   old wounds never heal. RimWorld's slow daily healing still runs beside it.
-- **Dismemberment** (`hitPart`, `dismember`, `zones.dismember.overkillShare` 0.25): only the hit that kills, when
-  its damage is over what the struck zone had left by a quarter of the zone's hit points: 13 over for an arm or the
-  head, 19 for a leg, 25 for the torso. Struck on the hand, the foot, a part of them or the radius or tibia: the limb
+- **Dismemberment** (`hitPart`, `dismember`, `zones.dismember.overkillShare` 0.25; piling up: sneed, 2026-11-19):
+  whatever a hit does past what its zone had left piles up on that zone (`Health::zoneOverkill`, saved in health
+  section 9 and hashed), hit after hit, on the living and the dead; a zone that heals back above 0 starts again from
+  nothing. Once the body is dead, a zone with a quarter of its hit points piled up comes off: 13 for an arm or the
+  head, 19 for a leg, 25 for the torso. So one big killing blow still does it, and so do many knife stabs at a corpse.
+  The struck zone is looked at on every hit; on the blow that kills every other zone too (a leg already battered
+  past 0 comes off with the death). After a cut the zone's pile starts again, so a forearm comes off first and the
+  rest of the arm later. A corpse that can be cut up (`takesCorpseHits`: a body with zones, not the protagonist)
+  keeps its hitboxes (lying), so bullets, the player's drawn aim, melee swings and blasts land on it
+  (`applyHit` takes it; `applyDamage`, fire, falls and roofs, still don't); such a hit staggers no one and credits
+  or angers no one. Struck on the hand, the foot, a part of them or the radius or tibia: the limb
   comes off below the elbow or knee (the Hand or Foot part goes); anywhere else on the limb: the whole Arm or Leg.
   Head zone: the Head part. Torso: the head and every limb. One `PawnDismembered` event for each piece, message
-  "left forearm", "right arm", "left lower leg", "right leg", "head". A corpse is never cut up further.
+  "left forearm", "right arm", "left lower leg", "right leg", "head".
 - **Never** the protagonist, animals, mechanoids (bodies without zones).
 - **For drawing**: the snapshot's `severed` (SeveredBits: each forearm, arm, lower leg, leg, and the head), worked out
   from the lost parts, so a surgeon's amputation shows too.
@@ -237,6 +245,21 @@ torsos, whole-corpse gibs) was never merged.
   a limb falls over to lie flat once it lands; pieces and discs take no decals; hair cards and hats go with the
   head (hair strands cannot: an unbound groom copy did not draw). Smoke test `hurt` takes noon close-ups of each
   piece from two sides (`dismember_close<N>a/b.png`).
+- **Gore** (sneed, 2026-11-19: "dismembered parts are simple red dots at joints"; `GoreCut.h`, `GoreStump.cpp`): the
+  fold into a point (and the flat red disc over it) is replaced by a clean cut. On the MakeHuman body the sever node
+  straightens the cut bone onto its parent (its reference pose) and squashes it flat along the limb at the joint, so
+  the stump keeps its full width and ends in a flat face; everything below folds into the middle of that face. The
+  piece does the mirror image: the bone above the cut is placed straight on and squashed flat onto the joint across
+  the piece's line (`GoreCut::FlattenParent`). A bone whose limb line is more than about 30 degrees off all its own
+  axes (a thigh's pelvis, a whole arm's collarbone) can't be squashed cleanly and still folds to a point. Over each
+  flat face sits a stump cap (`GoreMakeStump`, a procedural mesh in `M_Gore`, which BloodArt makes: vertex colours,
+  alpha = dryness, a fine bump): a torn, uneven rim of the pawn's own skin colour that curls up and hangs a little
+  back over the limb (covering the squashed skin's edge), a thin yellow fat layer, wet dark muscle in uneven bundles
+  bulging out, and the bone standing out of it broken and jagged with dark marrow: one bone for an upper arm or thigh,
+  two for a forearm or lower leg; a neck shows the spine with its pale cord behind and the windpipe in front (the
+  front from the face bones). Body and piece both get one, facing out of the cut. Blood keeps dripping from a fresh
+  stump for `Gore.DripSeconds` (120 s; a piece for 40% of it once it lands). `Gore.StumpScale` (1.08) sizes the caps
+  against the limb thickness table. Without `M_Gore` (BloodArt not run) the caps draw in the blood drops' red.
 - Corpses and the unconscious were already ragdolls (`StartRagdoll`); a cut limb's physics shapes stay on the ragdoll,
   unseen.
 - Smoke test `hurt`, phase `dismember`: a 400 blow to the downed colonist's torso; the sim must take off the head and

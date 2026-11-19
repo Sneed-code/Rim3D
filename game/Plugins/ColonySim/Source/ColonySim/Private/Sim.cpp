@@ -3767,6 +3767,11 @@ uint64_t Sim::stateHash() const {
                     h.add(hurtAt);
                 }
             }
+            for (const float pile : health->zoneOverkill) {
+                if (pile > 0.0f) {
+                    h.add(pile);
+                }
+            }
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
             if (const CorpseRot* corpse = reg.try_get<CorpseRot>(e)) {

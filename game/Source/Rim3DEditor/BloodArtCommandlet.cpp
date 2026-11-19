@@ -39,6 +39,8 @@
 #include "Materials/MaterialExpressionTextureSample.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialExpressionVertexInterpolator.h"
+#include "Materials/MaterialExpressionVertexColor.h"
+#include "Materials/MaterialExpressionLocalPosition.h"
 #include "MaterialShared.h"
 #include "Misc/PackageName.h"
 #include "Rendering/SkeletalMeshLODModel.h"
@@ -398,6 +400,57 @@ namespace
 		auto* Specular = BloodArtNode<UMaterialExpressionConstant>(Material, -400, 200);
 		Specular->R = 0.7f;
 		UMaterialEditingLibrary::ConnectMaterialProperty(Specular, TEXT(""), MP_Specular);
+		UMaterialEditingLibrary::RecompileMaterial(Material);
+		Failures += BloodArtSave(Material) ? 0 : 1;
+	}
+
+	/**
+	 * M_Gore, the cut flesh of a stump (GoreStump.cpp, docs/design/body-health.md "Gore"): colour from the mesh's vertex
+	 * colours (skin rim, fat, muscle, bone, marrow), wetness from their alpha (0 wet and glossy, 1 dry bone), and a fine
+	 * noise bump so muscle doesn't read as plastic.
+	 */
+	void BloodArtMakeGore(IAssetTools& Tools, int32& Failures)
+	{
+		UMaterial* Material = BloodArtNewMaterial(Tools, TEXT("M_Gore"), Failures);
+		if (!Material)
+		{
+			return;
+		}
+		Material->MaterialDomain = MD_Surface;
+		Material->BlendMode = BLEND_Opaque;
+		Material->SetShadingModel(MSM_DefaultLit);
+		auto* Vertex = BloodArtNode<UMaterialExpressionVertexColor>(Material, -1000, -200);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Vertex, TEXT(""), MP_BaseColor);
+		auto* Wet = BloodArtNode<UMaterialExpressionConstant>(Material, -800, 50);
+		Wet->R = 0.16f;
+		auto* Dry = BloodArtNode<UMaterialExpressionConstant>(Material, -800, 150);
+		Dry->R = 0.55f;
+		auto* Rough = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -500, 100);
+		BloodArtConnect(Wet, TEXT(""), Rough, TEXT("A"));
+		BloodArtConnect(Dry, TEXT(""), Rough, TEXT("B"));
+		BloodArtConnect(Vertex, TEXT("A"), Rough, TEXT("Alpha"));
+		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
+		auto* Specular = BloodArtNode<UMaterialExpressionConstant>(Material, -400, 250);
+		Specular->R = 0.6f;
+		UMaterialEditingLibrary::ConnectMaterialProperty(Specular, TEXT(""), MP_Specular);
+		// A fine bump: the slope of a small noise in the mesh's own space (local position, cm).
+		auto* Bump = BloodArtNode<UMaterialExpressionCustom>(Material, -500, 400);
+		Bump->OutputType = CMOT_Float3;
+		Bump->Description = TEXT("GoreBump");
+		Bump->Code = TEXT("float3 p = LocalPos * 1.7;\n"
+			"float3 i = floor(p); float3 f = frac(p);\n"
+			"float a = frac(sin(dot(i, float3(12.9898, 78.233, 37.719))) * 43758.5453);\n"
+			"float b = frac(sin(dot(i + float3(1, 0, 0), float3(12.9898, 78.233, 37.719))) * 43758.5453);\n"
+			"float c = frac(sin(dot(i + float3(0, 1, 0), float3(12.9898, 78.233, 37.719))) * 43758.5453);\n"
+			"float2 g = float2(lerp(a, b, f.x) - a, lerp(a, c, f.y) - a) * 0.35 * (1.0 - Dryness);\n"
+			"return normalize(float3(g, 1.0));");
+		Bump->Inputs.SetNum(2);
+		Bump->Inputs[0].InputName = TEXT("LocalPos");
+		Bump->Inputs[1].InputName = TEXT("Dryness");
+		auto* Local = BloodArtNode<UMaterialExpressionLocalPosition>(Material, -800, 400);
+		Bump->Inputs[0].Input.Connect(0, Local);
+		Bump->Inputs[1].Input.Connect(4, Vertex);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Bump, TEXT(""), MP_Normal);
 		UMaterialEditingLibrary::RecompileMaterial(Material);
 		Failures += BloodArtSave(Material) ? 0 : 1;
 	}
@@ -1057,6 +1110,10 @@ int32 UBloodArtCommandlet::Main(const FString& Params)
 	if (BloodArtWanted(TEXT("M_BloodDrop"), bForce))
 	{
 		BloodArtMakeDrop(Tools, Failures);
+	}
+	if (BloodArtWanted(TEXT("M_Gore"), bForce))
+	{
+		BloodArtMakeGore(Tools, Failures);
 	}
 	if (BloodArtWanted(TEXT("M_BloodMist"), bForce))
 	{
