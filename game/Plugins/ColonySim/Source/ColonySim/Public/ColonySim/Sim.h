@@ -547,6 +547,7 @@ public:
 private:
     float lowestPartHealth(Entity pawn) const;  // the focus HP bar (docs/design/focus.md)
     float pawnMoveFactor(Entity pawn) const;  // see Sim.cpp
+    void dropLostDecks();  // what stood on a bridge that fell into deep water is gone (docs/design/roads-bridges.md)
     bool takeIntoBag(Entity pawn, Entity item, int count, std::string& error);  // Inventory.cpp
     void autoPickUp();                                                          // Inventory.cpp
     friend class SimSaveAccess;  // saves read and restore the private state (Save.h)

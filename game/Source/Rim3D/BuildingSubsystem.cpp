@@ -476,6 +476,7 @@ void UBuildingSubsystem::ReadDefs(const colony::Sim& Sim)
 		Look.bItem = Category == "Item";
 		Look.bDoor = Def.text("thingClass") == "Building_Door";
 		Look.bConform = Category == "Building" && colony::groundFitOf(Def) == colony::GroundFit::Conform;
+		Look.bDeck = Category == "Building" && colony::bridgeKindOf(Def) != colony::BridgeKind::None;
 		Look.bDrawnElsewhere = !Def.text("visual.drawnBy").empty();
 		if (Def.has("visual.link"))
 		{
@@ -938,7 +939,7 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 		const int32 OriginX = FMath::RoundToInt32(View.x - static_cast<float>(View.sizeX) * 0.5f);
 		const int32 OriginY = FMath::RoundToInt32(View.y - static_cast<float>(View.sizeY) * 0.5f);
 		float Base = View.z;
-		for (int32 Y = OriginY; Y <= OriginY + View.sizeY; ++Y)
+		for (int32 Y = OriginY; Y <= OriginY + View.sizeY && !DefLook->bDeck; ++Y)
 		{
 			for (int32 X = OriginX; X <= OriginX + View.sizeX; ++X)
 			{

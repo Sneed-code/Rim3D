@@ -62,6 +62,7 @@
 #include "ColonySim/Genes.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/MapFeatures.h"
+#include "ColonySim/MapRoads.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
@@ -240,6 +241,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     : Sim(settings, std::move(defs), EmptyStart{}) {
     if (!settings_.flatMap) {
         placeMapFeatures(map_, *things_, splitMix64(settings_.seed ^ 0x66656174ULL));
+        if (site_) {
+            // The world map's roads come onto the map from the tile's sides (docs/design/roads-bridges.md).
+            placeMapRoads(map_, *things_, *plants_, *floors_, site_->roadEdges, splitMix64(settings_.seed ^ 0x726F6164ULL));
+        }
     }
     placeStockpileAndThings();
     if (!settings_.scenario.empty()) {
@@ -2325,6 +2330,22 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     }
 }
 
+void Sim::dropLostDecks() {
+    // Items on a bridge that fell are swept away where the water is deep; in shallow water, marsh or mud they stay where
+    // they fell. Pawns need nothing here: one in deep water off a path swims for the nearest shore (MovementSystem).
+    for (const uint32_t i : map_.takeLostDecks()) {
+        const CellPos c = map_.cellAt(static_cast<int>(i));
+        if (map_.groundWalkable(c)) {
+            continue;
+        }
+        const std::vector<Entity> items = things_->itemsAt(c);  // a copy: destroying changes the list
+        for (const Entity item : items) {
+            jobs_->forget(item);
+            things_->destroy(item);
+        }
+    }
+}
+
 void Sim::step() {
     stepOnce(false);
     // A skip (P5) runs on inside this call, a batch of steps at a time, so the game's own loop sees time jump.
@@ -2468,6 +2489,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     { SimLap lap(profile_, "pathfinder"); pathfinder_.update(settings_.pathBudget); }  // paths asked for this step are ready next step at the earliest
     { SimLap lap(profile_, "rooms"); rooms_->noteBedOwners(); rooms_->update(); }
     { SimLap lap(profile_, "roofCollapse"); roofCollapse_->step(rng_); }  // roofs and floors that lost their holders fall
+    dropLostDecks();
     if (calendar) {
         SimLap lap(profile_, "power");
         power_->step(time_);

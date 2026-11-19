@@ -3,6 +3,7 @@
 #include "ColonySim/Api.h"
 #include "ColonySim/Defs.h"
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -58,6 +59,9 @@ struct WorldSite {
     Hilliness hilliness = Hilliness::Flat;
     RiverSize river = RiverSize::None;
     RoadKind road = RoadKind::None;
+    // The road on each of the tile's eight edges (by World::kNeighbourDx/Dy direction), None where there is none:
+    // the map's roads come in from those sides (docs/design/roads-bridges.md).
+    std::array<RoadKind, 8> roadEdges{};
     float temperature = 0.0f;
     float rainfall = 0.0f;
     int elevation = 0;
