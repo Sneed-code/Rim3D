@@ -9,7 +9,7 @@
 #include <imgui.h>
 
 #include "ColonyHudStyle.h"
-
+#include "KeyBindings.h"
 #include "OrdersSubsystem.h"
 #include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
@@ -35,6 +35,8 @@ namespace
 	constexpr double HandsLookCm = 1800.0;
 	/** The ghost only follows the crosshair this far from the colonist, in metres. */
 	constexpr double HandsBuildRangeM = 14.0;
+	// F picks up a weapon lying this near (metres), as the equip key does.
+	constexpr double HandsWeaponReachM = 2.5;
 	/** Heights of what can be looked at, in cm: a tree, a bush or a flower. */
 	constexpr double HandsTreeCm = 650.0;
 	constexpr double HandsBushCm = 110.0;
@@ -226,6 +228,19 @@ void UHandsOnSubsystem::SetInteractHeld(bool bHeld)
 	bScriptedHeld = bHeld;
 }
 
+bool UHandsOnSubsystem::IsLooseWeapon(const USimSubsystem& Bridge, colony::Entity Thing, colony::Entity Pawn) const
+{
+	const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
+	const colony::ThingView* Item = Thing != colony::kNoEntity ? Snapshot.find(Thing) : nullptr;
+	const colony::ThingView* Me = Pawn != colony::kNoEntity ? Snapshot.find(Pawn) : nullptr;
+	if (!Item || !Me || Item->category != colony::ThingCategory::Item || !Item->def.valid() || !Bridge.GetDefs())
+	{
+		return false;
+	}
+	const colony::Def& Def = Bridge.GetDefs()->get(Item->def);
+	return Def.text("equipmentType") == "Primary" && FVector2D::Distance(FVector2D(Me->x, Me->y), FVector2D(Item->x, Item->y)) <= HandsWeaponReachM;
+}
+
 void UHandsOnSubsystem::Interact(USimSubsystem& Bridge, bool bDown)
 {
 	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
@@ -243,6 +258,12 @@ void UHandsOnSubsystem::Interact(USimSubsystem& Bridge, bool bDown)
 			LastCommand = Bridge.Submit(colony::HandsOnCommand{Pawn, colony::HandsOnMode::Work, Target.Thing, Target.Cell});
 			++Stats.CommandsSent;
 			bInteracting = Plan.kind != colony::HandsOnKind::PickUp;
+		}
+		else if (IsLooseWeapon(Bridge, Target.Thing, Pawn))
+		{
+			// F on a weapon lying in reach picks it up into the hands (sneed 2026-11-17: F is the one interact key).
+			LastCommand = Bridge.Submit(colony::EquipCommand{Pawn, Target.Thing});
+			++Stats.CommandsSent;
 		}
 		else if (Target.bValid && !Target.bGround)
 		{
@@ -322,7 +343,7 @@ void UHandsOnSubsystem::UpdateBuilding(USimSubsystem& Bridge, APlayerController*
 	{
 		return;
 	}
-	if (PC && PC->WasInputKeyJustPressed(EKeys::B))
+	if (Rim3DKeys::WasPressed(PC, ERim3DAction::BuildMode))
 	{
 		ToggleBuilding();
 	}
@@ -422,9 +443,9 @@ void UHandsOnSubsystem::Tick(float DeltaTime)
 		AimCell = Ground.Cell;
 	}
 
-	const bool bDown = bScripted ? bScriptedHeld : (PC && PC->IsInputKeyDown(EKeys::F));
+	const bool bDown = bScripted ? bScriptedHeld : Rim3DKeys::IsDown(PC, ERim3DAction::Interact);
 	Interact(*Bridge, bDown);
-	if (!bScripted && PC && PC->WasInputKeyJustPressed(EKeys::X))
+	if (!bScripted && Rim3DKeys::WasPressed(PC, ERim3DAction::PutDown))
 	{
 		PutDown();
 	}

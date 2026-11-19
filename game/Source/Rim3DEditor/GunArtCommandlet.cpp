@@ -4,6 +4,7 @@
 #include "AssetToolsModule.h"
 #include "Dom/JsonObject.h"
 #include "Engine/StaticMesh.h"
+#include "Math/RotationMatrix.h"
 #include "StaticMeshResources.h"
 #include "Engine/Texture2D.h"
 #include "Factories/FbxImportUI.h"
@@ -32,6 +33,8 @@ DEFINE_LOG_CATEGORY_STATIC(LogGunArt, Log, All);
 namespace
 {
 	const TCHAR* const GunArtRoot = TEXT("/Game/Rim3D/Generated/Guns");
+	/** Where the "vehicles" of a list go (assets/shuttle.json, docs/design/shuttle-draw.md). */
+	const TCHAR* const GunArtVehicleRoot = TEXT("/Game/Rim3D/Generated/Vehicles");
 
 	bool GunArtSave(UObject* Asset)
 	{
@@ -138,6 +141,14 @@ namespace
 		auto* Rough = Sample(TEXT("RoughnessMap"), 200, GunArtMaskTexture(TEXT("T_GunMaskWhite"), 255), SAMPLERTYPE_Masks);
 		auto* Metal = Sample(TEXT("MetallicMap"), 500, GunArtMaskTexture(TEXT("T_GunMaskBlack"), 0), SAMPLERTYPE_Masks);
 		auto* Orm = Sample(TEXT("ORMMap"), 800, GunArtMaskTexture(TEXT("T_GunMaskWhite"), 255), SAMPLERTYPE_Masks);
+		// Glow (lit panels, screens, nozzle rings): the emissive map times EmissiveStrength, 0 unless a model has one.
+		auto* Glow = Sample(TEXT("EmissiveMap"), 1400, GunArtDefaultTexture(TEXT("/Engine/EngineResources/Black")), SAMPLERTYPE_Color);
+		auto* GlowStrength = GunArtNode<UMaterialExpressionScalarParameter>(Material, -600, 1500);
+		GlowStrength->ParameterName = TEXT("EmissiveStrength");
+		GlowStrength->DefaultValue = 0.0f;
+		auto* GlowOut = GunArtNode<UMaterialExpressionMultiply>(Material, -200, 1450);
+		GunArtConnect(Glow, TEXT("RGB"), GlowOut, TEXT("A"));
+		GunArtConnect(GlowStrength, TEXT(""), GlowOut, TEXT("B"));
 		auto* UseOrm = GunArtNode<UMaterialExpressionScalarParameter>(Material, -600, 1100);
 		UseOrm->ParameterName = TEXT("UseORM");
 		UseOrm->DefaultValue = 0.0f;
@@ -185,6 +196,7 @@ namespace
 		GunArtConnectProperty(RoughOut, TEXT(""), MP_Roughness);
 		GunArtConnectProperty(MetalPick, TEXT(""), MP_Metallic);
 		GunArtConnectProperty(AoPick, TEXT(""), MP_AmbientOcclusion);
+		GunArtConnectProperty(GlowOut, TEXT(""), MP_EmissiveColor);
 		UMaterialEditingLibrary::RecompileMaterial(Material);
 		GunArtSave(Material);
 		return Material;
@@ -249,7 +261,10 @@ UGunArtCommandlet::UGunArtCommandlet()
 int32 UGunArtCommandlet::Main(const FString& Params)
 {
 	FString Text;
-	const FString ListFile = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("../assets/guns.json")));
+	// -List=assets/shuttle.json reads another list (relative to the repo); its "guns" and "vehicles" are both imported.
+	FString ListName = TEXT("assets/guns.json");
+	FParse::Value(*Params, TEXT("List="), ListName);
+	const FString ListFile = GunArtResolve(ListName);
 	TSharedPtr<FJsonObject> Root;
 	if (!FFileHelper::LoadFileToString(Text, *ListFile) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
 	{
@@ -264,8 +279,21 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 	IAssetTools& Tools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 	UMaterial* Master = GunArtMaster(Tools);
 	int32 Failed = Master ? 0 : 1;
-	for (const TSharedPtr<FJsonValue>& Value : Root->GetArrayField(TEXT("guns")))
+	TArray<TPair<TSharedPtr<FJsonValue>, const TCHAR*>> Entries;
+	for (const TPair<const TCHAR*, const TCHAR*> Section : {TPair<const TCHAR*, const TCHAR*>(TEXT("guns"), GunArtRoot), TPair<const TCHAR*, const TCHAR*>(TEXT("melee"), GunArtRoot), TPair<const TCHAR*, const TCHAR*>(TEXT("vehicles"), GunArtVehicleRoot)})
 	{
+		const TArray<TSharedPtr<FJsonValue>>* Array = nullptr;
+		if (Root->TryGetArrayField(Section.Key, Array))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Array)
+			{
+				Entries.Emplace(Value, Section.Value);
+			}
+		}
+	}
+	for (const TPair<TSharedPtr<FJsonValue>, const TCHAR*>& ListEntry : Entries)
+	{
+		const TSharedPtr<FJsonValue>& Value = ListEntry.Key;
 		const TSharedPtr<FJsonObject> Gun = Value->AsObject();
 		const TSharedPtr<FJsonObject>* ArtPtr = nullptr;
 		if (!Gun.IsValid() || !Gun->TryGetObjectField(TEXT("art"), ArtPtr))
@@ -284,7 +312,7 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 			UE_LOG(LogGunArt, Warning, TEXT("%s: %s is not there (download it first, docs/design/gun-range.md); skipped"), *Name, *File);
 			continue;
 		}
-		const FString Dest = FString(GunArtRoot) / Name;
+		const FString Dest = FString(ListEntry.Value) / Name;
 
 		// The model: every object its own static mesh, no collision, its materials made but replaced below.
 		UFbxImportUI* Options = NewObject<UFbxImportUI>();
@@ -299,21 +327,84 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 		Options->StaticMeshImportData->bAutoGenerateCollision = false;
 		Options->StaticMeshImportData->bGenerateLightmapUVs = false;
 		Options->StaticMeshImportData->ImportUniformScale = Art->HasField(TEXT("scale")) ? static_cast<float>(Art->GetNumberField(TEXT("scale"))) : 1.0f;
-		UAssetImportTask* Task = NewObject<UAssetImportTask>();
-		Task->Filename = File;
-		Task->DestinationPath = Dest;
-		Task->bAutomated = true;
-		Task->bReplaceExisting = true;
-		Task->bSave = true;
-		Task->Options = Options;
-		Tools.ImportAssetTasks({Task});
-		TArray<UStaticMesh*> Meshes;
-		for (UObject* Object : Task->GetObjects())
+		// "importRotation" [pitch, yaw, roll] and "importOffset" [x, y, z] cm (applied after the rotation) put a model into the
+		// frame the game draws it in. "autoOrient": the longest side becomes +X with the far end (the tip, away from the grip
+		// at the origin) forward and the second longest +Z (a blade's edge), checked after a first import.
+		const auto ArtVec = [&Art](const TCHAR* Key, FVector& Out)
 		{
-			if (UStaticMesh* Mesh = Cast<UStaticMesh>(Object))
+			const TArray<TSharedPtr<FJsonValue>>* V = nullptr;
+			if (Art->TryGetArrayField(Key, V) && V->Num() == 3)
 			{
-				Meshes.Add(Mesh);
+				Out = FVector((*V)[0]->AsNumber(), (*V)[1]->AsNumber(), (*V)[2]->AsNumber());
+				return true;
 			}
+			return false;
+		};
+		FVector RotationIn = FVector::ZeroVector;
+		FVector OffsetIn = FVector::ZeroVector;
+		ArtVec(TEXT("importRotation"), RotationIn);
+		ArtVec(TEXT("importOffset"), OffsetIn);
+		Options->StaticMeshImportData->ImportRotation = FRotator(RotationIn.X, RotationIn.Y, RotationIn.Z);
+		Options->StaticMeshImportData->ImportTranslation = OffsetIn;
+		TArray<UStaticMesh*> Meshes;
+		const auto RunImport = [&]()
+		{
+			UAssetImportTask* Task = NewObject<UAssetImportTask>();
+			Task->Filename = File;
+			Task->DestinationPath = Dest;
+			Task->bAutomated = true;
+			Task->bReplaceExisting = true;
+			Task->bSave = true;
+			Task->Options = Options;
+			Tools.ImportAssetTasks({Task});
+			Meshes.Reset();
+			for (UObject* Object : Task->GetObjects())
+			{
+				if (UStaticMesh* Mesh = Cast<UStaticMesh>(Object))
+				{
+					Meshes.Add(Mesh);
+				}
+			}
+		};
+		RunImport();
+		if (Meshes.Num() == 1 && Art->HasField(TEXT("autoOrient")) && Art->GetBoolField(TEXT("autoOrient")))
+		{
+			// Measured with no offset: undo it from the bounds (the rotation is redone from scratch below).
+			const FBox Box = Meshes[0]->GetBoundingBox().ShiftBy(-OffsetIn);
+			const FVector Size = Box.GetSize();
+			int32 Long = 0;
+			for (int32 Axis = 1; Axis < 3; ++Axis)
+			{
+				Long = Size[Axis] > Size[Long] ? Axis : Long;
+			}
+			int32 Second = Long == 0 ? 1 : 0;
+			for (int32 Axis = 0; Axis < 3; ++Axis)
+			{
+				Second = Axis != Long && Size[Axis] > Size[Second] ? Axis : Second;
+			}
+			const auto AxisDir = [&Box](int32 Axis)
+			{
+				FVector Dir = FVector::ZeroVector;
+				Dir[Axis] = FMath::Abs(Box.Max[Axis]) >= FMath::Abs(Box.Min[Axis]) ? 1.0 : -1.0;
+				return Dir;
+			};
+			const FVector SrcX = AxisDir(Long);
+			const FVector SrcZ = AxisDir(Second);
+			// Rotation taking the model's tip direction to +X and its edge direction to +Z, on top of the one given.
+			const FQuat Fix = FRotationMatrix::MakeFromXZ(SrcX, SrcZ).ToQuat().Inverse();
+			if (!Fix.Equals(FQuat::Identity, 1e-3))
+			{
+				const FQuat Total = Fix * Options->StaticMeshImportData->ImportRotation.Quaternion();
+				Options->StaticMeshImportData->ImportRotation = Total.Rotator();
+				UE_LOG(LogGunArt, Display, TEXT("%s: turned to the game's frame (long side was %s, edge %s): import rotation %s"), *Name,
+					*SrcX.ToString(), *SrcZ.ToString(), *Total.Rotator().ToString());
+				RunImport();
+			}
+		}
+		for (const UStaticMesh* Mesh : Meshes)
+		{
+			const FBox Box = Mesh->GetBoundingBox();
+			UE_LOG(LogGunArt, Display, TEXT("%s: %s bounds %s .. %s cm"), *Name, *Mesh->GetName(), *Box.Min.ToString(), *Box.Max.ToString());
 		}
 		if (Meshes.IsEmpty())
 		{
@@ -362,6 +453,11 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 			Map(TEXT("normal"), TEXT("NormalMap"), true, false);
 			Map(TEXT("roughness"), TEXT("RoughnessMap"), false, true);
 			Map(TEXT("metallic"), TEXT("MetallicMap"), false, true);
+			if (Map(TEXT("emissive"), TEXT("EmissiveMap"), false, false))
+			{
+				const float Strength = Tex->HasField(TEXT("emissiveStrength")) ? static_cast<float>(Tex->GetNumberField(TEXT("emissiveStrength"))) : 1.0f;
+				Instance->SetScalarParameterValueEditorOnly(FMaterialParameterInfo(TEXT("EmissiveStrength")), Strength);
+			}
 			if (Map(TEXT("orm"), TEXT("ORMMap"), false, true))
 			{
 				Instance->SetScalarParameterValueEditorOnly(FMaterialParameterInfo(TEXT("UseORM")), 1.0f);

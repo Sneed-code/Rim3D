@@ -16,10 +16,12 @@
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
+#include "SkinBlood.h"
 
 #include "ColonySim/Defs.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Clock.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Wounds.h"
@@ -34,7 +36,9 @@ namespace
 		TEXT("1 draws the full blood (spray, drops, stains, bleeding wounds, filth); 0 leaves the fights' old simple blood."), ECVF_Default);
 	TAutoConsoleVariable<int32> GBloodQuality(TEXT("Blood.Quality"), 1, TEXT("0 low (fewer drops), 1 normal, 2 high."), ECVF_Default);
 	TAutoConsoleVariable<int32> GBloodMaxDrops(TEXT("Blood.MaxDrops"), 3000, TEXT("Most drops in the air at once; hits make fewer as it fills."), ECVF_Default);
-	TAutoConsoleVariable<int32> GBloodMaxStains(TEXT("Blood.MaxStains"), 900, TEXT("Most stains on the world at once (oldest go first); bodies keep 20 each, 260 in all."), ECVF_Default);
+	TAutoConsoleVariable<int32> GBloodMaxStains(TEXT("Blood.MaxStains"), 900, TEXT("Most stains on the world at once (oldest go first); bodies keep 32 each, 400 in all."), ECVF_Default);
+	TAutoConsoleVariable<float> GBloodFadeStep(TEXT("Blood.FadeStep"), 0.03f,
+		TEXT("Share of a blood stain's strength lost every 10 seconds (game speed) from when it was put down (sneed: 3%, gone in about 5.5 minutes). 0: stains stay."), ECVF_Default);
 	TAutoConsoleVariable<float> GBloodDryMinutes(TEXT("Blood.DryMinutes"), 5.0f, TEXT("Real minutes at 1x for fresh blood to dry dark."), ECVF_Default);
 	TAutoConsoleVariable<int32> GBloodFilth(TEXT("Blood.Filth"), 1, TEXT("1 draws the sim's filth (blood, dirt, vomit, ash) as stains on its cells."), ECVF_Default);
 	TAutoConsoleVariable<float> GBloodDropScale(TEXT("Blood.DropScale"), 1.6f, TEXT("Drawn size of flying drops against their real size (they read better a little big)."), ECVF_Default);
@@ -60,15 +64,30 @@ namespace
 	constexpr int32 BloodCellRun = 12;         // a run, top to bottom (+V down)
 	constexpr int32 BloodCellSmear = 13;       // a smear along U
 	constexpr int32 BloodCellHole = 14;        // a bullet hole or stab
+	/**
+	 * The colour of blood on a body against the same blood on the ground: brighter, and with more of the two weaker
+	 * channels, because skin and cloth are mostly seen in open shade, where a pure red is black (PC look, 2026-11-18).
+	 */
+	FLinearColor BloodOnBody(const FLinearColor& Color)
+	{
+		const float Top = 1.7f * FMath::Max3(Color.R, Color.G, Color.B);
+		return FLinearColor(FMath::Max(Color.R * 1.7f, 0.3f * Top), FMath::Max(Color.G * 1.7f, 0.3f * Top), FMath::Max(Color.B * 1.7f, 0.3f * Top), Color.A);
+	}
 	constexpr int32 BloodCellGash = 15;        // a torn exit wound or a cut along U
 
 	constexpr int32 BloodTracesPerFrame = 320;
-	constexpr int32 BloodMaxBodyStainsEach = 20;
-	constexpr int32 BloodMaxBodyStains = 260;
+	constexpr int32 BloodMaxBodyStainsEach = 32;
+	constexpr int32 BloodMaxBodyStains = 400;
 	constexpr int32 BloodMaxFilthDecals = 1500;
 	constexpr float BloodGravity = 980.0f;
 	// Rain washes a fresh stain off in this many game-speed seconds at full rain (ours: thin spatter goes in minutes).
 	constexpr float BloodRainWashSeconds = 240.0f;
+	/** How much of a stain is left `Age` game-speed seconds after it was put down: 3% less every 10 s (Blood.FadeStep). */
+	float BloodAgeFade(float Age)
+	{
+		const float Step = FMath::Max(0.0f, GBloodFadeStep.GetValueOnGameThread());
+		return FMath::Clamp(1.0f - Step * FMath::FloorToFloat(FMath::Max(0.0f, Age) / 10.0f), 0.0f, 1.0f);
+	}
 	// A stain on skin in the rain.
 	constexpr float BloodBodyRainWashSeconds = 300.0f;
 	// A stain on skin under water while swimming (the sim's GrimeRules swimWashSeconds is 600 game seconds: 20 s at 1x).
@@ -153,6 +172,22 @@ void UBloodSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		EventHandle = Bridge->OnSimEvent.AddUObject(this, &UBloodSubsystem::OnSimEvent);
 	}
 	Collection.InitializeDependency<USimPawnSubsystem>();
+	SkinBlood = NewObject<USkinBlood>(this);
+}
+
+int32 UBloodSubsystem::GetSkinPaints() const
+{
+	return SkinBlood ? SkinBlood->GetPaints() : 0;
+}
+
+USkinBlood* UBloodSubsystem::GetSkinBlood() const
+{
+	return SkinBlood.Get();
+}
+
+int32 UBloodSubsystem::GetSkinMasks() const
+{
+	return SkinBlood ? SkinBlood->GetMasks() : 0;
 }
 
 void UBloodSubsystem::Deinitialize()
@@ -235,7 +270,14 @@ FLinearColor UBloodSubsystem::ColorAt(const FBloodFluid& Fluid, float Age) const
 	const float DrySeconds = FMath::Max(10.0f, GBloodDryMinutes.GetValueOnGameThread() * 60.0f);
 	// Drying is quick at first (the surface skins over), then slow.
 	const float T = FMath::Clamp(1.0f - FMath::Exp(-2.6f * Age / DrySeconds), 0.0f, 1.0f) / (1.0f - FMath::Exp(-2.6f));
-	return FMath::Lerp(Fluid.Wet, Fluid.Dry, FMath::Clamp(T, 0.0f, 1.0f));
+	FLinearColor Color = FMath::Lerp(Fluid.Wet, Fluid.Dry, FMath::Clamp(T, 0.0f, 1.0f));
+	// A pure red goes black in the blue light of open shade (PC look, 2026-11-18: wounds on a shaded face were black
+	// smudges): keep a little of the other two channels.
+	const float Floor = 0.12f * FMath::Max3(Color.R, Color.G, Color.B);  // (not GetMax: that counts alpha, and made it pink)
+	Color.R = FMath::Max(Color.R, Floor);
+	Color.G = FMath::Max(Color.G, Floor);
+	Color.B = FMath::Max(Color.B, Floor);
+	return Color;
 }
 
 FLinearColor UBloodSubsystem::DecalColorFor(const FBloodFluid& Fluid, float Age, float Opacity) const
@@ -366,6 +408,10 @@ void UBloodSubsystem::ResetAll()
 	Pools.Reset();
 	Pending.Reset();
 	Injuries.Reset();
+	if (SkinBlood)
+	{
+		SkinBlood->Reset();
+	}
 	SimHitSteps.Reset();
 	for (TPair<uint64, FFilthStain>& Pair : FilthDecals)
 	{
@@ -597,8 +643,199 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 			break;
 	}
 
-	// The marks on the body, stuck to the nearest bone.
-	if (Mesh)
+	// After-combat splatter on the ground (sneed: like Baldur's Gate 3): every hit that draws blood leaves a readable
+	// pattern there and then, not only what the flying drops happen to make. A spatter fan thrown the way the blow went
+	// (out of the exit for a shot through), a few slanted drops further out in a line, and a patch under the body.
+	// Big enough to read from across a fight, and never culled by distance.
+	if (Kind != EBloodWound::Blunt || Hit.Damage >= 8.0f)
+	{
+		const FVector Flat = FVector(Dir.X, Dir.Y, 0.0f).GetSafeNormal().IsNearlyZero() ? BloodAnyPerpendicular(Up, Random) : FVector(Dir.X, Dir.Y, 0.0f).GetSafeNormal();
+		const FVector Throw = Kind == EBloodWound::Gunshot && !bExit ? -Flat : Flat;  // no exit: the blood comes back out of the entry
+		const FLinearColor Fresh = DecalColorFor(Fluid, 0.0f, 0.97f);
+		const auto Splat = [&](int32 Cell, const FVector& Where, const FVector& Along, float HalfLength, float HalfWidth)
+		{
+			const FVector Ground(Where.X, Where.Y, GroundBelow(FVector(Where.X, Where.Y, Hit.At.Z), Ignore));
+			if (UDecalComponent* Decal = MakeWorldDecal(Cell, Ground, Up, Along, HalfLength, HalfWidth, Fresh))
+			{
+				Decal->SetFadeScreenSize(0.0f);
+				Decal->DecalSize.X = 12.0f;  // reaches over bumps and grass roots (20 also painted dropped items)
+				AddStain(Decal, Ground, Up, FMath::Sqrt(HalfLength * HalfWidth), Fluid, false);
+			}
+		};
+		const float Reach = (Kind == EBloodWound::Gunshot ? 55.0f : 35.0f) * FMath::Sqrt(Force);
+		const FVector Foot(Hit.At.X, Hit.At.Y, Hit.At.Z);
+		// The main fan.
+		// (PC look, 2026-11-17: the first sizes read as a few small blotches from the firing line, so everything here is
+		// about twice as big and the fan is filled with crowned drops.)
+		const float FanHalf = FMath::Clamp(30.0f + 30.0f * Force, 28.0f, 95.0f);
+		const FVector FanAt = Foot + Throw * (Reach + FanHalf * 0.6f);
+		Splat(BloodCellSpecks + Random.RandRange(0, 1), FanAt, Throw, FanHalf * 1.25f, FanHalf);
+		Splat(BloodCellSpecks + Random.RandRange(0, 1), FanAt + Throw * FanHalf * 0.5f, Throw, FanHalf * 0.8f, FanHalf * 0.65f);
+		const FVector Across(-Throw.Y, Throw.X, 0.0f);
+		// (PC look, 2026-11-18: the fine spatter alone did not show from 9 m. The fan is now carried by solid shapes:
+		// two or three irregular splashes where most of it landed, then crowned drops, big near the body and small far
+		// out, widening as they go.)
+		for (int32 I = 0; I < (Force >= 0.6f ? 3 : 2); ++I)
+		{
+			const float W = Random.FRandRange(12.0f, 21.0f) * (0.7f + 0.3f * Force);
+			const float T = Random.FRandRange(0.0f, 0.6f);
+			Splat(BloodCellPool + Random.RandRange(0, 1), Foot + Throw * (Reach * 0.6f + T * FanHalf * 1.6f) + Across * Random.FRandRange(-0.35f, 0.35f) * FanHalf * (0.3f + T),
+				FMath::VRandCone(Throw, FMath::DegreesToRadians(25.0f)), W * Random.FRandRange(1.2f, 1.9f), W);
+		}
+		for (int32 I = 0; I < FMath::Clamp(FMath::RoundToInt((9.0f + 8.0f * Force) * BloodQualityScale()), 5, 26); ++I)
+		{
+			const float T = FMath::Square(Random.FRand());  // 0 at the body, 1 at the far end; more of them near
+			const float W = FMath::Lerp(16.0f, 4.5f, T) * Random.FRandRange(0.6f, 1.2f) * (0.8f + 0.2f * Force);
+			const FVector Where = Foot + Throw * (Reach * 0.4f + T * FanHalf * 2.6f) + Across * Random.FRandRange(-1.0f, 1.0f) * FanHalf * (0.25f + 0.75f * T);
+			if (T > 0.35f && Random.FRand() < 0.5f)
+			{
+				Splat(BloodCellDirectional + Random.RandRange(0, 3), Where, (Where - Foot).GetSafeNormal2D(), W * Random.FRandRange(1.8f, 2.6f), W);
+			}
+			else
+			{
+				Splat(BloodCellRound + Random.RandRange(0, 3), Where, Throw, W, W);
+			}
+		}
+		// Slanted drops trailing further out.
+		const int32 Trail = FMath::Clamp(FMath::RoundToInt(2.0f + 3.0f * Force * BloodQualityScale()), 1, 8);
+		for (int32 I = 0; I < Trail; ++I)
+		{
+			const FVector Spread = FMath::VRandCone(Throw, FMath::DegreesToRadians(22.0f));
+			const FVector Along = FVector(Spread.X, Spread.Y, 0.0f).GetSafeNormal();
+			const float Out = Reach + FanHalf + Random.FRandRange(20.0f, 160.0f) * FMath::Sqrt(Force);
+			const float W = Random.FRandRange(4.0f, 9.0f) * (0.7f + 0.3f * Force);
+			Splat(BloodCellDirectional + Random.RandRange(0, 3), Foot + Along * Out, Along, W * Random.FRandRange(1.8f, 3.0f), W);
+		}
+		// A few round drops close by.
+		for (int32 I = 0; I < FMath::Clamp(FMath::RoundToInt(2.0f * Force), 1, 4); ++I)
+		{
+			const FVector Off = FMath::VRandCone(Up, FMath::DegreesToRadians(89.0f));
+			const float W = Random.FRandRange(2.5f, 6.0f);
+			Splat(BloodCellRound + Random.RandRange(0, 3), Foot + FVector(Off.X, Off.Y, 0.0f) * Random.FRandRange(10.0f, 45.0f), Throw, W, W);
+		}
+		// A patch where the body stands or lies: more for bad wounds.
+		// Not again where one already lies (more hits on a downed body stacked them into one smooth sheet).
+		const int32 PatchesHere = Stains.FilterByPredicate([&Foot](const FStain& Stain) { return Stain.RadiusCm >= 9.0f && FVector::DistSquared2D(Stain.Position, Foot) < 50.0f * 50.0f; }).Num();
+		if (PatchesHere < 3 && (Force >= 0.6f || (View && (View->downed || View->dead))))
+		{
+			// Two or three overlapping splashes with drops round the rim, not one smooth sheet.
+			const float PatchHalf = FMath::Clamp(12.0f + 10.0f * Force, 12.0f, 34.0f);
+			for (int32 I = 0; I < 3; ++I)
+			{
+				const FVector Off = FMath::VRandCone(Up, FMath::DegreesToRadians(89.0f)).GetSafeNormal2D();
+				const float W = PatchHalf * Random.FRandRange(0.55f, 1.0f);
+				Splat(BloodCellPool + Random.RandRange(0, 1), Foot + Off * (I == 0 ? 0.0f : PatchHalf * Random.FRandRange(0.5f, 0.9f)), Off, W, W * Random.FRandRange(0.6f, 0.85f));
+			}
+			for (int32 I = 0; I < 6; ++I)
+			{
+				const FVector Off = FMath::VRandCone(Up, FMath::DegreesToRadians(89.0f)).GetSafeNormal2D();
+				const float W = Random.FRandRange(2.5f, 7.0f);
+				Splat(BloodCellRound + Random.RandRange(0, 3), Foot + Off * PatchHalf * Random.FRandRange(1.0f, 1.9f), Off, W, W);
+			}
+		}
+	}
+
+	// The marks on the body: painted into the skin where the body can take it (USkinBlood: it moves and bends with the
+	// skin and never slides), else decals stuck to the nearest bone.
+	USkinBlood* Skin = SkinBlood && Mesh && SkinBlood->CanPaint(Mesh) ? SkinBlood.Get() : nullptr;
+	if (Skin)
+	{
+		const FName Bone = Mesh->FindClosestBone(Hit.At);
+		const FVector BoneAt = Bone != NAME_None ? Mesh->GetSocketLocation(Bone) : Mesh->Bounds.Origin;
+		FVector Into = Kind == EBloodWound::Gunshot ? Dir : (BoneAt - Hit.At).GetSafeNormal();
+		if (Into.IsNearlyZero())
+		{
+			Into = Dir;
+		}
+		FSkinBloodPaint Mark;
+		Mark.At = Hit.At;
+		Mark.To = Hit.At;
+		Mark.Inward = Into;
+		bool bPaint = true;
+		switch (Kind)
+		{
+			case EBloodWound::Gunshot:
+				Mark.Core = 1.3f + 0.6f * Force;
+				Mark.Soak = 4.5f + 3.0f * Force;
+				Mark.Spatter = 8.0f + 4.0f * Force;
+				Mark.Run = 6.0f + 6.0f * Force;
+				Mark.Hole = 1.0f;
+				break;
+			case EBloodWound::Cut:
+			{
+				FVector Along = FVector::VectorPlaneProject(Dir, Into).GetSafeNormal();
+				if (Along.IsNearlyZero())
+				{
+					Along = BloodAnyPerpendicular(Into, Random);
+				}
+				const float HalfLength = 3.0f + 3.0f * Force;
+				Mark.At = Hit.At - Along * HalfLength;
+				Mark.To = Hit.At + Along * HalfLength;
+				Mark.Core = 0.8f + 0.4f * Force;
+				Mark.Soak = 3.5f + 2.5f * Force;
+				Mark.Spatter = 7.0f + 3.0f * Force;
+				Mark.Run = 6.0f + 6.0f * Force;
+				Mark.Hole = 0.8f;
+				break;
+			}
+			case EBloodWound::Stab:
+				Mark.Core = 1.5f + 0.5f * Force;
+				Mark.Soak = 4.0f + 2.5f * Force;
+				Mark.Spatter = 5.0f;
+				Mark.Run = 6.0f + 6.0f * Force;
+				Mark.Hole = 1.0f;
+				break;
+			case EBloodWound::Bite:
+				Mark.Core = 2.5f + 1.0f * Force;
+				Mark.Soak = 5.0f + 2.0f * Force;
+				Mark.Spatter = 6.0f;
+				Mark.Run = 5.0f + 5.0f * Force;
+				Mark.Hole = 0.6f;
+				break;
+			case EBloodWound::Blast:
+				Mark.Core = 2.0f;
+				Mark.Soak = 6.0f + 3.0f * Force;
+				Mark.Spatter = 14.0f;
+				Mark.Run = 6.0f;
+				Mark.Hole = 0.5f;
+				break;
+			case EBloodWound::Blunt:
+				bPaint = Hit.Damage >= 8.0f;  // a lighter blow only bruises
+				Mark.Core = 1.6f + 0.8f * Force;
+				Mark.Soak = 3.5f + 2.0f * Force;
+				Mark.Spatter = 4.0f;
+				Mark.Run = 4.0f + 4.0f * Force;
+				Mark.Hole = 0.3f;
+				break;
+			default:
+				Mark.Core = 1.5f;
+				Mark.Soak = 4.0f;
+				Mark.Spatter = 6.0f;
+				Mark.Run = 6.0f;
+				break;
+		}
+		if (bPaint && Skin->Paint(Mesh, Mark, Fluid, Clock))
+		{
+			++WoundMarks;
+		}
+		if (bPaint && bExit)
+		{
+			// The torn way out: bigger, more blood, more spray over the skin round it. Where it is is a guess along the
+			// shot (the body's thickness), so take skin a good way along the line.
+			FSkinBloodPaint Exit;
+			Exit.At = ExitAt;
+			Exit.To = ExitAt;
+			Exit.Inward = -Dir;
+			Exit.Depth = FMath::Max(6.0f, Half * 0.75f);
+			Exit.Core = 2.4f + 1.2f * Force;
+			Exit.Soak = 6.0f + 4.0f * Force;
+			Exit.Spatter = 12.0f + 6.0f * Force;
+			Exit.Run = 10.0f + 8.0f * Force;
+			Exit.Hole = 1.0f;
+			Skin->Paint(Mesh, Exit, Fluid, Clock);
+		}
+	}
+	else if (Mesh)
 	{
 		const FName Bone = Mesh->FindClosestBone(Hit.At);
 		const FVector BoneAt = Bone != NAME_None ? Mesh->GetSocketLocation(Bone) : Mesh->Bounds.Origin;
@@ -645,22 +882,31 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 		if (Kind != EBloodWound::Blunt || Hit.Damage >= 8.0f)
 		{
 			// Blood soaking out round the wound (into clothes where they cover it: they take the decal too).
-			const float Soak = 4.0f + 5.0f * Force;
-			AddBodyStain(MakeBodyDecal(Mesh, BloodCellPool + Random.RandRange(0, 1), Hit.At, Into, Side, Soak, Soak * 0.85f, DecalColorFor(Fluid, 0.0f, 0.75f)), Mesh,
+			// (PC look, 2026-11-18: at 6 + 7 x force these covered a whole head and read as cow-print blotches.)
+			const float Soak = 5.5f + 4.0f * Force;
+			AddBodyStain(MakeBodyDecal(Mesh, BloodCellPool + Random.RandRange(0, 1), Hit.At, Into, Side, Soak, Soak * 0.85f, DecalColorFor(Fluid, 0.0f, 0.95f)), Mesh,
 				Hit.Victim, Fluid, false);
 			if (bExit)
 			{
 				const float ExitSoak = Soak * 1.3f;
 				AddBodyStain(MakeBodyDecal(Mesh, BloodCellPool + Random.RandRange(0, 1), ExitAt, -Dir, BloodAnyPerpendicular(Dir, Random), ExitSoak, ExitSoak * 0.85f,
-					DecalColorFor(Fluid, 0.0f, 0.75f)), Mesh, Hit.Victim, Fluid, false);
+					DecalColorFor(Fluid, 0.0f, 0.95f)), Mesh, Hit.Victim, Fluid, false);
 			}
 		}
-		if (Force >= 0.5f)
+		if (Kind != EBloodWound::Blunt || Hit.Damage >= 8.0f)
 		{
-			// Blood splashed on the skin round the wound.
-			const int32 Cell = Random.RandRange(0, 1) == 0 ? BloodCellSpecks + Random.RandRange(0, 1) : BloodCellRound + Random.RandRange(0, 3);
-			const float Size = 4.0f + 4.0f * Force;
-			AddBodyStain(MakeBodyDecal(Mesh, Cell, Hit.At + Side * Random.FRandRange(0.0f, 3.0f), Into, Side, Size, Size, Fresh), Mesh, Hit.Victim, Fluid, false);
+			// Blood splashed over the skin and clothes round the wound: a spatter pattern and a couple of drops with tails
+			// running off it, so a hit body reads as bloodied at a glance, not tinted.
+			const float Size = 6.0f + 4.0f * Force;
+			AddBodyStain(MakeBodyDecal(Mesh, BloodCellSpecks + Random.RandRange(0, 1), Hit.At + Side * Random.FRandRange(0.0f, 4.0f), Into, Side, Size, Size, Fresh), Mesh,
+				Hit.Victim, Fluid, false);
+			for (int32 I = 0; I < (Force >= 0.6f ? 2 : 1); ++I)
+			{
+				const FVector Off = FMath::VRandCone(Side, FMath::DegreesToRadians(60.0f));
+				const float W = 1.5f + 1.2f * Force;
+				AddBodyStain(MakeBodyDecal(Mesh, BloodCellDirectional + Random.RandRange(0, 3), Hit.At + Off * Random.FRandRange(4.0f, 10.0f), Into, Off, W * 2.4f, W, Fresh),
+					Mesh, Hit.Victim, Fluid, false);
+			}
 		}
 		++WoundMarks;
 	}
@@ -820,7 +1066,7 @@ UDecalComponent* UBloodSubsystem::MakeBodyDecal(USkeletalMeshComponent* Mesh, in
 		FRotationMatrix::MakeFromXY(X, Y).Rotator(), EAttachLocation::KeepWorldPosition, 0.0f);
 	if (Decal)
 	{
-		Decal->SetDecalColor(Color);
+		Decal->SetDecalColor(BloodOnBody(Color));
 		Decal->SetFadeScreenSize(0.0f);
 		Decal->SetSortOrder(Cell == BloodCellHole || Cell == BloodCellGash ? 3 : 2);
 	}
@@ -863,15 +1109,19 @@ void UBloodSubsystem::AddBodyStain(UDecalComponent* Decal, USkeletalMeshComponen
 	FBodyStain Stain;
 	Stain.Decal = Decal;
 	Stain.Mesh = Mesh;
+	// Skin and cloth are mostly seen in softer light than the ground: blood on them is drawn brighter so it reads as red.
+	FBloodFluid Bright = Fluid;
+	Bright.Wet = BloodOnBody(Fluid.Wet);
+	Bright.Dry = BloodOnBody(Fluid.Dry);
 	Stain.Owner = Owner;
-	Stain.Fluid = Fluid;
+	Stain.Fluid = Bright;
 	Stain.bWound = bWound;
 	Stain.WetSince = Clock;
 	Stain.LastVisit = Clock;
 	Stain.LastColorAge = 0.0f;
 	BodyStains.Add(Stain);
 	++BodyStainsMade;
-	// Each body keeps its newest 20 (wounds before splashes), all bodies 260.
+	// Each body keeps its newest 32 (wounds before splashes), all bodies 400.
 	int32 Mine = 0;
 	for (const FBodyStain& Other : BodyStains)
 	{
@@ -938,13 +1188,34 @@ void UBloodSubsystem::Land(const FDrop& Drop, const FVector& At, const FVector& 
 	const float Elongation = 1.0f / Sine;
 	const FVector Along = FVector::VectorPlaneProject(V, N).GetSafeNormal();
 	const float Scale = Drop.Kind == EDropKind::Chunk ? 1.2f : 1.0f;
-	const float HalfWidth = FMath::Clamp(Drop.RadiusCm * (5.0f + Speed * 0.006f) * Scale, 0.6f, 14.0f);
+	// Splats spread well past the drop (a 3 mm drop leaves a 1-2 cm splat with a crown); never so small that it is lost at range.
+	const float HalfWidth = FMath::Clamp(Drop.RadiusCm * (7.0f + Speed * 0.008f) * Scale, 1.2f, 16.0f);
 	const float HalfLength = HalfWidth * Elongation;
 	const FLinearColor Fresh = DecalColorFor(Drop.Fluid, 0.0f, 1.0f);
 
 	// On a body: a splash that moves with it.
 	if (USkeletalMeshComponent* Mesh = Cast<USkeletalMeshComponent>(What))
 	{
+		if (SkinBlood && SkinBlood->CanPaint(Mesh))
+		{
+			if (Drop.RadiusCm < 0.25f)
+			{
+				return;  // fine spray: as dots all over a body it read as freckles (PC look, 2026-11-18)
+			}
+			// Into the skin: a small splash, longer the flatter it came in, with a short run if it was a big one.
+			FSkinBloodPaint Mark;
+			Mark.At = At - Along * (HalfLength - HalfWidth) * 0.5f;
+			Mark.To = At + Along * (HalfLength - HalfWidth) * 0.5f;
+			Mark.Inward = -N;
+			Mark.Depth = 4.0f;
+			Mark.Core = FMath::Clamp(HalfWidth * 0.35f, 0.3f, 2.5f);
+			Mark.Soak = 0.0f;
+			Mark.Spatter = 0.0f;
+			Mark.Run = Drop.RadiusCm > 0.35f ? FMath::Clamp(HalfWidth * 1.5f, 0.0f, 8.0f) : 0.0f;
+			Mark.Strength = 0.9f;
+			SkinBlood->Paint(Mesh, Mark, Drop.Fluid, Clock);
+			return;
+		}
 		const int32 Cell = Elongation > 1.6f ? BloodCellDirectional + Random.RandRange(0, 3) : BloodCellSpecks + Random.RandRange(0, 1);
 		colony::Entity Owner = colony::kNoEntity;
 		if (const ASimPawnActor* Pawn = Cast<ASimPawnActor>(Mesh->GetOwner()))
@@ -1116,6 +1387,16 @@ void UBloodSubsystem::Tick(float DeltaTime)
 	UpdateMist(Dt);
 	UpdateBleeding(Dt, GameSeconds);
 	UpdateStains(Dt, GameSeconds);
+	if (SkinBlood)
+	{
+		const colony::Snapshot* Snapshot = bSim ? &Bridge->GetCurrentSnapshot() : nullptr;
+		SkinBlood->Tick(Clock, [Snapshot](const USkeletalMeshComponent* Mesh)
+		{
+			const ASimPawnActor* Pawn = Snapshot && Mesh ? Cast<ASimPawnActor>(Mesh->GetOwner()) : nullptr;
+			const colony::ThingView* View = Pawn ? Snapshot->find(Pawn->GetThing()) : nullptr;
+			return View ? View->blood : -1.0f;
+		});
+	}
 	if (bSim)
 	{
 		SyncFilth();
@@ -1300,8 +1581,32 @@ void UBloodSubsystem::UpdateBleeding(float Dt, float GameSeconds)
 				++Spurts;
 			}
 		}
-		// A run down the skin while upright.
-		if (!bDown && !bDead)
+		// A run down the skin while upright: painted into the skin, longer as it bleeds on, or a decal.
+		const bool bSkinRun = SkinBlood && SkinBlood->CanPaint(Mesh);
+		if (!bDown && !bDead && bSkinRun)
+		{
+			const float MaxRun = 35.0f + Bleed.Force * 15.0f;
+			Bleed.RunLengthCm = FMath::Min(MaxRun, Bleed.RunLengthCm + Dt * (1.5f + Bleed.Rate));
+			if (Bleed.RunLengthCm - Bleed.SkinRunPainted >= 3.0f)
+			{
+				if (Bleed.SkinSeed < 0.0f)
+				{
+					Bleed.SkinSeed = Random.FRandRange(0.0f, 97.0f);
+				}
+				FSkinBloodPaint Mark;
+				Mark.At = At;
+				Mark.To = At;
+				Mark.Inward = -Outward;
+				Mark.Depth = 5.0f;
+				Mark.Core = 0.7f + 0.3f * Bleed.Force;
+				Mark.Run = Bleed.RunLengthCm;
+				Mark.Strength = 0.9f;
+				Mark.Seed = Bleed.SkinSeed;
+				SkinBlood->Paint(Mesh, Mark, Bleed.Fluid, Clock);
+				Bleed.SkinRunPainted = Bleed.RunLengthCm;
+			}
+		}
+		if (!bDown && !bDead && !bSkinRun)
 		{
 			const float MaxRun = 35.0f + Bleed.Force * 15.0f;
 			const float Before = Bleed.RunLengthCm;
@@ -1361,14 +1666,28 @@ void UBloodSubsystem::UpdateBleeding(float Dt, float GameSeconds)
 					NewPool.Victim = Bleed.Victim;
 					NewPool.Stain = AddStain(Decal, Ground, FVector::UpVector, 6.0f, Bleed.Fluid, true);
 					NewPool.RadiusCm = 6.0f;
-					NewPool.MaxRadiusCm = 40.0f + 40.0f * FMath::Clamp(BloodLoss + 0.3f, 0.0f, 1.0f);
+					// Drops and a second lobe round it, so its edge is broken (it read as a smooth sheet of paint).
+					for (int32 I = 0; I < 7; ++I)
+					{
+						const FVector Off = FMath::VRandCone(FVector::UpVector, FMath::DegreesToRadians(89.0f)).GetSafeNormal2D();
+						const float W = I == 0 ? Random.FRandRange(14.0f, 22.0f) : Random.FRandRange(3.0f, 8.0f);
+						const FVector Where = Ground + Off * (I == 0 ? Random.FRandRange(18.0f, 30.0f) : Random.FRandRange(30.0f, 75.0f));
+						const FVector OnGround(Where.X, Where.Y, GroundBelow(Where + FVector(0, 0, 40), Ignore));
+						if (UDecalComponent* Rim = MakeWorldDecal(I == 0 ? BloodCellPool + Random.RandRange(0, 1) : BloodCellRound + Random.RandRange(0, 3), OnGround, FVector::UpVector, Off,
+							W, W * Random.FRandRange(0.7f, 1.0f), Fresh))
+						{
+							Rim->SetFadeScreenSize(0.0f);
+							AddStain(Rim, OnGround, FVector::UpVector, W, Bleed.Fluid, false);
+						}
+					}
+					NewPool.MaxRadiusCm = 26.0f + 26.0f * FMath::Clamp(BloodLoss + 0.3f, 0.0f, 1.0f);
 					Pools.Add(NewPool);
 					++PoolsMade;
 				}
 			}
 			else if (Pool)
 			{
-				Pool->MaxRadiusCm = FMath::Max(Pool->MaxRadiusCm, 40.0f + 40.0f * FMath::Clamp(BloodLoss + 0.3f, 0.0f, 1.0f));
+				Pool->MaxRadiusCm = FMath::Max(Pool->MaxRadiusCm, 26.0f + 26.0f * FMath::Clamp(BloodLoss + 0.3f, 0.0f, 1.0f));
 				const float Grown = FMath::Min(Pool->MaxRadiusCm, Pool->RadiusCm + Dt * (1.0f + 1.5f * Bleed.Rate) / FMath::Max(1.0f, Pool->RadiusCm / 20.0f));
 				if (Grown > Pool->RadiusCm + 0.05f)
 				{
@@ -1484,7 +1803,7 @@ void UBloodSubsystem::UpdateStains(float Dt, float GameSeconds)
 			Stains.RemoveAt(Index);
 			continue;
 		}
-		Stain.Decal->SetDecalColor(DecalColorFor(Stain.Fluid, Clock - Stain.WetSince, Stain.Fade * (0.35f + 0.65f * Stain.WashLeft)));
+		Stain.Decal->SetDecalColor(DecalColorFor(Stain.Fluid, Clock - Stain.WetSince, Stain.Fade * BloodAgeFade(Clock - Stain.WetSince) * (0.35f + 0.65f * Stain.WashLeft)));
 	}
 
 	// The rest a slice a frame: drying colour, rain.
@@ -1517,10 +1836,17 @@ void UBloodSubsystem::UpdateStains(float Dt, float GameSeconds)
 			}
 		}
 		const float Age = Clock - Stain.WetSince;
+		const float Left = BloodAgeFade(Age);
+		if (Left <= 0.0f)
+		{
+			Stain.bGoing = true;
+			++Washed;
+			continue;
+		}
 		if (Age - Stain.LastColorAge > 2.0f || Rain > 0.001f)
 		{
 			Stain.LastColorAge = Age;
-			Stain.Decal->SetDecalColor(DecalColorFor(Stain.Fluid, Age, 0.35f + 0.65f * Stain.WashLeft));
+			Stain.Decal->SetDecalColor(DecalColorFor(Stain.Fluid, Age, Left * (0.35f + 0.65f * Stain.WashLeft)));
 		}
 	}
 
@@ -1561,7 +1887,7 @@ void UBloodSubsystem::UpdateStains(float Dt, float GameSeconds)
 				}
 			}
 		}
-		if (Stain.WashLeft <= 0.0f)
+		if (Stain.WashLeft <= 0.0f || BloodAgeFade(Clock - Stain.WetSince) <= 0.0f)
 		{
 			Stain.Decal->DestroyComponent();
 			BodyStains.RemoveAt(Index);
@@ -1572,7 +1898,7 @@ void UBloodSubsystem::UpdateStains(float Dt, float GameSeconds)
 		if (Age - Stain.LastColorAge > 2.0f || Rain > 0.001f)
 		{
 			Stain.LastColorAge = Age;
-			Stain.Decal->SetDecalColor(DecalColorFor(Stain.Fluid, Age, 0.3f + 0.7f * Stain.WashLeft));
+			Stain.Decal->SetDecalColor(DecalColorFor(Stain.Fluid, Age, BloodAgeFade(Age) * (0.3f + 0.7f * Stain.WashLeft)));
 		}
 	}
 	// Body stains made before the pawn was known (drops landing on a body): find the owner by actor.
@@ -1648,14 +1974,18 @@ void UBloodSubsystem::SyncFilth()
 				}
 				Stain.Fluid = Fluid;
 				Stain.bFluid = bFluid;
-				// Piles there when the game loaded are old and dry; new ones are wet.
-				Stain.WetSince = bFilthSeenOnce ? Clock : Clock - 100000.0f;
+				// Its age is the sim's (game seconds; the clock here is real seconds at game speed).
+				Stain.WetSince = Clock - Pile.age / static_cast<float>(colony::kStepsPerRealSecondAt1x);
+			}
+			else if (Pile.thickness > Existing->Thickness)
+			{
+				Stain.WetSince = Clock;  // fresh blood on it
 			}
 			Stain.Thickness = Pile.thickness;
 			// One decal per pile, placed and turned by the cell so it does not jump when it thickens.
 			const uint32 Hash = static_cast<uint32>(CellIndex) * 2654435761u ^ (Pile.def.value * 40503u + 17u);
 			FRandomStream CellRandom(static_cast<int32>(Hash));
-			const float Radius = (Stain.bFluid ? 22.0f : 30.0f) + (Stain.bFluid ? 12.0f : 9.0f) * static_cast<float>(Pile.thickness);
+			const float Radius = (Stain.bFluid ? 16.0f : 30.0f) + (Stain.bFluid ? 7.0f : 9.0f) * static_cast<float>(Pile.thickness);
 			const int32 Cell = Stain.bFluid ? (Pile.thickness >= 2 ? BloodCellPool + CellRandom.RandRange(0, 1) : BloodCellRound + CellRandom.RandRange(0, 3))
 			                                : (CellRandom.RandRange(0, 2) == 0 ? BloodCellSmear : BloodCellSpecks + CellRandom.RandRange(0, 1));
 			const FVector Top = Bridge->SimToWorld(Pile.cell.x + 0.5f + CellRandom.FRandRange(-0.25f, 0.25f), Pile.cell.y + 0.5f + CellRandom.FRandRange(-0.25f, 0.25f), Pile.cell.level);
@@ -1665,7 +1995,7 @@ void UBloodSubsystem::SyncFilth()
 				Stain.Decal->DestroyComponent();
 			}
 			UDecalComponent* Decal = MakeWorldDecal(Cell, At, FVector::UpVector, FVector(CellRandom.FRandRange(-1.0f, 1.0f), CellRandom.FRandRange(-1.0f, 1.0f), 0.0f), Radius,
-				Radius * CellRandom.FRandRange(0.75f, 1.0f), DecalColorFor(Stain.Fluid, Stain.bFluid ? Clock - Stain.WetSince : 100000.0f, Stain.bFluid ? 0.9f : 0.75f));
+				Radius * CellRandom.FRandRange(0.75f, 1.0f), DecalColorFor(Stain.Fluid, Stain.bFluid ? Clock - Stain.WetSince : 100000.0f, Stain.bFluid ? 0.9f * BloodAgeFade(Clock - Stain.WetSince) : 0.75f));
 			if (!Decal)
 			{
 				continue;
@@ -1702,10 +2032,10 @@ void UBloodSubsystem::SyncFilth()
 			continue;
 		}
 		const float Age = Clock - Stain.WetSince;
-		if (Age - Stain.LastColorAge > 4.0f && Age < 2.0f * 60.0f * FMath::Max(1.0f, GBloodDryMinutes.GetValueOnGameThread()))
+		if (Age - Stain.LastColorAge > 4.0f)
 		{
 			Stain.LastColorAge = Age;
-			Stain.Decal->SetDecalColor(DecalColorFor(Stain.Fluid, Age, 0.9f));
+			Stain.Decal->SetDecalColor(DecalColorFor(Stain.Fluid, Age, 0.9f * BloodAgeFade(Age)));
 			if (--Budget <= 0)
 			{
 				break;

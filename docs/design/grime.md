@@ -18,8 +18,8 @@ game seconds; 9,000 is 5 real minutes at 1x.
 | Walking in mud or marsh | legs towards 1 in `mudFullSeconds` 600 (about 600 m) |
 | Digging, cutting, harvesting, sowing, building, taking down, taking up floors, butchering, beating out fires (standing at it) | body and legs towards `workMax` 0.7 over `workFullSeconds` 10,800 |
 | Downed or dead on bare ground (lying, crawling) | body and legs towards 1 in `groundFullSeconds` 1,200 |
-| An injury whose Hediffs def bleeds (`injuryProps.bleedRate` > 0: not bruises or burns) | body blood + `bloodPerDamage` 0.03 per point of damage, its own fluid |
-| A melee blow that lands on a pawn (not deflected or blocked) | the attacker's body + `spatterPerDamage` 0.012 per point, the victim's fluid; its weapon + `weaponPerDamage` 0.05 (fists, teeth and claws: no weapon) |
+| An injury whose Hediffs def bleeds (`injuryProps.bleedRate` > 0: not bruises or burns) | body blood + `bloodPerDamage` 0.012 per point of damage, its own fluid |
+| A melee blow that lands on a pawn (not deflected or blocked) | the attacker's body + `spatterPerDamage` 0.005 per point, the victim's fluid; its weapon + `weaponPerDamage` 0.03 (fists, teeth and claws: no weapon) |
 | Rain under the open sky | everything off in `rainWashSeconds` 9,000 at rain rate 1 |
 | Ankle-deep water | legs off in `ankleWashSeconds` 600 |
 | Waist or chest deep | legs as above, body dirt and blood off in `waistWashSeconds` 900 |
@@ -51,7 +51,14 @@ now also wash off while swimming or wading waist deep.
 
 **Cost:** one dynamic material per pawn shown (and per bloody weapon), updated four times a second; a clean pawn or
 one further than `Grime.MaxDistance` (60 m) from the camera has no overlay and costs nothing. Console:
-`Grime.Enabled`, `Grime.MaxDistance`, `Grime.Strength` (0 to 2).
+`Grime.Enabled`, `Grime.MaxDistance`, `Grime.Strength` (0 to 2). `Grime.BodyBlood` (0 to 1, default 0): how much of the blood level shows as flecks all over a
+body. On the PC (2026-11-18) the flecks read as a cow print on skin and hair, so bodies show blood through the wound
+marks of `UBloodSubsystem` alone (docs/design/blood.md); the overlay still draws dirt, and blood on weapons.
+
+Seen on the PC (2026-11-17): with the first numbers a body went solid glossy red after a hit or two. Blood per damage
+is now 0.012 (a 12-point bullet 0.14, about seven to fill) and the material's gains keep even a full level patchy (about
+half covered); the blood layer also fades 3% every 10 s like the stains. The pre-skinned position reaches the pixel
+shader through a vertex interpolator.
 
 ## Later
 

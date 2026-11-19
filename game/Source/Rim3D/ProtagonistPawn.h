@@ -18,9 +18,9 @@ class USimSubsystem;
  * per step. The sim has the last word: every step the local copy is pulled back to the sim's if it
  * drifted (docs/design/protagonist.md).
  *
- * Keys: W A S D walk (Ctrl slower), the mouse looks, the wheel zooms in third person, V toggles
- * first and third person, T takes over the colonist under the crosshair, Tab goes back to the
- * overseer view. The methods below are what the keys call, so tests can drive it without a keyboard.
+ * Keys (defaults; all rebindable, KeyBindings.h and docs/design/controls.md): W A S D walk (Ctrl slower, Shift
+ * toggles sprint), the mouse looks, the wheel zooms in third person, V toggles first and third person, Y takes over the
+ * colonist under the crosshair, O goes back to the overseer view. The methods below are what the keys call, so tests can drive it without a keyboard.
  *
  * Stairs and ladders (U17, docs/design/levels-draw.md): walking into the stairs from the cell at their foot, or back
  * towards them from the cell at their head, asks the sim to climb (ClimbCommand). The sim moves the colonist up or
@@ -65,6 +65,8 @@ public:
 	void SetScriptedAim(bool bHeld) { bScriptedAim = true; bScriptAimHeld = bHeld; }
 	void ClearScriptedAim() { bScriptedAim = false; }
 	bool IsAimHeld() const { return bAimHeld; }
+	/** Locked on to an enemy (docs/design/focus.md): the view turns to keep it ahead; in third person the mouse only tilts. */
+	bool IsFocusLocked() const { return bFocusLocked; }
 	/** 0 not aiming to 1 fully aimed (eased). */
 	float GetAimBlend() const { return AimBlend; }
 	/** The third person distance now, cm: the zoomed one, closer while aiming. Shots start this far along the view. */
@@ -113,10 +115,15 @@ public:
 	static constexpr float kMaxArm = 800.0f;
 	/** Slow walking pace, metres per second. */
 	static constexpr float kWalkSpeed = 1.5f;
-	/** Sprinting (Shift held): this much faster than the colonist's cruise speed, and at least kMinSprintSpeed m/s. */
+	/** Sprinting (the sprint toggle on): this much faster than the colonist's cruise speed, and at least kMinSprintSpeed m/s. */
 	static constexpr float kSprintFactor = 1.5f;
 	static constexpr float kMinSprintSpeed = 6.5f;
 	bool IsSprinting() const { return bSprinting; }
+	/** A gun in hand (the sim's weapon has verbs): lock-on keeps the target but not the facing or the view (lock-on.md). */
+	bool HasGunDrawn() const;
+	/** The sprint key is a toggle (sneed 2026-11-17): on until pressed again, kept across colonists you take over. */
+	static bool IsSprintToggleOn();
+	static void SetSprintToggle(bool bOn);
 	/** The speed the keys ask for now (walk, run or sprint, slowed by the ground), metres per second; 0 with none held. */
 	float GetTargetSpeed() const { return TargetSpeed; }
 	/** Space: the body jumps (an arc and the jump animations on the pawn actor; the sim keeps it on the ground). */
@@ -154,6 +161,8 @@ private:
 	float ArmLength = 350.0f;
 	bool bFirstPerson = false;
 	bool bAimHeld = false;
+	bool bFocusLocked = false;
+	void FollowFocus(float DeltaTime);
 	bool bScriptedAim = false;
 	bool bScriptAimHeld = false;
 	float AimBlend = 0.0f;

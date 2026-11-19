@@ -1,8 +1,8 @@
 // The gun range (docs/design/gun-range.md): a first-person scene to play, not a check. The player's colonist (a random
 // creator woman) stands at one end of a cleared flat field with the guns of assets/guns.json in a rack; random creator
 // women stand and walk at 8 to 30 m. The sim does all the shooting, wounds, downing and dying; UGunRangeSubsystem draws
-// the arms and guns. N (or downing them all) brings a new group. -GunRangeScript runs a short tour by itself and saves
-// pictures to game/Saved/GunRange/ (each gun from the hip, aimed, firing and reloading, then a downed target).
+// the arms and guns. K (or downing them all) brings a new group. -GunRangeScript runs a short tour by itself and saves
+// pictures to game/Saved/GunRange/ (each gun from the hip, aimed, firing and cooling down, then a downed target).
 
 #include "SmokeTest.h"
 #include "Camera/CameraActor.h"
@@ -17,9 +17,12 @@
 #include "Misc/Paths.h"
 #include "UnrealClient.h"
 
+#include "BloodSubsystem.h"
 #include "CreatorPeople.h"
 #include "FightSubsystem.h"
 #include "GunRangeSubsystem.h"
+#include "KeyBindings.h"
+#include "KillFeedSubsystem.h"
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
 #include "PawnSubsystem.h"
@@ -27,9 +30,11 @@
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
 #include "SoundSubsystem.h"
+#include "WeaponDrawSubsystem.h"
 
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Commands.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
@@ -40,9 +45,42 @@ namespace
 	const FVector GunRangeOrigin(-1695000.0, 1300000.0, 0.0);
 	constexpr int32 GunRangeTargets = 8;
 
+	/** How a target behaves (sneed, 2026-11-17): some stand, some flee on sight, some flee when attacked, some fight back
+	 *  with their fists when attacked. Driven by the scene with ordinary commands, as a player would drive them, until the
+	 *  sim's own sight and flee settings come (the stealth thread). */
+	enum class EGunRangeBehaviour : uint8
+	{
+		Stand,
+		FleeOnSight,
+		FleeWhenHit,
+		Fists,
+	};
+
+	const TCHAR* GunRangeBehaviourName(EGunRangeBehaviour B)
+	{
+		switch (B)
+		{
+			case EGunRangeBehaviour::FleeOnSight: return TEXT("flees on sight");
+			case EGunRangeBehaviour::FleeWhenHit: return TEXT("flees when hit");
+			case EGunRangeBehaviour::Fists: return TEXT("fights back");
+			default: return TEXT("stands");
+		}
+	}
+
+	/** She sees the player this close (the field is open; the sim's sight will replace this). */
+	constexpr float GunRangeSightMetres = 20.0f;
+
 	struct FGunRangeTarget
 	{
 		colony::Entity Thing = colony::kNoEntity;
+		EGunRangeBehaviour Behaviour = EGunRangeBehaviour::Stand;
+		bool bFleeing = false;
+		bool bAngry = false;
+		bool bTurned = false;   // struck and handed to the sim's fight response
+		bool bSprinted = false;
+		bool bCharged = false;
+		float TurnedDist = 0.0f;
+		float NextOrder = 0.0f;
 		int32 Seed = 0;
 		TWeakObjectPtr<USkeletalMeshComponent> AppliedTo;
 		bool bWalker = false;
@@ -50,6 +88,10 @@ namespace
 		colony::CellPos B;
 		bool bToB = true;
 		float NextMove = 0.0f;
+		// A guard group (U, docs/design/stealth.md): she walks a few steps away from you, then at `GuardAt` goes over to a
+		// hostile side, unaware, her back to you. From then on the sim's own sight, hearing and fighting drive her.
+		float GuardAt = 0.0f;
+		bool bGuard = false;
 	};
 
 	struct FGunRangeState
@@ -66,10 +108,21 @@ namespace
 		TArray<colony::Entity> Rack;
 		TArray<FGunRangeTarget> Targets;
 		TSet<colony::Entity> Known;   // pawns that existed before a spawn (to find the new ones)
+		TSet<colony::Entity> Attacked; // pawns a shot or a blow has struck (from the sim's events)
+		bool bListening = false;
+		int32 Fled = 0;
+		int32 FistSwings = 0;
+		int32 Sprinted = 0;
+		int32 Charged = 0;
 		int32 PendingSpawn = 0;       // frames until the spawned pawns are looked for
 		int32 Group = 0;
+		bool bGuards = false;         // this group are unaware hostile guards to sneak up on (U)
+		int32 GuardsSet = 0;
+		bool bStopAlarm = false;      // the colony alarm went off at the guards: the range switches it off again
 		float AllDownFor = 0.0f;
 		float Clock = 0.0f;
+		float GrenadesNextCheck = 0.0f; // the belt is topped up when empty (sneed 2026-11-19)
+		bool bGrenadesSpawned = false;
 		// The scripted tour.
 		int32 Step = 0;
 		float StepTime = 0.0f;
@@ -81,6 +134,13 @@ namespace
 		int32 HitClipsAtStep = 0;
 		float HitSeenAt = -1.0f;
 		bool bHitPicture = false;
+		bool bSwingPicture = false;
+		int32 MeleeTour = 0;  // step 15: every rack melee weapon in the hand, first and third person
+		bool bKillFeedLines = false;
+		// Tab on the range's own-side targets: the sim's Next takes enemies only, so the range locks on itself (FocusCommand Set).
+		float TabAt = -1.0f;
+		colony::Entity FocusBefore = colony::kNoEntity;
+		int32 RangeFocusSets = 0;
 		// -GunRangeIdleRecord=<seconds>: frames of a standing target close up (gunrange_idle/rec_0000.png ...).
 		int32 IdleRecorded = 0;
 		TWeakObjectPtr<ACameraActor> IdleCamera;
@@ -125,6 +185,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		}
 		State->Targets.Reset();
 		State->Known.Reset();
+		State->Attacked.Reset();
 		for (const colony::ThingView& View : B->GetCurrentSnapshot().things)
 		{
 			if (View.category == colony::ThingCategory::Pawn)
@@ -175,26 +236,47 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			Pawns->SetLooksOverride(View.id, CreatorPeople::RandomLooks(T.Seed, true, From));
 			GunRangeStrip(*Sim, *B, View.id);
 			B->Submit(colony::SetFactionCommand{View.id, 1});
-			// The far half walk across the field and back; the near half stand.
+			// The far half walk across the field and back; the near half stand. In each half: one stands, one flees when
+			// hit, one fights back with her fists, one flees as soon as she sees you.
 			T.bWalker = i >= GunRangeTargets / 2;
+			static const EGunRangeBehaviour Kinds[4] = {EGunRangeBehaviour::Stand, EGunRangeBehaviour::FleeWhenHit, EGunRangeBehaviour::Fists,
+				EGunRangeBehaviour::FleeOnSight};
+			T.Behaviour = Kinds[i % 4];
 			const colony::CellPos Here{FMath::FloorToInt32(View.x), FMath::FloorToInt32(View.y), 0};
 			T.A = colony::CellPos{Here.x, State->Stand.y - 9, 0};
 			T.B = colony::CellPos{Here.x, State->Stand.y + 9, 0};
 			T.NextMove = State->Clock + 1.0f + i * 0.7f;
+			if (State->bGuards)
+			{
+				// Guards: nobody walks or follows the scene's own behaviours; each turns her back by walking 3 m away.
+				T.bWalker = false;
+				// Three of four come at you with their fists once alerted; the fourth runs as soon as she sees you.
+				T.Behaviour = i % 4 == 3 ? EGunRangeBehaviour::FleeOnSight : EGunRangeBehaviour::Fists;
+				T.GuardAt = State->Clock + 6.0f;
+				T.A = colony::CellPos{Here.x + 3, Here.y, 0};
+			}
 			State->Targets.Add(T);
 		}
 		B->StepOnce();
 		for (const FGunRangeTarget& T : State->Targets)
 		{
 			B->Submit(colony::DraftCommand{T.Thing, true});
+			if (State->bGuards)
+			{
+				B->Submit(colony::MoveOrderCommand{T.Thing, T.A});
+			}
 		}
-		Notes.Add(FString::Printf(TEXT("gunrange: group %d, %d targets"), State->Group, State->Targets.Num()));
+		Notes.Add(FString::Printf(TEXT("gunrange: group %d, %d targets%s"), State->Group, State->Targets.Num(), State->bGuards ? TEXT(", unaware guards") : TEXT("")));
+		for (const FGunRangeTarget& T : State->Targets)
+		{
+			Notes.Add(FString::Printf(TEXT("gunrange:   target %u %s%s"), entt::to_integral(T.Thing), GunRangeBehaviourName(T.Behaviour), T.bWalker ? TEXT(", walking") : TEXT("")));
+		}
 	};
 
 	FPhase Play;
 	Play.Name = TEXT("gunrange");
 	Play.WarmupSeconds = 6.0f;
-	float Minutes = bScript ? 2.0f : 240.0f;
+	float Minutes = bScript ? 2.9f : 240.0f;  // the melee line-up (step 15) adds about 25 s
 	FParse::Value(FCommandLine::Get(), TEXT("GunRangeMinutes="), Minutes);
 	Play.MeasureSeconds = Minutes * 60.0f;
 	Play.Setup = [=, this]()
@@ -310,6 +392,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			B->Submit(colony::SpawnThingCommand{TCHAR_TO_UTF8(*Def), State->RackCell, 1});
 		}
 		B->StepOnce();
+		State->bGuards = FParse::Param(FCommandLine::Get(), TEXT("GunRangeGuards"));
 		SpawnGroup();
 		B->StepOnce();
 		B->StepOnce();
@@ -352,6 +435,68 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		const float Dt = GetWorld()->GetDeltaSeconds();
 		State->Clock += Dt;
 		const colony::Snapshot& Snapshot = B->GetCurrentSnapshot();
+		if (!State->bListening)
+		{
+			// Who was struck: a bullet (on the body or its armour) or a blow that landed.
+			State->bListening = true;
+			TWeakPtr<FGunRangeState> Weak = State;
+			B->OnSimEvent.AddLambda([Weak](const colony::Event& Event)
+			{
+				const TSharedPtr<FGunRangeState> Shared = Weak.Pin();
+				const bool bStruck = Event.hit == colony::ProjectileHitKind::Pawn || Event.hit == colony::ProjectileHitKind::Armor;
+				if (Shared && bStruck && (Event.type == colony::EventType::ProjectileHit || Event.type == colony::EventType::MeleeHit))
+				{
+					Shared->Attacked.Add(Event.target);
+				}
+				if (Shared && Event.type == colony::EventType::AlarmChanged && Event.message.rfind("on", 0) == 0)
+				{
+					Shared->bStopAlarm = true;
+				}
+			});
+		}
+		const colony::ThingView* PlayerView = Snapshot.find(State->Player);
+		if (State->bStopAlarm)
+		{
+			// No klaxon in the range: stopped by hand, it stays off while the guards are about.
+			State->bStopAlarm = false;
+			B->Submit(colony::SoundAlarmCommand{false});
+		}
+
+		// Grenades (sneed 2026-11-19): five frag grenades and five molotovs on the belt, topped up when it is empty. They are
+		// laid at your feet and put on the belt, the sim's way (EquipCommand), so the throw is the game's own.
+		if (State->bControlled && PlayerView && !PlayerView->dead && State->Clock >= State->GrenadesNextCheck)
+		{
+			const colony::CellPos Feet{FMath::FloorToInt32(PlayerView->x), FMath::FloorToInt32(PlayerView->y), 0};
+			if (PlayerView->grenades > 0)
+			{
+				State->bGrenadesSpawned = false;
+				State->GrenadesNextCheck = State->Clock + 1.0f;
+			}
+			else if (!State->bGrenadesSpawned)
+			{
+				B->Submit(colony::SpawnThingCommand{"Grenade_Frag", Feet, 5});
+				B->Submit(colony::SpawnThingCommand{"Grenade_Molotov", Feet, 5});
+				State->bGrenadesSpawned = true;
+				State->GrenadesNextCheck = State->Clock + 0.3f;
+			}
+			else
+			{
+				for (const colony::ThingView& View : Snapshot.things)
+				{
+					if (View.category != colony::ThingCategory::Item || !View.def.valid() || FMath::Abs(View.x - PlayerView->x) > 3.0f || FMath::Abs(View.y - PlayerView->y) > 3.0f)
+					{
+						continue;
+					}
+					const std::string Name = B->GetDefs()->get(View.def).defName();
+					if (Name == "Grenade_Frag" || Name == "Grenade_Molotov")
+					{
+						B->Submit(colony::EquipCommand{State->Player, View.id});
+					}
+				}
+				State->bGrenadesSpawned = false;
+				State->GrenadesNextCheck = State->Clock + 2.0f;
+			}
+		}
 
 		// Take control once the body is drawn, in first person, facing the field.
 		if (!State->bControlled && PhaseTime > 1.0f)
@@ -395,6 +540,66 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					T.AppliedTo = Actor->GetMakeHumanMesh();
 				}
 			}
+			// A guard: once she has walked off, a hostile side and unaware; the sim does the rest (stealth.md).
+			if (T.GuardAt > 0.0f)
+			{
+				if (!T.bGuard && State->Clock >= T.GuardAt && !View->downed && !View->dead)
+				{
+					B->Submit(colony::SetFactionCommand{T.Thing, 2});
+					B->Submit(colony::SetAlertCommand{T.Thing, 0});
+					// Unarmed, she would only stand there once alerted: the sim's fight response sends her at you or away.
+					B->Submit(colony::SetFightResponseCommand{T.Thing, T.Behaviour == EGunRangeBehaviour::FleeOnSight ? colony::FightResponse::FleeOnSight : colony::FightResponse::Fists});
+					T.bGuard = true;
+					++State->GuardsSet;
+				}
+				continue;
+			}
+			// Each one's own way, by the sim's own fight responses (docs/design/focus.md) so the sim runs and sprints her:
+			// struck, she turns hostile (faction 2) and flees (FleeOnSight, so she keeps running while she sees you) or comes
+			// at you with her fists (Fists); the on-sight runner turns and flees once you are within 20 m (or she is struck).
+			const bool bUp = !View->downed && !View->dead;
+			const bool bStruck = State->Attacked.Contains(T.Thing);
+			const float ToPlayer = PlayerView ? FVector2D::Distance(FVector2D(View->x, View->y), FVector2D(PlayerView->x, PlayerView->y)) : 1e9f;
+			const bool bSpotted = T.Behaviour == EGunRangeBehaviour::FleeOnSight && ToPlayer <= GunRangeSightMetres;
+			if (bUp && !T.bTurned && (bSpotted || (bStruck && T.Behaviour != EGunRangeBehaviour::Stand)))
+			{
+				T.bTurned = true;
+				T.TurnedDist = ToPlayer;
+				B->Submit(colony::SetFactionCommand{T.Thing, 2});
+				B->Submit(colony::SetFightResponseCommand{T.Thing,
+					T.Behaviour == EGunRangeBehaviour::Fists ? colony::FightResponse::Fists : colony::FightResponse::FleeOnSight});
+			}
+			if (bUp && T.bTurned)
+			{
+				if (View->sprinting && !T.bSprinted)
+				{
+					T.bSprinted = true;
+					++State->Sprinted;
+				}
+				// "Ran": a runner moving away from you (the sim's flee response puts her in a fall-back, not the map-leaving
+				// `fleeing`); "charged": the brawler sprinting in.
+				if (!T.bFleeing && T.Behaviour != EGunRangeBehaviour::Fists && PlayerView &&
+					(View->fleeing || View->sprinting || ToPlayer > T.TurnedDist + 3.0f))
+				{
+					T.bFleeing = true;
+					++State->Fled;
+				}
+				if (!T.bCharged && T.Behaviour == EGunRangeBehaviour::Fists && View->sprinting)
+				{
+					T.bCharged = true;
+					++State->Charged;
+				}
+				if (View->meleeTarget == State->Player && View->meleePhase != colony::MeleePhase::Ready && !T.bAngry)
+				{
+					T.bAngry = true;
+				}
+				if (T.bAngry && View->meleeTarget == State->Player && View->meleePhase == colony::MeleePhase::Windup && State->Clock >= T.NextOrder)
+				{
+					++State->FistSwings;
+					T.NextOrder = State->Clock + 0.5f;
+				}
+				continue;
+			}
 			// Walkers cross the field and back, a pause at each end.
 			if (T.bWalker && !View->downed && !View->dead && State->Clock >= T.NextMove)
 			{
@@ -403,7 +608,14 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				T.NextMove = State->Clock + 8.0f + FMath::Frac(T.Seed * 0.0137f) * 4.0f;
 			}
 		}
-		G->SetSceneLine(FString::Printf(TEXT("Targets: %d standing, %d down, %d dead   (group %d)"), Standing, Downed, Dead, State->Group));
+		if (State->bGuards)
+		{
+			G->SetSceneLine(FString::Printf(TEXT("Guards: %d standing, %d down, %d dead   (group %d)\nUnaware, backs turned: crouch to creep up, walking is heard at 3 m.\nAlerted, most come at you with their fists, some run\nN: ordinary targets   U: new guards"), Standing, Downed, Dead, State->Group));
+		}
+		else
+		{
+			G->SetSceneLine(FString::Printf(TEXT("Targets: %d standing, %d down, %d dead   (group %d)\nEach pair: one stands, one flees on sight,\none flees when hit, one fights back with fists\nU: unaware guards to sneak up on"), Standing, Downed, Dead, State->Group));
+		}
 
 		// -GunRangeIdleRecord=<seconds>: a camera 3 m in front of a standing (not walking) target, every frame at a fixed
 		// 30 a second, to check that a standing pawn stands still and breathes (docs/design/pawns.md "Standing still").
@@ -440,14 +652,17 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			}
 		}
 
-		// N: a new group now. By itself only after everyone has been down a full minute (or dead for 20 seconds), so the
+		// K (N is sleep now): a new group now. By itself only after everyone has been down a full minute (or dead for 20 seconds), so the
 		// downed can still be shot and the bodies looked at (sneed: downed is not dead).
 		APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
 		const bool bAllDown = !State->Targets.IsEmpty() && Standing == 0;
 		State->AllDownFor = bAllDown ? State->AllDownFor + Dt : 0.0f;
 		const float NewGroupAfter = Downed == 0 ? 20.0f : 60.0f;
-		if (State->PendingSpawn == 0 && ((PC && PC->WasInputKeyJustPressed(EKeys::N)) || State->AllDownFor > NewGroupAfter))
+		const bool bWantGuards = PC && PC->WasInputKeyJustPressed(EKeys::U);
+		if (State->PendingSpawn == 0 && (bWantGuards || (PC && PC->WasInputKeyJustPressed(EKeys::K)) || State->AllDownFor > NewGroupAfter))
 		{
+			// U: unaware guards; K: ordinary targets (N is the sleep key); by itself: the same kind again.
+			State->bGuards = bWantGuards || (State->bGuards && !(PC && PC->WasInputKeyJustPressed(EKeys::K)));
 			SpawnGroup();
 		}
 		else if (State->PendingSpawn > 0)
@@ -459,11 +674,60 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			}
 		}
 
+		// Tab (lock-on): the sim's own Next picks enemies (the turned and the guards). The ordinary targets are the player's
+		// side, which Next never takes, so when it locked on to nobody the range picks the next nearest woman ahead itself.
+		if (PC && State->bControlled && Rim3DKeys::IsLockOnFocusEnabled() && Rim3DKeys::WasPressed(PC, ERim3DAction::FocusNextTarget))
+		{
+			State->TabAt = State->Clock;
+			State->FocusBefore = PlayerView ? PlayerView->focusTarget : colony::kNoEntity;
+		}
+		if (State->TabAt >= 0.0f && State->Clock > State->TabAt + 0.2f)
+		{
+			State->TabAt = -1.0f;
+			if (PlayerView && PlayerView->focusTarget == State->FocusBefore)
+			{
+				const FVector2D Me(PlayerView->x, PlayerView->y);
+				const float FacingYaw = FMath::DegreesToRadians(P->GetBody() ? P->GetBody()->GetYaw() : 0.0f);
+				const FVector2D Facing(FMath::Cos(FacingYaw), FMath::Sin(FacingYaw));
+				TArray<TPair<float, colony::Entity>> Picks;
+				for (const FGunRangeTarget& T : State->Targets)
+				{
+					const colony::ThingView* View = Snapshot.find(T.Thing);
+					if (!View || View->dead)
+					{
+						continue;
+					}
+					const FVector2D To = FVector2D(View->x, View->y) - Me;
+					const float D = To.Size();
+					if (D > 24.0f)
+					{
+						continue;
+					}
+					const bool bAhead = D < 0.01f || FVector2D::DotProduct(To / D, Facing) > 0.5f;
+					Picks.Add({bAhead ? D : D * 2.0f, T.Thing});
+				}
+				Picks.Sort([](const TPair<float, colony::Entity>& A, const TPair<float, colony::Entity>& Bp) { return A.Key < Bp.Key; });
+				if (!Picks.IsEmpty())
+				{
+					int32 Index = 0;
+					for (int32 i = 0; i < Picks.Num(); ++i)
+					{
+						if (Picks[i].Value == PlayerView->focusTarget)
+						{
+							Index = (i + 1) % Picks.Num();
+						}
+					}
+					B->Submit(colony::FocusCommand{State->Player, Picks[Index].Value, colony::FocusMode::Set});
+					++State->RangeFocusSets;
+				}
+			}
+		}
+
 		if (!bScript || !State->bArmed)
 		{
 			return;
 		}
-		// The tour: each gun from the hip, aimed, firing at the nearest standing woman, reloading; then down one.
+		// The tour: each gun from the hip, aimed, firing at the nearest standing woman, its cooldown bar; then down one.
 		UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>();
 		AProtagonistPawn* Body = P->GetBody();
 		if (!Fight || !Body)
@@ -559,22 +823,18 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				if (State->StepTime > 2.0f)
 				{
 					Body->SetScriptedAim(false);
-					Fight->Reload();
+					Notes.Add(FString::Printf(TEXT("gunrange: gun %d fired %d shots in 2 s (no reloads: bursts and a cooldown)"), State->Gun + 1,
+						G->GetShotsSeen() - State->Shots));
 					Next(3);
 				}
 				break;
-			case 3:  // reload: pictures at a third and two thirds of it
-				if (G->GetReloadFraction() > 0.33f && State->Shots >= 0)
+			case 3:  // the cooldown: the thin yellow refill bar under the gun's name (no reloads, sneed 2026-11-17)
+				if (State->StepTime > 0.4f && State->Shots >= 0)
 				{
-					Picture(*FString::Printf(TEXT("gun%d_reload_a"), State->Gun + 1));
+					Picture(*FString::Printf(TEXT("gun%d_cooldown"), State->Gun + 1));
 					State->Shots = -1;
 				}
-				if (G->GetReloadFraction() > 0.66f && State->Shots == -1)
-				{
-					Picture(*FString::Printf(TEXT("gun%d_reload_b"), State->Gun + 1));
-					State->Shots = -2;
-				}
-				if (State->StepTime > 6.0f || (State->StepTime > 1.0f && G->GetReloadFraction() < 0.0f))
+				if (State->StepTime > 1.5f)
 				{
 					++State->Gun;
 					Next(State->Gun < GunCount ? 0 : 4);
@@ -639,6 +899,39 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				{
 					Picture(TEXT("downed_shot"));
 					Body->SetScriptedAim(false);
+					Next(12);
+				}
+				break;
+			case 12:  // a close look at her wounds through the rifle's scope (the far pictures are too small to show them):
+				      // at the place the last bullet met her drawn body
+				G->SelectGun(0);
+				for (const FGunRangeTarget& T : State->Targets)
+				{
+					const colony::ThingView* View = B->GetCurrentSnapshot().find(T.Thing);
+					FVector At;
+					if (View && (View->downed || View->dead) && Fight->GetLastBodyHit(T.Thing, At))
+					{
+						if (!State->bFiringPicture)
+						{
+							State->bFiringPicture = true;
+							Notes.Add(FString::Printf(TEXT("gunrange: close look at %u's last wound, %.0f m away"), entt::to_integral(T.Thing),
+								FVector::Distance(At, Body->GetViewLocation()) / 100.0f));
+						}
+						const FRotator Wanted = (At - Body->GetViewLocation()).Rotation();
+						Body->Look(FRotator::NormalizeAxis(Wanted.Yaw - Body->GetYaw()), Wanted.Pitch - Body->GetPitch());
+						break;
+					}
+				}
+				// The blood seen from where the shooter stands, without the scope (sneed: it must read from afar too).
+				if (State->StepTime > 1.2f && State->StepTime - Dt <= 1.2f)
+				{
+					Picture(TEXT("downed_far"));
+				}
+				Body->SetScriptedAim(State->StepTime > 1.5f);
+				if (State->StepTime > 3.5f)
+				{
+					Picture(TEXT("downed_scope"));
+					Body->SetScriptedAim(false);
 					Next(5);
 				}
 				break;
@@ -674,27 +967,120 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					Next(9);
 				}
 				break;
-			case 9:  // taking the melee weapon should turn third person on by itself (the main game draws the swing)
+			case 9:  // a melee weapon from the rack: first person stays on, the arms hold it and swing it
 				G->SelectGun(GunCount + FMath::Min(4, G->GetMelee().Num() - 1));
-				AimAtNearest();
-				if (State->StepTime > 2.0f && !State->bFiringPicture)
+				if (!Body->IsFirstPerson())
 				{
-					Notes.Add(FString::Printf(TEXT("gunrange: melee rack %d in hand, view %s"), G->GetHeldRackIndex(),
-						Body->IsFirstPerson() ? TEXT("first person (auto switch failed)") : TEXT("third person")));
+					Body->ToggleView();
+					Body->SnapCamera();
+				}
+				AimAtNearest();
+				if (State->StepTime > 1.5f && !State->bFiringPicture)
+				{
+					Notes.Add(FString::Printf(TEXT("gunrange: melee rack %d in hand, view %s, arms %s"), G->GetHeldRackIndex(),
+						Body->IsFirstPerson() ? TEXT("first person") : TEXT("third person (should stay first)"), G->IsHeldViewShown() ? TEXT("shown") : TEXT("NOT shown")));
 					Picture(TEXT("melee_held"));
 					State->bFiringPicture = true;
+					if (UWeaponDrawSubsystem* W = GetWorld()->GetSubsystem<UWeaponDrawSubsystem>())
+					{
+						W->Swing();
+					}
 				}
-				if (State->StepTime > 3.0f)
+				if (State->StepTime > 2.0f && !State->bSwingPicture)
 				{
-					G->SelectGun(0);
-					Next(11);
+					State->bSwingPicture = true;
+					Picture(TEXT("melee_swing"));
+				}
+				if (State->StepTime > 3.5f)
+				{
+					Notes.Add(FString::Printf(TEXT("gunrange: first-person swings seen %d"), G->GetHeldSwingsSeen()));
+					State->MeleeTour = 0;
+					State->bSwingPicture = false;
+					Next(15);
 				}
 				break;
-			case 11:  // a gun again: first person back
+			case 15:  // each melee weapon in the hand: a first-person and a third-person picture (is it in the palm, pointing right?)
+			{
+				const TArray<FGunRangeMelee>& Rack = G->GetMelee();
+				if (State->StepTime < Dt * 1.5f)
+				{
+					G->SelectGun(GunCount + State->MeleeTour);
+					if (!Body->IsFirstPerson())
+					{
+						Body->ToggleView();
+						Body->SnapCamera();
+					}
+				}
+				AimAtNearest();
+				if (State->StepTime > 2.2f && !State->bFiringPicture)  // after the view change back has settled (no blur)
+				{
+					State->bFiringPicture = true;
+					Picture(*FString::Printf(TEXT("melee_%s_fp"), *Rack[State->MeleeTour].Label));
+					Body->ToggleView();
+					Body->SnapCamera();
+				}
+				if (State->StepTime > 3.8f && !State->bSwingPicture)
+				{
+					State->bSwingPicture = true;
+					Picture(*FString::Printf(TEXT("melee_%s_3p"), *Rack[State->MeleeTour].Label));
+				}
+				if (State->StepTime > 4.0f)
+				{
+					if (!Body->IsFirstPerson())
+					{
+						Body->ToggleView();
+						Body->SnapCamera();
+					}
+					State->bSwingPicture = false;
+					if (++State->MeleeTour < Rack.Num())
+					{
+						Next(15);
+					}
+					else
+					{
+						G->SelectGun(0);
+						Next(11);
+					}
+				}
+				break;
+			}
+			case 11:  // a gun again: its model in the hands
 				if (State->StepTime > 2.0f)
 				{
-					Notes.Add(FString::Printf(TEXT("gunrange: gun back in hand, view %s"), Body->IsFirstPerson() ? TEXT("first person") : TEXT("third person (switch back failed)")));
+					Notes.Add(FString::Printf(TEXT("gunrange: gun back in hand, view %s, gun model %s"), Body->IsFirstPerson() ? TEXT("first person") : TEXT("third person"),
+						G->IsViewShown() && !G->IsHeldViewShown() ? TEXT("shown") : TEXT("NOT shown")));
 					Picture(TEXT("gun_again"));
+					Next(13);
+				}
+				break;
+			case 13:  // the kill feed at the top left: sample lines (one of them yours, with its sound), then a picture
+				if (UKillFeedSubsystem* Feed = GetWorld()->GetSubsystem<UKillFeedSubsystem>(); Feed && !State->bKillFeedLines)
+				{
+					State->bKillFeedLines = true;
+					Feed->AddLine(TEXT("You"), 0, TEXT("Raider"), 1, true);
+					Feed->AddLine(TEXT("Raider"), 1, TEXT("Bo"), 0, false);
+					Feed->AddLine(FString(), 0, TEXT("Deer"), 2, false);
+				}
+				if (State->StepTime > 1.0f)
+				{
+					Picture(TEXT("kill_feed"));
+					Next(14);
+				}
+				break;
+			case 14:  // Tab: lock on to the nearest woman; the HP bar top middle and the marker on her
+				if (State->StepTime < Dt * 1.5f)
+				{
+					AimAtNearest();
+					P->FocusNext();
+					State->TabAt = State->Clock;
+					State->FocusBefore = P->GetFocusTarget();
+				}
+				if (State->StepTime > 1.5f)
+				{
+					Notes.Add(FString::Printf(TEXT("gunrange: Tab focus on %u (%s), HP bar frames %d"), entt::to_integral(P->GetFocusTarget()),
+						P->GetFocusTarget() != colony::kNoEntity ? TEXT("locked on") : TEXT("NOTHING FOCUSED"), P->GetFocusBarFramesDrawn()));
+					Picture(TEXT("focus_hpbar"));
+					P->EndFocus();
 					Next(10);
 				}
 				break;
@@ -712,10 +1098,34 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			{
 				Notes.Add(FString::Printf(TEXT("gunrange: %s: %s"), *G->GetGuns()[i].Label, G->HasModel(i) ? TEXT("model") : TEXT("no model (box)")));
 			}
+			for (const FGunRangeMelee& M : G->GetMelee())
+			{
+				Notes.Add(FString::Printf(TEXT("gunrange: %s (melee): %s"), *M.Label, G->FindMeleeMesh(M.Def) ? TEXT("model") : TEXT("no model (placeholder)")));
+			}
 		}
 		if (UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>())
 		{
 			PhaseNumbers.Add(TEXT("hit_clips"), Fight->GetHitClips());
+			PhaseNumbers.Add(TEXT("pawn_hits"), Fight->GetPawnHitsSeen());
+			PhaseNumbers.Add(TEXT("hits_on_drawn_body"), Fight->GetSnappedHits());
+			PhaseNumbers.Add(TEXT("old_body_decals"), Fight->GetBodyDecals());
+		}
+		if (UBloodSubsystem* Blood = GetWorld()->GetSubsystem<UBloodSubsystem>())
+		{
+			Notes.Add(FString::Printf(TEXT("gunrange: blood %s: %d hits, %d drops, %d mist, %d wound marks, %d body stains, %d ground splats, %d painted into skin (%d bodies now)"),
+				Blood->IsReady() ? TEXT("assets in") : TEXT("ASSETS MISSING (old simple blood)"), Blood->GetHits(), Blood->GetDropsSpawned(),
+				Blood->GetMistSpawned(), Blood->GetWoundMarks(), Blood->GetBodyStainsMade(), Blood->GetSplatsMade(), Blood->GetSkinPaints(), Blood->GetSkinMasks()));
+		}
+		Notes.Add(FString::Printf(TEXT("gunrange: %d targets ran, %d sprinted, %d charged you, %d punches thrown at you, %d range lock-ons"), State->Fled, State->Sprinted, State->Charged, State->FistSwings, State->RangeFocusSets));
+		if (const UFightSubsystem* Marks = GetWorld()->GetSubsystem<UFightSubsystem>())
+		{
+			Notes.Add(FString::Printf(TEXT("gunrange: %d guards set unaware, %d alert events, %d alert marks drawn"), State->GuardsSet, Marks->GetAlertEventsSeen(), Marks->GetAlertMarksDrawn()));
+		}
+		if (UKillFeedSubsystem* Feed = GetWorld()->GetSubsystem<UKillFeedSubsystem>())
+		{
+			PhaseNumbers.Add(TEXT("killfeed_lines"), Feed->GetLinesShown());
+			PhaseNumbers.Add(TEXT("killfeed_mine"), Feed->GetPersonalKills());
+			PhaseNumbers.Add(TEXT("killfeed_frames"), Feed->GetFramesDrawn());
 		}
 		if (USoundSubsystem* S = GetWorld()->GetSubsystem<USoundSubsystem>())
 		{

@@ -8,12 +8,15 @@
 #include "InputCoreTypes.h"
 
 #include "HandsOnSubsystem.h"
+#include "KeyBindings.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
 #include "ProtagonistSubsystem.h"
 #include "ShooterFeelSubsystem.h"
 #include "SimSubsystem.h"
 
+#include "ColonySim/BodyMotion.h"
+#include "ColonySim/Combat.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Snapshot.h"
@@ -46,6 +49,8 @@ namespace
 	}
 	TAutoConsoleVariable<float> GProtagonistDepthOfField(TEXT("Look.DepthOfField"), 2.0f,
 		TEXT("The third person camera's cinematic depth of field: the lens f-stop, focused on the colonist (lower blurs the distance more; 0 turns it off). Fades out while aiming and in first person."));
+	// The sprint toggle belongs to the player, not the body: it carries over to the next colonist taken over.
+	bool bProtagonistSprintToggle = false;
 	constexpr float ProtagonistMaxPitch = 80.0f;
 	// One wheel notch scales the third person distance by this much.
 	constexpr float ProtagonistZoomPerNotch = 0.85f;
@@ -68,6 +73,9 @@ namespace
 	constexpr float ProtagonistAimArm = 120.0f;
 	constexpr float ProtagonistAimShoulder = 42.0f;
 	constexpr float ProtagonistNormalFov = 80.0f;
+	// Locked on (docs/design/focus.md): how fast the view turns to keep the focus ahead, degrees a second.
+	constexpr float ProtagonistFocusTurnThird = 360.0f;
+	constexpr float ProtagonistFocusTurnFirst = 100.0f;
 	// The engine's default vignette, which the pulses add to.
 	constexpr float ProtagonistBaseVignette = 0.4f;
 
@@ -91,6 +99,16 @@ AProtagonistPawn::AProtagonistPawn()
 	Camera->SetupAttachment(Root);
 	Camera->SetFieldOfView(80.0f);
 	Camera->bUsePawnControlRotation = false;
+}
+
+bool AProtagonistPawn::IsSprintToggleOn()
+{
+	return bProtagonistSprintToggle;
+}
+
+void AProtagonistPawn::SetSprintToggle(bool bOn)
+{
+	bProtagonistSprintToggle = bOn;
 }
 
 float AProtagonistPawn::GetMouseTurn()
@@ -125,12 +143,9 @@ APlayerController* AProtagonistPawn::GetPlayerController() const
 void AProtagonistPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
-	PlayerInputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &AProtagonistPawn::OnSwitchModePressed);
-	PlayerInputComponent->BindKey(EKeys::V, IE_Pressed, this, &AProtagonistPawn::OnToggleViewPressed);
-	PlayerInputComponent->BindKey(EKeys::T, IE_Pressed, this, &AProtagonistPawn::OnTakeOverPressed);
+	// The mouse wheel zooms; the other keys are rebindable (KeyBindings.h) and read in Tick.
 	PlayerInputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &AProtagonistPawn::OnZoomIn);
 	PlayerInputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &AProtagonistPawn::OnZoomOut);
-	PlayerInputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &AProtagonistPawn::OnJumpPressed);
 }
 
 bool AProtagonistPawn::Jump()
@@ -201,22 +216,54 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	}
 	else if (APlayerController* PC = GetPlayerController())
 	{
-		Right = (PC->IsInputKeyDown(EKeys::D) ? 1.0 : 0.0) - (PC->IsInputKeyDown(EKeys::A) ? 1.0 : 0.0);
-		Forward = (PC->IsInputKeyDown(EKeys::W) ? 1.0 : 0.0) - (PC->IsInputKeyDown(EKeys::S) ? 1.0 : 0.0);
-		bWalk = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl);
-		// Shift sprints (not while walking slowly or aiming).
-		bSprinting = !bWalk && !bAimHeld && (PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift));
+		using Rim3DKeys::IsDown;
+		using Rim3DKeys::WasPressed;
+		UProtagonistSubsystem* Unstuck = GetWorld() ? GetWorld()->GetSubsystem<UProtagonistSubsystem>() : nullptr;
+		if (Unstuck && WasPressed(PC, ERim3DAction::Unstuck))
+		{
+			Unstuck->StartUnstuck();
+		}
+		// F12 Unstuck: standing still, no actions, until the sim moves the colonist (docs/design/earthworks.md).
+		const bool bUnstucking = Unstuck && Unstuck->IsUnstucking();
+		Right = bUnstucking ? 0.0 : (IsDown(PC, ERim3DAction::MoveRight) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveLeft) ? 1.0 : 0.0);
+		Forward = bUnstucking ? 0.0 : (IsDown(PC, ERim3DAction::MoveForward) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveBack) ? 1.0 : 0.0);
+		bWalk = IsDown(PC, ERim3DAction::WalkSlow);
+		// Sprint is a toggle (sneed 2026-11-17): on until pressed again, and it stays on when you take over another colonist.
+		// It doesn't sprint while walking slowly or aiming.
+		if (WasPressed(PC, ERim3DAction::Sprint))
+		{
+			SetSprintToggle(!IsSprintToggleOn());
+		}
+		bSprinting = IsSprintToggleOn() && !bWalk && !bAimHeld;
+		if (!bUnstucking && WasPressed(PC, ERim3DAction::Jump))
+		{
+			Jump();
+		}
+		if (WasPressed(PC, ERim3DAction::ToggleView))
+		{
+			OnToggleViewPressed();
+		}
+		if (WasPressed(PC, ERim3DAction::SwitchMode))
+		{
+			OnSwitchModePressed();
+		}
+		if (WasPressed(PC, ERim3DAction::TakeOver))
+		{
+			OnTakeOverPressed();
+		}
 		float MouseX = 0.0f;
 		float MouseY = 0.0f;
 		PC->GetInputMouseDelta(MouseX, MouseY);
 		if (MouseX != 0.0f || MouseY != 0.0f)
 		{
 			const float Turn = FMath::Max(0.01f, GetMouseTurn());
-			Look(MouseX * Turn, MouseY * Turn);
+			// Locked on in third person the camera keeps the enemy ahead: the mouse only tilts it (Dark Souls).
+			Look(bFocusLocked && !bFirstPerson ? 0.0f : MouseX * Turn, MouseY * Turn);
 		}
 	}
 	if (Thing != colony::kNoEntity)
 	{
+		FollowFocus(DeltaTime);
 		Move(Right, Forward, bWalk, DeltaTime);
 	}
 
@@ -228,7 +275,7 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	}
 	else if (const APlayerController* PC = GetPlayerController(); PC && Thing != colony::kNoEntity)
 	{
-		bWantAim = PC->IsInputKeyDown(EKeys::RightMouseButton);
+		bWantAim = Rim3DKeys::IsDown(PC, ERim3DAction::AimBlock);
 	}
 	if (bWantAim)
 	{
@@ -241,6 +288,42 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	bAimHeld = bWantAim;
 	AimBlend = FMath::FInterpConstantTo(AimBlend, bAimHeld ? 1.0f : 0.0f, DeltaTime, ProtagonistAimBlendPerSecond);
 	UpdateCamera();
+}
+
+bool AProtagonistPawn::HasGunDrawn() const
+{
+	const USimSubsystem* Bridge = GetBridge();
+	const colony::ThingView* View = Bridge && Bridge->GetSim() ? Bridge->GetCurrentSnapshot().find(Thing) : nullptr;
+	return View && View->weapon.valid() && Bridge->GetDefs() && Bridge->GetDefs()->get(View->weapon).has("verbs");
+}
+
+void AProtagonistPawn::FollowFocus(float DeltaTime)
+{
+	// The sim turns the body to face the focus (MeleeSystem::faceFocus); the view turns after it so WASD strafes round the
+	// enemy: quickly in third person, gently in first. Not while aiming a gun (the aim leads) or rolling.
+	bFocusLocked = false;
+	const USimSubsystem* Bridge = GetBridge();
+	const colony::ThingView* Me = Bridge && Bridge->GetSim() ? Bridge->GetCurrentSnapshot().find(Thing) : nullptr;
+	// Nor with a gun in hand (free aim, sneed 2026-11-18, docs/design/lock-on.md), nor while sprinting (the run goes
+	// where the keys say, as in Elden Ring).
+	if (!Me || Me->focusTarget == colony::kNoEntity || bAimHeld || Me->rollPhase > 0 || bSprinting || HasGunDrawn())
+	{
+		return;
+	}
+	const colony::ThingView* Target = Bridge->GetCurrentSnapshot().find(Me->focusTarget);
+	if (!Target || Target->level != Level)
+	{
+		return;
+	}
+	const FVector2D To(Target->x - Position.X, Target->y - Position.Y);
+	if (To.SizeSquared() < 0.09)
+	{
+		return;
+	}
+	bFocusLocked = true;
+	const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(To.Y), static_cast<float>(To.X)));
+	const float Rate = bFirstPerson ? ProtagonistFocusTurnFirst : ProtagonistFocusTurnThird;
+	Yaw = FRotator::NormalizeAxis(FMath::FixedTurn(Yaw, Wanted, Rate * DeltaTime));
 }
 
 bool AProtagonistPawn::IsBodyHiddenInView() const
@@ -278,6 +361,7 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 		return;
 	}
 	const colony::Map& Map = Bridge->GetSim()->map();
+	const colony::BodyMotionSystem& Bodies = Bridge->GetSim()->combat().motion();
 
 	const double YawRadians = FMath::DegreesToRadians(static_cast<double>(Yaw));
 	const FVector2D Ahead(FMath::Cos(YawRadians), FMath::Sin(YawRadians));
@@ -308,8 +392,12 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 	const FVector2D Tries[3] = {Delta, FVector2D(Delta.X, 0.0), FVector2D(0.0, Delta.Y)};
 	const auto Fits = [&](const FVector2D& Try)
 	{
-		// The player may swim: deep water counts as open (docs/design/water.md), as the sim's DirectMove does.
-		return colony::swimmerFitsAt(Map, static_cast<float>(Position.X + Try.X), static_cast<float>(Position.Y + Try.Y), colony::kPawnRadius, Level);
+		// The player may swim: deep water counts as open (docs/design/water.md), as the sim's DirectMove does. Other
+		// standing bodies stop the walk the same way (sneed 2026-11-18: no running through people).
+		const float ToX = static_cast<float>(Position.X + Try.X);
+		const float ToY = static_cast<float>(Position.Y + Try.Y);
+		return colony::swimmerFitsAt(Map, ToX, ToY, colony::kPawnRadius, Level) &&
+			Bodies.bodiesClear(Thing, static_cast<float>(Position.X), static_cast<float>(Position.Y), ToX, ToY, Level);
 	};
 	// Pushing into stairs or a ladder (or back towards them from their head, into the stairwell over them, which may
 	// have a floor laid) climbs them.
@@ -509,6 +597,7 @@ void AProtagonistPawn::UpdateCamera()
 		if (UShooterFeelSubsystem* Feel = World->GetSubsystem<UShooterFeelSubsystem>())
 		{
 			const FCameraFeel& Nudge = Feel->GetCameraFeel();
+			Camera->SetFieldOfView(FMath::Lerp(ProtagonistNormalFov, UShooterFeelSubsystem::GetAimFov(), Blend) + Nudge.FovAdd);
 			Camera->SetRelativeRotation(Nudge.Rotation);
 			Camera->SetRelativeLocation(Nudge.Location);
 			FPostProcessSettings& PostProcess = Camera->PostProcessSettings;

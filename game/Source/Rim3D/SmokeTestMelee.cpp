@@ -3,6 +3,9 @@
 #include "SmokeTest.h"
 
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
 
 #include "FightSubsystem.h"
@@ -11,6 +14,7 @@
 #include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
+#include "TerrainSubsystem.h"
 #include "WeaponDrawSubsystem.h"
 
 #include "ColonySim/Apparel.h"
@@ -22,6 +26,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
 #include "ColonySim/WeaponSlot.h"
@@ -38,6 +43,35 @@ namespace
 	const FVector MeleeSmokeRifleHolster(-14.0, 6.0, 104.0);
 	const FVector MeleeSmokeSidearmHolster(4.0, 23.0, 80.0);
 	const FVector MeleeSmokeMeleeHolster(-2.0, -23.0, 86.0);
+
+	// In the hand: hung on a hand bone (HoldDraw, docs/design/weapon-hold.md), or at the old fixed place when the hands
+	// are off (Weapons.Hands 0).
+	bool MeleeSmokeInHand(const USceneComponent* Component, const FVector& OldPlace, double Tolerance)
+	{
+		if (!Component)
+		{
+			return false;
+		}
+		const FName Socket = Component->GetAttachSocketName();
+		if (Socket == FName(TEXT("hand_r")) || Socket == FName(TEXT("hand_l")))
+		{
+			return true;
+		}
+		return Component->GetRelativeLocation().Equals(OldPlace, Tolerance);
+	}
+
+	// Where a component is in its actor's frame (cm), whatever it hangs from.
+	FVector MeleeSmokeActorSpace(const USceneComponent& Component)
+	{
+		const AActor* Owner = Component.GetOwner();
+		if (!Owner)
+		{
+			return Component.GetRelativeLocation();
+		}
+		FTransform Frame = Owner->GetActorTransform();
+		Frame.SetScale3D(FVector::OneVector);
+		return Frame.InverseTransformPosition(Component.GetComponentLocation());
+	}
 
 	struct FMeleeSmokeState
 	{
@@ -69,12 +103,19 @@ namespace
 		FVector PausedRifle = FVector::ZeroVector;
 		float WindupZ = 0.0f;
 		float WindupLean = 0.0f;
+		// A swing played as a motion clip (docs/design/body-motion.md): the clip's seconds left before its blow at the
+		// moment the game was stopped, and how far the right hand has gone from where it was.
+		bool bClipSwing = false;
+		float ClipToHit = 0.0f;
+		FVector HandStart = FVector::ZeroVector;
+		float MaxHandMove = 0.0f;
 		FString SwingPhaseAtPause;
 
 		int32 SwingsAtStart = 0;
 		int32 HitsAtStart = 0;
 		int32 OnTimeAtStart = 0;
 		int32 LateAtStart = 0;
+		int32 UntimedAtStart = 0;
 		int32 StopsAtStart = 0;
 		int32 ImpactsAtStart = 0;
 		int32 ReactionsAtStart = 0;
@@ -91,6 +132,11 @@ namespace
 		float MaxShieldRaise = 0.0f;
 		bool bShieldUpSeen = false;
 		FVector RaisedAt = FVector::ZeroVector;
+		// Where the shield sits while held up, summed over every frame it is fully up (RaisedAt is the mean), and the
+		// highest it went: one frame (a blow's jolt, a turn) does not decide the place.
+		FVector RaisedSum = FVector::ZeroVector;
+		int32 RaisedFrames = 0;
+		double RaisedTop = 0.0;
 	};
 
 	const colony::ThingView* MeleeSmokeFind(const USimSubsystem& Bridge, colony::Entity Thing)
@@ -121,6 +167,17 @@ namespace
 			}
 		}
 		return Best;
+	}
+
+	/** Where the right hand is, in cm from the actor's spot (the drawn body, as the weapon hold uses it). */
+	FVector MeleeSmokeHand(const ASimPawnActor& Actor)
+	{
+		const USkeletalMeshComponent* Mesh = Actor.GetMakeHumanMesh() ? Actor.GetMakeHumanMesh() : Actor.GetBody();
+		if (!Mesh || Mesh->GetBoneIndex(TEXT("hand_r")) == INDEX_NONE)
+		{
+			return FVector::ZeroVector;
+		}
+		return Mesh->GetBoneLocation(TEXT("hand_r"), EBoneSpaces::WorldSpace) - Actor.GetActorLocation();
 	}
 
 	/** A plain pawn (not a colonist) standing within 60 cm of the point. */
@@ -216,6 +273,29 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		ViewFrom(Eye, (P + FVector(0.0, 0.0, 100.0) - Eye).Rotation());
 	};
 
+	// Like BodyView, but pulls the camera in front of a tree or wall between it and the pawn.
+	const auto ClearBodyView = [=, this](colony::Entity Pawn, double Right, double Forward, double Height)
+	{
+		const ASimPawnActor* Actor = ActorOf(Pawn);
+		if (!Actor)
+		{
+			return;
+		}
+		const FVector Focus = Actor->GetActorLocation() + FVector(0.0, 0.0, 100.0);
+		FVector Eye = Actor->GetActorLocation() + Actor->GetActorRightVector() * Right + Actor->GetActorForwardVector() * Forward + FVector(0.0, 0.0, Height);
+		FCollisionQueryParams Params(FName(TEXT("MeleeSmokeCamera")), false);
+		for (TActorIterator<ASimPawnActor> It(GetWorld()); It; ++It)
+		{
+			Params.AddIgnoredActor(*It);
+		}
+		FHitResult Hit;
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Focus, Eye, ECC_Visibility, Params))
+		{
+			Eye = Focus + (Hit.Location - Focus) * 0.85;
+		}
+		ViewFrom(Eye, (Focus - Eye).Rotation());
+	};
+
 	const auto MarkBaselines = [=]()
 	{
 		UWeaponDrawSubsystem* W = Weapons();
@@ -224,6 +304,7 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		State->HitsAtStart = W->GetHitsSeen();
 		State->OnTimeAtStart = W->GetHitsOnTime();
 		State->LateAtStart = W->GetHitsLate();
+		State->UntimedAtStart = W->GetHitsUntimed();
 		State->StopsAtStart = W->GetHitStopsPlayed();
 		State->ImpactsAtStart = F->GetImpactsOfKind(colony::ProjectileHitKind::Pawn);
 		State->ReactionsAtStart = F->GetHitReactions();
@@ -372,7 +453,11 @@ void USmokeTestSubsystem::BuildMeleePhases()
 				Fail(FString::Printf(TEXT("holsters: the %s is at %s, expected %s"), Name, Component ? *Component->GetRelativeLocation().ToString() : TEXT("nowhere"), *Where.ToString()));
 			}
 		};
-		Near(0, MeleeSmokeHands, TEXT("rifle in the hands"));
+		if (const UStaticMeshComponent* Rifle = W->GetSlotComponent(State->Me, 0); !MeleeSmokeInHand(Rifle, MeleeSmokeHands, 3.0))
+		{
+			Fail(FString::Printf(TEXT("holsters: the rifle is not in the hands (at %s on %s)"), Rifle ? *MeleeSmokeActorSpace(*Rifle).ToString() : TEXT("nowhere"),
+				Rifle ? *Rifle->GetAttachSocketName().ToString() : TEXT("nothing")));
+		}
 		Near(1, MeleeSmokeSidearmHolster, TEXT("sidearm on the hip"));
 		if (const UStaticMeshComponent* Melee = W->GetSlotComponent(State->Me, 2); !Melee || FMath::Abs(Melee->GetRelativeLocation().Y - MeleeSmokeMeleeHolster.Y) > 3.0 || Melee->GetRelativeLocation().Z > 100.0)
 		{
@@ -454,7 +539,7 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			Fail(TEXT("switch_key: the rifle is not on the back after the switch"));
 		}
-		if (!Revolver || !Revolver->GetRelativeLocation().Equals(MeleeSmokeHands, 3.0) || W->GetHandsComponent(State->Me) != Revolver)
+		if (!Revolver || !MeleeSmokeInHand(Revolver, MeleeSmokeHands, 3.0) || W->GetHandsComponent(State->Me) != Revolver)
 		{
 			Fail(TEXT("switch_key: the revolver is not in the hand after the switch"));
 		}
@@ -555,9 +640,9 @@ void USmokeTestSubsystem::BuildMeleePhases()
 			return;
 		}
 		// At rest the blade is held at the side, tip up and forward.
-		if (!Blade->GetRelativeLocation().Equals(FVector(24.0, 20.0, 100.0), 4.0))
+		if (!MeleeSmokeInHand(Blade, FVector(24.0, 20.0, 100.0), 4.0))
 		{
-			Fail(FString::Printf(TEXT("draw_melee: the gladius rests at %s"), *Blade->GetRelativeLocation().ToString()));
+			Fail(FString::Printf(TEXT("draw_melee: the gladius rests at %s, not in the hand"), *MeleeSmokeActorSpace(*Blade).ToString()));
 		}
 		if (W->IsGun(Me->weapon))
 		{
@@ -624,9 +709,25 @@ void USmokeTestSubsystem::BuildMeleePhases()
 			return;
 		}
 		const FMeleeSwingTrack& Track = Actor->GetSwing();
-		if (State->bSent && Track.Phase == FMeleeSwingTrack::EPhase::DrawBack && Track.Clock >= Track.Length * 0.85f)
+		float ToHit = 0.0f;
+		float Rate = 1.0f;
+		if (State->bSent && Actor->GetMotionClipToHit(ToHit, Rate))
+		{
+			// The swing is an attack clip the sim moves the body along: stop a little before its blow.
+			if (Me->meleePhase == colony::MeleePhase::Windup && ToHit > 0.0f && ToHit <= 0.15f)
+			{
+				State->bPaused = true;
+				State->bClipSwing = true;
+				State->ClipToHit = ToHit;
+				B->SetSpeed(0);
+				State->WindupZ = static_cast<float>(MeleeSmokeHand(*Actor).Z);
+				State->SwingPhaseAtPause = Me->meleeTarget == State->Enemy ? TEXT("at the enemy") : TEXT("at no one");
+			}
+		}
+		else if (State->bSent && Track.Phase == FMeleeSwingTrack::EPhase::DrawBack && Track.Clock >= Track.Length * 0.85f)
 		{
 			State->bPaused = true;
+			State->bClipSwing = false;
 			B->SetSpeed(0);
 			FVector Location;
 			FRotator Rotation;
@@ -662,11 +763,19 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			Fail(TEXT("swing_windup: the sim does not have the protagonist winding up"));
 		}
-		if (State->WindupZ < 135.0f || State->WindupLean > -3.0f)
+		if (State->bClipSwing)
 		{
-			Fail(FString::Printf(TEXT("swing_windup: the blade is %.0f cm up and the body leans %.1f degrees (expected above 135 and back of -3)"), State->WindupZ, State->WindupLean));
+			// The clip is timed by the sim: stopped in the wind-up, its blow is still ahead, by no more than a few steps.
+			Notes.Add(FString::Printf(TEXT("swing_windup: stopped in the attack clip %.2f s before its blow, right hand %.0f cm up"), State->ClipToHit, State->WindupZ));
 		}
-		Notes.Add(FString::Printf(TEXT("swing_windup: stopped at the top of the wind-up, blade %.0f cm up, body leaning %.1f degrees"), State->WindupZ, State->WindupLean));
+		else
+		{
+			if (State->WindupZ < 135.0f || State->WindupLean > -3.0f)
+			{
+				Fail(FString::Printf(TEXT("swing_windup: the blade is %.0f cm up and the body leans %.1f degrees (expected above 135 and back of -3)"), State->WindupZ, State->WindupLean));
+			}
+			Notes.Add(FString::Printf(TEXT("swing_windup: stopped at the top of the wind-up, blade %.0f cm up, body leaning %.1f degrees"), State->WindupZ, State->WindupLean));
+		}
 	});
 
 	// 7. The blow lands: the game stops just after the hit moment.
@@ -688,9 +797,21 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		}
 		SideView(State->Me, State->Enemy, 260.0, 130.0);
 		const FMeleeSwingTrack& Track = Actor->GetSwing();
-		if (W->GetHitsSeen() + W->GetDeflectedSeen() > State->HitsAtStart && Track.Phase == FMeleeSwingTrack::EPhase::Follow)
+		float ToHit = 0.0f;
+		float Rate = 1.0f;
+		const bool bLanded = W->GetHitsSeen() + W->GetDeflectedSeen() > State->HitsAtStart;
+		if (bLanded && Actor->GetMotionClipToHit(ToHit, Rate))
 		{
 			State->bPaused = true;
+			State->bClipSwing = true;
+			State->ClipToHit = ToHit;
+			B->SetSpeed(0);
+			State->WindupZ = static_cast<float>(MeleeSmokeHand(*Actor).Z);
+		}
+		else if (bLanded && Track.Phase == FMeleeSwingTrack::EPhase::Follow)
+		{
+			State->bPaused = true;
+			State->bClipSwing = false;
 			B->SetSpeed(0);
 			FVector Location;
 			FRotator Rotation;
@@ -710,7 +831,16 @@ void USmokeTestSubsystem::BuildMeleePhases()
 			Bridge()->SetSpeed(1);
 			return;
 		}
-		if (State->WindupZ > 115.0f || State->WindupLean < 8.0f)
+		if (State->bClipSwing)
+		{
+			// The sim times the clip so that its blow falls on the hit step: on screen it must be at its blow, give or take
+			// four steps (0.13 s).
+			if (FMath::Abs(State->ClipToHit) > 0.13f)
+			{
+				Fail(FString::Printf(TEXT("swing_blow: when the blow landed the attack clip was %.2f s from its own blow (expected within 0.13)"), State->ClipToHit));
+			}
+		}
+		else if (State->WindupZ > 115.0f || State->WindupLean < 8.0f)
 		{
 			Fail(FString::Printf(TEXT("swing_blow: at the blow the blade is %.0f cm up and the body leans %.1f degrees forward (expected under 115 and over 8)"), State->WindupZ, State->WindupLean));
 		}
@@ -730,7 +860,14 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			Fail(TEXT("swing_blow: the struck pawn did not flinch"));
 		}
-		Notes.Add(FString::Printf(TEXT("swing_blow: stopped on the blow, blade %.0f cm up, body leaning %.1f degrees forward, enemy flinches %d"), State->WindupZ, State->WindupLean, Enemy ? Enemy->GetHitReactions() : 0));
+		if (State->bClipSwing)
+		{
+			Notes.Add(FString::Printf(TEXT("swing_blow: stopped on the blow, the attack clip %.2f s from its own blow, right hand %.0f cm up, enemy flinches %d"), State->ClipToHit, State->WindupZ, Enemy ? Enemy->GetHitReactions() : 0));
+		}
+		else
+		{
+			Notes.Add(FString::Printf(TEXT("swing_blow: stopped on the blow, blade %.0f cm up, body leaning %.1f degrees forward, enemy flinches %d"), State->WindupZ, State->WindupLean, Enemy ? Enemy->GetHitReactions() : 0));
+		}
 		Bridge()->SetSpeed(1);
 	});
 
@@ -738,9 +875,15 @@ void USmokeTestSubsystem::BuildMeleePhases()
 	AddPhase(TEXT("swing_flow"), [=, this]()
 	{
 		State->MaxLean = 0.0f;
+		State->MaxHandMove = 0.0f;
+		State->bClipSwing = false;
 		State->LastHealSeconds = 0.0f;
 		Bridge()->SetSpeed(1);
 		MarkBaselines();
+		if (const ASimPawnActor* Actor = ActorOf(State->Me))
+		{
+			State->HandStart = MeleeSmokeHand(*Actor);
+		}
 	}, 0.5f, 9.0f, [=, this]()
 	{
 		ASimPawnActor* Actor = ActorOf(State->Me);
@@ -753,6 +896,9 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		HoldDummy();
 		Weapons()->Swing();
 		State->MaxLean = FMath::Max(State->MaxLean, Actor->GetMeleeBodyDegrees());
+		// With attack clips the whole body swings by its animation: the right hand's travel shows it.
+		State->bClipSwing = State->bClipSwing || Actor->IsInMotionClip();
+		State->MaxHandMove = FMath::Max(State->MaxHandMove, static_cast<float>(FVector::Dist(MeleeSmokeHand(*Actor), State->HandStart)));
 	}, [=, this]()
 	{
 		UWeaponDrawSubsystem* W = Weapons();
@@ -762,13 +908,16 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		const int32 Hits = W->GetHitsSeen() - State->HitsAtStart;
 		const int32 OnTime = W->GetHitsOnTime() - State->OnTimeAtStart;
 		const int32 Late = W->GetHitsLate() - State->LateAtStart;
+		const int32 Untimed = W->GetHitsUntimed() - State->UntimedAtStart;
 		if (Swings < 4 || Hits < 3)
 		{
 			Fail(FString::Printf(TEXT("swing_flow: %d swings and %d hits in 9 s, expected at least 4 and 3"), Swings, Hits));
 		}
-		if (OnTime < Hits || Late > 0)
+		// Every blow the body shows a swing for lands on time. A blow can also land while the swinger's body plays no swing
+		// (the sim lets a swing finish though a push threw the swinger into a stagger): no moment to time, but most must have one.
+		if (OnTime < Hits - Untimed || Late > 0 || Untimed * 2 > Hits)
 		{
-			Fail(FString::Printf(TEXT("swing_flow: %d blows landed on time and %d late (the picture was up to %.1f steps behind), expected all on time"), OnTime, Late, W->GetMaxStepsBehind()));
+			Fail(FString::Printf(TEXT("swing_flow: %d blows landed on time, %d late, %d with no swing on screen (the picture was up to %.1f steps behind), expected all on time"), OnTime, Late, Untimed, W->GetMaxStepsBehind()));
 		}
 		if (W->GetHitStopsPlayed() - State->StopsAtStart < Hits)
 		{
@@ -778,12 +927,65 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			Fail(TEXT("swing_flow: a hit made no blood or no flinch"));
 		}
-		if (State->MaxLean < 20.0f)
+		if (State->bClipSwing ? State->MaxHandMove < 40.0f : State->MaxLean < 20.0f)
 		{
-			Fail(FString::Printf(TEXT("swing_flow: the body hardly moved in the swings (%.1f degrees)"), State->MaxLean));
+			Fail(FString::Printf(TEXT("swing_flow: the body hardly moved in the swings (bent %.1f degrees, right hand moved %.0f cm)"), State->MaxLean, State->MaxHandMove));
 		}
-		Notes.Add(FString::Printf(TEXT("swing_flow: %d swings, %d hits, %d on time, %d late, %d hit-stops, enemy flinched %d times, body bent up to %.0f degrees"), Swings, Hits, OnTime, Late,
-			W->GetHitStopsPlayed() - State->StopsAtStart, Enemy ? Enemy->GetHitReactions() : 0, State->MaxLean));
+		Notes.Add(FString::Printf(TEXT("swing_flow: %d swings, %d hits, %d on time, %d late, %d with no swing on screen, %d hit-stops, enemy flinched %d times, body bent up to %.0f degrees, right hand moved up to %.0f cm%s"), Swings, Hits, OnTime, Late, Untimed,
+			W->GetHitStopsPlayed() - State->StopsAtStart, Enemy ? Enemy->GetHitReactions() : 0, State->MaxLean, State->MaxHandMove, State->bClipSwing ? TEXT(" (attack clips)") : TEXT("")));
+	});
+
+	// Lock-on focus (docs/design/focus.md): Tab locks on to the enemy in front, the HP bar shows top middle, the body and the
+	// camera face it; F1 lets go.
+	AddPhase(TEXT("focus"), [=, this]()
+	{
+		State->LastHealSeconds = 0.0f;
+		State->bSent = false;
+		Bridge()->SetSpeed(1);
+		Prot()->FocusNext();
+	}, 1.0f, 2.0f, [=, this]()
+	{
+		SideView(State->Me, State->Enemy, 260.0, 130.0);
+		KeepAlive();
+		HoldDummy();
+	}, [=, this]()
+	{
+		UProtagonistSubsystem* P = Prot();
+		const ASimPawnActor* Actor = ActorOf(State->Me);
+		const ASimPawnActor* Enemy = ActorOf(State->Enemy);
+		if (P->GetFocusTarget() != State->Enemy)
+		{
+			Fail(FString::Printf(TEXT("focus: Tab locked on to #%u, expected the enemy #%u"), static_cast<uint32>(entt::to_integral(P->GetFocusTarget())),
+				static_cast<uint32>(entt::to_integral(State->Enemy))));
+		}
+		if (P->GetFocusBarFramesDrawn() <= 0)
+		{
+			Fail(TEXT("focus: no HP bar was drawn for the focused enemy"));
+		}
+		FVector Point;
+		if (!P->GetFocusPoint(Point))
+		{
+			Fail(TEXT("focus: no marker point on the focused enemy"));
+		}
+		float Off = 180.0f;
+		if (Actor && Enemy)
+		{
+			const float Wanted = (Enemy->GetActorLocation() - Actor->GetActorLocation()).Rotation().Yaw;
+			Off = FMath::Abs(FRotator::NormalizeAxis(Actor->GetActorRotation().Yaw - Wanted));
+			if (Off > 30.0f)
+			{
+				Fail(FString::Printf(TEXT("focus: the body faces %.0f degrees off the enemy"), Off));
+			}
+		}
+		const colony::ThingView* Target = Bridge()->GetCurrentSnapshot().find(State->Enemy);
+		Notes.Add(FString::Printf(TEXT("focus: locked on, bar drawn %d frames, body %.0f degrees off, enemy worst part %.0f%%"), P->GetFocusBarFramesDrawn(), Off,
+			Target ? Target->lowestPart * 100.0f : -1.0f));
+		const int64 Sent = P->GetFocusCommandsSent();
+		P->EndFocus();
+		if (P->GetFocusCommandsSent() != Sent + 1)
+		{
+			Fail(TEXT("focus: middle mouse (EndFocus) sent no Clear"));
+		}
 	});
 
 	// 9. The right mouse button: the blade comes across the chest and stays there.
@@ -986,8 +1188,29 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		State->ShieldOrdersAtStart = Weapons()->GetShieldOrders();
 		State->ShieldBlocksAtStart = Weapons()->GetShieldBlocksSeen();
 		State->SparksAtStart = Fight()->GetImpactsOfKind(colony::ProjectileHitKind::Armor);
+		// Noon: the shield's colour is judged in the picture, and the night leaves a face turned from the moon black.
+		if (IConsoleVariable* Hour = IConsoleManager::Get().FindConsoleVariable(TEXT("Sky.Hour")))
+		{
+			Hour->Set(12.0f, ECVF_SetByCode);
+		}
 		// Away from the duel, the protagonist facing east with the gladius in hand.
 		const colony::CellPos A{State->Cell.x - 12, State->Cell.y - 30, 0};
+		// No trees or bushes in the screenshot's way.
+		for (int32 Dy = -6; Dy <= 6; ++Dy)
+		{
+			for (int32 Dx = -6; Dx <= 6; ++Dx)
+			{
+				const colony::CellPos C{A.x + Dx, A.y + Dy, 0};
+				if (Sim.map().inBounds(C) && Sim.plants().has(C) && Sim.defs().get(Sim.plants().defAt(C)).defName() != "Plant_Grass")
+				{
+					Sim.plants().remove(C);
+					if (UTerrainSubsystem* Terrain = GetWorld()->GetSubsystem<UTerrainSubsystem>())
+					{
+						Terrain->MarkPlantDirty(C);
+					}
+				}
+			}
+		}
 		colony::Position& MeAt = Registry.get<colony::Position>(State->Me);
 		MeAt.x = A.x + 0.5f;
 		MeAt.y = A.y + 0.5f;
@@ -999,10 +1222,11 @@ void USmokeTestSubsystem::BuildMeleePhases()
 			B->Submit(colony::SwitchWeaponCommand{State->Me, colony::WeaponSlot::Melee});
 		}
 		std::string Why;
-		State->Shield = Sim.apparel().make(Sim.defs().idOf("Things", "Apparel_ShieldMedium"), Sim.defs().idOf("Things", "Steel"), -1, A, &Why);
+		// Wood: the brightest model, easy to see in the screenshot.
+		State->Shield = Sim.apparel().make(Sim.defs().idOf("Things", "Apparel_ShieldMedium"), Sim.defs().idOf("Things", "WoodLog"), -1, A, &Why);
 		if (State->Shield == colony::kNoEntity || !Sim.apparel().putOn(State->Me, State->Shield, Why))
 		{
-			Fail(FString::Printf(TEXT("shield: could not put a steel medium shield on the protagonist: %s"), UTF8_TO_TCHAR(Why.c_str())));
+			Fail(FString::Printf(TEXT("shield: could not put a wooden medium shield on the protagonist: %s"), UTF8_TO_TCHAR(Why.c_str())));
 		}
 		B->Submit(colony::SpawnThingCommand{"Human", colony::CellPos{A.x + 1, A.y, 0}, 1});
 		B->Submit(colony::SpawnThingCommand{"Melee_Club", colony::CellPos{A.x + 1, A.y + 2, 0}, 1});
@@ -1021,7 +1245,8 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		}
 		colony::Sim& Sim = *const_cast<colony::Sim*>(B->GetSim());
 		const colony::CellPos A{State->Cell.x - 12, State->Cell.y - 30, 0};
-		BodyView(State->Me, 260.0, 120.0, 150.0);
+		// From the front left and a little above, the shield arm's side, in front of any trunk in the way.
+		ClearBodyView(State->Me, -170.0, 190.0, 190.0);
 		KeepAlive();
 		MeleeSmokeHeal(Sim, State->Basher);
 		// Held for the first 8 seconds, then let go.
@@ -1032,7 +1257,11 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			if (const UStaticMeshComponent* Shield = Weapons()->GetShieldComponent(State->Me))
 			{
-				State->RaisedAt = Shield->GetRelativeLocation();
+				const FVector Here = MeleeSmokeActorSpace(*Shield);
+				State->RaisedSum += Here;
+				++State->RaisedFrames;
+				State->RaisedAt = State->RaisedSum / static_cast<double>(State->RaisedFrames);
+				State->RaisedTop = FMath::Max(State->RaisedTop, Here.Z);
 			}
 		}
 		if (!State->bStaged)
@@ -1049,6 +1278,17 @@ void USmokeTestSubsystem::BuildMeleePhases()
 			B->Submit(colony::SetFactionCommand{State->Basher, 2});
 			return;
 		}
+		// The player keeps the camera, and so the shield, on the clubber: its footwork takes it round the side of a shield
+		// left facing one way (that, and a gladius parry, made this phase see no blows on the shield half the time).
+		if (const colony::ThingView* Basher = Snapshot(State->Basher))
+		{
+			UProtagonistSubsystem* P = Prot();
+			const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Basher->y - Me->y, Basher->x - Me->x));
+			if (P && P->GetBody())
+			{
+				P->GetBody()->Look(FRotator::NormalizeAxis(Wanted - P->GetBody()->GetYaw()), 0.0f);
+			}
+		}
 		if (PhaseTime < 8.0f && B->GetGameSeconds() > State->LastOrderStep && Sim.melee().ready(State->Basher) && Sim.melee().inReach(State->Basher, State->Me))
 		{
 			B->Submit(colony::MeleeCommand{State->Basher, State->Me, colony::MeleeMode::Attack});
@@ -1058,8 +1298,16 @@ void USmokeTestSubsystem::BuildMeleePhases()
 	{
 		UWeaponDrawSubsystem* W = Weapons();
 		W->ScriptRightMouse(false, false);
+		if (IConsoleVariable* Hour = IConsoleManager::Get().FindConsoleVariable(TEXT("Sky.Hour")))
+		{
+			Hour->Set(-1.0f, ECVF_SetByCode);
+		}
 		const colony::ThingView* Me = Snapshot(State->Me);
 		const UStaticMeshComponent* Shield = W->GetShieldComponent(State->Me);
+		if (Shield)
+		{
+			Notes.Add(FString::Printf(TEXT("shield: materials %s"), *UWeaponDrawSubsystem::DescribeMaterials(Shield->GetStaticMesh())));
+		}
 		if (!Me || !Me->shield.valid() || Me->shieldSlung)
 		{
 			Fail(TEXT("shield: the snapshot does not show a shield on the protagonist's arm"));
@@ -1078,21 +1326,37 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		{
 			Fail(FString::Printf(TEXT("shield: the sim raised it: %s; drawn up %.2f of the way"), State->bShieldUpSeen ? TEXT("yes") : TEXT("no"), State->MaxShieldRaise));
 		}
-		if (State->RaisedAt.X < 30.0 || FMath::Abs(State->RaisedAt.Y) > 15.0 || State->RaisedAt.Z < 100.0)
+		// On the forearm, the block clip lifts it before the chest and face (docs/design/weapon-hold.md): the left arm
+		// crosses the body, so it may sit a little right of the middle.
+		if (State->RaisedAt.X < 30.0 || FMath::Abs(State->RaisedAt.Y) > 25.0 || State->RaisedAt.Z < 100.0 || State->RaisedAt.Z > 150.0)
 		{
-			Fail(FString::Printf(TEXT("shield: raised it sits at %s, expected in front of the chest"), *State->RaisedAt.ToString()));
+			Fail(FString::Printf(TEXT("shield: raised it sits at %s, expected in front of the chest or face"), *State->RaisedAt.ToString()));
 		}
 		if (Me->shieldUp || W->GetShieldRaise(State->Me) > 0.01f)
 		{
 			Fail(TEXT("shield: still up 2 seconds after the button was let go"));
 		}
+		// The real model (docs/design/shields.md "Models"), when the ShieldArt commandlet has made it: thin along the face
+		// (x), about 60 cm wide and 75 cm tall for a medium shield.
+		FString ModelNote = TEXT("plain shapes (the ShieldArt commandlet has not made the models)");
+		if (const UStaticMesh* Mesh = Shield->GetStaticMesh(); Mesh && Mesh->GetPathName().Contains(TEXT("/Generated/Shields/")))
+		{
+			const FVector Size = Mesh->GetBoundingBox().GetSize();
+			ModelNote = FString::Printf(TEXT("model %s, %.0f x %.0f x %.0f cm"), *Mesh->GetName(), Size.X, Size.Y, Size.Z);
+			if (Size.X > Size.Y || Size.X > Size.Z || Size.Z < 60.0 || Size.Z > 95.0 || Size.Y < 45.0 || Size.Y > 75.0)
+			{
+				Fail(FString::Printf(TEXT("shield: the medium shield model is %s, expected thin along x, about 60 wide and 75 tall (turned or scaled wrong on import)"), *ModelNote));
+			}
+		}
+		Notes.Add(FString::Printf(TEXT("shield: drawn as %s"), *ModelNote));
 		const int32 Blocks = W->GetShieldBlocksSeen() - State->ShieldBlocksAtStart;
 		const int32 Sparks = Fight()->GetImpactsOfKind(colony::ProjectileHitKind::Armor) - State->SparksAtStart;
 		if (State->bStaged && (Blocks < 1 || Sparks < 1))
 		{
 			Fail(FString::Printf(TEXT("shield: %d blows landed on the shield, %d sparks"), Blocks, Sparks));
 		}
-		Notes.Add(FString::Printf(TEXT("shield: raised at %s, %d blows on the shield, %d sparks, %d commands"), *State->RaisedAt.ToString(), Blocks, Sparks,
+		Notes.Add(FString::Printf(TEXT("shield: raised at %s on average over %d frames (top %.1f), %d blows on the shield, %d sparks, %d commands"),
+			*State->RaisedAt.ToString(), State->RaisedFrames, State->RaisedTop, Blocks, Sparks,
 			W->GetShieldOrders() - State->ShieldOrdersAtStart));
 	});
 }

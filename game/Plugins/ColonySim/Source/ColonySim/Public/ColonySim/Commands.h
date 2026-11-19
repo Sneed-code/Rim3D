@@ -6,6 +6,7 @@
 #include "ColonySim/Cover.h"
 #include "ColonySim/BillMode.h"
 #include "ColonySim/Entity.h"
+#include "ColonySim/FightResponse.h"
 #include "ColonySim/Grid.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Trade.h"
@@ -194,6 +195,14 @@ struct ShootCommand {
     float y = 0.0f;
     float z = 0.0f;
     bool player = false;
+    // Player shots: the drawn body part under the crosshair (CombatSystem DrawnAim, docs/design/aiming.md). `aimPawn`
+    // none for an ordinary shot at the point. The spot: metres east (dx) and north (dy) of the aimed pawn's position
+    // and up from the ground under it.
+    Entity aimPawn = kNoEntity;
+    int aimPart = -1;
+    float aimDx = 0.0f;
+    float aimDy = 0.0f;
+    float aimUp = 0.0f;
 };
 
 // Stands, crouches or lies down: changes the pawn's hitboxes, muzzle height and what hides it
@@ -1090,6 +1099,51 @@ struct PatchCommand {
     Entity pawn = kNoEntity;
 };
 
+// Stealth (docs/design/stealth.md): sets how watchful a fighter is, 0 unaware, 1 suspicious, 2 alerted. A dev and
+// scenario command (guards at their posts, the practice range's targets). Unaware and suspicious also make it forget
+// the enemies it knew. Fails for a pawn that isn't a fighter or a number above 2.
+struct SetAlertCommand {
+    Entity pawn = kNoEntity;
+    uint8_t alert = 0;
+};
+
+// Lock-on focus (sneed, 2026-11-17; docs/design/focus.md), Dark Souls style. Set: `pawn` locks on to `target` (any
+// living pawn within 25 m). Next: the next nearest target (Tab, WoW style): enemies within 20 m, nearest first, those in
+// front before those behind. Clear: let go (F1). A focused pawn faces its target, and the player's swing with no target
+// goes at the focus's centre when it is in reach. Fails if the pawn isn't on the map, or there is nothing to lock on to.
+struct FocusCommand {
+    Entity pawn = kNoEntity;
+    Entity target = kNoEntity;
+    FocusMode mode = FocusMode::Next;
+};
+
+// What a pawn does about enemies (docs/design/focus.md "Fight response"): Attack (as now), Fists (fights back, with its
+// fists if unarmed), Flee (runs when attacked), FleeOnSight (runs when it sees an enemy). Fails if it isn't a pawn.
+struct SetFightResponseCommand {
+    Entity pawn = kNoEntity;
+    FightResponse response = FightResponse::Attack;
+};
+
+// Earthworks (docs/design/earthworks.md): plans the ground of `area` dug or filled flat to `baseCm`
+// (centimetres, snapped to Map::kLevelStepM), for pawns to do. Cells with a building or plan, rock,
+// water, or more than ConstructionRules earthMaxM from the height are left out. Fails if no cell was planned.
+struct LevelEarthCommand {
+    CellRect area;
+    int baseCm = 0;
+};
+
+// Drops earthworks planned on `area` (not those a building plan needs). Fails if there were none.
+struct CancelEarthworksCommand {
+    CellRect area;
+};
+
+// Unstuck (docs/design/earthworks.md "Stuck"): puts the pawn on the nearest clear spot within 12 m (walkable,
+// room to stand, open round it), stopping its walk. Unreal sends it after the player's 5-second F12 wait.
+// Fails if the pawn can't be moved or there is no clear spot.
+struct UnstuckCommand {
+    Entity pawn = kNoEntity;
+};
+
 // Work groups (docs/design/ui-layout.md, the Work tab): puts a colonist in a named group the player uses to sort and
 // filter the work grid (Fighters, Growers, any name). Up to 24 characters; an empty name takes the colonist out of its
 // group. Groups only sort the grid: the work a colonist does still comes from its priorities. Fails for a pawn that is
@@ -1133,7 +1187,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              ArtilleryCommand, ArrestCommand, PodCommand, CommsCommand, ScannerCommand,
                              InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand,
                              SleepCommand, SetLandingZoneCommand,
-                             PatchCommand, SetWorkGroupCommand>;
+                             PatchCommand, SetAlertCommand, FocusCommand, SetFightResponseCommand,
+                             LevelEarthCommand, CancelEarthworksCommand, UnstuckCommand, SetWorkGroupCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
 // day) it was applied in. Failed commands are logged too.

@@ -42,6 +42,7 @@ struct LooksMark {
 struct PawnLooks {
     std::string lineage = "Baseline";  // Lineages def
     bool female = false;
+    std::string name;  // a first name for a pawn with no Colonist record (one spawned as a stand-in, a range target)
     BodyType body = BodyType::Average;
     float weight = 0.0f;   // -1 (thin body) to 1 (heavy body): the body shape blend
     float height = 1.0f;   // times the height of the average man (1.80 m)

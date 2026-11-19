@@ -534,6 +534,7 @@ bool TradeSystem::spawnPawn(Visit& visit, const KindInfo& kind, VisitorRole role
         if (settlementCell(visit, post)) {
             f.goal = post;
         }
+        f.alert = Alert::Unaware;  // a guard at its post, at ease until it sees or hears something (stealth.md)
     }
     fighters_.replan(pawn);
     visit.members.push_back(pawn);

@@ -1,4 +1,5 @@
 #include "ShooterFeelSubsystem.h"
+#include "KeyBindings.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -17,6 +18,7 @@
 
 #include <imgui.h>
 
+#include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
 #include "VisualMesh.h"
@@ -375,6 +377,29 @@ void UShooterFeelSubsystem::OnExplosion(const colony::Event& Event)
 		VignettePulse = FMath::Max(VignettePulse, 0.6f * Closeness);
 	}
 
+	// A fire blast (a molotov, an incendiary shell; sneed 2026-11-19): a wide low splash of burning fuel and black smoke, a
+	// soft flash and a small push on the camera, no fragments or debris. The sim lights the ground (FireSubsystem draws it).
+	const colony::DefId Type = Event.def;
+	if (Type.valid() && Source->GetDefs() && Source->GetDefs()->get(Type).text("mix.sub") == "Fire")
+	{
+		const float FireScale = FMath::Max(RadiusM / 1.1f, 0.6f);
+		Burst(EBlastParticle::FireOuter, At + FVector(0.0, 0.0, 15.0), FMath::RoundToInt(14 * FireScale), 260.0f * FireScale, 0.25f, 60.0f * FireScale, 0.7f, 0.0f);
+		Burst(EBlastParticle::FireCore, At + FVector(0.0, 0.0, 25.0), FMath::RoundToInt(8 * FireScale), 120.0f * FireScale, 0.9f, 50.0f * FireScale, 0.6f, -30.0f);
+		Burst(EBlastParticle::Smoke, At + FVector(0.0, 0.0, 60.0), FMath::RoundToInt(10 * FireScale), 80.0f * FireScale, 1.0f, 60.0f * FireScale, 3.0f, -60.0f);
+		Burst(EBlastParticle::Spark, At + FVector(0.0, 0.0, 10.0), FMath::RoundToInt(12 * FireScale), 350.0f * FireScale, 0.6f, 1.5f, 0.6f, 980.0f);
+		FlashAt = At + FVector(0.0, 0.0, 80.0);
+		FlashPeak = 4000.0f * FMath::Clamp(FireScale, 0.6f, 2.0f);
+		FlashAge = 0.0f;
+		for (UPointLightComponent* Light : FlashLights)
+		{
+			if (Light)
+			{
+				Light->SetWorldLocation(FlashAt);
+			}
+		}
+		return;
+	}
+
 	// Fireball, smoke, sparks and dust.
 	const float Scale = RadiusM / 1.9f;
 	Burst(EBlastParticle::FireCore, At + FVector(0.0, 0.0, 30.0), FMath::RoundToInt(5 + 3 * Scale), 140.0f * Scale, 0.8f, 55.0f * Scale, 0.35f + 0.1f * Scale, 0.0f);
@@ -514,13 +539,26 @@ void UShooterFeelSubsystem::UpdateKick(float DeltaTime, const colony::Sim& Sim, 
 	// A dodge roll ducks the camera under it and kicks the blur: from where the sim has the roll (27 steps in all).
 	float Dip = 0.0f;
 	float RollBlur = 0.0f;
+	float Dash = 0.0f;
 	if (View && View->rollPhase > 0)
 	{
 		const float Progress = FMath::Clamp(1.0f - static_cast<float>(View->rollStepsLeft) / 27.0f, 0.0f, 1.0f);
-		Dip = FMath::Sin(PI * Progress);
-		RollBlur = View->rollPhase == 2 ? 0.7f : 0.25f;
+		// In first person the same move is a dash (sneed 2026-11-17): the view stays level, blurs hard and widens a little.
+		const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+		const AProtagonistPawn* Body = Protagonist ? Protagonist->GetBody() : nullptr;
+		if (Body && Body->IsFirstPerson())
+		{
+			Dash = FMath::Sin(PI * Progress);
+			RollBlur = View->rollPhase == 2 ? 1.0f : 0.5f;
+		}
+		else
+		{
+			Dip = FMath::Sin(PI * Progress);
+			RollBlur = View->rollPhase == 2 ? 0.7f : 0.25f;
+		}
 	}
 	RollDip = FMath::FInterpTo(RollDip, Dip, DeltaTime, 18.0f);
+	DashKick = FMath::FInterpTo(DashKick, Dash, DeltaTime, 14.0f);
 	BlurPulse = FMath::Max(BlurPulse - DeltaTime * 1.4f, RollBlur);
 	VignettePulse = FMath::Max(0.0f, VignettePulse - DeltaTime * 1.1f);
 }
@@ -563,6 +601,7 @@ void UShooterFeelSubsystem::Advance(float DeltaTime)
 	Feel.Rotation = FRotator(KickPitch + Shake.Pitch - RollDip * 9.0f, KickYaw + Shake.Yaw, Shake.Roll);
 	Feel.Location = ShakeMove + FVector(0.0, 0.0, -RollDip * 55.0f);
 	const float Blur = GetBlurScale();
+	Feel.FovAdd = DashKick * 9.0f;
 	Feel.MotionBlur = Blur <= 0.0f ? 0.0f : FMath::Clamp(0.5f * Blur + BlurPulse * 0.8f * Blur, 0.0f, 1.0f);
 	Feel.Vignette = VignettePulse * FMath::Min(Blur, 1.0f);
 	Feel.Fringe = FMath::Min(1.5f, BlurPulse * 1.2f + VignettePulse) * FMath::Min(Blur, 1.0f);
@@ -659,6 +698,27 @@ void UShooterFeelSubsystem::UpdateParticles(float DeltaTime, const USimSubsystem
 				break;
 			}
 		}
+		// In flight, what it trails (the Projectiles def's visual.trail, sneed 2026-11-19): a rocket's smoke and flame, a
+		// molotov's burning rag, a launcher shell's thin puff. About one puff per 60th of a second whatever the frame rate.
+		if (View.fuse < 0 && DeltaTime > 0.0f && Source.GetSpeed() > 0)
+		{
+			const std::string Trail = Source.GetDefs()->get(View.def).text("visual.trail");
+			const int32 Puffs = FMath::Clamp(FMath::FloorToInt32(DeltaTime * 60.0f + Random.FRand()), 0, 4);
+			const FVector Back = -FVector(View.vx, View.vy, View.vz).GetSafeNormal() * 25.0;
+			if (Trail == "rocket" && Puffs > 0)
+			{
+				Burst(EBlastParticle::Smoke, At + Back, Puffs * 2, 25.0f, 0.3f, 22.0f, 1.8f, -15.0f);
+				Burst(EBlastParticle::FireCore, At + Back * 0.6, Puffs, 15.0f, 0.2f, 14.0f, 0.12f, 0.0f);
+			}
+			else if (Trail == "flame" && Puffs > 0)
+			{
+				Burst(EBlastParticle::FireCore, At + FVector(0.0, 0.0, 6.0), Puffs, 10.0f, 0.8f, 7.0f, 0.18f, -60.0f);
+			}
+			else if (Trail == "puff" && Puffs > 0)
+			{
+				Burst(EBlastParticle::Smoke, At + Back, Puffs, 10.0f, 0.3f, 8.0f, 0.6f, -10.0f);
+			}
+		}
 		// A lit fuse blinks quicker as it runs out.
 		const float Blink = View.fuse >= 0 ? 1.0f + 0.35f * FMath::Sin(static_cast<float>(View.fuse) * (0.6f + 6.0f / (1.0f + View.fuse))) : 1.0f;
 		ByKind[static_cast<int32>(EBlastParticle::Grenade)].Add(FTransform(FRotator(static_cast<float>(Now.gameSeconds) * 20.0f, static_cast<float>(Now.gameSeconds) * 35.0f, 0.0f), At + FVector(0.0, 0.0, 4.0), FVector(Blink)));
@@ -730,7 +790,7 @@ void UShooterFeelSubsystem::Tick(float DeltaTime)
 		LastGeneration = Source->GetSimGeneration();
 		Teardown();
 		Shakes.Reset();
-		KickPitch = KickYaw = RollDip = BlurPulse = VignettePulse = 0.0f;
+		KickPitch = KickYaw = RollDip = DashKick = BlurPulse = VignettePulse = 0.0f;
 	}
 	GetCameraFeel();
 	if (Holder)
@@ -783,7 +843,8 @@ void UShooterFeelSubsystem::DrawSettingsBody(float Scale)
 		bChanged = true;
 	}
 	ImGui::TextUnformatted("0 turns shake, blur or kick off. Hold the right mouse");
-	ImGui::TextUnformatted("button with a gun to aim; Left Shift rolls; G throws a grenade.");
+	ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("button with a gun to aim; %s rolls (dashes in first person); %s throws a grenade."),
+		*Rim3DKeys::GetKeyLabel(ERim3DAction::RollDash), *Rim3DKeys::GetKeyLabel(ERim3DAction::Grenade))));
 	ImGui::PopItemWidth();
 	if (bChanged)
 	{

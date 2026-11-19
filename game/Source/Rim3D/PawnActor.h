@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 
+#include "DrawnHit.h"
 #include "MeleePose.h"
 #include "PawnAnimInstance.h"
 #include "PawnSubsystem.h"
@@ -130,9 +131,29 @@ public:
 	bool PlayHitClip(const FVector& ShotDirection, bool bStaggered);
 	int32 GetHitClipsPlayed() const { return HitClipsPlayed; }
 	int32 GetHitReactions() const { return HitReactions; }
+	/** Fight faces (docs/design/focus.md "Faces"): how far the pain and angry faces show now (0 to 1), and how many pain
+	 *  faces a hit started. Cosmetic. */
+	float GetPainFace() const { return PainFace; }
+	float GetAngryFace() const { return AngryFace; }
+	int32 GetPainFacesShown() const { return PainFacesShown; }
 	bool IsReacting() const { return ReactionAge < kHitReactionSeconds; }
 	/** The lean now, in degrees (0 when still). */
 	float GetLeanDegrees() const { return LeanDegrees; }
+
+	// --- The hit layer (docs/design/body-health.md part E). All cosmetic. ---
+
+	/** A blow or a bullet landed: the zone it hit is knocked along `DirectionWorld` and springs back with a wobble, on
+	 *  top of whatever the body is doing (USimPawnAnimInstance's hit layer). `Part` is the sim's body part (the zone is
+	 *  the one the sim has it in); without one the zone is taken from how high `AtWorld` is on the body and which side.
+	 *  `Strength` is 0 to 1. */
+	void KickZone(const USimSubsystem& Bridge, int32 Part, const FVector& AtWorld, const FVector& DirectionWorld, float Strength);
+	int32 GetZoneKicks() const { return ZoneKicks; }
+	ESimPawnZone GetLastKickZone() const { return LastKickZone; }
+	/** The crawl of a pawn downed by its torso and awake: whether the crawl clip plays now, and how often it started. */
+	bool IsCrawling() const { return bCrawling; }
+	int32 GetCrawlsPlayed() const { return CrawlsPlayed; }
+	/** Whether the body is bent over a wound it is patching. */
+	bool IsPatchPosed() const { return bPatchPosed; }
 
 	/** Downed and dead pawns go limp: the mannequin simulates physics on a floor made under it, and the
 	 *  MetaHuman follows it. `Impulse` is a velocity change in cm/s (the shot that did it). Cosmetic: the
@@ -141,12 +162,33 @@ public:
 	/** Gets up again: the animation takes over. */
 	void StopRagdoll();
 	bool IsRagdoll() const { return bRagdoll; }
+	/** The ragdoll's floor taken away (carried on a back, BodyCarrySubsystem) or made again under where the pawn is now. */
+	void ResetRagdollFloor(bool bWanted);
 	/** Where the ragdoll's pelvis is now (world cm); false if the pawn is not a ragdoll. */
 	bool GetRagdollPelvis(FVector& OutLocation) const;
 	int32 GetRagdollsStarted() const { return RagdollsStarted; }
 
+	/** Dismemberment (body-health.md part F): the limbs and head the sim says are gone (SeveredBits) are folded away on
+	 *  every mesh, and what hung on them is hidden. Only ever more: a body does not grow them back. */
+	void ApplySevered(uint16 Bits);
+	uint16 GetSeveredShown() const { return SeveredShown; }
+	/** How many stumps got their flesh cap. */
+	int32 GetSeveredCaps() const { return SeveredCaps; }
+	/** The piece itself, as the body has it now, thrown clear (SeveredPieceActor.cpp). Null if the body has no such bone. */
+	class ASeveredPieceActor* SpawnSeveredPiece(uint16 Bit);
+
 	/** The mesh that wears wound decals: the MetaHuman's body if there is one, else the mannequin. */
 	USkeletalMeshComponent* GetDecalMesh() const;
+	/** The player's crosshair against the body as it is drawn this frame (DrawnHit, docs/design/aiming.md). False if
+	 *  hidden or missed; `bOutHasSkeleton` false if the body has no humanlike bones (animals: the sim's hitboxes decide). */
+	bool TraceDrawnBody(const FVector& Start, const FVector& Direction, double MaxCm, DrawnHit::FResult& Out, bool& bOutHasSkeleton) const;
+	/** How far a world point is from the body as drawn (0 on it), cm; -1 if the body has no humanlike bones. */
+	double DistanceToDrawnBodyCm(const FVector& Point) const;
+	/** The drawn head's middle this frame (world); false without the bones. For tests that aim at heads. */
+	bool GetDrawnHeadCentre(FVector& Out) const;
+	/** Where the line From-To first meets the drawn body (the animated mannequin's physics shapes, which every body
+	 *  follows; no collision needed). False if it misses. */
+	bool TraceDrawnBody(const FVector& From, const FVector& To, FVector& OutHit);
 
 	static constexpr float kHitReactionSeconds = 0.55f;
 
@@ -171,7 +213,11 @@ public:
 	/** Clips the sim moved this body along so far, and whether one is playing now (docs/design/body-motion.md). */
 	int32 GetMotionClipsPlayed() const { return MotionClipsPlayed; }
 	bool IsInMotionClip() const { return MotionClipDef != MAX_uint32; }
+	bool IsMotionClipUpper() const { return IsInMotionClip() && bMotionUpper; }
 	FVector GetMotionOffset() const { return MotionOffset; }
+	/** While an attack clip is on screen: the seconds of the clip still to play before its blow (negative once past it) and
+	 *  the rate it plays at. False when no clip with a blow is playing. */
+	bool GetMotionClipToHit(float& OutSeconds, float& OutRate) const;
 	float GetRollAngle() const { return RollAngle; }
 	int32 GetRollsSeen() const { return RollsSeen; }
 	/** 1 standing, 0.66 crouching, 0.24 lying: what weapon heights are scaled by. */
@@ -318,6 +364,8 @@ private:
 	/** The hit reaction's lean and the melee pose, applied to the body together. */
 	void ApplyBodyPose(float GameDelta, bool bBlocking);
 	void AdvanceJump(float GameDelta);
+	/** Animate after this frame's move: the meshes tick in TG_PostUpdateWork (TG_PrePhysics while a ragdoll). */
+	void UpdateMeshTickGroups();
 	/** The swing or block, plus the dodge: what the body and the weapon do now. */
 	FMeleePose ComputeMeleePose() const;
 
@@ -328,12 +376,26 @@ private:
 	FSimPawnLooks Looks;
 	bool bHasLooks = false;
 	bool bRagdoll = false;
+	/** The tick group the meshes were last put in, and how many meshes that was (more come with looks). */
+	int32 MeshTickGroup = -1;
+	int32 MeshTickCount = 0;
+	uint16 SeveredShown = 0;
+	int32 SeveredCaps = 0;
+	/** Meshes hidden whole because the head is off (a MetaHuman face); they still go into the head's piece. */
+	TSet<TWeakObjectPtr<class USkinnedMeshComponent>> SeveredHidden;
 	int32 RagdollsStarted = 0;
 	float ReactionAge = kHitReactionSeconds;
 	int32 HitClipsPlayed = 0;
+	// The react to a hit playing on the upper body, how long it has played (game seconds) and when it is let go.
+	TWeakObjectPtr<class UAnimMontage> HitMontage;
+	float HitClipAge = 0.0f;
+	float HitClipEndSeconds = 0.0f;
 	float ReactionStrength = 0.0f;
 	FVector ReactionDirection = FVector::ForwardVector;
 	float LeanDegrees = 0.0f;
+	/** The hit lean drawn last, and the one a new hit took over from (eased out under the new one). */
+	FQuat LeanShown = FQuat::Identity;
+	FQuat LeanCarry = FQuat::Identity;
 	int32 HitReactions = 0;
 
 	FMeleeSwingTrack Swing;
@@ -356,13 +418,56 @@ private:
 	// the visible body is set back so that its hips stay exactly on the sim's position while the clip carries them.
 	uint32 MotionClipDef = MAX_uint32;
 	float MotionClipTime = 0.0f;
+	float MotionClipFrom = 0.0f;  // the clip def's trim start and blow, in the animation's and the clip's seconds
+	float MotionClipHit = 0.0f;
 	TWeakObjectPtr<class UAnimMontage> MotionMontage;
 	TWeakObjectPtr<class UAnimSequence> MotionAsset;
 	int32 MotionPelvisBone = INDEX_NONE;
 	FVector MotionPelvisStart = FVector::ZeroVector;
 	FVector MotionOffset = FVector::ZeroVector;
 	int32 MotionClipsPlayed = 0;
+	/** The clip playing is drawn on the upper body only (the hips are the walk's: no set-back). */
+	bool bMotionUpper = false;
+	// The whole-body clip the one now playing took over from, while it fades out: its share of the set-back.
+	TWeakObjectPtr<class UAnimMontage> MotionOutMontage;
+	TWeakObjectPtr<class UAnimSequence> MotionOutAsset;
+	int32 MotionOutPelvisBone = INDEX_NONE;
+	FVector MotionOutPelvisStart = FVector::ZeroVector;
 	bool UpdateMotionClip(const USimSubsystem& Bridge, const colony::ThingView& Now, float GameDelta);
+	// The hit layer (body-health.md part E): the zone a sim body part or a sim zone is on screen, hits so far, the hurt
+	// legs (looked up a few times a second), and the crawl clip with its own set-back (its travel is in its hips too).
+	ESimPawnZone ZoneOfSimZone(const USimSubsystem& Bridge, int32 SimZone) const;
+	void UpdateHurt(const USimSubsystem& Bridge, const colony::ThingView& Now, float DeltaTime);
+	void UpdateCrawl(const colony::ThingView& Now, float GameDelta);
+	// Fight faces (docs/design/focus.md "Faces"): the pain face after a hit and the angry face in melee, eased 0 to 1 and
+	// laid on the MakeHuman body's Face_ morphs over the face it had before (kept in FaceBase while either shows).
+	void UpdateFightFace(const USimSubsystem& Bridge, const colony::ThingView& Now, float GameDelta);
+	void ApplyFightFace();
+	float PainFaceLeft = 0.0f;
+	float AngryHoldLeft = 0.0f;
+	float PainFace = 0.0f;
+	float AngryFace = 0.0f;
+	TMap<FName, float> FaceBase;
+	FVector4f FaceBaseWrinkles = FVector4f(0.0f, 0.0f, 0.0f, 0.0f);
+	TWeakObjectPtr<USkeletalMeshComponent> FaceBaseMesh;
+	int32 PainFacesShown = 0;
+	int32 ZoneKicks = 0;
+	ESimPawnZone LastKickZone = ESimPawnZone::Torso;
+	float HurtAge = 1.0f;
+	float LimpLeft = 0.0f;
+	float LimpRight = 0.0f;
+	bool bPatchPosed = false;
+	ESimPawnZone PatchZone = ESimPawnZone::Torso;
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> CrawlClip;
+	bool bCrawlClipTried = false;
+	bool bCrawling = false;
+	int32 CrawlsPlayed = 0;
+	TWeakObjectPtr<class UAnimMontage> CrawlMontage;
+	int32 CrawlPelvisBone = INDEX_NONE;
+	FVector CrawlPelvisStart = FVector::ZeroVector;
+	float CrawlClipSpeed = 40.0f;
+	FVector CrawlOffset = FVector::ZeroVector;
 	float RollProgress = 0.0f;
 	float RollAngle = 0.0f;
 	FVector RollDirection = FVector::ForwardVector;
@@ -374,6 +479,12 @@ private:
 	ESimPawnDetail Detail = ESimPawnDetail::Full;
 	float CruiseSpeed = 400.0f;
 	float Yaw = 0.0f;
+	/** The facing drawn (degrees): Yaw, through a damped spring, so a body the sim turns 30 degrees in a few frames
+	 *  starts and stops turning smoothly; and how fast it turns (degrees a second). */
+	float DrawnYaw = 0.0f;
+	float DrawnYawRate = 0.0f;
+	/** How much of a whole-body clip shows now (the clip playing and the one fading out). */
+	float LegsClipWeight = 0.0f;
 	float SwimLiftCm = 0.0f;
 	bool bPlaced = false;
 	bool bBodyHidden = false;

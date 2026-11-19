@@ -98,7 +98,8 @@ and shin), feet. Pawn defs name theirs with `race.hitboxes`. Standing is 1.8 m t
 1.1 m (leaning forward over bent legs), prone 0.4 m (lying along the facing, 1.84 m long); the tops
 match the stance heights of cover.md. **Downed pawns are prone** whatever their stance. A lost
 part's hitbox is gone, so a bullet passes where the arm was. `aimPoint` is each stance's chest, where
-others aim. `hitboxesOf(pawn)` gives the shapes in the world for the debug view (U11).
+others aim. **They grow and shrink with the body** (PawnLooks height, 0.5 to 1.5; `hitboxScale`), and the player's
+crosshair uses the body as drawn ([aiming.md](aiming.md) "Shots go where the crosshair is"). `hitboxesOf(pawn)` gives the shapes in the world for the debug view (U11).
 
 **Facing.** `Posture` holds the stance and a facing vector. Pawns face where they walk, or where
 they aim while aiming or firing.

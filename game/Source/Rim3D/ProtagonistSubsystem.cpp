@@ -1,4 +1,5 @@
 #include "ProtagonistSubsystem.h"
+#include "KeyBindings.h"
 
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -26,6 +27,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Snapshot.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogProtagonist, Log, All);
 
@@ -403,6 +405,11 @@ void UProtagonistSubsystem::OnBeforeStep()
 	{
 		return;  // lying still till morning: the sim ignores moves meanwhile
 	}
+	if (UnstuckSkipMoves > 0)
+	{
+		--UnstuckSkipMoves;
+		return;
+	}
 	const FVector2D& Position = Body->GetSimPosition();
 	Bridge->Submit(colony::DirectMoveCommand{Controlled, static_cast<float>(Position.X), static_cast<float>(Position.Y)});
 	++MovesSent;
@@ -449,6 +456,14 @@ void UProtagonistSubsystem::ApplyBodyVisibility()
 	}
 }
 
+void UProtagonistSubsystem::StartUnstuck()
+{
+	if (Controlled != colony::kNoEntity && UnstuckSecondsLeft <= 0.0f)
+	{
+		UnstuckSecondsLeft = 5.0f;
+	}
+}
+
 void UProtagonistSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -458,6 +473,20 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 		return;
 	}
 
+	if (UnstuckSecondsLeft > 0.0f)
+	{
+		UnstuckSecondsLeft -= DeltaTime;
+		if (UnstuckSecondsLeft <= 0.0f)
+		{
+			UnstuckSecondsLeft = 0.0f;
+			if (Controlled != colony::kNoEntity)
+			{
+				Bridge->Submit(colony::UnstuckCommand{Controlled});
+				UnstuckSkipMoves = 3;  // no DirectMove from the old spot until the body has been pulled to the new one
+				UE_LOG(LogProtagonist, Log, TEXT("Unstuck: moved to the nearest clear spot"));
+			}
+		}
+	}
 	if (bExitRequested)
 	{
 		bExitRequested = false;
@@ -507,7 +536,13 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 	if (Bridge->GetSim()->controlledPawn() == Controlled)
 	{
 		Body->FollowSim(FVector2D(View->x, View->y), View->level, View->climb > 0.0f);
-		if (!Body->IsClimbing() && Body->Reconcile(FVector2D(View->x, View->y)))
+		if (!Body->IsClimbing() && (View->motionClip.valid() || View->motionPush) && !View->motionFreeFeet && View->rollPhase == 0)
+		{
+			// A stagger or a knockdown carries the colonist: the keys wait and the body is where the sim's clip takes it,
+			// so nothing snaps back a metre when it ends. (The player's own swings leave the feet to the keys.)
+			Body->SetSimPosition(FVector2D(View->x, View->y));
+		}
+		else if (!Body->IsClimbing() && Body->Reconcile(FVector2D(View->x, View->y)))
 		{
 			++ReconcileCount;
 		}
@@ -519,7 +554,8 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 	{
 		if (bAsleep)
 		{
-			for (const FKey& Key : {EKeys::W, EKeys::A, EKeys::S, EKeys::D, EKeys::N, EKeys::Escape})
+			for (const FKey& Key : {Rim3DKeys::Get(ERim3DAction::MoveForward), Rim3DKeys::Get(ERim3DAction::MoveBack), Rim3DKeys::Get(ERim3DAction::MoveLeft),
+					 Rim3DKeys::Get(ERim3DAction::MoveRight), Rim3DKeys::Get(ERim3DAction::SleepHere), FKey(EKeys::Escape)})
 			{
 				if (PC->WasInputKeyJustPressed(Key))
 				{
@@ -528,9 +564,13 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 				}
 			}
 		}
-		else if (PC->WasInputKeyJustPressed(EKeys::N))
+		else if (Rim3DKeys::WasPressed(PC, ERim3DAction::SleepHere))
 		{
 			SleepHere();
+		}
+		if (!bAsleep)
+		{
+			UpdateFocus(*PC, *Bridge);
 		}
 	}
 	SleepFade = FMath::Clamp(SleepFade + (bAsleep ? DeltaTime : -DeltaTime) * 1.5f, 0.0f, 1.0f);
@@ -560,6 +600,7 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 	// The time, and pause or 1x (a faster game would outrun the body).
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Margin), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
 	ImGui::SetNextWindowBgAlpha(0.6f);
+	float TimeBottom = Viewport->Pos.y + Margin + 60.0f * Scale;
 	if (ImGui::Begin("##DirectTime", nullptr, PanelFlags))
 	{
 		const colony::GameTime& Time = Sim.time();
@@ -571,8 +612,12 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 		ProtagonistSpeedButton("1x", 1, Bridge);
 		// The date, the temperature and the weather (U13).
 		ProtagonistText(USkySubsystem::DescribeDate(Sim) + TEXT("   ") + USkySubsystem::DescribeClimate(Sim));
+		TimeBottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y;
 	}
 	ImGui::End();
+
+	// The enemy you are locked on to: its name and the health of its worst body part, under the clock.
+	DrawFocus(Bridge, TimeBottom + 6.0f * Scale, Scale);
 
 	// Who you are, bottom left.
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Margin, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
@@ -644,13 +689,211 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 	}
 	else if (ImGui::Begin("##DirectHints", nullptr, PanelFlags | ImGuiWindowFlags_NoInputs))
 	{
-		ImGui::TextUnformatted("F1 hide   F3 speed   WASD walk   Ctrl slow   mouse look");
-		ImGui::TextUnformatted("V first / third person   wheel zoom");
-		ImGui::TextUnformatted("F hold: work / pick up   X put down   B build");
-		ImGui::TextUnformatted("T take over   Tab overseer view");
-		ImGui::TextUnformatted("N sleep here (18:00 to 6:00)   F on a bed: sleep   F5 quicksave");
+		// The keys as they are bound now (Settings > Controls changes them, KeyBindings.h).
+		const auto KeyOf = [](ERim3DAction Action) { return Rim3DKeys::GetKeyLabel(Action); };
+		const auto Line = [](const FString& Text) { ImGui::TextUnformatted(TCHAR_TO_UTF8(*Text)); };
+		Line(FString::Printf(TEXT("F1 hide   F3 speed   WASD walk   %s slow   %s sprint on/off   mouse look"), *KeyOf(ERim3DAction::WalkSlow), *KeyOf(ERim3DAction::Sprint)));
+		Line(FString::Printf(TEXT("%s jump   %s roll / dash   %s first / third person   wheel zoom"), *KeyOf(ERim3DAction::Jump), *KeyOf(ERim3DAction::RollDash), *KeyOf(ERim3DAction::ToggleView)));
+		Line(FString::Printf(TEXT("%s hold: work / pick up / take weapon   %s put down   %s build"), *KeyOf(ERim3DAction::Interact), *KeyOf(ERim3DAction::PutDown), *KeyOf(ERim3DAction::BuildMode)));
+		Line(FString::Printf(TEXT("%s take over   %s overseer view   resources are picked up as you walk by"), *KeyOf(ERim3DAction::TakeOver), *KeyOf(ERim3DAction::SwitchMode)));
+		Line(FString::Printf(TEXT("%s sleep here (18:00 to 6:00)   %s on a bed: sleep   F5 quicksave"), *KeyOf(ERim3DAction::SleepHere), *KeyOf(ERim3DAction::Interact)));
+		if (Rim3DKeys::IsLockOnFocusEnabled())
+		{
+			Line(FString::Printf(TEXT("%s lock on to the next enemy   %s let go"), *KeyOf(ERim3DAction::FocusNextTarget), *KeyOf(ERim3DAction::EndFocus)));
+		}
 	}
 	ImGui::End();
 
 	++HudFramesDrawn;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Lock-on focus (docs/design/focus.md, sneed 2026-11-17): Tab locks on to the next nearest enemy, Dark Souls and WoW
+// style; middle mouse locks on or lets go (sneed 2026-11-18); Settings > Controls turns it off. The sim keeps the focus (FocusCommand) and turns the body to face
+// it; here are the keys, the HP bar top middle, the marker on the target and (AProtagonistPawn) the camera.
+
+colony::Entity UProtagonistSubsystem::GetFocusTarget() const
+{
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	if (!bDirect || !Bridge || !Bridge->GetSim() || Controlled == colony::kNoEntity)
+	{
+		return colony::kNoEntity;
+	}
+	const colony::ThingView* Me = Bridge->GetCurrentSnapshot().find(Controlled);
+	return Me ? Me->focusTarget : colony::kNoEntity;
+}
+
+void UProtagonistSubsystem::SubmitFocus(USimSubsystem& Bridge, colony::FocusMode Mode)
+{
+	colony::FocusCommand Command;
+	Command.pawn = Controlled;
+	Command.mode = Mode;
+	Bridge.Submit(Command);
+	++FocusCommandsSent;
+}
+
+void UProtagonistSubsystem::FocusNext()
+{
+	USimSubsystem* Bridge = BridgeSource.Get();
+	if (bDirect && Bridge && Bridge->GetSim() && Controlled != colony::kNoEntity && Rim3DKeys::IsLockOnFocusEnabled())
+	{
+		SubmitFocus(*Bridge, colony::FocusMode::Next);
+	}
+}
+
+void UProtagonistSubsystem::EndFocus()
+{
+	USimSubsystem* Bridge = BridgeSource.Get();
+	if (Bridge && GetFocusTarget() != colony::kNoEntity)
+	{
+		SubmitFocus(*Bridge, colony::FocusMode::Clear);
+	}
+}
+
+void UProtagonistSubsystem::UpdateFocus(APlayerController& PC, USimSubsystem& Bridge)
+{
+	const colony::Entity Focus = GetFocusTarget();
+	if (!Rim3DKeys::IsLockOnFocusEnabled())
+	{
+		// Turned off while locked on: let go once.
+		if (Focus != colony::kNoEntity && FocusClearedFor != Focus)
+		{
+			SubmitFocus(Bridge, colony::FocusMode::Clear);
+			FocusClearedFor = Focus;
+		}
+		return;
+	}
+	FocusClearedFor = colony::kNoEntity;
+	if (Rim3DKeys::IsCapturing())
+	{
+		return;  // the Controls page is waiting for a new key
+	}
+	if (Rim3DKeys::WasPressed(&PC, ERim3DAction::FocusNextTarget))
+	{
+		FocusNext();
+	}
+	else if (Rim3DKeys::WasPressed(&PC, ERim3DAction::EndFocus))
+	{
+		// Middle mouse (sneed 2026-11-18, like Elden Ring's lock-on button): locks on when free, lets go when locked on.
+		if (Focus != colony::kNoEntity)
+		{
+			EndFocus();
+		}
+		else
+		{
+			FocusNext();
+		}
+	}
+	UpdateTurnAway(Bridge);
+}
+
+namespace
+{
+	// docs/design/lock-on.md (ours): moving away faster than this, while turned away, for this long lets go.
+	constexpr float LockTurnAwayMetresPerSecond = 1.5f;
+	constexpr float LockTurnAwaySeconds = 0.75f;
+	constexpr float LockTurnAwayDegrees = 100.0f;
+}
+
+// sneed 2026-11-18: turning away and moving away from the focus lets go. With a gun the view turns freely, so turned away
+// is the view more than 100 degrees off the target; with melee the view and body keep facing it, so it is sprinting (the
+// run turns the body, Elden Ring style). Backing off with S while facing it keeps the lock.
+void UProtagonistSubsystem::UpdateTurnAway(USimSubsystem& Bridge)
+{
+	const colony::Entity Focus = GetFocusTarget();
+	AProtagonistPawn* Player = GetBody();
+	const colony::ThingView* Target = Focus != colony::kNoEntity ? Bridge.GetCurrentSnapshot().find(Focus) : nullptr;
+	if (!bDirect || !Player || !Target)
+	{
+		TurnAwaySeconds = 0.0f;
+		return;
+	}
+	const FVector2D To(Target->x - Player->GetSimPosition().X, Target->y - Player->GetSimPosition().Y);
+	const FVector2D Dir = To.GetSafeNormal();
+	if (Dir.IsNearlyZero())
+	{
+		TurnAwaySeconds = 0.0f;
+		return;
+	}
+	const double Away = -FVector2D::DotProduct(Player->GetLocalVelocity(), Dir);
+	const double YawRadians = FMath::DegreesToRadians(static_cast<double>(Player->GetYaw()));
+	const FVector2D View(FMath::Cos(YawRadians), FMath::Sin(YawRadians));
+	const bool bTurned = Player->HasGunDrawn()
+		? FVector2D::DotProduct(View, Dir) < FMath::Cos(FMath::DegreesToRadians(LockTurnAwayDegrees))
+		: Player->IsSprinting();
+	const UWorld* World = GetWorld();
+	TurnAwaySeconds = (Away > LockTurnAwayMetresPerSecond && bTurned && World) ? TurnAwaySeconds + World->GetDeltaSeconds() : 0.0f;
+	if (TurnAwaySeconds >= LockTurnAwaySeconds)
+	{
+		TurnAwaySeconds = 0.0f;
+		EndFocus();
+	}
+}
+
+bool UProtagonistSubsystem::GetFocusPoint(FVector& OutPoint) const
+{
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	const colony::Entity Focus = GetFocusTarget();
+	const colony::ThingView* Target = Bridge && Focus != colony::kNoEntity ? Bridge->GetCurrentSnapshot().find(Focus) : nullptr;
+	if (!Target)
+	{
+		return false;
+	}
+	// The middle of the body, where the swing goes: the chest standing, low over a body on the ground.
+	const bool bLow = Target->downed || Target->stance == colony::Stance::Prone;
+	const float HeightM = FMath::Max(0.3f, Bridge->GetSim()->bodyHeightM(Focus));
+	OutPoint = Bridge->SimToWorld(Target->x, Target->y, Target->level) + FVector(0.0, 0.0, bLow ? 25.0 : HeightM * 100.0 * 0.62);
+	return true;
+}
+
+void UProtagonistSubsystem::DrawFocus(USimSubsystem& Bridge, float Top, float Scale)
+{
+	const colony::Entity Focus = GetFocusTarget();
+	const colony::ThingView* Target = Focus != colony::kNoEntity ? Bridge.GetCurrentSnapshot().find(Focus) : nullptr;
+	if (!Target)
+	{
+		return;
+	}
+	const colony::Sim& Sim = *Bridge.GetSim();
+	// Its name: a colonist's or raider's, a named animal's, a spawned pawn's, else its kind (as the kill feed names it).
+	const FString Name = UTF8_TO_TCHAR(Sim.feedName(Focus).c_str());
+	const float Health = FMath::Clamp(Target->dead ? 0.0f : Target->lowestPart, 0.0f, 1.0f);
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+
+	// Top middle: the name, and a bar for its worst body part (sneed: "lowest hp body part as %").
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Top), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+	ImGui::SetNextWindowBgAlpha(0.6f);
+	const ImGuiWindowFlags Flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs;
+	if (ImGui::Begin("##FocusTarget", nullptr, Flags))
+	{
+		const float Width = 300.0f * Scale;
+		const FTCHARToUTF8 NameUtf8(*Name);
+		const float NameWidth = ImGui::CalcTextSize(NameUtf8.Get()).x;
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + FMath::Max(0.0f, (Width - NameWidth) * 0.5f));
+		ImGui::TextUnformatted(NameUtf8.Get());
+		const FString Percent = FString::Printf(TEXT("%d%%"), FMath::RoundToInt(Health * 100.0f));
+		const FTCHARToUTF8 PercentUtf8(*Percent);
+		// Red, going darker as it empties.
+		ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.55f + 0.3f * Health, 0.08f, 0.06f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.1f, 0.02f, 0.02f, 0.85f));
+		ImGui::ProgressBar(Health, ImVec2(Width, 16.0f * Scale), PercentUtf8.Get());
+		ImGui::PopStyleColor(2);
+	}
+	ImGui::End();
+	++FocusBarFramesDrawn;
+
+	// A small marker on the body you are locked on to.
+	FVector Point;
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	FVector2D Screen;
+	if (PC && GetFocusPoint(Point) && PC->ProjectWorldLocationToScreen(Point, Screen, true))
+	{
+		ImDrawList* Draw = ImGui::GetForegroundDrawList();
+		const ImVec2 C(Viewport->Pos.x + static_cast<float>(Screen.X), Viewport->Pos.y + static_cast<float>(Screen.Y));
+		const float R = 7.0f * Scale;
+		Draw->AddCircleFilled(C, R + 2.0f * Scale, IM_COL32(0, 0, 0, 120), 20);
+		Draw->AddCircleFilled(C, R, IM_COL32(255, 235, 200, 230), 20);
+		Draw->AddCircleFilled(C, R * 0.45f, IM_COL32(200, 40, 30, 255), 12);
+	}
 }

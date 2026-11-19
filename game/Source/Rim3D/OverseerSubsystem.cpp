@@ -1,4 +1,5 @@
 #include "OverseerSubsystem.h"
+#include "KeyBindings.h"
 
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -343,7 +344,7 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 							}
 							if (Sim.colonistOf(View->id))
 							{
-								if (ImGui::Button("Take control (Tab)"))
+								if (ImGui::Button(TCHAR_TO_UTF8(*FString::Printf(TEXT("Take control (%s)##TakeControl"), *Rim3DKeys::GetKeyLabel(ERim3DAction::SwitchMode)))))
 								{
 									if (UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>())
 									{
@@ -410,7 +411,7 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 		ImGui::TextUnformatted("middle-drag orbit   click select");
 		ImGui::TextUnformatted("F centre   Home reset   Esc deselect");
 		ImGui::TextUnformatted("Page Up / Page Down level above / below");
-		ImGui::TextUnformatted("Tab take control of the selected colonist");
+		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("%s take control of the selected colonist"), *Rim3DKeys::GetKeyLabel(ERim3DAction::SwitchMode))));
 		ImGui::TextUnformatted("R draft colonist / turn building   right click order");
 	}
 	ImGui::End();

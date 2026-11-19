@@ -118,6 +118,13 @@ TEST_CASE("Levelling: a roofed room is levelled to its walls' base, so the floor
         }
     }
     sim.rooms().update();
+    // The room's floor is planned, and pawns dig it (docs/design/earthworks.md): do the digging here.
+    for (int y = 11; y <= 15; ++y) {
+        for (int x = 11; x <= 15; ++x) {
+            while (sim.editMap().digEarth(CellPos{x, y, 0}) >= 0) {
+            }
+        }
+    }
     const Room* room = sim.rooms().roomOf(CellPos{13, 13, 0});
     LEVEL_REQUIRE(room != nullptr);
     CHECK_FALSE(room->outdoors());
@@ -136,14 +143,15 @@ TEST_CASE("Levelling: a roofed room is levelled to its walls' base, so the floor
     CHECK_FALSE(sim.map().levelled(CellPos{20, 13, 0}));
 }
 
-TEST_CASE("Levelling: a plan levels its ground at once; floors and upper floors level theirs") {
+TEST_CASE("Levelling: a plan plans its ground (dug when work starts); floors level theirs") {
     std::unique_ptr<Sim> owned = levellingSim();
     Sim& sim = *owned;
     sim.submit(PlaceBlueprintCommand{"Wall", "WoodLog", CellPos{20, 20, 0}, Rot4::North});
     sim.submit(PlaceFloorCommand{CellRect{30, 30, 2, 1, 0}, "WoodFloor"});
     sim.step();
     CHECK(sim.map().levelled(CellPos{20, 20, 0}));
-    CHECK(levellingFlat(sim, 20, 20, sim.map().levelBase(CellPos{20, 20, 0})));
+    CHECK_FALSE(levellingFlat(sim, 20, 20, sim.map().levelBase(CellPos{20, 20, 0})));
+    CHECK(sim.map().earthPending(CellPos{20, 20, 0}));
     CHECK(sim.map().levelled(CellPos{30, 30, 0}));
     CHECK(sim.map().levelled(CellPos{31, 30, 0}));
     // The two floor cells are within the join distance, so they share one base.

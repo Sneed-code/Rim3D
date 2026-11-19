@@ -5,6 +5,8 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
+#include "ColonySim/Looks.h"
+#include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
@@ -33,7 +35,8 @@ using namespace colony;
 namespace {
 
 // The game's real data plus a slow test projectile and the gun that fires it (no arrows or
-// grenades are written yet). These tests check docs/design/aiming.md.
+// grenades are written yet), and three guns that still reload (`reloads`: sneed's cooldown bursts took magazines off
+// every real gun). These tests check docs/design/aiming.md.
 std::shared_ptr<const DefDatabase> aimTestDefs() {
     static const std::shared_ptr<const DefDatabase> defs = [] {
         namespace fs = std::filesystem;
@@ -59,7 +62,10 @@ std::shared_ptr<const DefDatabase> aimTestDefs() {
         sources.push_back(DefSource{"Things", "zz_aim_test.json", R"([
             {"defName": "AimTestSlowGun", "category": "Item", "stackLimit": 1,
              "stats": {"rangedWeaponCooldown": 30, "accuracyTouch": 0.8, "accuracyShort": 0.8, "accuracyMedium": 0.8, "accuracyLong": 0.8},
-             "verbs": [{"range": 30, "warmupTime": 9, "burstShotCount": 1, "defaultProjectile": "AimTestSlowShot"}]}
+             "verbs": [{"range": 30, "warmupTime": 9, "burstShotCount": 1, "defaultProjectile": "AimTestSlowShot"}]},
+            {"defName": "AimTestRevolver", "parent": "Gun_Revolver", "reloads": true},
+            {"defName": "AimTestAssaultRifle", "parent": "Gun_AssaultRifle", "reloads": true},
+            {"defName": "AimTestBoltActionRifle", "parent": "Gun_BoltActionRifle", "reloads": true}
         ])"});
         std::ifstream tuningFile(root / "tuning.json", std::ios::binary);
         std::stringstream tuning;
@@ -164,7 +170,7 @@ double aimTestHitRate(int skill, bool walking, int shots) {
 
 TEST_CASE("Aiming: guns and rules have magazines, reload times and skill curves") {
     auto sim = aimTestSim();
-    const Entity pawn = aimTestPawn(*sim, 10, 10, "Gun_Revolver");
+    const Entity pawn = aimTestPawn(*sim, 10, 10, "AimTestRevolver");
     CHECK(sim->combat().magazineSize(pawn) == 6);
     CHECK(sim->combat().roundsLeft(pawn) == 6);
     aimTestSkill(*sim, pawn, 0);
@@ -173,7 +179,7 @@ TEST_CASE("Aiming: guns and rules have magazines, reload times and skill curves"
     CHECK(sim->combat().reactionSteps(pawn) == 5);
     aimTestSkill(*sim, pawn, 10);
     CHECK(sim->combat().reactionSteps(pawn) == 10);
-    const Entity rifleman = aimTestPawn(*sim, 12, 10, "Gun_AssaultRifle");
+    const Entity rifleman = aimTestPawn(*sim, 12, 10, "AimTestAssaultRifle");
     CHECK(sim->combat().magazineSize(rifleman) == 30);
     CHECK(sim->combat().magazineSize(aimTestPawn(*sim, 14, 10)) == 0);  // no gun
 }
@@ -181,7 +187,7 @@ TEST_CASE("Aiming: guns and rules have magazines, reload times and skill curves"
 TEST_CASE("Aiming: a gun runs dry, reloads by itself, faster with skill, and keeps its rounds") {
     for (const int skill : {0, 20}) {
         auto sim = aimTestSim();
-        const Entity pawn = aimTestPawn(*sim, 20, 40, "Gun_Revolver");
+        const Entity pawn = aimTestPawn(*sim, 20, 40, "AimTestRevolver");
         aimTestSkill(*sim, pawn, skill);
         int fired = 0;
         int64_t emptyAt = -1;
@@ -228,7 +234,7 @@ TEST_CASE("Aiming: a gun runs dry, reloads by itself, faster with skill, and kee
 
     // A reload on order: refused while full, done after one shot; the gun keeps its count.
     auto sim = aimTestSim();
-    const Entity a = aimTestPawn(*sim, 20, 40, "Gun_BoltActionRifle");
+    const Entity a = aimTestPawn(*sim, 20, 40, "AimTestBoltActionRifle");
     sim->submit(ReloadCommand{a});
     sim->step();
     bool failed = false;
@@ -330,7 +336,7 @@ TEST_CASE("Aiming: a fighter waits its reaction time before shooting a new targe
 
 TEST_CASE("Aiming: a drafted fighter tops up its magazine when there is nothing to shoot") {
     auto sim = aimTestSim();
-    const Entity colonist = aimTestPawn(*sim, 30, 40, "Gun_AssaultRifle");
+    const Entity colonist = aimTestPawn(*sim, 30, 40, "AimTestAssaultRifle");
     const Entity gun = sim->things().registry().get<Gear>(colonist).weapon;
     sim->things().registry().emplace<Magazine>(gun, Magazine{20});
     sim->submit(DraftCommand{colonist, true});
@@ -375,8 +381,8 @@ TEST_CASE("Aiming: a fighter sidesteps a slow projectile but not a bullet") {
 
 TEST_CASE("Aiming: magazines, reloads and reaction times survive a save and load") {
     auto sim = aimTestSim();
-    const Entity colonist = aimTestPawn(*sim, 30, 40, "Gun_Revolver");
-    const Entity raider = aimTestPawn(*sim, 45, 40, "Gun_AssaultRifle");
+    const Entity colonist = aimTestPawn(*sim, 30, 40, "AimTestRevolver");
+    const Entity raider = aimTestPawn(*sim, 45, 40, "AimTestAssaultRifle");
     sim->submit(SetFactionCommand{raider, 2});
     sim->submit(DraftCommand{colonist, true});
     bool sawReload = false;
@@ -398,4 +404,320 @@ TEST_CASE("Aiming: magazines, reloads and reaction times survive a save and load
     sim->stepMany(300);
     loaded.sim->stepMany(300);
     CHECK(loaded.sim->stateHash() == sim->stateHash());
+}
+
+namespace {
+
+// The steps (counted from the start) at which `pawn` fired, over `steps` steps, the player's trigger held down
+// (a shot ordered whenever the gun takes one) or, for a fighter, one aimed order at the start.
+std::vector<int> aimTestShotSteps(Sim& sim, Entity pawn, int steps, bool player) {
+    std::vector<int> at;
+    for (int i = 0; i < steps; ++i) {
+        if (player ? sim.combat().shotReadyIn(pawn) == 0 : i == 0) {
+            sim.submit(ShootCommand{pawn, kNoEntity, 80.5f, 40.5f, 1.0f, player});
+        }
+        sim.step();
+        if (aimTestEvent(sim, EventType::ShotFired, pawn)) {
+            at.push_back(i);
+        }
+    }
+    return at;
+}
+
+}  // namespace
+
+TEST_CASE("Cooldown bursts: three times the shots, snipers one, no magazines, half the ranged damage") {
+    auto sim = aimTestSim();
+    int stored = 0, size = 0, left = 0, from = 0;
+    const auto storeOf = [&](const char* gun, int x) {
+        const Entity pawn = aimTestPawn(*sim, x, 10, gun);
+        CHECK(sim->combat().magazineSize(pawn) == 0);
+        CHECK(sim->combat().shotStore(pawn, stored, size, left, from));
+        CHECK(stored == size);
+        CHECK(left == 0);
+        return size;
+    };
+    CHECK(storeOf("Gun_Autopistol", 10) == 3);     // fired one
+    CHECK(storeOf("Gun_AssaultRifle", 12) == 9);   // fired three
+    CHECK(storeOf("Gun_Revolver", 14) == 3);
+    CHECK(storeOf("Gun_BoltActionRifle", 16) == 1);  // snipers keep one shot
+    CHECK(storeOf("Gun_SniperRifle", 18) == 1);
+    CHECK(storeOf("Gun_RecurveBow", 20) == 1);
+    const Entity pawn = aimTestPawn(*sim, 22, 10, "Gun_AssaultRifle");
+    sim->submit(ReloadCommand{pawn});
+    sim->step();
+    CHECK(!sim->combat().reloading(pawn));
+    // tuning.json halves every projectile's damage for now: RimWorld's 11 for the assault rifle bullet, rounded.
+    const Def& bullet = sim->defs().get(sim->defs().idOf("Projectiles", "Bullet_AssaultRifle"));
+    CHECK(bullet.number("projectile.damageAmountBase") == doctest::Approx(6.0));
+}
+
+TEST_CASE("Cooldown bursts: the player's autopistol fires every half cooldown and never runs dry") {
+    auto sim = aimTestSim();
+    const Entity pawn = aimTestPawn(*sim, 20, 40, "Gun_Autopistol");
+    const std::vector<int> at = aimTestShotSteps(*sim, pawn, 300, true);
+    AIM_REQUIRE(at.size() >= 10);
+    // Cooldown 30, so a shot every 15 steps (the gap), on and on: the store refills 30 steps after its first shot.
+    for (size_t i = 1; i < at.size(); ++i) {
+        CHECK(at[i] - at[i - 1] == 15);
+    }
+}
+
+TEST_CASE("Cooldown bursts: the cooldown counts from the first shot and later shots don't add to it") {
+    auto sim = aimTestSim();
+    const Entity pawn = aimTestPawn(*sim, 20, 40, "Gun_AssaultRifle");
+    int stored = 0, size = 0, left = 0, from = 0;
+    // One shot: the cooldown (51 steps) starts.
+    sim->submit(ShootCommand{pawn, kNoEntity, 80.5f, 40.5f, 1.0f, true});
+    sim->step();
+    AIM_REQUIRE(aimTestEvent(*sim, EventType::ShotFired, pawn));
+    AIM_REQUIRE(sim->combat().shotStore(pawn, stored, size, left, from));
+    CHECK(stored == 8);
+    CHECK(from == 50);  // the cooldown, less the step the next order takes
+    const int afterFirst = left;
+    // Half way through it, two more shots: the refill is as far on as if they hadn't been fired.
+    sim->stepMany(25);
+    for (int shots = 0; shots < 2;) {
+        if (sim->combat().shotReadyIn(pawn) == 0) {
+            sim->submit(ShootCommand{pawn, kNoEntity, 80.5f, 40.5f, 1.0f, true});
+        }
+        sim->step();
+        shots += aimTestEvent(*sim, EventType::ShotFired, pawn) ? 1 : 0;
+    }
+    AIM_REQUIRE(sim->combat().shotStore(pawn, stored, size, left, from));
+    CHECK(stored == 6);
+    CHECK(from == 50);
+    const int since = 50 - left;
+    CHECK(left == afterFirst - since);
+    sim->stepMany(left);
+    AIM_REQUIRE(sim->combat().shotStore(pawn, stored, size, left, from));
+    CHECK(stored == 9);  // full again 51 steps after the first shot
+    CHECK(left == 0);
+    Snapshot snap;
+    sim->writeSnapshot(snap);
+    CHECK(snap.find(pawn)->shotStore == 9);
+    CHECK(snap.find(pawn)->shotStoreSize == 9);
+}
+
+TEST_CASE("Cooldown bursts: held down, the assault rifle fires nine quick shots, then waits for the refill") {
+    auto sim = aimTestSim();
+    const Entity pawn = aimTestPawn(*sim, 20, 40, "Gun_AssaultRifle");
+    const std::vector<int> at = aimTestShotSteps(*sim, pawn, 120, true);
+    AIM_REQUIRE(at.size() >= 10);
+    // Gap 5 halved: 3 steps (2.5 rounded up).
+    for (size_t i = 1; i < 9; ++i) {
+        CHECK(at[i] - at[i - 1] == 3);
+    }
+    // The tenth waits for the store to fill, 51 steps after the first.
+    CHECK(at[9] - at[0] == 51);
+}
+
+TEST_CASE("Cooldown bursts: a sniper rifle fires one shot a cooldown; a fighter empties its store in one burst") {
+    {
+        auto sim = aimTestSim();
+        const Entity pawn = aimTestPawn(*sim, 20, 40, "Gun_SniperRifle");
+        const std::vector<int> at = aimTestShotSteps(*sim, pawn, 200, true);
+        AIM_REQUIRE(at.size() >= 3);
+        CHECK(at[1] - at[0] == 45);
+        CHECK(at[2] - at[1] == 45);
+        Snapshot snap;
+        sim->writeSnapshot(snap);
+        CHECK(snap.find(pawn)->shotStoreSize == 1);
+    }
+    auto sim = aimTestSim();
+    const Entity pawn = aimTestPawn(*sim, 20, 40, "Gun_AssaultRifle");
+    const std::vector<int> at = aimTestShotSteps(*sim, pawn, 140, false);
+    AIM_REQUIRE(at.size() == 9);  // one order: the whole store, after the warm-up
+    CHECK(at.front() >= 29);
+    CHECK(at.back() - at.front() == 24);
+    CHECK(sim->combat().shotReadyIn(pawn) == 0);  // refilled by now
+}
+
+TEST_CASE("Cooldown bursts: the gun's store survives a save and load") {
+    auto sim = aimTestSim();
+    const Entity pawn = aimTestPawn(*sim, 20, 40, "Gun_AssaultRifle");
+    aimTestShotSteps(*sim, pawn, 12, true);
+    int stored = 0, size = 0, left = 0, from = 0;
+    AIM_REQUIRE(sim->combat().shotStore(pawn, stored, size, left, from));
+    CHECK(stored < 9);
+    CHECK(left > 0);
+    SaveLoadResult loaded = loadSim(saveSim(*sim), aimTestDefs());
+    AIM_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+    int stored2 = 0, left2 = 0;
+    AIM_REQUIRE(loaded.sim->combat().shotStore(pawn, stored2, size, left2, from));
+    CHECK(stored2 == stored);
+    CHECK(left2 == left);
+    sim->stepMany(100);
+    loaded.sim->stepMany(100);
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+}
+
+// --- Shots go where the crosshair is (sneed 2026-11-18, docs/design/aiming.md) ---
+
+namespace {
+
+// Is `part` the labelled part or under it?
+bool aimTestUnder(const Sim& sim, Entity pawn, int part, const std::string& label) {
+    const std::vector<BodyPartInfo> parts = sim.health().bodyParts(sim.things().registry().get<Thing>(pawn).def);
+    for (int p = part; p >= 0 && static_cast<size_t>(p) < parts.size(); p = parts[static_cast<size_t>(p)].parent) {
+        if (parts[static_cast<size_t>(p)].label == label) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// A target standing at (42, 40) facing west, toward a shooter at (20, 40).
+Entity aimTestFacingTarget(Sim& sim) {
+    const Entity target = aimTestPawn(sim, 42, 40);
+    aimTestHold(sim, target);
+    sim.things().registry().get<Posture>(target) = Posture{Stance::Standing, -1.0f, 0.0f};
+    return target;
+}
+
+}  // namespace
+
+TEST_CASE("Crosshair: the player's own spread is small with every gun") {
+    auto sim = aimTestSim();
+    const char* guns[] = {"Gun_Revolver", "Gun_Autopistol", "Gun_BoltActionRifle", "Gun_PumpShotgun", "Gun_AssaultRifle"};
+    float bolt = 1.0f;
+    for (const char* gun : guns) {
+        const DefId id = sim->defs().idOf("Things", gun);
+        const float slope = sim->combat().spread(id, 8, 30.0f, true, 1.0f);
+        MESSAGE(std::string(gun) << ": the player's cone is " << slope * 3000.0f << " cm wide at 30 m (radius)");
+        // A head is about 20 cm across: at 30 m every gun's cone stays well inside it.
+        CHECK(slope * 30.0f < 0.05f);
+        if (std::string(gun) == "Gun_BoltActionRifle") {
+            bolt = slope;
+        }
+    }
+    CHECK(bolt > 0.0f);
+    // Fighters keep RimWorld's spread: much wider.
+    CHECK(sim->combat().spread(sim->defs().idOf("Things", "Gun_BoltActionRifle"), 8, 30.0f, false, 1.0f) > bolt * 3.0f);
+}
+
+TEST_CASE("Crosshair: a bullet passing the drawn spot hits that part, a miss falls back on the hitboxes") {
+    auto sim = aimTestSim();
+    const Entity target = aimTestFacingTarget(*sim);
+    const Position pos = sim->things().registry().get<Position>(target);
+    const int head = sim->combat().hitboxPart(target, "head");
+    AIM_REQUIRE(head >= 0);
+    CHECK(sim->combat().hitboxPart(target, "left arm") >= 0);
+    CHECK(sim->combat().hitboxPart(target, "tail") == -1);
+    // The drawn head leans 0.3 m to the pawn's left of where the stock hitbox is (a clip leaning it over).
+    const DrawnAim drawn{target, head, 0.0f, -0.3f, 1.65f};  // facing west, its left is south
+    const float y = pos.y - 0.3f;  // facing west, its left is south
+    const CellPos nowhere{-1, -1, 0};
+    const TraceHit plain = sim->combat().trace(20.5f, y, 1.65f, 60.0f, y, 1.65f, 0, kNoEntity, nowhere);
+    CHECK(plain.kind == ProjectileHitKind::None);
+    const TraceHit hit = sim->combat().trace(20.5f, y, 1.65f, 60.0f, y, 1.65f, 0, kNoEntity, nowhere, true, &drawn);
+    CHECK(hit.kind == ProjectileHitKind::Pawn);
+    CHECK(hit.thing == target);
+    CHECK(hit.part == head);
+    CHECK(hit.x == doctest::Approx(pos.x));  // on the spot itself, not the edge of the allowance
+    CHECK(hit.y == doctest::Approx(y));
+    CHECK(hit.z == doctest::Approx(1.65f));
+    // A line through the chest misses the spot: the stock torso box takes it.
+    const TraceHit chest = sim->combat().trace(20.5f, pos.y, 1.15f, 60.0f, pos.y, 1.15f, 0, kNoEntity, nowhere, true, &drawn);
+    CHECK(chest.kind == ProjectileHitKind::Pawn);
+    CHECK(aimTestUnder(*sim, target, chest.part, "torso"));
+    // The trace's own pawn (the shooter's skip) is never hit, drawn spot or not.
+    const TraceHit other = sim->combat().trace(20.5f, y, 1.65f, 60.0f, y, 1.65f, 0, target, nowhere, true, &drawn);
+    CHECK(other.kind == ProjectileHitKind::None);
+}
+
+TEST_CASE("Crosshair: the player's bolt-action shots at a drawn head hit the head") {
+    auto sim = aimTestSim();
+    const Entity shooter = aimTestPawn(*sim, 20, 40, "Gun_BoltActionRifle");
+    const Entity target = aimTestFacingTarget(*sim);
+    const int head = sim->combat().hitboxPart(target, "head");
+    AIM_REQUIRE(head >= 0);
+    const Position pos = sim->things().registry().get<Position>(target);
+    int fired = 0;
+    int heads = 0;
+    for (int i = 0; i < 4000 && (fired < 12 || !sim->things().registry().view<Projectile>().empty()); ++i) {
+        if (fired < 12 && sim->combat().shotReadyIn(shooter) == 0) {
+            // Unreal's crosshair on the drawn head, 0.25 m left of the stock hitbox's head.
+            ShootCommand shot{shooter, kNoEntity, pos.x, pos.y - 0.25f, 1.62f, true};
+            shot.aimPawn = target;
+            shot.aimPart = head;
+            shot.aimDx = 0.0f;
+            shot.aimDy = -0.25f;
+            shot.aimUp = 1.62f;
+            sim->submit(shot);
+        }
+        sim->step();
+        fired += aimTestEvent(*sim, EventType::ShotFired, shooter) ? 1 : 0;
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::ProjectileHit && e.hit == ProjectileHitKind::Pawn && e.target == target) {
+                heads += aimTestUnder(*sim, target, e.part, "head") ? 1 : 0;
+                aimTestHeal(*sim, target);
+            }
+        }
+    }
+    AIM_REQUIRE(fired == 12);
+    MESSAGE("bolt-action at 22 m: " << heads << " of 12 on the head");
+    CHECK(heads == 12);
+}
+
+TEST_CASE("Crosshair: hitboxes grow and shrink with the body's height") {
+    auto sim = aimTestSim();
+    const Entity target = aimTestFacingTarget(*sim);
+    const Position pos = sim->things().registry().get<Position>(target);
+    const CellPos nowhere{-1, -1, 0};
+    const auto at = [&](float z) { return sim->combat().trace(20.5f, pos.y, z, 60.0f, pos.y, z, 0, kNoEntity, nowhere); };
+    CHECK(at(1.7f).kind == ProjectileHitKind::Pawn);  // the stock 1.80 m man
+    PawnLooks looks;
+    looks.height = 0.8f;  // 1.44 m
+    sim->things().registry().emplace_or_replace<PawnLooks>(target, looks);
+    CHECK(sim->combat().hitboxScale(target) == doctest::Approx(0.8f));
+    CHECK(at(1.6f).kind == ProjectileHitKind::None);
+    const TraceHit head = at(1.33f);
+    CHECK(head.kind == ProjectileHitKind::Pawn);
+    CHECK(aimTestUnder(*sim, target, head.part, "head"));
+    float x = 0.0f, y = 0.0f, z = 0.0f;
+    AIM_REQUIRE(sim->combat().aimPoint(target, x, y, z));
+    CHECK(z == doctest::Approx(1.15f * 0.8f).epsilon(0.01));
+}
+
+TEST_CASE("Crosshair: a shot at a drawn part survives a save, a load and a replay") {
+    auto sim = aimTestSim();
+    const Entity shooter = aimTestPawn(*sim, 20, 40, "Gun_BoltActionRifle");
+    const Entity target = aimTestFacingTarget(*sim);
+    const Position pos = sim->things().registry().get<Position>(target);
+    ShootCommand shot{shooter, kNoEntity, pos.x, pos.y - 0.25f, 1.62f, true};
+    shot.aimPawn = target;
+    shot.aimPart = sim->combat().hitboxPart(target, "head");
+    shot.aimDy = -0.25f;
+    shot.aimUp = 1.62f;
+    sim->submit(shot);
+    // Saved with the command still waiting, then again with the bullet in the air.
+    SaveLoadResult waiting = loadSim(saveSim(*sim), aimTestDefs());
+    AIM_REQUIRE(waiting.sim != nullptr);
+    sim->step();
+    waiting.sim->step();
+    CHECK(waiting.sim->stateHash() == sim->stateHash());
+    SaveLoadResult flying = loadSim(saveSim(*sim), aimTestDefs());
+    AIM_REQUIRE(flying.sim != nullptr);
+    sim->stepMany(20);
+    flying.sim->stepMany(20);
+    waiting.sim->stepMany(20);
+    CHECK(flying.sim->stateHash() == sim->stateHash());
+    CHECK(waiting.sim->stateHash() == sim->stateHash());
+    // The replay file keeps the drawn spot.
+    Replay read;
+    std::string error;
+    AIM_REQUIRE(readReplay(writeReplay(recordReplay(*sim)), read, error));
+    bool found = false;
+    for (const LoggedCommand& logged : read.commands) {
+        if (const auto* s = std::get_if<ShootCommand>(&logged.command)) {
+            found = true;
+            CHECK(s->aimPawn == target);
+            CHECK(s->aimPart == shot.aimPart);
+            CHECK(s->aimDy == doctest::Approx(-0.25f));
+            CHECK(s->aimUp == doctest::Approx(1.62f));
+        }
+    }
+    CHECK(found);
 }

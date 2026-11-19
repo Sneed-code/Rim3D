@@ -1,5 +1,7 @@
 #include "OverseerPawn.h"
 
+#include "KeyBindings.h"
+
 #include "Camera/CameraComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/SceneComponent.h"
@@ -66,7 +68,7 @@ void AOverseerPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	PlayerInputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AOverseerPawn::OnClearPressed);
 	PlayerInputComponent->BindKey(EKeys::F, IE_Pressed, this, &AOverseerPawn::OnFocusPressed);
 	PlayerInputComponent->BindKey(EKeys::Home, IE_Pressed, this, &AOverseerPawn::OnResetPressed);
-	PlayerInputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &AOverseerPawn::OnTakeControlPressed);
+	// Taking control of the selected colonist is the rebindable SwitchMode key (KeyBindings.h), read in Tick.
 	PlayerInputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &AOverseerPawn::OnZoomIn);
 	PlayerInputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &AOverseerPawn::OnZoomOut);
 	PlayerInputComponent->BindKey(EKeys::PageUp, IE_Pressed, this, &AOverseerPawn::OnLevelUp);
@@ -88,6 +90,10 @@ void AOverseerPawn::Tick(float DeltaTime)
 
 	if (APlayerController* PC = GetPlayerController())
 	{
+		if (Rim3DKeys::WasPressed(PC, ERim3DAction::SwitchMode))
+		{
+			OnTakeControlPressed();
+		}
 		const auto Down = [PC](const FKey& A, const FKey& B) { return PC->IsInputKeyDown(A) || PC->IsInputKeyDown(B); };
 		const double Right = (Down(EKeys::D, EKeys::Right) ? 1.0 : 0.0) - (Down(EKeys::A, EKeys::Left) ? 1.0 : 0.0);
 		const double Forward = (Down(EKeys::W, EKeys::Up) ? 1.0 : 0.0) - (Down(EKeys::S, EKeys::Down) ? 1.0 : 0.0);

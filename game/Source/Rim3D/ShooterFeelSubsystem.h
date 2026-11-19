@@ -29,6 +29,8 @@ struct FCameraFeel
 	float MotionBlur = 0.5f;
 	float Vignette = 0.0f;
 	float Fringe = 0.0f;
+	/** Degrees added to the field of view: a first person dash widens it. */
+	float FovAdd = 0.0f;
 };
 
 /** A bit of debris from a blast (cosmetic Chaos rigid body). */
@@ -195,6 +197,7 @@ private:
 	float KickYaw = 0.0f;
 	float ShakeNow = 0.0f;
 	float LargestShake = 0.0f;
+	float DashKick = 0.0f;
 	float RollDip = 0.0f;
 	float BlurPulse = 0.0f;
 	float VignettePulse = 0.0f;

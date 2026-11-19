@@ -634,6 +634,10 @@ TEST_CASE("Fighters: a caravan guard standing by a colonist never swings at it; 
             // The colonist holds still: since real-time-combat.md an unarmed fighter sidesteps a swing it reads, and the
             // two would then stand out of each other's reach.
             sim->things().registry().emplace_or_replace<Stunned>(colonist, Stunned{5});
+            // Nor does a blow knock it out of reach (punches go at the head since lock-on.md, and throw it back).
+            Position& held = sim->things().registry().get<Position>(colonist);
+            held.x = 40.5f;
+            held.y = 40.5f;
             sim->step();
             for (const Event& e : sim->events()) {
                 swings += e.type == EventType::MeleeSwing && e.thing == guard && e.target == colonist ? 1 : 0;
@@ -836,7 +840,8 @@ TEST_CASE("Fighters: a fighter whose shots go into a crest in front of a crouche
     MESSAGE(shots << " shots, " << intoGround << " into the crest; the fighter ended at " << at.x << "," << at.y);
     CHECK(at != CellPos{40, 34, 0});  // from where it started every shot was into the rise
     CHECK(shots >= 5);
-    CHECK(intoGround * 4 <= shots);
+    // A quarter before cooldown bursts; now the shots that come before it moves on make up to a third (18 shots, 6).
+    CHECK(intoGround * 3 <= shots);
 }
 
 TEST_CASE("Fighters: a defender with a club waits for a lone club raider, but runs in when it is at a friend") {

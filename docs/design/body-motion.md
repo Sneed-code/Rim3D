@@ -37,7 +37,8 @@ never moved. The creator's fight demo did the same with its own offsets.
      the ground (downed, knocked down, prone) are stepped over.
    - Motion lost against something is **lost**: the body doesn't catch up later.
 4. **When the clip ends the component is removed.** The body is where the sweep left it.
-5. While a clip has the body, steering and the player's walking are ignored (`MovementSystem`, `DirectMoveCommand`).
+5. While a clip has the body, steering and the player's walking are ignored (`MovementSystem`, `DirectMoveCommand`),
+   except for the player's own swings, which leave the feet free (below).
 
 Unreal reads `motionClip`, `motionTime` and `motionRate` from the snapshot and plays that clip at
 that time, root motion dropped. The actor follows the sim, which follows the same path, so feet stay planted. If the
@@ -53,10 +54,48 @@ sim was stopped by a wall the body stops there and the clip plays on against it.
 | Stagger by a bullet | `flinchClip.*` (none measured yet: a bullet flinches on the spot, it doesn't send a body stumbling a metre) | nothing |
 | Knockdown by poise (`CombatSystem::jolt`) | `knockdownClip.*` | a push of `knockdownMetres` (1.0) |
 | Blast (`CombatSystem::explode`) | none | a push of the blast's knockback over `blastSteps` (12) |
-| Melee swing (`MeleeSystem::attack`) | one of the weapon style's attack clips | no body movement |
+| Melee swing (`MeleeSystem::attack`) | one of the weapon style's attack clips (the player's: upper body, free feet) | no body movement |
 
 Animals have no human clips: they always get the plain push, shorter the bigger they are (divided by the root of
 their body size). Until the PC step has written the clip defs, people get the plain pushes too.
+
+## Upper-body clips and the player's free feet
+
+sneed (2026-11-18): "when I swing a melee weapon ... every fraction of a second it resets my position if I try to
+move while meleeing. It's critical I can move while meleeing", and, the third time of asking, "when people are hit
+and staggered they just slide in the stagger animation, their legs need to work, can you make one part of the body
+do it while the other is separate?"
+
+Why it happened: a swing's clip took the whole body, so the sim ignored the player's walking for the swing's second
+or so while Unreal's own body (`AProtagonistPawn`) kept walking; once the two were a metre apart Unreal snapped back to
+the sim. A stagger played the clip on the whole body while the sim's sweep (shortened by bodies and walls) carried it:
+the clip's steps and the body's real travel didn't match, so it slid.
+
+The fix splits the body at `spine_01`:
+
+- `BodyMotion::upper`: the clip is drawn on the chest, arms and head only. Staggers and flinches (`throwBody`, not
+  knockdowns) and the player's swings set it. The legs and hips are the walk's, driven by how the body really moves:
+  the sim still carries a staggered body along the clip's path and reports that speed (`vx`, `vy`), so the legs step
+  backwards or sideways through the stumble. The snapshot says so (`motionUpper`).
+- `BodyMotion::freeFeet`: the player's own swing at someone standing (`MeleeSystem::attack`, `m.player && !m.low`).
+  The clip doesn't move the body at all; `DirectMoveCommand` keeps working (`BodyMotionSystem::holdsBody` is false),
+  so the player walks, strafes and backs off while the arms swing. Its blow reaches as far as the clip's step would
+  have taken it (`set.lunge` added to the strike's reach), so swings land as before. A downward blow at a body on the
+  ground (a stomp, an overhead smash) stays a whole-body clip. Snapshot: `motionFreeFeet`.
+- Unreal: `USimPawnAnimInstance::UpperBodySlot` ("UpperBody") is a second montage slot over the default one; its node
+  (`FSimPawnUpperSlotNode`) keeps the pose under it for the hips and legs, turns `spine_01` to the clip's chest
+  direction in mesh space and takes every bone above. `ASimPawnActor::UpdateMotionClip` plays upper clips there with
+  no set-back (the hips are the walk's). While a clip or a lock-on holds the facing, the walk's predicted trajectory
+  keeps that facing (`bHoldFacing`), so motion matching picks backward and sideways steps instead of turning.
+- While a clip that holds the body plays on the player (a stagger, a knockdown), Unreal's own body is put where the
+  sim's is every frame, so nothing snaps back when it ends.
+
+## Bodies block the player
+
+sneed (2026-11-18): "enemies should have physical collision so I can't run through them." The player's walking
+(both `DirectMoveCommand` and Unreal's own walking) stops against standing bodies: `BodyMotionSystem::bodiesClear`
+refuses a move that brings it closer into another standing body than the two radii, slides along it as walls do, and
+always allows a move out of an overlap. Bodies on the ground are stepped over. Nobody is shoved by walking.
 
 ## Fast melee
 
@@ -115,24 +154,30 @@ distance follows height, weapon and target size; a motion survives save and load
 
 ## The measured clips (PC, 2026-11-17)
 
-`assets/motion_clips.json` lists 23 Mixamo clips with their trims; `-run=MotionClips` wrote
+`assets/motion_clips.json` lists 26 Mixamo clips with their trims; `-run=MotionClips` wrote
 `data/defs/MotionClips/MotionClips.json` from them (`-List` and `-Trace=A_Name` show travel and hand speed, which is
 how the trims and hit times were chosen). Roll 3.6 m in 1.55 s; sidesteps about 1 m in 0.4 s; staggers 0.9 to 1.2 m;
 knockdowns (death falls that end lying) about 1 m; club, one-hand and two-hand attacks of 1.0 to 1.5 s with the blow
-at 0.47 to 0.63 s. No clean punch clip exists yet, so fists swing without a clip.
+at 0.47 to 0.63 s. Fists have three punches (Mixamo singles Lead Jab, Cross Punch and Hook Punch, category
+Fighting), each trimmed to 0.8 s with the blow at 0.32 to 0.37 s and at most 0.43 m of hip travel; the jab is thrown
+with the left (lead) hand, so its blow is set by hand at the left arm's full stretch.
 
 The dodge roll's distance now comes from its clip (3.6 m for a 1.80 m body), not from `dodgeRoll.distance`, which
 only the plain push uses; the clip is spread over start-up, roll and recovery, so the body leans in during start-up.
 
 Unreal (`ASimPawnActor::UpdateMotionClip`): plays the clip as a montage at the sim's `motionTime` and sets the mesh
 back by the drawn pelvis's own travel (read from the animation, times the montage's blend weight), so the hips sit on
-the sim position through blend-in and blend-out. The actor keeps the sim's facing while a clip plays. The smoke test
-`motion` (`tools\smoke.ps1 -Test motion`) measures pelvis against actor every frame: within 4 to 7 cm, no pop at
-the end.
+the sim position through blend-in and blend-out. The set-back reads the montage's moment and weight as they are when
+the pawns update (after the bodies' animation has moved on for the frame), which is what that frame draws. A clip that
+falls behind the sim's moment (a hit-stop froze it) plays faster until it is back, so an attack's blow still lands on
+its step. The actor keeps the sim's facing while a clip plays. The smoke test `motion` (`tools\smoke.ps1 -Test
+motion`) reads pelvis against actor at the end of every frame, as drawn (its own tick runs before the pawns'): within
+1 cm while a clip plays; in the 0.3 s after, up to about 10 cm, which is the pawn's walk pose as it turns back to its
+post, not the clip.
 
 ## Next
 
 - **PC:** weapons in the hand follow `hand_r` during a clip (now they stay in the ready pose while the arms swing)
-  and holstered guns follow the spine; flinch clips for bullets; punch clips; separate get-ups for face-up and
+  and holstered guns follow the spine; flinch clips for bullets; separate get-ups for face-up and
   face-down; the creator's fight demo moving its people the same way.
 - **World:** tree trunks as solid posts, plant and swamp slow-down, loose props shoved by weight, foliage bending.

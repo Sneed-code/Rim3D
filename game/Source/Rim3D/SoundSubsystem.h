@@ -195,6 +195,10 @@ private:
 		float CooldownS = 0.0f;
 		int32 Priority = 2;
 		ESoundMix Group = ESoundMix::Effects;
+		/** A shot's or a blast's distant layer (`far`): past `farFrom` metres it takes over from the near sound, fully at
+		 * four times that, so a far gunshot is the low boom and rolling echo, not a quiet crack. */
+		FString FarCue;
+		float FarFromM = 0.0f;
 		/** The cut files; empty plays the tone. */
 		TArray<TSharedPtr<const FSoundClip>> Clips;
 		TSharedPtr<const FSoundClip> Tone;
@@ -212,7 +216,10 @@ private:
 		float Gain = 1.0f;      // beds and weather fade with this
 		float Pitch = 1.0f;
 		double EndsAt = 0.0;    // one-shots: real seconds
+		/** When it is heard (real seconds): later than asked by the distance over the speed of sound (343 m/s). */
 		double StartedAt = 0.0;
+		/** 0 the whole sound; 1 the near and 2 the far layer of a cue with a `far` layer (they crossfade by distance). */
+		uint8 Layer = 0;
 		float DistanceM = 0.0f;
 		int32 Occlusion = 0;
 		float OcclusionAge = 99.0f;

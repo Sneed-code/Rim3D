@@ -1,5 +1,5 @@
 {
-  "comment": "Clips the sim moves bodies along (docs/design/body-motion.md). The MotionClips commandlet (-run=MotionClips) measures each animation's hip travel and writes data/defs/MotionClips/MotionClips.json. `anim` is relative to /Game/Rim3D/Generated/Animations. `kind` Attack gets hitSeconds (the list's own, else the moment the weapon hand is fastest). `from`/`to` trim a clip (seconds). `turn` keeps the clip's turning. `keepWhenDown` for falls. The def names are the ones Rules/MotionRules.json and Rules/MeleeRules.json (styleAttacks) ask for. `hitSeconds` and `from`/`to` are in the animation's own time. Trims and blows were chosen from -run=MotionClips -Trace=<names> (each sample's hip travel and hand speeds). Unarmed Jab/Cross/Hook are left out: no clean punch clip is imported yet.",
+  "comment": "Clips the sim moves bodies along (docs/design/body-motion.md). The MotionClips commandlet (-run=MotionClips) measures each animation's hip travel and writes data/defs/MotionClips/MotionClips.json. `anim` is relative to /Game/Rim3D/Generated/Animations. `kind` Attack gets hitSeconds (the list's own, else the moment the weapon hand is fastest). `from`/`to` trim a clip (seconds). `turn` keeps the clip's turning. `keepWhenDown` for falls. The def names are the ones Rules/MotionRules.json and Rules/MeleeRules.json (styleAttacks) ask for. `hitSeconds` and `from`/`to` are in the animation's own time. Trims and blows were chosen from -run=MotionClips -Trace=<names> (each sample's hip travel and hand speeds). Unarmed Jab/Cross/Hook are Mixamo singles (Lead Jab, Cross Punch, Hook Punch; category Fighting); the jab is thrown with the left (lead) hand, so its blow is set by hand from the left hand reaching full stretch. The low blows at the downed (KnifeStabLow, SpearStabLow, OneHandHackLow, TwoHandHackLow, UnarmedStomp) are Mixamo singles too (Stabbing, Bayonet Stab, Sword And Shield Slash, Great Sword Slash, Stomping; category Fighting); the stomp's blow is the right foot's fastest moment, measured in Blender, as -Trace has no feet.",
   "metresScale": 1.0,
   "clips": [
     {
@@ -157,6 +157,97 @@
       "anim": "Mixamo/GreatSword/A_GreatSwordGreatSwordAttack",
       "kind": "Attack",
       "hitSeconds": 0.47
+    },
+    {
+      "defName": "Motion_Unarmed_Jab",
+      "anim": "Mixamo/Fighting/A_LeadJab",
+      "kind": "Attack",
+      "from": 0.1,
+      "to": 0.9,
+      "hitSeconds": 0.47
+    },
+    {
+      "defName": "Motion_Unarmed_Cross",
+      "anim": "Mixamo/Fighting/A_CrossPunch",
+      "kind": "Attack",
+      "from": 0.65,
+      "to": 1.45,
+      "hitSeconds": 1.02
+    },
+    {
+      "defName": "Motion_Unarmed_Hook",
+      "anim": "Mixamo/Fighting/A_HookPunch",
+      "kind": "Attack",
+      "from": 0.7,
+      "to": 1.5,
+      "hitSeconds": 1.02
+    },
+    {
+      "defName": "Motion_Knife_Stab_Low",
+      "anim": "Mixamo/Fighting/A_KnifeStabLow",
+      "kind": "Attack",
+      "from": 0.6,
+      "to": 2.0,
+      "hitSeconds": 1.35
+    },
+    {
+      "defName": "Motion_Spear_Stab_Low",
+      "anim": "Mixamo/Fighting/A_SpearStabLow",
+      "kind": "Attack",
+      "from": 0.5,
+      "to": 2.1,
+      "hitSeconds": 1.25
+    },
+    {
+      "defName": "Motion_Spear_Stab",
+      "anim": "Mixamo/Fighting/A_SpearStab",
+      "kind": "Attack",
+      "from": 0.35,
+      "to": 1.85,
+      "hitSeconds": 1.08,
+      "note": "the spear's thrust at a standing target: Mixamo 'Bayonet Stab' with Height 85 (chest; the low one, Height 0, is Motion_Spear_Stab_Low), downloaded 2026-11-19. Wind-up 0.27-0.73 s, both hands drive forward 0.80-1.27 s (fastest 1.0-1.07 s, full stretch 1.2-1.33 s), pull-back to 2.0 s; the hips go 0.43 m forward and under 0.1 m sideways, so it faces ahead"
+    },
+    {
+      "defName": "Motion_Spear_Thrust",
+      "anim": "FencingAttacks/A_FencingAttacks",
+      "kind": "Attack",
+      "from": 4.4,
+      "to": 5.6,
+      "hitSeconds": 4.8,
+      "note": "spear thrust at a standing target (sneed 2026-11-18): NOT USED: the fencer stands side-on, so this lunge travels to the pawn's right (0.58 m) and would stab sideways; kept measured for a later facing offset. One lunge out of the mocap fencing loop (4.4-5.6 s, blow at the front hand's fastest, 4.8 s; picked with -Trace=A_FencingAttacks on 2026-11-19)"
+    },
+    {
+      "defName": "Motion_Spear_Lunge",
+      "anim": "SwordLunge/A_SwordLunge",
+      "kind": "Attack",
+      "from": 0.1,
+      "to": 1.4,
+      "hitSeconds": 0.63,
+      "note": "NOT USED: side-on like the fencing clip (travels 0.54 m to the right). Spear lunge (mocap clip 13): the first lunge, 0.1-1.4 s, blow at 0.63 s (front hand fastest; -Trace=A_SwordLunge, 2026-11-19); hips 0.6 m at most"
+    },
+    {
+      "defName": "Motion_OneHand_Hack_Low",
+      "anim": "Mixamo/Fighting/A_OneHandHackLow",
+      "kind": "Attack",
+      "from": 0.0,
+      "to": 1.4,
+      "hitSeconds": 0.6
+    },
+    {
+      "defName": "Motion_TwoHand_Hack_Low",
+      "anim": "Mixamo/Fighting/A_TwoHandHackLow",
+      "kind": "Attack",
+      "from": 0.0,
+      "to": 1.25,
+      "hitSeconds": 0.57
+    },
+    {
+      "defName": "Motion_Unarmed_Stomp",
+      "anim": "Mixamo/Fighting/A_UnarmedStomp",
+      "kind": "Attack",
+      "from": 0.2,
+      "to": 1.5,
+      "hitSeconds": 0.63
     }
   ]
 }

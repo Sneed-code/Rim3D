@@ -3,6 +3,7 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Hash.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/RoomStats.h"
@@ -40,6 +41,16 @@ SpoilageNumbers SpoilageNumbers::read(const DefDatabase& defs) {
     n.dirtiest = spoilFloat(*def, "poison.dirtiestAt", n.dirtiest);
     n.unskilledChance = spoilFloat(*def, "poison.unskilledChance", n.unskilledChance);
     n.skillSafe = std::max(1, static_cast<int>(def->integer("poison.skillSafeAt", n.skillSafe)));
+    n.corpseRotStartDays = spoilFloat(*def, "corpse.daysToRotStart", n.corpseRotStartDays);
+    n.corpseDessicatedDays = std::max(n.corpseRotStartDays, spoilFloat(*def, "corpse.daysToDessicated", n.corpseDessicatedDays));
+    n.fliesFromDays = spoilFloat(*def, "corpse.flies.fromDays", n.fliesFromDays);
+    n.fliesFullDays = std::max(n.fliesFromDays, spoilFloat(*def, "corpse.flies.fullDays", n.fliesFullDays));
+    n.fliesFadeFromDays = std::min(n.corpseDessicatedDays, spoilFloat(*def, "corpse.flies.fadeFromDays", n.fliesFadeFromDays));
+    n.fliesColdC = spoilFloat(*def, "corpse.flies.stillAtOrBelowC", n.fliesColdC);
+    n.fliesWarmC = std::max(n.fliesColdC, spoilFloat(*def, "corpse.flies.allFlyingAtC", n.fliesWarmC));
+    n.maggotsFromDays = spoilFloat(*def, "corpse.maggots.fromDays", n.maggotsFromDays);
+    n.maggotsFullDays = std::max(n.maggotsFromDays, spoilFloat(*def, "corpse.maggots.fullDays", n.maggotsFullDays));
+    n.maggotsGoneDays = std::max(n.maggotsFullDays, spoilFloat(*def, "corpse.maggots.goneDays", n.maggotsGoneDays));
     return n;
 }
 
@@ -51,6 +62,7 @@ SpoilageSystem::SpoilageSystem(Map& map, Things& things, TemperatureSystem& temp
     deterioration_.assign(defs.size(), 0.0f);
     isMeal_.assign(defs.size(), 0);
     shelters_.assign(defs.size(), 0);
+    noCorpseRot_.assign(defs.size(), 0);
     for (uint32_t i = 0; i < defs.size(); ++i) {
         const Def& d = defs.get(DefId{i});
         if (d.kind() != "Things") {
@@ -60,6 +72,7 @@ SpoilageSystem::SpoilageSystem(Map& map, Things& things, TemperatureSystem& temp
         deterioration_[i] = spoilFloat(d, "stats.deteriorationRate", 0.0f);
         isMeal_[i] = d.text("ingestible.foodType") == "Meal" ? 1 : 0;
         shelters_[i] = d.flag("building.preventDeteriorationOnTop") ? 1 : 0;
+        noCorpseRot_[i] = d.flag("race.mechanical", false) ? 1 : 0;
     }
 }
 
@@ -71,6 +84,63 @@ float SpoilageSystem::rotSpeedAt(float celsius) const {
         return 0.0f;
     }
     return (celsius - numbers_.rotNoneBelowC) / (numbers_.rotFullAboveC - numbers_.rotNoneBelowC);
+}
+
+namespace {
+
+// 0 at or below `from`, 1 at or above `to`, linear between (1 from `from` on if they are the same).
+float spoilRamp(float x, float from, float to) {
+    if (x >= to) {
+        return x >= from ? 1.0f : 0.0f;
+    }
+    if (x <= from) {
+        return 0.0f;
+    }
+    return (x - from) / (to - from);
+}
+
+}  // namespace
+
+CorpseLook SpoilageSystem::corpseLook(float rotDays, float celsius) const {
+    const SpoilageNumbers& n = numbers_;
+    CorpseLook look;
+    if (rotDays >= n.corpseDessicatedDays) {
+        look.stage = CorpseStage::Dessicated;
+        return look;
+    }
+    look.stage = rotDays >= n.corpseRotStartDays ? CorpseStage::Rotting : CorpseStage::Fresh;
+    const float swarm = spoilRamp(rotDays, n.fliesFromDays, n.fliesFullDays) *
+                        (1.0f - spoilRamp(rotDays, n.fliesFadeFromDays, n.corpseDessicatedDays));
+    look.flies = swarm;
+    // In the cold the flies sit on the body rather than fly.
+    look.flying = spoilRamp(celsius, n.fliesColdC, n.fliesWarmC);
+    look.maggots = spoilRamp(rotDays, n.maggotsFromDays, n.maggotsFullDays) * (1.0f - spoilRamp(rotDays, n.maggotsFullDays, n.maggotsGoneDays));
+    return look;
+}
+
+bool SpoilageSystem::corpseRots(DefId pawnDef) const {
+    return pawnDef.valid() && pawnDef.value < noCorpseRot_.size() && noCorpseRot_[pawnDef.value] == 0;
+}
+
+void SpoilageSystem::rotCorpses(float days) {
+    entt::registry& reg = things_.registry();
+    for (const Entity e : reg.view<Health, Position>()) {
+        if (!reg.get<Health>(e).dead) {
+            continue;
+        }
+        const Thing* thing = reg.try_get<Thing>(e);
+        if (thing == nullptr || !corpseRots(thing->def)) {
+            continue;
+        }
+        const CellPos cell = cellOf(reg.get<Position>(e));
+        if (!map_.inBounds(cell)) {
+            continue;
+        }
+        CorpseRot& rot = reg.get_or_emplace<CorpseRot>(e);
+        if (rot.days < numbers_.corpseDessicatedDays) {
+            rot.days = std::min(numbers_.corpseDessicatedDays, rot.days + rotSpeedAt(temperature_.temperatureAt(cell)) * days);
+        }
+    }
 }
 
 float SpoilageSystem::poisonChance(Entity cook, CellPos cell) {
@@ -153,6 +223,8 @@ void SpoilageSystem::step(int64_t now) {
         scratch_.push_back(e);
     }
     std::sort(scratch_.begin(), scratch_.end());
+    // Bodies first: nothing is destroyed there, so the order does not matter.
+    rotCorpses(days);
     for (const Entity e : scratch_) {
         const DefId def = reg.get<Thing>(e).def;
         const CellPos cell = cellOf(reg.get<Position>(e));

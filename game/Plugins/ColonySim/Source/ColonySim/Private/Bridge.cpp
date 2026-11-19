@@ -11,248 +11,13 @@
 
 namespace colony {
 
-// The names, in two halves: one long if-constexpr chain nests too deeply for MSVC (C1061).
-// Prefixed because Unreal's unity builds merge .cpp files.
-template <typename Type>
-constexpr const char* bridgeCommandNameFirst() {
-    if constexpr (std::is_same_v<Type, SpawnThingCommand>) {
-        return "SpawnThing";
-    } else if constexpr (std::is_same_v<Type, DestroyThingCommand>) {
-        return "DestroyThing";
-    } else if constexpr (std::is_same_v<Type, DamagePawnCommand>) {
-        return "DamagePawn";
-    } else if constexpr (std::is_same_v<Type, TendPawnCommand>) {
-        return "TendPawn";
-    } else if constexpr (std::is_same_v<Type, SetWorkPriorityCommand>) {
-        return "SetWorkPriority";
-    } else if constexpr (std::is_same_v<Type, CreateStockpileCommand>) {
-        return "CreateStockpile";
-    } else if constexpr (std::is_same_v<Type, RemoveZoneCellsCommand>) {
-        return "RemoveZoneCells";
-    } else if constexpr (std::is_same_v<Type, SetStockpilePriorityCommand>) {
-        return "SetStockpilePriority";
-    } else if constexpr (std::is_same_v<Type, SetStockpileAllowedCommand>) {
-        return "SetStockpileAllowed";
-    } else if constexpr (std::is_same_v<Type, OrderHaulCommand>) {
-        return "OrderHaul";
-    } else if constexpr (std::is_same_v<Type, ControlPawnCommand>) {
-        return "ControlPawn";
-    } else if constexpr (std::is_same_v<Type, DirectMoveCommand>) {
-        return "DirectMove";
-    } else if constexpr (std::is_same_v<Type, SetScheduleCommand>) {
-        return "SetSchedule";
-    } else if constexpr (std::is_same_v<Type, AssignBedCommand>) {
-        return "AssignBed";
-    } else if constexpr (std::is_same_v<Type, PlaceBlueprintCommand>) {
-        return "PlaceBlueprint";
-    } else if constexpr (std::is_same_v<Type, CancelBuildCommand>) {
-        return "CancelBuild";
-    } else if constexpr (std::is_same_v<Type, DeconstructCommand>) {
-        return "Deconstruct";
-    } else if constexpr (std::is_same_v<Type, EquipCommand>) {
-        return "Equip";
-    } else if constexpr (std::is_same_v<Type, ShootCommand>) {
-        return "Shoot";
-    } else if constexpr (std::is_same_v<Type, SetStanceCommand>) {
-        return "SetStance";
-    } else if constexpr (std::is_same_v<Type, DesignateCommand>) {
-        return "Designate";
-    } else if constexpr (std::is_same_v<Type, CancelDesignationsCommand>) {
-        return "CancelDesignations";
-    } else if constexpr (std::is_same_v<Type, DraftCommand>) {
-        return "Draft";
-    } else if constexpr (std::is_same_v<Type, MoveOrderCommand>) {
-        return "MoveOrder";
-    } else if constexpr (std::is_same_v<Type, AttackOrderCommand>) {
-        return "AttackOrder";
-    } else if constexpr (std::is_same_v<Type, SetFactionCommand>) {
-        return "SetFaction";
-    } else if constexpr (std::is_same_v<Type, SetLineageCommand>) {
-        return "SetLineage";
-    } else if constexpr (std::is_same_v<Type, ReloadCommand>) {
-        return "Reload";
-    } else if constexpr (std::is_same_v<Type, AddBillCommand>) {
-        return "AddBill";
-    } else if constexpr (std::is_same_v<Type, RemoveBillCommand>) {
-        return "RemoveBill";
-    } else if constexpr (std::is_same_v<Type, SetBillCommand>) {
-        return "SetBill";
-    } else if constexpr (std::is_same_v<Type, HandsOnCommand>) {
-        return "HandsOn";
-    } else if constexpr (std::is_same_v<Type, FlickCommand>) {
-        return "Flick";
-    } else if constexpr (std::is_same_v<Type, PlaceFloorCommand>) {
-        return "PlaceFloor";
-    } else if constexpr (std::is_same_v<Type, AddFilthCommand>) {
-        return "AddFilth";
-    } else if constexpr (std::is_same_v<Type, SetThermostatCommand>) {
-        return "SetThermostat";
-    } else if constexpr (std::is_same_v<Type, TakeDrugCommand>) {
-        return "TakeDrug";
-    } else if constexpr (std::is_same_v<Type, SetDrugPolicyCommand>) {
-        return "SetDrugPolicy";
-    } else if constexpr (std::is_same_v<Type, SetDrugPolicyEntryCommand>) {
-        return "SetDrugPolicyEntry";
-    } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
-        return "SetRefuel";
-    } else if constexpr (std::is_same_v<Type, SetBillOptionsCommand>) {
-        return "SetBillOptions";
-    } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
-        return "MoveBill";
-    } else if constexpr (std::is_same_v<Type, ClimbCommand>) {
-        return "Climb";
-    } else if constexpr (std::is_same_v<Type, AddOperationCommand>) {
-        return "AddOperation";
-    } else if constexpr (std::is_same_v<Type, RemoveOperationCommand>) {
-        return "RemoveOperation";
-    } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
-        return "ShortCircuit";
-    } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
-        return "SetResearch";
-    } else if constexpr (std::is_same_v<Type, UnlockResearchCommand>) {
-        return "UnlockResearch";
-    } else if constexpr (std::is_same_v<Type, ThrowCommand>) {
-        return "Throw";
-    } else if constexpr (std::is_same_v<Type, ExplodeCommand>) {
-        return "Explode";
-    } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
-        return "StartRaid";
-    } else if constexpr (std::is_same_v<Type, StartThreatCommand>) {
-        return "StartThreat";
-    } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
-        return "SoundAlarm";
-    } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
-        return "SetDefenseRole";
-    } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
-        return "MarkShelter";
-    } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
-        return "MarkAnimal";
-    } else if constexpr (std::is_same_v<Type, MarkAnimalsInAreaCommand>) {
-        return "MarkAnimalsInArea";
-    } else if constexpr (std::is_same_v<Type, SetAnimalNameCommand>) {
-        return "SetAnimalName";
-    } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
-        return "SetTraining";
-    } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand>) {
-        return "CreateAnimalZone";
-    } else if constexpr (std::is_same_v<Type, RemoveAnimalZoneCellsCommand>) {
-        return "RemoveAnimalZoneCells";
-    } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
-        return "AssignAnimalZone";
-    } else if constexpr (std::is_same_v<Type, SetBreedingCommand>) {
-        return "SetBreeding";
-    } else {
-        return nullptr;
-    }
-}
+namespace {
 
+// The newest commands' names, apart from commandName's chain: MSVC stops at 128 nested blocks (C1061), and that chain
+// is at the limit. New commands go here.
 template <typename Type>
-constexpr const char* bridgeCommandNameSecond() {
-    if constexpr (std::is_same_v<Type, MeleeCommand>) {
-        return "Melee";
-    } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
-        return "DodgeRoll";
-    } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
-        return "SetOutfit";
-    } else if constexpr (std::is_same_v<Type, EditOutfitCommand>) {
-        return "EditOutfit";
-    } else if constexpr (std::is_same_v<Type, AddOutfitCommand>) {
-        return "AddOutfit";
-    } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
-        return "RemoveOutfit";
-    } else if constexpr (std::is_same_v<Type, StripCommand>) {
-        return "Strip";
-    } else if constexpr (std::is_same_v<Type, RepairGearCommand>) {
-        return "RepairGear";
-    } else if constexpr (std::is_same_v<Type, FitUpgradeCommand>) {
-        return "FitUpgrade";
-    } else if constexpr (std::is_same_v<Type, InteractCommand>) {
-        return "Interact";
-    } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
-        return "SetWeather";
-    } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
-        return "SpendTalentPoint";
-    } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
-        return "RearmTrap";
-    } else if constexpr (std::is_same_v<Type, CreateGrowingZoneCommand>) {
-        return "CreateGrowingZone";
-    } else if constexpr (std::is_same_v<Type, RemoveGrowingZoneCellsCommand>) {
-        return "RemoveGrowingZoneCells";
-    } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
-        return "SetGrowingZoneCrop";
-    } else if constexpr (std::is_same_v<Type, AddTalentXpCommand>) {
-        return "AddTalentXp";
-    } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
-        return "CarryWeapon";
-    } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
-        return "SetNarrator";
-    } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
-        return "FireIncident";
-    } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
-        return "SwitchWeapon";
-    } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
-        return "Ignite";
-    } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
-        return "SetHomeArea";
-    } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
-        return "SetMedicalCare";
-    } else if constexpr (std::is_same_v<Type, SetPrisonerModeCommand>) {
-        return "SetPrisonerMode";
-    } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
-        return "SetPrisonBed";
-    } else if constexpr (std::is_same_v<Type, ArrestCommand>) {
-        return "Arrest";
-    } else if constexpr (std::is_same_v<Type, StartVisitCommand>) {
-        return "StartVisit";
-    } else if constexpr (std::is_same_v<Type, TradeCommand>) {
-        return "Trade";
-    } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
-        return "AdjustGoodwill";
-    } else if constexpr (std::is_same_v<Type, GiftCommand>) {
-        return "Gift";
-    } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
-        return "PlaceUpperFloor";
-    } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
-        return "StartMentalBreak";
-    } else if constexpr (std::is_same_v<Type, CreateAreaCommand>) {
-        return "CreateArea";
-    } else if constexpr (std::is_same_v<Type, PaintAreaCommand>) {
-        return "PaintArea";
-    } else if constexpr (std::is_same_v<Type, DeleteAreaCommand>) {
-        return "DeleteArea";
-    } else if constexpr (std::is_same_v<Type, AssignAreaCommand>) {
-        return "AssignArea";
-    } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
-        return "ContractDisease";
-    } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
-        return "EndMentalBreak";
-    } else if constexpr (std::is_same_v<Type, StartStrategyRaidCommand>) {
-        return "StartStrategyRaid";
-    } else if constexpr (std::is_same_v<Type, ShipCommand>) {
-        return "Ship";
-    } else if constexpr (std::is_same_v<Type, QuestCommand>) {
-        return "Quest";
-    } else if constexpr (std::is_same_v<Type, AttuneCommand>) {
-        return "Attune";
-    } else if constexpr (std::is_same_v<Type, LearnPowerCommand>) {
-        return "LearnPower";
-    } else if constexpr (std::is_same_v<Type, CastPowerCommand>) {
-        return "CastPower";
-    } else if constexpr (std::is_same_v<Type, SkipNightCommand>) {
-        return "SkipNight";
-    } else if constexpr (std::is_same_v<Type, FastTravelCommand>) {
-        return "FastTravel";
-    } else if constexpr (std::is_same_v<Type, CancelSkipCommand>) {
-        return "CancelSkip";
-    } else if constexpr (std::is_same_v<Type, CaravanCommand>) {
-        return "Caravan";
-    } else if constexpr (std::is_same_v<Type, ArtilleryCommand>) {
-        return "Artillery";
-    } else if constexpr (std::is_same_v<Type, CommsCommand>) {
-        return "Comms";
-    } else if constexpr (std::is_same_v<Type, PodCommand>) {
-        return "Pod";
-    } else if constexpr (std::is_same_v<Type, ScannerCommand>) {
+const char* bridgeLateCommandName() {
+    if constexpr (std::is_same_v<Type, ScannerCommand>) {
         return "Scanner";
     } else if constexpr (std::is_same_v<Type, InventoryCommand>) {
         return "Inventory";
@@ -268,26 +33,273 @@ constexpr const char* bridgeCommandNameSecond() {
         return "Sleep";
     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
         return "Patch";
+    } else if constexpr (std::is_same_v<Type, SetAlertCommand>) {
+        return "SetAlert";
+    } else if constexpr (std::is_same_v<Type, LevelEarthCommand>) {
+        return "LevelEarth";
+    } else if constexpr (std::is_same_v<Type, CancelEarthworksCommand>) {
+        return "CancelEarthworks";
+    } else if constexpr (std::is_same_v<Type, UnstuckCommand>) {
+        return "Unstuck";
     } else if constexpr (std::is_same_v<Type, SetWorkGroupCommand>) {
         return "SetWorkGroup";
-    } else if constexpr (std::is_same_v<Type, RerollColonistCommand>) {
-        return "RerollColonist";
-    } else if constexpr (std::is_same_v<Type, SetLandingZoneCommand>) {
-        return "SetLandingZone";
     } else {
-        static_assert(bridgeCommandNameFirst<Type>() != nullptr, "name every command type");
-        return nullptr;
+        // FocusCommand and SetFightResponseCommand are named before the visit (commandName).
+        static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||
+                          std::is_same_v<Type, FocusCommand> || std::is_same_v<Type, SetFightResponseCommand>,
+                      "name every command type");
+        return std::is_same_v<Type, SetLandingZoneCommand> ? "SetLandingZone" : "RerollColonist";
     }
 }
 
+}  // namespace
+
 const char* commandName(const Command& command) {
+    if (std::holds_alternative<FocusCommand>(command)) {
+        return "Focus";
+    }
+    if (std::holds_alternative<SetFightResponseCommand>(command)) {
+        return "SetFightResponse";
+    }
     return std::visit(
         [](const auto& c) -> const char* {
             using Type = std::decay_t<decltype(c)>;
-            if (const char* name = bridgeCommandNameFirst<Type>()) {
-                return name;
+            if constexpr (std::is_same_v<Type, SpawnThingCommand>) {
+                return "SpawnThing";
+            } else if constexpr (std::is_same_v<Type, DestroyThingCommand>) {
+                return "DestroyThing";
+            } else if constexpr (std::is_same_v<Type, DamagePawnCommand>) {
+                return "DamagePawn";
+            } else if constexpr (std::is_same_v<Type, TendPawnCommand>) {
+                return "TendPawn";
+            } else if constexpr (std::is_same_v<Type, SetWorkPriorityCommand>) {
+                return "SetWorkPriority";
+            } else if constexpr (std::is_same_v<Type, CreateStockpileCommand>) {
+                return "CreateStockpile";
+            } else if constexpr (std::is_same_v<Type, RemoveZoneCellsCommand>) {
+                return "RemoveZoneCells";
+            } else if constexpr (std::is_same_v<Type, SetStockpilePriorityCommand>) {
+                return "SetStockpilePriority";
+            } else if constexpr (std::is_same_v<Type, SetStockpileAllowedCommand>) {
+                return "SetStockpileAllowed";
+            } else if constexpr (std::is_same_v<Type, OrderHaulCommand>) {
+                return "OrderHaul";
+            } else if constexpr (std::is_same_v<Type, ControlPawnCommand>) {
+                return "ControlPawn";
+            } else if constexpr (std::is_same_v<Type, DirectMoveCommand>) {
+                return "DirectMove";
+            } else if constexpr (std::is_same_v<Type, SetScheduleCommand>) {
+                return "SetSchedule";
+            } else if constexpr (std::is_same_v<Type, AssignBedCommand>) {
+                return "AssignBed";
+            } else if constexpr (std::is_same_v<Type, PlaceBlueprintCommand>) {
+                return "PlaceBlueprint";
+            } else if constexpr (std::is_same_v<Type, CancelBuildCommand>) {
+                return "CancelBuild";
+            } else if constexpr (std::is_same_v<Type, DeconstructCommand>) {
+                return "Deconstruct";
+            } else if constexpr (std::is_same_v<Type, EquipCommand>) {
+                return "Equip";
+            } else if constexpr (std::is_same_v<Type, ShootCommand>) {
+                return "Shoot";
+            } else if constexpr (std::is_same_v<Type, SetStanceCommand>) {
+                return "SetStance";
+            } else if constexpr (std::is_same_v<Type, DesignateCommand>) {
+                return "Designate";
+            } else if constexpr (std::is_same_v<Type, CancelDesignationsCommand>) {
+                return "CancelDesignations";
+            } else if constexpr (std::is_same_v<Type, DraftCommand>) {
+                return "Draft";
+            } else if constexpr (std::is_same_v<Type, MoveOrderCommand>) {
+                return "MoveOrder";
+            } else if constexpr (std::is_same_v<Type, AttackOrderCommand>) {
+                return "AttackOrder";
+            } else if constexpr (std::is_same_v<Type, SetFactionCommand>) {
+                return "SetFaction";
+            } else if constexpr (std::is_same_v<Type, SetLineageCommand>) {
+                return "SetLineage";
+            } else if constexpr (std::is_same_v<Type, ReloadCommand>) {
+                return "Reload";
+            } else if constexpr (std::is_same_v<Type, AddBillCommand>) {
+                return "AddBill";
+            } else if constexpr (std::is_same_v<Type, RemoveBillCommand>) {
+                return "RemoveBill";
+            } else if constexpr (std::is_same_v<Type, SetBillCommand>) {
+                return "SetBill";
+            } else if constexpr (std::is_same_v<Type, HandsOnCommand>) {
+                return "HandsOn";
+            } else if constexpr (std::is_same_v<Type, FlickCommand>) {
+                return "Flick";
+            } else if constexpr (std::is_same_v<Type, PlaceFloorCommand>) {
+                return "PlaceFloor";
+            } else if constexpr (std::is_same_v<Type, AddFilthCommand>) {
+                return "AddFilth";
+            } else if constexpr (std::is_same_v<Type, SetThermostatCommand>) {
+                return "SetThermostat";
+            } else if constexpr (std::is_same_v<Type, TakeDrugCommand>) {
+                return "TakeDrug";
+            } else if constexpr (std::is_same_v<Type, SetDrugPolicyCommand>) {
+                return "SetDrugPolicy";
+            } else if constexpr (std::is_same_v<Type, SetDrugPolicyEntryCommand>) {
+                return "SetDrugPolicyEntry";
+            } else if constexpr (std::is_same_v<Type, SetRefuelCommand>) {
+                return "SetRefuel";
+            } else if constexpr (std::is_same_v<Type, SetBillOptionsCommand>) {
+                return "SetBillOptions";
+            } else if constexpr (std::is_same_v<Type, MoveBillCommand>) {
+                return "MoveBill";
+            } else if constexpr (std::is_same_v<Type, ClimbCommand>) {
+                return "Climb";
+            } else if constexpr (std::is_same_v<Type, AddOperationCommand>) {
+                return "AddOperation";
+            } else if constexpr (std::is_same_v<Type, RemoveOperationCommand>) {
+                return "RemoveOperation";
+            } else if constexpr (std::is_same_v<Type, ShortCircuitCommand>) {
+                return "ShortCircuit";
+            } else if constexpr (std::is_same_v<Type, SetResearchCommand>) {
+                return "SetResearch";
+            } else if constexpr (std::is_same_v<Type, UnlockResearchCommand>) {
+                return "UnlockResearch";
+            } else if constexpr (std::is_same_v<Type, ThrowCommand>) {
+                return "Throw";
+            } else if constexpr (std::is_same_v<Type, ExplodeCommand>) {
+                return "Explode";
+            } else if constexpr (std::is_same_v<Type, StartRaidCommand>) {
+                return "StartRaid";
+            } else if constexpr (std::is_same_v<Type, StartThreatCommand>) {
+                return "StartThreat";
+            } else if constexpr (std::is_same_v<Type, SoundAlarmCommand>) {
+                return "SoundAlarm";
+            } else if constexpr (std::is_same_v<Type, SetDefenseRoleCommand>) {
+                return "SetDefenseRole";
+            } else if constexpr (std::is_same_v<Type, MarkShelterCommand>) {
+                return "MarkShelter";
+            } else if constexpr (std::is_same_v<Type, MarkAnimalCommand>) {
+                return "MarkAnimal";
+            } else if constexpr (std::is_same_v<Type, MarkAnimalsInAreaCommand>) {
+                return "MarkAnimalsInArea";
+            } else if constexpr (std::is_same_v<Type, SetAnimalNameCommand>) {
+                return "SetAnimalName";
+            } else if constexpr (std::is_same_v<Type, SetTrainingCommand>) {
+                return "SetTraining";
+            } else if constexpr (std::is_same_v<Type, CreateAnimalZoneCommand>) {
+                return "CreateAnimalZone";
+            } else if constexpr (std::is_same_v<Type, RemoveAnimalZoneCellsCommand>) {
+                return "RemoveAnimalZoneCells";
+            } else if constexpr (std::is_same_v<Type, AssignAnimalZoneCommand>) {
+                return "AssignAnimalZone";
+            } else if constexpr (std::is_same_v<Type, SetBreedingCommand>) {
+                return "SetBreeding";
+            } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
+                return "Melee";
+            } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
+                return "DodgeRoll";
+            } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
+                return "SetOutfit";
+            } else if constexpr (std::is_same_v<Type, EditOutfitCommand>) {
+                return "EditOutfit";
+            } else if constexpr (std::is_same_v<Type, AddOutfitCommand>) {
+                return "AddOutfit";
+            } else if constexpr (std::is_same_v<Type, RemoveOutfitCommand>) {
+                return "RemoveOutfit";
+            } else if constexpr (std::is_same_v<Type, StripCommand>) {
+                return "Strip";
+            } else if constexpr (std::is_same_v<Type, RepairGearCommand>) {
+                return "RepairGear";
+            } else if constexpr (std::is_same_v<Type, FitUpgradeCommand>) {
+                return "FitUpgrade";
+            } else if constexpr (std::is_same_v<Type, InteractCommand>) {
+                return "Interact";
+            } else if constexpr (std::is_same_v<Type, SetWeatherCommand>) {
+                return "SetWeather";
+            } else if constexpr (std::is_same_v<Type, SpendTalentPointCommand>) {
+                return "SpendTalentPoint";
+            } else if constexpr (std::is_same_v<Type, RearmTrapCommand>) {
+                return "RearmTrap";
+            } else if constexpr (std::is_same_v<Type, CreateGrowingZoneCommand>) {
+                return "CreateGrowingZone";
+            } else if constexpr (std::is_same_v<Type, RemoveGrowingZoneCellsCommand>) {
+                return "RemoveGrowingZoneCells";
+            } else if constexpr (std::is_same_v<Type, SetGrowingZoneCropCommand>) {
+                return "SetGrowingZoneCrop";
+            } else if constexpr (std::is_same_v<Type, AddTalentXpCommand>) {
+                return "AddTalentXp";
+            } else if constexpr (std::is_same_v<Type, CarryWeaponCommand>) {
+                return "CarryWeapon";
+            } else if constexpr (std::is_same_v<Type, SetNarratorCommand>) {
+                return "SetNarrator";
+            } else if constexpr (std::is_same_v<Type, FireIncidentCommand>) {
+                return "FireIncident";
+            } else if constexpr (std::is_same_v<Type, SwitchWeaponCommand>) {
+                return "SwitchWeapon";
+            } else if constexpr (std::is_same_v<Type, IgniteCommand>) {
+                return "Ignite";
+            } else if constexpr (std::is_same_v<Type, SetHomeAreaCommand>) {
+                return "SetHomeArea";
+            } else if constexpr (std::is_same_v<Type, SetMedicalCareCommand>) {
+                return "SetMedicalCare";
+            } else if constexpr (std::is_same_v<Type, SetPrisonerModeCommand>) {
+                return "SetPrisonerMode";
+            } else if constexpr (std::is_same_v<Type, SetPrisonBedCommand>) {
+                return "SetPrisonBed";
+            } else if constexpr (std::is_same_v<Type, ArrestCommand>) {
+                return "Arrest";
+            } else if constexpr (std::is_same_v<Type, StartVisitCommand>) {
+                return "StartVisit";
+            } else if constexpr (std::is_same_v<Type, TradeCommand>) {
+                return "Trade";
+            } else if constexpr (std::is_same_v<Type, AdjustGoodwillCommand>) {
+                return "AdjustGoodwill";
+            } else if constexpr (std::is_same_v<Type, GiftCommand>) {
+                return "Gift";
+            } else if constexpr (std::is_same_v<Type, PlaceUpperFloorCommand>) {
+                return "PlaceUpperFloor";
+            } else if constexpr (std::is_same_v<Type, StartMentalBreakCommand>) {
+                return "StartMentalBreak";
+            } else if constexpr (std::is_same_v<Type, CreateAreaCommand>) {
+                return "CreateArea";
+            } else if constexpr (std::is_same_v<Type, PaintAreaCommand>) {
+                return "PaintArea";
+            } else if constexpr (std::is_same_v<Type, DeleteAreaCommand>) {
+                return "DeleteArea";
+            } else if constexpr (std::is_same_v<Type, AssignAreaCommand>) {
+                return "AssignArea";
+            } else if constexpr (std::is_same_v<Type, ContractDiseaseCommand>) {
+                return "ContractDisease";
+            } else if constexpr (std::is_same_v<Type, EndMentalBreakCommand>) {
+                return "EndMentalBreak";
+            } else if constexpr (std::is_same_v<Type, StartStrategyRaidCommand>) {
+                return "StartStrategyRaid";
+            } else if constexpr (std::is_same_v<Type, ShipCommand>) {
+                return "Ship";
+            } else if constexpr (std::is_same_v<Type, QuestCommand>) {
+                return "Quest";
+            } else if constexpr (std::is_same_v<Type, AttuneCommand>) {
+                return "Attune";
+            } else if constexpr (std::is_same_v<Type, LearnPowerCommand>) {
+                return "LearnPower";
+            } else if constexpr (std::is_same_v<Type, CastPowerCommand>) {
+                return "CastPower";
+            } else if constexpr (std::is_same_v<Type, SkipNightCommand>) {
+                return "SkipNight";
+            } else if constexpr (std::is_same_v<Type, FastTravelCommand>) {
+                return "FastTravel";
+            } else if constexpr (std::is_same_v<Type, CancelSkipCommand>) {
+                return "CancelSkip";
+            } else if constexpr (std::is_same_v<Type, CaravanCommand>) {
+                return "Caravan";
+            } else if constexpr (std::is_same_v<Type, ArtilleryCommand>) {
+                return "Artillery";
+            } else if constexpr (std::is_same_v<Type, CommsCommand>) {
+                return "Comms";
+            } else {
+                // Nested, not one more else-if: MSVC stops at 128 nested blocks (C1061).
+                if constexpr (std::is_same_v<Type, PodCommand>) {
+                    return "Pod";
+                } else {
+                    return bridgeLateCommandName<Type>();  // its own chain: this one is at MSVC's limit
+                }
             }
-            return bridgeCommandNameSecond<Type>();
         },
         command);
 }
@@ -349,6 +361,7 @@ const char* eventTypeName(EventType type) {
         case EventType::GrenadeLanded: return "GrenadeLanded";
         case EventType::Explosion: return "Explosion";
         case EventType::PawnKnockedDown: return "PawnKnockedDown";
+        case EventType::PawnDismembered: return "PawnDismembered";
         case EventType::RaidArrived: return "RaidArrived";
         case EventType::SquadChanged: return "SquadChanged";
         case EventType::AlarmChanged: return "AlarmChanged";
@@ -513,6 +526,8 @@ const char* pawnActionName(PawnAction action) {
         case PawnAction::Cornered: return "Cornered";
         case PawnAction::TakeCover: return "TakeCover";
         case PawnAction::Patch: return "Patch";
+        case PawnAction::Alert: return "Alert";
+        case PawnAction::Callout: return "Callout";
     }
     return "?";
 }

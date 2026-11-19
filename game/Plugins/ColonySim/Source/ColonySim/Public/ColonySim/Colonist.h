@@ -68,4 +68,7 @@ COLONY_API bool generateColonist(const DefDatabase& defs, uint64_t seed, bool pr
 COLONY_API void makeColonistNameUnique(const DefDatabase& defs, uint64_t seed, Colonist& colonist,
                                        const std::vector<const Colonist*>& taken);
 
+// A first name from the Names banks by `seed` (empty without them): for pawns that have no Colonist record.
+COLONY_API std::string randomFirstName(const DefDatabase& defs, uint64_t seed, bool female);
+
 }  // namespace colony

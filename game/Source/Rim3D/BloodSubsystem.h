@@ -17,6 +17,7 @@ class UMaterialInterface;
 class UPrimitiveComponent;
 class USimSubsystem;
 class USkeletalMeshComponent;
+class USkinBlood;
 class UStaticMesh;
 namespace colony { class Sim; }
 
@@ -135,6 +136,11 @@ public:
 	int32 GetWallSplats() const { return WallSplats; }
 	int32 GetBodyStainsMade() const { return BodyStainsMade; }
 	int32 GetWoundMarks() const { return WoundMarks; }
+	/** Marks painted into skin (USkinBlood) and bodies carrying blood in their skin now. */
+	int32 GetSkinPaints() const;
+	int32 GetSkinMasks() const;
+	/** Blood painted into skin; null before Initialize. */
+	USkinBlood* GetSkinBlood() const;
 	int32 GetExitWounds() const { return ExitWounds; }
 	int32 GetDrips() const { return Drips; }
 	int32 GetSpurts() const { return Spurts; }
@@ -238,6 +244,8 @@ private:
 		bool bArterial = false;
 		float RunLengthCm = 0.0f;
 		TWeakObjectPtr<UDecalComponent> Run;
+		float SkinRunPainted = 0.0f;  // how long the run painted into the skin is (cm)
+		float SkinSeed = -1.0f;
 		float NoSimSeconds = 0.0f;   // > 0: bleeds this long without a sim
 		float Rate = 0.0f;           // drips a second now
 		float NotBleedingFor = 0.0f;
@@ -333,6 +341,10 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> SplatterBase;
+
+	/** Blood painted into MakeHuman skin (in place of body decals). */
+	UPROPERTY()
+	TObjectPtr<USkinBlood> SkinBlood;
 
 	/** One per cell of the splat atlas (4 x 4). */
 	UPROPERTY()

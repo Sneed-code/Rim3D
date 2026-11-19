@@ -59,6 +59,7 @@ Filth::Filth(Map& map, Things& things, const Floors& floors, const DefDatabase& 
                                                 24.0);
         }
         kind.rainWashes = def.flag("filth.rainWashes", false);
+        kind.fadeSeconds = static_cast<float>(def.number("filth.fadeSeconds", 0.0));
         kinds_.push_back(std::move(kind));
     }
     dirtKind_ = kindIndex("Dirt");
@@ -105,10 +106,12 @@ bool Filth::add(CellPos c, int kind, int layers) {
         FilthPile pile;
         pile.kind = static_cast<uint16_t>(kind);
         pile.thickness = static_cast<uint8_t>(std::min(layers, limit));
+        pile.wetAt = now_;
         cell.insert(std::find_if(cell.begin(), cell.end(), [&](const FilthPile& p) { return p.kind > kind; }), pile);
         ++changes_;
         return true;
     }
+    it->wetAt = now_;  // fresh blood on old: the pile starts over
     if (it->thickness >= limit) {
         return false;
     }
@@ -211,9 +214,31 @@ size_t Filth::totalLayers() const {
     return total;
 }
 
-void Filth::step() {
+void Filth::step(int64_t now) {
     if (kinds_.empty()) {
         return;
+    }
+    if (now >= 0) {
+        now_ = now;
+        if (now % kFilthFadeEvery == 0) {
+            for (auto it = piles_.begin(); it != piles_.end();) {
+                std::vector<FilthPile>& cellPiles = it->second;
+                for (size_t i = 0; i < cellPiles.size();) {
+                    FilthPile& pile = cellPiles[i];
+                    if (pile.wetAt < 0) {
+                        pile.wetAt = now;
+                    }
+                    const float fade = kinds_[pile.kind].fadeSeconds;
+                    if (fade > 0.0f && static_cast<float>(now - pile.wetAt) >= fade) {
+                        cellPiles.erase(cellPiles.begin() + static_cast<std::ptrdiff_t>(i));
+                        ++changes_;
+                        continue;
+                    }
+                    ++i;
+                }
+                it = cellPiles.empty() ? piles_.erase(it) : std::next(it);
+            }
+        }
     }
     entt::registry& reg = things_.registry();
     // Pawns in id order: the registry's own order depends on its history.
@@ -315,6 +340,7 @@ void Filth::hashState(StateHasher& h) const {
         for (const FilthPile& pile : cell) {
             h.add(static_cast<int>(pile.kind));
             h.add(static_cast<int>(pile.thickness));
+            h.add(pile.wetAt);
         }
     }
     h.add(static_cast<uint64_t>(carriers_.size()));
@@ -333,7 +359,7 @@ FilthState Filth::state() const {
     FilthState out;
     for (const auto& [index, cell] : piles_) {
         for (const FilthPile& pile : cell) {
-            out.piles.push_back(FilthState::Entry{index, kinds_[pile.kind].name, pile.thickness});
+            out.piles.push_back(FilthState::Entry{index, kinds_[pile.kind].name, pile.thickness, pile.wetAt});
         }
     }
     for (const auto& [id, carrier] : carriers_) {
@@ -368,6 +394,7 @@ bool Filth::restore(const FilthState& state, std::string& error) {
         FilthPile pile;
         pile.kind = static_cast<uint16_t>(kind);
         pile.thickness = static_cast<uint8_t>(e.thickness);
+        pile.wetAt = e.wetAt;
         cell.insert(std::find_if(cell.begin(), cell.end(), [&](const FilthPile& p) { return p.kind > kind; }), pile);
     }
     for (const FilthState::Carrier& c : state.carriers) {

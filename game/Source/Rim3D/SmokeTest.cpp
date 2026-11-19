@@ -173,9 +173,17 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildPanelsPhases();
 	}
+	else if (TestName == TEXT("hud"))
+	{
+		BuildHudPhases();
+	}
 	else if (TestName == TEXT("trade"))
 	{
 		BuildTradePhases();
+	}
+	else if (TestName == TEXT("shuttle"))
+	{
+		BuildShuttlePhases();
 	}
 	else if (TestName == TEXT("quests"))
 	{
@@ -216,6 +224,14 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	else if (TestName == TEXT("motion"))
 	{
 		BuildMotionPhases();
+	}
+	else if (TestName == TEXT("idle"))
+	{
+		BuildIdlePhases();
+	}
+	else if (TestName == TEXT("hurt"))
+	{
+		BuildHurtPhases();
 	}
 	else if (TestName == TEXT("levels"))
 	{
@@ -1273,12 +1289,12 @@ void USmokeTestSubsystem::Tick(float DeltaTime)
 	Samples.Add({DeltaTime * 1000.0f, static_cast<float>(FPlatformTime::ToMilliseconds(GGameThreadTime)),
 		static_cast<float>(FPlatformTime::ToMilliseconds(GRenderThreadTime)), static_cast<float>(FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()))});
 	// A second into the measuring, or earlier in a phase measured for less than that (the file is written a frame or two later).
-	if (!bScreenshotTaken && PhaseTime >= Phase.WarmupSeconds + FMath::Min(1.0f, Phase.MeasureSeconds * 0.6f))
+	if (!bScreenshotTaken && PhaseTime >= Phase.WarmupSeconds + (Phase.ScreenshotAt >= 0.0f ? Phase.ScreenshotAt : FMath::Min(1.0f, Phase.MeasureSeconds * 0.6f)))
 	{
 		bScreenshotTaken = true;
 		const FString Path = FPaths::ProjectSavedDir() / TEXT("Smoke") / TestName / (Phase.Name + TEXT(".png"));
 		// The sim tests show the on-screen sim timings and the overseer its ImGui panels, which count as UI.
-		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist") || TestName == TEXT("orders") || TestName == TEXT("orders_world") || TestName == TEXT("panels") || TestName == TEXT("trade") || TestName == TEXT("quests") || TestName == TEXT("ship") || TestName == TEXT("worldmap") || TestName == TEXT("fights") || TestName == TEXT("handson") || TestName == TEXT("sky") || TestName == TEXT("melee") || TestName == TEXT("levels") || TestName == TEXT("creator") || (TestName == TEXT("look") && Phase.Name == TEXT("hud")), false);
+		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist") || TestName == TEXT("orders") || TestName == TEXT("orders_world") || TestName == TEXT("panels") || TestName == TEXT("hud") || TestName == TEXT("trade") || TestName == TEXT("shuttle") || TestName == TEXT("quests") || TestName == TEXT("ship") || TestName == TEXT("worldmap") || TestName == TEXT("fights") || TestName == TEXT("handson") || TestName == TEXT("sky") || TestName == TEXT("melee") || TestName == TEXT("levels") || TestName == TEXT("creator") || (TestName == TEXT("look") && Phase.Name == TEXT("hud")), false);
 	}
 	if (PhaseTime >= Phase.WarmupSeconds + Phase.MeasureSeconds)
 	{
@@ -1913,8 +1929,8 @@ void USmokeTestSubsystem::BuildPawnsPhases()
 				{
 					++State->SimpleSamples;
 					const FName Asset = Stats.PlayingAsset;
-					State->SimpleOnLoops += (Asset == Pawns->GetIdleLoop()->GetFName() || Asset == Pawns->GetWalkLoop()->GetFName()
-						|| Asset == Pawns->GetRunLoop()->GetFName()) ? 1 : 0;
+					const bool bIdle = Pawns->GetIdleLoops().ContainsByPredicate([Asset](const TObjectPtr<UAnimSequence>& Idle) { return Idle && Idle->GetFName() == Asset; });
+					State->SimpleOnLoops += (bIdle || Asset == Pawns->GetWalkLoop()->GetFName() || Asset == Pawns->GetRunLoop()->GetFName()) ? 1 : 0;
 				}
 			}
 			if (Pawn->GetMetaHuman())

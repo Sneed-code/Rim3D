@@ -60,6 +60,48 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
     ReplayOrderedJson j = ReplayOrderedJson::object();
     j["step"] = logged.step;
     j["type"] = commandName(logged.command);
+    // Written before the visit: its chain is at MSVC's nesting limit (C1061).
+    if (const auto* focus = std::get_if<FocusCommand>(&logged.command)) {
+        j["pawn"] = entt::to_integral(focus->pawn);
+        j["target"] = entt::to_integral(focus->target);
+        j["mode"] = static_cast<int>(focus->mode);
+        return j;
+    }
+    if (const auto* response = std::get_if<SetFightResponseCommand>(&logged.command)) {
+        j["pawn"] = entt::to_integral(response->pawn);
+        j["response"] = fightResponseName(response->response);
+        return j;
+    }
+    if (const auto* shield = std::get_if<ShieldCommand>(&logged.command)) {
+        j["pawn"] = entt::to_integral(shield->pawn);
+        j["up"] = shield->up;
+        j["hasDir"] = shield->hasDir;
+        j["dirX"] = shield->dirX;
+        j["dirY"] = shield->dirY;
+        return j;
+    }
+    if (const auto* level = std::get_if<LevelEarthCommand>(&logged.command)) {
+        j["area"] = replayRectJson(level->area);
+        j["baseCm"] = level->baseCm;
+        return j;
+    }
+    if (const auto* cancelEarth = std::get_if<CancelEarthworksCommand>(&logged.command)) {
+        j["area"] = replayRectJson(cancelEarth->area);
+        return j;
+    }
+    if (const auto* unstuck = std::get_if<UnstuckCommand>(&logged.command)) {
+        j["pawn"] = entt::to_integral(unstuck->pawn);
+        return j;
+    }
+    if (const auto* group = std::get_if<SetWorkGroupCommand>(&logged.command)) {
+        j["pawn"] = entt::to_integral(group->pawn);
+        j["group"] = group->group;
+        return j;
+    }
+    if (const auto* reroll = std::get_if<RerollColonistCommand>(&logged.command)) {
+        j["slot"] = reroll->slot;
+        return j;
+    }
     std::visit(
         [&j](const auto& c) {
             using Type = std::decay_t<decltype(c)>;
@@ -128,6 +170,11 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                 j["target"] = entt::to_integral(c.target);
                 j["point"] = {static_cast<double>(c.x), static_cast<double>(c.y), static_cast<double>(c.z)};
                 j["player"] = c.player;
+                if (c.aimPawn != kNoEntity) {  // the crosshair on a drawn body (docs/design/aiming.md)
+                    j["aimPawn"] = entt::to_integral(c.aimPawn);
+                    j["aimPart"] = c.aimPart;
+                    j["aimSpot"] = {static_cast<double>(c.aimDx), static_cast<double>(c.aimDy), static_cast<double>(c.aimUp)};
+                }
             } else if constexpr (std::is_same_v<Type, SetStanceCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["stance"] = kReplayStanceNames[static_cast<int>(c.stance)];
@@ -546,18 +593,19 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                         j["add"] = c.add;
                     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
-                    } else if constexpr (std::is_same_v<Type, SetWorkGroupCommand>) {
+                    } else if constexpr (std::is_same_v<Type, SetAlertCommand>) {
                         j["pawn"] = entt::to_integral(c.pawn);
-                        j["group"] = c.group;
-                    } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
-                        j["pawn"] = entt::to_integral(c.pawn);
-                        j["up"] = c.up;
-                        j["hasDir"] = c.hasDir;
-                        j["dirX"] = c.dirX;
-                        j["dirY"] = c.dirY;
+                        j["alert"] = c.alert;
                     } else {
-                        static_assert(std::is_same_v<Type, RerollColonistCommand>, "write every command type");
-                        j["slot"] = c.slot;
+                        // Written before the visit (MSVC nesting limit).
+                        static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, ShieldCommand> ||
+                                          std::is_same_v<Type, FocusCommand> ||
+                                          std::is_same_v<Type, SetFightResponseCommand> ||
+                                          std::is_same_v<Type, LevelEarthCommand> ||
+                                          std::is_same_v<Type, CancelEarthworksCommand> ||
+                                          std::is_same_v<Type, UnstuckCommand> ||
+                                          std::is_same_v<Type, SetWorkGroupCommand>,
+                                      "write every command type");
                     }
                 }
             }
@@ -963,6 +1011,21 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             c.y = (*point)[1].get<float>();
             c.z = (*point)[2].get<float>();
         }
+        uint32_t aimPawn = entt::to_integral(kNoEntity);
+        if (!r.integer(j, "aimPawn", aimPawn, where) || !r.integer(j, "aimPart", c.aimPart, where)) {
+            return false;
+        }
+        const auto spot = j.find("aimSpot");
+        if (spot != j.end()) {
+            if (!spot->is_array() || spot->size() != 3 || !(*spot)[0].is_number() || !(*spot)[1].is_number() ||
+                !(*spot)[2].is_number()) {
+                return r.fail(where + ".aimSpot must be [dx, dy, up]");
+            }
+            c.aimDx = (*spot)[0].get<float>();
+            c.aimDy = (*spot)[1].get<float>();
+            c.aimUp = (*spot)[2].get<float>();
+        }
+        c.aimPawn = static_cast<Entity>(aimPawn);
         c.pawn = static_cast<Entity>(pawn);
         c.target = static_cast<Entity>(target);
         out.command = c;
@@ -1826,6 +1889,32 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         out.command = std::move(c);
     } else {
         // Nested, not one more else-if: MSVC stops at 128 nested blocks (C1061).
+        if (type == "LevelEarth") {
+            LevelEarthCommand c;
+            if (!replayReadRect(r, j, where, c.area) || !r.integer(j, "baseCm", c.baseCm, where)) {
+                return false;
+            }
+            out.command = c;
+            return true;
+        }
+        if (type == "CancelEarthworks") {
+            CancelEarthworksCommand c;
+            if (!replayReadRect(r, j, where, c.area)) {
+                return false;
+            }
+            out.command = c;
+            return true;
+        }
+        if (type == "Unstuck") {
+            UnstuckCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            if (!r.integer(j, "pawn", pawn, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            out.command = c;
+            return true;
+        }
         if (type == "Scanner") {
             ScannerCommand c;
             uint32_t building = entt::to_integral(kNoEntity);
@@ -1895,6 +1984,49 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
                 return false;
             }
             c.pawn = static_cast<Entity>(pawn);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "Focus") {
+            FocusCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            uint32_t target = entt::to_integral(kNoEntity);
+            int mode = 0;
+            if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "target", target, where) || !r.integer(j, "mode", mode, where)) {
+                return false;
+            }
+            if (mode < 0 || mode > static_cast<int>(FocusMode::Clear)) {
+                return r.fail(where + ": bad focus mode");
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            c.target = static_cast<Entity>(target);
+            c.mode = static_cast<FocusMode>(mode);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetFightResponse") {
+            SetFightResponseCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            std::string response;
+            if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "response", response, where)) {
+                return false;
+            }
+            if (!fightResponseFromName(response, c.response)) {
+                return r.fail(where + ": no fight response \"" + response + "\"");
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetAlert") {
+            SetAlertCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            uint32_t alert = 0;
+            if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "alert", alert, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            c.alert = static_cast<uint8_t>(std::min<uint32_t>(alert, 255));
             out.command = std::move(c);
             return true;
         }

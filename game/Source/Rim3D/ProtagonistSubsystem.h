@@ -5,10 +5,12 @@
 
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/FightResponse.h"
 
 #include "ProtagonistSubsystem.generated.h"
 
 class AProtagonistPawn;
+class APlayerController;
 class USimSubsystem;
 namespace colony { class Sim; }
 
@@ -47,7 +49,7 @@ public:
 	/** Lets the colonist go (the sim's own routines take over again) and returns to the overseer
 	 *  view, centred on it, with it selected. */
 	void ExitDirectMode();
-	/** Tab: the overseer view becomes direct mode and the other way round. */
+	/** O (SwitchMode): the overseer view becomes direct mode and the other way round. */
 	void ToggleMode();
 	/** In direct mode: control another colonist instead. Returns false if it isn't a colonist on the map. */
 	bool TakeOver(colony::Entity Pawn);
@@ -81,13 +83,35 @@ public:
 	/** Climbs of stairs and ladders asked of the sim (U17). */
 	int64 GetClimbsSent() const { return ClimbsSent; }
 
+	/** Lock-on focus (docs/design/focus.md): the pawn the controlled colonist is locked on to, kNoEntity for none. */
+	colony::Entity GetFocusTarget() const;
+	/** Tab: lock on to the next nearest enemy (FocusCommand Next); middle mouse: lock on or let go. Both do nothing with the setting off. */
+	void FocusNext();
+	void EndFocus();
+	/** FocusCommands sent so far (smoke tests). */
+	int64 GetFocusCommandsSent() const { return FocusCommandsSent; }
+	/** Frames the focus HP bar was drawn. */
+	int32 GetFocusBarFramesDrawn() const { return FocusBarFramesDrawn; }
+	/** The world point the focus marker sits over (cm), false with no focus. */
+	bool GetFocusPoint(FVector& OutPoint) const;
+	/** F12 Unstuck (docs/design/earthworks.md "Stuck"): 5 seconds of standing still with no actions, then the sim puts the
+	 *  controlled colonist on the nearest clear spot (UnstuckCommand). Seconds left, 0 when not waiting. */
+	void StartUnstuck();
+	float GetUnstuckSecondsLeft() const { return UnstuckSecondsLeft; }
+	bool IsUnstucking() const { return UnstuckSecondsLeft > 0.0f; }
+
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
 
 private:
+	float UnstuckSecondsLeft = 0.0f;
+	int32 UnstuckSkipMoves = 0;
 	void OnBeforeStep();
 	void OnSimEvent(const colony::Event& Event);
 	void DrawHud(USimSubsystem& Bridge);
+	void UpdateFocus(APlayerController& PC, USimSubsystem& Bridge);
+	void DrawFocus(USimSubsystem& Bridge, float Top, float Scale);
+	void SubmitFocus(USimSubsystem& Bridge, colony::FocusMode Mode);
 	void ApplyBodyVisibility();
 
 	UPROPERTY()
@@ -106,6 +130,13 @@ private:
 	int32 ReconcileCount = 0;
 	int64 MovesSent = 0;
 	int64 ClimbsSent = 0;
+	int64 FocusCommandsSent = 0;
+	int32 FocusBarFramesDrawn = 0;
+	/** The focus a Clear was last sent for while the setting is off (so it is sent once). */
+	colony::Entity FocusClearedFor = colony::kNoEntity;
+	/** Seconds the player has been turned away from the focus and moving away from it (lock-on.md). */
+	float TurnAwaySeconds = 0.0f;
+	void UpdateTurnAway(USimSubsystem& Bridge);
 	/** Real seconds the screen has been dark for the night skip (fades in and out). */
 	float SleepFade = 0.0f;
 };

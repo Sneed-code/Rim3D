@@ -3,6 +3,7 @@
 #include "BloodSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
+#include "SkinBlood.h"
 #include "SimSubsystem.h"
 #include "WeaponDrawSubsystem.h"
 
@@ -25,6 +26,8 @@ namespace
 {
 	TAutoConsoleVariable<int32> GGrimeEnabled(TEXT("Grime.Enabled"), 1, TEXT("1 draws the sim's dirt and blood on bodies, clothes and weapons."), ECVF_Default);
 	TAutoConsoleVariable<float> GGrimeMaxDistance(TEXT("Grime.MaxDistance"), 60.0f, TEXT("Metres from the camera within which bodies show dirt and blood."), ECVF_Default);
+	TAutoConsoleVariable<float> GGrimeBodyBlood(TEXT("Grime.BodyBlood"), 0.0f,
+		TEXT("How much of the sim's blood level shows as flecks all over a body (0 to 1). 0: the wound marks alone carry it (as flecks it read as a cow print)."), ECVF_Default);
 	TAutoConsoleVariable<float> GGrimeStrength(TEXT("Grime.Strength"), 1.0f, TEXT("Multiplies how much dirt and blood shows (0 to 2)."), ECVF_Default);
 
 	const TCHAR* const GrimeOverlayPath = TEXT("/Game/Rim3D/Generated/Blood/M_GrimeOverlay.M_GrimeOverlay");
@@ -45,6 +48,23 @@ namespace
 		OutWet = FMath::Clamp(1.0f - AgeSeconds / DrySeconds, 0.0f, 1.0f);
 		const float T = FMath::Clamp(1.0f - FMath::Exp(-2.6f * AgeSeconds / DrySeconds), 0.0f, 1.0f) / (1.0f - FMath::Exp(-2.6f));
 		return FMath::Lerp(Fluid.Wet, Fluid.Dry, FMath::Clamp(T, 0.0f, 1.0f));
+	}
+
+	/** sneed: blood fades 3% every 10 s from when it was put on (Blood.FadeStep), as the stains do. */
+	float GrimeBloodFade(float AgeSeconds)
+	{
+		float Step = 0.03f;
+		if (const IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("Blood.FadeStep")))
+		{
+			Step = FMath::Max(0.0f, Var->GetFloat());
+		}
+		return FMath::Clamp(1.0f - Step * FMath::FloorToFloat(FMath::Max(0.0f, AgeSeconds) / 10.0f), 0.0f, 1.0f);
+	}
+
+	/** Blood in cloth needs some light in every channel too (pure red reads black in shade). */
+	FLinearColor GrimeClothBlood(const FLinearColor& Color)
+	{
+		return FLinearColor(FMath::Max(Color.R, 0.026f), FMath::Max(Color.G, 0.014f), FMath::Max(Color.B, 0.012f), 1.0f);
 	}
 
 	void GrimeCollectMeshes(AActor* Actor, TArray<TWeakObjectPtr<UMeshComponent>>& Out, float& OutMinZ, float& OutHeight)
@@ -105,7 +125,7 @@ void UGrimeSubsystem::ClearPawn(FPawnGrime& Pawn)
 {
 	for (const TWeakObjectPtr<UMeshComponent>& Mesh : Pawn.Meshes)
 	{
-		if (Mesh.IsValid() && Mesh->GetOverlayMaterial() == Pawn.Material.Get())
+		if (Mesh.IsValid() && (Mesh->GetOverlayMaterial() == Pawn.Material.Get() || Mesh->GetOverlayMaterial() == Pawn.ClothMaterial.Get()))
 		{
 			Mesh->SetOverlayMaterial(nullptr);
 		}
@@ -115,6 +135,7 @@ void UGrimeSubsystem::ClearPawn(FPawnGrime& Pawn)
 		Pawn.Weapon->SetOverlayMaterial(nullptr);
 	}
 	Materials.Remove(Pawn.Material.Get());
+	Materials.Remove(Pawn.ClothMaterial.Get());
 	Materials.Remove(Pawn.WeaponMaterial.Get());
 	Pawn = FPawnGrime();
 }
@@ -160,6 +181,9 @@ void UGrimeSubsystem::Tick(float DeltaTime)
 	}
 	GrimyPawns = 0;
 	BloodyWeapons = 0;
+	BloodyClothes = 0;
+	const UBloodSubsystem* BloodDraw = GetWorld()->GetSubsystem<UBloodSubsystem>();
+	const USkinBlood* SkinBlood = BloodDraw ? BloodDraw->GetSkinBlood() : nullptr;
 	for (const TPair<uint32, TObjectPtr<ASimPawnActor>>& Pair : PawnDraw->GetPawns())
 	{
 		ASimPawnActor* Actor = Pair.Value.Get();
@@ -169,7 +193,13 @@ void UGrimeSubsystem::Tick(float DeltaTime)
 			continue;
 		}
 		const bool bNear = !bCamera || FVector::Dist(Camera, Actor->GetActorLocation()) <= MaxDistance;
-		const bool bBody = View->dirtLegs > GrimeShowLevel || View->dirtBody > GrimeShowLevel || View->blood > GrimeShowLevel;
+		// Blood soaked into the clothes over wounds painted into the skin.
+		FLinearColor Spots[8];
+		float SpotAmounts[8];
+		float SpotWet = 0.0f;
+		USkeletalMeshComponent* Body = Actor->GetMakeHumanMesh();
+		const int32 SpotCount = SkinBlood && Body ? SkinBlood->GetClothSpots(Body, Spots, SpotAmounts, SpotWet) : 0;
+		const bool bBody = View->dirtLegs > GrimeShowLevel || View->dirtBody > GrimeShowLevel || View->blood > GrimeShowLevel || SpotCount > 0;
 		const bool bWeapon = View->weaponBlood > GrimeShowLevel;
 		FPawnGrime* Grime = Pawns.Find(Pair.Key);
 		if (!bNear || (!bBody && !bWeapon))
@@ -214,17 +244,41 @@ void UGrimeSubsystem::Tick(float DeltaTime)
 			const FLinearColor BloodColor = GrimeBloodColor(Fluid, Age, Wet);
 			Material->SetScalarParameterValue(TEXT("DirtLegs"), FMath::Clamp(View->dirtLegs * Strength, 0.0f, 1.0f));
 			Material->SetScalarParameterValue(TEXT("DirtBody"), FMath::Clamp(View->dirtBody * Strength, 0.0f, 1.0f));
-			Material->SetScalarParameterValue(TEXT("Blood"), FMath::Clamp(View->blood * Strength, 0.0f, 1.0f));
+			Material->SetScalarParameterValue(TEXT("Blood"), FMath::Clamp(View->blood * GrimeBloodFade(Age) * Strength * FMath::Clamp(GGrimeBodyBlood.GetValueOnGameThread(), 0.0f, 1.0f), 0.0f, 1.0f));
 			Material->SetScalarParameterValue(TEXT("BloodWet"), Wet);
 			Material->SetScalarParameterValue(TEXT("LocalMinZ"), Grime->LocalMinZ);
 			Material->SetScalarParameterValue(TEXT("LocalHeight"), Grime->LocalHeight);
 			Material->SetVectorParameterValue(TEXT("BloodColor"), BloodColor);
 			Material->SetVectorParameterValue(TEXT("DirtColor"), GrimeDirtColor);
+			// Clothes (every mesh but the skin, whose blood is painted in): the same, plus the soaked spots, the blood a
+			// little darker in cloth and as wet as the newest wound.
+			UMaterialInstanceDynamic* Cloth = nullptr;
+			if (SpotCount > 0)
+			{
+				Cloth = Grime->ClothMaterial.Get();
+				if (!Cloth)
+				{
+					Cloth = UMaterialInstanceDynamic::Create(Overlay, this);
+					Materials.Add(Cloth);
+					Grime->ClothMaterial = Cloth;
+				}
+				Cloth->CopyParameterOverrides(Material);
+				Cloth->SetVectorParameterValue(TEXT("BloodColor"), GrimeClothBlood(FMath::Lerp(Fluid.Dry * 0.85f, Fluid.Wet * 0.8f, SpotWet)));
+				Cloth->SetScalarParameterValue(TEXT("BloodWet"), SpotWet * 0.6f);  // cloth soaks it up: less shine than on skin
+				for (int32 I = 0; I < 8; ++I)
+				{
+					Cloth->SetVectorParameterValue(*FString::Printf(TEXT("Spot%d"), I), Spots[I]);
+				}
+				Cloth->SetVectorParameterValue(TEXT("SpotAmountA"), FLinearColor(SpotAmounts[0], SpotAmounts[1], SpotAmounts[2], SpotAmounts[3]));
+				Cloth->SetVectorParameterValue(TEXT("SpotAmountB"), FLinearColor(SpotAmounts[4], SpotAmounts[5], SpotAmounts[6], SpotAmounts[7]));
+				++BloodyClothes;
+			}
 			for (const TWeakObjectPtr<UMeshComponent>& Mesh : Grime->Meshes)
 			{
-				if (Mesh.IsValid() && Mesh->GetOverlayMaterial() != Material)
+				UMaterialInstanceDynamic* Wanted = Cloth && Mesh.Get() != Body ? Cloth : Material;
+				if (Mesh.IsValid() && Mesh->GetOverlayMaterial() != Wanted)
 				{
-					Mesh->SetOverlayMaterial(Material);
+					Mesh->SetOverlayMaterial(Wanted);
 				}
 			}
 			++GrimyPawns;
@@ -233,7 +287,7 @@ void UGrimeSubsystem::Tick(float DeltaTime)
 		{
 			for (const TWeakObjectPtr<UMeshComponent>& Mesh : Grime->Meshes)
 			{
-				if (Mesh.IsValid() && Mesh->GetOverlayMaterial() == Grime->Material.Get())
+				if (Mesh.IsValid() && (Mesh->GetOverlayMaterial() == Grime->Material.Get() || Mesh->GetOverlayMaterial() == Grime->ClothMaterial.Get()))
 				{
 					Mesh->SetOverlayMaterial(nullptr);
 				}
@@ -263,7 +317,7 @@ void UGrimeSubsystem::Tick(float DeltaTime)
 			Material->SetScalarParameterValue(TEXT("DirtLegs"), 0.0f);
 			Material->SetScalarParameterValue(TEXT("DirtBody"), 0.0f);
 			// A weapon shows its blood plainly: it is small and the eye goes to it.
-			Material->SetScalarParameterValue(TEXT("Blood"), FMath::Clamp(View->weaponBlood * Strength * 1.3f, 0.0f, 1.0f));
+			Material->SetScalarParameterValue(TEXT("Blood"), FMath::Clamp(View->weaponBlood * GrimeBloodFade(View->weaponBloodAge / static_cast<float>(colony::kStepsPerRealSecondAt1x)) * Strength * 1.3f, 0.0f, 1.0f));
 			Material->SetScalarParameterValue(TEXT("BloodWet"), Wet);
 			Material->SetScalarParameterValue(TEXT("NoiseScale"), 0.15f);
 			Material->SetVectorParameterValue(TEXT("BloodColor"), BloodColor);

@@ -122,10 +122,12 @@ TEST_CASE("Feel: a burst lifts the player's aim shot by shot from the weapon's k
     CHECK(up == 0.0f);
     CHECK(side == 0.0f);
 
-    // The player's trigger: three shots of a burst, five steps apart.
-    sim->submit(ShootCommand{pawn, kNoEntity, 60.5f, 40.5f, 1.0f, true});
+    // The player's trigger held: three shots, a gap apart (one shot an order with cooldown bursts).
     std::vector<std::pair<float, float>> after;  // the kick just after each shot
     for (int i = 0; i < 20 && after.size() < 3; ++i) {
+        if (sim->combat().shotReadyIn(pawn) == 0) {
+            sim->submit(ShootCommand{pawn, kNoEntity, 60.5f, 40.5f, 1.0f, true});
+        }
         sim->step();
         const bool shot = std::any_of(sim->events().begin(), sim->events().end(),
                                       [&](const Event& e) { return e.type == EventType::ShotFired && e.thing == pawn; });
@@ -376,14 +378,19 @@ TEST_CASE("Feel: a roll ends a shot being aimed or fired, keeps a reload, and is
     sim->submit(SetStanceCommand{pawn, Stance::Standing});
     sim->step();
 
-    // A reload goes on through a roll.
-    sim->submit(ReloadCommand{pawn});
+    // The gun's shots go on refilling through a roll (cooldown bursts: no reloads).
+    sim->stepMany(120);
+    sim->submit(ShootCommand{pawn, kNoEntity, 60.5f, 40.5f, 1.0f, true});
     sim->step();
-    CHECK(sim->combat().roundsLeft(pawn) < sim->combat().magazineSize(pawn));
-    CHECK(sim->combat().reloading(pawn));
+    int stored = 0, size = 0, left = 0, from = 0;
+    FEEL_REQUIRE(sim->combat().shotStore(pawn, stored, size, left, from));
+    CHECK(stored < size);
+    const int before = left;
+    FEEL_REQUIRE(before > 4);
     sim->submit(DodgeRollCommand{pawn, 1.0f, 0.0f});
     sim->stepMany(3);
-    CHECK(sim->combat().reloading(pawn));
+    FEEL_REQUIRE(sim->combat().shotStore(pawn, stored, size, left, from));
+    CHECK(left == before - 3);
 }
 
 TEST_CASE("Feel: a roll stops at the edge of the map") {

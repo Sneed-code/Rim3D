@@ -45,6 +45,15 @@ enum class EOrderTool : uint8
 	Grow,
 	/** Drag a rectangle: marks the laid floors in it to be taken up (DesignationKind::RemoveFloor). */
 	RemoveFloor,
+	/** Drag a rectangle: adds its cells to the landing zone, where shuttles set down (docs/design/landing.md). */
+	LandingZone,
+	/** Drag a rectangle: takes its cells out of the landing zone. */
+	RemoveLandingZone,
+	/** Drag a rectangle: plans its ground dug or filled flat to the height of the cell the drag starts on, nudged by
+	 *  the Raise / Lower buttons (docs/design/earthworks.md). */
+	LevelEarth,
+	/** Drag a rectangle: drops the earthworks planned in it. */
+	CancelEarth,
 };
 
 /** What the orders overlay draws (smoke test `orders`). */
@@ -58,6 +67,8 @@ struct FOrdersStats
 	int32 ZoneCells = 0;
 	/** Cells of growing zones drawn. */
 	int32 GrowCells = 0;
+	/** Cells of the landing zone drawn. */
+	int32 LandingCells = 0;
 	/** Instances of the placement ghost (valid, invalid). */
 	int32 GhostValid = 0;
 	int32 GhostInvalid = 0;
@@ -254,6 +265,8 @@ private:
 	void RefreshStuffOptions();
 	colony::DefId BestStuffFor(colony::DefId Def) const;
 	colony::CellRect DragRect() const;
+	/** The ground height at a cell's middle, cm on the 25 cm step (Level earth). */
+	int32 LevelHeightAtCm(colony::CellPos Cell) const;
 	void Submit(colony::Command Command);
 	void FlushIfPaused();
 	bool SetDraft(colony::Entity Pawn, bool bDraft);
@@ -298,6 +311,9 @@ private:
 	colony::CellPos Hover;
 	bool bDragging = false;
 	colony::CellPos DragStart;
+	/** Level earth: the height the drag started on (cm, on a 25 cm step), and the player's nudge on top of it. */
+	int32 LevelStartCm = 0;
+	int32 LevelNudgeCm = 0;
 
 	// Menu contents, read from the defs once per sim.
 	TArray<FBuildOption> BuildOptions;
@@ -325,6 +341,8 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> ZoneMaterial;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> GrowZoneMaterial;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> LandZoneMaterial;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> GhostGoodMaterial;
 	UPROPERTY()

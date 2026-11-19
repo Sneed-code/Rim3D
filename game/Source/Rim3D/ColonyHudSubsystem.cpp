@@ -16,6 +16,7 @@
 #include "ColonyHudStyle.h"
 
 #include "GraphicsOptionsSubsystem.h"
+#include "KeyBindings.h"
 #include "LevelsSubsystem.h"
 #include "OrdersSubsystem.h"
 #include "OverseerPawn.h"
@@ -1153,31 +1154,17 @@ void UColonyHudSubsystem::DrawSettings(USimSubsystem& Bridge, float Scale)
 
 void UColonyHudSubsystem::DrawKeyListPage(float Scale)
 {
+	// The overseer camera's keys are fixed; every key for playing as a pawn can be changed below (docs/design/controls.md).
 	ColonyHud::Heading(TEXT("Overseer view"));
-	const TCHAR* const Overseer[] = {
-		TEXT("WASD  pan the camera        Q / E  turn        wheel  zoom        middle drag  orbit"),
-		TEXT("Click  select        F  centre on selection        Home  reset view        Esc  deselect"),
-		TEXT("Page Up / Page Down  level above / below        Tab  take control of the selected colonist"),
-		TEXT("R  draft colonist / turn building        Right click  order a drafted colonist"),
-		TEXT("Space  pause        1, 2, 3  speed        I  inventory of the selected pawn        M  world map"),
-	};
-	for (const TCHAR* Line : Overseer)
-	{
-		ColonyHud::Text(Line);
-	}
+	ColonyHud::Text(TEXT("WASD  pan the camera        Q / E  turn        wheel  zoom        middle drag  orbit"));
+	ColonyHud::Text(TEXT("Click  select        F  centre on selection        Home  reset view        Esc  deselect"));
+	ColonyHud::Text(TEXT("Page Up / Page Down  level above / below        R  draft colonist / turn building"));
+	ColonyHud::Text(FString::Printf(TEXT("Right click  order a drafted colonist        %s  take control of the selected colonist"),
+		*Rim3DKeys::GetKeyLabel(ERim3DAction::SwitchMode)));
+	ColonyHud::Text(TEXT("Space  pause        1, 2, 3  speed        M  world map"));
 	ImGui::Spacing();
-	ColonyHud::Heading(TEXT("Playing as a pawn"));
-	const TCHAR* const Direct[] = {
-		TEXT("WASD  walk        mouse  look        V  first / third person        wheel  zoom"),
-		TEXT("F hold  work / pick up        X  put down        B  build        T  take over the pawn looked at"),
-		TEXT("N  sleep here (18:00 to 6:00)        F5  quicksave        Tab  back to the overseer view"),
-	};
-	for (const TCHAR* Line : Direct)
-	{
-		ColonyHud::Text(Line);
-	}
-	ImGui::Spacing();
-	ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("Changing keys comes with the controls update."));
+	ColonyHud::Heading(TEXT("Playing as a pawn (click a key to change it)"));
+	Rim3DKeys::DrawControlsPage(Scale);
 }
 
 // ---- Mugshots ----------------------------------------------------------------------------------

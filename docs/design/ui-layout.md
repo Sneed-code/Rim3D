@@ -91,7 +91,7 @@ one border and radius, two text sizes, 1.2 s tooltips). Every subsystem that dra
 - **Date box** above the bar's right end: time, day, season, temperature, weather, Step while paused,
   the level looked at with Up/Down. The old top-middle speed box is gone. Key hints sit above it.
 - **Build** (`OrdersSubsystem::DrawBuildMenu`): left window with a search box and the categories in
-  two columns (Orders first), a tile window with hotkey letters (Z X C V B N ...), Cancel and
+  two columns (Orders first), a tile window with hotkey letters (Z X C V N M ...; not B, I, O, R or Y, which other keys use), Cancel and
   Deconstruct first in Orders, locked research greyed with a tooltip saying what to research, and a
   strip with name, description, material choice, drag shape (single, line, outline, filled), Turn (R)
   and the plan's cost. Uses the sim's `BuildPlanner`. Remove floor is a new order.
@@ -109,7 +109,11 @@ one border and radius, two text sizes, 1.2 s tooltips). Every subsystem that dra
   name under it coloured by mood, a red edge while drafted, pinned resources below.
 - **Settings** (Menu): pages down the left, Game (day length, mouse speed, text size Normal/Bigger,
   saved as `UI.TextSize`), Display, Sound, Feel and Controls. Other code adds pages with
-  `AddSettingsPage`; the hotkey rebind menu goes in Controls.
+  `AddSettingsPage`. Controls lists the overseer camera keys and holds the key rebind menu
+  (`Rim3DKeys::DrawControlsPage`, docs/design/controls.md).
+- Brought up to date with main on 2026-11-19 (lock-on, grenades, rebindable keys, earthworks, landing
+  zone): Zone has Landing zone and Remove landing zone tiles, Structure has Level earth and Cancel
+  earthworks tiles, and the strip shows Level earth's height with Lower / Raise.
 - The **I inventory window** (playing as a pawn) now has a fixed place: centred, under the clock,
   above the bottom edge, so the clock and the key hints stay readable.
 
