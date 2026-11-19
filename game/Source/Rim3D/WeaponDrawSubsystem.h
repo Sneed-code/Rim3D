@@ -195,7 +195,7 @@ private:
 	 *  OutWeaponInHand is the weapon in the main hand bone's space. False when the hold has no place or the body no
 	 *  MakeHuman hands (the weapon then follows the hand as before). */
 	bool PinWeapon(ASimPawnActor& Actor, const colony::ThingView& View, FPawnWeapons& Pawn, const colony::WeaponHold& Hold, const HoldDraw::FPoints& Points,
-				   float Size, float BodyPlace, bool bControlled, float Alpha, FTransform& OutWeaponInHand);
+				   float Size, float BodyPlace, bool bControlled, float Alpha, FTransform& OutWeaponInHand, FTransform& OutWeaponWorld);
 	UStaticMeshComponent* MakeComponent(ASimPawnActor& Actor, UStaticMesh* Mesh);
 	void HoldPose(int32 Slot, float Height, FVector& OutLocation, FRotator& OutRotation) const;
 	void HolsterPose(int32 Slot, float Height, FVector& OutLocation, FRotator& OutRotation) const;

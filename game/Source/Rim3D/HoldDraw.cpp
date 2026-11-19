@@ -482,9 +482,27 @@ void HoldDraw::ApplyPinned(USkeletalMeshComponent* Mesh, const colony::WeaponHol
 	Anim->SetHandGoal(bRight, Main);
 	FMakeHumanHandGoal Off;
 	Off.Alpha = Pinned.bOff ? FMath::Clamp(OffAlpha, 0.0f, 1.0f) : 0.0f;
-	Off.Space = EMakeHumanGoalSpace::OtherHand;
-	Off.Target = OffCS;
 	Off.bRotation = true;
+	if (Main.Alpha >= 0.5f)
+	{
+		// The weapon is at its place: the other hand goes to its own grip there, not after the main hand (whose turn
+		// the wrist limits may have held back), so it stays on the fore-end.
+		FTransform OffWorldCS = (Pinned.OffInMain * Pinned.MainHand).GetRelativeTransform(Comp);
+		OffWorldCS.SetScale3D(FVector::OneVector);
+		if (Main.Space == EMakeHumanGoalSpace::Anchor && HdHas(Mesh, *Anchor.ToString()))
+		{
+			OffWorldCS.AddToTranslation(-Comp.InverseTransformPosition(Mesh->GetSocketLocation(Anchor)));
+		}
+		Off.Space = Main.Space;
+		Off.Anchor = Anchor;
+		Off.Target = OffWorldCS;
+	}
+	else
+	{
+		// The main hand follows a clip (a swing): the other hand stays on the weapon in it.
+		Off.Space = EMakeHumanGoalSpace::OtherHand;
+		Off.Target = OffCS;
+	}
 	Anim->SetHandGoal(!bRight, Off);
 }
 

@@ -491,6 +491,7 @@ void FMakeHumanArmsNode::InitializeBoneReferences(const FBoneContainer& Required
 		Arm.bValid = Arm.Upper.Initialize(RequiredBones) && Arm.Lower.Initialize(RequiredBones) && Arm.Hand.Initialize(RequiredBones) &&
 			Arm.Index.Initialize(RequiredBones) && Arm.Pinky.Initialize(RequiredBones) && Arm.Middle.Initialize(RequiredBones);
 		Arm.IndexTip.Initialize(RequiredBones);
+		Arm.Clavicle.Initialize(RequiredBones);
 		Arm.bValid = Arm.bValid && Arm.Upper.IsValidToEvaluate(RequiredBones) && Arm.Lower.IsValidToEvaluate(RequiredBones) &&
 			Arm.Hand.IsValidToEvaluate(RequiredBones) && Arm.Index.IsValidToEvaluate(RequiredBones) && Arm.Pinky.IsValidToEvaluate(RequiredBones) &&
 			Arm.Middle.IsValidToEvaluate(RequiredBones);
@@ -543,11 +544,11 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 		const FCompactPoseBoneIndex UpperI = Arm.Upper.GetCompactPoseIndex(Container);
 		const FCompactPoseBoneIndex LowerI = Arm.Lower.GetCompactPoseIndex(Container);
 		const FCompactPoseBoneIndex HandI = Arm.Hand.GetCompactPoseIndex(Container);
-		const FTransform UpperT = Output.Pose.GetComponentSpaceTransform(UpperI);
-		const FTransform LowerT = Output.Pose.GetComponentSpaceTransform(LowerI);
-		const FTransform HandT = Output.Pose.GetComponentSpaceTransform(HandI);
-		const FVector S = UpperT.GetLocation(), E0 = LowerT.GetLocation(), W0 = HandT.GetLocation();
-		const double UpperLen = FVector::Dist(S, E0), LowerLen = FVector::Dist(E0, W0);
+		FTransform UpperT = Output.Pose.GetComponentSpaceTransform(UpperI);
+		FTransform LowerT = Output.Pose.GetComponentSpaceTransform(LowerI);
+		FTransform HandT = Output.Pose.GetComponentSpaceTransform(HandI);
+		const double UpperLen = FVector::Dist(UpperT.GetLocation(), LowerT.GetLocation());
+		const double LowerLen = FVector::Dist(LowerT.GetLocation(), HandT.GetLocation());
 		if (UpperLen < 1.0 || LowerLen < 1.0)
 		{
 			continue;
@@ -579,6 +580,51 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 			OtherHand.SetScale3D(FVector::OneVector);
 			Target = Goal.Target * OtherHand;
 		}
+		GoalCS[Side] = Target;
+
+		// A grip past the arm's reach brings the shoulder girdle forward towards it (the clavicle turns, as a person
+		// reaching out does), at most 25 degrees, before the arm is solved; the arm itself is never stretched.
+		ShoulderReach[Side] = 0.0f;
+		if (Arm.Clavicle.IsValidToEvaluate(Container))
+		{
+			const FCompactPoseBoneIndex ClavI = Arm.Clavicle.GetCompactPoseIndex(Container);
+			const FTransform ClavT = Output.Pose.GetComponentSpaceTransform(ClavI);
+			const FVector Pivot = ClavT.GetLocation();
+			const FVector Shoulder = UpperT.GetLocation();
+			const double MaxReach = (UpperLen + LowerLen) * Human.reachShare;
+			const double Over = FVector::Dist(Shoulder, Target.GetLocation()) - MaxReach;
+			const FVector ToShoulder = Shoulder - Pivot;
+			const FVector ToGoal = Target.GetLocation() - Pivot;
+			const FVector Axis = FVector::CrossProduct(ToShoulder, ToGoal).GetSafeNormal();
+			if (Over > 0.0 && ToShoulder.Size() > 2.0 && !Axis.IsNearlyZero())
+			{
+				// Turn by as much as closes the gap (found along the shoulder's arc), at most 25 degrees, and never past
+				// the line to the goal.
+				const double Between = FMath::Acos(FMath::Clamp(FVector::DotProduct(ToShoulder.GetSafeNormal(), ToGoal.GetSafeNormal()), -1.0, 1.0));
+				double Lo = 0.0, Hi = FMath::Min(FMath::DegreesToRadians(25.0), Between);
+				for (int32 Step = 0; Step < 14; ++Step)
+				{
+					const double Mid = (Lo + Hi) * 0.5;
+					const FVector Moved = Pivot + FQuat(Axis, Mid).RotateVector(ToShoulder);
+					(FVector::Dist(Moved, Target.GetLocation()) > MaxReach ? Lo : Hi) = Mid;
+				}
+				const double Angle = Hi * GoalAlpha;
+				const FQuat Turn(Axis, Angle);
+				const auto Swing = [&Turn, &Pivot](FTransform& T)
+				{
+					T.SetLocation(Pivot + Turn.RotateVector(T.GetLocation() - Pivot));
+					T.SetRotation((Turn * T.GetRotation()).GetNormalized());
+				};
+				FTransform ClavNew = ClavT;
+				ClavNew.SetRotation((Turn * ClavT.GetRotation()).GetNormalized());
+				Swing(UpperT);
+				Swing(LowerT);
+				Swing(HandT);
+				OutBoneTransforms.Add(FBoneTransform(ClavI, FTransform(ClavNew.GetRotation(), Pivot, ClavT.GetScale3D())));
+				ShoulderReach[Side] = static_cast<float>(FVector::Dist(Shoulder, UpperT.GetLocation()));
+			}
+		}
+		const FVector S = UpperT.GetLocation(), E0 = LowerT.GetLocation(), W0 = HandT.GetLocation();
 		const FQuat WantRot = Goal.bRotation ? Target.GetRotation() : HandT.GetRotation();
 
 		// The elbow's pole, then the hinge solve (no stretching, never folded past the limit).
@@ -732,6 +778,21 @@ bool UMakeHumanAnimInstance::GetSolvedArm(bool bRight, colony::arm::ArmAngles& O
 	return Node.bSolved[Side];
 }
 
+bool UMakeHumanAnimInstance::GetSolvedGoal(bool bRight, FTransform& OutGoalWorld, float& OutShoulderReach) const
+{
+	const FMakeHumanArmsNode& Node = GetProxyOnGameThread<FMakeHumanAnimProxy>().ArmsIK;
+	const int32 Side = bRight ? 1 : 0;
+	const USkeletalMeshComponent* Mesh = GetSkelMeshComponent();
+	if (!Node.bSolved[Side] || !Mesh)
+	{
+		return false;
+	}
+	OutGoalWorld = Node.GoalCS[Side] * Mesh->GetComponentTransform();
+	OutGoalWorld.SetScale3D(FVector::OneVector);
+	OutShoulderReach = Node.ShoulderReach[Side];
+	return true;
+}
+
 void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 {
 	// The graph is linked up first: the engine's Initialize takes the root node (GetCustomRootNode) there and keeps it, so
@@ -817,6 +878,7 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 			Arm.Pinky.BoneName = FName(*FString::Printf(TEXT("pinky_01_%s"), S));
 			Arm.Middle.BoneName = FName(*FString::Printf(TEXT("middle_01_%s"), S));
 			Arm.IndexTip.BoneName = FName(*FString::Printf(TEXT("index_03_%s"), S));
+			Arm.Clavicle.BoneName = FName(*FString::Printf(TEXT("clavicle_%s"), S));
 		}
 		ArmsIK.Alpha = 1.0f;
 	}

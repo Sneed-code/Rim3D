@@ -138,8 +138,12 @@ sim's plain C++ `colony::arm` (`ArmPose.h`), so it is unit tested:
 - **The elbow is a hinge**: it bends 0 to 145 degrees on its own anatomical axis (read from the body's bent rest pose),
   never backwards; the upper arm rolls so the hinge lies in the new bend plane.
 - **The elbow points down, out and a little back** (`naturalPole`), as people hold a weapon.
-- **No stretching**: a grip out of reach leaves the hand at 99.5% of the arm's length, short on the line to it (and
-  the first-person rig leans forward up to 25 cm until the shoulders reach, `ArmsLean`).
+- **No stretching**: a grip past the arm's reach first brings the shoulder forward (the clavicle turns up to 25
+  degrees, as a person reaching out does); still out of reach, the hand stops at 99.5% of the arm's length, short on
+  the line to it (and the first-person rig leans forward up to 25 cm until the shoulders reach, `ArmsLean`).
+- **The weapon stays at its place** while the hands hold it there (third person too): a hand the wrist limits hold
+  back never turns the weapon; the other hand goes to its own grip at the place, not after the main hand. Only a swing
+  or a full-body clip carries the weapon in the hand.
 - **Wrist and forearm limits**: forearm twist 85 degrees either way from thumb-up, wrist bend 70, sideways 28
   (`Limits`). A hand turned further is brought back to the nearest pose a wrist can take (`clampHand`); the weapon
   stays where it was placed and the grip gives a little instead. A backwards elbow reads as 180 degrees of twist, so
@@ -148,5 +152,5 @@ sim's plain C++ `colony::arm` (`ArmPose.h`), so it is unit tested:
 Proof: `ArmPoseTests` solves 20,000 random grips round the body (out of reach, against the shoulder, any hand turn)
 and every one is inside the limits. On the PC, smoke test `gunrange` measures **both arms of every drawn frame** (the
 first-person arms and the third-person body), from the solver and from the drawn bones, and fails on any joint out of
-range (`arm_limit_fails`); its step 16 pictures every gun hip, aimed, third-person ready and aimed (`hold_<Gun>_*`).
+range (`arm_limit_fails`), and on more than 1% of hand-frames with a hand over 3 cm off its grip (`arm_hand_short`, the `HAND OFF ITS GRIP` notes give the gun, view, hand and where the goal was); its step 16 pictures every gun hip, aimed, third-person ready and aimed (`hold_<Gun>_*`).
 Cvars: `Pawns.ArmLimits`, `Weapons.Places`, `Weapons.PlacesFirstPerson` (0 = the old way, for comparing).

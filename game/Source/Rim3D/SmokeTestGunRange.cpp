@@ -143,6 +143,7 @@ namespace
 		int32 ArmFrames = 0;
 		int32 ArmFails = 0;
 		int32 ArmShort = 0;
+		float ArmWorstGap = 0.0f;
 		float ArmWorstTwist = 0.0f;
 		float ArmWorstWrist = 0.0f;
 		float ArmWorstElbow = 0.0f;
@@ -767,13 +768,29 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 								Drawn.wristDeviation));
 						}
 					}
-					if (Short > 2.0f)
+					// The hand must be drawn on its goal: the solver's reach (after the shoulder came forward) and the
+					// drawn hand bone against the goal it was given (catches a goal in the wrong frame or a later node
+					// moving the hand). Either off by more than 3 cm fails the test.
+					FTransform GoalWorld;
+					float ShoulderReach = 0.0f;
+					float Gap = 0.0f;
+					FVector GoalFromShoulder = FVector::ZeroVector;
+					if (Anim->GetSolvedGoal(bRight, GoalWorld, ShoulderReach))
+					{
+						const FVector HandAt = Mesh->GetSocketLocation(bRight ? TEXT("hand_r") : TEXT("hand_l"));
+						Gap = static_cast<float>(FVector::Dist(HandAt, GoalWorld.GetLocation()));
+						const FVector FromShoulder = GoalWorld.GetLocation() - Mesh->GetSocketLocation(bRight ? TEXT("upperarm_r") : TEXT("upperarm_l"));
+						GoalFromShoulder = FVector(FVector::DotProduct(FromShoulder, Forward), FVector::DotProduct(FromShoulder, Right), FVector::DotProduct(FromShoulder, Up));
+					}
+					State->ArmWorstGap = FMath::Max(State->ArmWorstGap, Gap);
+					if (Short > 3.0f || Gap > 3.0f)
 					{
 						++State->ArmShort;
 						int32& N = State->ArmFailsBy.FindOrAdd(Key + TEXT(" short"));
 						if (N++ < 2)
 						{
-							Notes.Add(FString::Printf(TEXT("gunrange: hand short of its grip by %.1f cm: %s"), Short, *Key));
+							Notes.Add(FString::Printf(TEXT("gunrange: HAND OFF ITS GRIP %s: out of reach by %.1f cm, drawn %.1f cm from the goal, shoulder forward %.1f cm, goal from shoulder (ahead %.0f, right %.0f, up %.0f)"),
+								*Key, Short, Gap, ShoulderReach, GoalFromShoulder.X, GoalFromShoulder.Y, GoalFromShoulder.Z));
 						}
 					}
 				}
@@ -1233,8 +1250,13 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		PhaseNumbers.Add(TEXT("arm_frames_checked"), State->ArmFrames);
 		PhaseNumbers.Add(TEXT("arm_limit_fails"), State->ArmFails);
 		PhaseNumbers.Add(TEXT("arm_hand_short"), State->ArmShort);
-		Notes.Add(FString::Printf(TEXT("gunrange: arms checked on %d hand-frames: %d outside human limits, %d short of the grip; worst twist %.0f, wrist %.0f, elbow %.0f deg, short %.1f cm"),
-			State->ArmFrames, State->ArmFails, State->ArmShort, State->ArmWorstTwist, State->ArmWorstWrist, State->ArmWorstElbow, State->ArmWorstShort));
+		Notes.Add(FString::Printf(TEXT("gunrange: arms checked on %d hand-frames: %d outside human limits, %d off the grip; worst twist %.0f, wrist %.0f, elbow %.0f deg, out of reach %.1f cm, drawn off the goal %.1f cm"),
+			State->ArmFrames, State->ArmFails, State->ArmShort, State->ArmWorstTwist, State->ArmWorstWrist, State->ArmWorstElbow, State->ArmWorstShort, State->ArmWorstGap));
+		// A few frames off at a switch or a clip's blend are allowed (under 1%); more is a hold that doesn't fit the body.
+		if (State->ArmFrames > 0 && State->ArmShort * 100 > State->ArmFrames)
+		{
+			Fail(FString::Printf(TEXT("gunrange: %d of %d hand-frames with a hand off its grip (see the HAND OFF ITS GRIP notes)"), State->ArmShort, State->ArmFrames));
+		}
 		if (State->ArmFrames > 0 && State->ArmFails > 0)
 		{
 			Fail(FString::Printf(TEXT("gunrange: %d hand-frames with an arm outside human joint limits (see the ARM OUT OF RANGE notes)"), State->ArmFails));

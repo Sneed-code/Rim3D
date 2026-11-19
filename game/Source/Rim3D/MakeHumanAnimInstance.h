@@ -168,6 +168,7 @@ struct FMakeHumanArmsNode : public FAnimNode_SkeletalControlBase
 	struct FArm
 	{
 		FBoneReference Upper, Lower, Hand, Index, Pinky, Middle, IndexTip;
+		FBoneReference Clavicle;                     // optional: the shoulder girdle, brought forward for a far grip
 		FVector HingeInUpper = FVector::ZeroVector;  // the elbow's medial hinge in the upper arm's space, last seen bent
 		bool bHinge = false;
 		double NeutralFlex = 0.0;       // the rest pose's wrist readings (its knuckles off the forearm's line)
@@ -185,6 +186,9 @@ struct FMakeHumanArmsNode : public FAnimNode_SkeletalControlBase
 	colony::arm::ArmAngles Measured[2];
 	float ShortBy[2] = {0.0f, 0.0f};
 	bool bSolved[2] = {false, false};
+	/** The goal each hand was solved to (component space) and how far the shoulder was brought forward for it (cm). */
+	FTransform GoalCS[2];
+	float ShoulderReach[2] = {0.0f, 0.0f};
 
 	virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) override;
 	virtual bool IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones) override;
@@ -287,6 +291,9 @@ public:
 	}
 	/** What an arm read after the solver's last pass (degrees; tests), false if it was not solved. */
 	bool GetSolvedArm(bool bRight, colony::arm::ArmAngles& Out, float& OutShortBy) const;
+	/** The goal the arm was last solved to, in world space (tests: compared with where the hand is drawn), and how far
+	 *  the shoulder came forward for it (cm, component units). */
+	bool GetSolvedGoal(bool bRight, FTransform& OutGoalWorld, float& OutShoulderReach) const;
 	FMakeHumanHandGoal HandGoals[2];  // 0 left, 1 right
 	bool bAxesOverride = false;
 	FVector AxesUp = FVector::UpVector;
