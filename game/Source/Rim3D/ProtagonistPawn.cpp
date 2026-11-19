@@ -290,6 +290,13 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	UpdateCamera();
 }
 
+bool AProtagonistPawn::HasGunDrawn() const
+{
+	const USimSubsystem* Bridge = GetBridge();
+	const colony::ThingView* View = Bridge && Bridge->GetSim() ? Bridge->GetCurrentSnapshot().find(Thing) : nullptr;
+	return View && View->weapon.valid() && Bridge->GetDefs() && Bridge->GetDefs()->get(View->weapon).has("verbs");
+}
+
 void AProtagonistPawn::FollowFocus(float DeltaTime)
 {
 	// The sim turns the body to face the focus (MeleeSystem::faceFocus); the view turns after it so WASD strafes round the
@@ -297,7 +304,9 @@ void AProtagonistPawn::FollowFocus(float DeltaTime)
 	bFocusLocked = false;
 	const USimSubsystem* Bridge = GetBridge();
 	const colony::ThingView* Me = Bridge && Bridge->GetSim() ? Bridge->GetCurrentSnapshot().find(Thing) : nullptr;
-	if (!Me || Me->focusTarget == colony::kNoEntity || bAimHeld || Me->rollPhase > 0)
+	// Nor with a gun in hand (free aim, sneed 2026-11-18, docs/design/lock-on.md), nor while sprinting (the run goes
+	// where the keys say, as in Elden Ring).
+	if (!Me || Me->focusTarget == colony::kNoEntity || bAimHeld || Me->rollPhase > 0 || bSprinting || HasGunDrawn())
 	{
 		return;
 	}

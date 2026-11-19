@@ -1756,6 +1756,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                 dx *= kDirectMaxStep / length;
                 dy *= kDirectMaxStep / length;
             }
+            melee_->orbitMove(move->pawn, dx, dy);  // locked on with melee: sideways walks round the target (lock-on.md)
             // The whole move, or sliding along one axis (a wall), or staying where it is.
             const float tries[3][2] = {{dx, dy}, {dx, 0.0f}, {0.0f, dy}};
             float moveX = 0.0f;
