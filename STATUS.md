@@ -2,6 +2,16 @@
 
 Updated 2026-11-19.
 
+Races and wall climbing (sneed, 2026-11-19; `docs/design/races.md`, `docs/design/climbing.md`): sneed's race stats are
+in the sim as lineages: **baseline** learns 20% faster; **Impid** (Emberkin) 90% less harm from heat, cold and fire, no
+heat injury until 100 C past normal, +5% walk, +5% damage taken; **Orcoid** +10% melee, +10% hit points and blood,
+-10% learning and work; **drow** +10% shot damage, dark vision, +10% work in the dark, never cooped up, nocturnal by
+default, -10% aim and work outdoors in sunlight; **cat-strain** jumps x2, climbs walls x2, -20% fall and collapse
+damage, every penalty a third worse. The player and starting colonists stay human; joiners and raiders roll a race.
+**Wall climbing** for everyone: the outside face of a wall under an upper floor is a climb (0.15 of walking speed),
+drawn on the face then mantling over the top; the Unreal part (GASP climb clip, cat jump x2) is a follow-up PR for the PC. **Cat ears remade** as thin cupped pinnae with
+tufts (`tools/makehuman/mh_common.py`). **Next: PC compile, re-make the creator bodies for the ears, pictures.**
+
 Elden Ring roll camera (sneed, 2026-11-19; Unreal, `docs/design/shooter-feel-draw.md` "Roll", `docs/design/lock-on.md` "Facing and movement"): in third person **a roll no longer ducks the camera** (it dropped 55 cm and tipped 9 degrees, which looked like zooming in). The camera now **follows the body softly**, barely while running and more in a roll, so it keeps its height and distance and glides after the tumble; exact while aiming; first person keeps the dash. **Locked on, the view eases** to the enemy instead of a fixed 360 degree a second spin, and **after a roll it swings back over half a second** instead of whipping round. Smoke test `feel` phase `feel_roll` now checks no duck and a soft follow that settles. **Next: compile and try on the PC.**
 
 Shots go where the crosshair is (sneed, 2026-11-18; sim and Unreal, `docs/design/aiming.md` "Shots go where the crosshair is"): bolt-action headshots missed because the crosshair was checked against the sim's stock 1.80 m upright dummy, not the body on screen, and the player's spread was a fighter's. Now **the player's crosshair is traced against the body as drawn this frame** (bone-to-bone capsules on the animated mesh, named by body part), the shot carries the pawn, the part and the spot, and **a bullet passing within 7 cm of that spot hits that part**; one that misses the spot meets the stock hitboxes, walls and ground as before (deterministic: the spot is in the command, saves and replays). **The player's spread is now tiny for every gun** (about 2.4 cm at 30 m; it was 25 cm for the bolt-action and over 2 m for the autopistol, which is why some guns hit and others didn't). **Hitboxes scale with each body's height.** Tests "Crosshair" in `AimingTests`. **Next: the PC build and a range check (aim at heads with each gun at 10, 30 and 60 m); then fighters' and melee hitboxes posed from the clips.**

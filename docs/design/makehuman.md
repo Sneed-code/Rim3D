@@ -216,9 +216,12 @@ sternum, their tail is in the breast (the pigment mask now uses the tail too).
 
 A fourth kind in the creator's Kind tab beside Baseline, Imp and Orcoid (sneed, 2026-11-15: cat only for now). It looks
 the same as a person except for these parts, all generated for whatever body they go on (`mh_common.py`):
-- `add_cat_ears`: cat ears coming up out of the top of the head either side of the crown, tilted out and turned slightly
-  outwards. They have a crescent cross-section with a cupped front, and are weighted to the head. Outside material
-  CatFur, inside CatEarInner (skin, pinker).
+- `add_cat_ears` (remade 2026-11-19, sneed: "the cat ears don't look realistic"): each ear is a thin cupped pinna
+  (`_cat_ear_mesh`), not a solid cone: a broad-based triangle with bowed sides and a rounded tip, a deep cup pushed back
+  in the middle with the rim rolled forward, the back a few millimetres behind and fuller in the middle, its root sunk
+  1.5 cm into the skull. Pale tufts (ear furnishings) grow out of the bottom of the cup. Up out of the top of the head
+  either side of the crown, tilted out and turned 25 degrees outwards, weighted to the head. Outside and rim CatFur;
+  inside of the cup and the tufts CatEarInner (skin, pinker). 7.8 cm tall, 6.8 cm wide.
 - `add_cat_claws`: one small curved claw per fingertip, starting at the nail side and curling towards the palm, weighted
   to the last finger bone. Material CatClaw.
 - A furred CatTail: `add_tail` called a second time, so it uses the imp tail's bones. That means the tail swish node

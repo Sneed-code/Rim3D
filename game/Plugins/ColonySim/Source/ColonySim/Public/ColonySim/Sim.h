@@ -42,6 +42,7 @@ class RoomStats;
 struct Colonist;
 struct PawnLooks;
 struct PawnGenes;
+struct GeneEffects;
 class Designations;
 class ExplosiveSystem;
 class FighterSystem;
@@ -241,6 +242,8 @@ public:
     // before the first step). Clamped to 48 to 120.
     void setDayMinutes(int minutes);
     const Map& map() const { return map_; }
+    // For tests and dev tools that change map-wide rules (Map::setWallClimb).
+    Map& mapRules() { return map_; }
     // For map generation and tests that set the world up; the game changes the map through commands.
     Map& editMap() { return map_; }
     // Regions and reachability (docs/design/regions.md). Queries may rebuild, so not const.
@@ -318,6 +321,13 @@ public:
     const PawnLooks* looksOf(Entity pawn) const;
     // A humanlike pawn's genes, made from its lineage (docs/design/genes.md), or null for other things.
     const PawnGenes* genesOf(Entity pawn) const;
+    // sneed's races (docs/design/races.md): the pawn's debuff factor (1 without genes), whether it
+    // stands under open sky with the sun up, the lineage a joiner or raider rolls from its seed, and
+    // a nocturnal lineage's turned-round schedule.
+    float geneDebuff(Entity pawn) const;
+    bool sunlit(Entity pawn, const GeneEffects& fx) const;
+    std::string joinerLineage(uint64_t seed) const;
+    void giveNocturnalSchedule(Entity pawn);
 
     // The plant layer: wild plants from map generation, growing hourly (docs/design/plants.md).
     Plants& plants() { return *plants_; }

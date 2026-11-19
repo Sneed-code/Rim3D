@@ -71,28 +71,28 @@ std::vector<Entity> genesColonists(const Sim& sim) {
 
 }  // namespace
 
-TEST_CASE("genes: every lineage's genes exist, the baseline has none, and the effects add up") {
+TEST_CASE("genes: every lineage's genes exist, the baseline only learns faster, and the effects add up") {
     const auto defs = genesTestDefs();
-    for (const char* lineage : {"Baseline", "Emberkin", "Frostkin", "Warbred", "Ashborn", "Delver"}) {
+    for (const char* lineage : {"Baseline", "Emberkin", "Frostkin", "Warbred", "Ashborn", "Delver", "Orcoid", "Drow", "CatStrain"}) {
         PawnGenes genes;
         std::string error;
         CHECK_MESSAGE(makeGenes(*defs, lineage, genes, error), lineage << ": " << error);
         CHECK(genes.genes.size() == defs->find("Lineages", lineage)->count("genes"));
     }
     const PawnGenes baseline = genesOfLineage("Baseline");
-    CHECK(baseline.genes.empty());
+    CHECK(baseline.genes == std::vector<std::string>{"QuickLearner"});
+    CHECK(baseline.effects.learning == doctest::Approx(1.2f));  // sneed: baseline humans learn 20% faster
     CHECK(baseline.effects.moveSpeed == 0.0f);
     CHECK(baseline.effects.foodRate == 1.0f);
     CHECK(baseline.effects.damageTaken == 1.0f);
 
+    // sneed's Impid: thermal resistance, +5% walking, +5% damage taken.
     const PawnGenes ember = genesOfLineage("Emberkin");
-    CHECK(ember.effects.moveSpeed > 0.0f);          // very fast runner
-    CHECK(ember.effects.comfyMinC == 10.0f);        // cold weakness
-    CHECK(ember.effects.comfyMaxC == 20.0f);        // heat super-tolerant
-    CHECK(ember.effects.woundHealing == 0.5f);      // slow wound healing
-    CHECK(ember.effects.moodOffset < 0.0f);         // unhappy
-    CHECK(geneAptitude(ember, "Plants") == -4);
-    CHECK(geneAptitude(ember, "Mining") == 0);
+    CHECK(ember.effects.thermalDamage == doctest::Approx(0.1f));
+    CHECK(ember.effects.comfyMaxC == 100.0f);
+    CHECK(ember.effects.moveSpeedFactor == doctest::Approx(1.05f));
+    CHECK(ember.effects.damageTaken == doctest::Approx(1.05f));
+    CHECK(ember.effects.learning == 1.0f);
 
     const PawnGenes frost = genesOfLineage("Frostkin");
     // The wiki: a naked Frostkin is comfortable down to -6 C, a baseline human down to 16 C.
@@ -165,7 +165,7 @@ TEST_CASE("genes: pawns get their lineage's genes, a changed lineage changes the
     const Entity pawn = colonists[1];
     const PawnGenes* genes = sim.genesOf(pawn);
     GENES_REQUIRE(genes != nullptr);
-    CHECK(genes->genes.empty());
+    CHECK(genes->genes == std::vector<std::string>{"QuickLearner"});  // the starting colonists are human
 
     sim.submit(SetLineageCommand{pawn, "Frostkin"});
     sim.step();
@@ -205,7 +205,7 @@ TEST_CASE("genes: hunger, damage, walking speed and skills follow the genes") {
     const Entity ember = colonists[3];
     sim.submit(SetLineageCommand{frost, "Frostkin"});
     sim.submit(SetLineageCommand{ember, "Emberkin"});
-    // Warm weather for both (the Emberkin's range starts at 22 degrees), so cold doesn't slow either.
+    // Warm weather for both, so cold doesn't slow either.
     sim.setOutdoorOverride(25.0f);
     sim.step();
 
@@ -238,8 +238,8 @@ TEST_CASE("genes: hunger, damage, walking speed and skills follow the genes") {
     GENES_REQUIRE(plainHurt > 0.0f);
     CHECK(frostHurt / plainHurt == doctest::Approx(0.75f).epsilon(0.02));
 
-    // Walking: drafted and sent along a free row; once up to speed the very fast runner covers
-    // more ground in the same time.
+    // Walking: drafted and sent along a free row; once up to speed the Impid (+5%) covers more ground
+    // in the same time.
     const auto posOf = [&](Entity pawn) { return sim.things().registry().get<Position>(pawn); };
     for (const Entity pawn : {plain, ember}) {
         sim.submit(DraftCommand{pawn, true});
@@ -256,7 +256,8 @@ TEST_CASE("genes: hunger, damage, walking speed and skills follow the genes") {
     const float plainMoved = std::fabs(posOf(plain).x - plainFrom.x);
     const float emberMoved = std::fabs(posOf(ember).x - emberFrom.x);
     CHECK(plainMoved > 1.0f);
-    CHECK(emberMoved > plainMoved * 1.1f);
+    CHECK(emberMoved > plainMoved * 1.03f);
+    CHECK(emberMoved < plainMoved * 1.07f);
 }
 
 TEST_CASE("genes: a scenario with lineage weights rolls the colonists' lineages, never the protagonist's") {
