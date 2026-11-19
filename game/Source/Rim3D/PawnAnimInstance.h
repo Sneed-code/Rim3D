@@ -64,6 +64,8 @@ struct FSimPawnAnimInputs
 	/** A whole-body clip still shows (blending out after the sim's clip ended, or a crouching action): the legs are
 	 *  the clip's, so neither the feet holds nor the hips' pull to the sim's position may act on them. */
 	bool bLegsFromClip = false;
+	/** The legs' whole-body clip is only fading out (the sim's clip is over): the standing hold may take the feet. */
+	bool bLegsClipFading = false;
 	// --- The hit layer (docs/design/body-health.md part E), on top of whatever animation plays. ---
 	/** Hits since the animation last took them: it empties the list when it has. */
 	TArray<FSimPawnKick, TInlineAllocator<4>> Kicks;

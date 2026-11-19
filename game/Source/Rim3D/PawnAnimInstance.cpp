@@ -117,7 +117,7 @@ namespace
 	// PawnWalkYawMax, or when the leg would have to reach further than the animation's own leg does and more than
 	// PawnWalkStepReach of its length. One foot steps at a time; it does not land again until the step is over.
 	constexpr float PawnWalkStepGap = 16.0f;
-	constexpr float PawnWalkStepLift = 6.0f;
+	constexpr float PawnWalkStepLift = 8.0f;
 	constexpr double PawnWalkStepReach = 0.95;
 	// A leg asked to reach further than it can comes to its full length softly, over the last PawnLegSoftReach cm (a hard
 	// stop turned the foot's speed round in one frame).
@@ -313,12 +313,15 @@ namespace
 		}
 		FVector Along = Target - A;
 		const double Longest = Upper + Lower - 0.05;
-		const double SoftFrom = Longest - PawnLegSoftReach;
+		// The soft part starts no nearer than the animation's own foot, so a target on the animation's foot is reached
+		// exactly (whether the bend is done or skipped, the foot is in the same place).
+		const double SoftFrom = FMath::Min(FMath::Max(Longest - PawnLegSoftReach, (C - A).Size()), Longest);
 		double Wanted = Along.Size();
 		if (Wanted > SoftFrom)
 		{
 			// tanh: slope 1 where it starts, never past the leg's length.
-			Wanted = SoftFrom + PawnLegSoftReach * FMath::Tanh((Wanted - SoftFrom) / PawnLegSoftReach);
+			const double Span = Longest - SoftFrom;
+			Wanted = Span > 0.01 ? SoftFrom + Span * FMath::Tanh((Wanted - SoftFrom) / Span) : Longest;
 		}
 		const double Reach = FMath::Clamp(Wanted, FMath::Abs(Upper - Lower) + 0.5, Longest);
 		if (!Along.Normalize())
@@ -1710,7 +1713,10 @@ void FSimPawnHitLayerNode::Update_AnyThread(const FAnimationUpdateContext& Conte
 	Walking = PawnApproach(Walking, In.Velocity.Size2D() > PawnStandSpeed ? 1.0f : 0.0f, DeltaTime / 0.25f);
 
 	// Standing feet and turns are worked out in Evaluate, where the feet are known.
-	bWantFootLock = Proxy->bStandingIdleNow && In.bStandTwist && !In.bLegsFromClip;
+	// A whole-body clip blending out over the standing idle (the sim's clip over: a swing, a stagger) hands its feet to
+	// the hold where it leaves them, so the blend into the idle bends the legs instead of sliding the feet (the standing
+	// feet slid 6 cm after a swing in the eleventh PC round).
+	bWantFootLock = Proxy->bStandingIdleNow && In.bStandTwist && (!In.bLegsFromClip || In.bLegsClipFading);
 	bWantWalkLock = In.bStandTwist && !In.bLegsFromClip;
 
 	// The springs, in steps short enough to stay steady on a slow frame.
@@ -1999,7 +2005,9 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 
 	// How much the standing hold shows: eased, so neither taking hold nor letting go starts or stops a foot at once.
 	float HoldShow = bFootLocked ? PawnSmooth(FootLockWeight) : 0.0f;
-	bool bWant = bWantFootLock && bLegs;
+	// Not while a walking foot is stepping (it is in the air: the hold took it where it was across the ground and set it
+	// down at once, a 4 cm drop in a frame in the eleventh PC round); the step is over within PawnWalkLockRelease.
+	bool bWant = bWantFootLock && bLegs && !bWalkStepping[0] && !bWalkStepping[1];
 	if (bFootLocked && FVector::Dist2D(ToWorld.GetLocation(), FootLockCentre) > PawnFootLockDrift)
 	{
 		bWant = false;  // the body has crept off its spot without the walk taking over: let go, take hold again after

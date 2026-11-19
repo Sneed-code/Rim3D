@@ -193,6 +193,11 @@ and swings jolted the head and chest at every 30 fps key. **A clip's set-back us
 drawn, like its moment: read a frame old it lagged through every blend in or out by a different amount each frame
 (frames were 3 to 8 ms), and the hips jittered through the AI's lunges. The `idle` test logs `IDLETRACE stand-drift` lines
 for a standing foot wandering past 2 cm and reports `walkStepsAllPhases`.
+Eleventh round (afcb7ab: motion, melee, hurt, pawns and feel pass; idle 8 errors from 9, the standing phases and the body
+quiet): **the standing hold waits for a walking step to land** (it took a lifted foot and set it down in a frame, 4 cm);
+**a whole-body clip fading out over the standing idle hands its feet to the hold** (a swing's feet slid 6 cm as it blended
+into the idle); the soft leg reach starts no nearer than the animation's own foot (bending or not bending the leg to a
+target on the animation's foot then gives the same foot); a step lifts 8 cm.
 
 **Near and far: loops.** The breathing idle, or the walk or run loop (`M_Neutral_*`), picked by speed (run above the
 middle of the two loops' speeds, measured from their root motion: 200 and 500 cm/s) and played

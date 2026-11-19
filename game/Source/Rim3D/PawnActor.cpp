@@ -428,6 +428,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		In.bHoldFacing = bHoldFacing;
 		In.bStandTwist = !(IsInMotionClip() && !bMotionUpper) && RollProgress <= 0.0f && !IsJumping() && !Now.crawling && !Now.downed;
 		In.bLegsFromClip = LegsClipWeight > 0.001f || ActionEndSeconds > 0.0 || (IsInMotionClip() && !bMotionUpper);
+		In.bLegsClipFading = LegsClipWeight > 0.001f && ActionEndSeconds <= 0.0 && !IsInMotionClip() && RollProgress <= 0.0f && !Now.downed && !Now.crawling;
 		In.bHitLayer = true;
 		In.LimpLeft = LimpLeft;
 		In.LimpRight = LimpRight;
