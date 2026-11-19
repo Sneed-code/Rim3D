@@ -2,6 +2,7 @@
 
 #include "ColonySim/Animals.h"
 #include "ColonySim/Apparel.h"
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Construction.h"
@@ -132,6 +133,11 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     num("rangeMargin", r.rangeMargin);
     num("walkStayBonus", r.walkStayBonus);
     num("focusMetres", r.focusMetres);
+    num("meleeThreatMetres", r.meleeThreatMetres);
+    num("backpedalRange", r.backpedalRange);
+    num("backpedalMetres", r.backpedalMetres);
+    whole("backpedalSteps", r.backpedalSteps);
+    r.backpedalSteps = std::max(1, r.backpedalSteps);
     num("ambushRange", r.ambushRange);
     num("helpRange", r.helpRange);
     num("fleeResponseSeconds", r.fleeResponseSeconds);
@@ -564,6 +570,10 @@ void FighterSystem::step() {
         if (f.mode == FightMode::Rescue) {
             rescueStep(pawn, f);
         }
+        // Hand to hand, a new enemy swinging at it is answered at once, not at the next plan (lock-on.md).
+        if (now() < f.nextPlan && f.mode == FightMode::Fight && attackedByOther(pawn, f)) {
+            f.nextPlan = now();
+        }
         if (now() >= f.nextPlan) {
             f.nextPlan = now() + rules_.planEvery;
             plan(pawn, f);
@@ -587,6 +597,44 @@ void FighterSystem::aiFocus(Entity pawn, const Fighter& f) {
                       !panicked(pawn, f) && weaponRange(pawn) <= 0.0f && target->level == self->level &&
                       fightDist(target->x, target->y, self->x, self->y) <= melee_->rules().aiFocusRange;
     melee_->setAiFocus(pawn, keep ? f.target : kNoEntity);
+}
+
+// `enemy` is at `pawn` hand to hand: winding up a swing at it, or within its own reach of it while going for it.
+bool FighterSystem::threatensInMelee(Entity enemy, Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    if (melee_ == nullptr || !reg.valid(enemy)) {
+        return false;
+    }
+    const Melee* m = reg.try_get<Melee>(enemy);
+    if (m != nullptr && m->phase == MeleePhase::Windup && m->target == pawn) {
+        return true;
+    }
+    const Fighter* f = reg.try_get<Fighter>(enemy);
+    return f != nullptr && f->target == pawn && weaponRange(enemy) <= 0.0f && melee_->inReach(enemy, pawn);
+}
+
+// A fighter without a gun has an enemy other than its target winding up a swing at it, nearer than its target.
+bool FighterSystem::attackedByOther(Entity pawn, const Fighter& f) const {
+    if (melee_ == nullptr || weaponRange(pawn) > 0.0f) {
+        return false;
+    }
+    const entt::registry& reg = things_.registry();
+    const PawnInfo* self = info(pawn);
+    if (self == nullptr) {
+        return false;
+    }
+    const PawnInfo* target = info(f.target);
+    const float targetDist = target != nullptr ? fightDist(target->x, target->y, self->x, self->y) : 1e9f;
+    for (const PawnInfo& p : pawns_) {
+        if (p.pawn == pawn || p.pawn == f.target || p.faction == self->faction || !p.able || p.level != self->level) {
+            continue;
+        }
+        const Melee* m = reg.try_get<Melee>(p.pawn);
+        if (m != nullptr && m->phase == MeleePhase::Windup && m->target == pawn && fightDist(p.x, p.y, self->x, self->y) < targetDist) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool FighterSystem::sprinting(Entity pawn) const {
@@ -812,6 +860,7 @@ Entity FighterSystem::chooseTarget(Entity pawn, const Fighter& f, const PawnInfo
     const Raider* raider = reg.try_get<Raider>(pawn);
     const bool focuses = self.faction == kPlayerFaction;
     const float range = focuses ? weaponRange(pawn) : 0.0f;
+    const bool melee = melee_ != nullptr && weaponRange(pawn) <= 0.0f;
     const auto standsOn = [&](FactionId side) {
         return std::any_of(pawns_.begin(), pawns_.end(), [&](const PawnInfo& p) { return p.faction == side && p.able && !p.animal; });
     };
@@ -843,6 +892,11 @@ Entity FighterSystem::chooseTarget(Entity pawn, const Fighter& f, const PawnInfo
         float d = fightDist(k.x, k.y, self.x, self.y);
         if (focuses && p->able && range > 0.0f && d <= range) {
             d -= rules_.focusMetres * static_cast<float>(shootingAt(k.pawn));
+        }
+        // Hand to hand (sneed 2026-11-18, lock-on.md): a fighter without a gun doesn't let one enemy cut it down while it
+        // goes for another further off. One swinging at it, or within reach of it, comes first.
+        if (melee && p->able && threatensInMelee(k.pawn, pawn)) {
+            d -= rules_.meleeThreatMetres;
         }
         if (best == kNoEntity || rank < bestRank || (rank == bestRank && (d < bestDist || (d == bestDist && k.pawn < best)))) {
             best = k.pawn;
@@ -1615,6 +1669,9 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
     if (meleeAct(pawn, f)) {
         return;  // swinging, or an enemy in reach to swing at (F8)
     }
+    if (backpedal(pawn, f)) {
+        return;  // backing off from one rushing in hand to hand, shooting as it goes
+    }
 
     // Walking to the spot: upright, not shooting.
     if (f.walk == 1) {
@@ -1703,6 +1760,62 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
     if (phase == ShotPhase::Ready) {
         tacticalReload(pawn, f, canShoot);
     }
+}
+
+// A gunman an enemy without a gun is rushing (sneed 2026-11-18, lock-on.md): between its shots it steps back away from
+// it, and fires at it from where it stands as soon as its gun is ready, instead of walking out to its firing cell. Close
+// enough to hit (switchMeleeRange) it takes up its melee weapon if it has one (chooseWeapon), and meleeAct fights.
+bool FighterSystem::backpedal(Entity pawn, Fighter& f) {
+    if (f.mode != FightMode::Fight || panicked(pawn, f) || weaponRange(pawn) <= 0.0f || combat_.rollLocked(pawn)) {
+        return false;
+    }
+    if (combat_.motion().moving(pawn)) {
+        return rules_.backpedalRange > 0.0f;  // a step under way: nothing else meanwhile
+    }
+    const PawnInfo* self = info(pawn);
+    if (self == nullptr) {
+        return false;
+    }
+    const PawnInfo* rusher = nullptr;
+    float nearest = rules_.backpedalRange;
+    for (const PawnInfo& p : pawns_) {
+        if (p.pawn == pawn || !p.able || p.turret || p.faction == self->faction || p.level != self->level ||
+            weaponRange(p.pawn) > 0.0f) {
+            continue;
+        }
+        const float d = fightDist(p.x, p.y, self->x, self->y);
+        if (d <= nearest && std::find_if(f.known.begin(), f.known.end(), [&](const KnownEnemy& k) { return k.pawn == p.pawn; }) != f.known.end()) {
+            nearest = d;
+            rusher = &p;
+        }
+    }
+    if (rusher == nullptr) {
+        return false;
+    }
+    if (combat_.shotReadyIn(pawn) <= 0 && now() >= f.reactUntil) {
+        combat_.setStance(pawn, Stance::Standing);
+        const Position& pos = things_.registry().get<Position>(pawn);
+        const Viewpoint eye{pos.x, pos.y, pos.level, Stance::Standing};
+        if (map_.cover().lineOfSight(eye, Viewpoint{rusher->x, rusher->y, rusher->level, rusher->stance}) &&
+            !friendInLine(pawn, pos.x, pos.y, pos.level, Stance::Standing, *rusher) && fireAt(pawn, *rusher)) {
+            return true;
+        }
+        return false;
+    }
+    float dx = self->x - rusher->x;
+    float dy = self->y - rusher->y;
+    const float len = std::sqrt(dx * dx + dy * dy);
+    if (len < 1e-4f) {
+        return false;
+    }
+    dx /= len;
+    dy /= len;
+    if (!combat_.motion().push(pawn, dx, dy, rules_.backpedalMetres, rules_.backpedalSteps)) {
+        return false;
+    }
+    combat_.setStance(pawn, Stance::Standing);
+    f.nextPlan = std::max(f.nextPlan, now() + rules_.backpedalSteps);  // thinks again once it has stepped
+    return true;
 }
 
 bool FighterSystem::shootsTurrets(Entity pawn) const {

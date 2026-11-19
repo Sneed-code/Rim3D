@@ -127,6 +127,9 @@ private:
 	int32 FocusBarFramesDrawn = 0;
 	/** The focus a Clear was last sent for while the setting is off (so it is sent once). */
 	colony::Entity FocusClearedFor = colony::kNoEntity;
+	/** Seconds the player has been turned away from the focus and moving away from it (lock-on.md). */
+	float TurnAwaySeconds = 0.0f;
+	void UpdateTurnAway(USimSubsystem& Bridge);
 	/** Real seconds the screen has been dark for the night skip (fades in and out). */
 	float SleepFade = 0.0f;
 };

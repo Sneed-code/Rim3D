@@ -64,6 +64,7 @@
       "Melee_Spear": ["Motion_Spear_Stab_Low"]
     },
     "focusRange": 20, "focusBreakRange": 25, "focusFrontCos": 0.5, "focusBehindFactor": 2, "aiFocusRange": 8,
+    "lockBigBodySize": 2, "lockSightLostSteps": 90, "orbitRadialShare": 0.35,
     "footworkEverySteps": 24, "footworkChanceBySkill": [0.35, 0.8], "footworkTraitBonus": 0.2, "footworkTraits": ["Nimble"],
     "recklessFootwork": 0.5, "circleMetres": 0.6, "circleSteps": 18, "circleFlip": 0.3, "backShare": 0.5, "circleShare": 0.6, "backMetres": 0.6, "backSteps": 12,
     "crowdedShare": 0.6, "chaseSeconds": 6, "lineOfFireRange": 30, "lineOfFireClearance": 0.8,
@@ -76,7 +77,8 @@
       "blockRecoverySteps", "playerBlockSteps", "dodgeHoldSteps", "chargeTraits", "strongPowerShare",
       "arcHalfDegrees", "arcRaysPerSide", "arcDamageTypes",
       "reachHeightFollow", "maxAttackClipSeconds", "maxAttackHitSeconds", "maxAttackTravel", "unarmedStyle", "styleAttacks", "lowAttacks",
-      "focusRange", "focusBreakRange", "focusFrontCos", "focusBehindFactor", "aiFocusRange", "footworkEverySteps",
+      "focusRange", "focusBreakRange", "focusFrontCos", "focusBehindFactor", "aiFocusRange", "lockBigBodySize",
+      "lockSightLostSteps", "orbitRadialShare", "footworkEverySteps",
       "footworkChanceBySkill", "footworkTraitBonus", "footworkTraits", "recklessFootwork", "circleMetres", "circleSteps", "circleFlip", "backShare", "circleShare",
       "backMetres", "backSteps", "crowdedShare", "chaseSeconds", "lineOfFireRange", "lineOfFireClearance"
     ]

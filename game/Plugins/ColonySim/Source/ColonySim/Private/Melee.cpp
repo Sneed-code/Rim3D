@@ -118,6 +118,9 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     num("focusFrontCos", r.focusFrontCos);
     num("focusBehindFactor", r.focusBehindFactor);
     num("aiFocusRange", r.aiFocusRange);
+    num("lockBigBodySize", r.lockBigBodySize);
+    whole("lockSightLostSteps", r.lockSightLostSteps);
+    num("orbitRadialShare", r.orbitRadialShare);
     whole("footworkEverySteps", r.footworkEverySteps);
     bySkill("footworkChanceBySkill", r.footworkChance);
     num("footworkTraitBonus", r.footworkTraitBonus);
@@ -935,8 +938,11 @@ void MeleeSystem::commit(Entity pawn, Melee& m) {
     float oy = 0.0f;
     float oz = 0.0f;
     shoulder(pawn, ox, oy, oz);
+    // Locked on or not, a swing at someone goes at its focus point (lock-on.md); one at a body on the ground at its aim
+    // point there.
     const bool hasTarget = m.target != kNoEntity && reg.valid(m.target) && things_.spawned(m.target) &&
-                           combat_.aimPoint(m.target, m.aimX, m.aimY, m.aimZ);
+                           (m.low ? combat_.aimPoint(m.target, m.aimX, m.aimY, m.aimZ)
+                                  : focusPoint(pawn, m.target, !m.weaponTool, m.aimX, m.aimY, m.aimZ));
     if (!hasTarget) {
         const Posture& posture = reg.get<Posture>(pawn);
         const float r = reach(pawn);
@@ -1292,6 +1298,7 @@ void MeleeSystem::hashThing(Entity e, StateHasher& h) const {
     h.add(m->nextRollAt);
     h.add(entt::to_integral(m->focus));
     h.add(m->focusPlayer);
+    h.add(m->focusSeenAt);
     h.add(m->low);
     h.add(static_cast<int>(m->circleDir));
     h.add(m->nextFootworkAt);
@@ -1401,6 +1408,7 @@ bool MeleeSystem::focusCommand(Entity pawn, Entity target, FocusMode mode, std::
         Melee& m = reg.get_or_emplace<Melee>(pawn);
         m.focus = target;
         m.focusPlayer = true;
+        m.focusSeenAt = now();
         return true;
     }
     if (mode != FocusMode::Next) {
@@ -1457,6 +1465,7 @@ bool MeleeSystem::focusCommand(Entity pawn, Entity target, FocusMode mode, std::
     }
     m.focus = picks[next].pawn;
     m.focusPlayer = true;
+    m.focusSeenAt = now();
     return true;
 }
 
@@ -1494,6 +1503,21 @@ void MeleeSystem::faceFocus() {
             m.focusPlayer = false;
             continue;
         }
+        const Position& t = reg.get<Position>(m.focus);
+        // The player's lock lets go when it hasn't seen the target for lockSightLostSteps (lock-on.md). Looked at
+        // every tenth step, from its eyes to the target's.
+        if (m.focusPlayer && (now() + entt::to_integral(pawn)) % 10 == 0) {
+            const Position& p = reg.get<Position>(pawn);
+            const Viewpoint from{p.x, p.y, p.level, reg.get<Posture>(pawn).stance};
+            const Viewpoint to{t.x, t.y, t.level, reg.get<Posture>(m.focus).stance};
+            if (map_.cover().lineOfSight(from, to)) {
+                m.focusSeenAt = now();
+            } else if (now() - m.focusSeenAt >= rules_.lockSightLostSteps) {
+                m.focus = kNoEntity;
+                m.focusPlayer = false;
+                continue;
+            }
+        }
         if (combat_.rollLocked(pawn)) {
             continue;  // a roll goes its own way
         }
@@ -1501,9 +1525,107 @@ void MeleeSystem::faceFocus() {
         if (s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) {
             continue;  // it faces where it aims
         }
-        const Position& t = reg.get<Position>(m.focus);
+        // A gun in hand keeps the lock but not the facing: the aim is free (sneed 2026-11-18, lock-on.md).
+        if (const Gear* gear = reg.try_get<Gear>(pawn);
+            gear != nullptr && gear->weapon != kNoEntity && reg.valid(gear->weapon) && combat_.isGun(reg.get<Thing>(gear->weapon).def)) {
+            continue;
+        }
         face(pawn, t.x, t.y);
     }
+}
+
+// Where a swing goes (docs/design/lock-on.md): sneed's focus point. A big body (lockBigBodySize and up) is struck at the
+// centre of its body part nearest the attacker's shoulder, picked fresh at each swing; fists go at a person's head; anything
+// else at the chest (aimPoint). Only where it is aimed: the strike's swept line decides what it meets.
+bool MeleeSystem::focusPoint(Entity attacker, Entity target, bool fists, float& x, float& y, float& z) const {
+    if (!combat_.aimPoint(target, x, y, z)) {
+        return false;
+    }
+    const bool big = combat_.bodySizeOf(target) >= rules_.lockBigBodySize;
+    if (!big && !fists) {
+        return true;
+    }
+    std::vector<HitboxView> boxes;
+    if (!combat_.hitboxesOf(target, boxes) || boxes.empty()) {
+        return true;
+    }
+    float ox = 0.0f;
+    float oy = 0.0f;
+    float oz = 0.0f;
+    if (!shoulder(attacker, ox, oy, oz)) {
+        return true;
+    }
+    int head = -1;
+    if (!big) {
+        const std::vector<std::string> zones = health_.zoneNames(target);
+        for (size_t i = 0; i < zones.size(); ++i) {
+            if (zones[i] == "Head") {
+                head = static_cast<int>(i);
+                break;
+            }
+        }
+        if (head < 0) {
+            return true;  // no head to punch at: the chest
+        }
+    }
+    bool found = false;
+    float best = 0.0f;
+    for (const HitboxView& b : boxes) {
+        const float cx = b.box ? b.ax : 0.5f * (b.ax + b.bx);
+        const float cy = b.box ? b.ay : 0.5f * (b.ay + b.by);
+        const float cz = b.box ? b.az : 0.5f * (b.az + b.bz);
+        float score = 0.0f;
+        if (big) {
+            score = (cx - ox) * (cx - ox) + (cy - oy) * (cy - oy) + (cz - oz) * (cz - oz);  // nearest
+        } else if (health_.partZone(target, b.part) == head) {
+            score = -cz;  // the head's highest shape (the skull over the neck)
+        } else {
+            continue;
+        }
+        if (!found || score < best) {
+            found = true;
+            best = score;
+            x = cx;
+            y = cy;
+            z = cz;
+        }
+    }
+    return true;
+}
+
+// Elden Ring circling (lock-on.md): locked on with no gun, A and D walk round the target. The camera faces it, so a
+// sideways key press is a step along the tangent, which would drift outwards; the step is put back on the circle.
+void MeleeSystem::orbitMove(Entity pawn, float& dx, float& dy) const {
+    const entt::registry& reg = things_.registry();
+    const Melee* m = reg.valid(pawn) ? reg.try_get<Melee>(pawn) : nullptr;
+    if (m == nullptr || m->focus == kNoEntity || !reg.valid(m->focus) || !reg.all_of<Position>(m->focus) || !reg.all_of<Position>(pawn)) {
+        return;
+    }
+    if (const Gear* gear = reg.try_get<Gear>(pawn);
+        gear != nullptr && gear->weapon != kNoEntity && reg.valid(gear->weapon) && combat_.isGun(reg.get<Thing>(gear->weapon).def)) {
+        return;
+    }
+    const Position& p = reg.get<Position>(pawn);
+    const Position& t = reg.get<Position>(m->focus);
+    const float rx = p.x - t.x;
+    const float ry = p.y - t.y;
+    const float r = std::sqrt(rx * rx + ry * ry);
+    const float len = std::sqrt(dx * dx + dy * dy);
+    if (p.level != t.level || r < 0.5f || len < 1e-5f) {
+        return;
+    }
+    const float radial = (dx * rx + dy * ry) / r;
+    if (std::fabs(radial) > rules_.orbitRadialShare * len) {
+        return;  // walking in or backing off
+    }
+    const float nx = rx + dx;
+    const float ny = ry + dy;
+    const float n = std::sqrt(nx * nx + ny * ny);
+    if (n < 1e-5f) {
+        return;
+    }
+    dx = t.x + nx * (r / n) - p.x;
+    dy = t.y + ny * (r / n) - p.y;
 }
 
 Entity MeleeSystem::playerTarget(Entity pawn) const {
