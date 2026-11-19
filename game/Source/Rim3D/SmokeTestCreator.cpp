@@ -1335,12 +1335,14 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				++State->HairDemoStep;
 			}
 			static const float ShotTimes[] = {2.0f, 4.0f, 8.0f, 10.0f, 14.0f, 16.0f, 20.0f, 22.0f, 26.0f, 32.0f};
+			bool bShotThisFrame = false;  // one screenshot request a frame: a later one replaces it, so the recording skips this frame
 			if (State->HairDemoShot < static_cast<int32>(UE_ARRAY_COUNT(ShotTimes)) && T >= ShotTimes[State->HairDemoShot])
 			{
 				static const TCHAR* const PartNames[] = {TEXT("on"), TEXT("off"), TEXT("capsules")};
 				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") /
 					FString::Printf(TEXT("hair_%02d_%s.png"), State->HairDemoShot, PartNames[Part]), false, false);
 				++State->HairDemoShot;
+				bShotThisFrame = true;
 			}
 			if (const ASimPawnActor* Pawn = Pawns->FindPawn(State->People[State->Selected].Thing))
 			{
@@ -1352,7 +1354,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					State->HairAnimatedDeepest[Part] = FMath::Max(State->HairAnimatedDeepest[Part], Animated);
 				}
 			}
-			if (RecordSeconds > 0.0f && State->Recorded < FMath::RoundToInt32(RecordSeconds * 30.0f))
+			if (!bShotThisFrame && RecordSeconds > 0.0f && State->Recorded < FMath::RoundToInt32(RecordSeconds * 30.0f))
 			{
 				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") / FString::Printf(TEXT("rec_%04d.png"), State->Recorded++), false, false);
 			}
