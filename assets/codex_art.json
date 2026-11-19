@@ -1,0 +1,282 @@
+{
+ "comment": "Codex models for buildings and items (docs/design/codex-models.md). 'prep' is read by tools/codex_prep.py (Blender: GLB from sneed's Rim3D_Codex folder -> assets/raw/codex/<Name>/, not in Git). 'buildings' is read by the GunArt commandlet (-List=assets/codex_art.json): each FBX is imported as one combined mesh, /Game/Rim3D/Generated/Buildings/<name>/SM_<name>, with M_GunPBR instances from the T_<slot>_* maps; the def's visual.mesh names it. The launchers' art is in assets/guns.json. All numbers are ours.",
+ "prep": {
+  "GrenadeLauncher": {
+   "kind": "gun"
+  },
+  "TripleRocketLauncher": {
+   "kind": "gun"
+  },
+  "Molotov": {
+   "kind": "item",
+   "def": "Grenade_Molotov",
+   "size": [
+    0.09,
+    0.09,
+    0.4
+   ]
+  },
+  "ComponentIndustrial": {
+   "kind": "item",
+   "def": "ComponentIndustrial",
+   "size": [
+    0.154,
+    0.113,
+    0.08
+   ],
+   "drop": [
+    "ComponentStack"
+   ]
+  },
+  "MiniTurret": {
+   "kind": "building",
+   "def": "Turret_Mini",
+   "size": [
+    1,
+    1,
+    1.4
+   ],
+   "centerOn": "Base"
+  },
+  "AutocannonTurret": {
+   "kind": "building",
+   "def": "Turret_Autocannon",
+   "size": [
+    2,
+    2,
+    2.2
+   ],
+   "centerOn": "Base"
+  },
+  "Mortar": {
+   "kind": "building",
+   "def": "Turret_Mortar",
+   "size": [
+    2,
+    2,
+    1.3
+   ],
+   "centerOn": "Base"
+  },
+  "IEDTrap": {
+   "kind": "building",
+   "def": "TrapIEDExplosive",
+   "size": [
+    0.9,
+    0.9,
+    0.25
+   ]
+  },
+  "NutrientPasteDispenser": {
+   "kind": "building",
+   "def": "NutrientPasteDispenser",
+   "size": [
+    3,
+    4,
+    2.12
+   ]
+  },
+  "CommsConsole": {
+   "kind": "building",
+   "def": "CommsConsole",
+   "size": [
+    3,
+    2,
+    2.47
+   ]
+  },
+  "HiTechResearchBench": {
+   "kind": "building",
+   "def": "HiTechResearchBench",
+   "size": [
+    5,
+    2,
+    2.0
+   ]
+  },
+  "TransportPod": {
+   "kind": "building",
+   "def": "TransportPod",
+   "size": [
+    1,
+    1,
+    1.93
+   ]
+  },
+  "GeothermalGenerator": {
+   "kind": "building",
+   "def": "GeothermalGenerator",
+   "size": [
+    2,
+    2,
+    2.48
+   ]
+  },
+  "DeepDrill": {
+   "kind": "building",
+   "def": "DeepDrill",
+   "size": [
+    1,
+    1,
+    2.41
+   ]
+  },
+  "BiofuelRefinery": {
+   "kind": "building",
+   "def": "BiofuelRefinery",
+   "size": [
+    3,
+    2,
+    1.91
+   ]
+  }
+ },
+ "buildings": [
+  {
+   "def": "Grenade_Molotov",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Molotov",
+    "fbx": "assets/raw/codex/Molotov/Molotov_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Molotov",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ComponentIndustrial",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ComponentIndustrial",
+    "fbx": "assets/raw/codex/ComponentIndustrial/ComponentIndustrial_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ComponentIndustrial",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Turret_Mini",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "MiniTurret",
+    "fbx": "assets/raw/codex/MiniTurret/MiniTurret_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/MiniTurret",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Turret_Autocannon",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "AutocannonTurret",
+    "fbx": "assets/raw/codex/AutocannonTurret/AutocannonTurret_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/AutocannonTurret",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Turret_Mortar",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Mortar",
+    "fbx": "assets/raw/codex/Mortar/Mortar_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Mortar",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "TrapIEDExplosive",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "IEDTrap",
+    "fbx": "assets/raw/codex/IEDTrap/IEDTrap_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/IEDTrap",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "NutrientPasteDispenser",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "NutrientPasteDispenser",
+    "fbx": "assets/raw/codex/NutrientPasteDispenser/NutrientPasteDispenser_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/NutrientPasteDispenser",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "CommsConsole",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "CommsConsole",
+    "fbx": "assets/raw/codex/CommsConsole/CommsConsole_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/CommsConsole",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "HiTechResearchBench",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "HiTechResearchBench",
+    "fbx": "assets/raw/codex/HiTechResearchBench/HiTechResearchBench_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/HiTechResearchBench",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "TransportPod",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "TransportPod",
+    "fbx": "assets/raw/codex/TransportPod/TransportPod_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/TransportPod",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "GeothermalGenerator",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "GeothermalGenerator",
+    "fbx": "assets/raw/codex/GeothermalGenerator/GeothermalGenerator_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/GeothermalGenerator",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "DeepDrill",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "DeepDrill",
+    "fbx": "assets/raw/codex/DeepDrill/DeepDrill_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/DeepDrill",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "BiofuelRefinery",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "BiofuelRefinery",
+    "fbx": "assets/raw/codex/BiofuelRefinery/BiofuelRefinery_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/BiofuelRefinery",
+    "normalOpenGL": true
+   }
+  }
+ ]
+}

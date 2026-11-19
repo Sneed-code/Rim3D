@@ -113,7 +113,7 @@
   "unverified": ["costs", "stats.workToBuild", "power", "fuel"]
  },
  {
-  "defName": "GeothermalGenerator", "visual": {"sound": {"loop": "Hum_Generator"}}, "researchPrerequisite": "GeothermalPower",
+  "defName": "GeothermalGenerator", "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/GeothermalGenerator/SM_GeothermalGenerator.SM_GeothermalGenerator","sound": {"loop": "Hum_Generator"}}, "researchPrerequisite": "GeothermalPower",
   "parent": "PowerBase",
   "label": "geothermal generator",
   "size": [2, 2],

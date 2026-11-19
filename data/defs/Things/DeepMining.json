@@ -2,7 +2,7 @@
   {
     "defName": "DeepDrill", "parent": "BuildingBase", "label": "deep drill", "size": [1, 1], "designationCategory": "Production",
     "researchPrerequisite": "DeepDrilling", "fillPercent": 0.5, "costs": {"Steel": 100, "ComponentIndustrial": 2},
-    "visual": {"parts": [{"shape": "box", "size": [0.9, 0.9, 0.35], "color": [0.5, 0.52, 0.56]}, {"shape": "cylinder", "radius": 0.18, "height": 1.3, "at": [0, 0, 0.35], "color": [0.75, 0.6, 0.15]}, {"shape": "box", "size": [0.5, 0.5, 0.1], "at": [0, 0, 1.65], "color": [0.3, 0.3, 0.33]}]},
+    "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/DeepDrill/SM_DeepDrill.SM_DeepDrill","parts": [{"shape": "box", "size": [0.9, 0.9, 0.35], "color": [0.5, 0.52, 0.56]}, {"shape": "cylinder", "radius": 0.18, "height": 1.3, "at": [0, 0, 0.35], "color": [0.75, 0.6, 0.15]}, {"shape": "box", "size": [0.5, 0.5, 0.1], "at": [0, 0, 1.65], "color": [0.3, 0.3, 0.33]}]},
     "stats": {"maxHitPoints": 300, "workToBuild": 14400.0, "flammability": 0.5, "beauty": -25, "mass": 35},
     "power": {"consumption": 200},
     "deepWork": {"kind": "drill", "radius": 2.6},

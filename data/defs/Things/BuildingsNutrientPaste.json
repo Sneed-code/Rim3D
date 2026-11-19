@@ -7,7 +7,7 @@
     "stats": { "maxHitPoints": 350, "workToBuild": 3168.0, "flammability": 0.5, "beauty": 0 },
     "power": { "consumption": 200 },
     "building": { "nutritionPerMeal": 0.3, "mealDef": "MealNutrientPaste" },
-    "visual": { "parts": [
+    "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/NutrientPasteDispenser/SM_NutrientPasteDispenser.SM_NutrientPasteDispenser", "parts": [
       { "shape": "box", "size": [0, 0, 1.0], "color": [0.55, 0.57, 0.6] },
       { "shape": "box", "size": [-0.2, -0.2, 0.15], "at": [0, 0, 1.0], "color": [0.35, 0.37, 0.4] },
       { "shape": "box", "size": [0.6, 0.05, 0.4], "at": [0, -1.85, 0.5], "color": [0.2, 0.45, 0.35] }

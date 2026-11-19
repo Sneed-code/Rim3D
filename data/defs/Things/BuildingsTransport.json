@@ -22,7 +22,7 @@
     "costs": { "Steel": 60, "ComponentIndustrial": 1 },
     "stats": { "maxHitPoints": 250, "workToBuild": 2304.0, "flammability": 0.5, "marketValue": 152 },
     "transportPod": { "massCapacity": 150 },
-    "visual": { "parts": [
+    "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/TransportPod/SM_TransportPod.SM_TransportPod", "parts": [
       { "shape": "cylinder", "radius": 0.42, "height": 0.9, "color": [0.7, 0.72, 0.75] },
       { "shape": "cylinder", "radius": 0.25, "height": 0.25, "at": [0, 0, 0.9], "color": [0.35, 0.37, 0.4] }
     ] },
