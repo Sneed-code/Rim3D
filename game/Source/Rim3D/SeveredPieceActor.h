@@ -33,6 +33,7 @@ public:
 	void SetLimbAxis(const FVector& InAxis) { LimbAxis = InAxis.GetSafeNormal(); }
 	/** The open end (its stump cap): blood drips from there for a while once the piece has come down. */
 	void SetCutEnd(USceneComponent* InEnd) { CutEnd = InEnd; }
+	const USceneComponent* GetCutEnd() const { return CutEnd; }
 
 private:
 	UPROPERTY()

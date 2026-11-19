@@ -484,8 +484,18 @@ void USmokeTestSubsystem::BuildHurtPhases()
 				{
 					const bool bCorpse = Which == Close.Num() - 1;
 					const double Side = Shot % 2 == 0 ? 1.0 : -1.0;
-					const FVector P = Close[Which]->GetActorLocation() + FVector(0.0, 0.0, bCorpse ? 20.0 : 0.0);
-					const FVector Eye = P + (bCorpse ? FVector(70.0 * Side, 50.0 * Side, 260.0) : FVector(75.0 * Side, 60.0 * Side, 65.0));
+					FVector P = Close[Which]->GetActorLocation() + FVector(0.0, 0.0, bCorpse ? 20.0 : 0.0);
+					FVector Eye = P + (bCorpse ? FVector(70.0 * Side, 50.0 * Side, 260.0) : FVector(75.0 * Side, 60.0 * Side, 65.0));
+					// A piece's first shot looks into its cut from 40 cm, a little off its line, to judge the stump (skin
+					// rim, fat, muscle, bone).
+					const ASeveredPieceActor* PieceShown = Cast<ASeveredPieceActor>(Close[Which]);
+					if (!bCorpse && Side > 0.0 && PieceShown && PieceShown->GetCutEnd())
+					{
+						P = PieceShown->GetCutEnd()->GetComponentLocation();
+						FVector Out = PieceShown->GetCutEnd()->GetUpVector();
+						Out.Z = FMath::Max(Out.Z, 0.35);
+						Eye = P + Out.GetSafeNormal() * 40.0 + FVector(8.0, 6.0, 4.0);
+					}
 					ViewFrom(Eye, (P - Eye).Rotation());
 					if (State->CloseUpsTaken == Shot && PhaseTime - 8.0f - Shot > 0.5f)
 					{

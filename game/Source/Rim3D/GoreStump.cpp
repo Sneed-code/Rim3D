@@ -100,12 +100,12 @@ namespace
 	}
 
 	// The tissue colours (linear).
-	const FLinearColor GoreMuscleDark(0.20f, 0.012f, 0.010f);
-	const FLinearColor GoreMuscleLight(0.42f, 0.040f, 0.032f);
-	const FLinearColor GoreFat(0.72f, 0.50f, 0.20f);
-	const FLinearColor GoreDermis(0.55f, 0.16f, 0.12f);
+	const FLinearColor GoreMuscleDark(0.11f, 0.006f, 0.005f);
+	const FLinearColor GoreMuscleLight(0.30f, 0.020f, 0.016f);
+	const FLinearColor GoreFat(0.80f, 0.52f, 0.10f);
+	const FLinearColor GoreDermis(0.40f, 0.07f, 0.05f);
 	const FLinearColor GoreBlood(0.18f, 0.008f, 0.006f);
-	const FLinearColor GoreBone(0.80f, 0.74f, 0.60f);
+	const FLinearColor GoreBone(0.90f, 0.86f, 0.74f);
 	const FLinearColor GoreMarrow(0.30f, 0.06f, 0.035f);
 	const FLinearColor GoreCord(0.82f, 0.76f, 0.66f);
 	const FLinearColor GoreCartilage(0.80f, 0.62f, 0.56f);
@@ -178,7 +178,7 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 	FGoreMesh Mesh;
 
 	// The cut face: rings out from the middle (fractions of the radius), then the torn rim and the skin hanging back.
-	static const float Rings[] = {0.0f, 0.14f, 0.28f, 0.42f, 0.55f, 0.66f, 0.74f, 0.80f, 0.84f, 0.88f, 0.91f, 0.94f, 0.97f, 1.0f, 1.03f, 1.05f, 1.06f};
+	static const float Rings[] = {0.0f, 0.14f, 0.28f, 0.42f, 0.55f, 0.66f, 0.74f, 0.81f, 0.85f, 0.89f, 0.92f, 0.95f, 0.975f, 1.0f, 1.02f, 1.04f, 1.05f};
 	constexpr int32 RingCount = UE_ARRAY_COUNT(Rings);
 	constexpr int32 Cols = 40;
 	const float Skirt = 0.22f * R + 1.2f;
@@ -200,7 +200,7 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 		}
 		return FMath::Lerp(0.0f, -0.06f * R, (F - 1.0f) / 0.06f);
 	};
-	const FLinearColor SkinBloodied = FMath::Lerp(Skin, GoreBlood, 0.25f);
+	const FLinearColor SkinBloodied = FMath::Lerp(Skin, GoreBlood, 0.4f);
 	Mesh.AddRingGrid(RingCount + 1, Cols,
 		[&](int32 Row, int32 C)
 		{
@@ -221,23 +221,23 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			const float G = F + Wobble;
 			if (Row == RingCount)
 			{
-				return GoreWet(FMath::Lerp(Skin, GoreBlood, 0.1f + 0.15f * Random.FRand()), 0.45f);
+				return GoreWet(FMath::Lerp(Skin, GoreBlood, 0.35f + 0.3f * Random.FRand()), 0.35f);
 			}
-			if (G < 0.79f)
+			if (G < 0.84f)
 			{
 				// Muscle in bundles: darker and lighter streaks across the cut, wet.
 				const float Streak = 0.5f + 0.5f * Fibres.At(Theta * 3.0f + F * 11.0f);
 				return GoreWet(FMath::Lerp(GoreMuscleDark, GoreMuscleLight, Streak * 0.8f + 0.2f * Random.FRand()), 0.0f);
 			}
-			if (G < 0.89f)
+			if (G < 0.92f)
 			{
 				return GoreWet(FMath::Lerp(GoreFat, GoreBlood, 0.15f + 0.35f * Random.FRand()), 0.12f);
 			}
-			if (G < 0.95f)
+			if (G < 0.975f)
 			{
 				return GoreWet(GoreDermis, 0.1f);
 			}
-			return GoreWet(FMath::Lerp(SkinBloodied, GoreBlood, 0.35f * Random.FRand()), 0.3f);
+			return GoreWet(FMath::Lerp(SkinBloodied, GoreBlood, 0.3f + 0.4f * Random.FRand()), 0.3f);
 		});
 
 	// What stands out of the middle.
@@ -258,16 +258,16 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 	case EGoreStumpKind::OneBone:
 	{
 		const FVector2D Centre(0.05f * R, 0.02f * R);
-		const float Radius = 0.22f * R;
-		GoreAddBone(Mesh, Random, Centre, Radius, -1.0f, TopOver(Centre, Radius) + 0.5f + 0.1f * R, 0.12f * R);
+		const float Radius = 0.26f * R;
+		GoreAddBone(Mesh, Random, Centre, Radius, -1.0f, TopOver(Centre, Radius) + 0.9f + 0.18f * R, 0.15f * R);
 		break;
 	}
 	case EGoreStumpKind::TwoBones:
 	{
 		const FVector2D A(-0.30f * R, 0.06f * R);
 		const FVector2D B(0.32f * R, -0.12f * R);
-		GoreAddBone(Mesh, Random, A, 0.17f * R, -1.0f, TopOver(A, 0.17f * R) + 0.4f + 0.08f * R, 0.1f * R);
-		GoreAddBone(Mesh, Random, B, 0.12f * R, -1.0f, TopOver(B, 0.12f * R) + 0.3f + 0.05f * R, 0.08f * R);
+		GoreAddBone(Mesh, Random, A, 0.2f * R, -1.0f, TopOver(A, 0.2f * R) + 0.8f + 0.15f * R, 0.12f * R);
+		GoreAddBone(Mesh, Random, B, 0.14f * R, -1.0f, TopOver(B, 0.14f * R) + 0.5f + 0.1f * R, 0.1f * R);
 		break;
 	}
 	case EGoreStumpKind::Neck:

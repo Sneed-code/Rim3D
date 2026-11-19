@@ -422,16 +422,16 @@ namespace
 		auto* Vertex = BloodArtNode<UMaterialExpressionVertexColor>(Material, -1000, -200);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Vertex, TEXT(""), MP_BaseColor);
 		auto* Wet = BloodArtNode<UMaterialExpressionConstant>(Material, -800, 50);
-		Wet->R = 0.16f;
+		Wet->R = 0.32f;
 		auto* Dry = BloodArtNode<UMaterialExpressionConstant>(Material, -800, 150);
-		Dry->R = 0.55f;
+		Dry->R = 0.6f;
 		auto* Rough = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -500, 100);
 		BloodArtConnect(Wet, TEXT(""), Rough, TEXT("A"));
 		BloodArtConnect(Dry, TEXT(""), Rough, TEXT("B"));
 		BloodArtConnect(Vertex, TEXT("A"), Rough, TEXT("Alpha"));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
 		auto* Specular = BloodArtNode<UMaterialExpressionConstant>(Material, -400, 250);
-		Specular->R = 0.6f;
+		Specular->R = 0.35f;
 		UMaterialEditingLibrary::ConnectMaterialProperty(Specular, TEXT(""), MP_Specular);
 		// A fine bump: the slope of a small noise in the mesh's own space (local position, cm).
 		auto* Bump = BloodArtNode<UMaterialExpressionCustom>(Material, -500, 400);
