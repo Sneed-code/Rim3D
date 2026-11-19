@@ -1619,8 +1619,8 @@ bool MeleeSystem::focusNext(Entity pawn, FocusMode mode, float viewX, float view
         }
         return a.pawn < b.pawn;
     });
-    if (picks.front().group <= 1) {
-        // Enemies about: nobody else.
+    if (picks.front().group <= 1 && !anySide) {
+        // Enemies about: nobody else (the practice range keeps everyone: its targets turn on you one by one).
         picks.erase(std::remove_if(picks.begin(), picks.end(), [](const Pick& p) { return p.group > 1; }), picks.end());
     }
     Entity chosen = kNoEntity;

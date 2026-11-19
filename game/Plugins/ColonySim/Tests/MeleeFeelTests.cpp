@@ -349,3 +349,22 @@ TEST_CASE("Blows at the downed: a spear and a knife have a downward stab") {
         }
     }
 }
+
+TEST_CASE("Flicks: on the practice range (anySide) a flick from the one enemy goes to a target beside it") {
+    // PC smoke test 2026-11-19: the range's Tab had locked on to a woman who had turned on the player (an enemy); the
+    // others were the player's own side, which a flick dropped because an enemy was about, so it never switched.
+    auto sim = feelTestSim(320);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Gun_Revolver");
+    const Entity turned = feelTestPawn(*sim, 40.5f, 30.5f);
+    const Entity beside = feelTestPawn(*sim, 40.5f, 33.5f);
+    sim->submit(SetFactionCommand{turned, 2});
+    sim->submit(SetFightResponseCommand{turned, FightResponse::Flee});
+    sim->submit(FocusCommand{hero, turned, FocusMode::Set});
+    sim->step();
+    sim->submit(FocusCommand{hero, kNoEntity, FocusMode::Right, 1.0f, 0.0f, true});
+    sim->step();
+    CHECK(sim->melee().focusOf(hero) == beside);
+    sim->submit(FocusCommand{hero, kNoEntity, FocusMode::Next, 1.0f, 0.0f, true});
+    sim->step();
+    CHECK(sim->melee().focusOf(hero) == turned);  // Tab still gives the enemy first
+}
