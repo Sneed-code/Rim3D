@@ -40,3 +40,27 @@ The snapshot has each item's `rot`; whether a meal is poisoned is hidden from it
 
 All numbers except 0 and 10 degrees and 0.35 are ours (see the def's `ours` and `unverified` lists).
 Cancelling a bill returns fresh ingredients, not the rot they had.
+
+## Corpses
+
+(sneed, 2026-11-14: flies and maggots on corpses.) Every dead pawn that is not a machine (`race.mechanical`)
+gets a `CorpseRot` component on the first spoilage pass after it died. Its `days` are rot-days: every pass adds
+the rot speed of the body's cell (the same 0 to 10 degree curve as food) times the pass length, so a freezer or
+a winter night keeps a body. They stop at `corpse.daysToDessicated`. Save section `corpses` 1; the days are in
+the state hash.
+
+`SpoilageSystem::corpseLook(days, celsius)` gives the stage and what to draw, and the snapshot copies it onto the
+body's `ThingView` (`corpseDays`, `corpseStage`, `flies`, `fliesFlying`, `maggots`):
+
+| | from | numbers (`SpoilageRules` `corpse`) |
+| --- | --- | --- |
+| Fresh | death | |
+| Rotting | 2.5 rot-days | RimWorld's corpse `daysToRotStart` (unverified) |
+| Dessicated | 25 rot-days | RimWorld's `daysToDessicated` (unverified) |
+| flies | 0 at 0.01 days (about 15 minutes), a full swarm at 0.25, thinning from 12 days, gone when dessicated | ours |
+| flies on the wing | none at 10 degrees or less (they sit on the body), all at 20 or more | ours |
+| maggots | from 1 day, the most at 2.5, gone by 18 | ours |
+
+Flies and maggots are cosmetic: no mood, no disease, nothing else in the sim reads them (sneed, 2026-11-17: no
+mood debuffs for corpses). Chitinid bodies rot and draw flies too; the PC side draws the swarm and the maggots
+from these numbers and darkens a rotting body.

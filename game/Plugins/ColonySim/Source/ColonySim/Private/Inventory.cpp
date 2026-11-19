@@ -19,6 +19,113 @@ constexpr float kInventoryReachSq = 2.0f * 2.0f + 0.01f;  // within 2 cells (met
 
 }  // namespace
 
+// Puts `count` (0 for all) of `item`, lying on the map, into the pawn's bag, as much as fits under its carry capacity;
+// the same def already in the bag takes it on. The caller has checked reach. False, with the reason, if none fits.
+bool Sim::takeIntoBag(Entity pawn, Entity item, int count, std::string& error) {
+    entt::registry& reg = things_->registry();
+    const DefId def = reg.get<Thing>(item).def;
+    const StackCount* stack = reg.try_get<StackCount>(item);
+    const int have = stack != nullptr ? stack->count : 1;
+    const int wanted = count == 0 ? have : std::min(count, have);
+    // As many as fit under the carry capacity next to everything else it carries.
+    const double room = jobs_->carryCapacity(pawn) - jobs_->loadMass(pawn);
+    const double each = std::max(jobs_->massFor(pawn, def), 1e-9);
+    const int fits = room <= 0.0 ? 0 : static_cast<int>(std::floor(room / each + 1e-9));
+    const int take = std::min(wanted, fits);
+    if (take <= 0) {
+        error = "that is too heavy: the pawn can't carry any more";
+        return false;
+    }
+    Entity taken = item;
+    if (take < have) {
+        taken = things_->splitOff(item, take);
+        if (taken == kNoEntity) {
+            error = "that stack can't be split";
+            return false;
+        }
+    } else {
+        jobs_->forget(item);
+        things_->despawn(item);
+    }
+    Gear& gear = reg.get_or_emplace<Gear>(pawn);
+    // The same def already in the bag takes it on, as far as a stack goes.
+    for (const Entity mine : gear.inventory) {
+        if (!reg.valid(mine) || reg.get<Thing>(mine).def != def || !reg.all_of<StackCount>(mine) ||
+            !reg.all_of<StackCount>(taken)) {
+            continue;
+        }
+        const int limit = jobs_->stackLimit(def);
+        const int join = std::min(reg.get<StackCount>(taken).count, limit - reg.get<StackCount>(mine).count);
+        if (join <= 0) {
+            continue;
+        }
+        things_->addToStack(mine, taken, join);
+        reg.get<StackCount>(taken).count -= join;
+        if (reg.get<StackCount>(taken).count <= 0) {
+            things_->destroy(taken);
+            taken = kNoEntity;
+            break;
+        }
+    }
+    if (taken != kNoEntity) {
+        gear.inventory.push_back(taken);
+        reg.emplace_or_replace<EquippedBy>(taken, EquippedBy{pawn});
+    }
+    return true;
+}
+
+// The player's colonist picks resources up by walking past them (sneed 2026-11-17, docs/design/inventory.md "Picking up
+// resources"): every few game seconds, each resource stack lying within reach that isn't in storage, owned or about to
+// be taken by another colonist goes into its bag, as much as fits. Silent when it doesn't fit.
+void Sim::autoPickUp() {
+    const float radius = jobs_->autoPickUpRadius();
+    if (radius <= 0.0f || time_.steps % jobs_->autoPickUpEvery() != 0) {
+        return;
+    }
+    entt::registry& reg = things_->registry();
+    std::vector<Entity> players;
+    for (const Entity pawn : reg.view<PlayerControl, Position>()) {
+        players.push_back(pawn);
+    }
+    std::sort(players.begin(), players.end());
+    for (const Entity pawn : players) {
+        if (!health_->tracks(pawn) || health_->incapacitated(pawn) || reg.get<Health>(pawn).dead) {
+            continue;
+        }
+        const Position at = reg.get<Position>(pawn);
+        const CellPos here = cellOf(at);
+        std::vector<Entity> near;
+        const int reach = static_cast<int>(std::ceil(radius));
+        for (int dy = -reach; dy <= reach; ++dy) {
+            for (int dx = -reach; dx <= reach; ++dx) {
+                const CellPos cell{here.x + dx, here.y + dy, here.level};
+                if (!map_.inBounds(cell)) {
+                    continue;
+                }
+                for (const Entity item : things_->itemsAt(cell)) {
+                    near.push_back(item);
+                }
+            }
+        }
+        std::sort(near.begin(), near.end());
+        for (const Entity item : near) {
+            if (!reg.valid(item) || !things_->spawned(item) || reg.all_of<EquippedBy>(item) ||
+                !jobs_->autoPicksUp(reg.get<Thing>(item).def) || jobs_->storedPriority(item) != StoragePriority::Unstored ||
+                jobs_->reservedByOther(JobTarget{item, CellPos{}}, pawn)) {
+                continue;
+            }
+            const Position& there = reg.get<Position>(item);
+            const float dx = there.x - at.x;
+            const float dy = there.y - at.y;
+            if (dx * dx + dy * dy > radius * radius) {
+                continue;
+            }
+            std::string error;
+            takeIntoBag(pawn, item, 0, error);
+        }
+    }
+}
+
 void Sim::applyInventoryCommand(const InventoryCommand& command, uint64_t id) {
     entt::registry& reg = things_->registry();
     const Entity pawn = command.pawn;
@@ -63,53 +170,9 @@ void Sim::applyInventoryCommand(const InventoryCommand& command, uint64_t id) {
             commandFailed(id, "that is too far away to pick up");
             return;
         }
-        const DefId def = reg.get<Thing>(item).def;
-        const StackCount* stack = reg.try_get<StackCount>(item);
-        const int have = stack != nullptr ? stack->count : 1;
-        const int wanted = command.count == 0 ? have : std::min(command.count, have);
-        // As many as fit under the carry capacity next to everything else it carries.
-        const double room = jobs_->carryCapacity(pawn) - jobs_->loadMass(pawn);
-        const double each = std::max(jobs_->massFor(pawn, def), 1e-9);
-        const int fits = room <= 0.0 ? 0 : static_cast<int>(std::floor(room / each + 1e-9));
-        const int take = std::min(wanted, fits);
-        if (take <= 0) {
-            commandFailed(id, "that is too heavy: the pawn can't carry any more");
-            return;
-        }
-        Entity taken = item;
-        if (take < have) {
-            taken = things_->splitOff(item, take);
-            if (taken == kNoEntity) {
-                commandFailed(id, "that stack can't be split");
-                return;
-            }
-        } else {
-            jobs_->forget(item);
-            things_->despawn(item);
-        }
-        Gear& gear = reg.get_or_emplace<Gear>(pawn);
-        // The same def already in the bag takes it on, as far as a stack goes.
-        for (const Entity mine : gear.inventory) {
-            if (!reg.valid(mine) || reg.get<Thing>(mine).def != def || !reg.all_of<StackCount>(mine) ||
-                !reg.all_of<StackCount>(taken)) {
-                continue;
-            }
-            const int limit = jobs_->stackLimit(def);
-            const int join = std::min(reg.get<StackCount>(taken).count, limit - reg.get<StackCount>(mine).count);
-            if (join <= 0) {
-                continue;
-            }
-            things_->addToStack(mine, taken, join);
-            reg.get<StackCount>(taken).count -= join;
-            if (reg.get<StackCount>(taken).count <= 0) {
-                things_->destroy(taken);
-                taken = kNoEntity;
-                break;
-            }
-        }
-        if (taken != kNoEntity) {
-            gear.inventory.push_back(taken);
-            reg.emplace_or_replace<EquippedBy>(taken, EquippedBy{pawn});
+        std::string error;
+        if (!takeIntoBag(pawn, item, command.count, error)) {
+            commandFailed(id, error);
         }
         return;
     }

@@ -287,7 +287,7 @@ void Rooms::levelRooms() {
         }
         std::sort(cells.begin(), cells.end(), [](const CellPos& a, const CellPos& b) { return a.y != b.y ? a.y < b.y : a.x < b.x; });
         cells.erase(std::unique(cells.begin(), cells.end(), [](const CellPos& a, const CellPos& b) { return a.x == b.x && a.y == b.y; }), cells.end());
-        map_.levelCells(cells, base);
+        map_.planCells(cells, base);  // dug by pawns (docs/design/earthworks.md)
     }
 }
 

@@ -51,6 +51,8 @@ public:
 
     // Pawns whose walk was held up by other pawns this step, for the stats simrun prints.
     uint64_t pawnsHeldUp() const { return heldUp_; }
+    // Times a stuck pawn was let walk through walls (the stuck watchdog), since the start.
+    uint64_t pawnsPhased() const { return phased_; }
 
 private:
     void movePawns(entt::registry& registry, const Map& map);
@@ -77,6 +79,7 @@ private:
     std::vector<int> bucketHead_;  // first agent index in each bucket, or -1
     std::vector<int> nextInBucket_;
     uint64_t heldUp_ = 0;
+    uint64_t phased_ = 0;
     DoorNumbers doors_;
     const Lights* lights_ = nullptr;
     const TraitBook* traits_ = nullptr;

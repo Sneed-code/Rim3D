@@ -29,6 +29,7 @@
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Raids.h"
 #include "ColonySim/Filth.h"
+#include "ColonySim/Grime.h"
 #include "ColonySim/Fire.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Health.h"
@@ -241,6 +242,7 @@ struct SaveHealth {
     bool downed = false;  // health section 5 on: with `dirty`, so a wound not yet worked out is still pending after a load
     bool dirty = false;
     int64_t bleedStoppedAt = -1;  // health section 7 on
+    std::vector<int64_t> zoneHurtAt;  // health section 8 on (body-health.md part F)
 };
 
 // An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
@@ -455,6 +457,7 @@ struct SaveEntity {
     std::optional<Young> young;             // section "breeding" version 3
     std::optional<Burning> burning;         // section "fire" (E4)
     std::optional<SaveSpoilage> spoilage;   // section "spoilage"
+    std::optional<CorpseRot> corpse;        // section "corpses"
     std::optional<SaveGrenade> grenade;     // section "explosives"
     std::optional<SaveBelt> belt;           // section "explosives"
     std::optional<SaveThrower> thrower;     // section "explosives"
@@ -631,6 +634,7 @@ struct SaveData {
     bool hasRoomStats = false;
     std::vector<uint32_t> driedCells;  // section "terrain": water cells a moisture pump dried, in order
     Map::LevelState levelled;          // section "terrain" 2: ground levelled for structures (docs/design/levelling.md)
+    Map::EarthState earth;             // section "terrain" 3: corners waiting for earthworks (docs/design/earthworks.md)
     std::vector<SaveFloor> floors;
     FilthState filth;
     RoomStatsState roomStats;
@@ -646,7 +650,9 @@ struct SaveData {
     std::vector<CellPos> upperFloors;  // section "levels" (M1), by level then row
     RoofCollapseSaved roofs;           // section "roofs" (M3)
     AreasSaved areas;                  // section "areas": allowed areas and who is limited to one
+    GrimeState grime;                  // section "grime": dirt and blood on bodies (docs/design/grime.md)
     LandingSaved landing;              // section "landing": the landing zone and shuttles (docs/design/landing.md)
+    SeveredSaved severed;              // section "severed": cut-off limbs and heads lying about (body-health.md part F)
     SaveDeep deep;                     // section "deep"
     std::vector<OutfitPolicy> outfits;  // section "apparel"; empty: the outfits the defs make
     uint32_t nextOutfitId = 1;
@@ -1310,6 +1316,15 @@ void saveCommandTail(Ar& ar, Type& c) {
             ar.text("arrival", c.arrival);
             ar.value("x", c.x);
             ar.value("y", c.y);
+        } else if constexpr (std::is_same_v<Type, LevelEarthCommand>) {
+            auto* level = &c;
+            ar.group("area", [&] { saveRect(ar, level->area); });
+            ar.value("baseCm", level->baseCm);
+        } else if constexpr (std::is_same_v<Type, CancelEarthworksCommand>) {
+            auto* cancelEarth = &c;
+            ar.group("area", [&] { saveRect(ar, cancelEarth->area); });
+        } else if constexpr (std::is_same_v<Type, UnstuckCommand>) {
+            ar.value("pawn", c.pawn);
         } else {
             static_assert(kSaveNoSuchCommand<Type>, "save every command type here");
         }
@@ -1330,7 +1345,8 @@ inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitComma
                                             std::is_same_v<Type, SetOutfitFightGearCommand> || std::is_same_v<Type, HideGearCommand> ||
                                             std::is_same_v<Type, ShieldCommand> || std::is_same_v<Type, SetDayLengthCommand> ||
                                             std::is_same_v<Type, SleepCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||
-                                            std::is_same_v<Type, PatchCommand>;
+                                            std::is_same_v<Type, PatchCommand> || std::is_same_v<Type, SetAlertCommand> ||
+                                            std::is_same_v<Type, FocusCommand> || std::is_same_v<Type, SetFightResponseCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1385,6 +1401,18 @@ void saveTradeCommand(Ar& ar, Type& c) {
         ar.value("add", c.add);
     } else if constexpr (std::is_same_v<Type, PatchCommand>) {
         ar.value("pawn", c.pawn);
+    } else if constexpr (std::is_same_v<Type, SetAlertCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("alert", c.alert);
+    } else if constexpr (std::is_same_v<Type, FocusCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("target", c.target);
+        ar.value("mode", c.mode);
+        ar.require(c.mode <= FocusMode::Clear, "the save file has a bad focus mode");
+    } else if constexpr (std::is_same_v<Type, SetFightResponseCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("response", c.response);
+        ar.require(c.response <= FightResponse::FleeOnSight, "the save file has a bad fight response");
     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("up", c.up);
@@ -1559,6 +1587,13 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("y", shoot->y);
                 ar.value("z", shoot->z);
                 ar.value("player", shoot->player);
+                if (ar.sectionVersion() >= 5) {  // the crosshair on a drawn body (docs/design/aiming.md)
+                    ar.value("aimPawn", shoot->aimPawn);
+                    ar.value("aimPart", shoot->aimPart);
+                    ar.value("aimDx", shoot->aimDx);
+                    ar.value("aimDy", shoot->aimDy);
+                    ar.value("aimUp", shoot->aimUp);
+                }
             } else if constexpr (std::is_same_v<Type, SetStanceCommand>) {
                 auto* stance = &c;
                 ar.value("pawn", stance->pawn);
@@ -1778,6 +1813,9 @@ void saveLooks(Ar& ar, PawnLooks& l) {
         ar.text("beard", l.beard);
         ar.value("naturalBodyHair", l.naturalBodyHair);
         ar.value("bodyHair", l.bodyHair);
+        if (ar.sectionVersion() >= 3) {  // a name for pawns with no Colonist record (focus HP bar, kill feed)
+            ar.text("name", l.name);
+        }
         ar.require(l.faceShape >= 0.0f && l.faceShape <= 1.0f && l.brow >= 0.0f && l.brow <= 1.0f && l.nose >= 0.0f &&
                        l.nose <= 1.0f && l.jaw >= 0.0f && l.jaw <= 1.0f && l.bodyHair >= 0.0f && l.bodyHair <= 1.0f &&
                        l.naturalBodyHair >= 0.0f && l.naturalBodyHair <= 1.0f,
@@ -1859,6 +1897,12 @@ void saveMoverPart(Ar& ar, Mover& m, const std::optional<Position>& position) {
         if (ar.sectionVersion() >= 2) {  // M2: stairs and ladders
             ar.value("climbed", m.climbed);
         }
+        if (ar.sectionVersion() >= 3) {  // the stuck watchdog (docs/design/earthworks.md)
+            ar.value("stuckSteps", m.stuckSteps);
+            ar.value("phaseSteps", m.phaseSteps);
+            ar.value("stuckX", m.stuckX);
+            ar.value("stuckY", m.stuckY);
+        }
     } else if (position) {
         // Older saves: a pawn mid-walk sets off along the line from where it stands.
         m.fromX = position->x;
@@ -1871,7 +1915,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::LoadPod, "the save file has a bad job");
+    ar.require(job.type <= JobType::Earthworks, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -1998,6 +2042,10 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     if (ar.sectionVersion() >= 7) {
         ar.value("bleedStoppedAt", h.bleedStoppedAt);
         ar.require(h.bleedStoppedAt >= -1, "the save file has an impossible bleeding time");
+    }
+    if (ar.sectionVersion() >= 8) {
+        ar.list("zoneHurtAt", h.zoneHurtAt, [&](int64_t& at) { ar.value(nullptr, at); });
+        ar.require(h.zoneHurtAt.size() <= 64, "the save file has too many body zones");
     }
 }
 
@@ -2310,6 +2358,16 @@ void saveEquippedByPart(Ar& ar, EquippedBy& b) {
 }
 
 template <typename Ar>
+void saveDrawnAim(Ar& ar, DrawnAim& d) {
+    ar.value("drawnPawn", d.pawn);
+    ar.value("drawnPart", d.part);
+    ar.value("drawnDx", d.dx);
+    ar.value("drawnDy", d.dy);
+    ar.value("drawnUp", d.up);
+    ar.require(std::isfinite(d.dx) && std::isfinite(d.dy) && std::isfinite(d.up), "the save file has a bad aim");
+}
+
+template <typename Ar>
 void saveShooterPart(Ar& ar, Shooter& sh) {
     ar.value("phase", sh.phase);
     ar.require(static_cast<int>(sh.phase) <= static_cast<int>(ar.version() >= 17 ? ShotPhase::Reloading : ShotPhase::Cooling),
@@ -2322,7 +2380,15 @@ void saveShooterPart(Ar& ar, Shooter& sh) {
     ar.value("aimZ", sh.aimZ);
     ar.value("player", sh.player);
     ar.value("recoil", sh.recoil);
-
+    if (ar.sectionVersion() >= 5) {  // sneed's cooldown bursts
+        ar.value("stored", sh.stored);
+        ar.value("refill", sh.refill);
+        ar.value("refillFrom", sh.refillFrom);
+        ar.value("storeGun", sh.storeGun);
+    }
+    if (ar.sectionVersion() >= 6) {  // the crosshair on a drawn body
+        saveDrawnAim(ar, sh.drawn);
+    }
 }
 
 template <typename Ar>
@@ -2379,6 +2445,10 @@ void saveMotionPart(Ar& ar, SaveMotion& sm) {
     ar.value("pushTo", m.pushTo);
     ar.value("turnBody", m.turnBody);
     ar.value("lost", m.lost);
+    if (ar.sectionVersion() >= 2) {  // upper-body clips and the player's free feet (2026-11-18)
+        ar.value("upper", m.upper);
+        ar.value("freeFeet", m.freeFeet);
+    }
     ar.require(std::isfinite(m.time) && std::isfinite(m.rate) && m.rate > 0.0f && std::isfinite(m.faceX) && std::isfinite(m.faceY) &&
                    std::isfinite(m.scale) && std::isfinite(m.doneF) && std::isfinite(m.doneR) && std::isfinite(m.doneYaw) &&
                    std::isfinite(m.pushMetres) && m.pushSteps >= 0 && m.pushFrom >= 0 && m.pushTo >= m.pushFrom && std::isfinite(m.lost),
@@ -2402,6 +2472,9 @@ void saveProjectilePart(Ar& ar, SaveProjectile& sp) {
     ar.value("seed", sp.p.seed);
     if (ar.sectionVersion() >= 2) {
         ar.value("damageFactor", sp.p.damageFactor);
+    }
+    if (ar.sectionVersion() >= 6) {
+        saveDrawnAim(ar, sp.p.drawn);
     }
 }
 
@@ -2531,6 +2604,9 @@ void saveFighterPart(Ar& ar, Fighter& f) {
         ar.value("y", k.y);
         ar.value("level", k.level);
         ar.value("seenAt", k.seenAt);
+        if (ar.sectionVersion() >= 5) {
+            ar.value("firsthand", k.firsthand);
+        }
     });
     if (ar.version() >= 17) {
         ar.value("reactUntil", f.reactUntil);
@@ -2552,6 +2628,30 @@ void saveFighterPart(Ar& ar, Fighter& f) {
     }
     if (ar.sectionVersion() >= 4) {  // a Wimp falling back after a hit
         ar.value("cowerUntil", f.cowerUntil);
+    }
+    if (ar.sectionVersion() >= 5) {  // stealth (docs/design/stealth.md); older saves: alerted, as a fighter was
+        ar.value("alert", f.alert);
+        ar.require(static_cast<int>(f.alert) <= static_cast<int>(Alert::Alerted), "the save file has a bad alert state");
+        ar.value("onGuard", f.onGuard);
+        ar.value("called", f.called);
+        ar.value("alertAt", f.alertAt);
+        ar.value("hasSuspect", f.hasSuspect);
+        ar.value("suspectX", f.suspectX);
+        ar.value("suspectY", f.suspectY);
+        ar.value("suspect", f.suspect);
+        ar.value("suspectAt", f.suspectAt);
+    }
+    if (ar.sectionVersion() >= 6) {  // team play (docs/design/team-play.md)
+        ar.value("role", f.role);
+        ar.require(static_cast<int>(f.role) <= static_cast<int>(TeamRole::FallBack), "the save file has a bad team role");
+        ar.value("roleSince", f.roleSince);
+        ar.value("flankSide", f.flankSide);
+        ar.value("lastCall", f.lastCall);
+        ar.require(static_cast<int>(f.lastCall) <= static_cast<int>(Callout::EnemyDown), "the save file has a bad call-out");
+        ar.value("calloutAt", f.calloutAt);
+        ar.value("alliesDown", f.alliesDown);
+        ar.value("allyDownAt", f.allyDownAt);
+        ar.value("suppressedUntil", f.suppressedUntil);
     }
 
 }
@@ -2586,6 +2686,21 @@ void saveMeleePart(Ar& ar, Melee& m) {
     if (ar.sectionVersion() >= 3) {  // real-time combat phase 2: waiting out a raised guard
         ar.value("guardWaitFrom", m.guardWaitFrom);
         ar.value("nextRollAt", m.nextRollAt);
+    }
+    if (ar.sectionVersion() >= 4) {  // focus, footwork and the fight response (docs/design/focus.md)
+        ar.value("focus", m.focus);
+        ar.value("focusPlayer", m.focusPlayer);
+        ar.value("low", m.low);
+        ar.value("circleDir", m.circleDir);
+        ar.value("nextFootworkAt", m.nextFootworkAt);
+        ar.value("footworkUntil", m.footworkUntil);
+        ar.value("engagedAt", m.engagedAt);
+        ar.value("response", m.response);
+        ar.require(m.response <= FightResponse::FleeOnSight, "the save file has a bad fight response");
+        ar.require(m.circleDir == 1 || m.circleDir == -1, "the save file has a bad footwork direction");
+    }
+    if (ar.sectionVersion() >= 5) {  // lock-on, Elden Ring style (docs/design/lock-on.md)
+        ar.value("focusSeenAt", m.focusSeenAt);
     }
 }
 
@@ -3056,6 +3171,9 @@ void saveRoomStatsSection(Ar& ar, SaveData& d) {
         ar.value("cell", e.cell);
         ar.text("kind", e.kind);
         ar.value("thickness", e.thickness);
+        if (ar.sectionVersion() >= 2) {
+            ar.value("wetAt", e.wetAt);  // 2: when the pile was last added to (blood fades by its age)
+        }
     });
     ar.list("carriers", d.filth.carriers, [&](FilthState::Carrier& c) {
         ar.value("pawn", c.pawn);
@@ -3391,10 +3509,10 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("repaths", d.repaths);
         ar.list("setupErrors", d.setupErrors, [&](std::string& s) { ar.text(nullptr, s); });
     });
-    ar.section("commands", 4, [&] { saveCommandsSection(ar, d); });
+    ar.section("commands", 5, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
-    ar.section("movement", 2, [&] {
+    ar.section("movement", 3, [&] {
         saveParts(ar, "mover", e, &SaveEntity::mover, [&](Mover& m) { saveMoverPart(ar, m, std::nullopt); });
     });
     ar.section("jobs", 1, [&] {
@@ -3405,7 +3523,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("colonists", 2, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 7, [&] {
+    ar.section("health", 8, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -3442,7 +3560,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("mood", 1, [&] {
         saveParts(ar, "mood", e, &SaveEntity::mood, [&](Mood& m) { saveMoodPart(ar, m); });
     });
-    ar.section("combat", 4, [&] {
+    ar.section("combat", 6, [&] {
         saveParts(ar, "posture", e, &SaveEntity::posture, [&](Posture& p) { savePosturePart(ar, p); });
         saveParts(ar, "gear", e, &SaveEntity::gear, [&](Gear& g) { saveGearPart(ar, g); });
         saveParts(ar, "equippedBy", e, &SaveEntity::equippedBy, [&](EquippedBy& b) { saveEquippedByPart(ar, b); });
@@ -3459,11 +3577,11 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("doors", 1, [&] {
         saveParts(ar, "door", e, &SaveEntity::door, [&](Door& door) { saveDoorPart(ar, door); });
     });
-    ar.section("fighters", 4, [&] {
+    ar.section("fighters", 6, [&] {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
-    ar.section("looks", 2, [&] {
+    ar.section("looks", 3, [&] {
         saveParts(ar, "looks", e, &SaveEntity::looks, [&](PawnLooks& l) { saveLooksPart(ar, l); });
     });
     ar.section("paths", 1, [&] { savePaths(ar, d.paths); });
@@ -3504,14 +3622,18 @@ void saveSections(Ar& ar, SaveData& d) {
     });
     ar.section("talents", 1, [&] { saveTalents(ar, d); });
     ar.section("drugs", 2, [&] { saveDrugs(ar, d); });
-    ar.section("roomstats", 1, [&] { saveRoomStatsSection(ar, d); });
-    ar.section("terrain", 2, [&] {
+    ar.section("roomstats", 2, [&] { saveRoomStatsSection(ar, d); });
+    ar.section("terrain", 3, [&] {
         ar.list("dried", d.driedCells, [&](uint32_t& cell) { ar.value(nullptr, cell); });
         if (ar.sectionVersion() >= 2) {
             ar.list("levelCells", d.levelled.cells, [&](uint32_t& cell) { ar.value(nullptr, cell); });
             ar.list("levelBases", d.levelled.cellBaseCm, [&](int32_t& cm) { ar.value(nullptr, cm); });
             ar.list("levelCorners", d.levelled.corners, [&](uint32_t& corner) { ar.value(nullptr, corner); });
             ar.list("levelHeights", d.levelled.cornerCm, [&](int32_t& cm) { ar.value(nullptr, cm); });
+        }
+        if (ar.sectionVersion() >= 3) {
+            ar.list("earthCorners", d.earth.corners, [&](uint32_t& corner) { ar.value(nullptr, corner); });
+            ar.list("earthTargets", d.earth.targetCm, [&](int32_t& cm) { ar.value(nullptr, cm); });
         }
     });
     ar.section("animals", 2, [&] {
@@ -3618,7 +3740,13 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(s.rot >= 0.0f && s.rot < 1.0f && s.decay >= 0.0f && s.decay < 1.0f, "the save file has an impossible rot or wear");
         });
     });
-    ar.section("melee", 3, [&] {
+    ar.section("corpses", 1, [&] {  // dead bodies' rot (docs/design/spoilage.md "Corpses")
+        saveParts(ar, "corpse", e, &SaveEntity::corpse, [&](CorpseRot& c) {
+            ar.value("days", c.days);
+            ar.require(c.days >= 0.0f && c.days <= 1000.0f, "the save file has an impossible corpse rot");
+        });
+    });
+    ar.section("melee", 5, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
     });
     ar.section("social", 3, [&] {
@@ -3647,7 +3775,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "kick", e, &SaveEntity::kick, [&](RecoilKick& k) { saveKickPart(ar, k); });
         saveParts(ar, "roll", e, &SaveEntity::roll, [&](DodgeRoll& r) { saveRollPart(ar, r); });
     });
-    ar.section("motion", 1, [&] {
+    ar.section("motion", 2, [&] {
         saveParts(ar, "motion", e, &SaveEntity::motion, [&](SaveMotion& m) { saveMotionPart(ar, m); });
     });
     ar.section("weather", 1, [&] {
@@ -3931,6 +4059,35 @@ void saveSections(Ar& ar, SaveData& d) {
             });
         });
     });
+    ar.section("severed", 1, [&] {  // cut-off limbs and heads lying about (docs/design/body-health.md part F)
+        ar.value("nextId", d.severed.nextId);
+        ar.list("pieces", d.severed.pieces, [&](SeveredPiece& p) {
+            ar.value("id", p.id);
+            ar.value("from", p.from);
+            ar.value("bit", p.bit);
+            ar.value("x", p.x);
+            ar.value("y", p.y);
+            ar.value("level", p.level);
+            ar.value("at", p.at);
+            ar.require(p.bit != 0 && (p.bit & (p.bit - 1)) == 0 && p.bit <= kSeveredHead, "the save file has an impossible severed piece");
+        });
+    });
+    ar.section("grime", 1, [&] {  // dirt and blood on bodies, clothes and weapons (docs/design/grime.md)
+        ar.list("pawns", d.grime.pawns, [&](GrimeState::Entry& g) {
+            ar.value("pawn", g.pawn);
+            ar.value("dirtLegs", g.dirtLegs);
+            ar.value("dirtBody", g.dirtBody);
+            ar.value("blood", g.blood);
+            ar.value("weaponBlood", g.weaponBlood);
+            ar.text("bloodKind", g.bloodKind);
+            ar.text("weaponKind", g.weaponKind);
+            ar.value("bloodAt", g.bloodAt);
+            ar.value("weaponAt", g.weaponAt);
+            ar.value("lastX", g.lastX);
+            ar.value("lastY", g.lastY);
+            ar.value("lastLevel", g.lastLevel);
+        });
+    });
     // New sections go here, at the end.
 }
 
@@ -4090,6 +4247,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
             saved.ingredients.push_back(sim.defs_->get(ingredient).defName());
         }
         out.spoilage = std::move(saved);
+    }
+    if (const CorpseRot* corpse = reg.try_get<CorpseRot>(e)) {
+        out.corpse = *corpse;
     }
     if (const Joy* joy = reg.try_get<Joy>(e)) {
         SaveJoy saved;
@@ -4263,6 +4423,7 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
         }
         saved.bloodLoss = health->bloodLoss;
         saved.bleedStoppedAt = health->bleedStoppedAt;
+        saved.zoneHurtAt = health->zoneHurtAt;
         for (const EnvironmentHediff& env : health->environment) {
             saved.environment.push_back(SaveEnvironmentHediff{sim.defs_->get(env.def).defName(), env.severity});
         }
@@ -4743,6 +4904,7 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
         }
         health.bloodLoss = e.health->bloodLoss;
         health.bleedStoppedAt = e.health->bleedStoppedAt;
+        health.zoneHurtAt = e.health->zoneHurtAt;
         for (const SaveEnvironmentHediff& env : e.health->environment) {
             const Def* hediff = sim.defs_->find("Hediffs", env.hediff);
             if (hediff == nullptr) {
@@ -4985,6 +5147,9 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
         reg.emplace_or_replace<Spoilage>(entity, std::move(spoilage));
     } else if (e.thing && e.thing->category == ThingCategory::Item && thingHasSpoilage(sim.defs_->get(reg.get<Thing>(entity).def))) {
         reg.emplace<Spoilage>(entity);  // saved before items could spoil
+    }
+    if (e.corpse) {
+        reg.emplace_or_replace<CorpseRot>(entity, *e.corpse);
     }
     if (e.melee) {
         reg.emplace<Melee>(entity, *e.melee);
@@ -5364,6 +5529,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     }
     d.driedCells = sim.map_.dried();
     d.levelled = sim.map_.levelState();
+    d.earth = sim.map_.earthState();
     d.hasRoomStats = true;
     for (const auto& [cell, def] : sim.floors_->all()) {
         d.floors.push_back(SaveFloor{static_cast<uint32_t>(cell), sim.defs_->get(def).defName()});
@@ -5376,6 +5542,8 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
     d.roofs = sim.roofCollapse_->state();
     d.areas = sim.areas_->saved();
     d.landing = sim.landing_->saved();
+    d.severed = sim.health_->severedSaved();
+    d.grime = sim.grime_->state();
     {
         const DeepResourcesSaved deep = sim.deepResources_->saved();
         std::unordered_map<uint32_t, uint32_t> indexOf;
@@ -5850,6 +6018,10 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         error = "the save has levelled ground off the map";
         return false;
     }
+    if (!sim.map_.restoreEarthState(d.earth)) {
+        error = "the save has earthworks off the map";
+        return false;
+    }
     if (d.hasRoomStats) {
         std::vector<std::pair<int, DefId>> floors;
         for (const SaveFloor& f : d.floors) {
@@ -5863,9 +6035,13 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
             return false;
         }
     }
+    if (!sim.grime_->restore(d.grime, error)) {
+        return false;
+    }
     if (!sim.landing_->restore(d.landing, error)) {
         return false;
     }
+    sim.health_->restoreSevered(d.severed);
     if (!sim.areas_->restore(d.areas, error)) {
         return false;
     }

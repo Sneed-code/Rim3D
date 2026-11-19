@@ -10,6 +10,7 @@
 // the hit test finds on screen, since the ImGui overlay does not take hits. A faux Slate cursor stands in for the mouse so the real mouse
 // cursor (wherever it is on the desktop) does not move the test pointer and is never moved itself.
 #include "SmokeTest.h"
+#include "KeyBindings.h"
 
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
@@ -602,13 +603,13 @@ void USmokeTestSubsystem::BuildOrdersWorldPhases()
 		}
 		if (F == 3 || F == 60)
 		{
-			const bool bTaken = OwSendKey(EKeys::Tab);
-			Note(FString::Printf(TEXT("Tab key (%s): Slate %s"), F == 3 ? TEXT("to direct") : TEXT("back to overseer"), bTaken ? TEXT("handled it") : TEXT("did not report it handled")));
+			const bool bTaken = OwSendKey(Rim3DKeys::Get(ERim3DAction::SwitchMode));
+			Note(FString::Printf(TEXT("Switch-mode key (%s): Slate %s"), F == 3 ? TEXT("to direct") : TEXT("back to overseer"), bTaken ? TEXT("handled it") : TEXT("did not report it handled")));
 		}
 		else if (F == 30)
 		{
 			State->bWentDirect = Protagonist->IsDirectMode();
-			Note(FString::Printf(TEXT("after the first Tab: %s"), State->bWentDirect ? TEXT("direct mode") : TEXT("still the overseer view")));
+			Note(FString::Printf(TEXT("after the first switch-mode key: %s"), State->bWentDirect ? TEXT("direct mode") : TEXT("still the overseer view")));
 		}
 	};
 	TabPhase.Verify = [this, State, Note]()

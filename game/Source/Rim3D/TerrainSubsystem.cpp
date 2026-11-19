@@ -142,8 +142,8 @@ namespace
 		switch (Map.terrain(Cell))
 		{
 			// Under the water surface the bed shows through: wet, dark mud and gravel in deep water, wet sand in the shallows.
-			case colony::Terrain::Water: return GTerrWaterBed ? FTerrLook(FLinearColor(0.42f, 0.38f, 0.30f), 0.3f, 0.0f, 0.7f, 0.0f) : FTerrLook(FLinearColor::White, 0.0f, 0.0f, 0.0f, 1.0f);
-			case colony::Terrain::ShallowWater: return GTerrWaterBed ? FTerrLook(FLinearColor(0.62f, 0.56f, 0.45f), 0.75f, 0.0f, 0.25f, 0.0f) : FTerrLook(FLinearColor(1.1f, 1.1f, 1.1f), 0.5f, 0.0f, 0.0f, 0.7f);
+			case colony::Terrain::Water: return GTerrWaterBed ? FTerrLook(FLinearColor(0.52f, 0.47f, 0.37f), 0.3f, 0.0f, 0.7f, 0.0f) : FTerrLook(FLinearColor::White, 0.0f, 0.0f, 0.0f, 1.0f);
+			case colony::Terrain::ShallowWater: return GTerrWaterBed ? FTerrLook(FLinearColor(0.72f, 0.65f, 0.52f), 0.75f, 0.0f, 0.25f, 0.0f) : FTerrLook(FLinearColor(1.1f, 1.1f, 1.1f), 0.5f, 0.0f, 0.0f, 0.7f);
 			case colony::Terrain::Marsh: return FTerrLook(FLinearColor(0.55f, 0.65f, 0.5f), 0.0f, 0.0f, 0.0f, 0.0f);
 			case colony::Terrain::Mud: return FTerrLook(FLinearColor(0.5f, 0.38f, 0.25f), 0.0f, 0.0f, 0.5f, 0.0f);
 			case colony::Terrain::Sand: return FTerrLook(FLinearColor(1.15f, 1.0f, 0.75f), 1.0f, 0.0f, 0.0f, 0.0f);
@@ -1044,6 +1044,20 @@ uint64 UTerrainSubsystem::GatherChunkPlants(int32 ChunkX, int32 ChunkY, TArray<T
 	return Signature;
 }
 
+namespace
+{
+	/** Ground cover and rocks lie flush with the slope (docs/design/earthworks.md): turned to the ground's normal at the point, then by `Yaw` round it. */
+	FRotator TerrGroundRotation(const colony::Map& Map, float X, float Y, float Yaw)
+	{
+		constexpr float D = 0.25f;
+		const float SlopeX = (Map.heightAt(X + D, Y) - Map.heightAt(X - D, Y)) / (2.0f * D);
+		const float SlopeY = (Map.heightAt(X, Y + D) - Map.heightAt(X, Y - D)) / (2.0f * D);
+		const FVector Up = FVector(-SlopeX, -SlopeY, 1.0).GetSafeNormal();
+		const FVector Forward = FRotator(0.0, Yaw, 0.0).RotateVector(FVector::XAxisVector);
+		return FRotationMatrix::MakeFromZX(Up, Forward).Rotator();
+	}
+}
+
 void UTerrainSubsystem::LoadRockScatter(const FString& LookPath)
 {
 	Rocks = FRockScatter();
@@ -1133,14 +1147,15 @@ void UTerrainSubsystem::GatherRocks(const colony::Map& Map, colony::CellPos Cell
 	const float PY = static_cast<float>(Cell.y) + 0.2f + R2 * 0.6f;
 	const float Size = Visual.Scale * (1.0f + (R3 - 0.5f) * 2.0f * Visual.Jitter);
 	// Sunk a little so it sits in the ground rather than on it.
-	Out[Kind].Add(FTransform(FRotator(0.0, R3 * 7919.0f, 0.0), FVector(PX * 100.0f, PY * 100.0f, Map.heightAt(PX, PY) * 100.0f - 12.0f * Size), FVector(Size)));
+	Out[Kind].Add(FTransform(TerrGroundRotation(Map, PX, PY, R3 * 7919.0f), FVector(PX * 100.0f, PY * 100.0f, Map.heightAt(PX, PY) * 100.0f - 12.0f * Size), FVector(Size)));
 }
 
 void UTerrainSubsystem::GatherCover(const colony::Map& Map, const colony::Plants& Plants, colony::CellPos Cell, bool bHasPlant, TArray<TArray<FTransform>>& Out) const
 {
 	// Cosmetic ground cover (L2): low leafy tufts on open, fertile soil, thicker on rich ground. Never on built or levelled
 	// cells, under walls or inside roofed rooms. Where and how much comes from a hash of the cell; none of it is sim state.
-	if (Map.terrain(Cell) != colony::Terrain::Soil || Map.levelled(Cell) || Map.buildingAt(Cell) != colony::kNoEntity)
+	// Ground only planned flat keeps its cover until the earthworks are done (docs/design/earthworks.md).
+	if (Map.terrain(Cell) != colony::Terrain::Soil || (Map.levelled(Cell) && !Map.earthPending(Cell)) || Map.buildingAt(Cell) != colony::kNoEntity)
 	{
 		return;
 	}
@@ -1172,7 +1187,7 @@ void UTerrainSubsystem::GatherCover(const colony::Map& Map, const colony::Plants
 		const float PX = static_cast<float>(Cell.x) + 0.05f + R1 * 0.9f;
 		const float PY = static_cast<float>(Cell.y) + 0.05f + R2 * 0.9f;
 		const float Size = Visual.Scale * (0.75f + 0.25f * Rich) * (1.0f + (R3 - 0.5f) * 2.0f * Visual.Jitter);
-		Out[Kind].Add(FTransform(FRotator(0.0, R3 * 7919.0f, 0.0), FVector(PX * 100.0f, PY * 100.0f, Map.heightAt(PX, PY) * 100.0f - 2.0f), FVector(Size)));
+		Out[Kind].Add(FTransform(TerrGroundRotation(Map, PX, PY, R3 * 7919.0f), FVector(PX * 100.0f, PY * 100.0f, Map.heightAt(PX, PY) * 100.0f - 2.0f), FVector(Size)));
 	}
 }
 

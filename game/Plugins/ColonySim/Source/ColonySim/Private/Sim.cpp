@@ -21,6 +21,7 @@
 #include "ColonySim/FieldCare.h"
 #include "ColonySim/Fighters.h"
 #include "ColonySim/Filth.h"
+#include "ColonySim/Grime.h"
 #include "ColonySim/Fire.h"
 #include "ColonySim/Traits.h"
 #include "ColonySim/Floors.h"
@@ -85,12 +86,33 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cctype>
 #include <cstdlib>
 #include <utility>
 
 namespace colony {
 
 namespace {
+
+// Who last hurt a pawn with a bullet, blow or blast, and in which step: the kill feed's credit (Sim::creditKills). Not saved:
+// it only names a killer on the PawnDied event and changes nothing in the game.
+struct SimKillCredit {
+    Entity by = kNoEntity;
+    int64_t step = 0;
+};
+
+bool simKillCountsAsKill(DeathCause cause) {
+    switch (cause) {
+        case DeathCause::BloodLoss:
+        case DeathCause::VitalPartLost:
+        case DeathCause::VitalCapacity:
+        case DeathCause::Wounds:
+        case DeathCause::None:
+            return true;
+        default:
+            return false;  // hunger, cold, heat, drugs, illness, surgery, slaughter, execution: nobody's kill
+    }
+}
 
 constexpr int64_t kBillUpkeepSeconds = 60;  // "until you have" bills with a restart stock look at their stock this often
 constexpr int64_t kSimPlantSlices = 60;      // the hourly plant pass runs over this many steps (G3, docs/design/sim-cost.md)
@@ -281,6 +303,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mood_->setRooms(rooms_.get());
     floors_ = std::make_unique<Floors>(map_, *defs_);
     filth_ = std::make_unique<Filth>(map_, *things_, *floors_, *defs_, settings.seed);
+    grime_ = std::make_unique<Grime>(map_, *things_, *floors_, *filth_, *defs_);
+    grime_->setBodyHeight([this](Entity pawn) { return bodyHeightM(pawn); });
     roomStats_ = std::make_unique<RoomStats>(map_, *things_, *rooms_, *floors_, *filth_, *plants_, *defs_);
     mood_->setRoomStats(roomStats_.get());
     power_ = std::make_unique<PowerGrid>(map_, *things_, *rooms_, *defs_, events_);
@@ -361,6 +385,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         const int factor = static_cast<int>(defs_->get(things_->registry().get<Thing>(door).def).integer("door.openSpeedFactor", 1));
         return factor > 1 && !power_->running(door) ? 1 : factor;
     });
+    health_->setAsleep([this](Entity pawn) {
+        const Worker* worker = things_->registry().try_get<Worker>(pawn);
+        return worker != nullptr && jobIsLyingDown(worker->job);
+    });
     health_->setImmunityBonus([this](Entity pawn) { return jobs_->bedMonitored(jobs_->bedUnder(pawn)) ? 0.02f : 0.0f; });
     jobs_->setLights(lights_.get());
     jobs_->setPower(power_.get());
@@ -423,10 +451,17 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setBreeding(breeding_.get());
     animals_->setHusbandry(husbandry_.get());
     animals_->setPathfinder(&pathfinder_);
+    combat_->setHoldFire([this](Entity shooter, Entity target) { return fighters_ && fighters_->friendInLineNow(shooter, target); });
+    combat_->setHarmHook([this](Entity victim, Entity by) {
+        if (things_->exists(victim)) {
+            things_->registry().emplace_or_replace<SimKillCredit>(victim, SimKillCredit{by, time_.steps});
+        }
+    });
     combat_->setHurtHook([this](Entity victim, Entity attacker) {
         animals_->hurt(victim, attacker);
         if (fighters_) {
             fighters_->hurt(victim, attacker);
+            fighters_->struck(victim, attacker);  // it knows it is under attack (stealth.md)
         }
         if (raids_) {
             raids_->hurt(victim, attacker);
@@ -525,10 +560,13 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         pods_->forget(thing);
     });
     fighters_->setWeather(weather_.get());
+    fighters_->setLights(lights_.get());
+    fighters_->setStaysAlerted(settings.world.visit);  // another map is a mission site (stealth.md)
     melee_ = std::make_unique<MeleeSystem>(*things_, map_, *combat_, *health_, *defs_, time_,
                                            splitMix64(settings.seed ^ 0x6D656C6565ULL));
     melee_->setEventLog(&events_);
     fighters_->setMelee(melee_.get());
+    fighters_->setSeed(splitMix64(settings.seed ^ 0x7EA3ULL));  // each fighter's temper (team play)
     upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_, plants_.get());
     areas_ = std::make_unique<Areas>();
     jobs_->setAreas(areas_.get());
@@ -538,6 +576,17 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     construction_->setUpperFloors(upperFloors_.get());
     construction_->setFloors(floors_.get());
     animals_->setMelee(melee_.get());
+    // Tab picks enemies first (docs/design/focus.md): another side's pawn that isn't a visitor or prisoner, or a mad animal.
+    melee_->setHostile([this](Entity pawn, Entity other) {
+        const entt::registry& reg = things_->registry();
+        if (const Animal* wild = reg.try_get<Animal>(other)) {
+            return wild->temper != AnimalTemper::Calm;
+        }
+        if (reg.any_of<Visitor, Prisoner>(other)) {
+            return false;
+        }
+        return fighters_->factionOf(other) != fighters_->factionOf(pawn);
+    });
     defense_ = std::make_unique<DefenseSystem>(*things_, map_, *combat_, *health_, *power_, *defs_, time_);
     defense_->setEventLog(&events_);
     defense_->setFuel(&jobs_->fuel());
@@ -940,6 +989,69 @@ const Colonist* Sim::colonistOf(Entity pawn) const {
     return things_->exists(pawn) ? things_->registry().try_get<Colonist>(pawn) : nullptr;
 }
 
+void Sim::creditKills() {
+    entt::registry& reg = things_->registry();
+    for (Event& event : events_) {
+        if (event.type != EventType::PawnDied || event.target != kNoEntity || !things_->exists(event.thing)) {
+            continue;
+        }
+        const SimKillCredit* credit = reg.try_get<SimKillCredit>(event.thing);
+        const Health* health = reg.try_get<Health>(event.thing);
+        if (credit == nullptr || time_.steps - credit->step > kKillCreditSteps || !things_->exists(credit->by) ||
+            (health != nullptr && !simKillCountsAsKill(health->cause))) {
+            continue;
+        }
+        event.target = credit->by;
+    }
+}
+
+Sim::KillSide Sim::killSideOf(Entity pawn) const {
+    if (!things_->exists(pawn)) {
+        return KillSide::Neutral;
+    }
+    const entt::registry& reg = things_->registry();
+    if (reg.all_of<Prisoner>(pawn) || reg.all_of<Visitor>(pawn)) {
+        return KillSide::Neutral;
+    }
+    const Faction* faction = reg.try_get<Faction>(pawn);
+    const FactionId side = faction != nullptr ? faction->id : kPlayerFaction;
+    if (side == kPlayerFaction) {
+        return KillSide::Friendly;
+    }
+    if (const Animal* animal = reg.try_get<Animal>(pawn)) {
+        return animal->temper != AnimalTemper::Calm ? KillSide::Enemy : KillSide::Neutral;
+    }
+    return side == kWildFaction ? KillSide::Neutral : KillSide::Enemy;
+}
+
+std::string Sim::feedName(Entity pawn) const {
+    if (!things_->exists(pawn)) {
+        return "Someone";
+    }
+    const entt::registry& reg = things_->registry();
+    if (const Colonist* person = reg.try_get<Colonist>(pawn)) {
+        const std::string& name = !person->nickName.empty() ? person->nickName : person->firstName;
+        if (!name.empty()) {
+            return name;
+        }
+    }
+    if (const AnimalCare* care = husbandry_->care(pawn); care != nullptr && !care->name.empty()) {
+        return care->name;
+    }
+    if (const PawnLooks* looks = reg.try_get<PawnLooks>(pawn); looks != nullptr && !looks->name.empty()) {
+        return looks->name;
+    }
+    const Thing* thing = reg.try_get<Thing>(pawn);
+    if (thing == nullptr || !thing->def.valid()) {
+        return "Someone";
+    }
+    std::string label = defs_->get(thing->def).label();
+    if (!label.empty()) {
+        label[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(label[0])));
+    }
+    return label;
+}
+
 int Sim::itemsLeft() const {
     int left = 0;
     for (const auto [item, thing] : things_->registry().view<const Thing>().each()) {
@@ -1075,6 +1187,26 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         return;
     }
     // Apart from the chain below: MSVC stops at 128 nested else-ifs (C1061).
+    if (const auto* levelEarth = std::get_if<LevelEarthCommand>(&command)) {
+        const float base = std::round(static_cast<float>(levelEarth->baseCm) / 100.0f / Map::kLevelStepM) * Map::kLevelStepM;
+        if (construction_->planLevelEarth(levelEarth->area, base) == 0) {
+            commandFailed(id, "no ground there can be levelled to that height");
+        }
+        return;
+    }
+    if (const auto* cancelEarth = std::get_if<CancelEarthworksCommand>(&command)) {
+        if (construction_->cancelEarthworks(cancelEarth->area) == 0) {
+            commandFailed(id, "no earthworks planned there");
+        }
+        return;
+    }
+    if (const auto* unstuck = std::get_if<UnstuckCommand>(&command)) {
+        std::string why;
+        if (!unstuckPawn(unstuck->pawn, why)) {
+            commandFailed(id, why);
+        }
+        return;
+    }
     if (const auto* pod = std::get_if<PodCommand>(&command)) {
         applyPodCommand(*pod, id);
         return;
@@ -1108,6 +1240,29 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     if (const auto* landingZone = std::get_if<SetLandingZoneCommand>(&command)) {
         if (landing_->paintZone(landingZone->area, landingZone->add) == 0) {
             commandFailed(id, "the landing zone is already so there");
+        }
+        return;
+    }
+    if (const auto* focus = std::get_if<FocusCommand>(&command)) {
+        std::string why;
+        if (!melee_->focusCommand(focus->pawn, focus->target, focus->mode, &why)) {
+            commandFailed(id, why);
+        }
+        return;
+    }
+    if (const auto* response = std::get_if<SetFightResponseCommand>(&command)) {
+        std::string why;
+        if (!melee_->setResponse(response->pawn, response->response, &why)) {
+            commandFailed(id, why);
+        }
+        return;
+    }
+    if (const auto* alert = std::get_if<SetAlertCommand>(&command)) {
+        std::string why;
+        if (alert->alert > static_cast<uint8_t>(Alert::Alerted)) {
+            commandFailed(id, "no such alert state");
+        } else if (!fighters_->setAlert(alert->pawn, static_cast<Alert>(alert->alert), why)) {
+            commandFailed(id, why);
         }
         return;
     }
@@ -1155,7 +1310,11 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             jobs_->addWorker(thing);  // until factions: every pawn is a colonist
             const uint64_t looksSeed = splitMix64(settings_.seed ^ 0x7370617776ULL ^ (static_cast<uint64_t>(time_.seconds) << 20) ^
                                                   entt::to_integral(thing));
-            giveLooks(thing, looksSeed, (splitMix64(looksSeed) & 1) != 0, "Baseline");
+            const bool female = (splitMix64(looksSeed) & 1) != 0;
+            giveLooks(thing, looksSeed, female, "Baseline");
+            if (PawnLooks* looks = things_->registry().try_get<PawnLooks>(thing)) {
+                looks->name = randomFirstName(*defs_, looksSeed, looks->female);  // so the HP bar and the kill feed name it
+            }
         }
     } else if (const auto* destroy = std::get_if<DestroyThingCommand>(&command)) {
         if (!things_->exists(destroy->thing) || !things_->registry().all_of<Thing>(destroy->thing)) {
@@ -1583,9 +1742,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "that pawn isn't under direct control");
         } else if (health_->incapacitated(move->pawn)) {
             commandFailed(id, "that colonist is downed or dead");
-        } else if (combat_->rollLocked(move->pawn) || reg.any_of<Stunned, Casting, BodyMotion>(move->pawn)) {
-            // Rolling (P2), stunned or winding up a power (X2): the player's position is ignored, without a failure
-            // because Unreal sends one every step.
+        } else if (combat_->rollLocked(move->pawn) || reg.any_of<Stunned, Casting>(move->pawn) || combat_->motion().holdsBody(move->pawn)) {
+            // Rolling (P2), stunned, winding up a power (X2) or carried by a clip (a stagger): the player's position is
+            // ignored, without a failure because Unreal sends one every step. The player's own swings leave the feet
+            // free (BodyMotion::freeFeet): walking goes on while the arms swing.
         } else if (jobs_->sleepingByHand(move->pawn)) {
             // Asleep (SleepCommand): lying still until morning or SleepCommand{wake}; the same, no failure.
         } else if (reg.get<Mover>(move->pawn).climbing(reg.get<Position>(move->pawn).level)) {
@@ -1600,13 +1760,16 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                 dx *= kDirectMaxStep / length;
                 dy *= kDirectMaxStep / length;
             }
+            melee_->orbitMove(move->pawn, dx, dy);  // locked on with melee: sideways walks round the target (lock-on.md)
             // The whole move, or sliding along one axis (a wall), or staying where it is.
             const float tries[3][2] = {{dx, dy}, {dx, 0.0f}, {0.0f, dy}};
             float moveX = 0.0f;
             float moveY = 0.0f;
             for (const auto& t : tries) {
                 // The player's body may swim out into deep water (docs/design/water.md).
-                if ((t[0] != 0.0f || t[1] != 0.0f) && swimmerFitsAt(map_, pos.x + t[0], pos.y + t[1], kPawnRadius, pos.level)) {
+                // Other standing bodies stop it too (sneed 2026-11-18): it slides round them, never through.
+                if ((t[0] != 0.0f || t[1] != 0.0f) && swimmerFitsAt(map_, pos.x + t[0], pos.y + t[1], kPawnRadius, pos.level) &&
+                    combat_->motion().bodiesClear(move->pawn, pos.x, pos.y, pos.x + t[0], pos.y + t[1], pos.level)) {
                     moveX = t[0];
                     moveY = t[1];
                     break;
@@ -1713,7 +1876,9 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "that pawn is throwing");
         } else if (pawnSwimming(shoot->pawn)) {
             commandFailed(id, "can't shoot while swimming");
-        } else if (!combat_->shoot(shoot->pawn, shoot->target, shoot->x, shoot->y, shoot->z, shoot->player, &error)) {
+        } else if (const DrawnAim drawn{shoot->aimPawn, shoot->aimPart, shoot->aimDx, shoot->aimDy, shoot->aimUp};
+                   !combat_->shoot(shoot->pawn, shoot->target, shoot->x, shoot->y, shoot->z, shoot->player, &error,
+                                   shoot->aimPawn != kNoEntity ? &drawn : nullptr)) {
             commandFailed(id, error);
         }
     } else if (const auto* stance = std::get_if<SetStanceCommand>(&command)) {
@@ -1811,12 +1976,11 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* swimMelee = std::get_if<MeleeCommand>(&command); swimMelee != nullptr && pawnSwimming(swimMelee->pawn)) {
         commandFailed(id, "can't fight while swimming");
     } else if (const auto* melee = std::get_if<MeleeCommand>(&command)) {
-        const bool done = melee->mode == MeleeMode::Block
-                              ? melee_->block(melee->pawn, &error)
-                              : melee_->attack(melee->pawn, melee->target,
-                                               things_->registry().valid(melee->pawn) &&
-                                                   things_->registry().all_of<PlayerControl>(melee->pawn),
-                                               &error);
+        const bool player = things_->registry().valid(melee->pawn) && things_->registry().all_of<PlayerControl>(melee->pawn);
+        // The player's swing with no target goes at its focus, or down at a body before it (docs/design/focus.md).
+        const Entity target = melee->target == kNoEntity && player ? melee_->playerTarget(melee->pawn) : melee->target;
+        const bool done = melee->mode == MeleeMode::Block ? melee_->block(melee->pawn, &error)
+                                                          : melee_->attack(melee->pawn, target, player, &error);
         if (!done) {
             commandFailed(id, error);
         }
@@ -2193,11 +2357,14 @@ void Sim::stepOnce(bool keepEvents, int tick) {
         { SimLap lap(profile_, "inspirations"); inspirations_->step(time_.seconds); }
     }
     { SimLap lap(profile_, "movement"); movement_->step(things_->registry(), map_); }
+    { SimLap lap(profile_, "autoPickUp"); autoPickUp(); }  // the player's colonist picks up resources it walks past
     travel_->noteVisits();
     { SimLap lap(profile_, "melee"); melee_->step(); }
-    { SimLap lap(profile_, "combat"); combat_->step(rng_); }
+    { SimLap lap(profile_, "combat"); combat_->step(rng_); melee_->faceFocus(); }
     { SimLap lap(profile_, "explosives"); explosives_->step(rng_); }
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
+    fighters_->hear(events_, eventsBefore);  // and fighters in earshot hear them (stealth.md)
+    fighters_->noteLosses(events_, eventsBefore);  // friends going down shake those near (team-play.md)
     { SimLap lap(profile_, "defense"); defense_->step(rng_); }
     { SimLap lap(profile_, "artillery"); artillery_->step(rng_); }
     raids_->takeFire();  // colonists hurt this step take cover or run (real-time-combat.md phase 3)
@@ -2222,7 +2389,8 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     }
     { SimLap lap(profile_, "lights"); lights_->update(); }
     if (calendar) {
-        { SimLap lap(profile_, "filth"); filth_->step(); }
+        { SimLap lap(profile_, "filth"); filth_->step(time_.seconds); }
+        { SimLap lap(profile_, "grime"); grime_->step(time_.seconds, events_, weather_->effects().rainRate); }
         { SimLap lap(profile_, "roomStats"); roomStats_->step(time_.seconds); }
         { SimLap lap(profile_, "temperature"); temperature_->step(time_.seconds); }
         // From the weather as it is now, not left over from the last step: a loaded game has not had a last step.
@@ -2259,6 +2427,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
             { SimLap lap(profile_, "disasters"); disasters_->step(); }  // T3: conditions end, work and strike (held while skipping, like the narrator)
         }
     }
+    creditKills();
     travel_->afterStep();
     narrator_->postpone(travel_->takeHold());  // a skip that ended (here or by a command) held the narrator back
     { SimLap lap(profile_, "otherMaps"); stepOtherMaps(); }  // W5: in step with the colony's clock
@@ -2312,6 +2481,13 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.mapWidth = map_.width();
     out.mapHeight = map_.height();
     out.things.clear();
+    // Pawns the player's pawn is focused on: their HP bar (focus.md).
+    std::vector<Entity> focusedByPlayer;
+    for (const auto [pawn, melee] : things_->registry().view<const Melee>().each()) {
+        if (melee.focusPlayer && melee.focus != kNoEntity) {
+            focusedByPlayer.push_back(melee.focus);
+        }
+    }
     out.waypoints.clear();
     out.bills.clear();
     out.zones.clear();
@@ -2497,6 +2673,19 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 view.waterDepth = water.depth;
                 view.swimming = water.swimming();
             }
+            if (const PawnGrime* grime = grime_->of(entity)) {
+                const auto filthDef = [&](int kind) {
+                    return kind >= 0 && static_cast<size_t>(kind) < filth_->kinds().size() ? filth_->kinds()[static_cast<size_t>(kind)].def : DefId{};
+                };
+                view.dirtLegs = grime->dirtLegs;
+                view.dirtBody = grime->dirtBody;
+                view.blood = grime->blood;
+                view.bloodFilth = filthDef(grime->bloodKind);
+                view.bloodAge = static_cast<float>(time_.seconds - grime->bloodAt);
+                view.weaponBlood = grime->weaponBlood;
+                view.weaponBloodFilth = filthDef(grime->weaponKind);
+                view.weaponBloodAge = static_cast<float>(time_.seconds - grime->weaponAt);
+            }
             view.firstWaypoint = static_cast<uint32_t>(out.waypoints.size());
             for (size_t k = mover->next; k < mover->path.size(); ++k) {
                 out.waypoints.push_back(PathPointView{static_cast<float>(mover->path[k].x) + 0.5f,
@@ -2564,7 +2753,16 @@ void Sim::writeSnapshot(Snapshot& out) const {
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
             view.crawling = health->downed && health->crawls;
+            view.severed = health->missing.empty() ? uint16_t{0} : health_->severed(entity);
             view.dead = health->dead;
+            if (const CorpseRot* corpse = reg.try_get<CorpseRot>(entity)) {
+                const CorpseLook look = spoilage_->corpseLook(corpse->days, temperature_->temperatureAt(cellOf(reg.get<Position>(entity))));
+                view.corpseDays = corpse->days;
+                view.corpseStage = look.stage;
+                view.flies = look.flies;
+                view.fliesFlying = look.flying;
+                view.maggots = look.maggots;
+            }
             view.pain = std::clamp(health->pain, 0.0f, 1.0f);
             view.bloodLoss = health->bloodLoss;
             view.bleedPerDay = health->bleedPerDay;
@@ -2601,6 +2799,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.area = areas_->areaOf(entity);
             view.jobTarget = worker->job.thing;
             view.jobProgress = worker->job.type != JobType::None ? jobs_->jobProgress(entity) : 0.0f;
+            view.carryingPawn = jobs_->carryingPawn(entity);
         }
         const bool noMind = mindIsPlayersOwn(reg, entity);  // the protagonist: no mood, recreation, beauty or rest need
         if (const Needs* needs = reg.try_get<Needs>(entity)) {
@@ -2661,6 +2860,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.rounds = combat_->roundsLeft(entity);
             view.magazineSize = combat_->magazineSize(entity);
             view.reloading = combat_->reloading(entity);
+            combat_->shotStore(entity, view.shotStore, view.shotStoreSize, view.refillLeft, view.refillSteps);
             combat_->kickOf(entity, view.kickUp, view.kickSide);
             view.rollPhase = static_cast<uint8_t>(combat_->rollPhase(entity));
             if (view.rollPhase != 0) {
@@ -2673,6 +2873,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 view.motionTime = motion->clip.valid() ? motion->time : 0.0f;
                 view.motionRate = motion->rate;
                 view.motionPush = !motion->clip.valid();
+                view.motionUpper = motion->upper;
+                view.motionFreeFeet = motion->freeFeet;
             }
             view.grenades = explosives_->count(entity);
             view.throwReadyIn = explosives_->throwReadyIn(entity);
@@ -2826,10 +3028,17 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.fightTarget = fighter->target;
             view.fightSpot = fighter->hasSpot ? fighter->spot : cellOf(pos);
             view.fallingBack = fighter->fallingBack;
+            view.alert = static_cast<uint8_t>(fighter->alert);
+            view.hasSuspect = fighter->hasSuspect;
+            view.suspectX = fighter->suspectX;
+            view.suspectY = fighter->suspectY;
             view.defending = fighter->defending;
             view.sheltering = fighter->mode == FightMode::Shelter;
             view.fleeing = fighter->mode == FightMode::Flee;
             view.rescuing = fighter->mode == FightMode::Rescue ? fighter->rescuing : kNoEntity;
+            if (fighter->mode == FightMode::Rescue && fighter->lifted && reg.valid(fighter->rescuing)) {
+                view.carryingPawn = fighter->rescuing;
+            }
         }
         if (reg.all_of<Colonist>(entity) && view.faction == kPlayerFaction) {
             view.defenseRole = static_cast<uint8_t>(raids_->roleOf(entity));
@@ -2855,6 +3064,16 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.blocking = melee_->blocking(entity);
             view.meleeTool = melee->tool;
             view.meleeStrong = melee_->strongSwing(entity);
+            view.meleeLow = melee->phase != MeleePhase::Ready && melee->low;
+            view.focusTarget = melee->focus;
+            view.focusPlayer = melee->focusPlayer;
+            view.footwork = time_.steps < melee->footworkUntil;
+            view.fightResponse = melee->response;
+        }
+        view.sprinting = pawnSprinting(entity);
+        if (std::find(focusedByPlayer.begin(), focusedByPlayer.end(), entity) != focusedByPlayer.end() ||
+            reg.all_of<PlayerControl>(entity)) {
+            view.lowestPart = lowestPartHealth(entity);
         }
         if (const Patching* patching = reg.try_get<Patching>(entity)) {
             view.patchZone = patching->zone;
@@ -2910,6 +3129,17 @@ void Sim::writeSnapshot(Snapshot& out) const {
     }
     std::sort(out.things.begin(), out.things.end(),
               [](const ThingView& a, const ThingView& b) { return a.id < b.id; });
+    // Who carries whom, on the carried body too (weapon-hold.md, "Carrying a body").
+    for (const ThingView& carrier : out.things) {
+        if (carrier.carryingPawn == kNoEntity) {
+            continue;
+        }
+        const auto it = std::lower_bound(out.things.begin(), out.things.end(), carrier.carryingPawn,
+                                         [](const ThingView& view, Entity value) { return view.id < value; });
+        if (it != out.things.end() && it->id == carrier.carryingPawn) {
+            it->carriedBy = carrier.id;
+        }
+    }
 
     out.alarm = raids_->state().alarm;
     out.alarmManual = raids_->state().manual;
@@ -2938,6 +3168,19 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.stock.push_back(StockView{line.thing, line.count});
         }
         out.visits.push_back(std::move(view));
+    }
+    out.severedPieces.clear();
+    for (const SeveredPiece& p : health_->severedPieces()) {
+        SeveredPieceView view;
+        view.id = p.id;
+        view.from = p.from;
+        view.bit = p.bit;
+        view.x = p.x;
+        view.y = p.y;
+        view.level = p.level;
+        const float life = health_->severedDecayDays() * static_cast<float>(kSecondsPerDay);
+        view.decay = life > 0.0f ? std::clamp(static_cast<float>(time_.seconds - p.at) / life, 0.0f, 1.0f) : 1.0f;
+        out.severedPieces.push_back(view);
     }
     out.shuttles.clear();
     for (const Shuttle& s : landing_->shuttles()) {
@@ -3023,7 +3266,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
         out.filth.clear();
         for (const auto& [index, piles] : filth_->all()) {
             for (const FilthPile& pile : piles) {
-                out.filth.push_back(FilthView{map_.cellAt(index), filth_->kinds()[pile.kind].def, pile.thickness});
+                out.filth.push_back(FilthView{map_.cellAt(index), filth_->kinds()[pile.kind].def, pile.thickness,
+                                              pile.wetAt >= 0 ? static_cast<float>(time_.seconds - pile.wetAt) : 0.0f});
             }
         }
     }
@@ -3176,6 +3420,7 @@ uint64_t Sim::stateHash() const {
     zones_->hashState(h);
     floors_->hashState(h);
     filth_->hashState(h);
+    grime_->hashState(h);
     roomStats_->hashState(h);
     animals_->hashState(h);
     husbandry_->hashState(h);
@@ -3189,6 +3434,14 @@ uint64_t Sim::stateHash() const {
     roofCollapse_->hashState(h);
     areas_->hashState(h);
     landing_->hashState(h);
+    for (const SeveredPiece& p : health_->severedPieces()) {  // only once something was cut off, so older hashes stay
+        h.add(p.id);
+        h.add(static_cast<uint64_t>(entt::to_integral(p.from)));
+        h.add(static_cast<int>(p.bit));
+        h.add(p.x);
+        h.add(p.y);
+        h.add(p.at);
+    }
     spoilage_->hashState(h);
     narrator_->hashState(h);
     disasters_->hashState(h);
@@ -3278,6 +3531,9 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<uint64_t>(mover->ghostSteps));
             h.add(static_cast<uint64_t>(mover->heldSteps));
             h.add(mover->gaveUp);
+            if (mover->phaseSteps != 0) {
+                h.add(static_cast<uint64_t>(mover->phaseSteps + 0x57C0000U));  // only while phasing, so older hashes stay
+            }
             if (mover->climbed != 0.0f) {
                 h.add(mover->climbed);  // M2; only when climbing, so older hashes stay
             }
@@ -3346,6 +3602,7 @@ uint64_t Sim::stateHash() const {
             h.add(looks->hairStyle.data(), looks->hairStyle.size());
             h.add(looks->naturalBeard.data(), looks->naturalBeard.size());
             h.add(looks->beard.data(), looks->beard.size());
+            h.add(looks->name.data(), looks->name.size());
             h.add(looks->naturalBodyHair);
             h.add(looks->bodyHair);
             for (const std::vector<LooksMark>* marks : {&looks->tattoos, &looks->scars}) {
@@ -3538,8 +3795,16 @@ uint64_t Sim::stateHash() const {
             if (health->bleedStoppedAt >= 0) {
                 h.add(health->bleedStoppedAt);
             }
+            for (const int64_t hurtAt : health->zoneHurtAt) {
+                if (hurtAt >= 0) {
+                    h.add(hurtAt);
+                }
+            }
             h.add(health->dead);
             h.add(static_cast<int>(health->cause));
+            if (const CorpseRot* corpse = reg.try_get<CorpseRot>(e)) {
+                h.add(corpse->days);
+            }
             if (!health->environment.empty()) {
                 h.add(static_cast<uint64_t>(health->environment.size()));
                 for (const EnvironmentHediff& env : health->environment) {
@@ -3603,6 +3868,61 @@ void Sim::applyScannerCommand(const ScannerCommand& command, uint64_t id) {
 // How fast the pawn walks, as a share of its def's speed: its load, the moveSpeed talents, a bullet stagger, what it
 // wears and hunger (a starving pawn walks at 75%, needs.md "Starving"). The movement system and the snapshot (for the
 // player's own walk in direct mode) both use it.
+bool Sim::unstuckPawn(Entity pawn, std::string& error) {
+    entt::registry& reg = things_->registry();
+    if (!things_->exists(pawn) || !reg.all_of<Position, Mover>(pawn)) {
+        error = "that pawn can't be moved";
+        return false;
+    }
+    Position& pos = reg.get<Position>(pawn);
+    const int level = pos.level;
+    const int px = static_cast<int>(std::floor(pos.x));
+    const int py = static_cast<int>(std::floor(pos.y));
+    // Clear: walkable, the pawn fits at its middle, no deep water, and at least three of the eight cells round it
+    // walkable too (so not a pocket between walls). Rings outwards, row order within a ring, so it is always the same.
+    const auto clear = [&](CellPos c) {
+        if (!map_.inBounds(c) || !map_.walkable(c) || !pawnFitsAt(map_, static_cast<float>(c.x) + 0.5f, static_cast<float>(c.y) + 0.5f, kPawnRadius, c.level) ||
+            waterContactAt(map_, static_cast<float>(c.x) + 0.5f, static_cast<float>(c.y) + 0.5f, c.level, bodyHeightM(pawn)).swimming()) {
+            return false;
+        }
+        int open = 0;
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const CellPos n{c.x + dx, c.y + dy, c.level};
+                open += (dx != 0 || dy != 0) && map_.inBounds(n) && map_.walkable(n) ? 1 : 0;
+            }
+        }
+        return open >= 3;
+    };
+    constexpr int kUnstuckReach = 12;
+    for (int ring = 0; ring <= kUnstuckReach; ++ring) {
+        for (int y = py - ring; y <= py + ring; ++y) {
+            for (int x = px - ring; x <= px + ring; ++x) {
+                if (std::max(std::abs(x - px), std::abs(y - py)) != ring || !clear(CellPos{x, y, level})) {
+                    continue;
+                }
+                pos.x = static_cast<float>(x) + 0.5f;
+                pos.y = static_cast<float>(y) + 0.5f;
+                Mover& mover = reg.get<Mover>(pawn);
+                mover.path.clear();
+                mover.next = 0;
+                mover.vx = 0.0f;
+                mover.vy = 0.0f;
+                mover.fromX = pos.x;
+                mover.fromY = pos.y;
+                mover.blockedSteps = 0;
+                mover.heldSteps = 0;
+                mover.ghostSteps = 0;
+                mover.stuckSteps = 0;
+                mover.phaseSteps = 0;
+                return true;
+            }
+        }
+    }
+    error = "no clear spot nearby";
+    return false;
+}
+
 bool Sim::pawnSwimming(Entity pawn) const {
     const entt::registry& reg = things_->registry();
     const Position* pos = reg.valid(pawn) ? reg.try_get<Position>(pawn) : nullptr;
@@ -3624,9 +3944,52 @@ float Sim::bodyHeightM(Entity pawn) const {
     return kPersonHeightM;
 }
 
+float Sim::lowestPartHealth(Entity pawn) const {
+    const entt::registry& reg = things_->registry();
+    const Health* h = reg.try_get<Health>(pawn);
+    if (h == nullptr || !reg.all_of<Thing>(pawn)) {
+        return 1.0f;
+    }
+    if (h->dead) {
+        return 0.0f;
+    }
+    float lowest = 1.0f;
+    if (!h->zones.empty()) {
+        for (const float z : h->zones) {
+            lowest = std::min(lowest, z);
+        }
+        return std::clamp(lowest, 0.0f, 1.0f);
+    }
+    const int parts = health_->partCount(reg.get<Thing>(pawn).def);
+    for (int i = 0; i < parts; ++i) {
+        const float max = health_->partMaxHitPoints(pawn, i);
+        if (max > 0.0f) {
+            lowest = std::min(lowest, health_->partHitPoints(pawn, i) / max);
+        }
+    }
+    return std::clamp(lowest, 0.0f, 1.0f);
+}
+
 float Sim::pawnMoveFactor(Entity pawn) const {
     return jobs_->loadSpeedFactor(pawn) * static_cast<float>(talents_->statFactor(pawn, "moveSpeed")) *
-           combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn);
+           combat_->staggerSpeedFactor(pawn) * combat_->apparelStats().moveFactor(things_->registry(), pawn) *
+           (pawnSprinting(pawn) ? fighters_->sprintFactor() : 1.0f);
+}
+
+bool Sim::pawnSprinting(Entity pawn) const {
+    const entt::registry& reg = things_->registry();
+    if (!reg.valid(pawn) || reg.any_of<PlayerControl, Animal, Visitor>(pawn)) {
+        return false;  // visitors walk as fleeing fighters (Trade.h) but are in no hurry
+    }
+    // Fighters: fleeing or charging into melee (FighterSystem::sprinting, focus.md); carrying a downed friend to cover too.
+    if (const Fighter* fighter = reg.try_get<Fighter>(pawn)) {
+        return fighters_->sprinting(pawn) || fighter->mode == FightMode::Rescue;
+    }
+    // Emergencies at work (sneed 2026-11-17, controls.md): rescuing a downed colonist, beating out a fire.
+    if (const Worker* worker = reg.try_get<Worker>(pawn)) {
+        return worker->job.type == JobType::Rescue || worker->job.type == JobType::ExtinguishFire;
+    }
+    return false;
 }
 
 }  // namespace colony

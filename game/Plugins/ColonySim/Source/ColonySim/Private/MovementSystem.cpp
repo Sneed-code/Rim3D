@@ -49,6 +49,9 @@ constexpr float kMoveSeparationSpeed = 0.5f;      // of the pawn's speed, pushin
 constexpr float kMoveHeldBackShare = 0.3f;        // under this share of the wanted speed counts as held back
 constexpr int kMoveGhostAfter = 45;               // steps held back before walking through the others
 constexpr int kMoveGhostSteps = 30;               // and for how many steps
+constexpr int kMoveStuckAfter = 300;              // steps (10 s at 1x) wanting to walk without getting a metre: stuck
+constexpr int kMovePhaseSteps = 90;               // then this many (3 s) walking straight through walls and pawns
+constexpr float kMoveStuckMetres = 1.0f;
 constexpr int kMoveWallCheckAfter = 10;           // steps held back before looking for a wall across the way
 constexpr float kMoveWallCheckRadius = 0.05f;     // metres: only a cell that can't be walked on counts, not a corner
 constexpr int kMoveCandidates = 17 + 9 + 2 + 1;   // turns at full speed, turns at half, two axis parts, standing still
@@ -505,6 +508,14 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             wantX = wx2 * speed;
             wantY = wy2 * speed;
         }
+        // Stuck for a while (docs/design/earthworks.md "Stuck"): it walks straight at its waypoint through walls,
+        // trunks and pawns until the phase runs out, then steers as usual again.
+        if (mover.phaseSteps > 0) {
+            --mover.phaseSteps;
+            a.newVx = walking ? wantX : 0.0f;
+            a.newVy = walking ? wantY : 0.0f;
+            continue;
+        }
 
         // The nearest pawns on the same level.
         int count = 0;
@@ -794,6 +805,22 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         } else {
             mover.blockedSteps = 0;
             mover.heldSteps = 0;
+        }
+        // The stuck watchdog: wanting to walk for kMoveStuckAfter steps and still within a metre of where that began.
+        if (wantsToWalk) {
+            const float sx = a.x - mover.stuckX;
+            const float sy = a.y - mover.stuckY;
+            if (mover.stuckSteps == 0 || sx * sx + sy * sy > kMoveStuckMetres * kMoveStuckMetres) {
+                mover.stuckX = a.x;
+                mover.stuckY = a.y;
+                mover.stuckSteps = 1;
+            } else if (++mover.stuckSteps >= kMoveStuckAfter) {
+                mover.stuckSteps = 0;
+                mover.phaseSteps = kMovePhaseSteps;
+                ++phased_;
+            }
+        } else {
+            mover.stuckSteps = 0;
         }
     }
 

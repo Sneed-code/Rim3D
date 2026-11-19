@@ -64,6 +64,8 @@ namespace
 	constexpr int32 OrdZoneRing = 6;
 	constexpr int32 OrdGrowTile = 7;
 	constexpr int32 OrdGrowRing = 8;
+	constexpr int32 OrdLandTile = 9;
+	constexpr int32 OrdLandRing = 10;
 	constexpr int32 OrdKeyScale = 10000;
 
 	constexpr int32 OrdMaxBuildOrigins = 200;
@@ -76,6 +78,7 @@ namespace
 	const FLinearColor OrdDeconstructColor = FLinearColor::FromSRGBColor(FColor(225, 50, 50));
 	const FLinearColor OrdZoneColor = FLinearColor::FromSRGBColor(FColor(60, 150, 230));
 	const FLinearColor OrdGrowColor = FLinearColor::FromSRGBColor(FColor(120, 200, 60));
+	const FLinearColor OrdLandColor = FLinearColor::FromSRGBColor(FColor(250, 185, 40));
 
 	uint64 OrdMix(uint64 Seed, uint64 Value)
 	{
@@ -168,8 +171,12 @@ namespace
 			case EOrderTool::Stockpile: return FColor(60, 150, 230);
 			case EOrderTool::RemoveZone: return FColor(160, 160, 170);
 			case EOrderTool::Grow: return FColor(120, 200, 60);
+			case EOrderTool::LandingZone: return FColor(250, 185, 40);
+			case EOrderTool::RemoveLandingZone: return FColor(160, 160, 170);
 			case EOrderTool::Cancel: return FColor(255, 255, 255);
 			case EOrderTool::Deconstruct: return FColor(225, 50, 50);
+			case EOrderTool::LevelEarth: return FColor(170, 120, 70);
+			case EOrderTool::CancelEarth: return FColor(160, 160, 170);
 			default: return FColor(255, 255, 255);
 		}
 	}
@@ -219,6 +226,10 @@ namespace
 			case EOrderTool::Cancel: return TEXT("Cancel");
 			case EOrderTool::Deconstruct: return TEXT("Deconstruct");
 			case EOrderTool::Grow: return TEXT("Grow");
+			case EOrderTool::LandingZone: return TEXT("LandingZone");
+			case EOrderTool::RemoveLandingZone: return TEXT("RemoveLandingZone");
+			case EOrderTool::LevelEarth: return TEXT("LevelEarth");
+			case EOrderTool::CancelEarth: return TEXT("CancelEarth");
 		}
 		return TEXT("?");
 	}
@@ -801,6 +812,23 @@ void UOrdersSubsystem::BeginDrag(colony::CellPos Cell)
 	SetHoverCell(Cell);
 	DragStart = Cell;
 	bDragging = true;
+	if (Tool == EOrderTool::LevelEarth)
+	{
+		LevelStartCm = LevelHeightAtCm(Cell);
+	}
+}
+
+int32 UOrdersSubsystem::LevelHeightAtCm(colony::CellPos Cell) const
+{
+	// The ground in the middle of the cell, on the 25 cm steps every base keeps (docs/design/earthworks.md).
+	const USimSubsystem* Bridge = GetBridge();
+	if (!Bridge || !Bridge->GetSim())
+	{
+		return 0;
+	}
+	const colony::Map& Map = Bridge->GetSim()->map();
+	const float Metres = Map.heightAt(static_cast<float>(Cell.x) + 0.5f, static_cast<float>(Cell.y) + 0.5f);
+	return FMath::RoundToInt32(Metres / colony::Map::kLevelStepM) * FMath::RoundToInt32(colony::Map::kLevelStepM * 100.0f);
 }
 
 colony::CellRect UOrdersSubsystem::DragRect() const
@@ -939,6 +967,14 @@ int32 UOrdersSubsystem::EndDrag(colony::CellPos Cell)
 			Say(FString::Printf(TEXT("Growing zone %d x %d: %s"), Rect.sizeX, Rect.sizeY, *OrdCapital(Crop.label())));
 			break;
 		}
+		case EOrderTool::LandingZone:
+		case EOrderTool::RemoveLandingZone:
+		{
+			const bool bAdd = Tool == EOrderTool::LandingZone;
+			Submit(colony::SetLandingZoneCommand{Rect, bAdd});
+			Say(bAdd ? FString::Printf(TEXT("Landing zone %d x %d"), Rect.sizeX, Rect.sizeY) : FString(TEXT("Landing zone cells removed")));
+			break;
+		}
 		case EOrderTool::Mine:
 			Submit(colony::DesignateCommand{Rect, colony::DesignationKind::Mine});
 			Say(FString::Printf(TEXT("Mine %d x %d"), Rect.sizeX, Rect.sizeY));
@@ -973,6 +1009,17 @@ int32 UOrdersSubsystem::EndDrag(colony::CellPos Cell)
 			Say(CommandsSent > SentBefore ? FString(TEXT("Cancelled")) : FString(TEXT("Nothing to cancel there")));
 			break;
 		}
+		case EOrderTool::LevelEarth:
+		{
+			const int32 HeightCm = LevelStartCm + LevelNudgeCm;
+			Submit(colony::LevelEarthCommand{Rect, HeightCm});
+			Say(FString::Printf(TEXT("Level earth %d x %d at %.2f m"), Rect.sizeX, Rect.sizeY, static_cast<float>(HeightCm) / 100.0f));
+			break;
+		}
+		case EOrderTool::CancelEarth:
+			Submit(colony::CancelEarthworksCommand{Rect});
+			Say(TEXT("Earthworks cancelled"));
+			break;
 		case EOrderTool::Deconstruct:
 			for (const colony::ThingView& View : Snapshot.things)
 			{
@@ -1150,6 +1197,7 @@ void UOrdersSubsystem::EnsureOverlayActor()
 		};
 		ZoneMaterial = Make(FLinearColor(OrdZoneColor.R, OrdZoneColor.G, OrdZoneColor.B, 0.30f));
 		GrowZoneMaterial = Make(FLinearColor(OrdGrowColor.R, OrdGrowColor.G, OrdGrowColor.B, 0.22f));
+		LandZoneMaterial = Make(FLinearColor(OrdLandColor.R, OrdLandColor.G, OrdLandColor.B, 0.16f));
 		GhostGoodMaterial = Make(FLinearColor(0.15f, 0.85f, 0.25f, 0.42f));
 		GhostBadMaterial = Make(FLinearColor(0.95f, 0.18f, 0.15f, 0.42f));
 	}
@@ -1212,6 +1260,12 @@ UStaticMesh* UOrdersSubsystem::GetMarkMesh(int32 Kind, int32 TopCm)
 		case OrdGrowRing:
 			Ring(OrdGrowColor);
 			break;
+		case OrdLandTile:
+			Box(FVector3f(96.0f, 96.0f, 3.0f), FVector3f::ZeroVector, OrdLandColor);
+			break;
+		case OrdLandRing:
+			Ring(OrdLandColor);
+			break;
 		default:
 			Ring(OrdZoneColor);
 			break;
@@ -1255,7 +1309,7 @@ void UOrdersSubsystem::RebuildMarks(const USimSubsystem& Bridge)
 	const UBuildingSubsystem* Buildings = GetWorld()->GetSubsystem<UBuildingSubsystem>();
 	TMap<int32, TArray<FTransform>> Batches;
 	TMap<int32, UMaterialInterface*> Materials;
-	Stats.MineMarks = Stats.CutMarks = Stats.HarvestMarks = Stats.DeconstructMarks = Stats.ZoneCells = Stats.GrowCells = 0;
+	Stats.MineMarks = Stats.CutMarks = Stats.HarvestMarks = Stats.DeconstructMarks = Stats.ZoneCells = Stats.GrowCells = Stats.LandingCells = 0;
 
 	// How high a plant stands, from its def's stem and crown, cm.
 	TMap<uint32, int32> PlantTop;
@@ -1334,6 +1388,40 @@ void UOrdersSubsystem::RebuildMarks(const USimSubsystem& Bridge)
 		Place(GrowDraw ? OrdGrowTile : OrdGrowRing, 0, Cell.x, Cell.y, 1.0, GrowDraw);
 		++Stats.GrowCells;
 	}
+	// The landing zone: a faint amber tile, a little above the others so it shows over a stockpile or field.
+	UMaterialInterface* LandDraw = LandZoneMaterial.Get();
+	for (const colony::CellPos& Cell : Snapshot.landingZone)
+	{
+		Place(LandDraw ? OrdLandTile : OrdLandRing, 0, Cell.x, Cell.y, 4.0, LandDraw);
+		++Stats.LandingCells;
+	}
+
+	// Earthworks waiting (docs/design/earthworks.md): an amber ring on every cell round a corner still to be dug or filled.
+	{
+		const colony::Map& Map = Sim.map();
+		TSet<int32> EarthCells;
+		for (const uint32 Corner : Map.earthCorners())
+		{
+			const colony::CellPos K = Map.cellAt(static_cast<int>(Corner));
+			for (int32 Y = K.y - 1; Y <= K.y; ++Y)
+			{
+				for (int32 X = K.x - 1; X <= K.x; ++X)
+				{
+					if (Map.inBounds(colony::CellPos{X, Y, 0}) && Sim.construction().siteAt(colony::CellPos{X, Y, 0}) == colony::kNoEntity)
+					{
+						EarthCells.Add(Map.index(colony::CellPos{X, Y, 0}));
+					}
+				}
+			}
+		}
+		TArray<int32> Sorted = EarthCells.Array();
+		Sorted.Sort();
+		for (const int32 Index : Sorted)
+		{
+			const colony::CellPos Cell = Map.cellAt(Index);
+			Place(OrdLandRing, 0, Cell.x, Cell.y, 3.0, nullptr);
+		}
+	}
 
 	for (TPair<int32, TObjectPtr<UInstancedStaticMeshComponent>>& Pair : OverlayComponents)
 	{
@@ -1400,6 +1488,9 @@ void UOrdersSubsystem::RefreshOverlay()
 		{
 			Signature = OrdMix(Signature, OrdCellKey(Cell.x, Cell.y) ^ 0x67726F77ULL);
 		}
+		Signature = OrdMix(Signature, Snapshot.landingZoneChanges ^ 0x4C414E44ULL);
+		Signature = OrdMix(Signature, Bridge->GetSim()->map().earthChanges() ^ 0x45415254ULL);
+		Signature = OrdMix(Signature, static_cast<uint64>(Bridge->GetSim()->map().levelledCorners().size()));
 		for (const colony::ThingView& View : Snapshot.things)
 		{
 			if (View.category == colony::ThingCategory::Building && View.stage == colony::ConstructionStage::Built && View.markedForDeconstruct)
@@ -1729,6 +1820,8 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 			ToolButton(TEXT("Stockpile"), EOrderTool::Stockpile);
 			ToolButton(TEXT("Growing zone"), EOrderTool::Grow);
 			ToolButton(TEXT("Remove zone"), EOrderTool::RemoveZone);
+			ToolButton(TEXT("Landing zone"), EOrderTool::LandingZone);
+			ToolButton(TEXT("Remove landing zone"), EOrderTool::RemoveLandingZone);
 			ImGui::NewLine();
 		}
 		else if (!OpenCategory.IsEmpty())
@@ -1751,6 +1844,11 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 					}
 				}
 				ImGui::SameLine();
+			}
+			if (OpenCategory == TEXT("Structure"))
+			{
+				ToolButton(TEXT("Level earth"), EOrderTool::LevelEarth);
+				ToolButton(TEXT("Cancel earthworks"), EOrderTool::CancelEarth);
 			}
 			ImGui::NewLine();
 		}
@@ -1830,6 +1928,34 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 			}
 			ImGui::SameLine();
 			OrdText(TEXT("Drag a rectangle on open soil.  Colonists with Growing work sow it."));
+		}
+		else if (Tool == EOrderTool::LevelEarth)
+		{
+			// The height comes from the ground where the drag starts; these nudge it in 25 cm steps (at most twice a wall's
+			// height from any corner: the sim leaves out cells further off).
+			const int32 StartCm = bDragging ? LevelStartCm : (bHasHover ? LevelHeightAtCm(Hover) : 0);
+			OrdText(FString::Printf(TEXT("Height %.2f m"), static_cast<float>(StartCm + LevelNudgeCm) / 100.0f));
+			ImGui::SameLine();
+			if (ImGui::Button("Lower 25 cm"))
+			{
+				LevelNudgeCm = FMath::Max(LevelNudgeCm - 25, -600);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Raise 25 cm"))
+			{
+				LevelNudgeCm = FMath::Min(LevelNudgeCm + 25, 600);
+			}
+			ImGui::SameLine();
+			if (LevelNudgeCm != 0 && ImGui::Button("Reset"))
+			{
+				LevelNudgeCm = 0;
+			}
+			ImGui::SameLine();
+			OrdText(TEXT("Drag from the height you want.  Builders dig or fill it, about a second per quarter metre."));
+		}
+		else if (Tool == EOrderTool::LandingZone)
+		{
+			OrdText(TEXT("Drag rectangles on open ground.  Shuttles set down inside it when a whole 6 x 12 shuttle fits."));
 		}
 		else if (Tool != EOrderTool::None)
 		{

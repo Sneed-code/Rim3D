@@ -20,7 +20,7 @@ class USceneComponent;
 class USimSubsystem;
 class UStaticMesh;
 class UStaticMeshComponent;
-namespace colony { class Sim; struct HitboxView; struct ThingView; }
+namespace colony { class Sim; struct DrawnAim; struct HitboxView; struct ThingView; }
 
 /** What the particles are (each has its own mesh and colour). */
 enum class EFightParticle : uint8
@@ -68,6 +68,14 @@ struct FFightHitRecord
 	FVector Where = FVector::ZeroVector;
 	/** Cm from the nearest of the pawn's hitboxes (0 on or inside one); -1 if the pawn had none. */
 	float MissCm = -1.0f;
+	/** The two distances MissCm is the nearer of: the sim's hitboxes and the body as drawn (-1: not measured). */
+	float StockCm = -1.0f;
+	float DrawnCm = -1.0f;
+	/** For the report: where the drawn body stood and faced (world cm, degrees) and where the sim had it (sim metres). */
+	FVector DrawnAt = FVector::ZeroVector;
+	float DrawnYaw = 0.0f;
+	FVector SimAt = FVector::ZeroVector;
+	float SimYaw = 0.0f;
 	int64 GameSeconds = 0;  // the step it happened in (USimSubsystem::GetSteps)
 };
 
@@ -107,6 +115,8 @@ public:
 	 *  not in direct mode, no gun, the game is paused, an order went out this step, or the gun isn't ready. */
 	bool Fire();
 	bool Reload();
+	/** Patches your worst bleeding zone (H; body-health.md part B). False if nothing bleeds, you are down or patching already. */
+	bool Patch();
 	/** Crouch or stand up. */
 	bool ToggleCrouch();
 	/** Lie down or stand up. */
@@ -117,11 +127,22 @@ public:
 	 *  where the view looks; zero is a backstep). False (and nothing sent) if not in direct mode, the pawn can't roll now or
 	 *  an order went out this step. */
 	bool Roll(const FVector2D& Input);
-	/** Throws the first grenade on the belt at the crosshair's point (F9's ThrowCommand with `player`). */
+	/** Throws the chosen grenade (R picks; the first on the belt if none): at the locked-on enemy in third person, else at
+	 *  the crosshair's point (F9's ThrowCommand with `player`). G held shows the arc first (DrawGrenadeArc); letting go throws. */
 	bool ThrowGrenade();
-	/** Where the crosshair points, in Unreal world units: the sim's trace from the view along the look
-	 *  direction (ground, rock, building or pawn hitbox), else a point 150 m out. False if not in direct mode. */
-	bool ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* OutPawnHit = nullptr) const;
+	/** R: the next kind of grenade on the belt. False if the belt holds one kind or none. */
+	bool NextGrenade();
+	/** The grenade G throws now (a Things def), invalid with an empty belt. */
+	colony::DefId GetGrenadeChoice() const;
+	/** G is held: the throw's arc and landing ring are drawn. */
+	bool IsAimingGrenade() const { return bAimingGrenade; }
+	/** Frames the aim arc was drawn (smoke tests). */
+	int32 GetGrenadeArcFrames() const { return GrenadeArcFrames; }
+	/** Where the crosshair points, in Unreal world units: the nearest of the sim's ground, rock and buildings and the
+	 *  bodies as they are drawn this frame (DrawnHit; animals by the sim's hitboxes), else a point 150 m out. On a drawn
+	 *  body `OutDrawn` gets the pawn, the sim body part and the spot in that pawn's frame (docs/design/aiming.md).
+	 *  False if not in direct mode. */
+	bool ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* OutPawnHit = nullptr, colony::DrawnAim* OutDrawn = nullptr) const;
 
 	// --- Hitbox debug view ---
 
@@ -137,8 +158,20 @@ public:
 	int32 GetShotsSeen() const { return ShotsSeen; }
 	int32 GetHitsSeen() const { return HitsSeen; }
 	int32 GetPawnHitsSeen() const { return PawnHitsSeen; }
+	int32 GetSnappedHits() const { return SnappedHits; }
+	/** Where the last bullet met this pawn's drawn body (for the smoke tests' close looks). */
+	bool GetLastBodyHit(colony::Entity Pawn, FVector& Out) const
+	{
+		const FVector* Found = LastBodyHits.Find(entt::to_integral(Pawn));
+		if (Found)
+		{
+			Out = *Found;
+		}
+		return Found != nullptr;
+	}
 	int32 GetFlashes() const { return Flashes; }
 	int32 GetTracersSpawned() const { return TracersSpawned; }
+	int32 GetMuzzleShots() const { return MuzzleShots; }
 	int32 GetTracersArrived() const { return TracersArrived; }
 	/** Tracers given up on: the bullet never showed in a snapshot, or flew too far or too long without a hit. */
 	int32 GetTracersDropped() const { return TracersDropped; }
@@ -159,16 +192,27 @@ public:
 	int32 GetHitClips() const { return HitClipsPlayed; }
 	/** Damage numbers put up over your own hits so far. */
 	int32 GetDamageNumbersShown() const { return DamageNumbersShown; }
+	/** Stealth marks drawn over heads so far: "?" for a suspicious enemy, "!" when one is alerted (docs/design/stealth.md). */
+	int32 GetAlertMarksDrawn() const { return AlertMarksDrawn; }
+	int32 GetAlertEventsSeen() const { return AlertEventsSeen; }
+	/** Of those, the hits on you (drawn red); zones knocked by hits (the hit layer, body-health.md part E); patch orders sent. */
+	int32 GetDamageNumbersOnMe() const { return DamageNumbersOnMe; }
+	int32 GetZoneKicks() const { return ZoneKicks; }
+	int32 GetPatchOrders() const { return PatchOrders; }
 	int32 GetBodyDecals() const { return BodyDecals; }
 	int32 GetGroundDecals() const { return GroundDecals; }
 	int32 GetRagdollsStarted() const { return RagdollsStarted; }
+	/** Severed limbs and heads on the ground now, and how many were thrown since the start (body-health.md part F). */
+	int32 GetSeveredPiecesShown() const;
+	int32 GetSeveredPiecesThrown() const { return SeveredPiecesThrown; }
 	int32 GetFireOrders() const { return FireOrders; }
 	int32 GetHitMarkers() const { return HitMarkers; }
 	int32 GetActiveTracers() const { return Tracers.Num(); }
 	int32 GetActiveParticles() const { return Particles.Num(); }
 	int32 GetLiveDecals() const;
 	int32 GetHeldGuns() const;
-	/** Largest distance (cm) between a pawn hit and the pawn's hitboxes over all hits seen. */
+	/** Largest distance (cm) between a pawn hit and the pawn's hitboxes or drawn body (the nearer; the drawn body less the
+	 *  5 cm it may move on while the bullet flies) over all hits seen. */
 	float GetMaxHitboxMissCm() const
 	{
 		float Max = 0.0f;
@@ -178,6 +222,8 @@ public:
 		}
 		return Max;
 	}
+	/** The worst checked hit, spelled out for a smoke test's failure message (empty if none). */
+	FString DescribeWorstHit() const;
 	/** Hits that could be checked: a hit that downed the pawn or took off a part is not (its hitboxes changed in the same step). */
 	int32 GetHitboxChecks() const
 	{
@@ -222,6 +268,11 @@ private:
 	void OnProjectileHit(const colony::Event& Event);
 	void SpawnImpact(const FFightTracer& Tracer);
 	void SpawnFlash(const FVector& Muzzle);
+	/** Where the drawn gun's muzzle is for a shot by Shooter: the first-person view gun's, else the front end of the gun
+	 *  in its hands. False (Out unchanged) when no drawn gun is near the sim's muzzle point. */
+	bool FindDrawnMuzzle(colony::Entity Shooter, FVector& InOutMuzzle) const;
+	/** The player's thin yellow bar under the gun's name: how far the gun's shots have refilled, and pips for the shots left. */
+	void DrawShotStore(const colony::ThingView& View, float Scale) const;
 	void SpawnBurst(EFightParticle Kind, const FVector& At, const FVector& Direction, int32 Count, float Speed, float Spread, float SizeCm, float Life, float Gravity);
 	void SpawnBodyDecal(ASimPawnActor& Actor, const FVector& At, const FVector& Direction, float Amount);
 	void SpawnGroundDecal(const FVector& At, float RadiusCm);
@@ -237,6 +288,10 @@ private:
 	void UpdatePlayerInput();
 	void DrawHitboxes();
 	void DrawHud();
+	/** While G is held: the arc the grenade would fly and a ring where it bursts, on the screen. */
+	void DrawGrenadeArc(USimSubsystem& Bridge, colony::Entity Pawn);
+	/** The world point a throw goes to now: the crosshair's, pulled in to the arm's range. False with no aim. */
+	bool GrenadeAimSim(USimSubsystem& Bridge, colony::Entity Pawn, colony::DefId Item, float& OutX, float& OutY) const;
 	bool EffectsOn() const;
 
 	UPROPERTY()
@@ -283,6 +338,9 @@ private:
 	bool bDecalMaterialMissing = false;
 	int32 NextLight = 0;
 	int64 LastFireStep = -1;
+	colony::DefId GrenadeChoice;
+	bool bAimingGrenade = false;
+	int32 GrenadeArcFrames = 0;
 	bool bHaveKeyState = false;
 	bool bNoGunMessage = false;
 	float HitMarkerSeconds = 0.0f;
@@ -293,12 +351,26 @@ private:
 		float Amount = 0.0f;
 		float Age = 0.0f;
 		bool bArmour = false;
+		/** A hit on you (red), not one of yours. */
+		bool bOnMe = false;
 	};
 	TArray<FFightDamageNumber> DamageNumbers;
 	int32 DamageNumbersShown = 0;
-	void AddDamageNumber(const FFightTracer& Tracer, bool bArmour);
+	/** Stealth (docs/design/stealth.md): seconds since each enemy was alerted (by entity id), for the "!" that flashes
+	    over its head; a "?" stays over a suspicious one from the snapshot. Direct mode only. */
+	TMap<uint32, float> AlertFlash;
+	int32 AlertMarksDrawn = 0;
+	int32 AlertEventsSeen = 0;
+	void DrawAlertMarks(float Scale);
+	int32 DamageNumbersOnMe = 0;
+	int32 ZoneKicks = 0;
+	int32 PatchOrders = 0;
+	void AddDamageNumber(const FFightTracer& Tracer, bool bArmour, bool bOnMe);
 	void SpawnBodyThroughHit(const FFightTracer& Tracer);
 	int32 BodyThroughHits = 0;
+	/** Body hits whose point moved onto the drawn body (SpawnImpact). */
+	int32 SnappedHits = 0;
+	TMap<uint32, FVector> LastBodyHits;
 	void DrawDamageNumbers(float Scale);
 	float EquipMessageSeconds = 0.0f;
 
@@ -307,6 +379,8 @@ private:
 	int32 PawnHitsSeen = 0;
 	int32 Flashes = 0;
 	int32 TracersSpawned = 0;
+	/** Shots whose flash and tracer started at the drawn gun's muzzle. */
+	int32 MuzzleShots = 0;
 	int32 TracersArrived = 0;
 	int32 TracersDropped = 0;
 	int32 Impacts = 0;
@@ -316,6 +390,8 @@ private:
 	int32 BodyDecals = 0;
 	int32 GroundDecals = 0;
 	int32 RagdollsStarted = 0;
+	TMap<uint32, TWeakObjectPtr<class ASeveredPieceActor>> SeveredPieces;  // by the sim's piece id
+	int32 SeveredPiecesThrown = 0;
 	int32 FireOrders = 0;
 	int32 HitMarkers = 0;
 	int32 HitboxesDrawn = 0;

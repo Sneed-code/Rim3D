@@ -1,11 +1,17 @@
 // Smoke test `motion` (docs/design/body-motion.md): a colonist plays the sim's motion clips (a roll, staggers, a
-// sidestep, a knockdown) and every frame the drawn hips are measured against the sim's position. The hips must stay
+// sidestep, a knockdown, the three punches) and every frame the drawn hips are measured against the sim's position. The hips must stay
 // on the sim's position through the clip and must not jump when it ends.
+//
+// The hips are read at the end of each frame (after the pawns update), as they are drawn: this test's own tick runs
+// before the pawn subsystem's, where the body's animation has already moved on for the frame but its set-back has not.
 #include "SmokeTest.h"
+
+#include "Engine/World.h"
 
 #include "Components/SkeletalMeshComponent.h"
 
 #include "PawnActor.h"
+#include "PawnAnimInstance.h"
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
 
@@ -34,10 +40,11 @@ namespace
 		bool bHaveLast = false;
 		double MaxOff = 0.0;      // hips from the sim's position while the clip plays (cm)
 		double MaxOffAfter = 0.0; // and in the 0.3 s after it ends (the blend-out)
+		int32 UpperFrames = 0;    // frames an upper-body clip played, and of those the frames the legs walked
+		int32 LegFrames = 0;
 		double MaxJump = 0.0;     // the hips' largest one-frame move beyond the actor's own (cm)
 		double MaxJumpAfter = 0.0;
 		double Travel = 0.0;      // how far the sim moved the body (cm)
-		bool bAfterStall = false;
 		bool bPrevSkipped = false;
 		double StartYaw = 0.0;
 		FVector LastSpot = FVector::ZeroVector;
@@ -45,6 +52,19 @@ namespace
 		int32 StillFrames = 0;
 		double MaxTurn = 0.0;     // how far the drawn body turned while the clip played (degrees)
 		int32 Skipped = 0;
+		bool bStallBefore = false;  // a stall one and two frames ago (the end-of-frame sample is a frame old)
+		bool bStallBefore2 = false;
+		FVector2D StillHips = FVector2D::ZeroVector;  // the hips against the actor summed over the still frames before the clip
+		int32 StillHipsSamples = 0;
+	};
+
+	/** The hips and the actor as drawn, read at the end of the last frame (FWorldDelegates::OnWorldTickStart, before the next frame moves anything). */
+	struct FMotionSmokeSample
+	{
+		bool bValid = false;
+		FVector2D Local = FVector2D::ZeroVector;  // the hips against the actor, in the actor's frame (cm)
+		FVector2D Hips = FVector2D::ZeroVector;
+		FVector2D Actor = FVector2D::ZeroVector;
 	};
 
 	FVector2D MotionSmokeHips(const ASimPawnActor& Actor)
@@ -77,6 +97,8 @@ namespace
 void USmokeTestSubsystem::BuildMotionPhases()
 {
 	const TSharedRef<FMotionSmokeState> State = MakeShared<FMotionSmokeState>();
+	const TSharedRef<FMotionSmokeSample> Sample = MakeShared<FMotionSmokeSample>();
+	const TSharedRef<FDelegateHandle> SampleHook = MakeShared<FDelegateHandle>();
 	const auto Bridge = [this]() { return GetWorld()->GetSubsystem<USimSubsystem>(); };
 	const auto Pawns = [this]() { return GetWorld()->GetSubsystem<USimPawnSubsystem>(); };
 	const auto ActorOf = [=]() -> ASimPawnActor* { return Pawns() ? Pawns()->FindPawn(State->Pawn) : nullptr; };
@@ -131,6 +153,24 @@ void USmokeTestSubsystem::BuildMotionPhases()
 				return;
 			}
 			B->Submit(colony::DraftCommand{State->Pawn, true});
+			const TWeakObjectPtr<USmokeTestSubsystem> Self(this);
+			*SampleHook = FWorldDelegates::OnWorldTickStart.AddLambda([Self, State, Sample](UWorld* World, ELevelTick, float)
+			{
+				const USmokeTestSubsystem* Smoke = Self.Get();
+				const USimPawnSubsystem* P = Smoke && World == Smoke->GetWorld() ? World->GetSubsystem<USimPawnSubsystem>() : nullptr;
+				const ASimPawnActor* Actor = P ? P->FindPawn(State->Pawn) : nullptr;
+				if (!Smoke || World != Smoke->GetWorld())
+				{
+					return;
+				}
+				Sample->bValid = Actor != nullptr;
+				if (Actor)
+				{
+					Sample->Local = MotionSmokeLocal(*Actor);
+					Sample->Hips = MotionSmokeHips(*Actor);
+					Sample->Actor = FVector2D(Actor->GetActorLocation());
+				}
+			});
 		};
 		Phase.WarmupSeconds = 3.0f;
 		Phase.MeasureSeconds = 0.5f;
@@ -159,9 +199,9 @@ void USmokeTestSubsystem::BuildMotionPhases()
 		Phase.OnFrame = [=]()
 		{
 			View();
-			if (const ASimPawnActor* Actor = ActorOf())
+			if (ActorOf() && Sample->bValid)
 			{
-				State->IdleOffset += MotionSmokeLocal(*Actor);
+				State->IdleOffset += Sample->Local;
 				++State->IdleSamples;
 			}
 		};
@@ -177,9 +217,12 @@ void USmokeTestSubsystem::BuildMotionPhases()
 		Phases.Add(MoveTemp(Phase));
 	}
 
-	for (const TCHAR* ClipName : {TEXT("Motion_Roll"), TEXT("Motion_StaggerBack"), TEXT("Motion_StaggerLeft"), TEXT("Motion_SidestepRight"), TEXT("Motion_KnockdownForward")})
+	const TCHAR* const MotionSmokeClips[] = {TEXT("Motion_Roll"), TEXT("Motion_StaggerBack"), TEXT("Motion_StaggerLeft"), TEXT("Motion_SidestepRight"),
+		TEXT("Motion_KnockdownForward"), TEXT("Motion_Unarmed_Jab"), TEXT("Motion_Unarmed_Cross"), TEXT("Motion_Unarmed_Hook")};
+	for (const TCHAR* ClipName : MotionSmokeClips)
 	{
 		const FString Name = ClipName;
+		const bool bLastClip = ClipName == MotionSmokeClips[UE_ARRAY_COUNT(MotionSmokeClips) - 1];
 		FPhase Phase;
 		Phase.Name = Name;
 		Phase.WarmupSeconds = 0.0f;
@@ -193,7 +236,7 @@ void USmokeTestSubsystem::BuildMotionPhases()
 			View();
 			USimSubsystem* B = Bridge();
 			ASimPawnActor* Actor = ActorOf();
-			if (!B || !B->GetSim() || !Actor)
+			if (!B || !B->GetSim() || !Actor || !Sample->bValid)
 			{
 				return;
 			}
@@ -203,6 +246,18 @@ void USmokeTestSubsystem::BuildMotionPhases()
 				const FVector Here = Actor->GetActorLocation();
 				const double Turned = FMath::Abs(FMath::FindDeltaAngleDegrees(State->LastYaw, Actor->GetActorRotation().Yaw));
 				State->StillFrames = FVector::Dist2D(Here, State->LastSpot) < 0.05 && Turned < 0.05 ? State->StillFrames + 1 : 0;
+				// The idle hips of the standing idle playing now (each stop picks one of several, and they stand
+				// their hips a few cm differently): measured over the still frames just before the clip.
+				if (State->StillFrames == 1)
+				{
+					State->StillHips = FVector2D::ZeroVector;
+					State->StillHipsSamples = 0;
+				}
+				if (State->StillFrames > 0)
+				{
+					State->StillHips += Sample->Local;
+					++State->StillHipsSamples;
+				}
 				State->LastSpot = Here;
 				State->LastYaw = Actor->GetActorRotation().Yaw;
 				if (State->StillFrames < 30 && PhaseTime < 6.0f)
@@ -215,15 +270,24 @@ void USmokeTestSubsystem::BuildMotionPhases()
 				{
 					Fail(FString::Printf(TEXT("%s: the sim would not play it"), *Name));
 				}
+				// A stagger is drawn on the upper body over walking legs, as a blow's stagger is (BodyMotionSystem::throwBody).
+				if (Name.Contains(TEXT("Stagger")))
+				{
+					Sim.combat().motion().setLayers(State->Pawn, true, false);
+				}
+				if (State->StillHipsSamples >= 10)
+				{
+					State->IdleOffset = State->StillHips / static_cast<double>(State->StillHipsSamples);
+				}
 				State->bStarted = true;
 				State->Start = Actor->GetActorLocation();
 				State->StartYaw = Actor->GetActorRotation().Yaw;
 				return;
 			}
 			// The hips against the sim's position, less the idle pose's own offset.
-			const FVector2D Off = MotionSmokeLocal(*Actor) - State->IdleOffset;
-			const FVector2D Hips = MotionSmokeHips(*Actor);
-			const FVector2D At(Actor->GetActorLocation());
+			const FVector2D Off = Sample->Local - State->IdleOffset;
+			const FVector2D Hips = Sample->Hips;
+			const FVector2D At = Sample->Actor;
 			const double RawJump = State->bHaveLast ? FVector2D::Distance(Hips - State->LastHips, At - State->LastActor) : 0.0;
 			State->LastHips = Hips;
 			State->LastActor = At;
@@ -231,9 +295,11 @@ void USmokeTestSubsystem::BuildMotionPhases()
 			const bool bInClip = Actor->IsInMotionClip();
 			// A stalled frame (the harness's screenshot, about 0.1 s) and the one after it, when the sim catches up,
 			// are left out: the actor and the animation move on in different orders across a stall.
+			// The sample is from the end of the last frame, so a stall shows a frame later: two frames after it are left out.
 			const bool bStall = GetWorld()->GetDeltaSeconds() > 0.05f;
-			const bool bSkip = bStall || State->bAfterStall;
-			State->bAfterStall = bStall;
+			const bool bSkip = bStall || State->bStallBefore || State->bStallBefore2;
+			State->bStallBefore2 = State->bStallBefore;
+			State->bStallBefore = bStall;
 			const double Jump = bSkip || State->bPrevSkipped ? 0.0 : RawJump;
 			State->bPrevSkipped = bSkip;
 			if (bSkip)
@@ -243,6 +309,13 @@ void USmokeTestSubsystem::BuildMotionPhases()
 			if (bInClip)
 			{
 				State->bSeenClip = true;
+				// The legs under an upper-body clip: walking (motion matching off the idle), not standing still.
+				if (Actor->IsMotionClipUpper())
+				{
+					++State->UpperFrames;
+					const USimPawnAnimInstance* Anim = Actor->GetAnim();
+					State->LegFrames += Anim && !Anim->GetStats().bStandingIdle && Actor->GetGroundSpeed() > 20.0f ? 1 : 0;
+				}
 			}
 			if (bInClip && !bSkip)
 			{
@@ -273,6 +346,10 @@ void USmokeTestSubsystem::BuildMotionPhases()
 		};
 		Phase.Verify = [=, this]()
 		{
+			if (bLastClip)
+			{
+				FWorldDelegates::OnWorldTickStart.Remove(*SampleHook);
+			}
 			PhaseNumbers.Add(TEXT("simTravelCm"), State->Travel);
 			PhaseNumbers.Add(TEXT("maxHipsOffCm"), State->MaxOff);
 			PhaseNumbers.Add(TEXT("maxHipsOffAfterCm"), State->MaxOffAfter);
@@ -297,6 +374,20 @@ void USmokeTestSubsystem::BuildMotionPhases()
 			if (State->MaxOff > 15.0 || State->MaxOffAfter > 15.0)
 			{
 				Fail(FString::Printf(TEXT("%s: the hips left the sim's position by %.1f cm"), *Name, FMath::Max(State->MaxOff, State->MaxOffAfter)));
+			}
+			if (Name.Contains(TEXT("Stagger")))
+			{
+				PhaseNumbers.Add(TEXT("upperFrames"), State->UpperFrames);
+				PhaseNumbers.Add(TEXT("walkingLegFrames"), State->LegFrames);
+				if (State->UpperFrames == 0)
+				{
+					Fail(FString::Printf(TEXT("%s: the stagger was not drawn on the upper body"), *Name));
+				}
+				else if (State->LegFrames * 3 < State->UpperFrames)
+				{
+					Fail(FString::Printf(TEXT("%s: the legs walked in only %d of %d frames of the stagger (they should carry the stumble)"), *Name,
+						State->LegFrames, State->UpperFrames));
+				}
 			}
 			if (State->MaxJumpAfter > 8.0)
 			{

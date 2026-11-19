@@ -60,7 +60,92 @@ the line clears (`CombatSystem` firing step, both numbers ours). In the year run
 colonists' shots and more hit the ground in front of them (C25). Test: a skill 20 rifleman at 12 m against a pawn
 crouched behind a 0.9 m crest put 0 of 34 shots into the crest and hit 28; aimed at the chest, the line ran into it.
 
-## Magazines and reloading
+## Cooldown bursts (sneed, 2026-11-17)
+
+sneed found the guns too slow and jarring, so guns no longer reload. `CombatRules` `cooldownBursts`
+(`shotsFactor` 3, `gapFactor` 0.5, `reloads` false) turns every gun's burst into a **store of shots**:
+
+- **Three times the shots.** The store holds the def's `burstShotCount` times 3: autopistol 3 (it
+  fired one), assault rifle 9, LMG 18, minigun 75. Guns marked `keepBurst` keep their own count:
+  bolt-action and sniper rifle, charge lance, needle gun, bows, pila, the launchers, the uranium slug
+  turret, the mortar and the rocketswarm, with their gaps. A one-shot gun has a store of 1.
+- **Half the gap.** Shots of the store come at least `secondsBetweenBurstShots` x 0.5 steps apart
+  (at least 1); a gun that used to fire one shot gets half its cooldown as the gap, so the autopistol
+  fires every 15 steps (half a second), almost semi-automatic.
+- **A hidden cooldown from the first shot.** The first shot from a full store starts the gun's
+  cooldown (`rangedWeaponCooldown`, slowed by worn armour and tiredness, quicker in a shooting
+  frenzy). Later shots don't add to it. When it runs out the store is full again, however many
+  shots were fired. sneed's example: a 3-shot gun with a 2 s cooldown fires once, waits 1 s, fires
+  again: the store is full 1 s later. An empty store waits for the rest of the cooldown.
+- **Who fires how.** The player fires one shot per pull, and holding the trigger fires one every gap
+  until the store is empty. A fighter fires all that is left in the store as one burst (after its
+  aiming time, as before), then waits for the refill (`shotReadyIn` counts it, so it ducks back into
+  cover).
+- **No reloads.** `magazineSize` and `reloadTime` stay in the defs but are not read while `reloads`
+  is false: the snapshot's `magazineSize` is 0, `Reload` is refused, and the reload paths below are
+  idle.
+- **Turrets** get the same shots and gaps; their cooldown counts from the burst's first shot.
+- **Ranged damage is halved for now** to make up for it: `data/tuning.json` multiplies every
+  projectile's `damageAmountBase` by 0.5 (bullets, arrows, the pila; explosions keep theirs).
+
+State: `Shooter::stored` (-1 full), `refill`, `refillFrom` and `storeGun` (another weapon in the
+hands starts full), saved in the `combat` section from version 5. The snapshot has `shotStore`,
+`shotStoreSize`, `refillLeft` and `refillSteps` for the player's **thin yellow bar** under the gun's
+name: full while the gun is full, empty after the first shot and filling over the cooldown like a
+stamina bar, with a pip per shot left under it. Tests: "Cooldown bursts" in `Tests/AimingTests.cpp`.
+
+On screen the flash and the tracer now start at the **drawn gun's muzzle** (the first-person view
+gun's `muzzle` from `assets/guns.json`, else the front of the gun mesh in the pawn's hands) and fly
+to where the sim's bullet lands (`UFightSubsystem::FindDrawnMuzzle`).
+
+## Shots go where the crosshair is (sneed, 2026-11-18)
+
+sneed aimed the bolt-action rifle at heads in the combat range and missed, and some guns hit where others missed at
+other ranges. Three things were wrong:
+
+- **The crosshair was traced against the sim's stock hitboxes**, a fixed 1.80 m man standing upright, not the body on
+  screen: a short woman's head, a body leaning in a clip, an arm swinging, a tall man's crown were not where the boxes
+  were, so the crosshair "passed" the drawn head and the shot went at whatever was behind it.
+- **The player's spread was wide**: the gun's cone as if aimed at 25 m with RimWorld's hit chance against a whole man
+  (a bolt-action rifle about 25 cm round at 30 m, a pistol much more), which is a fighter's spread, not a held sight.
+- **Hitboxes were the same size on every body** while bodies are drawn at their own height (0.5 to 1.5 of 1.80 m).
+
+Now:
+
+- **The drawn body is the target for the player's crosshair.** Unreal traces the camera's ray against capsules from
+  bone to bone of each pawn's animated mesh as it is drawn this frame (`DrawnHit`, `ASimPawnActor::TraceDrawnBody`):
+  head, neck, torso (two), shoulders, upper and lower arms, hands, thighs, shins and feet, named after the sim's hitbox
+  parts, radii grown with the body's height. Animals keep the sim's hitboxes for now. The nearest of that, the sim's
+  ground, rock and buildings is where the crosshair is (`UFightSubsystem::ComputeAimPoint`).
+- **The shot says what it was aimed at.** `ShootCommand` carries `aimPawn`, `aimPart` (`CombatSystem::hitboxPart` turns
+  the label into the part index) and the spot as map offsets from where the sim has that pawn (`aimDx` east, `aimDy` north, `aimUp` above
+  the ground under it; not in the pawn's facing, because the drawn body turns on its own and a spot in its frame landed
+  up to 30 cm off on the PC). The sim aims at that spot on the pawn as it stands when the shot goes, and the bullet carries it (`DrawnAim` on `Shooter` and `Projectile`). A bullet that passes within
+  `kDrawnAimRadius` (7 cm) of the spot, where the pawn stands when the bullet gets there, hits that part, at the spot itself (the wound goes where you aimed), whatever the
+  stock hitboxes say; one that misses the spot (spread, or the target moved) still meets the stock hitboxes, other
+  pawns, walls and the ground as before. Everything the sim decides stays in the sim and in the command log: replays
+  and saves keep the spot (commands section 5, combat section 6), so the game stays deterministic.
+- **The player's cone comes from the gun's best accuracy**, not its accuracy at 25 m: RimWorld's poor long-range numbers
+  for pistols stand in for a shooter's wobble, which the player supplies with the mouse. Every gun's cone is now about
+  2.4 cm round at 30 m (it was 25 cm for a bolt-action rifle and over 2 m for an autopistol), so a held sight puts the
+  bullet in a head; guns differ by recoil, kick and fire rate. `CombatRules` `playerSpreadFactor` (1, ours) scales it
+  for tuning. Fighters keep RimWorld's spread.
+- **Hitboxes scale with the body** (`CombatSystem::hitboxScale`, PawnLooks height clamped to 0.5 to 1.5 as Unreal
+  draws it): shapes, aim point and muzzle height, for bullets, blasts and melee alike.
+
+Tests: "Crosshair" in `Tests/AimingTests.cpp`; smoke test `fights` phase `head_shots` aims at the drawn head from 12 m
+and logs the struck parts (PC 2026-11-19: 7 of 7 on the head). Its hit check takes the nearer of the stock hitboxes
+and the drawn body, allowing the drawn body 5 cm of movement between the trigger and the bullet's arrival (the clip goes
+on and the previous hit's wobble springs back: 7 to 8 cm at worst on the PC, positions and yaws equal); the worst hit is
+written out in full. Note on heights: the sim's hitboxes follow PawnLooks height on a 1.80 m man, which
+matches the game's MetaHuman bodies. The smoke tests and the range dress pawns as creator MakeHuman people through an
+Unreal-only looks override the sim never sees, and those meshes have their own height (measured on the PC: CreatorFemale
+163 cm, CreatorMale 165, Woman 156, PetitePale 150, Imp 139, at scale 1). So there the stock hitboxes run about 20 cm
+tall (hitbox_view 184 against 163). That only touches fighters' shots and melee; when the creator bodies come to the
+real game through the sim's looks, the sim should scale by the chosen mesh's height. Not yet: fighters' shots and melee still use the stock hitboxes posed
+by stance only (a baked per-clip pose for them is a later step), and the drawn capsules are round where a chest is flat.
+
+## Magazines and reloading (off while cooldown bursts are on)
 
 Each gun has `magazineSize` rounds and a `reloadTime` in steps (ours, roughly real guns at
 RimWorld's pace):

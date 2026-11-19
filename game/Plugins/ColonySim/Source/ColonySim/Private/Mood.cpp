@@ -476,19 +476,9 @@ void MoodSystem::step(int64_t now, std::vector<Event>& events) {
             }
             continue;
         }
-        if (event.type == EventType::PawnDied) {
-            // A colonist died: every other living colonist knows. (Psychopaths shrug, as in RimWorld.)
-            if (moodIsColonist(reg, event.thing)) {
-                for (const Entity other : pawns) {
-                    const Health* health = reg.try_get<Health>(other);
-                    if (other != event.thing && moodIsColonist(reg, other) && (health == nullptr || !health->dead) &&
-                        !hasTrait(other, "Psychopath")) {
-                        addMemory(reg.get<Mood>(other), "KnowColonistDied", now);
-                    }
-                }
-            }
-            continue;
-        }
+        // A death is felt only through a bond (sneed, 2026-11-17, docs/decisions/0011): a lover, spouse, friend or rival
+        // dying is the social system's (Social.cpp); a stranger's death or a colonist nobody was close to costs no mood,
+        // and neither does seeing a death or a corpse.
         if (event.type == EventType::PrisonerExecuted) {
             // The colony knows. Cold-hearted, bloodthirsty and cannibal colonists shrug (RimWorld wiki).
             // One of the colony's own, arrested and executed, has its own thought (the same numbers in RimWorld).

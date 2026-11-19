@@ -248,6 +248,9 @@ bool BodyMotionSystem::throwBody(Entity pawn, float pushX, float pushY, bool kno
         const int side = motionSideOf(posture.facingX, posture.facingY, pushX, pushY);
         const DefId c = clipId(knockdown ? rules_.knockdownClip[side] : plainPush ? rules_.staggerClip[side] : rules_.flinchClip[side]);
         if (c.valid() && play(pawn, c, posture.facingX, posture.facingY, 0, false)) {
+            // A stagger or a flinch is the upper body's: the legs walk the stumble the clip carries the body through
+            // (sneed 2026-11-18, third time asked). A knockdown is the whole body's fall.
+            setLayers(pawn, !knockdown, false);
             return true;
         }
     }
@@ -275,6 +278,48 @@ bool BodyMotionSystem::sidestep(Entity pawn, float dx, float dy) {
         }
     }
     return push(pawn, dx, dy, rules_.sidestepMetres * sizeScale(pawn), rules_.sidestepSteps);
+}
+
+void BodyMotionSystem::setLayers(Entity pawn, bool upper, bool freeFeet) {
+    entt::registry& reg = things_.registry();
+    if (BodyMotion* m = reg.valid(pawn) ? reg.try_get<BodyMotion>(pawn) : nullptr) {
+        m->upper = upper;
+        m->freeFeet = freeFeet;
+    }
+}
+
+bool BodyMotionSystem::holdsBody(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const BodyMotion* m = reg.valid(pawn) ? reg.try_get<BodyMotion>(pawn) : nullptr;
+    return m != nullptr && !m->freeFeet;
+}
+
+bool BodyMotionSystem::bodiesClear(Entity pawn, float fromX, float fromY, float x, float y, int level) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || (solid_ && !solid_(pawn))) {
+        return true;
+    }
+    const float mine = bodyRadius(pawn);
+    for (const auto [e, pos, posture] : reg.view<const Position, const Posture>().each()) {
+        (void)posture;
+        if (e == pawn || pos.level != level || !things_.spawned(e) || (solid_ && !solid_(e))) {
+            continue;
+        }
+        const float r = mine + bodyRadius(e);
+        const float dx = x - pos.x;
+        const float dy = y - pos.y;
+        const float d2 = dx * dx + dy * dy;
+        if (d2 >= r * r) {
+            continue;
+        }
+        // Overlapping there: allowed only when it moves away from that body (out of an overlap it already had).
+        const float fx = fromX - pos.x;
+        const float fy = fromY - pos.y;
+        if (d2 <= fx * fx + fy * fy) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void BodyMotionSystem::stop(Entity pawn) {
@@ -539,6 +584,16 @@ void BodyMotionSystem::step() {
             wantF = m.pushMetres * motionEase(static_cast<float>(now - m.pushFrom) / static_cast<float>(span));
             done = now >= m.pushSteps;
         }
+        if (m.freeFeet) {
+            // The player's own feet: the clip plays on the upper body and the walking keys move the body.
+            m.doneF = wantF;
+            m.doneR = wantR;
+            m.doneYaw = wantYaw;
+            if (done) {
+                reg.remove<BodyMotion>(pawn);
+            }
+            continue;
+        }
         const float df = wantF - m.doneF;
         const float dr = wantR - m.doneR;
         m.doneF = wantF;
@@ -599,6 +654,8 @@ void BodyMotionSystem::hashThing(Entity e, StateHasher& h) const {
     h.add(m->pushTo);
     h.add(m->turnBody);
     h.add(m->lost);
+    h.add(m->upper);
+    h.add(m->freeFeet);
 }
 
 }  // namespace colony

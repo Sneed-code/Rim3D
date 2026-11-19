@@ -58,15 +58,59 @@ gunshot, cut or stab (force >= 1.3, half of them) spurts with the heartbeat (eve
 lost), and a downed or dead body bleeds a pool that spreads (to 40-80 cm by blood loss). A dead body's bleeding runs
 down in half a minute. Tended or stopped wounds stop; the run stays as a stain.
 
+**Splatter on the ground at every hit** (sneed, 2026-11-17: "realistic blood splatter, like Baldur's Gate 3 after combat",
+not a tint; it must read from afar): besides what the flying drops leave, each hit that draws blood lays a pattern on
+the ground at once: a spatter fan 60 to 190 cm across, filled with 4 to 12 crowned drops, thrown the way the blow went (out of the exit of a shot through,
+back toward the shooter otherwise), 3 to 8 slanted drops with tails trailing further out, a few round drops near the
+feet and, for a bad wound or a body that is down, a patch under it. These are never culled by distance. Drops' own
+splats are bigger too (at least 2.4 cm across). On the body each such hit leaves the wound mark, a larger soaked patch
+at full strength, a spatter pattern 14 to 26 cm across and one or two drops with tails; a body keeps 32 stains (400 in
+all).
+
+**Fading** (sneed, 2026-11-17): every stain on the world and on bodies, and the blood layer of [grime.md](grime.md),
+loses 3% of its strength every 10 seconds from when it was put down (`Blood.FadeStep` 0.03, at game speed), so it is
+gone after about 5.5 minutes. The sim's blood piles (Blood, InsectBlood, MachineFluid: `filth.fadeSeconds` 10,200, ours)
+follow the same rule, indoors too: a pile is gone 5 min 40 s after blood last landed on it, and its decal fades by the
+pile's age from the snapshot (`FilthView::age`). Dirt, vomit and ash keep RimWorld's days.
+
 **Stains stay**: world stains, body stains and pools dry from the fluid's `wet` to `dry` colour over `Blood.DryMinutes`
 (5) at 1x, glossy and raised while wet, matte once dry. Outdoors, rain washes a fresh stain away in about 4 minutes of
 full rain (ours: spatter is thin), and without rain it lasts as long as the sim's blood filth (6 game days). Indoors it
 stays until a colonist cleans that cell (the sim's blood pile there thins or goes: stains within a cell of it go too).
-A body's stains wash off while it stands in the rain. Caps: `Blood.MaxStains` (900) on the world, oldest small spatter
-first; 20 per body, 260 on bodies.
+A body's stains wash off while it stands in the rain, swims (about 20 s at 1x) or wades waist deep (twice that). Caps: `Blood.MaxStains` (900) on the world, oldest small spatter
+first; 32 per body, 400 on bodies.
 
 **The sim's filth** (blood, insect blood, machine fluid, dirt, vomit, ash, animal filth) is drawn as one decal per pile,
 sized by thickness, placed and turned by its cell. Piles there when a game loads are dry; new ones dry like spray.
+
+## Blood in the skin (`USkinBlood`, sneed 2026-11-18)
+
+Decals on a moving body slid, clipped and went into the hair. A MakeHuman body now takes its blood **in its skin
+texture**, as Baldur's Gate 3 does:
+
+- Each bloodied body near the camera (at most `Blood.SkinMasks`, 8; 16 MB each) gets a **blood mask**, a 1024 x 1024
+  render target in its skin's UV space. R: how much blood, G: how wet, B: a wound's dark open core.
+- `-run=BloodArt` bakes one **position map** per body base (`T_SkinPos_<Base>`): the bind-pose position of the skin
+  at each texel. A hit is taken back into the bind pose through the bone it moves with (the nearest bone span with a
+  physics body, through the mesh's inverse bind matrix), and `M_SkinBloodPaint` adds the marks on the GPU: the wound,
+  blood soaked round it, spatter, and runs down from it along the bind-pose "down" of that moment, broken up by noise.
+  Only skin near the shot line takes it (not the far side). Because it is painted in body space, seams match and the
+  blood bends and stretches with the skin.
+- Sizes: gunshot core 1.3 + 0.6 x force cm, soak 4.5 + 3 x force, spatter 8 + 4 x force, run 6 + 6 x force; the exit
+  bigger; a cut a short gash along the blade; stab, bite, blast and heavy blunt blows their own. Drops landing on the
+  body paint small splashes; a bleeding wound paints its run longer as it bleeds (same pattern each time).
+- The skin material (`M_MH_SkinDetail`, the blood added by BloodArt and by MakeHumanArt when it makes it) reads the
+  mask: a pink-brown stain where there is little, the body's fluid colour where there is more, **wet: bright, glossy
+  and a little raised; dry: dark brown and matte** over `Blood.DryMinutes`; the core of a hole or gash darker and sunk.
+  Every 10 s a fade pass takes 3% off (`Blood.FadeStep`) and dries it; the mask goes when it is all gone, when the pawn
+  washes (the sim's blood level falls to nothing) or when a newer body needs the room.
+- Head and neck wounds darken and redden the hair (its `Tint`), fading the same way. Hair takes no stamps.
+- Bodies without a position map (MetaHumans, animals) keep the decals. `Blood.SkinPaint 0` goes back to decals.
+- Clothes: each wound also leaves a **cloth spot** (its place in the body's bind pose, radius 1.5 x soak + 2 x core,
+  8 newest per body, fading and drying like the skin). `UGrimeSubsystem` gives every mesh but the skin its own copy of
+  `M_GrimeOverlay` with the spots (`Spot0-7`, `SpotAmountA/B`), which soaks an uneven dark blot into the cloth there.
+  It relies on clothes sharing the body's bind pose. MakeHuman bodies wear no clothes yet (only MetaHumans do, and
+  they keep decals, which land on their clothes), so this shows once MakeHuman clothes come.
 
 ## Assets
 
@@ -74,7 +118,8 @@ sized by thickness, placed and turned by its cell. Piles there when a game loads
 `/Game/Rim3D/Generated/Blood`: `T_BloodAtlas` (4 x 4 splat pictures drawn from shapes in `BloodSplatAtlas.h`: crowned
 drops, slanted drops with tails, fine spatter, pools, a run, a smear, a hole, a gash; R coverage, G thickness, B wound
 core), `T_BloodAtlasN` (normals from thickness), `M_BloodSplatter` (the decal; its decal colour's alpha packs wetness
-and opacity), `M_BloodDrop` and `M_BloodMist`. Without them the fights keep their old simple blood.
+and opacity), `M_BloodDrop` and `M_BloodMist`; `T_SkinPos_<Base>` and `M_SkinBloodPaint` for blood in the skin, and the mask
+added to `M_MH_SkinDetail` (with `-force` it is taken out and added again). Without them the fights keep their old simple blood.
 
 ## Cost
 
@@ -82,12 +127,13 @@ One instanced mesh each for drops, bits and mist; decals are the main cost, so t
 colours update a slice a frame (every stain about every half second, only when it changed). `Blood.Quality 0` for big
 fights on a slow PC.
 
-Console: `Blood.Enabled`, `Blood.Quality`, `Blood.MaxDrops`, `Blood.MaxStains`, `Blood.DryMinutes`, `Blood.Filth`,
+Console: `Blood.Enabled`, `Blood.Quality`, `Blood.MaxDrops`, `Blood.MaxStains`, `Blood.DryMinutes`, `Blood.FadeStep`, `Blood.Filth`,
 `Blood.DropScale`, `Blood.Bleeding`, `Blood.Bits`, `Blood.FlipU` / `Blood.FlipV` / `Blood.SwapUV` (if the stain pictures come out mirrored or turned),
-`Blood.Debug`.
+`Blood.SkinPaint`, `Blood.SkinMasks`, `Blood.Debug`.
 
 ## Later
 
 - Niagara fluid sims for close-ups (the creator) if this is not enough.
-- Blood soaking into clothes as its own layer; blood on weapons; showers wash bodies.
+- Showers wash bodies (dirt and blood on bodies, clothes and weapons, and washing them in rain and water, are in
+  [grime.md](grime.md)).
 - Wound decals that change as the sim's wound is tended (bandage) or scars.

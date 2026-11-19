@@ -178,10 +178,10 @@ TEST_CASE("Defense: a powered turret shoots a hostile in range and leaves its ow
         aimed = aimed || (t.phase != TurretPhase::Idle && t.target == raider);
     }
     CHECK(aimed);
-    CHECK(shots >= 3);  // a whole burst
+    CHECK(shots >= 2);  // a whole burst (the Mini turret fires 2)
     CHECK(defnHurt(*sim, raider) > 0.0f);
     CHECK(defnHurt(*sim, colonist) == 0.0f);
-    CHECK(sim->defense().shotsFired() >= 3);
+    CHECK(sim->defense().shotsFired() >= 2);
 }
 
 TEST_CASE("Defense: a turret with no power, out of range or behind a wall does not shoot") {
@@ -760,7 +760,7 @@ TEST_CASE("Defense: a lancer outranges the mini-turret (32.9 m against 28.9 m) a
     sim->submit(SetFactionCommand{mech, 3});
     int turretShots = 0;
     int mechShots = 0;
-    for (int i = 0; i < 30 * 120 && sim->things().registry().valid(turret); ++i) {
+    for (int i = 0; i < 30 * 240 && sim->things().registry().valid(turret); ++i) {  // longer with ranged damage halved
         sim->step();
         for (const Event& e : sim->events()) {
             turretShots += e.type == EventType::ShotFired && e.thing == turret ? 1 : 0;

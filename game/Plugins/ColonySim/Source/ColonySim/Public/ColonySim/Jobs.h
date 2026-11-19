@@ -308,6 +308,9 @@ public:
     bool sleepingByHand(Entity pawn) const;
     // How far along the pawn's job is, 0 to 1 (a swing of the pick, a plant, a frame); 0 with no job.
     float jobProgress(Entity pawn) const;
+    // The downed pawn or corpse this pawn is carrying on a job now (rescue, capture, a corpse to haul or butcher: after it
+    // was lifted and until it is put down); kNoEntity otherwise (docs/design/weapon-hold.md, "Carrying a body").
+    Entity carryingPawn(Entity pawn) const;
     // Puts down what the pawn carries on the nearest free cell. Used when the player lets a colonist go.
     void putDown(Entity pawn) { dropCarried(pawn); }
     // Ends the job of any pawn mining, cutting or picking at this cell, as interrupted: the mark was
@@ -472,6 +475,8 @@ public:
     Map& map() { return map_; }
     Zones& zones() { return zones_; }
     Construction& construction() { return construction_; }
+    // True if pawns may dig or fill this corner now: no building plan and no tree on the cells round it.
+    bool earthCornerFree(int corner) const;
     Plants& plants() { return plants_; }
     Mineables& mineables() { return mineables_; }
     Designations& designations() { return designations_; }
@@ -558,6 +563,14 @@ public:
     // What one of `def` weighs for this pawn: `stats.mass` times the CarryRules `lighter` factors of its skills
     // (a miner carries mined stone lighter, a farmer crops, a fighter everything).
     double massFor(Entity pawn, DefId def) const;
+    // The player's colonist picks resources up by walking past them (sneed 2026-11-17, docs/design/inventory.md
+    // "Picking up resources"): whether `def` is one (CarryRules `autoPickUp`), how near it must lie (metres) and how
+    // many game seconds apart it looks. Radius 0 turns it off (no CarryRules, or none set).
+    bool autoPicksUp(DefId def) const {
+        return def.valid() && def.value < carry_.autoPickUp.size() && carry_.autoPickUp[def.value] != 0;
+    }
+    float autoPickUpRadius() const { return carry_.autoPickUpRadius; }
+    int autoPickUpEvery() const { return carry_.autoPickUpEvery; }
     double lighterFactor(Entity pawn, DefId def) const;
     // What one item entity (a whole stack) weighs for this pawn.
     double itemMassFor(Entity pawn, Entity item) const;
@@ -793,6 +806,12 @@ private:
     bool failCheckRefuel(Entity pawn, Job& job, std::string& why);
     StepResult loadPodWork(Entity pawn, Job& job, std::string& why);
     bool failCheckLoadPod(Entity pawn, Job& job, std::string& why);
+    // Earthworks (EarthJobs.cpp, docs/design/earthworks.md).
+    StepResult earthWork(Entity pawn, Job& job, std::string& why);
+    bool failCheckEarth(Entity pawn, Job& job, std::string& why);
+    void earthMoved(int corner, bool clearAll);
+    void markEarthTrees();
+    uint64_t earthMarked_ = 0;
     // RepairGear (GearJobs.cpp, docs/design/repair.md): carry the gear to a bench, mend it or fit a part.
     StepResult gearWork(Entity pawn, Job& job, std::string& why);
     bool failCheckGear(Entity pawn, Job& job, std::string& why);
@@ -885,6 +904,9 @@ private:
             std::vector<uint8_t> applies;  // per Things def id; empty: every item
         };
         std::vector<Lighter> lighter;
+        std::vector<uint8_t> autoPickUp;  // per Things def id
+        float autoPickUpRadius = 0.0f;
+        int autoPickUpEvery = 10;
     } carry_;
     void loadCarryRules();
     // Per def id, from the Things defs (NeedJobs.cpp): food tiers (-1 not food), nutrition and how
@@ -976,6 +998,7 @@ void addPrisonerWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
 void addHuntWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
 // The scanner that carries stacks into transport pods being loaded (PodJobs.cpp).
 void addPodWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
+void addEarthWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
 // A butcher bill's job: the nearest corpse the bill may use (within its radius), carried to the table's `stand` cell. False if there is none.
 bool makeButcherJob(JobSystem& jobs, Entity pawn, Entity building, const Bill& bill, CellPos stand, Job& out);
 // Haul jobs, shared by the hauling scanner and the haul order: the job to store `item`, or false.

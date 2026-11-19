@@ -114,6 +114,23 @@ struct FMakeHumanHairNode : public FAnimNode_SkeletalControlBase
 };
 
 /**
+ * Severed limbs (a corpse cut apart): each listed bone, and with it all below it, shrinks to a point at its joint, so
+ * the limb is gone and the skin closes there. (HideBone is not used on this mesh: it drops the bones from the pose,
+ * and the nodes above that still use them then read bone -1.)
+ */
+USTRUCT()
+struct FMakeHumanSeverNode : public FAnimNode_SkeletalControlBase
+{
+	GENERATED_BODY()
+
+	TArray<FName> Names;
+
+	virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) override;
+	virtual bool IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones) override;
+	virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override {}
+};
+
+/**
  * The pose of the mesh this one is attached to (the pawn's hidden mannequin), retargeted; then, where the skeleton
  * has them, soft-body jiggle on the breast bones and a swinging chain on a ponytail's bones (AnimDynamics).
  */
@@ -131,6 +148,7 @@ struct FMakeHumanAnimProxy : public FAnimInstanceProxy
 	FMakeHumanTailNode Tail;
 	FMakeHumanHairNode Hair;
 	TArray<TSharedPtr<FAnimNode_AnimDynamics>> Dynamics;
+	FMakeHumanSeverNode Sever;       // last: what was cut off folds away after everything else has moved
 	FAnimNode_ConvertComponentToLocalSpace ToLocal;
 	FAnimNode_TwoBoneIK RightHandIK; // the gun range: the right hand moved so the gun's sight is before the eye
 	FAnimNode_TwoBoneIK LeftHandIK;  // creator weapons: the left hand on a two-handed hilt (Pawns.MakeHumanHandIK)
@@ -177,6 +195,9 @@ public:
 	void AddBlastKick(const FVector& At, float Speed, float Radius = 800.0f);
 	/** The softness last set (0 firm .. 1 very soft), for the tests and the creator's readout. */
 	float GetBodySoftness() const { return BodySoftness; }
+	/** Bones cut off (each with all below it): folded to a point from the next animation update on. */
+	void SetSeveredBones(const TArray<FName>& Bones) { SeveredBones = Bones; }
+	const TArray<FName>& GetSeveredBones() const { return SeveredBones; }
 	/** Kicks queued since the last animation update (moved to the spring node in PreUpdate). */
 	TArray<FMakeHumanKick> PendingKicks;
 	/** The deepest skin dent (cm) since the last call, for the tests. */
@@ -185,6 +206,7 @@ public:
 	 *  towards ElbowWorld; Alpha 0 is off. Read once a frame before the animation updates (creator weapons). */
 	void SetLeftHandGrip(float Alpha, const FVector& InRightHandOffset, const FVector& InElbowWorld)
 	{
+		bLeftReach = false;
 		LeftGripAlpha = Alpha;
 		LeftGripOffset = InRightHandOffset;
 		LeftElbowWorld = InElbowWorld;
@@ -197,6 +219,16 @@ public:
 		RightReachTarget = InTargetComponent;
 		RightElbowComponent = InElbowComponent;
 	}
+	/** The left hand's wrist moved to a point in this component's space instead (a guard, a shield raised, hands under a
+	 *  carried body's legs), the elbow bent towards a point in the same space; Alpha 0 is off. Replaces the grip. */
+	void SetLeftHandReach(float Alpha, const FVector& InTargetComponent, const FVector& InElbowComponent)
+	{
+		bLeftReach = true;
+		LeftGripAlpha = Alpha;
+		LeftGripOffset = InTargetComponent;
+		LeftElbowWorld = InElbowComponent;
+	}
+	bool bLeftReach = false;
 	float RightReachAlpha = 0.0f;
 	FVector RightReachTarget = FVector::ZeroVector;
 	FVector RightElbowComponent = FVector::ZeroVector;
@@ -214,6 +246,7 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UIKRetargeter> Retargeter;
+	TArray<FName> SeveredBones;
 	float BodySoftness = 0.5f;
 
 	/** A dent in the skin where a hit landed (M_MH_SkinDetail's SkinDent, custom primitive data 16 to 25): pushed in along

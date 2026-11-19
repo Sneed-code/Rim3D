@@ -235,7 +235,7 @@ LineFightResult lineFightRun(uint64_t seed, bool corridor) {
         sim->combat().equip(e, sim->things().make(sim->defs().idOf("Things", weapon)));
         return e;
     };
-    const Entity raider = place(27.5f, 30.5f, "Melee_Knife");
+    const Entity raider = place(27.5f, 30.5f, "Melee_Gladius");  // a knife (x3 speed, tuning.json) outlasts the 40 s
     const Entity clubman = place(28.4f, 30.5f, "Melee_Club");
     const Entity gunman = place(31.5f, 30.5f, "Gun_Revolver");
     sim->submit(DraftCommand{clubman, true});
@@ -243,7 +243,7 @@ LineFightResult lineFightRun(uint64_t seed, bool corridor) {
     sim->submit(SetFactionCommand{raider, 2});
     LineFightResult r;
     const Health& h = sim->things().registry().get<Health>(raider);
-    for (int i = 0; i < 600 && !h.dead && !h.downed; ++i) {
+    for (int i = 0; i < 1200 && !h.dead && !h.downed; ++i) {  // 40 s: the fighters step round each other now (focus.md)
         sim->step();
         for (const Event& e : sim->events()) {
             r.shots += e.type == EventType::ShotFired && e.thing == gunman ? 1 : 0;

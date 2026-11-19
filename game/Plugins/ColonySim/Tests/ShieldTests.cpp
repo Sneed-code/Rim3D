@@ -518,3 +518,75 @@ TEST_CASE("Shields: a raider holds its swing at a raised shield facing it, then 
     reg.get<Melee>(raider).guardWaitFrom = 0;
     CHECK(swingsBy(10, false) >= 1);
 }
+
+namespace {
+
+struct ShieldBashResult {
+    int swings = 0;
+    int onShield = 0;     // ShieldBlocked events
+    int parried = 0;      // blows a weapon parry took (MeleeHit "blocked" that no shield stopped)
+};
+
+// The melee smoke test's shield phase in the sim: a pawn with a gladius holds a steel medium shield up, a clubber
+// beats on it from the east for 240 steps (8 real seconds). `turnToAttacker`: the shield follows the attacker (the
+// player turning the camera to it), else it stays facing east.
+ShieldBashResult shieldBash(uint64_t seed, bool player, bool turnToAttacker) {
+    ShieldBashResult out;
+    auto sim = shieldTestSim(seed);
+    entt::registry& reg = sim->things().registry();
+    const Entity me = shieldPawn(*sim, 20, 20);
+    shieldHold(*sim, me, "Melee_Gladius");
+    shieldWear(*sim, me, "Apparel_ShieldMedium", "Steel");
+    if (player) {
+        reg.emplace<PlayerControl>(me);
+    }
+    const Entity basher = shieldPawn(*sim, 21, 20);
+    shieldHold(*sim, basher, "Melee_Club");
+    sim->submit(SetFactionCommand{basher, 2});
+    for (int i = 0; i < 240; ++i) {
+        float dx = 1.0f;
+        float dy = 0.0f;
+        if (turnToAttacker) {
+            const Position& a = reg.get<Position>(me);
+            const Position& b = reg.get<Position>(basher);
+            dx = b.x - a.x;
+            dy = b.y - a.y;
+        }
+        sim->submit(ShieldCommand{me, true, true, dx, dy});
+        reg.replace<Health>(me, Health{});
+        sim->health().refresh(me);
+        if (sim->melee().ready(basher) && sim->melee().inReach(basher, me)) {
+            sim->submit(MeleeCommand{basher, me, MeleeMode::Attack});
+        }
+        sim->step();
+        for (const Event& e : sim->events()) {
+            out.swings += e.type == EventType::MeleeSwing && e.thing == basher ? 1 : 0;
+            out.onShield += e.type == EventType::ShieldBlocked && e.thing == me ? 1 : 0;
+            out.parried += e.type == EventType::MeleeHit && e.thing == basher && e.message == "blocked" && e.hit != ProjectileHitKind::Armor ? 1 : 0;
+        }
+    }
+    return out;
+}
+
+}  // namespace
+
+TEST_CASE("Shields: blows on a raised shield land on the shield, not on a weapon parry, and every run sees them") {
+    // The melee smoke test's shield phase saw no blows on the shield about half the time. Two causes: a pawn not under
+    // the player's hand parried with its gladius (prepareDefense) before the shield could take the blow, and the
+    // clubber's footwork carried it round to the side of a shield left facing east.
+    for (const uint64_t seed : {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u}) {
+        for (const bool player : {false, true}) {
+            const ShieldBashResult r = shieldBash(seed, player, true);
+            INFO("seed " << seed << std::string(player ? " (player)" : " (left alone)") << ": " << r.swings << " swings, " << r.onShield
+                         << " on the shield, " << r.parried << " parried");
+            CHECK(r.swings >= 3);
+            CHECK(r.parried == 0);
+            CHECK(r.onShield >= 1);
+        }
+    }
+    // Same seed, same story.
+    const ShieldBashResult a = shieldBash(3, true, true);
+    const ShieldBashResult b = shieldBash(3, true, true);
+    CHECK(a.swings == b.swings);
+    CHECK(a.onShield == b.onShield);
+}

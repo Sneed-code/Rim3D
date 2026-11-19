@@ -12,6 +12,7 @@
 #include "WeaponDrawSubsystem.generated.h"
 
 class ASimPawnActor;
+struct FGunRangeGun;
 class UMaterialInterface;
 class USimSubsystem;
 class UStaticMesh;
@@ -68,6 +69,8 @@ public:
 	void ScriptRightMouse(bool bScripted, bool bHeld) { bScriptedRight = bScripted; bScriptRightHeld = bHeld; }
 	/** Whether this pawn's view has a shield on its arm (worn, not slung behind a two-handed weapon). */
 	static bool HasShieldOnArm(const colony::ThingView& View);
+	/** Each material slot of a model: material, parent, base colour map and factor, metallic and roughness (for the logs and tests). */
+	static FString DescribeMaterials(const UStaticMesh* Mesh);
 	/** Q: starts bringing up the next carried weapon. False if there is nothing else to take. */
 	bool SwitchNext();
 	/** Starts switching to the weapon in this slot (0 rifle, 1 sidearm, 2 melee). */
@@ -93,6 +96,11 @@ public:
 	FString DescribeCarried(const colony::ThingView& View) const;
 	/** Whether the weapon def shoots (has a gun verb); melee weapons and nothing do not. */
 	bool IsGun(colony::DefId Weapon) const;
+	/** The mesh of a weapon def's own shapes (`visual.parts`, grip at the origin), and of a shield in a stuff; made once. */
+	UStaticMesh* GetWeaponMesh(colony::DefId Weapon);
+	UStaticMesh* GetShieldMesh(colony::DefId Shield, colony::DefId Stuff);
+	/** 0 holstered to 1 drawn: how ready the pawn holds its weapon now (docs/design/weapon-hold.md). */
+	float GetReady(colony::Entity Pawn) const;
 
 	// --- Counted for the smoke test ---
 
@@ -118,6 +126,8 @@ public:
 	 *  behind (it is then snapped to the blow), and the most steps it was behind. */
 	int32 GetHitsOnTime() const { return HitsOnTime; }
 	int32 GetHitsLate() const { return HitsLate; }
+	/** Blows that landed while the attacker's body showed no swing to time them by (pushed into a stagger mid-swing). */
+	int32 GetHitsUntimed() const { return HitsUntimed; }
 	float GetMaxStepsBehind() const { return MaxStepsBehind; }
 
 protected:
@@ -128,6 +138,9 @@ private:
 	{
 		TWeakObjectPtr<UStaticMeshComponent> Component;
 		colony::DefId Def;
+		/** A real gun model (assets/guns.json): its body is Component, its other parts ride on it. */
+		bool bArt = false;
+		TArray<TWeakObjectPtr<UStaticMeshComponent>> Parts;
 	};
 
 	struct FPawnWeapons
@@ -140,6 +153,17 @@ private:
 		uint64 ShieldKey = 0;
 		float ShieldRaise = 0.0f;
 		float ShieldSlung = 0.0f;
+		/** 0 holstered to 1 drawn (ready), the other hand's grip on a two-handed weapon (0 to 1), and whether this
+		 *  drawing set that grip (so it lets it go once, and leaves other users of the hand IK alone). */
+		float Ready = 0.0f;
+		float OffHand = 0.0f;
+		bool bOffHandSet = false;
+		/** The pelvis in the actor's frame when no clip plays, how far the holsters follow it through a clip (0 to 1),
+		 *  and the frame they ride in this frame (the slung shield uses it too). */
+		FTransform PelvisRest = FTransform::Identity;
+		bool bPelvisRest = false;
+		float PelvisFollow = 0.0f;
+		FTransform BodyFrame = FTransform::Identity;
 	};
 
 	void OnSimEvent(const colony::Event& Event);
@@ -154,6 +178,9 @@ private:
 	void UpdatePawn(ASimPawnActor& Actor, const colony::ThingView& View);
 	void UpdatePlayerInput();
 	UStaticMesh* WeaponMesh(colony::DefId Weapon);
+	void DestroyDisplayed(FDisplayed& Shown);
+	bool MakeDisplayed(ASimPawnActor& Actor, FDisplayed& Shown, colony::DefId Def, const FGunRangeGun* Art);
+	void UpdateStance(ASimPawnActor& Actor, const colony::ThingView& View, FPawnWeapons& Pawn, bool bShow, bool bControlled);
 	UStaticMeshComponent* MakeComponent(ASimPawnActor& Actor, UStaticMesh* Mesh);
 	void HoldPose(int32 Slot, float Height, FVector& OutLocation, FRotator& OutRotation) const;
 	void HolsterPose(int32 Slot, float Height, FVector& OutLocation, FRotator& OutRotation) const;
@@ -203,5 +230,6 @@ private:
 	int64 LastHitStep = -1;
 	int32 HitsOnTime = 0;
 	int32 HitsLate = 0;
+	int32 HitsUntimed = 0;
 	float MaxStepsBehind = 0.0f;
 };

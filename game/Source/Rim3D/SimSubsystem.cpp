@@ -14,6 +14,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
+#include "KeyBindings.h"
 #include "ProtagonistSubsystem.h"
 
 #include "ColonySim/Map.h"
@@ -351,6 +352,25 @@ void USimSubsystem::Tick(float DeltaTime)
 		return;
 	}
 
+	AdvanceFrame(DeltaTime);
+
+	if (GSimBridgeShowTimings.GetValueOnGameThread() != 0)
+	{
+		ShowTimings();
+	}
+	if (GSimBridgeDebugDraw.GetValueOnGameThread() != 0)
+	{
+		DrawDebug();
+	}
+}
+
+void USimSubsystem::AdvanceFrame(float DeltaTime)
+{
+	if (!Sim || AdvancedFrame == GFrameCounter)
+	{
+		return;
+	}
+	AdvancedFrame = GFrameCounter;
 	if (Speed > 0)
 	{
 		StepAccumulator += static_cast<double>(DeltaTime) * colony::kStepsPerRealSecondAt1x * Speed;
@@ -362,15 +382,6 @@ void USimSubsystem::Tick(float DeltaTime)
 		// the leftover time is into the next one. The picture lags the sim by less than one step.
 		BlendAlpha = static_cast<float>(StepAccumulator);
 		AdvanceTimingWindow(DeltaTime);
-	}
-
-	if (GSimBridgeShowTimings.GetValueOnGameThread() != 0)
-	{
-		ShowTimings();
-	}
-	if (GSimBridgeDebugDraw.GetValueOnGameThread() != 0)
-	{
-		DrawDebug();
 	}
 }
 
@@ -819,7 +830,12 @@ bool USimSubsystem::HandleKey(const FKey& Key)
 	}
 	else if (Key == EKeys::F1)
 	{
-		GSimBridgeKeyHelp->Set(IsKeyHelpShown() ? 0 : 1, ECVF_SetByCode);
+		// While you are locked on with F1 bound to the lock-on key (rebound by hand), F1 is that instead (docs/design/focus.md).
+		const UProtagonistSubsystem* Protagonist = GetWorld() ? GetWorld()->GetSubsystem<UProtagonistSubsystem>() : nullptr;
+		if (!Protagonist || Protagonist->GetFocusTarget() == colony::kNoEntity || Rim3DKeys::Get(ERim3DAction::EndFocus) != EKeys::F1)
+		{
+			GSimBridgeKeyHelp->Set(IsKeyHelpShown() ? 0 : 1, ECVF_SetByCode);
+		}
 	}
 	else if (Key == EKeys::F5)
 	{

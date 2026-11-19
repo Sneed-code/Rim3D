@@ -11,7 +11,10 @@
  * magazine can move), and the listed textures go onto M_GunPBR (made here once), a plain metal/rough material with a
  * base colour, normal, and either roughness and metallic maps or an ORM map.
  *
- *   UnrealEditor-Cmd.exe Rim3D.uproject -run=GunArt -unattended -nosplash -nullrhi [-Guns=Name,Name]
+ *   UnrealEditor-Cmd.exe Rim3D.uproject -run=GunArt -unattended -nosplash -nullrhi [-Guns=Name,Name] [-List=assets/shuttle.json]
+ *
+ * -List reads another list file; its "vehicles" (the shuttle, docs/design/shuttle-draw.md) go to /Game/Rim3D/Generated/Vehicles/<Name>/.
+ * An "emissive" map (with "emissiveStrength") makes the parts glow.
  *
  * Source files are absolute paths or relative to the repo; models (Fab, Codex) are not in Git.
  */
