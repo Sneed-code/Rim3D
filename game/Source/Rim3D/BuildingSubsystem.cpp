@@ -15,6 +15,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Things.h"
 
 #include <string>
 
@@ -342,6 +343,7 @@ void UBuildingSubsystem::ReadDefs(const colony::Sim& Sim)
 		Look.bRead = true;
 		Look.bItem = Category == "Item";
 		Look.bDoor = Def.text("thingClass") == "Building_Door";
+		Look.bConform = Category == "Building" && colony::groundFitOf(Def) == colony::GroundFit::Conform;
 		Look.bDrawnElsewhere = !Def.text("visual.drawnBy").empty();
 		if (Def.has("visual.link"))
 		{
@@ -788,14 +790,36 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 		const int32 Link = ScanLinks.IsValidIndex(ThingIndex) ? ScanLinks[ThingIndex] : -1;
 		// A linked building's arms point at its neighbours on the map, so it is never turned.
 		const float Yaw = bDoorBuilt ? (BldDoorAlongY(Map, View) ? 90.0f : 0.0f) : (Link >= 0 ? 0.0f : BldYawOf(View.rotation));
-		const FVector Location(View.x * 100.0f, View.y * 100.0f, Base * 100.0f);
+		FVector Location(View.x * 100.0f, View.y * 100.0f, Base * 100.0f);
 		const int32 LookId = GetLook(View.def, View.stuff, Link);
 		if (LookId < 0)
 		{
 			continue;
 		}
 		const FLook Look = Looks[LookId];
-		const FTransform Placed(FRotator(0.0, Yaw, 0.0), Location);
+		FTransform Placed(FRotator(0.0, Yaw, 0.0), Location);
+		if (DefLook->bConform && Level == 0)
+		{
+			// Sandbags and the like lean with the slope (docs/design/earthworks.md): the plane through the footprint's four
+			// outer corners, centred at their mean height.
+			const auto H = [&Map, Level](int32 X, int32 Y) {
+				return Map.groundHeight(colony::CellPos{FMath::Clamp(X, 0, Map.width() - 1), FMath::Clamp(Y, 0, Map.height() - 1), Level});
+			};
+			const int32 X0 = OriginX;
+			const int32 X1 = OriginX + View.sizeX;
+			const int32 Y0 = OriginY;
+			const int32 Y1 = OriginY + View.sizeY;
+			const float H00 = H(X0, Y0);
+			const float H10 = H(X1, Y0);
+			const float H01 = H(X0, Y1);
+			const float H11 = H(X1, Y1);
+			const float SlopeX = ((H10 + H11) - (H00 + H01)) * 0.5f / FMath::Max(static_cast<float>(View.sizeX), 1.0f);
+			const float SlopeY = ((H01 + H11) - (H00 + H10)) * 0.5f / FMath::Max(static_cast<float>(View.sizeY), 1.0f);
+			const FVector Up = FVector(-SlopeX, -SlopeY, 1.0).GetSafeNormal();
+			const FVector Forward = FRotator(0.0, Yaw, 0.0).RotateVector(FVector::XAxisVector);
+			Location.Z = (H00 + H10 + H01 + H11) * 25.0f;
+			Placed = FTransform(FRotationMatrix::MakeFromZX(Up, Forward).Rotator(), Location);
+		}
 		switch (View.stage)
 		{
 			case colony::ConstructionStage::Built:

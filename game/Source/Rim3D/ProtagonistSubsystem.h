@@ -94,11 +94,18 @@ public:
 	int32 GetFocusBarFramesDrawn() const { return FocusBarFramesDrawn; }
 	/** The world point the focus marker sits over (cm), false with no focus. */
 	bool GetFocusPoint(FVector& OutPoint) const;
+	/** F12 Unstuck (docs/design/earthworks.md "Stuck"): 5 seconds of standing still with no actions, then the sim puts the
+	 *  controlled colonist on the nearest clear spot (UnstuckCommand). Seconds left, 0 when not waiting. */
+	void StartUnstuck();
+	float GetUnstuckSecondsLeft() const { return UnstuckSecondsLeft; }
+	bool IsUnstucking() const { return UnstuckSecondsLeft > 0.0f; }
 
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
 
 private:
+	float UnstuckSecondsLeft = 0.0f;
+	int32 UnstuckSkipMoves = 0;
 	void OnBeforeStep();
 	void OnSimEvent(const colony::Event& Event);
 	void DrawHud(USimSubsystem& Bridge);

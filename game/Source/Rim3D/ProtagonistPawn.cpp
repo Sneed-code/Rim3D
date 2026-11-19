@@ -218,8 +218,15 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	{
 		using Rim3DKeys::IsDown;
 		using Rim3DKeys::WasPressed;
-		Right = (IsDown(PC, ERim3DAction::MoveRight) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveLeft) ? 1.0 : 0.0);
-		Forward = (IsDown(PC, ERim3DAction::MoveForward) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveBack) ? 1.0 : 0.0);
+		UProtagonistSubsystem* Unstuck = GetWorld() ? GetWorld()->GetSubsystem<UProtagonistSubsystem>() : nullptr;
+		if (Unstuck && WasPressed(PC, ERim3DAction::Unstuck))
+		{
+			Unstuck->StartUnstuck();
+		}
+		// F12 Unstuck: standing still, no actions, until the sim moves the colonist (docs/design/earthworks.md).
+		const bool bUnstucking = Unstuck && Unstuck->IsUnstucking();
+		Right = bUnstucking ? 0.0 : (IsDown(PC, ERim3DAction::MoveRight) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveLeft) ? 1.0 : 0.0);
+		Forward = bUnstucking ? 0.0 : (IsDown(PC, ERim3DAction::MoveForward) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveBack) ? 1.0 : 0.0);
 		bWalk = IsDown(PC, ERim3DAction::WalkSlow);
 		// Sprint is a toggle (sneed 2026-11-17): on until pressed again, and it stays on when you take over another colonist.
 		// It doesn't sprint while walking slowly or aiming.
@@ -228,7 +235,7 @@ void AProtagonistPawn::Tick(float DeltaTime)
 			SetSprintToggle(!IsSprintToggleOn());
 		}
 		bSprinting = IsSprintToggleOn() && !bWalk && !bAimHeld;
-		if (WasPressed(PC, ERim3DAction::Jump))
+		if (!bUnstucking && WasPressed(PC, ERim3DAction::Jump))
 		{
 			Jump();
 		}
