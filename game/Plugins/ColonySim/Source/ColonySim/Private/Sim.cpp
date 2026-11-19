@@ -62,6 +62,7 @@
 #include "ColonySim/Genes.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/MapFeatures.h"
+#include "ColonySim/MapRoads.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
@@ -76,6 +77,7 @@
 #include "ColonySim/UpperFloors.h"
 #include "ColonySim/Water.h"
 #include "ColonySim/Weather.h"
+#include "ColonySim/Windows.h"
 #include "ColonySim/Zones.h"
 #include "ColonySim/Disasters.h"
 #include "ColonySim/Narrator.h"
@@ -91,6 +93,13 @@
 #include <utility>
 
 namespace colony {
+
+namespace {
+// A wall climb drawn (docs/design/climbing.md): the body against the face this far from the middle of the
+// cell in front, and its feet this far under the top when its hands reach the edge.
+constexpr float kSimWallFace = 0.28f;
+constexpr float kSimWallHang = 1.1f;
+}  // namespace
 
 namespace {
 
@@ -183,9 +192,12 @@ std::optional<WorldSite> simStartSite(const World* world) {
     return world->siteFor(world->startTile());
 }
 
-// The map's size and seed, and how wet the biome makes it (`mapGen` in the Biomes def).
-MapSettings simMapSettings(const SimSettings& settings, uint64_t mapSeed, const std::string& biomeName, const DefDatabase& defs) {
+// The map's size and seed, how wet the biome makes it (`mapGen` in the Biomes def) and how much of
+// it is hills (the world tile's hilliness; flat with no world).
+MapSettings simMapSettings(const SimSettings& settings, uint64_t mapSeed, const std::string& biomeName, const DefDatabase& defs,
+                           Hilliness hilliness) {
     MapSettings map{settings.mapSize, settings.mapSize, mapSeed, settings.flatMap};
+    map.hills = mapHillShare(static_cast<int>(hilliness));
     if (const Def* biome = defs.find("Biomes", biomeName)) {
         map.river = static_cast<float>(biome->number("mapGen.river", 1.0));
         map.marsh = static_cast<float>(biome->number("mapGen.marsh", 1.0));
@@ -229,6 +241,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     : Sim(settings, std::move(defs), EmptyStart{}) {
     if (!settings_.flatMap) {
         placeMapFeatures(map_, *things_, splitMix64(settings_.seed ^ 0x66656174ULL));
+        if (site_) {
+            // The world map's roads come onto the map from the tile's sides (docs/design/roads-bridges.md).
+            placeMapRoads(map_, *things_, *plants_, *floors_, site_->roadEdges, splitMix64(settings_.seed ^ 0x726F6164ULL));
+        }
     }
     placeStockpileAndThings();
     if (!settings_.scenario.empty()) {
@@ -250,7 +266,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       site_(simStartSite(world_.get())),
       biome_(site_ && !site_->biome.empty() ? site_->biome : std::string("TemperateForest")),
       // On a world the start tile seeds the map, so the same world and tile always give the same map.
-      map_(simMapSettings(settings, site_ ? site_->mapSeed : splitMix64(settings.seed ^ 0x6D6170ULL), biome_, *defs_)),
+      map_(simMapSettings(settings, site_ ? site_->mapSeed : splitMix64(settings.seed ^ 0x6D6170ULL), biome_, *defs_,
+                         site_ ? site_->hilliness : Hilliness::Flat)),
       pathfinder_(map_),
       zones_(std::make_unique<Zones>(map_)),
       things_(std::make_unique<Things>(map_, defs_)),
@@ -277,6 +294,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     }
     things_->setEventLog(&events_);
     health_->setEventLog(&events_);
+    // Wall climbing (docs/design/climbing.md): the outside face of a full-height wall under an upper floor.
+    if (const Def* climb = defs_->find("Rules", "ClimbRules")) {
+        map_.setWallClimb(static_cast<float>(climb->number("wallSpeedFactor", 0.0)), static_cast<float>(climb->number("wallLengthM", 3.5)));
+    }
     woundViews_ = std::make_unique<WoundViews>(*defs_, *health_);
     weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), "TemperateForest");
     health_->setWorld(&time_.seconds, settings.seed);
@@ -309,6 +330,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     mood_->setRoomStats(roomStats_.get());
     power_ = std::make_unique<PowerGrid>(map_, *things_, *rooms_, *defs_, events_);
     lights_ = std::make_unique<Lights>(map_, *things_, *rooms_, *defs_, time_);
+    windows_ = std::make_unique<Windows>(map_, *things_, *defs_);
     // The sun for solar panels is the light grid's; a lamp that draws power glows only while it has it,
     // and the lamps are made again when that changes.
     power_->setWind([this](const GameTime&) { return weather_->wind(); });
@@ -345,6 +367,12 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     // A heater or cooler that draws power pushes heat only while it has it (E5), and one that burns fuel (a campfire, a
     // passive cooler) only while it has some: before, a campfire with no wood left still warmed its room.
     temperature_->setSourceRunning([this](Entity building) { return power_->running(building) && (jobs_ == nullptr || jobs_->fuel().lit(building)); });
+    // A heater or cooler at its target (or a cooler that can do nothing) draws a tenth of its power, as RimWorld's
+    // CompTempControl.lowPowerConsumptionFactor.
+    temperature_->setDrawFactor([this](Entity building, double factor) {
+        const double full = power_->info(things_->registry().get<Thing>(building).def).consumption;
+        power_->setDraw(building, factor >= 1.0 ? -1.0 : full * factor);
+    });
     spoilage_ = std::make_unique<SpoilageSystem>(map_, *things_, *temperature_, *roomStats_, *defs_,
                                                  splitMix64(settings.seed ^ 0x73706F696CULL));
     spoilage_->setEventLog(&events_);
@@ -387,6 +415,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     });
     health_->setImmunityBonus([this](Entity pawn) { return jobs_->bedMonitored(jobs_->bedUnder(pawn)) ? 0.02f : 0.0f; });
     jobs_->setLights(lights_.get());
+    jobs_->setWindows(windows_.get());
     jobs_->setPower(power_.get());
     jobs_->setRooms(rooms_.get());
     jobs_->setTemperature(temperature_.get());
@@ -399,10 +428,19 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     jobs_->setTalents(talents_.get());
     jobs_->setTraits(traits_.get());
     // Worn armour's weight, and being exhausted (rest at 0: sneed's -25%), slow work.
+    // Cat-strain feel tiredness and hunger a third worse (geneWorsen, docs/design/races.md).
     jobs_->setGearWorkFactor([this](Entity pawn) {
-        return combat_->apparelStats().workFactor(things_->registry(), pawn) * needs_->performanceFactor(pawn);
+        return combat_->apparelStats().workFactor(things_->registry(), pawn) * geneWorsen(needs_->performanceFactor(pawn), geneDebuff(pawn));
     });
-    combat_->setPerformance([this](Entity pawn) { return needs_->performanceFactor(pawn); });
+    combat_->setPerformance([this](Entity pawn) { return geneWorsen(needs_->performanceFactor(pawn), geneDebuff(pawn)); });
+    // Lineage aim: a gene's shooting accuracy, and the drow's in sunlight (outdoors while the sun is up).
+    combat_->setAimFactor([this](Entity pawn) {
+        const PawnGenes* genes = genesOf(pawn);
+        if (genes == nullptr) {
+            return 1.0f;
+        }
+        return genes->effects.shootingAccuracy * (sunlit(pawn, genes->effects) ? genes->effects.sunShootingAccuracy : 1.0f);
+    });
     jobs_->setFilth(filth_.get());
     jobs_->setApparel(apparel_.get());
     jobs_->setSpoilage(spoilage_.get());
@@ -419,7 +457,11 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         const PawnGenes* genes = genesOf(pawn);
         return genes != nullptr ? geneStat(*genes, "flammability", 1.0f) : 1.0f;
     });
-    fire_->setPawnHurt([this](Entity pawn, DefId type, float amount, Rng& rng) { return combat_->hurtPawn(pawn, type, amount, rng); });
+    // Burns: an Impid's thermal resistance takes 90% off (docs/design/races.md).
+    fire_->setPawnHurt([this](Entity pawn, DefId type, float amount, Rng& rng) {
+        const PawnGenes* genes = genesOf(pawn);
+        return combat_->hurtPawn(pawn, type, amount * (genes != nullptr ? genes->effects.thermalDamage : 1.0f), rng);
+    });
     jobs_->setFire(fire_.get());
     jobs_->fuel().setLights(lights_.get());
     // A wood-fired generator makes power only with fuel, and burns it only while it makes power.
@@ -470,7 +512,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     raids_ = std::make_unique<RaidSystem>(*things_, map_, *rooms_, *combat_, *health_, *jobs_, *fighters_, *defs_, time_, rng_);
     mood_->setWealth([this] { return raids_->colonyWealth(1.0f); });
     raids_->setEventLog(&events_);
-    raids_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    raids_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, joinerLineage(seed)); });
     monsters_ = std::make_unique<MonsterSystem>(*things_, map_, *combat_, *health_, *fighters_, *raids_, *animals_, *defs_, time_, rng_);
     prisoners_ = std::make_unique<PrisonerSystem>(*things_, map_, *combat_, *health_, *jobs_, *fighters_, *raids_, *defs_, time_, rng_);
     prisoners_->setEventLog(&events_);
@@ -771,7 +813,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     resonance_ = std::make_unique<ResonanceSystem>(*things_, map_, *health_, *jobs_, *fighters_, *defs_, time_,
                                                    splitMix64(settings.seed ^ 0x7265736F6EULL));
     resonance_->setEventLog(&events_);
-    health_->setMods([this](Entity pawn, HealthMods& mods) { resonance_->healthMods(pawn, mods); });
+    health_->setMods([this](Entity pawn, HealthMods& mods) {
+        resonance_->healthMods(pawn, mods);
+        mods.debuffFactor = geneDebuff(pawn);  // cat-strain: pain, lost capacities and limb slows a third worse
+    });
     patches_ = std::make_unique<PatchSystem>(*things_, map_, *health_, *fighters_, time_);
     patches_->setEventLog(&events_);
     jobs_->setPauseGate([this](Entity pawn) { return things_->registry().any_of<Stunned, Casting, Patching>(pawn); });
@@ -924,8 +969,10 @@ Entity Sim::makeJoiner(CellPos cell, uint64_t seed) {
         return kNoEntity;
     }
     jobs_->addWorker(pawn, colonist.disabledWorkTags);
-    giveLooks(pawn, seed, colonist.female, "Baseline");
+    // Joiners can be of any race (GeneRules joinerLineageWeights); the player and the first colonists are human.
+    giveLooks(pawn, seed, colonist.female, joinerLineage(seed));
     things_->registry().emplace<Colonist>(pawn, std::move(colonist));
+    giveNocturnalSchedule(pawn);
     return pawn;
 }
 
@@ -963,11 +1010,68 @@ void Sim::giveGenes(Entity pawn) {
     std::string error;
     // Without the Genes defs (the test defs) the pawn has no genes; that is not an error.
     makeGenes(*defs_, looks->lineage, genes, error);
+    // Hit points and blood follow the lineage (Orcoid +10%); not saved, like the genes.
+    if (Health* health = reg.try_get<Health>(pawn)) {
+        if (health->lineageHp != genes.effects.healthScale) {
+            health->lineageHp = genes.effects.healthScale;
+            health->dirty = true;
+        }
+    }
     reg.emplace_or_replace<PawnGenes>(pawn, std::move(genes));
 }
 
 const PawnGenes* Sim::genesOf(Entity pawn) const {
     return things_->exists(pawn) ? things_->registry().try_get<PawnGenes>(pawn) : nullptr;
+}
+
+float Sim::geneDebuff(Entity pawn) const {
+    const PawnGenes* genes = genesOf(pawn);
+    return genes != nullptr ? genes->effects.debuffFactor : 1.0f;
+}
+
+bool Sim::sunlit(Entity pawn, const GeneEffects& fx) const {
+    const Position* at = things_->registry().try_get<Position>(pawn);
+    return at != nullptr && lights_ != nullptr && lights_->skyGlow() > fx.sunAbove && lights_->underOpenSky(cellOf(*at));
+}
+
+std::string Sim::joinerLineage(uint64_t seed) const {
+    const Def* rules = defs_->find("Rules", "GeneRules");
+    if (rules == nullptr) {
+        return "Baseline";
+    }
+    std::vector<std::string> names = rules->keys("joinerLineageWeights");
+    std::sort(names.begin(), names.end());
+    double total = 0.0;
+    for (const std::string& name : names) {
+        total += std::max(0.0, rules->number(("joinerLineageWeights." + name).c_str(), 0.0));
+    }
+    if (total <= 0.0) {
+        return "Baseline";
+    }
+    // A stream of its own from the pawn's seed, so the rest of the game's draws are untouched.
+    Rng rng(splitMix64(seed ^ 0x6C696E65616765ULL));
+    double roll = rng.unit() * total;
+    for (const std::string& name : names) {
+        const double w = std::max(0.0, rules->number(("joinerLineageWeights." + name).c_str(), 0.0));
+        if (roll < w && defs_->find("Lineages", name) != nullptr) {
+            return name;
+        }
+        roll -= w;
+    }
+    return "Baseline";
+}
+
+void Sim::giveNocturnalSchedule(Entity pawn) {
+    const PawnGenes* genes = genesOf(pawn);
+    if (genes == nullptr || !genes->effects.nocturnal || !needs_->rules().present) {
+        return;
+    }
+    // The standard day turned round by 12 hours: asleep through the day, up and working at night.
+    const Schedule standard = needs_->rules().standardSchedule();
+    std::string error;
+    for (int hour = 0; hour < 24; ++hour) {
+        jobs_->setSchedule(pawn, hour, standard.hours[static_cast<size_t>((hour + 12) % 24)], error);
+    }
 }
 
 const PawnLooks* Sim::looksOf(Entity pawn) const {
@@ -1241,7 +1345,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     }
     if (const auto* focus = std::get_if<FocusCommand>(&command)) {
         std::string why;
-        if (!melee_->focusCommand(focus->pawn, focus->target, focus->mode, &why)) {
+        if (!melee_->focusCommand(focus->pawn, focus->target, focus->mode, &why, focus->viewX, focus->viewY, focus->anySide)) {
             commandFailed(id, why);
         }
         return;
@@ -1476,8 +1580,14 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     } else if (const auto* prisonerMode = std::get_if<SetPrisonerModeCommand>(&command)) {
         PrisonerMode mode = PrisonerMode::NoInteraction;
         std::string why;
-        if (!prisonerModeFromName(prisonerMode->mode, mode)) {
-            commandFailed(id, "no prisoner mode '" + prisonerMode->mode + "' (NoInteraction, ReduceResistance, AttemptRecruit, Release or Execute)");
+        if (prisoners_->isSlave(prisonerMode->pawn)) {
+            // A slave: Emancipate or Release (docs/design/prisoners.md, Slaves).
+            if (!prisoners_->slaveOrder(prisonerMode->pawn, prisonerMode->mode, why)) {
+                commandFailed(id, why);
+            }
+        } else if (!prisonerModeFromName(prisonerMode->mode, mode)) {
+            commandFailed(id, "no prisoner mode '" + prisonerMode->mode +
+                                  "' (NoInteraction, ReduceResistance, AttemptRecruit, Release, Execute, Enslave or ReduceWill)");
         } else if (!prisoners_->setMode(prisonerMode->pawn, mode, why)) {
             commandFailed(id, why);
         }
@@ -1811,6 +1921,17 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             } else if (construction_->placeFloorPlan(floor, stuff, place->cell, error) == kNoEntity) {
                 commandFailed(id, error);
             }
+        } else if (const BuildTool tool = buildToolOf(*defs_, place->def); tool != BuildTool::None) {
+            // A build-menu tool (docs/design/windows.md): marks the cell for a builder instead of planning a building.
+            const std::string why = tool == BuildTool::AddWindow ? windows_->whyNotAdd(place->cell) : windows_->whyNotRemove(place->cell);
+            if (!why.empty()) {
+                commandFailed(id, why);
+            } else {
+                designations_->set(place->cell, tool == BuildTool::AddWindow ? DesignationKind::AddWindow : DesignationKind::RemoveWindow);
+                Event changed;
+                changed.type = EventType::DesignationsChanged;
+                events_.push_back(std::move(changed));
+            }
         } else if (!def.valid()) {
             commandFailed(id, "no Things def '" + place->def + "'");
         } else if (!place->stuff.empty() && !stuff.valid()) {
@@ -1866,7 +1987,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         const CellRect& area = designate->area;
         int marked = 0;
         if (kind == DesignationKind::None) {
-            commandFailed(id, "Designate needs Mine, CutPlant, HarvestPlant or RemoveFloor (CancelDesignations takes marks off)");
+            commandFailed(id, "Designate needs Mine, CutPlant, HarvestPlant, RemoveFloor, AddWindow or RemoveWindow (CancelDesignations takes marks off)");
             return;
         }
         for (int y = std::max(0, area.minY); y < std::min(map_.height(), area.minY + area.sizeY); ++y) {
@@ -1880,6 +2001,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                     suits = mineables_->has(c);
                 } else if (kind == DesignationKind::RemoveFloor) {
                     suits = floors_->at(c).valid();
+                } else if (kind == DesignationKind::AddWindow) {
+                    suits = windows_->whyNotAdd(c).empty();
+                } else if (kind == DesignationKind::RemoveWindow) {
+                    suits = windows_->whyNotRemove(c).empty();
                 } else if (plants_->has(c)) {
                     suits = kind == DesignationKind::CutPlant || defs_->get(plants_->defAt(c)).has("plant.harvestedThingDef");
                 }
@@ -1892,6 +2017,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         if (marked == 0) {
             commandFailed(id, kind == DesignationKind::Mine          ? "there is no rock to mine there"
                               : kind == DesignationKind::RemoveFloor ? "there is no floor to take up there"
+                              : kind == DesignationKind::AddWindow   ? "there is no wall to put a window in there"
+                              : kind == DesignationKind::RemoveWindow ? "there is no window there"
                               : kind == DesignationKind::CutPlant    ? "there is no plant to cut there"
                                                                      : "there is nothing to harvest there");
         } else {
@@ -2215,6 +2342,22 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     }
 }
 
+void Sim::dropLostDecks() {
+    // Items on a bridge that fell are swept away where the water is deep; in shallow water, marsh or mud they stay where
+    // they fell. Pawns need nothing here: one in deep water off a path swims for the nearest shore (MovementSystem).
+    for (const uint32_t i : map_.takeLostDecks()) {
+        const CellPos c = map_.cellAt(static_cast<int>(i));
+        if (map_.groundWalkable(c)) {
+            continue;
+        }
+        const std::vector<Entity> items = things_->itemsAt(c);  // a copy: destroying changes the list
+        for (const Entity item : items) {
+            jobs_->forget(item);
+            things_->destroy(item);
+        }
+    }
+}
+
 void Sim::step() {
     stepOnce(false);
     // A skip (P5) runs on inside this call, a batch of steps at a time, so the game's own loop sees time jump.
@@ -2358,6 +2501,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     { SimLap lap(profile_, "pathfinder"); pathfinder_.update(settings_.pathBudget); }  // paths asked for this step are ready next step at the earliest
     { SimLap lap(profile_, "rooms"); rooms_->noteBedOwners(); rooms_->update(); }
     { SimLap lap(profile_, "roofCollapse"); roofCollapse_->step(rng_); }  // roofs and floors that lost their holders fall
+    dropLostDecks();
     if (calendar) {
         SimLap lap(profile_, "power");
         power_->step(time_);
@@ -2638,10 +2782,46 @@ void Sim::writeSnapshot(Snapshot& out) const {
                     const float tx = static_cast<float>(to.x) + 0.5f;
                     const float ty = static_cast<float>(to.y) + 0.5f;
                     view.climb = t;
-                    view.x = pos.x + (tx - pos.x) * t;
-                    view.y = pos.y + (ty - pos.y) * t;
-                    view.z += (map_.heightAt(tx, ty, to.level) - view.z) * t;
+                    if (link->wall) {
+                        // Up the face of the wall: against it, rising, then over the top (docs/design/climbing.md). Going
+                        // down is the same path backwards.
+                        const bool up = to.level > pos.level;
+                        const CellPos low = up ? cellOf(pos) : to;
+                        const CellPos top = up ? to : cellOf(pos);
+                        const float u = up ? t : 1.0f - t;
+                        const float lx = static_cast<float>(low.x) + 0.5f;
+                        const float ly = static_cast<float>(low.y) + 0.5f;
+                        const float dx = static_cast<float>(top.x - low.x);
+                        const float dy = static_cast<float>(top.y - low.y);
+                        const float z0 = map_.heightAt(lx, ly, low.level);
+                        const float z1 = map_.heightAt(static_cast<float>(top.x) + 0.5f, static_cast<float>(top.y) + 0.5f, top.level);
+                        float along = kSimWallFace;
+                        float z = z0;
+                        if (u < kWallMantleFrom) {
+                            const float k = u / kWallMantleFrom;
+                            along = kSimWallFace * std::min(1.0f, k * 8.0f);
+                            z = z0 + (z1 - kSimWallHang - z0) * k;
+                        } else {
+                            const float k = (u - kWallMantleFrom) / (1.0f - kWallMantleFrom);
+                            along = kSimWallFace + (1.0f - kSimWallFace) * k;
+                            z = z1 - kSimWallHang * (1.0f - std::min(1.0f, k * 2.0f));
+                        }
+                        view.wallClimb = true;
+                        view.wallClimbUp = up;
+                        view.facingX = dx;
+                        view.facingY = dy;
+                        view.x = lx + dx * along;
+                        view.y = ly + dy * along;
+                        view.z = z;
+                    } else {
+                        view.x = pos.x + (tx - pos.x) * t;
+                        view.y = pos.y + (ty - pos.y) * t;
+                        view.z += (map_.heightAt(tx, ty, to.level) - view.z) * t;
+                    }
                 }
+            }
+            if (const PawnGenes* genes = reg.try_get<PawnGenes>(entity)) {
+                view.jumpHeight = genes->effects.jumpHeight;
             }
             if (view.level == 0 && view.climb == 0.0f) {
                 const WaterContact water = waterContactAt(map_, view.x, view.y, 0, bodyHeightM(entity));
@@ -2676,6 +2856,9 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.markedForDeconstruct = reg.all_of<MarkedForDeconstruct>(entity);
             if (const Door* door = reg.try_get<Door>(entity)) {
                 view.doorOpen = door->openFraction(doorNumbers_);
+            }
+            if (const Window* window = reg.try_get<Window>(entity)) {
+                view.window = window->broken ? WindowState::Broken : WindowState::Glass;
             }
             if (const PowerPart* part = reg.try_get<PowerPart>(entity)) {
                 view.power = power_->stateOf(entity);
@@ -2829,8 +3012,10 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         if (const Posture* posture = reg.try_get<Posture>(entity)) {
             view.stance = view.downed || view.dead ? Stance::Prone : posture->stance;
-            view.facingX = posture->facingX;
-            view.facingY = posture->facingY;
+            if (!view.wallClimb) {  // on a wall it faces the wall
+                view.facingX = posture->facingX;
+                view.facingY = posture->facingY;
+            }
             view.shotReadyIn = combat_->shotReadyIn(entity);
             view.rounds = combat_->roundsLeft(entity);
             view.magazineSize = combat_->magazineSize(entity);
@@ -3017,6 +3202,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.prisoner = true;
             view.prisonerMode = static_cast<uint8_t>(prisoner->mode);
             view.resistance = prisoner->resistance;
+            view.will = prisoner->will;
+        }
+        if (const Slave* slave = reg.try_get<Slave>(entity)) {
+            view.slave = true;
+            view.suppression = slave->suppression;
         }
         view.prisonBed = reg.all_of<PrisonBed>(entity);
         if (const Visitor* visitor = reg.try_get<Visitor>(entity)) {
@@ -3468,6 +3658,10 @@ uint64_t Sim::stateHash() const {
             simHashCell(h, f->origin);
             h.add(static_cast<int>(f->rotation));
         }
+        if (const Window* window = reg.try_get<Window>(e)) {
+            h.add(uint64_t{0x3D1A0});  // only walls with a window add anything, so older hashes stay as they were
+            h.add(window->broken);
+        }
         if (const StackCount* stack = reg.try_get<StackCount>(e)) {
             h.add(stack->count);
         }
@@ -3765,6 +3959,11 @@ uint64_t Sim::stateHash() const {
             for (const int64_t hurtAt : health->zoneHurtAt) {
                 if (hurtAt >= 0) {
                     h.add(hurtAt);
+                }
+            }
+            for (const float pile : health->zoneOverkill) {
+                if (pile > 0.0f) {
+                    h.add(pile);
                 }
             }
             h.add(health->dead);

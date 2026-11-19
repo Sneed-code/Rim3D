@@ -1,0 +1,9 @@
+[
+  {
+    "defName": "ClimbRules",
+    "source": "ours",
+    "wallSpeedFactor": 0.15,
+    "wallLengthM": 3.5,
+    "note": "Wall climbing (sneed 2026-11-19, docs/design/climbing.md): any pawn can climb the outside face of a full-height wall onto the upper floor over it, at this share of its walking speed (half a ladder's 30%), over 3.5 m (3 m up and over the top). Cat-strain climb twice as fast. RimWorld has no climbing."
+  }
+]

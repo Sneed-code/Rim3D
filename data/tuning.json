@@ -8,19 +8,34 @@
       "stats.carryingCapacity": 0.6666667
     },
     "Things/Melee_Knife": {
-      "tools.cooldownTime": 0.3333333
+      "tools.cooldownTime": 0.2222222
+    },
+    "Things/Melee_Club": {
+      "tools.cooldownTime": 0.5
+    },
+    "Things/Melee_Gladius": {
+      "tools.cooldownTime": 0.6666667
+    },
+    "Things/Melee_Mace": {
+      "tools.cooldownTime": 0.6666667
     },
     "Things/Melee_Longsword": {
-      "tools.cooldownTime": 0.5
+      "tools.cooldownTime": 0.3333333
     },
     "Things/Melee_BreachAxe": {
-      "tools.cooldownTime": 0.5
+      "tools.cooldownTime": 0.3333333
     },
     "Things/Melee_Spear": {
-      "tools.cooldownTime": 0.5
+      "tools.cooldownTime": 0.3333333
     },
     "Things/Melee_Monosword": {
-      "tools.cooldownTime": 0.5
+      "tools.cooldownTime": 0.3333333
+    },
+    "Things/Melee_Plasmasword": {
+      "tools.cooldownTime": 0.6666667
+    },
+    "Things/Melee_Zeushammer": {
+      "tools.cooldownTime": 0.6666667
     }
   },
   "values": {

@@ -29,6 +29,28 @@ struct GeneEffects {
     float woundHealing = 1.0f;        // times natural healing
     float miningSpeed = 1.0f;
     float plantWorkSpeed = 1.0f;
+
+    // sneed's races (docs/design/races.md), all numbers in the Genes defs.
+    float moveSpeedFactor = 1.0f;     // times walking speed (Impid 1.05)
+    float learning = 1.0f;            // times the experience learned (baseline 1.2, Orcoid 0.9)
+    float workSpeed = 1.0f;           // times every work speed (Orcoid 0.9)
+    float meleeDamage = 1.0f;         // times its melee blows' damage (Orcoid 1.1)
+    float rangedDamage = 1.0f;        // times its shots' damage (drow 1.1)
+    float shootingAccuracy = 1.0f;    // times its aim (more is steadier)
+    float healthScale = 1.0f;         // times its hit points and its blood (Orcoid 1.1)
+    float thermalDamage = 1.0f;       // times heat and cold injury build-up and burn damage (Impid 0.1)
+    float environmentDamage = 1.0f;   // times fall and collapse damage (cat-strain 0.8)
+    float debuffFactor = 1.0f;        // times every penalty: pain, lost capacities, limb slows, bad moods, tiredness (cat-strain 1.33)
+    float jumpHeight = 1.0f;          // times the jump's height, for Unreal (cat-strain 2)
+    float climbSpeed = 1.0f;          // times wall-climbing speed (cat-strain 2)
+    bool darkVision = false;          // no slower working or walking in the dark (darknessSlowdown 0)
+    float darkWorkSpeed = 1.0f;       // times work where the light is under darkBelow (drow 1.1)
+    float sunWorkSpeed = 1.0f;        // times work under open sky while the sun is up (drow 0.9)
+    float sunShootingAccuracy = 1.0f; // times aim under open sky while the sun is up (drow 0.9)
+    bool noOutdoorsNeed = false;      // never feels cooped up indoors, like an undergrounder (drow)
+    bool nocturnal = false;           // joins with its schedule turned round: up at night, asleep by day (drow)
+    float darkBelow = 0.3f;           // GeneRules: light under this is dark
+    float sunAbove = 0.3f;            // GeneRules: the sun is up when its glow is over this
 };
 
 struct PawnGenes {
@@ -49,6 +71,20 @@ COLONY_API float geneStat(const PawnGenes& genes, const char* stat, float base);
 
 // Skill levels the genes add (negative for poor and awful).
 COLONY_API int geneAptitude(const PawnGenes& genes, const std::string& skill);
+
+// The work speed factor of a pawn's genes where the light is `glow` (0 to 1), `sunlit` under open sky
+// with the sun up: workSpeed, the dark bonus and the sunlight penalty. The light's own slowdown is
+// the caller's (geneLightWork).
+COLONY_API float geneWorkFactor(const GeneEffects& fx, float glow, bool sunlit);
+
+// The light's own work and walk factor for a pawn with these genes: 1 with dark vision, else `factor`.
+inline float geneLightFactor(const GeneEffects* fx, float factor) { return fx != nullptr && fx->darkVision ? 1.0f : factor; }
+
+// A penalty made worse by the genes' debuff factor: a factor under 1 moves away from 1 by `debuff`
+// (0.75 with 1.33 is 0.6675); factors of 1 or more are left alone.
+inline float geneWorsen(float factor, float debuff) {
+    return factor < 1.0f ? (1.0f - (1.0f - factor) * debuff > 0.0f ? 1.0f - (1.0f - factor) * debuff : 0.0f) : factor;
+}
 
 // The last gene of a lineage whose def has `path` (for example "visual.horns.length"), or null.
 // How looks and Unreal find the colours and horns a lineage's genes give.

@@ -12,6 +12,8 @@ const char* designationKindName(DesignationKind kind) {
         case DesignationKind::CutPlant: return "CutPlant";
         case DesignationKind::HarvestPlant: return "HarvestPlant";
         case DesignationKind::RemoveFloor: return "RemoveFloor";
+        case DesignationKind::AddWindow: return "AddWindow";
+        case DesignationKind::RemoveWindow: return "RemoveWindow";
     }
     return "?";
 }

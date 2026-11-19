@@ -301,8 +301,13 @@ bool AnimalSystem::pollPath(Entity e, Animal& a, const Kind& kind, AnimalCare& c
         a.mode = AnimalMode::Idle;
         return true;
     }
+    // A tame animal outside its own zone is let in through a fence gate (the handler opening it, as RimWorld's roping).
+    const bool outsideZone = care.zone != kNoAnimalZone && husbandry_->zoneAt(cellOf(reg.get<Position>(e))) != care.zone;
     for (const CellPos& step : route) {
-        if (map_.isDoor(step)) {  // animals can't open doors: the way is shut
+        if (outsideZone && map_.isFenceGate(step)) {
+            continue;
+        }
+        if (map_.blocksAnimals(step)) {  // animals can't open doors or cross fences: the way is shut
             care.noPathUntil = now + static_cast<int64_t>(husbandry_->rules().repathSeconds);
             a.mode = AnimalMode::Idle;
             return true;
@@ -317,6 +322,55 @@ bool AnimalSystem::pollPath(Entity e, Animal& a, const Kind& kind, AnimalCare& c
     a.mode = care.pathMode;
     a.nextThink = now + kAnimalCareWalkCheck;
     return false;
+}
+
+// ---- Animal beds (docs/design/husbandry.md, Animal beds) ----------------------------------------
+
+bool AnimalSystem::onOwnBed(Entity e) const {
+    if (husbandry_ == nullptr) {
+        return false;
+    }
+    const AnimalCare* care = husbandry_->care(e);
+    if (care == nullptr || care->bed == kNoEntity || !husbandry_->bedSuits(e, care->bed)) {
+        return false;
+    }
+    return cellOf(things_.registry().get<Position>(e)) == husbandry_->bedCell(care->bed);
+}
+
+bool AnimalSystem::walkToBed(Entity e, Animal& a, const Kind& kind, int64_t now) {
+    AnimalCare* care = husbandry_ != nullptr ? husbandry_->careFor(e) : nullptr;
+    if (care == nullptr) {
+        return false;
+    }
+    const Entity bed = husbandry_->bedFor(e);
+    if (bed == kNoEntity) {
+        return false;
+    }
+    const CellPos cell = husbandry_->bedCell(bed);
+    Mover& mover = things_.registry().get<Mover>(e);
+    if (a.mode == AnimalMode::WaitPath && care->pathGoal == cell) {
+        if (!pollPath(e, a, kind, *care)) {
+            return true;  // the path is not answered yet
+        }
+    }
+    if (a.mode == AnimalMode::Wander && a.goal == cell) {
+        if (!mover.arrived() && !mover.gaveUp) {
+            a.nextThink = now + kAnimalCareWalkCheck;
+            return true;
+        }
+        if (mover.gaveUp) {  // stuck on the way: it lies down where it is and tries again later
+            care->noPathUntil = now + static_cast<int64_t>(husbandry_->rules().repathSeconds);
+        }
+        mover.gaveUp = false;
+        mover.path.clear();
+        mover.next = 0;
+        a.mode = AnimalMode::Idle;
+        return false;
+    }
+    if (now < care->noPathUntil) {
+        return false;
+    }
+    return walkOrPath(e, a, kind, *care, cell, AnimalMode::Wander);
 }
 
 // ---- Eating ---------------------------------------------------------------------------------

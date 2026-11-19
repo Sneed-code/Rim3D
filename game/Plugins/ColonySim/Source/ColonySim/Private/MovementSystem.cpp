@@ -233,13 +233,15 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         if (!stays) {
             // Injuries slow a pawn down (its Moving capacity); a downed or dead one doesn't walk.
             const Health* health = reg.try_get<Health>(a.entity);
-            const float lightFactor = lights_ != nullptr ? lights_->moveSpeedAt(here) : 1.0f;
-            const float weatherFactor = weather_ != nullptr ? weather_->moveFactorAt(here) : 1.0f;
             const PawnGenes* genes = reg.try_get<PawnGenes>(a.entity);
-            const float geneSpeed = genes != nullptr ? genes->effects.moveSpeed / static_cast<float>(kStepsPerRealSecondAt1x) : 0.0f;
+            const GeneEffects* fx = genes != nullptr ? &genes->effects : nullptr;
+            const float lightFactor = lights_ != nullptr ? geneLightFactor(fx, lights_->moveSpeedAt(here)) : 1.0f;  // dark vision
+            const float weatherFactor = weather_ != nullptr ? weather_->moveFactorAt(here) : 1.0f;
+            const float geneSpeed = fx != nullptr ? fx->moveSpeed / static_cast<float>(kStepsPerRealSecondAt1x) : 0.0f;
             const float traitSpeed = traits_ != nullptr ? traits_->of(a.entity).moveSpeedStep : 0.0f;
             base = std::max(0.0f, mover.metresPerStep + geneSpeed + traitSpeed) * (health != nullptr ? health->movingFactor : 1.0f) *
-                   lightFactor * weatherFactor * (speedFactor_ ? speedFactor_(a.entity) : 1.0f);
+                   lightFactor * weatherFactor * (speedFactor_ ? speedFactor_(a.entity) : 1.0f) * (fx != nullptr ? fx->moveSpeedFactor : 1.0f);
+            mover.climbFactor = fx != nullptr ? fx->climbSpeed : 1.0f;
             stays = base <= 0.0f;
             mover.pace = base;
         }
@@ -319,7 +321,8 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
                 mover.climbed = 0.0f;
                 continue;
             }
-            mover.climbed += base * link->speedFactor;
+            // A wall is climbed at the pawn's own climbing speed too (cat-strain twice as fast, docs/design/climbing.md).
+            mover.climbed += base * link->speedFactor * (link->wall ? mover.climbFactor : 1.0f);
             if (mover.climbed >= link->length) {
                 a.climbed = true;
                 a.toX = static_cast<float>(to.x) + 0.5f;

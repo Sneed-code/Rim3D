@@ -1,4 +1,5 @@
 #include "ColonySim/Combat.h"
+#include "ColonySim/Genes.h"
 
 #include "ColonySim/Apparel.h"
 #include "ColonySim/BodyMotion.h"
@@ -14,6 +15,7 @@
 #include "ColonySim/Things.h"
 #include "ColonySim/Traits.h"
 #include "ColonySim/Weather.h"
+#include "ColonySim/Windows.h"
 
 #include <algorithm>
 #include <cmath>
@@ -709,6 +711,7 @@ CombatSystem::CombatSystem(Things& things, Map& map, HealthSystem& health)
       model_(std::make_unique<CombatModel>(things.defs(), health)),
       apparelStats_(std::make_unique<ApparelStats>(things.defs())),
       motion_(std::make_unique<BodyMotionSystem>(things, map)) {
+    windowLintelDm_ = static_cast<float>(WindowNumbers::read(things.defs()).lintelDm);
     motion_->setMass([this](Entity pawn) { return bodySize_ ? bodySize_(pawn) : 1.0f; });
     motion_->setAble([this](Entity pawn) { return !health_.incapacitated(pawn); });
     // Bodies on the ground (downed, knocked down, lying prone) don't stand in the way: they are stepped over.
@@ -880,8 +883,8 @@ bool CombatSystem::hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const {
     }
     const Health* health = reg.try_get<Health>(pawn);
     const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
-    if (kind == nullptr || (health != nullptr && health->dead)) {
-        return false;
+    if (kind == nullptr || (health != nullptr && health->dead && !health_.takesCorpseHits(pawn))) {
+        return false;  // (a corpse that can still be cut up lies there to be hit, sneed 2026-11-19)
     }
     const Position& pos = reg.get<Position>(pawn);
     const Posture& posture = reg.get<Posture>(pawn);
@@ -970,6 +973,27 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
                     best.thing = map_.buildingAt(c);
                     break;
                 }
+                // A window (docs/design/windows.md): the wall counts up to the sill, and again above the lintel.
+                const Entity wall = obstacle == kObstacleTallDm ? kNoEntity : map_.buildingAt(c);
+                const entt::registry& walls = things_.registry();
+                const Window* window = wall != kNoEntity && walls.valid(wall) ? walls.try_get<Window>(wall) : nullptr;
+                if (window != nullptr) {
+                    const float lintel = map_.groundHeight(c) + 0.1f * windowLintelDm_;
+                    if (std::max(z0, z1) > lintel) {
+                        const float t = z0 > lintel ? tIn : tIn + (tOut - tIn) * (lintel - z0) / (z1 - z0);
+                        at(t, best);
+                        best.kind = ProjectileHitKind::Building;
+                        best.thing = wall;
+                        break;
+                    }
+                    if (!window->broken && best.glass == kNoEntity) {
+                        best.glass = wall;
+                        best.glassT = tIn;
+                        best.glassX = ax + dx * tIn;
+                        best.glassY = ay + dy * tIn;
+                        best.glassZ = z0;
+                    }
+                }
             }
             const float g0 = map_.heightAt(ax + dx * tIn, ay + dy * tIn);
             const float g1 = map_.heightAt(ax + dx * tOut, ay + dy * tOut);
@@ -1009,7 +1033,7 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
         }
         const Health* health = reg.try_get<Health>(pawn);
         const CombatModel::Kind* kind = model_->kind(thing.def);
-        if (kind == nullptr || (health != nullptr && health->dead)) {
+        if (kind == nullptr || (health != nullptr && health->dead && !health_.takesCorpseHits(pawn))) {
             continue;
         }
         const CombatModel::Pose& pose = kind->poses[static_cast<int>(combatStanceOf(reg, pawn))];
@@ -1018,7 +1042,7 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
         const float fx = posture.facingX;
         const float fy = posture.facingY;
         // A player's shot at a drawn body part (DrawnAim): passing near the spot the crosshair was on hits that part.
-        if (drawn != nullptr && pawn == drawn->pawn && drawn->part >= 0 && health_.partHitPoints(pawn, drawn->part) > 0.0f) {
+        if (drawn != nullptr && pawn == drawn->pawn && drawn->part >= 0 && health_.hasPart(pawn, drawn->part)) {
             const float sx = pos.x + drawn->dx;
             const float sy = pos.y + drawn->dy;
             const float sz = ground + drawn->up;
@@ -1107,7 +1131,9 @@ Entity CombatSystem::fire(Entity pawn, float x, float y, float z, float spreadSl
     const Entity shot = launch(pawn, weaponDef, pos.x, pos.y, map_.heightAt(pos.x, pos.y) + muzzle, pos.level, cellOf(pos), x, y,
                                z, spreadSlope, rng, kickUp, kickSide, &reg.get<Posture>(pawn));
     if (shot != kNoEntity) {
-        reg.get<Projectile>(shot).damageFactor = rangedDamageFactor(weapon);
+        // The weapon's quality and stuff, and the shooter's lineage (drow +10%, docs/design/races.md).
+        const PawnGenes* genes = reg.try_get<PawnGenes>(pawn);
+        reg.get<Projectile>(shot).damageFactor = rangedDamageFactor(weapon) * (genes != nullptr ? genes->effects.rangedDamage : 1.0f);
     }
     return shot;
 }
@@ -1464,7 +1490,9 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     const float partsAccuracy = mods != nullptr ? mods->accuracy : 1.0f;
     const float quality = rangedAccuracyFactor(gear->weapon);
     const Entity shot = fire(pawn, fx, fy, fz,
-                             spread(weaponDef, skill, distance, s.player, accuracyFactor * quality * partsAccuracy * performance(pawn)) * steady + s.recoil,
+                             spread(weaponDef, skill, distance, s.player,
+                                    accuracyFactor * quality * partsAccuracy * performance(pawn) * (aimFactor_ ? std::max(0.05f, aimFactor_(pawn)) : 1.0f)) *
+                                     steady + s.recoil,
                              rng, kickUp, kickSide);
     if (shot != kNoEntity && s.player) {
         reg.get<Projectile>(shot).drawn = s.drawn;
@@ -1864,13 +1892,15 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
                 return;
             }
             emitHit(projectile, p, h, result.amount);
+            // A corpse takes the damage (it piles up until the piece comes off) but nobody is credited or angered.
+            const bool corpse = health_.tracks(hit.thing) && reg.get<Health>(hit.thing).dead;
             health_.applyHit(hit.thing, result.damageType, result.amount, result.part);
             wearApparel(hit.thing, result);
-            if (zoned) {
+            if (zoned && !corpse) {
                 jolt(hit.thing, result.part, bullet.damageType, bullet.damage * p.damageFactor, result.amount,
                      HitFrom{true, h.x - p.vx, h.y - p.vy});
             }
-            if (p.launcher != kNoEntity) {
+            if (p.launcher != kNoEntity && !corpse) {
                 noteHurt(hit.thing, p.launcher);
             }
             break;
@@ -2279,6 +2309,9 @@ void CombatSystem::step(Rng& rng) {
             hit.y = ny;
             hit.z = nz;
         }
+        if (hit.glass != kNoEntity && (hit.kind == ProjectileHitKind::None || hit.glassT <= hit.t)) {
+            breakWindow(hit.glass, hit.glassX, hit.glassY, hit.glassZ, p.launcher);
+        }
         if (hit.kind != ProjectileHitKind::None) {
             impact(shot, p, hit);
             reg.destroy(shot);
@@ -2385,7 +2418,9 @@ bool CombatSystem::jolt(Entity pawn, int part, DefId damageType, float force, fl
 }
 
 float CombatSystem::traitMeleeDamage(Entity pawn) const {
-    return traits_ != nullptr ? traits_->of(pawn).meleeDamageFactor : 1.0f;
+    // Wimp's trait factor and the lineage's (Orcoid +10%, docs/design/races.md).
+    const PawnGenes* genes = things_.registry().valid(pawn) ? things_.registry().try_get<PawnGenes>(pawn) : nullptr;
+    return (traits_ != nullptr ? traits_->of(pawn).meleeDamageFactor : 1.0f) * (genes != nullptr ? genes->effects.meleeDamage : 1.0f);
 }
 
 int CombatSystem::poiseImmuneFor(Entity pawn) const {
@@ -2409,9 +2444,16 @@ int CombatSystem::pickOutsidePart(Entity pawn, Rng& rng) const {
     if (kind == nullptr) {
         return -1;
     }
+    // On a corpse that can be cut up a part at 0 still takes hits (they pile up past 0); otherwise only parts with hit
+    // points left.
+    const Health* health = things_.registry().try_get<Health>(pawn);
+    const bool corpse = health != nullptr && health->dead && health_.takesCorpseHits(pawn);
+    const auto open = [&](size_t q) {
+        return corpse ? health_.hasPart(pawn, static_cast<int>(q)) : health_.partHitPoints(pawn, static_cast<int>(q)) > 0.0f;
+    };
     float total = 0.0f;
     for (size_t q = 0; q < kind->parts.size(); ++q) {
-        if (!kind->parts[q].inside && health_.partHitPoints(pawn, static_cast<int>(q)) > 0.0f) {
+        if (!kind->parts[q].inside && open(q)) {
             total += kind->parts[q].ownOutside;
         }
     }
@@ -2422,7 +2464,7 @@ int CombatSystem::pickOutsidePart(Entity pawn, Rng& rng) const {
     float acc = 0.0f;
     int pick = -1;
     for (size_t q = 0; q < kind->parts.size(); ++q) {
-        if (kind->parts[q].inside || health_.partHitPoints(pawn, static_cast<int>(q)) <= 0.0f || kind->parts[q].ownOutside <= 0.0f) {
+        if (kind->parts[q].inside || !open(q) || kind->parts[q].ownOutside <= 0.0f) {
             continue;
         }
         acc += kind->parts[q].ownOutside;
@@ -2484,9 +2526,10 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
     for (const Entity pawn : pawns) {
         const Health* health = reg.try_get<Health>(pawn);
         const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
-        if (kind == nullptr || (health != nullptr && health->dead)) {
+        if (kind == nullptr || (health != nullptr && health->dead && !health_.takesCorpseHits(pawn))) {
             continue;
         }
+        const bool corpse = health != nullptr && health->dead;
         const Position pos = reg.get<Position>(pawn);
         const int stance = static_cast<int>(combatStanceOf(reg, pawn));
         const float ground = map_.heightAt(pos.x, pos.y);
@@ -2546,13 +2589,15 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
             }
             const bool alive = health_.applyHit(pawn, piece.damageType, piece.amount, part);
             wearApparel(pawn, piece);
-            noteHarm(pawn, ex.instigator);
+            if (!corpse) {
+                noteHarm(pawn, ex.instigator);
+            }
             if (!alive) {
                 break;
             }
             dealt += piece.amount;
         }
-        if (dealt > 0.0f) {
+        if (dealt > 0.0f && !corpse) {
             ++result.pawnsHurt;
         }
         // Knock-down: the blast throws the pawn down and away, armor or not.
@@ -2649,6 +2694,11 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
         }
     }
     for (const BlastTarget& target : targets) {
+        if (reg.all_of<Window>(target.building)) {
+            // The blast blows the glass out (docs/design/windows.md).
+            const Position* wallAt = reg.try_get<Position>(target.building);
+            breakWindow(target.building, wallAt != nullptr ? wallAt->x : ex.x, wallAt != nullptr ? wallAt->y : ex.y, ex.z, ex.instigator);
+        }
         HitPoints* hp = reg.try_get<HitPoints>(target.building);
         if (hp == nullptr) {
             continue;
@@ -2661,8 +2711,17 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
                 factor *= blast.wallFactor;
             }
         }
+        const Def& targetDef = things_.defs().get(reg.get<Thing>(target.building).def);
+        if (targetDef.flag("building.blastProof")) {
+            continue;  // a heavy bridge (RimWorld 1.6: immune to explosions)
+        }
         const int damage = std::max(1, static_cast<int>(std::lround(ex.damage * falloff(target.distance) * factor)));
         hp->current -= damage;
+        // A wooden bridge goes at once under a big enough blast (RimWorld: destroyOnBombDamageThreshold, 35 for a bridge).
+        const double bombThreshold = targetDef.number("building.bombThreshold", 0.0);
+        if (bombThreshold > 0.0 && ex.damageType == things_.defs().idOf("DamageTypes", "Bomb") && static_cast<double>(ex.damage * falloff(target.distance)) >= bombThreshold) {
+            hp->current = 0;
+        }
         ++result.buildingsHit;
         if (hp->current <= 0) {
             ++result.buildingsDestroyed;
@@ -2673,6 +2732,26 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
         }
     }
     return result;
+}
+
+bool CombatSystem::breakWindow(Entity wall, float x, float y, float z, Entity by) {
+    if (!Windows::breakGlass(things_, wall)) {
+        return false;
+    }
+    if (events_ != nullptr) {
+        Event e;
+        e.type = EventType::WindowBroken;
+        e.thing = wall;
+        e.target = by;
+        e.x = x;
+        e.y = y;
+        e.z = z;
+        if (const Footprint* footprint = things_.registry().try_get<Footprint>(wall)) {
+            e.cell = footprint->origin;
+        }
+        events_->push_back(std::move(e));
+    }
+    return true;
 }
 
 bool CombatSystem::damageBuilding(Entity building, int damage) {

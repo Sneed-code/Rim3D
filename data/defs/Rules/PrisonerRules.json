@@ -20,6 +20,26 @@
     "captureSafeRadius": 25,
     "feedBelow": 0.3,
     "edgeSearch": 40,
+    "slaves": {
+      "initialWill": [1, 3],
+      "willPerChat": 1.0,
+      "startSuppression": 0.5,
+      "suppressionFall": [[0.3, 0.2], [0.15, 0.1], [0.0, 0.05]],
+      "suppressBelow": 0.7,
+      "suppressIntervalSeconds": 10800,
+      "suppressWorkSeconds": 259,
+      "suppressPowerBase": 0.08,
+      "suppressPowerPerLevel": 0.02,
+      "suppressCurve": [[0.0, 2.0], [0.5, 1.0], [1.0, 0.5]],
+      "suppressXp": 50,
+      "rebellionMtbDays": 45,
+      "rebellionSuppression": [[0.0, 5.0], [0.333, 1.5], [0.5, 1.0], [1.0, 0.25]],
+      "rebellionSlaveCount": [[1, 1.0], [2, 0.75], [5, 0.5], [10, 0.3], [20, 0.2]],
+      "rebellionMood": [[0, 1.5], [50, 1.0], [100, 0.8]],
+      "rebellionUnattended": 20,
+      "workSpeed": 0.85,
+      "disabledWorkTags": ["Social", "Violent", "Artistic", "Intellectual"]
+    },
     "unverified": [
       "initialResistance"
     ],
@@ -37,8 +57,16 @@
       "captureSafeRadius",
       "feedBelow",
       "edgeSearch",
-      "defaultSkillLevel"
+      "defaultSkillLevel",
+      "slaves.initialWill",
+      "slaves.startSuppression",
+      "slaves.suppressBelow",
+      "slaves.suppressIntervalSeconds",
+      "slaves.suppressPowerBase",
+      "slaves.suppressPowerPerLevel",
+      "slaves.suppressCurve (only the 2x at 0% is the wiki's)",
+      "slaves.suppressXp"
     ],
-    "notes": "initialResistance is the range of the wiki's Warrior example (a raider kind's own range is not on the wiki page). resistancePerChat and moodFactor are the wiki's: reduction = 1.0 x opinion factor (C20) x mood factor x negotiation ability. The wiki gives no interval ('every several hours'), no recruit chance and no negotiation formula: those are ours."
+    "notes": "initialResistance is the range of the wiki's Warrior example (a raider kind's own range is not on the wiki page). resistancePerChat and moodFactor are the wiki's: reduction = 1.0 x opinion factor (C20) x mood factor x negotiation ability. The wiki gives no interval ('every several hours'), no recruit chance and no negotiation formula: those are ours. Slaves (wiki, Slave page, checked 2026-11-19): suppression falls 20%/day from 30%, 10% from 15%, 5% below; a suppression takes 180 ticks; Social 10 suppresses 28% (x2 at 0%); rebellion MTB 45 days of awake time divided by the suppression, slave count, mood and unattended factors (the moving, room-edge and weapon factors are not modelled); slaves work at 85% and can't do Warden, Hunting, Art or Research."
   }
 ]

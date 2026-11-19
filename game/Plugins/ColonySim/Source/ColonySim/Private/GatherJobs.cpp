@@ -10,6 +10,7 @@
 #include "ColonySim/Farming.h"
 #include "ColonySim/Floors.h"
 #include "ColonySim/Genes.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Mineables.h"
@@ -17,6 +18,7 @@
 #include "ColonySim/Regions.h"
 #include "ColonySim/Lights.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Windows.h"
 #include "ColonySim/Traits.h"
 
 #include <algorithm>
@@ -124,9 +126,23 @@ bool JobSystem::canUseHands(Entity pawn) const {
 
 float JobSystem::workFactor(Entity pawn) const {
     const Position* at = lights_ != nullptr ? things_.registry().try_get<Position>(pawn) : nullptr;
-    // The light on the pawn, its drugs and its own nature: industrious works faster, lazy slower (TraitStats).
-    return (at != nullptr ? lights_->workSpeedAt(cellOf(*at)) : 1.0f) * health_.workSpeedFactor(pawn) *
-           (traits_ != nullptr ? traits_->of(pawn).workSpeed : 1.0f) * (gearWorkFactor_ ? gearWorkFactor_(pawn) : 1.0f);
+    const PawnGenes* genes = things_.registry().valid(pawn) ? things_.registry().try_get<PawnGenes>(pawn) : nullptr;
+    const GeneEffects* fx = genes != nullptr ? &genes->effects : nullptr;
+    // The light on the pawn (none of its slowdown with dark vision), its drugs and its own nature: industrious works
+    // faster, lazy slower (TraitStats). Its lineage: Orcoid slower, drow faster in the dark and slower in sunlight.
+    float light = 1.0f;
+    float lineage = fx != nullptr ? fx->workSpeed : 1.0f;
+    if (at != nullptr) {
+        const CellPos cell = cellOf(*at);
+        light = geneLightFactor(fx, lights_->workSpeedAt(cell));
+        if (fx != nullptr) {
+            const bool sunlit = lights_->skyGlow() > fx->sunAbove && lights_->underOpenSky(cell);
+            lineage = geneWorkFactor(*fx, lights_->lightAt(cell), sunlit);
+        }
+    }
+    return light * lineage * health_.workSpeedFactor(pawn) * (traits_ != nullptr ? traits_->of(pawn).workSpeed : 1.0f) *
+           (gearWorkFactor_ ? gearWorkFactor_(pawn) : 1.0f) *
+           (prisoners_ != nullptr ? prisoners_->workSpeedFactor(pawn) : 1.0f);  // a slave works at 85%
 }
 
 double JobSystem::miningSpeed(Entity pawn) const {
@@ -170,7 +186,10 @@ void JobSystem::learnSkill(Entity pawn, const char* skill, double xp) {
     }
     for (SkillRecord& record : colonist->skills) {
         if (record.def == skill) {
-            learnSkillXp(skillRules_, record, traits_ != nullptr ? xp * traits_->of(pawn).learningFactor : xp);
+            // Learners learn faster, and so does a lineage: baseline +20%, Orcoid -10% (docs/design/races.md).
+            const PawnGenes* learnerGenes = things_.registry().try_get<PawnGenes>(pawn);
+            const double geneLearn = learnerGenes != nullptr ? learnerGenes->effects.learning : 1.0;
+            learnSkillXp(skillRules_, record, (traits_ != nullptr ? xp * traits_->of(pawn).learningFactor : xp) * geneLearn);
             return;
         }
     }
@@ -203,6 +222,7 @@ std::string JobSystem::activeSkill(Entity pawn) const {
         case JobType::Deconstruct:
         case JobType::RemoveFloor:
         case JobType::Earthworks:
+        case JobType::WindowWork:
             return "Construction";
         case JobType::DoBill: {
             const Bill* bill = bills_->find(job.site, job.bill);
@@ -321,6 +341,19 @@ bool JobSystem::failCheckGather(Entity pawn, Job& job, std::string& why) {
                 return false;
             }
             return true;
+        case JobType::WindowWork: {
+            const DesignationKind mark = designations_.at(job.cell);
+            if (mark != DesignationKind::AddWindow && mark != DesignationKind::RemoveWindow) {
+                why = "the order was cancelled";
+                return false;
+            }
+            if (windows_ == nullptr) {
+                why = "no windows here";
+                return false;
+            }
+            why = mark == DesignationKind::AddWindow ? windows_->whyNotAdd(job.cell) : windows_->whyNotRemove(job.cell);
+            return why.empty();
+        }
         case JobType::RemoveFloor:
             if (designations_.at(job.cell) != DesignationKind::RemoveFloor) {
                 why = "the order was cancelled";
@@ -440,6 +473,43 @@ JobSystem::StepResult JobSystem::removeFloorWork(Entity pawn, Job& job, std::str
         return StepResult::Failed;
     }
     designations_.set(job.cell, DesignationKind::None);
+    Event changed;
+    changed.type = EventType::DesignationsChanged;
+    events_.push_back(std::move(changed));
+    return StepResult::Next;
+}
+
+// A window (docs/design/windows.md): `WindowRules` addWork or removeWork game seconds at construction speed, like taking
+// up a floor; then the wall has its window (or a broken one is glazed again), or is whole again. No materials either way.
+JobSystem::StepResult JobSystem::windowWork(Entity pawn, Job& job, std::string& why) {
+    const DesignationKind mark = designations_.at(job.cell);
+    if (windows_ == nullptr || (mark != DesignationKind::AddWindow && mark != DesignationKind::RemoveWindow)) {
+        why = "the order was cancelled";
+        return StepResult::Failed;
+    }
+    if (job.walk == 0) {
+        job.walk = 2;  // work steps don't walk: this marks that the animation event went out
+        gatherEvent(pawn, PawnAction::Build, job.cell);
+    }
+    job.progress += constructionSpeed(pawn) * static_cast<float>(construction_.numbers().buildWorkPerSecond);
+    learnSkill(pawn, "Construction", gather_.constructionXpPerSecond * gather_.constructionSpeed);
+    const bool adding = mark == DesignationKind::AddWindow;
+    if (static_cast<double>(job.progress) < (adding ? windows_->numbers().addWork : windows_->numbers().removeWork)) {
+        return StepResult::Running;
+    }
+    const Window* before = windows_->at(job.cell);
+    const bool glazing = adding && before != nullptr && before->broken;
+    if (!(adding ? windows_->add(job.cell) : windows_->remove(job.cell))) {
+        why = adding ? windows_->whyNotAdd(job.cell) : windows_->whyNotRemove(job.cell);
+        return StepResult::Failed;
+    }
+    designations_.set(job.cell, DesignationKind::None);
+    Event done;
+    done.type = EventType::WindowChanged;
+    done.thing = windows_->wallAt(job.cell);
+    done.cell = job.cell;
+    done.message = glazing ? "glazed" : adding ? "added" : "removed";
+    events_.push_back(std::move(done));
     Event changed;
     changed.type = EventType::DesignationsChanged;
     events_.push_back(std::move(changed));

@@ -71,7 +71,9 @@ Lights::Lights(Map& map, Things& things, const Rooms& rooms, const DefDatabase& 
       rooms_(rooms),
       time_(time),
       numbers_(LightNumbers::read(defs)),
-      lamp_(static_cast<size_t>(map.width()) * static_cast<size_t>(map.height()), 0.0f) {
+      lamp_(static_cast<size_t>(map.width()) * static_cast<size_t>(map.height()), 0.0f),
+      windowNumbers_(WindowNumbers::read(defs)),
+      window_(lamp_.size(), 0.0f) {
     lightDef_.assign(defs.size(), 0);
     for (uint32_t i = 0; i < defs.size(); ++i) {
         const Def& d = defs.get(DefId{i});
@@ -175,6 +177,70 @@ void Lights::rebuild() {
             }
         }
     }
+    lightThroughWindows();
+}
+
+// Each window with open sky on one side lights the roofed cells on the other side, `lightGlow` of the sky
+// right behind it falling in a straight line to 0 at `lightRadius`, stopped by tall things like a lamp's
+// light. The share is kept; lightAt multiplies it by the sky's glow of the moment, so the room follows the
+// day and the weather with no rebuild.
+void Lights::lightThroughWindows() {
+    for (const int i : windowTouched_) {
+        window_[static_cast<size_t>(i)] = 0.0f;
+    }
+    windowTouched_.clear();
+    const float radius = windowNumbers_.lightRadius;
+    if (!(radius > 0.0f) || !(windowNumbers_.lightGlow > 0.0f)) {
+        return;
+    }
+    const entt::registry& reg = things_.registry();
+    std::vector<CellPos> cells;
+    for (const auto [wall, window, footprint, position] : reg.view<const Window, const Footprint, const Position>().each()) {
+        (void)window;
+        (void)position;
+        if (footprint.origin.level != 0) {
+            continue;  // the light layer is the ground's
+        }
+        cells.push_back(footprint.origin);
+    }
+    std::sort(cells.begin(), cells.end(), [](CellPos a, CellPos b) { return a.y != b.y ? a.y < b.y : a.x < b.x; });
+    constexpr int kSides[4][2] = {{0, 1}, {1, 0}, {0, -1}, {-1, 0}};
+    const int reach = static_cast<int>(std::ceil(radius));
+    for (const CellPos w : cells) {
+        for (const auto& side : kSides) {
+            const CellPos outside{w.x - side[0], w.y - side[1], 0};
+            const CellPos inside{w.x + side[0], w.y + side[1], 0};
+            if (!underOpenSky(outside) || !map_.onGround(inside) || underOpenSky(inside)) {
+                continue;
+            }
+            // The half-plane behind the window on the inside: cells at least one step in along `side`.
+            for (int dy = -reach; dy <= reach; ++dy) {
+                for (int dx = -reach; dx <= reach; ++dx) {
+                    if (dx * side[0] + dy * side[1] < 1) {
+                        continue;
+                    }
+                    const CellPos c{w.x + dx, w.y + dy, 0};
+                    if (!map_.onGround(c) || underOpenSky(c)) {
+                        continue;
+                    }
+                    const float dist = std::sqrt(static_cast<float>(dx * dx + dy * dy));
+                    if (dist >= radius) {
+                        continue;
+                    }
+                    const float share = windowNumbers_.lightGlow * (1.0f - (dist - 1.0f) / radius);
+                    float& slot = window_[static_cast<size_t>(map_.index(c))];
+                    const float clamped = std::min(windowNumbers_.lightGlow, share);
+                    if (clamped <= slot || blocked(w.x, w.y, c.x, c.y)) {
+                        continue;
+                    }
+                    if (slot == 0.0f) {
+                        windowTouched_.push_back(map_.index(c));
+                    }
+                    slot = clamped;
+                }
+            }
+        }
+    }
 }
 
 float Lights::skyGlow() const {
@@ -192,12 +258,21 @@ float Lights::lampLightAt(CellPos c) const {
     return map_.onGround(c) ? lamp_[static_cast<size_t>(map_.index(c))] : 0.0f;
 }
 
+float Lights::windowShareAt(CellPos c) const {
+    return map_.onGround(c) ? window_[static_cast<size_t>(map_.index(c))] : 0.0f;
+}
+
 float Lights::lightAt(CellPos c) const {
     if (!map_.onGround(c)) {
         return 0.0f;
     }
-    const float lamp = lamp_[static_cast<size_t>(map_.index(c))];
-    return map_.roof(c) == Roof::None ? std::max(lamp, std::max(skyGlow(), skyFloor_ ? skyFloor_() : 0.0f)) : lamp;
+    const size_t i = static_cast<size_t>(map_.index(c));
+    const float lamp = lamp_[i];
+    if (map_.roof(c) == Roof::None) {
+        return std::max(lamp, std::max(skyGlow(), skyFloor_ ? skyFloor_() : 0.0f));
+    }
+    const float share = window_[i];
+    return share > 0.0f ? std::max(lamp, share * std::max(skyGlow(), skyFloor_ ? skyFloor_() : 0.0f)) : lamp;
 }
 
 float Lights::workSpeedAt(CellPos c) const {

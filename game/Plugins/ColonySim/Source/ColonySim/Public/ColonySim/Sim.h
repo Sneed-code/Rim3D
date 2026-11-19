@@ -42,6 +42,7 @@ class RoomStats;
 struct Colonist;
 struct PawnLooks;
 struct PawnGenes;
+struct GeneEffects;
 class Designations;
 class ExplosiveSystem;
 class FighterSystem;
@@ -52,6 +53,7 @@ class MentalBreakSystem;
 class NatureEvents;
 class JobSystem;
 class Lights;
+class Windows;
 class MeleeSystem;
 class DeepResources;
 class Mineables;
@@ -241,6 +243,8 @@ public:
     // before the first step). Clamped to 48 to 120.
     void setDayMinutes(int minutes);
     const Map& map() const { return map_; }
+    // For tests and dev tools that change map-wide rules (Map::setWallClimb).
+    Map& mapRules() { return map_; }
     // For map generation and tests that set the world up; the game changes the map through commands.
     Map& editMap() { return map_; }
     // Regions and reachability (docs/design/regions.md). Queries may rebuild, so not const.
@@ -318,6 +322,13 @@ public:
     const PawnLooks* looksOf(Entity pawn) const;
     // A humanlike pawn's genes, made from its lineage (docs/design/genes.md), or null for other things.
     const PawnGenes* genesOf(Entity pawn) const;
+    // sneed's races (docs/design/races.md): the pawn's debuff factor (1 without genes), whether it
+    // stands under open sky with the sun up, the lineage a joiner or raider rolls from its seed, and
+    // a nocturnal lineage's turned-round schedule.
+    float geneDebuff(Entity pawn) const;
+    bool sunlit(Entity pawn, const GeneEffects& fx) const;
+    std::string joinerLineage(uint64_t seed) const;
+    void giveNocturnalSchedule(Entity pawn);
 
     // The plant layer: wild plants from map generation, growing hourly (docs/design/plants.md).
     Plants& plants() { return *plants_; }
@@ -358,6 +369,8 @@ public:
     const Farming& farming() const { return *farming_; }
     Lights& lights() { return *lights_; }
     const Lights& lights() const { return *lights_; }
+    Windows& windows() { return *windows_; }
+    const Windows& windows() const { return *windows_; }
     // Floors, filth, room stats and the beauty need (docs/design/room-stats.md).
     Floors& floors() { return *floors_; }
     const Floors& floors() const { return *floors_; }
@@ -534,6 +547,7 @@ public:
 private:
     float lowestPartHealth(Entity pawn) const;  // the focus HP bar (docs/design/focus.md)
     float pawnMoveFactor(Entity pawn) const;  // see Sim.cpp
+    void dropLostDecks();  // what stood on a bridge that fell into deep water is gone (docs/design/roads-bridges.md)
     bool takeIntoBag(Entity pawn, Entity item, int count, std::string& error);  // Inventory.cpp
     void autoPickUp();                                                          // Inventory.cpp
     friend class SimSaveAccess;  // saves read and restore the private state (Save.h)
@@ -607,6 +621,7 @@ private:
     std::unique_ptr<Rooms> rooms_;
     std::unique_ptr<PowerGrid> power_;
     std::unique_ptr<Lights> lights_;
+    std::unique_ptr<Windows> windows_;  // docs/design/windows.md
     std::unique_ptr<TemperatureSystem> temperature_;  // after rooms_ and health_
     std::unique_ptr<Farming> farming_;                // after temperature_, lights_ and zones_
     std::unique_ptr<SpoilageSystem> spoilage_;        // after temperature_ and roomStats_

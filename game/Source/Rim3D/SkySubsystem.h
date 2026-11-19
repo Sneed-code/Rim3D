@@ -71,6 +71,10 @@ struct FLookConfig
 	float MinEV = -1.5f;
 	float MaxEV = 16.0f;
 	float BrighterEV = 0.75f;
+	/** Under a roof the auto exposure may go this many stops below the target instead (rooms lit through windows). */
+	float IndoorBrighterEV = 3.0f;
+	/** Stops per second the indoor allowance eases in and out. */
+	float IndoorEase = 1.5f;
 	float DarkerEV = 0.25f;
 	float SpeedUp = 2.0f;
 	float SpeedDown = 1.5f;
@@ -216,6 +220,8 @@ public:
 	/** The weather as the HUD shows it: "12°C, rain". */
 	static FString DescribeClimate(const colony::Sim& Sim);
 
+	/** 0 with the camera outdoors, 1 under a roof (the indoor exposure allowance). */
+	float GetIndoorShare() const { return IndoorShare; }
 	/** The state the sky was last set to. */
 	const FSkyState& GetState() const { return State; }
 	/** Works out the state for a time of day and day of the year with the weather the sim has now (no scene needed). */
@@ -341,6 +347,9 @@ private:
 	int32 AppliedQuality = -1;
 	int32 ExposureCuts = 0;
 	float LastExposureEV = -100.0f;
+	/** 0 with the camera outdoors, 1 under a roof; eased so stepping through a door is not a jump. */
+	float IndoorShare = 0.0f;
+	void UpdateIndoorShare(const colony::Sim& Sim, const USimSubsystem& Source, float RealDelta);
 
 	FSkyState State;
 	TArray<FDrop> Rain;

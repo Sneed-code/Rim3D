@@ -112,7 +112,8 @@ constexpr int kMarksEach = 12;  // rock cells, trees and berry bushes the script
 constexpr int kBerryMarks = 24;
 constexpr int64_t kStuckSamples = 60;  // one sample a game minute: a game hour without a change is stuck
 constexpr int kSearchRadius = 40;
-constexpr int kMarkRadius = 120;  // how far from the landing the script looks for rock, trees and bushes
+constexpr int kMarkRadius = 220;  // how far from the landing the script looks for rock, trees and bushes (flat maps: the
+                                   // hills, and their rock, keep about 150 m from the middle)
 
 struct Plan {
     DefId def;

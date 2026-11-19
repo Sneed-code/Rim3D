@@ -77,6 +77,8 @@
 #include "ColonySim/Replay.h"
 #include "ColonySim/Rooms.h"
 #include "ColonySim/Save.h"
+#include "ColonySim/Floors.h"
+#include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Temperature.h"
 #include "ColonySim/ThreatMap.h"
@@ -351,6 +353,31 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
             pixels[i + 2] = static_cast<unsigned char>(pixels[i + 2] + (b - pixels[i + 2]) * grown);
         }
     }
+    // Roads (roads-bridges.md): packed dirt tan, flagstone grey, broken asphalt dark; bridge decks brown-orange.
+    for (const auto& [index, floor] : sim.floors().all()) {
+        const std::string& name = sim.defs().get(floor).defName();
+        unsigned char r = 0;
+        unsigned char g = 0;
+        unsigned char b = 0;
+        if (name == "PackedDirt") { r = 196; g = 160; b = 110; }
+        else if (name == "Flagstone") { r = 175; g = 170; b = 160; }
+        else if (name == "BrokenAsphalt") { r = 60; g = 60; b = 62; }
+        else { continue; }
+        const size_t i = static_cast<size_t>(index) * 3;
+        pixels[i] = r;
+        pixels[i + 1] = g;
+        pixels[i + 2] = b;
+    }
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            if (map.hasDeck(colony::CellPos{x, y, 0})) {
+                const size_t i = static_cast<size_t>(map.index(colony::CellPos{x, y, 0})) * 3;
+                pixels[i] = 230;
+                pixels[i + 1] = 120;
+                pixels[i + 2] = 40;
+            }
+        }
+    }
     // Built roofs (rooms.md): the ground under them tinted warm.
     for (const colony::CellPos& c : sim.rooms().thinRoofCells()) {
         const size_t i = static_cast<size_t>(map.index(c)) * 3;
@@ -378,7 +405,7 @@ bool writeMapPng(const colony::Sim& sim, const std::string& path) {
     };
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            if (map.buildingAt(colony::CellPos{x, y, 0}) != colony::kNoEntity) {
+            if (map.buildingAt(colony::CellPos{x, y, 0}) != colony::kNoEntity && !map.hasDeck(colony::CellPos{x, y, 0})) {
                 mark(colony::Position{static_cast<float>(x), static_cast<float>(y), 0}, 60, 60, 60);
             }
         }

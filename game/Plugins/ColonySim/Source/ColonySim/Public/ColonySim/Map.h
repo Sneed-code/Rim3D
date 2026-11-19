@@ -5,11 +5,13 @@
 #include "ColonySim/Grid.h"
 
 #include <array>
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <unordered_set>
 #include <vector>
 
 namespace colony {
@@ -47,6 +49,7 @@ struct LevelLink {
     Entity building = kNoEntity;
     float length = 0.0f;       // metres from the middle of `low` to the middle of `high`, climbing
     float speedFactor = 1.0f;  // share of its walking speed a pawn keeps on it
+    bool wall = false;         // climbed up the face of a wall, not stairs or a ladder (docs/design/climbing.md)
 
     // What the link costs a path, in metres of flat walking.
     float cost() const { return length / speedFactor; }
@@ -69,7 +72,13 @@ struct MapSettings {
     // How much river and how much marsh the biome gets, as multiples of the usual (0: none).
     float river = 1.0f;
     float marsh = 1.0f;
+    // Share of a map of 192 m or more that lies in its hill areas; the rest is flat open ground
+    // (sneed: about 15% on a flat tile, in a few big patches; docs/design/mapgen.md "Flat ground").
+    float hills = 0.15f;
 };
+
+// The hill share for a world tile's hilliness (ours: sneed's 15% for flat, a little more for hillier tiles).
+COLONY_API float mapHillShare(int hilliness);
 
 // The map grid: one flat array per layer, generated from a seed.
 //
@@ -109,14 +118,33 @@ public:
 
     // Placeholder until terrain defs: water and rock can't be walked or built on, and neither can
     // the air of an upper level with no floor laid.
+    // Deep water can be walked where a bridge deck spans it (docs/design/roads-bridges.md).
     bool groundWalkable(CellPos c) const {
         const Terrain t = terrain(c);
-        return t != Terrain::Water && t != Terrain::Rock && t != Terrain::Air;
+        return t != Terrain::Rock && t != Terrain::Air && (t != Terrain::Water || hasDeck(c));
     }
     // Pawns can stand here: in bounds, walkable ground and no building that blocks movement.
     bool walkable(CellPos c) const { return inBounds(c) && groundWalkable(c) && passage(c) != Passage::Blocked; }
+    // On a generated map of 192 m or more: the cell is in one of the hill areas (its ground stands
+    // over kHillGroundM; the plain lies 15 to 17 m up). Always false on smaller and flat maps.
+    static constexpr float kHillGroundM = 18.0f;
+    bool hillGround(CellPos c) const {
+        return std::min(width_, height_) >= 192 && !std::isnan(waterTable_) && onGround(c) &&
+               groundHeight_[static_cast<size_t>(index(c))] > kHillGroundM;
+    }
     // A walkable cell with a door in it.
     bool isDoor(CellPos c) const { return walkable(c) && passage(c) == Passage::Door; }
+    // A walkable ground cell with a fence or a fence gate in it (docs/design/husbandry.md, Fences): people step over
+    // it, animals can't. Kept up to date by Things with the building layer.
+    bool isFence(CellPos c) const {
+        return c.level == 0 && !fence_.empty() && inBounds(c) && fence_[static_cast<size_t>(index(c))] != 0 && walkable(c);
+    }
+    // A fence gate (a fence cell that is a gate): a tame animal outside its pen is let in through it.
+    bool isFenceGate(CellPos c) const { return isFence(c) && fence_[static_cast<size_t>(index(c))] == 2; }
+    // What an animal can't walk into: a door (animals don't open doors) or a fence.
+    bool blocksAnimals(CellPos c) const { return isDoor(c) || isFence(c); }
+    // `kind` 0 clears the cell, 1 is a fence, 2 a fence gate.
+    void setFence(CellPos c, int kind);
 
     // Height in metres of what a pawn stands on in the cell: the ground on level 0, the ground
     // plus kLevelHeightM per level above it (an upper floor runs parallel to the ground under it).
@@ -170,6 +198,15 @@ public:
     const std::vector<LevelLink>& levelLinks() const { return levelLinks_; }
     // The link with `a` at one end and `b` at the other, either way round; null if none.
     const LevelLink* levelLinkBetween(CellPos a, CellPos b) const;
+    // Whether any stairs, ladder or wall climb starts or ends in the cell (a quick test before a scan).
+    bool linkAt(CellPos c) const { return linkCells_.count(linkCellKey(c)) != 0; }
+
+    // Wall climbing (docs/design/climbing.md): with a speed above 0, the outside face of every
+    // full-height wall is a climb from the cell in front of it, under open air, up to the upper floor
+    // laid over the wall: a LevelLink with `wall` set, `length` metres long at `speedFactor` of walking.
+    // The links follow walls, floors and ground as they change. 0 (the default) climbs no walls.
+    void setWallClimb(float speedFactor, float length);
+    float wallClimbSpeed() const { return wallClimbSpeed_; }
 
     // Building layer: the building covering each cell, kNoEntity if none. Kept up to date by
     // Things when buildings spawn and despawn; nothing else should call the setters.
@@ -211,6 +248,8 @@ public:
     // Counts up every time a building is set or cleared in any cell, so a system that reads the
     // building layer can tell its picture is stale (Rooms).
     uint64_t buildingChanges() const { return buildingChanges_; }
+    // Counts a change to a building that keeps its cells (a window cut in a wall): the light is worked out again.
+    void noteBuildingChange() { ++buildingChanges_; }
 
     // Steam geysers (ground level): a geothermal generator over one makes power (docs/design/power.md).
     // Map generation (S8) places them from the seed; they are not saved, so whoever places them must do
@@ -224,6 +263,27 @@ public:
         return c.level == 0 && inBounds(c) && !flowing_.empty() && flowing_[static_cast<size_t>(index(c))] != 0 &&
                terrain(c) == Terrain::Water;
     }
+    // Bridge decks (docs/design/roads-bridges.md): a ground cell of water, marsh or mud with a bridge built over it.
+    // The deck is a flat walking surface kDeckLiftM above the water (or the cell's highest corner, if that is higher):
+    // heightAt gives the deck's height there, so pawns walk on it dry and shots and blasts meet it; deep water under a
+    // deck can be walked. Things lays and lifts decks with the bridge buildings; nothing else should call these.
+    static constexpr float kDeckLiftM = 0.25f;  // ours
+    bool hasDeck(CellPos c) const {
+        return c.level == 0 && !deck_.empty() && !std::isnan(deck_[static_cast<size_t>(index(c))]);
+    }
+    // The deck's walking height in metres, NaN where there is none.
+    float deckHeight(CellPos c) const {
+        return hasDeck(c) ? deck_[static_cast<size_t>(index(c))] : std::nanf("");
+    }
+    // Where a bridge can be built: a ground cell of shallow water, marsh or mud; `deepRiver` adds the deep water of a
+    // river (a heavy bridge), `anyWater` any deep water (the old bridges map generation lays).
+    bool bridgeable(CellPos c, bool deepRiver, bool anyWater) const;
+    void setDeck(CellPos c);
+    void clearDeck(CellPos c);
+    // Ground cells (by index) whose deck went since the last call, in order; the sim drops what stood on them.
+    std::vector<uint32_t> takeLostDecks();
+    size_t deckCount() const { return deckCount_; }
+
     // Water as a surface (docs/design/water.md). The height in metres of the water's surface over a
     // ground cell, NaN where there is none. Lakes, rivers and their shallow rims share one water
     // table on a generated map (kWaterTableShare of the top height, 13.2 m); water put down by hand
@@ -396,6 +456,7 @@ private:
     Roof& roofSlot(CellPos c);
 
     void generate();
+    void generateFlatLand();
     void carveRivers();
     void addWetlands();
 
@@ -407,6 +468,7 @@ private:
     std::vector<Entity> building_;
     std::vector<Passage> passage_;
     std::vector<uint8_t> obstacle_;
+    std::vector<uint8_t> fence_;  // per ground cell, 1 under a fence or fence gate; empty until the first
     std::vector<Roof> roof_;
     int chunksX_ = 0;
     int chunksY_ = 0;
@@ -416,6 +478,9 @@ private:
     uint64_t upperFloorChanges_ = 0;
     uint64_t buildingChanges_ = 0;
     uint64_t rockChanges_ = 0;
+    std::vector<float> deck_;       // per ground cell: the bridge deck's height, NaN where none; empty until the first
+    std::vector<uint32_t> deckLost_;
+    size_t deckCount_ = 0;
     std::vector<uint8_t> geyser_;  // 1 where a steam geyser vents
     std::vector<uint8_t> flowing_;  // 1 where the water moves (a river)
     std::vector<int16_t> flow_;     // per ground cell: x then y flow in cm/s; empty until a river is made
@@ -432,10 +497,23 @@ private:
     void setLevelCorner(int corner, float metres);
     std::vector<int> hollow_;  // mined-out ground cells that still have the thick roof
     std::vector<LevelLink> levelLinks_;
+    std::unordered_set<uint64_t> linkCells_;  // linkCellKey of both ends of every link
+    float wallClimbSpeed_ = 0.0f;
+    float wallClimbLength_ = 3.0f;
+    static uint64_t linkCellKey(CellPos c) {
+        return (static_cast<uint64_t>(static_cast<uint32_t>(c.level)) << 48) | (static_cast<uint64_t>(static_cast<uint32_t>(c.y)) << 24) |
+               static_cast<uint64_t>(static_cast<uint32_t>(c.x));
+    }
+    void rebuildLinkCells();
+    // Makes the wall climbs onto the cell above `wall` again (none if `wall` is not a full-height wall
+    // with a floor over it), and those of the four walls beside it when `around` is set.
+    void refreshWallClimbs(CellPos wall, bool around);
+    void refreshWallClimb(CellPos wall);
     std::unique_ptr<Regions> regions_;
     std::unique_ptr<Cover> cover_;
     float river_;
     float marsh_;
+    float hills_;
 };
 
 }  // namespace colony

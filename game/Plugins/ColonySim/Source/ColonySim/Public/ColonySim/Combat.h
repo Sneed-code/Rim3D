@@ -258,6 +258,11 @@ struct TraceHit {
     float x = 0.0f, y = 0.0f, z = 0.0f;
     Entity thing = kNoEntity;  // the pawn or building hit
     int part = -1;             // the body part whose hitbox was hit (outside part)
+    // The first window wall with whole glass the stretch went through on its way (docs/design/windows.md), and
+    // where it met the glass. The glass doesn't stop anything; a bullet or grenade that gets that far breaks it.
+    Entity glass = kNoEntity;
+    float glassT = 1.0f;
+    float glassX = 0.0f, glassY = 0.0f, glassZ = 0.0f;
 };
 
 // What a hit on a pawn came to (CombatSystem::hitPawn): the part it lands on, and the damage left
@@ -327,6 +332,8 @@ public:
     // How well the pawn performs, 1 normally (an Exhausted pawn 0.75, NeedsSystem::performanceFactor): aim, cooldown,
     // reload and swing times are divided by it, shooting accuracy multiplied.
     void setPerformance(std::function<float(Entity)> performance) { performance_ = std::move(performance); }
+    // Times a shooter's aim from its lineage (docs/design/races.md); more is steadier. Unset: 1.
+    void setAimFactor(std::function<float(Entity)> aim) { aimFactor_ = std::move(aim); }
     float performance(Entity pawn) const { return performance_ ? std::max(0.05f, performance_(pawn)) : 1.0f; }
     // Times for aiming, cooldown, reloading and swings are multiplied by this: worn armour's weight over performance.
     float attackTimeFactor(Entity pawn) const;
@@ -505,6 +512,9 @@ public:
     // before-destroy hook and is destroyed. True if it was destroyed; false for a thing without hit points or one
     // that still stands.
     bool damageBuilding(Entity building, int damage);
+    // Breaks the glass of a window wall at (x, y, z), `by` who or what did it (docs/design/windows.md). Event
+    // WindowBroken. False if it has no window or the glass is already gone.
+    bool breakWindow(Entity wall, float x, float y, float z, Entity by = kNoEntity);
     // Steps left of a pawn's knock-down (0: not knocked down).
     int knockedDownFor(Entity pawn) const;
     // Steps left of a bullet's stagger (0: not staggered), and the share of its walking speed it keeps now.
@@ -575,6 +585,7 @@ private:
     Map& map_;
     HealthSystem& health_;
     std::unique_ptr<CombatModel> model_;
+    float windowLintelDm_ = 21.0f;  // WindowRules: bullets above a window's lintel hit the wall
     std::unique_ptr<ApparelStats> apparelStats_;
     std::unique_ptr<BodyMotionSystem> motion_;
     std::vector<Event>* events_ = nullptr;
@@ -588,6 +599,7 @@ private:
     std::function<void(Entity, Entity)> harmHook_;
     std::function<float(Entity)> bodySize_;
     std::function<float(Entity)> performance_;
+    std::function<float(Entity)> aimFactor_;
     std::vector<Entity> scratch_;
 
     void emitHit(Entity projectile, const Projectile& p, const TraceHit& hit, float amount);

@@ -38,6 +38,12 @@ struct PathPointView {
 // bed, on the ground to sleep, downed or knocked down).
 enum class PawnPosture : uint8_t { Stand, Sit, Lie };
 
+// Share of a wall climb spent on the face; the rest is the mantle over the top (docs/design/climbing.md).
+inline constexpr float kWallMantleFrom = 0.8f;
+
+// A wall's window (docs/design/windows.md).
+enum class WindowState : uint8_t { None, Glass, Broken };
+
 struct ThingView {
     Entity id = kNoEntity;
     DefId def;
@@ -56,6 +62,12 @@ struct ThingView {
     // Pawns on stairs or a ladder: how far along the climb, 0 to 1; x, y and z are already that
     // share of the way to the end, `level` is the one it started on (docs/design/levels.md).
     float climb = 0.0f;
+    // The climb is up (or down) the face of a wall (docs/design/climbing.md): until kWallMantleFrom
+    // of the way the pawn hangs on the face, rising; after it, it mantles over the top onto the floor.
+    bool wallClimb = false;
+    bool wallClimbUp = false;  // going up (else down); facingX/Y point at the wall either way
+    // Times the height of its jump (its lineage: cat-strain 2), for Unreal's jump.
+    float jumpHeight = 1.0f;
     uint32_t firstWaypoint = 0;
     uint32_t waypointCount = 0;
     Rot4 rotation = Rot4::North;  // buildings
@@ -102,6 +114,7 @@ struct ThingView {
     bool markedForDeconstruct = false;
     // Doors: 0 closed to 1 open (it opens over about 0.75 real seconds while a pawn waits).
     float doorOpen = 0.0f;
+    WindowState window = WindowState::None;  // walls: a window with glass, or with the glass broken
     // Work buildings with bills (docs/design/bills.md): `billCount` bills from Snapshot::bills[firstBill].
     uint32_t firstBill = 0;
     uint32_t billCount = 0;
@@ -213,6 +226,11 @@ struct ThingView {
     bool prisoner = false;
     uint8_t prisonerMode = 0;
     float resistance = 0.0f;
+    float will = 0.0f;           // a prisoner's will (Enslave and ReduceWill wear it down)
+    // Slaves (docs/design/prisoners.md, Slaves): the colony's slave, and its suppression (0 to 1; low means it may rebel).
+    // The player frees one with SetPrisonerModeCommand "Emancipate" or "Release".
+    bool slave = false;
+    float suppression = 0.0f;
     // Visitors (docs/design/trade.md): a pawn of a visit (a VisitorRole number: 0 visitor, 1 trader, 2 guard) and the visit's id.
     bool visitor = false;
     uint8_t visitRole = 0;

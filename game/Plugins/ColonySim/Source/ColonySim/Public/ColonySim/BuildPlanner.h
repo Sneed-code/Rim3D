@@ -35,6 +35,9 @@ struct BuildMenuEntry {
     std::string defName;  // a Things building, or a Terrain floor
     std::string label;
     bool floor = false;       // a floor (PlaceBlueprintCommand lays a floor plan)
+    // A tool, not a building (a Things def with category BuildTool, docs/design/windows.md): PlaceBlueprintCommand marks
+    // the cell for a builder (cut a window in a wall, fill one in). One cell, no stuff, no cost.
+    bool tool = false;
     int sizeX = 1;            // footprint facing North
     int sizeY = 1;
     bool needsStuff = false;  // it is made of a stuff the player picks

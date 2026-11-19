@@ -5,6 +5,7 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Genes.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mood.h"
@@ -203,7 +204,8 @@ TEST_CASE("Skills: building a wall teaches Construction, more with passion") {
 
 TEST_CASE("Skills: cooking teaches Cooking in proportion to the recipe's experience, whatever the speed") {
     float manip = 1.0f;  // a colonist's hands are not at 100% (the work, and so the experience per run, scales with it)
-    const auto xpAfterRun = [&manip](int level) {
+    float learn = 1.0f;  // a baseline human learns 20% faster (sneed, docs/design/races.md)
+    const auto xpAfterRun = [&manip, &learn](int level) {
         Sim sim = skillsSim();
         const Entity stove = testFueled(sim, skillsSpawn(sim, "FueledStove", CellPos{20, 20, 0}));
         testFueled(sim, skillsSpawn(sim, "TorchLamp", CellPos{19, 22, 0}));  // the sim starts at midnight; cook at full speed
@@ -213,6 +215,7 @@ TEST_CASE("Skills: cooking teaches Cooking in proportion to the recipe's experie
         const int taken = skillsRunUntil(sim, 6000, [&] { return sim.jobs().bills().stockOf(sim.defs().idOf("Things", "MealSimple")) == 1; });
         CHECK(taken >= 0);
         manip = sim.health().capacityValue(cook, "Manipulation");
+        learn = sim.genesOf(cook) != nullptr ? sim.genesOf(cook)->effects.learning : 1.0f;
         return skillsOf(sim, cook).xp;
     };
     const Sim recipeSim(SimSettings{5, 48, 0, 0, true}, skillsDefs());  // keeps the recipe alive
@@ -220,7 +223,7 @@ TEST_CASE("Skills: cooking teaches Cooking in proportion to the recipe's experie
     SKILLS_REQUIRE(recipe != nullptr);
     // Minor passion is 1.0x. At skill 8 the run is a steady 'skillXp' over 'work' seconds, so a whole run gives skillXp.
     const float xp8 = xpAfterRun(8);
-    CHECK(xp8 == doctest::Approx(recipe->skillXp / manip).epsilon(0.03));
+    CHECK(xp8 == doctest::Approx(recipe->skillXp * learn / manip).epsilon(0.03));
     // A slower cook takes longer at the same rate and learns more from the run.
     CHECK(xpAfterRun(0) > xp8 * 1.5f);
 }

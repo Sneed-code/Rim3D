@@ -55,6 +55,15 @@
       "reinstall": "\"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" game\\Rim3D.uproject -run=BuildingMaterials -unattended -nosplash -nullrhi"
     },
     {
+      "name": "Window glass material (generated)",
+      "source": "Made by the BuildingMaterials commandlet: our own lit translucent two-sided material (Tint, Metallic, Specular, Roughness, Opacity), marked for instanced static meshes",
+      "licence": "Our own",
+      "version": "UE 5.8",
+      "installedTo": "game/Content/Rim3D/Generated/Buildings/M_WindowGlass.uasset (not in Git)",
+      "usedFor": "the glass of windows in walls (docs/design/windows.md); without it windows are drawn open",
+      "reinstall": "\"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" game\\Rim3D.uproject -run=BuildingMaterials -unattended -nosplash -nullrhi (makes only what is missing)"
+    },
+    {
       "name": "Wound decal material (generated)",
       "source": "Made by the FightMaterials commandlet: our own deferred decal with a Color and an Opacity that blends a round soft-edged blob into what it lands on",
       "licence": "Our own",

@@ -31,7 +31,7 @@ A command that can't be done fails with a reason in plain words (a `CommandFaile
   `interactSeconds` (389 s) and then rolls.
 - Chance of one attempt: `(0.5 + 0.05 x Animals level) x (1 - wildness)`. Wildness is the animal def's
   (deer 0.7, muffalo 0.5, cow 0.25). A failed attempt keeps the mark and the colonist tries again;
-  `AnimalAttemptFailed` is sent. (No manhunter on failure yet: N5.)
+  `AnimalAttemptFailed` is sent, and some animals turn on the handler (Revenge on a failed taming, below).
 - The animal is fed `0.15 x body size` nutrition by the attempt, from one stack of enough food.
 - On success: the animal's side is the player's (`Faction` 1), `Animal::wild` is false, its home is
   where it stands, the mark is gone and `AnimalTamed` is sent. A tame animal that has wandered can't be
@@ -68,8 +68,34 @@ A command that can't be done fails with a reason in plain words (a `CommandFaile
   by asking the pathfinder for a path (it can't be away from the zone for long). With no zone it stays
   within 40 m of its home.
 - A zone is a **pen** (`Husbandry::isPen`) when every cell just outside it that is next to it is not
-  walkable, apart from doors: nothing joined to the zone gets out. Doors count as walls for this test,
-  and they are walls to animals: an animal's walk never crosses a door and a path through one is dropped (RimWorld's animals can't open doors).
+  walkable, apart from doors, fences and fence gates: nothing joined to the zone gets out. Doors and fences count as walls for this test,
+  and they are walls to animals: an animal's walk never crosses a door or a fence and a path through one is dropped (RimWorld's animals can't open doors).
+
+## Fences
+
+`Fence` and `FenceGate` (Structure, `Things/Husbandry.json`, wiki numbers: a fence is 1 stuff, 40 HP, path cost 80, cover 25%; a
+gate 25 stuff, 20 HP) carry `building.fence`. `Map::isFence` marks their cells (kept with the building layer, from the def, so a loaded
+game has them too) and `Map::blocksAnimals` is a door or a fence. People walk over a fence (slowly) and through a gate; no animal
+crosses either, wild or tame, and a fleeing animal turns away from them. Only an animal charging its enemy (`Chase`) still goes
+through, as RimWorld's manhunters break through fences. An animal zone never takes a fence cell, so a zone painted over a fence
+ring keeps its inside, and a ring of fence with a gate makes a pen. A tame animal assigned to a pen that is outside it may walk in
+through a gate (`Map::isFenceGate`); once inside the gate is shut to it again.
+
+## Animal beds
+
+`AnimalSleepingSpot`, `AnimalSleepingBox` (fits body size 0.55 and under; from memory) and `AnimalBed` (40 fabric or leather,
+fits any animal; wiki) carry `building.animalBed`; people never sleep in them. At bedtime a tame animal takes the nearest
+animal bed that fits it, stands in its zone (or within `homeRadius` of home) and no other living animal has
+(`Husbandry::bedFor`, kept in `AnimalCare::bed` and saved), walks there and sleeps on it. A hurt tame animal with a bed goes
+and rests on it by day as well. While lying on it the animal heals as in a bed (`Health::rest` is `Bed`: RimWorld's rest heal
+bonus); on the ground it heals as before. No bed, or no way there: it sleeps where it is, as before. Saved in section
+`husbandry` version 4 (`bed`).
+
+## Revenge on a failed taming
+
+`race.revengeOnTameFail` (the wiki's "manhunter chance (taming)": 30% for wolves, bears, the cougar, the rhinoceros and the
+megasloth, 10% for the boomalope and the ostrich, 0 for farm animals; ours for the lion, raptor and tyrannosaurus) is rolled
+after every failed attempt: the animal turns on the handler (`AnimalTemper::Revenge`) for a short time.
 - Animals in a pen eat hay and kibble that lies in it (and hand-feeding reaches them there).
 
 ## Feeding
@@ -104,8 +130,7 @@ Snapshot `ThingView` has `markTame`, `markSlaughter`, `animalZone`, `learnedTric
 
 ## Limits
 
-- No names for tamed animals yet.
 - A taming or feeding trip needs one stack with enough food.
-- Failed taming does not make animals manhunters (N5).
-- Animals walk through doors; only the pen test treats them as barriers.
+- No handler walks an animal into its pen (RimWorld's roping): instead a tame animal outside its own zone may path through a
+  fence gate (not a door) to get back in; from inside, the gate is shut to it.
 - Mating, young, eggs, milk and wool are in [breeding.md](breeding.md) (N4); the animal zone a mother is in is the zone her young are born into.

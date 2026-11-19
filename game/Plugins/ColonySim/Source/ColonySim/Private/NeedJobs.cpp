@@ -231,6 +231,7 @@ bool needJobsYieldsToCold(JobType type) {
         case JobType::HarvestPlant:
         case JobType::RemoveFloor:
         case JobType::Earthworks:
+        case JobType::WindowWork:
         case JobType::SowCrop:
         case JobType::DeliverResources:
         case JobType::BuildFrame:
