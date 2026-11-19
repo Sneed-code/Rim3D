@@ -265,6 +265,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	}
 	const bool bTeleported = !bPlaced || FVector::Dist(Location, GetActorLocation()) > PawnTeleportDistance;
 	bPlaced = true;
+	UpdateMeshTickGroups();
 
 	// Metres per step to cm per second at 1x, blended like the position.
 	const float Alpha = Bridge.GetBlendAlpha();
@@ -2081,6 +2082,37 @@ void ASimPawnActor::StartRagdoll(const FVector& Impulse)
 	{
 		Body->AddImpulse(Impulse, NAME_None, true);
 	}
+}
+
+void ASimPawnActor::UpdateMeshTickGroups()
+{
+	// The pawn subsystem moves and turns the actor as a tickable, after TG_PrePhysics: a mesh animated there draws a pose
+	// made for last frame's place and facing, so every turn and step swings the feet by one frame's move and back
+	// (docs/design/pawns.md "No pops"). TG_PostUpdateWork comes after the tickables: the pose is made for the place it
+	// is drawn at. A ragdoll keeps TG_PrePhysics, where physics expects its body.
+	const ETickingGroup Group = bRagdoll ? TG_PrePhysics : TG_PostUpdateWork;
+	TInlineComponentArray<USkeletalMeshComponent*> Meshes(this);
+	if (MetaHuman)
+	{
+		TInlineComponentArray<USkeletalMeshComponent*> More(MetaHuman.Get());
+		Meshes.Append(More);
+	}
+	if (MeshTickGroup == static_cast<int32>(Group) && MeshTickCount == Meshes.Num())
+	{
+		return;
+	}
+	for (USkeletalMeshComponent* Mesh : Meshes)
+	{
+		Mesh->PrimaryComponentTick.TickGroup = Group;
+		Mesh->PrimaryComponentTick.EndTickGroup = Group;
+		if (Mesh != Body.Get())
+		{
+			// Copies of the body's pose (the MakeHuman retarget, MetaHuman parts) come after it.
+			Mesh->PrimaryComponentTick.AddPrerequisite(Body.Get(), Body->PrimaryComponentTick);
+		}
+	}
+	MeshTickGroup = static_cast<int32>(Group);
+	MeshTickCount = Meshes.Num();
 }
 
 void ASimPawnActor::StopRagdoll()

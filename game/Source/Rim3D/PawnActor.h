@@ -356,6 +356,8 @@ private:
 	/** The hit reaction's lean and the melee pose, applied to the body together. */
 	void ApplyBodyPose(float GameDelta, bool bBlocking);
 	void AdvanceJump(float GameDelta);
+	/** Animate after this frame's move: the meshes tick in TG_PostUpdateWork (TG_PrePhysics while a ragdoll). */
+	void UpdateMeshTickGroups();
 	/** The swing or block, plus the dodge: what the body and the weapon do now. */
 	FMeleePose ComputeMeleePose() const;
 
@@ -366,6 +368,9 @@ private:
 	FSimPawnLooks Looks;
 	bool bHasLooks = false;
 	bool bRagdoll = false;
+	/** The tick group the meshes were last put in, and how many meshes that was (more come with looks). */
+	int32 MeshTickGroup = -1;
+	int32 MeshTickCount = 0;
 	uint16 SeveredShown = 0;
 	int32 SeveredCaps = 0;
 	/** Meshes hidden whole because the head is off (a MetaHuman face); they still go into the head's piece. */

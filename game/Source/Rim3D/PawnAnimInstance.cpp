@@ -78,6 +78,48 @@ namespace
 	constexpr float PawnMotionMatchRateMax = 1.6f;
 	// Enough blends at once that none is ever dropped half shown (dropping one was a pop).
 	constexpr int32 PawnBlendStackMax = 12;
+	// A standing idle never wraps from its last frame to its first (most do not match up: a pop every loop). Before
+	// its end it blends over PawnIdleSeamBlend into itself from the start, so the old copy wraps unseen.
+	constexpr float PawnIdleSeamBlend = 0.5f;
+	// Walking feet (docs/design/pawns.md "No pops"): a foot down on the ground in the animation (within
+	// PawnWalkLockContact cm of the lowest it has been lately, the low point creeping up PawnWalkLockGroundRise cm a
+	// second) is held where it came down, the leg bent to reach it, so a pace off the clip's or a blend between clips
+	// cannot slide it. It lets go when the animation lifts it, the gap closing over PawnWalkLockRelease; a hold that
+	// falls further behind than PawnWalkLockMaxOff cm is dragged along (never snapped). The whole lock fades in and out
+	// over PawnWalkLockBlend (off for clips that move the whole body, jumps, rolls, crawling).
+	constexpr float PawnWalkLockContact = 3.0f;
+	constexpr float PawnWalkLockGroundRise = 2.0f;
+	constexpr float PawnWalkLockRelease = 0.15f;
+	constexpr float PawnWalkLockMaxOff = 20.0f;
+	constexpr float PawnWalkLockBlend = 0.15f;
+
+	/**
+	 * Clips motion matching must never play here: turns, pivots and refaces turn the body by their own root, and the
+	 * sim turns the actor, so under a pawn that keeps its facing they spun the legs and slid the feet (Stand_Turn_180
+	 * slid them 24 m/s in the PC test); at a walking pace, run and sprint clips (stops, transitions) too.
+	 */
+	bool PawnMotionClipBanned(const UObject* Asset, bool bWalkPace)
+	{
+		if (!Asset)
+		{
+			return false;
+		}
+		const FString Name = Asset->GetName();
+		for (const TCHAR* Word : {TEXT("Turn"), TEXT("Pivot"), TEXT("Reface")})
+		{
+			if (Name.Contains(Word))
+			{
+				return true;
+			}
+		}
+		return bWalkPace && (Name.Contains(TEXT("Run")) || Name.Contains(TEXT("Sprint")));
+	}
+
+	float PawnSmooth(float T)
+	{
+		T = FMath::Clamp(T, 0.0f, 1.0f);
+		return T * T * (3.0f - 2.0f * T);
+	}
 
 	/** The mesh faces +Y in its own space, so it is turned -90 degrees under the actor. */
 	FQuat PawnMeshFacing(float ActorYaw)
@@ -442,6 +484,9 @@ struct FSimPawnHitLayerNode : public FAnimNode_Base
 	float FootHold = 0.0f;
 	bool bStepping = false;
 	int32 FootSteps = 0;
+	/** The walking foot lock: how much it shows (0 to 1) and how many feet it holds now. */
+	float WalkLockWeight = 0.0f;
+	int32 WalkFeetHeld = 0;
 
 private:
 	struct FSpring
@@ -480,6 +525,15 @@ private:
 	float StepYawFrom = 0.0f;
 	bool bFirstStep = true;
 	bool bSecondStepDue = false;
+	/** Walking feet (PawnWalkLock*): wanted (set in the update); per foot whether it is held, where (world), the gap
+	 *  left when it let go (world, closing as WalkFade goes to nought) and the lowest it has been lately (mesh space). */
+	bool bWantWalkLock = false;
+	bool bWalkHeld[2] = {false, false};
+	FVector WalkPlant[2] = {FVector::ZeroVector, FVector::ZeroVector};
+	FVector WalkGap[2] = {FVector::ZeroVector, FVector::ZeroVector};
+	float WalkFade[2] = {0.0f, 0.0f};
+	float WalkGround[2] = {0.0f, 0.0f};
+	bool bWalkGroundKnown = false;
 	FCompactPoseBoneIndex Calf[2] = {FCompactPoseBoneIndex(INDEX_NONE), FCompactPoseBoneIndex(INDEX_NONE)};
 
 	FCompactPoseBoneIndex Pelvis = FCompactPoseBoneIndex(INDEX_NONE);
@@ -597,6 +651,8 @@ protected:
 		Out.FootHold = HitLayer.FootHold;
 		Out.bFootStepping = HitLayer.bStepping;
 		Out.FootSteps = HitLayer.FootSteps;
+		Out.WalkLock = HitLayer.WalkLockWeight;
+		Out.WalkFeetHeld = HitLayer.WalkFeetHeld;
 	}
 
 public:
@@ -1050,8 +1106,33 @@ void FSimPawnLocomotionNode::UpdateMotionMatching(const FAnimationUpdateContext&
 	PRAGMA_ENABLE_EXPERIMENTAL_WARNINGS
 	const FSearchResult Result = Results.GetBestResult();
 	const float WantedPlayRate = CalculateWantedPlayRate(Result, SearchContext, PlayRate, History.GetTrajectorySpeedMultiplier(), FPoseSearchEvent());
+	const auto Kept = State.SearchResult;
 	State.SearchResult.InitFrom(Result, WantedPlayRate);
 	++Stats.Searches;
+
+	// Never a turn, pivot or reface clip, nor a run clip at a walking pace (PawnMotionClipBanned): the clip playing goes
+	// on if it can, else the plain walk or run loop takes over.
+	const FSimPawnAnimInputs& In = Proxy->Inputs;
+	const bool bWalkPace = FMath::Max(In.Velocity.Size2D(), In.CruiseSpeed) < 0.5f * (Proxy->WalkLoopSpeed + Proxy->RunLoopSpeed);
+	const UObject* Picked = State.SearchResult.SelectedAnim;
+	if (PawnMotionClipBanned(Picked, bWalkPace))
+	{
+		++Stats.BannedPicks;
+		State.SearchResult = Kept;
+		const UAnimSequenceBase* Playing = Cast<UAnimSequenceBase>(BlendStack.GetAnimAsset());
+		if (Playing && !IsIdleAsset(Playing) && !PawnMotionClipBanned(Playing, bWalkPace) &&
+			(Kept.bLoop || Kept.SelectedTime < Playing->GetPlayLength() - 0.2f))
+		{
+			BlendStack.UpdatePlayRate(Kept.WantedPlayRate);
+			Stats.PlayRate = Kept.WantedPlayRate;
+			return;
+		}
+		State.Reset();
+		Stats.Database = NAME_None;
+		UpdateLoops(Context, In, PawnMotionMatchBlendTime);
+		SinceJump = 0.0f;
+		return;
+	}
 
 	const UPoseSearchDatabase* Database = State.SearchResult.SelectedDatabase.Get();
 	Stats.Database = Database ? Database->GetFName() : NAME_None;
@@ -1136,7 +1217,9 @@ bool FSimPawnLocomotionNode::UpdateStandingIdle(const FAnimationUpdateContext& C
 		{
 			return false;
 		}
-		BlendStack.BlendTo(Context, Idle, Random.FRand() * Idle->GetPlayLength(), true, false, nullptr, BlendTime, nullptr,
+		// Started early enough that its blend in is over before its seam blend begins.
+		const float Latest = FMath::Max(0.0f, Idle->GetPlayLength() - PawnIdleSeamBlend - BlendTime - 0.1f);
+		BlendStack.BlendTo(Context, Idle, Random.FRand() * Latest, true, false, nullptr, BlendTime, nullptr,
 			EAlphaBlendOption::HermiteCubic, false, NAME_None, FVector::ZeroVector, 1.0f);
 		IdleDriftIn = Random.FRandRange(PawnIdleDriftMin, PawnIdleDriftMax);
 		++Stats.IdlesStarted;
@@ -1145,8 +1228,19 @@ bool FSimPawnLocomotionNode::UpdateStandingIdle(const FAnimationUpdateContext& C
 	{
 		// Standing on: now and then it drifts to another idle (any of them: the feet are held where they stand, so the
 		// slow blend moves only the body above them; a foot the new idle wants far off takes a small step).
+		const UAnimSequenceBase* Seq = Cast<UAnimSequenceBase>(Playing);
+		const float Length = Seq ? Seq->GetPlayLength() : 0.0f;
+		const float Left = Length - BlendStack.GetAccumulatedTime();
+		if (Length > 2.0f * PawnIdleSeamBlend && Left <= PawnIdleSeamBlend + 0.05f)
+		{
+			// The seam: into itself from the start; the old copy reaches its end as its weight reaches nought.
+			BlendStack.BlendTo(Context, Playing, 0.0f, true, false, nullptr, PawnIdleSeamBlend, nullptr,
+				EAlphaBlendOption::HermiteCubic, false, NAME_None, FVector::ZeroVector, 1.0f);
+			++Stats.IdleSeams;
+		}
 		IdleDriftIn -= DeltaTime;
-		if (IdleDriftIn <= 0.0f)
+		// A drift waits until the idle playing has its whole blend out left (it must not wrap while it still shows).
+		if (IdleDriftIn <= 0.0f && Left > PawnIdleDriftBlendTime + PawnIdleSeamBlend + 0.1f)
 		{
 			IdleDriftIn = Random.FRandRange(PawnIdleDriftMin, PawnIdleDriftMax);
 			const int32 Next = PickIdle(-1);
@@ -1154,7 +1248,8 @@ bool FSimPawnLocomotionNode::UpdateStandingIdle(const FAnimationUpdateContext& C
 			{
 				IdleIndex = Next;
 				UAnimSequence* Idle = Proxy->IdleLoops[Next];
-				BlendStack.BlendTo(Context, Idle, Random.FRand() * Idle->GetPlayLength(), true, false, nullptr, PawnIdleDriftBlendTime, nullptr,
+				const float Latest = FMath::Max(0.0f, Idle->GetPlayLength() - PawnIdleSeamBlend - PawnIdleDriftBlendTime - 0.1f);
+				BlendStack.BlendTo(Context, Idle, Random.FRand() * Latest, true, false, nullptr, PawnIdleDriftBlendTime, nullptr,
 					EAlphaBlendOption::HermiteCubic, false, NAME_None, FVector::ZeroVector, 1.0f);
 				++Stats.IdleDrifts;
 			}
@@ -1209,6 +1304,12 @@ void FSimPawnHitLayerNode::Forget()
 	WobbleDegrees = 0.0f;
 	LimpNow = 0.0f;
 	TwistDegrees = 0.0f;
+	WalkLockWeight = 0.0f;
+	WalkFeetHeld = 0;
+	bWantWalkLock = false;
+	bWalkHeld[0] = bWalkHeld[1] = false;
+	WalkFade[0] = WalkFade[1] = 0.0f;
+	bWalkGroundKnown = false;
 	bWantFootLock = false;
 	bFootLocked = false;
 	FootLockWeight = 0.0f;
@@ -1320,6 +1421,7 @@ void FSimPawnHitLayerNode::Update_AnyThread(const FAnimationUpdateContext& Conte
 
 	// Standing feet and turns are worked out in Evaluate, where the feet are known.
 	bWantFootLock = Proxy->bStandingIdleNow && In.bStandTwist;
+	bWantWalkLock = In.bStandTwist;
 
 	// The springs, in steps short enough to stay steady on a slow frame.
 	const int32 Steps = FMath::Clamp(FMath::CeilToInt32(DeltaTime / PawnKickStep), 1, 30);
@@ -1441,6 +1543,60 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 			Wanted[Side] = ToWorld.TransformPosition(PawnBonePlace(Pose, Foot[Side]));
 		}
 	}
+	// Walking feet: each foot down in the animation is held where it came down (PawnWalkLock*). WalkTarget is where
+	// each foot goes (world), Shown where it is drawn with the lock's weight.
+	FVector WalkTarget[2] = {Wanted[0], Wanted[1]};
+	FVector Shown[2] = {Wanted[0], Wanted[1]};
+	WalkLockWeight = PawnApproach(WalkLockWeight, bWantWalkLock && bLegs ? 1.0f : 0.0f, Dt / PawnWalkLockBlend);
+	WalkFeetHeld = 0;
+	if (!bLegs || WalkLockWeight <= 0.0f)
+	{
+		bWalkHeld[0] = bWalkHeld[1] = false;
+		WalkFade[0] = WalkFade[1] = 0.0f;
+		bWalkGroundKnown = false;
+	}
+	else
+	{
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			const float Z = static_cast<float>(PawnBonePlace(Pose, Foot[Side]).Z);
+			WalkGround[Side] = bWalkGroundKnown ? FMath::Min(WalkGround[Side] + PawnWalkLockGroundRise * Dt, Z) : Z;
+			const bool bDown = Z <= WalkGround[Side] + PawnWalkLockContact;
+			if (bWalkHeld[Side])
+			{
+				FVector Gap = WalkPlant[Side] - Wanted[Side];
+				Gap.Z = 0.0;
+				if (!bDown)
+				{
+					// Lifted: let go, the gap closing smoothly while the foot swings.
+					bWalkHeld[Side] = false;
+					WalkGap[Side] = Gap;
+					WalkFade[Side] = 1.0f;
+				}
+				else if (Gap.Size2D() > PawnWalkLockMaxOff)
+				{
+					WalkPlant[Side] = Wanted[Side] + Gap * (PawnWalkLockMaxOff / Gap.Size2D());
+				}
+			}
+			else if (bDown)
+			{
+				// Down: held where it is drawn now (part way through closing a gap, there), so nothing moves this frame.
+				WalkPlant[Side] = Wanted[Side] + WalkGap[Side] * PawnSmooth(WalkFade[Side]);
+				bWalkHeld[Side] = true;
+				WalkFade[Side] = 0.0f;
+			}
+			else
+			{
+				WalkFade[Side] = FMath::Max(0.0f, WalkFade[Side] - Dt / PawnWalkLockRelease);
+			}
+			WalkTarget[Side] = bWalkHeld[Side] ? FVector(WalkPlant[Side].X, WalkPlant[Side].Y, Wanted[Side].Z) :
+				Wanted[Side] + WalkGap[Side] * PawnSmooth(WalkFade[Side]);
+			Shown[Side] = Wanted[Side] + (WalkTarget[Side] - Wanted[Side]) * WalkLockWeight;
+			WalkFeetHeld += bWalkHeld[Side] ? 1 : 0;
+		}
+		bWalkGroundKnown = true;
+	}
+
 	bool bWant = bWantFootLock && bLegs;
 	if (bFootLocked && FVector::Dist2D(ToWorld.GetLocation(), FootLockCentre) > PawnFootLockDrift)
 	{
@@ -1452,7 +1608,7 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 		// facing the body's way: nothing moves this frame.
 		for (int32 Side = 0; Side < 2; ++Side)
 		{
-			FootPlant[Side] = bFootLocked ? FMath::Lerp(Wanted[Side], FootPlant[Side], static_cast<double>(FootLockWeight)) : Wanted[Side];
+			FootPlant[Side] = bFootLocked ? FMath::Lerp(Shown[Side], FootPlant[Side], static_cast<double>(FootLockWeight)) : Shown[Side];
 		}
 		FeetYaw = bFootLocked ? FRotator::NormalizeAxis(BodyYaw - FMath::Clamp(FMath::FindDeltaAngleDegrees(FeetYaw, BodyYaw), -PawnStandTwistMax,
 			PawnStandTwistMax) * FootLockWeight) : BodyYaw;
@@ -1564,13 +1720,28 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 
 	// Planted feet, last, over everything above: each foot held at its place (or on its way in a step), the leg bent to
 	// reach it, blended with the animation's foot by how much the hold shows.
-	if (bLegs && bFootLocked && FootLockWeight > 0.0f)
+	// The walking hold goes on as a gap from where the animation had the foot (so the twist and the springs above
+	// still show), the standing hold over it.
+	if (bLegs && (WalkLockWeight > 0.0f || (bFootLocked && FootLockWeight > 0.0f)))
 	{
 		for (int32 Side = 0; Side < 2; ++Side)
 		{
-			const FVector Held = ToWorld.InverseTransformPosition(FootPlant[Side]);
 			const FVector Animated = PawnBonePlace(Pose, Foot[Side]);
-			PawnReachLeg(Pose, Thigh[Side], Calf[Side], Foot[Side], FMath::Lerp(Animated, Held, static_cast<double>(FootLockWeight)));
+			FVector Target = Animated;
+			if (WalkLockWeight > 0.0f)
+			{
+				FVector Gap = ToWorld.InverseTransformPosition(WalkTarget[Side]) - ToWorld.InverseTransformPosition(Wanted[Side]);
+				Gap.Z = 0.0;
+				Target += Gap * static_cast<double>(WalkLockWeight);
+			}
+			if (bFootLocked && FootLockWeight > 0.0f)
+			{
+				Target = FMath::Lerp(Target, ToWorld.InverseTransformPosition(FootPlant[Side]), static_cast<double>(FootLockWeight));
+			}
+			if (!Target.Equals(Animated, 0.01))
+			{
+				PawnReachLeg(Pose, Thigh[Side], Calf[Side], Foot[Side], Target);
+			}
 		}
 	}
 }

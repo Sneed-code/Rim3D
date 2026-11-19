@@ -97,6 +97,13 @@ struct FSimPawnAnimStats
 	/** Standing idles started (each stop picks one at random) and drifts from one to another while standing. */
 	int32 IdlesStarted = 0;
 	int32 IdleDrifts = 0;
+	/** Seam blends (an idle blended into its own start before its end, so it never wraps on screen). */
+	int32 IdleSeams = 0;
+	/** Motion matching picks thrown away: a turn, pivot or reface clip, or a run clip at a walking pace. */
+	int32 BannedPicks = 0;
+	/** Walking feet: how much the walking foot lock shows (0 to 1) and how many feet it holds now. */
+	float WalkLock = 0.0f;
+	int32 WalkFeetHeld = 0;
 	/** Degrees the upper body is twisted over planted feet now (a standing turn), and the most it has been. */
 	float StandTwistDegrees = 0.0f;
 	float MaxStandTwistDegrees = 0.0f;

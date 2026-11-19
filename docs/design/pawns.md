@@ -120,6 +120,18 @@ layer's wobble shows the rest). A clip the sim moves the body along blends in ov
 from one still playing (the next swing), and the clip going out keeps its share of the set-back while it fades (the
 body used to jump forward by the old clip's travel the moment a second swing began). Smoke test `idle` measures it.
 
+Second PC round (2026-11-19): **pawn meshes animate in `TG_PostUpdateWork`** (a ragdoll in `TG_PrePhysics`), after the
+pawn subsystem moves and turns the actors as a tickable; animated in `TG_PrePhysics` they drew a pose made for last
+frame's place, so every turn swung the held feet by a frame's turn and back (a foot pop at every turn's start and end).
+Motion matching **never plays a turn, pivot or reface clip** (`Stand_Turn_*` sat in the loaded databases and were picked
+at every change of direction, sliding the feet up to 24 m/s), **nor a run or sprint clip at a walking pace**; a banned
+pick keeps the clip playing or falls back to the plain walk or run loop. A standing idle **never wraps on screen**: 0.5 s
+before its end it blends into itself from the start (the 11 s looking idle popped the head at each loop). **Walking feet
+are locked** while the animation has them on the ground (within 3 cm of their lowest lately): held where they came down,
+the leg bent to reach, let go as the animation lifts them with the gap closing over 0.15 s, dragged (never snapped) past
+20 cm; the lock fades in and out over 0.15 s and is off for whole-body clips, jumps, rolls and crawling. The smoke tests
+read the bones at the start of the next frame (what was drawn), and `idle` fails on any frame that plays a turn clip.
+
 **Near and far: loops.** The breathing idle, or the walk or run loop (`M_Neutral_*`), picked by speed (run above the
 middle of the two loops' speeds, measured from their root motion: 200 and 500 cm/s) and played
 faster or slower to match it (0.6 to 1.5). A pawn that comes close again starts motion matching

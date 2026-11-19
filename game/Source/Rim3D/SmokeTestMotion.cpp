@@ -58,7 +58,7 @@ namespace
 		int32 StillHipsSamples = 0;
 	};
 
-	/** The hips and the actor as drawn, read at the end of the last frame (FWorldDelegates::OnWorldPostActorTick). */
+	/** The hips and the actor as drawn, read at the end of the last frame (FWorldDelegates::OnWorldTickStart, before the next frame moves anything). */
 	struct FMotionSmokeSample
 	{
 		bool bValid = false;
@@ -154,7 +154,7 @@ void USmokeTestSubsystem::BuildMotionPhases()
 			}
 			B->Submit(colony::DraftCommand{State->Pawn, true});
 			const TWeakObjectPtr<USmokeTestSubsystem> Self(this);
-			*SampleHook = FWorldDelegates::OnWorldPostActorTick.AddLambda([Self, State, Sample](UWorld* World, ELevelTick, float)
+			*SampleHook = FWorldDelegates::OnWorldTickStart.AddLambda([Self, State, Sample](UWorld* World, ELevelTick, float)
 			{
 				const USmokeTestSubsystem* Smoke = Self.Get();
 				const USimPawnSubsystem* P = Smoke && World == Smoke->GetWorld() ? World->GetSubsystem<USimPawnSubsystem>() : nullptr;
@@ -348,7 +348,7 @@ void USmokeTestSubsystem::BuildMotionPhases()
 		{
 			if (bLastClip)
 			{
-				FWorldDelegates::OnWorldPostActorTick.Remove(*SampleHook);
+				FWorldDelegates::OnWorldTickStart.Remove(*SampleHook);
 			}
 			PhaseNumbers.Add(TEXT("simTravelCm"), State->Travel);
 			PhaseNumbers.Add(TEXT("maxHipsOffCm"), State->MaxOff);

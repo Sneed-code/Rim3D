@@ -62,7 +62,7 @@ namespace
 	constexpr double IdleSmokeGroundBand = 4.0;
 	constexpr double IdleSmokeWalkSlip = 25.0;
 
-	/** The bones as drawn at the end of the last frame (FWorldDelegates::OnWorldPostActorTick). */
+	/** The bones as drawn at the end of the last frame (FWorldDelegates::OnWorldTickStart, before the next frame moves anything). */
 	struct FIdleSmokeSample
 	{
 		bool bValid = false;
@@ -77,6 +77,8 @@ namespace
 		FName Playing;
 		FVector ActorAt = FVector::ZeroVector;
 		float ActorYaw = 0.0f;
+		float WalkLock = 0.0f;  // the walking foot lock's weight, and the feet it holds
+		int32 WalkFeetHeld = 0;
 	};
 
 	struct FIdleSmokeState
@@ -100,6 +102,8 @@ namespace
 		int32 Frames = 0;
 		int32 StandingFrames = 0;
 		int32 OffIdleFrames = 0;  // standing idle, but not one of the standing idles
+		int32 TurnClipFrames = 0;  // frames that played a turn, pivot or reface clip (none may)
+		FString TurnClipSeen;
 		int32 IdlesStartedAtStart = 0;
 		int32 IdleDriftsAtStart = 0;
 		float MaxTwist = 0.0f;
@@ -136,6 +140,8 @@ namespace
 		Out.Playing = Anim ? Anim->GetStats().PlayingAsset : NAME_None;
 		Out.ActorAt = Actor.GetActorLocation();
 		Out.ActorYaw = static_cast<float>(Actor.GetActorRotation().Yaw);
+		Out.WalkLock = Anim ? Anim->GetStats().WalkLock : 0.0f;
+		Out.WalkFeetHeld = Anim ? Anim->GetStats().WalkFeetHeld : 0;
 	}
 }
 
@@ -174,6 +180,11 @@ void USmokeTestSubsystem::BuildIdlePhases()
 		}
 		++State->Frames;
 		const FIdleSmokeSample Now = *Sample;
+		if (const FString Clip = Now.Playing.ToString(); Clip.Contains(TEXT("Turn")) || Clip.Contains(TEXT("Pivot")) || Clip.Contains(TEXT("Reface")))
+		{
+			++State->TurnClipFrames;
+			State->TurnClipSeen = FString::Printf(TEXT("%s in phase %s at %.2f s"), *Clip, *PhaseName(), PhaseTime);
+		}
 		const bool bStall = GetWorld()->GetDeltaSeconds() > 0.05f;
 		if (bStall)
 		{
@@ -206,10 +217,10 @@ void USmokeTestSubsystem::BuildIdlePhases()
 				if (Accel > 0.5 * Limits[Group])
 				{
 					// Every frame near or over a limit, with what was going on, for finding the cause in the log.
-					UE_LOG(LogTemp, Log, TEXT("IDLETRACE %s t=%.3f bone=%s accel=%.0f %s playing=%s rate=%.2f standing=%d hold=%.2f step=%d twist=%.1f yaw=%.1f dyaw=%.2f speed=%.0f"),
+					UE_LOG(LogTemp, Log, TEXT("IDLETRACE %s t=%.3f bone=%s accel=%.0f %s playing=%s rate=%.2f standing=%d hold=%.2f step=%d twist=%.1f yaw=%.1f dyaw=%.2f speed=%.0f walklock=%.2f walkheld=%d"),
 						*PhaseName(), PhaseTime, IdleSmokeBones[i].Name, Accel, bWorld ? TEXT("world") : TEXT("local"), *Now.Playing.ToString(), Now.PlayRate,
 						Now.bStandingIdle ? 1 : 0, Now.FootHold, Now.bStepping ? 1 : 0, Now.TwistDegrees, Now.ActorYaw,
-						FMath::FindDeltaAngleDegrees(State->Last[0].ActorYaw, Now.ActorYaw), FVector::Dist2D(Now.ActorAt, State->Last[0].ActorAt) / Dt2);
+						FMath::FindDeltaAngleDegrees(State->Last[0].ActorYaw, Now.ActorYaw), FVector::Dist2D(Now.ActorAt, State->Last[0].ActorAt) / Dt2, Now.WalkLock, Now.WalkFeetHeld);
 				}
 				if (Accel > State->MaxPop[Group])
 				{
@@ -288,6 +299,13 @@ void USmokeTestSubsystem::BuildIdlePhases()
 		}
 		PhaseNumbers.Add(TEXT("stallFramesSkipped"), State->Skipped);
 		State->Skipped = 0;
+		PhaseNumbers.Add(TEXT("turnClipFrames"), State->TurnClipFrames);
+		if (State->TurnClipFrames > 0)
+		{
+			Fail(FString::Printf(TEXT("%s: %d frames played a turn/pivot clip (they spin the legs under the body): last %s"), What, State->TurnClipFrames,
+				*State->TurnClipSeen));
+		}
+		State->TurnClipFrames = 0;
 	};
 	const auto VerifyStand = [=, this](const TCHAR* What)
 	{
@@ -364,7 +382,7 @@ void USmokeTestSubsystem::BuildIdlePhases()
 			B->Submit(colony::MoveOrderCommand{State->Others[0], Cell(5, 0)});
 			B->Submit(colony::MoveOrderCommand{State->Others[1], Cell(5, 3)});
 			const TWeakObjectPtr<USmokeTestSubsystem> Self(this);
-			*SampleHook = FWorldDelegates::OnWorldPostActorTick.AddLambda([Self, State, Sample](UWorld* World, ELevelTick, float)
+			*SampleHook = FWorldDelegates::OnWorldTickStart.AddLambda([Self, State, Sample](UWorld* World, ELevelTick, float)
 			{
 				const USmokeTestSubsystem* Smoke = Self.Get();
 				if (!Smoke || World != Smoke->GetWorld())
@@ -426,6 +444,7 @@ void USmokeTestSubsystem::BuildIdlePhases()
 			const USimPawnAnimInstance* Anim = ActorOf() ? ActorOf()->GetAnim() : nullptr;
 			const int32 Drifts = Anim ? Anim->GetStats().IdleDrifts - State->IdleDriftsAtStart : 0;
 			PhaseNumbers.Add(TEXT("idleDrifts"), Drifts);
+			PhaseNumbers.Add(TEXT("idleSeamBlends"), Anim ? Anim->GetStats().IdleSeams : 0);
 			const USimPawnSubsystem* P = Pawns();
 			if (Drifts < 1 && P && P->GetIdleLoops().Num() >= 2)
 			{
@@ -662,7 +681,12 @@ void USmokeTestSubsystem::BuildIdlePhases()
 		};
 		Phase.Verify = [=, this]()
 		{
-			FWorldDelegates::OnWorldPostActorTick.Remove(*SampleHook);
+			FWorldDelegates::OnWorldTickStart.Remove(*SampleHook);
+			if (const USimPawnAnimInstance* Anim = ActorOf() ? ActorOf()->GetAnim() : nullptr)
+			{
+				// Turn, pivot and reface clips (and run clips at a walk) motion matching picked and was not let play.
+				PhaseNumbers.Add(TEXT("bannedPicksAllPhases"), Anim->GetStats().BannedPicks);
+			}
 			VerifyPops(TEXT("swings"));
 			VerifyStand(TEXT("swings"));
 		};
