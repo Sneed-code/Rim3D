@@ -822,7 +822,7 @@ void UProtagonistSubsystem::UpdateFlick(APlayerController& PC, USimSubsystem& Br
 	PC.GetInputMouseDelta(MouseX, MouseY);
 	// A window of the last moments: the sum fades out over it, so slow drifts never add up to a flick.
 	FlickAge += Dt;
-	if (FlickAge > LockFlickWindowSeconds || FMath::Sign(MouseX) != FMath::Sign(FlickX))
+	if (FlickAge > LockFlickWindowSeconds || MouseX * FlickX < 0.0f)
 	{
 		FlickX = 0.0f;
 		FlickAge = 0.0f;
