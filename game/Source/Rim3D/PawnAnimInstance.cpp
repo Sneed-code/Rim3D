@@ -122,6 +122,8 @@ namespace
 	constexpr float PawnWalkYawMax = 35.0f;
 	constexpr float PawnStandYawMax = 40.0f;
 	constexpr float PawnWalkYawMaxRate = 540.0f;
+	// The foot's drawn turn follows the holds' as a critically damped spring at this rate (1/s).
+	constexpr float PawnFootTurnRate = 30.0f;
 
 	/** The facing of a foot (degrees, world yaw) from its ankle to its ball. */
 	float PawnFootYaw(const FVector& Ankle, const FVector& Ball)
@@ -626,6 +628,9 @@ private:
 	float StandYawLast[2] = {0.0f, 0.0f};
 	bool bStandYawTake[2] = {false, false};
 	float StandYawFrom[2] = {0.0f, 0.0f};
+	/** Each foot's turn drawn (degrees) and how fast it turns: a spring after the holds' wanted turn. */
+	float FootTurn[2] = {0.0f, 0.0f};
+	float FootTurnRate[2] = {0.0f, 0.0f};
 	FCompactPoseBoneIndex Calf[2] = {FCompactPoseBoneIndex(INDEX_NONE), FCompactPoseBoneIndex(INDEX_NONE)};
 
 	FCompactPoseBoneIndex Pelvis = FCompactPoseBoneIndex(INDEX_NONE);
@@ -820,9 +825,11 @@ void FSimPawnUpperNode::Update_AnyThread(const FAnimationUpdateContext& Context)
 	// The hips are pulled while the body stands on its own legs (walking, standing, or a clip over the walk), not while
 	// it jumps, crawls, lies downed or tumbles in a dodge roll.
 	const FSimPawnAnimInputs* In = Proxy ? &Proxy->Inputs : nullptr;
-	const float Want = In && In->bHitLayer && (In->bStandTwist || In->bLegsFromClip) ? 1.0f : 0.0f;
+	// Not over a standing idle either: its hips stand where they stand over its feet (pulling them shifted the whole
+	// body, and all it carries, off its pose); the pull eases out and in over the idle's own blend.
+	const float Want = In && In->bHitLayer && (In->bStandTwist || In->bLegsFromClip) && !Proxy->bStandingIdleNow ? 1.0f : 0.0f;
 	const float Dt = FMath::Min(Context.GetDeltaTime(), 0.25f);
-	HipsWeight = In && In->bTeleported ? Want : PawnApproach(HipsWeight, Want, Dt / PawnWalkLockBlend);
+	HipsWeight = In && In->bTeleported ? Want : PawnApproach(HipsWeight, Want, Dt / PawnStandBlendTime);
 }
 
 void FSimPawnUpperNode::Evaluate_AnyThread(FPoseContext& Output)
@@ -1441,6 +1448,8 @@ void FSimPawnHitLayerNode::Forget()
 	WalkYawGapRate[0] = WalkYawGapRate[1] = 0.0f;
 	StandYawLast[0] = StandYawLast[1] = 0.0f;
 	bStandYawTake[0] = bStandYawTake[1] = false;
+	FootTurn[0] = FootTurn[1] = 0.0f;
+	FootTurnRate[0] = FootTurnRate[1] = 0.0f;
 	bWalkGroundKnown = false;
 	bWantFootLock = false;
 	bFootLocked = false;
@@ -1988,6 +1997,10 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 			{
 				StandYawHeld[Side] = FRotator::NormalizeAxis(Drawn + StandYawLast[Side]);
 				bStandYawTake[Side] = false;
+				if (StepFoot == Side)
+				{
+					StandYawFrom[Side] = StandYawHeld[Side];  // a step that began this very frame starts from it too
+				}
 			}
 			float StandTurn = 0.0f;
 			if (bFootLocked && HoldShow > 0.0f)
@@ -2000,10 +2013,20 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 				StandTurn = FMath::Clamp(FMath::FindDeltaAngleDegrees(Drawn, Want), -PawnStandYawMax, PawnStandYawMax) * HoldShow;
 			}
 			StandYawLast[Side] = StandTurn;
-			const float Turn = WalkTurn + StandTurn;
-			if (FMath::Abs(Turn) > 0.01f)
+			// The turn put on follows the one wanted as a stiff damped spring (PawnFootTurnRate): the holds change it
+			// smoothly anyway, but no hand-over between them (a hold taken, a step, a lock fading) can then spin the
+			// toes round in a frame.
+			const float Want = FMath::Clamp(WalkTurn + StandTurn, -PawnStandYawMax, PawnStandYawMax);
+			const int32 TurnSteps = FMath::Clamp(FMath::CeilToInt32(Dt * 240.0f), 1, 60);
+			for (int32 i = 0; i < TurnSteps; ++i)
 			{
-				PawnTurnBone(Pose, Foot[Side], FQuat(FVector::ZAxisVector, FMath::DegreesToRadians(Turn)));
+				const float H = Dt / TurnSteps;
+				FootTurnRate[Side] += (PawnFootTurnRate * PawnFootTurnRate * (Want - FootTurn[Side]) - 2.0f * PawnFootTurnRate * FootTurnRate[Side]) * H;
+				FootTurn[Side] += FootTurnRate[Side] * H;
+			}
+			if (FMath::Abs(FootTurn[Side]) > 0.01f)
+			{
+				PawnTurnBone(Pose, Foot[Side], FQuat(FVector::ZAxisVector, FMath::DegreesToRadians(FootTurn[Side])));
 			}
 		}
 	}
@@ -2011,6 +2034,8 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 	{
 		StandYawLast[0] = StandYawLast[1] = 0.0f;
 		bStandYawTake[0] = bStandYawTake[1] = false;
+		FootTurn[0] = FootTurn[1] = 0.0f;
+		FootTurnRate[0] = FootTurnRate[1] = 0.0f;
 	}
 }
 

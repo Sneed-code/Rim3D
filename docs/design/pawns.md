@@ -163,6 +163,11 @@ stopped the hips' outward speed in one frame (a jolt of every bone as a stop cli
 while the animation's foot moves under 1.5 m/s** over the ground (a running foot swinging low past the ground was taken
 for a landing, its speed cut at once); a standing foot the leg can hardly reach any more **steps** before the
 stretched leg would drag it.
+Seventh round: a step that began on the frame its foot was taken held started its facing from an old one (the toes
+spun round in a frame); now it starts from the facing taken, and **the turn a foot is drawn with follows the holds' as
+a stiff spring** (30/s), so no hand-over can spin the toes at once. **The hips are not pulled over a standing idle**
+(its hips belong where they are over its feet; pulling them shifted the body and its holsters), easing out and in over
+the idle's 0.4 s blend.
 
 **Near and far: loops.** The breathing idle, or the walk or run loop (`M_Neutral_*`), picked by speed (run above the
 middle of the two loops' speeds, measured from their root motion: 200 and 500 cm/s) and played
