@@ -144,6 +144,21 @@ follows the sim's** as a damped spring (20/s, at most 30 degrees behind), so a b
 frames starts and stops turning smoothly. The `idle` test measures a walking foot the lock holds in the world, like
 a standing one, and stamps each sample with the time of the frame it shows.
 
+Fourth and fifth PC rounds (2026-11-19): **pawns move by this frame's time.** The pawn subsystem and the sim bridge are
+both tickables, whose order is not set; on frames the pawns ticked first they were drawn with the last frame's blend,
+so a walking body moved by the last frame's time (its speed wavered 20% frame to frame, and every foot held in the
+world seemed to jump against it). `USimSubsystem::AdvanceFrame` now runs the frame's steps once, for whichever asks
+first. **The hips' pull works on the locomotion's own pose**, under the montage slot (in the hold layer): a roll or a
+sidestep cross-fades from the pulled walk to its own hips, and its set-back (the clip's travel times its weight, read
+a frame on, where it is drawn) is never fought by the pull (it pulled the hips 17 cm back as a roll blended in).
+**A planted foot is held by its heel or its ball**: down while either is within 3 cm of its lowest; on the ball alone
+(pushing off) the ball stays put and the ankle swings over it. **It keeps its facing** (ankle to ball) up to 35 degrees
+off the animation's while walking, and a standing foot up to 40 degrees (steps turn it with them), so neither the body
+turning over a foot nor an idle swivelling it spins the toes round the ankle; a let-go foot turns back along the same
+curve as its place. **The play rate eases** (0.2 s) to the one motion matching wants instead of jumping at each search
+(every bone's speed scaled at once), and the hit lean (the whole body tipped along a shot) eases in and out and eases
+out of a lean still showing when the next hit comes (it used to jump back upright).
+
 **Near and far: loops.** The breathing idle, or the walk or run loop (`M_Neutral_*`), picked by speed (run above the
 middle of the two loops' speeds, measured from their root motion: 200 and 500 cm/s) and played
 faster or slower to match it (0.6 to 1.5). A pawn that comes close again starts motion matching

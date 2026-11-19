@@ -385,6 +385,9 @@ private:
 	float ReactionStrength = 0.0f;
 	FVector ReactionDirection = FVector::ForwardVector;
 	float LeanDegrees = 0.0f;
+	/** The hit lean drawn last, and the one a new hit took over from (eased out under the new one). */
+	FQuat LeanShown = FQuat::Identity;
+	FQuat LeanCarry = FQuat::Identity;
 	int32 HitReactions = 0;
 
 	FMeleeSwingTrack Swing;

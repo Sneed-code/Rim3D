@@ -427,7 +427,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		In.bTeleported = bTeleported;
 		In.bHoldFacing = bHoldFacing;
 		In.bStandTwist = !(IsInMotionClip() && !bMotionUpper) && RollProgress <= 0.0f && !IsJumping() && !Now.crawling && !Now.downed;
-		In.bLegsFromClip = LegsClipWeight > 0.001f || ActionEndSeconds > 0.0;
+		In.bLegsFromClip = LegsClipWeight > 0.001f || ActionEndSeconds > 0.0 || (IsInMotionClip() && !bMotionUpper);
 		In.bHitLayer = true;
 		In.LimpLeft = LimpLeft;
 		In.LimpRight = LimpRight;
@@ -1298,6 +1298,7 @@ void ASimPawnActor::PlayHitReaction(const FVector& ShotDirection, float Strength
 		ReactionDirection = GetActorForwardVector();
 	}
 	ReactionStrength = FMath::Clamp(Strength, 0.0f, 1.0f);
+	LeanCarry = ReactionAge < kHitReactionSeconds ? LeanShown : FQuat::Identity;
 	ReactionAge = 0.0f;
 	++HitReactions;
 	// Every hit that reaches the body (or its armour) shows a moment of pain on the face (docs/design/focus.md "Faces").
@@ -1579,14 +1580,17 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 	// The mannequin faces +Y in its own space and the actor +X, so the mesh's +Y is the actor's +X and its -X the
 	// actor's +Y (right); the body is scaled by the pawn's height, and so is its hips' travel.
 	const float Height = bHasLooks ? Looks.Height : 1.0f;
-	const auto SetBack = [Height](const FAnimMontageInstance& Playing, const UAnimSequence& PlayingAsset, int32 Pelvis, const FVector& PelvisStart)
+	const UWorld* World = GetWorld();
+	const double FrameAhead = World ? static_cast<double>(World->GetDeltaSeconds()) : 0.0;
+	const auto SetBack = [Height, FrameAhead](const FAnimMontageInstance& Playing, const UAnimSequence& PlayingAsset, int32 Pelvis, const FVector& PelvisStart)
 	{
-		const double At = FMath::Clamp(static_cast<double>(Playing.GetPosition()), 0.0, static_cast<double>(PlayingAsset.GetPlayLength()));
+		const double Ahead = Playing.IsPlaying() ? FrameAhead * static_cast<double>(Playing.GetPlayRate()) : 0.0;
+		const double At = FMath::Clamp(static_cast<double>(Playing.GetPosition()) + Ahead, 0.0, static_cast<double>(PlayingAsset.GetPlayLength()));
 		const FVector Travel = PawnMotionBoneAt(PlayingAsset, Pelvis, At) - PelvisStart;
 		return FVector(-Travel.Y, Travel.X, 0.0) * Playing.GetWeight() * Height;
 	};
-	// The pawns update after the bodies' animation has moved on for this frame (a tickable subsystem runs after the
-	// tick groups), so the montages' moments and weights now are the ones drawn this frame.
+	// The bodies' meshes tick after the pawns (TG_PostUpdateWork), so the moments and weights read here are a frame
+	// old; the hips' travel is read a frame on (the montage's moment plus this frame's play), which is where it is drawn.
 	const FAnimMontageInstance* Shown = MontageShown(MotionMontage);
 	const UAnimSequence* ShownAsset = MotionAsset.Get();
 	MotionOffset = FVector::ZeroVector;
@@ -1958,16 +1962,26 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 	{
 		ReactionAge += GameDelta;
 		const float T = FMath::Clamp(ReactionAge / kHitReactionSeconds, 0.0f, 1.0f);
-		// Snaps over in the first 15%, then settles back.
-		const float Envelope = T < 0.15f ? T / 0.15f : FMath::Square(1.0f - (T - 0.15f) / 0.85f);
+		// Over in the first 20%, then back; eased at both ends of both, so the body never starts or stops at once
+		// (docs/design/pawns.md "No pops").
+		const auto Ease = [](float X) { X = FMath::Clamp(X, 0.0f, 1.0f); return X * X * (3.0f - 2.0f * X); };
+		const float Envelope = T < 0.2f ? Ease(T / 0.2f) : 1.0f - Ease((T - 0.2f) / 0.8f);
 		LeanDegrees = PawnHitLeanDegrees * ReactionStrength * Envelope;
 		// The top of the body goes along the shot: turn about up x direction.
 		const FVector Axis = FVector::CrossProduct(FVector::UpVector, ReactionDirection).GetSafeNormal();
 		LeanWorld = FQuat(Axis, FMath::DegreesToRadians(LeanDegrees));
+		// A hit before the last one's lean is over: that lean eases out over the new one's way in (it used to jump back).
+		if (!LeanCarry.Equals(FQuat::Identity, 1.0e-5))
+		{
+			LeanWorld = FQuat::Slerp(LeanCarry, FQuat::Identity, Ease(T / 0.2f)) * LeanWorld;
+		}
+		LeanShown = LeanWorld;
 	}
 	else
 	{
 		LeanDegrees = 0.0f;
+		LeanCarry = FQuat::Identity;
+		LeanShown = FQuat::Identity;
 	}
 
 	FQuat MeleeLocal = FQuat::Identity;

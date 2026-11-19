@@ -352,6 +352,25 @@ void USimSubsystem::Tick(float DeltaTime)
 		return;
 	}
 
+	AdvanceFrame(DeltaTime);
+
+	if (GSimBridgeShowTimings.GetValueOnGameThread() != 0)
+	{
+		ShowTimings();
+	}
+	if (GSimBridgeDebugDraw.GetValueOnGameThread() != 0)
+	{
+		DrawDebug();
+	}
+}
+
+void USimSubsystem::AdvanceFrame(float DeltaTime)
+{
+	if (!Sim || AdvancedFrame == GFrameCounter)
+	{
+		return;
+	}
+	AdvancedFrame = GFrameCounter;
 	if (Speed > 0)
 	{
 		StepAccumulator += static_cast<double>(DeltaTime) * colony::kStepsPerRealSecondAt1x * Speed;
@@ -363,15 +382,6 @@ void USimSubsystem::Tick(float DeltaTime)
 		// the leftover time is into the next one. The picture lags the sim by less than one step.
 		BlendAlpha = static_cast<float>(StepAccumulator);
 		AdvanceTimingWindow(DeltaTime);
-	}
-
-	if (GSimBridgeShowTimings.GetValueOnGameThread() != 0)
-	{
-		ShowTimings();
-	}
-	if (GSimBridgeDebugDraw.GetValueOnGameThread() != 0)
-	{
-		DrawDebug();
 	}
 }
 

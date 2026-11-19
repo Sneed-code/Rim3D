@@ -640,6 +640,8 @@ void USimPawnSubsystem::Tick(float DeltaTime)
 		RemoveAll();
 		return;
 	}
+	// This frame's steps and blend first, if the sim has not ticked yet this frame (the order tickables run in is not set).
+	Bridge->AdvanceFrame(DeltaTime);
 	// A new sim reuses entity numbers; a new look needs new actors.
 	const bool bMetaHumans = GPawnsMetaHumans.GetValueOnGameThread() != 0;
 	if (Bridge->GetSim() != LastSim || bMetaHumans != bMetaHumansShown)
