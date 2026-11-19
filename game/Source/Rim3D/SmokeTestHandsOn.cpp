@@ -167,6 +167,9 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 				Sim->plants().remove(colony::CellPos{X, Y, 0});
 			}
 		}
+		// A stockpile under it all: the player's colonist picks loose resources up by walking past (docs/design/inventory.md
+		// "Picking up resources"), but never out of storage, so the steel stays on the ground for the hands to pick up.
+		B->Submit(colony::CreateStockpileCommand{colony::CellRect{58, 58, 13, 13, 0}});
 		if (Sim->mineables().rockTypes().empty())
 		{
 			Fail(TEXT("The data has no rock types"));
