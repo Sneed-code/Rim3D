@@ -1019,8 +1019,8 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
         const float fy = posture.facingY;
         // A player's shot at a drawn body part (DrawnAim): passing near the spot the crosshair was on hits that part.
         if (drawn != nullptr && pawn == drawn->pawn && drawn->part >= 0 && health_.partHitPoints(pawn, drawn->part) > 0.0f) {
-            const float sx = pos.x + drawn->forward * fx - drawn->left * fy;
-            const float sy = pos.y + drawn->forward * fy + drawn->left * fx;
+            const float sx = pos.x + drawn->dx;
+            const float sy = pos.y + drawn->dy;
             const float sz = ground + drawn->up;
             const CombatVec spot{0.0f, 0.0f, 0.0f};
             const float t = combatSegmentCapsule(CombatVec{ax - sx, ay - sy, az - sz}, CombatVec{dx, dy, dz}, spot, spot,
@@ -1275,7 +1275,7 @@ bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, 
     s.player = player;
     s.drawn = DrawnAim{};
     if (player && drawn != nullptr && drawn->pawn != pawn && drawn->part >= 0 && things_.spawned(drawn->pawn) &&
-        reg.all_of<Posture>(drawn->pawn) && std::isfinite(drawn->forward) && std::isfinite(drawn->left) &&
+        reg.all_of<Posture>(drawn->pawn) && std::isfinite(drawn->dx) && std::isfinite(drawn->dy) &&
         std::isfinite(drawn->up)) {
         s.drawn = *drawn;
     }
@@ -1383,9 +1383,8 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
             s.drawn = DrawnAim{};
         } else {
             const Position& tp = reg.get<Position>(s.drawn.pawn);
-            const Posture& tf = reg.get<Posture>(s.drawn.pawn);
-            s.aimX = tp.x + s.drawn.forward * tf.facingX - s.drawn.left * tf.facingY;
-            s.aimY = tp.y + s.drawn.forward * tf.facingY + s.drawn.left * tf.facingX;
+            s.aimX = tp.x + s.drawn.dx;
+            s.aimY = tp.y + s.drawn.dy;
             s.aimZ = map_.heightAt(tp.x, tp.y) + s.drawn.up;
         }
     }
@@ -3242,8 +3241,8 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(entt::to_integral(s->storeGun));
         h.add(entt::to_integral(s->drawn.pawn));
         h.add(s->drawn.part);
-        h.add(s->drawn.forward);
-        h.add(s->drawn.left);
+        h.add(s->drawn.dx);
+        h.add(s->drawn.dy);
         h.add(s->drawn.up);
     }
     if (const Projectile* p = reg.try_get<Projectile>(e)) {
@@ -3261,8 +3260,8 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(p->seed);
         h.add(entt::to_integral(p->drawn.pawn));
         h.add(p->drawn.part);
-        h.add(p->drawn.forward);
-        h.add(p->drawn.left);
+        h.add(p->drawn.dx);
+        h.add(p->drawn.dy);
         h.add(p->drawn.up);
     }
     if (const Magazine* m = reg.try_get<Magazine>(e)) {

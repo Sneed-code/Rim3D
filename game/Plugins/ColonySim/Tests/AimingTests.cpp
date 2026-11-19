@@ -606,7 +606,7 @@ TEST_CASE("Crosshair: a bullet passing the drawn spot hits that part, a miss fal
     CHECK(sim->combat().hitboxPart(target, "left arm") >= 0);
     CHECK(sim->combat().hitboxPart(target, "tail") == -1);
     // The drawn head leans 0.3 m to the pawn's left of where the stock hitbox is (a clip leaning it over).
-    const DrawnAim drawn{target, head, 0.0f, 0.3f, 1.65f};
+    const DrawnAim drawn{target, head, 0.0f, -0.3f, 1.65f};  // facing west, its left is south
     const float y = pos.y - 0.3f;  // facing west, its left is south
     const CellPos nowhere{-1, -1, 0};
     const TraceHit plain = sim->combat().trace(20.5f, y, 1.65f, 60.0f, y, 1.65f, 0, kNoEntity, nowhere);
@@ -642,8 +642,8 @@ TEST_CASE("Crosshair: the player's bolt-action shots at a drawn head hit the hea
             ShootCommand shot{shooter, kNoEntity, pos.x, pos.y - 0.25f, 1.62f, true};
             shot.aimPawn = target;
             shot.aimPart = head;
-            shot.aimForward = 0.0f;
-            shot.aimLeft = 0.25f;
+            shot.aimDx = 0.0f;
+            shot.aimDy = -0.25f;
             shot.aimUp = 1.62f;
             sim->submit(shot);
         }
@@ -689,7 +689,7 @@ TEST_CASE("Crosshair: a shot at a drawn part survives a save, a load and a repla
     ShootCommand shot{shooter, kNoEntity, pos.x, pos.y - 0.25f, 1.62f, true};
     shot.aimPawn = target;
     shot.aimPart = sim->combat().hitboxPart(target, "head");
-    shot.aimLeft = 0.25f;
+    shot.aimDy = -0.25f;
     shot.aimUp = 1.62f;
     sim->submit(shot);
     // Saved with the command still waiting, then again with the bullet in the air.
@@ -715,7 +715,7 @@ TEST_CASE("Crosshair: a shot at a drawn part survives a save, a load and a repla
             found = true;
             CHECK(s->aimPawn == target);
             CHECK(s->aimPart == shot.aimPart);
-            CHECK(s->aimLeft == doctest::Approx(0.25f));
+            CHECK(s->aimDy == doctest::Approx(-0.25f));
             CHECK(s->aimUp == doctest::Approx(1.62f));
         }
     }

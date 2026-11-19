@@ -1580,8 +1580,8 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 if (ar.sectionVersion() >= 5) {  // the crosshair on a drawn body (docs/design/aiming.md)
                     ar.value("aimPawn", shoot->aimPawn);
                     ar.value("aimPart", shoot->aimPart);
-                    ar.value("aimForward", shoot->aimForward);
-                    ar.value("aimLeft", shoot->aimLeft);
+                    ar.value("aimDx", shoot->aimDx);
+                    ar.value("aimDy", shoot->aimDy);
                     ar.value("aimUp", shoot->aimUp);
                 }
             } else if constexpr (std::is_same_v<Type, SetStanceCommand>) {
@@ -2345,10 +2345,10 @@ template <typename Ar>
 void saveDrawnAim(Ar& ar, DrawnAim& d) {
     ar.value("drawnPawn", d.pawn);
     ar.value("drawnPart", d.part);
-    ar.value("drawnForward", d.forward);
-    ar.value("drawnLeft", d.left);
+    ar.value("drawnDx", d.dx);
+    ar.value("drawnDy", d.dy);
     ar.value("drawnUp", d.up);
-    ar.require(std::isfinite(d.forward) && std::isfinite(d.left) && std::isfinite(d.up), "the save file has a bad aim");
+    ar.require(std::isfinite(d.dx) && std::isfinite(d.dy) && std::isfinite(d.up), "the save file has a bad aim");
 }
 
 template <typename Ar>

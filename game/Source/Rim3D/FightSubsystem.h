@@ -68,6 +68,14 @@ struct FFightHitRecord
 	FVector Where = FVector::ZeroVector;
 	/** Cm from the nearest of the pawn's hitboxes (0 on or inside one); -1 if the pawn had none. */
 	float MissCm = -1.0f;
+	/** The two distances MissCm is the nearer of: the sim's hitboxes and the body as drawn (-1: not measured). */
+	float StockCm = -1.0f;
+	float DrawnCm = -1.0f;
+	/** For the report: where the drawn body stood and faced (world cm, degrees) and where the sim had it (sim metres). */
+	FVector DrawnAt = FVector::ZeroVector;
+	float DrawnYaw = 0.0f;
+	FVector SimAt = FVector::ZeroVector;
+	float SimYaw = 0.0f;
 	int64 GameSeconds = 0;  // the step it happened in (USimSubsystem::GetSteps)
 };
 
@@ -204,6 +212,8 @@ public:
 		}
 		return Max;
 	}
+	/** The worst checked hit, spelled out for a smoke test's failure message (empty if none). */
+	FString DescribeWorstHit() const;
 	/** Hits that could be checked: a hit that downed the pawn or took off a part is not (its hitboxes changed in the same step). */
 	int32 GetHitboxChecks() const
 	{

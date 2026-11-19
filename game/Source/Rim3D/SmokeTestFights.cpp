@@ -483,9 +483,10 @@ void USmokeTestSubsystem::BuildFightsPhases()
 		{
 			Fail(TEXT("fire_at_pawn: no hit was checked against the hitboxes"));
 		}
+		Notes.Add(F->DescribeWorstHit());
 		if (F->GetMaxHitboxMissCm() > 5.0f)
 		{
-			Fail(FString::Printf(TEXT("fire_at_pawn: a hit was %.1f cm from the pawn's hitboxes"), F->GetMaxHitboxMissCm()));
+			Fail(FString::Printf(TEXT("fire_at_pawn: a hit was %.1f cm from the pawn's hitboxes and drawn body; %s"), F->GetMaxHitboxMissCm(), *F->DescribeWorstHit()));
 		}
 		// The shooter turned to face its target (the sim's facing, drawn).
 		if (const ASimPawnActor* Actor = Pawns()->FindPawn(State->Protagonist); Actor && FMath::Abs(FRotator::NormalizeAxis(Actor->GetActorRotation().Yaw)) > 45.0f)
@@ -972,9 +973,10 @@ void USmokeTestSubsystem::BuildFightsPhases()
 		{
 			Fail(TEXT("firefight: nobody was hit"));
 		}
+		Notes.Add(F->DescribeWorstHit());
 		if (F->GetMaxHitboxMissCm() > 5.0f)
 		{
-			Fail(FString::Printf(TEXT("firefight: a hit was %.1f cm from the pawn's hitboxes"), F->GetMaxHitboxMissCm()));
+			Fail(FString::Printf(TEXT("firefight: a hit was %.1f cm from the pawn's hitboxes and drawn body; %s"), F->GetMaxHitboxMissCm(), *F->DescribeWorstHit()));
 		}
 		if (F->GetImpacts() - State->ImpactsAtStart < 1)
 		{

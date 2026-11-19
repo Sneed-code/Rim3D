@@ -82,14 +82,16 @@ enum class ShotPhase : uint8_t {
 
 // The player's crosshair on a drawn body (docs/design/aiming.md "Shots go where the crosshair is"): Unreal traces the
 // camera's ray against the body as it is drawn now (animated, at its own height) and says which pawn and body part it
-// is on, and where on that pawn in its own frame (metres forward, left and up from the ground under it). The shot is
+// is on, and where on that pawn: metres east (dx) and north (dy) of its position and up from the ground under it (map
+// axes, not the pawn's facing: the drawn body turns on its own and its yaw need not be the sim's facing). The shot is
 // aimed there, and a bullet that passes within `kDrawnAimRadius` of that spot (as the pawn stands when the bullet gets
-// there) hits that part, whatever the pawn's stock hitboxes say. A bullet that misses the spot still meets the hitboxes.
+// there) hits that part, on the spot, whatever the pawn's stock hitboxes say. A bullet that misses the spot still meets
+// the hitboxes.
 struct DrawnAim {
     Entity pawn = kNoEntity;  // none: an ordinary shot
     int part = -1;            // body part index (outside part, as a hitbox names it)
-    float forward = 0.0f;
-    float left = 0.0f;
+    float dx = 0.0f;
+    float dy = 0.0f;
     float up = 0.0f;
 };
 inline constexpr float kDrawnAimRadius = 0.07f;  // metres, ours: about a limb's thickness

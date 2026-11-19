@@ -380,6 +380,12 @@ void UFightSubsystem::OnProjectileHit(const colony::Event& Event)
 		Record.Where = FVector(Event.x, Event.y, Event.z);
 		Record.GameSeconds = Bridge->GetSteps();
 		Record.MissCm = DistanceToHitboxesCm(Event.target, Event.x, Event.y, Event.z);
+		Record.StockCm = Record.MissCm;
+		if (const colony::ThingView* Hit = Bridge->GetCurrentSnapshot().find(Event.target))
+		{
+			Record.SimAt = FVector(Hit->x, Hit->y, 0.0f);
+			Record.SimYaw = FMath::RadiansToDegrees(FMath::Atan2(Hit->facingY, Hit->facingX));
+		}
 		// The player's shots hit the body as drawn (docs/design/aiming.md "Shots go where the crosshair is"): a hit on the
 		// drawn body counts as on the body, whichever is nearer.
 		if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
@@ -387,6 +393,9 @@ void UFightSubsystem::OnProjectileHit(const colony::Event& Event)
 			if (const ASimPawnActor* Actor = Pawns->FindPawn(Event.target))
 			{
 				const double Drawn = Actor->DistanceToDrawnBodyCm(FightSimToWorldUnits(*Bridge, Event.x, Event.y, Event.z));
+				Record.DrawnCm = static_cast<float>(Drawn);
+				Record.DrawnAt = Actor->GetActorLocation();
+				Record.DrawnYaw = Actor->GetActorRotation().Yaw;
 				if (Drawn >= 0.0 && (Record.MissCm < 0.0f || Drawn < Record.MissCm))
 				{
 					Record.MissCm = static_cast<float>(Drawn);
@@ -430,6 +439,39 @@ void UFightSubsystem::OnProjectileHit(const colony::Event& Event)
 	Immediate.Part = Event.part;
 	Immediate.Amount = Event.amount;
 	SpawnImpact(Immediate);
+}
+
+FString UFightSubsystem::DescribeWorstHit() const
+{
+	const FFightHitRecord* Worst = nullptr;
+	for (const FFightHitRecord& Record : HitLog)
+	{
+		if (Record.MissCm >= 0.0f && (!Worst || Record.MissCm > Worst->MissCm))
+		{
+			Worst = &Record;
+		}
+	}
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	if (!Worst || !Bridge)
+	{
+		return FString();
+	}
+	const FVector HitWorld = FightSimToWorldUnits(*Bridge, Worst->Where.X, Worst->Where.Y, Worst->Where.Z);
+	const FVector SimWorld = FightSimToWorldUnits(*Bridge, Worst->SimAt.X, Worst->SimAt.Y, 0.0f);
+	FString Part = FString::FromInt(Worst->Part);
+	if (const colony::ThingView* Hit = Bridge->GetCurrentSnapshot().find(Worst->Pawn); Hit && Bridge->GetSim() && Worst->Part >= 0)
+	{
+		const std::vector<colony::BodyPartInfo> Parts = Bridge->GetSim()->health().bodyParts(Hit->def);
+		if (Worst->Part < static_cast<int32>(Parts.size()))
+		{
+			Part = UTF8_TO_TCHAR(Parts[static_cast<size_t>(Worst->Part)].label.c_str());
+		}
+	}
+	return FString::Printf(TEXT("worst hit: pawn %u part %s at sim (%.2f, %.2f, %.2f); %.1f cm from the sim hitboxes, %.1f cm from the drawn body; ")
+		TEXT("drawn body at (%.0f, %.0f) yaw %.0f, sim pawn at (%.0f, %.0f) yaw %.0f (world cm): %.1f cm apart, %.0f deg apart; hit %.0f cm above the drawn feet"),
+		static_cast<uint32>(entt::to_integral(Worst->Pawn)), *Part, Worst->Where.X, Worst->Where.Y, Worst->Where.Z, Worst->StockCm, Worst->DrawnCm,
+		Worst->DrawnAt.X, Worst->DrawnAt.Y, Worst->DrawnYaw, SimWorld.X, SimWorld.Y, Worst->SimYaw, FVector::Dist2D(Worst->DrawnAt, SimWorld),
+		FMath::Abs(FRotator::NormalizeAxis(Worst->DrawnYaw - Worst->SimYaw)), HitWorld.Z - Worst->DrawnAt.Z);
 }
 
 float UFightSubsystem::DistanceToHitboxesCm(colony::Entity Pawn, float X, float Y, float Z) const
@@ -1294,18 +1336,15 @@ bool UFightSubsystem::ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* Ou
 		const int Part = Combat.hitboxPart(BestPawn, BestPart);
 		if (Part >= 0)
 		{
-			// The spot in the pawn's own frame as it is drawn (forward along its yaw, left, up from the sim's ground under
-			// it): the sim puts it back on the pawn as the sim has it, so a frame of lag in the drawing doesn't move it.
-			const FVector Delta = BestPoint - TargetActor->GetActorLocation();
-			const double Yaw = FMath::DegreesToRadians(TargetActor->GetActorRotation().Yaw);
-			const double Cos = FMath::Cos(Yaw);
-			const double Sin = FMath::Sin(Yaw);
+			// The spot as offsets on the map from where the sim has the pawn now (not its drawn yaw: the drawn body turns on
+			// its own, so a spot in its frame landed tens of cm off on the sim's facing). The sim puts it back on the pawn as
+			// it stands when the shot goes.
 			const FVector SimPoint = (BestPoint - Bridge->GetWorldOrigin()) / 100.0;
 			const float Ground = Bridge->GetSim()->map().heightAt(Target->x, Target->y);
 			OutDrawn->pawn = BestPawn;
 			OutDrawn->part = Part;
-			OutDrawn->forward = static_cast<float>((Delta.X * Cos + Delta.Y * Sin) / 100.0);
-			OutDrawn->left = static_cast<float>((-Delta.X * Sin + Delta.Y * Cos) / 100.0);
+			OutDrawn->dx = static_cast<float>(SimPoint.X) - Target->x;
+			OutDrawn->dy = static_cast<float>(SimPoint.Y) - Target->y;
 			OutDrawn->up = static_cast<float>(SimPoint.Z) - Ground;
 		}
 	}
@@ -1347,8 +1386,8 @@ bool UFightSubsystem::Fire()
 	colony::ShootCommand Shot{Pawn, colony::kNoEntity, static_cast<float>(Sim.X), static_cast<float>(Sim.Y), static_cast<float>(Sim.Z), true};
 	Shot.aimPawn = Drawn.pawn;
 	Shot.aimPart = Drawn.part;
-	Shot.aimForward = Drawn.forward;
-	Shot.aimLeft = Drawn.left;
+	Shot.aimDx = Drawn.dx;
+	Shot.aimDy = Drawn.dy;
 	Shot.aimUp = Drawn.up;
 	Bridge->Submit(Shot);
 	LastFireStep = Bridge->GetSteps();
