@@ -149,14 +149,15 @@ bool HoldDraw::PoleFrame(const USkeletalMeshComponent* Mesh, bool bRight, FTrans
 	const FVector Grip = Main.GetLocation();
 	// The shaft always points where the body faces (2026-11-19: with one hand on it, or both hands close together, it
 	// used to follow the single fist and stood upright along the leg). The hands' line, when there are two hands apart
-	// on the shaft, only tilts it up or down, at most 35 degrees.
+	// on the shaft, only tilts it: at most 10 degrees up (the rifle idle's raised front hand held it like a pike, 35 degrees
+	// up, in the 2026-11-19 side picture: a low guard points at the chest) and 20 down.
 	double Pitch = 0.0;
 	if (BladeFrame(Mesh, !bRight, Other))
 	{
 		const FVector Line = Other.GetLocation() - Grip;
 		if (Line.Size() >= 8.0)
 		{
-			Pitch = FMath::Clamp(FMath::Asin(FMath::Clamp(Line.GetSafeNormal().Z, -1.0, 1.0)), FMath::DegreesToRadians(-35.0), FMath::DegreesToRadians(35.0));
+			Pitch = FMath::Clamp(FMath::Asin(FMath::Clamp(Line.GetSafeNormal().Z, -1.0, 1.0)), FMath::DegreesToRadians(-20.0), FMath::DegreesToRadians(10.0));
 		}
 	}
 	FVector Ahead = FVector::ZeroVector;
@@ -170,7 +171,7 @@ bool HoldDraw::PoleFrame(const USkeletalMeshComponent* Mesh, bool bRight, FTrans
 		return true;
 	}
 	const FVector X = (Ahead * FMath::Cos(Pitch) + FVector::UpVector * FMath::Sin(Pitch)).GetSafeNormal();
-	// Up across the shaft is the world's up (the shaft is never steeper than 35 degrees).
+	// Up across the shaft is the world's up (the shaft is never steep).
 	const FVector Z = (FVector::UpVector - X * FVector::DotProduct(FVector::UpVector, X)).GetSafeNormal();
 	Out = FTransform(FRotationMatrix::MakeFromXZ(X, Z).ToQuat(), Grip);
 	return true;

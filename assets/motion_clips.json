@@ -202,7 +202,10 @@
       "defName": "Motion_Spear_Stab",
       "anim": "Mixamo/Fighting/A_SpearStab",
       "kind": "Attack",
-      "note": "the spear's thrust at a standing target: Mixamo 'Bayonet Stab' with Target Height raised to chest level (the low one is Motion_Spear_Stab_Low); to download, import and trim on the PC (sneed's Mixamo sign-in)"
+      "from": 0.35,
+      "to": 1.85,
+      "hitSeconds": 1.08,
+      "note": "the spear's thrust at a standing target: Mixamo 'Bayonet Stab' with Height 85 (chest; the low one, Height 0, is Motion_Spear_Stab_Low), downloaded 2026-11-19. Wind-up 0.27-0.73 s, both hands drive forward 0.80-1.27 s (fastest 1.0-1.07 s, full stretch 1.2-1.33 s), pull-back to 2.0 s; the hips go 0.43 m forward and under 0.1 m sideways, so it faces ahead"
     },
     {
       "defName": "Motion_Spear_Thrust",
