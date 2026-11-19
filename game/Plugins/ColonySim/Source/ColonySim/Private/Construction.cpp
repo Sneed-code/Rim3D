@@ -226,6 +226,9 @@ std::string Construction::whyNotFloorPlan(DefId floor, DefId stuff, CellPos cell
         return "that isn't a floor that can be laid";
     }
     const Def& d = defs_.get(floor);
+    if (d.has("mapRoad")) {
+        return "that floor is only found on roads";
+    }
     if (!stuffFits(floor, stuff)) {
         return d.count("stuffCategories") == 0 ? "that floor is not made of anything" : "that floor can't be made of that";
     }

@@ -62,6 +62,7 @@
 #include "ColonySim/Genes.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/MapFeatures.h"
+#include "ColonySim/MapProps.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Plants.h"
@@ -229,6 +230,16 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     : Sim(settings, std::move(defs), EmptyStart{}) {
     if (!settings_.flatMap) {
         placeMapFeatures(map_, *things_, splitMix64(settings_.seed ^ 0x66656174ULL));
+        MapPropInput props;
+        props.map = &map_;
+        props.things = things_.get();
+        props.plants = plants_.get();
+        props.floors = floors_.get();
+        props.mineables = mineables_.get();
+        props.loot = loot_.get();
+        props.road = site_ ? site_->road : RoadKind::None;
+        props.seed = splitMix64(settings_.seed ^ 0x70726F70ULL);
+        placeMapProps(props);
     }
     placeStockpileAndThings();
     if (!settings_.scenario.empty()) {

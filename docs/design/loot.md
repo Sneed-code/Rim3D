@@ -39,8 +39,8 @@ Rolling with 0 points means no scaling.
   ground, and sends a positive Letter ("A cargo pod has crashed nearby, with 120 steel.") with the cell.
 - **Ancient danger** (`AncientDanger`, always 3 to 8 survival meals plus 3 to 5 valuable stacks),
   **ruin stash** (`RuinStash`) and **supply cache** (`SupplyCache`, for quests): not called by anything
-  yet. Map generation's ancient rooms and the quest supply cache call
-  `sim.loot().roll(name, 0, rng)` and `drop`.
+  yet, except the ancient danger: map generation's sealed rooms roll it and lay the stacks inside
+  (docs/design/mapgen.md).
 
 ## Numbers
 
@@ -51,6 +51,6 @@ BACKLOG note from the long-lasting food work.
 
 ## Not yet
 
-Ancient danger rooms and ruins do not exist in map generation; nothing rolls their tables. Pawns do
+Map generation's ancient danger rooms roll `AncientDanger` (docs/design/mapgen.md); nothing rolls `RuinStash` yet. Pawns do
 not carry the pack visibly (it is rolled when they die). A lone `RaidState` squad that is gone before a
 slow bleed-out death drops with 0 points (scale 1).

@@ -101,6 +101,8 @@
   { "defName": "ChunkSandstone", "visual": {"tint": [1, 0.9, 0.7]}, "parent": "ChunkBase", "label": "sandstone chunk", "stats": { "mass": 20 } },
   { "defName": "ChunkSlate", "visual": {"tint": [0.6, 0.65, 0.72]}, "parent": "ChunkBase", "label": "slate chunk", "stats": { "mass": 18 } },
   { "defName": "ChunkMarble", "visual": {"tint": [1, 1, 1]}, "parent": "ChunkBase", "label": "marble chunk", "stats": { "mass": 25 } },
+  { "defName": "ChunkSlagSteel", "visual": {"tint": [0.45, 0.35, 0.3]}, "parent": "ChunkBase", "label": "steel slag chunk", "source": "RimWorld wiki", "stats": { "mass": 8 },
+    "note": "Left by wrecks and crashed pods. An electric smelter makes 15 steel from one (wiki)." },
   {
     "defName": "MealBase", "parent": "ItemBase", "abstract": true, "stackLimit": 10,
     "stats": {

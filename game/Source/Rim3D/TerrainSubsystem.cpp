@@ -23,6 +23,7 @@
 #include "SimWaterSubsystem.h"
 
 #include "ColonySim/Defs.h"
+#include "ColonySim/Floors.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
@@ -88,10 +89,38 @@ namespace
 			static_cast<uint8>(FMath::Clamp(static_cast<int32>(Color.B) + Delta, 0, 255)));
 	}
 
+	/** The floors laid on the ground (roads the map was made with, floors colonists laid) and the colour of each floor
+	 *  def by DefId value (alpha 0: not a floor). Floors had no look before: they draw as tinted gravel. */
+	struct FTerrFloors
+	{
+		const colony::Floors* Floors = nullptr;
+		const TArray<FLinearColor>* ColorOfDef = nullptr;
+
+		bool At(int32 X, int32 Y, FLinearColor& Out) const
+		{
+			if (!Floors || !ColorOfDef || Floors->count() == 0)
+			{
+				return false;
+			}
+			const colony::DefId Def = Floors->at(colony::CellPos{X, Y, 0});
+			if (!Def.valid() || static_cast<int32>(Def.value) >= ColorOfDef->Num() || (*ColorOfDef)[Def.value].A <= 0.0f)
+			{
+				return false;
+			}
+			Out = (*ColorOfDef)[Def.value];
+			return true;
+		}
+	};
+
 	/** The colour of a cell's ground. Soil follows the fertility the plants use: gravel, soil, rich soil. */
-	FColor TerrCellColor(const colony::Map& Map, const colony::Plants& Plants, int32 X, int32 Y)
+	FColor TerrCellColor(const colony::Map& Map, const colony::Plants& Plants, const FTerrFloors& Floors, int32 X, int32 Y)
 	{
 		const colony::CellPos Cell{X, Y, 0};
+		FLinearColor FloorColor;
+		if (Floors.At(X, Y, FloorColor))
+		{
+			return FloorColor.ToFColor(true);
+		}
 		switch (Map.terrain(Cell))
 		{
 			case colony::Terrain::Water: return GTerrWaterBed ? FColor(70, 62, 48) : TerrWaterColor;
@@ -136,9 +165,16 @@ namespace
 	};
 
 	/** How a cell's ground looks with the terrain material. Soil follows the fertility the plants use: dry and gravelly, soil, rich and dark. */
-	FTerrLook TerrCellLook(const colony::Map& Map, const colony::Plants& Plants, int32 X, int32 Y)
+	FTerrLook TerrCellLook(const colony::Map& Map, const colony::Plants& Plants, const FTerrFloors& Floors, int32 X, int32 Y)
 	{
 		const colony::CellPos Cell{X, Y, 0};
+		FLinearColor FloorColor;
+		if (Floors.At(X, Y, FloorColor))
+		{
+			// The gravel layer tinted by the floor's colour (its sRGB colour over the gravel texture's mid grey).
+			const FLinearColor Lin = FLinearColor::FromSRGBColor(FloorColor.ToFColor(true));
+			return FTerrLook(FLinearColor(Lin.R * 2.2f, Lin.G * 2.2f, Lin.B * 2.2f), 0.0f, 0.0f, 1.0f, 0.0f);
+		}
 		switch (Map.terrain(Cell))
 		{
 			// Under the water surface the bed shows through: wet, dark mud and gravel in deep water, wet sand in the shallows.
@@ -243,7 +279,7 @@ namespace
 	}
 
 	/** The ground of a chunk (section 0) and its roofs (section 1), as vertices in cm from the map's corner. */
-	void TerrBuildChunkMeshes(const colony::Map& Map, const colony::Plants& Plants, const TArray<uint8>& ThinRoof, bool bTextured,
+	void TerrBuildChunkMeshes(const colony::Map& Map, const colony::Plants& Plants, const FTerrFloors& Floors, const TArray<uint8>& ThinRoof, bool bTextured,
 		int32 ChunkX, int32 ChunkY, FTerrMesh& Ground, FTerrMesh& Roof)
 	{
 		const int32 MapW = Map.width();
@@ -293,7 +329,7 @@ namespace
 						{
 							if (bTextured)
 							{
-								const FTerrLook Look = TerrCellLook(Map, Plants, CX, CY);
+								const FTerrLook Look = TerrCellLook(Map, Plants, Floors, CX, CY);
 								Tint += Look.Tint;
 								Sand += Look.Sand;
 								Rock += Look.Rock;
@@ -302,7 +338,7 @@ namespace
 							}
 							else
 							{
-								const FColor Color = TerrCellColor(Map, Plants, CX, CY);
+								const FColor Color = TerrCellColor(Map, Plants, Floors, CX, CY);
 								R += Color.R;
 								G += Color.G;
 								B += Color.B;
@@ -815,6 +851,64 @@ void UTerrainSubsystem::ReadThinRoof(bool& bOutChanged)
 	bOutChanged = true;
 }
 
+void UTerrainSubsystem::LoadFloorColors(const colony::Sim& Core)
+{
+	const colony::DefDatabase& Defs = Core.defs();
+	FloorColorOfDef.Init(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), static_cast<int32>(Defs.size()));
+	for (const colony::DefId Id : Defs.idsOfKind("Terrain"))
+	{
+		if (!Core.floors().isFloorDef(Id))
+		{
+			continue;
+		}
+		const colony::Def& Def = Defs.get(Id);
+		// visual.color is an sRGB colour from 0 to 1; floors without one are a neutral stone grey-brown.
+		FloorColorOfDef[Id.value] = FLinearColor(static_cast<float>(Def.numberAt("visual.color", 0, 0.55)),
+			static_cast<float>(Def.numberAt("visual.color", 1, 0.5)), static_cast<float>(Def.numberAt("visual.color", 2, 0.45)), 1.0f);
+	}
+	FloorsSeen.Reset();
+	for (const auto& [Index, Def] : Core.floors().all())
+	{
+		FloorsSeen.Add(Index, Def.value);
+	}
+	LastFloorChanges = Core.floors().changes();
+}
+
+void UTerrainSubsystem::ReadFloors()
+{
+	if (!bBuilt || !BuiltSim)
+	{
+		return;
+	}
+	const colony::Floors& Floors = BuiltSim->floors();
+	if (Floors.changes() == LastFloorChanges)
+	{
+		return;
+	}
+	LastFloorChanges = Floors.changes();
+	// Cells whose floor was laid, changed or taken up since the last look: their chunks are drawn again.
+	const colony::Map& Map = BuiltSim->map();
+	TMap<int32, uint32> Now;
+	Now.Reserve(static_cast<int32>(Floors.count()));
+	for (const auto& [Index, Def] : Floors.all())
+	{
+		Now.Add(Index, Def.value);
+		const uint32* Was = FloorsSeen.Find(Index);
+		if (!Was || *Was != Def.value)
+		{
+			MarkCellDirty(Map.cellAt(Index));
+		}
+	}
+	for (const TPair<int32, uint32>& Was : FloorsSeen)
+	{
+		if (!Now.Contains(Was.Key))
+		{
+			MarkCellDirty(Map.cellAt(Was.Key));
+		}
+	}
+	FloorsSeen = MoveTemp(Now);
+}
+
 void UTerrainSubsystem::SetGroundWetness(float Wetness)
 {
 	GroundWetness = FMath::Clamp(Wetness, 0.0f, 1.0f);
@@ -888,7 +982,7 @@ void UTerrainSubsystem::RebuildChunkGround(int32 ChunkX, int32 ChunkY)
 	FChunk& Chunk = Chunks[ChunkIndex(ChunkX, ChunkY)];
 	FTerrMesh Ground;
 	FTerrMesh Roof;
-	TerrBuildChunkMeshes(Sim.map(), Sim.plants(), ThinRoof, bTextured, ChunkX, ChunkY, Ground, Roof);
+	TerrBuildChunkMeshes(Sim.map(), Sim.plants(), FTerrFloors{&Sim.floors(), &FloorColorOfDef}, ThinRoof, bTextured, ChunkX, ChunkY, Ground, Roof);
 	Stats.GroundVertices += Ground.Num() - Chunk.GroundVertices;
 	Stats.RoofVertices += Roof.Num() - Chunk.RoofVertices;
 	Chunk.GroundVertices = Ground.Num();
@@ -1285,6 +1379,7 @@ void UTerrainSubsystem::RebuildAll()
 		GroundMaterial = GroundDynamic;
 	}
 	LoadPlantVisuals(Core);
+	LoadFloorColors(Core);
 	bool bUnused = false;
 	LastRoofChanges = 0;
 	bBuilt = false;
@@ -1305,7 +1400,7 @@ void UTerrainSubsystem::RebuildAll()
 			const int32 CX = (First + I) % ChunksX;
 			const int32 CY = (First + I) / ChunksX;
 			FTerrChunkBuild& Build = Builds[I];
-			TerrBuildChunkMeshes(Core.map(), Core.plants(), ThinRoof, bTextured, CX, CY, Build.Ground, Build.Roof);
+			TerrBuildChunkMeshes(Core.map(), Core.plants(), FTerrFloors{&Core.floors(), &FloorColorOfDef}, ThinRoof, bTextured, CX, CY, Build.Ground, Build.Roof);
 			Build.Plants.SetNum(PlantVisuals.Num());
 			Build.PlantSignature = GatherChunkPlants(CX, CY, &Build.Plants);
 		});
@@ -1367,6 +1462,7 @@ void UTerrainSubsystem::Tick(float DeltaTime)
 	}
 
 	ReadLevelledCorners(Sim->GetSim()->map());
+	ReadFloors();
 	bool bRoofChanged = false;
 	ReadThinRoof(bRoofChanged);
 	UpdateRoofVisibility(false);
