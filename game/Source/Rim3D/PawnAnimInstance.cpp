@@ -106,10 +106,6 @@ namespace
 	// trail their root by up to 20 cm, and the root is not where the sim has the body; past PawnHipsReach cm from the
 	// mesh's origin the hips are pulled back to it (the held feet stay put, the legs reach).
 	constexpr float PawnHipsReach = 8.0f;
-	// The upper body comes round after a fast turn of the body (the sim turns it 30 degrees in a few frames), as a
-	// damped spring of PawnYawLagRate radians a second, at most PawnYawLagMax degrees behind.
-	constexpr float PawnYawLagRate = 25.0f;
-	constexpr float PawnYawLagMax = 25.0f;
 
 	float PawnSmooth(float T)
 	{
@@ -570,10 +566,7 @@ private:
 	/** The animation's feet last frame (world), for their speed. */
 	FVector WalkLastWanted[2] = {FVector::ZeroVector, FVector::ZeroVector};
 	float WalkFade[2] = {0.0f, 0.0f};
-	/** The upper body's yaw (degrees, following the body's after a fast turn) and how fast it turns (degrees a second). */
-	bool bYawKnown = false;
-	float ShownYaw = 0.0f;
-	float ShownYawRate = 0.0f;
+
 	float WalkGround[2] = {0.0f, 0.0f};
 	bool bWalkGroundKnown = false;
 	FCompactPoseBoneIndex Calf[2] = {FCompactPoseBoneIndex(INDEX_NONE), FCompactPoseBoneIndex(INDEX_NONE)};
@@ -1351,8 +1344,6 @@ void FSimPawnHitLayerNode::Forget()
 	WalkFeetHeld = 0;
 	WalkHeldMask = 0;
 	bWantWalkLock = false;
-	bYawKnown = false;
-	ShownYawRate = 0.0f;
 	bWalkHeld[0] = bWalkHeld[1] = false;
 	WalkFade[0] = WalkFade[1] = 0.0f;
 	bWalkGroundKnown = false;
@@ -1466,8 +1457,8 @@ void FSimPawnHitLayerNode::Update_AnyThread(const FAnimationUpdateContext& Conte
 	Walking = PawnApproach(Walking, In.Velocity.Size2D() > PawnStandSpeed ? 1.0f : 0.0f, DeltaTime / 0.25f);
 
 	// Standing feet and turns are worked out in Evaluate, where the feet are known.
-	bWantFootLock = Proxy->bStandingIdleNow && In.bStandTwist;
-	bWantWalkLock = In.bStandTwist;
+	bWantFootLock = Proxy->bStandingIdleNow && In.bStandTwist && !In.bLegsFromClip;
+	bWantWalkLock = In.bStandTwist && !In.bLegsFromClip;
 
 	// The springs, in steps short enough to stay steady on a slow frame.
 	const int32 Steps = FMath::Clamp(FMath::CeilToInt32(DeltaTime / PawnKickStep), 1, 30);
@@ -1776,36 +1767,6 @@ void FSimPawnHitLayerNode::Evaluate_AnyThread(FPoseContext& Output)
 		for (int32 i = 0; i < 4; ++i)
 		{
 			TwistAt[i] = FQuat(FVector::ZAxisVector, Radians * PawnTwistShare[i]);
-		}
-	}
-	// The upper body after a fast turn (PawnYawLag*): the spine and head carry the lag, bit by bit as they carry the twist.
-	if (!bYawKnown || Dt <= 0.0f)
-	{
-		ShownYaw = bYawKnown ? ShownYaw : BodyYaw;
-		bYawKnown = true;
-	}
-	else
-	{
-		const int32 YawSteps = FMath::Clamp(FMath::CeilToInt32(Dt * 120.0f), 1, 30);
-		const float YawStep = Dt / YawSteps;
-		for (int32 i = 0; i < YawSteps; ++i)
-		{
-			const float Off = FMath::FindDeltaAngleDegrees(ShownYaw, BodyYaw);
-			ShownYawRate += (PawnYawLagRate * PawnYawLagRate * Off - 2.0f * PawnYawLagRate * ShownYawRate) * YawStep;
-			ShownYaw = FRotator::NormalizeAxis(ShownYaw + ShownYawRate * YawStep);
-		}
-		const float Behind = FMath::FindDeltaAngleDegrees(BodyYaw, ShownYaw);
-		if (FMath::Abs(Behind) > PawnYawLagMax)
-		{
-			ShownYaw = FRotator::NormalizeAxis(BodyYaw + FMath::Sign(Behind) * PawnYawLagMax);
-		}
-	}
-	const float Lag = FMath::FindDeltaAngleDegrees(BodyYaw, ShownYaw) * WalkShow;
-	if (FMath::Abs(Lag) > 0.05f)
-	{
-		for (int32 i = 0; i < 4; ++i)
-		{
-			TwistAt[i] = FQuat(FVector::ZAxisVector, FMath::DegreesToRadians(Lag) * PawnTwistShare[i]) * TwistAt[i];
 		}
 	}
 

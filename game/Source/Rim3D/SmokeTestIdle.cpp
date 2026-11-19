@@ -152,6 +152,10 @@ void USmokeTestSubsystem::BuildIdlePhases()
 	const TSharedRef<FIdleSmokeState> State = MakeShared<FIdleSmokeState>();
 	const TSharedRef<FIdleSmokeSample> Sample = MakeShared<FIdleSmokeSample>();
 	const TSharedRef<FDelegateHandle> SampleHook = MakeShared<FDelegateHandle>();
+	// The world's time of the frame the bones were drawn in, taken during that frame (whether the next frame's start
+	// already counts its own time or not, the sample is stamped with the frame it shows).
+	const TSharedRef<FDelegateHandle> TimeHook = MakeShared<FDelegateHandle>();
+	const TSharedRef<double> DrawnSeconds = MakeShared<double>(0.0);
 	const auto Bridge = [this]() { return GetWorld()->GetSubsystem<USimSubsystem>(); };
 	const auto Pawns = [this]() { return GetWorld()->GetSubsystem<USimPawnSubsystem>(); };
 	const auto ActorOf = [=]() -> ASimPawnActor* { return Pawns() ? Pawns()->FindPawn(State->Pawn) : nullptr; };
@@ -223,10 +227,10 @@ void USmokeTestSubsystem::BuildIdlePhases()
 				if (Accel > 0.5 * Limits[Group])
 				{
 					// Every frame near or over a limit, with what was going on, for finding the cause in the log.
-					UE_LOG(LogTemp, Log, TEXT("IDLETRACE %s t=%.3f bone=%s accel=%.0f %s playing=%s rate=%.2f standing=%d hold=%.2f step=%d twist=%.1f yaw=%.1f dyaw=%.2f speed=%.0f walklock=%.2f walkheld=%d"),
+					UE_LOG(LogTemp, Log, TEXT("IDLETRACE %s t=%.3f bone=%s accel=%.0f %s playing=%s rate=%.2f standing=%d hold=%.2f step=%d twist=%.1f yaw=%.1f dyaw=%.2f speed=%.0f walklock=%.2f walkheld=%d dt=%.4f"),
 						*PhaseName(), PhaseTime, IdleSmokeBones[i].Name, Accel, bWorld ? TEXT("world") : TEXT("local"), *Now.Playing.ToString(), Now.PlayRate,
 						Now.bStandingIdle ? 1 : 0, Now.FootHold, Now.bStepping ? 1 : 0, Now.TwistDegrees, Now.ActorYaw,
-						FMath::FindDeltaAngleDegrees(State->Last[0].ActorYaw, Now.ActorYaw), FVector::Dist2D(Now.ActorAt, State->Last[0].ActorAt) / Dt2, Now.WalkLock, Now.WalkFeetHeld);
+						FMath::FindDeltaAngleDegrees(State->Last[0].ActorYaw, Now.ActorYaw), FVector::Dist2D(Now.ActorAt, State->Last[0].ActorAt) / Dt2, Now.WalkLock, Now.WalkFeetHeld, Dt2);
 				}
 				if (Accel > State->MaxPop[Group])
 				{
@@ -388,7 +392,15 @@ void USmokeTestSubsystem::BuildIdlePhases()
 			B->Submit(colony::MoveOrderCommand{State->Others[0], Cell(5, 0)});
 			B->Submit(colony::MoveOrderCommand{State->Others[1], Cell(5, 3)});
 			const TWeakObjectPtr<USmokeTestSubsystem> Self(this);
-			*SampleHook = FWorldDelegates::OnWorldTickStart.AddLambda([Self, State, Sample](UWorld* World, ELevelTick, float)
+			*TimeHook = FWorldDelegates::OnWorldPostActorTick.AddLambda([Self, DrawnSeconds](UWorld* World, ELevelTick, float)
+			{
+				const USmokeTestSubsystem* Smoke = Self.Get();
+				if (Smoke && World == Smoke->GetWorld())
+				{
+					*DrawnSeconds = World->GetTimeSeconds();
+				}
+			});
+			*SampleHook = FWorldDelegates::OnWorldTickStart.AddLambda([Self, State, Sample, DrawnSeconds](UWorld* World, ELevelTick, float)
 			{
 				const USmokeTestSubsystem* Smoke = Self.Get();
 				if (!Smoke || World != Smoke->GetWorld())
@@ -401,7 +413,7 @@ void USmokeTestSubsystem::BuildIdlePhases()
 				if (Actor)
 				{
 					IdleSmokeRead(*Actor, *Sample);
-					Sample->Seconds = World->GetTimeSeconds();
+					Sample->Seconds = *DrawnSeconds;
 				}
 			});
 		};
@@ -688,6 +700,7 @@ void USmokeTestSubsystem::BuildIdlePhases()
 		Phase.Verify = [=, this]()
 		{
 			FWorldDelegates::OnWorldTickStart.Remove(*SampleHook);
+			FWorldDelegates::OnWorldPostActorTick.Remove(*TimeHook);
 			if (const USimPawnAnimInstance* Anim = ActorOf() ? ActorOf()->GetAnim() : nullptr)
 			{
 				// Turn, pivot and reface clips (and run clips at a walk) motion matching picked and was not let play.

@@ -61,6 +61,9 @@ struct FSimPawnAnimInputs
 	/** Standing, a turn twists the upper body over planted feet (docs/design/pawns.md "Standing still"); off while a
 	 *  whole-body clip, a roll, a jump or a crawl has the body. */
 	bool bStandTwist = true;
+	/** A whole-body clip still shows (blending out after the sim's clip ended, or a crouching action): the legs are
+	 *  the clip's, so neither the feet holds nor the hips' pull to the sim's position may act on them. */
+	bool bLegsFromClip = false;
 	// --- The hit layer (docs/design/body-health.md part E), on top of whatever animation plays. ---
 	/** Hits since the animation last took them: it empties the list when it has. */
 	TArray<FSimPawnKick, TInlineAllocator<4>> Kicks;

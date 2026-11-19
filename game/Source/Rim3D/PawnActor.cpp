@@ -86,6 +86,10 @@ namespace
 	const float PawnHitClipBlendIn = 0.12f;
 	const float PawnHitClipBlendOut = 0.3f;
 	const float PawnHitClipMinGap = 0.35f;
+	// The facing drawn: a damped spring onto the sim's facing, PawnDrawnYawRate radians a second, at most
+	// PawnDrawnYawMaxLag degrees behind.
+	const float PawnDrawnYawRate = 20.0f;
+	const float PawnDrawnYawMaxLag = 30.0f;
 
 	/** A clip or a push the sim is carrying the body along (walking waits); false for the player's own swings, which
 	 *  leave the feet to the keys (docs/design/body-motion.md "Upper-body clips"). */
@@ -330,7 +334,30 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	// Swimming: the body floats with its shoulders at the surface (docs/design/water.md, W4).
 	SwimLiftCm = WaterDraw::SwimLiftEase(SwimLiftCm, Bridge.GetSim() ? WaterDraw::SwimLiftTargetCm(Now, Bridge.GetSim()->bodyHeightM(Thing)) : 0.0f, DeltaTime, bTeleported);
 	Location.Z += SwimLiftCm;
-	SetActorLocationAndRotation(Location, FRotator(0.0, Yaw, 0.0));
+	// The facing drawn follows Yaw as a damped spring (PawnDrawnYawRate): the sim turns a body up to 30 degrees in a few
+	// frames, and a facing that starts or stops turning at once jolts every bone (docs/design/pawns.md "No pops").
+	if (bTeleported || DeltaTime * Speed <= 0.0f)
+	{
+		DrawnYaw = bTeleported ? Yaw : DrawnYaw;
+		DrawnYawRate = bTeleported ? 0.0f : DrawnYawRate;
+	}
+	else
+	{
+		const float YawDelta = DeltaTime * Speed;
+		const int32 YawSteps = FMath::Clamp(FMath::CeilToInt32(YawDelta * 120.0f), 1, 30);
+		for (int32 i = 0; i < YawSteps; ++i)
+		{
+			const float Off = FMath::FindDeltaAngleDegrees(DrawnYaw, Yaw);
+			DrawnYawRate += (PawnDrawnYawRate * PawnDrawnYawRate * Off - 2.0f * PawnDrawnYawRate * DrawnYawRate) * (YawDelta / YawSteps);
+			DrawnYaw = FRotator::NormalizeAxis(DrawnYaw + DrawnYawRate * (YawDelta / YawSteps));
+		}
+		const float Behind = FMath::FindDeltaAngleDegrees(Yaw, DrawnYaw);
+		if (FMath::Abs(Behind) > PawnDrawnYawMaxLag)
+		{
+			DrawnYaw = FRotator::NormalizeAxis(Yaw + FMath::Sign(Behind) * PawnDrawnYawMaxLag);
+		}
+	}
+	SetActorLocationAndRotation(Location, FRotator(0.0, DrawnYaw, 0.0));
 	ApplySevered(Now.severed);
 	UpdateFightFace(Bridge, Now, DeltaTime * Speed);
 	if (bRagdoll)
@@ -393,13 +420,14 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	{
 		FSimPawnAnimInputs& In = Anim->Inputs;
 		In.Location = Location;
-		In.Yaw = Yaw;
+		In.Yaw = DrawnYaw;
 		In.Velocity = Velocity;
 		In.CruiseSpeed = Pace;
 		In.Detail = Detail;
 		In.bTeleported = bTeleported;
 		In.bHoldFacing = bHoldFacing;
 		In.bStandTwist = !(IsInMotionClip() && !bMotionUpper) && RollProgress <= 0.0f && !IsJumping() && !Now.crawling && !Now.downed;
+		In.bLegsFromClip = LegsClipWeight > 0.001f || ActionEndSeconds > 0.0;
 		In.bHitLayer = true;
 		In.LimpLeft = LimpLeft;
 		In.LimpRight = LimpRight;
@@ -1562,6 +1590,7 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 	const FAnimMontageInstance* Shown = MontageShown(MotionMontage);
 	const UAnimSequence* ShownAsset = MotionAsset.Get();
 	MotionOffset = FVector::ZeroVector;
+	LegsClipWeight = Shown && !bMotionUpper ? Shown->GetWeight() : 0.0f;
 	if (Shown && ShownAsset && MotionPelvisBone != INDEX_NONE && !bMotionUpper)
 	{
 		MotionOffset += SetBack(*Shown, *ShownAsset, MotionPelvisBone, MotionPelvisStart);
@@ -1574,6 +1603,7 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 	const FAnimMontageInstance* Out = MotionOutMontage != MotionMontage ? MontageShown(MotionOutMontage) : nullptr;
 	if (Out && MotionOutAsset.IsValid() && MotionOutPelvisBone != INDEX_NONE)
 	{
+		LegsClipWeight = FMath::Max(LegsClipWeight, Out->GetWeight());
 		MotionOffset += SetBack(*Out, *MotionOutAsset.Get(), MotionOutPelvisBone, MotionOutPelvisStart);
 	}
 	else

@@ -137,9 +137,12 @@ came down at, dying away over 0.025 s; a hold more than 8 cm behind the animatio
 excess a second, 50 cm at most; a lifted foot lets go along a curve that starts at its own speed). The standing hold
 and the walking lock fade in and out eased, not linearly. **The hips stay within 8 cm of the sim's position** under
 walking legs (the sample's stop and transition clips lead or trail their root by up to 20 cm: staggers, and the walk
-back after a roll or a knockdown, drew the hips 17 to 22 cm off), and **the upper body comes round after a fast turn**
-as a damped spring (25/s, at most 25 degrees behind) instead of snapping with the actor. The `idle` test measures a
-walking foot the lock holds in the world, like a standing one.
+back after a roll or a knockdown, drew the hips 17 to 22 cm off). Neither the feet holds nor the hips' pull act while
+a whole-body clip still shows (blending out after the sim's clip has ended, a crouching action): the clip's own legs
+and hips are drawn then (pulling the hips while a roll blended out left them 2 m from the body). **The facing drawn
+follows the sim's** as a damped spring (20/s, at most 30 degrees behind), so a body the sim turns 30 degrees in a few
+frames starts and stops turning smoothly. The `idle` test measures a walking foot the lock holds in the world, like
+a standing one, and stamps each sample with the time of the frame it shows.
 
 **Near and far: loops.** The breathing idle, or the walk or run loop (`M_Neutral_*`), picked by speed (run above the
 middle of the two loops' speeds, measured from their root motion: 200 and 500 cm/s) and played

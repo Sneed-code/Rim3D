@@ -468,6 +468,12 @@ private:
 	ESimPawnDetail Detail = ESimPawnDetail::Full;
 	float CruiseSpeed = 400.0f;
 	float Yaw = 0.0f;
+	/** The facing drawn (degrees): Yaw, through a damped spring, so a body the sim turns 30 degrees in a few frames
+	 *  starts and stops turning smoothly; and how fast it turns (degrees a second). */
+	float DrawnYaw = 0.0f;
+	float DrawnYawRate = 0.0f;
+	/** How much of a whole-body clip shows now (the clip playing and the one fading out). */
+	float LegsClipWeight = 0.0f;
 	float SwimLiftCm = 0.0f;
 	bool bPlaced = false;
 	bool bBodyHidden = false;
