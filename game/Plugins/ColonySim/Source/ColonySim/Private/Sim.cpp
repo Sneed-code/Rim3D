@@ -184,9 +184,12 @@ std::optional<WorldSite> simStartSite(const World* world) {
     return world->siteFor(world->startTile());
 }
 
-// The map's size and seed, and how wet the biome makes it (`mapGen` in the Biomes def).
-MapSettings simMapSettings(const SimSettings& settings, uint64_t mapSeed, const std::string& biomeName, const DefDatabase& defs) {
+// The map's size and seed, how wet the biome makes it (`mapGen` in the Biomes def) and how much of
+// it is hills (the world tile's hilliness; flat with no world).
+MapSettings simMapSettings(const SimSettings& settings, uint64_t mapSeed, const std::string& biomeName, const DefDatabase& defs,
+                           Hilliness hilliness) {
     MapSettings map{settings.mapSize, settings.mapSize, mapSeed, settings.flatMap};
+    map.hills = mapHillShare(static_cast<int>(hilliness));
     if (const Def* biome = defs.find("Biomes", biomeName)) {
         map.river = static_cast<float>(biome->number("mapGen.river", 1.0));
         map.marsh = static_cast<float>(biome->number("mapGen.marsh", 1.0));
@@ -261,7 +264,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
       site_(simStartSite(world_.get())),
       biome_(site_ && !site_->biome.empty() ? site_->biome : std::string("TemperateForest")),
       // On a world the start tile seeds the map, so the same world and tile always give the same map.
-      map_(simMapSettings(settings, site_ ? site_->mapSeed : splitMix64(settings.seed ^ 0x6D6170ULL), biome_, *defs_)),
+      map_(simMapSettings(settings, site_ ? site_->mapSeed : splitMix64(settings.seed ^ 0x6D6170ULL), biome_, *defs_,
+                         site_ ? site_->hilliness : Hilliness::Flat)),
       pathfinder_(map_),
       zones_(std::make_unique<Zones>(map_)),
       things_(std::make_unique<Things>(map_, defs_)),
