@@ -139,6 +139,8 @@ public:
 	/** Marks painted into skin (USkinBlood) and bodies carrying blood in their skin now. */
 	int32 GetSkinPaints() const;
 	int32 GetSkinMasks() const;
+	/** Blood painted into skin; null before Initialize. */
+	USkinBlood* GetSkinBlood() const;
 	int32 GetExitWounds() const { return ExitWounds; }
 	int32 GetDrips() const { return Drips; }
 	int32 GetSpurts() const { return Spurts; }

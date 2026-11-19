@@ -557,6 +557,71 @@ namespace
 		auto* BloodAmount = BloodArtScalar(Material, TEXT("Blood"), 0.0f, -1200, 150);
 		UMaterialExpression* BloodNoise = GrimeArtNoise(Material, -1200, 300, Position, NoiseScale, 5.0f, 37.1f);
 		UMaterialExpression* BloodCover = GrimeArtCover(Material, -800, 200, BloodAmount, 0.34f, BloodNoise, 9.0f);  // small flecks, never a coat: the wound marks carry the look
+		// Blood soaked into clothes over a wound (USkinBlood's cloth spots, set on clothes only): up to 8 bind-pose spheres
+		// (Spot0-7: centre, radius in cm; 0 is off) with how much is left of each (SpotAmountA/B), an uneven blot round each
+		// that moves with the cloth. Clothes share the body's bind pose, so the pre-skinned position lines up.
+		{
+			auto* Cloth = BloodArtNode<UMaterialExpressionCustom>(Material, -1000, 900);
+			Cloth->Description = TEXT("ClothBlood");
+			Cloth->OutputType = CMOT_Float1;
+			Cloth->Code = TEXT(R"HLSL(
+struct ClothBloodNoise
+{
+	float H(float3 p) { p = frac(p * 0.3183099 + 0.1); p *= 17.0; return frac(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+	float N(float3 x)
+	{
+		float3 i = floor(x);
+		float3 f = frac(x);
+		f = f * f * (3.0 - 2.0 * f);
+		return lerp(lerp(lerp(H(i), H(i + float3(1, 0, 0)), f.x), lerp(H(i + float3(0, 1, 0)), H(i + float3(1, 1, 0)), f.x), f.y),
+			lerp(lerp(H(i + float3(0, 0, 1)), H(i + float3(1, 0, 1)), f.x), lerp(H(i + float3(0, 1, 1)), H(i + float3(1, 1, 1)), f.x), f.y), f.z);
+	}
+};
+float4 S[8] = { Spot0, Spot1, Spot2, Spot3, Spot4, Spot5, Spot6, Spot7 };
+float A[8] = { AmountA.x, AmountA.y, AmountA.z, AmountA.w, AmountB.x, AmountB.y, AmountB.z, AmountB.w };
+if (S[0].w <= 0.01) return 0.0;
+ClothBloodNoise b;
+float n = b.N(Pre * 0.22) * 0.65 + b.N(Pre * 0.7 + 13.1) * 0.35;
+float cover = 0.0;
+for (int i = 0; i < 8; i++)
+{
+	if (S[i].w <= 0.01) continue;
+	float d = length(Pre - S[i].xyz);
+	float R = S[i].w * (0.55 + 0.8 * n);
+	cover = max(cover, (1.0 - smoothstep(R * 0.75, R, d)) * saturate(A[i]));
+}
+return cover;
+)HLSL");
+			Cloth->Inputs.Reset();
+			FCustomInput& PreIn = Cloth->Inputs.AddDefaulted_GetRef();
+			PreIn.InputName = TEXT("Pre");
+			PreIn.Input.Connect(0, Position);
+			int32 Y = 1000;
+			for (int32 I = 0; I < 8; ++I)
+			{
+				auto* Spot = BloodArtNode<UMaterialExpressionVectorParameter>(Material, -1300, Y);
+				Spot->ParameterName = *FString::Printf(TEXT("Spot%d"), I);
+				Spot->DefaultValue = FLinearColor::Transparent;
+				FCustomInput& In = Cloth->Inputs.AddDefaulted_GetRef();
+				In.InputName = *FString::Printf(TEXT("Spot%d"), I);
+				In.Input.Connect(5, Spot);  // RGBA
+				Y += 80;
+			}
+			for (const TCHAR* Name : {TEXT("AmountA"), TEXT("AmountB")})
+			{
+				auto* Amount = BloodArtNode<UMaterialExpressionVectorParameter>(Material, -1300, Y);
+				Amount->ParameterName = FName(FString(TEXT("Spot")) + Name);
+				Amount->DefaultValue = FLinearColor::Transparent;
+				FCustomInput& In = Cloth->Inputs.AddDefaulted_GetRef();
+				In.InputName = Name;
+				In.Input.Connect(5, Amount);
+				Y += 80;
+			}
+			auto* Both = BloodArtNode<UMaterialExpressionMax>(Material, -700, 300);
+			BloodArtConnect(BloodCover, TEXT(""), Both, TEXT("A"));
+			BloodArtConnect(Cloth, TEXT(""), Both, TEXT("B"));
+			BloodCover = Both;
+		}
 
 		// Colour.
 		auto* DirtColor = BloodArtNode<UMaterialExpressionVectorParameter>(Material, -800, -500);
