@@ -121,7 +121,11 @@ round, one system for every weapon, both views:
    (the other hand cupping the grip, a two-handed pistol hold).
 3. **Swings and full-body clips free the main hand** (third person: the clip moves the arm and the weapon stays in the
    hand; the off hand follows it). First person melee swings move the *weapon* along an arc (windup, strike, back to
-   ready, timed by the sim's clip) and the hands follow.
+   ready, timed by the sim's clip) and the hands follow. A third-person swing with no clip playing on the body moves
+   the weapon along the procedural swing path with both hands kept on it, so a weapon never hangs still in the air
+   (sneed 2026-11-19: the club and longsword floated and didn't move on a swing).
+4. **Shooting from the hip raises the gun to the eye** for as long as the gun's cooldown runs (it starts at the first
+   shot), so the arms follow the shots; aiming up or down turns the Head-anchored place with the view's pitch.
 
 Per weapon there is still only the `hold` block; grenade and rocket launchers need only their grip points (and a
 place if they sit differently from a rifle).

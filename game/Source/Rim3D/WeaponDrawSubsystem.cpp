@@ -965,7 +965,9 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 	float AimPitch = 0.0f;
 	if (bGun && Body)
 	{
-		AimWant = Body->GetAimBlend();
+		// Shooting from the hip raises the gun to the eye too (the cooldown starts at the first shot), so the arms
+		// always follow the shots instead of the gun staying at the ready.
+		AimWant = FMath::Max(Body->GetAimBlend(), View.refillLeft > 0 ? 1.0f : 0.0f);
 		AimPitch = Body->GetPitch();
 	}
 	else if (bGun && View.fightTarget != colony::kNoEntity)
@@ -981,11 +983,16 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 			AimPitch = FMath::Clamp(static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(D.Z, D.Size2D()))), -60.0f, 60.0f);
 		}
 	}
-	Pawn.AimBlend = Body ? AimWant : FMath::FInterpConstantTo(Pawn.AimBlend, AimWant, FrameDelta, 4.0f);
+	Pawn.AimBlend = Body && AimWant <= Body->GetAimBlend() ? AimWant : FMath::FInterpConstantTo(Pawn.AimBlend, AimWant, FrameDelta, Body ? 8.0f : 4.0f);
 	Pawn.BlockBlend = FMath::FInterpConstantTo(Pawn.BlockBlend, !bGun && (View.blocking || View.shieldUp) ? 1.0f : 0.0f, FrameDelta, 6.0f);
-	const bool bSwinging = !bGun && (Actor.GetSwing().IsActive() || View.meleePhase != colony::MeleePhase::Ready);
+	// A swing whose clip moves the arm frees the main hand (the weapon stays in it). A swing with no clip on the body
+	// (no measured clip for it, or a body that can't play one) moves the weapon itself along the procedural swing
+	// path, with both hands kept on it, so a weapon always swings and never hangs still in the air.
+	const bool bClipSwing = !bGun && Actor.IsInMotionClip() && (View.meleePhase != colony::MeleePhase::Ready || Actor.GetSwing().IsActive());
+	const bool bWeaponSwing = !bGun && !Actor.IsInMotionClip() && Actor.GetSwing().IsActive();
 	const bool bFullBodyClip = Actor.IsInMotionClip() && !Actor.IsMotionClipUpper();
-	Pawn.HandFree = FMath::FInterpConstantTo(Pawn.HandFree, bSwinging || bFullBodyClip ? 1.0f : 0.0f, FrameDelta, 8.0f);
+	Pawn.HandFree = FMath::FInterpConstantTo(Pawn.HandFree, bClipSwing || bFullBodyClip ? 1.0f : 0.0f, FrameDelta, 8.0f);
+	Pawn.SwingBlend = FMath::FInterpConstantTo(Pawn.SwingBlend, bWeaponSwing ? 1.0f : 0.0f, FrameDelta, 10.0f);
 
 	// The anchors in the world from this frame's pose: between the shoulder joints, or the head; the body's facing.
 	const FVector Chest = (Mesh->GetSocketLocation(TEXT("upperarm_l")) + Mesh->GetSocketLocation(TEXT("upperarm_r"))) * 0.5;
@@ -1010,6 +1017,18 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 	if (Block && Pawn.BlockBlend > 0.0f)
 	{
 		Weapon = Blend(Weapon, Placed(*Block), Pawn.BlockBlend);
+	}
+	if (Pawn.SwingBlend > 0.0f)
+	{
+		// The procedural swing's weapon pose (the old drawing's, which swings the weapon round the body), with the
+		// main grip where that pose put the hand.
+		FVector SwingLocation;
+		FRotator SwingRotation;
+		Actor.GetMeleeWeaponPose(SwingLocation, SwingRotation);
+		FTransform ActorFrame = Actor.GetActorTransform();
+		ActorFrame.SetScale3D(FVector::OneVector);
+		const FTransform SwingWeapon = FTransform(SwingRotation, SwingLocation * BodyPlace) * ActorFrame;
+		Weapon = Blend(Weapon, SwingWeapon, Pawn.SwingBlend);
 	}
 
 	HoldDraw::FPinned Pinned;

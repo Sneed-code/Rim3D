@@ -172,6 +172,7 @@ private:
 		float AimBlend = 0.0f;
 		float BlockBlend = 0.0f;
 		float HandFree = 0.0f;
+		float SwingBlend = 0.0f;  // a swing with no clip: the weapon itself follows the procedural swing
 		bool bPinned = false;
 	};
 
