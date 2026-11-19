@@ -30,7 +30,10 @@ to the aim, and the post-process:
   plus 0.07 per degree of the gun's first kick, 0.13 s), a hit on the player (1.1 degrees, 0.3 s), a knock-down (3.5 degrees,
   0.9 s), a blast by its nearness (5.5 degrees x a strength from its radius x closeness squared, out to 6 radii plus 30 m).
   Times `Feel.Shake`.
-- **Roll**: the camera ducks 55 cm and tips down 9 degrees under a roll, following the sim's 27 steps.
+- **Roll** (third person, Elden Ring, sneed 2026-11-19): the camera does **not** duck or zoom. It keeps its height and
+  distance and follows the body softly: its pivot trails the body with a 0.05 s time constant while running (as good as
+  fixed) and 0.2 s in a roll, eased between over a third of a second, never more than 1.4 m behind, and exactly while
+  aimed. Only a light blur pulse. First person keeps the dash (level view, hard blur, wider view).
 - **Motion blur, vignette, chromatic fringe**: blur is 0.5 (the engine's) times `Feel.Blur`, plus a pulse of up to 0.8 near
   blasts and in the rolling steps; the vignette (on top of the engine's 0.4) and the fringe pulse when the player is hit or
   knocked down and near blasts.
@@ -69,7 +72,7 @@ A flat 128 m map with the Crashlanded start, the protagonist in third person wit
 camera is not nudged when nothing happens; holding aim gives blend 1, the 62 degree field of view and a camera 120 cm back with the body
 still drawn; the first person aim view hides the body and puts the camera at the eyes; letting go restores everything; a burst lifts
 the view (up to 2.3 degrees), moves the aim by nothing, shakes the camera and settles to 0; with shake, kick and blur at 0 the view does not
-move and the settings are saved; a roll (the sim moves the pawn 4 m, the body turns over 360 degrees, the camera ducks 8 degrees, the
+move and the settings are saved; a roll (the sim moves the pawn 4 m, the body turns over 360 degrees, the camera glides after it without ducking, the
 blur rises to 1, a second roll is refused); a thrown grenade is drawn in the air, then its blast makes particles, a flash, shake, blur
 and 25 debris pieces that go about 6 m out and 2 m up without falling through the ground and are gone after 5 s; a 5 m blast 9 m away
 shakes the camera over 5 degrees. About 45 s, 220 to 240 fps at 888 x 500, game thread 4 ms.

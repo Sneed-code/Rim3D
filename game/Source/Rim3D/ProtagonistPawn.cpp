@@ -77,6 +77,21 @@ namespace
 	// Locked on (docs/design/focus.md): how fast the view turns to keep the focus ahead, degrees a second.
 	constexpr float ProtagonistFocusTurnThird = 360.0f;
 	constexpr float ProtagonistFocusTurnFirst = 100.0f;
+	// The locked-on view closes its gap with this time constant (s): it eases on, faster when further off,
+	// never over the turn rates above (Elden Ring: no whip).
+	constexpr float ProtagonistFocusEaseSeconds = 0.08f;
+	// After a roll the lock-on view eases back to the enemy over this long (real seconds, sneed 2026-11-19), starting
+	// from this share of its turn rate.
+	constexpr float ProtagonistFocusRecentreSeconds = 0.5f;
+	constexpr float ProtagonistFocusRecentreStart = 0.1f;
+	// The third person camera follows the body softly (time constants, real seconds): barely while running, so it feels
+	// as it did, and more in a roll, so the view glides after the tumble instead of lurching with it (Elden Ring). Aiming
+	// follows exactly. It never trails more than the most below (cm), and jumps (a teleport, a new body) are not followed.
+	constexpr float ProtagonistFollowRunSeconds = 0.05f;
+	constexpr float ProtagonistFollowRollSeconds = 0.2f;
+	constexpr float ProtagonistRollFollowPerSecond = 3.0f;
+	constexpr double ProtagonistFollowMaxTrail = 140.0;
+	constexpr double ProtagonistFollowTeleport = 500.0;
 	// The engine's default vignette, which the pulses add to.
 	constexpr float ProtagonistBaseVignette = 0.4f;
 
@@ -288,7 +303,10 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	}
 	bAimHeld = bWantAim;
 	AimBlend = FMath::FInterpConstantTo(AimBlend, bAimHeld ? 1.0f : 0.0f, DeltaTime, ProtagonistAimBlendPerSecond);
+	RollFollow = FMath::FInterpConstantTo(RollFollow, bRollingNow ? 1.0f : 0.0f, DeltaTime, ProtagonistRollFollowPerSecond);
+	CameraDelta = DeltaTime;
 	UpdateCamera();
+	CameraDelta = 0.0f;
 }
 
 bool AProtagonistPawn::HasGunDrawn() const
@@ -305,9 +323,20 @@ void AProtagonistPawn::FollowFocus(float DeltaTime)
 	bFocusLocked = false;
 	const USimSubsystem* Bridge = GetBridge();
 	const colony::ThingView* Me = Bridge && Bridge->GetSim() ? Bridge->GetCurrentSnapshot().find(Thing) : nullptr;
+	// The roll's clock: the camera follows softly while it lasts, and the lock-on eases back in after it.
+	const bool bRolling = Me && Me->rollPhase > 0;
+	if (bRolling)
+	{
+		SinceRoll = 0.0f;
+	}
+	else if (Me && Bridge->GetSpeed() != 0)
+	{
+		SinceRoll = FMath::Min(SinceRoll + DeltaTime, 100.0f);
+	}
+	bRollingNow = bRolling;
 	// Nor with a gun in hand (free aim, sneed 2026-11-18, docs/design/lock-on.md), nor while sprinting (the run goes
 	// where the keys say, as in Elden Ring).
-	if (!Me || Me->focusTarget == colony::kNoEntity || bAimHeld || Me->rollPhase > 0 || bSprinting || HasGunDrawn())
+	if (!Me || Me->focusTarget == colony::kNoEntity || bAimHeld || bRolling || bSprinting || HasGunDrawn())
 	{
 		return;
 	}
@@ -323,8 +352,15 @@ void AProtagonistPawn::FollowFocus(float DeltaTime)
 	}
 	bFocusLocked = true;
 	const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(To.Y), static_cast<float>(To.X)));
-	const float Rate = bFirstPerson ? ProtagonistFocusTurnFirst : ProtagonistFocusTurnThird;
-	Yaw = FRotator::NormalizeAxis(FMath::FixedTurn(Yaw, Wanted, Rate * DeltaTime));
+	// Eased, not a fixed spin (sneed 2026-11-19: after a roll the view whipped back to the enemy): it closes a share of
+	// the gap each frame, capped at the turn rate, and for half a second after a roll that cap starts low and grows.
+	const float Recentre = ProtagonistSmooth(SinceRoll / ProtagonistFocusRecentreSeconds);
+	const float Cap = (bFirstPerson ? ProtagonistFocusTurnFirst : ProtagonistFocusTurnThird)
+		* FMath::Lerp(ProtagonistFocusRecentreStart, 1.0f, Recentre);
+	const float Gap = FMath::FindDeltaAngleDegrees(Yaw, Wanted);
+	const float Share = 1.0f - FMath::Exp(-DeltaTime / ProtagonistFocusEaseSeconds);
+	const float Step = FMath::Clamp(Gap * Share, -Cap * DeltaTime, Cap * DeltaTime);
+	Yaw = FRotator::NormalizeAxis(Yaw + Step);
 }
 
 bool AProtagonistPawn::IsBodyHiddenInView() const
@@ -483,6 +519,7 @@ void AProtagonistPawn::SetFirstPerson(bool bFirst)
 
 void AProtagonistPawn::SnapCamera()
 {
+	bSmoothFeetValid = false;
 	UpdateCamera();
 }
 
@@ -570,6 +607,26 @@ void AProtagonistPawn::UpdateCamera()
 			Feet.Z += Drawn->GetSwimLiftCm();
 		}
 	}
+	// The soft follow (third person only): the pivot glides after the drawn body, more in a roll, not at all while aimed.
+	const double Trail = FVector::Dist(SmoothFeet, Feet);
+	if (!bSmoothFeetValid || bFirstPerson || Trail > ProtagonistFollowTeleport)
+	{
+		SmoothFeet = Feet;
+		bSmoothFeetValid = true;
+	}
+	else if (CameraDelta > 0.0f)
+	{
+		const float Seconds = FMath::Lerp(ProtagonistFollowRunSeconds, ProtagonistFollowRollSeconds, ProtagonistSmooth(RollFollow))
+			* (1.0f - Blend);
+		const double Share = Seconds > 1.0e-3f ? 1.0 - FMath::Exp(-CameraDelta / Seconds) : 1.0;
+		SmoothFeet = FMath::Lerp(SmoothFeet, Feet, Share);
+		const FVector Behind = SmoothFeet - Feet;
+		if (Behind.Size() > ProtagonistFollowMaxTrail)
+		{
+			SmoothFeet = Feet + Behind.GetSafeNormal() * ProtagonistFollowMaxTrail;
+		}
+	}
+	CameraTrail = FVector::Dist2D(SmoothFeet, Feet);
 	const FVector Eye = Feet + FVector(0.0, 0.0, kEyeHeight * BodyScale) + FRotator(0.0, Yaw, 0.0).Vector() * ProtagonistEyeForward;
 	FVector Location;
 	EffectiveArm = ArmLength;
@@ -581,7 +638,7 @@ void AProtagonistPawn::UpdateCamera()
 	else
 	{
 		// Aimed (over the shoulder): the camera comes in close behind and to the right of the colonist.
-		const FVector Pivot = Feet + FVector(0.0, 0.0, ProtagonistPivotHeight * BodyScale);
+		const FVector Pivot = SmoothFeet + FVector(0.0, 0.0, ProtagonistPivotHeight * BodyScale);
 		EffectiveArm = FMath::Lerp(ArmLength, FMath::Min(ArmLength, ProtagonistAimArm), Blend);
 		const FVector Right = FRotator(0.0, Yaw, 0.0).RotateVector(FVector::RightVector);
 		Location = Pivot - Look.Vector() * EffectiveArm + Right * (ProtagonistAimShoulder * Blend);
