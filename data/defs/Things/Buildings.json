@@ -13,15 +13,15 @@
     "passability": "Impassable", "fillPercent": 1.0, "designationCategory": "Structure",
     "costStuffCount": 5,
     "stats": { "maxHitPoints": 300, "workToBuild": 194.4, "flammability": 1.0 },
-    "building": { "holdsRoof": true, "dragShape": "Outline" },
-    "ours": ["building.holdsRoof", "building.dragShape"]
+    "building": { "holdsRoof": true, "dragShape": "Outline", "takesWindow": true },
+    "ours": ["building.holdsRoof", "building.dragShape", "building.takesWindow: a window can be cut in it (docs/design/windows.md)"]
   },
   {
     "defName": "AncientWall", "visual": {"link": {"thickness": 0.5}, "parts": [{"shape": "box", "size": [0, 0, 2.2], "color": [0.42, 0.4, 0.37]}]}, "parent": "BuildingBase", "label": "ancient wall",
     "passability": "Impassable", "fillPercent": 1.0,
     "stats": { "maxHitPoints": 200, "flammability": 0 },
-    "building": { "holdsRoof": true }, "mapFeature": true,
-    "ours": ["building.holdsRoof", "stats.maxHitPoints", "mapFeature: not the colony's, so not its home (raids.md)"],
+    "building": { "holdsRoof": true, "takesWindow": true }, "mapFeature": true,
+    "ours": ["building.holdsRoof", "building.takesWindow", "stats.maxHitPoints", "mapFeature: not the colony's, so not its home (raids.md)"],
     "note": "Part of a ruin the map is made with (docs/design/mapgen.md). Not built by anyone."
   },
   {

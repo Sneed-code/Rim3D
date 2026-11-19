@@ -536,7 +536,7 @@ void UShooterFeelSubsystem::UpdateKick(float DeltaTime, const colony::Sim& Sim, 
 	KickPitch = FMath::FInterpTo(KickPitch, WantPitch, DeltaTime, 40.0f);
 	KickYaw = FMath::FInterpTo(KickYaw, WantYaw, DeltaTime, 40.0f);
 
-	// A dodge roll ducks the camera under it and kicks the blur: from where the sim has the roll (27 steps in all).
+	// A dodge roll kicks the blur (and in first person widens the view): from where the sim has the roll (27 steps in all).
 	float Dip = 0.0f;
 	float RollBlur = 0.0f;
 	float Dash = 0.0f;
@@ -553,8 +553,9 @@ void UShooterFeelSubsystem::UpdateKick(float DeltaTime, const colony::Sim& Sim, 
 		}
 		else
 		{
-			Dip = FMath::Sin(PI * Progress);
-			RollBlur = View->rollPhase == 2 ? 0.7f : 0.25f;
+			// Third person: no duck (sneed 2026-11-19, Elden Ring): the camera keeps its height and distance and glides
+			// after the body (AProtagonistPawn's soft follow); only a light blur.
+			RollBlur = View->rollPhase == 2 ? 0.4f : 0.15f;
 		}
 	}
 	RollDip = FMath::FInterpTo(RollDip, Dip, DeltaTime, 18.0f);

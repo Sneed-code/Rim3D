@@ -36,6 +36,7 @@
 #include "ColonySim/Hash.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Weather.h"
+#include "ColonySim/Windows.h"
 #include "ColonySim/DeepResources.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/RoofCollapse.h"
@@ -497,6 +498,7 @@ struct SaveEntity {
     std::optional<Visitor> visitor;         // section "trade" (C23)
     std::optional<Inspired> inspired;            // section "inspirations" (C25)
     std::optional<AwayPawn> away;                // section "maps" (W5)
+    std::optional<Window> window;                // section "windows" (docs/design/windows.md)
 };
 
 // Another map (W5): its tile, when it was made and its whole sim as a save of its own.
@@ -1607,13 +1609,13 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 auto* designate = &c;
                 ar.group("area", [&] { saveRect(ar, designate->area); });
                 ar.value("kind", designate->kind);
-                ar.require(designate->kind >= DesignationKind::Mine && designate->kind <= DesignationKind::RemoveFloor,
+                ar.require(designate->kind >= DesignationKind::Mine && designate->kind <= DesignationKind::RemoveWindow,
                        "the save file has a bad designation kind");
             } else if constexpr (std::is_same_v<Type, CancelDesignationsCommand>) {
                 auto* cancelMarks = &c;
                 ar.group("area", [&] { saveRect(ar, cancelMarks->area); });
                 ar.value("kind", cancelMarks->kind);
-                ar.require(cancelMarks->kind <= DesignationKind::RemoveFloor, "the save file has a bad designation kind");
+                ar.require(cancelMarks->kind <= DesignationKind::RemoveWindow, "the save file has a bad designation kind");
             } else if constexpr (std::is_same_v<Type, DraftCommand>) {
                 auto* draft = &c;
                 ar.value("pawn", draft->pawn);
@@ -1922,7 +1924,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Earthworks, "the save file has a bad job");
+    ar.require(job.type <= JobType::WindowWork, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -4095,6 +4097,9 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("lastLevel", g.lastLevel);
         });
     });
+    ar.section("windows", 1, [&] {  // windows in walls (docs/design/windows.md); the wall's footprint keeps its height
+        saveParts(ar, "window", e, &SaveEntity::window, [&](Window& w) { ar.value("broken", w.broken); });
+    });
     // New sections go here, at the end.
 }
 
@@ -4537,6 +4542,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     }
     if (const Trap* trap = reg.try_get<Trap>(e)) {
         out.trap = *trap;
+    }
+    if (const Window* window = reg.try_get<Window>(e)) {
+        out.window = *window;
     }
     if (const Attunement* a = reg.try_get<Attunement>(e)) {
         SaveAttunement saved{a->level, a->strain, a->focus, {}};
@@ -5190,6 +5198,9 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
         }
         reg.emplace<ArtilleryShell>(entity, s);
     }
+    if (e.window) {
+        reg.emplace<Window>(entity, *e.window);
+    }
     if (e.trap) {
         reg.emplace<Trap>(entity, *e.trap);
     } else if (e.footprint && e.thing && sim.defs_->get(reg.get<Thing>(entity).def).has("trap")) {
@@ -5835,7 +5846,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         std::vector<std::pair<int, DesignationKind>> marks;
         for (size_t i = 0; i < d.designations.cells.size(); ++i) {
-            if (d.designations.kinds[i] > static_cast<uint8_t>(DesignationKind::RemoveFloor)) {
+            if (d.designations.kinds[i] > static_cast<uint8_t>(DesignationKind::RemoveWindow)) {
                 error = "the save has a bad designation";
                 return false;
             }

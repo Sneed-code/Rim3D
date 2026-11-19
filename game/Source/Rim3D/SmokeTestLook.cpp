@@ -34,6 +34,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Windows.h"
 
 #include <optional>
 
@@ -338,6 +339,18 @@ void USmokeTestSubsystem::BuildLookPhases()
 			SampleWalls += MakeOf(At(LookSampleX, LookSampleY + Y), LookSampleStuffs[Y / 2]) ? 1 : 0;
 		}
 		SampleWalls += MakeOf(At(LookSampleX - 1, LookSampleY), LookSampleStuffs[0]) ? 1 : 0;
+		// Windows (docs/design/windows.md): two in the room's north wall, and one in the second cell of each stuff in the
+		// sample wall, the granite one with its glass broken.
+		int32 WindowsCut = 0;
+		for (const int32 X : {2, 4})
+		{
+			WindowsCut += Sim->windows().add(At(X, LookRoomH - 1)) ? 1 : 0;
+		}
+		for (int32 Y = 1; Y < 2 * static_cast<int32>(UE_ARRAY_COUNT(LookSampleStuffs)); Y += 2)
+		{
+			WindowsCut += Sim->windows().add(At(LookSampleX, LookSampleY + Y)) ? 1 : 0;
+		}
+		colony::Windows::breakGlass(Sim->things(), Sim->map().buildingAt(At(LookSampleX, LookSampleY + 1)));
 		int32 Torches = 0;
 		for (const colony::CellPos Cell : {At(5, 1), At(1, 4)})
 		{
@@ -349,8 +362,8 @@ void USmokeTestSubsystem::BuildLookPhases()
 			}
 		}
 		State->bRoomBuilt = Sim->map().buildingAt(At(0, 0)) != colony::kNoEntity && Torches == 2;
-		Notes.Add(FString::Printf(TEXT("_prepare: home (%d, %d), room at (%d, %d), %d torches fuelled, %d sample walls"), State->Home.x, State->Home.y, State->Room.x, State->Room.y, Torches,
-			SampleWalls));
+		Notes.Add(FString::Printf(TEXT("_prepare: home (%d, %d), room at (%d, %d), %d torches fuelled, %d sample walls, %d windows"), State->Home.x, State->Home.y, State->Room.x,
+			State->Room.y, Torches, SampleWalls, WindowsCut));
 		{
 			// Which plants the bench's map grows (the look tasks dress the common ones first).
 			TMap<FString, int32> Kinds;
@@ -642,6 +655,23 @@ void USmokeTestSubsystem::BuildLookPhases()
 	};
 	Walls.Verify = [=]() { NoteShot(TEXT("walls")); };
 	Phases.Add(MoveTemp(Walls));
+
+	// 8b. Windows (docs/design/windows.md): inside the room at noon, looking at the two windows of its north wall, with the
+	// sun coming in through them.
+	FPhase WindowsShot;
+	WindowsShot.Name = TEXT("windows");
+	WindowsShot.WarmupSeconds = 4.0f;
+	WindowsShot.MeasureSeconds = 2.0f;
+	WindowsShot.Setup = [=, this]()
+	{
+		SetClock(12.0f, LookSmokeMidsummer);
+		const float NorthY = static_cast<float>(State->Room.y + LookRoomH - 1);
+		const FVector To = CellWorld(static_cast<float>(State->Room.x) + 3.5f, NorthY + 0.5f, 150.0);
+		const FVector From = CellWorld(static_cast<float>(State->Room.x) + 3.5f, NorthY - 3.6f, 165.0);
+		ViewFrom(From, (To - From).Rotation());
+	};
+	WindowsShot.Verify = [=]() { NoteShot(TEXT("windows")); };
+	Phases.Add(MoveTemp(WindowsShot));
 
 	// 9. A snowy day: a new game on the same seed snows hard through the cold night, then the overseer looks at it at eleven
 	// on a midwinter morning. (The sim's first day is spring; the night is cold enough for the snow to lie.)
