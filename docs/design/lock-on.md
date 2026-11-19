@@ -53,7 +53,10 @@ that had EndFocus on F1 move to the new default.
 - **Melee weapon or fists in hand**: the sim turns the body to the target (as `MeleeSystem::faceFocus` does now). WASD is
   read **around the target**: W toward it, S straight back, A/D walk a circle round it at the current distance (the move
   direction is the tangent, corrected each step so the distance holds). The third-person camera turns to keep the target
-  ahead (as `FollowFocus` does now); the mouse tilts it and flicks switch targets.
+  ahead (as `FollowFocus` does now); the mouse tilts it and flicks switch targets. The turn is eased, not a fixed
+  spin: it closes its gap with a 0.08 s time constant, capped at 360 degrees a second (100 in first person). After a
+  roll the cap starts at a tenth and eases up to full over 0.5 s, so the view swings back to the enemy gently instead of
+  whipping round (sneed 2026-11-19).
 - **Gun in hand**: no auto-face, no camera pull. WASD and the mouse work exactly as unlocked. The marker and HP bar stay.
 - **Sprint while locked**: the body turns to the run direction (as Elden Ring), facing returns when sprint stops.
 - **Roll**: goes the way you press, relative to the target when locked with melee.
