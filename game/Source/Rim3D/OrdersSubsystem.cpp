@@ -175,6 +175,8 @@ namespace
 			case EOrderTool::RemoveLandingZone: return FColor(160, 160, 170);
 			case EOrderTool::Cancel: return FColor(255, 255, 255);
 			case EOrderTool::Deconstruct: return FColor(225, 50, 50);
+			case EOrderTool::LevelEarth: return FColor(170, 120, 70);
+			case EOrderTool::CancelEarth: return FColor(160, 160, 170);
 			default: return FColor(255, 255, 255);
 		}
 	}
@@ -226,6 +228,8 @@ namespace
 			case EOrderTool::Grow: return TEXT("Grow");
 			case EOrderTool::LandingZone: return TEXT("LandingZone");
 			case EOrderTool::RemoveLandingZone: return TEXT("RemoveLandingZone");
+			case EOrderTool::LevelEarth: return TEXT("LevelEarth");
+			case EOrderTool::CancelEarth: return TEXT("CancelEarth");
 		}
 		return TEXT("?");
 	}
@@ -808,6 +812,23 @@ void UOrdersSubsystem::BeginDrag(colony::CellPos Cell)
 	SetHoverCell(Cell);
 	DragStart = Cell;
 	bDragging = true;
+	if (Tool == EOrderTool::LevelEarth)
+	{
+		LevelStartCm = LevelHeightAtCm(Cell);
+	}
+}
+
+int32 UOrdersSubsystem::LevelHeightAtCm(colony::CellPos Cell) const
+{
+	// The ground in the middle of the cell, on the 25 cm steps every base keeps (docs/design/earthworks.md).
+	const USimSubsystem* Bridge = GetBridge();
+	if (!Bridge || !Bridge->GetSim())
+	{
+		return 0;
+	}
+	const colony::Map& Map = Bridge->GetSim()->map();
+	const float Metres = Map.heightAt(static_cast<float>(Cell.x) + 0.5f, static_cast<float>(Cell.y) + 0.5f);
+	return FMath::RoundToInt32(Metres / colony::Map::kLevelStepM) * FMath::RoundToInt32(colony::Map::kLevelStepM * 100.0f);
 }
 
 colony::CellRect UOrdersSubsystem::DragRect() const
@@ -988,6 +1009,17 @@ int32 UOrdersSubsystem::EndDrag(colony::CellPos Cell)
 			Say(CommandsSent > SentBefore ? FString(TEXT("Cancelled")) : FString(TEXT("Nothing to cancel there")));
 			break;
 		}
+		case EOrderTool::LevelEarth:
+		{
+			const int32 HeightCm = LevelStartCm + LevelNudgeCm;
+			Submit(colony::LevelEarthCommand{Rect, HeightCm});
+			Say(FString::Printf(TEXT("Level earth %d x %d at %.2f m"), Rect.sizeX, Rect.sizeY, static_cast<float>(HeightCm) / 100.0f));
+			break;
+		}
+		case EOrderTool::CancelEarth:
+			Submit(colony::CancelEarthworksCommand{Rect});
+			Say(TEXT("Earthworks cancelled"));
+			break;
 		case EOrderTool::Deconstruct:
 			for (const colony::ThingView& View : Snapshot.things)
 			{
@@ -1364,6 +1396,33 @@ void UOrdersSubsystem::RebuildMarks(const USimSubsystem& Bridge)
 		++Stats.LandingCells;
 	}
 
+	// Earthworks waiting (docs/design/earthworks.md): an amber ring on every cell round a corner still to be dug or filled.
+	{
+		const colony::Map& Map = Sim.map();
+		TSet<int32> EarthCells;
+		for (const uint32 Corner : Map.earthCorners())
+		{
+			const colony::CellPos K = Map.cellAt(static_cast<int>(Corner));
+			for (int32 Y = K.y - 1; Y <= K.y; ++Y)
+			{
+				for (int32 X = K.x - 1; X <= K.x; ++X)
+				{
+					if (Map.inBounds(colony::CellPos{X, Y, 0}) && Sim.construction().siteAt(colony::CellPos{X, Y, 0}) == colony::kNoEntity)
+					{
+						EarthCells.Add(Map.index(colony::CellPos{X, Y, 0}));
+					}
+				}
+			}
+		}
+		TArray<int32> Sorted = EarthCells.Array();
+		Sorted.Sort();
+		for (const int32 Index : Sorted)
+		{
+			const colony::CellPos Cell = Map.cellAt(Index);
+			Place(OrdLandRing, 0, Cell.x, Cell.y, 3.0, nullptr);
+		}
+	}
+
 	for (TPair<int32, TObjectPtr<UInstancedStaticMeshComponent>>& Pair : OverlayComponents)
 	{
 		if (Pair.Value)
@@ -1430,6 +1489,8 @@ void UOrdersSubsystem::RefreshOverlay()
 			Signature = OrdMix(Signature, OrdCellKey(Cell.x, Cell.y) ^ 0x67726F77ULL);
 		}
 		Signature = OrdMix(Signature, Snapshot.landingZoneChanges ^ 0x4C414E44ULL);
+		Signature = OrdMix(Signature, Bridge->GetSim()->map().earthChanges() ^ 0x45415254ULL);
+		Signature = OrdMix(Signature, static_cast<uint64>(Bridge->GetSim()->map().levelledCorners().size()));
 		for (const colony::ThingView& View : Snapshot.things)
 		{
 			if (View.category == colony::ThingCategory::Building && View.stage == colony::ConstructionStage::Built && View.markedForDeconstruct)
@@ -1784,6 +1845,11 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 				}
 				ImGui::SameLine();
 			}
+			if (OpenCategory == TEXT("Structure"))
+			{
+				ToolButton(TEXT("Level earth"), EOrderTool::LevelEarth);
+				ToolButton(TEXT("Cancel earthworks"), EOrderTool::CancelEarth);
+			}
 			ImGui::NewLine();
 		}
 
@@ -1862,6 +1928,30 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 			}
 			ImGui::SameLine();
 			OrdText(TEXT("Drag a rectangle on open soil.  Colonists with Growing work sow it."));
+		}
+		else if (Tool == EOrderTool::LevelEarth)
+		{
+			// The height comes from the ground where the drag starts; these nudge it in 25 cm steps (at most twice a wall's
+			// height from any corner: the sim leaves out cells further off).
+			const int32 StartCm = bDragging ? LevelStartCm : (bHasHover ? LevelHeightAtCm(Hover) : 0);
+			OrdText(FString::Printf(TEXT("Height %.2f m"), static_cast<float>(StartCm + LevelNudgeCm) / 100.0f));
+			ImGui::SameLine();
+			if (ImGui::Button("Lower 25 cm"))
+			{
+				LevelNudgeCm = FMath::Max(LevelNudgeCm - 25, -600);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Raise 25 cm"))
+			{
+				LevelNudgeCm = FMath::Min(LevelNudgeCm + 25, 600);
+			}
+			ImGui::SameLine();
+			if (LevelNudgeCm != 0 && ImGui::Button("Reset"))
+			{
+				LevelNudgeCm = 0;
+			}
+			ImGui::SameLine();
+			OrdText(TEXT("Drag from the height you want.  Builders dig or fill it, about a second per quarter metre."));
 		}
 		else if (Tool == EOrderTool::LandingZone)
 		{

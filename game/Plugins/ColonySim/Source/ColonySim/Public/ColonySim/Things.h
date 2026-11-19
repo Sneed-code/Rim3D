@@ -47,6 +47,15 @@ inline CellPos cellOf(const Position& p) {
     return CellPos{static_cast<int>(std::floor(p.x)), static_cast<int>(std::floor(p.y)), p.level};
 }
 
+// How a building meets sloped ground (docs/design/earthworks.md), the def's `building.groundFit`:
+// Level digs or fills its footprint flat (walls, doors; the default for Structure and for buildings
+// with no designation category), Flat does the same but can't be planned on ground steeper than
+// kFlatMaxRiseM (furniture, benches, turrets: every other category), Conform leaves the ground as it
+// is and leans with it (sandbags, barricades, traps).
+enum class GroundFit : uint8_t { Level, Flat, Conform };
+inline constexpr float kFlatMaxRiseM = 0.25f;
+COLONY_API GroundFit groundFitOf(const Def& d);
+
 // Buildings. Size and blocking come from the def (`size`, `passability`). A door is a def with
 // `thingClass` Building_Door, as in RimWorld, and never blocks movement. `fillPercent` makes it
 // block sight and give cover. Origin and rotation are set while the building is spawned.
@@ -116,6 +125,12 @@ struct Mover {
     uint16_t ghostSteps = 0;
     uint16_t heldSteps = 0;
     bool gaveUp = false;
+    // The stuck watchdog (docs/design/earthworks.md "Stuck"): steps spent wanting to walk within a metre of
+    // (stuckX, stuckY), and steps left of walking straight through walls and pawns once that reached 10 s.
+    uint16_t stuckSteps = 0;
+    uint16_t phaseSteps = 0;
+    float stuckX = 0.0f;
+    float stuckY = 0.0f;
     // Set by the job system every step for a pawn at a job step it does standing still (building,
     // mining, cooking, eating, sleeping): the movement system keeps it where it is, so a pawn
     // walking past can't shove it out of its working cell. Others steer round it. Not saved: the

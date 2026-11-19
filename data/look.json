@@ -11,8 +11,8 @@
     "volumetricScattering": 1.0
   },
   "moon": {
-    "fullLux": 1.0,
-    "newMoonShare": 0.25,
+    "fullLux": 3.0,
+    "newMoonShare": 0.4,
     "color": [0.62, 0.74, 1.0]
   },
   "skyLight": {
@@ -25,7 +25,7 @@
   "exposure": {
     "_about": "The camera is held near a target that follows the light: noonEV at a clear midsummer noon, and for every stop darker the scene is, the target drops `follow` stops (1 would make night as bright as day). The auto exposure may move `brighterEV` below and `darkerEV` above the target, for rooms and bright snow.",
     "noonEV": 15.0,
-    "follow": 0.80,
+    "follow": 0.88,
     "minEV": -1.5,
     "maxEV": 16.0,
     "brighterEV": 0.75,

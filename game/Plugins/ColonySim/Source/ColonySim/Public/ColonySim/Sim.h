@@ -524,6 +524,8 @@ public:
     float bodyHeightM(Entity pawn) const;
     // True when the pawn is in water past its shoulders: it swims, and can't roll, shoot or fight.
     bool pawnSwimming(Entity pawn) const;
+    // UnstuckCommand: the nearest clear spot within 12 m (docs/design/earthworks.md "Stuck").
+    bool unstuckPawn(Entity pawn, std::string& error);
     // True while an AI pawn sprints (sneed 2026-11-17, docs/design/controls.md): a fighter fleeing or charging into melee
     // (FighterSystem::sprinting) or carrying a downed friend to cover, or a colonist rescuing a downed colonist or beating
     // out a fire. Never the player's pawn (Unreal's sprint toggle sets its speed), visitors or animals.
