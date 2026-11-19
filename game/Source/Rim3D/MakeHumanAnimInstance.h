@@ -8,6 +8,8 @@
 #include "BoneControllers/AnimNode_AnimDynamics.h"
 #include "BoneControllers/AnimNode_TwoBoneIK.h"
 
+#include "ColonySim/ArmPose.h"
+
 #include "MakeHumanAnimInstance.generated.h"
 
 class UIKRetargeter;
@@ -130,6 +132,65 @@ struct FMakeHumanSeverNode : public FAnimNode_SkeletalControlBase
 	virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override {}
 };
 
+/** Where a hand's goal is given (FMakeHumanHandGoal). */
+enum class EMakeHumanGoalSpace : uint8
+{
+	Component,  // the mesh component's space
+	Anchor,     // offset from a bone's place in component space this very pose (no lag behind the body), rotation in component space
+	OtherHand,  // in the other hand's bone space after that hand is solved (a second hand on the same weapon)
+};
+
+/** A hand's goal for the arm solver (FMakeHumanArmsNode). */
+struct FMakeHumanHandGoal
+{
+	float Alpha = 0.0f;                 // 0 off .. 1 fully on the goal
+	EMakeHumanGoalSpace Space = EMakeHumanGoalSpace::Component;
+	FName Anchor;                       // Space Anchor: the bone
+	FTransform Target;                  // the hand bone's goal (its location and, with bRotation, its rotation)
+	bool bRotation = false;             // false: the hand keeps its animated rotation (still within the wrist's range)
+	FVector Pole = FVector::ZeroVector; // component-space direction the elbow points; zero: naturally down and out
+	bool bElbowPoint = false;           // instead, a component-space point the elbow bends towards
+	FVector ElbowPoint = FVector::ZeroVector;
+};
+
+/**
+ * Both arms onto their hands' goals without a joint a person couldn't make (docs/design/weapon-hold.md, "Arms that
+ * can't bend wrong"): the elbow is a hinge about the axis the animation gave it (the upper arm rolls to keep it so),
+ * never past 145 degrees nor straighter than the arm's reach allows (no stretching), the forearm's twist and the
+ * wrist's bend are clamped to human range (colony::arm, tested in the sim's ArmPoseTests). A goal the arm can't
+ * reach leaves the hand short of it, never a stretched or snapped arm.
+ */
+USTRUCT()
+struct FMakeHumanArmsNode : public FAnimNode_SkeletalControlBase
+{
+	GENERATED_BODY()
+
+	struct FArm
+	{
+		FBoneReference Upper, Lower, Hand, Index, Pinky, Middle, IndexTip;
+		FVector HingeInUpper = FVector::ZeroVector;  // the elbow's medial hinge in the upper arm's space, last seen bent
+		bool bHinge = false;
+		double NeutralFlex = 0.0;       // the rest pose's wrist readings (its knuckles off the forearm's line)
+		double NeutralDeviation = 0.0;
+		bool bValid = false;
+	};
+	FArm Arms[2];                        // 0 left, 1 right
+	FMakeHumanHandGoal Goals[2];
+	/** The body's axes in component space (up, forward, right), from the owner each update unless overridden. */
+	FVector Up = FVector::UpVector;
+	FVector Forward = FVector(0.0, 1.0, 0.0);
+	FVector Right = FVector(-1.0, 0.0, 0.0);
+	bool bLimits = true;                 // Pawns.ArmLimits
+	/** What each arm read after the last solve (tests): angles, and how far the goal was out of reach (cm). */
+	colony::arm::ArmAngles Measured[2];
+	float ShortBy[2] = {0.0f, 0.0f};
+	bool bSolved[2] = {false, false};
+
+	virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) override;
+	virtual bool IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones) override;
+	virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override;
+};
+
 /**
  * The pose of the mesh this one is attached to (the pawn's hidden mannequin), retargeted; then, where the skeleton
  * has them, soft-body jiggle on the breast bones and a swinging chain on a ponytail's bones (AnimDynamics).
@@ -150,8 +211,7 @@ struct FMakeHumanAnimProxy : public FAnimInstanceProxy
 	TArray<TSharedPtr<FAnimNode_AnimDynamics>> Dynamics;
 	FMakeHumanSeverNode Sever;       // last: what was cut off folds away after everything else has moved
 	FAnimNode_ConvertComponentToLocalSpace ToLocal;
-	FAnimNode_TwoBoneIK RightHandIK; // the gun range: the right hand moved so the gun's sight is before the eye
-	FAnimNode_TwoBoneIK LeftHandIK;  // creator weapons: the left hand on a two-handed hilt (Pawns.MakeHumanHandIK)
+	FMakeHumanArmsNode ArmsIK;       // both hands on weapons and reaches, within human joint limits (Pawns.MakeHumanHandIK)
 	bool bPhysics = false;
 
 	virtual void Initialize(UAnimInstance* Instance) override;
@@ -203,38 +263,35 @@ public:
 	/** The deepest skin dent (cm) since the last call, for the tests. */
 	float TakeDeepestDent();
 	/** The left hand's wrist pulled to a point given in the right hand bone's space (a two-handed grip), the elbow bent
-	 *  towards ElbowWorld; Alpha 0 is off. Read once a frame before the animation updates (creator weapons). */
-	void SetLeftHandGrip(float Alpha, const FVector& InRightHandOffset, const FVector& InElbowWorld)
-	{
-		bLeftReach = false;
-		LeftGripAlpha = Alpha;
-		LeftGripOffset = InRightHandOffset;
-		LeftElbowWorld = InElbowWorld;
-	}
+	 *  towards ElbowWorld; Alpha 0 is off. Its rotation stays as animated (within the wrist's range). */
+	void SetLeftHandGrip(float Alpha, const FVector& InRightHandOffset, const FVector& InElbowWorld);
 	/** The right hand's wrist moved to a point in this component's space (its rotation kept as animated), the elbow
-	 *  bent towards a point in the same space; Alpha 0 is off. Evaluated before the left hand's grip (the gun range). */
-	void SetRightHandReach(float Alpha, const FVector& InTargetComponent, const FVector& InElbowComponent)
-	{
-		RightReachAlpha = Alpha;
-		RightReachTarget = InTargetComponent;
-		RightElbowComponent = InElbowComponent;
-	}
+	 *  bent towards a point in the same space; Alpha 0 is off. */
+	void SetRightHandReach(float Alpha, const FVector& InTargetComponent, const FVector& InElbowComponent);
 	/** The left hand's wrist moved to a point in this component's space instead (a guard, a shield raised, hands under a
 	 *  carried body's legs), the elbow bent towards a point in the same space; Alpha 0 is off. Replaces the grip. */
-	void SetLeftHandReach(float Alpha, const FVector& InTargetComponent, const FVector& InElbowComponent)
+	void SetLeftHandReach(float Alpha, const FVector& InTargetComponent, const FVector& InElbowComponent);
+	/** A hand's full goal (location and rotation, in any space): a weapon's grip (docs/design/weapon-hold.md). Replaces
+	 *  whatever the hand was given before; Alpha 0 lets it go. */
+	void SetHandGoal(bool bRight, const FMakeHumanHandGoal& Goal) { HandGoals[bRight ? 1 : 0] = Goal; }
+	const FMakeHumanHandGoal& GetHandGoal(bool bRight) const { return HandGoals[bRight ? 1 : 0]; }
+	/** The body's up, forward and right in world space, used instead of the owner actor's (the first-person arms face
+	 *  the view, not their holder); off with bOn false. */
+	void SetBodyAxesOverride(bool bOn, const FVector& InUp = FVector::UpVector, const FVector& InForward = FVector::ForwardVector,
+							 const FVector& InRight = FVector::RightVector)
 	{
-		bLeftReach = true;
-		LeftGripAlpha = Alpha;
-		LeftGripOffset = InTargetComponent;
-		LeftElbowWorld = InElbowComponent;
+		bAxesOverride = bOn;
+		AxesUp = InUp;
+		AxesForward = InForward;
+		AxesRight = InRight;
 	}
-	bool bLeftReach = false;
-	float RightReachAlpha = 0.0f;
-	FVector RightReachTarget = FVector::ZeroVector;
-	FVector RightElbowComponent = FVector::ZeroVector;
-	float LeftGripAlpha = 0.0f;
-	FVector LeftGripOffset = FVector::ZeroVector;
-	FVector LeftElbowWorld = FVector::ZeroVector;
+	/** What an arm read after the solver's last pass (degrees; tests), false if it was not solved. */
+	bool GetSolvedArm(bool bRight, colony::arm::ArmAngles& Out, float& OutShortBy) const;
+	FMakeHumanHandGoal HandGoals[2];  // 0 left, 1 right
+	bool bAxesOverride = false;
+	FVector AxesUp = FVector::UpVector;
+	FVector AxesForward = FVector::ForwardVector;
+	FVector AxesRight = FVector::RightVector;
 
 protected:
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;

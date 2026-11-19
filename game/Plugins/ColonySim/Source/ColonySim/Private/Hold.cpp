@@ -26,6 +26,43 @@ HoldGrip holdGripFrom(const std::string& text) {
     return HoldGrip::Blade;
 }
 
+HoldPlace holdPlaceAt(const Def& def, const std::string& path, const HoldPlace& fallback) {
+    if (def.count((path + ".at").c_str()) < 3) {
+        return fallback;
+    }
+    HoldPlace p;
+    p.set = true;
+    const std::string anchor = def.text((path + ".anchor").c_str(), "Chest");
+    p.anchor = anchor == "Head" ? HoldAnchor::Head : (anchor == "View" ? HoldAnchor::View : HoldAnchor::Chest);
+    const std::string point = def.text((path + ".point").c_str(), "Main");
+    p.point = point == "Sight" ? HoldPlacePoint::Sight : (point == "Stock" ? HoldPlacePoint::Stock : HoldPlacePoint::Main);
+    p.at = holdPointAt(def, path + ".at", HoldPoint{});
+    if (def.count((path + ".turn").c_str()) >= 3) {
+        p.pitch = static_cast<float>(def.numberAt((path + ".turn").c_str(), 0));
+        p.yaw = static_cast<float>(def.numberAt((path + ".turn").c_str(), 1));
+        p.roll = static_cast<float>(def.numberAt((path + ".turn").c_str(), 2));
+    }
+    return p;
+}
+
+// The places of a style or a weapon's own `hold` over `out`'s.
+void holdPlacesFrom(const Def& def, const std::string& prefix, WeaponHold& out) {
+    out.ready = holdPlaceAt(def, prefix + "ready", out.ready);
+    out.aim = holdPlaceAt(def, prefix + "aim", out.aim);
+    out.block = holdPlaceAt(def, prefix + "block", out.block);
+    out.fpReady = holdPlaceAt(def, prefix + "fpReady", out.fpReady);
+    out.fpAim = holdPlaceAt(def, prefix + "fpAim", out.fpAim);
+    out.fpBlock = holdPlaceAt(def, prefix + "fpBlock", out.fpBlock);
+}
+
+void holdOffTurnFrom(const Def& def, const std::string& path, WeaponHold& out) {
+    if (def.count(path.c_str()) >= 3) {
+        out.offPitch = static_cast<float>(def.numberAt(path.c_str(), 0));
+        out.offYaw = static_cast<float>(def.numberAt(path.c_str(), 1));
+        out.offRoll = static_cast<float>(def.numberAt(path.c_str(), 2));
+    }
+}
+
 // Fills `out` from a HoldStyles def: hands, hand, grip, attack style and the style's default grip points.
 bool holdFromStyle(const DefDatabase& defs, const std::string& name, WeaponHold& out) {
     const Def* style = defs.find("HoldStyles", name);
@@ -42,6 +79,10 @@ bool holdFromStyle(const DefDatabase& defs, const std::string& name, WeaponHold&
     out.hasOff = style->count("off") >= 3;
     out.off = holdPointAt(*style, "off", HoldPoint{});
     out.rake = static_cast<float>(style->number("rake", 0.0));
+    out.hasSupport = style->count("support") >= 3;
+    out.support = holdPointAt(*style, "support", HoldPoint{});
+    holdOffTurnFrom(*style, "offTurn", out);
+    holdPlacesFrom(*style, "places.", out);
     return true;
 }
 
@@ -81,6 +122,12 @@ bool holdFor(const DefDatabase& defs, DefId weapon, WeaponHold& out) {
             out.hasOff = true;
         }
         out.rake = static_cast<float>(def->number("hold.rake", out.rake));
+        if (def->count("hold.support") >= 3) {
+            out.support = holdPointAt(*def, "hold.support", out.support);
+            out.hasSupport = true;
+        }
+        holdOffTurnFrom(*def, "hold.offTurn", out);
+        holdPlacesFrom(*def, "hold.places.", out);
     }
     // One-handed styles never put the other hand on (a def's stray off point is ignored).
     if (out.hands < 2) {
@@ -102,6 +149,25 @@ bool shieldHoldFor(const DefDatabase& defs, DefId shield, WeaponHold& out) {
     out.main = holdPointAt(*def, "hold.main", out.main);
     out.hasOff = false;
     return true;
+}
+
+const HoldPlace* holdPlaceFor(const WeaponHold& hold, bool firstPerson, bool aimed, bool blocking) {
+    const HoldPlace* wants[6] = {};
+    int n = 0;
+    if (firstPerson) {
+        if (aimed) wants[n++] = &hold.fpAim;
+        if (blocking) wants[n++] = &hold.fpBlock;
+        wants[n++] = &hold.fpReady;
+    }
+    if (aimed) wants[n++] = &hold.aim;
+    if (blocking) wants[n++] = &hold.block;
+    wants[n++] = &hold.ready;
+    for (int i = 0; i < n; ++i) {
+        if (wants[i]->set) {
+            return wants[i];
+        }
+    }
+    return nullptr;
 }
 
 const char* holdGripName(HoldGrip grip) {

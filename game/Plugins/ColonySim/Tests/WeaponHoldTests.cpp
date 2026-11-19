@@ -281,3 +281,58 @@ TEST_CASE("Weapon hold: a body carried to bed is on the carrier's back in the sn
     CHECK(snap.find(doctor)->carryingPawn == kNoEntity);
     CHECK(snap.find(patient)->carriedBy == kNoEntity);
 }
+
+TEST_CASE("Weapon hold: every held weapon has a place on the body, and the hands follow it, in both views") {
+    const auto defs = holdTestDefs();
+    // Every weapon a pawn can hold (guns and melee) is put somewhere by its style, first person and third, so its hands
+    // close on its grips (docs/design/weapon-hold.md, "Weapon first, then the hands").
+    int weapons = 0;
+    for (size_t i = 0; i < defs->size(); ++i) {
+        const Def& def = defs->get(DefId{static_cast<uint32_t>(i)});
+        if (def.kind() != "Things" || def.flag("abstract") || !(def.has("verbs") || (def.count("tools") > 0 && !def.has("race")))) {
+            continue;
+        }
+        if (def.has("race") || def.has("building") || def.has("apparel")) {
+            continue;
+        }
+        WeaponHold hold;
+        HOLD_REQUIRE(holdFor(*defs, def.id(), hold));
+        if (hold.grip == HoldGrip::None || hold.grip == HoldGrip::Bow) {
+            continue;  // fists keep their guard; bows draw with their own clip
+        }
+        ++weapons;
+        INFO(def.defName());
+        CHECK(holdPlaceFor(hold, false, false, false) != nullptr);
+        CHECK(holdPlaceFor(hold, true, false, false) != nullptr);
+        CHECK(holdPlaceFor(hold, true, false, false)->anchor == HoldAnchor::View);
+        if (hold.grip == HoldGrip::Gun) {
+            const HoldPlace* aimed = holdPlaceFor(hold, false, true, false);
+            HOLD_REQUIRE(aimed != nullptr);
+            CHECK(aimed->point == HoldPlacePoint::Sight);
+            CHECK(aimed->anchor == HoldAnchor::Head);
+            CHECK(holdPlaceFor(hold, true, true, false)->point == HoldPlacePoint::Sight);
+        } else {
+            CHECK(holdPlaceFor(hold, false, false, true) != nullptr);
+        }
+    }
+    CHECK(weapons > 20);
+
+    // A rifle: aimed, the sight goes before the eye; ready, the stock sits at the shoulder, muzzle down; the support hand's
+    // palm lies under the fore-end.
+    const WeaponHold rifle = holdTestOf(*defs, "Gun_AssaultRifle");
+    CHECK(rifle.aim.set);
+    CHECK(rifle.ready.point == HoldPlacePoint::Stock);
+    CHECK(rifle.ready.pitch < -20.0f);
+    CHECK(rifle.hasOff);
+    CHECK(rifle.offRoll > 45.0f);
+    // A pistol is one-handed for the sim, with a support hand for drawing.
+    const WeaponHold pistol = holdTestOf(*defs, "Gun_Autopistol");
+    CHECK(pistol.hands == 1);
+    CHECK_FALSE(pistol.hasOff);
+    CHECK(pistol.hasSupport);
+    // Melee: blocking has its own place; first person falls back to third only when it has none.
+    const WeaponHold sword = holdTestOf(*defs, "Melee_Longsword");
+    CHECK(holdPlaceFor(sword, false, false, true) == &sword.block);
+    CHECK(holdPlaceFor(sword, true, false, true) == &sword.fpBlock);
+    CHECK(holdPlaceFor(sword, false, false, false) == &sword.ready);
+}

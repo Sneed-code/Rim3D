@@ -18,6 +18,7 @@
 #include "FightSubsystem.h"
 #include "GunRangeSubsystem.h"
 #include "HoldDraw.h"
+#include "MakeHumanAnimInstance.h"
 #include "OrdersSubsystem.h"
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
@@ -51,6 +52,8 @@ namespace
 		TEXT("Weapons.Stances"), 1, TEXT("1 plays the held weapon's upper-body stance, aim, block and reload clips, 0 none."), ECVF_Default);
 	TAutoConsoleVariable<int32> GWeaponHolsterIdle(
 		TEXT("Weapons.HolsterIdle"), 1, TEXT("1 holsters the weapon while a pawn is not drafted, fighting or the player's, 0 keeps it in the hands."), ECVF_Default);
+	TAutoConsoleVariable<int32> GWeaponPlaces(
+		TEXT("Weapons.Places"), 1, TEXT("1 holds weapons at their style's place (a gun's sight before the eye, its stock in the shoulder, a blade's guard) with both hands on the grips (docs/design/weapon-hold.md), 0 lets the weapon follow the clip's hand."), ECVF_Default);
 	TAutoConsoleVariable<int32> GWeaponGunArt(
 		TEXT("Weapons.GunModels"), 1, TEXT("1 draws guns with a real model (assets/guns.json) in third person too, 0 the defs' plain shapes."), ECVF_Default);
 
@@ -770,6 +773,7 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 	bool bHandsHold = false;
 	FTransform HandsWeapon;
 	float HandsSize = Gear.size;
+	bool bAnyPinned = false;
 	for (int32 Slot = 0; Slot < GWeaponDisplaySlots; ++Slot)
 	{
 		FDisplayed& Shown = Pawn.Slots[Slot];
@@ -826,11 +830,34 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		HolsterPose(Slot, Height, HolsterLocation, HolsterRotation);
 		const FTransform Holster = FTransform(HolsterRotation, HolsterLocation * Place) * BodyFrame;
 
-		// In the hands: on the hand's grip (HoldDraw), else floating where the old drawing put it.
+		// In the hands: held at its place with both hands on its grips (weapon first, then the hands), else on the
+		// hand's grip as the clip has it (HoldDraw), else floating where the old drawing put it.
+		const bool bPinSlot = Incoming < 0 ? Slot == InHands : Slot == (Progress < 0.5f ? InHands : Incoming);
+		bool bPinned = false;
+		FTransform WeaponInHand;
+		if (bShow && bHands && bHold && bPinSlot && InHand > 0.0f && GWeaponPlaces.GetValueOnGameThread() != 0)
+		{
+			HoldDraw::FPoints Points = HoldDraw::PointsOf(Hold, HasShieldOnArm(View));
+			if (Art)
+			{
+				Points.Sight = Art->Sight;
+				const UStaticMeshComponent* Body = Shown.Component.Get();
+				Points.Stock = HoldDraw::StockFromBounds(Body && Body->GetStaticMesh() ? Body->GetStaticMesh()->GetBoundingBox() : FBox(ForceInit), Art->Sight);
+			}
+			bPinned = PinWeapon(Actor, View, Pawn, Hold, Points, Size, static_cast<float>(Place), bControlled, InHand, WeaponInHand);
+			bAnyPinned = bAnyPinned || bPinned;
+		}
 		FTransform Frame;
-		const bool bInHandFrame = bHands && bHold && HoldDraw::HandFrame(Mesh, Hold, Frame);
+		const bool bInHandFrame = bHands && bHold && (bPinned || HoldDraw::HandFrame(Mesh, Hold, Frame));
 		FTransform Hands;
-		if (bInHandFrame)
+		if (bPinned)
+		{
+			FTransform HandWorld = Mesh->GetSocketTransform(HoldDraw::HandBone(Hold), RTS_World);
+			HandWorld.SetScale3D(FVector::OneVector);
+			Hands = WeaponInHand * HandWorld;
+			Hands.SetScale3D(FVector::OneVector);
+		}
+		else if (bInHandFrame)
 		{
 			Hands = HoldDraw::WeaponWorld(Frame, Hold, Size);
 		}
@@ -885,10 +912,18 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		}
 	}
 
-	// The other hand on a two-handed grip, while the weapon is held up (not through a reload, which moves the hand itself).
-	const bool bOff = bShow && bHandsHold && HandsHold.hasOff && !View.reloading && Height > 0.9f;
+	// Hands let go once when the weapon is no longer held at a place (holstered, crouched, lying, downed).
+	if (!bAnyPinned && Pawn.bPinned)
+	{
+		HoldDraw::ReleaseHands(Mesh);
+		Pawn.bOffHandSet = false;
+	}
+	Pawn.bPinned = bAnyPinned;
+	// The other hand on a two-handed grip, while the weapon is held up (not through a reload, which moves the hand
+	// itself), when it isn't held at a place (that puts both hands on already).
+	const bool bOff = !bAnyPinned && bShow && bHandsHold && HandsHold.hasOff && !View.reloading && Height > 0.9f;
 	Pawn.OffHand = FMath::FInterpConstantTo(Pawn.OffHand, bOff ? 1.0f : 0.0f, FrameDelta, 5.0f);
-	if (Mesh && (Pawn.OffHand > 0.0f || Pawn.bOffHandSet))
+	if (Mesh && !bAnyPinned && (Pawn.OffHand > 0.0f || Pawn.bOffHandSet))
 	{
 		HoldDraw::SetOffHand(Mesh, HandsWeapon, HandsHold, HandsSize, bHandsHold ? Pawn.OffHand : 0.0f);
 		Pawn.bOffHandSet = Pawn.OffHand > 0.0f;
@@ -896,6 +931,95 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 
 	UpdateStance(Actor, View, Pawn, bShow && bHands, bControlled);
 	UpdateShield(Actor, View, Pawn, bShow && !View.hideGear, Height, Gear);
+}
+
+// Weapon first, then the hands (docs/design/weapon-hold.md): the weapon goes to its style's place on the body for what
+// the pawn is doing (ready, aimed, blocking), blended as it changes, in the body's facing from between the shoulders or
+// from the head (aimed: turned by the aim's pitch); the hands' goals ride on the neck bone so the arm solver reads them
+// against this very pose. Both hands then close on its grips through the solver, within human joint limits. Through a melee
+// swing or a full-body clip (a roll) the main hand follows its clip instead, the weapon still in it and the other hand
+// still on its grip.
+bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingView& View, FPawnWeapons& Pawn, const colony::WeaponHold& Hold,
+									 const HoldDraw::FPoints& Points, float Size, float BodyPlace, bool bControlled, float Alpha, FTransform& OutWeaponInHand)
+{
+	USkeletalMeshComponent* Mesh = HoldDraw::VisibleMesh(Actor);
+	if (!Mesh || !Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()) || !HoldDraw::HasHand(Mesh, true) || !HoldDraw::HasHand(Mesh, false) ||
+		Mesh->GetBoneIndex(TEXT("neck_01")) == INDEX_NONE || Mesh->GetBoneIndex(TEXT("head")) == INDEX_NONE ||
+		Mesh->GetBoneIndex(TEXT("upperarm_l")) == INDEX_NONE || Mesh->GetBoneIndex(TEXT("upperarm_r")) == INDEX_NONE)
+	{
+		return false;
+	}
+	const colony::HoldPlace* Ready = colony::holdPlaceFor(Hold, false, false, false);
+	if (!Ready || Hold.grip == colony::HoldGrip::None || Hold.grip == colony::HoldGrip::Shield || Hold.grip == colony::HoldGrip::Bow)
+	{
+		return false;
+	}
+	const colony::HoldPlace* Aim = colony::holdPlaceFor(Hold, false, true, false);
+	const colony::HoldPlace* Block = colony::holdPlaceFor(Hold, false, false, true);
+	const bool bGun = Hold.grip == colony::HoldGrip::Gun;
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	const AProtagonistPawn* Body = bControlled && Protagonist ? Protagonist->GetBody() : nullptr;
+
+	// Aimed (guns) and blocking (melee), eased.
+	float AimWant = 0.0f;
+	float AimPitch = 0.0f;
+	if (bGun && Body)
+	{
+		AimWant = Body->GetAimBlend();
+		AimPitch = Body->GetPitch();
+	}
+	else if (bGun && View.fightTarget != colony::kNoEntity)
+	{
+		AimWant = 1.0f;
+		const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>();
+		if (const ASimPawnActor* Target = Pawns ? Pawns->FindPawn(View.fightTarget) : nullptr)
+		{
+			// At the target's chest, from the eye.
+			const FVector From = Mesh->GetSocketLocation(TEXT("head"));
+			const FVector To = Target->GetActorLocation() + FVector(0.0, 0.0, 40.0 * Target->GetBodyScale());
+			const FVector D = To - From;
+			AimPitch = FMath::Clamp(static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(D.Z, D.Size2D()))), -60.0f, 60.0f);
+		}
+	}
+	Pawn.AimBlend = Body ? AimWant : FMath::FInterpConstantTo(Pawn.AimBlend, AimWant, FrameDelta, 4.0f);
+	Pawn.BlockBlend = FMath::FInterpConstantTo(Pawn.BlockBlend, !bGun && (View.blocking || View.shieldUp) ? 1.0f : 0.0f, FrameDelta, 6.0f);
+	const bool bSwinging = !bGun && (Actor.GetSwing().IsActive() || View.meleePhase != colony::MeleePhase::Ready);
+	const bool bFullBodyClip = Actor.IsInMotionClip() && !Actor.IsMotionClipUpper();
+	Pawn.HandFree = FMath::FInterpConstantTo(Pawn.HandFree, bSwinging || bFullBodyClip ? 1.0f : 0.0f, FrameDelta, 8.0f);
+
+	// The anchors in the world from this frame's pose: between the shoulder joints, or the head; the body's facing.
+	const FVector Chest = (Mesh->GetSocketLocation(TEXT("upperarm_l")) + Mesh->GetSocketLocation(TEXT("upperarm_r"))) * 0.5;
+	const FVector Head = Mesh->GetSocketLocation(TEXT("head"));
+	const FQuat Facing = FRotationMatrix::MakeFromXZ(Actor.GetActorForwardVector(), Actor.GetActorUpVector()).ToQuat();
+	const auto Placed = [&](const colony::HoldPlace& P)
+	{
+		const bool bHead = P.anchor == colony::HoldAnchor::Head;
+		const FQuat Frame = bHead ? Facing * FRotator(AimPitch, 0.0f, 0.0f).Quaternion() : Facing;
+		return HoldDraw::PlaceInAnchor(P, Points, Size, BodyPlace) * FTransform(Frame, bHead ? Head : Chest);
+	};
+	const auto Blend = [](const FTransform& A, const FTransform& B, float T)
+	{
+		const float E = MeleePose::EaseInOut(FMath::Clamp(T, 0.0f, 1.0f));
+		return FTransform(FQuat::Slerp(A.GetRotation(), B.GetRotation(), E), FMath::Lerp(A.GetLocation(), B.GetLocation(), static_cast<double>(E)));
+	};
+	FTransform Weapon = Placed(*Ready);
+	if (Aim && Pawn.AimBlend > 0.0f)
+	{
+		Weapon = Blend(Weapon, Placed(*Aim), Pawn.AimBlend);
+	}
+	if (Block && Pawn.BlockBlend > 0.0f)
+	{
+		Weapon = Blend(Weapon, Placed(*Block), Pawn.BlockBlend);
+	}
+
+	HoldDraw::FPinned Pinned;
+	if (!HoldDraw::PinHands(Mesh, Hold, Points, Size, Weapon, Pinned))
+	{
+		return false;
+	}
+	HoldDraw::ApplyPinned(Mesh, Hold, Pinned, static_cast<uint8>(EMakeHumanGoalSpace::Anchor), TEXT("neck_01"), Alpha * (1.0f - Pawn.HandFree), Alpha);
+	OutWeaponInHand = Pinned.WeaponInHand;
+	return true;
 }
 
 // The upper body's stance for what is in the hands (docs/design/weapon-hold.md): the hold style's stance clip while

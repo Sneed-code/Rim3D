@@ -100,3 +100,49 @@ The spear was carried point-up across the back (the SpearGuard mocap stance) and
   hands closer than 8 cm, it still points ahead, level (the next PC picture showed it standing upright along the leg,
   following the single fist).
 - PC check: the range tour's step 15 pictures the spear in first and third person.
+
+## Weapon first, then the hands (sneed 2026-11-19)
+
+sneed: "have you fixed the awful first and 3rd person weapon holding yet to be realistic and accurate?" and "the arms
+cannot be messed up, like unnatural bends in hands, forearms or otherwise". The old way placed the weapon where the
+clip's hand happened to be, so the clip's arm decided where the gun pointed; in first person the whole arm rig was
+turned until the barrel lined up (`AimCorrection`), which bent wrists and twisted forearms. Now it is the other way
+round, one system for every weapon, both views:
+
+1. **The weapon is placed first**, at its style's place for the moment: `places.ready`, `aim`, `block` (third person),
+   `fpReady`, `fpAim`, `fpBlock` (first person; each falls back to the one before, then to the third-person one,
+   `colony::holdPlaceFor`). A place says which body point it hangs from (`anchor`: Chest = between the shoulders,
+   Head = the eyes, View = the camera), which weapon point sits there (`point`: Main grip, Sight, Stock), where (`at`,
+   cm: ahead, right, up) and how the weapon is turned (`turn`: pitch, yaw, roll). A gun aimed puts its **sight on the
+   eye line** (first person: on the screen's centre, so iron sights line up); ready, a rifle's **stock sits in the
+   shoulder pocket**. A weapon def can override any place under `hold.places`. Places blend over a quarter second.
+2. **Both hands are pinned to the weapon's grips** (`HoldDraw::PinHands` / `ApplyPinned`): the main hand on `main`,
+   the other on `off` turned by `offTurn` (a rifle's palm up under the fore-end), or for one-handed guns on `support`
+   (the other hand cupping the grip, a two-handed pistol hold).
+3. **Swings and full-body clips free the main hand** (third person: the clip moves the arm and the weapon stays in the
+   hand; the off hand follows it). First person melee swings move the *weapon* along an arc (windup, strike, back to
+   ready, timed by the sim's clip) and the hands follow.
+
+Per weapon there is still only the `hold` block; grenade and rocket launchers need only their grip points (and a
+place if they sit differently from a rifle).
+
+## Arms that can't bend wrong
+
+Both hands go through one arm solver, `FMakeHumanArmsNode` (`MakeHumanAnimInstance`), which does its geometry in the
+sim's plain C++ `colony::arm` (`ArmPose.h`), so it is unit tested:
+
+- **The elbow is a hinge**: it bends 0 to 145 degrees on its own anatomical axis (read from the body's bent rest pose),
+  never backwards; the upper arm rolls so the hinge lies in the new bend plane.
+- **The elbow points down, out and a little back** (`naturalPole`), as people hold a weapon.
+- **No stretching**: a grip out of reach leaves the hand at 99.5% of the arm's length, short on the line to it (and
+  the first-person rig leans forward up to 25 cm until the shoulders reach, `ArmsLean`).
+- **Wrist and forearm limits**: forearm twist 85 degrees either way from thumb-up, wrist bend 70, sideways 28
+  (`Limits`). A hand turned further is brought back to the nearest pose a wrist can take (`clampHand`); the weapon
+  stays where it was placed and the grip gives a little instead. A backwards elbow reads as 180 degrees of twist, so
+  the same limit catches it.
+
+Proof: `ArmPoseTests` solves 20,000 random grips round the body (out of reach, against the shoulder, any hand turn)
+and every one is inside the limits. On the PC, smoke test `gunrange` measures **both arms of every drawn frame** (the
+first-person arms and the third-person body), from the solver and from the drawn bones, and fails on any joint out of
+range (`arm_limit_fails`); its step 16 pictures every gun hip, aimed, third-person ready and aimed (`hold_<Gun>_*`).
+Cvars: `Pawns.ArmLimits`, `Weapons.Places`, `Weapons.PlacesFirstPerson` (0 = the old way, for comparing).

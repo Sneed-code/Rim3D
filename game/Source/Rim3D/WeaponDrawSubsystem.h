@@ -9,6 +9,8 @@
 
 #include "MeleePose.h"
 
+#include "HoldDraw.h"
+
 #include "WeaponDrawSubsystem.generated.h"
 
 class ASimPawnActor;
@@ -164,6 +166,13 @@ private:
 		bool bPelvisRest = false;
 		float PelvisFollow = 0.0f;
 		FTransform BodyFrame = FTransform::Identity;
+		/** Weapon first, then the hands (docs/design/weapon-hold.md): how far it is aimed (guns) and raised to block
+		 *  (melee), how free the main hand is of its place through a swing or a full-body clip (0 to 1), and whether
+		 *  the hands have goals from this drawing (so it lets them go once). */
+		float AimBlend = 0.0f;
+		float BlockBlend = 0.0f;
+		float HandFree = 0.0f;
+		bool bPinned = false;
 	};
 
 	void OnSimEvent(const colony::Event& Event);
@@ -181,6 +190,11 @@ private:
 	void DestroyDisplayed(FDisplayed& Shown);
 	bool MakeDisplayed(ASimPawnActor& Actor, FDisplayed& Shown, colony::DefId Def, const FGunRangeGun* Art);
 	void UpdateStance(ASimPawnActor& Actor, const colony::ThingView& View, FPawnWeapons& Pawn, bool bShow, bool bControlled);
+	/** Holds the weapon at its style's place on the body and puts both hands on its grips (the arm solver's goals);
+	 *  OutWeaponInHand is the weapon in the main hand bone's space. False when the hold has no place or the body no
+	 *  MakeHuman hands (the weapon then follows the hand as before). */
+	bool PinWeapon(ASimPawnActor& Actor, const colony::ThingView& View, FPawnWeapons& Pawn, const colony::WeaponHold& Hold, const HoldDraw::FPoints& Points,
+				   float Size, float BodyPlace, bool bControlled, float Alpha, FTransform& OutWeaponInHand);
 	UStaticMeshComponent* MakeComponent(ASimPawnActor& Actor, UStaticMesh* Mesh);
 	void HoldPose(int32 Slot, float Height, FVector& OutLocation, FRotator& OutRotation) const;
 	void HolsterPose(int32 Slot, float Height, FVector& OutLocation, FRotator& OutRotation) const;

@@ -3,6 +3,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
+#include "GameFramework/Actor.h"
 #include "HAL/IConsoleManager.h"
 #include "Retargeter/IKRetargeter.h"
 
@@ -12,6 +13,8 @@ namespace
 		TEXT("1 runs jiggle (breast bones) and hair sway (ponytail bones) on MakeHuman characters; read when a character's animation starts."), ECVF_Default);
 	TAutoConsoleVariable<int32> GMakeHumanHandIK(TEXT("Pawns.MakeHumanHandIK"), 1,
 		TEXT("1 lets the creator's weapons put the left hand on a two-handed hilt (two-bone IK, off until asked for); read when a character's animation starts."), ECVF_Default);
+	TAutoConsoleVariable<int32> GMakeHumanArmLimits(TEXT("Pawns.ArmLimits"), 1,
+		TEXT("1 keeps every solved arm inside human joint limits (forearm twist, wrist bend); 0 lets the hand take any turn its goal asks."), ECVF_Default);
 	TAutoConsoleVariable<float> GMakeHumanSoftNear(TEXT("Pawns.SoftBodyNear"), 1300.0f,
 		TEXT("Soft-body springs run fully on MakeHuman characters within this many cm of the camera, fading out to Pawns.SoftBodyFar."), ECVF_Default);
 	TAutoConsoleVariable<float> GMakeHumanSoftFar(TEXT("Pawns.SoftBodyFar"), 1500.0f,
@@ -415,6 +418,320 @@ void FMakeHumanSeverNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseC
 	OutBoneTransforms.Sort(FCompareBoneTransformIndex());
 }
 
+namespace
+{
+	colony::arm::V3 MhV(const FVector& V)
+	{
+		return colony::arm::V3{V.X, V.Y, V.Z};
+	}
+
+	FVector MhF(const colony::arm::V3& V)
+	{
+		return FVector(V.x, V.y, V.z);
+	}
+
+	// A bone's rest-pose transform in component space (its local rest transforms up the chain).
+	FTransform MhRefComponent(const FBoneContainer& Container, FCompactPoseBoneIndex Index)
+	{
+		FTransform T = Container.GetRefPoseTransform(Index);
+		FCompactPoseBoneIndex Parent = Container.GetParentBoneIndex(Index);
+		while (Parent.IsValid())
+		{
+			T = T * Container.GetRefPoseTransform(Parent);
+			Parent = Container.GetParentBoneIndex(Parent);
+		}
+		return T;
+	}
+
+	// A hand's finger direction (wrist to the middle knuckle) and palm normal (out of the palm) from its knuckles: the
+	// palm side is where the curled index finger's tip lies, else by the hand's side (HoldDraw::BladeFrame's rule).
+	bool MhHandFrame(const FVector& Hand, const FVector& Index, const FVector& Pinky, const FVector& Middle, const FVector* IndexTip, bool bRight,
+					 FVector& OutFingers, FVector& OutPalm)
+	{
+		const FVector Across = (Index - Pinky).GetSafeNormal();
+		FVector Fingers = (Middle - Hand).GetSafeNormal();
+		Fingers = (Fingers - Across * FVector::DotProduct(Fingers, Across)).GetSafeNormal();
+		if (Across.IsNearlyZero() || Fingers.IsNearlyZero())
+		{
+			return false;
+		}
+		FVector Palm = FVector::CrossProduct(Fingers, Across).GetSafeNormal();
+		float Side = bRight ? 1.0f : -1.0f;
+		if (IndexTip)
+		{
+			const float Curl = FVector::DotProduct(*IndexTip - Index, Palm);
+			if (FMath::Abs(Curl) > 0.5f)
+			{
+				Side = FMath::Sign(Curl);
+			}
+		}
+		OutFingers = (Middle - Hand).GetSafeNormal();
+		OutPalm = Palm * Side;
+		// Square to the fingers.
+		OutPalm = (OutPalm - OutFingers * FVector::DotProduct(OutPalm, OutFingers)).GetSafeNormal();
+		return !OutPalm.IsNearlyZero();
+	}
+}
+
+bool FMakeHumanArmsNode::IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones)
+{
+	bool bAny = false;
+	for (int32 Side = 0; Side < 2; ++Side)
+	{
+		bAny = bAny || (Arms[Side].bValid && Goals[Side].Alpha > 0.0f);
+	}
+	return bAny;
+}
+
+void FMakeHumanArmsNode::InitializeBoneReferences(const FBoneContainer& RequiredBones)
+{
+	for (int32 Side = 0; Side < 2; ++Side)
+	{
+		FArm& Arm = Arms[Side];
+		Arm.bValid = Arm.Upper.Initialize(RequiredBones) && Arm.Lower.Initialize(RequiredBones) && Arm.Hand.Initialize(RequiredBones) &&
+			Arm.Index.Initialize(RequiredBones) && Arm.Pinky.Initialize(RequiredBones) && Arm.Middle.Initialize(RequiredBones);
+		Arm.IndexTip.Initialize(RequiredBones);
+		Arm.bValid = Arm.bValid && Arm.Upper.IsValidToEvaluate(RequiredBones) && Arm.Lower.IsValidToEvaluate(RequiredBones) &&
+			Arm.Hand.IsValidToEvaluate(RequiredBones) && Arm.Index.IsValidToEvaluate(RequiredBones) && Arm.Pinky.IsValidToEvaluate(RequiredBones) &&
+			Arm.Middle.IsValidToEvaluate(RequiredBones);
+		Arm.NeutralFlex = 0.0;
+		Arm.NeutralDeviation = 0.0;
+		if (!Arm.bValid)
+		{
+			continue;
+		}
+		// The rest pose's wrist readings: its knuckles are seldom exactly on the forearm's line.
+		const auto Ref = [&RequiredBones](const FBoneReference& B) { return MhRefComponent(RequiredBones, B.GetCompactPoseIndex(RequiredBones)).GetLocation(); };
+		const FVector Upper = Ref(Arm.Upper), Lower = Ref(Arm.Lower), Hand = Ref(Arm.Hand);
+		FVector Fingers, Palm;
+		if (MhHandFrame(Hand, Ref(Arm.Index), Ref(Arm.Pinky), Ref(Arm.Middle), nullptr, Side == 1, Fingers, Palm))
+		{
+			const colony::arm::ArmAngles A = colony::arm::measureArm(MhV(Upper), MhV(Lower), MhV(Hand), MhV(Fingers), MhV(Palm), colony::arm::V3{});
+			// Only a small offset is the skeleton's own (a rest pose with a bent wrist would hide real bends).
+			Arm.NeutralFlex = FMath::Clamp(A.wristFlex, -15.0, 15.0);
+			Arm.NeutralDeviation = FMath::Clamp(A.wristDeviation, -15.0, 15.0);
+		}
+	}
+}
+
+void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms)
+{
+	using namespace colony::arm;
+	const FBoneContainer& Container = Output.Pose.GetPose().GetBoneContainer();
+	const Limits Human;
+	FTransform FinalHand[2];
+	bool bFinal[2] = {false, false};
+	bSolved[0] = bSolved[1] = false;
+	// A hand given in the other hand's space goes after that one.
+	int32 Order[2] = {1, 0};
+	if (Goals[1].Space == EMakeHumanGoalSpace::OtherHand && Goals[0].Space != EMakeHumanGoalSpace::OtherHand)
+	{
+		Order[0] = 0;
+		Order[1] = 1;
+	}
+	const V3 BodyUp = MhV(Up), BodyForward = MhV(Forward), BodyRight = MhV(Right);
+	for (const int32 Side : Order)
+	{
+		const FMakeHumanHandGoal& Goal = Goals[Side];
+		FArm& Arm = Arms[Side];
+		const float Alpha = FMath::Clamp(Goal.Alpha, 0.0f, 1.0f);
+		if (!Arm.bValid || Alpha <= 0.0f)
+		{
+			continue;
+		}
+		const bool bRight = Side == 1;
+		const FCompactPoseBoneIndex UpperI = Arm.Upper.GetCompactPoseIndex(Container);
+		const FCompactPoseBoneIndex LowerI = Arm.Lower.GetCompactPoseIndex(Container);
+		const FCompactPoseBoneIndex HandI = Arm.Hand.GetCompactPoseIndex(Container);
+		const FTransform UpperT = Output.Pose.GetComponentSpaceTransform(UpperI);
+		const FTransform LowerT = Output.Pose.GetComponentSpaceTransform(LowerI);
+		const FTransform HandT = Output.Pose.GetComponentSpaceTransform(HandI);
+		const FVector S = UpperT.GetLocation(), E0 = LowerT.GetLocation(), W0 = HandT.GetLocation();
+		const double UpperLen = FVector::Dist(S, E0), LowerLen = FVector::Dist(E0, W0);
+		if (UpperLen < 1.0 || LowerLen < 1.0)
+		{
+			continue;
+		}
+
+		// The goal in component space.
+		FTransform Target = Goal.Target;
+		if (Goal.Space == EMakeHumanGoalSpace::Anchor)
+		{
+			FBoneReference AnchorBone;
+			AnchorBone.BoneName = Goal.Anchor;
+			if (AnchorBone.Initialize(Container) && AnchorBone.IsValidToEvaluate(Container))
+			{
+				Target.AddToTranslation(Output.Pose.GetComponentSpaceTransform(AnchorBone.GetCompactPoseIndex(Container)).GetLocation());
+			}
+		}
+		else if (Goal.Space == EMakeHumanGoalSpace::OtherHand)
+		{
+			const int32 Other = 1 - Side;
+			FTransform OtherHand = bFinal[Other] ? FinalHand[Other] : FTransform::Identity;
+			if (!bFinal[Other])
+			{
+				if (!Arms[Other].bValid)
+				{
+					continue;
+				}
+				OtherHand = Output.Pose.GetComponentSpaceTransform(Arms[Other].Hand.GetCompactPoseIndex(Container));
+			}
+			OtherHand.SetScale3D(FVector::OneVector);
+			Target = Goal.Target * OtherHand;
+		}
+		const FQuat WantRot = Goal.bRotation ? Target.GetRotation() : HandT.GetRotation();
+
+		// The elbow's pole, then the hinge solve (no stretching, never folded past the limit).
+		V3 Pole;
+		if (Goal.bElbowPoint)
+		{
+			Pole = MhV(Goal.ElbowPoint - (S + Target.GetLocation()) * 0.5);
+		}
+		else if (!Goal.Pole.IsNearlyZero())
+		{
+			Pole = MhV(Goal.Pole);
+		}
+		else
+		{
+			Pole = naturalPole(MhV(S), MhV(Target.GetLocation()), BodyUp, BodyForward, BodyRight, bRight);
+		}
+		const ArmSolve Solve = solveArm(MhV(S), UpperLen, LowerLen, MhV(Target.GetLocation()), Pole, Human);
+		const FVector E1 = MhF(Solve.elbow), W1 = MhF(Solve.wrist);
+		const FVector U0 = (E0 - S).GetSafeNormal(), L0 = (W0 - E0).GetSafeNormal();
+		const FVector U1 = (E1 - S).GetSafeNormal(), L1 = (W1 - E1).GetSafeNormal();
+
+		// The elbow's hinge as the animation has it (kept from the last bent pose when the clip's arm is straight).
+		const V3 Seen = medialHinge(MhV(U0), MhV(L0), BodyUp, BodyForward, BodyRight, bRight);
+		if (length(Seen) > 0.5)
+		{
+			Arm.HingeInUpper = UpperT.GetRotation().UnrotateVector(MhF(Seen));
+			Arm.bHinge = true;
+		}
+		FVector HingeNow;
+		if (Arm.bHinge)
+		{
+			HingeNow = UpperT.GetRotation().RotateVector(Arm.HingeInUpper);
+		}
+		else
+		{
+			// Never seen bent: as if the forearm swung forward from the upper arm.
+			const FVector Ahead = (Forward - U0 * FVector::DotProduct(Forward, U0)).GetSafeNormal();
+			HingeNow = MhF(medialHinge(MhV(U0), MhV(Ahead.IsNearlyZero() ? Up : Ahead), BodyUp, BodyForward, BodyRight, bRight));
+		}
+
+		// Upper arm: turned onto its new line, then rolled so its hinge is the new bend's (the elbow bends only as a hinge).
+		const FQuat R1 = FQuat::FindBetweenNormals(U0, U1);
+		FQuat UpperRot = R1 * UpperT.GetRotation();
+		const FVector HingeWant = MhF(medialHinge(MhV(U1), MhV(L1), BodyUp, BodyForward, BodyRight, bRight));
+		if (!HingeWant.IsNearlyZero() && !HingeNow.IsNearlyZero())
+		{
+			const FVector H1 = R1.RotateVector(HingeNow);
+			const FVector A = (H1 - U1 * FVector::DotProduct(H1, U1)).GetSafeNormal();
+			const FVector B = (HingeWant - U1 * FVector::DotProduct(HingeWant, U1)).GetSafeNormal();
+			if (!A.IsNearlyZero() && !B.IsNearlyZero())
+			{
+				const double Roll = FMath::Atan2(FVector::DotProduct(FVector::CrossProduct(A, B), U1), FVector::DotProduct(A, B));
+				UpperRot = FQuat(U1, Roll) * UpperRot;
+			}
+		}
+		// Forearm: carried by the upper arm, then turned about the hinge onto its new line.
+		const FQuat UpperDelta = UpperRot * UpperT.GetRotation().Inverse();
+		const FQuat LowerCarried = UpperDelta * LowerT.GetRotation();
+		const FVector LCarried = UpperDelta.RotateVector(L0).GetSafeNormal();
+		const FQuat LowerRot = FQuat::FindBetweenNormals(LCarried, L1) * LowerCarried;
+
+		// Hand: the goal's turn, brought inside the forearm's twist and the wrist's bend.
+		FQuat HandRot = WantRot;
+		const auto Loc = [&Output, &Container](const FBoneReference& B) { return Output.Pose.GetComponentSpaceTransform(B.GetCompactPoseIndex(Container)).GetLocation(); };
+		FVector Tip = FVector::ZeroVector;
+		const bool bTip = Arm.IndexTip.IsValidToEvaluate(Container);
+		if (bTip)
+		{
+			Tip = Loc(Arm.IndexTip);
+		}
+		FVector Fingers0, Palm0;
+		if (MhHandFrame(W0, Loc(Arm.Index), Loc(Arm.Pinky), Loc(Arm.Middle), bTip ? &Tip : nullptr, bRight, Fingers0, Palm0))
+		{
+			const FQuat HandInv = HandT.GetRotation().Inverse();
+			const FVector FingersWant = WantRot.RotateVector(HandInv.RotateVector(Fingers0));
+			const FVector PalmWant = WantRot.RotateVector(HandInv.RotateVector(Palm0));
+			if (bLimits && !HingeWant.IsNearlyZero())
+			{
+				const HandFrame Got = clampHand(MhV(L1), MhV(HingeWant), HandFrame{MhV(FingersWant), MhV(PalmWant)}, Human, Arm.NeutralFlex,
+					Arm.NeutralDeviation);
+				const FVector FingersGot = MhF(Got.fingers), PalmGot = MhF(Got.palm);
+				if (!FingersGot.Equals(FingersWant, 1e-5) || !PalmGot.Equals(PalmWant, 1e-5))
+				{
+					const FQuat From = FRotationMatrix::MakeFromXY(FingersWant, PalmWant).ToQuat();
+					const FQuat To = FRotationMatrix::MakeFromXY(FingersGot, PalmGot).ToQuat();
+					HandRot = (To * From.Inverse()) * WantRot;
+				}
+			}
+			Measured[Side] = measureArm(MhV(S), MhV(E1), MhV(W1), MhV(HandRot.RotateVector(HandInv.RotateVector(Fingers0))),
+				MhV(HandRot.RotateVector(HandInv.RotateVector(Palm0))), MhV(HingeWant), Arm.NeutralFlex, Arm.NeutralDeviation);
+		}
+		HandRot.Normalize();
+
+		// Blended in by the goal's alpha, the bones rebuilt down the chain so they keep their lengths.
+		const FQuat UpperB = FQuat::Slerp(UpperT.GetRotation(), UpperRot, Alpha).GetNormalized();
+		const FQuat LowerB = FQuat::Slerp(LowerT.GetRotation(), LowerRot, Alpha).GetNormalized();
+		const FQuat HandB = FQuat::Slerp(HandT.GetRotation(), HandRot, Alpha).GetNormalized();
+		const FVector EB = S + UpperB.RotateVector(UpperT.GetRotation().UnrotateVector(E0 - S));
+		const FVector WB = EB + LowerB.RotateVector(LowerT.GetRotation().UnrotateVector(W0 - E0));
+		OutBoneTransforms.Add(FBoneTransform(UpperI, FTransform(UpperB, S, UpperT.GetScale3D())));
+		OutBoneTransforms.Add(FBoneTransform(LowerI, FTransform(LowerB, EB, LowerT.GetScale3D())));
+		OutBoneTransforms.Add(FBoneTransform(HandI, FTransform(HandB, WB, HandT.GetScale3D())));
+		FinalHand[Side] = FTransform(HandB, WB);
+		bFinal[Side] = true;
+		ShortBy[Side] = static_cast<float>(Solve.shortBy);
+		bSolved[Side] = true;
+	}
+	OutBoneTransforms.Sort(FCompareBoneTransformIndex());
+}
+
+void UMakeHumanAnimInstance::SetLeftHandGrip(float Alpha, const FVector& InRightHandOffset, const FVector& InElbowWorld)
+{
+	FMakeHumanHandGoal Goal;
+	Goal.Alpha = Alpha;
+	Goal.Space = EMakeHumanGoalSpace::OtherHand;
+	Goal.Target = FTransform(InRightHandOffset);
+	if (const USkeletalMeshComponent* Mesh = GetSkelMeshComponent(); Mesh && Alpha > 0.0f)
+	{
+		Goal.bElbowPoint = true;
+		Goal.ElbowPoint = Mesh->GetComponentTransform().InverseTransformPosition(InElbowWorld);
+	}
+	HandGoals[0] = Goal;
+}
+
+void UMakeHumanAnimInstance::SetRightHandReach(float Alpha, const FVector& InTargetComponent, const FVector& InElbowComponent)
+{
+	FMakeHumanHandGoal Goal;
+	Goal.Alpha = Alpha;
+	Goal.Target = FTransform(InTargetComponent);
+	Goal.bElbowPoint = true;
+	Goal.ElbowPoint = InElbowComponent;
+	HandGoals[1] = Goal;
+}
+
+void UMakeHumanAnimInstance::SetLeftHandReach(float Alpha, const FVector& InTargetComponent, const FVector& InElbowComponent)
+{
+	FMakeHumanHandGoal Goal;
+	Goal.Alpha = Alpha;
+	Goal.Target = FTransform(InTargetComponent);
+	Goal.bElbowPoint = true;
+	Goal.ElbowPoint = InElbowComponent;
+	HandGoals[0] = Goal;
+}
+
+bool UMakeHumanAnimInstance::GetSolvedArm(bool bRight, colony::arm::ArmAngles& Out, float& OutShortBy) const
+{
+	const FMakeHumanArmsNode& Node = GetProxyOnGameThread<FMakeHumanAnimProxy>().ArmsIK;
+	const int32 Side = bRight ? 1 : 0;
+	Out = Node.Measured[Side];
+	OutShortBy = Node.ShortBy[Side];
+	return Node.bSolved[Side];
+}
+
 void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 {
 	// The graph is linked up first: the engine's Initialize takes the root node (GetCustomRootNode) there and keeps it, so
@@ -484,21 +801,24 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 			Tail.Bones.Emplace(FName(*FString::Printf(TEXT("tail_%02d"), i)));
 		}
 	}
-	// Creator weapons' two-handed grip: hand_l to a point in hand_r's space, the elbow towards a world point (alpha 0 = off).
+	// Both arms' solver (FMakeHumanArmsNode): weapons' grips, two-handed hilts, reaches; off until a hand gets a goal.
 	const bool bHandIK = Asset && GMakeHumanHandIK.GetValueOnGameThread() != 0 && Asset->GetRefSkeleton().FindBoneIndex(TEXT("hand_l")) != INDEX_NONE &&
 		Asset->GetRefSkeleton().FindBoneIndex(TEXT("hand_r")) != INDEX_NONE;
 	if (bHandIK)
 	{
-		LeftHandIK.IKBone.BoneName = TEXT("hand_l");
-		LeftHandIK.EffectorTarget = FBoneSocketTarget(TEXT("hand_r"));
-		LeftHandIK.EffectorLocationSpace = BCS_BoneSpace;
-		LeftHandIK.JointTargetLocationSpace = BCS_WorldSpace;
-		LeftHandIK.Alpha = 0.0f;
-		RightHandIK.IKBone.BoneName = TEXT("hand_r");
-		RightHandIK.EffectorLocationSpace = BCS_ComponentSpace;
-		RightHandIK.JointTargetLocationSpace = BCS_ComponentSpace;
-		RightHandIK.bAllowStretching = false;
-		RightHandIK.Alpha = 0.0f;
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			const TCHAR* S = Side == 1 ? TEXT("r") : TEXT("l");
+			FMakeHumanArmsNode::FArm& Arm = ArmsIK.Arms[Side];
+			Arm.Upper.BoneName = FName(*FString::Printf(TEXT("upperarm_%s"), S));
+			Arm.Lower.BoneName = FName(*FString::Printf(TEXT("lowerarm_%s"), S));
+			Arm.Hand.BoneName = FName(*FString::Printf(TEXT("hand_%s"), S));
+			Arm.Index.BoneName = FName(*FString::Printf(TEXT("index_01_%s"), S));
+			Arm.Pinky.BoneName = FName(*FString::Printf(TEXT("pinky_01_%s"), S));
+			Arm.Middle.BoneName = FName(*FString::Printf(TEXT("middle_01_%s"), S));
+			Arm.IndexTip.BoneName = FName(*FString::Printf(TEXT("index_03_%s"), S));
+		}
+		ArmsIK.Alpha = 1.0f;
 	}
 	// Always through component space: the sever node at the end must be in the graph before anything is cut off (the
 	// engine keeps the root node it is given here).
@@ -509,10 +829,8 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 		FAnimNode_Base* Previous = &ToComponent;
 		if (bHandIK)
 		{
-			RightHandIK.ComponentPose.SetLinkNode(Previous);
-			Previous = &RightHandIK;
-			LeftHandIK.ComponentPose.SetLinkNode(Previous);
-			Previous = &LeftHandIK;
+			ArmsIK.ComponentPose.SetLinkNode(Previous);
+			Previous = &ArmsIK;
 		}
 		if (!Jiggle.Bodies.IsEmpty())
 		{
@@ -548,14 +866,24 @@ void FMakeHumanAnimProxy::PreUpdate(UAnimInstance* Instance, float DeltaSeconds)
 	{
 		Retarget.IKRetargeterAsset = MakeHuman->GetRetargeter();
 		Sever.Names = MakeHuman->GetSeveredBones();
-		LeftHandIK.EffectorLocationSpace = MakeHuman->bLeftReach ? BCS_ComponentSpace : BCS_BoneSpace;
-		LeftHandIK.JointTargetLocationSpace = MakeHuman->bLeftReach ? BCS_ComponentSpace : BCS_WorldSpace;
-		LeftHandIK.Alpha = MakeHuman->LeftGripAlpha;
-		LeftHandIK.EffectorLocation = MakeHuman->LeftGripOffset;
-		LeftHandIK.JointTargetLocation = MakeHuman->LeftElbowWorld;
-		RightHandIK.Alpha = MakeHuman->RightReachAlpha;
-		RightHandIK.EffectorLocation = MakeHuman->RightReachTarget;
-		RightHandIK.JointTargetLocation = MakeHuman->RightElbowComponent;
+		ArmsIK.Goals[0] = MakeHuman->HandGoals[0];
+		ArmsIK.Goals[1] = MakeHuman->HandGoals[1];
+		ArmsIK.bLimits = GMakeHumanArmLimits.GetValueOnGameThread() != 0;
+		// The body's axes in component space: the owner actor's (or the override's, the first-person arms' view).
+		if (const USkeletalMeshComponent* Body = MakeHuman->GetSkelMeshComponent())
+		{
+			const AActor* Owner = Body->GetOwner();
+			if (MakeHuman->bAxesOverride || Owner)
+			{
+				const FTransform& C = Body->GetComponentTransform();
+				const FVector WUp = MakeHuman->bAxesOverride ? MakeHuman->AxesUp : Owner->GetActorUpVector();
+				const FVector WForward = MakeHuman->bAxesOverride ? MakeHuman->AxesForward : Owner->GetActorForwardVector();
+				const FVector WRight = MakeHuman->bAxesOverride ? MakeHuman->AxesRight : Owner->GetActorRightVector();
+				ArmsIK.Up = C.InverseTransformVectorNoScale(WUp).GetSafeNormal();
+				ArmsIK.Forward = C.InverseTransformVectorNoScale(WForward).GetSafeNormal();
+				ArmsIK.Right = C.InverseTransformVectorNoScale(WRight).GetSafeNormal();
+			}
+		}
 		// Hits and blasts since the last update; the node uses them on its next evaluation.
 		if (UMakeHumanAnimInstance* Kicked = Cast<UMakeHumanAnimInstance>(Instance))
 		{

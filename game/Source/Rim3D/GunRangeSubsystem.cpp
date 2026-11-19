@@ -43,6 +43,9 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogGunRange, Log, All);
 
+static TAutoConsoleVariable<int32> GWeaponPlacesFp(TEXT("Weapons.PlacesFirstPerson"), 1,
+	TEXT("1 holds melee weapons at their style's first-person place with both hands on the grips (docs/design/weapon-hold.md), 0 lets them follow the clip's hand."));
+
 static TAutoConsoleVariable<int32> GViewArms(TEXT("View.Arms"), 1,
 	TEXT("First person in the main game: 1 shows the player's arms holding what is in their hands (docs/design/weapon-hold.md), 0 shows nothing."));
 
@@ -812,57 +815,22 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 	}
 	const float ActionWeight = Anim->GetActionWeight();
 
-	// --- Where the gun is in the arms' hands (root space): from the right hand's knuckles. ---
+	// --- Weapon first, then the hands (docs/design/weapon-hold.md, sneed 2026-11-19): the gun is placed in the view,
+	// its sight on the view's centre line while aimed (lower right from the hip), the barrel along the view; then both
+	// hands close on its grip and fore-end through the arm solver, inside human joint limits. (Before, the clip's right
+	// hand decided where the gun pointed and the whole body was turned to bring the barrel round, so the wrist and the
+	// hold changed with every clip.) ---
 	const FTransform RootWorld = ViewRoot->GetComponentTransform();
 	const auto Bone = [this, &RootWorld](const TCHAR* Name) { return RootWorld.InverseTransformPosition(Arms->GetSocketLocation(Name)); };
-	const FVector Hand = Bone(TEXT("hand_r"));
-	const FVector Index = Bone(TEXT("index_01_r"));
-	const FVector Pinky = Bone(TEXT("pinky_01_r"));
-	const FVector Middle = Bone(TEXT("middle_01_r"));
-	const FVector GripAxis = (Index - Pinky).GetSafeNormal();
-	const FVector Along = (Middle - Hand).GetSafeNormal();
-	const FVector Forward = (Along - FVector::DotProduct(Along, GripAxis) * GripAxis).GetSafeNormal();
-	const bool bPoseValid = !GripAxis.IsNearlyZero() && !Forward.IsNearlyZero() && FVector::Dist(Hand, Middle) > 2.0f;
+	const bool bPoseValid = HoldDraw::HasHand(Arms, true) && HoldDraw::HasHand(Arms, false) && FVector::Dist(Bone(TEXT("hand_r")), Bone(TEXT("middle_01_r"))) > 2.0f;
 	ValidFrames = bPoseValid ? ValidFrames + 1 : 0;
 	if (!bPoseValid)
 	{
 		HideAll();
 		return;
 	}
-	const float Rake = FMath::DegreesToRadians(G.Rake);
-	const FVector GunX = FMath::Sin(Rake) * GripAxis + FMath::Cos(Rake) * Forward;
-	const FVector GunZ = FMath::Cos(Rake) * GripAxis - FMath::Sin(Rake) * Forward;
-	const FQuat GunRot = FRotationMatrix::MakeFromXZ(GunX, GunZ).ToQuat() * G.GripTurn.Quaternion();
-	const FVector Palm = (Index + Pinky) * 0.5f + (Hand - (Index + Pinky) * 0.5f) * 0.35f;
-	const FVector GunLoc = Palm - GunRot.RotateVector(G.Grip);
-	const FTransform GunInRoot(GunRot, GunLoc);
 
-	// --- The aim: turn the arms so the barrel runs along the view (held still through a reload and a switch). ---
-	const FVector BarrelInRoot = GunRot.GetForwardVector();
-	const FVector UpInRoot = GunRot.GetUpVector();
-	const FQuat Target = FRotationMatrix::MakeFromXZ(BarrelInRoot, UpInRoot).ToQuat().Inverse();
-	const bool bFrozen = ActionWeight > 0.05f || Dip > 0.6f;
-	if (!bHaveCorrection)
-	{
-		AimCorrection = Target;
-		bHaveCorrection = true;
-	}
-	else if (!bFrozen)
-	{
-		AimCorrection = FQuat::Slerp(AimCorrection, Target, 1.0f - FMath::Exp(-14.0f * Dt));
-		SteadyBase = AimCorrection;
-	}
-	else if (ActionWeight > 0.05f && Dip <= 0.6f && G.ReloadSteady > 0.0f)
-	{
-		// Through a reload the barrel keeps pointing ahead by ReloadSteady (its direction only: the clip still rolls and
-		// lifts the gun about it), so a reload that swings the stock about doesn't swing the muzzle across the view.
-		const FVector BarrelNow = SteadyBase.RotateVector(BarrelInRoot).GetSafeNormal();
-		const FQuat Full = FQuat::FindBetweenNormals(BarrelNow, FVector::ForwardVector) * SteadyBase;
-		const FQuat Desired = FQuat::Slerp(SteadyBase, Full, G.ReloadSteady);
-		AimCorrection = FQuat::Slerp(AimCorrection, Desired, 1.0f - FMath::Exp(-10.0f * Dt));
-	}
-
-	// --- Procedural layers: kick, sway, bob, the switch dip, sprinting. ---
+	// --- Procedural layers: kick, sway, bob, the switch dip, sprinting. They move the gun; the hands follow it. ---
 	SinceShot += Dt;
 	// Kick: each shot sets a pulse; the gun snaps back to it in a few hundredths of a second and settles as it fades.
 	KickVelocity = FMath::Min(KickVelocity, 1.6f) * FMath::Exp(-G.KickRecover * Dt);
@@ -880,39 +848,86 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 	const float BobAmount = FMath::Min(Speed / 4.0f, 1.3f) * (1.0f - 0.85f * Ads);
 	Dip = FMath::Max(0.0f, Dip - Dt / GunRangeSwitchSeconds);
 	SprintBlend = FMath::FInterpTo(SprintBlend, Body->IsSprinting() ? 1.0f : 0.0f, Dt, 7.0f);
-
-	// --- Place the arms: the body hangs from the head (the view is the eyes), and the right hand reaches so the sight
-	// is at its spot before the eye (aimed) or lower right (from the hip). Moving the body to bring the sight there
-	// instead put the camera inside a shoulder: the stance clips don't hold the sight before the eye. ---
-	const FVector SightInRoot = GunInRoot.TransformPosition(G.Sight);
-	const FVector HeadInRoot = Bone(TEXT("head"));
-	// Through a reload the hand keeps reaching, to the reload spot (the clip still turns the gun and moves the left
-	// hand), so the gun stays in view instead of going wherever the clip's third-person hold puts it.
-	const FVector Spot = FMath::Lerp(FVector(G.SightDistance, 0.0f, 0.0f) + G.Hip * (1.0f - Ads), G.ReloadSpot, FMath::Clamp(ActionWeight, 0.0f, 1.0f));
 	const float DipEase = GunRangeSmooth(Dip);
+
+	// --- The body: facing the view (the mannequin faces +y), the head pinned a little behind and below the eyes,
+	// moved forward as far as the arms need to reach the gun (a shooter leans into a long gun; never stretched). ---
+	const FQuat RootRot = FRotator(0.0f, -90.0f, 0.0f).Quaternion();
+	const FVector HeadInRoot = Bone(TEXT("head"));
+	FVector RootLoc = HeadInView - RootRot.RotateVector(HeadInRoot) + FVector(ArmsLean, 0.0f, 0.0f);
+	ViewRoot->SetRelativeLocationAndRotation(RootLoc, RootRot);
+
+	// --- The gun in the view's frame (cm, x ahead, y right, z up): its sight at its spot, turned by the layers. ---
+	const FVector Spot = FMath::Lerp(FVector(G.SightDistance, 0.0f, 0.0f) + G.Hip * (1.0f - Ads), G.ReloadSpot, FMath::Clamp(ActionWeight, 0.0f, 1.0f));
+	const FQuat Procedural = FRotator(G.KickUp * Kick - 38.0f * DipEase - 14.0f * SprintBlend + Sway.Y, Sway.X + 22.0f * SprintBlend,
+		6.0f * SprintBlend + FMath::Sin(BobPhase) * 0.8f * BobAmount).Quaternion();
+	FVector SpotNow = Spot + FVector(-G.KickBack * Kick, 0.0f, 0.0f);
+	SpotNow += FVector(0.0f, FMath::Sin(BobPhase) * 0.7f, -FMath::Abs(FMath::Cos(BobPhase)) * 0.6f) * BobAmount;
+	SpotNow += FVector(-4.0f, 4.0f, -22.0f) * DipEase + FVector(-4.0f, 3.0f, -5.0f) * SprintBlend;
+	const FTransform GunInView(Procedural, SpotNow - Procedural.RotateVector(G.Sight));
+	const FTransform CameraWorld = Camera->GetComponentTransform();
+	FTransform CameraNoScale = CameraWorld;
+	CameraNoScale.SetScale3D(FVector::OneVector);
+	const FTransform GunWorld = GunInView * CameraNoScale;
+	const FTransform GunInRoot = GunWorld.GetRelativeTransform(ViewRoot->GetComponentTransform());
+	GunFrame->SetRelativeTransform(GunInRoot);
+
+	// --- Both hands on it: the grip in the right palm, the left hand under the fore-end (riding a pump gun's slide),
+	// let go through a reload clip (it moves the hands itself) and the switch. ---
+	colony::WeaponHold GunHold;
+	if (const colony::DefDatabase* GunDefs = Bridge->GetDefs().get())
 	{
-		// Without the procedural layers (the reach must not undo the kick or the dip): where the sight is now, how far
-		// the hand has to go. The hand read this frame already carries last frame's reach, so this settles at once.
-		const FVector SightBase = HeadInView + AimCorrection.RotateVector(SightInRoot - HeadInRoot);
-		const FVector Shift = AimCorrection.UnrotateVector(Spot - SightBase);
-		const FTransform ArmsInRoot = Arms->GetComponentTransform().GetRelativeTransform(ViewRoot->GetComponentTransform());
-		const float Reach = G.bReach ? 1.0f : 0.0f;
-		if (UMakeHumanAnimInstance* ArmsAnim = Cast<UMakeHumanAnimInstance>(Arms->GetAnimInstance()))
+		colony::holdFor(*GunDefs, GunDefs->idOf("Things", TCHAR_TO_UTF8(*G.Def)), GunHold);
+	}
+	GunHold.hand = colony::HoldHand::Right;
+	GunHold.grip = colony::HoldGrip::Gun;
+	GunHold.rake = G.Rake;
+	GunHold.main = colony::HoldPoint{static_cast<float>(G.Grip.X), static_cast<float>(G.Grip.Y), static_cast<float>(G.Grip.Z)};
+	GunHold.hasOff = G.bOffHand;
+	HoldDraw::FPoints Points = HoldDraw::PointsOf(GunHold, false);
+	Points.Main = G.Grip;
+	Points.Sight = G.Sight;
+	if (G.bOffHand)
+	{
+		Points.Off = G.OffHand;
+		Points.bOff = true;
+		if (G.bPump && G.bCycle)
 		{
-			const FVector TargetRoot = Hand + Shift;
-			// The elbow out to the right and down, as a shooter holds it.
-			const FVector ElbowRoot = TargetRoot + AimCorrection.UnrotateVector(FVector(-30.0f, 25.0f, -30.0f));
-			ArmsAnim->SetRightHandReach(Reach, ArmsInRoot.InverseTransformPosition(TargetRoot), ArmsInRoot.InverseTransformPosition(ElbowRoot));
+			Points.Off.X += GunRangeBolt((SinceShot - G.CycleStart) / FMath::Max(G.CycleSeconds, 0.05f), G.CycleLift, G.CycleBack).Y;
 		}
 	}
-	const FQuat Procedural = FRotator(G.KickUp * Kick - 38.0f * DipEase - 14.0f * SprintBlend + Sway.Y, Sway.X + 22.0f * SprintBlend, 6.0f * SprintBlend + FMath::Sin(BobPhase) * 0.8f * BobAmount).Quaternion();
-	const FQuat RootRot = Procedural * AimCorrection;
-	FVector RootLoc = HeadInView - RootRot.RotateVector(HeadInRoot);
-	RootLoc += FVector(-G.KickBack * Kick, 0.0f, 0.0f);
-	RootLoc += FVector(0.0f, FMath::Sin(BobPhase) * 0.7f, -FMath::Abs(FMath::Cos(BobPhase)) * 0.6f) * BobAmount;
-	RootLoc += FVector(-4.0f, 4.0f, -22.0f) * DipEase + FVector(-4.0f, 3.0f, -5.0f) * SprintBlend;
-	ViewRoot->SetRelativeLocationAndRotation(RootLoc, RootRot);
-	GunFrame->SetRelativeTransform(GunInRoot);
+	if (UMakeHumanAnimInstance* ArmsAnim = Cast<UMakeHumanAnimInstance>(Arms->GetAnimInstance()))
+	{
+		ArmsAnim->SetBodyAxesOverride(true, CameraWorld.GetUnitAxis(EAxis::Z), CameraWorld.GetUnitAxis(EAxis::X), CameraWorld.GetUnitAxis(EAxis::Y));
+		HoldDraw::FPinned Pinned;
+		const float HandsOn = G.bReach ? 1.0f - FMath::Clamp(ActionWeight * 1.5f, 0.0f, 1.0f) : 0.0f;
+		if (HoldDraw::PinHands(Arms, GunHold, Points, 1.0f, GunWorld, Pinned))
+		{
+			HoldDraw::ApplyPinned(Arms, GunHold, Pinned, static_cast<uint8>(EMakeHumanGoalSpace::Component), NAME_None, HandsOn, HandsOn * (1.0f - DipEase));
+			// How far forward the body must lean so both shoulders reach their grips (with a little to spare).
+			float Need = 0.0f;
+			const auto Reach = [&](const TCHAR* Upper, const TCHAR* Lower, const TCHAR* Hand, const FVector& GoalWorld)
+			{
+				const double Arm = (FVector::Dist(Arms->GetSocketLocation(Upper), Arms->GetSocketLocation(Lower)) +
+					FVector::Dist(Arms->GetSocketLocation(Lower), Arms->GetSocketLocation(Hand))) * 0.97;
+				const FVector Shoulder = CameraNoScale.InverseTransformPosition(Arms->GetSocketLocation(Upper)) - FVector(ArmsLean, 0.0f, 0.0f);
+				const FVector Goal = CameraNoScale.InverseTransformPosition(GoalWorld);
+				const double Side = FVector2D(Goal.Y - Shoulder.Y, Goal.Z - Shoulder.Z).SizeSquared();
+				if (Arm * Arm > Side)
+				{
+					Need = FMath::Max(Need, static_cast<float>((Goal.X - Shoulder.X) - FMath::Sqrt(Arm * Arm - Side)));
+				}
+			};
+			Reach(TEXT("upperarm_r"), TEXT("lowerarm_r"), TEXT("hand_r"), Pinned.MainHand.GetLocation());
+			if (Pinned.bOff)
+			{
+				Reach(TEXT("upperarm_l"), TEXT("lowerarm_l"), TEXT("hand_l"), (Pinned.OffInMain * Pinned.MainHand).GetLocation());
+			}
+			ArmsLean = FMath::FInterpTo(ArmsLean, FMath::Clamp(Need, 0.0f, 25.0f), Dt, 10.0f);
+		}
+	}
+	const FVector SightInRoot = GunInRoot.TransformPosition(G.Sight);
+	const FVector BarrelInRoot = GunInRoot.GetRotation().GetForwardVector();
 
 	// Show once the pose is settled (the first frames have no animation yet). Through a scope (fully aimed, not
 	// reloading or switching) the arms and gun go and the view narrows to the scope's.
@@ -1035,31 +1050,6 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 		}
 	}
 
-	// --- The left hand on the fore-end (off through the reload, which moves it itself). ---
-	if (UMakeHumanAnimInstance* ArmsAnim = Cast<UMakeHumanAnimInstance>(Arms->GetAnimInstance()))
-	{
-		const float Alpha = G.bOffHand ? FMath::Clamp(1.0f - ActionWeight * 1.5f, 0.0f, 1.0f) * (1.0f - DipEase) : 0.0f;
-		if (Alpha > 0.0f)
-		{
-			const FTransform GunWorld = GunFrame->GetComponentTransform();
-			const FTransform RightHand = Arms->GetSocketTransform(TEXT("hand_r"));
-			// A pump gun: the hand rides the fore-end back and forward with it (the cycle part's slide).
-			FVector OffHand = G.OffHand;
-			if (G.bPump && G.bCycle)
-			{
-				OffHand.X += GunRangeBolt((SinceShot - G.CycleStart) / FMath::Max(G.CycleSeconds, 0.05f), G.CycleLift, G.CycleBack).Y;
-			}
-			const FVector GripTarget = GunWorld.TransformPosition(OffHand);
-			const FVector GripLocal = RightHand.InverseTransformPosition(GripTarget);
-			const FVector Elbow = GripTarget + Camera->GetComponentQuat().RotateVector(FVector(-25.0f, -25.0f, -35.0f));
-			ArmsAnim->SetLeftHandGrip(Alpha, GripLocal, Elbow);
-		}
-		else
-		{
-			ArmsAnim->SetLeftHandGrip(0.0f, FVector::ZeroVector, FVector::ZeroVector);
-		}
-	}
-
 	// --- The muzzle flash: a short warm light at the muzzle. ---
 	FlashAge += Dt;
 	const bool bFlash = FlashAge < GunRangeFlashSeconds && bShown;
@@ -1178,122 +1168,272 @@ void UGunRangeSubsystem::UpdateHeldView(float Dt, ASimPawnActor& Player, const c
 	const float DipEase = GunRangeSmooth(Dip);
 	SprintBlend = FMath::FInterpTo(SprintBlend, Body->IsSprinting() ? 1.0f : 0.0f, Dt, 7.0f);
 
-	// --- Place the body: facing the view (the mannequin faces +y), leaning half as far as the view pitches, the head
-	// pinned a little behind the eyes so the swings turn the arms about the view. ---
-	const FTransform RootWorld = ViewRoot->GetComponentTransform();
-	const FVector HeadInRoot = RootWorld.InverseTransformPosition(Arms->GetSocketLocation(TEXT("head")));
-	const float Pitch = static_cast<float>(Camera->GetComponentRotation().Pitch);
-	const FQuat Procedural = FRotator(-0.5f * Pitch + Sway.Y - 30.0f * DipEase - 10.0f * SprintBlend, Sway.X + 15.0f * SprintBlend, FMath::Sin(BobPhase) * 0.8f * BobAmount).Quaternion();
-	const FQuat RootRot = Procedural * FRotator(0.0f, -90.0f, 0.0f).Quaternion();
-	FVector RootLoc = HeadInView - RootRot.RotateVector(HeadInRoot);
-	RootLoc += FVector(0.0f, FMath::Sin(BobPhase) * 0.7f, -FMath::Abs(FMath::Cos(BobPhase)) * 0.6f) * BobAmount;
-	RootLoc += FVector(-4.0f, 4.0f, -20.0f) * DipEase;
-	ViewRoot->SetRelativeLocationAndRotation(RootLoc, RootRot);
-
-	// --- The hands raised into view while ready (the stance clips are third-person holds, low at the hips): spots in
-	// the view's frame (cm, x ahead, y right, z up), off through a swing so its clip moves them. ---
-	const FTransform CameraWorld = Camera->GetComponentTransform();
-	const FTransform ArmsWorld = Arms->GetComponentTransform();
-	const auto ToArms = [&CameraWorld, &ArmsWorld](const FVector& InView) { return ArmsWorld.InverseTransformPosition(CameraWorld.TransformPosition(InView)); };
-	// The hands stay on their spots through a swing (the third-person clips carry them out of view, sneed saw an empty
-	// frame): the swing itself is an arc of the spot across the view, timed by the sim's clip.
-	const float Reach = 1.0f - 0.15f * SwingWeight;
-	FVector RightSpot = bFists ? FVector(34.0f, 12.0f, -7.0f) : (Hold.hands >= 2 ? FVector(38.0f, 9.0f, -9.0f) : FVector(38.0f, 13.0f, -8.0f));
-	if (bBlock && !bShield)
-	{
-		RightSpot = bFists ? FVector(30.0f, 8.0f, -2.0f) : FVector(38.0f, 6.0f, -3.0f);
-	}
-	if (SwingAsset && Clip && Clip->seconds > 0.0f)
-	{
-		// Wind up high and to the right, then cut down and across to the low left, then come back (a thrust for a spear
-		// or a knife: drawn back, then driven straight out). The sim's hit lands about two thirds through its clip.
-		const float T = FMath::Clamp(Me.motionTime / Clip->seconds, 0.0f, 1.0f);
-		const bool bThrust = Hold.styleName.find("Spear") != std::string::npos || Hold.styleName.find("Knife") != std::string::npos ||
-			Clip->anim.find("Stab") != std::string::npos || Clip->anim.find("Thrust") != std::string::npos;
-		const FVector Ready = RightSpot;
-		const FVector Windup = bThrust ? Ready + FVector(-12.0f, 2.0f, 1.0f) : FVector(30.0f, 24.0f, 6.0f);
-		const FVector Strike = bThrust ? Ready + FVector(26.0f, -6.0f, 0.0f) : FVector(46.0f, -14.0f, -16.0f);
-		// The blade meets the target when the sim's blow lands.
-		const float Hit = Clip->hitSeconds > 0.0f ? FMath::Clamp(Clip->hitSeconds / Clip->seconds, 0.3f, 0.9f) : 0.66f;
-		const float WindEnd = FMath::Max(0.1f, Hit - 0.2f);
-		const float StrikeEnd = FMath::Min(0.95f, Hit + 0.04f);
-		FVector Arc;
-		if (T < WindEnd)
-		{
-			Arc = FMath::Lerp(Ready, Windup, GunRangeSmooth(T / WindEnd));
-		}
-		else if (T < StrikeEnd)
-		{
-			Arc = FMath::Lerp(Windup, Strike, GunRangeSmooth((T - WindEnd) / (StrikeEnd - WindEnd)));
-		}
-		else
-		{
-			Arc = FMath::Lerp(Strike, Ready, GunRangeSmooth((T - StrikeEnd) / (1.0f - StrikeEnd)));
-		}
-		RightSpot = Arc;
-	}
-	if (bFists && !bPunchLeft)
-	{
-		RightSpot = FMath::Lerp(RightSpot, FVector(62.0f, 4.0f, -10.0f), Punch);
-	}
-	ArmsAnim->SetRightHandReach(Reach, ToArms(RightSpot), ToArms(RightSpot + FVector(-28.0f, 26.0f, -32.0f)));
-
-	// --- The weapon on the right hand's grip, the shield on the left forearm. ---
 	const float Size = colony::gearSizeFor(*Defs, Player.GetBodyScale()).size;
 	const bool bSettled = ++ValidFrames >= 3;
-	FTransform WeaponWorld;
-	bool bWeapon = false;
-	if (!bFists && Me.weapon.valid())
+	UStaticMesh* WeaponMesh = !bFists && Me.weapon.valid() ? Weapons->GetWeaponMesh(Me.weapon) : nullptr;
+	const colony::HoldPlace* ReadyPlace = colony::holdPlaceFor(Hold, true, false, false);
+	const bool bPinnedWeapon = WeaponMesh && ReadyPlace && ReadyPlace->anchor == colony::HoldAnchor::View && Hold.grip != colony::HoldGrip::Shield &&
+		Hold.grip != colony::HoldGrip::Bow && HoldDraw::HasHand(Arms, false) && GWeaponPlacesFp.GetValueOnGameThread() != 0;
+	HeldBlockBlend = FMath::FInterpConstantTo(HeldBlockBlend, bBlock && !bShield ? 1.0f : 0.0f, Dt, 6.0f);
+	if (bPinnedWeapon)
 	{
-		FTransform Frame;
-		UStaticMesh* Mesh = Weapons->GetWeaponMesh(Me.weapon);
-		if (Mesh && HoldDraw::HandFrame(Arms, Hold, Frame))
-		{
-			WeaponWorld = HoldDraw::WeaponWorld(Frame, Hold, Size);
-			if (HeldWeapon->GetStaticMesh() != Mesh)
-			{
-				HeldWeapon->SetStaticMesh(Mesh);
-			}
-			HeldWeapon->SetWorldTransform(WeaponWorld);
-			bWeapon = true;
-		}
-	}
-	HeldWeapon->SetVisibility(bWeapon && bSettled);
-	bool bShieldShown = false;
-	if (bShield)
-	{
-		FTransform Frame;
-		UStaticMesh* Mesh = Weapons->GetShieldMesh(Me.shield, Me.shieldStuff);
-		if (Mesh && HoldDraw::ShieldFrame(Arms, Frame))
-		{
-			if (HeldShield->GetStaticMesh() != Mesh)
-			{
-				HeldShield->SetStaticMesh(Mesh);
-			}
-			HeldShield->SetWorldTransform(HoldDraw::WeaponWorld(Frame, ShieldHold, Size));
-			bShieldShown = true;
-		}
-	}
-	HeldShield->SetVisibility(bShieldShown && bSettled);
+		// --- Weapon first, then the hands (docs/design/weapon-hold.md): the weapon goes to its style's first-person
+		// place in the view (a blade's guard low right, raised across for a block), a swing carries it along an arc
+		// timed by the sim's clip (wound up high right, cut down across to the low left; a thrust drawn back and driven
+		// out), and both hands close on its grips through the arm solver, inside human joint limits. The body faces the
+		// view (the mannequin faces +y), the head pinned behind the eyes. ---
+		const FQuat RootRot = FRotator(0.0f, -90.0f, 0.0f).Quaternion();
+		const FTransform RootWorld = ViewRoot->GetComponentTransform();
+		const FVector HeadInRoot = RootWorld.InverseTransformPosition(Arms->GetSocketLocation(TEXT("head")));
+		FVector RootLoc = HeadInView - RootRot.RotateVector(HeadInRoot) + FVector(ArmsLean, 0.0f, 0.0f);
+		ViewRoot->SetRelativeLocationAndRotation(RootLoc, RootRot);
 
-	// --- The left hand: on a two-handed grip, else up as a guard (fists) or with the shield raised before the face. ---
-	const FVector ElbowOut = CameraWorld.TransformVector(FVector(-0.2f, -0.6f, -1.0f)).GetSafeNormal();
-	if (bWeapon && Hold.hasOff)
-	{
-		HoldDraw::SetOffHand(Arms, WeaponWorld, Hold, Size, 1.0f - DipEase, ElbowOut);
-	}
-	else if (bFists || bShield)
-	{
-		FVector LeftSpot = bShield ? (bBlock ? FVector(34.0f, -6.0f, -8.0f) : FVector(40.0f, -18.0f, -16.0f)) : (bBlock ? FVector(30.0f, -8.0f, -4.0f) : FVector(36.0f, -13.0f, -10.0f));
-		if (bFists && bPunchLeft)
+		const auto PlaceAt = [](const FVector& At, float Pitch, float Yaw, float Roll)
 		{
-			LeftSpot = FMath::Lerp(LeftSpot, FVector(62.0f, -4.0f, -10.0f), Punch);
+			colony::HoldPlace P;
+			P.set = true;
+			P.anchor = colony::HoldAnchor::View;
+			P.at = colony::HoldPoint{static_cast<float>(At.X), static_cast<float>(At.Y), static_cast<float>(At.Z)};
+			P.pitch = Pitch;
+			P.yaw = Yaw;
+			P.roll = Roll;
+			return P;
+		};
+		const auto Blend = [](const FTransform& A, const FTransform& B, float T)
+		{
+			const float E = GunRangeSmooth(T);
+			return FTransform(FQuat::Slerp(A.GetRotation(), B.GetRotation(), E), FMath::Lerp(A.GetLocation(), B.GetLocation(), static_cast<double>(E)));
+		};
+		const HoldDraw::FPoints Points = HoldDraw::PointsOf(Hold, bShield);
+		FTransform InView = HoldDraw::PlaceInAnchor(*ReadyPlace, Points, Size, 1.0f);
+		if (const colony::HoldPlace* AimPlace = colony::holdPlaceFor(Hold, true, true, false);
+			Hold.grip == colony::HoldGrip::Gun && AimPlace && AimPlace != ReadyPlace && Body->GetAimBlend() > 0.0f)
+		{
+			// A gun without a model of its own, aimed: its sight comes up onto the view's centre line.
+			InView = Blend(InView, HoldDraw::PlaceInAnchor(*AimPlace, Points, Size, 1.0f), Body->GetAimBlend());
 		}
-		ArmsAnim->SetLeftHandReach(Reach, ToArms(LeftSpot), ToArms(LeftSpot + FVector(-28.0f, -26.0f, -32.0f)));
+		if (const colony::HoldPlace* BlockPlace = colony::holdPlaceFor(Hold, true, false, true); BlockPlace && HeldBlockBlend > 0.0f)
+		{
+			InView = Blend(InView, HoldDraw::PlaceInAnchor(*BlockPlace, Points, Size, 1.0f), HeldBlockBlend);
+		}
+		if (SwingAsset && Clip && Clip->seconds > 0.0f)
+		{
+			// The sim's hit lands about two thirds through its clip: the blade meets the target then.
+			const float T = FMath::Clamp(Me.motionTime / Clip->seconds, 0.0f, 1.0f);
+			const bool bThrust = Hold.grip == colony::HoldGrip::Pole || Hold.styleName.find("Spear") != std::string::npos ||
+				Hold.styleName.find("Knife") != std::string::npos || Clip->anim.find("Stab") != std::string::npos || Clip->anim.find("Thrust") != std::string::npos;
+			const FVector R = FVector(ReadyPlace->at.x, ReadyPlace->at.y, ReadyPlace->at.z);
+			// The fist's knuckles lead the cut (a blade's edge is its +z, the way the fingers point: rolled over, as in
+			// the ready guard, they face forward).
+			const colony::HoldPlace Windup = bThrust ? PlaceAt(R + FVector(-12.0f, 2.0f, 1.0f), ReadyPlace->pitch * 0.5f, ReadyPlace->yaw * 0.5f, ReadyPlace->roll)
+													 : PlaceAt(FVector(30.0f, 26.0f, -4.0f), 70.0f, 35.0f, 160.0f);
+			const colony::HoldPlace Strike = bThrust ? PlaceAt(R + FVector(28.0f, -8.0f, 6.0f), 2.0f, -4.0f, ReadyPlace->roll)
+													 : PlaceAt(FVector(44.0f, -14.0f, -28.0f), -25.0f, -60.0f, 150.0f);
+			const FTransform WindupT = HoldDraw::PlaceInAnchor(Windup, Points, Size, 1.0f);
+			const FTransform StrikeT = HoldDraw::PlaceInAnchor(Strike, Points, Size, 1.0f);
+			const float Hit = Clip->hitSeconds > 0.0f ? FMath::Clamp(Clip->hitSeconds / Clip->seconds, 0.3f, 0.9f) : 0.66f;
+			const float WindEnd = FMath::Max(0.1f, Hit - 0.2f);
+			const float StrikeEnd = FMath::Min(0.95f, Hit + 0.04f);
+			if (T < WindEnd)
+			{
+				InView = Blend(InView, WindupT, T / WindEnd);
+			}
+			else if (T < StrikeEnd)
+			{
+				InView = Blend(WindupT, StrikeT, (T - WindEnd) / (StrikeEnd - WindEnd));
+			}
+			else
+			{
+				InView = Blend(StrikeT, InView, (T - StrikeEnd) / (1.0f - StrikeEnd));
+			}
+		}
+		// Sway, bob and the switch dip move the weapon; the hands follow it.
+		const FQuat Procedural = FRotator(Sway.Y - 30.0f * DipEase - 10.0f * SprintBlend, Sway.X + 15.0f * SprintBlend, FMath::Sin(BobPhase) * 0.8f * BobAmount).Quaternion();
+		FVector Shift = FVector(0.0f, FMath::Sin(BobPhase) * 0.7f, -FMath::Abs(FMath::Cos(BobPhase)) * 0.6f) * BobAmount + FVector(-4.0f, 4.0f, -20.0f) * DipEase;
+		InView = FTransform(Procedural * InView.GetRotation(), Procedural.RotateVector(InView.GetLocation()) + Shift);
+
+		FTransform CameraNoScale = Camera->GetComponentTransform();
+		CameraNoScale.SetScale3D(FVector::OneVector);
+		const FTransform WeaponWorld = InView * CameraNoScale;
+		if (HeldWeapon->GetStaticMesh() != WeaponMesh)
+		{
+			HeldWeapon->SetStaticMesh(WeaponMesh);
+		}
+		FTransform Drawn = WeaponWorld;
+		Drawn.SetScale3D(FVector(Size));
+		HeldWeapon->SetWorldTransform(Drawn);
+		HeldWeapon->SetVisibility(bSettled);
+
+		ArmsAnim->SetBodyAxesOverride(true, CameraNoScale.GetUnitAxis(EAxis::Z), CameraNoScale.GetUnitAxis(EAxis::X), CameraNoScale.GetUnitAxis(EAxis::Y));
+		HoldDraw::FPinned Pinned;
+		if (HoldDraw::PinHands(Arms, Hold, Points, Size, WeaponWorld, Pinned))
+		{
+			HoldDraw::ApplyPinned(Arms, Hold, Pinned, static_cast<uint8>(EMakeHumanGoalSpace::Component), NAME_None, 1.0f, 1.0f - DipEase);
+			// Lean in as far as the arms need to reach (a spear's front hand is far out).
+			float Need = 0.0f;
+			const auto Reach = [&](const TCHAR* Upper, const TCHAR* Lower, const TCHAR* HandBone, const FVector& GoalWorld)
+			{
+				const double Arm = (FVector::Dist(Arms->GetSocketLocation(Upper), Arms->GetSocketLocation(Lower)) +
+					FVector::Dist(Arms->GetSocketLocation(Lower), Arms->GetSocketLocation(HandBone))) * 0.97;
+				const FVector Shoulder = CameraNoScale.InverseTransformPosition(Arms->GetSocketLocation(Upper)) - FVector(ArmsLean, 0.0f, 0.0f);
+				const FVector Goal = CameraNoScale.InverseTransformPosition(GoalWorld);
+				const double Side = FVector2D(Goal.Y - Shoulder.Y, Goal.Z - Shoulder.Z).SizeSquared();
+				if (Arm * Arm > Side)
+				{
+					Need = FMath::Max(Need, static_cast<float>((Goal.X - Shoulder.X) - FMath::Sqrt(Arm * Arm - Side)));
+				}
+			};
+			const bool bRightMain = Hold.hand != colony::HoldHand::Left;
+			Reach(bRightMain ? TEXT("upperarm_r") : TEXT("upperarm_l"), bRightMain ? TEXT("lowerarm_r") : TEXT("lowerarm_l"), bRightMain ? TEXT("hand_r") : TEXT("hand_l"),
+				Pinned.MainHand.GetLocation());
+			if (Pinned.bOff)
+			{
+				Reach(bRightMain ? TEXT("upperarm_l") : TEXT("upperarm_r"), bRightMain ? TEXT("lowerarm_l") : TEXT("lowerarm_r"), bRightMain ? TEXT("hand_l") : TEXT("hand_r"),
+					(Pinned.OffInMain * Pinned.MainHand).GetLocation());
+			}
+			ArmsLean = FMath::FInterpTo(ArmsLean, FMath::Clamp(Need, 0.0f, 25.0f), Dt, 10.0f);
+		}
+		// A shield on the left arm with a one-handed weapon: held out, raised before the face while blocking.
+		bool bShieldShown = false;
+		if (bShield)
+		{
+			FTransform Frame;
+			UStaticMesh* ShieldMeshNow = Weapons->GetShieldMesh(Me.shield, Me.shieldStuff);
+			if (ShieldMeshNow && HoldDraw::ShieldFrame(Arms, Frame))
+			{
+				if (HeldShield->GetStaticMesh() != ShieldMeshNow)
+				{
+					HeldShield->SetStaticMesh(ShieldMeshNow);
+				}
+				HeldShield->SetWorldTransform(HoldDraw::WeaponWorld(Frame, ShieldHold, Size));
+				bShieldShown = true;
+			}
+			const FTransform CamW = Camera->GetComponentTransform();
+			const FTransform ArmsW = Arms->GetComponentTransform();
+			const FVector LeftSpot = bBlock ? FVector(34.0f, -6.0f, -8.0f) : FVector(40.0f, -18.0f, -16.0f);
+			ArmsAnim->SetLeftHandReach(1.0f, ArmsW.InverseTransformPosition(CamW.TransformPosition(LeftSpot)),
+				ArmsW.InverseTransformPosition(CamW.TransformPosition(LeftSpot + FVector(-28.0f, -26.0f, -32.0f))));
+		}
+		HeldShield->SetVisibility(bShieldShown && bSettled);
 	}
 	else
 	{
-		ArmsAnim->SetLeftHandGrip(0.0f, FVector::ZeroVector, FVector::ZeroVector);
+		ArmsAnim->SetBodyAxesOverride(false);
+		// --- Place the body: facing the view (the mannequin faces +y), leaning half as far as the view pitches, the head
+		// pinned a little behind the eyes so the swings turn the arms about the view. ---
+		const FTransform RootWorld = ViewRoot->GetComponentTransform();
+		const FVector HeadInRoot = RootWorld.InverseTransformPosition(Arms->GetSocketLocation(TEXT("head")));
+		const float Pitch = static_cast<float>(Camera->GetComponentRotation().Pitch);
+		const FQuat Procedural = FRotator(-0.5f * Pitch + Sway.Y - 30.0f * DipEase - 10.0f * SprintBlend, Sway.X + 15.0f * SprintBlend, FMath::Sin(BobPhase) * 0.8f * BobAmount).Quaternion();
+		const FQuat RootRot = Procedural * FRotator(0.0f, -90.0f, 0.0f).Quaternion();
+		FVector RootLoc = HeadInView - RootRot.RotateVector(HeadInRoot);
+		RootLoc += FVector(0.0f, FMath::Sin(BobPhase) * 0.7f, -FMath::Abs(FMath::Cos(BobPhase)) * 0.6f) * BobAmount;
+		RootLoc += FVector(-4.0f, 4.0f, -20.0f) * DipEase;
+		ViewRoot->SetRelativeLocationAndRotation(RootLoc, RootRot);
+
+		// --- The hands raised into view while ready (the stance clips are third-person holds, low at the hips): spots in
+		// the view's frame (cm, x ahead, y right, z up), off through a swing so its clip moves them. ---
+		const FTransform CameraWorld = Camera->GetComponentTransform();
+		const FTransform ArmsWorld = Arms->GetComponentTransform();
+		const auto ToArms = [&CameraWorld, &ArmsWorld](const FVector& InView) { return ArmsWorld.InverseTransformPosition(CameraWorld.TransformPosition(InView)); };
+		// The hands stay on their spots through a swing (the third-person clips carry them out of view, sneed saw an empty
+		// frame): the swing itself is an arc of the spot across the view, timed by the sim's clip.
+		const float Reach = 1.0f - 0.15f * SwingWeight;
+		FVector RightSpot = bFists ? FVector(34.0f, 12.0f, -7.0f) : (Hold.hands >= 2 ? FVector(38.0f, 9.0f, -9.0f) : FVector(38.0f, 13.0f, -8.0f));
+		if (bBlock && !bShield)
+		{
+			RightSpot = bFists ? FVector(30.0f, 8.0f, -2.0f) : FVector(38.0f, 6.0f, -3.0f);
+		}
+		if (SwingAsset && Clip && Clip->seconds > 0.0f)
+		{
+			// Wind up high and to the right, then cut down and across to the low left, then come back (a thrust for a spear
+			// or a knife: drawn back, then driven straight out). The sim's hit lands about two thirds through its clip.
+			const float T = FMath::Clamp(Me.motionTime / Clip->seconds, 0.0f, 1.0f);
+			const bool bThrust = Hold.styleName.find("Spear") != std::string::npos || Hold.styleName.find("Knife") != std::string::npos ||
+				Clip->anim.find("Stab") != std::string::npos || Clip->anim.find("Thrust") != std::string::npos;
+			const FVector Ready = RightSpot;
+			const FVector Windup = bThrust ? Ready + FVector(-12.0f, 2.0f, 1.0f) : FVector(30.0f, 24.0f, 6.0f);
+			const FVector Strike = bThrust ? Ready + FVector(26.0f, -6.0f, 0.0f) : FVector(46.0f, -14.0f, -16.0f);
+			// The blade meets the target when the sim's blow lands.
+			const float Hit = Clip->hitSeconds > 0.0f ? FMath::Clamp(Clip->hitSeconds / Clip->seconds, 0.3f, 0.9f) : 0.66f;
+			const float WindEnd = FMath::Max(0.1f, Hit - 0.2f);
+			const float StrikeEnd = FMath::Min(0.95f, Hit + 0.04f);
+			FVector Arc;
+			if (T < WindEnd)
+			{
+				Arc = FMath::Lerp(Ready, Windup, GunRangeSmooth(T / WindEnd));
+			}
+			else if (T < StrikeEnd)
+			{
+				Arc = FMath::Lerp(Windup, Strike, GunRangeSmooth((T - WindEnd) / (StrikeEnd - WindEnd)));
+			}
+			else
+			{
+				Arc = FMath::Lerp(Strike, Ready, GunRangeSmooth((T - StrikeEnd) / (1.0f - StrikeEnd)));
+			}
+			RightSpot = Arc;
+		}
+		if (bFists && !bPunchLeft)
+		{
+			RightSpot = FMath::Lerp(RightSpot, FVector(62.0f, 4.0f, -10.0f), Punch);
+		}
+		ArmsAnim->SetRightHandReach(Reach, ToArms(RightSpot), ToArms(RightSpot + FVector(-28.0f, 26.0f, -32.0f)));
+
+		// --- The weapon on the right hand's grip, the shield on the left forearm. ---
+		FTransform WeaponWorld;
+		bool bWeapon = false;
+		if (!bFists && Me.weapon.valid())
+		{
+			FTransform Frame;
+			UStaticMesh* Mesh = Weapons->GetWeaponMesh(Me.weapon);
+			if (Mesh && HoldDraw::HandFrame(Arms, Hold, Frame))
+			{
+				WeaponWorld = HoldDraw::WeaponWorld(Frame, Hold, Size);
+				if (HeldWeapon->GetStaticMesh() != Mesh)
+				{
+					HeldWeapon->SetStaticMesh(Mesh);
+				}
+				HeldWeapon->SetWorldTransform(WeaponWorld);
+				bWeapon = true;
+			}
+		}
+		HeldWeapon->SetVisibility(bWeapon && bSettled);
+		bool bShieldShown = false;
+		if (bShield)
+		{
+			FTransform Frame;
+			UStaticMesh* Mesh = Weapons->GetShieldMesh(Me.shield, Me.shieldStuff);
+			if (Mesh && HoldDraw::ShieldFrame(Arms, Frame))
+			{
+				if (HeldShield->GetStaticMesh() != Mesh)
+				{
+					HeldShield->SetStaticMesh(Mesh);
+				}
+				HeldShield->SetWorldTransform(HoldDraw::WeaponWorld(Frame, ShieldHold, Size));
+				bShieldShown = true;
+			}
+		}
+		HeldShield->SetVisibility(bShieldShown && bSettled);
+
+		// --- The left hand: on a two-handed grip, else up as a guard (fists) or with the shield raised before the face. ---
+		const FVector ElbowOut = CameraWorld.TransformVector(FVector(-0.2f, -0.6f, -1.0f)).GetSafeNormal();
+		if (bWeapon && Hold.hasOff)
+		{
+			HoldDraw::SetOffHand(Arms, WeaponWorld, Hold, Size, 1.0f - DipEase, ElbowOut);
+		}
+		else if (bFists || bShield)
+		{
+			FVector LeftSpot = bShield ? (bBlock ? FVector(34.0f, -6.0f, -8.0f) : FVector(40.0f, -18.0f, -16.0f)) : (bBlock ? FVector(30.0f, -8.0f, -4.0f) : FVector(36.0f, -13.0f, -10.0f));
+			if (bFists && bPunchLeft)
+			{
+				LeftSpot = FMath::Lerp(LeftSpot, FVector(62.0f, -4.0f, -10.0f), Punch);
+			}
+			ArmsAnim->SetLeftHandReach(Reach, ToArms(LeftSpot), ToArms(LeftSpot + FVector(-28.0f, -26.0f, -32.0f)));
+		}
+		else
+		{
+			ArmsAnim->SetLeftHandGrip(0.0f, FVector::ZeroVector, FVector::ZeroVector);
+		}
 	}
 
 	// Shown once the pose has settled (the first frames have no animation yet); no gun parts, magazine or flash here.

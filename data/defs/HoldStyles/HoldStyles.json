@@ -3,7 +3,7 @@
     "defName": "Hold_Unarmed",
     "label": "fists",
     "source": "ours (docs/design/weapon-hold.md)",
-    "comment": "Every weapon and shield is held through one of these styles (docs/design/weapon-hold.md). hands: 0 fists, 1, 2. hand: which hand holds it. grip: how that hand closes on it (None, Blade, Gun, Bow, Shield). main/off: default palm points in the weapon's frame (cm, +x along the weapon, +z up), overridden by a weapon's own `hold`. attackStyle: the MeleeRules.styleAttacks list swings come from. Clips (paths under /Game/Rim3D/Generated/Animations, empty for none): stance (upper body, third person, while ready), aim (guns, while aiming), block, reload, shieldStance/shieldBlock (with a shield on the arm), fpStance/fpBlock (first person; the third-person one when empty). holster: where it rides when not in the hands (Back, LeftHip, RightHip).",
+    "comment": "Every weapon and shield is held through one of these styles (docs/design/weapon-hold.md). hands: 0 fists, 1, 2. hand: which hand holds it. grip: how that hand closes on it (None, Blade, Gun, Bow, Shield). main/off: default palm points in the weapon's frame (cm, +x along the weapon, +z up), overridden by a weapon's own `hold`. attackStyle: the MeleeRules.styleAttacks list swings come from. Clips (paths under /Game/Rim3D/Generated/Animations, empty for none): stance (upper body, third person, while ready), aim (guns, while aiming), block, reload, shieldStance/shieldBlock (with a shield on the arm), fpStance/fpBlock (first person; the third-person one when empty). holster: where it rides when not in the hands (Back, LeftHip, RightHip). places (docs/design/weapon-hold.md, 'Weapon first, then the hands'): where the weapon is held, the hands then closing on its grips: ready, aim (guns), block (melee), fpReady/fpAim/fpBlock (first person); each {anchor: Chest (between the shoulders) | Head (the head bone, turned by the aim's pitch) | View (the first-person camera), point: Main (grip) | Sight | Stock (a gun's butt), at: [x ahead, y right, z up] cm for a 1.80 m body, turn: [pitch up, yaw right, roll right] degrees}. offTurn: the other fist on off/support turned from the weapon's frame [pitch, yaw, roll]. support: a one-handed gun's second hand (drawing only).",
     "hands": 0,
     "grip": "None",
     "attackStyle": "Unarmed",
@@ -24,7 +24,13 @@
     "block": "Mixamo/SwordandShield/A_ProSwordAndShieldSwordAndShieldBlockIdle",
     "shieldStance": "Mixamo/SwordandShield/A_ProSwordAndShieldSwordAndShieldIdle",
     "shieldBlock": "Mixamo/SwordandShield/A_ProSwordAndShieldSwordAndShieldBlockIdle",
-    "holster": "LeftHip"
+    "holster": "LeftHip",
+    "places": {
+      "ready": {"anchor": "Chest", "at": [30, 16, -34], "turn": [45, -10, 180]},
+      "block": {"anchor": "Chest", "at": [32, 14, 0], "turn": [12, -80, 90]},
+      "fpReady": {"anchor": "View", "at": [38, 16, -24], "turn": [55, -12, 180]},
+      "fpBlock": {"anchor": "View", "at": [40, 12, -8], "turn": [12, -80, 90]}
+    }
   },
   {
     "defName": "Hold_Club",
@@ -38,7 +44,13 @@
     "block": "Mixamo/MeleeAxe/A_ProMeleeAxeStandingBlockIdle",
     "shieldStance": "Mixamo/SwordandShield/A_ProSwordAndShieldSwordAndShieldIdle",
     "shieldBlock": "Mixamo/SwordandShield/A_ProSwordAndShieldSwordAndShieldBlockIdle",
-    "holster": "LeftHip"
+    "holster": "LeftHip",
+    "places": {
+      "ready": {"anchor": "Chest", "at": [28, 17, -34], "turn": [60, -8, 180]},
+      "block": {"anchor": "Chest", "at": [32, 14, 0], "turn": [12, -80, 90]},
+      "fpReady": {"anchor": "View", "at": [38, 16, -24], "turn": [65, -10, 180]},
+      "fpBlock": {"anchor": "View", "at": [40, 12, -8], "turn": [12, -80, 90]}
+    }
   },
   {
     "defName": "Hold_TwoHandBlade",
@@ -51,7 +63,14 @@
     "off": [-13, 0, 0],
     "stance": "Mixamo/GreatSword/A_GreatSwordGreatSwordIdle",
     "block": "Mixamo/GreatSword/A_GreatSwordGreatSwordBlocking",
-    "holster": "Back"
+    "holster": "Back",
+    "offTurn": [0, 0, 0],
+    "places": {
+      "ready": {"anchor": "Chest", "at": [32, 8, -30], "turn": [50, -6, 180]},
+      "block": {"anchor": "Chest", "at": [32, 14, 2], "turn": [14, -78, 90]},
+      "fpReady": {"anchor": "View", "at": [40, 9, -27], "turn": [55, -8, 180]},
+      "fpBlock": {"anchor": "View", "at": [40, 12, -8], "turn": [14, -78, 90]}
+    }
   },
   {
     "defName": "Hold_Spear",
@@ -66,7 +85,14 @@
     "stance": "Mixamo/Rifle/A_ProRifleIdle",
     "block": "Mixamo/GreatSword/A_GreatSwordGreatSwordBlocking",
     "fpStance": "Mixamo/Rifle/A_ProRifleIdle",
-    "holster": "Back"
+    "holster": "Back",
+    "offTurn": [0, 0, 80],
+    "places": {
+      "ready": {"anchor": "Chest", "at": [14, 15, -44], "turn": [8, -8, 180]},
+      "block": {"anchor": "Chest", "at": [26, 24, -8], "turn": [10, -80, 90]},
+      "fpReady": {"anchor": "View", "at": [24, 15, -34], "turn": [6, -6, 180]},
+      "fpBlock": {"anchor": "View", "at": [30, 22, -14], "turn": [10, -80, 90]}
+    }
   },
   {
     "defName": "Hold_Pistol",
@@ -81,7 +107,15 @@
     "aim": "PistolAim/A_PistolAim",
     "reload": "Mixamo/Firearms/A_Reload",
     "fpStance": "PistolAim/A_PistolAim",
-    "holster": "RightHip"
+    "holster": "RightHip",
+    "support": [1, -2.5, -2],
+    "offTurn": [68, 0, 135],
+    "places": {
+      "ready": {"anchor": "Chest", "at": [26, 6, -22], "turn": [-40, 0, 0]},
+      "aim": {"anchor": "Head", "point": "Sight", "at": [46, 3, 7], "turn": [0, 0, 0]},
+      "fpReady": {"anchor": "View", "point": "Sight", "at": [30, 10, -12], "turn": [0, 0, 0]},
+      "fpAim": {"anchor": "View", "point": "Sight", "at": [34, 0, 0], "turn": [0, 0, 0]}
+    }
   },
   {
     "defName": "Hold_Rifle",
@@ -97,7 +131,14 @@
     "aim": "Mixamo/Rifle/A_ProRifleIdleAiming",
     "reload": "Mixamo/Firearms/A_Reloading",
     "fpStance": "Mixamo/Rifle/A_ProRifleIdleAiming",
-    "holster": "Back"
+    "holster": "Back",
+    "offTurn": [0, 0, 80],
+    "places": {
+      "ready": {"anchor": "Chest", "point": "Stock", "at": [4, 15, -4], "turn": [-35, -6, 0]},
+      "aim": {"anchor": "Head", "point": "Sight", "at": [19, 3.5, 7], "turn": [0, 0, 0]},
+      "fpReady": {"anchor": "View", "point": "Sight", "at": [22, 10, -6], "turn": [0, 0, 0]},
+      "fpAim": {"anchor": "View", "point": "Sight", "at": [10, 0, 0], "turn": [0, 0, 0]}
+    }
   },
   {
     "defName": "Hold_Bow",

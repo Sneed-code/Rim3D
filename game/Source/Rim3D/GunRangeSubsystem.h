@@ -157,6 +157,10 @@ public:
 	const FString& GetBoneLine() const { return BoneLine; }
 	/** Whether the arms show a weapon by its hold style this frame (a melee weapon, fists, a shield), not a gun model. */
 	bool IsHeldViewShown() const { return bShown && bHeldView; }
+	/** The first-person arms' mesh (the player's MakeHuman body, only its arms shown), for the smoke test's arm checks. */
+	USkeletalMeshComponent* GetArmsMesh() const { return Arms; }
+	/** How far the first-person body leans in so its arms reach the weapon (cm). */
+	float GetArmsLean() const { return ArmsLean; }
 	/** Swing clips the first-person arms have started. */
 	int32 GetHeldSwingsSeen() const { return HeldSwingsSeen; }
 
@@ -239,6 +243,10 @@ private:
 	float BobPhase = 0.0f;
 	float Dip = 0.0f;
 	float SprintBlend = 0.0f;
+	/** How far (cm) the first-person body leans forward so its arms reach the weapon's grips (never stretched). */
+	float ArmsLean = 0.0f;
+	/** How far a melee weapon is raised to block in first person (0 to 1). */
+	float HeldBlockBlend = 0.0f;
 	float FlashAge = 99.0f;
 	float DropAge = 99.0f;
 	FVector DropVelocity = FVector::ZeroVector;
