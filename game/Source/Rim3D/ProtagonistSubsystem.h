@@ -88,6 +88,10 @@ public:
 	/** Tab: lock on to the next nearest enemy (FocusCommand Next); middle mouse: lock on or let go. Both do nothing with the setting off. */
 	void FocusNext();
 	void EndFocus();
+	/** Tab and flicks may lock on to the player's own side too (the practice range's targets). */
+	void SetFocusAnySide(bool bAny) { bFocusAnySide = bAny; }
+	/** Mouse flicks that switched the lock-on target (smoke tests). */
+	int32 GetFlicksSent() const { return FlicksSent; }
 	/** FocusCommands sent so far (smoke tests). */
 	int64 GetFocusCommandsSent() const { return FocusCommandsSent; }
 	/** Frames the focus HP bar was drawn. */
@@ -137,6 +141,13 @@ private:
 	/** Seconds the player has been turned away from the focus and moving away from it (lock-on.md). */
 	float TurnAwaySeconds = 0.0f;
 	void UpdateTurnAway(USimSubsystem& Bridge);
+	/** A quick sideways mouse flick while locked on with melee switches target (lock-on.md). */
+	void UpdateFlick(APlayerController& PC, USimSubsystem& Bridge, colony::Entity Focus);
+	float FlickX = 0.0f;
+	float FlickAge = 0.0f;
+	float FlickCooldown = 0.0f;
+	int32 FlicksSent = 0;
+	bool bFocusAnySide = false;
 	/** Real seconds the screen has been dark for the night skip (fades in and out). */
 	float SleepFade = 0.0f;
 };

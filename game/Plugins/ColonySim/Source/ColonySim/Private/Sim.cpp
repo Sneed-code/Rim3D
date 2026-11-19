@@ -1241,7 +1241,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     }
     if (const auto* focus = std::get_if<FocusCommand>(&command)) {
         std::string why;
-        if (!melee_->focusCommand(focus->pawn, focus->target, focus->mode, &why)) {
+        if (!melee_->focusCommand(focus->pawn, focus->target, focus->mode, &why, focus->viewX, focus->viewY, focus->anySide)) {
             commandFailed(id, why);
         }
         return;

@@ -127,6 +127,40 @@ An aimed ability asks `focusPoint(target)` for its aim when the caster is locked
   (Tab's nearest-in-front pick is used), and the body turning to run while sprinting locked on (the lock lets go after
   0.75 s instead).
 
+## Tab, flicks and landing blows (sneed 2026-11-19, after the gun range)
+
+sneed: "tab doesn't shuffle or work intuitively to target closest", "when I'm swinging at someone it doesn't always hit,
+and they don't dodge it or anything", swing speeds up (club x2, the rest +50%), a spear or knife at a downed target stabs
+down into the body.
+
+- **Why Tab felt stuck**: it took the one after the held target in a list sorted by distance at each press. Walking to
+  the second nearest made it the nearest, so Tab swapped between the two nearest for ever. **Now a round**: each Tab
+  within `focusRoundSteps` (5 s) of the last gives the nearest enemy not given yet (standing ones before downed ones,
+  those in view before those behind), then round again from the nearest. After 5 s without Tab a new round starts
+  from the nearest other than the one held. "In view" is where the **camera** looks (FocusCommand `viewX/viewY`), not
+  where the body faces.
+- **Mouse flick** (Unreal `UProtagonistSubsystem::UpdateFlick`): locked on with melee or fists, a quick sideways mouse
+  move (`LockOn.FlickMouse`, 40 units within 0.15 s, 0.4 s between flicks) sends FocusMode `Left`/`Right`: the enemy
+  with the smallest turn that way from the one held (within `flickMaxDegrees` 150). Not with a gun (free aim).
+- **The practice range** picks its own-side targets through FocusCommand `anySide` (it used to pick them itself, Tab
+  only, so middle mouse found nobody there).
+- **Faster swings**: `data/tuning.json` cooldown multipliers (RimWorld's numbers stay in the defs): club 0.5, knife
+  0.222 (x3 then +50%), longsword, breach axe, spear and monosword 0.333 (x2 then +50%), gladius, mace, plasma sword and
+  zeushammer 0.667. The wind-up is `windupShare` of it (at least `minWindup`, 0.3 s) and the clip plays to fit.
+- **Why swings whiffed**: (1) a swing started with the lock just out of reach went straight ahead at nobody; (2) the
+  line fixed 0.2 s before the blow missed a target that only shuffled (footwork) without dodging. Now the player's swing
+  takes its lock up to `playerReachSlack` (0.6 m) past its reach (it walks on under it; the blow is still only as long as
+  the reach), else the nearest enemy within `assistCos` of ahead, else whoever walked into it by the commit. A target
+  that didn't dodge is followed to the blow if it moved no more than `strikeTrackDegrees` (35) off the line.
+- **Why nobody dodged**: the faster swings wind up in 9 steps; reading one took 14 steps at skill 0 and 5 at skill 20
+  (plus or minus 4), so most were too quick to read. Reaction is now `reactionStepsBySkill` 9 to 3 (plus or minus 3),
+  and a swing read in time is defended `defendChanceBySkill` (35% at skill 0, 85% at 20): with a weapon a parry
+  (`parryShare` 60% for a fighter), else (and the rest) a roll from a heavy blow, a **step back** out of reach
+  (`backstepShare` 40%, 1.3 m in 8 steps, clear of the attacker's own step in) or a sidestep. A dodge read in time keeps the fixed line, so it gets away.
+- **Blows at the downed**: the sim already picked the downward stab (`Motion_Spear_Stab_Low`, `Motion_Knife_Stab_Low`)
+  for a swing at a downed target; the PC's range build lacked those clips and played the standing one. In first person
+  the hands now drive down into the body for a low blow instead of straight ahead.
+
 ## The original build plan
 
 - **Sim (cloud)**: `focusPoint`, wind-up turn rate, lunge, letting go (turn-away and sight timers), "locked but don't
