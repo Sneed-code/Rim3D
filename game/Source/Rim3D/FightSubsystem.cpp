@@ -1568,10 +1568,10 @@ void UFightSubsystem::UpdatePlayerInput()
 	}
 	else if (WasPressed(PC, ERim3DAction::Grenade))
 	{
-		const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
-		const AProtagonistPawn* Body = Protagonist ? Protagonist->GetBody() : nullptr;
+		const UProtagonistSubsystem* GrenadeProt = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+		const AProtagonistPawn* Body = GrenadeProt ? GrenadeProt->GetBody() : nullptr;
 		const bool bThirdPerson = Body && !Body->IsFirstPerson();
-		if (bThirdPerson && Protagonist->GetFocusTarget() != colony::kNoEntity)
+		if (bThirdPerson && GrenadeProt->GetFocusTarget() != colony::kNoEntity)
 		{
 			ThrowGrenade();
 		}
@@ -1798,7 +1798,7 @@ void UFightSubsystem::DrawGrenadeArc(USimSubsystem& Bridge, colony::Entity Pawn)
 		}
 		if (Count > 2)
 		{
-			Draw->AddPolyline(Ring, Count, Line, 0, 2.0f);
+			Draw->AddPolyline(Ring, Count, Line, 2.0f, 0);
 		}
 	}
 	++GrenadeArcFrames;
