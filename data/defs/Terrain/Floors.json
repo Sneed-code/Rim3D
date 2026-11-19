@@ -117,5 +117,19 @@
     "costs": { "Steel": 3, "Silver": 12 }, "stuff": false, "workToBuild": 2304.0,
     "stats": { "beauty": -1, "cleanliness": 0.6, "flammability": 0 },
     "note": "Wiki-checked 2026-10-28: 3 steel + 12 silver, 1600 ticks, beauty -1, cleanliness +0.6, not flammable. The wiki's 60% cleaning time is not modelled."
+  },
+  {
+    "defName": "PackedDirt", "visual": {"sound": {"step": "Step_Dirt"}, "color": [0.45, 0.36, 0.26]}, "parent": "FloorBase", "label": "packed dirt",
+    "mapRoad": "Dirt",
+    "stats": { "beauty": -1, "cleanliness": 0 },
+    "unverified": ["stats"], "ours": ["mapRoad"],
+    "note": "A dirt road across the map, when the world tile has one (docs/design/mapgen.md 'Roads'). Never built by colonists."
+  },
+  {
+    "defName": "BrokenAsphalt", "visual": {"sound": {"step": "Step_Stone"}, "color": [0.24, 0.24, 0.25]}, "parent": "FloorBase", "label": "broken asphalt",
+    "mapRoad": "Asphalt",
+    "stats": { "beauty": -1, "cleanliness": 0 },
+    "unverified": ["stats"], "ours": ["mapRoad"],
+    "note": "An old asphalt road across the map, when the world tile has one (docs/design/mapgen.md 'Roads'). Never built by colonists."
   }
 ]

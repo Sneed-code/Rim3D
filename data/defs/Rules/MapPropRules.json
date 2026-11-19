@@ -1,0 +1,16 @@
+[
+  {
+    "defName": "MapPropRules",
+    "edge": 12, "centreClear": 20, "bigCentreClear": 45, "bigApart": 25, "maxRise": 1.5,
+    "chunkClusterCells": 16000, "chunkClusterSize": [2, 6], "chunkClusterRadius": 4, "chunkNearRockShare": 0.6,
+    "boulderGroupCells": 14000, "boulderGroupSize": [1, 3], "boulderNearRockShare": 0.6,
+    "fallenLogCells": 9000, "fallenLogTreeRadius": 5,
+    "wreckCells": 350000, "wreckSlag": [2, 5], "wreckSecondChunkChance": 0.35,
+    "dangerRoomCells": 600000, "dangerRoomWidth": [9, 15], "dangerRoomDepth": [7, 11], "dangerCaskets": [2, 4],
+    "roadWidth": { "Dirt": 3, "Stone": 4, "Asphalt": 5 },
+    "ours": ["edge", "centreClear", "bigCentreClear", "bigApart", "maxRise", "chunkClusterCells", "chunkClusterSize", "chunkClusterRadius", "chunkNearRockShare", "boulderGroupCells", "boulderGroupSize",
+             "boulderNearRockShare", "fallenLogCells", "fallenLogTreeRadius", "wreckCells", "wreckSlag", "wreckSecondChunkChance",
+             "dangerRoomCells", "dangerRoomWidth", "dangerRoomDepth", "dangerCaskets", "roadWidth"],
+    "note": "Ground props, wreckage, ancient danger rooms and roads a new map is made with (docs/design/mapgen.md). '...Cells' is how many cells of map there are for each one (1 km map = 1,048,576 cells). RimWorld scatters chunks in clusters and puts an ancient danger on most maps but gives no numbers."
+  }
+]

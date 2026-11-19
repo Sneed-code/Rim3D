@@ -1,7 +1,7 @@
 # Map generation 2
 
 Code: `Private/Map.cpp` (`Map::generate`, `carveRivers`, `addWetlands`), `Private/MapFeatures.cpp`
-(`placeMapFeatures`). Tests: `Tests/MapGenTests.cpp`, one in `SaveTests.cpp`. Task S8.
+(`placeMapFeatures`), `Private/MapProps.cpp` (`placeMapProps`). Tests: `Tests/MapGenTests.cpp`, one in `SaveTests.cpp`. Task S8.
 
 Look at it with `simrun --seed 42 --days 0 --png map.png` (1,024 m by default now; `--size 512`
 for a quicker look).
@@ -85,6 +85,40 @@ gets a roof-able room). A geyser is a 2x2 `SteamGeyser` building that cannot be 
 ground, preferably within 10 m of rock. Both keep 45 m clear of the map's middle and 25 m from each other, and sit
 on flat soil or sand. Steam power and eruptions come with the events later; for now a geyser is a landmark.
 Neither def has a `designationCategory`, so nobody can build them.
+
+## Ground props, wreckage, ancient danger and roads
+
+`placeMapProps` (`Private/MapProps.cpp`, tests `Tests/MapPropTests.cpp`) runs right after
+`placeMapFeatures`, on the same maps (new games, not flat, 256 m or more), with its own random stream.
+Its numbers are the `MapPropRules` def (all ours: RimWorld scatters chunks and puts an ancient danger
+on most maps but gives no numbers). Everything it puts down is a normal thing in the save. In order:
+
+- **Road**: when the world tile has a road (`Sim::site()->road`), a strip of road floor runs from one
+  map edge to the other, along x or y, its middle wandering on two slow waves. Dirt road: 3 cells of
+  `PackedDirt`; stone road: 4 of `Flagstone`; asphalt: 5 of `BrokenAsphalt` (`roadWidth`). It stops at
+  water and rock and clears the plants on it. Road floors (`mapRoad` in the Terrain def) can't be laid
+  from a floor plan. Unreal draws ground floors as tinted gravel (their `visual.color`; laid floors
+  without one are grey-brown), which floors never had before.
+- **Ancient danger**: one sealed room per 600,000 cells (at least one: 1 on 512 m, 2 on 1 km), 9 to 15
+  by 7 to 11 cells, on flat open ground at least 45 m from the middle and 6 cells from any building.
+  A full outline of `AncientWall` with no gap; Rooms roofs it like any closed room. Inside: 2 to 4
+  `AncientCryptosleepCasket` buildings in a row along a long wall, and the `AncientDanger` loot table
+  (survival meals and valuable stacks) on the floor of the far half. Getting in means taking a wall
+  down. **Not yet**: the sleepers in the caskets (hostile or friendly) and opening them.
+- **Wreckage**: one `ShipChunk` (2x2) per 350,000 cells (at least one), 45 m from the middle, sometimes
+  (35%) a second one a few metres off, with 2 to 5 `ChunkSlagSteel` items around. Taking a ship chunk
+  down gives the wiki's 20 steel and 5 or 6 components (its `costs`, half back); an electric smelter
+  turns a slag chunk into 15 steel (`SmeltSlag`).
+- **Boulders**: a group of 1 to 3 per 14,000 cells (about 75 groups on 1 km), 60% of them near rock or on hill ground (`Map::hillGround`),
+  of the rock next to them (else one of the map's rock types): `Boulder<Rock>` buildings, impassable,
+  75% cover. Taken down, one chunk of that rock.
+- **Fallen logs**: one per 9,000 cells on soil with a tree within 5 m: `FallenLog`, 3 by 1, along x or
+  y. Pawns climb over (path cost 42), 40% cover, burns; taken down, 25 wood.
+- **Stone chunks**: a cluster of 2 to 6 per 16,000 cells within 4 cells, 60% near rock or on hills; the chunk of the
+  rock beside them, else one of the map's rock types.
+
+Small props keep 20 m off the middle, big ones 45 m; nothing goes on a road, a building, an item, water,
+marsh or rock. Boulders, logs, wrecks and caskets remove the plants under them.
 
 ## Numbers
 

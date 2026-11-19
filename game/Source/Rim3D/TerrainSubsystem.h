@@ -192,6 +192,12 @@ private:
 	TArray<uint8> ThinRoof;
 	TArray<int32> ThinRoofCells;
 	uint64 LastRoofChanges = 0;
+	/** Ground floors (roads, laid floors): each floor def's colour by DefId value, and the floors last drawn. */
+	TArray<FLinearColor> FloorColorOfDef;
+	TMap<int32, uint32> FloorsSeen;
+	uint64 LastFloorChanges = 0;
+	void LoadFloorColors(const colony::Sim& Core);
+	void ReadFloors();
 	int32 ChunksX = 0;
 	int32 ChunksY = 0;
 	int32 BuiltGeneration = -1;

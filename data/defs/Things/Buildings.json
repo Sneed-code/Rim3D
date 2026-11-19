@@ -32,6 +32,47 @@
     "note": "Found on the map, never built. Steam power and eruptions come with the events (docs/design/mapgen.md)."
   },
   {
+    "defName": "BoulderBase", "abstract": true, "parent": "BuildingBase",
+    "passability": "Impassable", "fillPercent": 0.75, "mapFeature": true,
+    "stats": { "maxHitPoints": 800, "flammability": 0 },
+    "visual": {"surface": "stone", "parts": [{"shape": "sphere", "radius": 0.55, "height": 0.85, "color": [0.5, 0.48, 0.46]}, {"shape": "sphere", "radius": 0.3, "height": 0.45, "at": [0.3, 0.2, 0], "color": [0.5, 0.48, 0.46]}]},
+    "ours": ["passability", "fillPercent", "stats.maxHitPoints", "costs: taking one down gives back half, one chunk"],
+    "note": "A loose boulder the map is made with (docs/design/mapgen.md 'Ground props'). RimWorld has none; ours, for cover in the open. Taken down (deconstruct) it leaves one chunk of its rock."
+  },
+  { "defName": "BoulderGranite", "parent": "BoulderBase", "label": "granite boulder", "costs": { "ChunkGranite": 2 }, "visual": {"tint": [0.52, 0.48, 0.47]} },
+  { "defName": "BoulderLimestone", "parent": "BoulderBase", "label": "limestone boulder", "costs": { "ChunkLimestone": 2 }, "visual": {"tint": [0.62, 0.6, 0.52]} },
+  { "defName": "BoulderSandstone", "parent": "BoulderBase", "label": "sandstone boulder", "costs": { "ChunkSandstone": 2 }, "visual": {"tint": [0.62, 0.52, 0.4]} },
+  { "defName": "BoulderSlate", "parent": "BoulderBase", "label": "slate boulder", "costs": { "ChunkSlate": 2 }, "visual": {"tint": [0.36, 0.38, 0.42]} },
+  { "defName": "BoulderMarble", "parent": "BoulderBase", "label": "marble boulder", "costs": { "ChunkMarble": 2 }, "visual": {"tint": [0.72, 0.72, 0.7]} },
+  {
+    "defName": "FallenLog", "parent": "BuildingBase", "label": "fallen log", "source": "ours",
+    "size": [3, 1], "passability": "PassThroughOnly", "pathCost": 42, "fillPercent": 0.4, "mapFeature": true,
+    "stats": { "maxHitPoints": 300, "flammability": 1.0 },
+    "costs": { "WoodLog": 50 },
+    "visual": {"surface": "wood", "parts": [{"shape": "cylinder", "radius": 0.32, "height": 2.9, "rot": [90, 0, 0], "at": [-1.45, 0, 0.3], "color": [0.36, 0.27, 0.18]}, {"shape": "cylinder", "radius": 0.12, "height": 0.7, "rot": [60, 30, 0], "at": [0.4, 0.15, 0.35], "color": [0.33, 0.25, 0.17]}]},
+    "ours": ["everything: RimWorld has no fallen logs", "costs: taking it down (deconstruct) gives back half, 25 wood"],
+    "note": "An old fallen tree trunk on forest ground (docs/design/mapgen.md 'Ground props'). Pawns climb over it slowly (tree path cost 42); low cover; burns."
+  },
+  {
+    "defName": "ShipChunk", "parent": "BuildingBase", "label": "ship chunk", "source": "RimWorld wiki",
+    "size": [2, 2], "passability": "Impassable", "fillPercent": 0.75, "mapFeature": true,
+    "stats": { "maxHitPoints": 300, "flammability": 0 },
+    "costs": { "Steel": 40, "ComponentIndustrial": 11 },
+    "visual": {"surface": "steel", "parts": [{"shape": "box", "size": [1.7, 1.5, 0.9], "rot": [0, 12, 8], "color": [0.42, 0.44, 0.47]}, {"shape": "box", "size": [0.9, 0.5, 0.6], "at": [0.4, 0.5, 0.7], "rot": [20, 35, 0], "color": [0.3, 0.31, 0.33]}, {"shape": "cylinder", "radius": 0.18, "height": 0.9, "at": [-0.5, -0.4, 0.6], "rot": [70, 0, 0], "color": [0.25, 0.25, 0.26]}]},
+    "unverified": ["fillPercent"],
+    "ours": ["costs: chosen so taking it down (half back) gives the wiki's 20 steel and 5 to 6 components"],
+    "note": "Wreckage of a ship, on the map from the start (docs/design/mapgen.md 'Wreckage'); RimWorld's chunk-drop event comes later. Wiki: 300 hit points, 2x2, deconstruct for 20 steel and 5-6 components; destroyed it leaves 2 steel slag and 1 component (not yet)."
+  },
+  {
+    "defName": "AncientCryptosleepCasket", "parent": "BuildingBase", "label": "ancient cryptosleep casket", "source": "RimWorld wiki",
+    "size": [1, 2], "passability": "Impassable", "fillPercent": 0.5, "mapFeature": true,
+    "stats": { "maxHitPoints": 250, "flammability": 0 },
+    "costs": { "Steel": 60, "ComponentIndustrial": 2 },
+    "visual": {"surface": "steel", "parts": [{"shape": "box", "size": [0.9, 1.9, 0.75], "color": [0.38, 0.42, 0.44]}, {"shape": "box", "size": [0.6, 1.5, 0.08], "at": [0, 0, 0.75], "color": [0.35, 0.55, 0.6]}]},
+    "unverified": ["fillPercent", "costs"],
+    "note": "Inside an ancient danger room (docs/design/mapgen.md 'Ancient danger'). The sleepers inside and opening it come later; for now it is a landmark that can be taken down for steel."
+  },
+  {
     "defName": "Door", "visual": {"sound": {"open": "Door_Open", "close": "Door_Close"}, "mesh": "/Game/Rim3D/Generated/Art/SM_Door.SM_Door", "parts": [{"shape": "box", "size": [0, 0.5, 0.8], "at": [0, 0, 2.2], "color": [0.9, 0.9, 0.9], "stuff": true}, {"shape": "box", "size": [0.12, 0.5, 2.2], "at": [-0.44, 0, 0], "color": [0.9, 0.9, 0.9], "stuff": true}, {"shape": "box", "size": [0.12, 0.5, 2.2], "at": [0.44, 0, 0], "color": [0.9, 0.9, 0.9], "stuff": true}, {"shape": "box", "size": [-0.26, 0.1, 2.15], "at": [0, 0, 0], "color": [0.8, 0.8, 0.8], "stuff": true, "slide": 0.85}]}, "parent": "StuffBuildingBase", "label": "door",
     "thingClass": "Building_Door", "fillPercent": 1.0, "designationCategory": "Structure",
     "costStuffCount": 25,
