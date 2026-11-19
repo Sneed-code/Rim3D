@@ -140,6 +140,9 @@ struct Mover {
     // next waypoint is on another level, the pawn stays in the cell in front of the climb and this
     // counts up to the climb's length; then it stands in the cell at the other end. 0 otherwise.
     float climbed = 0.0f;
+    // Times the climbing speed on a wall (the pawn's genes; cat-strain 2). Set by the movement
+    // system each step before it is used; not saved.
+    float climbFactor = 1.0f;
 
     bool arrived() const { return next >= path.size(); }
     // True while the pawn is going up or down stairs or a ladder.

@@ -1,8 +1,39 @@
 [
   {
-    "defName": "GeneRules", "source": "RimWorld wiki",
-    "hungerRateByMetabolicEfficiency": [[-1, 1.25], [0, 1.0], [2, 0.8]],
+    "defName": "GeneRules",
+    "source": "RimWorld wiki",
+    "hungerRateByMetabolicEfficiency": [
+      [
+        -1,
+        1.25
+      ],
+      [
+        0,
+        1.0
+      ],
+      [
+        2,
+        0.8
+      ]
+    ],
     "note": "x is a lineage's metabolic efficiency, y the pawn's hunger rate (wiki: Frostkin -1 is x125%, Warbred +2 is x80%, baseline x100%). Between and beyond the points the curve is straight lines, flat at the ends.",
-    "unverified": ["hungerRateByMetabolicEfficiency"]
+    "unverified": [
+      "hungerRateByMetabolicEfficiency"
+    ],
+    "darkBelowGlow": 0.3,
+    "sunAboveGlow": 0.3,
+    "joinerLineageWeights": {
+      "Baseline": 60,
+      "Emberkin": 10,
+      "Orcoid": 10,
+      "Drow": 10,
+      "CatStrain": 10
+    },
+    "ours": [
+      "darkBelowGlow",
+      "sunAboveGlow",
+      "joinerLineageWeights"
+    ],
+    "note2": "sneed 2026-11-19 (docs/design/races.md): the player and the starting colonists are human; joiners and raiders roll their race from joinerLineageWeights. Dark is light under 0.3 (the Dark thought's), the sun is up while its glow is over 0.3."
   }
 ]

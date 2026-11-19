@@ -483,10 +483,13 @@ void TemperatureSystem::exposePawns(int64_t now) {
         const float ambient = ambientOf(pawn);
         const float safeMin = min - numbers_.safeMarginC;
         const float safeMax = max + numbers_.safeMarginC;
+        // An Impid's thermal resistance: heat and cold injuries build up 90% slower (docs/design/races.md).
+        const PawnGenes* genes = reg.try_get<PawnGenes>(pawn);
+        const float thermal = genes != nullptr ? genes->effects.thermalDamage : 1.0f;
         if (hypothermia_.valid()) {
             const float before = health_.environmentSeverity(pawn, hypothermia_);
             if (ambient < safeMin) {
-                health_.setEnvironmentSeverity(pawn, hypothermia_, before + (safeMin - ambient) * coldPerDay_ * days);
+                health_.setEnvironmentSeverity(pawn, hypothermia_, before + (safeMin - ambient) * coldPerDay_ * days * thermal);
             } else if (before > 0.0f) {
                 health_.setEnvironmentSeverity(pawn, hypothermia_, before - coldRecoverPerDay_ * days);
             }
@@ -494,7 +497,7 @@ void TemperatureSystem::exposePawns(int64_t now) {
         if (heatstroke_.valid()) {
             const float before = health_.environmentSeverity(pawn, heatstroke_);
             if (ambient > safeMax) {
-                health_.setEnvironmentSeverity(pawn, heatstroke_, before + (ambient - safeMax) * hotPerDay_ * days);
+                health_.setEnvironmentSeverity(pawn, heatstroke_, before + (ambient - safeMax) * hotPerDay_ * days * thermal);
             } else if (before > 0.0f) {
                 health_.setEnvironmentSeverity(pawn, heatstroke_, before - hotRecoverPerDay_ * days);
             }

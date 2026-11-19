@@ -653,6 +653,8 @@ void Map::setBuilding(CellPos c, Entity building, Passage passage, uint8_t obsta
             chunk.passage[i] = passage;
             regions_->markDirty(c);
         }
+        refreshWallClimbs(c, true);
+        refreshWallClimbs(CellPos{c.x, c.y, c.level - 1}, false);  // a building on the wall's top
         return;
     }
     const size_t i = static_cast<size_t>(index(c));
@@ -665,6 +667,7 @@ void Map::setBuilding(CellPos c, Entity building, Passage passage, uint8_t obsta
         passage_[i] = passage;
         regions_->markDirty(c);
     }
+    refreshWallClimbs(c, true);
 }
 
 void Map::setObstacle(CellPos c, uint8_t obstacleDm) {
@@ -685,8 +688,97 @@ void Map::addLevelLink(const LevelLink& link) {
         return key(a.low) != key(b.low) ? key(a.low) < key(b.low) : key(a.high) < key(b.high);
     };
     levelLinks_.insert(std::upper_bound(levelLinks_.begin(), levelLinks_.end(), link, before), link);
+    linkCells_.insert(linkCellKey(link.low));
+    linkCells_.insert(linkCellKey(link.high));
     regions_->markDirty(link.low);
     regions_->markDirty(link.high);
+}
+
+void Map::rebuildLinkCells() {
+    linkCells_.clear();
+    for (const LevelLink& link : levelLinks_) {
+        linkCells_.insert(linkCellKey(link.low));
+        linkCells_.insert(linkCellKey(link.high));
+    }
+}
+
+void Map::setWallClimb(float speedFactor, float length) {
+    wallClimbSpeed_ = std::max(0.0f, speedFactor);
+    wallClimbLength_ = std::max(0.5f, length);
+    // Every wall climb is made again: drop them all, then look at every wall cell with a floor over it.
+    const size_t before = levelLinks_.size();
+    for (const LevelLink& link : levelLinks_) {
+        if (link.wall) {
+            regions_->markDirty(link.low);
+            regions_->markDirty(link.high);
+        }
+    }
+    levelLinks_.erase(std::remove_if(levelLinks_.begin(), levelLinks_.end(), [](const LevelLink& l) { return l.wall; }), levelLinks_.end());
+    if (levelLinks_.size() != before) {
+        rebuildLinkCells();
+    }
+    if (wallClimbSpeed_ <= 0.0f) {
+        return;
+    }
+    for (const CellPos& floor : upperFloorCells()) {
+        refreshWallClimb(CellPos{floor.x, floor.y, floor.level - 1});
+    }
+}
+
+void Map::refreshWallClimb(CellPos wall) {
+    if (!inBounds(wall)) {
+        return;
+    }
+    const CellPos top{wall.x, wall.y, wall.level + 1};
+    bool removed = false;
+    for (auto it = levelLinks_.begin(); it != levelLinks_.end();) {
+        if (it->wall && it->high == top) {
+            regions_->markDirty(it->low);
+            regions_->markDirty(it->high);
+            it = levelLinks_.erase(it);
+            removed = true;
+        } else {
+            ++it;
+        }
+    }
+    if (removed) {
+        rebuildLinkCells();
+    }
+    if (wallClimbSpeed_ <= 0.0f || !inBounds(top) || passage(wall) != Passage::Blocked || buildingAt(wall) == kNoEntity ||
+        obstacleDm(wall) < kObstacleTallDm || !walkable(top)) {
+        return;
+    }
+    static constexpr int kDx[4] = {0, 1, 0, -1};
+    static constexpr int kDy[4] = {1, 0, -1, 0};
+    for (int d = 0; d < 4; ++d) {
+        const CellPos low{wall.x + kDx[d], wall.y + kDy[d], wall.level};
+        const CellPos above{low.x, low.y, low.level + 1};
+        // From open air outside the wall: not from under a floor, where the climb would go through the ceiling.
+        if (!walkable(low) || !inBounds(above) || terrain(above) != Terrain::Air) {
+            continue;
+        }
+        LevelLink link;
+        link.low = low;
+        link.high = top;
+        link.building = buildingAt(wall);
+        link.length = wallClimbLength_;
+        link.speedFactor = wallClimbSpeed_;
+        link.wall = true;
+        addLevelLink(link);
+    }
+}
+
+void Map::refreshWallClimbs(CellPos wall, bool around) {
+    if (wallClimbSpeed_ <= 0.0f) {
+        return;
+    }
+    refreshWallClimb(wall);
+    if (around) {
+        refreshWallClimb(CellPos{wall.x + 1, wall.y, wall.level});
+        refreshWallClimb(CellPos{wall.x - 1, wall.y, wall.level});
+        refreshWallClimb(CellPos{wall.x, wall.y + 1, wall.level});
+        refreshWallClimb(CellPos{wall.x, wall.y - 1, wall.level});
+    }
 }
 
 void Map::removeLevelLinks(Entity building) {
@@ -699,6 +791,7 @@ void Map::removeLevelLinks(Entity building) {
             ++it;
         }
     }
+    rebuildLinkCells();
 }
 
 const LevelLink* Map::levelLinkBetween(CellPos a, CellPos b) const {
@@ -742,6 +835,7 @@ void Map::setTerrain(CellPos c, Terrain terrain) {
     }
     if (groundWalkable(c) != walkableBefore) {
         regions_->markDirty(c);
+        refreshWallClimbs(c, true);
     }
     if (obstacleDm(c) != obstacleBefore) {
         cover_->markDirty(c);
@@ -777,6 +871,8 @@ bool Map::setUpperFloor(CellPos c, bool floor) {
     upperChunkFor(c).floor[upperSlot(c)] = floor ? 1 : 0;
     ++upperFloorChanges_;
     regions_->markDirty(c);
+    refreshWallClimbs(CellPos{c.x, c.y, c.level - 1}, true);  // the wall under it, and the walls it roofs the front of
+    refreshWallClimbs(c, true);                                // a wall standing on this floor, and its neighbours'
     // The cell below gained or lost its roof; rooms below see it through buildingChanges.
     ++buildingChanges_;
     return true;

@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <unordered_set>
 #include <vector>
 
 namespace colony {
@@ -48,6 +49,7 @@ struct LevelLink {
     Entity building = kNoEntity;
     float length = 0.0f;       // metres from the middle of `low` to the middle of `high`, climbing
     float speedFactor = 1.0f;  // share of its walking speed a pawn keeps on it
+    bool wall = false;         // climbed up the face of a wall, not stairs or a ladder (docs/design/climbing.md)
 
     // What the link costs a path, in metres of flat walking.
     float cost() const { return length / speedFactor; }
@@ -184,6 +186,15 @@ public:
     const std::vector<LevelLink>& levelLinks() const { return levelLinks_; }
     // The link with `a` at one end and `b` at the other, either way round; null if none.
     const LevelLink* levelLinkBetween(CellPos a, CellPos b) const;
+    // Whether any stairs, ladder or wall climb starts or ends in the cell (a quick test before a scan).
+    bool linkAt(CellPos c) const { return linkCells_.count(linkCellKey(c)) != 0; }
+
+    // Wall climbing (docs/design/climbing.md): with a speed above 0, the outside face of every
+    // full-height wall is a climb from the cell in front of it, under open air, up to the upper floor
+    // laid over the wall: a LevelLink with `wall` set, `length` metres long at `speedFactor` of walking.
+    // The links follow walls, floors and ground as they change. 0 (the default) climbs no walls.
+    void setWallClimb(float speedFactor, float length);
+    float wallClimbSpeed() const { return wallClimbSpeed_; }
 
     // Building layer: the building covering each cell, kNoEntity if none. Kept up to date by
     // Things when buildings spawn and despawn; nothing else should call the setters.
@@ -449,6 +460,18 @@ private:
     void setLevelCorner(int corner, float metres);
     std::vector<int> hollow_;  // mined-out ground cells that still have the thick roof
     std::vector<LevelLink> levelLinks_;
+    std::unordered_set<uint64_t> linkCells_;  // linkCellKey of both ends of every link
+    float wallClimbSpeed_ = 0.0f;
+    float wallClimbLength_ = 3.0f;
+    static uint64_t linkCellKey(CellPos c) {
+        return (static_cast<uint64_t>(static_cast<uint32_t>(c.level)) << 48) | (static_cast<uint64_t>(static_cast<uint32_t>(c.y)) << 24) |
+               static_cast<uint64_t>(static_cast<uint32_t>(c.x));
+    }
+    void rebuildLinkCells();
+    // Makes the wall climbs onto the cell above `wall` again (none if `wall` is not a full-height wall
+    // with a floor over it), and those of the four walls beside it when `around` is set.
+    void refreshWallClimbs(CellPos wall, bool around);
+    void refreshWallClimb(CellPos wall);
     std::unique_ptr<Regions> regions_;
     std::unique_ptr<Cover> cover_;
     float river_;
