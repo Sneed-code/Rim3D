@@ -66,7 +66,11 @@ namespace
 		{"Navel gem", {TEXT("Jewel_NavelGem"), nullptr}}, {"Navel dangle", {TEXT("Jewel_NavelDangle"), nullptr}},
 		{"Genital piercing", {TEXT("Jewel_Genital"), nullptr}}, {"Finger ring", {TEXT("Jewel_Ring"), nullptr}},
 		{"Necklace", {TEXT("Jewel_Necklace"), nullptr}}, {"Collar", {TEXT("Jewel_Collar"), nullptr}},
-		{"Wrist cuffs", {TEXT("Jewel_CuffL"), TEXT("Jewel_CuffR")}}, {"Ankle shackles", {TEXT("Jewel_ShackleL"), TEXT("Jewel_ShackleR")}}};
+		{"Wrist cuffs", {TEXT("Jewel_CuffL"), TEXT("Jewel_CuffR")}}, {"Ankle shackles", {TEXT("Jewel_ShackleL"), TEXT("Jewel_ShackleR")}},
+		// Chains (mh_common.add_body_chains), at the end so -CreatorJewels indices stay put.
+		{"Waist chain", {TEXT("Jewel_WaistChain"), nullptr}}, {"Body chain", {TEXT("Jewel_BodyChain"), nullptr}},
+		{"Nipple chain", {TEXT("Jewel_NippleChain"), nullptr}}, {"Collar leash chain", {TEXT("Jewel_CollarChain"), nullptr}},
+		{"Ankle hobble chain", {TEXT("Jewel_AnkleChain"), nullptr}}};
 	constexpr int32 CreatorJewelCount = UE_ARRAY_COUNT(CreatorJewels);
 	constexpr int32 CreatorEarJewels = 6;  // the first six are in the ears (none on the cat kind: no human ears)
 	const char* const CreatorMetalNames[] = {"Gold", "Silver", "Steel", "Iron", "Copper", "Black"};

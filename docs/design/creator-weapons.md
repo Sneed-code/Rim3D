@@ -121,3 +121,9 @@ a club or the shield), and strikes on the ground throw dust, through `UFightSubs
 - Staggers come back to the spot they started from when the clip blends out (no root motion carried over).
 - The demo turns and moves the visible body, not the pawn. Only the creator does this; the game's own melee
   (`UWeaponDrawSubsystem`, procedural swings) is unchanged.
+
+## Sized to the body
+
+Weapons and the shield follow [gear-size.md](gear-size.md): the grip sits on the body's own hand bones, the per-style
+fine-tune offsets scale with its height (`gearSizeFor(...).place`), and the weapon and shield are drawn at
+`gearSizeFor(...).size` (half way to the body's height), blades and the shield's reach included.

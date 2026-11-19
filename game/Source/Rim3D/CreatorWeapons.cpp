@@ -33,6 +33,7 @@
 
 #include "ColonySim/Defs.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Looks.h"
 
 #include <imgui.h>
 
@@ -786,6 +787,13 @@ namespace
 			return;
 		}
 		const FCwStyleDef& Style = CwStyles[P.HeldStyle];
+		// Gear sized to the body (docs/design/gear-size.md): the grip frame comes from this body's own hand bones, so
+		// only the fine-tune offsets (measured on the 1.80 m man) scale with its height, and the weapon itself grows
+		// or shrinks half way (LooksRules gearSizeFollow). Placed by world transform, it would otherwise stay real size.
+		const USimSubsystem* Bridge = S.World.IsValid() ? S.World->GetSubsystem<USimSubsystem>() : nullptr;
+		const ASimPawnActor* Pawn = P.Pawn.Get();
+		const colony::GearSize Gear = Bridge && Bridge->GetSim() && Pawn ? colony::gearSizeFor(Bridge->GetSim()->defs(), Pawn->GetBodyScale())
+																		: colony::GearSize{};
 		for (int32 Hand = 0; Hand < 2; ++Hand)
 		{
 			UStaticMeshComponent* Comp = (Hand == 0 ? P.Right : P.Left).Get();
@@ -803,8 +811,9 @@ namespace
 				continue;
 			}
 			const float* T = S.Grip[P.HeldStyle][Hand];
-			const FTransform Tweak(FRotator(T[3], T[4], T[5]), FVector(T[0], T[1], T[2]));
-			const FTransform World = Tweak * Frame;
+			const FTransform Tweak(FRotator(T[3], T[4], T[5]), FVector(T[0], T[1], T[2]) * Gear.place);
+			FTransform World = Tweak * Frame;
+			World.SetScale3D(FVector(Gear.size));
 			// Hung on the hand bone, so it moves with the hand between our updates.
 			const FName Bone = bShield ? FName(TEXT("lowerarm_l")) : FName(Hand == 0 ? TEXT("hand_r") : TEXT("hand_l"));
 			if (Comp->GetAttachParent() != Mesh || Comp->GetAttachSocketName() != Bone)
@@ -819,7 +828,7 @@ namespace
 			{
 				Blade.Centre = World.GetLocation();
 				Blade.Normal = World.GetUnitAxis(EAxis::Z);
-				Blade.Radius = Tip;
+				Blade.Radius = Tip * Gear.size;
 			}
 			else
 			{

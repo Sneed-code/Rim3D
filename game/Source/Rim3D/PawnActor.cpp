@@ -694,6 +694,18 @@ void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 		MakeHumanMesh->RegisterComponent();
 	}
 	MakeHumanMesh->SetSkeletalMeshAsset(Mesh);
+	// Jewellery and chains are on every MakeHuman body as their own sections (Jewel_<key>): hidden unless the
+	// creator shows them, so generated pawns never wear any.
+	{
+		const TArray<FName> Slots = MakeHumanMesh->GetMaterialSlotNames();
+		for (int32 i = 0; i < Slots.Num(); ++i)
+		{
+			if (Slots[i].ToString().Contains(TEXT("Jewel_")))
+			{
+				MakeHumanMesh->ShowMaterialSection(i, 0, false, 0);
+			}
+		}
+	}
 	MakeHumanMesh->SetAnimInstanceClass(UMakeHumanAnimInstance::StaticClass());
 	if (UMakeHumanAnimInstance* Anim = Cast<UMakeHumanAnimInstance>(MakeHumanMesh->GetAnimInstance()))
 	{

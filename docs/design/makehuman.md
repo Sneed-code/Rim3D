@@ -253,6 +253,14 @@ clothes have an "ears covered" flag.
   the back of the finger, so a ring round the bone sat off-centre and looked like a halo.
 - The necklace is a chain of links lying on the skin, lower at the front. Each point takes the skin weights under it.
 - Piercings take the skin weights of the skin they go through, so a nipple barbell moves exactly as the breast does.
+- **Chains** (`add_body_chains`, sneed 2026-11-14 "collars, chains"), all of the necklace's links: a waist chain round
+  the torso just above the hips, 4 cm lower at the front; a body chain from the necklace's lowest point down the
+  breastbone and belly to the waist chain; a nipple chain hanging 5 cm (men 3 cm) between the nipple barbells; a leash
+  chain hanging 32 cm from the collar's front down the chest; and an ankle hobble chain between the shackles, sagging
+  6 cm. Chains on the body take the skin weights under each link; the hobble chain blends from the left calf to the
+  right, so it stretches and swings between the ankles as they move. They are the last five rows of the Jewellery tab.
+- Generated pawns never wear jewellery or chains: `ASimPawnActor` hides every `Jewel_` section when it sets a MakeHuman
+  body, and only the creator shows the picked ones.
 
 **Animation:**
 - Breast jiggle slider: 0 is the old default; 1 is softer and bouncier, still damped.
