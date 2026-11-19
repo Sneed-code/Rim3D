@@ -300,6 +300,10 @@ bool FighterSystem::draft(Entity pawn, bool drafted, std::string& error) {
         error = "only the player's own pawns can be drafted";
         return false;
     }
+    if (drafted && reg.all_of<Slave>(pawn)) {
+        error = "a slave can't be drafted";
+        return false;
+    }
     Fighter* existing = reg.try_get<Fighter>(pawn);
     if (drafted) {
         if (existing != nullptr && !existing->drafted && existing->defending) {

@@ -860,6 +860,24 @@ const LevelLink* Map::levelLinkBetween(CellPos a, CellPos b) const {
 
 void Map::clearBuilding(CellPos c) {
     setBuilding(c, kNoEntity, Passage::Open, 0);
+    setFence(c, 0);
+}
+
+void Map::setFence(CellPos c, int kind) {
+    if (c.level != 0 || !inBounds(c)) {
+        return;
+    }
+    if (fence_.empty()) {
+        if (kind == 0) {
+            return;
+        }
+        fence_.assign(static_cast<size_t>(width_) * static_cast<size_t>(height_), 0);
+    }
+    uint8_t& slot = fence_[static_cast<size_t>(index(c))];
+    if (slot != static_cast<uint8_t>(kind)) {
+        slot = static_cast<uint8_t>(kind);
+        ++buildingChanges_;
+    }
 }
 
 void Map::setGroundHeight(CellPos c, float metres) {

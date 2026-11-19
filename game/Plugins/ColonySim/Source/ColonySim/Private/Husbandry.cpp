@@ -137,11 +137,15 @@ Husbandry::Husbandry(Things& things, const Map& map, AnimalSystem& animals, Heal
         rules_.trainables[static_cast<size_t>(t)].name = kHusbandryTrainableNames[t];
     }
 
+    bedMaxBody_.assign(defs.size(), -1.0f);
     kindOfDef_.assign(defs.size(), -1);
     nutrition_.assign(defs.size(), 0.0f);
     foodType_.assign(defs.size(), 0);
     for (const DefId id : defs.idsOfKind("Things")) {
         const Def& def = defs.get(id);
+        if (def.flag("building.animalBed")) {
+            bedMaxBody_[id.value] = static_cast<float>(def.number("building.maxBodySize", 0.0));
+        }
         if (def.text("category") == "Pawn" && def.text("race.intelligence") == "Animal") {
             Kind k;
             k.trainability = husbandryTrainabilityOf(def.text("race.trainability"));
@@ -540,7 +544,7 @@ AnimalZoneId Husbandry::createZone(const CellRect& area) {
     for (int y = area.minY; y < area.minY + area.sizeY; ++y) {
         for (int x = area.minX; x < area.minX + area.sizeX; ++x) {
             const CellPos c{x, y, 0};
-            if (area.level == 0 && map_.walkable(c) && zoneOf_[slot(c)] == kNoAnimalZone) {
+            if (area.level == 0 && map_.walkable(c) && !map_.isFence(c) && zoneOf_[slot(c)] == kNoAnimalZone) {
                 zone.cells.push_back(c);
             }
         }
@@ -647,8 +651,9 @@ bool Husbandry::isPen(AnimalZoneId id) const {
         for (const CellPos& c : zone->cells) {
             for (int d = 0; d < 4 && pen; ++d) {
                 const CellPos n{c.x + kDx[d], c.y + kDy[d], c.level};
-                // A way out: ground an animal can walk onto that is not in the zone and not a door (animals don't open doors).
-                if (map_.walkable(n) && !map_.isDoor(n) && zoneOf_[slot(n)] != id) {
+                // A way out: ground an animal can walk onto that is not in the zone and not a door or a fence (animals
+                // don't open doors or cross fences).
+                if (map_.walkable(n) && !map_.blocksAnimals(n) && zoneOf_[slot(n)] != id) {
                     pen = false;
                 }
             }
@@ -659,6 +664,106 @@ bool Husbandry::isPen(AnimalZoneId id) const {
     }
     penCache_.emplace_back(id, pen);
     return pen;
+}
+
+// ---- Animal beds ----------------------------------------------------------------------------
+
+bool Husbandry::anyAnimalBeds() const {
+    const entt::registry& reg = things_.registry();
+    for (const auto [bed, thing, footprint] : reg.view<const Thing, const Footprint>().each()) {
+        (void)footprint;
+        if (thing.def.valid() && thing.def.value < bedMaxBody_.size() && bedMaxBody_[thing.def.value] >= 0.0f && reg.all_of<Position>(bed)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+CellPos Husbandry::bedCell(Entity bed) const {
+    const entt::registry& reg = things_.registry();
+    const Footprint* footprint = reg.try_get<Footprint>(bed);
+    return footprint != nullptr ? footprint->origin : cellOf(reg.get<Position>(bed));
+}
+
+bool Husbandry::bedSuits(Entity animal, Entity bed) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(bed) || !reg.all_of<Thing, Footprint, Position>(bed) || !valid(animal)) {
+        return false;
+    }
+    const DefId def = reg.get<Thing>(bed).def;
+    if (!def.valid() || def.value >= bedMaxBody_.size() || bedMaxBody_[def.value] < 0.0f) {
+        return false;
+    }
+    const float maxBody = bedMaxBody_[def.value];
+    if (maxBody > 0.0f) {
+        const Kind* kind = kindOf(animal);
+        if (kind == nullptr || kind->bodySize > maxBody) {
+            return false;
+        }
+    }
+    const CellPos cell = bedCell(bed);
+    if (cell.level != 0 || !map_.walkable(cell)) {
+        return false;
+    }
+    const AnimalCare* c = care(animal);
+    if (c == nullptr) {
+        return false;
+    }
+    if (c->zone != kNoAnimalZone) {
+        return zoneAt(cell) == c->zone;
+    }
+    const Position& pos = reg.get<Position>(animal);
+    const float hx = c->hasHome ? static_cast<float>(c->home.x) + 0.5f : pos.x;
+    const float hy = c->hasHome ? static_cast<float>(c->home.y) + 0.5f : pos.y;
+    const float dx = static_cast<float>(cell.x) + 0.5f - hx;
+    const float dy = static_cast<float>(cell.y) + 0.5f - hy;
+    return dx * dx + dy * dy <= static_cast<float>(rules_.homeRadius * rules_.homeRadius);
+}
+
+Entity Husbandry::bedFor(Entity animal) {
+    AnimalCare* c = careFor(animal);
+    if (c == nullptr || !isTame(animal)) {
+        return kNoEntity;
+    }
+    if (c->bed != kNoEntity) {
+        if (bedSuits(animal, c->bed)) {
+            return c->bed;
+        }
+        c->bed = kNoEntity;
+    }
+    const entt::registry& reg = things_.registry();
+    const Position& pos = reg.get<Position>(animal);
+    Entity best = kNoEntity;
+    float bestD2 = 0.0f;
+    for (const auto [bed, thing, footprint] : reg.view<const Thing, const Footprint>().each()) {
+        (void)footprint;
+        if (!thing.def.valid() || thing.def.value >= bedMaxBody_.size() || bedMaxBody_[thing.def.value] < 0.0f || !bedSuits(animal, bed)) {
+            continue;
+        }
+        bool taken = false;
+        for (const auto [other, otherCare] : reg.view<const AnimalCare>().each()) {
+            if (other != animal && otherCare.bed == bed && reg.all_of<Animal>(other)) {
+                const Health* h = reg.try_get<Health>(other);
+                if (h == nullptr || !h->dead) {
+                    taken = true;
+                    break;
+                }
+            }
+        }
+        if (taken) {
+            continue;
+        }
+        const CellPos cell = bedCell(bed);
+        const float dx = static_cast<float>(cell.x) + 0.5f - pos.x;
+        const float dy = static_cast<float>(cell.y) + 0.5f - pos.y;
+        const float d2 = dx * dx + dy * dy;
+        if (best == kNoEntity || d2 < bestD2 || (d2 == bestD2 && entt::to_integral(bed) < entt::to_integral(best))) {
+            best = bed;
+            bestD2 = d2;
+        }
+    }
+    c->bed = best;
+    return best;
 }
 
 // ---- Work done by the jobs ------------------------------------------------------------------
@@ -710,6 +815,11 @@ bool Husbandry::finishTame(Entity handler, Entity animal, int skill) {
     }
     ++saved_.stats.tameFailed;
     emit(EventType::AnimalAttemptFailed, animal, handler, "tame", static_cast<float>(chance));
+    // Some animals attack the handler when a try fails (RimWorld's revenge chance on tame fail: wolves, bears, big cats).
+    const double revenge = defs_.get(things_.registry().get<Thing>(animal).def).number("race.revengeOnTameFail", 0.0);
+    if (revenge > 0.0 && static_cast<double>(rng.unit()) < revenge) {
+        animals_.enrage(animal, AnimalTemper::Revenge, handler);
+    }
     return false;
 }
 
@@ -918,6 +1028,9 @@ void Husbandry::hashThing(Entity e, StateHasher& h) const {
     for (const TrainingState& t : c->training) {
         h.add(static_cast<int>(t.steps));
         h.add(t.wanted);
+    }
+    if (c->bed != kNoEntity) {  // only once it has a bed, so older recordings hash as before
+        h.add(static_cast<uint32_t>(entt::to_integral(c->bed)));
     }
     h.add(c->path.slot);
     h.add(c->path.serial);
