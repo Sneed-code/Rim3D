@@ -2,6 +2,7 @@
 
 #include "ColonySim/Animals.h"
 #include "ColonySim/Apparel.h"
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Construction.h"
@@ -132,6 +133,11 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     num("rangeMargin", r.rangeMargin);
     num("walkStayBonus", r.walkStayBonus);
     num("focusMetres", r.focusMetres);
+    num("meleeThreatMetres", r.meleeThreatMetres);
+    num("backpedalRange", r.backpedalRange);
+    num("backpedalMetres", r.backpedalMetres);
+    whole("backpedalSteps", r.backpedalSteps);
+    r.backpedalSteps = std::max(1, r.backpedalSteps);
     num("ambushRange", r.ambushRange);
     num("helpRange", r.helpRange);
     num("fleeResponseSeconds", r.fleeResponseSeconds);
@@ -140,6 +146,40 @@ void fightReadRules(const DefDatabase& defs, FighterRules& r) {
     num("sprintChargeMin", r.sprintChargeMin);
     num("sprintChargeMax", r.sprintChargeMax);
     num("helpReach", r.helpReach);
+    // Team play (docs/design/team-play.md).
+    r.teamPlay = def->flag("teamPlay", r.teamPlay);
+    num("allyRadius", r.allyRadius);
+    num("aggressionColonists", r.aggressionColonists);
+    num("aggressionRaiders", r.aggressionRaiders);
+    num("aggressionVariety", r.aggressionVariety);
+    num("aggressionPerSkill", r.aggressionPerSkill);
+    if (def->has("aggressionTraits")) {
+        r.aggressionTraits.clear();
+        for (const std::string& trait : def->keys("aggressionTraits")) {
+            const std::string path = "aggressionTraits." + trait;
+            r.aggressionTraits.emplace_back(trait, static_cast<float>(def->number(path.c_str(), 0.0)));
+        }
+    }
+    whole("roleHoldSteps", r.roleHoldSteps);
+    num("suppressStayBonus", r.suppressStayBonus);
+    num("suppressNoShot", r.suppressNoShot);
+    whole("maxFlankers", r.maxFlankers);
+    num("flankWeight", r.flankWeight);
+    num("flankTravel", r.flankTravel);
+    num("flankDegrees", r.flankDegrees);
+    num("flankOtherSide", r.flankOtherSide);
+    num("flankExposeWeight", r.flankExposeWeight);
+    num("pushWeight", r.pushWeight);
+    num("pushExposed", r.pushExposed);
+    num("pushTooClose", r.pushTooClose);
+    whole("pushCooldownSteps", r.pushCooldownSteps);
+    num("suppressRadius", r.suppressRadius);
+    whole("suppressSteps", r.suppressSteps);
+    num("suppressedCover", r.suppressedCover);
+    whole("allyDownSteps", r.allyDownSteps);
+    whole("calloutEvery", r.calloutEvery);
+    num("calloutHearing", r.calloutHearing);
+    num("surroundMin", r.surroundMin);
     r.colonistsHoldForFriends = def->flag("profiles.colonists.holdsForFriends", r.colonistsHoldForFriends);
     r.raidersHoldForFriends = def->flag("profiles.raiders.holdsForFriends", r.raidersHoldForFriends);
     r.throwEvery = std::max(1, r.throwEvery);
@@ -494,6 +534,7 @@ void FighterSystem::step() {
     if (explosives_ != nullptr) {
         explosives_->dangers(blasts_);
     }
+    suppressionStep();  // team play: shots passing close keep heads down
 
     order_.clear();
     for (const Entity pawn : reg.view<Fighter>()) {
@@ -529,6 +570,10 @@ void FighterSystem::step() {
         if (f.mode == FightMode::Rescue) {
             rescueStep(pawn, f);
         }
+        // Hand to hand, a new enemy swinging at it is answered at once, not at the next plan (lock-on.md).
+        if (now() < f.nextPlan && f.mode == FightMode::Fight && attackedByOther(pawn, f)) {
+            f.nextPlan = now();
+        }
         if (now() >= f.nextPlan) {
             f.nextPlan = now() + rules_.planEvery;
             plan(pawn, f);
@@ -554,6 +599,44 @@ void FighterSystem::aiFocus(Entity pawn, const Fighter& f) {
     melee_->setAiFocus(pawn, keep ? f.target : kNoEntity);
 }
 
+// `enemy` is at `pawn` hand to hand: winding up a swing at it, or within its own reach of it while going for it.
+bool FighterSystem::threatensInMelee(Entity enemy, Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    if (melee_ == nullptr || !reg.valid(enemy)) {
+        return false;
+    }
+    const Melee* m = reg.try_get<Melee>(enemy);
+    if (m != nullptr && m->phase == MeleePhase::Windup && m->target == pawn) {
+        return true;
+    }
+    const Fighter* f = reg.try_get<Fighter>(enemy);
+    return f != nullptr && f->target == pawn && weaponRange(enemy) <= 0.0f && melee_->inReach(enemy, pawn);
+}
+
+// A fighter without a gun has an enemy other than its target winding up a swing at it, nearer than its target.
+bool FighterSystem::attackedByOther(Entity pawn, const Fighter& f) const {
+    if (melee_ == nullptr || weaponRange(pawn) > 0.0f) {
+        return false;
+    }
+    const entt::registry& reg = things_.registry();
+    const PawnInfo* self = info(pawn);
+    if (self == nullptr) {
+        return false;
+    }
+    const PawnInfo* target = info(f.target);
+    const float targetDist = target != nullptr ? fightDist(target->x, target->y, self->x, self->y) : 1e9f;
+    for (const PawnInfo& p : pawns_) {
+        if (p.pawn == pawn || p.pawn == f.target || p.faction == self->faction || !p.able || p.level != self->level) {
+            continue;
+        }
+        const Melee* m = reg.try_get<Melee>(p.pawn);
+        if (m != nullptr && m->phase == MeleePhase::Windup && m->target == pawn && fightDist(p.x, p.y, self->x, self->y) < targetDist) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool FighterSystem::sprinting(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     const Fighter* f = reg.valid(pawn) ? reg.try_get<Fighter>(pawn) : nullptr;
@@ -569,13 +652,19 @@ bool FighterSystem::sprinting(Entity pawn) const {
     if (f->fallingBack || panicked(pawn, *f)) {
         return !f->known.empty();
     }
+    // Pushing in on a hurt or quiet enemy (team play): it runs to its new spot.
+    if (f->role == TeamRole::Push && weaponRange(pawn) > 0.0f) {
+        return !f->known.empty();
+    }
     // Charging in to melee: no gun, after a target, not yet close.
     if (melee_ == nullptr || weaponRange(pawn) > 0.0f || !melee_->charges(pawn)) {
         return false;
     }
     const PawnInfo* self = info(pawn);
     const PawnInfo* target = info(f->target);
-    if (self == nullptr || target == nullptr || f->spot != cellOf(Position{target->x, target->y, target->level})) {
+    // Its spot is the target's cell, or one beside it (going round to the far side of a friend at it, team play).
+    if (self == nullptr || target == nullptr ||
+        fightDist(fightCentre(f->spot.x), fightCentre(f->spot.y), target->x, target->y) > 2.0f) {
         return false;
     }
     const float d = fightDist(target->x, target->y, self->x, self->y);
@@ -771,6 +860,7 @@ Entity FighterSystem::chooseTarget(Entity pawn, const Fighter& f, const PawnInfo
     const Raider* raider = reg.try_get<Raider>(pawn);
     const bool focuses = self.faction == kPlayerFaction;
     const float range = focuses ? weaponRange(pawn) : 0.0f;
+    const bool melee = melee_ != nullptr && weaponRange(pawn) <= 0.0f;
     const auto standsOn = [&](FactionId side) {
         return std::any_of(pawns_.begin(), pawns_.end(), [&](const PawnInfo& p) { return p.faction == side && p.able && !p.animal; });
     };
@@ -802,6 +892,11 @@ Entity FighterSystem::chooseTarget(Entity pawn, const Fighter& f, const PawnInfo
         float d = fightDist(k.x, k.y, self.x, self.y);
         if (focuses && p->able && range > 0.0f && d <= range) {
             d -= rules_.focusMetres * static_cast<float>(shootingAt(k.pawn));
+        }
+        // Hand to hand (sneed 2026-11-18, lock-on.md): a fighter without a gun doesn't let one enemy cut it down while it
+        // goes for another further off. One swinging at it, or within reach of it, comes first.
+        if (melee && p->able && threatensInMelee(k.pawn, pawn)) {
+            d -= rules_.meleeThreatMetres;
         }
         if (best == kNoEntity || rank < bestRank || (rank == bestRank && (d < bestDist || (d == bestDist && k.pawn < best)))) {
             best = k.pawn;
@@ -1079,7 +1174,8 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
     // bruised group of three against one doesn't back off, and the lone one backing off from them left a fight with
     // nobody coming on); one bleeding low still goes to patch.
     const bool overwhelming = static_cast<float>(friendsNear) >= rules_.outnumberedRatio * static_cast<float>(enemiesNear);
-    f.fallingBack = f.retreat || now() < f.cowerUntil ||
+    // Team play: friends dropping round it shake it (a bold one takes more of that), unless its side is overwhelming.
+    f.fallingBack = f.retreat || now() < f.cowerUntil || (enemiesNear > 0 && !overwhelming && shaken(f, pawn)) ||
                     (enemiesNear > 0 && (static_cast<float>(enemiesNear) >= rules_.outnumberedRatio * static_cast<float>(friendsNear) ||
                                          // Badly hurt, it backs off from enemies that press it, or to patch a bad bleed. When
                                          // every enemy near is backing off too there is nothing to back off from: two hurt
@@ -1089,6 +1185,8 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
     if (f.fallingBack && !scared && melee_ != nullptr && threatCount > 0 && threats[0].d <= melee_->reach(pawn) + melee_->rules().standGround) {
         f.fallingBack = false;
     }
+    // Team play: its part, from what the friends near it are doing (docs/design/team-play.md).
+    chooseRole(pawn, f, self, targetInfo, tx, ty, range);
 
     // Armed for melee, or a Brawler: it runs at its target instead of taking cover (F8). A drafted
     // one only as far as its leash allows, unless the player ordered the attack.
@@ -1114,11 +1212,13 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
     const bool disciplined =
         f.defending || (self.faction == kPlayerFaction ? rules_.colonistsHoldForFriends : rules_.raidersHoldForFriends);
     // A fighter fresh from a swing at the enemy follows it when it runs (sneed: "they move if enemies flee").
-    const bool lies = disciplined && f.forcedTarget != f.target && targetInfo != nullptr && targetInfo->able &&
+    // Pushing (team play), it doesn't wait: the target is hurt, backing off, quiet or a friend is at it.
+    const bool lies = disciplined && f.role != TeamRole::Push && f.forcedTarget != f.target && targetInfo != nullptr && targetInfo->able &&
                       !(melee_ != nullptr && f.target != kNoEntity && melee_->engagedRecently(pawn)) &&
                       fightDist(tx, ty, self.x, self.y) > rules_.ambushRange && (weaponRange(f.target) > 0.0f || !atFriend());
     if (melee_ != nullptr && targetInfo != nullptr && !f.fallingBack && !lies && melee_->charges(pawn)) {
-        const CellPos goal = cellOf(Position{tx, ty, targetInfo->level});
+        const CellPos targetCell = cellOf(Position{tx, ty, targetInfo->level});
+        const CellPos goal = chargeGoal(pawn, self, targetCell, tx, ty);  // round to the far side of a friend at it
         if (f.leash <= 0.0f || f.forcedTarget == f.target ||
             fightDist(fightCentre(goal.x), fightCentre(goal.y), fightCentre(f.anchor.x), fightCentre(f.anchor.y)) <=
                 f.leash + melee_->reach(pawn) + 1.0f) {
@@ -1191,6 +1291,10 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
         }
     }
 
+    // Team play: the part's own terms, and a fighter under close fire minds cover more (a bold one less).
+    const TeamTerms team = teamTerms(pawn, f, targetInfo, tx, ty);
+    const float headDown =
+        now() < f.suppressedUntil ? 1.0f + (rules_.suppressedCover - 1.0f) * (1.0f - aggression(pawn)) : 1.0f;
     candidates_.clear();
     for (int dy = -radius; dy <= radius; ++dy) {
         for (int dx = -radius; dx <= radius; ++dx) {
@@ -1235,7 +1339,7 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
                     }
                 }
                 // Falling back hurt, cover counts double: it gets out of the line of fire first, not just far away.
-                s += (f.fallingBack ? 2.0f : 1.0f) * rules_.coverWeight * covered / threatWeight;
+                s += (f.fallingBack ? 2.0f : 1.0f) * headDown * rules_.coverWeight * covered / threatWeight;
             }
             s -= rules_.travelWeight * fightDist(cx, cy, self.x, self.y);
             s -= rules_.crowdWeight * crowd;
@@ -1260,6 +1364,9 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
             }
             if (f.hasSpot && c == f.spot) {
                 s += rules_.stayBonus + (f.walk != 0 ? rules_.walkStayBonus : 0.0f);  // more once on its way there
+            }
+            if (team.role != TeamRole::None && range > 0.0f) {
+                s += teamScore(team, f, c, cx, cy);
             }
             cand.score = s;
             cand.fireCell = c;
@@ -1291,6 +1398,7 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
     const size_t refine = std::min(pool, static_cast<size_t>(rules_.refine));
     std::partial_sort(candidates_.begin(), candidates_.begin() + static_cast<std::ptrdiff_t>(refine), candidates_.end(),
                       [](const Candidate& a, const Candidate& b) { return fightBetter(a, b); });
+    const float exposedWeight = rules_.exposedWeight * (team.role == TeamRole::Push ? rules_.pushExposed : 1.0f);
     for (size_t i = 0; i < refine; ++i) {
         Candidate& cand = candidates_[i];
         if (threatCount > 0) {
@@ -1302,14 +1410,14 @@ void FighterSystem::plan(Entity pawn, Fighter& f) {
                     exposed += kFightThreatWeights[t];
                 }
             }
-            cand.score -= rules_.exposedWeight * exposed / threatWeight;
+            cand.score -= exposedWeight * exposed / threatWeight;
         }
         if (targetInfo != nullptr) {
             if (fireOption(pawn, cand.cell, *targetInfo, range, tx, ty, cand)) {
                 cand.score -= (cand.fireStance == Stance::Standing ? rules_.standPenalty : 0.0f) +
                               (cand.fireCell != cand.cell ? rules_.stepOutPenalty : 0.0f);
             } else {
-                cand.score -= f.fallingBack ? 1.0f : rules_.noShotWeight;
+                cand.score -= f.fallingBack ? 1.0f : rules_.noShotWeight + (team.role == TeamRole::Suppress ? rules_.suppressNoShot : 0.0f);
             }
         }
     }
@@ -1561,6 +1669,9 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
     if (meleeAct(pawn, f)) {
         return;  // swinging, or an enemy in reach to swing at (F8)
     }
+    if (backpedal(pawn, f)) {
+        return;  // backing off from one rushing in hand to hand, shooting as it goes
+    }
 
     // Walking to the spot: upright, not shooting.
     if (f.walk == 1) {
@@ -1649,6 +1760,62 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
     if (phase == ShotPhase::Ready) {
         tacticalReload(pawn, f, canShoot);
     }
+}
+
+// A gunman an enemy without a gun is rushing (sneed 2026-11-18, lock-on.md): between its shots it steps back away from
+// it, and fires at it from where it stands as soon as its gun is ready, instead of walking out to its firing cell. Close
+// enough to hit (switchMeleeRange) it takes up its melee weapon if it has one (chooseWeapon), and meleeAct fights.
+bool FighterSystem::backpedal(Entity pawn, Fighter& f) {
+    if (f.mode != FightMode::Fight || panicked(pawn, f) || weaponRange(pawn) <= 0.0f || combat_.rollLocked(pawn)) {
+        return false;
+    }
+    if (combat_.motion().moving(pawn)) {
+        return rules_.backpedalRange > 0.0f;  // a step under way: nothing else meanwhile
+    }
+    const PawnInfo* self = info(pawn);
+    if (self == nullptr) {
+        return false;
+    }
+    const PawnInfo* rusher = nullptr;
+    float nearest = rules_.backpedalRange;
+    for (const PawnInfo& p : pawns_) {
+        if (p.pawn == pawn || !p.able || p.turret || p.faction == self->faction || p.level != self->level ||
+            weaponRange(p.pawn) > 0.0f) {
+            continue;
+        }
+        const float d = fightDist(p.x, p.y, self->x, self->y);
+        if (d <= nearest && std::find_if(f.known.begin(), f.known.end(), [&](const KnownEnemy& k) { return k.pawn == p.pawn; }) != f.known.end()) {
+            nearest = d;
+            rusher = &p;
+        }
+    }
+    if (rusher == nullptr) {
+        return false;
+    }
+    if (combat_.shotReadyIn(pawn) <= 0 && now() >= f.reactUntil) {
+        combat_.setStance(pawn, Stance::Standing);
+        const Position& pos = things_.registry().get<Position>(pawn);
+        const Viewpoint eye{pos.x, pos.y, pos.level, Stance::Standing};
+        if (map_.cover().lineOfSight(eye, Viewpoint{rusher->x, rusher->y, rusher->level, rusher->stance}) &&
+            !friendInLine(pawn, pos.x, pos.y, pos.level, Stance::Standing, *rusher) && fireAt(pawn, *rusher)) {
+            return true;
+        }
+        return false;
+    }
+    float dx = self->x - rusher->x;
+    float dy = self->y - rusher->y;
+    const float len = std::sqrt(dx * dx + dy * dy);
+    if (len < 1e-4f) {
+        return false;
+    }
+    dx /= len;
+    dy /= len;
+    if (!combat_.motion().push(pawn, dx, dy, rules_.backpedalMetres, rules_.backpedalSteps)) {
+        return false;
+    }
+    combat_.setStance(pawn, Stance::Standing);
+    f.nextPlan = std::max(f.nextPlan, now() + rules_.backpedalSteps);  // thinks again once it has stepped
+    return true;
 }
 
 bool FighterSystem::shootsTurrets(Entity pawn) const {
@@ -2287,6 +2454,19 @@ void FighterSystem::hashThing(Entity e, StateHasher& h) const {
             h.add(f->suspectY);
             h.add(entt::to_integral(f->suspect));
             h.add(f->suspectAt);
+        }
+        // Team play: likewise only away from a new fighter's values.
+        if (f->role != TeamRole::None || f->roleSince != 0 || f->flankSide != 0 || f->lastCall != Callout::None ||
+            f->calloutAt != 0 || f->alliesDown != 0 || f->allyDownAt != 0 || f->suppressedUntil != 0) {
+            h.add(uint64_t{0x7EA3});
+            h.add(static_cast<int>(f->role));
+            h.add(f->roleSince);
+            h.add(static_cast<int>(f->flankSide));
+            h.add(static_cast<int>(f->lastCall));
+            h.add(f->calloutAt);
+            h.add(static_cast<int>(f->alliesDown));
+            h.add(f->allyDownAt);
+            h.add(f->suppressedUntil);
         }
     }
 }

@@ -562,6 +562,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
                                            splitMix64(settings.seed ^ 0x6D656C6565ULL));
     melee_->setEventLog(&events_);
     fighters_->setMelee(melee_.get());
+    fighters_->setSeed(splitMix64(settings.seed ^ 0x7EA3ULL));  // each fighter's temper (team play)
     upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_, plants_.get());
     areas_ = std::make_unique<Areas>();
     jobs_->setAreas(areas_.get());
@@ -1717,9 +1718,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "that pawn isn't under direct control");
         } else if (health_->incapacitated(move->pawn)) {
             commandFailed(id, "that colonist is downed or dead");
-        } else if (combat_->rollLocked(move->pawn) || reg.any_of<Stunned, Casting, BodyMotion>(move->pawn)) {
-            // Rolling (P2), stunned or winding up a power (X2): the player's position is ignored, without a failure
-            // because Unreal sends one every step.
+        } else if (combat_->rollLocked(move->pawn) || reg.any_of<Stunned, Casting>(move->pawn) || combat_->motion().holdsBody(move->pawn)) {
+            // Rolling (P2), stunned, winding up a power (X2) or carried by a clip (a stagger): the player's position is
+            // ignored, without a failure because Unreal sends one every step. The player's own swings leave the feet
+            // free (BodyMotion::freeFeet): walking goes on while the arms swing.
         } else if (jobs_->sleepingByHand(move->pawn)) {
             // Asleep (SleepCommand): lying still until morning or SleepCommand{wake}; the same, no failure.
         } else if (reg.get<Mover>(move->pawn).climbing(reg.get<Position>(move->pawn).level)) {
@@ -1734,13 +1736,16 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                 dx *= kDirectMaxStep / length;
                 dy *= kDirectMaxStep / length;
             }
+            melee_->orbitMove(move->pawn, dx, dy);  // locked on with melee: sideways walks round the target (lock-on.md)
             // The whole move, or sliding along one axis (a wall), or staying where it is.
             const float tries[3][2] = {{dx, dy}, {dx, 0.0f}, {0.0f, dy}};
             float moveX = 0.0f;
             float moveY = 0.0f;
             for (const auto& t : tries) {
                 // The player's body may swim out into deep water (docs/design/water.md).
-                if ((t[0] != 0.0f || t[1] != 0.0f) && swimmerFitsAt(map_, pos.x + t[0], pos.y + t[1], kPawnRadius, pos.level)) {
+                // Other standing bodies stop it too (sneed 2026-11-18): it slides round them, never through.
+                if ((t[0] != 0.0f || t[1] != 0.0f) && swimmerFitsAt(map_, pos.x + t[0], pos.y + t[1], kPawnRadius, pos.level) &&
+                    combat_->motion().bodiesClear(move->pawn, pos.x, pos.y, pos.x + t[0], pos.y + t[1], pos.level)) {
                     moveX = t[0];
                     moveY = t[1];
                     break;
@@ -2312,6 +2317,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
     { SimLap lap(profile_, "explosives"); explosives_->step(rng_); }
     animals_->scare(events_, eventsBefore);  // shots and blows this step frighten the animals near them (N5)
     fighters_->hear(events_, eventsBefore);  // and fighters in earshot hear them (stealth.md)
+    fighters_->noteLosses(events_, eventsBefore);  // friends going down shake those near (team-play.md)
     { SimLap lap(profile_, "defense"); defense_->step(rng_); }
     { SimLap lap(profile_, "artillery"); artillery_->step(rng_); }
     raids_->takeFire();  // colonists hurt this step take cover or run (real-time-combat.md phase 3)
@@ -2820,6 +2826,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 view.motionTime = motion->clip.valid() ? motion->time : 0.0f;
                 view.motionRate = motion->rate;
                 view.motionPush = !motion->clip.valid();
+                view.motionUpper = motion->upper;
+                view.motionFreeFeet = motion->freeFeet;
             }
             view.grenades = explosives_->count(entity);
             view.throwReadyIn = explosives_->throwReadyIn(entity);
