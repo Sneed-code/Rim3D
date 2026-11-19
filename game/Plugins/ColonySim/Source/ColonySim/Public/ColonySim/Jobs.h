@@ -475,6 +475,8 @@ public:
     Map& map() { return map_; }
     Zones& zones() { return zones_; }
     Construction& construction() { return construction_; }
+    // True if pawns may dig or fill this corner now: no building plan and no tree on the cells round it.
+    bool earthCornerFree(int corner) const;
     Plants& plants() { return plants_; }
     Mineables& mineables() { return mineables_; }
     Designations& designations() { return designations_; }
@@ -804,6 +806,12 @@ private:
     bool failCheckRefuel(Entity pawn, Job& job, std::string& why);
     StepResult loadPodWork(Entity pawn, Job& job, std::string& why);
     bool failCheckLoadPod(Entity pawn, Job& job, std::string& why);
+    // Earthworks (EarthJobs.cpp, docs/design/earthworks.md).
+    StepResult earthWork(Entity pawn, Job& job, std::string& why);
+    bool failCheckEarth(Entity pawn, Job& job, std::string& why);
+    void earthMoved(int corner, bool clearAll);
+    void markEarthTrees();
+    uint64_t earthMarked_ = 0;
     // RepairGear (GearJobs.cpp, docs/design/repair.md): carry the gear to a bench, mend it or fit a part.
     StepResult gearWork(Entity pawn, Job& job, std::string& why);
     bool failCheckGear(Entity pawn, Job& job, std::string& why);
@@ -990,6 +998,7 @@ void addPrisonerWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
 void addHuntWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
 // The scanner that carries stacks into transport pods being loaded (PodJobs.cpp).
 void addPodWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
+void addEarthWorkGivers(std::vector<std::unique_ptr<WorkGiver>>& givers);
 // A butcher bill's job: the nearest corpse the bill may use (within its radius), carried to the table's `stand` cell. False if there is none.
 bool makeButcherJob(JobSystem& jobs, Entity pawn, Entity building, const Bill& bill, CellPos stand, Job& out);
 // Haul jobs, shared by the hauling scanner and the haul order: the job to store `item`, or false.

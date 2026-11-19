@@ -18,6 +18,7 @@
 #include "ColonySim/Fuel.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/MentalBreaks.h"
 #include "ColonySim/Caravans.h"
 #include "ColonySim/Movement.h"
@@ -99,7 +100,8 @@ enum class JobStepKind : uint8_t {
     WarmWait,       // stay put in a warm room until the cold has let go (NeedJobs.cpp)
     ManWork,        // stand beside the gun while it is manned (ArtilleryJobs.cpp)
     LoadPodWork,    // put the carried stack into the pod (PodJobs.cpp)
-    RemoveFloorWork  // take the floor on the job's cell up (GatherJobs.cpp)
+    RemoveFloorWork,  // take the floor on the job's cell up (GatherJobs.cpp)
+    EarthWork         // dig or fill the job's cell (EarthJobs.cpp)
 };
 
 constexpr JobStepKind kJobsWaitSteps[] = {JobStepKind::Wait};
@@ -114,6 +116,7 @@ constexpr JobStepKind kJobsShelterSteps[] = {JobStepKind::GotoCell, JobStepKind:
 constexpr JobStepKind kJobsMineSteps[] = {JobStepKind::GotoTouch, JobStepKind::MineWork};
 constexpr JobStepKind kJobsPlantSteps[] = {JobStepKind::GotoTouch, JobStepKind::PlantWork};
 constexpr JobStepKind kJobsRemoveFloorSteps[] = {JobStepKind::GotoTouch, JobStepKind::RemoveFloorWork};
+constexpr JobStepKind kJobsEarthworksSteps[] = {JobStepKind::GotoTouch, JobStepKind::EarthWork};
 constexpr JobStepKind kJobsCleanSteps[] = {JobStepKind::GotoCell, JobStepKind::CleanWork};
 constexpr uint8_t kJobsHaulPickUpStep = 1;
 constexpr uint8_t kJobsHaulCarryStep = 2;
@@ -204,6 +207,7 @@ JobsSteps jobsStepsOf(JobType type) {
         case JobType::Deconstruct: return {kJobsDeconstructSteps, static_cast<int>(std::size(kJobsDeconstructSteps))};
         case JobType::Mine: return {kJobsMineSteps, static_cast<int>(std::size(kJobsMineSteps))};
         case JobType::RemoveFloor: return {kJobsRemoveFloorSteps, static_cast<int>(std::size(kJobsRemoveFloorSteps))};
+        case JobType::Earthworks: return {kJobsEarthworksSteps, static_cast<int>(std::size(kJobsEarthworksSteps))};
         case JobType::CutPlant:
         case JobType::SowCrop:
         case JobType::HarvestPlant: return {kJobsPlantSteps, static_cast<int>(std::size(kJobsPlantSteps))};
@@ -257,6 +261,7 @@ bool jobHoldsStill(const Job& job) {
         case JobStepKind::DeconstructWork:
         case JobStepKind::MineWork:
         case JobStepKind::RemoveFloorWork:
+        case JobStepKind::EarthWork:
         case JobStepKind::PlantWork:
         case JobStepKind::BillWork:
         case JobStepKind::ResearchWork:
@@ -323,6 +328,7 @@ const char* jobTypeName(JobType type) {
         case JobType::Deconstruct: return "Deconstruct";
         case JobType::Mine: return "Mine";
         case JobType::RemoveFloor: return "RemoveFloor";
+        case JobType::Earthworks: return "Earthworks";
         case JobType::CutPlant: return "CutPlant";
         case JobType::HarvestPlant: return "HarvestPlant";
         case JobType::DoBill: return "DoBill";
@@ -595,6 +601,7 @@ int JobSystem::reservationsOf(const Job& job, TargetKey out[kMaxReservations]) {
         case JobType::CutPlant:
         case JobType::HarvestPlant:
         case JobType::RemoveFloor:
+        case JobType::Earthworks:
         case JobType::SowCrop:
         case JobType::CleanFilth:
             out[0] = keyOf(JobTarget{kNoEntity, job.cell});
@@ -1105,6 +1112,7 @@ void JobSystem::step() {
         order_.push_back(pawn);
     }
     std::sort(order_.begin(), order_.end());
+    markEarthTrees();  // trees in the way of earthworks are marked to be cut (EarthJobs.cpp)
 
     // The think list, in order. Later tasks put theirs in place: emergencies first (downed, on
     // fire: F1 and later), then the defense plan (F6), urgent needs and the schedule (C6), work
@@ -1417,6 +1425,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
     if (job.type == JobType::LoadPod) {
         return failCheckLoadPod(pawn, job, why);
     }
+    if (job.type == JobType::Earthworks) {
+        return failCheckEarth(pawn, job, why);
+    }
     if (job.type == JobType::RepairGear || job.type == JobType::MendWorn) {
         return failCheckGear(pawn, job, why);
     }
@@ -1564,6 +1575,8 @@ JobSystem::StepResult JobSystem::runStep(Entity pawn, Job& job, std::string& why
             return mineRock(pawn, job, why);
         case JobStepKind::RemoveFloorWork:
             return removeFloorWork(pawn, job, why);
+        case JobStepKind::EarthWork:
+            return earthWork(pawn, job, why);
         case JobStepKind::PlantWork:
             return plantWork(pawn, job, why);
         case JobStepKind::DepositIngredient:
@@ -1831,6 +1844,33 @@ JobSystem::StepResult JobSystem::buildWork(Entity pawn, Job& job, std::string& w
     ConstructionSite& site = reg.get<ConstructionSite>(job.thing);
     const bool art = construction_.isArt(reg.get<Thing>(job.thing).def);
     const char* skillName = art ? "Artistic" : "Construction";
+    // First the earthworks under the footprint, planned with it and dug only now (docs/design/earthworks.md).
+    if (const CellRect rect = site.rect(); rect.level == 0 && map_.earthUnits(rect) > 0) {
+        job.progress += constructionSpeed(pawn, "Construction") * static_cast<float>(construction_.numbers().buildWorkPerSecond);
+        learnSkill(pawn, "Construction", gather_.constructionXpPerSecond * gather_.constructionSpeed);
+        const float perUnit = static_cast<float>(std::max(construction_.numbers().earthWorkPerUnit, 1.0));
+        while (job.progress >= perUnit) {
+            job.progress -= perUnit;
+            int corner = -1;
+            for (int y = rect.minY; y < rect.minY + rect.sizeY && corner < 0; ++y) {
+                for (int x = rect.minX; x < rect.minX + rect.sizeX && corner < 0; ++x) {
+                    const CellPos c{x, y, 0};
+                    if (plants_.has(c)) {
+                        plants_.remove(c);  // whatever grew on the footprint goes with the first spadeful
+                    }
+                    corner = map_.digEarth(c);
+                }
+            }
+            if (corner < 0) {
+                break;
+            }
+            earthMoved(corner, false);
+        }
+        if (map_.earthUnits(rect) > 0) {
+            return StepResult::Running;
+        }
+        job.progress = 0.0f;
+    }
     site.workDone += constructionSpeed(pawn, skillName) * static_cast<float>(construction_.numbers().buildWorkPerSecond);
     learnSkill(pawn, skillName, gather_.constructionXpPerSecond * gather_.constructionSpeed);
     if (site.workDone < site.workTotal) {

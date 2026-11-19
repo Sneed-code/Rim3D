@@ -58,7 +58,10 @@ TEST_CASE("PerfColony: 30 colonists, 300 tame animals, plans that the sim takes"
     sim->step();
     int failed = 0;
     for (const Event& e : sim->events()) {
-        failed += e.type == EventType::CommandFailed ? 1 : 0;
+        if (e.type == EventType::CommandFailed) {
+            MESSAGE("refused: " << e.message);
+            ++failed;
+        }
     }
     CHECK(failed == 0);
     feedPerfColonyAnimals(*sim);  // nothing to check but that it runs on a live colony

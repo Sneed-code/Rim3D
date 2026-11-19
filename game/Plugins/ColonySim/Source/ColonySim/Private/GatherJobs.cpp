@@ -202,6 +202,7 @@ std::string JobSystem::activeSkill(Entity pawn) const {
             return reg.valid(job.thing) && construction_.isArt(reg.get<Thing>(job.thing).def) ? "Artistic" : "Construction";
         case JobType::Deconstruct:
         case JobType::RemoveFloor:
+        case JobType::Earthworks:
             return "Construction";
         case JobType::DoBill: {
             const Bill* bill = bills_->find(job.site, job.bill);

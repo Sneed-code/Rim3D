@@ -1183,6 +1183,26 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         return;
     }
     // Apart from the chain below: MSVC stops at 128 nested else-ifs (C1061).
+    if (const auto* levelEarth = std::get_if<LevelEarthCommand>(&command)) {
+        const float base = std::round(static_cast<float>(levelEarth->baseCm) / 100.0f / Map::kLevelStepM) * Map::kLevelStepM;
+        if (construction_->planLevelEarth(levelEarth->area, base) == 0) {
+            commandFailed(id, "no ground there can be levelled to that height");
+        }
+        return;
+    }
+    if (const auto* cancelEarth = std::get_if<CancelEarthworksCommand>(&command)) {
+        if (construction_->cancelEarthworks(cancelEarth->area) == 0) {
+            commandFailed(id, "no earthworks planned there");
+        }
+        return;
+    }
+    if (const auto* unstuck = std::get_if<UnstuckCommand>(&command)) {
+        std::string why;
+        if (!unstuckPawn(unstuck->pawn, why)) {
+            commandFailed(id, why);
+        }
+        return;
+    }
     if (const auto* pod = std::get_if<PodCommand>(&command)) {
         applyPodCommand(*pod, id);
         return;
@@ -3476,6 +3496,9 @@ uint64_t Sim::stateHash() const {
             h.add(static_cast<uint64_t>(mover->ghostSteps));
             h.add(static_cast<uint64_t>(mover->heldSteps));
             h.add(mover->gaveUp);
+            if (mover->phaseSteps != 0) {
+                h.add(static_cast<uint64_t>(mover->phaseSteps + 0x57C0000U));  // only while phasing, so older hashes stay
+            }
             if (mover->climbed != 0.0f) {
                 h.add(mover->climbed);  // M2; only when climbing, so older hashes stay
             }
@@ -3810,6 +3833,61 @@ void Sim::applyScannerCommand(const ScannerCommand& command, uint64_t id) {
 // How fast the pawn walks, as a share of its def's speed: its load, the moveSpeed talents, a bullet stagger, what it
 // wears and hunger (a starving pawn walks at 75%, needs.md "Starving"). The movement system and the snapshot (for the
 // player's own walk in direct mode) both use it.
+bool Sim::unstuckPawn(Entity pawn, std::string& error) {
+    entt::registry& reg = things_->registry();
+    if (!things_->exists(pawn) || !reg.all_of<Position, Mover>(pawn)) {
+        error = "that pawn can't be moved";
+        return false;
+    }
+    Position& pos = reg.get<Position>(pawn);
+    const int level = pos.level;
+    const int px = static_cast<int>(std::floor(pos.x));
+    const int py = static_cast<int>(std::floor(pos.y));
+    // Clear: walkable, the pawn fits at its middle, no deep water, and at least three of the eight cells round it
+    // walkable too (so not a pocket between walls). Rings outwards, row order within a ring, so it is always the same.
+    const auto clear = [&](CellPos c) {
+        if (!map_.inBounds(c) || !map_.walkable(c) || !pawnFitsAt(map_, static_cast<float>(c.x) + 0.5f, static_cast<float>(c.y) + 0.5f, kPawnRadius, c.level) ||
+            waterContactAt(map_, static_cast<float>(c.x) + 0.5f, static_cast<float>(c.y) + 0.5f, c.level, bodyHeightM(pawn)).swimming()) {
+            return false;
+        }
+        int open = 0;
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const CellPos n{c.x + dx, c.y + dy, c.level};
+                open += (dx != 0 || dy != 0) && map_.inBounds(n) && map_.walkable(n) ? 1 : 0;
+            }
+        }
+        return open >= 3;
+    };
+    constexpr int kUnstuckReach = 12;
+    for (int ring = 0; ring <= kUnstuckReach; ++ring) {
+        for (int y = py - ring; y <= py + ring; ++y) {
+            for (int x = px - ring; x <= px + ring; ++x) {
+                if (std::max(std::abs(x - px), std::abs(y - py)) != ring || !clear(CellPos{x, y, level})) {
+                    continue;
+                }
+                pos.x = static_cast<float>(x) + 0.5f;
+                pos.y = static_cast<float>(y) + 0.5f;
+                Mover& mover = reg.get<Mover>(pawn);
+                mover.path.clear();
+                mover.next = 0;
+                mover.vx = 0.0f;
+                mover.vy = 0.0f;
+                mover.fromX = pos.x;
+                mover.fromY = pos.y;
+                mover.blockedSteps = 0;
+                mover.heldSteps = 0;
+                mover.ghostSteps = 0;
+                mover.stuckSteps = 0;
+                mover.phaseSteps = 0;
+                return true;
+            }
+        }
+    }
+    error = "no clear spot nearby";
+    return false;
+}
+
 bool Sim::pawnSwimming(Entity pawn) const {
     const entt::registry& reg = things_->registry();
     const Position* pos = reg.valid(pawn) ? reg.try_get<Position>(pawn) : nullptr;

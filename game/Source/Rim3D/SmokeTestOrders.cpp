@@ -245,6 +245,22 @@ void USmokeTestSubsystem::BuildOrdersPhases()
 				SimOf()->plants().remove(At(X, Y));
 			}
 		}
+		// Plan the site flat first (docs/design/earthworks.md): furniture is refused on ground that rises more than 25 cm
+		// unless its cells are all planned to one height.
+		{
+			const colony::Map& Map = SimOf()->map();
+			float Sum = 0.0f;
+			int32 Corners = 0;
+			for (int32 Y = 0; Y <= SiteH; ++Y)
+			{
+				for (int32 X = 0; X <= SiteW; ++X)
+				{
+					Sum += Map.groundHeight(State->Site.x + X, State->Site.y + Y);
+					++Corners;
+				}
+			}
+			Bridge()->Submit(colony::LevelEarthCommand{colony::CellRect{State->Site.x, State->Site.y, SiteW, SiteH, 0}, FMath::RoundToInt32(Sum / Corners * 100.0f)});
+		}
 		Aim(At(SiteW / 2, SiteH / 2), 2.0f);
 	};
 	Setup.Verify = [=, this]()

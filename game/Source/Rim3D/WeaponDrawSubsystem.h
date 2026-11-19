@@ -69,6 +69,8 @@ public:
 	void ScriptRightMouse(bool bScripted, bool bHeld) { bScriptedRight = bScripted; bScriptRightHeld = bHeld; }
 	/** Whether this pawn's view has a shield on its arm (worn, not slung behind a two-handed weapon). */
 	static bool HasShieldOnArm(const colony::ThingView& View);
+	/** Each material slot of a model: material, parent, base colour map and factor, metallic and roughness (for the logs and tests). */
+	static FString DescribeMaterials(const UStaticMesh* Mesh);
 	/** Q: starts bringing up the next carried weapon. False if there is nothing else to take. */
 	bool SwitchNext();
 	/** Starts switching to the weapon in this slot (0 rifle, 1 sidearm, 2 melee). */

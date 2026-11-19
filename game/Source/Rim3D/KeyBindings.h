@@ -46,6 +46,7 @@ enum class ERim3DAction : uint8
 	FreeHandReachOut,
 	FreeHandReachIn,
 	Patch,           // patch a bleeding wound (body health part B)
+	Unstuck,         // F12: after 5 s standing still, moved to the nearest clear spot (docs/design/earthworks.md)
 	Count
 };
 
