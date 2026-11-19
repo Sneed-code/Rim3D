@@ -4,6 +4,7 @@
 #include "ColonySim/Clock.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
+#include "ColonySim/Windows.h"
 
 #include <cstdint>
 #include <functional>
@@ -24,7 +25,7 @@ class Weather;
 // lamps'. The sun lights every cell with no roof (thin or thick) by the time of day (`LightRules`
 // `skyGlowByHour`). A building with `glower` (`radius` in metres, optional `glow` 0 to 1, default 1) lights the cells
 // round it, falling off in a straight line to 0 at the radius and stopped by tall things (walls, rock)
-// in the way. The lamp layer is rebuilt when a building or a roof changes; it is derived, not saved
+// in the way. A window in a wall lets the sky's light into the roofed room behind it (windows.md). The lamp layer is rebuilt when a building or a roof changes; it is derived, not saved
 // and not in the state hash. Dark cells slow work and walking (`workSpeedByGlow`, `moveSpeedByGlow`).
 struct COLONY_API LightNumbers {
     // Pairs (x, factor) of a curve, x ascending; the factor is held flat outside the ends.
@@ -79,6 +80,9 @@ public:
     float lightAt(CellPos c) const;
     // Only the lamps' share, and whether the sun reaches the cell.
     float lampLightAt(CellPos c) const;
+    // The share of the sky's light a roofed cell gets through windows (docs/design/windows.md), 0 to 1: the
+    // light there is this times the sky's glow now. 0 under open sky and for cells no window reaches.
+    float windowShareAt(CellPos c) const;
     bool underOpenSky(CellPos c) const;
 
     // Work speed and walking speed factors in a cell's light.
@@ -92,6 +96,7 @@ public:
 private:
     void rebuild();
     bool blocked(int x0, int y0, int x1, int y1) const;
+    void lightThroughWindows();
 
     Map& map_;
     Things& things_;
@@ -104,6 +109,9 @@ private:
     std::vector<uint8_t> lightDef_;  // per def id: 1 if it has glower
     std::vector<float> lamp_;        // per cell
     std::vector<int> touched_;       // cells lamp_ is non-zero in, to clear
+    WindowNumbers windowNumbers_;
+    std::vector<float> window_;        // per cell: share of the sky let in by windows
+    std::vector<int> windowTouched_;   // cells window_ is non-zero in, to clear
     std::vector<LightSource> sources_;
     bool built_ = false;
     bool dirty_ = false;

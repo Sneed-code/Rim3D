@@ -225,6 +225,8 @@ public:
     // Counts up every time a building is set or cleared in any cell, so a system that reads the
     // building layer can tell its picture is stale (Rooms).
     uint64_t buildingChanges() const { return buildingChanges_; }
+    // Counts a change to a building that keeps its cells (a window cut in a wall): the light is worked out again.
+    void noteBuildingChange() { ++buildingChanges_; }
 
     // Steam geysers (ground level): a geothermal generator over one makes power (docs/design/power.md).
     // Map generation (S8) places them from the seed; they are not saved, so whoever places them must do

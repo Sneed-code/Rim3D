@@ -188,6 +188,11 @@ it, and takes an extra shot, `walls`, of the sample at noon. Spawned buildings h
 Cost: none worth measuring at the bench (the same instanced meshes, a few more triangles a wall); the bench's frame times
 did not move.
 
+**Windows** ([windows.md](windows.md)): a linked wall with a window is cut at the sill and the lintel with an opening, a frame
+and a glass pane between (`BldWindowParts`); the pane is its own mesh in `M_WindowGlass` (made by the `BuildingMaterials`
+commandlet with the ghost) and casts no shadow. The window (none, glass, broken) is part of the look's key and the chunk's
+signature, so breaking a pane rebuilds one chunk.
+
 ## Not here yet
 
 - Floors, damage and fire, minified furniture.
