@@ -1315,6 +1315,7 @@ std::vector<std::unique_ptr<WorkGiver>> makeWorkGivers() {
     addPrisonerWorkGivers(givers);
     givers.push_back(std::make_unique<RefuelGiver>());
     addPodWorkGivers(givers);
+    addEarthWorkGivers(givers);
     givers.push_back(std::make_unique<RepairGearGiver>("RepairWeapons", "Weapons"));
     givers.push_back(std::make_unique<RepairGearGiver>("RepairApparel", "Apparel"));
     return givers;

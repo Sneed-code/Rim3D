@@ -215,6 +215,21 @@ void Things::placeFootprint(Entity thing, const CellRect& rect, const Footprint&
     }
 }
 
+GroundFit groundFitOf(const Def& d) {
+    const std::string fit = d.text("building.groundFit");
+    if (fit == "Conform") {
+        return GroundFit::Conform;
+    }
+    if (fit == "Flat") {
+        return GroundFit::Flat;
+    }
+    if (fit == "Level") {
+        return GroundFit::Level;
+    }
+    const std::string category = d.text("designationCategory");
+    return category.empty() || category == "Structure" ? GroundFit::Level : GroundFit::Flat;
+}
+
 bool Things::standsOnFlowingWater(Entity thing) const {
     const Thing* t = registry_.try_get<Thing>(thing);
     return t != nullptr && t->def.valid() && defs_->get(t->def).flag("building.onFlowingWater");
@@ -251,7 +266,9 @@ bool Things::spawnAt(Entity thing, CellPos cell, Rot4 rot) {
     footprint->origin = cell;
     footprint->rotation = rot;
     linkLevels(thing);
-    if (!onWater) {
+    const Thing* built = registry_.try_get<Thing>(thing);
+    const bool conform = built != nullptr && built->def.valid() && groundFitOf(defs_->get(built->def)) == GroundFit::Conform;
+    if (!onWater && !conform) {
         map_.levelGround(rect);  // a building stands on level ground (docs/design/levelling.md); nothing upstairs
     }
     registry_.emplace<Position>(thing, Position{static_cast<float>(rect.minX) + 0.5f * static_cast<float>(rect.sizeX),

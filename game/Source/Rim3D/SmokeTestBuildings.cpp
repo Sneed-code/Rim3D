@@ -204,9 +204,12 @@ void USmokeTestSubsystem::BuildBuildingsPhases()
 	const auto CountBuilt = [=, this]() -> int32
 	{
 		int32 Built = 0;
+		// Only the room's: the start may have buildings of its own.
+		const colony::CellPos R = State->Room;
 		for (const colony::ThingView& View : Bridge()->GetCurrentSnapshot().things)
 		{
-			Built += View.category == colony::ThingCategory::Building && View.stage == colony::ConstructionStage::Built ? 1 : 0;
+			const bool bInRoom = View.x >= R.x && View.y >= R.y && View.x < R.x + RoomW && View.y < R.y + RoomH;
+			Built += bInRoom && View.category == colony::ThingCategory::Building && View.stage == colony::ConstructionStage::Built ? 1 : 0;
 		}
 		return Built;
 	};
@@ -354,6 +357,21 @@ void USmokeTestSubsystem::BuildBuildingsPhases()
 		State->bRoomFound = true;
 		State->Room.x += 1;
 		State->Room.y += 1;
+		// Plan the room's ground flat first (docs/design/earthworks.md), so the bed, table and stove are not refused as too steep.
+		{
+			const colony::Map& Map = Sim->map();
+			float Sum = 0.0f;
+			int32 Corners = 0;
+			for (int32 Y = 0; Y <= RoomH; ++Y)
+			{
+				for (int32 X = 0; X <= RoomW; ++X)
+				{
+					Sum += Map.groundHeight(State->Room.x + X, State->Room.y + Y);
+					++Corners;
+				}
+			}
+			B->Submit(colony::LevelEarthCommand{colony::CellRect{State->Room.x, State->Room.y, RoomW, RoomH, 0}, FMath::RoundToInt32(Sum / Corners * 100.0f)});
+		}
 		const auto Place = [&](const char* Def, const char* Stuff, int32 DX, int32 DY)
 		{
 			B->Submit(colony::PlaceBlueprintCommand{Def, Stuff, Cell(DX, DY), colony::Rot4::North});

@@ -48,6 +48,7 @@ namespace
 			{ERim3DAction::FocusNextTarget, TEXT("FocusNextTarget"), TEXT("Focus the next enemy"), TEXT("Fighting"), EKeys::Tab},
 			{ERim3DAction::EndFocus, TEXT("EndFocus"), TEXT("Lock on / let go"), TEXT("Fighting"), EKeys::MiddleMouseButton},
 			{ERim3DAction::SleepHere, TEXT("SleepHere"), TEXT("Sleep here"), TEXT("Other"), EKeys::N},
+			{ERim3DAction::Unstuck, TEXT("Unstuck"), TEXT("Unstuck (stand still 5 s)"), TEXT("Other"), EKeys::F12},
 			{ERim3DAction::Inventory, TEXT("Inventory"), TEXT("Inventory"), TEXT("Other"), EKeys::I},
 			{ERim3DAction::BuildMode, TEXT("BuildMode"), TEXT("Build"), TEXT("Other"), EKeys::B},
 			{ERim3DAction::ToggleView, TEXT("ToggleView"), TEXT("First / third person"), TEXT("View"), EKeys::V},
