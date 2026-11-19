@@ -130,8 +130,9 @@ is drawn and stands the right way up (thin along x, about 60 x 75 cm for the med
 
 - A proper raised-shield animation for the body (now the procedural block lean); shields sized to the wielder (thread
   "Scale weapons and gear to wielder size"). The plasteel and composite models could use a pass by hand in Blender.
-- In Unreal the imported models draw near-black although the .glb colour maps are right (wood is brown in the file),
-  and the raised plate may sit rolled 30-40 degrees: one look in the editor at the imported material and the raised
-  rotation is due.
+- The models looked near-black only in the dark forest at night (a lit mannequin read 23,6,2 there); at noon the wood
+  reads brown, and the melee smoke test's shield phase now runs at noon and lists each material's colour settings. The
+  wood map was lightened (2026-11-19) after the noon picture read about half as bright as a mannequin: remake the .glb
+  files and run ShieldArt to see it. The raised plate may sit rolled 30-40 degrees (the forearm's angle in the block clip).
 - Raiders and traders don't carry shields yet (no pawn kind lists them).
 - Shield bash, and blocking with the weapon (melee.md) together with a shield.

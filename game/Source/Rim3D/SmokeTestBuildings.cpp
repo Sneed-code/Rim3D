@@ -701,9 +701,16 @@ void USmokeTestSubsystem::BuildBuildingsPhases()
 			return;
 		}
 		CheckMatches(TEXT("buildings_new_sim"));
-		if (Buildings->IsBuilt() && (Buildings->GetStats().Built != 0 || Buildings->GetStats().Blueprints != 0))
+		// The new map may have buildings of its own (seed 7 has 17 ancient walls): what is drawn must be those, and no plans.
+		int32 Fresh = 0;
+		for (const colony::ThingView& View : Bridge()->GetCurrentSnapshot().things)
 		{
-			Fail(FString::Printf(TEXT("buildings_new_sim: %d buildings and %d blueprints are still drawn after a new start"), Buildings->GetStats().Built, Buildings->GetStats().Blueprints));
+			Fresh += View.category == colony::ThingCategory::Building && View.stage == colony::ConstructionStage::Built ? 1 : 0;
+		}
+		if (Buildings->IsBuilt() && (Buildings->GetStats().Built != Fresh || Buildings->GetStats().Blueprints != 0))
+		{
+			Fail(FString::Printf(TEXT("buildings_new_sim: %d buildings and %d blueprints are drawn after a new start, which has %d buildings and no plans"),
+				Buildings->GetStats().Built, Buildings->GetStats().Blueprints, Fresh));
 		}
 	};
 	Phases.Add(MoveTemp(Fresh));
