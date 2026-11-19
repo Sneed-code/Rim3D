@@ -444,7 +444,7 @@ namespace
 	}
 
 	// A hand's finger direction (wrist to the middle knuckle) and palm normal (out of the palm) from its knuckles: the
-	// palm side is where the curled index finger's tip lies, else by the hand's side (HoldDraw::BladeFrame's rule).
+	// palm side from the knuckles alone (fingers x across: the same rule as HoldDraw::FistFrame).
 	bool MhHandFrame(const FVector& Hand, const FVector& Index, const FVector& Pinky, const FVector& Middle, const FVector* IndexTip, bool bRight,
 					 FVector& OutFingers, FVector& OutPalm)
 	{
@@ -456,15 +456,10 @@ namespace
 			return false;
 		}
 		FVector Palm = FVector::CrossProduct(Fingers, Across).GetSafeNormal();
-		float Side = bRight ? 1.0f : -1.0f;
-		if (IndexTip)
-		{
-			const float Curl = FVector::DotProduct(*IndexTip - Index, Palm);
-			if (FMath::Abs(Curl) > 0.5f)
-			{
-				Side = FMath::Sign(Curl);
-			}
-		}
+		// The palm's side from the knuckles alone (as HoldDraw::FistFrame): the index finger's curl turned an open hand's
+		// palm inside out, and the wrist limits then spun the hand round.
+		(void)IndexTip;
+		const float Side = bRight ? 1.0f : -1.0f;
 		OutFingers = (Middle - Hand).GetSafeNormal();
 		OutPalm = Palm * Side;
 		// Square to the fingers.

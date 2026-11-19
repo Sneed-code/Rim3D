@@ -383,7 +383,6 @@ bool HoldDraw::FistFrame(const USkeletalMeshComponent* Mesh, bool bRight, FTrans
 	const FVector I = HdBone(Mesh, bRight ? TEXT("index_01_r") : TEXT("index_01_l"));
 	const FVector K = HdBone(Mesh, bRight ? TEXT("pinky_01_r") : TEXT("pinky_01_l"));
 	const FVector M = HdBone(Mesh, bRight ? TEXT("middle_01_r") : TEXT("middle_01_l"));
-	const TCHAR* IndexTip = bRight ? TEXT("index_03_r") : TEXT("index_03_l");
 	FVector X = (I - K).GetSafeNormal();
 	FVector Fingers = (M - H).GetSafeNormal();
 	Fingers = (Fingers - X * FVector::DotProduct(Fingers, X)).GetSafeNormal();
@@ -392,15 +391,10 @@ bool HoldDraw::FistFrame(const USkeletalMeshComponent* Mesh, bool bRight, FTrans
 		return false;
 	}
 	FVector Palm = FVector::CrossProduct(Fingers, X).GetSafeNormal();
-	float Side = bRight ? 1.0f : -1.0f;
-	if (HdHas(Mesh, IndexTip))
-	{
-		const float Curl = FVector::DotProduct(HdBone(Mesh, IndexTip) - I, Palm);
-		if (FMath::Abs(Curl) > 0.5f)
-		{
-			Side = FMath::Sign(Curl);
-		}
-	}
+	// The palm's side from the knuckles alone (fingers x across, index side to pinky side): the same for every pose.
+	// It used to follow the index finger's curl, which an open or overextended hand turned inside out (PC 2026-11-19:
+	// the pistol's hand read as turned round, so the wrist limits spun it, fingers up, and the pistol hid behind it).
+	const float Side = bRight ? 1.0f : -1.0f;
 	Palm *= Side;
 	const FVector Grip = (I + K) * 0.5f + Palm * 2.5f + Fingers * 0.5f;
 	// A hilt sits across the fist leaning a little the way the fingers point (about 15 degrees).
