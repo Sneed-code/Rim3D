@@ -106,6 +106,8 @@ private:
 		bool bDoor = false;
 		/** Leans with the slope instead of standing on dug ground (building.groundFit Conform: sandbags, barricades, traps). */
 		bool bConform = false;
+		/** A bridge (building.bridge, docs/design/roads-bridges.md): stands at its deck's height (the snapshot's z), not on the river bed. */
+		bool bDeck = false;
 		/** Drawn by a subsystem of its own (visual.drawnBy, e.g. "shuttle": UShuttleSubsystem), so not here. */
 		bool bDrawnElsewhere = false;
 		/** Joins the walls, doors and rock beside it (visual.link, L4): drawn as a post with an arm to each, `LinkThicknessCm` thick. */
