@@ -1,0 +1,56 @@
+{
+ "name": "IEDTrap",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -45.14,
+   -44.29,
+   0.0
+  ],
+  "max": [
+   45.14,
+   44.29,
+   12.81
+  ]
+ },
+ "sizeM": [
+  0.903,
+  0.886,
+  0.128
+ ],
+ "parts": {
+  "IEDTrap": {
+   "boundsCm": {
+    "min": [
+     -45.14,
+     -44.29,
+     0.0
+    ],
+    "max": [
+     45.14,
+     44.29,
+     12.81
+    ]
+   },
+   "tris": 5793
+  }
+ },
+ "sockets": {
+  "BlastCenter": [
+   -15.12,
+   -8.38,
+   4.55
+  ]
+ },
+ "slots": {
+  "IEDTrap": {
+   "from": "IEDTrap | Weathered salvage",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}
