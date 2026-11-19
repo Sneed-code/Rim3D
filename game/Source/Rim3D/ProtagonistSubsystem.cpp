@@ -507,7 +507,13 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 	if (Bridge->GetSim()->controlledPawn() == Controlled)
 	{
 		Body->FollowSim(FVector2D(View->x, View->y), View->level, View->climb > 0.0f);
-		if (!Body->IsClimbing() && Body->Reconcile(FVector2D(View->x, View->y)))
+		if (!Body->IsClimbing() && (View->motionClip.valid() || View->motionPush) && !View->motionFreeFeet && View->rollPhase == 0)
+		{
+			// A stagger or a knockdown carries the colonist: the keys wait and the body is where the sim's clip takes it,
+			// so nothing snaps back a metre when it ends. (The player's own swings leave the feet to the keys.)
+			Body->SetSimPosition(FVector2D(View->x, View->y));
+		}
+		else if (!Body->IsClimbing() && Body->Reconcile(FVector2D(View->x, View->y)))
 		{
 			++ReconcileCount;
 		}
@@ -674,7 +680,7 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Lock-on focus (docs/design/focus.md, sneed 2026-11-17): Tab locks on to the next nearest enemy, Dark Souls and WoW
-// style; F1 lets go; Settings > Controls turns it off. The sim keeps the focus (FocusCommand) and turns the body to face
+// style; middle mouse locks on or lets go (sneed 2026-11-18); Settings > Controls turns it off. The sim keeps the focus (FocusCommand) and turns the body to face
 // it; here are the keys, the HP bar top middle, the marker on the target and (AProtagonistPawn) the camera.
 
 colony::Entity UProtagonistSubsystem::GetFocusTarget() const
@@ -737,8 +743,60 @@ void UProtagonistSubsystem::UpdateFocus(APlayerController& PC, USimSubsystem& Br
 	{
 		FocusNext();
 	}
-	else if (Focus != colony::kNoEntity && Rim3DKeys::WasPressed(&PC, ERim3DAction::EndFocus))
+	else if (Rim3DKeys::WasPressed(&PC, ERim3DAction::EndFocus))
 	{
+		// Middle mouse (sneed 2026-11-18, like Elden Ring's lock-on button): locks on when free, lets go when locked on.
+		if (Focus != colony::kNoEntity)
+		{
+			EndFocus();
+		}
+		else
+		{
+			FocusNext();
+		}
+	}
+	UpdateTurnAway(Bridge);
+}
+
+namespace
+{
+	// docs/design/lock-on.md (ours): moving away faster than this, while turned away, for this long lets go.
+	constexpr float LockTurnAwayMetresPerSecond = 1.5f;
+	constexpr float LockTurnAwaySeconds = 0.75f;
+	constexpr float LockTurnAwayDegrees = 100.0f;
+}
+
+// sneed 2026-11-18: turning away and moving away from the focus lets go. With a gun the view turns freely, so turned away
+// is the view more than 100 degrees off the target; with melee the view and body keep facing it, so it is sprinting (the
+// run turns the body, Elden Ring style). Backing off with S while facing it keeps the lock.
+void UProtagonistSubsystem::UpdateTurnAway(USimSubsystem& Bridge)
+{
+	const colony::Entity Focus = GetFocusTarget();
+	AProtagonistPawn* Player = GetBody();
+	const colony::ThingView* Target = Focus != colony::kNoEntity ? Bridge.GetCurrentSnapshot().find(Focus) : nullptr;
+	if (!bDirect || !Player || !Target)
+	{
+		TurnAwaySeconds = 0.0f;
+		return;
+	}
+	const FVector2D To(Target->x - Player->GetSimPosition().X, Target->y - Player->GetSimPosition().Y);
+	const FVector2D Dir = To.GetSafeNormal();
+	if (Dir.IsNearlyZero())
+	{
+		TurnAwaySeconds = 0.0f;
+		return;
+	}
+	const double Away = -FVector2D::DotProduct(Player->GetLocalVelocity(), Dir);
+	const double YawRadians = FMath::DegreesToRadians(static_cast<double>(Player->GetYaw()));
+	const FVector2D View(FMath::Cos(YawRadians), FMath::Sin(YawRadians));
+	const bool bTurned = Player->HasGunDrawn()
+		? FVector2D::DotProduct(View, Dir) < FMath::Cos(FMath::DegreesToRadians(LockTurnAwayDegrees))
+		: Player->IsSprinting();
+	const UWorld* World = GetWorld();
+	TurnAwaySeconds = (Away > LockTurnAwayMetresPerSecond && bTurned && World) ? TurnAwaySeconds + World->GetDeltaSeconds() : 0.0f;
+	if (TurnAwaySeconds >= LockTurnAwaySeconds)
+	{
+		TurnAwaySeconds = 0.0f;
 		EndFocus();
 	}
 }
@@ -768,11 +826,8 @@ void UProtagonistSubsystem::DrawFocus(USimSubsystem& Bridge, float Top, float Sc
 		return;
 	}
 	const colony::Sim& Sim = *Bridge.GetSim();
-	FString Name = ColonistLabel(Sim, Focus);
-	if (Name.IsEmpty() && Bridge.GetDefs() && Target->def.valid())
-	{
-		Name = UTF8_TO_TCHAR(Bridge.GetDefs()->get(Target->def).label().c_str());
-	}
+	// Its name: a colonist's or raider's, a named animal's, a spawned pawn's, else its kind (as the kill feed names it).
+	const FString Name = UTF8_TO_TCHAR(Sim.feedName(Focus).c_str());
 	const float Health = FMath::Clamp(Target->dead ? 0.0f : Target->lowestPart, 0.0f, 1.0f);
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 

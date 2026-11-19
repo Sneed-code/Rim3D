@@ -1,5 +1,7 @@
 # Focus, footwork and fight responses
 
+The player's lock-on was rebuilt Elden Ring style on 2026-11-18: see [lock-on.md](lock-on.md), which wins where the two differ.
+
 sneed, 2026-11-17 (thread "Add focus lock and smart melee AI"). Builds on [real-time-combat.md](real-time-combat.md),
 [melee.md](melee.md), [fighters.md](fighters.md) and [body-motion.md](body-motion.md). All numbers are ours (Dark Souls
 and WoW have none to copy) and live in `data/defs/Rules/MeleeRules.json` and `FighterRules.json`.
@@ -7,7 +9,7 @@ and WoW have none to copy) and live in `data/defs/Rules/MeleeRules.json` and `Fi
 ## What sneed asked for
 
 - **Focus like Dark Souls**: pawns face the enemy they fight. The player locks on in third person with **Tab**, which
-  cycles to the next nearest target like WoW; **F1** ends focus; a game setting turns lock-on off. Focus makes melee
+  cycles to the next nearest target like WoW; **middle mouse** locks on or lets go (sneed 2026-11-18; was F1, which also hit Unreal's wireframe view); a game setting turns lock-on off. Focus makes melee
   easier: the swing goes at the centre of the focused body.
 - **Smart melee movement**: fighters don't stand still. They follow an enemy that runs and move round a bit between
   blows without hurting their attack, varying with who they are.
@@ -28,7 +30,7 @@ State is on the `Melee` component (melee save section 4): `focus`, `focusPlayer`
   - `Next` (Tab): the pawns within `focusRange` (20 m), never its own side; enemies first (another side that isn't a
     visitor or prisoner, or a mad animal), and only others if there are no enemies; nearest first, with pawns more than
     60 degrees off its facing counted `focusBehindFactor` (2x) as far. Picks the one after the current focus, round again.
-  - `Clear` (F1): let go. Fails if not focused.
+  - `Clear` (middle mouse while locked on): let go. Fails if not focused.
 - A focus lets go by itself when the target dies, leaves, changes level or goes beyond 25 m (the AI's beyond
   `aiFocusRange` + 2 m), or the pawn is downed. A downed target keeps the focus (to finish it).
 - **Facing** (`MeleeSystem::faceFocus`, after the combat step): every focused pawn faces its focus, so it walks sideways
@@ -39,7 +41,7 @@ State is on the `Melee` component (melee save section 4): `focus`, `focusPlayer`
   blow goes at its centre whichever way the camera looks; else a body on the ground in reach within 60 degrees ahead; else
   straight ahead as before.
 
-The lock-on **setting** is Unreal-side: with it off, Tab and F1 send nothing (the controls thread adds the keys and the
+The lock-on **setting** is Unreal-side: with it off, Tab and middle mouse send nothing (the controls thread adds the keys and the
 checkbox: `FocusNextTarget`, `EndFocus`, `Rim3DKeys::IsLockOnFocusEnabled()`).
 
 Snapshot: `focusTarget`, `focusPlayer` (the lock-on camera follows it, a marker on the target).
@@ -83,8 +85,32 @@ player's own pawn.
 ## Blows at the downed (sim)
 
 A swing at a downed or prone target sets `Melee::low` (snapshot `meleeLow` while the swing is under way). The strike already
-aims at the body's aim point on the ground; Unreal plays a downward blow (a stab down for knives and spears, an overhead
-smash for clubs and hammers, a hack for blades and axes).
+aims at the body's aim point on the ground, and the swing plays a downward clip through the body motion system
+([body-motion.md](body-motion.md): the clip's root path moves the body, timed so its blow lands on the hit step): a stab
+down for knives and spears, an overhead smash for clubs and hammers, a hack for blades and axes, a stomp for fists.
+`MeleeRules.lowAttacks` lists the clips by attack style or by weapon def name (a weapon's own list wins); they pass the
+same short-and-quick filter as the usual swings, and a weapon with none measured swings its usual clips
+(`MeleeSystem::lowAttackClipsOf`). Unreal needs nothing new: it plays the snapshot's `motionClip` as for any swing.
+
+Clips (Mixamo, free): club and hammer `Motion_Club_Downward` (the axe pack's downward attack, already measured); knife
+`Motion_Knife_Stab_Low` ("Stabbing", rear hand reverse grip, Target Height 0); spear `Motion_Spear_Stab_Low` ("Bayonet
+Stab", Height 0); one-hand blades `Motion_OneHand_Hack_Low` ("Sword And Shield Slash", the downward one); two-hand blades
+and axes `Motion_TwoHand_Hack_Low` ("Great Sword Slash", the downward one); fists `Motion_Unarmed_Stomp` ("Stomping").
+All five were imported and measured on the PC on 2026-11-18 (`assets/motion_clips.json`; the stomp's blow is the right foot's fastest moment, measured in Blender): 1.25 to 1.6 s, blows 0.43 to 0.75 s in, at most 0.46 m of hip travel.
+
+## Faces (Unreal)
+
+A pain face for 0.6 s on every hit that reaches a body or its armour (`ASimPawnActor::PlayHitReaction`, so every
+ProjectileHit and landed MeleeHit), and an angry face while the pawn fights hand to hand: swinging, blocking without a
+gun, locked on without a gun in its hands, or in a fist fight, held 4 s after the last of those so it does not drop
+between blows (never while downed or dead). Pain wins over anger while it lasts. They ease in and out (pain 0.06 s in,
+0.2 s out; anger 0.3 s in, 0.8 s out).
+
+They are the creator's own "In pain" and "Angry" expressions (`PawnExpressions.h`), laid on the MakeHuman body's
+`Face_<Unit>` morphs (the creator bases already carry MakeHuman's 34 expression units, makehuman.md "Facial
+expressions") over the face it had before, which comes back when they fade; the skin's wrinkle map (custom primitive
+data 8 to 11) furrows the brow with them. A MetaHuman face has no such morphs and shows nothing.
+`GetPainFace`/`GetAngryFace`/`GetPainFacesShown` for tests.
 
 ## Fight responses (sim)
 
@@ -104,9 +130,9 @@ The arm's-length "stand and fight" rule does not hold a fleeing pawn. Snapshot `
 Built (2026-11-18):
 
 - **Keys** (`UProtagonistSubsystem::UpdateFocus`): in direct control, `FocusNextTarget` (Tab) sends `FocusCommand Next`,
-  `EndFocus` (F1) sends `Clear`; nothing with Settings > Controls "Lock-on focus" off, and turning it off while locked on
-  lets go. While locked on F1 does not toggle the key help (`USimSubsystem::HandleKey`). The overseer switch is O.
-- **HP bar** top middle, under the clock (`DrawFocus`): the target's name (colonist name, else its kind) and a red bar of
+  `EndFocus` (middle mouse) sends `Clear` when locked on, else locks on like Tab; nothing with Settings > Controls "Lock-on focus" off, and turning it off while locked on
+  lets go. F1 is key help; DefaultInput.ini clears the engine debug keys (F1 wireframe, F2 unlit, F5 shader complexity). The overseer switch is O.
+- **HP bar** top middle, under the clock (`DrawFocus`): the target's name (`Sim::feedName`: a colonist's or raider's name, a named animal's, a spawned pawn's `PawnLooks::name`, else its kind) and a red bar of
   `lowestPart` with the percentage.
 - **Marker**: a small dot on the target's chest (low over a body on the ground), `GetFocusPoint`.
 - **Camera** (`AProtagonistPawn::FollowFocus`): the view turns to keep the focus ahead, 360 degrees a second in third
@@ -116,4 +142,4 @@ Built (2026-11-18):
   off facing its enemy; the walk blends play from the velocity.
 - Smoke test `melee`, phase `focus`.
 
-Still to do: pain and angry faces, downward attack clips for `meleeLow`, a strafe check by eye.
+Still to do: a strafe check by eye. Faces and downward blows: see above (built 2026-11-18, compiled on the PC: smoke tests melee and gunrange pass, the pain face seen on a hit target).

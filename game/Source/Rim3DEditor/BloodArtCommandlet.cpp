@@ -1,6 +1,9 @@
 #include "BloodArtCommandlet.h"
 
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
 #include "AssetToolsModule.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/Texture2D.h"
 #include "Factories/MaterialFactoryNew.h"
 #include "HAL/FileManager.h"
@@ -13,6 +16,7 @@
 #include "Materials/MaterialExpressionConstant.h"
 #include "Materials/MaterialExpressionConstant2Vector.h"
 #include "Materials/MaterialExpressionConstant3Vector.h"
+#include "Materials/MaterialExpressionCustom.h"
 #include "Materials/MaterialExpressionDecalColor.h"
 #include "Materials/MaterialExpressionDepthFade.h"
 #include "Materials/MaterialExpressionDistance.h"
@@ -31,14 +35,22 @@
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Materials/MaterialExpressionSubtract.h"
 #include "Materials/MaterialExpressionTextureCoordinate.h"
+#include "Materials/MaterialExpressionTextureObjectParameter.h"
 #include "Materials/MaterialExpressionTextureSample.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialExpressionVertexInterpolator.h"
+#include "MaterialShared.h"
 #include "Misc/PackageName.h"
+#include "Rendering/SkeletalMeshLODModel.h"
+#include "Rendering/SkeletalMeshModel.h"
+#include "ShaderCompiler.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 
 #include "BloodSplatAtlas.h"
+#include "MakeHumanArt.h"
+#include "SkinBloodArt.h"
+#include "SkinBloodMaterial.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogBloodArt, Log, All);
 
@@ -304,8 +316,8 @@ namespace
 		// Roughness: matte when dry; wet blood shines where it is thick, but soaks into the ground: not a mirror
 		// (PC look, 2026-11-18: 0.04 made pools a glossy sheet of paint).
 		auto* WetRough = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -650, 0);
-		WetRough->ConstA = 0.5f;
-		WetRough->ConstB = 0.22f;
+		WetRough->ConstA = 0.62f;  // (close-ups of pools, 2026-11-18: 0.5 to 0.22 still shone like plastic)
+		WetRough->ConstB = 0.42f;
 		BloodArtConnect(Sample, TEXT("G"), WetRough, TEXT("Alpha"));
 		auto* DryRough = BloodArtNode<UMaterialExpressionConstant>(Material, -650, 100);
 		DryRough->R = 0.72f;
@@ -313,7 +325,7 @@ namespace
 		UMaterialEditingLibrary::ConnectMaterialProperty(Roughness, TEXT(""), MP_Roughness);
 		auto* Specular = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -450, 150);
 		Specular->ConstA = 0.3f;
-		Specular->ConstB = 0.5f;
+		Specular->ConstB = 0.38f;
 		BloodArtConnect(Wet, TEXT(""), Specular, TEXT("Alpha"));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Specular, TEXT(""), MP_Specular);
 
@@ -590,6 +602,366 @@ namespace
 		UMaterialEditingLibrary::RecompileMaterial(Material);
 		Failures += BloodArtSave(Material) ? 0 : 1;
 	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// Blood in the skin (docs/design/blood.md): each MakeHuman body base's bind-pose position map, the paint material
+	// that draws wounds into a pawn's mask with it, and the skin material reading the mask.
+
+	/** Draws every skin triangle of a body into its UV layout, each texel holding where on the body (bind pose) it is. */
+	bool SkinArtBakePositions(USkeletalMesh* Mesh, const FString& Base, const FString& TextureName)
+	{
+		const FSkeletalMeshModel* Model = Mesh->GetImportedModel();
+		if (!Model || Model->LODModels.Num() == 0)
+		{
+			UE_LOG(LogBloodArt, Error, TEXT("%s has no imported model"), *Mesh->GetName());
+			return false;
+		}
+		const FSkeletalMeshLODModel& Lod = Model->LODModels[0];
+		TArray<FSoftSkinVertex> Vertices;
+		Lod.GetVertices(Vertices);
+		const TArray<FSkeletalMaterial>& Materials = Mesh->GetMaterials();
+		const FString SkinName = MakeHumanSkinName(Base);
+		constexpr int32 Res = SkinBloodResolution;
+		TArray<FVector4f> Texels;
+		Texels.SetNumZeroed(Res * Res);
+		int32 Triangles = 0;
+		for (const FSkelMeshSection& Section : Lod.Sections)
+		{
+			const UMaterialInterface* Material = Materials.IsValidIndex(Section.MaterialIndex) ? Materials[Section.MaterialIndex].MaterialInterface.Get() : nullptr;
+			const FString Slot = Materials.IsValidIndex(Section.MaterialIndex) ? Materials[Section.MaterialIndex].MaterialSlotName.ToString() : FString();
+			if (!Material || !Material->GetName().StartsWith(SkinName))
+			{
+				continue;
+			}
+			// Indices into the whole vertex list, or (older imports) into the section's own.
+			bool bGlobal = true;
+			for (uint32 I = 0; I < Section.NumTriangles * 3; ++I)
+			{
+				const uint32 Index = Lod.IndexBuffer[Section.BaseIndex + I];
+				if (Index < Section.BaseVertexIndex || Index >= Section.BaseVertexIndex + static_cast<uint32>(Section.SoftVertices.Num()))
+				{
+					bGlobal = false;
+					break;
+				}
+			}
+			const auto Vertex = [&](uint32 Index) -> const FSoftSkinVertex&
+			{
+				return bGlobal ? Vertices[Index] : Section.SoftVertices[FMath::Min<int32>(Index, Section.SoftVertices.Num() - 1)];
+			};
+			for (uint32 T = 0; T < Section.NumTriangles; ++T)
+			{
+				const FSoftSkinVertex& A = Vertex(Lod.IndexBuffer[Section.BaseIndex + T * 3 + 0]);
+				const FSoftSkinVertex& B = Vertex(Lod.IndexBuffer[Section.BaseIndex + T * 3 + 1]);
+				const FSoftSkinVertex& C = Vertex(Lod.IndexBuffer[Section.BaseIndex + T * 3 + 2]);
+				const FVector2f Pa = A.UVs[0] * Res;
+				const FVector2f Pb = B.UVs[0] * Res;
+				const FVector2f Pc = C.UVs[0] * Res;
+				const float Area = (Pb.X - Pa.X) * (Pc.Y - Pa.Y) - (Pc.X - Pa.X) * (Pb.Y - Pa.Y);
+				if (FMath::Abs(Area) < 1e-8f)
+				{
+					continue;
+				}
+				const int32 X0 = FMath::Clamp(FMath::FloorToInt(FMath::Min3(Pa.X, Pb.X, Pc.X)), 0, Res - 1);
+				const int32 X1 = FMath::Clamp(FMath::CeilToInt(FMath::Max3(Pa.X, Pb.X, Pc.X)), 0, Res - 1);
+				const int32 Y0 = FMath::Clamp(FMath::FloorToInt(FMath::Min3(Pa.Y, Pb.Y, Pc.Y)), 0, Res - 1);
+				const int32 Y1 = FMath::Clamp(FMath::CeilToInt(FMath::Max3(Pa.Y, Pb.Y, Pc.Y)), 0, Res - 1);
+				for (int32 Y = Y0; Y <= Y1; ++Y)
+				{
+					for (int32 X = X0; X <= X1; ++X)
+					{
+						const FVector2f P(X + 0.5f, Y + 0.5f);
+						const float Wa = ((Pb.X - P.X) * (Pc.Y - P.Y) - (Pc.X - P.X) * (Pb.Y - P.Y)) / Area;
+						const float Wb = ((Pc.X - P.X) * (Pa.Y - P.Y) - (Pa.X - P.X) * (Pc.Y - P.Y)) / Area;
+						const float Wc = 1.0f - Wa - Wb;
+						constexpr float Edge = -0.02f;
+						if (Wa < Edge || Wb < Edge || Wc < Edge)
+						{
+							continue;
+						}
+						const FVector3f Position = A.Position * Wa + B.Position * Wb + C.Position * Wc;
+						Texels[Y * Res + X] = FVector4f(Position.X + SkinBloodPositionOffset, Position.Y + SkinBloodPositionOffset, Position.Z + SkinBloodPositionOffset, 1.0f);
+					}
+				}
+				++Triangles;
+			}
+			UE_LOG(LogBloodArt, Display, TEXT("  %s: skin section %s, %u triangles (%s indices)"), *Base, *Slot, Section.NumTriangles, bGlobal ? TEXT("global") : TEXT("section"));
+		}
+		if (Triangles == 0)
+		{
+			UE_LOG(LogBloodArt, Error, TEXT("%s: no skin sections (material %s*)"), *Mesh->GetName(), *SkinName);
+			return false;
+		}
+		// Grow each island a few texels so the skin's filtered lookups across a UV seam find blood on both sides.
+		for (int32 Pass = 0; Pass < 4; ++Pass)
+		{
+			TArray<FVector4f> Grown = Texels;
+			for (int32 Y = 0; Y < Res; ++Y)
+			{
+				for (int32 X = 0; X < Res; ++X)
+				{
+					if (Texels[Y * Res + X].W > 0.5f)
+					{
+						continue;
+					}
+					FVector4f Sum(0, 0, 0, 0);
+					for (int32 Dy = -1; Dy <= 1; ++Dy)
+					{
+						for (int32 Dx = -1; Dx <= 1; ++Dx)
+						{
+							const int32 Nx = X + Dx;
+							const int32 Ny = Y + Dy;
+							if (Nx >= 0 && Ny >= 0 && Nx < Res && Ny < Res && Texels[Ny * Res + Nx].W > 0.5f)
+							{
+								Sum += Texels[Ny * Res + Nx];
+							}
+						}
+					}
+					if (Sum.W > 0.5f)
+					{
+						Grown[Y * Res + X] = FVector4f(Sum.X / Sum.W, Sum.Y / Sum.W, Sum.Z / Sum.W, 1.0f);
+					}
+				}
+			}
+			Texels = MoveTemp(Grown);
+		}
+		TArray<FFloat16Color> Half;
+		Half.SetNumUninitialized(Res * Res);
+		int32 Filled = 0;
+		for (int32 I = 0; I < Res * Res; ++I)
+		{
+			Half[I] = FFloat16Color(FLinearColor(Texels[I].X, Texels[I].Y, Texels[I].Z, Texels[I].W));
+			Filled += Texels[I].W > 0.5f ? 1 : 0;
+		}
+		UPackage* Package = CreatePackage(*(FString(SkinBloodFolder) / TextureName));
+		UTexture2D* Texture = NewObject<UTexture2D>(Package, *TextureName, RF_Public | RF_Standalone);
+		Texture->PreEditChange(nullptr);
+		Texture->Source.Init(Res, Res, 1, 1, TSF_RGBA16F, reinterpret_cast<const uint8*>(Half.GetData()));
+		Texture->SRGB = false;
+		Texture->CompressionSettings = TC_HDR;
+		Texture->MipGenSettings = TMGS_NoMipmaps;
+		Texture->Filter = TF_Nearest;
+		Texture->NeverStream = true;
+		Texture->AddressX = TA_Clamp;
+		Texture->AddressY = TA_Clamp;
+		Texture->LODGroup = TEXTUREGROUP_Pixels2D;
+		Texture->PostEditChange();
+		UE_LOG(LogBloodArt, Display, TEXT("%s: %d skin triangles, %.1f%% of the texture is skin"), *TextureName, Triangles, 100.0f * Filled / (Res * Res));
+		return BloodArtSave(Texture);
+	}
+
+	/** A position map for every MakeHuman body base there is. The first one made or found (for the paint material's default). */
+	UTexture2D* SkinArtMakePositions(bool bForce, int32& Failures)
+	{
+		IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		Registry.ScanPathsSynchronous({FString(MakeHumanFolder)}, true);
+		TArray<FAssetData> Assets;
+		Registry.GetAssetsByPath(FName(MakeHumanFolder), Assets, false);
+		UTexture2D* First = nullptr;
+		for (const FAssetData& Asset : Assets)
+		{
+			const FString Name = Asset.AssetName.ToString();
+			if (!Name.StartsWith(TEXT("SK_MH_")) || Asset.AssetClassPath != USkeletalMesh::StaticClass()->GetClassPathName())
+			{
+				continue;
+			}
+			const FString Base = Name.RightChop(6);
+			const FString TextureName = SkinBloodPositionName(Base);
+			if (BloodArtWanted(*TextureName, bForce))
+			{
+				USkeletalMesh* Mesh = Cast<USkeletalMesh>(Asset.GetAsset());
+				if (!Mesh || !SkinArtBakePositions(Mesh, Base, TextureName))
+				{
+					++Failures;
+					continue;
+				}
+			}
+			if (!First)
+			{
+				First = LoadObject<UTexture2D>(nullptr, *MakeHumanAssetPath(SkinBloodFolder, TextureName));
+			}
+		}
+		if (!First)
+		{
+			UE_LOG(LogBloodArt, Warning, TEXT("No MakeHuman bodies in %s: no skin blood"), MakeHumanFolder);
+		}
+		return First;
+	}
+
+	// The paint step. Every texel of the mask looks up where on the body it is (Pos, bind pose) and adds the wound's
+	// marks there: the wound itself (Shape.x radius), blood soaked round it (Shape.y), spatter (Shape.z) and runs down
+	// the body from it (Shape.w long), all in cm and broken up by noise so no two look alike. Only skin near the shot
+	// line (Dir.w deep) takes it, not the far side of the body. Hit.w: how dark the open core is; Down.w: strength;
+	// Hit2: the far end of a gash (= Hit for a hole), w its seed. Mode 1 fades instead (Decay: amount, wetness, core).
+	const TCHAR* const SkinArtPaintCode = TEXT(R"HLSL(
+float4 prev = Texture2DSampleLevel(Prev, PrevSampler, UV, 0);
+if (Mode > 0.5)
+{
+	return float3(max(0.0, prev.r - Decay.x), max(0.0, prev.g - Decay.y), max(0.0, prev.b - Decay.z));
+}
+float4 pm = Texture2DSampleLevel(Pos, PosSampler, UV, 0);
+if (pm.a < 0.5) return max(prev.rgb, 0.0);
+float3 P = pm.xyz - Offset;
+struct SkinBloodNoise
+{
+	float H(float3 p) { p = frac(p * 0.3183099 + 0.1); p *= 17.0; return frac(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+	float N(float3 x)
+	{
+		float3 i = floor(x);
+		float3 f = frac(x);
+		f = f * f * (3.0 - 2.0 * f);
+		return lerp(lerp(lerp(H(i), H(i + float3(1, 0, 0)), f.x), lerp(H(i + float3(0, 1, 0)), H(i + float3(1, 1, 0)), f.x), f.y),
+			lerp(lerp(H(i + float3(0, 0, 1)), H(i + float3(1, 0, 1)), f.x), lerp(H(i + float3(0, 1, 1)), H(i + float3(1, 1, 1)), f.x), f.y), f.z);
+	}
+};
+SkinBloodNoise b;
+float seed = Hit2.w;
+float3 A = Hit.xyz;
+float3 AB = Hit2.xyz - A;
+float t = saturate(dot(P - A, AB) / max(dot(AB, AB), 0.0001));
+float3 C = A + AB * t;
+float3 D = normalize(Dir.xyz + float3(0.0, 0.0, 0.00001));
+float3 d = P - C;
+float along = dot(d, D);
+float r = length(d - D * along);
+float facing = 1.0 - smoothstep(Dir.w, Dir.w * 1.6, abs(along));
+float rr = r * (0.7 + 0.6 * b.N(P * 0.45 + seed));
+float core = 1.0 - smoothstep(Shape.x * 0.6, Shape.x, rr);
+float sn = b.N(P * 0.35 + seed * 1.7) * 0.6 + b.N(P * 1.1 + seed * 2.3) * 0.4;
+float soakR = Shape.y * (0.45 + 0.75 * sn);
+float soak = Shape.y > 0.01 ? 0.8 * (1.0 - smoothstep(soakR * 0.8, soakR, r)) : 0.0;
+float fall = saturate(1.0 - r / max(Shape.z, 0.01));
+float spk = b.N(P * 2.4 + seed * 3.1);
+float sp = Shape.z > 0.01 ? smoothstep(0.84 - 0.3 * fall, 0.88 - 0.3 * fall, spk) * step(0.0001, fall) * 0.9 : 0.0;
+float wide = Dir.w + Shape.z * 0.4;
+float nearWide = 1.0 - smoothstep(wide, wide * 1.6, abs(along));
+float runs = 0.0;
+if (Shape.w > 0.01)
+{
+	float3 Dn = normalize(Down.xyz + float3(0.0, 0.0, -0.00001));
+	float3 q = P - C;
+	float h = dot(q, Dn);
+	float3 E1 = normalize(cross(Dn, D) + float3(0.00001, 0.0, 0.0));
+	float x = dot(q, E1);
+	float depth = dot(q - Dn * h, D);
+	float width = Shape.x * 1.4 + Shape.y * 0.35;
+	if (h > -Shape.x && abs(x) < width && abs(depth) < Dir.w * 1.5)
+	{
+		float lane = x * 1.1 + seed * 7.0;
+		float pick = b.N(float3(lane, seed * 3.0, 0.5));
+		float len = Shape.w * (0.25 + 0.95 * b.N(float3(lane * 0.7, seed * 5.0, 9.5)));
+		float streak = smoothstep(0.52, 0.6, pick) * (1.0 - smoothstep(len * 0.75, len, h));
+		float mainRun = (1.0 - smoothstep(Shape.x * 0.35, Shape.x * 0.8, abs(x) * (1.0 + 1.5 * saturate(h / max(Shape.w, 1.0))))) * (1.0 - smoothstep(Shape.w * 0.6, Shape.w, h));
+		runs = max(streak, mainRun) * 0.9 * (1.0 - smoothstep(width * 0.8, width, abs(x)));
+	}
+}
+float s = Down.w;
+float paint = max(max(core, soak) * facing, max(sp * nearWide, runs)) * s;
+float hole = Hit.w * (1.0 - smoothstep(Shape.x * 0.22, Shape.x * 0.38, rr)) * facing * s;
+return max(float3(max(prev.r, paint), max(prev.g, saturate(paint * 4.0)), max(prev.b, hole)), 0.0);
+)HLSL");
+
+	void SkinArtInput(UMaterialExpressionCustom* Custom, const TCHAR* Name, UMaterialExpression* From, int32 Output = 0)
+	{
+		FCustomInput& Input = Custom->Inputs.AddDefaulted_GetRef();
+		Input.InputName = Name;
+		Input.Input.Connect(Output, From);
+	}
+
+	bool SkinArtReportErrors(UMaterial* Material)
+	{
+		bool bErrors = false;
+		if (const FMaterialResource* Resource = Material->GetMaterialResource(GMaxRHIShaderPlatform))
+		{
+			for (const FString& Error : Resource->GetCompileErrors())
+			{
+				UE_LOG(LogBloodArt, Error, TEXT("%s: %s"), *Material->GetName(), *Error);
+				bErrors = true;
+			}
+		}
+		return bErrors;
+	}
+
+	void SkinArtMakePaint(IAssetTools& Tools, UTexture2D* SamplePositions, int32& Failures)
+	{
+		UMaterial* Material = BloodArtNewMaterial(Tools, SkinBloodPaintName, Failures);
+		if (!Material)
+		{
+			return;
+		}
+		Material->SetShadingModel(MSM_Unlit);
+		Material->BlendMode = BLEND_Opaque;
+		auto* Custom = BloodArtNode<UMaterialExpressionCustom>(Material, -300, 0);
+		Custom->Description = TEXT("SkinBloodPaint");
+		Custom->OutputType = CMOT_Float3;
+		Custom->Code = SkinArtPaintCode;
+		Custom->Inputs.Reset();
+		auto* UV = BloodArtNode<UMaterialExpressionTextureCoordinate>(Material, -1400, 0);
+		SkinArtInput(Custom, TEXT("UV"), UV);
+		auto* Prev = BloodArtNode<UMaterialExpressionTextureObjectParameter>(Material, -1100, 80);
+		Prev->ParameterName = TEXT("Prev");
+		Prev->Texture = LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineResources/Black.Black"));
+		Prev->SamplerType = SAMPLERTYPE_Color;
+		SkinArtInput(Custom, TEXT("Prev"), Prev);
+		auto* Pos = BloodArtNode<UMaterialExpressionTextureObjectParameter>(Material, -1100, 180);
+		Pos->ParameterName = TEXT("Pos");
+		Pos->Texture = SamplePositions ? static_cast<UTexture*>(SamplePositions) : LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineResources/Black.Black"));
+		Pos->SamplerType = UMaterialExpressionTextureBase::GetSamplerTypeForTexture(Pos->Texture);
+		SkinArtInput(Custom, TEXT("Pos"), Pos);
+		SkinArtInput(Custom, TEXT("Offset"), BloodArtScalar(Material, TEXT("Offset"), SkinBloodPositionOffset, -1100, 280));
+		SkinArtInput(Custom, TEXT("Mode"), BloodArtScalar(Material, TEXT("Mode"), 0.0f, -1100, 340));
+		int32 Y = 420;
+		for (const TCHAR* Name : {TEXT("Hit"), TEXT("Hit2"), TEXT("Dir"), TEXT("Down"), TEXT("Shape"), TEXT("Decay")})
+		{
+			auto* Vector = BloodArtNode<UMaterialExpressionVectorParameter>(Material, -1100, Y);
+			Vector->ParameterName = Name;
+			Vector->DefaultValue = FLinearColor::Transparent;
+			SkinArtInput(Custom, Name, Vector, 5);  // output 5: RGBA
+			Y += 120;
+		}
+		UMaterialEditingLibrary::ConnectMaterialProperty(Custom, TEXT(""), MP_EmissiveColor);
+		UMaterialEditingLibrary::RecompileMaterial(Material);
+		if (GShaderCompilingManager)
+		{
+			GShaderCompilingManager->FinishAllCompilation();
+		}
+		Failures += SkinArtReportErrors(Material) ? 1 : 0;
+		Failures += BloodArtSave(Material) ? 0 : 1;
+	}
+
+	/** Adds the blood mask to the MakeHuman skin material (again with -force). */
+	void SkinArtPatchSkin(bool bForce, int32& Failures)
+	{
+		const FString Path = MakeHumanAssetPath(MakeHumanFolder, SkinBloodSkinMaterialName);
+		UMaterial* Material = LoadObject<UMaterial>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (!Material)
+		{
+			UE_LOG(LogBloodArt, Warning, TEXT("No %s yet (run -run=MakeHumanArt first): skin blood not added"), *Path);
+			return;
+		}
+		if (SkinBloodMaterial::Has(Material))
+		{
+			if (!bForce)
+			{
+				UE_LOG(LogBloodArt, Display, TEXT("%s reads the blood mask already (-force adds it again)"), *Path);
+				return;
+			}
+			SkinBloodMaterial::Strip(Material);
+		}
+		if (!SkinBloodMaterial::Add(Material))
+		{
+			UE_LOG(LogBloodArt, Error, TEXT("%s: base colour, roughness or normal not connected"), *Path);
+			++Failures;
+			return;
+		}
+		Material->PostEditChange();
+		UMaterialEditingLibrary::RecompileMaterial(Material);
+		if (GShaderCompilingManager)
+		{
+			GShaderCompilingManager->FinishAllCompilation();
+		}
+		Failures += SkinArtReportErrors(Material) ? 1 : 0;
+		Failures += BloodArtSave(Material) ? 0 : 1;
+	}
 }
 
 UBloodArtCommandlet::UBloodArtCommandlet()
@@ -629,6 +1001,12 @@ int32 UBloodArtCommandlet::Main(const FString& Params)
 	{
 		BloodArtMakeGrimeOverlay(Tools, Failures);
 	}
+	UTexture2D* SkinPositions = SkinArtMakePositions(bForce, Failures);
+	if (BloodArtWanted(SkinBloodPaintName, bForce))
+	{
+		SkinArtMakePaint(Tools, SkinPositions, Failures);
+	}
+	SkinArtPatchSkin(bForce, Failures);
 	UE_LOG(LogBloodArt, Display, TEXT("Blood art done, %d failures"), Failures);
 	return Failures == 0 ? 0 : 1;
 }

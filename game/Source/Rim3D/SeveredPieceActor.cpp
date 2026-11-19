@@ -1,13 +1,16 @@
 #include "SeveredPieceActor.h"
 
+#include "AnimationRuntime.h"
 #include "Components/PoseableMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
+#include "Rendering/SkeletalMeshRenderData.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
+#include "GroomAsset.h"
 #include "GroomComponent.h"
 
 #include "BloodSubsystem.h"
@@ -62,8 +65,9 @@ namespace
 		}
 	}
 
-	/** Wet flesh over a cut: a ball of the blood drops' glossy red where the folded mesh closes on a point. */
-	UStaticMeshComponent* SeveredCap(AActor* Owner, USceneComponent* Parent, FName Socket, const FVector& At, float RadiusCm)
+	/** Wet flesh over a cut: a flat disc of the blood drops' glossy dark red across the limb (Along: the way the limb
+	 *  runs), where the folded mesh closes on a point. A full ball there read as a pom-pom stuck on the stump. */
+	UStaticMeshComponent* SeveredCap(AActor* Owner, USceneComponent* Parent, FName Socket, const FVector& At, const FVector& Along, float RadiusCm)
 	{
 		UStaticMesh* Ball = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 		if (!Owner || !Parent || !Ball)
@@ -78,10 +82,14 @@ namespace
 		}
 		Cap->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Cap->SetCanEverAffectNavigation(false);
+		Cap->SetCastShadow(false);
+		Cap->bReceivesDecals = false;
 		Cap->SetupAttachment(Parent, Socket);
 		Cap->RegisterComponent();
-		Cap->SetWorldLocation(At);
-		Cap->SetWorldScale3D(FVector(RadiusCm / 50.0f));
+		const FVector Axis = Along.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+		Cap->SetWorldLocationAndRotation(At, FRotationMatrix::MakeFromZ(Axis).ToQuat());
+		const float Across = RadiusCm * 0.9f / 50.0f;
+		Cap->SetWorldScale3D(FVector(Across, Across, Across * 0.3f));
 		return Cap;
 	}
 
@@ -97,6 +105,36 @@ namespace
 			MetaHuman->GetComponents(Found);
 			Out.Append(Found);
 		}
+	}
+
+	/** Whether a mesh is really drawn: its own flags and its actor's (a hidden second body still has "visible" set). */
+	bool SeveredDrawn(const USkinnedMeshComponent& Mesh)
+	{
+		const AActor* Owner = Mesh.GetOwner();
+		return Mesh.IsVisible() && !Mesh.bHiddenInGame && !(Owner && Owner->IsHidden());
+	}
+
+	/** How much of a mesh's skin hangs on a bone or under it: the share of the bones its skin uses, 0 to 1. */
+	float SeveredSkinnedTo(const USkeletalMesh& Asset, int32 Bone)
+	{
+		const FSkeletalMeshRenderData* Data = Asset.GetResourceForRendering();
+		if (!Data || Data->LODRenderData.Num() == 0)
+		{
+			return 1.0f;
+		}
+		const FReferenceSkeleton& Skeleton = Asset.GetRefSkeleton();
+		TSet<int32> Used;
+		int32 OnPiece = 0;
+		for (const FSkelMeshRenderSection& Section : Data->LODRenderData[0].RenderSections)
+		{
+			for (const FBoneIndexType Index : Section.BoneMap)
+			{
+				bool bSeen = false;
+				Used.Add(Index, &bSeen);
+				OnPiece += !bSeen && (Index == Bone || Skeleton.BoneIsChildOf(Index, Bone)) ? 1 : 0;
+			}
+		}
+		return Used.IsEmpty() ? 0.0f : static_cast<float>(OnPiece) / static_cast<float>(Used.Num());
 	}
 
 	/** The component whose pose a mesh shows: itself, or the top of its leader chain. */
@@ -160,8 +198,8 @@ void ASeveredPieceActor::Tick(float DeltaSeconds)
 				Hit.At = At;
 				Hit.Direction = FVector(Velocity.X * 0.3, Velocity.Y * 0.3, -200.0);
 				Hit.Kind = EBloodWound::Blunt;
-				Hit.Damage = 12.0f;
-				Hit.Force = 0.7f;
+				Hit.Damage = 8.0f;
+				Hit.Force = 0.4f;
 				Blood->AddHit(Hit);
 			}
 		}
@@ -178,7 +216,16 @@ void ASeveredPieceActor::Tick(float DeltaSeconds)
 			Velocity = FVector::ZeroVector;
 		}
 	}
-	SetActorLocationAndRotation(At, (GetActorQuat() * (Spin * Step).Quaternion()).GetNormalized());
+	FQuat Turned = (GetActorQuat() * (Spin * Step).Quaternion()).GetNormalized();
+	if (bLanded && !LimbAxis.IsNearlyZero())
+	{
+		// Once it has touched the ground a limb falls over towards lying flat (quickly; flat when it stops).
+		const FVector Now = Turned.RotateVector(LimbAxis);
+		const FVector Flat = FVector(Now.X, Now.Y, 0.0).GetSafeNormal(UE_SMALL_NUMBER, FVector::ForwardVector);
+		const FQuat Down = FQuat::FindBetweenNormals(Now, Flat);
+		Turned = (FQuat::Slerp(FQuat::Identity, Down, bAtRest ? 1.0f : FMath::Clamp(Step * 8.0f, 0.0f, 1.0f)) * Turned).GetNormalized();
+	}
+	SetActorLocationAndRotation(At, Turned);
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +294,8 @@ void ASimPawnActor::ApplySevered(uint16 Bits)
 			Skin = Body;
 		}
 		if (Skin && Skin->GetBoneIndex(Bone) != INDEX_NONE &&
-			SeveredCap(this, Skin, Skin->GetParentBone(Bone), Skin->GetBoneLocation(Bone, EBoneSpaces::WorldSpace), SeveredCapRadius(Bit) * GetBodyScale()))
+			SeveredCap(this, Skin, Skin->GetParentBone(Bone), Skin->GetBoneLocation(Bone, EBoneSpaces::WorldSpace),
+				Skin->GetBoneLocation(Bone, EBoneSpaces::WorldSpace) - Skin->GetBoneLocation(Skin->GetParentBone(Bone), EBoneSpaces::WorldSpace), SeveredCapRadius(Bit) * GetBodyScale()))
 		{
 			++SeveredCaps;
 		}
@@ -304,13 +352,17 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 	for (USkinnedMeshComponent* Source : Skinned)
 	{
 		USkeletalMesh* Asset = Source ? Cast<USkeletalMesh>(Source->GetSkinnedAsset()) : nullptr;
-		if (!Asset || (!Source->IsVisible() && !SeveredHidden.Contains(Source)))
+		if (!Asset || (!SeveredDrawn(*Source) && !SeveredHidden.Contains(Source)))
 		{
 			continue;  // (a face hidden because the head is off still goes into the head's piece)
 		}
 		const FReferenceSkeleton& Skeleton = Asset->GetRefSkeleton();
 		const int32 CutIndex = Skeleton.FindBoneIndex(Bone);
-		if (CutIndex == INDEX_NONE)
+		// Nothing of this mesh on the piece (a face has arm bones, but no arm): left out. A head only takes what is
+		// mostly head (the face, a hat): a shirt's collar or the body's neck skin, a little of it hanging on the head
+		// bone, was drawn out into a jagged shard under the head.
+		const float Share = CutIndex == INDEX_NONE ? 0.0f : SeveredSkinnedTo(*Asset, CutIndex);
+		if (Share < 0.01f || (Bit == colony::kSeveredHead && Share < 0.5f))
 		{
 			continue;
 		}
@@ -318,6 +370,7 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		Copy->SetSkinnedAssetAndUpdate(Asset);
 		Copy->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Copy->SetCanEverAffectNavigation(false);
+		Copy->bReceivesDecals = false;  // the pools it lands in would paint it red all over
 		for (int32 i = 0; i < Source->GetNumMaterials(); ++i)
 		{
 			Copy->SetMaterial(i, Source->GetMaterial(i));
@@ -345,6 +398,12 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 				Copy->SetBoneTransformByName(Name, Folded, EBoneSpaces::ComponentSpace);
 				continue;
 			}
+			if (i != CutIndex)
+			{
+				// Below the cut the piece lies as the mesh was made (its reference pose, straight): a limb cut off while
+				// the falling body had it bent double was a stubby tube with its hand or shoe tucked out of sight.
+				continue;
+			}
 			const int32 From = Pose->GetBoneIndex(Name);
 			if (From == INDEX_NONE)
 			{
@@ -364,6 +423,51 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 			Copy->SetBoneTransformByName(Name, Now.GetRelativeTransform(ToCopy), EBoneSpaces::ComponentSpace);
 		}
 		Piece->AddMesh(Copy);
+		UE_LOG(LogTemp, Log, TEXT("Severed piece 0x%x: %s (%s), material %s, %.0f cm across"), Bit, *Source->GetName(), *Asset->GetName(),
+			Copy->GetMaterial(0) ? *Copy->GetMaterial(0)->GetName() : TEXT("none"), Copy->Bounds.SphereRadius * 2.0f);
+	}
+	// What sat on the bone as a plain mesh (hair cards, a hat, horns) goes with the piece. Hair strands (grooms) cannot
+	// be copied, so the hair cards stand in for them on a severed head even up close.
+	// Hair strands (grooms) do not go with a head: an unbound copy did not draw. The hair cards stand in, up close too.
+	TInlineComponentArray<UStaticMeshComponent*> Worn;
+	GetComponents(Worn);
+	if (MetaHuman)
+	{
+		TInlineComponentArray<UStaticMeshComponent*> More;
+		MetaHuman->GetComponents(More);
+		Worn.Append(More);
+	}
+	for (UStaticMeshComponent* Part : Worn)
+	{
+		const USkinnedMeshComponent* On = Part ? Cast<USkinnedMeshComponent>(Part->GetAttachParent()) : nullptr;
+		const FName Socket = Part ? Part->GetAttachSocketName() : NAME_None;
+		if (!On || Socket.IsNone() || !Part->GetStaticMesh())
+		{
+			continue;
+		}
+		const FName Held = On->GetSocketBoneName(Socket);
+		if (Held.IsNone() || !(Held == Bone || (On->GetBoneIndex(Bone) != INDEX_NONE && On->BoneIsChildOf(Held, Bone))))
+		{
+			continue;
+		}
+		UStaticMeshComponent* Copy = NewObject<UStaticMeshComponent>(Piece);
+		Copy->SetStaticMesh(Part->GetStaticMesh());
+		for (int32 i = 0; i < Part->GetNumMaterials(); ++i)
+		{
+			Copy->SetMaterial(i, Part->GetMaterial(i));
+		}
+		const TArray<float>& WornData = Part->GetCustomPrimitiveData().Data;
+		for (int32 i = 0; i < WornData.Num(); ++i)
+		{
+			Copy->SetCustomPrimitiveDataFloat(i, WornData[i]);
+		}
+		Copy->bReceivesDecals = false;
+		Copy->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Copy->SetCanEverAffectNavigation(false);
+		Copy->SetupAttachment(Piece->GetRootComponent());
+		Copy->RegisterComponent();
+		Copy->SetWorldTransform(Part->GetComponentTransform());
+		UE_LOG(LogTemp, Log, TEXT("Severed piece 0x%x: worn %s (%s)"), Bit, *Part->GetName(), *Part->GetStaticMesh()->GetName());
 	}
 	if (Piece->GetMeshCount() == 0)
 	{
@@ -379,14 +483,14 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		Hit.At = Cut;
 		Hit.Direction = Out;
 		Hit.Kind = EBloodWound::Cut;
-		Hit.Damage = 60.0f;
-		Hit.Force = 2.5f;
+		Hit.Damage = 35.0f;
+		Hit.Force = 1.2f;
 		Hit.Victim = Thing;
 		Hit.Mesh = GetDecalMesh();
 		Blood->AddHit(Hit);
 	}
 	// Wet flesh over its cut end too.
-	SeveredCap(Piece, Piece->GetRootComponent(), NAME_None, Cut, SeveredCapRadius(Bit) * GetBodyScale());
+	SeveredCap(Piece, Piece->GetRootComponent(), NAME_None, Cut, Bit == colony::kSeveredHead ? FVector::UpVector : Middle - Cut, SeveredCapRadius(Bit) * GetBodyScale());
 	// Thrown up and away from the body's middle, tumbling.
 	FVector Away = Middle - GetActorLocation();
 	Away.Z = 0.0;
@@ -397,6 +501,10 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 	}
 	const FVector Velocity = Away * FMath::FRandRange(120.0f, 260.0f) + FVector(FMath::FRandRange(-60.0f, 60.0f), FMath::FRandRange(-60.0f, 60.0f), FMath::FRandRange(220.0f, 380.0f));
 	const FRotator Spin(FMath::FRandRange(-360.0f, 360.0f), FMath::FRandRange(-360.0f, 360.0f), FMath::FRandRange(-360.0f, 360.0f));
+	if (Bit != colony::kSeveredHead)
+	{
+		Piece->SetLimbAxis(Middle - Cut);
+	}
 	Piece->Throw(Velocity, Spin, Bit == colony::kSeveredHead ? 10.0f : 6.0f);
 	return Piece;
 }

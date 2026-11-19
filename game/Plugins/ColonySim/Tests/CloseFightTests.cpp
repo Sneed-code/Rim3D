@@ -235,7 +235,7 @@ LineFightResult lineFightRun(uint64_t seed, bool corridor) {
         sim->combat().equip(e, sim->things().make(sim->defs().idOf("Things", weapon)));
         return e;
     };
-    const Entity raider = place(27.5f, 30.5f, "Melee_Knife");
+    const Entity raider = place(27.5f, 30.5f, "Melee_Gladius");  // a knife (x3 speed, tuning.json) outlasts the 40 s
     const Entity clubman = place(28.4f, 30.5f, "Melee_Club");
     const Entity gunman = place(31.5f, 30.5f, "Gun_Revolver");
     sim->submit(DraftCommand{clubman, true});

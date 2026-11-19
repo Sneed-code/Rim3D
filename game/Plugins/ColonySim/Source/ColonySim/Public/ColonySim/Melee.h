@@ -80,6 +80,8 @@ struct Melee {
     int64_t footworkUntil = 0;   // stepping round or back until this step (the snapshot's `footwork`)
     int64_t engagedAt = 0;       // the step it last swung at an enemy (a fighter fresh from a swing follows one that runs)
     FightResponse response = FightResponse::Attack;  // what it does about enemies (SetFightResponseCommand)
+    // Lock-on (melee section 5, docs/design/lock-on.md): the last step the player's pawn saw its focus.
+    int64_t focusSeenAt = 0;
 };
 
 // The numbers (MeleeRules in data/defs/Rules/MeleeRules.json). Ours and sneed's: RimWorld's hit and dodge
@@ -132,6 +134,10 @@ struct MeleeRules {
     // are fast (sneed).
     std::vector<std::pair<std::string, std::vector<std::string>>> styleAttacks;
     std::vector<std::pair<std::string, std::string>> weaponStyle;
+    // Blows at a body on the ground (Melee::low; docs/design/focus.md "Blows at the downed"): clips by style or by weapon
+    // def name (a weapon's own list wins): a stab down for knives and spears, an overhead smash for clubs and hammers,
+    // a hack for blades and axes. A style with none of them measured swings its usual clips.
+    std::vector<std::pair<std::string, std::vector<std::string>>> lowAttacks;
     std::string unarmedStyle = "Unarmed";
     float maxAttackClipSeconds = 1.6f;
     float maxAttackHitSeconds = 0.8f;
@@ -142,6 +148,10 @@ struct MeleeRules {
     float focusFrontCos = 0.5f;       // targets within 60 degrees of where it faces come first...
     float focusBehindFactor = 2.0f;   // ...ones behind count this many times further off
     float aiFocusRange = 8.0f;        // a melee fighter locks on to its target this close (and faces it)
+    // Lock-on, Elden Ring style (docs/design/lock-on.md, ours).
+    float lockBigBodySize = 2.0f;     // a target this big (a bear and up) is struck at its body part nearest the attacker
+    int lockSightLostSteps = 90;      // the player's lock lets go after this long without seeing the target
+    float orbitRadialShare = 0.35f;   // a locked-on step with melee mostly sideways (radial part under this share) circles the target
     // Footwork (sneed: "move around a bit without compromising their ability to attack"; ours). Between its own swings,
     // in reach of its target, a melee fighter steps round it or back out of a blow it can't stop.
     int footworkEverySteps = 24;      // a choice at most this often
@@ -199,6 +209,8 @@ public:
     // The attack clips a melee weapon def (or a body def's own tools) swings with: its hold style's, the short ones
     // (docs/design/weapon-hold.md, body-motion.md). Empty for a def with no melee tools.
     std::vector<DefId> attackClipsOf(DefId def) const;
+    // The clips it swings with at a body on the ground (focus.md); empty: it uses attackClipsOf.
+    std::vector<DefId> lowAttackClipsOf(DefId def) const;
     // The fighter AI charges with this pawn: no gun, and a melee weapon in hand or a trait that says
     // so (Brawler). Others only strike back at enemies in reach.
     bool charges(Entity pawn) const;
@@ -230,6 +242,12 @@ public:
     // Turns every pawn locked on to a target within reach of sight to face it (after movement turned it to its walk), so
     // it steps sideways and back facing its enemy. Runs from the combat step.
     void faceFocus();
+    // Where a swing at `target` goes (lock-on.md): a big body's part nearest the attacker, a person's head for fists,
+    // else its chest (CombatSystem::aimPoint). False when the target can't be aimed at.
+    bool focusPoint(Entity attacker, Entity target, bool fists, float& x, float& y, float& z) const;
+    // The player's step (dx, dy) while locked on with no gun in hand: a mostly sideways step walks round the focus at
+    // the same distance (Elden Ring circling). Leaves it alone otherwise.
+    void orbitMove(Entity pawn, float& dx, float& dy) const;
     // The player's swing with no target: its focus if in reach, else a body on the ground before it in reach (the blow
     // goes down at it), else kNoEntity (straight ahead).
     Entity playerTarget(Entity pawn) const;
@@ -270,6 +288,7 @@ private:
         std::vector<Tool> tools;
         float reach = 0.0f;
         std::vector<DefId> attackClips;  // MotionClips of its style that are short enough
+        std::vector<DefId> lowAttackClips;  // the same for blows at a body on the ground (MeleeRules lowAttacks)
         float lunge = 0.0f;              // the least any of them steps forward by its blow (a man's metres)
     };
 

@@ -6,6 +6,21 @@
     },
     "Things": {
       "stats.carryingCapacity": 0.6666667
+    },
+    "Things/Melee_Knife": {
+      "tools.cooldownTime": 0.3333333
+    },
+    "Things/Melee_Longsword": {
+      "tools.cooldownTime": 0.5
+    },
+    "Things/Melee_BreachAxe": {
+      "tools.cooldownTime": 0.5
+    },
+    "Things/Melee_Spear": {
+      "tools.cooldownTime": 0.5
+    },
+    "Things/Melee_Monosword": {
+      "tools.cooldownTime": 0.5
     }
   },
   "values": {

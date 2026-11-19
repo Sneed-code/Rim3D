@@ -122,6 +122,15 @@ void makeColonistNameUnique(const DefDatabase& defs, uint64_t seed, Colonist& co
     }
 }
 
+std::string randomFirstName(const DefDatabase& defs, uint64_t seed, bool female) {
+    const Def* bank = defs.find("Names", female ? "FirstNamesFemale" : "FirstNamesMale");
+    if (bank == nullptr) {
+        return {};
+    }
+    Rng rng(splitMix64(seed ^ 0x6E616D65666F7273ULL), 7);
+    return colonistName(*bank, rng);
+}
+
 bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, Colonist& out, std::string& error,
                       const std::string& category) {
     out = Colonist{};

@@ -28,6 +28,12 @@ namespace colony {
 
 namespace {
 
+// The player's own swing at someone standing: the clip is drawn on the upper body and the feet stay the player's
+// (BodyMotion::freeFeet). A blow at someone on the ground keeps the whole body's clip.
+bool meleeFreeFeet(const Melee& m) {
+    return m.player && !m.low;
+}
+
 // Names are prefixed because Unreal's unity builds merge .cpp files together.
 
 float meleeLerp(float a, float b, float t) { return a + (b - a) * t; }
@@ -112,6 +118,9 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     num("focusFrontCos", r.focusFrontCos);
     num("focusBehindFactor", r.focusBehindFactor);
     num("aiFocusRange", r.aiFocusRange);
+    num("lockBigBodySize", r.lockBigBodySize);
+    whole("lockSightLostSteps", r.lockSightLostSteps);
+    num("orbitRadialShare", r.orbitRadialShare);
     whole("footworkEverySteps", r.footworkEverySteps);
     bySkill("footworkChanceBySkill", r.footworkChance);
     num("footworkTraitBonus", r.footworkTraitBonus);
@@ -144,6 +153,14 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
             clips.push_back(def->textAt(path.c_str(), i));
         }
         r.styleAttacks.emplace_back(style, std::move(clips));
+    }
+    for (const std::string& key : def->keys("lowAttacks")) {
+        std::vector<std::string> clips;
+        const std::string path = "lowAttacks." + key;
+        for (size_t i = 0; i < def->count(path.c_str()); ++i) {
+            clips.push_back(def->textAt(path.c_str(), i));
+        }
+        r.lowAttacks.emplace_back(key, std::move(clips));
     }
     for (const std::string& weapon : def->keys("weaponStyle")) {
         r.weaponStyle.emplace_back(weapon, def->text(("weaponStyle." + weapon).c_str()));
@@ -236,27 +253,48 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
             }
         }
         const BodyMotionSystem& motion = combat_.motion();
+        // Only short, quick clips that stay near the target.
+        const auto usable = [&](const std::string& clipName) -> const MotionClip* {
+            const MotionClip* c = motion.clip(clipName);
+            if (c == nullptr || c->hitSeconds <= 0.0f || c->hitSeconds > rules_.maxAttackHitSeconds ||
+                c->seconds > rules_.maxAttackClipSeconds) {
+                return nullptr;
+            }
+            // A clip that carries the body further than this is a charge, not a swing: it would run past the target.
+            float travel = 0.0f;
+            for (size_t i = 0; i < c->forward.size() && i < c->right.size(); ++i) {
+                travel = std::max(travel, std::sqrt(c->forward[i] * c->forward[i] + c->right[i] * c->right[i]));
+            }
+            return travel > rules_.maxAttackTravel ? nullptr : c;
+        };
         for (const auto& [name, clips] : rules_.styleAttacks) {
             if (name != style) {
                 continue;
             }
             for (const std::string& clipName : clips) {
-                const MotionClip* c = motion.clip(clipName);
-                if (c == nullptr || c->hitSeconds <= 0.0f || c->hitSeconds > rules_.maxAttackHitSeconds ||
-                    c->seconds > rules_.maxAttackClipSeconds) {
-                    continue;
-                }
-                // A clip that carries the body further than this is a charge, not a swing: it would run past the target.
-                float travel = 0.0f;
-                for (size_t i = 0; i < c->forward.size() && i < c->right.size(); ++i) {
-                    travel = std::max(travel, std::sqrt(c->forward[i] * c->forward[i] + c->right[i] * c->right[i]));
-                }
-                if (travel > rules_.maxAttackTravel) {
+                const MotionClip* c = usable(clipName);
+                if (c == nullptr) {
                     continue;
                 }
                 const float lunge = std::max(0.0f, motion.forwardAt(c->def, c->hitSeconds));
                 set.lunge = set.attackClips.empty() ? lunge : std::min(set.lunge, lunge);
                 set.attackClips.push_back(c->def);
+            }
+        }
+        // Blows at the downed: the weapon's own list if it has one, else its style's (a body's tools: the unarmed style).
+        const std::vector<std::string>* low = nullptr;
+        for (const auto& [key, clips] : rules_.lowAttacks) {
+            if (weapon && key == def.defName()) {
+                low = &clips;
+            } else if (low == nullptr && key == style) {
+                low = &clips;
+            }
+        }
+        if (low != nullptr && !set.attackClips.empty()) {
+            for (const std::string& clipName : *low) {
+                if (const MotionClip* c = usable(clipName)) {
+                    set.lowAttackClips.push_back(c->def);
+                }
             }
         }
     }
@@ -484,6 +522,13 @@ std::vector<DefId> MeleeSystem::attackClipsOf(DefId def) const {
     return tools_[def.value].attackClips;
 }
 
+std::vector<DefId> MeleeSystem::lowAttackClipsOf(DefId def) const {
+    if (!def.valid() || def.value >= tools_.size()) {
+        return {};
+    }
+    return tools_[def.value].lowAttackClips;
+}
+
 bool MeleeSystem::ready(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || !meleeAble(reg, pawn)) {
@@ -597,13 +642,19 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     }
     // A person's swing is one of its style's attack clips, timed so the clip's blow lands on the hit step; the clip's
     // step forward moves the body through the world (docs/design/body-motion.md). Faster swings play the clip faster.
+    // A blow at a body on the ground plays one of the downward clips when the weapon has any (focus.md).
     if (!set->attackClips.empty() && combat_.motion().hasClips(pawn) && !reg.all_of<BodyMotion>(pawn)) {
+        const std::vector<DefId>& clips = m.low && !set->lowAttackClips.empty() ? set->lowAttackClips : set->attackClips;
         Rng pick(splitMix64(m.seed ^ 0xC11FULL));
-        const DefId clipDef = set->attackClips[static_cast<size_t>(pick.unit() * static_cast<float>(set->attackClips.size())) %
-                                               set->attackClips.size()];
+        const DefId clipDef = clips[static_cast<size_t>(pick.unit() * static_cast<float>(clips.size())) % clips.size()];
         const Posture& posture = reg.get<Posture>(pawn);
         combat_.motion().playTimed(pawn, clipDef, combat_.motion().clip(clipDef)->hitSeconds, windup, posture.facingX, posture.facingY,
                                    false);
+        // The player's swing is the arms' and the chest's: the player keeps walking under it (sneed 2026-11-18). A
+        // blow at someone on the ground (a stomp, an overhead smash) stays the whole body's.
+        if (meleeFreeFeet(m)) {
+            combat_.motion().setLayers(pawn, true, true);
+        }
     }
     if (events_ != nullptr) {
         Event e;
@@ -878,8 +929,11 @@ void MeleeSystem::commit(Entity pawn, Melee& m) {
     float oy = 0.0f;
     float oz = 0.0f;
     shoulder(pawn, ox, oy, oz);
+    // Locked on or not, a swing at someone goes at its focus point (lock-on.md); one at a body on the ground at its aim
+    // point there.
     const bool hasTarget = m.target != kNoEntity && reg.valid(m.target) && things_.spawned(m.target) &&
-                           combat_.aimPoint(m.target, m.aimX, m.aimY, m.aimZ);
+                           (m.low ? combat_.aimPoint(m.target, m.aimX, m.aimY, m.aimZ)
+                                  : focusPoint(pawn, m.target, !m.weaponTool, m.aimX, m.aimY, m.aimZ));
     if (!hasTarget) {
         const Posture& posture = reg.get<Posture>(pawn);
         const float r = reach(pawn);
@@ -981,8 +1035,16 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
         dx /= flat;
         dy /= flat;
     }
-    // As far as the aimed point and a little past it, but never further than the reach.
-    const float length = std::min(flat + rules_.strikeDepth, reach(pawn));
+    // As far as the aimed point and a little past it, but never further than the reach. The player's swing doesn't
+    // step the body in (its feet are the player's), so its blow reaches as far as the clip's step would have taken it.
+    float strikeReach = reach(pawn);
+    if (meleeFreeFeet(m)) {
+        bool weaponHeld = false;
+        if (const ToolSet* set = toolsOf(pawn, weaponHeld, !m.weaponTool)) {
+            strikeReach += set->lunge * combat_.motion().sizeScale(pawn);
+        }
+    }
+    const float length = std::min(flat + rules_.strikeDepth, strikeReach);
     const float ez = oz;
     // One line of the blow at `angle` radians off the aimed line: walls and hitboxes first, then a target without
     // hitboxes (animals until they get theirs), hit if the line passes within its body, which is then hurt where
@@ -1227,6 +1289,7 @@ void MeleeSystem::hashThing(Entity e, StateHasher& h) const {
     h.add(m->nextRollAt);
     h.add(entt::to_integral(m->focus));
     h.add(m->focusPlayer);
+    h.add(m->focusSeenAt);
     h.add(m->low);
     h.add(static_cast<int>(m->circleDir));
     h.add(m->nextFootworkAt);
@@ -1336,6 +1399,7 @@ bool MeleeSystem::focusCommand(Entity pawn, Entity target, FocusMode mode, std::
         Melee& m = reg.get_or_emplace<Melee>(pawn);
         m.focus = target;
         m.focusPlayer = true;
+        m.focusSeenAt = now();
         return true;
     }
     if (mode != FocusMode::Next) {
@@ -1392,6 +1456,7 @@ bool MeleeSystem::focusCommand(Entity pawn, Entity target, FocusMode mode, std::
     }
     m.focus = picks[next].pawn;
     m.focusPlayer = true;
+    m.focusSeenAt = now();
     return true;
 }
 
@@ -1429,6 +1494,21 @@ void MeleeSystem::faceFocus() {
             m.focusPlayer = false;
             continue;
         }
+        const Position& t = reg.get<Position>(m.focus);
+        // The player's lock lets go when it hasn't seen the target for lockSightLostSteps (lock-on.md). Looked at
+        // every tenth step, from its eyes to the target's.
+        if (m.focusPlayer && (now() + entt::to_integral(pawn)) % 10 == 0) {
+            const Position& p = reg.get<Position>(pawn);
+            const Viewpoint from{p.x, p.y, p.level, reg.get<Posture>(pawn).stance};
+            const Viewpoint to{t.x, t.y, t.level, reg.get<Posture>(m.focus).stance};
+            if (map_.cover().lineOfSight(from, to)) {
+                m.focusSeenAt = now();
+            } else if (now() - m.focusSeenAt >= rules_.lockSightLostSteps) {
+                m.focus = kNoEntity;
+                m.focusPlayer = false;
+                continue;
+            }
+        }
         if (combat_.rollLocked(pawn)) {
             continue;  // a roll goes its own way
         }
@@ -1436,9 +1516,107 @@ void MeleeSystem::faceFocus() {
         if (s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) {
             continue;  // it faces where it aims
         }
-        const Position& t = reg.get<Position>(m.focus);
+        // A gun in hand keeps the lock but not the facing: the aim is free (sneed 2026-11-18, lock-on.md).
+        if (const Gear* gear = reg.try_get<Gear>(pawn);
+            gear != nullptr && gear->weapon != kNoEntity && reg.valid(gear->weapon) && combat_.isGun(reg.get<Thing>(gear->weapon).def)) {
+            continue;
+        }
         face(pawn, t.x, t.y);
     }
+}
+
+// Where a swing goes (docs/design/lock-on.md): sneed's focus point. A big body (lockBigBodySize and up) is struck at the
+// centre of its body part nearest the attacker's shoulder, picked fresh at each swing; fists go at a person's head; anything
+// else at the chest (aimPoint). Only where it is aimed: the strike's swept line decides what it meets.
+bool MeleeSystem::focusPoint(Entity attacker, Entity target, bool fists, float& x, float& y, float& z) const {
+    if (!combat_.aimPoint(target, x, y, z)) {
+        return false;
+    }
+    const bool big = combat_.bodySizeOf(target) >= rules_.lockBigBodySize;
+    if (!big && !fists) {
+        return true;
+    }
+    std::vector<HitboxView> boxes;
+    if (!combat_.hitboxesOf(target, boxes) || boxes.empty()) {
+        return true;
+    }
+    float ox = 0.0f;
+    float oy = 0.0f;
+    float oz = 0.0f;
+    if (!shoulder(attacker, ox, oy, oz)) {
+        return true;
+    }
+    int head = -1;
+    if (!big) {
+        const std::vector<std::string> zones = health_.zoneNames(target);
+        for (size_t i = 0; i < zones.size(); ++i) {
+            if (zones[i] == "Head") {
+                head = static_cast<int>(i);
+                break;
+            }
+        }
+        if (head < 0) {
+            return true;  // no head to punch at: the chest
+        }
+    }
+    bool found = false;
+    float best = 0.0f;
+    for (const HitboxView& b : boxes) {
+        const float cx = b.box ? b.ax : 0.5f * (b.ax + b.bx);
+        const float cy = b.box ? b.ay : 0.5f * (b.ay + b.by);
+        const float cz = b.box ? b.az : 0.5f * (b.az + b.bz);
+        float score = 0.0f;
+        if (big) {
+            score = (cx - ox) * (cx - ox) + (cy - oy) * (cy - oy) + (cz - oz) * (cz - oz);  // nearest
+        } else if (health_.partZone(target, b.part) == head) {
+            score = -cz;  // the head's highest shape (the skull over the neck)
+        } else {
+            continue;
+        }
+        if (!found || score < best) {
+            found = true;
+            best = score;
+            x = cx;
+            y = cy;
+            z = cz;
+        }
+    }
+    return true;
+}
+
+// Elden Ring circling (lock-on.md): locked on with no gun, A and D walk round the target. The camera faces it, so a
+// sideways key press is a step along the tangent, which would drift outwards; the step is put back on the circle.
+void MeleeSystem::orbitMove(Entity pawn, float& dx, float& dy) const {
+    const entt::registry& reg = things_.registry();
+    const Melee* m = reg.valid(pawn) ? reg.try_get<Melee>(pawn) : nullptr;
+    if (m == nullptr || m->focus == kNoEntity || !reg.valid(m->focus) || !reg.all_of<Position>(m->focus) || !reg.all_of<Position>(pawn)) {
+        return;
+    }
+    if (const Gear* gear = reg.try_get<Gear>(pawn);
+        gear != nullptr && gear->weapon != kNoEntity && reg.valid(gear->weapon) && combat_.isGun(reg.get<Thing>(gear->weapon).def)) {
+        return;
+    }
+    const Position& p = reg.get<Position>(pawn);
+    const Position& t = reg.get<Position>(m->focus);
+    const float rx = p.x - t.x;
+    const float ry = p.y - t.y;
+    const float r = std::sqrt(rx * rx + ry * ry);
+    const float len = std::sqrt(dx * dx + dy * dy);
+    if (p.level != t.level || r < 0.5f || len < 1e-5f) {
+        return;
+    }
+    const float radial = (dx * rx + dy * ry) / r;
+    if (std::fabs(radial) > rules_.orbitRadialShare * len) {
+        return;  // walking in or backing off
+    }
+    const float nx = rx + dx;
+    const float ny = ry + dy;
+    const float n = std::sqrt(nx * nx + ny * ny);
+    if (n < 1e-5f) {
+        return;
+    }
+    dx = t.x + nx * (r / n) - p.x;
+    dy = t.y + ny * (r / n) - p.y;
 }
 
 Entity MeleeSystem::playerTarget(Entity pawn) const {

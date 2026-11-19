@@ -29,6 +29,8 @@ public:
 	void AddMesh(UPoseableMeshComponent* Mesh) { Meshes.Add(Mesh); }
 	int32 GetMeshCount() const { return Meshes.Num(); }
 	bool IsAtRest() const { return bAtRest; }
+	/** The way a limb runs, in the piece's own space: it comes to rest lying along the ground, not standing on its end. */
+	void SetLimbAxis(const FVector& InAxis) { LimbAxis = InAxis.GetSafeNormal(); }
 
 private:
 	UPROPERTY()
@@ -37,6 +39,7 @@ private:
 	TArray<TObjectPtr<UPoseableMeshComponent>> Meshes;
 	FVector Velocity = FVector::ZeroVector;
 	FRotator Spin = FRotator::ZeroRotator;
+	FVector LimbAxis = FVector::ZeroVector;
 	float Radius = 8.0f;
 	bool bAtRest = false;
 	bool bLanded = false;
