@@ -72,10 +72,10 @@ tracing on the light comes in through the opening as it would. A broken window h
 material (a fresh clone before the commandlet runs) windows are drawn open, with a warning in the log.
 
 **Daylight inside** (`WindowLightSubsystem`): the nearest `Windows.MaxLights` (24) windows that let the sky in get a rect light
-the size of the opening, just inside the wall and facing into the room, at `Windows.LightCd` (6000 cd, about a patch of bright
-sky) times the sim's sky glow of the moment, so it follows the day, the weather and the night. The nearest `Windows.ShadowLights`
+the size of the opening, just inside the wall and facing into the room, at `Windows.LightCd` (15000 cd, bright sky and sunlit ground seen through the opening; 6000 was still dim on the PC, 2026-11-20)
+times the sim's sky glow of the moment, so it follows the day, the weather and the night. The nearest `Windows.ShadowLights`
 (8) cast shadows. The side it lights is the side the sim lights (`windowShareAt`). And with the camera **under a roof** the eye
-opens up further: the auto exposure may go `exposure.indoorBrighterEV` (3 stops, `data/look.json`) below the outdoor target
+opens up further: the auto exposure may go `exposure.indoorBrighterEV` (5 stops, a real indoor photo is 5 to 6 stops under daylight; 3 was still dim, `data/look.json`) below the outdoor target
 instead of `brighterEV`, easing in over a moment, so a room lit through its windows reads as lit instead of black next to the
 bright outside (sneed, 2026-11-19: the first noon picture was far too dark).
 
