@@ -221,11 +221,12 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			const float F = Rings[FMath::Min(Row, RingCount - 1)];
 			// The edge is torn, not round: the outer rings wander in and out.
 			const float Torn = F >= 0.94f ? 1.0f + 0.05f * Edge.At(Theta) + (bSkirt ? 0.03f * Random.FRandRange(-1.0f, 1.0f) : 0.0f) : 1.0f;
-			// Clothed: the rings past the skin stretch out over the sleeve or trouser leg as torn, soaked cloth.
-			const float Spread = bClothed && F > 1.0f ? 1.0f + (F - 1.0f) / 0.05f * (ClothOuter - 1.0f) : F;
+			// Clothed, the outer rings are torn, soaked cloth, but they stay the limb's width: spread out over the sleeve
+			// they read as a loose hoop round every stump in the PC pictures.
+			const float Spread = F;
 			// The skirt hangs back onto the limb: bare skin just inside its own edge, soaked cloth folded back down onto
 			// the sleeve rather than standing off it as a wide hollow collar.
-			const float SkirtSpread = bClothed ? ClothOuter * 0.99f : 0.99f;
+			const float SkirtSpread = 0.99f;
 			const float Radius = R * (bSkirt ? SkirtSpread : Spread) * Torn;
 			const float Z = bSkirt ? -(Skirt + Lift) * (0.75f + 0.25f * Edge.At(Theta * 1.7f + 1.0f)) : FaceZ(F, Theta) + (F < 0.7f ? 0.04f * R * Random.FRandRange(-0.5f, 0.5f) : 0.0f);
 			return FVector(Radius * FMath::Cos(Theta), Radius * FMath::Sin(Theta), Z);

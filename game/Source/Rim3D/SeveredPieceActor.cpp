@@ -310,11 +310,13 @@ namespace
 					continue;
 				}
 				// On the body the piece's bones squash onto the face, so what stays out is the share on the body's bones;
-				// on the piece the other way round. Skin wholly on the far side's bones that reaches past the joint (a sleeve
-				// cut below the elbow still covering it) stays out all the way: leaving it out had the cap buried inside
-				// the sleeve's end.
+				// on the piece the other way round. Skin wholly on one side's bones is left out: on the body that was hip and
+				// crotch skin past the hip joint, which lifted a thigh's cap 8 cm off the body.
 				const double Stays = bPieceSide ? Piece / Total : 1.0 - Piece / Total;
-				Dome = FMath::Max(Dome, static_cast<float>(Stays * FMath::Abs(Along)));
+				if (Stays < 0.999)
+				{
+					Dome = FMath::Max(Dome, static_cast<float>(Stays * FMath::Abs(Along)));
+				}
 			}
 		}
 		return FMath::Min(Dome, RadiusCm);
