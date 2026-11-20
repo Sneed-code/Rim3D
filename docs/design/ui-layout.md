@@ -150,5 +150,11 @@ drift). A faction that sends caravans has **Call for a caravan** (the comms cons
 reason when the faction is no ally, was called in the last 4 days, a caravan is already coming, or
 there is no powered comms console. The best talker (highest price improvement) makes the call.
 
+**Tile pictures** (2026-11-20): a building's Build tile shows its own mesh (made of the best stuff in
+stock), seen from the south-west and above, taken once per def by a show-only scene capture on a stage
+4 km under the map (one picture a frame, 128 px). Unlit by default so it reads the same day and
+night; `Orders.TileIconsLit 1` lights it by the world instead, `Orders.TileIcons 0` goes back to the
+drawn footprints. Floors and orders keep their drawn icons.
+
 Still to do: goodwill history in the Factions window, icons for the bar's right-hand
-buttons, real tile icons for every building, the learning helper's lessons.
+buttons, the learning helper's lessons.

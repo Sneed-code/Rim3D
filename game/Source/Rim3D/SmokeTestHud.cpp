@@ -153,10 +153,39 @@ void USmokeTestSubsystem::BuildHudPhases()
 		{
 			Fail(TEXT("hud_build_structure: no Level earth tile in Structure"));
 		}
+		if (Orders()->GetStats().TileIconsMade == 0)
+		{
+			Fail(TEXT("hud_build_structure: no tile picture was made from a building mesh"));
+		}
+		Notes.Add(FString::Printf(TEXT("hud_build_structure: %d tile pictures made"), Orders()->GetStats().TileIconsMade));
 		Orders()->CancelTool();
 		Hud()->CloseTabs();
 	};
 	Phases.Add(MoveTemp(Structure));
+
+	// 3b. Build > Production with the tile pictures lit by the world (Orders.TileIconsLit 1), to compare with the unlit ones.
+	FPhase Lit;
+	Lit.Name = TEXT("hud_build_lit");
+	Lit.WarmupSeconds = 3.0f;
+	Lit.MeasureSeconds = 0.5f;
+	Lit.Setup = [=, this]()
+	{
+		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("Orders.TileIconsLit")))
+		{
+			Var->Set(1, ECVF_SetByCode);
+		}
+		Hud()->OpenTab(EHudTab::Build);
+		Orders()->SetOpenCategory(TEXT("Production"));
+	};
+	Lit.Verify = [=, this]()
+	{
+		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("Orders.TileIconsLit")))
+		{
+			Var->Set(0, ECVF_SetByCode);
+		}
+		Hud()->CloseTabs();
+	};
+	Phases.Add(MoveTemp(Lit));
 
 	// 4. The info window of the first colonist ("i" on the selected panel).
 	FPhase Info;
