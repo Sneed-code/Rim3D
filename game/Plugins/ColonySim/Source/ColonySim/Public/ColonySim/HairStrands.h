@@ -103,7 +103,7 @@ COLONY_API std::vector<std::pair<int, int>> hairSheetNeighbours(const std::vecto
 
 // Long hair swept off the stock while a long gun is aimed (docs/design/hair-physics.md, "Aiming"): as a shooter with
 // long hair puts it over the other shoulder, every strand's styled shape is turned towards `away` (unit: the side away
-// from the stock and a little back) by up to `angleDeg` times `amount` (0 at the ready .. 1 aimed). Strands rooted on the
+// from the stock and forward, over that shoulder) by up to `angleDeg` times `amount` (0 at the ready .. 1 aimed). Strands rooted on the
 // stock's side (`stockSide`, unit, from `head`) turn fully, those down the middle of the back by 0.85, the far side's
 // by 0.7; the first segment, on the scalp, by 0.8. Roots and every segment's length are kept. Only the goals change: the
 // physics carries the hair there with its usual lag, its collisions and its rest on the body.

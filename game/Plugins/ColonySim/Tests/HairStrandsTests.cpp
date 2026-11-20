@@ -449,7 +449,7 @@ TEST_CASE("hair: aiming turns the hair's styled shape off the stock, keeping roo
     const auto rest = restingHair();
     const HairVec head = hv(0, 0, 155);
     const HairVec stockSide = hv(0, -1, 0);
-    const HairVec away = hv(-0.33f, 0.94f, 0.0f);
+    const HairVec away = hv(0.47f, 0.88f, 0.0f);
     auto none = rest;
     sweepHairGoals(none, head, stockSide, away, 0.0f);
     for (size_t i = 0; i < rest.size(); ++i) {
@@ -526,7 +526,7 @@ AimedHair aimedHair(float sweep, int frames) {
     AimedHair out;
     for (int f = 0; f < frames; ++f) {
         auto goals = rest;
-        sweepHairGoals(goals, hv(0, 0, 155), hv(0, -1, 0), hv(-0.33f, 0.94f, 0.0f), sweep * std::fmin(1.0f, static_cast<float>(f) / 12.0f));
+        sweepHairGoals(goals, hv(0, 0, 155), hv(0, -1, 0), hv(0.47f, 0.88f, 0.0f), sweep * std::fmin(1.0f, static_cast<float>(f) / 12.0f));
         hair.step(1.0f / 60.0f, goals, body, hairAimSettings(HairSettings{}, sweep));
         if (f > 30) {
             out.deepest = std::fmax(out.deepest, hairDeepestPenetration(hair.points(), body));
@@ -567,7 +567,7 @@ TEST_CASE("hair: lowering the gun lets the hair fall back to where it hangs unai
         for (int f = 0; f < 600; ++f) {
             auto goals = rest;
             const float aim = !aimFirst || f >= 192 ? 0.0f : (f < 180 ? 1.0f : 1.0f - static_cast<float>(f - 180) / 12.0f);
-            sweepHairGoals(goals, hv(0, 0, 155), hv(0, -1, 0), hv(-0.33f, 0.94f, 0.0f), aim);
+            sweepHairGoals(goals, hv(0, 0, 155), hv(0, -1, 0), hv(0.47f, 0.88f, 0.0f), aim);
             hair.step(1.0f / 60.0f, goals, body, HairSettings{});
         }
         return hair.points();

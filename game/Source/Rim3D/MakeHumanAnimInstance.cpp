@@ -520,8 +520,10 @@ void FMakeHumanHairNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 	{
 		const FVector HeadWorld = Component.TransformPosition(Output.Pose.GetComponentSpaceTransform(HeadBone.GetCompactPoseIndex(Container)).GetLocation());
 		const FVector StockSide = Component.TransformVectorNoScale(Right).GetSafeNormal() * (Gun.bRightHand ? 1.0 : -1.0);
-		const FVector Back = -Component.TransformVectorNoScale(Forward).GetSafeNormal();
-		const FVector Away = (-StockSide + Back * 0.35).GetSafeNormal();
+		// Over the far shoulder and forward down the chest, away from a camera behind the stock (PC round 4: sent out to the
+		// side and back, the hair fanned across the view of the stock instead).
+		const FVector Ahead = Component.TransformVectorNoScale(Forward).GetSafeNormal();
+		const FVector Away = (-StockSide + Ahead * 0.55).GetSafeNormal();
 		TArray<FVector, TInlineAllocator<8>> TipsBefore;
 		for (const std::vector<colony::HairVec>& Points : Goals)
 		{
