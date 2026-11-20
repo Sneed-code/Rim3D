@@ -94,6 +94,11 @@ struct FLookConfig
 	float VolumetricExtinction = 1.0f;
 	float VolumetricScatteringDistribution = 0.55f;
 	float VolumetricDistanceCm = 9000.0f;
+	/** Under a roof (IndoorShare): dust in the air, so sunbeams through windows show as soft shafts. The fog starts at the camera,
+	 *  thickens by DustExtinction and reaches only DustDistanceCm, which also packs the fog's slices close for crisp shafts. */
+	float DustStartDistanceCm = 0.0f;
+	float DustExtinction = 4.0f;
+	float DustDistanceCm = 3000.0f;
 	float LowSunMist = 0.03f;
 	float LowSunMistFromDeg = -3.0f;
 	float LowSunMistToDeg = 14.0f;
