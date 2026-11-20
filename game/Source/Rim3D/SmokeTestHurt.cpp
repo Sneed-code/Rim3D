@@ -543,7 +543,7 @@ void USmokeTestSubsystem::BuildHurtPhases()
 						{
 							Across = FVector(0.8, 0.6, 0.0);
 						}
-						const double Lift = FMath::Max(CutOut.Z, 0.3);
+						const double Lift = FMath::Max(CutOut.Z, 0.15);
 						const FVector Look = Across.GetSafeNormal() * FMath::Sqrt(1.0 - Lift * Lift) + FVector(0.0, 0.0, Lift);
 						Eye = P + Look * 40.0 + FVector(4.0, 3.0, 2.0);
 					}
