@@ -155,6 +155,8 @@ public:
 	float GetSightOffCm() const { return SightOffCm; }
 	/** Where the arms' main bones are in the view (cm, x ahead, y right, z up), for the smoke test's notes. */
 	const FString& GetBoneLine() const { return BoneLine; }
+	/** The gun model's parts this frame (mesh, shown or not, size, place in the view), for the smoke test's notes. */
+	FString DescribeGunParts() const;
 	/** Whether the arms show a weapon by its hold style this frame (a melee weapon, fists, a shield), not a gun model. */
 	bool IsHeldViewShown() const { return bShown && bHeldView; }
 	/** The first-person arms' mesh (the player's MakeHuman body, only its arms shown), for the smoke test's arm checks. */

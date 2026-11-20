@@ -466,6 +466,82 @@ namespace
 		OutPalm = (OutPalm - OutFingers * FVector::DotProduct(OutPalm, OutFingers)).GetSafeNormal();
 		return !OutPalm.IsNearlyZero();
 	}
+
+	// Closes a pinned hand's fingers round its grip: each finger is carried rigidly with the solved hand, then each
+	// joint gets only the curl the animation lacks (an open-handed clip held air beside the gun), towards the palm and
+	// never past a natural fist (index 50/60 at its first two joints, the little finger 65/65), the last joint a third
+	// as much. The thumb is left as animated.
+	void MhCurlFingers(FComponentSpacePoseContext& Output, const FBoneContainer& Container, const FMakeHumanArmsNode::FArm& Arm,
+					   const FTransform& HandAnimated, const FTransform& HandSolved, const FVector& Fingers0, const FVector& Palm0, float CurlAlpha,
+					   TArray<FBoneTransform>& OutBoneTransforms)
+	{
+		static const double MhCurlWant[4][2] = {{50.0, 60.0}, {55.0, 65.0}, {60.0, 65.0}, {65.0, 65.0}};
+		const FQuat HandDelta = HandSolved.GetRotation() * HandAnimated.GetRotation().Inverse();
+		const FVector FingersF = HandDelta.RotateVector(Fingers0).GetSafeNormal();
+		const FVector PalmF = HandDelta.RotateVector(Palm0).GetSafeNormal();
+		// A turn about this axis by a positive angle brings the fingers towards the palm.
+		const FVector CurlAxis = FVector::CrossProduct(FingersF, PalmF).GetSafeNormal();
+		if (CurlAxis.IsNearlyZero())
+		{
+			return;
+		}
+		for (int32 F = 0; F < 4; ++F)
+		{
+			const FBoneReference (&Chain)[3] = Arm.Fingers[F];
+			if (!Chain[0].IsValidToEvaluate(Container) || !Chain[1].IsValidToEvaluate(Container) || !Chain[2].IsValidToEvaluate(Container))
+			{
+				continue;
+			}
+			FTransform Joint[3];
+			FCompactPoseBoneIndex JointI[3] = {FCompactPoseBoneIndex(INDEX_NONE), FCompactPoseBoneIndex(INDEX_NONE), FCompactPoseBoneIndex(INDEX_NONE)};
+			for (int32 J = 0; J < 3; ++J)
+			{
+				JointI[J] = Chain[J].GetCompactPoseIndex(Container);
+				Joint[J] = Output.Pose.GetComponentSpaceTransform(JointI[J]).GetRelativeTransform(HandAnimated) * HandSolved;
+			}
+			double Added = 0.0;
+			for (int32 J = 0; J < 3; ++J)
+			{
+				double Turn = 0.0;
+				if (J < 2)
+				{
+					const FVector From = J == 0 ? FingersF : (Joint[1].GetLocation() - Joint[0].GetLocation()).GetSafeNormal();
+					const FVector Seg = (J == 0 ? Joint[1].GetLocation() - Joint[0].GetLocation() : Joint[2].GetLocation() - Joint[1].GetLocation()).GetSafeNormal();
+					if (From.IsNearlyZero() || Seg.IsNearlyZero())
+					{
+						continue;
+					}
+					const double Now = FMath::RadiansToDegrees(FMath::Atan2(FVector::DotProduct(FVector::CrossProduct(From, Seg), CurlAxis), FVector::DotProduct(From, Seg)));
+					Turn = FMath::Max(0.0, MhCurlWant[F][J] - Now);
+				}
+				else
+				{
+					Turn = FMath::Min(Added / 3.0, 30.0);
+				}
+				Turn *= CurlAlpha;
+				if (Turn <= 0.01)
+				{
+					continue;
+				}
+				Added += Turn;
+				const FQuat Q(CurlAxis, FMath::DegreesToRadians(Turn));
+				const FVector Pivot = Joint[J].GetLocation();
+				for (int32 K = J; K < 3; ++K)
+				{
+					Joint[K].SetRotation((Q * Joint[K].GetRotation()).GetNormalized());
+					Joint[K].SetLocation(Pivot + Q.RotateVector(Joint[K].GetLocation() - Pivot));
+				}
+			}
+			if (Added <= 0.0)
+			{
+				continue;
+			}
+			for (int32 J = 0; J < 3; ++J)
+			{
+				OutBoneTransforms.Add(FBoneTransform(JointI[J], Joint[J]));
+			}
+		}
+	}
 }
 
 bool FMakeHumanArmsNode::IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones)
@@ -489,6 +565,13 @@ void FMakeHumanArmsNode::InitializeBoneReferences(const FBoneContainer& Required
 			Arm.Index.Initialize(RequiredBones) && Arm.Pinky.Initialize(RequiredBones) && Arm.Middle.Initialize(RequiredBones);
 		Arm.IndexTip.Initialize(RequiredBones);
 		Arm.Clavicle.Initialize(RequiredBones);
+		for (FBoneReference (&Chain)[3] : Arm.Fingers)
+		{
+			for (FBoneReference& Joint : Chain)
+			{
+				Joint.Initialize(RequiredBones);
+			}
+		}
 		Arm.bValid = Arm.bValid && Arm.Upper.IsValidToEvaluate(RequiredBones) && Arm.Lower.IsValidToEvaluate(RequiredBones) &&
 			Arm.Hand.IsValidToEvaluate(RequiredBones) && Arm.Index.IsValidToEvaluate(RequiredBones) && Arm.Pinky.IsValidToEvaluate(RequiredBones) &&
 			Arm.Middle.IsValidToEvaluate(RequiredBones);
@@ -818,9 +901,11 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 			Tip = Loc(Arm.IndexTip);
 		}
 		FVector Fingers0, Palm0;
+		bool bHandFrame = false;
 		if (MhHandFrame(HandAnimated.GetLocation(), Loc(Arm.Index), Loc(Arm.Pinky), Loc(Arm.Middle), bTip ? &Tip : nullptr, bRight, Fingers0, Palm0))
 		{
 			// The frame as animated, carried to the goal's turn by the hand bone's own rotation (as animated too).
+			bHandFrame = true;
 			const FQuat HandInv = HandAnimated.GetRotation().Inverse();
 			const FVector FingersWant = WantRot.RotateVector(HandInv.RotateVector(Fingers0));
 			const FVector PalmWant = WantRot.RotateVector(HandInv.RotateVector(Palm0));
@@ -851,6 +936,10 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 		OutBoneTransforms.Add(FBoneTransform(LowerI, FTransform(LowerB, EB, LowerT.GetScale3D())));
 		OutBoneTransforms.Add(FBoneTransform(HandI, FTransform(HandB, WB, HandT.GetScale3D())));
 		FinalHand[Side] = FTransform(HandB, WB);
+		if (Goal.bCurl && bHandFrame)
+		{
+			MhCurlFingers(Output, Container, Arm, HandAnimated, FTransform(HandB, WB, HandT.GetScale3D()), Fingers0, Palm0, GoalAlpha, OutBoneTransforms);
+		}
 		bFinal[Side] = true;
 		ShortBy[Side] = static_cast<float>(Solve.shortBy);
 		bSolved[Side] = true;
@@ -1002,6 +1091,14 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 			Arm.Middle.BoneName = FName(*FString::Printf(TEXT("middle_01_%s"), S));
 			Arm.IndexTip.BoneName = FName(*FString::Printf(TEXT("index_03_%s"), S));
 			Arm.Clavicle.BoneName = FName(*FString::Printf(TEXT("clavicle_%s"), S));
+			static const TCHAR* const MhFingerNames[4] = {TEXT("index"), TEXT("middle"), TEXT("ring"), TEXT("pinky")};
+			for (int32 F = 0; F < 4; ++F)
+			{
+				for (int32 J = 0; J < 3; ++J)
+				{
+					Arm.Fingers[F][J].BoneName = FName(*FString::Printf(TEXT("%s_%02d_%s"), MhFingerNames[F], J + 1, S));
+				}
+			}
 		}
 		ArmsIK.Spine.BoneName = FName(TEXT("spine_05"));
 		ArmsIK.Neck.BoneName = FName(TEXT("neck_01"));

@@ -473,10 +473,12 @@ void HoldDraw::ApplyPinned(USkeletalMeshComponent* Mesh, const colony::WeaponHol
 	Main.Anchor = Anchor;
 	Main.Target = MainCS;
 	Main.bRotation = true;
+	Main.bCurl = true;
 	Anim->SetHandGoal(bRight, Main);
 	FMakeHumanHandGoal Off;
 	Off.Alpha = Pinned.bOff ? FMath::Clamp(OffAlpha, 0.0f, 1.0f) : 0.0f;
 	Off.bRotation = true;
+	Off.bCurl = true;
 	if (Main.Alpha >= 0.5f)
 	{
 		// The weapon is at its place: the other hand goes to its own grip there, not after the main hand (whose turn

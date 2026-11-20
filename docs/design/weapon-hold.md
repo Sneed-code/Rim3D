@@ -153,6 +153,9 @@ sim's plain C++ `colony::arm` (`ArmPose.h`), so it is unit tested:
   (`Limits`). A hand turned further is brought back to the nearest pose a wrist can take (`clampHand`); the weapon
   stays where it was placed and the grip gives a little instead. A backwards elbow reads as 180 degrees of twist, so
   the same limit catches it.
+- **Fingers close round the grip**: a pinned hand's four fingers get only the curl its clip lacks, towards the palm,
+  up to a natural fist (index 50/60 degrees at its first two joints, the little finger 65/65, the last joint a third as
+  much); the thumb stays as animated. An open-handed clip no longer leaves the hand holding air beside the gun.
 
 Proof: `ArmPoseTests` solves 20,000 random grips round the body (out of reach, against the shoulder, any hand turn)
 and every one is inside the limits. On the PC, smoke test `gunrange` measures **both arms of every drawn frame** (the

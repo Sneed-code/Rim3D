@@ -434,6 +434,29 @@ void UGunRangeSubsystem::OnSimEvent(const colony::Event& Event)
 	FlashAge = 0.0f;
 }
 
+FString UGunRangeSubsystem::DescribeGunParts() const
+{
+	const UProtagonistSubsystem* Protagonist = GetWorld() ? GetWorld()->GetSubsystem<UProtagonistSubsystem>() : nullptr;
+	const AProtagonistPawn* Body = Protagonist ? Protagonist->GetBody() : nullptr;
+	const UCameraComponent* Cam = Body ? Body->GetCamera() : nullptr;
+	FString Out;
+	for (const UStaticMeshComponent* Part : PartComponents)
+	{
+		if (!Part)
+		{
+			continue;
+		}
+		const UStaticMesh* PartMesh = Part->GetStaticMesh();
+		const FVector Size = PartMesh ? PartMesh->GetBoundingBox().GetSize() * Part->GetComponentScale() : FVector::ZeroVector;
+		const FVector At = Cam ? Cam->GetComponentTransform().InverseTransformPosition(Part->Bounds.Origin) : FVector::ZeroVector;
+		Out += FString::Printf(TEXT("%s[%s flag %d shown %d attached %d size %.0fx%.0fx%.0f at (%.0f,%.0f,%.0f) materials %d] "),
+			Part->ComponentTags.IsEmpty() ? TEXT("?") : *Part->ComponentTags[0].ToString(), PartMesh ? *PartMesh->GetName() : TEXT("none"),
+			Part->GetVisibleFlag() ? 1 : 0, Part->IsVisible() ? 1 : 0, Part->GetAttachParent() == GunFrame ? 1 : 0, Size.X, Size.Y, Size.Z,
+			At.X, At.Y, At.Z, Part->GetNumMaterials());
+	}
+	return Out;
+}
+
 void UGunRangeSubsystem::HideAll()
 {
 	bShown = false;
@@ -973,6 +996,12 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 		if (!Part)
 		{
 			continue;
+		}
+		// Shown with the view every frame (the magazine is set again below): a part made while the view was hidden
+		// stayed hidden (round 5: the pistol's body never showed in first person).
+		if (Part->GetVisibleFlag() != bShown)
+		{
+			Part->SetVisibility(bShown);
 		}
 		const FTransform MeshFix(G.MeshRotation, G.MeshOffset);
 		FTransform Local = MeshFix;

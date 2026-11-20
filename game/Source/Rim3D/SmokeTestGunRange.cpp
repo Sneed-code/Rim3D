@@ -819,6 +819,18 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 						Gap = static_cast<float>(FVector::Dist(HandAt, GoalWorld.GetLocation()));
 						const FVector FromShoulder = GoalWorld.GetLocation() - Mesh->GetSocketLocation(bRight ? TEXT("upperarm_r") : TEXT("upperarm_l"));
 						GoalFromShoulder = FVector(FVector::DotProduct(FromShoulder, Forward), FVector::DotProduct(FromShoulder, Right), FVector::DotProduct(FromShoulder, Up));
+						// How far the drawn hand is turned from its grip's turn (the wrist limits held it back): not a
+						// failure, a note for tuning the places and grips.
+						const FQuat HandQ = Mesh->GetSocketQuaternion(bRight ? TEXT("hand_r") : TEXT("hand_l"));
+						const float HandTurn = static_cast<float>(FMath::RadiansToDegrees(HandQ.AngularDistance(GoalWorld.GetRotation())));
+						if (HandTurn > 25.0f)
+						{
+							int32& TurnNotes = State->ArmFailsBy.FindOrAdd(Key + TEXT(" turn"));
+							if (TurnNotes++ < 1)
+							{
+								Notes.Add(FString::Printf(TEXT("gunrange: HAND TURNED FROM ITS GRIP %s: %.0f degrees (the wrist's limits held it back)"), *Key, HandTurn));
+							}
+						}
 					}
 					State->ArmWorstGap = FMath::Max(State->ArmWorstGap, Gap);
 					if (Short > 3.0f || Gap > 3.0f)
@@ -853,6 +865,10 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			Notes.Add(FString::Printf(TEXT("gunrange: picture %s (gun %d, barrel off %.1f deg, sight off %.1f cm, shots %d, reloads %d)"),
 				*FPaths::GetCleanFilename(Path), G->GetCurrentGun(), G->GetBarrelOffDegrees(), G->GetSightOffCm(), G->GetShotsSeen(), G->GetReloadsSeen()));
 			Notes.Add(FString::Printf(TEXT("gunrange:   bones %s"), *G->GetBoneLine()));
+			if (Body->IsFirstPerson() && !G->IsHeldViewShown())
+			{
+				Notes.Add(FString::Printf(TEXT("gunrange:   parts %s"), *G->DescribeGunParts()));
+			}
 		};
 		const auto AimAtNearest = [=]() -> bool
 		{

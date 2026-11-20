@@ -148,6 +148,7 @@ struct FMakeHumanHandGoal
 	FName Anchor;                       // Space Anchor: the bone
 	FTransform Target;                  // the hand bone's goal (its location and, with bRotation, its rotation)
 	bool bRotation = false;             // false: the hand keeps its animated rotation (still within the wrist's range)
+	bool bCurl = false;                 // close the fingers round a grip (only adds curl the animation lacks)
 	FVector Pole = FVector::ZeroVector; // component-space direction the elbow points; zero: naturally down and out
 	bool bElbowPoint = false;           // instead, a component-space point the elbow bends towards
 	FVector ElbowPoint = FVector::ZeroVector;
@@ -169,6 +170,7 @@ struct FMakeHumanArmsNode : public FAnimNode_SkeletalControlBase
 	{
 		FBoneReference Upper, Lower, Hand, Index, Pinky, Middle, IndexTip;
 		FBoneReference Clavicle;                     // optional: the shoulder girdle, brought forward for a far grip
+		FBoneReference Fingers[4][3];                // optional: index, middle, ring, pinky joints 01..03 (curled round a grip)
 		FVector HingeInUpper = FVector::ZeroVector;  // the elbow's medial hinge in the upper arm's space, last seen bent
 		bool bHinge = false;
 		double NeutralFlex = 0.0;       // the rest pose's wrist readings (its knuckles off the forearm's line)
