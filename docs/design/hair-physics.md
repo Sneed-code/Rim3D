@@ -28,7 +28,9 @@ cloud); `FMakeHumanHairNode` in `MakeHumanAnimInstance` feeds it and turns its a
   so the chain never gains energy. A segment never turns more than 80° from the style's shape. Steps of at most
   1/120 s, three constraint passes each.
 - **The body.** Capsules round the skull, the neck, the chest and upper back (across the body at the top spine bone),
-  a yoke towards the base of the neck, the middle of the back, both shoulders (collarbone to arm) and both upper arms.
+  a yoke towards the base of the neck, the middle of the back, the small of the back (lowest spine bone), the front of
+  the chest (a bust bar ahead of the spine, sized from the chest shape: hair falling forward over the shoulders lies on
+  it when she leans back), the hips (across the pelvis), both shoulders (collarbone to arm) and both upper arms.
   Each rides on its bone, so it moves exactly as the body is drawn. Every hair segment is pushed out of them by turning
   it about its upper end, just to the surface. **Hair that touches the body lands and stays**: the push out is never kept
   as speed away from the body (no bounce), sliding slower than 4 cm/s stops dead (grip) and faster sliding dies away at
@@ -80,5 +82,11 @@ About 30 points against 10 capsules: a few tens of microseconds per pawn per fra
 - MetaHuman strand hair (grooms, `Pawns.MetaHumans 1`, not used by the game's pawns now) has no physics.
 - Short styles and the afro have no bones and stay as styled (they don't reach the body).
 - Hits, blasts and wind don't push the hair yet; clothes and armour will need their own capsules once bodies wear them.
-- Breasts have no capsule of their own (the chest capsule covers the upper chest); side hair falling far forward over a
-  large chest may still touch it.
+- The bust bar is sized from the skeleton and the back hair, not from the mesh, so a very large or very flat chest is
+  only roughly matched; reading the body mesh needs CPU copies of the meshes (not kept in packaged builds).
+- Five chains carry the whole sheet of hair; the mesh between two chains is blended between them, so where two chains
+  part round a shoulder the hair between can cut the corner. More chains need the MakeHuman hair rebuilt
+  (`add_hair_bones` azimuths) and re-imported on the PC.
+- Animals: the solver and the body shapes take any chain of points and any capsules, but none of the animal models has
+  bones in its mane, fur or tail to swing yet (their manes are solid mesh) and animals play single clips with no
+  animation graph; a model with mane or tail bones would get the same node.

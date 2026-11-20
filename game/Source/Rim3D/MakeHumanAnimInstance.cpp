@@ -406,6 +406,8 @@ void FMakeHumanHairNode::Setup(const FReferenceSkeleton& Ref)
 		case colony::HairBone::ClavicleR: Bone = Arm[0][1]; break;
 		case colony::HairBone::UpperArmL: Bone = Arm[1][0]; break;
 		case colony::HairBone::UpperArmR: Bone = Arm[1][1]; break;
+		case colony::HairBone::SpineLow: Bone = Spine.IsEmpty() ? INDEX_NONE : Spine[0]; break;
+		case colony::HairBone::Pelvis: Bone = PelvisIndex; break;
 		}
 		if (Bone == INDEX_NONE)
 		{
