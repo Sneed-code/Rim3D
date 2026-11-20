@@ -317,14 +317,23 @@ namespace blastfx
 				const float Pit = 1.0f - SmoothStep(0.03f, 0.08f, R + (Speck - 0.5f) * 0.05f);
 				// Fragment pocks: small dark dots scattered past the core.
 				const float Dots = SmoothStep(0.74f, 0.8f, Fbm(Vec3{U * 40.0f, V * 40.0f, 3.0f}, Seed + 37u, 2)) * (1.0f - SmoothStep(0.55f, 0.92f, R));
-				float Soot = std::max({Core * (0.88f + 0.24f * (Speck - 0.5f)), Rays * 0.95f, Dots * 0.85f});
+				// The core is charred, not flat black (PC round 10): mottled soot, darker along thin cracks, patches of grey ash
+				// between them and a few embers still glowing (B: ash 0 to 0.8, an ember 0.9 at its edge to 1 in its heart).
+				const float Mottle = Fbm(Vec3{U * 7.0f, V * 7.0f, 6.0f}, Seed + 38u, 4);
+				const float Crack = 1.0f - SmoothStep(0.0f, 0.04f, std::fabs(Fbm(Vec3{U * 11.0f, V * 11.0f, 7.0f}, Seed + 39u, 3) - 0.5f));
+				const float CharDark = Clamp01(0.7f + 0.3f * (Mottle - 0.5f) + 0.12f * Crack + 0.1f * (Speck - 0.5f));
+				const float AshAmt = Core * SmoothStep(0.6f, 0.78f, Fbm(Vec3{U * 5.0f, V * 5.0f, 8.0f}, Seed + 40u, 4)) * (1.0f - Crack) * (0.25f + 0.35f * Speck);
+				// Embers a few centimetres across (PC round 11: pinpricks were lost in the texture's smaller mips at 6 m).
+				const float EmberN = Fbm(Vec3{U * 14.0f, V * 14.0f, 9.0f}, Seed + 41u, 2);
+				const bool bEmber = R < Rc * 0.85f && EmberN > 0.74f;
+				float Soot = std::max({Core * CharDark, Rays * 0.95f, Dots * 0.85f});
 				Soot *= 1.0f - 0.4f * Pit;
 				const float Pale = Clamp01(std::max(Dust, Pit * 0.4f));
 				Pixel& Px = Out.At(X, Y);
 				Px.Heat = Clamp01(Soot);
 				Px.Light = Pale * (1.0f - Clamp01(Soot));
-				Px.Depth = Speck;
-				Px.Opacity = Clamp01(std::max({Soot, Pale * 0.7f}) * (1.0f - SmoothStep(0.88f, 0.99f, R)));
+				Px.Depth = bEmber ? 0.9f + 0.1f * SmoothStep(0.74f, 0.8f, EmberN) : 0.8f * Clamp01(AshAmt);
+				Px.Opacity = Clamp01(std::max({Core * 0.96f, Soot, Pale * 0.7f}) * (1.0f - SmoothStep(0.88f, 0.99f, R)));
 			}
 		}
 		return Out;
