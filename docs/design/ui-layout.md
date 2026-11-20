@@ -160,5 +160,8 @@ stock), seen from the south-west and above, taken once per def by a show-only sc
 night; `Orders.TileIconsLit 1` lights it by the world instead, `Orders.TileIcons 0` goes back to the
 drawn footprints. Floors and orders keep their drawn icons.
 
-Still to do: goodwill history in the Factions window, icons for the bar's right-hand
-buttons, the learning helper's lessons.
+**Bar icons** (2026-11-20): the speed buttons (pause bars, one to three play arrows), Keys (a
+keyboard), Factions (a flag) and Menu (three lines) are clean line icons drawn by ImGui on
+square-ish buttons, amber when on; their names are in the tooltips. Ship stays a word.
+
+Still to do: goodwill history in the Factions window, the learning helper's lessons.
