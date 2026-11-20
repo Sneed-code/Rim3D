@@ -10,6 +10,10 @@
 #include "TradePanelSubsystem.generated.h"
 
 class USimSubsystem;
+namespace colony
+{
+	struct Visit;
+}
 
 /** What a deal comes to at the negotiator's prices (see FTradePanelQuote). */
 struct FTradePanelQuote
@@ -117,6 +121,8 @@ private:
 	void DrawAll(USimSubsystem& Bridge);
 	void DrawStrip(USimSubsystem& Bridge, float Scale, float Margin);
 	void DrawTradeWindow(USimSubsystem& Bridge, const colony::VisitView& Visit, float Scale);
+	/** How many kinds of item the You sell list of a trade window shows (for its height). */
+	int32 CountSellable(USimSubsystem& Bridge, const colony::Visit* SimVisit) const;
 	void DrawGiftWindow(USimSubsystem& Bridge, const colony::VisitView& Visit, float Scale);
 	void DrawFactionsWindow(USimSubsystem& Bridge, float Scale);
 
