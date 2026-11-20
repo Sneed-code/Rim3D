@@ -1,6 +1,6 @@
 // Smoke test `hud` (docs/design/ui-layout.md): the overseer's bottom tab bar opens every tab in turn on a Crashlanded colony,
 // then Build with its Structure tiles, the info window, the Outfits, Areas, Medical and Prisoners windows,
-// Factions (with the Fray Compact made an ally), the main menu and Settings > Controls; one screenshot each, in the game, offscreen.
+// Factions (with the Fray Compact made an ally), the learning helper, the main menu and Settings > Controls; one screenshot each, in the game, offscreen.
 #include "SmokeTest.h"
 
 #include "Engine/Engine.h"
@@ -128,6 +128,8 @@ void USmokeTestSubsystem::BuildHudPhases()
 			return;
 		}
 		B->SetSpeed(0);
+		// The learning helper stays off for the other pictures; its own phase turns it on.
+		Hud()->SetLessonsForTest(false, true);
 		if (colony::Sim* MutableSim = const_cast<colony::Sim*>(B->GetSim()))
 		{
 			State->SmokeExtras = HudSmokeAddAnimalsAndPrisoners(*MutableSim);
@@ -387,6 +389,28 @@ void USmokeTestSubsystem::BuildHudPhases()
 		}
 	};
 	Phases.Add(MoveTemp(Factions));
+
+	// 6b. The learning helper with nothing learned: its first lesson (the camera) shows at the top right.
+	FPhase Lessons;
+	Lessons.Name = TEXT("hud_lessons");
+	Lessons.WarmupSeconds = 1.5f;
+	Lessons.MeasureSeconds = 0.5f;
+	Lessons.Setup = [=, this]()
+	{
+		State->TabFramesBefore = Hud()->GetStats().LessonFrames;
+		Hud()->SetLessonsForTest(true, true);
+	};
+	Lessons.Verify = [=, this]()
+	{
+		if (Hud()->GetStats().LessonFrames == State->TabFramesBefore)
+		{
+			Fail(TEXT("hud_lessons: the learning helper was never drawn"));
+		}
+		Notes.Add(FString::Printf(TEXT("hud_lessons: %d lessons, drawn %d frames"), UColonyHudSubsystem::CountLessons(),
+			Hud()->GetStats().LessonFrames - State->TabFramesBefore));
+		Hud()->SetLessonsForTest(false, false);
+	};
+	Phases.Add(MoveTemp(Lessons));
 
 	// 7. The main menu's New colony page (over the running colony; nothing is started).
 	FPhase Menu;
