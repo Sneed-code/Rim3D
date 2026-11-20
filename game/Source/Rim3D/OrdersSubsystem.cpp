@@ -2255,31 +2255,40 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 					bClicked = ImGui::Button("##tile", ImVec2(TileSize, TileHeight));
 				}
 				{
-					// A long name ("Hand tailor bench") breaks at the space nearest its middle, and shrinks until each line fits.
+					// A long name wraps word by word at 90% of the text size (up to three lines), and shrinks only if a single word
+					// is still too wide ("Ground-penetrating").
 					const float Room = TileSize - 2.0f * ImGui::GetStyle().FramePadding.x;
+					const float WrapScale = ImGui::CalcTextSize(TCHAR_TO_UTF8(*Tile.Label)).x > Room ? 0.9f : 1.0f;
+					const auto WidthAt = [](const FString& Text, float Size) { return ImGui::GetFont()->CalcTextSizeA(Size, FLT_MAX, 0.0f, TCHAR_TO_UTF8(*Text)).x; };
+					const float WrapSize = ImGui::GetFontSize() * WrapScale;
+					TArray<FString> Words;
+					Tile.Label.ParseIntoArray(Words, TEXT(" "));
 					TArray<FString> Lines;
-					Lines.Add(Tile.Label);
-					if (ImGui::CalcTextSize(TCHAR_TO_UTF8(*Tile.Label)).x > Room)
+					for (const FString& Word : Words)
 					{
-						int32 Best = INDEX_NONE;
-						for (int32 Char = 0; Char < Tile.Label.Len(); ++Char)
+						if (Lines.Num() > 0 && Lines.Num() <= 3 && WidthAt(Lines.Last() + TEXT(" ") + Word, WrapSize) <= Room)
 						{
-							if (Tile.Label[Char] == TEXT(' ') && (Best == INDEX_NONE || FMath::Abs(Char - Tile.Label.Len() / 2) < FMath::Abs(Best - Tile.Label.Len() / 2)))
-							{
-								Best = Char;
-							}
+							Lines.Last() += TEXT(" ") + Word;
 						}
-						if (Best != INDEX_NONE)
+						else if (Lines.Num() < 3)
 						{
-							Lines = {Tile.Label.Left(Best), Tile.Label.Mid(Best + 1)};
+							Lines.Add(Word);
 						}
+						else
+						{
+							Lines.Last() += TEXT(" ") + Word;
+						}
+					}
+					if (Lines.IsEmpty())
+					{
+						Lines.Add(Tile.Label);
 					}
 					float Widest = 1.0f;
 					for (const FString& Line : Lines)
 					{
-						Widest = FMath::Max(Widest, ImGui::CalcTextSize(TCHAR_TO_UTF8(*Line)).x);
+						Widest = FMath::Max(Widest, WidthAt(Line, WrapSize));
 					}
-					const float FontSize = ImGui::GetFontSize() * FMath::Clamp(Room / Widest, 0.75f, 1.0f);
+					const float FontSize = WrapSize * FMath::Clamp(Room / Widest, 0.75f, 1.0f);
 					const ImU32 NameColor = ImGui::GetColorU32(bLocked ? ColonyHud::TextFaint() : ColonyHud::TextMain());
 					float LineY = Min.y + TileHeight - 5.0f * Scale - FontSize * Lines.Num();
 					for (const FString& Line : Lines)
@@ -2310,7 +2319,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 					const char Key[2] = {static_cast<char>(OrdTileKeys[Index]), 0};
 					Draw->AddText(ImVec2(Min.x + 5.0f * Scale, Min.y + 3.0f * Scale), ImGui::GetColorU32(ColonyHud::TextFaint()), Key);
 				}
-				const ImVec2 IconCentre(Min.x + TileSize * 0.5f, Min.y + TileSize * 0.42f);
+				const ImVec2 IconCentre(Min.x + TileSize * 0.5f, Min.y + TileSize * 0.40f);
 				const float IconSize = TileSize * 0.40f;
 				const ImU32 IconColor = ImGui::GetColorU32(bLocked ? ColonyHud::TextFaint() : ColonyHud::Rgb(0xd6d0c3));
 				if (Tile.Option && Tile.Option->bFloor)
@@ -2327,7 +2336,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 				}
 				else if (UTexture* Picture = Tile.Option ? GetTileIcon(Tile.Option->Def) : nullptr)
 				{
-					const float Half = TileSize * 0.30f;
+					const float Half = TileSize * 0.28f;
 					Draw->AddImage(ImTextureRef(Picture), ImVec2(IconCentre.x - Half, IconCentre.y - Half), ImVec2(IconCentre.x + Half, IconCentre.y + Half),
 						ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), bLocked ? IM_COL32(255, 255, 255, 90) : IM_COL32(255, 255, 255, 255));
 				}
