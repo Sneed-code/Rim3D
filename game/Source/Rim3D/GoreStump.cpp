@@ -188,7 +188,7 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 	static const float Rings[] = {0.0f, 0.14f, 0.28f, 0.42f, 0.55f, 0.66f, 0.74f, 0.81f, 0.85f, 0.89f, 0.92f, 0.95f, 0.975f, 1.0f, 1.02f, 1.04f, 1.05f};
 	constexpr int32 RingCount = UE_ARRAY_COUNT(Rings);
 	constexpr int32 Cols = 40;
-	const float Skirt = 0.22f * R + 1.2f;
+	const float Skirt = 0.12f * R + 0.6f;
 	// Clothed: a sleeve or trouser leg is thicker than the skin and ends a little past the cut in a closed, rounded end of
 	// its own, which hid the meat. The face stands in front of it (and is as wide as the cloth), the soaked cloth hanging
 	// back over the gap.
@@ -221,11 +221,14 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			const float F = Rings[FMath::Min(Row, RingCount - 1)];
 			// The edge is torn, not round: the outer rings wander in and out.
 			const float Torn = F >= 0.94f ? 1.0f + 0.05f * Edge.At(Theta) + (bSkirt ? 0.03f * Random.FRandRange(-1.0f, 1.0f) : 0.0f) : 1.0f;
-			// Clothed: the rings past the skin stretch out over the sleeve or trouser leg as torn, soaked cloth.
-			const float Spread = bClothed && F > 1.0f ? 1.0f + (F - 1.0f) / 0.05f * (ClothOuter - 1.0f) : F;
+			// Clothed, the outer rings are torn, soaked cloth, but they stay the limb's width: spread out over the sleeve
+			// they read as a loose hoop round every stump in the PC pictures.
+			const float Spread = F;
 			// The skirt hangs back onto the limb: bare skin just inside its own edge, soaked cloth folded back down onto
 			// the sleeve rather than standing off it as a wide hollow collar.
-			const float SkirtSpread = bClothed ? ClothOuter * 0.99f : 0.99f;
+			// Tucked in a little and short, so it reads as an edge curling back onto the limb, never a hoop standing off a
+			// thinner sleeve.
+			const float SkirtSpread = 0.88f;
 			const float Radius = R * (bSkirt ? SkirtSpread : Spread) * Torn;
 			const float Z = bSkirt ? -(Skirt + Lift) * (0.75f + 0.25f * Edge.At(Theta * 1.7f + 1.0f)) : FaceZ(F, Theta) + (F < 0.7f ? 0.04f * R * Random.FRandRange(-0.5f, 0.5f) : 0.0f);
 			return FVector(Radius * FMath::Cos(Theta), Radius * FMath::Sin(Theta), Z);

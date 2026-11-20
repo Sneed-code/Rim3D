@@ -6,6 +6,7 @@
 
 #include "SmokeTest.h"
 #include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
 
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -21,6 +22,8 @@
 #include "CreatorPeople.h"
 #include "FightSubsystem.h"
 #include "GunRangeSubsystem.h"
+#include "HoldDraw.h"
+#include "MakeHumanAnimInstance.h"
 #include "KeyBindings.h"
 #include "KillFeedSubsystem.h"
 #include "PawnActor.h"
@@ -136,6 +139,18 @@ namespace
 		bool bHitPicture = false;
 		bool bSwingPicture = false;
 		int32 MeleeTour = 0;  // step 15: every rack melee weapon in the hand, first and third person
+		int32 GunTour = 0;    // step 16: every rack gun held ready and aimed, first and third person
+		// Arms that can't bend wrong (docs/design/weapon-hold.md): every frame a hand is on a weapon, both views, each arm
+		// measured (the solver's own reading and the drawn bones'); any angle outside human limits is a failure.
+		int32 ArmFrames = 0;
+		int32 ArmFails = 0;
+		int32 ArmShort = 0;
+		float ArmWorstGap = 0.0f;
+		float ArmWorstTwist = 0.0f;
+		float ArmWorstWrist = 0.0f;
+		float ArmWorstElbow = 0.0f;
+		float ArmWorstShort = 0.0f;
+		TMap<FString, int32> ArmFailsBy;
 		bool bKillFeedLines = false;
 		colony::Entity FlickFrom = colony::kNoEntity;  // step 14: the lock before the flick
 		bool bFlickLeftTried = false;
@@ -275,7 +290,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 	FPhase Play;
 	Play.Name = TEXT("gunrange");
 	Play.WarmupSeconds = 6.0f;
-	float Minutes = bScript ? 2.9f : 240.0f;  // the melee line-up (step 15) adds about 25 s
+	float Minutes = bScript ? 3.5f : 240.0f;  // the melee line-up (step 15) adds about 25 s, the gun hold tour (16) about 30 s
 	FParse::Value(FCommandLine::Get(), TEXT("GunRangeMinutes="), Minutes);
 	Play.MeasureSeconds = Minutes * 60.0f;
 	Play.Setup = [=, this]()
@@ -688,6 +703,120 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		{
 			return;
 		}
+		const auto GunCountNow = [G]() { return G->GetGuns().Num(); };
+		// --- Arms that can't bend wrong: both views, every frame a hand holds a weapon. ---
+		{
+			const auto Label = [&]() -> FString
+			{
+				const int32 Held = G->GetHeldRackIndex();
+				if (Held >= 0 && Held < GunCountNow())
+				{
+					return G->GetGuns()[Held].Label;
+				}
+				if (Held >= GunCountNow() && Held - GunCountNow() < G->GetMelee().Num())
+				{
+					return G->GetMelee()[Held - GunCountNow()].Label;
+				}
+				return TEXT("other");
+			};
+			const auto CheckArms = [&](const USkeletalMeshComponent* Mesh, const FVector& Up, const FVector& Forward, const FVector& Right, const TCHAR* View)
+			{
+				const UMakeHumanAnimInstance* Anim = Mesh ? Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()) : nullptr;
+				if (!Anim)
+				{
+					return;
+				}
+				for (const bool bRight : {true, false})
+				{
+					if (Anim->GetHandGoal(bRight).Alpha < 0.99f)
+					{
+						continue;
+					}
+					colony::arm::ArmAngles Solved, Drawn;
+					float Short = 0.0f;
+					const bool bSolved = Anim->GetSolvedArm(bRight, Solved, Short);
+					const bool bDrawn = HoldDraw::MeasureDrawnArm(Mesh, bRight, Up, Forward, Right, Drawn);
+					if (!bSolved || !bDrawn)
+					{
+						continue;
+					}
+					++State->ArmFrames;
+					// The solver's own reading must be inside the limits; the drawn bones' too, with room for the
+					// skeleton's rest offsets and the fingers' curl (the palm read from the knuckles).
+					const bool bBad = !colony::arm::withinLimits(Solved, colony::arm::Limits{}, 0.5) || !colony::arm::withinLimits(Drawn, colony::arm::Limits{}, 15.0);
+					State->ArmWorstTwist = FMath::Max(State->ArmWorstTwist, static_cast<float>(FMath::Max(FMath::Abs(Solved.forearmTwist), FMath::Abs(Drawn.forearmTwist))));
+					State->ArmWorstWrist = FMath::Max(State->ArmWorstWrist, static_cast<float>(FMath::Max(FMath::Abs(Drawn.wristFlex), FMath::Abs(Drawn.wristDeviation))));
+					State->ArmWorstElbow = FMath::Max(State->ArmWorstElbow, static_cast<float>(Drawn.elbowFlex));
+					State->ArmWorstShort = FMath::Max(State->ArmWorstShort, Short);
+					const FString Key = FString::Printf(TEXT("%s %s %s"), *Label(), View, bRight ? TEXT("right") : TEXT("left"));
+					if (bBad)
+					{
+						++State->ArmFails;
+						int32& N = State->ArmFailsBy.FindOrAdd(Key);
+						if (N++ < 2)
+						{
+							Notes.Add(FString::Printf(TEXT("gunrange: ARM OUT OF RANGE %s: solved elbow %.0f twist %.0f wrist %.0f/%.0f; drawn elbow %.0f twist %.0f wrist %.0f/%.0f"),
+								*Key, Solved.elbowFlex, Solved.forearmTwist, Solved.wristFlex, Solved.wristDeviation, Drawn.elbowFlex, Drawn.forearmTwist, Drawn.wristFlex,
+								Drawn.wristDeviation));
+						}
+					}
+					// The hand must be drawn on its goal: the solver's reach (after the shoulder came forward) and the
+					// drawn hand bone against the goal it was given (catches a goal in the wrong frame or a later node
+					// moving the hand). Either off by more than 3 cm fails the test.
+					FTransform GoalWorld;
+					float ShoulderReach = 0.0f;
+					float Gap = 0.0f;
+					FVector GoalFromShoulder = FVector::ZeroVector;
+					if (Anim->GetSolvedGoal(bRight, GoalWorld, ShoulderReach))
+					{
+						const FVector HandAt = Mesh->GetSocketLocation(bRight ? TEXT("hand_r") : TEXT("hand_l"));
+						Gap = static_cast<float>(FVector::Dist(HandAt, GoalWorld.GetLocation()));
+						const FVector FromShoulder = GoalWorld.GetLocation() - Mesh->GetSocketLocation(bRight ? TEXT("upperarm_r") : TEXT("upperarm_l"));
+						GoalFromShoulder = FVector(FVector::DotProduct(FromShoulder, Forward), FVector::DotProduct(FromShoulder, Right), FVector::DotProduct(FromShoulder, Up));
+						// How far the drawn hand is turned from its grip's turn (the wrist limits held it back): not a
+						// failure, a note for tuning the places and grips.
+						const FQuat HandQ = Mesh->GetSocketQuaternion(bRight ? TEXT("hand_r") : TEXT("hand_l"));
+						const float HandTurn = static_cast<float>(FMath::RadiansToDegrees(HandQ.AngularDistance(GoalWorld.GetRotation())));
+						if (HandTurn > 25.0f)
+						{
+							int32& TurnNotes = State->ArmFailsBy.FindOrAdd(Key + TEXT(" turn"));
+							if (TurnNotes++ < 1)
+							{
+								colony::arm::ArmAngles Asked;
+								float CurlAdded = 0.0f;
+								float ElbowSwing = 0.0f;
+								Anim->GetWantedArm(bRight, Asked, CurlAdded, ElbowSwing);
+								Notes.Add(FString::Printf(TEXT("gunrange: HAND TURNED FROM ITS GRIP %s: %.0f degrees (the wrist's limits held it back); the grip asked twist %.0f wrist %.0f/%.0f, got twist %.0f wrist %.0f/%.0f, elbow %.0f swung %.0f; fingers curled %.0f more"),
+									*Key, HandTurn, Asked.forearmTwist, Asked.wristFlex, Asked.wristDeviation, Solved.forearmTwist, Solved.wristFlex, Solved.wristDeviation, Solved.elbowFlex, ElbowSwing, CurlAdded));
+							}
+						}
+					}
+					State->ArmWorstGap = FMath::Max(State->ArmWorstGap, Gap);
+					if (Short > 3.0f || Gap > 3.0f)
+					{
+						++State->ArmShort;
+						int32& N = State->ArmFailsBy.FindOrAdd(Key + TEXT(" short"));
+						if (N++ < 2)
+						{
+							Notes.Add(FString::Printf(TEXT("gunrange: HAND OFF ITS GRIP %s: out of reach by %.1f cm, drawn %.1f cm from the goal, shoulder forward %.1f cm, goal from shoulder (ahead %.0f, right %.0f, up %.0f)"),
+								*Key, Short, Gap, ShoulderReach, GoalFromShoulder.X, GoalFromShoulder.Y, GoalFromShoulder.Z));
+						}
+					}
+				}
+			};
+			if (G->IsViewShown() && Body->IsFirstPerson())
+			{
+				if (const UCameraComponent* Cam = Body->GetCamera())
+				{
+					CheckArms(G->GetArmsMesh(), Cam->GetUpVector(), Cam->GetForwardVector(), Cam->GetRightVector(), TEXT("first person"));
+				}
+			}
+			const USimPawnSubsystem* PawnsNow = GetWorld()->GetSubsystem<USimPawnSubsystem>();
+			if (const ASimPawnActor* Me = PawnsNow ? PawnsNow->FindPawn(State->Player) : nullptr; Me && !Body->IsFirstPerson())
+			{
+				CheckArms(HoldDraw::VisibleMesh(*Me), Me->GetActorUpVector(), Me->GetActorForwardVector(), Me->GetActorRightVector(), TEXT("third person"));
+			}
+		}
 		const auto Picture = [=, this](const TCHAR* What)
 		{
 			const FString Path = FPaths::ProjectSavedDir() / TEXT("GunRange") / FString::Printf(TEXT("%02d_%s.png"), State->Pictures++, What);
@@ -695,6 +824,10 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			Notes.Add(FString::Printf(TEXT("gunrange: picture %s (gun %d, barrel off %.1f deg, sight off %.1f cm, shots %d, reloads %d)"),
 				*FPaths::GetCleanFilename(Path), G->GetCurrentGun(), G->GetBarrelOffDegrees(), G->GetSightOffCm(), G->GetShotsSeen(), G->GetReloadsSeen()));
 			Notes.Add(FString::Printf(TEXT("gunrange:   bones %s"), *G->GetBoneLine()));
+			if (Body->IsFirstPerson() && !G->IsHeldViewShown())
+			{
+				Notes.Add(FString::Printf(TEXT("gunrange:   parts %s"), *G->DescribeGunParts()));
+			}
 		};
 		const auto AimAtNearest = [=]() -> bool
 		{
@@ -992,6 +1125,63 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					}
 					else
 					{
+						State->GunTour = 0;
+						Next(16);
+					}
+				}
+				break;
+			}
+			case 16:  // each gun held: first person from the hip and aimed, third person ready and aimed (hands on the grips?)
+			{
+				if (State->StepTime < Dt * 1.5f)
+				{
+					G->SelectGun(State->GunTour);
+					if (!Body->IsFirstPerson())
+					{
+						Body->ToggleView();
+						Body->SnapCamera();
+					}
+				}
+				AimAtNearest();
+				const FString Name = G->GetGuns().IsValidIndex(State->GunTour) ? G->GetGuns()[State->GunTour].Label.Replace(TEXT(" "), TEXT("")) : TEXT("gun");
+				const float T = State->StepTime;
+				const auto At = [T, Dt](float When) { return T >= When && T - Dt < When; };
+				Body->SetScriptedAim((T > 2.2f && T < 3.4f) || T > 6.0f);
+				if (At(2.0f))
+				{
+					Picture(*FString::Printf(TEXT("hold_%s_fp_hip"), *Name));
+				}
+				if (At(3.2f))
+				{
+					Picture(*FString::Printf(TEXT("hold_%s_fp_aimed"), *Name));
+				}
+				if (At(3.6f))
+				{
+					Body->ToggleView();
+					Body->SnapCamera();
+				}
+				if (At(5.6f))
+				{
+					Picture(*FString::Printf(TEXT("hold_%s_3p_ready"), *Name));
+				}
+				if (At(7.4f))
+				{
+					Picture(*FString::Printf(TEXT("hold_%s_3p_aimed"), *Name));
+				}
+				if (T > 7.6f)
+				{
+					Body->SetScriptedAim(false);
+					if (!Body->IsFirstPerson())
+					{
+						Body->ToggleView();
+						Body->SnapCamera();
+					}
+					if (++State->GunTour < G->GetGuns().Num())
+					{
+						Next(16);
+					}
+					else
+					{
 						G->SelectGun(0);
 						Next(11);
 					}
@@ -1088,6 +1278,20 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			Notes.Add(FString::Printf(TEXT("gunrange: blood %s: %d hits, %d drops, %d mist, %d wound marks, %d body stains, %d ground splats, %d painted into skin (%d bodies now)"),
 				Blood->IsReady() ? TEXT("assets in") : TEXT("ASSETS MISSING (old simple blood)"), Blood->GetHits(), Blood->GetDropsSpawned(),
 				Blood->GetMistSpawned(), Blood->GetWoundMarks(), Blood->GetBodyStainsMade(), Blood->GetSplatsMade(), Blood->GetSkinPaints(), Blood->GetSkinMasks()));
+		}
+		PhaseNumbers.Add(TEXT("arm_frames_checked"), State->ArmFrames);
+		PhaseNumbers.Add(TEXT("arm_limit_fails"), State->ArmFails);
+		PhaseNumbers.Add(TEXT("arm_hand_short"), State->ArmShort);
+		Notes.Add(FString::Printf(TEXT("gunrange: arms checked on %d hand-frames: %d outside human limits, %d off the grip; worst twist %.0f, wrist %.0f, elbow %.0f deg, out of reach %.1f cm, drawn off the goal %.1f cm"),
+			State->ArmFrames, State->ArmFails, State->ArmShort, State->ArmWorstTwist, State->ArmWorstWrist, State->ArmWorstElbow, State->ArmWorstShort, State->ArmWorstGap));
+		// A few frames off at a switch or a clip's blend are allowed (under 1%); more is a hold that doesn't fit the body.
+		if (State->ArmFrames > 0 && State->ArmShort * 100 > State->ArmFrames)
+		{
+			Fail(FString::Printf(TEXT("gunrange: %d of %d hand-frames with a hand off its grip (see the HAND OFF ITS GRIP notes)"), State->ArmShort, State->ArmFrames));
+		}
+		if (State->ArmFrames > 0 && State->ArmFails > 0)
+		{
+			Fail(FString::Printf(TEXT("gunrange: %d hand-frames with an arm outside human joint limits (see the ARM OUT OF RANGE notes)"), State->ArmFails));
 		}
 		Notes.Add(FString::Printf(TEXT("gunrange: %d targets ran, %d sprinted, %d charged you, %d punches thrown at you, %d lock-on flicks"), State->Fled, State->Sprinted, State->Charged, State->FistSwings, Prot() ? Prot()->GetFlicksSent() : 0));
 		if (const UFightSubsystem* Marks = GetWorld()->GetSubsystem<UFightSubsystem>())

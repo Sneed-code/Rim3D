@@ -2,6 +2,7 @@
 // and hit-stops on screen, in the game, offscreen.
 #include "SmokeTest.h"
 
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -9,6 +10,7 @@
 #include "HAL/IConsoleManager.h"
 
 #include "FightSubsystem.h"
+#include "HoldDraw.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
 #include "ProtagonistPawn.h"
@@ -58,6 +60,20 @@ namespace
 			return true;
 		}
 		return Component->GetRelativeLocation().Equals(OldPlace, Tolerance);
+	}
+
+	// Where the pelvis of the body a component rides on is in its actor's frame (cm): the holsters move with the hips.
+	FString MeleeSmokePelvis(const USceneComponent* Component)
+	{
+		const ASimPawnActor* Owner = Component ? Cast<ASimPawnActor>(Component->GetOwner()) : nullptr;
+		const USkeletalMeshComponent* Body = Owner ? HoldDraw::VisibleMesh(*Owner) : nullptr;
+		if (!Body || Body->GetBoneIndex(TEXT("pelvis")) == INDEX_NONE)
+		{
+			return TEXT("unknown");
+		}
+		FTransform Frame = Owner->GetActorTransform();
+		Frame.SetScale3D(FVector::OneVector);
+		return Frame.InverseTransformPosition(Body->GetSocketLocation(TEXT("pelvis"))).ToString();
 	}
 
 	// Where a component is in its actor's frame (cm), whatever it hangs from.
@@ -450,7 +466,8 @@ void USmokeTestSubsystem::BuildMeleePhases()
 			const UStaticMeshComponent* Component = W->GetSlotComponent(State->Me, Slot);
 			if (!Component || !Component->GetRelativeLocation().Equals(Where, 3.0))
 			{
-				Fail(FString::Printf(TEXT("holsters: the %s is at %s, expected %s"), Name, Component ? *Component->GetRelativeLocation().ToString() : TEXT("nowhere"), *Where.ToString()));
+				Fail(FString::Printf(TEXT("holsters: the %s is at %s, expected %s (pelvis at %s, attached to %s)"), Name, Component ? *Component->GetRelativeLocation().ToString() : TEXT("nowhere"),
+					*Where.ToString(), *MeleeSmokePelvis(Component), Component && Component->GetAttachParent() ? *Component->GetAttachParent()->GetName() : TEXT("nothing")));
 			}
 		};
 		if (const UStaticMeshComponent* Rifle = W->GetSlotComponent(State->Me, 0); !MeleeSmokeInHand(Rifle, MeleeSmokeHands, 3.0))
@@ -461,7 +478,8 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		Near(1, MeleeSmokeSidearmHolster, TEXT("sidearm on the hip"));
 		if (const UStaticMeshComponent* Melee = W->GetSlotComponent(State->Me, 2); !Melee || FMath::Abs(Melee->GetRelativeLocation().Y - MeleeSmokeMeleeHolster.Y) > 3.0 || Melee->GetRelativeLocation().Z > 100.0)
 		{
-			Fail(TEXT("holsters: the melee weapon is not on the left hip"));
+			Fail(FString::Printf(TEXT("holsters: the melee weapon is not on the left hip (at %s, expected near %s, pelvis at %s)"), Melee ? *Melee->GetRelativeLocation().ToString() : TEXT("nowhere"),
+				*MeleeSmokeMeleeHolster.ToString(), *MeleeSmokePelvis(Melee)));
 		}
 		if (W->GetHandsComponent(State->Me) != W->GetSlotComponent(State->Me, 0))
 		{
@@ -537,7 +555,8 @@ void USmokeTestSubsystem::BuildMeleePhases()
 		const UStaticMeshComponent* Revolver = W->GetSlotComponent(State->Me, 1);
 		if (!Rifle || !Rifle->GetRelativeLocation().Equals(MeleeSmokeRifleHolster, 3.0))
 		{
-			Fail(TEXT("switch_key: the rifle is not on the back after the switch"));
+			Fail(FString::Printf(TEXT("switch_key: the rifle is not on the back after the switch (at %s, expected %s, pelvis at %s, attached to %s)"), Rifle ? *Rifle->GetRelativeLocation().ToString() : TEXT("nowhere"),
+				*MeleeSmokeRifleHolster.ToString(), *MeleeSmokePelvis(Rifle), Rifle && Rifle->GetAttachParent() ? *Rifle->GetAttachParent()->GetName() : TEXT("nothing")));
 		}
 		if (!Revolver || !MeleeSmokeInHand(Revolver, MeleeSmokeHands, 3.0) || W->GetHandsComponent(State->Me) != Revolver)
 		{

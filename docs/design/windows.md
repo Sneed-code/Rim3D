@@ -72,19 +72,25 @@ tracing on the light comes in through the opening as it would. A broken window h
 material (a fresh clone before the commandlet runs) windows are drawn open, with a warning in the log.
 
 **Daylight inside** (`WindowLightSubsystem`): the nearest `Windows.MaxLights` (24) windows that let the sky in get a rect light
-the size of the opening, just inside the wall and facing into the room, at `Windows.LightCd` (6000 cd, about a patch of bright
-sky) times the sim's sky glow of the moment, so it follows the day, the weather and the night. The nearest `Windows.ShadowLights`
+the size of the opening, just inside the wall and facing into the room, at `Windows.LightCd` (15000 cd, bright sky and sunlit ground seen through the opening; 6000 was still dim on the PC, 2026-11-20)
+times the sim's sky glow of the moment, so it follows the day, the weather and the night. The nearest `Windows.ShadowLights`
 (8) cast shadows. The side it lights is the side the sim lights (`windowShareAt`). And with the camera **under a roof** the eye
-opens up further: the auto exposure may go `exposure.indoorBrighterEV` (3 stops, `data/look.json`) below the outdoor target
+opens up further: the auto exposure may go `exposure.indoorBrighterEV` (5 stops, a real indoor photo is 5 to 6 stops under daylight; 3 was still dim, `data/look.json`) below the outdoor target
 instead of `brighterEV`, easing in over a moment, so a room lit through its windows reads as lit instead of black next to the
 bright outside (sneed, 2026-11-19: the first noon picture was far too dark).
 
 The look bench (`look` smoke test) cuts two windows in its room's north wall and one in the second cell of each stuff of the
-sample wall (granite's broken), and takes an extra shot, `windows`, from inside the room at noon; it fails if the two windows there have no daylight lights.
+sample wall (granite's broken), and takes an extra shot, `windows`, from inside the room at noon; it fails if the two windows there have no daylight lights. A second shot, `sunbeams`, looks down at the floor under those windows at
+half past eight on a midsummer morning, when the sun (azimuth about 128 degrees, 41 degrees up) shines in through them. **Sun
+patches are the real sun**: the opening and its frame cast the sun's shadow and the glass casts none, so wherever the sun faces a
+window a bright patch falls on the floor and furniture, and with ray tracing it bounces round the room. At noon the sun is in the
+south (world -X) and high, so a window in a wall along X, like the room's north wall, gets no patch then (the first two noon
+pictures, 2026-11-19 and 20).
 
 ## Not yet
 
 - Shards on the ground and a pane cracking before it breaks; curtains and shutters (sneed: not needed).
 - A broken window letting the room's warmth out (temperature treats the room as closed).
 - Windows on upper levels light only their own sight and cover; the sun through them waits for the light layer to go upstairs.
+- Visible shafts of light in dusty air (volumetric fog indoors).
 - Mood: there is no "dark room" thought yet ([light.md](light.md) "For later tasks"); when there is, windows count by themselves.

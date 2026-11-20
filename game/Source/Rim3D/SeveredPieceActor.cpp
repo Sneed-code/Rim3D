@@ -310,7 +310,8 @@ namespace
 					continue;
 				}
 				// On the body the piece's bones squash onto the face, so what stays out is the share on the body's bones;
-				// on the piece the other way round.
+				// on the piece the other way round. Skin wholly on one side's bones is left out: on the body that was hip and
+				// crotch skin past the hip joint, which lifted a thigh's cap 8 cm off the body.
 				const double Stays = bPieceSide ? Piece / Total : 1.0 - Piece / Total;
 				if (Stays < 0.999)
 				{

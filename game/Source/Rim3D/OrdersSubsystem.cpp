@@ -2113,6 +2113,13 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 				// The label sits low in the tile, under the icon.
 				ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.92f));
 				const FTCHARToUTF8 Label(*FString::Printf(TEXT("%s##tile"), *Tile.Label));
+				// A long name ("Cancel earthworks") is drawn smaller so it fits the tile instead of being cut off.
+				const float NameWidth = ImGui::CalcTextSize(TCHAR_TO_UTF8(*Tile.Label)).x + 2.0f * ImGui::GetStyle().FramePadding.x;
+				const bool bShrinkName = NameWidth > TileSize;
+				if (bShrinkName)
+				{
+					ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * FMath::Max(0.6f, TileSize / NameWidth));
+				}
 				bool bClicked = false;
 				if (bActive)
 				{
@@ -2121,6 +2128,10 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 				else
 				{
 					bClicked = ImGui::Button(Label.Get(), ImVec2(TileSize, TileSize));
+				}
+				if (bShrinkName)
+				{
+					ImGui::PopFont();
 				}
 				ImGui::PopStyleVar();
 				if (bLocked)

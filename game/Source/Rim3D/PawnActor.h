@@ -58,7 +58,7 @@ public:
 	 *  pawn on the ground. False if it is already in the air, lying or ragdolled. */
 	bool StartJump();
 	bool IsJumping() const { return JumpAge >= 0.0f; }
-	/** How high the body is off the ground now, cm. */
+	/** How high the body is off the ground now, cm. A cat-strain jumps twice as high (and longer, as a thrown body would). */
 	float GetJumpHeight() const;
 	int32 GetJumpsPlayed() const { return JumpsPlayed; }
 	/** How fast the pawn moves over the ground now (the sim's, blended), cm per second at 1x. */
@@ -152,6 +152,9 @@ public:
 	/** The crawl of a pawn downed by its torso and awake: whether the crawl clip plays now, and how often it started. */
 	bool IsCrawling() const { return bCrawling; }
 	int32 GetCrawlsPlayed() const { return CrawlsPlayed; }
+	/** Up or down the face of a wall (docs/design/climbing.md): whether the climb clip plays, and how often it started. */
+	bool IsWallClimbing() const { return WallClimbMontage.IsValid(); }
+	int32 GetWallClimbsPlayed() const { return WallClimbsPlayed; }
 	/** Whether the body is bent over a wound it is patching. */
 	bool IsPatchPosed() const { return bPatchPosed; }
 
@@ -470,6 +473,18 @@ private:
 	FVector CrawlPelvisStart = FVector::ZeroVector;
 	float CrawlClipSpeed = 40.0f;
 	FVector CrawlOffset = FVector::ZeroVector;
+	// A wall climb (docs/design/climbing.md): the Game Animation Sample's climb onto a ledge, its time following the sim's
+	// climb (on the face, then over the top), with its own set-back (its travel is in its root), facing the wall.
+	void UpdateWallClimb(const USimSubsystem& Bridge, const colony::ThingView& Now);
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> WallClimbClip;
+	bool bWallClimbClipTried = false;
+	TWeakObjectPtr<class UAnimMontage> WallClimbMontage;
+	FVector WallClimbOffset = FVector::ZeroVector;
+	int32 WallClimbsPlayed = 0;
+	/** The lineage's jump height (cat-strain 2), from the snapshot, and the one fixed for the jump under way. */
+	float JumpHeightFactor = 1.0f;
+	float JumpFactor = 1.0f;
 	float RollProgress = 0.0f;
 	float RollAngle = 0.0f;
 	FVector RollDirection = FVector::ForwardVector;
