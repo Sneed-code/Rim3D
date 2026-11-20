@@ -29,9 +29,9 @@ namespace
 	TAutoConsoleVariable<float> GWinDust(TEXT("Windows.Dust"), 0.3f,
 		TEXT("Dust in the air of rooms with windows (a local fog volume's extinction per metre, drawn into the volumetric fog): sunbeams through windows show as shafts. 0 off."), ECVF_Default);
 	TAutoConsoleVariable<int32> GWinDustRooms(TEXT("Windows.DustRooms"), 8, TEXT("How many rooms nearest the camera get dust in their air."), ECVF_Default);
-	// A local fog volume is a sphere of this radius at scale 1 (its base size, 1000 cm across); scaled per axis it becomes the
-	// ellipsoid inside a room's box.
-	constexpr double WinDustBaseRadiusCm = 500.0;
+	// A local fog volume is a sphere of this radius at scale 1; scaled per axis it becomes the ellipsoid round a room. PC round 7
+	// showed 500 made it a 1 m blob, so it is about 50 cm (a 1 m sphere at scale 1); the console variable is there to check.
+	TAutoConsoleVariable<float> GWinDustBaseCm(TEXT("Windows.DustBaseCm"), 50.0f, TEXT("Radius of a local fog volume at scale 1, cm (sizes the rooms' dust)."), ECVF_Default);
 	constexpr double WinDustOversize = 1.3;
 	constexpr int32 WinDustPool = 16;
 	constexpr int32 WinLightPool = 48;
@@ -281,7 +281,7 @@ void UWindowLightSubsystem::Tick(float DeltaTime)
 		const double FloorZ = Origin.Z + static_cast<double>(Map.groundHeight(Room.anchor)) * 100.0;
 		const double TallCm = TerrainDraw::RoofHeightM * 100.0;
 		const FVector RoomCentre(Origin.X + (R.minX + R.sizeX * 0.5) * 100.0, Origin.Y + (R.minY + R.sizeY * 0.5) * 100.0, FloorZ + TallCm * 0.5);
-		const FVector RoomScale = FVector(R.sizeX * 50.0, R.sizeY * 50.0, TallCm * 0.5) * WinDustOversize / WinDustBaseRadiusCm;
+		const FVector RoomScale = FVector(R.sizeX * 50.0, R.sizeY * 50.0, TallCm * 0.5) * WinDustOversize / FMath::Max(1.0, static_cast<double>(GWinDustBaseCm.GetValueOnGameThread()));
 		if (!Volume->GetComponentLocation().Equals(RoomCentre, 1.0) || !Volume->GetComponentScale().Equals(RoomScale, 0.001))
 		{
 			Volume->SetWorldLocationAndRotation(RoomCentre, FRotator::ZeroRotator);

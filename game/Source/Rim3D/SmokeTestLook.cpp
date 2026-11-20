@@ -752,6 +752,37 @@ void USmokeTestSubsystem::BuildLookPhases()
 	};
 	Phases.Add(MoveTemp(FogTest));
 
+	// 8e. The rooms' dust again with the other reading of a local fog volume's size (a test): whichever of sunbeams and this shows
+	// a shaft has the right one.
+	FPhase DustSize;
+	DustSize.Name = TEXT("sunbeams_base500");
+	DustSize.WarmupSeconds = 3.0f;
+	DustSize.MeasureSeconds = 1.0f;
+	DustSize.Setup = [=, this]()
+	{
+		if (IConsoleVariable* Base = IConsoleManager::Get().FindConsoleVariable(TEXT("Windows.DustBaseCm")))
+		{
+			Base->Set(500.0f, ECVF_SetByCode);
+		}
+		SetClock(8.5f, LookSmokeMidsummer);
+		const FVector To = CellWorld(static_cast<float>(State->Room.x) + 3.8f, static_cast<float>(State->Room.y) + 3.6f, 20.0);
+		const FVector From = CellWorld(static_cast<float>(State->Room.x) + 1.4f, static_cast<float>(State->Room.y) + 1.3f, 215.0);
+		ViewFrom(From, (To - From).Rotation());
+	};
+	DustSize.Verify = [=, this]()
+	{
+		NoteShot(TEXT("sunbeams_base500"));
+		if (const UWindowLightSubsystem* SizeLights = GetWorld()->GetSubsystem<UWindowLightSubsystem>())
+		{
+			Notes.Add(FString::Printf(TEXT("sunbeams_base500: %s"), *SizeLights->DescribeDust()));
+		}
+		if (IConsoleVariable* Base = IConsoleManager::Get().FindConsoleVariable(TEXT("Windows.DustBaseCm")))
+		{
+			Base->Set(50.0f, ECVF_SetByCode);
+		}
+	};
+	Phases.Add(MoveTemp(DustSize));
+
 	// 9. A snowy day: a new game on the same seed snows hard through the cold night, then the overseer looks at it at eleven
 	// on a midwinter morning. (The sim's first day is spring; the night is cold enough for the snow to lie.)
 	FPhase Snowy;
