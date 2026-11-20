@@ -612,6 +612,28 @@ void UTradePanelSubsystem::DrawStrip(USimSubsystem& Bridge, float Scale, float M
 	ImGui::End();
 }
 
+int32 UTradePanelSubsystem::CountSellable(USimSubsystem& Bridge, const colony::Visit* SimVisit) const
+{
+	// The same filter as the You sell list: items on the map, not silver, worth something, that this trader takes.
+	const colony::Sim& Sim = *Bridge.GetSim();
+	TSet<uint32> Seen;
+	int32 Count = 0;
+	for (const colony::ThingView& View : Bridge.GetCurrentSnapshot().things)
+	{
+		if (View.category != colony::ThingCategory::Item || Seen.Contains(View.def.value))
+		{
+			continue;
+		}
+		Seen.Add(View.def.value);
+		const colony::Def& Def = Sim.defs().get(View.def);
+		if (Def.defName() != "Silver" && Def.number("stats.marketValue", 0.0) > 0.0 && (!SimVisit || Sim.trade().accepts(*SimVisit, Def)))
+		{
+			++Count;
+		}
+	}
+	return Count;
+}
+
 void UTradePanelSubsystem::DrawTradeWindow(USimSubsystem& Bridge, const colony::VisitView& Visit, float Scale)
 {
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
@@ -621,9 +643,14 @@ void UTradePanelSubsystem::DrawTradeWindow(USimSubsystem& Bridge, const colony::
 	const colony::Def* Faction = Sim.defs().find("Factions", Visit.faction);
 	const colony::Def* TraderKind = Sim.defs().find("TraderKinds", Visit.traderKind);
 
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.45f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(760.0f * Scale, 0.0f), ImVec2(Viewport->Size.x * 0.85f, Viewport->Size.y * 0.8f));
-	if (ImGui::Begin("##TradeWindow", nullptr, TpFlags() & ~ImGuiWindowFlags_NoScrollbar))
+	// Its bottom edge just above the bar (clear of the date box's top at any size), as tall as the room there allows; the two
+	// lists scroll inside it so the header and the Make the trade button always show.
+	const float TradeBottom = ColonyHud::AboveBar(Viewport, Scale) - ColonyHud::DateBoxHeight(Scale);
+	const float TradeMaxHeight = TradeBottom - Viewport->Pos.y - 8.0f * Scale;
+	const float TradeWidth = FMath::Min(900.0f * Scale, Viewport->Size.x - 16.0f * Scale);
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, TradeBottom), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(TradeWidth, 0.0f), ImVec2(TradeWidth, TradeMaxHeight));
+	if (ImGui::Begin("##TradeWindow", nullptr, TpFlags()))
 	{
 		++Stats.TradeFrames;
 		const float Goodwill = Trade.goodwill(Visit.faction);
@@ -663,6 +690,13 @@ void UTradePanelSubsystem::DrawTradeWindow(USimSubsystem& Bridge, const colony::
 		TpText(FString::Printf(TEXT("Colony silver on the map: %d     The trader has %d silver"), Trade.silverOnMap(), Visit.silver));
 		ImGui::Separator();
 
+		// The lists: as tall as their longer side needs, but leaving room for the totals and buttons under them.
+		const float RowHeight = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing();
+		const int32 Rows = FMath::Max(static_cast<int32>(Visit.stock.size()), CountSellable(Bridge, SimVisit)) + 1;
+		const float FooterHeight = 4.0f * ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().WindowPadding.y;
+		const float ListRoom = TradeMaxHeight - (ImGui::GetCursorPosY() + FooterHeight);
+		const float ListHeight = FMath::Max(3.0f * RowHeight, FMath::Min(RowHeight * static_cast<float>(Rows), ListRoom));
+		ImGui::BeginChild("##TradeLists", ImVec2(0.0f, ListHeight), ImGuiChildFlags_None);
 		if (ImGui::BeginTable("##TradeColumns", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame))
 		{
 			ImGui::TableNextColumn();
@@ -739,6 +773,7 @@ void UTradePanelSubsystem::DrawTradeWindow(USimSubsystem& Bridge, const colony::
 			}
 			ImGui::EndTable();
 		}
+		ImGui::EndChild();
 
 		ImGui::Separator();
 		FTradePanelQuote Quote;
