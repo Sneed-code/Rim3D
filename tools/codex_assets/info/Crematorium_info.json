@@ -1,0 +1,51 @@
+{
+ "name": "Crematorium",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -150.0,
+   -100.0,
+   0.0
+  ],
+  "max": [
+   150.0,
+   100.0,
+   194.5
+  ]
+ },
+ "sizeM": [
+  3.0,
+  2.0,
+  1.945
+ ],
+ "parts": {
+  "Crematorium": {
+   "boundsCm": {
+    "min": [
+     -150.0,
+     -100.0,
+     0.0
+    ],
+    "max": [
+     150.0,
+     100.0,
+     194.5
+    ]
+   },
+   "tris": 15716
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "Crematorium": {
+   "from": "Crematorium",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

@@ -1,0 +1,56 @@
+{
+ "name": "FoamTurret",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -48.0,
+   -48.0,
+   0.0
+  ],
+  "max": [
+   48.0,
+   48.0,
+   131.8
+  ]
+ },
+ "sizeM": [
+  0.96,
+  0.96,
+  1.318
+ ],
+ "parts": {
+  "FoamTurret": {
+   "boundsCm": {
+    "min": [
+     -48.0,
+     -48.0,
+     0.0
+    ],
+    "max": [
+     48.0,
+     48.0,
+     131.8
+    ]
+   },
+   "tris": 9862
+  }
+ },
+ "sockets": {
+  "Spray": [
+   0.0,
+   47.2,
+   115.8
+  ]
+ },
+ "slots": {
+  "FoamTurret": {
+   "from": "FoamTurret_PBR",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

@@ -1,0 +1,58 @@
+{
+ "name": "PassiveCooler",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -47.43,
+   -46.24,
+   0.0
+  ],
+  "max": [
+   47.43,
+   46.24,
+   80.88
+  ]
+ },
+ "sizeM": [
+  0.949,
+  0.925,
+  0.809
+ ],
+ "parts": {
+  "PassiveCooler": {
+   "boundsCm": {
+    "min": [
+     -47.43,
+     -46.24,
+     0.0
+    ],
+    "max": [
+     47.43,
+     46.24,
+     80.88
+    ]
+   },
+   "tris": 7684
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "PassiveCooler_0": {
+   "from": "Cooler | Wood, reed and fired clay",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  },
+  "PassiveCooler_1": {
+   "from": "Cooler | Damp ground",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}
