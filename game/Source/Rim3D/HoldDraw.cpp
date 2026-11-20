@@ -484,6 +484,8 @@ void HoldDraw::ApplyPinned(USkeletalMeshComponent* Mesh, const colony::WeaponHol
 	Off.Alpha = Pinned.bOff ? FMath::Clamp(OffAlpha, 0.0f, 1.0f) : 0.0f;
 	Off.bRotation = true;
 	Off.bCurl = true;
+	// Wrapped round the fore-end or shaft (a front hand left open under it read as resting on an open palm, PC 2026-11-20).
+	Off.CurlWrap = 1.3f;
 	if (Main.Alpha >= 0.5f)
 	{
 		// The weapon is at its place: the other hand goes to its own grip there, not after the main hand (whose turn
