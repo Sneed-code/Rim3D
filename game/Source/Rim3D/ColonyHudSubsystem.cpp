@@ -2,6 +2,7 @@
 
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/Engine.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -507,6 +508,21 @@ void UColonyHudSubsystem::DrawHud(USimSubsystem& Bridge)
 	const float Scale = ColonyHud::ViewScale(Viewport);
 	ColonyHud::ApplyFrameStyle(Scale);
 	ButtonRects.Reset();
+	// ImGui sometimes never hears a release (a middle-button orbit pressed over the bar, a release outside the window), and then
+	// thinks the button is still held and keeps the mouse to itself. Slate knows which buttons are really down: release the rest.
+	if (FSlateApplication::IsInitialized())
+	{
+		const TSet<FKey>& Down = FSlateApplication::Get().GetPressedMouseButtons();
+		const FKey Buttons[3] = {EKeys::LeftMouseButton, EKeys::RightMouseButton, EKeys::MiddleMouseButton};
+		ImGuiIO& IO = ImGui::GetIO();
+		for (int32 Button = 0; Button < 3; ++Button)
+		{
+			if (IO.MouseDown[Button] && !Down.Contains(Buttons[Button]))
+			{
+				IO.AddMouseButtonEvent(Button, false);
+			}
+		}
+	}
 
 	// The World tab is a whole screen of its own: only the bar's way back stays (Esc or M close it too).
 	const EHudTab Open = GetOpenTab();
