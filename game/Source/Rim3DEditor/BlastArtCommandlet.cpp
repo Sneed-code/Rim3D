@@ -399,7 +399,7 @@ namespace
 		UMaterialEditingLibrary::ConnectMaterialProperty(Spec, TEXT(""), MP_Specular);
 		// Embers in the core glow orange and flicker, dying over the first half minute (data 1: the mark's age, seconds).
 		auto* Ember = BlastArtCustom(Material, TEXT("BlastScorchEmber"), CMOT_Float3, TEXT(
-			"float ember = smoothstep(0.85, 0.95, S.b);\n"
+			"float ember = smoothstep(0.86, 1.0, S.b);\n"
 			"float flicker = 0.65 + 0.35 * sin(Age * 6.0 + UV.x * 53.0 + UV.y * 37.0);\n"
 			"return float3(1.0, 0.33, 0.06) * ember * flicker * exp(-Age / 9.0) * 1.5;\n"), -500, 150);
 		BlastArtInput(Ember, TEXT("S"), Sample);
