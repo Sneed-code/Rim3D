@@ -117,6 +117,20 @@ namespace
 		const FTransform OnHead = InBody * BodyHead.Inverse();           // -> the head bone's space
 
 		UGroomComponent* Hair = Existing;
+		if (!Hair && Body->GetOwner())
+		{
+			// The one this body already wears (callers that re-apply every frame must not stack up new grooms: the
+			// creator's apply runs often, and a new groom each time took 4 people from 30 to 5 fps).
+			TArray<UGroomComponent*> Worn;
+			Body->GetOwner()->GetComponents(Worn);
+			for (UGroomComponent* Candidate : Worn)
+			{
+				if (!Hair && Candidate->GetAttachParent() == Body && Candidate->GetName().StartsWith(TEXT("StrandHair")))
+				{
+					Hair = Candidate;
+				}
+			}
+		}
 		if (!Hair)
 		{
 			UObject* Outer = Body->GetOwner() ? static_cast<UObject*>(Body->GetOwner()) : static_cast<UObject*>(Body);
@@ -136,7 +150,7 @@ namespace
 				Hair->PhysicsAsset = Physics;
 			}
 			Hair->AddCollisionComponent(Body);
-			UE_LOG(LogTemp, Display, TEXT("STRANDHAIR %s on %s: fitted scale %.3f (neck to head %.1f / %.1f cm, head sliders %.3f, moved %s), body head at %s, groom head at %s"),
+			UE_LOG(LogTemp, Display, TEXT("STRANDHAIR %s on %s: fitted scale %.3f (neck to head %.1f / %.1f cm, fit %.3f, moved %s), body head at %s, groom head at %s"),
 				*Groom->GetName(), *BodyMesh->GetName(), Scale, BodyNeck, SourceNeck, FitScale, *FitOffset.ToString(), *BodyHead.GetLocation().ToString(),
 				*SourceHead.ToString());
 		}
@@ -326,14 +340,31 @@ void UStrandHairSubsystem::Want(USkeletalMeshComponent* Body, const FString& Bas
 		Found = &Wearers.AddDefaulted_GetRef();
 		Found->Body = Body;
 	}
+	// The creator's apply calls this often with nothing changed: then only the wig it just showed is hidden again.
+	const bool bSame = Found->Groom.Get() == Groom && Found->Colour.Equals(Colour) && Found->WigSections == WigSections && Found->Base.IsValid();
+	if (bSame)
+	{
+		if (Found->bStrands)
+		{
+			Show(*Found, true);  // cheap: same groom, so only the fit (head sliders may have moved) and the wig
+		}
+		return;
+	}
+	const bool bNewColour = !Found->Colour.Equals(Colour);
 	Found->Groom = Groom;
-	Found->Base = LoadObject<USkeletalMesh>(nullptr, *(FString(TEXT("/Game/Rim3D/Generated/MakeHuman/SK_MH_")) + Base + TEXT(".SK_MH_") + Base), nullptr,
-		LOAD_NoWarn | LOAD_Quiet);
+	if (!Found->Base.IsValid() || !Found->Base->GetName().EndsWith(Base))
+	{
+		Found->Base = LoadObject<USkeletalMesh>(nullptr, *(FString(TEXT("/Game/Rim3D/Generated/MakeHuman/SK_MH_")) + Base + TEXT(".SK_MH_") + Base), nullptr,
+			LOAD_NoWarn | LOAD_Quiet);
+	}
 	Found->Colour = Colour;
 	Found->WigSections = WigSections;
 	if (Found->bStrands)
 	{
-		StrandHairSetColour(Found->Strands.Get(), Colour);
+		if (bNewColour)
+		{
+			StrandHairSetColour(Found->Strands.Get(), Colour);
+		}
 		Show(*Found, true);  // the wig the apply just showed goes again
 	}
 	SinceSort = 1.0f;  // sort at the next tick
@@ -364,9 +395,9 @@ void UStrandHairSubsystem::Show(FWearer& Wearer, bool bStrands)
 		{
 			bStrands = false;
 		}
-		else
+		else if (!Wearer.bStrands)
 		{
-			StrandHairSetColour(Strands, Wearer.Colour);
+			StrandHairSetColour(Strands, Wearer.Colour);  // on coming into view; Want sets a changed colour
 		}
 	}
 	else if (UGroomComponent* Strands = Wearer.Strands.Get())
