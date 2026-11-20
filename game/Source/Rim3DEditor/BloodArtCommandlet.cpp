@@ -310,9 +310,19 @@ namespace
 		auto* Shade = BloodArtNode<UMaterialExpressionMultiply>(Material, -650, -150);
 		BloodArtConnect(ThickShade, TEXT(""), Shade, TEXT("A"));
 		BloodArtConnect(CoreShade, TEXT(""), Shade, TEXT("B"));
-		auto* Base = BloodArtNode<UMaterialExpressionMultiply>(Material, -500, -300);
-		BloodArtConnect(Rgb, TEXT(""), Base, TEXT("A"));
-		BloodArtConnect(Shade, TEXT(""), Base, TEXT("B"));
+		auto* Shaded = BloodArtNode<UMaterialExpressionMultiply>(Material, -500, -300);
+		BloodArtConnect(Rgb, TEXT(""), Shaded, TEXT("A"));
+		BloodArtConnect(Shade, TEXT(""), Shaded, TEXT("B"));
+		// WorldTint: white on bodies; on the ground and walls UBloodSubsystem sets it darker and redder (Blood.GroundShade),
+		// since the shared colour keeps a little green and blue for shaded faces, and in sun that read as flat pink paint
+		// (PC look, 2026-11-20).
+		auto* WorldTint = BloodArtNode<UMaterialExpressionVectorParameter>(Material, -650, -550);
+		WorldTint->ParameterName = TEXT("WorldTint");
+		WorldTint->DefaultValue = FLinearColor::White;
+		auto* WorldRgb = BloodArtMask(Material, -500, -550, WorldTint, TEXT(""), true, true, true, false);
+		auto* Base = BloodArtNode<UMaterialExpressionMultiply>(Material, -350, -300);
+		BloodArtConnect(Shaded, TEXT(""), Base, TEXT("A"));
+		BloodArtConnect(WorldRgb, TEXT(""), Base, TEXT("B"));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Base, TEXT(""), MP_BaseColor);
 
 		// Roughness: matte when dry; wet blood shines where it is thick, but soaks into the ground: not a mirror
