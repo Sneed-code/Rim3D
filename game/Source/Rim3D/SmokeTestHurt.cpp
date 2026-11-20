@@ -513,7 +513,7 @@ void USmokeTestSubsystem::BuildHurtPhases()
 					{
 						Fill->SetMobility(EComponentMobility::Movable);
 						Fill->PointLightComponent->SetIntensityUnits(ELightUnits::Candelas);
-						Fill->PointLightComponent->SetIntensity(600.0f);
+						Fill->PointLightComponent->SetIntensity(8000.0f);  // about as bright as the sun at 40 cm: 600 did nothing in daylight
 						Fill->PointLightComponent->SetAttenuationRadius(250.0f);
 						Fill->PointLightComponent->SetCastShadows(false);
 						State->CloseLight = Fill;
