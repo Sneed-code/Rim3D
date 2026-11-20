@@ -6,6 +6,7 @@
 #include "Components/SceneComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "GameFramework/Pawn.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInterface.h"
@@ -297,7 +298,10 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 			Fire.EndCm = 220.0f * S;
 			Fire.Life = Random.FRandRange(0.9f, 1.4f);
 			Fire.FadeIn = 0.03f;
-			Fire.FireGain = FireGain * 0.8f;
+			// Burning fuel stays hot: only the flipbook's fiery first half, a little brighter than the frag's (PC round 6: the
+			// whole flipbook read as a smoky blob).
+			Fire.FrameTo = 32.0f;
+			Fire.FireGain = FireGain * 1.3f;
 			Fire.Roll = Random.FRandRange(-25.0f, 25.0f);
 			Fire.Tint = BlastSoot;
 			Fire.Wind = 0.3f;
@@ -473,14 +477,39 @@ void UBlastFxSubsystem::SpawnScorch(const FVector& Ground, const FVector& Ground
 	{
 		Scorches.RemoveAt(0);
 	}
-	const float SizeCm = RadiusM * 200.0f * Random.FRandRange(0.6f, 0.8f);
+	// The drawn ground can stand above the sim's height there; find the surface that is really drawn (visible static or
+	// dynamic geometry, not a pawn and not the debris' hidden floor), as the blood's stains do. PC rounds 3 to 6: the
+	// mark was never seen.
+	FVector At = Ground;
+	FVector Normal = GroundNormal;
+	if (UWorld* World = GetWorld())
+	{
+		TArray<FHitResult> Hits;
+		FCollisionObjectQueryParams Objects;
+		Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+		Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(BlastScorchGround), true);
+		World->LineTraceMultiByObjectType(Hits, Ground + FVector(0.0, 0.0, 300.0), Ground - FVector(0.0, 0.0, 400.0), Objects, Params);
+		for (const FHitResult& Hit : Hits)
+		{
+			const UPrimitiveComponent* Component = Hit.GetComponent();
+			if (Component && Component->IsVisible() && !Component->bHiddenInGame && !Cast<APawn>(Hit.GetActor()))
+			{
+				At = Hit.ImpactPoint;
+				Normal = Hit.ImpactNormal.Z > 0.5 ? FVector(Hit.ImpactNormal) : GroundNormal;
+				break;
+			}
+		}
+		UE_LOG(LogBlastFx, Display, TEXT("Scorch at %s (sim ground %.0f cm, %d hits below)"), *At.ToString(), Ground.Z, Hits.Num());
+	}
+	const float SizeCm = RadiusM * 200.0f * Random.FRandRange(0.7f, 0.9f);
 	// Flat on the ground (the plane's +Z along the ground's normal), turned at random, a few centimetres up so it never
 	// sinks into the terrain between its corners.
 	const float Turn = Random.FRand() * 2.0f * PI;
-	const FVector Along = FVector::VectorPlaneProject(FVector(FMath::Cos(Turn), FMath::Sin(Turn), 0.0f), GroundNormal).GetSafeNormal();
-	const FQuat Facing = FRotationMatrix::MakeFromZX(GroundNormal, Along).ToQuat();
+	const FVector Along = FVector::VectorPlaneProject(FVector(FMath::Cos(Turn), FMath::Sin(Turn), 0.0f), Normal).GetSafeNormal();
+	const FQuat Facing = FRotationMatrix::MakeFromZX(Normal, Along).ToQuat();
 	FScorch& Mark = Scorches.AddDefaulted_GetRef();
-	Mark.Where = FTransform(Facing, Ground + GroundNormal * 4.0, FVector(SizeCm / 100.0f, SizeCm / 100.0f, 1.0f));
+	Mark.Where = FTransform(Facing, At + Normal * 4.0, FVector(SizeCm / 100.0f, SizeCm / 100.0f, 1.0f));
 	Mark.Strength = Random.FRandRange(0.85f, 1.0f);
 }
 
