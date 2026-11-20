@@ -19,7 +19,6 @@ namespace
 	const TCHAR* const BuildingMaterialsFolder = TEXT("/Game/Rim3D/Generated/Buildings");
 	const TCHAR* const GhostName = TEXT("M_BuildingGhost");
 	const TCHAR* const GlassName = TEXT("M_WindowGlass");
-	const TCHAR* const DustName = TEXT("M_RoomDust");
 
 	bool BldMatSave(UMaterial* Material)
 	{
@@ -70,34 +69,6 @@ namespace
 		UMaterialEditingLibrary::RecompileMaterial(Material);
 		return BldMatSave(Material);
 	}
-
-	/**
-	 * Dust in a room's air (docs/design/windows.md "Drawing"): a volume material for a box that fills a room, so the volumetric
-	 * fog has a little haze there and only there. The sun through a window lights it into a shaft; outdoors stays clear. In the
-	 * volume domain the base colour is the albedo and the subsurface colour pin is the extinction (per metre of fog).
-	 */
-	bool BldMatMakeDust(IAssetTools& Tools)
-	{
-		UMaterial* Material = Cast<UMaterial>(Tools.CreateAsset(DustName, BuildingMaterialsFolder, UMaterial::StaticClass(), NewObject<UMaterialFactoryNew>()));
-		if (!Material)
-		{
-			UE_LOG(LogBuildingMaterials, Error, TEXT("Could not create %s/%s"), BuildingMaterialsFolder, DustName);
-			return false;
-		}
-		Material->MaterialDomain = MD_Volume;
-		Material->BlendMode = BLEND_Additive;
-		Material->SetShadingModel(MSM_Unlit);
-		auto* Albedo = Cast<UMaterialExpressionVectorParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVectorParameter::StaticClass(), -400, -100));
-		Albedo->ParameterName = TEXT("Albedo");
-		Albedo->DefaultValue = FLinearColor(0.85f, 0.82f, 0.76f, 1.0f);
-		UMaterialEditingLibrary::ConnectMaterialProperty(Albedo, TEXT(""), MP_BaseColor);
-		auto* Extinction = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -400, 100));
-		Extinction->ParameterName = TEXT("Extinction");
-		Extinction->DefaultValue = 0.25f;
-		UMaterialEditingLibrary::ConnectMaterialProperty(Extinction, TEXT(""), MP_SubsurfaceColor);
-		UMaterialEditingLibrary::RecompileMaterial(Material);
-		return BldMatSave(Material);
-	}
 }
 
 UBuildingMaterialsCommandlet::UBuildingMaterialsCommandlet()
@@ -111,10 +82,9 @@ UBuildingMaterialsCommandlet::UBuildingMaterialsCommandlet()
 int32 UBuildingMaterialsCommandlet::Main(const FString& Params)
 {
 	IAssetTools& Tools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
-	// Each material is made only if it isn't there yet, so running this again after a new one is added (window glass, room dust) keeps the rest.
+	// Each material is made only if it isn't there yet, so running this again after a new one is added (window glass) keeps the rest.
 	const bool bHaveGlass = LoadObject<UMaterial>(nullptr, *FString::Printf(TEXT("%s/%s.%s"), BuildingMaterialsFolder, GlassName, GlassName)) != nullptr;
-	const bool bHaveDust = LoadObject<UMaterial>(nullptr, *FString::Printf(TEXT("%s/%s.%s"), BuildingMaterialsFolder, DustName, DustName)) != nullptr;
-	const bool bGlassSaved = (bHaveGlass || BldMatMakeGlass(Tools)) && (bHaveDust || BldMatMakeDust(Tools));
+	const bool bGlassSaved = bHaveGlass || BldMatMakeGlass(Tools);
 	if (LoadObject<UMaterial>(nullptr, *FString::Printf(TEXT("%s/%s.%s"), BuildingMaterialsFolder, GhostName, GhostName)) != nullptr)
 	{
 		UE_LOG(LogBuildingMaterials, Display, TEXT("%s/%s is there already"), BuildingMaterialsFolder, GhostName);

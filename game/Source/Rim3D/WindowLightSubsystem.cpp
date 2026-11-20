@@ -3,15 +3,13 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Components/RectLightComponent.h"
 #include "Components/SceneComponent.h"
-#include "Components/StaticMeshComponent.h"
-#include "Engine/StaticMesh.h"
-#include "Materials/MaterialInstanceDynamic.h"
-#include "Materials/MaterialInterface.h"
+#include "Components/LocalFogVolumeComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "SimSubsystem.h"
+#include "SkySubsystem.h"
 #include "TerrainDraw.h"
 
 #include "ColonySim/Lights.h"
@@ -28,11 +26,12 @@ namespace
 	TAutoConsoleVariable<int32> GWinShadowLights(TEXT("Windows.ShadowLights"), 8, TEXT("How many of those cast shadows (the nearest)."), ECVF_Default);
 	TAutoConsoleVariable<float> GWinLightCd(TEXT("Windows.LightCd"), 15000.0f,
 		TEXT("Candelas of a window's daylight at a clear noon: bright sky plus sunlit ground seen through the opening."), ECVF_Default);
-	TAutoConsoleVariable<float> GWinDust(TEXT("Windows.Dust"), 0.25f,
-		TEXT("Dust in the air of rooms with windows, as volumetric fog extinction per metre: sunbeams through windows show as shafts. 0 off."), ECVF_Default);
+	TAutoConsoleVariable<float> GWinDust(TEXT("Windows.Dust"), 0.3f,
+		TEXT("Dust in the air of rooms with windows (a local fog volume's extinction per metre, drawn into the volumetric fog): sunbeams through windows show as shafts. 0 off."), ECVF_Default);
 	TAutoConsoleVariable<int32> GWinDustRooms(TEXT("Windows.DustRooms"), 8, TEXT("How many rooms nearest the camera get dust in their air."), ECVF_Default);
-	const TCHAR* const WinDustMaterialPath = TEXT("/Game/Rim3D/Generated/Buildings/M_RoomDust.M_RoomDust");
-	const TCHAR* const WinDustCubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
+	// A local fog volume is a sphere of this radius at scale 1 (its base size, 1000 cm across); scaled per axis it becomes the
+	// ellipsoid inside a room's box.
+	constexpr double WinDustBaseRadiusCm = 500.0;
 	constexpr int32 WinDustPool = 16;
 	constexpr int32 WinLightPool = 48;
 	constexpr float WinLightReachCm = 1000.0f;
@@ -70,7 +69,8 @@ void UWindowLightSubsystem::Teardown()
 	}
 	Holder = nullptr;
 	Lights.Reset();
-	DustBoxes.Reset();
+	DustVolumes.Reset();
+	DustSet.Reset();
 	Shining = 0;
 	DustRooms = 0;
 }
@@ -116,29 +116,22 @@ void UWindowLightSubsystem::Tick(float DeltaTime)
 			Light->SetVisibility(false);
 			Lights.Add(Light);
 		}
-		DustMaterial = LoadObject<UMaterialInterface>(nullptr, WinDustMaterialPath);
-		UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, WinDustCubePath);
-		if (DustMaterial && Cube)
+		for (int32 I = 0; I < WinDustPool; ++I)
 		{
-			for (int32 I = 0; I < WinDustPool; ++I)
-			{
-				UStaticMeshComponent* Box = NewObject<UStaticMeshComponent>(Holder);
-				Box->SetMobility(EComponentMobility::Movable);
-				Box->SetStaticMesh(Cube);
-				Box->SetMaterial(0, UMaterialInstanceDynamic::Create(DustMaterial, Box));
-				Box->SetCastShadow(false);
-				Box->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-				Box->SetCanEverAffectNavigation(false);
-				Box->SetupAttachment(Root);
-				Box->RegisterComponent();
-				Box->SetVisibility(false);
-				DustBoxes.Add(Box);
-			}
-		}
-		else if (!bDustMissingLogged)
-		{
-			bDustMissingLogged = true;
-			UE_LOG(LogTemp, Warning, TEXT("WindowLights: no %s (run the BuildingMaterials commandlet); rooms get no dust, so no light shafts"), WinDustMaterialPath);
+			ULocalFogVolumeComponent* Volume = NewObject<ULocalFogVolumeComponent>(Holder);
+			Volume->SetMobility(EComponentMobility::Movable);
+			Volume->SetRadialFogExtinction(0.0f);
+			Volume->SetHeightFogExtinction(0.0f);
+			Volume->SetHeightFogFalloff(0.0f);
+			Volume->SetHeightFogOffset(0.0f);
+			Volume->SetFogPhaseG(0.2f);
+			Volume->SetFogAlbedo(FLinearColor(0.85f, 0.82f, 0.76f));
+			Volume->SetFogEmissive(FLinearColor::Black);
+			Volume->SetupAttachment(Root);
+			Volume->RegisterComponent();
+			Volume->SetVisibility(false);
+			DustVolumes.Add(Volume);
+			DustSet.Add(0.0f);
 		}
 	}
 
@@ -247,10 +240,14 @@ void UWindowLightSubsystem::Tick(float DeltaTime)
 		++Shining;
 	}
 
-	// Dust in the rooms behind the windows, nearest the camera first. The box fills the room's bounds from the floor to the
-	// roof, so its walls hold the haze in; the volumetric fog is lit by the sun only where it comes in through a window.
-	const float Dust = FMath::Max(0.0f, GWinDust.GetValueOnGameThread());
-	const int32 DustWanted = Dust > 0.0f ? FMath::Clamp(GWinDustRooms.GetValueOnGameThread(), 0, DustBoxes.Num()) : 0;
+	// Dust in the rooms behind the windows, nearest the camera first, while the camera is indoors (outdoors none of it is
+	// wanted, and the overview camera never sees it). Each room gets a local fog volume: the ellipsoid inside its bounds from the
+	// floor to the roof, a little haze of even density, which the volumetric fog lights where the sun comes in through a window.
+	// (A volume material on a box does nothing: the volumetric fog takes volume materials from particles only.)
+	const USkySubsystem* SkyNow = GetWorld()->GetSubsystem<USkySubsystem>();
+	const float Indoors = SkyNow ? SkyNow->GetIndoorShare() : 0.0f;
+	const float Dust = FMath::Max(0.0f, GWinDust.GetValueOnGameThread()) * Indoors;
+	const int32 DustWanted = Dust > 0.001f ? FMath::Clamp(GWinDustRooms.GetValueOnGameThread(), 0, DustVolumes.Num()) : 0;
 	const FVector Origin = Source->GetWorldOrigin();
 	DustRoomIds.Sort([&RoomList, &Origin, &Camera](int32 A, int32 B)
 	{
@@ -263,18 +260,18 @@ void UWindowLightSubsystem::Tick(float DeltaTime)
 		return Far(A) < Far(B);
 	});
 	DustRooms = 0;
-	for (int32 I = 0; I < DustBoxes.Num(); ++I)
+	for (int32 I = 0; I < DustVolumes.Num(); ++I)
 	{
-		UStaticMeshComponent* Box = DustBoxes[I];
-		if (!Box)
+		ULocalFogVolumeComponent* Volume = DustVolumes[I];
+		if (!Volume)
 		{
 			continue;
 		}
 		if (I >= DustWanted || I >= DustRoomIds.Num())
 		{
-			if (Box->IsVisible())
+			if (Volume->IsVisible())
 			{
-				Box->SetVisibility(false);
+				Volume->SetVisibility(false);
 			}
 			continue;
 		}
@@ -282,16 +279,21 @@ void UWindowLightSubsystem::Tick(float DeltaTime)
 		const colony::CellRect& R = Room.bounds;
 		const double FloorZ = Origin.Z + static_cast<double>(Map.groundHeight(Room.anchor)) * 100.0;
 		const double TallCm = TerrainDraw::RoofHeightM * 100.0;
-		// The engine cube is 100 cm across and centred on its origin.
-		Box->SetWorldLocation(Origin + FVector((R.minX + R.sizeX * 0.5) * 100.0, (R.minY + R.sizeY * 0.5) * 100.0, 0.0) + FVector(0.0, 0.0, FloorZ - Origin.Z + TallCm * 0.5));
-		Box->SetWorldScale3D(FVector(R.sizeX, R.sizeY, TallCm / 100.0));
-		if (UMaterialInstanceDynamic* DustMid = Cast<UMaterialInstanceDynamic>(Box->GetMaterial(0)))
+		const FVector RoomCentre(Origin.X + (R.minX + R.sizeX * 0.5) * 100.0, Origin.Y + (R.minY + R.sizeY * 0.5) * 100.0, FloorZ + TallCm * 0.5);
+		const FVector RoomScale = FVector(R.sizeX * 50.0, R.sizeY * 50.0, TallCm * 0.5) / WinDustBaseRadiusCm;
+		if (!Volume->GetComponentLocation().Equals(RoomCentre, 1.0) || !Volume->GetComponentScale().Equals(RoomScale, 0.001))
 		{
-			DustMid->SetScalarParameterValue(TEXT("Extinction"), Dust);
+			Volume->SetWorldLocationAndRotation(RoomCentre, FRotator::ZeroRotator);
+			Volume->SetWorldScale3D(RoomScale);
 		}
-		if (!Box->IsVisible())
+		if (DustSet.IsValidIndex(I) && !FMath::IsNearlyEqual(DustSet[I], Dust, 0.002f))
 		{
-			Box->SetVisibility(true);
+			DustSet[I] = Dust;
+			Volume->SetHeightFogExtinction(Dust);
+		}
+		if (!Volume->IsVisible())
+		{
+			Volume->SetVisibility(true);
 		}
 		++DustRooms;
 	}
