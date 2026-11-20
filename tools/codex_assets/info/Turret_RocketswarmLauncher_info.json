@@ -1,0 +1,56 @@
+{
+ "name": "Turret_RocketswarmLauncher",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -99.0,
+   -98.3,
+   0.0
+  ],
+  "max": [
+   99.0,
+   102.8,
+   228.19
+  ]
+ },
+ "sizeM": [
+  1.98,
+  2.011,
+  2.282
+ ],
+ "parts": {
+  "Turret_RocketswarmLauncher": {
+   "boundsCm": {
+    "min": [
+     -99.0,
+     -98.3,
+     0.0
+    ],
+    "max": [
+     99.0,
+     102.8,
+     228.19
+    ]
+   },
+   "tris": 24787
+  }
+ },
+ "sockets": {
+  "PodFace": [
+   0.0,
+   77.65,
+   190.05
+  ]
+ },
+ "slots": {
+  "Turret_RocketswarmLauncher": {
+   "from": "Rocketswarm painted steel and hardware",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

@@ -1,0 +1,57 @@
+{
+ "name": "Turret_UraniumSlug",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -100.0,
+   -100.0,
+   0.0
+  ],
+  "max": [
+   100.0,
+   239.2,
+   240.0
+  ]
+ },
+ "sizeM": [
+  2.0,
+  3.392,
+  2.4
+ ],
+ "parts": {
+  "Turret_UraniumSlug": {
+   "boundsCm": {
+    "min": [
+     -100.0,
+     -100.0,
+     0.0
+    ],
+    "max": [
+     100.0,
+     239.2,
+     240.0
+    ]
+   },
+   "tris": 15590
+  }
+ },
+ "sockets": {
+  "Muzzle": [
+   0.0,
+   239.2,
+   170.0
+  ]
+ },
+ "slots": {
+  "Turret_UraniumSlug": {
+   "from": "Turret | Weathered Alloy",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

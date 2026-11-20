@@ -1,0 +1,56 @@
+{
+ "name": "SimpleResearchBench",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -150.0,
+   -100.0,
+   0.0
+  ],
+  "max": [
+   150.0,
+   100.0,
+   150.9
+  ]
+ },
+ "sizeM": [
+  3.0,
+  2.0,
+  1.509
+ ],
+ "parts": {
+  "SimpleResearchBench": {
+   "boundsCm": {
+    "min": [
+     -150.0,
+     -100.0,
+     0.0
+    ],
+    "max": [
+     150.0,
+     100.0,
+     150.9
+    ]
+   },
+   "tris": 16025
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "SimpleResearchBench_0": {
+   "from": "Workbench | PBR atlas",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  },
+  "SimpleResearchBench_1": {
+   "from": "Blown glass | clear",
+   "maps": [
+    "baseColor"
+   ]
+  }
+ }
+}

@@ -1,0 +1,65 @@
+{
+ "name": "ShipCryptosleepCasket",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -49.6,
+   -99.2,
+   0.0
+  ],
+  "max": [
+   49.6,
+   99.2,
+   109.2
+  ]
+ },
+ "sizeM": [
+  0.992,
+  1.984,
+  1.092
+ ],
+ "parts": {
+  "ShipCryptosleepCasket": {
+   "boundsCm": {
+    "min": [
+     -49.6,
+     -99.2,
+     0.0
+    ],
+    "max": [
+     49.6,
+     99.2,
+     109.2
+    ]
+   },
+   "tris": 19686
+  }
+ },
+ "sockets": {
+  "Sleeper": [
+   0.0,
+   -3.0,
+   60.0
+  ]
+ },
+ "slots": {
+  "ShipCryptosleepCasket_0": {
+   "from": "Casket | Spacer finishes",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  },
+  "ShipCryptosleepCasket_1": {
+   "from": "Casket | Frosted glazing",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}
