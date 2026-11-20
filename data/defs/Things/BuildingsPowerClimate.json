@@ -351,7 +351,7 @@
   ]
  },
  {
-  "defName": "PassiveCooler", "visual": {"parts": [{"shape": "box", "size": [0.8, 0.8, 0.7], "color": [0.52, 0.38, 0.24]}, {"shape": "box", "size": [0.82, 0.06, 0.5], "at": [0, 0.4, 0.1], "color": [0.36, 0.26, 0.16]}, {"shape": "box", "size": [0.88, 0.88, 0.06], "at": [0, 0, 0.7], "color": [0.42, 0.3, 0.19]}, {"shape": "box", "size": [0.72, 0.72, 0.02], "at": [0, 0, 0.75], "color": [0.22, 0.42, 0.52]}]}, "researchPrerequisite": "PassiveCooler",
+  "defName": "PassiveCooler", "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/PassiveCooler/SM_PassiveCooler.SM_PassiveCooler","parts": [{"shape": "box", "size": [0.8, 0.8, 0.7], "color": [0.52, 0.38, 0.24]}, {"shape": "box", "size": [0.82, 0.06, 0.5], "at": [0, 0.4, 0.1], "color": [0.36, 0.26, 0.16]}, {"shape": "box", "size": [0.88, 0.88, 0.06], "at": [0, 0, 0.7], "color": [0.42, 0.3, 0.19]}, {"shape": "box", "size": [0.72, 0.72, 0.02], "at": [0, 0, 0.75], "color": [0.22, 0.42, 0.52]}]}, "researchPrerequisite": "PassiveCooler",
   "parent": "ClimateBase",
   "label": "passive cooler",
   "size": [

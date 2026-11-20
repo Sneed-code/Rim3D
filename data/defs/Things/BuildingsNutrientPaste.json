@@ -23,7 +23,7 @@
     "researchPrerequisite": "NutrientPaste",
     "stats": { "maxHitPoints": 100, "workToBuild": 432.0, "flammability": 0.5, "beauty": 0 },
     "building": { "hopper": true },
-    "visual": { "parts": [
+    "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/Hopper/SM_Hopper.SM_Hopper", "parts": [
       { "shape": "box", "size": [0.9, 0.9, 0.12], "color": [0.5, 0.52, 0.55] },
       { "shape": "box", "size": [0.9, 0.04, 0.3], "at": [0, -0.43, 0], "color": [0.5, 0.52, 0.55] },
       { "shape": "box", "size": [0.9, 0.04, 0.3], "at": [0, 0.43, 0], "color": [0.5, 0.52, 0.55] },

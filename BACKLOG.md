@@ -94,3 +94,8 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
   their target and barrels recoil (the GLBs keep Head, Gun and Barrel with pivots); triple rocket launcher's rockets
   leave the tubes one by one; incendiary/smoke/EMP launchers share the GrenadeLauncher model; molotov in flight uses
   its model with see-through glass.
+- Codex batch 2/3 moving parts and two left out (2026-11-20): each Codex building is imported as one mesh, so the
+  foam/rocketswarm/uranium-slug turret heads, watermill wheel, casket canopy, beacon and scanner dishes, floodlight
+  head and telescope tube don't move yet (the GLBs keep them as separate parts with pivots). The Autodoor model (frame
+  plus two leaves) and the in-wall Cooler model are made but not wired in: doors draw one sliding leaf and the cooler
+  def is a whole wall-height block, so both need a small draw change first.

@@ -318,6 +318,152 @@
     2.4
    ],
    "centerOn": "Base"
+  },
+  "VitalsMonitor": {
+   "kind": "building",
+   "def": "VitalsMonitor",
+   "size": [
+    1,
+    1,
+    1.5
+   ]
+  },
+  "FermentingBarrel": {
+   "kind": "building",
+   "def": "FermentingBarrel",
+   "size": [
+    0.8,
+    0.8,
+    0.95
+   ]
+  },
+  "Hopper": {
+   "kind": "building",
+   "def": "Hopper",
+   "size": [
+    1,
+    1,
+    0.9
+   ]
+  },
+  "PassiveCooler": {
+   "kind": "building",
+   "def": "PassiveCooler",
+   "size": [
+    1,
+    1,
+    0.8
+   ]
+  },
+  "FloodLight": {
+   "kind": "building",
+   "def": "FloodLight",
+   "size": [
+    1,
+    1,
+    2.4
+   ],
+   "centerOn": "Base"
+  },
+  "Telescope": {
+   "kind": "building",
+   "def": "Telescope",
+   "size": [
+    1,
+    1,
+    1.7
+   ],
+   "centerOn": "Base"
+  },
+  "TubeTelevision": {
+   "kind": "building",
+   "def": "TubeTelevision",
+   "size": [
+    1,
+    1,
+    1.0
+   ]
+  },
+  "PokerTable": {
+   "kind": "building",
+   "def": "PokerTable",
+   "size": [
+    1.8,
+    1.8,
+    0.78
+   ]
+  },
+  "HorseshoesPin": {
+   "kind": "building",
+   "def": "HorseshoesPin",
+   "size": [
+    0.9,
+    0.9,
+    0.35
+   ]
+  },
+  "AnimalSleepingBox": {
+   "kind": "building",
+   "def": "AnimalSleepingBox",
+   "size": [
+    0.85,
+    0.85,
+    0.35
+   ]
+  },
+  "AnimalBed": {
+   "kind": "building",
+   "def": "AnimalBed",
+   "size": [
+    0.92,
+    0.92,
+    0.25
+   ]
+  },
+  "Shell_HighExplosive": {
+   "kind": "item",
+   "def": "Shell_HighExplosive",
+   "size": [
+    0.42,
+    0.081,
+    0.081
+   ],
+   "drop": [
+    "ShellStack"
+   ]
+  },
+  "ComponentSpacer": {
+   "kind": "item",
+   "def": "ComponentSpacer",
+   "size": [
+    0.14,
+    0.1,
+    0.05
+   ],
+   "drop": [
+    "ComponentSpacerStack"
+   ]
+  },
+  "BionicArm": {
+   "kind": "item",
+   "def": "BionicArm",
+   "size": [
+    0.75,
+    0.15,
+    0.12
+   ]
+  },
+  "Melee_Monosword": {
+   "kind": "gun"
+  },
+  "Melee_Plasmasword": {
+   "kind": "gun"
+  },
+  "Melee_Zeushammer": {
+   "kind": "gun"
+  },
+  "Melee_BreachAxe": {
+   "kind": "gun"
   }
  },
  "buildings": [
@@ -692,6 +838,165 @@
     "fbx": "assets/raw/codex/Turret_UraniumSlug/Turret_UraniumSlug_Game.fbx",
     "combine": true,
     "slotTextureDir": "assets/raw/codex/Turret_UraniumSlug",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "VitalsMonitor",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "VitalsMonitor",
+    "fbx": "assets/raw/codex/VitalsMonitor/VitalsMonitor_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/VitalsMonitor",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "FermentingBarrel",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "FermentingBarrel",
+    "fbx": "assets/raw/codex/FermentingBarrel/FermentingBarrel_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/FermentingBarrel",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Hopper",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Hopper",
+    "fbx": "assets/raw/codex/Hopper/Hopper_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Hopper",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "PassiveCooler",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "PassiveCooler",
+    "fbx": "assets/raw/codex/PassiveCooler/PassiveCooler_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/PassiveCooler",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "FloodLight",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "FloodLight",
+    "fbx": "assets/raw/codex/FloodLight/FloodLight_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/FloodLight",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "Telescope",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Telescope",
+    "fbx": "assets/raw/codex/Telescope/Telescope_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Telescope",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "TubeTelevision",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "TubeTelevision",
+    "fbx": "assets/raw/codex/TubeTelevision/TubeTelevision_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/TubeTelevision",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "PokerTable",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "PokerTable",
+    "fbx": "assets/raw/codex/PokerTable/PokerTable_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/PokerTable",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "HorseshoesPin",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "HorseshoesPin",
+    "fbx": "assets/raw/codex/HorseshoesPin/HorseshoesPin_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/HorseshoesPin",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "AnimalSleepingBox",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "AnimalSleepingBox",
+    "fbx": "assets/raw/codex/AnimalSleepingBox/AnimalSleepingBox_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/AnimalSleepingBox",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "AnimalBed",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "AnimalBed",
+    "fbx": "assets/raw/codex/AnimalBed/AnimalBed_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/AnimalBed",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Shell_HighExplosive",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Shell_HighExplosive",
+    "fbx": "assets/raw/codex/Shell_HighExplosive/Shell_HighExplosive_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Shell_HighExplosive",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ComponentSpacer",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ComponentSpacer",
+    "fbx": "assets/raw/codex/ComponentSpacer/ComponentSpacer_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ComponentSpacer",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "BionicArm",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "BionicArm",
+    "fbx": "assets/raw/codex/BionicArm/BionicArm_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/BionicArm",
     "normalOpenGL": true,
     "emissiveStrength": 3.0
    }
