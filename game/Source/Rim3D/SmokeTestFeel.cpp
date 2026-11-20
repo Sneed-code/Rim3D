@@ -19,6 +19,7 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Explosives.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 
@@ -546,9 +547,22 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	};
 	Phases.Add(MoveTemp(Big));
 
-	// 8. The realistic blast look (docs/design/blast-draw.md, needs -run=BlastArt): a frag blast 14 m ahead in daylight,
+	// 8. The realistic blast look (docs/design/blast-draw.md, needs -run=BlastArt): a frag blast 12 m ahead in a cleared patch, the camera turned to it, in daylight,
 	// pictured at its fireball, its rising smoke and its lingering cloud and scorch; then a molotov's splash of fire.
 	const auto Fx = [this]() { return GetWorld()->GetSubsystem<UBlastFxSubsystem>(); };
+	// Turns the camera to look at a map point a little below eye height, so the blast there is in the picture.
+	const auto LookAtBlast = [=, this](float X, float Y)
+	{
+		const colony::ThingView* Me = MyView();
+		AProtagonistPawn* Body = Prot() ? Prot()->GetBody() : nullptr;
+		if (!Me || !Body)
+		{
+			return;
+		}
+		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Y - Me->y, X - Me->x));
+		Body->Look(FRotator::NormalizeAxis(Yaw - Body->GetYaw()), -Body->GetPitch());
+		Body->SnapCamera();
+	};
 	FPhase Fireball;
 	Fireball.Name = TEXT("blast_fireball");
 	Fireball.WarmupSeconds = 0.2f;
@@ -561,7 +575,21 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		const colony::ThingView* Me = MyView();
 		State->BlastsAtStart = Fx() ? Fx()->GetBlastsDrawn() : 0;
 		State->ScorchesAtStart = Fx() ? Fx()->GetScorchMarks() : 0;
-		Bridge()->Submit(colony::ExplodeCommand{Me->x + 14.0f, Me->y, 1.9f, 50.0f, "Bomb", 0.1f});
+		// A clearing ahead, so no tree stands between the camera and the blasts (the molotov's spot too).
+		if (colony::Sim* Sim = SimOf())
+		{
+			const int32 X0 = FMath::FloorToInt32(Me->x);
+			const int32 Y0 = FMath::FloorToInt32(Me->y);
+			for (int32 Dx = -4; Dx <= 22; ++Dx)
+			{
+				for (int32 Dy = -10; Dy <= 12; ++Dy)
+				{
+					Sim->plants().remove(colony::CellPos{X0 + Dx, Y0 + Dy, 0});
+				}
+			}
+		}
+		LookAtBlast(Me->x + 12.0f, Me->y + 1.5f);
+		Bridge()->Submit(colony::ExplodeCommand{Me->x + 12.0f, Me->y + 1.5f, 1.9f, 50.0f, "Bomb", 0.1f});
 	};
 	Fireball.OnFrame = Watch;
 	Fireball.Verify = [=, this]()
@@ -627,6 +655,7 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	{
 		State->Reset();
 		const colony::ThingView* Me = MyView();
+		LookAtBlast(Me->x + 12.0f, Me->y + 4.0f);
 		Bridge()->Submit(colony::ExplodeCommand{Me->x + 12.0f, Me->y + 4.0f, 1.1f, 10.0f, "Burn", 0.0f});
 	};
 	Molotov.OnFrame = Watch;
