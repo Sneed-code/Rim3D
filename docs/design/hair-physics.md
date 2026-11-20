@@ -55,6 +55,36 @@ on a still body: the old solver never settled (points still moving at 260 cm/s a
 all once it settles, and an idle's lean moves the hair only as fast as the body (tests "comes to rest and stays still",
 "lands and stays").
 
+## Aiming (2026-11-20)
+
+PC pictures after the weapon hold polish (#402) showed long hair covering the rifle's stock and the front hand in the
+over-the-shoulder aim (the camera sits 120 cm behind and 45 cm right of the colonist), and nothing stopped hair from
+going through a gun held across the body. Fading the hair near the camera was the other option; a shooter with long
+hair really does put it over the other shoulder, so the game does that, through the physics:
+
+- **The gun and the forearms are solid.** While a two-handed gun is held at its place (`HoldDraw` pinned, the
+  `hasOff` long guns), `WeaponDrawSubsystem` hands the hair node the gun (`UMakeHumanAnimInstance::SetHeldGun`: the
+  gun in the main hand's space, its butt and muzzle, as thick as its model is wide) and the node adds a capsule along
+  it and one round each forearm (elbow to wrist, about 4 cm, scaled to the body). Hair rests on them like on the body.
+- **Aimed, the hair goes over the other shoulder.** `colony::sweepHairGoals` turns every strand's styled shape towards
+  the far shoulder and forward (over that shoulder, down the chest; both read from the gun: ahead along its barrel, the
+  stock's side from the head to its butt), by up to 60 degrees (`Pawns.HairAimSweep`, 0 off) times the aim
+  blend: strands growing on the stock's side fully, down the middle 0.85, the far side 0.7, the first segment (on the
+  scalp) by 0.8, roots and lengths kept. Only the goal changes, so the hair swings there with its usual lag (about a
+  second for waist-length hair), slides over the neck and shoulders instead of through them, and falls back to its
+  style when the gun comes down. Every colonist aiming a long gun does it, not just the player.
+- **Held there.** Hair put over a shoulder stays put, so while aimed the springs back to the swept shape are stiffer
+  (`colony::hairAimSettings`: twice at the root, four times at the tips). With the plain springs gravity left the
+  tips only half way (PC round 3: goals moved 37 cm, tips 12 to 24 cm).
+- Tests (`HairStrandsTests.cpp`): the sweep keeps roots and lengths and turns the stock side more; on the test body
+  with a shouldered rifle, seen from the aim camera, the hair lay across the lines of sight to the stock and the front
+  hand without the sweep and clears both by more than 4 cm with it, never going into the body, the gun or the arms;
+  lowering the gun lets the hair settle back to where it hangs unaimed (within 3 cm; measured 0.01).
+- On the PC: `Pawns.HairDebug 1` draws the gun and forearm capsules in cyan (the body's are green). The gun range notes
+  give a `HAIR AIM` line at each 3p aimed picture: whether the gun reached the hair, the aim, the capsules, how far the
+  sweep moved the tips' goals and how far the solved tips ended from the hair as animated. The gun range's hold pictures
+  (`hold_<gun>_3p_aimed`) show it on the long-haired protagonist.
+
 ## Cost and distance
 
 About 30 points against 10 capsules: a few tens of microseconds per pawn per frame, on the animation worker threads.
@@ -82,6 +112,7 @@ About 30 points against 10 capsules: a few tens of microseconds per pawn per fra
 - MetaHuman strand hair (grooms, `Pawns.MetaHumans 1`, not used by the game's pawns now) has no physics.
 - Short styles and the afro have no bones and stay as styled (they don't reach the body).
 - Hits, blasts and wind don't push the hair yet; clothes and armour will need their own capsules once bodies wear them.
+- A pistol or a one-handed weapon has no capsule, and aiming one does not sweep the hair; melee weapons don't push it.
 - The bust bar is sized from the skeleton and the back hair, not from the mesh, so a very large or very flat chest is
   only roughly matched; reading the body mesh needs CPU copies of the meshes (not kept in packaged builds).
 - Five chains carry the whole sheet of hair; the mesh between two chains is blended between them, so where two chains

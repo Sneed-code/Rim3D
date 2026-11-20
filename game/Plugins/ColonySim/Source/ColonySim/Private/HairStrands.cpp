@@ -341,6 +341,60 @@ float hairDeepestPenetration(const std::vector<std::vector<HairVec>>& strands, c
     return deepest;
 }
 
+void sweepHairGoals(std::vector<std::vector<HairVec>>& goals, HairVec head, HairVec stockSide, HairVec away, float amount, float angleDeg) {
+    amount = hsClamp01(amount);
+    if (amount <= 0.0f || angleDeg <= 0.0f) {
+        return;
+    }
+    away = hsNormal(away, HairVec{});
+    if (hsDot(away, away) < 0.5f) {
+        return;
+    }
+    const float full = std::min(angleDeg, 90.0f) * 3.14159265f / 180.0f * amount;
+    const HairVec up = hsNormal(hsCross(stockSide, away), HairVec{0.0f, 0.0f, 1.0f});
+    for (std::vector<HairVec>& p : goals) {
+        if (p.size() < 2) {
+            continue;
+        }
+        // Which side of the head the strand grows from: +1 the stock's side, 0 the middle of the back, -1 the far side
+        // (measured across the body, its height left out).
+        HairVec fromHead = hsSub(p[0], head);
+        fromHead = hsSub(fromHead, hsMul(up, hsDot(fromHead, up)));
+        const float side = std::clamp(hsDot(hsNormal(fromHead, HairVec{}), stockSide), -1.0f, 1.0f);
+        const float share = 0.85f + 0.15f * side;
+        HairVec above = p[0];  // the point above as styled
+        HairVec joint = p[0];  // and as swept
+        for (size_t k = 1; k < p.size(); ++k) {
+            const HairVec seg = hsSub(p[k], above);
+            above = p[k];
+            const float length = hsLen(seg);
+            if (length < 1.0e-5f) {
+                p[k] = joint;
+                continue;
+            }
+            HairVec dir = hsMul(seg, 1.0f / length);
+            const float want = full * share * (k == 1 ? 0.8f : 1.0f);
+            const float c = std::clamp(hsDot(dir, away), -1.0f, 1.0f);
+            const HairVec across = hsSub(away, hsMul(dir, c));
+            const float acrossLen = hsLen(across);
+            if (acrossLen > 1.0e-5f) {
+                const float turn = std::min(want, std::acos(c));
+                dir = hsAdd(hsMul(dir, std::cos(turn)), hsMul(across, std::sin(turn) / acrossLen));
+            }
+            joint = hsAdd(joint, hsMul(dir, length));
+            p[k] = joint;
+        }
+    }
+}
+
+HairSettings hairAimSettings(const HairSettings& settings, float amount) {
+    amount = hsClamp01(amount);
+    HairSettings aimed = settings;
+    aimed.rootStiffness *= 1.0f + amount;
+    aimed.tipStiffness *= 1.0f + 3.0f * amount;
+    return aimed;
+}
+
 std::vector<std::pair<int, int>> hairSheetNeighbours(const std::vector<HairVec>& roots, HairVec head, HairVec up) {
     std::vector<std::pair<int, int>> pairs;
     const int n = static_cast<int>(roots.size());

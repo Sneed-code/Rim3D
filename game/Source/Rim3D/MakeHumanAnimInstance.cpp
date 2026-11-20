@@ -20,6 +20,8 @@ namespace
 		TEXT("Long hair simulates fully within this many cm of the camera; further off it is only pushed out of the body."), ECVF_Default);
 	TAutoConsoleVariable<float> GMakeHumanHairCollideFar(TEXT("Pawns.HairCollideFar"), 5000.0f,
 		TEXT("Beyond this many cm from the camera long hair stays as animated (not even pushed out of the body)."), ECVF_Default);
+	TAutoConsoleVariable<float> GMakeHumanHairAimSweep(TEXT("Pawns.HairAimSweep"), 60.0f,
+		TEXT("Degrees long hair turns over the other shoulder while a gun is aimed, so it never hides the stock or the front hand (0: off)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GMakeHumanHairDebug(TEXT("Pawns.HairDebug"), 0,
 		TEXT("1 draws the body's hair collision capsules (green) and the hair strands (yellow) on MakeHuman characters."), ECVF_Default);
 	TAutoConsoleVariable<int32> GMakeHumanHandIK(TEXT("Pawns.MakeHumanHandIK"), 1,
@@ -277,6 +279,12 @@ void FMakeHumanHairNode::InitializeBoneReferences(const FBoneContainer& Required
 	{
 		Shape.Bone.Initialize(RequiredBones);
 	}
+	HeadBone.Initialize(RequiredBones);
+	for (int32 Side = 0; Side < 2; ++Side)
+	{
+		Hands[Side].Initialize(RequiredBones);
+		LowerArms[Side].Initialize(RequiredBones);
+	}
 }
 
 namespace
@@ -420,6 +428,17 @@ void FMakeHumanHairNode::Setup(const FReferenceSkeleton& Ref)
 		Shape.Radius = Fit.capsule.radius;
 	}
 	Strands.setSheetNeighbours(colony::hairSheetNeighbours(Roots, Body.head, colony::HairVec{0.0f, 0.0f, 1.0f}));
+	// A held gun's forearms (capsules only while a gun is held up): a little thinner than the upper arms' shape.
+	HeadBone.BoneName = Ref.GetBoneName(HeadIndex);
+	for (int32 Side = 0; Side < 2; ++Side)
+	{
+		const int32 HandIndex = Find(Side == 1 ? TEXT("hand_r") : TEXT("hand_l"));
+		const bool bForearm = Body.hasArms && HandIndex != INDEX_NONE;
+		Hands[Side].BoneName = bForearm ? Ref.GetBoneName(HandIndex) : NAME_None;
+		LowerArms[Side].BoneName = bForearm ? Ref.GetBoneName(Arm[2][Side]) : NAME_None;
+	}
+	// In the skeleton's own units (a mesh may be in metres under a scaled component): 4 cm on a body 60 cm from pelvis to head.
+	ForearmRadius = static_cast<float>(FVector::Dist(RefCS[HeadIndex].GetLocation(), RefCS[PelvisIndex].GetLocation())) * (4.0f / 60.0f);
 }
 
 void FMakeHumanHairNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms)
@@ -471,9 +490,64 @@ void FMakeHumanHairNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 		Capsules.push_back({MhHairVec(Component.TransformPosition(BoneCS.TransformPosition(Shape.A))),
 			MhHairVec(Component.TransformPosition(BoneCS.TransformPosition(Shape.B))), Shape.Radius * Scale});
 	}
+	// A gun held up in both hands (docs/design/hair-physics.md, "Aiming"): the hair rests on it and on the forearms.
+	BodyCapsules = static_cast<int32>(Capsules.size());
+	const bool bGun = Gun.bOn && Hands[Gun.bRightHand ? 1 : 0].IsValidToEvaluate(Container);
+	bLastGun = bGun;
+	LastAim = Gun.Aim;
+	LastSweepShift = 0.0f;
+	if (bGun)
+	{
+		FTransform HandWorld = Output.Pose.GetComponentSpaceTransform(Hands[Gun.bRightHand ? 1 : 0].GetCompactPoseIndex(Container)) * Component;
+		HandWorld.SetScale3D(FVector::OneVector);
+		const FTransform GunWorld = Gun.GunInHand * HandWorld;
+		const float GunSize = static_cast<float>(Gun.GunInHand.GetMaximumAxisScale());
+		Capsules.push_back({MhHairVec(GunWorld.TransformPosition(Gun.Rear)), MhHairVec(GunWorld.TransformPosition(Gun.Front)), Gun.Radius * GunSize});
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			if (Hands[Side].IsValidToEvaluate(Container) && LowerArms[Side].IsValidToEvaluate(Container))
+			{
+				const FVector Elbow = Output.Pose.GetComponentSpaceTransform(LowerArms[Side].GetCompactPoseIndex(Container)).GetLocation();
+				const FVector Wrist = Output.Pose.GetComponentSpaceTransform(Hands[Side].GetCompactPoseIndex(Container)).GetLocation();
+				Capsules.push_back({MhHairVec(Component.TransformPosition(Elbow)), MhHairVec(Component.TransformPosition(Wrist)), ForearmRadius * Scale});
+			}
+		}
+	}
+	LargestAnimatedPenetration = FMath::Max(LargestAnimatedPenetration, colony::hairDeepestPenetration(Goals, Capsules));
+	// Aimed, the hair goes over the other shoulder, as a shooter with long hair puts it, off the stock and the front hand
+	// (sneed's PC pictures 2026-11-20: it hid both in the over-the-shoulder view). The directions come from the gun
+	// itself: ahead along its barrel, the stock's side from the head to its butt (PC round 5: the body axes handed in
+	// sent the hair back towards the camera).
+	if (bGun && Gun.Aim > 0.0f && SweepDegrees > 0.0f && HeadBone.IsValidToEvaluate(Container) && Capsules.size() > static_cast<size_t>(BodyCapsules))
+	{
+		const FVector HeadWorld = Component.TransformPosition(Output.Pose.GetComponentSpaceTransform(HeadBone.GetCompactPoseIndex(Container)).GetLocation());
+		const colony::HairCapsule& GunCap = Capsules[static_cast<size_t>(BodyCapsules)];
+		const FVector Butt = MhHairFVector(GunCap.a);
+		const FVector Ahead = (MhHairFVector(GunCap.b) - Butt).GetSafeNormal2D();
+		FVector StockSide = Butt - HeadWorld;
+		StockSide.Z = 0.0;
+		StockSide = (StockSide - Ahead * FVector::DotProduct(StockSide, Ahead)).GetSafeNormal();
+		if (StockSide.IsNearlyZero() || Ahead.IsNearlyZero())
+		{
+			StockSide = Component.TransformVectorNoScale(Right).GetSafeNormal() * (Gun.bRightHand ? 1.0 : -1.0);
+		}
+		// Over the far shoulder and forward down the chest, away from a camera behind the stock.
+		const FVector Away = (-StockSide + Ahead * 0.55).GetSafeNormal();
+		TArray<FVector, TInlineAllocator<8>> TipsBefore;
+		for (const std::vector<colony::HairVec>& Points : Goals)
+		{
+			TipsBefore.Add(MhHairFVector(Points.back()));
+		}
+		colony::sweepHairGoals(Goals, MhHairVec(HeadWorld), MhHairVec(StockSide), MhHairVec(Away), FMath::Clamp(Gun.Aim, 0.0f, 1.0f), SweepDegrees);
+		for (int32 c = 0; c < TipsBefore.Num(); ++c)
+		{
+			LastSweepShift = FMath::Max(LastSweepShift, static_cast<float>(FVector::Dist(TipsBefore[c], MhHairFVector(Goals[static_cast<size_t>(c)].back()))));
+		}
+	}
+	LastGunCapsules = static_cast<int32>(Capsules.size()) - BodyCapsules;
 	if (Mode >= 2)
 	{
-		Strands.step(FMath::Max(DeltaTime, 0.0f), Goals, Capsules, Settings);
+		Strands.step(FMath::Max(DeltaTime, 0.0f), Goals, Capsules, bGun ? colony::hairAimSettings(Settings, Gun.Aim) : Settings);
 	}
 	else
 	{
@@ -485,7 +559,16 @@ void FMakeHumanHairNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 		return;
 	}
 	LargestPenetration = FMath::Max(LargestPenetration, colony::hairDeepestPenetration(Solved, Capsules));
-	LargestAnimatedPenetration = FMath::Max(LargestAnimatedPenetration, colony::hairDeepestPenetration(Goals, Capsules));
+	LastTipsMoved = 0.0f;
+	LastTipsShift = FVector::ZeroVector;
+	for (int32 c = 0; c < Chains.Num(); ++c)
+	{
+		const int32 N = Original[c].Num();
+		const FVector AnimatedTip = Component.TransformPosition(Original[c][N - 1].GetLocation() * 2.0 - Original[c][N - 2].GetLocation());
+		const FVector SolvedTip = MhHairFVector(Solved[static_cast<size_t>(c)].back());
+		LastTipsMoved = FMath::Max(LastTipsMoved, static_cast<float>(FVector::Dist(AnimatedTip, SolvedTip)));
+		LastTipsShift += (SolvedTip - AnimatedTip) / static_cast<double>(FMath::Max(Chains.Num(), 1));
+	}
 	// Each bone turned from where the animation points it to where its strand now runs, from the root down.
 	for (int32 c = 0; c < Chains.Num(); ++c)
 	{
@@ -1370,6 +1453,11 @@ void FMakeHumanAnimProxy::PreUpdate(UAnimInstance* Instance, float DeltaSeconds)
 				ArmsIK.Right = C.InverseTransformVectorNoScale(WRight).GetSafeNormal();
 			}
 		}
+		// A held gun for the hair, in the same body axes.
+		Hair.Gun = MakeHuman->GetHeldGun();
+		Hair.Right = ArmsIK.Right;
+		Hair.Forward = ArmsIK.Forward;
+		Hair.SweepDegrees = FMath::Max(0.0f, GMakeHumanHairAimSweep.GetValueOnGameThread());
 		// Hits and blasts since the last update; the node uses them on its next evaluation.
 		if (UMakeHumanAnimInstance* Kicked = Cast<UMakeHumanAnimInstance>(Instance))
 		{
@@ -1418,13 +1506,14 @@ void FMakeHumanAnimProxy::PreUpdate(UAnimInstance* Instance, float DeltaSeconds)
 	// Pawns.HairDebug: the last frame's collision capsules and strands (the evaluation has finished by now).
 	if (World && GMakeHumanHairDebug.GetValueOnGameThread() != 0 && HairMode > 0)
 	{
-		for (const colony::HairCapsule& Cap : Hair.Capsules)
+		for (int32 CapIndex = 0; CapIndex < static_cast<int32>(Hair.Capsules.size()); ++CapIndex)
 		{
+			const colony::HairCapsule& Cap = Hair.Capsules[static_cast<size_t>(CapIndex)];
 			const FVector A(Cap.a.x, Cap.a.y, Cap.a.z);
 			const FVector B(Cap.b.x, Cap.b.y, Cap.b.z);
 			const FVector Axis = B - A;
 			const FQuat Turn = Axis.IsNearlyZero() ? FQuat::Identity : FRotationMatrix::MakeFromZ(Axis.GetSafeNormal()).ToQuat();
-			DrawDebugCapsule(World, (A + B) * 0.5, static_cast<float>(Axis.Size()) * 0.5f + Cap.radius, Cap.radius, Turn, FColor::Green, false, -1.0f, 0, 0.3f);
+			DrawDebugCapsule(World, (A + B) * 0.5, static_cast<float>(Axis.Size()) * 0.5f + Cap.radius, Cap.radius, Turn, CapIndex < Hair.BodyCapsules ? FColor::Green : FColor::Cyan, false, -1.0f, 0, 0.3f);
 		}
 		for (const std::vector<colony::HairVec>& Points : Hair.Strands.points())
 		{
@@ -1583,6 +1672,23 @@ void UMakeHumanAnimInstance::AddBlastKick(const FVector& At, float Speed, float 
 int32 UMakeHumanAnimInstance::GetHairStrands() const
 {
 	return GetProxyOnGameThread<FMakeHumanAnimProxy>().Hair.Chains.Num();
+}
+
+FString UMakeHumanAnimInstance::DescribeHairAim() const
+{
+	const FMakeHumanAnimProxy& Proxy = GetProxyOnGameThread<FMakeHumanAnimProxy>();
+	const FMakeHumanHairNode& Node = Proxy.Hair;
+	// Which way the tips went, in the body's frame (the owner's facing): over the far shoulder is ahead and to the left
+	// for a right-handed gun.
+	FVector Shift = Node.LastTipsShift;
+	if (const AActor* Owner = GetOwningActor())
+	{
+		Shift = FVector(FVector::DotProduct(Shift, Owner->GetActorForwardVector()), FVector::DotProduct(Shift, Owner->GetActorRightVector()),
+			FVector::DotProduct(Shift, Owner->GetActorUpVector()));
+	}
+	return FString::Printf(TEXT("held gun %s (set %s, aim %.2f), strands %d, mode %d, body capsules %d + gun/forearm %d, sweep %.0f deg moved the tips' goals %.1f cm, tips %.1f cm from the hair as animated, on average ahead %.0f right %.0f up %.0f cm"),
+		Node.bLastGun ? TEXT("on") : TEXT("off"), HeldGun.bOn ? TEXT("yes") : TEXT("no"), Node.LastAim, Node.Chains.Num(), Node.Mode, Node.BodyCapsules,
+		Node.LastGunCapsules, Node.SweepDegrees, Node.LastSweepShift, Node.LastTipsMoved, Shift.X, Shift.Y, Shift.Z);
 }
 
 float UMakeHumanAnimInstance::TakeLargestHairPenetration(float* OutAnimated)

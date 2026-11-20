@@ -441,3 +441,154 @@ TEST_CASE("hair: hair falling onto a shoulder lands and stays, without bouncing 
     // Once landed it lies still: the middle of the strand moves less than half a centimetre up or down.
     CHECK(highestAfterLanding - lowestAfterLanding < 0.5f);
 }
+
+// ---- Aiming (sneed's PC pictures 2026-11-20: long hair hid the rifle's stock and the front hand in the over-the-shoulder
+// aim). The test body faces +x with its left at +y, so a right-handed stock is on the -y side.
+
+TEST_CASE("hair: aiming turns the hair's styled shape off the stock, keeping roots and lengths") {
+    const auto rest = restingHair();
+    const HairVec head = hv(0, 0, 155);
+    const HairVec stockSide = hv(0, -1, 0);
+    const HairVec away = hv(0.47f, 0.88f, 0.0f);
+    auto none = rest;
+    sweepHairGoals(none, head, stockSide, away, 0.0f);
+    for (size_t i = 0; i < rest.size(); ++i) {
+        for (size_t k = 0; k < rest[i].size(); ++k) {
+            CHECK(hvDist(none[i][k], rest[i][k]) < 1.0e-5f);
+        }
+    }
+    auto swept = rest;
+    sweepHairGoals(swept, head, stockSide, away, 1.0f);
+    for (size_t i = 0; i < rest.size(); ++i) {
+        CHECK(hvDist(swept[i][0], rest[i][0]) < 1.0e-5f);
+        for (size_t k = 1; k < rest[i].size(); ++k) {
+            CHECK(hvDist(swept[i][k], swept[i][k - 1]) == doctest::Approx(hvDist(rest[i][k], rest[i][k - 1])).epsilon(1.0e-3));
+        }
+        // Every tip goes towards the far shoulder.
+        CHECK(swept[i].back().y > rest[i].back().y + 5.0f);
+    }
+    // The stock side's strand (4: rooted at y -10) turns further than the far side's (3: y +10).
+    CHECK(swept[4].back().y - rest[4].back().y > swept[3].back().y - rest[3].back().y + 3.0f);
+}
+
+namespace {
+
+float hvSegmentDistance(HairVec p, HairVec a, HairVec b) {
+    const HairVec ab = hv(b.x - a.x, b.y - a.y, b.z - a.z);
+    const float len2 = ab.x * ab.x + ab.y * ab.y + ab.z * ab.z;
+    float t = len2 > 0.0f ? ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y + (p.z - a.z) * ab.z) / len2 : 0.0f;
+    t = std::fmax(0.0f, std::fmin(1.0f, t));
+    return hvDist(p, hv(a.x + ab.x * t, a.y + ab.y * t, a.z + ab.z * t));
+}
+
+// How close any hair (below the first segment's scalp end) comes to the line of sight from `eye` to `target`, cm.
+float sightClearance(const std::vector<std::vector<HairVec>>& hair, HairVec eye, HairVec target) {
+    float closest = 1.0e9f;
+    for (const auto& p : hair) {
+        for (size_t k = 1; k < p.size(); ++k) {
+            for (int j = 0; j <= 8; ++j) {
+                const float t = static_cast<float>(j) / 8.0f;
+                if (k == 1 && t < 0.5f) {
+                    continue;
+                }
+                const HairVec at = hv(p[k - 1].x + (p[k].x - p[k - 1].x) * t, p[k - 1].y + (p[k].y - p[k - 1].y) * t,
+                                      p[k - 1].z + (p[k].z - p[k - 1].z) * t);
+                closest = std::fmin(closest, hvSegmentDistance(at, eye, target));
+            }
+        }
+    }
+    return closest;
+}
+
+struct AimedHair {
+    float stockClearance = 0.0f;
+    float handClearance = 0.0f;
+    float deepest = 0.0f;  // the deepest any hair went into the body or the gun once aimed, cm
+};
+
+// The resting hair after `frames` at 60 fps aimed with `sweep` (0 or 1), the body's shapes plus a rifle shouldered on
+// the right (stock in the shoulder's pocket, fore-end out to the front hand) and both forearms; seen from the
+// over-the-shoulder camera (ProtagonistPawn: 120 behind, 45 right, about eye height).
+AimedHair aimedHair(float sweep, int frames) {
+    HairBodyBones bones = testBody();
+    const auto rest = restingHair();
+    std::vector<HairCapsule> body;
+    for (const HairShape& s : buildHairShapes(bones, rest)) {
+        body.push_back(s.capsule);
+    }
+    const HairVec stock = hv(4, -16, 140);
+    const HairVec hand = hv(45, -4, 136);
+    body.push_back({stock, hv(80, -6, 145), 3.5f});         // the rifle
+    body.push_back({hv(10, -24, 128), hv(18, -12, 138), 4.0f});  // right forearm to the grip
+    body.push_back({hv(20, 14, 126), hand, 4.0f});           // left forearm to the fore-end
+    HairStrands hair;
+    hair.setSheetNeighbours({{0, 1}, {0, 2}, {1, 3}, {2, 4}});
+    AimedHair out;
+    for (int f = 0; f < frames; ++f) {
+        auto goals = rest;
+        sweepHairGoals(goals, hv(0, 0, 155), hv(0, -1, 0), hv(0.47f, 0.88f, 0.0f), sweep * std::fmin(1.0f, static_cast<float>(f) / 12.0f));
+        hair.step(1.0f / 60.0f, goals, body, hairAimSettings(HairSettings{}, sweep));
+        if (f > 30) {
+            out.deepest = std::fmax(out.deepest, hairDeepestPenetration(hair.points(), body));
+        }
+    }
+    const HairVec eye = hv(-120, -45, 158);
+    out.stockClearance = sightClearance(hair.points(), eye, stock);
+    out.handClearance = sightClearance(hair.points(), eye, hand);
+    return out;
+}
+
+}  // namespace
+
+TEST_CASE("hair: aimed over the shoulder, long hair goes over the other shoulder and the camera sees the stock and front hand") {
+    const AimedHair plain = aimedHair(0.0f, 240);
+    const AimedHair swept = aimedHair(1.0f, 240);
+    MESSAGE("stock clearance " << plain.stockClearance << " -> " << swept.stockClearance << " cm, front hand "
+                               << plain.handClearance << " -> " << swept.handClearance << " cm, deepest " << swept.deepest);
+    // Without the sweep the hair lies across both lines of sight (the PC pictures).
+    CHECK(plain.stockClearance < 2.0f);
+    CHECK(plain.handClearance < 2.0f);
+    // Swept, both are clear by more than a hair sheet's thickness, and the hair still never goes into the body or the gun.
+    CHECK(swept.stockClearance > 4.0f);
+    CHECK(swept.handClearance > 4.0f);
+    CHECK(swept.deepest < 1.0f);
+}
+
+TEST_CASE("hair: lowering the gun lets the hair fall back to where it hangs unaimed") {
+    const auto rest = restingHair();
+    HairBodyBones bones = testBody();
+    std::vector<HairCapsule> body;
+    for (const HairShape& s : buildHairShapes(bones, rest)) {
+        body.push_back(s.capsule);
+    }
+    const auto run = [&](bool aimFirst) {
+        HairStrands hair;
+        hair.setSheetNeighbours({{0, 1}, {0, 2}, {1, 3}, {2, 4}});
+        for (int f = 0; f < 600; ++f) {
+            auto goals = rest;
+            const float aim = !aimFirst || f >= 192 ? 0.0f : (f < 180 ? 1.0f : 1.0f - static_cast<float>(f - 180) / 12.0f);
+            sweepHairGoals(goals, hv(0, 0, 155), hv(0, -1, 0), hv(0.47f, 0.88f, 0.0f), aim);
+            hair.step(1.0f / 60.0f, goals, body, HairSettings{});
+        }
+        return hair.points();
+    };
+    const auto never = run(false);
+    const auto lowered = run(true);
+    float furthest = 0.0f;
+    for (size_t i = 0; i < never.size(); ++i) {
+        furthest = std::fmax(furthest, hvDist(lowered[i].back(), never[i].back()));
+    }
+    MESSAGE("furthest tip from the never-aimed hair " << furthest << " cm");
+    CHECK(furthest < 3.0f);
+}
+
+TEST_CASE("hair: aimed, the hair is held nearer its swept shape (stiffer springs)") {
+    const HairSettings plain;
+    const HairSettings none = hairAimSettings(plain, 0.0f);
+    CHECK(none.rootStiffness == plain.rootStiffness);
+    CHECK(none.tipStiffness == plain.tipStiffness);
+    const HairSettings aimed = hairAimSettings(plain, 1.0f);
+    CHECK(aimed.rootStiffness == doctest::Approx(plain.rootStiffness * 2.0f));
+    CHECK(aimed.tipStiffness == doctest::Approx(plain.tipStiffness * 4.0f));
+    CHECK(aimed.gravity == plain.gravity);
+}
