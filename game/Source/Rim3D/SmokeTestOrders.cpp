@@ -518,6 +518,14 @@ void USmokeTestSubsystem::BuildOrdersPhases()
 		{
 			Fail(TEXT("orders_marks: the stockpile drag made no zone"));
 		}
+		// An animal zone (docs/design/husbandry.md), dragged out the same way.
+		const int32 AnimalZonesBefore = static_cast<int32>(B->GetCurrentSnapshot().animalZones.size());
+		const int32 AnimalZone = Drag(EOrderTool::AnimalZone, At(15, 10), At(17, 12));
+		if (AnimalZone != 1 || static_cast<int32>(B->GetCurrentSnapshot().animalZones.size()) != AnimalZonesBefore + 1)
+		{
+			Fail(FString::Printf(TEXT("orders_marks: the animal zone drag sent %d commands and made %d zones, wanted 1 and 1"), AnimalZone,
+				static_cast<int32>(B->GetCurrentSnapshot().animalZones.size()) - AnimalZonesBefore));
+		}
 		O->RefreshOverlay();
 	};
 	Marks.Verify = [=, this]()

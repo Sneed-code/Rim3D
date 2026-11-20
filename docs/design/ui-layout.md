@@ -98,8 +98,9 @@ one border and radius, two text sizes, 1.2 s tooltips). Every subsystem that dra
 - **Work**: a Group column (sim `SetWorkGroupCommand`, saved and replayed; up to 24 letters) and
   filter buttons Everyone / each group above the table; prisoners get rows that say they don't work.
 - **Assign** (outfit, drug policy, medical care, allowed area), **Animals** (name, kind, age and sex,
-  health, the four trainings, zone; right click renames or marks for slaughter), **Wildlife** (tame,
-  hunt), **Mechs** (colony robots; none yet), **Research** (tree by depth with lines, current
+  health, the four trainings, zone or pen, breeding tick, pregnancy and milk / wool fullness, animal
+  bed; right click renames, marks for slaughter or releases to the wild; below it a list of zones and
+  pens with a breeding tick each), **Wildlife** (tame, hunt), **Mechs** (colony robots; none yet), **Research** (tree by depth with lines, current
   project bar, an info panel with Research this / Stop), **Inventory** (colony stock by category,
   search, a star pins a resource under the colonist bar; silver pinned by default).
 - **Bottom left**: the hover readout (ground, walk speed, fertility, light) when nothing is selected
@@ -132,8 +133,11 @@ one border and radius, two text sizes, 1.2 s tooltips). Every subsystem that dra
 - **Medical**: colonists and prisoners with their state and medical care; for the picked one the
   health report (injuries, missing and added parts, diseases), the planned operations with Remove,
   and "Add an operation" listing every recipe and part `SurgerySystem::targets` allows now.
-- **Prisoners**: each prisoner's resistance and mode (no interaction, reduce resistance, recruit,
-  release, execute), and every built bed with a "for prisoners" tick.
+- **Prisoners**: each prisoner's resistance and will and mode (no interaction, reduce resistance,
+  recruit, release, execute, enslave, reduce will), a Slaves list (suppression bar, Emancipate,
+  Release), and every built bed with a "for prisoners" tick.
+- **Build > Zone > Animal zone** paints animal zones (drawn as tan rings; Remove zone takes them off
+  too); **Build > Orders** has Tame, Hunt and Slaughter drag tools (`MarkAnimalsInAreaCommand`).
 
 **Main menu**: shown at launch when the game starts without `-SimScenario` (not in smoke tests;
 `-NoMenu` skips it) and from Menu > New colony / load. New colony picks the scenario (rainforest

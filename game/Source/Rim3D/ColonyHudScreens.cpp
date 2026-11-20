@@ -99,7 +99,17 @@ namespace
 	const char* const HudScrCareNames[] = {"NoCare", "NoMedicine", "Herbal", "Normal", "Best"};
 	const TCHAR* const HudScrCareLabels[] = {TEXT("No care"), TEXT("No medicine"), TEXT("Herbal or worse"), TEXT("Normal or worse"), TEXT("Best")};
 	// The prisoner modes the window offers, in PrisonerMode order.
-	const TCHAR* const HudScrPrisonerModes[] = {TEXT("No interaction"), TEXT("Reduce resistance"), TEXT("Recruit"), TEXT("Release"), TEXT("Execute")};
+	const TCHAR* const HudScrPrisonerModes[] = {TEXT("No interaction"), TEXT("Reduce resistance"), TEXT("Recruit"), TEXT("Release"), TEXT("Execute"),
+		TEXT("Enslave"), TEXT("Reduce will")};
+	constexpr int32 HudScrPrisonerModeCount = UE_ARRAY_COUNT(HudScrPrisonerModes);
+	const TCHAR* const HudScrPrisonerModeTips[] = {
+		TEXT("Wardens only feed it"),
+		TEXT("Wardens talk its resistance down, but don't try to recruit it yet"),
+		TEXT("Wardens talk its resistance down, then try to win it over to join the colony"),
+		TEXT("A warden walks it out and lets it go home"),
+		TEXT("A warden kills it"),
+		TEXT("Wardens wear its will down to 0, then make it a slave of the colony"),
+		TEXT("Wardens wear its will down, but don't enslave it yet")};
 
 	/** Which group of the outfit editor an apparel def goes in, by its outermost layer. */
 	FString HudScrApparelGroup(const colony::Def& Def)
@@ -673,6 +683,7 @@ void UColonyHudSubsystem::DrawPrisonersScreen(USimSubsystem& Bridge, float Scale
 		OpenedScreen = EHudScreen::None;
 	}
 	ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("Downed enemies are carried to a prison bed by wardens. Here you say what wardens do with them."));
+	ColonyHud::Heading(TEXT("Prisoners"));
 	int32 Prisoners = 0;
 	if (ImGui::BeginTable("##HudPrisonersTable", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
 	{
@@ -693,19 +704,20 @@ void UColonyHudSubsystem::DrawPrisonersScreen(USimSubsystem& Bridge, float Scale
 			}
 			ColonyHud::Tip(TEXT("Click to go there"));
 			ImGui::TableNextColumn();
-			ColonyHud::TextColored(ColonyHud::TextDim(), FString::Printf(TEXT("Resistance %.1f"), View.resistance));
-			ColonyHud::Tip(TEXT("Wardens talk it down to 0; then a recruit attempt can win the prisoner over"));
+			ColonyHud::TextColored(ColonyHud::TextDim(), FString::Printf(TEXT("Resistance %.1f  Will %.1f"), View.resistance, View.will));
+			ColonyHud::Tip(TEXT("Resistance: wardens talk it down to 0, then a recruit attempt can win the prisoner over.\nWill: wardens wear it down to 0, then the prisoner can be enslaved."));
 			ImGui::TableNextColumn();
-			const int32 Mode = FMath::Clamp(static_cast<int32>(View.prisonerMode), 0, 4);
+			const int32 Mode = FMath::Clamp(static_cast<int32>(View.prisonerMode), 0, HudScrPrisonerModeCount - 1);
 			ImGui::SetNextItemWidth(220.0f * Scale);
 			if (ImGui::BeginCombo("##mode", TCHAR_TO_UTF8(HudScrPrisonerModes[Mode])))
 			{
-				for (int32 Index = 0; Index < 5; ++Index)
+				for (int32 Index = 0; Index < HudScrPrisonerModeCount; ++Index)
 				{
 					if (ImGui::Selectable(TCHAR_TO_UTF8(HudScrPrisonerModes[Index]), Index == Mode))
 					{
 						Submit(colony::SetPrisonerModeCommand{View.id, colony::prisonerModeName(static_cast<colony::PrisonerMode>(Index))});
 					}
+					ColonyHud::Tip(HudScrPrisonerModeTips[Index]);
 				}
 				ImGui::EndCombo();
 			}
@@ -721,6 +733,64 @@ void UColonyHudSubsystem::DrawPrisonersScreen(USimSubsystem& Bridge, float Scale
 	if (Prisoners == 0)
 	{
 		ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("No prisoners."));
+	}
+
+	// Slaves (docs/design/prisoners.md, Slaves): their suppression, and freeing them.
+	ImGui::Spacing();
+	ColonyHud::Heading(TEXT("Slaves"));
+	int32 Slaves = 0;
+	if (ImGui::BeginTable("##HudSlavesTable", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
+	{
+		for (const colony::ThingView& View : Snapshot.things)
+		{
+			if (View.category != colony::ThingCategory::Pawn || View.dead || !View.slave)
+			{
+				continue;
+			}
+			++Slaves;
+			ImGui::PushID(HudScrId(View.id));
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			const FString Name = HudScrPawnName(Sim, View);
+			if (ImGui::Selectable(TCHAR_TO_UTF8(*Name), false, ImGuiSelectableFlags_None, ImVec2(200.0f * Scale, 0.0f)))
+			{
+				HudScrGoTo(GetWorld(), View.id);
+			}
+			ColonyHud::Tip(TEXT("Click to go there"));
+			ImGui::TableNextColumn();
+			const float Suppression = FMath::Clamp(View.suppression, 0.0f, 1.0f);
+			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, Suppression < 0.333f ? ColonyHud::Bad() : (Suppression < 0.5f ? ColonyHud::Warn() : ColonyHud::Good()));
+			ImGui::ProgressBar(Suppression, ImVec2(180.0f * Scale, 0.0f), TCHAR_TO_UTF8(*FString::Printf(TEXT("Suppression %d%%"), FMath::RoundToInt32(Suppression * 100.0f))));
+			ImGui::PopStyleColor();
+			ColonyHud::Tip(TEXT("Falls by itself; wardens raise it by talking to the slave. Low suppression: the slaves may rise up, more so when no free colonist is around."));
+			ImGui::TableNextColumn();
+			if (ColonyHud::Button(TEXT("Emancipate")))
+			{
+				Submit(colony::SetPrisonerModeCommand{View.id, "Emancipate"});
+			}
+			ColonyHud::Tip(TEXT("Free the slave: it stays and joins the colony as a colonist"));
+			ImGui::SameLine();
+			if (ColonyHud::Button(TEXT("Release")))
+			{
+				Submit(colony::SetPrisonerModeCommand{View.id, "Release"});
+			}
+			ColonyHud::Tip(TEXT("Free the slave and let it go home"));
+			ImGui::TableNextColumn();
+			if (View.downed)
+			{
+				ColonyHud::TextColored(ColonyHud::Warn(), TEXT("Down"));
+			}
+			ImGui::PopID();
+		}
+		ImGui::EndTable();
+	}
+	if (Slaves == 0)
+	{
+		ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("No slaves. Set a prisoner to Enslave to make one."));
+	}
+	else
+	{
+		ColonyHud::TextColored(ColonyHud::TextFaint(), TEXT("Slaves work at 85% speed, can't be drafted and don't do warden, hunting, art or research work."));
 	}
 
 	// Beds: mark one for prisoners.

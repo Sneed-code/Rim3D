@@ -72,6 +72,7 @@ namespace
 	constexpr int32 OrdLandTile = 9;
 	constexpr int32 OrdLandRing = 10;
 	constexpr int32 OrdAreaRing = 11;
+	constexpr int32 OrdAnimalRing = 12;
 	constexpr int32 OrdKeyScale = 10000;
 
 	constexpr int32 OrdMaxBuildOrigins = 600;
@@ -89,6 +90,7 @@ namespace
 	const FLinearColor OrdGrowColor = FLinearColor::FromSRGBColor(FColor(120, 200, 60));
 	const FLinearColor OrdLandColor = FLinearColor::FromSRGBColor(FColor(250, 185, 40));
 	const FLinearColor OrdAreaColor = FLinearColor::FromSRGBColor(FColor(120, 150, 240));
+	const FLinearColor OrdAnimalColor = FLinearColor::FromSRGBColor(FColor(205, 150, 90));
 
 	uint64 OrdMix(uint64 Seed, uint64 Value)
 	{
@@ -190,6 +192,10 @@ namespace
 			case EOrderTool::CancelEarth: return FColor(160, 160, 170);
 			case EOrderTool::PaintArea: return FColor(120, 150, 240);
 			case EOrderTool::EraseArea: return FColor(160, 160, 170);
+			case EOrderTool::AnimalZone: return FColor(205, 150, 90);
+			case EOrderTool::Tame: return FColor(120, 200, 230);
+			case EOrderTool::Hunt: return FColor(230, 90, 70);
+			case EOrderTool::Slaughter: return FColor(190, 60, 60);
 			default: return FColor(255, 255, 255);
 		}
 	}
@@ -218,6 +224,10 @@ namespace
 			case EOrderTool::Deconstruct: return TEXT("Deconstruct");
 			case EOrderTool::Grow: return TEXT("Growing zone");
 			case EOrderTool::RemoveFloor: return TEXT("Remove floor");
+			case EOrderTool::AnimalZone: return TEXT("Animal zone");
+			case EOrderTool::Tame: return TEXT("Tame");
+			case EOrderTool::Hunt: return TEXT("Hunt");
+			case EOrderTool::Slaughter: return TEXT("Slaughter");
 			default: return TEXT("Build");
 		}
 	}
@@ -243,6 +253,10 @@ namespace
 			case EOrderTool::CancelEarth: return TEXT("CancelEarth");
 			case EOrderTool::PaintArea: return TEXT("PaintArea");
 			case EOrderTool::EraseArea: return TEXT("EraseArea");
+			case EOrderTool::AnimalZone: return TEXT("AnimalZone");
+			case EOrderTool::Tame: return TEXT("Tame");
+			case EOrderTool::Hunt: return TEXT("Hunt");
+			case EOrderTool::Slaughter: return TEXT("Slaughter");
 		}
 		return TEXT("?");
 	}
@@ -931,9 +945,17 @@ int32 UOrdersSubsystem::EndDrag(colony::CellPos Cell)
 			Say(FString::Printf(TEXT("Stockpile zone %d x %d"), Rect.sizeX, Rect.sizeY));
 			break;
 		case EOrderTool::RemoveZone:
-			// Stockpile and growing zones alike (each command fails quietly where it finds no zone of its kind).
+			// Stockpile, growing and animal zones alike (each command fails quietly where it finds no zone of its kind).
 			Submit(colony::RemoveZoneCellsCommand{Rect});
 			Submit(colony::RemoveGrowingZoneCellsCommand{Rect});
+			for (const colony::CellPos& Cell : Snapshot.animalZoneCells)
+			{
+				if (Rect.contains(Cell))
+				{
+					Submit(colony::RemoveAnimalZoneCellsCommand{Rect});
+					break;
+				}
+			}
 			Say(TEXT("Zone cells removed"));
 			break;
 		case EOrderTool::Grow:
@@ -1028,6 +1050,20 @@ int32 UOrdersSubsystem::EndDrag(colony::CellPos Cell)
 			const bool bAdd = Tool == EOrderTool::PaintArea;
 			Submit(colony::PaintAreaCommand{AreaToolArea, Rect, bAdd});
 			Say(bAdd ? FString::Printf(TEXT("Area painted %d x %d"), Rect.sizeX, Rect.sizeY) : FString(TEXT("Area cells taken off")));
+			break;
+		}
+		case EOrderTool::AnimalZone:
+			Submit(colony::CreateAnimalZoneCommand{Rect});
+			Say(FString::Printf(TEXT("Animal zone %d x %d"), Rect.sizeX, Rect.sizeY));
+			break;
+		case EOrderTool::Tame:
+		case EOrderTool::Hunt:
+		case EOrderTool::Slaughter:
+		{
+			// The sim marks every animal in the rectangle that can take the mark (wild ones to tame or hunt, tame ones to slaughter).
+			const TCHAR* Mark = Tool == EOrderTool::Tame ? TEXT("Tame") : (Tool == EOrderTool::Hunt ? TEXT("Hunt") : TEXT("Slaughter"));
+			Submit(colony::MarkAnimalsInAreaCommand{Rect, TCHAR_TO_UTF8(Mark), true});
+			Say(FString::Printf(TEXT("%s: animals in %d x %d marked"), Mark, Rect.sizeX, Rect.sizeY));
 			break;
 		}
 		case EOrderTool::Deconstruct:
@@ -1279,6 +1315,9 @@ UStaticMesh* UOrdersSubsystem::GetMarkMesh(int32 Kind, int32 TopCm)
 		case OrdAreaRing:
 			Ring(OrdAreaColor);
 			break;
+		case OrdAnimalRing:
+			Ring(OrdAnimalColor);
+			break;
 		default:
 			Ring(OrdZoneColor);
 			break;
@@ -1322,7 +1361,7 @@ void UOrdersSubsystem::RebuildMarks(const USimSubsystem& Bridge)
 	const UBuildingSubsystem* Buildings = GetWorld()->GetSubsystem<UBuildingSubsystem>();
 	TMap<int32, TArray<FTransform>> Batches;
 	TMap<int32, UMaterialInterface*> Materials;
-	Stats.MineMarks = Stats.CutMarks = Stats.HarvestMarks = Stats.DeconstructMarks = Stats.ZoneCells = Stats.GrowCells = Stats.LandingCells = 0;
+	Stats.MineMarks = Stats.CutMarks = Stats.HarvestMarks = Stats.DeconstructMarks = Stats.ZoneCells = Stats.GrowCells = Stats.LandingCells = Stats.AnimalZoneCells = 0;
 
 	// How high a plant stands, from its def's stem and crown, cm.
 	TMap<uint32, int32> PlantTop;
@@ -1412,6 +1451,12 @@ void UOrdersSubsystem::RebuildMarks(const USimSubsystem& Bridge)
 	{
 		Place(LandDraw ? OrdLandTile : OrdLandRing, 0, Cell.x, Cell.y, 4.0, LandDraw);
 		++Stats.LandingCells;
+	}
+	// Animal zones and pens (docs/design/husbandry.md): a tan ring on each cell, so a painted pen shows where its fence goes.
+	for (const colony::CellPos& Cell : Snapshot.animalZoneCells)
+	{
+		Place(OrdAnimalRing, 0, Cell.x, Cell.y, 3.0, nullptr);
+		++Stats.AnimalZoneCells;
 	}
 
 	// The allowed area being painted (docs/design/areas.md): a blue ring on each of its cells while an area tool is in hand.
@@ -1524,6 +1569,10 @@ void UOrdersSubsystem::RefreshOverlay()
 			Signature = OrdMix(Signature, OrdCellKey(Cell.x, Cell.y) ^ 0x67726F77ULL);
 		}
 		Signature = OrdMix(Signature, Snapshot.landingZoneChanges ^ 0x4C414E44ULL);
+		for (const colony::CellPos& Cell : Snapshot.animalZoneCells)
+		{
+			Signature = OrdMix(Signature, OrdCellKey(Cell.x, Cell.y) ^ 0x414E494DULL);
+		}
 		if (AreaToolArea != 0 && (Tool == EOrderTool::PaintArea || Tool == EOrderTool::EraseArea))
 		{
 			Signature = OrdMix(Signature, (static_cast<uint64>(AreaToolArea) << 32) ^ 0x41524541ULL);
@@ -1956,12 +2005,16 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 		AddTool(TEXT("Chop trees"), EOrderTool::Chop, TEXT("Drag over trees and plants to have them cut"));
 		AddTool(TEXT("Harvest"), EOrderTool::Harvest, TEXT("Drag over grown plants to have them harvested"));
 		AddTool(TEXT("Remove floor"), EOrderTool::RemoveFloor, TEXT("Drag over laid floors to have them taken up"));
+		AddTool(TEXT("Tame"), EOrderTool::Tame, TEXT("Drag over wild animals: a colonist with Handling work tries to tame them"));
+		AddTool(TEXT("Hunt"), EOrderTool::Hunt, TEXT("Drag over wild animals: a colonist with Hunting work and a gun shoots them for meat"));
+		AddTool(TEXT("Slaughter"), EOrderTool::Slaughter, TEXT("Drag over tame animals: a colonist with Handling work kills them for meat"));
 	}
 	else if (OpenCategory == TEXT("Zone"))
 	{
 		AddTool(TEXT("Cancel"), EOrderTool::Cancel, TEXT("Drag over marks, plans and frames to take them off"));
 		AddTool(TEXT("Stockpile"), EOrderTool::Stockpile, TEXT("Drag a stockpile zone: haulers bring things there"));
 		AddTool(TEXT("Growing zone"), EOrderTool::Grow, TEXT("Drag a growing zone on soil: growers sow the crop you pick"));
+		AddTool(TEXT("Animal zone"), EOrderTool::AnimalZone, TEXT("Drag an animal zone; pick it for animals in the Animals tab. Ring it with fence and a gate to make a pen"));
 		AddTool(TEXT("Remove zone"), EOrderTool::RemoveZone, TEXT("Drag over zone cells to take them out of their zones"));
 		AddTool(TEXT("Landing zone"), EOrderTool::LandingZone, TEXT("Drag where shuttles may set down"));
 		AddTool(TEXT("Remove landing zone"), EOrderTool::RemoveLandingZone, TEXT("Drag over landing zone cells to take them out"));
@@ -2316,6 +2369,11 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 					}
 				}
 				ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("Drag from the height you want. Builders dig or fill it, about a second per quarter metre."));
+			}
+			else if (Tool == EOrderTool::AnimalZone)
+			{
+				ColonyHud::Title(TEXT("Animal zone"));
+				ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("Drag rectangles. Then pick the zone for animals in the Animals tab. Ring it with fence (Structure) and a fence gate to make a pen they can't leave."));
 			}
 			else if (Tool == EOrderTool::LandingZone)
 			{
