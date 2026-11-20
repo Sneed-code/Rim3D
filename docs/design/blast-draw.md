@@ -70,6 +70,10 @@ scorch still there) and `blast_molotov` (a fire blast, pictured 0.5 s in). Witho
 
 ## Not yet
 
+- **The scorch mark does not show on the PC** (2026-11-20, rounds 3 to 7): first as a deferred decal, then as a ground square on the
+  traced ground (`LogBlastFx: Scorch at ...` is logged at the right place). The fireball, smoke and sparks with the same texture
+  path render fine. To find: the material (`M_BlastScorch`) or `T_BlastScorch`'s alpha.
+
 - Blasts in water (a column of spray), on snow (white powder) and on stone floors (grey dust): the dust is soil-coloured
   everywhere.
 - Plants and grass flattened or burnt by the blast; ragdolls pushed by it (the sim's knock-down already throws pawns).
