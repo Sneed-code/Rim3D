@@ -30,7 +30,9 @@ cloud); `FMakeHumanHairNode` in `MakeHumanAnimInstance` feeds it and turns its a
 - **The body.** Capsules round the skull, the neck, the chest and upper back (across the body at the top spine bone),
   a yoke towards the base of the neck, the middle of the back, both shoulders (collarbone to arm) and both upper arms.
   Each rides on its bone, so it moves exactly as the body is drawn. Every hair segment is pushed out of them by turning
-  it about its upper end; a point resting on the body loses some of its sliding (friction). Between frames the body
+  it about its upper end, just to the surface. **Hair that touches the body lands and stays**: the push out is never kept
+  as speed away from the body (no bounce), sliding slower than 4 cm/s stops dead (grip) and faster sliding dies away at
+  20/s (friction), so hair lying on the back or shoulders comes to rest and stays still. Between frames the body
   and the animated hair are blended step by step, so a quick turn does not jump through.
 - **Fitted to each body.** The shapes are sized from the skeleton (its height and shoulder width), then fitted to the
   hair as it was styled in the reference pose, where it lies on the body: a shape is shrunk if the resting hair would
@@ -39,6 +41,17 @@ cloud); `FMakeHumanHairNode` in `MakeHumanAnimInstance` feeds it and turns its a
 - **One sheet.** Neighbouring strands round the head (never across the face) are kept between 0.55 and 1.35 times
   their styled distance apart, so the sheet of hair does not tear open or bunch up when one strand is pushed.
 - **Ponytails** use the same strands (they were an AnimDynamics chain with no collision).
+
+## Why it pulsed (fixed 2026-11-20)
+
+sneed (2026-11-20): "it just seems to me like the hair touches the body and freaks out to pulse off it ... why can't
+it just rest normally?" Two mistakes in the first version (#376): the push out of the body was kept as speed (about 70%
+of the speed it came in with, so hair was thrown off the body, fell back, was thrown again, for ever, even standing
+still), and the follow-the-leader correction passed every push of a point back up to the point above as a kick into
+the body. The push could also overshoot the surface by over three times the depth. Measured on long hair styled lying
+on a still body: the old solver never settled (points still moving at 260 cm/s after ten seconds); now nothing moves at
+all once it settles, and an idle's lean moves the hair only as fast as the body (tests "comes to rest and stays still",
+"lands and stays").
 
 ## Cost and distance
 
