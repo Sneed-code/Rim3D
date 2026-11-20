@@ -284,7 +284,8 @@ namespace
 		float Dome = 0.0f;
 		// How wide the mesh is where it's cut (the open end of a sleeve is wider than the limb): the largest distance
 		// from the limb's line in each of 16 directions round it, of skin on the piece's bones (MakeHuman weights its
-		// limbs to twist bones under the cut bone, not the cut bone itself) within half a radius of the joint, averaged.
+		// limbs to twist bones under the cut bone, not the cut bone itself) within a quarter radius of the joint; the median
+		// of the 16 (the mean let a loose hem or the shoulder's bulge make it twice too wide).
 		FVector Across1;
 		FVector Across2;
 		Down.FindBestAxisVectors(Across1, Across2);
@@ -308,7 +309,7 @@ namespace
 				const FVector Rel = FVector(Positions.VertexPosition(V)) - Joint.GetLocation();
 				const double Along = FVector::DotProduct(Rel, Down);
 				const double Radial = (Rel - Along * Down).Size();
-				if (FMath::Abs(Along) < 0.5 * RadiusCm && Radial < 2.0 * RadiusCm && OnCutBone(Section, V))
+				if (FMath::Abs(Along) < 0.25 * RadiusCm && Radial < 2.0 * RadiusCm && OnCutBone(Section, V))
 				{
 					const double Angle = FMath::Atan2(FVector::DotProduct(Rel, Across2), FVector::DotProduct(Rel, Across1));
 					const int32 Bin = FMath::Clamp(FMath::FloorToInt32((Angle + PI) / (2.0 * PI) * 16.0), 0, 15);
@@ -346,14 +347,16 @@ namespace
 				}
 			}
 		}
-		float Sum = 0.0f;
-		int32 Filled = 0;
+		TArray<float, TInlineAllocator<16>> Found;
 		for (const float W : Widest)
 		{
-			Sum += W;
-			Filled += W > 0.0f ? 1 : 0;
+			if (W > 0.0f)
+			{
+				Found.Add(W);
+			}
 		}
-		OutOpening = Filled >= 8 ? Sum / Filled : -1.0f;
+		Found.Sort();
+		OutOpening = Found.Num() >= 8 ? Found[Found.Num() / 2] : -1.0f;
 		return FMath::Min(Dome, RadiusCm);
 	}
 
@@ -365,10 +368,11 @@ namespace
 
 	/** The most any drawn mesh of the pawn bulges past a cut at `Bone` (cm, world), or -1 if none could be measured;
 	 *  `OutOpening`: how wide the widest of them is there (cm, world; -1 unknown). */
-	float SeveredDome(const TArray<USkinnedMeshComponent*>& Skinned, FName Bone, bool bPieceSide, float RadiusCm, float& OutOpening)
+	float SeveredDome(const TArray<USkinnedMeshComponent*>& Skinned, FName Bone, bool bPieceSide, float RadiusCm, float& OutOpening, float& OutSkinOpening)
 	{
 		float Most = -1.0f;
 		OutOpening = -1.0f;
+		OutSkinOpening = -1.0f;
 		for (const USkinnedMeshComponent* Mesh : Skinned)
 		{
 			const USkeletalMesh* Asset = Mesh ? Cast<USkeletalMesh>(Mesh->GetSkinnedAsset()) : nullptr;
@@ -389,6 +393,8 @@ namespace
 			if (Opening > 0.0f)
 			{
 				OutOpening = FMath::Max(OutOpening, Opening * Scale);
+				// The skin is the innermost layer: the narrowest mesh there.
+				OutSkinOpening = OutSkinOpening < 0.0f ? Opening * Scale : FMath::Min(OutSkinOpening, Opening * Scale);
 			}
 			// A mesh whose vertices can't be read (no CPU copy) is taken to stick out Gore.ClothLift radii.
 			Most = FMath::Max(Most, Dome >= 0.0f ? Dome * Scale : SeveredUnreadDome() * RadiusCm);
@@ -396,8 +402,16 @@ namespace
 		return Most;
 	}
 
+	/** The face covers the skin's own measured width where it's cut (the limb is thicker at the shoulder or hip than the
+	 *  thickness table says, and a smaller face left the flattened skin's hole showing round it), at most half again the
+	 *  table's radius. */
+	float SeveredFitFace(float TableRadiusCm, float SkinOpeningCm)
+	{
+		return SkinOpeningCm > 0.0f ? FMath::Clamp(SkinOpeningCm * 1.02f, TableRadiusCm, 1.5f * TableRadiusCm) : TableRadiusCm;
+	}
+
 	/** A clothed cut's face reaches out to the sleeve's measured width (radii, 1 to 1.6), so no white inside of the
-	 *  sleeve shows round the meat; bare or unmeasured, as given. */
+	 *  sleeve shows round the meat; bare or unmeasured, as given. At most a quarter wider than the face. */
 	float SeveredFitCloth(float ClothOuter, float OpeningCm, float RadiusCm)
 	{
 		if (ClothOuter <= 1.01f || RadiusCm <= 0.0f)
@@ -408,7 +422,7 @@ namespace
 		{
 			return 1.02f;  // unmeasured: a guessed width stood off thinner sleeves as a hoop
 		}
-		return FMath::Clamp(OpeningCm * 1.03f / RadiusCm, 1.02f, 1.6f);
+		return FMath::Clamp(OpeningCm / RadiusCm, 1.02f, 1.25f);
 	}
 
 	/** The component whose pose a mesh shows: itself, or the top of its leader chain. */
@@ -575,9 +589,10 @@ void ASimPawnActor::ApplySevered(uint16 Bits)
 		FVector At;
 		FVector Along;
 		FVector Front;
-		const float CapRadius = SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread();
 		float BodyOpening = -1.0f;
-		const float BodyDome = SeveredDome(Skinned, Bone, false, CapRadius, BodyOpening);
+		float BodySkin = -1.0f;
+		const float BodyDome = SeveredDome(Skinned, Bone, false, SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread(), BodyOpening, BodySkin);
+		const float CapRadius = SeveredFitFace(SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread(), BodySkin);
 		UE_LOG(LogTemp, Log, TEXT("Severed 0x%x: body side bulges %.1f cm past the cut (cap radius %.1f cm)"), Bit, BodyDome, CapRadius);
 		if (Skin && Skin->GetBoneIndex(Bone) != INDEX_NONE && SeveredCutFrame(*Skin, Bone, At, Along, Front) &&
 			GoreMakeStump(this, Skin, Skin->GetParentBone(Bone), At, Along, Front, CapRadius, SeveredStumpKind(Bit),
@@ -802,9 +817,11 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 			At = Cut;
 			Along = Bit == colony::kSeveredHead ? FVector::UpVector : (Middle - Cut).GetSafeNormal();
 		}
-		const float PieceRadius = SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread();
+		const float PieceRadiusTable = SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread();
 		float PieceOpening = -1.0f;
-		const float PieceDome = SeveredDome(Skinned, Bone, true, PieceRadius, PieceOpening);
+		float PieceSkin = -1.0f;
+		const float PieceDome = SeveredDome(Skinned, Bone, true, PieceRadiusTable, PieceOpening, PieceSkin);
+		const float PieceRadius = SeveredFitFace(PieceRadiusTable, PieceSkin);
 		UE_LOG(LogTemp, Log, TEXT("Severed piece 0x%x: bulges %.1f cm past the cut (cap radius %.1f cm)"), Bit, PieceDome, PieceRadius);
 		if (USceneComponent* Stump = GoreMakeStump(Piece, Piece->GetRootComponent(), NAME_None, At, -Along, Front, PieceRadius,
 				SeveredStumpKind(Bit), SeveredSkinColour(*this), static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 17u + Bit * 7u),
