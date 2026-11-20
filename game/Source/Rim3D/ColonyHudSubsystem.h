@@ -56,13 +56,14 @@ struct FHudStats
 	int32 CommandsSent = 0;
 	int32 ScreenFrames = 0;
 	int32 MainMenuFrames = 0;
+	int32 LessonFrames = 0;
 };
 
 /**
  * The overseer's screen layout (docs/design/ui-layout.md), ImGui:
  *
  * - The bottom bar, full width: Build, Work, Schedule, Assign, Animals, Mechs, Wildlife, Research, Quests, World, Inventory;
- *   at the far right the speed buttons, the key help (book), Factions and Menu. A click opens a tab's window above the bar,
+ *   at the far right the speed buttons, the key help (book), Factions, the learning helper (book) and Menu. A click opens a tab's window above the bar,
  *   a second click closes it; the open tab stays lit. Build, Work, Schedule, Quests and World are drawn by the subsystems
  *   that already had them (Orders, Panels, QuestPanel, WorldScreen); this one opens and closes them and draws the rest.
  * - The date, time, weather and the level looked at, just above the bar's right end.
@@ -114,6 +115,19 @@ public:
 	/** Shown at launch when the game was started without a scenario (not in smoke tests), and from Menu > New colony. */
 	void SetMainMenuOpen(bool bOpen) { bMainMenuOpen = bOpen; }
 	bool IsMainMenuOpen() const { return bMainMenuOpen; }
+
+	// ---- The learning helper (lessons at the top right) -----------------------------------------
+	bool AreLessonsOn() const { return bLessonsOn; }
+	static int32 CountLessons();
+	/** Smoke tests: turns the helper on or off and, with bForget, forgets the lessons learned, saving neither. */
+	void SetLessonsForTest(bool bOn, bool bForget)
+	{
+		bLessonsOn = bOn;
+		if (bForget)
+		{
+			LearnedLessons.Reset();
+		}
+	}
 	/** Starts a new colony with the main menu's choices (scenario, narrator, difficulty, seed); the site is the scenario
 	 *  biome's unless bPickSite, which opens the world map to pick one. True if the sim started. */
 	bool StartNewColony(bool bPickSite);
@@ -183,6 +197,9 @@ private:
 	/** Sends the narrator and difficulty picked in the main menu once the new sim runs. */
 	void SendPendingNarrator(USimSubsystem& Bridge);
 
+	// The learning helper (ColonyHudLessons.cpp).
+	void DrawLessons(USimSubsystem& Bridge, float Scale);
+
 	// The tabs this subsystem draws itself (ColonyHudTabs.cpp).
 	void DrawAssignTab(USimSubsystem& Bridge, float Scale);
 	void DrawAnimalsTab(USimSubsystem& Bridge, float Scale, bool bWild);
@@ -199,6 +216,9 @@ private:
 
 	EHudTab OwnTab = EHudTab::None;
 	bool bSettingsOpen = false;
+	/** The learning helper is on (the book on the bar); the lessons marked "Got it". Saved with the HUD's settings. */
+	bool bLessonsOn = true;
+	TSet<FString> LearnedLessons;
 	FString SettingsPage = TEXT("Game");
 	TArray<FSettingsPage> SettingsPages;
 	colony::Entity InfoThing = colony::kNoEntity;
