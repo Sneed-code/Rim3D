@@ -441,6 +441,7 @@ std::vector<HairShape> buildHairShapes(HairBodyBones& bones, const std::vector<s
         const HairVec top = bones.spine.back();
         // Chest and upper back: across the body at the top spine bone, and higher, towards the base of the neck.
         add(HairBone::SpineTop, hsAdd(top, hsMul(side, 0.5f * halfWidth)), hsSub(top, hsMul(side, 0.5f * halfWidth)), 10.0f, 6.0f, 14.0f, true);
+        const float chest = shapes.back().capsule.radius;
         if (bones.hasNeck) {
             const HairVec yoke = hsLerp(top, bones.neck, 0.6f);
             add(HairBone::SpineTop, hsAdd(yoke, hsMul(side, 0.55f * halfWidth)), hsSub(yoke, hsMul(side, 0.55f * halfWidth)), 8.0f, 5.0f, 12.0f, true);
@@ -457,8 +458,22 @@ std::vector<HairShape> buildHairShapes(HairBodyBones& bones, const std::vector<s
             bones.spineMid = best;
             const HairVec mid = bones.spine[static_cast<size_t>(best)];
             add(HairBone::SpineMid, hsAdd(mid, hsMul(side, 0.4f * halfWidth)), hsSub(mid, hsMul(side, 0.4f * halfWidth)), 10.5f, 7.0f, 14.0f, true);
+            // The small of the back, at the lowest spine bone, where waist-length hair ends.
+            if (best > 0) {
+                const HairVec low = bones.spine.front();
+                add(HairBone::SpineLow, hsAdd(low, hsMul(side, 0.4f * halfWidth)), hsSub(low, hsMul(side, 0.4f * halfWidth)), 11.0f, 7.0f, 15.0f, true);
+            }
         }
+        // The front of the chest (the bust): a bar across the chest ahead of the spine and a little below the top spine
+        // bone, sized from the chest shape just fitted to the back hair, so hair falling forward over the shoulders lies
+        // on the chest instead of sinking into it. Only ever shrunk to clear the hair at rest.
+        const HairVec bust = hsSub(hsSub(top, hsMul(back, 0.45f * chest)), hsMul(up, 4.0f * scale));
+        add(HairBone::SpineTop, hsAdd(bust, hsMul(side, 0.4f * halfWidth)), hsSub(bust, hsMul(side, 0.4f * halfWidth)), 0.8f * chest / scale,
+            4.0f, 0.8f * chest / scale, false);
     }
+    // The hips: across the pelvis (below the hair's reach for most styles; the longest lie on them).
+    add(HairBone::Pelvis, hsAdd(bones.pelvis, hsMul(side, 0.45f * halfWidth)), hsSub(bones.pelvis, hsMul(side, 0.45f * halfWidth)), 12.0f, 7.0f,
+        12.0f, false);
     if (bones.hasArms) {
         // Shoulders: collarbone to the top of the arm; then the upper arms (which only clear the hair, never grow).
         add(HairBone::ClavicleL, bones.clavicle[0], bones.upperArm[0], 6.0f, 4.0f, 8.5f, true);

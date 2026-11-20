@@ -102,7 +102,7 @@ COLONY_API float hairDeepestPenetration(const std::vector<std::vector<HairVec>>&
 COLONY_API std::vector<std::pair<int, int>> hairSheetNeighbours(const std::vector<HairVec>& roots, HairVec head, HairVec up);
 
 // The body's collision shapes for hair, fitted to one skeleton in its reference pose (component space, z up).
-enum class HairBone : uint8_t { Head, Neck, SpineTop, SpineMid, ClavicleL, ClavicleR, UpperArmL, UpperArmR };
+enum class HairBone : uint8_t { Head, Neck, SpineTop, SpineMid, ClavicleL, ClavicleR, UpperArmL, UpperArmR, SpineLow, Pelvis };
 
 struct HairShape {
     HairBone bone = HairBone::Head;  // the bone it rides on
