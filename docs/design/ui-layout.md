@@ -161,10 +161,18 @@ night; `Orders.TileIconsLit 1` lights it by the world instead, `Orders.TileIcons
 drawn footprints. Floors and orders keep their drawn icons.
 
 **Bar icons** (2026-11-20): the speed buttons (pause bars, one to three play arrows), Keys (a
-keyboard), Factions (a flag) and Menu (three lines) are clean line icons drawn by ImGui on
+keyboard), the learning helper (an open book), Factions (a flag) and Menu (three lines) are clean line icons drawn by ImGui on
 square-ish buttons, amber when on; their names are in the tooltips. Ship stays a word.
 
 Each faction also shows its last three goodwill changes with why and the day ("Lately: -19 a caravan called (day 3)"),
 from the sim's goodwill log (`comms-console.md`). Build tiles fill their rows evenly (27 tiles: 9, 9, 9, not 13, 13, 1).
 
-Still to do: the learning helper's lessons.
+**Learning helper** (2026-11-20, `ColonyHudLessons.cpp`): 16 short lessons in plain words, each shown
+when it matters, one at a time, in a box at the top right under the alarm: the camera, selecting colonists,
+a stockpile (until there is one), building, the Work tab, then on their moment: hungry colonists (food
+under 30%), beds (rest under 30%), strangers attack (draft), someone is down, playing as a colonist and
+research (from day 1), traders and visitors, prisoners, tame animals, cold (outdoors under 0 C) and heat
+(over 35 C). The first unlearned lesson whose moment has come shows, with "Learning helper n / 16".
+**Got it** marks it learned for good; **Hide the helper** or the book icon on the bar (between Keys and
+Factions, amber while on) turns it off. Both are saved with the HUD's settings (`Rim3D.Hud` keys
+`Lessons` and `LessonsOn`), not with the colony.
