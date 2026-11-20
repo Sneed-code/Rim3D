@@ -96,6 +96,13 @@ namespace
 		UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FactoryClass);
 		Factory->AssetImportTask = Task;
 		Task->Factory = Factory;
+		// FactoryCanImport is what loads the factory's file translators (Alembic and so on); without it the factory has
+		// none and returns nothing for every file (PC, 2026-11-21).
+		if (!Factory->FactoryCanImport(File))
+		{
+			UE_LOG(LogHairGrooms, Error, TEXT("The groom importer cannot read %s (no hair curves in it?)"), *File);
+			return nullptr;
+		}
 		UPackage* Package = CreatePackage(*(FString(StrandHairGrownFolder) / Name));
 		Package->FullyLoad();
 		bool bCancelled = false;
