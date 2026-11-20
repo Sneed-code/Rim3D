@@ -15,7 +15,7 @@ degrees).
 
 | Key | What |
 | --- | --- |
-| Hold right mouse button, gun in hand | aim: the view blends to over the shoulder (camera 120 cm back, 60 cm to the right and 26 cm up so a shouldered rifle clears the head and long hair, field of view 80 to 62 degrees) in about a fifth of a second, and back when let go. `Feel.AimView 1` goes to first person instead (camera to the eyes, body hidden). A melee weapon blocks with the same button |
+| Hold right mouse button, gun in hand | aim: the view blends to over the shoulder (camera 120 cm back, 55 cm to the right and 22 cm up so a shouldered rifle clears the head and long hair; the body turns with the view while aimed and strafes, field of view 80 to 62 degrees) in about a fifth of a second, and back when let go. `Feel.AimView 1` goes to first person instead (camera to the eyes, body hidden). A melee weapon blocks with the same button |
 | Left Alt (was Left Shift; Shift sprints now) | dodge roll in the direction of the movement keys (relative to the view; none held is a backstep): `DodgeRollCommand`. Refused while rolling or waiting out the last roll |
 | G | throw the first grenade on the belt at the crosshair's point (`ThrowCommand` with `player`) |
 
