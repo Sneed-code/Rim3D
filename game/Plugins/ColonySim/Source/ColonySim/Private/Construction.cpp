@@ -85,6 +85,7 @@ Construction::Construction(Map& map, Things& things, Plants& plants, const DefDa
         numbers_.deconstructWorkMin = rules->number("deconstructWorkMin", numbers_.deconstructWorkMin);
         numbers_.deconstructWorkMax = rules->number("deconstructWorkMax", numbers_.deconstructWorkMax);
         numbers_.deconstructRefundFactor = rules->number("deconstructRefundFactor", numbers_.deconstructRefundFactor);
+        numbers_.killLeaveFactor = rules->number("killLeaveFactor", numbers_.killLeaveFactor);
         numbers_.skillSpeedBase = rules->number("skillSpeedBase", numbers_.skillSpeedBase);
         numbers_.skillSpeedPerLevel = rules->number("skillSpeedPerLevel", numbers_.skillSpeedPerLevel);
         numbers_.defaultSkillLevel = static_cast<int>(rules->integer("defaultSkillLevel", numbers_.defaultSkillLevel));
@@ -684,6 +685,26 @@ bool Construction::deconstruct(Entity building) {
         dropNear(cost.item, cost.count, rect);
     }
     return true;
+}
+
+int Construction::leaveWreck(DefId def, DefId stuff, const CellRect& rect, bool finished, uint64_t seed) {
+    if (!finished || !def.valid() || !defs_.get(def).has("designationCategory")) {
+        return 0;
+    }
+    Rng roll(seed, 0x57524543ULL);
+    int dropped = 0;
+    for (const Cost& cost : costOf(def, stuff)) {
+        // Rounded at random as a refund is: 5 wood give back 1 or 2.
+        const double exact = static_cast<double>(cost.count) * numbers_.killLeaveFactor;
+        int count = static_cast<int>(std::floor(exact));
+        const double fraction = exact - static_cast<double>(count);
+        if (fraction > 0.0 && static_cast<double>(roll.unit()) < fraction) {
+            ++count;
+        }
+        dropNear(cost.item, count, rect);
+        dropped += count;
+    }
+    return dropped;
 }
 
 void Construction::dropNear(DefId item, int count, const CellRect& rect, bool skipRect) {

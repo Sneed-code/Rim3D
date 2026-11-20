@@ -70,6 +70,12 @@ The full blood ([blood.md](blood.md)) needs `game/Content/Rim3D/Generated/Blood`
 The realistic blasts ([blast-draw.md](blast-draw.md)) need `game/Content/Rim3D/Generated/Blast` (not in Git): make it once on each machine with
 `UnrealEditor-Cmd.exe game\Rim3D.uproject -run=BlastArt -unattended -nosplash -nullrhi`. With it `feel` checks and pictures them (`blast_*` phases); without it the old simple blast is drawn.
 
+The wet look on buildings, plants, rocks and clothes ([wetness.md](wetness.md)) needs `game/Content/Rim3D/Generated/Weather` and changes
+the generated materials: run it once on each machine, and again after any commandlet that remakes materials, with
+`UnrealEditor-Cmd.exe game\Rim3D.uproject -run=WetLook -unattended -nosplash -nullrhi`. `sky_rain` checks the surfaces and people soak and
+that the roof cover is written; without the assets only people get wet, and the test says so. The same commandlet
+adds the damage look (cracks) that `buildings_wreck` pictures ([destruction.md](destruction.md)).
+
 `buildings` and `orders` need `game/Content/Rim3D/Generated/Buildings/M_BuildingGhost` (not in Git): make it once on each machine with
 `UnrealEditor-Cmd.exe game\Rim3D.uproject -run=BuildingMaterials -unattended -nosplash -nullrhi`. Without it the game still runs and draws plans solid.
 
