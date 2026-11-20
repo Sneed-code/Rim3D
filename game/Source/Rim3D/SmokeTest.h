@@ -115,6 +115,7 @@ private:
 	void BuildMotionPhases();       // SmokeTestMotion.cpp
 	void BuildIdlePhases();         // SmokeTestIdle.cpp
 	void BuildHurtPhases();         // SmokeTestHurt.cpp
+	void BuildGorePhases();         // SmokeTestGore.cpp
 	void BuildClothesPhases();      // SmokeTestClothes.cpp
 	void BuildLevelsPhases();       // SmokeTestLevels.cpp
 	void BuildFeelPhases();         // SmokeTestFeel.cpp

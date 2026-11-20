@@ -116,6 +116,8 @@
         "overkillShare": 0.25,
         "pieceDecayDays": 2,
         "torsoSingleHit": 1,
+        "livingLimbs": 1,
+        "noteLiving": "sneed 2026-11-20: an arm or leg shot or hacked again and again comes off a living body too, at the same pile (head and torso only off the dead); a blast at a corpse piles all its damage past 0 on the part it meets, unsplit, and throws the corpse",
         "arm": { "whole": "Arm", "lower": "Hand", "lowerAlso": ["Radius"] },
         "leg": { "whole": "Leg", "lower": "Foot", "lowerAlso": ["Tibia"] },
         "head": "Head"

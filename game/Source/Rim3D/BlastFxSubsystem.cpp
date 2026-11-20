@@ -13,6 +13,8 @@
 #include "Materials/MaterialInterface.h"
 
 #include "BlastFxData.h"
+#include "PawnActor.h"
+#include "PawnSubsystem.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Defs.h"
@@ -252,6 +254,27 @@ void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 	if (FlashLight)
 	{
 		FlashLight->SetWorldLocation(FlashAt);
+	}
+
+	// Ragdolls (corpses, the knocked out) are thrown by it (sneed 2026-11-20: "punt and ragdoll corpses, not cartoonishly
+	// but a decent amount"): a frag grenade throws a body at about 5 m/s, a rocket about 7, a doomsday rocket 9, nothing at
+	// the edge. The sim moves the corpse's place the same way (CombatSystem::explode).
+	if (!bFire)
+	{
+		if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
+		{
+			const float Speed = FMath::Clamp(250.0f + 120.0f * RadiusM, 300.0f, 900.0f);
+			const double Reach = RadiusM * 120.0;
+			for (const TPair<uint32, TObjectPtr<ASimPawnActor>>& Pair : Pawns->GetPawns())
+			{
+				ASimPawnActor* Actor = Pair.Value.Get();
+				if (Actor && Actor->IsRagdoll() && FVector::Dist(Actor->GetActorLocation(), Centre) < Reach + 100.0)
+				{
+					Actor->PushRagdoll(Centre, static_cast<float>(Reach), Speed);
+					++RagdollsThrown;
+				}
+			}
+		}
 	}
 
 	APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0);

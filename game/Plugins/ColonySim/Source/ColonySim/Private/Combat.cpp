@@ -2563,7 +2563,10 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
         }
         // Fragments: a hard enough blast splits into 2 to 4 pieces, each on a part of its own.
         int pieces = 1;
-        if (amount >= blast.fragmentMinDamage && blast.fragmentsMax > blast.fragmentsMin) {
+        if (corpse) {
+            // A blast at a corpse tears it whole (sneed, 2026-11-20: a rocket at a corpse must take it apart): one piece,
+            // all of it piling past 0 on the part it meets.
+        } else if (amount >= blast.fragmentMinDamage && blast.fragmentsMax > blast.fragmentsMin) {
             pieces = blast.fragmentsMin + static_cast<int>(rng.below(static_cast<uint32_t>(blast.fragmentsMax - blast.fragmentsMin + 1)));
         } else if (amount >= blast.fragmentMinDamage) {
             pieces = blast.fragmentsMin;
@@ -2587,7 +2590,7 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
                 wearApparel(pawn, piece);
                 continue;
             }
-            const bool alive = health_.applyHit(pawn, piece.damageType, piece.amount, part);
+            const bool alive = health_.applyHit(pawn, piece.damageType, piece.amount, part, corpse);
             wearApparel(pawn, piece);
             if (!corpse) {
                 noteHarm(pawn, ex.instigator);
@@ -2599,6 +2602,17 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
         }
         if (dealt > 0.0f && !corpse) {
             ++result.pawnsHurt;
+        }
+        // A corpse is thrown too (sneed, 2026-11-20), as far as a living body would be, without the knock-down.
+        if (corpse && amount >= model_->knockMinDamage && things_.spawned(pawn)) {
+            const Position& at = reg.get<Position>(pawn);
+            const float pushX = at.x - bx;
+            const float pushY = at.y - by;
+            const float share = std::clamp(1.0f - nearest / ex.radius, 0.0f, 1.0f);
+            if (const float push = model_->knockbackMetres * share; push > 0.01f && pushX * pushX + pushY * pushY > 1e-4f) {
+                motion_->push(pawn, pushX, pushY, push, motion_->rules().blastSteps);
+            }
+            continue;
         }
         // Knock-down: the blast throws the pawn down and away, armor or not.
         if (amount < model_->knockMinDamage || (health != nullptr && health->dead) || !things_.spawned(pawn)) {

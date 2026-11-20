@@ -3,7 +3,10 @@
 #include "MakeHumanArt.h"
 #include "SkinBloodArt.h"
 
+#include "Camera/PlayerCameraManager.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -18,8 +21,8 @@ namespace
 {
 	TAutoConsoleVariable<int32> GSkinBloodOn(TEXT("Blood.SkinPaint"), 1,
 		TEXT("1 paints wounds and blood into MakeHuman bodies' skin; 0 uses the old decals on bodies."), ECVF_Default);
-	TAutoConsoleVariable<int32> GSkinBloodMasks(TEXT("Blood.SkinMasks"), 8,
-		TEXT("How many bodies can carry blood in their skin at once (each takes 16 MB of video memory); the one bloodied longest ago gives way."),
+	TAutoConsoleVariable<int32> GSkinBloodMasks(TEXT("Blood.SkinMasks"), 16,
+		TEXT("How many bodies can carry blood in their skin at once (each takes 16 MB of video memory); the one farthest from the camera gives way (8 made a fight's blood vanish and come back: sneed's red flashing, 2026-11-20)."),
 		ECVF_Default);
 
 	float SkinBloodConsole(const TCHAR* Name, float Default)
@@ -212,15 +215,31 @@ USkinBlood::FMask* USkinBlood::FindOrAddMask(USkeletalMeshComponent* Mesh, float
 	const int32 Cap = FMath::Clamp(GSkinBloodMasks.GetValueOnGameThread(), 1, 64);
 	while (Masks.Num() >= Cap)
 	{
-		int32 Oldest = 0;
-		for (int32 Index = 1; Index < Masks.Num(); ++Index)
+		// The one farthest from the camera gives way (a body off in the distance, not one in the fight in front of you),
+		// counting a minute since its last wound as 10 m further.
+		FVector Camera = Mesh->GetComponentLocation();
+		if (const UWorld* World = Mesh->GetWorld())
 		{
-			if (Masks[Index].LastPaint < Masks[Oldest].LastPaint)
+			if (const APlayerController* Player = World->GetFirstPlayerController(); Player && Player->PlayerCameraManager)
 			{
-				Oldest = Index;
+				Camera = Player->PlayerCameraManager->GetCameraLocation();
 			}
 		}
-		DropMask(Oldest);
+		const auto Score = [&](const FMask& M)
+		{
+			const USkeletalMeshComponent* Other = M.Mesh.Get();
+			const double Away = Other ? FVector::Dist(Other->GetComponentLocation(), Camera) : 1e9;
+			return Away + (Clock - M.LastPaint) / 60.0 * 1000.0;
+		};
+		int32 Farthest = 0;
+		for (int32 Index = 1; Index < Masks.Num(); ++Index)
+		{
+			if (Score(Masks[Index]) > Score(Masks[Farthest]))
+			{
+				Farthest = Index;
+			}
+		}
+		DropMask(Farthest);
 	}
 	FMask& Mask = Masks.AddDefaulted_GetRef();
 	Mask.Mesh = Mesh;
