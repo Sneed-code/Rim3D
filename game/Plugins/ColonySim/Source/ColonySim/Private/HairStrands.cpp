@@ -82,7 +82,7 @@ bool hsSameShape(const std::vector<std::vector<HairVec>>& a, const std::vector<s
 }  // namespace
 
 bool HairStrands::solveStrand(std::vector<HairVec>& p, const std::vector<HairVec>& goal, const std::vector<HairCapsule>& capsules,
-                              float cosMax, float sinMax, std::vector<uint8_t>* touched) const {
+                              float cosMax, float sinMax, std::vector<HairVec>* contacts, std::vector<HairVec>* follow) const {
     bool any = false;
     const size_t n = p.size();
     p[0] = goal[0];
@@ -102,11 +102,16 @@ bool HairStrands::solveStrand(std::vector<HairVec>& p, const std::vector<HairVec
             const float acrossLen = hsLen(across);
             dir = acrossLen > 1.0e-6f ? hsAdd(hsMul(styledDir, cosMax), hsMul(across, sinMax / acrossLen)) : styledDir;
         }
-        p[k] = hsAdd(p[k - 1], hsMul(dir, length));
+        const HairVec kept = hsAdd(p[k - 1], hsMul(dir, length));
+        if (follow) {
+            (*follow)[k] = hsAdd((*follow)[k], hsSub(kept, p[k]));  // the length's own correction (follow the leader)
+        }
+        p[k] = kept;
         // Out of the body: the segment's deepest point pushed to the surface by turning it about its parent point (the
         // first segment's top quarter is left alone: the root sits in the scalp).
         for (int round = 0; round < 3; ++round) {
             bool hit = false;
+            HairVec normals;
             for (const HairCapsule& cap : capsules) {
                 const float from = k == 1 ? 0.25f : 0.0f;
                 const HairVec start = hsLerp(p[k - 1], p[k], from);
@@ -122,8 +127,12 @@ bool HairStrands::solveStrand(std::vector<HairVec>& p, const std::vector<HairVec
                 }
                 const HairVec normal = distance > 1.0e-5f ? hsMul(out, 1.0f / distance) : hsNormal(hsSub(p[k], onAxis), HairVec{0.0f, 0.0f, 1.0f});
                 const float depth = cap.radius - distance;
-                const float lever = std::max(from + (1.0f - from) * s, 0.3f);
-                p[k] = hsAdd(p[k], hsMul(normal, std::min(depth / lever, depth * 3.0f + 0.5f)));
+                // Turned about the point above, the end moves further than the deepest point (by the lever), but never
+                // past the surface by much: an over-push becomes an outward speed, which threw hair off the body
+                // (sneed 2026-11-20: "touches the body and freaks out to pulse off it").
+                const float lever = std::max(from + (1.0f - from) * s, 0.5f);
+                p[k] = hsAdd(p[k], hsMul(normal, depth / lever));
+                normals = hsAdd(normals, normal);
                 hit = true;
             }
             if (!hit) {
@@ -131,8 +140,8 @@ bool HairStrands::solveStrand(std::vector<HairVec>& p, const std::vector<HairVec
             }
             p[k] = hsAdd(p[k - 1], hsMul(hsNormal(hsSub(p[k], p[k - 1]), styledDir), length));
             any = true;
-            if (touched) {
-                (*touched)[k] = 1;
+            if (contacts) {
+                (*contacts)[k] = hsAdd((*contacts)[k], normals);
             }
         }
     }
@@ -170,12 +179,14 @@ void HairStrands::solveSheet(const std::vector<std::vector<HairVec>>& goal, cons
 void HairStrands::start(const std::vector<std::vector<HairVec>>& goals, const std::vector<HairCapsule>& capsules,
                         const HairSettings& settings) {
     points_ = goals;
-    touched_.assign(goals.size(), {});
+    contacts_.assign(goals.size(), {});
+    follow_.assign(goals.size(), {});
     for (size_t i = 0; i < goals.size(); ++i) {
-        touched_[i].assign(goals[i].size(), 0);
+        contacts_[i].assign(goals[i].size(), HairVec{});
+        follow_[i].assign(goals[i].size(), HairVec{});
         if (goals[i].size() >= 2) {
             for (int it = 0; it < 2; ++it) {
-                solveStrand(points_[i], goals[i], capsules, -1.0f, 0.0f, nullptr);
+                solveStrand(points_[i], goals[i], capsules, -1.0f, 0.0f, nullptr, nullptr);
             }
         }
     }
@@ -261,10 +272,10 @@ void HairStrands::step(float dt, const std::vector<std::vector<HairVec>>& goals,
                 p[k] = hsAdd(p[k], hsAdd(hsAdd(hsAdd(rootMove, swing), fall), pull));
             }
         }
-        for (auto& t : touched_) {
-            std::fill(t.begin(), t.end(), static_cast<uint8_t>(0));
+        for (size_t i = 0; i < goals.size(); ++i) {
+            std::fill(contacts_[i].begin(), contacts_[i].end(), HairVec{});
+            std::fill(follow_[i].begin(), follow_[i].end(), HairVec{});
         }
-        beforeSolve_ = points_;
         const int iterations = std::max(settings.iterations, 1);
         for (int it = 0; it < iterations; ++it) {
             if (!neighbours_.empty()) {
@@ -272,26 +283,38 @@ void HairStrands::step(float dt, const std::vector<std::vector<HairVec>>& goals,
             }
             for (size_t i = 0; i < goals.size(); ++i) {
                 if (points_[i].size() >= 2) {
-                    solveStrand(points_[i], goalNow_[i], capsulesNow_, cosMax, sinMax, it + 1 == iterations ? &touched_[i] : nullptr);
+                    solveStrand(points_[i], goalNow_[i], capsulesNow_, cosMax, sinMax, &contacts_[i], &follow_[i]);
                 }
             }
         }
-        // Each point is only ever moved after the one above it (follow the leader), so a move given to the point below is
-        // taken back off this one's speed, or the chain gains energy and swings on (Mueller et al. 2012, "Fast
-        // simulation of inextensible hair and fur").
+        // Each point is only ever moved after the one above it (follow the leader), so the length's correction given to
+        // the point below is taken back off this one's speed, or the chain gains energy and swings on (Mueller et al.
+        // 2012, "Fast simulation of inextensible hair and fur"). Only the length's own correction: a push out of the
+        // body fed back up the strand like this kicked the point above into the body every step.
         for (size_t i = 0; i < goals.size(); ++i) {
             for (size_t k = 1; k + 1 < points_[i].size(); ++k) {
-                const HairVec below = hsSub(points_[i][k + 1], beforeSolve_[i][k + 1]);
-                previous_[i][k] = hsAdd(previous_[i][k], hsMul(below, settings.followDamping));
+                previous_[i][k] = hsAdd(previous_[i][k], hsMul(follow_[i][k + 1], settings.followDamping));
             }
         }
-        // Friction: a point resting on the body loses some of its sliding.
+        // Touching the body: hair lands and stays (no bounce: the push out is not kept as speed away from the body),
+        // and grips it: slow sliding stops dead, faster sliding loses a share each step.
+        const float gripMove = settings.grip * h;
+        const float slideKeep = std::exp(-settings.friction * h);
         for (size_t i = 0; i < goals.size(); ++i) {
             for (size_t k = 1; k < points_[i].size(); ++k) {
-                if (touched_[i][k]) {
-                    const HairVec slide = hsSub(hsSub(points_[i][k], previous_[i][k]), rootMoves_[i]);
-                    previous_[i][k] = hsAdd(previous_[i][k], hsMul(slide, settings.friction));
+                const HairVec sum = contacts_[i][k];
+                if (hsDot(sum, sum) < 1.0e-8f) {
+                    continue;
                 }
+                const HairVec normal = hsNormal(sum, HairVec{0.0f, 0.0f, 1.0f});
+                HairVec v = hsSub(hsSub(points_[i][k], previous_[i][k]), rootMoves_[i]);
+                const float away = hsDot(v, normal);
+                const HairVec normalPart = hsMul(normal, std::min(away, 0.0f));
+                HairVec slide = hsSub(v, hsMul(normal, away));
+                const float slideLen = hsLen(slide);
+                slide = slideLen <= gripMove ? HairVec{} : hsMul(slide, slideKeep);
+                v = hsAdd(normalPart, slide);
+                previous_[i][k] = hsSub(hsSub(points_[i][k], rootMoves_[i]), v);
             }
         }
     }
