@@ -20,10 +20,10 @@ namespace
 	TAutoConsoleVariable<int32> GWinLightsEnable(TEXT("Windows.Lights"), 1, TEXT("Daylight through windows as rect lights (docs/design/windows.md); 0 off."), ECVF_Default);
 	TAutoConsoleVariable<int32> GWinMaxLights(TEXT("Windows.MaxLights"), 24, TEXT("How many of the windows nearest the camera get a daylight rect light."), ECVF_Default);
 	TAutoConsoleVariable<int32> GWinShadowLights(TEXT("Windows.ShadowLights"), 8, TEXT("How many of those cast shadows (the nearest)."), ECVF_Default);
-	TAutoConsoleVariable<float> GWinLightCd(TEXT("Windows.LightCd"), 6000.0f,
-		TEXT("Candelas of a window's daylight at a clear noon: about a patch of bright sky (8000 nits) the size of the opening."), ECVF_Default);
+	TAutoConsoleVariable<float> GWinLightCd(TEXT("Windows.LightCd"), 15000.0f,
+		TEXT("Candelas of a window's daylight at a clear noon: bright sky plus sunlit ground seen through the opening."), ECVF_Default);
 	constexpr int32 WinLightPool = 48;
-	constexpr float WinLightReachCm = 800.0f;
+	constexpr float WinLightReachCm = 1000.0f;
 	constexpr float WinWallHalfCm = 25.0f;
 	const FLinearColor WinSkyColor(0.92f, 0.96f, 1.0f);
 }
