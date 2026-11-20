@@ -98,4 +98,5 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
   foam/rocketswarm/uranium-slug turret heads, watermill wheel, casket canopy, beacon and scanner dishes, floodlight
   head and telescope tube don't move yet (the GLBs keep them as separate parts with pivots). The Autodoor model (frame
   plus two leaves) and the in-wall Cooler model are made but not wired in: doors draw one sliding leaf and the cooler
-  def is a whole wall-height block, so both need a small draw change first.
+  def is a whole wall-height block, so both need a small draw change first. Zeushammer, breach axe, HE mortar shell,
+  advanced component and bionic arm were cut off by the Codex usage limit (2026-11-20); rerun after Nov 22 2:38 PM.
