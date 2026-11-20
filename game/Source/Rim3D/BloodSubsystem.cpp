@@ -1678,18 +1678,44 @@ void UBloodSubsystem::UpdateBleeding(float Dt, float GameSeconds)
 		// A pool under a body on the ground.
 		if ((bDown || bDead) && Bleed.Victim != colony::kNoEntity)
 		{
-			FPool* Pool = Pools.FindByPredicate([&Bleed](const FPool& P) { return P.Victim == Bleed.Victim; });
+			FPool* Pool = Pools.FindByPredicate([&Bleed](const FPool& P) { return P.Victim == Bleed.Victim && !P.bLeft; });
+			FVector Centre = Mesh->Bounds.Origin;
+			if (const ASimPawnActor* Pawn = Cast<ASimPawnActor>(Mesh->GetOwner()))
+			{
+				FVector Pelvis;
+				if (Pawn->GetRagdollPelvis(Pelvis))
+				{
+					Centre = Pelvis;
+				}
+			}
+			// A downed body crawling away leaves a smeared trail, and a new pool where it stops (PC look, 2026-11-20:
+			// she crawled 2 m off her pool, and from 12 m only that one patch showed).
+			if (Pool && !bDead)
+			{
+				const FVector Moved = FVector(Centre.X - Pool->LastTrail.X, Centre.Y - Pool->LastTrail.Y, 0.0f);
+				if (Moved.SizeSquared() > FMath::Square(30.0f))
+				{
+					const FVector Middle = Pool->LastTrail + Moved * 0.5f;
+					const FVector OnGround(Middle.X, Middle.Y, GroundBelow(FVector(Middle.X, Middle.Y, Centre.Z + 40.0f), Ignore));
+					const float Width = Random.FRandRange(5.0f, 9.0f) * (0.7f + 0.3f * Bleed.Force);
+					if (UDecalComponent* Smear = MakeWorldDecal(BloodCellSmear, OnGround, FVector::UpVector, Moved.GetSafeNormal(), Moved.Size() * 0.65f, Width,
+						DecalColorFor(Bleed.Fluid, 0.0f, 0.9f)))
+					{
+						Smear->SetFadeScreenSize(0.0f);
+						Smear->SetSortOrder(0);
+						AddStain(Smear, OnGround, FVector::UpVector, Width, Bleed.Fluid, false);
+						++CrawlSmears;
+					}
+					Pool->LastTrail = Centre;
+				}
+				if (FVector::DistSquared2D(Centre, Pool->Centre) > FMath::Square(Pool->RadiusCm * 0.6f + 60.0f))
+				{
+					Pool->bLeft = true;
+					Pool = nullptr;
+				}
+			}
 			if (!Pool && CellMaterials.IsValidIndex(BloodCellPool))
 			{
-				FVector Centre = Mesh->Bounds.Origin;
-				if (const ASimPawnActor* Pawn = Cast<ASimPawnActor>(Mesh->GetOwner()))
-				{
-					FVector Pelvis;
-					if (Pawn->GetRagdollPelvis(Pelvis))
-					{
-						Centre = Pelvis;
-					}
-				}
 				const FVector Ground(Centre.X, Centre.Y, GroundBelow(Centre + FVector(0, 0, 40), Ignore));
 				const FLinearColor Fresh = DecalColorFor(Bleed.Fluid, 0.0f, 1.0f);
 				UDecalComponent* Decal = MakeWorldDecal(BloodCellPool + Random.RandRange(0, 1), Ground, FVector::UpVector, FMath::VRand(), 6.0f, 6.0f, Fresh);
@@ -1698,6 +1724,8 @@ void UBloodSubsystem::UpdateBleeding(float Dt, float GameSeconds)
 					Decal->SetSortOrder(0);
 					FPool NewPool;
 					NewPool.Victim = Bleed.Victim;
+					NewPool.Centre = Ground;
+					NewPool.LastTrail = Ground;
 					NewPool.Stain = AddStain(Decal, Ground, FVector::UpVector, 6.0f, Bleed.Fluid, true);
 					NewPool.RadiusCm = 6.0f;
 					// Drops and a second lobe round it, so its edge is broken (it read as a smooth sheet of paint).

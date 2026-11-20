@@ -119,6 +119,15 @@ struct CommsCall {
     int64_t at = 0;
 };
 
+// One change to a faction's goodwill, for the Factions window's recent changes (docs/design/comms-console.md, Goodwill log).
+// Saved in section "comms" (2); not part of the state hash (it changes nothing in the game).
+struct GoodwillChange {
+    std::string faction;
+    float amount = 0.0f;  // after minus before
+    std::string reason;   // plain words: "a gift", "a caravan called"...; empty for none given
+    int64_t at = 0;       // game second
+};
+
 struct TradeState {
     std::vector<Visit> visits;       // in id order
     uint32_t nextVisit = 1;
@@ -126,7 +135,10 @@ struct TradeState {
     int64_t lastDrift = 0;           // the game day goodwill last drifted back toward its start
     std::vector<CaravanRequest> requests;  // in arrival order (then faction name)
     std::vector<CommsCall> calls;          // in faction name order
+    std::vector<GoodwillChange> goodwillLog;  // the newest last, at most kGoodwillLogSize
 };
+
+inline constexpr size_t kGoodwillLogSize = 60;
 
 // What a faction is to the colony, by goodwill (FactionRules).
 enum class Relation : uint8_t { Hostile, Neutral, Ally };
@@ -202,8 +214,9 @@ public:
     // ---- Goodwill ----
     // A faction's goodwill with the colony now.
     float goodwill(const std::string& faction) const;
-    // Changes it by `delta`, within the limits; a permanent enemy stays at its lowest. False for an unknown faction.
-    bool adjustGoodwill(const std::string& faction, float delta, std::string& error);
+    // Changes it by `delta`, within the limits; a permanent enemy stays at its lowest. False for an unknown faction. A change
+    // that moves it goes in the goodwill log with `reason`.
+    bool adjustGoodwill(const std::string& faction, float delta, std::string& error, const std::string& reason = std::string());
     Relation relation(const std::string& faction) const;
     // Whether the faction is the colony's enemy now (a permanent enemy, or goodwill at -75 or less): raids may come from it.
     bool hostile(const std::string& faction) const { return relation(faction) == Relation::Hostile; }

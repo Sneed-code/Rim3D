@@ -2221,7 +2221,10 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 			// A narrow window: the tiles may cover the date box rather than stand in a tall column.
 			MaxWidth = Viewport->Size.x - (TilesLeft - Viewport->Pos.x) - Margin;
 		}
-		const int32 PerRow = FMath::Max(1, static_cast<int32>((MaxWidth - Pad) / Step));
+		// As many a row as fit, then evened out so the last row isn't one lone tile (27 tiles at 13 a row: 9, 9, 9).
+		const int32 Fit = FMath::Max(1, static_cast<int32>((MaxWidth - Pad) / Step));
+		const int32 RowCount = FMath::DivideAndRoundUp(Tiles.Num(), Fit);
+		const int32 PerRow = FMath::Max(1, FMath::DivideAndRoundUp(Tiles.Num(), RowCount));
 		ImGui::SetNextWindowPos(ImVec2(TilesLeft, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
 		// Never taller than the room above the bar (the rest scrolls), so the window stays on screen.
 		ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, FMath::Max(120.0f * Scale, Bottom - Viewport->Pos.y - 150.0f * Scale)));
@@ -2288,7 +2291,10 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 					{
 						Widest = FMath::Max(Widest, WidthAt(Line, WrapSize));
 					}
-					const float FontSize = WrapSize * FMath::Clamp(Room / Widest, 0.75f, 1.0f);
+					// Never taller than the room under the picture (which ends at 68% of the tile's width), so three lines don't
+					// run into it.
+					const float NameRoom = TileHeight - 5.0f * Scale - TileSize * 0.70f;
+					const float FontSize = FMath::Min(WrapSize * FMath::Clamp(Room / Widest, 0.75f, 1.0f), NameRoom / static_cast<float>(Lines.Num()));
 					const ImU32 NameColor = ImGui::GetColorU32(bLocked ? ColonyHud::TextFaint() : ColonyHud::TextMain());
 					float LineY = Min.y + TileHeight - 5.0f * Scale - FontSize * Lines.Num();
 					for (const FString& Line : Lines)
