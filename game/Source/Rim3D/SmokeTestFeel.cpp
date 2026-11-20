@@ -638,12 +638,13 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	Lingering.WarmupSeconds = 0.0f;
 	Lingering.MeasureSeconds = 7.0f;
 	Lingering.ScreenshotAt = 6.5f;
-	// Looking down at the blast's spot, for the scorch mark.
+	// The smoke still hanging over the blast's spot.
 	Lingering.Setup = [=]()
 	{
 		State->MaxSmoke = 0;
-		// From behind the shoulder the spot 11 m off is about 8 degrees down (PC round 3: at -30 it was off the top).
-		LookAtBlast(State->BlastX, State->BlastY, -14.0f, 20.0f);
+		// The hanging cloud, looked at a little upward. The scorch is pictured by blast_scorch: 11 m off it is a sliver at a
+		// grazing angle, with the colonists standing on the right of it and the player's own body on the left (rounds 3 to 9).
+		LookAtBlast(State->BlastX, State->BlastY, 6.0f, -20.0f);
 	};
 	Lingering.OnFrame = Watch;
 	Lingering.Verify = [=, this]()

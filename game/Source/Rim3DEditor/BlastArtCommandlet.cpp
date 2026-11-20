@@ -382,7 +382,7 @@ namespace
 		BlastArtInput(Sample, TEXT("Tex"), Tex);
 		auto* Base = BlastArtCustom(Material, TEXT("BlastScorchColour"), CMOT_Float3, TEXT(
 			"float3 soot = float3(0.012, 0.011, 0.01);\n"
-			"float3 dust = float3(0.21, 0.19, 0.16);\n"
+			"float3 dust = float3(0.34, 0.31, 0.27);\n"
 			"return lerp(lerp(dust, soot, saturate(S.r * 1.3)), dust, S.g * (1.0 - S.r));\n"), -500, -250);
 		BlastArtInput(Base, TEXT("S"), Sample);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Base, TEXT(""), MP_BaseColor);

@@ -307,7 +307,7 @@ namespace blastfx
 				// Wider by the core, thinning out to their tips.
 				const float Taper = Clamp01((R - Rc) / 0.45f);
 				const float SpokeAmt = SmoothStep(0.46f + 0.12f * Taper, 0.6f + 0.08f * Taper, Spoke);
-				const float Reach = Rc + 0.15f + 0.45f * SmoothStep(0.52f, 0.8f, Spoke);
+				const float Reach = Rc + 0.18f + 0.5f * SmoothStep(0.52f, 0.8f, Spoke);
 				const float Broken = SmoothStep(0.3f, 0.55f, Fbm(Vec3{U * 14.0f, V * 14.0f, 5.0f}, Seed + 36u, 3));
 				const float Rays = SpokeAmt * (1.0f - SmoothStep(Rc, Reach, R)) * Broken * (R > Rc - 0.05f ? 1.0f : 0.0f);
 				// Pale dust thrown out in a ring just past the core, mostly between the rays.
@@ -324,7 +324,7 @@ namespace blastfx
 				Px.Heat = Clamp01(Soot);
 				Px.Light = Pale * (1.0f - Clamp01(Soot));
 				Px.Depth = Speck;
-				Px.Opacity = Clamp01(std::max({Soot, Pale * 0.5f}) * (1.0f - SmoothStep(0.88f, 0.99f, R)));
+				Px.Opacity = Clamp01(std::max({Soot, Pale * 0.7f}) * (1.0f - SmoothStep(0.88f, 0.99f, R)));
 			}
 		}
 		return Out;

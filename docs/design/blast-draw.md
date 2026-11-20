@@ -65,14 +65,15 @@ If the fire comes out upside down on the PC (the plane's texture runs the other 
 ## Smoke test
 
 `feel` ends with `blast_fireball` (a frag blast 11 m off to one side at 14:00 in a patch cleared of plants, the camera turned to it, pictured 0.3 s in; it must draw 40+ sprites, a light
-over 2,000 cd and a scorch mark), `blast_smoke` (pictured about 4 s in), `blast_linger` (about 11 s in, looking down at the spot: 3+ smoke puffs and the
+over 2,000 cd and a scorch mark), `blast_smoke` (pictured about 4 s in), `blast_linger` (about 11 s in, looking at the hanging cloud: 3+ smoke puffs and the
 scorch still there), `blast_scorch` (a scorch mark alone, no smoke, looked down at from 5 m) and `blast_molotov` (a fire blast, pictured 0.5 s in). Without the art they note it and pass.
 
 ## Not yet
 
 - The scorch mark showed first in PC round 8 (`blast_scorch`, a mark alone looked down at from 5 m): the earlier pictures had
   it 11 m off at a grazing angle under the smoke, and the old texture was a soft round blotch that read as a shadow. Round 9
-  draws it as a starburst (above) and turns `blast_linger` the other way, away from the colonists on the right.
+  drew it as a starburst (reads as burnt); its pale dust was then made lighter. `blast_linger` now pictures the cloud only:
+  at 11 m the mark sits behind the colonists or the player's body.
 
 - Blasts in water (a column of spray), on snow (white powder) and on stone floors (grey dust): the dust is soil-coloured
   everywhere.
