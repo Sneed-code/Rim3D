@@ -1976,15 +1976,15 @@ def add_cat_ears(rig, body, height=0.078, width=0.068, depth=0.022, tilt=0.2, th
             root = base + radial - normal * 0.003 + axis * (0.004 + 0.004 * ring)
             flat = (radial - normal * radial.dot(normal)).normalized() if radial.length > 1e-6 else lat
             behind = 0.5 - 0.5 * math.sin(a)  # 1 at the back of the ear (fwd points forward)
-            length = 0.009 + 0.01 * behind + 0.004 * ((k * 3) % 4) / 3.0
-            # Mostly along the scalp and back over it, barely lifting: fur lying down, not bristles.
+            length = 0.006 + 0.006 * behind + 0.002 * ((k * 3) % 4) / 3.0
+            # Short, back over the scalp and bending down onto it: fur lying flat, not a frill (PC look v2: it stuck out sideways).
             down_back = (fwd * -1.0 - normal * fwd.dot(normal) * -1.0)
             down_back = down_back.normalized() if down_back.length > 1e-6 else flat
-            out = (flat * 0.6 + down_back * 0.4 + axis * (0.15 - 0.1 * ring)).normalized()
+            out = (flat * 0.3 + down_back * 0.7 + axis * (0.08 - 0.06 * ring)).normalized()
             out = (out - normal * max(out.dot(normal), 0.0) * 0.8).normalized()
             n = 5
-            centres = [root + out * length * t - normal * length * 0.5 * t * t for t in [q / (n - 1) for q in range(n)]]
-            radii = [max(0.0010 * (1.0 - q / (n - 1)) ** 0.6, 0.0001) for q in range(n)]
+            centres = [root + out * length * t - normal * length * 0.8 * t * t for t in [q / (n - 1) for q in range(n)]]
+            radii = [max(0.0008 * (1.0 - q / (n - 1)) ** 0.6, 0.0001) for q in range(n)]
             frames = []
             for q in range(n):
                 dd = (centres[min(q + 1, n - 1)] - centres[max(q - 1, 0)]).normalized()
