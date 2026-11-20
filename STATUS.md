@@ -2,6 +2,8 @@
 
 Updated 2026-11-19.
 
+Codex models, batches 2 and 3 (sneed, 2026-11-20; `docs/design/codex-models.md`): **33 more** made by Codex on sneed's PC and wired in (20 buildings from batch 2, 11 buildings and 2 swords from batch 3), converted into `assets/raw/codex/`, same GunArt import as the first 15. Autodoor and wall cooler models made but not wired in; 5 more wait for the Codex usage limit (Nov 22).
+
 Codex models for 15 things free Fab lacks (sneed, 2026-11-19; art and data, `docs/design/codex-models.md`): Codex (GPT 6.2 Sol) made **the grenade launcher, triple rocket launcher, molotov, mini-turret, autocannon turret, mortar pit, IED trap, nutrient paste dispenser, comms console, hi-tech research bench, transport pod, geothermal generator, deep drill, biofuel refinery and the component** on sneed's PC in 1 h 48 min (briefs in `tools/codex_assets/`; grenade launcher, IED trap and autocannon got a second pass). `tools/codex_prep.py` (Blender) turns each GLB into a game FBX plus maps, and GunArt imports them: a new `buildings` list (`assets/codex_art.json`) puts each building or item at `/Game/Rim3D/Generated/Buildings/<Name>/SM_<Name>`, which the 13 defs' `visual.mesh` now name, and the launchers' art is in `assets/guns.json`. **Next: the PC import (codex_prep, then GunArt twice), launcher grip and muzzle points from the models and a look in the game**; later, turret heads that turn (the parts are kept in the GLBs).
 Races and wall climbing (sneed, 2026-11-19; `docs/design/races.md`, `docs/design/climbing.md`): sneed's race stats are
 in the sim as lineages: **baseline** learns 20% faster; **Impid** (Emberkin) 90% less harm from heat, cold and fire, no

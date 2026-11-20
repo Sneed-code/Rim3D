@@ -16,6 +16,19 @@ those were left to Fab.
 | NutrientPasteDispenser, CommsConsole, HiTechResearchBench | same names | emissive screens and lamps |
 | TransportPod, GeothermalGenerator, DeepDrill, BiofuelRefinery | same names (`TransportPod`, ...) | |
 
+### Batches 2 and 3 (2026-11-19/20)
+
+sneed asked for 20 more, then 20 more again. Batch 2 (all 20 made and wired in): hydroponics basin, ship
+cryptosleep casket, multi-analyzer, fabrication bench, simple research bench, electric smelter, crematorium, drug
+lab, chemfuel generator, watermill generator, moisture pump, orbital trade beacon, long-range mineral scanner,
+ground-penetrating scanner, pod launcher, foam turret, firefoam popper, rocketswarm and uranium slug turrets, hive.
+Batch 3 (15 of 20 made before the ChatGPT usage limit; 13 wired in): vitals monitor, fermenting barrel, hopper,
+passive cooler, flood light, telescope, tube television, poker table, horseshoes pin, animal sleeping box, animal
+bed (all `visual.mesh`), monosword and plasma sword (`assets/guns.json` melee, palm at the origin, so no
+`autoOrient`). The autodoor (frame plus two sliding leaves) and the in-wall cooler are made but not wired in: a door's
+mesh is one sliding leaf and the cooler def is a wall-height block. Zeushammer, breach axe, HE mortar shell,
+spacer component and bionic arm were cut off by the limit; their briefs stay, rerun them later.
+
 ## How a model is made
 
 `tools/codex_assets/`: `_common.md` is the brief every job shares (GLB in metres, +Z up, real scale, PBR BaseColor /
