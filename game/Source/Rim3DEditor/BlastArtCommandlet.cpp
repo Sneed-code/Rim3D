@@ -357,8 +357,8 @@ namespace
 	}
 
 	/**
-	 * M_BlastScorch: the scorch, on a flat square laid on the ground (instanced; data 0 its opacity): soot black with a pale
-	 * dusty rim, lit translucent. (A deferred decal first, but on the PC it never showed on the ground in rounds 3 and 4.)
+	 * M_BlastScorch: the scorch, on a flat square laid on the ground (instanced; data 0 its opacity): a ragged core and rays of
+	 * soot black, pale dust between them, lit translucent. (A deferred decal first, but on the PC it never showed on the ground in rounds 3 and 4.)
 	 */
 	void BlastArtMakeScorch(IAssetTools& Tools, UTexture2D* Texture, int32& Failures)
 	{
@@ -371,6 +371,8 @@ namespace
 		Material->BlendMode = BLEND_Translucent;
 		Material->SetShadingModel(MSM_DefaultLit);
 		Material->TranslucencyLightingMode = TLM_SurfacePerPixelLighting;
+		// Seen from either side, so a square laid the wrong way up still shows.
+		Material->TwoSided = true;
 		bool bNeedsRecompile = false;
 		Material->SetMaterialUsage(bNeedsRecompile, MATUSAGE_InstancedStaticMeshes);
 		auto* UV = BlastArtNode<UMaterialExpressionTextureCoordinate>(Material, -1100, -200);
@@ -379,8 +381,8 @@ namespace
 		BlastArtInput(Sample, TEXT("UV"), UV);
 		BlastArtInput(Sample, TEXT("Tex"), Tex);
 		auto* Base = BlastArtCustom(Material, TEXT("BlastScorchColour"), CMOT_Float3, TEXT(
-			"float3 soot = float3(0.022, 0.02, 0.018);\n"
-			"float3 dust = float3(0.21, 0.19, 0.16);\n"
+			"float3 soot = float3(0.012, 0.011, 0.01);\n"
+			"float3 dust = float3(0.34, 0.31, 0.27);\n"
 			"return lerp(lerp(dust, soot, saturate(S.r * 1.3)), dust, S.g * (1.0 - S.r));\n"), -500, -250);
 		BlastArtInput(Base, TEXT("S"), Sample);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Base, TEXT(""), MP_BaseColor);
@@ -390,7 +392,7 @@ namespace
 		auto* Spec = BlastArtNode<UMaterialExpressionConstant>(Material, -400, 30);
 		Spec->R = 0.2f;
 		UMaterialEditingLibrary::ConnectMaterialProperty(Spec, TEXT(""), MP_Specular);
-		auto* Opacity = BlastArtCustom(Material, TEXT("BlastScorchOpacity"), CMOT_Float1, TEXT("return saturate(S.a * Fade);\n"), -500, 50);
+		auto* Opacity = BlastArtCustom(Material, TEXT("BlastScorchOpacity"), CMOT_Float1, TEXT("return saturate(S.a * Fade * 1.2);\n"), -500, 50);
 		BlastArtInput(Opacity, TEXT("S"), Sample);
 		BlastArtInput(Opacity, TEXT("Fade"), BlastArtData(Material, 0, 1.0f, -800, 100));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Opacity, TEXT(""), MP_Opacity);

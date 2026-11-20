@@ -553,7 +553,7 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	// pictured at its fireball, its rising smoke and its lingering cloud and scorch; then a molotov's splash of fire.
 	const auto Fx = [this]() { return GetWorld()->GetSubsystem<UBlastFxSubsystem>(); };
 	// Turns the camera to look at a map point a little below eye height, so the blast there is in the picture.
-	const auto LookAtBlast = [=, this](float X, float Y, float Pitch)
+	const auto LookAtBlast = [=, this](float X, float Y, float Pitch, float Aside)
 	{
 		const colony::ThingView* Me = MyView();
 		AProtagonistPawn* Body = Prot() ? Prot()->GetBody() : nullptr;
@@ -561,9 +561,10 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		{
 			return;
 		}
-		// 20 degrees to the left of it: the over-the-shoulder camera looks through the player's own body, which hid the
-		// fireball, the scorch and the molotov's flames in PC rounds 3 to 5. Now the blast sits right of the body.
-		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Y - Me->y, X - Me->x)) - 20.0f;
+		// Aside degrees off it: the over-the-shoulder camera looks through the player's own body, which hid the fireball,
+		// the scorch and the molotov's flames in PC rounds 3 to 5. -20 puts the blast right of the body, +20 left of it
+		// (away from the colonists standing about on the right: PC round 8's linger shot).
+		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Y - Me->y, X - Me->x)) + Aside;
 		Body->Look(FRotator::NormalizeAxis(Yaw - Body->GetYaw()), Pitch - Body->GetPitch());
 		Body->SnapCamera();
 	};
@@ -600,7 +601,7 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		// Off to one side, out of line with the colonists who stand about ahead (PC round 3: they hid the fireball).
 		State->BlastX = Me->x + 9.0f;
 		State->BlastY = Me->y - 7.0f;
-		LookAtBlast(State->BlastX, State->BlastY, 0.0f);
+		LookAtBlast(State->BlastX, State->BlastY, 0.0f, -20.0f);
 		Bridge()->Submit(colony::ExplodeCommand{State->BlastX, State->BlastY, 1.9f, 50.0f, "Bomb", 0.1f});
 	};
 	Fireball.OnFrame = Watch;
@@ -637,12 +638,13 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	Lingering.WarmupSeconds = 0.0f;
 	Lingering.MeasureSeconds = 7.0f;
 	Lingering.ScreenshotAt = 6.5f;
-	// Looking down at the blast's spot, for the scorch mark.
+	// The smoke still hanging over the blast's spot.
 	Lingering.Setup = [=]()
 	{
 		State->MaxSmoke = 0;
-		// From behind the shoulder the spot 11 m off is about 8 degrees down (PC round 3: at -30 it was off the top).
-		LookAtBlast(State->BlastX, State->BlastY, -12.0f);
+		// The hanging cloud, looked at a little upward. The scorch is pictured by blast_scorch: 11 m off it is a sliver at a
+		// grazing angle, with the colonists standing on the right of it and the player's own body on the left (rounds 3 to 9).
+		LookAtBlast(State->BlastX, State->BlastY, 6.0f, -20.0f);
 	};
 	Lingering.OnFrame = Watch;
 	Lingering.Verify = [=, this]()
@@ -664,6 +666,37 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	};
 	Phases.Add(MoveTemp(Lingering));
 
+	// The scorch mark alone, with no smoke over it and looked down at from 5 m (rounds 3 to 7 never saw it behind the smoke).
+	FPhase ScorchOnly;
+	ScorchOnly.Name = TEXT("blast_scorch");
+	ScorchOnly.WarmupSeconds = 0.2f;
+	ScorchOnly.MeasureSeconds = 1.0f;
+	ScorchOnly.ScreenshotAt = 0.5f;
+	ScorchOnly.Setup = [=, this]()
+	{
+		const colony::ThingView* Me = MyView();
+		if (!Me || !Fx())
+		{
+			return;
+		}
+		Fx()->ClearForTest();
+		Fx()->AddScorchForTest(Me->x + 5.0f, Me->y - 2.0f, 1.9f);
+		LookAtBlast(Me->x + 5.0f, Me->y - 2.0f, -30.0f, -20.0f);
+	};
+	ScorchOnly.Verify = [=, this]()
+	{
+		if (!Fx() || !Fx()->IsReady())
+		{
+			return;
+		}
+		Notes.Add(FString::Printf(TEXT("blast_scorch: %d scorch mark(s), look for a dark burnt patch with rays on the ground"), Fx()->GetScorchMarks()));
+		if (Fx()->GetScorchMarks() < 1)
+		{
+			Fail(TEXT("blast_scorch: no scorch mark was made"));
+		}
+	};
+	Phases.Add(MoveTemp(ScorchOnly));
+
 	FPhase Molotov;
 	Molotov.Name = TEXT("blast_molotov");
 	Molotov.WarmupSeconds = 0.2f;
@@ -674,7 +707,7 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		State->Reset();
 		const colony::ThingView* Me = MyView();
 		// Nearer and looked down at, so the colonists standing about don't hide the burning ground (PC round 4).
-		LookAtBlast(Me->x + 6.0f, Me->y + 6.0f, -12.0f);
+		LookAtBlast(Me->x + 6.0f, Me->y + 6.0f, -12.0f, -20.0f);
 		Bridge()->Submit(colony::ExplodeCommand{Me->x + 6.0f, Me->y + 6.0f, 1.1f, 10.0f, "Burn", 0.0f});
 	};
 	Molotov.OnFrame = Watch;
