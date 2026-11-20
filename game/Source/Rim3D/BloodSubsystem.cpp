@@ -12,6 +12,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
@@ -42,7 +44,7 @@ namespace
 	TAutoConsoleVariable<float> GBloodDryMinutes(TEXT("Blood.DryMinutes"), 5.0f, TEXT("Real minutes at 1x for fresh blood to dry dark."), ECVF_Default);
 	TAutoConsoleVariable<int32> GBloodFilth(TEXT("Blood.Filth"), 1, TEXT("1 draws the sim's filth (blood, dirt, vomit, ash) as stains on its cells."), ECVF_Default);
 	TAutoConsoleVariable<float> GBloodDropScale(TEXT("Blood.DropScale"), 1.6f, TEXT("Drawn size of flying drops against their real size (they read better a little big)."), ECVF_Default);
-	TAutoConsoleVariable<float> GBloodSplatScale(TEXT("Blood.SplatScale"), 1.6f,
+	TAutoConsoleVariable<float> GBloodSplatScale(TEXT("Blood.SplatScale"), 1.9f,
 		TEXT("Drawn size of blood splats on the ground and walls (the round shapes fill less of their square than the old spiky ones, and read small from 10 m)."), ECVF_Default);
 	TAutoConsoleVariable<float> GBloodGroundShade(TEXT("Blood.GroundShade"), 0.6f,
 		TEXT("How bright blood on the ground and walls is against blood on bodies (green and blue go down further, so it stays deep red, not pink)."), ECVF_Default);
@@ -186,6 +188,19 @@ void UBloodSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 	Collection.InitializeDependency<USimPawnSubsystem>();
 	SkinBlood = NewObject<USkinBlood>(this);
+
+	// -BloodSplatScale=2 -BloodGroundShade=0.5 on the command line (PC look, 2026-11-20: Blood.SplatScale set through
+	// -ini was only "deferred" and the splats stayed the same size). The console (Blood.SplatScale 2) works too.
+	float FromCommandLine = 0.0f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("BloodSplatScale="), FromCommandLine) && FromCommandLine > 0.0f)
+	{
+		GBloodSplatScale.AsVariable()->Set(FromCommandLine, ECVF_SetByCommandline);
+	}
+	if (FParse::Value(FCommandLine::Get(), TEXT("BloodGroundShade="), FromCommandLine) && FromCommandLine > 0.0f)
+	{
+		GBloodGroundShade.AsVariable()->Set(FromCommandLine, ECVF_SetByCommandline);
+	}
+	UE_LOG(LogBlood, Display, TEXT("Blood.SplatScale %.2f, Blood.GroundShade %.2f"), GBloodSplatScale.GetValueOnGameThread(), GBloodGroundShade.GetValueOnGameThread());
 }
 
 int32 UBloodSubsystem::GetSkinPaints() const
