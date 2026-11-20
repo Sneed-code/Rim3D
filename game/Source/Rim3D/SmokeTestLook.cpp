@@ -708,8 +708,47 @@ void USmokeTestSubsystem::BuildLookPhases()
 			Notes.Add(FString::Printf(TEXT("sunbeams: indoor share %.2f, volumetric fog %d, fog starts %.0f cm, extinction x%.2f, reach %.0f cm"), SkyDust->GetIndoorShare(),
 				DustFog->bEnableVolumetricFog ? 1 : 0, DustFog->StartDistance, DustFog->VolumetricFogExtinctionScale, DustFog->VolumetricFogDistance));
 		}
+		if (const USkySubsystem* SkyScat = Sky())
+		{
+			Notes.Add(FString::Printf(TEXT("sunbeams: sky light volumetric scattering %.2f"), SkyScat->GetSkyLightScattering()));
+		}
 	};
 	Phases.Add(MoveTemp(Sunbeams));
+
+	// 8d, 8e. The same view with thinner and thicker dust (tests for tuning indoorDust.extinction).
+	for (const float Times : {4.0f, 30.0f})
+	{
+		FPhase DustTry;
+		DustTry.Name = FString::Printf(TEXT("sunbeams_dust%.0f"), Times);
+		DustTry.WarmupSeconds = 3.0f;
+		DustTry.MeasureSeconds = 1.0f;
+		DustTry.Setup = [=, this]()
+		{
+			if (IConsoleVariable* DustVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Look.IndoorDust")))
+			{
+				DustVar->Set(Times, ECVF_SetByCode);
+			}
+			SetClock(8.5f, LookSmokeMidsummer);
+			const FVector To = CellWorld(static_cast<float>(State->Room.x) + 3.8f, static_cast<float>(State->Room.y) + 3.6f, 20.0);
+			const FVector From = CellWorld(static_cast<float>(State->Room.x) + 1.4f, static_cast<float>(State->Room.y) + 1.3f, 215.0);
+			ViewFrom(From, (To - From).Rotation());
+		};
+		const FString TryName = DustTry.Name;
+		DustTry.Verify = [=, this]()
+		{
+			NoteShot(*TryName);
+			if (const USkySubsystem* SkyTry = Sky(); SkyTry && SkyTry->GetFog())
+			{
+				Notes.Add(FString::Printf(TEXT("%s: volumetric extinction x%.2f, reach %.0f cm, fog density %.4f"), *TryName, SkyTry->GetFog()->VolumetricFogExtinctionScale,
+					SkyTry->GetFog()->VolumetricFogDistance, SkyTry->GetFog()->FogDensity));
+			}
+			if (IConsoleVariable* DustVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Look.IndoorDust")))
+			{
+				DustVar->Set(-1.0f, ECVF_SetByCode);
+			}
+		};
+		Phases.Add(MoveTemp(DustTry));
+	}
 
 	// 9. A snowy day: a new game on the same seed snows hard through the cold night, then the overseer looks at it at eleven
 	// on a midwinter morning. (The sim's first day is spring; the night is cold enough for the snow to lie.)
