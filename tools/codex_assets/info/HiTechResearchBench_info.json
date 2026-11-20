@@ -1,36 +1,36 @@
 {
  "name": "HiTechResearchBench",
  "kind": "building",
- "turned": "none",
+ "turned": "x-90",
  "boundsCm": {
   "min": [
    -250.0,
-   -110.27,
-   0.0
+   -100.0,
+   -0.0
   ],
   "max": [
    250.0,
-   110.27,
-   200.0
+   100.0,
+   220.55
   ]
  },
  "sizeM": [
   5.0,
-  2.205,
-  2.0
+  2.0,
+  2.205
  ],
  "parts": {
   "HiTechResearchBench": {
    "boundsCm": {
     "min": [
      -250.0,
-     -110.27,
-     0.0
+     -100.0,
+     -0.0
     ],
     "max": [
      250.0,
-     110.27,
-     200.0
+     100.0,
+     220.55
     ]
    },
    "tris": 23934
