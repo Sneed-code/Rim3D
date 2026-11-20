@@ -117,6 +117,12 @@ void UWindowLightSubsystem::Tick(float DeltaTime)
 			Light->SetVisibility(false);
 			Lights.Add(Light);
 		}
+		// Local fog volumes are drawn only from some distance off the camera (20 m by default), and the dust is in the room the
+		// camera stands in: from the camera on (also set in DefaultEngine.ini).
+		if (IConsoleVariable* LfvStart = IConsoleManager::Get().FindConsoleVariable(TEXT("r.LocalFogVolume.GlobalStartDistance")))
+		{
+			LfvStart->Set(0.0f, ECVF_SetByCode);
+		}
 		for (int32 I = 0; I < WinDustPool; ++I)
 		{
 			ULocalFogVolumeComponent* Volume = NewObject<ULocalFogVolumeComponent>(Holder);

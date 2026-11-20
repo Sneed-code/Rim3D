@@ -714,6 +714,8 @@ void USmokeTestSubsystem::BuildLookPhases()
 			const IConsoleVariable* LfvIntoFog = IConsoleManager::Get().FindConsoleVariable(TEXT("r.LocalFogVolume.RenderIntoVolumetricFog"));
 			const IConsoleVariable* LfvSupport = IConsoleManager::Get().FindConsoleVariable(TEXT("r.SupportLocalFogVolumes"));
 			const IConsoleVariable* VolFog = IConsoleManager::Get().FindConsoleVariable(TEXT("r.VolumetricFog"));
+			const IConsoleVariable* LfvStart = IConsoleManager::Get().FindConsoleVariable(TEXT("r.LocalFogVolume.GlobalStartDistance"));
+			Notes.Add(FString::Printf(TEXT("sunbeams: r.LocalFogVolume.GlobalStartDistance %s"), LfvStart ? *LfvStart->GetString() : TEXT("?")));
 			Notes.Add(FString::Printf(TEXT("sunbeams: r.VolumetricFog %s, r.SupportLocalFogVolumes %s, r.LocalFogVolume.RenderIntoVolumetricFog %s, camera at %s"),
 				VolFog ? *VolFog->GetString() : TEXT("?"), LfvSupport ? *LfvSupport->GetString() : TEXT("?"), LfvIntoFog ? *LfvIntoFog->GetString() : TEXT("?"),
 				*(GetWorld()->GetFirstPlayerController() && GetWorld()->GetFirstPlayerController()->PlayerCameraManager ? GetWorld()->GetFirstPlayerController()->PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector).ToString()));
@@ -752,17 +754,20 @@ void USmokeTestSubsystem::BuildLookPhases()
 	};
 	Phases.Add(MoveTemp(FogTest));
 
-	// 8e. The rooms' dust again with the other reading of a local fog volume's size (a test): whichever of sunbeams and this shows
-	// a shaft has the right one.
+	// 8e. A test of the other way: no room dust, a thin fog held in the whole view while the camera is indoors.
 	FPhase DustSize;
-	DustSize.Name = TEXT("sunbeams_base500");
+	DustSize.Name = TEXT("sunbeams_thinfog");
 	DustSize.WarmupSeconds = 3.0f;
 	DustSize.MeasureSeconds = 1.0f;
 	DustSize.Setup = [=, this]()
 	{
-		if (IConsoleVariable* Base = IConsoleManager::Get().FindConsoleVariable(TEXT("Windows.DustBaseCm")))
+		if (IConsoleVariable* Thin = IConsoleManager::Get().FindConsoleVariable(TEXT("Look.IndoorFogDensity")))
 		{
-			Base->Set(500.0f, ECVF_SetByCode);
+			Thin->Set(0.06f, ECVF_SetByCode);
+		}
+		if (IConsoleVariable* NoDust = IConsoleManager::Get().FindConsoleVariable(TEXT("Windows.Dust")))
+		{
+			NoDust->Set(0.0f, ECVF_SetByCode);
 		}
 		SetClock(8.5f, LookSmokeMidsummer);
 		const FVector To = CellWorld(static_cast<float>(State->Room.x) + 3.8f, static_cast<float>(State->Room.y) + 3.6f, 20.0);
@@ -771,14 +776,14 @@ void USmokeTestSubsystem::BuildLookPhases()
 	};
 	DustSize.Verify = [=, this]()
 	{
-		NoteShot(TEXT("sunbeams_base500"));
-		if (const UWindowLightSubsystem* SizeLights = GetWorld()->GetSubsystem<UWindowLightSubsystem>())
+		NoteShot(TEXT("sunbeams_thinfog"));
+		if (IConsoleVariable* Thin = IConsoleManager::Get().FindConsoleVariable(TEXT("Look.IndoorFogDensity")))
 		{
-			Notes.Add(FString::Printf(TEXT("sunbeams_base500: %s"), *SizeLights->DescribeDust()));
+			Thin->Set(-1.0f, ECVF_SetByCode);
 		}
-		if (IConsoleVariable* Base = IConsoleManager::Get().FindConsoleVariable(TEXT("Windows.DustBaseCm")))
+		if (IConsoleVariable* NoDust = IConsoleManager::Get().FindConsoleVariable(TEXT("Windows.Dust")))
 		{
-			Base->Set(50.0f, ECVF_SetByCode);
+			NoDust->Set(0.3f, ECVF_SetByCode);
 		}
 	};
 	Phases.Add(MoveTemp(DustSize));

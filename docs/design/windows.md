@@ -92,7 +92,7 @@ window near the camera (the 8 nearest, `Windows.DustRooms`) gets a local fog vol
 to roof, with an even haze (`Windows.Dust`, 0.3 extinction per metre, warm grey albedo) that the volumetric fog lights where the
 sun comes in through a window, so the beam shows as a soft shaft across the shadowed room while the outdoors stays clear.
 Under a roof the volumetric fog also starts at the camera (outdoors it starts 5 m off) and reaches 30 m (`data/look.json`
-`indoorDust`). The volume's size at scale 1 is `Windows.DustBaseCm` (50 cm radius; the `sunbeams_base500` test shot tries 500). The `sunbeams_fogtest` shot holds thick fog in the room (`Look.IndoorFogDensity`) to show the volumetric fog is lit there. Tries that did not work: thickening the fog everywhere four times (faint shafts, milky view outside), and a
+`indoorDust`). The volume's size at scale 1 is `Windows.DustBaseCm` (50 cm radius), and local fog volumes are drawn from the camera on (`r.LocalFogVolume.GlobalStartDistance=0`; by default they start 20 m off, which hid the dust in the camera's own room). The `sunbeams_thinfog` test shot tries the other way, a thin fog in the whole view while indoors. The `sunbeams_fogtest` shot holds thick fog in the room (`Look.IndoorFogDensity`) to show the volumetric fog is lit there. Tries that did not work: thickening the fog everywhere four times (faint shafts, milky view outside), and a
 box with a volume material (the volumetric fog takes volume materials from particles only, so nothing showed). Needs a quality
 step with volumetric fog (High, Epic). The `sunbeams` shot notes the fog's numbers and the dusty rooms.
 
