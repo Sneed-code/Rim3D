@@ -1,0 +1,156 @@
+{
+	"test": "wallclimb",
+	"status": "pass",
+	"durationSeconds": 125.25162719935179,
+	"errors": [],
+	"gpu": "NVIDIA GeForce RTX 5080",
+	"resolution": "888x500",
+	"phases": [
+		{
+			"phase": "morning",
+			"frames": 58,
+			"avgFps": 82.465572298628814,
+			"p95FrameMs": 6.055999755859375,
+			"medianGameThreadMs": 4.8260002136230469,
+			"medianRenderThreadMs": 5.3119001388549805,
+			"medianGpuMs": 4.1052999496459961,
+			"actors": 0,
+			"screenshot": "wallclimb/morning.png"
+		},
+		{
+			"phase": "ring",
+			"frames": 175,
+			"avgFps": 174.03772875107541,
+			"p95FrameMs": 6.0188994407653809,
+			"medianGameThreadMs": 5.008699893951416,
+			"medianRenderThreadMs": 5.3796000480651855,
+			"medianGpuMs": 3.8896999359130859,
+			"actors": 0,
+			"screenshot": "wallclimb/ring.png"
+		},
+		{
+			"phase": "climb-12",
+			"frames": 160,
+			"avgFps": 158.89980904882529,
+			"p95FrameMs": 7.0079007148742676,
+			"medianGameThreadMs": 5.3008999824523926,
+			"medianRenderThreadMs": 5.7744998931884766,
+			"medianGpuMs": 4.5054998397827148,
+			"actors": 0,
+			"screenshot": "wallclimb/climb-12.png"
+		},
+		{
+			"phase": "climb-30",
+			"frames": 158,
+			"avgFps": 157.08190394239659,
+			"p95FrameMs": 7.0283970832824707,
+			"medianGameThreadMs": 5.2702999114990234,
+			"medianRenderThreadMs": 5.8945999145507812,
+			"medianGpuMs": 4.5954999923706055,
+			"actors": 0,
+			"screenshot": "wallclimb/climb-30.png"
+		},
+		{
+			"phase": "climb-50",
+			"frames": 157,
+			"avgFps": 156.29661819095048,
+			"p95FrameMs": 6.9674997329711914,
+			"medianGameThreadMs": 5.2589998245239258,
+			"medianRenderThreadMs": 5.9414000511169434,
+			"medianGpuMs": 4.6624999046325684,
+			"actors": 0,
+			"screenshot": "wallclimb/climb-50.png"
+		},
+		{
+			"phase": "climb-70",
+			"frames": 158,
+			"avgFps": 157.76003120954621,
+			"p95FrameMs": 6.717402458190918,
+			"medianGameThreadMs": 5.2523999214172363,
+			"medianRenderThreadMs": 5.9250001907348633,
+			"medianGpuMs": 4.6501002311706543,
+			"actors": 0,
+			"screenshot": "wallclimb/climb-70.png"
+		},
+		{
+			"phase": "climb-75",
+			"frames": 157,
+			"avgFps": 156.34483669760982,
+			"p95FrameMs": 7.2405004501342773,
+			"medianGameThreadMs": 5.2786002159118652,
+			"medianRenderThreadMs": 5.9025998115539551,
+			"medianGpuMs": 4.6497001647949219,
+			"actors": 0,
+			"screenshot": "wallclimb/climb-75.png"
+		},
+		{
+			"phase": "climb-79",
+			"frames": 157,
+			"avgFps": 155.675157607161,
+			"p95FrameMs": 7.0899019241333008,
+			"medianGameThreadMs": 5.1507000923156738,
+			"medianRenderThreadMs": 5.8794999122619629,
+			"medianGpuMs": 4.6262001991271973,
+			"actors": 0,
+			"screenshot": "wallclimb/climb-79.png"
+		},
+		{
+			"phase": "climb-84",
+			"frames": 154,
+			"avgFps": 153.84873605816099,
+			"p95FrameMs": 7.7600998878479004,
+			"medianGameThreadMs": 5.2277998924255371,
+			"medianRenderThreadMs": 5.9981999397277832,
+			"medianGpuMs": 4.631199836730957,
+			"actors": 0,
+			"screenshot": "wallclimb/climb-84.png"
+		},
+		{
+			"phase": "climb-92",
+			"frames": 160,
+			"avgFps": 158.66198740721683,
+			"p95FrameMs": 6.9134011268615723,
+			"medianGameThreadMs": 4.9706997871398926,
+			"medianRenderThreadMs": 5.9426999092102051,
+			"medianGpuMs": 4.6269001960754395,
+			"actors": 0,
+			"screenshot": "wallclimb/climb-92.png"
+		},
+		{
+			"phase": "climb-98",
+			"frames": 158,
+			"avgFps": 157.44903925216238,
+			"p95FrameMs": 7.0258007049560547,
+			"medianGameThreadMs": 5.215400218963623,
+			"medianRenderThreadMs": 5.9828000068664551,
+			"medianGpuMs": 4.6409997940063477,
+			"actors": 0,
+			"screenshot": "wallclimb/climb-98.png"
+		},
+		{
+			"phase": "on-top",
+			"frames": 158,
+			"avgFps": 156.52103255796416,
+			"p95FrameMs": 7.2108993530273438,
+			"medianGameThreadMs": 4.9822998046875,
+			"medianRenderThreadMs": 5.9850001335144043,
+			"medianGpuMs": 4.7495999336242676,
+			"actors": 0,
+			"screenshot": "wallclimb/on-top.png"
+		}
+	],
+	"notes": [
+		"ring: 28 wall climbs, 0 stairs/ladders, wall climb speed 0.15, climber found",
+		"climb-12: climb 0.12 wallClimb 1 up 1 level 0, root 29 cm up, 22 cm off the face; foot_l 36 up 19 off foot_r 39 up 46 off ball_l 31 up 7 off ball_r 31 up 35 off hand_l 93 up 3 off hand_r 98 up 4 off",
+		"climb-30: climb 0.30 wallClimb 1 up 1 level 0, root 72 cm up, 22 cm off the face; foot_l 120 up 8 off foot_r 117 up 1 off ball_l 124 up -5 off ball_r 105 up -6 off hand_l 197 up -0 off hand_r 195 up -3 off",
+		"climb-50: climb 0.50 wallClimb 1 up 1 level 0, root 119 cm up, 22 cm off the face; foot_l 96 up 27 off foot_r 140 up 40 off ball_l 86 up 18 off ball_r 138 up 35 off hand_l 158 up 10 off hand_r 156 up 9 off",
+		"climb-70: climb 0.70 wallClimb 1 up 1 level 0, root 167 cm up, 22 cm off the face; foot_l 135 up 51 off foot_r 159 up 19 off ball_l 123 up 44 off ball_r 153 up 7 off hand_l 178 up 20 off hand_r 199 up -11 off",
+		"climb-75: climb 0.75 wallClimb 1 up 1 level 0, root 179 cm up, 22 cm off the face; foot_l 150 up 52 off foot_r 159 up 19 off ball_l 138 up 46 off ball_r 153 up 7 off hand_l 190 up 20 off hand_r 213 up -9 off",
+		"climb-79: climb 0.79 wallClimb 1 up 1 level 0, root 189 cm up, 22 cm off the face; foot_l 156 up 53 off foot_r 159 up 19 off ball_l 144 up 47 off ball_r 153 up 7 off hand_l 200 up 21 off hand_r 223 up -8 off",
+		"climb-84: climb 0.84 wallClimb 1 up 1 level 0, root 235 cm up, 7 cm off the face; foot_l 244 up -14 off foot_r 245 up 29 off ball_l 243 up -28 off ball_r 237 up 18 off hand_l 281 up 3 off hand_r 305 up 37 off",
+		"climb-92: climb 0.92 wallClimb 1 up 1 level 0, root 300 cm up, -22 cm off the face; foot_l 308 up -33 off foot_r 311 up 7 off ball_l 303 up -45 off ball_r 305 up -5 off hand_l 376 up -33 off hand_r 375 up -6 off",
+		"climb-98: climb 0.98 wallClimb 1 up 1 level 0, root 300 cm up, -44 cm off the face; foot_l 308 up -55 off foot_r 311 up -15 off ball_l 303 up -68 off ball_r 305 up -27 off hand_l 376 up -55 off hand_r 376 up -29 off",
+		"on-top: level 1, wall clips played 1, biggest foot move in one frame on the face 17.2 cm",
+		"on-top: climb 0.00 wallClimb 0 up 0 level 1, root 300 cm up, -350 cm off the face; foot_l 308 up -362 off foot_r 310 up -334 off ball_l 301 up -373 off ball_r 303 up -335 off hand_l 373 up -363 off hand_r 375 up -339 off"
+	]
+}
