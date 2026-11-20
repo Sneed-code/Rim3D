@@ -1235,11 +1235,34 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				if (State->StepTime > 2.6f)
 				{
 					const bool bSwitched = State->FlickFrom != colony::kNoEntity && P->GetFocusTarget() != State->FlickFrom;
-					Notes.Add(FString::Printf(TEXT("gunrange: flick from %u to %u (%s), %d flicks"), entt::to_integral(State->FlickFrom),
-						entt::to_integral(P->GetFocusTarget()), bSwitched ? TEXT("switched") : TEXT("DID NOT SWITCH"), P->GetFlicksSent()));
-					if (!bSwitched)
+					// Who a flick could have gone to: the range's living women within Tab's 20 m, other than the one held
+					// (by this point of the tour most may be dead; then there is nothing to test).
+					int32 Beside = 0;
+					const colony::Snapshot& Now = B->GetCurrentSnapshot();
+					const colony::ThingView* MeNow = Now.find(State->Player);
+					for (const FGunRangeTarget& T : State->Targets)
+					{
+						const colony::ThingView* View = Now.find(T.Thing);
+						if (MeNow && View && !View->dead && T.Thing != State->FlickFrom &&
+							FVector2D::Distance(FVector2D(View->x, View->y), FVector2D(MeNow->x, MeNow->y)) < 19.5f)
+						{
+							++Beside;
+						}
+					}
+					Notes.Add(FString::Printf(TEXT("gunrange: flick from %u to %u (%s), %d flicks, %d living targets within 20 m besides the one held"),
+						entt::to_integral(State->FlickFrom), entt::to_integral(P->GetFocusTarget()), bSwitched ? TEXT("switched") : TEXT("DID NOT SWITCH"),
+						P->GetFlicksSent(), Beside));
+					if (State->FlickFrom == colony::kNoEntity)
+					{
+						Fail(TEXT("gunrange: Tab locked on to nobody, so the mouse flick could not be tried"));
+					}
+					else if (!bSwitched && Beside > 0)
 					{
 						Fail(TEXT("gunrange: a mouse flick did not switch the lock-on target"));
+					}
+					else if (!bSwitched)
+					{
+						Notes.Add(TEXT("gunrange: flick not tested: nobody alive near enough beside the lock"));
 					}
 					Picture(TEXT("focus_flick"));
 					State->FlickFrom = colony::kNoEntity;
