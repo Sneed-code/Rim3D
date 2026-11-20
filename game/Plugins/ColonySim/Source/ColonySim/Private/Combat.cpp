@@ -1,4 +1,5 @@
 #include "ColonySim/Combat.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Genes.h"
 
 #include "ColonySim/Apparel.h"
@@ -1829,6 +1830,13 @@ void CombatSystem::emitHit(Entity projectile, const Projectile& p, const TraceHi
     e.y = hit.y;
     e.z = hit.z;
     e.cell = CellPos{static_cast<int>(std::floor(hit.x)), static_cast<int>(std::floor(hit.y)), p.level};
+    // What it struck, for its sound (docs/design/sound.md "Every weapon, surface and job"): the wall and its stuff.
+    const entt::registry& reg = things_.registry();
+    if (hit.kind == ProjectileHitKind::Building && hit.thing != kNoEntity && reg.valid(hit.thing)) {
+        if (const Thing* t = reg.try_get<Thing>(hit.thing)) e.struckDef = t->def;
+        if (const MadeOf* made = reg.try_get<MadeOf>(hit.thing)) e.struckStuff = made->stuff;
+        else if (const BuiltOf* built = reg.try_get<BuiltOf>(hit.thing)) e.struckStuff = built->stuff;
+    }
     events_->push_back(std::move(e));
 }
 
@@ -1840,6 +1848,7 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
         // A rocket does nothing on its own: wherever it ends (pawn, wall, ground, out of range) it bursts.
         emitHit(projectile, p, h, 0.0f);
         Explosion ex;
+        ex.sourceDef = p.def;
         ex.x = hit.x;
         ex.y = hit.y;
         ex.z = hit.z;
@@ -2499,6 +2508,7 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
         e.thing = ex.source;
         e.target = ex.instigator;
         e.def = ex.damageType;
+        e.struckDef = ex.sourceDef;
         e.amount = ex.radius;
         e.x = ex.x;
         e.y = ex.y;

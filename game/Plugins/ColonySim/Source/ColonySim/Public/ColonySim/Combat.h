@@ -210,6 +210,7 @@ struct Explosion {
     Entity source = kNoEntity;      // the grenade entity, for the event
     Entity instigator = kNoEntity;  // who threw or planted it
     uint64_t seed = 0;          // where its random choices come from
+    DefId sourceDef;            // the projectile, grenade or shell def that burst (for its sound), invalid if none
 };
 
 struct ExplosionResult {

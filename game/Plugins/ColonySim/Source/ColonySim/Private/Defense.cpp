@@ -605,6 +605,7 @@ void DefenseSystem::spring(Entity trap, Entity victim, Rng& rng) {
         const DefenseModel::Blast* blast = model_->blast(def);
         if (blast != nullptr) {
             Explosion ex;
+            ex.sourceDef = def;
             ex.x = pos.x;
             ex.y = pos.y;
             ex.z = map_.heightAt(pos.x, pos.y);

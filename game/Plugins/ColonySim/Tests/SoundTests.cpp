@@ -3,6 +3,7 @@
 
 #include <doctest.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -34,8 +35,9 @@ TEST_CASE("sound: every cue a def names is a SoundCues def, with a placeholder t
         for (DefId id : db.idsOfKind(kind)) {
             const Def& def = db.get(id);
             for (const std::string& slot : def.keys("visual.sound")) {
-                if (slot == "material") continue;  // what it is made of, not a cue
+                if (slot == "material" || slot == "impactSet") continue;  // what it is made of, a family: not cues
                 const std::string cue = soundSlot(def, slot.c_str());
+                if (cue.empty()) continue;  // an empty slot clears the parent's (a bow throws no spent case)
                 const Def* c = db.find("SoundCues", cue);
                 CHECK_MESSAGE(c != nullptr, def.defName() << " " << slot << " -> " << cue);
                 ++named;
@@ -112,9 +114,9 @@ TEST_CASE("sound: events turn into cues") {
     hit.hit = ProjectileHitKind::Pawn;
     CHECK(soundTestPlay(db, hit).at(0).cue == "Flesh_Bullet");
     hit.hit = ProjectileHitKind::Armor;
-    CHECK(soundTestPlay(db, hit).at(0).cue == "Impact_Armor");
+    CHECK(soundTestPlay(db, hit).at(0).cue == "Impact_Steel");
     hit.hit = ProjectileHitKind::Rock;
-    CHECK(soundTestPlay(db, hit).at(0).cue == "Impact_Rock");
+    CHECK(soundTestPlay(db, hit).at(0).cue == "Impact_Stone");
     hit.hit = ProjectileHitKind::Gone;
     CHECK(soundTestPlay(db, hit).empty());
 
@@ -273,15 +275,13 @@ TEST_CASE("sound: a woman grunts at some hard melee hits and screams when downed
     // The club's own hit sound (wood on flesh) still plays with it.
     CHECK(soundTestPlay(db, mh, defOf).at(0).cue == "Hit_Wood_Flesh");
 
-    // 3 damage or less, a blocked or deflected blow, a man (no male voice yet), an animal, or no gender callback: no grunt.
+    // 3 damage or less, a blocked or deflected blow, an animal, or no gender callback: no grunt.
     bool any = false;
     for (int i = 0; i < 100; ++i) {
         mh.x = static_cast<float>(i);
         mh.amount = 3.0f;
         any = any || !voices(mh).empty();
         mh.amount = 8.0f;
-        mh.target = man;
-        any = any || !voices(mh).empty();
         mh.target = beast;
         any = any || !voices(mh).empty();
         mh.target = woman;
@@ -305,8 +305,8 @@ TEST_CASE("sound: a woman grunts at some hard melee hits and screams when downed
     CHECK(v[0].voice == SoundVoice::Scream);
     CHECK(v[0].entity == woman);
     CHECK(v[0].x == doctest::Approx(5.5f));
-    down.thing = man;
-    CHECK(voices(down).empty());
+    down.thing = man;  // men have recordings now too (2026-11-20)
+    CHECK(voices(down).at(0).cue == "Voice_MaleScream");
 
     // Killed in a fight screams, bleeding out from it too; cold or illness do not.
     Event died;
@@ -493,4 +493,217 @@ TEST_CASE("sound: shots and blasts have a far layer and carry like real ones") {
     }
     CHECK(db.find("SoundCues", "Shot_Rifle")->number("range") > db.find("SoundCues", "Shot_Pistol")->number("range"));
     CHECK(db.find("SoundCues", "Explosion_Blast")->number("range") > db.find("SoundCues", "Shot_Rifle")->number("range"));
+}
+
+// sneed, 2026-11-20 (docs/design/sound.md "Every weapon, surface and job").
+TEST_CASE("sound: every gun sounds like itself") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    const auto shotOf = [&](const char* gun) {
+        Event shot;
+        shot.type = EventType::ShotFired;
+        shot.def = db.idOf("Things", gun);
+        return soundTestPlay(db, shot).at(0).cue;
+    };
+    CHECK(shotOf("Gun_Autopistol") == "Shot_Pistol");
+    CHECK(shotOf("Gun_MachinePistol") == "Shot_MachinePistol");
+    CHECK(shotOf("Gun_HeavySMG") == "Shot_HeavySMG");
+    CHECK(shotOf("Gun_AssaultRifle") == "Shot_AssaultRifle");
+    CHECK(shotOf("Gun_LMG") == "Shot_LMG");
+    CHECK(shotOf("Gun_Minigun") == "Shot_Minigun");
+    CHECK(shotOf("Gun_SniperRifle") == "Shot_SniperRifle");
+    CHECK(shotOf("Gun_ChainShotgun") == "Shot_ChainShotgun");
+    CHECK(shotOf("Gun_ChargeRifle") == "Shot_Charge");
+    CHECK(shotOf("Gun_ShortBow") == "Shot_Bow");
+    CHECK(shotOf("Gun_Greatbow") == "Shot_Greatbow");
+    CHECK(shotOf("Gun_Pila") == "Throw_Pila");
+    CHECK(shotOf("Gun_TripleRocketLauncher") == "Shot_Rocket");
+    CHECK(shotOf("Gun_GrenadeLauncher") == "Shot_Launcher");
+    CHECK(shotOf("Gun_AutocannonTurret") == "Shot_Autocannon");
+    CHECK(shotOf("Gun_Mortar") == "Shot_Mortar");
+    // No two hand guns of different kinds share a cue.
+    std::vector<std::string> seen;
+    for (const char* g : {"Gun_Revolver", "Gun_Autopistol", "Gun_MachinePistol", "Gun_HeavySMG", "Gun_BoltActionRifle", "Gun_PumpShotgun",
+                          "Gun_AssaultRifle", "Gun_LMG", "Gun_Minigun", "Gun_SniperRifle", "Gun_ChainShotgun", "Gun_ChargeRifle",
+                          "Gun_ShortBow", "Gun_Greatbow", "Gun_Pila"}) {
+        const std::string cue = shotOf(g);
+        CHECK_MESSAGE(std::find(seen.begin(), seen.end(), cue) == seen.end(), g << " shares " << cue);
+        seen.push_back(cue);
+    }
+
+    // A firearm's spent case tinkles half a second later; a bow throws none.
+    Event shot;
+    shot.type = EventType::ShotFired;
+    shot.thing = static_cast<Entity>(3);
+    shot.def = db.idOf("Things", "Gun_AssaultRifle");
+    auto plays = soundTestPlay(db, shot);
+    if (plays.size() != 2) { CHECK(plays.size() == 2); return; }
+    CHECK(plays[1].cue == "Gun_Shell");
+    CHECK(plays[1].delay > 0.2f);
+    shot.def = db.idOf("Things", "Gun_RecurveBow");
+    CHECK(soundTestPlay(db, shot).size() == 1);
+}
+
+TEST_CASE("sound: bullets and arrows sound by what they strike") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    Event hit;
+    hit.type = EventType::ProjectileHit;
+    hit.def = db.idOf("Projectiles", "Bullet_AssaultRifle");
+    hit.hit = ProjectileHitKind::Ground;
+    CHECK(soundImpactCue(db, hit) == "Impact_Dirt");
+    const SoundStepAt water = [](CellPos) { return std::string("Step_Water"); };
+    const SoundStepAt sand = [](CellPos) { return std::string("Step_Sand"); };
+    const SoundStepAt floor = [](CellPos) { return std::string("Step_Wood"); };
+    CHECK(soundImpactCue(db, hit, water) == "Impact_Water");
+    CHECK(soundImpactCue(db, hit, sand) == "Impact_Sand");
+    CHECK(soundImpactCue(db, hit, floor) == "Impact_Wood");
+    // A wall by its stuff: wood, steel, stone; a wall that says nothing is stone.
+    hit.hit = ProjectileHitKind::Building;
+    hit.struckDef = db.idOf("Things", "Wall");
+    hit.struckStuff = db.idOf("Things", "WoodLog");
+    CHECK(soundImpactCue(db, hit) == "Impact_Wood");
+    hit.struckStuff = db.idOf("Things", "Steel");
+    CHECK(soundImpactCue(db, hit) == "Impact_Steel");
+    hit.struckStuff = db.idOf("Things", "BlocksGranite");
+    CHECK(soundImpactCue(db, hit) == "Impact_Stone");
+    hit.struckStuff = DefId{};
+    hit.struckDef = DefId{};
+    CHECK(soundImpactCue(db, hit) == "Impact_Stone");
+    hit.hit = ProjectileHitKind::Pawn;
+    CHECK(soundImpactCue(db, hit) == "Flesh_Bullet");
+
+    // Arrows thunk into flesh and wood; steel rings like stone.
+    hit.def = db.idOf("Projectiles", "Arrow_Recurve");
+    CHECK(soundImpactCue(db, hit) == "Arrow_Flesh");
+    hit.hit = ProjectileHitKind::Ground;
+    CHECK(soundImpactCue(db, hit) == "Arrow_Dirt");
+    hit.hit = ProjectileHitKind::Armor;
+    CHECK(soundImpactCue(db, hit) == "Arrow_Stone");
+    hit.hit = ProjectileHitKind::Building;
+    hit.struckStuff = db.idOf("Things", "WoodLog");
+    CHECK(soundImpactCue(db, hit) == "Arrow_Wood");
+
+    // A bullet off rock whines away a quarter of the time, decided by the hit itself.
+    hit.def = db.idOf("Projectiles", "Bullet_AssaultRifle");
+    hit.hit = ProjectileHitKind::Rock;
+    int ricochets = 0;
+    for (int i = 0; i < 400; ++i) {
+        hit.x = static_cast<float>(i) * 0.37f;
+        hit.y = static_cast<float>(i % 17);
+        const auto plays = soundTestPlay(db, hit);
+        ricochets += (plays.size() == 2 && plays[1].cue == "Ricochet") ? 1 : 0;
+    }
+    CHECK(ricochets > 60);
+    CHECK(ricochets < 140);
+    // Never off flesh or an arrow.
+    hit.hit = ProjectileHitKind::Pawn;
+    CHECK(soundTestPlay(db, hit).size() == 1);
+}
+
+TEST_CASE("sound: blasts by what burst, with debris after a big one") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    Event boom;
+    boom.type = EventType::Explosion;
+    boom.def = db.idOf("DamageTypes", "Bomb");
+    boom.amount = 1.9f;
+    auto plays = soundTestPlay(db, boom);
+    CHECK(plays.at(0).cue == "Explosion_Blast");
+    CHECK(plays.size() == 1);  // a small one throws no debris
+    boom.struckDef = db.idOf("Projectiles", "Bullet_Shell_HighExplosive");
+    boom.amount = 2.9f;
+    plays = soundTestPlay(db, boom);
+    CHECK(plays.at(0).cue == "Explosion_Mortar");
+    if (plays.size() != 2) { CHECK(plays.size() == 2); return; }
+    CHECK(plays[1].cue == "Explosion_Debris");
+    CHECK(plays[1].delay > 0.0f);
+    boom.struckDef = db.idOf("Projectiles", "Rocket_Doomsday");
+    boom.amount = 7.8f;
+    CHECK(soundTestPlay(db, boom).at(0).cue == "Explosion_Large");
+    boom.struckDef = DefId{};
+    CHECK(soundTestPlay(db, boom).at(0).cue == "Explosion_Large");  // big by its size alone
+    boom.struckDef = db.idOf("Projectiles", "Shell_EMP");
+    boom.amount = 3.5f;
+    plays = soundTestPlay(db, boom);
+    CHECK(plays.at(0).cue == "Explosion_EMP");
+    CHECK(plays.size() == 1);
+    boom.struckDef = db.idOf("Projectiles", "Shell_Smoke");
+    CHECK(soundTestPlay(db, boom).at(0).cue == "Explosion_Smoke");
+}
+
+TEST_CASE("sound: gore, a felled tree and the work by the job") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    const Entity pawn = static_cast<Entity>(7);
+    const DefId human = db.idOf("Things", "Human");
+    const SoundDefOf defOf = [&](Entity e) { return e == pawn ? human : DefId{}; };
+    Event lost;
+    lost.type = EventType::PawnPartLost;
+    lost.thing = pawn;
+    lost.message = "Leg";
+    auto plays = soundTestPlay(db, lost, defOf);
+    const auto has = [&](const char* cue) {
+        return std::any_of(plays.begin(), plays.end(), [&](const SoundPlay& p) { return p.cue == cue; });
+    };
+    CHECK(has("Gore_Sever"));
+    CHECK(has("Gore_Splat"));
+    lost.message = "Head";
+    plays = soundTestPlay(db, lost, defOf);
+    CHECK(has("Gore_Decap"));
+
+    Event felled;
+    felled.type = EventType::PlantRemoved;
+    felled.message = "felled";
+    felled.cell = {2, 3, 0};
+    CHECK(soundTestPlay(db, felled).at(0).cue == "Tree_Fall");
+    felled.message = "cut";
+    CHECK(soundTestPlay(db, felled).empty());
+
+    Event act;
+    act.type = EventType::PawnAction;
+    act.thing = pawn;
+    act.action = PawnAction::Cut;
+    act.cell = {4, 4, 0};
+    act.struckDef = db.idOf("Things", "Plant_TreeOak");
+    CHECK(soundTestPlay(db, act).at(0).cue == "Work_Chop");
+    act.struckDef = db.idOf("Things", "Plant_Grass");
+    CHECK(soundTestPlay(db, act).at(0).cue == "Work_PlantCut");
+    act.action = PawnAction::Harvest;
+    act.message = "sow";
+    CHECK(soundTestPlay(db, act).at(0).cue == "Work_Sow");
+    act.message.clear();
+    CHECK(soundTestPlay(db, act).at(0).cue == "Work_Harvest");
+    act.action = PawnAction::Deconstruct;
+    CHECK(soundTestPlay(db, act).at(0).cue == "Work_Deconstruct");
+    act.action = PawnAction::Repair;
+    CHECK(soundTestPlay(db, act).at(0).cue == "Work_Repair");
+    act.action = PawnAction::LieDown;
+    CHECK(soundTestPlay(db, act).empty());  // on the ground: no creak
+    act.target = static_cast<Entity>(11);
+    CHECK(soundTestPlay(db, act).at(0).cue == "Bed_Creak");
+}
+
+TEST_CASE("sound: a man grunts and screams too") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    const Entity pawn = static_cast<Entity>(7);
+    const DefId human = db.idOf("Things", "Human");
+    const SoundDefOf defOf = [&](Entity e) { return e == pawn ? human : DefId{}; };
+    const SoundGenderOf man = [](Entity) { return SoundGender::Male; };
+    Event down;
+    down.type = EventType::PawnDowned;
+    down.thing = pawn;
+    std::vector<SoundPlay> out;
+    soundForEvent(db, down, defOf, out, man);
+    CHECK(std::any_of(out.begin(), out.end(), [](const SoundPlay& p) { return p.cue == "Voice_MaleScream" && p.voice == SoundVoice::Scream; }));
+}
+
+TEST_CASE("sound: what a step says about the ground") {
+    CHECK(soundSurfaceOfStep("Step_Grass") == "Dirt");
+    CHECK(soundSurfaceOfStep("Step_Mud") == "Dirt");
+    CHECK(soundSurfaceOfStep("Step_Sand") == "Sand");
+    CHECK(soundSurfaceOfStep("Step_Water") == "Water");
+    CHECK(soundSurfaceOfStep("Step_Tile") == "Stone");
+    CHECK(soundSurfaceOfStep("Step_Wood") == "Wood");
 }

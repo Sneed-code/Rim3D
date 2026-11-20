@@ -151,6 +151,13 @@ EVENT_CUES = {
     "Hit_Wood_Flesh", "Hit_Wood_Wood", "Hit_Wood_Steel", "Hit_Wood_Stone",
     "Hit_Steel_Flesh", "Hit_Steel_Wood", "Hit_Steel_Steel", "Hit_Steel_Stone",
     "Ui_KillConfirm",  # Unreal, the kill feed on the player's own kill (KillFeedSubsystem.cpp)
+    # Impacts by surface (soundImpactCue): bullets and arrows on what they struck; ricochets off stone and steel
+    "Impact_Wood", "Impact_Steel", "Impact_Stone", "Impact_Dirt", "Impact_Sand", "Impact_Water", "Impact_Glass",
+    "Arrow_Flesh", "Arrow_Wood", "Arrow_Stone", "Arrow_Dirt", "Ricochet",
+    # Blasts by size and their debris, gore when a part comes off, a felled tree (soundForEvent)
+    "Explosion_Large", "Explosion_Debris", "Gore_Sever", "Gore_Decap", "Gore_Splat", "Tree_Fall",
+    # Work by the job (soundWorkCue): plants cut, soil dug to sow, buildings taken apart, repairs, drills, a bed
+    "Work_PlantCut", "Work_Sow", "Work_Deconstruct", "Work_Repair", "Work_Drill", "Bed_Creak",
 }
 
 
@@ -236,6 +243,12 @@ def check_sound_cues(defs_by_kind):
                 if slot == "material":  # what it sounds like when struck or striking (melee by material)
                     if cue not in ("Wood", "Steel", "Stone", "Flesh"):
                         problems.append(f"{file}: {kind} '{name}' visual.sound.material must be Wood, Steel, Stone or Flesh")
+                    continue
+                if slot == "impactSet":  # the family of impact cues a projectile uses (soundImpactCue)
+                    if cue not in ("Impact", "Arrow"):
+                        problems.append(f"{file}: {kind} '{name}' visual.sound.impactSet must be Impact or Arrow")
+                    continue
+                if cue == "":  # an empty slot clears what the parent gives (a bow throws no spent case)
                     continue
                 if not isinstance(cue, str) or cue not in cues:
                     problems.append(f"{file}: {kind} '{name}' visual.sound.{slot} names unknown SoundCues def '{cue}'")

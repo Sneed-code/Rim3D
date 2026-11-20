@@ -299,13 +299,15 @@ void JobSystem::dropItems(DefId def, int count, CellPos cell) {
     }
 }
 
-void JobSystem::gatherEvent(Entity pawn, PawnAction action, CellPos cell) {
+void JobSystem::gatherEvent(Entity pawn, PawnAction action, CellPos cell, DefId plant, const char* message) {
     Event event;
     event.type = EventType::PawnAction;
     event.thing = pawn;
     event.def = things_.registry().get<Thing>(pawn).def;
     event.action = action;
     event.cell = cell;
+    event.struckDef = plant;  // the plant or crop, for the sound (a tree is chopped, a bush cut)
+    if (message != nullptr) event.message = message;
     events_.push_back(std::move(event));
 }
 
@@ -532,7 +534,7 @@ JobSystem::StepResult JobSystem::plantWork(Entity pawn, Job& job, std::string& w
     const bool harvest = job.type == JobType::HarvestPlant;
     if (job.walk == 0) {
         job.walk = 2;  // work steps don't walk: this marks that the animation event went out
-        gatherEvent(pawn, harvest ? PawnAction::Harvest : PawnAction::Cut, job.cell);
+        gatherEvent(pawn, harvest ? PawnAction::Harvest : PawnAction::Cut, job.cell, plants_.defAt(job.cell));
     }
     const DefId plant = plants_.defAt(job.cell);
     const Def& def = defs_.get(plant);
@@ -589,7 +591,7 @@ JobSystem::StepResult JobSystem::sowWork(Entity pawn, Job& job, std::string& why
     const Def& def = defs_.get(crop);
     if (job.walk == 0) {
         job.walk = 2;
-        gatherEvent(pawn, PawnAction::Harvest, job.cell);
+        gatherEvent(pawn, PawnAction::Harvest, job.cell, crop, "sow");
     }
     const double sowFactor = gather_.plantSpeed;  // sowing is plant work, a sapling too (not the felling speed-up)
     job.progress += static_cast<float>(speed * sowFactor);

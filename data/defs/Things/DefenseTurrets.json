@@ -2,7 +2,7 @@
   {
     "defName": "Gun_AutocannonTurret", "label": "autocannon turret gun", "source": "RimWorld wiki",
     "category": "Item", "stackLimit": 1, "turretGun": true,
-    "visual": { "sound": { "shot": "Shot_Turret" }, "parts": [{ "shape": "box", "size": [0.9, 0.1, 0.1], "at": [0.2, 0, 0.04], "color": [0.2, 0.2, 0.22] }] },
+    "visual": { "sound": {"shot": "Shot_Autocannon"}, "parts": [{ "shape": "box", "size": [0.9, 0.1, 0.1], "at": [0.2, 0, 0.04], "color": [0.2, 0.2, 0.22] }] },
     "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 105, "accuracyTouch": 0.28, "accuracyShort": 0.72, "accuracyMedium": 0.66, "accuracyLong": 0.5 },
     "verbs": [ { "range": 32.9, "minRange": 8.9, "warmupTime": 45, "burstShotCount": 3, "secondsBetweenBurstShots": 8.5, "defaultProjectile": "Bullet_Autocannon" } ],
     "unverified": ["verbs.0.warmupTime"],
@@ -12,7 +12,7 @@
   {
     "defName": "Gun_UraniumSlugTurret", "keepBurst": true, "label": "uranium slug turret gun", "source": "RimWorld wiki",
     "category": "Item", "stackLimit": 1, "turretGun": true,
-    "visual": { "sound": { "shot": "Shot_Turret" }, "parts": [{ "shape": "box", "size": [1.2, 0.12, 0.12], "at": [0.3, 0, 0.04], "color": [0.18, 0.2, 0.18] }] },
+    "visual": { "sound": {"shot": "Shot_UraniumSlug"}, "parts": [{ "shape": "box", "size": [1.2, 0.12, 0.12], "at": [0.3, 0, 0.04], "color": [0.18, 0.2, 0.18] }] },
     "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 120, "accuracyTouch": 0.22, "accuracyShort": 0.33, "accuracyMedium": 0.44, "accuracyLong": 0.95 },
     "verbs": [ { "range": 45.9, "minRange": 11.9, "warmupTime": 0, "burstShotCount": 1, "secondsBetweenBurstShots": 0, "defaultProjectile": "Bullet_UraniumSlug" } ],
     "unverified": ["stats.accuracyLong"],

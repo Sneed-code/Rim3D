@@ -34,7 +34,8 @@ enum class SoundGender : uint8_t { Unknown, Male, Female };
 
 // One thing to play. The place is `x, y, z` in metres when `hasPos` (z is the base of the cell's level
 // when it came from a cell: Unreal puts it on the ground); else the position of `entity`, followed as it
-// moves; with neither it is heard everywhere (an alarm, a horn).
+// moves; with neither it is heard everywhere (an alarm, a horn). Work at a cell has both: the cell, and the worker in
+// `entity`, so Unreal can repeat a work cue (its `repeat` seconds) while that pawn keeps working.
 struct SoundPlay {
     std::string cue;
     SoundMode mode = SoundMode::Once;
@@ -45,6 +46,7 @@ struct SoundPlay {
     Entity entity = kNoEntity;
     CellPos cell;  // the loop's identity when it has no entity (a fire)
     SoundVoice voice = SoundVoice::None;  // set: `entity` is the pawn whose voice it is (and `x, y, z` where it was)
+    float delay = 0.0f;  // real seconds to wait before it starts (a spent case lands after the shot, debris after a blast)
 };
 
 // The thing's def, so an event that only names an entity (PawnInjured, a bench) can find its slots.
@@ -53,6 +55,10 @@ using SoundDefOf = std::function<DefId(Entity)>;
 
 // A humanlike pawn's gender, for its voice; null or Unknown: no voice sounds.
 using SoundGenderOf = std::function<SoundGender(Entity)>;
+
+// The `step` cue of the ground or floor in a cell (Unreal's StepCueAt), so a bullet in the ground sounds like what it hit:
+// dirt, sand, water, stone, wood. Null: dirt.
+using SoundStepAt = std::function<std::string(CellPos)>;
 
 // The cue in a def's `visual.sound.<slot>`; empty if the def has none.
 COLONY_API std::string soundSlot(const Def& def, const char* slot);
@@ -65,8 +71,21 @@ COLONY_API std::string soundStepCue(const DefDatabase& db, DefId terrain);
 // (`femaleHit`, `femaleScream`, `maleHit`, `maleScream`) also cry out: a hit grunt for a melee hit or a shot that does more than
 // the cue's `minDamage` (3), `chance` of the time (0.5, decided by a hash of the event so it never touches the game's
 // random numbers), and a scream every time when downed and every time a fight kills them (downed first or not).
+//
+// Impacts by surface (sneed, 2026-11-20, docs/design/sound.md "Every weapon, surface and job"): a projectile's
+// `visual.sound.impactSet` ("Impact" for bullets, "Arrow" for arrows and the pila) names the family, and what it struck the
+// surface: `<Set>_<Flesh|Wood|Steel|Stone|Dirt|Sand|Water>`, falling back to the older general cues. Blasts by their source's
+// `explosion` slot or their size; a severed part `Gore_Sever` (`Gore_Decap` for a head); a felled tree `Tree_Fall`.
 COLONY_API void soundForEvent(const DefDatabase& db, const Event& event, const SoundDefOf& defOf,
-                              std::vector<SoundPlay>& out, const SoundGenderOf& genderOf = {});
+                              std::vector<SoundPlay>& out, const SoundGenderOf& genderOf = {},
+                              const SoundStepAt& stepAt = {});
+
+// What a step cue says about the ground for a bullet: "Dirt" (grass, soil, carpet, leaves, mud, snow), "Sand", "Water",
+// "Stone" (stone, tile), "Wood", "Steel" (metal).
+COLONY_API std::string soundSurfaceOfStep(const std::string& stepCue);
+
+// The cue a ProjectileHit plays on what it struck (empty for none): see soundForEvent.
+COLONY_API std::string soundImpactCue(const DefDatabase& db, const Event& event, const SoundStepAt& stepAt = {});
 
 // The lovin sound for a pair (docs/design/sound.md "Lovin"): a man and a woman `Voice_LovinCouple` (sneed's six
 // recordings), two women or a woman alone (`b` Unknown) `Voice_LovinFem` (the three women's ones), two men or a man alone
