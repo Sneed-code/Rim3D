@@ -1,0 +1,96 @@
+MakeHuman headwear + armour preview - 2026-11-21
+Same method as report.txt: C:\Dev\Rim3D	ools\makehuman\mh_export.py + C:\Dev\Rim3D-clothes\scriptsender_views.py, headless Blender 5.2 + MPFB, EEVEE,
+below-normal priority, 3 at a time. Configs: C:\Dev\Rim3D-clothes\cfg_hats\ (make_configs_hats.py); sheets/report: sheets_hats.py.
+Bodies: CreatorMale (short02 hair) / CreatorFemale (long01 hair; skin swapped to MPFB young_caucasian_female, same black-skin workaround).
+Renders: headwear 768x768 head-and-shoulders, armour 500x768 full body; front 3/4 (-35 deg) + back. Neutral grey world + 2 soft suns.
+Files: hats_male.jpg, hats_female.jpg, armour.jpg (contact sheets); individual PNGs in clothes_preview\hats_renders\.
+
+Licence note: the .mhclo headers of several items still say 'AGPL3', which is MakeClothes' default boilerplate. They were downloaded
+from packs labelled CC0 or CC-BY, and the pack label (pack column) is the licence the community site gives. Check before shipping anything AGPL-flagged.
+Triangle counts are the garment mesh as loaded by MPFB (same on both bodies); the anatomy body itself is ~27k tris.
+
+MISSING (not in data\clothes, skipped): gredal_gas_mask, culturalibre_bandana_mask
+
+== HEADWEAR ==
+grinsegold_uncle_joshis_hat
+   found | licence (mhclo): AGPL3 | pack: hats01_cc0.zip | author: grinsegold | 7,168 tris (3,588 verts)
+   clipping: Crown of thorns, not a hat. Sits in the hair on both; no real clipping.
+culturalibre_cl_bowler_hat
+   found | licence (mhclo): CC-BY | pack: hats03_cc-by.zip | author: culturalibre | 2,368 tris (1,186 verts)
+   clipping: Clean. Male: short hair shows under the brim, which looks normal. Female: long hair hangs from under it, fine.
+elvs_male_trilby_hat
+   found | licence (mhclo): CC-by | pack: hats03_cc-by.zip | author: Elvaerwyn | 28,602 tris (14,924 verts)
+   clipping: Clean on both. Very heavy for a hat (28.6k tris).
+elvs_male_flat_cap1
+   found | licence (mhclo): CC BY 4.0 | pack: hats03_cc-by.zip | author: Elvaerwyn | 2,632 tris (1,337 verts)
+   clipping: Clean on both.
+jujube_newsboy_cap
+   found | licence (mhclo): AGPL3 | pack: hats01_cc0.zip | author: Unknown | 996 tris (517 verts)
+   clipping: Mesh has gaps at the top back that show hair/scalp through on both bodies.
+mindfront_patrol_cap
+   found | licence (mhclo): CC BY 4.0 | pack: hats03_cc-by.zip | author: Mindfront (Sweden) | 724 tris (377 verts)
+   clipping: Hair clips through the crown on both. Female: from behind the long hair covers most of the cap.
+mindfront_sherpa_hat
+   found | licence (mhclo): CC BY 4.0 | pack: hats03_cc-by.zip | author: Mindfront (Sweden) | 2,032 tris (1,071 verts)
+   clipping: Male: hair pokes through the top front. Female: hair clips over the top and back. Ear-flap ties hang onto the chest (no body clip).
+elvs_slouchy_beanie1
+   found | licence (mhclo): CC-BY | pack: hats03_cc-by.zip | author: Elvaerwyn | 1,180 tris (615 verts)
+   clipping: Male: mostly clean. Female: long hair clips through the front and back of the beanie.
+aethelraed_unraed_cloche_hat
+   found | licence (mhclo): CC0 | pack: hats01_cc0.zip | author: AEthelraed_Unraed | 771 tris (441 verts)
+   clipping: Bad. Hair shows through all over on both, so it reads as camo patches in the hair.
+drednicolson_pith_helmet
+   found | licence (mhclo): CCBY | pack: hats04_cc-by.zip | author: DredNicolson | 4,676 tris (2,380 verts)
+   clipping: Clean on both.
+maciekg_leather_helmet
+   found | licence (mhclo): AGPL3 | pack: hats04_cc-by.zip | author: MGGames | 928 tris (495 verts)
+   clipping: Male: hair pokes through the top. Female: from behind the hair fully covers the helmet.
+maciekg_horned_helmet
+   found | licence (mhclo): AGPL3 | pack: hats04_cc-by.zip | author: MGgames | 432 tris (235 verts)
+   clipping: Hair clips through the cap on both. Female: from behind the hair covers it, only the horns show.
+culturalibre_warrior_helmet
+   found | licence (mhclo): CC-0 | pack: hats02_cc0.zip | author: culturalibre | 2,712 tris (1,322 verts)
+   clipping: Spiky skullcap. Hair clips through around it on both.
+culturalibre_warrior_helmet_02
+   found | licence (mhclo): CC-BY | pack: hats04_cc-by.zip | author: culturalibre | 7,131 tris (3,609 verts)
+   clipping: Clean on both (full helm with horns). Female: long hair hangs out the bottom, which is plausible.
+grinsegold_corinthian_helmet
+   found | licence (mhclo): AGPL3 | pack: hats02_cc0.zip | author: grinsegold | 296 tris (166 verts)
+   clipping: Male: clean. Female: hair clips through the back of the helmet.
+javherre_casco_caballero_templario_templar_knight_helmet
+   found | licence (mhclo): AGPL3 | pack: hats02_cc0.zip | author: Unknown | 6,420 tris (3,218 verts)
+   clipping: Clean on both. The visor slit sits over the eyes.
+culturalibre_motorcycle_helmet
+   found | licence (mhclo): creative commons zero (public domain) | pack: hats02_cc0.zip | author: culturalibre | 44,608 tris (22,306 verts)
+   clipping: Clean on both. Female: long hair comes out the bottom back, not realistic but not clipping. Very heavy (44.6k tris).
+culturalibre_skull_helmet
+   found | licence (mhclo): CC-0 | pack: hats02_cc0.zip | author: culturalibre | 8,504 tris (4,254 verts)
+   clipping: Huge horned demon skull with tentacle horns. Male: clean. Female: hair clips through the face/forehead of the mask.
+donitz_monk_robe_hood
+   found | licence (mhclo): CC0 | pack: suits02_cc0.zip | author: Donitz | 9,008 tris (4,504 verts)
+   clipping: Male: clean. Female: hair clips through the back of the hood.
+
+== ARMOUR ==
+matcreator_mc-scifi-armor_guardian
+   found | licence (mhclo): CC0 | pack: suits02_cc0.zip | author: MatCreator | 18,020 tris (9,014 verts)
+   clipping: Only bracers and fur-trimmed boots, made to go over MC-BodySuit-2021 (not included), so the body is nude. No clipping.
+matcreator_mc-scifi-armor_helios
+   found | licence (mhclo): CC0 | pack: suits02_cc0.zip | author: unknown | 142,468 tris (71,242 verts)
+   clipping: Chest plate, shoulders, bracers, thigh plates, boots; also meant to go over the bodysuit. Fits both; no visible clipping. Extremely heavy: 142k tris.
+matcreator_mc-scifi-armor_jupiter7
+   found | licence (mhclo): CC0 | pack: suits02_cc0.zip | author: MatCreator | 26,598 tris (13,315 verts)
+   clipping: Chest plate, briefs, knee/arm pads, boots; meant to go over the bodysuit. Fits both; no visible clipping.
+joachip_cyborg_suit
+   found | licence (mhclo): CC0 | pack: suits02_cc0.zip | author: joachip | 2,380 tris (944 verts)
+   clipping: Full boxy low-poly suit with a hood. The male genitals poke through the crotch at the front (faint on the female). Female: the long hair hangs out of the hood at the back.
+grinsegold_mars_suit
+   found | licence (mhclo): AGPL3 | pack: suits03_cc-by.zip | author: grinsegold | 3,370 tris (1,758 verts)
+   clipping: Male: wearable, but genitals poke through the crotch and the face is visible through the open helmet with no glass. Female: broken. The torso/helmet don't fit the breasts, the chest is exposed and the helmet hangs open behind the head.
+
+== Summary ==
+Clean on both bodies: bowler, trilby, flat cap, pith helmet, warrior_helmet_02, templar helmet, motorcycle helmet.
+Hair-clip problems (need hair hidden/swapped under the hat): cloche (worst), patrol cap, sherpa, leather, horned, warrior_helmet, newsboy (mesh gaps),
+  and on the female only: beanie, corinthian, skull mask, monk hood.
+Heavy: helios armour 142k, motorcycle helmet 44.6k, trilby 28.6k, jupiter7 26.6k, guardian 18k tris; these need decimating for game use.
+The MC sci-fi armours are add-on pieces meant to go over MC-BodySuit-2021 (or our own undersuit), not full outfits.
+Mars suit does not fit the female body; cyborg suit and mars suit let the male genitals through (same issue as the trousers in report.txt).
