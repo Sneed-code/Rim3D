@@ -2291,7 +2291,10 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 					{
 						Widest = FMath::Max(Widest, WidthAt(Line, WrapSize));
 					}
-					const float FontSize = WrapSize * FMath::Clamp(Room / Widest, 0.75f, 1.0f);
+					// Never taller than the room under the picture (which ends at 68% of the tile's width), so three lines don't
+					// run into it.
+					const float NameRoom = TileHeight - 5.0f * Scale - TileSize * 0.70f;
+					const float FontSize = FMath::Min(WrapSize * FMath::Clamp(Room / Widest, 0.75f, 1.0f), NameRoom / static_cast<float>(Lines.Num()));
 					const ImU32 NameColor = ImGui::GetColorU32(bLocked ? ColonyHud::TextFaint() : ColonyHud::TextMain());
 					float LineY = Min.y + TileHeight - 5.0f * Scale - FontSize * Lines.Num();
 					for (const FString& Line : Lines)
