@@ -1,0 +1,74 @@
+[
+  {
+    "defName": "Fence", "parent": "StuffBuildingBase", "label": "fence", "source": "RimWorld wiki",
+    "description": "A low fence. People step over it; animals can't cross it, so a ring of fence with a gate makes a pen.",
+    "size": [1, 1], "passability": "PassThroughOnly", "pathCost": 80, "fillPercent": 0.25, "designationCategory": "Structure",
+    "costStuffCount": 1,
+    "visual": { "link": { "thickness": 0.12 }, "parts": [{ "shape": "box", "size": [0, 0, 1.1], "stuff": true }] },
+    "stats": { "maxHitPoints": 40, "workToBuild": 100.8, "flammability": 1.0 },
+    "building": { "fence": true, "dragShape": "Outline", "groundFit": "Conform" },
+    "ours": ["visual", "building.dragShape", "building.groundFit"],
+    "note": "Wiki-checked 2026-11-19: 1 stuff, 40 HP, 70 ticks of work (x 1.44 = 100.8 game seconds), path cost 80, cover 25%, 100% flammable. Pen animals can't cross it; people can (docs/design/husbandry.md, Fences)."
+  },
+  {
+    "defName": "FenceGate", "parent": "StuffBuildingBase", "label": "fence gate", "source": "RimWorld wiki",
+    "description": "A gate in a fence. People walk through it; animals can't.",
+    "size": [1, 1], "passability": "PassThroughOnly", "fillPercent": 0.25, "designationCategory": "Structure",
+    "costStuffCount": 25,
+    "visual": { "parts": [
+      { "shape": "box", "size": [0.1, 0.1, 1.2], "at": [-0.45, 0, 0], "stuff": true },
+      { "shape": "box", "size": [0.1, 0.1, 1.2], "at": [0.45, 0, 0], "stuff": true },
+      { "shape": "box", "size": [0.8, 0.06, 0.12], "at": [0, 0, 0.3], "stuff": true },
+      { "shape": "box", "size": [0.8, 0.06, 0.12], "at": [0, 0, 0.8], "stuff": true }
+    ] },
+    "stats": { "maxHitPoints": 20, "workToBuild": 720, "flammability": 1.0 },
+    "building": { "fence": true, "gate": true, "groundFit": "Conform" },
+    "unverified": ["fillPercent"],
+    "ours": ["visual", "building.groundFit", "building.gate"],
+    "note": "Wiki-checked 2026-11-19: 25 stuff, 20 HP, 500 ticks of work (x 1.44 = 720 game seconds), 100% flammable. Animals can't walk through it."
+  },
+  {
+    "defName": "AnimalSleepingSpot", "parent": "BuildingBase", "label": "animal sleeping spot", "source": "RimWorld wiki",
+    "description": "A marked spot where a tame animal sleeps.",
+    "size": [1, 1], "passability": "Standable", "designationCategory": "Furniture",
+    "costs": { "WoodLog": 1 },
+    "visual": { "parts": [{ "shape": "box", "size": [0.8, 0.8, 0.02], "color": [0.55, 0.47, 0.32] }] },
+    "stats": { "maxHitPoints": 40, "workToBuild": 72, "flammability": 1.0, "bedRestEffectiveness": 0.8 },
+    "building": { "animalBed": true },
+    "unverified": ["costs", "stats.maxHitPoints", "stats.workToBuild", "stats.bedRestEffectiveness"],
+    "note": "Like the crafting spot: a token log and a short job, so it can be planned like any building.",
+    "ours": ["visual"]
+  },
+  {
+    "defName": "AnimalSleepingBox", "parent": "BuildingBase", "label": "animal sleeping box", "source": "RimWorld wiki",
+    "description": "A wooden box with bedding for a small tame animal.",
+    "size": [1, 1], "passability": "Standable", "designationCategory": "Furniture",
+    "costs": { "WoodLog": 25 },
+    "visual": { "parts": [
+      { "shape": "box", "size": [0.85, 0.85, 0.08], "color": [0.5, 0.36, 0.22] },
+      { "shape": "box", "size": [0.85, 0.08, 0.3], "at": [0, 0.4, 0], "color": [0.5, 0.36, 0.22] },
+      { "shape": "box", "size": [0.85, 0.08, 0.3], "at": [0, -0.4, 0], "color": [0.5, 0.36, 0.22] },
+      { "shape": "box", "size": [0.08, 0.85, 0.3], "at": [0.4, 0, 0], "color": [0.5, 0.36, 0.22] },
+      { "shape": "box", "size": [0.7, 0.7, 0.04], "at": [0, 0, 0.08], "color": [0.8, 0.72, 0.5] }
+    ] },
+    "stats": { "maxHitPoints": 100, "workToBuild": 576, "flammability": 1.0, "bedRestEffectiveness": 0.9 },
+    "building": { "animalBed": true, "maxBodySize": 0.55 },
+    "unverified": ["costs", "stats", "building.maxBodySize"],
+    "ours": ["visual"],
+    "note": "Unlike the animal bed it doesn't fit every animal (RimWorld wiki); the body size limit is from memory."
+  },
+  {
+    "defName": "AnimalBed", "parent": "BuildingBase", "label": "animal bed", "source": "RimWorld wiki",
+    "description": "A soft bed that fits any tame animal. Animals sleep and heal better in it.",
+    "size": [1, 1], "passability": "Standable", "designationCategory": "Furniture",
+    "stuffCategories": ["Fabric", "Leathery"], "costStuffCount": 40,
+    "visual": { "parts": [
+      { "shape": "cylinder", "radius": 0.46, "height": 0.14, "stuff": true },
+      { "shape": "cylinder", "radius": 0.36, "height": 0.04, "at": [0, 0, 0.14], "color": [0.85, 0.82, 0.74] }
+    ] },
+    "stats": { "maxHitPoints": 140, "workToBuild": 576, "flammability": 1.0, "comfort": 0.75, "bedRestEffectiveness": 1.0, "immunityGainSpeedFactor": 1.07 },
+    "building": { "animalBed": true },
+    "ours": ["visual"],
+    "note": "Wiki-checked 2026-11-19: 40 fabric or leather, 140 HP, 400 ticks of work (x 1.44 = 576 game seconds), comfort 75%, rest effectiveness 100%, immunity gain 1.07, fits all animals."
+  }
+]

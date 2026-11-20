@@ -69,6 +69,9 @@ float groundSpeedFactor(const Map& map, float x, float y, float bodyHeightM, int
     if (level != 0) {
         return terrainSpeedFactor(t);
     }
+    if (map.hasDeck(cell)) {
+        return terrainSpeedFactor(Terrain::UpperFloor);  // a bridge deck: a built floor, no path cost (RimWorld: move speed 100%)
+    }
     // Water by its depth against the body (docs/design/water.md): shallow water's cost to the waist,
     // chest-deep water's beyond, then swimming. Marsh and mud keep their own cost until the water is deeper.
     const WaterBand band = waterBandFor(map.waterDepthAt(x, y, 0), bodyHeightM);

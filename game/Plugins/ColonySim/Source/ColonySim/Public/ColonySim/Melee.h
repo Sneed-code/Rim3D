@@ -41,7 +41,7 @@ enum class MeleePhase : uint8_t {
     Recovery,  // after the hit (or a blocked strike's stagger): no new swing until it is over
 };
 
-enum class MeleeDefense : uint8_t { None, Dodge, Block };
+enum class MeleeDefense : uint8_t { None, Dodge, Block, Backstep };
 
 // On a pawn once it has swung or been swung at. Every field is saved.
 struct Melee {
@@ -82,6 +82,10 @@ struct Melee {
     FightResponse response = FightResponse::Attack;  // what it does about enemies (SetFightResponseCommand)
     // Lock-on (melee section 5, docs/design/lock-on.md): the last step the player's pawn saw its focus.
     int64_t focusSeenAt = 0;
+    // Tab's round (melee section 6, sneed 2026-11-19): the targets Tab has already given this round, and the step of the
+    // last Tab. Tab gives the nearest one not yet given, so it walks out through every enemy instead of swapping two.
+    std::vector<Entity> focusTried;
+    int64_t focusTriedAt = 0;
 };
 
 // The numbers (MeleeRules in data/defs/Rules/MeleeRules.json). Ours and sneed's: RimWorld's hit and dodge
@@ -115,7 +119,7 @@ struct MeleeRules {
     float windupShare = 0.3f;         // of a tool's cooldown spent winding up; the rest is recovery
     int minWindup = 9;
     int commitSteps = 6;              // steps before the hit at which the strike's line is fixed
-    float reactionSteps[2] = {14.0f, 5.0f};  // at Melee skill 0 and 20: steps to read a swing
+    float reactionSteps[2] = {9.0f, 3.0f};  // at Melee skill 0 and 20: steps to read a swing
     float reactionJitter = 4.0f;      // plus or minus this, picked per swing
     int blockSteps = 4;               // to raise the weapon
     int blockRecoverySteps = 12;      // the blocker's stagger: no swing of its own meanwhile
@@ -152,6 +156,25 @@ struct MeleeRules {
     float lockBigBodySize = 2.0f;     // a target this big (a bear and up) is struck at its body part nearest the attacker
     int lockSightLostSteps = 90;      // the player's lock lets go after this long without seeing the target
     float orbitRadialShare = 0.35f;   // a locked-on step with melee mostly sideways (radial part under this share) circles the target
+    // Tab and flicks (sneed 2026-11-19, ours): Tab's round starts again after this long without a Tab; a flick takes
+    // the nearest enemy on that side within this many degrees of the current one.
+    int focusRoundSteps = 150;
+    float flickMaxDegrees = 150.0f;
+    // Landing blows (sneed 2026-11-19, ours). The player's swing with no lock takes the nearest enemy within this cosine
+    // of straight ahead and in reach; a locked target this far past its reach still gets the swing (the player walks on
+    // under it). A blow at someone who didn't dodge it follows them to the blow if they moved no more than
+    // strikeTrackDegrees off its line (a step aside that wasn't a dodge doesn't make it whiff).
+    float assistCos = 0.6f;
+    float playerReachSlack = 0.6f;
+    float strikeTrackDegrees = 35.0f;
+    // Defending (sneed 2026-11-19, ours): a defender that reads a swing in time defends with this chance by Melee skill
+    // (0 and 20); with a weapon it parries parryShare of those times, else (and the rest) it gets out of the way: a roll
+    // from a heavy blow, else a step back (backstepShare) or aside. The step back goes backstepMetres in backstepSteps.
+    float defendChance[2] = {0.35f, 0.85f};
+    float parryShare = 0.6f;
+    float backstepShare = 0.4f;
+    float backstepMetres = 1.3f;
+    int backstepSteps = 8;
     // Footwork (sneed: "move around a bit without compromising their ability to attack"; ours). Between its own swings,
     // in reach of its target, a melee fighter steps round it or back out of a blow it can't stop.
     int footworkEverySteps = 24;      // a choice at most this often
@@ -232,7 +255,10 @@ public:
 
     // Focus (docs/design/focus.md). The player's FocusCommand: lock on to `target`, cycle to the next nearest target
     // (Tab), or let go (F1). False, with a reason, if it can't (no pawn, nothing to lock on to).
-    bool focusCommand(Entity pawn, Entity target, FocusMode mode, std::string* why = nullptr);
+    // Next and the flicks (Left, Right) take where the camera looks (viewX, viewY; zero: where the body faces) and
+    // `anySide` (also the pawn's own side: the practice range's targets).
+    bool focusCommand(Entity pawn, Entity target, FocusMode mode, std::string* why = nullptr, float viewX = 0.0f, float viewY = 0.0f,
+                      bool anySide = false);
     // The fighter AI: lock on to `target` (kNoEntity lets go). Never overrides a focus the player set.
     void setAiFocus(Entity pawn, Entity target);
     // The pawn it is locked on to, or kNoEntity.
@@ -297,8 +323,12 @@ private:
     void prepareDefense(Entity defender, Entity attacker, int stepsToHit, uint64_t seed);
     void defend(Entity defender, Melee& d);
     void sidestep(Entity defender, Melee& d);
+    bool backstep(Entity defender, Melee& d);
+    bool focusNext(Entity pawn, FocusMode mode, float viewX, float viewY, bool anySide, std::string* why);
     bool roll(Entity defender, Melee& d);
     void commit(Entity pawn, Melee& m);
+    void followToBlow(Entity pawn, Melee& m);
+    bool inPlayerReach(Entity pawn, Entity target) const;
     void strike(Entity pawn, Melee& m);
     bool arcSwing(DefId damageType) const;
     void face(Entity pawn, float x, float y);

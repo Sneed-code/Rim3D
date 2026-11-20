@@ -7,6 +7,7 @@
 #include "AnimNodes/AnimNode_RetargetPoseFromMesh.h"
 #include "BoneControllers/AnimNode_AnimDynamics.h"
 #include "BoneControllers/AnimNode_TwoBoneIK.h"
+#include "ColonySim/HairStrands.h"
 
 #include "ColonySim/ArmPose.h"
 
@@ -90,29 +91,44 @@ struct FMakeHumanTailNode : public FAnimNode_SkeletalControlBase
 };
 
 /**
- * Long hair (mh_common.add_hair_bones: hair_c1_1 ... chains under the head): no physics engine, a spring of our own
- * that cannot blow up. Each chain first hangs towards the ground (a bowed head lets the hair fall forward), then all
- * swing together against the head's acceleration (starts, stops, turns, a jump) through a damped spring, limited to a
- * few tens of degrees. (AnimDynamics chains flung the hair into a sheet now and then.)
+ * Long hair (docs/design/hair-physics.md): the long, bob and braid styles' chains (mh_common.add_hair_bones: hair_c1_1 ...
+ * under the head) and a ponytail's (ponytail1 ...), as strands of colony::HairStrands. Each point falls under gravity,
+ * keeps its length, lags behind the head and is pulled softly back towards the style's shape; capsules round the skull,
+ * neck, chest and upper back, shoulders and upper arms (fitted to each skeleton so the hair at rest just touches them)
+ * push it out of the body, so it rests on the back and shoulders instead of passing through them. Full simulation near
+ * the camera (Pawns.HairSimFar), only pushed out of the body further off (Pawns.HairCollideFar), as animated beyond.
  */
 USTRUCT()
 struct FMakeHumanHairNode : public FAnimNode_SkeletalControlBase
 {
 	GENERATED_BODY()
 
-	TArray<TArray<FBoneReference>> Chains;
-	FBoneReference Head;
+	/** A collision shape riding on a bone: a capsule between two points in the bone's space. */
+	struct FShape
+	{
+		FBoneReference Bone;
+		FVector A = FVector::ZeroVector;
+		FVector B = FVector::ZeroVector;
+		float Radius = 0.0f;  // cm, component space
+	};
+
+	TArray<TArray<FBoneReference>> Chains;  // the hair_c chains (one sheet) first, then a ponytail's
+	TArray<FShape> Shapes;
 	float DeltaTime = 0.0f;
-	FVector LastHead = FVector::ZeroVector;      // world
-	FVector HeadVelocity = FVector::ZeroVector;  // world, cm/s
-	FVector Swing = FVector::ZeroVector;         // world, horizontal: which way and how far (degrees) the hair swings
-	FVector SwingVelocity = FVector::ZeroVector;
-	bool bStarted = false;
+	int32 Mode = 2;                         // 2 full simulation, 1 pushed out of the body only, 0 as animated
+	colony::HairStrands Strands;
+	colony::HairSettings Settings;
+	std::vector<std::vector<colony::HairVec>> Goals;  // this frame's animated points, world
+	std::vector<colony::HairCapsule> Capsules;        // this frame's body, world (also drawn by Pawns.HairDebug)
+	float LargestPenetration = 0.0f;                  // cm into the body, since the last read (tests)
+	float LargestAnimatedPenetration = 0.0f;          // cm the animated hair alone would have gone in (tests)
 
 	virtual void UpdateInternal(const FAnimationUpdateContext& Context) override;
 	virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) override;
 	virtual bool IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones) override;
 	virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override;
+	/** Chains and shapes for a skeleton (game thread, when the animation starts). */
+	void Setup(const FReferenceSkeleton& Ref);
 };
 
 /**
@@ -209,7 +225,7 @@ struct FMakeHumanArmsNode : public FAnimNode_SkeletalControlBase
 
 /**
  * The pose of the mesh this one is attached to (the pawn's hidden mannequin), retargeted; then, where the skeleton
- * has them, soft-body jiggle on the breast bones and a swinging chain on a ponytail's bones (AnimDynamics).
+ * has them, soft-body jiggle on the soft-tissue bones, a tail's swish and long hair's strands.
  */
 USTRUCT()
 struct FMakeHumanAnimProxy : public FAnimInstanceProxy
@@ -224,7 +240,6 @@ struct FMakeHumanAnimProxy : public FAnimInstanceProxy
 	FMakeHumanJiggleNode Jiggle;
 	FMakeHumanTailNode Tail;
 	FMakeHumanHairNode Hair;
-	TArray<TSharedPtr<FAnimNode_AnimDynamics>> Dynamics;
 	FMakeHumanSeverNode Sever;       // last: what was cut off folds away after everything else has moved
 	FAnimNode_ConvertComponentToLocalSpace ToLocal;
 	FMakeHumanArmsNode ArmsIK;       // both hands on weapons and reaches, within human joint limits (Pawns.MakeHumanHandIK)
@@ -248,12 +263,17 @@ class UMakeHumanAnimInstance : public UAnimInstance
 public:
 	void SetRetargeter(UIKRetargeter* InRetargeter);
 	UIKRetargeter* GetRetargeter() const { return Retargeter; }
-	/** How many soft bodies run (jiggle bones and hair chains), for the tests. */
+	/** How many soft bodies run (jiggle bones, hair strands and a tail), for the tests. */
 	int32 GetPhysicsChains() const;
 	/** The largest jiggle offset (cm) since the last call, for the tests. */
 	float TakeLargestJiggle();
 	/** The largest tail swing at the tip (degrees) since the last call, for the tests; 0 without a tail. */
 	float TakeLargestTailSwing();
+	/** How many hair strands simulate (0 without long hair or a ponytail), for the tests. */
+	int32 GetHairStrands() const;
+	/** The deepest any hair went into the body (cm) since the last call, for the tests; OutAnimated: how deep the hair
+	 *  as animated (no physics) would have gone in the same frames. */
+	float TakeLargestHairPenetration(float* OutAnimated = nullptr);
 	/** Soft-tissue jiggle on or off (on by default). Off, breasts, buttocks and genitals stay as animated. */
 	void SetSoftTissueEnabled(bool bEnabled);
 	/** Whether the soft parts run (the creator's "Jiggle" box); skin squish on contact follows it too. */

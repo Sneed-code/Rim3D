@@ -106,11 +106,22 @@ private:
 		bool bDoor = false;
 		/** Leans with the slope instead of standing on dug ground (building.groundFit Conform: sandbags, barricades, traps). */
 		bool bConform = false;
+		/** A bridge (building.bridge, docs/design/roads-bridges.md): stands at its deck's height (the snapshot's z), not on the river bed. */
+		bool bDeck = false;
 		/** Drawn by a subsystem of its own (visual.drawnBy, e.g. "shuttle": UShuttleSubsystem), so not here. */
 		bool bDrawnElsewhere = false;
 		/** Joins the walls, doors and rock beside it (visual.link, L4): drawn as a post with an arm to each, `LinkThicknessCm` thick. */
 		bool bLink = false;
 		float LinkThicknessCm = 50.0f;
+		/** Walls join it as they join a door (visual.joinsWalls: the cooler and the vent, which stand in a wall line). */
+		bool bJoinsWalls = false;
+		/** Has a power part (def `power`): power cables run up to it. */
+		bool bPowered = false;
+		/** A power cable (visual.cable: conduits, switches): a low run with an arm to each powered building beside it. */
+		bool bCable = false;
+		float CableThicknessCm = 7.0f;
+		float CableHeightCm = 5.0f;
+		FLinearColor CableColor = FLinearColor(0.12f, 0.12f, 0.13f);
 		FVector2f FootprintCm = FVector2f(100.0f, 100.0f);
 		TArray<VisualMesh::FPart> Parts;
 		bool bHasSliding = false;
@@ -130,6 +141,8 @@ private:
 		UStaticMesh* Fixed = nullptr;
 		UStaticMesh* Sliding = nullptr;
 		UStaticMesh* All = nullptr;
+		/** A window's glass (docs/design/windows.md), drawn see-through and casting no shadow; null for none. */
+		UStaticMesh* Glass = nullptr;
 	};
 
 	/** One instance component and the instances put in it by the last rebuild of its chunk. */
@@ -159,8 +172,9 @@ private:
 	/**
 	 * The index in Looks of this def made of this stuff (invalid for none), made if it is new; -1 if the def has no picture.
 	 * `Link` is a linked def's neighbours (1 north, 2 east, 4 south, 8 west); -1 draws its plain parts (the placement ghost).
+	 * `Window` is a linked wall's window (docs/design/windows.md): 0 none, 1 with glass, 2 with the glass broken.
 	 */
-	int32 GetLook(colony::DefId Def, colony::DefId Stuff, int32 Link = -1);
+	int32 GetLook(colony::DefId Def, colony::DefId Stuff, int32 Link = -1, int32 Window = 0);
 	/** The surface material of a stuff (its visual.surface, made by the SurfaceMaterials commandlet); null for none. */
 	UMaterialInterface* SurfaceOf(colony::DefId Stuff);
 	void RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, const TArray<int32>& ThingIndexes, const colony::Snapshot& Snapshot);
@@ -179,6 +193,10 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> GhostMaterial;
+
+	/** Window glass (docs/design/windows.md), made by the BuildingMaterials commandlet; null draws open windows. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> GlassMaterial;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMesh>> KeepMeshes;

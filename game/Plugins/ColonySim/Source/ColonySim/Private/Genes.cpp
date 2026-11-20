@@ -100,14 +100,38 @@ bool makeGenes(const DefDatabase& defs, const std::string& lineage, PawnGenes& o
     fx.miningSpeed = geneStat(out, "miningSpeed", 1.0f);
     fx.plantWorkSpeed = geneStat(out, "plantWorkSpeed", 1.0f);
     fx.foodRate = geneStat(out, "foodRate", 1.0f);
+    fx.moveSpeedFactor = std::max(0.0f, geneStat(out, "moveSpeedFactor", 1.0f));
+    fx.learning = std::max(0.0f, geneStat(out, "learningRate", 1.0f));
+    fx.workSpeed = std::max(0.0f, geneStat(out, "workSpeed", 1.0f));
+    fx.meleeDamage = std::max(0.0f, geneStat(out, "meleeDamage", 1.0f));
+    fx.rangedDamage = std::max(0.0f, geneStat(out, "rangedDamage", 1.0f));
+    fx.shootingAccuracy = std::max(0.05f, geneStat(out, "shootingAccuracy", 1.0f));
+    fx.healthScale = std::max(0.1f, geneStat(out, "healthScale", 1.0f));
+    fx.thermalDamage = std::max(0.0f, geneStat(out, "thermalDamage", 1.0f));
+    fx.environmentDamage = std::max(0.0f, geneStat(out, "environmentDamage", 1.0f));
+    fx.debuffFactor = std::max(0.0f, geneStat(out, "debuffFactor", 1.0f));
+    fx.jumpHeight = std::max(0.0f, geneStat(out, "jumpHeight", 1.0f));
+    fx.climbSpeed = std::max(0.0f, geneStat(out, "climbSpeed", 1.0f));
+    fx.darkVision = geneStat(out, "darknessSlowdown", 1.0f) <= 0.0f;
+    fx.darkWorkSpeed = std::max(0.0f, geneStat(out, "darkWorkSpeed", 1.0f));
+    fx.sunWorkSpeed = std::max(0.0f, geneStat(out, "sunWorkSpeed", 1.0f));
+    fx.sunShootingAccuracy = std::max(0.05f, geneStat(out, "sunShootingAccuracy", 1.0f));
+    fx.noOutdoorsNeed = geneStat(out, "noOutdoorsNeed", 0.0f) > 0.0f;
+    fx.nocturnal = geneStat(out, "nocturnal", 0.0f) > 0.0f;
     if (const Def* rules = defs.find("Rules", "GeneRules")) {
         fx.foodRate *= genesHungerRate(*rules, out.metabolicEfficiency);
+        fx.darkBelow = static_cast<float>(rules->number("darkBelowGlow", fx.darkBelow));
+        fx.sunAbove = static_cast<float>(rules->number("sunAboveGlow", fx.sunAbove));
     }
     return ok;
 }
 
 float geneStat(const PawnGenes& genes, const char* stat, float base) {
     return (base + genesLookup(genes.offsets, stat, 0.0f)) * genesLookup(genes.factors, stat, 1.0f);
+}
+
+float geneWorkFactor(const GeneEffects& fx, float glow, bool sunlit) {
+    return fx.workSpeed * (glow < fx.darkBelow ? fx.darkWorkSpeed : 1.0f) * (sunlit ? fx.sunWorkSpeed : 1.0f);
 }
 
 int geneAptitude(const PawnGenes& genes, const std::string& skill) {

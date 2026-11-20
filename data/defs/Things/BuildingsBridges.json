@@ -1,0 +1,30 @@
+[
+  {
+    "defName": "Bridge", "parent": "BuildingBase", "label": "bridge",
+    "visual": {"parts": [{"shape": "box", "size": [0, 0, 0.3], "at": [0, 0, -0.3], "color": [0.55, 0.42, 0.28]}]},
+    "designationCategory": "Structure", "passability": "Standable", "fillPercent": 0,
+    "costs": { "WoodLog": 12 },
+    "stats": { "maxHitPoints": 100, "workToBuild": 2160, "flammability": 0.8 },
+    "building": { "bridge": "Light", "bombThreshold": 35 },
+    "note": "RimWorld wiki (2026-11-19): 12 wood, 1500 ticks, 100 HP, flammability 80%, destroyed by a Bomb blast of 35 or more, built on shallow water, marsh and mud. Here a building, not a floor (docs/design/roads-bridges.md), so nothing else stands on it yet."
+  },
+  {
+    "defName": "HeavyBridge", "parent": "BuildingBase", "label": "heavy bridge",
+    "visual": {"parts": [{"shape": "box", "size": [0, 0, 0.4], "at": [0, 0, -0.4], "color": [0.45, 0.47, 0.5]}]},
+    "designationCategory": "Structure", "passability": "Standable", "fillPercent": 0,
+    "costs": { "Steel": 14 },
+    "stats": { "maxHitPoints": 300, "workToBuild": 3600, "flammability": 0 },
+    "building": { "bridge": "Heavy", "blastProof": true },
+    "ours": ["stats.maxHitPoints", "no research yet: the Heavy bridges research is not in our tree"],
+    "note": "RimWorld wiki (Odyssey, 2026-11-19): 14 steel, 2500 ticks, immune to explosions and fire, built on shallow water, marsh, mud and chest-deep moving water (here: a river's deep water)."
+  },
+  {
+    "defName": "AncientBridge", "parent": "BuildingBase", "label": "old stone bridge",
+    "visual": {"parts": [{"shape": "box", "size": [0, 0, 0.6], "at": [0, 0, -0.6], "color": [0.5, 0.48, 0.44]}]},
+    "passability": "Standable", "fillPercent": 0,
+    "stats": { "maxHitPoints": 300, "flammability": 0 },
+    "building": { "bridge": "Ancient" }, "mapFeature": true,
+    "ours": ["stats.maxHitPoints", "the whole def: RimWorld lays wooden bridge floors where a road crosses water"],
+    "note": "Laid by map generation where a road crosses water (docs/design/roads-bridges.md). Not built by anyone; can be blown up, shot to pieces and repaired."
+  }
+]

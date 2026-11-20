@@ -650,6 +650,9 @@ Pathfinder::Outcome Pathfinder::runCells(int64_t& work, int64_t budget) {
             continue;
         }
         const CellPos here{cx, cy, level};
+        if (!map_.linkAt(here)) {
+            continue;
+        }
         for (const LevelLink& link : map_.levelLinks()) {
             const CellPos other = link.low == here ? link.high : link.high == here ? link.low : CellPos{-1, -1, -1};
             if (other.level < 0 || !map_.inBounds(other) || regionOfLevel[other.level] == nullptr) {

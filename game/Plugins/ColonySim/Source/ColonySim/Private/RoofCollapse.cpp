@@ -1,5 +1,7 @@
 #include "ColonySim/RoofCollapse.h"
 
+#include "ColonySim/Genes.h"
+
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
@@ -18,6 +20,12 @@ float roofNum(const Def& def, const char* path, float fallback) {
 
 int roofInt(const Def& def, const char* path, int fallback) {
     return static_cast<int>(def.integer(path, fallback));
+}
+
+// Times the fall and collapse damage a pawn takes, from its lineage (docs/design/races.md).
+float roofEnvironmentFactor(const entt::registry& reg, Entity pawn) {
+    const PawnGenes* genes = reg.try_get<PawnGenes>(pawn);
+    return genes != nullptr ? genes->effects.environmentDamage : 1.0f;
 }
 
 }  // namespace
@@ -157,8 +165,9 @@ void RoofCollapse::crush(CellPos c, Kind kind, Rng& rng) {
     const float damage = thick ? numbers_.thickPawnDamage : numbers_.thinPawnDamage;
     for (const Entity pawn : pawns) {
         bool struck = false;
+        const float own = roofEnvironmentFactor(reg, pawn);  // cat-strain land on their feet: -20%
         for (int i = 0; i < hits; ++i) {
-            struck = health_.applyDamage(pawn, crushType_, damage, -1, rng) || struck;
+            struck = health_.applyDamage(pawn, crushType_, damage * own, -1, rng) || struck;
         }
         if (struck) {
             ++hurt;
@@ -207,8 +216,9 @@ void RoofCollapse::dropFloor(CellPos c, Rng& rng) {
             mover.vx = mover.vy = 0.0f;
         }
         bool struck = false;
+        const float own = roofEnvironmentFactor(reg, pawn);
         for (int i = 0; i < numbers_.fallPawnHits; ++i) {
-            struck = health_.applyDamage(pawn, crushType_, numbers_.fallPawnDamage, -1, rng) || struck;
+            struck = health_.applyDamage(pawn, crushType_, numbers_.fallPawnDamage * own, -1, rng) || struck;
         }
         hurt += struck ? 1 : 0;
         if (interrupt_) {

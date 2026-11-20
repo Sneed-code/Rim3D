@@ -572,8 +572,9 @@ struct SetMedicalCareCommand {
 };
 
 // Prisoners (task C22, docs/design/prisoners.md): what wardens do with a prisoner. `mode` is NoInteraction, ReduceResistance,
-// AttemptRecruit or Release (prisonerModeName). Fails for a pawn that is no prisoner, or a name that isn't one; Release also fails
-// for a prisoner who can't walk.
+// AttemptRecruit, Release, Execute, Enslave or ReduceWill (prisonerModeName). Fails for a pawn that is no prisoner, or a name that
+// isn't one; Release also fails for a prisoner who can't walk. For a slave `mode` is "Emancipate" (it becomes a free colonist)
+// or "Release" (it goes back to its side and walks off the map).
 struct SetPrisonerModeCommand {
     Entity pawn = kNoEntity;
     std::string mode;
@@ -1107,14 +1108,20 @@ struct SetAlertCommand {
     uint8_t alert = 0;
 };
 
-// Lock-on focus (sneed, 2026-11-17; docs/design/focus.md), Dark Souls style. Set: `pawn` locks on to `target` (any
-// living pawn within 25 m). Next: the next nearest target (Tab, WoW style): enemies within 20 m, nearest first, those in
-// front before those behind. Clear: let go (F1). A focused pawn faces its target, and the player's swing with no target
+// Lock-on focus (sneed, 2026-11-17; docs/design/focus.md, lock-on.md), Elden Ring style. Set: `pawn` locks on to
+// `target` (any living pawn within 25 m). Next (Tab): enemies within 20 m, standing before downed, nearest first with
+// those in view before those behind; each Tab within 5 s gives the nearest one not yet given (then round again).
+// Left / Right (a mouse flick): the nearest enemy on that side of the current one (Right turns from +x towards +y,
+// which Unreal draws to the player's right). `viewX`, `viewY`: where the camera looks (zero: the body's facing). `anySide`: own
+// side too (the practice range). Clear: let go. A focused pawn faces its target, and the player's swing with no target
 // goes at the focus's centre when it is in reach. Fails if the pawn isn't on the map, or there is nothing to lock on to.
 struct FocusCommand {
     Entity pawn = kNoEntity;
     Entity target = kNoEntity;
     FocusMode mode = FocusMode::Next;
+    float viewX = 0.0f;
+    float viewY = 0.0f;
+    bool anySide = false;
 };
 
 // What a pawn does about enemies (docs/design/focus.md "Fight response"): Attack (as now), Fists (fights back, with its

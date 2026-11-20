@@ -234,6 +234,7 @@ TEST_CASE("Levels: the upper floor command lays and takes up floors and says why
 
 TEST_CASE("Levels: every level has its own regions, and paths on an upper floor go round its walls") {
     auto sim = levelsSim();
+    sim->mapRules().setWallClimb(0.0f, 3.5f);  // no climbing the ring's outside faces (ClimbTests.cpp has that)
     levelsRing(*sim, 10, 10, 20, 20);
     Regions& regions = sim->regions();
     const size_t groundGroups = regions.groupCount();
@@ -273,6 +274,7 @@ TEST_CASE("Levels: every level has its own regions, and paths on an upper floor 
 
 TEST_CASE("Levels: a floor over a room is its roof, and walls on the floor make an upper room with a thin roof") {
     auto sim = levelsSim();
+    sim->mapRules().setWallClimb(0.0f, 3.5f);  // no climbing the ring's outside faces (ClimbTests.cpp has that)
     levelsRing(*sim, 10, 10, 16, 16);
     CHECK(sim->rooms().thinRoofCells().size() == 49);  // the walls' own thin roof
     CHECK(levelsFloor(*sim, 10, 10, 16, 16) == 49);

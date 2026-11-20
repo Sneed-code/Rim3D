@@ -614,6 +614,9 @@ void ExplosiveSystem::flyOrBlow(Entity grenade, Rng& rng) {
             landed = true;
         } else {
             const TraceHit hit = combat_.trace(g.x, g.y, g.z, nx, ny, nz, g.level, g.thrower, g.startCell);
+            if (hit.glass != kNoEntity && (hit.kind == ProjectileHitKind::None || hit.glassT <= hit.t)) {
+                combat_.breakWindow(hit.glass, hit.glassX, hit.glassY, hit.glassZ, g.thrower);  // it flies on through
+            }
             if (hit.kind != ProjectileHitKind::None) {
                 explosiveLanding(map_, g, hit, ex, ey, ez);
                 landed = true;

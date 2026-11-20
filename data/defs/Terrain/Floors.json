@@ -117,5 +117,17 @@
     "costs": { "Steel": 3, "Silver": 12 }, "stuff": false, "workToBuild": 2304.0,
     "stats": { "beauty": -1, "cleanliness": 0.6, "flammability": 0 },
     "note": "Wiki-checked 2026-10-28: 3 steel + 12 silver, 1600 ticks, beauty -1, cleanliness +0.6, not flammable. The wiki's 60% cleaning time is not modelled."
+  },
+  {
+    "defName": "PackedDirt", "visual": {"sound": {"step": "Step_Dirt"}}, "parent": "FloorBase", "label": "packed dirt",
+    "stats": { "beauty": -1, "cleanliness": -1 },
+    "note": "A dirt road's surface, laid by map generation where the world map has a road (docs/design/roads-bridges.md). No cost, so it is not on the Floors menu.",
+    "unverified": ["stats"]
+  },
+  {
+    "defName": "BrokenAsphalt", "visual": {"sound": {"step": "Step_Stone"}}, "parent": "FloorBase", "label": "broken asphalt",
+    "stats": { "beauty": -1, "cleanliness": 0 },
+    "note": "An ancient asphalt road's surface, laid by map generation (docs/design/roads-bridges.md). No cost, so it is not on the Floors menu.",
+    "unverified": ["stats"]
   }
 ]

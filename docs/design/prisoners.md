@@ -142,6 +142,34 @@ disagree on the stranger's thought (-5 for 8 days against -6 for 6); the second 
 set by `addSituation("isPrisoner")`), `Captured` (-5 for 3 days), `WardenTalk` (+2 for a day after a talk). The prisoner's mood
 feeds the two mood factors above.
 
+## Slaves
+
+Slavery as in RimWorld's Ideology (sneed, 2026-11-19). Code: `Prisoners.h`, `Prisoners.cpp` (Slaves), the suppression talk in
+`PrisonerJobs.cpp`. Tests: `Tests/SlaveTests.cpp`. Numbers: `PrisonerRules` `slaves` (each marked wiki or ours).
+
+- **Will.** A captured prisoner of another side gets a will of 1 to 3 (ours; the wiki says only that it starts much lower
+  than resistance), rolled from the pawn and the second so older recordings play as before. Two more modes:
+  `Enslave` (each talk lowers the will by the resistance formula; once it is 0 the next talk enslaves) and `ReduceWill`
+  (lowers it to 0 and stops). The modes come after `Execute` in `PrisonerMode`, so the numbers the UI uses for the first five
+  stay the same.
+- **A slave** (`Slave` component) is on the player's side and works, but can't do Warden, Hunting, Art or Research (work
+  tags Social, Violent, Artistic, Intellectual are off and can't be turned on), works at 85% speed (`JobSystem::workFactor`)
+  and can't be drafted. It remembers the side it was taken from.
+- **Suppression** starts at 50% (ours) and falls by itself, asleep too: 20% a day from 30%, 10% from 15%, 5% below (wiki).
+  A warden suppresses a slave under 70% (ours), at most every 3 hours (ours), in a 259 s talk (the wiki's 180 ticks): it
+  rises by (0.08 + 0.02 x Social) x Talking (fitted to the wiki's Social 10 = 28%) times a factor of 2 at 0%, 1 at 50% and 0.5
+  at 100% (only the 2x is the wiki's). Event `SlaveSuppressed`.
+- **Rebellion.** Every 15 s each awake slave who can walk rolls against a mean time of 45 days divided by the wiki's factors:
+  suppression (5x at 0%, 1.5x at 33%, 1x at 50%, 0.25x at 100%), slave count (1x for one, 0.75 for two, 0.5 for five, 0.3 for
+  ten, 0.2 for twenty), mood (1.5x at 0, 1 at 50, 0.8 at 100) and 20x when no free colonist able to stand is on the map. When one
+  rises, every slave who can walk does: each goes back to its old side and runs for the map edge (`SlaveRebellion`). The wiki's
+  moving, room-edge and weapon factors are not modelled.
+- **Freeing.** `SetPrisonerModeCommand` on a slave takes `Emancipate` (it becomes a free colonist with its full work) or
+  `Release` (it goes back to its side and walks off the map). `SlaveEmancipated`, `PrisonerReleased` "slave".
+- **Snapshot:** `ThingView::will`, `slave`, `suppression`. **Save:** section `prisoners` version 4 adds `will` and the `slave` part.
+- Not here: slave collars and body straps (suppression gear), the slave mood bonus and the "shares a bedroom with a slave" thought,
+  the Slavery precept, goodwill for emancipating, selling slaves, slaves fighting in a rebellion (they only run), melee suppression.
+
 ## Save
 
 Section `prisoners` (version 2 adds `guiltyUntil`, version 3 the `arrest` part): the `prisoner` part of every prisoner (mode,
@@ -152,6 +180,6 @@ jobs reuse `thing`, `site`, `chair`, `cell`, `count`). Commands `SetPrisonerMode
 ## Not here
 
 A "was imprisoned" thought of its own, colonists who resist arrest, the rest of an arrested visitor's group turning on the colony (here they just leave),
-euthanasia, the "innocent prisoner died" thought, selling prisoners, slaves, wardens escorting a freed prisoner out, goodwill from a release, prisoners eating from a dispenser or
+euthanasia, the "innocent prisoner died" thought, selling prisoners, wardens escorting a freed prisoner out, goodwill from a release, prisoners eating from a dispenser or
 food lying in their cell, the warden's opinion in the resistance formula and prisoner traits (C20), the prisoner tab in the
 panels (U18), prisoners breaking out by themselves (T3 calls `breakOut`), a prisoner's mental breaks (C19).

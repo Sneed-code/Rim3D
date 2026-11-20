@@ -1831,11 +1831,64 @@ def make_fur_textures(out_dir, size=512, log=print):
     return paths
 
 
-def add_cat_ears(rig, body, height=0.066, width=0.062, depth=0.03, tilt=0.35, log=print):
-    """Cat ears for any MakeHuman head: up out of the top of the head either side of the crown, tilted out a little and
-    turned a little outwards, a crescent in section (cupped at the front), weighted wholly to the head. The outside is
-    the fur material (CatFur), the cup's inside CatEarInner. Returns the ear objects."""
+def _cat_ear_mesh(base, axis, fwd, lat, height, width, depth, thick, rows=14, cols=13):
+    """The points and faces of one realistic cat ear (a pinna): a thin shell, not a solid. Seen from the front it is a
+    broad-based triangle with gently bowed sides and a rounded tip; across, the front is a deep cup (pushed back in the
+    middle, the edges rolled forward a little) and the back follows it, a few millimetres behind and fuller in the
+    middle, as the cartilage is. The base runs 1.5 cm down into the skull so no seam shows under the hair.
+    `base` is the middle of the ear's root on the skull; `axis` up the ear, `fwd` the way its opening faces, `lat` across.
+    Returns (verts, faces, front_faces, uvs): front_faces are the inside of the cup (the pink skin)."""
     import math
+    sink = 0.015
+    front, back = [], []
+    for i in range(rows + 1):
+        v = i / rows
+        # Outline: broad base, slightly bowed sides, rounded tip (the last rows close in on a curve, not a point).
+        half = 0.5 * width * (1.0 - v ** 1.7) ** 0.75 * (1.0 + 0.12 * math.sin(math.pi * v))
+        up = -sink + (height + sink) * (1.0 - (1.0 - v) ** 1.08)
+        cup_v = (1.0 - v) ** 0.6 * min(1.0, v * 6.0 + 0.35)       # deepest above the root, shallow at the tip
+        t = thick * (1.0 - 0.6 * v) + 0.0006                      # thinner towards the tip
+        frow, brow = [], []
+        for j in range(cols + 1):
+            s = -1.0 + 2.0 * j / cols
+            cup = depth * (1.0 - s * s) * cup_v                     # the middle pushed back: the cup opens forward
+            roll = 0.004 * s ** 4 * (1.0 - v)                       # the rim curls forward a little
+            p = base + axis * up + lat * (s * half) - fwd * cup + fwd * roll
+            frow.append(p)
+            bulge = 0.0025 * (1.0 - s * s) * (1.0 - v)
+            brow.append(p - fwd * (t + bulge) * (1.0 if abs(s) < 0.999 else 0.25))
+        front.append(frow)
+        back.append(brow)
+    n = (rows + 1) * (cols + 1)
+    verts = [tuple(p) for row in front for p in row] + [tuple(p) for row in back for p in row]
+    idx = lambda i, j: i * (cols + 1) + j
+    faces, front_faces, uvs = [], [], []
+    for i in range(rows):
+        for j in range(cols):
+            a, b, c, d = idx(i, j), idx(i, j + 1), idx(i + 1, j + 1), idx(i + 1, j)
+            faces.append((a, b, c, d))                    # front, facing forward
+            front_faces.append(len(faces) - 1)
+            faces.append((n + a, n + d, n + c, n + b))    # back, facing back
+    for i in range(rows):                                  # the two edges, closed
+        faces.append((idx(i, 0), idx(i + 1, 0), n + idx(i + 1, 0), n + idx(i, 0)))
+        faces.append((idx(i, cols), n + idx(i, cols), n + idx(i + 1, cols), idx(i + 1, cols)))
+    for j in range(cols):                                  # the tip row, closed
+        faces.append((idx(rows, j), idx(rows, j + 1), n + idx(rows, j + 1), n + idx(rows, j)))
+    for j in range(cols):                                  # the root, closed (inside the skull)
+        faces.append((idx(0, j), n + idx(0, j), n + idx(0, j + 1), idx(0, j + 1)))
+    for k in range(2 * n):
+        i, j = (k % n) // (cols + 1), (k % n) % (cols + 1)
+        uvs.append((j / cols * 0.5 + (0.5 if k >= n else 0.0), i / rows))
+    return verts, faces, front_faces, uvs
+
+
+def add_cat_ears(rig, body, height=0.078, width=0.068, depth=0.022, tilt=0.2, thick=0.003, tufts=14, log=print):
+    """Realistic cat ears for any MakeHuman head (sneed 2026-11-19: the old ones looked like cones): up out of the top of
+    the head either side of the crown, tilted out a little and turned a little outwards, each a thin cupped pinna
+    (`_cat_ear_mesh`) with a few pale fur tufts growing out of the bottom of the cup, weighted wholly to the head. The
+    outside is the fur material (CatFur), the inside of the cup CatEarInner (skin, pinker). Returns the ear objects."""
+    import math
+    import bmesh
     from mathutils import Vector
     head = rig.data.bones.get("head")
     if head is None:
@@ -1854,47 +1907,66 @@ def add_cat_ears(rig, body, height=0.066, width=0.062, depth=0.03, tilt=0.35, lo
     upper = [p for p in skull if p.z > top - 0.05]
     objs = []
     for side in (1.0, -1.0):
-        want = Vector((hx + side * 0.05, top_p.y + 0.008, top - 0.018))
+        want = Vector((hx + side * 0.052, top_p.y + 0.006, top - 0.02))
         base = min(upper, key=lambda p: (p - want).length)
         normal = (base - centre).normalized()
-        axis = (normal * 0.4 + Vector((0, 0, 1)) * 0.6 + Vector((side, 0, 0)) * tilt).normalized()
-        fwd = Vector((side * math.sin(math.radians(20)), -math.cos(math.radians(20)), 0.0))   # forward, turned out
+        axis = (normal * 0.35 + Vector((0, 0, 1)) * 0.65 + Vector((side, 0, 0)) * tilt).normalized()
+        fwd = Vector((side * math.sin(math.radians(25)), -math.cos(math.radians(25)), 0.0))   # forward, turned out
         fwd = (fwd - axis * fwd.dot(axis)).normalized()
         lat = axis.cross(fwd).normalized()
-        rings_n, seg = 10, 16
-        rings = []
-        for i in range(rings_n):
-            t = i / rings_n
-            c = base - axis * 0.012 + axis * (height + 0.012) * t
-            a = 0.5 * width * (1.0 - t ** 1.15) * (1.0 - t) ** 0.35 + 0.001   # a little rounded out, a soft tip
-            b = 0.5 * depth * (1.0 - t) + 0.0008
-            ring = []
-            for s in range(seg):
-                th = 2.0 * math.pi * s / seg
-                cos = math.cos(th)
-                o_f = b * cos - 1.5 * b * max(cos, 0.0) ** 2   # the front cupped in
-                ring.append(c + lat * a * math.sin(th) + fwd * o_f)
-            rings.append(ring)
-        apex = base - axis * 0.012 + axis * (height + 0.012) - fwd * 0.004
-        obj = _loft("CatEar_" + ("l" if side > 0 else "r"), rings, apex)
-        import bmesh
+        verts, faces, front_faces, uvs = _cat_ear_mesh(base, axis, fwd, lat, height, width, depth, thick)
+        name = "CatEar_" + ("l" if side > 0 else "r")
+        mesh = bpy.data.meshes.new(name)
+        mesh.from_pydata(verts, [], faces)
+        mesh.update()
+        uv = mesh.uv_layers.new(name="UVMap")
+        for poly in mesh.polygons:
+            poly.use_smooth = True
+            for li in poly.loop_indices:
+                uv.data[li].uv = uvs[mesh.loops[li].vertex_index]
+        mesh.materials.append(fur)
+        mesh.materials.append(inner)
+        front_set = set(front_faces)
+        rows, cols = 14, 13
+        for k, poly in enumerate(mesh.polygons):
+            if k in front_set:
+                i, j = (k // 2) // cols, (k // 2) % cols
+                # The pink skin inside the cup; a furred rim round it and up the tip, as on a real cat.
+                if 1 <= i < rows - 3 and 2 <= j < cols - 2:
+                    poly.material_index = 1
+        obj = bpy.data.objects.new(name, mesh)
+        bpy.context.scene.collection.objects.link(obj)
         bm = bmesh.new()
         bm.from_mesh(obj.data)
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
         bm.to_mesh(obj.data)
         bm.free()
-        obj.data.materials.append(fur)
-        obj.data.materials.append(inner)
-        for poly in obj.data.polygons:
-            vs = list(poly.vertices)
-            if any(v >= rings_n * seg for v in vs):
-                continue
-            ring_i = min(v // seg for v in vs)
-            if 1 <= ring_i < rings_n - 2 and all(math.cos(2.0 * math.pi * (v % seg) / seg) > 0.35 for v in vs):
-                poly.material_index = 1
-        _skin_to(obj, rig, {i: {"head": 1.0} for i in range(len(obj.data.vertices))})
-        objs.append(obj)
-    log("cat ears", height, "m on the skull at z", round(top, 3))
+        parts = [obj]
+        # Ear furnishings: pale tufts out of the bottom of the cup, curving up and out past the rim (the inner material).
+        for k in range(tufts):
+            s = -0.55 + 1.1 * (k + 0.5) / tufts
+            v0 = 0.12 + 0.1 * ((k * 7) % 3) / 2.0
+            half = 0.5 * width * (1.0 - v0 ** 1.7) ** 0.75
+            root = base + axis * (height * v0) + lat * (s * half) - fwd * (depth * (1.0 - s * s) * 0.8 - 0.002)
+            length = height * (0.32 + 0.12 * ((k * 5) % 4) / 3.0)
+            out = (axis * 0.75 + fwd * 0.45 + lat * (s * 0.5)).normalized()
+            n = 6
+            centres = [root + out * length * t + axis * length * 0.25 * t * t for t in [q / (n - 1) for q in range(n)]]
+            radii = [max(0.0006 * (1.0 - q / (n - 1)) ** 0.7, 0.0001) for q in range(n)]
+            frames = []
+            for q in range(n):
+                dd = (centres[min(q + 1, n - 1)] - centres[max(q - 1, 0)]).normalized()
+                a = dd.cross(fwd).normalized()
+                frames.append((a, dd.cross(a).normalized()))
+            tuft = _tube("%s_tuft%d" % (name, k), centres, radii, frames, segments=5)
+            tuft.data.materials.append(inner)  # pale, as a cat's ear furnishings are
+            tuft.data.materials.append(fur)
+            parts.append(tuft)
+        ear = _join(parts) if len(parts) > 1 else obj
+        ear.name = name
+        _skin_to(ear, rig, {i: {"head": 1.0} for i in range(len(ear.data.vertices))})
+        objs.append(ear)
+    log("cat ears", height, "m, thin cupped pinnae with", tufts, "tufts, on the skull at z", round(top, 3))
     return objs
 
 

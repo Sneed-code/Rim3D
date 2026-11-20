@@ -719,6 +719,17 @@ WorldSite World::siteFor(int index) const {
     s.hilliness = t.hilliness;
     s.river = t.river;
     s.road = t.road;
+    for (const WorldRoad& r : roads_) {
+        if (r.tileA != index && r.tileB != index) {
+            continue;
+        }
+        const int other = r.tileA == index ? r.tileB : r.tileA;
+        for (int dir = 0; dir < 8; ++dir) {
+            if (neighbour(index, dir) == other && r.kind > s.roadEdges[static_cast<size_t>(dir)]) {
+                s.roadEdges[static_cast<size_t>(dir)] = r.kind;
+            }
+        }
+    }
     s.temperature = t.temperature;
     s.rainfall = t.rainfall;
     s.elevation = t.elevation;

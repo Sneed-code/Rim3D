@@ -1260,10 +1260,19 @@ void UGunRangeSubsystem::UpdateHeldView(float Dt, ASimPawnActor& Player, const c
 			const FVector R = FVector(ReadyPlace->at.x, ReadyPlace->at.y, ReadyPlace->at.z);
 			// The fist's knuckles lead the cut (a blade's edge is its +z, the way the fingers point: rolled over, as in
 			// the ready guard, they face forward).
-			const colony::HoldPlace Windup = bThrust ? PlaceAt(R + FVector(-12.0f, 2.0f, 1.0f), ReadyPlace->pitch * 0.5f, ReadyPlace->yaw * 0.5f, ReadyPlace->roll)
-													 : PlaceAt(FVector(30.0f, 26.0f, -4.0f), 70.0f, 35.0f, 160.0f);
-			const colony::HoldPlace Strike = bThrust ? PlaceAt(R + FVector(28.0f, -8.0f, 6.0f), 2.0f, -4.0f, ReadyPlace->roll)
-													 : PlaceAt(FVector(46.0f, -4.0f, -26.0f), -25.0f, -50.0f, 150.0f);
+			colony::HoldPlace Windup = bThrust ? PlaceAt(R + FVector(-12.0f, 2.0f, 1.0f), ReadyPlace->pitch * 0.5f, ReadyPlace->yaw * 0.5f, ReadyPlace->roll)
+											   : PlaceAt(FVector(30.0f, 26.0f, -4.0f), 70.0f, 35.0f, 160.0f);
+			colony::HoldPlace Strike = bThrust ? PlaceAt(R + FVector(28.0f, -8.0f, 6.0f), 2.0f, -4.0f, ReadyPlace->roll)
+											   : PlaceAt(FVector(46.0f, -4.0f, -26.0f), -25.0f, -50.0f, 150.0f);
+			if (Me.meleeLow)
+			{
+				// A blow at a body on the ground (sneed 2026-11-19): raised, then driven down into it below the view: a stab
+				// down for a spear or a knife (point down), a chop down for the rest.
+				Windup = bThrust ? PlaceAt(R + FVector(-6.0f, 3.0f, 16.0f), ReadyPlace->pitch * 0.5f - 20.0f, ReadyPlace->yaw * 0.5f, ReadyPlace->roll)
+								 : PlaceAt(FVector(26.0f, 10.0f, 10.0f), 70.0f, 15.0f, 160.0f);
+				Strike = bThrust ? PlaceAt(R + FVector(22.0f, -3.0f, -34.0f), -55.0f, -4.0f, ReadyPlace->roll)
+								 : PlaceAt(FVector(44.0f, -4.0f, -36.0f), -60.0f, -20.0f, 150.0f);
+			}
 			const FTransform WindupT = HoldDraw::PlaceInAnchor(Windup, Points, Size, 1.0f);
 			const FTransform StrikeT = HoldDraw::PlaceInAnchor(Strike, Points, Size, 1.0f);
 			const float Hit = Clip->hitSeconds > 0.0f ? FMath::Clamp(Clip->hitSeconds / Clip->seconds, 0.3f, 0.9f) : 0.66f;
@@ -1387,8 +1396,15 @@ void UGunRangeSubsystem::UpdateHeldView(float Dt, ASimPawnActor& Player, const c
 			const bool bThrust = Hold.styleName.find("Spear") != std::string::npos || Hold.styleName.find("Knife") != std::string::npos ||
 				Clip->anim.find("Stab") != std::string::npos || Clip->anim.find("Thrust") != std::string::npos;
 			const FVector Ready = RightSpot;
-			const FVector Windup = bThrust ? Ready + FVector(-12.0f, 2.0f, 1.0f) : FVector(30.0f, 24.0f, 6.0f);
-			const FVector Strike = bThrust ? Ready + FVector(26.0f, -6.0f, 0.0f) : FVector(46.0f, -14.0f, -16.0f);
+			FVector Windup = bThrust ? Ready + FVector(-12.0f, 2.0f, 1.0f) : FVector(30.0f, 24.0f, 6.0f);
+			FVector Strike = bThrust ? Ready + FVector(26.0f, -6.0f, 0.0f) : FVector(46.0f, -14.0f, -16.0f);
+			if (Me.meleeLow)
+			{
+				// A blow at a body on the ground (sneed 2026-11-19): raised, then driven down into it below the view, not
+				// straight ahead: a stab down for a spear or a knife, a chop down for the rest.
+				Windup = bThrust ? Ready + FVector(-6.0f, 3.0f, 16.0f) : FVector(26.0f, 10.0f, 14.0f);
+				Strike = bThrust ? Ready + FVector(22.0f, -3.0f, -38.0f) : FVector(44.0f, -4.0f, -40.0f);
+			}
 			// The blade meets the target when the sim's blow lands.
 			const float Hit = Clip->hitSeconds > 0.0f ? FMath::Clamp(Clip->hitSeconds / Clip->seconds, 0.3f, 0.9f) : 0.66f;
 			const float WindEnd = FMath::Max(0.1f, Hit - 0.2f);

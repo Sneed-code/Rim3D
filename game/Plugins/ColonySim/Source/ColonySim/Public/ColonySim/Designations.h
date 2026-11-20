@@ -22,6 +22,8 @@ enum class DesignationKind : uint8_t {
     CutPlant,      // fell the tree or cut down the plant; a tree gives wood
     HarvestPlant,  // pick what the plant gives (berries, wood from a tree)
     RemoveFloor,   // take up the floor laid on the cell (docs/design/build-menu.md)
+    AddWindow,     // cut a window in the wall in the cell, or glaze its broken one (docs/design/windows.md)
+    RemoveWindow,  // fill the wall's window in
 };
 
 COLONY_API const char* designationKindName(DesignationKind kind);

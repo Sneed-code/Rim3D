@@ -263,6 +263,11 @@ bool AnimalSystem::walkAt(Entity e, Animal& a, const Kind& kind, float x, float 
     if (!straightWalkIsClear(map_, pos.x, pos.y, static_cast<float>(cell.x) + 0.5f, static_cast<float>(cell.y) + 0.5f, kPawnRadius, pos.level)) {
         return false;
     }
+    // Doors and fences stop it, except an animal charging at its enemy: a manhunter breaks through a fence (RimWorld wiki).
+    if (mode != AnimalMode::Chase &&
+        animalLineCrossesDoor(map_, pos.x, pos.y, static_cast<float>(cell.x) + 0.5f, static_cast<float>(cell.y) + 0.5f, pos.level)) {
+        return false;
+    }
     Mover& mover = reg.get<Mover>(e);
     mover.gaveUp = false;
     mover.metresPerStep = kind.topSpeed * speedShare;

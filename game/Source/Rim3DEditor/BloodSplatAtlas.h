@@ -4,8 +4,8 @@
 // and look at it (tools/blood_atlas_preview.cpp) without Unreal. BloodArtCommandlet turns it into T_BloodAtlas (R
 // coverage, G thickness, B wound core) and T_BloodAtlasN (a normal map from the thickness).
 //
-// Cells: 0-3 a drop that hit square on (crown, spines, satellite drops); 4-7 one that hit at a slant travelling to +U
-// (a body, a tail and drops thrown ahead); 8-9 fine spatter; 10-11 pools; 12 a run, top to bottom; 13 a smear along U;
+// Cells: 0-3 a drop that hit square on (an uneven blot with droplets); 4-7 one that hit at a slant travelling to +U
+// (a body, a short tail and drops thrown ahead); 8-9 fine spatter; 10-11 pools; 12 a run, top to bottom; 13 a smear along U;
 // 14 a bullet hole or stab; 15 a torn exit wound or a cut along U.
 
 #include <algorithm>
@@ -134,76 +134,79 @@ namespace bloodatlas
 
 	inline void AddCircle(Cell& C, float X, float Y, float R, float Thick = 1.0f, float Core = 0.0f) { Add(C, X, Y, X, Y, R, R, Thick, Core); }
 
-	// A drop that hit square on.
+	// A drop that hit square on: a soft, uneven blot (lobes melted together, a few short rounded bulges where the crown
+	// spilled over) with droplets nearby, more of them close in. No spines: thin rays with beads read as a cartoon
+	// starburst or a virus (PC look, 2026-11-19).
 	inline Cell MakeRound(uint32_t Seed)
 	{
 		Random R(Seed);
 		Cell C;
 		C.Seed = Seed;
-		const float Main = R.Range(0.13f, 0.17f);
-		// The body: a few overlapping circles so it is not a perfect disc.
+		const float Main = R.Range(0.14f, 0.18f);
 		AddCircle(C, 0.5f, 0.5f, Main);
-		for (int I = 0; I < 5; ++I)
+		const int Lobes = static_cast<int>(R.Range(4.0f, 7.0f));
+		for (int I = 0; I < Lobes; ++I)
 		{
 			const float A = R.Range(0.0f, 6.2832f);
-			AddCircle(C, 0.5f + std::cos(A) * Main * 0.35f, 0.5f + std::sin(A) * Main * 0.35f, Main * R.Range(0.7f, 0.9f));
+			const float D = Main * R.Range(0.3f, 0.6f);
+			AddCircle(C, 0.5f + std::cos(A) * D, 0.5f + std::sin(A) * D, Main * R.Range(0.55f, 0.8f));
 		}
-		// Spines thrown off the crown, each ending in a bead.
-		const int Spines = static_cast<int>(R.Range(12.0f, 22.0f));
-		for (int I = 0; I < Spines; ++I)
-		{
-			const float A = (I + R.Range(-0.35f, 0.35f)) * 6.2832f / Spines;
-			const float From = Main * 0.85f;
-			const float To = Main * R.Range(1.2f, 1.9f);
-			const float W = R.Range(0.010f, 0.022f);
-			Add(C, 0.5f + std::cos(A) * From, 0.5f + std::sin(A) * From, 0.5f + std::cos(A) * To, 0.5f + std::sin(A) * To, W, W * 0.35f, 0.7f);
-			if (R.Unit() < 0.7f)
-			{
-				const float Bead = To + R.Range(0.01f, 0.05f);
-				AddCircle(C, 0.5f + std::cos(A) * Bead, 0.5f + std::sin(A) * Bead, R.Range(0.006f, 0.016f), 0.6f);
-			}
-		}
-		// Satellite drops further out.
-		const int Satellites = static_cast<int>(R.Range(10.0f, 26.0f));
-		for (int I = 0; I < Satellites; ++I)
+		// Short, round-ended bulges past the edge.
+		const int Bulges = static_cast<int>(R.Range(2.0f, 5.0f));
+		for (int I = 0; I < Bulges; ++I)
 		{
 			const float A = R.Range(0.0f, 6.2832f);
-			const float D = R.Range(Main * 1.8f, 0.46f);
-			AddCircle(C, 0.5f + std::cos(A) * D, 0.5f + std::sin(A) * D, R.Range(0.003f, 0.012f) * (1.2f - D), 0.5f);
+			const float To = Main * R.Range(1.05f, 1.3f);
+			const float W = Main * R.Range(0.18f, 0.3f);
+			Add(C, 0.5f + std::cos(A) * Main * 0.7f, 0.5f + std::sin(A) * Main * 0.7f, 0.5f + std::cos(A) * To, 0.5f + std::sin(A) * To, W, W * 0.8f, 0.8f);
 		}
-		C.EdgeNoise = 0.008f;
+		// Droplets: a few bigger ones close by, small ones further out, all round.
+		const int Droplets = static_cast<int>(R.Range(6.0f, 14.0f));
+		for (int I = 0; I < Droplets; ++I)
+		{
+			const float A = R.Range(0.0f, 6.2832f);
+			const float D = Main * (1.25f + 1.6f * std::pow(R.Unit(), 1.5f));
+			const float Size = R.Range(0.004f, 0.016f) * std::clamp(1.6f - D / Main * 0.4f, 0.3f, 1.0f);
+			AddCircle(C, 0.5f + std::cos(A) * D, 0.5f + std::sin(A) * D, Size, 0.6f);
+		}
+		C.Smooth = 0.03f;
+		C.EdgeNoise = 0.012f;
+		C.EdgeNoiseScale = 14.0f;
+		C.ThickScale = 0.12f;
 		return C;
 	}
 
-	// A drop that hit at a slant, travelling to +U (+X): a long body, a tail ahead, drops thrown further ahead.
+	// A drop that hit at a slant, travelling to +U (+X): a long rounded body narrowing to a short tail, and a few
+	// small drops thrown ahead along its line.
 	inline Cell MakeDirectional(uint32_t Seed)
 	{
 		Random R(Seed);
 		Cell C;
 		C.Seed = Seed;
 		const float Y = 0.5f + R.Range(-0.03f, 0.03f);
-		const float W = R.Range(0.075f, 0.095f);
-		Add(C, 0.20f, Y, 0.52f, Y + R.Range(-0.01f, 0.01f), W * 0.85f, W);
-		Add(C, 0.52f, Y, 0.80f, Y + R.Range(-0.02f, 0.02f), W, W * 0.12f, 0.8f);
-		AddCircle(C, R.Range(0.84f, 0.88f), Y + R.Range(-0.02f, 0.02f), R.Range(0.012f, 0.022f), 0.7f);
-		// Scalloped edge on the leading half.
-		for (int I = 0; I < 8; ++I)
+		const float W = R.Range(0.07f, 0.09f);
+		AddCircle(C, 0.28f, Y, W * 0.95f);
+		Add(C, 0.28f, Y, 0.55f, Y + R.Range(-0.01f, 0.01f), W, W * 0.8f);
+		Add(C, 0.55f, Y, 0.74f, Y + R.Range(-0.015f, 0.015f), W * 0.8f, W * 0.2f, 0.8f);
+		// A lobe or two on the sides of the body.
+		for (int I = 0; I < 2; ++I)
 		{
-			const float X = R.Range(0.35f, 0.65f);
+			const float X = R.Range(0.3f, 0.5f);
 			const float Side = R.Unit() < 0.5f ? -1.0f : 1.0f;
-			Add(C, X, Y, X + R.Range(0.03f, 0.08f), Y + Side * R.Range(0.05f, 0.11f), 0.010f, 0.004f, 0.6f);
+			AddCircle(C, X, Y + Side * W * R.Range(0.45f, 0.65f), W * R.Range(0.35f, 0.5f));
 		}
-		// Drops thrown ahead in a narrow fan, smaller further out.
-		const int Ahead = static_cast<int>(R.Range(6.0f, 14.0f));
+		// Drops thrown ahead, elongated along the travel, smaller further out.
+		const int Ahead = static_cast<int>(R.Range(3.0f, 7.0f));
 		for (int I = 0; I < Ahead; ++I)
 		{
-			const float X = R.Range(0.6f, 0.97f);
-			const float Spread = (X - 0.5f) * 0.35f;
-			const float Rr = R.Range(0.004f, 0.014f) * (1.1f - X);
-			const float Tail = Rr * 2.5f;
-			Add(C, X - Tail, Y + R.Range(-Spread, Spread), X, Y + R.Range(-Spread, Spread) * 0.2f, Rr, Rr * 0.3f, 0.5f);
+			const float X = R.Range(0.78f, 0.95f);
+			const float Rr = R.Range(0.006f, 0.014f) * (1.2f - X);
+			const float Dy = R.Range(-0.04f, 0.04f);
+			Add(C, X - Rr * 1.8f, Y + Dy, X, Y + Dy, Rr * 0.7f, Rr, 0.5f);
 		}
-		C.EdgeNoise = 0.005f;
+		C.Smooth = 0.025f;
+		C.EdgeNoise = 0.008f;
+		C.EdgeNoiseScale = 14.0f;
 		return C;
 	}
 
@@ -226,29 +229,31 @@ namespace bloodatlas
 		return C;
 	}
 
-	// A pool: lobes melted together, smooth, thick.
+	// A pool: many lobes of different sizes melted together, so the outline is uneven all round (no single tongue),
+	// thick in the middle, with a few drops on the rim.
 	inline Cell MakePool(uint32_t Seed)
 	{
 		Random R(Seed);
 		Cell C;
 		C.Seed = Seed;
-		const int Lobes = static_cast<int>(R.Range(6.0f, 10.0f));
+		AddCircle(C, 0.5f, 0.5f, R.Range(0.16f, 0.2f));
+		const int Lobes = static_cast<int>(R.Range(9.0f, 14.0f));
 		for (int I = 0; I < Lobes; ++I)
 		{
 			const float A = R.Range(0.0f, 6.2832f);
-			const float D = R.Range(0.0f, 0.17f);
-			AddCircle(C, 0.5f + std::cos(A) * D, 0.5f + std::sin(A) * D, R.Range(0.14f, 0.24f));
+			const float D = R.Range(0.08f, 0.24f);
+			AddCircle(C, 0.5f + std::cos(A) * D, 0.5f + std::sin(A) * D, R.Range(0.05f, 0.13f) * (1.25f - D * 1.5f));
 		}
-		// A few runnels where it found a way across the ground.
-		for (int I = 0; I < 3; ++I)
+		const int Rim = static_cast<int>(R.Range(5.0f, 10.0f));
+		for (int I = 0; I < Rim; ++I)
 		{
 			const float A = R.Range(0.0f, 6.2832f);
-			const float Reach = R.Range(0.30f, 0.38f);
-			Add(C, 0.5f + std::cos(A) * 0.2f, 0.5f + std::sin(A) * 0.2f, 0.5f + std::cos(A) * Reach, 0.5f + std::sin(A) * Reach, 0.06f, 0.035f, 0.8f);
+			const float D = R.Range(0.33f, 0.44f);
+			AddCircle(C, 0.5f + std::cos(A) * D, 0.5f + std::sin(A) * D, R.Range(0.006f, 0.02f), 0.6f);
 		}
-		C.Smooth = 0.08f;
-		C.EdgeNoise = 0.012f;
-		C.EdgeNoiseScale = 9.0f;
+		C.Smooth = 0.06f;
+		C.EdgeNoise = 0.014f;
+		C.EdgeNoiseScale = 11.0f;
 		C.ThickScale = 0.2f;
 		return C;
 	}

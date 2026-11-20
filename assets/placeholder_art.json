@@ -40,7 +40,6 @@
     {"def": "WoodFiredGenerator", "id": "portable_generator", "size": [1.9, 1.9, 1.2], "stretch": true, "tris": 2500},
     {"def": "Battery", "id": "old_military_crate", "size": [0.94, 1.94, 0.7], "long": "y", "stretch": true, "tris": 800},
     {"def": "Heater", "id": "scandinavian_masonry_heater", "size": [0.9, 0.9, 1.4], "tris": 2000},
-    {"def": "Cooler", "id": "exterior_aircon_unit", "size": [1.9, 0.9, 0.9], "long": "x", "stretch": true, "tris": 2000},
     {"def": "Campfire", "id": "stone_fire_pit", "size": [0.9, 0.9, 0.3], "tris": 1500},
     {"def": "StandingLamp", "id": "street_lamp_01", "size": [0.4, 0.4, 1.5], "stretch": true, "tris": 1500},
     {"def": "SunLamp", "id": "street_lamp_01", "size": [0.4, 0.4, 2.2], "tris": 1500},
