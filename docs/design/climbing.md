@@ -2,7 +2,7 @@
 
 sneed (2026-11-19): pawns climb sheer walls, cat-strain twice as fast, with an animation at the top. Code: `Map`
 (`setWallClimb`, `refreshWallClimb`, `linkAt`), `MovementSystem` (climb speed), `Sim::writeSnapshot` (the drawn path),
-`PawnActor.cpp` (`UpdateWallClimb`, follow-up PR). Data: `Rules/ClimbRules.json`. Tests: `Tests/ClimbTests.cpp`.
+`PawnActor.cpp` (`UpdateWallClimb`). Data: `Rules/ClimbRules.json`. Tests: `Tests/ClimbTests.cpp`.
 
 ## What can be climbed
 
@@ -26,7 +26,10 @@ Cat-strain climb twice as fast (gene `climbSpeed` 2, `Mover::climbFactor`).
 
 The snapshot's `climb` (0 to 1) with `wallClimb`, `wallClimbUp` and the facing (towards the wall). Until
 `kWallMantleFrom` (0.8) the pawn is drawn against the face, rising to 1.1 m under the top; after it, it mantles over the
-edge onto the floor. Going down is the same backwards. Unreal (a follow-up PR, compiled on the PC) plays the Game Animation Sample's
-`M_Neutral_Traversal_Climb_Start_2_5_stand_F_Lfoot` with its time following the climb (the face up to the catch at 45%
-of the clip, the mantle the rest) and its root travel taken out (the sim moves the body). Tune `PawnWallClimbGrab` on
-the PC by eye.
+edge onto the floor. Going down is the same backwards. Unreal (`ASimPawnActor::UpdateWallClimb`, PR #389, tuned over four
+PC rounds) plays the Game Animation Sample's `M_Neutral_Traversal_Climb_Start_2_5_stand_F_Lfoot` held still, its time
+following the climb: evenly up the face to 45% of the clip (`PawnWallClimbGrab`, the hands reach the edge at about 0.7),
+then the pull over the top to 68% (`PawnWallClimbEnd`, where it already stands). The pose is drawn about its root, so
+the body is lifted by the clip's own rise (stretched to the 3 m wall), not the sim's straight line: the hands stay on
+the edge. The sim keeps the ground position; the selection ring lags the body a little mid-climb. Cat-strain jump twice
+as high (`JumpHeightFactor`).

@@ -285,6 +285,8 @@ struct ThingView {
     bool pregnant = false;
     float milkFullness = -1.0f;
     float woolFullness = -1.0f;
+    bool breedingOff = false;     // the player switched breeding off for this animal itself (its zone may switch it off too)
+    Entity animalBed = kNoEntity; // the animal bed it sleeps in (docs/design/husbandry.md, Animal beds); none: the ground
     // Pawns in melee (docs/design/melee.md): winding up a swing at meleeTarget (the hit comes in
     // meleeStepsLeft steps) or recovering from one, and whether their weapon is raised to block.
     MeleePhase meleePhase = MeleePhase::Ready;
@@ -589,6 +591,7 @@ struct AnimalZoneView {
     uint32_t firstCell = 0;
     uint32_t cellCount = 0;
     bool pen = false;
+    bool breedingOff = false;  // the animals in it do not mate
 };
 
 // One allowed area (docs/design/areas.md): `cellCount` cells from Snapshot::areaCells[firstCell].

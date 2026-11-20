@@ -684,6 +684,24 @@ void USmokeTestSubsystem::BuildLookPhases()
 	};
 	Phases.Add(MoveTemp(WindowsShot));
 
+	// 8c. Sunbeams: at half past eight on a midsummer morning the sun is low in the north-east of the sky's turn (azimuth about
+	// 128 degrees, 41 degrees up), so it shines in through the room's north windows and lays two bright patches on the floor and
+	// furniture, which bounce light round the room (docs/design/windows.md "Drawing"). From the south-west corner, looking down
+	// at where they fall.
+	FPhase Sunbeams;
+	Sunbeams.Name = TEXT("sunbeams");
+	Sunbeams.WarmupSeconds = 4.0f;
+	Sunbeams.MeasureSeconds = 2.0f;
+	Sunbeams.Setup = [=, this]()
+	{
+		SetClock(8.5f, LookSmokeMidsummer);
+		const FVector To = CellWorld(static_cast<float>(State->Room.x) + 3.8f, static_cast<float>(State->Room.y) + 3.6f, 20.0);
+		const FVector From = CellWorld(static_cast<float>(State->Room.x) + 1.4f, static_cast<float>(State->Room.y) + 1.3f, 215.0);
+		ViewFrom(From, (To - From).Rotation());
+	};
+	Sunbeams.Verify = [=]() { NoteShot(TEXT("sunbeams")); };
+	Phases.Add(MoveTemp(Sunbeams));
+
 	// 9. A snowy day: a new game on the same seed snows hard through the cold night, then the overseer looks at it at eleven
 	// on a midwinter morning. (The sim's first day is spring; the night is cold enough for the snow to lie.)
 	FPhase Snowy;

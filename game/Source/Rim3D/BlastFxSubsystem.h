@@ -44,6 +44,9 @@ public:
 	/** Takes away every sprite, scorch and light (the smoke test, so an earlier blast's smoke doesn't hide the next). */
 	void ClearForTest();
 
+	/** A scorch mark alone at a map point, with no blast over it (the smoke test pictures it clear of smoke). */
+	void AddScorchForTest(float MapX, float MapY, float RadiusM);
+
 	/** A puff of dust behind a piece of debris in flight (UShooterFeelSubsystem calls it). */
 	void AddDebrisTrail(const FVector& At, float SizeCm);
 
@@ -134,5 +137,6 @@ private:
 	float FlashAge = 99.0f;
 	float FlashScale = 1.0f;
 	bool bFlashFire = false;
+	bool bLoggedScorchDraw = false;
 	float FlashCandelas = 0.0f;
 };

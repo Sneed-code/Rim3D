@@ -739,6 +739,23 @@ TEST_CASE("Breeding: breeding can be switched off for an animal or a whole zone"
     g.sim.submit(SetBreedingCommand{cow2, 0, false});
     g.sim.step();
 
+    // The overseer screens see both switches.
+    {
+        Snapshot snap;
+        g.sim.writeSnapshot(snap);
+        const ThingView* bullView = snap.find(bull2);
+        const ThingView* cowView = snap.find(cow2);
+        BREED_REQUIRE(bullView != nullptr);
+        BREED_REQUIRE(cowView != nullptr);
+        CHECK_FALSE(bullView->breedingOff);  // only its zone's switch is off
+        CHECK(cowView->breedingOff);
+        bool zoneOff = false;
+        for (const AnimalZoneView& zoneView : snap.animalZones) {
+            zoneOff = zoneOff || (zoneView.id == zone && zoneView.breedingOff);
+        }
+        CHECK(zoneOff);
+    }
+
     const std::vector<uint8_t> bytes = saveSim(g.sim);
     SaveLoadResult loaded = loadSim(bytes, breedDefs());
     BREED_REQUIRE(loaded.sim != nullptr);

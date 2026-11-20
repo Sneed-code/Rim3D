@@ -893,6 +893,13 @@ FVector USimSubsystem::GetViewLocation(const colony::ThingView& View) const
 	{
 		return SimToWorld(View.x, View.y, View.level);
 	}
+	if (View.wallClimb)
+	{
+		// Up a wall the sim gives the height itself (on the face, then over the top: docs/design/climbing.md), measured
+		// from its own ground; kept relative to that so the body sits on the drawn terrain the same way.
+		const float GroundSimM = Sim->map().heightAt(View.x, View.y, 0);
+		return SimToWorld(View.x, View.y, 0) + FVector(0.0, 0.0, (View.z - GroundSimM) * 100.0);
+	}
 	// The link the pawn is on: one end on its level, and the pawn on the line between the two ends' middles.
 	const FVector2D At(View.x, View.y);
 	const colony::LevelLink* Best = nullptr;

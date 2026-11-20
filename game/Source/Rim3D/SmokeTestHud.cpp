@@ -13,9 +13,17 @@
 #include "PanelsSubsystem.h"
 #include "SimSubsystem.h"
 
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
+#include "ColonySim/Fighters.h"
+#include "ColonySim/Health.h"
+#include "ColonySim/Husbandry.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Things.h"
+
+#include <string>
 
 namespace
 {
@@ -25,7 +33,59 @@ namespace
 	{
 		TArray<colony::Entity> Colonists;
 		int32 TabFramesBefore = 0;
+		/** The tame cow, prisoner and slave the bar phase made (3 when all went in). */
+		int32 SmokeExtras = 0;
 	};
+
+	/** A tame cow, a prisoner and a slave near the stockpile, so the Animals tab and the Prisoners screen show real rows
+	 *  (the same steps as the sim test "Slaves: the overseer screens' smoke colony"). Returns how many of the three it made. */
+	int32 HudSmokeAddAnimalsAndPrisoners(colony::Sim& Sim)
+	{
+		const colony::CellPos Home = Sim.stockpileCell() ? *Sim.stockpileCell() : colony::CellPos{128, 128, 0};
+		entt::registry& Reg = Sim.things().registry();
+		colony::Entity Handler = colony::kNoEntity;
+		for (const colony::Entity Found : Reg.view<colony::Colonist>())
+		{
+			Handler = Found;
+			break;
+		}
+		if (Handler == colony::kNoEntity)
+		{
+			return 0;
+		}
+		int32 Made = 0;
+		std::string Error;
+		const colony::Entity Cow = Sim.things().spawn("Cow", colony::CellPos{Home.x + 4, Home.y + 3, 0});
+		if (Cow != colony::kNoEntity && Sim.husbandry().markTame(Cow, true, Error))
+		{
+			for (int32 Try = 0; Try < 200 && !Sim.husbandry().isTame(Cow); ++Try)
+			{
+				Sim.husbandry().finishTame(Handler, Cow, 20);
+			}
+			Made += Sim.husbandry().isTame(Cow) ? 1 : 0;
+		}
+		for (int32 Index = 0; Index < 2; ++Index)
+		{
+			const colony::Entity Bed = Sim.things().spawn("Bed", colony::CellPos{Home.x - 6 + Index * 2, Home.y + 4, 0});
+			const colony::Entity Pawn = Sim.things().spawn("Human", colony::CellPos{Home.x - 6 + Index * 2, Home.y + 7, 0});
+			if (Bed == colony::kNoEntity || Pawn == colony::kNoEntity || !Sim.prisoners().setPrisonBed(Bed, true, Error) ||
+				!Sim.fighters().setFaction(Pawn, 2, Error))
+			{
+				continue;
+			}
+			// Only a downed enemy can be captured: it counts as down for the capture, then stands up on the next health pass.
+			colony::Health& PawnHealth = Reg.get<colony::Health>(Pawn);
+			PawnHealth.downed = true;
+			const bool bCaptured = Sim.prisoners().imprison(Pawn, Bed, Handler, Error);
+			PawnHealth.dirty = true;
+			if (!bCaptured)
+			{
+				continue;
+			}
+			Made += Index == 0 || Sim.prisoners().enslave(Pawn, Handler) ? 1 : 0;
+		}
+		return Made;
+	}
 }
 
 void USmokeTestSubsystem::BuildHudPhases()
@@ -67,6 +127,11 @@ void USmokeTestSubsystem::BuildHudPhases()
 			return;
 		}
 		B->SetSpeed(0);
+		if (colony::Sim* MutableSim = const_cast<colony::Sim*>(B->GetSim()))
+		{
+			State->SmokeExtras = HudSmokeAddAnimalsAndPrisoners(*MutableSim);
+			B->StepOnce();
+		}
 		if (!Overseer()->EnterOverseerMode())
 		{
 			Fail(TEXT("The overseer camera did not start"));
@@ -89,6 +154,10 @@ void USmokeTestSubsystem::BuildHudPhases()
 		if (Hud()->GetStats().BarFrames == 0)
 		{
 			Fail(TEXT("hud_bar: the bottom bar was never drawn"));
+		}
+		if (State->SmokeExtras != 3)
+		{
+			Fail(FString::Printf(TEXT("hud_bar: made %d of the tame cow, prisoner and slave, wanted 3"), State->SmokeExtras));
 		}
 		Notes.Add(FString::Printf(TEXT("hud_bar: %d colonists, bar drawn %d frames"), State->Colonists.Num(), Hud()->GetStats().BarFrames));
 	};
