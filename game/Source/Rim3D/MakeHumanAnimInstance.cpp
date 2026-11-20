@@ -406,6 +406,8 @@ void FMakeHumanHairNode::Setup(const FReferenceSkeleton& Ref)
 		case colony::HairBone::ClavicleR: Bone = Arm[0][1]; break;
 		case colony::HairBone::UpperArmL: Bone = Arm[1][0]; break;
 		case colony::HairBone::UpperArmR: Bone = Arm[1][1]; break;
+		case colony::HairBone::SpineLow: Bone = Spine.IsEmpty() ? INDEX_NONE : Spine[0]; break;
+		case colony::HairBone::Pelvis: Bone = PelvisIndex; break;
 		}
 		if (Bone == INDEX_NONE)
 		{
@@ -631,7 +633,7 @@ namespace
 	// never past a natural fist (index 50/60 at its first two joints, the little finger 65/65), the last joint a third
 	// as much. The thumb is left as animated.
 	float MhCurlFingers(FComponentSpacePoseContext& Output, const FBoneContainer& Container, const FMakeHumanArmsNode::FArm& Arm,
-					   const FTransform& HandAnimated, const FTransform& HandSolved, const FVector& Fingers0, const FVector& Palm0, float CurlAlpha,
+					   const FTransform& HandAnimated, const FTransform& HandSolved, const FVector& Fingers0, const FVector& Palm0, float CurlAlpha, float CurlWrap,
 					   TArray<FBoneTransform>& OutBoneTransforms)
 	{
 		static const double MhCurlWant[4][2] = {{50.0, 60.0}, {55.0, 65.0}, {60.0, 65.0}, {65.0, 65.0}};
@@ -674,7 +676,7 @@ namespace
 						continue;
 					}
 					const double Now = FMath::RadiansToDegrees(FMath::Atan2(FVector::DotProduct(FVector::CrossProduct(From, Seg), CurlAxis), FVector::DotProduct(From, Seg)));
-					Turn = FMath::Max(0.0, MhCurlWant[F][J] - Now);
+					Turn = FMath::Max(0.0, FMath::Min(MhCurlWant[F][J] * CurlWrap, 85.0) - Now);
 				}
 				else
 				{
@@ -1166,7 +1168,7 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 		CurlAdded[Side] = 0.0f;
 		if (Goal.bCurl && bHandFrame)
 		{
-			CurlAdded[Side] = MhCurlFingers(Output, Container, Arm, HandAnimated, FTransform(HandB, WB, HandT.GetScale3D()), Fingers0, Palm0, GoalAlpha, OutBoneTransforms);
+			CurlAdded[Side] = MhCurlFingers(Output, Container, Arm, HandAnimated, FTransform(HandB, WB, HandT.GetScale3D()), Fingers0, Palm0, GoalAlpha, Goal.CurlWrap, OutBoneTransforms);
 		}
 		bFinal[Side] = true;
 		ShortBy[Side] = static_cast<float>(Solve.shortBy);

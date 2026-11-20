@@ -998,6 +998,27 @@ void UTradePanelSubsystem::DrawFactionsWindow(USimSubsystem& Bridge, float Scale
 				ColonyHud::TextColored(Color, FString::Printf(TEXT("%+.0f"), Line.goodwill));
 			}
 
+			// Its last few goodwill changes, newest first, with why (the sim's goodwill log).
+			{
+				int32 Shown = 0;
+				FString Recent;
+				for (auto It = State.goodwillLog.rbegin(); It != State.goodwillLog.rend() && Shown < 3; ++It)
+				{
+					if (It->faction != Line.faction)
+					{
+						continue;
+					}
+					const FString Why = It->reason.empty() ? FString(TEXT("change")) : FString(UTF8_TO_TCHAR(It->reason.c_str()));
+					Recent += FString::Printf(TEXT("%s%+.0f %s (day %lld)"), Shown > 0 ? TEXT(",  ") : TEXT(""), It->amount, *Why,
+						static_cast<long long>(It->at / colony::kSecondsPerDay) + 1);
+					++Shown;
+				}
+				if (Shown > 0)
+				{
+					ColonyHud::TextColored(ColonyHud::TextDim(), FString::Printf(TEXT("Lately: %s"), *Recent));
+				}
+			}
+
 			// The caravan request: only factions that send caravans.
 			const size_t KindCount = Faction ? Faction->count("traders.caravan") : 0;
 			if (Faction && Faction->flag("canTrade") && KindCount > 0)

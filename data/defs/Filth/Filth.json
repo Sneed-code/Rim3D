@@ -55,5 +55,13 @@
     "defName": "AnimalFilth", "parent": "FilthBase", "label": "animal filth",
     "stats": { "beauty": -15, "cleanliness": -5 }, "cleanTicks": 35,
     "look": { "wet": [0.14, 0.10, 0.05], "dry": [0.14, 0.10, 0.05] }, "ours": ["look"]
+  },
+  {
+    "defName": "Rubble", "parent": "FilthBase", "label": "rubble", "trackable": false,
+    "stats": { "beauty": -5, "cleanliness": -5 }, "cleanTicks": 35,
+    "filth": { "disappearsInDays": [0, 0], "rainWashes": false },
+    "look": { "wet": [0.32, 0.3, 0.27], "dry": [0.42, 0.4, 0.36] },
+    "unverified": ["stats", "cleanTicks"], "ours": ["look", "filth"],
+    "note": "RimWorld's Filth_RubbleBuilding: what a building wrecked by damage leaves on its footprint, 1 to 3 layers a cell (docs/design/destruction.md). Rubble stays until it is cleaned: rain doesn't wash it and it doesn't fade. Unreal draws broken pieces of the building on it."
   }
 ]

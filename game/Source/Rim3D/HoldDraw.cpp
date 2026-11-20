@@ -338,7 +338,8 @@ HoldDraw::FPoints HoldDraw::PointsOf(const colony::WeaponHold& Hold, bool bShiel
 	}
 	else if (Hold.hasSupport && !bShieldOnArm && Hold.hand == colony::HoldHand::Right)
 	{
-		P.Off = HdPoint(Hold.support);
+		// Given from the main grip (a pistol's grip point may sit anywhere on its model): the support hand cups the grip hand.
+		P.Off = P.Main + HdPoint(Hold.support);
 		P.bOff = true;
 	}
 	// No model: the sight a little above the grip's line, the butt a forearm behind it.
@@ -446,7 +447,8 @@ bool HoldDraw::PinHands(const USkeletalMeshComponent* Mesh, const colony::Weapon
 		const FTransform GripInHand = OffInGrip.Inverse();
 		Out.OffRollPoint = GripInHand.GetLocation();
 		Out.OffRollAxis = GripInHand.TransformVectorNoScale(Turn.UnrotateVector(FVector::ForwardVector)).GetSafeNormal();
-		Out.OffRollFree = Hold.grip == colony::HoldGrip::Pole ? 180.0f : (Hold.grip == colony::HoldGrip::Gun ? 90.0f : 45.0f);
+		// A support hand cupping a pistol's grip hand has no round shaft to turn about.
+		Out.OffRollFree = !Hold.hasOff ? 0.0f : (Hold.grip == colony::HoldGrip::Pole ? 180.0f : (Hold.grip == colony::HoldGrip::Gun ? 90.0f : 45.0f));
 	}
 	return true;
 }
@@ -484,6 +486,8 @@ void HoldDraw::ApplyPinned(USkeletalMeshComponent* Mesh, const colony::WeaponHol
 	Off.Alpha = Pinned.bOff ? FMath::Clamp(OffAlpha, 0.0f, 1.0f) : 0.0f;
 	Off.bRotation = true;
 	Off.bCurl = true;
+	// Wrapped round the fore-end or shaft (a front hand left open under it read as resting on an open palm, PC 2026-11-20).
+	Off.CurlWrap = 1.3f;
 	if (Main.Alpha >= 0.5f)
 	{
 		// The weapon is at its place: the other hand goes to its own grip there, not after the main hand (whose turn
