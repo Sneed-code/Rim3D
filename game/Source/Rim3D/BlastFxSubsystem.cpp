@@ -203,7 +203,7 @@ bool UBlastFxSubsystem::EnsureScene()
 		const UMaterial* Base = Scorch->GetMaterial();
 		UE_LOG(LogBlastFx, Display, TEXT("Scorch material %s: domain %d, blend %d, two-sided %d, ISM usage %d"), *Scorch->GetPathName(),
 			Base ? static_cast<int32>(Base->MaterialDomain) : -1, static_cast<int32>(Scorch->GetBlendMode()), Scorch->IsTwoSided() ? 1 : 0,
-			Base && Base->bUsedWithInstancedStaticMeshes ? 1 : 0);
+			Base && Base->GetUsageByFlag(MATUSAGE_InstancedStaticMeshes) ? 1 : 0);
 	}
 	else
 	{

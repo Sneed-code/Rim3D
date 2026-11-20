@@ -278,6 +278,10 @@ namespace blastfx
 	/** The scorch: soot thickest in a ragged middle, streaks thrown out in rays, a paler dusty rim. One picture. */
 	inline Image MakeScorch(int Size, uint32_t Seed)
 	{
+		// A frag blast's mark seen from above: a ragged core of black soot, streaks of soot thrown out in rays past it, a
+		// ring of pale dust and soil blown out between the rays, a small pit of churned lighter soil in the middle and
+		// dark pocks where fragments struck. R = soot (how black), G = pale dust, A = how much of it covers the ground.
+		// PC round 8: the old soft round blotch read as a shadow.
 		Image Out;
 		Out.Size = Size;
 		Out.Pixels.assign(static_cast<size_t>(Size) * Size, Pixel{});
@@ -289,19 +293,38 @@ namespace blastfx
 				const float V = (Y + 0.5f) / Size * 2.0f - 1.0f;
 				const float R = std::sqrt(U * U + V * V);
 				const float A = std::atan2(V, U);
-				// Rays: noise round the circle, sharpened.
-				const float Ray = std::pow(Fbm(Vec3{std::cos(A) * 6.0f, std::sin(A) * 6.0f, 0.5f}, Seed + 21u, 4), 2.2f) * 2.2f;
-				const float Edge = std::min(0.8f, 0.42f + 0.16f * Ray + (Fbm(Vec3{U * 5.0f, V * 5.0f, 1.0f}, Seed + 22u, 4) - 0.5f) * 0.3f);
-				const float Speck = Fbm(Vec3{U * 22.0f, V * 22.0f, 2.0f}, Seed + 23u, 3);
-				float Soot = 1.0f - SmoothStep(Edge * 0.35f, Edge, R);
-				Soot *= 0.75f + 0.5f * (Speck - 0.5f);
-				const float Core = 1.0f - SmoothStep(0.0f, 0.22f, R + (Speck - 0.5f) * 0.15f);
-				Soot = Clamp01(Soot + Core * 0.4f);
-				const float Rim = SmoothStep(Edge * 0.8f, Edge, R) * (1.0f - SmoothStep(Edge, Edge * 1.25f, R)) * (0.6f + 0.4f * Speck);
+				const float Ca = std::cos(A);
+				const float Sa = std::sin(A);
+				// Ragged edge of the core: slow lumps round the circle plus fine fraying.
+				const float Lumps = Fbm(Vec3{Ca * 2.5f, Sa * 2.5f, 0.3f}, Seed + 31u, 3) - 0.5f;
+				const float Fray = Fbm(Vec3{U * 9.0f, V * 9.0f, 0.7f}, Seed + 32u, 4) - 0.5f;
+				const float Rc = 0.4f + 0.2f * Lumps + 0.07f * Fray;
+				const float Speck = Fbm(Vec3{U * 26.0f, V * 26.0f, 2.0f}, Seed + 33u, 3);
+				const float Core = 1.0f - SmoothStep(Rc - 0.04f, Rc + 0.03f, R);
+				// Rays: narrow spokes of soot of random length, a little wavy and broken along their length.
+				const float Wave = (Fbm(Vec3{R * 3.0f, 0.5f, 4.0f}, Seed + 34u, 2) - 0.5f) * 0.12f;
+				const float Spoke = Fbm(Vec3{std::cos(A + Wave) * 16.0f, std::sin(A + Wave) * 16.0f, 1.3f}, Seed + 35u, 3);
+				// Wider by the core, thinning out to their tips.
+				const float Taper = Clamp01((R - Rc) / 0.45f);
+				const float SpokeAmt = SmoothStep(0.46f + 0.12f * Taper, 0.6f + 0.08f * Taper, Spoke);
+				const float Reach = Rc + 0.15f + 0.45f * SmoothStep(0.52f, 0.8f, Spoke);
+				const float Broken = SmoothStep(0.3f, 0.55f, Fbm(Vec3{U * 14.0f, V * 14.0f, 5.0f}, Seed + 36u, 3));
+				const float Rays = SpokeAmt * (1.0f - SmoothStep(Rc, Reach, R)) * Broken * (R > Rc - 0.05f ? 1.0f : 0.0f);
+				// Pale dust thrown out in a ring just past the core, mostly between the rays.
+				const float Ring = SmoothStep(Rc - 0.02f, Rc + 0.06f, R) * (1.0f - SmoothStep(Rc + 0.12f, Rc + 0.34f, R));
+				const float Dust = Ring * (1.0f - 0.8f * SpokeAmt) * (0.3f + 0.4f * Speck);
+				// The pit: churned soil, lighter, in the middle.
+				const float Pit = 1.0f - SmoothStep(0.03f, 0.08f, R + (Speck - 0.5f) * 0.05f);
+				// Fragment pocks: small dark dots scattered past the core.
+				const float Dots = SmoothStep(0.74f, 0.8f, Fbm(Vec3{U * 40.0f, V * 40.0f, 3.0f}, Seed + 37u, 2)) * (1.0f - SmoothStep(0.55f, 0.92f, R));
+				float Soot = std::max({Core * (0.88f + 0.24f * (Speck - 0.5f)), Rays * 0.95f, Dots * 0.85f});
+				Soot *= 1.0f - 0.4f * Pit;
+				const float Pale = Clamp01(std::max(Dust, Pit * 0.4f));
 				Pixel& Px = Out.At(X, Y);
-				Px.Heat = Soot;
-				Px.Light = Clamp01(Rim);
-				Px.Opacity = Clamp01(std::max(Soot, Rim * 0.6f) * (1.0f - SmoothStep(0.85f, 1.0f, R)));
+				Px.Heat = Clamp01(Soot);
+				Px.Light = Pale * (1.0f - Clamp01(Soot));
+				Px.Depth = Speck;
+				Px.Opacity = Clamp01(std::max({Soot, Pale * 0.5f}) * (1.0f - SmoothStep(0.88f, 0.99f, R)));
 			}
 		}
 		return Out;

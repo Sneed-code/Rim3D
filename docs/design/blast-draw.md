@@ -22,7 +22,7 @@ recorded blasts, a far layer past 100 m, heard late by the speed of sound).
 | Heat shimmer | a ring of bent light swelling from 1.2 to 11 m in a third of a second |
 | Fragments | 40 glowing streaks at 15 to 35 m/s (each as long as it flies in 1/25 s) and 10 slower embers that arc down |
 | Debris | `UShooterFeelSubsystem`'s Chaos rigid bodies, now dark soil, brown soil and grey stone clods, mostly small; the fast ones trail dust for their first second |
-| Scorch | soot thrown out in rays with a pale dusty rim, 1.2 to 1.6 radii across, at a random turn, on a flat square laid on the ground along its slope 4 cm up (a deferred decal never showed on the PC); fades over `Blast.ScorchSeconds` (5 minutes, slowly at first), at most 40 at once |
+| Scorch | a ragged core of black soot with spokes of soot thrown out past it, pale blown-out dust between the spokes, a small pit of churned soil in the middle and dark fragment pocks, 1.4 to 1.8 radii across, at a random turn, on a flat square laid on the ground along its slope 4 cm up (a deferred decal never showed on the PC); fades over `Blast.ScorchSeconds` (5 minutes, slowly at first), at most 40 at once |
 | Camera | `UShooterFeelSubsystem`'s shake, blur and vignette by distance (unchanged) |
 
 Everything scales with the blast's radius against the frag grenade's 1.9 m. A **fire blast** (damage type with `mix.sub`
@@ -70,11 +70,9 @@ scorch still there), `blast_scorch` (a scorch mark alone, no smoke, looked down 
 
 ## Not yet
 
-- **The scorch mark does not show on the PC** (2026-11-20, rounds 3 to 7): first as a deferred decal, then as a ground square on the
-  traced ground (`LogBlastFx: Scorch at ...` is logged at the right place). The fireball, smoke and sparks with the same texture
-  path render fine. To find: the material (`M_BlastScorch`) or `T_BlastScorch`'s alpha. Round 8 (follow-up): the material is
-  two-sided, the log says what it is drawn with (`Scorch material ...`, `Scorch drawn: ...`) and `blast_scorch` pictures one
-  alone; the earlier pictures had it 11 m off at a grazing angle under the smoke.
+- The scorch mark showed first in PC round 8 (`blast_scorch`, a mark alone looked down at from 5 m): the earlier pictures had
+  it 11 m off at a grazing angle under the smoke, and the old texture was a soft round blotch that read as a shadow. Round 9
+  draws it as a starburst (above) and turns `blast_linger` the other way, away from the colonists on the right.
 
 - Blasts in water (a column of spray), on snow (white powder) and on stone floors (grey dust): the dust is soil-coloured
   everywhere.
