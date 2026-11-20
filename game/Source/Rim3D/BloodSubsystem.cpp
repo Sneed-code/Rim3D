@@ -42,7 +42,7 @@ namespace
 	TAutoConsoleVariable<float> GBloodDryMinutes(TEXT("Blood.DryMinutes"), 5.0f, TEXT("Real minutes at 1x for fresh blood to dry dark."), ECVF_Default);
 	TAutoConsoleVariable<int32> GBloodFilth(TEXT("Blood.Filth"), 1, TEXT("1 draws the sim's filth (blood, dirt, vomit, ash) as stains on its cells."), ECVF_Default);
 	TAutoConsoleVariable<float> GBloodDropScale(TEXT("Blood.DropScale"), 1.6f, TEXT("Drawn size of flying drops against their real size (they read better a little big)."), ECVF_Default);
-	TAutoConsoleVariable<float> GBloodSplatScale(TEXT("Blood.SplatScale"), 1.35f,
+	TAutoConsoleVariable<float> GBloodSplatScale(TEXT("Blood.SplatScale"), 1.6f,
 		TEXT("Drawn size of blood splats on the ground and walls (the round shapes fill less of their square than the old spiky ones, and read small from 10 m)."), ECVF_Default);
 	TAutoConsoleVariable<float> GBloodGroundShade(TEXT("Blood.GroundShade"), 0.6f,
 		TEXT("How bright blood on the ground and walls is against blood on bodies (green and blue go down further, so it stays deep red, not pink)."), ECVF_Default);
@@ -79,6 +79,14 @@ namespace
 	}
 	constexpr int32 BloodCellGash = 15;        // a torn exit wound or a cut along U
 	constexpr int32 BloodWorldCells = 16;      // CellMaterials: the same 16 again, tinted for the ground and walls
+
+	/** How big (decal half size, cm) a pool under a bleeding body grows. The pool picture fills only about the middle 60%
+	 *  of its square, so 90 is a puddle about a metre across: a body lying on it still leaves it showing round the
+	 *  edges (PC look, 2026-11-20: at 26-52 it hid under the body and nothing read from 12 m). */
+	float BloodPoolMaxRadius(float BloodLoss)
+	{
+		return 35.0f + 55.0f * FMath::Clamp(BloodLoss + 0.3f, 0.0f, 1.0f);
+	}
 
 	constexpr int32 BloodTracesPerFrame = 320;
 	constexpr int32 BloodMaxBodyStainsEach = 32;
@@ -1691,15 +1699,15 @@ void UBloodSubsystem::UpdateBleeding(float Dt, float GameSeconds)
 							AddStain(Rim, OnGround, FVector::UpVector, W, Bleed.Fluid, false);
 						}
 					}
-					NewPool.MaxRadiusCm = 26.0f + 26.0f * FMath::Clamp(BloodLoss + 0.3f, 0.0f, 1.0f);
+					NewPool.MaxRadiusCm = BloodPoolMaxRadius(BloodLoss);
 					Pools.Add(NewPool);
 					++PoolsMade;
 				}
 			}
 			else if (Pool)
 			{
-				Pool->MaxRadiusCm = FMath::Max(Pool->MaxRadiusCm, 26.0f + 26.0f * FMath::Clamp(BloodLoss + 0.3f, 0.0f, 1.0f));
-				const float Grown = FMath::Min(Pool->MaxRadiusCm, Pool->RadiusCm + Dt * (1.0f + 1.5f * Bleed.Rate) / FMath::Max(1.0f, Pool->RadiusCm / 20.0f));
+				Pool->MaxRadiusCm = FMath::Max(Pool->MaxRadiusCm, BloodPoolMaxRadius(BloodLoss));
+				const float Grown = FMath::Min(Pool->MaxRadiusCm, Pool->RadiusCm + Dt * (3.0f + 4.0f * Bleed.Rate) / FMath::Max(1.0f, Pool->RadiusCm / 25.0f));
 				if (Grown > Pool->RadiusCm + 0.05f)
 				{
 					if (FStain* Stain = Stains.FindByPredicate([Pool](const FStain& S) { return S.Serial == Pool->Stain; }); Stain && Stain->Decal.IsValid())

@@ -2,7 +2,7 @@
 
 Updated 2026-11-20.
 
-Natural blood splats (2026-11-19; Unreal art, `docs/design/blood.md`): the ground blood pictures no longer have the spiky crown that read as starbursts or viruses: drops are uneven round blots with droplets, slanted drops have a short tail, pools are lumpy puddles with drops on the rim. Checked on the PC 2026-11-20: spikes gone. Follow-up: blood on the ground and walls is darker and deeper red (it read pink in sun) and drawn 1.35x so it shows from 10-20 m (Blood.GroundShade, Blood.SplatScale). **Needs a compile and `-run=BloodArt -force` once; check with the gun range tour.**
+Natural blood splats (2026-11-19; Unreal art, `docs/design/blood.md`): the ground blood pictures no longer have the spiky crown that read as starbursts or viruses: drops are uneven round blots with droplets, slanted drops have a short tail, pools are lumpy puddles with drops on the rim. Checked on the PC 2026-11-20: spikes gone. Follow-up: blood on the ground and walls is darker and deeper red (it read pink in sun) (PC checked: fixed). Splats are drawn 1.6x and the pool under a bleeding body spreads faster and up to about a metre across, so it shows round the body from 10-20 m (Blood.SplatScale; it hid under the body before). **Needs a compile; check the 12 m view with the gun range tour.**
 
 Races and wall climbing (sneed, 2026-11-19; `docs/design/races.md`, `docs/design/climbing.md`): sneed's race stats are
 in the sim as lineages: **baseline** learns 20% faster; **Impid** (Emberkin) 90% less harm from heat, cold and fire, no
