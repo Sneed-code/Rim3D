@@ -283,8 +283,8 @@ namespace
 		const uint32 Influences = Weights.GetMaxBoneInfluences();
 		float Dome = 0.0f;
 		// How wide the mesh is where it's cut (the open end of a sleeve is wider than the limb): the largest distance
-		// from the limb's line in each of 16 directions round it, of skin on the cut bone within a third of a radius of
-		// the joint, averaged.
+		// from the limb's line in each of 16 directions round it, of skin on the piece's bones (MakeHuman weights its
+		// limbs to twist bones under the cut bone, not the cut bone itself) within half a radius of the joint, averaged.
 		FVector Across1;
 		FVector Across2;
 		Down.FindBestAxisVectors(Across1, Across2);
@@ -294,7 +294,7 @@ namespace
 			for (uint32 K = 0; K < Influences; ++K)
 			{
 				const uint32 Local = Weights.GetBoneIndex(V, K);
-				if (Weights.GetBoneWeight(V, K) > 0 && static_cast<int32>(Local) < Section.BoneMap.Num() && Section.BoneMap[Local] == CutIndex)
+				if (Weights.GetBoneWeight(V, K) > 0 && static_cast<int32>(Local) < Section.BoneMap.Num() && OnPiece.IsValidIndex(Section.BoneMap[Local]) && OnPiece[Section.BoneMap[Local]])
 				{
 					return true;
 				}
@@ -308,7 +308,7 @@ namespace
 				const FVector Rel = FVector(Positions.VertexPosition(V)) - Joint.GetLocation();
 				const double Along = FVector::DotProduct(Rel, Down);
 				const double Radial = (Rel - Along * Down).Size();
-				if (FMath::Abs(Along) < 0.35 * RadiusCm && Radial < 2.0 * RadiusCm && OnCutBone(Section, V))
+				if (FMath::Abs(Along) < 0.5 * RadiusCm && Radial < 2.0 * RadiusCm && OnCutBone(Section, V))
 				{
 					const double Angle = FMath::Atan2(FVector::DotProduct(Rel, Across2), FVector::DotProduct(Rel, Across1));
 					const int32 Bin = FMath::Clamp(FMath::FloorToInt32((Angle + PI) / (2.0 * PI) * 16.0), 0, 15);
@@ -400,9 +400,13 @@ namespace
 	 *  sleeve shows round the meat; bare or unmeasured, as given. */
 	float SeveredFitCloth(float ClothOuter, float OpeningCm, float RadiusCm)
 	{
-		if (ClothOuter <= 1.01f || OpeningCm <= 0.0f || RadiusCm <= 0.0f)
+		if (ClothOuter <= 1.01f || RadiusCm <= 0.0f)
 		{
 			return ClothOuter;
+		}
+		if (OpeningCm <= 0.0f)
+		{
+			return 1.02f;  // unmeasured: a guessed width stood off thinner sleeves as a hoop
 		}
 		return FMath::Clamp(OpeningCm * 1.03f / RadiusCm, 1.02f, 1.6f);
 	}
