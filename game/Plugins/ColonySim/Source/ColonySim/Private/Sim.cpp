@@ -1630,7 +1630,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* goodwillCommand = std::get_if<AdjustGoodwillCommand>(&command)) {
         std::string why;
-        if (!trade_->adjustGoodwill(goodwillCommand->faction, goodwillCommand->delta, why)) {
+        if (!trade_->adjustGoodwill(goodwillCommand->faction, goodwillCommand->delta, why, "dev tool")) {
             commandFailed(id, why);
         }
     } else if (const auto* prisonBed = std::get_if<SetPrisonBedCommand>(&command)) {
