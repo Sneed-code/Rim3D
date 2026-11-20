@@ -111,7 +111,9 @@ range's random people) asks for strands for their hair style (`assets/hair_groom
 style names to grown ones; Braid, Messy and Afro have none yet and keep their wigs). Four times a second the people within
 `Pawns.StrandHairNear` metres of the camera (10) are sorted by distance and the nearest `Pawns.StrandHairMax` (6) wear
 strands, their wig hidden; the rest wear the wig. People wearing strands keep them a metre further, so nobody flickers at
-the edge. `Pawns.StrandHair 0` puts everyone in wigs. A style whose groom has not been grown and imported keeps its wig.
+the edge. Strand hair is the default (`Pawns.StrandHair 1`) with the wig as the fallback: far off, past the count, for a
+style with no grown groom, or with `Pawns.StrandHair 0` (wigs for everyone). The colony's pawns are still MetaHumans
+(their own MetaHuman grooms); they get this when they move to MakeHuman bodies. A style whose groom has not been grown and imported keeps its wig.
 
 ## Animal fur and manes (plan)
 
