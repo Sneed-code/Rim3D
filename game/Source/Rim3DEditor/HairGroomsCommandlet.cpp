@@ -1,6 +1,7 @@
 #include "HairGroomsCommandlet.h"
 
 #include "AssetImportTask.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "Dom/JsonObject.h"
 #include "Factories/Factory.h"
@@ -17,6 +18,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
+#include "UObject/UObjectHash.h"
 #include "UObject/UnrealType.h"
 
 #include "StrandHair.h"
@@ -81,6 +83,8 @@ namespace
 		// grow_hair.py writes Blender's axes in centimetres; Alembic is Y up. Unreal's default conversion (turn 90 about X,
 		// flip Y) gives the body's own component axes, as the FBX import of the same body does.
 		GroomsSet(Options, TEXT("ConversionSettings"), TEXT("(Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))"));
+		// The groom factory is called directly: AssetTools' ImportAssetTasks hit a null shared pointer in a commandlet
+		// (PC, 2026-11-21). The task only carries the options and the automated flag the factory reads.
 		UAssetImportTask* Task = NewObject<UAssetImportTask>();
 		Task->Filename = File;
 		Task->DestinationPath = StrandHairGrownFolder;
@@ -88,13 +92,27 @@ namespace
 		Task->bAutomated = true;
 		Task->bReplaceExisting = true;
 		Task->bSave = false;
-		Task->Factory = NewObject<UFactory>(GetTransientPackage(), FactoryClass);
 		Task->Options = Options;
-		FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get().ImportAssetTasks({Task});
-		for (UObject* Object : Task->GetObjects())
+		UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FactoryClass);
+		Factory->AssetImportTask = Task;
+		Task->Factory = Factory;
+		UPackage* Package = CreatePackage(*(FString(StrandHairGrownFolder) / Name));
+		Package->FullyLoad();
+		bool bCancelled = false;
+		UObject* Made = Factory->ImportObject(UGroomAsset::StaticClass(), Package, FName(*Name), RF_Public | RF_Standalone, File, nullptr, bCancelled);
+		if (UGroomAsset* Groom = Cast<UGroomAsset>(Made))
+		{
+			FAssetRegistryModule::AssetCreated(Groom);
+			return Groom;
+		}
+		// Some factories make the asset under their own name in the package: look there too.
+		TArray<UObject*> Inside;
+		GetObjectsWithOuter(Package, Inside, false);
+		for (UObject* Object : Inside)
 		{
 			if (UGroomAsset* Groom = Cast<UGroomAsset>(Object))
 			{
+				FAssetRegistryModule::AssetCreated(Groom);
 				return Groom;
 			}
 		}

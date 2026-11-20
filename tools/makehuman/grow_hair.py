@@ -549,6 +549,11 @@ def main():
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--config", default=os.path.join(HERE, "hair_styles.json"))
     a = ap.parse_args(args)
+    # Absolute paths: Blender reads relative ones against the drive root when no .blend is open (the previews went to
+    # C:\game\Saved\... on the PC).
+    a.body = os.path.abspath(a.body)
+    a.out = os.path.abspath(a.out)
+    a.joints = os.path.abspath(a.joints) if a.joints else ""
     styles = json.load(open(a.config))["styles"]
     wanted = [s for s in a.styles.split(",") if s] or list(styles)
     verts, tris, head, neck, keys = load_body(a.body, a.joints)
