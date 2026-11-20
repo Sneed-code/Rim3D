@@ -20,7 +20,7 @@ namespace
 		TEXT("Long hair simulates fully within this many cm of the camera; further off it is only pushed out of the body."), ECVF_Default);
 	TAutoConsoleVariable<float> GMakeHumanHairCollideFar(TEXT("Pawns.HairCollideFar"), 5000.0f,
 		TEXT("Beyond this many cm from the camera long hair stays as animated (not even pushed out of the body)."), ECVF_Default);
-	TAutoConsoleVariable<float> GMakeHumanHairAimSweep(TEXT("Pawns.HairAimSweep"), 35.0f,
+	TAutoConsoleVariable<float> GMakeHumanHairAimSweep(TEXT("Pawns.HairAimSweep"), 45.0f,
 		TEXT("Degrees long hair turns over the other shoulder while a gun is aimed, so it never hides the stock or the front hand (0: off)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GMakeHumanHairDebug(TEXT("Pawns.HairDebug"), 0,
 		TEXT("1 draws the body's hair collision capsules (green) and the hair strands (yellow) on MakeHuman characters."), ECVF_Default);
@@ -435,7 +435,8 @@ void FMakeHumanHairNode::Setup(const FReferenceSkeleton& Ref)
 		Hands[Side].BoneName = bForearm ? Ref.GetBoneName(HandIndex) : NAME_None;
 		LowerArms[Side].BoneName = bForearm ? Ref.GetBoneName(Arm[2][Side]) : NAME_None;
 	}
-	ForearmRadius = FMath::Clamp(static_cast<float>(FVector::Dist(RefCS[HeadIndex].GetLocation(), RefCS[PelvisIndex].GetLocation())) / 60.0f, 0.6f, 1.5f) * 4.0f;
+	// In the skeleton's own units (a mesh may be in metres under a scaled component): 4 cm on a body 60 cm from pelvis to head.
+	ForearmRadius = static_cast<float>(FVector::Dist(RefCS[HeadIndex].GetLocation(), RefCS[PelvisIndex].GetLocation())) * (4.0f / 60.0f);
 }
 
 void FMakeHumanHairNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms)

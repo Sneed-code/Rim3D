@@ -132,10 +132,10 @@ struct FMakeHumanHairNode : public FAnimNode_SkeletalControlBase
 	FBoneReference HeadBone;
 	FBoneReference Hands[2];                // 0 left, 1 right
 	FBoneReference LowerArms[2];
-	float ForearmRadius = 4.0f;             // cm, component space
+	float ForearmRadius = 4.0f;             // component space (the skeleton's units)
 	FVector Right = FVector(-1.0, 0.0, 0.0);   // the body's right and forward in component space (the arm solver's)
 	FVector Forward = FVector(0.0, 1.0, 0.0);
-	float SweepDegrees = 35.0f;             // Pawns.HairAimSweep
+	float SweepDegrees = 45.0f;             // Pawns.HairAimSweep
 	float DeltaTime = 0.0f;
 	int32 Mode = 2;                         // 2 full simulation, 1 pushed out of the body only, 0 as animated
 	colony::HairStrands Strands;

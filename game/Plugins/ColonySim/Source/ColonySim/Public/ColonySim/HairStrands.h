@@ -108,7 +108,7 @@ COLONY_API std::vector<std::pair<int, int>> hairSheetNeighbours(const std::vecto
 // 0.4; the first segment, on the scalp, by half. Roots and every segment's length are kept. Only the goals change: the
 // physics carries the hair there with its usual lag, its collisions and its rest on the body.
 COLONY_API void sweepHairGoals(std::vector<std::vector<HairVec>>& goals, HairVec head, HairVec stockSide, HairVec away, float amount,
-                               float angleDeg = 35.0f);
+                               float angleDeg = 45.0f);
 
 // The body's collision shapes for hair, fitted to one skeleton in its reference pose (component space, z up).
 enum class HairBone : uint8_t { Head, Neck, SpineTop, SpineMid, ClavicleL, ClavicleR, UpperArmL, UpperArmR };
