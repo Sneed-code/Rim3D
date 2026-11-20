@@ -3,11 +3,16 @@
 #include "Components/SceneComponent.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInterface.h"
+#include "HAL/IConsoleManager.h"
 #include "Math/RandomStream.h"
 #include "ProceduralMeshComponent.h"
 
 namespace
 {
+	TAutoConsoleVariable<float> GGoreClothLift(TEXT("Gore.ClothLift"), 0.25f,
+		TEXT("On a clothed limb, how far (limb radii) the stump's face stands out past the cut, in front of the sleeve or trouser leg's own end, ")
+		TEXT("with the soaked cloth hanging back over the gap. Only where the meshes' bulge past the cut could not be measured."), ECVF_Default);
+
 	/** A smooth random wobble round a circle: a few waves with random phases (periodic in Theta). */
 	struct FGoreWave
 	{
@@ -100,10 +105,10 @@ namespace
 	}
 
 	// The tissue colours (linear).
-	const FLinearColor GoreMuscleDark(0.11f, 0.006f, 0.005f);
-	const FLinearColor GoreMuscleLight(0.30f, 0.020f, 0.016f);
-	const FLinearColor GoreFat(0.92f, 0.66f, 0.16f);
-	const FLinearColor GoreCloth(0.035f, 0.03f, 0.03f);
+	const FLinearColor GoreMuscleDark(0.20f, 0.014f, 0.010f);
+	const FLinearColor GoreMuscleLight(0.46f, 0.045f, 0.032f);
+	const FLinearColor GoreFat(1.0f, 0.78f, 0.30f);
+	const FLinearColor GoreCloth(0.50f, 0.16f, 0.11f);
 	const FLinearColor GoreDermis(0.40f, 0.07f, 0.05f);
 	const FLinearColor GoreBlood(0.18f, 0.008f, 0.006f);
 	const FLinearColor GoreBone(0.90f, 0.86f, 0.74f);
@@ -165,7 +170,7 @@ namespace
 }
 
 UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, FName Socket, const FVector& At, const FVector& Outward,
-	const FVector& Front, float RadiusCm, EGoreStumpKind Kind, const FLinearColor& Skin, int32 Seed, float ClothOuter)
+	const FVector& Front, float RadiusCm, EGoreStumpKind Kind, const FLinearColor& Skin, int32 Seed, float ClothOuter, float DomeCm)
 {
 	const bool bClothed = ClothOuter > 1.01f;
 	if (!Owner || !Parent || RadiusCm <= 0.0f)
@@ -184,18 +189,22 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 	constexpr int32 RingCount = UE_ARRAY_COUNT(Rings);
 	constexpr int32 Cols = 40;
 	const float Skirt = 0.22f * R + 1.2f;
+	// Clothed: a sleeve or trouser leg is thicker than the skin and ends a little past the cut in a closed, rounded end of
+	// its own, which hid the meat. The face stands in front of it (and is as wide as the cloth), the soaked cloth hanging
+	// back over the gap.
+	const float Lift = DomeCm >= 0.0f ? FMath::Min(DomeCm, R) : (bClothed ? FMath::Max(GGoreClothLift.GetValueOnGameThread(), 0.0f) * R : 0.0f);
 	// Height of the face (cm) at a fraction of the radius: the muscle bulges out unevenly, the fat lies lower, the skin
 	// curls up in a lip at the edge and then hangs back over the limb.
 	const auto FaceZ = [&](float F, float Theta) -> float
 	{
-		if (F < 0.82f)
+		if (F < 0.70f)
 		{
 			return 0.13f * R * (1.0f - F * F) * (0.65f + 0.35f * Bulge.At(Theta * 1.3f + F * 2.0f)) + 0.06f * R * Fibres.At(Theta * 2.0f + F * 7.0f) * F;
 		}
-		if (F < 0.92f)
+		if (F < 0.89f)
 		{
 			// The fat stands a little proud of the muscle's edge, so it catches the light instead of lying in shadow.
-			return 0.07f * R * (0.85f + 0.15f * Edge.At(Theta * 3.0f));
+			return 0.08f * R * (0.85f + 0.15f * Edge.At(Theta * 3.0f));
 		}
 		if (F < 1.0f)
 		{
@@ -214,8 +223,11 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			const float Torn = F >= 0.94f ? 1.0f + 0.05f * Edge.At(Theta) + (bSkirt ? 0.03f * Random.FRandRange(-1.0f, 1.0f) : 0.0f) : 1.0f;
 			// Clothed: the rings past the skin stretch out over the sleeve or trouser leg as torn, soaked cloth.
 			const float Spread = bClothed && F > 1.0f ? 1.0f + (F - 1.0f) / 0.05f * (ClothOuter - 1.0f) : F;
-			const float Radius = R * Spread * Torn * (bSkirt ? 0.99f : 1.0f);
-			const float Z = bSkirt ? -Skirt * (0.75f + 0.25f * Edge.At(Theta * 1.7f + 1.0f)) : FaceZ(F, Theta) + (F < 0.8f ? 0.04f * R * Random.FRandRange(-0.5f, 0.5f) : 0.0f);
+			// The skirt hangs back onto the limb: bare skin just inside its own edge, soaked cloth folded back down onto
+			// the sleeve rather than standing off it as a wide hollow collar.
+			const float SkirtSpread = bClothed ? ClothOuter * 0.99f : 0.99f;
+			const float Radius = R * (bSkirt ? SkirtSpread : Spread) * Torn;
+			const float Z = bSkirt ? -(Skirt + Lift) * (0.75f + 0.25f * Edge.At(Theta * 1.7f + 1.0f)) : FaceZ(F, Theta) + (F < 0.7f ? 0.04f * R * Random.FRandRange(-0.5f, 0.5f) : 0.0f);
 			return FVector(Radius * FMath::Cos(Theta), Radius * FMath::Sin(Theta), Z);
 		},
 		[&](int32 Row, int32 C)
@@ -226,21 +238,21 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			const float G = F + Wobble;
 			if (bClothed && (Row == RingCount || F > 1.0f))
 			{
-				return GoreWet(FMath::Lerp(GoreCloth, GoreBlood, 0.3f + 0.5f * Random.FRand()), 0.4f);
+				return GoreWet(FMath::Lerp(GoreCloth, GoreBlood, 0.1f + 0.3f * Random.FRand()), 0.45f);
 			}
 			if (Row == RingCount)
 			{
 				return GoreWet(FMath::Lerp(Skin, GoreBlood, 0.35f + 0.3f * Random.FRand()), 0.35f);
 			}
-			if (G < 0.84f)
+			if (G < 0.71f)
 			{
 				// Muscle in bundles: darker and lighter streaks across the cut, wet.
 				const float Streak = 0.5f + 0.5f * Fibres.At(Theta * 3.0f + F * 11.0f);
 				return GoreWet(FMath::Lerp(GoreMuscleDark, GoreMuscleLight, Streak * 0.8f + 0.2f * Random.FRand()), 0.0f);
 			}
-			if (G < 0.92f)
+			if (G < 0.89f)
 			{
-				return GoreWet(FMath::Lerp(GoreFat, GoreBlood, 0.04f + 0.14f * Random.FRand()), 0.3f);
+				return GoreWet(FMath::Lerp(GoreFat, GoreBlood, 0.02f + 0.08f * Random.FRand()), 0.3f);
 			}
 			if (G < 0.975f)
 			{
@@ -267,16 +279,16 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 	case EGoreStumpKind::OneBone:
 	{
 		const FVector2D Centre(0.05f * R, 0.02f * R);
-		const float Radius = 0.26f * R;
-		GoreAddBone(Mesh, Random, Centre, Radius, -1.0f, TopOver(Centre, Radius) + 0.9f + 0.18f * R, 0.15f * R);
+		const float Radius = 0.32f * R;
+		GoreAddBone(Mesh, Random, Centre, Radius, -1.0f, TopOver(Centre, Radius) + 1.2f + 0.3f * R, 0.15f * R);
 		break;
 	}
 	case EGoreStumpKind::TwoBones:
 	{
 		const FVector2D A(-0.30f * R, 0.06f * R);
 		const FVector2D B(0.32f * R, -0.12f * R);
-		GoreAddBone(Mesh, Random, A, 0.2f * R, -1.0f, TopOver(A, 0.2f * R) + 0.8f + 0.15f * R, 0.12f * R);
-		GoreAddBone(Mesh, Random, B, 0.14f * R, -1.0f, TopOver(B, 0.14f * R) + 0.5f + 0.1f * R, 0.1f * R);
+		GoreAddBone(Mesh, Random, A, 0.24f * R, -1.0f, TopOver(A, 0.24f * R) + 1.0f + 0.25f * R, 0.12f * R);
+		GoreAddBone(Mesh, Random, B, 0.17f * R, -1.0f, TopOver(B, 0.17f * R) + 0.7f + 0.18f * R, 0.1f * R);
 		break;
 	}
 	case EGoreStumpKind::Neck:
@@ -323,7 +335,7 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 	{
 		Ahead = FVector::CrossProduct(Out, FMath::Abs(Out.Z) < 0.9 ? FVector::UpVector : FVector::ForwardVector);
 	}
-	Stump->SetWorldLocationAndRotation(At, FRotationMatrix::MakeFromZX(Out, Ahead).ToQuat());
+	Stump->SetWorldLocationAndRotation(At + Out * Lift, FRotationMatrix::MakeFromZX(Out, Ahead).ToQuat());
 	Stump->SetWorldScale3D(FVector::OneVector);
 	return Stump;
 }
