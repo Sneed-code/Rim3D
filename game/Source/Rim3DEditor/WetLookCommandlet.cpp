@@ -464,8 +464,8 @@ namespace
 		}
 		Remove.Remove(OldBase.Expression);
 		Remove.Remove(OldRough.Expression);
-		Data->BaseColor = OldBase;
-		Data->Roughness = OldRough;
+		Data->BaseColor.Connect(OldBase.OutputIndex, OldBase.Expression);
+		Data->Roughness.Connect(OldRough.OutputIndex, OldRough.Expression);
 		for (UMaterialExpression* Expression : Remove)
 		{
 			UMaterialEditingLibrary::DeleteMaterialExpression(Material, Expression);
