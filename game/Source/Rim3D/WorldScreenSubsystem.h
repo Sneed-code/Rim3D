@@ -77,7 +77,6 @@ protected:
 private:
 	USimSubsystem* GetBridge() const;
 	void DrawScreen(USimSubsystem& Bridge);
-	void DrawOpenButton(float Scale, float Margin);
 
 	bool bOpen = false;
 	bool bPreview = true;

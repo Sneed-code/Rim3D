@@ -41,6 +41,8 @@ const char* bridgeLateCommandName() {
         return "CancelEarthworks";
     } else if constexpr (std::is_same_v<Type, UnstuckCommand>) {
         return "Unstuck";
+    } else if constexpr (std::is_same_v<Type, SetWorkGroupCommand>) {
+        return "SetWorkGroup";
     } else {
         // FocusCommand and SetFightResponseCommand are named before the visit (commandName).
         static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||

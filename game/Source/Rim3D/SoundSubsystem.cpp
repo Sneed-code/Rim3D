@@ -2073,16 +2073,9 @@ void USoundSubsystem::UpdateMusic(const colony::Snapshot& Snap, float Delta)
 
 // ---- Mixer panel ----------------------------------------------------------------------------------------------------
 
-void USoundSubsystem::DrawMixerPanel(float ViewportRight, float Scale)
+void USoundSubsystem::DrawMixerBody(float Scale)
 {
-	ImGui::SetNextWindowPos(ImVec2(ViewportRight - 12.0f * Scale, 100.0f * Scale), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-	ImGui::SetNextWindowBgAlpha(0.7f);
-	ImGui::SetNextWindowCollapsed(true, ImGuiCond_Once);
-	if (!ImGui::Begin("Sound##SoundMixer", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
-	{
-		ImGui::End();
-		return;
-	}
+	ImGui::PushItemWidth(260.0f * Scale);
 	bool bChanged = false;
 	float Master = GSoundMaster.GetValueOnGameThread();
 	if (ImGui::SliderFloat("Master", &Master, 0.0f, 1.0f, "%.2f"))
@@ -2105,9 +2098,9 @@ void USoundSubsystem::DrawMixerPanel(float ViewportRight, float Scale)
 	{
 		ImGui::Text("Music: %s", TCHAR_TO_UTF8(*MusicTrackName));
 	}
+	ImGui::PopItemWidth();
 	if (bChanged)
 	{
 		SaveMixer();
 	}
-	ImGui::End();
 }

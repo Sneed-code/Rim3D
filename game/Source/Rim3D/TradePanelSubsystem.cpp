@@ -5,6 +5,8 @@
 
 #include <imgui.h>
 
+#include "ColonyHudStyle.h"
+
 #include "OverseerSubsystem.h"
 #include "SimSubsystem.h"
 
@@ -544,7 +546,7 @@ void UTradePanelSubsystem::DrawAll(USimSubsystem& Bridge)
 		return;
 	}
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	ColonyHud::ApplyFrameStyle(Scale);
 	const float Margin = 12.0f * Scale;
 
 	DrawStrip(Bridge, Scale, Margin);

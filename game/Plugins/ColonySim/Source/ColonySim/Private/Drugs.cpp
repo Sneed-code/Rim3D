@@ -296,7 +296,7 @@ ChemicalState& DrugSystem::chemicalState(DrugState& state, const std::string& ch
     return *it;
 }
 
-DrugState& DrugSystem::ensure(Entity pawn) {
+DrugState& DrugSystem::ensureDrugState(Entity pawn) {
     return states_[pawn];
 }
 
@@ -377,7 +377,7 @@ bool DrugSystem::setPolicy(Entity pawn, const std::string& policy, std::string& 
         error = "no drug policy '" + policy + "'";
         return false;
     }
-    DrugState& s = ensure(pawn);
+    DrugState& s = ensureDrugState(pawn);
     s.policy = policy;
     s.edits.clear();
     return true;
@@ -397,7 +397,7 @@ bool DrugSystem::setEntry(Entity pawn, const DrugPolicyEntry& entry, std::string
         error = "the frequency must be between 0 and 1000 days";
         return false;
     }
-    DrugState& s = ensure(pawn);
+    DrugState& s = ensureDrugState(pawn);
     for (DrugPolicyEntry& e : s.edits) {
         if (e.drug == entry.drug) {
             e = entry;
@@ -498,7 +498,7 @@ std::vector<DrugWant> DrugSystem::wants(Entity pawn, int64_t now, ScheduleKind s
 
 void DrugSystem::searchFailed(Entity pawn, int64_t now) {
     if (things_.exists(pawn)) {
-        DrugState& s = ensure(pawn);
+        DrugState& s = ensureDrugState(pawn);
         s.searchAfter = now + rules_.searchSeconds;
         if (s.bingeUntil > now) {
             endBinge(pawn, s);  // nothing left to binge on
@@ -513,7 +513,7 @@ bool DrugSystem::takeDose(Entity pawn, DefId drug, int64_t now) {
     }
     entt::registry& reg = things_.registry();
     const DrugChemical& chem = chemicals_[static_cast<size_t>(kind->chemical)];
-    DrugState& state = ensure(pawn);
+    DrugState& state = ensureDrugState(pawn);
     ChemicalState& cs = chemicalState(state, chem.defName);
 
     // The high: weaker the more used to the chemical the pawn is.
@@ -682,7 +682,7 @@ bool DrugSystem::startBinge(Entity pawn, const std::string& chemical, int64_t no
     if (!canBinge(pawn) || chemicalIndex(chemical) < 0) {
         return false;
     }
-    DrugState& s = ensure(pawn);
+    DrugState& s = ensureDrugState(pawn);
     if (s.bingeUntil > 0) {
         return false;
     }
