@@ -66,6 +66,11 @@ namespace
 
 	// A sidearm is drawn at half the rifle-sized gun the defs share.
 	constexpr float WeaponSidearmScale = 0.55f;
+	// A held weapon whose grip is drawn further than this from its hand (cm, for a 1.80 m man) for this long (real
+	// seconds) is floating: it goes back on the hand's own grip for WeaponForceHandSeconds.
+	constexpr double WeaponFloatCm = 22.0;
+	constexpr float WeaponFloatSeconds = 0.1f;
+	constexpr float WeaponForceHandSeconds = 0.6f;
 	// The colonist's view must be this close to the line to a pawn for a swing to pick it (cosine of 70 degrees).
 	constexpr float WeaponSwingCone = 0.34f;
 	// Hit-stop, real seconds: a hit, armor that turned the blow, a blow a weapon took.
@@ -729,9 +734,12 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		View.shieldUp || bControlled || View.reloading || Incoming >= 0 || Actor.IsInMotionClip() || Actor.GetSwing().IsActive());
 	Pawn.Ready = FMath::FInterpConstantTo(Pawn.Ready, bReady ? 1.0f : 0.0f, FrameDelta, WeaponReadyRate);
 	const float ReadyEase = MeleePose::EaseInOut(Pawn.Ready);
-	// Crouched or prone the body has no crouch clip yet (only the drawn height drops), so the weapon keeps the old
-	// lowered place instead of the standing hands.
-	const bool bHands = GWeaponHands.GetValueOnGameThread() != 0 && Mesh && Height > 0.9f && !View.swimming;
+	// Crouched or prone (C, Z) the weapon stays in the hand as the body's clip has it: it is only held at a place with
+	// the hands pinned to it standing up. (It used to go to an old lowered spot in the air, sneed 2026-11-20: "I press Z
+	// and the weapons float".)
+	const bool bStanding = Height > 0.9f;
+	const bool bHands = GWeaponHands.GetValueOnGameThread() != 0 && Mesh && !View.swimming;
+	Pawn.ForceHandSeconds = FMath::Max(0.0f, Pawn.ForceHandSeconds - FrameDelta);
 
 	// The frame the holsters ride in: the actor's, carried along with the hips (a lunge), and through a roll, stagger or
 	// knockdown clip turned and moved with the pelvis as well (so holsters and a slung shield stay on the body), eased in
@@ -836,14 +844,19 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		bool bPinned = false;
 		FTransform WeaponInHand;
 		FTransform WeaponPlaced;
-		if (bShow && bHands && bHold && bPinSlot && InHand > 0.0f && GWeaponPlaces.GetValueOnGameThread() != 0)
+		if (bShow && bHands && bStanding && bHold && bPinSlot && InHand > 0.0f && GWeaponPlaces.GetValueOnGameThread() != 0 && Pawn.ForceHandSeconds <= 0.0f)
 		{
 			HoldDraw::FPoints Points = HoldDraw::PointsOf(Hold, HasShieldOnArm(View));
+			const UStaticMeshComponent* Body = Shown.Component.Get();
+			const FBox Bounds = Body && Body->GetStaticMesh() ? Body->GetStaticMesh()->GetBoundingBox() : FBox(ForceInit);
+			if (Bounds.IsValid)
+			{
+				Points.Tip = FVector(Bounds.Max.X, Bounds.GetCenter().Y, Bounds.GetCenter().Z);  // the far end along the blade
+			}
 			if (Art)
 			{
 				Points.Sight = Art->Sight;
-				const UStaticMeshComponent* Body = Shown.Component.Get();
-				Points.Stock = HoldDraw::StockFromBounds(Body && Body->GetStaticMesh() ? Body->GetStaticMesh()->GetBoundingBox() : FBox(ForceInit), Art->Sight);
+				Points.Stock = HoldDraw::StockFromBounds(Bounds, Art->Sight);
 			}
 			bPinned = PinWeapon(Actor, View, Pawn, Hold, Points, Size, static_cast<float>(Place), bControlled, InHand, WeaponInHand, WeaponPlaced);
 			bAnyPinned = bAnyPinned || bPinned;
@@ -892,6 +905,44 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		World.SetRotation(FQuat::Slerp(Holster.GetRotation(), Hands.GetRotation(), InHand));
 		World.SetScale3D(FVector(Size));
 
+		// Never floating (sneed 2026-11-20: "the weapon floats but the hand animations still work", "swap weapons, go
+		// unarmed and back and press Z and the weapons float"): a weapon fully in the hands whose grip has been drawn away
+		// from its hand for a moment (a hand the arm solver couldn't bring to it, a place the body can't reach, a swing
+		// path off the arm) goes back onto the hand's own grip at once and stays there a little while.
+		if (bShow && bHands && bHold && Slot == InHands && Incoming < 0 && InHand >= 0.999f && Mesh->GetBoneIndex(HoldDraw::HandBone(Hold)) != INDEX_NONE)
+		{
+			const FVector Grip = World.TransformPosition(FVector(Hold.main.x, Hold.main.y, Hold.main.z));
+			const double Gap = FVector::Dist(Grip, Mesh->GetSocketLocation(HoldDraw::HandBone(Hold)));
+			WorstGripGap = FMath::Max(WorstGripGap, static_cast<float>(Gap));
+			const bool bAway = Gap > WeaponFloatCm * Place;
+			Pawn.FloatSeconds = bAway ? Pawn.FloatSeconds + FrameDelta : 0.0f;
+			if (bAway)
+			{
+				++FloatFrames;
+			}
+			FTransform Frame2;
+			if (Pawn.FloatSeconds >= WeaponFloatSeconds && HoldDraw::HandFrame(Mesh, Hold, Frame2))
+			{
+				if (!Pawn.bFloatLogged)
+				{
+					Pawn.bFloatLogged = true;
+					UE_LOG(LogTemp, Warning, TEXT("WEAPON FLOAT %s: grip %.0f cm off the hand (pinned %d, hand free %.2f, swing %.2f, clip %d, melee %d, finisher %d, height %.2f); put back in the hand"),
+						*DefName, Gap, bPinned ? 1 : 0, Pawn.HandFree, Pawn.SwingBlend, Actor.IsInMotionClip() ? 1 : 0, static_cast<int32>(View.meleePhase),
+						static_cast<int32>(View.meleeFinisher), Height);
+				}
+				World = HoldDraw::WeaponWorld(Frame2, Hold, Size);
+				Pawn.ForceHandSeconds = WeaponForceHandSeconds;
+				Pawn.FloatSeconds = 0.0f;
+				++FloatFixes;
+				if (bPinned)
+				{
+					HoldDraw::ReleaseHands(Mesh);
+					bAnyPinned = false;
+					Pawn.bOffHandSet = false;
+				}
+			}
+		}
+
 		// Hung on the hand bone once fully in it (so it moves with the hand between our updates), else on the actor.
 		UStaticMeshComponent* Component = Shown.Component.Get();
 		USceneComponent* Parent = InHand >= 0.999f && bInHandFrame ? static_cast<USceneComponent*>(Mesh) : Actor.GetRootComponent();
@@ -935,7 +986,7 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		Pawn.bOffHandSet = Pawn.OffHand > 0.0f;
 	}
 
-	UpdateStance(Actor, View, Pawn, bShow && bHands, bControlled);
+	UpdateStance(Actor, View, Pawn, bShow && bHands && bStanding, bControlled);
 	UpdateShield(Actor, View, Pawn, bShow && !View.hideGear, Height, Gear);
 }
 
@@ -994,8 +1045,14 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 	// A swing whose clip moves the arm frees the main hand (the weapon stays in it). A swing with no clip on the body
 	// (no measured clip for it, or a body that can't play one) moves the weapon itself along the procedural swing
 	// path, with both hands kept on it, so a weapon always swings and never hangs still in the air.
-	const bool bClipSwing = !bGun && Actor.IsInMotionClip() && (View.meleePhase != colony::MeleePhase::Ready || Actor.GetSwing().IsActive());
-	const bool bWeaponSwing = !bGun && !Actor.IsInMotionClip() && Actor.GetSwing().IsActive();
+	// A finisher (docs/design/lock-on.md "Finishers") drives the weapon along its own path with both hands kept on it.
+	FTransform FinisherDrawn;
+	FTransform FinisherPinned;
+	float FinisherWeight = 0.0f;
+	const bool bFinisher = !bGun && FinisherPose(Actor, View, Points, Size, FinisherDrawn, FinisherPinned, FinisherWeight);
+	Pawn.FinisherBlend = bFinisher ? FinisherWeight : 0.0f;
+	const bool bClipSwing = !bFinisher && !bGun && Actor.IsInMotionClip() && (View.meleePhase != colony::MeleePhase::Ready || Actor.GetSwing().IsActive());
+	const bool bWeaponSwing = !bFinisher && !bGun && !Actor.IsInMotionClip() && Actor.GetSwing().IsActive();
 	const bool bFullBodyClip = Actor.IsInMotionClip() && !Actor.IsMotionClipUpper();
 	Pawn.HandFree = FMath::FInterpConstantTo(Pawn.HandFree, bClipSwing || bFullBodyClip ? 1.0f : 0.0f, FrameDelta, 8.0f);
 	Pawn.SwingBlend = FMath::FInterpConstantTo(Pawn.SwingBlend, bWeaponSwing ? 1.0f : 0.0f, FrameDelta, 10.0f);
@@ -1004,10 +1061,44 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 	const FVector Chest = (Mesh->GetSocketLocation(TEXT("upperarm_l")) + Mesh->GetSocketLocation(TEXT("upperarm_r"))) * 0.5;
 	const FVector Head = Mesh->GetSocketLocation(TEXT("head"));
 	const FQuat Facing = FRotationMatrix::MakeFromXZ(Actor.GetActorForwardVector(), Actor.GetActorUpVector()).ToQuat();
+	// Third person, aiming (sneed 2026-11-20: "the weapon doesn't move with my cursor to aim, and arms"): an aimed place on
+	// the head is turned to look straight at what the crosshair is on (yaw and pitch, at most 60 degrees round from
+	// the body, which turns after the view), so the gun's sight line and both arms follow the cursor.
+	FVector CrosshairPoint = FVector::ZeroVector;
+	bool bCrosshair = false;
+	if (bGun && Body && !Body->IsFirstPerson() && Pawn.AimBlend > 0.01f)
+	{
+		if (const UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>())
+		{
+			bCrosshair = Fight->ComputeAimPoint(CrosshairPoint) && FVector::DistSquared(CrosshairPoint, Head) > FMath::Square(60.0);
+		}
+	}
+	const auto AimAt = [&](const FVector& From)
+	{
+		FVector Dir = (CrosshairPoint - From).GetSafeNormal();
+		const FVector Forward = Actor.GetActorForwardVector().GetSafeNormal2D();
+		const FVector Flat = Dir.GetSafeNormal2D();
+		const double Yaw = FMath::Atan2(FVector::CrossProduct(Forward, Flat).Z, FVector::DotProduct(Forward, Flat));
+		const double Most = FMath::DegreesToRadians(60.0);
+		if (FMath::Abs(Yaw) > Most)
+		{
+			const FVector Turned = Forward.RotateAngleAxisRad(FMath::Sign(Yaw) * Most, FVector::UpVector);
+			Dir = (Turned * Dir.Size2D() + FVector(0.0, 0.0, Dir.Z)).GetSafeNormal();
+		}
+		Dir.Z = FMath::Clamp(Dir.Z, -0.94, 0.94);
+		return FRotationMatrix::MakeFromXZ(Dir, FVector::UpVector).ToQuat();
+	};
 	const auto Placed = [&](const colony::HoldPlace& P)
 	{
 		const bool bHead = P.anchor == colony::HoldAnchor::Head;
-		const FQuat Frame = bHead ? Facing * FRotator(AimPitch, 0.0f, 0.0f).Quaternion() : Facing;
+		FQuat Frame = bHead ? Facing * FRotator(AimPitch, 0.0f, 0.0f).Quaternion() : Facing;
+		if (bHead && bCrosshair && &P == Aim)
+		{
+			// Twice: the second time from where the first put the sight, so the sight line itself meets the crosshair.
+			Frame = AimAt(Head);
+			const FTransform First = HoldDraw::PlaceInAnchor(P, Points, Size, BodyPlace) * FTransform(Frame, Head);
+			Frame = AimAt(First.TransformPosition(Points.Sight * Size));
+		}
 		return HoldDraw::PlaceInAnchor(P, Points, Size, BodyPlace) * FTransform(Frame, bHead ? Head : Chest);
 	};
 	const auto Blend = [](const FTransform& A, const FTransform& B, float T)
@@ -1037,8 +1128,16 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 		Weapon = Blend(Weapon, SwingWeapon, Pawn.SwingBlend);
 	}
 
+	FTransform PinAt = Weapon;
+	if (bFinisher && Pawn.FinisherBlend > 0.0f)
+	{
+		PinAt = Blend(Weapon, FinisherPinned, Pawn.FinisherBlend);
+		Weapon = Blend(Weapon, FinisherDrawn, Pawn.FinisherBlend);
+		++FinisherFrames;
+	}
+
 	HoldDraw::FPinned Pinned;
-	if (!HoldDraw::PinHands(Mesh, Hold, Points, Size, Weapon, Pinned))
+	if (!HoldDraw::PinHands(Mesh, Hold, Points, Size, PinAt, Pinned))
 	{
 		return false;
 	}
@@ -1046,6 +1145,151 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 	OutWeaponInHand = Pinned.WeaponInHand;
 	OutWeaponWorld = Weapon;
 	OutWeaponWorld.SetScale3D(FVector::OneVector);
+	return true;
+}
+
+namespace
+{
+	// Finishers (sneed 2026-11-20, docs/design/lock-on.md "Finishers"): where the weapon's point is and which way the
+	// weapon points through each one, keyed by the finisher's share of its time. Point: cm from the spot on the body it is
+	// driven at, along the attacker's line to it (F), to its right (R) and up (U). Direction: grip to point, (F, R, U).
+	// Drawing numbers, ours; the hit key is at the finisher's hitSeconds share (MeleeRules finishers).
+	struct FWeaponFinisherKey
+	{
+		float T;
+		FVector Point;
+		FVector Dir;
+	};
+	struct FWeaponFinisherMove
+	{
+		const TCHAR* Name;
+		bool bReverse;      // held point-down under the fist (a knife slammed down, a sword driven in)
+		const TCHAR* Bone;  // where on the body on the ground it goes
+		float SurfaceCm;    // the spot is this far above that bone (the body's top)
+		TArray<FWeaponFinisherKey> Keys;
+	};
+	const TArray<FWeaponFinisherMove>& WeaponFinisherMoves()
+	{
+		static const TArray<FWeaponFinisherMove> Moves = {
+			// The spear rammed down two-handed into the back (or belly), the shaft slanting back over the shoulder.
+			{TEXT("Spear"), false, TEXT("spine_02"), 10.0f,
+				{{0.00f, FVector(-5, 0, 30), FVector(0.6, 0, -0.8)}, {0.45f, FVector(-12, 0, 45), FVector(0.55, 0, -0.83)},
+					{0.55f, FVector(-12, 0, 48), FVector(0.55, 0, -0.83)}, {0.611f, FVector(2, 0, -14), FVector(0.5, 0, -0.86)},
+					{0.78f, FVector(2, 0, -14), FVector(0.5, 0, -0.86)}, {0.92f, FVector(-5, 0, 30), FVector(0.55, 0, -0.83)},
+					{1.00f, FVector(-5, 0, 35), FVector(0.6, 0, -0.8)}}},
+			// The club raised over the head, cocked back, and smashed down on the head; it bounces off.
+			{TEXT("Club"), false, TEXT("head"), 16.0f,
+				{{0.00f, FVector(-30, 15, 146), FVector(0.5, 0, 0.85)}, {0.25f, FVector(-71, 12, 200), FVector(-0.1, 0, 1)},
+					{0.50f, FVector(-108, 8, 198), FVector(-0.6, 0, 0.8)}, {0.56f, FVector(-108, 8, 198), FVector(-0.6, 0, 0.8)},
+					{0.59f, FVector(-37, 6, 207), FVector(0.3, 0, 0.95)}, {0.618f, FVector(0, 0, 4), FVector(0.8, 0, -0.6)},
+					{0.66f, FVector(-5, 0, 25), FVector(0.75, 0, -0.5)}, {0.85f, FVector(-19, 10, 98), FVector(0.6, 0, 0.3)},
+					{1.00f, FVector(-30, 15, 146), FVector(0.5, 0, 0.85)}}},
+			// The sword raised point-down and driven into the chest, held, pulled out.
+			{TEXT("Sword"), true, TEXT("spine_03"), 10.0f,
+				{{0.00f, FVector(-25, 12, 20), FVector(0.4, 0, -1)}, {0.20f, FVector(-15, 8, 45), FVector(0.2, 0, -1)},
+					{0.50f, FVector(-8, 4, 60), FVector(0.1, 0, -1)}, {0.56f, FVector(-6, 4, 62), FVector(0.1, 0, -1)},
+					{0.605f, FVector(0, 0, -15), FVector(0.05, 0, -1)}, {0.76f, FVector(0, 0, -15), FVector(0.05, 0, -1)},
+					{0.90f, FVector(-8, 4, 35), FVector(0.15, 0, -1)}, {1.00f, FVector(-20, 10, 25), FVector(0.35, 0, -1)}}},
+			// The knife raised high in a fist and slammed straight down, like into a table; held, pulled out.
+			{TEXT("Knife"), true, TEXT("spine_03"), 10.0f,
+				{{0.00f, FVector(-30, 12, 35), FVector(0.2, 0, -1)}, {0.18f, FVector(-25, 10, 55), FVector(0.25, 0, -1)},
+					{0.50f, FVector(-22, 8, 78), FVector(0.3, 0, -1)}, {0.56f, FVector(-20, 8, 80), FVector(0.3, 0, -1)},
+					{0.625f, FVector(0, 0, -6), FVector(0.1, 0, -1)}, {0.74f, FVector(0, 0, -6), FVector(0.1, 0, -1)},
+					{0.90f, FVector(-12, 6, 30), FVector(0.2, 0, -1)}, {1.00f, FVector(-20, 10, 40), FVector(0.2, 0, -1)}}},
+		};
+		return Moves;
+	}
+
+	// The point at T: a smooth curve through the keys (Hermite, tangents from the neighbours; none at a held key, so a
+	// hold holds), the direction eased between keys.
+	void WeaponFinisherAt(const FWeaponFinisherMove& Move, float T, FVector& OutPoint, FVector& OutDir)
+	{
+		const TArray<FWeaponFinisherKey>& K = Move.Keys;
+		int32 I = 0;
+		while (I + 2 < K.Num() && T > K[I + 1].T)
+		{
+			++I;
+		}
+		const FWeaponFinisherKey& A = K[I];
+		const FWeaponFinisherKey& B = K[I + 1];
+		const float Span = FMath::Max(0.001f, B.T - A.T);
+		const float S = FMath::Clamp((T - A.T) / Span, 0.0f, 1.0f);
+		const auto Tangent = [&](int32 J)
+		{
+			if (J <= 0 || J >= K.Num() - 1 || K[J].Point.Equals(K[J - 1].Point, 0.5) || K[J].Point.Equals(K[J + 1].Point, 0.5))
+			{
+				return FVector::ZeroVector;
+			}
+			return (K[J + 1].Point - K[J - 1].Point) / FMath::Max(0.001f, K[J + 1].T - K[J - 1].T);
+		};
+		const FVector M0 = Tangent(I) * Span;
+		const FVector M1 = Tangent(I + 1) * Span;
+		const float S2 = S * S;
+		const float S3 = S2 * S;
+		OutPoint = A.Point * (2 * S3 - 3 * S2 + 1) + M0 * (S3 - 2 * S2 + S) + B.Point * (-2 * S3 + 3 * S2) + M1 * (S3 - S2);
+		const float E = MeleePose::EaseInOut(S);
+		OutDir = FMath::Lerp(A.Dir.GetSafeNormal(), B.Dir.GetSafeNormal(), static_cast<double>(E)).GetSafeNormal();
+	}
+}
+
+bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony::ThingView& View, const HoldDraw::FPoints& Points, float Size,
+										FTransform& OutDrawn, FTransform& OutPinned, float& OutWeight)
+{
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	if (View.meleeFinisher == 0 || View.meleeFinisherTarget == colony::kNoEntity || !Bridge || !Bridge->GetSim())
+	{
+		return false;
+	}
+	const std::vector<colony::MeleeFinisher>& Finishers = Bridge->GetSim()->melee().rules().finishers;
+	const size_t Index = static_cast<size_t>(View.meleeFinisher) - 1;
+	if (Index >= Finishers.size())
+	{
+		return false;
+	}
+	const FString MoveName = UTF8_TO_TCHAR(Finishers[Index].move.c_str());
+	const FWeaponFinisherMove* Move = WeaponFinisherMoves().FindByPredicate([&](const FWeaponFinisherMove& M) { return MoveName == M.Name; });
+	const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>();
+	const ASimPawnActor* Target = Pawns ? Pawns->FindPawn(View.meleeFinisherTarget) : nullptr;
+	if (!Move || !Target)
+	{
+		return false;
+	}
+	// The spot on the body: its bone as drawn now (lying, crawling or a ragdoll), lifted to the body's top.
+	const USkeletalMeshComponent* TargetMesh = HoldDraw::VisibleMesh(*Target);
+	FVector Spot = Target->GetActorLocation() + FVector(0.0, 0.0, 20.0);
+	if (TargetMesh && TargetMesh->GetBoneIndex(Move->Bone) != INDEX_NONE)
+	{
+		Spot = TargetMesh->GetSocketLocation(Move->Bone);
+	}
+	Spot.Z += Move->SurfaceCm * Target->GetBodyScale();
+	FVector F = (Spot - Actor.GetActorLocation()).GetSafeNormal2D();
+	if (F.IsNearlyZero())
+	{
+		F = Actor.GetActorForwardVector().GetSafeNormal2D();
+	}
+	const FVector U = FVector::UpVector;
+	const FVector R = FVector::CrossProduct(U, F);
+	const float T = FMath::Clamp(View.meleeFinisherT, 0.0f, 1.0f);
+	FVector Point;
+	FVector Dir;
+	WeaponFinisherAt(*Move, T, Point, Dir);
+	const FVector PointWorld = Spot + F * Point.X + R * Point.Y + U * Point.Z;
+	const FVector DirWorld = (F * Dir.X + R * Dir.Y + U * Dir.Z).GetSafeNormal();
+	const FQuat Drawn = FRotationMatrix::MakeFromXZ(DirWorld, F).ToQuat();
+	OutDrawn = FTransform(Drawn, PointWorld - Drawn.RotateVector(Points.Tip * Size));
+	OutPinned = OutDrawn;
+	if (Move->bReverse)
+	{
+		// The hands close on the weapon as if its blade stood up out of the thumb side; drawn, it comes out under the
+		// little finger, point down: the same grip turned half round about the fingers' line.
+		const FQuat Up = FRotationMatrix::MakeFromXZ(-DirWorld, F).ToQuat();
+		const FVector Grip = OutDrawn.TransformPosition(Points.Main * Size);
+		OutPinned = FTransform(Up, Grip - Up.RotateVector(Points.Main * Size));
+	}
+	// In over the first seventh, out over the last.
+	OutWeight = MeleePose::EaseInOut(FMath::Clamp(T / 0.14f, 0.0f, 1.0f)) * (1.0f - MeleePose::EaseInOut(FMath::Clamp((T - 0.86f) / 0.14f, 0.0f, 1.0f)));
+	FinisherTip = PointWorld;
+	FinisherGoal = Spot;
 	return true;
 }
 
@@ -1111,7 +1355,19 @@ void UWeaponDrawSubsystem::UpdateStance(ASimPawnActor& Actor, const colony::Thin
 	}
 	Anim->SetUpperStance(Clip, Clip ? Weight : 0.0f);
 	// A body on the back: bent forward under it (docs/design/weapon-hold.md, "Carrying a body").
-	Anim->SetSpineBend(View.carryingPawn != colony::kNoEntity && !View.downed && !View.dead ? WeaponCarryBend : 0.0f);
+	float Bend = View.carryingPawn != colony::kNoEntity && !View.downed && !View.dead ? WeaponCarryBend : 0.0f;
+	// Through a finisher: bent over the body on the ground, most at the blow (sneed 2026-11-20).
+	const std::vector<colony::MeleeFinisher>& Finishers = Bridge->GetSim() ? Bridge->GetSim()->melee().rules().finishers : std::vector<colony::MeleeFinisher>{};
+	if (View.meleeFinisher != 0 && static_cast<size_t>(View.meleeFinisher) <= Finishers.size() && !View.downed)
+	{
+		const colony::MeleeFinisher& F = Finishers[static_cast<size_t>(View.meleeFinisher) - 1];
+		const float T = View.meleeFinisherT;
+		const float Hit = F.hitSeconds / FMath::Max(0.1f, F.seconds);
+		const float In = MeleePose::EaseInOut(FMath::Clamp(T / 0.2f, 0.0f, 1.0f)) * (1.0f - MeleePose::EaseInOut(FMath::Clamp((T - 0.86f) / 0.14f, 0.0f, 1.0f)));
+		const float AtBlow = 1.0f - FMath::Clamp(FMath::Abs(T - Hit) / 0.12f, 0.0f, 1.0f);
+		Bend = FMath::Max(Bend, F.bend * In * (0.75f + 0.35f * AtBlow));
+	}
+	Anim->SetSpineBend(Bend);
 }
 
 void UWeaponDrawSubsystem::UpdateShield(ASimPawnActor& Actor, const colony::ThingView& View, FPawnWeapons& Pawn, bool bShow, float Height,
@@ -1329,17 +1585,31 @@ colony::Entity UWeaponDrawSubsystem::FindSwingTarget() const
 	// The combat range's targets are on your side (so they never shoot back); there anyone in front of you can be struck.
 	const UGunRangeSubsystem* Range = GetWorld()->GetSubsystem<UGunRangeSubsystem>();
 	const bool bAnySide = Range && Range->IsEnabled();
+	// Aim assist (sneed 2026-11-20: "if I use a melee weapon near a non-friendly, even neutral, the attack aims at them
+	// even if not focused"): anyone not on its side, or a prisoner, in the swing's reach (as far as the player walks on
+	// under it) within 70 degrees of the view, the one nearest the middle of the view and nearest first. A body on the
+	// ground the swing passes over is left to the sim, which drives the blow down at it (a finisher).
+	float BestDistance = 0.0f;
 	for (const colony::ThingView& Other : Bridge->GetCurrentSnapshot().things)
 	{
-		if (Other.category != colony::ThingCategory::Pawn || Other.id == Me->id || Other.dead || (Other.faction == Me->faction && !bAnySide) || !Melee.inReach(Me->id, Other.id))
+		if (Other.category != colony::ThingCategory::Pawn || Other.id == Me->id || Other.dead || Other.prisoner || (Other.faction == Me->faction && !bAnySide) ||
+			!Melee.inPlayerReach(Me->id, Other.id))
 		{
 			continue;
 		}
-		const FVector To = FVector(Other.x - Me->x, Other.y - Me->y, 0.0).GetSafeNormal();
+		const FVector Off = FVector(Other.x - Me->x, Other.y - Me->y, 0.0);
+		const FVector To = Off.GetSafeNormal();
 		const float Cosine = static_cast<float>(FVector::DotProduct(To, Look));
-		if (Cosine > BestScore)
+		const float Distance = static_cast<float>(Off.Size2D());
+		if (Cosine < WeaponSwingCone)
+		{
+			continue;
+		}
+		// Within 20 degrees of each other counts as the same direction: then the nearer one.
+		if (Best == colony::kNoEntity || Cosine > BestScore + 0.06f || (Cosine > BestScore - 0.06f && Distance < BestDistance))
 		{
 			BestScore = Cosine;
+			BestDistance = Distance;
 			Best = Other.id;
 		}
 	}

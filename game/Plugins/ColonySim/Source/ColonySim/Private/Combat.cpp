@@ -2222,6 +2222,11 @@ void CombatSystem::step(Rng& rng) {
                 posture.facingX = dx / len;
                 posture.facingY = dy / len;
             }
+        } else if (const Melee* swing = reg.try_get<Melee>(pawn);
+                   swing != nullptr && swing->target != kNoEntity && (swing->phase == MeleePhase::Windup || swing->finisher != 0) &&
+                   swing->phase != MeleePhase::Ready) {
+            // Swinging at someone (or through a finisher): it keeps facing its target while its feet walk (sneed
+            // 2026-11-20: a swing while walking turned the body the way it walked, away from whom it struck).
         } else if (!health_.incapacitated(pawn) && !reg.all_of<BodyMotion>(pawn)) {
             // A body a clip or a push is moving keeps the way it faced (or the clip's own turn): a stagger back
             // doesn't turn it round to face its push (docs/design/body-motion.md).

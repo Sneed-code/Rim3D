@@ -39,6 +39,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Melee.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 
@@ -95,7 +96,16 @@ namespace
 	 *  leave the feet to the keys (docs/design/body-motion.md "Upper-body clips"). */
 	bool PawnMotionHolds(const colony::ThingView& View)
 	{
-		return (View.motionClip.valid() || View.motionPush) && !View.motionFreeFeet;
+		// A finisher holds the body where it knelt too (sneed 2026-11-20).
+		return ((View.motionClip.valid() || View.motionPush) && !View.motionFreeFeet) || View.meleeFinisher != 0;
+	}
+	// The player's own colonist aiming a gun (held right mouse, or shooting from the hip) in third person.
+	bool PawnAimsThirdPerson(const UWorld* World, colony::Entity Thing, const colony::ThingView& Now)
+	{
+		const UProtagonistSubsystem* Protagonist = World ? World->GetSubsystem<UProtagonistSubsystem>() : nullptr;
+		const AProtagonistPawn* Player = Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == Thing ? Protagonist->GetBody() : nullptr;
+		return Player && !Player->IsFirstPerson() && !Now.downed && Now.rollPhase == 0 && Player->HasGunDrawn() &&
+			(Player->GetAimBlend() > 0.05f || Now.refillLeft > 0);
 	}
 	// The hit layer (docs/design/body-health.md part E). A leg limps from 85% health down, fully at 35% and less.
 	constexpr float PawnLimpFrom = 0.85f;
@@ -328,6 +338,24 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}
+	else if ((Now.meleeFinisher != 0 || (Now.meleePhase == colony::MeleePhase::Windup && Now.meleeTarget != colony::kNoEntity)) && !bRagdoll &&
+		!Now.downed && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
+	{
+		// Swinging at someone, or through a finisher (sneed 2026-11-20): the body turns to whom it strikes and the feet
+		// step under it, instead of the body facing the way it walks while the blow goes off to the side.
+		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * 2.0f * DeltaTime * FMath::Max(Speed, 1));
+		bHoldFacing = true;
+	}
+	else if (PawnAimsThirdPerson(GetWorld(), Thing, Now))
+	{
+		// The player aiming a gun in third person (sneed 2026-11-20: "the weapon doesn't move with my cursor"): the body
+		// turns with the view, walking sideways or back under it, so the gun and arms point where the crosshair is.
+		const UProtagonistSubsystem* Aimer = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+		const float Wanted = Aimer->GetBody()->GetYaw();
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * 2.0f * DeltaTime * FMath::Max(Speed, 1));
+		bHoldFacing = true;
+	}
 	else if (Velocity.Size2D() > (Now.crawling ? PawnCrawlStill : PawnTurnSpeed))
 	{
 		const float Wanted = Velocity.Rotation().Yaw;
@@ -399,6 +427,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	}
 	UpdateCrawl(Now, DeltaTime * Speed);
 	UpdateWallClimb(Bridge, Now);
+	UpdateFinisherKneel(Bridge, Now);
 	UpdateHurt(Bridge, Now, DeltaTime);
 
 	// The hit-stop holds the swing, the flinch and the animation for a moment of real time.
@@ -435,8 +464,8 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		In.Detail = Detail;
 		In.bTeleported = bTeleported;
 		In.bHoldFacing = bHoldFacing;
-		In.bStandTwist = !(IsInMotionClip() && !bMotionUpper) && RollProgress <= 0.0f && !IsJumping() && !Now.crawling && !Now.downed;
-		In.bLegsFromClip = LegsClipWeight > 0.001f || ActionEndSeconds > 0.0 || (IsInMotionClip() && !bMotionUpper);
+		In.bStandTwist = !(IsInMotionClip() && !bMotionUpper) && RollProgress <= 0.0f && !IsJumping() && !Now.crawling && !Now.downed && !KneelMontage.IsValid();
+		In.bLegsFromClip = LegsClipWeight > 0.001f || ActionEndSeconds > 0.0 || (IsInMotionClip() && !bMotionUpper) || KneelMontage.IsValid();
 		In.bHitLayer = true;
 		In.LimpLeft = LimpLeft;
 		In.LimpRight = LimpRight;
@@ -1962,6 +1991,34 @@ namespace
 	/** The wall's height, cm: a level (the sim's colony::Map::kLevelHeightM). */
 	constexpr float PawnWallClimbHeightCm = 300.0f;
 	constexpr float PawnWallClimbBlend = 0.2f;
+}
+
+void ASimPawnActor::UpdateFinisherKneel(const USimSubsystem& Bridge, const colony::ThingView& Now)
+{
+	// Down on the knees through the wind-up and the blow, up again for the last eighth (sneed 2026-11-20: "this requires
+	// my pawn to kneel down to do it"). The crouch is the one the pawns pick things up with.
+	USimPawnAnimInstance* Anim = GetAnim();
+	const colony::Sim* Sim = Bridge.GetSim();
+	bool bKneel = false;
+	if (Anim && Sim && !bRagdoll && !Now.downed && Now.meleeFinisher != 0 && Now.meleeFinisherT < 0.86f)
+	{
+		const std::vector<colony::MeleeFinisher>& Finishers = Sim->melee().rules().finishers;
+		const size_t Index = static_cast<size_t>(Now.meleeFinisher) - 1;
+		bKneel = Index < Finishers.size() && Finishers[Index].kneel;
+	}
+	const USimPawnSubsystem* Pawns = GetWorld() ? GetWorld()->GetSubsystem<USimPawnSubsystem>() : nullptr;
+	UAnimSequence* Crouch = Pawns ? Pawns->GetActionAnimation(colony::PawnAction::PickUp) : nullptr;
+	if (bKneel && Crouch && (!KneelMontage.IsValid() || !Anim->Montage_IsPlaying(KneelMontage.Get())))
+	{
+		KneelMontage = Anim->PlaySlotAnimationAsDynamicMontage(Crouch, FAnimSlotGroup::DefaultSlotName, 0.3f, 0.35f, 1.0f, 1000);
+		ActionEndSeconds = 0.0;
+		++FinisherKneels;
+	}
+	else if (!bKneel && Anim && KneelMontage.IsValid())
+	{
+		Anim->Montage_Stop(0.35f, KneelMontage.Get());
+		KneelMontage.Reset();
+	}
 }
 
 void ASimPawnActor::UpdateWallClimb(const USimSubsystem& Bridge, const colony::ThingView& Now)

@@ -625,6 +625,18 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         }
         return fighters_->factionOf(other) != fighters_->factionOf(pawn);
     });
+    // The player's swing without a lock is steered at anyone not on its side (sneed 2026-11-20: "a non-friendly, even
+    // neutral"): another faction, a visitor, a wild animal; not its own side, tame animals or prisoners.
+    melee_->setNotFriendly([this](Entity pawn, Entity other) {
+        const entt::registry& reg = things_->registry();
+        if (reg.any_of<Prisoner>(other)) {
+            return false;
+        }
+        if (const Animal* animal = reg.try_get<Animal>(other)) {
+            return animal->wild || fighters_->factionOf(other) != fighters_->factionOf(pawn);
+        }
+        return fighters_->factionOf(other) != fighters_->factionOf(pawn);
+    });
     defense_ = std::make_unique<DefenseSystem>(*things_, map_, *combat_, *health_, *power_, *defs_, time_);
     defense_->setEventLog(&events_);
     defense_->setFuel(&jobs_->fuel());
@@ -1863,6 +1875,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             // Rolling (P2), stunned, winding up a power (X2) or carried by a clip (a stagger): the player's position is
             // ignored, without a failure because Unreal sends one every step. The player's own swings leave the feet
             // free (BodyMotion::freeFeet): walking goes on while the arms swing.
+        } else if (melee_->finisherOf(move->pawn) != nullptr) {
+            // Through a finisher (sneed 2026-11-20) the body stays at its place beside the body on the ground; no failure.
         } else if (jobs_->sleepingByHand(move->pawn)) {
             // Asleep (SleepCommand): lying still until morning or SleepCommand{wake}; the same, no failure.
         } else if (reg.get<Mover>(move->pawn).climbing(reg.get<Position>(move->pawn).level)) {
@@ -3237,6 +3251,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.meleeTool = melee->tool;
             view.meleeStrong = melee_->strongSwing(entity);
             view.meleeLow = melee->phase != MeleePhase::Ready && melee->low;
+            if (melee_->finisherOf(entity) != nullptr) {
+                view.meleeFinisher = melee->finisher;
+                view.meleeFinisherT = melee_->finisherProgress(entity);
+                view.meleeFinisherTarget = melee->target;
+            }
             view.focusTarget = melee->focus;
             view.focusPlayer = melee->focusPlayer;
             view.footwork = time_.steps < melee->footworkUntil;

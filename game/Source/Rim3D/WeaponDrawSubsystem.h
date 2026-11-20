@@ -130,6 +130,16 @@ public:
 	int32 GetHitsLate() const { return HitsLate; }
 	/** Blows that landed while the attacker's body showed no swing to time them by (pushed into a stagger mid-swing). */
 	int32 GetHitsUntimed() const { return HitsUntimed; }
+	/** Frames a weapon in the hands was drawn away from its hand, and times the drawing put it back in the hand
+	 *  (sneed 2026-11-20: "the weapon then floats but the hand animations still work"); finisher frames drawn. */
+	int32 GetFloatFrames() const { return FloatFrames; }
+	int32 GetFloatFixes() const { return FloatFixes; }
+	int32 GetFinisherFrames() const { return FinisherFrames; }
+	/** The worst gap seen between a held weapon's grip and its hand (cm) since the last call, and resets it. */
+	float TakeWorstGripGap() { const float W = WorstGripGap; WorstGripGap = 0.0f; return W; }
+	/** The last finisher frame: the weapon's point and the body point it is driven at (world cm). */
+	FVector GetFinisherTip() const { return FinisherTip; }
+	FVector GetFinisherGoal() const { return FinisherGoal; }
 	float GetMaxStepsBehind() const { return MaxStepsBehind; }
 
 protected:
@@ -174,7 +184,24 @@ private:
 		float HandFree = 0.0f;
 		float SwingBlend = 0.0f;  // a swing with no clip: the weapon itself follows the procedural swing
 		bool bPinned = false;
+		/** A held weapon drawn away from its hand this long (real seconds), and how long it is kept on the hand's own
+		 *  grip after that (no place, no pinned hands) so it never floats. */
+		float FloatSeconds = 0.0f;
+		float ForceHandSeconds = 0.0f;
+		bool bFloatLogged = false;
+		/** The finisher's share of the weapon's pose (0 to 1). */
+		float FinisherBlend = 0.0f;
 	};
+	int32 FloatFrames = 0;
+	int32 FloatFixes = 0;
+	int32 FinisherFrames = 0;
+	float WorstGripGap = 0.0f;
+	FVector FinisherTip = FVector::ZeroVector;
+	FVector FinisherGoal = FVector::ZeroVector;
+	/** The finisher's weapon pose now (docs/design/lock-on.md "Finishers"): drawn, and the one the hands close on (they
+	 *  differ for a reverse grip: the blade comes out under the fist), and how much of it shows. False if none. */
+	bool FinisherPose(const ASimPawnActor& Actor, const colony::ThingView& View, const HoldDraw::FPoints& Points, float Size, FTransform& OutDrawn,
+					  FTransform& OutPinned, float& OutWeight);
 
 	void OnSimEvent(const colony::Event& Event);
 	void OnMeleeSwing(const colony::Event& Event);

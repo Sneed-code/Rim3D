@@ -8,6 +8,8 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Movement.h"
+#include "ColonySim/Save.h"
+#include "ColonySim/Snapshot.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
 
@@ -27,12 +29,14 @@ using namespace colony;
 // sneed's gun range feedback, 2026-11-19 (docs/design/lock-on.md "Tab, flicks and landing blows"): Tab walks out through
 // every enemy, flicks switch sides, faster swings, blows that land unless dodged, enemies that dodge.
 
-#define FEEL_REQUIRE(...)      \
-    do {                       \
-        CHECK(__VA_ARGS__);    \
-        if (!(__VA_ARGS__)) {  \
-            return;            \
-        }                      \
+// Evaluates its condition once (it used to run it twice, so a call with side effects such as attack() ran twice).
+#define FEEL_REQUIRE(...)                         \
+    do {                                          \
+        const bool feelOk_ = static_cast<bool>(__VA_ARGS__); \
+        CHECK_MESSAGE(feelOk_, #__VA_ARGS__);     \
+        if (!feelOk_) {                           \
+            return;                               \
+        }                                         \
     } while (0)
 
 namespace {
@@ -367,4 +371,156 @@ TEST_CASE("Flicks: on the practice range (anySide) a flick from the one enemy go
     sim->submit(FocusCommand{hero, kNoEntity, FocusMode::Next, 1.0f, 0.0f, true});
     sim->step();
     CHECK(sim->melee().focusOf(hero) == turned);  // Tab still gives the enemy first
+}
+
+// ---- Finishers, aim assist and facing (sneed 2026-11-20, docs/design/lock-on.md "Finishers") ---------------------------
+
+namespace {
+
+// A hero with `weapon` and a downed enemy `metres` ahead of it; returns the enemy.
+Entity feelTestDowned(Sim& sim, Entity hero, float metres) {
+    const Position& p = sim.things().registry().get<Position>(hero);
+    const Entity enemy = feelTestPawn(sim, p.x + metres, p.y);
+    sim.submit(SetFactionCommand{enemy, 2});
+    sim.step();
+    // As a real downed body: on the ground, not moving (so nobody's walk shoves it).
+    Health& health = sim.things().registry().get<Health>(enemy);
+    health.downed = true;
+    health.movingFactor = 0.0f;
+    return enemy;
+}
+
+}  // namespace
+
+TEST_CASE("Finishers: every melee weapon of sneed's four kinds has its own finisher at the downed") {
+    auto sim = feelTestSim(401);
+    const MeleeSystem& melee = sim->melee();
+    const auto moveOf = [&](const char* weapon) -> std::string {
+        const int f = melee.finisherFor(sim->defs().idOf("Things", weapon));
+        return f > 0 ? melee.rules().finishers[static_cast<size_t>(f - 1)].move : std::string("none");
+    };
+    CHECK(moveOf("Melee_Spear") == "Spear");
+    CHECK(moveOf("Melee_Club") == "Club");
+    CHECK(moveOf("Melee_Knife") == "Knife");
+    CHECK(moveOf("Melee_Gladius") == "Sword");
+    CHECK(moveOf("Melee_Longsword") == "Sword");
+}
+
+TEST_CASE("Finishers: a knife at a downed enemy kneels into a slow slam that lands at its hit time, holding the body still") {
+    auto sim = feelTestSim(402);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Knife");
+    const Entity enemy = feelTestDowned(*sim, hero, 0.9f);
+    feelTestFace(*sim, hero, 1.0f, 0.0f);
+    std::string why;
+    const bool attacked = sim->melee().attack(hero, enemy, true, &why);
+    FEEL_REQUIRE(attacked);
+    const MeleeFinisher* f = sim->melee().finisherOf(hero);
+    FEEL_REQUIRE(f != nullptr);
+    CHECK(f->move == "Knife");
+    CHECK(f->kneel);
+    const int hitStep = static_cast<int>(std::lround(f->hitSeconds * 30.0f));
+    const int total = static_cast<int>(std::lround(f->seconds * 30.0f));
+    int struckAt = -1;
+    int readyAt = -1;
+    float sawT = 0.0f;
+    float apartAtHit = -1.0f;
+    for (int s = 1; s <= total + 10; ++s) {
+        // The player keeps pushing forward: through a finisher the body stays where it knelt.
+        const Position before = sim->things().registry().get<Position>(hero);
+        if (s > hitStep / 2) {
+            sim->submit(DirectMoveCommand{hero, before.x, before.y + 0.08f});
+        }
+        sim->step();
+        if (s > hitStep / 2 && sim->melee().finisherOf(hero) != nullptr) {
+            CHECK(std::fabs(sim->things().registry().get<Position>(hero).y - before.y) < 1e-3f);
+        }
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::MeleeHit && e.thing == hero && struckAt < 0) {
+                struckAt = s;
+                const Position& hp = sim->things().registry().get<Position>(hero);
+                const Position& ep = sim->things().registry().get<Position>(enemy);
+                apartAtHit = std::hypot(hp.x - ep.x, hp.y - ep.y);
+            }
+        }
+        Snapshot snap;
+        sim->writeSnapshot(snap);
+        if (const ThingView* v = snap.find(hero); v != nullptr && v->meleeFinisher != 0) {
+            CHECK(v->meleeFinisherTarget == enemy);
+            sawT = std::max(sawT, v->meleeFinisherT);
+        }
+        if (readyAt < 0 && sim->melee().ready(hero)) {
+            readyAt = s;
+        }
+    }
+    CHECK(struckAt == hitStep);
+    CHECK(readyAt >= total - 1);
+    CHECK(readyAt <= total + 1);
+    CHECK(sawT > 0.9f);
+    // It stepped in to kneel at its place beside the body before the blow.
+    CHECK(std::fabs(apartAtHit - f->standOff) < 0.12f);
+}
+
+TEST_CASE("Finishers: a swing at someone standing is the usual quick swing") {
+    auto sim = feelTestSim(403);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Knife");
+    const Entity enemy = feelTestPawn(*sim, 31.3f, 30.5f);
+    sim->submit(SetFactionCommand{enemy, 2});
+    sim->step();
+    std::string why;
+    const bool attacked = sim->melee().attack(hero, enemy, true, &why);
+    FEEL_REQUIRE(attacked);
+    CHECK(sim->melee().finisherOf(hero) == nullptr);
+}
+
+TEST_CASE("Finishers: a finisher under way survives a save and load") {
+    auto sim = feelTestSim(404);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Spear");
+    const Entity enemy = feelTestDowned(*sim, hero, 0.8f);
+    std::string why;
+    const bool attacked = sim->melee().attack(hero, enemy, true, &why);
+    FEEL_REQUIRE(attacked);
+    for (int s = 0; s < 10; ++s) {
+        sim->step();
+    }
+    const Melee before = sim->things().registry().get<Melee>(hero);
+    SaveLoadResult result = loadSim(saveSim(*sim), feelTestDefs());
+    FEEL_REQUIRE(result.sim != nullptr);
+    Sim* loaded = result.sim.get();
+    const Melee& after = loaded->things().registry().get<Melee>(hero);
+    CHECK(after.finisher == before.finisher);
+    CHECK(after.finisherFrom == before.finisherFrom);
+    CHECK(after.finisherSteps == before.finisherSteps);
+    CHECK(loaded->stateHash() == sim->stateHash());
+}
+
+TEST_CASE("Aim assist: with no lock the player's swing goes at a neutral ahead too, never at its own side") {
+    auto sim = feelTestSim(405);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    const Entity neutral = feelTestPawn(*sim, 31.6f, 30.9f);
+    const Entity friendly = feelTestPawn(*sim, 31.4f, 30.1f);
+    sim->submit(SetFactionCommand{neutral, 3});
+    sim->submit(SetFightResponseCommand{neutral, FightResponse::Flee});
+    sim->step();
+    FEEL_REQUIRE(sim->fighters().factionOf(friendly) == sim->fighters().factionOf(hero));
+    feelTestFace(*sim, hero, 1.0f, 0.0f);
+    CHECK(sim->melee().playerTarget(hero) == neutral);
+}
+
+TEST_CASE("Facing: a swing at someone while walking keeps the body turned to them, not to the walk") {
+    auto sim = feelTestSim(406);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    const Entity enemy = feelTestPawn(*sim, 31.4f, 30.5f);  // to the east
+    sim->submit(SetFactionCommand{enemy, 2});
+    sim->submit(SetFightResponseCommand{enemy, FightResponse::Flee});
+    sim->step();
+    sim->submit(MeleeCommand{hero, enemy});
+    for (int s = 0; s < 6; ++s) {
+        const Position p = sim->things().registry().get<Position>(hero);
+        sim->submit(DirectMoveCommand{hero, p.x, p.y + 0.05f});  // walking north
+        sim->step();
+        if (sim->melee().winding(hero)) {
+            const Posture& posture = sim->things().registry().get<Posture>(hero);
+            CHECK(posture.facingX > 0.7f);
+        }
+    }
 }

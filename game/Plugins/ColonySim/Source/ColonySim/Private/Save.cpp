@@ -2734,6 +2734,11 @@ void saveMeleePart(Ar& ar, Melee& m) {
         ar.list("focusTried", m.focusTried, [&](Entity& e) { ar.value(nullptr, e); });
         ar.value("focusTriedAt", m.focusTriedAt);
     }
+    if (ar.sectionVersion() >= 7) {  // finishers (sneed 2026-11-20)
+        ar.value("finisher", m.finisher);
+        ar.value("finisherFrom", m.finisherFrom);
+        ar.value("finisherSteps", m.finisherSteps);
+    }
 }
 
 template <typename Ar>
@@ -3778,7 +3783,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(c.days >= 0.0f && c.days <= 1000.0f, "the save file has an impossible corpse rot");
         });
     });
-    ar.section("melee", 6, [&] {
+    ar.section("melee", 7, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
     });
     ar.section("social", 3, [&] {
