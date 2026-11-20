@@ -27,8 +27,11 @@ All numbers in `data/defs/Rules/StructureDamageRules.json`.
 - **Trunks.** `Plants::trunkOf` gives a tree's trunk as a standing cylinder: at `Plants::stemPoint` (the cell's centre
   moved up to 0.35 m by a hash of the cell; Unreal's `TerrainSubsystem` draws the tree at that same spot by calling it),
   radius `visual.stem.radius` (oak 0.28 m) and height `visual.stem.height`, both times 0.2 + 0.8 x growth (Unreal draws
-  saplings from 0.2 of full size). `tracesMeetTrees`: bullets, sight lines of shots and melee blows stop at a trunk
-  (`ProjectileHitKind::Plant`). Grass, bushes and crops don't stop anything.
+  saplings from 0.2 of full size). `tracesMeetTrees`: bullets and grenades in flight and melee blows stop at a trunk
+  (`ProjectileHitKind::Plant`; `CombatSystem::trace(..., trees = true)`). Sight checks (can I shoot him, which turret
+  sees whom, how much of a body a blast sees) look past trunks: a shooter fires past a tree and the bullet may meet it,
+  so trees give cover by chance. Grass, bushes and crops don't stop anything. Older fight tests clear their maps' plants
+  (`Tests/TestPlants.h`).
 - **Solid trunks.** The player's body (DirectMove) can't go into a trunk: the part of the move going in is taken off, so
   it slides round the tree. Colonists and raiders on paths still walk through tree cells as in RimWorld (trees are
   pass-through cells there); making path followers steer round trunks is a later step.

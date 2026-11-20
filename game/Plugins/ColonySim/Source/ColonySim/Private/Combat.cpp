@@ -962,7 +962,7 @@ float combatSegmentCircle(float ax, float ay, float dx, float dy, float r) {
 }  // namespace
 
 TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, float bz, int level, Entity skipPawn,
-                             CellPos skipCell, bool pawns, const DrawnAim* drawn) const {
+                             CellPos skipCell, bool pawns, const DrawnAim* drawn, bool trees) const {
     TraceHit best;
     const float dx = bx - ax;
     const float dy = by - ay;
@@ -1034,7 +1034,7 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
                 }
             }
             // A tree's trunk (docs/design/structure-damage.md): a standing cylinder at the spot Unreal draws the tree.
-            if (plants_ != nullptr && model_->tracesMeetTrees && level == 0 && !(c == skipCell) && plants_->has(c)) {
+            if (trees && plants_ != nullptr && model_->tracesMeetTrees && level == 0 && !(c == skipCell) && plants_->has(c)) {
                 float tx = 0.0f;
                 float ty = 0.0f;
                 float radius = 0.0f;
@@ -2361,7 +2361,7 @@ void CombatSystem::step(Rng& rng) {
         const float ny = p.y + p.vy;
         const float nz = p.z + p.vz - 0.5f * g;
         TraceHit hit = trace(p.x, p.y, p.z, nx, ny, nz, p.level, p.launcher, p.startCell, true,
-                             p.drawn.pawn != kNoEntity ? &p.drawn : nullptr);
+                             p.drawn.pawn != kNoEntity ? &p.drawn : nullptr, true);
         const CellPos next{static_cast<int>(std::floor(nx)), static_cast<int>(std::floor(ny)), p.level};
         if (hit.kind == ProjectileHitKind::None && (p.age > model_->maxFlight || !map_.inBounds(next))) {
             hit.kind = ProjectileHitKind::Gone;

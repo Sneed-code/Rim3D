@@ -240,17 +240,19 @@ TEST_CASE("Structure damage: the trunk stands where Unreal draws the tree, and t
     CHECK(y <= 30.85f);
     CHECK(radius == doctest::Approx(0.28f));  // the oak's visual.stem.radius, fully grown
     const float z = sim->map().heightAt(x, y) + 1.2f;
-    const TraceHit hit = sim->combat().trace(x - 5.0f, y, z, x + 5.0f, y, z, 0, kNoEntity, CellPos{-1, -1, 0});
+    const TraceHit hit = sim->combat().trace(x - 5.0f, y, z, x + 5.0f, y, z, 0, kNoEntity, CellPos{-1, -1, 0}, true, nullptr, true);
     CHECK(hit.kind == ProjectileHitKind::Plant);
     CHECK(hit.cell == tree);
     CHECK(hit.x == doctest::Approx(x - radius).epsilon(0.01));
     // Over the top of it, nothing.
     const float over = sim->map().heightAt(x, y) + height + 1.0f;
-    CHECK(sim->combat().trace(x - 5.0f, y, over, x + 5.0f, y, over, 0, kNoEntity, CellPos{-1, -1, 0}).kind != ProjectileHitKind::Plant);
+    CHECK(sim->combat().trace(x - 5.0f, y, over, x + 5.0f, y, over, 0, kNoEntity, CellPos{-1, -1, 0}, true, nullptr, true).kind != ProjectileHitKind::Plant);
+    // A sight check (no `trees`) looks past the trunk: the shooter fires and the bullet may meet it.
+    CHECK(sim->combat().trace(x - 5.0f, y, z, x + 5.0f, y, z, 0, kNoEntity, CellPos{-1, -1, 0}).kind == ProjectileHitKind::None);
     // Grass doesn't stop anything.
     sim->plants().remove(tree);
     CHECK(sim->plants().place(tree, sim->defs().idOf("Things", "Plant_Grass"), 1.0f));
-    CHECK(sim->combat().trace(x - 5.0f, y, z, x + 5.0f, y, z, 0, kNoEntity, CellPos{-1, -1, 0}).kind == ProjectileHitKind::None);
+    CHECK(sim->combat().trace(x - 5.0f, y, z, x + 5.0f, y, z, 0, kNoEntity, CellPos{-1, -1, 0}, true, nullptr, true).kind == ProjectileHitKind::None);
 }
 
 TEST_CASE("Structure damage: a bullet into a tree does half its damage, a melee blow its whole damage") {

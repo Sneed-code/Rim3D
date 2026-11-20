@@ -1192,7 +1192,7 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
         const float ly = dx * sn + dy * c;
         const float lex = ox + lx * length;
         const float ley = oy + ly * length;
-        TraceHit found = combat_.trace(ox, oy, oz, lex, ley, ez, pos.level, pawn, cellOf(pos));
+        TraceHit found = combat_.trace(ox, oy, oz, lex, ley, ez, pos.level, pawn, cellOf(pos), true, nullptr, true);
         if (found.kind != ProjectileHitKind::Pawn && found.kind != ProjectileHitKind::Building && found.kind != ProjectileHitKind::Plant &&
             m.target != kNoEntity &&
             reg.valid(m.target) && things_.spawned(m.target)) {

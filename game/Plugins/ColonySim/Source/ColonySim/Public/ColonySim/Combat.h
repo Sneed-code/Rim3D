@@ -497,7 +497,9 @@ public:
     // With `pawns` false only the ground, rock and buildings count (blast lines of sight).
     // `drawn`: a player's shot at a drawn body part (DrawnAim); passing near that spot hits the part.
     TraceHit trace(float ax, float ay, float az, float bx, float by, float bz, int level, Entity skipPawn,
-                   CellPos skipCell, bool pawns = true, const DrawnAim* drawn = nullptr) const;
+                   CellPos skipCell, bool pawns = true, const DrawnAim* drawn = nullptr, bool trees = false) const;
+    // `trees`: tree trunks stop the line too (a bullet, a grenade or a blow in flight; docs/design/structure-damage.md).
+    // Sight checks leave it off: a shooter fires past a trunk and the bullet may meet it.
     // The point other pawns aim at on this pawn (its chest), world metres. False if not a pawn
     // on the map.
     bool aimPoint(Entity pawn, float& x, float& y, float& z) const;
