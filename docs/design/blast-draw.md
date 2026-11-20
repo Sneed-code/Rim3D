@@ -66,13 +66,15 @@ If the fire comes out upside down on the PC (the plane's texture runs the other 
 
 `feel` ends with `blast_fireball` (a frag blast 11 m off to one side at 14:00 in a patch cleared of plants, the camera turned to it, pictured 0.3 s in; it must draw 40+ sprites, a light
 over 2,000 cd and a scorch mark), `blast_smoke` (pictured about 4 s in), `blast_linger` (about 11 s in, looking down at the spot: 3+ smoke puffs and the
-scorch still there) and `blast_molotov` (a fire blast, pictured 0.5 s in). Without the art they note it and pass.
+scorch still there), `blast_scorch` (a scorch mark alone, no smoke, looked down at from 5 m) and `blast_molotov` (a fire blast, pictured 0.5 s in). Without the art they note it and pass.
 
 ## Not yet
 
 - **The scorch mark does not show on the PC** (2026-11-20, rounds 3 to 7): first as a deferred decal, then as a ground square on the
   traced ground (`LogBlastFx: Scorch at ...` is logged at the right place). The fireball, smoke and sparks with the same texture
-  path render fine. To find: the material (`M_BlastScorch`) or `T_BlastScorch`'s alpha.
+  path render fine. To find: the material (`M_BlastScorch`) or `T_BlastScorch`'s alpha. Round 8 (follow-up): the material is
+  two-sided, the log says what it is drawn with (`Scorch material ...`, `Scorch drawn: ...`) and `blast_scorch` pictures one
+  alone; the earlier pictures had it 11 m off at a grazing angle under the smoke.
 
 - Blasts in water (a column of spray), on snow (white powder) and on stone floors (grey dust): the dust is soil-coloured
   everywhere.

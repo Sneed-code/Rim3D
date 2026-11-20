@@ -664,6 +664,37 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	};
 	Phases.Add(MoveTemp(Lingering));
 
+	// The scorch mark alone, with no smoke over it and looked down at from 5 m (rounds 3 to 7 never saw it behind the smoke).
+	FPhase ScorchOnly;
+	ScorchOnly.Name = TEXT("blast_scorch");
+	ScorchOnly.WarmupSeconds = 0.2f;
+	ScorchOnly.MeasureSeconds = 1.0f;
+	ScorchOnly.ScreenshotAt = 0.5f;
+	ScorchOnly.Setup = [=, this]()
+	{
+		const colony::ThingView* Me = MyView();
+		if (!Me || !Fx())
+		{
+			return;
+		}
+		Fx()->ClearForTest();
+		Fx()->AddScorchForTest(Me->x + 5.0f, Me->y - 2.0f, 1.9f);
+		LookAtBlast(Me->x + 5.0f, Me->y - 2.0f, -30.0f);
+	};
+	ScorchOnly.Verify = [=, this]()
+	{
+		if (!Fx() || !Fx()->IsReady())
+		{
+			return;
+		}
+		Notes.Add(FString::Printf(TEXT("blast_scorch: %d scorch mark(s), look for a dark burnt patch with rays on the ground"), Fx()->GetScorchMarks()));
+		if (Fx()->GetScorchMarks() < 1)
+		{
+			Fail(TEXT("blast_scorch: no scorch mark was made"));
+		}
+	};
+	Phases.Add(MoveTemp(ScorchOnly));
+
 	FPhase Molotov;
 	Molotov.Name = TEXT("blast_molotov");
 	Molotov.WarmupSeconds = 0.2f;

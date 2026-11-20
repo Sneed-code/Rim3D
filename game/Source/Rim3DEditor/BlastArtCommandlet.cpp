@@ -371,6 +371,8 @@ namespace
 		Material->BlendMode = BLEND_Translucent;
 		Material->SetShadingModel(MSM_DefaultLit);
 		Material->TranslucencyLightingMode = TLM_SurfacePerPixelLighting;
+		// Seen from either side, so a square laid the wrong way up still shows.
+		Material->TwoSided = true;
 		bool bNeedsRecompile = false;
 		Material->SetMaterialUsage(bNeedsRecompile, MATUSAGE_InstancedStaticMeshes);
 		auto* UV = BlastArtNode<UMaterialExpressionTextureCoordinate>(Material, -1100, -200);

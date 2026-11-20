@@ -9,6 +9,7 @@
 #include "GameFramework/Pawn.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "Materials/Material.h"
 #include "Materials/MaterialInterface.h"
 
 #include "BlastFxData.h"
@@ -88,6 +89,7 @@ void UBlastFxSubsystem::Teardown()
 {
 	Scorches.Reset();
 	ScorchInstances = nullptr;
+	bLoggedScorchDraw = false;
 	Sprites.Reset();
 	if (Holder)
 	{
@@ -197,6 +199,15 @@ bool UBlastFxSubsystem::EnsureScene()
 		ScorchInstances->NumCustomDataFloats = 1;
 		ScorchInstances->SetupAttachment(Root);
 		ScorchInstances->RegisterComponent();
+		// The scorch never showed on the PC (rounds 3 to 7): say what it is drawn with, to tell a stale or wrong material.
+		const UMaterial* Base = Scorch->GetMaterial();
+		UE_LOG(LogBlastFx, Display, TEXT("Scorch material %s: domain %d, blend %d, two-sided %d, ISM usage %d"), *Scorch->GetPathName(),
+			Base ? static_cast<int32>(Base->MaterialDomain) : -1, static_cast<int32>(Scorch->GetBlendMode()), Scorch->IsTwoSided() ? 1 : 0,
+			Base && Base->bUsedWithInstancedStaticMeshes ? 1 : 0);
+	}
+	else
+	{
+		UE_LOG(LogBlastFx, Warning, TEXT("No %s: blasts leave no scorch mark"), BlastFxData::ScorchMaterial);
 	}
 
 	FlashLight = NewObject<UPointLightComponent>(Holder);
@@ -518,6 +529,16 @@ void UBlastFxSubsystem::ClearForTest()
 	Teardown();
 }
 
+void UBlastFxSubsystem::AddScorchForTest(float MapX, float MapY, float RadiusM)
+{
+	USimSubsystem* Source = Bridge.Get();
+	if (!Source || !Source->GetSim() || !EnsureScene())
+	{
+		return;
+	}
+	SpawnScorch(Source->SimToWorld(MapX, MapY, 0), FVector::UpVector, RadiusM);
+}
+
 void UBlastFxSubsystem::AddDebrisTrail(const FVector& At, float SizeCm)
 {
 	if (!Holder || Sprites.Num() >= GBlastMaxSprites.GetValueOnGameThread())
@@ -735,6 +756,13 @@ void UBlastFxSubsystem::UpdateScorches(float DeltaTime)
 			ScorchInstances->SetCustomDataValue(I, 0, Scorches[I].Strength * FMath::Sqrt(Left), false);
 		}
 		ScorchInstances->MarkRenderStateDirty();
+		if (!bLoggedScorchDraw)
+		{
+			bLoggedScorchDraw = true;
+			const FBoxSphereBounds Bounds = ScorchInstances->CalcBounds(ScorchInstances->GetComponentTransform());
+			UE_LOG(LogBlastFx, Display, TEXT("Scorch drawn: %d instance(s), visible %d, bounds centre %s extent %s, fade %.2f"), ScorchInstances->GetInstanceCount(),
+				ScorchInstances->IsVisible() ? 1 : 0, *Bounds.Origin.ToString(), *Bounds.BoxExtent.ToString(), Scorches[0].Strength);
+		}
 	}
 }
 
