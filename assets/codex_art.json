@@ -98,7 +98,8 @@
     5,
     2,
     2.0
-   ]
+   ],
+   "turn": "x-90"
   },
   "TransportPod": {
    "kind": "building",

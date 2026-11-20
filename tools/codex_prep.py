@@ -78,15 +78,23 @@ def transform_all(meshes, empties, m):
         e["pos"] = m @ e["pos"]
 
 
-def stand_up(meshes, empties, size):
-    """Pick the turn (none, or 90 degrees about X either way) that makes the bounds best match the expected size."""
+def stand_up(meshes, empties, size, force=None):
+    """Pick the turn (none, or 90 degrees about X either way) that makes the bounds best match the expected size.
+    force ("none", "x-90" or "x+90", the prep entry's "turn") skips the guess, for a model whose height and depth are
+    about the same (the hi-tech research bench: 2.0 m tall, 2.2 m deep, so it came in lying on its back)."""
+    turns = (("none", mathutils.Matrix.Identity(4)),
+             ("x-90", mathutils.Matrix.Rotation(math.radians(-90), 4, "X")),
+             ("x+90", mathutils.Matrix.Rotation(math.radians(90), 4, "X")))
+    if force:
+        rot = dict(turns)[force]
+        if force != "none":
+            transform_all(meshes, empties, rot)
+        return force
     if not size:
         return "none"
     want = mathutils.Vector(size)
     best, best_err = None, 1e9
-    for label, rot in (("none", mathutils.Matrix.Identity(4)),
-                       ("x-90", mathutils.Matrix.Rotation(math.radians(-90), 4, "X")),
-                       ("x+90", mathutils.Matrix.Rotation(math.radians(90), 4, "X"))):
+    for label, rot in turns:
         pts = world_points(meshes, rot)
         ext = list(pts.max(axis=0) - pts.min(axis=0))
         # Footprint may be either way round in x/y; the height must match.
@@ -230,7 +238,7 @@ def prep(src_root, name, entry):
         print(f"CODEXPREP {name}: {o.name} turned {math.degrees(angle):.1f} degrees about its pivot {tuple(round(v, 3) for v in piv)}")
     turn = "none"
     if kind in ("building", "item"):
-        turn = stand_up(meshes, empties, entry.get("size"))
+        turn = stand_up(meshes, empties, entry.get("size"), entry.get("turn"))
         # "centerOn": the footprint is the bounds of the objects whose name starts with it (a turret's base), so an
         # overhanging barrel doesn't move the model off its cells.
         base = [o for o in meshes if entry.get("centerOn") and o.name.startswith(entry["centerOn"])]
