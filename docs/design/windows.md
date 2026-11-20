@@ -87,14 +87,16 @@ window a bright patch falls on the floor and furniture, and with ray tracing it 
 south (world -X) and high, so a window in a wall along X, like the room's north wall, gets no patch then (the first two noon
 pictures, 2026-11-19 and 20).
 
-**Dust in the air** (sneed 2026-11-20: photoreal and subtle): while the camera is under a roof, each closed, roofed room with a
-window near the camera (the 8 nearest, `Windows.DustRooms`) gets a local fog volume: the ellipsoid inside its bounds from floor
-to roof, with an even haze (`Windows.Dust`, 0.3 extinction per metre, warm grey albedo) that the volumetric fog lights where the
-sun comes in through a window, so the beam shows as a soft shaft across the shadowed room while the outdoors stays clear.
-Under a roof the volumetric fog also starts at the camera (outdoors it starts 5 m off) and reaches 30 m (`data/look.json`
-`indoorDust`). The volume's size at scale 1 is `Windows.DustBaseCm` (50 cm radius), and local fog volumes are drawn from the camera on (`r.LocalFogVolume.GlobalStartDistance=0`; by default they start 20 m off, which hid the dust in the camera's own room). The `sunbeams_thinfog` test shot tries the other way, a thin fog in the whole view while indoors. The `sunbeams_fogtest` shot holds thick fog in the room (`Look.IndoorFogDensity`) to show the volumetric fog is lit there. Tries that did not work: thickening the fog everywhere four times (faint shafts, milky view outside), and a
-box with a volume material (the volumetric fog takes volume materials from particles only, so nothing showed). Needs a quality
-step with volumetric fog (High, Epic). The `sunbeams` shot notes the fog's numbers and the dusty rooms.
+**Dust in the air** (sneed 2026-11-20: photoreal and subtle; `data/look.json` `indoorDust`): with the camera under a roof the
+volumetric fog starts at the camera (outdoors 5 m off), is 12 times thicker and reaches only 15 m, while the plain height fog
+beyond keeps the weather's thin density, so the outdoors stays clear. The sky light and the sky's ambient light stop lighting
+that fog indoors (they shine through the roof and only made the room milky) and the window lights never did, so the air of the
+room is dark and only the sun coming in through a window lights it, as a shaft. It eases in and out with the indoor exposure.
+Needs a quality step with volumetric fog (High, Epic). The look bench takes `sunbeams` at the default and `sunbeams_dust4`,
+`sunbeams_dust30` (`Look.IndoorDust`) for tuning. Tries that did not work (PC rounds 4 to 9, 2026-11-20): the fog four times
+thicker everywhere with the sky still lighting it (faint shafts, milky view outside); a box with a volume material (the
+volumetric fog takes those from particles only); a local fog volume per room (it drew nothing, whatever its size or start
+distance).
 
 ## Not yet
 

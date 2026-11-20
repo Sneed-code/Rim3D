@@ -58,10 +58,12 @@
   },
 
   "indoorDust": {
-    "_about": "With the camera under a roof (the same test as exposure.indoorBrighterEV) the air shows its dust, so sunbeams through windows draw soft shafts: the volumetric fog starts `startDistanceCm` from the camera instead of fog.startDistanceCm, is `extinction` times thicker everywhere (1: the haze itself is put only inside rooms, by the window lights' dust boxes, `Windows.Dust`; 4 everywhere bleached the view outside) and reaches only `distanceCm`. Needs a quality step with volumetric fog (High, Epic).",
+    "_about": "With the camera under a roof (the same test as exposure.indoorBrighterEV) the air shows its dust, so sunbeams through windows draw shafts: the volumetric fog starts `startDistanceCm` from the camera instead of fog.startDistanceCm, is `extinction` times thicker and reaches only `distanceCm` (the plain height fog beyond keeps the weather's thin density, so the outdoors stays clear). The sky light and the sky's ambient light light the fog only `skyScattering` and `ambient` as much (they shine through the roof and made the room milky), so the room's air is dark and the sun's beams stand out. Needs a quality step with volumetric fog (High, Epic).",
     "startDistanceCm": 0,
-    "extinction": 1.0,
-    "distanceCm": 3000
+    "extinction": 12.0,
+    "distanceCm": 1500,
+    "skyScattering": 0.0,
+    "ambient": 0.0
   },
 
   "morningMist": {
