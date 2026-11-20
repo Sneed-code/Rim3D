@@ -708,6 +708,10 @@ void USmokeTestSubsystem::BuildLookPhases()
 			Notes.Add(FString::Printf(TEXT("sunbeams: indoor share %.2f, volumetric fog %d, fog starts %.0f cm, extinction x%.2f, reach %.0f cm"), SkyDust->GetIndoorShare(),
 				DustFog->bEnableVolumetricFog ? 1 : 0, DustFog->StartDistance, DustFog->VolumetricFogExtinctionScale, DustFog->VolumetricFogDistance));
 		}
+		if (const UWindowLightSubsystem* DustLights = GetWorld()->GetSubsystem<UWindowLightSubsystem>())
+		{
+			Notes.Add(FString::Printf(TEXT("sunbeams: %d rooms with dust in the air"), DustLights->GetDustRooms()));
+		}
 	};
 	Phases.Add(MoveTemp(Sunbeams));
 

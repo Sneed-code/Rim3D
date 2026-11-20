@@ -87,11 +87,14 @@ window a bright patch falls on the floor and furniture, and with ray tracing it 
 south (world -X) and high, so a window in a wall along X, like the room's north wall, gets no patch then (the first two noon
 pictures, 2026-11-19 and 20).
 
-**Dust in the air** (`data/look.json` `indoorDust`, sneed 2026-11-20: photoreal and subtle): with the camera under a roof (the
-same test as the indoor exposure) the volumetric fog starts at the camera instead of 5 m off, is 4 times thicker and reaches
-30 m, so a sunbeam through a window shows as a soft shaft across the shadowed room. It eases in and out with the exposure. It
-needs a quality step with volumetric fog (High, Epic); on Low and Medium there are patches but no shafts. The `sunbeams` shot
-notes the fog's numbers.
+**Dust in the air** (sneed 2026-11-20: photoreal and subtle): each closed, roofed room with a window near the camera (the 8
+nearest, `Windows.DustRooms`) gets a box filling its bounds from floor to roof, drawn in the generated volume material
+`M_RoomDust` (`BuildingMaterials` commandlet). It puts a little haze into the volumetric fog there and only there
+(`Windows.Dust`, 0.25 extinction per metre, warm grey albedo), so the sun coming in through a window lights a soft shaft
+across the shadowed room while the outdoors stays clear. Under a roof the volumetric fog also starts at the camera (outdoors it
+starts 5 m off) and reaches 30 m (`data/look.json` `indoorDust`). A first try thickened the fog everywhere four times instead:
+the shafts were still faint and the view out of the windows went milky. Needs a quality step with volumetric fog (High, Epic);
+without the material there is no dust and a warning in the log. The `sunbeams` shot notes the fog's numbers and the dusty rooms.
 
 ## Not yet
 
