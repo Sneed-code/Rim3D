@@ -58,6 +58,12 @@ enum class EOrderTool : uint8
 	PaintArea,
 	/** Drag a rectangle: takes its cells out of that area. */
 	EraseArea,
+	/** Drag a rectangle: an animal zone of its free cells (docs/design/husbandry.md); fenced in all round, it is a pen. */
+	AnimalZone,
+	/** Drag a rectangle: marks the wild animals in it to be tamed or hunted, the tame ones to be slaughtered. */
+	Tame,
+	Hunt,
+	Slaughter,
 };
 
 /** What the orders overlay draws (smoke test `orders`). */
@@ -73,6 +79,8 @@ struct FOrdersStats
 	int32 GrowCells = 0;
 	/** Cells of the landing zone drawn. */
 	int32 LandingCells = 0;
+	/** Cells of animal zones and pens drawn. */
+	int32 AnimalZoneCells = 0;
 	/** Instances of the placement ghost (valid, invalid). */
 	int32 GhostValid = 0;
 	int32 GhostInvalid = 0;

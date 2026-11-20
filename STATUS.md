@@ -1,6 +1,8 @@
 # Status
 
-Updated 2026-11-19.
+Updated 2026-11-20.
+
+Buttons for animals, pens, prisoners and slaves (2026-11-20; Unreal UI on the new overseer screens, `docs/design/ui-layout.md`): **Prisoners screen** gets the Enslave and Reduce will modes (with a tip for every mode), each prisoner's will next to its resistance, and a **Slaves** list with a suppression bar (red under a third) and Emancipate / Release buttons. **Animals tab** gets a breeding tick, "with young" and milk / wool fullness, the animal bed it sleeps in, "Release to the wild" on right click, Pen or Zone in the zone column, and a **Zones and pens** list with a breeding tick per zone. **Build > Zone > Animal zone** paints animal zones at last (they show as tan rings; Remove zone takes them off too), and **Build > Orders** has Tame, Hunt and Slaughter drag tools. Fences, gates and animal beds were already on the Structure and Furniture tabs. Sim: the snapshot now carries `breedingOff`, `animalBed` and the zone's `breedingOff`. **Next: PC compile and a look (smoke `orders` and `hud`).**
 
 Natural blood splats (2026-11-19; Unreal art, `docs/design/blood.md`): the ground blood pictures no longer have the spiky crown that read as starbursts or viruses: drops are uneven round blots with droplets, slanted drops have a short tail, pools are lumpy puddles with drops on the rim. **Needs `-run=BloodArt -force` once; check on the PC with the gun range tour.**
 

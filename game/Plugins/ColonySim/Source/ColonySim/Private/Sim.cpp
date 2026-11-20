@@ -2762,7 +2762,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
     }
     for (const AnimalZone& zone : husbandry_->zones()) {
         out.animalZones.push_back(AnimalZoneView{zone.id, static_cast<uint32_t>(out.animalZoneCells.size()),
-                                                 static_cast<uint32_t>(zone.cells.size()), husbandry_->isPen(zone.id)});
+                                                 static_cast<uint32_t>(zone.cells.size()), husbandry_->isPen(zone.id), zone.breedingOff});
         out.animalZoneCells.insert(out.animalZoneCells.end(), zone.cells.begin(), zone.cells.end());
     }
     for (const GrowingZone& zone : farming_->zones()) {
@@ -3178,11 +3178,15 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 view.animalName = care->name;
                 view.learnedTricks = husbandry_->learnedMask(entity);
                 view.wantedTricks = husbandry_->wantedMask(entity);
+                view.animalBed = care->bed;
             }
             view.sex = static_cast<int>(breeding_->sexOf(entity));
             view.pregnant = breeding_->pregnant(entity);
             view.milkFullness = breeding_->fullness(entity, AnimalProduct::Milk);
             view.woolFullness = breeding_->fullness(entity, AnimalProduct::Wool);
+            if (const AnimalBreed* breed = breeding_->breed(entity)) {
+                view.breedingOff = breed->breedingOff;
+            }
         }
         view.onFire = reg.all_of<Burning>(entity);
         if (const Fighter* fighter = reg.try_get<Fighter>(entity)) {
