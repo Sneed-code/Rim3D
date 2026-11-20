@@ -24,10 +24,15 @@ game seconds; 9,000 is 5 real minutes at 1x.
 | Ankle-deep water | legs off in `ankleWashSeconds` 600 |
 | Waist or chest deep | legs as above, body dirt and blood off in `waistWashSeconds` 900 |
 | Swimming | everything, the weapon too, off in `swimWashSeconds` 600 (20 s at 1x) |
-| Otherwise | it all wears off in `wearOffSeconds` 172,800 (two game days); a corpse keeps its grime |
+| Otherwise, dirt | fades from 1 to clean in `dirtFadeSeconds` 18,000 (10 real minutes at 1x; sneed 2026-11-20: "dirt fades over time too like blood ... takes 10m"), only while nothing is dirtying that level that second, so a pawn walking in mud or digging stays dirty and a corpse lying in the dirt stays dirty; water and rain above wash it faster |
+| Otherwise, blood | wears off in `wearOffSeconds` 172,800 (two game days), not off a corpse (how it looks fades in 5 minutes on screen, below) |
 
 A pawn on a floor, indoors or carried keeps what it has. Nothing in the game's rules reads grime (no mood or beauty
 effects): it is there to be drawn, and it is saved (section `grime`) and hashed so a loaded game looks the same.
+
+The dev command `SetGrimeCommand` (pawn, dirt on the legs, dirt on the body) sets the dirt outright for smoke-test
+pictures: smoke `hurt` phase `dirt` dirties a colonist (legs 0.85, body 0.35) and takes `Saved/Smoke/hurt/dirt_0` to
+`dirt_4.png` (whole body, shins at 60 and 30 cm, from behind, from 10 m), then washes it off.
 
 The snapshot gives each pawn `dirtLegs`, `dirtBody`, `blood`, `bloodFilth`, `bloodAge` and `weaponBlood`,
 `weaponBloodFilth`, `weaponBloodAge` (ages in game seconds). Tests: `GrimeTests.cpp`.
@@ -39,9 +44,18 @@ of every skeletal mesh of the pawn** (the MakeHuman or MetaHuman body, face, clo
 patches without touching their own materials. It takes the pre-skinned local position, so the patches stay put on the
 body as it moves:
 
-- **Dirt** from the feet up by the legs level (fading out by just above the knee, about half the body's height) plus
-  the body level all over, in patches of procedural noise that grow from their low spots as the level rises; a dusty
-  brown, matte.
+- **Dirt** (reworked 2026-11-20, sneed: "fine spray etc over the more broad smudges, not unlike blood"): one HLSL node
+  (`GrimeDirt`) draws three layers from the legs level (from the feet up, a ragged top edge fading out about half the
+  body's height) and the body level (all over):
+  - **broad smudges**: two octaves of noise patches growing from their low spots as the level rises, gritty inside
+    (a 1 cm grain thins them in places);
+  - **spray**: drops of mud flicked up by the feet or thrown by work, one jittered drop per 3D cell at three sizes
+    (cells of 0.35, 0.8 and 2.4 cm); on the legs they reach higher than the smudges (to the waist) and are stretched a
+    little upwards, and they crowd round each smudge's edge so it trails off into speckles;
+  - drops under about 3 pixels on screen fade into an even tint of the same average cover, so nothing sparkles at
+    range.
+  Drops and smudge cores are dark wet mud (a little less matte), smudge edges pale dry dust. Cloud preview of the
+  pattern: `python3 tools/grime_dirt_preview.py out.png` (a plain mannequin, old and new, whole body and shin).
 - **Blood** in its own patches, in the fluid's colour drying from its `look.wet` to `look.dry` (the same curve and
   `Blood.DryMinutes` as the stains), glossy while wet, matte once dry.
 - The held weapon (`UWeaponDrawSubsystem::GetHandsComponent`) gets the same material with blood only.
