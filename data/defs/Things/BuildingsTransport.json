@@ -7,7 +7,7 @@
     "stats": { "maxHitPoints": 200, "workToBuild": 4320.0, "flammability": 0.5 },
     "fuel": { "item": "Chemfuel", "capacity": 150, "autoRefuelPercent": 1.0 },
     "podLauncher": true,
-    "visual": { "parts": [
+    "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/PodLauncher/SM_PodLauncher.SM_PodLauncher", "parts": [
       { "shape": "box", "size": [0.9, 1.9, 0.5], "color": [0.42, 0.44, 0.47] },
       { "shape": "cylinder", "radius": 0.3, "height": 0.9, "at": [0, -0.45, 0.5], "color": [0.85, 0.6, 0.2] },
       { "shape": "box", "size": [0.2, 0.6, 0.15], "at": [0, 0.55, 0.5], "color": [0.2, 0.2, 0.22] }

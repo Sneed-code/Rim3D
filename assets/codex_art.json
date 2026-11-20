@@ -135,6 +135,189 @@
     2,
     1.91
    ]
+  },
+  "HydroponicsBasin": {
+   "kind": "building",
+   "def": "HydroponicsBasin",
+   "size": [
+    1,
+    1,
+    1.5
+   ]
+  },
+  "FabricationBench": {
+   "kind": "building",
+   "def": "FabricationBench",
+   "size": [
+    5,
+    2,
+    1.91
+   ]
+  },
+  "ElectricSmelter": {
+   "kind": "building",
+   "def": "ElectricSmelter",
+   "size": [
+    3,
+    1,
+    1.8
+   ]
+  },
+  "Crematorium": {
+   "kind": "building",
+   "def": "Crematorium",
+   "size": [
+    3,
+    2,
+    1.95
+   ]
+  },
+  "DrugLab": {
+   "kind": "building",
+   "def": "DrugLab",
+   "size": [
+    3,
+    1,
+    1.62
+   ]
+  },
+  "ChemfuelGenerator": {
+   "kind": "building",
+   "def": "ChemfuelGenerator",
+   "size": [
+    2,
+    2,
+    1.6
+   ]
+  },
+  "MoisturePump": {
+   "kind": "building",
+   "def": "MoisturePump",
+   "size": [
+    2,
+    2,
+    1.4
+   ]
+  },
+  "LongRangeMineralScanner": {
+   "kind": "building",
+   "def": "LongRangeMineralScanner",
+   "size": [
+    3,
+    3,
+    3.09
+   ]
+  },
+  "GroundPenetratingScanner": {
+   "kind": "building",
+   "def": "GroundPenetratingScanner",
+   "size": [
+    3,
+    3,
+    1.8
+   ]
+  },
+  "FoamTurret": {
+   "kind": "building",
+   "def": "FoamTurret",
+   "size": [
+    1,
+    1,
+    1.32
+   ],
+   "centerOn": "Base"
+  },
+  "FirefoamPopper": {
+   "kind": "building",
+   "def": "FirefoamPopper",
+   "size": [
+    0.8,
+    0.86,
+    0.6
+   ]
+  },
+  "Hive": {
+   "kind": "building",
+   "def": "Hive",
+   "size": [
+    0.91,
+    0.96,
+    1.6
+   ]
+  },
+  "ShipCryptosleepCasket": {
+   "kind": "building",
+   "def": "ShipCryptosleepCasket",
+   "size": [
+    1,
+    2,
+    1.1
+   ]
+  },
+  "MultiAnalyzer": {
+   "kind": "building",
+   "def": "MultiAnalyzer",
+   "size": [
+    2,
+    2,
+    1.6
+   ]
+  },
+  "SimpleResearchBench": {
+   "kind": "building",
+   "def": "SimpleResearchBench",
+   "size": [
+    3,
+    2,
+    1.5
+   ]
+  },
+  "WatermillGenerator": {
+   "kind": "building",
+   "def": "WatermillGenerator",
+   "size": [
+    3,
+    3,
+    2.6
+   ]
+  },
+  "OrbitalTradeBeacon": {
+   "kind": "building",
+   "def": "OrbitalTradeBeacon",
+   "size": [
+    1,
+    1,
+    1.3
+   ]
+  },
+  "PodLauncher": {
+   "kind": "building",
+   "def": "PodLauncher",
+   "size": [
+    1,
+    2,
+    2.2
+   ]
+  },
+  "Turret_RocketswarmLauncher": {
+   "kind": "building",
+   "def": "Turret_RocketswarmLauncher",
+   "size": [
+    2,
+    2,
+    2.2
+   ],
+   "centerOn": "Base"
+  },
+  "Turret_UraniumSlug": {
+   "kind": "building",
+   "def": "Turret_UraniumSlug",
+   "size": [
+    2,
+    2,
+    2.4
+   ],
+   "centerOn": "Base"
   }
  },
  "buildings": [
@@ -282,6 +465,235 @@
     "combine": true,
     "slotTextureDir": "assets/raw/codex/BiofuelRefinery",
     "normalOpenGL": true
+   }
+  },
+  {
+   "def": "HydroponicsBasin",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "HydroponicsBasin",
+    "fbx": "assets/raw/codex/HydroponicsBasin/HydroponicsBasin_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/HydroponicsBasin",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "FabricationBench",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "FabricationBench",
+    "fbx": "assets/raw/codex/FabricationBench/FabricationBench_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/FabricationBench",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "ElectricSmelter",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ElectricSmelter",
+    "fbx": "assets/raw/codex/ElectricSmelter/ElectricSmelter_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ElectricSmelter",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "Crematorium",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Crematorium",
+    "fbx": "assets/raw/codex/Crematorium/Crematorium_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Crematorium",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "DrugLab",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "DrugLab",
+    "fbx": "assets/raw/codex/DrugLab/DrugLab_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/DrugLab",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ChemfuelGenerator",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ChemfuelGenerator",
+    "fbx": "assets/raw/codex/ChemfuelGenerator/ChemfuelGenerator_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ChemfuelGenerator",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "MoisturePump",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "MoisturePump",
+    "fbx": "assets/raw/codex/MoisturePump/MoisturePump_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/MoisturePump",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "LongRangeMineralScanner",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "LongRangeMineralScanner",
+    "fbx": "assets/raw/codex/LongRangeMineralScanner/LongRangeMineralScanner_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/LongRangeMineralScanner",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "GroundPenetratingScanner",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "GroundPenetratingScanner",
+    "fbx": "assets/raw/codex/GroundPenetratingScanner/GroundPenetratingScanner_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/GroundPenetratingScanner",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "FoamTurret",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "FoamTurret",
+    "fbx": "assets/raw/codex/FoamTurret/FoamTurret_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/FoamTurret",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "FirefoamPopper",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "FirefoamPopper",
+    "fbx": "assets/raw/codex/FirefoamPopper/FirefoamPopper_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/FirefoamPopper",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Hive",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Hive",
+    "fbx": "assets/raw/codex/Hive/Hive_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Hive",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ShipCryptosleepCasket",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ShipCryptosleepCasket",
+    "fbx": "assets/raw/codex/ShipCryptosleepCasket/ShipCryptosleepCasket_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ShipCryptosleepCasket",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "MultiAnalyzer",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "MultiAnalyzer",
+    "fbx": "assets/raw/codex/MultiAnalyzer/MultiAnalyzer_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/MultiAnalyzer",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "SimpleResearchBench",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "SimpleResearchBench",
+    "fbx": "assets/raw/codex/SimpleResearchBench/SimpleResearchBench_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/SimpleResearchBench",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WatermillGenerator",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "WatermillGenerator",
+    "fbx": "assets/raw/codex/WatermillGenerator/WatermillGenerator_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WatermillGenerator",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "OrbitalTradeBeacon",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "OrbitalTradeBeacon",
+    "fbx": "assets/raw/codex/OrbitalTradeBeacon/OrbitalTradeBeacon_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/OrbitalTradeBeacon",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "PodLauncher",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "PodLauncher",
+    "fbx": "assets/raw/codex/PodLauncher/PodLauncher_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/PodLauncher",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Turret_RocketswarmLauncher",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Turret_RocketswarmLauncher",
+    "fbx": "assets/raw/codex/Turret_RocketswarmLauncher/Turret_RocketswarmLauncher_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Turret_RocketswarmLauncher",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Turret_UraniumSlug",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Turret_UraniumSlug",
+    "fbx": "assets/raw/codex/Turret_UraniumSlug/Turret_UraniumSlug_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Turret_UraniumSlug",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
    }
   }
  ]

@@ -38,7 +38,7 @@
     "researchPrerequisite": "RocketswarmLauncher",
     "size": [2, 2], "passability": "PassThroughOnly", "fillPercent": 0.4, "designationCategory": "Security",
     "costs": { "Steel": 200, "Plasteel": 20, "ComponentIndustrial": 2, "Chemfuel": 180 },
-    "visual": { "parts": [{ "shape": "box", "size": [1.7, 1.7, 0.35], "color": [0.32, 0.3, 0.26] }, { "shape": "box", "size": [1.1, 1.1, 0.6], "at": [0, 0, 0.35], "color": [0.24, 0.22, 0.19] }] },
+    "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/Turret_RocketswarmLauncher/SM_Turret_RocketswarmLauncher.SM_Turret_RocketswarmLauncher", "parts": [{ "shape": "box", "size": [1.7, 1.7, 0.35], "color": [0.32, 0.3, 0.26] }, { "shape": "box", "size": [1.1, 1.1, 0.6], "at": [0, 0, 0.35], "color": [0.24, 0.22, 0.19] }] },
     "stats": { "maxHitPoints": 200, "workToBuild": 14400, "flammability": 0.7, "beauty": -20 },
     "power": { "consumption": 150 },
     "fuel": { "item": "Chemfuel", "capacity": 180, "perUse": 180 },

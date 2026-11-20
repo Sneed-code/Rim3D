@@ -30,7 +30,7 @@
    "researchFacility": "MultiAnalyzer",
    "facilityRange": 8
   },
-  "visual": {
+  "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/MultiAnalyzer/SM_MultiAnalyzer.SM_MultiAnalyzer",
    "parts": [
     {
      "shape": "box",
@@ -129,7 +129,7 @@
     "Ore_Copper"
    ]
   },
-  "visual": {
+  "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/LongRangeMineralScanner/SM_LongRangeMineralScanner.SM_LongRangeMineralScanner",
    "parts": [
     {
      "shape": "box",

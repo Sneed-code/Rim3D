@@ -25,7 +25,7 @@
     "stats": { "maxHitPoints": 75, "workToBuild": 1152, "flammability": 0.5 },
     "power": { "consumption": 40 },
     "building": { "tradeBeacon": true, "tradeRadius": 7.9 },
-    "visual": { "parts": [
+    "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/OrbitalTradeBeacon/SM_OrbitalTradeBeacon.SM_OrbitalTradeBeacon", "parts": [
       { "shape": "cylinder", "radius": 0.08, "height": 0.9, "color": [0.4, 0.42, 0.45] },
       { "shape": "box", "size": [0.3, 0.3, 0.12], "at": [0, 0, 0.9], "color": [0.85, 0.6, 0.2] }
     ] },

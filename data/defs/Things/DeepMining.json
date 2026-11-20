@@ -11,7 +11,7 @@
   {
     "defName": "GroundPenetratingScanner", "parent": "BuildingBase", "label": "ground-penetrating scanner", "size": [3, 3], "designationCategory": "Production",
     "researchPrerequisite": "GroundPenetratingScanner", "fillPercent": 0.4, "costs": {"Steel": 150, "ComponentIndustrial": 4},
-    "visual": {"parts": [{"shape": "box", "size": [2.8, 2.8, 0.3], "color": [0.5, 0.52, 0.56]}, {"shape": "cylinder", "radius": 1.0, "height": 0.2, "at": [0, 0, 0.3], "color": [0.2, 0.4, 0.5]}, {"shape": "sphere", "radius": 0.3, "height": 0.5, "at": [0, 0, 0.5], "color": [0.85, 0.85, 0.9]}]},
+    "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/GroundPenetratingScanner/SM_GroundPenetratingScanner.SM_GroundPenetratingScanner","parts": [{"shape": "box", "size": [2.8, 2.8, 0.3], "color": [0.5, 0.52, 0.56]}, {"shape": "cylinder", "radius": 1.0, "height": 0.2, "at": [0, 0, 0.3], "color": [0.2, 0.4, 0.5]}, {"shape": "sphere", "radius": 0.3, "height": 0.5, "at": [0, 0, 0.5], "color": [0.85, 0.85, 0.9]}]},
     "stats": {"maxHitPoints": 200, "workToBuild": 17280.0, "flammability": 0.5, "beauty": -8},
     "power": {"consumption": 700},
     "deepWork": {"kind": "scan"},
