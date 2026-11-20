@@ -93,7 +93,9 @@ namespace
 					const int32 B = Base + (R + 1) * Cols + C;
 					const int32 D = Base + R * Cols + (C + 1) % Cols;
 					const int32 E = Base + (R + 1) * Cols + (C + 1) % Cols;
-					Triangles.Append({A, B, D, B, E, D});
+					// Unreal draws a triangle's front where its corners run clockwise as seen: wound the other way, every
+					// face showed its back (culled or black) and the meat was never seen, only the skirt's inside.
+					Triangles.Append({A, D, B, B, D, E});
 				}
 			}
 		}
