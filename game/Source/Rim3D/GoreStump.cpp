@@ -264,6 +264,22 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			return GoreWet(FMath::Lerp(SkinBloodied, GoreBlood, 0.3f + 0.4f * Random.FRand()), 0.3f);
 		});
 
+	// Clothed: a sleeve or trouser leg often runs on past the cut as an open tube. A ragged, blood-soaked lining just
+	// inside it, facing in, so looking down the tube shows wet red cloth instead of a hollow white sleeve.
+	if (bClothed)
+	{
+		const float Lining = 0.45f * R;
+		Mesh.AddRingGrid(2, Cols,
+			[&](int32 Row, int32 C)
+			{
+				const float Theta = 2.0f * PI * C / Cols;
+				const float Rr = R * (1.0f + 0.03f * Edge.At(Theta));
+				const float Z = Row == 0 ? FaceZ(1.0f, Theta) - 0.02f * R : Lining * (0.55f + 0.45f * (0.5f + 0.5f * Fibres.At(Theta * 2.3f + 0.7f)));
+				return FVector(Rr * FMath::Cos(Theta), Rr * FMath::Sin(Theta), Z);
+			},
+			[&](int32 Row, int32 C) { return GoreWet(FMath::Lerp(GoreCloth, GoreBlood, Row == 0 ? 0.6f : 0.25f + 0.3f * Random.FRand()), 0.4f); });
+	}
+
 	// What stands out of the middle.
 	const auto TopOver = [&](const FVector2D& Centre, float Radius)
 	{

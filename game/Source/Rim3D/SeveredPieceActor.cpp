@@ -322,6 +322,12 @@ namespace
 		return FMath::Min(Dome, RadiusCm);
 	}
 
+	float SeveredUnreadDome()
+	{
+		const IConsoleVariable* Lift = IConsoleManager::Get().FindConsoleVariable(TEXT("Gore.ClothLift"));
+		return Lift ? FMath::Max(Lift->GetFloat(), 0.0f) : 0.25f;
+	}
+
 	/** The most any drawn mesh of the pawn bulges past a cut at `Bone` (cm, world), or -1 if none could be measured. */
 	float SeveredDome(const TArray<USkinnedMeshComponent*>& Skinned, FName Bone, bool bPieceSide, float RadiusCm)
 	{
@@ -340,10 +346,10 @@ namespace
 				continue;
 			}
 			const float Dome = SeveredDomeCm(*Asset, Index, bPieceSide, RadiusCm / Scale);
-			if (Dome >= 0.0f)
-			{
-				Most = FMath::Max(Most, Dome * Scale);
-			}
+			UE_LOG(LogTemp, Log, TEXT("  %s bulge on %s (%s): %.1f cm"), bPieceSide ? TEXT("piece") : TEXT("body"), *Asset->GetName(), *Bone.ToString(),
+				Dome < 0.0f ? -1.0f : Dome * Scale);
+			// A mesh whose vertices can't be read (no CPU copy) is taken to stick out Gore.ClothLift radii.
+			Most = FMath::Max(Most, Dome >= 0.0f ? Dome * Scale : SeveredUnreadDome() * RadiusCm);
 		}
 		return Most;
 	}
