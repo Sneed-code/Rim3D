@@ -71,7 +71,10 @@ namespace
 	// Aiming (U21): how fast the view blends, the closest the over-the-shoulder camera comes and how far right of the body it sits (cm).
 	constexpr float ProtagonistAimBlendPerSecond = 5.5f;
 	constexpr float ProtagonistAimArm = 120.0f;
-	constexpr float ProtagonistAimShoulder = 42.0f;
+	// 55 right and 14 up so a shouldered long gun beside the cheek clears the head and long hair (PC pictures 2026-11-19:
+	// at 42 and level with the pivot the rifle hid behind the head).
+	constexpr float ProtagonistAimShoulder = 55.0f;
+	constexpr float ProtagonistAimLift = 14.0f;
 	constexpr float ProtagonistNormalFov = 80.0f;
 	// Locked on (docs/design/focus.md): how fast the view turns to keep the focus ahead, degrees a second.
 	constexpr float ProtagonistFocusTurnThird = 360.0f;
@@ -628,7 +631,7 @@ void AProtagonistPawn::UpdateCamera()
 		const FVector Pivot = SmoothFeet + FVector(0.0, 0.0, ProtagonistPivotHeight * BodyScale);
 		EffectiveArm = FMath::Lerp(ArmLength, FMath::Min(ArmLength, ProtagonistAimArm), Blend);
 		const FVector Right = FRotator(0.0, Yaw, 0.0).RotateVector(FVector::RightVector);
-		Location = Pivot - Look.Vector() * EffectiveArm + Right * (ProtagonistAimShoulder * Blend);
+		Location = Pivot - Look.Vector() * EffectiveArm + Right * (ProtagonistAimShoulder * Blend) + FVector(0.0, 0.0, ProtagonistAimLift * BodyScale * Blend);
 		// Never under the ground on a hillside.
 		const FVector Local = (Location - Bridge->GetWorldOrigin()) / 100.0;
 		const colony::Map& Map = Bridge->GetSim()->map();

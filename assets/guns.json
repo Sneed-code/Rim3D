@@ -114,8 +114,8 @@
       "stanceHold": 1.0,
       "reload": "Mixamo/Firearms/A_Reload",
       "magazine": {"part": "magazine", "out": 0.2, "in": 0.6},
-      "hip": [14, 6, -6],
-      "sightDistance": 30,
+      "hip": [6, 6, -10],
+      "sightDistance": 44,
       "kick": {"back": 2.5, "up": 6, "recover": 16}
     },
     {
@@ -154,7 +154,7 @@
       "pump": {"start": 0.3, "seconds": 0.5},
       "cycle": {"part": "pump", "start": 0.3, "seconds": 0.5, "lift": 0, "back": -9}
     },
-    {"def": "Gun_GrenadeLauncher", "label": "Grenade launcher", "credit": "placeholder box until the Codex model lands", "parts": [{"name": "body", "match": "GrenadeLauncher_Game"}], "meshRotation": [0, 0, 0], "meshOffset": [0, 0, 0], "grip": [0, 0, 0], "offHand": [22, 0, 2], "sight": [-3, 0, 12], "muzzle": [34, 0, 5], "rake": 20, "stance": "Mixamo/Rifle/A_ProRifleIdleAiming", "hip": [18, 9, -6], "sightDistance": 14, "kick": {"back": 5, "up": 4, "recover": 10}},
+    {"def": "Gun_GrenadeLauncher", "label": "Grenade launcher", "credit": "placeholder box until the Codex model lands", "parts": [{"name": "body", "match": "GrenadeLauncher_Game"}], "meshRotation": [0, 0, 0], "meshOffset": [0, 0, 0], "grip": [0, 0, 0], "offHand": [22, 0, 2], "sight": [-3, 0, 12], "muzzle": [34, 0, 5], "rake": 20, "stance": "Mixamo/Rifle/A_ProRifleIdleAiming", "hip": [18, 9, -6], "sightDistance": 22, "kick": {"back": 5, "up": 4, "recover": 10}},
     {"def": "Gun_TripleRocketLauncher", "label": "Rocket launcher", "credit": "placeholder box until the Codex model lands", "parts": [{"name": "body", "match": "TripleRocketLauncher_Game"}], "meshRotation": [0, 0, 0], "meshOffset": [0, 0, 0], "grip": [0, 0, 0], "offHand": [30, 0, 0], "sight": [-3, 0, 16], "muzzle": [70, 0, 9], "rake": 10, "stance": "Mixamo/Rifle/A_ProRifleIdleAiming", "hip": [18, 9, -6], "sightDistance": 16, "kick": {"back": 6, "up": 3, "recover": 8}}
   ]
 }
