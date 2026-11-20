@@ -186,4 +186,70 @@ HandFrame clampHand(const V3& forearm, const V3& hinge, const HandFrame& want, c
     return out;
 }
 
+SwivelChoice chooseSwivel(const V3& shoulder, double upperLength, double lowerLength, const V3& target,
+                          const V3& basePole, const HandFrame& hand, const V3& up, const V3& forward, const V3& right,
+                          bool bRight, const Limits& limits, double neutralFlex, double neutralDeviation,
+                          double maxSwivel, double previousSwivel) {
+    SwivelChoice best;
+    best.pole = basePole;
+    const V3 axis = normal(sub(target, shoulder));
+    if (length(axis) < 0.5 || length(normal(hand.fingers)) < 0.5 || length(normal(hand.palm)) < 0.5) {
+        return best;
+    }
+    const V3 upN = normal(up);
+    const V3 outN = bRight ? normal(right) : mul(normal(right), -1.0);
+    const double u = std::max(upperLength, 0.01);
+    const double span = armClamp(maxSwivel, 0.0, 180.0);
+    // One swing's cost: what the wrist is still asked past its limits, how far from natural and from last frame, and an
+    // elbow raised over the shoulder or swung in across the chest.
+    const auto costAt = [&](double swivel, SwivelChoice& out) {
+        const V3 pole = rotate(basePole, axis, swivel);
+        const ArmSolve solve = solveArm(shoulder, upperLength, lowerLength, target, pole, limits);
+        const V3 upper = normal(sub(solve.elbow, shoulder));
+        const V3 forearm = normal(sub(solve.wrist, solve.elbow));
+        const V3 hinge = medialHinge(upper, forearm, up, forward, right, bRight);
+        const ArmAngles a = measureArm(shoulder, solve.elbow, solve.wrist, hand.fingers, hand.palm, hinge, neutralFlex,
+                                       neutralDeviation);
+        double excess = 0.0;
+        if (a.hingeKnown) {
+            excess += std::max(0.0, std::fabs(a.forearmTwist) - limits.forearmTwist);
+        }
+        excess += std::max(0.0, std::fabs(a.wristFlex) - limits.wristFlex);
+        excess += std::max(0.0, std::fabs(a.wristDeviation) - limits.wristDeviation);
+        const V3 elbowFrom = mul(sub(solve.elbow, shoulder), 1.0 / u);
+        const double raised = std::max(0.0, dot(elbowFrom, upN) - 0.15);
+        const double inward = std::max(0.0, -dot(elbowFrom, outN) - 0.1);
+        out.pole = pole;
+        out.swivel = swivel;
+        out.excess = excess;
+        return excess * 4.0 + std::fabs(swivel) * 0.1 + std::fabs(swivel - previousSwivel) * 0.06 + raised * 120.0 +
+               inward * 120.0;
+    };
+    double bestCost = 1e18;
+    const int coarse = static_cast<int>(std::floor(span / 5.0));
+    double coarseBest = 0.0;
+    for (int i = -coarse; i <= coarse; ++i) {
+        SwivelChoice c;
+        const double cost = costAt(5.0 * i, c);
+        if (cost < bestCost - 1e-9) {
+            bestCost = cost;
+            best = c;
+            coarseBest = 5.0 * i;
+        }
+    }
+    for (int i = -4; i <= 4; ++i) {
+        const double swivel = coarseBest + i;
+        if (i == 0 || std::fabs(swivel) > span) {
+            continue;
+        }
+        SwivelChoice c;
+        const double cost = costAt(swivel, c);
+        if (cost < bestCost - 1e-9) {
+            bestCost = cost;
+            best = c;
+        }
+    }
+    return best;
+}
+
 }  // namespace colony::arm

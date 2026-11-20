@@ -110,6 +110,11 @@ namespace HoldDraw
 		FTransform OffInMain;     // the other hand bone's goal in the main hand bone's space
 		FTransform WeaponInHand;  // the weapon (with its size) in the main hand bone's space
 		bool bOff = false;
+		// The other hand may turn about the weapon's long axis (a fore-end or a shaft is round): the axis and a point on
+		// it in that hand bone's own space (world cm), and how far either way (degrees).
+		FVector OffRollAxis = FVector::ZeroVector;
+		FVector OffRollPoint = FVector::ZeroVector;
+		float OffRollFree = 0.0f;
 	};
 
 	/** Hands for a weapon placed at Weapon (world space, unscaled): the main hand's goal on its grip (world), the other

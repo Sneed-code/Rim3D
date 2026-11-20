@@ -836,9 +836,29 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 			}
 		}
 		const FVector S = UpperT.GetLocation(), E0 = LowerT.GetLocation(), W0 = HandT.GetLocation();
-		const FQuat WantRot = Goal.bRotation ? Target.GetRotation() : HandT.GetRotation();
+		FQuat WantRot = Goal.bRotation ? Target.GetRotation() : HandT.GetRotation();
+
+		// The hand's frame as animated (finger direction and palm normal from its knuckles), carried to the goal's turn by
+		// the hand bone's own rotation (as animated too).
+		const auto Loc = [&Output, &Container](const FBoneReference& B) { return Output.Pose.GetComponentSpaceTransform(B.GetCompactPoseIndex(Container)).GetLocation(); };
+		FVector Tip = FVector::ZeroVector;
+		const bool bTip = Arm.IndexTip.IsValidToEvaluate(Container);
+		if (bTip)
+		{
+			Tip = Loc(Arm.IndexTip);
+		}
+		FVector Fingers0, Palm0;
+		const bool bHandFrame = MhHandFrame(HandAnimated.GetLocation(), Loc(Arm.Index), Loc(Arm.Pinky), Loc(Arm.Middle), bTip ? &Tip : nullptr, bRight, Fingers0, Palm0);
+		FVector FingersWant = FVector::ZeroVector, PalmWant = FVector::ZeroVector;
+		if (bHandFrame)
+		{
+			const FQuat AnimatedInv = HandAnimated.GetRotation().Inverse();
+			FingersWant = WantRot.RotateVector(AnimatedInv.RotateVector(Fingers0));
+			PalmWant = WantRot.RotateVector(AnimatedInv.RotateVector(Palm0));
+		}
 
 		// The elbow's pole, then the hinge solve (no stretching, never folded past the limit).
+		Swivel[Side] = 0.0f;
 		V3 Pole;
 		if (Goal.bElbowPoint)
 		{
@@ -851,6 +871,60 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 		else
 		{
 			Pole = naturalPole(MhV(S), MhV(Target.GetLocation()), BodyUp, BodyForward, BodyRight, bRight);
+			// A grip that sets the hand's turn swings the elbow round to where the wrist can take it (a rifle's grip
+			// hand lifts its elbow out to the side) rather than bending the wrist past its range.
+			// A hand round a round shaft (a support hand under a fore-end, on a spear's shaft) may also turn about it, up
+			// to RollFree degrees either way: the turn and the elbow's swing are chosen together.
+			if (Goal.bRotation && bHandFrame && bLimits)
+			{
+				const FQuat AnimatedInv = HandAnimated.GetRotation().Inverse();
+				const FVector RollAxis = Target.TransformVectorNoScale(Goal.RollAxis).GetSafeNormal();
+				const FVector RollPoint = Target.TransformPosition(Goal.RollPoint);
+				const float RollSpan = RollAxis.IsNearlyZero() ? 0.0f : FMath::Clamp(Goal.RollFree, 0.0f, 180.0f);
+				const int32 RollSteps = FMath::CeilToInt(RollSpan / 22.5f);
+				double BestCost = 1e18;
+				FTransform BestTarget = Target;
+				float BestRoll = 0.0f;
+				SwivelChoice Best;
+				Best.pole = Pole;
+				for (int32 Step = -RollSteps; Step <= RollSteps; ++Step)
+				{
+					const float Roll = RollSteps > 0 ? RollSpan * static_cast<float>(Step) / static_cast<float>(RollSteps) : 0.0f;
+					FTransform Rolled = Target;
+					if (FMath::Abs(Roll) > KINDA_SMALL_NUMBER)
+					{
+						const FQuat RollQ(RollAxis, FMath::DegreesToRadians(Roll));
+						Rolled.SetRotation((RollQ * Target.GetRotation()).GetNormalized());
+						Rolled.SetLocation(RollPoint + RollQ.RotateVector(Target.GetLocation() - RollPoint));
+					}
+					const FQuat RolledRot = Rolled.GetRotation();
+					const SwivelChoice Swing = chooseSwivel(MhV(S), UpperLen, LowerLen, MhV(Rolled.GetLocation()),
+						naturalPole(MhV(S), MhV(Rolled.GetLocation()), BodyUp, BodyForward, BodyRight, bRight),
+						HandFrame{MhV(RolledRot.RotateVector(AnimatedInv.RotateVector(Fingers0))), MhV(RolledRot.RotateVector(AnimatedInv.RotateVector(Palm0)))},
+						BodyUp, BodyForward, BodyRight, bRight, Human, Arm.NeutralFlex, Arm.NeutralDeviation, 100.0, Arm.LastSwivel);
+					const double Cost = Swing.excess * 4.0 + FMath::Abs(Swing.swivel) * 0.1 + FMath::Abs(Swing.swivel - Arm.LastSwivel) * 0.06 +
+						FMath::Abs(Roll) * 0.05 + FMath::Abs(Roll - Arm.LastRoll) * 0.04;
+					if (Cost < BestCost - 1e-9)
+					{
+						BestCost = Cost;
+						BestTarget = Rolled;
+						BestRoll = Roll;
+						Best = Swing;
+					}
+				}
+				if (!BestTarget.Equals(Target, 1e-4))
+				{
+					Target = BestTarget;
+					WantRot = Target.GetRotation();
+					FingersWant = WantRot.RotateVector(AnimatedInv.RotateVector(Fingers0));
+					PalmWant = WantRot.RotateVector(AnimatedInv.RotateVector(Palm0));
+					GoalCS[Side] = Target;
+				}
+				Pole = Best.pole;
+				Swivel[Side] = static_cast<float>(Best.swivel);
+				Arm.LastSwivel = Best.swivel;
+				Arm.LastRoll = BestRoll;
+			}
 		}
 		const ArmSolve Solve = solveArm(MhV(S), UpperLen, LowerLen, MhV(Target.GetLocation()), Pole, Human);
 		const FVector E1 = MhF(Solve.elbow), W1 = MhF(Solve.wrist);
@@ -899,22 +973,9 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 
 		// Hand: the goal's turn, brought inside the forearm's twist and the wrist's bend.
 		FQuat HandRot = WantRot;
-		const auto Loc = [&Output, &Container](const FBoneReference& B) { return Output.Pose.GetComponentSpaceTransform(B.GetCompactPoseIndex(Container)).GetLocation(); };
-		FVector Tip = FVector::ZeroVector;
-		const bool bTip = Arm.IndexTip.IsValidToEvaluate(Container);
-		if (bTip)
+		if (bHandFrame)
 		{
-			Tip = Loc(Arm.IndexTip);
-		}
-		FVector Fingers0, Palm0;
-		bool bHandFrame = false;
-		if (MhHandFrame(HandAnimated.GetLocation(), Loc(Arm.Index), Loc(Arm.Pinky), Loc(Arm.Middle), bTip ? &Tip : nullptr, bRight, Fingers0, Palm0))
-		{
-			// The frame as animated, carried to the goal's turn by the hand bone's own rotation (as animated too).
-			bHandFrame = true;
 			const FQuat HandInv = HandAnimated.GetRotation().Inverse();
-			const FVector FingersWant = WantRot.RotateVector(HandInv.RotateVector(Fingers0));
-			const FVector PalmWant = WantRot.RotateVector(HandInv.RotateVector(Palm0));
 			Wanted[Side] = measureArm(MhV(S), MhV(E1), MhV(W1), MhV(FingersWant), MhV(PalmWant), MhV(HingeWant), Arm.NeutralFlex, Arm.NeutralDeviation);
 			if (bLimits && !HingeWant.IsNearlyZero())
 			{
@@ -998,12 +1059,13 @@ bool UMakeHumanAnimInstance::GetSolvedArm(bool bRight, colony::arm::ArmAngles& O
 	return Node.bSolved[Side];
 }
 
-bool UMakeHumanAnimInstance::GetWantedArm(bool bRight, colony::arm::ArmAngles& Out, float& OutCurl) const
+bool UMakeHumanAnimInstance::GetWantedArm(bool bRight, colony::arm::ArmAngles& Out, float& OutCurl, float& OutSwivel) const
 {
 	const FMakeHumanArmsNode& Node = GetProxyOnGameThread<FMakeHumanAnimProxy>().ArmsIK;
 	const int32 Side = bRight ? 1 : 0;
 	Out = Node.Wanted[Side];
 	OutCurl = Node.CurlAdded[Side];
+	OutSwivel = Node.Swivel[Side];
 	return Node.bSolved[Side];
 }
 

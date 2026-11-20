@@ -91,4 +91,23 @@ struct HandFrame {
 COLONY_API HandFrame clampHand(const V3& forearm, const V3& hinge, const HandFrame& want, const Limits& limits = Limits{},
                                double neutralFlex = 0.0, double neutralDeviation = 0.0);
 
+// The elbow's swivel for a hand that must take a given turn (a grip on a weapon): the elbow is swung round the
+// shoulder-wrist line from `basePole` (the natural way, down and out), at most `maxSwivel` degrees either way, to where
+// the forearm lets the wrist take `hand` with the least bend past the limits (a rifle's grip hand lifts its elbow out
+// to the side, as shooters do, instead of bending the wrist 70 degrees sideways). A little swing costs a little, an
+// elbow raised above the shoulder or swung in against the chest costs more, so the natural pole wins whenever the hand
+// fits there, and a swing away from `previousSwivel` (last frame's) costs a little too, so the elbow doesn't hop between
+// poses that are nearly as good. Searched in 5 degree steps, then to the degree. Returns the pole to give `solveArm`,
+// and how far (degrees) the best pose still asked past the limits.
+struct SwivelChoice {
+    V3 pole;
+    double swivel = 0.0;  // degrees from basePole
+    double excess = 0.0;  // degrees past the limits left at the chosen swivel (summed over twist, bend, sideways bend)
+};
+COLONY_API SwivelChoice chooseSwivel(const V3& shoulder, double upperLength, double lowerLength, const V3& target,
+                                     const V3& basePole, const HandFrame& hand, const V3& up, const V3& forward,
+                                     const V3& right, bool bRight, const Limits& limits = Limits{},
+                                     double neutralFlex = 0.0, double neutralDeviation = 0.0, double maxSwivel = 100.0,
+                                     double previousSwivel = 0.0);
+
 }  // namespace colony::arm

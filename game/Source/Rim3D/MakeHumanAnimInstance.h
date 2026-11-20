@@ -149,6 +149,9 @@ struct FMakeHumanHandGoal
 	FTransform Target;                  // the hand bone's goal (its location and, with bRotation, its rotation)
 	bool bRotation = false;             // false: the hand keeps its animated rotation (still within the wrist's range)
 	bool bCurl = false;                 // close the fingers round a grip (only adds curl the animation lacks)
+	float RollFree = 0.0f;              // with bRotation: degrees the hand may turn about a round shaft either way to fit the wrist
+	FVector RollAxis = FVector::ZeroVector;   // the shaft's axis in the hand goal's own space
+	FVector RollPoint = FVector::ZeroVector;  // a point on the shaft in the hand goal's own space
 	FVector Pole = FVector::ZeroVector; // component-space direction the elbow points; zero: naturally down and out
 	bool bElbowPoint = false;           // instead, a component-space point the elbow bends towards
 	FVector ElbowPoint = FVector::ZeroVector;
@@ -175,6 +178,8 @@ struct FMakeHumanArmsNode : public FAnimNode_SkeletalControlBase
 		bool bHinge = false;
 		double NeutralFlex = 0.0;       // the rest pose's wrist readings (its knuckles off the forearm's line)
 		double NeutralDeviation = 0.0;
+		double LastSwivel = 0.0;        // last solve's elbow swing and turn round a shaft (degrees): kept unless clearly better
+		float LastRoll = 0.0f;
 		bool bValid = false;
 	};
 	FArm Arms[2];                        // 0 left, 1 right
@@ -188,6 +193,7 @@ struct FMakeHumanArmsNode : public FAnimNode_SkeletalControlBase
 	/** What each arm read after the last solve (tests): angles, and how far the goal was out of reach (cm). */
 	colony::arm::ArmAngles Measured[2];
 	colony::arm::ArmAngles Wanted[2];    // the goal's own hand turn read the same way, before the wrist's limits
+	float Swivel[2] = {0.0f, 0.0f};      // degrees the elbow was swung round from its natural way so the wrist fits the grip
 	float CurlAdded[2] = {0.0f, 0.0f};   // mean degrees of curl added per finger last solve (-1 no hand frame, -2 no finger bones)
 	float ShortBy[2] = {0.0f, 0.0f};
 	bool bSolved[2] = {false, false};
@@ -298,7 +304,7 @@ public:
 	/** What an arm read after the solver's last pass (degrees; tests), false if it was not solved. */
 	bool GetSolvedArm(bool bRight, colony::arm::ArmAngles& Out, float& OutShortBy) const;
 	/** What the goal's hand turn asked of the arm before the wrist's limits (degrees; tests' notes), and the fingers' added curl. */
-	bool GetWantedArm(bool bRight, colony::arm::ArmAngles& Out, float& OutCurl) const;
+	bool GetWantedArm(bool bRight, colony::arm::ArmAngles& Out, float& OutCurl, float& OutSwivel) const;
 	/** The goal the arm was last solved to, in world space (tests: compared with where the hand is drawn), and how far
 	 *  the shoulder came forward for it (cm, component units). */
 	bool GetSolvedGoal(bool bRight, FTransform& OutGoalWorld, float& OutShoulderReach) const;

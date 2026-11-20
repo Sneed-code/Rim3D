@@ -153,6 +153,13 @@ sim's plain C++ `colony::arm` (`ArmPose.h`), so it is unit tested:
   (`Limits`). A hand turned further is brought back to the nearest pose a wrist can take (`clampHand`); the weapon
   stays where it was placed and the grip gives a little instead. A backwards elbow reads as 180 degrees of twist, so
   the same limit catches it.
+- **The elbow swings to fit the grip** (`chooseSwivel`): a grip fixes the hand's turn, so the elbow is swung round
+  the shoulder-wrist line (up to 100 degrees from its natural down-and-out) to where the forearm lets the wrist take
+  that turn inside its limits, as a rifleman lifts the trigger arm's elbow out to the side. A swing costs a little, an
+  elbow over the shoulder or in across the chest costs more, and a change from last frame's swing costs a little too
+  (no hopping). The support hand may also **turn round the fore-end or shaft** (it is round): up to 90 degrees on a
+  gun, 180 on a spear, 45 on a two-handed hilt, chosen with the elbow's swing. PC round 7 measured why: the grips
+  asked the right wrist for 54 to 96 degrees of sideways bend (limit 28) and the left forearm for 130 of twist (85).
 - **Fingers close round the grip**: a pinned hand's four fingers get only the curl its clip lacks, towards the palm,
   up to a natural fist (index 50/60 degrees at its first two joints, the little finger 65/65, the last joint a third as
   much); the thumb stays as animated. An open-handed clip no longer leaves the hand holding air beside the gun.

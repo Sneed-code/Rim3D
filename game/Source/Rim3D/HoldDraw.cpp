@@ -442,6 +442,11 @@ bool HoldDraw::PinHands(const USkeletalMeshComponent* Mesh, const colony::Weapon
 		const FTransform OffGrip = FTransform(Turn, Points.Off * Size) * W;
 		Out.OffInMain = (OffInGrip * OffGrip).GetRelativeTransform(Out.MainHand);
 		Out.bOff = true;
+		// The weapon's long axis through the off grip, in the off hand's own space: the hand may turn round it.
+		const FTransform GripInHand = OffInGrip.Inverse();
+		Out.OffRollPoint = GripInHand.GetLocation();
+		Out.OffRollAxis = GripInHand.TransformVectorNoScale(Turn.UnrotateVector(FVector::ForwardVector)).GetSafeNormal();
+		Out.OffRollFree = Hold.grip == colony::HoldGrip::Pole ? 180.0f : (Hold.grip == colony::HoldGrip::Gun ? 90.0f : 45.0f);
 	}
 	return true;
 }
@@ -492,6 +497,9 @@ void HoldDraw::ApplyPinned(USkeletalMeshComponent* Mesh, const colony::WeaponHol
 		Off.Space = Main.Space;
 		Off.Anchor = Anchor;
 		Off.Target = OffWorldCS;
+		Off.RollFree = Pinned.OffRollFree;
+		Off.RollAxis = Pinned.OffRollAxis;
+		Off.RollPoint = Pinned.OffRollPoint / Scale;
 	}
 	else
 	{

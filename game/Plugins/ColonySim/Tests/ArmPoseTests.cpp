@@ -4,6 +4,7 @@
 #include "ColonySim/Random.h"
 
 #include <cmath>
+#include <initializer_list>
 
 using namespace colony::arm;
 
@@ -153,4 +154,43 @@ TEST_CASE("Arm pose: any grip anywhere, any hand turn: the solved arm is always 
         ++checked;
     }
     CHECK(checked > 19000);
+}
+
+TEST_CASE("Arm pose: the elbow swings round so a grip's hand turn fits the wrist, and stays natural when it already fits") {
+    const V3 grip{30.0, 4.0, 140.0};  // a long gun's grip before the right shoulder
+    const V3 base = naturalPole(kArmShoulderR, grip, kArmUp, kArmForward, kArmRight, true);
+
+    // A hand that fits the natural elbow (straight wrist, thumb up): no swing.
+    {
+        const ArmSolve s = solveArm(kArmShoulderR, kArmUpper, kArmLower, grip, base);
+        const V3 forearm = normal(sub(s.wrist, s.elbow));
+        const V3 hinge = medialHinge(normal(sub(s.elbow, kArmShoulderR)), forearm, kArmUp, kArmForward, kArmRight, true);
+        const SwivelChoice c = chooseSwivel(kArmShoulderR, kArmUpper, kArmLower, grip, base, armFrame(forearm, hinge), kArmUp,
+                                            kArmForward, kArmRight, true);
+        CHECK(c.swivel == doctest::Approx(0.0));
+        CHECK(c.excess == doctest::Approx(0.0));
+    }
+    // A hand only an elbow swung out 60 degrees can take: found, and nothing is left past the limits there.
+    for (const double swing : {-60.0, 60.0}) {
+        const V3 axis = normal(sub(grip, kArmShoulderR));
+        const ArmSolve s = solveArm(kArmShoulderR, kArmUpper, kArmLower, grip, rotate(base, axis, swing));
+        const V3 forearm = normal(sub(s.wrist, s.elbow));
+        const V3 hinge = medialHinge(normal(sub(s.elbow, kArmShoulderR)), forearm, kArmUp, kArmForward, kArmRight, true);
+        const HandFrame hand = armFrame(rotate(forearm, cross(forearm, hinge), 0.0), rotate(hinge, forearm, 70.0));
+        const ArmSolve natural = solveArm(kArmShoulderR, kArmUpper, kArmLower, grip, base);
+        const V3 natForearm = normal(sub(natural.wrist, natural.elbow));
+        const ArmAngles atNatural = measureArm(kArmShoulderR, natural.elbow, natural.wrist, hand.fingers, hand.palm,
+                                               medialHinge(normal(sub(natural.elbow, kArmShoulderR)), natForearm, kArmUp,
+                                                           kArmForward, kArmRight, true));
+        const SwivelChoice c = chooseSwivel(kArmShoulderR, kArmUpper, kArmLower, grip, base, hand, kArmUp, kArmForward,
+                                            kArmRight, true);
+        CHECK_FALSE(withinLimits(atNatural));
+        CHECK(c.excess == doctest::Approx(0.0));
+        const ArmSolve chosen = solveArm(kArmShoulderR, kArmUpper, kArmLower, grip, c.pole);
+        const V3 chForearm = normal(sub(chosen.wrist, chosen.elbow));
+        const ArmAngles at = measureArm(kArmShoulderR, chosen.elbow, chosen.wrist, hand.fingers, hand.palm,
+                                        medialHinge(normal(sub(chosen.elbow, kArmShoulderR)), chForearm, kArmUp, kArmForward,
+                                                    kArmRight, true));
+        CHECK(withinLimits(at, Limits{}, 0.5));
+    }
 }
