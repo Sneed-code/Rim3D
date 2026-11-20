@@ -144,6 +144,7 @@ struct FMakeHumanHairNode : public FAnimNode_SkeletalControlBase
 	int32 BodyCapsules = 0;                 // the first this many of Capsules are the body's (Pawns.HairDebug: green; the rest cyan)
 	float LastSweepShift = 0.0f;
 	float LastTipsMoved = 0.0f;
+	FVector LastTipsShift = FVector::ZeroVector;  // the tips' mean move from the hair as animated, world cm (which way it went)
 	float DeltaTime = 0.0f;
 	int32 Mode = 2;                         // 2 full simulation, 1 pushed out of the body only, 0 as animated
 	colony::HairStrands Strands;
