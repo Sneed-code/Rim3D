@@ -2026,9 +2026,18 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 	if (!Tiles.IsEmpty())
 	{
 		const float TileSize = 86.0f * Scale;
-		const float MaxWidth = Viewport->Size.x - (TilesLeft - Viewport->Pos.x) - 330.0f * Scale;  // the date box stays clear
-		const int32 PerRow = FMath::Max(1, static_cast<int32>((MaxWidth - 2.0f * ImGui::GetStyle().WindowPadding.x) / (TileSize + ImGui::GetStyle().ItemSpacing.x)));
+		const float Step = TileSize + ImGui::GetStyle().ItemSpacing.x;
+		const float Pad = 2.0f * ImGui::GetStyle().WindowPadding.x;
+		float MaxWidth = Viewport->Size.x - (TilesLeft - Viewport->Pos.x) - 330.0f * Scale;  // the date box stays clear
+		if (MaxWidth < 4.0f * Step + Pad)
+		{
+			// A narrow window: the tiles may cover the date box rather than stand in a tall column.
+			MaxWidth = Viewport->Size.x - (TilesLeft - Viewport->Pos.x) - Margin;
+		}
+		const int32 PerRow = FMath::Max(1, static_cast<int32>((MaxWidth - Pad) / Step));
 		ImGui::SetNextWindowPos(ImVec2(TilesLeft, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+		// Never taller than the room above the bar (the rest scrolls), so the window stays on screen.
+		ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, FMath::Max(120.0f * Scale, Bottom - Viewport->Pos.y - 150.0f * Scale)));
 		if (ImGui::Begin("##BuildTiles", nullptr, ColonyHud::BoxFlags()))
 		{
 			ImDrawList* Draw = ImGui::GetWindowDrawList();
