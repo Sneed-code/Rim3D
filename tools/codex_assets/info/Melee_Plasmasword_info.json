@@ -1,0 +1,57 @@
+{
+ "name": "Melee_Plasmasword",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -19.0,
+   -4.9,
+   -9.6
+  ],
+  "max": [
+   81.0,
+   4.9,
+   9.4
+  ]
+ },
+ "sizeM": [
+  1.0,
+  0.098,
+  0.19
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -19.0,
+     -4.9,
+     -9.6
+    ],
+    "max": [
+     81.0,
+     4.9,
+     9.4
+    ]
+   },
+   "tris": 7557
+  }
+ },
+ "sockets": {
+  "Tip": [
+   81.0,
+   -0.0,
+   0.5
+  ]
+ },
+ "slots": {
+  "Melee_Plasmasword": {
+   "from": "Plasmasword",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

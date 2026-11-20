@@ -1,0 +1,57 @@
+{
+ "name": "VitalsMonitor",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -34.17,
+   -34.02,
+   0.0
+  ],
+  "max": [
+   34.17,
+   34.02,
+   148.33
+  ]
+ },
+ "sizeM": [
+  0.683,
+  0.68,
+  1.483
+ ],
+ "parts": {
+  "VitalsMonitor": {
+   "boundsCm": {
+    "min": [
+     -34.17,
+     -34.02,
+     0.0
+    ],
+    "max": [
+     34.17,
+     34.02,
+     148.33
+    ]
+   },
+   "tris": 9979
+  }
+ },
+ "sockets": {
+  "Screen": [
+   -0.51,
+   10.31,
+   133.84
+  ]
+ },
+ "slots": {
+  "VitalsMonitor": {
+   "from": "VitalsMonitor | PBR atlas",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

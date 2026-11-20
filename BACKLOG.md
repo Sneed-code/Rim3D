@@ -90,3 +90,13 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
 - Settlements on their maps (left from W6, `docs/design/settlements.md`): attacking and taking a settlement (destroyed bases, loot, the faction's anger), its people using their beds, tables and stoves and needing food, a hostile settlement making peace again (its people stay fighters), turrets and sandbags on the edge defense, seeing a settlement's stock from the world map, the old crews' settlements standing empty, Unreal's trade window on another map.
 - Other maps (left from W5, `docs/design/other-maps.md`): quest sites, ambushes and caravan stops as map kinds, abandoning a map nobody is on, the narrator and raids on other maps, a colonist's death away telling the colony (mood, letter), orders to pawns on another map beyond forming a caravan (a command that names the map), Unreal drawing another map and switching the view to it, the night skip counting colonists away.
 - Stealth (left from `docs/design/stealth.md`, sneed 2026-11-17): on the PC the "?" and "!" over heads, an alert bark, unaware targets in the practice range; guards that look round or patrol; a suspicious guard walking over to a noise; plants hiding a crouched pawn; walls muffling noise; silenced guns and stealth blades as defs (`noiseRadius` is ready); stealth hits on unaware targets; colonists at work noticing by cone and light; quest sites as mission zones.
+- Codex turrets that move (2026-11-19, docs/design/codex-models.md): mini-turret, autocannon and mortar heads turn to
+  their target and barrels recoil (the GLBs keep Head, Gun and Barrel with pivots); triple rocket launcher's rockets
+  leave the tubes one by one; incendiary/smoke/EMP launchers share the GrenadeLauncher model; molotov in flight uses
+  its model with see-through glass.
+- Codex batch 2/3 moving parts and two left out (2026-11-20): each Codex building is imported as one mesh, so the
+  foam/rocketswarm/uranium-slug turret heads, watermill wheel, casket canopy, beacon and scanner dishes, floodlight
+  head and telescope tube don't move yet (the GLBs keep them as separate parts with pivots). The Autodoor model (frame
+  plus two leaves) and the in-wall Cooler model are made but not wired in: doors draw one sliding leaf and the cooler
+  def is a whole wall-height block, so both need a small draw change first. Zeushammer, breach axe, HE mortar shell,
+  advanced component and bionic arm were cut off by the Codex usage limit (2026-11-20); rerun after Nov 22 2:38 PM.

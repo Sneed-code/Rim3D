@@ -1,0 +1,50 @@
+{
+ "name": "DeepDrill",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -50.0,
+   -50.0,
+   0.0
+  ],
+  "max": [
+   50.0,
+   50.0,
+   241.38
+  ]
+ },
+ "sizeM": [
+  1.0,
+  1.0,
+  2.414
+ ],
+ "parts": {
+  "DeepDrill": {
+   "boundsCm": {
+    "min": [
+     -50.0,
+     -50.0,
+     0.0
+    ],
+    "max": [
+     50.0,
+     50.0,
+     241.38
+    ]
+   },
+   "tris": 17006
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "DeepDrill": {
+   "from": "DeepDrill | painted steel and hardware",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

@@ -26,7 +26,7 @@
     "stats": { "maxHitPoints": 120, "workToBuild": 864, "flammability": 0 },
     "glower": { "radius": 17.45, "lift": 2.4, "color": [0.95, 0.95, 0.9] },
     "power": { "consumption": 50 },
-    "visual": { "parts": [
+    "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/FloodLight/SM_FloodLight.SM_FloodLight", "parts": [
       { "shape": "cylinder", "radius": 0.04, "height": 2.2, "color": [0.3, 0.3, 0.32] },
       { "shape": "box", "size": [0.45, 0.3, 0.25], "at": [0, 0, 2.2], "color": [0.85, 0.85, 0.8] }
     ] },
@@ -42,7 +42,7 @@
     "stats": { "maxHitPoints": 100, "workToBuild": 8640, "flammability": 0.7, "beauty": 0 },
     "power": { "consumption": 80 },
     "building": { "vitalsMonitor": true },
-    "visual": { "parts": [
+    "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/VitalsMonitor/SM_VitalsMonitor.SM_VitalsMonitor", "parts": [
       { "shape": "box", "size": [0.5, 0.4, 0.8], "color": [0.8, 0.82, 0.85] },
       { "shape": "box", "size": [0.4, 0.02, 0.3], "at": [0, -0.2, 0.45], "color": [0.15, 0.7, 0.45] }
     ] },

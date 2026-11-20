@@ -1,0 +1,51 @@
+{
+ "name": "NutrientPasteDispenser",
+ "kind": "building",
+ "turned": "x-90",
+ "boundsCm": {
+  "min": [
+   -150.0,
+   -200.0,
+   -0.0
+  ],
+  "max": [
+   150.0,
+   200.0,
+   212.0
+  ]
+ },
+ "sizeM": [
+  3.0,
+  4.0,
+  2.12
+ ],
+ "parts": {
+  "NutrientPasteDispenser": {
+   "boundsCm": {
+    "min": [
+     -150.0,
+     -200.0,
+     -0.0
+    ],
+    "max": [
+     150.0,
+     200.0,
+     212.0
+    ]
+   },
+   "tris": 15980
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "NutrientPasteDispenser": {
+   "from": "NutrientPasteDispenser | PBR",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

@@ -1,0 +1,57 @@
+{
+ "name": "TubeTelevision",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -40.92,
+   -38.49,
+   0.0
+  ],
+  "max": [
+   40.92,
+   38.49,
+   111.83
+  ]
+ },
+ "sizeM": [
+  0.818,
+  0.77,
+  1.118
+ ],
+ "parts": {
+  "TubeTelevision": {
+   "boundsCm": {
+    "min": [
+     -40.92,
+     -38.49,
+     0.0
+    ],
+    "max": [
+     40.92,
+     38.49,
+     111.83
+    ]
+   },
+   "tris": 7963
+  }
+ },
+ "sockets": {
+  "Screen": [
+   -10.42,
+   35.59,
+   67.2
+  ]
+ },
+ "slots": {
+  "TubeTelevision": {
+   "from": "TubeTelevision",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

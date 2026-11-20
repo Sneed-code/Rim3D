@@ -1,0 +1,57 @@
+{
+ "name": "MultiAnalyzer",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -100.0,
+   -100.0,
+   0.0
+  ],
+  "max": [
+   100.0,
+   100.0,
+   162.85
+  ]
+ },
+ "sizeM": [
+  2.0,
+  2.0,
+  1.628
+ ],
+ "parts": {
+  "MultiAnalyzer": {
+   "boundsCm": {
+    "min": [
+     -100.0,
+     -100.0,
+     0.0
+    ],
+    "max": [
+     100.0,
+     100.0,
+     162.85
+    ]
+   },
+   "tris": 17936
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "MultiAnalyzer_0": {
+   "from": "MultiAnalyzer \u2022 coated instrument assembly",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  },
+  "MultiAnalyzer_1": {
+   "from": "MultiAnalyzer \u2022 optical port",
+   "maps": [
+    "baseColor"
+   ]
+  }
+ }
+}

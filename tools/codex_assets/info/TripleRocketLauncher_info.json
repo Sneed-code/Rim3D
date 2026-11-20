@@ -1,0 +1,50 @@
+{
+ "name": "TripleRocketLauncher",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -44.1,
+   -22.74,
+   -12.69
+  ],
+  "max": [
+   76.4,
+   14.74,
+   36.1
+  ]
+ },
+ "sizeM": [
+  1.205,
+  0.375,
+  0.488
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -44.1,
+     -22.74,
+     -12.69
+    ],
+    "max": [
+     76.4,
+     14.74,
+     36.1
+    ]
+   },
+   "tris": 21072
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "TripleRocketLauncher": {
+   "from": "TRL | Painted alloy, elastomer and glass",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}
