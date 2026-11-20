@@ -1,0 +1,31 @@
+{
+	"test": "creator",
+	"status": "pass",
+	"durationSeconds": 289.56780499964952,
+	"errors": [],
+	"gpu": "NVIDIA GeForce RTX 5080",
+	"resolution": "1920x1080",
+	"phases": [
+		{
+			"phase": "creator",
+			"frames": 2701,
+			"avgFps": 29.999997711181816,
+			"p95FrameMs": 33.333335876464844,
+			"medianGameThreadMs": 5.2390999794006348,
+			"medianRenderThreadMs": 24.128499984741211,
+			"medianGpuMs": 21.576999664306641,
+			"actors": 0,
+			"screenshot": "creator/creator.png"
+		}
+	],
+	"notes": [
+		"creator: 4 people, panel drawn 0 frames, tail swung up to 28 degrees, soft tissue up to 6.4 cm, skin dents up to 0.0 cm, ball pressing the skin 0 frames",
+		"creator: 1 woman Baseline",
+		"creator: 2 man Baseline",
+		"creator: 3 woman Baseline",
+		"creator: 4 man Baseline",
+		"creator hair demo, physics on: hair up to 0.2 cm into the body; as animated it would have gone 6.6 cm in",
+		"creator hair demo, as animated (measured with physics off: none): hair up to 0.0 cm into the body; as animated it would have gone 5.4 cm in",
+		"creator hair demo, physics on, capsules drawn: hair up to 0.8 cm into the body; as animated it would have gone 6.4 cm in"
+	]
+}
