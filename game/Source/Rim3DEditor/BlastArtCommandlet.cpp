@@ -13,6 +13,7 @@
 #include "Materials/MaterialExpressionCustom.h"
 #include "Materials/MaterialExpressionDecalColor.h"
 #include "Materials/MaterialExpressionDepthFade.h"
+#include "Materials/MaterialExpressionEyeAdaptationInverse.h"
 #include "Materials/MaterialExpressionPerInstanceCustomData.h"
 #include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "Materials/MaterialExpressionTextureObject.h"
@@ -164,6 +165,21 @@ namespace
 		return Node;
 	}
 
+	/**
+	 * Emissive through the inverse of the camera's exposure, so a glow of 1 reads as bright white whether the camera is set
+	 * for noon (EV 15, where an emissive of 40 was invisible: PC round 2) or night. As M_BuildingGhost does it.
+	 */
+	void BlastArtUnexposedEmissive(UMaterial* Material, UMaterialExpression* Glow, int32 X, int32 Y)
+	{
+		auto* Unexposed = BlastArtNode<UMaterialExpressionEyeAdaptationInverse>(Material, X, Y);
+		if (!UMaterialEditingLibrary::ConnectMaterialExpressions(Glow, TEXT(""), Unexposed, TEXT("LightValue")) &&
+			!UMaterialEditingLibrary::ConnectMaterialExpressions(Glow, TEXT(""), Unexposed, TEXT("LightValueInput")))
+		{
+			Unexposed->LightValueInput.Connect(0, Glow);
+		}
+		UMaterialEditingLibrary::ConnectMaterialProperty(Unexposed, TEXT(""), MP_EmissiveColor);
+	}
+
 	bool BlastArtFinish(UMaterial* Material)
 	{
 		UMaterialEditingLibrary::RecompileMaterial(Material);
@@ -256,7 +272,7 @@ namespace
 		BlastArtInput(Emissive, TEXT("S"), Sample);
 		BlastArtInput(Emissive, TEXT("Gain"), BlastArtData(Material, BlastFxData::DataFireGain, 0.0f, -1100, 500));
 		BlastArtInput(Emissive, TEXT("Glow"), BlastArtData(Material, BlastFxData::DataGlow, 0.0f, -1100, 600));
-		UMaterialEditingLibrary::ConnectMaterialProperty(Emissive, TEXT(""), MP_EmissiveColor);
+		BlastArtUnexposedEmissive(Material, Emissive, -450, -100);
 
 		auto* Rough = BlastArtNode<UMaterialExpressionConstant>(Material, -400, 0);
 		Rough->R = 1.0f;
@@ -299,9 +315,9 @@ namespace
 			"float3 c = lerp(float3(1.0, 0.45, 0.1), float3(1.0, 0.9, 0.7), pow(core, 4.0));\n"
 			"return c * core * Bright * Opacity;\n"), -500, -100);
 		BlastArtInput(Glow, TEXT("UV"), UV);
-		BlastArtInput(Glow, TEXT("Bright"), BlastArtData(Material, 0, 20.0f, -900, 50));
+		BlastArtInput(Glow, TEXT("Bright"), BlastArtData(Material, 0, 4.0f, -900, 50));
 		BlastArtInput(Glow, TEXT("Opacity"), BlastArtData(Material, 1, 1.0f, -900, 150));
-		UMaterialEditingLibrary::ConnectMaterialProperty(Glow, TEXT(""), MP_EmissiveColor);
+		BlastArtUnexposedEmissive(Material, Glow, -250, -100);
 		Failures += BlastArtFinish(Material) ? 0 : 1;
 	}
 

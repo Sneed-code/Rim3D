@@ -24,8 +24,10 @@ namespace
 {
 	TAutoConsoleVariable<int32> GBlastEnable(TEXT("Blast.Enable"), 1,
 		TEXT("1 draws blasts with the realistic look (needs -run=BlastArt), 0 falls back to the simple look."), ECVF_Default);
-	TAutoConsoleVariable<float> GBlastFireBrightness(TEXT("Blast.FireBrightness"), 40.0f,
-		TEXT("How brightly a blast's fire glows (emissive gain of the fireball flipbook)."), ECVF_Default);
+	TAutoConsoleVariable<float> GBlastFireBrightness(TEXT("Blast.FireBrightness"), 3.0f,
+		TEXT("How brightly a blast's fire glows, against the camera's exposure (1: white-hot reads as plain white; same at noon and night)."), ECVF_Default);
+	TAutoConsoleVariable<float> GBlastLightScale(TEXT("Blast.LightScale"), 1.0f,
+		TEXT("Scales a blast's flash of light (400,000 cd peak and 60,000 cd glow for a frag grenade)."), ECVF_Default);
 	TAutoConsoleVariable<float> GBlastSmokeSeconds(TEXT("Blast.SmokeSeconds"), 14.0f,
 		TEXT("How long a blast's smoke hangs in the air, seconds (each puff 70% to 120% of it)."), ECVF_Default);
 	TAutoConsoleVariable<float> GBlastScorchSeconds(TEXT("Blast.ScorchSeconds"), 300.0f,
@@ -41,9 +43,9 @@ namespace
 	constexpr double BlastDrawMetres = 600.0;
 
 	// Smoke colours (linear): soot from the charge, dust and soil from the ground.
-	const FLinearColor BlastSoot(0.045f, 0.042f, 0.04f);
-	const FLinearColor BlastDust(0.17f, 0.15f, 0.12f);
-	const FLinearColor BlastSoil(0.12f, 0.095f, 0.065f);
+	const FLinearColor BlastSoot(0.085f, 0.08f, 0.075f);
+	const FLinearColor BlastDust(0.26f, 0.23f, 0.19f);
+	const FLinearColor BlastSoil(0.17f, 0.13f, 0.09f);
 
 	FVector BlastSimToWorld(const USimSubsystem& Source, float X, float Y, float Z)
 	{
@@ -298,7 +300,7 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 			Smoke.Life = SmokeSeconds * Random.FRandRange(0.45f, 0.65f);
 			Smoke.FadeIn = 0.5f;
 			Smoke.Opacity = 0.8f;
-			Smoke.Glow = 1.2f;
+			Smoke.Glow = 0.3f;
 			Smoke.Spin = Random.FRandRange(-8.0f, 8.0f);
 			Smoke.Tint = FLinearColor(0.03f, 0.028f, 0.026f);
 		}
@@ -313,7 +315,7 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 			Spark.Drag = 0.8f;
 			Spark.Life = Random.FRandRange(0.5f, 1.2f);
 			Spark.StartCm = Spark.EndCm = 2.5f;
-			Spark.FireGain = 18.0f;
+			Spark.FireGain = 3.0f;
 			Spark.FadeIn = 0.0f;
 		}
 		return;
@@ -356,7 +358,7 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 		Fire.Tint = BlastSoot;
 	}
 	// The smoke: a cloud of soot and dust that lifts, swells and drifts with the wind for 10 to 20 seconds.
-	for (int32 I = 0; I < 10; ++I)
+	for (int32 I = 0; I < 8; ++I)
 	{
 		FSprite& Smoke = Add(EKind::Smoke);
 		const FVector Out = FVector(Random.FRandRange(-1.0f, 1.0f), Random.FRandRange(-1.0f, 1.0f), 0.0f).GetSafeNormal();
@@ -366,12 +368,13 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 		Smoke.Drag = 0.6f;
 		Smoke.Gravity = -15.0f;
 		Smoke.Wind = 1.0f;
-		Smoke.StartCm = 200.0f * S;
-		Smoke.EndCm = Random.FRandRange(550.0f, 800.0f) * S;
+		// A bigger blast makes more of a cloud, but not one as many times wider (PC round 2: a 5 m blast hid the sky).
+		Smoke.StartCm = 180.0f * Root;
+		Smoke.EndCm = Random.FRandRange(420.0f, 600.0f) * Root;
 		Smoke.Life = SmokeSeconds * Random.FRandRange(0.7f, 1.2f);
 		Smoke.FadeIn = 0.4f;
-		Smoke.Opacity = 0.85f;
-		Smoke.Glow = 2.0f;
+		Smoke.Opacity = 0.65f;
+		Smoke.Glow = 0.35f;
 		Smoke.Spin = Random.FRandRange(-8.0f, 8.0f);
 		const float Mix = Random.FRand();
 		Smoke.Tint = FLinearColor::LerpUsingHSV(BlastSoot, BlastDust, Mix * 0.8f);
@@ -437,7 +440,7 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 		Spark.Drag = bEmber ? 1.2f : 0.6f;
 		Spark.Life = bEmber ? Random.FRandRange(1.2f, 2.2f) : Random.FRandRange(0.25f, 0.7f);
 		Spark.StartCm = Spark.EndCm = bEmber ? 2.0f : 3.0f;
-		Spark.FireGain = bEmber ? 15.0f : 45.0f;
+		Spark.FireGain = bEmber ? 2.0f : 5.0f;
 		Spark.FadeIn = 0.0f;
 	}
 }
@@ -471,6 +474,11 @@ void UBlastFxSubsystem::SpawnScorch(const FVector& Ground, float RadiusM)
 	FScorch& Mark = Scorches.AddDefaulted_GetRef();
 	Mark.Decal = Decal;
 	Mark.Strength = Random.FRandRange(0.85f, 1.0f);
+}
+
+void UBlastFxSubsystem::ClearForTest()
+{
+	Teardown();
 }
 
 void UBlastFxSubsystem::AddDebrisTrail(const FVector& At, float SizeCm)
@@ -631,9 +639,13 @@ void UBlastFxSubsystem::UpdateLight(float DeltaTime)
 		return;
 	}
 	// A white-hot peak gone in a twentieth of a second, under it an orange glow fading over a second (a molotov has only
-	// the glow). Candelas found by eye against the old flash (9000 at its peak for a frag grenade).
-	const float Peak = bFlashFire ? 0.0f : 14000.0f * FlashScale * FMath::Exp(-FlashAge / 0.05f);
-	const float Glow = (bFlashFire ? 3500.0f : 3000.0f) * FlashScale * FMath::Exp(-FlashAge / 0.45f);
+	// the glow).
+	// A grenade's fireball is a couple of square metres at a few hundred thousand nits: about a million candelas. Less here so
+	// a night blast doesn't white out the screen; at noon it still lights the ground a few percent of the sun (PC round 2:
+	// 14,000 cd did nothing visible in daylight).
+	const float Scale = FlashScale * FMath::Max(GBlastLightScale.GetValueOnGameThread(), 0.0f);
+	const float Peak = bFlashFire ? 0.0f : 400000.0f * Scale * FMath::Exp(-FlashAge / 0.05f);
+	const float Glow = (bFlashFire ? 50000.0f : 60000.0f) * Scale * FMath::Exp(-FlashAge / 0.45f);
 	FlashCandelas = FlashAge < 3.0f ? Peak + Glow : 0.0f;
 	const bool bOn = FlashCandelas > 5.0f;
 	if (FlashLight->IsVisible() != bOn)

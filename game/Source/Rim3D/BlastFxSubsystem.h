@@ -42,6 +42,9 @@ public:
 	/** True once the art has loaded: blasts are drawn here, not by UShooterFeelSubsystem's simple look. */
 	bool IsReady();
 
+	/** Takes away every sprite, scorch and light (the smoke test, so an earlier blast's smoke doesn't hide the next). */
+	void ClearForTest();
+
 	/** A puff of dust behind a piece of debris in flight (UShooterFeelSubsystem calls it). */
 	void AddDebrisTrail(const FVector& At, float SizeCm);
 

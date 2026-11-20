@@ -15,8 +15,8 @@ recorded blasts, a far layer past 100 m, heard late by the speed of sound).
 | --- | --- |
 | Flash | a white-hot fireball sprite for 0.14 s (the flipbook's first frames, 3 x the fire's glow) |
 | Fireball | 5 flipbook sprites thrown out and up, each 1.3 to 1.8 s from white-hot through orange to dark smoke |
-| Light | a shadow-casting point light: a white peak of 14,000 cd gone in about 0.05 s, under it an orange glow of 3,000 cd fading over a second, rising with the smoke (x radius / 1.9 m) |
-| Smoke | 10 puffs of soot and dust, staggered over half a second, lifting, swelling to 5.5 to 8 m and drifting with the sim's wind; they hang `Blast.SmokeSeconds` (14 s, each 70% to 120% of it) and glow orange from the fire under them for the first second |
+| Light | a shadow-casting point light: a white peak of 400,000 cd gone in about 0.05 s, under it an orange glow of 60,000 cd fading over a second, rising with the smoke (x radius / 1.9 m, x `Blast.LightScale`). A real fireball is about a million candelas; 14,000 did nothing visible at noon (PC round 2) |
+| Smoke | 8 grey-brown puffs of soot and dust, staggered over half a second, lifting, swelling to 4 to 6 m (x the square root of radius / 1.9 m) and drifting with the sim's wind; they hang `Blast.SmokeSeconds` (14 s, each 70% to 120% of it) and glow orange from the fire under them for the first second |
 | Dirt | 7 brown puffs thrown 5 to 9 m/s up from the ground under the blast that fall back as a haze over 2 to 3.5 s |
 | Shock wave | a ring of 20 dust puffs racing out along the ground at 11 to 16 m/s and stopping 3 to 4 m out |
 | Heat shimmer | a ring of bent light swelling from 1.2 to 11 m in a third of a second |
@@ -43,7 +43,8 @@ middle and cooling from the outside in. Each pixel keeps heat (R), the light the
 self-shadowing), a little depth noise (B) and opacity (A). The materials (`M_BlastFire`, `M_BlastSmoke`) blend the two frames
 either side of the sprite's moment, colour the smoke by its tint and baked light (lit translucent, volumetric, so the sun,
 the sky and the blast's own light reach it), make the heat glow as a black body (dark red, orange, yellow, white) times
-`Blast.FireBrightness`, and fade softly where a sprite cuts into the ground (depth fade 60 cm).
+`Blast.FireBrightness` **through the inverse of the camera's exposure** (so a glow of 1 is plain white at noon, EV 15, and at night alike;
+a plain emissive of 40 was invisible at noon in PC round 2), and fade softly where a sprite cuts into the ground (depth fade 60 cm).
 
 All numbers are ours, found by eye in the previews (no RimWorld numbers apply: RimWorld draws a blast as a flat ring).
 
@@ -58,13 +59,13 @@ If the fire comes out upside down on the PC (the plane's texture runs the other 
 
 ## Console
 
-`Blast.Enable`, `Blast.FireBrightness` (40), `Blast.SmokeSeconds` (14), `Blast.ScorchSeconds` (300), `Blast.MaxSprites`
+`Blast.Enable`, `Blast.FireBrightness` (3), `Blast.LightScale` (1), `Blast.SmokeSeconds` (14), `Blast.ScorchSeconds` (300), `Blast.MaxSprites`
 (1500), `Blast.FlipV`.
 
 ## Smoke test
 
 `feel` ends with `blast_fireball` (a frag blast 12 m ahead at 14:00 in a patch cleared of plants, the camera turned to it, pictured 0.3 s in; it must draw 40+ sprites, a light
-over 2,000 cd and a scorch mark), `blast_smoke` (pictured about 4 s in), `blast_linger` (about 11 s in: 3+ smoke puffs and the
+over 2,000 cd and a scorch mark), `blast_smoke` (pictured about 4 s in), `blast_linger` (about 11 s in, looking down at the spot: 3+ smoke puffs and the
 scorch still there) and `blast_molotov` (a fire blast, pictured 0.5 s in). Without the art they note it and pass.
 
 ## Not yet

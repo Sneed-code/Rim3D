@@ -44,6 +44,8 @@ namespace
 		int32 MaxBlast = 0;
 		int32 MaxSmoke = 0;
 		int32 BlastsAtStart = 0;
+		float BlastX = 0.0f;
+		float BlastY = 0.0f;
 		int32 ScorchesAtStart = 0;
 		int32 MaxGrenades = 0;
 		int32 MaxDebris = 0;
@@ -551,7 +553,7 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	// pictured at its fireball, its rising smoke and its lingering cloud and scorch; then a molotov's splash of fire.
 	const auto Fx = [this]() { return GetWorld()->GetSubsystem<UBlastFxSubsystem>(); };
 	// Turns the camera to look at a map point a little below eye height, so the blast there is in the picture.
-	const auto LookAtBlast = [=, this](float X, float Y)
+	const auto LookAtBlast = [=, this](float X, float Y, float Pitch)
 	{
 		const colony::ThingView* Me = MyView();
 		AProtagonistPawn* Body = Prot() ? Prot()->GetBody() : nullptr;
@@ -560,7 +562,7 @@ void USmokeTestSubsystem::BuildFeelPhases()
 			return;
 		}
 		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Y - Me->y, X - Me->x));
-		Body->Look(FRotator::NormalizeAxis(Yaw - Body->GetYaw()), -Body->GetPitch());
+		Body->Look(FRotator::NormalizeAxis(Yaw - Body->GetYaw()), Pitch - Body->GetPitch());
 		Body->SnapCamera();
 	};
 	FPhase Fireball;
@@ -574,7 +576,6 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		FeelSmokeSet(TEXT("Sky.Hour"), 14.0f);
 		const colony::ThingView* Me = MyView();
 		State->BlastsAtStart = Fx() ? Fx()->GetBlastsDrawn() : 0;
-		State->ScorchesAtStart = Fx() ? Fx()->GetScorchMarks() : 0;
 		// A clearing ahead, so no tree stands between the camera and the blasts (the molotov's spot too).
 		if (colony::Sim* Sim = SimOf())
 		{
@@ -588,8 +589,16 @@ void USmokeTestSubsystem::BuildFeelPhases()
 				}
 			}
 		}
-		LookAtBlast(Me->x + 12.0f, Me->y + 1.5f);
-		Bridge()->Submit(colony::ExplodeCommand{Me->x + 12.0f, Me->y + 1.5f, 1.9f, 50.0f, "Bomb", 0.1f});
+		// The earlier phases' blasts (a 5 m one among them) would still be smoking in the picture.
+		if (Fx())
+		{
+			Fx()->ClearForTest();
+		}
+		State->ScorchesAtStart = Fx() ? Fx()->GetScorchMarks() : 0;
+		State->BlastX = Me->x + 12.0f;
+		State->BlastY = Me->y + 1.5f;
+		LookAtBlast(State->BlastX, State->BlastY, 0.0f);
+		Bridge()->Submit(colony::ExplodeCommand{State->BlastX, State->BlastY, 1.9f, 50.0f, "Bomb", 0.1f});
 	};
 	Fireball.OnFrame = Watch;
 	Fireball.Verify = [=, this]()
@@ -625,7 +634,12 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	Lingering.WarmupSeconds = 0.0f;
 	Lingering.MeasureSeconds = 7.0f;
 	Lingering.ScreenshotAt = 6.5f;
-	Lingering.Setup = [=]() { State->MaxSmoke = 0; };
+	// Looking down at the blast's spot, for the scorch mark.
+	Lingering.Setup = [=]()
+	{
+		State->MaxSmoke = 0;
+		LookAtBlast(State->BlastX, State->BlastY, -30.0f);
+	};
 	Lingering.OnFrame = Watch;
 	Lingering.Verify = [=, this]()
 	{
@@ -655,7 +669,7 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	{
 		State->Reset();
 		const colony::ThingView* Me = MyView();
-		LookAtBlast(Me->x + 12.0f, Me->y + 4.0f);
+		LookAtBlast(Me->x + 12.0f, Me->y + 4.0f, 0.0f);
 		Bridge()->Submit(colony::ExplodeCommand{Me->x + 12.0f, Me->y + 4.0f, 1.1f, 10.0f, "Burn", 0.0f});
 	};
 	Molotov.OnFrame = Watch;
