@@ -773,7 +773,8 @@ TEST_CASE("Healing (sneed's rule): a zone left alone for 10 seconds, not bleedin
 TEST_CASE("Healing: a limb at 0 is still on, and comes back") {
     auto sim = zoneTestSim();
     const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
-    CHECK(zoneTestHit(*sim, pawn, "Blunt", 70.0f, "left arm"));
+    // 10 past 0: under the 12.5 that takes a living arm off (zones.dismember.livingLimbs).
+    CHECK(zoneTestHit(*sim, pawn, "Blunt", 60.0f, "left arm"));
     CHECK(zoneTestLeft(*sim, pawn, "Arm") == doctest::Approx(0.0f));
     CHECK(sim->health().severed(pawn) == 0);
     zoneTestRun(*sim, 900);
