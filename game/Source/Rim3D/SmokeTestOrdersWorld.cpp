@@ -47,6 +47,8 @@ namespace
 	{
 		bool bReady = false;
 		bool bListening = false;
+		/** The last press was handed to the viewport by the test (nothing in Slate took it): only then is its release too. */
+		bool bDownHanded = false;
 		int32 FailedCommands = 0;
 		FString FirstFailure;
 		colony::CellPos Site;
@@ -175,10 +177,13 @@ namespace
 						Slate.RoutePointerDownEvent(ViewportPath, Event);
 					}
 				}
+				State.bDownHanded = bHanded;
 				break;
 			case EOwPointer::Up:
 				bTaken = Slate.ProcessMouseButtonUpEvent(Event);
-				if (!bTaken && !bCaptured)
+				// A release whose press Slate took (the ImGui window over the Build button) stays with Slate: routing it to the
+				// viewport by hand asserted inside Slate on the PC (an index into an empty array, 2026-11-20).
+				if (!bTaken && !bCaptured && State.bDownHanded)
 				{
 					bHanded = RefreshPath();
 					if (bHanded)
