@@ -2,6 +2,8 @@
 
 Updated 2026-11-19.
 
+Natural blood splats (2026-11-19; Unreal art, `docs/design/blood.md`): the ground blood pictures no longer have the spiky crown that read as starbursts or viruses: drops are uneven round blots with droplets, slanted drops have a short tail, pools are lumpy puddles with drops on the rim. **Needs `-run=BloodArt -force` once; check on the PC with the gun range tour.**
+
 Races and wall climbing (sneed, 2026-11-19; `docs/design/races.md`, `docs/design/climbing.md`): sneed's race stats are
 in the sim as lineages: **baseline** learns 20% faster; **Impid** (Emberkin) 90% less harm from heat, cold and fire, no
 heat injury until 100 C past normal, +5% walk, +5% damage taken; **Orcoid** +10% melee, +10% hit points and blood,
