@@ -83,3 +83,4 @@ Aim-down-sights sight picture and a held gun that follows the aim; a real roll a
 (a procedural shake stands in); blast decals, scorched ground and fire from blasts (E4's fire starts from Burn blasts through the sim);
 debris from walls (a destroyed building leaves nothing to fall yet); sound; the kick for AI fighters (none by design); stance effects on
 the kick; a `Feel` panel in direct mode itself (the mouse is the camera there, so the sliders live in the overseer view).
+- Since 2026-11-20 the fire, smoke, sparks and light of a blast are drawn by `UBlastFxSubsystem` when its art is in ([blast-draw.md](blast-draw.md)); this subsystem keeps the camera's feel and the debris (soil and stone clods trailing dust).

@@ -172,7 +172,7 @@ private:
 	TObjectPtr<UMaterialInterface> SolidMaterial;
 
 	UPROPERTY()
-	TObjectPtr<UStaticMesh> DebrisMesh;
+	TArray<TObjectPtr<UStaticMesh>> DebrisMeshes;
 
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> CubeMesh;
