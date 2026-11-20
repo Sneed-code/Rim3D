@@ -221,14 +221,14 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			const float F = Rings[FMath::Min(Row, RingCount - 1)];
 			// The edge is torn, not round: the outer rings wander in and out.
 			const float Torn = F >= 0.94f ? 1.0f + 0.05f * Edge.At(Theta) + (bSkirt ? 0.03f * Random.FRandRange(-1.0f, 1.0f) : 0.0f) : 1.0f;
-			// Clothed, the outer rings are torn, soaked cloth, but they stay the limb's width: spread out over the sleeve
-			// they read as a loose hoop round every stump in the PC pictures.
-			const float Spread = F;
+			// Clothed, the outer rings are torn, soaked cloth reaching out to the sleeve's own measured width (ClothOuter),
+			// covering the white inside of the open sleeve round the meat.
+			const float Spread = bClothed && F > 1.0f ? 1.0f + (F - 1.0f) / 0.05f * (ClothOuter - 1.0f) : F;
 			// The skirt hangs back onto the limb: bare skin just inside its own edge, soaked cloth folded back down onto
 			// the sleeve rather than standing off it as a wide hollow collar.
 			// Tucked in a little and short, so it reads as an edge curling back onto the limb, never a hoop standing off a
 			// thinner sleeve.
-			const float SkirtSpread = 0.88f;
+			const float SkirtSpread = bClothed ? ClothOuter * 0.97f : 0.88f;
 			const float Radius = R * (bSkirt ? SkirtSpread : Spread) * Torn;
 			const float Z = bSkirt ? -(Skirt + Lift) * (0.75f + 0.25f * Edge.At(Theta * 1.7f + 1.0f)) : FaceZ(F, Theta) + (F < 0.7f ? 0.04f * R * Random.FRandRange(-0.5f, 0.5f) : 0.0f);
 			return FVector(Radius * FMath::Cos(Theta), Radius * FMath::Sin(Theta), Z);
@@ -273,7 +273,7 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			[&](int32 Row, int32 C)
 			{
 				const float Theta = 2.0f * PI * C / Cols;
-				const float Rr = R * (1.0f + 0.03f * Edge.At(Theta));
+				const float Rr = R * ClothOuter * (0.99f + 0.02f * Edge.At(Theta));
 				const float Z = Row == 0 ? FaceZ(1.0f, Theta) - 0.02f * R : Lining * (0.55f + 0.45f * (0.5f + 0.5f * Fibres.At(Theta * 2.3f + 0.7f)));
 				return FVector(Rr * FMath::Cos(Theta), Rr * FMath::Sin(Theta), Z);
 			},
