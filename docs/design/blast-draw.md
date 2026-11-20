@@ -22,7 +22,7 @@ recorded blasts, a far layer past 100 m, heard late by the speed of sound).
 | Heat shimmer | a ring of bent light swelling from 1.2 to 11 m in a third of a second |
 | Fragments | 40 glowing streaks at 15 to 35 m/s (each as long as it flies in 1/25 s) and 10 slower embers that arc down |
 | Debris | `UShooterFeelSubsystem`'s Chaos rigid bodies, now dark soil, brown soil and grey stone clods, mostly small; the fast ones trail dust for their first second |
-| Scorch | a decal of soot thrown out in rays with a pale dusty rim, 1.2 to 1.6 radii across, at a random turn; fades over `Blast.ScorchSeconds` (5 minutes, slowly at first), at most 40 at once, under blood |
+| Scorch | soot thrown out in rays with a pale dusty rim, 1.2 to 1.6 radii across, at a random turn, on a flat square laid on the ground along its slope 4 cm up (a deferred decal never showed on the PC); fades over `Blast.ScorchSeconds` (5 minutes, slowly at first), at most 40 at once |
 | Camera | `UShooterFeelSubsystem`'s shake, blur and vignette by distance (unchanged) |
 
 Everything scales with the blast's radius against the frag grenade's 1.9 m. A **fire blast** (damage type with `mix.sub`
@@ -59,7 +59,7 @@ If the fire comes out upside down on the PC (the plane's texture runs the other 
 
 ## Console
 
-`Blast.Enable`, `Blast.FireBrightness` (3), `Blast.LightScale` (1), `Blast.SmokeSeconds` (14), `Blast.ScorchSeconds` (300), `Blast.MaxSprites`
+`Blast.Enable`, `Blast.FireBrightness` (2), `Blast.LightScale` (1), `Blast.SmokeSeconds` (14), `Blast.ScorchSeconds` (300), `Blast.MaxSprites`
 (1500), `Blast.FlipV`.
 
 ## Smoke test

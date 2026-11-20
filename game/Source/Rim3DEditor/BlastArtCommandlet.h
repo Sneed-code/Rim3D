@@ -18,7 +18,7 @@
  *   meets the ground.
  * - M_BlastSpark: a glowing streak (additive) for hot fragments and sparks.
  * - M_BlastHaze: a ring of heat shimmer (refraction only).
- * - M_BlastScorch: the scorch decal; the decal colour's alpha fades it.
+ * - M_BlastScorch: the scorch on a flat square laid on the ground (instanced; per-instance data 0 fades it).
  *
  * Without -force, assets that are there already are kept.
  */

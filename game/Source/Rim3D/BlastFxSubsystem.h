@@ -8,7 +8,6 @@
 #include "BlastFxSubsystem.generated.h"
 
 class AActor;
-class UDecalComponent;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
 class UPointLightComponent;
@@ -94,14 +93,14 @@ private:
 
 	struct FScorch
 	{
-		TWeakObjectPtr<UDecalComponent> Decal;
+		FTransform Where;  // a 1 m plane, laid on the ground and scaled to the mark's size
 		float Age = 0.0f;
 		float Strength = 1.0f;
 	};
 
 	void OnSimEvent(const colony::Event& Event);
 	void SpawnBlast(const FVector& Centre, const FVector& Ground, float RadiusM, bool bFire);
-	void SpawnScorch(const FVector& Ground, float RadiusM);
+	void SpawnScorch(const FVector& Ground, const FVector& GroundNormal, float RadiusM);
 	bool EnsureScene();
 	void Teardown();
 	FSprite& Add(EKind Kind);
@@ -116,7 +115,7 @@ private:
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> Instances;
 
 	UPROPERTY()
-	TObjectPtr<UMaterialInterface> ScorchMaterial;
+	TObjectPtr<UInstancedStaticMeshComponent> ScorchInstances;
 
 	UPROPERTY()
 	TObjectPtr<UPointLightComponent> FlashLight;

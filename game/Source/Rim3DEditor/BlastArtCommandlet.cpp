@@ -8,10 +8,8 @@
 #include "IAssetTools.h"
 #include "MaterialEditingLibrary.h"
 #include "Materials/Material.h"
-#include "Materials/MaterialExpressionComponentMask.h"
 #include "Materials/MaterialExpressionConstant.h"
 #include "Materials/MaterialExpressionCustom.h"
-#include "Materials/MaterialExpressionDecalColor.h"
 #include "Materials/MaterialExpressionDepthFade.h"
 #include "Materials/MaterialExpressionEyeAdaptationInverse.h"
 #include "Materials/MaterialExpressionPerInstanceCustomData.h"
@@ -358,7 +356,10 @@ namespace
 		Failures += BlastArtFinish(Material) ? 0 : 1;
 	}
 
-	/** M_BlastScorch: the scorch decal, soot black with a pale dusty rim; the decal colour's alpha fades it out. */
+	/**
+	 * M_BlastScorch: the scorch, on a flat square laid on the ground (instanced; data 0 its opacity): soot black with a pale
+	 * dusty rim, lit translucent. (A deferred decal first, but on the PC it never showed on the ground in rounds 3 and 4.)
+	 */
 	void BlastArtMakeScorch(IAssetTools& Tools, UTexture2D* Texture, int32& Failures)
 	{
 		UMaterial* Material = BlastArtNewMaterial(Tools, TEXT("M_BlastScorch"), Failures);
@@ -366,10 +367,12 @@ namespace
 		{
 			return;
 		}
-		Material->MaterialDomain = MD_DeferredDecal;
+		Material->MaterialDomain = MD_Surface;
 		Material->BlendMode = BLEND_Translucent;
-		Material->DecalBlendMode = DBM_Translucent;
 		Material->SetShadingModel(MSM_DefaultLit);
+		Material->TranslucencyLightingMode = TLM_SurfacePerPixelLighting;
+		bool bNeedsRecompile = false;
+		Material->SetMaterialUsage(bNeedsRecompile, MATUSAGE_InstancedStaticMeshes);
 		auto* UV = BlastArtNode<UMaterialExpressionTextureCoordinate>(Material, -1100, -200);
 		UMaterialExpression* Tex = BlastArtTextureObject(Material, Texture, -1100, -80);
 		auto* Sample = BlastArtCustom(Material, TEXT("BlastScorchSample"), CMOT_Float4, TEXT("return Texture2DSample(Tex, TexSampler, UV);\n"), -800, -150);
@@ -384,21 +387,12 @@ namespace
 		auto* Rough = BlastArtNode<UMaterialExpressionConstant>(Material, -400, -50);
 		Rough->R = 0.95f;
 		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
-		auto* Decal = BlastArtNode<UMaterialExpressionDecalColor>(Material, -800, 100);
+		auto* Spec = BlastArtNode<UMaterialExpressionConstant>(Material, -400, 30);
+		Spec->R = 0.2f;
+		UMaterialEditingLibrary::ConnectMaterialProperty(Spec, TEXT(""), MP_Specular);
 		auto* Opacity = BlastArtCustom(Material, TEXT("BlastScorchOpacity"), CMOT_Float1, TEXT("return saturate(S.a * Fade);\n"), -500, 50);
 		BlastArtInput(Opacity, TEXT("S"), Sample);
-		// UE 5.8: the decal colour node's alpha has its own "A" pin (as M_BloodSplatter reads it).
-		auto* Alpha = BlastArtNode<UMaterialExpressionComponentMask>(Material, -650, 100);
-		Alpha->R = 1;
-		Alpha->G = 0;
-		Alpha->B = 0;
-		Alpha->A = 0;
-		if (!UMaterialEditingLibrary::ConnectMaterialExpressions(Decal, TEXT("A"), Alpha, TEXT("")))
-		{
-			UE_LOG(LogBlastArt, Error, TEXT("Could not connect the decal colour's alpha"));
-			++Failures;
-		}
-		BlastArtInput(Opacity, TEXT("Fade"), Alpha);
+		BlastArtInput(Opacity, TEXT("Fade"), BlastArtData(Material, 0, 1.0f, -800, 100));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Opacity, TEXT(""), MP_Opacity);
 		Failures += BlastArtFinish(Material) ? 0 : 1;
 	}

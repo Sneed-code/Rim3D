@@ -1,7 +1,6 @@
 #include "BlastFxSubsystem.h"
 
 #include "Camera/PlayerCameraManager.h"
-#include "Components/DecalComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SceneComponent.h"
@@ -15,6 +14,7 @@
 #include "SimSubsystem.h"
 
 #include "ColonySim/Defs.h"
+#include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Weather.h"
 
@@ -24,7 +24,7 @@ namespace
 {
 	TAutoConsoleVariable<int32> GBlastEnable(TEXT("Blast.Enable"), 1,
 		TEXT("1 draws blasts with the realistic look (needs -run=BlastArt), 0 falls back to the simple look."), ECVF_Default);
-	TAutoConsoleVariable<float> GBlastFireBrightness(TEXT("Blast.FireBrightness"), 3.0f,
+	TAutoConsoleVariable<float> GBlastFireBrightness(TEXT("Blast.FireBrightness"), 2.0f,
 		TEXT("How brightly a blast's fire glows, against the camera's exposure (1: white-hot reads as plain white; same at noon and night)."), ECVF_Default);
 	TAutoConsoleVariable<float> GBlastLightScale(TEXT("Blast.LightScale"), 1.0f,
 		TEXT("Scales a blast's flash of light (400,000 cd peak and 60,000 cd glow for a frag grenade)."), ECVF_Default);
@@ -85,14 +85,8 @@ void UBlastFxSubsystem::Deinitialize()
 
 void UBlastFxSubsystem::Teardown()
 {
-	for (FScorch& Mark : Scorches)
-	{
-		if (UDecalComponent* Decal = Mark.Decal.Get())
-		{
-			Decal->DestroyComponent();
-		}
-	}
 	Scorches.Reset();
+	ScorchInstances = nullptr;
 	Sprites.Reset();
 	if (Holder)
 	{
@@ -185,7 +179,24 @@ bool UBlastFxSubsystem::EnsureScene()
 		Component->RegisterComponent();
 		Instances.Add(Component);
 	}
-	ScorchMaterial = LoadObject<UMaterialInterface>(nullptr, BlastFxData::ScorchMaterial, nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (UMaterialInterface* Scorch = LoadObject<UMaterialInterface>(nullptr, BlastFxData::ScorchMaterial, nullptr, LOAD_NoWarn | LOAD_Quiet))
+	{
+		ScorchInstances = NewObject<UInstancedStaticMeshComponent>(Holder);
+		ScorchInstances->SetStaticMesh(Plane);
+		ScorchInstances->SetMaterial(0, Scorch);
+		ScorchInstances->SetMobility(EComponentMobility::Movable);
+		ScorchInstances->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		ScorchInstances->SetGenerateOverlapEvents(false);
+		ScorchInstances->SetCanEverAffectNavigation(false);
+		ScorchInstances->SetCastShadow(false);
+		ScorchInstances->bReceivesDecals = false;
+		ScorchInstances->bUseAsOccluder = false;
+		// Under the smoke and everything else see-through.
+		ScorchInstances->TranslucencySortPriority = -1;
+		ScorchInstances->NumCustomDataFloats = 1;
+		ScorchInstances->SetupAttachment(Root);
+		ScorchInstances->RegisterComponent();
+	}
 
 	FlashLight = NewObject<UPointLightComponent>(Holder);
 	FlashLight->SetMobility(EComponentMobility::Movable);
@@ -242,7 +253,12 @@ void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 	SpawnBlast(Centre, Floor, RadiusM, bFire);
 	if (!bFire)
 	{
-		SpawnScorch(Floor, RadiusM);
+		// The ground leans with the map there (as the debris floor).
+		const colony::Map& Map = Source->GetSim()->map();
+		const float MX = Event.x;
+		const float MY = Event.y;
+		const FVector Normal = FVector((Map.heightAt(MX - 1.0f, MY) - Map.heightAt(MX + 1.0f, MY)) * 0.5f, (Map.heightAt(MX, MY - 1.0f) - Map.heightAt(MX, MY + 1.0f)) * 0.5f, 1.0f).GetSafeNormal();
+		SpawnScorch(Floor, Normal, RadiusM);
 	}
 }
 
@@ -447,34 +463,24 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 	}
 }
 
-void UBlastFxSubsystem::SpawnScorch(const FVector& Ground, float RadiusM)
+void UBlastFxSubsystem::SpawnScorch(const FVector& Ground, const FVector& GroundNormal, float RadiusM)
 {
-	if (!ScorchMaterial || !GetWorld())
+	if (!ScorchInstances)
 	{
 		return;
 	}
 	if (Scorches.Num() >= BlastMaxScorches)
 	{
-		if (UDecalComponent* Old = Scorches[0].Decal.Get())
-		{
-			Old->DestroyComponent();
-		}
 		Scorches.RemoveAt(0);
 	}
-	const float HalfCm = RadiusM * 100.0f * Random.FRandRange(0.6f, 0.8f);
-	// Decals project along their X axis: straight down, turned at random round it.
-	const FRotator Rotation = FRotationMatrix::MakeFromXY(FVector(0.0, 0.0, -1.0), FVector(FMath::Cos(Random.FRand() * 2.0f * PI), FMath::Sin(Random.FRand() * 2.0f * PI), 0.0f)).Rotator();
-	UDecalComponent* Decal = UGameplayStatics::SpawnDecalAtLocation(GetWorld(), ScorchMaterial, FVector(80.0f, HalfCm, HalfCm), Ground, Rotation, 0.0f);
-	if (!Decal)
-	{
-		return;
-	}
-	Decal->SetDecalColor(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
-	Decal->SetFadeScreenSize(0.001f);
-	// Under blood, which lands later on top of it.
-	Decal->SetSortOrder(-1);
+	const float SizeCm = RadiusM * 200.0f * Random.FRandRange(0.6f, 0.8f);
+	// Flat on the ground (the plane's +Z along the ground's normal), turned at random, a few centimetres up so it never
+	// sinks into the terrain between its corners.
+	const float Turn = Random.FRand() * 2.0f * PI;
+	const FVector Along = FVector::VectorPlaneProject(FVector(FMath::Cos(Turn), FMath::Sin(Turn), 0.0f), GroundNormal).GetSafeNormal();
+	const FQuat Facing = FRotationMatrix::MakeFromZX(GroundNormal, Along).ToQuat();
 	FScorch& Mark = Scorches.AddDefaulted_GetRef();
-	Mark.Decal = Decal;
+	Mark.Where = FTransform(Facing, Ground + GroundNormal * 4.0, FVector(SizeCm / 100.0f, SizeCm / 100.0f, 1.0f));
 	Mark.Strength = Random.FRandRange(0.85f, 1.0f);
 }
 
@@ -666,24 +672,40 @@ void UBlastFxSubsystem::UpdateLight(float DeltaTime)
 
 void UBlastFxSubsystem::UpdateScorches(float DeltaTime)
 {
+	if (!ScorchInstances)
+	{
+		return;
+	}
 	const float Seconds = FMath::Max(GBlastScorchSeconds.GetValueOnGameThread(), 1.0f);
 	for (int32 Index = Scorches.Num() - 1; Index >= 0; --Index)
 	{
-		FScorch& Mark = Scorches[Index];
-		UDecalComponent* Decal = Mark.Decal.Get();
-		Mark.Age += DeltaTime;
-		if (!Decal || Mark.Age >= Seconds)
+		Scorches[Index].Age += DeltaTime;
+		if (Scorches[Index].Age >= Seconds)
 		{
-			if (Decal)
-			{
-				Decal->DestroyComponent();
-			}
 			Scorches.RemoveAt(Index);
-			continue;
 		}
-		// Fades slowly at first, quicker at the end (as soot is scuffed and rained off).
-		const float Left = 1.0f - Mark.Age / Seconds;
-		Decal->SetDecalColor(FLinearColor(1.0f, 1.0f, 1.0f, Mark.Strength * FMath::Sqrt(Left)));
+	}
+	if (Scorches.IsEmpty() && ScorchInstances->GetInstanceCount() == 0)
+	{
+		return;
+	}
+	TArray<FTransform> Transforms;
+	Transforms.Reserve(Scorches.Num());
+	for (const FScorch& Mark : Scorches)
+	{
+		Transforms.Add(Mark.Where);
+	}
+	ScorchInstances->ClearInstances();
+	if (!Transforms.IsEmpty())
+	{
+		ScorchInstances->AddInstances(Transforms, false, true);
+		for (int32 I = 0; I < Scorches.Num(); ++I)
+		{
+			// Fades slowly at first, quicker at the end (as soot is scuffed and rained off).
+			const float Left = 1.0f - Scorches[I].Age / Seconds;
+			ScorchInstances->SetCustomDataValue(I, 0, Scorches[I].Strength * FMath::Sqrt(Left), false);
+		}
+		ScorchInstances->MarkRenderStateDirty();
 	}
 }
 

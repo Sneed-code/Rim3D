@@ -671,8 +671,9 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	{
 		State->Reset();
 		const colony::ThingView* Me = MyView();
-		LookAtBlast(Me->x + 9.0f, Me->y + 7.0f, -4.0f);
-		Bridge()->Submit(colony::ExplodeCommand{Me->x + 9.0f, Me->y + 7.0f, 1.1f, 10.0f, "Burn", 0.0f});
+		// Nearer and looked down at, so the colonists standing about don't hide the burning ground (PC round 4).
+		LookAtBlast(Me->x + 6.0f, Me->y + 6.0f, -12.0f);
+		Bridge()->Submit(colony::ExplodeCommand{Me->x + 6.0f, Me->y + 6.0f, 1.1f, 10.0f, "Burn", 0.0f});
 	};
 	Molotov.OnFrame = Watch;
 	Molotov.Verify = [=, this]()
