@@ -568,8 +568,10 @@ TEST_CASE("Motion: a blow at a body on the ground plays the weapon's downward cl
         bool down;
         DefId wanted;
     };
-    const Case cases[] = {{"Melee_Knife", false, slash}, {"Melee_Knife", true, stab}, {"Melee_Gladius", false, slash},
-                          {"Melee_Gladius", true, hack},  {nullptr, false, jab},          {nullptr, true, jab}};
+    // A weapon with a finisher (MeleeRules finishers, sneed 2026-11-20) plays that at the downed instead of a clip: the
+    // knife and the gladius have one, so at a body on the ground they step in and play no clip (an invalid clip).
+    const Case cases[] = {{"Melee_Knife", false, slash}, {"Melee_Knife", true, DefId{}}, {"Melee_Gladius", false, slash},
+                          {"Melee_Gladius", true, DefId{}}, {nullptr, false, jab},         {nullptr, true, jab}};
     float x = 10.5f;
     for (const Case& c : cases) {
         x += 6.0f;
@@ -585,8 +587,11 @@ TEST_CASE("Motion: a blow at a body on the ground plays the weapon's downward cl
         CAPTURE(c.weapon == nullptr ? "fists" : c.weapon);
         CAPTURE(c.down);
         MOTION_REQUIRE(sim->melee().winding(attacker));
-        MOTION_REQUIRE(motion.moving(attacker));
-        CHECK(sim->things().registry().get<BodyMotion>(attacker).clip == c.wanted);
+        CHECK((sim->melee().finisherOf(attacker) != nullptr) == (c.down && c.weapon != nullptr));
+        if (c.wanted.valid()) {
+            MOTION_REQUIRE(motion.moving(attacker));
+            CHECK(sim->things().registry().get<BodyMotion>(attacker).clip == c.wanted);
+        }
         Snapshot snap;
         sim->writeSnapshot(snap);
         const ThingView* view = snap.find(attacker);
