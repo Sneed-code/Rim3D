@@ -828,7 +828,11 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 							int32& TurnNotes = State->ArmFailsBy.FindOrAdd(Key + TEXT(" turn"));
 							if (TurnNotes++ < 1)
 							{
-								Notes.Add(FString::Printf(TEXT("gunrange: HAND TURNED FROM ITS GRIP %s: %.0f degrees (the wrist's limits held it back)"), *Key, HandTurn));
+								colony::arm::ArmAngles Asked;
+								float CurlAdded = 0.0f;
+								Anim->GetWantedArm(bRight, Asked, CurlAdded);
+								Notes.Add(FString::Printf(TEXT("gunrange: HAND TURNED FROM ITS GRIP %s: %.0f degrees (the wrist's limits held it back); the grip asked twist %.0f wrist %.0f/%.0f, got twist %.0f wrist %.0f/%.0f, elbow %.0f; fingers curled %.0f more"),
+									*Key, HandTurn, Asked.forearmTwist, Asked.wristFlex, Asked.wristDeviation, Solved.forearmTwist, Solved.wristFlex, Solved.wristDeviation, Solved.elbowFlex, CurlAdded));
 							}
 						}
 					}

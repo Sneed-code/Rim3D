@@ -1263,7 +1263,7 @@ void UGunRangeSubsystem::UpdateHeldView(float Dt, ASimPawnActor& Player, const c
 			const colony::HoldPlace Windup = bThrust ? PlaceAt(R + FVector(-12.0f, 2.0f, 1.0f), ReadyPlace->pitch * 0.5f, ReadyPlace->yaw * 0.5f, ReadyPlace->roll)
 													 : PlaceAt(FVector(30.0f, 26.0f, -4.0f), 70.0f, 35.0f, 160.0f);
 			const colony::HoldPlace Strike = bThrust ? PlaceAt(R + FVector(28.0f, -8.0f, 6.0f), 2.0f, -4.0f, ReadyPlace->roll)
-													 : PlaceAt(FVector(44.0f, -14.0f, -28.0f), -25.0f, -60.0f, 150.0f);
+													 : PlaceAt(FVector(46.0f, -4.0f, -26.0f), -25.0f, -50.0f, 150.0f);
 			const FTransform WindupT = HoldDraw::PlaceInAnchor(Windup, Points, Size, 1.0f);
 			const FTransform StrikeT = HoldDraw::PlaceInAnchor(Strike, Points, Size, 1.0f);
 			const float Hit = Clip->hitSeconds > 0.0f ? FMath::Clamp(Clip->hitSeconds / Clip->seconds, 0.3f, 0.9f) : 0.66f;

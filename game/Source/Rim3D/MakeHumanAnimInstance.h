@@ -187,6 +187,8 @@ struct FMakeHumanArmsNode : public FAnimNode_SkeletalControlBase
 	bool bLimits = true;                 // Pawns.ArmLimits
 	/** What each arm read after the last solve (tests): angles, and how far the goal was out of reach (cm). */
 	colony::arm::ArmAngles Measured[2];
+	colony::arm::ArmAngles Wanted[2];    // the goal's own hand turn read the same way, before the wrist's limits
+	float CurlAdded[2] = {0.0f, 0.0f};   // mean degrees of curl added per finger last solve (-1 no hand frame, -2 no finger bones)
 	float ShortBy[2] = {0.0f, 0.0f};
 	bool bSolved[2] = {false, false};
 	/** The goal each hand was solved to (component space) and how far the shoulder was brought forward for it (cm). */
@@ -295,6 +297,8 @@ public:
 	}
 	/** What an arm read after the solver's last pass (degrees; tests), false if it was not solved. */
 	bool GetSolvedArm(bool bRight, colony::arm::ArmAngles& Out, float& OutShortBy) const;
+	/** What the goal's hand turn asked of the arm before the wrist's limits (degrees; tests' notes), and the fingers' added curl. */
+	bool GetWantedArm(bool bRight, colony::arm::ArmAngles& Out, float& OutCurl) const;
 	/** The goal the arm was last solved to, in world space (tests: compared with where the hand is drawn), and how far
 	 *  the shoulder came forward for it (cm, component units). */
 	bool GetSolvedGoal(bool bRight, FTransform& OutGoalWorld, float& OutShoulderReach) const;

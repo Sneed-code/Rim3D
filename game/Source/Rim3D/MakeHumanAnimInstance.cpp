@@ -471,7 +471,7 @@ namespace
 	// joint gets only the curl the animation lacks (an open-handed clip held air beside the gun), towards the palm and
 	// never past a natural fist (index 50/60 at its first two joints, the little finger 65/65), the last joint a third
 	// as much. The thumb is left as animated.
-	void MhCurlFingers(FComponentSpacePoseContext& Output, const FBoneContainer& Container, const FMakeHumanArmsNode::FArm& Arm,
+	float MhCurlFingers(FComponentSpacePoseContext& Output, const FBoneContainer& Container, const FMakeHumanArmsNode::FArm& Arm,
 					   const FTransform& HandAnimated, const FTransform& HandSolved, const FVector& Fingers0, const FVector& Palm0, float CurlAlpha,
 					   TArray<FBoneTransform>& OutBoneTransforms)
 	{
@@ -483,8 +483,10 @@ namespace
 		const FVector CurlAxis = FVector::CrossProduct(FingersF, PalmF).GetSafeNormal();
 		if (CurlAxis.IsNearlyZero())
 		{
-			return;
+			return -1.0f;
 		}
+		double AllAdded = 0.0;
+		int32 Chains = 0;
 		for (int32 F = 0; F < 4; ++F)
 		{
 			const FBoneReference (&Chain)[3] = Arm.Fingers[F];
@@ -492,6 +494,7 @@ namespace
 			{
 				continue;
 			}
+			++Chains;
 			FTransform Joint[3];
 			FCompactPoseBoneIndex JointI[3] = {FCompactPoseBoneIndex(INDEX_NONE), FCompactPoseBoneIndex(INDEX_NONE), FCompactPoseBoneIndex(INDEX_NONE)};
 			for (int32 J = 0; J < 3; ++J)
@@ -532,6 +535,7 @@ namespace
 					Joint[K].SetLocation(Pivot + Q.RotateVector(Joint[K].GetLocation() - Pivot));
 				}
 			}
+			AllAdded += Added;
 			if (Added <= 0.0)
 			{
 				continue;
@@ -541,6 +545,8 @@ namespace
 				OutBoneTransforms.Add(FBoneTransform(JointI[J], Joint[J]));
 			}
 		}
+		// The mean curl added per finger (degrees), -2 if the fingers' bones weren't found.
+		return Chains > 0 ? static_cast<float>(AllAdded / Chains) : -2.0f;
 	}
 }
 
@@ -909,6 +915,7 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 			const FQuat HandInv = HandAnimated.GetRotation().Inverse();
 			const FVector FingersWant = WantRot.RotateVector(HandInv.RotateVector(Fingers0));
 			const FVector PalmWant = WantRot.RotateVector(HandInv.RotateVector(Palm0));
+			Wanted[Side] = measureArm(MhV(S), MhV(E1), MhV(W1), MhV(FingersWant), MhV(PalmWant), MhV(HingeWant), Arm.NeutralFlex, Arm.NeutralDeviation);
 			if (bLimits && !HingeWant.IsNearlyZero())
 			{
 				const HandFrame Got = clampHand(MhV(L1), MhV(HingeWant), HandFrame{MhV(FingersWant), MhV(PalmWant)}, Human, Arm.NeutralFlex,
@@ -936,9 +943,10 @@ void FMakeHumanArmsNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 		OutBoneTransforms.Add(FBoneTransform(LowerI, FTransform(LowerB, EB, LowerT.GetScale3D())));
 		OutBoneTransforms.Add(FBoneTransform(HandI, FTransform(HandB, WB, HandT.GetScale3D())));
 		FinalHand[Side] = FTransform(HandB, WB);
+		CurlAdded[Side] = 0.0f;
 		if (Goal.bCurl && bHandFrame)
 		{
-			MhCurlFingers(Output, Container, Arm, HandAnimated, FTransform(HandB, WB, HandT.GetScale3D()), Fingers0, Palm0, GoalAlpha, OutBoneTransforms);
+			CurlAdded[Side] = MhCurlFingers(Output, Container, Arm, HandAnimated, FTransform(HandB, WB, HandT.GetScale3D()), Fingers0, Palm0, GoalAlpha, OutBoneTransforms);
 		}
 		bFinal[Side] = true;
 		ShortBy[Side] = static_cast<float>(Solve.shortBy);
@@ -987,6 +995,15 @@ bool UMakeHumanAnimInstance::GetSolvedArm(bool bRight, colony::arm::ArmAngles& O
 	const int32 Side = bRight ? 1 : 0;
 	Out = Node.Measured[Side];
 	OutShortBy = Node.ShortBy[Side];
+	return Node.bSolved[Side];
+}
+
+bool UMakeHumanAnimInstance::GetWantedArm(bool bRight, colony::arm::ArmAngles& Out, float& OutCurl) const
+{
+	const FMakeHumanArmsNode& Node = GetProxyOnGameThread<FMakeHumanAnimProxy>().ArmsIK;
+	const int32 Side = bRight ? 1 : 0;
+	Out = Node.Wanted[Side];
+	OutCurl = Node.CurlAdded[Side];
 	return Node.bSolved[Side];
 }
 
