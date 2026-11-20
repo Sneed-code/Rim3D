@@ -1,0 +1,81 @@
+{
+	"test": "mhgroom",
+	"status": "pass",
+	"durationSeconds": 83.077890701591969,
+	"errors": [],
+	"gpu": "NVIDIA GeForce RTX 5080",
+	"resolution": "888x500",
+	"phases": [
+		{
+			"phase": "mh_setup",
+			"frames": 11,
+			"avgFps": 14.600028269610958,
+			"p95FrameMs": 43.707099914550781,
+			"medianGameThreadMs": 34.387298583984375,
+			"medianRenderThreadMs": 4.6614999771118164,
+			"medianGpuMs": 5.3842000961303711,
+			"actors": 0,
+			"screenshot": "mhgroom/mh_setup.png"
+		},
+		{
+			"phase": "mh_looks",
+			"frames": 69,
+			"avgFps": 68.030544178814381,
+			"p95FrameMs": 14.866698265075684,
+			"medianGameThreadMs": 5.558800220489502,
+			"medianRenderThreadMs": 13.811400413513184,
+			"medianGpuMs": 10.699899673461914,
+			"actors": 0,
+			"screenshot": "mhgroom/mh_looks.png"
+		},
+		{
+			"phase": "mh_behind",
+			"frames": 69,
+			"avgFps": 67.863469842582248,
+			"p95FrameMs": 15.562999725341797,
+			"medianGameThreadMs": 5.4626002311706543,
+			"medianRenderThreadMs": 13.968999862670898,
+			"medianGpuMs": 10.907099723815918,
+			"actors": 0,
+			"screenshot": "mhgroom/mh_behind.png"
+		},
+		{
+			"phase": "mh_side",
+			"frames": 59,
+			"avgFps": 57.5687207286636,
+			"p95FrameMs": 17.751197814941406,
+			"medianGameThreadMs": 5.4314999580383301,
+			"medianRenderThreadMs": 16.469900131225586,
+			"medianGpuMs": 13.340299606323242,
+			"actors": 0,
+			"screenshot": "mhgroom/mh_side.png"
+		},
+		{
+			"phase": "mh_still_rec",
+			"frames": 301,
+			"avgFps": 29.999997711181816,
+			"p95FrameMs": 33.333335876464844,
+			"medianGameThreadMs": 45.099498748779297,
+			"medianRenderThreadMs": 25.189399719238281,
+			"medianGpuMs": 12.173700332641602,
+			"actors": 0,
+			"screenshot": "mhgroom/mh_still_rec.png"
+		},
+		{
+			"phase": "mh_turn_rec",
+			"frames": 361,
+			"avgFps": 29.999997711181816,
+			"p95FrameMs": 33.333335876464844,
+			"medianGameThreadMs": 48.037601470947266,
+			"medianRenderThreadMs": 25.959999084472656,
+			"medianGpuMs": 12.398799896240234,
+			"actors": 0,
+			"screenshot": "mhgroom/mh_turn_rec.png"
+		}
+	],
+	"notes": [
+		"mh_looks: hair groom GA_Hair_Long, female 1, MakeHuman ''",
+		"mh_behind: hair groom GA_Hair_Long, female 1, MakeHuman ''",
+		"mh_turn_rec: hair groom GA_Hair_Long, female 1, MakeHuman ''"
+	]
+}
