@@ -7,6 +7,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
+#include "Rendering/SkeletalMeshLODRenderData.h"
 #include "Rendering/SkeletalMeshRenderData.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
@@ -246,6 +247,105 @@ namespace
 		return 1.0f;
 	}
 
+	/**
+	 * How far (cm, in the mesh's own units) a mesh still bulges out past the flat face once cut, from its skin weights
+	 * in the reference pose. Skin weighted partly to bones on both sides of the cut lands between the face and where it
+	 * was: a loose sleeve with soft weights round the elbow ends in a rounded dome a few cm long that hid the stump.
+	 * `bPieceSide`: on the severed piece (bulging back towards the body), else on the body (bulging out down the limb).
+	 * Only skin within 1.6 `RadiusCm` of the limb's line counts. -1 if the mesh keeps no copy of its vertices to read.
+	 */
+	float SeveredDomeCm(const USkeletalMesh& Asset, int32 CutIndex, bool bPieceSide, float RadiusCm)
+	{
+		FSkeletalMeshRenderData* Data = Asset.GetResourceForRendering();
+		const FReferenceSkeleton& Ref = Asset.GetRefSkeleton();
+		if (!Data || Data->LODRenderData.Num() == 0 || CutIndex == INDEX_NONE || CutIndex >= Ref.GetNum() || FPlatformProperties::RequiresCookedData())
+		{
+			return -1.0f;
+		}
+		FSkeletalMeshLODRenderData& Lod = Data->LODRenderData[0];
+		FPositionVertexBuffer& Positions = Lod.StaticVertexBuffers.PositionVertexBuffer;
+		const FSkinWeightVertexBuffer& Weights = Lod.SkinWeightVertexBuffer;
+		// (No CPU copy kept: the vertex data pointer is null and there is nothing to read.)
+		if (Positions.GetNumVertices() == 0 || !Positions.GetVertexData() || Weights.GetNumVertices() != Positions.GetNumVertices())
+		{
+			return -1.0f;
+		}
+		TArray<bool> OnPiece;
+		OnPiece.SetNumZeroed(Ref.GetNum());
+		for (int32 i = CutIndex; i < Ref.GetNum(); ++i)
+		{
+			OnPiece[i] = i == CutIndex || Ref.BoneIsChildOf(i, CutIndex);
+		}
+		const FTransform Joint = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, CutIndex);
+		const FVector Down = Joint.GetRotation().RotateVector(GoreCut::AxisLocal(Ref, CutIndex));
+		const uint32 Influences = Weights.GetMaxBoneInfluences();
+		float Dome = 0.0f;
+		for (const FSkelMeshRenderSection& Section : Lod.RenderSections)
+		{
+			for (uint32 V = Section.BaseVertexIndex; V < Section.BaseVertexIndex + Section.NumVertices && V < Positions.GetNumVertices(); ++V)
+			{
+				const FVector Rel = FVector(Positions.VertexPosition(V)) - Joint.GetLocation();
+				const double Along = FVector::DotProduct(Rel, Down);
+				if ((bPieceSide ? -Along : Along) <= 0.0 || (Rel - Along * Down).Size() > 1.6 * RadiusCm)
+				{
+					continue;
+				}
+				double Total = 0.0;
+				double Piece = 0.0;
+				for (uint32 K = 0; K < Influences; ++K)
+				{
+					const double W = Weights.GetBoneWeight(V, K);
+					const uint32 Local = Weights.GetBoneIndex(V, K);
+					if (W <= 0.0 || static_cast<int32>(Local) >= Section.BoneMap.Num())
+					{
+						continue;
+					}
+					const int32 Bone = Section.BoneMap[Local];
+					Total += W;
+					Piece += Bone < OnPiece.Num() && OnPiece[Bone] ? W : 0.0;
+				}
+				if (Total <= 0.0)
+				{
+					continue;
+				}
+				// On the body the piece's bones squash onto the face, so what stays out is the share on the body's bones;
+				// on the piece the other way round.
+				const double Stays = bPieceSide ? Piece / Total : 1.0 - Piece / Total;
+				if (Stays < 0.999)
+				{
+					Dome = FMath::Max(Dome, static_cast<float>(Stays * FMath::Abs(Along)));
+				}
+			}
+		}
+		return FMath::Min(Dome, 1.5f * RadiusCm);
+	}
+
+	/** The most any drawn mesh of the pawn bulges past a cut at `Bone` (cm, world), or -1 if none could be measured. */
+	float SeveredDome(const TArray<USkinnedMeshComponent*>& Skinned, FName Bone, bool bPieceSide, float RadiusCm)
+	{
+		float Most = -1.0f;
+		for (const USkinnedMeshComponent* Mesh : Skinned)
+		{
+			const USkeletalMesh* Asset = Mesh ? Cast<USkeletalMesh>(Mesh->GetSkinnedAsset()) : nullptr;
+			if (!Asset || !SeveredDrawn(*Mesh))
+			{
+				continue;
+			}
+			const int32 Index = Asset->GetRefSkeleton().FindBoneIndex(Bone);
+			const float Scale = static_cast<float>(Mesh->GetComponentScale().X);
+			if (Index == INDEX_NONE || Scale <= 0.0f || SeveredSkinnedTo(*Asset, Index) < 0.01f)
+			{
+				continue;
+			}
+			const float Dome = SeveredDomeCm(*Asset, Index, bPieceSide, RadiusCm / Scale);
+			if (Dome >= 0.0f)
+			{
+				Most = FMath::Max(Most, Dome * Scale);
+			}
+		}
+		return Most;
+	}
+
 	/** The component whose pose a mesh shows: itself, or the top of its leader chain. */
 	const USkinnedMeshComponent* SeveredPoseOf(const USkinnedMeshComponent* Mesh)
 	{
@@ -410,9 +510,12 @@ void ASimPawnActor::ApplySevered(uint16 Bits)
 		FVector At;
 		FVector Along;
 		FVector Front;
+		const float CapRadius = SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread();
+		const float BodyDome = SeveredDome(Skinned, Bone, false, CapRadius);
+		UE_LOG(LogTemp, Log, TEXT("Severed 0x%x: body side bulges %.1f cm past the cut (cap radius %.1f cm)"), Bit, BodyDome, CapRadius);
 		if (Skin && Skin->GetBoneIndex(Bone) != INDEX_NONE && SeveredCutFrame(*Skin, Bone, At, Along, Front) &&
-			GoreMakeStump(this, Skin, Skin->GetParentBone(Bone), At, Along, Front, SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread(), SeveredStumpKind(Bit),
-				SeveredSkinColour(*this), static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 31u + Bit), SeveredClothOuter(Skinned, Skin, Bone, Bit)))
+			GoreMakeStump(this, Skin, Skin->GetParentBone(Bone), At, Along, Front, CapRadius, SeveredStumpKind(Bit),
+				SeveredSkinColour(*this), static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 31u + Bit), SeveredClothOuter(Skinned, Skin, Bone, Bit), BodyDome))
 		{
 			++SeveredCaps;
 			SeveredDrip(GetWorld(), At, Along, Skin, GSeveredDripSeconds.GetValueOnGameThread());
@@ -633,9 +736,12 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 			At = Cut;
 			Along = Bit == colony::kSeveredHead ? FVector::UpVector : (Middle - Cut).GetSafeNormal();
 		}
-		if (USceneComponent* Stump = GoreMakeStump(Piece, Piece->GetRootComponent(), NAME_None, At, -Along, Front, SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread(),
+		const float PieceRadius = SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread();
+		const float PieceDome = SeveredDome(Skinned, Bone, true, PieceRadius);
+		UE_LOG(LogTemp, Log, TEXT("Severed piece 0x%x: bulges %.1f cm past the cut (cap radius %.1f cm)"), Bit, PieceDome, PieceRadius);
+		if (USceneComponent* Stump = GoreMakeStump(Piece, Piece->GetRootComponent(), NAME_None, At, -Along, Front, PieceRadius,
 				SeveredStumpKind(Bit), SeveredSkinColour(*this), static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 17u + Bit * 7u),
-				SeveredClothOuter(Skinned, Skin, Bone, Bit)))
+				SeveredClothOuter(Skinned, Skin, Bone, Bit), PieceDome))
 		{
 			Piece->SetCutEnd(Stump);
 		}

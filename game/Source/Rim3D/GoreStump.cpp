@@ -9,9 +9,9 @@
 
 namespace
 {
-	TAutoConsoleVariable<float> GGoreClothLift(TEXT("Gore.ClothLift"), 0.4f,
+	TAutoConsoleVariable<float> GGoreClothLift(TEXT("Gore.ClothLift"), 0.25f,
 		TEXT("On a clothed limb, how far (limb radii) the stump's face stands out past the cut, in front of the sleeve or trouser leg's own end, ")
-		TEXT("with the soaked cloth hanging back over the gap."), ECVF_Default);
+		TEXT("with the soaked cloth hanging back over the gap. Only where the meshes' bulge past the cut could not be measured."), ECVF_Default);
 
 	/** A smooth random wobble round a circle: a few waves with random phases (periodic in Theta). */
 	struct FGoreWave
@@ -108,7 +108,7 @@ namespace
 	const FLinearColor GoreMuscleDark(0.20f, 0.014f, 0.010f);
 	const FLinearColor GoreMuscleLight(0.46f, 0.045f, 0.032f);
 	const FLinearColor GoreFat(1.0f, 0.78f, 0.30f);
-	const FLinearColor GoreCloth(0.42f, 0.09f, 0.06f);
+	const FLinearColor GoreCloth(0.50f, 0.16f, 0.11f);
 	const FLinearColor GoreDermis(0.40f, 0.07f, 0.05f);
 	const FLinearColor GoreBlood(0.18f, 0.008f, 0.006f);
 	const FLinearColor GoreBone(0.90f, 0.86f, 0.74f);
@@ -170,7 +170,7 @@ namespace
 }
 
 UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, FName Socket, const FVector& At, const FVector& Outward,
-	const FVector& Front, float RadiusCm, EGoreStumpKind Kind, const FLinearColor& Skin, int32 Seed, float ClothOuter)
+	const FVector& Front, float RadiusCm, EGoreStumpKind Kind, const FLinearColor& Skin, int32 Seed, float ClothOuter, float DomeCm)
 {
 	const bool bClothed = ClothOuter > 1.01f;
 	if (!Owner || !Parent || RadiusCm <= 0.0f)
@@ -192,7 +192,7 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 	// Clothed: a sleeve or trouser leg is thicker than the skin and ends a little past the cut in a closed, rounded end of
 	// its own, which hid the meat. The face stands in front of it (and is as wide as the cloth), the soaked cloth hanging
 	// back over the gap.
-	const float Lift = bClothed ? FMath::Max(GGoreClothLift.GetValueOnGameThread(), 0.0f) * R : 0.0f;
+	const float Lift = DomeCm >= 0.0f ? FMath::Min(DomeCm, 1.5f * R) : (bClothed ? FMath::Max(GGoreClothLift.GetValueOnGameThread(), 0.0f) * R : 0.0f);
 	// Height of the face (cm) at a fraction of the radius: the muscle bulges out unevenly, the fat lies lower, the skin
 	// curls up in a lip at the edge and then hangs back over the limb.
 	const auto FaceZ = [&](float F, float Theta) -> float
