@@ -55,6 +55,25 @@ on a still body: the old solver never settled (points still moving at 260 cm/s a
 all once it settles, and an idle's lean moves the hair only as fast as the body (tests "comes to rest and stays still",
 "lands and stays").
 
+## Strand hair (step 1, 2026-11-20)
+
+sneed (2026-11-20) chose real strand hair over the wig meshes ("try a makehuman with strandgroom ... can you make it look
+good / real?"). A groom is tens of thousands of hair curves rooted in the scalp, drawn as strands with hair shading and
+swung by Unreal's groom physics. The wigs stay as they are (the default) until strands are proven.
+
+- **Step 1 (this PR):** `StrandHairAttach` (`StrandHair.h`) puts a groom made for the MetaHuman head (the PawnFaces copies,
+  `GA_Hair_*`) on any body with a `head` bone: the groom's curves are moved from the MetaHuman face mesh's component space
+  onto this body's head (head bone onto head bone, scaled by the two necks' neck_01-to-head lengths, within 15%) and ride
+  on the head bone; groom physics collides with the body through the mannequin physics asset (same bone names). Creator
+  switch `-CreatorGroom=GA_Hair_Long` shows it on the MakeHuman bodies instead of the hair meshes; tuning cvars
+  `Pawns.StrandHairScale`, `Pawns.StrandHairOffsetX/Y/Z`, `Pawns.StrandHairYaw`; the log line `STRANDHAIR` gives the fit.
+- **Next:** waist-length grooms of our own, grown by a Blender script from our head's scalp (hair curves combed down
+  under gravity, clumped and frizzed, exported as Alembic grooms and imported once per style); the pawn's hair colour on
+  the groom material; strands only on pawns near the camera, the groom's simpler LODs or the wig further away.
+- **One-time per style:** each groom is made and imported once; fitting to each head is automatic. Cost measured on the
+  PC (2026-11-20): one MetaHuman close-up with groom physics about 9-13 ms GPU, about the same as the creator scene with
+  four card-hair bodies.
+
 ## Cost and distance
 
 About 30 points against 10 capsules: a few tens of microseconds per pawn per frame, on the animation worker threads.
