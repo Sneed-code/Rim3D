@@ -2,6 +2,15 @@
 
 Updated 2026-11-20.
 
+Buildings crack and come down (sneed, 2026-11-20; sim and Unreal, `docs/design/destruction.md`): every building already
+had hit points that bullets, blasts, fire and sappers take away, but at 0 it just vanished. Now a building **wrecked by
+damage leaves rubble** (1 to 3 layers on its footprint, cleaned like filth) and **a quarter of its materials** (RimWorld's
+numbers), and the sim sends a BuildingWrecked. On screen, **walls and buildings crack as they lose hit points** (a crack
+network that spreads and widens, from the materials patched by `-run=WetLook`), and a wrecked one **falls apart into
+pieces of its own stuff** (granite into granite) under physics, with a dust cloud, the pieces staying as the rubble until
+it is cleaned. New `UWreckSubsystem`; smoke test phase `buildings_wreck`. **Needs a PC compile, `-run=WetLook`, and the
+`buildings` smoke pictures.**
+
 Rain makes things wet (sneed, 2026-11-20; Unreal only, `docs/design/wetness.md`): before, only the ground soaked;
 walls, roofs, furniture, trees, rocks and people stayed dry and a roofed room's floor got wet. Now **every building,
 plant, rock, gun, animal and vehicle material** darkens (by how porous it is) and turns glossy in rain, faces up wettest,

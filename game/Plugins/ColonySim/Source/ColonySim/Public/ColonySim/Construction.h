@@ -69,6 +69,7 @@ struct ConstructionNumbers {
     double deconstructWorkMin = 28.8;
     double deconstructWorkMax = 4320.0;
     double deconstructRefundFactor = 0.5;
+    double killLeaveFactor = 0.25;    // a building wrecked by damage leaves this share of its materials (RimWorld's KillFinalize)
     double skillSpeedBase = 0.3;       // construction speed = base + perLevel x Construction skill
     double skillSpeedPerLevel = 0.0875;
     int defaultSkillLevel = 8;         // for a worker with no skills (a test pawn)
@@ -162,6 +163,11 @@ public:
     // Takes a finished building down and puts back `deconstructRefundFactor` of its materials,
     // rounded at random. False if it isn't a building.
     bool deconstruct(Entity building);
+    // What a building wrecked by damage leaves (docs/design/destruction.md): `killLeaveFactor` of a finished building's
+    // materials, rounded at random by `seed` (not the sim's stream, so wrecks change no other roll), on and around its
+    // footprint (it is gone by now). Only buildings colonists can build leave anything (a def with a
+    // `designationCategory`: not a frame, a mound or a ruin's wall). Returns how many items were dropped.
+    int leaveWreck(DefId def, DefId stuff, const CellRect& rect, bool finished, uint64_t seed);
 
     // ---- Looking up -------------------------------------------------------------------------
     // The blueprint or frame covering a cell, or kNoEntity.

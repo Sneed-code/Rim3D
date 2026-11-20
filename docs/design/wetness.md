@@ -44,11 +44,19 @@ MakeHuman skin, hair and jewellery already read it (`MhAddWetness`, the creator'
 
 Then it changes every opaque or masked, lit, surface material under `/Game/Rim3D/Generated` (except Blood, Fights, Sky,
 MakeHuman, Animations, Water and Weather): whatever fed Base Colour and Roughness goes through the wet look first (nodes
-tagged `WetLook...`, so a material is changed once). Clothes take worn mode; a material with its own `Wetness` scalar
+tagged `WetLook...`, so a material is changed once; a wrap from an older run, or in the wrong mode, is taken out and
+done again). Clothes and people's own materials (`M_Pawn...`: skin, hair, eyes, cloth) take worn mode; a material with its own `Wetness` scalar
 parameter (the terrain) gets that parameter masked by the cover; one whose `Wetness` comes from custom primitive data (the
 MakeHuman bodies) is left alone. Material instances follow their parents. Run it again after any commandlet that remakes
 materials (TerrainMaterials, SurfaceMaterials, PlaceholderArt, FoliageMaterials, TreeArt, GunArt, AnimalArt, ClothesArt,
 ShuttleArt, ShieldArt); `-List` shows what it would change.
+
+It also makes `M_WetSolid`, our own copy of the engine's VertexColorMaterial (vertex colours, lit, roughness 0.5) with
+the wet look and the damage look on it. Buildings, upper floors and wreck pieces whose stuff has no surface material
+(plain colour walls) are drawn with it (`WetnessShared::LoadSolidMaterial`, the engine's own before the commandlet runs).
+
+The cover texture is sent again whenever its GPU copy is made again (an editor build can finish building the texture
+after the game has started), and the cover's place (`CoverMap`) again whenever the world origin moves.
 
 ```
 UnrealEditor-Cmd.exe game\Rim3D.uproject -run=WetLook -unattended -nosplash -nullrhi
@@ -59,12 +67,13 @@ Without the assets, only people get wet (their materials already have the wet lo
 ## Console
 
 `Wet.Enabled` (1; 0 keeps everything dry), `Wet.Override` (-1 follows the weather; 0 to 1 holds surfaces, and people
-outdoors, at that wetness, for screenshots and checks).
+outdoors, at that wetness, for screenshots and checks). `Wet.Dump` logs the state: the cover texture's format and
+whether it is usable, the cells under a roof, how often the cover was made and sent, the surface wetness shown.
 
 ## Tests
 
 Smoke test `sky_rain` (three game hours of rain at the foot of the mountain) notes and checks the surfaces' wetness
-(at least 0.3), the wettest pawn, the covered cells and that the cover was written. Pictures for sneed: the look bench's
+(at least 0.3), the wettest pawn, the covered cells and that the cover was written and reached its texture. Pictures for sneed: the look bench's
 rainy night, and `Wet.Override 1` against `Wet.Override 0` on a house with a roof.
 
 ## Later

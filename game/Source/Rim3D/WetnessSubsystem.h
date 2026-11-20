@@ -38,8 +38,13 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override;
 
-	/** The surfaces' wetness now (0 dry to 1 soaked), as written to MPC_Weather. */
-	float GetSurfaceWetness() const { return SurfaceWet; }
+	/** The surfaces' wetness now (0 dry to 1 soaked), as written to MPC_Weather (Wet.Override and Wet.Enabled included). */
+	float GetSurfaceWetness() const { return ShownSurfaceWet; }
+	/** True once the cover texture can be written, and how many times it was uploaded to the GPU. */
+	bool IsCoverUsable() const { return bCoverUsable; }
+	int32 GetCoverUploads() const { return CoverUploads; }
+	/** One line on the state of things, for the log (Wet.Dump). */
+	FString Describe() const;
 	/** Cells with a roof or upper floor over them in the last cover written, and how many times it was written. */
 	int32 GetCoveredCells() const { return CoveredCells; }
 	int32 GetCoverWrites() const { return CoverWrites; }
@@ -57,6 +62,8 @@ protected:
 private:
 	void LoadAssets();
 	void UpdateCover(const colony::Map& Map, bool bForce);
+	/** Sends the cover to the texture when it changed or the texture's GPU copy was made again (it loses what was sent). */
+	void UploadCover();
 	void UpdateSurfaces(float Elapsed);
 	void UpdatePawns(const colony::Map& Map, float Elapsed);
 
@@ -67,6 +74,13 @@ private:
 	TObjectPtr<UTexture2D> Cover;
 	bool bAssetsTried = false;
 	bool bCoverUsable = false;
+	bool bCoverFormatLogged = false;
+	/** Single floats (32 bit) or halves (16 bit): whichever the texture was built as. */
+	bool bCoverHalf = false;
+	bool bCoverDirty = false;
+	/** The texture's GPU copy the cover was last sent to. */
+	const void* UploadedResource = nullptr;
+	FVector WrittenOrigin = FVector(TNumericLimits<double>::Max());
 
 	/** The cover as last written, one float per cell of the map (row by row, map width). */
 	TArray<float> CoverCells;
@@ -80,6 +94,7 @@ private:
 
 	float SurfaceWet = 0.0f;
 	float WrittenSurfaceWet = -1.0f;
+	float ShownSurfaceWet = 0.0f;
 	double LastGameSeconds = -1.0;
 	/** Each pawn's wetness, by thing id, and the value last written to its meshes. */
 	TMap<uint32, float> PawnWet;
@@ -87,6 +102,7 @@ private:
 
 	int32 CoveredCells = 0;
 	int32 CoverWrites = 0;
+	int32 CoverUploads = 0;
 	int32 WetPawns = 0;
 	float WettestPawn = 0.0f;
 };

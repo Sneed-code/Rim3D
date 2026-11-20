@@ -336,6 +336,11 @@ void USmokeTestSubsystem::BuildSkyPhases()
 			{
 				Fail(FString::Printf(TEXT("sky_rain: surfaces only got to wetness %.2f after three hours of rain"), State->MaxSurfaceWet));
 			}
+			Notes.Add(FString::Printf(TEXT("sky_rain: wetness %s"), *W->Describe()));
+			if (W->HasAssets() && (!W->IsCoverUsable() || W->GetCoverUploads() < 1))
+			{
+				Fail(TEXT("sky_rain: the roof cover never reached its texture, so roofs won't keep rooms dry (see the wetness note)"));
+			}
 			if (W->GetCoverWrites() < 1)
 			{
 				Fail(TEXT("sky_rain: the roof cover for the wet look was never written"));

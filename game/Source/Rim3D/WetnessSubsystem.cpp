@@ -5,8 +5,13 @@
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
 #include "Materials/MaterialParameterCollection.h"
+#include "Math/Float16.h"
 #include "Materials/MaterialParameterCollectionInstance.h"
 #include "RenderingThread.h"
+#include "TextureResource.h"
+#if WITH_EDITOR
+#include "TextureCompiler.h"
+#endif
 
 #include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
@@ -34,6 +39,14 @@ namespace
 	constexpr float WetPawnDrySeconds = 2400.0f;
 	// How far over its feet a person is counted as under a roof (the middle of the body).
 	constexpr float WetPawnBodyM = 1.0f;
+
+	FAutoConsoleCommandWithWorld GWetDump(
+		TEXT("Wet.Dump"), TEXT("Logs the wetness state: the cover texture, the cells under a roof, the surface wetness."),
+		FConsoleCommandWithWorldDelegate::CreateLambda([](UWorld* World)
+		{
+			const UWetnessSubsystem* Wetness = World ? World->GetSubsystem<UWetnessSubsystem>() : nullptr;
+			UE_LOG(LogTemp, Display, TEXT("Wetness: %s"), Wetness ? *Wetness->Describe() : TEXT("no subsystem in this world"));
+		}));
 
 	float WetStepToward(float Value, float Target, float Elapsed, float SoakSeconds, float DrySeconds)
 	{
@@ -65,24 +78,49 @@ void UWetnessSubsystem::Initialize(FSubsystemCollectionBase& InCollection)
 
 void UWetnessSubsystem::LoadAssets()
 {
-	if (bAssetsTried)
+	if (!bAssetsTried)
+	{
+		bAssetsTried = true;
+		Collection = LoadObject<UMaterialParameterCollection>(nullptr, WetnessShared::CollectionPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+		Cover = LoadObject<UTexture2D>(nullptr, WetnessShared::CoverPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (!Collection || !Cover)
+		{
+			UE_LOG(LogTemp, Display, TEXT("Wetness: no MPC_Weather or T_WeatherCover (run -run=WetLook); only people get wet"));
+		}
+	}
+	if (!Cover || bCoverUsable)
 	{
 		return;
 	}
-	bAssetsTried = true;
-	Collection = LoadObject<UMaterialParameterCollection>(nullptr, WetnessShared::CollectionPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
-	Cover = LoadObject<UTexture2D>(nullptr, WetnessShared::CoverPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
-	bCoverUsable = Cover != nullptr && Cover->GetPixelFormat() == PF_R32_FLOAT && Cover->GetSizeX() == WetnessShared::CoverSize &&
-		Cover->GetSizeY() == WetnessShared::CoverSize;
-	if (!Collection || !Cover)
+#if WITH_EDITOR
+	// In an editor build a loaded texture may still be building in the background, with a stand-in that has no format
+	// yet: wait for it, once, so the cover isn't sent to the stand-in and lost.
+	UTexture* Compiling = Cover.Get();
+	FTextureCompilingManager::Get().FinishCompilation(MakeArrayView(&Compiling, 1));
+#endif
+	// Checked again every tick until it holds (the format can turn up a little after the load).
+	const EPixelFormat Format = Cover->GetPixelFormat();
+	const bool bSize = Cover->GetSizeX() == WetnessShared::CoverSize && Cover->GetSizeY() == WetnessShared::CoverSize;
+	bCoverHalf = Format == PF_R16F;
+	bCoverUsable = bSize && (Format == PF_R32_FLOAT || Format == PF_R16F);
+	if (bCoverUsable)
 	{
-		UE_LOG(LogTemp, Display, TEXT("Wetness: no MPC_Weather or T_WeatherCover (run -run=WetLook); only people get wet"));
+		bCoverDirty = true;
+		UE_LOG(LogTemp, Display, TEXT("Wetness: T_WeatherCover ready, %dx%d %s"), Cover->GetSizeX(), Cover->GetSizeY(), bCoverHalf ? TEXT("halves") : TEXT("floats"));
 	}
-	else if (!bCoverUsable)
+	else if (!bCoverFormatLogged && Format != PF_Unknown)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Wetness: T_WeatherCover is %dx%d format %d, not %dx%d single floats; roofs won't keep things dry"),
-			Cover->GetSizeX(), Cover->GetSizeY(), static_cast<int32>(Cover->GetPixelFormat()), WetnessShared::CoverSize, WetnessShared::CoverSize);
+		bCoverFormatLogged = true;
+		UE_LOG(LogTemp, Warning, TEXT("Wetness: T_WeatherCover is %dx%d pixel format %d, not %dx%d single floats; roofs won't keep things dry"),
+			Cover->GetSizeX(), Cover->GetSizeY(), static_cast<int32>(Format), WetnessShared::CoverSize, WetnessShared::CoverSize);
 	}
+}
+
+FString UWetnessSubsystem::Describe() const
+{
+	return FString::Printf(TEXT("assets %s, cover %s (pixel format %d), %d cells covered, cover made %d times and sent %d times, surface wetness %.2f, %d wet pawns"),
+		HasAssets() ? TEXT("found") : TEXT("missing"), bCoverUsable ? TEXT("usable") : TEXT("NOT usable"),
+		Cover ? static_cast<int32>(Cover->GetPixelFormat()) : -1, CoveredCells, CoverWrites, CoverUploads, ShownSurfaceWet, WetPawns);
 }
 
 float UWetnessSubsystem::CoverAt(int32 X, int32 Y) const
@@ -155,27 +193,60 @@ void UWetnessSubsystem::UpdateCover(const colony::Map& Map, bool bForce)
 		}
 	}
 	++CoverWrites;
+	bCoverDirty = true;
+}
 
-	if (!bCoverUsable || !Cover->GetResource())
+void UWetnessSubsystem::UploadCover()
+{
+	if (!bCoverUsable || CoverCells.IsEmpty())
 	{
 		return;
 	}
+	const FTextureResource* Resource = Cover->GetResource();
+	if (!Resource)
+	{
+		return;
+	}
+	if (!bCoverDirty && Resource == UploadedResource)
+	{
+		return;
+	}
+	bCoverDirty = false;
+	UploadedResource = Resource;
+	++CoverUploads;
 	// The texture is the map's size or less; a map bigger than it is covered as far as it reaches.
 	const int32 W = FMath::Min(CoverWidth, WetnessShared::CoverSize);
 	const int32 H = FMath::Min(CoverHeight, WetnessShared::CoverSize);
-	TArray<float>* Texels = new TArray<float>();
-	Texels->SetNumUninitialized(W * H);
+	const int32 TexelBytes = bCoverHalf ? static_cast<int32>(sizeof(FFloat16)) : static_cast<int32>(sizeof(float));
+	TArray<uint8>* Texels = new TArray<uint8>();
+	Texels->SetNumUninitialized(W * H * TexelBytes);
 	for (int32 Y = 0; Y < H; ++Y)
 	{
-		FMemory::Memcpy(Texels->GetData() + Y * W, CoverCells.GetData() + Y * CoverWidth, W * sizeof(float));
+		const float* Row = CoverCells.GetData() + Y * CoverWidth;
+		if (bCoverHalf)
+		{
+			FFloat16* Out = reinterpret_cast<FFloat16*>(Texels->GetData()) + Y * W;
+			for (int32 X = 0; X < W; ++X)
+			{
+				Out[X] = FFloat16(Row[X]);
+			}
+		}
+		else
+		{
+			FMemory::Memcpy(Texels->GetData() + Y * W * TexelBytes, Row, W * TexelBytes);
+		}
 	}
 	FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, W, H);
-	Cover->UpdateTextureRegions(0, 1, Region, W * sizeof(float), sizeof(float), reinterpret_cast<uint8*>(Texels->GetData()),
+	Cover->UpdateTextureRegions(0, 1, Region, W * TexelBytes, TexelBytes, Texels->GetData(),
 		[Texels](uint8*, const FUpdateTextureRegion2D* Regions)
 		{
 			delete Texels;
 			delete Regions;
 		});
+	if (CoverUploads == 1)
+	{
+		UE_LOG(LogTemp, Display, TEXT("Wetness: cover sent, %d of %dx%d cells under a roof or floor"), CoveredCells, CoverWidth, CoverHeight);
+	}
 }
 
 void UWetnessSubsystem::UpdateSurfaces(float Elapsed)
@@ -187,6 +258,7 @@ void UWetnessSubsystem::UpdateSurfaces(float Elapsed)
 	SurfaceWet = WetStepToward(SurfaceWet, Target, Elapsed, WetSurfaceSoakSeconds, WetSurfaceDrySeconds);
 	const float Override = GWetOverride.GetValueOnGameThread();
 	const float Shown = GWetEnabled.GetValueOnGameThread() == 0 ? 0.0f : (Override >= 0.0f ? FMath::Clamp(Override, 0.0f, 1.0f) : SurfaceWet);
+	ShownSurfaceWet = Shown;
 	if (!Collection || FMath::Abs(Shown - WrittenSurfaceWet) < 0.002f)
 	{
 		return;
@@ -293,18 +365,21 @@ void UWetnessSubsystem::Tick(float DeltaTime)
 		PawnWritten.Reset();
 		bForce = true;
 	}
-	if (bForce && Collection)
+	const FVector Origin = Source->GetWorldOrigin();
+	if (Collection && (bForce || Origin != WrittenOrigin))
 	{
-		// Where the cover texture lies: cell (0, 0) at the world origin, one texel a metre.
+		// Where the cover texture lies: cell (0, 0) at the world origin, one texel a metre. Written again whenever the
+		// origin moves (the map can be placed after the first tick), or every roof would mask the wrong cells.
 		if (UMaterialParameterCollectionInstance* Instance = GetWorld()->GetParameterCollectionInstance(Collection))
 		{
-			const FVector Origin = Source->GetWorldOrigin();
 			Instance->SetVectorParameterValue(WetnessShared::CoverMapParam,
 				FLinearColor(static_cast<float>(Origin.X), static_cast<float>(Origin.Y), static_cast<float>(Origin.Z), 1.0f / static_cast<float>(WetnessShared::CoverSize)));
+			WrittenOrigin = Origin;
 		}
 		WrittenSurfaceWet = -1.0f;
 	}
 	UpdateCover(Map, bForce);
+	UploadCover();
 	const double Seconds = static_cast<double>(Source->GetGameSeconds());
 	if (LastGameSeconds < 0.0)
 	{
