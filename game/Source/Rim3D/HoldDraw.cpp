@@ -338,7 +338,8 @@ HoldDraw::FPoints HoldDraw::PointsOf(const colony::WeaponHold& Hold, bool bShiel
 	}
 	else if (Hold.hasSupport && !bShieldOnArm && Hold.hand == colony::HoldHand::Right)
 	{
-		P.Off = HdPoint(Hold.support);
+		// Given from the main grip (a pistol's grip point may sit anywhere on its model): the support hand cups the grip hand.
+		P.Off = P.Main + HdPoint(Hold.support);
 		P.bOff = true;
 	}
 	// No model: the sight a little above the grip's line, the butt a forearm behind it.
@@ -446,7 +447,8 @@ bool HoldDraw::PinHands(const USkeletalMeshComponent* Mesh, const colony::Weapon
 		const FTransform GripInHand = OffInGrip.Inverse();
 		Out.OffRollPoint = GripInHand.GetLocation();
 		Out.OffRollAxis = GripInHand.TransformVectorNoScale(Turn.UnrotateVector(FVector::ForwardVector)).GetSafeNormal();
-		Out.OffRollFree = Hold.grip == colony::HoldGrip::Pole ? 180.0f : (Hold.grip == colony::HoldGrip::Gun ? 90.0f : 45.0f);
+		// A support hand cupping a pistol's grip hand has no round shaft to turn about.
+		Out.OffRollFree = !Hold.hasOff ? 0.0f : (Hold.grip == colony::HoldGrip::Pole ? 180.0f : (Hold.grip == colony::HoldGrip::Gun ? 90.0f : 45.0f));
 	}
 	return true;
 }

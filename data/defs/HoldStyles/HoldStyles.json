@@ -108,7 +108,7 @@
     "reload": "Mixamo/Firearms/A_Reload",
     "fpStance": "PistolAim/A_PistolAim",
     "holster": "RightHip",
-    "support": [2.5, -2, -4.5],
+    "support": [1, -3, -4],
     "offTurn": [68, 0, 135],
     "places": {
       "ready": {"anchor": "Chest", "at": [26, 6, -22], "turn": [-40, 0, 0]},
