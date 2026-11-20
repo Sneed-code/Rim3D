@@ -881,7 +881,7 @@ void UTradePanelSubsystem::DrawFactionsWindow(USimSubsystem& Bridge, float Scale
 	const float Width = FMath::Min(760.0f * Scale, Viewport->Size.x - 32.0f * Scale);
 	// Bottom edge just above the bar, so a long list grows upward and scrolls rather than running off the screen.
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(Width, 0.0f), ImVec2(Width, ColonyHud::AboveBar(Viewport, Scale) - Viewport->Pos.y - 24.0f * Scale));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(Width, 0.0f), ImVec2(Width, (ColonyHud::AboveBar(Viewport, Scale) - Viewport->Pos.y) * 0.85f));
 	if (ImGui::Begin("##FactionsWindow", nullptr, ColonyHud::BoxFlags() & ~ImGuiWindowFlags_NoScrollbar))
 	{
 		++Stats.FactionFrames;
@@ -1003,6 +1003,14 @@ void UTradePanelSubsystem::DrawFactionsWindow(USimSubsystem& Bridge, float Scale
 					Blocker = TEXT("Needs a powered comms console a colonist can walk to.");
 				}
 
+				// A faction that is no ally gets one quiet line, not a greyed button.
+				if (!Coming && Line.relation != 2)
+				{
+					ColonyHud::TextColored(ColonyHud::TextFaint(), FString::Printf(TEXT("Sends a caravan when called once it is an ally (goodwill %.0f)."), Rules.alliedAtOrAbove));
+					ImGui::Spacing();
+					ImGui::PopID();
+					continue;
+				}
 				FString& Kind = RequestKinds.FindOrAdd(UTF8_TO_TCHAR(Line.faction.c_str()));
 				ImGui::BeginDisabled(!Blocker.IsEmpty());
 				if (ColonyHud::Button(FString::Printf(TEXT("Call for a caravan (-%.0f goodwill)"), Rules.requestGoodwillCost)))

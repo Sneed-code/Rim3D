@@ -2189,30 +2189,52 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 					ImGui::PushStyleColor(ImGuiCol_Text, ColonyHud::TextFaint());
 					ImGui::PushStyleColor(ImGuiCol_Button, ColonyHud::Rgb(0x15181b));
 				}
-				// The label sits low in the tile, under the icon.
-				ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.92f));
-				const FTCHARToUTF8 Label(*FString::Printf(TEXT("%s##tile"), *Tile.Label));
-				// A long name ("Cancel earthworks") is drawn smaller so it fits the tile instead of being cut off.
-				const float NameWidth = ImGui::CalcTextSize(TCHAR_TO_UTF8(*Tile.Label)).x + 2.0f * ImGui::GetStyle().FramePadding.x;
-				const bool bShrinkName = NameWidth > TileSize;
-				if (bShrinkName)
-				{
-					ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * FMath::Max(0.6f, TileSize / NameWidth));
-				}
+				// The button carries no text: the name is drawn under the picture below, on two lines when it is long.
 				bool bClicked = false;
 				if (bActive)
 				{
-					bClicked = ColonyHud::Button(FString(UTF8_TO_TCHAR(Label.Get())), true, ImVec2(TileSize, TileSize));
+					bClicked = ColonyHud::Button(TEXT("##tile"), true, ImVec2(TileSize, TileSize));
 				}
 				else
 				{
-					bClicked = ImGui::Button(Label.Get(), ImVec2(TileSize, TileSize));
+					bClicked = ImGui::Button("##tile", ImVec2(TileSize, TileSize));
 				}
-				if (bShrinkName)
 				{
-					ImGui::PopFont();
+					// A long name ("Hand tailor bench") breaks at the space nearest its middle, and shrinks until each line fits.
+					const float Room = TileSize - 2.0f * ImGui::GetStyle().FramePadding.x;
+					TArray<FString> Lines;
+					Lines.Add(Tile.Label);
+					if (ImGui::CalcTextSize(TCHAR_TO_UTF8(*Tile.Label)).x > Room)
+					{
+						int32 Best = INDEX_NONE;
+						for (int32 Char = 0; Char < Tile.Label.Len(); ++Char)
+						{
+							if (Tile.Label[Char] == TEXT(' ') && (Best == INDEX_NONE || FMath::Abs(Char - Tile.Label.Len() / 2) < FMath::Abs(Best - Tile.Label.Len() / 2)))
+							{
+								Best = Char;
+							}
+						}
+						if (Best != INDEX_NONE)
+						{
+							Lines = {Tile.Label.Left(Best), Tile.Label.Mid(Best + 1)};
+						}
+					}
+					float Widest = 1.0f;
+					for (const FString& Line : Lines)
+					{
+						Widest = FMath::Max(Widest, ImGui::CalcTextSize(TCHAR_TO_UTF8(*Line)).x);
+					}
+					const float FontSize = ImGui::GetFontSize() * FMath::Clamp(Room / Widest, 0.6f, Lines.Num() > 1 ? 0.85f : 1.0f);
+					const ImU32 NameColor = ImGui::GetColorU32(bLocked ? ColonyHud::TextFaint() : ColonyHud::TextMain());
+					float LineY = Min.y + TileSize - 5.0f * Scale - FontSize * Lines.Num();
+					for (const FString& Line : Lines)
+					{
+						const FTCHARToUTF8 Utf8(*Line);
+						const float LineWidth = ImGui::GetFont()->CalcTextSizeA(FontSize, FLT_MAX, 0.0f, Utf8.Get()).x;
+						Draw->AddText(ImGui::GetFont(), FontSize, ImVec2(Min.x + (TileSize - LineWidth) * 0.5f, LineY), NameColor, Utf8.Get());
+						LineY += FontSize;
+					}
 				}
-				ImGui::PopStyleVar();
 				if (bLocked)
 				{
 					ImGui::PopStyleColor(2);
@@ -2250,7 +2272,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 				}
 				else if (UTexture* Picture = Tile.Option ? GetTileIcon(Tile.Option->Def) : nullptr)
 				{
-					const float Half = TileSize * 0.30f;
+					const float Half = TileSize * 0.28f;
 					Draw->AddImage(ImTextureRef(Picture), ImVec2(IconCentre.x - Half, IconCentre.y - Half), ImVec2(IconCentre.x + Half, IconCentre.y + Half),
 						ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), bLocked ? IM_COL32(255, 255, 255, 90) : IM_COL32(255, 255, 255, 255));
 				}
