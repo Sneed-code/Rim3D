@@ -47,6 +47,8 @@ namespace
 	{
 		bool bReady = false;
 		bool bListening = false;
+		/** The last press was handed to the viewport by the test (nothing in Slate took it): only then is its release too. */
+		bool bDownHanded = false;
 		int32 FailedCommands = 0;
 		FString FirstFailure;
 		colony::CellPos Site;
@@ -144,30 +146,50 @@ namespace
 		const bool bCaptured = User && User->HasCursorCapture();
 		bool bTaken = false;
 		bool bHanded = false;
+		// Slate's own handling (the ImGui and orders preprocessors) can change the widget tree, which leaves the path found above
+		// empty (an out-of-bounds assert in RoutePointerDownEvent, 2026-11-19): find it again just before handing the event on.
+		const auto RefreshPath = [&]() -> bool
+		{
+			ViewportPath = FWidgetPath();
+			return Widget && Slate.FindPathToWidget(Widget.ToSharedRef(), ViewportPath, EVisibility::All) && ViewportPath.IsValid() &&
+				ViewportPath.Widgets.Num() > 0;
+		};
 		switch (Kind)
 		{
 			case EOwPointer::Move:
 				bTaken = Slate.ProcessMouseMoveEvent(Event);
 				if (!bTaken && !bCaptured)
 				{
-					bHanded = true;
-					Slate.RoutePointerMoveEvent(ViewportPath, Event, false);
+					bHanded = RefreshPath();
+					if (bHanded)
+					{
+						Slate.RoutePointerMoveEvent(ViewportPath, Event, false);
+					}
 				}
 				break;
 			case EOwPointer::Down:
 				bTaken = Slate.ProcessMouseButtonDownEvent(nullptr, Event);
 				if (!bTaken)
 				{
-					bHanded = true;
-					Slate.RoutePointerDownEvent(ViewportPath, Event);
+					bHanded = RefreshPath();
+					if (bHanded)
+					{
+						Slate.RoutePointerDownEvent(ViewportPath, Event);
+					}
 				}
+				State.bDownHanded = bHanded;
 				break;
 			case EOwPointer::Up:
 				bTaken = Slate.ProcessMouseButtonUpEvent(Event);
-				if (!bTaken && !bCaptured)
+				// A release whose press Slate took (the ImGui window over the Build button) stays with Slate: routing it to the
+				// viewport by hand asserted inside Slate on the PC (an index into an empty array, 2026-11-20).
+				if (!bTaken && !bCaptured && State.bDownHanded)
 				{
-					bHanded = true;
-					Slate.RoutePointerUpEvent(ViewportPath, Event);
+					bHanded = RefreshPath();
+					if (bHanded)
+					{
+						Slate.RoutePointerUpEvent(ViewportPath, Event);
+					}
 				}
 				break;
 		}
@@ -299,9 +321,14 @@ void USmokeTestSubsystem::BuildOrdersWorldPhases()
 	const auto Row = [State](int32 X) { return colony::CellPos{State->Site.x + X, State->Site.y + State->RowOffset, 0}; };
 
 	// Clicks the Structure button, then the Wall button, with real events a few frames apart (ImGui needs a frame to see each).
-	const auto PickWallFrame = [this, State, Pointer, ButtonAbs](const FString& PhaseName)
+	const auto PickWallFrame = [this, State, Pointer, ButtonAbs, Orders](const FString& PhaseName)
 	{
 		const int32 F = ++State->Frame;
+		if (F == 1)
+		{
+			// The Build menu opens from the bottom bar's Build tab; Structure is one of its categories.
+			Orders()->SetBuildMenuOpen(true);
+		}
 		FVector2D Abs;
 		const TCHAR* Label = F < 14 ? TEXT("Structure") : TEXT("Wall");
 		const bool bPointerFrame = F == 2 || F == 4 || F == 6 || F == 9 || F == 16 || F == 18 || F == 20 || F == 23;
@@ -311,7 +338,7 @@ void USmokeTestSubsystem::BuildOrdersWorldPhases()
 		}
 		if (!ButtonAbs(Label, Abs))
 		{
-			Fail(FString::Printf(TEXT("%s: the architect bar has no %s button on screen"), *PhaseName, Label));
+			Fail(FString::Printf(TEXT("%s: the Build menu has no %s button on screen"), *PhaseName, Label));
 			State->Frame = 1000;
 			return;
 		}
@@ -408,6 +435,8 @@ void USmokeTestSubsystem::BuildOrdersWorldPhases()
 	Setup.MeasureSeconds = 0.5f;
 	Setup.Setup = [this, State, Overseer, Note]()
 	{
+		// Full HD even offscreen (it starts at 888 x 500): at that size the overseer's windows covered the ground the test clicks.
+		GEngine->Exec(GetWorld(), TEXT("r.SetRes 1920x1080w"));
 		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("Terrain.Roofs")))
 		{
 			Var->Set(0, ECVF_SetByCode);
@@ -676,7 +705,7 @@ void USmokeTestSubsystem::BuildOrdersWorldPhases()
 		State->bGhostSeen = false;
 		State->PreFrames = 0;
 	};
-	DragAgain.OnFrame = [State, DragFrame, Pointer, ButtonAbs, Note]()
+	DragAgain.OnFrame = [State, DragFrame, Pointer, ButtonAbs, Note, Orders]()
 	{
 		if (!State->bReady)
 		{
@@ -688,6 +717,10 @@ void USmokeTestSubsystem::BuildOrdersWorldPhases()
 		if (State->PreFrames < 8)
 		{
 			const int32 Pre = ++State->PreFrames;
+			if (Pre == 1)
+			{
+				Orders()->SetBuildMenuOpen(true);
+			}
 			FVector2D Abs;
 			if ((Pre == 1 || Pre == 3) && ButtonAbs(TEXT("Structure"), Abs))
 			{

@@ -1151,6 +1151,15 @@ struct UnstuckCommand {
     Entity pawn = kNoEntity;
 };
 
+// Work groups (docs/design/ui-layout.md, the Work tab): puts a colonist in a named group the player uses to sort and
+// filter the work grid (Fighters, Growers, any name). Up to 24 characters; an empty name takes the colonist out of its
+// group. Groups only sort the grid: the work a colonist does still comes from its priorities. Fails for a pawn that is
+// no colonist or a name that is too long.
+struct SetWorkGroupCommand {
+    Entity pawn = kNoEntity;
+    std::string group;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -1186,7 +1195,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand,
                              SleepCommand, SetLandingZoneCommand,
                              PatchCommand, SetAlertCommand, FocusCommand, SetFightResponseCommand,
-                             LevelEarthCommand, CancelEarthworksCommand, UnstuckCommand>;
+                             LevelEarthCommand, CancelEarthworksCommand, UnstuckCommand, SetWorkGroupCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
 // day) it was applied in. Failed commands are logged too.

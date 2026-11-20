@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 
+#include "ColonySim/BuildPlanner.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Designations.h"
@@ -42,6 +43,8 @@ enum class EOrderTool : uint8
 	Deconstruct,
 	/** Drag a rectangle: a growing zone of its free soil cells, sown with the chosen crop (GetGrowCrop). */
 	Grow,
+	/** Drag a rectangle: marks the laid floors in it to be taken up (DesignationKind::RemoveFloor). */
+	RemoveFloor,
 	/** Drag a rectangle: adds its cells to the landing zone, where shuttles set down (docs/design/landing.md). */
 	LandingZone,
 	/** Drag a rectangle: takes its cells out of the landing zone. */
@@ -51,6 +54,10 @@ enum class EOrderTool : uint8
 	LevelEarth,
 	/** Drag a rectangle: drops the earthworks planned in it. */
 	CancelEarth,
+	/** Drag a rectangle: adds its cells to the allowed area picked with SetAreaTool (docs/design/areas.md). */
+	PaintArea,
+	/** Drag a rectangle: takes its cells out of that area. */
+	EraseArea,
 };
 
 /** What the orders overlay draws (smoke test `orders`). */
@@ -105,6 +112,24 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override;
 
+	// ---- The Build tab (docs/design/ui-layout.md) --------------------------------------------
+	/** The Build menu above the bottom bar: categories on the left, the category's tiles beside them. The bar's Build tab opens it. */
+	bool IsBuildMenuOpen() const { return bBuildMenuOpen; }
+	/** Opens or closes the Build menu; closing it puts down the tool in hand. */
+	void SetBuildMenuOpen(bool bOpen);
+	/** The open category's label ("Orders", "Zone", "Structure", ...), empty for none. */
+	const FString& GetOpenCategory() const { return OpenCategory; }
+	void SetOpenCategory(const FString& Category) { OpenCategory = Category; }
+	/** The Build menu's rectangle last frame (ImGui pixels), so the selected panel can sit above it. */
+	bool GetBuildMenuRect(FBox2D& Out) const
+	{
+		Out = BuildMenuRect;
+		return bBuildMenuShown;
+	}
+	/** What a drag of the building in hand plans: one, a line, a room's outline or a filled rectangle. */
+	colony::DragShape GetBuildShape() const { return BuildShape; }
+	void SetBuildShape(colony::DragShape Shape) { BuildShape = Shape; }
+
 	// ---- Tools ------------------------------------------------------------------------------
 	EOrderTool GetTool() const { return Tool; }
 	/** Picks a tool; stops a drag in progress. Build keeps the building last chosen. */
@@ -122,6 +147,10 @@ public:
 	void RotateBuilding();
 	/** Stops the tool and any drag. True if there was one. */
 	bool CancelTool();
+	/** Picks the PaintArea (bAdd) or EraseArea tool for allowed area `Area` (AreaView::id): the Areas window's Paint / Erase. */
+	void SetAreaTool(uint32 Area, bool bAdd);
+	/** The allowed area the area tools work on, and whose cells the overlay shows while one is in hand (0 for none). */
+	uint32 GetAreaToolArea() const { return AreaToolArea; }
 
 	// ---- Walking the colony (task U10, docs/design/handson.md) ---------------------------------
 	/** In direct mode the Build tool still works: the crosshair aims the ghost, one click plans it. */
@@ -217,8 +246,17 @@ private:
 	struct FBuildOption
 	{
 		colony::DefId Def;
+		FString DefName;
 		FString Label;
+		/** The category's label, as its button says. */
 		FString Category;
+		/** A floor (a Terrain def): PlaceBlueprintCommand lays a floor plan. */
+		bool bFloor = false;
+		/** The research it still needs, in plain words; empty if it can be planned. */
+		FString Locked;
+		colony::DragShape Drag = colony::DragShape::Single;
+		int32 SizeX = 1;
+		int32 SizeY = 1;
 	};
 	struct FStuffOption
 	{
@@ -252,6 +290,9 @@ private:
 	void DrawDragOutline(const USimSubsystem& Bridge) const;
 	void DrawDraftMarkers(const USimSubsystem& Bridge) const;
 	void DrawPanels(USimSubsystem& Bridge);
+	/** The Build menu: categories, tiles, and the strip about the thing in hand. */
+	void DrawBuildMenu(USimSubsystem& Bridge, float Scale);
+	const FBuildOption* FindOption(colony::DefId Def) const;
 
 	// What is in hand.
 	EOrderTool Tool = EOrderTool::None;
@@ -260,6 +301,16 @@ private:
 	colony::DefId BuildStuff;
 	colony::Rot4 BuildRot = colony::Rot4::North;
 	FString OpenCategory;
+	colony::DragShape BuildShape = colony::DragShape::Single;
+	bool bBuildMenuOpen = false;
+	bool bBuildMenuShown = false;
+	FBox2D BuildMenuRect = FBox2D(ForceInit);
+	char BuildSearch[64] = {};
+	int32 ResearchDoneSeen = -1;
+	// What the drag in hand would plan and cost, worked out again only when the drag changes.
+	uint64 PlanSignature = 0;
+	FString PlanText;
+	bool bPlanAffordable = true;
 
 	// The cursor and the drag.
 	bool bMouseDriven = true;
@@ -271,6 +322,7 @@ private:
 	/** Level earth: the height the drag started on (cm, on a 25 cm step), and the player's nudge on top of it. */
 	int32 LevelStartCm = 0;
 	int32 LevelNudgeCm = 0;
+	uint32 AreaToolArea = 0;
 
 	// Menu contents, read from the defs once per sim.
 	TArray<FBuildOption> BuildOptions;

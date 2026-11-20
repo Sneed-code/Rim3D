@@ -122,8 +122,8 @@ public:
 	/** The low-pass for air: far sounds lose their highs first (20 kHz close, about 1.3 kHz at the edge of the range). */
 	static float AirCutoff(float RangeM, float DistanceM);
 
-	/** The mixer panel (sliders), drawn by the overseer under its settings. */
-	void DrawMixerPanel(float ViewportRight, float Scale);
+	/** The Sound page of the Settings window: the mixer sliders (inside the open window). */
+	void DrawMixerBody(float Scale);
 
 	// --- For the smoke test ---
 

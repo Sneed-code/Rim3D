@@ -809,16 +809,9 @@ void UShooterFeelSubsystem::Tick(float DeltaTime)
 // ---------------------------------------------------------------------------
 // The settings panel.
 
-void UShooterFeelSubsystem::DrawSettingsPanel(float ViewportWidth, float Scale)
+void UShooterFeelSubsystem::DrawSettingsBody(float Scale)
 {
-	ImGui::SetNextWindowPos(ImVec2(ViewportWidth - 12.0f * Scale, 70.0f * Scale), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-	ImGui::SetNextWindowBgAlpha(0.7f);
-	ImGui::SetNextWindowCollapsed(true, ImGuiCond_Once);
-	if (!ImGui::Begin("Feel (direct mode)##Feel", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
-	{
-		ImGui::End();
-		return;
-	}
+	ImGui::PushItemWidth(260.0f * Scale);
 	bool bChanged = false;
 	float Shake = GetShakeScale();
 	float Blur = GetBlurScale();
@@ -853,9 +846,9 @@ void UShooterFeelSubsystem::DrawSettingsPanel(float ViewportWidth, float Scale)
 	ImGui::TextUnformatted("0 turns shake, blur or kick off. Hold the right mouse");
 	ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("button with a gun to aim; %s rolls (dashes in first person); %s throws a grenade."),
 		*Rim3DKeys::GetKeyLabel(ERim3DAction::RollDash), *Rim3DKeys::GetKeyLabel(ERim3DAction::Grenade))));
+	ImGui::PopItemWidth();
 	if (bChanged)
 	{
 		SaveSettings();
 	}
-	ImGui::End();
 }
