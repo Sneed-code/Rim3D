@@ -113,6 +113,25 @@ style names to grown ones; Braid, Messy and Afro have none yet and keep their wi
 strands, their wig hidden; the rest wear the wig. People wearing strands keep them a metre further, so nobody flickers at
 the edge. `Pawns.StrandHair 0` puts everyone in wigs. A style whose groom has not been grown and imported keeps its wig.
 
+## Animal fur and manes (plan)
+
+The same script can grow on any mesh: what changes per animal is where hair grows and how long it is. Plan, in order:
+
+1. **Manes and tails first** (horse, thrumbo, lion-like predators, muffalo's shag): a `region` per animal style picked by
+   painting, as a vertex group in Blender, or by bone weights (neck and head bones for a mane, tail bones for a tail),
+   grown with the same comb-and-gravity steps, combed along the bone chain instead of from a parting. A few thousand
+   strands each, so they cost about a quarter of a human's long hair.
+2. **Attached to the animal's skeleton**, not a head bone: Unreal grooms on animals need a groom binding to the skeletal
+   mesh (made by the commandlet, as PawnFaces does for the MetaHuman faces), so the roots follow the skin as the animal
+   moves. Animals play single clips with no animation graph; groom physics runs on its own, so that is no obstacle.
+3. **Short body fur** (dogs, cats, wolves) as strands only on the nearest few animals and only for the furriest kinds;
+   further off, and for the rest, the textured mesh as now. Full-body fur is 100,000+ short strands, so it is a
+   per-animal choice, not a default.
+4. Same near/far rule as people (`UStrandHairSubsystem` with its own count), and the animal's own colour drives the fur.
+
+Waiting on: animal models with clean UVs and skin weights (the free animals vary; some manes are solid mesh that would
+need hiding where the strands grow).
+
 ## Cost and distance
 
 About 30 points against 10 capsules: a few tens of microseconds per pawn per frame, on the animation worker threads.
