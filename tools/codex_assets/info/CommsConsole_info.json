@@ -1,0 +1,51 @@
+{
+ "name": "CommsConsole",
+ "kind": "building",
+ "turned": "x-90",
+ "boundsCm": {
+  "min": [
+   -150.0,
+   -85.91,
+   -0.0
+  ],
+  "max": [
+   150.0,
+   85.91,
+   246.5
+  ]
+ },
+ "sizeM": [
+  3.0,
+  1.718,
+  2.465
+ ],
+ "parts": {
+  "CommsConsole": {
+   "boundsCm": {
+    "min": [
+     -150.0,
+     -85.91,
+     -0.0
+    ],
+    "max": [
+     150.0,
+     85.91,
+     246.5
+    ]
+   },
+   "tris": 20645
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "CommsConsole": {
+   "from": "CommsConsole",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

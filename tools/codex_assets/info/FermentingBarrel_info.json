@@ -1,0 +1,56 @@
+{
+ "name": "FermentingBarrel",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -38.86,
+   -49.38,
+   0.0
+  ],
+  "max": [
+   38.86,
+   49.38,
+   95.63
+  ]
+ },
+ "sizeM": [
+  0.777,
+  0.988,
+  0.956
+ ],
+ "parts": {
+  "FermentingBarrel": {
+   "boundsCm": {
+    "min": [
+     -38.86,
+     -49.38,
+     0.0
+    ],
+    "max": [
+     38.86,
+     49.38,
+     95.63
+    ]
+   },
+   "tris": 7922
+  }
+ },
+ "sockets": {
+  "Tap": [
+   -0.06,
+   49.38,
+   38.7
+  ]
+ },
+ "slots": {
+  "FermentingBarrel": {
+   "from": "Oak, wrought iron and linen",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

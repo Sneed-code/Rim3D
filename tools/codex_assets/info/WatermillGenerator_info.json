@@ -1,0 +1,50 @@
+{
+ "name": "WatermillGenerator",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -150.0,
+   -150.0,
+   0.0
+  ],
+  "max": [
+   150.0,
+   150.0,
+   281.28
+  ]
+ },
+ "sizeM": [
+  3.0,
+  3.0,
+  2.813
+ ],
+ "parts": {
+  "WatermillGenerator": {
+   "boundsCm": {
+    "min": [
+     -150.0,
+     -150.0,
+     0.0
+    ],
+    "max": [
+     150.0,
+     150.0,
+     281.28
+    ]
+   },
+   "tris": 24640
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "WatermillGenerator": {
+   "from": "WatermillGenerator | Surface atlas",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

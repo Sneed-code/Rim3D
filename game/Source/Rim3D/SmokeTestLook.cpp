@@ -699,7 +699,16 @@ void USmokeTestSubsystem::BuildLookPhases()
 		const FVector From = CellWorld(static_cast<float>(State->Room.x) + 1.4f, static_cast<float>(State->Room.y) + 1.3f, 215.0);
 		ViewFrom(From, (To - From).Rotation());
 	};
-	Sunbeams.Verify = [=]() { NoteShot(TEXT("sunbeams")); };
+	Sunbeams.Verify = [=, this]()
+	{
+		NoteShot(TEXT("sunbeams"));
+		if (const USkySubsystem* SkyDust = Sky(); SkyDust && SkyDust->GetFog())
+		{
+			const UExponentialHeightFogComponent* DustFog = SkyDust->GetFog();
+			Notes.Add(FString::Printf(TEXT("sunbeams: indoor share %.2f, volumetric fog %d, fog starts %.0f cm, extinction x%.2f, reach %.0f cm"), SkyDust->GetIndoorShare(),
+				DustFog->bEnableVolumetricFog ? 1 : 0, DustFog->StartDistance, DustFog->VolumetricFogExtinctionScale, DustFog->VolumetricFogDistance));
+		}
+	};
 	Phases.Add(MoveTemp(Sunbeams));
 
 	// 9. A snowy day: a new game on the same seed snows hard through the cold night, then the overseer looks at it at eleven

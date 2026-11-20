@@ -4,6 +4,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Husbandry.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Mood.h"
@@ -376,4 +377,54 @@ TEST_CASE("Slaves: a slave and a prisoner's will save and load, and the loaded g
     copy.stepMany(20000);
     CHECK(copy.stateHash() == sim.stateHash());
     CHECK(saveSim(copy) == saveSim(sim));
+}
+
+TEST_CASE("Slaves: the overseer screens' smoke colony") {
+    // The steps the Unreal smoke test `hud` takes (SmokeTestHud.cpp, HudSmokeAddAnimalsAndPrisoners): a cow tamed at once, a
+    // prisoner and a slave put straight into prison beds, all on a paused colony; the snapshot shows the rows the screens draw.
+    Sim sim = slvSim();
+    const Entity handler = slvColonist(sim, CellPos{10, 10, 0});
+    std::string error;
+    const Entity cow = sim.things().spawn("Cow", CellPos{20, 20, 0});
+    SLV_REQUIRE(cow != kNoEntity);
+    const bool marked = sim.husbandry().markTame(cow, true, error);
+    SLV_REQUIRE(marked);
+    for (int i = 0; i < 200 && !sim.husbandry().isTame(cow); ++i) {
+        sim.husbandry().finishTame(handler, cow, 20);
+    }
+    CHECK(sim.husbandry().isTame(cow));
+    Entity pawns[2] = {kNoEntity, kNoEntity};
+    for (int i = 0; i < 2; ++i) {
+        const Entity bed = sim.things().spawn("Bed", CellPos{30 + i * 2, 30, 0});
+        pawns[i] = sim.things().spawn("Human", CellPos{30 + i * 2, 34, 0});
+        SLV_REQUIRE(bed != kNoEntity);
+        SLV_REQUIRE(pawns[i] != kNoEntity);
+        const bool prisonBed = sim.prisoners().setPrisonBed(bed, true, error);
+        const bool enemy = sim.fighters().setFaction(pawns[i], 2, error);
+        SLV_REQUIRE(prisonBed);
+        SLV_REQUIRE(enemy);
+        // Only a downed enemy can be captured: it counts as down for the capture, then stands up on the next health pass.
+        Health& health = sim.things().registry().get<Health>(pawns[i]);
+        health.downed = true;
+        const bool captured = sim.prisoners().imprison(pawns[i], bed, handler, error);
+        health.dirty = true;
+        SLV_REQUIRE(captured);
+    }
+    CHECK(sim.prisoners().enslave(pawns[1], handler));
+    sim.step();
+    Snapshot snap;
+    sim.writeSnapshot(snap);
+    const ThingView* cowView = snap.find(cow);
+    const ThingView* prisonerView = snap.find(pawns[0]);
+    const ThingView* slaveView = snap.find(pawns[1]);
+    SLV_REQUIRE(cowView != nullptr);
+    SLV_REQUIRE(prisonerView != nullptr);
+    SLV_REQUIRE(slaveView != nullptr);
+    CHECK(cowView->faction == kPlayerFaction);
+    CHECK(prisonerView->prisoner);
+    CHECK(prisonerView->will > 0.0f);
+    CHECK_FALSE(prisonerView->downed);  // up again after the capture
+    CHECK(slaveView->slave);
+    CHECK_FALSE(slaveView->prisoner);
+    CHECK(slaveView->suppression > 0.0f);
 }

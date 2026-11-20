@@ -1,0 +1,57 @@
+{
+ "name": "HydroponicsBasin",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -48.0,
+   -44.5,
+   0.0
+  ],
+  "max": [
+   48.0,
+   44.5,
+   150.0
+  ]
+ },
+ "sizeM": [
+  0.96,
+  0.89,
+  1.5
+ ],
+ "parts": {
+  "HydroponicsBasin": {
+   "boundsCm": {
+    "min": [
+     -48.0,
+     -44.5,
+     0.0
+    ],
+    "max": [
+     48.0,
+     44.5,
+     150.0
+    ]
+   },
+   "tris": 10996
+  }
+ },
+ "sockets": {
+  "PlantArea": [
+   0.0,
+   -0.0,
+   83.5
+  ]
+ },
+ "slots": {
+  "HydroponicsBasin": {
+   "from": "Basin | Workshop PBR",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

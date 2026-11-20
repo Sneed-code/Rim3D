@@ -1,0 +1,56 @@
+{
+ "name": "ChemfuelGenerator",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -100.0,
+   -100.0,
+   0.0
+  ],
+  "max": [
+   100.0,
+   100.0,
+   159.81
+  ]
+ },
+ "sizeM": [
+  2.0,
+  2.0,
+  1.598
+ ],
+ "parts": {
+  "ChemfuelGenerator": {
+   "boundsCm": {
+    "min": [
+     -100.0,
+     -100.0,
+     0.0
+    ],
+    "max": [
+     100.0,
+     100.0,
+     159.81
+    ]
+   },
+   "tris": 18960
+  }
+ },
+ "sockets": {
+  "Exhaust": [
+   30.0,
+   -31.1,
+   154.5
+  ]
+ },
+ "slots": {
+  "ChemfuelGenerator": {
+   "from": "ChemfuelGenerator_PBR",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

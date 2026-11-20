@@ -1,0 +1,56 @@
+{
+ "name": "FirefoamPopper",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -38.83,
+   -42.87,
+   0.0
+  ],
+  "max": [
+   38.83,
+   42.87,
+   59.55
+  ]
+ },
+ "sizeM": [
+  0.777,
+  0.857,
+  0.595
+ ],
+ "parts": {
+  "FirefoamPopper": {
+   "boundsCm": {
+    "min": [
+     -38.83,
+     -42.87,
+     0.0
+    ],
+    "max": [
+     38.83,
+     42.87,
+     59.55
+    ]
+   },
+   "tris": 5850
+  }
+ },
+ "sockets": {
+  "Burst": [
+   0.03,
+   3.43,
+   59.55
+  ]
+ },
+ "slots": {
+  "FirefoamPopper": {
+   "from": "FirefoamPopper | Enamel & hardware",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

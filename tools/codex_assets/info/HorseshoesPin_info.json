@@ -1,0 +1,50 @@
+{
+ "name": "HorseshoesPin",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -45.0,
+   -45.0,
+   0.0
+  ],
+  "max": [
+   45.0,
+   45.0,
+   40.85
+  ]
+ },
+ "sizeM": [
+  0.9,
+  0.9,
+  0.408
+ ],
+ "parts": {
+  "HorseshoesPin": {
+   "boundsCm": {
+    "min": [
+     -45.0,
+     -45.0,
+     0.0
+    ],
+    "max": [
+     45.0,
+     45.0,
+     40.85
+    ]
+   },
+   "tris": 5992
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "HorseshoesPin": {
+   "from": "HorseshoesPit",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

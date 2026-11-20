@@ -22,6 +22,10 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UStaticMesh;
 class USimSubsystem;
+class UTexture;
+class UTextureRenderTarget2D;
+class USceneCaptureComponent2D;
+class UStaticMeshComponent;
 
 /** What the next click or drag of the left mouse button does (docs/design/orders.md). None: it selects, as before. */
 enum class EOrderTool : uint8
@@ -58,6 +62,12 @@ enum class EOrderTool : uint8
 	PaintArea,
 	/** Drag a rectangle: takes its cells out of that area. */
 	EraseArea,
+	/** Drag a rectangle: an animal zone of its free cells (docs/design/husbandry.md); fenced in all round, it is a pen. */
+	AnimalZone,
+	/** Drag a rectangle: marks the wild animals in it to be tamed or hunted, the tame ones to be slaughtered. */
+	Tame,
+	Hunt,
+	Slaughter,
 };
 
 /** What the orders overlay draws (smoke test `orders`). */
@@ -73,11 +83,15 @@ struct FOrdersStats
 	int32 GrowCells = 0;
 	/** Cells of the landing zone drawn. */
 	int32 LandingCells = 0;
+	/** Cells of animal zones and pens drawn. */
+	int32 AnimalZoneCells = 0;
 	/** Instances of the placement ghost (valid, invalid). */
 	int32 GhostValid = 0;
 	int32 GhostInvalid = 0;
 	/** How many times the overlay was rebuilt since the sim last started. */
 	int64 OverlayRebuilds = 0;
+	/** Build tile pictures made from the buildings' own meshes since the sim last started. */
+	int32 TileIconsMade = 0;
 };
 
 /**
@@ -266,6 +280,10 @@ private:
 	};
 
 	USimSubsystem* GetBridge() const;
+	/** The picture of a building's tile (its own mesh, seen from above at an angle), or null until it is made; asking queues it.
+	 *  Made one a frame by UpdateTileIcons. Floors and orders keep their drawn icons. */
+	UTexture* GetTileIcon(colony::DefId Def);
+	void UpdateTileIcons();
 	FSimPick PickGroundAt(const FVector2D& Screen) const;
 	bool IsOverseerActive() const;
 	void ResetForNewSim();
@@ -340,6 +358,23 @@ private:
 	bool bClickProcessorAtFront = false;
 	bool bWarnedImGuiHeld = false;
 	int32 CommandsSent = 0;
+
+	// Build tile pictures (GetTileIcon): a render target a def, made by a capture on a stage of its own.
+	UPROPERTY()
+	TMap<int32, TObjectPtr<UTextureRenderTarget2D>> TileIcons;
+	TArray<int32> WantedTileIcons;
+	/** Defs whose picture was made for the running sim. */
+	TSet<int32> TileIconsReady;
+	/** Orders.TileIcons and Orders.TileIconsLit when the pictures were made: a change makes them again. */
+	int32 TileIconMode = -1;
+	/** Defs whose mesh could not be had (no picture); asked no more until the sim starts again. */
+	TSet<int32> NoTileIcon;
+	UPROPERTY()
+	TObjectPtr<AActor> IconStage;
+	UPROPERTY()
+	TObjectPtr<USceneCaptureComponent2D> IconCapture;
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> IconMesh;
 
 	// The overlay: marks, zone tiles, ghost.
 	UPROPERTY()

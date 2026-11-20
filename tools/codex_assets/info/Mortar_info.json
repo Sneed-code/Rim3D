@@ -1,0 +1,56 @@
+{
+ "name": "Mortar",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -94.51,
+   -87.0,
+   0.0
+  ],
+  "max": [
+   94.51,
+   87.0,
+   127.71
+  ]
+ },
+ "sizeM": [
+  1.89,
+  1.74,
+  1.277
+ ],
+ "parts": {
+  "Mortar": {
+   "boundsCm": {
+    "min": [
+     -94.51,
+     -87.0,
+     0.0
+    ],
+    "max": [
+     94.51,
+     87.0,
+     127.71
+    ]
+   },
+   "tris": 17534
+  }
+ },
+ "sockets": {
+  "Muzzle": [
+   -16.23,
+   32.86,
+   124.96
+  ]
+ },
+ "slots": {
+  "Mortar": {
+   "from": "Mortar_PBR",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}
