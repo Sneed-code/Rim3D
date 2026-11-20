@@ -252,7 +252,8 @@ namespace
 	 * in the reference pose. Skin weighted partly to bones on both sides of the cut lands between the face and where it
 	 * was: a loose sleeve with soft weights round the elbow ends in a rounded dome a few cm long that hid the stump.
 	 * `bPieceSide`: on the severed piece (bulging back towards the body), else on the body (bulging out down the limb).
-	 * Only skin within 1.6 `RadiusCm` of the limb's line counts. -1 if the mesh keeps no copy of its vertices to read.
+	 * Only skin over the face (within 1.1 `RadiusCm` of the limb's line) counts: the shoulder's sides bulged 8 cm and
+	 * lifted the cap off the body. -1 if the mesh keeps no copy of its vertices to read.
 	 */
 	float SeveredDomeCm(const USkeletalMesh& Asset, int32 CutIndex, bool bPieceSide, float RadiusCm)
 	{
@@ -286,7 +287,7 @@ namespace
 			{
 				const FVector Rel = FVector(Positions.VertexPosition(V)) - Joint.GetLocation();
 				const double Along = FVector::DotProduct(Rel, Down);
-				if ((bPieceSide ? -Along : Along) <= 0.0 || (Rel - Along * Down).Size() > 1.6 * RadiusCm)
+				if ((bPieceSide ? -Along : Along) <= 0.0 || (Rel - Along * Down).Size() > 1.1 * RadiusCm)
 				{
 					continue;
 				}
@@ -317,7 +318,7 @@ namespace
 				}
 			}
 		}
-		return FMath::Min(Dome, 1.5f * RadiusCm);
+		return FMath::Min(Dome, RadiusCm);
 	}
 
 	/** The most any drawn mesh of the pawn bulges past a cut at `Bone` (cm, world), or -1 if none could be measured. */

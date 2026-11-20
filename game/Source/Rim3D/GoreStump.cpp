@@ -192,7 +192,7 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 	// Clothed: a sleeve or trouser leg is thicker than the skin and ends a little past the cut in a closed, rounded end of
 	// its own, which hid the meat. The face stands in front of it (and is as wide as the cloth), the soaked cloth hanging
 	// back over the gap.
-	const float Lift = DomeCm >= 0.0f ? FMath::Min(DomeCm, 1.5f * R) : (bClothed ? FMath::Max(GGoreClothLift.GetValueOnGameThread(), 0.0f) * R : 0.0f);
+	const float Lift = DomeCm >= 0.0f ? FMath::Min(DomeCm, R) : (bClothed ? FMath::Max(GGoreClothLift.GetValueOnGameThread(), 0.0f) * R : 0.0f);
 	// Height of the face (cm) at a fraction of the radius: the muscle bulges out unevenly, the fat lies lower, the skin
 	// curls up in a lip at the edge and then hangs back over the limb.
 	const auto FaceZ = [&](float F, float Theta) -> float
