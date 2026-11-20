@@ -51,7 +51,18 @@ def load_body(path, joints_path):
     else:
         bpy.ops.wm.obj_import(filepath=path, forward_axis="Y", up_axis="Z")
     meshes = [o for o in bpy.data.objects if o.type == "MESH"]
-    body = max(meshes, key=lambda o: len(o.data.vertices))
+    # The body: the tallest mesh that is not hair, eyes, teeth or another add-on (the creator FBXs carry the pubic hair,
+    # wigs, brows, lashes, eyes, teeth and tongue as their own meshes; the pubic hair has more vertices than the body).
+    skip = ("hair", "brow", "lash", "eye", "teeth", "tooth", "tongue", "pubic", "wig", "ponytail", "braid", "bob0", "long0",
+            "short0", "afro", "tusk", "horn", "cat")
+
+    def mesh_height(o):
+        zs = [(o.matrix_world @ v.co).z for v in o.data.vertices]
+        return max(zs) - min(zs) if zs else 0.0
+
+    candidates = [o for o in meshes if not any(k in o.name.lower() for k in skip)] or meshes
+    body = max(candidates, key=lambda o: (round(mesh_height(o), 2), len(o.data.vertices)))
+    log("meshes", sorted((o.name, len(o.data.vertices)) for o in meshes))
     mesh = body.data
     world = body.matrix_world
     verts = np.array([tuple(world @ v.co) for v in mesh.vertices])
@@ -102,7 +113,7 @@ def head_morphs(body, keys):
     out = {}
     for name, kv in keys:
         c, r = fit_sphere(kv[body.crown_ids])
-        grow = r / body.skull_r - 1.0
+        grow = r / body.skull_r - 1.0 if body.skull_r > 1e-6 else 0.0
         move = (c - body.skull) * 100.0
         if abs(grow) > 0.002 or np.abs(move).max() > 0.05:
             out[name] = [round(float(grow), 5), round(float(move[0]), 3), round(float(-move[1]), 3), round(float(move[2]), 3)]
