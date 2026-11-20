@@ -1,6 +1,9 @@
 #include "OrdersSubsystem.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "Framework/Application/IInputProcessor.h"
@@ -340,6 +343,10 @@ void UOrdersSubsystem::Deinitialize()
 	OverlayComponents.Reset();
 	GhostGood = nullptr;
 	GhostBad = nullptr;
+	IconStage = nullptr;
+	IconCapture = nullptr;
+	IconMesh = nullptr;
+	TileIcons.Reset();
 	Super::Deinitialize();
 }
 
@@ -413,6 +420,10 @@ void UOrdersSubsystem::ResetForNewSim()
 	MarksSignature = 0;
 	PreviewSignature = 0;
 	OverlaySeconds = -1;
+	// New defs and new building meshes: the tile pictures are made again (the render targets are kept and drawn over).
+	WantedTileIcons.Reset();
+	NoTileIcon.Reset();
+	TileIconsReady.Reset();
 	Stats = FOrdersStats();
 	ReadBuildOptions();
 }
@@ -1887,6 +1898,127 @@ void UOrdersSubsystem::SetBuildMenuOpen(bool bOpen)
 	}
 }
 
+// ---- Build tile pictures -----------------------------------------------------------------------
+
+namespace
+{
+	TAutoConsoleVariable<int32> GOrdersTileIcons(TEXT("Orders.TileIcons"), 1,
+		TEXT("1: Build tiles show the building's own mesh; 0: the drawn footprint icons."));
+	TAutoConsoleVariable<int32> GOrdersTileIconsLit(TEXT("Orders.TileIconsLit"), 0,
+		TEXT("1: tile pictures are lit by the world's light (shaded, but dark at night); 0: unlit (flat colours, the same at any hour)."));
+	/** Where the pictures are taken: far under the map, where only the picture's own mesh is drawn (a show-only capture). */
+	const FVector OrdIconStageAt(0.0, 0.0, -400000.0);
+	constexpr int32 OrdIconPixels = 128;
+}
+
+UTexture* UOrdersSubsystem::GetTileIcon(colony::DefId Def)
+{
+	if (!Def.valid() || GOrdersTileIcons.GetValueOnGameThread() == 0)
+	{
+		return nullptr;
+	}
+	const int32 Mode = GOrdersTileIconsLit.GetValueOnGameThread() != 0 ? 1 : 0;
+	if (Mode != TileIconMode)
+	{
+		TileIconMode = Mode;
+		TileIconsReady.Reset();
+		WantedTileIcons.Reset();
+	}
+	const int32 Key = static_cast<int32>(Def.value);
+	if (TileIconsReady.Contains(Key))
+	{
+		const TObjectPtr<UTextureRenderTarget2D>* Found = TileIcons.Find(Key);
+		return Found ? Found->Get() : nullptr;
+	}
+	if (!NoTileIcon.Contains(Key))
+	{
+		WantedTileIcons.AddUnique(Key);
+	}
+	return nullptr;
+}
+
+void UOrdersSubsystem::UpdateTileIcons()
+{
+	UWorld* World = GetWorld();
+	UBuildingSubsystem* Buildings = World ? World->GetSubsystem<UBuildingSubsystem>() : nullptr;
+	if (WantedTileIcons.IsEmpty() || !Buildings)
+	{
+		return;
+	}
+	const int32 Key = WantedTileIcons[0];
+	WantedTileIcons.RemoveAt(0);
+	colony::DefId Def;
+	Def.value = static_cast<uint32>(Key);
+	UStaticMesh* Mesh = Buildings->GetWholeMesh(Def, BestStuffFor(Def));
+	if (!Mesh)
+	{
+		// The building subsystem may not be built yet: ask again later, unless the def has no picture at all.
+		if (Buildings->IsBuilt() && Buildings->GetDrawnHeightCm(Def) <= 0.0f)
+		{
+			NoTileIcon.Add(Key);
+		}
+		return;
+	}
+	if (!IconStage)
+	{
+		FActorSpawnParameters Params;
+		Params.ObjectFlags |= RF_Transient;
+		IconStage = World->SpawnActor<AActor>(AActor::StaticClass(), FTransform(OrdIconStageAt), Params);
+		if (!IconStage)
+		{
+			return;
+		}
+		USceneComponent* Root = NewObject<USceneComponent>(IconStage);
+		IconStage->SetRootComponent(Root);
+		Root->RegisterComponent();
+		IconStage->SetActorLocation(OrdIconStageAt);
+		IconMesh = NewObject<UStaticMeshComponent>(IconStage);
+		IconMesh->SetupAttachment(Root);
+		IconMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		IconMesh->SetCastShadow(false);
+		IconMesh->RegisterComponent();
+		IconCapture = NewObject<USceneCaptureComponent2D>(IconStage);
+		IconCapture->SetupAttachment(Root);
+		IconCapture->RegisterComponent();
+		IconCapture->bCaptureEveryFrame = false;
+		IconCapture->bCaptureOnMovement = false;
+		IconCapture->FOVAngle = 30.0f;
+		IconCapture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+		IconCapture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+		IconCapture->ShowFlags.SetAtmosphere(false);
+		IconCapture->ShowFlags.SetFog(false);
+		IconCapture->ShowFlags.SetMotionBlur(false);
+		IconCapture->ShowFlags.SetEyeAdaptation(false);
+		IconCapture->ShowOnlyComponents.Add(IconMesh);
+	}
+	IconCapture->ShowFlags.SetLighting(GOrdersTileIconsLit.GetValueOnGameThread() != 0);
+	IconMesh->SetStaticMesh(Mesh);
+	IconMesh->SetWorldLocation(OrdIconStageAt);
+	// From the south-west, above at about 35 degrees, far enough back that the whole mesh fits.
+	const FBoxSphereBounds Bounds = IconMesh->CalcBounds(IconMesh->GetComponentTransform());
+	const float Radius = FMath::Max(10.0f, static_cast<float>(Bounds.SphereRadius));
+	const float Distance = Radius / FMath::Tan(FMath::DegreesToRadians(IconCapture->FOVAngle * 0.5f)) * 1.05f;
+	const FVector Look = FVector(1.0, 0.8, -0.85).GetSafeNormal();
+	const FVector Eye = Bounds.Origin - Look * Distance;
+	IconCapture->SetWorldLocationAndRotation(Eye, Look.Rotation());
+
+	TObjectPtr<UTextureRenderTarget2D>& Target = TileIcons.FindOrAdd(Key);
+	if (!Target)
+	{
+		Target = NewObject<UTextureRenderTarget2D>(this);
+		Target->RenderTargetFormat = RTF_RGBA8;
+		// The tile's own colour, so the picture sits in the button with no box round it.
+		const ImVec4 Back = ColonyHud::ButtonBg();
+		Target->ClearColor = FLinearColor(Back.x, Back.y, Back.z, 1.0f);
+		Target->InitAutoFormat(OrdIconPixels, OrdIconPixels);
+		Target->UpdateResourceImmediate(true);
+	}
+	IconCapture->TextureTarget = Target;
+	IconCapture->CaptureScene();
+	TileIconsReady.Add(Key);
+	++Stats.TileIconsMade;
+}
+
 void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 {
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
@@ -2110,30 +2242,52 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 					ImGui::PushStyleColor(ImGuiCol_Text, ColonyHud::TextFaint());
 					ImGui::PushStyleColor(ImGuiCol_Button, ColonyHud::Rgb(0x15181b));
 				}
-				// The label sits low in the tile, under the icon.
-				ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.92f));
-				const FTCHARToUTF8 Label(*FString::Printf(TEXT("%s##tile"), *Tile.Label));
-				// A long name ("Cancel earthworks") is drawn smaller so it fits the tile instead of being cut off.
-				const float NameWidth = ImGui::CalcTextSize(TCHAR_TO_UTF8(*Tile.Label)).x + 2.0f * ImGui::GetStyle().FramePadding.x;
-				const bool bShrinkName = NameWidth > TileSize;
-				if (bShrinkName)
-				{
-					ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * FMath::Max(0.6f, TileSize / NameWidth));
-				}
+				// The button carries no text: the name is drawn under the picture below, on two lines when it is long.
 				bool bClicked = false;
 				if (bActive)
 				{
-					bClicked = ColonyHud::Button(FString(UTF8_TO_TCHAR(Label.Get())), true, ImVec2(TileSize, TileSize));
+					bClicked = ColonyHud::Button(TEXT("##tile"), true, ImVec2(TileSize, TileSize));
 				}
 				else
 				{
-					bClicked = ImGui::Button(Label.Get(), ImVec2(TileSize, TileSize));
+					bClicked = ImGui::Button("##tile", ImVec2(TileSize, TileSize));
 				}
-				if (bShrinkName)
 				{
-					ImGui::PopFont();
+					// A long name ("Hand tailor bench") breaks at the space nearest its middle, and shrinks until each line fits.
+					const float Room = TileSize - 2.0f * ImGui::GetStyle().FramePadding.x;
+					TArray<FString> Lines;
+					Lines.Add(Tile.Label);
+					if (ImGui::CalcTextSize(TCHAR_TO_UTF8(*Tile.Label)).x > Room)
+					{
+						int32 Best = INDEX_NONE;
+						for (int32 Char = 0; Char < Tile.Label.Len(); ++Char)
+						{
+							if (Tile.Label[Char] == TEXT(' ') && (Best == INDEX_NONE || FMath::Abs(Char - Tile.Label.Len() / 2) < FMath::Abs(Best - Tile.Label.Len() / 2)))
+							{
+								Best = Char;
+							}
+						}
+						if (Best != INDEX_NONE)
+						{
+							Lines = {Tile.Label.Left(Best), Tile.Label.Mid(Best + 1)};
+						}
+					}
+					float Widest = 1.0f;
+					for (const FString& Line : Lines)
+					{
+						Widest = FMath::Max(Widest, ImGui::CalcTextSize(TCHAR_TO_UTF8(*Line)).x);
+					}
+					const float FontSize = ImGui::GetFontSize() * FMath::Clamp(Room / Widest, 0.6f, Lines.Num() > 1 ? 0.85f : 1.0f);
+					const ImU32 NameColor = ImGui::GetColorU32(bLocked ? ColonyHud::TextFaint() : ColonyHud::TextMain());
+					float LineY = Min.y + TileSize - 5.0f * Scale - FontSize * Lines.Num();
+					for (const FString& Line : Lines)
+					{
+						const FTCHARToUTF8 Utf8(*Line);
+						const float LineWidth = ImGui::GetFont()->CalcTextSizeA(FontSize, FLT_MAX, 0.0f, Utf8.Get()).x;
+						Draw->AddText(ImGui::GetFont(), FontSize, ImVec2(Min.x + (TileSize - LineWidth) * 0.5f, LineY), NameColor, Utf8.Get());
+						LineY += FontSize;
+					}
 				}
-				ImGui::PopStyleVar();
 				if (bLocked)
 				{
 					ImGui::PopStyleColor(2);
@@ -2169,6 +2323,12 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 						Draw->AddLine(ImVec2(B.x - T, B.y), ImVec2(B.x, B.y - T), IconColor, 1.0f);
 					}
 				}
+				else if (UTexture* Picture = Tile.Option ? GetTileIcon(Tile.Option->Def) : nullptr)
+				{
+					const float Half = TileSize * 0.28f;
+					Draw->AddImage(ImTextureRef(Picture), ImVec2(IconCentre.x - Half, IconCentre.y - Half), ImVec2(IconCentre.x + Half, IconCentre.y + Half),
+						ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), bLocked ? IM_COL32(255, 255, 255, 90) : IM_COL32(255, 255, 255, 255));
+				}
 				else if (Tile.Option)
 				{
 					const int32 W = FMath::Clamp(Tile.Option->SizeX, 1, 4);
@@ -2198,6 +2358,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 			}
 			Grow();
 			TilesTop = ImGui::GetWindowPos().y;
+			UpdateTileIcons();
 		}
 		ImGui::End();
 	}

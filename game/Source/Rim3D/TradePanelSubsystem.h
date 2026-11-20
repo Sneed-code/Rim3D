@@ -124,6 +124,8 @@ private:
 	bool bGiftMode = false;
 	bool bFactionsOpen = false;
 	colony::Entity Negotiator = colony::kNoEntity;
+	// The trader kind picked for each faction's caravan call (empty: any of theirs).
+	TMap<FString, FString> RequestKinds;
 	TMap<FString, int32> Buy;
 	TMap<FString, int32> Sell;
 	TMap<FString, int32> Gift;

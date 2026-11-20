@@ -127,6 +127,34 @@ void USmokeTestSubsystem::BuildTradePhases()
 			B->Submit(colony::SpawnThingCommand{"Steel", colony::CellPos{Cell.x + Index, Cell.y + 5, 0}, 75, colony::Rot4::North});
 		}
 		B->StepOnce();
+		// A ship trades only over a powered comms console, from a trade beacon's cells (docs/design/comms-console.md). Both are
+		// put down near the goods and counted as powered, as the sim's own trade tests do, so no generator and wires are needed.
+		colony::Sim* Mutable = const_cast<colony::Sim*>(B->GetSim());
+		Mutable->trade().setRunning([](colony::Entity) { return true; });
+		const auto Place = [Mutable](const char* Def, colony::CellPos Near) -> bool
+		{
+			for (int32 Ring = 0; Ring <= 4; ++Ring)
+			{
+				for (int32 DY = -Ring; DY <= Ring; ++DY)
+				{
+					for (int32 DX = -Ring; DX <= Ring; ++DX)
+					{
+						if (FMath::Max(FMath::Abs(DX), FMath::Abs(DY)) == Ring &&
+							Mutable->things().spawn(Def, colony::CellPos{Near.x + DX, Near.y + DY, 0}) != colony::kNoEntity)
+						{
+							return true;
+						}
+					}
+				}
+			}
+			return false;
+		};
+		if (!Place("OrbitalTradeBeacon", colony::CellPos{Cell.x + 2, Cell.y + 7, 0}) || !Place("CommsConsole", colony::CellPos{Cell.x - 5, Cell.y + 7, 0}))
+		{
+			Fail(TEXT("trade_setup: no room for the comms console or the trade beacon"));
+			return;
+		}
+		B->StepOnce();
 		B->Submit(colony::StartVisitCommand{"FrayCompact", "Orbital", "BulkGoods", -1});
 		B->StepOnce();
 		for (const colony::VisitView& Visit : B->GetCurrentSnapshot().visits)

@@ -146,5 +146,19 @@ Pick a site on the world map (the World screen's Start here). The new game gets 
 which no start sent before, so playtests until now had no narrator events. Load a game lists
 `Saved/Saves/*.save`. Settings opens over it.
 
-Still to do: a better Factions window (relations, goodwill history), icons for the bar's right-hand
-buttons, real tile icons for every building, the learning helper's lessons.
+**Factions** (2026-11-20): one block per faction with its relation in colour, tech level, what it
+does (raids, trades, visits), "permanent enemy" where it is, and a goodwill bar from -100 to 100 filled
+from the middle with lines at the hostile (-75) and ally (75) marks (hover: the numbers and the daily
+drift). A faction that sends caravans has **Call for a caravan** (the comms console's
+`CommsCommand` "RequestCaravan", -19 goodwill) with a trader kind picker; it is greyed with the
+reason when the faction is no ally, was called in the last 4 days, a caravan is already coming, or
+there is no powered comms console. The best talker (highest price improvement) makes the call.
+
+**Tile pictures** (2026-11-20): a building's Build tile shows its own mesh (made of the best stuff in
+stock), seen from the south-west and above, taken once per def by a show-only scene capture on a stage
+4 km under the map (one picture a frame, 128 px). Unlit by default so it reads the same day and
+night; `Orders.TileIconsLit 1` lights it by the world instead, `Orders.TileIcons 0` goes back to the
+drawn footprints. Floors and orders keep their drawn icons.
+
+Still to do: goodwill history in the Factions window, icons for the bar's right-hand
+buttons, the learning helper's lessons.
