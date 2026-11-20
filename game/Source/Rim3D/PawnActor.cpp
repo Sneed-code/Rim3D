@@ -1957,8 +1957,8 @@ namespace
 	/** Share of the clip up to the moment the hands have the edge: the sim's time on the face plays up to here, its
 	 *  mantle (colony::kWallMantleFrom on) the rest. To be tuned by eye on the PC. */
 	constexpr float PawnWallClimbGrab = 0.45f;
-	/** Share of the clip where the body stands on the top (PC measure, #389 round 2): the rest is settling, not played. */
-	constexpr float PawnWallClimbEnd = 0.8f;
+	/** Share of the clip where the body stands on the top (PC measures, #389 rounds 2 and 3): the rest is settling, not played. */
+	constexpr float PawnWallClimbEnd = 0.68f;
 	/** The wall's height, cm: a level (the sim's colony::Map::kLevelHeightM). */
 	constexpr float PawnWallClimbHeightCm = 300.0f;
 	constexpr float PawnWallClimbBlend = 0.2f;
@@ -1999,14 +1999,14 @@ void ASimPawnActor::UpdateWallClimb(const USimSubsystem& Bridge, const colony::T
 		return;
 	}
 	// The clip's time follows the climb: going up, the face to the catch, then the pull over the top; going down, the
-	// same backwards. Eased on the face so the jump and the catch don't crawl.
+	// same backwards, evenly.
 	const float U = Now.wallClimbUp ? Now.climb : 1.0f - Now.climb;
 	const float Length = WallClimbClip->GetPlayLength();
 	float Share = 0.0f;
 	if (U < colony::kWallMantleFrom)
 	{
 		const float K = U / colony::kWallMantleFrom;
-		Share = PawnWallClimbGrab * FMath::Sin(K * HALF_PI);
+		Share = PawnWallClimbGrab * K;  // even: eased, the catch came early and the end of the face froze (#389 round 3)
 	}
 	else
 	{
