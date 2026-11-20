@@ -9,6 +9,9 @@
 #include "HAL/IConsoleManager.h"
 #include "Misc/Paths.h"
 #include "UnrealClient.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Engine/PointLight.h"
 
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
@@ -17,6 +20,7 @@
 #include "PawnSubsystem.h"
 #include "SeveredPieceActor.h"
 #include "SimSubsystem.h"
+#include "TerrainSubsystem.h"
 
 #include "ColonySim/Commands.h"
 #include "ColonySim/Health.h"
@@ -59,6 +63,11 @@ namespace
 		int32 PiecesAtRest = 0;
 		int32 BloodHitsAtStart = 0;
 		int32 CloseUpsTaken = 0;
+		// The close-ups clear the plants round the pieces and the corpse and bring a fill light along (else plants
+		// stood in front of the cut or shaded it black).
+		bool bCloseSetUp = false;
+		TArray<TWeakObjectPtr<UPrimitiveComponent>> CloseHidden;
+		TWeakObjectPtr<APointLight> CloseLight;
 	};
 
 	/** The real bodies with their clothes instead of the bare mannequins (the pawn actors are made again). */
@@ -477,6 +486,40 @@ void USmokeTestSubsystem::BuildHurtPhases()
 				}
 				Close.Sort([](const AActor& A, const AActor& B) { return A.GetName() < B.GetName(); });
 				Close.Add(ActorOf());
+				if (!State->bCloseSetUp)
+				{
+					State->bCloseSetUp = true;
+					const UTerrainSubsystem* Terrain = GetWorld()->GetSubsystem<UTerrainSubsystem>();
+					if (AActor* Ground = Terrain ? Terrain->GetTerrainActor() : nullptr)
+					{
+						TInlineComponentArray<UInstancedStaticMeshComponent*> Plants;
+						Ground->GetComponents(Plants);
+						for (UInstancedStaticMeshComponent* Kind : Plants)
+						{
+							for (const AActor* Near : Close)
+							{
+								if (Kind && Near && Kind->IsVisible() && Kind->GetInstancesOverlappingSphere(Near->GetActorLocation(), 160.0f, true).Num() > 0)
+								{
+									Kind->SetVisibility(false);
+									State->CloseHidden.Add(Kind);
+									break;
+								}
+							}
+						}
+					}
+					FActorSpawnParameters LightParams;
+					LightParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+					if (APointLight* Fill = GetWorld()->SpawnActor<APointLight>(APointLight::StaticClass(), FTransform::Identity, LightParams))
+					{
+						Fill->SetMobility(EComponentMobility::Movable);
+						Fill->PointLightComponent->SetIntensityUnits(ELightUnits::Candelas);
+						Fill->PointLightComponent->SetIntensity(600.0f);
+						Fill->PointLightComponent->SetAttenuationRadius(250.0f);
+						Fill->PointLightComponent->SetCastShadows(false);
+						State->CloseLight = Fill;
+					}
+					UE_LOG(LogTemp, Log, TEXT("Smoke hurt: close-ups hide %d plant groups and bring a fill light"), State->CloseHidden.Num());
+				}
 				// Each from two opposite sides (a head has a face on one of them).
 				const int32 Shot = FMath::FloorToInt(PhaseTime - 8.0f);
 				const int32 Which = Shot / 2;
@@ -505,11 +548,33 @@ void USmokeTestSubsystem::BuildHurtPhases()
 						Eye = P + Look * 40.0 + FVector(4.0, 3.0, 2.0);
 					}
 					ViewFrom(Eye, (P - Eye).Rotation());
+					if (APointLight* Fill = State->CloseLight.Get())
+					{
+						// Beside and above the camera, so the cut is lit from the viewer's side.
+						Fill->SetActorLocation(Eye + FVector(0.0, 0.0, 25.0));
+					}
 					if (State->CloseUpsTaken == Shot && PhaseTime - 8.0f - Shot > 0.5f)
 					{
 						++State->CloseUpsTaken;
 						FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke") / TEXT("hurt") / FString::Printf(TEXT("dismember_close%d%s.png"), Which, Shot % 2 == 0 ? TEXT("a") : TEXT("b")), false, false);
 					}
+				}
+				else if (Which >= Close.Num() && (State->CloseLight.IsValid() || !State->CloseHidden.IsEmpty()))
+				{
+					// All taken: the plants and the light as they were.
+					for (const TWeakObjectPtr<UPrimitiveComponent>& Hidden : State->CloseHidden)
+					{
+						if (UPrimitiveComponent* Kind = Hidden.Get())
+						{
+							Kind->SetVisibility(true);
+						}
+					}
+					State->CloseHidden.Reset();
+					if (APointLight* Fill = State->CloseLight.Get())
+					{
+						Fill->Destroy();
+					}
+					State->CloseLight.Reset();
 				}
 			}
 			if (!State->bKillSent && PhaseTime > 2.5f)
