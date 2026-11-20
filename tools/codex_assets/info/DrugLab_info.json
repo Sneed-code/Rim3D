@@ -1,0 +1,70 @@
+{
+ "name": "DrugLab",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -150.0,
+   -50.0,
+   0.0
+  ],
+  "max": [
+   150.0,
+   50.0,
+   162.0
+  ]
+ },
+ "sizeM": [
+  3.0,
+  1.0,
+  1.62
+ ],
+ "parts": {
+  "DrugLab": {
+   "boundsCm": {
+    "min": [
+     -150.0,
+     -50.0,
+     0.0
+    ],
+    "max": [
+     150.0,
+     50.0,
+     162.0
+    ]
+   },
+   "tris": 17958
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "DrugLab_0": {
+   "from": "DrugLab | painted metals and hardware",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  },
+  "DrugLab_1": {
+   "from": "DrugLab | borosilicate glass",
+   "maps": [
+    "baseColor"
+   ]
+  },
+  "DrugLab_2": {
+   "from": "DrugLab | reagent liquids",
+   "maps": [
+    "baseColor"
+   ]
+  },
+  "DrugLab_3": {
+   "from": "DrugLab | painted metals and hardware.001",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

@@ -1,0 +1,72 @@
+{
+ "name": "Molotov",
+ "kind": "item",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -4.76,
+   -4.07,
+   0.0
+  ],
+  "max": [
+   4.76,
+   4.07,
+   29.75
+  ]
+ },
+ "sizeM": [
+  0.095,
+  0.081,
+  0.298
+ ],
+ "parts": {
+  "Molotov": {
+   "boundsCm": {
+    "min": [
+     -4.76,
+     -4.07,
+     0.0
+    ],
+    "max": [
+     4.76,
+     4.07,
+     29.75
+    ]
+   },
+   "tris": 3988
+  }
+ },
+ "sockets": {
+  "FlameSocket": [
+   3.64,
+   1.24,
+   16.33
+  ]
+ },
+ "slots": {
+  "Molotov_0": {
+   "from": "Bottle_Glass",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  },
+  "Molotov_1": {
+   "from": "Salvaged_Paper_and_Textile",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  },
+  "Molotov_2": {
+   "from": "Fuel_Amber",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

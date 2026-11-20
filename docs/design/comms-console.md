@@ -34,4 +34,5 @@ when its cooldown ends. Both join `TradeSystem::hashState` only once a caravan h
 ## Not yet
 
 Military aid (31 goodwill, 24 h cooldown), other comms options, the negotiator walking to the console, a solar flare cutting it,
-unsafe weather blocking requests, beacon areas drawn in Unreal, and the trade window using `beaconHas` for ships (U19 follow-up).
+unsafe weather blocking requests, beacon areas drawn in Unreal (the caravan call itself is in the Factions window,
+`ui-layout.md`), and the trade window using `beaconHas` for ships (U19 follow-up).

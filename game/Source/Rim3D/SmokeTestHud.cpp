@@ -1,6 +1,6 @@
 // Smoke test `hud` (docs/design/ui-layout.md): the overseer's bottom tab bar opens every tab in turn on a Crashlanded colony,
 // then Build with its Structure tiles, the info window, the Outfits, Areas, Medical and Prisoners windows,
-// the main menu and Settings > Controls; one screenshot each, in the game, offscreen.
+// Factions (with the Fray Compact made an ally), the main menu and Settings > Controls; one screenshot each, in the game, offscreen.
 #include "SmokeTest.h"
 
 #include "Engine/Engine.h"
@@ -12,6 +12,7 @@
 #include "OverseerSubsystem.h"
 #include "PanelsSubsystem.h"
 #include "SimSubsystem.h"
+#include "TradePanelSubsystem.h"
 
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
@@ -221,10 +222,39 @@ void USmokeTestSubsystem::BuildHudPhases()
 		{
 			Fail(TEXT("hud_build_structure: no Level earth tile in Structure"));
 		}
+		if (Orders()->GetStats().TileIconsMade == 0)
+		{
+			Fail(TEXT("hud_build_structure: no tile picture was made from a building mesh"));
+		}
+		Notes.Add(FString::Printf(TEXT("hud_build_structure: %d tile pictures made"), Orders()->GetStats().TileIconsMade));
 		Orders()->CancelTool();
 		Hud()->CloseTabs();
 	};
 	Phases.Add(MoveTemp(Structure));
+
+	// 3b. Build > Production with the tile pictures lit by the world (Orders.TileIconsLit 1), to compare with the unlit ones.
+	FPhase Lit;
+	Lit.Name = TEXT("hud_build_lit");
+	Lit.WarmupSeconds = 3.0f;
+	Lit.MeasureSeconds = 0.5f;
+	Lit.Setup = [=, this]()
+	{
+		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("Orders.TileIconsLit")))
+		{
+			Var->Set(1, ECVF_SetByCode);
+		}
+		Hud()->OpenTab(EHudTab::Build);
+		Orders()->SetOpenCategory(TEXT("Production"));
+	};
+	Lit.Verify = [=, this]()
+	{
+		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("Orders.TileIconsLit")))
+		{
+			Var->Set(0, ECVF_SetByCode);
+		}
+		Hud()->CloseTabs();
+	};
+	Phases.Add(MoveTemp(Lit));
 
 	// 4. The info window of the first colonist ("i" on the selected panel).
 	FPhase Info;
@@ -317,7 +347,48 @@ void USmokeTestSubsystem::BuildHudPhases()
 		Phases.Add(MoveTemp(Phase));
 	}
 
-	// 6. The main menu's New colony page (over the running colony; nothing is started).
+	// 6. Factions, with the Fray Compact pushed to ally so its caravan call shows (greyed: there is no comms console).
+	FPhase Factions;
+	Factions.Name = TEXT("hud_factions");
+	Factions.WarmupSeconds = 1.5f;
+	Factions.MeasureSeconds = 0.5f;
+	Factions.Setup = [=, this]()
+	{
+		UTradePanelSubsystem* Trade = GetWorld()->GetSubsystem<UTradePanelSubsystem>();
+		if (!Trade)
+		{
+			Fail(TEXT("hud_factions: UTradePanelSubsystem did not start"));
+			return;
+		}
+		State->TabFramesBefore = Trade->GetStats().FactionFrames;
+		Bridge()->Submit(colony::AdjustGoodwillCommand{"FrayCompact", 100.0f});
+		Bridge()->StepOnce();
+		Trade->SetFactionsOpen(true);
+	};
+	Factions.Verify = [=, this]()
+	{
+		UTradePanelSubsystem* Trade = GetWorld()->GetSubsystem<UTradePanelSubsystem>();
+		if (!Trade || Trade->GetStats().FactionFrames == State->TabFramesBefore)
+		{
+			Fail(TEXT("hud_factions: the Factions window was never drawn"));
+		}
+		bool bAlly = false;
+		for (const colony::GoodwillView& Line : Bridge()->GetCurrentSnapshot().goodwill)
+		{
+			bAlly = bAlly || (Line.faction == "FrayCompact" && Line.relation == 2);
+		}
+		if (!bAlly)
+		{
+			Fail(TEXT("hud_factions: the Fray Compact did not become an ally"));
+		}
+		if (Trade)
+		{
+			Trade->SetFactionsOpen(false);
+		}
+	};
+	Phases.Add(MoveTemp(Factions));
+
+	// 7. The main menu's New colony page (over the running colony; nothing is started).
 	FPhase Menu;
 	Menu.Name = TEXT("hud_main_menu");
 	Menu.WarmupSeconds = 1.5f;
@@ -337,7 +408,7 @@ void USmokeTestSubsystem::BuildHudPhases()
 	};
 	Phases.Add(MoveTemp(Menu));
 
-	// 7. Settings, the Controls page with the key rebind list.
+	// 8. Settings, the Controls page with the key rebind list.
 	FPhase Settings;
 	Settings.Name = TEXT("hud_settings_controls");
 	Settings.WarmupSeconds = 1.5f;

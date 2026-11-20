@@ -1,0 +1,57 @@
+{
+ "name": "FloodLight",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -47.0,
+   -47.0,
+   0.0
+  ],
+  "max": [
+   47.0,
+   47.0,
+   237.84
+  ]
+ },
+ "sizeM": [
+  0.94,
+  0.94,
+  2.378
+ ],
+ "parts": {
+  "FloodLight": {
+   "boundsCm": {
+    "min": [
+     -47.0,
+     -47.0,
+     0.0
+    ],
+    "max": [
+     47.0,
+     47.0,
+     237.84
+    ]
+   },
+   "tris": 7970
+  }
+ },
+ "sockets": {
+  "Light": [
+   0.0,
+   11.47,
+   222.81
+  ]
+ },
+ "slots": {
+  "FloodLight": {
+   "from": "FloodLight | PBR",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

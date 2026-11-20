@@ -1,0 +1,51 @@
+{
+ "name": "LongRangeMineralScanner",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -147.71,
+   -146.31,
+   0.0
+  ],
+  "max": [
+   147.71,
+   146.31,
+   309.15
+  ]
+ },
+ "sizeM": [
+  2.954,
+  2.926,
+  3.091
+ ],
+ "parts": {
+  "LongRangeMineralScanner": {
+   "boundsCm": {
+    "min": [
+     -147.71,
+     -146.31,
+     0.0
+    ],
+    "max": [
+     147.71,
+     146.31,
+     309.15
+    ]
+   },
+   "tris": 21462
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "LongRangeMineralScanner": {
+   "from": "Scanner | painted steel, alloys and instruments",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

@@ -1,0 +1,64 @@
+{
+ "name": "Hive",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -45.5,
+   -48.03,
+   0.0
+  ],
+  "max": [
+   45.5,
+   48.03,
+   160.0
+  ]
+ },
+ "sizeM": [
+  0.91,
+  0.961,
+  1.6
+ ],
+ "parts": {
+  "Hive": {
+   "boundsCm": {
+    "min": [
+     -45.5,
+     -48.03,
+     0.0
+    ],
+    "max": [
+     45.5,
+     48.03,
+     160.0
+    ]
+   },
+   "tris": 12932
+  }
+ },
+ "sockets": {
+  "Mouth": [
+   -0.23,
+   27.76,
+   57.8
+  ]
+ },
+ "slots": {
+  "Hive_0": {
+   "from": "Hive | Earth, chitin and resin",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  },
+  "Hive_1": {
+   "from": "Hive | Translucent egg membrane",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

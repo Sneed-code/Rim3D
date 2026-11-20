@@ -1,0 +1,57 @@
+{
+ "name": "HiTechResearchBench",
+ "kind": "building",
+ "turned": "x-90",
+ "boundsCm": {
+  "min": [
+   -250.0,
+   -100.0,
+   -0.0
+  ],
+  "max": [
+   250.0,
+   100.0,
+   220.55
+  ]
+ },
+ "sizeM": [
+  5.0,
+  2.0,
+  2.205
+ ],
+ "parts": {
+  "HiTechResearchBench": {
+   "boundsCm": {
+    "min": [
+     -250.0,
+     -100.0,
+     -0.0
+    ],
+    "max": [
+     250.0,
+     100.0,
+     220.55
+    ]
+   },
+   "tris": 23934
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "HiTechResearchBench_0": {
+   "from": "Bench - painted alloy, steel & resin",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  },
+  "HiTechResearchBench_1": {
+   "from": "Bench - inspection glass",
+   "maps": [
+    "baseColor"
+   ]
+  }
+ }
+}

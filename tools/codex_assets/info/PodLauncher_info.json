@@ -1,0 +1,50 @@
+{
+ "name": "PodLauncher",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -75.6,
+   -100.0,
+   0.0
+  ],
+  "max": [
+   75.6,
+   100.0,
+   220.85
+  ]
+ },
+ "sizeM": [
+  1.512,
+  2.0,
+  2.208
+ ],
+ "parts": {
+  "PodLauncher": {
+   "boundsCm": {
+    "min": [
+     -75.6,
+     -100.0,
+     0.0
+    ],
+    "max": [
+     75.6,
+     100.0,
+     220.85
+    ]
+   },
+   "tris": 15418
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "PodLauncher": {
+   "from": "PodLauncher Atlas",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

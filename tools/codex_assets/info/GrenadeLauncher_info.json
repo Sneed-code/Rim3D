@@ -1,0 +1,50 @@
+{
+ "name": "GrenadeLauncher",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -37.1,
+   -3.9,
+   -11.19
+  ],
+  "max": [
+   41.79,
+   4.1,
+   23.5
+  ]
+ },
+ "sizeM": [
+  0.789,
+  0.08,
+  0.347
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -37.1,
+     -3.9,
+     -11.19
+    ],
+    "max": [
+     41.79,
+     4.1,
+     23.5
+    ]
+   },
+   "tris": 14946
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "GrenadeLauncher": {
+   "from": "GrenadeLauncher | frontier finish",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

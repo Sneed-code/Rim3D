@@ -1,0 +1,56 @@
+{
+ "name": "MoisturePump",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -100.0,
+   -100.0,
+   0.0
+  ],
+  "max": [
+   100.0,
+   100.0,
+   139.68
+  ]
+ },
+ "sizeM": [
+  2.0,
+  2.0,
+  1.397
+ ],
+ "parts": {
+  "MoisturePump": {
+   "boundsCm": {
+    "min": [
+     -100.0,
+     -100.0,
+     0.0
+    ],
+    "max": [
+     100.0,
+     100.0,
+     139.68
+    ]
+   },
+   "tris": 13775
+  }
+ },
+ "sockets": {
+  "Water": [
+   75.8,
+   90.3,
+   41.1
+  ]
+ },
+ "slots": {
+  "MoisturePump": {
+   "from": "MoisturePump | field-worn industrial",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}
