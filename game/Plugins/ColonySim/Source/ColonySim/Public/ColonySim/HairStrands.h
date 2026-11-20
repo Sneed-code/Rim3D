@@ -101,6 +101,15 @@ COLONY_API float hairDeepestPenetration(const std::vector<std::vector<HairVec>>&
 // joined to the next unless they are more than 100 degrees apart (so never across the face).
 COLONY_API std::vector<std::pair<int, int>> hairSheetNeighbours(const std::vector<HairVec>& roots, HairVec head, HairVec up);
 
+// Long hair swept off the stock while a long gun is aimed (docs/design/hair-physics.md, "Aiming"): as a shooter with
+// long hair puts it over the other shoulder, every strand's styled shape is turned towards `away` (unit: the side away
+// from the stock and a little back) by up to `angleDeg` times `amount` (0 at the ready .. 1 aimed). Strands rooted on the
+// stock's side (`stockSide`, unit, from `head`) turn fully, those down the middle of the back by 0.7, the far side's by
+// 0.4; the first segment, on the scalp, by half. Roots and every segment's length are kept. Only the goals change: the
+// physics carries the hair there with its usual lag, its collisions and its rest on the body.
+COLONY_API void sweepHairGoals(std::vector<std::vector<HairVec>>& goals, HairVec head, HairVec stockSide, HairVec away, float amount,
+                               float angleDeg = 35.0f);
+
 // The body's collision shapes for hair, fitted to one skeleton in its reference pose (component space, z up).
 enum class HairBone : uint8_t { Head, Neck, SpineTop, SpineMid, ClavicleL, ClavicleR, UpperArmL, UpperArmR };
 

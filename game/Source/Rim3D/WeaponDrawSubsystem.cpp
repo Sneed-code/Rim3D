@@ -774,6 +774,7 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 	FTransform HandsWeapon;
 	float HandsSize = Gear.size;
 	bool bAnyPinned = false;
+	FMakeHumanHeldGun HairGun;  // a gun held at its place, for long hair (it rests on the gun; aimed, it goes over the other shoulder)
 	for (int32 Slot = 0; Slot < GWeaponDisplaySlots; ++Slot)
 	{
 		FDisplayed& Shown = Pawn.Slots[Slot];
@@ -847,6 +848,21 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 			}
 			bPinned = PinWeapon(Actor, View, Pawn, Hold, Points, Size, static_cast<float>(Place), bControlled, InHand, WeaponInHand, WeaponPlaced);
 			bAnyPinned = bAnyPinned || bPinned;
+			if (bPinned && Hold.grip == colony::HoldGrip::Gun && Hold.hasOff && Points.bOff)
+			{
+				HairGun.bOn = true;
+				HairGun.bRightHand = Hold.hand != colony::HoldHand::Left;
+				HairGun.GunInHand = WeaponInHand;
+				HairGun.Rear = Points.Stock;
+				HairGun.Front = Art ? Art->Muzzle : Points.Off + FVector(25.0, 0.0, 0.0);
+				const UStaticMeshComponent* GunMesh = Shown.Component.Get();
+				if (Art && GunMesh && GunMesh->GetStaticMesh())
+				{
+					// As thick as the gun's body is wide (its height takes in the magazine and the grip).
+					HairGun.Radius = FMath::Clamp(static_cast<float>(GunMesh->GetStaticMesh()->GetBoundingBox().GetExtent().Y), 2.0f, 6.0f);
+				}
+				HairGun.Aim = Pawn.AimBlend;
+			}
 		}
 		FTransform Frame;
 		const bool bInHandFrame = bHands && bHold && (bPinned || HoldDraw::HandFrame(Mesh, Hold, Frame));
@@ -918,6 +934,10 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		}
 	}
 
+	if (UMakeHumanAnimInstance* HairAnim = Mesh ? Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()) : nullptr)
+	{
+		HairAnim->SetHeldGun(HairGun);
+	}
 	// Hands let go once when the weapon is no longer held at a place (holstered, crouched, lying, downed).
 	if (!bAnyPinned && Pawn.bPinned)
 	{

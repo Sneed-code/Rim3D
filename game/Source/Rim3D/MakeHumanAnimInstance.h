@@ -90,6 +90,19 @@ struct FMakeHumanTailNode : public FAnimNode_SkeletalControlBase
 	virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override;
 };
 
+/** A gun held up in both hands, for long hair (docs/design/hair-physics.md, "Aiming"): the hair rests on the gun and
+ *  the forearms instead of passing through them, and while it is aimed the hair goes over the other shoulder. */
+struct FMakeHumanHeldGun
+{
+	bool bOn = false;
+	bool bRightHand = true;                     // the hand on the grip (its shoulder takes the stock)
+	FTransform GunInHand;                       // the gun, with its size, in the main hand bone's space (world cm)
+	FVector Rear = FVector(-25.0, 0.0, 2.0);    // the butt and the muzzle in the gun's own frame (cm, before its size)
+	FVector Front = FVector(45.0, 0.0, 3.0);
+	float Radius = 3.5f;                        // cm, before its size
+	float Aim = 0.0f;                           // 0 at the ready .. 1 aimed
+};
+
 /**
  * Long hair (docs/design/hair-physics.md): the long, bob and braid styles' chains (mh_common.add_hair_bones: hair_c1_1 ...
  * under the head) and a ponytail's (ponytail1 ...), as strands of colony::HairStrands. Each point falls under gravity,
@@ -114,6 +127,15 @@ struct FMakeHumanHairNode : public FAnimNode_SkeletalControlBase
 
 	TArray<TArray<FBoneReference>> Chains;  // the hair_c chains (one sheet) first, then a ponytail's
 	TArray<FShape> Shapes;
+	/** A held gun and the forearms holding it (capsules only while a gun is held), and the sweep off its stock. */
+	FMakeHumanHeldGun Gun;
+	FBoneReference HeadBone;
+	FBoneReference Hands[2];                // 0 left, 1 right
+	FBoneReference LowerArms[2];
+	float ForearmRadius = 4.0f;             // cm, component space
+	FVector Right = FVector(-1.0, 0.0, 0.0);   // the body's right and forward in component space (the arm solver's)
+	FVector Forward = FVector(0.0, 1.0, 0.0);
+	float SweepDegrees = 35.0f;             // Pawns.HairAimSweep
 	float DeltaTime = 0.0f;
 	int32 Mode = 2;                         // 2 full simulation, 1 pushed out of the body only, 0 as animated
 	colony::HairStrands Strands;
@@ -312,6 +334,11 @@ public:
 	 *  whatever the hand was given before; Alpha 0 lets it go. */
 	void SetHandGoal(bool bRight, const FMakeHumanHandGoal& Goal) { HandGoals[bRight ? 1 : 0] = Goal; }
 	const FMakeHumanHandGoal& GetHandGoal(bool bRight) const { return HandGoals[bRight ? 1 : 0]; }
+	/** The gun held up in both hands (bOn false: none), for long hair: it rests on the gun and the forearms, and goes over
+	 *  the other shoulder while aimed (docs/design/hair-physics.md, "Aiming"). */
+	void SetHeldGun(const FMakeHumanHeldGun& InGun) { HeldGun = InGun; }
+	const FMakeHumanHeldGun& GetHeldGun() const { return HeldGun; }
+	FMakeHumanHeldGun HeldGun;
 	/** The body's up, forward and right in world space, used instead of the owner actor's (the first-person arms face
 	 *  the view, not their holder); off with bOn false. */
 	void SetBodyAxesOverride(bool bOn, const FVector& InUp = FVector::UpVector, const FVector& InForward = FVector::ForwardVector,
