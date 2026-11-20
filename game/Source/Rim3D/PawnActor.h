@@ -94,6 +94,11 @@ public:
 	 *  removed. `Key` is USimPawnSubsystem::ApparelKey of the snapshot. Mannequins just remember the key. */
 	void ApplyApparel(USimPawnSubsystem& Pawns, const FSimPawnApparel& Wanted, uint64 Key);
 	bool HasApparel() const { return bApparelApplied; }
+	/** MakeHuman bodies: puts the body's slider and face morphs on its garments when they changed (cheap otherwise; the
+	 *  pawn subsystem calls it every frame). */
+	void SyncGarmentMorphs();
+	/** The garment names each worn piece is drawn as on a MakeHuman body (one cut of its `visual.cuts`), by item; empty on a MetaHuman. */
+	const TMap<uint32, FString>& GetGarmentCuts() const { return GarmentCuts; }
 	uint64 GetApparelKey() const { return ApparelKey; }
 	const FSimPawnApparel& GetApparel() const { return Apparel; }
 	/** The meshes of the worn pieces now (skinned garments and head props), and the item each belongs to. */
@@ -284,6 +289,13 @@ private:
 	void DestroyWorn();
 	/** Colour, wear and morphs of a garment mesh. */
 	void StyleWornMesh(UMeshComponent* Mesh, const FSimWornPiece& Piece);
+	/** ApplyApparel for a MakeHuman body: each piece's cut as garments that follow the body's pose and morphs. */
+	void ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnApparel& Wanted);
+	void StyleGarment(UMeshComponent* Mesh, const FSimWornPiece& Piece) const;
+	/** The body's skin-under-clothes bits (custom primitive data 30/31): skin a worn garment covers is cut away. */
+	void SetMakeHumanCoverBits(uint32 Bits);
+	/** Hides (or shows again) the MakeHuman body's scalp hair under a covering hat or helmet. */
+	void SetMakeHumanHairCovered(bool bCovered);
 	void UpdateHairVisibility();
 	/** Grooms show at full detail, minus hair under a covering hat and grooms with nothing to draw (bald, no beard). */
 	void RefreshGroomVisibility();
@@ -351,6 +363,10 @@ private:
 	TObjectPtr<USkeletalMeshComponent> DefaultShoes;
 
 	FSimPawnApparel Apparel;
+	TMap<uint32, FString> GarmentCuts;
+	uint32 GarmentMorphHash = 0;
+	/** The body's hair sections hidden under a hat (shown again when it comes off). */
+	TArray<int32> CoveredHairSections;
 	uint64 ApparelKey = 0;
 	bool bApparelApplied = false;
 	bool bBareLayerTried = false;

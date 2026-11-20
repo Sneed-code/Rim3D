@@ -47,6 +47,39 @@ primitive data input, so no material instance is made per pawn. Index 0 to 2 is 
   and from armor absorbing damage (C15), so cloth that has been shot looks it.
 - **Destroyed**: the sim takes the piece off the list; its meshes go the same frame.
 
+## MakeHuman bodies (2026-11-20)
+
+The MakeHuman people (the creator's women and men, `docs/design/makehuman.md`) wear real clothes: free MakeHuman
+community garments (`.mhclo`, CC0 and CC-BY, list and authors in `assets/makehuman_garments.json`) fitted to the base
+body by MPFB.
+
+- **Making them**: `python tools/makehuman/mh_garments.py` (it runs Blender once per base) fits every garment to the base,
+  builds the same slider variants as the body so each garment gets **the same morph targets** (a fat, thin, tall or
+  muscled body moves its clothes with it), and writes `game/Saved/MakeHuman/<Base>/Garments/<G>/<G>.fbx` plus
+  `cover.png`/`cover.json`. `UnrealEditor-Cmd ... -run=MakeHumanArt -Garments` imports them as `SK_MHG_<Base>_<G>` on the
+  body's skeleton with one `M_MH_Garment` instance per slot.
+- **Women's and men's cuts**: a garment with `bases` is made for that base only (blouse for women; polo and untucked
+  shirt for men), and a few have a per-base `.mhclo` (tees, tank, trousers, jeans, uniform jacket, tactical vest).
+- **Cuts**: a def's `visual.cuts` lists the looks a piece can have; `+` joins garments drawn together
+  (`"VikingTunic+VikingPants"`). Each item picks one by its id among the cuts its wearer's base has, so the same
+  T-shirt always looks the same and a colony in one fabric still looks varied. `check_defs.py` checks the names.
+- **Colour is a look, not the stuff** (sneed 2026-11-20): a made-of-stuff garment takes one of 16 clothing colours
+  (navy, olive, khaki, greys, browns, denim, maroon...) picked by its item id, over the garment's own shading. The stuff
+  only changes the numbers. Gear without a stuff (flak) keeps its own colours. A dye or recolour choice is in the backlog.
+- **Worn look and wet**: `M_MH_Garment` keeps the torn holes and darkening from the wear (custom data 3) and the
+  wetness of the wearer (12).
+- **Following the body**: each garment is a skinned mesh component on the body's leader pose; the body's morph weights
+  are copied onto it when they change.
+- **Hats** hide the scalp hair sections of the body while worn (`hidesHair`).
+
+### Skin under clothes
+
+Skin poking through tight clothes when the body bends is cut away instead of pushed in. `mh_garments.py` casts a ray
+along each body normal and marks the faces a garment covers within 6 cm; each garment that covers 40 faces or more gets
+one bit (up to 32) in a per-base cover texture on the body's UVs (`T_MHG_<Base>_Cover`, 32 bits in RGBA8, nearest
+filtering). The garment keeps its bit as `UGarmentCoverData`. While worn, the pawn sets the bits on the body (custom
+data 30 low 16, 31 high 16) and the skin material (masked) clips the skin where a worn bit is set.
+
 ## Cost
 
 12 pawns with 3 pieces each: 4 ms game thread at 888 x 500, 2.5 to 4 ms GPU. 100 pawns in a shirt and trousers

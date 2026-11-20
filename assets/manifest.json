@@ -206,6 +206,15 @@
       "installedTo": "assets/raw/codex/<Name>/ (not in Git), imported to /Game/Rim3D/Generated/Buildings and /Game/Rim3D/Generated/Guns by the GunArt commandlet",
       "usedFor": "docs/design/codex-models.md: 13 buildings/items (visual.mesh) and the grenade and triple rocket launchers (assets/guns.json)",
       "reinstall": "blender -b --factory-startup -P tools/codex_prep.py -- <Rim3D_Codex folder>, then UnrealEditor-Cmd game/Rim3D.uproject -run=GunArt -List=assets/codex_art.json -unattended -nosplash -nullrhi, then -run=GunArt (guns.json)"
+    },
+    {
+      "name": "MakeHuman community clothes (28 garments from 16 asset packs)",
+      "source": "https://static.makehumancommunity.org/assets/assetpacks/index.html (zips on files.makehumancommunity.org)",
+      "licence": "CC0 and CC-BY 4.0 (per garment author and licence in assets/makehuman_garments.json; credit the CC-BY authors)",
+      "version": "asset packs as downloaded 2026-11-20",
+      "installedTo": "Documents/makehuman/v1py3/data/clothes on sneed's PC (not in Git); fitted and exported by tools/makehuman/mh_garments.py to game/Saved/MakeHuman/<Base>/Garments",
+      "usedFor": "docs/design/clothes-draw.md 'MakeHuman bodies': clothes on the MakeHuman people (visual.cuts)",
+      "reinstall": "download the packs listed in assets/makehuman_garments.json into the MakeHuman data folder, python tools/makehuman/mh_garments.py, then UnrealEditor-Cmd game/Rim3D.uproject -run=MakeHumanArt -Garments -unattended -nosplash"
     }
   ]
 }

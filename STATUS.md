@@ -2,6 +2,17 @@
 
 Updated 2026-11-20.
 
+Clothes on MakeHuman people (sneed, 2026-11-20; tools and Unreal, `docs/design/clothes-draw.md` "MakeHuman bodies"):
+the MakeHuman bodies wore nothing. Now **28 free MakeHuman community garments** (CC0/CC-BY, `assets/makehuman_garments.json`:
+tees, polo, tank, shirts, blouse, sweaters, cargo pants, jeans, trousers, hooded and uniform jackets, cardigan, winter
+coat, viking tunic and trousers, knit hats, fishing hat, M1 and KZ helmets, tactical vest) are fitted to both bodies with
+**the same slider morphs** so they fit every body shape, women's cuts only on women and men's only on men. Defs list
+their **cuts** (`visual.cuts`); each item picks one, and its **colour is a random clothing colour**, not its fabric
+(sneed). Wear holes and wetness carry over; **skin under clothes is cut away** so it cannot poke through; hats hide
+hair. Duster, cowboy hat, leather jacket and the armour wait for Codex after sneed's go (stand-ins for now). **Needs the
+PC: `mh_garments.py`, compile, `-run=MakeHumanArt -Garments`, creator smoke with `-CreatorDressed` for pictures.** The
+colony's MetaHuman pawns are unchanged.
+
 Buildings crack and come down (sneed, 2026-11-20; sim and Unreal, `docs/design/destruction.md`): every building already
 had hit points that bullets, blasts, fire and sappers take away, but at 0 it just vanished. Now a building **wrecked by
 damage leaves rubble** (1 to 3 layers on its footprint, cleaned like filth) and **a quarter of its materials** (RimWorld's
@@ -18,7 +29,7 @@ undersides dry; **nothing under a roof or upper floor gets wet** (a per-cell cov
 wet and its inside dry, and the floor indoors stays dry); **people** soak in about five game minutes outdoors in rain (at
 once swimming) and dry in about forty under a roof (skin, hair and clothes). New `UWetnessSubsystem` and
 `-run=WetLook` (makes `MPC_Weather` and `T_WeatherCover` and adds the wet look to the generated materials). Smoke test
-`sky_rain` checks it. PC compile 2026-11-20: clean, `sky_rain` passes, people get wet; but plain colour walls stayed dry, a roofed table got wet and people's materials took the weather. Fixed: people's materials take the wearer's wetness (older wraps redone), plain colour buildings use our own `M_WetSolid`, the roof cover is resent if the texture is rebuilt and follows the world origin, `Wet.Dump` logs the state. **Needs a PC re-run: compile, `-run=WetLook`, the house pictures again.**
+`sky_rain` checks it. PC compile 2026-11-20: clean, `sky_rain` passes; round 2 fixes (people's materials, `M_WetSolid`, roof cover) passed on the PC and merged (#404). Needs `-run=WetLook` once per PC build.
 
 Buttons for animals, pens, prisoners and slaves (2026-11-20; Unreal UI on the new overseer screens, `docs/design/ui-layout.md`): **Prisoners screen** gets the Enslave and Reduce will modes (with a tip for every mode), each prisoner's will next to its resistance, and a **Slaves** list with a suppression bar (red under a third) and Emancipate / Release buttons. **Animals tab** gets a breeding tick, "with young" and milk / wool fullness, the animal bed it sleeps in, "Release to the wild" on right click, Pen or Zone in the zone column, and a **Zones and pens** list with a breeding tick per zone. **Build > Zone > Animal zone** paints animal zones at last (they show as tan rings; Remove zone takes them off too), and **Build > Orders** has Tame, Hunt and Slaughter drag tools. Fences, gates and animal beds were already on the Structure and Furniture tabs. Sim: the snapshot now carries `breedingOff`, `animalBed` and the zone's `breedingOff`. The `hud` smoke now makes a tame cow, a prisoner and a slave so their rows get pictured. PC compile 2026-11-20: build, `orders_world` and `hud` pass. **Next: PC pictures of the real rows.**
 

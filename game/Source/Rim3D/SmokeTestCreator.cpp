@@ -964,7 +964,8 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			Person.Looks.Skin = FLinearColor(Person.Skin[0], Person.Skin[1], Person.Skin[2]);
 			CreatorSetGender(Person, Person.bFemale, *Pawns);
 			State->People.Add(Person);
-			for (const colony::Entity Item : Sim->apparel().worn(Person.Thing))
+			// -CreatorDressed keeps the start's clothes on (MakeHuman garments, docs/design/clothes-draw.md); otherwise bare skin.
+			for (const colony::Entity Item : FParse::Param(FCommandLine::Get(), TEXT("CreatorDressed")) ? std::vector<colony::Entity>() : Sim->apparel().worn(Person.Thing))
 			{
 				std::string Error;
 				Sim->apparel().takeOff(Person.Thing, Item, Error);
