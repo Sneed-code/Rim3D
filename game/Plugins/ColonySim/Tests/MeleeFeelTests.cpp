@@ -228,6 +228,32 @@ TEST_CASE("Flicks: right and left switch to the nearest enemy on that side of th
     CHECK(sim->melee().focusOf(hero) == minusY);
 }
 
+TEST_CASE("Flicks: with one other enemy left, on the other side, a flick still switches to it, and Tab does too") {
+    // PC gun range 2026-11-20: "flick from 1048614 to 1048614 (DID NOT SWITCH), 1 living targets besides the one held".
+    auto sim = feelTestSim(318);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Longsword");
+    const Entity ahead = feelTestPawn(*sim, 34.5f, 30.5f);
+    const Entity minusY = feelTestPawn(*sim, 34.0f, 27.5f);  // to the left
+    for (const Entity e : {ahead, minusY}) {
+        sim->submit(SetFactionCommand{e, 2});
+        sim->submit(SetFightResponseCommand{e, FightResponse::Flee});
+    }
+    sim->submit(FocusCommand{hero, ahead, FocusMode::Set});
+    sim->step();
+    sim->submit(FocusCommand{hero, kNoEntity, FocusMode::Right, 1.0f, 0.0f});
+    sim->step();
+    CHECK(sim->melee().focusOf(hero) == minusY);
+    sim->submit(FocusCommand{hero, kNoEntity, FocusMode::Right, 1.0f, 0.0f});
+    sim->step();
+    CHECK(sim->melee().focusOf(hero) == ahead);
+    sim->submit(FocusCommand{hero, kNoEntity, FocusMode::Next, 1.0f, 0.0f});
+    sim->step();
+    CHECK(sim->melee().focusOf(hero) == minusY);
+    sim->submit(FocusCommand{hero, kNoEntity, FocusMode::Next, 1.0f, 0.0f});
+    sim->step();
+    CHECK(sim->melee().focusOf(hero) == ahead);
+}
+
 TEST_CASE("Swing speed: the club swings twice as fast, other melee weapons half again as fast (sneed 2026-11-19)") {
     const int club = feelTestSwingSteps("Melee_Club");        // RimWorld 2 s, now 1 s
     const int gladius = feelTestSwingSteps("Melee_Gladius");  // RimWorld 2 s, now 1.33 s

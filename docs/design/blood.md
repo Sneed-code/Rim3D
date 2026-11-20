@@ -117,11 +117,15 @@ slanted drops a rounded body with a short tail, pools many melted lobes with dro
 spines with beads read as a cartoon starburst or a virus.
 Ground and wall splats (PC look, 2026-11-20): the shared colour keeps a little green and blue so wounds on shaded faces
 are not black, and on sunlit ground that read as flat pink paint, so ground and wall decals take `WorldTint`
-(Blood.GroundShade 0.6: red x0.6, green and blue x0.33), deep red wet and dark brown dry. They are drawn 1.6x
-(Blood.SplatScale), since the round shapes fill less of their square and read as specks from 10-20 m. The sim's filth
+(Blood.GroundShade 0.6: red x0.6, green and blue x0.33), deep red wet and dark brown dry. They are drawn 1.9x
+(Blood.SplatScale; on the command line `-BloodSplatScale=2`, since a value set through `-ini` stayed "deferred"; the log
+prints both values at start), since the round shapes fill less of their square and read as specks from 10-20 m. The sim's filth
 stains keep their 1 m cell size. The pool under a bleeding body spreads faster (3-7 cm/s at first) and grows to a
 half size of 35-90 cm by blood loss, about a metre across at most, so it shows round a body lying on it (second PC look,
 2026-11-20: at 26-52 cm it hid under the body and nothing read from 12 m).
+A downed body that crawls leaves a smeared trail (a smear decal every 30 cm of crawl), and once it is more than
+60 cm past its pool's edge the old pool stops growing and a new one starts under it (third PC look, 2026-11-20: she
+crawled 2 m off her pool, and from 12 m only that patch showed).
 
 ## Assets
 

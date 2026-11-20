@@ -118,6 +118,18 @@ namespace
 	constexpr float PawnCrawlDefaultSpeed = 40.0f;
 	// Slower than this (cm/s) a crawling pawn lies still (and keeps facing the way it faced).
 	constexpr float PawnCrawlStill = 4.0f;
+	/** The player's body when this pawn is the colonist it drives, aiming a gun (not rolling, climbing or down). */
+	const AProtagonistPawn* PawnAimingPlayer(const UWorld* World, colony::Entity Thing, const colony::ThingView& View)
+	{
+		const UProtagonistSubsystem* Protagonist = World ? World->GetSubsystem<UProtagonistSubsystem>() : nullptr;
+		if (!Protagonist || !Protagonist->IsDirectMode() || Protagonist->GetControlled() != Thing || View.rollPhase != 0 ||
+			View.downed || View.climb > 0.0f)
+		{
+			return nullptr;
+		}
+		const AProtagonistPawn* Player = Protagonist->GetBody();
+		return Player && Player->GetAimBlend() > 0.01f && Player->HasGunDrawn() && !Player->IsClimbing() ? Player : nullptr;
+	}
 }
 
 ASimPawnActor::ASimPawnActor()
@@ -328,6 +340,14 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		// A clip the sim moves the body along plays facing the way the sim has the body face, not the way it is
 		// thrown: a stagger back must not turn the body round to face its own push (docs/design/body-motion.md).
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		bHoldFacing = true;
+	}
+	else if (const AProtagonistPawn* Aimer = PawnAimingPlayer(GetWorld(), Thing, Now))
+	{
+		// The player's colonist aiming a gun: the body turns with the view and strafes, as in any over-the-shoulder
+		// shooter (PC run 11: standing still it kept its old facing and the rifle pointed off to the side of the view).
+		const float Wanted = Aimer->GetYaw();
 		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}

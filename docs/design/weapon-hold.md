@@ -118,7 +118,8 @@ round, one system for every weapon, both views:
    shoulder pocket**. A weapon def can override any place under `hold.places`. Places blend over a quarter second.
 2. **Both hands are pinned to the weapon's grips** (`HoldDraw::PinHands` / `ApplyPinned`): the main hand on `main`,
    the other on `off` turned by `offTurn` (a rifle's palm up under the fore-end), or for one-handed guns on `support`
-   (the other hand cupping the grip, a two-handed pistol hold).
+   (the other hand cupping the grip, a two-handed pistol hold; `support` is measured from the main grip, so it follows
+   wherever a pistol's grip point sits).
 3. **Swings and full-body clips free the main hand** (third person: the clip moves the arm and the weapon stays in the
    hand; the off hand follows it). First person melee swings move the *weapon* along an arc (windup, strike, back to
    ready, timed by the sim's clip) and the hands follow. A third-person swing with no clip playing on the body moves
@@ -157,7 +158,7 @@ sim's plain C++ `colony::arm` (`ArmPose.h`), so it is unit tested:
   the shoulder-wrist line (up to 100 degrees from its natural down-and-out) to where the forearm lets the wrist take
   that turn inside its limits, as a rifleman lifts the trigger arm's elbow out to the side. A swing costs a little, an
   elbow over the shoulder or in across the chest costs more, and a change from last frame's swing costs a little too
-  (no hopping). The support hand may also **turn round the fore-end or shaft** (it is round): up to 90 degrees on a
+  (no hopping). The support hand may also **turn round the fore-end or shaft** (it is round; a pistol's cupping hand does not turn): up to 90 degrees on a
   gun, 180 on a spear, 45 on a two-handed hilt, chosen with the elbow's swing. PC round 7 measured why: the grips
   asked the right wrist for 54 to 96 degrees of sideways bend (limit 28) and the left forearm for 130 of twist (85).
 - **Fingers close round the grip**: a pinned hand's four fingers get only the curl its clip lacks, towards the palm,

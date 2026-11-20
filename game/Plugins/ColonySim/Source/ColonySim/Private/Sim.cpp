@@ -588,6 +588,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         return units > 0 ? std::min(units, 4) - 1 : -1;
     });
     combat_->setBeforeDestroy([this](Entity thing) {
+        noteWreck(thing);
         jobs_->forget(thing);
         raids_->forget(thing);
         trade_->forget(thing);
@@ -1641,7 +1642,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* goodwillCommand = std::get_if<AdjustGoodwillCommand>(&command)) {
         std::string why;
-        if (!trade_->adjustGoodwill(goodwillCommand->faction, goodwillCommand->delta, why)) {
+        if (!trade_->adjustGoodwill(goodwillCommand->faction, goodwillCommand->delta, why, "dev tool")) {
             commandFailed(id, why);
         }
     } else if (const auto* prisonBed = std::get_if<SetPrisonBedCommand>(&command)) {
@@ -2367,6 +2368,63 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     }
 }
 
+void Sim::noteWreck(Entity building) {
+    const entt::registry& reg = things_->registry();
+    const Footprint* footprint = reg.valid(building) ? reg.try_get<Footprint>(building) : nullptr;
+    const Thing* thing = footprint != nullptr ? reg.try_get<Thing>(building) : nullptr;
+    if (thing == nullptr || thing->category != ThingCategory::Building) {
+        return;  // only buildings (and frames) leave a wreck
+    }
+    const BuiltOf* made = reg.try_get<BuiltOf>(building);
+    PendingWreck wreck;
+    wreck.def = thing->def;
+    wreck.stuff = made != nullptr ? made->stuff : DefId{};
+    wreck.rect = footprint->rect();
+    wreck.finished = !reg.all_of<ConstructionSite>(building);
+
+    Event& e = wreck.event;
+    e.type = EventType::BuildingWrecked;
+    e.thing = building;
+    e.def = wreck.def;
+    e.cell = footprint->origin;
+    e.count = wreck.rect.sizeX;
+    e.part = wreck.rect.sizeY;
+    e.x = static_cast<float>(wreck.rect.minX) + 0.5f * static_cast<float>(wreck.rect.sizeX);
+    e.y = static_cast<float>(wreck.rect.minY) + 0.5f * static_cast<float>(wreck.rect.sizeY);
+    const CellPos middle{wreck.rect.minX + wreck.rect.sizeX / 2, wreck.rect.minY + wreck.rect.sizeY / 2, wreck.rect.level};
+    e.z = map_.inBounds(middle) ? map_.groundHeight(middle) : 0.0f;
+    e.message = wreck.stuff.valid() ? defs_->get(wreck.stuff).defName() : std::string();
+    e.amount = wreck.finished ? 1.0f : 0.0f;
+    wrecks_.push_back(std::move(wreck));
+}
+
+void Sim::settleWrecks() {
+    if (wrecks_.empty()) {
+        return;
+    }
+    const std::vector<PendingWreck> wrecks = std::move(wrecks_);
+    wrecks_.clear();
+    const int rubble = filth_->kindIndex("Rubble");
+    for (const PendingWreck& wreck : wrecks) {
+        // Rolled from the wreck's place and time, not the sim's stream, so a wreck changes no other roll in the game.
+        const uint64_t seed = splitMix64(settings_.seed ^ (static_cast<uint64_t>(time_.steps) << 20) ^
+                                         static_cast<uint64_t>(static_cast<uint32_t>(wreck.rect.minY * 4096 + wreck.rect.minX)) ^
+                                         (static_cast<uint64_t>(wreck.rect.level) << 52));
+        Rng roll(seed, 0x52554242ULL);
+        // RimWorld's filthLeaving: rubble on every cell of the footprint, 1 to 3 layers each.
+        if (rubble >= 0) {
+            for (int dy = 0; dy < wreck.rect.sizeY; ++dy) {
+                for (int dx = 0; dx < wreck.rect.sizeX; ++dx) {
+                    const CellPos c{wreck.rect.minX + dx, wreck.rect.minY + dy, wreck.rect.level};
+                    filth_->add(c, rubble, 1 + static_cast<int>(roll.below(3)));
+                }
+            }
+        }
+        construction_->leaveWreck(wreck.def, wreck.stuff, wreck.rect, wreck.finished, splitMix64(seed));
+        events_.push_back(wreck.event);
+    }
+}
+
 void Sim::dropLostDecks() {
     // Items on a bridge that fell are swept away where the water is deep; in shallow water, marsh or mud they stay where
     // they fell. Pawns need nothing here: one in deep water off a path swims for the nearest shore (MovementSystem).
@@ -2571,6 +2629,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
             { SimLap lap(profile_, "disasters"); disasters_->step(); }  // T3: conditions end, work and strike (held while skipping, like the narrator)
         }
     }
+    settleWrecks();
     creditKills();
     travel_->afterStep();
     narrator_->postpone(travel_->takeHold());  // a skip that ended (here or by a command) held the narrator back

@@ -1722,7 +1722,20 @@ bool MeleeSystem::focusNext(Entity pawn, FocusMode mode, float viewX, float view
             }
         }
         if (chosen == kNoEntity) {
-            return fail("nobody that way to focus on");
+            // Nobody that way (PC gun range 2026-11-20: one other target left, on the other side, and the flick did nothing):
+            // the flick still switches, to the other target nearest in turn, standing ones first.
+            for (const Pick& p : picks) {
+                const float turn = std::fabs(p.angle);
+                const int g = p.group % 2;
+                if (p.pawn != m.focus && (chosen == kNoEntity || g < bestGroup || (g == bestGroup && turn < best))) {
+                    chosen = p.pawn;
+                    best = turn;
+                    bestGroup = g;
+                }
+            }
+        }
+        if (chosen == kNoEntity) {
+            return fail("nobody else to focus on");
         }
     } else {
         // Tab: a round starts again after focusRoundSteps without a Tab; the target held counts as given.

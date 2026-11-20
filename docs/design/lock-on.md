@@ -203,7 +203,8 @@ a few degrees. The body also keeps facing its target through the windup now: the
 **Tab no longer stops you, and every Tab cycles.** The cause was Unreal's menu navigation: Tab (and the arrow keys) moved
 keyboard focus off the game viewport to the next widget, so held keys were let go (W and sprint stopped) and the next
 Tab went to that widget instead of the game. `UProtagonistSubsystem::Initialize` turns Slate's Tab, arrow and stick
-navigation off for the game (and puts it back on shutdown). Smoke `finishers` phase `tab_run` sprints with real key
+navigation off for the game (and puts it back on shutdown). A flick with nobody that way (one other target left, behind or on the other side) still switches, to the other
+target nearest in turn (PC gun range 2026-11-20). Smoke `finishers` phase `tab_run` sprints with real key
 events, presses Tab three times and checks the speed never drops and the lock moves to three different enemies.
 
 ## The original build plan
