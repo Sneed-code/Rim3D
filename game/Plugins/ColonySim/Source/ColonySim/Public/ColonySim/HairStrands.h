@@ -111,7 +111,7 @@ COLONY_API void sweepHairGoals(std::vector<std::vector<HairVec>>& goals, HairVec
                                float angleDeg = 45.0f);
 
 // The body's collision shapes for hair, fitted to one skeleton in its reference pose (component space, z up).
-enum class HairBone : uint8_t { Head, Neck, SpineTop, SpineMid, ClavicleL, ClavicleR, UpperArmL, UpperArmR };
+enum class HairBone : uint8_t { Head, Neck, SpineTop, SpineMid, ClavicleL, ClavicleR, UpperArmL, UpperArmR, SpineLow, Pelvis };
 
 struct HairShape {
     HairBone bone = HairBone::Head;  // the bone it rides on
