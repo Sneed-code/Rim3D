@@ -2012,9 +2012,9 @@ void ASimPawnActor::UpdateWallClimb(const colony::ThingView& Now)
 	const float At = FMath::Clamp(Share, 0.0f, 1.0f) * Length;
 	Anim->Montage_SetPlayRate(WallClimbMontage.Get(), 0.0f);
 	Anim->Montage_SetPosition(WallClimbMontage.Get(), At);
-	// The clip carries the body up and forward in its root; the sim already moves it, so that travel is taken out.
-	const FTransform Travel = WallClimbClip->ExtractRootMotionFromRange(0.0, At, FAnimExtractContext());
-	WallClimbOffset = -PawnBodyRelativeRotation.RotateVector(Travel.GetTranslation()) * (bHasLooks ? Looks.Height : 1.0f);
+	// The pose is drawn about the actor, which the sim lifts up the face and over the top (USimSubsystem::GetViewLocation),
+	// so the clip's own root travel is not added or taken out: taking it out sank the body into the ground.
+	WallClimbOffset = FVector::ZeroVector;
 }
 
 float ASimPawnActor::GetMeleeBodyDegrees() const
