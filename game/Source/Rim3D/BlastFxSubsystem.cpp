@@ -328,8 +328,8 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 	{
 		FSprite& Flash = Add(EKind::Fire);
 		Flash.Position = Centre + FVector(0.0, 0.0, 50.0);
-		Flash.StartCm = 260.0f * S;
-		Flash.EndCm = 340.0f * S;
+		Flash.StartCm = 380.0f * S;
+		Flash.EndCm = 500.0f * S;
 		Flash.Life = 0.14f;
 		Flash.FadeIn = 0.0f;
 		Flash.FrameFrom = 0.0f;
@@ -348,8 +348,10 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 		Fire.Drag = 3.0f;
 		Fire.Gravity = -60.0f;
 		Fire.Wind = 0.3f;
-		Fire.StartCm = Random.FRandRange(200.0f, 250.0f) * S;
-		Fire.EndCm = Random.FRandRange(300.0f, 380.0f) * S;
+		// The flipbook's ball fills about 40% of its square at first, so this makes a fireball about 2.5 m across that
+		// swells to 4 m (PC round 3: 2 m squares read as a head-sized glow).
+		Fire.StartCm = Random.FRandRange(300.0f, 370.0f) * S;
+		Fire.EndCm = Random.FRandRange(450.0f, 570.0f) * S;
 		Fire.Life = Random.FRandRange(1.3f, 1.8f);
 		Fire.FadeIn = 0.02f;
 		Fire.FireGain = FireGain;

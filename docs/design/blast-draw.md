@@ -64,7 +64,7 @@ If the fire comes out upside down on the PC (the plane's texture runs the other 
 
 ## Smoke test
 
-`feel` ends with `blast_fireball` (a frag blast 12 m ahead at 14:00 in a patch cleared of plants, the camera turned to it, pictured 0.3 s in; it must draw 40+ sprites, a light
+`feel` ends with `blast_fireball` (a frag blast 11 m off to one side at 14:00 in a patch cleared of plants, the camera turned to it, pictured 0.3 s in; it must draw 40+ sprites, a light
 over 2,000 cd and a scorch mark), `blast_smoke` (pictured about 4 s in), `blast_linger` (about 11 s in, looking down at the spot: 3+ smoke puffs and the
 scorch still there) and `blast_molotov` (a fire blast, pictured 0.5 s in). Without the art they note it and pass.
 

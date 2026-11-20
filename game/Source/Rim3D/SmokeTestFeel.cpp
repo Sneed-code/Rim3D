@@ -583,7 +583,7 @@ void USmokeTestSubsystem::BuildFeelPhases()
 			const int32 Y0 = FMath::FloorToInt32(Me->y);
 			for (int32 Dx = -4; Dx <= 22; ++Dx)
 			{
-				for (int32 Dy = -10; Dy <= 12; ++Dy)
+				for (int32 Dy = -12; Dy <= 12; ++Dy)
 				{
 					Sim->plants().remove(colony::CellPos{X0 + Dx, Y0 + Dy, 0});
 				}
@@ -595,8 +595,9 @@ void USmokeTestSubsystem::BuildFeelPhases()
 			Fx()->ClearForTest();
 		}
 		State->ScorchesAtStart = Fx() ? Fx()->GetScorchMarks() : 0;
-		State->BlastX = Me->x + 12.0f;
-		State->BlastY = Me->y + 1.5f;
+		// Off to one side, out of line with the colonists who stand about ahead (PC round 3: they hid the fireball).
+		State->BlastX = Me->x + 9.0f;
+		State->BlastY = Me->y - 7.0f;
 		LookAtBlast(State->BlastX, State->BlastY, 0.0f);
 		Bridge()->Submit(colony::ExplodeCommand{State->BlastX, State->BlastY, 1.9f, 50.0f, "Bomb", 0.1f});
 	};
@@ -638,7 +639,8 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	Lingering.Setup = [=]()
 	{
 		State->MaxSmoke = 0;
-		LookAtBlast(State->BlastX, State->BlastY, -30.0f);
+		// From behind the shoulder the spot 11 m off is about 8 degrees down (PC round 3: at -30 it was off the top).
+		LookAtBlast(State->BlastX, State->BlastY, -12.0f);
 	};
 	Lingering.OnFrame = Watch;
 	Lingering.Verify = [=, this]()
@@ -669,8 +671,8 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	{
 		State->Reset();
 		const colony::ThingView* Me = MyView();
-		LookAtBlast(Me->x + 12.0f, Me->y + 4.0f, 0.0f);
-		Bridge()->Submit(colony::ExplodeCommand{Me->x + 12.0f, Me->y + 4.0f, 1.1f, 10.0f, "Burn", 0.0f});
+		LookAtBlast(Me->x + 9.0f, Me->y + 7.0f, -4.0f);
+		Bridge()->Submit(colony::ExplodeCommand{Me->x + 9.0f, Me->y + 7.0f, 1.1f, 10.0f, "Burn", 0.0f});
 	};
 	Molotov.OnFrame = Watch;
 	Molotov.Verify = [=, this]()
