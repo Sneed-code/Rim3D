@@ -287,6 +287,13 @@ void UColonyHudSubsystem::DrawAnimalsTab(USimSubsystem& Bridge, float Scale, boo
 		if (ImGui::BeginTable("##HudAnimalTable", Columns, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY,
 			ImVec2(0.0f, Viewport->Size.y * 0.5f)))
 		{
+			// Fixed widths, so the headers read in full even with no rows under them (empty columns would get no width).
+			static const float WildWidths[] = {150.0f, 110.0f, 110.0f, 90.0f, 130.0f};
+			static const float TameWidths[] = {150.0f, 110.0f, 110.0f, 90.0f, 80.0f, 70.0f, 70.0f, 60.0f, 120.0f, 50.0f, 180.0f, 150.0f};
+			for (int32 Column = 0; Column < Columns; ++Column)
+			{
+				ImGui::TableSetupColumn(nullptr, ImGuiTableColumnFlags_WidthFixed, (bWild ? WildWidths[Column] : TameWidths[Column]) * Scale);
+			}
 			ImGui::TableSetupScrollFreeze(0, 1);
 			ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
 			HudTabHeader(TEXT("Name"), TEXT("Click to select, double click to go there"));
