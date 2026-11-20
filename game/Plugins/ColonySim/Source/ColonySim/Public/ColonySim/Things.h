@@ -194,8 +194,8 @@ public:
 
     // Makes a thing from a Things def and puts it on the map (see make and spawnAt). Returns
     // kNoEntity, and changes nothing, if either step fails.
-    Entity spawn(DefId def, CellPos cell, int stackCount = 1, Rot4 rot = Rot4::North);
-    Entity spawn(const std::string& defName, CellPos cell, int stackCount = 1, Rot4 rot = Rot4::North);
+    COLONY_API Entity spawn(DefId def, CellPos cell, int stackCount = 1, Rot4 rot = Rot4::North);
+    COLONY_API Entity spawn(const std::string& defName, CellPos cell, int stackCount = 1, Rot4 rot = Rot4::North);
 
     // Makes a thing that is not on the map yet, with the components its def asks for. Returns
     // kNoEntity if the def is not a Things def or its category is not Item, Building or Pawn.
