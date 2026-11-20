@@ -1,5 +1,7 @@
 # Colony panels
 
+> 2026-11-17: placement replaced by the bottom tab bar layout, see [ui-layout.md](ui-layout.md) "As built". The Build menu and the Work tab changed with it.
+
 Code: `game/Source/Rim3D/PanelsSubsystem.*`. Smoke test: `panels` (`tools/smoke.ps1 -Test panels`).
 Task U8. Unreal side only; the sim is untouched. Everything is ImGui, drawn only while the overseer
 view is the one in use ([overseer.md](overseer.md)); `Panels.UI 0` (or `Overseer.UI 0`) hides it.

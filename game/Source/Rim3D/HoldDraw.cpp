@@ -324,3 +324,229 @@ UAnimSequence* HoldDraw::StyleClip(const colony::DefDatabase& Defs, const colony
 	}
 	return Rel.empty() ? nullptr : LoadClip(UTF8_TO_TCHAR(Rel.c_str()));
 }
+
+// ---- Weapon first, then the hands -------------------------------------------------------------------------------------
+
+HoldDraw::FPoints HoldDraw::PointsOf(const colony::WeaponHold& Hold, bool bShieldOnArm)
+{
+	FPoints P;
+	P.Main = HdPoint(Hold.main);
+	if (Hold.hasOff)
+	{
+		P.Off = HdPoint(Hold.off);
+		P.bOff = true;
+	}
+	else if (Hold.hasSupport && !bShieldOnArm && Hold.hand == colony::HoldHand::Right)
+	{
+		P.Off = HdPoint(Hold.support);
+		P.bOff = true;
+	}
+	// No model: the sight a little above the grip's line, the butt a forearm behind it.
+	P.Sight = P.Main + FVector(Hold.hands >= 2 ? -4.0 : 4.0, 0.0, 8.0);
+	P.Stock = P.Main + FVector(-24.0, 0.0, 3.0);
+	return P;
+}
+
+FVector HoldDraw::StockFromBounds(const FBox& BoxInGunFrame, const FVector& Sight)
+{
+	if (!BoxInGunFrame.IsValid)
+	{
+		return FVector(-25.0, 0.0, Sight.Z - 6.0);
+	}
+	const double Z = FMath::Clamp(Sight.Z - 6.0, BoxInGunFrame.Min.Z + 2.0, BoxInGunFrame.Max.Z - 2.0);
+	return FVector(BoxInGunFrame.Min.X + 1.5, 0.0, Z);
+}
+
+FTransform HoldDraw::PlaceInAnchor(const colony::HoldPlace& Place, const FPoints& Points, float Size, float BodyPlace)
+{
+	const FQuat Turn = FRotator(Place.pitch, Place.yaw, Place.roll).Quaternion();
+	FVector Point = Points.Main;
+	if (Place.point == colony::HoldPlacePoint::Sight)
+	{
+		Point = Points.Sight;
+	}
+	else if (Place.point == colony::HoldPlacePoint::Stock)
+	{
+		Point = Points.Stock;
+	}
+	const FVector At = HdPoint(Place.at) * BodyPlace;
+	return FTransform(Turn, At - Turn.RotateVector(Point * Size));
+}
+
+bool HoldDraw::FistFrame(const USkeletalMeshComponent* Mesh, bool bRight, FTransform& Out)
+{
+	if (!HasHand(Mesh, bRight))
+	{
+		return false;
+	}
+	const FVector H = HdBone(Mesh, bRight ? TEXT("hand_r") : TEXT("hand_l"));
+	const FVector I = HdBone(Mesh, bRight ? TEXT("index_01_r") : TEXT("index_01_l"));
+	const FVector K = HdBone(Mesh, bRight ? TEXT("pinky_01_r") : TEXT("pinky_01_l"));
+	const FVector M = HdBone(Mesh, bRight ? TEXT("middle_01_r") : TEXT("middle_01_l"));
+	FVector X = (I - K).GetSafeNormal();
+	FVector Fingers = (M - H).GetSafeNormal();
+	Fingers = (Fingers - X * FVector::DotProduct(Fingers, X)).GetSafeNormal();
+	if (X.IsNearlyZero() || Fingers.IsNearlyZero())
+	{
+		return false;
+	}
+	FVector Palm = FVector::CrossProduct(Fingers, X).GetSafeNormal();
+	// The palm's side from the knuckles alone (fingers x across, index side to pinky side): the same for every pose.
+	// It used to follow the index finger's curl, which an open or overextended hand turned inside out (PC 2026-11-19:
+	// the pistol's hand read as turned round, so the wrist limits spun it, fingers up, and the pistol hid behind it).
+	const float Side = bRight ? 1.0f : -1.0f;
+	Palm *= Side;
+	const FVector Grip = (I + K) * 0.5f + Palm * 2.5f + Fingers * 0.5f;
+	// A hilt sits across the fist leaning a little the way the fingers point (about 15 degrees).
+	X = (X + Fingers * 0.27f).GetSafeNormal();
+	Fingers = (Fingers - X * FVector::DotProduct(Fingers, X)).GetSafeNormal();
+	Out = FTransform(FRotationMatrix::MakeFromXZ(X, Fingers).ToQuat(), Grip);
+	return true;
+}
+
+bool HoldDraw::HandInGrip(const USkeletalMeshComponent* Mesh, bool bRight, bool bPistolGrip, float RakeDegrees, FTransform& Out)
+{
+	FTransform Grip;
+	if (!(bPistolGrip ? GunFrame(Mesh, bRight, RakeDegrees, Grip) : FistFrame(Mesh, bRight, Grip)))
+	{
+		return false;
+	}
+	FTransform Hand = Mesh->GetSocketTransform(bRight ? TEXT("hand_r") : TEXT("hand_l"), RTS_World);
+	Hand.SetScale3D(FVector::OneVector);
+	Grip.SetScale3D(FVector::OneVector);
+	Out = Hand.GetRelativeTransform(Grip);
+	return true;
+}
+
+bool HoldDraw::PinHands(const USkeletalMeshComponent* Mesh, const colony::WeaponHold& Hold, const FPoints& Points, float Size, const FTransform& Weapon,
+						FPinned& Out)
+{
+	const bool bRight = Hold.hand != colony::HoldHand::Left;
+	FTransform MainInGrip;
+	if (!HandInGrip(Mesh, bRight, Hold.grip == colony::HoldGrip::Gun, Hold.rake, MainInGrip))
+	{
+		return false;
+	}
+	FTransform W = Weapon;
+	W.SetScale3D(FVector::OneVector);
+	const FTransform MainGrip = FTransform(FQuat::Identity, Points.Main * Size) * W;
+	Out.MainHand = MainInGrip * MainGrip;
+	FTransform WeaponScaled = W;
+	WeaponScaled.SetScale3D(FVector(Size));
+	Out.WeaponInHand = WeaponScaled.GetRelativeTransform(Out.MainHand);
+	Out.bOff = false;
+	FTransform OffInGrip;
+	if (Points.bOff && HandInGrip(Mesh, !bRight, false, 0.0f, OffInGrip))
+	{
+		const FQuat Turn = FRotator(Hold.offPitch, Hold.offYaw, Hold.offRoll).Quaternion();
+		const FTransform OffGrip = FTransform(Turn, Points.Off * Size) * W;
+		Out.OffInMain = (OffInGrip * OffGrip).GetRelativeTransform(Out.MainHand);
+		Out.bOff = true;
+		// The weapon's long axis through the off grip, in the off hand's own space: the hand may turn round it.
+		const FTransform GripInHand = OffInGrip.Inverse();
+		Out.OffRollPoint = GripInHand.GetLocation();
+		Out.OffRollAxis = GripInHand.TransformVectorNoScale(Turn.UnrotateVector(FVector::ForwardVector)).GetSafeNormal();
+		Out.OffRollFree = Hold.grip == colony::HoldGrip::Pole ? 180.0f : (Hold.grip == colony::HoldGrip::Gun ? 90.0f : 45.0f);
+	}
+	return true;
+}
+
+void HoldDraw::ApplyPinned(USkeletalMeshComponent* Mesh, const colony::WeaponHold& Hold, const FPinned& Pinned, uint8 Space, FName Anchor, float MainAlpha,
+						   float OffAlpha)
+{
+	UMakeHumanAnimInstance* Anim = Mesh ? Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()) : nullptr;
+	if (!Anim)
+	{
+		return;
+	}
+	// The goals in the mesh's component space (a body's height scales its mesh: component units are world cm over it).
+	const FTransform Comp = Mesh->GetComponentTransform();
+	const double Scale = FMath::Max(static_cast<double>(Comp.GetScale3D().GetAbsMax()), 0.01);
+	FTransform MainCS = Pinned.MainHand.GetRelativeTransform(Comp);
+	MainCS.SetScale3D(FVector::OneVector);
+	if (static_cast<EMakeHumanGoalSpace>(Space) == EMakeHumanGoalSpace::Anchor && HdHas(Mesh, *Anchor.ToString()))
+	{
+		MainCS.AddToTranslation(-Comp.InverseTransformPosition(Mesh->GetSocketLocation(Anchor)));
+	}
+	FTransform OffCS = Pinned.OffInMain;
+	OffCS.SetTranslation(OffCS.GetTranslation() / Scale);
+	OffCS.SetScale3D(FVector::OneVector);
+	const bool bRight = Hold.hand != colony::HoldHand::Left;
+	FMakeHumanHandGoal Main;
+	Main.Alpha = FMath::Clamp(MainAlpha, 0.0f, 1.0f);
+	Main.Space = static_cast<EMakeHumanGoalSpace>(Space);
+	Main.Anchor = Anchor;
+	Main.Target = MainCS;
+	Main.bRotation = true;
+	Main.bCurl = true;
+	Anim->SetHandGoal(bRight, Main);
+	FMakeHumanHandGoal Off;
+	Off.Alpha = Pinned.bOff ? FMath::Clamp(OffAlpha, 0.0f, 1.0f) : 0.0f;
+	Off.bRotation = true;
+	Off.bCurl = true;
+	if (Main.Alpha >= 0.5f)
+	{
+		// The weapon is at its place: the other hand goes to its own grip there, not after the main hand (whose turn
+		// the wrist limits may have held back), so it stays on the fore-end.
+		FTransform OffWorldCS = (Pinned.OffInMain * Pinned.MainHand).GetRelativeTransform(Comp);
+		OffWorldCS.SetScale3D(FVector::OneVector);
+		if (Main.Space == EMakeHumanGoalSpace::Anchor && HdHas(Mesh, *Anchor.ToString()))
+		{
+			OffWorldCS.AddToTranslation(-Comp.InverseTransformPosition(Mesh->GetSocketLocation(Anchor)));
+		}
+		Off.Space = Main.Space;
+		Off.Anchor = Anchor;
+		Off.Target = OffWorldCS;
+		Off.RollFree = Pinned.OffRollFree;
+		Off.RollAxis = Pinned.OffRollAxis;
+		Off.RollPoint = Pinned.OffRollPoint / Scale;
+	}
+	else
+	{
+		// The main hand follows a clip (a swing): the other hand stays on the weapon in it.
+		Off.Space = EMakeHumanGoalSpace::OtherHand;
+		Off.Target = OffCS;
+	}
+	Anim->SetHandGoal(!bRight, Off);
+}
+
+void HoldDraw::ReleaseHands(USkeletalMeshComponent* Mesh)
+{
+	if (UMakeHumanAnimInstance* Anim = Mesh ? Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()) : nullptr)
+	{
+		Anim->SetHandGoal(true, FMakeHumanHandGoal());
+		Anim->SetHandGoal(false, FMakeHumanHandGoal());
+	}
+}
+
+bool HoldDraw::MeasureDrawnArm(const USkeletalMeshComponent* Mesh, bool bRight, const FVector& Up, const FVector& Forward, const FVector& Right,
+							   colony::arm::ArmAngles& Out)
+{
+	if (!HasHand(Mesh, bRight) || !HdHas(Mesh, bRight ? TEXT("upperarm_r") : TEXT("upperarm_l")) || !HdHas(Mesh, bRight ? TEXT("lowerarm_r") : TEXT("lowerarm_l")))
+	{
+		return false;
+	}
+	const auto V = [](const FVector& F) { return colony::arm::V3{F.X, F.Y, F.Z}; };
+	const FVector S = HdBone(Mesh, bRight ? TEXT("upperarm_r") : TEXT("upperarm_l"));
+	const FVector E = HdBone(Mesh, bRight ? TEXT("lowerarm_r") : TEXT("lowerarm_l"));
+	const FVector W = HdBone(Mesh, bRight ? TEXT("hand_r") : TEXT("hand_l"));
+	const FVector M = HdBone(Mesh, bRight ? TEXT("middle_01_r") : TEXT("middle_01_l"));
+	FTransform Fist;
+	if (!FistFrame(Mesh, bRight, Fist))
+	{
+		return false;
+	}
+	// The palm's normal: from the fist's frame (x across the knuckles, z the fingers' way), out of the palm towards
+	// the grip point it sets inside the curled fingers.
+	const FVector Fingers = (M - W).GetSafeNormal();
+	FVector Palm = FVector::CrossProduct(Fist.GetUnitAxis(EAxis::Z), Fist.GetUnitAxis(EAxis::X)).GetSafeNormal();
+	const FVector Knuckles = (HdBone(Mesh, bRight ? TEXT("index_01_r") : TEXT("index_01_l")) + HdBone(Mesh, bRight ? TEXT("pinky_01_r") : TEXT("pinky_01_l"))) * 0.5;
+	if (FVector::DotProduct(Fist.GetLocation() - Knuckles, Palm) < 0.0)
+	{
+		Palm = -Palm;
+	}
+	Palm = (Palm - Fingers * FVector::DotProduct(Palm, Fingers)).GetSafeNormal();
+	const colony::arm::V3 Hinge = colony::arm::medialHinge(V(E - S), V(W - E), V(Up), V(Forward), V(Right), bRight);
+	Out = colony::arm::measureArm(V(S), V(E), V(W), V(Fingers), V(Palm), Hinge);
+	return true;
+}

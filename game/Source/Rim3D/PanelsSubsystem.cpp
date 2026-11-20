@@ -5,13 +5,12 @@
 
 #include <imgui.h>
 
+#include "ColonyHudStyle.h"
+
+#include "ColonyHudSubsystem.h"
 #include "Engine/Engine.h"
-#include "GraphicsOptionsSubsystem.h"
-#include "KeyBindings.h"
 #include "OverseerSubsystem.h"
 #include "ProtagonistPawn.h"
-#include "QuestPanelSubsystem.h"
-#include "ShipPanelSubsystem.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Bills.h"
@@ -81,20 +80,6 @@ namespace
 	int32 PId(colony::Entity Id)
 	{
 		return static_cast<int32>(entt::to_integral(Id));
-	}
-
-	bool PButton(const FString& Label, bool bActive)
-	{
-		if (bActive)
-		{
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.45f, 0.75f, 1.0f));
-		}
-		const bool bClicked = ImGui::Button(TCHAR_TO_UTF8(*Label));
-		if (bActive)
-		{
-			ImGui::PopStyleColor();
-		}
-		return bClicked;
 	}
 
 	ImVec4 MoodColor(int32 Band)
@@ -534,7 +519,7 @@ void UPanelsSubsystem::DrawPanels(USimSubsystem& Bridge)
 		return;
 	}
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	ColonyHud::ApplyFrameStyle(Scale);
 	const float Margin = 12.0f * Scale;
 
 	float MenuBottom = Margin;
@@ -578,10 +563,6 @@ void UPanelsSubsystem::DrawPanels(USimSubsystem& Bridge)
 	}
 
 	DrawLog(Bridge, Scale, Margin);
-	if (bSettingsOpen)
-	{
-		DrawSettings(Bridge, Scale, Margin);
-	}
 	++Stats.FramesDrawn;
 }
 
@@ -596,78 +577,23 @@ namespace
 
 void UPanelsSubsystem::DrawMenuAndColonistBar(USimSubsystem& Bridge, float Scale, float Margin, float& OutBottom)
 {
+	// The colonist bar, top left (docs/design/ui-layout.md): a mugshot of each colonist with the name under it, coloured by
+	// mood (grey when downed). Click selects, double click centres the camera. The tabs that used to sit here are on the
+	// bottom bar now; the pinned resources show under the bar.
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>();
+	UColonyHudSubsystem* Hud = GetWorld()->GetSubsystem<UColonyHudSubsystem>();
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Margin, Viewport->Pos.y + Margin), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(Viewport->Size.x * 0.5f, FLT_MAX));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(Viewport->Size.x * 0.55f, FLT_MAX));
 	if (ImGui::Begin("##PanelsMenu", nullptr, PanelFlags()))
 	{
-		if (PButton(TEXT("Work"), Tab == EColonyTab::Work))
-		{
-			Tab = Tab == EColonyTab::Work ? EColonyTab::None : EColonyTab::Work;
-		}
-		ImGui::SameLine();
-		if (PButton(TEXT("Schedule"), Tab == EColonyTab::Schedule))
-		{
-			Tab = Tab == EColonyTab::Schedule ? EColonyTab::None : EColonyTab::Schedule;
-		}
-		ImGui::SameLine();
-		if (PButton(TEXT("Log"), bLogOpen))
-		{
-			bLogOpen = !bLogOpen;
-		}
-		ImGui::SameLine();
-		if (PButton(TEXT("Settings"), bSettingsOpen))
-		{
-			bSettingsOpen = !bSettingsOpen;
-		}
-		if (UQuestPanelSubsystem* Quests = GetWorld()->GetSubsystem<UQuestPanelSubsystem>())
-		{
-			// "Quests (2)" while offers wait for an answer; amber until the window has been opened since the newest one.
-			ImGui::SameLine();
-			const int32 Waiting = Quests->CountOffered();
-			const bool bUnseen = Quests->HasUnseenOffer();
-			if (bUnseen)
-			{
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.75f, 0.55f, 0.15f, 1.0f));
-			}
-			if (PButton(Waiting > 0 ? FString::Printf(TEXT("Quests (%d)"), Waiting) : FString(TEXT("Quests")), Quests->IsOpen()))
-			{
-				Quests->SetOpen(!Quests->IsOpen());
-			}
-			if (bUnseen)
-			{
-				ImGui::PopStyleColor();
-			}
-		}
-		UShipPanelSubsystem* Ship = GetWorld()->GetSubsystem<UShipPanelSubsystem>();
-		if (Ship && Ship->HasShip())
-		{
-			// "Ship (12.5 days)" while the reactor warms up; green once it can launch.
-			ImGui::SameLine();
-			const colony::ShipView& ShipView = Bridge.GetCurrentSnapshot().ship;
-			const bool bReady = ShipView.canLaunch;
-			if (bReady)
-			{
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.25f, 0.6f, 0.3f, 1.0f));
-			}
-			const FString Label = ShipView.phase == 1
-				? FString::Printf(TEXT("Ship (%.1f days)"), static_cast<double>(ShipView.activationLeft) / colony::kSecondsPerDay)
-				: FString(TEXT("Ship"));
-			if (PButton(Label, Ship->IsOpen()))
-			{
-				Ship->SetOpen(!Ship->IsOpen());
-			}
-			if (bReady)
-			{
-				ImGui::PopStyleColor();
-			}
-		}
-
-		// The colonists, coloured by mood; downed ones are grey.
 		TArray<colony::Entity> Colonists;
 		GetColonists(Colonists);
 		const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
+		const float Face = 56.0f * Scale;
+		const float Slot = Face + 16.0f * Scale;
+		const int32 PerRow = FMath::Max(1, static_cast<int32>((Viewport->Size.x * 0.55f) / (Slot + ImGui::GetStyle().ItemSpacing.x)));
+		int32 Shown = 0;
 		for (const colony::Entity Pawn : Colonists)
 		{
 			const colony::ThingView* View = Snapshot.find(Pawn);
@@ -675,30 +601,78 @@ void UPanelsSubsystem::DrawMenuAndColonistBar(USimSubsystem& Bridge, float Scale
 			{
 				continue;
 			}
+			if (Shown % PerRow != 0)
+			{
+				ImGui::SameLine();
+			}
+			++Shown;
 			const bool bSelected = Overseer && Overseer->GetSelection().Kind == ESimPickKind::Thing && Overseer->GetSelection().Thing == Pawn;
 			ImGui::PushID(PId(Pawn));
+			ImGui::BeginGroup();
+			const ImVec2 Corner = ImGui::GetCursorScreenPos();
+			UTexture* Mugshot = Hud ? Hud->GetMugshot(Pawn) : nullptr;
+			ImGui::PushStyleColor(ImGuiCol_Button, ColonyHud::ButtonBg());
+			ImGui::PushStyleColor(ImGuiCol_Border, bSelected ? ColonyHud::Accent() : ColonyHud::ButtonBorder());
+			bool bClicked = false;
+			if (Mugshot)
+			{
+				bClicked = ImGui::ImageButton("##face", ImTextureRef(Mugshot), ImVec2(Face, Face));
+			}
+			else
+			{
+				// Until the picture is made: the first letter of the name.
+				const FString Initial = NameOf(Pawn).Left(1);
+				bClicked = ImGui::Button(TCHAR_TO_UTF8(*FString::Printf(TEXT("%s##face"), *Initial)), ImVec2(Face + 2.0f * ImGui::GetStyle().FramePadding.x,
+					Face + 2.0f * ImGui::GetStyle().FramePadding.y));
+			}
+			ImGui::PopStyleColor(2);
+			const bool bDouble = ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+			{
+				const FString Tip = View->mood >= 0.0f ? FString::Printf(TEXT("%s\nMood %.0f   Food %.0f%%   Rest %.0f%%\nClick to select, double click to centre"), *NameOf(Pawn), View->mood,
+					View->food * 100.0f, View->rest * 100.0f) : FString::Printf(TEXT("%s\nClick to select"), *NameOf(Pawn));
+				ImGui::SetTooltip("%s", TCHAR_TO_UTF8(*Tip));
+			}
+			// Drafted: a red edge; downed: greyed.
+			if (View->drafted)
+			{
+				ImGui::GetWindowDrawList()->AddRect(Corner, ImGui::GetItemRectMax(), ImGui::GetColorU32(ColonyHud::Bad()), 4.0f * Scale, 2.0f * Scale, 0);
+			}
 			ImGui::PushStyleColor(ImGuiCol_Text, View->downed ? ImVec4(0.6f, 0.6f, 0.6f, 1.0f) : MoodColor(View->moodBand));
-			if (PButton(NameOf(Pawn), bSelected) && Overseer)
+			FString Name = NameOf(Pawn);
+			if (ImGui::CalcTextSize(TCHAR_TO_UTF8(*Name)).x > Slot)
+			{
+				Name = Name.Left(7);
+			}
+			PText(Name);
+			ImGui::PopStyleColor();
+			ImGui::EndGroup();
+			if (bClicked && Overseer)
 			{
 				FSimPick Pick;
 				Pick.Kind = ESimPickKind::Thing;
 				Pick.Thing = Pawn;
 				Overseer->Select(Pick);
 			}
-			if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && Overseer)
+			if (bDouble && Overseer)
 			{
 				Overseer->FocusOnSelection();
 			}
-			ImGui::PopStyleColor();
-			if (ImGui::IsItemHovered())
-			{
-				const FString Tip = View->mood >= 0.0f ? FString::Printf(TEXT("Mood %.0f   Food %.0f%%   Rest %.0f%%\nClick to select, double click to centre"), View->mood, View->food * 100.0f, View->rest * 100.0f) : FString(TEXT("Click to select"));
-				ImGui::SetTooltip("%s", TCHAR_TO_UTF8(*Tip));
-			}
 			ImGui::PopID();
-			ImGui::SameLine();
 		}
-		ImGui::NewLine();
+		if (Shown == 0)
+		{
+			PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("No colonists"));
+		}
+		// The pinned resources (a star in the Inventory tab; silver by default).
+		if (Hud)
+		{
+			ImGui::Separator();
+			if (!Hud->DrawPinnedResources(Bridge))
+			{
+				PTextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), TEXT("Pin resources in the Inventory tab"));
+			}
+		}
 		OutBottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y - Viewport->Pos.y;
 	}
 	ImGui::End();
@@ -709,6 +683,7 @@ void UPanelsSubsystem::DrawWorkTab(USimSubsystem& Bridge, float Scale)
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const auto& WorkTypes = Sim.jobs().workTypes();
+	UColonyHudSubsystem* Hud = GetWorld()->GetSubsystem<UColonyHudSubsystem>();
 	// Only work that has a scanner does anything yet.
 	std::vector<int32> Columns;
 	for (int32 Index = 0; Index < static_cast<int32>(WorkTypes.size()); ++Index)
@@ -718,22 +693,66 @@ void UPanelsSubsystem::DrawWorkTab(USimSubsystem& Bridge, float Scale)
 			Columns.push_back(Index);
 		}
 	}
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.42f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(Viewport->Size.x * 0.8f, Viewport->Size.y * 0.6f));
+	// Above the bottom bar, in the middle.
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(Viewport->Size.x * 0.92f, Viewport->Size.y * 0.66f));
 	if (ImGui::Begin("##PanelsWork", nullptr, PanelFlags() & ~ImGuiWindowFlags_NoScrollbar))
 	{
 		++Stats.WorkTabFrames;
-		PText(TEXT("Work"));
+		ColonyHud::Title(TEXT("Work"));
 		ImGui::SameLine();
-		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("  1 is done first, 4 last, - is never.  Left click raises the number, right click lowers it.  X: can never do this."));
+		PTextColored(ColonyHud::TextDim(), TEXT("  1 is done first, 4 last, - is never.  Left click raises the number, right click lowers it.  X: can never do this."));
 		TArray<colony::Entity> Colonists;
 		GetColonists(Colonists);
-		if (Colonists.IsEmpty() || Columns.empty())
+
+		// The work groups in use, as filter buttons along the top.
+		TArray<FString> Groups;
+		for (const colony::Entity Pawn : Colonists)
+		{
+			const colony::Colonist* Colonist = Sim.colonistOf(Pawn);
+			if (Colonist && !Colonist->workGroup.empty())
+			{
+				Groups.AddUnique(UTF8_TO_TCHAR(Colonist->workGroup.c_str()));
+			}
+		}
+		Groups.Sort();
+		if (!WorkGroupFilter.IsEmpty() && !Groups.Contains(WorkGroupFilter))
+		{
+			WorkGroupFilter.Reset();
+		}
+		PTextColored(ColonyHud::TextFaint(), TEXT("Show"));
+		ImGui::SameLine();
+		if (ColonyHud::Button(TEXT("Everyone"), WorkGroupFilter.IsEmpty()))
+		{
+			WorkGroupFilter.Reset();
+		}
+		for (const FString& Group : Groups)
+		{
+			ImGui::SameLine();
+			if (ColonyHud::Button(Group + TEXT("##filter"), WorkGroupFilter == Group))
+			{
+				WorkGroupFilter = WorkGroupFilter == Group ? FString() : Group;
+			}
+		}
+
+		// Prisoners have rows too, marked as such: they can't be given work.
+		TArray<colony::Entity> Prisoners;
+		for (const colony::ThingView& View : Bridge.GetCurrentSnapshot().things)
+		{
+			if (View.category == colony::ThingCategory::Pawn && View.prisoner && !View.dead)
+			{
+				Prisoners.Add(View.id);
+			}
+		}
+		if ((Colonists.IsEmpty() && Prisoners.IsEmpty()) || Columns.empty())
 		{
 			PText(TEXT("No colonists or no work to set."));
 		}
-		else if (ImGui::BeginTable("##WorkTable", static_cast<int>(Columns.size()) + 1, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg))
+		else if (ImGui::BeginTable("##WorkTable", static_cast<int>(Columns.size()) + 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg |
+			ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX, ImVec2(0.0f, FMath::Min(Viewport->Size.y * 0.52f, ImGui::GetFrameHeightWithSpacing() * (Colonists.Num() + Prisoners.Num() + 2)))))
 		{
+			ImGui::TableSetupScrollFreeze(2, 1);
+			ImGui::TableSetupColumn("Group");
 			ImGui::TableSetupColumn("Colonist");
 			for (const int32 Index : Columns)
 			{
@@ -744,7 +763,51 @@ void UPanelsSubsystem::DrawWorkTab(USimSubsystem& Bridge, float Scale)
 			{
 				const colony::WorkSettings* Settings = Sim.things().registry().try_get<colony::WorkSettings>(Pawn);
 				const colony::Colonist* Colonist = Sim.colonistOf(Pawn);
+				const FString Group = Colonist ? FString(UTF8_TO_TCHAR(Colonist->workGroup.c_str())) : FString();
+				if (!WorkGroupFilter.IsEmpty() && Group != WorkGroupFilter)
+				{
+					continue;
+				}
 				ImGui::TableNextRow();
+				// The work group: blank to start; a click puts the colonist in a group (an old one or a new name).
+				ImGui::TableNextColumn();
+				ImGui::PushID(PId(Pawn));
+				if (ColonyHud::Button(Group.IsEmpty() ? FString(TEXT("  +  ##group")) : Group + TEXT("##group"), false, ImVec2(110.0f * Scale, 0.0f)))
+				{
+					ImGui::OpenPopup("##GroupPopup");
+					NewGroupName[0] = 0;
+				}
+				ColonyHud::Tip(TEXT("Put this colonist in a work group (Fighters, Growers, any name). Groups sort and filter this list"));
+				if (ImGui::BeginPopup("##GroupPopup"))
+				{
+					for (const FString& Existing : Groups)
+					{
+						if (ImGui::Selectable(TCHAR_TO_UTF8(*Existing), Existing == Group) && Hud)
+						{
+							Hud->SetWorkGroup(Pawn, Existing);
+						}
+					}
+					for (const TCHAR* Suggested : {TEXT("Fighters"), TEXT("Growers"), TEXT("Miners"), TEXT("Builders"), TEXT("Cooks")})
+					{
+						if (!Groups.Contains(Suggested) && ImGui::Selectable(TCHAR_TO_UTF8(Suggested)) && Hud)
+						{
+							Hud->SetWorkGroup(Pawn, Suggested);
+						}
+					}
+					ImGui::SetNextItemWidth(180.0f * Scale);
+					if (ImGui::InputTextWithHint("##newgroup", "New group, Enter", NewGroupName, sizeof(NewGroupName), ImGuiInputTextFlags_EnterReturnsTrue) && Hud &&
+						NewGroupName[0] != 0)
+					{
+						Hud->SetWorkGroup(Pawn, UTF8_TO_TCHAR(NewGroupName));
+						ImGui::CloseCurrentPopup();
+					}
+					if (!Group.IsEmpty() && ImGui::Selectable("No group") && Hud)
+					{
+						Hud->SetWorkGroup(Pawn, FString());
+					}
+					ImGui::EndPopup();
+				}
+				ImGui::PopID();
 				ImGui::TableNextColumn();
 				PText(NameOf(Pawn));
 				int32 Column = 0;
@@ -776,7 +839,7 @@ void UPanelsSubsystem::DrawWorkTab(USimSubsystem& Bridge, float Scale)
 						{
 							CyclePriority(Pawn, Index, false);
 						}
-						if (ImGui::IsItemHovered())
+						if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
 						{
 							const colony::Def& WorkDef = Sim.defs().get(WorkTypes[Index].def);
 							FString Tip = FString::Printf(TEXT("%s: %s"), *PCapital(WorkDef.label()), Priority == 0 ? TEXT("never") : *FString::Printf(TEXT("priority %d"), Priority));
@@ -795,6 +858,20 @@ void UPanelsSubsystem::DrawWorkTab(USimSubsystem& Bridge, float Scale)
 					ImGui::PopID();
 				}
 			}
+			if (WorkGroupFilter.IsEmpty())
+			{
+				for (const colony::Entity Pawn : Prisoners)
+				{
+					ImGui::TableNextRow();
+					ImGui::TableNextColumn();
+					PTextColored(ColonyHud::Warn(), TEXT("Prisoner"));
+					ImGui::TableNextColumn();
+					const colony::ThingView* View = Bridge.GetCurrentSnapshot().find(Pawn);
+					PText(View ? PCapital(Sim.colonistOf(Pawn) ? std::string(TCHAR_TO_UTF8(*NameOf(Pawn))) : Sim.defs().get(View->def).label()) : FString(TEXT("?")));
+					ImGui::TableNextColumn();
+					PTextColored(ColonyHud::TextFaint(), TEXT("Prisoners don't work"));
+				}
+			}
 			ImGui::EndTable();
 		}
 	}
@@ -806,12 +883,12 @@ void UPanelsSubsystem::DrawScheduleTab(USimSubsystem& Bridge, float Scale)
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const int32 Now = Sim.time().hourOfDay();
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.42f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
 	ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(Viewport->Size.x * 0.9f, Viewport->Size.y * 0.6f));
 	if (ImGui::Begin("##PanelsSchedule", nullptr, PanelFlags() & ~ImGuiWindowFlags_NoScrollbar))
 	{
 		++Stats.ScheduleTabFrames;
-		PText(TEXT("Schedule"));
+		ColonyHud::Title(TEXT("Schedule"));
 		ImGui::SameLine();
 		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("  Click an hour to change it, right click to go back.  "));
 		for (const colony::ScheduleKind Kind : {colony::ScheduleKind::Anything, colony::ScheduleKind::Work, colony::ScheduleKind::Joy, colony::ScheduleKind::Sleep})
@@ -1298,62 +1375,6 @@ void UPanelsSubsystem::DrawThermostatPanel(USimSubsystem& Bridge, const colony::
 		}
 		PTextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), bOwnTarget ? FString::Printf(TEXT("Set to %.0f C (the building's own limit is %.0f C)."), Target, OwnLimit)
 														 : FString::Printf(TEXT("At the building's own limit, %.0f C."), OwnLimit));
-	}
-	ImGui::End();
-}
-
-void UPanelsSubsystem::DrawSettings(USimSubsystem& Bridge, float Scale, float Margin)
-{
-	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Margin + 60.0f * Scale), ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
-	ImGui::SetNextWindowBgAlpha(0.9f);
-	if (ImGui::Begin("Settings##PanelsSettings", &bSettingsOpen, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse))
-	{
-		// Whole minutes, 48 (the default) to 120. Changing it applies to this game now and to new games.
-		int32 Minutes = Bridge.GetDayMinutes();
-		ImGui::SetNextItemWidth(260.0f * Scale);
-		if (ImGui::SliderInt("Day length", &Minutes, colony::kBaseDayMinutes, colony::kMaxDayMinutes, "%d real minutes"))
-		{
-			Bridge.SetDayMinutes(Minutes);
-		}
-		ImGui::SameLine();
-		if (PButton(TEXT("Default"), false))
-		{
-			Bridge.SetDayMinutes(colony::kBaseDayMinutes);
-		}
-		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("How long a game day lasts at normal speed."));
-		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("Walking, fighting and work keep their speed; hunger, sleep,"));
-		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("crops, animals, food rot and the sun follow the day."));
-
-		// Mouse speed when playing as a pawn (saved; 1.2 is the default).
-		ImGui::Separator();
-		float MouseTurn = AProtagonistPawn::GetMouseTurn();
-		ImGui::SetNextItemWidth(260.0f * Scale);
-		if (ImGui::SliderFloat("Mouse speed", &MouseTurn, 0.2f, 4.0f, "%.2f"))
-		{
-			AProtagonistPawn::SetMouseTurn(MouseTurn);
-		}
-		ImGui::SameLine();
-		if (PButton(TEXT("Default##MouseTurn"), false))
-		{
-			AProtagonistPawn::SetMouseTurn(AProtagonistPawn::kDefaultMouseTurn);
-		}
-		PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("How fast the mouse turns the view when you play as a pawn."));
-
-		// Keys (sneed 2026-11-17, docs/design/controls.md): every player key can be rebound; saved with the settings.
-		ImGui::Separator();
-		if (ImGui::CollapsingHeader("Controls (change keys)"))
-		{
-			Rim3DKeys::DrawControlsPage(Scale);
-		}
-
-		// Graphics: quality, ray tracing, upscaler (docs/design/graphics-options.md).
-		if (UGraphicsOptionsSubsystem* Graphics = GEngine ? GEngine->GetEngineSubsystem<UGraphicsOptionsSubsystem>() : nullptr)
-		{
-			ImGui::Separator();
-			PTextColored(ImVec4(0.9f, 0.85f, 0.6f, 1.0f), TEXT("Graphics"));
-			Graphics->DrawOptions(Scale);
-		}
 	}
 	ImGui::End();
 }

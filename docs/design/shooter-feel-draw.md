@@ -15,7 +15,7 @@ degrees).
 
 | Key | What |
 | --- | --- |
-| Hold right mouse button, gun in hand | aim: the view blends to over the shoulder (camera 120 cm back and 42 cm to the right, field of view 80 to 62 degrees) in about a fifth of a second, and back when let go. `Feel.AimView 1` goes to first person instead (camera to the eyes, body hidden). A melee weapon blocks with the same button |
+| Hold right mouse button, gun in hand | aim: the view blends to over the shoulder (camera 120 cm back, 55 cm to the right and 14 cm up so a shouldered rifle clears the head and hair, field of view 80 to 62 degrees) in about a fifth of a second, and back when let go. `Feel.AimView 1` goes to first person instead (camera to the eyes, body hidden). A melee weapon blocks with the same button |
 | Left Alt (was Left Shift; Shift sprints now) | dodge roll in the direction of the movement keys (relative to the view; none held is a backstep): `DodgeRollCommand`. Refused while rolling or waiting out the last roll |
 | G | throw the first grenade on the belt at the crosshair's point (`ThrowCommand` with `player`) |
 
@@ -83,3 +83,4 @@ Aim-down-sights sight picture and a held gun that follows the aim; a real roll a
 (a procedural shake stands in); blast decals, scorched ground and fire from blasts (E4's fire starts from Burn blasts through the sim);
 debris from walls (a destroyed building leaves nothing to fall yet); sound; the kick for AI fighters (none by design); stance effects on
 the kick; a `Feel` panel in direct mode itself (the mouse is the camera there, so the sliders live in the overseer view).
+- Since 2026-11-20 the fire, smoke, sparks and light of a blast are drawn by `UBlastFxSubsystem` when its art is in ([blast-draw.md](blast-draw.md)); this subsystem keeps the camera's feel and the debris (soil and stone clods trailing dust).

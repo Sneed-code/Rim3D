@@ -1343,6 +1343,17 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
         return;
     }
+    if (const auto* group = std::get_if<SetWorkGroupCommand>(&command)) {
+        Colonist* colonist = things_->exists(group->pawn) ? things_->registry().try_get<Colonist>(group->pawn) : nullptr;
+        if (colonist == nullptr) {
+            commandFailed(id, "only a colonist can be put in a work group");
+        } else if (group->group.size() > Colonist::kMaxWorkGroupLength) {
+            commandFailed(id, "a work group's name is at most 24 characters");
+        } else {
+            colonist->workGroup = group->group;
+        }
+        return;
+    }
     if (const auto* focus = std::get_if<FocusCommand>(&command)) {
         std::string why;
         if (!melee_->focusCommand(focus->pawn, focus->target, focus->mode, &why, focus->viewX, focus->viewY, focus->anySide)) {
@@ -3706,6 +3717,9 @@ uint64_t Sim::stateHash() const {
             h.add(c->female);
             h.add(c->age);
             h.add(c->protagonist);
+            if (!c->workGroup.empty()) {
+                h.add(c->workGroup.data(), c->workGroup.size());  // only when set, so older hashes stay
+            }
             for (const TraitRecord& t : c->traits) {
                 h.add(t.def.data(), t.def.size());
                 h.add(t.degree);

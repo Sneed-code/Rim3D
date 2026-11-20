@@ -1,4 +1,5 @@
 #include "ShooterFeelSubsystem.h"
+#include "BlastFxSubsystem.h"
 #include "KeyBindings.h"
 
 #include "Camera/PlayerCameraManager.h"
@@ -250,23 +251,29 @@ void UShooterFeelSubsystem::EnsureScene()
 	ParticleInstances.Add(MakeInstanced(MakeSolid(Box, 2.0f, 2.0f, 2.0f, FLinearColor(1.0f, 0.62f, 0.15f))));        // Spark
 	ParticleInstances.Add(MakeInstanced(MakeSolid(Sphere, 10.0f, 10.0f, 20.0f, FLinearColor(0.16f, 0.12f, 0.08f))));  // Dust
 	ParticleInstances.Add(MakeInstanced(MakeSolid(Sphere, 4.0f, 4.0f, 8.0f, FLinearColor(0.07f, 0.09f, 0.04f))));     // Grenade
-	DebrisMesh = MakeSolid(Box, 10.0f, 10.0f, 10.0f, FLinearColor(0.12f, 0.1f, 0.08f));
-	// A mesh made at run time has no collision: give the debris a box to be a rigid body with (the mesh is a 10 cm cube on z = 0).
-	if (DebrisMesh)
+	// Debris: clods of dark and brown soil and grey stone.
+	DebrisMeshes.Reset();
+	for (const FLinearColor& Colour : {FLinearColor(0.07f, 0.055f, 0.04f), FLinearColor(0.15f, 0.11f, 0.07f), FLinearColor(0.2f, 0.19f, 0.17f)})
 	{
-		if (!DebrisMesh->GetBodySetup())
+		UStaticMesh* DebrisMesh = MakeSolid(Box, 10.0f, 10.0f, 10.0f, Colour);
+		// A mesh made at run time has no collision: give the debris a box to be a rigid body with (the mesh is a 10 cm cube on z = 0).
+		if (DebrisMesh)
 		{
-			DebrisMesh->CreateBodySetup();
-		}
-		if (UBodySetup* Setup = DebrisMesh->GetBodySetup())
-		{
-			Setup->RemoveSimpleCollision();
-			FKBoxElem Cube(10.0f, 10.0f, 10.0f);
-			Cube.Center = FVector(0.0, 0.0, 5.0);
-			Setup->AggGeom.BoxElems.Add(Cube);
-			Setup->CollisionTraceFlag = CTF_UseSimpleAsComplex;
-			Setup->InvalidatePhysicsData();
-			Setup->CreatePhysicsMeshes();
+			DebrisMeshes.Add(DebrisMesh);
+			if (!DebrisMesh->GetBodySetup())
+			{
+				DebrisMesh->CreateBodySetup();
+			}
+			if (UBodySetup* Setup = DebrisMesh->GetBodySetup())
+			{
+				Setup->RemoveSimpleCollision();
+				FKBoxElem Cube(10.0f, 10.0f, 10.0f);
+				Cube.Center = FVector(0.0, 0.0, 5.0);
+				Setup->AggGeom.BoxElems.Add(Cube);
+				Setup->CollisionTraceFlag = CTF_UseSimpleAsComplex;
+				Setup->InvalidatePhysicsData();
+				Setup->CreatePhysicsMeshes();
+			}
 		}
 	}
 
@@ -379,9 +386,17 @@ void UShooterFeelSubsystem::OnExplosion(const colony::Event& Event)
 
 	// A fire blast (a molotov, an incendiary shell; sneed 2026-11-19): a wide low splash of burning fuel and black smoke, a
 	// soft flash and a small push on the camera, no fragments or debris. The sim lights the ground (FireSubsystem draws it).
+	// With the blast art in (-run=BlastArt), UBlastFxSubsystem draws the fire, smoke, sparks and light; this keeps the
+	// camera's feel and the debris.
+	UBlastFxSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<UBlastFxSubsystem>() : nullptr;
+	const bool bRealistic = Fx && Fx->IsReady();
 	const colony::DefId Type = Event.def;
 	if (Type.valid() && Source->GetDefs() && Source->GetDefs()->get(Type).text("mix.sub") == "Fire")
 	{
+		if (bRealistic)
+		{
+			return;
+		}
 		const float FireScale = FMath::Max(RadiusM / 1.1f, 0.6f);
 		Burst(EBlastParticle::FireOuter, At + FVector(0.0, 0.0, 15.0), FMath::RoundToInt(14 * FireScale), 260.0f * FireScale, 0.25f, 60.0f * FireScale, 0.7f, 0.0f);
 		Burst(EBlastParticle::FireCore, At + FVector(0.0, 0.0, 25.0), FMath::RoundToInt(8 * FireScale), 120.0f * FireScale, 0.9f, 50.0f * FireScale, 0.6f, -30.0f);
@@ -402,25 +417,28 @@ void UShooterFeelSubsystem::OnExplosion(const colony::Event& Event)
 
 	// Fireball, smoke, sparks and dust.
 	const float Scale = RadiusM / 1.9f;
-	Burst(EBlastParticle::FireCore, At + FVector(0.0, 0.0, 30.0), FMath::RoundToInt(5 + 3 * Scale), 140.0f * Scale, 0.8f, 55.0f * Scale, 0.35f + 0.1f * Scale, 0.0f);
-	Burst(EBlastParticle::FireOuter, At + FVector(0.0, 0.0, 30.0), FMath::RoundToInt(8 + 5 * Scale), 230.0f * Scale, 0.6f, 75.0f * Scale, 0.55f + 0.15f * Scale, 0.0f);
-	Burst(EBlastParticle::Smoke, At + FVector(0.0, 0.0, 40.0), FMath::RoundToInt(12 + 6 * Scale), 150.0f * Scale, 1.0f, 55.0f * Scale, 2.6f + 0.6f * Scale, -40.0f);
-	Burst(EBlastParticle::Spark, At + FVector(0.0, 0.0, 20.0), FMath::RoundToInt(24 + 12 * Scale), 700.0f * Scale, 0.5f, 1.8f, 0.9f, 980.0f);
-	Burst(EBlastParticle::Dust, At + FVector(0.0, 0.0, 8.0), FMath::RoundToInt(10 + 6 * Scale), 260.0f * Scale, 0.15f, 45.0f * Scale, 1.6f, -10.0f);
-
-	// A flash of light that dies in half a second.
-	FlashAt = At + FVector(0.0, 0.0, 120.0);
-	FlashPeak = 9000.0f * FMath::Clamp(Scale, 0.6f, 3.0f);
-	FlashAge = 0.0f;
-	for (UPointLightComponent* Light : FlashLights)
+	if (!bRealistic)
 	{
-		if (Light)
+		Burst(EBlastParticle::FireCore, At + FVector(0.0, 0.0, 30.0), FMath::RoundToInt(5 + 3 * Scale), 140.0f * Scale, 0.8f, 55.0f * Scale, 0.35f + 0.1f * Scale, 0.0f);
+		Burst(EBlastParticle::FireOuter, At + FVector(0.0, 0.0, 30.0), FMath::RoundToInt(8 + 5 * Scale), 230.0f * Scale, 0.6f, 75.0f * Scale, 0.55f + 0.15f * Scale, 0.0f);
+		Burst(EBlastParticle::Smoke, At + FVector(0.0, 0.0, 40.0), FMath::RoundToInt(12 + 6 * Scale), 150.0f * Scale, 1.0f, 55.0f * Scale, 2.6f + 0.6f * Scale, -40.0f);
+		Burst(EBlastParticle::Spark, At + FVector(0.0, 0.0, 20.0), FMath::RoundToInt(24 + 12 * Scale), 700.0f * Scale, 0.5f, 1.8f, 0.9f, 980.0f);
+		Burst(EBlastParticle::Dust, At + FVector(0.0, 0.0, 8.0), FMath::RoundToInt(10 + 6 * Scale), 260.0f * Scale, 0.15f, 45.0f * Scale, 1.6f, -10.0f);
+
+		// A flash of light that dies in half a second.
+		FlashAt = At + FVector(0.0, 0.0, 120.0);
+		FlashPeak = 9000.0f * FMath::Clamp(Scale, 0.6f, 3.0f);
+		FlashAge = 0.0f;
+		for (UPointLightComponent* Light : FlashLights)
 		{
-			Light->SetWorldLocation(FlashAt);
+			if (Light)
+			{
+				Light->SetWorldLocation(FlashAt);
+			}
 		}
 	}
 
-	if (GFeelDebris.GetValueOnGameThread() != 0 && CubeMesh && DebrisMesh)
+	if (GFeelDebris.GetValueOnGameThread() != 0 && CubeMesh && !DebrisMeshes.IsEmpty())
 	{
 		// The ground under the blast leans with the map there.
 		const colony::Map& Map = Source->GetSim()->map();
@@ -474,7 +492,7 @@ void UShooterFeelSubsystem::SpawnDebris(const FVector& Centre, float RadiusM, co
 	for (int32 I = 0; I < Want && Debris.Num() < FeelMaxDebris; ++I)
 	{
 		UStaticMeshComponent* Piece = NewObject<UStaticMeshComponent>(Holder);
-		Piece->SetStaticMesh(DebrisMesh);
+		Piece->SetStaticMesh(DebrisMeshes[Random.RandRange(0, DebrisMeshes.Num() - 1)]);
 		Piece->SetMobility(EComponentMobility::Movable);
 		Piece->SetCollisionProfileName(TEXT("PhysicsActor"));
 		// Pieces fall on the floor and nothing else: not on each other, not on pawns.
@@ -483,7 +501,8 @@ void UShooterFeelSubsystem::SpawnDebris(const FVector& Centre, float RadiusM, co
 		Piece->SetCollisionResponseToChannel(ECC_Vehicle, ECR_Ignore);
 		Piece->SetCanEverAffectNavigation(false);
 		Piece->SetCastShadow(true);
-		const float Size = Random.FRandRange(0.4f, 1.3f);
+		// Mostly small clods, a few fist-sized lumps.
+		const float Size = FMath::Lerp(0.3f, 1.4f, FMath::Square(Random.FRand()));
 		Piece->SetWorldScale3D(FVector(Size, Size * Random.FRandRange(0.7f, 1.3f), Size * Random.FRandRange(0.5f, 1.1f)));
 		const FVector Start = Centre + FVector(Random.FRandRange(-25.0f, 25.0f), Random.FRandRange(-25.0f, 25.0f), Random.FRandRange(10.0f, 40.0f));
 		Piece->SetWorldLocationAndRotation(Start, FRotator(Random.FRand() * 360.0f, Random.FRand() * 360.0f, Random.FRand() * 360.0f));
@@ -744,6 +763,11 @@ void UShooterFeelSubsystem::UpdateParticles(float DeltaTime, const USimSubsystem
 
 void UShooterFeelSubsystem::UpdateDebris(float DeltaTime)
 {
+	UBlastFxSubsystem* Fx = GetWorld() ? GetWorld()->GetSubsystem<UBlastFxSubsystem>() : nullptr;
+	if (Fx && !Fx->IsReady())
+	{
+		Fx = nullptr;
+	}
 	for (int32 Index = Debris.Num() - 1; Index >= 0; --Index)
 	{
 		FFeelDebris& Piece = Debris[Index];
@@ -754,6 +778,11 @@ void UShooterFeelSubsystem::UpdateDebris(float DeltaTime)
 		}
 		Piece.Age += DeltaTime;
 		const FVector Where = Piece.Piece->GetComponentLocation();
+		// Fast pieces trail dust for their first second (about 12 puffs a second each).
+		if (Fx && Piece.Age < 1.0f && Random.FRand() < DeltaTime * 12.0f && Piece.Piece->GetPhysicsLinearVelocity().SizeSquared() > 300.0 * 300.0)
+		{
+			Fx->AddDebrisTrail(Where, 25.0f);
+		}
 		DebrisLowestCm = FMath::Min(DebrisLowestCm, static_cast<float>(Where.Z - Piece.Start.Z));
 		DebrisHighestCm = FMath::Max(DebrisHighestCm, static_cast<float>(Where.Z - Piece.Start.Z));
 		DebrisFarthestCm = FMath::Max(DebrisFarthestCm, static_cast<float>(FVector::Dist2D(Where, Piece.Start)));
@@ -809,16 +838,9 @@ void UShooterFeelSubsystem::Tick(float DeltaTime)
 // ---------------------------------------------------------------------------
 // The settings panel.
 
-void UShooterFeelSubsystem::DrawSettingsPanel(float ViewportWidth, float Scale)
+void UShooterFeelSubsystem::DrawSettingsBody(float Scale)
 {
-	ImGui::SetNextWindowPos(ImVec2(ViewportWidth - 12.0f * Scale, 70.0f * Scale), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-	ImGui::SetNextWindowBgAlpha(0.7f);
-	ImGui::SetNextWindowCollapsed(true, ImGuiCond_Once);
-	if (!ImGui::Begin("Feel (direct mode)##Feel", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
-	{
-		ImGui::End();
-		return;
-	}
+	ImGui::PushItemWidth(260.0f * Scale);
 	bool bChanged = false;
 	float Shake = GetShakeScale();
 	float Blur = GetBlurScale();
@@ -853,9 +875,9 @@ void UShooterFeelSubsystem::DrawSettingsPanel(float ViewportWidth, float Scale)
 	ImGui::TextUnformatted("0 turns shake, blur or kick off. Hold the right mouse");
 	ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("button with a gun to aim; %s rolls (dashes in first person); %s throws a grenade."),
 		*Rim3DKeys::GetKeyLabel(ERim3DAction::RollDash), *Rim3DKeys::GetKeyLabel(ERim3DAction::Grenade))));
+	ImGui::PopItemWidth();
 	if (bChanged)
 	{
 		SaveSettings();
 	}
-	ImGui::End();
 }

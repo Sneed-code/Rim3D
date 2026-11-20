@@ -94,7 +94,7 @@ struct FBloodHit
  * IsReady is false and UFightSubsystem draws its old simple blood.
  *
  * Console: Blood.Enabled, Blood.Quality (0 low, 1 normal, 2 high), Blood.MaxDrops, Blood.MaxStains, Blood.DryMinutes,
- * Blood.Filth, Blood.DropScale, Blood.FlipU / Blood.FlipV (decal image axes), Blood.Debug.
+ * Blood.Filth, Blood.DropScale, Blood.SplatScale, Blood.GroundShade, Blood.FlipU / Blood.FlipV (decal image axes), Blood.Debug.
  */
 UCLASS()
 class RIM3D_API UBloodSubsystem : public UTickableWorldSubsystem
@@ -299,8 +299,9 @@ private:
 		EDropKind Kind = EDropKind::Drop);
 	void Land(const FDrop& Drop, const FVector& At, const FVector& Normal, UPrimitiveComponent* What);
 
+	/** On the ground or a wall; `bScaled`: drawn Blood.SplatScale times as big (not the sim's filth, already cell sized). */
 	UDecalComponent* MakeWorldDecal(int32 Cell, const FVector& At, const FVector& Normal, const FVector& Along, float HalfLength,
-		float HalfWidth, const FLinearColor& Color);
+		float HalfWidth, const FLinearColor& Color, bool bScaled = true);
 	UDecalComponent* MakeBodyDecal(USkeletalMeshComponent* Mesh, int32 Cell, const FVector& At, const FVector& Into, const FVector& Along,
 		float HalfLength, float HalfWidth, const FLinearColor& Color);
 	int32 AddStain(UDecalComponent* Decal, const FVector& At, const FVector& Normal, float RadiusCm, const FBloodFluid& Fluid, bool bPool);

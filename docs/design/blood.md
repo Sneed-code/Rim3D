@@ -60,7 +60,7 @@ down in half a minute. Tended or stopped wounds stop; the run stays as a stain.
 
 **Splatter on the ground at every hit** (sneed, 2026-11-17: "realistic blood splatter, like Baldur's Gate 3 after combat",
 not a tint; it must read from afar): besides what the flying drops leave, each hit that draws blood lays a pattern on
-the ground at once: a spatter fan 60 to 190 cm across, filled with 4 to 12 crowned drops, thrown the way the blow went (out of the exit of a shot through,
+the ground at once: a spatter fan 60 to 190 cm across, filled with 4 to 12 round drops, thrown the way the blow went (out of the exit of a shot through,
 back toward the shooter otherwise), 3 to 8 slanted drops with tails trailing further out, a few round drops near the
 feet and, for a bad wound or a body that is down, a patch under it. These are never culled by distance. Drops' own
 splats are bigger too (at least 2.4 cm across). On the body each such hit leaves the wound mark, a larger soaked patch
@@ -112,10 +112,21 @@ texture**, as Baldur's Gate 3 does:
   It relies on clothes sharing the body's bind pose. MakeHuman bodies wear no clothes yet (only MetaHumans do, and
   they keep decals, which land on their clothes), so this shows once MakeHuman clothes come.
 
+Splat shapes (PC look, 2026-11-19): drops are uneven round blots with a few short bulges and droplets near them,
+slanted drops a rounded body with a short tail, pools many melted lobes with drops on the rim. The old crown of thin
+spines with beads read as a cartoon starburst or a virus.
+Ground and wall splats (PC look, 2026-11-20): the shared colour keeps a little green and blue so wounds on shaded faces
+are not black, and on sunlit ground that read as flat pink paint, so ground and wall decals take `WorldTint`
+(Blood.GroundShade 0.6: red x0.6, green and blue x0.33), deep red wet and dark brown dry. They are drawn 1.6x
+(Blood.SplatScale), since the round shapes fill less of their square and read as specks from 10-20 m. The sim's filth
+stains keep their 1 m cell size. The pool under a bleeding body spreads faster (3-7 cm/s at first) and grows to a
+half size of 35-90 cm by blood loss, about a metre across at most, so it shows round a body lying on it (second PC look,
+2026-11-20: at 26-52 cm it hid under the body and nothing read from 12 m).
+
 ## Assets
 
 `UnrealEditor-Cmd.exe Rim3D.uproject -run=BloodArt` (game/Source/Rim3DEditor/BloodArtCommandlet.cpp) makes
-`/Game/Rim3D/Generated/Blood`: `T_BloodAtlas` (4 x 4 splat pictures drawn from shapes in `BloodSplatAtlas.h`: crowned
+`/Game/Rim3D/Generated/Blood`: `T_BloodAtlas` (4 x 4 splat pictures drawn from shapes in `BloodSplatAtlas.h`: round
 drops, slanted drops with tails, fine spatter, pools, a run, a smear, a hole, a gash; R coverage, G thickness, B wound
 core), `T_BloodAtlasN` (normals from thickness), `M_BloodSplatter` (the decal; its decal colour's alpha packs wetness
 and opacity), `M_BloodDrop` and `M_BloodMist`; `T_SkinPos_<Base>` and `M_SkinBloodPaint` for blood in the skin, and the mask

@@ -29,7 +29,7 @@
     "minEV": -1.5,
     "maxEV": 16.0,
     "brighterEV": 0.75,
-    "indoorBrighterEV": 3.0,
+    "indoorBrighterEV": 5.0,
     "indoorEase": 1.5,
     "darkerEV": 0.25,
     "speedUp": 2.0,

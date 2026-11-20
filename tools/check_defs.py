@@ -266,7 +266,34 @@ def check_hold_styles(defs_by_kind):
     rules = defs_by_kind.get("Rules", {}).get("MeleeRules")
     attack_styles = set((rules[1].get("styleAttacks") or {}).keys()) if rules else set()
     point = lambda v: isinstance(v, list) and len(v) == 3 and all(isinstance(x, (int, float)) for x in v)
+    place_keys = ("ready", "aim", "block", "fpReady", "fpAim", "fpBlock")
+
+    def check_places(where, places):
+        # Where the weapon is held: {anchor, point, at, turn} per state (docs/design/weapon-hold.md).
+        if not isinstance(places, dict):
+            problems.append(f"{where} places must be an object")
+            return
+        for key, place in places.items():
+            if key not in place_keys:
+                problems.append(f"{where} places.{key} is not one of {', '.join(place_keys)}")
+            elif not isinstance(place, dict) or not point(place.get("at")):
+                problems.append(f"{where} places.{key} needs at: [x, y, z]")
+            else:
+                if place.get("anchor", "Chest") not in ("Chest", "Head", "View"):
+                    problems.append(f"{where} places.{key} anchor must be Chest, Head or View")
+                if place.get("point", "Main") not in ("Main", "Sight", "Stock"):
+                    problems.append(f"{where} places.{key} point must be Main, Sight or Stock")
+                if "turn" in place and not point(place["turn"]):
+                    problems.append(f"{where} places.{key} turn must be [pitch, yaw, roll]")
+                if key.startswith("fp") != (place.get("anchor", "Chest") == "View"):
+                    problems.append(f"{where} places.{key}: first-person places use anchor View, third-person ones Chest or Head")
+
     for name, (file, entry) in defs_by_kind.get("HoldStyles", {}).items():
+        if "places" in entry:
+            check_places(f"{file}: HoldStyles '{name}'", entry["places"])
+        for key in ("support", "offTurn"):
+            if key in entry and not point(entry[key]):
+                problems.append(f"{file}: HoldStyles '{name}' {key} must be [x, y, z]")
         if entry.get("grip", "Blade") not in ("None", "Blade", "Gun", "Bow", "Shield", "Pole"):
             problems.append(f"{file}: HoldStyles '{name}' grip must be None, Blade, Gun, Bow, Shield or Pole")
         if entry.get("hand", "Right") not in ("Right", "Left"):
@@ -288,9 +315,11 @@ def check_hold_styles(defs_by_kind):
         if not isinstance(hold, dict) or "style" not in hold:
             problems.append(f"{file}: Things '{name}' hold needs a style")
             continue
-        for key in ("main", "off"):
+        for key in ("main", "off", "support", "offTurn"):
             if key in hold and not point(hold[key]):
                 problems.append(f"{file}: Things '{name}' hold.{key} must be [x, y, z]")
+        if "places" in hold:
+            check_places(f"{file}: Things '{name}' hold", hold["places"])
     return problems
 
 

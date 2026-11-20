@@ -42,6 +42,10 @@ namespace
 	TAutoConsoleVariable<float> GBloodDryMinutes(TEXT("Blood.DryMinutes"), 5.0f, TEXT("Real minutes at 1x for fresh blood to dry dark."), ECVF_Default);
 	TAutoConsoleVariable<int32> GBloodFilth(TEXT("Blood.Filth"), 1, TEXT("1 draws the sim's filth (blood, dirt, vomit, ash) as stains on its cells."), ECVF_Default);
 	TAutoConsoleVariable<float> GBloodDropScale(TEXT("Blood.DropScale"), 1.6f, TEXT("Drawn size of flying drops against their real size (they read better a little big)."), ECVF_Default);
+	TAutoConsoleVariable<float> GBloodSplatScale(TEXT("Blood.SplatScale"), 1.6f,
+		TEXT("Drawn size of blood splats on the ground and walls (the round shapes fill less of their square than the old spiky ones, and read small from 10 m)."), ECVF_Default);
+	TAutoConsoleVariable<float> GBloodGroundShade(TEXT("Blood.GroundShade"), 0.6f,
+		TEXT("How bright blood on the ground and walls is against blood on bodies (green and blue go down further, so it stays deep red, not pink)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GBloodFlipU(TEXT("Blood.FlipU"), 0, TEXT("1 mirrors the stain pictures left-right (if spatter tails point the wrong way)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GBloodFlipV(TEXT("Blood.FlipV"), 0, TEXT("1 mirrors the stain pictures top-bottom (if runs go up)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GBloodSwapUV(TEXT("Blood.SwapUV"), 0, TEXT("1 turns the stain pictures a quarter (if runs go sideways)."), ECVF_Default);
@@ -57,7 +61,7 @@ namespace
 	const TCHAR* const BloodPlaneMeshPath = TEXT("/Engine/BasicShapes/Plane.Plane");
 
 	// The splat atlas (BloodArtCommandlet): 4 x 4 pictures.
-	constexpr int32 BloodCellRound = 0;        // 0-3: a drop that hit square on: crown, spines, satellites
+	constexpr int32 BloodCellRound = 0;        // 0-3: a drop that hit square on: a round blot, bulges, droplets
 	constexpr int32 BloodCellDirectional = 4;  // 4-7: a drop that hit at a slant, travelling to +U: body and tail
 	constexpr int32 BloodCellSpecks = 8;       // 8-9: fine spatter
 	constexpr int32 BloodCellPool = 10;        // 10-11: a pool
@@ -74,6 +78,15 @@ namespace
 		return FLinearColor(FMath::Max(Color.R * 1.7f, 0.3f * Top), FMath::Max(Color.G * 1.7f, 0.3f * Top), FMath::Max(Color.B * 1.7f, 0.3f * Top), Color.A);
 	}
 	constexpr int32 BloodCellGash = 15;        // a torn exit wound or a cut along U
+	constexpr int32 BloodWorldCells = 16;      // CellMaterials: the same 16 again, tinted for the ground and walls
+
+	/** How big (decal half size, cm) a pool under a bleeding body grows. The pool picture fills only about the middle 60%
+	 *  of its square, so 90 is a puddle about a metre across: a body lying on it still leaves it showing round the
+	 *  edges (PC look, 2026-11-20: at 26-52 it hid under the body and nothing read from 12 m). */
+	float BloodPoolMaxRadius(float BloodLoss)
+	{
+		return 35.0f + 55.0f * FMath::Clamp(BloodLoss + 0.3f, 0.0f, 1.0f);
+	}
 
 	constexpr int32 BloodTracesPerFrame = 320;
 	constexpr int32 BloodMaxBodyStainsEach = 32;
@@ -353,11 +366,12 @@ bool UBloodSubsystem::EnsureAssets()
 	ChunkInstances = MakeInstanced(Sphere, DropMaterial, 4);
 	MistInstances = MakeInstanced(Plane, MistMaterial, 4);
 	CellMaterials.Reset();
-	for (int32 Cell = 0; Cell < 16; ++Cell)
+	// 0-15 on bodies, 16-31 (BloodWorldCells on) on the ground and walls, which take WorldTint.
+	for (int32 Cell = 0; Cell < 32; ++Cell)
 	{
 		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(SplatterBase, this);
 		Mid->SetScalarParameterValue(TEXT("CellX"), static_cast<float>(Cell % 4));
-		Mid->SetScalarParameterValue(TEXT("CellY"), static_cast<float>(Cell / 4));
+		Mid->SetScalarParameterValue(TEXT("CellY"), static_cast<float>((Cell % 16) / 4));
 		CellMaterials.Add(Mid);
 	}
 	ApplyCvarsToMaterials();
@@ -366,10 +380,12 @@ bool UBloodSubsystem::EnsureAssets()
 
 void UBloodSubsystem::ApplyCvarsToMaterials()
 {
-	for (UMaterialInstanceDynamic* Mid : CellMaterials)
+	const float Shade = FMath::Clamp(GBloodGroundShade.GetValueOnGameThread(), 0.1f, 2.0f);
+	for (int32 Index = 0; Index < CellMaterials.Num(); ++Index)
 	{
-		if (Mid)
+		if (UMaterialInstanceDynamic* Mid = CellMaterials[Index])
 		{
+			Mid->SetVectorParameterValue(TEXT("WorldTint"), Index >= BloodWorldCells ? FLinearColor(Shade, Shade * 0.55f, Shade * 0.55f) : FLinearColor::White);
 			Mid->SetScalarParameterValue(TEXT("FlipU"), GBloodFlipU.GetValueOnGameThread() != 0 ? 1.0f : 0.0f);
 			Mid->SetScalarParameterValue(TEXT("FlipV"), GBloodFlipV.GetValueOnGameThread() != 0 ? 1.0f : 0.0f);
 			Mid->SetScalarParameterValue(TEXT("SwapUV"), GBloodSwapUV.GetValueOnGameThread() != 0 ? 1.0f : 0.0f);
@@ -1024,9 +1040,9 @@ void UBloodSubsystem::AddBleed(const FBloodHit& Hit, EBloodWound Kind, float For
 // Decals.
 
 UDecalComponent* UBloodSubsystem::MakeWorldDecal(int32 Cell, const FVector& At, const FVector& Normal, const FVector& Along, float HalfLength, float HalfWidth,
-	const FLinearColor& Color)
+	const FLinearColor& Color, bool bScaled)
 {
-	if (!CellMaterials.IsValidIndex(Cell))
+	if (!CellMaterials.IsValidIndex(BloodWorldCells + Cell))
 	{
 		return nullptr;
 	}
@@ -1037,7 +1053,9 @@ UDecalComponent* UBloodSubsystem::MakeWorldDecal(int32 Cell, const FVector& At, 
 		Y = BloodAnyPerpendicular(Into, Random);
 	}
 	const FRotator Rotation = FRotationMatrix::MakeFromXY(Into, Y).Rotator();
-	UDecalComponent* Decal = UGameplayStatics::SpawnDecalAtLocation(GetWorld(), CellMaterials[Cell], FVector(5.0f, HalfLength, HalfWidth), At, Rotation, 0.0f);
+	const float Scale = bScaled ? FMath::Clamp(GBloodSplatScale.GetValueOnGameThread(), 0.3f, 4.0f) : 1.0f;
+	UDecalComponent* Decal = UGameplayStatics::SpawnDecalAtLocation(GetWorld(), CellMaterials[BloodWorldCells + Cell], FVector(5.0f, HalfLength * Scale, HalfWidth * Scale), At,
+		Rotation, 0.0f);
 	if (Decal)
 	{
 		Decal->SetDecalColor(Color);
@@ -1287,7 +1305,7 @@ void UBloodSubsystem::Land(const FDrop& Drop, const FVector& At, const FVector& 
 				const FVector Into = -N;
 				const FRotator Rotation = FRotationMatrix::MakeFromXZ(Into, -Down).Rotator();
 				const FVector Middle = At + Down * RunLength * 0.9f;
-				if (UDecalComponent* Run = UGameplayStatics::SpawnDecalAtLocation(GetWorld(), CellMaterials[BloodCellRun], FVector(5.0f, HalfWidth * 0.8f, RunLength), Middle, Rotation, 0.0f))
+				if (UDecalComponent* Run = UGameplayStatics::SpawnDecalAtLocation(GetWorld(), CellMaterials[BloodWorldCells + BloodCellRun], FVector(5.0f, HalfWidth * 0.8f, RunLength), Middle, Rotation, 0.0f))
 				{
 					Run->SetDecalColor(Fresh);
 					Run->SetFadeScreenSize(0.0015f);
@@ -1317,7 +1335,8 @@ void UBloodSubsystem::Tick(float DeltaTime)
 		Pending.Reset();
 		return;
 	}
-	const int32 Flips = (GBloodFlipU.GetValueOnGameThread() != 0 ? 1 : 0) | (GBloodFlipV.GetValueOnGameThread() != 0 ? 2 : 0) | (GBloodSwapUV.GetValueOnGameThread() != 0 ? 4 : 0);
+	const int32 Flips = (GBloodFlipU.GetValueOnGameThread() != 0 ? 1 : 0) | (GBloodFlipV.GetValueOnGameThread() != 0 ? 2 : 0) | (GBloodSwapUV.GetValueOnGameThread() != 0 ? 4 : 0) |
+		(FMath::RoundToInt(FMath::Clamp(GBloodGroundShade.GetValueOnGameThread(), 0.1f, 2.0f) * 100.0f) << 3);  // (so Blood.GroundShade shows at once)
 	if (Flips != LastFlips)
 	{
 		LastFlips = Flips;
@@ -1680,15 +1699,15 @@ void UBloodSubsystem::UpdateBleeding(float Dt, float GameSeconds)
 							AddStain(Rim, OnGround, FVector::UpVector, W, Bleed.Fluid, false);
 						}
 					}
-					NewPool.MaxRadiusCm = 26.0f + 26.0f * FMath::Clamp(BloodLoss + 0.3f, 0.0f, 1.0f);
+					NewPool.MaxRadiusCm = BloodPoolMaxRadius(BloodLoss);
 					Pools.Add(NewPool);
 					++PoolsMade;
 				}
 			}
 			else if (Pool)
 			{
-				Pool->MaxRadiusCm = FMath::Max(Pool->MaxRadiusCm, 26.0f + 26.0f * FMath::Clamp(BloodLoss + 0.3f, 0.0f, 1.0f));
-				const float Grown = FMath::Min(Pool->MaxRadiusCm, Pool->RadiusCm + Dt * (1.0f + 1.5f * Bleed.Rate) / FMath::Max(1.0f, Pool->RadiusCm / 20.0f));
+				Pool->MaxRadiusCm = FMath::Max(Pool->MaxRadiusCm, BloodPoolMaxRadius(BloodLoss));
+				const float Grown = FMath::Min(Pool->MaxRadiusCm, Pool->RadiusCm + Dt * (3.0f + 4.0f * Bleed.Rate) / FMath::Max(1.0f, Pool->RadiusCm / 25.0f));
 				if (Grown > Pool->RadiusCm + 0.05f)
 				{
 					if (FStain* Stain = Stains.FindByPredicate([Pool](const FStain& S) { return S.Serial == Pool->Stain; }); Stain && Stain->Decal.IsValid())
@@ -1995,7 +2014,8 @@ void UBloodSubsystem::SyncFilth()
 				Stain.Decal->DestroyComponent();
 			}
 			UDecalComponent* Decal = MakeWorldDecal(Cell, At, FVector::UpVector, FVector(CellRandom.FRandRange(-1.0f, 1.0f), CellRandom.FRandRange(-1.0f, 1.0f), 0.0f), Radius,
-				Radius * CellRandom.FRandRange(0.75f, 1.0f), DecalColorFor(Stain.Fluid, Stain.bFluid ? Clock - Stain.WetSince : 100000.0f, Stain.bFluid ? 0.9f * BloodAgeFade(Clock - Stain.WetSince) : 0.75f));
+				Radius * CellRandom.FRandRange(0.75f, 1.0f), DecalColorFor(Stain.Fluid, Stain.bFluid ? Clock - Stain.WetSince : 100000.0f, Stain.bFluid ? 0.9f * BloodAgeFade(Clock - Stain.WetSince) : 0.75f),
+				false);  // sized to its 1 m cell already
 			if (!Decal)
 			{
 				continue;

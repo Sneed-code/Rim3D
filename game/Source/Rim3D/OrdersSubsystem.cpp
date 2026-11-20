@@ -20,6 +20,8 @@
 
 #include <imgui.h>
 
+#include "ColonyHudStyle.h"
+
 #include "BuildingSubsystem.h"
 #include "LevelsSubsystem.h"
 #include "OverseerPawn.h"
@@ -29,8 +31,11 @@
 #include "TerrainDraw.h"
 #include "VisualMesh.h"
 
+#include "ColonySim/BuildPlanner.h"
 #include "ColonySim/Construction.h"
+#include "ColonySim/Designations.h"
 #include "ColonySim/Farming.h"
+#include "ColonySim/Floors.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Research.h"
@@ -66,9 +71,13 @@ namespace
 	constexpr int32 OrdGrowRing = 8;
 	constexpr int32 OrdLandTile = 9;
 	constexpr int32 OrdLandRing = 10;
+	constexpr int32 OrdAreaRing = 11;
 	constexpr int32 OrdKeyScale = 10000;
 
-	constexpr int32 OrdMaxBuildOrigins = 200;
+	constexpr int32 OrdMaxBuildOrigins = 600;
+	// The tiles' hotkeys, in tile order: letters the overseer view uses for nothing else (not B build, I inventory,
+	// O overseer, R turn, Y take over).
+	const TCHAR* const OrdTileKeys = TEXT("ZXCVNMGHJKLUPT");
 	constexpr int32 OrdPostMineCm = 150;
 	constexpr double OrdMessageSeconds = 4.0;
 
@@ -79,6 +88,7 @@ namespace
 	const FLinearColor OrdZoneColor = FLinearColor::FromSRGBColor(FColor(60, 150, 230));
 	const FLinearColor OrdGrowColor = FLinearColor::FromSRGBColor(FColor(120, 200, 60));
 	const FLinearColor OrdLandColor = FLinearColor::FromSRGBColor(FColor(250, 185, 40));
+	const FLinearColor OrdAreaColor = FLinearColor::FromSRGBColor(FColor(120, 150, 240));
 
 	uint64 OrdMix(uint64 Seed, uint64 Value)
 	{
@@ -175,8 +185,11 @@ namespace
 			case EOrderTool::RemoveLandingZone: return FColor(160, 160, 170);
 			case EOrderTool::Cancel: return FColor(255, 255, 255);
 			case EOrderTool::Deconstruct: return FColor(225, 50, 50);
+			case EOrderTool::RemoveFloor: return FColor(200, 120, 60);
 			case EOrderTool::LevelEarth: return FColor(170, 120, 70);
 			case EOrderTool::CancelEarth: return FColor(160, 160, 170);
+			case EOrderTool::PaintArea: return FColor(120, 150, 240);
+			case EOrderTool::EraseArea: return FColor(160, 160, 170);
 			default: return FColor(255, 255, 255);
 		}
 	}
@@ -191,25 +204,22 @@ namespace
 		return Out;
 	}
 
-	// `Rects` keeps where each button was drawn (ImGui pixels), so a test can click it with real mouse events.
-	bool OrdButton(const FString& Label, bool bActive, TMap<FString, FBox2D>* Rects = nullptr)
+	/** What the strip above the tiles calls a tool. */
+	const TCHAR* OrdToolLabel(EOrderTool Tool)
 	{
-		if (bActive)
+		switch (Tool)
 		{
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.45f, 0.75f, 1.0f));
+			case EOrderTool::Stockpile: return TEXT("Stockpile zone");
+			case EOrderTool::RemoveZone: return TEXT("Remove zone");
+			case EOrderTool::Mine: return TEXT("Mine");
+			case EOrderTool::Chop: return TEXT("Chop trees");
+			case EOrderTool::Harvest: return TEXT("Harvest");
+			case EOrderTool::Cancel: return TEXT("Cancel");
+			case EOrderTool::Deconstruct: return TEXT("Deconstruct");
+			case EOrderTool::Grow: return TEXT("Growing zone");
+			case EOrderTool::RemoveFloor: return TEXT("Remove floor");
+			default: return TEXT("Build");
 		}
-		const bool bClicked = ImGui::Button(TCHAR_TO_UTF8(*Label));
-		if (Rects)
-		{
-			const ImVec2 Min = ImGui::GetItemRectMin();
-			const ImVec2 Max = ImGui::GetItemRectMax();
-			Rects->Add(Label, FBox2D(FVector2D(Min.x, Min.y), FVector2D(Max.x, Max.y)));
-		}
-		if (bActive)
-		{
-			ImGui::PopStyleColor();
-		}
-		return bClicked;
 	}
 
 	const TCHAR* OrdToolName(EOrderTool Tool)
@@ -226,10 +236,13 @@ namespace
 			case EOrderTool::Cancel: return TEXT("Cancel");
 			case EOrderTool::Deconstruct: return TEXT("Deconstruct");
 			case EOrderTool::Grow: return TEXT("Grow");
+			case EOrderTool::RemoveFloor: return TEXT("RemoveFloor");
 			case EOrderTool::LandingZone: return TEXT("LandingZone");
 			case EOrderTool::RemoveLandingZone: return TEXT("RemoveLandingZone");
 			case EOrderTool::LevelEarth: return TEXT("LevelEarth");
 			case EOrderTool::CancelEarth: return TEXT("CancelEarth");
+			case EOrderTool::PaintArea: return TEXT("PaintArea");
+			case EOrderTool::EraseArea: return TEXT("EraseArea");
 		}
 		return TEXT("?");
 	}
@@ -400,40 +413,42 @@ void UOrdersSubsystem::ReadBuildOptions()
 		return;
 	}
 	const colony::Sim& Sim = *Bridge->GetSim();
-	const colony::DefDatabase& Defs = Sim.defs();
-	for (const colony::DefId Id : Defs.idsOfKind("Things"))
+	// The sim's own menu (docs/design/build-menu.md): categories in RimWorld's order, floors on Floors, locked entries kept.
+	const colony::BuildPlanner Planner(Sim);
+	for (const colony::BuildMenuCategory& Category : Planner.menu())
 	{
-		const colony::Def& Def = Defs.get(Id);
-		if (Def.text("category") != "Building" || !Def.has("designationCategory") || !Sim.construction().buildable(Id))
+		const FString Label = OrdCapital(Category.label);
+		BuildCategories.AddUnique(Label);
+		for (const colony::BuildMenuEntry& Entry : Category.entries)
 		{
-			continue;
-		}
-		FBuildOption Option;
-		Option.Def = Id;
-		Option.Label = OrdCapital(Def.label());
-		Option.Category = OrdCapital(Def.text("designationCategory"));
-		BuildOptions.Add(Option);
-		BuildCategories.AddUnique(Option.Category);
-	}
-	// The usual order first, anything else after it.
-	const TCHAR* const Usual[] = {TEXT("Structure"), TEXT("Furniture"), TEXT("Production")};
-	BuildCategories.Sort([&Usual](const FString& A, const FString& B)
-	{
-		const auto Rank = [&Usual](const FString& Name)
-		{
-			for (int32 Index = 0; Index < 3; ++Index)
+			FBuildOption Option;
+			Option.Def = Sim.defs().idOf(Entry.floor ? "Terrain" : "Things", Entry.defName);
+			if (!Option.Def.valid())
 			{
-				if (Name == Usual[Index])
-				{
-					return Index;
-				}
+				continue;
 			}
-			return 3;
-		};
-		const int32 RankA = Rank(A);
-		const int32 RankB = Rank(B);
-		return RankA != RankB ? RankA < RankB : A < B;
-	});
+			Option.DefName = UTF8_TO_TCHAR(Entry.defName.c_str());
+			Option.Label = OrdCapital(Entry.label);
+			Option.Category = Label;
+			Option.bFloor = Entry.floor;
+			Option.Locked = UTF8_TO_TCHAR(Entry.locked.c_str());
+			Option.Drag = Entry.drag;
+			Option.SizeX = FMath::Max(1, Entry.sizeX);
+			Option.SizeY = FMath::Max(1, Entry.sizeY);
+			BuildOptions.Add(Option);
+		}
+	}
+	int32 Done = 0;
+	for (const colony::ResearchView& Project : Bridge->GetCurrentSnapshot().research)
+	{
+		Done += Project.done ? 1 : 0;
+	}
+	ResearchDoneSeen = Done;
+}
+
+const UOrdersSubsystem::FBuildOption* UOrdersSubsystem::FindOption(colony::DefId Def) const
+{
+	return BuildOptions.FindByPredicate([Def](const FBuildOption& Option) { return Option.Def == Def; });
 }
 
 void UOrdersSubsystem::RefreshStuffOptions()
@@ -445,36 +460,17 @@ void UOrdersSubsystem::RefreshStuffOptions()
 		return;
 	}
 	const colony::Sim& Sim = *Bridge->GetSim();
-	const colony::DefDatabase& Defs = Sim.defs();
 	StuffOptionsSeconds = Bridge->GetCurrentSnapshot().gameSeconds;
-	for (const colony::DefId Id : Defs.idsOfKind("Things"))
+	// The stuffs that fit, the most on the map first (BuildPlanner::stuffChoices), for buildings and floors alike.
+	for (const colony::StuffChoice& Choice : colony::BuildPlanner(Sim).stuffChoices(Sim.defs().get(BuildDef).defName()))
 	{
-		const colony::Def& Def = Defs.get(Id);
-		if (Def.text("category") != "Item" || Def.count("stuffProps.categories") == 0 || !Sim.construction().stuffFits(BuildDef, Id))
-		{
-			continue;
-		}
 		FStuffOption Option;
-		Option.Def = Id;
-		Option.Label = OrdCapital(Def.label());
-		StuffOptions.Add(Option);
-	}
-	if (StuffOptions.IsEmpty())
-	{
-		return;
-	}
-	for (const colony::ThingView& View : Bridge->GetCurrentSnapshot().things)
-	{
-		if (View.category != colony::ThingCategory::Item)
+		Option.Def = Sim.defs().idOf("Things", Choice.defName);
+		Option.Label = OrdCapital(Choice.label);
+		Option.InStock = Choice.onMap;
+		if (Option.Def.valid())
 		{
-			continue;
-		}
-		for (FStuffOption& Option : StuffOptions)
-		{
-			if (Option.Def == View.def)
-			{
-				Option.InStock += View.stackCount;
-			}
+			StuffOptions.Add(Option);
 		}
 	}
 }
@@ -482,31 +478,13 @@ void UOrdersSubsystem::RefreshStuffOptions()
 colony::DefId UOrdersSubsystem::BestStuffFor(colony::DefId Def) const
 {
 	const USimSubsystem* Bridge = GetBridge();
-	if (!Bridge || !Bridge->GetSim() || !Def.valid() || Bridge->GetSim()->construction().stuffFits(Def, colony::DefId()))
+	if (!Bridge || !Bridge->GetSim() || !Def.valid())
 	{
 		return colony::DefId();
 	}
 	const colony::Sim& Sim = *Bridge->GetSim();
-	colony::DefId Best;
-	int32 BestStock = -1;
-	for (const colony::DefId Id : Sim.defs().idsOfKind("Things"))
-	{
-		if (Sim.defs().get(Id).text("category") != "Item" || !Sim.construction().stuffFits(Def, Id))
-		{
-			continue;
-		}
-		int32 Stock = 0;
-		for (const colony::ThingView& View : Bridge->GetCurrentSnapshot().things)
-		{
-			Stock += View.category == colony::ThingCategory::Item && View.def == Id ? View.stackCount : 0;
-		}
-		if (Stock > BestStock)
-		{
-			Best = Id;
-			BestStock = Stock;
-		}
-	}
-	return Best;
+	const std::string Best = colony::BuildPlanner(Sim).bestStuff(Sim.defs().get(Def).defName());
+	return Best.empty() ? colony::DefId() : Sim.defs().idOf("Things", Best);
 }
 
 // ---- Tools -------------------------------------------------------------------------------------
@@ -532,12 +510,28 @@ void UOrdersSubsystem::SetTool(EOrderTool NewTool)
 {
 	bDragging = false;
 	Tool = NewTool;
-	if (Tool == EOrderTool::Build && !BuildDef.valid() && !BuildOptions.IsEmpty())
+	if (Tool == EOrderTool::Build && !BuildDef.valid())
 	{
-		BuildDef = BuildOptions[0].Def;
-		BuildStuff = BestStuffFor(BuildDef);
-		RefreshStuffOptions();
+		for (const FBuildOption& Option : BuildOptions)
+		{
+			if (Option.Locked.IsEmpty())
+			{
+				BuildDef = Option.Def;
+				BuildShape = Option.Drag;
+				BuildStuff = BestStuffFor(BuildDef);
+				RefreshStuffOptions();
+				break;
+			}
+		}
 	}
+}
+
+void UOrdersSubsystem::SetAreaTool(uint32 Area, bool bAdd)
+{
+	AreaToolArea = Area;
+	SetTool(Area == 0 ? EOrderTool::None : (bAdd ? EOrderTool::PaintArea : EOrderTool::EraseArea));
+	// The overlay shows the area's cells now, so it is worked out again at once.
+	OverlaySeconds = -1;
 }
 
 bool UOrdersSubsystem::SelectBuilding(const FString& DefName, const FString& Stuff)
@@ -547,23 +541,34 @@ bool UOrdersSubsystem::SelectBuilding(const FString& DefName, const FString& Stu
 	{
 		return false;
 	}
-	const colony::DefDatabase& Defs = Bridge->GetSim()->defs();
-	const colony::DefId Id = Defs.idOf("Things", TCHAR_TO_UTF8(*DefName));
-	if (!Id.valid() || !BuildOptions.ContainsByPredicate([Id](const FBuildOption& Option) { return Option.Def == Id; }))
+	const FBuildOption* Option = BuildOptions.FindByPredicate([&DefName](const FBuildOption& Entry) { return Entry.DefName == DefName; });
+	if (!Option)
 	{
 		return false;
 	}
-	colony::DefId StuffId = Stuff.IsEmpty() ? BestStuffFor(Id) : Defs.idOf("Things", TCHAR_TO_UTF8(*Stuff));
-	if (!Bridge->GetSim()->construction().stuffFits(Id, StuffId))
+	if (!Option->Locked.IsEmpty())
 	{
-		StuffId = BestStuffFor(Id);
+		Say(FString::Printf(TEXT("%s needs research first: %s"), *Option->Label, *Option->Locked));
+		return false;
 	}
+	const colony::DefDatabase& Defs = Bridge->GetSim()->defs();
+	const colony::DefId Id = Option->Def;
+	const colony::DragShape Shape = Option->Drag;
 	bDragging = false;
 	Tool = EOrderTool::Build;
 	BuildDef = Id;
-	BuildStuff = StuffId;
+	BuildShape = Shape;
 	BuildRot = colony::Rot4::North;
 	RefreshStuffOptions();
+	BuildStuff = BestStuffFor(Id);
+	if (!Stuff.IsEmpty())
+	{
+		const colony::DefId Wanted = Defs.idOf("Things", TCHAR_TO_UTF8(*Stuff));
+		if (StuffOptions.ContainsByPredicate([Wanted](const FStuffOption& Choice) { return Choice.Def == Wanted; }))
+		{
+			BuildStuff = Wanted;
+		}
+	}
 	return true;
 }
 
@@ -595,14 +600,17 @@ bool UOrdersSubsystem::CycleBuilding(int32 Direction)
 	{
 		return false;
 	}
+	const int32 Count = BuildOptions.Num();
 	int32 Index = BuildOptions.IndexOfByPredicate([this](const FBuildOption& Option) { return Option.Def == BuildDef; });
-	Index = Index < 0 ? (Direction >= 0 ? 0 : BuildOptions.Num() - 1) : (Index + (Direction >= 0 ? 1 : -1) + BuildOptions.Num()) % BuildOptions.Num();
-	const USimSubsystem* Bridge = GetBridge();
-	if (!Bridge || !Bridge->GetSim())
+	for (int32 Tries = 0; Tries < Count; ++Tries)
 	{
-		return false;
+		Index = Index < 0 ? (Direction >= 0 ? 0 : Count - 1) : (Index + (Direction >= 0 ? 1 : -1) + Count) % Count;
+		if (BuildOptions[Index].Locked.IsEmpty())
+		{
+			return SelectBuilding(BuildOptions[Index].DefName);
+		}
 	}
-	return SelectBuilding(UTF8_TO_TCHAR(Bridge->GetSim()->defs().get(BuildOptions[Index].Def).defName().c_str()));
+	return false;
 }
 
 bool UOrdersSubsystem::CycleStuff()
@@ -844,28 +852,26 @@ void UOrdersSubsystem::GetBuildOrigins(TArray<colony::CellPos>& Out) const
 	{
 		return;
 	}
-	const colony::Def& Def = Bridge->GetSim()->defs().get(BuildDef);
-	const int32 SizeX = FMath::Max(1, FMath::RoundToInt32(static_cast<float>(Def.numberAt("size", 0, 1.0))));
-	const int32 SizeY = FMath::Max(1, FMath::RoundToInt32(static_cast<float>(Def.numberAt("size", 1, 1.0))));
+	const FBuildOption* Option = FindOption(BuildDef);
+	const int32 SizeX = Option ? Option->SizeX : 1;
+	const int32 SizeY = Option ? Option->SizeY : 1;
 	const colony::CellRect Foot = colony::footprintRect(colony::CellPos{0, 0, 0}, SizeX, SizeY, BuildRot);
-	if (Foot.sizeX == 1 && Foot.sizeY == 1)
+	if (BuildShape == colony::DragShape::Single)
 	{
-		// A 1 x 1 building is dragged out along a line (the longer way).
-		const colony::CellPos From = bDragging ? DragStart : Hover;
-		const int32 DX = Hover.x - From.x;
-		const int32 DY = Hover.y - From.y;
-		const bool bAlongX = FMath::Abs(DX) >= FMath::Abs(DY);
-		const int32 Length = FMath::Min(OrdMaxBuildOrigins, (bAlongX ? FMath::Abs(DX) : FMath::Abs(DY)) + 1);
-		const int32 Step = (bAlongX ? DX : DY) < 0 ? -1 : 1;
-		for (int32 Index = 0; Index < Length; ++Index)
-		{
-			Out.Add(bAlongX ? colony::CellPos{From.x + Index * Step, From.y, From.level} : colony::CellPos{From.x, From.y + Index * Step, From.level});
-		}
-	}
-	else
-	{
-		// The footprint is centred on the cursor's cell.
+		// One, with its footprint centred on the cursor's cell.
 		Out.Add(colony::CellPos{Hover.x - (Foot.sizeX - 1) / 2, Hover.y - (Foot.sizeY - 1) / 2, Hover.level});
+		return;
+	}
+	// A line, a room's outline or a filled rectangle from where the drag started (BuildPlanner::dragCells, the sim's own shapes).
+	const colony::CellPos From = bDragging ? DragStart : Hover;
+	for (colony::CellPos Cell : colony::BuildPlanner::dragCells(From, Hover, BuildShape, Foot.sizeX, Foot.sizeY))
+	{
+		if (Out.Num() >= OrdMaxBuildOrigins)
+		{
+			break;
+		}
+		Cell.level = Hover.level;
+		Out.Add(Cell);
 	}
 }
 
@@ -876,33 +882,12 @@ bool UOrdersSubsystem::CanPlace(colony::DefId Def, colony::CellPos Origin, colon
 	{
 		return false;
 	}
-	const colony::Sim& Sim = *Bridge->GetSim();
-	const colony::Def& Data = Sim.defs().get(Def);
-	const colony::CellRect Rect = colony::footprintRect(Origin, FMath::Max(1, FMath::RoundToInt32(static_cast<float>(Data.numberAt("size", 0, 1.0)))),
-		FMath::Max(1, FMath::RoundToInt32(static_cast<float>(Data.numberAt("size", 1, 1.0)))), Rot);
-	// An upper floor goes over open air where it would be held up; stairs and ladders need a level above them (docs/design/levels.md).
-	const bool bUpperFloor = Data.flag("building.upperFloor", false);
-	if (Data.has("building.climb") && Origin.level + 1 >= colony::Map::kLevels)
-	{
-		return false;
-	}
-	for (int32 Y = Rect.minY; Y < Rect.minY + Rect.sizeY; ++Y)
-	{
-		for (int32 X = Rect.minX; X < Rect.minX + Rect.sizeX; ++X)
-		{
-			const colony::CellPos Cell{X, Y, Origin.level};
-			if (!Sim.map().inBounds(Cell) || Sim.construction().siteAt(Cell) != colony::kNoEntity)
-			{
-				return false;
-			}
-			if (bUpperFloor ? !Sim.upperFloors().whyNotLay(Cell).empty()
-							: (!Sim.map().walkable(Cell) || Sim.map().buildingAt(Cell) != colony::kNoEntity))
-			{
-				return false;
-			}
-		}
-	}
-	return true;
+	// The sim's own rule for the plan (docs/design/build-menu.md): map edge, water, rock, a building, a plan, a floor already laid,
+	// levels and climbing.
+	const colony::Construction& Construction = Bridge->GetSim()->construction();
+	const colony::DefId Stuff = Def == BuildDef ? BuildStuff : colony::DefId();
+	const FBuildOption* Option = FindOption(Def);
+	return Option && Option->bFloor ? Construction.whyNotFloorPlan(Def, Stuff, Origin).empty() : Construction.whyNotBlueprint(Def, Stuff, Origin, Rot).empty();
 }
 
 int32 UOrdersSubsystem::EndDrag(colony::CellPos Cell)
@@ -987,6 +972,23 @@ int32 UOrdersSubsystem::EndDrag(colony::CellPos Cell)
 			Submit(colony::DesignateCommand{Rect, colony::DesignationKind::HarvestPlant});
 			Say(FString::Printf(TEXT("Harvest %d x %d"), Rect.sizeX, Rect.sizeY));
 			break;
+		case EOrderTool::RemoveFloor:
+		{
+			bool bFloor = false;
+			for (int32 Y = Rect.minY; Y < Rect.minY + Rect.sizeY && !bFloor; ++Y)
+			{
+				for (int32 X = Rect.minX; X < Rect.minX + Rect.sizeX && !bFloor; ++X)
+				{
+					bFloor = Bridge->GetSim()->floors().at(colony::CellPos{X, Y, Rect.level}).valid();
+				}
+			}
+			if (bFloor)
+			{
+				Submit(colony::DesignateCommand{Rect, colony::DesignationKind::RemoveFloor});
+			}
+			Say(bFloor ? FString(TEXT("Floor marked to be taken up")) : FString(TEXT("No floor there")));
+			break;
+		}
 		case EOrderTool::Cancel:
 		{
 			bool bMark = false;
@@ -1020,6 +1022,14 @@ int32 UOrdersSubsystem::EndDrag(colony::CellPos Cell)
 			Submit(colony::CancelEarthworksCommand{Rect});
 			Say(TEXT("Earthworks cancelled"));
 			break;
+		case EOrderTool::PaintArea:
+		case EOrderTool::EraseArea:
+		{
+			const bool bAdd = Tool == EOrderTool::PaintArea;
+			Submit(colony::PaintAreaCommand{AreaToolArea, Rect, bAdd});
+			Say(bAdd ? FString::Printf(TEXT("Area painted %d x %d"), Rect.sizeX, Rect.sizeY) : FString(TEXT("Area cells taken off")));
+			break;
+		}
 		case EOrderTool::Deconstruct:
 			for (const colony::ThingView& View : Snapshot.things)
 			{
@@ -1266,6 +1276,9 @@ UStaticMesh* UOrdersSubsystem::GetMarkMesh(int32 Kind, int32 TopCm)
 		case OrdLandRing:
 			Ring(OrdLandColor);
 			break;
+		case OrdAreaRing:
+			Ring(OrdAreaColor);
+			break;
 		default:
 			Ring(OrdZoneColor);
 			break;
@@ -1361,6 +1374,11 @@ void UOrdersSubsystem::RebuildMarks(const USimSubsystem& Bridge)
 				Place(OrdHarvest, TopOfPlant(Mark.cell), Mark.cell.x, Mark.cell.y, 3.0, nullptr);
 				++Stats.HarvestMarks;
 				break;
+			case colony::DesignationKind::RemoveFloor:
+				// A red plate on the floor to be taken up, like a building marked to come down.
+				Place(OrdDeconstruct, 0, Mark.cell.x, Mark.cell.y, 3.0, nullptr);
+				++Stats.DeconstructMarks;
+				break;
 			default:
 				break;
 		}
@@ -1394,6 +1412,23 @@ void UOrdersSubsystem::RebuildMarks(const USimSubsystem& Bridge)
 	{
 		Place(LandDraw ? OrdLandTile : OrdLandRing, 0, Cell.x, Cell.y, 4.0, LandDraw);
 		++Stats.LandingCells;
+	}
+
+	// The allowed area being painted (docs/design/areas.md): a blue ring on each of its cells while an area tool is in hand.
+	if (AreaToolArea != 0 && (Tool == EOrderTool::PaintArea || Tool == EOrderTool::EraseArea))
+	{
+		for (const colony::AreaView& Area : Snapshot.areas)
+		{
+			if (Area.id != AreaToolArea)
+			{
+				continue;
+			}
+			for (uint32 Index = Area.firstCell; Index < Area.firstCell + Area.cellCount && Index < Snapshot.areaCells.size(); ++Index)
+			{
+				const colony::CellPos& Cell = Snapshot.areaCells[Index];
+				Place(OrdAreaRing, 0, Cell.x, Cell.y, 5.0, nullptr);
+			}
+		}
 	}
 
 	// Earthworks waiting (docs/design/earthworks.md): an amber ring on every cell round a corner still to be dug or filled.
@@ -1489,6 +1524,14 @@ void UOrdersSubsystem::RefreshOverlay()
 			Signature = OrdMix(Signature, OrdCellKey(Cell.x, Cell.y) ^ 0x67726F77ULL);
 		}
 		Signature = OrdMix(Signature, Snapshot.landingZoneChanges ^ 0x4C414E44ULL);
+		if (AreaToolArea != 0 && (Tool == EOrderTool::PaintArea || Tool == EOrderTool::EraseArea))
+		{
+			Signature = OrdMix(Signature, (static_cast<uint64>(AreaToolArea) << 32) ^ 0x41524541ULL);
+			for (const colony::AreaView& Area : Snapshot.areas)
+			{
+				Signature = OrdMix(Signature, Area.id == AreaToolArea ? static_cast<uint64>(Area.cellCount) : 0);
+			}
+		}
 		Signature = OrdMix(Signature, Bridge->GetSim()->map().earthChanges() ^ 0x45415254ULL);
 		Signature = OrdMix(Signature, static_cast<uint64>(Bridge->GetSim()->map().levelledCorners().size()));
 		for (const colony::ThingView& View : Snapshot.things)
@@ -1710,7 +1753,7 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 	}
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	ColonyHud::ApplyFrameStyle(Scale);
 	const float Margin = 12.0f * Scale;
 	const ImGuiWindowFlags PanelFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
@@ -1763,204 +1806,537 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 	}
 	ImGui::End();
 
-	// The architect bar, bottom middle.
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+	// The Build menu (the bottom bar's Build tab), above the bar on the left. A message (what a drag did) shows in it, or on its
+	// own above the bar while the menu is closed (building in direct mode).
 	bBarShown = false;
-	if (ImGui::Begin("##OrdersBar", nullptr, PanelFlags))
+	bBuildMenuShown = false;
+	if (bBuildMenuOpen)
 	{
-		const ImVec2 BarPos = ImGui::GetWindowPos();
-		const ImVec2 BarSize = ImGui::GetWindowSize();
-		BarRect = FBox2D(FVector2D(BarPos.x, BarPos.y), FVector2D(BarPos.x + BarSize.x, BarPos.y + BarSize.y));
-		bBarShown = true;
-		if (!Message.IsEmpty() && FPlatformTime::Seconds() < MessageUntil)
+		DrawBuildMenu(Bridge, Scale);
+	}
+	else if (!Message.IsEmpty() && FPlatformTime::Seconds() < MessageUntil)
+	{
+		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+		if (ImGui::Begin("##OrdersMessage", nullptr, ColonyHud::BoxFlags() | ImGuiWindowFlags_NoInputs))
 		{
 			OrdText(Message);
 		}
-		// Categories.
-		const auto Category = [this](const FString& Name)
-		{
-			if (OrdButton(Name, OpenCategory == Name, &ButtonRects))
-			{
-				OpenCategory = OpenCategory == Name ? FString() : Name;
-			}
-			ImGui::SameLine();
-		};
-		Category(TEXT("Orders"));
-		Category(TEXT("Zones"));
-		for (const FString& Name : BuildCategories)
-		{
-			Category(Name);
-		}
-		if (Tool != EOrderTool::None && OrdButton(TEXT("Stop (Esc)"), false, &ButtonRects))
-		{
-			CancelTool();
-		}
-		ImGui::NewLine();
+		ImGui::End();
+	}
+}
 
-		// What is in the open category.
-		const auto ToolButton = [this](const TCHAR* Label, EOrderTool ForTool)
+void UOrdersSubsystem::SetBuildMenuOpen(bool bOpen)
+{
+	if (bBuildMenuOpen && !bOpen)
+	{
+		CancelTool();
+	}
+	bBuildMenuOpen = bOpen;
+	if (bOpen && OpenCategory.IsEmpty())
+	{
+		OpenCategory = TEXT("Orders");
+	}
+}
+
+void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
+{
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	const colony::Sim& Sim = *Bridge.GetSim();
+	const float Margin = 12.0f * Scale;
+	const float Bottom = ColonyHud::AboveBar(Viewport, Scale);
+
+	// Research finished since the menu was read: locked entries open up.
+	int32 Done = 0;
+	for (const colony::ResearchView& Project : Bridge.GetCurrentSnapshot().research)
+	{
+		Done += Project.done ? 1 : 0;
+	}
+	if (Done != ResearchDoneSeen)
+	{
+		ReadBuildOptions();
+	}
+
+	const auto Record = [this](const FString& Label)
+	{
+		const ImVec2 Min = ImGui::GetItemRectMin();
+		const ImVec2 Max = ImGui::GetItemRectMax();
+		ButtonRects.Add(Label, FBox2D(FVector2D(Min.x, Min.y), FVector2D(Max.x, Max.y)));
+	};
+	FBox2D Menu(ForceInit);
+	const auto Grow = [&Menu]()
+	{
+		const ImVec2 Pos = ImGui::GetWindowPos();
+		const ImVec2 Size = ImGui::GetWindowSize();
+		Menu += FBox2D(FVector2D(Pos.x, Pos.y), FVector2D(Pos.x + Size.x, Pos.y + Size.y));
+	};
+
+	// Left: the search box and the categories, two columns, the picked one lit.
+	const float NavWidth = 250.0f * Scale;
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Margin, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+	ImGui::SetNextWindowSize(ImVec2(NavWidth, 0.0f), ImGuiCond_Always);
+	if (ImGui::Begin("##BuildNav", nullptr, ColonyHud::BoxFlags()))
+	{
+		ImGui::SetNextItemWidth(-1.0f);
+		ImGui::InputTextWithHint("##BuildSearch", "Search", BuildSearch, sizeof(BuildSearch));
+		TArray<FString> Categories = {TEXT("Orders"), TEXT("Zone")};
+		Categories.Append(BuildCategories);
+		// Only the categories there are (an odd count leaves the last cell of the grid empty, not drawn).
+		const int32 Slots = Categories.Num();
+		const float CellWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+		for (int32 Index = 0; Index < Slots; ++Index)
 		{
-			if (OrdButton(Label, Tool == ForTool, &ButtonRects))
+			if (Index % 2 == 1)
 			{
-				SetTool(Tool == ForTool ? EOrderTool::None : ForTool);
-			}
-			ImGui::SameLine();
-		};
-		if (OpenCategory == TEXT("Orders"))
-		{
-			ToolButton(TEXT("Mine"), EOrderTool::Mine);
-			ToolButton(TEXT("Chop trees"), EOrderTool::Chop);
-			ToolButton(TEXT("Harvest"), EOrderTool::Harvest);
-			ToolButton(TEXT("Deconstruct"), EOrderTool::Deconstruct);
-			ToolButton(TEXT("Cancel"), EOrderTool::Cancel);
-			ImGui::NewLine();
-		}
-		else if (OpenCategory == TEXT("Zones"))
-		{
-			ToolButton(TEXT("Stockpile"), EOrderTool::Stockpile);
-			ToolButton(TEXT("Growing zone"), EOrderTool::Grow);
-			ToolButton(TEXT("Remove zone"), EOrderTool::RemoveZone);
-			ToolButton(TEXT("Landing zone"), EOrderTool::LandingZone);
-			ToolButton(TEXT("Remove landing zone"), EOrderTool::RemoveLandingZone);
-			ImGui::NewLine();
-		}
-		else if (!OpenCategory.IsEmpty())
-		{
-			for (const FBuildOption& Option : BuildOptions)
-			{
-				if (Option.Category != OpenCategory)
-				{
-					continue;
-				}
-				if (OrdButton(Option.Label, Tool == EOrderTool::Build && BuildDef == Option.Def, &ButtonRects))
-				{
-					if (Tool == EOrderTool::Build && BuildDef == Option.Def)
-					{
-						CancelTool();
-					}
-					else
-					{
-						SelectBuilding(UTF8_TO_TCHAR(Sim.defs().get(Option.Def).defName().c_str()));
-					}
-				}
 				ImGui::SameLine();
 			}
-			if (OpenCategory == TEXT("Structure"))
+			if (Index >= Categories.Num())
 			{
-				ToolButton(TEXT("Level earth"), EOrderTool::LevelEarth);
-				ToolButton(TEXT("Cancel earthworks"), EOrderTool::CancelEarth);
+				// Spare slots for categories still to come.
+				ImGui::BeginDisabled();
+				ImGui::PushID(Index);
+				ImGui::Button("##spare", ImVec2(CellWidth, 0.0f));
+				ImGui::PopID();
+				ImGui::EndDisabled();
+				continue;
 			}
-			ImGui::NewLine();
-		}
-
-		// Details of the tool in hand.
-		if (Tool == EOrderTool::Build && BuildDef.valid())
-		{
-			const colony::Construction& Construction = Sim.construction();
-			if (!StuffOptions.IsEmpty())
+			const FString& Name = Categories[Index];
+			if (ColonyHud::Button(Name, OpenCategory == Name && BuildSearch[0] == 0, ImVec2(CellWidth, 0.0f)))
 			{
-				FString Preview = TEXT("(none)");
-				for (const FStuffOption& Option : StuffOptions)
+				OpenCategory = Name;
+				BuildSearch[0] = 0;
+			}
+			Record(Name);
+		}
+		Grow();
+	}
+	ImGui::End();
+
+	// The tiles of the open category (or what the search finds): Cancel and Deconstruct first.
+	struct FTile
+	{
+		FString Label;
+		FString Tip;
+		EOrderTool TileTool = EOrderTool::None;
+		const FBuildOption* Option = nullptr;
+	};
+	TArray<FTile> Tiles;
+	const auto AddTool = [&Tiles](const TCHAR* Label, EOrderTool ForTool, const TCHAR* Tip)
+	{
+		FTile Tile;
+		Tile.Label = Label;
+		Tile.TileTool = ForTool;
+		Tile.Tip = Tip;
+		Tiles.Add(Tile);
+	};
+	const FString Search = UTF8_TO_TCHAR(BuildSearch);
+	const auto AddOption = [&Tiles, &Sim](const FBuildOption& Option)
+	{
+		FTile Tile;
+		Tile.Label = Option.Label;
+		Tile.Option = &Option;
+		const std::string About = Sim.defs().get(Option.Def).text("description");
+		Tile.Tip = Option.Locked.IsEmpty() ? FString(UTF8_TO_TCHAR(About.c_str())) : FString::Printf(TEXT("Needs research: %s"), *Option.Locked);
+		Tiles.Add(Tile);
+	};
+	if (!Search.IsEmpty())
+	{
+		for (const FBuildOption& Option : BuildOptions)
+		{
+			if (Option.Label.Contains(Search))
+			{
+				AddOption(Option);
+			}
+		}
+	}
+	else if (OpenCategory == TEXT("Orders"))
+	{
+		AddTool(TEXT("Cancel"), EOrderTool::Cancel, TEXT("Drag over marks, plans and frames to take them off"));
+		AddTool(TEXT("Deconstruct"), EOrderTool::Deconstruct, TEXT("Drag over buildings to have them taken down"));
+		AddTool(TEXT("Mine"), EOrderTool::Mine, TEXT("Drag over rock to have it mined"));
+		AddTool(TEXT("Chop trees"), EOrderTool::Chop, TEXT("Drag over trees and plants to have them cut"));
+		AddTool(TEXT("Harvest"), EOrderTool::Harvest, TEXT("Drag over grown plants to have them harvested"));
+		AddTool(TEXT("Remove floor"), EOrderTool::RemoveFloor, TEXT("Drag over laid floors to have them taken up"));
+	}
+	else if (OpenCategory == TEXT("Zone"))
+	{
+		AddTool(TEXT("Cancel"), EOrderTool::Cancel, TEXT("Drag over marks, plans and frames to take them off"));
+		AddTool(TEXT("Stockpile"), EOrderTool::Stockpile, TEXT("Drag a stockpile zone: haulers bring things there"));
+		AddTool(TEXT("Growing zone"), EOrderTool::Grow, TEXT("Drag a growing zone on soil: growers sow the crop you pick"));
+		AddTool(TEXT("Remove zone"), EOrderTool::RemoveZone, TEXT("Drag over zone cells to take them out of their zones"));
+		AddTool(TEXT("Landing zone"), EOrderTool::LandingZone, TEXT("Drag where shuttles may set down"));
+		AddTool(TEXT("Remove landing zone"), EOrderTool::RemoveLandingZone, TEXT("Drag over landing zone cells to take them out"));
+	}
+	else if (!OpenCategory.IsEmpty())
+	{
+		AddTool(TEXT("Cancel"), EOrderTool::Cancel, TEXT("Drag over marks, plans and frames to take them off"));
+		AddTool(TEXT("Deconstruct"), EOrderTool::Deconstruct, TEXT("Drag over buildings to have them taken down"));
+		for (const FBuildOption& Option : BuildOptions)
+		{
+			if (Option.Category == OpenCategory)
+			{
+				AddOption(Option);
+			}
+		}
+		if (OpenCategory == TEXT("Structure"))
+		{
+			AddTool(TEXT("Level earth"), EOrderTool::LevelEarth, TEXT("Drag to have the ground dug or filled flat"));
+			AddTool(TEXT("Cancel earthworks"), EOrderTool::CancelEarth, TEXT("Drag over planned earthworks to drop them"));
+		}
+	}
+
+	const auto Activate = [this](const FTile& Tile)
+	{
+		if (Tile.Option)
+		{
+			if (Tool == EOrderTool::Build && BuildDef == Tile.Option->Def)
+			{
+				CancelTool();
+			}
+			else
+			{
+				SelectBuilding(Tile.Option->DefName);
+			}
+		}
+		else
+		{
+			SetTool(Tool == Tile.TileTool ? EOrderTool::None : Tile.TileTool);
+		}
+	};
+
+	// Hotkeys: the letter in each tile's corner, while nothing is being typed.
+	if (!ImGui::GetIO().WantTextInput)
+	{
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			const int32 KeyCount = FCString::Strlen(OrdTileKeys);
+			for (int32 Index = 0; Index < Tiles.Num() && Index < KeyCount; ++Index)
+			{
+				const TCHAR Letter[2] = {OrdTileKeys[Index], 0};
+				if (PC->WasInputKeyJustPressed(FKey(FName(Letter))))
 				{
-					if (Option.Def == BuildStuff)
+					Activate(Tiles[Index]);
+					break;
+				}
+			}
+		}
+	}
+
+	float TilesTop = Bottom;
+	const float TilesLeft = Viewport->Pos.x + Margin + NavWidth + 8.0f * Scale;
+	if (!Tiles.IsEmpty())
+	{
+		const float TileSize = 86.0f * Scale;
+		const float Step = TileSize + ImGui::GetStyle().ItemSpacing.x;
+		const float Pad = 2.0f * ImGui::GetStyle().WindowPadding.x;
+		float MaxWidth = Viewport->Size.x - (TilesLeft - Viewport->Pos.x) - 330.0f * Scale;  // the date box stays clear
+		if (MaxWidth < 4.0f * Step + Pad)
+		{
+			// A narrow window: the tiles may cover the date box rather than stand in a tall column.
+			MaxWidth = Viewport->Size.x - (TilesLeft - Viewport->Pos.x) - Margin;
+		}
+		const int32 PerRow = FMath::Max(1, static_cast<int32>((MaxWidth - Pad) / Step));
+		ImGui::SetNextWindowPos(ImVec2(TilesLeft, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+		// Never taller than the room above the bar (the rest scrolls), so the window stays on screen.
+		ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, FMath::Max(120.0f * Scale, Bottom - Viewport->Pos.y - 150.0f * Scale)));
+		if (ImGui::Begin("##BuildTiles", nullptr, ColonyHud::BoxFlags()))
+		{
+			ImDrawList* Draw = ImGui::GetWindowDrawList();
+			for (int32 Index = 0; Index < Tiles.Num(); ++Index)
+			{
+				const FTile& Tile = Tiles[Index];
+				if (Index % PerRow != 0)
+				{
+					ImGui::SameLine();
+				}
+				const bool bLocked = Tile.Option && !Tile.Option->Locked.IsEmpty();
+				const bool bActive = Tile.Option ? (Tool == EOrderTool::Build && BuildDef == Tile.Option->Def) : (Tool == Tile.TileTool && Tool != EOrderTool::None);
+				ImGui::PushID(Index);
+				const ImVec2 Min = ImGui::GetCursorScreenPos();
+				if (bLocked)
+				{
+					ImGui::PushStyleColor(ImGuiCol_Text, ColonyHud::TextFaint());
+					ImGui::PushStyleColor(ImGuiCol_Button, ColonyHud::Rgb(0x15181b));
+				}
+				// The label sits low in the tile, under the icon.
+				ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.5f, 0.92f));
+				const FTCHARToUTF8 Label(*FString::Printf(TEXT("%s##tile"), *Tile.Label));
+				// A long name ("Cancel earthworks") is drawn smaller so it fits the tile instead of being cut off.
+				const float NameWidth = ImGui::CalcTextSize(TCHAR_TO_UTF8(*Tile.Label)).x + 2.0f * ImGui::GetStyle().FramePadding.x;
+				const bool bShrinkName = NameWidth > TileSize;
+				if (bShrinkName)
+				{
+					ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * FMath::Max(0.6f, TileSize / NameWidth));
+				}
+				bool bClicked = false;
+				if (bActive)
+				{
+					bClicked = ColonyHud::Button(FString(UTF8_TO_TCHAR(Label.Get())), true, ImVec2(TileSize, TileSize));
+				}
+				else
+				{
+					bClicked = ImGui::Button(Label.Get(), ImVec2(TileSize, TileSize));
+				}
+				if (bShrinkName)
+				{
+					ImGui::PopFont();
+				}
+				ImGui::PopStyleVar();
+				if (bLocked)
+				{
+					ImGui::PopStyleColor(2);
+				}
+				Record(Tile.Label);
+				if (bClicked && !bLocked)
+				{
+					Activate(Tile);
+				}
+				else if (bClicked)
+				{
+					Say(Tile.Tip);
+				}
+				ColonyHud::Tip(Tile.Tip);
+				// The hotkey in the corner, and an icon: the footprint for a building, a hatched square for a floor, the tool's colour for an order.
+				if (Index < FCString::Strlen(OrdTileKeys))
+				{
+					const char Key[2] = {static_cast<char>(OrdTileKeys[Index]), 0};
+					Draw->AddText(ImVec2(Min.x + 5.0f * Scale, Min.y + 3.0f * Scale), ImGui::GetColorU32(ColonyHud::TextFaint()), Key);
+				}
+				const ImVec2 IconCentre(Min.x + TileSize * 0.5f, Min.y + TileSize * 0.40f);
+				const float IconSize = TileSize * 0.40f;
+				const ImU32 IconColor = ImGui::GetColorU32(bLocked ? ColonyHud::TextFaint() : ColonyHud::Rgb(0xd6d0c3));
+				if (Tile.Option && Tile.Option->bFloor)
+				{
+					const ImVec2 A(IconCentre.x - IconSize * 0.5f, IconCentre.y - IconSize * 0.5f);
+					const ImVec2 B(IconCentre.x + IconSize * 0.5f, IconCentre.y + IconSize * 0.5f);
+					Draw->AddRect(A, B, IconColor, 2.0f, 1.5f, 0);
+					for (int32 Line = 1; Line < 4; ++Line)
 					{
-						Preview = FString::Printf(TEXT("%s (%d)"), *Option.Label, Option.InStock);
+						const float T = IconSize * Line / 4.0f;
+						Draw->AddLine(ImVec2(A.x + T, A.y), ImVec2(A.x, A.y + T), IconColor, 1.0f);
+						Draw->AddLine(ImVec2(B.x - T, B.y), ImVec2(B.x, B.y - T), IconColor, 1.0f);
 					}
 				}
-				OrdText(TEXT("Made of"));
-				ImGui::SameLine();
-				ImGui::SetNextItemWidth(200.0f * Scale);
-				if (ImGui::BeginCombo("##OrdersStuff", TCHAR_TO_UTF8(*Preview)))
+				else if (Tile.Option)
 				{
-					for (const FStuffOption& Option : StuffOptions)
+					const int32 W = FMath::Clamp(Tile.Option->SizeX, 1, 4);
+					const int32 H = FMath::Clamp(Tile.Option->SizeY, 1, 4);
+					const float Cell = IconSize / FMath::Max(W, H);
+					const ImVec2 A(IconCentre.x - Cell * W * 0.5f, IconCentre.y - Cell * H * 0.5f);
+					for (int32 Y = 0; Y < H; ++Y)
 					{
-						const FString Label = FString::Printf(TEXT("%s (%d)"), *Option.Label, Option.InStock);
-						if (ImGui::Selectable(TCHAR_TO_UTF8(*Label), Option.Def == BuildStuff))
+						for (int32 X = 0; X < W; ++X)
+						{
+							Draw->AddRectFilled(ImVec2(A.x + X * Cell + 1.0f, A.y + Y * Cell + 1.0f), ImVec2(A.x + (X + 1) * Cell - 1.0f, A.y + (Y + 1) * Cell - 1.0f), IconColor, 2.0f);
+						}
+					}
+				}
+				else
+				{
+					const FColor Color = OrdToolColor(Tile.TileTool);
+					Draw->AddCircle(IconCentre, IconSize * 0.45f, IM_COL32(Color.R, Color.G, Color.B, 255), 24, 3.0f * Scale);
+					if (Tile.TileTool == EOrderTool::Cancel || Tile.TileTool == EOrderTool::Deconstruct || Tile.TileTool == EOrderTool::RemoveZone ||
+						Tile.TileTool == EOrderTool::RemoveFloor || Tile.TileTool == EOrderTool::RemoveLandingZone || Tile.TileTool == EOrderTool::CancelEarth)
+					{
+						const float R = IconSize * 0.3f;
+						Draw->AddLine(ImVec2(IconCentre.x - R, IconCentre.y - R), ImVec2(IconCentre.x + R, IconCentre.y + R), IM_COL32(Color.R, Color.G, Color.B, 255), 3.0f * Scale);
+					}
+				}
+				ImGui::PopID();
+			}
+			Grow();
+			TilesTop = ImGui::GetWindowPos().y;
+		}
+		ImGui::End();
+	}
+
+	// The strip about the tool in hand: name, what it does, material, drag shape and what the drag plans and costs.
+	const bool bMessage = !Message.IsEmpty() && FPlatformTime::Seconds() < MessageUntil;
+	if (Tool != EOrderTool::None || bMessage)
+	{
+		ImGui::SetNextWindowPos(ImVec2(TilesLeft, TilesTop - 6.0f * Scale), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+		ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(Viewport->Size.x - (TilesLeft - Viewport->Pos.x) - Margin, FLT_MAX));
+		if (ImGui::Begin("##BuildStrip", nullptr, ColonyHud::BoxFlags()))
+		{
+			if (Tool == EOrderTool::Build && BuildDef.valid())
+			{
+				const colony::Def& Def = Sim.defs().get(BuildDef);
+				ImGui::BeginGroup();
+				ColonyHud::Title(OrdCapital(Def.label()));
+				FString About = UTF8_TO_TCHAR(Def.text("description").c_str());
+				int32 Stop = INDEX_NONE;
+				if (About.FindChar(TEXT('.'), Stop) && Stop > 0)
+				{
+					About = About.Left(Stop + 1);
+				}
+				ColonyHud::TextColored(ColonyHud::TextDim(), About.Len() > 96 ? About.Left(93) + TEXT("...") : About);
+				ImGui::EndGroup();
+				// Material, with how much lies on the map.
+				if (!StuffOptions.IsEmpty())
+				{
+					ImGui::SameLine(0.0f, 16.0f * Scale);
+					ImGui::BeginGroup();
+					ColonyHud::TextColored(ColonyHud::TextFaint(), TEXT("Made of"));
+					for (int32 Index = 0; Index < StuffOptions.Num() && Index < 6; ++Index)
+					{
+						const FStuffOption& Option = StuffOptions[Index];
+						if (Index > 0)
+						{
+							ImGui::SameLine();
+						}
+						if (ColonyHud::Button(FString::Printf(TEXT("%s %d##stuff%d"), *Option.Label, Option.InStock, Index), Option.Def == BuildStuff))
 						{
 							BuildStuff = Option.Def;
+						}
+					}
+					ImGui::EndGroup();
+				}
+				// The drag shape.
+				ImGui::SameLine(0.0f, 16.0f * Scale);
+				ImGui::BeginGroup();
+				ColonyHud::TextColored(ColonyHud::TextFaint(), TEXT("Drag"));
+				const colony::DragShape Shapes[] = {colony::DragShape::Single, colony::DragShape::Line, colony::DragShape::Outline, colony::DragShape::Filled};
+				const TCHAR* const ShapeTips[] = {TEXT("One, where you let go"), TEXT("A row along the drag"), TEXT("The edge of the dragged rectangle: a room's walls"),
+					TEXT("Every cell of the dragged rectangle")};
+				for (int32 Index = 0; Index < 4; ++Index)
+				{
+					if (Index > 0)
+					{
+						ImGui::SameLine();
+					}
+					if (ColonyHud::Button(UTF8_TO_TCHAR(colony::dragShapeName(Shapes[Index])), BuildShape == Shapes[Index]))
+					{
+						BuildShape = Shapes[Index];
+					}
+					ColonyHud::Tip(ShapeTips[Index]);
+				}
+				ImGui::SameLine();
+				if (ColonyHud::Button(TEXT("Turn (R)")))
+				{
+					RotateBuilding();
+				}
+				ImGui::EndGroup();
+
+				// What the drag plans and costs, worked out again only when it changes.
+				if (bHasHover)
+				{
+					const colony::CellPos From = bDragging ? DragStart : Hover;
+					TArray<colony::CellPos> Origins;
+					GetBuildOrigins(Origins);
+					uint64 Signature = OrdMix(OrdMix(OrdMix(OrdMix(7, BuildDef.value), BuildStuff.value), static_cast<uint64>(BuildRot)), static_cast<uint64>(BuildShape));
+					Signature = OrdMix(OrdMix(Signature, OrdCellKey(From.x, From.y)), OrdCellKey(Hover.x, Hover.y) + static_cast<uint64>(Hover.level));
+					Signature = OrdMix(Signature, static_cast<uint64>(Bridge.GetCurrentSnapshot().gameSeconds / 10));
+					if (Signature != PlanSignature && !Origins.IsEmpty())
+					{
+						PlanSignature = Signature;
+						const colony::CellPos Start = BuildShape == colony::DragShape::Single ? Origins[0] : From;
+						const colony::CellPos End = BuildShape == colony::DragShape::Single ? Origins[0] : Hover;
+						const colony::BuildPreview Preview = colony::BuildPlanner(Sim).preview(Def.defName(),
+							BuildStuff.valid() ? Sim.defs().get(BuildStuff).defName() : std::string(), Start, End, BuildRot, BuildShape);
+						if (!Preview.whyNot.empty())
+						{
+							PlanText = UTF8_TO_TCHAR(Preview.whyNot.c_str());
+							bPlanAffordable = false;
+						}
+						else
+						{
+							FString Cost;
+							for (const colony::BuildCostLine& Line : Preview.cost)
+							{
+								Cost += FString::Printf(TEXT("%s%d %s"), Cost.IsEmpty() ? TEXT("") : TEXT(", "), Line.needed, UTF8_TO_TCHAR(Line.label.c_str()));
+							}
+							PlanText = FString::Printf(TEXT("%d planned%s%s"), Preview.plannable, Cost.IsEmpty() ? TEXT("") : TEXT("  -  "), *Cost);
+							bPlanAffordable = Preview.affordable();
+						}
+					}
+					ImGui::SameLine(0.0f, 16.0f * Scale);
+					ColonyHud::TextColored(bPlanAffordable ? ColonyHud::Good() : ColonyHud::Warn(), PlanText);
+					if (!bPlanAffordable)
+					{
+						ColonyHud::Tip(TEXT("Not enough on the map yet: builders wait for more, as in RimWorld"));
+					}
+				}
+			}
+			else if (Tool == EOrderTool::Grow)
+			{
+				if (!GrowCrop.valid())
+				{
+					SetGrowCrop(TEXT("Plant_Rice"));
+				}
+				// The crops the colony may sow now (research done), with their growing time.
+				ColonyHud::Title(TEXT("Growing zone"));
+				const FString Preview = GrowCrop.valid() ? OrdCapital(Sim.defs().get(GrowCrop).label()) : FString(TEXT("(none)"));
+				OrdText(TEXT("Crop"));
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(220.0f * Scale);
+				if (ImGui::BeginCombo("##OrdersCrop", TCHAR_TO_UTF8(*Preview)))
+				{
+					for (const colony::DefId Crop : Sim.farming().crops())
+					{
+						const colony::Def& Def = Sim.defs().get(Crop);
+						if (!Sim.research().unlocked(Def))
+						{
+							continue;
+						}
+						// Days to grow in good soil: growDays round the clock, 13 growing hours a day, times the life pace.
+						const double Days = Def.number("plant.growDays", 1.0) * 24.0 / 13.0 / FMath::Max(Sim.plants().growthTuning(), 0.01);
+						const FString Label = FString::Printf(TEXT("%s (%.1f days)"), *OrdCapital(Def.label()), Days);
+						if (ImGui::Selectable(TCHAR_TO_UTF8(*Label), Crop == GrowCrop))
+						{
+							GrowCrop = Crop;
 						}
 					}
 					ImGui::EndCombo();
 				}
 				ImGui::SameLine();
+				ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("Drag a rectangle on open soil. Colonists with Growing work sow it."));
 			}
-			if (ImGui::Button("Rotate (R)"))
+			else if (Tool == EOrderTool::LevelEarth)
 			{
-				RotateBuilding();
-			}
-			FString Cost;
-			for (const colony::Construction::Cost& Part : Construction.costOf(BuildDef, BuildStuff))
-			{
-				Cost += FString::Printf(TEXT("%s%d %s"), Cost.IsEmpty() ? TEXT("") : TEXT(", "), Part.count, UTF8_TO_TCHAR(Sim.defs().get(Part.item).label().c_str()));
-			}
-			ImGui::SameLine();
-			OrdText(FString::Printf(TEXT("Costs %s.  Click to plan; drag a line for walls."), *Cost));
-		}
-		else if (Tool == EOrderTool::Grow)
-		{
-			if (!GrowCrop.valid())
-			{
-				SetGrowCrop(TEXT("Plant_Rice"));
-			}
-			// The crops the colony may sow now (research done), with their growing time.
-			const FString Preview = GrowCrop.valid() ? OrdCapital(Sim.defs().get(GrowCrop).label()) : FString(TEXT("(none)"));
-			OrdText(TEXT("Crop"));
-			ImGui::SameLine();
-			ImGui::SetNextItemWidth(220.0f * Scale);
-			if (ImGui::BeginCombo("##OrdersCrop", TCHAR_TO_UTF8(*Preview)))
-			{
-				for (const colony::DefId Crop : Sim.farming().crops())
+				// The height comes from the ground where the drag starts; these nudge it in 25 cm steps (at most twice a wall's
+				// height from any corner: the sim leaves out cells further off).
+				ColonyHud::Title(TEXT("Level earth"));
+				const int32 StartCm = bDragging ? LevelStartCm : (bHasHover ? LevelHeightAtCm(Hover) : 0);
+				OrdText(FString::Printf(TEXT("Height %.2f m"), static_cast<float>(StartCm + LevelNudgeCm) / 100.0f));
+				ImGui::SameLine();
+				if (ColonyHud::Button(TEXT("Lower 25 cm")))
 				{
-					const colony::Def& Def = Sim.defs().get(Crop);
-					if (!Sim.research().unlocked(Def))
+					LevelNudgeCm = FMath::Max(LevelNudgeCm - 25, -600);
+				}
+				ImGui::SameLine();
+				if (ColonyHud::Button(TEXT("Raise 25 cm")))
+				{
+					LevelNudgeCm = FMath::Min(LevelNudgeCm + 25, 600);
+				}
+				if (LevelNudgeCm != 0)
+				{
+					ImGui::SameLine();
+					if (ColonyHud::Button(TEXT("Reset")))
 					{
-						continue;
-					}
-					// Days to grow in good soil: growDays round the clock, 13 growing hours a day, times the life pace.
-					const double Days = Def.number("plant.growDays", 1.0) * 24.0 / 13.0 / FMath::Max(Sim.plants().growthTuning(), 0.01);
-					const FString Label = FString::Printf(TEXT("%s (%.1f days)"), *OrdCapital(Def.label()), Days);
-					if (ImGui::Selectable(TCHAR_TO_UTF8(*Label), Crop == GrowCrop))
-					{
-						GrowCrop = Crop;
+						LevelNudgeCm = 0;
 					}
 				}
-				ImGui::EndCombo();
+				ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("Drag from the height you want. Builders dig or fill it, about a second per quarter metre."));
 			}
-			ImGui::SameLine();
-			OrdText(TEXT("Drag a rectangle on open soil.  Colonists with Growing work sow it."));
-		}
-		else if (Tool == EOrderTool::LevelEarth)
-		{
-			// The height comes from the ground where the drag starts; these nudge it in 25 cm steps (at most twice a wall's
-			// height from any corner: the sim leaves out cells further off).
-			const int32 StartCm = bDragging ? LevelStartCm : (bHasHover ? LevelHeightAtCm(Hover) : 0);
-			OrdText(FString::Printf(TEXT("Height %.2f m"), static_cast<float>(StartCm + LevelNudgeCm) / 100.0f));
-			ImGui::SameLine();
-			if (ImGui::Button("Lower 25 cm"))
+			else if (Tool == EOrderTool::LandingZone)
 			{
-				LevelNudgeCm = FMath::Max(LevelNudgeCm - 25, -600);
+				ColonyHud::Title(TEXT("Landing zone"));
+				ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("Drag rectangles on open ground. Shuttles set down inside it when a whole 6 x 12 shuttle fits."));
 			}
-			ImGui::SameLine();
-			if (ImGui::Button("Raise 25 cm"))
+			else if (Tool != EOrderTool::None)
 			{
-				LevelNudgeCm = FMath::Min(LevelNudgeCm + 25, 600);
+				ColonyHud::Title(OrdToolLabel(Tool));
+				ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("Drag a rectangle on the ground. Right click or Esc puts it down."));
 			}
-			ImGui::SameLine();
-			if (LevelNudgeCm != 0 && ImGui::Button("Reset"))
+			if (bMessage)
 			{
-				LevelNudgeCm = 0;
+				ColonyHud::TextColored(ColonyHud::Accent(), Message);
 			}
-			ImGui::SameLine();
-			OrdText(TEXT("Drag from the height you want.  Builders dig or fill it, about a second per quarter metre."));
+			Grow();
 		}
-		else if (Tool == EOrderTool::LandingZone)
-		{
-			OrdText(TEXT("Drag rectangles on open ground.  Shuttles set down inside it when a whole 6 x 12 shuttle fits."));
-		}
-		else if (Tool != EOrderTool::None)
-		{
-			OrdText(TEXT("Drag a rectangle on the ground.  Right click or Esc stops."));
-		}
+		ImGui::End();
 	}
-	ImGui::End();
+	BuildMenuRect = Menu;
+	bBuildMenuShown = Menu.bIsValid;
+	BarRect = Menu;
+	bBarShown = Menu.bIsValid;
 }

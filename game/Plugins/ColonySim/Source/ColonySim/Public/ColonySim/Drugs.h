@@ -233,7 +233,7 @@ public:
 private:
     ChemicalState& chemicalState(DrugState& state, const std::string& chemical);
     const ChemicalState* chemicalState(const DrugState& state, const std::string& chemical) const;
-    DrugState& ensure(Entity pawn);
+    DrugState& ensureDrugState(Entity pawn);
     double unit(Entity pawn, int64_t now, uint64_t salt) const;
     void emit(EventType type, Entity pawn, DefId def, float amount, const char* message);
     float severity(Entity pawn, DefId hediff) const;

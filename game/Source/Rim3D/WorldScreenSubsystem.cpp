@@ -5,6 +5,8 @@
 
 #include <imgui.h>
 
+#include "ColonyHudStyle.h"
+
 #include "OverseerSubsystem.h"
 #include "SimSubsystem.h"
 
@@ -363,22 +365,6 @@ void UWorldScreenSubsystem::Tick(float DeltaTime)
 	DrawScreen(*Bridge);
 }
 
-void UWorldScreenSubsystem::DrawOpenButton(float Scale, float Margin)
-{
-	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - Margin, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
-	const ImGuiWindowFlags Flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
-	if (ImGui::Begin("##WorldScreenOpen", nullptr, Flags))
-	{
-		if (ImGui::Button("World map (M)"))
-		{
-			SetOpen(true);
-		}
-	}
-	ImGui::End();
-}
-
 void UWorldScreenSubsystem::DrawScreen(USimSubsystem& Bridge)
 {
 	const ImGui::FScopedContext ScopedContext;
@@ -392,7 +378,7 @@ void UWorldScreenSubsystem::DrawScreen(USimSubsystem& Bridge)
 		return;
 	}
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	ColonyHud::ApplyFrameStyle(Scale);
 	const float Margin = 12.0f * Scale;
 
 	ImGuiIO& IO = ImGui::GetIO();
@@ -404,9 +390,9 @@ void UWorldScreenSubsystem::DrawScreen(USimSubsystem& Bridge)
 	{
 		bOpen = false;
 	}
+	// Opened from the bottom bar's World tab (UColonyHudSubsystem) or the M key.
 	if (!bOpen)
 	{
-		DrawOpenButton(Scale, Margin);
 		return;
 	}
 

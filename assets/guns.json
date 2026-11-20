@@ -116,8 +116,8 @@
       "stanceHold": 1.0,
       "reload": "Mixamo/Firearms/A_Reload",
       "magazine": {"part": "magazine", "out": 0.2, "in": 0.6},
-      "hip": [14, 6, -6],
-      "sightDistance": 30,
+      "hip": [6, 6, -10],
+      "sightDistance": 44,
       "kick": {"back": 2.5, "up": 6, "recover": 16}
     },
     {

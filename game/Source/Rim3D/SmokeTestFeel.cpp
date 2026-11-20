@@ -6,6 +6,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Misc/ConfigCacheIni.h"
 
+#include "BlastFxSubsystem.h"
 #include "FightSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
@@ -18,6 +19,7 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Explosives.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 
@@ -40,6 +42,11 @@ namespace
 		float MaxRollAngle = 0.0f;
 		float MaxFlash = 0.0f;
 		int32 MaxBlast = 0;
+		int32 MaxSmoke = 0;
+		int32 BlastsAtStart = 0;
+		float BlastX = 0.0f;
+		float BlastY = 0.0f;
+		int32 ScorchesAtStart = 0;
 		int32 MaxGrenades = 0;
 		int32 MaxDebris = 0;
 		int32 ShotsAtStart = 0;
@@ -57,7 +64,7 @@ namespace
 		void Reset()
 		{
 			MaxKickPitch = MaxFeelPitch = MinFeelPitch = MaxAimDirectionError = MaxShake = MaxBlur = MaxRollAngle = MaxFlash = 0.0f;
-			MaxBlast = MaxGrenades = MaxDebris = 0;
+			MaxBlast = MaxGrenades = MaxDebris = MaxSmoke = 0;
 			MaxCameraTrail = CameraTrailAtEnd = 0.0;
 		}
 	};
@@ -102,6 +109,12 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		State->MaxShake = FMath::Max(State->MaxShake, F->GetLargestShakeSeen());
 		State->MaxBlur = FMath::Max(State->MaxBlur, Body->GetMotionBlurAmount());
 		State->MaxFlash = FMath::Max(State->MaxFlash, F->GetFlashIntensity());
+		if (const UBlastFxSubsystem* Fx = GetWorld()->GetSubsystem<UBlastFxSubsystem>())
+		{
+			State->MaxFlash = FMath::Max(State->MaxFlash, Fx->GetFlashCandelas());
+			State->MaxBlast = FMath::Max(State->MaxBlast, Fx->GetSpritesAlive());
+			State->MaxSmoke = FMath::Max(State->MaxSmoke, Fx->GetSmokeAlive());
+		}
 		State->MaxCameraTrail = FMath::Max(State->MaxCameraTrail, Body->GetCameraTrail());
 		State->CameraTrailAtEnd = Body->GetCameraTrail();
 		State->MaxBlast = FMath::Max(State->MaxBlast, F->GetBlastParticles());
@@ -535,4 +548,173 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		FeelSmokeSet(TEXT("Sky.DayOfYear"), -1.0f);
 	};
 	Phases.Add(MoveTemp(Big));
+
+	// 8. The realistic blast look (docs/design/blast-draw.md, needs -run=BlastArt): a frag blast 12 m ahead in a cleared patch, the camera turned to it, in daylight,
+	// pictured at its fireball, its rising smoke and its lingering cloud and scorch; then a molotov's splash of fire.
+	const auto Fx = [this]() { return GetWorld()->GetSubsystem<UBlastFxSubsystem>(); };
+	// Turns the camera to look at a map point a little below eye height, so the blast there is in the picture.
+	const auto LookAtBlast = [=, this](float X, float Y, float Pitch, float Aside)
+	{
+		const colony::ThingView* Me = MyView();
+		AProtagonistPawn* Body = Prot() ? Prot()->GetBody() : nullptr;
+		if (!Me || !Body)
+		{
+			return;
+		}
+		// Aside degrees off it: the over-the-shoulder camera looks through the player's own body, which hid the fireball,
+		// the scorch and the molotov's flames in PC rounds 3 to 5. -20 puts the blast right of the body, +20 left of it
+		// (away from the colonists standing about on the right: PC round 8's linger shot).
+		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Y - Me->y, X - Me->x)) + Aside;
+		Body->Look(FRotator::NormalizeAxis(Yaw - Body->GetYaw()), Pitch - Body->GetPitch());
+		Body->SnapCamera();
+	};
+	FPhase Fireball;
+	Fireball.Name = TEXT("blast_fireball");
+	Fireball.WarmupSeconds = 0.2f;
+	Fireball.MeasureSeconds = 1.0f;
+	Fireball.ScreenshotAt = 0.1f;
+	Fireball.Setup = [=, this]()
+	{
+		State->Reset();
+		FeelSmokeSet(TEXT("Sky.Hour"), 14.0f);
+		const colony::ThingView* Me = MyView();
+		State->BlastsAtStart = Fx() ? Fx()->GetBlastsDrawn() : 0;
+		// A clearing ahead, so no tree stands between the camera and the blasts (the molotov's spot too).
+		if (colony::Sim* Sim = SimOf())
+		{
+			const int32 X0 = FMath::FloorToInt32(Me->x);
+			const int32 Y0 = FMath::FloorToInt32(Me->y);
+			for (int32 Dx = -4; Dx <= 22; ++Dx)
+			{
+				for (int32 Dy = -12; Dy <= 12; ++Dy)
+				{
+					Sim->plants().remove(colony::CellPos{X0 + Dx, Y0 + Dy, 0});
+				}
+			}
+		}
+		// The earlier phases' blasts (a 5 m one among them) would still be smoking in the picture.
+		if (Fx())
+		{
+			Fx()->ClearForTest();
+		}
+		State->ScorchesAtStart = Fx() ? Fx()->GetScorchMarks() : 0;
+		// Off to one side, out of line with the colonists who stand about ahead (PC round 3: they hid the fireball).
+		State->BlastX = Me->x + 9.0f;
+		State->BlastY = Me->y - 7.0f;
+		LookAtBlast(State->BlastX, State->BlastY, 0.0f, -20.0f);
+		Bridge()->Submit(colony::ExplodeCommand{State->BlastX, State->BlastY, 1.9f, 50.0f, "Bomb", 0.1f});
+	};
+	Fireball.OnFrame = Watch;
+	Fireball.Verify = [=, this]()
+	{
+		if (!Fx() || !Fx()->IsReady())
+		{
+			Notes.Add(TEXT("blast_fireball: no blast art (run -run=BlastArt); the simple look was drawn"));
+			return;
+		}
+		Notes.Add(FString::Printf(TEXT("blast_fireball: %d blast(s) drawn, %d sprites at most, light up to %.0f cd"), Fx()->GetBlastsDrawn() - State->BlastsAtStart, State->MaxBlast, State->MaxFlash));
+		if (Fx()->GetBlastsDrawn() - State->BlastsAtStart < 1 || State->MaxBlast < 40 || State->MaxFlash < 2000.0f)
+		{
+			Fail(FString::Printf(TEXT("blast_fireball: %d blasts drawn, %d sprites, %.0f cd"), Fx()->GetBlastsDrawn() - State->BlastsAtStart, State->MaxBlast, State->MaxFlash));
+		}
+		if (Fx()->GetScorchMarks() - State->ScorchesAtStart < 1)
+		{
+			Fail(TEXT("blast_fireball: the blast left no scorch mark"));
+		}
+	};
+	Phases.Add(MoveTemp(Fireball));
+
+	FPhase Rising;
+	Rising.Name = TEXT("blast_smoke");
+	Rising.WarmupSeconds = 0.0f;
+	Rising.MeasureSeconds = 3.0f;
+	Rising.ScreenshotAt = 2.5f;
+	Rising.Setup = [=]() { State->MaxSmoke = 0; };
+	Rising.OnFrame = Watch;
+	Phases.Add(MoveTemp(Rising));
+
+	FPhase Lingering;
+	Lingering.Name = TEXT("blast_linger");
+	Lingering.WarmupSeconds = 0.0f;
+	Lingering.MeasureSeconds = 7.0f;
+	Lingering.ScreenshotAt = 6.5f;
+	// The smoke still hanging over the blast's spot.
+	Lingering.Setup = [=]()
+	{
+		State->MaxSmoke = 0;
+		// The hanging cloud, looked at a little upward. The scorch is pictured by blast_scorch: 11 m off it is a sliver at a
+		// grazing angle, with the colonists standing on the right of it and the player's own body on the left (rounds 3 to 9).
+		LookAtBlast(State->BlastX, State->BlastY, 6.0f, -20.0f);
+	};
+	Lingering.OnFrame = Watch;
+	Lingering.Verify = [=, this]()
+	{
+		if (!Fx() || !Fx()->IsReady())
+		{
+			return;
+		}
+		// About 11 s after the blast: the smoke still hangs and the scorch is still there.
+		Notes.Add(FString::Printf(TEXT("blast_linger: %d smoke puffs at the end, %d scorch marks"), Fx()->GetSmokeAlive(), Fx()->GetScorchMarks()));
+		if (Fx()->GetSmokeAlive() < 3)
+		{
+			Fail(FString::Printf(TEXT("blast_linger: only %d smoke puffs left 11 s after the blast"), Fx()->GetSmokeAlive()));
+		}
+		if (Fx()->GetScorchMarks() < 1)
+		{
+			Fail(TEXT("blast_linger: the scorch mark is gone already"));
+		}
+	};
+	Phases.Add(MoveTemp(Lingering));
+
+	// The scorch mark alone, with no smoke over it and looked down at from 5 m (rounds 3 to 7 never saw it behind the smoke).
+	FPhase ScorchOnly;
+	ScorchOnly.Name = TEXT("blast_scorch");
+	ScorchOnly.WarmupSeconds = 0.2f;
+	ScorchOnly.MeasureSeconds = 1.0f;
+	ScorchOnly.ScreenshotAt = 0.5f;
+	ScorchOnly.Setup = [=, this]()
+	{
+		const colony::ThingView* Me = MyView();
+		if (!Me || !Fx())
+		{
+			return;
+		}
+		Fx()->ClearForTest();
+		Fx()->AddScorchForTest(Me->x + 5.0f, Me->y - 2.0f, 1.9f);
+		LookAtBlast(Me->x + 5.0f, Me->y - 2.0f, -30.0f, -20.0f);
+	};
+	ScorchOnly.Verify = [=, this]()
+	{
+		if (!Fx() || !Fx()->IsReady())
+		{
+			return;
+		}
+		Notes.Add(FString::Printf(TEXT("blast_scorch: %d scorch mark(s), look for a dark burnt patch with rays on the ground"), Fx()->GetScorchMarks()));
+		if (Fx()->GetScorchMarks() < 1)
+		{
+			Fail(TEXT("blast_scorch: no scorch mark was made"));
+		}
+	};
+	Phases.Add(MoveTemp(ScorchOnly));
+
+	FPhase Molotov;
+	Molotov.Name = TEXT("blast_molotov");
+	Molotov.WarmupSeconds = 0.2f;
+	Molotov.MeasureSeconds = 1.5f;
+	Molotov.ScreenshotAt = 0.3f;
+	Molotov.Setup = [=, this]()
+	{
+		State->Reset();
+		const colony::ThingView* Me = MyView();
+		// Nearer and looked down at, so the colonists standing about don't hide the burning ground (PC round 4).
+		LookAtBlast(Me->x + 6.0f, Me->y + 6.0f, -12.0f, -20.0f);
+		Bridge()->Submit(colony::ExplodeCommand{Me->x + 6.0f, Me->y + 6.0f, 1.1f, 10.0f, "Burn", 0.0f});
+	};
+	Molotov.OnFrame = Watch;
+	Molotov.Verify = [=, this]()
+	{
+		Notes.Add(FString::Printf(TEXT("blast_molotov: %d sprites at most, light up to %.0f cd"), State->MaxBlast, State->MaxFlash));
+		FeelSmokeSet(TEXT("Sky.Hour"), -1.0f);
+	};
+	Phases.Add(MoveTemp(Molotov));
 }

@@ -188,6 +188,8 @@ public:
 	int32 GetDefCount() const { return Defs ? static_cast<int32>(Defs->size()) : 0; }
 	const FString& GetDataRoot() const { return DataRoot; }
 	const FSimStartOptions& GetStartOptions() const { return StartOptions; }
+	/** Sets the options the next start reads (the world map's Start here takes them) without starting a sim. */
+	void SetStartOptions(const FSimStartOptions& Options) { StartOptions = Options; }
 
 	/** The state after the newest step, and the one before it. Blend positions between them. */
 	const colony::Snapshot& GetCurrentSnapshot() const { return Current; }

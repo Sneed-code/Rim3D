@@ -260,7 +260,7 @@ torsos, whole-corpse gibs) was never merged.
   front from the face bones). Body and piece both get one, facing out of the cut. Blood keeps dripping from a fresh
   stump for `Gore.DripSeconds` (120 s; a piece for 40% of it once it lands). `Gore.StumpScale` (1.08) sizes the caps
   against the limb thickness table. On a clothed limb (another drawn mesh covers the cut bone) the cap's rim spreads out
-  as a ring of torn, blood-soaked cloth to `Gore.ClothRim` (1.35) radii, so the sleeve's tube doesn't show hollow round the meat. Without `M_Gore` (BloodArt not run) the caps draw in the blood drops' red.
+  ends in a band of torn, blood-soaked cloth at the limb's own width (spread wider it read as a loose hoop), and the whole face stands out past the cut by as much as any of the pawn's meshes still bulges there (skin weighted partly to both sides of the cut ends in a rounded dome, which hid the meat in the PC pictures; measured once per cut from the meshes' skin weights, logged as "bulges N cm"), the soaked cloth or skin hanging back over the gap. Where that can't be measured, a clothed limb uses `Gore.ClothLift` (0.25) radii. Without `M_Gore` (BloodArt not run) the caps draw in the blood drops' red.
 - Corpses and the unconscious were already ragdolls (`StartRagdoll`); a cut limb's physics shapes stay on the ragdoll,
   unseen.
 - Smoke test `hurt`, phase `dismember`: a 400 blow to the downed colonist's torso; the sim must take off the head and

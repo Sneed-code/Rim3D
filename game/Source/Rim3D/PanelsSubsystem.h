@@ -130,12 +130,12 @@ private:
 	void DrawBillsPanel(USimSubsystem& Bridge, const colony::ThingView& View, float Left, float Top, float Scale);
 	void DrawThermostatPanel(USimSubsystem& Bridge, const colony::ThingView& View, float Left, float Top, float Scale);
 	void DrawLog(USimSubsystem& Bridge, float Scale, float Margin);
-	/** Game settings: the day length slider (docs/design/day-length.md). */
-	void DrawSettings(USimSubsystem& Bridge, float Scale, float Margin);
 
 	EColonyTab Tab = EColonyTab::None;
 	bool bLogOpen = false;
-	bool bSettingsOpen = false;
+	/** The Work tab: the work group shown (empty: everyone), and a new group's name being typed. */
+	FString WorkGroupFilter;
+	char NewGroupName[32] = {};
 	TArray<FColonyLogLine> Log;
 	FDelegateHandle EventHandle;
 	TWeakObjectPtr<USimSubsystem> EventSource;

@@ -71,7 +71,10 @@ namespace
 	// Aiming (U21): how fast the view blends, the closest the over-the-shoulder camera comes and how far right of the body it sits (cm).
 	constexpr float ProtagonistAimBlendPerSecond = 5.5f;
 	constexpr float ProtagonistAimArm = 120.0f;
-	constexpr float ProtagonistAimShoulder = 42.0f;
+	// 55 right and 14 up so a shouldered long gun beside the cheek clears the head and long hair (PC pictures 2026-11-19:
+	// at 42 and level with the pivot the rifle hid behind the head).
+	constexpr float ProtagonistAimShoulder = 55.0f;
+	constexpr float ProtagonistAimLift = 14.0f;
 	constexpr float ProtagonistNormalFov = 80.0f;
 	// Locked on (docs/design/focus.md): how fast the view turns to keep the focus ahead, degrees a second.
 	constexpr float ProtagonistFocusTurnThird = 360.0f;
@@ -436,7 +439,8 @@ void AProtagonistPawn::Move(double Right, double Forward, bool bWalk, float Delt
 			Bodies.bodiesClear(Thing, static_cast<float>(Position.X), static_cast<float>(Position.Y), ToX, ToY, Level);
 	};
 	// Pushing into stairs or a ladder (or back towards them from their head, into the stairwell over them, which may
-	// have a floor laid) climbs them.
+	// have a floor laid) climbs them. A climbable wall is the same (docs/design/climbing.md): walking into it climbs it,
+	// walking off its top edge climbs back down.
 	if (!Wanted.IsNearlyZero() && !Delta.IsNearlyZero(1.0e-7) && ClimbWait <= 0.0f)
 	{
 		const colony::CellPos Here{FMath::FloorToInt32(Position.X), FMath::FloorToInt32(Position.Y), Level};
@@ -628,7 +632,7 @@ void AProtagonistPawn::UpdateCamera()
 		const FVector Pivot = SmoothFeet + FVector(0.0, 0.0, ProtagonistPivotHeight * BodyScale);
 		EffectiveArm = FMath::Lerp(ArmLength, FMath::Min(ArmLength, ProtagonistAimArm), Blend);
 		const FVector Right = FRotator(0.0, Yaw, 0.0).RotateVector(FVector::RightVector);
-		Location = Pivot - Look.Vector() * EffectiveArm + Right * (ProtagonistAimShoulder * Blend);
+		Location = Pivot - Look.Vector() * EffectiveArm + Right * (ProtagonistAimShoulder * Blend) + FVector(0.0, 0.0, ProtagonistAimLift * BodyScale * Blend);
 		// Never under the ground on a hillside.
 		const FVector Local = (Location - Bridge->GetWorldOrigin()) / 100.0;
 		const colony::Map& Map = Bridge->GetSim()->map();
