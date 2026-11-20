@@ -789,7 +789,9 @@ namespace
 		{
 			FString Base = Mesh->GetSkeletalMeshAsset() ? Mesh->GetSkeletalMeshAsset()->GetName() : FString();
 			Base.RemoveFromStart(TEXT("SK_MH_"));
-			Strands->Want(Mesh, Base, bGroom || !Chosen.Key ? FString() : FString(UTF8_TO_TCHAR(Chosen.Label)), HairColour, WigSections);
+			// -CreatorHairHat: the under-a-hat version (no hat is drawn on these bodies yet; the hair shows pressed flat).
+			Strands->Want(Mesh, Base, bGroom || !Chosen.Key ? FString() : FString(UTF8_TO_TCHAR(Chosen.Label)), HairColour, WigSections,
+				FParse::Param(FCommandLine::Get(), TEXT("CreatorHairHat")));
 		}
 		// The panel's colour is as seen (sRGB); the skin material takes it linear, as FSimPawnLooks::Skin is.
 		const FLinearColor Skin = FLinearColor::FromSRGBColor(FLinearColor(P.Skin[0], P.Skin[1], P.Skin[2]).ToFColor(false));

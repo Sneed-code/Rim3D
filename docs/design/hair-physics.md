@@ -104,6 +104,30 @@ blender.exe -b -noaudio --python tools/makehuman/grow_hair.py -- game/Saved/Make
 - **Hair colour:** the pawn's hair colour drives the groom through the MetaHuman hair material's melanin and redness
   (`StrandHairSetColour`, the same mapping as the MetaHuman route's grooms).
 
+## Fit to each head (2026-11-21)
+
+sneed (2026-11-21), on the MetaHuman groom test: "way too big ... the hairline's too high ... looks like it was made to
+fit a head 35% bigger". That groom was sized by the two skeletons' neck-to-head lengths, and our bodies have longer necks
+but smaller heads than the MetaHumans, so it was blown up 15% instead of shrunk. Now:
+
+- **MetaHuman grooms** (`-CreatorGroom`) are worn at a set 0.85 of their size (`Pawns.StrandHairMetaHumanFit`).
+- **Our grown grooms** fit the base's own head exactly (grown on it). Height scales the whole body and the hair with it.
+  The creator's sliders are morphs, which move no bones, so `grow_hair.py` measures each one: it fits the skull sphere
+  again with that morph on and writes how much the skull grows and where its centre moves (`grooms.json`
+  `head_morphs`, Unreal axes, cm). The game adds these up by each person's morph weights and grows or shrinks the hair
+  about the skull centre to match, so a wider, longer or smaller head gets matching hair. The log line `STRANDHAIR`
+  shows the head-slider scale and move.
+- The grown styles' hairline is a little lower (forehead 22 degrees above the skull centre, was 27).
+
+## Hats and helmets (2026-11-21)
+
+Every grown style (but Buzz) is also grown as `<Style>Hat`: everything above the hat's brim (`hair_styles.json` "hat",
+1.2 cm below the skull centre's height) is pressed within 4 mm of the scalp, and below the brim it hangs as usual, so a
+hat or helmet sits over the hair with no strands through it while the hair below shows and swings. `Want(...,
+bUnderHat)` picks it; headgear that covers all the hair still hides it all (`apparel.hidesHair`). The groom physics keeps
+colliding with the body's physics asset; when MakeHuman bodies wear hats (clothes thread), the hat also gets a collision
+shape so swinging hair below the brim cannot pass into it. Creator test: `-CreatorHairHat` (pressed hair, no hat drawn).
+
 ## Near and far (step 2)
 
 `UStrandHairSubsystem` decides who wears strands. Every MakeHuman person the creator's apply dresses (the creator, the gun

@@ -159,17 +159,23 @@ int32 UHairGroomsCommandlet::Main(const FString& Params)
 	int32 Failed = 0;
 	for (const TSharedPtr<FJsonValue>& Base : Root->GetArrayField(TEXT("bases")))
 	{
-		for (const TSharedPtr<FJsonValue>& Style : Root->GetArrayField(TEXT("styles")))
+		for (const TSharedPtr<FJsonValue>& StyleValue : Root->GetArrayField(TEXT("styles")))
 		{
-			const FString File = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Grooms") / Base->AsString() / (Style->AsString() + TEXT(".abc")));
-			if (!IFileManager::Get().FileExists(*File))
+			// Each style and its under-a-hat version (<Style>Hat; grow_hair.py makes one for every style but Buzz).
+			for (const FString& Style : {StyleValue->AsString(), StyleValue->AsString() + TEXT("Hat")})
 			{
-				UE_LOG(LogHairGrooms, Warning, TEXT("No %s: grow it with tools/makehuman/grow_hair.py (that style keeps its wig)"), *File);
-				continue;
+				const bool bHat = Style.EndsWith(TEXT("Hat"));
+				const FString File = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Grooms") / Base->AsString() / (Style + TEXT(".abc")));
+				if (!IFileManager::Get().FileExists(*File))
+				{
+					UE_LOG(LogHairGrooms, Display, TEXT("No %s: grow it with tools/makehuman/grow_hair.py (%s)"), *File,
+						bHat ? TEXT("under a hat the plain style shows") : TEXT("that style keeps its wig"));
+					continue;
+				}
+				const bool bOk = GroomsMake(File, StrandHairGrownName(Base->AsString(), Style), HairMaterial);
+				Made += bOk ? 1 : 0;
+				Failed += bOk ? 0 : 1;
 			}
-			const bool bOk = GroomsMake(File, StrandHairGrownName(Base->AsString(), Style->AsString()), HairMaterial);
-			Made += bOk ? 1 : 0;
-			Failed += bOk ? 0 : 1;
 		}
 	}
 	UE_LOG(LogHairGrooms, Display, TEXT("HairGrooms: %d grooms made, %d failed"), Made, Failed);

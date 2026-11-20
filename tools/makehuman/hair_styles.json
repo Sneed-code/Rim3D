@@ -1,5 +1,6 @@
 {
   "comment": "Strand hair styles grown by tools/makehuman/grow_hair.py (docs/design/hair-physics.md 'Growing our own grooms'). Lengths in metres; 'to' names a height on the body the longest strands reach (waist, mid_back, shoulder, chin, ear) and overrides 'length'. part: middle, side, none (combed back) or gather (ponytail). count is the number of strands at full detail; Unreal thins them for its lower LODs.",
+  "hat": {"comment": "Each style is also grown as <Style>Hat for wearing under a hat or helmet that leaves hair showing: above the brim (metres from the skull centre's height) it lies within gap of the scalp, below it hangs as usual.", "brim": -0.012, "gap": 0.004},
   "styles": {
     "LongStraight": {
       "count": 60000, "to": "waist", "part": "middle", "segments": 64,
@@ -34,7 +35,7 @@
     },
     "Buzz": {
       "count": 35000, "length": 0.012, "part": "none", "segments": 6,
-      "lift": 0.002, "volume": 0.002, "stiffness": 0.95, "gravity": 0.05, "back": 0.6,
+      "lift": 0.002, "volume": 0.002, "stiffness": 0.95, "gravity": 0.05, "back": 0.6, "no_hat": true,
       "clump": 0.1, "clump_size": 0.006, "wave": 0.0, "frizz": 0.0004, "u_cut": 0.0,
       "width_root": 0.00007, "width_tip": 0.00005, "fringe": 0.0
     }

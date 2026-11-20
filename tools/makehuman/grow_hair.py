@@ -55,6 +55,11 @@ def load_body(path, joints_path):
     mesh = body.data
     world = body.matrix_world
     verts = np.array([tuple(world @ v.co) for v in mesh.vertices])
+    # The creator's sliders are shape keys (morph targets in Unreal): kept to measure how each changes the head.
+    keys = []
+    if mesh.shape_keys:
+        for kb in mesh.shape_keys.key_blocks[1:]:
+            keys.append((kb.name, np.array([tuple(world @ d.co) for d in kb.data])))
     tris = []
     for p in mesh.polygons:
         vs = list(p.vertices)
@@ -77,10 +82,31 @@ def load_body(path, joints_path):
     # Metres: the creator FBX is in centimetres.
     height = verts[:, 2].max() - verts[:, 2].min()
     scale = 0.01 if height > 10.0 else 1.0
-    log("body", body.name, len(verts), "vertices,", len(tris), "triangles, height", round(height * scale, 3), "m")
+    log("body", body.name, len(verts), "vertices,", len(tris), "triangles, height", round(height * scale, 3), "m,", len(keys), "shape keys")
     for o in list(bpy.data.objects):
         bpy.data.objects.remove(o)
-    return verts * scale, tris, head * scale, neck * scale, scale
+    return verts * scale, tris, head * scale, neck * scale, [(n, k * scale) for n, k in keys]
+
+
+def fit_sphere(points):
+    A = np.c_[2 * points, np.ones(len(points))]
+    b = (points ** 2).sum(1)
+    sol = np.linalg.lstsq(A, b, rcond=None)[0]
+    return sol[:3], math.sqrt(sol[3] + (sol[:3] ** 2).sum())
+
+
+def head_morphs(body, keys):
+    """How each shape key (a creator slider at full weight) changes the head the hair sits on: the skull sphere's
+    growth as a share and its centre's move, in Unreal's axes and centimetres (Blender x, -y, z), for the game to fit
+    the groom to each person's sliders. Only keys that change the skull by more than a hair's breadth are kept."""
+    out = {}
+    for name, kv in keys:
+        c, r = fit_sphere(kv[body.crown_ids])
+        grow = r / body.skull_r - 1.0
+        move = (c - body.skull) * 100.0
+        if abs(grow) > 0.002 or np.abs(move).max() > 0.05:
+            out[name] = [round(float(grow), 5), round(float(move[0]), 3), round(float(-move[1]), 3), round(float(move[2]), 3)]
+    return out
 
 
 class Body:
@@ -92,12 +118,8 @@ class Body:
         self.height = self.top - self.bottom
         # The skull: a sphere fitted to the crown (the head above the ears).
         cut = head[2] + 0.55 * (self.top - head[2])
-        crown = verts[(verts[:, 2] > cut) & (np.abs(verts[:, 0] - head[0]) < 0.12)]
-        A = np.c_[2 * crown, np.ones(len(crown))]
-        b = (crown ** 2).sum(1)
-        sol = np.linalg.lstsq(A, b, rcond=None)[0]
-        self.skull = sol[:3]
-        self.skull_r = math.sqrt(sol[3] + (self.skull ** 2).sum())
+        self.crown_ids = np.nonzero((verts[:, 2] > cut) & (np.abs(verts[:, 0] - head[0]) < 0.12))[0]
+        self.skull, self.skull_r = fit_sphere(verts[self.crown_ids])
         # Heights the long styles reach, as shares of the body's height above the soles (an adult's proportions).
         h = self.height
         self.heights = {
@@ -122,11 +144,29 @@ class Body:
             return loc + nrm * clearance
         return p
 
+    def press(self, p, low, high, reach):
+        """p kept between `low` and `high` off the body's surface: hair pressed flat under a hat."""
+        loc, nrm, _, dist = self.bvh.find_nearest(Vector(p), reach)
+        if loc is None:
+            return p
+        loc = np.array(loc)
+        nrm = np.array(nrm)
+        d = np.dot(p - loc, nrm)
+        if d < low or d > high:
+            return loc + nrm * min(max(d, low), high)
+        return p
+
+    def keep(self, p, clearance, reach, hat_z, gap):
+        """Out of the body to the strand's clearance; under a hat (above hat_z) pressed within `gap` of the scalp."""
+        if hat_z is not None and p[2] > hat_z:
+            return self.press(p, 0.0012, gap, max(reach, gap + 0.03))
+        return self.push_out(p, clearance, reach)
+
 
 # ---- the scalp ----------------------------------------------------------------------------------------------------------
 
 # Hairline: (degrees round the head from the front, lowest elevation above the skull centre's height that grows hair).
-HAIRLINE = [(0, 27), (30, 25), (55, 18), (75, 4), (90, 6), (105, -4), (125, -22), (150, -36), (180, -42)]
+HAIRLINE = [(0, 22), (30, 20), (55, 15), (75, 4), (90, 6), (105, -4), (125, -22), (150, -36), (180, -42)]
 
 
 def hairline_elevation(az_deg):
@@ -257,6 +297,10 @@ def grow(body, style, rng, count_scale):
     grav = style["gravity"]
     back = style.get("back", 0.0)
     reach = float(clearance.max() + seg_len * 2.5)
+    # Under a hat: everything above the brim lies pressed within a few millimetres of the scalp, then hangs below it.
+    hat = style.get("_hat")
+    hat_z = body.skull[2] + hat["brim"] if hat else None
+    hat_gap = hat["gap"] if hat else 0.0
     t0 = time.time()
     for k in range(1, segs + 1):
         p = pts[:, k - 1]
@@ -310,7 +354,7 @@ def grow(body, style, rng, count_scale):
             q[face, 0] = body.skull[0] + sgn * body.skull_r * 0.8
         # Out of the body, to the strand's own distance off the skin.
         for i in np.nonzero(alive)[0]:
-            q[i] = body.push_out(q[i], clearance[i], reach)
+            q[i] = body.keep(q[i], clearance[i], reach, hat_z, hat_gap)
         d = unit(q - p)
         q = p + d * seg_len
         # Below the neck hair does not spread outwards over the shoulders (the push out of a sloping shoulder would
@@ -321,7 +365,7 @@ def grow(body, style, rng, count_scale):
         spread = (p[:, 2] < body.neck[2]) & (np.abs(lat_q) > cap)
         q[spread, 0] = body.neck[0] + np.sign(lat_q[spread]) * cap[spread]
         for i in np.nonzero(alive)[0]:
-            q[i] = body.push_out(q[i], clearance[i], reach)
+            q[i] = body.keep(q[i], clearance[i], reach, hat_z, hat_gap)
         lat_q = q[:, 0] - body.neck[0]
         spread = (p[:, 2] < body.neck[2]) & (np.abs(lat_q) > cap)
         q[spread, 0] = body.neck[0] + np.sign(lat_q[spread]) * cap[spread]
@@ -372,9 +416,12 @@ def comb(body, style, pts, end_idx, roots, rng, seg_len):
     out[:, 0] = pts[:, 0]
     # Out of the body again (clumping and waves can pull a strand in).
     reach = 0.03
+    hat = style.get("_hat")
+    hat_z = body.skull[2] + hat["brim"] if hat else None
+    hat_gap = hat["gap"] if hat else 0.0
     for i in range(n):
         for k in range(1, end_idx[i] + 1):
-            out[i, k] = body.push_out(out[i, k], 0.0015, reach)
+            out[i, k] = body.keep(out[i, k], 0.0015, reach, hat_z, hat_gap)
     return out
 
 
@@ -402,8 +449,22 @@ def export_abc(obj, path):
     bpy.ops.wm.alembic_export(filepath=path, selected=True, start=1, end=1, global_scale=100.0, evaluation_mode="RENDER")
 
 
-def preview(body_obj_verts, tris, hair_obj, origin, path, head, colour=(0.09, 0.055, 0.03)):
+def preview(body_obj_verts, tris, hair_obj, origin, path, head, colour=(0.09, 0.055, 0.03), cap=None):
     scene = bpy.context.scene
+    extra = []
+    if cap:
+        # A plain cap on the head for the under-a-hat versions: a sphere just over the pressed hair, cut at the brim.
+        centre, radius, brim = cap
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=radius, location=tuple(centre), segments=48, ring_count=24)
+        hat = bpy.context.active_object
+        for v in hat.data.vertices:
+            if v.co.z < brim:
+                v.co.z = brim
+        felt = bpy.data.materials.new("Felt")
+        felt.use_nodes = True
+        felt.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (0.12, 0.16, 0.10, 1)
+        hat.data.materials.append(felt)
+        extra.append(hat)
     mesh = bpy.data.meshes.new("PreviewBody")
     mesh.from_pydata([tuple(v - origin) for v in body_obj_verts], [], [tuple(t) for t in tris])
     mesh.shade_smooth() if hasattr(mesh, "shade_smooth") else None
@@ -457,6 +518,8 @@ def preview(body_obj_verts, tris, hair_obj, origin, path, head, colour=(0.09, 0.
         bpy.ops.render.render(write_still=True)
         shots.append(f)
     bpy.data.objects.remove(body)
+    for o in extra:
+        bpy.data.objects.remove(o)
     bpy.data.objects.remove(sun)
     bpy.data.objects.remove(cam)
     return shots
@@ -470,20 +533,33 @@ def main():
     ap.add_argument("--styles", default="")
     ap.add_argument("--joints", default="")
     ap.add_argument("--preview", action="store_true")
+    ap.add_argument("--no-hats", action="store_true", help="skip the under-a-hat version of each style")
     ap.add_argument("--count-scale", type=float, default=1.0)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--config", default=os.path.join(HERE, "hair_styles.json"))
     a = ap.parse_args(args)
     styles = json.load(open(a.config))["styles"]
     wanted = [s for s in a.styles.split(",") if s] or list(styles)
-    verts, tris, head, neck, _ = load_body(a.body, a.joints)
+    verts, tris, head, neck, keys = load_body(a.body, a.joints)
     body = Body(verts, tris, head, neck)
+    morphs = head_morphs(body, keys)
+    log("head-changing sliders:", len(morphs), "of", len(keys))
     os.makedirs(a.out, exist_ok=True)
     manifest = {"body": os.path.basename(a.body), "head": head.tolist(), "neck": neck.tolist(),
-                "neck_to_head_cm": float(np.linalg.norm(head - neck) * 100), "styles": {}}
+                "neck_to_head_cm": float(np.linalg.norm(head - neck) * 100),
+                # For the game's fit (StrandHair.cpp): the skull centre from the head bone and each slider's change to it,
+                # in Unreal's axes (Blender x, -y, z) and centimetres.
+                "skull_from_head_cm": [round(float(v), 3) for v in ((body.skull - head) * 100.0 * np.array([1, -1, 1]))],
+                "skull_radius_cm": round(body.skull_r * 100.0, 3),
+                "head_morphs": morphs, "styles": {}}
+    hat = json.load(open(a.config)).get("hat")
+    jobs = []
     for name in wanted:
-        style = styles[name]
-        rng = np.random.default_rng([a.seed, sum(map(ord, name))])
+        jobs.append((name, styles[name]))
+        if hat and not a.no_hats and not styles[name].get("no_hat"):
+            jobs.append((name + "Hat", dict(styles[name], _hat=hat)))  # the same style worn under a hat
+    for name, style in jobs:
+        rng = np.random.default_rng([a.seed, sum(map(ord, name.removesuffix("Hat")))])
         pts, end_idx, roots, seg_len = grow(body, style, rng, a.count_scale)
         pts = comb(body, style, pts, end_idx, roots, rng, seg_len)
         obj, npts = make_curves(name, pts, end_idx, head, style)
@@ -495,7 +571,10 @@ def main():
                                     "lowest_tip_cm_below_head": round(float((head[2] - pts[np.arange(len(pts)), end_idx][:, 2]).max()) * 100, 1)}
         log(name, manifest["styles"][name])
         if a.preview:
-            preview(verts, tris, obj, head, os.path.join(a.out, name + "_preview.png"), head)
+            cap = None
+            if style.get("_hat"):
+                cap = (body.skull - head, body.skull_r + style["_hat"]["gap"] + 0.006, style["_hat"]["brim"])
+            preview(verts, tris, obj, head, os.path.join(a.out, name + "_preview.png"), head, cap=cap)
         bpy.data.objects.remove(obj)
     with open(os.path.join(a.out, "grooms.json"), "w") as f:
         json.dump(manifest, f, indent=1)
