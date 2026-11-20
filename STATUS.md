@@ -11,8 +11,8 @@ heat injury until 100 C past normal, +5% walk, +5% damage taken; **Orcoid** +10%
 default, -10% aim and work outdoors in sunlight; **cat-strain** jumps x2, climbs walls x2, -20% fall and collapse
 damage, every penalty a third worse. The player and starting colonists stay human; joiners and raiders roll a race.
 **Wall climbing** for everyone: the outside face of a wall under an upper floor is a climb (0.15 of walking speed),
-drawn on the face then mantling over the top; the Unreal part (GASP climb clip, cat jump x2) is a follow-up PR for the PC. **Cat ears remade** as thin cupped pinnae with
-tufts (`tools/makehuman/mh_common.py`). **Next: PC compile, re-make the creator bodies for the ears, pictures.**
+drawn on the face then mantling over the top; the Unreal part (GASP climb clip held to the climb, hands on the edge, cat jump x2) compiled and tuned on the PC in four rounds (#389). **Cat ears remade** as thin cupped pinnae with
+tufts (`tools/makehuman/mh_common.py`). Ears got a fur skirt blending into the hair and clearer tufts (rebuilt on the PC). **Next: sneed tries a climb in play.**
 
 Realistic explosions (sneed, 2026-11-19/20; Unreal only, `docs/design/blast-draw.md`): blasts were coloured balls on a
 debug material, grey box debris and smoke gone in 3 s. Now a new `UBlastFxSubsystem` draws each sim blast as a **white
