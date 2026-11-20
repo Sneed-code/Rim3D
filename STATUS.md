@@ -3,9 +3,9 @@
 Updated 2026-11-20.
 
 Clothes on MakeHuman people (sneed, 2026-11-20; tools and Unreal, `docs/design/clothes-draw.md` "MakeHuman bodies"):
-the MakeHuman bodies wore nothing. Now **28 free MakeHuman community garments** (CC0/CC-BY, `assets/makehuman_garments.json`:
+the MakeHuman bodies wore nothing. Now **34 free MakeHuman community garments** (CC0/CC-BY, `assets/makehuman_garments.json`:
 tees, polo, tank, shirts, blouse, sweaters, cargo pants, jeans, trousers, hooded and uniform jackets, cardigan, winter
-coat, viking tunic and trousers, knit hats, fishing hat, M1 and KZ helmets, tactical vest) are fitted to both bodies with
+coat, viking tunic and trousers, knit hats, sherpa hat, flat and patrol caps, bowler, trilby, fishing hat, pith helmet, M1 and KZ helmets, tactical vest) are fitted to both bodies with
 **the same slider morphs** so they fit every body shape, women's cuts only on women and men's only on men. Defs list
 their **cuts** (`visual.cuts`); each item picks one, and its **colour is a random clothing colour**, not its fabric
 (sneed). Wear holes and wetness carry over; **skin under clothes is cut away** so it cannot poke through; hats hide

@@ -262,6 +262,42 @@
       "license": "CC-BY"
     },
     {
+      "name": "Bowler",
+      "mhclo": "{mh_user}/clothes/culturalibre_cl_bowler_hat",
+      "author": "culturalibre",
+      "license": "CC-BY"
+    },
+    {
+      "name": "Trilby",
+      "mhclo": "{mh_user}/clothes/elvs_male_trilby_hat",
+      "author": "Elvaerwyn",
+      "license": "CC-BY"
+    },
+    {
+      "name": "FlatCap",
+      "mhclo": "{mh_user}/clothes/elvs_male_flat_cap1",
+      "author": "Elvaerwyn",
+      "license": "CC-BY"
+    },
+    {
+      "name": "PithHelmet",
+      "mhclo": "{mh_user}/clothes/drednicolson_pith_helmet",
+      "author": "DredNicolson",
+      "license": "CC-BY"
+    },
+    {
+      "name": "PatrolCap",
+      "mhclo": "{mh_user}/clothes/mindfront_patrol_cap",
+      "author": "Mindfront",
+      "license": "CC-BY"
+    },
+    {
+      "name": "SherpaHat",
+      "mhclo": "{mh_user}/clothes/mindfront_sherpa_hat",
+      "author": "Mindfront",
+      "license": "CC-BY"
+    },
+    {
       "name": "TacticalVest",
       "mhclo": {
         "CreatorFemale": "{mh_user}/clothes/mindfront_tactical_vest_female",

@@ -208,7 +208,7 @@
       "reinstall": "blender -b --factory-startup -P tools/codex_prep.py -- <Rim3D_Codex folder>, then UnrealEditor-Cmd game/Rim3D.uproject -run=GunArt -List=assets/codex_art.json -unattended -nosplash -nullrhi, then -run=GunArt (guns.json)"
     },
     {
-      "name": "MakeHuman community clothes (28 garments from 16 asset packs)",
+      "name": "MakeHuman community clothes (34 garments from 16 asset packs)",
       "source": "https://static.makehumancommunity.org/assets/assetpacks/index.html (zips on files.makehumancommunity.org)",
       "licence": "CC0 and CC-BY 4.0 (per garment author and licence in assets/makehuman_garments.json; credit the CC-BY authors)",
       "version": "asset packs as downloaded 2026-11-20",
