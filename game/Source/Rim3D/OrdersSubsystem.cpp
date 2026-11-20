@@ -2210,7 +2210,9 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 	const float TilesLeft = Viewport->Pos.x + Margin + NavWidth + 8.0f * Scale;
 	if (!Tiles.IsEmpty())
 	{
-		const float TileSize = 86.0f * Scale;
+		// Tiles are a little taller than wide: the picture on top, the name (up to two lines) under it at a readable size.
+		const float TileSize = 92.0f * Scale;
+		const float TileHeight = TileSize * 1.2f;
 		const float Step = TileSize + ImGui::GetStyle().ItemSpacing.x;
 		const float Pad = 2.0f * ImGui::GetStyle().WindowPadding.x;
 		float MaxWidth = Viewport->Size.x - (TilesLeft - Viewport->Pos.x) - 330.0f * Scale;  // the date box stays clear
@@ -2246,11 +2248,11 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 				bool bClicked = false;
 				if (bActive)
 				{
-					bClicked = ColonyHud::Button(TEXT("##tile"), true, ImVec2(TileSize, TileSize));
+					bClicked = ColonyHud::Button(TEXT("##tile"), true, ImVec2(TileSize, TileHeight));
 				}
 				else
 				{
-					bClicked = ImGui::Button("##tile", ImVec2(TileSize, TileSize));
+					bClicked = ImGui::Button("##tile", ImVec2(TileSize, TileHeight));
 				}
 				{
 					// A long name ("Hand tailor bench") breaks at the space nearest its middle, and shrinks until each line fits.
@@ -2277,9 +2279,9 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 					{
 						Widest = FMath::Max(Widest, ImGui::CalcTextSize(TCHAR_TO_UTF8(*Line)).x);
 					}
-					const float FontSize = ImGui::GetFontSize() * FMath::Clamp(Room / Widest, 0.6f, Lines.Num() > 1 ? 0.85f : 1.0f);
+					const float FontSize = ImGui::GetFontSize() * FMath::Clamp(Room / Widest, 0.75f, 1.0f);
 					const ImU32 NameColor = ImGui::GetColorU32(bLocked ? ColonyHud::TextFaint() : ColonyHud::TextMain());
-					float LineY = Min.y + TileSize - 5.0f * Scale - FontSize * Lines.Num();
+					float LineY = Min.y + TileHeight - 5.0f * Scale - FontSize * Lines.Num();
 					for (const FString& Line : Lines)
 					{
 						const FTCHARToUTF8 Utf8(*Line);
@@ -2308,7 +2310,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 					const char Key[2] = {static_cast<char>(OrdTileKeys[Index]), 0};
 					Draw->AddText(ImVec2(Min.x + 5.0f * Scale, Min.y + 3.0f * Scale), ImGui::GetColorU32(ColonyHud::TextFaint()), Key);
 				}
-				const ImVec2 IconCentre(Min.x + TileSize * 0.5f, Min.y + TileSize * 0.40f);
+				const ImVec2 IconCentre(Min.x + TileSize * 0.5f, Min.y + TileSize * 0.42f);
 				const float IconSize = TileSize * 0.40f;
 				const ImU32 IconColor = ImGui::GetColorU32(bLocked ? ColonyHud::TextFaint() : ColonyHud::Rgb(0xd6d0c3));
 				if (Tile.Option && Tile.Option->bFloor)
@@ -2325,7 +2327,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 				}
 				else if (UTexture* Picture = Tile.Option ? GetTileIcon(Tile.Option->Def) : nullptr)
 				{
-					const float Half = TileSize * 0.28f;
+					const float Half = TileSize * 0.30f;
 					Draw->AddImage(ImTextureRef(Picture), ImVec2(IconCentre.x - Half, IconCentre.y - Half), ImVec2(IconCentre.x + Half, IconCentre.y + Half),
 						ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), bLocked ? IM_COL32(255, 255, 255, 90) : IM_COL32(255, 255, 255, 255));
 				}

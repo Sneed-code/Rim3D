@@ -369,12 +369,16 @@ void UColonyHudSubsystem::DrawAnimalsTab(USimSubsystem& Bridge, float Scale, boo
 				ColonyHud::Text(FString::Printf(TEXT("%s%s"), Stages[FMath::Clamp(View.lifeStage, 0, 2)],
 					View.sex == 1 ? TEXT(", female") : (View.sex == 0 ? TEXT(", male") : TEXT(""))));
 				ImGui::TableNextColumn();
-				if (View.maxHitPoints > 0)
+				if (View.maxHitPoints > 0 && (View.downed || View.hitPoints < View.maxHitPoints))
 				{
 					const float Share = static_cast<float>(View.hitPoints) / static_cast<float>(View.maxHitPoints);
 					ImGui::PushStyleColor(ImGuiCol_PlotHistogram, Share < 0.5f ? ColonyHud::Bad() : ColonyHud::Good());
 					ImGui::ProgressBar(Share, ImVec2(90.0f * Scale, 0.0f), View.downed ? "down" : "");
 					ImGui::PopStyleColor();
+				}
+				else
+				{
+					ColonyHud::TextColored(ColonyHud::Good(), TEXT("Healthy"));
 				}
 				if (bWild)
 				{
