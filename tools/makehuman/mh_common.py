@@ -1882,11 +1882,13 @@ def _cat_ear_mesh(base, axis, fwd, lat, height, width, depth, thick, rows=14, co
     return verts, faces, front_faces, uvs
 
 
-def add_cat_ears(rig, body, height=0.078, width=0.068, depth=0.022, tilt=0.2, thick=0.003, tufts=14, log=print):
+def add_cat_ears(rig, body, height=0.078, width=0.068, depth=0.022, tilt=0.2, thick=0.003, tufts=36, skirt=96, log=print):
     """Realistic cat ears for any MakeHuman head (sneed 2026-11-19: the old ones looked like cones): up out of the top of
     the head either side of the crown, tilted out a little and turned a little outwards, each a thin cupped pinna
     (`_cat_ear_mesh`) with a few pale fur tufts growing out of the bottom of the cup, weighted wholly to the head. The
-    outside is the fur material (CatFur), the inside of the cup CatEarInner (skin, pinker). Returns the ear objects."""
+    outside is the fur material (CatFur), the inside of the cup CatEarInner (skin, pinker). A skirt of short CatFur strands
+    round the base lies down over the scalp into the hair, so the ear grows out of it instead of sitting on it (PC look
+    2026-11-20: the base had a hard edge). Returns the ear objects."""
     import math
     import bmesh
     from mathutils import Vector
@@ -1942,17 +1944,20 @@ def add_cat_ears(rig, body, height=0.078, width=0.068, depth=0.022, tilt=0.2, th
         bm.to_mesh(obj.data)
         bm.free()
         parts = [obj]
-        # Ear furnishings: pale tufts out of the bottom of the cup, curving up and out past the rim (the inner material).
+        # Ear furnishings: pale tufts out of the bottom of the cup, curving up and fanning out past the rim (the inner
+        # material), long and thick enough to read against the dark fur at play distance.
         for k in range(tufts):
-            s = -0.55 + 1.1 * (k + 0.5) / tufts
-            v0 = 0.12 + 0.1 * ((k * 7) % 3) / 2.0
+            s = -0.6 + 1.2 * (k + 0.5) / tufts
+            v0 = 0.1 + 0.16 * ((k * 7) % 3) / 2.0
             half = 0.5 * width * (1.0 - v0 ** 1.7) ** 0.75
             root = base + axis * (height * v0) + lat * (s * half) - fwd * (depth * (1.0 - s * s) * 0.8 - 0.002)
-            length = height * (0.32 + 0.12 * ((k * 5) % 4) / 3.0)
-            out = (axis * 0.75 + fwd * 0.45 + lat * (s * 0.5)).normalized()
-            n = 6
-            centres = [root + out * length * t + axis * length * 0.25 * t * t for t in [q / (n - 1) for q in range(n)]]
-            radii = [max(0.0006 * (1.0 - q / (n - 1)) ** 0.7, 0.0001) for q in range(n)]
+            length = height * (0.36 + 0.16 * ((k * 5) % 4) / 3.0)
+            out = (axis * 0.85 + fwd * 0.3 + lat * (s * 0.35)).normalized()
+            # Soft and curling: they start up the cup, then bend out of it and to the side, like a wisp of hair.
+            bend = (fwd * 0.7 + lat * (s * 0.9 + 0.25 * (((k * 11) % 5) / 4.0 - 0.5))).normalized()
+            n = 7
+            centres = [root + out * length * t + bend * length * 0.45 * t * t for t in [q / (n - 1) for q in range(n)]]
+            radii = [max(0.0009 * (1.0 - q / (n - 1)) ** 0.8, 0.00008) for q in range(n)]
             frames = []
             for q in range(n):
                 dd = (centres[min(q + 1, n - 1)] - centres[max(q - 1, 0)]).normalized()
@@ -1962,11 +1967,38 @@ def add_cat_ears(rig, body, height=0.078, width=0.068, depth=0.022, tilt=0.2, th
             tuft.data.materials.append(inner)  # pale, as a cat's ear furnishings are
             tuft.data.materials.append(fur)
             parts.append(tuft)
+        # The fur skirt: two rings of short strands round the foot of the ear, rooted a little inside the scalp and lying
+        # out and down over it into the hair, longer behind than in front, the way a cat's ear fur runs into its coat.
+        for k in range(skirt):
+            ring = k % 2
+            a = 2.0 * math.pi * (k // 2 + 0.5 * ring) / max(skirt // 2, 1)
+            radial = (lat * math.cos(a) * 0.5 * width * (1.05 + 0.15 * ring) + fwd * math.sin(a) * (depth * 0.9 + 0.006))
+            root = base + radial - normal * 0.003 + axis * (0.004 + 0.004 * ring)
+            flat = (radial - normal * radial.dot(normal)).normalized() if radial.length > 1e-6 else lat
+            behind = 0.5 - 0.5 * math.sin(a)  # 1 at the back of the ear (fwd points forward)
+            length = 0.009 + 0.01 * behind + 0.004 * ((k * 3) % 4) / 3.0
+            # Mostly along the scalp and back over it, barely lifting: fur lying down, not bristles.
+            down_back = (fwd * -1.0 - normal * fwd.dot(normal) * -1.0)
+            down_back = down_back.normalized() if down_back.length > 1e-6 else flat
+            out = (flat * 0.6 + down_back * 0.4 + axis * (0.15 - 0.1 * ring)).normalized()
+            out = (out - normal * max(out.dot(normal), 0.0) * 0.8).normalized()
+            n = 5
+            centres = [root + out * length * t - normal * length * 0.5 * t * t for t in [q / (n - 1) for q in range(n)]]
+            radii = [max(0.0010 * (1.0 - q / (n - 1)) ** 0.6, 0.0001) for q in range(n)]
+            frames = []
+            for q in range(n):
+                dd = (centres[min(q + 1, n - 1)] - centres[max(q - 1, 0)]).normalized()
+                side_axis = dd.cross(normal)
+                side_axis = side_axis.normalized() if side_axis.length > 1e-6 else lat
+                frames.append((side_axis, dd.cross(side_axis).normalized()))
+            strand = _tube("%s_skirt%d" % (name, k), centres, radii, frames, segments=4)
+            strand.data.materials.append(fur)
+            parts.append(strand)
         ear = _join(parts) if len(parts) > 1 else obj
         ear.name = name
         _skin_to(ear, rig, {i: {"head": 1.0} for i in range(len(ear.data.vertices))})
         objs.append(ear)
-    log("cat ears", height, "m, thin cupped pinnae with", tufts, "tufts, on the skull at z", round(top, 3))
+    log("cat ears", height, "m, thin cupped pinnae with", tufts, "tufts and a", skirt, "strand fur skirt, on the skull at z", round(top, 3))
     return objs
 
 
