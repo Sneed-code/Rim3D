@@ -1,0 +1,193 @@
+Building Rim3DEditor (below-normal priority, 6 jobs)...
+Build ok.
+Running smoke test 'gunrange' at 1920x1080...
+
+Smoke test 'gunrange': PASS  (227 s, NVIDIA GeForce RTX 5080, 888x500)
+gunrange                    118.6 fps  game   5.6 ms  render   0.0 ms  gpu   6.2 ms  screenshot ok
+note: gunrange: group 1, 8 targets
+note: gunrange:   target 1048620 stands
+note: gunrange:   target 1048619 flees when hit
+note: gunrange:   target 1048618 fights back
+note: gunrange:   target 1048617 flees on sight
+note: gunrange:   target 1048616 stands, walking
+note: gunrange:   target 1048615 flees when hit, walking
+note: gunrange:   target 1048614 fights back, walking
+note: gunrange:   target 1048613 flees on sight, walking
+note: gunrange: HAND TURNED FROM ITS GRIP other first person right: 116 degrees (the wrist's limits held it back); the grip asked twist -30 wrist 178/99, got twist -30 wrist 70/28, elbow 11 swung 0; fingers curled 0 more
+note: gunrange: HAND TURNED FROM ITS GRIP other first person left: 178 degrees (the wrist's limits held it back); the grip asked twist 36 wrist -7/-95, got twist 36 wrist -7/-28, elbow 11 swung 0; fingers curled 0 more
+note: gunrange: picture 00_gun1_hip.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 0, reloads 0)
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Bolt-action rifle first person right: 26 degrees (the wrist's limits held it back); the grip asked twist -84 wrist -44/57, got twist -84 wrist -44/28, elbow 105 swung 34; fingers curled 80 more
+note: gunrange: picture 01_gun1_raising.png (gun 0, barrel off 0.0 deg, sight off 6.3 cm, shots 0, reloads 0)
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (41,7,-10) materials 1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (41,7,-10) materials 1] trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (32,8,-17) materials 1] 
+note: gunrange: picture 02_gun1_aimed.png (gun 0, barrel off 0.0 deg, sight off 0.0 cm, shots 0, reloads 0)
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] bolt[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] trigger[SM_BoltActionRifle_PIVOT_Trigger flag 0 shown 0 attached 1 size 1x1x2 at (19,3,-14) materials 1] 
+note: gunrange: picture 03_gun1_firing.png (gun 0, barrel off 0.0 deg, sight off 0.0 cm, shots 1, reloads 0)
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] bolt[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] trigger[SM_BoltActionRifle_PIVOT_Trigger flag 0 shown 0 attached 1 size 1x1x2 at (19,3,-14) materials 1] 
+note: gunrange: gun 1 fired 2 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: HAND TURNED FROM ITS GRIP Bolt-action rifle first person left: 26 degrees (the wrist's limits held it back); the grip asked twist 85 wrist -6/-54, got twist 85 wrist -6/-28, elbow 11 swung 72; fingers curled 75 more
+note: gunrange: picture 04_gun1_cooldown.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 2, reloads 0)
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (50,11,-12) materials 1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (48,11,-10) materials 1] trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: picture 05_gun2_hip.png (gun 1, barrel off 0.0 deg, sight off 10.8 cm, shots 2, reloads 0)
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (52,10,-19) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Assault rifle first person right: 25 degrees (the wrist's limits held it back); the grip asked twist -110 wrist -56/28, got twist -85 wrist -56/28, elbow 117 swung 56; fingers curled 80 more
+note: gunrange: picture 06_gun2_raising.png (gun 1, barrel off 0.0 deg, sight off 6.0 cm, shots 2, reloads 0)
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (44,6,-17) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Assault rifle first person left: 25 degrees (the wrist's limits held it back); the grip asked twist 85 wrist -32/-55, got twist 85 wrist -32/-28, elbow 48 swung 74; fingers curled 75 more
+note: gunrange: picture 07_gun2_aimed.png (gun 1, barrel off 0.0 deg, sight off 0.0 cm, shots 2, reloads 0)
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (34,1,-13) materials 1] 
+note: gunrange: picture 08_gun2_firing.png (gun 1, barrel off 0.0 deg, sight off 0.0 cm, shots 3, reloads 0)
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (34,1,-13) materials 1] 
+note: gunrange: gun 2 fired 12 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 09_gun2_cooldown.png (gun 1, barrel off 0.0 deg, sight off 10.8 cm, shots 15, reloads 0)
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (52,10,-19) materials 1] 
+note: gunrange: picture 10_gun3_hip.png (gun 2, barrel off 0.0 deg, sight off 11.7 cm, shots 15, reloads 0)
+note: gunrange:   parts body[PistolBody flag 1 shown 1 attached 1 size 19x3x12 at (57,3,-14) materials 1] magazine[PistolMagazine flag 1 shown 1 attached 1 size 7x2x10 at (52,3,-16) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Pistol first person right: 25 degrees (the wrist's limits held it back); the grip asked twist -84 wrist -62/63, got twist -84 wrist -62/28, elbow 82 swung 54; fingers curled 68 more
+note: gunrange: picture 11_gun3_raising.png (gun 2, barrel off 0.0 deg, sight off 5.9 cm, shots 15, reloads 0)
+note: gunrange:   parts body[PistolBody flag 1 shown 1 attached 1 size 19x3x12 at (54,0,-9) materials 1] magazine[PistolMagazine flag 1 shown 1 attached 1 size 7x2x10 at (49,0,-11) materials 1] 
+note: gunrange: picture 12_gun3_aimed.png (gun 2, barrel off 0.0 deg, sight off 0.0 cm, shots 15, reloads 0)
+note: gunrange:   parts body[PistolBody flag 1 shown 1 attached 1 size 19x3x12 at (51,-3,-4) materials 1] magazine[PistolMagazine flag 1 shown 1 attached 1 size 7x2x10 at (46,-3,-6) materials 1] 
+note: gunrange: picture 13_gun3_firing.png (gun 2, barrel off 0.0 deg, sight off 0.0 cm, shots 16, reloads 0)
+note: gunrange:   parts body[PistolBody flag 1 shown 1 attached 1 size 19x3x12 at (51,-3,-4) materials 1] magazine[PistolMagazine flag 1 shown 1 attached 1 size 7x2x10 at (46,-3,-6) materials 1] 
+note: gunrange: gun 3 fired 4 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 14_gun3_cooldown.png (gun 2, barrel off 0.0 deg, sight off 11.7 cm, shots 20, reloads 0)
+note: gunrange:   parts body[PistolBody flag 1 shown 1 attached 1 size 19x3x12 at (57,3,-14) materials 1] magazine[PistolMagazine flag 1 shown 1 attached 1 size 7x2x10 at (52,3,-16) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Pump shotgun first person left: 25 degrees (the wrist's limits held it back); the grip asked twist 85 wrist -11/-54, got twist 85 wrist -11/-28, elbow 11 swung 50; fingers curled 74 more
+note: gunrange: picture 15_gun4_hip.png (gun 3, barrel off 0.0 deg, sight off 10.8 cm, shots 20, reloads 0)
+note: gunrange:   parts body[ShotgunBody flag 1 shown 1 attached 1 size 127x5x22 at (59,9,-19) materials 1] pump[ShotgunPump flag 1 shown 1 attached 1 size 24x5x5 at (89,9,-14) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Pump shotgun first person right: 26 degrees (the wrist's limits held it back); the grip asked twist -111 wrist -57/29, got twist -85 wrist -57/28, elbow 117 swung 55; fingers curled 80 more
+note: gunrange: picture 16_gun4_raising.png (gun 3, barrel off 0.0 deg, sight off 5.4 cm, shots 20, reloads 0)
+note: gunrange:   parts body[ShotgunBody flag 1 shown 1 attached 1 size 127x5x22 at (50,5,-16) materials 1] pump[ShotgunPump flag 1 shown 1 attached 1 size 24x5x5 at (80,5,-11) materials 1] 
+note: gunrange: picture 17_gun4_aimed.png (gun 3, barrel off 0.0 deg, sight off 0.0 cm, shots 20, reloads 0)
+note: gunrange:   parts body[ShotgunBody flag 1 shown 1 attached 1 size 127x5x22 at (41,-0,-13) materials 1] pump[ShotgunPump flag 1 shown 1 attached 1 size 24x5x5 at (71,0,-8) materials 1] 
+note: gunrange: picture 18_gun4_firing.png (gun 3, barrel off 0.0 deg, sight off 0.0 cm, shots 21, reloads 0)
+note: gunrange:   parts body[ShotgunBody flag 1 shown 1 attached 1 size 127x5x22 at (41,-0,-13) materials 1] pump[ShotgunPump flag 1 shown 1 attached 1 size 24x5x5 at (71,0,-8) materials 1] 
+note: gunrange: gun 4 fired 4 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 19_gun4_cooldown.png (gun 3, barrel off 0.3 deg, sight off 10.8 cm, shots 24, reloads 0)
+note: gunrange:   parts body[ShotgunBody flag 1 shown 1 attached 1 size 127x5x22 at (59,9,-19) materials 1] pump[ShotgunPump flag 1 shown 1 attached 1 size 24x5x5 at (82,9,-14) materials 1] 
+note: gunrange: picture 20_gun5_hip.png (gun 4, barrel off 0.0 deg, sight off 10.8 cm, shots 24, reloads 0)
+note: gunrange:   parts body[Cube flag 1 shown 1 attached 1 size 54x4x5 at (50,9,-17) materials 1] 
+note: gunrange: picture 21_gun5_raising.png (gun 4, barrel off 0.0 deg, sight off 5.5 cm, shots 24, reloads 0)
+note: gunrange:   parts body[Cube flag 1 shown 1 attached 1 size 54x4x5 at (41,5,-14) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Grenade launcher first person right: 27 degrees (the wrist's limits held it back); the grip asked twist -85 wrist -57/61, got twist -85 wrist -57/28, elbow 94 swung 45; fingers curled 80 more
+note: gunrange: HAND TURNED FROM ITS GRIP Grenade launcher first person left: 26 degrees (the wrist's limits held it back); the grip asked twist 111 wrist -38/-28, got twist 85 wrist -38/-28, elbow 100 swung 64; fingers curled 75 more
+note: gunrange: picture 22_gun5_aimed.png (gun 4, barrel off 0.0 deg, sight off 0.0 cm, shots 24, reloads 0)
+note: gunrange:   parts body[Cube flag 1 shown 1 attached 1 size 54x4x5 at (32,0,-11) materials 1] 
+note: gunrange: picture 23_gun5_firing.png (gun 4, barrel off 0.0 deg, sight off 0.0 cm, shots 25, reloads 0)
+note: gunrange:   parts body[Cube flag 1 shown 1 attached 1 size 54x4x5 at (32,0,-11) materials 1] 
+note: gunrange: gun 5 fired 1 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: HAND OFF ITS GRIP Grenade launcher first person right: out of reach by 3.0 cm, drawn 3.0 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 45, right -1, up 9)
+note: gunrange: HAND OFF ITS GRIP Grenade launcher first person right: out of reach by 3.5 cm, drawn 3.5 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 46, right -1, up 9)
+note: gunrange: picture 24_gun5_cooldown.png (gun 4, barrel off 0.0 deg, sight off 10.8 cm, shots 25, reloads 0)
+note: gunrange:   parts body[Cube flag 1 shown 1 attached 1 size 54x4x5 at (50,9,-17) materials 1] 
+note: gunrange: picture 25_gun6_hip.png (gun 5, barrel off 0.0 deg, sight off 10.8 cm, shots 25, reloads 0)
+note: gunrange:   parts body[Cube flag 1 shown 1 attached 1 size 90x4x5 at (62,9,-21) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Rocket launcher first person left: 25 degrees (the wrist's limits held it back); the grip asked twist 86 wrist -26/-54, got twist 85 wrist -26/-28, elbow 56 swung 45; fingers curled 75 more
+note: gunrange: picture 26_gun6_raising.png (gun 5, barrel off 0.0 deg, sight off 6.1 cm, shots 25, reloads 0)
+note: gunrange:   parts body[Cube flag 1 shown 1 attached 1 size 90x4x5 at (54,5,-18) materials 1] 
+note: gunrange: picture 27_gun6_aimed.png (gun 5, barrel off 0.0 deg, sight off 0.0 cm, shots 25, reloads 0)
+note: gunrange:   parts body[Cube flag 1 shown 1 attached 1 size 90x4x5 at (44,0,-15) materials 1] 
+note: gunrange: picture 28_gun6_firing.png (gun 5, barrel off 0.0 deg, sight off 0.0 cm, shots 26, reloads 0)
+note: gunrange:   parts body[Cube flag 1 shown 1 attached 1 size 90x4x5 at (44,0,-15) materials 1] 
+note: gunrange: gun 6 fired 3 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 29_gun6_cooldown.png (gun 5, barrel off 0.0 deg, sight off 10.8 cm, shots 28, reloads 0)
+note: gunrange:   parts body[Cube flag 1 shown 1 attached 1 size 90x4x5 at (62,9,-21) materials 1] 
+note: gunrange: picture 30_downed.png (gun 1, barrel off 0.0 deg, sight off 10.8 cm, shots 37, reloads 0)
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (52,10,-19) materials 1] 
+note: gunrange: picture 31_downed_shot.png (gun 1, barrel off 0.1 deg, sight off 0.0 cm, shots 44, reloads 0)
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (34,1,-13) materials 1] 
+note: gunrange: close look at 1048620's last wound, 7 m away
+note: gunrange: picture 32_downed_far.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: picture 33_downed_scope.png (gun 0, barrel off 0.0 deg, sight off 0.0 cm, shots 44, reloads 0)
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] bolt[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] trigger[SM_BoltActionRifle_PIVOT_Trigger flag 0 shown 0 attached 1 size 1x1x2 at (19,3,-14) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Bolt-action rifle third person left: 28 degrees (the wrist's limits held it back); the grip asked twist 85 wrist -14/-56, got twist 85 wrist -14/-28, elbow 54 swung 71; fingers curled 75 more
+note: gunrange: picture 34_third_person.png (gun 0, barrel off 0.0 deg, sight off 0.0 cm, shots 44, reloads 0)
+note: gunrange: picture 35_third_person_aimed.png (gun 0, barrel off 0.0 deg, sight off 0.0 cm, shots 44, reloads 0)
+note: gunrange: melee rack 10 in hand, view first person, arms shown
+note: gunrange: picture 36_melee_held.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: HAND TURNED FROM ITS GRIP Longsword first person left: 26 degrees (the wrist's limits held it back); the grip asked twist 110 wrist -32/-29, got twist 85 wrist -32/-28, elbow 117 swung -14; fingers curled 13 more
+note: gunrange: HAND TURNED FROM ITS GRIP Longsword first person right: 26 degrees (the wrist's limits held it back); the grip asked twist 84 wrist 12/55, got twist 84 wrist 12/28, elbow 11 swung -79; fingers curled 28 more
+note: gunrange: picture 37_melee_swing.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: HAND OFF ITS GRIP Longsword first person left: out of reach by 8.6 cm, drawn 8.6 cm from the goal, shoulder forward 5.7 cm, goal from shoulder (ahead 51, right 6, up 2)
+note: gunrange: first-person swings seen 1
+note: gunrange: picture 38_melee_Knife_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: picture 39_melee_Knife_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: picture 40_melee_Club_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: picture 41_melee_Club_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: picture 42_melee_Gladius_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: picture 43_melee_Gladius_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: picture 44_melee_Mace_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: picture 45_melee_Mace_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: picture 46_melee_Longsword_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: picture 47_melee_Longsword_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: picture 48_melee_Spear_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: picture 49_melee_Spear_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: picture 50_hold_Bolt-actionrifle_fp_hip.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: picture 51_hold_Bolt-actionrifle_fp_aimed.png (gun 0, barrel off 0.0 deg, sight off 0.0 cm, shots 44, reloads 0)
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] bolt[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] trigger[SM_BoltActionRifle_PIVOT_Trigger flag 0 shown 0 attached 1 size 1x1x2 at (19,3,-14) materials 1] 
+note: gunrange: picture 52_hold_Bolt-actionrifle_3p_ready.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: picture 53_hold_Bolt-actionrifle_3p_aimed.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange: picture 54_hold_Assaultrifle_fp_hip.png (gun 1, barrel off 0.0 deg, sight off 10.8 cm, shots 44, reloads 0)
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (52,10,-19) materials 1] 
+note: gunrange: picture 55_hold_Assaultrifle_fp_aimed.png (gun 1, barrel off 0.0 deg, sight off 0.0 cm, shots 44, reloads 0)
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (34,1,-13) materials 1] 
+note: gunrange: picture 56_hold_Assaultrifle_3p_ready.png (gun 1, barrel off 0.0 deg, sight off 10.8 cm, shots 44, reloads 0)
+note: gunrange: HAND TURNED FROM ITS GRIP Assault rifle third person left: 27 degrees (the wrist's limits held it back); the grip asked twist 85 wrist -36/-57, got twist 85 wrist -36/-28, elbow 84 swung 30; fingers curled 75 more
+note: gunrange: picture 57_hold_Assaultrifle_3p_aimed.png (gun 1, barrel off 0.0 deg, sight off 10.8 cm, shots 44, reloads 0)
+note: gunrange: picture 58_hold_Pistol_fp_hip.png (gun 2, barrel off 0.0 deg, sight off 11.7 cm, shots 44, reloads 0)
+note: gunrange:   parts body[PistolBody flag 1 shown 1 attached 1 size 19x3x12 at (57,3,-14) materials 1] magazine[PistolMagazine flag 1 shown 1 attached 1 size 7x2x10 at (52,3,-16) materials 1] 
+note: gunrange: picture 59_hold_Pistol_fp_aimed.png (gun 2, barrel off 0.0 deg, sight off 0.0 cm, shots 44, reloads 0)
+note: gunrange:   parts body[PistolBody flag 1 shown 1 attached 1 size 19x3x12 at (51,-3,-4) materials 1] magazine[PistolMagazine flag 1 shown 1 attached 1 size 7x2x10 at (46,-3,-6) materials 1] 
+note: gunrange: picture 60_hold_Pistol_3p_ready.png (gun 2, barrel off 0.0 deg, sight off 11.7 cm, shots 44, reloads 0)
+note: gunrange: HAND TURNED FROM ITS GRIP Pistol third person right: 25 degrees (the wrist's limits held it back); the grip asked twist -85 wrist -34/55, got twist -85 wrist -34/28, elbow 26 swung 52; fingers curled 64 more
+note: gunrange: picture 61_hold_Pistol_3p_aimed.png (gun 2, barrel off 0.0 deg, sight off 11.7 cm, shots 44, reloads 0)
+note: gunrange: HAND OFF ITS GRIP Pump shotgun first person right: out of reach by 4.1 cm, drawn 4.1 cm from the goal, shoulder forward 0.0 cm, goal from shoulder (ahead 5, right -5, up -6)
+note: gunrange: picture 62_hold_Pumpshotgun_fp_hip.png (gun 3, barrel off 0.0 deg, sight off 10.8 cm, shots 44, reloads 0)
+note: gunrange:   parts body[ShotgunBody flag 1 shown 1 attached 1 size 127x5x22 at (59,9,-19) materials 1] pump[ShotgunPump flag 1 shown 1 attached 1 size 24x5x5 at (89,9,-14) materials 1] 
+note: gunrange: picture 63_hold_Pumpshotgun_fp_aimed.png (gun 3, barrel off 0.0 deg, sight off 0.0 cm, shots 44, reloads 0)
+note: gunrange:   parts body[ShotgunBody flag 1 shown 1 attached 1 size 127x5x22 at (41,-0,-13) materials 1] pump[ShotgunPump flag 1 shown 1 attached 1 size 24x5x5 at (71,0,-8) materials 1] 
+note: gunrange: picture 64_hold_Pumpshotgun_3p_ready.png (gun 3, barrel off 0.0 deg, sight off 10.8 cm, shots 44, reloads 0)
+note: gunrange: HAND TURNED FROM ITS GRIP Pump shotgun third person left: 25 degrees (the wrist's limits held it back); the grip asked twist 84 wrist -16/-53, got twist 84 wrist -16/-28, elbow 33 swung 11; fingers curled 75 more
+note: gunrange: HAND TURNED FROM ITS GRIP Pump shotgun third person right: 26 degrees (the wrist's limits held it back); the grip asked twist -84 wrist -55/60, got twist -84 wrist -55/28, elbow 98 swung 43; fingers curled 80 more
+note: gunrange: picture 65_hold_Pumpshotgun_3p_aimed.png (gun 3, barrel off 0.0 deg, sight off 10.8 cm, shots 44, reloads 0)
+note: gunrange: picture 66_hold_Grenadelauncher_fp_hip.png (gun 4, barrel off 0.0 deg, sight off 10.8 cm, shots 44, reloads 0)
+note: gunrange:   parts body[Cube flag 1 shown 1 attached 1 size 54x4x5 at (50,9,-17) materials 1] 
+note: gunrange: picture 67_hold_Grenadelauncher_fp_aimed.png (gun 4, barrel off 0.0 deg, sight off 0.0 cm, shots 44, reloads 0)
+note: gunrange:   parts body[Cube flag 1 shown 1 attached 1 size 54x4x5 at (32,-0,-11) materials 1] 
+note: gunrange: picture 68_hold_Grenadelauncher_3p_ready.png (gun 4, barrel off 0.0 deg, sight off 10.8 cm, shots 44, reloads 0)
+note: gunrange: HAND TURNED FROM ITS GRIP Grenade launcher third person left: 26 degrees (the wrist's limits held it back); the grip asked twist 111 wrist -36/-28, got twist 85 wrist -36/-28, elbow 104 swung 24; fingers curled 75 more
+note: gunrange: picture 69_hold_Grenadelauncher_3p_aimed.png (gun 4, barrel off 0.0 deg, sight off 10.8 cm, shots 44, reloads 0)
+note: gunrange: picture 70_hold_Rocketlauncher_fp_hip.png (gun 5, barrel off 0.0 deg, sight off 10.8 cm, shots 44, reloads 0)
+note: gunrange:   parts body[Cube flag 1 shown 1 attached 1 size 90x4x5 at (62,9,-21) materials 1] 
+note: gunrange: picture 71_hold_Rocketlauncher_fp_aimed.png (gun 5, barrel off 0.0 deg, sight off 0.0 cm, shots 44, reloads 0)
+note: gunrange:   parts body[Cube flag 1 shown 1 attached 1 size 90x4x5 at (44,0,-15) materials 1] 
+note: gunrange: picture 72_hold_Rocketlauncher_3p_ready.png (gun 5, barrel off 0.0 deg, sight off 10.8 cm, shots 44, reloads 0)
+note: gunrange: picture 73_hold_Rocketlauncher_3p_aimed.png (gun 5, barrel off 0.0 deg, sight off 10.8 cm, shots 44, reloads 0)
+note: gunrange: gun back in hand, view first person, gun model shown
+note: gunrange: picture 74_gun_again.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: picture 75_kill_feed.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: Tab focus on 1048620 (locked on), HP bar frames 163
+note: gunrange: picture 76_focus_hpbar.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 44, reloads 0)
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: Bolt-action rifle: model
+note: gunrange: Assault rifle: model
+note: gunrange: Pistol: model
+note: gunrange: Pump shotgun: model
+note: gunrange: Grenade launcher: no model (box)
+note: gunrange: Rocket launcher: no model (box)
+note: gunrange: Knife (melee): no model (placeholder)
+note: gunrange: Club (melee): no model (placeholder)
+note: gunrange: Gladius (melee): no model (placeholder)
+note: gunrange: Mace (melee): no model (placeholder)
+note: gunrange: Longsword (melee): no model (placeholder)
+note: gunrange: Spear (melee): no model (placeholder)
+note: gunrange: blood assets in: 14 hits, 731 drops, 228 mist, 14 wound marks, 92 body stains, 958 ground splats, 0 painted into skin (0 bodies now)
+note: gunrange: arms checked on 47335 hand-frames: 0 outside human limits, 24 off the grip; worst twist 88, wrist 72, elbow 145 deg, out of reach 8.6 cm, drawn off the goal 8.6 cm
+note: gunrange: 2 targets ran, 2 sprinted, 0 charged you, 0 punches thrown at you, 1 range lock-ons
+note: gunrange: 0 guards set unaware, 0 alert events, 0 alert marks drawn
+Screenshots: C:\Dev\Rim3D-gunhits\game\Saved\Smoke\gunrange
