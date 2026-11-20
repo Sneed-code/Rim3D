@@ -67,12 +67,51 @@ swung by Unreal's groom physics. The wigs stay as they are (the default) until s
   on the head bone; groom physics collides with the body through the mannequin physics asset (same bone names). Creator
   switch `-CreatorGroom=GA_Hair_Long` shows it on the MakeHuman bodies instead of the hair meshes; tuning cvars
   `Pawns.StrandHairScale`, `Pawns.StrandHairOffsetX/Y/Z`, `Pawns.StrandHairYaw`; the log line `STRANDHAIR` gives the fit.
-- **Next:** waist-length grooms of our own, grown by a Blender script from our head's scalp (hair curves combed down
-  under gravity, clumped and frizzed, exported as Alembic grooms and imported once per style); the pawn's hair colour on
-  the groom material; strands only on pawns near the camera, the groom's simpler LODs or the wig further away.
+- **Next:** our own grooms, the pawn's hair colour and strands only near the camera: step 2 below.
 - **One-time per style:** each groom is made and imported once; fitting to each head is automatic. Cost measured on the
   PC (2026-11-20): one MetaHuman close-up with groom physics about 9-13 ms GPU, about the same as the creator scene with
   four card-hair bodies.
+
+## Growing our own grooms (step 2, 2026-11-20)
+
+`tools/makehuman/grow_hair.py` (headless Blender, the styles in `tools/makehuman/hair_styles.json`) grows strand hair
+on a creator base's own body, so it fits that scalp exactly and can be grown again whenever the base changes:
+
+```
+blender.exe -b -noaudio --python tools/makehuman/grow_hair.py -- game/Saved/MakeHuman/CreatorFemale/CreatorFemale.fbx game/Saved/Grooms/CreatorFemale --preview
+```
+
+- **Roots** are scattered evenly over the scalp, inside a hairline round the skull (a sphere fitted to the crown): high
+  at the forehead, lower at the temples, above and behind the ears, lowest at the nape.
+- **Combed with gravity.** Each strand leaves the skin along the style's flow (away from a middle or side parting, straight
+  back, or towards a ponytail's band) lying along the scalp; with each step it turns further towards the ground. Every
+  point is pushed out of the body mesh to the strand's own small distance off the skin, so the hair has layers and
+  volume and lies on the head, shoulders and back without passing through. Long hair falls behind the shoulders (some
+  locks from in front of the ears fall in front) and may not spread outwards below the neck, so it never runs down the
+  arms. A ponytail's strands are combed to the band at the back of the head, then hang from it, spreading a little and
+  narrowing to the ends.
+- **Then** strands are pulled into clumps towards their tips, waved (a whole clump together), given a little frizz, cut
+  to length (`to`: waist, mid back, shoulder, chin, ear, with a soft U at the back) and checked against the body again.
+- **Styles:** LongStraight (waist, middle parting), LongWavy (mid back, side parting), Ponytail, Bob, Short, Buzz;
+  40,000 to 60,000 strands each. Each is written as `<Style>.abc` (centimetres, relative to the head bone, the body's
+  axes) with `grooms.json`; `--preview` renders the head from three sides and the whole length from behind with Cycles.
+  Blender also runs as a Python module in the cloud (`pip install bpy`), so styles can be tuned there with test renders
+  on MakeHuman's base mesh (`--joints` with its head and neck joints).
+- **Import:** the `HairGrooms` commandlet (`Rim3DEditor/HairGroomsCommandlet.*`) imports every style of every base in
+  `assets/hair_grooms.json` as `/Game/Rim3D/Generated/Grooms/GA_<base>_<Style>`: Unreal's default Alembic conversion
+  (gives the body's own axes), guides made from the strands for the physics (one in 40), the physics on, the MetaHuman
+  hair material, and a second LOD with a third of the strands for further off.
+- **Hair colour:** the pawn's hair colour drives the groom through the MetaHuman hair material's melanin and redness
+  (`StrandHairSetColour`, the same mapping as the MetaHuman route's grooms).
+
+## Near and far (step 2)
+
+`UStrandHairSubsystem` decides who wears strands. Every MakeHuman person the creator's apply dresses (the creator, the gun
+range's random people) asks for strands for their hair style (`assets/hair_grooms.json` "creator" maps the creator's
+style names to grown ones; Braid, Messy and Afro have none yet and keep their wigs). Four times a second the people within
+`Pawns.StrandHairNear` metres of the camera (10) are sorted by distance and the nearest `Pawns.StrandHairMax` (6) wear
+strands, their wig hidden; the rest wear the wig. People wearing strands keep them a metre further, so nobody flickers at
+the edge. `Pawns.StrandHair 0` puts everyone in wigs. A style whose groom has not been grown and imported keeps its wig.
 
 ## Cost and distance
 

@@ -9,6 +9,14 @@
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "AnimationRuntime.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Dom/JsonObject.h"
+#include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 
 namespace
 {
@@ -19,6 +27,13 @@ namespace
 	TAutoConsoleVariable<float> GStrandHairOffsetZ(TEXT("Pawns.StrandHairOffsetZ"), 0.0f, TEXT("Strand hair: cm along the body's Z."));
 	TAutoConsoleVariable<float> GStrandHairYaw(TEXT("Pawns.StrandHairYaw"), 0.0f,
 		TEXT("Strand hair: degrees turned about the head (if the body faces another way than the MetaHuman meshes)."));
+
+	TAutoConsoleVariable<int32> GStrandHairOn(TEXT("Pawns.StrandHair"), 1,
+		TEXT("1: the people nearest the camera wear strand hair (our own grown grooms), the rest their wig meshes. 0: wigs for everyone."));
+	TAutoConsoleVariable<float> GStrandHairNear(TEXT("Pawns.StrandHairNear"), 10.0f,
+		TEXT("Strand hair: metres from the camera within which people wear strands (a metre's grace before they switch back)."));
+	TAutoConsoleVariable<int32> GStrandHairMax(TEXT("Pawns.StrandHairMax"), 6,
+		TEXT("Strand hair: at most this many people wear strands at once, the nearest first."));
 
 	const TCHAR* const StrandHairPhysicsAssetPath = TEXT("/Game/Characters/UEFN_Mannequin/Rigs/PA_UEFN_Mannequin.PA_UEFN_Mannequin");
 
@@ -70,54 +85,262 @@ UGroomAsset* StrandHairFind(const FString& Name)
 	return LoadObject<UGroomAsset>(nullptr, *PawnFacesAssetPath(Name));
 }
 
+namespace
+{
+	/** Puts Groom on Body's head: the groom's curves are in a space where the head they were made on is at SourceHead
+	 *  (component space, cm) with a neck-to-head length of SourceNeck; they are moved onto Body's head bone, scaled by
+	 *  the two lengths (within 15%), turned by the yaw cvar, then the offset cvars. */
+	UGroomComponent* StrandHairFit(USkeletalMeshComponent* Body, UGroomAsset* Groom, const FVector& SourceHead, float SourceNeck, bool bFound,
+		UGroomComponent* Existing)
+	{
+		const USkeletalMesh* BodyMesh = Body ? Body->GetSkeletalMeshAsset() : nullptr;
+		FTransform BodyHead;
+		float BodyNeck = 0.0f;
+		if (!BodyMesh || !Groom || !bFound || !StrandHairHead(*BodyMesh, BodyHead, BodyNeck))
+		{
+			if (Existing)
+			{
+				Existing->SetVisibility(false);
+			}
+			return Existing;
+		}
+		const float Fitted = SourceNeck > 1.0f && BodyNeck > 1.0f ? FMath::Clamp(BodyNeck / SourceNeck, 0.85f, 1.15f) : 1.0f;
+		const float Scale = Fitted * FMath::Clamp(GStrandHairScale.GetValueOnGameThread(), 0.5f, 2.0f);
+		const FQuat Yaw(FVector::UpVector, FMath::DegreesToRadians(GStrandHairYaw.GetValueOnGameThread()));
+		const FVector Offset(GStrandHairOffsetX.GetValueOnGameThread(), GStrandHairOffsetY.GetValueOnGameThread(), GStrandHairOffsetZ.GetValueOnGameThread());
+		const FTransform ToSourceHead(FQuat::Identity, -SourceHead);
+		const FTransform Fit(Yaw, BodyHead.GetLocation() + Offset, FVector(Scale));
+		const FTransform InBody = ToSourceHead * Fit;                    // groom space -> body component space
+		const FTransform OnHead = InBody * BodyHead.Inverse();           // -> the head bone's space
+
+		UGroomComponent* Hair = Existing;
+		if (!Hair)
+		{
+			UObject* Outer = Body->GetOwner() ? static_cast<UObject*>(Body->GetOwner()) : static_cast<UObject*>(Body);
+			Hair = NewObject<UGroomComponent>(Outer, MakeUniqueObjectName(Outer, UGroomComponent::StaticClass(), TEXT("StrandHair")));
+			Hair->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Hair->SetCanEverAffectNavigation(false);
+			Hair->SetupAttachment(Body, TEXT("head"));
+			Hair->RegisterComponent();
+		}
+		Hair->SetRelativeTransform(OnHead);  // every call, so the tuning cvars show at once
+		Hair->SetVisibility(true);
+		if (Hair->GroomAsset != Groom)
+		{
+			Hair->SetGroomAsset(Groom);
+			if (UPhysicsAsset* Physics = LoadObject<UPhysicsAsset>(nullptr, StrandHairPhysicsAssetPath))
+			{
+				Hair->PhysicsAsset = Physics;
+			}
+			Hair->AddCollisionComponent(Body);
+			UE_LOG(LogTemp, Display, TEXT("STRANDHAIR %s on %s: fitted scale %.3f (neck to head %.1f / %.1f cm), body head at %s, groom head at %s"),
+				*Groom->GetName(), *BodyMesh->GetName(), Scale, BodyNeck, SourceNeck, *BodyHead.GetLocation().ToString(), *SourceHead.ToString());
+		}
+		return Hair;
+	}
+
+	/** assets/hair_grooms.json "creator": the creator's hair style -> our grown style. */
+	const TMap<FString, FString>& StrandHairCreatorStyles()
+	{
+		static TMap<FString, FString> Styles;
+		static bool bRead = false;
+		if (!bRead)
+		{
+			bRead = true;
+			FString Text;
+			TSharedPtr<FJsonObject> Root;
+			const FString File = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("../assets/hair_grooms.json"));
+			if (FFileHelper::LoadFileToString(Text, *File) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) && Root.IsValid())
+			{
+				const TSharedPtr<FJsonObject>* Creator = nullptr;
+				if (Root->TryGetObjectField(TEXT("creator"), Creator))
+				{
+					for (const TPair<FString, TSharedPtr<FJsonValue>>& Entry : (*Creator)->Values)
+					{
+						Styles.Add(Entry.Key, Entry.Value->AsString());
+					}
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Strand hair: cannot read %s; everyone keeps their wig"), *File);
+			}
+		}
+		return Styles;
+	}
+}
+
 UGroomComponent* StrandHairAttach(USkeletalMeshComponent* Body, UGroomAsset* Groom, UGroomComponent* Existing)
 {
-	const USkeletalMesh* BodyMesh = Body ? Body->GetSkeletalMeshAsset() : nullptr;
 	const USkeletalMesh* Face = StrandHairMetaHumanFace();
-	FTransform BodyHead;
 	FTransform FaceHead;
-	float BodyNeck = 0.0f;
 	float FaceNeck = 0.0f;
-	if (!BodyMesh || !Groom || !Face || !StrandHairHead(*BodyMesh, BodyHead, BodyNeck) || !StrandHairHead(*Face, FaceHead, FaceNeck))
-	{
-		if (Existing)
-		{
-			Existing->SetVisibility(false);
-		}
-		return Existing;
-	}
-	// From the MetaHuman's component space to this body's: the MetaHuman's head onto this one, scaled by the heads'
-	// neck-to-head lengths (within 15%), turned by the yaw cvar, then the offset; the groom then rides on the head bone.
-	const float Fitted = FaceNeck > 1.0f && BodyNeck > 1.0f ? FMath::Clamp(BodyNeck / FaceNeck, 0.85f, 1.15f) : 1.0f;
-	const float Scale = Fitted * FMath::Clamp(GStrandHairScale.GetValueOnGameThread(), 0.5f, 2.0f);
-	const FQuat Yaw(FVector::UpVector, FMath::DegreesToRadians(GStrandHairYaw.GetValueOnGameThread()));
-	const FVector Offset(GStrandHairOffsetX.GetValueOnGameThread(), GStrandHairOffsetY.GetValueOnGameThread(), GStrandHairOffsetZ.GetValueOnGameThread());
-	const FTransform ToFaceHead(FQuat::Identity, -FaceHead.GetLocation());
-	const FTransform Fit(Yaw, BodyHead.GetLocation() + Offset, FVector(Scale));
-	const FTransform InBody = ToFaceHead * Fit;                      // groom space -> body component space
-	const FTransform OnHead = InBody * BodyHead.Inverse();           // -> the head bone's space
+	const bool bFound = Face && StrandHairHead(*Face, FaceHead, FaceNeck);
+	return StrandHairFit(Body, Groom, FaceHead.GetLocation(), FaceNeck, bFound, Existing);
+}
 
-	UGroomComponent* Hair = Existing;
-	if (!Hair)
+UGroomAsset* StrandHairFindGrown(const FString& Base, const FString& CreatorStyle)
+{
+	const FString* Style = StrandHairCreatorStyles().Find(CreatorStyle);
+	if (!Style || Base.IsEmpty())
 	{
-		Hair = NewObject<UGroomComponent>(Body->GetOwner(), TEXT("StrandHair"));
-		Hair->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Hair->SetCanEverAffectNavigation(false);
-		Hair->SetupAttachment(Body, TEXT("head"));
-		Hair->RegisterComponent();
+		return nullptr;
 	}
-	Hair->SetRelativeTransform(OnHead);  // every call, so the tuning cvars show at once
-	Hair->SetVisibility(true);
-	if (Hair->GroomAsset != Groom)
+	const FString Name = StrandHairGrownName(Base, *Style);
+	const FString Path = FString(StrandHairGrownFolder) / Name + TEXT(".") + Name;
+	return LoadObject<UGroomAsset>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
+}
+
+UGroomComponent* StrandHairAttachGrown(USkeletalMeshComponent* Body, UGroomAsset* Groom, const USkeletalMesh* Base, UGroomComponent* Existing)
+{
+	// The curves are relative to the base's head bone (grow_hair.py), so the source head is at the origin.
+	FTransform BaseHead;
+	float BaseNeck = 0.0f;
+	const bool bFound = !Base || StrandHairHead(*Base, BaseHead, BaseNeck);
+	return StrandHairFit(Body, Groom, FVector::ZeroVector, BaseNeck, bFound, Existing);
+}
+
+void StrandHairSetColour(UGroomComponent* Groom, const FLinearColor& Hair)
+{
+	if (!Groom)
 	{
-		Hair->SetGroomAsset(Groom);
-		if (UPhysicsAsset* Physics = LoadObject<UPhysicsAsset>(nullptr, StrandHairPhysicsAssetPath))
+		return;
+	}
+	// The MetaHuman hair material is coloured by melanin and redness (as ASimPawnActor does for the MetaHuman grooms).
+	const float Lightness = Hair.GetLuminance();
+	const float Melanin = FMath::Clamp(1.0f - FMath::Sqrt(Lightness) * 1.6f, 0.0f, 1.0f);
+	const float Redness = FMath::Clamp((Hair.R - Hair.B) / FMath::Max(Hair.R, 0.01f), 0.0f, 1.0f) * 0.8f;
+	Groom->SetScalarParameterValueOnMaterials(TEXT("HairMelanin"), Melanin);
+	Groom->SetScalarParameterValueOnMaterials(TEXT("HairRedness"), Redness);
+}
+
+// ---- who wears strands ------------------------------------------------------------------------------------------------
+
+void UStrandHairSubsystem::Want(USkeletalMeshComponent* Body, const FString& Base, const FString& CreatorStyle, const FLinearColor& Colour,
+	const TArray<int32>& WigSections)
+{
+	if (!Body)
+	{
+		return;
+	}
+	FWearer* Found = Wearers.FindByPredicate([Body](const FWearer& W) { return W.Body.Get() == Body; });
+	UGroomAsset* Groom = CreatorStyle.IsEmpty() ? nullptr : StrandHairFindGrown(Base, CreatorStyle);
+	if (Found && Found->bStrands && Found->Groom.Get() != Groom)
+	{
+		Show(*Found, false);  // a new style: the old strands go, the new ones come at the next sort
+	}
+	if (!Groom)
+	{
+		if (Found)
 		{
-			Hair->PhysicsAsset = Physics;
+			if (UGroomComponent* Strands = Found->Strands.Get())
+			{
+				Strands->SetVisibility(false);
+			}
+			Wearers.RemoveAll([Body](const FWearer& W) { return W.Body.Get() == Body; });
 		}
-		Hair->AddCollisionComponent(Body);
-		UE_LOG(LogTemp, Display, TEXT("STRANDHAIR %s on %s: fitted scale %.3f (neck to head %.1f / %.1f cm), body head at %s, face head at %s"),
-			*Groom->GetName(), *BodyMesh->GetName(), Scale, BodyNeck, FaceNeck, *BodyHead.GetLocation().ToString(), *FaceHead.GetLocation().ToString());
+		return;
 	}
-	return Hair;
+	if (!Found)
+	{
+		Found = &Wearers.AddDefaulted_GetRef();
+		Found->Body = Body;
+	}
+	Found->Groom = Groom;
+	Found->Base = LoadObject<USkeletalMesh>(nullptr, *(FString(TEXT("/Game/Rim3D/Generated/MakeHuman/SK_MH_")) + Base + TEXT(".SK_MH_") + Base), nullptr,
+		LOAD_NoWarn | LOAD_Quiet);
+	Found->Colour = Colour;
+	Found->WigSections = WigSections;
+	if (Found->bStrands)
+	{
+		StrandHairSetColour(Found->Strands.Get(), Colour);
+		Show(*Found, true);  // the wig the apply just showed goes again
+	}
+	SinceSort = 1.0f;  // sort at the next tick
+}
+
+int32 UStrandHairSubsystem::NumWearing() const
+{
+	int32 Count = 0;
+	for (const FWearer& Wearer : Wearers)
+	{
+		Count += Wearer.bStrands ? 1 : 0;
+	}
+	return Count;
+}
+
+void UStrandHairSubsystem::Show(FWearer& Wearer, bool bStrands)
+{
+	USkeletalMeshComponent* Body = Wearer.Body.Get();
+	if (!Body)
+	{
+		return;
+	}
+	if (bStrands)
+	{
+		UGroomComponent* Strands = StrandHairAttachGrown(Body, Wearer.Groom.Get(), Wearer.Base.Get(), Wearer.Strands.Get());
+		Wearer.Strands = Strands;
+		if (!Strands)
+		{
+			bStrands = false;
+		}
+		else
+		{
+			StrandHairSetColour(Strands, Wearer.Colour);
+		}
+	}
+	else if (UGroomComponent* Strands = Wearer.Strands.Get())
+	{
+		Strands->SetVisibility(false);
+	}
+	for (const int32 Section : Wearer.WigSections)
+	{
+		Body->ShowMaterialSection(Section, 0, !bStrands, 0);
+	}
+	Wearer.bStrands = bStrands;
+}
+
+void UStrandHairSubsystem::Tick(float DeltaTime)
+{
+	Wearers.RemoveAll([](const FWearer& W) { return !W.Body.IsValid(); });
+	SinceSort += DeltaTime;
+	if (SinceSort < 0.25f || Wearers.IsEmpty())
+	{
+		return;
+	}
+	SinceSort = 0.0f;
+	const bool bOn = GStrandHairOn.GetValueOnGameThread() != 0;
+	APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0);
+	const FVector Eye = Camera ? Camera->GetCameraLocation() : FVector::ZeroVector;
+	const float NearCm = FMath::Max(0.0f, GStrandHairNear.GetValueOnGameThread()) * 100.0f;
+	const int32 MaxWearers = FMath::Max(0, GStrandHairMax.GetValueOnGameThread());
+	// Nearest first; those wearing strands now keep them a metre further (no flicker at the edge).
+	TArray<TPair<float, int32>> Order;
+	for (int32 i = 0; i < Wearers.Num(); ++i)
+	{
+		const USkeletalMeshComponent* Body = Wearers[i].Body.Get();
+		const bool bVisible = Body->IsVisible() && Body->GetOwner() && !Body->GetOwner()->IsHidden();
+		const float Distance = static_cast<float>(FVector::Dist(Body->GetComponentLocation(), Eye)) - (Wearers[i].bStrands ? 100.0f : 0.0f);
+		Order.Emplace(bVisible && bOn && Distance < NearCm ? Distance : TNumericLimits<float>::Max(), i);
+	}
+	Order.Sort([](const TPair<float, int32>& A, const TPair<float, int32>& B) { return A.Key < B.Key; });
+	for (int32 Rank = 0; Rank < Order.Num(); ++Rank)
+	{
+		FWearer& Wearer = Wearers[Order[Rank].Value];
+		const bool bWant = Rank < MaxWearers && Order[Rank].Key < TNumericLimits<float>::Max();
+		if (bWant != Wearer.bStrands)
+		{
+			Show(Wearer, bWant);
+		}
+	}
+}
+
+TStatId UStrandHairSubsystem::GetStatId() const
+{
+	RETURN_QUICK_DECLARE_CYCLE_STAT(UStrandHairSubsystem, STATGROUP_Tickables);
+}
+
+bool UStrandHairSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
+{
+	return WorldType == EWorldType::Game || WorldType == EWorldType::PIE;
 }
