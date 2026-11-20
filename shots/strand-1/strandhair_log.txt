@@ -1,0 +1,2 @@
+STRANDHAIR GA_Hair_Long on SK_MH_CreatorFemale: fitted scale 1.150 (neck to head 11.9 / 10.2 cm), body head at X=-0.000 Y=4.030 Z=142.573, face head at X=0.000 Y=0.855 Z=155.794
+STRANDHAIR GA_Hair_Long on SK_MH_CreatorMale: fitted scale 0.992 (neck to head 10.2 / 10.2 cm), body head at X=-0.000 Y=4.670 Z=159.999, face head at X=0.000 Y=0.855 Z=155.794
