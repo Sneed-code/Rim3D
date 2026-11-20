@@ -1166,6 +1166,12 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				}
 				if (At(7.4f))
 				{
+					// Long hair while aimed (docs/design/hair-physics.md, "Aiming"): over the other shoulder, off the stock.
+					const USimPawnSubsystem* HairPawns = GetWorld()->GetSubsystem<USimPawnSubsystem>();
+					const ASimPawnActor* HairMe = HairPawns ? HairPawns->FindPawn(State->Player) : nullptr;
+					const USkeletalMeshComponent* HairMesh = HairMe ? HoldDraw::VisibleMesh(*HairMe) : nullptr;
+					const UMakeHumanAnimInstance* HairAnim = HairMesh ? Cast<UMakeHumanAnimInstance>(HairMesh->GetAnimInstance()) : nullptr;
+					Notes.Add(FString::Printf(TEXT("gunrange: HAIR AIM %s 3p aimed: %s"), *Name, HairAnim ? *HairAnim->DescribeHairAim() : TEXT("no MakeHuman body")));
 					Picture(*FString::Printf(TEXT("hold_%s_3p_aimed"), *Name));
 				}
 				if (T > 7.6f)

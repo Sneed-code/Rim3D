@@ -136,6 +136,14 @@ struct FMakeHumanHairNode : public FAnimNode_SkeletalControlBase
 	FVector Right = FVector(-1.0, 0.0, 0.0);   // the body's right and forward in component space (the arm solver's)
 	FVector Forward = FVector(0.0, 1.0, 0.0);
 	float SweepDegrees = 45.0f;             // Pawns.HairAimSweep
+	/** What the last evaluation did with a held gun (tests' notes): whether it was on, its aim, the capsules it added,
+	 *  how far the sweep moved the goals' tips and how far the solved tips ended from the hair as animated (cm). */
+	bool bLastGun = false;
+	float LastAim = 0.0f;
+	int32 LastGunCapsules = 0;
+	int32 BodyCapsules = 0;                 // the first this many of Capsules are the body's (Pawns.HairDebug: green; the rest cyan)
+	float LastSweepShift = 0.0f;
+	float LastTipsMoved = 0.0f;
 	float DeltaTime = 0.0f;
 	int32 Mode = 2;                         // 2 full simulation, 1 pushed out of the body only, 0 as animated
 	colony::HairStrands Strands;
@@ -338,6 +346,8 @@ public:
 	 *  the other shoulder while aimed (docs/design/hair-physics.md, "Aiming"). */
 	void SetHeldGun(const FMakeHumanHeldGun& InGun) { HeldGun = InGun; }
 	const FMakeHumanHeldGun& GetHeldGun() const { return HeldGun; }
+	/** The hair's last frame with a held gun, for the tests' notes (see FMakeHumanHairNode::bLastGun). */
+	FString DescribeHairAim() const;
 	FMakeHumanHeldGun HeldGun;
 	/** The body's up, forward and right in world space, used instead of the owner actor's (the first-person arms face
 	 *  the view, not their holder); off with bOn false. */

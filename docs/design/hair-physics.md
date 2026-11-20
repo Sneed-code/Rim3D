@@ -69,14 +69,16 @@ hair really does put it over the other shoulder, so the game does that, through 
 - **Aimed, the hair goes over the other shoulder.** `colony::sweepHairGoals` turns every strand's styled shape towards
   the side away from the stock and a little back, by up to 45 degrees (`Pawns.HairAimSweep`, 0 off) times the aim
   blend: strands growing on the stock's side fully, down the middle 0.7, the far side 0.4, the first segment (on the
-  scalp) by half, roots and lengths kept. Only the goal changes, so the hair swings there with its usual lag (about a
+  scalp) by 0.8, roots and lengths kept. Only the goal changes, so the hair swings there with its usual lag (about a
   second for waist-length hair), slides over the neck and shoulders instead of through them, and falls back to its
   style when the gun comes down. Every colonist aiming a long gun does it, not just the player.
 - Tests (`HairStrandsTests.cpp`): the sweep keeps roots and lengths and turns the stock side more; on the test body
   with a shouldered rifle, seen from the aim camera, the hair lay across the lines of sight to the stock and the front
   hand without the sweep and clears both by more than 4 cm with it, never going into the body, the gun or the arms;
   lowering the gun lets the hair settle back to where it hangs unaimed (within 3 cm; measured 0.01).
-- On the PC: `Pawns.HairDebug 1` draws the gun and forearm capsules with the body's. The gun range's hold pictures
+- On the PC: `Pawns.HairDebug 1` draws the gun and forearm capsules in cyan (the body's are green). The gun range notes
+  give a `HAIR AIM` line at each 3p aimed picture: whether the gun reached the hair, the aim, the capsules, how far the
+  sweep moved the tips' goals and how far the solved tips ended from the hair as animated. The gun range's hold pictures
   (`hold_<gun>_3p_aimed`) show it on the long-haired protagonist.
 
 ## Cost and distance

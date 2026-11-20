@@ -373,7 +373,7 @@ void sweepHairGoals(std::vector<std::vector<HairVec>>& goals, HairVec head, Hair
                 continue;
             }
             HairVec dir = hsMul(seg, 1.0f / length);
-            const float want = full * share * (k == 1 ? 0.5f : 1.0f);
+            const float want = full * share * (k == 1 ? 0.8f : 1.0f);
             const float c = std::clamp(hsDot(dir, away), -1.0f, 1.0f);
             const HairVec across = hsSub(away, hsMul(dir, c));
             const float acrossLen = hsLen(across);
