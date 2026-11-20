@@ -492,9 +492,17 @@ void USmokeTestSubsystem::BuildHurtPhases()
 					if (!bCorpse && Side > 0.0 && PieceShown && PieceShown->GetCutEnd())
 					{
 						P = PieceShown->GetCutEnd()->GetComponentLocation();
-						FVector Out = PieceShown->GetCutEnd()->GetUpVector();
-						Out.Z = FMath::Max(Out.Z, 0.35);
-						Eye = P + Out.GetSafeNormal() * 40.0 + FVector(8.0, 6.0, 4.0);
+						// Keep the cut's own sideways direction and only lift the eye a little: a head lies on its side with
+						// its neck facing along the ground, and clamping straight up put the camera in its hair.
+						const FVector CutOut = PieceShown->GetCutEnd()->GetUpVector();
+						FVector Across(CutOut.X, CutOut.Y, 0.0);
+						if (Across.SizeSquared() < 0.04)
+						{
+							Across = FVector(0.8, 0.6, 0.0);
+						}
+						const double Lift = FMath::Max(CutOut.Z, 0.3);
+						const FVector Look = Across.GetSafeNormal() * FMath::Sqrt(1.0 - Lift * Lift) + FVector(0.0, 0.0, Lift);
+						Eye = P + Look * 40.0 + FVector(4.0, 3.0, 2.0);
 					}
 					ViewFrom(Eye, (P - Eye).Rotation());
 					if (State->CloseUpsTaken == Shot && PhaseTime - 8.0f - Shot > 0.5f)

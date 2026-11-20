@@ -36,8 +36,8 @@ namespace
 
 	TAutoConsoleVariable<float> GSeveredDripSeconds(TEXT("Gore.DripSeconds"), 120.0f,
 		TEXT("How long blood keeps dripping from a fresh stump, seconds at 1x (a severed piece drips for 40% of it)."), ECVF_Default);
-	TAutoConsoleVariable<float> GSeveredClothRim(TEXT("Gore.ClothRim"), 1.35f,
-		TEXT("On a clothed limb, how far the stump's torn, soaked cloth ring reaches over the sleeve or trouser leg (limb radii)."), ECVF_Default);
+	TAutoConsoleVariable<float> GSeveredClothRim(TEXT("Gore.ClothRim"), 1.12f,
+		TEXT("On a clothed limb, how wide the stump is against the bare limb (the sleeve or trouser leg is thicker), its rim the torn, soaked cloth (limb radii)."), ECVF_Default);
 	TAutoConsoleVariable<float> GSeveredStumpScale(TEXT("Gore.StumpScale"), 1.08f,
 		TEXT("Stump caps' size against the limb's usual thickness at the cut (bigger hides more of the flattened skin's edge)."), ECVF_Default);
 
