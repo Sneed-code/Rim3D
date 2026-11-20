@@ -607,6 +607,11 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 			SpawnBurst(EFightParticle::Chip, At, Back + FVector::UpVector * 0.3f, 6, 320.0f, 0.8f, 5.0f, 0.7f, 980.0f);
 			SpawnBurst(EFightParticle::Dust, At, Back, 3, 120.0f, 0.6f, 9.0f, 0.7f, 100.0f);
 			break;
+		case colony::ProjectileHitKind::Plant:
+			// A tree's trunk (docs/design/structure-damage.md): bark and wood chips, a puff of dust, no sparks.
+			SpawnBurst(EFightParticle::Chip, At, Back + FVector::UpVector * 0.4f, 9, 340.0f, 0.9f, 5.0f, 0.8f, 980.0f);
+			SpawnBurst(EFightParticle::Dust, At, Back, 3, 110.0f, 0.6f, 8.0f, 0.6f, 100.0f);
+			break;
 		case colony::ProjectileHitKind::Armor:
 			SpawnBurst(EFightParticle::Spark, At, Back, 12, 560.0f, 0.9f, 3.0f, 0.35f, 980.0f);
 			if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
