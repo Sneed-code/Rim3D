@@ -28,6 +28,8 @@
 #include "PawnSubsystem.h"
 #include "MakeHumanArt.h"
 #include "SoftContactSubsystem.h"
+#include "StrandHair.h"
+#include "GroomComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
@@ -750,8 +752,22 @@ namespace
 				}
 			}
 		}
-		// Only the chosen hair style shows.
-		const int32 Style = P.HairStyle >= 0 ? P.HairStyle : (P.bFemale ? 1 : 5);
+		// -CreatorGroom=<GA_Hair_...>: strand hair (a MetaHuman groom fitted to this head) instead of the hair meshes.
+		FString GroomName;
+		const bool bGroom = FParse::Value(FCommandLine::Get(), TEXT("CreatorGroom="), GroomName) && !GroomName.IsEmpty();
+		if (bGroom)
+		{
+			UGroomComponent* Existing = nullptr;
+			TArray<UGroomComponent*> Grooms;
+			Pawn.GetComponents(Grooms);
+			for (UGroomComponent* Candidate : Grooms)
+			{
+				Existing = Candidate->GetFName() == TEXT("StrandHair") ? Candidate : Existing;
+			}
+			StrandHairAttach(Mesh, StrandHairFind(GroomName), Existing);
+		}
+		// Only the chosen hair style shows (none under strand hair).
+		const int32 Style = bGroom ? 0 : (P.HairStyle >= 0 ? P.HairStyle : (P.bFemale ? 1 : 5));
 		for (int32 i = 0; i < Slots.Num(); ++i)
 		{
 			const FString Slot = Slots[i].ToString();
