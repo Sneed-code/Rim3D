@@ -208,6 +208,10 @@ bool FLookConfig::Load(const FString& Path, FString& OutError)
 	LookNumber(FogJson, TEXT("volumetricExtinction"), VolumetricExtinction);
 	LookNumber(FogJson, TEXT("volumetricScatteringDistribution"), VolumetricScatteringDistribution);
 	LookNumber(FogJson, TEXT("volumetricDistanceCm"), VolumetricDistanceCm);
+	const TSharedPtr<FJsonObject> DustJson = LookObject(Root, TEXT("indoorDust"));
+	LookNumber(DustJson, TEXT("startDistanceCm"), DustStartDistanceCm);
+	LookNumber(DustJson, TEXT("extinction"), DustExtinction);
+	LookNumber(DustJson, TEXT("distanceCm"), DustDistanceCm);
 	LookNumber(FogJson, TEXT("lowSunMist"), LowSunMist);
 	LookNumber(FogJson, TEXT("lowSunMistFromDeg"), LowSunMistFromDeg);
 	LookNumber(FogJson, TEXT("lowSunMistToDeg"), LowSunMistToDeg);
@@ -824,6 +828,26 @@ void USkySubsystem::ApplyState(const FSkyState& New)
 	// Fog takes the sky atmosphere's colour; the veil is the grey of an overcast sky or the white of snow (ComputeState).
 	Fog->SetFogDensity(State.FogDensity);
 	Fog->SetFogInscatteringColor(State.FogVeil * GSkyFogLuminance.GetValueOnGameThread());
+	// Indoors the air shows its dust: the volumetric fog starts at the camera (outdoors it starts some metres off, so it never
+	// greys what is close), is a few times thicker and only reaches across the room and a little way out, so the sun through a
+	// window draws a soft shaft in the shadowed room, as in a real house (docs/design/windows.md "Drawing").
+	{
+		const float DustStart = FMath::Lerp(Look.FogStartDistanceCm, Look.DustStartDistanceCm, IndoorShare);
+		const float DustScale = FMath::Lerp(Look.VolumetricExtinction, Look.VolumetricExtinction * FMath::Max(Look.DustExtinction, 0.0f), IndoorShare);
+		const float DustReach = FMath::Lerp(Look.VolumetricDistanceCm, FMath::Max(Look.DustDistanceCm, 500.0f), IndoorShare);
+		if (!FMath::IsNearlyEqual(Fog->StartDistance, DustStart, 1.0f))
+		{
+			Fog->SetStartDistance(DustStart);
+		}
+		if (!FMath::IsNearlyEqual(Fog->VolumetricFogExtinctionScale, DustScale, 0.01f))
+		{
+			Fog->SetVolumetricFogExtinctionScale(DustScale);
+		}
+		if (!FMath::IsNearlyEqual(Fog->VolumetricFogDistance, DustReach, 10.0f))
+		{
+			Fog->SetVolumetricFogDistance(DustReach);
+		}
+	}
 	if (FMath::Abs(Fog->SecondFogData.FogDensity - State.MistDensity) > 0.0005f || Fog->SecondFogData.FogHeightFalloff != Look.MistHeightFalloff || bMistBaseMoved)
 	{
 		FExponentialHeightFogData Mist;

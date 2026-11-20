@@ -1,0 +1,56 @@
+{
+ "name": "AutocannonTurret",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -100.0,
+   -100.0,
+   0.0
+  ],
+  "max": [
+   100.7,
+   248.6,
+   218.7
+  ]
+ },
+ "sizeM": [
+  2.007,
+  3.486,
+  2.187
+ ],
+ "parts": {
+  "AutocannonTurret": {
+   "boundsCm": {
+    "min": [
+     -100.0,
+     -100.0,
+     0.0
+    ],
+    "max": [
+     100.7,
+     248.6,
+     218.7
+    ]
+   },
+   "tris": 26971
+  }
+ },
+ "sockets": {
+  "Muzzle": [
+   0.0,
+   248.6,
+   170.0
+  ]
+ },
+ "slots": {
+  "AutocannonTurret": {
+   "from": "AutocannonTurret_PBR",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

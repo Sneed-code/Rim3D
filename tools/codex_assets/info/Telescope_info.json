@@ -1,0 +1,56 @@
+{
+ "name": "Telescope",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -45.44,
+   -49.73,
+   0.0
+  ],
+  "max": [
+   45.44,
+   45.37,
+   169.16
+  ]
+ },
+ "sizeM": [
+  0.909,
+  0.951,
+  1.692
+ ],
+ "parts": {
+  "Telescope": {
+   "boundsCm": {
+    "min": [
+     -45.44,
+     -49.73,
+     0.0
+    ],
+    "max": [
+     45.44,
+     45.37,
+     169.16
+    ]
+   },
+   "tris": 9417
+  }
+ },
+ "sockets": {
+  "Eyepiece": [
+   0.0,
+   44.25,
+   112.11
+  ]
+ },
+ "slots": {
+  "Telescope": {
+   "from": "Telescope | painted and machined finishes",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

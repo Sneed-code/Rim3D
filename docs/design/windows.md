@@ -87,10 +87,15 @@ window a bright patch falls on the floor and furniture, and with ray tracing it 
 south (world -X) and high, so a window in a wall along X, like the room's north wall, gets no patch then (the first two noon
 pictures, 2026-11-19 and 20).
 
+**Dust in the air** (`data/look.json` `indoorDust`, sneed 2026-11-20: photoreal and subtle): with the camera under a roof (the
+same test as the indoor exposure) the volumetric fog starts at the camera instead of 5 m off, is 4 times thicker and reaches
+30 m, so a sunbeam through a window shows as a soft shaft across the shadowed room. It eases in and out with the exposure. It
+needs a quality step with volumetric fog (High, Epic); on Low and Medium there are patches but no shafts. The `sunbeams` shot
+notes the fog's numbers.
+
 ## Not yet
 
 - Shards on the ground and a pane cracking before it breaks; curtains and shutters (sneed: not needed).
 - A broken window letting the room's warmth out (temperature treats the room as closed).
 - Windows on upper levels light only their own sight and cover; the sun through them waits for the light layer to go upstairs.
-- Visible shafts of light in dusty air (volumetric fog indoors).
 - Mood: there is no "dark room" thought yet ([light.md](light.md) "For later tasks"); when there is, windows count by themselves.

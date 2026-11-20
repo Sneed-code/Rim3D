@@ -44,7 +44,7 @@
     "description": "A wooden box with bedding for a small tame animal.",
     "size": [1, 1], "passability": "Standable", "designationCategory": "Furniture",
     "costs": { "WoodLog": 25 },
-    "visual": { "parts": [
+    "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/AnimalSleepingBox/SM_AnimalSleepingBox.SM_AnimalSleepingBox", "parts": [
       { "shape": "box", "size": [0.85, 0.85, 0.08], "color": [0.5, 0.36, 0.22] },
       { "shape": "box", "size": [0.85, 0.08, 0.3], "at": [0, 0.4, 0], "color": [0.5, 0.36, 0.22] },
       { "shape": "box", "size": [0.85, 0.08, 0.3], "at": [0, -0.4, 0], "color": [0.5, 0.36, 0.22] },
@@ -62,7 +62,7 @@
     "description": "A soft bed that fits any tame animal. Animals sleep and heal better in it.",
     "size": [1, 1], "passability": "Standable", "designationCategory": "Furniture",
     "stuffCategories": ["Fabric", "Leathery"], "costStuffCount": 40,
-    "visual": { "parts": [
+    "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/AnimalBed/SM_AnimalBed.SM_AnimalBed", "parts": [
       { "shape": "cylinder", "radius": 0.46, "height": 0.14, "stuff": true },
       { "shape": "cylinder", "radius": 0.36, "height": 0.04, "at": [0, 0, 0.14], "color": [0.85, 0.82, 0.74] }
     ] },

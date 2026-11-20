@@ -1,0 +1,57 @@
+{
+ "name": "Melee_Monosword",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -17.6,
+   -2.24,
+   -5.0
+  ],
+  "max": [
+   82.4,
+   2.24,
+   3.94
+  ]
+ },
+ "sizeM": [
+  1.0,
+  0.045,
+  0.089
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -17.6,
+     -2.24,
+     -5.0
+    ],
+    "max": [
+     82.4,
+     2.24,
+     3.94
+    ]
+   },
+   "tris": 7008
+  }
+ },
+ "sockets": {
+  "Tip": [
+   82.4,
+   -0.0,
+   1.2
+  ]
+ },
+ "slots": {
+  "Melee_Monosword": {
+   "from": "Monosword",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

@@ -1,0 +1,57 @@
+{
+ "name": "OrbitalTradeBeacon",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -50.0,
+   -50.0,
+   0.0
+  ],
+  "max": [
+   50.0,
+   50.0,
+   135.9
+  ]
+ },
+ "sizeM": [
+  1.0,
+  1.0,
+  1.359
+ ],
+ "parts": {
+  "OrbitalTradeBeacon": {
+   "boundsCm": {
+    "min": [
+     -50.0,
+     -50.0,
+     0.0
+    ],
+    "max": [
+     50.0,
+     50.0,
+     135.9
+    ]
+   },
+   "tris": 7598
+  }
+ },
+ "sockets": {
+  "Lamp": [
+   0.0,
+   -0.0,
+   128.2
+  ]
+ },
+ "slots": {
+  "OrbitalTradeBeacon": {
+   "from": "Beacon | weathered alloy and optics",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

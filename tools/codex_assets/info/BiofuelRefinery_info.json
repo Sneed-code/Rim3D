@@ -1,0 +1,64 @@
+{
+ "name": "BiofuelRefinery",
+ "kind": "building",
+ "turned": "x-90",
+ "boundsCm": {
+  "min": [
+   -150.0,
+   -100.0,
+   -0.0
+  ],
+  "max": [
+   150.0,
+   100.0,
+   190.92
+  ]
+ },
+ "sizeM": [
+  3.0,
+  2.0,
+  1.909
+ ],
+ "parts": {
+  "BiofuelRefinery": {
+   "boundsCm": {
+    "min": [
+     -150.0,
+     -100.0,
+     -0.0
+    ],
+    "max": [
+     150.0,
+     100.0,
+     190.92
+    ]
+   },
+   "tris": 23084
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "BiofuelRefinery_0": {
+   "from": "Refinery_PBR",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  },
+  "BiofuelRefinery_1": {
+   "from": "SightGlass_Amber",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  },
+  "BiofuelRefinery_2": {
+   "from": "SightGlass_Clear",
+   "maps": [
+    "baseColor"
+   ]
+  }
+ }
+}

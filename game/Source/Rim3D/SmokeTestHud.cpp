@@ -1,6 +1,6 @@
 // Smoke test `hud` (docs/design/ui-layout.md): the overseer's bottom tab bar opens every tab in turn on a Crashlanded colony,
 // then Build with its Structure tiles, the info window, the Outfits, Areas, Medical and Prisoners windows,
-// the main menu and Settings > Controls; one screenshot each, in the game, offscreen.
+// Factions (with the Fray Compact made an ally), the main menu and Settings > Controls; one screenshot each, in the game, offscreen.
 #include "SmokeTest.h"
 
 #include "Engine/Engine.h"
@@ -12,10 +12,19 @@
 #include "OverseerSubsystem.h"
 #include "PanelsSubsystem.h"
 #include "SimSubsystem.h"
+#include "TradePanelSubsystem.h"
 
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
+#include "ColonySim/Fighters.h"
+#include "ColonySim/Health.h"
+#include "ColonySim/Husbandry.h"
+#include "ColonySim/Prisoners.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Things.h"
+
+#include <string>
 
 namespace
 {
@@ -25,7 +34,59 @@ namespace
 	{
 		TArray<colony::Entity> Colonists;
 		int32 TabFramesBefore = 0;
+		/** The tame cow, prisoner and slave the bar phase made (3 when all went in). */
+		int32 SmokeExtras = 0;
 	};
+
+	/** A tame cow, a prisoner and a slave near the stockpile, so the Animals tab and the Prisoners screen show real rows
+	 *  (the same steps as the sim test "Slaves: the overseer screens' smoke colony"). Returns how many of the three it made. */
+	int32 HudSmokeAddAnimalsAndPrisoners(colony::Sim& Sim)
+	{
+		const colony::CellPos Home = Sim.stockpileCell() ? *Sim.stockpileCell() : colony::CellPos{128, 128, 0};
+		entt::registry& Reg = Sim.things().registry();
+		colony::Entity Handler = colony::kNoEntity;
+		for (const colony::Entity Found : Reg.view<colony::Colonist>())
+		{
+			Handler = Found;
+			break;
+		}
+		if (Handler == colony::kNoEntity)
+		{
+			return 0;
+		}
+		int32 Made = 0;
+		std::string Error;
+		const colony::Entity Cow = Sim.things().spawn("Cow", colony::CellPos{Home.x + 4, Home.y + 3, 0});
+		if (Cow != colony::kNoEntity && Sim.husbandry().markTame(Cow, true, Error))
+		{
+			for (int32 Try = 0; Try < 200 && !Sim.husbandry().isTame(Cow); ++Try)
+			{
+				Sim.husbandry().finishTame(Handler, Cow, 20);
+			}
+			Made += Sim.husbandry().isTame(Cow) ? 1 : 0;
+		}
+		for (int32 Index = 0; Index < 2; ++Index)
+		{
+			const colony::Entity Bed = Sim.things().spawn("Bed", colony::CellPos{Home.x - 6 + Index * 2, Home.y + 4, 0});
+			const colony::Entity Pawn = Sim.things().spawn("Human", colony::CellPos{Home.x - 6 + Index * 2, Home.y + 7, 0});
+			if (Bed == colony::kNoEntity || Pawn == colony::kNoEntity || !Sim.prisoners().setPrisonBed(Bed, true, Error) ||
+				!Sim.fighters().setFaction(Pawn, 2, Error))
+			{
+				continue;
+			}
+			// Only a downed enemy can be captured: it counts as down for the capture, then stands up on the next health pass.
+			colony::Health& PawnHealth = Reg.get<colony::Health>(Pawn);
+			PawnHealth.downed = true;
+			const bool bCaptured = Sim.prisoners().imprison(Pawn, Bed, Handler, Error);
+			PawnHealth.dirty = true;
+			if (!bCaptured)
+			{
+				continue;
+			}
+			Made += Index == 0 || Sim.prisoners().enslave(Pawn, Handler) ? 1 : 0;
+		}
+		return Made;
+	}
 }
 
 void USmokeTestSubsystem::BuildHudPhases()
@@ -67,6 +128,11 @@ void USmokeTestSubsystem::BuildHudPhases()
 			return;
 		}
 		B->SetSpeed(0);
+		if (colony::Sim* MutableSim = const_cast<colony::Sim*>(B->GetSim()))
+		{
+			State->SmokeExtras = HudSmokeAddAnimalsAndPrisoners(*MutableSim);
+			B->StepOnce();
+		}
 		if (!Overseer()->EnterOverseerMode())
 		{
 			Fail(TEXT("The overseer camera did not start"));
@@ -89,6 +155,10 @@ void USmokeTestSubsystem::BuildHudPhases()
 		if (Hud()->GetStats().BarFrames == 0)
 		{
 			Fail(TEXT("hud_bar: the bottom bar was never drawn"));
+		}
+		if (State->SmokeExtras != 3)
+		{
+			Fail(FString::Printf(TEXT("hud_bar: made %d of the tame cow, prisoner and slave, wanted 3"), State->SmokeExtras));
 		}
 		Notes.Add(FString::Printf(TEXT("hud_bar: %d colonists, bar drawn %d frames"), State->Colonists.Num(), Hud()->GetStats().BarFrames));
 	};
@@ -152,10 +222,39 @@ void USmokeTestSubsystem::BuildHudPhases()
 		{
 			Fail(TEXT("hud_build_structure: no Level earth tile in Structure"));
 		}
+		if (Orders()->GetStats().TileIconsMade == 0)
+		{
+			Fail(TEXT("hud_build_structure: no tile picture was made from a building mesh"));
+		}
+		Notes.Add(FString::Printf(TEXT("hud_build_structure: %d tile pictures made"), Orders()->GetStats().TileIconsMade));
 		Orders()->CancelTool();
 		Hud()->CloseTabs();
 	};
 	Phases.Add(MoveTemp(Structure));
+
+	// 3b. Build > Production with the tile pictures lit by the world (Orders.TileIconsLit 1), to compare with the unlit ones.
+	FPhase Lit;
+	Lit.Name = TEXT("hud_build_lit");
+	Lit.WarmupSeconds = 3.0f;
+	Lit.MeasureSeconds = 0.5f;
+	Lit.Setup = [=, this]()
+	{
+		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("Orders.TileIconsLit")))
+		{
+			Var->Set(1, ECVF_SetByCode);
+		}
+		Hud()->OpenTab(EHudTab::Build);
+		Orders()->SetOpenCategory(TEXT("Production"));
+	};
+	Lit.Verify = [=, this]()
+	{
+		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("Orders.TileIconsLit")))
+		{
+			Var->Set(0, ECVF_SetByCode);
+		}
+		Hud()->CloseTabs();
+	};
+	Phases.Add(MoveTemp(Lit));
 
 	// 4. The info window of the first colonist ("i" on the selected panel).
 	FPhase Info;
@@ -248,7 +347,48 @@ void USmokeTestSubsystem::BuildHudPhases()
 		Phases.Add(MoveTemp(Phase));
 	}
 
-	// 6. The main menu's New colony page (over the running colony; nothing is started).
+	// 6. Factions, with the Fray Compact pushed to ally so its caravan call shows (greyed: there is no comms console).
+	FPhase Factions;
+	Factions.Name = TEXT("hud_factions");
+	Factions.WarmupSeconds = 1.5f;
+	Factions.MeasureSeconds = 0.5f;
+	Factions.Setup = [=, this]()
+	{
+		UTradePanelSubsystem* Trade = GetWorld()->GetSubsystem<UTradePanelSubsystem>();
+		if (!Trade)
+		{
+			Fail(TEXT("hud_factions: UTradePanelSubsystem did not start"));
+			return;
+		}
+		State->TabFramesBefore = Trade->GetStats().FactionFrames;
+		Bridge()->Submit(colony::AdjustGoodwillCommand{"FrayCompact", 100.0f});
+		Bridge()->StepOnce();
+		Trade->SetFactionsOpen(true);
+	};
+	Factions.Verify = [=, this]()
+	{
+		UTradePanelSubsystem* Trade = GetWorld()->GetSubsystem<UTradePanelSubsystem>();
+		if (!Trade || Trade->GetStats().FactionFrames == State->TabFramesBefore)
+		{
+			Fail(TEXT("hud_factions: the Factions window was never drawn"));
+		}
+		bool bAlly = false;
+		for (const colony::GoodwillView& Line : Bridge()->GetCurrentSnapshot().goodwill)
+		{
+			bAlly = bAlly || (Line.faction == "FrayCompact" && Line.relation == 2);
+		}
+		if (!bAlly)
+		{
+			Fail(TEXT("hud_factions: the Fray Compact did not become an ally"));
+		}
+		if (Trade)
+		{
+			Trade->SetFactionsOpen(false);
+		}
+	};
+	Phases.Add(MoveTemp(Factions));
+
+	// 7. The main menu's New colony page (over the running colony; nothing is started).
 	FPhase Menu;
 	Menu.Name = TEXT("hud_main_menu");
 	Menu.WarmupSeconds = 1.5f;
@@ -268,7 +408,7 @@ void USmokeTestSubsystem::BuildHudPhases()
 	};
 	Phases.Add(MoveTemp(Menu));
 
-	// 7. Settings, the Controls page with the key rebind list.
+	// 8. Settings, the Controls page with the key rebind list.
 	FPhase Settings;
 	Settings.Name = TEXT("hud_settings_controls");
 	Settings.WarmupSeconds = 1.5f;

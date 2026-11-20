@@ -1,0 +1,59 @@
+{
+ "name": "FabricationBench",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -250.0,
+   -100.0,
+   0.0
+  ],
+  "max": [
+   250.0,
+   100.0,
+   191.15
+  ]
+ },
+ "sizeM": [
+  5.0,
+  2.0,
+  1.911
+ ],
+ "parts": {
+  "FabricationBench": {
+   "boundsCm": {
+    "min": [
+     -250.0,
+     -100.0,
+     0.0
+    ],
+    "max": [
+     250.0,
+     100.0,
+     191.15
+    ]
+   },
+   "tris": 27353
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "FabricationBench_0": {
+   "from": "FabricationBench | Surfaces",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  },
+  "FabricationBench_1": {
+   "from": "FabricationBench | Glazing",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}
