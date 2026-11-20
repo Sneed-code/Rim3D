@@ -1,0 +1,76 @@
+[grow_hair] meshes [('CatClaws', 650), ('CatEar_l', 3732), ('CatEar_r', 3732), ('CatTail', 289), ('Horn_l', 145), ('Horn_r', 145), ('Human.adult_female_anatomy_body', 13644), ('Human.afro01', 2196), ('Human.bob02', 1653), ('Human.braid01', 4493), ('Human.eyebrow001', 124), ('Human.eyelashes01', 250), ('Human.high-poly', 1064), ('Human.long01', 3239), ('Human.ponytail01', 3718), ('Human.short02', 1755), ('Human.teeth_base', 3868), ('Jewel_Collar', 128), ('Jewel_CuffL', 128), ('Jewel_CuffR', 128), ('Jewel_EarDangleL', 75), ('Jewel_EarDangleR', 75), ('Jewel_EarStudL', 75), ('Jewel_EarStudR', 75), ('Jewel_EarringL', 192), ('Jewel_EarringR', 192), ('Jewel_Genital', 192), ('Jewel_HelixL', 192), ('Jewel_HelixR', 192), ('Jewel_IndustrialL', 117), ('Jewel_IndustrialR', 117), ('Jewel_Navel', 192), ('Jewel_NavelDangle', 192), ('Jewel_NavelGem', 117), ('Jewel_Necklace', 5750), ('Jewel_NippleL', 192), ('Jewel_NippleR', 192), ('Jewel_NoseRing', 192), ('Jewel_Ring', 96), ('Jewel_ShackleL', 128), ('Jewel_ShackleR', 128), ('Jewel_TragusL', 75), ('Jewel_TragusR', 75), ('PubicHair', 36000), ('Tail', 289), ('Tusk_l', 81), ('Tusk_r', 81)]
+[grow_hair] body Human.adult_female_anatomy_body 13644 vertices, 27284 triangles, height 1.559 m, 56 shape keys
+[grow_hair] skull centre [ 0.    -0.048  1.478] radius 0.084 head bone [ 0.    -0.04   1.426]
+[grow_hair] head-changing sliders: 6 of 56
+[grow_hair] scalp 496 triangles, 467.9 cm2
+[grow_hair] grown 60000 strands, 64 segments of 1.76 cm in 18.5 s
+[grow_hair] LongStraight {'file': 'LongStraight.abc', 'strands': 60000, 'points': 2202799, 'longest_cm': 112.4, 'lowest_tip_cm_below_head': 51.8}
+[grow_hair] scalp 496 triangles, 467.9 cm2
+[grow_hair] grown 60000 strands, 64 segments of 1.76 cm in 18.7 s
+[grow_hair] LongStraightHat {'file': 'LongStraightHat.abc', 'strands': 60000, 'points': 2181923, 'longest_cm': 112.4, 'lowest_tip_cm_below_head': 51.8}
+[grow_hair] scalp 496 triangles, 467.9 cm2
+[grow_hair] grown 60000 strands, 64 segments of 1.37 cm in 18.6 s
+[grow_hair] LongWavy {'file': 'LongWavy.abc', 'strands': 60000, 'points': 2135665, 'longest_cm': 88.0, 'lowest_tip_cm_below_head': 36.0}
+[grow_hair] scalp 496 triangles, 467.9 cm2
+[grow_hair] grown 60000 strands, 64 segments of 1.37 cm in 18.8 s
+[grow_hair] LongWavyHat {'file': 'LongWavyHat.abc', 'strands': 60000, 'points': 2104725, 'longest_cm': 88.0, 'lowest_tip_cm_below_head': 36.1}
+[grow_hair] scalp 496 triangles, 467.9 cm2
+[grow_hair] grown 50000 strands, 64 segments of 1.38 cm in 16.2 s
+[grow_hair] Ponytail {'file': 'Ponytail.abc', 'strands': 50000, 'points': 1996990, 'longest_cm': 68.8, 'lowest_tip_cm_below_head': 36.5}
+[grow_hair] scalp 496 triangles, 467.9 cm2
+[grow_hair] grown 50000 strands, 64 segments of 1.38 cm in 15.5 s
+[grow_hair] PonytailHat {'file': 'PonytailHat.abc', 'strands': 50000, 'points': 1973649, 'longest_cm': 88.0, 'lowest_tip_cm_below_head': 36.4}
+[grow_hair] scalp 496 triangles, 467.9 cm2
+[grow_hair] grown 45000 strands, 32 segments of 1.61 cm in 7.2 s
+[grow_hair] Bob {'file': 'Bob.abc', 'strands': 45000, 'points': 696467, 'longest_cm': 51.5, 'lowest_tip_cm_below_head': 12.3}
+[grow_hair] scalp 496 triangles, 467.9 cm2
+[grow_hair] grown 45000 strands, 32 segments of 1.61 cm in 7.7 s
+[grow_hair] BobHat {'file': 'BobHat.abc', 'strands': 45000, 'points': 665522, 'longest_cm': 51.5, 'lowest_tip_cm_below_head': 12.0}
+[grow_hair] scalp 496 triangles, 467.9 cm2
+[grow_hair] grown 40000 strands, 16 segments of 0.54 cm in 4.5 s
+[grow_hair] Short {'file': 'Short.abc', 'strands': 40000, 'points': 502226, 'longest_cm': 8.6, 'lowest_tip_cm_below_head': 5.4}
+[grow_hair] scalp 496 triangles, 467.9 cm2
+[grow_hair] grown 40000 strands, 16 segments of 0.54 cm in 4.7 s
+[grow_hair] ShortHat {'file': 'ShortHat.abc', 'strands': 40000, 'points': 502226, 'longest_cm': 8.6, 'lowest_tip_cm_below_head': 5.4}
+[grow_hair] scalp 496 triangles, 467.9 cm2
+[grow_hair] grown 35000 strands, 6 segments of 0.25 cm in 1.6 s
+[grow_hair] Buzz {'file': 'Buzz.abc', 'strands': 35000, 'points': 220836, 'longest_cm': 1.5, 'lowest_tip_cm_below_head': 0.8}
+[grow_hair] done game/Saved/Grooms/CreatorFemale
+[grow_hair] meshes [('CatClaws', 650), ('CatEar_l', 3732), ('CatEar_r', 3732), ('CatTail', 289), ('Horn_l', 145), ('Horn_r', 145), ('Human.adult_male_anatomy_body', 13930), ('Human.afro01', 2196), ('Human.cortu_short_messy_hair', 832), ('Human.eyebrow002', 124), ('Human.eyelashes01', 250), ('Human.high-poly', 1064), ('Human.long01', 3239), ('Human.ponytail01', 3718), ('Human.short02', 1755), ('Human.short04', 865), ('Human.teeth_base', 3868), ('Jewel_Collar', 128), ('Jewel_CuffL', 128), ('Jewel_CuffR', 128), ('Jewel_EarDangleL', 75), ('Jewel_EarDangleR', 75), ('Jewel_EarStudL', 75), ('Jewel_EarStudR', 75), ('Jewel_EarringL', 192), ('Jewel_EarringR', 192), ('Jewel_Genital', 192), ('Jewel_HelixL', 192), ('Jewel_HelixR', 192), ('Jewel_IndustrialL', 117), ('Jewel_IndustrialR', 117), ('Jewel_Navel', 192), ('Jewel_NavelDangle', 192), ('Jewel_NavelGem', 117), ('Jewel_Necklace', 6800), ('Jewel_NippleL', 192), ('Jewel_NippleR', 192), ('Jewel_NoseRing', 192), ('Jewel_Ring', 96), ('Jewel_ShackleL', 128), ('Jewel_ShackleR', 128), ('Jewel_TragusL', 75), ('Jewel_TragusR', 75), ('PubicHair', 36000), ('Tail', 289), ('Tusk_l', 81), ('Tusk_r', 81)]
+[grow_hair] body Human.adult_male_anatomy_body 13930 vertices, 27856 triangles, height 1.747 m, 54 shape keys
+[grow_hair] skull centre [ 0.    -0.059  1.662] radius 0.091 head bone [ 0.    -0.047  1.6  ]
+[grow_hair] head-changing sliders: 6 of 54
+[grow_hair] scalp 530 triangles, 549.6 cm2
+[grow_hair] grown 60000 strands, 64 segments of 1.95 cm in 19.1 s
+[grow_hair] LongStraight {'file': 'LongStraight.abc', 'strands': 60000, 'points': 2220760, 'longest_cm': 116.9, 'lowest_tip_cm_below_head': 58.2}
+[grow_hair] scalp 530 triangles, 549.6 cm2
+[grow_hair] grown 60000 strands, 64 segments of 1.95 cm in 20.4 s
+[grow_hair] LongStraightHat {'file': 'LongStraightHat.abc', 'strands': 60000, 'points': 2203843, 'longest_cm': 118.9, 'lowest_tip_cm_below_head': 58.2}
+[grow_hair] scalp 530 triangles, 549.6 cm2
+[grow_hair] grown 60000 strands, 64 segments of 1.51 cm in 20.4 s
+[grow_hair] LongWavy {'file': 'LongWavy.abc', 'strands': 60000, 'points': 2172689, 'longest_cm': 96.9, 'lowest_tip_cm_below_head': 40.7}
+[grow_hair] scalp 530 triangles, 549.6 cm2
+[grow_hair] grown 60000 strands, 64 segments of 1.51 cm in 22.0 s
+[grow_hair] LongWavyHat {'file': 'LongWavyHat.abc', 'strands': 60000, 'points': 2143979, 'longest_cm': 96.9, 'lowest_tip_cm_below_head': 40.3}
+[grow_hair] scalp 530 triangles, 549.6 cm2
+[grow_hair] grown 50000 strands, 64 segments of 1.52 cm in 17.1 s
+[grow_hair] Ponytail {'file': 'Ponytail.abc', 'strands': 50000, 'points': 2020952, 'longest_cm': 97.1, 'lowest_tip_cm_below_head': 40.9}
+[grow_hair] scalp 530 triangles, 549.6 cm2
+[grow_hair] grown 50000 strands, 64 segments of 1.52 cm in 16.7 s
+[grow_hair] PonytailHat {'file': 'PonytailHat.abc', 'strands': 50000, 'points': 1996938, 'longest_cm': 72.8, 'lowest_tip_cm_below_head': 40.5}
+[grow_hair] scalp 530 triangles, 549.6 cm2
+[grow_hair] grown 45000 strands, 32 segments of 1.73 cm in 7.2 s
+[grow_hair] Bob {'file': 'Bob.abc', 'strands': 45000, 'points': 739454, 'longest_cm': 55.5, 'lowest_tip_cm_below_head': 13.6}
+[grow_hair] scalp 530 triangles, 549.6 cm2
+[grow_hair] grown 45000 strands, 32 segments of 1.73 cm in 7.1 s
+[grow_hair] BobHat {'file': 'BobHat.abc', 'strands': 45000, 'points': 704271, 'longest_cm': 55.5, 'lowest_tip_cm_below_head': 13.6}
+[grow_hair] scalp 530 triangles, 549.6 cm2
+[grow_hair] grown 40000 strands, 16 segments of 0.54 cm in 4.0 s
+[grow_hair] Short {'file': 'Short.abc', 'strands': 40000, 'points': 498943, 'longest_cm': 8.7, 'lowest_tip_cm_below_head': 5.2}
+[grow_hair] scalp 530 triangles, 549.6 cm2
+[grow_hair] grown 40000 strands, 16 segments of 0.54 cm in 4.2 s
+[grow_hair] ShortHat {'file': 'ShortHat.abc', 'strands': 40000, 'points': 498943, 'longest_cm': 8.7, 'lowest_tip_cm_below_head': 5.2}
+[grow_hair] scalp 530 triangles, 549.6 cm2
+[grow_hair] grown 35000 strands, 6 segments of 0.25 cm in 1.6 s
+[grow_hair] Buzz {'file': 'Buzz.abc', 'strands': 35000, 'points': 220836, 'longest_cm': 1.5, 'lowest_tip_cm_below_head': 0.9}
+[grow_hair] done game/Saved/Grooms/CreatorMale
