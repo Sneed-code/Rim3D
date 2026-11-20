@@ -475,7 +475,7 @@ private:
 	FVector CrawlOffset = FVector::ZeroVector;
 	// A wall climb (docs/design/climbing.md): the Game Animation Sample's climb onto a ledge, its time following the sim's
 	// climb (on the face, then over the top), with its own set-back (its travel is in its root), facing the wall.
-	void UpdateWallClimb(const colony::ThingView& Now);
+	void UpdateWallClimb(const USimSubsystem& Bridge, const colony::ThingView& Now);
 	UPROPERTY()
 	TObjectPtr<UAnimSequence> WallClimbClip;
 	bool bWallClimbClipTried = false;

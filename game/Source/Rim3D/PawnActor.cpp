@@ -398,7 +398,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		DodgeAge = kDodgeSeconds;
 	}
 	UpdateCrawl(Now, DeltaTime * Speed);
-	UpdateWallClimb(Now);
+	UpdateWallClimb(Bridge, Now);
 	UpdateHurt(Bridge, Now, DeltaTime);
 
 	// The hit-stop holds the swing, the flinch and the animation for a moment of real time.
@@ -1957,10 +1957,14 @@ namespace
 	/** Share of the clip up to the moment the hands have the edge: the sim's time on the face plays up to here, its
 	 *  mantle (colony::kWallMantleFrom on) the rest. To be tuned by eye on the PC. */
 	constexpr float PawnWallClimbGrab = 0.45f;
+	/** Share of the clip where the body stands on the top (PC measure, #389 round 2): the rest is settling, not played. */
+	constexpr float PawnWallClimbEnd = 0.8f;
+	/** The wall's height, cm: a level (the sim's colony::Map::kLevelHeightM). */
+	constexpr float PawnWallClimbHeightCm = 300.0f;
 	constexpr float PawnWallClimbBlend = 0.2f;
 }
 
-void ASimPawnActor::UpdateWallClimb(const colony::ThingView& Now)
+void ASimPawnActor::UpdateWallClimb(const USimSubsystem& Bridge, const colony::ThingView& Now)
 {
 	USimPawnAnimInstance* Anim = GetAnim();
 	const bool bOn = Now.wallClimb && Now.climb > 0.0f && Anim && !bRagdoll;
@@ -2007,14 +2011,21 @@ void ASimPawnActor::UpdateWallClimb(const colony::ThingView& Now)
 	else
 	{
 		const float K = (U - colony::kWallMantleFrom) / (1.0f - colony::kWallMantleFrom);
-		Share = PawnWallClimbGrab + (1.0f - PawnWallClimbGrab) * K;
+		Share = PawnWallClimbGrab + (PawnWallClimbEnd - PawnWallClimbGrab) * K;
 	}
 	const float At = FMath::Clamp(Share, 0.0f, 1.0f) * Length;
 	Anim->Montage_SetPlayRate(WallClimbMontage.Get(), 0.0f);
 	Anim->Montage_SetPosition(WallClimbMontage.Get(), At);
-	// The pose is drawn about the actor, which the sim lifts up the face and over the top (USimSubsystem::GetViewLocation),
-	// so the clip's own root travel is not added or taken out: taking it out sank the body into the ground.
-	WallClimbOffset = FVector::ZeroVector;
+	// The pose is drawn about its root, and the clip's hands hold the edge only while the root rises the way the clip's
+	// does. So the body is drawn at the clip's own height up the wall (its rise to the end share stretched to the wall),
+	// not the sim's straight line: only the height, the sim keeps where it is across the ground.
+	const float TotalRise = static_cast<float>(WallClimbClip->ExtractRootMotionFromRange(0.0, PawnWallClimbEnd * Length, FAnimExtractContext()).GetTranslation().Z);
+	const float ClipRise = static_cast<float>(WallClimbClip->ExtractRootMotionFromRange(0.0, At, FAnimExtractContext()).GetTranslation().Z);
+	const int32 LowLevel = Now.wallClimbUp ? Now.level : Now.level - 1;
+	const double FootZ = Bridge.SimToWorld(Now.x, Now.y, 0).Z + LowLevel * PawnWallClimbHeightCm;
+	const double SimRise = GetActorLocation().Z - FootZ;
+	const double Wanted = TotalRise > 10.0f ? FMath::Clamp(ClipRise / TotalRise, 0.0f, 1.0f) * PawnWallClimbHeightCm : SimRise;
+	WallClimbOffset = FVector(0.0, 0.0, Wanted - SimRise);
 }
 
 float ASimPawnActor::GetMeleeBodyDegrees() const
