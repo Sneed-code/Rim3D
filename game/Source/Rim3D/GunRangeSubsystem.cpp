@@ -910,7 +910,6 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 	GunHold.main = colony::HoldPoint{static_cast<float>(G.Grip.X), static_cast<float>(G.Grip.Y), static_cast<float>(G.Grip.Z)};
 	GunHold.hasOff = G.bOffHand;
 	HoldDraw::FPoints Points = HoldDraw::PointsOf(GunHold, false);
-	Points.Main = G.Grip;
 	Points.Sight = G.Sight;
 	if (G.bOffHand)
 	{
