@@ -3,6 +3,7 @@
 // the main menu and Settings > Controls; one screenshot each, in the game, offscreen.
 #include "SmokeTest.h"
 
+#include "Engine/Engine.h"
 #include "HAL/IConsoleManager.h"
 
 #include "ColonyHudSubsystem.h"
@@ -43,6 +44,8 @@ void USmokeTestSubsystem::BuildHudPhases()
 	Setup.MeasureSeconds = 1.0f;
 	Setup.Setup = [=, this]()
 	{
+		// Full HD even offscreen, so the pictures show the layout as a real screen does.
+		GEngine->Exec(GetWorld(), TEXT("r.SetRes 1920x1080w"));
 		USimSubsystem* B = Bridge();
 		if (!B || !Hud() || !Orders() || !Panels() || !Overseer())
 		{

@@ -435,6 +435,8 @@ void USmokeTestSubsystem::BuildOrdersWorldPhases()
 	Setup.MeasureSeconds = 0.5f;
 	Setup.Setup = [this, State, Overseer, Note]()
 	{
+		// Full HD even offscreen (it starts at 888 x 500): at that size the overseer's windows covered the ground the test clicks.
+		GEngine->Exec(GetWorld(), TEXT("r.SetRes 1920x1080w"));
 		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("Terrain.Roofs")))
 		{
 			Var->Set(0, ECVF_SetByCode);
