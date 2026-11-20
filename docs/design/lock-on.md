@@ -164,6 +164,48 @@ down into the body.
   for a swing at a downed target; the PC's range build lacked those clips and played the standing one. In first person
   the hands now drive down into the body for a low blow instead of straight ahead.
 
+## Finishers, aim assist and Tab that keeps you running (sneed 2026-11-20)
+
+sneed: "melee attack with spear / other melee weapons doesn't change on a downed enemy ... they have to be unique (a spear
+rams it in the back, club smashes, sword thrusts into chest, knife stabs down like slamming a knife into the table) - this
+requires my pawn to kneel down"; "if I use a melee weapon near a non-friendly (even neutral) it should have aim assist";
+"when I use Tab do not let it interrupt my movement (or sprint)"; "pressing Tab again still doesn't change targets".
+
+**Finishers (sim).** A swing at a body on the ground with a weapon that has a finisher is a finisher, not a swing:
+`MeleeRules.finishers` names one per weapon (`Melee_Spear`, `Melee_Knife`) or per style (`Club`, `OneHand`, `TwoHand`),
+each with its move (Spear, Club, Sword, Knife), total `seconds`, `hitSeconds` (when the blow lands), `standOff` (how far
+from the body's centre the attacker stands or kneels), `kneel` and `bend` (how far the back bends). The attacker steps to
+its place beside the body before the blow (`finisherStepMetres` a step, through BodyMotion), holds still (DirectMove is
+ignored, facing stays on the body) and is ready again when the move ends. Melee save section 7 keeps a finisher under way.
+The snapshot carries `meleeFinisher` (1-based index), `meleeFinisherT` (0..1) and `meleeFinisherTarget`.
+
+| Weapon | Move | Look |
+|---|---|---|
+| Spear | Spear | stands over the back, both hands raise the spear high, rams it down into the lower back |
+| Club, mace | Club | stands wide, swings the club up over the head and smashes it down on the head |
+| Gladius (one hand) | Sword | kneels, reverse grip, drives the blade down into the chest |
+| Longsword (two hands) | Sword | stands, both hands, point down into the chest |
+| Knife | Knife | kneels, reverse grip, raises the knife and slams it straight down into the chest like into a table |
+
+**Drawing (Unreal).** `UWeaponDrawSubsystem::FinisherPose` moves the weapon along the move's keys (points in front of,
+right of and above the target's bone, `spine_02` for the spear, `head` for the club, `spine_03` for swords and knives;
+Hermite curves that hold still at held keys, no snapping) so the tip ends on the body at the hit; the hands are pinned on
+the weapon (weapon first, then the hands, as `weapon-hold.md`). It eases in over the first 14% and out over the last 14%.
+Kneeling moves play the crouch pose on the default slot while T < 0.86; the back bends by `bend` with an extra push near
+the hit. Smoke test `finishers` pictures each move at the raise, strike and after (`Saved/Smoke/finishers/`).
+
+**Aim assist on anyone not friendly.** With no lock-on, the player's swing goes at the best target in a 70 degree cone
+ahead within reach: hostiles, **neutrals too** (another faction, wild animals), never its own side or prisoners (sim
+`MeleeSystem::setNotFriendly`; Unreal `FindSwingTarget` the same). The most centred wins; the nearest when two are within
+a few degrees. The body also keeps facing its target through the windup now: the walk direction no longer turns it away
+(the sim's combat step and the pawn actor both used to face the walk, which made swings "wonky").
+
+**Tab no longer stops you, and every Tab cycles.** The cause was Unreal's menu navigation: Tab (and the arrow keys) moved
+keyboard focus off the game viewport to the next widget, so held keys were let go (W and sprint stopped) and the next
+Tab went to that widget instead of the game. `UProtagonistSubsystem::Initialize` turns Slate's Tab, arrow and stick
+navigation off for the game (and puts it back on shutdown). Smoke `finishers` phase `tab_run` sprints with real key
+events, presses Tab three times and checks the speed never drops and the lock moves to three different enemies.
+
 ## The original build plan
 
 - **Sim (cloud)**: `focusPoint`, wind-up turn rate, lunge, letting go (turn-away and sight timers), "locked but don't

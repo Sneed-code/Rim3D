@@ -169,3 +169,20 @@ and every one is inside the limits. On the PC, smoke test `gunrange` measures **
 first-person arms and the third-person body), from the solver and from the drawn bones, and fails on any joint out of
 range (`arm_limit_fails`), and on more than 1% of hand-frames with a hand over 3 cm off its grip (`arm_hand_short`, the `HAND OFF ITS GRIP` notes give the gun, view, hand and where the goal was); its step 16 pictures every gun hip, aimed, third-person ready and aimed (`hold_<Gun>_*`).
 Cvars: `Pawns.ArmLimits`, `Weapons.Places`, `Weapons.PlacesFirstPerson` (0 = the old way, for comparing).
+
+## Never floating, and aiming at the crosshair in third person (sneed 2026-11-20)
+
+sneed: "a bug ... makes the graphic for melee attacks screw up (and I drop the weapon) but I keep it. The weapon then
+floats but the hand animations still work"; "if I swap weapons, go unarmed and back and press Z the weapons can bug and
+float"; "I like the ability to aim in 3rd person but the weapon doesn't move with my cursor to aim, and arms".
+
+- **Crouched and prone.** The weapon used to leave the hand below 0.9 m body height (crouch C, prone Z) for an old
+  fixed spot in the air. Now the hands hold it at any height; the weapon-first pinning runs only when standing.
+- **The float guard.** Each frame a weapon fully in the hands measures how far its grip is from its hand bone. More than
+  22 cm (`WeaponFloatCm`, scaled by body size) for 0.1 s puts it back on the hand's own grip frame and holds it there
+  0.6 s (`ForceHandSeconds`), whatever drew it away (a swing path, a pinned place the arm can't reach, a switch).
+  The log says `WEAPON FLOAT` once per pawn with what was going on, so a cause shows up in play.
+- **3rd person aim.** While aiming a gun in third person the body turns to the camera's yaw, and the aimed place is
+  turned (twice, from the sight) so the sight line meets what the crosshair is on, up to 60 degrees round and nearly
+  straight up or down; the arms follow because the hands are pinned on the weapon. Smoke `finishers` phase `aim3p`
+  checks the rifle within 8 degrees of the crosshair and the body within 20 degrees of the camera.
