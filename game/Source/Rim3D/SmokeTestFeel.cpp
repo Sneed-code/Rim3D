@@ -561,7 +561,9 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		{
 			return;
 		}
-		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Y - Me->y, X - Me->x));
+		// 20 degrees to the left of it: the over-the-shoulder camera looks through the player's own body, which hid the
+		// fireball, the scorch and the molotov's flames in PC rounds 3 to 5. Now the blast sits right of the body.
+		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Y - Me->y, X - Me->x)) - 20.0f;
 		Body->Look(FRotator::NormalizeAxis(Yaw - Body->GetYaw()), Pitch - Body->GetPitch());
 		Body->SnapCamera();
 	};
