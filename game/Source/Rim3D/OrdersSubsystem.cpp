@@ -1880,7 +1880,8 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 		ImGui::InputTextWithHint("##BuildSearch", "Search", BuildSearch, sizeof(BuildSearch));
 		TArray<FString> Categories = {TEXT("Orders"), TEXT("Zone")};
 		Categories.Append(BuildCategories);
-		const int32 Slots = FMath::Max(16, Categories.Num() + (Categories.Num() % 2));
+		// Only the categories there are (an odd count leaves the last cell of the grid empty, not drawn).
+		const int32 Slots = Categories.Num();
 		const float CellWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
 		for (int32 Index = 0; Index < Slots; ++Index)
 		{

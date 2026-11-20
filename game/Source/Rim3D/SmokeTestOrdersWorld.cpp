@@ -144,30 +144,47 @@ namespace
 		const bool bCaptured = User && User->HasCursorCapture();
 		bool bTaken = false;
 		bool bHanded = false;
+		// Slate's own handling (the ImGui and orders preprocessors) can change the widget tree, which leaves the path found above
+		// empty (an out-of-bounds assert in RoutePointerDownEvent, 2026-11-19): find it again just before handing the event on.
+		const auto RefreshPath = [&]() -> bool
+		{
+			ViewportPath = FWidgetPath();
+			return Widget && Slate.FindPathToWidget(Widget.ToSharedRef(), ViewportPath, EVisibility::All) && ViewportPath.IsValid() &&
+				ViewportPath.Widgets.Num() > 0;
+		};
 		switch (Kind)
 		{
 			case EOwPointer::Move:
 				bTaken = Slate.ProcessMouseMoveEvent(Event);
 				if (!bTaken && !bCaptured)
 				{
-					bHanded = true;
-					Slate.RoutePointerMoveEvent(ViewportPath, Event, false);
+					bHanded = RefreshPath();
+					if (bHanded)
+					{
+						Slate.RoutePointerMoveEvent(ViewportPath, Event, false);
+					}
 				}
 				break;
 			case EOwPointer::Down:
 				bTaken = Slate.ProcessMouseButtonDownEvent(nullptr, Event);
 				if (!bTaken)
 				{
-					bHanded = true;
-					Slate.RoutePointerDownEvent(ViewportPath, Event);
+					bHanded = RefreshPath();
+					if (bHanded)
+					{
+						Slate.RoutePointerDownEvent(ViewportPath, Event);
+					}
 				}
 				break;
 			case EOwPointer::Up:
 				bTaken = Slate.ProcessMouseButtonUpEvent(Event);
 				if (!bTaken && !bCaptured)
 				{
-					bHanded = true;
-					Slate.RoutePointerUpEvent(ViewportPath, Event);
+					bHanded = RefreshPath();
+					if (bHanded)
+					{
+						Slate.RoutePointerUpEvent(ViewportPath, Event);
+					}
 				}
 				break;
 		}

@@ -313,6 +313,8 @@ void USmokeTestSubsystem::BuildOrdersPhases()
 
 		// A line of six walls: dragged out along x, six ghosts, six commands.
 		O->SelectBuilding(TEXT("Wall"), TEXT("Steel"));
+		// Walls drag a room's outline by default (building.dragShape); this checks the line.
+		O->SetBuildShape(colony::DragShape::Line);
 		O->BeginDrag(At(0, 0));
 		O->SetHoverCell(At(5, 1));  // the longer way wins: along x
 		TArray<colony::CellPos> Origins;

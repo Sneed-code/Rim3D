@@ -601,9 +601,21 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 			{
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.40f, 0.12f, 1.0f));
 			}
-			if (ColonyHud::Button(Label + TEXT("##tab"), Open == Tab, ImVec2(TabWidth, 0.0f)))
+			// On a narrow window a label that would be cut off is drawn smaller to fit its tab.
+			const float LabelWidth = ImGui::CalcTextSize(TCHAR_TO_UTF8(*Label)).x + 2.0f * Style.FramePadding.x;
+			const bool bShrink = LabelWidth > TabWidth;
+			const float TabHeight = ImGui::GetFrameHeight();
+			if (bShrink)
+			{
+				ImGui::PushFont(nullptr, Style.FontSizeBase * FMath::Max(0.55f, TabWidth / LabelWidth));
+			}
+			if (ColonyHud::Button(Label + TEXT("##tab"), Open == Tab, ImVec2(TabWidth, TabHeight)))
 			{
 				ToggleTab(Tab);
+			}
+			if (bShrink)
+			{
+				ImGui::PopFont();
 			}
 			if (bAmber)
 			{
@@ -1254,6 +1266,10 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 			MugshotCapture->ShowFlags.SetAtmosphere(false);
 			MugshotCapture->ShowFlags.SetFog(false);
 			MugshotCapture->ShowFlags.SetMotionBlur(false);
+			// Lit by the world the pictures came out nearly black (night, indoors, and no eye adaptation history for a one-off
+			// capture, PC 2026-11-20): unlit, so a face reads the same at any hour.
+			MugshotCapture->ShowFlags.SetLighting(false);
+			MugshotCapture->ShowFlags.SetEyeAdaptation(false);
 		}
 		if (!Shot)
 		{
