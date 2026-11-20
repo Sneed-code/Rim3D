@@ -164,4 +164,7 @@ drawn footprints. Floors and orders keep their drawn icons.
 keyboard), Factions (a flag) and Menu (three lines) are clean line icons drawn by ImGui on
 square-ish buttons, amber when on; their names are in the tooltips. Ship stays a word.
 
-Still to do: goodwill history in the Factions window, the learning helper's lessons.
+Each faction also shows its last three goodwill changes with why and the day ("Lately: -19 a caravan called (day 3)"),
+from the sim's goodwill log (`comms-console.md`). Build tiles fill their rows evenly (27 tiles: 9, 9, 9, not 13, 13, 1).
+
+Still to do: the learning helper's lessons.
