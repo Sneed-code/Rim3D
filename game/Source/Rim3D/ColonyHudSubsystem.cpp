@@ -607,7 +607,7 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 				// A keyboard: its outline, two rows of keys and the space bar.
 				const ImVec2 A(Mid.x - R * 1.5f, Mid.y - R * 0.9f);
 				const ImVec2 B(Mid.x + R * 1.5f, Mid.y + R * 0.9f);
-				Draw->AddRect(A, B, Ink, 2.0f * Scale, 0, Line);
+				Draw->AddRect(A, B, Ink, 2.0f * Scale, Line, 0);
 				const float Key = R * 0.32f;
 				for (int32 Row = 0; Row < 2; ++Row)
 				{
