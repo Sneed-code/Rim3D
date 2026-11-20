@@ -59,6 +59,8 @@ namespace
 		TEXT("Look.Quality"), 2, TEXT("How the world is drawn: 0 Low, 1 Medium, 2 High (Lumen light and reflections, volumetric fog), 3 Epic (data/look.json \"quality\")."), ECVF_Default);
 	TAutoConsoleVariable<float> GLookExposure(
 		TEXT("Look.Exposure"), -99.0f, TEXT("An exposure (EV100) to hold the camera at instead of the one that follows the light; below -50 follows the light."), ECVF_Default);
+	TAutoConsoleVariable<float> GLookIndoorFog(
+		TEXT("Look.IndoorFogDensity"), -1.0f, TEXT("Test: with the camera under a roof, hold the height fog at this density (volumetric fog follows); negative leaves it to the weather."), ECVF_Default);
 	TAutoConsoleVariable<int32> GLookReload(
 		TEXT("Look.Reload"), 0, TEXT("Set to 1 to read data/look.json again (it goes back to 0)."), ECVF_Default);
 
@@ -826,7 +828,8 @@ void USkySubsystem::ApplyState(const FSkyState& New)
 	SkyLight->SetIntensity(State.SkyLightIntensity);
 
 	// Fog takes the sky atmosphere's colour; the veil is the grey of an overcast sky or the white of snow (ComputeState).
-	Fog->SetFogDensity(State.FogDensity);
+	const float IndoorFogTest = GLookIndoorFog.GetValueOnGameThread();
+	Fog->SetFogDensity(IndoorFogTest >= 0.0f && IndoorShare > 0.5f ? IndoorFogTest : State.FogDensity);
 	Fog->SetFogInscatteringColor(State.FogVeil * GSkyFogLuminance.GetValueOnGameThread());
 	// Indoors the air shows its dust: the volumetric fog starts at the camera (outdoors it starts some metres off, so it never
 	// greys what is close), is a few times thicker and only reaches across the room and a little way out, so the sun through a

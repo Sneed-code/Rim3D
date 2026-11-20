@@ -710,10 +710,47 @@ void USmokeTestSubsystem::BuildLookPhases()
 		}
 		if (const UWindowLightSubsystem* DustLights = GetWorld()->GetSubsystem<UWindowLightSubsystem>())
 		{
-			Notes.Add(FString::Printf(TEXT("sunbeams: %d rooms with dust in the air"), DustLights->GetDustRooms()));
+			Notes.Add(FString::Printf(TEXT("sunbeams: %d rooms with dust in the air: %s"), DustLights->GetDustRooms(), *DustLights->DescribeDust()));
+			const IConsoleVariable* LfvIntoFog = IConsoleManager::Get().FindConsoleVariable(TEXT("r.LocalFogVolume.RenderIntoVolumetricFog"));
+			const IConsoleVariable* LfvSupport = IConsoleManager::Get().FindConsoleVariable(TEXT("r.SupportLocalFogVolumes"));
+			const IConsoleVariable* VolFog = IConsoleManager::Get().FindConsoleVariable(TEXT("r.VolumetricFog"));
+			Notes.Add(FString::Printf(TEXT("sunbeams: r.VolumetricFog %s, r.SupportLocalFogVolumes %s, r.LocalFogVolume.RenderIntoVolumetricFog %s, camera at %s"),
+				VolFog ? *VolFog->GetString() : TEXT("?"), LfvSupport ? *LfvSupport->GetString() : TEXT("?"), LfvIntoFog ? *LfvIntoFog->GetString() : TEXT("?"),
+				*(GetWorld()->GetFirstPlayerController() && GetWorld()->GetFirstPlayerController()->PlayerCameraManager ? GetWorld()->GetFirstPlayerController()->PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector).ToString()));
 		}
 	};
 	Phases.Add(MoveTemp(Sunbeams));
+
+	// 8d. The same view with thick fog held in the room (a test, not a look): if the volumetric fog shows the sunbeams here but not
+	// with the rooms' dust, the dust volumes are wrong; if not even here, the fog is not lit by the sun indoors.
+	FPhase FogTest;
+	FogTest.Name = TEXT("sunbeams_fogtest");
+	FogTest.WarmupSeconds = 3.0f;
+	FogTest.MeasureSeconds = 1.0f;
+	FogTest.Setup = [=, this]()
+	{
+		if (IConsoleVariable* IndoorFog = IConsoleManager::Get().FindConsoleVariable(TEXT("Look.IndoorFogDensity")))
+		{
+			IndoorFog->Set(0.3f, ECVF_SetByCode);
+		}
+		SetClock(8.5f, LookSmokeMidsummer);
+		const FVector To = CellWorld(static_cast<float>(State->Room.x) + 3.8f, static_cast<float>(State->Room.y) + 3.6f, 20.0);
+		const FVector From = CellWorld(static_cast<float>(State->Room.x) + 1.4f, static_cast<float>(State->Room.y) + 1.3f, 215.0);
+		ViewFrom(From, (To - From).Rotation());
+	};
+	FogTest.Verify = [=, this]()
+	{
+		NoteShot(TEXT("sunbeams_fogtest"));
+		if (const USkySubsystem* SkyFog = Sky(); SkyFog && SkyFog->GetFog())
+		{
+			Notes.Add(FString::Printf(TEXT("sunbeams_fogtest: fog density %.3f, volumetric %d"), SkyFog->GetFog()->FogDensity, SkyFog->GetFog()->bEnableVolumetricFog ? 1 : 0));
+		}
+		if (IConsoleVariable* IndoorFog = IConsoleManager::Get().FindConsoleVariable(TEXT("Look.IndoorFogDensity")))
+		{
+			IndoorFog->Set(-1.0f, ECVF_SetByCode);
+		}
+	};
+	Phases.Add(MoveTemp(FogTest));
 
 	// 9. A snowy day: a new game on the same seed snows hard through the cold night, then the overseer looks at it at eleven
 	// on a midwinter morning. (The sim's first day is spring; the night is cold enough for the snow to lie.)

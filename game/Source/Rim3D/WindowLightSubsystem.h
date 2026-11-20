@@ -38,6 +38,8 @@ public:
 	int32 GetShining() const { return Shining; }
 	/** How many rooms have dust in their air now (smoke tests). */
 	int32 GetDustRooms() const { return DustRooms; }
+	/** Where the dust volumes are and what they hold (smoke tests). */
+	FString DescribeDust() const;
 
 private:
 	void Teardown();

@@ -32,6 +32,7 @@ namespace
 	// A local fog volume is a sphere of this radius at scale 1 (its base size, 1000 cm across); scaled per axis it becomes the
 	// ellipsoid inside a room's box.
 	constexpr double WinDustBaseRadiusCm = 500.0;
+	constexpr double WinDustOversize = 1.3;
 	constexpr int32 WinDustPool = 16;
 	constexpr int32 WinLightPool = 48;
 	constexpr float WinLightReachCm = 1000.0f;
@@ -122,7 +123,7 @@ void UWindowLightSubsystem::Tick(float DeltaTime)
 			Volume->SetMobility(EComponentMobility::Movable);
 			Volume->SetRadialFogExtinction(0.0f);
 			Volume->SetHeightFogExtinction(0.0f);
-			Volume->SetHeightFogFalloff(0.0f);
+			Volume->SetHeightFogFalloff(1000.0f);
 			Volume->SetHeightFogOffset(0.0f);
 			Volume->SetFogPhaseG(0.2f);
 			Volume->SetFogAlbedo(FLinearColor(0.85f, 0.82f, 0.76f));
@@ -280,16 +281,18 @@ void UWindowLightSubsystem::Tick(float DeltaTime)
 		const double FloorZ = Origin.Z + static_cast<double>(Map.groundHeight(Room.anchor)) * 100.0;
 		const double TallCm = TerrainDraw::RoofHeightM * 100.0;
 		const FVector RoomCentre(Origin.X + (R.minX + R.sizeX * 0.5) * 100.0, Origin.Y + (R.minY + R.sizeY * 0.5) * 100.0, FloorZ + TallCm * 0.5);
-		const FVector RoomScale = FVector(R.sizeX * 50.0, R.sizeY * 50.0, TallCm * 0.5) / WinDustBaseRadiusCm;
+		const FVector RoomScale = FVector(R.sizeX * 50.0, R.sizeY * 50.0, TallCm * 0.5) * WinDustOversize / WinDustBaseRadiusCm;
 		if (!Volume->GetComponentLocation().Equals(RoomCentre, 1.0) || !Volume->GetComponentScale().Equals(RoomScale, 0.001))
 		{
 			Volume->SetWorldLocationAndRotation(RoomCentre, FRotator::ZeroRotator);
 			Volume->SetWorldScale3D(RoomScale);
 		}
+		// Radial fog: its density falls off towards the ellipsoid's edge, so the ellipsoid is a little bigger than the room. (Height
+		// fog with no falloff drew nothing, PC round 6.)
 		if (DustSet.IsValidIndex(I) && !FMath::IsNearlyEqual(DustSet[I], Dust, 0.002f))
 		{
 			DustSet[I] = Dust;
-			Volume->SetHeightFogExtinction(Dust);
+			Volume->SetRadialFogExtinction(Dust);
 		}
 		if (!Volume->IsVisible())
 		{
@@ -297,4 +300,20 @@ void UWindowLightSubsystem::Tick(float DeltaTime)
 		}
 		++DustRooms;
 	}
+}
+
+FString UWindowLightSubsystem::DescribeDust() const
+{
+	FString Out;
+	for (const ULocalFogVolumeComponent* Volume : DustVolumes)
+	{
+		if (Volume && Volume->IsVisible())
+		{
+			const FVector At = Volume->GetComponentLocation();
+			const FVector Scale = Volume->GetComponentScale();
+			Out += FString::Printf(TEXT("[at %.0f %.0f %.0f cm, scale %.2f %.2f %.2f, bounds %.0f cm, radial %.2f, height %.2f, registered %d] "), At.X, At.Y, At.Z,
+				Scale.X, Scale.Y, Scale.Z, Volume->Bounds.SphereRadius, Volume->RadialFogExtinction, Volume->HeightFogExtinction, Volume->IsRegistered() ? 1 : 0);
+		}
+	}
+	return Out.IsEmpty() ? FString(TEXT("none")) : Out;
 }
