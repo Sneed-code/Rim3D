@@ -407,7 +407,9 @@ namespace
 	 *  table's radius. */
 	float SeveredFitFace(float TableRadiusCm, float SkinOpeningCm)
 	{
-		return SkinOpeningCm > 0.0f ? FMath::Clamp(SkinOpeningCm * 1.02f, TableRadiusCm, 1.5f * TableRadiusCm) : TableRadiusCm;
+		// Measured at the joint the skin takes in the shoulder's or buttock's bulge, and a face that wide stood off a
+		// thigh piece as a ring twice the leg's width (PC round 14). Only a little over the table, then.
+		return SkinOpeningCm > 0.0f ? FMath::Clamp(SkinOpeningCm, TableRadiusCm, 1.1f * TableRadiusCm) : TableRadiusCm;
 	}
 
 	/** A clothed cut's face reaches out to the sleeve's measured width (radii, 1 to 1.6), so no white inside of the
@@ -422,7 +424,7 @@ namespace
 		{
 			return 1.02f;  // unmeasured: a guessed width stood off thinner sleeves as a hoop
 		}
-		return FMath::Clamp(OpeningCm / RadiusCm, 1.02f, 1.25f);
+		return FMath::Clamp(OpeningCm / RadiusCm, 1.02f, 1.08f);
 	}
 
 	/** The component whose pose a mesh shows: itself, or the top of its leader chain. */
