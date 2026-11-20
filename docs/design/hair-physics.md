@@ -67,11 +67,14 @@ hair really does put it over the other shoulder, so the game does that, through 
   gun in the main hand's space, its butt and muzzle, as thick as its model is wide) and the node adds a capsule along
   it and one round each forearm (elbow to wrist, about 4 cm, scaled to the body). Hair rests on them like on the body.
 - **Aimed, the hair goes over the other shoulder.** `colony::sweepHairGoals` turns every strand's styled shape towards
-  the side away from the stock and a little back, by up to 45 degrees (`Pawns.HairAimSweep`, 0 off) times the aim
-  blend: strands growing on the stock's side fully, down the middle 0.7, the far side 0.4, the first segment (on the
+  the side away from the stock and a little back, by up to 60 degrees (`Pawns.HairAimSweep`, 0 off) times the aim
+  blend: strands growing on the stock's side fully, down the middle 0.85, the far side 0.7, the first segment (on the
   scalp) by 0.8, roots and lengths kept. Only the goal changes, so the hair swings there with its usual lag (about a
   second for waist-length hair), slides over the neck and shoulders instead of through them, and falls back to its
   style when the gun comes down. Every colonist aiming a long gun does it, not just the player.
+- **Held there.** Hair put over a shoulder stays put, so while aimed the springs back to the swept shape are stiffer
+  (`colony::hairAimSettings`: twice at the root, four times at the tips). With the plain springs gravity left the
+  tips only half way (PC round 3: goals moved 37 cm, tips 12 to 24 cm).
 - Tests (`HairStrandsTests.cpp`): the sweep keeps roots and lengths and turns the stock side more; on the test body
   with a shouldered rifle, seen from the aim camera, the hair lay across the lines of sight to the stock and the front
   hand without the sweep and clears both by more than 4 cm with it, never going into the body, the gun or the arms;

@@ -20,7 +20,7 @@ namespace
 		TEXT("Long hair simulates fully within this many cm of the camera; further off it is only pushed out of the body."), ECVF_Default);
 	TAutoConsoleVariable<float> GMakeHumanHairCollideFar(TEXT("Pawns.HairCollideFar"), 5000.0f,
 		TEXT("Beyond this many cm from the camera long hair stays as animated (not even pushed out of the body)."), ECVF_Default);
-	TAutoConsoleVariable<float> GMakeHumanHairAimSweep(TEXT("Pawns.HairAimSweep"), 45.0f,
+	TAutoConsoleVariable<float> GMakeHumanHairAimSweep(TEXT("Pawns.HairAimSweep"), 60.0f,
 		TEXT("Degrees long hair turns over the other shoulder while a gun is aimed, so it never hides the stock or the front hand (0: off)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GMakeHumanHairDebug(TEXT("Pawns.HairDebug"), 0,
 		TEXT("1 draws the body's hair collision capsules (green) and the hair strands (yellow) on MakeHuman characters."), ECVF_Default);
@@ -536,7 +536,7 @@ void FMakeHumanHairNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 	LastGunCapsules = static_cast<int32>(Capsules.size()) - BodyCapsules;
 	if (Mode >= 2)
 	{
-		Strands.step(FMath::Max(DeltaTime, 0.0f), Goals, Capsules, Settings);
+		Strands.step(FMath::Max(DeltaTime, 0.0f), Goals, Capsules, bGun ? colony::hairAimSettings(Settings, Gun.Aim) : Settings);
 	}
 	else
 	{

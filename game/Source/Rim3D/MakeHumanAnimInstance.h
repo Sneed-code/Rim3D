@@ -135,7 +135,7 @@ struct FMakeHumanHairNode : public FAnimNode_SkeletalControlBase
 	float ForearmRadius = 4.0f;             // component space (the skeleton's units)
 	FVector Right = FVector(-1.0, 0.0, 0.0);   // the body's right and forward in component space (the arm solver's)
 	FVector Forward = FVector(0.0, 1.0, 0.0);
-	float SweepDegrees = 45.0f;             // Pawns.HairAimSweep
+	float SweepDegrees = 60.0f;             // Pawns.HairAimSweep
 	/** What the last evaluation did with a held gun (tests' notes): whether it was on, its aim, the capsules it added,
 	 *  how far the sweep moved the goals' tips and how far the solved tips ended from the hair as animated (cm). */
 	bool bLastGun = false;

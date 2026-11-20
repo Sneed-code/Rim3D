@@ -104,11 +104,16 @@ COLONY_API std::vector<std::pair<int, int>> hairSheetNeighbours(const std::vecto
 // Long hair swept off the stock while a long gun is aimed (docs/design/hair-physics.md, "Aiming"): as a shooter with
 // long hair puts it over the other shoulder, every strand's styled shape is turned towards `away` (unit: the side away
 // from the stock and a little back) by up to `angleDeg` times `amount` (0 at the ready .. 1 aimed). Strands rooted on the
-// stock's side (`stockSide`, unit, from `head`) turn fully, those down the middle of the back by 0.7, the far side's by
-// 0.4; the first segment, on the scalp, by 0.8. Roots and every segment's length are kept. Only the goals change: the
+// stock's side (`stockSide`, unit, from `head`) turn fully, those down the middle of the back by 0.85, the far side's
+// by 0.7; the first segment, on the scalp, by 0.8. Roots and every segment's length are kept. Only the goals change: the
 // physics carries the hair there with its usual lag, its collisions and its rest on the body.
 COLONY_API void sweepHairGoals(std::vector<std::vector<HairVec>>& goals, HairVec head, HairVec stockSide, HairVec away, float amount,
-                               float angleDeg = 45.0f);
+                               float angleDeg = 60.0f);
+
+// The tuning while aimed: hair put over a shoulder is held there (by the hand that put it, and by lying on the
+// shoulder), not left to swing loose, so the spring back to the (swept) shape is stiffer by `amount`: four times at the
+// tips, twice at the root (PC 2026-11-20: with the plain springs gravity left the tips only half way to the sweep).
+COLONY_API HairSettings hairAimSettings(const HairSettings& settings, float amount);
 
 // The body's collision shapes for hair, fitted to one skeleton in its reference pose (component space, z up).
 enum class HairBone : uint8_t { Head, Neck, SpineTop, SpineMid, ClavicleL, ClavicleR, UpperArmL, UpperArmR, SpineLow, Pelvis };

@@ -527,7 +527,7 @@ AimedHair aimedHair(float sweep, int frames) {
     for (int f = 0; f < frames; ++f) {
         auto goals = rest;
         sweepHairGoals(goals, hv(0, 0, 155), hv(0, -1, 0), hv(-0.33f, 0.94f, 0.0f), sweep * std::fmin(1.0f, static_cast<float>(f) / 12.0f));
-        hair.step(1.0f / 60.0f, goals, body, HairSettings{});
+        hair.step(1.0f / 60.0f, goals, body, hairAimSettings(HairSettings{}, sweep));
         if (f > 30) {
             out.deepest = std::fmax(out.deepest, hairDeepestPenetration(hair.points(), body));
         }
@@ -580,4 +580,15 @@ TEST_CASE("hair: lowering the gun lets the hair fall back to where it hangs unai
     }
     MESSAGE("furthest tip from the never-aimed hair " << furthest << " cm");
     CHECK(furthest < 3.0f);
+}
+
+TEST_CASE("hair: aimed, the hair is held nearer its swept shape (stiffer springs)") {
+    const HairSettings plain;
+    const HairSettings none = hairAimSettings(plain, 0.0f);
+    CHECK(none.rootStiffness == plain.rootStiffness);
+    CHECK(none.tipStiffness == plain.tipStiffness);
+    const HairSettings aimed = hairAimSettings(plain, 1.0f);
+    CHECK(aimed.rootStiffness == doctest::Approx(plain.rootStiffness * 2.0f));
+    CHECK(aimed.tipStiffness == doctest::Approx(plain.tipStiffness * 4.0f));
+    CHECK(aimed.gravity == plain.gravity);
 }

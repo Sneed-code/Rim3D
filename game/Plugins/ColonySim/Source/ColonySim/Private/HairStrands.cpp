@@ -361,7 +361,7 @@ void sweepHairGoals(std::vector<std::vector<HairVec>>& goals, HairVec head, Hair
         HairVec fromHead = hsSub(p[0], head);
         fromHead = hsSub(fromHead, hsMul(up, hsDot(fromHead, up)));
         const float side = std::clamp(hsDot(hsNormal(fromHead, HairVec{}), stockSide), -1.0f, 1.0f);
-        const float share = 0.7f + 0.3f * side;
+        const float share = 0.85f + 0.15f * side;
         HairVec above = p[0];  // the point above as styled
         HairVec joint = p[0];  // and as swept
         for (size_t k = 1; k < p.size(); ++k) {
@@ -385,6 +385,14 @@ void sweepHairGoals(std::vector<std::vector<HairVec>>& goals, HairVec head, Hair
             p[k] = joint;
         }
     }
+}
+
+HairSettings hairAimSettings(const HairSettings& settings, float amount) {
+    amount = hsClamp01(amount);
+    HairSettings aimed = settings;
+    aimed.rootStiffness *= 1.0f + amount;
+    aimed.tipStiffness *= 1.0f + 3.0f * amount;
+    return aimed;
 }
 
 std::vector<std::pair<int, int>> hairSheetNeighbours(const std::vector<HairVec>& roots, HairVec head, HairVec up) {
