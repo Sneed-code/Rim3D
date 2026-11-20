@@ -71,10 +71,11 @@ namespace
 	// Aiming (U21): how fast the view blends, the closest the over-the-shoulder camera comes and how far right of the body it sits (cm).
 	constexpr float ProtagonistAimBlendPerSecond = 5.5f;
 	constexpr float ProtagonistAimArm = 120.0f;
-	// 68 right and 16 up so a shouldered long gun beside the cheek clears the head and long hair (PC pictures 2026-11-19:
-	// at 42 and level with the pivot the rifle hid behind the head; at 55 long hair still covered it, 2026-11-20).
-	constexpr float ProtagonistAimShoulder = 55.0f;
-	constexpr float ProtagonistAimLift = 22.0f;
+	// 45 right and 8 up: the colonist left of the crosshair, the rifle pointing into the middle of the screen. Earlier
+	// pictures with the rifle hidden behind the head (2026-11-19/20) came from the body keeping its old facing while aimed
+	// (fixed in PawnActor); at 55-68 right and 16-26 up the body sat in the bottom corner and the gun left the frame.
+	constexpr float ProtagonistAimShoulder = 45.0f;
+	constexpr float ProtagonistAimLift = 8.0f;
 	constexpr float ProtagonistNormalFov = 80.0f;
 	// Locked on (docs/design/focus.md): how fast the view turns to keep the focus ahead, degrees a second.
 	constexpr float ProtagonistFocusTurnThird = 360.0f;
