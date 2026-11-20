@@ -548,6 +548,10 @@ private:
     float lowestPartHealth(Entity pawn) const;  // the focus HP bar (docs/design/focus.md)
     float pawnMoveFactor(Entity pawn) const;  // see Sim.cpp
     void dropLostDecks();  // what stood on a bridge that fell into deep water is gone (docs/design/roads-bridges.md)
+    // Buildings wrecked by damage (docs/design/destruction.md): noted just before they go, then at the end of the step,
+    // once the footprint is free, their rubble and leftovers are laid and a BuildingWrecked is sent.
+    void noteWreck(Entity building);
+    void settleWrecks();
     bool takeIntoBag(Entity pawn, Entity item, int count, std::string& error);  // Inventory.cpp
     void autoPickUp();                                                          // Inventory.cpp
     friend class SimSaveAccess;  // saves read and restore the private state (Save.h)
@@ -685,6 +689,14 @@ private:
     uint64_t submitted_ = 0;
     std::vector<LoggedCommand> commandLog_;
     std::vector<Event> events_;
+    struct PendingWreck {
+        DefId def;
+        DefId stuff;
+        CellRect rect;
+        bool finished = true;
+        Event event;  // the BuildingWrecked, sent with the rubble so it reaches Unreal with that step's events
+    };
+    std::vector<PendingWreck> wrecks_;  // empty between steps (settleWrecks), so not saved
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it

@@ -2,6 +2,24 @@
 
 Updated 2026-11-20.
 
+Buildings crack and come down (sneed, 2026-11-20; sim and Unreal, `docs/design/destruction.md`): every building already
+had hit points that bullets, blasts, fire and sappers take away, but at 0 it just vanished. Now a building **wrecked by
+damage leaves rubble** (1 to 3 layers on its footprint, cleaned like filth) and **a quarter of its materials** (RimWorld's
+numbers), and the sim sends a BuildingWrecked. On screen, **walls and buildings crack as they lose hit points** (a crack
+network that spreads and widens, from the materials patched by `-run=WetLook`), and a wrecked one **falls apart into
+pieces of its own stuff** (granite into granite) under physics, with a dust cloud, the pieces staying as the rubble until
+it is cleaned. New `UWreckSubsystem`; smoke test phase `buildings_wreck`. **Needs a PC compile, `-run=WetLook`, and the
+`buildings` smoke pictures.**
+
+Rain makes things wet (sneed, 2026-11-20; Unreal only, `docs/design/wetness.md`): before, only the ground soaked;
+walls, roofs, furniture, trees, rocks and people stayed dry and a roofed room's floor got wet. Now **every building,
+plant, rock, gun, animal and vehicle material** darkens (by how porous it is) and turns glossy in rain, faces up wettest,
+undersides dry; **nothing under a roof or upper floor gets wet** (a per-cell cover texture, so a wall's outside face is
+wet and its inside dry, and the floor indoors stays dry); **people** soak in about five game minutes outdoors in rain (at
+once swimming) and dry in about forty under a roof (skin, hair and clothes). New `UWetnessSubsystem` and
+`-run=WetLook` (makes `MPC_Weather` and `T_WeatherCover` and adds the wet look to the generated materials). Smoke test
+`sky_rain` checks it. PC compile 2026-11-20: clean, `sky_rain` passes, people get wet; but plain colour walls stayed dry, a roofed table got wet and people's materials took the weather. Fixed: people's materials take the wearer's wetness (older wraps redone), plain colour buildings use our own `M_WetSolid`, the roof cover is resent if the texture is rebuilt and follows the world origin, `Wet.Dump` logs the state. **Needs a PC re-run: compile, `-run=WetLook`, the house pictures again.**
+
 Buttons for animals, pens, prisoners and slaves (2026-11-20; Unreal UI on the new overseer screens, `docs/design/ui-layout.md`): **Prisoners screen** gets the Enslave and Reduce will modes (with a tip for every mode), each prisoner's will next to its resistance, and a **Slaves** list with a suppression bar (red under a third) and Emancipate / Release buttons. **Animals tab** gets a breeding tick, "with young" and milk / wool fullness, the animal bed it sleeps in, "Release to the wild" on right click, Pen or Zone in the zone column, and a **Zones and pens** list with a breeding tick per zone. **Build > Zone > Animal zone** paints animal zones at last (they show as tan rings; Remove zone takes them off too), and **Build > Orders** has Tame, Hunt and Slaughter drag tools. Fences, gates and animal beds were already on the Structure and Furniture tabs. Sim: the snapshot now carries `breedingOff`, `animalBed` and the zone's `breedingOff`. The `hud` smoke now makes a tame cow, a prisoner and a slave so their rows get pictured. PC compile 2026-11-20: build, `orders_world` and `hud` pass. **Next: PC pictures of the real rows.**
 
 Natural blood splats (2026-11-19; Unreal art, `docs/design/blood.md`): the ground blood pictures no longer have the spiky crown that read as starbursts or viruses: drops are uneven round blots with droplets, slanted drops have a short tail, pools are lumpy puddles with drops on the rim. Checked on the PC 2026-11-20: spikes gone. Follow-up: blood on the ground and walls is darker and deeper red (it read pink in sun) (PC checked: fixed). Splats are drawn 1.9x (after the 12 m check read but small; `-BloodSplatScale=` / `-BloodGroundShade=` on the command line now set them, the log prints both) and the pool under a bleeding body spreads faster and up to about a metre across, so it shows round the body from 10-20 m (Blood.SplatScale; it hid under the body before). **Needs a compile; check the 12 m view with the gun range tour.**

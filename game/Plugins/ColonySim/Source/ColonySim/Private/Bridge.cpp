@@ -484,6 +484,7 @@ const char* eventTypeName(EventType type) {
         case EventType::PodsArrived: return "PodsArrived";
         case EventType::CaravanRequested: return "CaravanRequested";
         case EventType::CaravanRequestFailed: return "CaravanRequestFailed";
+        case EventType::BuildingWrecked: return "BuildingWrecked";
     }
     return "?";
 }
