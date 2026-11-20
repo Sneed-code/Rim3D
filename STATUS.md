@@ -2,6 +2,15 @@
 
 Updated 2026-11-20.
 
+Rain makes things wet (sneed, 2026-11-20; Unreal only, `docs/design/wetness.md`): before, only the ground soaked;
+walls, roofs, furniture, trees, rocks and people stayed dry and a roofed room's floor got wet. Now **every building,
+plant, rock, gun, animal and vehicle material** darkens (by how porous it is) and turns glossy in rain, faces up wettest,
+undersides dry; **nothing under a roof or upper floor gets wet** (a per-cell cover texture, so a wall's outside face is
+wet and its inside dry, and the floor indoors stays dry); **people** soak in about five game minutes outdoors in rain (at
+once swimming) and dry in about forty under a roof (skin, hair and clothes). New `UWetnessSubsystem` and
+`-run=WetLook` (makes `MPC_Weather` and `T_WeatherCover` and adds the wet look to the generated materials). Smoke test
+`sky_rain` checks it. **Needs a PC compile, `-run=WetLook`, and pictures (`Wet.Override 1` against 0).**
+
 Natural blood splats (2026-11-19; Unreal art, `docs/design/blood.md`): the ground blood pictures no longer have the spiky crown that read as starbursts or viruses: drops are uneven round blots with droplets, slanted drops have a short tail, pools are lumpy puddles with drops on the rim. Checked on the PC 2026-11-20: spikes gone. Follow-up: blood on the ground and walls is darker and deeper red (it read pink in sun) (PC checked: fixed). Splats are drawn 1.6x and the pool under a bleeding body spreads faster and up to about a metre across, so it shows round the body from 10-20 m (Blood.SplatScale; it hid under the body before). **Needs a compile; check the 12 m view with the gun range tour.**
 
 Races and wall climbing (sneed, 2026-11-19; `docs/design/races.md`, `docs/design/climbing.md`): sneed's race stats are
