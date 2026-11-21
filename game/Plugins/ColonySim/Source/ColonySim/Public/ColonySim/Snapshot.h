@@ -98,6 +98,7 @@ struct ThingView {
     uint32_t area = 0;  // the allowed area a pawn is limited to (AreaView::id), 0 for none
     Entity jobTarget = kNoEntity;
     float jobProgress = 0.0f;  // 0 to 1: a swing of the pick, a plant being cut, a frame being built (hands-on work, U10)
+    bool felling = false;      // at a tree, cutting it down (Unreal: a hand axe and the chop, docs/design/structure-damage.md)
     DefId carriedDef;
     int carriedCount = 0;
     // Buildings: Built, or a Blueprint or Frame still to be built (docs/design/construction.md). A

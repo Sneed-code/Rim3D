@@ -518,14 +518,42 @@ void ASimPawnActor::PlayAction(colony::PawnAction Action)
 	USimPawnAnimInstance* Anim = GetAnim();
 	const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>();
 	UAnimSequence* Animation = Pawns ? Pawns->GetActionAnimation(Action) : nullptr;
-	if (!Anim || !Animation)
+	if (!Anim || !Animation || WorkLoopClip.IsValid())
 	{
-		return;
+		return;  // a work loop (felling) owns the slot
 	}
 	if (Anim->PlaySlotAnimationAsDynamicMontage(Animation, FAnimSlotGroup::DefaultSlotName, PawnActionBlendIn, PawnActionBlendOut))
 	{
 		ActionEndSeconds = PawnActionBlendIn + PawnActionHold;
 		++ActionsPlayed;
+	}
+}
+
+void ASimPawnActor::SetWorkLoop(UAnimSequence* Clip, float Rate)
+{
+	USimPawnAnimInstance* Anim = GetAnim();
+	if (!Anim || !Clip || WorkLoopClip.Get() == Clip)
+	{
+		return;
+	}
+	// Loops until stopped (a felling takes a minute or so of game time; the count is only a ceiling).
+	if (Anim->PlaySlotAnimationAsDynamicMontage(Clip, FAnimSlotGroup::DefaultSlotName, PawnActionBlendIn, PawnActionBlendOut, Rate, 10000))
+	{
+		WorkLoopClip = Clip;
+		ActionEndSeconds = 0.0;  // a short action it replaced must not stop it
+	}
+}
+
+void ASimPawnActor::StopWorkLoop()
+{
+	if (!WorkLoopClip.IsValid())
+	{
+		return;
+	}
+	WorkLoopClip.Reset();
+	if (USimPawnAnimInstance* Anim = GetAnim())
+	{
+		Anim->StopSlotAnimation(PawnActionBlendOut, FAnimSlotGroup::DefaultSlotName);
 	}
 }
 

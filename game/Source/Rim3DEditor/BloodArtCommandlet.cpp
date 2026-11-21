@@ -594,29 +594,100 @@ namespace
 		auto* H = BloodArtNode<UMaterialExpressionDivide>(Material, -2100, -300);
 		BloodArtConnect(Above, TEXT(""), H, TEXT("A"));
 		BloodArtConnect(Height, TEXT(""), H, TEXT("B"));
-		auto* LegsSlope = BloodArtNode<UMaterialExpressionMultiply>(Material, -1950, -300);
-		BloodArtConnect(H, TEXT(""), LegsSlope, TEXT("A"));
-		LegsSlope->ConstB = -2.6f;
-		auto* LegsRaw = BloodArtNode<UMaterialExpressionAdd>(Material, -1800, -300);
-		BloodArtConnect(LegsSlope, TEXT(""), LegsRaw, TEXT("A"));
-		LegsRaw->ConstB = 1.35f;
-		auto* Legs = BloodArtNode<UMaterialExpressionSaturate>(Material, -1650, -300);
-		BloodArtConnect(LegsRaw, TEXT(""), Legs, TEXT(""));
-
-		// Dirt amount: legs by height, plus the body all over.
+		// Dirt (sneed 2026-11-20: fine spray over the broad smudges, like blood): one node draws three layers and returns
+		// (cover, darkness).
+		//  - Broad smudges: two octaves of noise patches growing from their low spots as the level rises, the legs' top
+		//    edge ragged (fading out by about h 0.52), gritty inside (a 1 cm grain thins them in places).
+		//  - Spray: drops of mud flicked up by the feet or thrown by work, one jittered drop per 3D cell at three sizes
+		//    (0.35, 0.8 and 2.4 cm cells); on the legs they reach higher than the smudges (to the waist), stretched a
+		//    little upwards, and they crowd round the edges of each smudge so a smudge trails off into speckles.
+		//  - Drops smaller than about 3 pixels on screen fade into an even tint of the same average cover (no sparkle
+		//    at range).
+		//  Darkness: drops and smudge cores are wet dark mud, smudge edges dry pale dust.
 		auto* DirtLegs = BloodArtScalar(Material, TEXT("DirtLegs"), 0.0f, -1650, -450);
 		auto* DirtBody = BloodArtScalar(Material, TEXT("DirtBody"), 0.0f, -1500, -450);
-		auto* LegsDirt = BloodArtNode<UMaterialExpressionMultiply>(Material, -1500, -300);
-		BloodArtConnect(DirtLegs, TEXT(""), LegsDirt, TEXT("A"));
-		BloodArtConnect(Legs, TEXT(""), LegsDirt, TEXT("B"));
-		auto* DirtSum = BloodArtNode<UMaterialExpressionAdd>(Material, -1350, -350);
-		BloodArtConnect(LegsDirt, TEXT(""), DirtSum, TEXT("A"));
-		BloodArtConnect(DirtBody, TEXT(""), DirtSum, TEXT("B"));
-		auto* DirtAmount = BloodArtNode<UMaterialExpressionSaturate>(Material, -1200, -350);
-		BloodArtConnect(DirtSum, TEXT(""), DirtAmount, TEXT(""));
-
-		UMaterialExpression* DirtNoise = GrimeArtNoise(Material, -1200, -100, Position, NoiseScale, 1.0f, 0.0f);
-		UMaterialExpression* DirtCover = GrimeArtCover(Material, -800, -250, DirtAmount, 0.8f, DirtNoise, 3.0f);
+		auto* Dirt = BloodArtNode<UMaterialExpressionCustom>(Material, -1100, -250);
+		Dirt->Description = TEXT("GrimeDirt");
+		Dirt->OutputType = CMOT_Float2;
+		Dirt->Code = TEXT(R"HLSL(
+struct GrimeDirtFn
+{
+	float H1(float3 p) { p = frac(p * 0.3183099 + 0.1); p *= 17.0; return frac(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+	float3 H3(float3 p) { return float3(H1(p), H1(p + 19.19), H1(p + 47.31)); }
+	float N(float3 x)
+	{
+		float3 i = floor(x);
+		float3 f = frac(x);
+		f = f * f * (3.0 - 2.0 * f);
+		return lerp(lerp(lerp(H1(i), H1(i + float3(1, 0, 0)), f.x), lerp(H1(i + float3(0, 1, 0)), H1(i + float3(1, 1, 0)), f.x), f.y),
+			lerp(lerp(H1(i + float3(0, 0, 1)), H1(i + float3(1, 0, 1)), f.x), lerp(H1(i + float3(0, 1, 1)), H1(i + float3(1, 1, 1)), f.x), f.y), f.z);
+	}
+	float Fbm(float3 x) { return N(x) * 0.55 + N(x * 2.03 + 7.7) * 0.3 + N(x * 4.11 + 3.1) * 0.15; }
+	// One drop per cell of `cell` cm (z stretched by 1/stretch), kept where its hash is under `density`; x: cover with a
+	// pixel-wide soft rim, y: how visible the size is on screen (0 below about 2 pixels a cell).
+	float2 Drops(float3 p, float cell, float density, float rMin, float rMax, float stretch, float fwCm, float seed)
+	{
+		float3 q = p / cell;
+		q.z *= stretch;
+		float3 i = floor(q) + seed;
+		float3 f = frac(q);
+		float keep = step(H1(i + 5.31), density);
+		float h = H1(i + 2.17);
+		float r = lerp(rMin, rMax, h * h);
+		float3 c = r + H3(i + 11.1) * (1.0 - 2.0 * r);
+		float aa = max(fwCm / cell, 0.01);
+		float d = length(f - c);
+		float vis = saturate((cell / max(fwCm, 1e-4) - 2.0) * 0.5);
+		return float2(keep * (1.0 - smoothstep(r - aa, r + aa, d)), vis);
+	}
+};
+GrimeDirtFn g;
+if (Legs <= 0.001 && Body <= 0.001) return float2(0.0, 0.0);
+float3 p = Pre;
+float fwCm = max(length(fwidth(Pre)), 1e-4);
+// Smudges.
+float ragged = (g.N(p * 0.05 + 3.7) - 0.5) * 0.14;
+float legs = saturate(1.35 - 2.6 * (H + ragged));
+float amount = saturate(Legs * legs + Body);
+float broad = g.Fbm(p * Scale * 0.8);
+float mid = g.N(p * Scale * 3.0 + 17.0);
+float field = amount * 0.78 - broad * 0.74 - mid * 0.3 + 0.02;
+float smudge = saturate(field * 5.0);
+float grainVis = saturate((1.0 / fwCm - 2.0) * 0.5);
+float grain = lerp(0.6, g.N(p * 1.0 + 3.3), grainVis);
+smudge *= lerp(0.62, 1.0, grain);
+float core = saturate((field - 0.2) * 3.0);
+float nearEdge = saturate((field + 0.22) * 3.0);
+// Spray.
+float sprayLegs = saturate(1.25 - 1.8 * (H + ragged * 0.5));
+float spray = saturate(Legs * sprayLegs * 1.1 + Body * 0.55);
+float fineDensity = spray * (0.25 + 0.75 * nearEdge) * 0.6;
+float bigDensity = spray * nearEdge * nearEdge * 0.3;
+float stretch = lerp(1.0, 0.7, saturate(Legs * sprayLegs));
+float2 mist = g.Drops(p, 0.35, fineDensity * 0.9, 0.12, 0.32, stretch, fwCm, 0.0);
+float2 fine = g.Drops(p, 0.8, fineDensity, 0.08, 0.3, stretch, fwCm, 31.0);
+float2 big = g.Drops(p, 2.4, bigDensity, 0.07, 0.24, stretch, fwCm, 67.0);
+float drops = max(max(mist.x * mist.y, fine.x * fine.y), big.x * big.y);
+// What the eye can't resolve as drops: their average cover (about density x pi r^2).
+float tint = saturate((1.0 - mist.y) * fineDensity * 0.9 * 0.18 + (1.0 - fine.y) * fineDensity * 0.15 + (1.0 - big.y) * bigDensity * 0.12);
+float cover = 1.0 - (1.0 - smudge * 0.85) * (1.0 - drops * 0.95) * (1.0 - tint);
+float dark = saturate(max(drops, core * (0.55 + 0.45 * mid)) + tint * 0.5);
+return float2(saturate(cover), dark);
+)HLSL");
+		Dirt->Inputs.Reset();
+		const auto DirtIn = [&](const TCHAR* Name, UMaterialExpression* From)
+		{
+			FCustomInput& In = Dirt->Inputs.AddDefaulted_GetRef();
+			In.InputName = Name;
+			In.Input.Connect(0, From);
+		};
+		DirtIn(TEXT("Pre"), Position);
+		DirtIn(TEXT("H"), H);
+		DirtIn(TEXT("Legs"), DirtLegs);
+		DirtIn(TEXT("Body"), DirtBody);
+		DirtIn(TEXT("Scale"), NoiseScale);
+		UMaterialExpression* DirtCover = BloodArtMask(Material, -900, -300, Dirt, TEXT(""), true, false, false, false);
+		UMaterialExpression* DirtDark = BloodArtMask(Material, -900, -200, Dirt, TEXT(""), false, true, false, false);
 		auto* BloodAmount = BloodArtScalar(Material, TEXT("Blood"), 0.0f, -1200, 150);
 		UMaterialExpression* BloodNoise = GrimeArtNoise(Material, -1200, 300, Position, NoiseScale, 5.0f, 37.1f);
 		UMaterialExpression* BloodCover = GrimeArtCover(Material, -800, 200, BloodAmount, 0.34f, BloodNoise, 9.0f);  // small flecks, never a coat: the wound marks carry the look
@@ -693,7 +764,15 @@ return cover;
 		auto* BloodColor = BloodArtNode<UMaterialExpressionVectorParameter>(Material, -800, -400);
 		BloodColor->ParameterName = TEXT("BloodColor");
 		BloodColor->DefaultValue = FLinearColor(0.2f, 0.008f, 0.007f);
-		auto* Base = BloodArtLerp(Material, -500, -450, DirtColor, TEXT(""), BloodColor, TEXT(""), BloodCover, TEXT(""));
+		// Dry dust at the smudges' edges, dark wet mud in the drops and cores.
+		auto* DirtPale = BloodArtNode<UMaterialExpressionMultiply>(Material, -650, -560);
+		BloodArtConnect(DirtColor, TEXT(""), DirtPale, TEXT("A"));
+		DirtPale->ConstB = 1.35f;
+		auto* DirtDeep = BloodArtNode<UMaterialExpressionMultiply>(Material, -650, -500);
+		BloodArtConnect(DirtColor, TEXT(""), DirtDeep, TEXT("A"));
+		DirtDeep->ConstB = 0.55f;
+		auto* DirtShade = BloodArtLerp(Material, -550, -530, DirtPale, TEXT(""), DirtDeep, TEXT(""), DirtDark, TEXT(""));
+		auto* Base = BloodArtLerp(Material, -500, -450, DirtShade, TEXT(""), BloodColor, TEXT(""), BloodCover, TEXT(""));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Base, TEXT(""), MP_BaseColor);
 
 		// Wet blood is glossy, dry blood and dirt matte.
@@ -702,8 +781,10 @@ return cover;
 		BloodRough->ConstA = 0.75f;
 		BloodRough->ConstB = 0.3f;
 		BloodArtConnect(Wet, TEXT(""), BloodRough, TEXT("Alpha"));
-		auto* DirtRough = BloodArtNode<UMaterialExpressionConstant>(Material, -650, 500);
-		DirtRough->R = 0.92f;
+		auto* DirtRough = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -650, 500);  // wet mud a little less matte
+		DirtRough->ConstA = 0.95f;
+		DirtRough->ConstB = 0.78f;
+		BloodArtConnect(DirtDark, TEXT(""), DirtRough, TEXT("Alpha"));
 		auto* Roughness = BloodArtLerp(Material, -450, 450, DirtRough, TEXT(""), BloodRough, TEXT(""), BloodCover, TEXT(""));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Roughness, TEXT(""), MP_Roughness);
 		auto* BloodSpec = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -650, 600);
@@ -718,7 +799,7 @@ return cover;
 		// Opacity: the stronger of the two.
 		auto* DirtOpacity = BloodArtNode<UMaterialExpressionMultiply>(Material, -500, -150);
 		BloodArtConnect(DirtCover, TEXT(""), DirtOpacity, TEXT("A"));
-		DirtOpacity->ConstB = 0.8f;
+		DirtOpacity->ConstB = 0.9f;
 		auto* BloodOpacity = BloodArtNode<UMaterialExpressionMultiply>(Material, -500, 150);
 		BloodArtConnect(BloodCover, TEXT(""), BloodOpacity, TEXT("A"));
 		BloodOpacity->ConstB = 0.92f;
