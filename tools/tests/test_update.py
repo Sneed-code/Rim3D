@@ -33,7 +33,7 @@ class ArtStepsFile(unittest.TestCase):
         self.assertGreater(len(steps), 20)
         names = [s["name"] for s in steps]
         # The steps PC builds needed by hand on 2026-11-21 are all there.
-        for needed in ("hair-grow", "hair-grooms", "garments-fit", "makehuman-garments", "blood-art", "wet-look", "blast-art", "sounds", "gun-art"):
+        for needed in ("hair-grow", "hair-grooms", "garments-fit", "makehuman-garments", "blood-art", "wet-look", "blast-art", "sounds", "gun-art", "codex-models", "creator-bodies"):
             self.assertIn(needed, names)
         # WetLook goes over every material, so it comes last.
         self.assertEqual(names[-1], "wet-look")
@@ -112,6 +112,18 @@ class Fingerprints(unittest.TestCase):
             one = update.fingerprint(step, root)
             self.assertNotEqual(empty, one)
             self.assertEqual(one, update.fingerprint(step, root))
+
+    def test_outside_folder_placeholder(self):
+        with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as codex:
+            old = update.PLACES["codex"]
+            update.PLACES["codex"] = codex
+            self.addCleanup(update.PLACES.__setitem__, "codex", old)
+            step = {"name": "a", "raw": ["{codex}"], "run": [{"blender": ["--", "{codex}"]}]}
+            before = update.fingerprint(step, Path(repo))
+            (Path(codex) / "Mortar").mkdir()
+            (Path(codex) / "Mortar" / "Mortar.glb").write_bytes(b"glb")
+            self.assertNotEqual(before, update.fingerprint(step, Path(repo)))
+            self.assertEqual(update.command_line(step["run"][0], "", "blender")[-1], codex)
 
     def test_command_changes_the_fingerprint(self):
         a = update.fingerprint({"name": "a", "run": [{"python": ["x.py"]}]})
