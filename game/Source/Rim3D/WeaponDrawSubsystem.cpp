@@ -1378,12 +1378,12 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 			OutPinned.AddToTranslation(-Back);
 			FinisherShort = static_cast<float>(Back.Size());
 		}
-		// How far ahead of the shoulder the grip wants to be: bending further over only helps while it is ahead.
-		FinisherAhead = static_cast<float>(FVector::DotProduct(Out, Actor.GetActorForwardVector().GetSafeNormal2D()));
 		else
 		{
 			FinisherShort = 0.0f;
 		}
+		// How far ahead of the shoulder the grip wants to be: bending further over only helps while it is ahead.
+		FinisherAhead = static_cast<float>(FVector::DotProduct(Out, Actor.GetActorForwardVector().GetSafeNormal2D()));
 	}
 	// In over the first seventh, out over the last.
 	OutWeight = MeleePose::EaseInOut(FMath::Clamp(T / 0.14f, 0.0f, 1.0f)) * (1.0f - MeleePose::EaseInOut(FMath::Clamp((T - 0.86f) / 0.14f, 0.0f, 1.0f)));
