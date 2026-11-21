@@ -120,7 +120,7 @@ struct FSimWornPiece
 	/** On the overhead layer (hats and helmets): a MakeHuman body's strand hair takes its under-a-hat groom. */
 	bool bHeadwear = false;
 	/** cm a MakeHuman garment is pushed out along its normals, so a top hangs over trousers and a jacket over a shirt
-	 *  (both made to sit on the skin): 0.8 for a piece over the torso, plus 0.6 a layer above the skin. */
+	 *  (both made to sit on the skin): 1.5 for a piece over the torso (a belt is bulky), plus 0.6 a layer above the skin. */
 	float Puff = 0.0f;
 	/** The cuts a MakeHuman body can wear this piece as (`visual.cuts`, docs/design/clothes-draw.md "MakeHuman bodies"):
 	 *  each one or more garment names joined by '+'; the pawn draws one of them, picked by the item. */

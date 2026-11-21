@@ -390,7 +390,7 @@ FSimPawnApparel USimPawnSubsystem::MakeApparel(const colony::Snapshot& Snapshot,
 			Worn.bHeadwear = Worn.bHeadwear || Def.textAt("apparel.layers", L) == "Overhead";
 		}
 		Worn.bCoversCrotch = bOverLegs && bUnderShell;
-		Worn.Puff = (bOverTorso ? 0.8f : 0.0f) + 0.6f * static_cast<float>(LayerRank);
+		Worn.Puff = (bOverTorso ? 1.5f : 0.0f) + 0.6f * static_cast<float>(LayerRank);
 		if (Piece->stuff.valid() && Piece->stuff.value < Defs->size())
 		{
 			const colony::Def& Stuff = Defs->get(Piece->stuff);
