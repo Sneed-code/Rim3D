@@ -18,6 +18,12 @@ class USimSubsystem;
 class UTexture;
 class UTextureRenderTarget2D;
 struct ImGuiViewport;
+namespace colony
+{
+class DefDatabase;
+class Sim;
+struct Colonist;
+}
 
 /** The tabs of the bottom bar, left to right (docs/design/ui-layout.md). */
 enum class EHudTab : uint8
@@ -123,7 +129,10 @@ public:
 	void SetMainMenuPageForTest(int32 Page) { MainMenuPage = Page; }
 	/** The new game's seed and map size, and the people page's picked colonist and tab (smoke test `newgame`). */
 	void SetNewGameForTest(int32 Seed, int32 MapSize) { NewSeed = Seed; NewMapSize = MapSize; }
-	void SetPeopleForTest(int32 Selected, int32 Tab) { PeopleSelected = Selected; PeopleTab = Tab; }
+	/** Slot 0 opens "You", another slot "Your companions" on that stranger; Tab 0 traits, 1 looks. */
+	void SetPeopleForTest(int32 Selected, int32 Tab) { PeopleSelected = Selected; PeopleTab = Tab; MainMenuPage = Selected == 0 ? 3 : 4; }
+	void SetPeopleClothesForTest(bool bOn) { bPeopleClothes = bOn; }
+	void SetPeopleSpinForTest(float Rate) { PeopleSpinRate = Rate; }
 	/** Start on the people page, as the button does. */
 	void LandColonyForTest();
 
@@ -222,6 +231,10 @@ private:
 	void EndPeopleCamera();
 	/** Sends a colonist's creator look to the sim (EditColonistCommand) and remembers it. */
 	void SubmitPeopleLook(colony::Entity Pawn, int32 Slot, const CreatorPeople::FLook& Look);
+	/** The character screens' parts (ColonyHudNewGame.cpp): names, the looks sliders, the trait shop and skills. */
+	void DrawPeopleNames(const colony::DefDatabase& Defs, const colony::Colonist& Colonist, colony::Entity Picked, int32 Slot, float Scale);
+	void DrawPeopleLooks(const colony::Sim& Sim, colony::Entity Picked, int32 Slot, bool bYou, float Scale);
+	void DrawTraitShop(const colony::Sim& Sim, const colony::Colonist& Colonist, int32 Slot, float Scale);
 
 	// The learning helper (ColonyHudLessons.cpp).
 	void DrawLessons(USimSubsystem& Bridge, float Scale);
@@ -275,7 +288,7 @@ private:
 	// The main menu: its page and the new colony's choices.
 	bool bMainMenuOpen = false;
 	bool bMainMenuChecked = false;
-	int32 MainMenuPage = 0;  // 0 the title, 1 new colony (scenario), 2 load, 3 people (docs/design/new-game.md)
+	int32 MainMenuPage = 0;  // 0 the title, 1 new colony (scenario), 2 load, 3 you, 4 your companions (docs/design/new-game.md)
 	FString NewScenario = TEXT("CrashLanded");
 	FString NewNarrator = TEXT("Orrin");
 	// The only difficulty for now, never shown (sneed 2026-11-21: "standard").
@@ -285,13 +298,16 @@ private:
 	int32 PeopleSelected = 0;
 	int32 PeopleGeneration = -1;
 	int32 PeopleRerolls = 0;
-	int32 PeopleTab = 0;  // 0 story and skills, 1 looks
+	int32 PeopleTab = 0;  // on the companions screen: 0 traits and skills, 1 looks
+	uint32 PeopleTraitRoll = 0;
+	bool bPeopleClothes = false;  // "clothes on": the cargo pack's cotton on everyone, cosmetic
+	float PeopleSpin = 0.0f;      // the turntable, degrees past the body's facing
+	float PeopleSpinRate = 0.0f;  // degrees a second, easing off after a drag
 	TMap<uint32, FString> PeopleLooks;  // by pawn: the look text being edited (shown before the sim has it)
 	colony::Entity PeopleNamesFor = colony::kNoEntity;
 	char PeopleFirst[32] = {};
 	char PeopleNick[32] = {};
 	char PeopleLast[32] = {};
-	float PeopleYaw = 200.0f;
 	float PeoplePitch = -4.0f;
 	float PeopleDistance = 280.0f;
 	TWeakObjectPtr<ACameraActor> PeopleCamera;

@@ -386,7 +386,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 			DrawnYaw = FRotator::NormalizeAxis(Yaw + FMath::Sign(Behind) * PawnDrawnYawMaxLag);
 		}
 	}
-	SetActorLocationAndRotation(Location, FRotator(0.0, DrawnYaw, 0.0));
+	SetActorLocationAndRotation(Location, FRotator(0.0, DrawnYaw + PreviewSpin, 0.0));
 	ApplySevered(Now.severed);
 	UpdateFightFace(Bridge, Now, DeltaTime * Speed);
 	if (bRagdoll)

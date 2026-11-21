@@ -1183,6 +1183,18 @@ struct EditColonistCommand {
     std::string creator;
 };
 
+// Before the game starts, from the new-game companions screen (docs/design/new-game.md): gives the starting colonist
+// in slot `slot` these traits, bought from the scenario's `traitPoints` pool (negative traits give points).
+// `traits` is "Def:degree" entries split by ';' (a degree of 0 may be left out). With `randomize` the traits are drawn
+// instead (all points spent), from the game seed, the slot and `roll`. Fails later in the game, for a bad slot, the
+// protagonist (no traits), a scenario without trait points, or a set that doesn't fit the pool (traitSetFits).
+struct SetColonistTraitsCommand {
+    int slot = 0;
+    std::string traits;
+    bool randomize = false;
+    uint32_t roll = 0;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -1219,7 +1231,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SleepCommand, SetLandingZoneCommand,
                              PatchCommand, SetAlertCommand, FocusCommand, SetFightResponseCommand,
                              LevelEarthCommand, CancelEarthworksCommand, UnstuckCommand, SetWorkGroupCommand,
-                             SetGrimeCommand, EditColonistCommand>;
+                             SetGrimeCommand, EditColonistCommand, SetColonistTraitsCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
 // day) it was applied in. Failed commands are logged too.

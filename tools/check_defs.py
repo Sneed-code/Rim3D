@@ -75,6 +75,7 @@ REFERENCES = [
     ("Hediffs", "stages[].capacityOffsets{}", "Capacities"),
     ("Hediffs", "stages[].capacityMax{}", "Capacities"),
     ("Scenarios", "startingThings[].thing", "Things"),
+    ("Scenarios", "startingThings[].stuff", "Things"),
     ("Scenarios", "nearbyThings[].thing", "Things"),
     ("Scenarios", "scatteredThings[].thing", "Things"),
     ("Scenarios", "colonistKind", "Things"),

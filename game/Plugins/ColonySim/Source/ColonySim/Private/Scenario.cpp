@@ -83,7 +83,12 @@ Entity Sim::makeScenarioColonist(const Def& scenario, CellPos cell, uint64_t col
     }
     Colonist colonist;
     std::string error;
-    if (!generateColonist(*defs_, colonistSeed, protagonist, colonist, error, gearKind ? gearKind->text("backstoryCategory", "Colony") : "Colony")) {
+    ColonistGenOptions options;
+    options.category = gearKind ? gearKind->text("backstoryCategory", "Colony") : "Colony";
+    options.traitPoints = scenarioTraitPoints();
+    options.noTraits = protagonist && options.traitPoints >= 0;  // who YOU are is cosmetic for now (sneed 2026-11-21)
+    options.age = protagonist ? 0 : static_cast<int>(scenario.integer("colonistAge", 0));
+    if (!generateColonist(*defs_, colonistSeed, protagonist, colonist, error, options)) {
         setupErrors_.push_back(who + error);
         return kNoEntity;
     }
@@ -179,6 +184,78 @@ bool Sim::rerollColonist(int slot, std::string& error) {
         error = setupErrors_.size() > errorsBefore ? setupErrors_.back() : "the colonist could not be made";
         return false;
     }
+    return true;
+}
+
+int Sim::scenarioTraitPoints() const {
+    const Def* scenario = defs_->find("Scenarios", settings_.scenario);
+    return scenario != nullptr && scenario->has("traitPoints") ? static_cast<int>(scenario->integer("traitPoints", 0)) : -1;
+}
+
+// The companions screen's traits (docs/design/new-game.md): a starting colonist's traits, bought from the scenario's
+// point pool, before the first step. Skills keep their base and take the new traits' gains; work follows the traits.
+bool Sim::setStartingTraits(const SetColonistTraitsCommand& command, std::string& error) {
+    if (time_.seconds != 0) {
+        error = "traits can only be chosen before the game starts";
+        return false;
+    }
+    const int pool = scenarioTraitPoints();
+    if (pool < 0) {
+        error = "this scenario's people come with backstories, not trait points";
+        return false;
+    }
+    const std::vector<Entity> slots = startingColonistSlots();
+    if (command.slot < 0 || static_cast<size_t>(command.slot) >= slots.size()) {
+        error = "there is no starting colonist " + std::to_string(command.slot);
+        return false;
+    }
+    const Entity pawn = slots[static_cast<size_t>(command.slot)];
+    Colonist& colonist = things_->registry().get<Colonist>(pawn);
+    if (colonist.protagonist) {
+        error = "who you are has no traits to choose";
+        return false;
+    }
+    std::vector<TraitRecord> traits;
+    if (command.randomize) {
+        traits = randomTraitSet(*defs_, splitMix64(settings_.seed ^ 0x7472616974726F6CULL ^ (static_cast<uint64_t>(command.slot) << 40) ^
+                                                   command.roll),
+                                pool);
+    } else {
+        if (command.traits.size() > 1024) {
+            error = "too many traits";
+            return false;
+        }
+        size_t start = 0;
+        while (start < command.traits.size()) {
+            size_t end = command.traits.find(';', start);
+            if (end == std::string::npos) {
+                end = command.traits.size();
+            }
+            const std::string entry = command.traits.substr(start, end - start);
+            start = end + 1;
+            if (entry.empty()) {
+                continue;
+            }
+            const size_t colon = entry.find(':');
+            TraitRecord record;
+            record.def = entry.substr(0, colon);
+            if (colon != std::string::npos) {
+                const std::string degree = entry.substr(colon + 1);
+                const bool negative = !degree.empty() && degree[0] == '-';
+                if (degree.size() != (negative ? 2u : 1u) || degree.back() < '0' || degree.back() > '9') {
+                    error = "bad trait degree in '" + entry + "'";
+                    return false;
+                }
+                record.degree = (degree.back() - '0') * (negative ? -1 : 1);
+            }
+            traits.push_back(record);
+        }
+    }
+    if (!traitSetFits(*defs_, traits, pool, error)) {
+        return false;
+    }
+    setColonistTraits(*defs_, colonist, traits);
+    things_->registry().emplace_or_replace<WorkSettings>(pawn, jobs_->defaultWorkSettings(colonist.disabledWorkTags));
     return true;
 }
 
@@ -335,7 +412,14 @@ void Sim::startScenario() {
                 setupErrors_.push_back("scenario '" + settings_.scenario + "': no Things def '" + name + "'");
                 return;
             }
-            const int limit = std::max(1, static_cast<int>(defs_->get(item).integer("stackLimit", 1)));
+            // Clothes come made of a stuff (Crash Landed's cotton shirts and trousers): one piece per cell.
+            const std::string stuffName = scenario->text((base + ".stuff").c_str());
+            const DefId stuff = stuffName.empty() ? DefId{} : defs_->idOf("Things", stuffName);
+            if (!stuffName.empty() && !stuff.valid()) {
+                setupErrors_.push_back("scenario '" + settings_.scenario + "': no Things def '" + stuffName + "'");
+                return;
+            }
+            const int limit = stuff.valid() ? 1 : std::max(1, static_cast<int>(defs_->get(item).integer("stackLimit", 1)));
             for (int left = static_cast<int>(scenario->integer((base + ".count").c_str(), 0)); left > 0; left -= limit) {
                 size_t index = firstCell;
                 if (scatter) {
@@ -344,8 +428,10 @@ void Sim::startScenario() {
                 while (index < cells.size() && used.count(map_.index(cells[index])) != 0) {
                     ++index;
                 }
-                if (index >= cells.size() ||
-                    things_->spawn(item, cells[index], std::min(left, limit)) == kNoEntity) {
+                const Entity made = index >= cells.size() ? kNoEntity
+                                    : stuff.valid()       ? apparel_->make(item, stuff, -1, cells[index])
+                                                          : things_->spawn(item, cells[index], std::min(left, limit));
+                if (made == kNoEntity) {
                     setupErrors_.push_back("scenario '" + settings_.scenario + "': no room for '" + name + "'");
                     return;
                 }
@@ -369,7 +455,9 @@ Entity Sim::joinColonist(CellPos cell, uint64_t seed) {
     const DefId kind = defs_->idOf("Things", scenario->text("colonistKind", "Human"));
     Colonist colonist;
     std::string error;
-    if (!kind.valid() || !generateColonist(*defs_, seed, false, colonist, error)) {
+    ColonistGenOptions options;
+    options.traitPoints = scenarioTraitPoints();
+    if (!kind.valid() || !generateColonist(*defs_, seed, false, colonist, error, options)) {
         return kNoEntity;
     }
     makeNameUnique(colonist, seed);

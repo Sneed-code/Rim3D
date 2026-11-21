@@ -314,6 +314,8 @@ public:
     const Colonist* colonistOf(Entity pawn) const;
     // The player's colonists in slot order (by entity index), as RerollColonist and EditColonist count them.
     std::vector<Entity> startingColonistSlots() const;
+    // The scenario's trait-point pool (its `traitPoints`), or -1 when its people have backstories.
+    int scenarioTraitPoints() const;
     // The kill feed (docs/design/kill-feed.md). A PawnDied event's `target` is the killer: whoever last hurt the pawn with
     // a bullet, blow or blast within kKillCreditSteps, unless it died of something else (hunger, cold, illness...).
     // Which colour a name shows in, seen from the player: friendly (the colony, its tame animals), enemy (raiders,
@@ -606,6 +608,8 @@ private:
     bool rerollColonist(int slot, std::string& error);
     // EditColonist: names, gender and the creator's look of a starting colonist, before the first step.
     bool editColonist(const EditColonistCommand& edit, std::string& error);
+    // SetColonistTraits: a starting colonist's traits from the scenario's point pool, before the first step.
+    bool setStartingTraits(const SetColonistTraitsCommand& command, std::string& error);
 
     // Gives a new pawn its looks if it is humanlike (its def names no other intelligence).
     Entity makeJoiner(CellPos cell, uint64_t seed);

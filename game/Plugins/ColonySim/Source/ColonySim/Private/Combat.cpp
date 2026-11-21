@@ -655,8 +655,9 @@ float combatPowDistance(float a, float d) {
 float combatLerp(float a, float b, float t) { return a + (b - a) * t; }
 
 // A CombatRules value given at Shooting skill 0 and 20, at this skill.
+// Past 20 (a skill trait's bonus) the line goes on.
 float combatBySkill(const float (&v)[2], int skill) {
-    return combatLerp(v[0], v[1], static_cast<float>(std::clamp(skill, 0, 20)) / 20.0f);
+    return combatLerp(v[0], v[1], static_cast<float>(std::clamp(skill, 0, kSkillLevelLimit)) / 20.0f);
 }
 
 Stance combatStanceOf(const entt::registry& reg, Entity pawn) {
@@ -790,7 +791,7 @@ int CombatSystem::shootingSkill(Entity pawn) const {
     if (const Colonist* colonist = things_.registry().try_get<Colonist>(pawn)) {
         for (const SkillRecord& skill : colonist->skills) {
             if (skill.def == "Shooting") {
-                return std::clamp(skill.level + bonus, 0, 20);
+                return std::clamp(skill.level + bonus, 0, kSkillLevelLimit);
             }
         }
     }
@@ -824,7 +825,12 @@ float CombatSystem::spread(DefId weapon, int skill, float distance, bool player,
         return model_->radiusFor(hit) / d * model_->playerSpreadFactor;
     }
     const float d = std::max(distance, 1.0f);
-    const float shooter = combatPowDistance(model_->accuracyBySkill[std::clamp(skill, 0, 20)], d);
+    // Past 20 (a skill trait's bonus) each level adds what the 19-to-20 step added, short of certainty.
+    float perShot = model_->accuracyBySkill[std::clamp(skill, 0, 20)];
+    if (skill > 20) {
+        perShot = std::min(0.995f, perShot + (model_->accuracyBySkill[20] - model_->accuracyBySkill[19]) * static_cast<float>(skill - 20));
+    }
+    const float shooter = combatPowDistance(perShot, d);
     const float hit = std::clamp(shooter * gunAccuracy(d) * accuracyFactor, model_->minHitChance, 1.0f);
     return model_->radiusFor(hit) / d;
 }

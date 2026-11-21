@@ -7,6 +7,7 @@
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Skills.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
 
@@ -77,6 +78,20 @@ int newGameItemsNear(const Sim& sim, const char* def, Position at, float radius)
     return total;
 }
 
+// Pieces of `def` lying within `radius` metres of `at` (apparel has no stack count).
+int newGamePiecesNear(const Sim& sim, const char* def, Position at, float radius) {
+    int total = 0;
+    const DefId id = sim.defs().idOf("Things", def);
+    for (const auto [e, thing, pos] : sim.things().registry().view<const Thing, const Position>().each()) {
+        const float dx = pos.x - at.x;
+        const float dy = pos.y - at.y;
+        if (thing.def == id && sim.things().spawned(e) && std::sqrt(dx * dx + dy * dy) <= radius) {
+            ++total;
+        }
+    }
+    return total;
+}
+
 std::map<uint64_t, std::string> newGameFailures(const Sim& sim) {
     std::map<uint64_t, std::string> failed;
     for (const Event& e : sim.events()) {
@@ -89,7 +104,7 @@ std::map<uint64_t, std::string> newGameFailures(const Sim& sim) {
 
 }  // namespace
 
-TEST_CASE("Crash Landed: the player and two human strangers with sneed's starting kit") {
+TEST_CASE("Crash Landed: the amnesiac player and two 18-year-old strangers, naked, with sneed's starting kit") {
     const auto defs = newGameDefs();
     const Def* scenario = defs->find("Scenarios", "CrashLanded");
     NG_REQUIRE(scenario != nullptr);
@@ -111,6 +126,21 @@ TEST_CASE("Crash Landed: the player and two human strangers with sneed's startin
         NG_REQUIRE(looks != nullptr);
         CHECK(looks->lineage == "Baseline");  // humans only for now
         CHECK(looks->creator.empty());
+        // No backstories: traits from the 10-point pool, all spent; who YOU are has none.
+        CHECK(c.childhood.empty());
+        CHECK(c.adulthood.empty());
+        if (c.protagonist) {
+            CHECK(c.traits.empty());
+        } else {
+            CHECK(c.age == 18);
+            CHECK_FALSE(c.traits.empty());
+            CHECK(traitPointsSpent(*defs, c.traits) == 10);
+            std::string why;
+            CHECK(traitSetFits(*defs, c.traits, 10, why));
+        }
+        // Everyone lands naked.
+        const Gear* worn = sim.things().registry().try_get<Gear>(e);
+        CHECK((worn == nullptr || worn->apparel.empty()));
     }
     CHECK(protagonists == 1);
     CHECK(sim.things().registry().get<Colonist>(people[0]).protagonist);
@@ -123,6 +153,9 @@ TEST_CASE("Crash Landed: the player and two human strangers with sneed's startin
     CHECK(newGameItemsNear(sim, "ComponentIndustrial", at, 12.0f) == 30);
     CHECK(newGameItemsNear(sim, "Gun_BoltActionRifle", at, 12.0f) == 1);
     CHECK(newGameItemsNear(sim, "WoodLog", at, 12.0f) == 0);
+    // The cargo pack's cotton shirt and trousers for each of the three.
+    CHECK(newGamePiecesNear(sim, "Apparel_TShirt", at, 12.0f) == 3);
+    CHECK(newGamePiecesNear(sim, "Apparel_Pants", at, 12.0f) == 3);
     for (const Entity e : people) {
         const Gear* gear = sim.things().registry().try_get<Gear>(e);
         CHECK((gear == nullptr || gear->weapon == kNoEntity));
@@ -247,4 +280,157 @@ TEST_CASE("Crash Landed: the character screen's edits apply at once before the s
     twin.submit(RerollColonistCommand{2});
     twin.step();
     CHECK(twin.stateHash() == sim.stateHash());
+}
+
+TEST_CASE("Trait points: colonists made this way spend the whole pool, and skill traits pass 20") {
+    const auto defs = newGameDefs();
+    int seenSkillTrait = 0;
+    int seenNegative = 0;
+    for (uint64_t seed = 1; seed <= 300; ++seed) {
+        Colonist c;
+        std::string error;
+        ColonistGenOptions options;
+        options.traitPoints = 10;
+        NG_REQUIRE(generateColonist(*defs, seed, false, c, error, options));
+        CHECK(c.childhood.empty());
+        CHECK(traitPointsSpent(*defs, c.traits) == 10);
+        CHECK(traitSetFits(*defs, c.traits, 10, error));
+        for (const TraitRecord& t : c.traits) {
+            seenNegative += traitPointCost(*defs, t) < 0 ? 1 : 0;
+            if (t.def == "NaturalMarksman") {
+                ++seenSkillTrait;
+                const SkillRecord* shooting = c.skill("Shooting");
+                NG_REQUIRE(shooting != nullptr);
+                CHECK(shooting->bonus == 3);
+                CHECK(shooting->level >= 3);
+            }
+        }
+        for (const SkillRecord& s : c.skills) {
+            CHECK(s.level >= 0);
+            CHECK(s.level <= 20 + std::max(0, s.bonus));
+        }
+    }
+    CHECK(seenSkillTrait > 0);
+    CHECK(seenNegative > 0);
+
+    // The backstory way is unchanged: no point-only traits drawn there.
+    for (uint64_t seed = 1; seed <= 200; ++seed) {
+        Colonist c;
+        std::string error;
+        NG_REQUIRE(generateColonist(*defs, seed, false, c, error));
+        CHECK_FALSE(c.childhood.empty());
+        for (const TraitRecord& t : c.traits) {
+            const Def* trait = defs->find("Traits", t.def);
+            CHECK((trait != nullptr && !trait->flag("pointsOnly")));
+        }
+    }
+
+    // A +3 skill learns up to 23, and no further.
+    SkillRules rules = SkillRules::read(*defs);
+    SkillRecord skill;
+    skill.def = "Shooting";
+    skill.level = 20;
+    skill.bonus = 3;
+    skill.passion = Passion::Major;
+    for (int i = 0; i < 400; ++i) {
+        learnSkillXp(rules, skill, 5000.0);
+        skill.xpToday = 0.0f;
+    }
+    CHECK(skill.level == 23);
+    skillDayPassed(rules, skill);
+    CHECK(skill.level >= 22);
+    SkillRecord plain;
+    plain.level = 20;
+    for (int i = 0; i < 100; ++i) {
+        learnSkillXp(rules, plain, 5000.0);
+    }
+    CHECK(plain.level == 20);
+
+    // Tough is -30% damage taken (sneed), not RimWorld's -50%.
+    const Def* tough = defs->find("Traits", "Tough");
+    NG_REQUIRE(tough != nullptr);
+    CHECK(tough->number("degreeDatas.0.statFactors.incomingDamageFactor", 0.0) == doctest::Approx(0.7));
+    CHECK(traitPointCost(*defs, TraitRecord{"Tough", 0}) == 5);
+    CHECK(traitPointCost(*defs, TraitRecord{"SpeedOffset", 1}) == 1);
+    CHECK(traitPointCost(*defs, TraitRecord{"SpeedOffset", 2}) == 3);
+    CHECK(traitPointCost(*defs, TraitRecord{"Wimp", 0}) < 0);
+}
+
+TEST_CASE("Crash Landed: the companions screen buys and randomizes traits, before the start only") {
+    const auto defs = newGameDefs();
+    Sim sim(newGameSettings(13), defs);
+    NG_REQUIRE(newGameColonists(sim).size() == 3);
+    const Entity stranger = newGameColonists(sim)[1];
+
+    SetColonistTraitsCommand buy;
+    buy.slot = 1;
+    buy.traits = "Tough;NaturalMarksman;Wimp;SpeedOffset:2;Pacifist";  // 5 + 3 - 3 + 3 - 4 = 4, but Pacifist clashes with the marksman
+    const uint64_t clash = sim.submit(buy);
+    SetColonistTraitsCommand tooMuch;
+    tooMuch.slot = 1;
+    tooMuch.traits = "Tough;Industriousness:2;NaturalMarksman";  // 13 points
+    const uint64_t over = sim.submit(tooMuch);
+    SetColonistTraitsCommand you;
+    you.slot = 0;
+    you.traits = "Kind";
+    const uint64_t protagonist = sim.submit(you);
+    SetColonistTraitsCommand good;
+    good.slot = 1;
+    good.traits = "Tough;NaturalMarksman;Wimp;SpeedOffset:2;Pampered";  // 5 + 3 - 3 + 3 - 3 = 5
+    const uint64_t ok = sim.submit(good);
+    CHECK(sim.applyPregameCommands());
+    const auto failed = newGameFailures(sim);
+    CHECK(failed.count(clash) == 1);
+    CHECK(failed.count(over) == 1);
+    CHECK(failed.count(protagonist) == 1);
+    CHECK(failed.count(ok) == 0);
+
+    const Colonist& c = sim.things().registry().get<Colonist>(stranger);
+    CHECK(c.traits.size() == 5);
+    CHECK(traitPointsSpent(*defs, c.traits) == 5);
+    const SkillRecord* shooting = c.skill("Shooting");
+    NG_REQUIRE(shooting != nullptr);
+    CHECK(shooting->bonus == 3);
+    CHECK(std::binary_search(c.disabledWorkTags.begin(), c.disabledWorkTags.end(), std::string("ManualDumb")));
+    const int shootingWith = shooting->level;
+
+    // Taking the marksman away gives back the base level.
+    SetColonistTraitsCommand fewer;
+    fewer.slot = 1;
+    fewer.traits = "Tough";
+    sim.submit(fewer);
+    CHECK(sim.applyPregameCommands());
+    CHECK(sim.things().registry().get<Colonist>(stranger).skill("Shooting")->level == shootingWith - 3);
+    CHECK(sim.things().registry().get<Colonist>(stranger).disabledWorkTags.empty());
+
+    // Random traits spend the whole pool; the same roll gives the same traits.
+    SetColonistTraitsCommand dice;
+    dice.slot = 2;
+    dice.randomize = true;
+    dice.roll = 7;
+    sim.submit(dice);
+    CHECK(sim.applyPregameCommands());
+    const std::vector<TraitRecord> rolled = sim.things().registry().get<Colonist>(newGameColonists(sim)[2]).traits;
+    CHECK(traitPointsSpent(*defs, rolled) == 10);
+
+    Sim twin(newGameSettings(13), defs);
+    for (const SetColonistTraitsCommand& command : {buy, tooMuch, you, good, fewer, dice}) {
+        twin.submit(command);
+    }
+    twin.step();
+    sim.step();
+    CHECK(twin.stateHash() == sim.stateHash());
+    SaveLoadResult loaded = loadSim(saveSim(sim), defs);
+    NG_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.sim->stateHash() == sim.stateHash());
+    Replay replay;
+    std::string error;
+    CHECK(readReplay(writeReplay(recordReplay(sim)), replay, error));
+
+    SetColonistTraitsCommand late;
+    late.slot = 1;
+    late.traits = "Kind";
+    const uint64_t lateId = sim.submit(late);
+    sim.step();
+    CHECK(newGameFailures(sim).count(lateId) == 1);
 }

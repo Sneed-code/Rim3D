@@ -47,6 +47,8 @@ const char* bridgeLateCommandName() {
         return "SetGrime";
     } else if constexpr (std::is_same_v<Type, EditColonistCommand>) {
         return "EditColonist";
+    } else if constexpr (std::is_same_v<Type, SetColonistTraitsCommand>) {
+        return "SetColonistTraits";
     } else {
         // FocusCommand and SetFightResponseCommand are named before the visit (commandName).
         static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||

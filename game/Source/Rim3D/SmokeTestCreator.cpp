@@ -2013,8 +2013,11 @@ namespace
 	{
 		FCreatorPerson Person;
 		Person.bFemale = bFemale;
-		FRandomStream Random(Seed);
-		CreatorRandomize(Person, Random);
+		if (Seed >= 0) // a negative seed is the creator's untouched base person (DefaultLooks): the gun range's woman
+		{
+			FRandomStream Random(Seed);
+			CreatorRandomize(Person, Random);
+		}
 		Person.Looks.bFemale = bFemale;
 		Person.Looks.MakeHuman = bFemale ? TEXT("CreatorFemale") : TEXT("CreatorMale");
 		return Person;

@@ -523,6 +523,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     trade_->setTalents(talents_.get());
     trade_->setRunning([this](Entity building) { return power_->running(building); });
     trade_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    raids_->setTraitPoints(scenarioTraitPoints());
+    trade_->setTraitPoints(scenarioTraitPoints());
     landing_ = std::make_unique<LandingSystem>(*things_, map_, *plants_, *defs_, time_, rng_);
     trade_->setLanding(landing_.get());
     landing_->setOnLanded([this](const Shuttle& shuttle) { trade_->shuttleLanded(shuttle); });
@@ -961,7 +963,9 @@ void Sim::placeStockpileAndThings() {
 Entity Sim::makeJoiner(CellPos cell, uint64_t seed) {
     Colonist colonist;
     std::string error;
-    if (!generateColonist(*defs_, seed, false, colonist, error)) {
+    ColonistGenOptions options;
+    options.traitPoints = scenarioTraitPoints();
+    if (!generateColonist(*defs_, seed, false, colonist, error, options)) {
         return kNoEntity;
     }
     makeNameUnique(colonist, seed);
@@ -1348,6 +1352,13 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     if (const auto* edit = std::get_if<EditColonistCommand>(&command)) {
         error.clear();
         if (!editColonist(*edit, error)) {
+            commandFailed(id, error);
+        }
+        return;
+    }
+    if (const auto* setTraits = std::get_if<SetColonistTraitsCommand>(&command)) {
+        error.clear();
+        if (!setStartingTraits(*setTraits, error)) {
             commandFailed(id, error);
         }
         return;
@@ -3863,6 +3874,9 @@ uint64_t Sim::stateHash() const {
                 h.add(s.xp);
                 h.add(s.xpToday);
                 h.add(s.disabled);
+                if (s.bonus != 0) {
+                    h.add(s.bonus);  // only when set, so older hashes stay
+                }
             }
             for (const std::string& tag : c->disabledWorkTags) {
                 h.add(tag.data(), tag.size());

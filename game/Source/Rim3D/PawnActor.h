@@ -89,6 +89,10 @@ public:
 	/** Puts the character screen's look (PawnLooks::creator text, docs/design/new-game.md) on the MakeHuman body once it
 	 *  is on, and again whenever the text changes or the body is remade. Call every frame with the pawn's text. */
 	void ApplyCreatorLook(const FString& Text);
+	/** The character screen's turntable (docs/design/new-game.md): turns the drawn body this many degrees past its
+	 *  facing, cosmetic only. The body really turns, so soft tissue and hair swing as it spins. 0 to stop. */
+	void SetPreviewSpin(float Degrees) { PreviewSpin = Degrees; }
+	float GetPreviewSpin() const { return PreviewSpin; }
 	/** The MetaHuman's body (with the whole body, all of its skin); null for a mannequin. */
 	USkeletalMeshComponent* GetSkinBody() const { return MetaHumanBody; }
 	/** The eye slots of the face (left, right). */
@@ -512,6 +516,8 @@ private:
 	 *  starts and stops turning smoothly; and how fast it turns (degrees a second). */
 	float DrawnYaw = 0.0f;
 	float DrawnYawRate = 0.0f;
+	/** The character screen's turntable (SetPreviewSpin), on top of the facing. */
+	float PreviewSpin = 0.0f;
 	/** How much of a whole-body clip shows now (the clip playing and the one fading out). */
 	float LegsClipWeight = 0.0f;
 	float SwimLiftCm = 0.0f;

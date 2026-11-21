@@ -1,6 +1,7 @@
 // Smoke test `newgame` (docs/design/new-game.md): the title screen, the scenario page, then a Crash Landed start on a
-// random tropical site straight into the people page (the three colonists on their creator bodies), its Looks tab after
-// a reroll, and the landing; one screenshot each, at 1080p, UI included.
+// random tropical site straight into "You" (the creator's default woman, naked), the same with clothes on and spinning,
+// "Your companions" (traits and skills, after random traits), its Looks tab after a reroll, and the landing; one
+// screenshot each, at 1080p, UI included.
 #include "SmokeTest.h"
 
 #include "Engine/Engine.h"
@@ -11,6 +12,7 @@
 #include "SimSubsystem.h"
 
 #include "ColonySim/Colonist.h"
+#include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Sim.h"
@@ -89,7 +91,7 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 	ScenarioPhase.Setup = [=, this]() { Hud()->SetMainMenuPageForTest(1); };
 	Phases.Add(MoveTemp(ScenarioPhase));
 
-	// 3. Land somewhere random: the people page with the three on their creator bodies.
+	// 3. Land somewhere random: "You", with the three on their creator bodies.
 	FPhase PeoplePhase;
 	PeoplePhase.Name = TEXT("newgame_people");
 	PeoplePhase.WarmupSeconds = 8.0f;
@@ -107,7 +109,7 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 		const colony::Sim* Sim = Bridge()->GetSim();
 		if (!Sim || Hud()->GetMainMenuPage() != 3 || !Hud()->IsMainMenuOpen())
 		{
-			Fail(TEXT("newgame_people: the people page is not open"));
+			Fail(TEXT("newgame_people: the You page is not open"));
 			return;
 		}
 		if (Sim->time().steps != 0)
@@ -135,11 +137,89 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 				Fail(TEXT("newgame_people: a colonist is not drawn on its MakeHuman body"));
 			}
 		}
+		// You are the creator's own woman, untouched (the gun range's), so hair and body updates show on you.
+		const colony::PawnLooks* YourLooks = Sim->things().registry().try_get<colony::PawnLooks>(People[0]);
+		const colony::Colonist* You = Sim->colonistOf(People[0]);
+		if (!You || !You->female || !YourLooks || YourLooks->creator.rfind("seed=-1;", 0) != 0)
+		{
+			Fail(TEXT("newgame_people: you are not the creator's default woman"));
+		}
+		if (You && !You->traits.empty())
+		{
+			Fail(TEXT("newgame_people: you have traits (who you are is cosmetic for now)"));
+		}
 		State->RerolledName = Sim->colonistOf(People[2]) ? Sim->colonistOf(People[2])->firstName : std::string();
 	};
 	Phases.Add(MoveTemp(PeoplePhase));
 
-	// 4. The Looks tab on the first stranger, after a reroll of the second.
+	// 3b. Clothes on, spinning: the cargo pack's cotton shown on the body (cosmetic), the body turning on the turntable.
+	FPhase ClothesPhase;
+	ClothesPhase.Name = TEXT("newgame_you_clothes");
+	ClothesPhase.WarmupSeconds = 1.2f;
+	ClothesPhase.MeasureSeconds = 0.3f;
+	ClothesPhase.Setup = [=, this]()
+	{
+		Hud()->SetPeopleClothesForTest(true);
+		Hud()->SetPeopleSpinForTest(240.0f);
+	};
+	ClothesPhase.Verify = [=, this]()
+	{
+		const colony::Sim* Sim = Bridge()->GetSim();
+		const std::vector<colony::Entity> People = Sim ? Sim->startingColonistSlots() : std::vector<colony::Entity>();
+		const ASimPawnActor* Actor = People.empty() ? nullptr : Pawns()->FindPawn(People[0]);
+		UE_LOG(LogTemp, Display, TEXT("NEWGAME clothes on: %d pieces drawn, spin %.0f degrees"), Actor ? Actor->GetApparel().Pieces.Num() : -1,
+			Actor ? Actor->GetPreviewSpin() : 0.0f);
+		if (!Actor || Actor->GetApparel().Pieces.Num() != 2)
+		{
+			Fail(TEXT("newgame_you_clothes: the cotton shirt and trousers are not on the body"));
+		}
+		const colony::Gear* Worn = People.empty() ? nullptr : Sim->things().registry().try_get<colony::Gear>(People[0]);
+		if (Worn && !Worn->apparel.empty())
+		{
+			Fail(TEXT("newgame_you_clothes: the preview put real clothes on in the sim"));
+		}
+		Hud()->SetPeopleClothesForTest(false);
+	};
+	Phases.Add(MoveTemp(ClothesPhase));
+
+	// 3c. Your companions: random traits for the first stranger, the traits and skills shown.
+	FPhase CompanionsPhase;
+	CompanionsPhase.Name = TEXT("newgame_companions");
+	CompanionsPhase.WarmupSeconds = 2.5f;
+	CompanionsPhase.MeasureSeconds = 0.5f;
+	CompanionsPhase.Setup = [=, this]()
+	{
+		Hud()->SetPeopleForTest(1, 0);
+		colony::SetColonistTraitsCommand Dice;
+		Dice.slot = 1;
+		Dice.randomize = true;
+		Dice.roll = 3;
+		Bridge()->Submit(Dice);
+	};
+	CompanionsPhase.Verify = [=, this]()
+	{
+		const colony::Sim* Sim = Bridge()->GetSim();
+		const std::vector<colony::Entity> People = Sim ? Sim->startingColonistSlots() : std::vector<colony::Entity>();
+		if (Hud()->GetMainMenuPage() != 4 || People.size() != 3 || Sim->time().steps != 0)
+		{
+			Fail(TEXT("newgame_companions: the companions page is not open, or the game started"));
+			return;
+		}
+		for (size_t Slot = 1; Slot < People.size(); ++Slot)
+		{
+			const colony::Colonist* C = Sim->colonistOf(People[Slot]);
+			const int32 Spent = C ? colony::traitPointsSpent(Sim->defs(), C->traits) : -1;
+			UE_LOG(LogTemp, Display, TEXT("NEWGAME companion %s: age %d, %d traits, %d of 10 points"), *NewGameSmokeName(*Sim, People[Slot]), C ? C->age : -1,
+				C ? static_cast<int32>(C->traits.size()) : -1, Spent);
+			if (!C || C->age != 18 || Spent != 10)
+			{
+				Fail(TEXT("newgame_companions: a companion is not 18 with all 10 trait points spent"));
+			}
+		}
+	};
+	Phases.Add(MoveTemp(CompanionsPhase));
+
+	// 4. The companions' Looks tab on the first stranger, after a reroll of the second.
 	FPhase LooksPhase;
 	LooksPhase.Name = TEXT("newgame_looks");
 	LooksPhase.WarmupSeconds = 3.0f;

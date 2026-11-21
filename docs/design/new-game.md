@@ -1,8 +1,10 @@
 # Title screen and new game
 
 sneed (2026-11-21): a title screen with saves and scenarios, nicer than RimWorld's. One scenario for now, **Crash
-landed**; a character screen in RimWorld's format with the 3D person; humans only (other races shown, locked); one
-difficulty, "standard", not shown; world generation with a landing site (tropical only for now). sneed will add details.
+landed**; character creation with the 3D person; humans only (other races shown, locked); one difficulty, "standard",
+not shown; world generation with a landing site (tropical only for now). Later the same day: creation in **two parts**
+(You, cosmetic only; then the two companions with a trait-point pool), you are an **amnesiac**, everyone lands
+**naked** with cotton clothes in the cargo pack, no backstories, and our own UI style instead of the ChatGPT concepts.
 
 Code: sim `Private/Scenario.cpp` (`editColonist`, `startingColonistSlots`), `Sim::applyPregameCommands`; Unreal
 `ColonyHudNewGame.cpp` (pages), `ColonyHudScreens.cpp` (`StartNewColony`, `DrawMainMenu`), `WorldScreenSubsystem`
@@ -12,11 +14,13 @@ Code: sim `Private/Scenario.cpp` (`editColonist`, `startingColonistSlots`), `Sim
 
 ## The scenario
 
-`CrashLanded` (`"menu": true`; only defs with `menu` are offered, by `menuOrder`): the protagonist and 2 human strangers
-(baseline, no relations: nobody starts with any), with 50 survival meals, 200 silver, 50 steel, 30 components and one
-bolt-action rifle lying beside them, in t-shirts and trousers (`CrashlandedSettler`). Biome `TropicalRainforest`;
-`siteBiomes` (rainforest and tropical swamp) are the world tiles it may land on. All of this is ours (sneed's list). The
-old `Crashlanded`, `CrashlandedRainforest` and `PerfColony` stay for tests and smoke tests.
+`CrashLanded` (`"menu": true`; only defs with `menu` are offered, by `menuOrder`): the protagonist, an amnesiac, and 2
+human strangers aged 18 (`colonistAge`; baseline, no relations), all naked, with 50 survival meals, 200 silver, 50 steel,
+30 components, one bolt-action rifle, and 3 cotton (`Cloth`) t-shirts and 3 trousers lying beside them (a
+`startingThings` entry may name a `stuff`; the cargo pack itself comes later). `traitPoints` 10: no backstories, traits
+from a point pool ([traits.md](traits.md) "Trait points"); you have none. Biome `TropicalRainforest`; `siteBiomes`
+(rainforest and tropical swamp) are the world tiles it may land on. All of this is ours (sneed's list). The old
+`Crashlanded`, `CrashlandedRainforest` and `PerfColony` stay for tests and smoke tests, with backstories.
 
 ## The steps
 
@@ -29,18 +33,30 @@ old `Crashlanded`, `CrashlandedRainforest` and `PerfColony` stay for tests and s
 3. **Landing site**: the world screen in new-game mode (`SetNewGame(biomes)`): tiles outside `siteBiomes` are dimmed
    and say "Only tropical land can be settled for now"; the button reads **Land here**; **Pick a random site**; Back or
    Esc returns to step 2. Landing starts the sim (paused) and opens step 4.
-4. **People** (3): the colony is made and waits at game second 0 (speed 0). Left: a card per colonist (YOU or
-   STRANGER, mugshot, name, adulthood, age) with **Reroll** (`RerollColonistCommand`) and **Reroll the strangers**.
-   Top: the races, Human open, Impid, Orcoid, drow and cat-strain locked. Middle: the colonist's real pawn on the map,
-   seen by a camera that turns with a drag and zooms with the wheel. Right, **Story and skills**: first, nick and last
-   name (sent when the field is left), gender and age, both backstories with their text, traits, work they won't do,
-   skills with bars and passion flames. **Looks**: woman or man, height, thin to heavy, soft to muscular, breasts, more
-   masculine or feminine, older, skin, hair style (the styles the body has) and colour, eyes, body hair below, Random
-   looks. Changes show at once on the body and go to the sim when a slider is let go. **Start** lands them: the game
-   runs at speed 1 in the overseer view.
+4. **You** (page 3): the colony is made and waits at game second 0 (speed 0). Left, "Who you are": the amnesia, your
+   name (first, nick, last; sent when the field is left) with **Random name**, and a note that there is nothing to
+   choose about what you can do. Right, **Your looks** (below). You start as the creator's untouched default woman
+   (`seed=-1`, the gun range's), so every hair and body update reaches you while you leave her be; **Default look**
+   goes back to her. **Next: your companions**.
+5. **Your companions** (page 4): the races on top (Human open; Impid, Orcoid, drow and cat-strain locked); left, a card
+   per stranger (mugshot, name, age 18, traits) with **Reroll** and **Reroll both**, and the picked one's name; right,
+   **Traits and skills** (points left in large figures; the chosen traits as chips, click to take back; the shop of
+   strengths with their cost and drawbacks with the points they give, greyed with the reason when they don't fit;
+   **Random traits** spends all points, **Clear**; skills with bars to 20, skill-trait levels in jade past them, and
+   passions) or **Looks**. **Land and start** lands them: the game runs at speed 1 in the overseer view.
 
-The look sliders and the camera are first-version layout in the "Frontier Glass" style (glass panels, amber lines);
-the final look follows sneed's pick of the ChatGPT concepts in `/mnt/project-files/ui-concepts/`.
+**Looks** (both screens): woman or man, height, thin to heavy, soft to muscular, breasts, more masculine or feminine,
+older (companions only a little), skin, hair style (the styles the body has) and colour, eyes, body hair below, Random
+looks. Changes show at once on the body and go to the sim when a slider is let go.
+
+Under the body on both screens: a **clothes on** tick (the cargo pack's cotton shirt and trousers on everyone, drawn
+through the real clothes path, `USimPawnSubsystem::SetApparelPreview`, nothing in the sim) and the turntable: dragging
+spins the body itself (`ASimPawnActor::SetPreviewSpin`), so soft tissue and hair swing; it eases to a stop, up and down
+tilt, the wheel zooms.
+
+**Canopy**, the screens' own look (sneed: no reference UIs; he judges, may change it): dark green-black glass panels with
+square corners and a short jade bar on top, bone text, jade for what is chosen and ember for costs, three text sizes
+(titles 2.2x, headings 1.25x, body), one pad (24) and one gap (10). Title and scenario pages use it too.
 
 ## Editing before the start
 
@@ -48,6 +64,10 @@ the final look follows sneed's pick of the ChatGPT concepts in `/mnt/project-fil
 place before the first step: empty names keep theirs; `female` 0 or 1 sets the gender and makes the seeded looks again
 for it (seed from the game seed, slot and gender; lineage and creator look kept); `setCreator` stores the creator look
 text. Names over 24 letters, a bad slot, or any step after the first fail. It goes through saves and replays.
+
+`SetColonistTraitsCommand{slot, traits, randomize, roll}` gives a starting companion traits from the scenario's pool
+("Def:degree;..." or random from the game seed, slot and roll); it fails for the protagonist, after the first step, or
+for a set `traitSetFits` refuses. Skills keep their base and take the new traits' gains; work follows the traits.
 
 `Sim::applyPregameCommands()` applies the queued commands without stepping while `time().steps` is 0, logged at step
 0; a replay applies them in its first step before anything runs, so it comes out the same (tested). The people page
@@ -64,15 +84,17 @@ remade). So the people page, the game and the creator share one path: hair, stra
 show everywhere. Each starting colonist gets a look on the people page the first time it is seen (seeded by game,
 slot and rerolls). Pawns without one (joiners, raiders) are still the MetaHumans until colony pawns move to MakeHuman.
 
-Until clothes on MakeHuman bodies (#425) are in, creator people show without clothes.
+Until clothes on MakeHuman bodies (#425) are in, creator people show without clothes, and "clothes on" shows nothing on them.
 
 ## Smoke test `newgame`
 
-Title, scenario page, "Land somewhere random" on seed 42 (people page: three colonists, each with a creator look on
-its MakeHuman body, game still at step 0, `NEWGAME person` lines), the Looks tab after a reroll of slot 2 (`NEWGAME
-reroll`), and Start (the game runs, looks kept). One 1080p screenshot each with the UI.
+Title, scenario page, "Land somewhere random" on seed 42 (You: three colonists, each with a creator look on its
+MakeHuman body, you the default woman with no traits, game still at step 0, `NEWGAME person` lines), clothes on and
+spinning (`NEWGAME clothes on`, nothing worn in the sim), the companions after random traits (`NEWGAME companion`: 18,
+10 of 10 points), their Looks tab after a reroll of slot 2 (`NEWGAME reroll`), and Start (the game runs, looks kept).
+One 1080p screenshot each with the UI.
 
 ## Not done yet
 
-The final look (after sneed's pick); a live title-screen camera through the rainforest; save pictures and day/wealth
-on the load list; picking backstories and traits; age; face and expression sliders; a 3D globe for the landing site.
+sneed's verdict on the Canopy look; the cargo pack as a thing to unpack; a live title-screen camera through the rainforest; save pictures and day/wealth
+on the load list; age; face and expression sliders; a 3D globe for the landing site.
