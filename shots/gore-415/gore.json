@@ -1,0 +1,117 @@
+{
+	"test": "gore",
+	"status": "fail",
+	"durationSeconds": 36.164173599332571,
+	"errors": [
+		"pileup: the body lost its skin blood while it was being hit",
+		"blast: the corpse moved 0 cm (40 at least), ragdolls thrown 0",
+		"blast: a rocket a metre away tore nothing off the corpse"
+	],
+	"gpu": "NVIDIA GeForce RTX 5080",
+	"resolution": "888x500",
+	"phases": [
+		{
+			"phase": "setup",
+			"frames": 27,
+			"avgFps": 38.44707393860724,
+			"p95FrameMs": 12.303299903869629,
+			"medianGameThreadMs": 4.7463998794555664,
+			"medianRenderThreadMs": 11.559700012207031,
+			"medianGpuMs": 10.22189998626709,
+			"actors": 0,
+			"screenshot": "gore/setup.png"
+		},
+		{
+			"phase": "groin",
+			"frames": 130,
+			"avgFps": 85.645441924803208,
+			"p95FrameMs": 11.822700500488281,
+			"medianGameThreadMs": 4.935999870300293,
+			"medianRenderThreadMs": 11.273900032043457,
+			"medianGpuMs": 9.7712001800537109,
+			"actors": 0,
+			"screenshot": "gore/groin.png",
+			"exitsTraced": 0
+		},
+		{
+			"phase": "spray",
+			"frames": 130,
+			"avgFps": 81.081234461266476,
+			"p95FrameMs": 12.445401191711426,
+			"medianGameThreadMs": 5.0641999244689941,
+			"medianRenderThreadMs": 11.679800033569336,
+			"medianGpuMs": 10.213100433349609,
+			"actors": 0,
+			"screenshot": "gore/spray.png",
+			"gushes": 25,
+			"mostInAir": 25
+		},
+		{
+			"phase": "pileup",
+			"frames": 307,
+			"avgFps": 72.977198811021751,
+			"p95FrameMs": 12.669500350952148,
+			"medianGameThreadMs": 5.299799919128418,
+			"medianRenderThreadMs": 11.930000305175781,
+			"medianGpuMs": 10.4552001953125,
+			"actors": 0,
+			"screenshot": "gore/pileup.png",
+			"hits": 30,
+			"fewestMasks": 0
+		},
+		{
+			"phase": "head",
+			"frames": 125,
+			"avgFps": 82.913492658906492,
+			"p95FrameMs": 12.105900764465332,
+			"medianGameThreadMs": 4.9527997970581055,
+			"medianRenderThreadMs": 11.651599884033203,
+			"medianGpuMs": 10.180800437927246,
+			"actors": 0,
+			"screenshot": "gore/head.png",
+			"headSnapDegrees": 15.857449531555176
+		},
+		{
+			"phase": "armoff",
+			"frames": 202,
+			"avgFps": 80.714436167079739,
+			"p95FrameMs": 12.750797271728516,
+			"medianGameThreadMs": 5.2747001647949219,
+			"medianRenderThreadMs": 12.083999633789062,
+			"medianGpuMs": 10.625699996948242,
+			"actors": 0,
+			"screenshot": "gore/armoff.png",
+			"armOff": 1
+		},
+		{
+			"phase": "corpse",
+			"frames": 658,
+			"avgFps": 93.948099053330282,
+			"p95FrameMs": 11.163000106811523,
+			"medianGameThreadMs": 5.5831999778747559,
+			"medianRenderThreadMs": 10.518400192260742,
+			"medianGpuMs": 9.006199836730957,
+			"actors": 0,
+			"screenshot": "gore/corpse.png",
+			"ragdoll": 1,
+			"sleeps": 1
+		},
+		{
+			"phase": "blast",
+			"frames": 313,
+			"avgFps": 104.10366037108068,
+			"p95FrameMs": 10.306600570678711,
+			"medianGameThreadMs": 5.9558000564575195,
+			"medianRenderThreadMs": 9.4110002517700195,
+			"medianGpuMs": 7.8959999084472656,
+			"actors": 0,
+			"screenshot": "gore/blast.png",
+			"corpseMovedCm": 0,
+			"piecesTornOff": 0,
+			"ragdollsThrown": 0
+		}
+	],
+	"notes": [
+		"groin: the exit was guessed, not found on the drawn body (a weak shot may not go through)"
+	]
+}
