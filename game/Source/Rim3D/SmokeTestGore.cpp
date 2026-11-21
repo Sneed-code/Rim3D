@@ -11,6 +11,7 @@
 #include "UnrealClient.h"
 
 #include "BlastFxSubsystem.h"
+#include "CreatorPeople.h"
 #include "BloodSubsystem.h"
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
@@ -177,6 +178,14 @@ void USmokeTestSubsystem::BuildGorePhases()
 			{
 				Fail(TEXT("setup: no colonist besides the protagonist"));
 				return;
+			}
+			// A MakeHuman body as the gun range and the creator's people have (it takes its blood in the skin; the plain
+			// MetaHuman body of a bare colonist gets decals only).
+			if (const colony::ThingView* View = B->GetCurrentSnapshot().find(State->Pawn))
+			{
+				const colony::Snapshot& Snapshot = B->GetCurrentSnapshot();
+				const FSimPawnLooks From = View->looks >= 0 ? USimPawnSubsystem::MakeLooks(Snapshot.looks[static_cast<size_t>(View->looks)], B->GetDefs().get()) : FSimPawnLooks();
+				Pawns()->SetLooksOverride(State->Pawn, CreatorPeople::RandomLooks(4242, false, From));
 			}
 			B->Submit(colony::DraftCommand{State->Pawn, true});
 		};

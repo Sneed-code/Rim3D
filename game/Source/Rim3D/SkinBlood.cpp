@@ -169,6 +169,10 @@ UTexture2D* USkinBlood::PositionsFor(const USkeletalMeshComponent* Mesh)
 		UE_LOG(LogTemp, Display, TEXT("Skin blood for %s: %s"), *Asset->GetName(),
 			Positions ? TEXT("painted into the skin") : (bSkinReads ? TEXT("no position map (run -run=BloodArt): decals") : TEXT("skin material has no blood mask (run -run=BloodArt): decals")));
 	}
+	else
+	{
+		UE_LOG(LogTemp, Display, TEXT("Skin blood for %s: not a MakeHuman body (SK_MH_...): decals"), *Asset->GetName());
+	}
 	if (Positions)
 	{
 		PositionMaps.Add(Key, Positions);
