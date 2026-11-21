@@ -235,27 +235,14 @@ void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 		return;
 	}
 	USimSubsystem* Source = Bridge.Get();
-	if (!Source || !Source->GetSim() || !EnsureScene())
+	if (!Source || !Source->GetSim())
 	{
 		return;
 	}
 	const float RadiusM = FMath::Max(Event.amount, 0.5f);
 	const FVector Centre = BlastSimToWorld(*Source, Event.x, Event.y, Event.z);
-	const FVector Ground = Source->SimToWorld(Event.x, Event.y, 0);
 	const colony::DefId Type = Event.def;
 	const bool bFire = Type.valid() && Source->GetDefs() && Source->GetDefs()->get(Type).text("mix.sub") == "Fire";
-	++BlastsDrawn;
-
-	// The light first: even a blast too far to draw lights the sky.
-	FlashAt = Centre + FVector(0.0, 0.0, 120.0);
-	FlashAge = 0.0f;
-	FlashScale = FMath::Clamp(RadiusM / (bFire ? 1.1f : 1.9f), 0.5f, 4.0f);
-	bFlashFire = bFire;
-	if (FlashLight)
-	{
-		FlashLight->SetWorldLocation(FlashAt);
-	}
-
 	// Ragdolls (corpses, the knocked out) are thrown by it (sneed 2026-11-20: "punt and ragdoll corpses, not cartoonishly
 	// but a decent amount"): a frag grenade throws a body at about 5 m/s, a rocket about 7, a doomsday rocket 9, nothing at
 	// the edge. The sim moves the corpse's place the same way (CombatSystem::explode).
@@ -278,7 +265,7 @@ void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 				const double Away = FVector::Dist(Lying, Centre);
 				if (Away < Reach + 300.0)
 				{
-					UE_LOG(LogTemp, Log, TEXT("Blast throw: pawn %u ragdoll %d, %.0f cm from the blast (reach %.0f)"), Pair.Key, Actor->IsRagdoll() ? 1 : 0, Away, Reach + 100.0);
+					UE_LOG(LogTemp, Display, TEXT("Blast throw: pawn %u ragdoll %d, %.0f cm from the blast (reach %.0f)"), Pair.Key, Actor->IsRagdoll() ? 1 : 0, Away, Reach + 100.0);
 				}
 				if (Actor->IsRagdoll() && Away < Reach + 100.0)
 				{
@@ -287,6 +274,24 @@ void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 				}
 			}
 		}
+	}
+
+	// The rest is art: without it (-run=BlastArt not run) the bodies are still thrown, above.
+	if (!EnsureScene())
+	{
+		return;
+	}
+	const FVector Ground = Source->SimToWorld(Event.x, Event.y, 0);
+	++BlastsDrawn;
+
+	// The light first: even a blast too far to draw lights the sky.
+	FlashAt = Centre + FVector(0.0, 0.0, 120.0);
+	FlashAge = 0.0f;
+	FlashScale = FMath::Clamp(RadiusM / (bFire ? 1.1f : 1.9f), 0.5f, 4.0f);
+	bFlashFire = bFire;
+	if (FlashLight)
+	{
+		FlashLight->SetWorldLocation(FlashAt);
 	}
 
 	APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0);

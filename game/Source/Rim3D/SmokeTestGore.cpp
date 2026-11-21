@@ -16,6 +16,7 @@
 #include "PawnAnimInstance.h"
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
+#include "SkinBlood.h"
 
 #include "ColonySim/Commands.h"
 #include "ColonySim/Health.h"
@@ -193,6 +194,16 @@ void USmokeTestSubsystem::BuildGorePhases()
 			if (Blood() && !Blood()->IsReady())
 			{
 				Fail(TEXT("setup: the blood assets are missing (run -run=BloodArt -force)"));
+			}
+			// Whether this body takes its blood in the skin (the log line "Skin blood for <mesh>: ..." says why not).
+			USkinBlood* Skin = Blood() ? Blood()->GetSkinBlood() : nullptr;
+			const USkeletalMeshComponent* Mesh = Actor->GetDecalMesh();
+			const bool bSkin = Skin && Skin->CanPaint(Mesh);
+			PhaseNumbers.Add(TEXT("skinPaintable"), bSkin ? 1 : 0);
+			if (!bSkin)
+			{
+				Notes.Add(FString::Printf(TEXT("setup: the colonist's body %s (%s) can't take skin blood: see the log line \"Skin blood for\""),
+					*Mesh->GetName(), Mesh->GetSkeletalMeshAsset() ? *Mesh->GetSkeletalMeshAsset()->GetName() : TEXT("no mesh")));
 			}
 		};
 		Phases.Add(MoveTemp(Phase));
