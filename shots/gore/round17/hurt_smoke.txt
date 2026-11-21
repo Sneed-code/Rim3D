@@ -1,0 +1,19 @@
+﻿Building Rim3DEditor (below-normal priority, 6 jobs)...
+Build ok.
+Running smoke test 'hurt' at 1920x1080...
+
+Smoke test 'hurt': PASS  (79 s, NVIDIA GeForce RTX 5080, 888x500)
+setup                        96.7 fps  game   3.8 ms  render   4.4 ms  gpu   3.1 ms  screenshot ok
+dirt                        188.1 fps  game   3.8 ms  render   5.1 ms  gpu   3.7 ms  screenshot ok
+wobble                      224.3 fps  game   3.6 ms  render   4.4 ms  gpu   3.1 ms  screenshot ok
+limp                        220.8 fps  game   3.8 ms  render   4.4 ms  gpu   3.1 ms  screenshot ok
+patch                       217.3 fps  game   3.9 ms  render   4.4 ms  gpu   3.2 ms  screenshot ok
+crawl                       219.3 fps  game   3.7 ms  render   4.4 ms  gpu   3.2 ms  screenshot ok
+dismember                   109.6 fps  game   5.9 ms  render   8.9 ms  gpu   7.4 ms  screenshot ok
+note: wobble: 6 hits, one a zone; bent 20.5 degrees at most, 0.00 at the end; the animation underneath changed 1 times 
+(idle variety only)
+note: limp: left leg at 60%, walked 1391 cm, leaned over it up to 0.50 of the full limp
+note: patch: patched by itself, the body bent over the wound
+note: crawl: downed by the torso after 3 blows; crawl clip playing (played 1 times)
+note: dismember: head and four limbs off a real, dressed body; 5 pieces thrown, 19 meshes in them, 5 at rest
+Screenshots: C:\Dev\Rim3D-blood\game\Saved\Smoke\hurt
