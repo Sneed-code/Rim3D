@@ -89,13 +89,14 @@ remade). So the people page, the game and the creator share one path: hair, stra
 show everywhere. Each starting colonist gets a look on the people page the first time it is seen (seeded by game,
 slot and rerolls). Pawns without one (joiners, raiders) are still the MetaHumans until colony pawns move to MakeHuman.
 
-Until clothes on MakeHuman bodies (#425) are in, creator people show without clothes, and "clothes on" shows nothing on them.
+"Clothes on" draws the cotton shirt and trousers as MakeHuman garments (#425). The scenario's `startHour` (Crash Landed:
+7, ours) sets the calendar's first hour so the landing is by daylight; steps still start at 0.
 
 ## Smoke test `newgame`
 
 Title, scenario page, "Land somewhere random" on seed 42 (You: three colonists, each with a creator look on its
 MakeHuman body, you the default woman with no traits, game still at step 0, `NEWGAME person` lines), clothes on and
-spinning (`NEWGAME clothes on`, nothing worn in the sim), the companions after random traits (`NEWGAME companion`: 18,
+spinning (`NEWGAME clothes on`: shirt and trousers drawn as garments, nothing worn in the sim), the companions after random traits (`NEWGAME companion`: 18,
 10 of 10 points), their Looks tab after a reroll of slot 2 (`NEWGAME reroll`), and Start (the game runs, looks kept).
 One 1080p screenshot each with the UI.
 

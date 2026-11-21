@@ -144,7 +144,7 @@ Entity Sim::makeScenarioColonist(const Def& scenario, CellPos cell, uint64_t col
 // Throws away the colonist in slot `slot` (the player's colonists in the order they were made) and
 // makes another from a fresh draw of the main stream, on the same spot. Only before the first step.
 bool Sim::rerollColonist(int slot, std::string& error) {
-    if (time_.seconds != 0) {
+    if (time_.steps != 0) {
         error = "the starting colonists can only be rerolled before the game starts";
         return false;
     }
@@ -195,7 +195,7 @@ int Sim::scenarioTraitPoints() const {
 // The companions screen's traits (docs/design/new-game.md): a starting colonist's traits, bought from the scenario's
 // point pool, before the first step. Skills keep their base and take the new traits' gains; work follows the traits.
 bool Sim::setStartingTraits(const SetColonistTraitsCommand& command, std::string& error) {
-    if (time_.seconds != 0) {
+    if (time_.steps != 0) {
         error = "traits can only be chosen before the game starts";
         return false;
     }
@@ -275,7 +275,7 @@ std::vector<Entity> Sim::startingColonistSlots() const {
 // The new-game character screen's edits (docs/design/new-game.md): names, gender and the creator's look of a
 // starting colonist, before the first step. Everything else about them stays (backstories, traits, skills, gear).
 bool Sim::editColonist(const EditColonistCommand& edit, std::string& error) {
-    if (time_.seconds != 0) {
+    if (time_.steps != 0) {
         error = "the starting colonists can only be edited before the game starts";
         return false;
     }

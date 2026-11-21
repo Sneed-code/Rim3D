@@ -4,7 +4,7 @@
     "description": "You wake in the wreck of a shuttle with no memory of how you got here, or of who you are. Two strangers lie beside you, as lost as you. A cargo pack survived the crash. Build a home in the wild and keep each other alive.",
     "colonists": 2, "protagonist": true, "colonistKind": "Human", "lineage": "Baseline", "biome": "TropicalRainforest",
     "siteBiomes": ["TropicalRainforest", "TropicalSwamp"],
-    "traitPoints": 10, "colonistAge": 18,
+    "traitPoints": 10, "colonistAge": 18, "startHour": 7,
     "startingThings": [
       { "thing": "MealSurvivalPack", "count": 50 },
       { "thing": "Silver", "count": 200 },
@@ -14,7 +14,7 @@
       { "thing": "Apparel_TShirt", "stuff": "Cloth", "count": 3 },
       { "thing": "Apparel_Pants", "stuff": "Cloth", "count": 3 }
     ],
-    "ours": ["colonists", "protagonist", "startingThings", "menu", "menuOrder", "siteBiomes", "description", "traitPoints", "colonistAge",
+    "ours": ["colonists", "protagonist", "startingThings", "menu", "menuOrder", "siteBiomes", "description", "traitPoints", "colonistAge", "startHour",
              "sneed 2026-11-21: the player and two human strangers with 50 survival meals, 200 silver, 50 steel, 30 components and a gun",
              "sneed 2026-11-21 (later): you are an amnesiac; everyone lands naked; the cargo pack has cotton trousers and a shirt for all 3 (the pack itself comes later); the strangers are 18; traits from a 10-point pool, no backstories"]
   },
