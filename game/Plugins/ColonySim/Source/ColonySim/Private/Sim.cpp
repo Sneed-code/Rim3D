@@ -307,6 +307,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     weather_->setEventLog(&events_);
     movement_->setWeather(weather_.get());
     combat_->setWeather(weather_.get());
+    combat_->setPlants(plants_.get());
     construction_ = std::make_unique<Construction>(map_, *things_, *plants_, *defs_, rng_, events_);
     needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
     mood_ = std::make_unique<MoodSystem>(*things_, *needs_, *defs_);
@@ -1890,6 +1891,40 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                 dy *= kDirectMaxStep / length;
             }
             melee_->orbitMove(move->pawn, dx, dy);  // locked on with melee: sideways walks round the target (lock-on.md)
+            // Tree trunks are solid (sneed 2026-11-20, docs/design/structure-damage.md): the part of the move into a trunk
+            // is taken off, so the body slides round it instead of through.
+            if (pos.level == 0) {
+                const int tcx = static_cast<int>(std::floor(pos.x));
+                const int tcy = static_cast<int>(std::floor(pos.y));
+                for (int ty = tcy - 1; ty <= tcy + 1; ++ty) {
+                    for (int tx = tcx - 1; tx <= tcx + 1; ++tx) {
+                        const CellPos tc{tx, ty, 0};
+                        float sx = 0.0f;
+                        float sy = 0.0f;
+                        float radius = 0.0f;
+                        float height = 0.0f;
+                        if (!map_.inBounds(tc) || !plants_->trunkOf(tc, sx, sy, radius, height)) {
+                            continue;
+                        }
+                        const float reach = radius + kPawnRadius;
+                        const float nx = pos.x + dx - sx;
+                        const float ny = pos.y + dy - sy;
+                        const float d2 = nx * nx + ny * ny;
+                        if (d2 >= reach * reach || d2 < 1.0e-8f) {
+                            continue;
+                        }
+                        const float d = std::sqrt(d2);
+                        const float ox = pos.x - sx;
+                        const float oy = pos.y - sy;
+                        if (ox * ox + oy * oy < d2) {
+                            continue;  // already in and walking out (a tree grew round it): let it go
+                        }
+                        // Onto the trunk's edge: keep the sideways part of the move, drop the part going in.
+                        dx = sx + nx / d * reach - pos.x;
+                        dy = sy + ny / d * reach - pos.y;
+                    }
+                }
+            }
             // The whole move, or sliding along one axis (a wall), or staying where it is.
             const float tries[3][2] = {{dx, dy}, {dx, 0.0f}, {0.0f, dy}};
             float moveX = 0.0f;
@@ -3038,6 +3073,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.area = areas_->areaOf(entity);
             view.jobTarget = worker->job.thing;
             view.jobProgress = worker->job.type != JobType::None ? jobs_->jobProgress(entity) : 0.0f;
+            // At work on a tree: work done piles up only in the plant work step, once the walk is over.
+            view.felling = worker->job.type == JobType::CutPlant && worker->job.progress > 0.0f && plants_->isTree(worker->job.cell);
             view.carryingPawn = jobs_->carryingPawn(entity);
         }
         const bool noMind = mindIsPlayersOwn(reg, entity);  // the protagonist: no mood, recreation, beauty or rest need
