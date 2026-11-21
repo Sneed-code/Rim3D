@@ -143,6 +143,18 @@ namespace
 		GroomsSet(Groom, TEXT("HairGroupsLOD"),
 			TEXT("((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),")
 			TEXT("(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))"));
+		// The import makes no material slot (PC: "0 materials"): one slot, Hair, on the MetaHuman hair material, which
+		// every group draws with (so the pawn's hair colour reaches it).
+		if (HairMaterial)
+		{
+			GroomsSet(Groom, TEXT("HairGroupsMaterials"), *FString::Printf(TEXT("((Material=\"%s\",SlotName=\"Hair\"))"), *HairMaterial->GetPathName()));
+			FString Rendering = TEXT("(");
+			for (int32 Group = 0; Group < Groom->GetNumHairGroups(); ++Group)
+			{
+				Rendering += Group ? TEXT(",(MaterialSlotName=\"Hair\")") : TEXT("(MaterialSlotName=\"Hair\")");
+			}
+			GroomsSet(Groom, TEXT("HairGroupsRendering"), *(Rendering + TEXT(")")));
+		}
 		for (FHairGroupsMaterial& Material : Groom->GetHairGroupsMaterials())
 		{
 			Material.Material = HairMaterial;

@@ -97,7 +97,7 @@ blender.exe -b -noaudio --python tools/makehuman/grow_hair.py -- game/Saved/Make
   axes) with `grooms.json`; `--preview` renders the head from three sides and the whole length from behind with Cycles.
   Blender also runs as a Python module in the cloud (`pip install bpy`), so styles can be tuned there with test renders
   on MakeHuman's base mesh (`--joints` with its head and neck joints).
-- **Import:** the `HairGrooms` commandlet (`Rim3DEditor/HairGroomsCommandlet.*`) imports every style of every base in
+- **Import:** needs the engine plugin AlembicHairImporter (on in `Rim3D.uproject`; off by default, and without it the groom importer reads no Alembic at all). The `HairGrooms` commandlet (`Rim3DEditor/HairGroomsCommandlet.*`) imports every style of every base in
   `assets/hair_grooms.json` as `/Game/Rim3D/Generated/Grooms/GA_<base>_<Style>`: Unreal's default Alembic conversion
   (gives the body's own axes), guides made from the strands for the physics (one in 40), the physics on, the MetaHuman
   hair material, and a second LOD with a third of the strands for further off.
