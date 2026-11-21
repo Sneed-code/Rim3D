@@ -64,12 +64,12 @@ body by MPFB.
   (`"VikingTunic+VikingPants"`). Each item picks one by its id among the cuts its wearer's base has, so the same
   T-shirt always looks the same and a colony in one fabric still looks varied. `check_defs.py` checks the names.
 - **Colour is a look, not the stuff** (sneed 2026-11-20): a made-of-stuff garment takes one of 16 clothing colours
-  (navy, olive, khaki, greys, browns, denim, maroon...) picked by its item id, over the garment's own shading. The stuff
+  (navy, olive, khaki, greys, browns, denim, maroon...) picked by its item id, over the garment's own shading (its light and dark capped at 1.4x the average, so a bright print or stripe stays cloth, not a pale patch). The stuff
   only changes the numbers. Gear without a stuff (flak) keeps its own colours. A dye or recolour choice is in the backlog.
 - **Worn look and wet**: `M_MH_Garment` keeps the torn holes and darkening from the wear (custom data 3) and the
   wetness of the wearer (12).
 - **Layers**: all garments are made to sit on the skin, so a top is pushed out along its normals over trousers (1.5 cm
-  for a piece over the torso, 0.6 cm more per layer above the skin; custom data 5, `FSimWornPiece::Puff`).
+  for a piece over the torso, 0.8 cm for legwear so its waistband covers the skin kept above it, 0.6 cm more per layer above the skin; custom data 5, `FSimWornPiece::Puff`).
 - **Following the body**: each garment is a skinned mesh component on the body's leader pose; the body's morph weights
   are copied onto it when they change.
 - **Hats**: a drawn overhead piece switches the strand hair to its under-a-hat groom (pressed flat above the brim, hanging

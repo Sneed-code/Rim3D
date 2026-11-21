@@ -95,12 +95,12 @@
     },
     {
       "name": "TeeCrude",
-      "mhclo": {
-        "CreatorFemale": "{mh_user}/clothes/joepal_crude_t-shirt_female",
-        "CreatorMale": "{mh_user}/clothes/elvs_crude_t-shirt_male"
-      },
-      "author": "Joel Palmius, Elvaerwyn",
-      "license": "CC0"
+      "mhclo": "{mh_user}/clothes/elvs_crude_t-shirt_male",
+      "author": "Elvaerwyn",
+      "license": "CC-BY",
+      "bases": [
+        "CreatorMale"
+      ]
     },
     {
       "name": "TeeCamo",
