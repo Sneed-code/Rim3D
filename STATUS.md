@@ -11,8 +11,9 @@ coat, viking tunic and trousers, knit hats, sherpa hat, flat and patrol caps, bo
 **the same slider morphs** so they fit every body shape, women's cuts only on women and men's only on men. Defs list
 their **cuts** (`visual.cuts`); each item picks one, and its **colour is a random clothing colour**, not its fabric
 (sneed). Wear holes and wetness carry over; **skin under clothes is cut away** so it cannot poke through; hats hide
-hair. Duster, cowboy hat, leather jacket and the armour wait for Codex after sneed's go (stand-ins for now). **Needs the
-PC: `mh_garments.py`, compile, `-run=MakeHumanArt -Garments`, creator smoke with `-CreatorDressed` for pictures.** The
+hair. Duster, cowboy hat, leather jacket and the armour wait for Codex after sneed's go (stand-ins for now). Checked on the PC in 7 rounds (2026-11-21): tees, shirts, blouse, jeans, trousers, viking set and hats fit with no
+holes or poke-through (`creator -CreatorDressed -CreatorCut=...`). Needs `mh_garments.py` and `-run=MakeHumanArt -Garments`
+once per PC. The hooded jacket is out of the jacket cuts (bulky, zip artefacts). The
 colony's MetaHuman pawns are unchanged.
 
 Buildings crack and come down (sneed, 2026-11-20; sim and Unreal, `docs/design/destruction.md`): every building already
