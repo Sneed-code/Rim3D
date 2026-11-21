@@ -1,0 +1,84 @@
+﻿== Long_front | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (42 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorMale_LongStraight on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_LongStraight on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 37.8 fps, GPU 24.7 ms, game 5.7 ms
+== Long_side | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (39 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorFemale_LongStraight on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorMale_LongStraight on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 33.9 fps, GPU 27.6 ms, game 5.9 ms
+== Long_back | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (41 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorFemale_LongStraight on SK_MH_CreatorFemale: fitted scale 1.002 (neck to head 11.9 / 11.9 cm, fit 1.002, moved X=0.000 Y=0.024 Z=0.336), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_LongStraight on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 34.8 fps, GPU 26.9 ms, game 5.8 ms
+== Ponytail_front | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (46 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorMale_Ponytail on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_Ponytail on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 42.2 fps, GPU 21.9 ms, game 6.3 ms
+== Ponytail_side | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (39 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorFemale_Ponytail on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorMale_Ponytail on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 36.2 fps, GPU 25.9 ms, game 5.5 ms
+== Ponytail_back | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (40 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorFemale_Ponytail on SK_MH_CreatorFemale: fitted scale 1.002 (neck to head 11.9 / 11.9 cm, fit 1.002, moved X=0.000 Y=0.024 Z=0.336), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_Ponytail on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 37.2 fps, GPU 25.0 ms, game 5.4 ms
+== Bob_front | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (42 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorMale_Bob on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_Bob on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 52.1 fps, GPU 17.5 ms, game 5.2 ms
+== Bob_side | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (40 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorFemale_Bob on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorMale_Bob on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 48.9 fps, GPU 18.7 ms, game 5.3 ms
+== Bob_back | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (40 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorFemale_Bob on SK_MH_CreatorFemale: fitted scale 1.002 (neck to head 11.9 / 11.9 cm, fit 1.002, moved X=0.000 Y=0.024 Z=0.336), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_Bob on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 51.6 fps, GPU 17.7 ms, game 5.3 ms
+== Short_front | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (41 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorMale_Short on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_Short on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 58.8 fps, GPU 15.4 ms, game 5.1 ms
+== Short_side | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (40 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorFemale_Short on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorMale_Short on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 54.1 fps, GPU 16.8 ms, game 5.3 ms
+== Short_back | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (39 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorFemale_Short on SK_MH_CreatorFemale: fitted scale 1.002 (neck to head 11.9 / 11.9 cm, fit 1.002, moved X=0.000 Y=0.024 Z=0.336), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_Short on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 58.8 fps, GPU 15.4 ms, game 4.5 ms
+== Crop_front | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (41 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorMale_Buzz on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_Buzz on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 59.1 fps, GPU 15.3 ms, game 5.1 ms
+== Crop_side | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (40 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorFemale_Buzz on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorMale_Buzz on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 55.2 fps, GPU 16.4 ms, game 5.3 ms
+== Crop_back | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (39 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorFemale_Buzz on SK_MH_CreatorFemale: fitted scale 1.002 (neck to head 11.9 / 11.9 cm, fit 1.002, moved X=0.000 Y=0.024 Z=0.336), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_Buzz on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 59.3 fps, GPU 15.2 ms, game 4.5 ms
+== Long_hat_front | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (43 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorMale_LongStraightHat on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_LongStraightHat on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 37.4 fps, GPU 25.0 ms, game 5.7 ms
+== Long_hat_back | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (40 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorFemale_LongStraightHat on SK_MH_CreatorFemale: fitted scale 1.002 (neck to head 11.9 / 11.9 cm, fit 1.002, moved X=0.000 Y=0.024 Z=0.336), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_LongStraightHat on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 34.8 fps, GPU 27.1 ms, game 5.9 ms
+== Long_select2_front | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (39 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorFemale_LongStraight on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_LongStraight on SK_MH_CreatorFemale: fitted scale 1.002 (neck to head 11.9 / 11.9 cm, fit 1.002, moved X=0.000 Y=0.024 Z=0.336), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 36.7 fps, GPU 25.4 ms, game 5.3 ms
+== Long_select1_front | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (40 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorMale_LongStraight on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_LongStraight on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 27.9 fps, GPU 34.1 ms, game 6.3 ms
+== Long_select3_front | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (40 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorMale_LongStraight on SK_MH_CreatorMale: fitted scale 0.999 (neck to head 10.2 / 10.2 cm, fit 0.999, moved X=0.000 Y=-0.012 Z=-0.166), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorMale_LongStraight on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 27.8 fps, GPU 34.1 ms, game 6.4 ms
+== four_people | Running smoke test 'creator' at 1920x1080...Smoke test 'creator': PASS  (61 s, NVIDIA GeForce RTX 5080, 1920x1080) | STRANDHAIR 4
+STRANDHAIR GA_CreatorMale_Short on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000
+STRANDHAIR GA_CreatorFemale_LongStraight on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000
+Phase creator: 55.7 fps, GPU 16.4 ms, game 5.3 ms
