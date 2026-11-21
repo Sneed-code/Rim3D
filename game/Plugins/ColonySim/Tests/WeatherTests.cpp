@@ -517,3 +517,40 @@ TEST_CASE("Weather: rain wears things under the open sky five times as fast, and
     sim.stepMany(3 * 3600);
     CHECK(sim.weather().deteriorationFactor() == 1.0f);
 }
+
+TEST_CASE("Weather: the HUD names the old weather until the new one is half way in") {
+    auto defs = weatherSmallDefs(10.0, R"({"Clear": 1})");
+    WeatherRig rig(*defs);
+    rig.run(10);
+    const DefId clear = defs->idOf("Weathers", "Clear");
+    const DefId fog = defs->idOf("Weathers", "Fog");
+    CHECK(rig.weather.shown() == clear);
+    CHECK(rig.weather.force("Fog", 3.0));
+    CHECK(rig.weather.current() == fog);
+    CHECK(rig.weather.shown() == clear);  // the fog has only just begun to roll in
+    rig.run(2700);
+    CHECK(rig.weather.shown() == clear);
+    rig.run(200);  // past half of the 1.6 hour transition
+    CHECK(rig.weather.shown() == fog);
+}
+
+TEST_CASE("Weather: a game that starts later in the day keeps its opening clear weather") {
+    // A morning landing (Crash Landed's 7:00) or any later start: the opening clear weather begins then, so the first
+    // step does not start a new weather that the HUD names while the sky is still clear.
+    auto defs = weatherRealDefs();
+    const DefId clear = defs->idOf("Weathers", "Clear");
+    for (uint64_t seed = 1; seed <= 40; ++seed) {
+        SimSettings settings = weatherSimSettings(seed);
+        settings.startSecond = 7 * kSecondsPerHour;
+        Sim sim(settings, defs);
+        CAPTURE(seed);
+        CHECK(sim.weather().current() == clear);
+        CHECK(sim.weather().weatherStartedAt() == 7 * kSecondsPerHour);
+        CHECK(sim.weather().weatherEndsAt() - sim.weather().weatherStartedAt() >= static_cast<int64_t>(2.8 * kSecondsPerHour) - 1);
+        CHECK(sim.weather().outdoorTemperature() == doctest::Approx(sim.weather().temperatureAt(7 * kSecondsPerHour)));
+        sim.stepMany(120);
+        CHECK(sim.weather().current() == clear);
+        CHECK(sim.weather().shown() == clear);
+        CHECK(sim.weather().effects().rainRate == 0.0f);
+    }
+}

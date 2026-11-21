@@ -396,7 +396,8 @@ FString USkySubsystem::DescribeClimate(const colony::Sim& Sim)
 {
 	const colony::Weather& Weather = Sim.weather();
 	FString Label = TEXT("clear");
-	const colony::DefId Current = Weather.current();
+	// The weather as it looks: the one before until the new one is half way in, matching the rain and cloud on screen.
+	const colony::DefId Current = Weather.shown();
 	if (Current.valid() && Current.value < Sim.defs().size())
 	{
 		Label = UTF8_TO_TCHAR(Sim.defs().get(Current).label().c_str());

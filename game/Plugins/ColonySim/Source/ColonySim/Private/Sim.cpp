@@ -263,6 +263,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     power_->update();
     lights_->update();
     roomStats_->refresh();
+    weather_->startAt(time_.seconds);  // again, in case the scenario moved the calendar (a morning landing)
 }
 
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart)
@@ -311,6 +312,10 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     // The start tile's own yearly mean temperature; the seasons and the daily swing are its biome's.
     weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), biome_,
                                          site_ ? std::optional<double>(site_->temperature) : std::nullopt);
+    // The opening clear weather begins when the game does (a scenario's morning landing, a later map's start), not at
+    // midnight of day 1: otherwise it could be long over by the first step, which would then start a storm that the
+    // HUD names at once while the sky has hardly begun to cloud over.
+    weather_->startAt(time_.seconds);
     weather_->setEventLog(&events_);
     movement_->setWeather(weather_.get());
     combat_->setWeather(weather_.get());

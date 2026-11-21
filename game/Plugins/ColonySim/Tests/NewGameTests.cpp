@@ -9,6 +9,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Skills.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Weather.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
@@ -262,6 +263,10 @@ TEST_CASE("Crash Landed: the character screen's edits apply at once before the s
     CHECK(sim.time().steps == 0);
     CHECK(sim.time().seconds == 7 * kSecondsPerHour);  // the scenario lands at 7:00, by daylight
     CHECK(sim.time().hourOfDay() == 7);
+    // It lands in clear weather that began at the landing, so the HUD doesn't name a storm the sky hasn't shown yet.
+    CHECK(sim.weather().current() == sim.defs().idOf("Weathers", "Clear"));
+    CHECK(sim.weather().weatherStartedAt() == 7 * kSecondsPerHour);
+    CHECK(sim.weather().weatherEndsAt() > 7 * kSecondsPerHour + 2 * kSecondsPerHour);
     EditColonistCommand edit;
     edit.slot = 1;
     edit.firstName = "Mina";

@@ -113,6 +113,13 @@ public:
 
     DefId current() const { return state_.current; }
     DefId previous() const { return state_.previous; }
+    // The weather as it looks now, for what the player reads (the HUD): the previous weather until the current one is
+    // half way in (when its lightning starts too), since rain, cloud and light blend over the transition.
+    DefId shown() const { return transition() < 0.5f ? state_.previous : state_.current; }
+    // The game starts at `seconds` rather than at midnight of day 1 (a scenario landing at 7:00, a map made later):
+    // the opening clear weather begins then and keeps its length, so it does not end at once on the first step.
+    // Draws nothing from the random stream. Only before the first step.
+    void startAt(int64_t seconds);
     // 0 when the current weather has just begun to 1 once it has fully taken over from the previous.
     float transition() const;
     // The effects now: the previous weather's, blended into the current one's over the transition.

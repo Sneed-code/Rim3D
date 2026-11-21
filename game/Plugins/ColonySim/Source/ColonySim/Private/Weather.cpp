@@ -303,6 +303,14 @@ bool Weather::force(const std::string& defName, double hours) {
     return false;
 }
 
+void Weather::startAt(int64_t seconds) {
+    const int64_t shift = seconds - state_.startedAt;
+    state_.startedAt += shift;
+    state_.endsAt += shift;
+    now_ = seconds;
+    cacheAt_ = -1;
+}
+
 void Weather::step(int64_t seconds) {
     now_ = seconds;
     cacheAt_ = -1;
