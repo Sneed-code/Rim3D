@@ -42,7 +42,7 @@ def log(*a):
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mh_common import (add_hair_bones, feather_hair_ends, add_cat_claws, add_cat_ears, flatten_human_ears, make_fur_textures, add_jewellery, write_body_areas, make_wrinkle_map, round_hair_ends, add_genital_bone, add_horns, add_morphs, add_soft_bones, add_body_soft_bones, add_tail, add_tusks, dump_vertices,  # noqa: E402
+from mh_common import (add_hair_bones, fit_garments, export_garments, bake_garment_cover, feather_hair_ends, add_cat_claws, add_cat_ears, flatten_human_ears, make_fur_textures, add_jewellery, write_body_areas, make_wrinkle_map, round_hair_ends, add_genital_bone, add_horns, add_morphs, add_soft_bones, add_body_soft_bones, add_tail, add_tusks, dump_vertices,  # noqa: E402
                        fuller_labia, grow_pubic_hair, lower_pubic_hair, make_pigment_mask, make_skin_normal, prepare_for_unreal,
                        write_materials)
 
@@ -126,6 +126,10 @@ try:
     for path in cfg.get("clothes", []):
         c = HumanService.add_mhclo_asset(path, basemesh, asset_type="Clothes", subdiv_levels=0, material_type="GAMEENGINE")
         log("clothes", c.name, len(c.data.vertices))
+    # Garments the game puts on and takes off (docs/design/clothes-draw.md "MakeHuman bodies"): fitted to this body like
+    # clothes, so every creator variant build moves them with its slider, but each is written as an FBX of its own and
+    # the body under it stays whole (MakeHuman would cut the skin a garment covers away).
+    garments = fit_garments(basemesh, proxy, cfg.get("garments", []), place, log=log)
 
     # Sub-rigs (the ponytail's bones) are separate armatures: joined into the main skeleton, so the game has one.
     subrigs = [o for o in bpy.data.objects if o.type == "ARMATURE" and o != rig]
@@ -237,6 +241,13 @@ try:
         sys.exit(0)
     if cfg.get("morphs"):
         add_morphs([o for o in export if o != rig], cfg["morphs"], log=log)
+    # tools/makehuman/mh_garments.py: only the garments are written (the body's own export stays as mh_creator made it).
+    if cfg.get("garments_only"):
+        garments_out = cfg.get("garments_out") or os.path.join(os.path.dirname(cfg["out"]), "Garments")
+        bake_garment_cover(body, garments, os.path.join(garments_out, "cover.png"), rig=rig, log=log)
+        prepare_for_unreal(rig, garments)
+        export_garments(rig, garments, garments_out, log=log)
+        sys.exit(0)
     # Where markings go on this body (areas.json, for the creator).
     if cfg.get("body_areas"):
         os.makedirs(os.path.dirname(cfg["out"]), exist_ok=True)
@@ -264,7 +275,7 @@ try:
         o.select_set(True)
     log("exporting", [o.name for o in export])
     os.makedirs(os.path.dirname(cfg["out"]), exist_ok=True)
-    manifest = write_materials([o for o in export if o != rig], os.path.dirname(cfg["out"]), skin_meshes=skin_meshes,
+    manifest = write_materials([o for o in export if o != rig and o not in garments], os.path.dirname(cfg["out"]), skin_meshes=skin_meshes,
                                tints=cfg.get("tints", {}), overrides=cfg["material_overrides"])
     # Long hair: the strands end at different lengths instead of one straight cut ("feather_hair_ends": false to keep it).
     if cfg.get("feather_hair_ends", True):
@@ -295,11 +306,15 @@ try:
                 entry["wrinkles"] = wrinkles
         with open(os.path.join(os.path.dirname(cfg["out"]), "materials.json"), "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=1)
+    for g in garments:
+        g.select_set(False)
     bpy.ops.export_scene.fbx(filepath=cfg["out"], use_selection=True, object_types={"ARMATURE", "MESH"},
                              apply_scale_options="FBX_SCALE_NONE", add_leaf_bones=False, bake_anim=False,
                              mesh_smooth_type="FACE", use_armature_deform_only=True, path_mode="COPY", embed_textures=False,
                              axis_forward="-Y", axis_up="Z")
     log("done", cfg["out"])
+    if garments:
+        export_garments(rig, garments, cfg.get("garments_out") or os.path.join(os.path.dirname(cfg["out"]), "Garments"), log=log)
     if cfg.get("save_blend"):
         bpy.ops.wm.save_as_mainfile(filepath=cfg["save_blend"])
 except Exception:
