@@ -110,10 +110,10 @@ namespace
 	const FLinearColor GoreMuscleDark(0.12f, 0.007f, 0.005f);
 	const FLinearColor GoreMuscleLight(0.32f, 0.026f, 0.018f);
 	const FLinearColor GoreFat(0.86f, 0.62f, 0.26f);
-	const FLinearColor GoreCloth(0.50f, 0.16f, 0.11f);
+	const FLinearColor GoreCloth(0.26f, 0.05f, 0.035f);
 	const FLinearColor GoreDermis(0.40f, 0.07f, 0.05f);
 	const FLinearColor GoreBlood(0.18f, 0.008f, 0.006f);
-	const FLinearColor GoreBone(0.90f, 0.86f, 0.74f);
+	const FLinearColor GoreBone(0.66f, 0.60f, 0.50f);
 	const FLinearColor GoreMarrow(0.30f, 0.06f, 0.035f);
 	const FLinearColor GoreCord(0.82f, 0.76f, 0.66f);
 	const FLinearColor GoreCartilage(0.80f, 0.62f, 0.56f);
@@ -143,7 +143,7 @@ namespace
 		// The ring of hard bone across the top, marrow edge out to the wall.
 		Mesh.AddRingGrid(2, Cols,
 			[&](int32 R, int32 C) { return Round(R == 0 ? Marrow : Radius, C, Tops[C] - (R == 0 ? 0.08f * Radius : 0.0f)); },
-			[&](int32 R, int32 C) { return GoreWet(FMath::Lerp(GoreBone, GoreMarrow, R == 0 ? 0.25f : 0.0f), 0.85f); });
+			[&](int32 R, int32 C) { return GoreWet(FMath::Lerp(FMath::Lerp(GoreBone, GoreMarrow, R == 0 ? 0.25f : 0.0f), GoreBlood, 0.1f + 0.35f * Random.FRand()), 0.5f); });
 		// The marrow, sunk a little.
 		Mesh.AddRingGrid(2, Cols,
 			[&](int32 R, int32 C) { return Round(R == 0 ? 0.0f : Marrow, C, (R == 0 ? Top - 0.35f * Radius : Tops[C] - 0.08f * Radius)); },
@@ -269,10 +269,14 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 				}
 				return GoreWet(FMath::Lerp(SkinBloodied, GoreBlood, 0.3f + 0.4f * Random.FRand()), 0.3f);
 			}();
-			if (Random.FRand() < 0.3f)
+			// Blood lies in smeared patches (smooth noise round and across the cut, so they read as smears, not as speckle),
+			// out over the skin rim too.
+			const float SmearTheta = 2.0f * PI * C / Cols;
+			const float SmearF = Rings[FMath::Min(Row, RingCount - 1)];
+			const float Smear = 0.6f * Bulge.At(SmearTheta * 2.0f + SmearF * 4.0f + 1.3f) + 0.4f * Edge.At(SmearTheta * 3.0f - SmearF * 6.0f);
+			if (Smear > 0.15f)
 			{
-				// A smear of blood: darker, and wet.
-				return GoreWet(FMath::Lerp(Tissue, GoreBlood, Random.FRandRange(0.3f, 0.65f)), 0.0f);
+				return GoreWet(FMath::Lerp(Tissue, GoreBlood, FMath::Clamp(0.35f + Smear, 0.35f, 0.8f)), 0.0f);
 			}
 			return Tissue;
 		});
