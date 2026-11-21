@@ -1,0 +1,11 @@
+﻿Running smoke test 'newgame' at 1920x1080...
+
+Smoke test 'newgame': PASS  (38 s, NVIDIA GeForce RTX 5080, 1920x1080)
+newgame_title                78.1 fps  game   4.3 ms  render   4.8 ms  gpu   4.3 ms  screenshot ok
+newgame_scenario            106.8 fps  game   4.0 ms  render   5.3 ms  gpu   4.4 ms  screenshot ok
+newgame_people               70.0 fps  game   5.2 ms  render  11.0 ms  gpu   9.7 ms  screenshot ok
+newgame_you_clothes          41.7 fps  game   5.1 ms  render  10.8 ms  gpu   9.6 ms  screenshot ok
+newgame_companions           52.7 fps  game   6.3 ms  render  10.9 ms  gpu   9.7 ms  screenshot ok
+newgame_looks                52.8 fps  game   5.2 ms  render  11.0 ms  gpu   9.7 ms  screenshot ok
+newgame_landed               70.6 fps  game   6.2 ms  render   7.3 ms  gpu   6.1 ms  screenshot ok
+Screenshots: C:\Dev\Rim3D-climb\game\Saved\Smoke\newgame
