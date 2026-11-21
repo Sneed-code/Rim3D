@@ -453,11 +453,24 @@ def make_curves(name, pts, end_idx, origin, style):
 
 
 def export_abc(obj, path):
+    """Writes the curves in centimetres. The points and the widths are scaled here: Blender's own global_scale only puts a
+    scale on the transform, which Unreal applies to the points but not to the widths, so the hair came in 100 times too
+    thin (PC, 2026-11-21: "almost bald, a thin fuzz")."""
+    curves = obj.data
+    n = len(curves.position_data)
+    pos = np.empty(n * 3, dtype=np.float32)
+    curves.position_data.foreach_get("vector", pos)
+    rad = np.empty(n, dtype=np.float32)
+    curves.attributes["radius"].data.foreach_get("value", rad)
+    curves.position_data.foreach_set("vector", pos * 100.0)
+    curves.attributes["radius"].data.foreach_set("value", rad * 100.0)
     for o in bpy.context.scene.objects:
         o.select_set(o == obj)
     bpy.context.view_layer.objects.active = obj
-    # Centimetres (Blender's own axes become Alembic's Y up; Unreal's default groom import turns them back).
-    bpy.ops.wm.alembic_export(filepath=path, selected=True, start=1, end=1, global_scale=100.0, evaluation_mode="RENDER")
+    # Blender's own axes become Alembic's Y up; Unreal's default groom import turns them back.
+    bpy.ops.wm.alembic_export(filepath=path, selected=True, start=1, end=1, global_scale=1.0, evaluation_mode="RENDER")
+    curves.position_data.foreach_set("vector", pos)  # back to metres for the preview
+    curves.attributes["radius"].data.foreach_set("value", rad)
 
 
 def preview(body_obj_verts, tris, hair_obj, origin, path, head, colour=(0.09, 0.055, 0.03), cap=None):

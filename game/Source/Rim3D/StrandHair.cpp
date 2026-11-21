@@ -94,7 +94,7 @@ namespace
 	 *  (component space, cm) with a neck-to-head length of SourceNeck; they are moved onto Body's head bone, scaled by
 	 *  the two lengths (within 15%), turned by the yaw cvar, then the offset cvars. */
 	UGroomComponent* StrandHairFit(USkeletalMeshComponent* Body, UGroomAsset* Groom, const FVector& SourceHead, float SourceNeck, bool bFound,
-		UGroomComponent* Existing, float FitScale = 1.0f, const FVector& FitOffset = FVector::ZeroVector)
+		UGroomComponent* Existing, float FitScale = 1.0f, const FVector& FitOffset = FVector::ZeroVector, UPhysicsAsset* Collision = nullptr)
 	{
 		const USkeletalMesh* BodyMesh = Body ? Body->GetSkeletalMeshAsset() : nullptr;
 		FTransform BodyHead;
@@ -145,7 +145,7 @@ namespace
 		if (Hair->GroomAsset != Groom)
 		{
 			Hair->SetGroomAsset(Groom);
-			if (UPhysicsAsset* Physics = LoadObject<UPhysicsAsset>(nullptr, StrandHairPhysicsAssetPath))
+			if (UPhysicsAsset* Physics = Collision ? Collision : LoadObject<UPhysicsAsset>(nullptr, StrandHairPhysicsAssetPath))
 			{
 				Hair->PhysicsAsset = Physics;
 			}
@@ -291,7 +291,10 @@ UGroomComponent* StrandHairAttachGrown(USkeletalMeshComponent* Body, UGroomAsset
 		}
 		Grow = FMath::Clamp(Grow, -0.3f, 0.3f);
 	}
-	return StrandHairFit(Body, Groom, FVector::ZeroVector, BaseNeck, bFound, Existing, 1.0f + Grow, Move - Skull * Grow);
+	// Collide with this body's own physics asset (made with it by the MakeHumanArt import): the mannequin's is a bigger
+	// body, so hair grown lying on our skin would start inside its shapes and be thrown off.
+	UPhysicsAsset* Own = Body && Body->GetSkeletalMeshAsset() ? Body->GetSkeletalMeshAsset()->GetPhysicsAsset() : nullptr;
+	return StrandHairFit(Body, Groom, FVector::ZeroVector, BaseNeck, bFound, Existing, 1.0f + Grow, Move - Skull * Grow, Own);
 }
 
 void StrandHairSetColour(UGroomComponent* Groom, const FLinearColor& Hair)
