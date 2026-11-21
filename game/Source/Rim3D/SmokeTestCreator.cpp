@@ -768,14 +768,30 @@ namespace
 		}
 		// Only the chosen hair style shows (none under strand hair).
 		const int32 Style = bGroom ? 0 : (P.HairStyle >= 0 ? P.HairStyle : (P.bFemale ? 1 : 5));
+		const FCreatorHairStyle& Chosen = CreatorHairStyles[FMath::Clamp(Style, 0, static_cast<int32>(UE_ARRAY_COUNT(CreatorHairStyles)) - 1)];
+		TArray<int32> WigSections;
 		for (int32 i = 0; i < Slots.Num(); ++i)
 		{
 			const FString Slot = Slots[i].ToString();
 			if (CreatorIsHairSlot(Slot))
 			{
-				const TCHAR* Key = CreatorHairStyles[FMath::Clamp(Style, 0, static_cast<int32>(UE_ARRAY_COUNT(CreatorHairStyles)) - 1)].Key;
-				Mesh->ShowMaterialSection(i, 0, Key && Slot.Contains(Key), 0);
+				const bool bShown = Chosen.Key && Slot.Contains(Chosen.Key);
+				Mesh->ShowMaterialSection(i, 0, bShown, 0);
+				if (bShown)
+				{
+					WigSections.Add(i);
+				}
 			}
+		}
+		// Our own strand hair for that style on people near the camera (the wig further off): docs/design/hair-physics.md
+		// "Near and far". The MetaHuman groom test above replaces it.
+		if (UStrandHairSubsystem* Strands = Pawn.GetWorld() ? Pawn.GetWorld()->GetSubsystem<UStrandHairSubsystem>() : nullptr)
+		{
+			FString Base = Mesh->GetSkeletalMeshAsset() ? Mesh->GetSkeletalMeshAsset()->GetName() : FString();
+			Base.RemoveFromStart(TEXT("SK_MH_"));
+			// -CreatorHairHat: the under-a-hat version (no hat is drawn on these bodies yet; the hair shows pressed flat).
+			Strands->Want(Mesh, Base, bGroom || !Chosen.Key ? FString() : FString(UTF8_TO_TCHAR(Chosen.Label)), HairColour, WigSections,
+				FParse::Param(FCommandLine::Get(), TEXT("CreatorHairHat")));
 		}
 		// The panel's colour is as seen (sRGB); the skin material takes it linear, as FSimPawnLooks::Skin is.
 		const FLinearColor Skin = FLinearColor::FromSRGBColor(FLinearColor(P.Skin[0], P.Skin[1], P.Skin[2]).ToFColor(false));

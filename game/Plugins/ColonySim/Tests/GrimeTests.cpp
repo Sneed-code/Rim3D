@@ -4,6 +4,7 @@
 #include "ColonySim/Events.h"
 #include "ColonySim/Filth.h"
 #include "ColonySim/Grime.h"
+#include "ColonySim/Replay.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
@@ -200,6 +201,72 @@ TEST_CASE("Grime: rain washes it off under the open sky, not under a roof; it we
         sim->grime().step(20000 + s, {}, 0.0f);
     }
     CHECK(sim->grime().of(in)->blood == before);
+}
+
+TEST_CASE("Grime: dirt fades by itself in about 10 minutes while nothing dirties it; a corpse in the dirt stays dirty") {
+    auto sim = grimeTestSim();
+    const GrimeNumbers& n = sim->grime().numbers();
+    CHECK(n.dirtFadeSeconds == doctest::Approx(18000.0f));  // 10 real minutes at 1x, from GrimeRules
+    const Entity standing = grimeTestPawn(*sim, "Human", CellPos{10, 10, 0});
+    const Entity corpse = grimeTestPawn(*sim, "Human", CellPos{20, 20, 0});
+    const int blood = sim->filth().kindIndex("Blood");
+    sim->grime().set(standing, 1.0f, 1.0f, 1.0f, blood, 0);
+    sim->grime().set(corpse, 1.0f, 1.0f, 0.0f, -1, 0);
+    sim->things().registry().get<Health>(corpse).dead = true;
+    sim->editMap().setTerrain(CellPos{20, 20, 0}, Terrain::Soil);
+    const int half = static_cast<int>(n.dirtFadeSeconds / 2.0f);
+    for (int s = 0; s < half; ++s) {
+        sim->grime().step(s, {}, 0.0f);
+    }
+    const PawnGrime* g = sim->grime().of(standing);
+    CHECK(g->dirtLegs == doctest::Approx(0.5f).epsilon(0.02));
+    CHECK(g->dirtBody == doctest::Approx(0.5f).epsilon(0.02));
+    CHECK(g->blood > 0.9f);  // blood keeps its own slow wear (Unreal fades how it looks)
+    CHECK(sim->grime().of(corpse)->dirtBody > 0.99f);
+    for (int s = 0; s < half + 10; ++s) {
+        sim->grime().step(half + s, {}, 0.0f);
+    }
+    CHECK(sim->grime().of(standing)->dirtLegs == 0.0f);
+    CHECK(sim->grime().of(standing)->dirtBody == 0.0f);
+
+    // Walking in mud keeps the legs caked: they don't fade while it goes on.
+    for (int x = 0; x < 48; ++x) {
+        sim->editMap().setTerrain(CellPos{x, 12, 0}, Terrain::Mud);
+    }
+    const Entity walker = grimeTestPawn(*sim, "Human", CellPos{2, 12, 0});
+    sim->grime().step(0, {}, 0.0f);
+    sim->grime().set(walker, 0.6f, 0.0f, 0.0f, -1, 0);
+    grimeTestWalk(*sim, walker, 30.0f);
+    CHECK(sim->grime().of(walker)->dirtLegs > 0.6f);
+}
+
+TEST_CASE("Grime: the SetGrime dev command sets a pawn's dirt, keeps its blood, and replays") {
+    auto sim = grimeTestSim();
+    const Entity pawn = grimeTestPawn(*sim, "Human", CellPos{10, 10, 0});
+    sim->step();
+    const int blood = sim->filth().kindIndex("Blood");
+    sim->grime().set(pawn, 0.0f, 0.0f, 0.4f, blood, sim->time().seconds);
+    sim->submit(SetGrimeCommand{pawn, 0.8f, 0.3f});
+    sim->step();
+    const PawnGrime* g = sim->grime().of(pawn);
+    GRIME_REQUIRE(g != nullptr);
+    CHECK(g->dirtLegs == doctest::Approx(0.8f).epsilon(0.01));
+    CHECK(g->dirtBody == doctest::Approx(0.3f).epsilon(0.01));
+    CHECK(g->blood > 0.39f);
+    CHECK(g->bloodKind == blood);
+
+    const Replay replay = recordReplay(*sim);
+    const std::string text = writeReplay(replay);
+    CHECK(text.find("SetGrime") != std::string::npos);
+    Replay read;
+    std::string error;
+    GRIME_REQUIRE(readReplay(text, read, error));
+    GRIME_REQUIRE(!read.commands.empty());
+    const auto* command = std::get_if<SetGrimeCommand>(&read.commands.back().command);
+    GRIME_REQUIRE(command != nullptr);
+    CHECK(command->pawn == pawn);
+    CHECK(command->dirtLegs == doctest::Approx(0.8f));
+    CHECK(command->dirtBody == doctest::Approx(0.3f));
 }
 
 TEST_CASE("Grime: wading washes the legs, swimming washes everything") {

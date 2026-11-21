@@ -1353,7 +1353,7 @@ inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitComma
                                             std::is_same_v<Type, SleepCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||
                                             std::is_same_v<Type, PatchCommand> || std::is_same_v<Type, SetAlertCommand> ||
                                             std::is_same_v<Type, FocusCommand> || std::is_same_v<Type, SetFightResponseCommand> ||
-                                            std::is_same_v<Type, SetWorkGroupCommand>;
+                                            std::is_same_v<Type, SetWorkGroupCommand> || std::is_same_v<Type, SetGrimeCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1428,6 +1428,10 @@ void saveTradeCommand(Ar& ar, Type& c) {
     } else if constexpr (std::is_same_v<Type, SetWorkGroupCommand>) {
         ar.value("pawn", c.pawn);
         ar.text("group", c.group);
+    } else if constexpr (std::is_same_v<Type, SetGrimeCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("dirtLegs", c.dirtLegs);
+        ar.value("dirtBody", c.dirtBody);
     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("up", c.up);
