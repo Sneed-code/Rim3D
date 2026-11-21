@@ -1,0 +1,12 @@
+[grow_hair] Braid {'file': 'Braid.abc', 'strands': 30000, 'points': 3369810, 'longest_cm': 80.8, 'lowest_tip_cm_below_head': 51.3}
+[grow_hair] BraidHat {'file': 'BraidHat.abc', 'strands': 30000, 'points': 3348823, 'longest_cm': 79.7, 'lowest_tip_cm_below_head': 51.3}
+[grow_hair] Afro {'file': 'Afro.abc', 'strands': 45000, 'points': 1703281, 'longest_cm': 13.6, 'lowest_tip_cm_below_head': 8.9}
+[grow_hair] AfroHat {'file': 'AfroHat.abc', 'strands': 45000, 'points': 2923095, 'longest_cm': 28.6, 'lowest_tip_cm_below_head': 9.4}
+[grow_hair] Messy {'file': 'Messy.abc', 'strands': 40000, 'points': 516767, 'longest_cm': 14.0, 'lowest_tip_cm_below_head': 8.2}
+[grow_hair] MessyHat {'file': 'MessyHat.abc', 'strands': 40000, 'points': 516767, 'longest_cm': 14.0, 'lowest_tip_cm_below_head': 8.2}
+[grow_hair] Braid {'file': 'Braid.abc', 'strands': 30000, 'points': 3438145, 'longest_cm': 89.8, 'lowest_tip_cm_below_head': 57.5}
+[grow_hair] BraidHat {'file': 'BraidHat.abc', 'strands': 30000, 'points': 3418910, 'longest_cm': 88.0, 'lowest_tip_cm_below_head': 57.6}
+[grow_hair] Afro {'file': 'Afro.abc', 'strands': 45000, 'points': 1715567, 'longest_cm': 13.6, 'lowest_tip_cm_below_head': 7.2}
+[grow_hair] AfroHat {'file': 'AfroHat.abc', 'strands': 45000, 'points': 3219587, 'longest_cm': 29.9, 'lowest_tip_cm_below_head': 7.8}
+[grow_hair] Messy {'file': 'Messy.abc', 'strands': 40000, 'points': 507000, 'longest_cm': 14.3, 'lowest_tip_cm_below_head': 5.0}
+[grow_hair] MessyHat {'file': 'MessyHat.abc', 'strands': 40000, 'points': 507000, 'longest_cm': 14.3, 'lowest_tip_cm_below_head': 5.0}
