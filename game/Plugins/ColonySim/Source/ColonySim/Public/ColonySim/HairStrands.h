@@ -44,7 +44,8 @@ struct HairSettings {
     float substep = 1.0f / 120.0f; // longest simulation step, s
     int iterations = 3;            // constraint passes per step
     float followDamping = 0.9f;    // share of the move given to the point below taken off a point's speed (0..1)
-    float friction = 0.3f;         // share of a touching point's sliding speed lost each step
+    float friction = 20.0f;        // 1/s: how fast a touching point's sliding dies away
+    float grip = 4.0f;             // cm/s: a touching point sliding slower than this stops (hair rests on the body)
     float sheetStretch = 1.35f;    // neighbouring strands stay within these times their styled distance apart
     float sheetSquash = 0.55f;
     float teleport = 60.0f;        // cm: a root jumping further in one frame starts the hair again at rest
@@ -73,7 +74,8 @@ private:
                const HairSettings& settings);
     // Lengths, the angle limit and the body, root to tip, on one strand (goal: this moment's animated points).
     bool solveStrand(std::vector<HairVec>& points, const std::vector<HairVec>& goal,
-                     const std::vector<HairCapsule>& capsules, float cosMax, float sinMax, std::vector<uint8_t>* touched) const;
+                     const std::vector<HairCapsule>& capsules, float cosMax, float sinMax, std::vector<HairVec>* contacts,
+                     std::vector<HairVec>* follow) const;
     void solveSheet(const std::vector<std::vector<HairVec>>& goal, const HairSettings& settings);
 
     std::vector<std::vector<HairVec>> points_;
@@ -84,8 +86,8 @@ private:
     // Scratch, kept to avoid allocating every frame.
     std::vector<std::vector<HairVec>> goalNow_;
     std::vector<HairCapsule> capsulesNow_;
-    std::vector<std::vector<HairVec>> beforeSolve_;
-    std::vector<std::vector<uint8_t>> touched_;
+    std::vector<std::vector<HairVec>> contacts_;  // per point, this step: the body's push-out directions summed
+    std::vector<std::vector<HairVec>> follow_;    // per point, this step: the length constraint's own corrections
     std::vector<HairVec> rootMoves_;
     bool started_ = false;
 };
@@ -100,7 +102,7 @@ COLONY_API float hairDeepestPenetration(const std::vector<std::vector<HairVec>>&
 COLONY_API std::vector<std::pair<int, int>> hairSheetNeighbours(const std::vector<HairVec>& roots, HairVec head, HairVec up);
 
 // The body's collision shapes for hair, fitted to one skeleton in its reference pose (component space, z up).
-enum class HairBone : uint8_t { Head, Neck, SpineTop, SpineMid, ClavicleL, ClavicleR, UpperArmL, UpperArmR };
+enum class HairBone : uint8_t { Head, Neck, SpineTop, SpineMid, ClavicleL, ClavicleR, UpperArmL, UpperArmR, SpineLow, Pelvis };
 
 struct HairShape {
     HairBone bone = HairBone::Head;  // the bone it rides on

@@ -258,6 +258,9 @@ private:
 		int32 Stain = -1;  // its FStain's serial
 		float RadiusCm = 0.0f;
 		float MaxRadiusCm = 60.0f;
+		FVector Centre = FVector::ZeroVector;
+		FVector LastTrail = FVector::ZeroVector;  // where the crawl trail last reached
+		bool bLeft = false;                       // the body crawled off it: it stops growing
 	};
 
 	/** A pile of the sim's filth drawn on its cell. */
@@ -393,5 +396,6 @@ private:
 	int32 Drips = 0;
 	int32 Spurts = 0;
 	int32 PoolsMade = 0;
+	int32 CrawlSmears = 0;
 	int32 Washed = 0;
 };

@@ -4077,7 +4077,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.group("social", [&] { saveSocialPart(ar, a.social, false); });  // maps 1: no lovin pause (it starts again at 0)
         });
     });
-    ar.section("comms", 1, [&] {  // the comms console's caravan requests (docs/design/comms-console.md)
+    ar.section("comms", 2, [&] {  // the comms console's caravan requests (docs/design/comms-console.md); 2: the goodwill log
         ar.list("requests", d.trade.requests, [&](CaravanRequest& r) {
             ar.text("faction", r.faction);
             ar.text("traderKind", r.traderKind);
@@ -4087,6 +4087,14 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.text("faction", c.faction);
             ar.value("at", c.at);
         });
+        if (ar.sectionVersion() >= 2) {
+            ar.list("goodwillLog", d.trade.goodwillLog, [&](GoodwillChange& g) {
+                ar.text("faction", g.faction);
+                ar.value("amount", g.amount);
+                ar.text("reason", g.reason);
+                ar.value("at", g.at);
+            });
+        }
     });
     ar.section("clock", 1, [&] {  // the step clock and the day length (docs/design/day-length.md)
         ar.value("steps", d.steps);

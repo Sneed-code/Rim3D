@@ -182,6 +182,10 @@ enum class EventType : uint8_t {
     SlaveSuppressed,       // a warden suppressed a slave: `thing` the warden, `target` the slave, `amount` its suppression now (0 to 1)
     SlaveRebellion,        // slaves rose up and run for the map edge: `count` how many, `thing` the one who started it
     SlaveEmancipated,      // a slave was freed and joined the colony as a colonist: `thing` the pawn
+    BuildingWrecked,  // a building was shot, blown or battered to pieces (docs/design/destruction.md): `thing` the building
+                      // (a ThingDestroyed follows; forget its id), `def` its def, `cell` its footprint origin, `count` and
+                      // `part` its footprint size (rotation applied), (x, y, z) its middle on the ground in metres,
+                      // `message` its stuff's defName ("" if none), `amount` 1 if it was finished, 0 a frame
 };
 
 // What stopped a projectile (ProjectileHit).

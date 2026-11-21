@@ -26,9 +26,16 @@ Numbers from the RimWorld wiki, checked 2026-10-28. Code: `TradeSystem` (`Trade.
   `CaravanRequested` (`amount` days to wait) and, if the caravan can't come when due (the faction turned hostile), `CaravanRequestFailed`.
 - Caravans on foot and settlements trade as before: every item on the map counts.
 
+## Goodwill log
+
+Every change that moves a faction's goodwill goes in `TradeState::goodwillLog` with its amount, the game second and a reason
+in plain words (`adjustGoodwill`'s `reason`): "a gift", "a gift by transport pod", "a caravan called", "a prisoner released",
+"a prisoner put to death", "a visitor died", "one of theirs arrested", "dev tool". The daily drift back toward the start is
+not logged. Only the newest 60 are kept (`kGoodwillLogSize`). The Factions window shows each faction's last three.
+
 ## Save and hash
 
-Section `comms` 1: the waiting requests and when each faction was last asked (`TradeState::requests`, `calls`); a call is forgotten
+Section `comms` 1: the waiting requests and when each faction was last asked (`TradeState::requests`, `calls`); 2 adds the goodwill log, which is not hashed; a call is forgotten
 when its cooldown ends. Both join `TradeSystem::hashState` only once a caravan has been asked for, so older replays keep their hashes.
 
 ## Not yet

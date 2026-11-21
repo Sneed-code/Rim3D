@@ -252,9 +252,9 @@ float TradeSystem::goodwill(const std::string& faction) const {
     return startGoodwill(faction);
 }
 
-bool TradeSystem::adjustGoodwill(const std::string& faction, float delta, std::string& error) {
+bool TradeSystem::adjustGoodwill(const std::string& faction, float delta, std::string& error, const std::string& reason) {
     if (owner_ != nullptr) {
-        return owner_->adjustGoodwill(faction, delta, error);  // this map's step turns its settlement hostile if need be
+        return owner_->adjustGoodwill(faction, delta, error, reason);  // this map's step turns its settlement hostile if need be
     }
     const Def* def = defs_.find("Factions", faction);
     if (def == nullptr) {
@@ -277,6 +277,10 @@ bool TradeSystem::adjustGoodwill(const std::string& faction, float delta, std::s
     }
     it->goodwill = after;
     if (after != before) {
+        state_.goodwillLog.push_back(GoodwillChange{faction, after - before, reason, now()});
+        if (state_.goodwillLog.size() > kGoodwillLogSize) {
+            state_.goodwillLog.erase(state_.goodwillLog.begin());
+        }
         emit(EventType::GoodwillChanged, 0, kNoEntity, after - before, faction);
         if (delta < 0.0f) {
             sendAwayIfHostile(faction);
@@ -385,7 +389,7 @@ bool TradeSystem::gift(uint32_t visitId, const std::vector<TradeLine>& items, st
         }
     }
     std::string ignored;
-    adjustGoodwill(visit->faction, static_cast<float>(value / rules_.giftSilverPerPoint), ignored);
+    adjustGoodwill(visit->faction, static_cast<float>(value / rules_.giftSilverPerPoint), ignored, "a gift");
     return true;
 }
 
@@ -393,7 +397,7 @@ void TradeSystem::noteExecuted(Entity prisoner) {
     const std::string faction = factionOf(prisoner);
     std::string ignored;
     if (!faction.empty()) {
-        adjustGoodwill(faction, rules_.executedGoodwill, ignored);
+        adjustGoodwill(faction, rules_.executedGoodwill, ignored, "a prisoner put to death");
     }
 }
 
@@ -402,7 +406,7 @@ void TradeSystem::noteArrested(Entity pawn) {
     const std::string faction = factionOf(pawn);
     std::string ignored;
     if (!faction.empty()) {
-        adjustGoodwill(faction, std::min(0.0f, rules_.hostileAtOrBelow - goodwill(faction)), ignored);
+        adjustGoodwill(faction, std::min(0.0f, rules_.hostileAtOrBelow - goodwill(faction)), ignored, "one of theirs arrested");
     }
 }
 
@@ -1158,7 +1162,7 @@ bool TradeSystem::requestCaravan(const std::string& faction, const std::string& 
             return false;
         }
     }
-    if (!adjustGoodwill(faction, -rules_.requestGoodwillCost, error)) {
+    if (!adjustGoodwill(faction, -rules_.requestGoodwillCost, error, "a caravan called")) {
         return false;
     }
     auto call = std::lower_bound(state_.calls.begin(), state_.calls.end(), faction,
@@ -1647,11 +1651,11 @@ void TradeSystem::step(const std::vector<Event>& events) {
             const std::string faction = factionOf(e.thing);
             std::string ignored;
             if (!faction.empty()) {
-                adjustGoodwill(faction, rules_.releaseGoodwill, ignored);
+                adjustGoodwill(faction, rules_.releaseGoodwill, ignored, "a prisoner released");
             }
         } else if (e.type == EventType::PawnDied && eventReg.valid(e.thing) && eventReg.all_of<Visitor>(e.thing)) {
             std::string ignored;
-            adjustGoodwill(factionOf(e.thing), rules_.visitorKilledGoodwill, ignored);
+            adjustGoodwill(factionOf(e.thing), rules_.visitorKilledGoodwill, ignored, "a visitor died");
         }
     }
     if (!state_.standings.empty() && t / kSecondsPerDay > state_.lastDrift) {
