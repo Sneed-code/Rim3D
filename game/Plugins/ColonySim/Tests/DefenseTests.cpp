@@ -22,6 +22,8 @@
 
 #include <doctest.h>
 
+#include "TestPlants.h"
+
 #include <algorithm>
 #include <cmath>
 #include <memory>
@@ -59,7 +61,7 @@ std::unique_ptr<Sim> defnSim(uint64_t seed = 31) {
     settings.seed = seed;
     settings.mapSize = 96;
     settings.flatMap = true;
-    return std::make_unique<Sim>(settings, defnDefs());
+    return withoutPlants(std::make_unique<Sim>(settings, defnDefs()));
 }
 
 // A pawn of another side (it becomes a fighter at the next step).
@@ -839,9 +841,12 @@ TEST_CASE("Defense: barricades round the mini-turret take the lancer's shots, an
         CHECK(f.barricadeHp < f.barricadeHpMax);
         CHECK(f.turretHp == 100);
     }
-    SUBCASE("ten minutes: it breaks barricades down (it wrecks the turret in the open in under two)") {
+    SUBCASE("ten minutes: it wears the barricades down (it wrecks the turret in the open in under two)") {
+        // Guns do half to buildings since sneed's 2026-11-20 rule (docs/design/structure-damage.md), so ten minutes
+        // wear the barricades down by a quarter rather than break one.
         const DefnBarricadeFight f = defnBarricadeFight(33, 600);
-        CHECK(f.standing < 7);
+        CHECK(f.barricadeHp < f.barricadeHpMax * 4 / 5);
+        CHECK(f.turretHp == 100);
     }
 }
 

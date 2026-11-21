@@ -197,6 +197,7 @@ enum class ProjectileHitKind : uint8_t {
     Pawn,      // a pawn (`target`) in the body part `part`; health events follow
     Armor,     // a pawn's armor stopped it (`target`, `part`)
     Gone,      // flew off the map or for too long, hitting nothing
+    Plant,     // a tree's trunk in `cell`; it lost `amount` hit points (docs/design/structure-damage.md)
 };
 
 // What a PawnAction event's pawn did. Later jobs add theirs (chop, mine, build, eat); Unreal plays

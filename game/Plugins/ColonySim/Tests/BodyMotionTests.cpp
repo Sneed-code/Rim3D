@@ -16,6 +16,8 @@
 
 #include <doctest.h>
 
+#include "TestPlants.h"
+
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -118,7 +120,7 @@ std::unique_ptr<Sim> motionTestSim(uint64_t seed = 5) {
     settings.mapSize = 64;
     settings.flatMap = true;
     settings.checkpointEvery = 50;
-    return std::make_unique<Sim>(settings, motionTestDefs());
+    return withoutPlants(std::make_unique<Sim>(settings, motionTestDefs()));
 }
 
 Entity motionTestPawn(Sim& sim, float x, float y, const char* weapon = nullptr, const char* def = "Human") {

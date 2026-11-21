@@ -1076,12 +1076,12 @@ uint64 UTerrainSubsystem::GatherChunkPlants(int32 ChunkX, int32 ChunkY, TArray<T
 			// Where in the cell, which way round and how big: a look made from the cell, not from the sim.
 			const FPlantVisual& Visual = PlantVisuals[Kind];
 			const uint64 H = TerrHash(static_cast<uint64>(Index) + 0x517CC1B7ULL);
-			const float R1 = static_cast<float>(H & 0xFFFF) / 65535.0f;
-			const float R2 = static_cast<float>((H >> 16) & 0xFFFF) / 65535.0f;
 			const float R3 = static_cast<float>((H >> 32) & 0xFFFF) / 65535.0f;
 			const float R4 = static_cast<float>((H >> 48) & 0xFFFF) / 65535.0f;
-			const float PX = static_cast<float>(X) + 0.5f + (R1 - 0.5f) * 0.7f;
-			const float PY = static_cast<float>(Y) + 0.5f + (R2 - 0.5f) * 0.7f;
+			// Where the sim's trunk stands too (colony::Plants::stemPoint: bullets, blows and walkers meet it there).
+			float PX = 0.0f;
+			float PY = 0.0f;
+			colony::Plants::stemPoint(Index, X, Y, PX, PY);
 			const float Grown = TerrSproutScale + (1.0f - TerrSproutScale) * static_cast<float>(Stage) / static_cast<float>(TerrGrowthStages);
 			const float Size = Visual.Scale * Grown * (1.0f + (R4 - 0.5f) * 2.0f * Visual.Jitter);
 			(*Out)[Kind].Add(FTransform(FRotator(0.0, R3 * 360.0f, 0.0), FVector(PX * 100.0f, PY * 100.0f, Map.heightAt(PX, PY) * 100.0f), FVector(Size)));
