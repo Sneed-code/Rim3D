@@ -38,6 +38,30 @@
       "lift": 0.002, "volume": 0.002, "stiffness": 0.95, "gravity": 0.05, "back": 0.6, "no_hat": true,
       "clump": 0.1, "clump_size": 0.006, "wave": 0.0, "frizz": 0.0004, "u_cut": 0.0,
       "width_root": 0.00007, "width_tip": 0.00005, "fringe": 0.0
+    },
+    "Braid": {
+      "count": 30000, "to": "waist", "part": "gather", "segments": 200,
+      "lift": 0.003, "volume": 0.003, "stiffness": 0.70, "gravity": 0.30, "back": 0.0,
+      "gather": {"up": -0.045, "back": 0.004, "band": 0.014, "tail_spread": 0.0,
+                 "braid": {"width": 0.021, "width_tip": 0.012, "period": 0.11, "tuft": 0.07,
+                           "tie_radius": 0.0055, "tuft_radius": 0.016}},
+      "clump": 0.15, "clump_size": 0.008, "wave": 0.0, "frizz": 0.0009, "u_cut": 0.0,
+      "width_root": 0.00008, "width_tip": 0.00004, "fringe": 0.0
+    },
+    "Afro": {
+      "count": 45000, "part": "radial", "puff": 0.068, "seg_len": 0.0018, "segments": 0,
+      "shape": {"up": -0.016, "back": 0.010, "scale": [0.97, 1.0, 1.04], "rough": 0.025},
+      "lift": 0.002, "volume": 0.004, "stiffness": 0.92, "gravity": 0.05, "droop": 0.12, "rise": 0.9,
+      "coil": 0.0028, "coil_period": 0.011,
+      "clump": 0.30, "clump_size": 0.010, "wave": 0.0, "frizz": 0.0015, "u_cut": 0.0,
+      "width_root": 0.00010, "width_tip": 0.00008, "fringe": 0.0
+    },
+    "Messy": {
+      "count": 40000, "length": 0.09, "part": "none", "segments": 20, "length_spread": 0.15,
+      "lift": 0.010, "volume": 0.018, "stiffness": 0.88, "gravity": 0.08, "back": 0.30, "hug": 0.8, "rise": 0.3,
+      "messy": 1.6, "messy_size": 0.08,
+      "clump": 0.55, "clump_size": 0.012, "wave": 0.005, "wave_period": 0.06, "frizz": 0.0012, "u_cut": 0.0,
+      "width_root": 0.00008, "width_tip": 0.00005, "shorter_sides": 0.35, "fringe": 0.0
     }
   }
 }
