@@ -4,6 +4,7 @@
 #include "ColonySim/Random.h"
 
 #include <cstring>
+#include <initializer_list>
 
 namespace colony {
 
@@ -70,8 +71,16 @@ const char* soundWorkCue(PawnAction action) {
         case PawnAction::Mine: return "Work_Mine";
         case PawnAction::Cut: return "Work_Chop";
         case PawnAction::Harvest: return "Work_Harvest";
-        case PawnAction::Build:
-        case PawnAction::Deconstruct: return "Work_Build";
+        case PawnAction::Build: return "Work_Build";
+        case PawnAction::Deconstruct: return "Work_Deconstruct";
+        case PawnAction::Repair: return "Work_Repair";
+        case PawnAction::Rearm: return "Trap_Rearm";
+        case PawnAction::Operate:
+        case PawnAction::Patch: return "Work_Tend";
+        case PawnAction::Drill:
+        case PawnAction::Scan: return "Work_Drill";
+        case PawnAction::DropCorpse: return "Pawn_Death";
+        case PawnAction::LieDown: return "Bed_Creak";
         case PawnAction::Cook: return "Work_Cook";
         case PawnAction::Research: return "Work_Research";
         case PawnAction::Clean: return "Work_Clean";
@@ -108,16 +117,31 @@ void soundPawnAction(const DefDatabase& db, const Event& e, const SoundDefOf& de
         else if (e.amount >= 0.5f) out.push_back(soundOn("Alert_Suspicious", e.thing));
         return;
     }
+    if (e.action == PawnAction::Patch && e.message != "patching") return;  // the bandage sounds once, as it starts
+    if (e.action == PawnAction::LieDown && e.target == kNoEntity) return;  // the ground does not creak
     const char* cue = soundWorkCue(e.action);
     if (cue == nullptr) return;
     std::string name = cue;
+    // Plant work by the plant (`struckDef`): a tree is chopped with an axe, the rest cut; its `visual.sound.cut` says
+    // otherwise. Sowing (`message` "sow") digs the soil.
+    if (e.action == PawnAction::Cut) {
+        const Def* plant = soundDef(db, e.struckDef);
+        const char* fallback = plant != nullptr && !plant->flag("plant.isTree") ? "Work_PlantCut" : "Work_Chop";
+        name = soundSlotOr(plant, "cut", fallback);
+    } else if (e.action == PawnAction::Harvest && e.message == "sow") {
+        name = "Work_Sow";
+    }
+    if (db.find("SoundCues", name) == nullptr) name = cue;
     // A bench names its own work sound ("work"): a smithy rings, a stove sizzles.
     if (e.action == PawnAction::Cook || e.action == PawnAction::Research || e.action == PawnAction::Butcher) {
         name = soundSlotOr(soundDefOfEntity(db, defOf, e.target), "work", cue);
     }
     if (e.action == PawnAction::Mine || e.action == PawnAction::Cut || e.action == PawnAction::Harvest ||
-        e.action == PawnAction::Extinguish) {
-        out.push_back(soundAtCell(name, e.cell));
+        e.action == PawnAction::Extinguish || e.action == PawnAction::DropCorpse) {
+        // At the cell worked, naming the worker too: Unreal repeats a cue with a `repeat` while that pawn keeps at it.
+        SoundPlay p = soundAtCell(name, e.cell);
+        p.entity = e.thing;
+        out.push_back(p);
     } else {
         out.push_back(soundOn(name, e.thing));
     }
@@ -147,7 +171,9 @@ std::string soundMaterialOf(const DefDatabase& db, DefId def) {
 std::string soundMeleeCue(const DefDatabase& db, const Event& e) {
     const std::string& m = e.message;
     // A blow into a wall or rock comes as "missed" (no pawn was struck) with `hit` Building or Rock.
-    if (m == "missed" && e.hit != ProjectileHitKind::Building && e.hit != ProjectileHitKind::Rock) return {};
+    if (m == "missed" && e.hit != ProjectileHitKind::Building && e.hit != ProjectileHitKind::Rock &&
+        e.hit != ProjectileHitKind::Plant)
+        return {};
     if (m == "dodged") return "Dodge";
     // The weapon's material (its stuff, else its def), wood or steel: a stone club rings hard like steel, a cloth one is wood.
     std::string weapon = soundMaterialOf(db, e.stuff);
@@ -169,6 +195,7 @@ std::string soundMeleeCue(const DefDatabase& db, const Event& e) {
     if (surface.empty()) surface = soundMaterialOf(db, e.struckDef);
     if (surface.empty()) {
         if (e.hit == ProjectileHitKind::Rock) surface = "Stone";
+        else if (e.hit == ProjectileHitKind::Plant) surface = "Wood";  // a tree trunk
         else if (e.hit == ProjectileHitKind::Building) surface = "Stone";
         else if (m == "deflected" || e.hit == ProjectileHitKind::Armor) surface = "Steel";  // plate turns a blow
         else if (m == "blocked") surface = "Steel";
@@ -181,7 +208,66 @@ std::string soundMeleeCue(const DefDatabase& db, const Event& e) {
     return "Hit_" + weapon + "_" + surface;
 }
 
+std::string soundSurfaceOfStep(const std::string& step) {
+    if (step == "Step_Sand") return "Sand";
+    if (step == "Step_Water") return "Water";
+    if (step == "Step_Stone" || step == "Step_Tile") return "Stone";
+    if (step == "Step_Wood") return "Wood";
+    if (step == "Step_Metal") return "Steel";
+    return "Dirt";  // grass, soil, carpet, leaves, mud, snow
+}
+
 namespace {
+
+// The first of the cues the defs have; empty if none.
+std::string soundFirstCue(const DefDatabase& db, std::initializer_list<std::string> cues) {
+    for (const std::string& c : cues) {
+        if (!c.empty() && db.find("SoundCues", c) != nullptr) return c;
+    }
+    return {};
+}
+
+}  // namespace
+
+std::string soundImpactCue(const DefDatabase& db, const Event& e, const SoundStepAt& stepAt) {
+    const Def* projectile = soundDef(db, e.def);
+    std::string set = projectile != nullptr ? soundSlot(*projectile, "impactSet") : std::string();
+    if (set.empty()) set = "Impact";
+    std::string surface;
+    std::string old;  // the general cue from before surfaces, the last fallback
+    switch (e.hit) {
+        case ProjectileHitKind::Pawn: {
+            const std::string flesh = soundFleshCue(db, soundDamageTypeOfProjectile(db, e.def));
+            return set == "Impact" ? flesh : soundFirstCue(db, {set + "_Flesh", flesh});
+        }
+        case ProjectileHitKind::Armor: surface = "Steel"; old = "Impact_Armor"; break;
+        case ProjectileHitKind::Rock: surface = "Stone"; old = "Impact_Rock"; break;
+        case ProjectileHitKind::Building: {
+            std::string m = soundMaterialOf(db, e.struckStuff);
+            if (m.empty()) m = soundMaterialOf(db, e.struckDef);
+            surface = m == "Wood" ? "Wood" : m == "Steel" ? "Steel" : m == "Flesh" ? "Dirt" : "Stone";  // sandbags thud like earth
+            old = "Impact_Building";
+            break;
+        }
+        case ProjectileHitKind::Plant: surface = "Wood"; old = "Impact_Building"; break;  // a tree trunk
+        case ProjectileHitKind::Ground:
+            surface = soundSurfaceOfStep(stepAt ? stepAt(e.cell) : std::string("Step_Dirt"));
+            old = "Impact_Ground";
+            break;
+        default: return {};
+    }
+    // An arrow has fewer recordings: steel rings like stone, sand and water like... sand and water, else the ground.
+    if (set == "Arrow") {
+        const std::string arrow = surface == "Steel" ? "Stone" : surface == "Sand" ? "Dirt" : surface;
+        return soundFirstCue(db, {set + "_" + surface, set + "_" + arrow, "Impact_" + surface, old});
+    }
+    return soundFirstCue(db, {set + "_" + surface, "Impact_" + surface, old});
+}
+
+namespace {
+
+// A hash of the event's place and amount, 0 to 1, for sound choices that must not touch the game's random numbers.
+double soundEventRoll(const Event& e, uint64_t salt);
 
 void soundMeleeHit(const DefDatabase& db, const Event& e, std::vector<SoundPlay>& out) {
     std::string cue = soundMeleeCue(db, e);
@@ -190,7 +276,7 @@ void soundMeleeHit(const DefDatabase& db, const Event& e, std::vector<SoundPlay>
         // A pairing with no cue of its own falls back to the old general sounds.
         const std::string& m = e.message;
         cue = m == "blocked" ? "Melee_Block" : (m == "deflected" || e.hit == ProjectileHitKind::Armor) ? "Melee_Clang"
-              : e.hit == ProjectileHitKind::Building ? "Impact_Building" : "Flesh_Blunt";
+              : e.hit == ProjectileHitKind::Building || e.hit == ProjectileHitKind::Plant ? "Impact_Building" : "Flesh_Blunt";
     }
     out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));
 }
@@ -206,6 +292,12 @@ uint64_t soundFloatBits(float f) {
     uint32_t bits = 0;
     std::memcpy(&bits, &f, sizeof(bits));
     return bits;
+}
+
+double soundEventRoll(const Event& e, uint64_t salt) {
+    const uint64_t roll = splitMix64(salt ^ static_cast<uint64_t>(e.target) ^ (soundFloatBits(e.amount) << 32) ^
+                                     splitMix64(soundFloatBits(e.x) ^ (soundFloatBits(e.y) << 32)));
+    return static_cast<double>(roll >> 11) * 0x1.0p-53;
 }
 
 // The pawn's voice cue for this kind of cry; empty if it has none.
@@ -268,26 +360,36 @@ std::string soundStepCue(const DefDatabase& db, DefId terrain) {
 }
 
 void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defOf, std::vector<SoundPlay>& out,
-                   const SoundGenderOf& genderOf) {
+                   const SoundGenderOf& genderOf, const SoundStepAt& stepAt) {
     switch (e.type) {
         case EventType::ShotFired: {
-            const std::string cue = soundSlotOr(soundDef(db, e.def), "shot", "Shot_Pistol");
+            const Def* gun = soundDef(db, e.def);
+            const std::string cue = soundSlotOr(gun, "shot", "Shot_Pistol");
             out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));
+            // A firearm throws its spent case, which tinkles on the ground half a second later (the gun's `shell`).
+            const std::string shell = gun != nullptr ? soundSlot(*gun, "shell") : std::string();
+            if (!shell.empty() && e.thing != kNoEntity) {
+                SoundPlay p = soundOn(shell, e.thing);
+                p.delay = 0.45f;
+                out.push_back(p);
+            }
             break;
         }
         case EventType::ProjectileHit: {
-            switch (e.hit) {
-                case ProjectileHitKind::Pawn: {
-                    const std::string cue = soundFleshCue(db, soundDamageTypeOfProjectile(db, e.def));
-                    out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));
-                    soundHitVoice(db, e, defOf, genderOf, out);
-                    break;
+            const std::string cue = soundImpactCue(db, e, stepAt);
+            if (!cue.empty()) out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));
+            if (e.hit == ProjectileHitKind::Pawn) {
+                soundHitVoice(db, e, defOf, genderOf, out);
+            } else if (e.hit == ProjectileHitKind::Rock || e.hit == ProjectileHitKind::Armor ||
+                       (e.hit == ProjectileHitKind::Building && cue.find("_Wood") == std::string::npos)) {
+                // A bullet off stone or steel whines away now and then (a quarter of the time, by a hash of the hit).
+                const Def* projectile = soundDef(db, e.def);
+                const bool bullet = projectile == nullptr || soundSlot(*projectile, "impactSet").empty();
+                if (bullet && db.find("SoundCues", "Ricochet") != nullptr && soundEventRoll(e, 0x52494343ull) < 0.25) {
+                    SoundPlay p = soundAt("Ricochet", e.x, e.y, e.z);
+                    p.delay = 0.05f;
+                    out.push_back(p);
                 }
-                case ProjectileHitKind::Armor: out.push_back(soundAt("Impact_Armor", e.x, e.y, e.z)); break;
-                case ProjectileHitKind::Building: out.push_back(soundAt("Impact_Building", e.x, e.y, e.z)); break;
-                case ProjectileHitKind::Ground: out.push_back(soundAt("Impact_Ground", e.x, e.y, e.z)); break;
-                case ProjectileHitKind::Rock: out.push_back(soundAt("Impact_Rock", e.x, e.y, e.z)); break;
-                default: break;
             }
             break;
         }
@@ -307,8 +409,21 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
             if (e.message == "softened") out.push_back(soundOn("Melee_Block", e.thing));
             break;
         case EventType::Explosion: {
-            const std::string cue = soundSlotOr(soundDef(db, e.def), "explosion", "Explosion_Blast");
+            // The grenade, shell or rocket's own `explosion` (EMP, smoke, a mortar shell); else a big blast (radius 4.5 m
+            // and more: the doomsday rocket) `Explosion_Large`; else the damage type's (a frag's crack, fire's whoosh).
+            const Def* damage = soundDef(db, e.def);
+            std::string cue = soundSlotOr(soundDef(db, e.struckDef), "explosion", "");
+            const std::string byType = soundSlotOr(damage, "explosion", "Explosion_Blast");
+            if (cue.empty() && byType == "Explosion_Blast" && e.amount >= 4.5f) cue = soundFirstCue(db, {"Explosion_Large"});
+            if (cue.empty()) cue = byType;
             out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));
+            // Earth and stones rain down after a real blast (2.5 m and more), not after fire, smoke or EMP.
+            const bool blast = cue == "Explosion_Blast" || cue == "Explosion_Large" || cue == "Explosion_Mortar";
+            if (blast && e.amount >= 2.5f && db.find("SoundCues", "Explosion_Debris") != nullptr) {
+                SoundPlay p = soundAt("Explosion_Debris", e.x, e.y, e.z);
+                p.delay = 0.6f;
+                out.push_back(p);
+            }
             break;
         }
         case EventType::GrenadeThrown: out.push_back(soundAt("Grenade_Throw", e.x, e.y, e.z)); break;
@@ -325,10 +440,32 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
         case EventType::WeaponSwitched: break;  // the PawnAction Switch already sounded
         case EventType::PawnInjured:
         case EventType::PawnPartLost: {
-            const std::string cue = soundSlotOr(soundDefOfEntity(db, defOf, e.thing), "hurt", "");
+            const Def* pawn = soundDefOfEntity(db, defOf, e.thing);
+            const std::string cue = soundSlotOr(pawn, "hurt", "");
             if (!cue.empty()) out.push_back(soundOn(cue, e.thing));
+            if (e.type == EventType::PawnPartLost) {
+                // Gore (sneed, 2026-11-20): a limb comes off with a wet tear and a crack of bone, a head with a heavier
+                // chop; the piece slaps down on the ground a moment later. Mechanoids (a `gore` slot of "none") don't.
+                const std::string gore = soundSlotOr(pawn, "gore", "");
+                if (gore != "none") {
+                    const bool head = e.message == "Head" || e.message == "Neck";
+                    const std::string sever = soundFirstCue(db, {head ? "Gore_Decap" : "Gore_Sever", "Gore_Sever"});
+                    if (!sever.empty()) out.push_back(soundOn(sever, e.thing));
+                    if (db.find("SoundCues", "Gore_Splat") != nullptr) {
+                        SoundPlay p = soundOn("Gore_Splat", e.thing);
+                        p.delay = 0.5f;
+                        out.push_back(p);
+                    }
+                }
+            }
             break;
         }
+        case EventType::PlantRemoved:
+            if (e.message == "felled") {
+                const std::string fall = soundSlotOr(soundDef(db, e.def), "fall", "Tree_Fall");
+                if (db.find("SoundCues", fall) != nullptr) out.push_back(soundAtCell(fall, e.cell));
+            }
+            break;
         case EventType::PawnDowned:
         case EventType::PawnDied: {
             const char* slot = e.type == EventType::PawnDied ? "death" : "downed";

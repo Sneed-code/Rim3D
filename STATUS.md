@@ -18,6 +18,16 @@ sneed judges the look. Clothes on creator bodies show once #425 merges.
 
 Finer body dirt that fades (sneed, 2026-11-20; sim, data and Unreal art, `docs/design/grime.md`): **dirt on bodies now has fine spray over the broad smudges**, like the blood: mud drops in three sizes flicked up the legs (to the waist, stretched a little upwards) and crowding round each smudge's edge, gritty smudges, dark wet mud in the drops and cores and pale dust at the edges; drops too small to see at range blend into an even tint (no sparkle). **Dirt fades by itself in 10 minutes** (`dirtFadeSeconds` 18,000) whenever nothing is dirtying it, a corpse in the dirt staying dirty; rain, wading and swimming still wash it faster (full rain 5 minutes, swimming 20 s). Cloud preview `tools/grime_dirt_preview.py`. Checked on the PC 2026-11-21 (noon pictures, smoke `hurt` phase `dirt`): fine dark spray over duller lower legs, reads as splashed mud. Needs `-run=BloodArt -force` once per PC.
 
+Sounds for every weapon, surface and job (sneed, 2026-11-20; sim, data and Unreal, `docs/design/sound.md`): **every gun
+now has its own shot** (machine pistol, heavy SMG, LMG, minigun, sniper, chain shotgun, turrets, mortar, charge guns,
+bows, pila) from real recordings; **bullets and arrows sound by what they hit** (flesh, wood, steel, stone, dirt, sand,
+water; some ricochet), spent cases tinkle after shots, shells whistle in, bullets whiz past your head, blasts have
+mortar, EMP, smoke and large kinds with falling debris; **gore** (severing, decapitation, a splat), **work** (chopping,
+plant cutting, sowing, deconstructing, repairing, drilling; repeated while working; a tree crashing down), bed creaks,
+men's grunts and screams. **Footsteps** are short range, vary by ground, are quieter crouched or prone, and your own
+character makes none. 318 free recordings from Freesound (CC0 / CC-BY, credits written) plus the CC0 firearm library;
+picked by title, not yet by ear. PC 2026-11-21: download 0 failures, compile clean, sound smoke passes; 5 quiet recordings that trimmed to nothing now recut untrimmed. **Next: re-run `python tools/sound_assets.py --cut` on the PC, and sneed's listen.**
+
 Clothes on MakeHuman people (sneed, 2026-11-20; tools and Unreal, `docs/design/clothes-draw.md` "MakeHuman bodies"):
 the MakeHuman bodies wore nothing. Now **34 free MakeHuman community garments** (CC0/CC-BY, `assets/makehuman_garments.json`:
 tees, polo, tank, shirts, blouse, sweaters, cargo pants, jeans, trousers, hooded and uniform jackets, cardigan, winter
