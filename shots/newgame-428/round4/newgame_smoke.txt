@@ -1,0 +1,14 @@
+﻿Building Rim3DEditor (below-normal priority, 6 jobs)...
+Build ok.
+Running smoke test 'newgame' at 1920x1080...
+
+Smoke test 'newgame': FAIL  (35 s, NVIDIA GeForce RTX 5080, 1920x1080)
+newgame_title                80.9 fps  game   3.8 ms  render   4.7 ms  gpu   3.7 ms  screenshot ok
+newgame_scenario            140.6 fps  game   3.7 ms  render   4.8 ms  gpu   3.7 ms  screenshot ok
+newgame_people               73.1 fps  game   5.1 ms  render  11.2 ms  gpu   9.9 ms  screenshot ok
+newgame_you_clothes          45.5 fps  game   5.3 ms  render  11.0 ms  gpu   9.7 ms  screenshot ok
+newgame_companions           57.1 fps  game   5.4 ms  render  11.0 ms  gpu   9.7 ms  screenshot ok
+newgame_looks                57.8 fps  game   4.8 ms  render  11.0 ms  gpu   9.7 ms  screenshot ok
+newgame_landed              109.6 fps  game   4.4 ms  render   5.6 ms  gpu   4.6 ms  screenshot ok
+ERROR: newgame_people: the screen's exposure is past the engine's safe 12 EV
+Screenshots: C:\Dev\Rim3D-climb\game\Saved\Smoke\newgame
