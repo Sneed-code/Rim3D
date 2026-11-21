@@ -9,6 +9,9 @@
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
+#include "GameFramework/PlayerController.h"
+#include "HAL/IConsoleManager.h"
+#include "Kismet/GameplayStatics.h"
 #include "UnrealClient.h"
 #include "Widgets/SViewport.h"
 
@@ -29,6 +32,7 @@
 #include "ColonySim/Melee.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Colonist.h"
 #include "ColonySim/WeaponSlot.h"
 
 #include <string>
@@ -63,6 +67,7 @@ namespace
 		TArray<colony::Entity> FocusSeen;
 		int32 TabsSent = 0;
 		bool bKeysDown = false;
+		float FastestBeforeTab = 0.0f;
 		float SlowestAfterTab = 1.0e9f;
 		bool bFocusLeftViewport = false;
 
@@ -191,6 +196,18 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 		ViewFrom(Eye, (Middle + FVector(0.0, 0.0, 60.0) - Eye).Rotation());
 	};
 
+	// Back to the player's own camera with the keys working (ViewFrom turns the pawn's input off).
+	const auto PlayerView = [=, this]()
+	{
+		APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+		AProtagonistPawn* Body = Prot() ? Prot()->GetBody() : nullptr;
+		if (PC && Body)
+		{
+			PC->SetViewTarget(Body);
+			Body->EnableInput(PC);
+		}
+	};
+
 	// 1. Crashlanded, the protagonist taken over in third person on a flat map.
 	AddPhase(TEXT("setup"), [=, this]()
 	{
@@ -200,6 +217,14 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 		{
 			Fail(TEXT("setup: a subsystem did not start"));
 			return;
+		}
+		// MetaHuman bodies (the hold system and the finisher pose need them; mannequins keep the old drawing) by day.
+		for (const TPair<const TCHAR*, float>& Var : {TPair<const TCHAR*, float>(TEXT("Pawns.MetaHumans"), 1.0f), TPair<const TCHAR*, float>(TEXT("Sky.Hour"), 10.0f)})
+		{
+			if (IConsoleVariable* Found = IConsoleManager::Get().FindConsoleVariable(Var.Key))
+			{
+				Found->Set(Var.Value, ECVF_SetByCode);
+			}
 		}
 		FSimStartOptions Options;
 		Options.Seed = 42;
@@ -221,6 +246,14 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			return;
 		}
 		State->Cell = colony::CellPos{FMath::FloorToInt32(Me->x), FMath::FloorToInt32(Me->y), 0};
+		// Only the player: the other colonists would crowd the pictures and stand in the run.
+		for (const colony::ThingView& View : B->GetCurrentSnapshot().things)
+		{
+			if (View.category == colony::ThingCategory::Pawn && View.id != State->Me)
+			{
+				B->Submit(colony::DestroyThingCommand{View.id});
+			}
+		}
 		if (!P->EnterDirectMode(State->Me))
 		{
 			Fail(TEXT("setup: could not take control of the protagonist"));
@@ -351,6 +384,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 				Fail(PhaseName + TEXT(": the victim did not appear"));
 				return;
 			}
+			Bridge()->Submit(colony::DestroyThingCommand{State->Enemy});
 			if (Frames <= 0 || State->MaxT < 0.8f)
 			{
 				Fail(FString::Printf(TEXT("%s: no %s finisher played (frames %d, T %.2f)"), *PhaseName, UTF8_TO_TCHAR(Weapon.Move), Frames, State->MaxT));
@@ -393,6 +427,9 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 		State->bKeysDown = false;
 		State->SlowestAfterTab = 1.0e9f;
 		State->bFocusLeftViewport = false;
+		State->FastestBeforeTab = 0.0f;
+		State->Enemy = colony::kNoEntity;
+		PlayerView();
 		const colony::ThingView* Me = FinSmokeFind(*B, State->Me);
 		if (!Me)
 		{
@@ -440,7 +477,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 				for (const colony::Entity Runner : State->Runners)
 				{
 					B->Submit(colony::SetFactionCommand{Runner, 2});
-					B->Submit(colony::SetFightResponseCommand{Runner, colony::FightResponse::FleeOnSight});
+					B->Submit(colony::SetFightResponseCommand{Runner, colony::FightResponse::Flee});  // stands till hit
 				}
 			}
 		}
@@ -476,6 +513,10 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 		{
 			const float Speed = static_cast<float>(FVector::Dist2D(Now, State->LastBody)) / 100.0f / Delta;
 			State->Speeds.Add(Speed);
+			if (State->TabsSent == 0)
+			{
+				State->FastestBeforeTab = FMath::Max(State->FastestBeforeTab, Speed);
+			}
 			if (State->TabsSent > 0 && At > 1.0f)
 			{
 				// Averaged over the last 8 frames, so one slow frame doesn't count.
@@ -497,16 +538,25 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 		{
 			AProtagonistPawn::SetSprintToggle(false);
 		}
+		for (const colony::Entity Runner : State->Runners)
+		{
+			Bridge()->Submit(colony::DestroyThingCommand{Runner});
+		}
+		PhaseNumbers.Add(TEXT("fastest_before_tab"), State->FastestBeforeTab);
 		PhaseNumbers.Add(TEXT("slowest_after_tab"), State->SlowestAfterTab);
 		PhaseNumbers.Add(TEXT("targets_seen"), State->FocusSeen.Num());
-		Notes.Add(FString::Printf(TEXT("tab_run: %d Tabs, %d different lock-on targets in turn, slowest %.1f m/s after a Tab, keyboard focus %s the game"),
-			State->TabsSent, State->FocusSeen.Num(), State->SlowestAfterTab, State->bFocusLeftViewport ? TEXT("LEFT") : TEXT("stayed on")));
+		Notes.Add(FString::Printf(TEXT("tab_run: %.1f m/s before the first Tab, %d Tabs, %d different lock-on targets in turn, slowest %.1f m/s after a Tab, keyboard focus %s the game"),
+			State->FastestBeforeTab, State->TabsSent, State->FocusSeen.Num(), State->SlowestAfterTab, State->bFocusLeftViewport ? TEXT("LEFT") : TEXT("stayed on")));
 		if (State->Runners.Num() < 3)
 		{
 			Fail(TEXT("tab_run: the three enemies did not appear"));
 			return;
 		}
-		if (State->SlowestAfterTab < 3.0f)
+		if (State->FastestBeforeTab < 3.0f)
+		{
+			Fail(FString::Printf(TEXT("tab_run: the run never started (%.1f m/s before any Tab: the held W key did not reach the pawn)"), State->FastestBeforeTab));
+		}
+		else if (State->SlowestAfterTab < 3.0f)
 		{
 			Fail(FString::Printf(TEXT("tab_run: Tab slowed the run to %.1f m/s"), State->SlowestAfterTab));
 		}
@@ -530,6 +580,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			return;
 		}
 		Prot()->EndFocus();
+		PlayerView();
 		FinSmokeHeal(*Sim, State->Me);
 		const colony::Entity Rifle = Sim->things().spawn(std::string("Gun_AssaultRifle"), State->Cell);
 		Sim->combat().equip(State->Me, Rifle);
