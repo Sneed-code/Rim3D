@@ -2,6 +2,13 @@
 
 Updated 2026-11-21.
 
+Weather words match the sky (sneed, 2026-11-21; sim and Unreal HUD, `docs/design/weather.md`): the Crash Landed
+picture said "rainy thunderstorm" over a dry, sunny map. The game's opening clear spell was timed from midnight, so a
+morning landing (#432) could start a new weather on the very first second, and the HUD named it at once while the rain
+and cloud take 1.6 hours to blend in. Now **the opening clear weather starts when the game does** (`Weather::startAt`,
+so every new colony lands in clear weather for 3 to 10 hours), and **the HUD names the weather you see**
+(`Weather::shown()`: the old one until the new one is half way in). Needs a PC compile (one line in `SkySubsystem.cpp`).
+
 Title screen and new game (sneed, 2026-11-21; sim, data and Unreal, `docs/design/new-game.md`): a **title screen**
 (Continue, New colony, Load, Settings, Quit), the **Crash Landed** scenario (you, an amnesiac, and 2 strangers aged 18,
 all landing naked, with 50 survival meals, 200 silver, 50 steel, 30 components, a rifle and cotton shirts and trousers
