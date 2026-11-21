@@ -96,8 +96,11 @@ namespace
 		UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FactoryClass);
 		Factory->AssetImportTask = Task;
 		Task->Factory = Factory;
-		// FactoryCanImport is what loads the factory's file translators (Alembic and so on); without it the factory has
-		// none and returns nothing for every file (PC, 2026-11-21).
+		// The groom factory loads its file translators (Alembic and so on) lazily, when asked for its file types; until
+		// then it has none, cannot read anything and imports nothing (PC, 2026-11-21: every file failed).
+		TArray<FString> Extensions;
+		Factory->GetSupportedFileExtensions(Extensions);
+		UE_LOG(LogHairGrooms, Display, TEXT("  groom importer reads: %s"), *FString::Join(Extensions, TEXT(", ")));
 		if (!Factory->FactoryCanImport(File))
 		{
 			UE_LOG(LogHairGrooms, Error, TEXT("The groom importer cannot read %s (no hair curves in it?)"), *File);
