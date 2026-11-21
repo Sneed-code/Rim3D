@@ -4,12 +4,15 @@
 // screenshot each, at 1080p, UI included.
 #include "SmokeTest.h"
 
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
+#include "Engine/SkeletalMesh.h"
 
 #include "ColonyHudSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
+#include "SkySubsystem.h"
 
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
@@ -136,6 +139,22 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 			{
 				Fail(TEXT("newgame_people: a colonist is not drawn on its MakeHuman body"));
 			}
+			// Round 2 showed the animating mannequin through the MakeHuman body as a red and blue figure.
+			else if (Actor->GetBody() && Actor->GetBody()->IsVisible())
+			{
+				Fail(TEXT("newgame_people: the hidden mannequin is drawn over a MakeHuman body"));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Display, TEXT("NEWGAME person %s drawn as %s"), *NewGameSmokeName(*Sim, Pawn),
+					Actor->GetMakeHumanMesh()->GetSkeletalMeshAsset() ? *Actor->GetMakeHumanMesh()->GetSkeletalMeshAsset()->GetName() : TEXT("nothing"));
+			}
+		}
+		// The screen is shown by day, whatever hour the landing is at.
+		const USkySubsystem* Sky = GetWorld()->GetSubsystem<USkySubsystem>();
+		if (Sky && Sky->GetHourOverride() < 0.0f)
+		{
+			Fail(TEXT("newgame_people: the sky is not held at day on the character screen"));
 		}
 		// You are the creator's own woman, untouched (the gun range's), so hair and body updates show on you.
 		const colony::PawnLooks* YourLooks = Sim->things().registry().try_get<colony::PawnLooks>(People[0]);
@@ -266,6 +285,10 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 		{
 			Fail(TEXT("newgame_landed: the game did not start after Start"));
 			return;
+		}
+		if (const USkySubsystem* Sky = GetWorld()->GetSubsystem<USkySubsystem>(); Sky && Sky->GetHourOverride() >= 0.0f)
+		{
+			Fail(TEXT("newgame_landed: the sky is still held at the character screen's hour"));
 		}
 		for (const colony::Entity Pawn : Sim->startingColonistSlots())
 		{

@@ -11,6 +11,7 @@
 #include "ColonyHudSubsystem.generated.h"
 
 class ACameraActor;
+class APointLight;
 
 class AActor;
 class USceneCaptureComponent2D;
@@ -312,6 +313,10 @@ private:
 	float PeoplePitch = -4.0f;
 	float PeopleDistance = 280.0f;
 	TWeakObjectPtr<ACameraActor> PeopleCamera;
+	TWeakObjectPtr<APointLight> PeopleLamp;  // a soft key light by the camera (cosmetic)
+	colony::Entity PeopleViewFor = colony::kNoEntity;  // the pawn the clear view below was picked for
+	float PeopleViewYaw = 0.0f;  // degrees off the body's facing where the camera stands, picked clear of trees
+	float PickPeopleView(colony::Entity Pawn) const;
 	int32 NewSeed = 42;
 	int32 NewMapSize = 512;
 	bool bNarratorPending = false;

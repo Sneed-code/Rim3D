@@ -52,7 +52,10 @@ looks. Changes show at once on the body and go to the sim when a slider is let g
 Under the body on both screens: a **clothes on** tick (the cargo pack's cotton shirt and trousers on everyone, drawn
 through the real clothes path, `USimPawnSubsystem::SetApparelPreview`, nothing in the sim) and the turntable: dragging
 spins the body itself (`ASimPawnActor::SetPreviewSpin`), so soft tissue and hair swing; it eases to a stop, up and down
-tilt, the wheel zooms.
+tilt, the wheel zooms. The stage is cosmetic too: the sky is held at mid-morning while the screen is open
+(`USkySubsystem::SetHourOverride`; the sim's clock is untouched), a soft key light stands by the camera, and for each
+pawn the camera picks the direction nearest its front with no tree trunk or other person in the way, turning the body to
+face it. The mannequin a MakeHuman body is retargeted from is hidden even without a MetaHuman (it showed through).
 
 **Canopy**, the screens' own look (sneed: no reference UIs; he judges, may change it): dark green-black glass panels with
 square corners and a short jade bar on top, bone text, jade for what is chosen and ember for costs, three text sizes

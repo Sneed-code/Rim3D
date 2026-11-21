@@ -6,7 +6,9 @@
 #include "ColonyHudSubsystem.h"
 
 #include "Camera/CameraActor.h"
+#include "Components/PointLightComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/PointLight.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
@@ -22,11 +24,14 @@
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
+#include "SkySubsystem.h"
 #include "WorldScreenSubsystem.h"
 
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/Map.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
 
@@ -36,6 +41,12 @@
 
 namespace
 {
+	// The character screen's stage (cosmetic): the hour the sky is held at, the key light (candelas, real units like the
+	// sun's lux in data/look.json), and how far out from the body the camera's line must be clear of trees.
+	constexpr float NgPreviewHour = 10.5f;
+	constexpr float NgPreviewLampIntensity = 60000.0f;
+	constexpr float NgPreviewClearMetres = 5.5f;
+
 	/**
 	 * "Canopy", the new-game screens' own look: dark green-black glass panels with square corners and a short jade bar on
 	 * each panel's top edge; bone-white text; one jade accent for what is chosen and one ember accent for what costs.
@@ -316,6 +327,7 @@ void UColonyHudSubsystem::EnterPeoplePage(USimSubsystem& Bridge)
 	PeopleSpin = 0.0f;
 	PeopleSpinRate = 0.0f;
 	bPeopleClothes = false;
+	PeopleViewFor = colony::kNoEntity;
 	Bridge.SetSpeed(0);
 }
 
@@ -348,7 +360,17 @@ void UColonyHudSubsystem::EndPeopleCamera()
 		Camera->Destroy();
 	}
 	PeopleCamera.Reset();
-	// The turntable and the clothes preview are cosmetic: they end with the screen.
+	if (APointLight* Lamp = PeopleLamp.Get())
+	{
+		Lamp->Destroy();
+	}
+	PeopleLamp.Reset();
+	PeopleViewFor = colony::kNoEntity;
+	// The turntable, the clothes preview and the daylight are cosmetic: they end with the screen.
+	if (USkySubsystem* Sky = GetWorld() ? GetWorld()->GetSubsystem<USkySubsystem>() : nullptr)
+	{
+		Sky->SetHourOverride(-1.0f);
+	}
 	if (UWorld* World = GetWorld())
 	{
 		if (USimPawnSubsystem* Pawns = World->GetSubsystem<USimPawnSubsystem>())
@@ -366,6 +388,81 @@ void UColonyHudSubsystem::EndPeopleCamera()
 			}
 		}
 	}
+}
+
+float UColonyHudSubsystem::PickPeopleView(colony::Entity Pawn) const
+{
+	// Tries the camera in front of the body first, then further round each way, and takes the first direction with no tree
+	// trunk or other starting person between the camera and the body (or the least blocked one).
+	UWorld* World = GetWorld();
+	USimPawnSubsystem* Pawns = World ? World->GetSubsystem<USimPawnSubsystem>() : nullptr;
+	USimSubsystem* Bridge = World ? World->GetSubsystem<USimSubsystem>() : nullptr;
+	const ASimPawnActor* Actor = Pawns ? Pawns->FindPawn(Pawn) : nullptr;
+	if (!Actor || !Bridge || !Bridge->GetSim())
+	{
+		return 0.0f;
+	}
+	const colony::Sim& Sim = *Bridge->GetSim();
+	const FVector Origin = Bridge->SimToWorld(0.0f, 0.0f, 0);
+	const FVector2D At((Actor->GetActorLocation().X - Origin.X) / 100.0, (Actor->GetActorLocation().Y - Origin.Y) / 100.0);
+	TArray<FVector2D> Others;
+	for (const colony::Entity Other : Sim.startingColonistSlots())
+	{
+		if (const ASimPawnActor* OtherActor = Other != Pawn ? Pawns->FindPawn(Other) : nullptr)
+		{
+			Others.Add(FVector2D((OtherActor->GetActorLocation().X - Origin.X) / 100.0, (OtherActor->GetActorLocation().Y - Origin.Y) / 100.0));
+		}
+	}
+	const float Facing = Actor->GetDrawnYaw();
+	float Best = 0.0f;
+	float BestBlocked = TNumericLimits<float>::Max();
+	for (int32 Step = 0; Step <= 18; ++Step)
+	{
+		const float Offset = (Step % 2 == 1 ? 1.0f : -1.0f) * 20.0f * static_cast<float>((Step + 1) / 2);
+		const float Yaw = FMath::DegreesToRadians(Facing + Offset);
+		const FVector2D Dir(FMath::Cos(Yaw), FMath::Sin(Yaw));
+		float Blocked = 0.0f;
+		for (float Along = 0.5f; Along <= NgPreviewClearMetres; Along += 0.25f)
+		{
+			const FVector2D P = At + Dir * Along;
+			const colony::CellPos Cell{FMath::FloorToInt32(P.X), FMath::FloorToInt32(P.Y), 0};
+			if (!Sim.map().inBounds(Cell))
+			{
+				Blocked += 1.0f;
+				continue;
+			}
+			float TrunkX = 0.0f;
+			float TrunkY = 0.0f;
+			float Radius = 0.0f;
+			float Height = 0.0f;
+			if (Sim.plants().trunkOf(Cell, TrunkX, TrunkY, Radius, Height) && Height > 1.0f
+				&& FVector2D::Distance(P, FVector2D(TrunkX, TrunkY)) < Radius + 0.6f)
+			{
+				Blocked += 2.0f;  // a trunk, and the leaves around it
+			}
+			else if (Sim.plants().isTree(Cell))
+			{
+				Blocked += 0.5f;
+			}
+			for (const FVector2D& O : Others)
+			{
+				if (FVector2D::Distance(P, O) < 0.6f)
+				{
+					Blocked += 2.0f;
+				}
+			}
+		}
+		if (Blocked < BestBlocked - 0.01f)
+		{
+			BestBlocked = Blocked;
+			Best = Offset;
+		}
+		if (BestBlocked <= 0.0f)
+		{
+			break;
+		}
+	}
+	return Best;
 }
 
 void UColonyHudSubsystem::UpdatePeopleCamera(colony::Entity Pawn)
@@ -388,6 +485,20 @@ void UColonyHudSubsystem::UpdatePeopleCamera(colony::Entity Pawn)
 	if (!Camera)
 	{
 		return;
+	}
+	// The screen is shown by day, whatever hour the landing is at (the sim's clock is untouched).
+	if (USkySubsystem* Sky = World->GetSubsystem<USkySubsystem>())
+	{
+		Sky->SetHourOverride(NgPreviewHour);
+	}
+	// A new pawn on the stand: the camera goes where no tree or other person is in the way, and the body turns to face it.
+	if (PeopleViewFor != Pawn)
+	{
+		PeopleViewFor = Pawn;
+		PeopleViewYaw = PickPeopleView(Pawn);
+		PeopleSpin = PeopleViewYaw;
+		PeopleSpinRate = 0.0f;
+		Actor->SetPreviewSpin(PeopleSpin);
 	}
 	// The turntable: dragging over the open middle spins the body itself (so soft tissue and hair swing with it), and
 	// it keeps turning a little after the mouse lets go; up and down tilt the view, the wheel zooms.
@@ -417,10 +528,34 @@ void UColonyHudSubsystem::UpdatePeopleCamera(colony::Entity Pawn)
 		const float Closeness = 1.0f - FMath::Clamp((PeopleDistance - 70.0f) / 300.0f, 0.0f, 1.0f);
 		Focus = FVector(Actor->GetActorLocation().X, Actor->GetActorLocation().Y, Bounds.Origin.Z + Bounds.BoxExtent.Z * (0.05f + 0.7f * Closeness));
 	}
-	const float Facing = Actor->GetActorRotation().Yaw - Actor->GetPreviewSpin();
+	const float Facing = Actor->GetDrawnYaw() + PeopleViewYaw;
 	const FRotator Around(PeoplePitch, Facing + 180.0f, 0.0f);
 	const FVector Eye = Focus - Around.Vector() * PeopleDistance;
 	Camera->SetActorLocationAndRotation(Eye, Around);
+	// A soft key light up and to one side of the camera, so the face and body read even in the shade of the canopy.
+	if (!PeopleLamp.IsValid())
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		PeopleLamp = World->SpawnActor<APointLight>(Eye, FRotator::ZeroRotator, Params);
+		if (APointLight* Lamp = PeopleLamp.Get())
+		{
+			Lamp->PointLightComponent->SetMobility(EComponentMobility::Movable);
+			Lamp->PointLightComponent->SetIntensityUnits(ELightUnits::Candelas);
+			Lamp->PointLightComponent->SetIntensity(NgPreviewLampIntensity);
+			Lamp->PointLightComponent->SetAttenuationRadius(900.0f);
+			Lamp->PointLightComponent->SetSourceRadius(60.0f);
+			Lamp->PointLightComponent->SetSoftSourceRadius(120.0f);
+			Lamp->PointLightComponent->SetLightColor(FLinearColor(1.0f, 0.95f, 0.88f));
+			Lamp->PointLightComponent->SetCastShadows(false);
+		}
+	}
+	if (APointLight* Lamp = PeopleLamp.Get())
+	{
+		const FVector Side = FRotationMatrix(Around).GetUnitAxis(EAxis::Y);
+		const FVector Toward = (Focus - Eye).GetSafeNormal();
+		Lamp->SetActorLocation(Focus - Toward * 180.0f + Side * 120.0f + FVector(0.0, 0.0, 90.0));
+	}
 	if (PC->GetViewTarget() != Camera)
 	{
 		PC->SetViewTargetWithBlend(Camera, 0.6f);

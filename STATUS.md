@@ -10,7 +10,7 @@ own "Canopy" look (concepts A/B/C turned down): **You** (looks and a name only; 
 woman, the gun range's, so hair and body updates show on you) and **Your companions** (looks, gender, names, and traits
 bought from a **10-point pool**: strong traits cost up to 5, drawbacks give points; no backstories). Skill traits
 (natural marksman and 11 more, +3 for 3 points) let a skill pass 20, up to 23. Tough is now -30% damage. A turntable
-spins the real body (soft tissue swings) and a "clothes on" tick previews the cotton. Other races shown but locked;
+spins the real body (soft tissue swings) and a "clothes on" tick previews the cotton. The screen is lit by day, with the camera clear of trees. Other races shown but locked;
 difficulty fixed on standard and hidden. People who join or raid later follow the same trait rules, all points spent.
 Sim: `EditColonistCommand`, `SetColonistTraitsCommand`, `Sim::applyPregameCommands`, `PawnLooks::creator`,
 `ColonistGenOptions` (trait points), `SkillRecord::bonus`. **Next:** PC compile and smoke test `newgame` pictures;

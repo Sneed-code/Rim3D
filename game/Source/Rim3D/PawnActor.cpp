@@ -811,8 +811,16 @@ void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 		{
 			MetaHuman->SetActorHiddenInGame(false);
 		}
+		else
+		{
+			Body->SetVisibility(true, false);  // no MetaHuman either: the mannequin is the body again
+		}
 		return;
 	}
+	// The mannequin under the MakeHuman body keeps animating (the MakeHuman pose is retargeted from it) but is never drawn;
+	// without a MetaHuman nothing else hid it, and it showed through as a red and blue figure (new game screen).
+	Body->SetVisibility(false, false);
+	Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	if (!MakeHumanMesh)
 	{
 		// Attached to the hidden mannequin: the Game Animation Sample's generic retarget animation takes the pose of the mesh it is attached to.

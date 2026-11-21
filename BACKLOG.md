@@ -100,3 +100,4 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
   plus two leaves) and the in-wall Cooler model are made but not wired in: doors draw one sliding leaf and the cooler
   def is a whole wall-height block, so both need a small draw change first. Zeushammer, breach axe, HE mortar shell,
   advanced component and bionic arm were cut off by the Codex usage limit (2026-11-20); rerun after Nov 22 2:38 PM.
+- New games land at 00:02, in the dark (`SimSettings::startSecond` is 0). Consider landing in the morning; the character screen already shows by day (2026-11-21).
