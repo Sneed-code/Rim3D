@@ -30,6 +30,7 @@
 #include "ColonySim/FightResponse.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Melee.h"
+#include "ColonySim/Movement.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
 #include "CreatorPeople.h"
@@ -347,6 +348,8 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			{
 				Hp.downed = !Hp.dead;
 				Hp.movingFactor = 0.0f;
+				// Lying on the ground, as a downed body is drawn (a stance left standing draws it on its feet).
+				Sim->things().registry().get<colony::Posture>(State->Enemy).stance = colony::Stance::Prone;
 			}
 			if (!State->bSent && PhaseTime > 0.4f)
 			{

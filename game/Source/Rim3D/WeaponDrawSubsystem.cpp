@@ -1284,6 +1284,9 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 	{
 		Spot = TargetMesh->GetSocketLocation(Move->Bone);
 	}
+	// Never above the body's middle: a downed body still getting up, kneeling or crawling is struck low, where the
+	// attacker's arms reach (a standing one put the spot 1.3 m up and the weapon off the hands).
+	Spot.Z = FMath::Min(Spot.Z, Target->GetActorLocation().Z);
 	Spot.Z += Move->SurfaceCm * Target->GetBodyScale();
 	FVector F = (Spot - Actor.GetActorLocation()).GetSafeNormal2D();
 	if (F.IsNearlyZero())
