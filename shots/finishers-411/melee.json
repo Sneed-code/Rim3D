@@ -1,0 +1,159 @@
+{
+	"test": "melee",
+	"status": "fail",
+	"durationSeconds": 87.125104997307062,
+	"errors": [
+		"holsters: the sidearm on the hip is at X=0.208 Y=23.365 Z=79.723, expected X=4.000 Y=23.000 Z=80.000 (pelvis at X=-3.778 Y=0.445 Z=89.345, attached to Root)",
+		"switch_key: the rifle is not on the back after the switch (at X=-18.134 Y=8.445 Z=103.640, expected X=-14.000 Y=6.000 Z=104.000, pelvis at X=-4.183 Y=2.466 Z=88.689, attached to Root)",
+		"swing_flow: 5 blows landed on time, 1 late, 0 with no swing on screen (the picture was up to 2.5 steps behind), expected all on time"
+	],
+	"gpu": "NVIDIA GeForce RTX 5080",
+	"resolution": "888x500",
+	"phases": [
+		{
+			"phase": "setup",
+			"frames": 56,
+			"avgFps": 79.158186392563124,
+			"p95FrameMs": 6.3567013740539551,
+			"medianGameThreadMs": 4.6684999465942383,
+			"medianRenderThreadMs": 4.5734000205993652,
+			"medianGpuMs": 2.98580002784729,
+			"actors": 0,
+			"screenshot": "melee/setup.png"
+		},
+		{
+			"phase": "holsters",
+			"frames": 530,
+			"avgFps": 211.55796205685337,
+			"p95FrameMs": 5.2442030906677246,
+			"medianGameThreadMs": 4.1676998138427734,
+			"medianRenderThreadMs": 4.5227999687194824,
+			"medianGpuMs": 3.0301001071929932,
+			"actors": 0,
+			"screenshot": "melee/holsters.png"
+		},
+		{
+			"phase": "switch_key",
+			"frames": 742,
+			"avgFps": 211.56345990002592,
+			"p95FrameMs": 5.4058022499084473,
+			"medianGameThreadMs": 4.1785998344421387,
+			"medianRenderThreadMs": 4.5683999061584473,
+			"medianGpuMs": 3.0494000911712646,
+			"actors": 0,
+			"screenshot": "melee/switch_key.png"
+		},
+		{
+			"phase": "switch_frozen",
+			"frames": 620,
+			"avgFps": 206.28882797752263,
+			"p95FrameMs": 5.7105011940002441,
+			"medianGameThreadMs": 4.1331000328063965,
+			"medianRenderThreadMs": 4.5879998207092285,
+			"medianGpuMs": 3.0866999626159668,
+			"actors": 0,
+			"screenshot": "melee/switch_frozen.png"
+		},
+		{
+			"phase": "draw_melee",
+			"frames": 311,
+			"avgFps": 206.49692415654937,
+			"p95FrameMs": 5.3873991966247559,
+			"medianGameThreadMs": 4.2003002166748047,
+			"medianRenderThreadMs": 4.5963997840881348,
+			"medianGpuMs": 3.0353999137878418,
+			"actors": 0,
+			"screenshot": "melee/draw_melee.png"
+		},
+		{
+			"phase": "swing_windup",
+			"frames": 750,
+			"avgFps": 213.99999370216898,
+			"p95FrameMs": 5.3405985832214355,
+			"medianGameThreadMs": 4.2342000007629395,
+			"medianRenderThreadMs": 4.4917001724243164,
+			"medianGpuMs": 2.8366999626159668,
+			"actors": 0,
+			"screenshot": "melee/swing_windup.png"
+		},
+		{
+			"phase": "swing_blow",
+			"frames": 735,
+			"avgFps": 209.54134414545209,
+			"p95FrameMs": 5.3988022804260254,
+			"medianGameThreadMs": 4.3143000602722168,
+			"medianRenderThreadMs": 4.6424999237060547,
+			"medianGpuMs": 2.8738000392913818,
+			"actors": 0,
+			"screenshot": "melee/swing_blow.png"
+		},
+		{
+			"phase": "swing_flow",
+			"frames": 1774,
+			"avgFps": 197.03312093235263,
+			"p95FrameMs": 6.0217008590698242,
+			"medianGameThreadMs": 4.8894000053405762,
+			"medianRenderThreadMs": 4.0346999168395996,
+			"medianGpuMs": 2.9414000511169434,
+			"actors": 0,
+			"screenshot": "melee/swing_flow.png"
+		},
+		{
+			"phase": "focus",
+			"frames": 414,
+			"avgFps": 206.38776125202401,
+			"p95FrameMs": 5.5069999694824219,
+			"medianGameThreadMs": 4.6279001235961914,
+			"medianRenderThreadMs": 4.0647001266479492,
+			"medianGpuMs": 2.9837000370025635,
+			"actors": 0,
+			"screenshot": "melee/focus.png"
+		},
+		{
+			"phase": "block",
+			"frames": 778,
+			"avgFps": 222.12244185396483,
+			"p95FrameMs": 5.1901006698608398,
+			"medianGameThreadMs": 3.7623999118804932,
+			"medianRenderThreadMs": 4.3113999366760254,
+			"medianGpuMs": 3.1284999847412109,
+			"actors": 0,
+			"screenshot": "melee/block.png"
+		},
+		{
+			"phase": "duel",
+			"frames": 5537,
+			"avgFps": 212.93880393206177,
+			"p95FrameMs": 5.4866971969604492,
+			"medianGameThreadMs": 4.5364999771118164,
+			"medianRenderThreadMs": 4.1016998291015625,
+			"medianGpuMs": 3.0782999992370605,
+			"actors": 0,
+			"screenshot": "melee/duel.png"
+		},
+		{
+			"phase": "shield",
+			"frames": 1785,
+			"avgFps": 178.369526237256,
+			"p95FrameMs": 6.2709002494812012,
+			"medianGameThreadMs": 4.9846000671386719,
+			"medianRenderThreadMs": 5.4927000999450684,
+			"medianGpuMs": 3.9965999126434326,
+			"actors": 0,
+			"screenshot": "melee/shield.png"
+		}
+	],
+	"notes": [
+		"switch_key: a 17 step switch; the rifle went 58 cm from the hand, the revolver 47 cm from its holster",
+		"switch_frozen: stopped with the rifle 21 cm from the hand and 30 cm from the back",
+		"swing_windup: stopped in the attack clip 0.15 s before its blow, right hand 124 cm up",
+		"swing_blow: stopped on the blow, the attack clip 0.04 s from its own blow, right hand 119 cm up, enemy flinches 1",
+		"swing_flow: 6 swings, 6 hits, 5 on time, 1 late, 0 with no swing on screen, 6 hit-stops, enemy flinched 14 times, body bent up to 0 degrees, right hand moved up to 108 cm (attack clips)",
+		"focus: locked on, bar drawn 605 frames, body 0 degrees off, enemy worst part 100%",
+		"block: the blade is across the chest at X=31.000 Y=0.000 Z=118.000",
+		"duel: 53 swings, 32 hits, 7 blocked, 0 deflected, 5 dodged, 9 missed; 4 sidesteps (4 played), 11 raised weapons, 39 hit-stops",
+		"shield: materials [0] Wood_worn_surface_003 (parent MI_Default_Opaque_DS, base M_Default) colour map Wood_baked_wear_Medium, colour (R=1.000000,G=1.000000,B=1.000000,A=1.000000), metallic 0.00, roughness 0.82; [1] Dark_iron_001 (parent MI_Default_Opaque_DS, base M_Default) colour map T_White_srgb, colour (R=0.105000,G=0.115000,B=0.112000,A=1.000000), metallic 0.80, roughness 0.43; [2] Polished_edge_wear_001 (parent MI_Default_Opaque_DS, base M_Default) colour map T_White_srgb, colour (R=0.420000,G=0.400000,B=0.340000,A=1.000000), metallic 0.80, roughness 0.28; [3] Worn_leather_001 (parent MI_Default_Opaque_DS, base M_Default) colour map T_White_srgb, colour (R=0.130000,G=0.075000,B=0.038000,A=1.000000), metallic 0.00, roughness 0.80",
+		"shield: drawn as model SM_Shield_Wood_Medium, 19 x 62 x 77 cm",
+		"shield: raised at X=45.103 Y=3.084 Z=135.943 on average over 1357 frames (top 166.8), 4 blows on the shield, 8 sparks, 10 commands"
+	]
+}
