@@ -326,10 +326,69 @@ def flow_directions(body, style, roots, rng):
         lateral = (0.25 + 0.95 * front) * top * np.clip(1.4 - np.abs(az) / 130.0, 0.0, 1.0)
         f = side[:, None] * np.array([1.0, 0.0, 0.0]) * lateral[:, None] + BACK * (0.25 + 0.9 * front[:, None]) \
             + DOWN * (0.45 + 0.5 * (1 - top[:, None]))
+    elif part == "radial":
+        # Straight out from a little below the skull centre (an afro): up on the crown, out at the sides and back.
+        f = roots - radial_origin(body)
     else:
         f = np.tile(BACK, (len(roots), 1)) + DOWN * 0.6
     f += rng.normal(0, 0.06, f.shape)
+    messy = style.get("messy", 0.0)
+    if messy:
+        # Tousled: each patch of hair a few centimetres across combed its own way (a smooth random field over the head,
+        # so neighbouring strands agree and the hair goes in locks, not fuzz).
+        f = unit(f) + messy * tousle_field(roots, rng, style.get("messy_size", 0.04))
     return unit(f)
+
+
+def radial_origin(body):
+    return body.skull - np.array([0.0, 0.0, 0.1 * body.skull_r])
+
+
+def tousle_field(p, rng, size, waves=8):
+    """A smooth random direction field: a sum of a few plane waves about `size` across, for each axis."""
+    out = np.zeros_like(p)
+    for axis in range(3):
+        for _ in range(waves):
+            k = unit(rng.normal(0, 1, 3)) * (2 * math.pi / size) * (0.7 + 0.6 * rng.random())
+            out[:, axis] += np.sin(p @ k + rng.random() * 2 * math.pi)
+    return out / math.sqrt(waves / 2)
+
+
+def braid_offsets(t, bundle, braid, length, w_scale):
+    """Where a strand sits across a three-strand plait at depth t (metres below the band): (sideways, back) offsets of its
+    bundle's centre and the bundle's radius. The bundles weave as x = sin(a), y = sin(2a) / 2, a third of a turn apart,
+    so each crosses over the middle in turn; they start together at the band, narrow towards the tie, and below the
+    tie the ends come loose in a small tuft."""
+    tie = max(length - braid["tuft"], 0.05)
+    w = braid["width"] + (braid["width_tip"] - braid["width"]) * np.clip(t / tie, 0, 1)
+    w = w * np.clip((t + 0.012) / 0.05, 0, 1) * w_scale                 # out of the band
+    into_tie = np.clip((tie - t) / 0.025, 0, 1)                         # bunched at the tie
+    a = 2 * math.pi * t / braid["period"] + 2 * math.pi * bundle / 3.0
+    side = w * np.sin(a) * into_tie
+    back = 0.55 * w * np.sin(2 * a) * into_tie
+    radius = np.where(t < tie, np.maximum(0.5 * w, braid["tie_radius"] * (1 - into_tie) + 0.5 * w * into_tie),
+                      braid["tie_radius"] + (braid["tuft_radius"] - braid["tie_radius"]) * np.clip((t - tie) / braid["tuft"], 0, 1))
+    return side, back, radius
+
+
+def braid_band(body, gather):
+    """A braid's band at the nape: `up` from the skull centre's height, just off the back of the head as it is there."""
+    z = body.skull[2] + gather["up"]
+    loc, _, _, _ = body.bvh.ray_cast(Vector((body.skull[0], body.skull[1] + 0.5, z)), Vector((0.0, -1.0, 0.0)), 1.0)
+    y = loc[1] if loc is not None else body.skull[1] + body.skull_r
+    return np.array([body.skull[0], y + gather["band"] + gather["back"], z])
+
+
+def braid_line(body, start, z_end, clearance, step=0.004):
+    """The braid's middle from the band down to z_end: straight down, kept `clearance` off the back (it lies on the
+    shoulder blades and hangs free where the back curves in). Returns points every `step` of height."""
+    pts = [start]
+    p = start.copy()
+    while p[2] > z_end - 0.1:
+        p = body.push_out(p + DOWN * step, clearance, clearance + 0.05)
+        p[2] = pts[-1][2] - step  # height goes down evenly, so depth indexes it
+        pts.append(p.copy())
+    return np.array(pts), step
 
 
 def grow(body, style, rng, count_scale):
@@ -339,9 +398,23 @@ def grow(body, style, rng, count_scale):
     segs = int(style["segments"])
     az, el, _ = scalp_frame(body, roots)
     side_dist = np.abs(roots[:, 0] - body.skull[0]) / 0.18
+    hat = style.get("_hat")
+    hat_z = body.skull[2] + hat["brim"] if hat else None
+    hat_gap = hat["gap"] if hat else 0.0
+    radial = style["part"] == "radial"
 
-    # Length: down to a height on the body (a soft U: longer in the middle of the back), or a set length.
-    if "to" in style:
+    # Length: down to a height on the body (a soft U: longer in the middle of the back), or a set length, or (an afro) out
+    # to a rounded shell round the head.
+    if radial:
+        shape = style["shape"]
+        shell_c = body.skull + np.array([0.0, shape.get("back", 0.0), shape.get("up", 0.0)])
+        shell_r = (body.skull_r + style["puff"]) * np.array(shape.get("scale", [1.0, 1.0, 1.0]))
+        shell_cut = 1.0 + rng.normal(0, shape.get("rough", 0.03), n)
+        z_end = np.full(n, -1e9)
+        max_len = style["puff"] * 1.7 + 0.02 + (body.skull_r * 1.8 if hat else 0.0)  # under a hat: down the scalp first
+        lengths = np.full(n, max_len)
+        segs = int(math.ceil(max_len / style["seg_len"]))
+    elif "to" in style:
         z_end = body.heights[style["to"]] + style.get("u_cut", 0.0) * np.clip(side_dist, 0, 1.5) ** 2
         z_end += rng.normal(0, 0.006, n)
         max_len = (body.top - z_end.min()) * 1.55 + 0.12
@@ -351,7 +424,7 @@ def grow(body, style, rng, count_scale):
         lengths = np.full(n, style["length"])
         short_sides = style.get("shorter_sides", 0.0)
         lengths *= 1.0 - short_sides * np.clip((40 - el) / 60.0, 0, 1)  # sides and nape cut shorter
-        lengths *= 1.0 + rng.normal(0, 0.06, n)
+        lengths *= 1.0 + rng.normal(0, style.get("length_spread", 0.06), n)
         max_len = lengths.max()
     seg_len = max_len / segs
 
@@ -361,10 +434,26 @@ def grow(body, style, rng, count_scale):
 
     flow = flow_directions(body, style, roots, rng)
     gather = style.get("gather")
+    braid = gather.get("braid") if gather else None
     if gather:
-        g_centre = body.skull + np.array([0.0, body.skull_r + gather["back"], gather["up"]])
-        disc = rng.normal(0, 1, (n, 2))
-        disc = disc / np.linalg.norm(disc, axis=1, keepdims=True) * np.sqrt(rng.random(n))[:, None]
+        if braid:
+            # A braid gathers low at the nape; each strand goes to the part of the band on its own side of the head
+            # (crown hair to the top, the left side to the left), so the three bundles take neighbouring hair.
+            g_centre = braid_band(body, gather)
+            rel = roots - g_centre
+            ang = np.arctan2(rel[:, 2], rel[:, 0])
+            rad = np.sqrt(rng.random(n))
+            disc = np.c_[np.cos(ang) * rad, np.sin(ang) * rad]
+            bundle = np.floor(((ang + math.pi / 2) % (2 * math.pi)) / (2 * math.pi / 3)).astype(int)  # 0 top, then round
+            local = rng.normal(0, 1, (n, 2))
+            local = local / np.linalg.norm(local, axis=1, keepdims=True) * np.sqrt(rng.random(n))[:, None]
+            braid_len = g_centre[2] - float(np.median(z_end))
+            line, line_step = braid_line(body, g_centre, float(z_end.min()), braid["width"] * 1.1 + 0.006)
+            w_scale = 1.0 + rng.normal(0, 0.02)
+        else:
+            g_centre = body.skull + np.array([0.0, body.skull_r + gather["back"], gather["up"]])
+            disc = rng.normal(0, 1, (n, 2))
+            disc = disc / np.linalg.norm(disc, axis=1, keepdims=True) * np.sqrt(rng.random(n))[:, None]
         band_target = g_centre + np.c_[disc[:, 0] * gather["band"], np.zeros(n), disc[:, 1] * gather["band"]]
         tail_offset = np.c_[disc[:, 0], disc[:, 1] * 0.6, np.zeros(n)] * gather["tail_spread"]
         in_tail = np.zeros(n, dtype=bool)
@@ -374,7 +463,7 @@ def grow(body, style, rng, count_scale):
     in_front = (np.abs(az) > 35) & (np.abs(az) < 80) & (el < 25) & (rng.random(n) < style.get("front_share", 0.6))
     pts = np.zeros((n, segs + 1, 3))
     pts[:, 0] = roots + normals * 0.0005
-    d = unit(normals * 0.25 + tangent(flow, normals))
+    d = unit(normals * style.get("rise", 0.25) + tangent(flow, normals))
     if gather:
         d = unit(normals * 0.3 + tangent(unit(band_target - roots), normals))
     arc = np.zeros(n)
@@ -383,11 +472,9 @@ def grow(body, style, rng, count_scale):
     stiff = style["stiffness"] ** (seg_len / 0.01)  # the style's stiffness is per centimetre of strand
     grav = style["gravity"]
     back = style.get("back", 0.0)
+    hug_w = style.get("hug", 1.0)  # how flat the hair lies along the scalp (1 flat; less stands up, a messy cut)
     reach = float(clearance.max() + seg_len * 2.5)
     # Under a hat: everything above the brim lies pressed within a few millimetres of the scalp, then hangs below it.
-    hat = style.get("_hat")
-    hat_z = body.skull[2] + hat["brim"] if hat else None
-    hat_gap = hat["gap"] if hat else 0.0
     t0 = time.time()
     for k in range(1, segs + 1):
         p = pts[:, k - 1]
@@ -395,9 +482,14 @@ def grow(body, style, rng, count_scale):
         n_here = unit(p - body.skull)
         on_head = r_p < body.skull_r * 1.6
         w_flow = np.exp(-arc / 0.11)
+        hug = (r_p < body.skull_r * 1.3) & (p[:, 2] > body.neck[2])
         if gather:
             to_band = band_target - p
             reached = np.linalg.norm(to_band, axis=1) < seg_len * 1.2
+            if braid:
+                # Into the plait at the band even if not at its own spot there, and anything still wandering after
+                # 40 cm (a strand caught round an ear) joins it too, so no loose strand hangs beside the braid.
+                reached |= (np.linalg.norm(g_centre - p, axis=1) < gather["band"] + seg_len * 1.5) | (arc > 0.4)
             newly = reached & ~in_tail
             in_tail |= reached
             desired = np.where(in_tail[:, None], 0, tangent(unit(to_band), n_here))
@@ -405,8 +497,29 @@ def grow(body, style, rng, count_scale):
             tail_depth = np.where(in_tail, tail_depth + np.where(newly, 0, seg_len), 0)
             spread = np.minimum(1.0, (tail_depth + seg_len) / 0.06) * (1.0 - 0.35 * np.minimum(1.0, tail_depth / 0.5))
             target = g_centre + DOWN[None, :] * (tail_depth + seg_len)[:, None] + tail_offset * spread[:, None] + BACK * 0.01
+            if braid:
+                t = tail_depth + seg_len
+                side, bk, radius = braid_offsets(t, bundle, braid, braid_len, w_scale)
+                mid = line[np.minimum((t / line_step).astype(int), len(line) - 1)]
+                # Round bundles: each strand's spot across its bundle is taken square to the bundle's own direction.
+                ahead = unit(np.c_[(braid_offsets(t + 0.002, bundle, braid, braid_len, w_scale)[0] - side) / 0.002,
+                                   (braid_offsets(t + 0.002, bundle, braid, braid_len, w_scale)[1] - bk) / 0.002, -np.ones(n)])
+                e1 = unit(np.cross(ahead, BACK))
+                e2 = np.cross(ahead, e1)
+                target = mid + np.c_[side, bk, np.zeros(n)] + (e1 * local[:, :1] + e2 * local[:, 1:]) * radius[:, None]
             desired = np.where(in_tail[:, None], unit(target - p), desired)
             step_stiff = np.where(in_tail, 0.35, stiff)
+        elif radial:
+            # Out from the head, sagging a little; under a hat first combed down along the scalp to the brim.
+            out = unit(p - radial_origin(body))
+            desired = unit(out + DOWN * style.get("droop", 0.1))
+            if hat_z is not None:
+                under = p[:, 2] > hat_z
+                desired = np.where(under[:, None], tangent(np.broadcast_to(DOWN + BACK * 0.2, n_here.shape), n_here), desired)
+                hug = under
+            else:
+                hug = np.zeros(n, dtype=bool)
+            step_stiff = np.full(n, stiff)
         else:
             flow_t = np.where(on_head[:, None], tangent(flow, n_here), flow)
             # Below the head: the ground, a little back (behind the shoulders), and hair behind the body leans onto it.
@@ -426,8 +539,10 @@ def grow(body, style, rng, count_scale):
             step_stiff = np.full(n, stiff)
         # On the head the strand lies along the scalp (its distance off the skin gives the volume); below it, it bends
         # towards where it is pulled only as stiff as the style says.
-        hug = (r_p < body.skull_r * 1.3) & (p[:, 2] > body.neck[2])
-        d = np.where(hug[:, None], tangent(d, n_here), d)
+        if hug_w >= 1.0 or radial:
+            d = np.where(hug[:, None], tangent(d, n_here), d)
+        else:
+            d = np.where(hug[:, None], unit(d * (1 - hug_w) + tangent(d, n_here) * hug_w), d)
         step_stiff = np.where(hug, np.minimum(step_stiff, 0.55), step_stiff)
         d = unit(step_stiff[:, None] * d + (1 - step_stiff[:, None]) * desired)
         q = p + d * seg_len
@@ -456,9 +571,18 @@ def grow(body, style, rng, count_scale):
         lat_q = q[:, 0] - body.neck[0]
         spread = (p[:, 2] < body.neck[2]) & (np.abs(lat_q) > cap)
         q[spread, 0] = body.neck[0] + np.sign(lat_q[spread]) * cap[spread]
+        if braid:
+            # In the plait every strand is placed exactly (its middle line is already kept off the back).
+            q = np.where(in_tail[:, None], target, q)
         pts[:, k] = np.where(alive[:, None], q, p)
         arc += seg_len
         done = alive & ((q[:, 2] <= z_end) | (arc >= lengths - 1e-6))
+        if radial:
+            done |= alive & (np.sqrt((((q - shell_c) / shell_r) ** 2).sum(1)) >= shell_cut)
+            if hat_z is not None:
+                # Under a hat only the hair behind the ears puffs out below the brim; in front of them it ends there
+                # (it would otherwise come down the temples and puff over the cheeks).
+                done |= alive & (np.abs(az) < 100) & (q[:, 2] < hat_z - 0.004)
         end_idx[done] = k
         alive &= ~done
         if not alive.any():
@@ -498,6 +622,20 @@ def comb(body, style, pts, end_idx, roots, rng, seg_len):
         side = unit(np.cross(tang, np.array([0.0, 0.0, 1.0])) + 1e-6)
         wave = np.sin(phase[:, None] + 2 * math.pi * s / period) * amp
         out = out + side * wave[..., None] + np.cross(unit(tang), side) * (0.4 * np.cos(phase[:, None] + 2 * math.pi * s / period) * amp)[..., None]
+    # Coils (an afro): each strand winds in a tight spiral of its own about its path, from just out of the skin.
+    if style.get("coil", 0.0) > 0:
+        period = style["coil_period"] * (0.75 + 0.5 * rng.random(n))
+        phase = rng.random(n) * 2 * math.pi
+        s = idx * seg_len
+        amp = style["coil"] * (0.7 + 0.6 * rng.random(n))[:, None] * np.clip(s / 0.006, 0, 1)
+        if style.get("_hat"):
+            amp = amp * (out[..., 2] < body.skull[2] + style["_hat"]["brim"])  # no coils pressed under the hat
+        tang = unit(np.gradient(out, axis=1))
+        ref = np.where((np.abs(tang[..., 2]) > 0.9)[..., None], np.array([1.0, 0.0, 0.0]), np.array([0.0, 0.0, 1.0]))
+        side = unit(np.cross(tang, ref))
+        bi = np.cross(tang, side)
+        ang = phase[:, None] + 2 * math.pi * s / period[:, None]
+        out = out + side * (np.cos(ang) * amp)[..., None] + bi * (np.sin(ang) * amp)[..., None]
     # Frizz: a little random wander, more towards the tips.
     out = out + rng.normal(0, 1, out.shape) * (style["frizz"] * frac ** 1.5)[..., None]
     out[:, 0] = pts[:, 0]

@@ -13,6 +13,7 @@
 
 #include "PawnActor.generated.h"
 
+class UAnimSequence;
 class USimPawnSubsystem;
 class USimSubsystem;
 class USkeletalMeshComponent;
@@ -52,6 +53,12 @@ public:
 
 	/** Plays the short animation for what the pawn did (picked up, put down). */
 	void PlayAction(colony::PawnAction Action);
+
+	/** A work clip on a loop (felling a tree: UWorkToolSubsystem) in the action slot until StopWorkLoop; it takes over
+	 *  from a short action and no action plays over it. Playing the same clip again does nothing. */
+	void SetWorkLoop(UAnimSequence* Clip, float Rate);
+	void StopWorkLoop();
+	bool HasWorkLoop() const { return WorkLoopClip.IsValid(); }
 
 	/** A jump (the player's body, Space): the body goes up and down in an arc over kJumpSeconds of game time while the Game
 	 *  Animation Sample's jump plays (take-off by speed, the fall loop, the landing). Only the picture: the sim keeps the
@@ -527,5 +534,6 @@ private:
 	bool bBodyHidden = false;
 	bool bCutAway = false;
 	double ActionEndSeconds = 0.0;
+	TWeakObjectPtr<UAnimSequence> WorkLoopClip;
 	int32 ActionsPlayed = 0;
 };

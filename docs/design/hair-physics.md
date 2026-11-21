@@ -92,8 +92,8 @@ blender.exe -b -noaudio --python tools/makehuman/grow_hair.py -- game/Saved/Make
   narrowing to the ends.
 - **Then** strands are pulled into clumps towards their tips, waved (a whole clump together), given a little frizz, cut
   to length (`to`: waist, mid back, shoulder, chin, ear, with a soft U at the back) and checked against the body again.
-- **Styles:** LongStraight (waist, middle parting), LongWavy (mid back, side parting), Ponytail, Bob, Short, Buzz;
-  40,000 to 60,000 strands each. Each is written as `<Style>.abc` (centimetres, relative to the head bone, the body's
+- **Styles:** LongStraight (waist, middle parting), LongWavy (mid back, side parting), Ponytail, Bob, Short, Buzz,
+  and (2026-11-21, below) Braid, Afro and Messy; 30,000 to 60,000 strands each. Each is written as `<Style>.abc` (centimetres, relative to the head bone, the body's
   axes) with `grooms.json`; `--preview` renders the head from three sides and the whole length from behind with Cycles.
   Blender also runs as a Python module in the cloud (`pip install bpy`), so styles can be tuned there with test renders
   on MakeHuman's base mesh (`--joints` with its head and neck joints).
@@ -118,6 +118,31 @@ but smaller heads than the MetaHumans, so it was blown up 15% instead of shrunk.
   about the skull centre to match, so a wider, longer or smaller head gets matching hair. The log line `STRANDHAIR`
   shows the head-slider scale and move.
 - The grown styles' hairline is a little lower (forehead 22 degrees above the skull centre, was 27).
+
+## Braid, afro and messy (2026-11-21)
+
+The last three creator styles that still wore their wig meshes up close are grown too (`hair_styles.json`, new steps in
+`grow_hair.py`), so every creator style now has strands:
+
+- **Braid:** combed back flat to a band low at the nape (found on the head's own back surface), each strand to the part
+  of the band on its own side of the head, then plaited: three round bundles weaving over the middle in turn (x =
+  sin a, y = sin 2a / 2, a third of a turn apart; `braid` width 4.2 cm narrowing to 2.4 cm, a full turn every 11 cm)
+  down the back to the waist, its middle line kept off the shoulder blades, tied 7 cm from the end with a small loose
+  tuft below. Strands still wandering after 40 cm join the plait, so none hangs loose beside it. 30,000 strands on 200
+  points (0.6 cm apart, so the weave stays round). Physics on, like the ponytail.
+- **Afro:** each strand grows straight out from the head (sagging a little) until it reaches a rounded shell 6.8 cm out
+  from the skull, so the outline is round; then wound into its own tight coil (2.8 mm across, about 1.1 cm a turn, each
+  strand its own phase and pitch) and loosely clumped. 45,000 strands, 1.8 mm segments. No physics (`hair_grooms.json`
+  "still": it holds its own shape, and Unreal's groom physics would let the coils sag). Under a hat the strands above
+  the brim are combed down along the scalp, with no coils, and puff out below it behind the ears; in front of the
+  ears they end at the brim, so nothing puffs over the cheeks.
+- **Messy:** a 9 cm cut (sides shorter, lengths vary 15%) whose flow is a smooth random field over the head about 8 cm
+  across (`messy`, `messy_size`), so each patch of hair goes its own way in locks rather than fuzz; it lies only partly
+  flat on the scalp (`hug` 0.8) and leaves the skin at a steeper angle (`rise`), strongly clumped, with a little frizz.
+  Physics on, like Short.
+
+Cloud previews (MakeHuman's base mesh, `--preview`): `/mnt/project-files/hair-grown/braid_afro_messy.png` and
+`..._hat.png`.
 
 ## Hats and helmets (2026-11-21)
 
@@ -150,7 +175,7 @@ resize the spheres (the 4 mm keeps a slightly smaller head clear).
 
 `UStrandHairSubsystem` decides who wears strands. Every MakeHuman person the creator's apply dresses (the creator, the gun
 range's random people) asks for strands for their hair style (`assets/hair_grooms.json` "creator" maps the creator's
-style names to grown ones; Braid, Messy and Afro have none yet and keep their wigs). Four times a second the people within
+style names to grown ones; every creator style now has one). Four times a second the people within
 `Pawns.StrandHairNear` metres of the camera (10) are sorted by distance and the nearest `Pawns.StrandHairMax` (6) wear
 strands, their wig hidden; the rest wear the wig. People wearing strands keep them a metre further, so nobody flickers at
 the edge. Strand hair is the default (`Pawns.StrandHair 1`) with the wig as the fallback: far off, past the count, for a

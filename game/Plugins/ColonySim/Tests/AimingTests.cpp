@@ -14,6 +14,8 @@
 
 #include <doctest.h>
 
+#include "TestPlants.h"
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -86,7 +88,7 @@ std::unique_ptr<Sim> aimTestSim(uint64_t seed = 7) {
     settings.seed = seed;
     settings.mapSize = 96;
     settings.flatMap = true;
-    return std::make_unique<Sim>(settings, aimTestDefs());
+    return withoutPlants(std::make_unique<Sim>(settings, aimTestDefs()));
 }
 
 Entity aimTestPawn(Sim& sim, int x, int y, const char* gun = nullptr) {

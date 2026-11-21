@@ -23,6 +23,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "WorkToolSubsystem.h"
 
 #include <algorithm>
 
@@ -304,6 +305,15 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 		if (HandsSmokeCountItems(*Sim, "WoodLog") <= State->LogsBefore)
 		{
 			Fail(TEXT("The tree gave no wood"));
+		}
+		// The hand axe and the chop while felling (docs/design/structure-damage.md "Felling trees").
+		if (const UWorkToolSubsystem* Tools = GetWorld()->GetSubsystem<UWorkToolSubsystem>())
+		{
+			UE_LOG(LogTemp, Display, TEXT("handson chop: axes shown %d, chop loops started %d"), Tools->GetAxesShown(), Tools->GetChopsStarted());
+			if (Tools->GetAxesShown() == 0)
+			{
+				Fail(TEXT("Felling the tree showed no hand axe"));
+			}
 		}
 		State->bDone = false;
 	});

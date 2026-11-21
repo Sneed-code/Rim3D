@@ -550,6 +550,7 @@ const char* projectileHitKindName(ProjectileHitKind kind) {
         case ProjectileHitKind::Pawn: return "Pawn";
         case ProjectileHitKind::Armor: return "Armor";
         case ProjectileHitKind::Gone: return "Gone";
+        case ProjectileHitKind::Plant: return "Plant";
     }
     return "?";
 }

@@ -10,6 +10,8 @@
 
 #include <doctest.h>
 
+#include "TestPlants.h"
+
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -70,7 +72,7 @@ std::unique_ptr<Sim> wqSim(uint64_t seed = 11) {
     settings.seed = seed;
     settings.mapSize = 64;
     settings.flatMap = true;
-    return std::make_unique<Sim>(settings, wqDefs());
+    return withoutPlants(std::make_unique<Sim>(settings, wqDefs()));
 }
 
 Entity wqPawn(Sim& sim, float x, float y) {

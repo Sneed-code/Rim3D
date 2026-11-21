@@ -1,4 +1,5 @@
 #include "ColonySim/Melee.h"
+#include "ColonySim/Plants.h"
 
 #include "ColonySim/Animals.h"
 #include "ColonySim/Apparel.h"
@@ -1191,8 +1192,9 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
         const float ly = dx * sn + dy * c;
         const float lex = ox + lx * length;
         const float ley = oy + ly * length;
-        TraceHit found = combat_.trace(ox, oy, oz, lex, ley, ez, pos.level, pawn, cellOf(pos));
-        if (found.kind != ProjectileHitKind::Pawn && found.kind != ProjectileHitKind::Building && m.target != kNoEntity &&
+        TraceHit found = combat_.trace(ox, oy, oz, lex, ley, ez, pos.level, pawn, cellOf(pos), true, nullptr, true);
+        if (found.kind != ProjectileHitKind::Pawn && found.kind != ProjectileHitKind::Building && found.kind != ProjectileHitKind::Plant &&
+            m.target != kNoEntity &&
             reg.valid(m.target) && things_.spawned(m.target)) {
             std::vector<HitboxView> boxes;
             if (!combat_.hitboxesOf(m.target, boxes)) {
@@ -1227,6 +1229,8 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
                 const Melee* dodger = swept.kind == ProjectileHitKind::Pawn ? reg.try_get<Melee>(swept.thing) : nullptr;
                 if (swept.kind == ProjectileHitKind::Pawn && !(dodger != nullptr && dodger->dodged && dodger->threat == pawn)) {
                     hit = swept;
+                } else if (m.target == kNoEntity && (swept.kind == ProjectileHitKind::Building || swept.kind == ProjectileHitKind::Plant)) {
+                    hit = swept;  // a swing at nobody (the player's at a wall or a tree) meets what stands in its arc
                 }
             }
         }
@@ -1248,6 +1252,20 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
     }
     if (hit.kind == ProjectileHitKind::Building && reg.valid(hit.thing)) {
         meleeSoundStruck(reg, hit.thing, e);
+    }
+    if (hit.kind == ProjectileHitKind::Plant) {
+        e.cell = hit.cell;
+        e.struckDef = combat_.plants() != nullptr ? combat_.plants()->defAt(hit.cell) : DefId{};
+    }
+    // Anything that can be hurt takes the blow: buildings, walls, doors and trees (sneed 2026-11-20,
+    // docs/design/structure-damage.md). The event is built first: the thing may be gone after it.
+    if (hit.kind == ProjectileHitKind::Building || hit.kind == ProjectileHitKind::Plant) {
+        const int taken = combat_.damageStruck(hit, power, true);
+        if (taken > 0) {
+            e.message = "hit";
+            e.amount = static_cast<float>(taken);
+            ++structureHits_;
+        }
     }
     if (hit.kind == ProjectileHitKind::Pawn) {
         const Entity victim = hit.thing;
