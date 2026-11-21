@@ -5,6 +5,7 @@
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequence.h"
 #include "Retargeter/IKRetargeter.h"
+#include "CreatorPeople.h"
 #include "MakeHumanAnimInstance.h"
 #include "MakeHumanArt.h"
 #include "GarmentCoverData.h"
@@ -387,7 +388,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 			DrawnYaw = FRotator::NormalizeAxis(Yaw + FMath::Sign(Behind) * PawnDrawnYawMaxLag);
 		}
 	}
-	SetActorLocationAndRotation(Location, FRotator(0.0, DrawnYaw, 0.0));
+	SetActorLocationAndRotation(Location, FRotator(0.0, DrawnYaw + PreviewSpin, 0.0));
 	ApplySevered(Now.severed);
 	UpdateFightFace(Bridge, Now, DeltaTime * Speed);
 	if (bRagdoll)
@@ -773,9 +774,28 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 // ---------------------------------------------------------------------------
 // Faces, hair and marks (V2, V3; docs/design/looks.md).
 
+void ASimPawnActor::ApplyCreatorLook(const FString& Text)
+{
+	if (Text == AppliedCreatorLook)
+	{
+		return;
+	}
+	CreatorPeople::FLook Look;
+	if (!CreatorPeople::Decode(Text, Look))
+	{
+		AppliedCreatorLook = Text;  // not a look: nothing to put on
+		return;
+	}
+	if (CreatorPeople::Apply(Look, *this))
+	{
+		AppliedCreatorLook = Text;
+	}
+}
+
 void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 {
 	AppliedMakeHuman = Looks.MakeHuman;
+	AppliedCreatorLook.Reset();
 	UIKRetargeter* Retargeter = nullptr;
 	USkeletalMesh* Mesh = Looks.MakeHuman.IsEmpty() ? nullptr : Pawns.GetMakeHumanMesh(Looks.MakeHuman, Retargeter);
 	if (!Mesh || !Retargeter)
@@ -801,8 +821,16 @@ void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 		{
 			MetaHuman->SetActorHiddenInGame(false);
 		}
+		else
+		{
+			Body->SetVisibility(true, false);  // no MetaHuman either: the mannequin is the body again
+		}
 		return;
 	}
+	// The mannequin under the MakeHuman body keeps animating (the MakeHuman pose is retargeted from it) but is never drawn;
+	// without a MetaHuman nothing else hid it, and it showed through as a red and blue figure (new game screen).
+	Body->SetVisibility(false, false);
+	Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	if (!MakeHumanMesh)
 	{
 		// Attached to the hidden mannequin: the Game Animation Sample's generic retarget animation takes the pose of the mesh it is attached to.

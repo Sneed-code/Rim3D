@@ -587,6 +587,31 @@ void UTerrainSubsystem::MarkPlantDirty(colony::CellPos Cell)
 	}
 }
 
+void UTerrainSubsystem::SetPlantClearings(const TArray<FVector3f>& InClearings)
+{
+	if (InClearings == PlantClearings)
+	{
+		return;
+	}
+	// Both the old and the new clearings' chunks are drawn again.
+	const auto MarkAround = [this](const TArray<FVector3f>& List)
+	{
+		for (const FVector3f& C : List)
+		{
+			for (int32 Y = FMath::FloorToInt32(C.Y - C.Z); Y <= FMath::FloorToInt32(C.Y + C.Z); ++Y)
+			{
+				for (int32 X = FMath::FloorToInt32(C.X - C.Z); X <= FMath::FloorToInt32(C.X + C.Z); ++X)
+				{
+					MarkPlantDirty(colony::CellPos{X, Y, 0});
+				}
+			}
+		}
+	};
+	MarkAround(PlantClearings);
+	PlantClearings = InClearings;
+	MarkAround(PlantClearings);
+}
+
 void UTerrainSubsystem::OnSimEvent(const colony::Event& Event)
 {
 	switch (Event.type)
@@ -1062,6 +1087,21 @@ uint64 UTerrainSubsystem::GatherChunkPlants(int32 ChunkX, int32 ChunkY, TArray<T
 			if (const int32 Variants = VariantsOfDef[static_cast<int32>(DefValue)]; Variants > 1)
 			{
 				Kind += static_cast<int32>(TerrHash(static_cast<uint64>(Map.index(Cell)) * 31ULL + 0xA24BAED4ULL) % static_cast<uint64>(Variants));
+			}
+			if (!PlantClearings.IsEmpty())
+			{
+				float SX = 0.0f;
+				float SY = 0.0f;
+				colony::Plants::stemPoint(Map.index(Cell), X, Y, SX, SY);
+				bool bCleared = false;
+				for (const FVector3f& C : PlantClearings)
+				{
+					bCleared = bCleared || FMath::Square(SX - C.X) + FMath::Square(SY - C.Y) < FMath::Square(C.Z);
+				}
+				if (bCleared)
+				{
+					continue;
+				}
 			}
 			const uint32 Growth = Plants.growthPpm(Cell);
 			const int32 Stage = Growth >= colony::kPlantFullGrowth

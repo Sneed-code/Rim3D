@@ -2,6 +2,20 @@
 
 Updated 2026-11-21.
 
+Title screen and new game (sneed, 2026-11-21; sim, data and Unreal, `docs/design/new-game.md`): a **title screen**
+(Continue, New colony, Load, Settings, Quit), the **Crash Landed** scenario (you, an amnesiac, and 2 strangers aged 18,
+all landing naked, with 50 survival meals, 200 silver, 50 steel, 30 components, a rifle and cotton shirts and trousers
+for all 3; tropical only), a **landing site** step on the world map, then **character creation in two parts** in our
+own "Canopy" look (concepts A/B/C turned down): **You** (looks and a name only; you start as the creator's default
+woman, the gun range's, so hair and body updates show on you) and **Your companions** (looks, gender, names, and traits
+bought from a **10-point pool**: strong traits cost up to 5, drawbacks give points; no backstories). Skill traits
+(natural marksman and 11 more, +3 for 3 points) let a skill pass 20, up to 23. Tough is now -30% damage. A turntable
+spins the real body (soft tissue swings) and a "clothes on" tick previews the cotton. The screen is lit by day, with the camera clear of trees. Other races shown but locked;
+difficulty fixed on standard and hidden. People who join or raid later follow the same trait rules, all points spent.
+Sim: `EditColonistCommand`, `SetColonistTraitsCommand`, `Sim::applyPregameCommands`, `PawnLooks::creator`,
+`ColonistGenOptions` (trait points), `SkillRecord::bonus`. **Next:** PC compile and smoke test `newgame` pictures;
+sneed judges the look. Clothes on creator bodies show once #425 merges.
+
 Finer body dirt that fades (sneed, 2026-11-20; sim, data and Unreal art, `docs/design/grime.md`): **dirt on bodies now has fine spray over the broad smudges**, like the blood: mud drops in three sizes flicked up the legs (to the waist, stretched a little upwards) and crowding round each smudge's edge, gritty smudges, dark wet mud in the drops and cores and pale dust at the edges; drops too small to see at range blend into an even tint (no sparkle). **Dirt fades by itself in 10 minutes** (`dirtFadeSeconds` 18,000) whenever nothing is dirtying it, a corpse in the dirt staying dirty; rain, wading and swimming still wash it faster (full rain 5 minutes, swimming 20 s). Cloud preview `tools/grime_dirt_preview.py`. Checked on the PC 2026-11-21 (noon pictures, smoke `hurt` phase `dirt`): fine dark spray over duller lower legs, reads as splashed mud. Needs `-run=BloodArt -force` once per PC.
 
 Clothes on MakeHuman people (sneed, 2026-11-20; tools and Unreal, `docs/design/clothes-draw.md` "MakeHuman bodies"):

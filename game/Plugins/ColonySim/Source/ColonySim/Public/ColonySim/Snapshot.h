@@ -558,6 +558,7 @@ struct PawnLooksView {
     float bodyHair = 0.0f;
     std::vector<LooksMark> tattoos;
     std::vector<LooksMark> scars;
+    std::string creator;  // the character creator's look text (PawnLooks::creator), or empty
 };
 
 // One bill on a work building, in the building's order (first is tried first).

@@ -187,6 +187,12 @@ public:
 	/** Draws the pawn with these looks instead of the sim's (smoke tests' showcases; later the character creator's preview). */
 	void SetLooksOverride(colony::Entity Thing, const FSimPawnLooks& Looks);
 	void ClearLooksOverrides() { LooksOverrides.Reset(); }
+	/** The character screen's "clothes on" (docs/design/new-game.md): the pawn is drawn wearing these pieces instead of
+	 *  what it wears in the sim ("Apparel_TShirt:Cloth", def and stuff), through the same clothes path. Cosmetic only. */
+	void SetApparelPreview(colony::Entity Thing, const TArray<FString>& Pieces);
+	void ClearApparelPreview(colony::Entity Thing);
+	void ClearApparelPreviews() { ApparelPreviews.Reset(); }
+	bool HasApparelPreview(colony::Entity Thing) const { return ApparelPreviews.Contains(static_cast<uint32>(entt::to_integral(Thing))); }
 	/** Every pawn actor, by the sim entity's number (entt::to_integral). */
 	const TMap<uint32, TObjectPtr<ASimPawnActor>>& GetPawns() const { return Pawns; }
 	const FSimPawnDetailCounts& GetDetailCounts() const { return DetailCounts; }
@@ -246,6 +252,7 @@ private:
 	UPROPERTY()
 	TMap<uint32, TObjectPtr<ASimPawnActor>> Pawns;
 	TMap<uint32, FSimPawnLooks> LooksOverrides;
+	TMap<uint32, TArray<FString>> ApparelPreviews;
 
 	UPROPERTY()
 	TObjectPtr<USkeletalMesh> BodyMesh;
