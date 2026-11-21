@@ -73,7 +73,7 @@ namespace
 		int32 DirtShotsTaken = 0;
 		int32 MaxGrimyPawns = 0;
 		TArray<TWeakObjectPtr<UPrimitiveComponent>> DirtHidden;
-		TWeakObjectPtr<APointLight> DirtLight;
+		bool bDirtSetUp = false;
 	};
 
 	/** The real bodies with their clothes instead of the bare mannequins (the pawn actors are made again). */
@@ -213,9 +213,14 @@ void USmokeTestSubsystem::BuildHurtPhases()
 			{
 				B->Submit(colony::SetGrimeCommand{State->Pawn, 0.85f, 0.35f});
 			}
+			// Noon, and time for the eye to adjust (the first PC round was at night with a fill light: blown out).
+			if (IConsoleVariable* Hour = IConsoleManager::Get().FindConsoleVariable(TEXT("Sky.Hour")))
+			{
+				Hour->Set(12.0f, ECVF_SetByCode);
+			}
 		};
-		Phase.WarmupSeconds = 1.0f;
-		Phase.MeasureSeconds = 6.5f;
+		Phase.WarmupSeconds = 3.0f;
+		Phase.MeasureSeconds = 8.5f;
 		Phase.ScreenshotAt = 0.6f;
 		Phase.OnFrame = [=, this]()
 		{
@@ -231,9 +236,10 @@ void USmokeTestSubsystem::BuildHurtPhases()
 			const FVector P = Actor->GetActorLocation();
 			const FVector Forward = Actor->GetActorForwardVector();
 			const FVector Side = Actor->GetActorRightVector();
-			if (!State->DirtLight.IsValid())
+			if (!State->bDirtSetUp)
 			{
-				// Plants round the body out of the way, and a fill light from the camera's side.
+				State->bDirtSetUp = true;
+				// Plants round the body out of the way.
 				const UTerrainSubsystem* Terrain = GetWorld()->GetSubsystem<UTerrainSubsystem>();
 				if (AActor* Ground = Terrain ? Terrain->GetTerrainActor() : nullptr)
 				{
@@ -248,20 +254,9 @@ void USmokeTestSubsystem::BuildHurtPhases()
 						}
 					}
 				}
-				FActorSpawnParameters LightParams;
-				LightParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-				if (APointLight* Fill = GetWorld()->SpawnActor<APointLight>(APointLight::StaticClass(), FTransform::Identity, LightParams))
-				{
-					Fill->SetMobility(EComponentMobility::Movable);
-					Fill->PointLightComponent->SetIntensityUnits(ELightUnits::Candelas);
-					Fill->PointLightComponent->SetIntensity(6000.0f);
-					Fill->PointLightComponent->SetAttenuationRadius(400.0f);
-					Fill->PointLightComponent->SetCastShadows(false);
-					State->DirtLight = Fill;
-				}
 			}
-			// Shot N from PhaseTime 1 + N: whole body, shins 60 cm, shins 30 cm, from behind, from 10 m.
-			const int32 Shot = FMath::Clamp(FMath::FloorToInt(PhaseTime - 1.0f), 0, 4);
+			// Shot N from PhaseTime 3 + N: whole body, shins 60 cm, shins 30 cm, from behind, from 10 m.
+			const int32 Shot = FMath::Clamp(FMath::FloorToInt(PhaseTime - 3.0f), 0, 4);
 			FVector Look = P + FVector(0.0, 0.0, 90.0);
 			FVector Eye = Look + Forward * 220.0 + Side * 60.0;
 			if (Shot == 1)
@@ -283,11 +278,7 @@ void USmokeTestSubsystem::BuildHurtPhases()
 				Eye = Look + Forward * 1000.0 + Side * 200.0 + FVector(0.0, 0.0, 150.0);
 			}
 			ViewFrom(Eye, (Look - Eye).Rotation());
-			if (APointLight* Fill = State->DirtLight.Get())
-			{
-				Fill->SetActorLocation(Eye + (Look - Eye).GetSafeNormal() * FMath::Min(80.0, FVector::Dist(Eye, Look) * 0.5) + FVector(0.0, 0.0, 30.0));
-			}
-			if (PhaseTime >= 1.0f && State->DirtShotsTaken == Shot && Shot < 5 && PhaseTime - 1.0f - Shot > 0.6f)
+			if (PhaseTime >= 3.0f && State->DirtShotsTaken == Shot && Shot < 5 && PhaseTime - 3.0f - Shot > 0.6f)
 			{
 				++State->DirtShotsTaken;
 				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke") / TEXT("hurt") / FString::Printf(TEXT("dirt_%d.png"), Shot), false, false);
@@ -303,11 +294,10 @@ void USmokeTestSubsystem::BuildHurtPhases()
 				}
 			}
 			State->DirtHidden.Reset();
-			if (APointLight* Fill = State->DirtLight.Get())
+			if (IConsoleVariable* Hour = IConsoleManager::Get().FindConsoleVariable(TEXT("Sky.Hour")))
 			{
-				Fill->Destroy();
+				Hour->Set(-1.0f, ECVF_SetByCode);
 			}
-			State->DirtLight.Reset();
 			const UGrimeSubsystem* Grime = GetWorld()->GetSubsystem<UGrimeSubsystem>();
 			PhaseNumbers.Add(TEXT("grimy_pawns"), State->MaxGrimyPawns);
 			PhaseNumbers.Add(TEXT("dirt_shots"), State->DirtShotsTaken);
