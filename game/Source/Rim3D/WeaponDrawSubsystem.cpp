@@ -1068,6 +1068,10 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 	float FinisherWeight = 0.0f;
 	const bool bFinisher = !bGun && FinisherPose(Actor, View, Points, Size, FinisherDrawn, FinisherPinned, FinisherWeight);
 	Pawn.FinisherBlend = bFinisher ? FinisherWeight : 0.0f;
+	Pawn.FinisherShort = bFinisher ? FinisherShort : 0.0f;
+	// Short of the body: bend further over it (down to the hips) until the blade reaches, eased so it never snaps.
+	Pawn.FinisherReachBend = FMath::FInterpTo(Pawn.FinisherReachBend, bFinisher ? FMath::Clamp(Pawn.FinisherReachBend + Pawn.FinisherShort * 0.5f, 0.0f, 45.0f) : 0.0f,
+		FrameDelta, 4.0f);
 	const bool bClipSwing = !bFinisher && !bGun && Actor.IsInMotionClip() && (View.meleePhase != colony::MeleePhase::Ready || Actor.GetSwing().IsActive());
 	const bool bWeaponSwing = !bFinisher && !bGun && !Actor.IsInMotionClip() && Actor.GetSwing().IsActive();
 	const bool bFullBodyClip = Actor.IsInMotionClip() && !Actor.IsMotionClipUpper();
@@ -1272,22 +1276,47 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 	const FWeaponFinisherMove* Move = WeaponFinisherMoves().FindByPredicate([&](const FWeaponFinisherMove& M) { return MoveName == M.Name; });
 	const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>();
 	const ASimPawnActor* Target = Pawns ? Pawns->FindPawn(View.meleeFinisherTarget) : nullptr;
-	if (!Move || !Target)
+	const colony::ThingView* TargetView = Bridge->GetCurrentSnapshot().find(View.meleeFinisherTarget);
+	if (!Move || (!Target && !TargetView))
 	{
 		PinFailReason = !Move ? TEXT("finisher move not in the table") : TEXT("finisher target not drawn");
 		return false;
 	}
-	// The spot on the body: its bone as drawn now (lying, crawling or a ragdoll), lifted to the body's top.
-	const USkeletalMeshComponent* TargetMesh = HoldDraw::VisibleMesh(*Target);
-	FVector Spot = Target->GetActorLocation() + FVector(0.0, 0.0, 20.0);
-	if (TargetMesh && TargetMesh->GetBoneIndex(Move->Bone) != INDEX_NONE)
+	// The spot on the body: its bone as drawn now (lying, crawling or a ragdoll), lifted to the body's top; of the move's
+	// bone and the spine's, the one nearest the attacker (a ragdoll lies any way round: the chest may be the far end).
+	// With no pawn actor (a corpse drawn otherwise), the sim's place of the body, on the ground.
+	const USkeletalMeshComponent* TargetMesh = Target ? HoldDraw::VisibleMesh(*Target) : nullptr;
+	const float TargetScale = Target ? Target->GetBodyScale() : 1.0f;
+	FVector Spot = Target ? Target->GetActorLocation() + FVector(0.0, 0.0, 20.0)
+						  : Bridge->SimToWorld(TargetView->x, TargetView->y, TargetView->level) + FVector(0.0, 0.0, 20.0);
+	if (TargetMesh)
 	{
-		Spot = TargetMesh->GetSocketLocation(Move->Bone);
+		const FVector From = Actor.GetActorLocation();
+		const FName Own(Move->Bone);
+		double Best = TNumericLimits<double>::Max();
+		for (const FName Bone : {Own, FName(TEXT("spine_03")), FName(TEXT("spine_02")), FName(TEXT("spine_01"))})
+		{
+			if (TargetMesh->GetBoneIndex(Bone) == INDEX_NONE)
+			{
+				continue;
+			}
+			const FVector At = TargetMesh->GetSocketLocation(Bone);
+			// The move's own bone wins unless another is 15 cm nearer.
+			const double Distance = FVector::Dist2D(At, From) + (Bone == Own ? -15.0 : 0.0);
+			if (Distance < Best)
+			{
+				Best = Distance;
+				Spot = At;
+			}
+		}
 	}
 	// Never above the body's middle: a downed body still getting up, kneeling or crawling is struck low, where the
 	// attacker's arms reach (a standing one put the spot 1.3 m up and the weapon off the hands).
-	Spot.Z = FMath::Min(Spot.Z, Target->GetActorLocation().Z);
-	Spot.Z += Move->SurfaceCm * Target->GetBodyScale();
+	if (Target)
+	{
+		Spot.Z = FMath::Min(Spot.Z, Target->GetActorLocation().Z);
+	}
+	Spot.Z += Move->SurfaceCm * TargetScale;
 	FVector F = (Spot - Actor.GetActorLocation()).GetSafeNormal2D();
 	if (F.IsNearlyZero())
 	{
@@ -1415,7 +1444,7 @@ void UWeaponDrawSubsystem::UpdateStance(ASimPawnActor& Actor, const colony::Thin
 		const float Hit = F.hitSeconds / FMath::Max(0.1f, F.seconds);
 		const float In = MeleePose::EaseInOut(FMath::Clamp(T / 0.2f, 0.0f, 1.0f)) * (1.0f - MeleePose::EaseInOut(FMath::Clamp((T - 0.86f) / 0.14f, 0.0f, 1.0f)));
 		const float AtBlow = 1.0f - FMath::Clamp(FMath::Abs(T - Hit) / 0.12f, 0.0f, 1.0f);
-		Bend = FMath::Max(Bend, F.bend * In * (0.75f + 0.35f * AtBlow));
+		Bend = FMath::Max(Bend, F.bend * In * (0.75f + 0.35f * AtBlow) + Pawn.FinisherReachBend * In);
 	}
 	Anim->SetSpineBend(Bend);
 }

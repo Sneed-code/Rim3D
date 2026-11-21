@@ -194,6 +194,9 @@ private:
 		bool bFloatLogged = false;
 		/** The finisher's share of the weapon's pose (0 to 1). */
 		float FinisherBlend = 0.0f;
+		/** How far the finisher's weapon had to come back to stay in reach (cm), and the extra forward bend that answers it (degrees). */
+		float FinisherShort = 0.0f;
+		float FinisherReachBend = 0.0f;
 	};
 	int32 FloatFrames = 0;
 	int32 FloatFixes = 0;
