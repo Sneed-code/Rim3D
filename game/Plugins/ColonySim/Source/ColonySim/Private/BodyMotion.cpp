@@ -467,7 +467,8 @@ void BodyMotionSystem::step() {
     for (const Entity pawn : order_) {
         BodyMotion& m = reg.get<BodyMotion>(pawn);
         const MotionClip* c = clip(m.clip);
-        const bool keep = c != nullptr && c->keepWhenDown;
+        // A plain push (a blast's) moves a body that can't move itself too: a downed pawn, a corpse (sneed 2026-11-20).
+        const bool keep = c == nullptr || c->keepWhenDown;
         if (!things_.spawned(pawn) || !reg.all_of<Position>(pawn) || (able_ && !keep && !able_(pawn))) {
             reg.remove<BodyMotion>(pawn);  // it ends where the body is
             continue;

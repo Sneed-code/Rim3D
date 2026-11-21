@@ -204,7 +204,9 @@ namespace
 	constexpr float PawnKickMaxAngle = 0.6f;
 	constexpr float PawnKickStep = 1.0f / 120.0f;
 	// How far a full-strength hit bends each zone at the top of its first swing (radians), by ESimPawnZone.
-	constexpr float PawnKickPeak[static_cast<int32>(ESimPawnZone::Count)] = {0.28f, 0.16f, 0.38f, 0.38f, 0.2f, 0.2f};
+	// (Head 0.28 at first: a rifle's 9 damage turned it 7 degrees, which nobody could see; sneed 2026-11-20 wants the head to
+	// snap back like the knee does.)
+	constexpr float PawnKickPeak[static_cast<int32>(ESimPawnZone::Count)] = {0.5f, 0.16f, 0.38f, 0.38f, 0.2f, 0.2f};
 	// A spring this damped reaches about 0.7 of (start speed / frequency) on its first swing.
 	constexpr float PawnKickPeakShare = 0.7f;
 	// The limp: over a hurt leg the body tips to that side and forward, the head stays level and the hips drop.

@@ -35,5 +35,8 @@ public class Rim3D : ModuleRules
 
 		// Sound (V20): the procedural voice waves.
 		PrivateDependencyModuleNames.Add("AudioExtensions");
+
+		// Ragdoll rest (PawnActor.cpp UpdateRagdollRest): FBodyInstanceCore::ShouldInstanceSimulatingPhysics.
+		PrivateDependencyModuleNames.Add("PhysicsCore");
 	}
 }
