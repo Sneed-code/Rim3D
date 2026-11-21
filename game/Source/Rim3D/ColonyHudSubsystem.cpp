@@ -29,6 +29,7 @@
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
 #include "ProtagonistPawn.h"
+#include "ProtagonistSubsystem.h"
 #include "QuestPanelSubsystem.h"
 #include "ShipPanelSubsystem.h"
 #include "ShooterFeelSubsystem.h"
@@ -501,6 +502,34 @@ void UColonyHudSubsystem::Tick(float DeltaTime)
 		bMainMenuOpen = Bridge->GetStartOptions().Scenario.IsEmpty() && !FParse::Param(Line, TEXT("NoMenu")) && !FString(Line).Contains(TEXT("-SmokeTest="));
 	}
 	CheckLanding(*Bridge);
+	// The menus are clicked with the mouse: show the cursor and let the UI have it while one is open (the level's
+	// default pawn starts with the mouse captured for looking around, so the title's buttons could not be clicked),
+	// and give it back to a directly controlled body when the menu closes (the overseer sets its own).
+	if (APlayerController* MenuPC = GetWorld()->GetFirstPlayerController())
+	{
+		if (bMainMenuOpen)
+		{
+			MenuPC->bShowMouseCursor = true;
+			if (!bMenuMouse)
+			{
+				bMenuMouse = true;
+				FInputModeGameAndUI MenuMode;
+				MenuMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+				MenuMode.SetHideCursorDuringCapture(false);
+				MenuPC->SetInputMode(MenuMode);
+			}
+		}
+		else if (bMenuMouse)
+		{
+			bMenuMouse = false;
+			const UProtagonistSubsystem* Direct = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+			if (Direct && Direct->IsDirectMode())
+			{
+				MenuPC->bShowMouseCursor = false;
+				MenuPC->SetInputMode(FInputModeGameOnly());
+			}
+		}
+	}
 	if (bMainMenuOpen)
 	{
 		DrawMainMenu(*Bridge);

@@ -7,6 +7,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
+#include "GameFramework/PlayerController.h"
 
 #include "ColonyHudSubsystem.h"
 #include "PawnActor.h"
@@ -84,6 +85,13 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 		{
 			Fail(TEXT("newgame_title: the title screen was never drawn"));
 		}
+		// sneed 2026-11-22: the title's buttons could not be clicked (no cursor, the mouse captured by the level's pawn).
+		const APlayerController* TitlePC = GetWorld()->GetFirstPlayerController();
+		if (!TitlePC || !TitlePC->bShowMouseCursor)
+		{
+			Fail(TEXT("newgame_title: no mouse cursor on the title screen"));
+		}
+		Notes.Add(FString::Printf(TEXT("NEWGAME title mouse cursor %s"), TitlePC && TitlePC->bShowMouseCursor ? TEXT("shown") : TEXT("hidden")));
 	};
 	Phases.Add(MoveTemp(TitlePhase));
 

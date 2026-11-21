@@ -10,7 +10,7 @@ smoke tests; Start restarts the game into the scene, **F10** or the scene ending
 (`DebugScenes.h`). **`tools\update-and-play.bat`** pulls main, builds at low priority, and runs only the one-off art
 steps whose inputs changed (`tools/update.py`, `tools/art_steps.json`: 34 steps, from sound downloads and Blender hair
 to `BloodArt`, `WetLook` last), then opens the title (`tools\play.bat`). New one-off steps go in `art_steps.json` in
-their PR. Merged as #435; `C:\Dev\Rim3D` adopted and up to date 2026-11-22. Follow-up: a `codex-models` step (`tools/codex_prep.py` from the Codex models folder, `{codex}`) so GunArt gets the Codex launchers and swords.
+their PR. Merged as #435; `C:\Dev\Rim3D` adopted and up to date 2026-11-22. Fix 2026-11-22: the title's buttons could not be clicked (the level's pawn kept the mouse captured, no cursor): the menu now shows the cursor and takes UI input while open (smoke `newgame` checks it). Follow-up: a `codex-models` step (`tools/codex_prep.py` from the Codex models folder, `{codex}`) so GunArt gets the Codex launchers and swords.
 
 Weather words match the sky (sneed, 2026-11-21; sim and Unreal HUD, `docs/design/weather.md`): the Crash Landed
 picture said "rainy thunderstorm" over a dry, sunny map. The game's opening clear spell was timed from midnight, so a
