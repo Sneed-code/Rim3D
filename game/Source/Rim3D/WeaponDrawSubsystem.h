@@ -140,6 +140,8 @@ public:
 	/** The last finisher frame: the weapon's point and the body point it is driven at (world cm). */
 	FVector GetFinisherTip() const { return FinisherTip; }
 	FVector GetFinisherGoal() const { return FinisherGoal; }
+	/** For the player's colonist: why the weapon in its hands was or wasn't held at its place this frame (smoke tests). */
+	const FString& GetPinDebug() const { return PinDebug; }
 	float GetMaxStepsBehind() const { return MaxStepsBehind; }
 
 protected:
@@ -198,6 +200,9 @@ private:
 	float WorstGripGap = 0.0f;
 	FVector FinisherTip = FVector::ZeroVector;
 	FVector FinisherGoal = FVector::ZeroVector;
+	FString PinDebug;
+	/** Why PinWeapon or FinisherPose gave up, for PinDebug. */
+	const TCHAR* PinFailReason = TEXT("");
 	/** The finisher's weapon pose now (docs/design/lock-on.md "Finishers"): drawn, and the one the hands close on (they
 	 *  differ for a reverse grip: the blade comes out under the fist), and how much of it shows. False if none. */
 	bool FinisherPose(const ASimPawnActor& Actor, const colony::ThingView& View, const HoldDraw::FPoints& Points, float Size, FTransform& OutDrawn,

@@ -844,7 +844,17 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		bool bPinned = false;
 		FTransform WeaponInHand;
 		FTransform WeaponPlaced;
-		if (bShow && bHands && bStanding && bHold && bPinSlot && InHand > 0.0f && GWeaponPlaces.GetValueOnGameThread() != 0 && Pawn.ForceHandSeconds <= 0.0f)
+		// A finisher holds the weapon at its place whatever the stance clip or a recent float fix says: its own path
+		// puts the weapon on the body with both hands on it.
+		const bool bFinisherNow = View.meleeFinisher != 0 && !IsGun(Def);
+		if (bControlled && bPinSlot)
+		{
+			PinFailReason = TEXT("");
+			PinDebug = FString::Printf(TEXT("show %d hands %d standing %d hold %d inhand %.2f places %d force %.2f finisher %d"), bShow ? 1 : 0, bHands ? 1 : 0,
+				bStanding ? 1 : 0, bHold ? 1 : 0, InHand, GWeaponPlaces.GetValueOnGameThread(), Pawn.ForceHandSeconds, static_cast<int32>(View.meleeFinisher));
+		}
+		if (bShow && bHands && (bStanding || bFinisherNow) && bHold && bPinSlot && InHand > 0.0f && GWeaponPlaces.GetValueOnGameThread() != 0 &&
+			(Pawn.ForceHandSeconds <= 0.0f || bFinisherNow))
 		{
 			HoldDraw::FPoints Points = HoldDraw::PointsOf(Hold, HasShieldOnArm(View));
 			const UStaticMeshComponent* Body = Shown.Component.Get();
@@ -860,6 +870,11 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 			}
 			bPinned = PinWeapon(Actor, View, Pawn, Hold, Points, Size, static_cast<float>(Place), bControlled, InHand, WeaponInHand, WeaponPlaced);
 			bAnyPinned = bAnyPinned || bPinned;
+			if (bControlled)
+			{
+				PinDebug += FString::Printf(TEXT(", pinned %d%s%s, aim %.2f, hand free %.2f, finisher blend %.2f"), bPinned ? 1 : 0, PinFailReason[0] != 0 ? TEXT(" because ") : TEXT(""),
+					PinFailReason, Pawn.AimBlend, Pawn.HandFree, Pawn.FinisherBlend);
+			}
 		}
 		FTransform Frame;
 		const bool bInHandFrame = bHands && bHold && (bPinned || HoldDraw::HandFrame(Mesh, Hold, Frame));
@@ -1004,11 +1019,13 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 		Mesh->GetBoneIndex(TEXT("neck_01")) == INDEX_NONE || Mesh->GetBoneIndex(TEXT("head")) == INDEX_NONE ||
 		Mesh->GetBoneIndex(TEXT("upperarm_l")) == INDEX_NONE || Mesh->GetBoneIndex(TEXT("upperarm_r")) == INDEX_NONE)
 	{
+		PinFailReason = !Mesh ? TEXT("no mesh") : !Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()) ? TEXT("not a MakeHuman body") : TEXT("missing hand/arm bones");
 		return false;
 	}
 	const colony::HoldPlace* Ready = colony::holdPlaceFor(Hold, false, false, false);
 	if (!Ready || Hold.grip == colony::HoldGrip::None || Hold.grip == colony::HoldGrip::Shield || Hold.grip == colony::HoldGrip::Bow)
 	{
+		PinFailReason = TEXT("no ready place for this grip");
 		return false;
 	}
 	const colony::HoldPlace* Aim = colony::holdPlaceFor(Hold, false, true, false);
@@ -1139,6 +1156,7 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 	HoldDraw::FPinned Pinned;
 	if (!HoldDraw::PinHands(Mesh, Hold, Points, Size, PinAt, Pinned))
 	{
+		PinFailReason = TEXT("the hands could not be pinned");
 		return false;
 	}
 	HoldDraw::ApplyPinned(Mesh, Hold, Pinned, static_cast<uint8>(EMakeHumanGoalSpace::Anchor), TEXT("neck_01"), Alpha * (1.0f - Pawn.HandFree), Alpha);
@@ -1238,6 +1256,10 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 	const USimSubsystem* Bridge = BridgeSource.Get();
 	if (View.meleeFinisher == 0 || View.meleeFinisherTarget == colony::kNoEntity || !Bridge || !Bridge->GetSim())
 	{
+		if (View.meleeFinisher != 0)
+		{
+			PinFailReason = TEXT("finisher with no target");
+		}
 		return false;
 	}
 	const std::vector<colony::MeleeFinisher>& Finishers = Bridge->GetSim()->melee().rules().finishers;
@@ -1252,6 +1274,7 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 	const ASimPawnActor* Target = Pawns ? Pawns->FindPawn(View.meleeFinisherTarget) : nullptr;
 	if (!Move || !Target)
 	{
+		PinFailReason = !Move ? TEXT("finisher move not in the table") : TEXT("finisher target not drawn");
 		return false;
 	}
 	// The spot on the body: its bone as drawn now (lying, crawling or a ragdoll), lifted to the body's top.

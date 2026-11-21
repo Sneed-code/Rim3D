@@ -59,6 +59,8 @@ namespace
 		bool bShot45 = false;
 		bool bShot63 = false;
 		bool bShot80 = false;
+		FString PinAtStrike;
+		FString PinAtStart;
 
 		// The Tab run.
 		FVector LastBody = FVector::ZeroVector;
@@ -136,7 +138,7 @@ namespace
 	{
 		for (const colony::ThingView& View : Bridge.GetCurrentSnapshot().things)
 		{
-			if (View.category == colony::ThingCategory::Pawn && View.id != Not && !Bridge.GetSim()->colonistOf(View.id) &&
+			if (View.category == colony::ThingCategory::Pawn && View.id != Not && !View.dead && !View.downed && !Bridge.GetSim()->colonistOf(View.id) &&
 				FVector2D::Distance(FVector2D(X, Y), FVector2D(View.x, View.y)) < 0.6f)
 			{
 				return View.id;
@@ -350,6 +352,10 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			{
 				State->BestTipGap = FMath::Min(State->BestTipGap, static_cast<float>(FVector::Dist(Weapons()->GetFinisherTip(), Weapons()->GetFinisherGoal())));
 			}
+			if (T > 0.05f && State->PinAtStart.IsEmpty())
+			{
+				State->PinAtStart = Weapons()->GetPinDebug();
+			}
 			if (!State->bShot45 && T >= 0.45f)
 			{
 				State->bShot45 = true;
@@ -358,6 +364,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			else if (!State->bShot63 && T >= 0.63f)
 			{
 				State->bShot63 = true;
+				State->PinAtStrike = Weapons()->GetPinDebug();
 				Shot(PhaseName + TEXT("_strike"));
 			}
 			else if (!State->bShot80 && T >= 0.82f)
@@ -379,6 +386,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			PhaseNumbers.Add(TEXT("float_fixes"), Fixes);
 			Notes.Add(FString::Printf(TEXT("%s: %d finisher frames, got to T %.2f, tip %.0f cm from its goal at the strike, kneel %s, worst grip gap %.0f cm, %d float fixes, %d hits"),
 				*PhaseName, Frames, State->MaxT, State->BestTipGap, State->bKneelSeen ? TEXT("yes") : TEXT("no"), Gap, Fixes, Hits));
+			Notes.Add(FString::Printf(TEXT("%s: weapon hold at the start [%s], at the strike [%s]"), *PhaseName, *State->PinAtStart, *State->PinAtStrike));
 			if (State->Enemy == colony::kNoEntity)
 			{
 				Fail(PhaseName + TEXT(": the victim did not appear"));
@@ -609,6 +617,11 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 		const float AimDegrees = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(ToAim, Gun->GetForwardVector()), -1.0, 1.0)));
 		const float YawDegrees = FMath::Abs(FRotator::NormalizeAxis(static_cast<float>(Actor->GetActorRotation().Yaw) - Body->GetYaw()));
 		State->WorstAimDegrees = FMath::Max(State->WorstAimDegrees, AimDegrees);
+		if (State->AimFrames % 60 == 1)
+		{
+			Notes.Add(FString::Printf(TEXT("aim3p frame %d: rifle %.1f degrees off (forward %s, to the aim %s, aim point %.0f m away), aim blend %.2f, hold [%s]"), State->AimFrames, AimDegrees,
+				*Gun->GetForwardVector().ToCompactString(), *ToAim.ToCompactString(), FVector::Dist(Aim, Gun->GetComponentLocation()) / 100.0, Body->GetAimBlend(), *Weapons()->GetPinDebug()));
+		}
 		State->WorstYawDegrees = FMath::Max(State->WorstYawDegrees, YawDegrees);
 	}, [=, this]()
 	{
