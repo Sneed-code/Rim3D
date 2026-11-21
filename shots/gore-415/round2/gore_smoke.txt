@@ -1,0 +1,18 @@
+﻿Building Rim3DEditor (below-normal priority, 6 jobs)...
+Build ok.
+Running smoke test 'gore' at 1920x1080...
+
+Smoke test 'gore': FAIL  (37 s, NVIDIA GeForce RTX 5080, 888x500)
+setup                        39.1 fps  game   6.0 ms  render  11.7 ms  gpu  10.3 ms  screenshot ok
+groin                        84.8 fps  game   6.1 ms  render  11.3 ms  gpu   9.8 ms  screenshot ok
+spray                        82.0 fps  game   6.3 ms  render  11.7 ms  gpu  10.2 ms  screenshot ok
+pileup                       71.7 fps  game   6.3 ms  render  12.0 ms  gpu  10.5 ms  screenshot ok
+head                         82.4 fps  game   5.9 ms  render  11.7 ms  gpu  10.2 ms  screenshot ok
+armoff                       79.5 fps  game   6.6 ms  render  12.2 ms  gpu  10.7 ms  screenshot ok
+corpse                       82.4 fps  game   6.5 ms  render  12.0 ms  gpu  10.4 ms  screenshot ok
+blast                        90.5 fps  game   6.9 ms  render  10.7 ms  gpu   9.1 ms  screenshot ok
+note: groin: the exit was guessed, not found on the drawn body (a weak shot may not go through)
+ERROR: pileup: nothing was painted into the skin (0 masks at the start): the body has no blood position map or skin 
+painting is off
+ERROR: blast: the corpse moved 0 cm (40 at least), ragdolls thrown 0
+Screenshots: C:\Dev\Rim3D-blood\game\Saved\Smoke\gore
