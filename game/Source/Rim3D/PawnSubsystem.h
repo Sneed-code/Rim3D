@@ -182,6 +182,7 @@ public:
 	void SetApparelPreview(colony::Entity Thing, const TArray<FString>& Pieces);
 	void ClearApparelPreview(colony::Entity Thing);
 	void ClearApparelPreviews() { ApparelPreviews.Reset(); }
+	bool HasApparelPreview(colony::Entity Thing) const { return ApparelPreviews.Contains(static_cast<uint32>(entt::to_integral(Thing))); }
 	/** Every pawn actor, by the sim entity's number (entt::to_integral). */
 	const TMap<uint32, TObjectPtr<ASimPawnActor>>& GetPawns() const { return Pawns; }
 	const FSimPawnDetailCounts& GetDetailCounts() const { return DetailCounts; }

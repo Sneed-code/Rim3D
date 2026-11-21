@@ -122,7 +122,8 @@ public:
 
 	// ---- The main menu (new colony, load, settings, quit) ------------------------------------
 	/** Shown at launch when the game was started without a scenario (not in smoke tests), and from Menu > New colony. */
-	void SetMainMenuOpen(bool bOpen) { bMainMenuOpen = bOpen; }
+	/** Also settles the launch check (a smoke test opening the menu keeps it open). */
+	void SetMainMenuOpen(bool bOpen) { bMainMenuOpen = bOpen; bMainMenuChecked = true; }
 	bool IsMainMenuOpen() const { return bMainMenuOpen; }
 	/** The main menu's page: 0 title, 1 scenario, 2 load, 3 people (docs/design/new-game.md). For the smoke test. */
 	int32 GetMainMenuPage() const { return MainMenuPage; }

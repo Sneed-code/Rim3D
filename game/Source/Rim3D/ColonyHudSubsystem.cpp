@@ -224,7 +224,13 @@ void UColonyHudSubsystem::Submit(colony::Command Command)
 	}
 	Bridge->Submit(std::move(Command));
 	++Stats.CommandsSent;
-	// Commands are applied by the next step; while the game is paused, one step makes the change show at once.
+	// Commands are applied by the next step; while the game is paused, one step makes the change show at once. Before
+	// the game starts (the new game's character screens, game second 0) a step would start the clock: those commands
+	// apply without one (docs/design/new-game.md).
+	if (Bridge->GetSim() && Bridge->GetSim()->time().steps == 0 && Bridge->ApplyPregameCommands())
+	{
+		return;
+	}
 	if (Bridge->GetSpeed() == 0)
 	{
 		Bridge->StepOnce();

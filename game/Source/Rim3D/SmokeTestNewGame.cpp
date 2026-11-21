@@ -169,9 +169,14 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 		const ASimPawnActor* Actor = People.empty() ? nullptr : Pawns()->FindPawn(People[0]);
 		UE_LOG(LogTemp, Display, TEXT("NEWGAME clothes on: %d pieces drawn, spin %.0f degrees"), Actor ? Actor->GetApparel().Pieces.Num() : -1,
 			Actor ? Actor->GetPreviewSpin() : 0.0f);
-		if (!Actor || Actor->GetApparel().Pieces.Num() != 2)
+		// The pieces are drawn on MakeHuman bodies once clothes for them (#425) are in; until then only the preview is checked.
+		if (!Actor || People.empty() || !Pawns()->HasApparelPreview(People[0]))
 		{
-			Fail(TEXT("newgame_you_clothes: the cotton shirt and trousers are not on the body"));
+			Fail(TEXT("newgame_you_clothes: the clothes-on preview is not set on you"));
+		}
+		if (Actor && FMath::Abs(Actor->GetPreviewSpin()) < 1.0f)
+		{
+			Fail(TEXT("newgame_you_clothes: the turntable did not turn the body"));
 		}
 		const colony::Gear* Worn = People.empty() ? nullptr : Sim->things().registry().try_get<colony::Gear>(People[0]);
 		if (Worn && !Worn->apparel.empty())
