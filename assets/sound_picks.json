@@ -59,7 +59,7 @@
     "Step_Water": {"files": ["oga-footsteps/footsteps/water/*.ogg"]},
     "Work_Mine": {"files": ["kenney-impact/Audio/impactMining_*.ogg"]},
     "Work_Chop": {"files": ["kenney-rpg/Audio/chop.ogg", "kenney-impact/Audio/impactWood_heavy_*.ogg"]},
-    "Tree_Crack": {"files": ["kenney-impact/Audio/impactPlank_heavy_*.ogg"]},
+    "Tree_Crack": {"files": ["kenney-impact/Audio/impactPlank_medium_*.ogg", "kenney-impact/Audio/impactWood_light_*.ogg"]},
     "Tree_Fall": {"files": ["kenney-impact/Audio/impactSoft_heavy_*.ogg", "kenney-impact/Audio/impactWood_heavy_*.ogg"]},
     "Work_Harvest": {"files": ["kenney-rpg/Audio/cloth?.ogg"], "gain": -3},
     "Work_Build": {"files": ["kenney-impact/Audio/impactPlank_medium_*.ogg", "kenney-impact/Audio/impactWood_medium_*.ogg"]},
