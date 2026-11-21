@@ -35,8 +35,10 @@ namespace
 	constexpr float TreeFallGravity = 9.81f;
 	// A felled tree starts with the hinge just giving (a slight lean, barely moving); one broken by a blow, a shot or a
 	// blast is pushed over harder.
-	constexpr float TreeFallFelledLeanDeg = 1.5f;
-	constexpr float TreeFallFelledRate = 0.04f;
+	// (Under a degree and barely turning, so it leans slowly for a second or two and is down in about 3 to 4 s, like a real
+	// felled tree; the first try started at 1.5 degrees and 0.04 rad/s and a poplar was down in about 2.5 s.)
+	constexpr float TreeFallFelledLeanDeg = 0.8f;
+	constexpr float TreeFallFelledRate = 0.015f;
 	constexpr float TreeFallBrokenLeanDeg = 3.0f;
 	constexpr float TreeFallBrokenRate = 0.25f;
 	// Air on the crown takes a little of the speed (per second).
@@ -125,6 +127,11 @@ int32 UTreeFallSubsystem::GetFalling() const
 		Count += Fall.Phase == EPhase::Falling ? 1 : 0;
 	}
 	return Count;
+}
+
+void UTreeFallSubsystem::PlayEventForTest(const colony::Event& Event)
+{
+	OnSimEvent(Event);
 }
 
 void UTreeFallSubsystem::OnSimEvent(const colony::Event& Event)
@@ -336,6 +343,10 @@ void UTreeFallSubsystem::Tick(float DeltaTime)
 			{
 				// A pole hinged at its foot: angular acceleration 3 g sin(lean) / 2 L.
 				const float Pull = 1.5f * TreeFallGravity / Fall.HeightM;
+				if (Fall.Bounces == 0)
+				{
+					Fall.Age += Dt;  // the time it takes to come down
+				}
 				for (int32 Step = 0; Step < Steps && Fall.Phase == EPhase::Falling; ++Step)
 				{
 					Fall.Rate += (Pull * FMath::Sin(Fall.Angle) - TreeFallAirDrag * Fall.Rate) * H;
@@ -352,6 +363,7 @@ void UTreeFallSubsystem::Tick(float DeltaTime)
 					Fall.Angle = Fall.RestAngle;
 					if (Fall.Bounces == 0)
 					{
+						LastFallSeconds = Fall.Age;
 						Land(Fall);
 					}
 					++Fall.Bounces;

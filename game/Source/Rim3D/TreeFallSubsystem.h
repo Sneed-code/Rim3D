@@ -42,6 +42,10 @@ public:
 	int32 GetFallsGone() const { return FallsGone; }
 	/** The largest jump in the lean of any tree between two frames, degrees (a snap shows as a big one). */
 	float GetBiggestStepDegrees() const { return BiggestStepDeg; }
+	/** Seconds the last tree to land took from the first give to the ground; 0 before any has landed. */
+	float GetLastFallSeconds() const { return LastFallSeconds; }
+	/** For the smoke test: plays a PlantRemoved event as if the sim had sent it (a tree falls where none stood). */
+	void PlayEventForTest(const colony::Event& Event);
 
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
@@ -89,4 +93,5 @@ private:
 	int32 FallsLanded = 0;
 	int32 FallsGone = 0;
 	float BiggestStepDeg = 0.0f;
+	float LastFallSeconds = 0.0f;
 };

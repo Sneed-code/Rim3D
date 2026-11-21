@@ -3,6 +3,9 @@
 #include "SmokeTest.h"
 
 #include "GameFramework/PlayerController.h"
+#include "HAL/IConsoleManager.h"
+#include "Misc/Paths.h"
+#include "UnrealClient.h"
 #include "Kismet/GameplayStatics.h"
 
 #include "HandsOnSubsystem.h"
@@ -16,6 +19,7 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Events.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Mineables.h"
@@ -37,6 +41,7 @@ namespace
 	const colony::CellPos HandsTreeCell{64, 66, 0};   // north (+Y)
 	const colony::CellPos HandsSteelCell{63, 64, 0};  // west, on the ground
 	const colony::CellPos HandsPlanCell{64, 62, 0};   // south
+	const colony::CellPos HandsFallCell{69, 58, 0};   // the tree the last phase fells, falling west
 
 	struct FHandsSmokeState
 	{
@@ -54,7 +59,18 @@ namespace
 		int32 ProgressFrames = 0;
 		int32 CommandsAtStart = 0;
 		int32 LogsBefore = 0;
+		float FallClock = 0.0f;
+		int32 FallShots = 0;
+		bool bFallStarted = false;
 	};
+
+	void HandsSmokeSetVar(const TCHAR* Name, float Value)
+	{
+		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(Name))
+		{
+			Var->Set(Value, ECVF_SetByCode);
+		}
+	}
 
 	int32 HandsSmokeCountItems(const colony::Sim& Sim, const char* DefName)
 	{
@@ -319,34 +335,6 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 		State->bDone = false;
 	});
 
-	// 3b. The felled tree topples over and lands, with no jump (docs/design/structure-damage.md "Falling trees").
-	AddPhase(TEXT("tree_falls"), [=, this]()
-	{
-		Release();
-	}, 0.0f, 9.0f, [=, this]() {}, [=, this]()
-	{
-		const UTreeFallSubsystem* Falls = GetWorld()->GetSubsystem<UTreeFallSubsystem>();
-		if (!Falls)
-		{
-			Fail(TEXT("The tree-fall subsystem did not start"));
-			return;
-		}
-		UE_LOG(LogTemp, Display, TEXT("handson tree fall: started %d, landed %d, still falling %d, biggest step %.2f degrees"),
-			Falls->GetFallsStarted(), Falls->GetFallsLanded(), Falls->GetFalling(), Falls->GetBiggestStepDegrees());
-		if (Falls->GetFallsStarted() == 0)
-		{
-			Fail(TEXT("The felled tree did not fall over (it just went)"));
-		}
-		else if (Falls->GetFallsLanded() == 0)
-		{
-			Fail(TEXT("The felled tree did not reach the ground in 9 seconds"));
-		}
-		else if (Falls->GetBiggestStepDegrees() > 12.0f)
-		{
-			Fail(FString::Printf(TEXT("The falling tree jumped %.1f degrees in one frame"), Falls->GetBiggestStepDegrees()));
-		}
-	});
-
 	// 4. Look down at the steel and pick it up.
 	AddPhase(TEXT("pick_up"), [=, this]()
 	{
@@ -533,6 +521,94 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 		if (Prot()->IsDirectMode())
 		{
 			Fail(TEXT("Tab did not give the colonist back"));
+		}
+	});
+
+	// 9. Falling trees (docs/design/structure-damage.md "Falling trees"): the poplar chopped in phase 3 fell already; here a
+	// second one is felled in daylight, watched from the side and above, with pictures through the fall
+	// (Saved/Smoke/handson/tree_fall_0.png and on). Last, because it takes the view off the colonist.
+	AddPhase(TEXT("tree_falls"), [=, this]()
+	{
+		HandsSmokeSetVar(TEXT("Sky.Hour"), 11.0f);
+		colony::Sim* Sim = SimOf();
+		if (!Sim)
+		{
+			return;
+		}
+		// A clear view: no bushes or trees between the camera and the tree.
+		for (int32 Y = 44; Y < 62; ++Y)
+		{
+			for (int32 X = 54; X < 78; ++X)
+			{
+				Sim->plants().remove(colony::CellPos{X, Y, 0});
+			}
+		}
+		const FVector Tree = Bridge()->SimToWorld(static_cast<float>(HandsFallCell.x) - 3.0f, static_cast<float>(HandsFallCell.y) + 0.5f, 0);
+		const FVector Eye = Tree + FVector(0.0, -1300.0, 900.0);
+		ViewFrom(Eye, (Tree + FVector(0.0, 0.0, 300.0) - Eye).Rotation());
+		State->FallClock = 0.0f;
+		State->FallShots = 0;
+		State->bFallStarted = false;
+	}, 0.5f, 9.0f, [=, this]()
+	{
+		UTreeFallSubsystem* Falls = GetWorld()->GetSubsystem<UTreeFallSubsystem>();
+		colony::Sim* Sim = SimOf();
+		if (!Falls || !Sim)
+		{
+			return;
+		}
+		State->FallClock += GetWorld()->GetDeltaSeconds();
+		if (!State->bFallStarted && State->FallClock >= 0.75f)
+		{
+			// As the sim says it when a woodcutter standing east of it fells a grown poplar.
+			colony::Event Felled;
+			Felled.type = colony::EventType::PlantRemoved;
+			Felled.message = "felled";
+			Felled.cell = HandsFallCell;
+			Felled.def = Sim->defs().idOf("Things", "Plant_TreePoplar");
+			Felled.count = static_cast<int>(colony::kPlantFullGrowth);
+			Felled.x = -1.0f;
+			Felled.y = 0.0f;
+			Falls->PlayEventForTest(Felled);
+			State->bFallStarted = true;
+			State->FallClock = 0.0f;
+			return;
+		}
+		// Pictures as it leans, falls, lands and lies.
+		const float ShotTimes[] = {0.3f, 1.5f, 2.4f, 3.0f, 3.5f, 4.2f, 6.0f};
+		if (State->bFallStarted && State->FallShots < static_cast<int32>(UE_ARRAY_COUNT(ShotTimes)) && State->FallClock >= ShotTimes[State->FallShots])
+		{
+			FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/handson") / FString::Printf(TEXT("tree_fall_%d.png"), State->FallShots),
+				false, false);
+			++State->FallShots;
+		}
+	}, [=, this]()
+	{
+		HandsSmokeSetVar(TEXT("Sky.Hour"), -1.0f);
+		const UTreeFallSubsystem* Falls = GetWorld()->GetSubsystem<UTreeFallSubsystem>();
+		if (!Falls)
+		{
+			Fail(TEXT("The tree-fall subsystem did not start"));
+			return;
+		}
+		UE_LOG(LogTemp, Display, TEXT("handson tree fall: started %d, landed %d, still falling %d, biggest step %.2f degrees, last fall %.2f s, pictures %d"),
+			Falls->GetFallsStarted(), Falls->GetFallsLanded(), Falls->GetFalling(), Falls->GetBiggestStepDegrees(), Falls->GetLastFallSeconds(),
+			State->FallShots);
+		if (Falls->GetFallsStarted() < 2)
+		{
+			Fail(FString::Printf(TEXT("%d trees fell over, not 2 (the chopped one and the test one)"), Falls->GetFallsStarted()));
+		}
+		else if (Falls->GetFallsLanded() < 2)
+		{
+			Fail(TEXT("A falling tree did not reach the ground"));
+		}
+		else if (Falls->GetBiggestStepDegrees() > 12.0f)
+		{
+			Fail(FString::Printf(TEXT("A falling tree jumped %.1f degrees in one frame"), Falls->GetBiggestStepDegrees()));
+		}
+		else if (Falls->GetLastFallSeconds() < 1.5f || Falls->GetLastFallSeconds() > 8.0f)
+		{
+			Fail(FString::Printf(TEXT("The felled poplar took %.2f s to come down (a real one takes a few seconds)"), Falls->GetLastFallSeconds()));
 		}
 	});
 }
