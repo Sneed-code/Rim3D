@@ -4,6 +4,7 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Grid.h"
 
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -15,6 +16,19 @@ class Map;
 
 // Growth and age are whole numbers so the layer hashes and saves the same on every platform.
 inline constexpr uint32_t kPlantFullGrowth = 1000000;  // growth in millionths: 1,000,000 is fully grown
+
+// The way a tree falls (docs/design/structure-damage.md "Falling trees"): the unit vector of (dx, dy), from what felled
+// it to its trunk; +x when the two are on top of each other.
+inline void fallDirection(float dx, float dy, float& x, float& y) {
+    const float length = std::sqrt(dx * dx + dy * dy);
+    if (length < 1.0e-4f) {
+        x = 1.0f;
+        y = 0.0f;
+        return;
+    }
+    x = dx / length;
+    y = dy / length;
+}
 
 // One plant as saved: the cell's index in the map, its def and how far it has come.
 struct PlantRecord {
@@ -96,6 +110,11 @@ public:
     // Where in its cell a plant is drawn: the cell's centre moved up to 0.35 m each way by a hash of the cell's index.
     // Unreal draws the plant here (TerrainSubsystem), so the sim's trunk and the drawn tree are in the same place.
     static void stemPoint(int cellIndex, int x, int y, float& px, float& py);
+    // Keeps the map's trunk layer (Map::setTrunk) in step with the trees from now on: every tree's trunk is written now and
+    // again whenever a plant appears, grows, is hurt to death or goes. Null stops it. The sim attaches its own map.
+    void attachTrunks(Map* map);
+    // The largest RimWorld `pathCost` among the tree defs, in its ticks (42 for every tree); 0 with no trees.
+    double treePathCostTicks() const { return treePathCost_; }
 
     size_t count() const { return count_; }
     size_t countOf(DefId def) const;
@@ -129,6 +148,8 @@ private:
     // Changes a cell. The damage stays with a plant that keeps its kind and goes with it otherwise.
     void set(size_t i, uint16_t kind, uint32_t growth, uint32_t age);
     void setDamage(size_t i, uint16_t damage);
+    float trunkRadiusAt(size_t i) const;  // 0 for no plant or a plant that isn't a tree
+    void syncTrunk(size_t i);
     // The biome's `forestPatches` (ours): the share of the map that is open ground, and the tree weight in
     // open ground and in the dense forest. Without it trees swing smoothly between 0.2 and 1.8 times.
     struct ForestPatches {
@@ -141,6 +162,9 @@ private:
     void generate(uint64_t seed, double density, const ForestPatches& patches);
 
     const Map& map_;
+    Map* trunks_ = nullptr;  // the same map, written to (attachTrunks)
+    bool bulkTrunks_ = false;  // writing many trunks at once: the steps between them are worked out after
+    double treePathCost_ = 0.0;
     std::vector<Kind> kinds_;
     std::vector<int> kindOfDef_;  // by DefId.value: index into kinds_, or -1
     double growthTuning_ = 1.0;

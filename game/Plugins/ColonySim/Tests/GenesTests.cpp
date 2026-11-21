@@ -7,6 +7,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Needs.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Temperature.h"
@@ -245,6 +246,15 @@ TEST_CASE("genes: hunger, damage, walking speed and skills follow the genes") {
         sim.submit(DraftCommand{pawn, true});
     }
     sim.step();
+    // No trees (trunks are solid, docs/design/structure-damage.md): a walker steering round one, or a path bent round
+    // them, covers less ground along the row.
+    for (int y = 0; y < sim.map().height(); ++y) {
+        for (int x = 0; x < sim.map().width(); ++x) {
+            if (sim.plants().isTree(CellPos{x, y, 0})) {
+                sim.plants().remove(CellPos{x, y, 0});
+            }
+        }
+    }
     for (const Entity pawn : {plain, ember}) {
         const Position at = posOf(pawn);
         sim.submit(MoveOrderCommand{pawn, CellPos{static_cast<int>(at.x) > 40 ? 5 : 90, static_cast<int>(at.y), 0}});

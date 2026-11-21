@@ -594,6 +594,9 @@ public:
     bool isGun(DefId def) const;
 
 private:
+    // Hurts the plant in a ground cell by `damage`; if that kills it, says so with a PlantRemoved "broken" (a tree with the
+    // way it falls, away from (fromX, fromY), and its growth: docs/design/structure-damage.md "Falling trees"). True if it died.
+    bool hurtPlant(CellPos c, int damage, float fromX, float fromY);
     Things& things_;
     Map& map_;
     HealthSystem& health_;

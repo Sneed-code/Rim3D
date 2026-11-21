@@ -315,6 +315,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     movement_->setWeather(weather_.get());
     combat_->setWeather(weather_.get());
     combat_->setPlants(plants_.get());
+    plants_->attachTrunks(&map_);  // trunks are solid: walkers steer round them, paths avoid them
     construction_ = std::make_unique<Construction>(map_, *things_, *plants_, *defs_, rng_, events_);
     needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
     mood_ = std::make_unique<MoodSystem>(*things_, *needs_, *defs_);
@@ -328,6 +329,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     doorNumbers_ = DoorNumbers::read(*defs_);
     movement_->setDoors(doorNumbers_);
     pathfinder_.setDoorCost(doorNumbers_.pathCost);
+    // RimWorld's tree path cost is in ticks on top of the 13 a step takes a pawn of 4.6 cells a second (60 ticks a
+    // second): 42 makes a tree cell cost about 3.2 m more (docs/design/structure-damage.md "Trees in the way").
+    pathfinder_.setTreeCost(static_cast<float>(plants_->treePathCostTicks() * 4.6 / 60.0 * defs_->tuning("treePathCost")));
     rooms_ = std::make_unique<Rooms>(map_, *things_, *defs_);
     mood_->setRooms(rooms_.get());
     floors_ = std::make_unique<Floors>(map_, *defs_);
