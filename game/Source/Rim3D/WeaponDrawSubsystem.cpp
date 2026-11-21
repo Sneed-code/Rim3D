@@ -268,9 +268,9 @@ void UWeaponDrawSubsystem::OnMeleeHit(const colony::Event& Event)
 		}
 		Stop = WeaponHitStopBlocked;
 	}
-	else if (Event.hit == colony::ProjectileHitKind::Building && Fight)
+	else if ((Event.hit == colony::ProjectileHitKind::Building || Event.hit == colony::ProjectileHitKind::Plant) && Fight)
 	{
-		Fight->SpawnMeleeImpact(colony::ProjectileHitKind::Building, Event.thing, Event.target, At, Direction, -1, 0.0f);
+		Fight->SpawnMeleeImpact(Event.hit, Event.thing, Event.target, At, Direction, -1, Event.amount);
 	}
 
 	if (Stop > 0.0f && Bridge->GetSpeed() > 0)
@@ -731,7 +731,7 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 	const float ReadyEase = MeleePose::EaseInOut(Pawn.Ready);
 	// Crouched or prone the body has no crouch clip yet (only the drawn height drops), so the weapon keeps the old
 	// lowered place instead of the standing hands.
-	const bool bHands = GWeaponHands.GetValueOnGameThread() != 0 && Mesh && Height > 0.9f && !View.swimming;
+	const bool bHands = GWeaponHands.GetValueOnGameThread() != 0 && Mesh && Height > 0.9f && !View.swimming && !View.felling;  // felling: the chop clip has the hands
 
 	// The frame the holsters ride in: the actor's, carried along with the hips (a lunge), and through a roll, stagger or
 	// knockdown clip turned and moved with the pelvis as well (so holsters and a slung shield stay on the body), eased in
@@ -818,6 +818,11 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 			{
 				InHand = Progress < 0.5f ? 0.0f : MeleePose::EaseInOut((Progress - 0.5f) / 0.5f);
 			}
+		}
+		// Felling a tree: the weapon goes to its holster while the hands hold the axe (UWorkToolSubsystem).
+		if (View.felling)
+		{
+			InHand = 0.0f;
 		}
 		// A weapon with no holster of its own (the fourth slot) stays in the hands.
 		if (Slot < colony::kWeaponSlotCount)

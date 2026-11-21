@@ -59,6 +59,8 @@ namespace
 		TEXT("Look.Quality"), 2, TEXT("How the world is drawn: 0 Low, 1 Medium, 2 High (Lumen light and reflections, volumetric fog), 3 Epic (data/look.json \"quality\")."), ECVF_Default);
 	TAutoConsoleVariable<float> GLookExposure(
 		TEXT("Look.Exposure"), -99.0f, TEXT("An exposure (EV100) to hold the camera at instead of the one that follows the light; below -50 follows the light."), ECVF_Default);
+	TAutoConsoleVariable<float> GLookIndoorDust(
+		TEXT("Look.IndoorDust"), -1.0f, TEXT("How many times thicker the volumetric fog is with the camera under a roof; negative takes data/look.json indoorDust.extinction."), ECVF_Default);
 	TAutoConsoleVariable<int32> GLookReload(
 		TEXT("Look.Reload"), 0, TEXT("Set to 1 to read data/look.json again (it goes back to 0)."), ECVF_Default);
 
@@ -212,6 +214,8 @@ bool FLookConfig::Load(const FString& Path, FString& OutError)
 	LookNumber(DustJson, TEXT("startDistanceCm"), DustStartDistanceCm);
 	LookNumber(DustJson, TEXT("extinction"), DustExtinction);
 	LookNumber(DustJson, TEXT("distanceCm"), DustDistanceCm);
+	LookNumber(DustJson, TEXT("skyScattering"), DustSkyScattering);
+	LookNumber(DustJson, TEXT("ambient"), DustAmbient);
 	LookNumber(FogJson, TEXT("lowSunMist"), LowSunMist);
 	LookNumber(FogJson, TEXT("lowSunMistFromDeg"), LowSunMistFromDeg);
 	LookNumber(FogJson, TEXT("lowSunMistToDeg"), LowSunMistToDeg);
@@ -833,7 +837,18 @@ void USkySubsystem::ApplyState(const FSkyState& New)
 	// window draws a soft shaft in the shadowed room, as in a real house (docs/design/windows.md "Drawing").
 	{
 		const float DustStart = FMath::Lerp(Look.FogStartDistanceCm, Look.DustStartDistanceCm, IndoorShare);
-		const float DustScale = FMath::Lerp(Look.VolumetricExtinction, Look.VolumetricExtinction * FMath::Max(Look.DustExtinction, 0.0f), IndoorShare);
+		const float DustTimes = GLookIndoorDust.GetValueOnGameThread() >= 0.0f ? GLookIndoorDust.GetValueOnGameThread() : Look.DustExtinction;
+		const float DustScale = FMath::Lerp(Look.VolumetricExtinction, Look.VolumetricExtinction * FMath::Max(DustTimes, 0.0f), IndoorShare);
+		const float SkyScatter = FMath::Lerp(1.0f, FMath::Max(Look.DustSkyScattering, 0.0f), IndoorShare);
+		if (!FMath::IsNearlyEqual(SkyLight->VolumetricScatteringIntensity, SkyScatter, 0.01f))
+		{
+			SkyLight->SetVolumetricScatteringIntensity(SkyScatter);
+		}
+		const FLinearColor Ambient = FLinearColor::White * FMath::Lerp(1.0f, FMath::Max(Look.DustAmbient, 0.0f), IndoorShare);
+		if (!Fog->SkyAtmosphereAmbientContributionColorScale.Equals(Ambient, 0.01f))
+		{
+			Fog->SetSkyAtmosphereAmbientContributionColorScale(Ambient);
+		}
 		const float DustReach = FMath::Lerp(Look.VolumetricDistanceCm, FMath::Max(Look.DustDistanceCm, 500.0f), IndoorShare);
 		if (!FMath::IsNearlyEqual(Fog->StartDistance, DustStart, 1.0f))
 		{
@@ -1061,6 +1076,11 @@ void USkySubsystem::UpdateIndoorShare(const colony::Sim& Sim, const USimSubsyste
 	}
 	const float Step = FMath::Max(Look.IndoorEase, 0.01f) * FMath::Min(RealDelta, 0.25f);
 	IndoorShare = FMath::Clamp(IndoorShare + FMath::Clamp(Wanted - IndoorShare, -Step, Step), 0.0f, 1.0f);
+}
+
+float USkySubsystem::GetSkyLightScattering() const
+{
+	return SkyLight ? SkyLight->VolumetricScatteringIntensity : -1.0f;
 }
 
 double USkySubsystem::GroundZ(const colony::Sim& Sim, const USimSubsystem& Source, double X, double Y) const

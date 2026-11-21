@@ -97,6 +97,8 @@ void UWindowLightSubsystem::Tick(float DeltaTime)
 			Light->SetBarnDoorAngle(70.0f);
 			Light->SetBarnDoorLength(20.0f);
 			Light->SetCastShadows(false);
+			// Not in the volumetric fog: the room's dust is lit by the sun's beams, not by a glow at every window.
+			Light->SetVolumetricScatteringIntensity(0.0f);
 			Light->SetupAttachment(Root);
 			Light->RegisterComponent();
 			Light->SetVisibility(false);

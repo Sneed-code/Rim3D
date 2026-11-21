@@ -171,7 +171,9 @@ std::string soundMaterialOf(const DefDatabase& db, DefId def) {
 std::string soundMeleeCue(const DefDatabase& db, const Event& e) {
     const std::string& m = e.message;
     // A blow into a wall or rock comes as "missed" (no pawn was struck) with `hit` Building or Rock.
-    if (m == "missed" && e.hit != ProjectileHitKind::Building && e.hit != ProjectileHitKind::Rock) return {};
+    if (m == "missed" && e.hit != ProjectileHitKind::Building && e.hit != ProjectileHitKind::Rock &&
+        e.hit != ProjectileHitKind::Plant)
+        return {};
     if (m == "dodged") return "Dodge";
     // The weapon's material (its stuff, else its def), wood or steel: a stone club rings hard like steel, a cloth one is wood.
     std::string weapon = soundMaterialOf(db, e.stuff);
@@ -193,6 +195,7 @@ std::string soundMeleeCue(const DefDatabase& db, const Event& e) {
     if (surface.empty()) surface = soundMaterialOf(db, e.struckDef);
     if (surface.empty()) {
         if (e.hit == ProjectileHitKind::Rock) surface = "Stone";
+        else if (e.hit == ProjectileHitKind::Plant) surface = "Wood";  // a tree trunk
         else if (e.hit == ProjectileHitKind::Building) surface = "Stone";
         else if (m == "deflected" || e.hit == ProjectileHitKind::Armor) surface = "Steel";  // plate turns a blow
         else if (m == "blocked") surface = "Steel";
@@ -246,6 +249,7 @@ std::string soundImpactCue(const DefDatabase& db, const Event& e, const SoundSte
             old = "Impact_Building";
             break;
         }
+        case ProjectileHitKind::Plant: surface = "Wood"; old = "Impact_Building"; break;  // a tree trunk
         case ProjectileHitKind::Ground:
             surface = soundSurfaceOfStep(stepAt ? stepAt(e.cell) : std::string("Step_Dirt"));
             old = "Impact_Ground";
@@ -272,7 +276,7 @@ void soundMeleeHit(const DefDatabase& db, const Event& e, std::vector<SoundPlay>
         // A pairing with no cue of its own falls back to the old general sounds.
         const std::string& m = e.message;
         cue = m == "blocked" ? "Melee_Block" : (m == "deflected" || e.hit == ProjectileHitKind::Armor) ? "Melee_Clang"
-              : e.hit == ProjectileHitKind::Building ? "Impact_Building" : "Flesh_Blunt";
+              : e.hit == ProjectileHitKind::Building || e.hit == ProjectileHitKind::Plant ? "Impact_Building" : "Flesh_Blunt";
     }
     out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));
 }

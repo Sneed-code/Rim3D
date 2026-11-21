@@ -570,6 +570,9 @@ TEST_CASE("sound: bullets and arrows sound by what they strike") {
     hit.struckStuff = DefId{};
     hit.struckDef = DefId{};
     CHECK(soundImpactCue(db, hit) == "Impact_Stone");
+    // A tree trunk is wood.
+    hit.hit = ProjectileHitKind::Plant;
+    CHECK(soundImpactCue(db, hit) == "Impact_Wood");
     hit.hit = ProjectileHitKind::Pawn;
     CHECK(soundImpactCue(db, hit) == "Flesh_Bullet");
 
@@ -578,6 +581,9 @@ TEST_CASE("sound: bullets and arrows sound by what they strike") {
     CHECK(soundImpactCue(db, hit) == "Arrow_Flesh");
     hit.hit = ProjectileHitKind::Ground;
     CHECK(soundImpactCue(db, hit) == "Arrow_Dirt");
+    hit.hit = ProjectileHitKind::Plant;
+    CHECK(soundImpactCue(db, hit) == "Arrow_Wood");
+    hit.hit = ProjectileHitKind::Ground;
     hit.hit = ProjectileHitKind::Armor;
     CHECK(soundImpactCue(db, hit) == "Arrow_Stone");
     hit.hit = ProjectileHitKind::Building;
