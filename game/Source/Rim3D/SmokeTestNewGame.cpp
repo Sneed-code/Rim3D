@@ -13,6 +13,7 @@
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
 #include "SkySubsystem.h"
+#include "TerrainSubsystem.h"
 
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
@@ -156,6 +157,19 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 		{
 			Fail(TEXT("newgame_people: the sky is not held at day on the character screen"));
 		}
+		else if (Sky)
+		{
+			UE_LOG(LogTemp, Display, TEXT("NEWGAME screen sky at %.2f h, exposure %.1f EV"), Sky->GetHourOverride(), Sky->GetExposure());
+			if (Sky->GetExposure() > 12.0f)
+			{
+				Fail(TEXT("newgame_people: the screen's exposure is past the engine's safe 12 EV"));
+			}
+		}
+		const UTerrainSubsystem* Terrain = GetWorld()->GetSubsystem<UTerrainSubsystem>();
+		if (Terrain && Terrain->GetPlantClearingCount() != static_cast<int32>(People.size()))
+		{
+			Fail(TEXT("newgame_people: no clearing of plants round each person on show"));
+		}
 		// You are the creator's own woman, untouched (the gun range's), so hair and body updates show on you.
 		const colony::PawnLooks* YourLooks = Sim->things().registry().try_get<colony::PawnLooks>(People[0]);
 		const colony::Colonist* You = Sim->colonistOf(People[0]);
@@ -289,6 +303,10 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 		if (const USkySubsystem* Sky = GetWorld()->GetSubsystem<USkySubsystem>(); Sky && Sky->GetHourOverride() >= 0.0f)
 		{
 			Fail(TEXT("newgame_landed: the sky is still held at the character screen's hour"));
+		}
+		if (const UTerrainSubsystem* Terrain = GetWorld()->GetSubsystem<UTerrainSubsystem>(); Terrain && Terrain->GetPlantClearingCount() > 0)
+		{
+			Fail(TEXT("newgame_landed: the character screen's clearings still hide plants"));
 		}
 		for (const colony::Entity Pawn : Sim->startingColonistSlots())
 		{

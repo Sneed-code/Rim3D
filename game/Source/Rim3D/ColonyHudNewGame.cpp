@@ -25,8 +25,10 @@
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
 #include "SkySubsystem.h"
+#include "TerrainSubsystem.h"
 #include "WorldScreenSubsystem.h"
 
+#include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Looks.h"
@@ -46,6 +48,11 @@ namespace
 	constexpr float NgPreviewHour = 10.5f;
 	constexpr float NgPreviewLampIntensity = 60000.0f;
 	constexpr float NgPreviewClearMetres = 5.5f;
+	// Plants within this many metres of a person on show are not drawn while the screen is open (a cosmetic clearing).
+	constexpr float NgPreviewClearingMetres = 3.5f;
+	// The engine warns on screen when the exposure passes 12 EV (cached lighting would clip): the screen's hour is the one
+	// nearest NgPreviewHour, earlier in the morning, whose exposure stays under this.
+	constexpr float NgPreviewMaxEV = 11.5f;
 
 	/**
 	 * "Canopy", the new-game screens' own look: dark green-black glass panels with square corners and a short jade bar on
@@ -371,6 +378,10 @@ void UColonyHudSubsystem::EndPeopleCamera()
 	{
 		Sky->SetHourOverride(-1.0f);
 	}
+	if (UTerrainSubsystem* Terrain = GetWorld() ? GetWorld()->GetSubsystem<UTerrainSubsystem>() : nullptr)
+	{
+		Terrain->SetPlantClearings({});
+	}
 	if (UWorld* World = GetWorld())
 	{
 		if (USimPawnSubsystem* Pawns = World->GetSubsystem<USimPawnSubsystem>())
@@ -435,12 +446,18 @@ float UColonyHudSubsystem::PickPeopleView(colony::Entity Pawn) const
 			float TrunkY = 0.0f;
 			float Radius = 0.0f;
 			float Height = 0.0f;
-			if (Sim.plants().trunkOf(Cell, TrunkX, TrunkY, Radius, Height) && Height > 1.0f
-				&& FVector2D::Distance(P, FVector2D(TrunkX, TrunkY)) < Radius + 0.6f)
+			// Plants in the clearings round the people on show are not drawn (SetPlantClearings): they don't count.
+			bool bCleared = FVector2D::Distance(P, At) < NgPreviewClearingMetres;
+			for (const FVector2D& O : Others)
+			{
+				bCleared = bCleared || FVector2D::Distance(P, O) < NgPreviewClearingMetres;
+			}
+			if (!bCleared && Sim.plants().trunkOf(Cell, TrunkX, TrunkY, Radius, Height) && Height > 1.0f
+				&& FVector2D::Distance(P, FVector2D(TrunkX, TrunkY)) < Radius + 1.5f)
 			{
 				Blocked += 2.0f;  // a trunk, and the leaves around it
 			}
-			else if (Sim.plants().isTree(Cell))
+			else if (!bCleared && Sim.plants().isTree(Cell))
 			{
 				Blocked += 0.5f;
 			}
@@ -487,9 +504,31 @@ void UColonyHudSubsystem::UpdatePeopleCamera(colony::Entity Pawn)
 		return;
 	}
 	// The screen is shown by day, whatever hour the landing is at (the sim's clock is untouched).
-	if (USkySubsystem* Sky = World->GetSubsystem<USkySubsystem>())
+	USimSubsystem* Bridge = World->GetSubsystem<USimSubsystem>();
+	if (USkySubsystem* Sky = World->GetSubsystem<USkySubsystem>(); Sky && Sky->GetHourOverride() < 0.0f && Bridge && Bridge->GetSim())
 	{
-		Sky->SetHourOverride(NgPreviewHour);
+		const float Day = static_cast<float>(FMath::Fmod(static_cast<double>(Bridge->GetGameSeconds()) / colony::kSecondsPerDay, static_cast<double>(colony::kDaysPerYear)));
+		float Hour = NgPreviewHour;
+		while (Hour > 6.5f && Sky->ComputeState(*Bridge->GetSim(), Hour, Day).ExposureEV + Sky->GetLook().DarkerEV > NgPreviewMaxEV)
+		{
+			Hour -= 0.25f;
+		}
+		Sky->SetHourOverride(Hour);
+	}
+	// A clearing round each person on show, so no tree stands over them or between them and the camera.
+	if (UTerrainSubsystem* Terrain = World->GetSubsystem<UTerrainSubsystem>(); Terrain && Bridge && Bridge->GetSim())
+	{
+		const FVector Origin = Bridge->SimToWorld(0.0f, 0.0f, 0);
+		TArray<FVector3f> Clearings;
+		for (const colony::Entity Shown : Bridge->GetSim()->startingColonistSlots())
+		{
+			if (const ASimPawnActor* ShownActor = Pawns->FindPawn(Shown))
+			{
+				const FVector P = (ShownActor->GetActorLocation() - Origin) / 100.0;
+				Clearings.Add(FVector3f(static_cast<float>(P.X), static_cast<float>(P.Y), NgPreviewClearingMetres));
+			}
+		}
+		Terrain->SetPlantClearings(Clearings);
 	}
 	// A new pawn on the stand: the camera goes where no tree or other person is in the way, and the body turns to face it.
 	if (PeopleViewFor != Pawn)
