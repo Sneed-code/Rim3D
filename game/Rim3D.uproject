@@ -71,6 +71,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "AlembicHairImporter",
+			"Enabled": true
+		},
+		{
 			"Name": "MetaHumanCharacter",
 			"Enabled": true,
 			"TargetAllowList": [
