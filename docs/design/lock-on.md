@@ -193,7 +193,7 @@ Hermite curves that hold still at held keys, no snapping) so the tip ends on the
 the weapon (weapon first, then the hands, as `weapon-hold.md`). It eases in over the first 14% and out over the last 14%.
 Kneeling moves play the crouch pose on the default slot while T < 0.86; the back bends by `bend` with an extra push near
 the hit. The spot is whichever of the move's bone (15 cm preferred), the spine, pelvis and thighs is nearest the
-attacker's shoulder (a ragdoll lies any way round). Where the grip would still be beyond the arm's reach (0.92 of the
+attacker's shoulder (a ragdoll lies any way round). Where the grip would still be beyond the arm's reach (0.97 of the
 arm from `upperarm_r`), the weapon comes back along that line so it never leaves the hands, and the back bends up to 30
 degrees further while the spot is still ahead of the shoulder. The bend is put on after the montage slots (the kneel is
 a whole-body clip there). The drawn body never slides toward the victim. A finisher whose body leaves the map ends at

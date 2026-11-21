@@ -1368,7 +1368,7 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 		const FVector Shoulder = Mesh->GetSocketLocation(TEXT("upperarm_r"));
 		const double Arm = FVector::Dist(Mesh->GetSocketLocation(TEXT("upperarm_r")), Mesh->GetSocketLocation(TEXT("lowerarm_r"))) +
 			FVector::Dist(Mesh->GetSocketLocation(TEXT("lowerarm_r")), Mesh->GetSocketLocation(TEXT("hand_r")));
-		const double Reach = Arm * 0.92;
+		const double Reach = Arm * 0.97;  // nearly straight: a finisher reaches all the way down
 		// First the weapon tips back about its point toward the shoulder (up to 50 degrees), so the point stays on the
 		// body and the grip comes into the hands (a longsword's grip a metre above the body, round 12 2026-11-21).
 		{
