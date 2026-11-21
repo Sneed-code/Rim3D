@@ -37,6 +37,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/WeaponSlot.h"
 
+#include <algorithm>
 #include <string>
 
 namespace
@@ -62,6 +63,9 @@ namespace
 		bool bShot45 = false;
 		bool bShot63 = false;
 		bool bShot80 = false;
+		int32 Blows = 0;
+		float LastBlowAt = -1.0f;
+		float DownedAt = -1.0f;
 		FString PinAtStrike;
 		FString PinAtStart;
 
@@ -322,7 +326,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			State->FixesAtStart = Weapons()->GetFloatFixes();
 			State->HitsAtStart = Weapons()->GetHitsSeen();
 			Weapons()->TakeWorstGripGap();
-		}, 0.6f, 2.6f, [=, this]()
+		}, 0.6f, 6.0f, [=, this]()
 		{
 			USimSubsystem* B = Bridge();
 			colony::Sim* Sim = MutableSim();
@@ -333,25 +337,38 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			if (State->Enemy == colony::kNoEntity)
 			{
 				State->Enemy = FinSmokePawnAt(*B, State->Cell.x + 1.5f, State->Cell.y + 0.5f, State->Me);
-				if (State->Enemy != colony::kNoEntity)
-				{
-					B->Submit(colony::SetFactionCommand{State->Enemy, 2});
-				}
 				return;
 			}
 			if (!Sim->things().spawned(State->Enemy))
 			{
 				return;
 			}
-			colony::Health& Hp = Sim->things().registry().get<colony::Health>(State->Enemy);
-			if (!State->bSent || Sim->melee().finisherOf(State->Me) != nullptr)
+			// Knocked out for real (blows to the head till it is out cold: downed and limp, a ragdoll on the ground, as
+			// a body downed in a fight is drawn), then made an enemy.
+			const colony::ThingView* Victim = FinSmokeFind(*B, State->Enemy);
+			if (!Victim)
 			{
-				Hp.downed = !Hp.dead;
-				Hp.movingFactor = 0.0f;
-				// Lying on the ground, as a downed body is drawn (a stance left standing draws it on its feet).
-				Sim->things().registry().get<colony::Posture>(State->Enemy).stance = colony::Stance::Prone;
+				return;
 			}
-			if (!State->bSent && PhaseTime > 0.4f)
+			if (!Victim->downed && !Victim->dead && State->Blows < 12 && PhaseTime - State->LastBlowAt > 0.25f)
+			{
+				const std::vector<std::string> Labels = Sim->health().partLabels(Victim->def);
+				const auto Head = std::find(Labels.begin(), Labels.end(), std::string("head"));
+				colony::DamagePawnCommand Blow;
+				Blow.pawn = State->Enemy;
+				Blow.damageType = "Blunt";
+				Blow.amount = 5.0f;
+				Blow.part = Head != Labels.end() ? static_cast<int>(Head - Labels.begin()) : -1;
+				B->Submit(Blow);
+				++State->Blows;
+				State->LastBlowAt = PhaseTime;
+			}
+			if (Victim->downed && State->DownedAt < 0.0f)
+			{
+				State->DownedAt = PhaseTime;
+				B->Submit(colony::SetFactionCommand{State->Enemy, 2});
+			}
+			if (!State->bSent && State->DownedAt >= 0.0f && PhaseTime > State->DownedAt + 1.0f)
 			{
 				// Face it, then the attack: a finisher, since it is on the ground.
 				if (AProtagonistPawn* Body = Prot()->GetBody())
@@ -416,6 +433,10 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			{
 				Fail(PhaseName + TEXT(": the victim did not appear"));
 				return;
+			}
+			if (State->DownedAt < 0.0f)
+			{
+				Fail(FString::Printf(TEXT("%s: %d blows to the head never downed the victim"), *PhaseName, State->Blows));
 			}
 			Bridge()->Submit(colony::DestroyThingCommand{State->Enemy});
 			if (Frames <= 0 || State->MaxT < 0.8f)
