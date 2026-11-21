@@ -255,7 +255,7 @@ namespace
 	 * Only skin over the face (within 1.1 `RadiusCm` of the limb's line) counts: the shoulder's sides bulged 8 cm and
 	 * lifted the cap off the body. -1 if the mesh keeps no copy of its vertices to read.
 	 */
-	float SeveredDomeCm(const USkeletalMesh& Asset, int32 CutIndex, bool bPieceSide, float RadiusCm, float& OutOpening)
+	float SeveredDomeCm(const USkeletalMesh& Asset, int32 CutIndex, bool bPieceSide, float RadiusCm, float& OutOpening, bool bWhole = false)
 	{
 		OutOpening = -1.0f;
 		FSkeletalMeshRenderData* Data = Asset.GetResourceForRendering();
@@ -341,7 +341,7 @@ namespace
 				// on the piece the other way round. Skin wholly on one side's bones is left out: on the body that was hip and
 				// crotch skin past the hip joint, which lifted a thigh's cap 8 cm off the body.
 				const double Stays = bPieceSide ? Piece / Total : 1.0 - Piece / Total;
-				if (Stays < 0.999)
+				if (Stays < 0.999 || bWhole)
 				{
 					Dome = FMath::Max(Dome, static_cast<float>(Stays * FMath::Abs(Along)));
 				}
@@ -368,7 +368,7 @@ namespace
 
 	/** The most any drawn mesh of the pawn bulges past a cut at `Bone` (cm, world), or -1 if none could be measured;
 	 *  `OutOpening`: how wide the widest of them is there (cm, world; -1 unknown). */
-	float SeveredDome(const TArray<USkinnedMeshComponent*>& Skinned, FName Bone, bool bPieceSide, float RadiusCm, float& OutOpening, float& OutSkinOpening)
+	float SeveredDome(const TArray<USkinnedMeshComponent*>& Skinned, FName Bone, bool bPieceSide, float RadiusCm, float& OutOpening, float& OutSkinOpening, bool bWhole = false)
 	{
 		float Most = -1.0f;
 		OutOpening = -1.0f;
@@ -387,7 +387,7 @@ namespace
 				continue;
 			}
 			float Opening = -1.0f;
-			const float Dome = SeveredDomeCm(*Asset, Index, bPieceSide, RadiusCm / Scale, Opening);
+			const float Dome = SeveredDomeCm(*Asset, Index, bPieceSide, RadiusCm / Scale, Opening, bWhole);
 			UE_LOG(LogTemp, Log, TEXT("  %s bulge on %s (%s): %.1f cm, %.1f cm wide (radius)"), bPieceSide ? TEXT("piece") : TEXT("body"), *Asset->GetName(), *Bone.ToString(),
 				Dome < 0.0f ? -1.0f : Dome * Scale, Opening < 0.0f ? -1.0f : Opening * Scale);
 			if (Opening > 0.0f)
@@ -822,7 +822,9 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		const float PieceRadiusTable = SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread();
 		float PieceOpening = -1.0f;
 		float PieceSkin = -1.0f;
-		const float PieceDome = SeveredDome(Skinned, Bone, true, PieceRadiusTable, PieceOpening, PieceSkin);
+		// A head is cut at the base of the skull, above the jaw: the throat and the jaw's underside, wholly on the head,
+		// closed over its cap (a smooth skin oval seen from the neck, PC round 16). Its cap stands below all of that.
+		const float PieceDome = SeveredDome(Skinned, Bone, true, PieceRadiusTable, PieceOpening, PieceSkin, Bit == colony::kSeveredHead);
 		const float PieceRadius = SeveredFitFace(PieceRadiusTable, PieceSkin);
 		UE_LOG(LogTemp, Log, TEXT("Severed piece 0x%x: bulges %.1f cm past the cut (cap radius %.1f cm)"), Bit, PieceDome, PieceRadius);
 		if (USceneComponent* Stump = GoreMakeStump(Piece, Piece->GetRootComponent(), NAME_None, At, -Along, Front, PieceRadius,

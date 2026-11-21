@@ -2035,8 +2035,11 @@ namespace
 	{
 		FCreatorPerson Person;
 		Person.bFemale = bFemale;
-		FRandomStream Random(Seed);
-		CreatorRandomize(Person, Random);
+		if (Seed >= 0) // a negative seed is the creator's untouched base person (DefaultLooks): the gun range's woman
+		{
+			FRandomStream Random(Seed);
+			CreatorRandomize(Person, Random);
+		}
 		Person.Looks.bFemale = bFemale;
 		Person.Looks.MakeHuman = bFemale ? TEXT("CreatorFemale") : TEXT("CreatorMale");
 		return Person;
@@ -2090,4 +2093,175 @@ bool CreatorPeople::ApplyRandom(int32 Seed, bool bFemale, ASimPawnActor& Pawn)
 	Person.bBlink = false;
 	CreatorApply(Person, Pawn, false);
 	return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The character screen's looks (CreatorPeople::FLook, docs/design/new-game.md).
+
+namespace
+{
+	FCreatorPerson CreatorLookPerson(const CreatorPeople::FLook& Look)
+	{
+		FCreatorPerson P = CreatorPeopleMake(Look.Seed, Look.bFemale);
+		P.Height = Look.Get(TEXT("height"), P.Height);
+		P.Sex = Look.Get(TEXT("sex"), P.Sex);
+		P.Older = Look.Get(TEXT("older"), P.Older);
+		P.Weight = Look.Get(TEXT("weight"), P.Weight);
+		P.Muscle = Look.Get(TEXT("muscle"), P.Muscle);
+		P.Breasts = P.bFemale ? Look.Get(TEXT("breasts"), P.Breasts) : 0.0f;
+		P.HairStyle = FMath::RoundToInt(Look.Get(TEXT("hairStyle"), static_cast<float>(P.HairStyle)));
+		P.Hair[0] = Look.Get(TEXT("hairR"), P.Hair[0]);
+		P.Hair[1] = Look.Get(TEXT("hairG"), P.Hair[1]);
+		P.Hair[2] = Look.Get(TEXT("hairB"), P.Hair[2]);
+		CreatorSetSkin(P, Look.Get(TEXT("skinR"), P.Skin[0]), Look.Get(TEXT("skinG"), P.Skin[1]), Look.Get(TEXT("skinB"), P.Skin[2]));
+		if (Look.Values.Contains(TEXT("irisR")))
+		{
+			P.bOwnIris = true;
+			P.IrisStrength = 0.85f;
+			P.Iris[0] = Look.Get(TEXT("irisR"), P.Iris[0]);
+			P.Iris[1] = Look.Get(TEXT("irisG"), P.Iris[1]);
+			P.Iris[2] = Look.Get(TEXT("irisB"), P.Iris[2]);
+		}
+		switch (FMath::RoundToInt(Look.Get(TEXT("pubic"), 1.0f)))
+		{
+		case 0: P.Pubic = 0; break;
+		case 2: P.Pubic = 1; P.PubicLength = 0.45f; P.PubicCoverage = 0.6f; break;
+		case 3: P.Pubic = 1; P.bShaved = true; break;
+		default: P.Pubic = 1; break;
+		}
+		P.bBlink = false;
+		return P;
+	}
+}
+
+FString CreatorPeople::Encode(const FLook& Look)
+{
+	FString Text = FString::Printf(TEXT("seed=%d;female=%d;"), Look.Seed, Look.bFemale ? 1 : 0);
+	TArray<FString> Keys;
+	Look.Values.GetKeys(Keys);
+	Keys.Sort();
+	for (const FString& Key : Keys)
+	{
+		Text += FString::Printf(TEXT("%s=%.4g;"), *Key, Look.Values[Key]);
+	}
+	return Text;
+}
+
+bool CreatorPeople::Decode(const FString& Text, FLook& Out)
+{
+	Out = FLook();
+	bool bSeed = false;
+	TArray<FString> Parts;
+	Text.ParseIntoArray(Parts, TEXT(";"), true);
+	for (const FString& Part : Parts)
+	{
+		FString Key;
+		FString Value;
+		if (!Part.Split(TEXT("="), &Key, &Value))
+		{
+			continue;
+		}
+		if (Key == TEXT("seed"))
+		{
+			Out.Seed = FCString::Atoi(*Value);
+			bSeed = true;
+		}
+		else if (Key == TEXT("female"))
+		{
+			Out.bFemale = FCString::Atoi(*Value) != 0;
+		}
+		else if (!Key.IsEmpty())
+		{
+			Out.Values.Add(Key, FCString::Atof(*Value));
+		}
+	}
+	return bSeed;
+}
+
+CreatorPeople::FLook CreatorPeople::Expanded(const FLook& Look)
+{
+	const FCreatorPerson P = CreatorLookPerson(Look);
+	FLook Out = Look;
+	const auto Keep = [&Out](const TCHAR* Name, float Value)
+	{
+		if (!Out.Values.Contains(Name))
+		{
+			Out.Values.Add(Name, Value);
+		}
+	};
+	Keep(TEXT("height"), P.Height);
+	Keep(TEXT("sex"), P.Sex);
+	Keep(TEXT("older"), P.Older);
+	Keep(TEXT("weight"), P.Weight);
+	Keep(TEXT("muscle"), P.Muscle);
+	Keep(TEXT("breasts"), P.Breasts);
+	Keep(TEXT("hairStyle"), static_cast<float>(P.HairStyle));
+	Keep(TEXT("hairR"), P.Hair[0]);
+	Keep(TEXT("hairG"), P.Hair[1]);
+	Keep(TEXT("hairB"), P.Hair[2]);
+	Keep(TEXT("skinR"), P.Skin[0]);
+	Keep(TEXT("skinG"), P.Skin[1]);
+	Keep(TEXT("skinB"), P.Skin[2]);
+	Keep(TEXT("pubic"), 1.0f);
+	return Out;
+}
+
+FSimPawnLooks CreatorPeople::LooksFor(const FLook& Look, const FSimPawnLooks& From)
+{
+	const FCreatorPerson P = CreatorLookPerson(Look);
+	FSimPawnLooks Looks = From;
+	Looks.bFemale = Look.bFemale;
+	Looks.MakeHuman = P.Looks.MakeHuman;
+	Looks.Height = 1.0f;  // the MakeHuman mesh carries the height (CreatorApply)
+	// As CreatorApply sets them: the creator's colours are as seen (sRGB), the looks' are linear.
+	Looks.Skin = FLinearColor::FromSRGBColor(FLinearColor(P.Skin[0], P.Skin[1], P.Skin[2]).ToFColor(false));
+	Looks.Hair = FLinearColor::FromSRGBColor(FLinearColor(P.Hair[0], P.Hair[1], P.Hair[2]).ToFColor(false));
+	return Looks;
+}
+
+bool CreatorPeople::Apply(const FLook& Look, ASimPawnActor& Pawn)
+{
+	const FCreatorPerson P = CreatorLookPerson(Look);
+	if (!Pawn.GetMakeHumanMesh() || Pawn.GetLooks().MakeHuman != P.Looks.MakeHuman)
+	{
+		return false;
+	}
+	CreatorApply(P, Pawn, false);
+	return true;
+}
+
+int32 CreatorPeople::HairStyleCount()
+{
+	return UE_ARRAY_COUNT(CreatorHairStyles);
+}
+
+FString CreatorPeople::HairStyleLabel(int32 Index)
+{
+	return Index >= 0 && Index < HairStyleCount() ? FString(UTF8_TO_TCHAR(CreatorHairStyles[Index].Label)) : FString();
+}
+
+bool CreatorPeople::HasHairStyle(int32 Index, const ASimPawnActor& Pawn)
+{
+	if (Index < 0 || Index >= HairStyleCount())
+	{
+		return false;
+	}
+	const TCHAR* Key = CreatorHairStyles[Index].Key;
+	if (!Key)
+	{
+		return true;
+	}
+	const USkeletalMeshComponent* Mesh = Pawn.GetMakeHumanMesh();
+	if (!Mesh)
+	{
+		return false;
+	}
+	for (const FName& Slot : Mesh->GetMaterialSlotNames())
+	{
+		if (Slot.ToString().Contains(Key))
+		{
+			return true;
+		}
+	}
+	return false;
 }

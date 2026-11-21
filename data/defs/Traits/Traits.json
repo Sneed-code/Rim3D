@@ -3,148 +3,262 @@
   {
     "defName": "Industriousness", "parent": "TraitBase",
     "degreeDatas": [
-      { "degree": -2, "label": "slothful", "statOffsets": { "workSpeedGlobal": -0.35 } },
-      { "degree": -1, "label": "lazy", "statOffsets": { "workSpeedGlobal": -0.2 } },
-      { "degree": 1, "label": "hard worker", "statOffsets": { "workSpeedGlobal": 0.2 } },
-      { "degree": 2, "label": "industrious", "statOffsets": { "workSpeedGlobal": 0.35 } }
+      { "degree": -2, "label": "slothful", "points": -4, "description": "Works 35% slower.", "statOffsets": { "workSpeedGlobal": -0.35 } },
+      { "degree": -1, "label": "lazy", "points": -2, "description": "Works 20% slower.", "statOffsets": { "workSpeedGlobal": -0.2 } },
+      { "degree": 1, "label": "hard worker", "points": 3, "description": "Works 20% faster.", "statOffsets": { "workSpeedGlobal": 0.2 } },
+      { "degree": 2, "label": "industrious", "points": 5, "description": "Works 35% faster.", "statOffsets": { "workSpeedGlobal": 0.35 } }
     ]
   },
   {
     "defName": "Nerves", "parent": "TraitBase", "conflictingTraits": ["TooSmart"],
     "degreeDatas": [
-      { "degree": -2, "label": "volatile", "statOffsets": { "mentalBreakThreshold": 0.15 } },
-      { "degree": -1, "label": "nervous", "statOffsets": { "mentalBreakThreshold": 0.08 } },
-      { "degree": 1, "label": "steadfast", "statOffsets": { "mentalBreakThreshold": -0.09 } },
-      { "degree": 2, "label": "iron-willed", "statOffsets": { "mentalBreakThreshold": -0.18 } }
+      { "degree": -2, "label": "volatile", "points": -3, "description": "Breaks down much sooner under stress.", "statOffsets": { "mentalBreakThreshold": 0.15 } },
+      { "degree": -1, "label": "nervous", "points": -1, "description": "Breaks down a little sooner under stress.", "statOffsets": { "mentalBreakThreshold": 0.08 } },
+      { "degree": 1, "label": "steadfast", "points": 2, "description": "Holds together longer under stress.", "statOffsets": { "mentalBreakThreshold": -0.09 } },
+      { "degree": 2, "label": "iron-willed", "points": 4, "description": "Hardly ever breaks under stress.", "statOffsets": { "mentalBreakThreshold": -0.18 } }
     ]
   },
   {
     "defName": "NaturalMood", "parent": "TraitBase",
     "degreeDatas": [
-      { "degree": -2, "label": "depressive", "moodOffset": -12 },
-      { "degree": -1, "label": "pessimist", "moodOffset": -6 },
-      { "degree": 1, "label": "optimist", "moodOffset": 6 },
-      { "degree": 2, "label": "sanguine", "moodOffset": 12 }
+      { "degree": -2, "label": "depressive", "points": -4, "description": "Mood -12, always.", "moodOffset": -12 },
+      { "degree": -1, "label": "pessimist", "points": -2, "description": "Mood -6, always.", "moodOffset": -6 },
+      { "degree": 1, "label": "optimist", "points": 2, "description": "Mood +6, always.", "moodOffset": 6 },
+      { "degree": 2, "label": "sanguine", "points": 4, "description": "Mood +12, always.", "moodOffset": 12 }
     ]
   },
   {
     "defName": "Neurotic", "parent": "TraitBase",
     "degreeDatas": [
-      { "degree": 1, "label": "neurotic", "statOffsets": { "workSpeedGlobal": 0.2, "mentalBreakThreshold": 0.08 } },
-      { "degree": 2, "label": "very neurotic", "statOffsets": { "workSpeedGlobal": 0.4, "mentalBreakThreshold": 0.14 } }
+      { "degree": 1, "label": "neurotic", "points": 1, "description": "Works 20% faster, but breaks a little sooner.", "statOffsets": { "workSpeedGlobal": 0.2, "mentalBreakThreshold": 0.08 } },
+      { "degree": 2, "label": "very neurotic", "points": 2, "description": "Works 40% faster, but breaks sooner.", "statOffsets": { "workSpeedGlobal": 0.4, "mentalBreakThreshold": 0.14 } }
     ]
   },
   {
     "defName": "SpeedOffset", "parent": "TraitBase",
     "degreeDatas": [
-      { "degree": -1, "label": "slowpoke", "statOffsets": { "moveSpeed": -0.006667 } },
-      { "degree": 1, "label": "fast walker", "statOffsets": { "moveSpeed": 0.006667 } },
-      { "degree": 2, "label": "jogger", "statOffsets": { "moveSpeed": 0.013333 } }
+      { "degree": -1, "label": "slowpoke", "points": -2, "description": "Walks about 5% slower.", "statOffsets": { "moveSpeed": -0.006667 } },
+      { "degree": 1, "label": "fast walker", "points": 1, "description": "Walks about 5% faster.", "statOffsets": { "moveSpeed": 0.006667 } },
+      { "degree": 2, "label": "jogger", "points": 3, "description": "Walks about 10% faster.", "statOffsets": { "moveSpeed": 0.013333 } }
     ]
   },
   {
     "defName": "ShootingAccuracy", "parent": "TraitBase", "conflictingTraits": ["Brawler"],
     "degreeDatas": [
-      { "degree": -1, "label": "trigger-happy", "statOffsets": { "shootingAccuracyPawn": -5 }, "statFactors": { "aimingDelayFactor": 0.5 } },
-      { "degree": 1, "label": "careful shooter", "statOffsets": { "shootingAccuracyPawn": 5 }, "statFactors": { "aimingDelayFactor": 1.25 } }
+      { "degree": -1, "label": "trigger-happy", "points": 1, "description": "Shoots twice as fast, 5 levels less accurate.", "statOffsets": { "shootingAccuracyPawn": -5 }, "statFactors": { "aimingDelayFactor": 0.5 } },
+      { "degree": 1, "label": "careful shooter", "points": 2, "description": "Aims longer, 5 levels more accurate.", "statOffsets": { "shootingAccuracyPawn": 5 }, "statFactors": { "aimingDelayFactor": 1.25 } }
     ]
   },
   {
     "defName": "Beauty", "parent": "TraitBase",
     "degreeDatas": [
-      { "degree": -2, "label": "staggeringly ugly", "statOffsets": { "pawnBeauty": -2 }, "opinionOfMe": -10 },
-      { "degree": -1, "label": "ugly", "statOffsets": { "pawnBeauty": -1 }, "opinionOfMe": -5 },
-      { "degree": 1, "label": "pretty", "statOffsets": { "pawnBeauty": 1 }, "opinionOfMe": 5 },
-      { "degree": 2, "label": "beautiful", "statOffsets": { "pawnBeauty": 2 }, "opinionOfMe": 10 }
+      { "degree": -2, "label": "staggeringly ugly", "points": -2, "description": "Others like them much less.", "statOffsets": { "pawnBeauty": -2 }, "opinionOfMe": -10 },
+      { "degree": -1, "label": "ugly", "points": -1, "description": "Others like them less.", "statOffsets": { "pawnBeauty": -1 }, "opinionOfMe": -5 },
+      { "degree": 1, "label": "pretty", "points": 1, "description": "Others like them more.", "statOffsets": { "pawnBeauty": 1 }, "opinionOfMe": 5 },
+      { "degree": 2, "label": "beautiful", "points": 2, "description": "Others like them much more.", "statOffsets": { "pawnBeauty": 2 }, "opinionOfMe": 10 }
     ],
     "unverified": ["opinionOfMe"]
   },
   {
-    "defName": "Tough", "parent": "TraitBase", "commonality": 1.1,
-    "degreeDatas": [{ "degree": 0, "label": "tough", "statFactors": { "incomingDamageFactor": 0.5 } }]
+    "defName": "Tough", "ours": ["incomingDamageFactor 0.7 (sneed 2026-11-21: tough is -30% damage taken, not 50%)"], "parent": "TraitBase", "commonality": 1.1,
+    "degreeDatas": [{ "degree": 0, "label": "tough", "points": 5, "description": "Takes 30% less damage.", "statFactors": { "incomingDamageFactor": 0.7 } }]
   },
   {
     "defName": "Nimble", "parent": "TraitBase",
-    "degreeDatas": [{ "degree": 0, "label": "nimble", "statOffsets": { "meleeDodgeChance": 15 } }]
+    "degreeDatas": [{ "degree": 0, "label": "nimble", "points": 3, "description": "Dodges blows more often.", "statOffsets": { "meleeDodgeChance": 15 } }]
   },
   {
     "defName": "Brawler", "parent": "TraitBase", "conflictingTraits": ["ShootingAccuracy", "Wimp"],
     "disallowedPassions": ["Shooting"],
     "degreeDatas": [{
-      "degree": 0, "label": "brawler", "skillGains": { "Melee": 4, "Shooting": -10 },
+      "degree": 0, "label": "brawler", "points": 2, "description": "+4 melee, -10 shooting, unhappy holding a gun.", "skillGains": { "Melee": 4, "Shooting": -10 },
       "statOffsets": { "meleeHitChance": 4 }, "moodWithRangedWeapon": -10
     }]
   },
   {
     "defName": "Wimp", "parent": "TraitBase", "conflictingTraits": ["Brawler"],
-    "degreeDatas": [{ "degree": 0, "label": "wimp", "statOffsets": { "painShockThreshold": -0.5, "marketValue": -0.15 },
+    "degreeDatas": [{ "degree": 0, "label": "wimp", "points": -3, "description": "Goes down to pain sooner and runs when hurt.", "statOffsets": { "painShockThreshold": -0.5, "marketValue": -0.15 },
                      "fleeWhenHurtSeconds": [12, 20], "meleeDamageFactor": 0.9 }],
     "note": "fleeWhenHurtSeconds and meleeDamageFactor are sneed's (2026-11-16/17): hurt in a fight, it runs to cover for 12 to 20 real seconds, then fights again; its melee blows do 10% less damage"
   },
   {
     "defName": "Kind", "parent": "TraitBase", "commonality": 2, "conflictingTraits": ["Abrasive", "Psychopath"],
-    "degreeDatas": [{ "degree": 0, "label": "kind" }]
+    "degreeDatas": [{ "degree": 0, "label": "kind", "points": 1, "description": "Never insults anyone; brightens others." }]
   },
   {
     "defName": "Abrasive", "parent": "TraitBase", "conflictingTraits": ["Kind"],
-    "degreeDatas": [{ "degree": 0, "label": "abrasive", "statOffsets": { "marketValue": -0.15 }, "opinionOfMe": -20 }],
+    "degreeDatas": [{ "degree": 0, "label": "abrasive", "points": -1, "description": "Rubs people the wrong way.", "statOffsets": { "marketValue": -0.15 }, "opinionOfMe": -20 }],
     "unverified": ["opinionOfMe"]
   },
   {
     "defName": "Psychopath", "parent": "TraitBase", "conflictingTraits": ["Kind"],
-    "degreeDatas": [{ "degree": 0, "label": "psychopath" }]
+    "degreeDatas": [{ "degree": 0, "label": "psychopath", "points": 1, "description": "Feels nothing for others, good or bad." }]
   },
   {
     "defName": "Bloodlust", "parent": "TraitBase", "commonality": 0.8, "requiredWorkTags": ["Violent"],
-    "degreeDatas": [{ "degree": 0, "label": "bloodlust", "moodPerKill": 12, "moodPerKillMax": 37 }]
+    "degreeDatas": [{ "degree": 0, "label": "bloodlust", "points": 1, "description": "Happy after a kill.", "moodPerKill": 12, "moodPerKillMax": 37 }]
   },
   {
     "defName": "Cannibal", "parent": "TraitBase", "commonality": 0.6,
-    "degreeDatas": [{ "degree": 0, "label": "cannibal" }]
+    "degreeDatas": [{ "degree": 0, "label": "cannibal", "points": -1, "description": "Will eat people, and likes it." }]
   },
   {
     "defName": "Gourmand", "parent": "TraitBase", "conflictingTraits": ["Ascetic"],
-    "degreeDatas": [{ "degree": 0, "label": "gourmand", "skillGains": { "Cooking": 4 }, "statFactors": { "hungerRateMultiplier": 1.5 } }]
+    "degreeDatas": [{ "degree": 0, "label": "gourmand", "points": 1, "description": "+4 cooking, but always hungry.", "skillGains": { "Cooking": 4 }, "statFactors": { "hungerRateMultiplier": 1.5 } }]
   },
   {
     "defName": "Ascetic", "parent": "TraitBase", "commonality": 0.7, "conflictingTraits": ["Greedy", "Gourmand"],
-    "degreeDatas": [{ "degree": 0, "label": "ascetic" }]
+    "degreeDatas": [{ "degree": 0, "label": "ascetic", "points": 1, "description": "Content with a plain bed and plain food." }]
   },
   {
     "defName": "Greedy", "parent": "TraitBase", "conflictingTraits": ["Ascetic"],
-    "degreeDatas": [{ "degree": 0, "label": "greedy", "moodWithoutBedroom": -8 }]
+    "degreeDatas": [{ "degree": 0, "label": "greedy", "points": -1, "description": "Wants a fine room of their own.", "moodWithoutBedroom": -8 }]
   },
   {
     "defName": "Pyromaniac", "parent": "TraitBase", "commonality": 0.8, "disabledWorkTags": ["Firefighting"],
-    "degreeDatas": [{ "degree": 0, "label": "pyromaniac", "statOffsets": { "marketValue": -0.2 } }]
+    "degreeDatas": [{ "degree": 0, "label": "pyromaniac", "points": -4, "description": "Starts fires now and then; will not fight them.", "statOffsets": { "marketValue": -0.2 } }]
   },
   {
     "defName": "FastLearner", "parent": "TraitBase", "conflictingTraits": ["SlowLearner"],
-    "degreeDatas": [{ "degree": 0, "label": "fast learner", "statOffsets": { "globalLearningFactor": 0.75 } }]
+    "degreeDatas": [{ "degree": 0, "label": "fast learner", "points": 4, "description": "Learns 75% faster.", "statOffsets": { "globalLearningFactor": 0.75 } }]
   },
   {
     "defName": "SlowLearner", "parent": "TraitBase", "conflictingTraits": ["FastLearner"],
-    "degreeDatas": [{ "degree": 0, "label": "slow learner", "statOffsets": { "globalLearningFactor": -0.75 } }]
+    "degreeDatas": [{ "degree": 0, "label": "slow learner", "points": -4, "description": "Learns 75% slower.", "statOffsets": { "globalLearningFactor": -0.75 } }]
   },
   {
     "defName": "TooSmart", "parent": "TraitBase", "conflictingTraits": ["Nerves"],
-    "degreeDatas": [{ "degree": 0, "label": "too smart", "statOffsets": { "globalLearningFactor": 0.75, "mentalBreakThreshold": 0.12 } }]
+    "degreeDatas": [{ "degree": 0, "label": "too smart", "points": 3, "description": "Learns 75% faster, but breaks sooner.", "statOffsets": { "globalLearningFactor": 0.75, "mentalBreakThreshold": 0.12 } }]
   },
   {
     "defName": "GreatMemory", "parent": "TraitBase", "commonality": 1.1,
-    "degreeDatas": [{ "degree": 0, "label": "great memory", "skillLossFactor": 0.5 }]
+    "degreeDatas": [{ "degree": 0, "label": "great memory", "points": 2, "description": "Forgets skills half as fast.", "skillLossFactor": 0.5 }]
   },
   {
     "defName": "QuickSleeper", "parent": "TraitBase", "commonality": 1.1,
-    "degreeDatas": [{ "degree": 0, "label": "quick sleeper", "statOffsets": { "restRateMultiplier": 0.5 } }]
+    "degreeDatas": [{ "degree": 0, "label": "quick sleeper", "points": 3, "description": "Needs half the sleep.", "statOffsets": { "restRateMultiplier": 0.5 } }]
   },
   {
     "defName": "NightOwl", "parent": "TraitBase", "commonality": 1.3,
-    "degreeDatas": [{ "degree": 0, "label": "night owl", "moodAwakeAtNight": 16, "moodAwakeInDay": -10 }]
+    "degreeDatas": [{ "degree": 0, "label": "night owl", "points": 1, "description": "Happy awake at night, unhappy by day.", "moodAwakeAtNight": 16, "moodAwakeInDay": -10 }]
   },
   {
     "defName": "Nudist", "parent": "TraitBase", "commonality": 0.7,
-    "degreeDatas": [{ "degree": 0, "label": "nudist", "moodNaked": 20, "moodClothed": -3, "statOffsets": { "comfyTemperatureMin": -10 } }],
+    "degreeDatas": [{ "degree": 0, "label": "nudist", "points": 1, "description": "Happy naked; copes with the cold better.", "moodNaked": 20, "moodClothed": -3, "statOffsets": { "comfyTemperatureMin": -10 } }],
     "ours": ["degreeDatas.0.statOffsets.comfyTemperatureMin: sneed's G2 playtest, nudists shrug off 10 C more cold (RimWorld's nudist has no temperature change)"]
+  },
+  {
+    "defName": "NaturalMarksman", "parent": "TraitBase", "source": "ours", "pointsOnly": true, "conflictingTraits": ["Brawler"],
+    "degreeDatas": [
+      { "degree": 0, "label": "natural marksman", "points": 3, "skillGains": { "Shooting": 3 }, "description": "A dead shot from the first time they held a gun. +3 shooting, and the skill can rise to 23." }
+    ],
+    "ours": ["sneed 2026-11-21: skill traits replace backstories; +3 skill for 3 points, above the usual 20"]
+  },
+  {
+    "defName": "BornFighter", "parent": "TraitBase", "source": "ours", "pointsOnly": true,
+    "degreeDatas": [
+      { "degree": 0, "label": "born fighter", "points": 3, "skillGains": { "Melee": 3 }, "description": "Hands and blades come naturally to them. +3 melee, and the skill can rise to 23." }
+    ],
+    "ours": ["sneed 2026-11-21: skill traits replace backstories; +3 skill for 3 points, above the usual 20"]
+  },
+  {
+    "defName": "BuildersHands", "parent": "TraitBase", "source": "ours", "pointsOnly": true,
+    "degreeDatas": [
+      { "degree": 0, "label": "builder's hands", "points": 3, "skillGains": { "Construction": 3 }, "description": "Walls go up straight and fast when they build. +3 construction, and the skill can rise to 23." }
+    ],
+    "ours": ["sneed 2026-11-21: skill traits replace backstories; +3 skill for 3 points, above the usual 20"]
+  },
+  {
+    "defName": "TunnelRat", "parent": "TraitBase", "source": "ours", "pointsOnly": true,
+    "degreeDatas": [
+      { "degree": 0, "label": "tunnel rat", "points": 3, "skillGains": { "Mining": 3 }, "description": "At home under the rock, with a pick in hand. +3 mining, and the skill can rise to 23." }
+    ],
+    "ours": ["sneed 2026-11-21: skill traits replace backstories; +3 skill for 3 points, above the usual 20"]
+  },
+  {
+    "defName": "KitchenRaised", "parent": "TraitBase", "source": "ours", "pointsOnly": true,
+    "degreeDatas": [
+      { "degree": 0, "label": "kitchen-raised", "points": 3, "skillGains": { "Cooking": 3 }, "description": "Grew up by a stove and never forgot it. +3 cooking, and the skill can rise to 23." }
+    ],
+    "ours": ["sneed 2026-11-21: skill traits replace backstories; +3 skill for 3 points, above the usual 20"]
+  },
+  {
+    "defName": "GreenThumb", "parent": "TraitBase", "source": "ours", "pointsOnly": true,
+    "degreeDatas": [
+      { "degree": 0, "label": "green thumb", "points": 3, "skillGains": { "Plants": 3 }, "description": "Things grow for them. +3 plants, and the skill can rise to 23." }
+    ],
+    "ours": ["sneed 2026-11-21: skill traits replace backstories; +3 skill for 3 points, above the usual 20"]
+  },
+  {
+    "defName": "AnimalWhisperer", "parent": "TraitBase", "source": "ours", "pointsOnly": true,
+    "degreeDatas": [
+      { "degree": 0, "label": "animal whisperer", "points": 3, "skillGains": { "Animals": 3 }, "description": "Animals trust them. +3 animals, and the skill can rise to 23." }
+    ],
+    "ours": ["sneed 2026-11-21: skill traits replace backstories; +3 skill for 3 points, above the usual 20"]
+  },
+  {
+    "defName": "Tinkerer", "parent": "TraitBase", "source": "ours", "pointsOnly": true,
+    "degreeDatas": [
+      { "degree": 0, "label": "tinkerer", "points": 3, "skillGains": { "Crafting": 3 }, "description": "Can make or mend almost anything. +3 crafting, and the skill can rise to 23." }
+    ],
+    "ours": ["sneed 2026-11-21: skill traits replace backstories; +3 skill for 3 points, above the usual 20"]
+  },
+  {
+    "defName": "ArtistsEye", "parent": "TraitBase", "source": "ours", "pointsOnly": true,
+    "degreeDatas": [
+      { "degree": 0, "label": "artist's eye", "points": 3, "skillGains": { "Artistic": 3 }, "description": "Sees beauty and can make it. +3 artistic, and the skill can rise to 23." }
+    ],
+    "ours": ["sneed 2026-11-21: skill traits replace backstories; +3 skill for 3 points, above the usual 20"]
+  },
+  {
+    "defName": "FieldMedic", "parent": "TraitBase", "source": "ours", "pointsOnly": true,
+    "degreeDatas": [
+      { "degree": 0, "label": "field medic", "points": 3, "skillGains": { "Medicine": 3 }, "description": "Steady hands with a wound. +3 medical, and the skill can rise to 23." }
+    ],
+    "ours": ["sneed 2026-11-21: skill traits replace backstories; +3 skill for 3 points, above the usual 20"]
+  },
+  {
+    "defName": "SilverTongue", "parent": "TraitBase", "source": "ours", "pointsOnly": true,
+    "degreeDatas": [
+      { "degree": 0, "label": "silver tongue", "points": 3, "skillGains": { "Social": 3 }, "description": "Talks their way in and out of anything. +3 social, and the skill can rise to 23." }
+    ],
+    "ours": ["sneed 2026-11-21: skill traits replace backstories; +3 skill for 3 points, above the usual 20"]
+  },
+  {
+    "defName": "Bookworm", "parent": "TraitBase", "source": "ours", "pointsOnly": true,
+    "degreeDatas": [
+      { "degree": 0, "label": "bookworm", "points": 3, "skillGains": { "Intellectual": 3 }, "description": "Learns from books and machines with ease. +3 intellectual, and the skill can rise to 23." }
+    ],
+    "ours": ["sneed 2026-11-21: skill traits replace backstories; +3 skill for 3 points, above the usual 20"]
+  },
+  {
+    "defName": "Pacifist", "parent": "TraitBase", "source": "ours", "pointsOnly": true, "conflictingTraits": ["Bloodlust", "Brawler", "ShootingAccuracy", "NaturalMarksman", "BornFighter"],
+    "disabledWorkTags": ["Violent"],
+    "degreeDatas": [
+      { "degree": 0, "label": "pacifist", "points": -4, "description": "Will not fight, hunt or carry a weapon." }
+    ],
+    "ours": ["sneed 2026-11-21: backstory 'incapable of violence' as a negative trait"]
+  },
+  {
+    "defName": "Pampered", "parent": "TraitBase", "source": "ours", "pointsOnly": true,
+    "disabledWorkTags": ["ManualDumb", "Cleaning"],
+    "degreeDatas": [
+      { "degree": 0, "label": "pampered", "points": -3, "description": "Will not haul or clean." }
+    ],
+    "ours": ["sneed 2026-11-21: backstory 'no dumb labour' as a negative trait"]
+  },
+  {
+    "defName": "Clumsy", "parent": "TraitBase", "source": "ours", "pointsOnly": true, "conflictingTraits": ["BuildersHands", "Tinkerer"],
+    "degreeDatas": [
+      { "degree": 0, "label": "clumsy", "points": -2, "skillGains": { "Construction": -4, "Crafting": -4 }, "description": "-4 construction and crafting." }
+    ],
+    "ours": ["sneed 2026-11-21: negative traits give points"]
+  },
+  {
+    "defName": "Frail", "parent": "TraitBase", "source": "ours", "pointsOnly": true, "conflictingTraits": ["Tough"],
+    "degreeDatas": [
+      { "degree": 0, "label": "frail", "points": -3, "statFactors": { "incomingDamageFactor": 1.2 }, "description": "Takes 20% more damage." }
+    ],
+    "ours": ["sneed 2026-11-21: negative traits give points; the mirror of tough"]
   }
 ]

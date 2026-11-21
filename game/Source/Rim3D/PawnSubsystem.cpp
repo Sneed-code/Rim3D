@@ -19,6 +19,7 @@
 #include "LevelsSubsystem.h"
 #include "PawnActor.h"
 #include "PawnFaces.h"
+#include "CreatorPeople.h"
 #include "MakeHumanArt.h"
 #include "Retargeter/IKRetargeter.h"
 #include "PawnLooks.h"
@@ -643,6 +644,16 @@ void USimPawnSubsystem::SetLooksOverride(colony::Entity Thing, const FSimPawnLoo
 	LooksOverrides.Add(PawnKey(Thing), Looks);
 }
 
+void USimPawnSubsystem::SetApparelPreview(colony::Entity Thing, const TArray<FString>& Pieces)
+{
+	ApparelPreviews.Add(PawnKey(Thing), Pieces);
+}
+
+void USimPawnSubsystem::ClearApparelPreview(colony::Entity Thing)
+{
+	ApparelPreviews.Remove(PawnKey(Thing));
+}
+
 ASimPawnActor* USimPawnSubsystem::FindPawn(colony::Entity Thing) const
 {
 	const TObjectPtr<ASimPawnActor>* Found = Pawns.Find(PawnKey(Thing));
@@ -744,13 +755,63 @@ void USimPawnSubsystem::Tick(float DeltaTime)
 		}
 		else if (View.looks >= 0 && View.looks < static_cast<int32>(Now.looks.size()))
 		{
-			Pawn->ApplyLooks(*this, MakeLooks(Now.looks[static_cast<size_t>(View.looks)], Defs));
+			const colony::PawnLooksView& LooksView = Now.looks[static_cast<size_t>(View.looks)];
+			FSimPawnLooks Looks = MakeLooks(LooksView, Defs);
+			// A colonist from the character screen (docs/design/new-game.md): drawn as the creator's MakeHuman person.
+			CreatorPeople::FLook Look;
+			const FString CreatorText = LooksView.creator.empty() ? FString() : FString(UTF8_TO_TCHAR(LooksView.creator.c_str()));
+			const bool bCreator = !CreatorText.IsEmpty() && CreatorPeople::Decode(CreatorText, Look);
+			if (bCreator)
+			{
+				Looks = CreatorPeople::LooksFor(Look, Looks);
+			}
+			Pawn->ApplyLooks(*this, Looks);
+			if (bCreator)
+			{
+				Pawn->ApplyCreatorLook(CreatorText);
+			}
 		}
 		// Worn clothes (U16): rebuilt only when what is worn, or how torn it is, changed.
-		const uint64 WornKey = ApparelKey(Now, View);
-		if (!Pawn->HasApparel() || Pawn->GetApparelKey() != WornKey)
+		if (const TArray<FString>* Preview = ApparelPreviews.Find(PawnKey(View.id)); Preview && Defs)
 		{
-			Pawn->ApplyApparel(*this, MakeApparel(Now, View, Defs), WornKey);
+			// The character screen's "clothes on": made-up pieces in a snapshot of their own, so they take exactly the
+			// path real clothes take (MakeApparel), keyed apart from anything the pawn really wears.
+			colony::Snapshot Dressed;
+			colony::ThingView Shown = View;
+			Shown.firstApparel = 0;
+			Shown.apparelCount = 0;
+			Shown.hideGear = false;
+			for (int32 P = 0; P < Preview->Num(); ++P)
+			{
+				FString DefName;
+				FString StuffName;
+				if (!(*Preview)[P].Split(TEXT(":"), &DefName, &StuffName))
+				{
+					DefName = (*Preview)[P];
+				}
+				colony::ApparelView Piece;
+				Piece.item = static_cast<colony::Entity>(0x7FFF0000u + static_cast<uint32>(P));
+				Piece.def = Defs->idOf("Things", TCHAR_TO_UTF8(*DefName));
+				Piece.stuff = StuffName.IsEmpty() ? colony::DefId{} : Defs->idOf("Things", TCHAR_TO_UTF8(*StuffName));
+				if (Piece.def.valid())
+				{
+					Dressed.apparel.push_back(Piece);
+					++Shown.apparelCount;
+				}
+			}
+			const uint64 PreviewKey = ApparelKey(Dressed, Shown) ^ 0x5052455649455721ULL;
+			if (!Pawn->HasApparel() || Pawn->GetApparelKey() != PreviewKey)
+			{
+				Pawn->ApplyApparel(*this, MakeApparel(Dressed, Shown, Defs), PreviewKey);
+			}
+		}
+		else
+		{
+			const uint64 WornKey = ApparelKey(Now, View);
+			if (!Pawn->HasApparel() || Pawn->GetApparelKey() != WornKey)
+			{
+				Pawn->ApplyApparel(*this, MakeApparel(Now, View, Defs), WornKey);
+			}
 		}
 		Pawn->SyncGarmentMorphs();
 	}

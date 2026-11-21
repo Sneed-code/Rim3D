@@ -1,6 +1,6 @@
 [
   {
-    "defName": "BulletBase", "abstract": true, "source": "RimWorld wiki",
+    "defName": "BulletBase", "visual": {"sound": {"flyby": "Flyby_Bullet"}}, "abstract": true, "source": "RimWorld wiki",
     "projectile": { "damageDef": "Bullet" }
   },
   {

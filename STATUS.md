@@ -2,9 +2,33 @@
 
 Updated 2026-11-21.
 
+Title screen and new game (sneed, 2026-11-21; sim, data and Unreal, `docs/design/new-game.md`): a **title screen**
+(Continue, New colony, Load, Settings, Quit), the **Crash Landed** scenario (you, an amnesiac, and 2 strangers aged 18,
+all landing naked, with 50 survival meals, 200 silver, 50 steel, 30 components, a rifle and cotton shirts and trousers
+for all 3; tropical only), a **landing site** step on the world map, then **character creation in two parts** in our
+own "Canopy" look (concepts A/B/C turned down): **You** (looks and a name only; you start as the creator's default
+woman, the gun range's, so hair and body updates show on you) and **Your companions** (looks, gender, names, and traits
+bought from a **10-point pool**: strong traits cost up to 5, drawbacks give points; no backstories). Skill traits
+(natural marksman and 11 more, +3 for 3 points) let a skill pass 20, up to 23. Tough is now -30% damage. A turntable
+spins the real body (soft tissue swings) and a "clothes on" tick previews the cotton. The screen is lit by day, with the camera clear of trees. Other races shown but locked;
+difficulty fixed on standard and hidden. People who join or raid later follow the same trait rules, all points spent.
+Sim: `EditColonistCommand`, `SetColonistTraitsCommand`, `Sim::applyPregameCommands`, `PawnLooks::creator`,
+`ColonistGenOptions` (trait points), `SkillRecord::bonus`. **Next:** PC compile and smoke test `newgame` pictures;
+sneed judges the look. Clothes on creator bodies show once #425 merges.
+
 Finer body dirt that fades (sneed, 2026-11-20; sim, data and Unreal art, `docs/design/grime.md`): **dirt on bodies now has fine spray over the broad smudges**, like the blood: mud drops in three sizes flicked up the legs (to the waist, stretched a little upwards) and crowding round each smudge's edge, gritty smudges, dark wet mud in the drops and cores and pale dust at the edges; drops too small to see at range blend into an even tint (no sparkle). **Dirt fades by itself in 10 minutes** (`dirtFadeSeconds` 18,000) whenever nothing is dirtying it, a corpse in the dirt staying dirty; rain, wading and swimming still wash it faster (full rain 5 minutes, swimming 20 s). Cloud preview `tools/grime_dirt_preview.py`. Checked on the PC 2026-11-21 (noon pictures, smoke `hurt` phase `dirt`): fine dark spray over duller lower legs, reads as splashed mud. Needs `-run=BloodArt -force` once per PC.
 
 Blood, spray and dismemberment fixes (sneed, 2026-11-20; sim, data and Unreal, `docs/design/blood.md`, `docs/design/body-health.md`): **the groin pattern** came from the tail's small UV patch overwriting the hip in the baked position map (a hard square) and a too-big exit stain; the bake now lets the body keep contested texels and exits are traced on the drawn body. **Big blood spray**: every melee hit and gunshot throws gushes of streaking blood and droplets (`M_BloodSpray`, `Blood.SprayScale`); the old mist was hidden by its depth fade. **Red flashing** on many hits: decals no longer tie in sort order, skin drops are capped per frame, 16 skin masks. **Dismemberment in play**: an arm or leg now comes off the living once 13 (arm) or 19 (leg) damage has piled up past 0 (a rule change: before only on the dead), and a rocket tears a limb off a corpse. **Head hits wobble** the head about 20 degrees. **Corpses lie still** (animation paused, ragdoll put to sleep) and **explosions throw corpses**. New smoke test `gore` (on a creator MakeHuman body). PC rounds 1-4 on 2026-11-21: smoke `gore` and `hurt` pass; the corpse is thrown about 2.5-3 m with a piece torn off, 30 hits in 3 s grow one steady skin stain with no flashing, the exit is traced on the body. Needs `-run=BloodArt -force` once per PC build (spray material, rebaked position maps). Note: bare colonists without creator looks draw a MetaHuman body (SK_Looks), which still takes blood as decals. **Next: sneed tries it in the gun range and in play.**
+
+Sounds for every weapon, surface and job (sneed, 2026-11-20; sim, data and Unreal, `docs/design/sound.md`): **every gun
+now has its own shot** (machine pistol, heavy SMG, LMG, minigun, sniper, chain shotgun, turrets, mortar, charge guns,
+bows, pila) from real recordings; **bullets and arrows sound by what they hit** (flesh, wood, steel, stone, dirt, sand,
+water; some ricochet), spent cases tinkle after shots, shells whistle in, bullets whiz past your head, blasts have
+mortar, EMP, smoke and large kinds with falling debris; **gore** (severing, decapitation, a splat), **work** (chopping,
+plant cutting, sowing, deconstructing, repairing, drilling; repeated while working; a tree crashing down), bed creaks,
+men's grunts and screams. **Footsteps** are short range, vary by ground, are quieter crouched or prone, and your own
+character makes none. 318 free recordings from Freesound (CC0 / CC-BY, credits written) plus the CC0 firearm library;
+picked by title, not yet by ear. PC 2026-11-21: download 0 failures, compile clean, sound smoke passes; 5 quiet recordings that trimmed to nothing now recut untrimmed. **Next: re-run `python tools/sound_assets.py --cut` on the PC, and sneed's listen.**
 
 Clothes on MakeHuman people (sneed, 2026-11-20; tools and Unreal, `docs/design/clothes-draw.md` "MakeHuman bodies"):
 the MakeHuman bodies wore nothing. Now **34 free MakeHuman community garments** (CC0/CC-BY, `assets/makehuman_garments.json`:

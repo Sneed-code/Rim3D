@@ -86,6 +86,15 @@ public:
 	USkeletalMeshComponent* GetFaceMesh() const { return FaceMesh; }
 	/** The MakeHuman character's mesh while the looks ask for one (docs/design/makehuman.md); null otherwise. */
 	USkeletalMeshComponent* GetMakeHumanMesh() const { return MakeHumanMesh; }
+	/** Puts the character screen's look (PawnLooks::creator text, docs/design/new-game.md) on the MakeHuman body once it
+	 *  is on, and again whenever the text changes or the body is remade. Call every frame with the pawn's text. */
+	void ApplyCreatorLook(const FString& Text);
+	/** The character screen's turntable (docs/design/new-game.md): turns the drawn body this many degrees past its
+	 *  facing, cosmetic only. The body really turns, so soft tissue and hair swing as it spins. 0 to stop. */
+	void SetPreviewSpin(float Degrees) { PreviewSpin = Degrees; }
+	float GetPreviewSpin() const { return PreviewSpin; }
+	/** The facing the body is drawn at before the turntable's spin, degrees. */
+	float GetDrawnYaw() const { return DrawnYaw; }
 	/** The MetaHuman's body (with the whole body, all of its skin); null for a mannequin. */
 	USkeletalMeshComponent* GetSkinBody() const { return MetaHumanBody; }
 	/** The eye slots of the face (left, right). */
@@ -399,6 +408,8 @@ private:
 	// A MakeHuman character drawn instead of the MetaHuman (docs/design/makehuman.md): its mesh, retargeted from the hidden mannequin.
 	TObjectPtr<USkeletalMeshComponent> MakeHumanMesh;
 	FString AppliedMakeHuman;
+	/** The character screen's look text put on the MakeHuman body (ApplyCreatorLook); cleared when the body is remade. */
+	FString AppliedCreatorLook;
 	void ApplyMakeHuman(USimPawnSubsystem& Pawns);
 	bool bHairHidden = false;
 	int32 ApparelRebuilds = 0;
@@ -546,6 +557,8 @@ private:
 	 *  starts and stops turning smoothly; and how fast it turns (degrees a second). */
 	float DrawnYaw = 0.0f;
 	float DrawnYawRate = 0.0f;
+	/** The character screen's turntable (SetPreviewSpin), on top of the facing. */
+	float PreviewSpin = 0.0f;
 	/** How much of a whole-body clip shows now (the clip playing and the one fading out). */
 	float LegsClipWeight = 0.0f;
 	float SwimLiftCm = 0.0f;
