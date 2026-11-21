@@ -881,6 +881,13 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 					PinFailReason, Pawn.AimBlend, Pawn.HandFree, Pawn.FinisherBlend);
 			}
 		}
+		// Not held at a place this frame (or PinWeapon gave up early): any finisher step eases back under the body.
+		if (!Pawn.bFinisherStepSet && !Pawn.FinisherStep.IsNearlyZero(0.01))
+		{
+			Pawn.FinisherStep = FMath::VInterpTo(Pawn.FinisherStep, FVector::ZeroVector, FrameDelta, 3.0f);
+			Actor.SetFinisherStep(Pawn.FinisherStep.IsNearlyZero(0.05) ? FVector::ZeroVector : Pawn.FinisherStep);
+		}
+		Pawn.bFinisherStepSet = false;
 		FTransform Frame;
 		const bool bInHandFrame = bHands && bHold && (bPinned || HoldDraw::HandFrame(Mesh, Hold, Frame));
 		FTransform Hands;
@@ -1077,6 +1084,14 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 	// Short of the body: bend further over it (down to the hips) until the blade reaches, eased so it never snaps.
 	Pawn.FinisherReachBend = FMath::FInterpTo(Pawn.FinisherReachBend, bFinisher ? FMath::Clamp(Pawn.FinisherReachBend + Pawn.FinisherShort * 0.5f, 0.0f, 45.0f) : 0.0f,
 		FrameDelta, 4.0f);
+	// And still short (a kneel beside the hips with the chest further on): the drawn body is carried in over the body
+	// along the flat part of the shortfall, up to 40 cm, eased in and out so it never jumps (the sim's place is unchanged).
+	{
+		const FVector StepGoal = bFinisher ? (Pawn.FinisherStep + FinisherBack * 0.6).GetClampedToMaxSize(40.0) : FVector::ZeroVector;
+		Pawn.FinisherStep = FMath::VInterpTo(Pawn.FinisherStep, StepGoal, FrameDelta, 3.0f);
+		Actor.SetFinisherStep(Pawn.FinisherStep);
+		Pawn.bFinisherStepSet = true;
+	}
 	const bool bClipSwing = !bFinisher && !bGun && Actor.IsInMotionClip() && (View.meleePhase != colony::MeleePhase::Ready || Actor.GetSwing().IsActive());
 	const bool bWeaponSwing = !bFinisher && !bGun && !Actor.IsInMotionClip() && Actor.GetSwing().IsActive();
 	const bool bFullBodyClip = Actor.IsInMotionClip() && !Actor.IsMotionClipUpper();
@@ -1364,10 +1379,12 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 			OutDrawn.AddToTranslation(-Back);
 			OutPinned.AddToTranslation(-Back);
 			FinisherShort = static_cast<float>(Back.Size());
+			FinisherBack = FVector(Back.X, Back.Y, 0.0);
 		}
 		else
 		{
 			FinisherShort = 0.0f;
+			FinisherBack = FVector::ZeroVector;
 		}
 	}
 	// In over the first seventh, out over the last.

@@ -329,7 +329,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			State->FixesAtStart = Weapons()->GetFloatFixes();
 			State->HitsAtStart = Weapons()->GetHitsSeen();
 			Weapons()->TakeWorstGripGap();
-		}, 0.6f, 6.0f, [=, this]()
+		}, 0.6f, 8.0f, [=, this]()
 		{
 			USimSubsystem* B = Bridge();
 			colony::Sim* Sim = MutableSim();
@@ -400,7 +400,8 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			}
 			SideView(State->Me, State->Enemy, 280.0, 70.0);
 			const colony::ThingView* MeView = FinSmokeFind(*B, State->Me);
-			const float T = MeView && MeView->meleeFinisher != 0 ? MeView->meleeFinisherT : 0.0f;
+			// Only this phase's finisher, at this phase's victim (not one left over from the phase before).
+			const float T = MeView && MeView->meleeFinisher != 0 && MeView->meleeFinisherTarget == State->Enemy ? MeView->meleeFinisherT : 0.0f;
 			State->MaxT = FMath::Max(State->MaxT, T);
 			if (const ASimPawnActor* Actor = ActorOf(State->Me))
 			{

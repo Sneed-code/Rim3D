@@ -2163,7 +2163,8 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 	const bool bRolling = RollProgress > 0.0f;
 	AdvanceJump(GameDelta);
 	const float JumpHeight = GetJumpHeight();
-	const bool bMotion = !MotionOffset.IsNearlyZero(0.01) || !CrawlOffset.IsNearlyZero(0.01) || !WallClimbOffset.IsNearlyZero(0.01);
+	const bool bMotion = !MotionOffset.IsNearlyZero(0.01) || !CrawlOffset.IsNearlyZero(0.01) || !WallClimbOffset.IsNearlyZero(0.01) ||
+		!FinisherStep.IsNearlyZero(0.01);
 	if (!bReacting && !bMelee && !bRolling && !bMotion && JumpHeight <= 0.0f)
 	{
 		if (bBodyPosed)
@@ -2230,6 +2231,7 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 	Offset += MotionOffset;  // a clip's own travel is taken out: the sim's position already has it (body-motion.md)
 	Offset += CrawlOffset;   // and the crawl clip's
 	Offset += WallClimbOffset;  // and the wall climb's
+	Offset += RootQuat.Inverse().RotateVector(FinisherStep);  // a finisher's last bit of reach in over the body
 	Body->SetRelativeLocationAndRotation(Offset, RootQuat.Inverse() * RollWorld * LeanWorld * RootQuat * MeleeLocal * PawnBodyRelativeRotation.Quaternion());
 }
 

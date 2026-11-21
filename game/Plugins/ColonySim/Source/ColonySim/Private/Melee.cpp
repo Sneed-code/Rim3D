@@ -1444,6 +1444,14 @@ void MeleeSystem::step() {
     }
     for (const Entity pawn : order_) {
         Melee& m = reg.get<Melee>(pawn);
+        // A finisher whose body is gone (taken off the map) ends there: nothing is left to strike or kneel over.
+        if (m.finisher != 0 && m.phase != MeleePhase::Ready &&
+            (m.target == kNoEntity || !reg.valid(m.target) || !things_.spawned(m.target))) {
+            m.phase = MeleePhase::Ready;
+            m.stepsLeft = 0;
+            m.finisher = 0;
+            continue;
+        }
         switch (m.phase) {
             case MeleePhase::Ready:
                 break;

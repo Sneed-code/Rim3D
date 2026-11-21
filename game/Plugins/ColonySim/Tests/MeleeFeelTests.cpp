@@ -498,6 +498,28 @@ TEST_CASE("Finishers: a knife at a downed enemy kneels into a slow slam that lan
     CHECK(std::fabs(apartAtHit - f->standOff) < 0.12f);
 }
 
+TEST_CASE("Finishers: a finisher whose body is taken off the map ends at once, and the next swing is the weapon's own") {
+    auto sim = feelTestSim(404);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Spear");
+    const Entity enemy = feelTestDowned(*sim, hero, 0.9f);
+    feelTestFace(*sim, hero, 1.0f, 0.0f);
+    std::string why;
+    FEEL_REQUIRE(sim->melee().attack(hero, enemy, true, &why));
+    FEEL_REQUIRE(sim->melee().finisherOf(hero) != nullptr);
+    for (int s = 0; s < 10; ++s) {
+        sim->step();
+    }
+    sim->things().destroy(enemy);
+    sim->step();
+    CHECK(sim->melee().finisherOf(hero) == nullptr);
+    CHECK(sim->melee().ready(hero));
+    Snapshot snap;
+    sim->writeSnapshot(snap);
+    const ThingView* v = snap.find(hero);
+    FEEL_REQUIRE(v != nullptr);
+    CHECK(v->meleeFinisher == 0);
+}
+
 TEST_CASE("Finishers: a swing at someone standing is the usual quick swing") {
     auto sim = feelTestSim(403);
     const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Knife");
