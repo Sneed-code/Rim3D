@@ -115,9 +115,19 @@ struct FSimWornPiece
 	/** 0 whole to 1 in tatters, in sixteenths: how many holes the cloth has. */
 	float Wear = 0.0f;
 	bool bHidesHair = false;
+	/** Worn on the skin or middle layer over the legs (trousers, not a duster): a MakeHuman body's pubic hair hides under it. */
+	bool bCoversCrotch = false;
+	/** On the overhead layer (hats and helmets): a MakeHuman body's strand hair takes its under-a-hat groom. */
+	bool bHeadwear = false;
+	/** cm a MakeHuman garment is pushed out along its normals, so a top hangs over trousers and a jacket over a shirt
+	 *  (both made to sit on the skin): 1.5 for a piece over the torso (a belt is bulky), plus 0.6 a layer above the skin. */
+	float Puff = 0.0f;
+	/** The cuts a MakeHuman body can wear this piece as (`visual.cuts`, docs/design/clothes-draw.md "MakeHuman bodies"):
+	 *  each one or more garment names joined by '+'; the pawn draws one of them, picked by the item. */
+	TArray<FString> Cuts;
 
 	/** Same item, def, stuff and meshes (what a rebuild of the components is for); wear and tint change in place. */
-	bool SameStructure(const FSimWornPiece& Other) const { return Item == Other.Item && Def == Other.Def && Stuff == Other.Stuff && Meshes == Other.Meshes; }
+	bool SameStructure(const FSimWornPiece& Other) const { return Item == Other.Item && Def == Other.Def && Stuff == Other.Stuff && Meshes == Other.Meshes && Cuts == Other.Cuts; }
 };
 
 struct FSimPawnApparel
@@ -210,6 +220,8 @@ public:
 	UObject* GetFacesAsset(const FString& Name);
 	/** A MakeHuman character's mesh and retargeter (MakeHumanArt.h names), from the generated or the local-only folder; null if not imported. */
 	USkeletalMesh* GetMakeHumanMesh(const FString& Name, class UIKRetargeter*& OutRetargeter);
+	/** A garment made for a MakeHuman creator base (MakeHumanArt.h names); null if not imported. Cached. */
+	USkeletalMesh* GetGarmentMesh(const FString& Base, const FString& Garment);
 	/** A skin material with the skin shine (data/look.json "skin": roughness and specular, docs/design/graphics-options.md) on a
 	 * dynamic instance shared by every pawn that uses it; the material itself when it isn't a skin with those parameters. */
 	UMaterialInterface* GetShinySkin(UMaterialInterface* Skin);
@@ -284,6 +296,9 @@ private:
 	/** Clothes meshes by path; null where a mesh is missing. */
 	UPROPERTY()
 	TMap<FString, TObjectPtr<UObject>> ClothesAssets;
+	/** GetGarmentMesh's cache by base and garment name (null for one that is not imported). */
+	UPROPERTY()
+	TMap<FString, TObjectPtr<USkeletalMesh>> GarmentMeshes;
 
 	/** PawnFaces assets by name; null where one is missing. */
 	UPROPERTY()

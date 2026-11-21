@@ -225,6 +225,29 @@ def check_research_unlocks(defs_by_kind):
     return problems
 
 
+def check_garment_cuts(defs_by_kind):
+    """Every garment a def's visual.cuts names ('+' joins several) must be in assets/makehuman_garments.json."""
+    path = Path(__file__).resolve().parent.parent / "assets" / "makehuman_garments.json"
+    if not path.exists():
+        return []
+    garments = {g["name"] for g in json.loads(path.read_text(encoding="utf-8"))["garments"]}
+    problems = []
+    for kind, kind_defs in defs_by_kind.items():
+        for name, (file, entry) in kind_defs.items():
+            visual = entry.get("visual")
+            cuts = visual.get("cuts") if isinstance(visual, dict) else None
+            if cuts is None:
+                continue
+            if not isinstance(cuts, list) or not all(isinstance(c, str) and c for c in cuts):
+                problems.append(f"{file}: {kind} '{name}' visual.cuts must be a list of garment names")
+                continue
+            for cut in cuts:
+                for garment in cut.split("+"):
+                    if garment not in garments:
+                        problems.append(f"{file}: {kind} '{name}' visual.cuts names unknown garment '{garment}'")
+    return problems
+
+
 def check_sound_cues(defs_by_kind):
     """Every cue a def names under visual.sound must be a SoundCues def; returns the problems and the cues used."""
     problems = []
@@ -390,6 +413,7 @@ def main() -> int:
 
     if CHECK_REFERENCES and "HoldStyles" in defs_by_kind:
         problems.extend(check_hold_styles(defs_by_kind))
+        problems.extend(check_garment_cuts(defs_by_kind))
 
     if CHECK_REFERENCES and "SoundCues" in defs_by_kind:
         sound_problems, used = check_sound_cues(defs_by_kind)
