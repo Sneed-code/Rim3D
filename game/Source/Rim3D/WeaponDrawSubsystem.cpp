@@ -881,13 +881,6 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 					PinFailReason, Pawn.AimBlend, Pawn.HandFree, Pawn.FinisherBlend);
 			}
 		}
-		// Not held at a place this frame (or PinWeapon gave up early): any finisher step eases back under the body.
-		if (!Pawn.bFinisherStepSet && !Pawn.FinisherStep.IsNearlyZero(0.01))
-		{
-			Pawn.FinisherStep = FMath::VInterpTo(Pawn.FinisherStep, FVector::ZeroVector, FrameDelta, 3.0f);
-			Actor.SetFinisherStep(Pawn.FinisherStep.IsNearlyZero(0.05) ? FVector::ZeroVector : Pawn.FinisherStep);
-		}
-		Pawn.bFinisherStepSet = false;
 		FTransform Frame;
 		const bool bInHandFrame = bHands && bHold && (bPinned || HoldDraw::HandFrame(Mesh, Hold, Frame));
 		FTransform Hands;
@@ -1084,14 +1077,6 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 	// Short of the body: bend further over it (down to the hips) until the blade reaches, eased so it never snaps.
 	Pawn.FinisherReachBend = FMath::FInterpTo(Pawn.FinisherReachBend, bFinisher ? FMath::Clamp(Pawn.FinisherReachBend + Pawn.FinisherShort * 0.5f, 0.0f, 45.0f) : 0.0f,
 		FrameDelta, 4.0f);
-	// And still short (a kneel beside the hips with the chest further on): the drawn body is carried in over the body
-	// along the flat part of the shortfall, up to 40 cm, eased in and out so it never jumps (the sim's place is unchanged).
-	{
-		const FVector StepGoal = bFinisher ? (Pawn.FinisherStep + FinisherBack * 0.6).GetClampedToMaxSize(40.0) : FVector::ZeroVector;
-		Pawn.FinisherStep = FMath::VInterpTo(Pawn.FinisherStep, StepGoal, FrameDelta, 3.0f);
-		Actor.SetFinisherStep(Pawn.FinisherStep);
-		Pawn.bFinisherStepSet = true;
-	}
 	const bool bClipSwing = !bFinisher && !bGun && Actor.IsInMotionClip() && (View.meleePhase != colony::MeleePhase::Ready || Actor.GetSwing().IsActive());
 	const bool bWeaponSwing = !bFinisher && !bGun && !Actor.IsInMotionClip() && Actor.GetSwing().IsActive();
 	const bool bFullBodyClip = Actor.IsInMotionClip() && !Actor.IsMotionClipUpper();
@@ -1303,7 +1288,8 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 		return false;
 	}
 	// The spot on the body: its bone as drawn now (lying, crawling or a ragdoll), lifted to the body's top; of the move's
-	// bone and the spine's, the one nearest the attacker (a ragdoll lies any way round: the chest may be the far end).
+	// bone, the spine's, the hips' and the thighs', the one nearest the attacker's shoulder (a ragdoll lies any way round
+	// and slides: the chest may be the far end, and the attacker never slides over to it, round 10 2026-11-21).
 	// With no pawn actor (a corpse drawn otherwise), the sim's place of the body, on the ground.
 	const USkeletalMeshComponent* TargetMesh = Target ? HoldDraw::VisibleMesh(*Target) : nullptr;
 	const float TargetScale = Target ? Target->GetBodyScale() : 1.0f;
@@ -1311,10 +1297,13 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 						  : Bridge->SimToWorld(TargetView->x, TargetView->y, TargetView->level) + FVector(0.0, 0.0, 20.0);
 	if (TargetMesh)
 	{
-		const FVector From = Actor.GetActorLocation();
+		const USkeletalMeshComponent* OwnMesh = HoldDraw::VisibleMesh(Actor);
+		const FVector From = OwnMesh && OwnMesh->GetBoneIndex(TEXT("upperarm_r")) != INDEX_NONE ? OwnMesh->GetSocketLocation(TEXT("upperarm_r"))
+																								: Actor.GetActorLocation();
 		const FName Own(Move->Bone);
 		double Best = TNumericLimits<double>::Max();
-		for (const FName Bone : {Own, FName(TEXT("spine_03")), FName(TEXT("spine_02")), FName(TEXT("spine_01"))})
+		for (const FName Bone : {Own, FName(TEXT("spine_03")), FName(TEXT("spine_02")), FName(TEXT("spine_01")), FName(TEXT("pelvis")),
+				 FName(TEXT("thigh_l")), FName(TEXT("thigh_r"))})
 		{
 			if (TargetMesh->GetBoneIndex(Bone) == INDEX_NONE)
 			{
@@ -1322,7 +1311,7 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 			}
 			const FVector At = TargetMesh->GetSocketLocation(Bone);
 			// The move's own bone wins unless another is 15 cm nearer.
-			const double Distance = FVector::Dist2D(At, From) + (Bone == Own ? -15.0 : 0.0);
+			const double Distance = FVector::Dist(At, From) + (Bone == Own ? -15.0 : 0.0);
 			if (Distance < Best)
 			{
 				Best = Distance;
@@ -1379,12 +1368,10 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 			OutDrawn.AddToTranslation(-Back);
 			OutPinned.AddToTranslation(-Back);
 			FinisherShort = static_cast<float>(Back.Size());
-			FinisherBack = FVector(Back.X, Back.Y, 0.0);
 		}
 		else
 		{
 			FinisherShort = 0.0f;
-			FinisherBack = FVector::ZeroVector;
 		}
 	}
 	// In over the first seventh, out over the last.

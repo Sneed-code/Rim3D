@@ -197,9 +197,6 @@ private:
 		/** How far the finisher's weapon had to come back to stay in reach (cm), and the extra forward bend that answers it (degrees). */
 		float FinisherShort = 0.0f;
 		float FinisherReachBend = 0.0f;
-		/** How far (world cm, flat) the drawn body is carried in toward the downed body to close the rest. */
-		FVector FinisherStep = FVector::ZeroVector;
-		bool bFinisherStepSet = false;  // this frame, by PinWeapon
 	};
 	int32 FloatFrames = 0;
 	int32 FloatFixes = 0;
@@ -210,8 +207,6 @@ private:
 	FString PinDebug;
 	/** How far the last finisher pose was pulled back to stay in the hands (cm). */
 	float FinisherShort = 0.0f;
-	/** The flat part of that pull-back (world cm, from the shoulder toward the body: the way still to go). */
-	FVector FinisherBack = FVector::ZeroVector;
 	/** Why PinWeapon or FinisherPose gave up, for PinDebug. */
 	const TCHAR* PinFailReason = TEXT("");
 	/** The finisher's weapon pose now (docs/design/lock-on.md "Finishers"): drawn, and the one the hands close on (they

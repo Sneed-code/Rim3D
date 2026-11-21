@@ -490,11 +490,7 @@ private:
 public:
 	/** Finishers this body has knelt for (smoke tests). */
 	int32 GetFinisherKneels() const { return FinisherKneels; }
-	/** Through a finisher: how far (world cm, flat) the drawn body is carried in toward the body on the ground, so the
-	 *  blade reaches it where the sim's place left it a little short (cosmetic; eased in and out by the caller). */
-	void SetFinisherStep(const FVector& WorldCm) { FinisherStep = FVector(WorldCm.X, WorldCm.Y, 0.0); }
 private:
-	FVector FinisherStep = FVector::ZeroVector;
 	int32 FinisherKneels = 0;
 	UPROPERTY()
 	TObjectPtr<UAnimSequence> WallClimbClip;

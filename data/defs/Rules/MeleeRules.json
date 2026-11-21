@@ -65,7 +65,7 @@
     },
     "finishers": {
       "Melee_Spear": {"move": "Spear", "seconds": 1.8, "hitSeconds": 1.1, "standOff": 0.85, "kneel": false, "bend": 20},
-      "Club": {"move": "Club", "seconds": 1.7, "hitSeconds": 1.05, "standOff": 0.6, "kneel": false, "bend": 35},
+      "Club": {"move": "Club", "seconds": 1.7, "hitSeconds": 1.05, "standOff": 0.5, "kneel": false, "bend": 35},
       "OneHand": {"move": "Sword", "seconds": 1.9, "hitSeconds": 1.15, "standOff": 0.42, "kneel": true, "bend": 25},
       "TwoHand": {"move": "Sword", "seconds": 1.9, "hitSeconds": 1.15, "standOff": 0.5, "kneel": false, "bend": 40},
       "Melee_Knife": {"move": "Knife", "seconds": 1.6, "hitSeconds": 1.0, "standOff": 0.38, "kneel": true, "bend": 40}
