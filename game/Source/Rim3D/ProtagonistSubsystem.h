@@ -11,6 +11,7 @@
 
 class AProtagonistPawn;
 class APlayerController;
+class FNavigationConfig;
 class USimSubsystem;
 namespace colony { class Sim; }
 
@@ -152,4 +153,6 @@ private:
 	bool bFocusAnySide = false;
 	/** Real seconds the screen has been dark for the night skip (fades in and out). */
 	float SleepFade = 0.0f;
+	/** Unreal's menu navigation as it was before the game turned Tab and the arrows off (put back when it ends). */
+	TSharedPtr<FNavigationConfig> PreviousNavigation;
 };

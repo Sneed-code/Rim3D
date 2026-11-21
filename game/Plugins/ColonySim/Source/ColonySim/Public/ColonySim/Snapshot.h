@@ -299,6 +299,12 @@ struct ThingView {
     // smash or hack); the pawn it is locked on to (it faces it; the player's lock-on camera follows it when focusPlayer);
     // stepping round or back from its enemy (a strafe or back step, facing the focus); what it does about enemies.
     bool meleeLow = false;
+    // A finisher under way (sneed 2026-11-20): 1 + its MeleeRules finishers index (0: none), how far through it is (0 to
+    // 1, the blow at its hitSeconds share) and the body on the ground it is at. Unreal kneels or bends the body over it
+    // and drives the weapon in along the finisher's own path.
+    uint8_t meleeFinisher = 0;
+    float meleeFinisherT = 0.0f;
+    Entity meleeFinisherTarget = kNoEntity;
     Entity focusTarget = kNoEntity;
     bool focusPlayer = false;
     bool footwork = false;

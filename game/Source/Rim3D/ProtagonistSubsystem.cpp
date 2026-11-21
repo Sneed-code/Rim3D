@@ -2,6 +2,8 @@
 #include "KeyBindings.h"
 
 #include "Engine/World.h"
+#include "Framework/Application/NavigationConfig.h"
+#include "Framework/Application/SlateApplication.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
@@ -106,6 +108,19 @@ void UProtagonistSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 	Collection.InitializeDependency<UOverseerSubsystem>();
 	Collection.InitializeDependency<USimPawnSubsystem>();
+	// Tab is the lock-on key (sneed 2026-11-20: "when I use Tab it stops me, and pressing Tab again doesn't change
+	// targets"). Unreal's menus move keyboard focus to the next widget on Tab (and the arrow keys): Tab took the focus off
+	// the game view, which lets go of every held key (W, sprint) and sends the next Tab to that widget instead of the
+	// game. The game's screens are drawn with ImGui and need none of it, so it is turned off while the game runs.
+	if (FSlateApplication::IsInitialized())
+	{
+		PreviousNavigation = FSlateApplication::Get().GetNavigationConfig();
+		TSharedRef<FNavigationConfig> Navigation = MakeShared<FNavigationConfig>();
+		Navigation->bTabNavigation = false;
+		Navigation->bKeyNavigation = false;
+		Navigation->bAnalogNavigation = false;
+		FSlateApplication::Get().SetNavigationConfig(Navigation);
+	}
 }
 
 void UProtagonistSubsystem::Deinitialize()
@@ -116,6 +131,11 @@ void UProtagonistSubsystem::Deinitialize()
 		Bridge->OnSimEvent.Remove(EventHandle);
 	}
 	Body = nullptr;
+	if (FSlateApplication::IsInitialized() && PreviousNavigation.IsValid())
+	{
+		FSlateApplication::Get().SetNavigationConfig(PreviousNavigation.ToSharedRef());
+		PreviousNavigation.Reset();
+	}
 	Super::Deinitialize();
 }
 
@@ -536,7 +556,7 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 	if (Bridge->GetSim()->controlledPawn() == Controlled)
 	{
 		Body->FollowSim(FVector2D(View->x, View->y), View->level, View->climb > 0.0f);
-		if (!Body->IsClimbing() && (View->motionClip.valid() || View->motionPush) && !View->motionFreeFeet && View->rollPhase == 0)
+		if (!Body->IsClimbing() && (((View->motionClip.valid() || View->motionPush) && !View->motionFreeFeet) || View->meleeFinisher != 0) && View->rollPhase == 0)
 		{
 			// A stagger or a knockdown carries the colonist: the keys wait and the body is where the sim's clip takes it,
 			// so nothing snaps back a metre when it ends. (The player's own swings leave the feet to the keys.)

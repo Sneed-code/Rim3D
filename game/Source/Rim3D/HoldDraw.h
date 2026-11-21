@@ -83,6 +83,7 @@ namespace HoldDraw
 		bool bOff = false;      // a second hand goes on Off (two-handed, or a pistol's support hand)
 		FVector Sight = FVector(0.0, 0.0, 8.0);
 		FVector Stock = FVector(-25.0, 0.0, 2.0);
+		FVector Tip = FVector(60.0, 0.0, 0.0);  // a blade's or shaft's point, a club's head (finishers drive it in)
 	};
 
 	/** The points of a hold (its main, off or support point), a gun's sight and a butt guessed behind the grip. With a

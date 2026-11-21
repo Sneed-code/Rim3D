@@ -533,6 +533,15 @@ private:
 	// A wall climb (docs/design/climbing.md): the Game Animation Sample's climb onto a ledge, its time following the sim's
 	// climb (on the face, then over the top), with its own set-back (its travel is in its root), facing the wall.
 	void UpdateWallClimb(const USimSubsystem& Bridge, const colony::ThingView& Now);
+	/** A finisher that kneels (docs/design/lock-on.md "Finishers"): the body goes down into the crouch over the body on
+	 *  the ground while the weapon is driven in (UWeaponDrawSubsystem), and comes back up at its end. */
+	void UpdateFinisherKneel(const USimSubsystem& Bridge, const colony::ThingView& Now);
+	TWeakObjectPtr<class UAnimMontage> KneelMontage;
+public:
+	/** Finishers this body has knelt for (smoke tests). */
+	int32 GetFinisherKneels() const { return FinisherKneels; }
+private:
+	int32 FinisherKneels = 0;
 	UPROPERTY()
 	TObjectPtr<UAnimSequence> WallClimbClip;
 	bool bWallClimbClipTried = false;
