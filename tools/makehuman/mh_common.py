@@ -2217,3 +2217,224 @@ def add_hair_bones(rig, hairs, azimuths=(0.0, 55.0, -55.0, 115.0, -115.0), bones
             made += 1
         log("hair bones on", h.name, ":", made, "points")
     log("hair bones:", len(chains), "chains of", bones)
+
+
+def _mask_groups(obj):
+    """{vertex group name: {vertex index: weight}} for every group a MASK modifier on obj reads (MakeHuman's "delete"
+    groups, which cut away the skin under clothes)."""
+    if obj is None:
+        return {}
+    names = {m.vertex_group for m in obj.modifiers if m.type == "MASK" and m.vertex_group}
+    out = {}
+    for name in names:
+        group = obj.vertex_groups.get(name)
+        if group is None:
+            continue
+        members = {}
+        for v in obj.data.vertices:
+            for g in v.groups:
+                if g.group == group.index:
+                    members[v.index] = g.weight
+        out[name] = members
+    return out
+
+
+def _restore_mask_groups(obj, before, log=print):
+    """Puts obj's mask groups (and MASK modifiers) back as they were before garments were fitted, so a garment never
+    cuts the body: the game puts it on and takes it off."""
+    if obj is None:
+        return
+    for m in list(obj.modifiers):
+        if m.type == "MASK" and m.vertex_group not in before:
+            obj.modifiers.remove(m)
+    for name, members in _mask_groups(obj).items():
+        old = before.get(name, {})
+        group = obj.vertex_groups.get(name)
+        extra = [i for i in members if i not in old]
+        if group is not None and extra:
+            group.remove(extra)
+            log("garments: kept", len(extra), "body vertices out of", name, "on", obj.name)
+
+
+def fit_garments(basemesh, proxy, garments, place=lambda p: p, log=print):
+    """Fits each garment ({"name", "mhclo"}) to the human as MPFB clothes and names its object G_<name> (the same in every
+    creator variant, so its morphs line up). The body keeps every vertex. Returns the garment objects."""
+    if not garments:
+        return []
+    from bl_ext.user_default.mpfb.services.humanservice import HumanService
+    before = {o.name: _mask_groups(o) for o in (basemesh, proxy) if o is not None}
+    out = []
+    for g in garments:
+        path = place(g["mhclo"])
+        if os.path.isdir(path):  # an asset folder: the .mhclo in it
+            found = sorted(f for f in os.listdir(path) if f.lower().endswith(".mhclo"))
+            path = os.path.join(path, found[0]) if found else path
+        if not os.path.isfile(path):
+            log("garments: missing", g["name"], path)
+            continue
+        obj = HumanService.add_mhclo_asset(path, basemesh, asset_type="Clothes", subdiv_levels=0, material_type="GAMEENGINE")
+        obj.name = "G_" + g["name"]
+        obj["rim3d_garment"] = g["name"]
+        out.append(obj)
+        log("garment", g["name"], len(obj.data.vertices), "vertices")
+    for o in (basemesh, proxy):
+        if o is not None:
+            _restore_mask_groups(o, before.get(o.name, {}), log=log)
+    return out
+
+
+def export_garments(rig, garments, out_dir, log=print):
+    """Each garment with the skeleton as <out_dir>/<name>/<name>.fbx and its materials.json beside it (as the body's;
+    the MakeHumanArt commandlet imports them onto the body's skeleton). Call after the body's export: the objects are
+    already in centimetres, morphs and all."""
+    for obj in garments:
+        name = obj.get("rim3d_garment") or obj.name
+        folder = os.path.join(out_dir, name)
+        os.makedirs(folder, exist_ok=True)
+        manifest = write_materials([obj], folder)
+        for entry in manifest.values():
+            entry["garment"] = True
+        with open(os.path.join(folder, "materials.json"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=1)
+        bpy.ops.object.select_all(action="DESELECT")
+        rig.select_set(True)
+        obj.hide_set(False)
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = rig
+        path = os.path.join(folder, name + ".fbx")
+        bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={"ARMATURE", "MESH"},
+                                 apply_scale_options="FBX_SCALE_NONE", add_leaf_bones=False, bake_anim=False,
+                                 mesh_smooth_type="FACE", use_armature_deform_only=True, path_mode="COPY", embed_textures=False,
+                                 axis_forward="-Y", axis_up="Z")
+        keys = len(obj.data.shape_keys.key_blocks) - 1 if obj.data.shape_keys else 0
+        log("garment exported", name, len(obj.data.vertices), "vertices", keys, "morphs", path)
+
+
+def _erode_cover(verts, covered, margin=0.04):
+    """A covered vertex stays covered only if no uncovered one is within `margin` metres: the skin near a garment's edge
+    stays drawn, so a hem that rides up when the body moves, or the gap between a top and trousers, never shows a hole
+    through the body (bare skin at a hem is fine; a see-through gap is not)."""
+    from mathutils.kdtree import KDTree
+    open_ = [i for i in range(len(verts)) if not covered[i]]
+    if not open_:
+        return covered
+    tree = KDTree(len(open_))
+    for n, i in enumerate(open_):
+        tree.insert(verts[i], n)
+    tree.balance()
+    keep = covered.copy()
+    for i in range(len(verts)):
+        if covered[i] and tree.find(verts[i])[2] < margin:
+            keep[i] = False
+    return keep
+
+
+def _cover_raster(bits, uv, size, faces, mask):
+    """Sets `mask` in `bits` (size x size, on the body's UVs) under each face (vertex ids, loop ids)."""
+    import numpy as np
+    for _, loops in faces:
+        a, b, c = (uv[k] * size for k in loops)
+        lo = np.floor(np.minimum(np.minimum(a, b), c)).astype(int)
+        hi = np.ceil(np.maximum(np.maximum(a, b), c)).astype(int)
+        lo = np.clip(lo, 0, size - 1)
+        hi = np.clip(hi, 0, size)
+        if hi[0] <= lo[0] or hi[1] <= lo[1]:
+            continue
+        xs, ys = np.meshgrid(np.arange(lo[0], hi[0]) + 0.5, np.arange(lo[1], hi[1]) + 0.5)
+        d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+        if abs(d) < 1e-12:
+            continue
+        w0 = ((b[1] - c[1]) * (xs - c[0]) + (c[0] - b[0]) * (ys - c[1])) / d
+        w1 = ((c[1] - a[1]) * (xs - c[0]) + (a[0] - c[0]) * (ys - c[1])) / d
+        inside = (w0 >= -1e-6) & (w1 >= -1e-6) & (w0 + w1 <= 1 + 1e-6)
+        rows = ys[inside].astype(int)
+        cols = xs[inside].astype(int)
+        bits[rows, cols] |= mask
+
+
+def bake_garment_cover(body, garments, out_png, size=1024, reach=0.03, rig=None, log=print):
+    """Where each garment covers the body, as bits in a texture on the body's UVs (docs/design/clothes-draw.md "Skin under
+    clothes"): a body face is covered when a ray out of each of its corners along the skin's normal meets the garment
+    within `reach` metres (or the garment lies just under the skin). Garment i that covers anything gets bit i (up to 32,
+    in RGBA, 8 bits a channel); the game hides the skin where a worn garment's bit is set, so nothing pokes through.
+    Writes the PNG and returns {garment name: bit}."""
+    import numpy as np
+    from mathutils.bvhtree import BVHTree
+    deps = bpy.context.evaluated_depsgraph_get()
+    to_world = body.matrix_world
+    normal_world = to_world.to_3x3().inverted().transposed()
+    verts = [to_world @ v.co for v in body.data.vertices]
+    normals = [(normal_world @ v.normal).normalized() for v in body.data.vertices]
+    body.data.calc_loop_triangles()
+    uv_layer = body.data.uv_layers.active
+    if uv_layer is None:
+        log("garment cover: the body has no UVs")
+        return {}
+    uv = np.empty(len(body.data.loops) * 2, dtype=np.float64)
+    uv_layer.data.foreach_get("uv", uv)
+    uv = uv.reshape(-1, 2)
+    tris = [(t.vertices[:], t.loops[:]) for t in body.data.loop_triangles]
+    bits = np.zeros((size, size), dtype=np.uint32)
+    out = {}
+    zs = [p.z for p in verts]
+    head_line = min(zs) + 0.80 * (max(zs) - min(zs))  # about the chin of a standing body
+    for g in garments:
+        if len(out) >= 31:
+            log("garment cover: more than 31 covering garments;", g.name, "left out")
+            break
+        # Headwear never hides skin: a brim or visor is far from the face, and the scalp is under the hair anyway.
+        lowest = min((g.matrix_world @ v.co).z for v in g.data.vertices) if g.data.vertices else 0.0
+        if lowest > head_line:
+            log("garment cover:", g.name, "is headwear: no cover")
+            continue
+        tree = BVHTree.FromObject(g, deps)  # in the garment's own space
+        inv = g.matrix_world.inverted()
+        inv3 = inv.to_3x3()
+        covered = np.zeros(len(verts), dtype=bool)
+        for i, (p, n) in enumerate(zip(verts, normals)):
+            pl = inv @ p
+            nl = inv3 @ n
+            k = nl.length  # metres to the garment's units
+            nl.normalize()
+            hit = tree.ray_cast(pl + nl * (0.004 * k), nl, reach * k)
+            if hit[0] is None:
+                hit = tree.ray_cast(pl + nl * (0.01 * k), -nl, 0.012 * k)  # the garment sunk just under the skin
+            covered[i] = hit[0] is not None
+        covered = _erode_cover(verts, covered)
+        faces = [(v, l) for v, l in tris if covered[v[0]] and covered[v[1]] and covered[v[2]]]
+        if len(faces) < 40:
+            continue  # a hat, gloves or a strap: nothing worth hiding
+        bit = len(out)
+        _cover_raster(bits, uv, size, faces, np.uint32(1 << bit))
+        out[g.get("rim3d_garment") or g.name] = bit
+        log("garment cover:", g.name, "bit", bit, len(faces), "body faces")
+    # Bit 31: the crotch (genitals, pubic area, inner thighs). They stand out past trousers fitted to the basemesh, so the
+    # game hides them whenever trousers are drawn (MakeHumanCrotchCoverBit), whatever the rays found.
+    if rig is not None and "pelvis" in rig.data.bones:
+        local = [v.co for v in body.data.vertices]
+        cx, crotch = _crotch(rig, local)
+        if crotch is not None:
+            gi = body.vertex_groups["genital"].index if "genital" in body.vertex_groups else -1
+            near = np.zeros(len(local), dtype=bool)
+            for v in body.data.vertices:
+                p = v.co
+                in_box = abs(p.x - cx) < 0.075 and crotch - 0.10 < p.z < crotch + 0.09
+                in_group = gi >= 0 and any(e.group == gi and e.weight > 0.02 for e in v.groups)
+                near[v.index] = in_box or in_group
+            faces = [(v, l) for v, l in tris if near[v[0]] or near[v[1]] or near[v[2]]]
+            _cover_raster(bits, uv, size, faces, np.uint32(1 << 31))
+            log("garment cover: crotch bit 31,", len(faces), "body faces")
+    # RGBA8: bits 0-7 red, 8-15 green, 16-23 blue, 24-31 alpha. Blender images start at the bottom row, like UV v.
+    rgba = np.stack([(bits >> s) & 0xFF for s in (0, 8, 16, 24)], axis=-1).astype(np.float32) / 255.0
+    image = bpy.data.images.new("GarmentCover", size, size, alpha=True, float_buffer=False)
+    image.colorspace_settings.name = "Non-Color"
+    image.alpha_mode = "STRAIGHT"
+    image.pixels.foreach_set(rgba.ravel())
+    os.makedirs(os.path.dirname(out_png), exist_ok=True)
+    image.filepath_raw = out_png
+    image.file_format = "PNG"
+    image.save()
+    with open(os.path.splitext(out_png)[0] + ".json", "w", encoding="utf-8") as f:
+        json.dump(out, f, indent=1)
+    log("garment cover:", len(out), "garments in", out_png)
+    return out

@@ -1,0 +1,322 @@
+{
+  "comment": "Garments the MakeHuman creator bodies wear (docs/design/clothes-draw.md \"MakeHuman bodies\"). tools/makehuman/mh_creator.py fits every garment to each base it lists, so the garment gets that base's slider morphs, and mh_export.py writes it as its own FBX; the MakeHumanArt commandlet imports it as SK_MHG_<Base>_<Garment>. An apparel def names the garments it can be drawn as in visual.cuts (one or more names joined by '+'; a pawn draws one cut, picked by the item). mhclo is an asset folder or .mhclo under {mh_user} (MakeHuman's user data: the free asset packs from https://static.makehumancommunity.org/assets/assetpacks/index.html are unzipped there, see packs). A garment can name a different mhclo per base (female and male versions). \"bases\" limits a garment to some bases (women's cuts on the female base only, men's on the male).",
+  "bases": [
+    "CreatorFemale",
+    "CreatorMale"
+  ],
+  "packs": [
+    {
+      "name": "shirts01",
+      "license": "CC0",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/shirts01/shirts01_cc0.zip"
+    },
+    {
+      "name": "shirts02",
+      "license": "CC-BY",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/shirts02/shirts02_ccby.zip"
+    },
+    {
+      "name": "shirts03",
+      "license": "CC-BY",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/shirts03/shirts03_ccby.zip"
+    },
+    {
+      "name": "pants01",
+      "license": "CC0",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/pants01/pants01_cc0.zip"
+    },
+    {
+      "name": "pants02",
+      "license": "CC-BY",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/pants02/pants02_ccby.zip"
+    },
+    {
+      "name": "suits02",
+      "license": "CC0",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/suits02/suits02_cc0.zip"
+    },
+    {
+      "name": "suits03",
+      "license": "CC-BY",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/suits03/suits03_cc-by.zip"
+    },
+    {
+      "name": "dress03",
+      "license": "CC-BY",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/dress03/dress03_cc-by.zip"
+    },
+    {
+      "name": "equipment03",
+      "license": "CC-BY",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/equipment03/equipment03_cc-by.zip"
+    },
+    {
+      "name": "hats01",
+      "license": "CC0",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/hats01/hats01_cc0.zip"
+    },
+    {
+      "name": "hats02",
+      "license": "CC0",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/hats02/hats02_cc0.zip"
+    },
+    {
+      "name": "hats03",
+      "license": "CC-BY",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/hats03/hats03_cc-by.zip"
+    },
+    {
+      "name": "hats04",
+      "license": "CC-BY",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/hats04/hats04_cc-by.zip"
+    },
+    {
+      "name": "shoes01",
+      "license": "CC0",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/shoes01/shoes01_cc0.zip"
+    },
+    {
+      "name": "shoes03",
+      "license": "CC-BY",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/shoes03/shoes03_ccby.zip"
+    },
+    {
+      "name": "gloves01",
+      "license": "CC0",
+      "zip": "https://files2.makehumancommunity.org/asset_packs/gloves01/gloves01_cc0.zip"
+    }
+  ],
+  "garments": [
+    {
+      "name": "TeeTucked",
+      "mhclo": "{mh_user}/clothes/toigo_basic_tucked_t-shirt",
+      "author": "MargaretToigo",
+      "license": "CC0"
+    },
+    {
+      "name": "TeeCrude",
+      "mhclo": {
+        "CreatorFemale": "{mh_user}/clothes/joepal_crude_t-shirt_female",
+        "CreatorMale": "{mh_user}/clothes/elvs_crude_t-shirt_male"
+      },
+      "author": "Joel Palmius, Elvaerwyn",
+      "license": "CC0"
+    },
+    {
+      "name": "TeeCamo",
+      "mhclo": "{mh_user}/clothes/drednicolson_short-tail_camo_tee",
+      "author": "DredNicolson",
+      "license": "CC-BY"
+    },
+    {
+      "name": "Polo",
+      "mhclo": "{mh_user}/clothes/namuhekam_male_polo_shirt",
+      "author": "namuhekam",
+      "license": "CC0",
+      "bases": [
+        "CreatorMale"
+      ]
+    },
+    {
+      "name": "Tank",
+      "mhclo": {
+        "CreatorFemale": "{mh_user}/clothes/mindfront_tank_top_01",
+        "CreatorMale": "{mh_user}/clothes/elvs_male_tankshirt1"
+      },
+      "author": "Mindfront, Elvaerwyn",
+      "license": "CC-BY"
+    },
+    {
+      "name": "ShirtUntucked",
+      "mhclo": "{mh_user}/clothes/elvs_male_shirt_untucked_bd1",
+      "author": "Elvaerwyn",
+      "license": "CC-BY",
+      "bases": [
+        "CreatorMale"
+      ]
+    },
+    {
+      "name": "ShirtStriped",
+      "mhclo": "{mh_user}/clothes/ews_striped_shirt",
+      "author": "EWS",
+      "license": "CC-BY"
+    },
+    {
+      "name": "Blouse",
+      "mhclo": "{mh_user}/clothes/punkduck_lace_up_blouse",
+      "bases": [
+        "CreatorFemale"
+      ],
+      "author": "punkduck",
+      "license": "CC-BY"
+    },
+    {
+      "name": "SweaterKnit",
+      "mhclo": "{mh_user}/clothes/mindfront_knitted_sweater_01",
+      "author": "Mindfront",
+      "license": "CC-BY"
+    },
+    {
+      "name": "SweaterFisherman",
+      "mhclo": "{mh_user}/clothes/toigo_fisherman_sweater",
+      "author": "MargaretToigo",
+      "license": "CC0"
+    },
+    {
+      "name": "PantsCargo",
+      "mhclo": "{mh_user}/clothes/cortu_cargo_pants",
+      "author": "Cortu",
+      "license": "CC0"
+    },
+    {
+      "name": "PantsWool",
+      "mhclo": "{mh_user}/clothes/toigo_wool_pants",
+      "author": "MargaretToigo",
+      "license": "CC0"
+    },
+    {
+      "name": "JeansStraight",
+      "mhclo": "{mh_user}/clothes/elvs_jeans_straight_leg",
+      "author": "Elvaerwyn",
+      "license": "CC-BY"
+    },
+    {
+      "name": "Trousers",
+      "mhclo": {
+        "CreatorFemale": "{mh_user}/clothes/mindfront_female_trousers_1",
+        "CreatorMale": "{mh_user}/clothes/mindfront_male_trousers_1"
+      },
+      "author": "Mindfront",
+      "license": "CC-BY"
+    },
+    {
+      "name": "JeansClassic",
+      "mhclo": {
+        "CreatorFemale": "{mh_user}/clothes/punkduck_female_tight_jeans",
+        "CreatorMale": "{mh_user}/clothes/punkduck_male_classic_jeans"
+      },
+      "author": "punkduck",
+      "license": "CC-BY"
+    },
+    {
+      "name": "HoodedJacket",
+      "mhclo": "{mh_user}/clothes/elvs_hooded_sweat_jacket1",
+      "author": "Elvaerwyn",
+      "license": "CC-BY"
+    },
+    {
+      "name": "UniformJacket",
+      "mhclo": {
+        "CreatorFemale": "{mh_user}/clothes/elvs_emt_uniform_jacket_female",
+        "CreatorMale": "{mh_user}/clothes/elvs_emt_uniform_jacket_male"
+      },
+      "author": "Elvaerwyn",
+      "license": "CC-BY"
+    },
+    {
+      "name": "CardiganLong",
+      "mhclo": "{mh_user}/clothes/mindfront_cardigan_long_open_front",
+      "author": "Mindfront",
+      "license": "CC-BY"
+    },
+    {
+      "name": "WinterCoat",
+      "mhclo": "{mh_user}/clothes/punkduck_winter_coat",
+      "author": "punkduck",
+      "license": "CC-BY"
+    },
+    {
+      "name": "VikingTunic",
+      "mhclo": "{mh_user}/clothes/rehmanpolanski_viking_tunic",
+      "author": "RehmanPolanski",
+      "license": "CC0"
+    },
+    {
+      "name": "VikingPants",
+      "mhclo": "{mh_user}/clothes/rehmanpolanski_viking_pants",
+      "author": "RehmanPolanski",
+      "license": "CC0"
+    },
+    {
+      "name": "TunicMycenaean",
+      "mhclo": "{mh_user}/clothes/wdg_mycenaean_tunic",
+      "author": "WDG",
+      "license": "CC0"
+    },
+    {
+      "name": "KnitHat",
+      "mhclo": "{mh_user}/clothes/mindfront_knitted_hat_01",
+      "author": "Mindfront",
+      "license": "CC-BY"
+    },
+    {
+      "name": "Beanie",
+      "mhclo": "{mh_user}/clothes/elvs_slouchy_beanie1",
+      "author": "Elvaerwyn",
+      "license": "CC-BY"
+    },
+    {
+      "name": "FishingHat",
+      "mhclo": "{mh_user}/clothes/mindfront_fishing_hat_01",
+      "author": "Mindfront",
+      "license": "CC-BY"
+    },
+    {
+      "name": "Bowler",
+      "mhclo": "{mh_user}/clothes/culturalibre_cl_bowler_hat",
+      "author": "culturalibre",
+      "license": "CC-BY"
+    },
+    {
+      "name": "Trilby",
+      "mhclo": "{mh_user}/clothes/elvs_male_trilby_hat",
+      "author": "Elvaerwyn",
+      "license": "CC-BY"
+    },
+    {
+      "name": "FlatCap",
+      "mhclo": "{mh_user}/clothes/elvs_male_flat_cap1",
+      "author": "Elvaerwyn",
+      "license": "CC-BY"
+    },
+    {
+      "name": "PithHelmet",
+      "mhclo": "{mh_user}/clothes/drednicolson_pith_helmet",
+      "author": "DredNicolson",
+      "license": "CC-BY"
+    },
+    {
+      "name": "PatrolCap",
+      "mhclo": "{mh_user}/clothes/mindfront_patrol_cap",
+      "author": "Mindfront",
+      "license": "CC-BY"
+    },
+    {
+      "name": "SherpaHat",
+      "mhclo": "{mh_user}/clothes/mindfront_sherpa_hat",
+      "author": "Mindfront",
+      "license": "CC-BY"
+    },
+    {
+      "name": "TacticalVest",
+      "mhclo": {
+        "CreatorFemale": "{mh_user}/clothes/mindfront_tactical_vest_female",
+        "CreatorMale": "{mh_user}/clothes/mindfront_tactical_vest_male"
+      },
+      "author": "Mindfront",
+      "license": "CC-BY"
+    },
+    {
+      "name": "HelmetM1",
+      "mhclo": "{mh_user}/clothes/mrgreaterthan_m1_helmet",
+      "author": "MrGreaterThan",
+      "license": "CC0"
+    },
+    {
+      "name": "HelmetKZ45",
+      "mhclo": "{mh_user}/clothes/mindfront_helmet_kz45",
+      "author": "Mindfront",
+      "license": "CC-BY"
+    }
+  ]
+}
