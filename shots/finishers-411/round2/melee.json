@@ -1,0 +1,158 @@
+{
+	"test": "melee",
+	"status": "fail",
+	"durationSeconds": 87.031752999871969,
+	"errors": [
+		"holsters: the sidearm on the hip is at X=0.473 Y=22.732 Z=79.723, expected X=4.000 Y=23.000 Z=80.000 (pelvis at X=-3.513 Y=-0.188 Z=88.864, attached to Root)",
+		"swing_flow: 5 blows landed on time, 1 late, 0 with no swing on screen (the picture was up to 2.6 steps behind), expected all on time"
+	],
+	"gpu": "NVIDIA GeForce RTX 5080",
+	"resolution": "888x500",
+	"phases": [
+		{
+			"phase": "setup",
+			"frames": 59,
+			"avgFps": 83.482729823250537,
+			"p95FrameMs": 5.9817991256713867,
+			"medianGameThreadMs": 4.4828000068664551,
+			"medianRenderThreadMs": 4.3751997947692871,
+			"medianGpuMs": 2.9625000953674316,
+			"actors": 0,
+			"screenshot": "melee/setup.png"
+		},
+		{
+			"phase": "holsters",
+			"frames": 525,
+			"avgFps": 209.43634858664211,
+			"p95FrameMs": 5.6810007095336914,
+			"medianGameThreadMs": 4.1916999816894531,
+			"medianRenderThreadMs": 4.4949002265930176,
+			"medianGpuMs": 3.033099889755249,
+			"actors": 0,
+			"screenshot": "melee/holsters.png"
+		},
+		{
+			"phase": "switch_key",
+			"frames": 736,
+			"avgFps": 209.96488189315494,
+			"p95FrameMs": 5.6942996978759766,
+			"medianGameThreadMs": 4.191199779510498,
+			"medianRenderThreadMs": 4.5036001205444336,
+			"medianGpuMs": 3.0336000919342041,
+			"actors": 0,
+			"screenshot": "melee/switch_key.png"
+		},
+		{
+			"phase": "switch_frozen",
+			"frames": 629,
+			"avgFps": 209.30439536822155,
+			"p95FrameMs": 5.7708024978637695,
+			"medianGameThreadMs": 4.0728001594543457,
+			"medianRenderThreadMs": 4.5573000907897949,
+			"medianGpuMs": 3.0552999973297119,
+			"actors": 0,
+			"screenshot": "melee/switch_frozen.png"
+		},
+		{
+			"phase": "draw_melee",
+			"frames": 304,
+			"avgFps": 202.0089665298897,
+			"p95FrameMs": 5.8504009246826172,
+			"medianGameThreadMs": 4.1276998519897461,
+			"medianRenderThreadMs": 4.6410999298095703,
+			"medianGpuMs": 3.0490000247955322,
+			"actors": 0,
+			"screenshot": "melee/draw_melee.png"
+		},
+		{
+			"phase": "swing_windup",
+			"frames": 752,
+			"avgFps": 214.59089070648301,
+			"p95FrameMs": 5.5765995979309082,
+			"medianGameThreadMs": 4.1870999336242676,
+			"medianRenderThreadMs": 4.4368000030517578,
+			"medianGpuMs": 2.8387000560760498,
+			"actors": 0,
+			"screenshot": "melee/swing_windup.png"
+		},
+		{
+			"phase": "swing_blow",
+			"frames": 731,
+			"avgFps": 208.4783438454964,
+			"p95FrameMs": 5.743201732635498,
+			"medianGameThreadMs": 4.2623000144958496,
+			"medianRenderThreadMs": 4.5770998001098633,
+			"medianGpuMs": 2.8735001087188721,
+			"actors": 0,
+			"screenshot": "melee/swing_blow.png"
+		},
+		{
+			"phase": "swing_flow",
+			"frames": 1754,
+			"avgFps": 194.82269461690524,
+			"p95FrameMs": 6.2051005363464355,
+			"medianGameThreadMs": 4.9032001495361328,
+			"medianRenderThreadMs": 4.0785999298095703,
+			"medianGpuMs": 2.9512999057769775,
+			"actors": 0,
+			"screenshot": "melee/swing_flow.png"
+		},
+		{
+			"phase": "focus",
+			"frames": 377,
+			"avgFps": 187.94220564862403,
+			"p95FrameMs": 6.1151013374328613,
+			"medianGameThreadMs": 5.012199878692627,
+			"medianRenderThreadMs": 4.3118000030517578,
+			"medianGpuMs": 2.9841001033782959,
+			"actors": 0,
+			"screenshot": "melee/focus.png"
+		},
+		{
+			"phase": "block",
+			"frames": 730,
+			"avgFps": 208.16827207023547,
+			"p95FrameMs": 5.4588990211486816,
+			"medianGameThreadMs": 4.260200023651123,
+			"medianRenderThreadMs": 4.6328001022338867,
+			"medianGpuMs": 3.1177000999450684,
+			"actors": 0,
+			"screenshot": "melee/block.png"
+		},
+		{
+			"phase": "duel",
+			"frames": 5096,
+			"avgFps": 195.94875108742815,
+			"p95FrameMs": 6.1866974830627441,
+			"medianGameThreadMs": 4.8712000846862793,
+			"medianRenderThreadMs": 4.2379999160766602,
+			"medianGpuMs": 3.0720999240875244,
+			"actors": 0,
+			"screenshot": "melee/duel.png"
+		},
+		{
+			"phase": "shield",
+			"frames": 1774,
+			"avgFps": 177.30404302759828,
+			"p95FrameMs": 6.9436988830566406,
+			"medianGameThreadMs": 5.0064997673034668,
+			"medianRenderThreadMs": 5.3653998374938965,
+			"medianGpuMs": 3.9347999095916748,
+			"actors": 0,
+			"screenshot": "melee/shield.png"
+		}
+	],
+	"notes": [
+		"switch_key: a 17 step switch; the rifle went 59 cm from the hand, the revolver 47 cm from its holster",
+		"switch_frozen: stopped with the rifle 24 cm from the hand and 28 cm from the back",
+		"swing_windup: stopped in the attack clip 0.15 s before its blow, right hand 125 cm up",
+		"swing_blow: stopped on the blow, the attack clip 0.04 s from its own blow, right hand 120 cm up, enemy flinches 1",
+		"swing_flow: 6 swings, 6 hits, 5 on time, 1 late, 0 with no swing on screen, 6 hit-stops, enemy flinched 14 times, body bent up to 0 degrees, right hand moved up to 110 cm (attack clips)",
+		"focus: locked on, bar drawn 563 frames, body 0 degrees off, enemy worst part 100%",
+		"block: the blade is across the chest at X=30.999 Y=0.002 Z=117.998",
+		"duel: 53 swings, 32 hits, 7 blocked, 0 deflected, 5 dodged, 9 missed; 4 sidesteps (4 played), 11 raised weapons, 39 hit-stops",
+		"shield: materials [0] Wood_worn_surface_003 (parent MI_Default_Opaque_DS, base M_Default) colour map Wood_baked_wear_Medium, colour (R=1.000000,G=1.000000,B=1.000000,A=1.000000), metallic 0.00, roughness 0.82; [1] Dark_iron_001 (parent MI_Default_Opaque_DS, base M_Default) colour map T_White_srgb, colour (R=0.105000,G=0.115000,B=0.112000,A=1.000000), metallic 0.80, roughness 0.43; [2] Polished_edge_wear_001 (parent MI_Default_Opaque_DS, base M_Default) colour map T_White_srgb, colour (R=0.420000,G=0.400000,B=0.340000,A=1.000000), metallic 0.80, roughness 0.28; [3] Worn_leather_001 (parent MI_Default_Opaque_DS, base M_Default) colour map T_White_srgb, colour (R=0.130000,G=0.075000,B=0.038000,A=1.000000), metallic 0.00, roughness 0.80",
+		"shield: drawn as model SM_Shield_Wood_Medium, 19 x 62 x 77 cm",
+		"shield: raised at X=45.135 Y=3.898 Z=135.839 on average over 1391 frames (top 166.6), 4 blows on the shield, 8 sparks, 10 commands"
+	]
+}
