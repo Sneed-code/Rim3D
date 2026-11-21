@@ -670,6 +670,32 @@ TEST_CASE("Comms: a ship trades only over a powered console, from the beacon's c
     CHECK(near);
 }
 
+TEST_CASE("Goodwill log: each change that moves goodwill is kept with its reason, capped, and it saves") {
+    Sim sim = trdSim();
+    std::string error;
+    const size_t before = sim.trade().state().goodwillLog.size();
+    CHECK(sim.trade().adjustGoodwill("FrayCompact", 10.0f, error, "a gift"));
+    CHECK(sim.trade().adjustGoodwill("FrayCompact", 0.0f, error, "nothing"));  // no change: nothing logged
+    const std::vector<GoodwillChange>& log = sim.trade().state().goodwillLog;
+    TRD_REQUIRE(log.size() == before + 1);
+    CHECK(log.back().faction == "FrayCompact");
+    CHECK(log.back().amount == doctest::Approx(10.0f));
+    CHECK(log.back().reason == "a gift");
+    // It saves and loads, and does not change the state hash.
+    CHECK(sim.trade().adjustGoodwill("FreeHold", -5.0f, error, "a visitor died"));
+    const std::vector<uint8_t> bytes = saveSim(sim);
+    SaveLoadResult loaded = loadSim(bytes, trdDefs());
+    TRD_REQUIRE(loaded.sim != nullptr);
+    TRD_REQUIRE(loaded.sim->trade().state().goodwillLog.size() == before + 2);
+    CHECK(loaded.sim->trade().state().goodwillLog.back().reason == "a visitor died");
+    CHECK(loaded.sim->stateHash() == sim.stateHash());
+    // The log keeps only the newest kGoodwillLogSize changes.
+    for (size_t i = 0; i < kGoodwillLogSize + 5; ++i) {
+        CHECK(sim.trade().adjustGoodwill("FrayCompact", (i % 2 == 0) ? 1.0f : -1.0f, error, "dev tool"));
+    }
+    CHECK(sim.trade().state().goodwillLog.size() == kGoodwillLogSize);
+}
+
 TEST_CASE("Comms: the narrator sends no trade ship without a powered console") {
     Sim sim = trdSim();
     trdColonist(sim, CellPos{64, 64, 0});

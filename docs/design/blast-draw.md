@@ -22,7 +22,7 @@ recorded blasts, a far layer past 100 m, heard late by the speed of sound).
 | Heat shimmer | a ring of bent light swelling from 1.2 to 11 m in a third of a second |
 | Fragments | 40 glowing streaks at 15 to 35 m/s (each as long as it flies in 1/25 s) and 10 slower embers that arc down |
 | Debris | `UShooterFeelSubsystem`'s Chaos rigid bodies, now dark soil, brown soil and grey stone clods, mostly small; the fast ones trail dust for their first second |
-| Scorch | a ragged core of black soot with spokes of soot thrown out past it, pale blown-out dust between the spokes, a small pit of churned soil in the middle and dark fragment pocks, 1.4 to 1.8 radii across, at a random turn, on a flat square laid on the ground along its slope 4 cm up (a deferred decal never showed on the PC); fades over `Blast.ScorchSeconds` (5 minutes, slowly at first), at most 40 at once |
+| Scorch | a ragged charred core (mottled soot darker along cracks, patches of grey ash, a little sheen, embers a few centimetres across glowing and flickering for the first half minute) with spokes of soot thrown out past it, pale blown-out dust between the spokes, a small pit of churned soil in the middle and dark fragment pocks, 1.4 to 1.8 radii across, at a random turn, on a flat square laid on the ground along its slope 4 cm up (a deferred decal never showed on the PC); fades over `Blast.ScorchSeconds` (5 minutes, slowly at first), at most 40 at once |
 | Camera | `UShooterFeelSubsystem`'s shake, blur and vignette by distance (unchanged) |
 
 Everything scales with the blast's radius against the frag grenade's 1.9 m. A **fire blast** (damage type with `mix.sub`
@@ -66,7 +66,7 @@ If the fire comes out upside down on the PC (the plane's texture runs the other 
 
 `feel` ends with `blast_fireball` (a frag blast 11 m off to one side at 14:00 in a patch cleared of plants, the camera turned to it, pictured 0.3 s in; it must draw 40+ sprites, a light
 over 2,000 cd and a scorch mark), `blast_smoke` (pictured about 4 s in), `blast_linger` (about 11 s in, looking at the hanging cloud: 3+ smoke puffs and the
-scorch still there), `blast_scorch` (a scorch mark alone, no smoke, looked down at from 5 m) and `blast_molotov` (a fire blast, pictured 0.5 s in). Without the art they note it and pass.
+scorch still there), `blast_scorch` (a scorch mark alone, no smoke, looked down at from 5 m), `blast_scorch_close` (a fresh one 3 m off at dusk, for its embers) and `blast_molotov` (a fire blast, pictured 0.5 s in). Without the art they note it and pass.
 
 ## Not yet
 

@@ -28,9 +28,13 @@ cloud); `FMakeHumanHairNode` in `MakeHumanAnimInstance` feeds it and turns its a
   so the chain never gains energy. A segment never turns more than 80° from the style's shape. Steps of at most
   1/120 s, three constraint passes each.
 - **The body.** Capsules round the skull, the neck, the chest and upper back (across the body at the top spine bone),
-  a yoke towards the base of the neck, the middle of the back, both shoulders (collarbone to arm) and both upper arms.
+  a yoke towards the base of the neck, the middle of the back, the small of the back (lowest spine bone), the front of
+  the chest (a bust bar ahead of the spine, sized from the chest shape: hair falling forward over the shoulders lies on
+  it when she leans back), the hips (across the pelvis), both shoulders (collarbone to arm) and both upper arms.
   Each rides on its bone, so it moves exactly as the body is drawn. Every hair segment is pushed out of them by turning
-  it about its upper end; a point resting on the body loses some of its sliding (friction). Between frames the body
+  it about its upper end, just to the surface. **Hair that touches the body lands and stays**: the push out is never kept
+  as speed away from the body (no bounce), sliding slower than 4 cm/s stops dead (grip) and faster sliding dies away at
+  20/s (friction), so hair lying on the back or shoulders comes to rest and stays still. Between frames the body
   and the animated hair are blended step by step, so a quick turn does not jump through.
 - **Fitted to each body.** The shapes are sized from the skeleton (its height and shoulder width), then fitted to the
   hair as it was styled in the reference pose, where it lies on the body: a shape is shrunk if the resting hair would
@@ -39,6 +43,138 @@ cloud); `FMakeHumanHairNode` in `MakeHumanAnimInstance` feeds it and turns its a
 - **One sheet.** Neighbouring strands round the head (never across the face) are kept between 0.55 and 1.35 times
   their styled distance apart, so the sheet of hair does not tear open or bunch up when one strand is pushed.
 - **Ponytails** use the same strands (they were an AnimDynamics chain with no collision).
+
+## Why it pulsed (fixed 2026-11-20)
+
+sneed (2026-11-20): "it just seems to me like the hair touches the body and freaks out to pulse off it ... why can't
+it just rest normally?" Two mistakes in the first version (#376): the push out of the body was kept as speed (about 70%
+of the speed it came in with, so hair was thrown off the body, fell back, was thrown again, for ever, even standing
+still), and the follow-the-leader correction passed every push of a point back up to the point above as a kick into
+the body. The push could also overshoot the surface by over three times the depth. Measured on long hair styled lying
+on a still body: the old solver never settled (points still moving at 260 cm/s after ten seconds); now nothing moves at
+all once it settles, and an idle's lean moves the hair only as fast as the body (tests "comes to rest and stays still",
+"lands and stays").
+
+## Strand hair (step 1, 2026-11-20)
+
+sneed (2026-11-20) chose real strand hair over the wig meshes ("try a makehuman with strandgroom ... can you make it look
+good / real?"). A groom is tens of thousands of hair curves rooted in the scalp, drawn as strands with hair shading and
+swung by Unreal's groom physics. The wigs stay as they are (the default) until strands are proven.
+
+- **Step 1 (this PR):** `StrandHairAttach` (`StrandHair.h`) puts a groom made for the MetaHuman head (the PawnFaces copies,
+  `GA_Hair_*`) on any body with a `head` bone: the groom's curves are moved from the MetaHuman face mesh's component space
+  onto this body's head (head bone onto head bone, scaled by the two necks' neck_01-to-head lengths, within 15%) and ride
+  on the head bone; groom physics collides with the body through the mannequin physics asset (same bone names). Creator
+  switch `-CreatorGroom=GA_Hair_Long` shows it on the MakeHuman bodies instead of the hair meshes; tuning cvars
+  `Pawns.StrandHairScale`, `Pawns.StrandHairOffsetX/Y/Z`, `Pawns.StrandHairYaw`; the log line `STRANDHAIR` gives the fit.
+- **Next:** our own grooms, the pawn's hair colour and strands only near the camera: step 2 below.
+- **One-time per style:** each groom is made and imported once; fitting to each head is automatic. Cost measured on the
+  PC (2026-11-20): one MetaHuman close-up with groom physics about 9-13 ms GPU, about the same as the creator scene with
+  four card-hair bodies.
+
+## Growing our own grooms (step 2, 2026-11-20)
+
+`tools/makehuman/grow_hair.py` (headless Blender, the styles in `tools/makehuman/hair_styles.json`) grows strand hair
+on a creator base's own body, so it fits that scalp exactly and can be grown again whenever the base changes:
+
+```
+blender.exe -b -noaudio --python tools/makehuman/grow_hair.py -- game/Saved/MakeHuman/CreatorFemale/CreatorFemale.fbx game/Saved/Grooms/CreatorFemale --preview
+```
+
+- **Roots** are scattered evenly over the scalp, inside a hairline round the skull (a sphere fitted to the crown): high
+  at the forehead, lower at the temples, above and behind the ears, lowest at the nape.
+- **Combed with gravity.** Each strand leaves the skin along the style's flow (away from a middle or side parting, straight
+  back, or towards a ponytail's band) lying along the scalp; with each step it turns further towards the ground. Every
+  point is pushed out of the body mesh to the strand's own small distance off the skin, so the hair has layers and
+  volume and lies on the head, shoulders and back without passing through. Long hair falls behind the shoulders (some
+  locks from in front of the ears fall in front) and may not spread outwards below the neck, so it never runs down the
+  arms. A ponytail's strands are combed to the band at the back of the head, then hang from it, spreading a little and
+  narrowing to the ends.
+- **Then** strands are pulled into clumps towards their tips, waved (a whole clump together), given a little frizz, cut
+  to length (`to`: waist, mid back, shoulder, chin, ear, with a soft U at the back) and checked against the body again.
+- **Styles:** LongStraight (waist, middle parting), LongWavy (mid back, side parting), Ponytail, Bob, Short, Buzz;
+  40,000 to 60,000 strands each. Each is written as `<Style>.abc` (centimetres, relative to the head bone, the body's
+  axes) with `grooms.json`; `--preview` renders the head from three sides and the whole length from behind with Cycles.
+  Blender also runs as a Python module in the cloud (`pip install bpy`), so styles can be tuned there with test renders
+  on MakeHuman's base mesh (`--joints` with its head and neck joints).
+- **Import:** needs the engine plugin AlembicHairImporter (on in `Rim3D.uproject`; off by default, and without it the groom importer reads no Alembic at all). The `HairGrooms` commandlet (`Rim3DEditor/HairGroomsCommandlet.*`) imports every style of every base in
+  `assets/hair_grooms.json` as `/Game/Rim3D/Generated/Grooms/GA_<base>_<Style>`: Unreal's default Alembic conversion
+  (gives the body's own axes), guides made from the strands for the physics (one in 40), the physics on, the MetaHuman
+  hair material, and a second LOD with a third of the strands for further off.
+- **Hair colour:** the pawn's hair colour drives the groom through the MetaHuman hair material's melanin and redness
+  (`StrandHairSetColour`, the same mapping as the MetaHuman route's grooms).
+
+## Fit to each head (2026-11-21)
+
+sneed (2026-11-21), on the MetaHuman groom test: "way too big ... the hairline's too high ... looks like it was made to
+fit a head 35% bigger". That groom was sized by the two skeletons' neck-to-head lengths, and our bodies have longer necks
+but smaller heads than the MetaHumans, so it was blown up 15% instead of shrunk. Now:
+
+- **MetaHuman grooms** (`-CreatorGroom`) are worn at a set 0.85 of their size (`Pawns.StrandHairMetaHumanFit`).
+- **Our grown grooms** fit the base's own head exactly (grown on it). Height scales the whole body and the hair with it.
+  The creator's sliders are morphs, which move no bones, so `grow_hair.py` measures each one: it fits the skull sphere
+  again with that morph on and writes how much the skull grows and where its centre moves (`grooms.json`
+  `head_morphs`, Unreal axes, cm). The game adds these up by each person's morph weights and grows or shrinks the hair
+  about the skull centre to match, so a wider, longer or smaller head gets matching hair. The log line `STRANDHAIR`
+  shows the head-slider scale and move.
+- The grown styles' hairline is a little lower (forehead 22 degrees above the skull centre, was 27).
+
+## Hats and helmets (2026-11-21)
+
+Every grown style (but Buzz) is also grown as `<Style>Hat`: everything above the hat's brim (`hair_styles.json` "hat",
+1.2 cm below the skull centre's height) is pressed within 4 mm of the scalp, and below the brim it hangs as usual, so a
+hat or helmet sits over the hair with no strands through it while the hair below shows and swings. `Want(...,
+bUnderHat)` picks it; headgear that covers all the hair still hides it all (`apparel.hidesHair`). The groom physics keeps
+colliding with the body (below); when MakeHuman bodies wear hats (clothes thread), the hat also gets a collision sphere
+so swinging hair below the brim cannot pass into it. Creator test: `-CreatorHairHat` (pressed hair, no hat drawn).
+
+## What the strands collide with (2026-11-21)
+
+First PC pictures of the grown hair: with Unreal's groom physics off it hung exactly as grown, with it on every style
+puffed out into a ball (long hair spread from the crown to the waist, Short and Crop stood straight up, the hat
+versions lifted). The cause: the strands collided with the body's own physics asset, whose shapes wrap each bone's
+vertices and stand centimetres proud of the scalp and back, and our hair is grown lying within millimetres of the
+skin, so it started inside them and was pushed out (the body was also added as a collision component, which brings in
+the same shapes, so the mannequin asset had the same trouble).
+
+Now `grow_hair.py` fits collision spheres inside the skin (`grooms.json` "collision", about 40): 12 filling the cranium,
+the neck, and every 5.5 cm from the top of the shoulders to the waist one in the middle of the body and two towards
+each side (two more at the shoulders), each at the middle of the body's depth with the largest radius that stays 4 mm
+inside the surface. The game builds a physics asset from them once per body mesh (head spheres on `head`, the neck on
+`neck_01`, the rest on the nearest spine bone) and the groom collides with that alone. Hair at rest never touches them;
+hair swinging into the body is pushed back out at the skin. Buzz has no physics at all (`hair_grooms.json` "still").
+`Pawns.StrandHairCollision` 1 fitted (default), 0 nothing, 2 the body's own asset (to compare). Head sliders do not
+resize the spheres (the 4 mm keeps a slightly smaller head clear).
+
+## Near and far (step 2)
+
+`UStrandHairSubsystem` decides who wears strands. Every MakeHuman person the creator's apply dresses (the creator, the gun
+range's random people) asks for strands for their hair style (`assets/hair_grooms.json` "creator" maps the creator's
+style names to grown ones; Braid, Messy and Afro have none yet and keep their wigs). Four times a second the people within
+`Pawns.StrandHairNear` metres of the camera (10) are sorted by distance and the nearest `Pawns.StrandHairMax` (6) wear
+strands, their wig hidden; the rest wear the wig. People wearing strands keep them a metre further, so nobody flickers at
+the edge. Strand hair is the default (`Pawns.StrandHair 1`) with the wig as the fallback: far off, past the count, for a
+style with no grown groom, or with `Pawns.StrandHair 0` (wigs for everyone). The colony's pawns are still MetaHumans
+(their own MetaHuman grooms); they get this when they move to MakeHuman bodies. A style whose groom has not been grown and imported keeps its wig.
+
+## Animal fur and manes (plan)
+
+The same script can grow on any mesh: what changes per animal is where hair grows and how long it is. Plan, in order:
+
+1. **Manes and tails first** (horse, thrumbo, lion-like predators, muffalo's shag): a `region` per animal style picked by
+   painting, as a vertex group in Blender, or by bone weights (neck and head bones for a mane, tail bones for a tail),
+   grown with the same comb-and-gravity steps, combed along the bone chain instead of from a parting. A few thousand
+   strands each, so they cost about a quarter of a human's long hair.
+2. **Attached to the animal's skeleton**, not a head bone: Unreal grooms on animals need a groom binding to the skeletal
+   mesh (made by the commandlet, as PawnFaces does for the MetaHuman faces), so the roots follow the skin as the animal
+   moves. Animals play single clips with no animation graph; groom physics runs on its own, so that is no obstacle.
+3. **Short body fur** (dogs, cats, wolves) as strands only on the nearest few animals and only for the furriest kinds;
+   further off, and for the rest, the textured mesh as now. Full-body fur is 100,000+ short strands, so it is a
+   per-animal choice, not a default.
+4. Same near/far rule as people (`UStrandHairSubsystem` with its own count), and the animal's own colour drives the fur.
+
+Waiting on: animal models with clean UVs and skin weights (the free animals vary; some manes are solid mesh that would
+need hiding where the strands grow).
 
 ## Cost and distance
 
@@ -51,6 +187,9 @@ About 30 points against 10 capsules: a few tens of microseconds per pawn per fra
 | beyond 50 m | as animated |
 
 ## Console and checks
+
+- Strand hair: `Pawns.StrandHair`, `Pawns.StrandHairNear`, `Pawns.StrandHairMax`, `Pawns.StrandHairCollision`,
+  `Pawns.StrandHairMetaHumanFit`, `Pawns.StrandHairScale`; Unreal's `r.HairStrands.Simulation 0` turns groom physics off.
 
 - `Pawns.HairPhysics 2` (default) full, `1` only pushed out of the body, `0` as animated (stiff).
 - `Pawns.HairDebug 1` draws the capsules (green) and the strands (yellow).
@@ -67,5 +206,11 @@ About 30 points against 10 capsules: a few tens of microseconds per pawn per fra
 - MetaHuman strand hair (grooms, `Pawns.MetaHumans 1`, not used by the game's pawns now) has no physics.
 - Short styles and the afro have no bones and stay as styled (they don't reach the body).
 - Hits, blasts and wind don't push the hair yet; clothes and armour will need their own capsules once bodies wear them.
-- Breasts have no capsule of their own (the chest capsule covers the upper chest); side hair falling far forward over a
-  large chest may still touch it.
+- The bust bar is sized from the skeleton and the back hair, not from the mesh, so a very large or very flat chest is
+  only roughly matched; reading the body mesh needs CPU copies of the meshes (not kept in packaged builds).
+- Five chains carry the whole sheet of hair; the mesh between two chains is blended between them, so where two chains
+  part round a shoulder the hair between can cut the corner. More chains need the MakeHuman hair rebuilt
+  (`add_hair_bones` azimuths) and re-imported on the PC.
+- Animals: the solver and the body shapes take any chain of points and any capsules, but none of the animal models has
+  bones in its mane, fur or tail to swing yet (their manes are solid mesh) and animals play single clips with no
+  animation graph; a model with mane or tail bones would get the same node.

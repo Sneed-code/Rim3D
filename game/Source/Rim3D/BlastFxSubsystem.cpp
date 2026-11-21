@@ -198,7 +198,7 @@ bool UBlastFxSubsystem::EnsureScene()
 		ScorchInstances->bUseAsOccluder = false;
 		// Under the smoke and everything else see-through.
 		ScorchInstances->TranslucencySortPriority = -1;
-		ScorchInstances->NumCustomDataFloats = 1;
+		ScorchInstances->NumCustomDataFloats = 2;  // fade, age (for the embers)
 		ScorchInstances->SetupAttachment(Root);
 		ScorchInstances->RegisterComponent();
 		// The scorch never showed on the PC (rounds 3 to 7): say what it is drawn with, to tell a stale or wrong material.
@@ -789,6 +789,7 @@ void UBlastFxSubsystem::UpdateScorches(float DeltaTime)
 			// Fades slowly at first, quicker at the end (as soot is scuffed and rained off).
 			const float Left = 1.0f - Scorches[I].Age / Seconds;
 			ScorchInstances->SetCustomDataValue(I, 0, Scorches[I].Strength * FMath::Sqrt(Left), false);
+			ScorchInstances->SetCustomDataValue(I, 1, Scorches[I].Age, false);
 		}
 		ScorchInstances->MarkRenderStateDirty();
 		if (!bLoggedScorchDraw)

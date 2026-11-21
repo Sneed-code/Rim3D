@@ -272,8 +272,8 @@ TEST_CASE("hair: the body's shapes clear the hair at rest and the back is grown 
     HairBodyBones bones = testBody();
     const auto hair = testHair();
     const auto shapes = buildHairShapes(bones, hair);
-    // Skull, neck, chest, yoke, mid back, two shoulders, two upper arms.
-    HAIR_REQUIRE(shapes.size() == 9);
+    // Skull, neck, chest, yoke, mid back, small of the back, bust, hips, two shoulders, two upper arms.
+    HAIR_REQUIRE(shapes.size() == 12);
     CHECK(bones.spineMid == 1);
     CHECK(hairDeepestPenetration(hair, capsulesOf(shapes)) <= 0.31f);
     // The chest/upper back capsule at the top spine bone: the hair lies 12 to 14 cm from it, so it grows to meet it.
@@ -300,7 +300,144 @@ TEST_CASE("hair: shapes for a skeleton without arms, neck or spine still make a 
     bones.pelvis = hv(0, 0, 97);
     bones.head = hv(0, 0, 155);
     const auto shapes = buildHairShapes(bones, testHair());
-    HAIR_REQUIRE(shapes.size() == 1);
+    HAIR_REQUIRE(shapes.size() == 2);  // the skull and the hips
     CHECK(shapes[0].bone == HairBone::Head);
+    CHECK(shapes[1].bone == HairBone::Pelvis);
     CHECK(bones.spineMid == -1);
+}
+
+namespace {
+
+// Long hair lying down her back and over her shoulders, as styled (touching the fitted body), five strands of a sheet.
+std::vector<std::vector<HairVec>> restingHair() {
+    std::vector<std::vector<HairVec>> h;
+    h.push_back({hv(-10, 0, 160), hv(-13, 0, 148), hv(-14, 0, 138), hv(-14, 0, 128), hv(-14, 0, 118), hv(-14, 0, 108)});
+    h.push_back({hv(-8, 7, 160), hv(-11, 10, 148), hv(-12, 12, 138), hv(-12, 12, 128), hv(-12, 12, 118), hv(-12, 12, 108)});
+    h.push_back({hv(-8, -7, 160), hv(-11, -10, 148), hv(-12, -12, 138), hv(-12, -12, 128), hv(-12, -12, 118), hv(-12, -12, 108)});
+    h.push_back({hv(-2, 10, 160), hv(-3, 15, 150), hv(-2, 18, 142), hv(-2, 19, 132), hv(-2, 19, 122), hv(-2, 19, 112)});
+    h.push_back({hv(-2, -10, 160), hv(-3, -15, 150), hv(-2, -18, 142), hv(-2, -19, 132), hv(-2, -19, 122), hv(-2, -19, 112)});
+    return h;
+}
+
+// The fastest any point moves relative to where the animation puts it, over the last `measure` of `frames` frames at
+// 60 fps, with the whole body leaning forward and back by `sway` cm at the head every 4 s (an idle's breathing).
+float restlessness(float sway, int frames, int measure) {
+    HairBodyBones bones = testBody();
+    const auto rest = restingHair();
+    std::vector<HairCapsule> body;
+    for (const HairShape& s : buildHairShapes(bones, rest)) {
+        body.push_back(s.capsule);
+    }
+    HairStrands hair;
+    hair.setSheetNeighbours({{0, 1}, {0, 2}, {1, 3}, {2, 4}});
+    float fastest = 0.0f;
+    std::vector<std::vector<HairVec>> lastOffset;
+    for (int f = 0; f < frames; ++f) {
+        const float lean = sway * std::sin(static_cast<float>(f) / 60.0f * 2.0f * 3.14159265f * 0.25f) / 58.0f;
+        auto goals = rest;
+        for (auto& p : goals) {
+            for (HairVec& v : p) {
+                v.x += lean * (v.z - 97.0f);
+            }
+        }
+        auto moved = body;
+        for (HairCapsule& c : moved) {
+            c.a.x += lean * (c.a.z - 97.0f);
+            c.b.x += lean * (c.b.z - 97.0f);
+        }
+        hair.step(1.0f / 60.0f, goals, moved, HairSettings{});
+        std::vector<std::vector<HairVec>> offset = hair.points();
+        for (size_t i = 0; i < offset.size(); ++i) {
+            for (size_t k = 0; k < offset[i].size(); ++k) {
+                offset[i][k] = hv(offset[i][k].x - goals[i][k].x, offset[i][k].y - goals[i][k].y, offset[i][k].z - goals[i][k].z);
+            }
+        }
+        if (f >= frames - measure && !lastOffset.empty()) {
+            for (size_t i = 0; i < offset.size(); ++i) {
+                for (size_t k = 1; k < offset[i].size(); ++k) {
+                    fastest = std::max(fastest, hvDist(offset[i][k], lastOffset[i][k]) * 60.0f);
+                }
+            }
+        }
+        lastOffset = offset;
+    }
+    return fastest;
+}
+
+}  // namespace
+
+TEST_CASE("hair: long hair lying on the back comes to rest and stays still (no pulsing off the body)") {
+    // sneed 2026-11-20: "the hair touches the body and freaks out to pulse off it". A body standing dead still: after
+    // settling, nothing moves at all.
+    CHECK(restlessness(0.0f, 600, 240) < 0.05f);
+    // An idle's gentle lean (1 cm at the head): the hair goes with the body, never faster than the lean itself drives it.
+    CHECK(restlessness(1.0f, 600, 240) < 3.0f);
+}
+
+TEST_CASE("hair: hair falling forward over the shoulder lies on the chest, not in it") {
+    // A side strand styled hanging in front of the shoulder; the body leans back 35 degrees (about the hips), so the
+    // hair falls onto the chest; the bust shape keeps it out of the chest's front.
+    HairBodyBones bones = testBody();
+    const std::vector<std::vector<HairVec>> rest = {{hv(-10, 0, 160), hv(-13, 0, 148), hv(-14, 0, 138), hv(-14, 0, 128), hv(-14, 0, 118)},
+                                                    {hv(4, 8, 160), hv(10, 8, 151), hv(15, 7, 142), hv(17, 6, 132), hv(17, 6, 122)},
+                                                    {hv(4, -8, 160), hv(10, -8, 151), hv(15, -7, 142), hv(17, -6, 132), hv(17, -6, 122)}};
+    const auto shapes = buildHairShapes(bones, rest);
+    bool bust = false;
+    for (const HairShape& s : shapes) {
+        bust = bust || (s.bone == HairBone::SpineTop && s.capsule.a.x > 2.0f);
+    }
+    CHECK(bust);
+    std::vector<HairCapsule> body = capsulesOf(shapes);
+    // How deep the hair goes into the chest's front (a stand-in for her real chest, a bar reaching 13 cm ahead of the
+    // spine at 128 cm; without the bust shape the hair sinks 2.7 cm into it).
+    const HairCapsule chestFront{hv(7, 7, 128), hv(7, -7, 128), 6.0f};
+    HairStrands hair;
+    float worst = 0.0f;
+    for (int f = 0; f < 240; ++f) {
+        const float bow = -std::min(static_cast<float>(f) / 60.0f, 1.0f) * 0.6f;  // radians, about the pelvis
+        const auto turn = [&](HairVec v) {
+            const float x = v.x;
+            const float z = v.z - 97.0f;
+            return hv(x * std::cos(bow) + z * std::sin(bow), v.y, 97.0f - x * std::sin(bow) + z * std::cos(bow));
+        };
+        auto goals = rest;
+        for (auto& p : goals) {
+            for (HairVec& v : p) {
+                v = turn(v);
+            }
+        }
+        std::vector<HairCapsule> moved = body;
+        for (HairCapsule& c : moved) {
+            c.a = turn(c.a);
+            c.b = turn(c.b);
+        }
+        HairCapsule front = chestFront;
+        front.a = turn(front.a);
+        front.b = turn(front.b);
+        hair.step(1.0f / 60.0f, goals, moved, HairSettings{});
+        worst = std::max(worst, hairDeepestPenetration(hair.points(), {front}));
+    }
+    CHECK(worst < 1.5f);
+}
+
+TEST_CASE("hair: hair falling onto a shoulder lands and stays, without bouncing off") {
+    // A strand styled out sideways, falling under gravity onto a capsule under it.
+    const std::vector<HairCapsule> body = {{hv(-15, 10, 140), hv(15, 10, 140), 6.0f}};
+    const std::vector<std::vector<HairVec>> goals = {strand(hv(0, 0, 160), hv(0, 0.6f, 0.8f), 4, 8.0f)};
+    HairSettings settings;
+    settings.rootStiffness = 0.0f;  // nothing holds it up: it drops onto the shoulder
+    settings.tipStiffness = 0.0f;
+    HairStrands hair;
+    float lowestAfterLanding = 1.0e9f;
+    float highestAfterLanding = -1.0e9f;
+    for (int f = 0; f < 360; ++f) {
+        hair.step(1.0f / 60.0f, goals, body, settings);
+        if (f > 120) {
+            lowestAfterLanding = std::min(lowestAfterLanding, hair.points()[0][2].z);
+            highestAfterLanding = std::max(highestAfterLanding, hair.points()[0][2].z);
+        }
+        CHECK(hairDeepestPenetration(hair.points(), body) < 1.0f);
+    }
+    // Once landed it lies still: the middle of the strand moves less than half a centimetre up or down.
+    CHECK(highestAfterLanding - lowestAfterLanding < 0.5f);
 }

@@ -75,7 +75,7 @@ Frame times: 200 to 280 fps at 888 x 500 on the RTX 5080, game thread 3.4 to 4.8
 ## Not done
 
 Stars; a thunderclap and rain sound; wind in the trees and the grass; snow on plants, rock tops, roofs and
-buildings; wet buildings and pawns; drips and puddles; a sky seen from inside the mountain; Niagara versions of the
+buildings; ~~wet buildings and pawns~~ (done: [wetness.md](wetness.md)); drips and puddles; a sky seen from inside the mountain; Niagara versions of the
 rain and snow (the streaks and flakes are instanced meshes, as in the fight effects, which keeps DLSS possible).
 The sim's first day starts in spring at 3.5 degrees, so a snowfall in the smoke test melts by the afternoon; the
 winter look is shown with `Sky.DayOfYear` and by the snow the sim lays on the first night.

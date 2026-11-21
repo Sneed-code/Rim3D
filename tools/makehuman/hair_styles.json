@@ -1,0 +1,43 @@
+{
+  "comment": "Strand hair styles grown by tools/makehuman/grow_hair.py (docs/design/hair-physics.md 'Growing our own grooms'). Lengths in metres; 'to' names a height on the body the longest strands reach (waist, mid_back, shoulder, chin, ear) and overrides 'length'. part: middle, side, none (combed back) or gather (ponytail). count is the number of strands at full detail; Unreal thins them for its lower LODs.",
+  "hat": {"comment": "Each style is also grown as <Style>Hat for wearing under a hat or helmet that leaves hair showing: above the brim (metres from the skull centre's height) it lies within gap of the scalp, below it hangs as usual.", "brim": -0.012, "gap": 0.004},
+  "styles": {
+    "LongStraight": {
+      "count": 60000, "to": "waist", "part": "middle", "segments": 64,
+      "lift": 0.006, "volume": 0.007, "stiffness": 0.80, "gravity": 0.22, "back": 0.30,
+      "clump": 0.55, "clump_size": 0.012, "wave": 0.0, "frizz": 0.0012, "u_cut": 0.06,
+      "width_root": 0.00008, "width_tip": 0.00004, "fringe": 0.0
+    },
+    "LongWavy": {
+      "count": 60000, "to": "mid_back", "part": "side", "segments": 64,
+      "lift": 0.007, "volume": 0.009, "stiffness": 0.80, "gravity": 0.22, "back": 0.25,
+      "clump": 0.65, "clump_size": 0.014, "wave": 0.016, "wave_period": 0.10, "frizz": 0.0012, "u_cut": 0.05,
+      "width_root": 0.00008, "width_tip": 0.00004, "fringe": 0.0
+    },
+    "Ponytail": {
+      "count": 50000, "to": "mid_back", "part": "gather", "segments": 64,
+      "lift": 0.004, "volume": 0.004, "stiffness": 0.70, "gravity": 0.30, "back": 0.0,
+      "gather": {"up": 0.035, "back": 0.012, "band": 0.012, "tail_spread": 0.035},
+      "clump": 0.45, "clump_size": 0.010, "wave": 0.0, "frizz": 0.0012, "u_cut": 0.02,
+      "width_root": 0.00008, "width_tip": 0.00004, "fringe": 0.0
+    },
+    "Bob": {
+      "count": 45000, "to": "chin", "part": "side", "segments": 32,
+      "lift": 0.012, "volume": 0.014, "stiffness": 0.85, "gravity": 0.20, "back": 0.10,
+      "clump": 0.45, "clump_size": 0.010, "wave": 0.0, "frizz": 0.0008, "u_cut": -0.02,
+      "width_root": 0.00008, "width_tip": 0.00005, "fringe": 0.0
+    },
+    "Short": {
+      "count": 40000, "length": 0.07, "part": "side", "segments": 16,
+      "lift": 0.010, "volume": 0.010, "stiffness": 0.90, "gravity": 0.10, "back": 0.55,
+      "clump": 0.40, "clump_size": 0.008, "wave": 0.0, "frizz": 0.0010, "u_cut": 0.0,
+      "width_root": 0.00008, "width_tip": 0.00005, "shorter_sides": 0.45, "fringe": 0.0
+    },
+    "Buzz": {
+      "count": 35000, "length": 0.012, "part": "none", "segments": 6,
+      "lift": 0.002, "volume": 0.002, "stiffness": 0.95, "gravity": 0.05, "back": 0.6, "no_hat": true,
+      "clump": 0.1, "clump_size": 0.006, "wave": 0.0, "frizz": 0.0004, "u_cut": 0.0,
+      "width_root": 0.00007, "width_tip": 0.00005, "fringe": 0.0
+    }
+  }
+}

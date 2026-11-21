@@ -357,8 +357,8 @@ namespace
 	}
 
 	/**
-	 * M_BlastScorch: the scorch, on a flat square laid on the ground (instanced; data 0 its opacity): a ragged core and rays of
-	 * soot black, pale dust between them, lit translucent. (A deferred decal first, but on the PC it never showed on the ground in rounds 3 and 4.)
+	 * M_BlastScorch: the scorch, on a flat square laid on the ground (instanced; data 0 its opacity, 1 its age): a charred core
+	 * (mottled soot, grey ash, embers glowing for the first half minute) and rays of soot, pale dust between them, lit translucent. (A deferred decal first, but on the PC it never showed on the ground in rounds 3 and 4.)
 	 */
 	void BlastArtMakeScorch(IAssetTools& Tools, UTexture2D* Texture, int32& Failures)
 	{
@@ -383,15 +383,29 @@ namespace
 		auto* Base = BlastArtCustom(Material, TEXT("BlastScorchColour"), CMOT_Float3, TEXT(
 			"float3 soot = float3(0.012, 0.011, 0.01);\n"
 			"float3 dust = float3(0.34, 0.31, 0.27);\n"
-			"return lerp(lerp(dust, soot, saturate(S.r * 1.3)), dust, S.g * (1.0 - S.r));\n"), -500, -250);
+			"float3 ash = float3(0.17, 0.165, 0.155);\n"
+			"float ember = smoothstep(0.85, 0.95, S.b);\n"
+			"float3 c = lerp(lerp(dust, soot, saturate(S.r * 1.3)), dust, S.g * (1.0 - S.r));\n"
+			"return lerp(c, ash, saturate(S.b / 0.8) * (1.0 - ember));\n"), -500, -250);
 		BlastArtInput(Base, TEXT("S"), Sample);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Base, TEXT(""), MP_BaseColor);
-		auto* Rough = BlastArtNode<UMaterialExpressionConstant>(Material, -400, -50);
-		Rough->R = 0.95f;
+		// Charred soot catches a little sheen; ash and dust are dull.
+		auto* Rough = BlastArtCustom(Material, TEXT("BlastScorchRough"), CMOT_Float1, TEXT(
+			"return 0.95 - 0.3 * saturate(S.r * 1.3) * (1.0 - saturate(S.b / 0.8));\n"), -500, -50);
+		BlastArtInput(Rough, TEXT("S"), Sample);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
 		auto* Spec = BlastArtNode<UMaterialExpressionConstant>(Material, -400, 30);
-		Spec->R = 0.2f;
+		Spec->R = 0.3f;
 		UMaterialEditingLibrary::ConnectMaterialProperty(Spec, TEXT(""), MP_Specular);
+		// Embers in the core glow orange and flicker, dying over the first half minute (data 1: the mark's age, seconds).
+		auto* Ember = BlastArtCustom(Material, TEXT("BlastScorchEmber"), CMOT_Float3, TEXT(
+			"float ember = smoothstep(0.86, 1.0, S.b);\n"
+			"float flicker = 0.65 + 0.35 * sin(Age * 6.0 + UV.x * 53.0 + UV.y * 37.0);\n"
+			"return float3(1.0, 0.33, 0.06) * ember * flicker * exp(-Age / 9.0) * 1.5;\n"), -500, 150);
+		BlastArtInput(Ember, TEXT("S"), Sample);
+		BlastArtInput(Ember, TEXT("UV"), UV);
+		BlastArtInput(Ember, TEXT("Age"), BlastArtData(Material, 1, 100.0f, -800, 200));
+		BlastArtUnexposedEmissive(Material, Ember, -250, 150);
 		auto* Opacity = BlastArtCustom(Material, TEXT("BlastScorchOpacity"), CMOT_Float1, TEXT("return saturate(S.a * Fade * 1.2);\n"), -500, 50);
 		BlastArtInput(Opacity, TEXT("S"), Sample);
 		BlastArtInput(Opacity, TEXT("Fade"), BlastArtData(Material, 0, 1.0f, -800, 100));
