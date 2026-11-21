@@ -109,11 +109,11 @@ namespace
 	// The tissue colours (linear).
 	const FLinearColor GoreMuscleDark(0.12f, 0.007f, 0.005f);
 	const FLinearColor GoreMuscleLight(0.32f, 0.026f, 0.018f);
-	const FLinearColor GoreFat(0.86f, 0.62f, 0.26f);
+	const FLinearColor GoreFat(0.72f, 0.52f, 0.21f);
 	const FLinearColor GoreCloth(0.26f, 0.05f, 0.035f);
 	const FLinearColor GoreDermis(0.40f, 0.07f, 0.05f);
 	const FLinearColor GoreBlood(0.18f, 0.008f, 0.006f);
-	const FLinearColor GoreBone(0.66f, 0.60f, 0.50f);
+	const FLinearColor GoreBone(0.45f, 0.40f, 0.32f);  // vertex colours go through sRGB: 0.66 still read bright white
 	const FLinearColor GoreMarrow(0.30f, 0.06f, 0.035f);
 	const FLinearColor GoreCord(0.82f, 0.76f, 0.66f);
 	const FLinearColor GoreCartilage(0.80f, 0.62f, 0.56f);
@@ -143,7 +143,7 @@ namespace
 		// The ring of hard bone across the top, marrow edge out to the wall.
 		Mesh.AddRingGrid(2, Cols,
 			[&](int32 R, int32 C) { return Round(R == 0 ? Marrow : Radius, C, Tops[C] - (R == 0 ? 0.08f * Radius : 0.0f)); },
-			[&](int32 R, int32 C) { return GoreWet(FMath::Lerp(FMath::Lerp(GoreBone, GoreMarrow, R == 0 ? 0.25f : 0.0f), GoreBlood, 0.1f + 0.35f * Random.FRand()), 0.5f); });
+			[&](int32 R, int32 C) { return GoreWet(FMath::Lerp(FMath::Lerp(GoreBone, GoreMarrow, R == 0 ? 0.25f : 0.0f), GoreBlood, 0.25f + 0.3f * Random.FRand()), 0.5f); });
 		// The marrow, sunk a little.
 		Mesh.AddRingGrid(2, Cols,
 			[&](int32 R, int32 C) { return Round(R == 0 ? 0.0f : Marrow, C, (R == 0 ? Top - 0.35f * Radius : Tops[C] - 0.08f * Radius)); },
