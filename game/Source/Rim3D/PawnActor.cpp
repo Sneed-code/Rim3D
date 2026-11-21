@@ -371,8 +371,8 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	{
 		// The player aiming a gun in third person (sneed 2026-11-20: "the weapon doesn't move with my cursor"): the body
 		// turns with the view, walking sideways or back under it, so the gun and arms point where the crosshair is.
-		const UProtagonistSubsystem* Aimer = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
-		const float Wanted = Aimer->GetBody()->GetYaw();
+		const UProtagonistSubsystem* ProtSub = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+		const float Wanted = ProtSub->GetBody()->GetYaw();
 		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * 2.0f * DeltaTime * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}
