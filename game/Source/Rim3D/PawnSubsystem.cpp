@@ -19,6 +19,7 @@
 #include "LevelsSubsystem.h"
 #include "PawnActor.h"
 #include "PawnFaces.h"
+#include "CreatorPeople.h"
 #include "MakeHumanArt.h"
 #include "Retargeter/IKRetargeter.h"
 #include "PawnLooks.h"
@@ -699,7 +700,21 @@ void USimPawnSubsystem::Tick(float DeltaTime)
 		}
 		else if (View.looks >= 0 && View.looks < static_cast<int32>(Now.looks.size()))
 		{
-			Pawn->ApplyLooks(*this, MakeLooks(Now.looks[static_cast<size_t>(View.looks)], Defs));
+			const colony::PawnLooksView& LooksView = Now.looks[static_cast<size_t>(View.looks)];
+			FSimPawnLooks Looks = MakeLooks(LooksView, Defs);
+			// A colonist from the character screen (docs/design/new-game.md): drawn as the creator's MakeHuman person.
+			CreatorPeople::FLook Look;
+			const FString CreatorText = LooksView.creator.empty() ? FString() : FString(UTF8_TO_TCHAR(LooksView.creator.c_str()));
+			const bool bCreator = !CreatorText.IsEmpty() && CreatorPeople::Decode(CreatorText, Look);
+			if (bCreator)
+			{
+				Looks = CreatorPeople::LooksFor(Look, Looks);
+			}
+			Pawn->ApplyLooks(*this, Looks);
+			if (bCreator)
+			{
+				Pawn->ApplyCreatorLook(CreatorText);
+			}
 		}
 		// Worn clothes (U16): rebuilt only when what is worn, or how torn it is, changed.
 		const uint64 WornKey = ApparelKey(Now, View);

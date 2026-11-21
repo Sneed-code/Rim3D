@@ -1,5 +1,21 @@
 [
   {
+    "defName": "CrashLanded", "source": "ours", "label": "crash landed", "menu": true, "menuOrder": 1,
+    "description": "You and two strangers survived the crash of your shuttle on a rim world. Build a home in the wild and keep each other alive.",
+    "colonists": 2, "protagonist": true, "colonistKind": "Human", "lineage": "Baseline", "biome": "TropicalRainforest",
+    "siteBiomes": ["TropicalRainforest", "TropicalSwamp"],
+    "colonistPawnKind": "CrashlandedSettler",
+    "startingThings": [
+      { "thing": "MealSurvivalPack", "count": 50 },
+      { "thing": "Silver", "count": 200 },
+      { "thing": "Steel", "count": 50 },
+      { "thing": "ComponentIndustrial", "count": 30 },
+      { "thing": "Gun_BoltActionRifle", "count": 1 }
+    ],
+    "ours": ["colonists", "protagonist", "colonistPawnKind", "startingThings", "menu", "menuOrder", "siteBiomes", "description",
+             "sneed 2026-11-21: the player and two human strangers with 50 survival meals, 200 silver, 50 steel, 30 components and a gun"]
+  },
+  {
     "defName": "Crashlanded", "source": "RimWorld wiki", "label": "crashlanded",
     "colonists": 5, "protagonist": true, "colonistKind": "Human", "lineage": "Baseline", "biome": "TemperateForest",
     "colonistPawnKind": "CrashlandedSettler",

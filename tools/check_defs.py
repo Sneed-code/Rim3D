@@ -103,6 +103,7 @@ REFERENCES = [
     ("LootTables", "items[].thing", "Things"),
     ("LootTables", "stacks.from[].thing", "Things"),
     ("Scenarios", "biome", "Biomes"),
+    ("Scenarios", "siteBiomes[]", "Biomes"),
     ("Scenarios", "lineage", "Lineages"),
     ("RecreationActivities", "kind", "RecreationKinds"),
     ("RecreationActivities", "building", "Things"),

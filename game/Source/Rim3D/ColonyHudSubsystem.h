@@ -6,8 +6,11 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
+#include "CreatorPeople.h"
 
 #include "ColonyHudSubsystem.generated.h"
+
+class ACameraActor;
 
 class AActor;
 class USceneCaptureComponent2D;
@@ -115,6 +118,14 @@ public:
 	/** Shown at launch when the game was started without a scenario (not in smoke tests), and from Menu > New colony. */
 	void SetMainMenuOpen(bool bOpen) { bMainMenuOpen = bOpen; }
 	bool IsMainMenuOpen() const { return bMainMenuOpen; }
+	/** The main menu's page: 0 title, 1 scenario, 2 load, 3 people (docs/design/new-game.md). For the smoke test. */
+	int32 GetMainMenuPage() const { return MainMenuPage; }
+	void SetMainMenuPageForTest(int32 Page) { MainMenuPage = Page; }
+	/** The new game's seed and map size, and the people page's picked colonist and tab (smoke test `newgame`). */
+	void SetNewGameForTest(int32 Seed, int32 MapSize) { NewSeed = Seed; NewMapSize = MapSize; }
+	void SetPeopleForTest(int32 Selected, int32 Tab) { PeopleSelected = Selected; PeopleTab = Tab; }
+	/** Start on the people page, as the button does. */
+	void LandColonyForTest();
 
 	// ---- The learning helper (lessons at the top right) -----------------------------------------
 	bool AreLessonsOn() const { return bLessonsOn; }
@@ -197,6 +208,21 @@ private:
 	/** Sends the narrator and difficulty picked in the main menu once the new sim runs. */
 	void SendPendingNarrator(USimSubsystem& Bridge);
 
+	// The title screen and the new game (ColonyHudNewGame.cpp, docs/design/new-game.md).
+	void DrawTitlePage(USimSubsystem& Bridge, float Scale);
+	void DrawScenarioPage(USimSubsystem& Bridge, float Scale);
+	void DrawPeoplePage(USimSubsystem& Bridge, float Scale);
+	/** After "Choose landing site": the world screen's landing opens the people page, its Back the scenario page. */
+	void CheckLanding(USimSubsystem& Bridge);
+	/** The people page over the new colony, paused at its first second. */
+	void EnterPeoplePage(USimSubsystem& Bridge);
+	/** Start on the people page: the game begins. */
+	void LandColony(USimSubsystem& Bridge);
+	void UpdatePeopleCamera(colony::Entity Pawn);
+	void EndPeopleCamera();
+	/** Sends a colonist's creator look to the sim (EditColonistCommand) and remembers it. */
+	void SubmitPeopleLook(colony::Entity Pawn, int32 Slot, const CreatorPeople::FLook& Look);
+
 	// The learning helper (ColonyHudLessons.cpp).
 	void DrawLessons(USimSubsystem& Bridge, float Scale);
 
@@ -249,10 +275,26 @@ private:
 	// The main menu: its page and the new colony's choices.
 	bool bMainMenuOpen = false;
 	bool bMainMenuChecked = false;
-	int32 MainMenuPage = 0;  // 0 the menu, 1 new colony, 2 load
-	FString NewScenario = TEXT("CrashlandedRainforest");
+	int32 MainMenuPage = 0;  // 0 the title, 1 new colony (scenario), 2 load, 3 people (docs/design/new-game.md)
+	FString NewScenario = TEXT("CrashLanded");
 	FString NewNarrator = TEXT("Orrin");
+	// The only difficulty for now, never shown (sneed 2026-11-21: "standard").
 	FString NewDifficulty = TEXT("StriveToSurvive");
+	// The new game's landing site and people pages.
+	bool bAwaitingLanding = false;
+	int32 PeopleSelected = 0;
+	int32 PeopleGeneration = -1;
+	int32 PeopleRerolls = 0;
+	int32 PeopleTab = 0;  // 0 story and skills, 1 looks
+	TMap<uint32, FString> PeopleLooks;  // by pawn: the look text being edited (shown before the sim has it)
+	colony::Entity PeopleNamesFor = colony::kNoEntity;
+	char PeopleFirst[32] = {};
+	char PeopleNick[32] = {};
+	char PeopleLast[32] = {};
+	float PeopleYaw = 200.0f;
+	float PeoplePitch = -4.0f;
+	float PeopleDistance = 280.0f;
+	TWeakObjectPtr<ACameraActor> PeopleCamera;
 	int32 NewSeed = 42;
 	int32 NewMapSize = 512;
 	bool bNarratorPending = false;

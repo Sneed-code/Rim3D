@@ -1168,6 +1168,21 @@ struct SetGrimeCommand {
     float dirtBody = 0.0f;
 };
 
+// Before the game starts (game second 0), from the new-game character screen (docs/design/new-game.md): edits the
+// starting colonist in slot `slot` (as RerollColonistCommand counts them). Empty names keep theirs; `female` -1 keeps the
+// gender, 0 or 1 sets it (and makes the looks again for that gender, the lineage kept); `setCreator` stores `creator`
+// (the character creator's look text, empty to clear it). Fails later in the game, for a bad slot, or a name over 24
+// letters.
+struct EditColonistCommand {
+    int slot = 0;
+    std::string firstName;
+    std::string nickName;
+    std::string lastName;
+    int female = -1;
+    bool setCreator = false;
+    std::string creator;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -1204,7 +1219,7 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              SleepCommand, SetLandingZoneCommand,
                              PatchCommand, SetAlertCommand, FocusCommand, SetFightResponseCommand,
                              LevelEarthCommand, CancelEarthworksCommand, UnstuckCommand, SetWorkGroupCommand,
-                             SetGrimeCommand>;
+                             SetGrimeCommand, EditColonistCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
 // day) it was applied in. Failed commands are logged too.

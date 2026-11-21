@@ -1345,6 +1345,13 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
         return;
     }
+    if (const auto* edit = std::get_if<EditColonistCommand>(&command)) {
+        error.clear();
+        if (!editColonist(*edit, error)) {
+            commandFailed(id, error);
+        }
+        return;
+    }
     if (const auto* setGrime = std::get_if<SetGrimeCommand>(&command)) {
         const Thing* thing = things_->exists(setGrime->pawn) ? things_->registry().try_get<Thing>(setGrime->pawn) : nullptr;
         if (thing == nullptr || thing->category != ThingCategory::Pawn) {
@@ -2473,6 +2480,19 @@ void Sim::dropLostDecks() {
     }
 }
 
+bool Sim::applyPregameCommands() {
+    if (time_.steps != 0) {
+        return false;
+    }
+    std::vector<std::pair<uint64_t, Command>> applying;
+    applying.swap(pending_);
+    for (auto& [id, command] : applying) {
+        applyCommand(command, id);
+        commandLog_.push_back(LoggedCommand{time_.steps, std::move(command)});
+    }
+    return true;
+}
+
 void Sim::step() {
     stepOnce(false);
     // A skip (P5) runs on inside this call, a batch of steps at a time, so the game's own loop sees time jump.
@@ -3065,6 +3085,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             l.bodyHair = looks->bodyHair;
             l.tattoos = looks->tattoos;
             l.scars = looks->scars;
+            l.creator = looks->creator;
             view.looks = static_cast<int32_t>(out.looks.size());
             out.looks.push_back(l);
         }
@@ -3889,6 +3910,7 @@ uint64_t Sim::stateHash() const {
             h.add(looks->naturalBeard.data(), looks->naturalBeard.size());
             h.add(looks->beard.data(), looks->beard.size());
             h.add(looks->name.data(), looks->name.size());
+            h.add(looks->creator.data(), looks->creator.size());
             h.add(looks->naturalBodyHair);
             h.add(looks->bodyHair);
             for (const std::vector<LooksMark>* marks : {&looks->tattoos, &looks->scars}) {

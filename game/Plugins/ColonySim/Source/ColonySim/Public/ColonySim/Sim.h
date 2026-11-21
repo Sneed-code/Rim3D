@@ -213,6 +213,11 @@ public:
     // then runs every system.
     void step();
     void stepMany(int64_t steps);
+    // Before the first step only (the new-game character screen, docs/design/new-game.md): applies the commands
+    // submitted so far without running anything else or moving the clock, so the player can reroll and edit the
+    // starting colonists while the game waits. They are logged at step 0, so a replay applies them in its first step
+    // before anything runs, with the same result. False (and nothing applied) once the game has stepped.
+    bool applyPregameCommands();
     // Times each system of the following steps into `profile` (null: off, the default). Not saved,
     // not hashed.
     void setProfile(StepProfile* profile) { profile_ = profile; }
@@ -307,6 +312,8 @@ public:
     Entity controlledPawn() const;
     // A pawn's colonist record (name, skills...), or null if it is not a colonist.
     const Colonist* colonistOf(Entity pawn) const;
+    // The player's colonists in slot order (by entity index), as RerollColonist and EditColonist count them.
+    std::vector<Entity> startingColonistSlots() const;
     // The kill feed (docs/design/kill-feed.md). A PawnDied event's `target` is the killer: whoever last hurt the pawn with
     // a bullet, blow or blast within kKillCreditSteps, unless it died of something else (hunger, cold, illness...).
     // Which colour a name shows in, seen from the player: friendly (the colony, its tame animals), enemy (raiders,
@@ -597,6 +604,9 @@ private:
     Entity makeScenarioColonist(const Def& scenario, CellPos cell, uint64_t colonistSeed, bool protagonist);
     // RerollColonist: another starting colonist in the same place, before the first step.
     bool rerollColonist(int slot, std::string& error);
+    // EditColonist: names, gender and the creator's look of a starting colonist, before the first step.
+    bool editColonist(const EditColonistCommand& edit, std::string& error);
+
     // Gives a new pawn its looks if it is humanlike (its def names no other intelligence).
     Entity makeJoiner(CellPos cell, uint64_t seed);
     void giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage);

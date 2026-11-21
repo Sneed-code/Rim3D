@@ -148,15 +148,7 @@ bool Sim::rerollColonist(int slot, std::string& error) {
         error = "there is no starting scenario to reroll";
         return false;
     }
-    std::vector<Entity> slots;
-    for (const auto [pawn, colonist] : things_->registry().view<Colonist>().each()) {
-        (void)colonist;
-        if (things_->spawned(pawn) && fighters_->factionOf(pawn) == kPlayerFaction) {
-            slots.push_back(pawn);
-        }
-    }
-    // By index, not version: a new colonist takes the freed index, so the slots keep their order.
-    std::sort(slots.begin(), slots.end(), [](Entity a, Entity b) { return entt::to_entity(a) < entt::to_entity(b); });
+    const std::vector<Entity> slots = startingColonistSlots();
     if (slot < 0 || static_cast<size_t>(slot) >= slots.size()) {
         error = "there is no starting colonist " + std::to_string(slot);
         return false;
@@ -186,6 +178,79 @@ bool Sim::rerollColonist(int slot, std::string& error) {
     if (makeScenarioColonist(*scenario, cell, colonistSeed, protagonist) == kNoEntity) {
         error = setupErrors_.size() > errorsBefore ? setupErrors_.back() : "the colonist could not be made";
         return false;
+    }
+    return true;
+}
+
+std::vector<Entity> Sim::startingColonistSlots() const {
+    std::vector<Entity> slots;
+    for (const auto [pawn, colonist] : things_->registry().view<Colonist>().each()) {
+        (void)colonist;
+        if (things_->spawned(pawn) && fighters_->factionOf(pawn) == kPlayerFaction) {
+            slots.push_back(pawn);
+        }
+    }
+    // By index, not version: a new colonist takes the freed index, so the slots keep their order.
+    std::sort(slots.begin(), slots.end(), [](Entity a, Entity b) { return entt::to_entity(a) < entt::to_entity(b); });
+    return slots;
+}
+
+// The new-game character screen's edits (docs/design/new-game.md): names, gender and the creator's look of a
+// starting colonist, before the first step. Everything else about them stays (backstories, traits, skills, gear).
+bool Sim::editColonist(const EditColonistCommand& edit, std::string& error) {
+    if (time_.seconds != 0) {
+        error = "the starting colonists can only be edited before the game starts";
+        return false;
+    }
+    const std::vector<Entity> slots = startingColonistSlots();
+    if (edit.slot < 0 || static_cast<size_t>(edit.slot) >= slots.size()) {
+        error = "there is no starting colonist " + std::to_string(edit.slot);
+        return false;
+    }
+    for (const std::string* name : {&edit.firstName, &edit.nickName, &edit.lastName}) {
+        if (name->size() > 24) {
+            error = "a name can have at most 24 letters";
+            return false;
+        }
+    }
+    if (edit.creator.size() > 8192) {
+        error = "the creator's look is too long";
+        return false;
+    }
+    if (edit.female < -1 || edit.female > 1) {
+        error = "female must be -1 (keep), 0 or 1";
+        return false;
+    }
+    const Entity pawn = slots[static_cast<size_t>(edit.slot)];
+    entt::registry& reg = things_->registry();
+    Colonist& colonist = reg.get<Colonist>(pawn);
+    if (!edit.firstName.empty()) {
+        colonist.firstName = edit.firstName;
+    }
+    if (!edit.nickName.empty()) {
+        colonist.nickName = edit.nickName;
+    }
+    if (!edit.lastName.empty()) {
+        colonist.lastName = edit.lastName;
+    }
+    if (edit.female >= 0 && (edit.female == 1) != colonist.female) {
+        colonist.female = edit.female == 1;
+        // New looks for the other gender from a seed of the game, the slot and the gender, so the same edits give the
+        // same person; the lineage and the creator's look (if any) stay.
+        const PawnLooks* had = reg.try_get<PawnLooks>(pawn);
+        const std::string lineage = had != nullptr ? had->lineage : "Baseline";
+        const std::string creator = had != nullptr ? had->creator : std::string();
+        giveLooks(pawn, splitMix64(settings_.seed ^ 0x6564697447656E64ULL ^ (static_cast<uint64_t>(edit.slot) << 8) ^
+                                   static_cast<uint64_t>(edit.female)),
+                  colonist.female, lineage);
+        if (PawnLooks* looks = reg.try_get<PawnLooks>(pawn)) {
+            looks->creator = creator;
+        }
+    }
+    if (edit.setCreator) {
+        if (PawnLooks* looks = reg.try_get<PawnLooks>(pawn)) {
+            looks->creator = edit.creator;
+        }
     }
     return true;
 }

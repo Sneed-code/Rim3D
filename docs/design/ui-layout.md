@@ -139,12 +139,7 @@ one border and radius, two text sizes, 1.2 s tooltips). Every subsystem that dra
 - **Build > Zone > Animal zone** paints animal zones (drawn as tan rings; Remove zone takes them off
   too); **Build > Orders** has Tame, Hunt and Slaughter drag tools (`MarkAnimalsInAreaCommand`).
 
-**Main menu**: shown at launch when the game starts without `-SimScenario` (not in smoke tests;
-`-NoMenu` skips it) and from Menu > New colony / load. New colony picks the scenario (rainforest
-first), narrator, difficulty, seed and map size, then Start (the scenario's biome picks the site) or
-Pick a site on the world map (the World screen's Start here). The new game gets `SetNarratorCommand`,
-which no start sent before, so playtests until now had no narrator events. Load a game lists
-`Saved/Saves/*.save`. Settings opens over it.
+**Main menu**: the title screen and the new game (scenario, landing site, people screen) are in [new-game.md](new-game.md). Load a game lists `Saved/Saves/*.save`, newest first. Settings opens over it.
 
 **Factions** (2026-11-20): one block per faction with its relation in colour, tech level, what it
 does (raids, trades, visits), "permanent enemy" where it is, and a goodwill bar from -100 to 100 filled

@@ -86,6 +86,9 @@ public:
 	USkeletalMeshComponent* GetFaceMesh() const { return FaceMesh; }
 	/** The MakeHuman character's mesh while the looks ask for one (docs/design/makehuman.md); null otherwise. */
 	USkeletalMeshComponent* GetMakeHumanMesh() const { return MakeHumanMesh; }
+	/** Puts the character screen's look (PawnLooks::creator text, docs/design/new-game.md) on the MakeHuman body once it
+	 *  is on, and again whenever the text changes or the body is remade. Call every frame with the pawn's text. */
+	void ApplyCreatorLook(const FString& Text);
 	/** The MetaHuman's body (with the whole body, all of its skin); null for a mannequin. */
 	USkeletalMeshComponent* GetSkinBody() const { return MetaHumanBody; }
 	/** The eye slots of the face (left, right). */
@@ -366,6 +369,8 @@ private:
 	// A MakeHuman character drawn instead of the MetaHuman (docs/design/makehuman.md): its mesh, retargeted from the hidden mannequin.
 	TObjectPtr<USkeletalMeshComponent> MakeHumanMesh;
 	FString AppliedMakeHuman;
+	/** The character screen's look text put on the MakeHuman body (ApplyCreatorLook); cleared when the body is remade. */
+	FString AppliedCreatorLook;
 	void ApplyMakeHuman(USimPawnSubsystem& Pawns);
 	bool bHairHidden = false;
 	int32 ApparelRebuilds = 0;

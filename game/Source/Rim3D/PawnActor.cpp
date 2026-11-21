@@ -5,6 +5,7 @@
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequence.h"
 #include "Retargeter/IKRetargeter.h"
+#include "CreatorPeople.h"
 #include "MakeHumanAnimInstance.h"
 #include "AnimationRuntime.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -771,9 +772,28 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 // ---------------------------------------------------------------------------
 // Faces, hair and marks (V2, V3; docs/design/looks.md).
 
+void ASimPawnActor::ApplyCreatorLook(const FString& Text)
+{
+	if (Text == AppliedCreatorLook)
+	{
+		return;
+	}
+	CreatorPeople::FLook Look;
+	if (!CreatorPeople::Decode(Text, Look))
+	{
+		AppliedCreatorLook = Text;  // not a look: nothing to put on
+		return;
+	}
+	if (CreatorPeople::Apply(Look, *this))
+	{
+		AppliedCreatorLook = Text;
+	}
+}
+
 void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 {
 	AppliedMakeHuman = Looks.MakeHuman;
+	AppliedCreatorLook.Reset();
 	UIKRetargeter* Retargeter = nullptr;
 	USkeletalMesh* Mesh = Looks.MakeHuman.IsEmpty() ? nullptr : Pawns.GetMakeHumanMesh(Looks.MakeHuman, Retargeter);
 	if (!Mesh || !Retargeter)

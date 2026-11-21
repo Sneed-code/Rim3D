@@ -483,6 +483,7 @@ void UColonyHudSubsystem::Tick(float DeltaTime)
 		const TCHAR* Line = FCommandLine::Get();
 		bMainMenuOpen = Bridge->GetStartOptions().Scenario.IsEmpty() && !FParse::Param(Line, TEXT("NoMenu")) && !FString(Line).Contains(TEXT("-SmokeTest="));
 	}
+	CheckLanding(*Bridge);
 	if (bMainMenuOpen)
 	{
 		DrawMainMenu(*Bridge);
@@ -818,7 +819,7 @@ void UColonyHudSubsystem::DrawMenuPopup(USimSubsystem& Bridge, float Scale)
 		bSettingsOpen = !bSettingsOpen;
 		ImGui::CloseCurrentPopup();
 	}
-	if (ColonyHud::Button(TEXT("New colony / load"), false, ImVec2(Width, 0.0f)))
+	if (ColonyHud::Button(TEXT("Main menu"), false, ImVec2(Width, 0.0f)))
 	{
 		bMainMenuOpen = true;
 		MainMenuPage = 0;
