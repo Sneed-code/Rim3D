@@ -75,13 +75,13 @@ body by MPFB.
 ### Skin under clothes
 
 Skin poking through tight clothes when the body bends is cut away instead of pushed in. `mh_garments.py` casts a ray
-along each body normal and marks the faces a garment covers within 6 cm; each garment that covers 40 faces or more gets
+along each body normal and marks the faces a garment covers within 3 cm, then shrinks that by one ring of vertices so the skin at a hem or between a top and trousers stays drawn (no holes through the body), and headwear (lowest point above the chin line) hides no skin; each garment that covers 40 faces or more gets
 one bit (up to 32) in a per-base cover texture on the body's UVs (`T_MHG_<Base>_Cover`, 32 bits in RGBA8, nearest
 filtering). The garment keeps its bit as `UGarmentCoverData`. While worn, the pawn sets the bits on the body (custom
 data 30 low 16, 31 high 16) and the skin material (masked) clips the skin where a worn bit is set.
 
 The male genitals stand out further than trousers fitted to the basemesh, so their normals miss the cloth: a garment
-that covers 60% of the skin within 10 cm of them covers the whole `genital` vertex group too. Pubic hair (its own
+that half the genital vertices meet within 15 cm (straight ahead or along the normal) covers the whole `genital` vertex group too. Pubic hair (its own
 material sections) is hidden while a piece over the legs on the skin or middle layer is drawn (`bCoversCrotch`).
 
 ## Cost

@@ -2310,9 +2310,11 @@ def export_garments(rig, garments, out_dir, log=print):
         log("garment exported", name, len(obj.data.vertices), "vertices", keys, "morphs", path)
 
 
-def _cover_genitals(body, verts, covered, name, log=print):
-    """The male genitals stand out further than trousers fitted to the basemesh sit, so their normals miss the cloth: when
-    a garment covers most of the skin round them (the crotch), they count as covered too and hide with the rest."""
+def _cover_genitals(body, verts, normals, covered, tree, inv, inv3, name, log=print):
+    """The male genitals stand out further than trousers fitted to the basemesh sit, so short rays along their normals
+    miss the cloth: when half of them meet the garment within 15 cm, straight ahead (MakeHuman faces -Y) or along the
+    normal, they all count as covered and hide with the rest of the skin under it."""
+    from mathutils import Vector
     group = body.vertex_groups.get("genital")
     if group is None:
         return
@@ -2320,16 +2322,36 @@ def _cover_genitals(body, verts, covered, name, log=print):
     members = [v.index for v in body.data.vertices if any(e.group == gi and e.weight > 0.05 for e in v.groups)]
     if not members:
         return
-    centre = sum((verts[i] for i in members), verts[members[0]] * 0.0) / len(members)
-    inside = set(members)
-    ring = [i for i, p in enumerate(verts) if i not in inside and (p - centre).length < 0.10]
-    if ring and sum(1 for i in ring if covered[i]) >= 0.6 * len(ring):
+    ahead = Vector((0.0, -1.0, 0.0))
+    hits = 0
+    for i in members:
+        for d in (normals[i], ahead):
+            dl = inv3 @ d
+            k = dl.length
+            dl.normalize()
+            if tree.ray_cast(inv @ verts[i], dl, 0.15 * k)[0] is not None:
+                hits += 1
+                break
+    if hits >= 0.5 * len(members):
         for i in members:
             covered[i] = True
-        log("garment cover:", name, "covers the genitals")
+        log("garment cover:", name, "covers the genitals", hits, "of", len(members))
 
 
-def bake_garment_cover(body, garments, out_png, size=1024, reach=0.06, log=print):
+def _erode_cover(body, covered):
+    """A covered vertex stays covered only if all its neighbours are: the skin near a garment's edge stays drawn, so a
+    hem that rides up or a gap between a top and trousers never shows a hole through the body."""
+    import numpy as np
+    keep = covered.copy()
+    for e in body.data.edges:
+        a, b = e.vertices
+        if not (covered[a] and covered[b]):
+            keep[a] = False
+            keep[b] = False
+    return keep
+
+
+def bake_garment_cover(body, garments, out_png, size=1024, reach=0.03, log=print):
     """Where each garment covers the body, as bits in a texture on the body's UVs (docs/design/clothes-draw.md "Skin under
     clothes"): a body face is covered when a ray out of each of its corners along the skin's normal meets the garment
     within `reach` metres (or the garment lies just under the skin). Garment i that covers anything gets bit i (up to 32,
@@ -2353,10 +2375,17 @@ def bake_garment_cover(body, garments, out_png, size=1024, reach=0.06, log=print
     tris = [(t.vertices[:], t.loops[:]) for t in body.data.loop_triangles]
     bits = np.zeros((size, size), dtype=np.uint32)
     out = {}
+    zs = [p.z for p in verts]
+    head_line = min(zs) + 0.80 * (max(zs) - min(zs))  # about the chin of a standing body
     for g in garments:
         if len(out) >= 32:
             log("garment cover: more than 32 covering garments;", g.name, "left out")
             break
+        # Headwear never hides skin: a brim or visor is far from the face, and the scalp is under the hair anyway.
+        lowest = min((g.matrix_world @ v.co).z for v in g.data.vertices) if g.data.vertices else 0.0
+        if lowest > head_line:
+            log("garment cover:", g.name, "is headwear: no cover")
+            continue
         tree = BVHTree.FromObject(g, deps)  # in the garment's own space
         inv = g.matrix_world.inverted()
         inv3 = inv.to_3x3()
@@ -2370,7 +2399,8 @@ def bake_garment_cover(body, garments, out_png, size=1024, reach=0.06, log=print
             if hit[0] is None:
                 hit = tree.ray_cast(pl + nl * (0.01 * k), -nl, 0.012 * k)  # the garment sunk just under the skin
             covered[i] = hit[0] is not None
-        _cover_genitals(body, verts, covered, g.name, log)
+        covered = _erode_cover(body, covered)
+        _cover_genitals(body, verts, normals, covered, tree, inv, inv3, g.name, log)
         faces = [(v, l) for v, l in tris if covered[v[0]] and covered[v[1]] and covered[v[2]]]
         if len(faces) < 40:
             continue  # a hat, gloves or a strap: nothing worth hiding
