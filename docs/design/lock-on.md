@@ -182,7 +182,7 @@ The snapshot carries `meleeFinisher` (1-based index), `meleeFinisherT` (0..1) an
 | Weapon | Move | Look |
 |---|---|---|
 | Spear | Spear | stands over the back, both hands raise the spear high, rams it down into the lower back |
-| Club, mace | Club | stands wide, swings the club up over the head and smashes it down on the head |
+| Club, mace | Club | drops to one knee, swings the club up and smashes it down on the nearest part of the body |
 | Gladius (one hand) | Sword | kneels, reverse grip, drives the blade down into the chest |
 | Longsword (two hands) | Sword | stands, both hands, point down into the chest |
 | Knife | Knife | kneels, reverse grip, raises the knife and slams it straight down into the chest like into a table |
@@ -192,7 +192,13 @@ right of and above the target's bone, `spine_02` for the spear, `head` for the c
 Hermite curves that hold still at held keys, no snapping) so the tip ends on the body at the hit; the hands are pinned on
 the weapon (weapon first, then the hands, as `weapon-hold.md`). It eases in over the first 14% and out over the last 14%.
 Kneeling moves play the crouch pose on the default slot while T < 0.86; the back bends by `bend` with an extra push near
-the hit. Smoke test `finishers` pictures each move at the raise, strike and after (`Saved/Smoke/finishers/`).
+the hit. The spot is whichever of the move's bone (15 cm preferred), the spine, pelvis and thighs is nearest the
+attacker's shoulder (a ragdoll lies any way round). Where the grip would still be beyond the arm's reach (0.92 of the
+arm from `upperarm_r`), the weapon comes back along that line so it never leaves the hands, and the back bends up to 30
+degrees further while the spot is still ahead of the shoulder. The bend is put on after the montage slots (the kneel is
+a whole-body clip there). The drawn body never slides toward the victim. A finisher whose body leaves the map ends at
+once. Only MakeHuman bodies (the gun range, the creator) pin the hands to the finisher path; MetaHumans get the sim part
+(step in, hold, kneel, bend). Smoke test `finishers` pictures each move at the raise, strike and after (`Saved/Smoke/finishers/`).
 
 **Aim assist on anyone not friendly.** With no lock-on, the player's swing goes at the best target in a 70 degree cone
 ahead within reach: hostiles, **neutrals too** (another faction, wild animals), never its own side or prisoners (sim

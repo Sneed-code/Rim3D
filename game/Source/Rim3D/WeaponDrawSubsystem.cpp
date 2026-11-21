@@ -1074,9 +1074,16 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 	const bool bFinisher = !bGun && FinisherPose(Actor, View, Points, Size, FinisherDrawn, FinisherPinned, FinisherWeight);
 	Pawn.FinisherBlend = bFinisher ? FinisherWeight : 0.0f;
 	Pawn.FinisherShort = bFinisher ? FinisherShort : 0.0f;
-	// Short of the body: bend further over it (down to the hips) until the blade reaches, eased so it never snaps.
-	Pawn.FinisherReachBend = FMath::FInterpTo(Pawn.FinisherReachBend, bFinisher ? FMath::Clamp(Pawn.FinisherReachBend + Pawn.FinisherShort * 0.5f, 0.0f, 45.0f) : 0.0f,
-		FrameDelta, 4.0f);
+	// Short of the body: bend further over it until the blade reaches, eased so it never snaps; only while the spot is
+	// still ahead of the shoulder (over it already, more bend only folds the body down into the one on the ground: the
+	// club and knife in round 11, 2026-11-21), and back up again once it is not.
+	{
+		const bool bBendHelps = bFinisher && Pawn.FinisherShort > 0.0f && FinisherAhead > 15.0f;
+		const float BendGoal = !bFinisher ? 0.0f
+			: bBendHelps ? FMath::Clamp(Pawn.FinisherReachBend + Pawn.FinisherShort * 0.5f, 0.0f, 30.0f)
+			: FinisherAhead < 5.0f ? FMath::Max(0.0f, Pawn.FinisherReachBend - 10.0f) : Pawn.FinisherReachBend;
+		Pawn.FinisherReachBend = FMath::FInterpTo(Pawn.FinisherReachBend, BendGoal, FrameDelta, 4.0f);
+	}
 	const bool bClipSwing = !bFinisher && !bGun && Actor.IsInMotionClip() && (View.meleePhase != colony::MeleePhase::Ready || Actor.GetSwing().IsActive());
 	const bool bWeaponSwing = !bFinisher && !bGun && !Actor.IsInMotionClip() && Actor.GetSwing().IsActive();
 	const bool bFullBodyClip = Actor.IsInMotionClip() && !Actor.IsMotionClipUpper();
@@ -1206,11 +1213,13 @@ namespace
 					{1.00f, FVector(-5, 0, 35), FVector(0.6, 0, -0.8)}}},
 			// The club raised over the head, cocked back, and smashed down on the head; it bounces off.
 			{TEXT("Club"), false, TEXT("head"), 16.0f,
-				{{0.00f, FVector(-30, 15, 146), FVector(0.5, 0, 0.85)}, {0.25f, FVector(-71, 12, 200), FVector(-0.1, 0, 1)},
-					{0.50f, FVector(-108, 8, 198), FVector(-0.6, 0, 0.8)}, {0.56f, FVector(-108, 8, 198), FVector(-0.6, 0, 0.8)},
-					{0.59f, FVector(-37, 6, 207), FVector(0.3, 0, 0.95)}, {0.618f, FVector(0, 0, 4), FVector(0.8, 0, -0.6)},
-					{0.66f, FVector(-5, 0, 25), FVector(0.75, 0, -0.5)}, {0.85f, FVector(-19, 10, 98), FVector(0.6, 0, 0.3)},
-					{1.00f, FVector(-30, 15, 146), FVector(0.5, 0, 0.85)}}},
+				// On one knee (round 12, 2026-11-21: standing, the floor was out of reach and the body folded onto him), so
+				// the raise is lower than a standing one.
+				{{0.00f, FVector(-30, 15, 105), FVector(0.5, 0, 0.85)}, {0.25f, FVector(-60, 12, 140), FVector(-0.1, 0, 1)},
+					{0.50f, FVector(-85, 8, 140), FVector(-0.6, 0, 0.8)}, {0.56f, FVector(-85, 8, 140), FVector(-0.6, 0, 0.8)},
+					{0.59f, FVector(-35, 6, 145), FVector(0.3, 0, 0.95)}, {0.618f, FVector(0, 0, 4), FVector(0.6, 0, -0.8)},
+					{0.66f, FVector(-5, 0, 25), FVector(0.6, 0, -0.7)}, {0.85f, FVector(-19, 10, 75), FVector(0.6, 0, 0.3)},
+					{1.00f, FVector(-30, 15, 105), FVector(0.5, 0, 0.85)}}},
 			// The sword raised point-down and driven into the chest, held, pulled out.
 			{TEXT("Sword"), true, TEXT("spine_03"), 10.0f,
 				{{0.00f, FVector(-25, 12, 20), FVector(0.4, 0, -1)}, {0.20f, FVector(-15, 8, 45), FVector(0.2, 0, -1)},
@@ -1369,6 +1378,8 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 			OutPinned.AddToTranslation(-Back);
 			FinisherShort = static_cast<float>(Back.Size());
 		}
+		// How far ahead of the shoulder the grip wants to be: bending further over only helps while it is ahead.
+		FinisherAhead = static_cast<float>(FVector::DotProduct(Out, Actor.GetActorForwardVector().GetSafeNormal2D()));
 		else
 		{
 			FinisherShort = 0.0f;

@@ -299,7 +299,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 	// 2. A finisher per weapon at a downed enemy just ahead: pictures from the side at the start, the strike and after.
 	static const FFinSmokeWeapon FinWeapons[] = {
 		{TEXT("finisher_spear"), "Melee_Spear", "Spear", false},
-		{TEXT("finisher_club"), "Melee_Club", "Club", false},
+		{TEXT("finisher_club"), "Melee_Club", "Club", true},
 		{TEXT("finisher_gladius"), "Melee_Gladius", "Sword", true},
 		{TEXT("finisher_longsword"), "Melee_Longsword", "Sword", false},
 		{TEXT("finisher_knife"), "Melee_Knife", "Knife", true},

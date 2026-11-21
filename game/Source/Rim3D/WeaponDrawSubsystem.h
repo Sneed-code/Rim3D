@@ -207,6 +207,8 @@ private:
 	FString PinDebug;
 	/** How far the last finisher pose was pulled back to stay in the hands (cm). */
 	float FinisherShort = 0.0f;
+	/** How far ahead of the shoulder (cm, along the facing) the finisher's grip wants to be. */
+	float FinisherAhead = 0.0f;
 	/** Why PinWeapon or FinisherPose gave up, for PinDebug. */
 	const TCHAR* PinFailReason = TEXT("");
 	/** The finisher's weapon pose now (docs/design/lock-on.md "Finishers"): drawn, and the one the hands close on (they
