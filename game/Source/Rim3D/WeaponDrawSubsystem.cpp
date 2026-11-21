@@ -1369,6 +1369,31 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 		const double Arm = FVector::Dist(Mesh->GetSocketLocation(TEXT("upperarm_r")), Mesh->GetSocketLocation(TEXT("lowerarm_r"))) +
 			FVector::Dist(Mesh->GetSocketLocation(TEXT("lowerarm_r")), Mesh->GetSocketLocation(TEXT("hand_r")));
 		const double Reach = Arm * 0.92;
+		// First the weapon tips back about its point toward the shoulder (up to 50 degrees), so the point stays on the
+		// body and the grip comes into the hands (a longsword's grip a metre above the body, round 12 2026-11-21).
+		{
+			const FVector TipNow = OutDrawn.TransformPosition(Points.Tip * Size);
+			const FVector GripNow = OutPinned.TransformPosition(Points.Main * Size);
+			const FVector FromTip = GripNow - TipNow;
+			const FVector ToShoulder = (Shoulder - TipNow).GetSafeNormal();
+			if (Arm > 10.0 && FVector::Dist(GripNow, Shoulder) > Reach && !FromTip.IsNearlyZero() && !ToShoulder.IsNearlyZero())
+			{
+				const FQuat Full = FQuat::FindBetweenNormals(FromTip.GetSafeNormal(), ToShoulder);
+				const double FullDegrees = FMath::RadiansToDegrees(Full.GetAngle());
+				FQuat Tilt = FQuat::Identity;
+				for (double Degrees = 5.0; Degrees <= FMath::Min(50.0, FullDegrees) + 0.01; Degrees += 5.0)
+				{
+					Tilt = FQuat::Slerp(FQuat::Identity, Full, static_cast<float>(Degrees / FMath::Max(FullDegrees, 1.0)));
+					if (FVector::Dist(TipNow + Tilt.RotateVector(FromTip), Shoulder) <= Reach)
+					{
+						break;
+					}
+				}
+				const FTransform AboutTip = FTransform(-TipNow) * FTransform(Tilt) * FTransform(TipNow);
+				OutDrawn = OutDrawn * AboutTip;
+				OutPinned = OutPinned * AboutTip;
+			}
+		}
 		const FVector Grip = OutPinned.TransformPosition(Points.Main * Size);
 		const FVector Out = Grip - Shoulder;
 		if (Arm > 10.0 && Out.Size() > Reach)

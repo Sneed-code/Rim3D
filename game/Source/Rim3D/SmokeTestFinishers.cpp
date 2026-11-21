@@ -55,6 +55,7 @@ namespace
 		// A finisher phase.
 		bool bSent = false;
 		int32 FramesAtStart = 0;
+		int32 KneelsAtStart = -1;  // the body's kneel count when this phase's finisher was first seen
 		int32 FixesAtStart = 0;
 		int32 HitsAtStart = 0;
 		float MaxT = 0.0f;
@@ -405,7 +406,11 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			State->MaxT = FMath::Max(State->MaxT, T);
 			if (const ASimPawnActor* Actor = ActorOf(State->Me))
 			{
-				State->bKneelSeen |= Actor->GetFinisherKneels() > 0 && T > 0.2f && T < 0.8f;
+				if (State->KneelsAtStart < 0)
+				{
+					State->KneelsAtStart = Actor->GetFinisherKneels();  // kneels from earlier phases don't count
+				}
+				State->bKneelSeen |= Actor->GetFinisherKneels() > State->KneelsAtStart && T > 0.2f && T < 0.8f;
 			}
 			if (T > 0.5f && T < 0.75f)
 			{
