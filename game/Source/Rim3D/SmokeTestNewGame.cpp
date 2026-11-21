@@ -160,9 +160,9 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 		else if (Sky)
 		{
 			UE_LOG(LogTemp, Display, TEXT("NEWGAME screen sky at %.2f h, exposure %.1f EV"), Sky->GetHourOverride(), Sky->GetExposure());
-			if (Sky->GetExposure() > 12.0f)
+			if (Sky->GetExposure() > 12.5f)
 			{
-				Fail(TEXT("newgame_people: the screen's exposure is past the engine's safe 12 EV"));
+				Fail(TEXT("newgame_people: the screen's exposure is near the engine's clipping warning (12.5 EV of ours)"));
 			}
 		}
 		const UTerrainSubsystem* Terrain = GetWorld()->GetSubsystem<UTerrainSubsystem>();

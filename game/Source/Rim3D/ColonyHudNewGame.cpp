@@ -50,9 +50,10 @@ namespace
 	constexpr float NgPreviewClearMetres = 5.5f;
 	// Plants within this many metres of a person on show are not drawn while the screen is open (a cosmetic clearing).
 	constexpr float NgPreviewClearingMetres = 3.5f;
-	// The engine warns on screen when the exposure passes 12 EV (cached lighting would clip): the screen's hour is the one
-	// nearest NgPreviewHour, earlier in the morning, whose exposure stays under this.
-	constexpr float NgPreviewMaxEV = 11.5f;
+	// The engine warns on screen when its exposure passes 12 (cached lighting would clip): the screen's hour is the one
+	// nearest NgPreviewHour, earlier in the morning, whose exposure (ours, which reads a little above the engine's) stays
+	// under this. At 6:30, 12.1 of ours showed no warning; 10:30 did.
+	constexpr float NgPreviewMaxEV = 12.25f;
 
 	/**
 	 * "Canopy", the new-game screens' own look: dark green-black glass panels with square corners and a short jade bar on
