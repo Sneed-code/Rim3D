@@ -1007,8 +1007,8 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			// whatever the start rolled (a nudist would stay bare); otherwise bare skin.
 			if (FParse::Param(FCommandLine::Get(), TEXT("CreatorDressed")))
 			{
-				static const char* const CreatorOutfits[4][3] = {{"Apparel_ButtonShirt", "Apparel_Pants", "Apparel_Tuque"},
-					{"Apparel_TShirt", "Apparel_Pants", "Apparel_CowboyHat"}, {"Apparel_TShirt", "Apparel_Jacket", "Apparel_Pants"},
+				static const char* const CreatorOutfits[4][3] = {{"Apparel_TShirt", "Apparel_Pants", "Apparel_Tuque"},
+					{"Apparel_ButtonShirt", "Apparel_Pants", "Apparel_CowboyHat"}, {"Apparel_TShirt", "Apparel_Jacket", "Apparel_Pants"},
 					{"Apparel_Tribalwear", "Apparel_Tuque", nullptr}};
 				for (const char* const Piece : CreatorOutfits[i % 4])
 				{
