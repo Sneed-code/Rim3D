@@ -345,6 +345,8 @@ struct Event {
     // fists, teeth or a weapon of no stuff, whose def then says), and what the blow struck when it was not flesh: the
     // parrying weapon, the raised shield, the armour piece that turned it or the building, as `struckDef` and its
     // `struckStuff` (invalid when it has none). A blow into natural rock has `hit` Rock and neither.
+    // The same two on a ProjectileHit on a Building (the wall and its stuff), on an Explosion (`struckDef` the projectile
+    // or grenade def that burst), and on a PawnAction Cut or Harvest (`struckDef` the plant; `message` "sow" for sowing).
     DefId stuff;
     DefId struckDef;
     DefId struckStuff;

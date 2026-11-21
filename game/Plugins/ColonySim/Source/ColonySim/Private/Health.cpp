@@ -2031,7 +2031,8 @@ void HealthSystem::destroyPart(Entity pawn, Health& health, int part, float amou
     lost.part = static_cast<uint16_t>(part);
     health.missing.push_back(lost);
     health.dirty = true;
-    emit(EventType::PawnPartLost, pawn, model_->missingHediff, part, amount);
+    // `message` the part's def ("Head", "Leg"), so the sound can tell a head from a limb (docs/design/sound.md).
+    emit(EventType::PawnPartLost, pawn, model_->missingHediff, part, amount, body.parts[static_cast<size_t>(part)].def.c_str());
 }
 
 int HealthSystem::tendAll(Entity pawn, float quality) {

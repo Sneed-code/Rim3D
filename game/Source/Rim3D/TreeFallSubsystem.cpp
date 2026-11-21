@@ -202,9 +202,14 @@ void UTreeFallSubsystem::OnSimEvent(const colony::Event& Event)
 	Falls.Add(Fall);
 	++FallsStarted;
 
-	if (USoundSubsystem* Sound = GetWorld()->GetSubsystem<USoundSubsystem>())
+	// A felled tree's crack and crash (`Tree_Fall`, one long clip) comes from the sim's sound for the event; a broken one
+	// sends no sound of its own there, so it is played here.
+	if (!bFelled)
 	{
-		Sound->PlayCue(TEXT("Tree_Crack"), Fall.Foot + FVector(0.0, 0.0, 120.0));
+		if (USoundSubsystem* Sound = GetWorld()->GetSubsystem<USoundSubsystem>())
+		{
+			Sound->PlayCue(TEXT("Tree_Fall"), Fall.Foot + FVector(0.0, 0.0, 120.0));
+		}
 	}
 
 	// Within the budget: the oldest lying tree starts to sink.
@@ -285,11 +290,6 @@ void UTreeFallSubsystem::Land(FFall& Fall)
 	++FallsLanded;
 	const float Out = FMath::Sin(Fall.RestAngle);
 	const float Up = FMath::Cos(Fall.RestAngle);
-	const FVector Crown = Fall.Foot + (Fall.Dir * Out + FVector::UpVector * Up) * (Fall.HeightM * 100.0f * 0.75f);
-	if (USoundSubsystem* Sound = GetWorld()->GetSubsystem<USoundSubsystem>())
-	{
-		Sound->PlayCue(TEXT("Tree_Fall"), Crown);
-	}
 	// Dust and leaf litter thrown up along the trunk and under the crown where it hits.
 	UBlastFxSubsystem* Fx = GetWorld()->GetSubsystem<UBlastFxSubsystem>();
 	if (Fx && Fx->IsReady())

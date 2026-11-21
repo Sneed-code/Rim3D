@@ -6,15 +6,17 @@ then cut the files assets/sound_picks.json names into the cue and music files th
 
   python tools/sound_assets.py            download what is missing, then cut (run on the PC, needs internet)
   python tools/sound_assets.py --cut      only cut again (after changing sound_picks.json)
+  python tools/sound_assets.py --freesound  only fetch the Freesound recordings (sound_freesound.json), then cut
   python tools/sound_assets.py --check    only check that every sound cue is mapped (CI, no network)
   python tools/sound_assets.py --list     print the cue to source table
 """
-import glob, json, re, shutil, subprocess, sys, urllib.request
+import glob, json, re, shutil, subprocess, sys, wave, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LIST = ROOT / "assets" / "sound_sources.json"
 PICKS = ROOT / "assets" / "sound_picks.json"
+FREESOUND = ROOT / "assets" / "sound_freesound.json"
 CUES = ROOT / "data" / "defs" / "SoundCues" / "Cues.json"
 DEST = ROOT / "game" / "Content" / "ThirdParty" / "Sounds"
 HEADERS = {"User-Agent": "Rim3D-sound-assets"}
@@ -30,8 +32,41 @@ def findLinks(page, pattern):
     return sorted(set(re.findall(pattern, html)))
 
 
+def freesoundRows():
+    return json.loads(FREESOUND.read_text())["sounds"] if FREESOUND.exists() else []
+
+
+def downloadFreesound(folder):
+    """Each listed recording's high-quality preview (no account needed), skipping the ones already there."""
+    folder.mkdir(parents=True, exist_ok=True)
+    got, failed = 0, []
+    for sid, stem, author, licence, title in freesoundRows():
+        out = folder / ("%d.mp3" % sid)
+        if out.exists() and out.stat().st_size > 0:
+            continue
+        url = "https://cdn.freesound.org/previews/%d/%s-hq.mp3" % (sid // 1000, stem)
+        try:
+            out.write_bytes(fetch(url))
+            got += 1
+        except Exception as e:  # one missing sound must not stop the rest
+            failed.append("%d (%s)" % (sid, e))
+    note = "downloaded %d new recording(s)" % got
+    return note + (", failed: " + ", ".join(failed) if failed else "")
+
+
+def freesoundCredits():
+    """CC-BY needs a credit line per recording; CC0 does not (but we thank them as a group)."""
+    lines = []
+    for sid, stem, author, licence, title in freesoundRows():
+        if licence.startswith("CC-BY"):
+            lines.append('"%s" by %s (freesound.org/s/%d), %s' % (title, author, sid, licence))
+    return lines
+
+
 def download(src):
     folder = DEST / src["id"]
+    if src["download"] == "freesound":
+        return downloadFreesound(folder)
     if folder.exists() and any(folder.iterdir()):
         return "have"
     how = src["download"]
@@ -88,7 +123,13 @@ def mapping(data):
 
 
 def pickProblems(picks, cues):
-    return ["sound_picks.json names unknown cue " + c for c in picks["cues"] if c not in cues]
+    problems = ["sound_picks.json names unknown cue " + c for c in picks["cues"] if c not in cues]
+    listed = {"freesound/%d.mp3" % row[0] for row in freesoundRows()}
+    for c, pick in picks["cues"].items():
+        for f in pick["files"]:
+            if f.startswith("freesound/") and f not in listed:
+                problems.append("sound_picks.json cue %s names %s, which sound_freesound.json does not list" % (c, f))
+    return problems
 
 
 def expand(patterns):
@@ -135,6 +176,18 @@ def cutOne(ffmpeg, src, out, channels, pick, music):
         args += ["-ss", str(pick["start"])]
     args += ["-i", src, "-af", ",".join(chain), "-ac", str(channels), "-ar", "44100", "-c:a", "pcm_s16le", out]
     subprocess.run(args, check=True)
+    # A quiet recording (all under the trim threshold) comes out empty, which the game skips: cut it again untrimmed.
+    if pick.get("trimSilence") and wavFrames(out) < 2205:
+        cutOne(ffmpeg, src, out, channels, dict(pick, trimSilence=False), music)
+
+
+def wavFrames(path):
+    """Sample frames in a WAV we wrote (0 if unreadable)."""
+    try:
+        with wave.open(path, "rb") as w:
+            return w.getnframes()
+    except (OSError, EOFError, wave.Error):
+        return 0
 
 
 def cut():
@@ -182,6 +235,10 @@ def main():
         problems += pickProblems(json.loads(PICKS.read_text()), table)
     if "--cut" in sys.argv:
         return cut()
+    if "--freesound" in sys.argv:
+        print("freesound -", downloadFreesound(DEST / "freesound"))
+        writeCredits(data)
+        return cut()
     if "--list" in sys.argv:
         for c, m in table.items():
             print(c, "<-", ", ".join(m["from"]) if m else "-")
@@ -191,17 +248,26 @@ def main():
         gaps = sum(1 for m in table.values() if m and "GAP" in m["pick"])
         print("%d cues, %d mapped, %d in known gaps" % (len(table), sum(1 for m in table.values() if m), gaps))
         return 1 if problems else 0
-    credits = []
     for s in data["sources"]:
         try:
             print(s["id"], "-", download(s))
         except Exception as e:  # network or site change: report, go on
             print(s["id"], "- failed:", e)
+    writeCredits(data)
+    return cut()
+
+
+def writeCredits(data):
+    credits = []
+    for s in data["sources"]:
         if s.get("attribution"):
             credits.append("%s (%s)" % (s["credit"], s["licence"]))
+    fs = freesoundCredits()
+    if fs:
+        credits += ["", "Freesound recordings under Creative Commons Attribution:"] + fs
+        credits += ["", "Many more Freesound recordings are CC0 (public domain): thank you to everyone who shares them."]
     DEST.mkdir(parents=True, exist_ok=True)
-    (DEST / "CREDITS.txt").write_text("\n".join(credits) + "\n")
-    return cut()
+    (DEST / "CREDITS.txt").write_text("\n".join(credits) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

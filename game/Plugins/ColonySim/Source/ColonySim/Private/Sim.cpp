@@ -527,6 +527,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     trade_->setTalents(talents_.get());
     trade_->setRunning([this](Entity building) { return power_->running(building); });
     trade_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    raids_->setTraitPoints(scenarioTraitPoints());
+    trade_->setTraitPoints(scenarioTraitPoints());
     landing_ = std::make_unique<LandingSystem>(*things_, map_, *plants_, *defs_, time_, rng_);
     trade_->setLanding(landing_.get());
     landing_->setOnLanded([this](const Shuttle& shuttle) { trade_->shuttleLanded(shuttle); });
@@ -965,7 +967,9 @@ void Sim::placeStockpileAndThings() {
 Entity Sim::makeJoiner(CellPos cell, uint64_t seed) {
     Colonist colonist;
     std::string error;
-    if (!generateColonist(*defs_, seed, false, colonist, error)) {
+    ColonistGenOptions options;
+    options.traitPoints = scenarioTraitPoints();
+    if (!generateColonist(*defs_, seed, false, colonist, error, options)) {
         return kNoEntity;
     }
     makeNameUnique(colonist, seed);
@@ -1346,6 +1350,20 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     if (const auto* landingZone = std::get_if<SetLandingZoneCommand>(&command)) {
         if (landing_->paintZone(landingZone->area, landingZone->add) == 0) {
             commandFailed(id, "the landing zone is already so there");
+        }
+        return;
+    }
+    if (const auto* edit = std::get_if<EditColonistCommand>(&command)) {
+        error.clear();
+        if (!editColonist(*edit, error)) {
+            commandFailed(id, error);
+        }
+        return;
+    }
+    if (const auto* setTraits = std::get_if<SetColonistTraitsCommand>(&command)) {
+        error.clear();
+        if (!setStartingTraits(*setTraits, error)) {
+            commandFailed(id, error);
         }
         return;
     }
@@ -2477,6 +2495,19 @@ void Sim::dropLostDecks() {
     }
 }
 
+bool Sim::applyPregameCommands() {
+    if (time_.steps != 0) {
+        return false;
+    }
+    std::vector<std::pair<uint64_t, Command>> applying;
+    applying.swap(pending_);
+    for (auto& [id, command] : applying) {
+        applyCommand(command, id);
+        commandLog_.push_back(LoggedCommand{time_.steps, std::move(command)});
+    }
+    return true;
+}
+
 void Sim::step() {
     stepOnce(false);
     // A skip (P5) runs on inside this call, a batch of steps at a time, so the game's own loop sees time jump.
@@ -3069,6 +3100,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             l.bodyHair = looks->bodyHair;
             l.tattoos = looks->tattoos;
             l.scars = looks->scars;
+            l.creator = looks->creator;
             view.looks = static_cast<int32_t>(out.looks.size());
             out.looks.push_back(l);
         }
@@ -3846,6 +3878,9 @@ uint64_t Sim::stateHash() const {
                 h.add(s.xp);
                 h.add(s.xpToday);
                 h.add(s.disabled);
+                if (s.bonus != 0) {
+                    h.add(s.bonus);  // only when set, so older hashes stay
+                }
             }
             for (const std::string& tag : c->disabledWorkTags) {
                 h.add(tag.data(), tag.size());
@@ -3893,6 +3928,7 @@ uint64_t Sim::stateHash() const {
             h.add(looks->naturalBeard.data(), looks->naturalBeard.size());
             h.add(looks->beard.data(), looks->beard.size());
             h.add(looks->name.data(), looks->name.size());
+            h.add(looks->creator.data(), looks->creator.size());
             h.add(looks->naturalBodyHair);
             h.add(looks->bodyHair);
             for (const std::vector<LooksMark>* marks : {&looks->tattoos, &looks->scars}) {

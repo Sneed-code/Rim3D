@@ -2,9 +2,33 @@
 
 Updated 2026-11-21.
 
-Trees block paths and fall when cut (sneed, 2026-11-21; sim, data and Unreal, `docs/design/structure-damage.md` "Trees in the way", "Falling trees"): **colonists, raiders and animals no longer walk through trees.** Paths go round trees (a tree cell costs RimWorld's tree path cost, 42 ticks, about 3.2 m extra), through a forest only where going round is longer; path smoothing never cuts a line through a trunk; and walkers steer round any trunk near them and slide along the bark instead of passing through it (staggers and shoves stop at it too). A goal under a tree is reached beside the trunk. **A tree that is cut down, or killed by blows, shots or a blast, now topples over** away from the woodcutter, the blow or the blast: a copy of the drawn tree leans slowly, then faster (a pole hinged at its foot), lands where its crown meets the ground or a wall, bounces a little and settles with a crash and dust, lies 25 s, then sinks away; nothing snaps. New `UTreeFallSubsystem`, sound cues `Tree_Crack`, `Tree_Fall` (Kenney impacts, run `python tools/sound_assets.py` for the files). Tests `TreeTrunkTests.cpp`; smoke `handson` phase `tree_falls`. **Merged (#429): compiled on the PC and `handson` passed; its last phase films a second felled poplar coming down in 3.3 s, smooth, no bounce. Tree_Crack and Tree_Fall play tones until `python tools/sound_assets.py --cut` finds their Kenney impact files.**
+Title screen and new game (sneed, 2026-11-21; sim, data and Unreal, `docs/design/new-game.md`): a **title screen**
+(Continue, New colony, Load, Settings, Quit), the **Crash Landed** scenario (you, an amnesiac, and 2 strangers aged 18,
+all landing naked, with 50 survival meals, 200 silver, 50 steel, 30 components, a rifle and cotton shirts and trousers
+for all 3; tropical only), a **landing site** step on the world map, then **character creation in two parts** in our
+own "Canopy" look (concepts A/B/C turned down): **You** (looks and a name only; you start as the creator's default
+woman, the gun range's, so hair and body updates show on you) and **Your companions** (looks, gender, names, and traits
+bought from a **10-point pool**: strong traits cost up to 5, drawbacks give points; no backstories). Skill traits
+(natural marksman and 11 more, +3 for 3 points) let a skill pass 20, up to 23. Tough is now -30% damage. A turntable
+spins the real body (soft tissue swings) and a "clothes on" tick previews the cotton. The screen is lit by day, with the camera clear of trees. Other races shown but locked;
+difficulty fixed on standard and hidden. People who join or raid later follow the same trait rules, all points spent.
+Sim: `EditColonistCommand`, `SetColonistTraitsCommand`, `Sim::applyPregameCommands`, `PawnLooks::creator`,
+`ColonistGenOptions` (trait points), `SkillRecord::bonus`. **Next:** PC compile and smoke test `newgame` pictures;
+sneed judges the look. Clothes on creator bodies show once #425 merges.
+
+Trees block paths and fall when cut (sneed, 2026-11-21; sim, data and Unreal, `docs/design/structure-damage.md` "Trees in the way", "Falling trees"): **colonists, raiders and animals no longer walk through trees.** Paths go round trees (a tree cell costs RimWorld's tree path cost, 42 ticks, about 3.2 m extra), through a forest only where going round is longer; path smoothing never cuts a line through a trunk; and walkers steer round any trunk near them and slide along the bark instead of passing through it (staggers and shoves stop at it too). A goal under a tree is reached beside the trunk. **A tree that is cut down, or killed by blows, shots or a blast, now topples over** away from the woodcutter, the blow or the blast: a copy of the drawn tree leans slowly, then faster (a pole hinged at its foot), lands where its crown meets the ground or a wall, bounces a little and settles with a crash and dust, lies 25 s, then sinks away; nothing snaps. New `UTreeFallSubsystem`, sound cues `Tree_Crack`, `Tree_Fall` (Kenney impacts, run `python tools/sound_assets.py` for the files). Tests `TreeTrunkTests.cpp`; smoke `handson` phase `tree_falls`. **Merged (#429): compiled on the PC and `handson` passed; its last phase films a second felled poplar coming down in 3.3 s, smooth, no bounce. The crack and crash is #426's `Tree_Fall` clip.**
 
 Finer body dirt that fades (sneed, 2026-11-20; sim, data and Unreal art, `docs/design/grime.md`): **dirt on bodies now has fine spray over the broad smudges**, like the blood: mud drops in three sizes flicked up the legs (to the waist, stretched a little upwards) and crowding round each smudge's edge, gritty smudges, dark wet mud in the drops and cores and pale dust at the edges; drops too small to see at range blend into an even tint (no sparkle). **Dirt fades by itself in 10 minutes** (`dirtFadeSeconds` 18,000) whenever nothing is dirtying it, a corpse in the dirt staying dirty; rain, wading and swimming still wash it faster (full rain 5 minutes, swimming 20 s). Cloud preview `tools/grime_dirt_preview.py`. Checked on the PC 2026-11-21 (noon pictures, smoke `hurt` phase `dirt`): fine dark spray over duller lower legs, reads as splashed mud. Needs `-run=BloodArt -force` once per PC.
+
+Sounds for every weapon, surface and job (sneed, 2026-11-20; sim, data and Unreal, `docs/design/sound.md`): **every gun
+now has its own shot** (machine pistol, heavy SMG, LMG, minigun, sniper, chain shotgun, turrets, mortar, charge guns,
+bows, pila) from real recordings; **bullets and arrows sound by what they hit** (flesh, wood, steel, stone, dirt, sand,
+water; some ricochet), spent cases tinkle after shots, shells whistle in, bullets whiz past your head, blasts have
+mortar, EMP, smoke and large kinds with falling debris; **gore** (severing, decapitation, a splat), **work** (chopping,
+plant cutting, sowing, deconstructing, repairing, drilling; repeated while working; a tree crashing down), bed creaks,
+men's grunts and screams. **Footsteps** are short range, vary by ground, are quieter crouched or prone, and your own
+character makes none. 318 free recordings from Freesound (CC0 / CC-BY, credits written) plus the CC0 firearm library;
+picked by title, not yet by ear. PC 2026-11-21: download 0 failures, compile clean, sound smoke passes; 5 quiet recordings that trimmed to nothing now recut untrimmed. **Next: re-run `python tools/sound_assets.py --cut` on the PC, and sneed's listen.**
 
 Clothes on MakeHuman people (sneed, 2026-11-20; tools and Unreal, `docs/design/clothes-draw.md` "MakeHuman bodies"):
 the MakeHuman bodies wore nothing. Now **34 free MakeHuman community garments** (CC0/CC-BY, `assets/makehuman_garments.json`:

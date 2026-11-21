@@ -717,6 +717,7 @@ void ArtillerySystem::stepShells() {
         }
         const ArtilleryModel::Info* info = nullptr;
         Explosion ex;
+        ex.sourceDef = landed.def;
         ex.x = landed.toX;
         ex.y = landed.toY;
         ex.z = z;

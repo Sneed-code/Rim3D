@@ -765,7 +765,7 @@ private:
     double yieldFactor(int level) const;
     int plantYield(Entity pawn, CellPos cell) const;
     void dropItems(DefId def, int count, CellPos cell);
-    void gatherEvent(Entity pawn, PawnAction action, CellPos cell);
+    void gatherEvent(Entity pawn, PawnAction action, CellPos cell, DefId plant = DefId{}, const char* message = nullptr);
     void loadGatherRules();
 
     // Cleaning (CleanJobs.cpp).

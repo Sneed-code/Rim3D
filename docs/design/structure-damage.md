@@ -71,8 +71,9 @@ sneed, 2026-11-21: a cut tree falls over, physically, no snapping.
   (0.015 rad/s), so it leans slowly for a second or two and then faster, and a grown poplar is down in about 3 to 4 s
   like a real felled tree (the first try, 1.5 degrees and 0.04 rad/s, took about 2.5 s); a broken one is pushed harder. It stops at the lean where trunk or crown
   first meets the ground or a building along the way (map heights, building heights; the crown's branches hold the
-  trunk up by `TreeFall.CrownRest` of its half width), bounces (`TreeFall.Restitution`) and settles, with `Tree_Crack`
-  as it goes and `Tree_Fall` and dust where it lands. It lies `TreeFall.LieSeconds` (25), then sinks into the ground over
+  trunk up by `TreeFall.CrownRest` of its half width), bounces (`TreeFall.Restitution`) and settles, with dust where it lands.
+  The sound is `Tree_Fall` (one long crack-and-crash clip): the sim's sound for a "felled" event plays it
+  (`Sound.cpp`), and the subsystem plays it for a "broken" one. It lies `TreeFall.LieSeconds` (25), then sinks into the ground over
   `TreeFall.SinkSeconds` (8) and is gone. A paused game holds it; at most `TreeFall.Max` (24) lie about.
 - Smoke `handson`, last phase `tree_falls`: the poplar chopped by hand earlier fell already; a second one is felled
   (`UTreeFallSubsystem::PlayEventForTest`) at 11:00, watched from the side and above, with pictures through the fall

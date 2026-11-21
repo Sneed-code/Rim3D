@@ -273,6 +273,9 @@ public:
 	FString GetQualityName() const;
 	/** The post-process settings the sky drives (exposure, film, grade); null before the scene is built. */
 	const FPostProcessSettings* GetPostProcess() const;
+	/** Holds the sky at this hour of the day whatever the sim's clock says (the new game's character screen); < 0 lets go. */
+	void SetHourOverride(float Hour) { HourOverride = Hour; }
+	float GetHourOverride() const { return HourOverride; }
 	/** Times the camera's exposure was made to jump to its target (a time jump, a new game). */
 	int32 GetExposureCuts() const { return ExposureCuts; }
 
@@ -357,6 +360,7 @@ private:
 	bool bLookLoaded = false;
 	int32 AppliedQuality = -1;
 	int32 ExposureCuts = 0;
+	float HourOverride = -1.0f;
 	float LastExposureEV = -100.0f;
 	/** 0 with the camera outdoors, 1 under a roof; eased so stepping through a door is not a jump. */
 	float IndoorShare = 0.0f;

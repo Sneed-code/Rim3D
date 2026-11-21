@@ -115,6 +115,23 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
         j["slot"] = reroll->slot;
         return j;
     }
+    if (const auto* edit = std::get_if<EditColonistCommand>(&logged.command)) {
+        j["slot"] = edit->slot;
+        j["firstName"] = edit->firstName;
+        j["nickName"] = edit->nickName;
+        j["lastName"] = edit->lastName;
+        j["female"] = edit->female;
+        j["setCreator"] = edit->setCreator;
+        j["creator"] = edit->creator;
+        return j;
+    }
+    if (const auto* setTraits = std::get_if<SetColonistTraitsCommand>(&logged.command)) {
+        j["slot"] = setTraits->slot;
+        j["traits"] = setTraits->traits;
+        j["randomize"] = setTraits->randomize;
+        j["roll"] = setTraits->roll;
+        return j;
+    }
     std::visit(
         [&j](const auto& c) {
             using Type = std::decay_t<decltype(c)>;
@@ -618,7 +635,9 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                                           std::is_same_v<Type, CancelEarthworksCommand> ||
                                           std::is_same_v<Type, UnstuckCommand> ||
                                           std::is_same_v<Type, SetWorkGroupCommand> ||
-                                          std::is_same_v<Type, SetGrimeCommand>,
+                                          std::is_same_v<Type, SetGrimeCommand> ||
+                                          std::is_same_v<Type, EditColonistCommand> ||
+                                          std::is_same_v<Type, SetColonistTraitsCommand>,
                                       "write every command type");
                     }
                 }
@@ -1987,6 +2006,26 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         if (type == "SetLandingZone") {
             SetLandingZoneCommand c;
             if (!replayReadRect(r, j, where, c.area) || !r.flag(j, "add", c.add, where)) {
+                return false;
+            }
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "EditColonist") {
+            EditColonistCommand c;
+            if (!r.integer(j, "slot", c.slot, where) || !r.text(j, "firstName", c.firstName, where) ||
+                !r.text(j, "nickName", c.nickName, where) || !r.text(j, "lastName", c.lastName, where) ||
+                !r.integer(j, "female", c.female, where) || !r.flag(j, "setCreator", c.setCreator, where) ||
+                !r.text(j, "creator", c.creator, where)) {
+                return false;
+            }
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetColonistTraits") {
+            SetColonistTraitsCommand c;
+            if (!r.integer(j, "slot", c.slot, where) || !r.text(j, "traits", c.traits, where) ||
+                !r.flag(j, "randomize", c.randomize, where) || !r.integer(j, "roll", c.roll, where)) {
                 return false;
             }
             out.command = std::move(c);

@@ -198,6 +198,8 @@ public:
     void setEventLog(std::vector<Event>* events) { events_ = events; }
     // Gives a new visitor its looks (Sim::giveLooks): pawn, seed, female.
     void setLooksMaker(std::function<void(Entity, uint64_t, bool)> maker) { looks_ = std::move(maker); }
+    // The scenario's trait-point pool (-1: backstories): people made here follow it, all points spent.
+    void setTraitPoints(int points) { traitPoints_ = points; }
     // The protagonist's talents make a better haggler (stat "tradePrice"). Without them nobody has any.
     void setTalents(const TalentSystem* talents) { talents_ = talents; }
     // The difficulty's trade price disadvantage (0 to 0.2): taken off every negotiator's price improvement.
@@ -368,6 +370,7 @@ private:
     float disadvantage_ = 0.0f;
     std::vector<Event>* events_ = nullptr;
     std::function<void(Entity, uint64_t, bool)> looks_;
+    int traitPoints_ = -1;
     std::function<bool(Entity)> running_;
     TradeSystem* owner_ = nullptr;
 };

@@ -88,6 +88,12 @@ public:
 	void MarkCellDirty(colony::CellPos Cell);
 	/** Says the plant in a cell changed (PlantRemoved, PlantHarvested). */
 	void MarkPlantDirty(colony::CellPos Cell);
+	/**
+	 * Cosmetic clearings: sim plants whose stem stands within a clearing are not drawn (the character screen keeps trees off
+	 * the people on show). Each is X, Y (sim metres) and a radius in metres; an empty list draws every plant again.
+	 */
+	void SetPlantClearings(const TArray<FVector3f>& InClearings);
+	int32 GetPlantClearingCount() const { return PlantClearings.Num(); }
 
 	bool IsBuilt() const { return bBuilt; }
 	bool IsTextured() const { return bTextured; }
@@ -175,6 +181,7 @@ private:
 
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMesh>> PlantMeshes;
+	TArray<FVector3f> PlantClearings;
 
 	/** Rim3D's own materials for the Megascans plants (FoliageMaterials commandlet), by mesh slot; kept alive here. */
 	UPROPERTY()

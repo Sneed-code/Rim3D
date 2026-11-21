@@ -42,9 +42,7 @@
   ],
   "mechOnly": true,
   "visual": {
-   "sound": {
-    "shot": "Shot_Rifle"
-   }
+   "sound": {"shot": "Shot_ChargeHeavy"}
   }
  },
  {
@@ -90,9 +88,7 @@
   ],
   "mechOnly": true,
   "visual": {
-   "sound": {
-    "shot": "Shot_Rifle"
-   }
+   "sound": {"shot": "Shot_Needle"}
   }
  },
  {
@@ -139,9 +135,7 @@
   ],
   "mechOnly": true,
   "visual": {
-   "sound": {
-    "shot": "Shot_Rifle"
-   }
+   "sound": {"shot": "Shot_ChargeHeavy"}
   }
  }
 ]
