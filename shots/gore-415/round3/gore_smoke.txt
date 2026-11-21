@@ -1,0 +1,19 @@
+﻿Building Rim3DEditor (below-normal priority, 6 jobs)...
+Build ok.
+Running smoke test 'gore' at 1920x1080...
+
+Smoke test 'gore': FAIL  (37 s, NVIDIA GeForce RTX 5080, 888x500)
+setup                        39.3 fps  game   5.6 ms  render  11.6 ms  gpu  10.3 ms  screenshot ok
+groin                        84.7 fps  game   5.7 ms  render  11.3 ms  gpu   9.9 ms  screenshot ok
+spray                        82.7 fps  game   5.9 ms  render  11.6 ms  gpu  10.3 ms  screenshot ok
+pileup                       72.1 fps  game   6.2 ms  render  11.9 ms  gpu  10.5 ms  screenshot ok
+head                         82.3 fps  game   5.7 ms  render  11.7 ms  gpu  10.2 ms  screenshot ok
+armoff                       79.9 fps  game   6.2 ms  render  12.2 ms  gpu  10.7 ms  screenshot ok
+corpse                       83.3 fps  game   5.9 ms  render  11.9 ms  gpu  10.4 ms  screenshot ok
+blast                        91.5 fps  game   6.8 ms  render  10.5 ms  gpu   9.0 ms  screenshot ok
+note: setup: the colonist's body Body (SK_Looks_m_med_nrw_body) can't take skin blood: see the log line "Skin blood 
+for"
+note: groin: the exit was guessed, not found on the drawn body (a weak shot may not go through)
+ERROR: pileup: nothing was painted into the skin (0 masks at the start): the body has no blood position map or skin 
+painting is off
+Screenshots: C:\Dev\Rim3D-blood\game\Saved\Smoke\gore
