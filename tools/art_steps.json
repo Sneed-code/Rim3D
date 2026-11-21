@@ -1,0 +1,248 @@
+{
+  "comment": "The one-off art steps tools/update.py runs after a pull and a build (docs/setup/update.md). A step runs again only when one of its inputs changed since it last ran on this PC (the stamps in game/Saved/ArtSteps/stamps.json), when a step it comes 'after' ran in this update, or when something it 'makes' is missing. inputs: files in Git (globs), fingerprinted by their Git blob ids. raw: folders not in Git (downloads, Blender output), fingerprinted by their files' names, sizes and times. A commandlet step's own source files (Rim3DEditor/<Name>Commandlet.cpp/.h and the project headers they include) are inputs too. needs: 'internet' or 'blender'; a step whose need is missing is skipped and tried again next time. Steps that write files in Git (MotionClips, tools/clothes_art.py setting defs) are left out on purpose: their output is committed.",
+  "steps": [
+    {
+      "name": "sounds",
+      "what": "Download any new sounds and cut the game's sound files",
+      "inputs": ["tools/sound_assets.py", "assets/sound_sources.json", "assets/sound_picks.json", "assets/sound_freesound.json", "data/defs/SoundCues/*.json"],
+      "needs": ["internet"],
+      "makes": ["game/Content/ThirdParty/Sounds/cues"],
+      "run": [{"python": ["tools/sound_assets.py"]}]
+    },
+    {
+      "name": "terrain-textures",
+      "what": "Download the ground and rock textures",
+      "inputs": ["tools/terrain_textures.py", "assets/terrain_textures.json"],
+      "needs": ["internet"],
+      "run": [{"python": ["tools/terrain_textures.py"]}]
+    },
+    {
+      "name": "stuff-textures",
+      "what": "Download the wood, stone and metal textures",
+      "inputs": ["tools/stuff_textures.py", "assets/stuff_textures.json"],
+      "needs": ["internet"],
+      "run": [{"python": ["tools/stuff_textures.py"]}]
+    },
+    {
+      "name": "tree-models",
+      "what": "Download the tree models",
+      "inputs": ["tools/tree_art.py", "assets/tree_art.json"],
+      "needs": ["internet"],
+      "run": [{"python": ["tools/tree_art.py"]}]
+    },
+    {
+      "name": "night-sky",
+      "what": "Download the night sky",
+      "inputs": ["tools/sky_textures.py"],
+      "needs": ["internet"],
+      "run": [{"python": ["tools/sky_textures.py"]}]
+    },
+    {
+      "name": "creator-bodies",
+      "what": "Build the character creator's bodies in Blender",
+      "inputs": ["tools/makehuman/mh_creator.py", "tools/makehuman/mh_common.py", "tools/makehuman/mh_export.py", "tools/makehuman/markings.py", "tools/makehuman/skin_4k.py", "tools/makehuman/creator.json"],
+      "needs": ["blender"],
+      "makes": ["game/Saved/MakeHuman/CreatorFemale/CreatorFemale.fbx", "game/Saved/MakeHuman/CreatorMale/CreatorMale.fbx"],
+      "run": [{"python": ["tools/makehuman/mh_creator.py"]}]
+    },
+    {
+      "name": "garments-fit",
+      "what": "Fit the MakeHuman clothes to the creator's bodies in Blender",
+      "inputs": ["tools/makehuman/mh_garments.py", "tools/makehuman/mh_common.py", "tools/makehuman/mh_export.py", "assets/makehuman_garments.json"],
+      "after": ["creator-bodies"],
+      "needs": ["blender"],
+      "run": [{"python": ["tools/makehuman/mh_garments.py"]}]
+    },
+    {
+      "name": "hair-grow",
+      "what": "Grow the strand hair on the creator's bodies in Blender",
+      "inputs": ["tools/makehuman/grow_hair.py", "tools/makehuman/hair_styles.json", "assets/hair_grooms.json"],
+      "after": ["creator-bodies"],
+      "needs": ["blender"],
+      "makes": ["game/Saved/Grooms/CreatorFemale", "game/Saved/Grooms/CreatorMale"],
+      "run": [
+        {"blender": ["-b", "-noaudio", "--python", "tools/makehuman/grow_hair.py", "--", "game/Saved/MakeHuman/CreatorFemale/CreatorFemale.fbx", "game/Saved/Grooms/CreatorFemale"]},
+        {"blender": ["-b", "-noaudio", "--python", "tools/makehuman/grow_hair.py", "--", "game/Saved/MakeHuman/CreatorMale/CreatorMale.fbx", "game/Saved/Grooms/CreatorMale"]}
+      ]
+    },
+    {
+      "name": "shield-models",
+      "what": "Build the shield models in Blender",
+      "inputs": ["tools/shield_models.py"],
+      "needs": ["blender"],
+      "run": [{"blender": ["-b", "--python", "tools/shield_models.py", "--", "game/Content/ThirdParty/Shields"]}]
+    },
+    {
+      "name": "placeholder-art",
+      "what": "Placeholder meshes",
+      "inputs": ["assets/placeholder_art.json"],
+      "raw": ["game/Content/ThirdParty/PlaceholderArt"],
+      "run": [{"commandlet": "PlaceholderArt", "args": ["-nullrhi"]}]
+    },
+    {
+      "name": "terrain-materials",
+      "what": "Ground material",
+      "inputs": ["assets/terrain_textures.json"],
+      "after": ["terrain-textures"],
+      "run": [{"commandlet": "TerrainMaterials", "args": ["-AllowCommandletRendering"]}]
+    },
+    {
+      "name": "surface-materials",
+      "what": "Wood, stone and metal materials",
+      "inputs": ["assets/stuff_textures.json"],
+      "after": ["stuff-textures"],
+      "run": [{"commandlet": "SurfaceMaterials", "args": ["-AllowCommandletRendering"]}]
+    },
+    {
+      "name": "building-materials",
+      "what": "Blueprint and frame material",
+      "run": [{"commandlet": "BuildingMaterials", "args": ["-nullrhi"]}]
+    },
+    {
+      "name": "tree-art",
+      "what": "Trees",
+      "inputs": ["assets/tree_art.json"],
+      "after": ["tree-models"],
+      "run": [{"commandlet": "TreeArt", "args": ["-AllowCommandletRendering"]}]
+    },
+    {
+      "name": "foliage-materials",
+      "what": "Plant and rock materials",
+      "after": ["tree-art"],
+      "run": [{"commandlet": "FoliageMaterials", "args": ["-AllowCommandletRendering"]}]
+    },
+    {
+      "name": "sky-art",
+      "what": "Night sky material",
+      "after": ["night-sky"],
+      "run": [{"commandlet": "SkyArt", "args": ["-AllowCommandletRendering"]}]
+    },
+    {
+      "name": "water-art",
+      "what": "Water materials",
+      "after": ["terrain-materials"],
+      "run": [{"commandlet": "WaterArt", "args": ["-AllowCommandletRendering"]}]
+    },
+    {
+      "name": "fight-materials",
+      "what": "Wound decals",
+      "run": [{"commandlet": "FightMaterials", "args": ["-nullrhi"]}]
+    },
+    {
+      "name": "shield-art",
+      "what": "Shields",
+      "after": ["shield-models"],
+      "raw": ["game/Content/ThirdParty/Shields"],
+      "run": [{"commandlet": "ShieldArt", "args": ["-AllowCommandletRendering"]}]
+    },
+    {
+      "name": "animal-art",
+      "what": "Animals",
+      "inputs": ["assets/animal_art.json"],
+      "raw": ["game/Content/ThirdParty/Animals", "assets/raw/sketchfab"],
+      "run": [{"commandlet": "AnimalArt", "args": ["-nullrhi"]}]
+    },
+    {
+      "name": "pawn-looks",
+      "what": "MetaHuman body looks",
+      "run": [{"commandlet": "PawnLooks", "args": ["-nullrhi"]}]
+    },
+    {
+      "name": "pawn-faces",
+      "what": "MetaHuman faces, hair and skin marks",
+      "inputs": ["assets/pawn_faces.json", "data/defs/Rules/Rules.json"],
+      "after": ["pawn-looks"],
+      "run": [{"commandlet": "PawnFaces", "args": ["-nullrhi"]}]
+    },
+    {
+      "name": "clothes-art",
+      "what": "Clothes on MetaHuman colonists",
+      "inputs": ["assets/clothes_art.json"],
+      "after": ["pawn-looks"],
+      "raw": ["game/Content/ThirdParty/ClothesArt"],
+      "run": [{"commandlet": "ClothesArt", "args": ["-nullrhi"]}]
+    },
+    {
+      "name": "makehuman-bodies",
+      "what": "Bring the creator's bodies and their clothes into the game",
+      "inputs": ["assets/makehuman.json"],
+      "after": ["creator-bodies"],
+      "raw": ["game/Saved/MakeHuman"],
+      "makes": ["game/Content/Rim3D/Generated/MakeHuman"],
+      "run": [{"commandlet": "MakeHumanArt", "args": ["-nullrhi"]}]
+    },
+    {
+      "name": "makehuman-garments",
+      "what": "Bring the fitted clothes into the game",
+      "inputs": ["assets/makehuman_garments.json"],
+      "after": ["garments-fit"],
+      "coveredBy": ["makehuman-bodies"],
+      "run": [{"commandlet": "MakeHumanArt", "args": ["-Garments", "-nullrhi"]}]
+    },
+    {
+      "name": "makehuman-clips",
+      "what": "Animation clips",
+      "inputs": ["assets/animations.json"],
+      "raw": ["assets/raw/mixamo"],
+      "makes": ["game/Content/Rim3D/Generated/Animations"],
+      "run": [{"commandlet": "MakeHumanArt", "args": ["-Clips", "-nullrhi"]}]
+    },
+    {
+      "name": "hair-grooms",
+      "what": "Bring the grown strand hair into the game",
+      "inputs": ["assets/hair_grooms.json"],
+      "after": ["hair-grow", "makehuman-bodies"],
+      "raw": ["game/Saved/Grooms"],
+      "makes": ["game/Content/Rim3D/Generated/Grooms"],
+      "run": [{"commandlet": "HairGrooms", "args": ["-nullrhi"]}]
+    },
+    {
+      "name": "gun-art",
+      "what": "Guns and melee weapons",
+      "inputs": ["assets/guns.json"],
+      "raw": ["assets/raw/guns", "assets/raw/melee"],
+      "makes": ["game/Content/Rim3D/Generated/Guns"],
+      "run": [{"commandlet": "GunArt", "args": ["-nullrhi"]}]
+    },
+    {
+      "name": "shuttle-art",
+      "what": "The shuttle and its flames",
+      "inputs": ["assets/shuttle.json"],
+      "raw": ["assets/raw/vehicles"],
+      "run": [
+        {"commandlet": "GunArt", "args": ["-List=assets/shuttle.json", "-nullrhi"]},
+        {"commandlet": "ShuttleArt"}
+      ]
+    },
+    {
+      "name": "codex-art",
+      "what": "Codex buildings, items and weapons",
+      "inputs": ["assets/codex_art.json"],
+      "raw": ["assets/raw/codex"],
+      "commandletSource": "GunArt",
+      "run": [{"commandlet": "GunArt", "args": ["-List=assets/codex_art.json", "-nullrhi"]}]
+    },
+    {
+      "name": "blood-art",
+      "what": "Blood, spray and skin blood",
+      "after": ["makehuman-bodies"],
+      "makes": ["game/Content/Rim3D/Generated/Blood"],
+      "run": [{"commandlet": "BloodArt", "args": ["-force", "-nullrhi"]}]
+    },
+    {
+      "name": "blast-art",
+      "what": "Explosions",
+      "makes": ["game/Content/Rim3D/Generated/Blast"],
+      "run": [{"commandlet": "BlastArt", "args": ["-force", "-nullrhi"]}]
+    },
+    {
+      "name": "wet-look",
+      "what": "Rain makes everything wet (after any material is remade)",
+      "after": ["placeholder-art", "terrain-materials", "surface-materials", "building-materials", "tree-art", "foliage-materials", "sky-art",
+                "water-art", "fight-materials", "shield-art", "animal-art", "pawn-looks", "pawn-faces", "clothes-art", "makehuman-bodies",
+                "makehuman-garments", "hair-grooms", "gun-art", "shuttle-art", "codex-art", "blood-art", "blast-art"],
+      "makes": ["game/Content/Rim3D/Generated/Weather"],
+      "run": [{"commandlet": "WetLook", "args": ["-nullrhi"]}]
+    }
+  ]
+}

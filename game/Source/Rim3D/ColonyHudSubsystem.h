@@ -222,6 +222,8 @@ private:
 	// The title screen and the new game (ColonyHudNewGame.cpp, docs/design/new-game.md).
 	void DrawTitlePage(USimSubsystem& Bridge, float Scale);
 	void DrawScenarioPage(USimSubsystem& Bridge, float Scale);
+	/** The Debug page: the test scenes (gun range, creator, ...) started from the title screen (DebugScenes.h). */
+	void DrawDebugPage(float Scale);
 	void DrawPeoplePage(USimSubsystem& Bridge, float Scale);
 	/** After "Choose landing site": the world screen's landing opens the people page, its Back the scenario page. */
 	void CheckLanding(USimSubsystem& Bridge);
@@ -290,7 +292,11 @@ private:
 	// The main menu: its page and the new colony's choices.
 	bool bMainMenuOpen = false;
 	bool bMainMenuChecked = false;
-	int32 MainMenuPage = 0;  // 0 the title, 1 new colony (scenario), 2 load, 3 you, 4 your companions (docs/design/new-game.md)
+	int32 MainMenuPage = 0;  // 0 the title, 1 new colony (scenario), 2 load, 3 you, 4 your companions, 5 debug scenes (docs/design/new-game.md)
+	/** The Debug page's picked scene (DebugScenes::All()). */
+	int32 DebugScenePicked = 0;
+	/** F10 in a debug scene has started the title screen; this copy is closing. */
+	bool bLeavingDebugScene = false;
 	FString NewScenario = TEXT("CrashLanded");
 	FString NewNarrator = TEXT("Orrin");
 	// The only difficulty for now, never shown (sneed 2026-11-21: "standard").

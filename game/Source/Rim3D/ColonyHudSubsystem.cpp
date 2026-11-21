@@ -17,6 +17,7 @@
 #include <imgui.h>
 
 #include "ColonyHudStyle.h"
+#include "DebugScenes.h"
 
 #include "GraphicsOptionsSubsystem.h"
 #include "KeyBindings.h"
@@ -463,6 +464,16 @@ void UColonyHudSubsystem::OpenSettingsPage(const FString& Name)
 void UColonyHudSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	// A scene started from the title screen's Debug page: F10 goes back to the title (docs/design/new-game.md).
+	static const bool bDebugScene = DebugScenes::IsDebugScene();
+	if (bDebugScene && !bLeavingDebugScene)
+	{
+		const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+		if (PC && PC->WasInputKeyJustPressed(EKeys::F10))
+		{
+			bLeavingDebugScene = DebugScenes::ReturnToTitle();
+		}
+	}
 	USimSubsystem* Bridge = GetBridge();
 	if (!Bridge || !Bridge->GetSim())
 	{

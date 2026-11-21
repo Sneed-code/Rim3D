@@ -31,6 +31,7 @@
 #include "Serialization/JsonWriter.h"
 #include "UnrealClient.h"
 
+#include "DebugScenes.h"
 #include "OverseerPawn.h"
 #include "OverseerSubsystem.h"
 #include "PawnActor.h"
@@ -1398,6 +1399,11 @@ void USmokeTestSubsystem::WriteResultsAndQuit()
 	FFileHelper::SaveStringToFile(Json, *Path);
 	UE_LOG(LogSmoke, Display, TEXT("Smoke test %s: %s, results written to %s"), *TestName, Errors.IsEmpty() ? TEXT("pass") : TEXT("FAIL"), *Path);
 
+	// Started from the title screen's Debug page: back to the title instead of closing the game.
+	if (DebugScenes::IsDebugScene() && DebugScenes::ReturnToTitle())
+	{
+		return;
+	}
 	FPlatformMisc::RequestExitWithStatus(false, Errors.IsEmpty() ? 0 : 1);
 }
 
