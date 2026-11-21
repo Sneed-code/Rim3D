@@ -789,9 +789,9 @@ namespace
 		{
 			FString Base = Mesh->GetSkeletalMeshAsset() ? Mesh->GetSkeletalMeshAsset()->GetName() : FString();
 			Base.RemoveFromStart(TEXT("SK_MH_"));
-			// -CreatorHairHat: the under-a-hat version (no hat is drawn on these bodies yet; the hair shows pressed flat).
+			// Under a drawn hat or helmet (or with -CreatorHairHat) the under-a-hat version: pressed flat above the brim, hanging below it.
 			Strands->Want(Mesh, Base, bGroom || !Chosen.Key ? FString() : FString(UTF8_TO_TCHAR(Chosen.Label)), HairColour, WigSections,
-				FParse::Param(FCommandLine::Get(), TEXT("CreatorHairHat")));
+				Pawn.WearsDrawnHeadwear() || FParse::Param(FCommandLine::Get(), TEXT("CreatorHairHat")));
 		}
 		// The panel's colour is as seen (sRGB); the skin material takes it linear, as FSimPawnLooks::Skin is.
 		const FLinearColor Skin = FLinearColor::FromSRGBColor(FLinearColor(P.Skin[0], P.Skin[1], P.Skin[2]).ToFColor(false));
@@ -996,11 +996,33 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			Person.Looks.Skin = FLinearColor(Person.Skin[0], Person.Skin[1], Person.Skin[2]);
 			CreatorSetGender(Person, Person.bFemale, *Pawns);
 			State->People.Add(Person);
-			for (const colony::Entity Item : Sim->apparel().worn(Person.Thing))
+			const std::vector<colony::Entity> StartClothes = Sim->apparel().worn(Person.Thing);
+			for (const colony::Entity Item : StartClothes)
 			{
 				std::string Error;
 				Sim->apparel().takeOff(Person.Thing, Item, Error);
 				B->Submit(colony::DestroyThingCommand{Item});
+			}
+			// -CreatorDressed: a set outfit per person (MakeHuman garments, docs/design/clothes-draw.md), the same every run
+			// whatever the start rolled (a nudist would stay bare); otherwise bare skin.
+			if (FParse::Param(FCommandLine::Get(), TEXT("CreatorDressed")))
+			{
+				static const char* const CreatorOutfits[4][3] = {{"Apparel_ButtonShirt", "Apparel_Pants", "Apparel_Tuque"},
+					{"Apparel_TShirt", "Apparel_Pants", "Apparel_CowboyHat"}, {"Apparel_TShirt", "Apparel_Jacket", "Apparel_Pants"},
+					{"Apparel_Tribalwear", "Apparel_Tuque", nullptr}};
+				for (const char* const Piece : CreatorOutfits[i % 4])
+				{
+					if (!Piece)
+					{
+						continue;
+					}
+					std::string Error;
+					const colony::Entity Item = Sim->apparel().make(Defs->idOf("Things", Piece), Defs->idOf("Things", "Cloth"), -1, Middle, &Error);
+					if (Item == colony::kNoEntity || !Sim->apparel().putOn(Person.Thing, Item, Error))
+					{
+						UE_LOG(LogTemp, Warning, TEXT("creator: could not dress %d in %hs: %hs"), i, Piece, Error.c_str());
+					}
+				}
 			}
 			B->Submit(colony::DraftCommand{Person.Thing, true});
 			B->Submit(colony::MoveOrderCommand{Person.Thing, colony::CellPos{Middle.x - 1, Middle.y + 6 - 3 + i * 2, 0}});
