@@ -113,7 +113,7 @@ namespace
 	const FLinearColor GoreCloth(0.26f, 0.05f, 0.035f);
 	const FLinearColor GoreDermis(0.40f, 0.07f, 0.05f);
 	const FLinearColor GoreBlood(0.18f, 0.008f, 0.006f);
-	const FLinearColor GoreBone(0.45f, 0.40f, 0.32f);  // vertex colours go through sRGB: 0.66 still read bright white
+	const FLinearColor GoreBone(0.45f, 0.40f, 0.32f);  // 0.66 still read bright white in daylight (PC round 17)
 	const FLinearColor GoreMarrow(0.30f, 0.06f, 0.035f);
 	const FLinearColor GoreCord(0.82f, 0.76f, 0.66f);
 	const FLinearColor GoreCartilage(0.80f, 0.62f, 0.56f);
