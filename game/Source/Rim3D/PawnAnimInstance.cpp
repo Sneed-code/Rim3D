@@ -515,8 +515,10 @@ struct FSimPawnUpperSlotNode : public FAnimNode_Base
 	}
 
 	virtual void Evaluate_AnyThread(FPoseContext& Output) override;
+	struct FSimPawnAnimInstanceProxy* Proxy = nullptr;
 
 private:
+	void EvaluateSlotted(FPoseContext& Output);
 	FGraphTraversalCounter Registered;
 	float SlotNodeWeight = 0.0f;
 	float SourceWeight = 1.0f;
@@ -684,6 +686,7 @@ protected:
 		HitLayer.Source = &UpperSlot;
 		HitLayer.Proxy = this;
 		UpperSlot.Source = &Slot;
+		UpperSlot.Proxy = this;
 		Slot.Source = &Upper;
 		Upper.Source = &Locomotion;
 		Upper.Proxy = this;
@@ -936,14 +939,7 @@ void FSimPawnUpperNode::Evaluate_AnyThread(FPoseContext& Output)
 			}
 		}
 	}
-	// The bend: the whole upper body tips forward about spine_01. The mesh faces +Y, so forward is a turn about -X.
-	if (FMath::Abs(P->SpineBend) > 0.05f)
-	{
-		const FQuat PelvisRot = PawnUpperComponent(Output.Pose, Pelvis).GetRotation();
-		const FQuat Delta(FVector::XAxisVector, -FMath::DegreesToRadians(P->SpineBend));
-		const FQuat Local = Output.Pose[Spine].GetRotation();
-		Output.Pose[Spine].SetRotation((PelvisRot.Inverse() * Delta * PelvisRot * Local).GetNormalized());
-	}
+	// (The bend over a body on the back or the downed is put on after the montage slots: FSimPawnUpperSlotNode.)
 }
 
 // ---------------------------------------------------------------------------
@@ -983,11 +979,29 @@ void FSimPawnUpperSlotNode::CacheBones_AnyThread(const FAnimationCacheBonesConte
 void FSimPawnUpperSlotNode::Evaluate_AnyThread(FPoseContext& Output)
 {
 	Source->Evaluate_AnyThread(Output);
-	if (SlotNodeWeight <= ZERO_ANIMWEIGHT_THRESH || Spine.GetInt() == INDEX_NONE || Pelvis.GetInt() == INDEX_NONE ||
-		BoneWeights.Num() != Output.Pose.GetNumBones())
+	if (Spine.GetInt() == INDEX_NONE || Pelvis.GetInt() == INDEX_NONE || BoneWeights.Num() != Output.Pose.GetNumBones())
 	{
 		return;
 	}
+	if (SlotNodeWeight > ZERO_ANIMWEIGHT_THRESH)
+	{
+		EvaluateSlotted(Output);
+	}
+	// The bend: the whole upper body tips forward about spine_01. The mesh faces +Y, so forward is a turn about -X.
+	// Last of all, over the montages too: a finisher's kneel is a whole-body clip in the montage slot, and under it the
+	// bend was lost (round 8, 2026-11-21: the knife and gladius knelt bolt upright with the blade 70 cm off the body).
+	const float Bend = Proxy ? Proxy->SpineBend : 0.0f;
+	if (FMath::Abs(Bend) > 0.05f)
+	{
+		const FQuat PelvisRot = PawnUpperComponent(Output.Pose, Pelvis).GetRotation();
+		const FQuat Delta(FVector::XAxisVector, -FMath::DegreesToRadians(Bend));
+		const FQuat Local = Output.Pose[Spine].GetRotation();
+		Output.Pose[Spine].SetRotation((PelvisRot.Inverse() * Delta * PelvisRot * Local).GetNormalized());
+	}
+}
+
+void FSimPawnUpperSlotNode::EvaluateSlotted(FPoseContext& Output)
+{
 	// The whole-body pose the montage makes over what plays under it (blended in and out by the montage's weight) ...
 	FPoseContext Slotted(Output);
 	{
