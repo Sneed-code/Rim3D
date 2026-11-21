@@ -1,0 +1,14 @@
+﻿Building Rim3DEditor (below-normal priority, 6 jobs)...
+Build ok.
+Running smoke test 'gore' at 1920x1080...
+
+Smoke test 'gore': PASS  (37 s, NVIDIA GeForce RTX 5080, 888x500)
+setup                        39.8 fps  game   5.1 ms  render  11.4 ms  gpu   9.5 ms  screenshot ok
+groin                        85.7 fps  game   5.0 ms  render  11.4 ms  gpu   9.8 ms  screenshot ok
+spray                        85.2 fps  game   5.3 ms  render  11.5 ms  gpu   9.9 ms  screenshot ok
+pileup                       75.7 fps  game   5.7 ms  render  11.6 ms  gpu  10.2 ms  screenshot ok
+head                         85.4 fps  game   5.2 ms  render  11.5 ms  gpu   9.9 ms  screenshot ok
+armoff                       82.1 fps  game   5.5 ms  render  12.1 ms  gpu  10.5 ms  screenshot ok
+corpse                       84.8 fps  game   5.4 ms  render  11.8 ms  gpu  10.3 ms  screenshot ok
+blast                        89.6 fps  game   6.1 ms  render  10.8 ms  gpu   9.3 ms  screenshot ok
+Screenshots: C:\Dev\Rim3D-blood\game\Saved\Smoke\gore
