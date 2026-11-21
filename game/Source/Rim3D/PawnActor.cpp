@@ -792,6 +792,7 @@ void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 			CoveredHairSections.Reset();
 			CoveredPubicSections.Reset();
 			bHeadwearDrawn = false;
+			GarmentCoverBits = 0;
 			bApparelApplied = false;
 			MakeHumanMesh->DestroyComponent();
 			MakeHumanMesh = nullptr;
@@ -821,6 +822,7 @@ void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 		CoveredHairSections.Reset();
 		CoveredPubicSections.Reset();
 		bHeadwearDrawn = false;
+		GarmentCoverBits = 0;
 		SetMakeHumanCoverBits(0);
 		bApparelApplied = false;
 	}
@@ -1320,6 +1322,29 @@ namespace
 		{
 			return FString();
 		}
+		// For pictures: -CreatorCut=Bowler,PatrolCap picks a cut with one of those garments wherever a piece has one.
+		static const TArray<FString> PawnForcedGarments = []()
+		{
+			FString Arg;
+			TArray<FString> Out;
+			if (FParse::Value(FCommandLine::Get(), TEXT("CreatorCut="), Arg, false))
+			{
+				Arg.ParseIntoArray(Out, TEXT(","), true);
+			}
+			return Out;
+		}();
+		for (const FString* Fit : Fits)
+		{
+			for (const FString& Forced : PawnForcedGarments)
+			{
+				TArray<FString> FitGarments;
+				Fit->ParseIntoArray(FitGarments, TEXT("+"));
+				if (FitGarments.Contains(Forced))
+				{
+					return *Fit;
+				}
+			}
+		}
 		const uint32 Seed[2] = {Piece.Item, Piece.Def};
 		return *Fits[FCrc::MemCrc32(Seed, sizeof(Seed)) % static_cast<uint32>(Fits.Num())];
 	}
@@ -1386,12 +1411,12 @@ void ASimPawnActor::ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnAppare
 			const USkeletalMeshComponent* Garment = Cast<USkeletalMeshComponent>(Worn);
 			USkeletalMesh* GarmentMesh = Garment ? Garment->GetSkeletalMeshAsset() : nullptr;
 			const UGarmentCoverData* Cover = GarmentMesh ? GarmentMesh->GetAssetUserData<UGarmentCoverData>() : nullptr;
-			if (Cover && Cover->CoverBit >= 0 && Cover->CoverBit < 32)
+			if (Cover && Cover->CoverBit >= 0 && Cover->CoverBit < MakeHumanCrotchCoverBit)
 			{
 				CoverBits |= 1u << Cover->CoverBit;
 			}
 		}
-		SetMakeHumanCoverBits(CoverBits);
+		GarmentCoverBits = CoverBits;
 	}
 	Apparel = Wanted;
 	for (const FSimWornPiece& Piece : Apparel.Pieces)
@@ -1416,10 +1441,9 @@ void ASimPawnActor::ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnAppare
 	}
 	SetMakeHumanHairCovered(bCovered);
 	SetMakeHumanPubicCovered(bCrotchCovered);
-	if (UMakeHumanAnimInstance* MhAnim = MakeHumanMesh ? Cast<UMakeHumanAnimInstance>(MakeHumanMesh->GetAnimInstance()) : nullptr)
-	{
-		MhAnim->SetGenitalTucked(bCrotchCovered);
-	}
+	// The crotch (bit 31 of the cover, tools/makehuman bake_garment_cover): the genitals, pubic area and inner thighs
+	// stand out past trousers fitted to the basemesh, so they hide whenever trousers are drawn.
+	SetMakeHumanCoverBits(GarmentCoverBits | (bCrotchCovered ? (1u << MakeHumanCrotchCoverBit) : 0u));
 }
 
 void ASimPawnActor::SetMakeHumanPubicCovered(bool bCovered)

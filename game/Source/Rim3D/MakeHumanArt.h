@@ -28,6 +28,8 @@ inline constexpr int32 MakeHumanGarmentTintAmountIndex = 4;
  *  material hides the skin where its GarmentCover texture has one of them (docs/design/clothes-draw.md "Skin under clothes"). */
 inline constexpr int32 MakeHumanCoverLowIndex = 30;
 inline constexpr int32 MakeHumanCoverHighIndex = 31;
+/** The cover texture's last bit marks the crotch (genitals, pubic area, inner thighs), hidden under any trousers. */
+inline constexpr int32 MakeHumanCrotchCoverBit = 31;
 inline FString MakeHumanCoverTextureName(const FString& Base) { return TEXT("T_MHG_") + Base + TEXT("_Cover"); }
 
 /** "/Game/.../Name.Name" in a folder. */

@@ -2310,34 +2310,6 @@ def export_garments(rig, garments, out_dir, log=print):
         log("garment exported", name, len(obj.data.vertices), "vertices", keys, "morphs", path)
 
 
-def _cover_genitals(body, verts, normals, covered, tree, inv, inv3, name, log=print):
-    """The male genitals stand out further than trousers fitted to the basemesh sit, so short rays along their normals
-    miss the cloth: when half of them meet the garment within 15 cm, straight ahead (MakeHuman faces -Y) or along the
-    normal, they all count as covered and hide with the rest of the skin under it."""
-    from mathutils import Vector
-    group = body.vertex_groups.get("genital")
-    if group is None:
-        return
-    gi = group.index
-    members = [v.index for v in body.data.vertices if any(e.group == gi and e.weight > 0.05 for e in v.groups)]
-    if not members:
-        return
-    ahead = Vector((0.0, -1.0, 0.0))
-    hits = 0
-    for i in members:
-        for d in (normals[i], ahead):
-            dl = inv3 @ d
-            k = dl.length
-            dl.normalize()
-            if tree.ray_cast(inv @ verts[i], dl, 0.15 * k)[0] is not None:
-                hits += 1
-                break
-    if hits >= 0.5 * len(members):
-        for i in members:
-            covered[i] = True
-        log("garment cover:", name, "covers the genitals", hits, "of", len(members))
-
-
 def _erode_cover(verts, covered, margin=0.04):
     """A covered vertex stays covered only if no uncovered one is within `margin` metres: the skin near a garment's edge
     stays drawn, so a hem that rides up when the body moves, or the gap between a top and trousers, never shows a hole
@@ -2357,7 +2329,30 @@ def _erode_cover(verts, covered, margin=0.04):
     return keep
 
 
-def bake_garment_cover(body, garments, out_png, size=1024, reach=0.03, log=print):
+def _cover_raster(bits, uv, size, faces, mask):
+    """Sets `mask` in `bits` (size x size, on the body's UVs) under each face (vertex ids, loop ids)."""
+    import numpy as np
+    for _, loops in faces:
+        a, b, c = (uv[k] * size for k in loops)
+        lo = np.floor(np.minimum(np.minimum(a, b), c)).astype(int)
+        hi = np.ceil(np.maximum(np.maximum(a, b), c)).astype(int)
+        lo = np.clip(lo, 0, size - 1)
+        hi = np.clip(hi, 0, size)
+        if hi[0] <= lo[0] or hi[1] <= lo[1]:
+            continue
+        xs, ys = np.meshgrid(np.arange(lo[0], hi[0]) + 0.5, np.arange(lo[1], hi[1]) + 0.5)
+        d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+        if abs(d) < 1e-12:
+            continue
+        w0 = ((b[1] - c[1]) * (xs - c[0]) + (c[0] - b[0]) * (ys - c[1])) / d
+        w1 = ((c[1] - a[1]) * (xs - c[0]) + (a[0] - c[0]) * (ys - c[1])) / d
+        inside = (w0 >= -1e-6) & (w1 >= -1e-6) & (w0 + w1 <= 1 + 1e-6)
+        rows = ys[inside].astype(int)
+        cols = xs[inside].astype(int)
+        bits[rows, cols] |= mask
+
+
+def bake_garment_cover(body, garments, out_png, size=1024, reach=0.03, rig=None, log=print):
     """Where each garment covers the body, as bits in a texture on the body's UVs (docs/design/clothes-draw.md "Skin under
     clothes"): a body face is covered when a ray out of each of its corners along the skin's normal meets the garment
     within `reach` metres (or the garment lies just under the skin). Garment i that covers anything gets bit i (up to 32,
@@ -2384,8 +2379,8 @@ def bake_garment_cover(body, garments, out_png, size=1024, reach=0.03, log=print
     zs = [p.z for p in verts]
     head_line = min(zs) + 0.80 * (max(zs) - min(zs))  # about the chin of a standing body
     for g in garments:
-        if len(out) >= 32:
-            log("garment cover: more than 32 covering garments;", g.name, "left out")
+        if len(out) >= 31:
+            log("garment cover: more than 31 covering garments;", g.name, "left out")
             break
         # Headwear never hides skin: a brim or visor is far from the face, and the scalp is under the hair anyway.
         lowest = min((g.matrix_world @ v.co).z for v in g.data.vertices) if g.data.vertices else 0.0
@@ -2406,32 +2401,29 @@ def bake_garment_cover(body, garments, out_png, size=1024, reach=0.03, log=print
                 hit = tree.ray_cast(pl + nl * (0.01 * k), -nl, 0.012 * k)  # the garment sunk just under the skin
             covered[i] = hit[0] is not None
         covered = _erode_cover(verts, covered)
-        _cover_genitals(body, verts, normals, covered, tree, inv, inv3, g.name, log)
         faces = [(v, l) for v, l in tris if covered[v[0]] and covered[v[1]] and covered[v[2]]]
         if len(faces) < 40:
             continue  # a hat, gloves or a strap: nothing worth hiding
         bit = len(out)
-        mask = np.uint32(1 << bit)
-        for _, loops in faces:
-            a, b, c = (uv[k] * size for k in loops)
-            lo = np.floor(np.minimum(np.minimum(a, b), c)).astype(int)
-            hi = np.ceil(np.maximum(np.maximum(a, b), c)).astype(int)
-            lo = np.clip(lo, 0, size - 1)
-            hi = np.clip(hi, 0, size)
-            if hi[0] <= lo[0] or hi[1] <= lo[1]:
-                continue
-            xs, ys = np.meshgrid(np.arange(lo[0], hi[0]) + 0.5, np.arange(lo[1], hi[1]) + 0.5)
-            d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
-            if abs(d) < 1e-12:
-                continue
-            w0 = ((b[1] - c[1]) * (xs - c[0]) + (c[0] - b[0]) * (ys - c[1])) / d
-            w1 = ((c[1] - a[1]) * (xs - c[0]) + (a[0] - c[0]) * (ys - c[1])) / d
-            inside = (w0 >= -1e-6) & (w1 >= -1e-6) & (w0 + w1 <= 1 + 1e-6)
-            rows = ys[inside].astype(int)
-            cols = xs[inside].astype(int)
-            bits[rows, cols] |= mask
+        _cover_raster(bits, uv, size, faces, np.uint32(1 << bit))
         out[g.get("rim3d_garment") or g.name] = bit
         log("garment cover:", g.name, "bit", bit, len(faces), "body faces")
+    # Bit 31: the crotch (genitals, pubic area, inner thighs). They stand out past trousers fitted to the basemesh, so the
+    # game hides them whenever trousers are drawn (MakeHumanCrotchCoverBit), whatever the rays found.
+    if rig is not None and "pelvis" in rig.data.bones:
+        local = [v.co for v in body.data.vertices]
+        cx, crotch = _crotch(rig, local)
+        if crotch is not None:
+            gi = body.vertex_groups["genital"].index if "genital" in body.vertex_groups else -1
+            near = np.zeros(len(local), dtype=bool)
+            for v in body.data.vertices:
+                p = v.co
+                in_box = abs(p.x - cx) < 0.075 and crotch - 0.10 < p.z < crotch + 0.09
+                in_group = gi >= 0 and any(e.group == gi and e.weight > 0.02 for e in v.groups)
+                near[v.index] = in_box or in_group
+            faces = [(v, l) for v, l in tris if near[v[0]] or near[v[1]] or near[v[2]]]
+            _cover_raster(bits, uv, size, faces, np.uint32(1 << 31))
+            log("garment cover: crotch bit 31,", len(faces), "body faces")
     # RGBA8: bits 0-7 red, 8-15 green, 16-23 blue, 24-31 alpha. Blender images start at the bottom row, like UV v.
     rgba = np.stack([(bits >> s) & 0xFF for s in (0, 8, 16, 24)], axis=-1).astype(np.float32) / 255.0
     image = bpy.data.images.new("GarmentCover", size, size, alpha=True, float_buffer=False)

@@ -95,19 +95,11 @@ void FMakeHumanJiggleNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePose
 	const FTransform Component = Output.AnimInstanceProxy->GetComponentTransform();
 	const FBoneContainer& Bones = Output.Pose.GetPose().GetBoneContainer();
 	// Small steps keep the spring steady at low frame rates.
-	const float TuckScale = FMath::Lerp(1.0f, 0.15f, FMath::Clamp(GenitalTuck, 0.0f, 1.0f));
 	if (!bEnabled || Fade <= 0.0f)
 	{
 		for (FBody& Body : Bodies)
 		{
 			Body.bStarted = false;  // starts again at rest when turned back on (or back within reach of the camera)
-			if (TuckScale < 1.0f && Body.Bone.BoneName == FName(TEXT("genital")) && Body.Bone.IsValidToEvaluate(Bones))
-			{
-				const FCompactPoseBoneIndex TuckIndex = Body.Bone.GetCompactPoseIndex(Bones);
-				FTransform Tucked = Output.Pose.GetComponentSpaceTransform(TuckIndex);
-				Tucked.SetScale3D(Tucked.GetScale3D() * TuckScale);
-				OutBoneTransforms.Add(FBoneTransform(TuckIndex, Tucked));
-			}
 		}
 		Kicks.Reset();
 		return;
@@ -149,13 +141,6 @@ void FMakeHumanJiggleNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePose
 			Body.Position += Body.Velocity * Dt;
 		}
 		FVector Offset = Body.Position - Goal;
-		const bool bTucked = TuckScale < 1.0f && Body.Bone.BoneName == FName(TEXT("genital"));
-		if (bTucked)
-		{
-			Offset = FVector::ZeroVector;  // held still under the cloth
-			Body.Position = Goal;
-			Body.Velocity = FVector::ZeroVector;
-		}
 		if (Offset.Size() > Body.MaxOffset)
 		{
 			Offset = Offset.GetSafeNormal() * Body.MaxOffset;
@@ -181,10 +166,6 @@ void FMakeHumanJiggleNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePose
 				Scale[Axis] = 1.0f + Body.Squash * Along;
 				Pose.SetScale3D(Pose.GetScale3D() * Scale);
 			}
-		}
-		if (bTucked)
-		{
-			Pose.SetScale3D(Pose.GetScale3D() * TuckScale);
 		}
 		Out.Add(FBoneTransform(Index, Pose));
 	}
@@ -1472,11 +1453,6 @@ int32 UMakeHumanAnimInstance::GetPhysicsChains() const
 void UMakeHumanAnimInstance::SetSoftTissueEnabled(bool bEnabled)
 {
 	GetProxyOnGameThread<FMakeHumanAnimProxy>().Jiggle.bEnabled = bEnabled;
-}
-
-void UMakeHumanAnimInstance::SetGenitalTucked(bool bTucked)
-{
-	GetProxyOnGameThread<FMakeHumanAnimProxy>().Jiggle.GenitalTuck = bTucked ? 1.0f : 0.0f;
 }
 
 void UMakeHumanAnimInstance::SetBreastJiggle(float Amount)

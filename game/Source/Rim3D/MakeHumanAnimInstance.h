@@ -59,7 +59,6 @@ struct FMakeHumanJiggleNode : public FAnimNode_SkeletalControlBase
 	float LargestOffset = 0.0f;  // cm, since the last read (tests)
 	bool bEnabled = true;        // off: the soft parts stay as animated (the creator's "keep still")
 	float Fade = 1.0f;           // 1 near the camera .. 0 beyond Pawns.SoftBodyFar (off: as animated)
-	float GenitalTuck = 0.0f;    // 1: the male genitals held flat at their root under trousers (they would poke through)
 
 	virtual void UpdateInternal(const FAnimationUpdateContext& Context) override;
 	virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) override;
@@ -282,9 +281,6 @@ public:
 	bool IsSoftTissueEnabled() const { return GetProxyOnGameThread<FMakeHumanAnimProxy>().Jiggle.bEnabled; }
 	/** Breast jiggle, 0 (the default: firm, a small lag) to 1 (softer, looser and bouncier, still damped). */
 	void SetBreastJiggle(float Amount);
-	/** Under trousers the male genitals are held flat at their root (the `genital` bone scaled down and kept still), so they
-	 *  never poke through the cloth; off again when the trousers come off. */
-	void SetGenitalTucked(bool bTucked);
 	/** How soft the body's flesh is, from the creator's sliders (Weight -1 thin .. 1 heavy, Muscle -1 soft .. 1
 	 *  muscular; older is a little looser): a heavy soft body's belly, thighs, arms and buttocks wobble more and
 	 *  slower, a lean muscular one's hardly at all. */

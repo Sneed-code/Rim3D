@@ -381,6 +381,8 @@ private:
 	/** The body's pubic hair sections hidden under trousers. */
 	TArray<int32> CoveredPubicSections;
 	bool bHeadwearDrawn = false;
+	/** The worn garments' cover bits (their UGarmentCoverData), without the crotch bit. */
+	uint32 GarmentCoverBits = 0;
 	uint64 ApparelKey = 0;
 	bool bApparelApplied = false;
 	bool bBareLayerTried = false;

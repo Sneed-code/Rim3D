@@ -77,13 +77,13 @@ body by MPFB.
 
 Skin poking through tight clothes when the body bends is cut away instead of pushed in. `mh_garments.py` casts a ray
 along each body normal and marks the faces a garment covers within 3 cm, then keeps only skin more than 4 cm from any uncovered skin, so the skin at a hem or between a top and trousers stays drawn even when the cloth shifts a little in play (no holes through the body), and headwear (lowest point above the chin line) hides no skin; each garment that covers 40 faces or more gets
-one bit (up to 32) in a per-base cover texture on the body's UVs (`T_MHG_<Base>_Cover`, 32 bits in RGBA8, nearest
+one bit (up to 31) in a per-base cover texture on the body's UVs (`T_MHG_<Base>_Cover`, 32 bits in RGBA8, bit 31 the crotch, nearest
 filtering). The garment keeps its bit as `UGarmentCoverData`. While worn, the pawn sets the bits on the body (custom
 data 30 low 16, 31 high 16) and the skin material (masked) clips the skin where a worn bit is set.
 
-The male genitals stand out further than trousers fitted to the basemesh, so their normals miss the cloth: a garment
-that half the genital vertices meet within 15 cm (straight ahead or along the normal) covers the whole `genital` vertex group too. Under trousers the `genital` bone is also scaled to 15% and held still
-(`UMakeHumanAnimInstance::SetGenitalTucked`), since the cut alone left the bulge on top of the cloth. Pubic hair (its own
+The crotch (genitals, pubic area and inner thighs: a box round the crotch plus the `genital` vertex group) stands out
+past trousers fitted to the basemesh, so it has its own bit, 31, set whenever a piece with `bCoversCrotch` is drawn.
+Pubic hair (its own
 material sections) is hidden while a piece over the legs on the skin or middle layer is drawn (`bCoversCrotch`).
 
 ## Cost

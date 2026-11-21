@@ -244,7 +244,7 @@ try:
     # tools/makehuman/mh_garments.py: only the garments are written (the body's own export stays as mh_creator made it).
     if cfg.get("garments_only"):
         garments_out = cfg.get("garments_out") or os.path.join(os.path.dirname(cfg["out"]), "Garments")
-        bake_garment_cover(body, garments, os.path.join(garments_out, "cover.png"), log=log)
+        bake_garment_cover(body, garments, os.path.join(garments_out, "cover.png"), rig=rig, log=log)
         prepare_for_unreal(rig, garments)
         export_garments(rig, garments, garments_out, log=log)
         sys.exit(0)
