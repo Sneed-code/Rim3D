@@ -1218,7 +1218,7 @@ namespace
 				{{0.00f, FVector(-30, 15, 105), FVector(0.5, 0, 0.85)}, {0.25f, FVector(-60, 12, 140), FVector(-0.1, 0, 1)},
 					{0.50f, FVector(-85, 8, 140), FVector(-0.6, 0, 0.8)}, {0.56f, FVector(-85, 8, 140), FVector(-0.6, 0, 0.8)},
 					{0.59f, FVector(-35, 6, 145), FVector(0.3, 0, 0.95)}, {0.618f, FVector(0, 0, 4), FVector(0.6, 0, -0.8)},
-					{0.66f, FVector(-5, 0, 25), FVector(0.6, 0, -0.7)}, {0.85f, FVector(-19, 10, 75), FVector(0.6, 0, 0.3)},
+					{0.70f, FVector(0, 0, 6), FVector(0.6, 0, -0.8)}, {0.85f, FVector(-19, 10, 75), FVector(0.6, 0, 0.3)},
 					{1.00f, FVector(-30, 15, 105), FVector(0.5, 0, 0.85)}}},
 			// The sword raised point-down and driven into the chest, held, pulled out.
 			{TEXT("Sword"), true, TEXT("spine_03"), 10.0f,
