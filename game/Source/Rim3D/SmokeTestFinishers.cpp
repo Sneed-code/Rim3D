@@ -32,6 +32,7 @@
 #include "ColonySim/Melee.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
+#include "CreatorPeople.h"
 #include "ColonySim/Colonist.h"
 #include "ColonySim/WeaponSlot.h"
 
@@ -43,6 +44,7 @@ namespace
 
 	struct FFinSmokeState
 	{
+		bool bLooksApplied = false;
 		colony::Entity Me = colony::kNoEntity;
 		colony::Entity Enemy = colony::kNoEntity;
 		colony::CellPos Cell{0, 0, 0};
@@ -256,6 +258,12 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 				B->Submit(colony::DestroyThingCommand{View.id});
 			}
 		}
+		// The player on a MakeHuman body (the creator's generic woman, as on the gun range): the weapon hold, the
+		// finisher pose and the crosshair aim drive MakeHuman bodies; MetaHumans and mannequins keep the old drawing.
+		{
+			const FSimPawnLooks From = Me->looks >= 0 ? USimPawnSubsystem::MakeLooks(B->GetCurrentSnapshot().looks[static_cast<size_t>(Me->looks)], B->GetDefs().get()) : FSimPawnLooks();
+			Pawns()->SetLooksOverride(State->Me, CreatorPeople::DefaultLooks(true, From));
+		}
 		if (!P->EnterDirectMode(State->Me))
 		{
 			Fail(TEXT("setup: could not take control of the protagonist"));
@@ -264,7 +272,21 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 		P->GetBody()->SetFirstPerson(false);
 		P->GetBody()->Look(FRotator::NormalizeAxis(-P->GetBody()->GetYaw()), -5.0f - P->GetBody()->GetPitch());
 		P->GetBody()->SnapCamera();
-	}, 2.5f, 0.5f, nullptr, nullptr);
+	}, 3.5f, 0.5f, [=, this]()
+	{
+		// The creator's sliders go on once the MakeHuman body is there.
+		if (ASimPawnActor* Actor = ActorOf(State->Me); Actor && Actor->GetMakeHumanMesh() && !State->bLooksApplied)
+		{
+			State->bLooksApplied = CreatorPeople::ApplyDefault(true, *Actor);
+		}
+	}, [=, this]()
+	{
+		const ASimPawnActor* Actor = ActorOf(State->Me);
+		if (!Actor || !Actor->GetMakeHumanMesh())
+		{
+			Fail(TEXT("setup: the player is not on a MakeHuman body (is the creator base imported? run -run=MakeHumanArt)"));
+		}
+	});
 
 	// 2. A finisher per weapon at a downed enemy just ahead: pictures from the side at the start, the strike and after.
 	static const FFinSmokeWeapon FinWeapons[] = {
@@ -284,7 +306,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			{
 				return;
 			}
-			*State = [&]() { FFinSmokeState Fresh; Fresh.Me = State->Me; Fresh.Cell = State->Cell; return Fresh; }();
+			*State = [&]() { FFinSmokeState Fresh; Fresh.Me = State->Me; Fresh.Cell = State->Cell; Fresh.bLooksApplied = State->bLooksApplied; return Fresh; }();
 			FinSmokeHeal(*Sim, State->Me);
 			const colony::Entity Item = Sim->things().spawn(std::string(Weapon.Def), State->Cell);
 			std::string Why;
