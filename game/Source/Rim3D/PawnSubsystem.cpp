@@ -372,6 +372,17 @@ FSimPawnApparel USimPawnSubsystem::MakeApparel(const colony::Snapshot& Snapshot,
 		Worn.Stuff = Piece->stuff.value;
 		Worn.Wear = PawnWearOf(Piece->hitPointShare);
 		Worn.bHidesHair = Def.flag("apparel.hidesHair", false);
+		bool bOverLegs = false;
+		bool bUnderShell = false;
+		for (size_t G = 0; G < Def.count("apparel.bodyPartGroups"); ++G)
+		{
+			bOverLegs = bOverLegs || Def.textAt("apparel.bodyPartGroups", G) == "Legs";
+		}
+		for (size_t L = 0; L < Def.count("apparel.layers"); ++L)
+		{
+			bUnderShell = bUnderShell || Def.textAt("apparel.layers", L) != "Shell";
+		}
+		Worn.bCoversCrotch = bOverLegs && bUnderShell;
 		if (Piece->stuff.valid() && Piece->stuff.value < Defs->size())
 		{
 			const colony::Def& Stuff = Defs->get(Piece->stuff);

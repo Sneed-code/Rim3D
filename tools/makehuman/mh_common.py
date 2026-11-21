@@ -2310,6 +2310,25 @@ def export_garments(rig, garments, out_dir, log=print):
         log("garment exported", name, len(obj.data.vertices), "vertices", keys, "morphs", path)
 
 
+def _cover_genitals(body, verts, covered, name, log=print):
+    """The male genitals stand out further than trousers fitted to the basemesh sit, so their normals miss the cloth: when
+    a garment covers most of the skin round them (the crotch), they count as covered too and hide with the rest."""
+    group = body.vertex_groups.get("genital")
+    if group is None:
+        return
+    gi = group.index
+    members = [v.index for v in body.data.vertices if any(e.group == gi and e.weight > 0.05 for e in v.groups)]
+    if not members:
+        return
+    centre = sum((verts[i] for i in members), verts[members[0]] * 0.0) / len(members)
+    inside = set(members)
+    ring = [i for i, p in enumerate(verts) if i not in inside and (p - centre).length < 0.10]
+    if ring and sum(1 for i in ring if covered[i]) >= 0.6 * len(ring):
+        for i in members:
+            covered[i] = True
+        log("garment cover:", name, "covers the genitals")
+
+
 def bake_garment_cover(body, garments, out_png, size=1024, reach=0.06, log=print):
     """Where each garment covers the body, as bits in a texture on the body's UVs (docs/design/clothes-draw.md "Skin under
     clothes"): a body face is covered when a ray out of each of its corners along the skin's normal meets the garment
@@ -2351,6 +2370,7 @@ def bake_garment_cover(body, garments, out_png, size=1024, reach=0.06, log=print
             if hit[0] is None:
                 hit = tree.ray_cast(pl + nl * (0.01 * k), -nl, 0.012 * k)  # the garment sunk just under the skin
             covered[i] = hit[0] is not None
+        _cover_genitals(body, verts, covered, g.name, log)
         faces = [(v, l) for v, l in tris if covered[v[0]] and covered[v[1]] and covered[v[2]]]
         if len(faces) < 40:
             continue  # a hat, gloves or a strap: nothing worth hiding

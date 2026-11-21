@@ -296,6 +296,8 @@ private:
 	void SetMakeHumanCoverBits(uint32 Bits);
 	/** Hides (or shows again) the MakeHuman body's scalp hair under a covering hat or helmet. */
 	void SetMakeHumanHairCovered(bool bCovered);
+	/** Hides (or shows again) the MakeHuman body's pubic hair under trousers (it would poke through them). */
+	void SetMakeHumanPubicCovered(bool bCovered);
 	void UpdateHairVisibility();
 	/** Grooms show at full detail, minus hair under a covering hat and grooms with nothing to draw (bald, no beard). */
 	void RefreshGroomVisibility();
@@ -367,6 +369,8 @@ private:
 	uint32 GarmentMorphHash = 0;
 	/** The body's hair sections hidden under a hat (shown again when it comes off). */
 	TArray<int32> CoveredHairSections;
+	/** The body's pubic hair sections hidden under trousers. */
+	TArray<int32> CoveredPubicSections;
 	uint64 ApparelKey = 0;
 	bool bApparelApplied = false;
 	bool bBareLayerTried = false;

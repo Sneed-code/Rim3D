@@ -762,6 +762,7 @@ void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 			Apparel = FSimPawnApparel();
 			GarmentCuts.Reset();
 			CoveredHairSections.Reset();
+			CoveredPubicSections.Reset();
 			bApparelApplied = false;
 			MakeHumanMesh->DestroyComponent();
 			MakeHumanMesh = nullptr;
@@ -789,6 +790,7 @@ void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 		Apparel = FSimPawnApparel();
 		GarmentCuts.Reset();
 		CoveredHairSections.Reset();
+		CoveredPubicSections.Reset();
 		SetMakeHumanCoverBits(0);
 		bApparelApplied = false;
 	}
@@ -1324,6 +1326,7 @@ void ASimPawnActor::ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnAppare
 		for (const FSimWornPiece& Piece : Wanted.Pieces)
 		{
 			const FString Cut = PawnGarmentCut(Pawns, Base, Piece);
+			UE_LOG(LogTemp, Display, TEXT("Garments: %s on %s wears item %u (%d cuts) as '%s'"), *GetName(), *Base, Piece.Item, Piece.Cuts.Num(), *Cut);
 			if (Cut.IsEmpty())
 			{
 				continue;  // nothing made for this piece yet: it is worn (and counts) but not drawn
@@ -1373,11 +1376,42 @@ void ASimPawnActor::ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnAppare
 	}
 	SyncGarmentMorphs();
 	bool bCovered = false;
+	bool bCrotchCovered = false;
 	for (const FSimWornPiece& Piece : Apparel.Pieces)
 	{
 		bCovered = bCovered || (Piece.bHidesHair && GarmentCuts.Contains(Piece.Item));
+		bCrotchCovered = bCrotchCovered || (Piece.bCoversCrotch && GarmentCuts.Contains(Piece.Item));
 	}
 	SetMakeHumanHairCovered(bCovered);
+	SetMakeHumanPubicCovered(bCrotchCovered);
+}
+
+void ASimPawnActor::SetMakeHumanPubicCovered(bool bCovered)
+{
+	if (!MakeHumanMesh || bCovered == !CoveredPubicSections.IsEmpty())
+	{
+		return;
+	}
+	if (bCovered)
+	{
+		const TArray<FSkeletalMaterial>& Slots = MakeHumanMesh->GetSkeletalMeshAsset() ? MakeHumanMesh->GetSkeletalMeshAsset()->GetMaterials() : TArray<FSkeletalMaterial>();
+		for (int32 I = 0; I < Slots.Num(); ++I)
+		{
+			if (Slots[I].MaterialSlotName.ToString().ToLower().Contains(TEXT("pubic")) && MakeHumanMesh->IsMaterialSectionShown(I, 0))
+			{
+				MakeHumanMesh->ShowMaterialSection(I, 0, false, 0);
+				CoveredPubicSections.Add(I);
+			}
+		}
+	}
+	else
+	{
+		for (const int32 I : CoveredPubicSections)
+		{
+			MakeHumanMesh->ShowMaterialSection(I, 0, true, 0);
+		}
+		CoveredPubicSections.Reset();
+	}
 }
 
 void ASimPawnActor::SetMakeHumanCoverBits(uint32 Bits)

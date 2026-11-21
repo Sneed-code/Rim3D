@@ -2298,7 +2298,7 @@ namespace
 			Input.InputName = InputName;
 			Input.Input.Connect(Output, From);
 		};
-		In(TEXT("Tex"), Color, 0);  // RGBA
+		In(TEXT("Tex"), Color, 5);  // output 5 is RGBA (0 is RGB only: Tex.a would not compile)
 		In(TEXT("UV"), Coord, 0);
 		In(TEXT("Average"), Average, 0);
 		In(TEXT("Tint"), Tint, 0);

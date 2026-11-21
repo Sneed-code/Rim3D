@@ -80,6 +80,10 @@ one bit (up to 32) in a per-base cover texture on the body's UVs (`T_MHG_<Base>_
 filtering). The garment keeps its bit as `UGarmentCoverData`. While worn, the pawn sets the bits on the body (custom
 data 30 low 16, 31 high 16) and the skin material (masked) clips the skin where a worn bit is set.
 
+The male genitals stand out further than trousers fitted to the basemesh, so their normals miss the cloth: a garment
+that covers 60% of the skin within 10 cm of them covers the whole `genital` vertex group too. Pubic hair (its own
+material sections) is hidden while a piece over the legs on the skin or middle layer is drawn (`bCoversCrotch`).
+
 ## Cost
 
 12 pawns with 3 pieces each: 4 ms game thread at 888 x 500, 2.5 to 4 ms GPU. 100 pawns in a shirt and trousers
