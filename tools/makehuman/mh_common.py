@@ -2338,16 +2338,22 @@ def _cover_genitals(body, verts, normals, covered, tree, inv, inv3, name, log=pr
         log("garment cover:", name, "covers the genitals", hits, "of", len(members))
 
 
-def _erode_cover(body, covered):
-    """A covered vertex stays covered only if all its neighbours are: the skin near a garment's edge stays drawn, so a
-    hem that rides up or a gap between a top and trousers never shows a hole through the body."""
-    import numpy as np
+def _erode_cover(verts, covered, margin=0.04):
+    """A covered vertex stays covered only if no uncovered one is within `margin` metres: the skin near a garment's edge
+    stays drawn, so a hem that rides up when the body moves, or the gap between a top and trousers, never shows a hole
+    through the body (bare skin at a hem is fine; a see-through gap is not)."""
+    from mathutils.kdtree import KDTree
+    open_ = [i for i in range(len(verts)) if not covered[i]]
+    if not open_:
+        return covered
+    tree = KDTree(len(open_))
+    for n, i in enumerate(open_):
+        tree.insert(verts[i], n)
+    tree.balance()
     keep = covered.copy()
-    for e in body.data.edges:
-        a, b = e.vertices
-        if not (covered[a] and covered[b]):
-            keep[a] = False
-            keep[b] = False
+    for i in range(len(verts)):
+        if covered[i] and tree.find(verts[i])[2] < margin:
+            keep[i] = False
     return keep
 
 
@@ -2399,7 +2405,7 @@ def bake_garment_cover(body, garments, out_png, size=1024, reach=0.03, log=print
             if hit[0] is None:
                 hit = tree.ray_cast(pl + nl * (0.01 * k), -nl, 0.012 * k)  # the garment sunk just under the skin
             covered[i] = hit[0] is not None
-        covered = _erode_cover(body, covered)
+        covered = _erode_cover(verts, covered)
         _cover_genitals(body, verts, normals, covered, tree, inv, inv3, g.name, log)
         faces = [(v, l) for v, l in tris if covered[v[0]] and covered[v[1]] and covered[v[2]]]
         if len(faces) < 40:

@@ -381,6 +381,7 @@ FSimPawnApparel USimPawnSubsystem::MakeApparel(const colony::Snapshot& Snapshot,
 		for (size_t L = 0; L < Def.count("apparel.layers"); ++L)
 		{
 			bUnderShell = bUnderShell || Def.textAt("apparel.layers", L) != "Shell";
+			Worn.bHeadwear = Worn.bHeadwear || Def.textAt("apparel.layers", L) == "Overhead";
 		}
 		Worn.bCoversCrotch = bOverLegs && bUnderShell;
 		if (Piece->stuff.valid() && Piece->stuff.value < Defs->size())

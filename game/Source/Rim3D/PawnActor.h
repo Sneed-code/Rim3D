@@ -106,6 +106,8 @@ public:
 	void SyncGarmentMorphs();
 	/** The garment names each worn piece is drawn as on a MakeHuman body (one cut of its `visual.cuts`), by item; empty on a MetaHuman. */
 	const TMap<uint32, FString>& GetGarmentCuts() const { return GarmentCuts; }
+	/** A hat or helmet is drawn on this MakeHuman body (its strand hair should take the under-a-hat groom). */
+	bool WearsDrawnHeadwear() const { return bHeadwearDrawn; }
 	uint64 GetApparelKey() const { return ApparelKey; }
 	const FSimPawnApparel& GetApparel() const { return Apparel; }
 	/** The meshes of the worn pieces now (skinned garments and head props), and the item each belongs to. */
@@ -378,6 +380,7 @@ private:
 	TArray<int32> CoveredHairSections;
 	/** The body's pubic hair sections hidden under trousers. */
 	TArray<int32> CoveredPubicSections;
+	bool bHeadwearDrawn = false;
 	uint64 ApparelKey = 0;
 	bool bApparelApplied = false;
 	bool bBareLayerTried = false;

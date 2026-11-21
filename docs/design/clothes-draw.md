@@ -70,18 +70,20 @@ body by MPFB.
   wetness of the wearer (12).
 - **Following the body**: each garment is a skinned mesh component on the body's leader pose; the body's morph weights
   are copied onto it when they change.
-- **Hats** hide the scalp hair sections of the body while worn (`hidesHair`).
+- **Hats**: a drawn overhead piece switches the strand hair to its under-a-hat groom (pressed flat above the brim, hanging
+  below it; `WearsDrawnHeadwear`); a `hidesHair` piece hides the scalp hair sections.
 
 ### Skin under clothes
 
 Skin poking through tight clothes when the body bends is cut away instead of pushed in. `mh_garments.py` casts a ray
-along each body normal and marks the faces a garment covers within 3 cm, then shrinks that by one ring of vertices so the skin at a hem or between a top and trousers stays drawn (no holes through the body), and headwear (lowest point above the chin line) hides no skin; each garment that covers 40 faces or more gets
+along each body normal and marks the faces a garment covers within 3 cm, then keeps only skin more than 4 cm from any uncovered skin, so the skin at a hem or between a top and trousers stays drawn even when the cloth shifts a little in play (no holes through the body), and headwear (lowest point above the chin line) hides no skin; each garment that covers 40 faces or more gets
 one bit (up to 32) in a per-base cover texture on the body's UVs (`T_MHG_<Base>_Cover`, 32 bits in RGBA8, nearest
 filtering). The garment keeps its bit as `UGarmentCoverData`. While worn, the pawn sets the bits on the body (custom
 data 30 low 16, 31 high 16) and the skin material (masked) clips the skin where a worn bit is set.
 
 The male genitals stand out further than trousers fitted to the basemesh, so their normals miss the cloth: a garment
-that half the genital vertices meet within 15 cm (straight ahead or along the normal) covers the whole `genital` vertex group too. Pubic hair (its own
+that half the genital vertices meet within 15 cm (straight ahead or along the normal) covers the whole `genital` vertex group too. Under trousers the `genital` bone is also scaled to 15% and held still
+(`UMakeHumanAnimInstance::SetGenitalTucked`), since the cut alone left the bulge on top of the cloth. Pubic hair (its own
 material sections) is hidden while a piece over the legs on the skin or middle layer is drawn (`bCoversCrotch`).
 
 ## Cost

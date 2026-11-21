@@ -117,6 +117,8 @@ struct FSimWornPiece
 	bool bHidesHair = false;
 	/** Worn on the skin or middle layer over the legs (trousers, not a duster): a MakeHuman body's pubic hair hides under it. */
 	bool bCoversCrotch = false;
+	/** On the overhead layer (hats and helmets): a MakeHuman body's strand hair takes its under-a-hat groom. */
+	bool bHeadwear = false;
 	/** The cuts a MakeHuman body can wear this piece as (`visual.cuts`, docs/design/clothes-draw.md "MakeHuman bodies"):
 	 *  each one or more garment names joined by '+'; the pawn draws one of them, picked by the item. */
 	TArray<FString> Cuts;

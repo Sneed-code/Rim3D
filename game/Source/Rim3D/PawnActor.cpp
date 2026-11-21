@@ -791,6 +791,7 @@ void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 			GarmentCuts.Reset();
 			CoveredHairSections.Reset();
 			CoveredPubicSections.Reset();
+			bHeadwearDrawn = false;
 			bApparelApplied = false;
 			MakeHumanMesh->DestroyComponent();
 			MakeHumanMesh = nullptr;
@@ -819,6 +820,7 @@ void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 		GarmentCuts.Reset();
 		CoveredHairSections.Reset();
 		CoveredPubicSections.Reset();
+		bHeadwearDrawn = false;
 		SetMakeHumanCoverBits(0);
 		bApparelApplied = false;
 	}
@@ -1405,13 +1407,19 @@ void ASimPawnActor::ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnAppare
 	SyncGarmentMorphs();
 	bool bCovered = false;
 	bool bCrotchCovered = false;
+	bHeadwearDrawn = false;
 	for (const FSimWornPiece& Piece : Apparel.Pieces)
 	{
+		bHeadwearDrawn = bHeadwearDrawn || (Piece.bHeadwear && GarmentCuts.Contains(Piece.Item));
 		bCovered = bCovered || (Piece.bHidesHair && GarmentCuts.Contains(Piece.Item));
 		bCrotchCovered = bCrotchCovered || (Piece.bCoversCrotch && GarmentCuts.Contains(Piece.Item));
 	}
 	SetMakeHumanHairCovered(bCovered);
 	SetMakeHumanPubicCovered(bCrotchCovered);
+	if (UMakeHumanAnimInstance* MhAnim = MakeHumanMesh ? Cast<UMakeHumanAnimInstance>(MakeHumanMesh->GetAnimInstance()) : nullptr)
+	{
+		MhAnim->SetGenitalTucked(bCrotchCovered);
+	}
 }
 
 void ASimPawnActor::SetMakeHumanPubicCovered(bool bCovered)
