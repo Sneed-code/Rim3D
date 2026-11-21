@@ -22,6 +22,7 @@ struct PlantRecord {
     DefId def;
     uint32_t growth = 0;    // millionths, 0 to kPlantFullGrowth
     uint32_t ageHours = 0;  // game hours since it sprouted
+    uint32_t damage = 0;    // hit points lost to blows, shots and blasts (docs/design/structure-damage.md)
 };
 
 // The plant layer: at most one plant per cell, kept as flat arrays (type, growth, age) because a
@@ -82,6 +83,20 @@ public:
     // takes the cell's index and returns the fertility, or a negative number for none. Not saved.
     void setFertilityOverride(std::function<float(size_t)> override) { fertilityOverride_ = std::move(override); }
 
+    // Hit points (docs/design/structure-damage.md): a plant has its def's `stats.maxHitPoints` (RimWorld's: 85 for grass,
+    // 200 for a tree) and loses them to melee blows, shots and blasts. 0 for an empty cell.
+    int maxHitPoints(CellPos c) const;
+    int hitPoints(CellPos c) const;
+    // Takes `amount` hit points off the plant in the cell; at 0 it dies and the cell is empty. True if it died.
+    bool damage(CellPos c, int amount);
+    bool isTree(CellPos c) const;
+    // A tree's trunk as a standing cylinder: where it stands (the spot Unreal draws the plant at), its radius
+    // (the def's `visual.stem.radius` scaled by growth) and height. False for an empty cell or a plant that isn't a tree.
+    bool trunkOf(CellPos c, float& x, float& y, float& radius, float& height) const;
+    // Where in its cell a plant is drawn: the cell's centre moved up to 0.35 m each way by a hash of the cell's index.
+    // Unreal draws the plant here (TerrainSubsystem), so the sim's trunk and the drawn tree are in the same place.
+    static void stemPoint(int cellIndex, int x, int y, float& px, float& py);
+
     size_t count() const { return count_; }
     size_t countOf(DefId def) const;
     // Fingerprint of the layer; kept up to date as plants change, so asking costs nothing.
@@ -102,13 +117,18 @@ private:
         uint32_t lifespanHours = 0;
         double commonality = 0.0;  // weight in the biome's wild plants; 0 if absent
         bool isTree = false;
+        int maxHitPoints = 85;      // stats.maxHitPoints (RimWorld's plant default)
+        float trunkRadius = 0.25f;  // visual.stem.radius (trees)
+        float trunkHeight = 3.0f;   // visual.stem.height (trees)
     };
 
     size_t indexOf(CellPos c) const;
     float fertilityAtIndex(size_t i) const;
     int kindOfDef(DefId def) const;
     uint64_t cellHash(size_t i) const;
+    // Changes a cell. The damage stays with a plant that keeps its kind and goes with it otherwise.
     void set(size_t i, uint16_t kind, uint32_t growth, uint32_t age);
+    void setDamage(size_t i, uint16_t damage);
     // The biome's `forestPatches` (ours): the share of the map that is open ground, and the tree weight in
     // open ground and in the dense forest. Without it trees swing smoothly between 0.2 and 1.8 times.
     struct ForestPatches {
@@ -130,6 +150,7 @@ private:
     std::vector<uint16_t> kind_;  // 0: no plant, otherwise index into kinds_ plus 1
     std::vector<uint32_t> growth_;
     std::vector<uint32_t> age_;
+    std::vector<uint16_t> damage_;  // hit points lost, 0 for most
     size_t count_ = 0;
     uint64_t hash_ = 0;
     std::function<double(size_t)> modifier_;

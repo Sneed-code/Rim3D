@@ -527,6 +527,7 @@ struct SavePlants {
     std::vector<uint32_t> defIndex;  // into `defs`
     std::vector<uint32_t> growth;
     std::vector<uint32_t> ageHours;
+    std::vector<uint32_t> damage;  // section v2 on: hit points lost (docs/design/structure-damage.md)
 };
 
 // The rock layer as parallel lists, one entry per rock or ore cell in cell order (format 10 on).
@@ -2995,7 +2996,13 @@ void savePlants(Ar& ar, SavePlants& p) {
     ar.list("defIndex", p.defIndex, [&](uint32_t& v) { ar.value(nullptr, v); });
     ar.list("growth", p.growth, [&](uint32_t& v) { ar.value(nullptr, v); });
     ar.list("ageHours", p.ageHours, [&](uint32_t& v) { ar.value(nullptr, v); });
-    ar.require(p.cells.size() == p.defIndex.size() && p.cells.size() == p.growth.size() && p.cells.size() == p.ageHours.size(),
+    if (ar.sectionVersion() >= 2) {
+        ar.list("damage", p.damage, [&](uint32_t& v) { ar.value(nullptr, v); });
+    } else {
+        p.damage.assign(p.cells.size(), 0);  // older saves: every plant unhurt
+    }
+    ar.require(p.cells.size() == p.defIndex.size() && p.cells.size() == p.growth.size() && p.cells.size() == p.ageHours.size() &&
+                   p.cells.size() == p.damage.size(),
                "the save file's plant lists don't match");
 }
 
@@ -3630,7 +3637,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("nextZoneId", d.nextZoneId);
         ar.list("zones", d.zones, [&](SaveZone& z) { saveZone(ar, z); });
     });
-    ar.section("plants", 1, [&] { savePlants(ar, d.plants); });
+    ar.section("plants", 2, [&] { savePlants(ar, d.plants); });
     ar.section("mining", 1, [&] {
         d.hasRock = true;
         saveMineables(ar, d.mineables);
@@ -5575,6 +5582,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.plants.defIndex.push_back(defIndexOf[r.def.value]);
         d.plants.growth.push_back(r.growth);
         d.plants.ageHours.push_back(r.ageHours);
+        d.plants.damage.push_back(r.damage);
     }
     std::vector<uint32_t> rockIndexOf(sim.defs_->size(), UINT32_MAX);
     for (const MineableRecord& r : sim.mineables_->records()) {
@@ -5889,7 +5897,8 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
                 return false;
             }
             const DefId def = sim.defs_->idOf("Things", d.plants.defs[d.plants.defIndex[i]]);
-            records.push_back(PlantRecord{static_cast<int>(d.plants.cells[i]), def, d.plants.growth[i], d.plants.ageHours[i]});
+            records.push_back(PlantRecord{static_cast<int>(d.plants.cells[i]), def, d.plants.growth[i], d.plants.ageHours[i],
+                                          i < d.plants.damage.size() ? d.plants.damage[i] : 0u});
         }
         if (!sim.plants_->restore(records)) {
             error = "the save has a plant the data files can't place";

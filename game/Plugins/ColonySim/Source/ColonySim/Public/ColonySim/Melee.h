@@ -329,6 +329,8 @@ public:
     // Counters for tests and simrun.
     uint64_t swings() const { return swings_; }
     uint64_t hits() const { return hits_; }
+    // Blows that hurt a building or a tree (docs/design/structure-damage.md).
+    uint64_t structureHits() const { return structureHits_; }
     uint64_t dodges() const { return dodges_; }
     uint64_t blocks() const { return blocks_; }
     uint64_t guardBreaks() const { return guardBreaks_; }
@@ -386,6 +388,7 @@ private:
     std::function<bool(Entity, Entity)> notFriendly_;
     uint64_t swings_ = 0;
     uint64_t hits_ = 0;
+    uint64_t structureHits_ = 0;  // blows that hurt a building or a tree
     uint64_t dodges_ = 0;
     uint64_t blocks_ = 0;
     uint64_t guardBreaks_ = 0;
