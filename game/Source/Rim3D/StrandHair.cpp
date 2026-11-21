@@ -7,6 +7,10 @@
 #include "HAL/IConsoleManager.h"
 #include "PawnFaces.h"
 #include "PhysicsEngine/PhysicsAsset.h"
+#include "PhysicsEngine/SkeletalBodySetup.h"
+#include "PhysicsEngine/SphereElem.h"
+#include "UObject/ObjectKey.h"
+#include "UObject/Package.h"
 #include "AnimationRuntime.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Camera/PlayerCameraManager.h"
@@ -37,6 +41,10 @@ namespace
 
 	TAutoConsoleVariable<float> GStrandHairMetaHumanFit(TEXT("Pawns.StrandHairMetaHumanFit"), 0.85f,
 		TEXT("Strand hair: size of a MetaHuman groom (-CreatorGroom) on our heads, times the MetaHuman's."));
+
+	TAutoConsoleVariable<int32> GStrandHairCollision(TEXT("Pawns.StrandHairCollision"), 1,
+		TEXT("What grown strand hair collides with: 1 spheres fitted inside the body's skin (grow_hair.py, grooms.json), 0 nothing, ")
+		TEXT("2 the body's own physics asset (stands proud of the skin, so it throws the hair out: for comparison)."));
 
 	const TCHAR* const StrandHairPhysicsAssetPath = TEXT("/Game/Characters/UEFN_Mannequin/Rigs/PA_UEFN_Mannequin.PA_UEFN_Mannequin");
 
@@ -142,17 +150,24 @@ namespace
 		}
 		Hair->SetRelativeTransform(OnHead);  // every call, so the tuning cvars show at once
 		Hair->SetVisibility(true);
-		if (Hair->GroomAsset != Groom)
+		const bool bNewGroom = Hair->GroomAsset != Groom;
+		if (bNewGroom)
 		{
 			Hair->SetGroomAsset(Groom);
-			if (UPhysicsAsset* Physics = Collision ? Collision : LoadObject<UPhysicsAsset>(nullptr, StrandHairPhysicsAssetPath))
-			{
-				Hair->PhysicsAsset = Physics;
-			}
-			Hair->AddCollisionComponent(Body);
-			UE_LOG(LogTemp, Display, TEXT("STRANDHAIR %s on %s: fitted scale %.3f (neck to head %.1f / %.1f cm, fit %.3f, moved %s), body head at %s, groom head at %s"),
+		}
+		// The strands collide with this one physics asset only. The body is not added as a collision component: that
+		// brings in its own physics asset, whose shapes stand centimetres proud of the scalp and back, and the hair
+		// grown lying on the skin started inside them and was thrown out into a puffball (PC, 2026-11-21).
+		if (bNewGroom || Hair->PhysicsAsset != Collision)
+		{
+			Hair->ResetCollisionComponents();
+			Hair->SetPhysicsAsset(Collision);
+		}
+		if (bNewGroom)
+		{
+			UE_LOG(LogTemp, Display, TEXT("STRANDHAIR %s on %s: fitted scale %.3f (neck to head %.1f / %.1f cm, fit %.3f, moved %s), body head at %s, groom head at %s, collides with %s"),
 				*Groom->GetName(), *BodyMesh->GetName(), Scale, BodyNeck, SourceNeck, FitScale, *FitOffset.ToString(), *BodyHead.GetLocation().ToString(),
-				*SourceHead.ToString());
+				*SourceHead.ToString(), Collision ? *Collision->GetName() : TEXT("nothing"));
 		}
 		return Hair;
 	}
@@ -189,10 +204,18 @@ namespace
 
 	/** grow_hair.py's grooms.json for a base: the skull centre from the head bone and each slider's change to the skull
 	 *  (share it grows, centre's move in cm), in the body's component axes. */
+	struct FStrandHairSphere
+	{
+		FString Part;                         // head, neck or torso
+		FVector Centre = FVector::ZeroVector;  // from the head bone, cm, the body's component axes
+		float Radius = 0.0f;
+	};
+
 	struct FStrandHairHeadFit
 	{
 		FVector SkullFromHead = FVector::ZeroVector;
 		TMap<FName, FVector4f> Morphs;
+		TArray<FStrandHairSphere> Collision;
 	};
 
 	const FStrandHairHeadFit& StrandHairHeadFit(const FString& Base)
@@ -228,9 +251,98 @@ namespace
 				}
 			}
 		}
-		UE_LOG(LogTemp, Display, TEXT("Strand hair: %s head fit, skull %s from the head bone, %d head sliders"), *Base, *HeadFit.SkullFromHead.ToString(),
-			HeadFit.Morphs.Num());
+		const TArray<TSharedPtr<FJsonValue>>* Spheres = nullptr;
+		if (Root->TryGetArrayField(TEXT("collision"), Spheres))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Spheres)
+			{
+				const TSharedPtr<FJsonObject> Object = Value->AsObject();
+				const TArray<TSharedPtr<FJsonValue>>* Centre = nullptr;
+				if (Object.IsValid() && Object->TryGetArrayField(TEXT("centre_cm"), Centre) && Centre->Num() == 3)
+				{
+					FStrandHairSphere& Sphere = HeadFit.Collision.AddDefaulted_GetRef();
+					Sphere.Part = Object->GetStringField(TEXT("part"));
+					Sphere.Centre = FVector((*Centre)[0]->AsNumber(), (*Centre)[1]->AsNumber(), (*Centre)[2]->AsNumber());
+					Sphere.Radius = static_cast<float>(Object->GetNumberField(TEXT("radius_cm")));
+				}
+			}
+		}
+		UE_LOG(LogTemp, Display, TEXT("Strand hair: %s head fit, skull %s from the head bone, %d head sliders, %d collision spheres"), *Base,
+			*HeadFit.SkullFromHead.ToString(), HeadFit.Morphs.Num(), HeadFit.Collision.Num());
 		return HeadFit;
+	}
+
+	/** What grown hair collides with on a body of this mesh: a physics asset of grow_hair.py's spheres inside the skin,
+	 *  each on the bone of its part (head, neck_01, or the spine bone nearest it), so the hair rests where it was grown
+	 *  and is only pushed back when it swings into the body. Made once per mesh. */
+	UPhysicsAsset* StrandHairFittedCollision(const USkeletalMesh& Mesh, const FStrandHairHeadFit& HeadFit)
+	{
+		static TMap<FObjectKey, TWeakObjectPtr<UPhysicsAsset>> Made;
+		if (const TWeakObjectPtr<UPhysicsAsset>* Known = Made.Find(FObjectKey(&Mesh)))
+		{
+			if (Known->IsValid())
+			{
+				return Known->Get();
+			}
+		}
+		FTransform Head;
+		float NeckToHead = 0.0f;
+		if (HeadFit.Collision.IsEmpty() || !StrandHairHead(Mesh, Head, NeckToHead))
+		{
+			return nullptr;
+		}
+		const FReferenceSkeleton& Ref = Mesh.GetRefSkeleton();
+		TArray<int32> Spine;
+		for (int32 Bone = 0; Bone < Ref.GetNum(); ++Bone)
+		{
+			if (Ref.GetBoneName(Bone).ToString().StartsWith(TEXT("spine")))
+			{
+				Spine.Add(Bone);
+			}
+		}
+		UPackage* Outer = GetTransientPackage();
+		UPhysicsAsset* Asset = NewObject<UPhysicsAsset>(Outer, MakeUniqueObjectName(Outer, UPhysicsAsset::StaticClass(), TEXT("PA_StrandHair")));
+		TMap<int32, USkeletalBodySetup*> Bodies;
+		int32 Placed = 0;
+		for (const FStrandHairSphere& Sphere : HeadFit.Collision)
+		{
+			const FVector Centre = Head.GetLocation() + Sphere.Centre;
+			int32 Bone = Sphere.Part == TEXT("head") ? Ref.FindBoneIndex(TEXT("head"))
+				: Sphere.Part == TEXT("neck") ? Ref.FindBoneIndex(TEXT("neck_01")) : INDEX_NONE;
+			if (Sphere.Part == TEXT("torso"))
+			{
+				double Nearest = TNumericLimits<double>::Max();
+				for (const int32 Candidate : Spine)
+				{
+					const double Distance = FVector::DistSquared(FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, Candidate).GetLocation(), Centre);
+					if (Distance < Nearest)
+					{
+						Nearest = Distance;
+						Bone = Candidate;
+					}
+				}
+			}
+			if (Bone == INDEX_NONE)
+			{
+				continue;
+			}
+			USkeletalBodySetup*& Setup = Bodies.FindOrAdd(Bone);
+			if (!Setup)
+			{
+				Setup = NewObject<USkeletalBodySetup>(Asset);
+				Setup->BoneName = Ref.GetBoneName(Bone);
+				Setup->PhysicsType = PhysType_Kinematic;
+				Asset->SkeletalBodySetups.Add(Setup);
+			}
+			FKSphereElem Elem(Sphere.Radius);
+			Elem.Center = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, Bone).InverseTransformPosition(Centre);
+			Setup->AggGeom.SphereElems.Add(Elem);
+			++Placed;
+		}
+		Asset->UpdateBodySetupIndexMap();
+		UE_LOG(LogTemp, Display, TEXT("STRANDHAIR collision for %s: %d spheres inside the skin on %d bones"), *Mesh.GetName(), Placed, Bodies.Num());
+		Made.Add(FObjectKey(&Mesh), Asset);
+		return Asset;
 	}
 }
 
@@ -242,7 +354,9 @@ UGroomComponent* StrandHairAttach(USkeletalMeshComponent* Body, UGroomAsset* Gro
 	const bool bFound = Face && StrandHairHead(*Face, FaceHead, FaceNeck);
 	// Not sized by the necks: our bodies have longer necks but smaller heads than the MetaHumans, so that blew the
 	// hair up 15% when it should shrink (sneed, 2026-11-21: "made to fit a head 35% bigger"). A set fit instead.
-	return StrandHairFit(Body, Groom, FaceHead.GetLocation(), 0.0f, bFound, Existing, FMath::Clamp(GStrandHairMetaHumanFit.GetValueOnGameThread(), 0.5f, 1.5f));
+	UPhysicsAsset* Mannequin = GStrandHairCollision.GetValueOnGameThread() != 0 ? LoadObject<UPhysicsAsset>(nullptr, StrandHairPhysicsAssetPath) : nullptr;
+	return StrandHairFit(Body, Groom, FaceHead.GetLocation(), 0.0f, bFound, Existing, FMath::Clamp(GStrandHairMetaHumanFit.GetValueOnGameThread(), 0.5f, 1.5f),
+		FVector::ZeroVector, Mannequin);
 }
 
 UGroomAsset* StrandHairFindGrown(const FString& Base, const FString& CreatorStyle, bool bUnderHat)
@@ -277,11 +391,21 @@ UGroomComponent* StrandHairAttachGrown(USkeletalMeshComponent* Body, UGroomAsset
 	float Grow = 0.0f;
 	FVector Move = FVector::ZeroVector;
 	FVector Skull = FVector::ZeroVector;
+	UPhysicsAsset* Collision = nullptr;
+	const int32 CollisionMode = GStrandHairCollision.GetValueOnGameThread();
+	if (CollisionMode == 2 && Body && Body->GetSkeletalMeshAsset())
+	{
+		Collision = Body->GetSkeletalMeshAsset()->GetPhysicsAsset();
+	}
 	if (Base && Body)
 	{
 		FString BaseName = Base->GetName();
 		BaseName.RemoveFromStart(TEXT("SK_MH_"));
 		const FStrandHairHeadFit& HeadFit = StrandHairHeadFit(BaseName);
+		if (CollisionMode == 1 && Body->GetSkeletalMeshAsset())
+		{
+			Collision = StrandHairFittedCollision(*Body->GetSkeletalMeshAsset(), HeadFit);
+		}
 		Skull = HeadFit.SkullFromHead;
 		for (const TPair<FName, FVector4f>& Morph : HeadFit.Morphs)
 		{
@@ -291,10 +415,7 @@ UGroomComponent* StrandHairAttachGrown(USkeletalMeshComponent* Body, UGroomAsset
 		}
 		Grow = FMath::Clamp(Grow, -0.3f, 0.3f);
 	}
-	// Collide with this body's own physics asset (made with it by the MakeHumanArt import): the mannequin's is a bigger
-	// body, so hair grown lying on our skin would start inside its shapes and be thrown off.
-	UPhysicsAsset* Own = Body && Body->GetSkeletalMeshAsset() ? Body->GetSkeletalMeshAsset()->GetPhysicsAsset() : nullptr;
-	return StrandHairFit(Body, Groom, FVector::ZeroVector, BaseNeck, bFound, Existing, 1.0f + Grow, Move - Skull * Grow, Own);
+	return StrandHairFit(Body, Groom, FVector::ZeroVector, BaseNeck, bFound, Existing, 1.0f + Grow, Move - Skull * Grow, Collision);
 }
 
 void StrandHairSetColour(UGroomComponent* Groom, const FLinearColor& Hair)

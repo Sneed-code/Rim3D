@@ -125,8 +125,26 @@ Every grown style (but Buzz) is also grown as `<Style>Hat`: everything above the
 1.2 cm below the skull centre's height) is pressed within 4 mm of the scalp, and below the brim it hangs as usual, so a
 hat or helmet sits over the hair with no strands through it while the hair below shows and swings. `Want(...,
 bUnderHat)` picks it; headgear that covers all the hair still hides it all (`apparel.hidesHair`). The groom physics keeps
-colliding with the body's physics asset; when MakeHuman bodies wear hats (clothes thread), the hat also gets a collision
-shape so swinging hair below the brim cannot pass into it. Creator test: `-CreatorHairHat` (pressed hair, no hat drawn).
+colliding with the body (below); when MakeHuman bodies wear hats (clothes thread), the hat also gets a collision sphere
+so swinging hair below the brim cannot pass into it. Creator test: `-CreatorHairHat` (pressed hair, no hat drawn).
+
+## What the strands collide with (2026-11-21)
+
+First PC pictures of the grown hair: with Unreal's groom physics off it hung exactly as grown, with it on every style
+puffed out into a ball (long hair spread from the crown to the waist, Short and Crop stood straight up, the hat
+versions lifted). The cause: the strands collided with the body's own physics asset, whose shapes wrap each bone's
+vertices and stand centimetres proud of the scalp and back, and our hair is grown lying within millimetres of the
+skin, so it started inside them and was pushed out (the body was also added as a collision component, which brings in
+the same shapes, so the mannequin asset had the same trouble).
+
+Now `grow_hair.py` fits collision spheres inside the skin (`grooms.json` "collision", about 40): 12 filling the cranium,
+the neck, and every 5.5 cm from the top of the shoulders to the waist one in the middle of the body and two towards
+each side (two more at the shoulders), each at the middle of the body's depth with the largest radius that stays 4 mm
+inside the surface. The game builds a physics asset from them once per body mesh (head spheres on `head`, the neck on
+`neck_01`, the rest on the nearest spine bone) and the groom collides with that alone. Hair at rest never touches them;
+hair swinging into the body is pushed back out at the skin. Buzz has no physics at all (`hair_grooms.json` "still").
+`Pawns.StrandHairCollision` 1 fitted (default), 0 nothing, 2 the body's own asset (to compare). Head sliders do not
+resize the spheres (the 4 mm keeps a slightly smaller head clear).
 
 ## Near and far (step 2)
 
@@ -169,6 +187,9 @@ About 30 points against 10 capsules: a few tens of microseconds per pawn per fra
 | beyond 50 m | as animated |
 
 ## Console and checks
+
+- Strand hair: `Pawns.StrandHair`, `Pawns.StrandHairNear`, `Pawns.StrandHairMax`, `Pawns.StrandHairCollision`,
+  `Pawns.StrandHairMetaHumanFit`, `Pawns.StrandHairScale`; Unreal's `r.HairStrands.Simulation 0` turns groom physics off.
 
 - `Pawns.HairPhysics 2` (default) full, `1` only pushed out of the body, `0` as animated (stiff).
 - `Pawns.HairDebug 1` draws the capsules (green) and the strands (yellow).

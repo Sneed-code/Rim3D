@@ -130,7 +130,7 @@ namespace
 		return nullptr;
 	}
 
-	bool GroomsMake(const FString& File, const FString& Name, UMaterialInterface* HairMaterial)
+	bool GroomsMake(const FString& File, const FString& Name, UMaterialInterface* HairMaterial, bool bSimulate)
 	{
 		UGroomAsset* Groom = GroomsImport(File, Name);
 		if (!Groom)
@@ -161,11 +161,11 @@ namespace
 		}
 		for (FHairGroupsPhysics& Physics : Groom->GetHairGroupsPhysics())
 		{
-			Physics.SolverSettings.EnableSimulation = true;
+			Physics.SolverSettings.EnableSimulation = bSimulate;
 		}
 		Groom->PostEditChange();
-		UE_LOG(LogHairGrooms, Display, TEXT("Groom %s from %s: %d groups, %d materials"), *Groom->GetName(), *File, Groom->GetNumHairGroups(),
-			Groom->GetHairGroupsMaterials().Num());
+		UE_LOG(LogHairGrooms, Display, TEXT("Groom %s from %s: %d groups, %d materials, physics %s"), *Groom->GetName(), *File, Groom->GetNumHairGroups(),
+			Groom->GetHairGroupsMaterials().Num(), bSimulate ? TEXT("on") : TEXT("off"));
 		return GroomsSave(Groom);
 	}
 }
@@ -195,6 +195,15 @@ int32 UHairGroomsCommandlet::Main(const FString& Params)
 			GroomsHairMaterial);
 	}
 	IFileManager::Get().DeleteDirectory(*FPackageName::LongPackageNameToFilename(StrandHairGrownFolder), false, true);
+	TArray<FString> Still;  // too short to move: no physics
+	const TArray<TSharedPtr<FJsonValue>>* StillValues = nullptr;
+	if (Root->TryGetArrayField(TEXT("still"), StillValues))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *StillValues)
+		{
+			Still.Add(Value->AsString());
+		}
+	}
 	int32 Made = 0;
 	int32 Failed = 0;
 	for (const TSharedPtr<FJsonValue>& Base : Root->GetArrayField(TEXT("bases")))
@@ -212,7 +221,7 @@ int32 UHairGroomsCommandlet::Main(const FString& Params)
 						bHat ? TEXT("under a hat the plain style shows") : TEXT("that style keeps its wig"));
 					continue;
 				}
-				const bool bOk = GroomsMake(File, StrandHairGrownName(Base->AsString(), Style), HairMaterial);
+				const bool bOk = GroomsMake(File, StrandHairGrownName(Base->AsString(), Style), HairMaterial, !Still.Contains(StyleValue->AsString()));
 				Made += bOk ? 1 : 0;
 				Failed += bOk ? 0 : 1;
 			}

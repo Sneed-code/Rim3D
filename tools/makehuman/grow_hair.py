@@ -174,6 +174,82 @@ class Body:
         return self.push_out(p, clearance, reach)
 
 
+def collision_spheres(body):
+    """Spheres for the groom's physics to collide with, all inside the skin: the head, the neck, and the shoulders and back
+    down to the waist (where the long styles reach). Each sits at a point inside the body with the largest radius that
+    stays `margin` inside its surface. The body's own physics asset wraps each bone's vertices in a capsule standing
+    centimetres proud of the scalp and back, so hair grown lying on the skin started inside it and the simulation threw
+    it out into a puffball (PC, 2026-11-21). Returns [(part, centre, radius)] in metres; part is head, neck or torso."""
+    margin = 0.004
+    out = []
+
+    def add(part, c, smallest=0.012):
+        loc, nrm, _, dist = body.bvh.find_nearest(Vector(c))
+        if loc is None or np.dot(c - np.array(loc), np.array(nrm)) >= 0.0:  # outside the body
+            return
+        if dist - margin > smallest:
+            out.append((part, np.array(c, dtype=float), float(dist - margin)))
+
+    # The head: the skull centre and points towards the crown, back and sides (MakeHuman faces -y).
+    for d in [(0, 0, 0), (0, 0, 1), (0, 1, 0), (0, 0.7, 0.7), (0, 0.8, -0.5), (0, -0.5, 0.7), (1, 0, 0.2), (-1, 0, 0.2),
+              (0.6, 0.6, 0.4), (-0.6, 0.6, 0.4), (0.6, 0.6, -0.4), (-0.6, 0.6, -0.4)]:
+        d = np.array(d, dtype=float)
+        n = np.linalg.norm(d)
+        add("head", body.skull + (d / n * 0.45 * body.skull_r if n > 0 else d))
+
+    mid_x = body.head[0]
+
+    def hit(origin, direction):
+        loc, _, _, _ = body.bvh.ray_cast(Vector(origin), Vector(direction), 2.0)
+        return None if loc is None else np.array(loc)
+
+    def depth_middle(x, z):
+        """The middle of the body's front and back surfaces at (x, z), or None if the line misses it."""
+        front = hit((x, -1.0, z), (0, 1, 0))
+        back = hit((x, 1.0, z), (0, -1, 0))
+        return None if front is None or back is None or back[1] <= front[1] else (front[1] + back[1]) / 2
+
+    def cross_section(z):
+        """The body's sides at height z, found from its middle outwards (so an arm hanging apart is left out, but the
+        shoulders are in): (left x, right x) or None."""
+        y = depth_middle(mid_x, z)
+        if y is None:
+            return None
+        left = hit((mid_x, y, z), (-1, 0, 0))
+        right = hit((mid_x, y, z), (1, 0, 0))
+        return None if left is None or right is None else (left[0], right[0])
+
+    def slice_spheres(part, z, columns, smallest=0.012):
+        sides = cross_section(z)
+        if sides is None:
+            return
+        x0, x1 = sides
+        for f in columns:
+            x = (x0 + x1) / 2 + f * (x1 - x0) / 2
+            y = depth_middle(x, z)
+            if y is not None:
+                add(part, np.array([x, y, z]), smallest)
+
+    # The neck, from its base to under the skull.
+    for t in (0.2, 0.55, 0.9):
+        slice_spheres("neck", body.neck[2] + t * (body.head[2] - body.neck[2]), (0.0,))
+
+    # The shoulders and back from the top of the shoulders to the waist: in each slice a sphere in the middle and two
+    # towards each side. Below the shoulders the outer ones (small where the body thins towards the arms) are left out,
+    # which keeps the count well within what the hair simulation reads from a physics asset.
+    z = body.heights["shoulder"] + 0.03
+    while z >= body.heights["waist"] - 1e-6:
+        slice_spheres("torso", z, (0.0, -0.45, 0.45, -0.8, 0.8), 0.012 if z > body.heights["shoulder"] - 0.04 else 0.025)
+        z -= 0.055
+
+    # Drop spheres inside another.
+    keep = []
+    for i, (part, c, r) in enumerate(out):
+        if not any(j != i and np.linalg.norm(c - c2) + r <= r2 + 1e-6 and (r2 > r or j < i) for j, (_, c2, r2) in enumerate(out)):
+            keep.append((part, c, r))
+    return keep
+
+
 # ---- the scalp ----------------------------------------------------------------------------------------------------------
 
 # Hairline: (degrees round the head from the front, lowest elevation above the skull centre's height that grows hair).
@@ -442,6 +518,9 @@ def make_curves(name, pts, end_idx, origin, style):
     curves = bpy.data.hair_curves.new(name)
     sizes = (end_idx + 1).tolist()
     curves.add_curves(sizes)
+    # Straight segments between the points (Blender's hair curves are Catmull-Rom by default, which the Alembic file
+    # carries as cubic curves with knots; Unreal's reader tripped over their knot counts, PC 2026-11-21).
+    curves.set_types(type="POLY")
     flat = np.concatenate([pts[i, : end_idx[i] + 1] - origin for i in range(len(pts))])
     curves.position_data.foreach_set("vector", flat.astype(np.float32).ravel())
     radius = np.concatenate([np.linspace(style["width_root"], style["width_tip"], s) * 0.5 for s in sizes]).astype(np.float32)
@@ -580,7 +659,13 @@ def main():
                 # in Unreal's axes (Blender x, -y, z) and centimetres.
                 "skull_from_head_cm": [round(float(v), 3) for v in ((body.skull - head) * 100.0 * np.array([1, -1, 1]))],
                 "skull_radius_cm": round(body.skull_r * 100.0, 3),
-                "head_morphs": morphs, "styles": {}}
+                "head_morphs": morphs,
+                # What the groom's physics collides with (StrandHair.cpp builds a physics asset from them): spheres inside
+                # the skin, centre from the head bone in Unreal's axes and cm; part head, neck or torso picks the bone.
+                "collision": [{"part": part, "centre_cm": [round(float(x), 2) for x in ((c - head) * 100.0 * np.array([1, -1, 1]))],
+                               "radius_cm": round(r * 100.0, 2)} for part, c, r in collision_spheres(body)],
+                "styles": {}}
+    log("collision spheres:", len(manifest["collision"]), [(c["part"], c["radius_cm"]) for c in manifest["collision"]])
     hat = json.load(open(a.config)).get("hat")
     jobs = []
     for name in wanted:
