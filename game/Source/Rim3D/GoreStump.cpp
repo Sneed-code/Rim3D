@@ -107,9 +107,9 @@ namespace
 	}
 
 	// The tissue colours (linear).
-	const FLinearColor GoreMuscleDark(0.20f, 0.014f, 0.010f);
-	const FLinearColor GoreMuscleLight(0.46f, 0.045f, 0.032f);
-	const FLinearColor GoreFat(1.0f, 0.78f, 0.30f);
+	const FLinearColor GoreMuscleDark(0.12f, 0.007f, 0.005f);
+	const FLinearColor GoreMuscleLight(0.32f, 0.026f, 0.018f);
+	const FLinearColor GoreFat(0.86f, 0.62f, 0.26f);
 	const FLinearColor GoreCloth(0.50f, 0.16f, 0.11f);
 	const FLinearColor GoreDermis(0.40f, 0.07f, 0.05f);
 	const FLinearColor GoreBlood(0.18f, 0.008f, 0.006f);
@@ -237,33 +237,44 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 		},
 		[&](int32 Row, int32 C)
 		{
-			const float Theta = 2.0f * PI * C / Cols;
-			const float F = Rings[FMath::Min(Row, RingCount - 1)];
-			const float Wobble = 0.03f * Edge.At(Theta * 2.0f);
-			const float G = F + Wobble;
-			if (bClothed && (Row == RingCount || F > 1.0f))
+			// Rough, wet and smeared rather than clean rings ("cartoon salami" on the PC): the layer edges wander a lot,
+			// and blood lies in patches across everything.
+			const FLinearColor Tissue = [&]() -> FLinearColor
 			{
-				return GoreWet(FMath::Lerp(GoreCloth, GoreBlood, 0.1f + 0.3f * Random.FRand()), 0.45f);
-			}
-			if (Row == RingCount)
+				const float Theta = 2.0f * PI * C / Cols;
+				const float F = Rings[FMath::Min(Row, RingCount - 1)];
+				const float Wobble = 0.07f * Edge.At(Theta * 2.0f) + 0.04f * Fibres.At(Theta * 5.0f + F * 3.0f) + 0.03f * Random.FRandRange(-1.0f, 1.0f);
+				const float G = F + Wobble;
+				if (bClothed && (Row == RingCount || F > 1.0f))
+				{
+					return GoreWet(FMath::Lerp(GoreCloth, GoreBlood, 0.1f + 0.3f * Random.FRand()), 0.45f);
+				}
+				if (Row == RingCount)
+				{
+					return GoreWet(FMath::Lerp(Skin, GoreBlood, 0.35f + 0.3f * Random.FRand()), 0.35f);
+				}
+				if (G < 0.71f)
+				{
+					// Muscle in bundles: darker and lighter streaks across the cut, wet.
+					const float Streak = 0.5f + 0.5f * Fibres.At(Theta * 3.0f + F * 11.0f);
+					return GoreWet(FMath::Lerp(GoreMuscleDark, GoreMuscleLight, Streak * 0.8f + 0.2f * Random.FRand()), 0.0f);
+				}
+				if (G < 0.89f)
+				{
+					return GoreWet(FMath::Lerp(GoreFat, GoreBlood, 0.1f + 0.25f * Random.FRand()), 0.15f);
+				}
+				if (G < 0.975f)
+				{
+					return GoreWet(GoreDermis, 0.05f);
+				}
+				return GoreWet(FMath::Lerp(SkinBloodied, GoreBlood, 0.3f + 0.4f * Random.FRand()), 0.3f);
+			}();
+			if (Random.FRand() < 0.3f)
 			{
-				return GoreWet(FMath::Lerp(Skin, GoreBlood, 0.35f + 0.3f * Random.FRand()), 0.35f);
+				// A smear of blood: darker, and wet.
+				return GoreWet(FMath::Lerp(Tissue, GoreBlood, Random.FRandRange(0.3f, 0.65f)), 0.0f);
 			}
-			if (G < 0.71f)
-			{
-				// Muscle in bundles: darker and lighter streaks across the cut, wet.
-				const float Streak = 0.5f + 0.5f * Fibres.At(Theta * 3.0f + F * 11.0f);
-				return GoreWet(FMath::Lerp(GoreMuscleDark, GoreMuscleLight, Streak * 0.8f + 0.2f * Random.FRand()), 0.0f);
-			}
-			if (G < 0.89f)
-			{
-				return GoreWet(FMath::Lerp(GoreFat, GoreBlood, 0.02f + 0.08f * Random.FRand()), 0.3f);
-			}
-			if (G < 0.975f)
-			{
-				return GoreWet(GoreDermis, 0.1f);
-			}
-			return GoreWet(FMath::Lerp(SkinBloodied, GoreBlood, 0.3f + 0.4f * Random.FRand()), 0.3f);
+			return Tissue;
 		});
 
 	// Clothed: a sleeve or trouser leg often runs on past the cut as an open tube. A ragged, blood-soaked lining just

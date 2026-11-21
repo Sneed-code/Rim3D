@@ -372,6 +372,25 @@ FSimPawnApparel USimPawnSubsystem::MakeApparel(const colony::Snapshot& Snapshot,
 		Worn.Stuff = Piece->stuff.value;
 		Worn.Wear = PawnWearOf(Piece->hitPointShare);
 		Worn.bHidesHair = Def.flag("apparel.hidesHair", false);
+		bool bOverLegs = false;
+		bool bUnderShell = false;
+		bool bOverTorso = false;
+		int32 LayerRank = 0;
+		for (size_t G = 0; G < Def.count("apparel.bodyPartGroups"); ++G)
+		{
+			const std::string Group = Def.textAt("apparel.bodyPartGroups", G);
+			bOverLegs = bOverLegs || Group == "Legs";
+			bOverTorso = bOverTorso || Group == "Torso";
+		}
+		for (size_t L = 0; L < Def.count("apparel.layers"); ++L)
+		{
+			const std::string Layer = Def.textAt("apparel.layers", L);
+			LayerRank = FMath::Max(LayerRank, Layer == "Shell" ? 2 : (Layer == "Middle" ? 1 : 0));
+			bUnderShell = bUnderShell || Def.textAt("apparel.layers", L) != "Shell";
+			Worn.bHeadwear = Worn.bHeadwear || Def.textAt("apparel.layers", L) == "Overhead";
+		}
+		Worn.bCoversCrotch = bOverLegs && bUnderShell;
+		Worn.Puff = (bOverTorso ? 1.5f : 0.0f) + 0.6f * static_cast<float>(LayerRank);
 		if (Piece->stuff.valid() && Piece->stuff.value < Defs->size())
 		{
 			const colony::Def& Stuff = Defs->get(Piece->stuff);
@@ -379,6 +398,16 @@ FSimPawnApparel USimPawnSubsystem::MakeApparel(const colony::Snapshot& Snapshot,
 			{
 				Worn.bHasTint = true;
 				Worn.Tint = VisualMesh::ReadColor(Stuff, "visual.color", FLinearColor::White);
+			}
+		}
+		// MakeHuman bodies: the cuts this piece can be drawn as ("visual.cuts": ["Garment", "Top+Trousers", ...]).
+		const size_t CutCount = Def.count("visual.cuts");
+		for (size_t C = 0; C < CutCount; ++C)
+		{
+			const std::string Cut = Def.text(("visual.cuts." + std::to_string(C)).c_str());
+			if (!Cut.empty())
+			{
+				Worn.Cuts.Add(UTF8_TO_TCHAR(Cut.c_str()));
 			}
 		}
 		const size_t Count = Def.count("visual.worn");
@@ -593,6 +622,22 @@ UAnimSequence* USimPawnSubsystem::GetActionAnimation(colony::PawnAction Action) 
 	return CrouchPose;
 }
 
+USkeletalMesh* USimPawnSubsystem::GetGarmentMesh(const FString& Base, const FString& Garment)
+{
+	const FString Name = MakeHumanGarmentName(Base, Garment);
+	if (const TObjectPtr<USkeletalMesh>* Found = GarmentMeshes.Find(Name))
+	{
+		return *Found;
+	}
+	USkeletalMesh* Mesh = nullptr;
+	if (FPackageName::DoesPackageExist(FString(MakeHumanGarmentFolder) / Name))
+	{
+		Mesh = LoadObject<USkeletalMesh>(nullptr, *MakeHumanAssetPath(MakeHumanGarmentFolder, Name));
+	}
+	GarmentMeshes.Add(Name, Mesh);
+	return Mesh;
+}
+
 void USimPawnSubsystem::SetLooksOverride(colony::Entity Thing, const FSimPawnLooks& Looks)
 {
 	LooksOverrides.Add(PawnKey(Thing), Looks);
@@ -707,6 +752,7 @@ void USimPawnSubsystem::Tick(float DeltaTime)
 		{
 			Pawn->ApplyApparel(*this, MakeApparel(Now, View, Defs), WornKey);
 		}
+		Pawn->SyncGarmentMorphs();
 	}
 	for (auto It = Pawns.CreateIterator(); It; ++It)
 	{

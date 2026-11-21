@@ -6,6 +6,8 @@
 #include "Animation/AnimSequence.h"
 #include "Retargeter/IKRetargeter.h"
 #include "MakeHumanAnimInstance.h"
+#include "MakeHumanArt.h"
+#include "GarmentCoverData.h"
 #include "AnimationRuntime.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Components/DecalComponent.h"
@@ -813,6 +815,14 @@ void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 		}
 		if (MakeHumanMesh)
 		{
+			DestroyWorn();  // its garments go with it; the MetaHuman dresses again
+			Apparel = FSimPawnApparel();
+			GarmentCuts.Reset();
+			CoveredHairSections.Reset();
+			CoveredPubicSections.Reset();
+			bHeadwearDrawn = false;
+			GarmentCoverBits = 0;
+			bApparelApplied = false;
 			MakeHumanMesh->DestroyComponent();
 			MakeHumanMesh = nullptr;
 		}
@@ -831,6 +841,19 @@ void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 		MakeHumanMesh->SetCanEverAffectNavigation(false);
 		MakeHumanMesh->bReceivesDecals = true;
 		MakeHumanMesh->RegisterComponent();
+	}
+	if (MakeHumanMesh->GetSkeletalMeshAsset() != Mesh)
+	{
+		// Garments are made per body: a new body puts its clothes on afresh (the pawn subsystem applies them again).
+		DestroyWorn();
+		Apparel = FSimPawnApparel();
+		GarmentCuts.Reset();
+		CoveredHairSections.Reset();
+		CoveredPubicSections.Reset();
+		bHeadwearDrawn = false;
+		GarmentCoverBits = 0;
+		SetMakeHumanCoverBits(0);
+		bApparelApplied = false;
 	}
 	MakeHumanMesh->SetSkeletalMeshAsset(Mesh);
 	MakeHumanMesh->SetAnimInstanceClass(UMakeHumanAnimInstance::StaticClass());
@@ -1303,10 +1326,283 @@ void ASimPawnActor::UpdateHairVisibility()
 	RefreshGroomVisibility();
 }
 
+namespace
+{
+	/** A worn piece's cut on a MakeHuman body: one of its `visual.cuts` whose garments are all made for the base, picked by
+	 *  the item (so the same shirt always looks the same, and two shirts of a kind can differ). Empty if none fits. */
+	FString PawnGarmentCut(USimPawnSubsystem& Pawns, const FString& Base, const FSimWornPiece& Piece)
+	{
+		TArray<const FString*> Fits;
+		for (const FString& Cut : Piece.Cuts)
+		{
+			TArray<FString> Garments;
+			Cut.ParseIntoArray(Garments, TEXT("+"));
+			bool bAll = !Garments.IsEmpty();
+			for (const FString& Garment : Garments)
+			{
+				bAll = bAll && Pawns.GetGarmentMesh(Base, Garment) != nullptr;
+			}
+			if (bAll)
+			{
+				Fits.Add(&Cut);
+			}
+		}
+		if (Fits.IsEmpty())
+		{
+			return FString();
+		}
+		// For pictures: -CreatorCut=Bowler,PatrolCap picks a cut with one of those garments wherever a piece has one.
+		static const TArray<FString> PawnForcedGarments = []()
+		{
+			FString Arg;
+			TArray<FString> Out;
+			if (FParse::Value(FCommandLine::Get(), TEXT("CreatorCut="), Arg, false))
+			{
+				Arg.ParseIntoArray(Out, TEXT(","), true);
+			}
+			return Out;
+		}();
+		TArray<const FString*> ForcedFits;
+		for (const FString* Fit : Fits)
+		{
+			TArray<FString> FitGarments;
+			Fit->ParseIntoArray(FitGarments, TEXT("+"));
+			for (const FString& Forced : PawnForcedGarments)
+			{
+				if (FitGarments.Contains(Forced))
+				{
+					ForcedFits.Add(Fit);
+					break;
+				}
+			}
+		}
+		const uint32 Seed[2] = {Piece.Item, Piece.Def};
+		if (!ForcedFits.IsEmpty())
+		{
+			return *ForcedFits[FCrc::MemCrc32(Seed, sizeof(Seed)) % static_cast<uint32>(ForcedFits.Num())];  // spread over the pawns
+		}
+		return *Fits[FCrc::MemCrc32(Seed, sizeof(Seed)) % static_cast<uint32>(Fits.Num())];
+	}
+
+	/** Slot names of a MakeHuman body's scalp hair styles (tools/makehuman: long01, bob02, short02, ponytail01, braid01...). */
+	bool PawnIsScalpHairSlot(const FString& Slot)
+	{
+		static const TCHAR* const Keys[] = {TEXT("long0"), TEXT("bob0"), TEXT("short0"), TEXT("ponytail"), TEXT("braid"), TEXT("afro"),
+			TEXT("_hair"), TEXT("twintail"), TEXT("messy")};
+		const FString Lower = Slot.ToLower();
+		if (Lower.Contains(TEXT("pubic")) || Lower.Contains(TEXT("brow")) || Lower.Contains(TEXT("lash")) || Lower.Contains(TEXT("beard")))
+		{
+			return false;
+		}
+		for (const TCHAR* Key : Keys)
+		{
+			if (Lower.Contains(Key))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
+void ASimPawnActor::ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnApparel& Wanted)
+{
+	const FString Base = Looks.MakeHuman;
+	if (!Wanted.SameStructure(Apparel))
+	{
+		DestroyWorn();
+		GarmentCuts.Reset();
+		++ApparelRebuilds;
+		for (const FSimWornPiece& Piece : Wanted.Pieces)
+		{
+			const FString Cut = PawnGarmentCut(Pawns, Base, Piece);
+			UE_LOG(LogTemp, Display, TEXT("Garments: %s on %s wears item %u (%d cuts) as '%s'"), *GetName(), *Base, Piece.Item, Piece.Cuts.Num(), *Cut);
+			if (Cut.IsEmpty())
+			{
+				continue;  // nothing made for this piece yet: it is worn (and counts) but not drawn
+			}
+			GarmentCuts.Add(Piece.Item, Cut);
+			TArray<FString> Garments;
+			Cut.ParseIntoArray(Garments, TEXT("+"));
+			for (const FString& Garment : Garments)
+			{
+				USkeletalMeshComponent* Component = NewObject<USkeletalMeshComponent>(this);
+				Component->SetSkeletalMeshAsset(Pawns.GetGarmentMesh(Base, Garment));
+				Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				Component->SetCanEverAffectNavigation(false);
+				Component->bReceivesDecals = false;
+				Component->SetupAttachment(MakeHumanMesh);
+				Component->RegisterComponent();
+				Component->SetLeaderPoseComponent(MakeHumanMesh);
+				WornMeshes.Add(Component);
+				WornMeshItems.Add(Piece.Item);
+			}
+		}
+		GarmentMorphHash = 0;  // the new garments take the body's morphs below
+		// Skin under the clothes is cut away, so the body never pokes through (docs/design/clothes-draw.md).
+		uint32 CoverBits = 0;
+		for (UMeshComponent* Worn : WornMeshes)
+		{
+			const USkeletalMeshComponent* Garment = Cast<USkeletalMeshComponent>(Worn);
+			USkeletalMesh* GarmentMesh = Garment ? Garment->GetSkeletalMeshAsset() : nullptr;
+			const UGarmentCoverData* Cover = GarmentMesh ? GarmentMesh->GetAssetUserData<UGarmentCoverData>() : nullptr;
+			if (Cover && Cover->CoverBit >= 0 && Cover->CoverBit < MakeHumanCrotchCoverBit)
+			{
+				CoverBits |= 1u << Cover->CoverBit;
+			}
+		}
+		GarmentCoverBits = CoverBits;
+	}
+	Apparel = Wanted;
+	for (const FSimWornPiece& Piece : Apparel.Pieces)
+	{
+		for (int32 I = 0; I < WornMeshItems.Num(); ++I)
+		{
+			if (WornMeshItems[I] == Piece.Item && WornMeshes.IsValidIndex(I) && WornMeshes[I])
+			{
+				StyleGarment(WornMeshes[I], Piece);
+			}
+		}
+	}
+	SyncGarmentMorphs();
+	bool bCovered = false;
+	bool bCrotchCovered = false;
+	bHeadwearDrawn = false;
+	for (const FSimWornPiece& Piece : Apparel.Pieces)
+	{
+		bHeadwearDrawn = bHeadwearDrawn || (Piece.bHeadwear && GarmentCuts.Contains(Piece.Item));
+		bCovered = bCovered || (Piece.bHidesHair && GarmentCuts.Contains(Piece.Item));
+		bCrotchCovered = bCrotchCovered || (Piece.bCoversCrotch && GarmentCuts.Contains(Piece.Item));
+	}
+	SetMakeHumanHairCovered(bCovered);
+	SetMakeHumanPubicCovered(bCrotchCovered);
+	// The crotch (bit 31 of the cover, tools/makehuman bake_garment_cover): the genitals, pubic area and inner thighs
+	// stand out past trousers fitted to the basemesh, so they hide whenever trousers are drawn.
+	SetMakeHumanCoverBits(GarmentCoverBits | (bCrotchCovered ? (1u << MakeHumanCrotchCoverBit) : 0u));
+}
+
+void ASimPawnActor::SetMakeHumanPubicCovered(bool bCovered)
+{
+	if (!MakeHumanMesh || bCovered == !CoveredPubicSections.IsEmpty())
+	{
+		return;
+	}
+	if (bCovered)
+	{
+		const TArray<FSkeletalMaterial>& Slots = MakeHumanMesh->GetSkeletalMeshAsset() ? MakeHumanMesh->GetSkeletalMeshAsset()->GetMaterials() : TArray<FSkeletalMaterial>();
+		for (int32 I = 0; I < Slots.Num(); ++I)
+		{
+			if (Slots[I].MaterialSlotName.ToString().ToLower().Contains(TEXT("pubic")) && MakeHumanMesh->IsMaterialSectionShown(I, 0))
+			{
+				MakeHumanMesh->ShowMaterialSection(I, 0, false, 0);
+				CoveredPubicSections.Add(I);
+			}
+		}
+	}
+	else
+	{
+		for (const int32 I : CoveredPubicSections)
+		{
+			MakeHumanMesh->ShowMaterialSection(I, 0, true, 0);
+		}
+		CoveredPubicSections.Reset();
+	}
+}
+
+void ASimPawnActor::SetMakeHumanCoverBits(uint32 Bits)
+{
+	if (MakeHumanMesh)
+	{
+		MakeHumanMesh->SetCustomPrimitiveDataFloat(MakeHumanCoverLowIndex, static_cast<float>(Bits & 0xFFFFu));
+		MakeHumanMesh->SetCustomPrimitiveDataFloat(MakeHumanCoverHighIndex, static_cast<float>(Bits >> 16));
+	}
+}
+
+void ASimPawnActor::StyleGarment(UMeshComponent* Mesh, const FSimWornPiece& Piece) const
+{
+	// Colour is a look, not a sign of the stuff (sneed 2026-11-20): each made-of-stuff garment takes a clothing colour
+	// picked from its item id, so it never changes. The stuff stays hidden in the numbers. Gear without a stuff
+	// (flak, plasteel) keeps its own colours.
+	static const FLinearColor Palette[] = {
+		FLinearColor(0.05f, 0.07f, 0.13f), FLinearColor(0.16f, 0.18f, 0.09f), FLinearColor(0.45f, 0.38f, 0.25f), FLinearColor(0.22f, 0.22f, 0.22f),
+		FLinearColor(0.20f, 0.12f, 0.07f), FLinearColor(0.10f, 0.16f, 0.28f), FLinearColor(0.55f, 0.53f, 0.48f), FLinearColor(0.30f, 0.07f, 0.06f),
+		FLinearColor(0.08f, 0.08f, 0.08f), FLinearColor(0.62f, 0.60f, 0.55f), FLinearColor(0.12f, 0.20f, 0.17f), FLinearColor(0.35f, 0.22f, 0.12f),
+		FLinearColor(0.25f, 0.27f, 0.30f), FLinearColor(0.40f, 0.30f, 0.32f), FLinearColor(0.28f, 0.30f, 0.20f), FLinearColor(0.15f, 0.10f, 0.18f)};
+	const uint32 Pick = FCrc::MemCrc32(&Piece.Item, sizeof(Piece.Item), 0x7c01u) % UE_ARRAY_COUNT(Palette);
+	const FLinearColor Colour = Palette[Pick];
+	Mesh->SetCustomPrimitiveDataVector3(MakeHumanGarmentTintIndex, FVector(Colour.R, Colour.G, Colour.B));
+	Mesh->SetCustomPrimitiveDataFloat(MakeHumanGarmentWearIndex, Piece.Wear);
+	Mesh->SetCustomPrimitiveDataFloat(MakeHumanGarmentTintAmountIndex, Piece.bHasTint ? 1.0f : 0.0f);
+	Mesh->SetCustomPrimitiveDataFloat(MakeHumanGarmentPuffIndex, Piece.Puff);
+}
+
+void ASimPawnActor::SyncGarmentMorphs()
+{
+	if (!MakeHumanMesh || WornMeshes.IsEmpty())
+	{
+		return;
+	}
+	const TMap<FName, float>& Curves = MakeHumanMesh->GetMorphTargetCurves();
+	uint32 Hash = static_cast<uint32>(Curves.Num()) + 1u;
+	for (const TPair<FName, float>& Morph : Curves)
+	{
+		Hash = HashCombineFast(Hash, HashCombineFast(GetTypeHash(Morph.Key), GetTypeHash(FMath::RoundToInt32(Morph.Value * 1000.0f))));
+	}
+	if (Hash == GarmentMorphHash)
+	{
+		return;
+	}
+	GarmentMorphHash = Hash;
+	for (UMeshComponent* Mesh : WornMeshes)
+	{
+		if (USkeletalMeshComponent* Garment = Cast<USkeletalMeshComponent>(Mesh))
+		{
+			Garment->ClearMorphTargets();
+			for (const TPair<FName, float>& Morph : Curves)
+			{
+				Garment->SetMorphTarget(Morph.Key, Morph.Value, false);
+			}
+		}
+	}
+}
+
+void ASimPawnActor::SetMakeHumanHairCovered(bool bCovered)
+{
+	if (!MakeHumanMesh || bCovered == !CoveredHairSections.IsEmpty())
+	{
+		return;
+	}
+	if (bCovered)
+	{
+		const TArray<FSkeletalMaterial>& Slots = MakeHumanMesh->GetSkeletalMeshAsset() ? MakeHumanMesh->GetSkeletalMeshAsset()->GetMaterials() : TArray<FSkeletalMaterial>();
+		for (int32 I = 0; I < Slots.Num(); ++I)
+		{
+			if (PawnIsScalpHairSlot(Slots[I].MaterialSlotName.ToString()) && MakeHumanMesh->IsMaterialSectionShown(I, 0))
+			{
+				MakeHumanMesh->ShowMaterialSection(I, 0, false, 0);
+				CoveredHairSections.Add(I);
+			}
+		}
+	}
+	else
+	{
+		for (const int32 I : CoveredHairSections)
+		{
+			MakeHumanMesh->ShowMaterialSection(I, 0, true, 0);
+		}
+		CoveredHairSections.Reset();
+	}
+}
+
 void ASimPawnActor::ApplyApparel(USimPawnSubsystem& Pawns, const FSimPawnApparel& Wanted, uint64 Key)
 {
 	ApparelKey = Key;
 	bApparelApplied = true;
+	if (MakeHumanMesh)
+	{
+		ApplyGarments(Pawns, Wanted);
+		return;
+	}
 	if (!MetaHuman || !MetaHumanBody)
 	{
 		return;  // a mannequin has no clothes to change
