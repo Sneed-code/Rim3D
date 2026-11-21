@@ -184,7 +184,7 @@ void Sim::landFlight(PodFlight& f) {
         }
         std::string ignored;
         trade_->adjustGoodwill(world_->settlements()[static_cast<size_t>(settlement)].faction,
-                               static_cast<float>(value / trade_->rules().giftSilverPerPoint), ignored);
+                               static_cast<float>(value / trade_->rules().giftSilverPerPoint), ignored, "a gift by transport pod");
         arrived("gift", CellPos{}, -1);
         return;
     }

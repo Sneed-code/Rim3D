@@ -697,6 +697,34 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	};
 	Phases.Add(MoveTemp(ScorchOnly));
 
+	// A fresh scorch close up at dusk, for its embers (PC round 12: from 5 m at noon an ember is about a pixel).
+	FPhase ScorchClose;
+	ScorchClose.Name = TEXT("blast_scorch_close");
+	ScorchClose.WarmupSeconds = 1.5f;  // the exposure settles to dusk
+	ScorchClose.MeasureSeconds = 0.6f;
+	ScorchClose.ScreenshotAt = 0.2f;
+	ScorchClose.Setup = [=, this]()
+	{
+		const colony::ThingView* Me = MyView();
+		if (!Me || !Fx())
+		{
+			return;
+		}
+		FeelSmokeSet(TEXT("Sky.Hour"), 19.5f);
+		Fx()->ClearForTest();
+		Fx()->AddScorchForTest(Me->x + 2.8f, Me->y - 1.2f, 1.9f);
+		LookAtBlast(Me->x + 2.8f, Me->y - 1.2f, -45.0f, -25.0f);
+	};
+	ScorchClose.Verify = [=, this]()
+	{
+		FeelSmokeSet(TEXT("Sky.Hour"), 14.0f);
+		if (Fx() && Fx()->IsReady())
+		{
+			Notes.Add(TEXT("blast_scorch_close: look for orange embers glowing in the charred core"));
+		}
+	};
+	Phases.Add(MoveTemp(ScorchClose));
+
 	FPhase Molotov;
 	Molotov.Name = TEXT("blast_molotov");
 	Molotov.WarmupSeconds = 0.2f;
