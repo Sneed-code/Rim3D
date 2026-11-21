@@ -187,3 +187,11 @@ float"; "I like the ability to aim in 3rd person but the weapon doesn't move wit
   turned (twice, from the sight) so the sight line meets what the crosshair is on, up to 60 degrees round and nearly
   straight up or down; the arms follow because the hands are pinned on the weapon. Smoke `finishers` phase `aim3p`
   checks the rifle within 8 degrees of the crosshair and the body within 20 degrees of the camera.
+
+## Stock clear of the head (sneed, 2026-11-22)
+
+The shotgun's stock went through the head when aiming. For two-handed guns, after the aim blend the gun slides forward
+along its barrel in 1 cm steps (up to 30 cm) until the stock-to-grip line clears an 11.5 cm skull round a point 9 cm
+above the head bone (both scaled by body size). `GetStockSlideCm` reports it; the gun range smoke notes it. In melee,
+the feet now turn with the body through a swing (`bTurnFeet`), so a turning mace swing no longer twists the spine up to
+60 degrees and the weapon follows the body.

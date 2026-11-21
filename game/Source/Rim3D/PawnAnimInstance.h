@@ -61,6 +61,9 @@ struct FSimPawnAnimInputs
 	/** Standing, a turn twists the upper body over planted feet (docs/design/pawns.md "Standing still"); off while a
 	 *  whole-body clip, a roll, a jump or a crawl has the body. */
 	bool bStandTwist = true;
+	/** The feet turn with the body at once, no held feet and no twist at the waist: through a melee swing, so the body
+	 *  turns the weapon with it instead of twisting under it (sneed 2026-11-22: a mace swing while turning). */
+	bool bTurnFeet = false;
 	/** A whole-body clip still shows (blending out after the sim's clip ended, or a crouching action): the legs are
 	 *  the clip's, so neither the feet holds nor the hips' pull to the sim's position may act on them. */
 	bool bLegsFromClip = false;

@@ -256,7 +256,7 @@ public:
     float patchQuality = 0.3f;                   // the tend quality of a patch
     float coverBlood = 1500.0f;                  // under this a bleeding fighter falls back to cover to patch
     float minMoving = 0.4f;                      // a person on their feet (body zones) limps, never slower than this share
-    float crawlMoving = 0.1f;                    // a torso-downed person crawls at this share of its walk (part D)
+    float crawlMoving = 0.05f;                   // a torso-downed person crawls at this share of its walk (part D)
     // sneed's rules of 2026-11-17 (HealthRules `zones`, body-health.md part F).
     int deadLimbs = 2;                 // this many arms and legs at 0 ...
     float deadLimbsCore = 0.5f;        // ...with the head or the torso at this or less: dead

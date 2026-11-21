@@ -102,7 +102,7 @@
       "patchQuality": 0.3,
       "coverBlood": 1500,
       "minMoving": 0.4,
-      "crawlMoving": 0.1,
+      "crawlMoving": 0.05,
       "note2": "sneed 2026-11-17: dead with the head or torso at 0, or with deadLimbs arms and legs at 0 and the head or torso at deadLimbsCoreAtOrBelow; an arm (attacks) or leg (walking) under limbSlowBelow slows by limbSlowPerShare for every share under it, both limbs added; a zone not hurt for healDelaySeconds (real) and not bleeding heals healPerSecond of its missing hit points a real second, healAsleepFactor times that asleep",
       "deadLimbs": 2,
       "deadLimbsCoreAtOrBelow": 0.5,

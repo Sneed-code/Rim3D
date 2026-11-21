@@ -1148,6 +1148,29 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 	{
 		Weapon = Blend(Weapon, Placed(*Block), Pawn.BlockBlend);
 	}
+	if (bGun && Hold.hands == 2)
+	{
+		// The stock never goes through the head (sneed 2026-11-22: "shotgun positioning bad, it goes through head"): a
+		// long gun whose sight sits far forward on it (the shotgun's bead rib over the grip) put its butt 20 cm behind the
+		// head bone when aimed. Slid forward along its own barrel until the stock, butt to grip, clears the skull (so the
+		// aim line doesn't change), at most 30 cm; the hands follow.
+		const float BodyScale = Actor.GetBodyScale();
+		const FVector Skull = Head + Actor.GetActorUpVector() * (9.0 * BodyScale);
+		const double Clear = 11.5 * BodyScale;
+		const FVector Barrel = Weapon.GetRotation().GetAxisX();
+		const FVector Butt = Weapon.TransformPosition(Points.Stock * Size);
+		const FVector Grip = Weapon.TransformPosition(Points.Main * Size);
+		double Slide = 0.0;
+		while (Slide < 30.0 && FMath::PointDistToSegment(Skull, Butt + Barrel * Slide, Grip + Barrel * Slide) < Clear)
+		{
+			Slide += 1.0;
+		}
+		if (Slide > 0.0)
+		{
+			Weapon.AddToTranslation(Barrel * Slide);
+			StockSlideCm = static_cast<float>(FMath::Max(static_cast<double>(StockSlideCm), Slide));
+		}
+	}
 	if (Pawn.SwingBlend > 0.0f)
 	{
 		// The procedural swing's weapon pose (the old drawing's, which swings the weapon round the body), with the

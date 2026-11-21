@@ -205,6 +205,12 @@ public:
 	/** Severed limbs and heads on the ground now, and how many were thrown since the start (body-health.md part F). */
 	int32 GetSeveredPiecesShown() const;
 	int32 GetSeveredPiecesThrown() const { return SeveredPiecesThrown; }
+	/** How many times a bullet's line knocked a severed piece. */
+	int32 GetSeveredPiecesPushed() const { return SeveredPiecesPushed; }
+	/** How many spent cases guns have thrown out (smoke tests). */
+	int32 GetCasingsEjected() const { return CasingsEjected; }
+	/** Knocks every severed piece the line from `From` to `To` passes through (body-health.md part F, "Physics"). */
+	void PushSeveredPieces(const FVector& From, const FVector& To, const FVector& Dir, float Damage);
 	int32 GetFireOrders() const { return FireOrders; }
 	int32 GetHitMarkers() const { return HitMarkers; }
 	int32 GetActiveTracers() const { return Tracers.Num(); }
@@ -263,8 +269,24 @@ private:
 		float Drag = 2.0f;
 	};
 
+	/** A spent case thrown out of a gun's ejection port (sneed, 2026-11-22: "just have the casing fire"): brass for rifles
+	 *  and pistols, a red shell for shotguns. It tumbles, bounces on the ground, lies a while and goes. Cosmetic. */
+	struct FCasing
+	{
+		int32 Kind = 0;  // 0 rifle, 1 pistol, 2 shotgun shell
+		FVector Position = FVector::ZeroVector;
+		FVector Velocity = FVector::ZeroVector;
+		FQuat Rotation = FQuat::Identity;
+		FVector Spin = FVector::ZeroVector;  // degrees a second about the case's own axes
+		float Age = 0.0f;
+		bool bRest = false;
+	};
+
 	void OnSimEvent(const colony::Event& Event);
 	void OnShotFired(const colony::Event& Event);
+	/** Throws a spent case out of the gun that fired, drawn in first person or held in third, within 25 m of the camera. */
+	void EjectCasing(const colony::Event& Event);
+	void UpdateCasings(float GameDelta);
 	void OnProjectileHit(const colony::Event& Event);
 	void SpawnImpact(const FFightTracer& Tracer);
 	void SpawnFlash(const FVector& Muzzle);
@@ -326,6 +348,10 @@ private:
 
 	TArray<FFightTracer> Tracers;
 	TArray<FParticle> Particles;
+	TArray<FCasing> Casings;
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> CasingInstances;  // by kind
+	int32 CasingsEjected = 0;
 	TArray<float> LightAges;
 	TMap<uint32, TPair<FVector, int64>> RecentImpulse;
 	TArray<FFightHitRecord> HitLog;
@@ -392,6 +418,7 @@ private:
 	int32 RagdollsStarted = 0;
 	TMap<uint32, TWeakObjectPtr<class ASeveredPieceActor>> SeveredPieces;  // by the sim's piece id
 	int32 SeveredPiecesThrown = 0;
+	int32 SeveredPiecesPushed = 0;
 	int32 FireOrders = 0;
 	int32 HitMarkers = 0;
 	int32 HitboxesDrawn = 0;

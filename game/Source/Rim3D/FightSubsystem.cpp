@@ -241,6 +241,12 @@ void UFightSubsystem::EnsureEffects()
 		ParticleInstances.Add(MakeInstanced(Look.bSphere ? MakeBox(5.0f, 5.0f, 10.0f, Look.Color, true) : MakeBox(10.0f, 10.0f, 10.0f, Look.Color, false)));
 	}
 
+	// Spent cases (long along X): rifle brass, pistol brass, a red shotgun shell.
+	CasingInstances.Reset();
+	CasingInstances.Add(MakeInstanced(MakeBox(2.6f, 0.75f, 0.75f, FLinearColor(0.72f, 0.5f, 0.2f), false)));
+	CasingInstances.Add(MakeInstanced(MakeBox(1.9f, 0.9f, 0.9f, FLinearColor(0.72f, 0.5f, 0.2f), false)));
+	CasingInstances.Add(MakeInstanced(MakeBox(6.0f, 1.9f, 1.9f, FLinearColor(0.55f, 0.06f, 0.05f), false)));
+
 	Lights.Reset();
 	LightAges.Reset();
 	for (int32 I = 0; I < FightLightCount; ++I)
@@ -264,6 +270,14 @@ void UFightSubsystem::ResetEffects()
 {
 	Tracers.Reset();
 	Particles.Reset();
+	Casings.Reset();
+	for (UInstancedStaticMeshComponent* Component : CasingInstances)
+	{
+		if (Component)
+		{
+			Component->ClearInstances();
+		}
+	}
 	RecentImpulse.Reset();
 	HitLog.Reset();
 	for (TWeakObjectPtr<UDecalComponent>& Decal : Decals)
@@ -352,6 +366,7 @@ void UFightSubsystem::OnShotFired(const colony::Event& Event)
 		++MuzzleShots;
 	}
 	SpawnFlash(Muzzle);
+	EjectCasing(Event);
 	if (Tracers.Num() < FightMaxTracers)
 	{
 		FFightTracer Tracer;
@@ -566,6 +581,7 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 	++ImpactsByKind[FMath::Clamp(static_cast<int32>(Tracer.HitKind), 0, 7)];
 	const FVector Dir = Tracer.Dir.GetSafeNormal().IsNearlyZero() ? -FVector::UpVector : Tracer.Dir.GetSafeNormal();
 	const FVector Back = -Dir;
+	PushSeveredPieces(Tracer.Start, Tracer.End + Dir * 20.0f, Dir, Tracer.Amount);
 	// The sim's point lies on its hitbox, which a slim drawn body may sit inside: on a body hit, where the bullet's line
 	// first meets the drawn body (the animated mannequin's physics shapes, which the MakeHuman body follows), so the
 	// wound and the spray come out of the skin where it was shot.
@@ -855,6 +871,7 @@ void UFightSubsystem::Tick(float DeltaTime)
 			const float GameDelta = DeltaTime * static_cast<float>(Bridge->GetSpeed());
 			UpdateTracers(DeltaTime, GameDelta);
 			UpdateParticles(GameDelta);
+			UpdateCasings(GameDelta);
 			UpdateLights(GameDelta);
 			SyncPawns();
 		}
@@ -1030,6 +1047,137 @@ void UFightSubsystem::UpdateParticles(float GameDelta)
 					Component->AddInstances(ByKind[Kind], false, true);
 				}
 			}
+		}
+	}
+}
+
+void UFightSubsystem::EjectCasing(const colony::Event& Event)
+{
+	USimSubsystem* Bridge = BridgeSource.Get();
+	if (!Bridge || !Bridge->GetDefs() || !Event.def.valid() || CasingInstances.Num() < 3)
+	{
+		return;
+	}
+	// Which case, by the gun: none for bows, charge guns, launchers and the like.
+	const FString Name = UTF8_TO_TCHAR(Bridge->GetDefs()->get(Event.def).defName().c_str());
+	for (const TCHAR* None : {TEXT("Bow"), TEXT("Charge"), TEXT("Launcher"), TEXT("Pila"), TEXT("Mortar"), TEXT("Rocket"), TEXT("Foam"),
+			 TEXT("Grenade"), TEXT("Doomsday"), TEXT("Inferno"), TEXT("EMP"), TEXT("Smoke")})
+	{
+		if (Name.Contains(None))
+		{
+			return;
+		}
+	}
+	const int32 Kind = Name.Contains(TEXT("Shotgun")) ? 2 : (Name.Contains(TEXT("Pistol")) || Name.Contains(TEXT("Revolver"))) ? 1 : 0;
+	// The gun's frame (+X out of the barrel, +Y right, +Z up) and its ejection port in it.
+	FTransform Frame;
+	FVector Port;
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	const bool bMe = Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == Event.thing;
+	bool bFound = false;
+	if (bMe && Protagonist->GetBody() && Protagonist->GetBody()->IsFirstPerson())
+	{
+		FVector Muzzle;
+		if (const UGunRangeSubsystem* Range = GetWorld()->GetSubsystem<UGunRangeSubsystem>(); Range && Range->GetViewGunFrame(Frame, Muzzle))
+		{
+			// Above the grip a little towards the barrel, on the right side: where a bolt or a breech opens.
+			Port = FVector(Muzzle.X * 0.12f + 6.0f, 1.5f, Muzzle.Z);
+			bFound = true;
+		}
+	}
+	if (!bFound)
+	{
+		const UStaticMeshComponent* Gun = GetHeldGun(Event.thing);
+		if (!Gun || !Gun->IsVisible() || !Gun->GetStaticMesh())
+		{
+			return;
+		}
+		const FBox Box = Gun->GetStaticMesh()->GetBoundingBox();
+		Frame = Gun->GetComponentTransform();
+		Frame.SetScale3D(FVector::OneVector);
+		Port = Gun->GetComponentTransform().GetScale3D() * FVector(Box.Min.X + 0.42 * (Box.Max.X - Box.Min.X), Box.Max.Y,
+			0.5 * (Box.Min.Z + Box.Max.Z) + 0.25 * (Box.Max.Z - Box.Min.Z));
+	}
+	const APlayerController* Controller = GetWorld()->GetFirstPlayerController();
+	const FVector At = Frame.TransformPosition(Port);
+	if (!Controller || !Controller->PlayerCameraManager || FVector::Dist(At, Controller->PlayerCameraManager->GetCameraLocation()) > 2500.0)
+	{
+		return;
+	}
+	if (Casings.Num() >= 80)
+	{
+		Casings.RemoveAt(0);  // the oldest goes
+	}
+	FCasing& Case = Casings.AddDefaulted_GetRef();
+	Case.Kind = Kind;
+	Case.Position = At;
+	// Out to the right and up, a little back, each a bit different.
+	const FVector Out(Random.FRandRange(-60.0f, -10.0f), Random.FRandRange(180.0f, 260.0f), Random.FRandRange(120.0f, 200.0f));
+	Case.Velocity = Frame.TransformVectorNoScale(Out);
+	// Lying across the barrel at first (its length along the gun's right), spinning end over end.
+	Case.Rotation = Frame.GetRotation() * FQuat(FVector::UpVector, FMath::DegreesToRadians(90.0f + Random.FRandRange(-20.0f, 20.0f)));
+	Case.Spin = FVector(Random.FRandRange(-200.0f, 200.0f), Random.FRandRange(900.0f, 1600.0f), Random.FRandRange(-400.0f, 400.0f));
+	++CasingsEjected;
+}
+
+void UFightSubsystem::UpdateCasings(float GameDelta)
+{
+	constexpr float Life = 30.0f;  // seconds a case lies about
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	TArray<FTransform> ByKind[3];
+	for (int32 Index = Casings.Num() - 1; Index >= 0; --Index)
+	{
+		FCasing& Case = Casings[Index];
+		Case.Age += GameDelta;
+		if (Case.Age >= Life)
+		{
+			Casings.RemoveAt(Index);
+			continue;
+		}
+		const float Radius = Case.Kind == 2 ? 0.95f : 0.45f;
+		if (!Case.bRest && Bridge && GameDelta > 0.0f)
+		{
+			const float Step = FMath::Min(GameDelta, 0.05f);
+			Case.Velocity.Z -= 980.0f * Step;
+			Case.Position += Case.Velocity * Step;
+			Case.Rotation = (Case.Rotation * FQuat::MakeFromEuler(Case.Spin * Step)).GetNormalized();
+			const FVector Here = (Case.Position - Bridge->GetWorldOrigin()) / 100.0;
+			const float Floor = static_cast<float>(Bridge->SimToWorld(static_cast<float>(Here.X), static_cast<float>(Here.Y), 0).Z) + Radius;
+			if (Case.Position.Z <= Floor)
+			{
+				Case.Position.Z = Floor;
+				if (Case.Velocity.Z < 0.0f)
+				{
+					Case.Velocity.Z = -Case.Velocity.Z * 0.35f;  // a light, hard case bounces and skitters
+				}
+				Case.Velocity.X *= 0.6f;
+				Case.Velocity.Y *= 0.6f;
+				Case.Spin *= 0.55f;
+				// Brought down to lie on its side (its length along the ground).
+				const FVector Length = Case.Rotation.GetAxisX();
+				const FVector Flat = FVector(Length.X, Length.Y, 0.0).GetSafeNormal(UE_SMALL_NUMBER, FVector::ForwardVector);
+				Case.Rotation = (FQuat::Slerp(FQuat::Identity, FQuat::FindBetweenNormals(Length, Flat), 0.5f) * Case.Rotation).GetNormalized();
+				if (Case.Velocity.Size() < 20.0f)
+				{
+					Case.bRest = true;
+					Case.Velocity = FVector::ZeroVector;
+				}
+			}
+		}
+		const float Shrink = Case.Age > Life - 2.0f ? (Life - Case.Age) / 2.0f : 1.0f;
+		ByKind[FMath::Clamp(Case.Kind, 0, 2)].Add(FTransform(Case.Rotation, Case.Position, FVector(Shrink)));
+	}
+	for (int32 Kind = 0; Kind < 3 && Kind < CasingInstances.Num(); ++Kind)
+	{
+		UInstancedStaticMeshComponent* Component = CasingInstances[Kind].Get();
+		if (!Component || (Component->GetInstanceCount() == 0 && ByKind[Kind].IsEmpty()))
+		{
+			continue;
+		}
+		Component->ClearInstances();
+		if (!ByKind[Kind].IsEmpty())
+		{
+			Component->AddInstances(ByKind[Kind], false, true);
 		}
 	}
 }
@@ -1236,6 +1384,29 @@ void UFightSubsystem::SyncPawns()
 			}
 			It.RemoveCurrent();
 		}
+	}
+}
+
+void UFightSubsystem::PushSeveredPieces(const FVector& From, const FVector& To, const FVector& Dir, float Damage)
+{
+	// A bullet whose line passes through a severed limb or head knocks it along (cosmetic: the sim's bullet goes on to
+	// what it hit). A rifle round sends a forearm about 2.5 m/s; more damage, harder.
+	for (const TPair<uint32, TWeakObjectPtr<ASeveredPieceActor>>& Pair : SeveredPieces)
+	{
+		ASeveredPieceActor* Piece = Pair.Value.Get();
+		if (!Piece)
+		{
+			continue;
+		}
+		const FVector Middle = Piece->GetActorLocation();
+		const FVector Closest = FMath::ClosestPointOnSegment(Middle, From, To);
+		if (FVector::Dist(Closest, Middle) > Piece->GetReachCm())
+		{
+			continue;
+		}
+		const float Speed = FMath::Clamp(120.0f + 14.0f * FMath::Max(Damage, 0.0f), 150.0f, 600.0f);
+		Piece->Push(Dir * Speed + FVector(0.0, 0.0, Speed * 0.35f), Closest);
+		++SeveredPiecesPushed;
 	}
 }
 

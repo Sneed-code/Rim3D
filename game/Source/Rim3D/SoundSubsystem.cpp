@@ -574,6 +574,7 @@ void USoundSubsystem::ResetForSim()
 	LoopsByKey.Reset();
 	PendingPlays.clear();
 	PlayCounts.Reset();
+	VoicedCounts.Reset();
 	StepDistance.Reset();
 	WorkBeats.Reset();
 	FlyWatch.Reset();
@@ -1794,6 +1795,12 @@ void USoundSubsystem::StartVoice(int32 VoiceIndex, int32 SoundIndex)
 	Voice.Wave = Wave;
 	Voice.BusyUntil = 0.0;
 	Sound.Voice = VoiceIndex;
+	FIntPoint& Voiced = VoicedCounts.FindOrAdd(Sound.Cue->Name);
+	const bool bFromFile = Sound.Clip.IsValid() && Sound.Cue->Clips.Contains(Sound.Clip);
+	Voiced.X += 1;
+	Voiced.Y += bFromFile ? 1 : 0;
+	UE_CLOG(GSoundDebug.GetValueOnGameThread() >= 1, LogTemp, Log, TEXT("Sound: %s playing (%s) %.0f m away, volume %.2f"), *Sound.Cue->Name,
+		bFromFile ? TEXT("recording") : TEXT("tone"), Sound.DistanceM, Sound.Volume);
 	// A one-shot's clock starts when it really starts: a long frame before this must not end it early.
 	Sound.EndsAt = Now + (Sound.Clip ? Sound.Clip->Seconds() / Sound.Pitch : 0.0) + 0.5;
 	Sound.DoneAt = -1.0;

@@ -458,6 +458,23 @@ void ASeveredPieceActor::Throw(const FVector& InVelocity, const FRotator& InSpin
 	bAtRest = false;
 }
 
+void ASeveredPieceActor::Push(const FVector& DeltaVelocity, const FVector& At)
+{
+	if (DeltaVelocity.IsNearlyZero())
+	{
+		return;
+	}
+	Velocity += DeltaVelocity;
+	// An off-centre knock spins it: the turn axis is across the knock and the arm from the middle to where it was struck.
+	const FVector Arm = At - GetActorLocation();
+	const FVector Axis = FVector::CrossProduct(Arm, DeltaVelocity);
+	const float Scale = FMath::Clamp(static_cast<float>(DeltaVelocity.Size()) / 300.0f, 0.2f, 2.0f);
+	const FVector Local = GetActorQuat().UnrotateVector(Axis.GetSafeNormal()) * 540.0f * Scale;
+	Spin += FRotator(Local.Y, Local.Z, Local.X);
+	bAtRest = false;
+	++Pushes;
+}
+
 void ASeveredPieceActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);

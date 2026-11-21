@@ -1333,6 +1333,32 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			PhaseNumbers.Add(TEXT("voice_femscream"), S->GetPlayCount(TEXT("Voice_FemScream")));
 			PhaseNumbers.Add(TEXT("voices_cut"), S->GetVoicesCut());
 			PhaseNumbers.Add(TEXT("voices_skipped"), S->GetVoicesSkipped());
+			// sneed 2026-11-22: "there's still no gun sounds". Every shot must be heard, and from a recording.
+			const int32 ShotsHeard = S->GetVoicedWithPrefix(TEXT("Shot_"), false);
+			const int32 ShotsRecorded = S->GetVoicedWithPrefix(TEXT("Shot_"), true);
+			const int32 Fired = GetWorld()->GetSubsystem<UFightSubsystem>() ? GetWorld()->GetSubsystem<UFightSubsystem>()->GetShotsSeen() : 0;
+			PhaseNumbers.Add(TEXT("shots_fired"), Fired);
+			PhaseNumbers.Add(TEXT("shots_heard"), ShotsHeard);
+			PhaseNumbers.Add(TEXT("shots_heard_recorded"), ShotsRecorded);
+			Notes.Add(FString::Printf(TEXT("gunrange: %d shots fired, %d gunshot sounds started on a voice, %d of them recordings (%d cues have files)"),
+				Fired, ShotsHeard, ShotsRecorded, S->GetCuesWithFiles()));
+			if (bScript && Fired > 0 && ShotsRecorded == 0)
+			{
+				Fail(FString::Printf(TEXT("gunrange: %d shots fired but no gunshot recording was played"), Fired));
+			}
+		}
+		if (const UFightSubsystem* Casings = GetWorld()->GetSubsystem<UFightSubsystem>())
+		{
+			PhaseNumbers.Add(TEXT("casings"), Casings->GetCasingsEjected());
+			PhaseNumbers.Add(TEXT("severed_pushed"), Casings->GetSeveredPiecesPushed());
+			if (bScript && Casings->GetShotsSeen() > 0 && Casings->GetCasingsEjected() == 0)
+			{
+				Fail(TEXT("gunrange: shots fired but no spent case was thrown out"));
+			}
+		}
+		if (const UWeaponDrawSubsystem* Draw = GetWorld()->GetSubsystem<UWeaponDrawSubsystem>())
+		{
+			Notes.Add(FString::Printf(TEXT("gunrange: a long gun slid forward at most %.0f cm to keep its stock out of the head"), Draw->GetStockSlideCm()));
 		}
 	};
 	Phases.Add(MoveTemp(Play));
