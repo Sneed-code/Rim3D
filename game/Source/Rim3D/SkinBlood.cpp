@@ -428,15 +428,50 @@ bool USkinBlood::Paint(USkeletalMeshComponent* Mesh, const FSkinBloodPaint& Mark
 	// A wound (not a drop or a run) soaks the clothes over it, wider than on the skin: cloth wicks.
 	if (Mark.Soak > 0.0f || Mark.Core >= 1.0f)
 	{
-		if (Mask->ClothSpots.Num() >= 8)
+		const FVector3f SpotAt(0.5f * (At + To));
+		const float SpotRadius = (Mark.Soak * 1.5f + Mark.Core * 2.0f + 0.5f * static_cast<float>(FVector::Dist(At, To))) * FMath::Clamp(Mark.Strength, 0.3f, 1.0f);
+		const float SpotStrength = FMath::Clamp(Mark.Strength, 0.0f, 1.0f);
+		// A hit on a patch already soaked makes that patch wetter and a little wider instead of taking a slot of its own:
+		// with only 8 slots, a burst of hits on one spot pushed every other patch off the clothes at once (sneed
+		// 2026-11-20: blood "glitches out and flashes" when hit over and over). When all 8 are taken by patches far apart,
+		// the new one joins the nearest, which grows to cover both, so no patch ever vanishes.
+		int32 Nearest = INDEX_NONE;
+		float NearestGap = TNumericLimits<float>::Max();
+		for (int32 Index = 0; Index < Mask->ClothSpots.Num(); ++Index)
 		{
-			Mask->ClothSpots.RemoveAt(0);
+			const FClothSpot& Old = Mask->ClothSpots[Index];
+			const float Gap = FVector3f::Dist(Old.At, SpotAt) - Old.Radius;
+			if (Gap < NearestGap)
+			{
+				NearestGap = Gap;
+				Nearest = Index;
+			}
 		}
-		FClothSpot& Spot = Mask->ClothSpots.AddDefaulted_GetRef();
-		Spot.At = FVector3f(0.5f * (At + To));
-		Spot.Radius = (Mark.Soak * 1.5f + Mark.Core * 2.0f + 0.5f * static_cast<float>(FVector::Dist(At, To))) * FMath::Clamp(Mark.Strength, 0.3f, 1.0f);
-		Spot.Strength = FMath::Clamp(Mark.Strength, 0.0f, 1.0f);
-		Spot.Clock = Clock;
+		if (Nearest != INDEX_NONE && (NearestGap <= 0.0f || Mask->ClothSpots.Num() >= 8))
+		{
+			FClothSpot Merged = Mask->ClothSpots[Nearest];
+			const float Apart = FVector3f::Dist(Merged.At, SpotAt);
+			if (Apart + SpotRadius > Merged.Radius)
+			{
+				// The smallest sphere round both, a little wider for the soak spreading; at most 40 cm.
+				const float Radius = FMath::Min(40.0f, 0.5f * (Apart + Merged.Radius + SpotRadius));
+				const float Toward = Apart > 1e-3f ? (Radius - Merged.Radius) / Apart : 0.0f;
+				Merged.At = Merged.At + (SpotAt - Merged.At) * FMath::Clamp(Toward, 0.0f, 1.0f);
+				Merged.Radius = Radius;
+			}
+			Merged.Strength = FMath::Min(1.0f, FMath::Max(Merged.Strength, SpotStrength) + 0.1f * SpotStrength);
+			Merged.Clock = Clock;
+			Mask->ClothSpots.RemoveAt(Nearest);
+			Mask->ClothSpots.Add(Merged);  // newest last
+		}
+		else
+		{
+			FClothSpot& Spot = Mask->ClothSpots.AddDefaulted_GetRef();
+			Spot.At = SpotAt;
+			Spot.Radius = SpotRadius;
+			Spot.Strength = SpotStrength;
+			Spot.Clock = Clock;
+		}
 	}
 
 	// A wound on the head or neck soaks the hair.

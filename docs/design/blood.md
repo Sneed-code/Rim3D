@@ -92,7 +92,7 @@ which hid it whenever it was near the body; it is now 4 cm.
 
 **No red flashing** (sneed, 2026-11-20, many hits at once): every decal gets its own sort order (layer x 100000 plus a
 counter) so two decals never tie and flicker; skin drops paint at most 24 times a frame; skin masks are 16, not 8, and
-the one dropped when full is the far, old one, never the one being hit.
+the one dropped when full is the far, old one, never the one being hit. Clothes show at most 8 soaked patches per body; a hit on a patch already soaked now wets and widens that patch, and when all 8 are taken the new one joins the nearest (which grows to cover both, up to 40 cm), so a burst of hits on one spot no longer pushes every other patch off the clothes.
 
 **Exit wounds** are found on the drawn body: a trace from 70 cm beyond back towards the entry finds where the bullet
 left the skin; the exit mark is smaller than before (it read as a shorts-shaped stain on the hips).

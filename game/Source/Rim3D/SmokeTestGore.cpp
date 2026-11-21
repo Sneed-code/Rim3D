@@ -35,6 +35,8 @@ namespace
 		int32 SprayAtStart = 0;
 		int32 MaxSprayInAir = 0;
 		int32 MasksMin = 1000;
+		int32 MasksAtStart = 0;
+		int32 PaintsAtStart = 0;
 		int32 Burst = 0;
 		float MaxWobble = 0.0f;
 		bool bArmOff = false;
@@ -256,6 +258,8 @@ void USmokeTestSubsystem::BuildGorePhases()
 			const int32 Spawned = Blood() ? Blood()->GetSpraySpawned() - State->SprayAtStart : 0;
 			PhaseNumbers.Add(TEXT("gushes"), Spawned);
 			PhaseNumbers.Add(TEXT("mostInAir"), State->MaxSprayInAir);
+			PhaseNumbers.Add(TEXT("skinMasks"), Blood() ? Blood()->GetSkinMasks() : 0);
+			PhaseNumbers.Add(TEXT("skinPaints"), Blood() ? Blood()->GetSkinPaints() : 0);
 			if (Spawned < 6 || State->MaxSprayInAir < 4)
 			{
 				Fail(FString::Printf(TEXT("spray: %d gushes made, %d in the air at once (6 and 4 at least)"), Spawned, State->MaxSprayInAir));
@@ -274,6 +278,8 @@ void USmokeTestSubsystem::BuildGorePhases()
 			State->HitsSent = 0;
 			State->Burst = 0;
 			State->MasksMin = 1000;
+			State->MasksAtStart = Blood() ? Blood()->GetSkinMasks() : 0;
+			State->PaintsAtStart = Blood() ? Blood()->GetSkinPaints() : 0;
 		};
 		Phase.WarmupSeconds = 0.0f;
 		Phase.MeasureSeconds = 4.2f;
@@ -303,9 +309,16 @@ void USmokeTestSubsystem::BuildGorePhases()
 		{
 			PhaseNumbers.Add(TEXT("hits"), State->HitsSent);
 			PhaseNumbers.Add(TEXT("fewestMasks"), State->MasksMin);
-			if (State->MasksMin < 1)
+			PhaseNumbers.Add(TEXT("masksAtStart"), State->MasksAtStart);
+			const int32 Paints = Blood() ? Blood()->GetSkinPaints() - State->PaintsAtStart : 0;
+			PhaseNumbers.Add(TEXT("skinPaints"), Paints);
+			if (Paints < 1)
 			{
-				Fail(TEXT("pileup: the body lost its skin blood while it was being hit"));
+				Fail(FString::Printf(TEXT("pileup: nothing was painted into the skin (%d masks at the start): the body has no blood position map or skin painting is off"), State->MasksAtStart));
+			}
+			else if (State->MasksMin < 1)
+			{
+				Fail(FString::Printf(TEXT("pileup: the body lost its skin blood while it was being hit (%d masks at the start, %d skin paints)"), State->MasksAtStart, Paints));
 			}
 		};
 		Phases.Add(MoveTemp(Phase));
@@ -383,7 +396,7 @@ void USmokeTestSubsystem::BuildGorePhases()
 		Phase.Setup = [=, this]()
 		{
 			State->SleepsAtStart = ActorOf() ? ActorOf()->GetRagdollSleeps() : 0;
-			State->bKilled = Damage("Blunt", 140.0f, "torso");
+			State->bKilled = Damage("Blunt", 62.0f, "head");  // dead with its limbs on, so the blast has something to tear
 		};
 		Phase.WarmupSeconds = 0.0f;
 		Phase.MeasureSeconds = 7.0f;

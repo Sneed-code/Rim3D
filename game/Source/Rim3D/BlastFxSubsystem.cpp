@@ -268,9 +268,21 @@ void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 			for (const TPair<uint32, TObjectPtr<ASimPawnActor>>& Pair : Pawns->GetPawns())
 			{
 				ASimPawnActor* Actor = Pair.Value.Get();
-				if (Actor && Actor->IsRagdoll() && FVector::Dist(Actor->GetActorLocation(), Centre) < Reach + 100.0)
+				if (!Actor)
 				{
-					Actor->PushRagdoll(Centre, static_cast<float>(Reach), Speed);
+					continue;
+				}
+				// Where the body lies (the ragdoll's pelvis), not where the actor stood when it fell.
+				FVector Lying = Actor->GetActorLocation();
+				Actor->GetRagdollPelvis(Lying);
+				const double Away = FVector::Dist(Lying, Centre);
+				if (Away < Reach + 300.0)
+				{
+					UE_LOG(LogTemp, Log, TEXT("Blast throw: pawn %u ragdoll %d, %.0f cm from the blast (reach %.0f)"), Pair.Key, Actor->IsRagdoll() ? 1 : 0, Away, Reach + 100.0);
+				}
+				if (Actor->IsRagdoll() && Away < Reach + 100.0)
+				{
+					Actor->PushRagdoll(Centre, static_cast<float>(Reach + 100.0), Speed);
 					++RagdollsThrown;
 				}
 			}

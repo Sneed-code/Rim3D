@@ -1077,3 +1077,22 @@ TEST_CASE("Severed pieces: what the killing blow took off lies where the body wa
         CHECK(sim->health().severedPieces()[0].id == 7);
     }
 }
+
+TEST_CASE("Dismemberment: a blast a metre from a corpse throws it and tears a part off (smoke gore)") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim, 20, 20, true);
+    sim->submit(DamagePawnCommand{pawn, "Blunt", 62.0f, zoneTestPart(*sim, pawn, "head")});
+    zoneTestRun(*sim, 3);
+    CHECK(zoneTestHealth(*sim, pawn).dead);
+    const uint16_t before = sim->health().severed(pawn);
+    MESSAGE("severed after the blow " << before);
+    const Position at = sim->things().registry().get<Position>(pawn);
+    sim->submit(ExplodeCommand{at.x + 1.0f, at.y, 3.9f, 50.0f, "Bomb", 0.1f});
+    zoneTestRun(*sim, 60);
+    const Position after = sim->things().registry().get<Position>(pawn);
+    const float moved = std::hypot(after.x - at.x, after.y - at.y);
+    MESSAGE("severed after the blast " << sim->health().severed(pawn) << ", moved " << moved);
+    CHECK(sim->health().severed(pawn) != before);
+    CHECK(moved > 0.3f);
+    CHECK(after.x < at.x);
+}

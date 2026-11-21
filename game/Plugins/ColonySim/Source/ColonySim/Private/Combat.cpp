@@ -2579,8 +2579,18 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
             weightSum += weights[i];
         }
         float dealt = 0.0f;
+        const std::vector<std::string> zoneNamesOf = corpse ? health_.zoneNames(pawn) : std::vector<std::string>{};
         for (int i = 0; i < pieces; ++i) {
-            const int part = pickOutsidePart(pawn, rng);
+            int part = pickOutsidePart(pawn, rng);
+            // On a corpse the blast tears off what sticks out (a limb, the head): the trunk comes apart only from one
+            // hit big enough on its own, which a blast's share rarely is, so a pick on the trunk is tried again.
+            for (int retry = 0; corpse && part >= 0 && retry < 8; ++retry) {
+                const int zone = health_.partZone(pawn, part);
+                if (zone < 0 || zone >= static_cast<int>(zoneNamesOf.size()) || zoneNamesOf[static_cast<size_t>(zone)] != "Torso") {
+                    break;
+                }
+                part = pickOutsidePart(pawn, rng);
+            }
             if (part < 0) {
                 break;
             }
