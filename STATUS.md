@@ -10,7 +10,7 @@ mortar, EMP, smoke and large kinds with falling debris; **gore** (severing, deca
 plant cutting, sowing, deconstructing, repairing, drilling; repeated while working; a tree crashing down), bed creaks,
 men's grunts and screams. **Footsteps** are short range, vary by ground, are quieter crouched or prone, and your own
 character makes none. 318 free recordings from Freesound (CC0 / CC-BY, credits written) plus the CC0 firearm library;
-picked by title, not yet by ear. **Needs on the PC: `python tools/sound_assets.py --freesound`, a compile, a listen.**
+picked by title, not yet by ear. PC 2026-11-21: download 0 failures, compile clean, sound smoke passes; 5 quiet recordings that trimmed to nothing now recut untrimmed. **Next: re-run `python tools/sound_assets.py --cut` on the PC, and sneed's listen.**
 
 Buildings crack and come down (sneed, 2026-11-20; sim and Unreal, `docs/design/destruction.md`): every building already
 had hit points that bullets, blasts, fire and sappers take away, but at 0 it just vanished. Now a building **wrecked by

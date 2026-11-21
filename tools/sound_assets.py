@@ -10,7 +10,7 @@ then cut the files assets/sound_picks.json names into the cue and music files th
   python tools/sound_assets.py --check    only check that every sound cue is mapped (CI, no network)
   python tools/sound_assets.py --list     print the cue to source table
 """
-import glob, json, re, shutil, subprocess, sys, urllib.request
+import glob, json, re, shutil, subprocess, sys, wave, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -176,6 +176,18 @@ def cutOne(ffmpeg, src, out, channels, pick, music):
         args += ["-ss", str(pick["start"])]
     args += ["-i", src, "-af", ",".join(chain), "-ac", str(channels), "-ar", "44100", "-c:a", "pcm_s16le", out]
     subprocess.run(args, check=True)
+    # A quiet recording (all under the trim threshold) comes out empty, which the game skips: cut it again untrimmed.
+    if pick.get("trimSilence") and wavFrames(out) < 2205:
+        cutOne(ffmpeg, src, out, channels, dict(pick, trimSilence=False), music)
+
+
+def wavFrames(path):
+    """Sample frames in a WAV we wrote (0 if unreadable)."""
+    try:
+        with wave.open(path, "rb") as w:
+            return w.getnframes()
+    except (OSError, EOFError, wave.Error):
+        return 0
 
 
 def cut():
