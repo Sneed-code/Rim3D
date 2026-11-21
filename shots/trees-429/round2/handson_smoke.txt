@@ -1,0 +1,15 @@
+﻿Building Rim3DEditor (below-normal priority, 6 jobs)...
+Build ok.
+Running smoke test 'handson' at 1920x1080...
+
+Smoke test 'handson': PASS  (111 s, NVIDIA GeForce RTX 5080, 888x500)
+setup                       141.3 fps  game   3.7 ms  render   3.7 ms  gpu   2.4 ms  screenshot ok
+mine_by_hand                210.9 fps  game   4.0 ms  render   4.5 ms  gpu   2.9 ms  screenshot ok
+chop_by_hand                222.4 fps  game   3.9 ms  render   4.4 ms  gpu   2.8 ms  screenshot ok
+pick_up                     216.4 fps  game   3.8 ms  render   4.5 ms  gpu   2.6 ms  screenshot ok
+deliver                     206.8 fps  game   3.9 ms  render   4.6 ms  gpu   2.9 ms  screenshot ok
+build_by_hand               220.7 fps  game   3.8 ms  render   4.5 ms  gpu   2.9 ms  screenshot ok
+build_ghost                 212.1 fps  game   3.8 ms  render   4.6 ms  gpu   2.6 ms  screenshot ok
+put_down_and_leave          211.9 fps  game   3.9 ms  render   4.6 ms  gpu   2.6 ms  screenshot ok
+tree_falls                  181.6 fps  game   4.1 ms  render   5.2 ms  gpu   3.5 ms  screenshot ok
+Screenshots: C:\Dev\Rim3D-trees\game\Saved\Smoke\handson
