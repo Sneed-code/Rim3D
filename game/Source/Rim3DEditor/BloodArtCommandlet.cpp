@@ -510,7 +510,7 @@ namespace
 		BloodArtConnect(Soft, TEXT(""), Opacity, TEXT("A"));
 		BloodArtConnect(InstanceOpacity, TEXT(""), Opacity, TEXT("B"));
 		auto* Fade = BloodArtNode<UMaterialExpressionDepthFade>(Material, -250, 300);
-		Fade->FadeDistanceDefault = 20.0f;
+		Fade->FadeDistanceDefault = 4.0f;  // (20 hid every puff made at a wound, right on the skin: sneed saw no spray)
 		BloodArtConnect(Opacity, TEXT(""), Fade, TEXT("Opacity"));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Fade, TEXT(""), MP_Opacity);
 		UMaterialEditingLibrary::RecompileMaterial(Material);
@@ -833,6 +833,13 @@ return cover;
 		constexpr int32 Res = SkinBloodResolution;
 		TArray<FVector4f> Texels;
 		Texels.SetNumZeroed(Res * Res);
+		// Texels that more than one piece of skin is laid on (sneed's groin square, 2026-11-20): the tail, ears and other
+		// extras made with the skin material have their own small UV patches, laid over the body's own skin (the tail's
+		// over the hip). Each texel keeps the piece with the most texels per cm2 (the body's real skin, not a stretched
+		// extra), so a wound by the hips no longer lights up the tail's patch as a square on the hip.
+		TArray<float> Density;
+		Density.SetNumZeroed(Res * Res);
+		int32 Contested = 0;
 		int32 Triangles = 0;
 		for (const FSkelMeshSection& Section : Lod.Sections)
 		{
@@ -870,6 +877,8 @@ return cover;
 				{
 					continue;
 				}
+				const float WorldArea = 0.5f * FVector3f::CrossProduct(B.Position - A.Position, C.Position - A.Position).Size();
+				const float TexelsPerArea = 0.5f * FMath::Abs(Area) / FMath::Max(WorldArea, 1e-4f);
 				const int32 X0 = FMath::Clamp(FMath::FloorToInt(FMath::Min3(Pa.X, Pb.X, Pc.X)), 0, Res - 1);
 				const int32 X1 = FMath::Clamp(FMath::CeilToInt(FMath::Max3(Pa.X, Pb.X, Pc.X)), 0, Res - 1);
 				const int32 Y0 = FMath::Clamp(FMath::FloorToInt(FMath::Min3(Pa.Y, Pb.Y, Pc.Y)), 0, Res - 1);
@@ -888,7 +897,17 @@ return cover;
 							continue;
 						}
 						const FVector3f Position = A.Position * Wa + B.Position * Wb + C.Position * Wc;
-						Texels[Y * Res + X] = FVector4f(Position.X + SkinBloodPositionOffset, Position.Y + SkinBloodPositionOffset, Position.Z + SkinBloodPositionOffset, 1.0f);
+						FVector4f& Texel = Texels[Y * Res + X];
+						if (Texel.W > 0.5f && FVector3f::Dist(FVector3f(Texel.X, Texel.Y, Texel.Z) - FVector3f(SkinBloodPositionOffset), Position) > 3.0f)
+						{
+							++Contested;
+							if (TexelsPerArea < Density[Y * Res + X] * 1.5f)
+							{
+								continue;  // a sparser piece laid over skin already there
+							}
+						}
+						Density[Y * Res + X] = FMath::Max(Density[Y * Res + X], TexelsPerArea);
+						Texel = FVector4f(Position.X + SkinBloodPositionOffset, Position.Y + SkinBloodPositionOffset, Position.Z + SkinBloodPositionOffset, 1.0f);
 					}
 				}
 				++Triangles;
@@ -954,7 +973,8 @@ return cover;
 		Texture->AddressY = TA_Clamp;
 		Texture->LODGroup = TEXTUREGROUP_Pixels2D;
 		Texture->PostEditChange();
-		UE_LOG(LogBloodArt, Display, TEXT("%s: %d skin triangles, %.1f%% of the texture is skin"), *TextureName, Triangles, 100.0f * Filled / (Res * Res));
+		UE_LOG(LogBloodArt, Display, TEXT("%s: %d skin triangles, %.1f%% of the texture is skin, %d texels laid on twice (the denser skin kept)"), *TextureName, Triangles,
+			100.0f * Filled / (Res * Res), Contested);
 		return BloodArtSave(Texture);
 	}
 
@@ -1137,6 +1157,82 @@ return max(float3(max(prev.r, paint), max(prev.g, saturate(paint * 4.0)), max(pr
 		Failures += BloodArtSave(Material) ? 0 : 1;
 	}
 
+	// A gush of blood in the air (sneed 2026-11-20): a ragged streak, thick at its head (+U) and thinning to a tail, with
+	// drops flying off it, different for every seed (instance data 4); instance colour (0-2) and opacity (3).
+	const TCHAR* const BloodArtSprayCode = TEXT(R"HLSL(
+struct BloodSprayNoise
+{
+	float H(float2 p) { return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
+	float N(float2 x)
+	{
+		float2 i = floor(x);
+		float2 f = frac(x);
+		f = f * f * (3.0 - 2.0 * f);
+		return lerp(lerp(H(i), H(i + float2(1, 0)), f.x), lerp(H(i + float2(0, 1)), H(i + float2(1, 1)), f.x), f.y);
+	}
+};
+BloodSprayNoise b;
+float2 p = UV * 2.0 - 1.0;
+float head = saturate(p.x * 0.5 + 0.5);
+float w = lerp(0.18, 0.85, head * head);
+float ragged = (b.N(float2(p.x * 5.0 + Seed, p.y * 5.0 - Seed)) - 0.5) * 0.55 + (b.N(float2(p.x * 13.0 - Seed, p.y * 13.0 + Seed * 0.5)) - 0.5) * 0.25;
+float edge = abs(p.y) / w + max(0.0, p.x) * max(0.0, p.x) * 0.9 + max(0.0, -p.x - 0.75) * 3.0;
+float body = 1.0 - smoothstep(0.7, 0.9, edge + ragged);
+float drops = 0.0;
+[unroll] for (int i = 0; i < 7; ++i)
+{
+	float2 c = float2(b.H(float2(Seed, i)) * 1.7 - 0.85, (b.H(float2(i, Seed)) * 2.0 - 1.0) * 0.75);
+	float r = 0.04 + 0.08 * b.H(float2(Seed + i, 3.7));
+	drops = max(drops, 1.0 - smoothstep(r * 0.65, r, length(p - c)));
+}
+return saturate(max(body, drops)) * Opacity;
+)HLSL");
+
+	void BloodArtMakeSpray(IAssetTools& Tools, int32& Failures)
+	{
+		UMaterial* Material = BloodArtNewMaterial(Tools, TEXT("M_BloodSpray"), Failures);
+		if (!Material)
+		{
+			return;
+		}
+		Material->MaterialDomain = MD_Surface;
+		Material->BlendMode = BLEND_Translucent;
+		Material->SetShadingModel(MSM_DefaultLit);
+		Material->TwoSided = true;
+		bool bNeedsRecompile = false;
+		Material->SetMaterialUsage(bNeedsRecompile, MATUSAGE_InstancedStaticMeshes);
+		UMaterialExpression* Color = BloodArtInstanceColor(Material, -1100, -300);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Color, TEXT(""), MP_BaseColor);
+		auto* Roughness = BloodArtNode<UMaterialExpressionConstant>(Material, -400, -100);
+		Roughness->R = 0.25f;  // wet
+		UMaterialEditingLibrary::ConnectMaterialProperty(Roughness, TEXT(""), MP_Roughness);
+		auto* Custom = BloodArtNode<UMaterialExpressionCustom>(Material, -500, 250);
+		Custom->Description = TEXT("BloodSpray");
+		Custom->OutputType = CMOT_Float1;
+		Custom->Code = BloodArtSprayCode;
+		Custom->Inputs.Reset();
+		SkinArtInput(Custom, TEXT("UV"), BloodArtNode<UMaterialExpressionTextureCoordinate>(Material, -900, 200));
+		auto* Seed = BloodArtNode<UMaterialExpressionPerInstanceCustomData>(Material, -900, 300);
+		Seed->DataIndex = 4;
+		Seed->ConstDefaultValue = 0.0f;
+		SkinArtInput(Custom, TEXT("Seed"), Seed);
+		auto* Opacity = BloodArtNode<UMaterialExpressionPerInstanceCustomData>(Material, -900, 400);
+		Opacity->DataIndex = 3;
+		Opacity->ConstDefaultValue = 0.9f;
+		SkinArtInput(Custom, TEXT("Opacity"), Opacity);
+		auto* Fade = BloodArtNode<UMaterialExpressionDepthFade>(Material, -250, 300);
+		Fade->FadeDistanceDefault = 3.0f;
+		BloodArtConnect(Custom, TEXT(""), Fade, TEXT("Opacity"));
+		UMaterialEditingLibrary::ConnectMaterialProperty(Fade, TEXT(""), MP_Opacity);
+		UMaterialEditingLibrary::RecompileMaterial(Material);
+		if (GShaderCompilingManager)
+		{
+			GShaderCompilingManager->FinishAllCompilation();
+		}
+		Failures += SkinArtReportErrors(Material) ? 1 : 0;
+		Failures += BloodArtSave(Material) ? 0 : 1;
+	}
+
 	/** Adds the blood mask to the MakeHuman skin material (again with -force). */
 	void SkinArtPatchSkin(bool bForce, int32& Failures)
 	{
@@ -1209,6 +1305,10 @@ int32 UBloodArtCommandlet::Main(const FString& Params)
 	if (BloodArtWanted(TEXT("M_BloodMist"), bForce))
 	{
 		BloodArtMakeMist(Tools, Failures);
+	}
+	if (BloodArtWanted(TEXT("M_BloodSpray"), bForce))
+	{
+		BloodArtMakeSpray(Tools, Failures);
 	}
 	if (BloodArtWanted(TEXT("M_GrimeOverlay"), bForce))
 	{

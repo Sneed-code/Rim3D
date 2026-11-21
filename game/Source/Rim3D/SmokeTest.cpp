@@ -237,6 +237,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildHurtPhases();
 	}
+	else if (TestName == TEXT("gore"))
+	{
+		BuildGorePhases();
+	}
 	else if (TestName == TEXT("levels"))
 	{
 		BuildLevelsPhases();

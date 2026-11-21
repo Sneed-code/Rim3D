@@ -3,7 +3,10 @@
 #include "MakeHumanArt.h"
 #include "SkinBloodArt.h"
 
+#include "Camera/PlayerCameraManager.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -18,8 +21,8 @@ namespace
 {
 	TAutoConsoleVariable<int32> GSkinBloodOn(TEXT("Blood.SkinPaint"), 1,
 		TEXT("1 paints wounds and blood into MakeHuman bodies' skin; 0 uses the old decals on bodies."), ECVF_Default);
-	TAutoConsoleVariable<int32> GSkinBloodMasks(TEXT("Blood.SkinMasks"), 8,
-		TEXT("How many bodies can carry blood in their skin at once (each takes 16 MB of video memory); the one bloodied longest ago gives way."),
+	TAutoConsoleVariable<int32> GSkinBloodMasks(TEXT("Blood.SkinMasks"), 16,
+		TEXT("How many bodies can carry blood in their skin at once (each takes 16 MB of video memory); the one farthest from the camera gives way (8 made a fight's blood vanish and come back: sneed's red flashing, 2026-11-20)."),
 		ECVF_Default);
 
 	float SkinBloodConsole(const TCHAR* Name, float Default)
@@ -166,6 +169,10 @@ UTexture2D* USkinBlood::PositionsFor(const USkeletalMeshComponent* Mesh)
 		UE_LOG(LogTemp, Display, TEXT("Skin blood for %s: %s"), *Asset->GetName(),
 			Positions ? TEXT("painted into the skin") : (bSkinReads ? TEXT("no position map (run -run=BloodArt): decals") : TEXT("skin material has no blood mask (run -run=BloodArt): decals")));
 	}
+	else
+	{
+		UE_LOG(LogTemp, Display, TEXT("Skin blood for %s: not a MakeHuman body (SK_MH_...): decals"), *Asset->GetName());
+	}
 	if (Positions)
 	{
 		PositionMaps.Add(Key, Positions);
@@ -212,15 +219,31 @@ USkinBlood::FMask* USkinBlood::FindOrAddMask(USkeletalMeshComponent* Mesh, float
 	const int32 Cap = FMath::Clamp(GSkinBloodMasks.GetValueOnGameThread(), 1, 64);
 	while (Masks.Num() >= Cap)
 	{
-		int32 Oldest = 0;
-		for (int32 Index = 1; Index < Masks.Num(); ++Index)
+		// The one farthest from the camera gives way (a body off in the distance, not one in the fight in front of you),
+		// counting a minute since its last wound as 10 m further.
+		FVector Camera = Mesh->GetComponentLocation();
+		if (const UWorld* World = Mesh->GetWorld())
 		{
-			if (Masks[Index].LastPaint < Masks[Oldest].LastPaint)
+			if (const APlayerController* Player = World->GetFirstPlayerController(); Player && Player->PlayerCameraManager)
 			{
-				Oldest = Index;
+				Camera = Player->PlayerCameraManager->GetCameraLocation();
 			}
 		}
-		DropMask(Oldest);
+		const auto Score = [&](const FMask& M)
+		{
+			const USkeletalMeshComponent* Other = M.Mesh.Get();
+			const double Away = Other ? FVector::Dist(Other->GetComponentLocation(), Camera) : 1e9;
+			return Away + (Clock - M.LastPaint) / 60.0 * 1000.0;
+		};
+		int32 Farthest = 0;
+		for (int32 Index = 1; Index < Masks.Num(); ++Index)
+		{
+			if (Score(Masks[Index]) > Score(Masks[Farthest]))
+			{
+				Farthest = Index;
+			}
+		}
+		DropMask(Farthest);
 	}
 	FMask& Mask = Masks.AddDefaulted_GetRef();
 	Mask.Mesh = Mesh;
@@ -409,15 +432,50 @@ bool USkinBlood::Paint(USkeletalMeshComponent* Mesh, const FSkinBloodPaint& Mark
 	// A wound (not a drop or a run) soaks the clothes over it, wider than on the skin: cloth wicks.
 	if (Mark.Soak > 0.0f || Mark.Core >= 1.0f)
 	{
-		if (Mask->ClothSpots.Num() >= 8)
+		const FVector3f SpotAt(0.5f * (At + To));
+		const float SpotRadius = (Mark.Soak * 1.5f + Mark.Core * 2.0f + 0.5f * static_cast<float>(FVector::Dist(At, To))) * FMath::Clamp(Mark.Strength, 0.3f, 1.0f);
+		const float SpotStrength = FMath::Clamp(Mark.Strength, 0.0f, 1.0f);
+		// A hit on a patch already soaked makes that patch wetter and a little wider instead of taking a slot of its own:
+		// with only 8 slots, a burst of hits on one spot pushed every other patch off the clothes at once (sneed
+		// 2026-11-20: blood "glitches out and flashes" when hit over and over). When all 8 are taken by patches far apart,
+		// the new one joins the nearest, which grows to cover both, so no patch ever vanishes.
+		int32 Nearest = INDEX_NONE;
+		float NearestGap = TNumericLimits<float>::Max();
+		for (int32 Index = 0; Index < Mask->ClothSpots.Num(); ++Index)
 		{
-			Mask->ClothSpots.RemoveAt(0);
+			const FClothSpot& Old = Mask->ClothSpots[Index];
+			const float Gap = FVector3f::Dist(Old.At, SpotAt) - Old.Radius;
+			if (Gap < NearestGap)
+			{
+				NearestGap = Gap;
+				Nearest = Index;
+			}
 		}
-		FClothSpot& Spot = Mask->ClothSpots.AddDefaulted_GetRef();
-		Spot.At = FVector3f(0.5f * (At + To));
-		Spot.Radius = (Mark.Soak * 1.5f + Mark.Core * 2.0f + 0.5f * static_cast<float>(FVector::Dist(At, To))) * FMath::Clamp(Mark.Strength, 0.3f, 1.0f);
-		Spot.Strength = FMath::Clamp(Mark.Strength, 0.0f, 1.0f);
-		Spot.Clock = Clock;
+		if (Nearest != INDEX_NONE && (NearestGap <= 0.0f || Mask->ClothSpots.Num() >= 8))
+		{
+			FClothSpot Merged = Mask->ClothSpots[Nearest];
+			const float Apart = FVector3f::Dist(Merged.At, SpotAt);
+			if (Apart + SpotRadius > Merged.Radius)
+			{
+				// The smallest sphere round both, a little wider for the soak spreading; at most 40 cm.
+				const float Radius = FMath::Min(40.0f, 0.5f * (Apart + Merged.Radius + SpotRadius));
+				const float Toward = Apart > 1e-3f ? (Radius - Merged.Radius) / Apart : 0.0f;
+				Merged.At = Merged.At + (SpotAt - Merged.At) * FMath::Clamp(Toward, 0.0f, 1.0f);
+				Merged.Radius = Radius;
+			}
+			Merged.Strength = FMath::Min(1.0f, FMath::Max(Merged.Strength, SpotStrength) + 0.1f * SpotStrength);
+			Merged.Clock = Clock;
+			Mask->ClothSpots.RemoveAt(Nearest);
+			Mask->ClothSpots.Add(Merged);  // newest last
+		}
+		else
+		{
+			FClothSpot& Spot = Mask->ClothSpots.AddDefaulted_GetRef();
+			Spot.At = SpotAt;
+			Spot.Radius = SpotRadius;
+			Spot.Strength = SpotStrength;
+			Spot.Clock = Clock;
+		}
 	}
 
 	// A wound on the head or neck soaks the hair.
