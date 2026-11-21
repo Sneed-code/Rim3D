@@ -260,7 +260,8 @@ TEST_CASE("Crash Landed: the character screen's edits apply at once before the s
     sim.submit(RerollColonistCommand{1});
     CHECK(sim.applyPregameCommands());
     CHECK(sim.time().steps == 0);
-    CHECK(sim.time().seconds == 0);
+    CHECK(sim.time().seconds == 7 * kSecondsPerHour);  // the scenario lands at 7:00, by daylight
+    CHECK(sim.time().hourOfDay() == 7);
     EditColonistCommand edit;
     edit.slot = 1;
     edit.firstName = "Mina";

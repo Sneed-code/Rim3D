@@ -14,7 +14,8 @@ spins the real body (soft tissue swings) and a "clothes on" tick previews the co
 difficulty fixed on standard and hidden. People who join or raid later follow the same trait rules, all points spent.
 Sim: `EditColonistCommand`, `SetColonistTraitsCommand`, `Sim::applyPregameCommands`, `PawnLooks::creator`,
 `ColonistGenOptions` (trait points), `SkillRecord::bonus`. **Next:** PC compile and smoke test `newgame` pictures;
-sneed judges the look. Clothes on creator bodies show once #425 merges.
+sneed judges the look. Follow-up: "clothes on" draws the cotton (MakeHuman garments, #425), and Crash Landed
+lands at 7:00 (scenario `startHour`; only the calendar moves, steps still start at 0).
 
 Finer body dirt that fades (sneed, 2026-11-20; sim, data and Unreal art, `docs/design/grime.md`): **dirt on bodies now has fine spray over the broad smudges**, like the blood: mud drops in three sizes flicked up the legs (to the waist, stretched a little upwards) and crowding round each smudge's edge, gritty smudges, dark wet mud in the drops and cores and pale dust at the edges; drops too small to see at range blend into an even tint (no sparkle). **Dirt fades by itself in 10 minutes** (`dirtFadeSeconds` 18,000) whenever nothing is dirtying it, a corpse in the dirt staying dirty; rain, wading and swimming still wash it faster (full rain 5 minutes, swimming 20 s). Cloud preview `tools/grime_dirt_preview.py`. Checked on the PC 2026-11-21 (noon pictures, smoke `hurt` phase `dirt`): fine dark spray over duller lower legs, reads as splashed mud. Needs `-run=BloodArt -force` once per PC.
 
