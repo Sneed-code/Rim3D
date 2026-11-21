@@ -91,7 +91,7 @@ TEST_CASE("Trait effects: the stats of each trait degree come from the defs") {
     CHECK(book.of(plain).workSpeed == doctest::Approx(1.0f));
     CHECK(book.of(industrious).workSpeed == doctest::Approx(1.35f));
     CHECK(book.of(lazy).workSpeed == doctest::Approx(0.8f));
-    CHECK(book.of(tough).damageFactor == doctest::Approx(0.5f));
+    CHECK(book.of(tough).damageFactor == doctest::Approx(0.7f));
     CHECK(book.of(jogger).moveSpeedStep == doctest::Approx(0.013333f));
     CHECK(book.of(careful).shootingSkill == doctest::Approx(5.0f));
     CHECK(book.of(careful).aimDelayFactor == doctest::Approx(1.25f));
@@ -104,7 +104,7 @@ TEST_CASE("Trait effects: the stats of each trait degree come from the defs") {
     CHECK(!book.has(plain, "Tough"));
 }
 
-TEST_CASE("Trait effects: a tough colonist takes half the damage") {
+TEST_CASE("Trait effects: a tough colonist takes 30% less damage (sneed)") {
     auto sim = traitFxSim();
     const Entity plain = traitFxPawn(*sim, CellPos{10, 10, 0});
     const Entity tough = traitFxPawn(*sim, CellPos{14, 10, 0}, "Tough");
@@ -116,7 +116,7 @@ TEST_CASE("Trait effects: a tough colonist takes half the damage") {
     sim->stepMany(2);
     const float plainHurt = traitFxInjury(*sim, plain);
     CHECK(plainHurt > 0.0f);
-    CHECK(traitFxInjury(*sim, tough) == doctest::Approx(plainHurt * 0.5f).epsilon(0.05));
+    CHECK(traitFxInjury(*sim, tough) == doctest::Approx(plainHurt * 0.7f).epsilon(0.05));
 }
 
 TEST_CASE("Trait effects: a wimp is downed by less pain") {

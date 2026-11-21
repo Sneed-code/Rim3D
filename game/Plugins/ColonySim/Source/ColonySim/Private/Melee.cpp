@@ -41,7 +41,7 @@ float meleeLerp(float a, float b, float t) { return a + (b - a) * t; }
 
 // A MeleeRules value given at Melee skill 0 and 20, at this skill.
 float meleeBySkill(const float (&v)[2], int skill) {
-    return meleeLerp(v[0], v[1], static_cast<float>(std::clamp(skill, 0, 20)) / 20.0f);
+    return meleeLerp(v[0], v[1], static_cast<float>(std::clamp(skill, 0, kSkillLevelLimit)) / 20.0f);  // goes on past 20
 }
 
 void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
@@ -478,7 +478,7 @@ bool MeleeSystem::charges(Entity pawn) const {
 int MeleeSystem::meleeSkill(Entity pawn) const {
     if (const Colonist* colonist = things_.registry().try_get<Colonist>(pawn)) {
         if (const SkillRecord* skill = colonist->skill("Melee")) {
-            return std::clamp(skill->level, 0, 20);
+            return std::clamp(skill->level, 0, kSkillLevelLimit);
         }
     }
     return std::clamp(rules_.defaultSkill, 0, 20);

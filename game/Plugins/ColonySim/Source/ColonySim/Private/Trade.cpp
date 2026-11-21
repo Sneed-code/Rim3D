@@ -491,7 +491,9 @@ bool TradeSystem::spawnPawn(Visit& visit, const KindInfo& kind, VisitorRole role
     }
     Colonist person;
     std::string ignored;
-    if (!generateColonist(defs_, base, false, person, ignored)) {
+    ColonistGenOptions options;
+    options.traitPoints = traitPoints_;
+    if (!generateColonist(defs_, base, false, person, ignored, options)) {
         things_.destroy(pawn);
         return false;
     }

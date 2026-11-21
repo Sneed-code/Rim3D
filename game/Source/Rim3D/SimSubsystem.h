@@ -174,6 +174,9 @@ public:
 
 	/** Queues a command for the start of the next step. Returns its id (a CommandFailed event names it). */
 	uint64 Submit(colony::Command Command);
+	/** Before the first step (the new-game character screen): applies the submitted commands at once without
+	 *  stepping (colony::Sim::applyPregameCommands) and refreshes the snapshot. False once the game has stepped. */
+	bool ApplyPregameCommands();
 
 	/** Sim events, one call each, straight after the step. Failed commands also show on screen. */
 	FSimEventSignature OnSimEvent;

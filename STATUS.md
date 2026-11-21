@@ -2,8 +2,33 @@
 
 Updated 2026-11-21.
 
+Title screen and new game (sneed, 2026-11-21; sim, data and Unreal, `docs/design/new-game.md`): a **title screen**
+(Continue, New colony, Load, Settings, Quit), the **Crash Landed** scenario (you, an amnesiac, and 2 strangers aged 18,
+all landing naked, with 50 survival meals, 200 silver, 50 steel, 30 components, a rifle and cotton shirts and trousers
+for all 3; tropical only), a **landing site** step on the world map, then **character creation in two parts** in our
+own "Canopy" look (concepts A/B/C turned down): **You** (looks and a name only; you start as the creator's default
+woman, the gun range's, so hair and body updates show on you) and **Your companions** (looks, gender, names, and traits
+bought from a **10-point pool**: strong traits cost up to 5, drawbacks give points; no backstories). Skill traits
+(natural marksman and 11 more, +3 for 3 points) let a skill pass 20, up to 23. Tough is now -30% damage. A turntable
+spins the real body (soft tissue swings) and a "clothes on" tick previews the cotton. The screen is lit by day, with the camera clear of trees. Other races shown but locked;
+difficulty fixed on standard and hidden. People who join or raid later follow the same trait rules, all points spent.
+Sim: `EditColonistCommand`, `SetColonistTraitsCommand`, `Sim::applyPregameCommands`, `PawnLooks::creator`,
+`ColonistGenOptions` (trait points), `SkillRecord::bonus`. **Next:** PC compile and smoke test `newgame` pictures;
+sneed judges the look. Clothes on creator bodies show once #425 merges.
+
 Melee finishers, aim assist, Tab and floating weapons (sneed, 2026-11-20; sim, data and Unreal, `docs/design/lock-on.md` "Finishers, aim assist and Tab that keeps you running", `docs/design/weapon-hold.md` "Never floating"): **a swing at a downed enemy is now a finisher of its own per weapon**: the spear rams down into the back, the club drops to one knee and smashes down, the gladius and knife kneel and drive down into the body (the knife slammed down like into a table), the longsword stands and thrusts down; the pawn steps to its place, holds still, and the weapon follows a smooth path so the blade ends in the body (the nearest part of it; a long blade tips back so its point stays on the body and the grip stays in the hands; nothing slides). A finisher ends if its body leaves the map. The weapon path and 3rd person aim drive MakeHuman bodies (gun range, creator); MetaHumans get the sim part. **Melee aim assist** takes neutrals too (never your own side), and the body keeps facing the target through a swing instead of turning to the walk. **Tab no longer stops running or sprint and every Tab cycles**: Unreal's menu navigation was taking Tab (and the arrows) and moving keyboard focus off the game. **Weapons no longer float**: crouched or prone they stay in the hand, and a guard puts any weapon drawn away from its hand back on it. **3rd person aim**: the body turns with the camera and the gun and arms point at the crosshair. Cloud tests in `MeleeFeelTests.cpp` (also fixed its FEEL_REQUIRE running calls twice). New smoke test `finishers`. PC smoke `finishers` passes for all five (round 16: blade tips 2 to 8 cm from the body, no floating weapons); the melee smoke's holster and back-rifle place errors also fail on main (not this change).
+
 Finer body dirt that fades (sneed, 2026-11-20; sim, data and Unreal art, `docs/design/grime.md`): **dirt on bodies now has fine spray over the broad smudges**, like the blood: mud drops in three sizes flicked up the legs (to the waist, stretched a little upwards) and crowding round each smudge's edge, gritty smudges, dark wet mud in the drops and cores and pale dust at the edges; drops too small to see at range blend into an even tint (no sparkle). **Dirt fades by itself in 10 minutes** (`dirtFadeSeconds` 18,000) whenever nothing is dirtying it, a corpse in the dirt staying dirty; rain, wading and swimming still wash it faster (full rain 5 minutes, swimming 20 s). Cloud preview `tools/grime_dirt_preview.py`. Checked on the PC 2026-11-21 (noon pictures, smoke `hurt` phase `dirt`): fine dark spray over duller lower legs, reads as splashed mud. Needs `-run=BloodArt -force` once per PC.
+
+Sounds for every weapon, surface and job (sneed, 2026-11-20; sim, data and Unreal, `docs/design/sound.md`): **every gun
+now has its own shot** (machine pistol, heavy SMG, LMG, minigun, sniper, chain shotgun, turrets, mortar, charge guns,
+bows, pila) from real recordings; **bullets and arrows sound by what they hit** (flesh, wood, steel, stone, dirt, sand,
+water; some ricochet), spent cases tinkle after shots, shells whistle in, bullets whiz past your head, blasts have
+mortar, EMP, smoke and large kinds with falling debris; **gore** (severing, decapitation, a splat), **work** (chopping,
+plant cutting, sowing, deconstructing, repairing, drilling; repeated while working; a tree crashing down), bed creaks,
+men's grunts and screams. **Footsteps** are short range, vary by ground, are quieter crouched or prone, and your own
+character makes none. 318 free recordings from Freesound (CC0 / CC-BY, credits written) plus the CC0 firearm library;
+picked by title, not yet by ear. PC 2026-11-21: download 0 failures, compile clean, sound smoke passes; 5 quiet recordings that trimmed to nothing now recut untrimmed. **Next: re-run `python tools/sound_assets.py --cut` on the PC, and sneed's listen.**
 
 Clothes on MakeHuman people (sneed, 2026-11-20; tools and Unreal, `docs/design/clothes-draw.md` "MakeHuman bodies"):
 the MakeHuman bodies wore nothing. Now **34 free MakeHuman community garments** (CC0/CC-BY, `assets/makehuman_garments.json`:

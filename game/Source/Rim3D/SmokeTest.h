@@ -103,6 +103,7 @@ private:
 	void BuildOrdersWorldPhases();  // SmokeTestOrdersWorld.cpp
 	void BuildPanelsPhases();       // SmokeTestPanels.cpp
 	void BuildHudPhases();          // SmokeTestHud.cpp
+	void BuildNewGamePhases();      // SmokeTestNewGame.cpp
 	void BuildTradePhases();        // SmokeTestTrade.cpp
 	void BuildShuttlePhases();      // SmokeTestShuttle.cpp
 	void BuildQuestsPhases();       // SmokeTestQuests.cpp

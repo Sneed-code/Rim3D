@@ -101,3 +101,5 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
   plus two leaves) and the in-wall Cooler model are made but not wired in: doors draw one sliding leaf and the cooler
   def is a whole wall-height block, so both need a small draw change first. Zeushammer, breach axe, HE mortar shell,
   advanced component and bionic arm were cut off by the Codex usage limit (2026-11-20); rerun after Nov 22 2:38 PM.
+- New games land at 00:02, in the dark (`SimSettings::startSecond` is 0). Consider landing in the morning; the character screen already shows by day (2026-11-21).
+- Daytime exposure above 12 EV makes the engine print a red "lighting is going to be clipped ... r.EyeAdaptation.CachedLightingPreExposure" warning on screen (seen on the character screen, 2026-11-21; the screen now stays under it). Check whether normal daytime play shows it too and set the project's exposure range or that cvar.

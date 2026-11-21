@@ -1354,7 +1354,8 @@ inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitComma
                                             std::is_same_v<Type, SleepCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||
                                             std::is_same_v<Type, PatchCommand> || std::is_same_v<Type, SetAlertCommand> ||
                                             std::is_same_v<Type, FocusCommand> || std::is_same_v<Type, SetFightResponseCommand> ||
-                                            std::is_same_v<Type, SetWorkGroupCommand> || std::is_same_v<Type, SetGrimeCommand>;
+                                            std::is_same_v<Type, SetWorkGroupCommand> || std::is_same_v<Type, SetGrimeCommand> ||
+                                            std::is_same_v<Type, EditColonistCommand> || std::is_same_v<Type, SetColonistTraitsCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1433,6 +1434,19 @@ void saveTradeCommand(Ar& ar, Type& c) {
         ar.value("pawn", c.pawn);
         ar.value("dirtLegs", c.dirtLegs);
         ar.value("dirtBody", c.dirtBody);
+    } else if constexpr (std::is_same_v<Type, EditColonistCommand>) {
+        ar.value("slot", c.slot);
+        ar.text("firstName", c.firstName);
+        ar.text("nickName", c.nickName);
+        ar.text("lastName", c.lastName);
+        ar.value("female", c.female);
+        ar.value("setCreator", c.setCreator);
+        ar.text("creator", c.creator);
+    } else if constexpr (std::is_same_v<Type, SetColonistTraitsCommand>) {
+        ar.value("slot", c.slot);
+        ar.text("traits", c.traits);
+        ar.value("randomize", c.randomize);
+        ar.value("roll", c.roll);
     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("up", c.up);
@@ -1794,6 +1808,9 @@ void saveColonist(Ar& ar, Colonist& c) {
             ar.value("xpToday", s.xpToday);
         }
         ar.value("disabled", s.disabled);
+        if (ar.sectionVersion() >= 4) {  // trait points: skill traits' bonus levels
+            ar.value("bonus", s.bonus);
+        }
         ar.require(static_cast<int>(s.passion) <= static_cast<int>(Passion::Major), "the save file has a bad passion");
     });
     ar.list("disabledWorkTags", c.disabledWorkTags, [&](std::string& tag) { ar.text(nullptr, tag); });
@@ -1838,6 +1855,9 @@ void saveLooks(Ar& ar, PawnLooks& l) {
         ar.value("bodyHair", l.bodyHair);
         if (ar.sectionVersion() >= 3) {  // a name for pawns with no Colonist record (focus HP bar, kill feed)
             ar.text("name", l.name);
+        }
+        if (ar.sectionVersion() >= 4) {  // the character creator's look (docs/design/new-game.md)
+            ar.text("creator", l.creator);
         }
         ar.require(l.faceShape >= 0.0f && l.faceShape <= 1.0f && l.brow >= 0.0f && l.brow <= 1.0f && l.nose >= 0.0f &&
                        l.nose <= 1.0f && l.jaw >= 0.0f && l.jaw <= 1.0f && l.bodyHair >= 0.0f && l.bodyHair <= 1.0f &&
@@ -3568,7 +3588,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "work", e, &SaveEntity::work, [&](SaveWorkSettings& w) { saveWorkPart(ar, w); });
         saveParts(ar, "carrying", e, &SaveEntity::carrying, [&](Carrying& c) { saveCarryingPart(ar, c); });
     });
-    ar.section("colonists", 3, [&] {
+    ar.section("colonists", 4, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
     ar.section("health", 9, [&] {
@@ -3629,7 +3649,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
-    ar.section("looks", 3, [&] {
+    ar.section("looks", 4, [&] {
         saveParts(ar, "looks", e, &SaveEntity::looks, [&](PawnLooks& l) { saveLooksPart(ar, l); });
     });
     ar.section("paths", 1, [&] { savePaths(ar, d.paths); });

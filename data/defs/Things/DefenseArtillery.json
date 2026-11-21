@@ -2,7 +2,7 @@
   {
     "defName": "Gun_Mortar", "keepBurst": true, "label": "mortar", "source": "RimWorld wiki",
     "category": "Item", "stackLimit": 1, "turretGun": true,
-    "visual": { "sound": { "shot": "Shot_Turret" }, "parts": [{ "shape": "cylinder", "radius": 0.12, "height": 1.1, "rot": [0, 50, 0], "at": [0, 0, 0.3], "color": [0.22, 0.24, 0.22] }] },
+    "visual": { "sound": {"shot": "Shot_Mortar"}, "parts": [{ "shape": "cylinder", "radius": 0.12, "height": 1.1, "rot": [0, 50, 0], "at": [0, 0, 0.3], "color": [0.22, 0.24, 0.22] }] },
     "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 840, "accuracyTouch": 1, "accuracyShort": 1, "accuracyMedium": 1, "accuracyLong": 1 },
     "verbs": [ { "range": 500, "minRange": 29.9, "warmupTime": 120, "burstShotCount": 1, "secondsBetweenBurstShots": 0, "defaultProjectile": "Bullet_Shell_HighExplosive" } ],
     "ours": ["turretGun", "visual", "stats.maxHitPoints", "stats.accuracy*: the shell lands within the mortar's miss radius instead"],
@@ -11,7 +11,7 @@
   {
     "defName": "Gun_RocketswarmLauncher", "keepBurst": true, "label": "rocketswarm launcher", "source": "RimWorld wiki",
     "category": "Item", "stackLimit": 1, "turretGun": true,
-    "visual": { "sound": { "shot": "Shot_Turret" }, "parts": [{ "shape": "box", "size": [0.9, 0.9, 0.5], "at": [0, 0, 0.3], "color": [0.26, 0.24, 0.2] }] },
+    "visual": { "sound": {"shot": "Shot_Rocket"}, "parts": [{ "shape": "box", "size": [0.9, 0.9, 0.5], "at": [0, 0, 0.3], "color": [0.26, 0.24, 0.2] }] },
     "stats": { "maxHitPoints": 100, "rangedWeaponCooldown": 3600, "accuracyTouch": 1, "accuracyShort": 1, "accuracyMedium": 1, "accuracyLong": 1 },
     "verbs": [ { "range": 29.9, "warmupTime": 30, "burstShotCount": 12, "secondsBetweenBurstShots": 5, "defaultProjectile": "Bullet_Rocketswarm" } ],
     "unverified": ["stats.rangedWeaponCooldown"],

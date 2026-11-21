@@ -1337,6 +1337,10 @@ void USkySubsystem::Tick(float DeltaTime)
 	{
 		Hour = FMath::Fmod(GSkyHour.GetValueOnGameThread(), 24.0f);
 	}
+	else if (HourOverride >= 0.0f)
+	{
+		Hour = FMath::Fmod(HourOverride, 24.0f);
+	}
 	if (GSkyDayOfYear.GetValueOnGameThread() >= 0.0f)
 	{
 		DayOfYear = FMath::Fmod(GSkyDayOfYear.GetValueOnGameThread(), SkyDaysPerYear);

@@ -67,6 +67,10 @@ struct PawnLooks {
     float bodyHair = 0.0f;         // what is drawn: the seed's, or the lineage's fur
     std::vector<LooksMark> tattoos;  // from the seed
     std::vector<LooksMark> scars;    // from healed injuries, one per Scar or OldWound the pawn got
+    // The character creator's own look (docs/design/new-game.md): the player's slider settings as
+    // "key=value;" text that only Unreal reads (MakeHuman body, face, hair, skin), or empty for a
+    // pawn the creator never touched. Set by EditColonistCommand before the game starts.
+    std::string creator;
 };
 
 // Makes the looks of a pawn of this gender and lineage from `seed` alone, with its own random

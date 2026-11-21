@@ -861,6 +861,17 @@ uint64 USimSubsystem::Submit(colony::Command Command)
 	return Sim ? Sim->submit(std::move(Command)) : 0;
 }
 
+bool USimSubsystem::ApplyPregameCommands()
+{
+	if (!Sim || !Sim->applyPregameCommands())
+	{
+		return false;
+	}
+	Sim->writeSnapshot(Current);
+	Previous = Current;
+	return true;
+}
+
 bool USimSubsystem::GetBlendedLocation(colony::Entity Thing, FVector& OutLocation) const
 {
 	const colony::ThingView* Newest = Current.find(Thing);

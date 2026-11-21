@@ -98,7 +98,280 @@ const Def* colonistPickBackstory(const DefDatabase& defs, const char* slot, cons
     return pool.empty() ? nullptr : pool[rng.below(static_cast<uint32_t>(pool.size()))];
 }
 
+// The degree data index of `degree` in `trait`, or -1.
+int colonistDegreeIndex(const Def& trait, int degree) {
+    const size_t n = trait.count("degreeDatas");
+    for (size_t d = 0; d < n; ++d) {
+        if (static_cast<int>(trait.integer(("degreeDatas." + std::to_string(d) + ".degree").c_str(), 0)) == degree) {
+            return static_cast<int>(d);
+        }
+    }
+    return n == 0 && degree == 0 ? 0 : -1;
+}
+
+bool colonistTraitsClash(const Def& a, const Def& b) {
+    return &a == &b || colonistListHas(colonistTextList(a, "conflictingTraits"), b.defName()) ||
+           colonistListHas(colonistTextList(b, "conflictingTraits"), a.defName());
+}
+
+// Buys traits from `pool` points until all are spent (ours, docs/design/new-game.md): each round picks
+// one trait degree by commonality from those that fit (no repeats or conflicts, none needing work
+// the traits so far disabled), a negative one now and then (it gives points), else one that costs
+// no more than what is left.
+std::vector<TraitRecord> colonistBuyTraits(const DefDatabase& defs, int pool, Rng& rng) {
+    std::vector<TraitRecord> out;
+    std::vector<const Def*> chosen;
+    std::vector<std::string> disabled;
+    int left = pool;
+    int negatives = 0;
+    const std::vector<DefId> ids = defs.idsOfKind("Traits");
+    for (int round = 0; round < 64 && left > 0 && static_cast<int>(out.size()) < kMaxTraits; ++round) {
+        const int slotsLeft = kMaxTraits - static_cast<int>(out.size());
+        const bool negative = negatives < 2 && slotsLeft > 3 && rng.unit() < 0.2f;
+        // With few slots left, only traits big enough to spend the rest in time.
+        const int minCost = (left + slotsLeft - 1) / slotsLeft;
+        struct Option {
+            const Def* trait;
+            int degree;
+            int cost;
+            uint32_t weight;
+        };
+        std::vector<Option> options;
+        uint32_t total = 0;
+        for (const DefId id : ids) {
+            const Def& trait = defs.get(id);
+            if (trait.flag("abstract")) {
+                continue;
+            }
+            bool fits = true;
+            for (const Def* other : chosen) {
+                fits = fits && !colonistTraitsClash(trait, *other);
+            }
+            for (const std::string& tag : colonistTextList(trait, "requiredWorkTags")) {
+                fits = fits && !colonistListHas(disabled, tag);
+            }
+            if (!fits) {
+                continue;
+            }
+            for (size_t d = 0; d < trait.count("degreeDatas"); ++d) {
+                const std::string base = "degreeDatas." + std::to_string(d);
+                if (!trait.has((base + ".points").c_str())) {
+                    continue;
+                }
+                const int cost = static_cast<int>(trait.integer((base + ".points").c_str(), 0));
+                if (negative ? cost >= 0 : (cost <= 0 || cost > left || cost < minCost)) {
+                    continue;
+                }
+                const uint32_t w = static_cast<uint32_t>(std::llround(trait.number("commonality", 1.0) * 1000.0));
+                if (w == 0) {
+                    continue;
+                }
+                options.push_back(Option{&trait, static_cast<int>(trait.integer((base + ".degree").c_str(), 0)), cost, w});
+                total += w;
+            }
+        }
+        if (options.empty()) {
+            continue;
+        }
+        uint32_t pick = rng.below(total);
+        const Option* got = &options.back();
+        for (const Option& o : options) {
+            if (pick < o.weight) {
+                got = &o;
+                break;
+            }
+            pick -= o.weight;
+        }
+        out.push_back(TraitRecord{got->trait->defName(), got->degree});
+        chosen.push_back(got->trait);
+        for (const std::string& tag : colonistTextList(*got->trait, "disabledWorkTags")) {
+            disabled.push_back(tag);
+        }
+        left -= got->cost;
+        negatives += got->cost < 0 ? 1 : 0;
+    }
+    return out;
+}
+
+// The skill gains of a set of traits for one skill.
+int colonistTraitGain(const DefDatabase& defs, const std::vector<TraitRecord>& traits, const std::string& skill) {
+    int gain = 0;
+    for (const TraitRecord& record : traits) {
+        const Def* trait = defs.find("Traits", record.def);
+        const int d = trait != nullptr ? colonistDegreeIndex(*trait, record.degree) : -1;
+        if (d >= 0) {
+            gain += static_cast<int>(trait->integer(("degreeDatas." + std::to_string(d) + ".skillGains." + skill).c_str(), 0));
+        }
+    }
+    return gain;
+}
+
+// The rest of a point-mode colonist (ours, docs/design/new-game.md), after name and age: no
+// backstories; traits bought from the pool (none for the protagonist); skills from the random curve
+// for all, stretched by age, a few of them lifted as what the person was good at before (in place of
+// the backstories' gains), then the traits' gains on top, which may pass maxLevel; passions as RimWorld.
+bool generatePointColonist(const DefDatabase& defs, Rng& rng, const Def& genRules, const Def& skillRules,
+                           const ColonistGenOptions& options, Colonist& out) {
+    const std::vector<TraitRecord> traits = options.noTraits ? std::vector<TraitRecord>{} : colonistBuyTraits(defs, options.traitPoints, rng);
+
+    const int maxLevel = static_cast<int>(skillRules.integer("maxLevel", 20));
+    const ColonistCurve levelCurve = colonistCurveField(genRules, "skillLevelRandomCurve");
+    const double levelMax = levelCurve.points.empty() ? 1.0 : levelCurve.points.back().first;
+    const ColonistCurve ageFactorCurve = colonistCurveField(genRules, "ageSkillMaxFactorCurve");
+    const double ageFactor = ageFactorCurve.points.empty() ? 1.0
+                                                           : ageFactorCurve.at(std::clamp<double>(out.age, ageFactorCurve.points.front().first,
+                                                                                                  ageFactorCurve.points.back().first));
+    std::vector<std::pair<int, const Def*>> skillDefs;  // listOrder, def
+    for (const DefId id : defs.idsOfKind("Skills")) {
+        skillDefs.emplace_back(static_cast<int>(defs.get(id).integer("listOrder", 0)), &defs.get(id));
+    }
+    std::sort(skillDefs.begin(), skillDefs.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    for (const auto& [order, skillDef] : skillDefs) {
+        (void)order;
+        double level = std::round(colonistDraw(levelCurve, 0.0, levelMax, 120, rng));
+        if (!ageFactorCurve.points.empty()) {
+            level *= 1.0 + (ageFactor - 1.0) * rng.unit();
+        }
+        SkillRecord skill;
+        skill.def = skillDef->defName();
+        skill.level = std::clamp(static_cast<int>(std::lround(level)), 0, maxLevel);
+        out.skills.push_back(std::move(skill));
+    }
+    const int boosts = static_cast<int>(genRules.numberAt("pointSkillBoosts", 0, 0));
+    const int boostMin = static_cast<int>(genRules.numberAt("pointSkillBoosts", 1, 0));
+    const int boostMax = std::max(boostMin, static_cast<int>(genRules.numberAt("pointSkillBoosts", 2, 0)));
+    std::vector<size_t> order;
+    for (size_t i = 0; i < out.skills.size(); ++i) {
+        order.push_back(i);
+    }
+    for (int i = 0; i < boosts && !order.empty(); ++i) {
+        const size_t at = rng.below(static_cast<uint32_t>(order.size()));
+        SkillRecord& skill = out.skills[order[at]];
+        order.erase(order.begin() + static_cast<std::ptrdiff_t>(at));
+        skill.level = std::min(maxLevel, skill.level + boostMin + static_cast<int>(rng.below(static_cast<uint32_t>(boostMax - boostMin + 1))));
+    }
+    setColonistTraits(defs, out, traits);
+    for (SkillRecord& skill : out.skills) {
+        const int index = std::min(skill.level, maxLevel);
+        const double toNext = skill.level >= maxLevel + std::max(0, skill.bonus) ? 0.0 : skillRules.numberAt("xpToNextLevel", static_cast<size_t>(index), 0.0);
+        skill.xp = static_cast<float>(toNext * rng.range(0.1f, 0.9f));
+    }
+
+    std::vector<std::string> forbidden;
+    for (const TraitRecord& record : traits) {
+        if (const Def* trait = defs.find("Traits", record.def)) {
+            for (const std::string& name : colonistTextList(*trait, "disallowedPassions")) {
+                forbidden.push_back(name);
+            }
+        }
+    }
+    std::vector<std::pair<uint32_t, size_t>> ranked;  // sort key, skill index
+    for (size_t i = 0; i < out.skills.size(); ++i) {
+        const SkillRecord& s = out.skills[i];
+        if (!s.disabled && !colonistListHas(forbidden, s.def)) {
+            ranked.emplace_back((static_cast<uint32_t>(s.level) << 16) | rng.below(0x10000), i);
+        }
+    }
+    std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    const int passionMin = static_cast<int>(genRules.numberAt("passionCount", 0, 0));
+    const int passionMax = static_cast<int>(genRules.numberAt("passionCount", 1, 4));
+    int passions = passionMin + static_cast<int>(rng.below(static_cast<uint32_t>(std::max(1, passionMax - passionMin + 1))));
+    const float majorChance = static_cast<float>(genRules.number("majorPassionChance", 0.33));
+    for (size_t i = 0; i < ranked.size() && passions > 0; ++i, --passions) {
+        out.skills[ranked[i].second].passion = rng.unit() < majorChance ? Passion::Major : Passion::Minor;
+    }
+    return true;
+}
+
 }  // namespace
+
+int traitPointCost(const DefDatabase& defs, const TraitRecord& record) {
+    const Def* trait = defs.find("Traits", record.def);
+    const int d = trait != nullptr ? colonistDegreeIndex(*trait, record.degree) : -1;
+    return d < 0 ? 0 : static_cast<int>(trait->integer(("degreeDatas." + std::to_string(d) + ".points").c_str(), 0));
+}
+
+int traitPointsSpent(const DefDatabase& defs, const std::vector<TraitRecord>& traits) {
+    int spent = 0;
+    for (const TraitRecord& t : traits) {
+        spent += traitPointCost(defs, t);
+    }
+    return spent;
+}
+
+bool traitSetFits(const DefDatabase& defs, const std::vector<TraitRecord>& traits, int pool, std::string& error) {
+    if (static_cast<int>(traits.size()) > kMaxTraits) {
+        error = "at most " + std::to_string(kMaxTraits) + " traits";
+        return false;
+    }
+    int negatives = 0;
+    std::vector<const Def*> seen;
+    for (const TraitRecord& t : traits) {
+        const Def* trait = defs.find("Traits", t.def);
+        const int d = trait != nullptr && !trait->flag("abstract") ? colonistDegreeIndex(*trait, t.degree) : -1;
+        if (d < 0 || !trait->has(("degreeDatas." + std::to_string(d) + ".points").c_str())) {
+            error = "no trait '" + t.def + "' of degree " + std::to_string(t.degree) + " to choose";
+            return false;
+        }
+        for (const Def* other : seen) {
+            if (colonistTraitsClash(*trait, *other)) {
+                error = "'" + t.def + "' can't go with '" + other->defName() + "'";
+                return false;
+            }
+        }
+        seen.push_back(trait);
+        negatives += traitPointCost(defs, t) < 0 ? 1 : 0;
+    }
+    if (negatives > kMaxNegativeTraits) {
+        error = "at most " + std::to_string(kMaxNegativeTraits) + " negative traits";
+        return false;
+    }
+    if (traitPointsSpent(defs, traits) > pool) {
+        error = "those traits cost " + std::to_string(traitPointsSpent(defs, traits)) + " points of " + std::to_string(pool);
+        return false;
+    }
+    return true;
+}
+
+void setColonistTraits(const DefDatabase& defs, Colonist& colonist, const std::vector<TraitRecord>& traits) {
+    colonist.traits = traits;
+    std::vector<std::string> disabled;
+    std::vector<std::string> forbidden;
+    for (const TraitRecord& record : traits) {
+        if (const Def* trait = defs.find("Traits", record.def)) {
+            for (const std::string& tag : colonistTextList(*trait, "disabledWorkTags")) {
+                if (!colonistListHas(disabled, tag)) {
+                    disabled.push_back(tag);
+                }
+            }
+            for (const std::string& name : colonistTextList(*trait, "disallowedPassions")) {
+                forbidden.push_back(name);
+            }
+        }
+    }
+    std::sort(disabled.begin(), disabled.end());
+    colonist.disabledWorkTags = disabled;
+    for (SkillRecord& skill : colonist.skills) {
+        const int base = skill.level - skill.bonus;
+        const int gain = colonistTraitGain(defs, traits, skill.def);
+        skill.level = std::max(0, base + gain);
+        skill.bonus = skill.level - base;
+        skill.disabled = false;
+        if (const Def* skillDef = defs.find("Skills", skill.def)) {
+            for (const std::string& tag : colonistTextList(*skillDef, "disablingWorkTags")) {
+                skill.disabled = skill.disabled || colonistListHas(disabled, tag);
+            }
+        }
+        if (skill.disabled || colonistListHas(forbidden, skill.def)) {
+            skill.passion = Passion::None;
+        }
+    }
+}
+
+std::vector<TraitRecord> randomTraitSet(const DefDatabase& defs, uint64_t seed, int pool) {
+    Rng rng(splitMix64(seed ^ 0x7472616974736574ULL), 9);
+    return colonistBuyTraits(defs, pool, rng);
+}
 
 void makeColonistNameUnique(const DefDatabase& defs, uint64_t seed, Colonist& colonist, const std::vector<const Colonist*>& taken) {
     const auto nickTaken = [&](const std::string& name) {
@@ -133,6 +406,15 @@ std::string randomFirstName(const DefDatabase& defs, uint64_t seed, bool female)
 
 bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, Colonist& out, std::string& error,
                       const std::string& category) {
+    ColonistGenOptions options;
+    options.category = category;
+    return generateColonist(defs, seed, protagonist, out, error, options);
+}
+
+bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, Colonist& out, std::string& error,
+                      const ColonistGenOptions& options) {
+    const std::string& category = options.category;
+    const bool pointMode = options.traitPoints >= 0;
     out = Colonist{};
     out.protagonist = protagonist;
     Rng rng(splitMix64(seed ^ 0x636F6C6F6E697374ULL), 3);
@@ -156,6 +438,12 @@ bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, 
     const ColonistCurve ageCurve = colonistCurveField(*genRules, "ageGenerationCurve");
     const double maxAge = ageCurve.points.empty() ? adultAge + 1.0 : ageCurve.points.back().first;
     out.age = std::max(adultAge, static_cast<int>(colonistDraw(ageCurve, adultAge, std::max<double>(maxAge, adultAge + 1), 64, rng)));
+    if (options.age > 0) {
+        out.age = options.age;
+    }
+    if (pointMode) {
+        return generatePointColonist(defs, rng, *genRules, *skillRules, options, out);
+    }
 
     // Backstories.
     const Def* childhood = colonistPickBackstory(defs, "Childhood", category, rng);
@@ -181,7 +469,9 @@ bool generateColonist(const DefDatabase& defs, uint64_t seed, bool protagonist, 
     const int traitMin = static_cast<int>(genRules->numberAt("traitCount", 0, 1));
     const int traitMax = static_cast<int>(genRules->numberAt("traitCount", 1, 3));
     const int wanted = traitMin + static_cast<int>(rng.below(static_cast<uint32_t>(std::max(1, traitMax - traitMin + 1))));
-    const std::vector<DefId> traitIds = defs.idsOfKind("Traits");
+    std::vector<DefId> traitIds = defs.idsOfKind("Traits");
+    // Traits made for trait points only (the skill traits that replace backstories) are not drawn here.
+    traitIds.erase(std::remove_if(traitIds.begin(), traitIds.end(), [&](DefId id) { return defs.get(id).flag("pointsOnly"); }), traitIds.end());
     std::vector<std::string> forbiddenTraits;
     for (const Def* b : {childhood, adulthood}) {
         for (const std::string& name : colonistTextList(*b, "disallowedTraits")) {

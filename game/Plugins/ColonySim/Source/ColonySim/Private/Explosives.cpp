@@ -656,6 +656,7 @@ void ExplosiveSystem::flyOrBlow(Entity grenade, Rng& rng) {
         return;
     }
     Explosion ex;
+    ex.sourceDef = g.def;
     ex.x = g.x;
     ex.y = g.y;
     ex.z = g.z;

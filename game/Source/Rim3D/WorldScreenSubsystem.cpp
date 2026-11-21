@@ -174,6 +174,56 @@ void UWorldScreenSubsystem::SetOpen(bool bNewOpen)
 	bOpen = bNewOpen;
 }
 
+void UWorldScreenSubsystem::SetNewGame(const TArray<FString>& Biomes)
+{
+	NewGameBiomes = Biomes;
+	bNewGame = Biomes.Num() > 0;
+	bLanded = false;
+	bCancelled = false;
+}
+
+bool UWorldScreenSubsystem::ConsumeLanding()
+{
+	const bool bWas = bLanded;
+	bLanded = false;
+	return bWas;
+}
+
+bool UWorldScreenSubsystem::ConsumeCancel()
+{
+	const bool bWas = bCancelled;
+	bCancelled = false;
+	return bWas;
+}
+
+bool UWorldScreenSubsystem::NewGameAllows(const colony::World& World, int32 Tile) const
+{
+	if (!bNewGame)
+	{
+		return true;
+	}
+	const colony::WorldTile& T = World.tile(Tile);
+	return T.biome != colony::kNoBiome && NewGameBiomes.Contains(FString(UTF8_TO_TCHAR(World.biomeName(T).c_str())));
+}
+
+bool UWorldScreenSubsystem::PickRandomSite()
+{
+	const colony::World* World = GetShownWorld();
+	if (!World)
+	{
+		return false;
+	}
+	TArray<int32> Good;
+	for (int32 Tile = 0; Tile < World->tileCount(); ++Tile)
+	{
+		if (World->canStartAt(Tile) && NewGameAllows(*World, Tile))
+		{
+			Good.Add(Tile);
+		}
+	}
+	return Good.Num() > 0 && SelectTile(Good[FMath::RandRange(0, Good.Num() - 1)]);
+}
+
 const colony::World* UWorldScreenSubsystem::GetShownWorld() const
 {
 	const USimSubsystem* Bridge = GetBridge();
@@ -236,6 +286,10 @@ FString UWorldScreenSubsystem::WhyNotStart(int32 Tile) const
 	if (!World || Tile < 0 || Tile >= World->tileCount())
 	{
 		return TEXT("No tile is picked.");
+	}
+	if (World->canStartAt(Tile) && !NewGameAllows(*World, Tile))
+	{
+		return TEXT("Only tropical land can be settled for now: the other biomes are not finished yet.");
 	}
 	if (World->canStartAt(Tile))
 	{
@@ -302,7 +356,7 @@ bool UWorldScreenSubsystem::StartHere()
 {
 	USimSubsystem* Bridge = GetBridge();
 	const colony::World* World = GetShownWorld();
-	if (!Bridge || !World || Selected < 0 || !World->canStartAt(Selected))
+	if (!Bridge || !World || Selected < 0 || !World->canStartAt(Selected) || !NewGameAllows(*World, Selected))
 	{
 		return false;
 	}
@@ -329,6 +383,11 @@ bool UWorldScreenSubsystem::StartHere()
 	SimGeneration = Bridge->GetSimGeneration();
 	bOpen = false;
 	++Stats.ColoniesStarted;
+	if (bNewGame)
+	{
+		bNewGame = false;
+		bLanded = true;
+	}
 	return true;
 }
 
@@ -382,13 +441,18 @@ void UWorldScreenSubsystem::DrawScreen(USimSubsystem& Bridge)
 	const float Margin = 12.0f * Scale;
 
 	ImGuiIO& IO = ImGui::GetIO();
-	if (!IO.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_M, false))
+	if (!bNewGame && !IO.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_M, false))
 	{
 		bOpen = !bOpen;
 	}
 	if (bOpen && !IO.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
 	{
 		bOpen = false;
+		if (bNewGame)
+		{
+			bNewGame = false;
+			bCancelled = true;
+		}
 	}
 	// Opened from the bottom bar's World tab (UColonyHudSubsystem) or the M key.
 	if (!bOpen)
@@ -405,11 +469,33 @@ void UWorldScreenSubsystem::DrawScreen(USimSubsystem& Bridge)
 	if (ImGui::Begin("##WorldScreen", nullptr, Flags))
 	{
 		const float PanelWidth = 360.0f * Scale;
-		ImGui::TextUnformatted("World map");
-		ImGui::SameLine();
-		if (ImGui::Button("Close"))
+		if (bNewGame)
 		{
-			bOpen = false;
+			// The new game's second step (docs/design/new-game.md): pick where the shuttle comes down.
+			if (ImGui::Button("Back"))
+			{
+				bOpen = false;
+				bNewGame = false;
+				bCancelled = true;
+			}
+			ImGui::SameLine();
+			ImGui::TextColored(ColonyHud::Accent(), "Choose your landing site");
+			ImGui::SameLine();
+			ImGui::TextColored(ColonyHud::TextDim(), "(Scenario  >  Landing site  >  People)");
+			ImGui::SameLine();
+			if (ImGui::Button("Pick a random site"))
+			{
+				PickRandomSite();
+			}
+		}
+		else
+		{
+			ImGui::TextUnformatted("World map");
+			ImGui::SameLine();
+			if (ImGui::Button("Close"))
+			{
+				bOpen = false;
+			}
 		}
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(110.0f * Scale);
@@ -445,7 +531,16 @@ void UWorldScreenSubsystem::DrawScreen(USimSubsystem& Bridge)
 			{
 				const float X = Left + World->tileX(Tile) * TileSize;
 				const float Y = Top + World->tileY(Tile) * TileSize;
-				Draw->AddRectFilled(ImVec2(X, Y), ImVec2(X + TileSize + 0.5f, Y + TileSize + 0.5f), TileColor(*World, World->tile(Tile)));
+				ImU32 Colour = TileColor(*World, World->tile(Tile));
+				if (bNewGame && !World->tile(Tile).water && !NewGameAllows(*World, Tile))
+				{
+					// Not settleable yet: dimmed to a third, so the tropical land stands out.
+					const ImU32 R = ((Colour >> IM_COL32_R_SHIFT) & 0xFF) / 3;
+					const ImU32 G = ((Colour >> IM_COL32_G_SHIFT) & 0xFF) / 3;
+					const ImU32 B = ((Colour >> IM_COL32_B_SHIFT) & 0xFF) / 3;
+					Colour = IM_COL32(R, G, B, 255);
+				}
+				Draw->AddRectFilled(ImVec2(X, Y), ImVec2(X + TileSize + 0.5f, Y + TileSize + 0.5f), Colour);
 				++Stats.TilesDrawn;
 			}
 			// Rivers run to the tile they flow into (not across the wrap).
@@ -519,11 +614,11 @@ void UWorldScreenSubsystem::DrawScreen(USimSubsystem& Bridge)
 				const FString Why = WhyNotStart(Selected);
 				if (Why.IsEmpty())
 				{
-					if (ImGui::Button("Start colony here"))
+					if (ImGui::Button(bNewGame ? "Land here" : "Start colony here"))
 					{
 						StartHere();
 					}
-					if (!bPreview && Selected != World->startTile())
+					if (!bNewGame && !bPreview && Selected != World->startTile())
 					{
 						ImGui::TextUnformatted("This starts a new colony.");
 					}
