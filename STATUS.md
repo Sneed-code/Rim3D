@@ -2,6 +2,16 @@
 
 Updated 2026-11-21.
 
+One game folder, one-click update, Debug scenes (sneed, 2026-11-21; Unreal and tools, `docs/setup/update.md`,
+`docs/design/new-game.md` "Debug scenes"): sneed played the gun range from its own copy (`C:\Dev\Rim3D-gunrange`) and saw
+none of the day's merges. Now **there is one game, `C:\Dev\Rim3D`**: the title screen has a **Debug** button with the
+gun range (also with unaware guards), the character creator, the body showcase, the rainforest colony, and 13 watchable
+smoke tests; Start restarts the game into the scene, **F10** or the scene ending restarts it to the title
+(`DebugScenes.h`). **`tools\update-and-play.bat`** pulls main, builds at low priority, and runs only the one-off art
+steps whose inputs changed (`tools/update.py`, `tools/art_steps.json`: 33 steps, from sound downloads and Blender hair
+to `BloodArt`, `WetLook` last), then opens the title (`tools\play.bat`). New one-off steps go in `art_steps.json` in
+their PR. **Next:** PC compile, Debug page pictures, `update.py --adopt` after tonight's hand update of `C:\Dev\Rim3D`.
+
 Weather words match the sky (sneed, 2026-11-21; sim and Unreal HUD, `docs/design/weather.md`): the Crash Landed
 picture said "rainy thunderstorm" over a dry, sunny map. The game's opening clear spell was timed from midnight, so a
 morning landing (#432) could start a new weather on the very first second, and the HUD named it at once while the rain

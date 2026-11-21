@@ -100,6 +100,20 @@ spinning (`NEWGAME clothes on`: shirt and trousers drawn as garments, nothing wo
 10 of 10 points), their Looks tab after a reroll of slot 2 (`NEWGAME reroll`), and Start (the game runs, looks kept).
 One 1080p screenshot each with the UI.
 
+## Debug scenes
+
+The title's **Debug** button (sneed, 2026-11-21: one game, every merge reaches everything) opens a page of test scenes
+that used to need their own launch file or their own copy of the game (`DebugScenes.h`): **play** scenes that run until
+you leave (the gun range, the gun range with unaware guards, the character creator, the body showcase, the rainforest
+colony straight from the menus) and **watch** scenes, the smoke tests that show something and end (finishers, melee,
+gore, wounds and dirt, a gunfight, hands-on work, sky, fire, water, animals, clothes, the shuttle, sounds).
+
+**Start scene** launches a fresh copy of the game with the scene's arguments (exactly what its old `.bat` passed) and
+closes this one: every scene sets its own graphics settings, console variables and sim, and a fresh start is the only
+way to get each as tested. The copy carries `-DebugScene=<id>`: **F10** there, or the scene ending, starts the title
+screen again (the command line without any scene's arguments, `DebugScenes::StripSceneArgs`) instead of quitting.
+The old launch files still work and run the same scenes in the same copy of the game.
+
 ## Not done yet
 
 sneed's verdict on the Canopy look; the cargo pack as a thing to unpack; a live title-screen camera through the rainforest; save pictures and day/wealth

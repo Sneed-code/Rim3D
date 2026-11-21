@@ -913,7 +913,7 @@ void UColonyHudSubsystem::DrawMainMenu(USimSubsystem& Bridge)
 	ColonyHud::ApplyFrameStyle(Scale);
 	++Stats.MainMenuFrames;
 
-	if (MainMenuPage >= 3)
+	if (MainMenuPage == 3 || MainMenuPage == 4)
 	{
 		// The people page shows the colony's real 3D people: no veil over them.
 		DrawPeoplePage(Bridge, Scale);
@@ -933,6 +933,10 @@ void UColonyHudSubsystem::DrawMainMenu(USimSubsystem& Bridge)
 		else if (MainMenuPage == 1)
 		{
 			DrawScenarioPage(Bridge, Scale);
+		}
+		else if (MainMenuPage == 5)
+		{
+			DrawDebugPage(Scale);
 		}
 		else
 		{

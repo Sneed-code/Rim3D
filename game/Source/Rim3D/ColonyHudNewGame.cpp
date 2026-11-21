@@ -20,6 +20,7 @@
 
 #include "ColonyHudStyle.h"
 #include "CreatorPeople.h"
+#include "DebugScenes.h"
 #include "OverseerSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
@@ -687,6 +688,11 @@ void UColonyHudSubsystem::DrawTitlePage(USimSubsystem& Bridge, float Scale)
 	{
 		bSettingsOpen = !bSettingsOpen;
 	}
+	if (NgButton(TEXT("Debug"), false, ImVec2(Wide, 0.0f)))
+	{
+		MainMenuPage = 5;
+	}
+	ColonyHud::Tip(TEXT("Test scenes: the gun range, the character creator and more"));
 	ImGui::Spacing();
 	if (NgButton(TEXT("Quit to desktop"), false, ImVec2(Wide, 0.0f)))
 	{
@@ -827,6 +833,65 @@ void UColonyHudSubsystem::DrawScenarioPage(USimSubsystem& Bridge, float Scale)
 	if (NgButton(TEXT("Choose landing site"), false, ImVec2(260.0f * Scale, 0.0f), true) && Picked)
 	{
 		StartNewColony(true);
+	}
+	NgEndPanel();
+}
+
+// ---- Debug scenes -----------------------------------------------------------------------------------
+
+void UColonyHudSubsystem::DrawDebugPage(float Scale)
+{
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	const ImVec2 Size(FMath::Min(1000.0f * Scale, Viewport->Size.x - 80.0f * Scale), FMath::Min(640.0f * Scale, Viewport->Size.y - 120.0f * Scale));
+	const ImVec2 Pos(Viewport->Pos.x + (Viewport->Size.x - Size.x) * 0.5f, Viewport->Pos.y + (Viewport->Size.y - Size.y) * 0.5f);
+	if (!NgBeginPanel("##NgDebug", Pos, Size))
+	{
+		NgEndPanel();
+		return;
+	}
+	NgTitle(TEXT("Debug scenes"));
+	ColonyHud::TextColored(NgStyle::Dim, TEXT("Test scenes inside this game, so every update reaches them. F10 in a scene comes back here."));
+	NgRule();
+
+	const TConstArrayView<DebugScenes::FScene> Scenes = DebugScenes::All();
+	DebugScenePicked = FMath::Clamp(DebugScenePicked, 0, Scenes.Num() - 1);
+	const float ListW = 340.0f * Scale;
+	const float FooterH = ImGui::GetFrameHeightWithSpacing() * 1.6f;
+	ImGui::BeginChild("##NgDebugList", ImVec2(ListW, -FooterH), ImGuiChildFlags_None);
+	const TCHAR* Group = nullptr;
+	for (int32 i = 0; i < Scenes.Num(); ++i)
+	{
+		if (!Group || FCString::Strcmp(Group, Scenes[i].Group) != 0)
+		{
+			Group = Scenes[i].Group;
+			NgLabel(FCString::Strcmp(Group, TEXT("Play")) == 0 ? TEXT("Play") : TEXT("Watch (ends by itself)"));
+		}
+		if (NgButton(FString::Printf(TEXT("%s##dbg%d"), Scenes[i].Label, i), i == DebugScenePicked, ImVec2(ListW - 8.0f * Scale, 0.0f)))
+		{
+			DebugScenePicked = i;
+		}
+	}
+	ImGui::EndChild();
+	ImGui::SameLine();
+	ImGui::BeginChild("##NgDebugInfo", ImVec2(0.0f, -FooterH), ImGuiChildFlags_None);
+	const DebugScenes::FScene& Picked = Scenes[DebugScenePicked];
+	NgHeading(Picked.Label);
+	ImGui::PushTextWrapPos(0.0f);
+	ColonyHud::Text(Picked.Tip);
+	ImGui::Spacing();
+	ColonyHud::TextColored(NgStyle::Dim, TEXT("The game restarts into the scene, which takes as long as starting the game. F10 in the scene, or the scene ending, restarts it back to this title screen."));
+	ImGui::PopTextWrapPos();
+	ImGui::EndChild();
+	NgRule();
+	const float FooterRight = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+	if (NgButton(TEXT("Back"), false, ImVec2(160.0f * Scale, 0.0f)))
+	{
+		MainMenuPage = 0;
+	}
+	ImGui::SameLine(FooterRight - 260.0f * Scale);
+	if (NgButton(TEXT("Start scene"), false, ImVec2(260.0f * Scale, 0.0f), true))
+	{
+		DebugScenes::Launch(Picked);
 	}
 	NgEndPanel();
 }
