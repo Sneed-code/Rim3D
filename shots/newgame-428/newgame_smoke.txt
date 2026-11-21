@@ -1,0 +1,22 @@
+﻿Building Rim3DEditor (below-normal priority, 6 jobs)...
+Build ok.
+Running smoke test 'newgame' at 1920x1080...
+
+Smoke test 'newgame': FAIL  (36 s, NVIDIA GeForce RTX 5080, 1920x1080)
+newgame_title                80.7 fps  game   3.5 ms  render   4.7 ms  gpu   3.7 ms  screenshot ok
+newgame_scenario            120.5 fps  game   3.5 ms  render   4.7 ms  gpu   3.7 ms  screenshot ok
+newgame_people              121.7 fps  game   4.2 ms  render   6.8 ms  gpu   5.6 ms  screenshot ok
+newgame_you_clothes          74.8 fps  game   4.1 ms  render   6.8 ms  gpu   5.6 ms  screenshot ok
+newgame_companions          104.7 fps  game   4.3 ms  render   6.4 ms  gpu   5.3 ms  screenshot ok
+newgame_looks               103.3 fps  game   3.9 ms  render   6.4 ms  gpu   5.3 ms  screenshot ok
+newgame_landed              119.2 fps  game   4.3 ms  render   5.3 ms  gpu   4.1 ms  screenshot ok
+ERROR: newgame_title: the title screen was never drawn
+ERROR: newgame_people: the game ran 4 steps behind the people page
+ERROR: newgame_people: a colonist has no creator look
+ERROR: newgame_people: a colonist is not drawn on its MakeHuman body
+ERROR: newgame_people: you are not the creator's default woman
+ERROR: newgame_you_clothes: the cotton shirt and trousers are not on the body
+ERROR: newgame_companions: the companions page is not open, or the game started
+ERROR: newgame_looks: the reroll lost a colonist or the game started
+ERROR: newgame_landed: a colonist lost its creator look
+Screenshots: C:\Dev\Rim3D-climb\game\Saved\Smoke\newgame
