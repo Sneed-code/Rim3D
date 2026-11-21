@@ -391,7 +391,10 @@ FSimPawnApparel USimPawnSubsystem::MakeApparel(const colony::Snapshot& Snapshot,
 			Worn.bHeadwear = Worn.bHeadwear || Def.textAt("apparel.layers", L) == "Overhead";
 		}
 		Worn.bCoversCrotch = bOverLegs && bUnderShell;
-		Worn.Puff = (bOverTorso ? 1.5f : 0.0f) + 0.6f * static_cast<float>(LayerRank);
+		// Puff (cm along the normal): tops sit over waistbands and belts; legwear sits over the skin kept
+		// at its top edge (the cover bake keeps skin near uncovered skin, which pokes through a waistband
+		// left bare by a short top).
+		Worn.Puff = (bOverTorso ? 1.5f : (bOverLegs ? 0.8f : 0.0f)) + 0.6f * static_cast<float>(LayerRank);
 		if (Piece->stuff.valid() && Piece->stuff.value < Defs->size())
 		{
 			const colony::Def& Stuff = Defs->get(Piece->stuff);

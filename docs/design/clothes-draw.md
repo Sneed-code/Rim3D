@@ -69,7 +69,7 @@ body by MPFB.
 - **Worn look and wet**: `M_MH_Garment` keeps the torn holes and darkening from the wear (custom data 3) and the
   wetness of the wearer (12).
 - **Layers**: all garments are made to sit on the skin, so a top is pushed out along its normals over trousers (1.5 cm
-  for a piece over the torso, 0.6 cm more per layer above the skin; custom data 5, `FSimWornPiece::Puff`).
+  for a piece over the torso, 0.8 cm for legwear so its waistband covers the skin kept above it, 0.6 cm more per layer above the skin; custom data 5, `FSimWornPiece::Puff`).
 - **Following the body**: each garment is a skinned mesh component on the body's leader pose; the body's morph weights
   are copied onto it when they change.
 - **Hats**: a drawn overhead piece switches the strand hair to its under-a-hat groom (pressed flat above the brim, hanging
