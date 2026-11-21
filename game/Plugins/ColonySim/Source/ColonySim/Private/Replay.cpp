@@ -105,6 +105,12 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
         j["group"] = group->group;
         return j;
     }
+    if (const auto* setGrime = std::get_if<SetGrimeCommand>(&logged.command)) {
+        j["pawn"] = entt::to_integral(setGrime->pawn);
+        j["dirtLegs"] = setGrime->dirtLegs;
+        j["dirtBody"] = setGrime->dirtBody;
+        return j;
+    }
     if (const auto* reroll = std::get_if<RerollColonistCommand>(&logged.command)) {
         j["slot"] = reroll->slot;
         return j;
@@ -611,7 +617,8 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                                           std::is_same_v<Type, LevelEarthCommand> ||
                                           std::is_same_v<Type, CancelEarthworksCommand> ||
                                           std::is_same_v<Type, UnstuckCommand> ||
-                                          std::is_same_v<Type, SetWorkGroupCommand>,
+                                          std::is_same_v<Type, SetWorkGroupCommand> ||
+                                          std::is_same_v<Type, SetGrimeCommand>,
                                       "write every command type");
                     }
                 }
@@ -1982,6 +1989,17 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             if (!replayReadRect(r, j, where, c.area) || !r.flag(j, "add", c.add, where)) {
                 return false;
             }
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetGrime") {
+            SetGrimeCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            if (!r.integer(j, "pawn", pawn, where) || !r.number(j, "dirtLegs", c.dirtLegs, where) ||
+                !r.number(j, "dirtBody", c.dirtBody, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
             out.command = std::move(c);
             return true;
         }
