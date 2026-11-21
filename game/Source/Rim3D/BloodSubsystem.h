@@ -129,6 +129,8 @@ public:
 	int32 GetHits() const { return Hits; }
 	int32 GetDropsSpawned() const { return DropsSpawned; }
 	int32 GetMistSpawned() const { return MistSpawned; }
+	int32 GetSpraySpawned() const { return SpraySpawned; }
+	int32 GetSprayInAir() const { return Spray.Num(); }
 	int32 GetActiveDrops() const { return Drops.Num(); }
 	int32 GetActiveMist() const { return Mist.Num(); }
 	int32 GetSplatsMade() const { return SplatsMade; }
@@ -136,6 +138,7 @@ public:
 	int32 GetWallSplats() const { return WallSplats; }
 	int32 GetBodyStainsMade() const { return BodyStainsMade; }
 	int32 GetWoundMarks() const { return WoundMarks; }
+	int32 GetExitsTraced() const { return ExitsTraced; }
 	/** Marks painted into skin (USkinBlood) and bodies carrying blood in their skin now. */
 	int32 GetSkinPaints() const;
 	int32 GetSkinMasks() const;
@@ -186,6 +189,22 @@ private:
 		float Age = 0.0f;
 		float Life = 0.6f;
 		float Opacity = 0.5f;
+		FLinearColor Color;
+	};
+
+	/** A gush of blood in the air (sneed 2026-11-20: big spray you can see on every melee hit and gunshot): a ragged
+	 *  streak drawn along its flight, facing the camera, gone in a fraction of a second. Cosmetic. */
+	struct FSprayStreak
+	{
+		FVector Position = FVector::ZeroVector;
+		FVector Velocity = FVector::ZeroVector;
+		float Length = 20.0f;  // cm
+		float Width = 6.0f;
+		float Grow = 1.6f;     // size at the end of its life against the start
+		float Age = 0.0f;
+		float Life = 0.25f;
+		float Opacity = 0.9f;
+		float Seed = 0.0f;
 		FLinearColor Color;
 	};
 
@@ -313,6 +332,10 @@ private:
 
 	void UpdateDrops(float Dt);
 	void UpdateMist(float Dt);
+	/** Gushes along `Axis` within `ConeDegrees`; `Burst`: one round splash at the wound as well. */
+	void SprayGush(const FVector& At, const FVector& Axis, float ConeDegrees, int32 Count, float MinSpeed, float MaxSpeed, float MinLength, float MaxLength,
+		bool bBurst, float Strength, const FBloodFluid& Fluid);
+	void UpdateSpray(float Dt);
 	void UpdateBleeding(float Dt, float GameSeconds);
 	void UpdateStains(float Dt, float GameSeconds);
 	void SyncFilth();
@@ -342,6 +365,8 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UInstancedStaticMeshComponent> MistInstances;
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> SprayInstances;
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> SplatterBase;
@@ -356,6 +381,7 @@ private:
 
 	TArray<FDrop> Drops;
 	TArray<FMistPuff> Mist;
+	TArray<FSprayStreak> Spray;
 	TArray<FStain> Stains;
 	TArray<FBodyStain> BodyStains;
 	TArray<FBleed> Bleeds;
@@ -387,12 +413,15 @@ private:
 	TMap<uint32, int32> HitsByFluid;
 	int32 DropsSpawned = 0;
 	int32 MistSpawned = 0;
+	int32 SpraySpawned = 0;
+	int32 SkinDropsThisFrame = 0;
 	int32 SplatsMade = 0;
 	int32 SplatsMerged = 0;
 	int32 WallSplats = 0;
 	int32 BodyStainsMade = 0;
 	int32 WoundMarks = 0;
 	int32 ExitWounds = 0;
+	int32 ExitsTraced = 0;  // exits found on the drawn body (not guessed)
 	int32 Drips = 0;
 	int32 Spurts = 0;
 	int32 PoolsMade = 0;

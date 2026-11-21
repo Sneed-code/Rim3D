@@ -1,4 +1,5 @@
 #include "PawnActor.h"
+#include "PhysicsEngine/BodyInstance.h"
 #include "WaterDraw.h"
 
 #include "Animation/AnimInstance.h"
@@ -393,6 +394,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	UpdateFightFace(Bridge, Now, DeltaTime * Speed);
 	if (bRagdoll)
 	{
+		UpdateRagdollRest(DeltaTime);
 		return;  // the physics body is on its own until the pawn gets up
 	}
 	StanceHeight = Now.stance == colony::Stance::Crouching ? 0.66f : (Now.stance == colony::Stance::Prone ? 0.24f : 1.0f);
@@ -2193,6 +2195,10 @@ void ASimPawnActor::KickZone(const USimSubsystem& Bridge, int32 Part, const FVec
 	// Into the mesh's own space, as the body is turned now (leaning, swinging).
 	Hit.Direction = Body->GetComponentTransform().InverseTransformVectorNoScale(DirectionWorld.GetSafeNormal());
 	Hit.Strength = FMath::Clamp(Strength, 0.0f, 1.0f);
+	if (Zone == ESimPawnZone::Head)
+	{
+		Hit.Strength = FMath::Max(Hit.Strength, 0.6f);  // any hit to the head snaps it back where you can see it
+	}
 	if (Anim->Inputs.Kicks.Num() < 4)
 	{
 		Anim->Inputs.Kicks.Add(Hit);
@@ -2615,6 +2621,26 @@ void ASimPawnActor::StartRagdoll(const FVector& Impulse)
 	Body->SetAllBodiesSimulatePhysics(true);
 	Body->SetAllBodiesPhysicsBlendWeight(1.0f);
 	Body->bBlendPhysics = true;
+	// A dead body lies still (sneed 2026-11-20: corpses twitched, fingers and toes moving): the clips stop, so the bones
+	// without a physics body (fingers, toes) keep their last pose instead of playing on; the limbs are damped like a limp
+	// body's, and the whole body goes to sleep once it has settled (UpdateRagdollRest).
+	Body->bPauseAnims = true;
+	for (FBodyInstance* Instance : Body->Bodies)
+	{
+		if (Instance)
+		{
+			Instance->LinearDamping = FMath::Max(Instance->LinearDamping, 0.2f);
+			Instance->AngularDamping = FMath::Max(Instance->AngularDamping, 2.0f);
+			Instance->UpdateDampingProperties();
+		}
+	}
+	RagdollSeconds = 0.0f;
+	RagdollStillSeconds = 0.0f;
+	if (UMakeHumanAnimInstance* Soft = MakeHumanMesh ? Cast<UMakeHumanAnimInstance>(MakeHumanMesh->GetAnimInstance()) : nullptr)
+	{
+		bSoftTissueBeforeRagdoll = Soft->IsSoftTissueEnabled();
+		Soft->SetSoftTissueEnabled(false);  // no flesh jiggling on a still body
+	}
 	Body->WakeAllRigidBodies();
 	if (!Impulse.IsNearlyZero())
 	{
@@ -2660,6 +2686,11 @@ void ASimPawnActor::StopRagdoll()
 		return;
 	}
 	bRagdoll = false;
+	Body->bPauseAnims = false;
+	if (UMakeHumanAnimInstance* Soft = MakeHumanMesh ? Cast<UMakeHumanAnimInstance>(MakeHumanMesh->GetAnimInstance()) : nullptr)
+	{
+		Soft->SetSoftTissueEnabled(bSoftTissueBeforeRagdoll);
+	}
 	Body->SetAllBodiesSimulatePhysics(false);
 	Body->bBlendPhysics = false;
 	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -2671,6 +2702,58 @@ void ASimPawnActor::StopRagdoll()
 		RagdollFloor->DestroyComponent();
 		RagdollFloor = nullptr;
 	}
+}
+
+void ASimPawnActor::UpdateRagdollRest(float DeltaTime)
+{
+	RagdollSeconds += DeltaTime;
+	if (!Body || !Body->IsSimulatingPhysics())
+	{
+		return;
+	}
+	// Settled: every part slower than 6 cm/s for half a second, at least 2 s after the fall. Then it sleeps, and the small
+	// jitter of limbs resting on each other and the ground (the twitching) stops. A blast or a hit wakes it again.
+	float Fastest = 0.0f;
+	for (const FBodyInstance* Instance : Body->Bodies)
+	{
+		if (Instance && Instance->IsInstanceSimulatingPhysics())
+		{
+			Fastest = FMath::Max(Fastest, static_cast<float>(Instance->GetUnrealWorldVelocity().Size()));
+		}
+	}
+	RagdollStillSeconds = Fastest < 6.0f ? RagdollStillSeconds + DeltaTime : 0.0f;
+	if (RagdollSeconds > 2.0f && RagdollStillSeconds > 0.5f && Body->RigidBodyIsAwake())
+	{
+		Body->PutAllRigidBodiesToSleep();
+		++RagdollSleeps;
+	}
+}
+
+void ASimPawnActor::PushRagdoll(const FVector& Centre, float RadiusCm, float SpeedCmPerSecond)
+{
+	if (!bRagdoll || !Body || !Body->IsSimulatingPhysics() || RadiusCm <= 0.0f)
+	{
+		return;
+	}
+	Body->WakeAllRigidBodies();
+	// A velocity change, so a light and a heavy body fly alike; falling off linearly to the edge, lifted a little.
+	Body->AddRadialImpulse(Centre - FVector(0.0, 0.0, 40.0), RadiusCm, SpeedCmPerSecond, ERadialImpulseFalloff::RIF_Linear, true);
+	RagdollSeconds = 0.0f;
+	RagdollStillSeconds = 0.0f;
+	++RagdollPushes;
+}
+
+void ASimPawnActor::PushRagdollAt(const FVector& At, const FVector& Impulse)
+{
+	if (!bRagdoll || !Body || !Body->IsSimulatingPhysics())
+	{
+		return;
+	}
+	const FName Bone = Body->FindClosestBone(At, nullptr, 0.0f, true);
+	Body->WakeAllRigidBodies();
+	Body->AddImpulseAtLocation(Impulse, At, Bone);
+	RagdollSeconds = 0.0f;
+	RagdollStillSeconds = 0.0f;
 }
 
 bool ASimPawnActor::GetRagdollPelvis(FVector& OutLocation) const

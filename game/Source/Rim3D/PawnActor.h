@@ -188,6 +188,14 @@ public:
 	/** Gets up again: the animation takes over. */
 	void StopRagdoll();
 	bool IsRagdoll() const { return bRagdoll; }
+	/** A blast throws a ragdoll (a corpse or a downed body): a velocity change of up to `SpeedCmPerSecond` at the
+	 *  centre, falling off to nothing at `RadiusCm` (sneed 2026-11-20). Wakes a body that had gone to sleep. */
+	void PushRagdoll(const FVector& Centre, float RadiusCm, float SpeedCmPerSecond);
+	/** A bullet or blow on a ragdoll: an impulse at the bone nearest `At`. */
+	void PushRagdollAt(const FVector& At, const FVector& Impulse);
+	/** For the tests: ragdolls put to sleep once settled, and blasts that threw one. */
+	int32 GetRagdollSleeps() const { return RagdollSleeps; }
+	int32 GetRagdollPushes() const { return RagdollPushes; }
 	/** The ragdoll's floor taken away (carried on a back, BodyCarrySubsystem) or made again under where the pawn is now. */
 	void ResetRagdollFloor(bool bWanted);
 	/** Where the ragdoll's pelvis is now (world cm); false if the pawn is not a ragdoll. */
@@ -422,6 +430,12 @@ private:
 	FSimPawnLooks Looks;
 	bool bHasLooks = false;
 	bool bRagdoll = false;
+	float RagdollSeconds = 0.0f;
+	float RagdollStillSeconds = 0.0f;
+	bool bSoftTissueBeforeRagdoll = true;
+	int32 RagdollSleeps = 0;
+	int32 RagdollPushes = 0;
+	void UpdateRagdollRest(float DeltaTime);
 	/** The tick group the meshes were last put in, and how many meshes that was (more come with looks). */
 	int32 MeshTickGroup = -1;
 	int32 MeshTickCount = 0;

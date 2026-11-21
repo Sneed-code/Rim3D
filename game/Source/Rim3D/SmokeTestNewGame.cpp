@@ -188,7 +188,7 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 	// 3b. Clothes on, spinning: the cargo pack's cotton shown on the body (cosmetic), the body turning on the turntable.
 	FPhase ClothesPhase;
 	ClothesPhase.Name = TEXT("newgame_you_clothes");
-	ClothesPhase.WarmupSeconds = 1.2f;
+	ClothesPhase.WarmupSeconds = 2.5f;
 	ClothesPhase.MeasureSeconds = 0.3f;
 	ClothesPhase.Setup = [=, this]()
 	{
@@ -200,12 +200,16 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 		const colony::Sim* Sim = Bridge()->GetSim();
 		const std::vector<colony::Entity> People = Sim ? Sim->startingColonistSlots() : std::vector<colony::Entity>();
 		const ASimPawnActor* Actor = People.empty() ? nullptr : Pawns()->FindPawn(People[0]);
-		UE_LOG(LogTemp, Display, TEXT("NEWGAME clothes on: %d pieces drawn, spin %.0f degrees"), Actor ? Actor->GetApparel().Pieces.Num() : -1,
-			Actor ? Actor->GetPreviewSpin() : 0.0f);
-		// The pieces are drawn on MakeHuman bodies once clothes for them (#425) are in; until then only the preview is checked.
+		UE_LOG(LogTemp, Display, TEXT("NEWGAME clothes on: %d pieces, %d cut, %d garment meshes, spin %.0f degrees"), Actor ? Actor->GetApparel().Pieces.Num() : -1,
+			Actor ? Actor->GetGarmentCuts().Num() : -1, Actor ? Actor->GetWornMeshes().Num() : -1, Actor ? Actor->GetPreviewSpin() : 0.0f);
 		if (!Actor || People.empty() || !Pawns()->HasApparelPreview(People[0]))
 		{
 			Fail(TEXT("newgame_you_clothes: the clothes-on preview is not set on you"));
+		}
+		// The cargo pack's cotton shirt and trousers, drawn as MakeHuman garments (#425).
+		else if (Actor->GetApparel().Pieces.Num() != 2 || Actor->GetGarmentCuts().Num() != 2 || Actor->GetWornMeshes().IsEmpty())
+		{
+			Fail(TEXT("newgame_you_clothes: the cotton shirt and trousers are not drawn on you"));
 		}
 		if (Actor && FMath::Abs(Actor->GetPreviewSpin()) < 1.0f)
 		{

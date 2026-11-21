@@ -292,7 +292,8 @@ public:
     // hitbox and goInside): as a random hit there would be, an inside part also hurts the outside
     // part over it. Same failures as applyDamage, except that a body which can be cut up (takesCorpseHits) still takes
     // hits once dead: they pile up past 0 until the piece comes off.
-    bool applyHit(Entity pawn, DefId damageType, float amount, int part);
+    // `tear` (a blast at a corpse): on a dead body all of it piles past 0, whatever hit points the zone had left.
+    bool applyHit(Entity pawn, DefId damageType, float amount, int part, bool tear = false);
     // A dead body with zones (not the protagonist's) still takes bullets, blows and blasts (sneed, 2026-11-19).
     bool takesCorpseHits(Entity pawn) const;
     // Whether body part `part` is still on the pawn (at 0 hit points or not).
@@ -488,7 +489,7 @@ private:
     // 1 downed and awake (a sound can give it a last scream), 2 downed and knocked out.
     void die(Entity pawn, Health& health, DeathCause cause, bool announce, bool downedAwake = false);
     bool downedAwake(const Health& health) const;
-    bool hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter);
+    bool hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter, bool tear = false);
     bool damagePart(Entity pawn, Health& health, int part, DefId hediff, float amount);
     void destroyPart(Entity pawn, Health& health, int part, float amount);
     void dismember(Entity pawn, Health& health, int zone, int struck, float overkill);

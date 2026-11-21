@@ -246,6 +246,13 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
             placeMapRoads(map_, *things_, *plants_, *floors_, site_->roadEdges, splitMix64(settings_.seed ^ 0x726F6164ULL));
         }
     }
+    // A scenario may land at an hour of the morning (Crash Landed: 7:00, by daylight) instead of midnight. Only the
+    // calendar moves: steps still start at 0, which is how the character screen knows the game hasn't begun.
+    if (!settings_.scenario.empty() && settings_.startSecond == 0) {
+        if (const Def* landing = defs_->find("Scenarios", settings_.scenario)) {
+            time_.seconds = static_cast<int64_t>(std::clamp(landing->number("startHour", 0.0), 0.0, 23.0) * kSecondsPerHour);
+        }
+    }
     placeStockpileAndThings();
     if (!settings_.scenario.empty()) {
         startScenario();
