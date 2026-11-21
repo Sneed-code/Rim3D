@@ -409,9 +409,21 @@ Entity feelTestDowned(Sim& sim, Entity hero, float metres) {
     const Entity enemy = feelTestPawn(sim, p.x + metres, p.y);
     sim.submit(SetFactionCommand{enemy, 2});
     sim.step();
-    // As a real downed body: on the ground, not moving (so nobody's walk shoves it).
+    // A real downed body: knocked out by blows to the head (the health refresh undoes a downed flag set by hand,
+    // and a body set down by hand would still stand in the way of a step-in).
+    int head = -1;
+    const std::vector<std::string> labels =
+        sim.health().partLabels(sim.things().registry().get<Thing>(enemy).def);
+    for (size_t i = 0; i < labels.size(); ++i) {
+        if (labels[i] == "head") {
+            head = static_cast<int>(i);
+        }
+    }
+    for (int blow = 0; blow < 40 && !sim.things().registry().get<Health>(enemy).downed; ++blow) {
+        sim.submit(DamagePawnCommand{enemy, "Blunt", 5.0f, head});
+        sim.step();
+    }
     Health& health = sim.things().registry().get<Health>(enemy);
-    health.downed = true;
     health.movingFactor = 0.0f;
     return enemy;
 }
