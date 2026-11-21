@@ -2272,7 +2272,7 @@ namespace
 		Look->Code = TEXT(
 			"float lum = dot(Tex.rgb, float3(0.2126, 0.7152, 0.0722));\n"
 			// The stuff's colour, shaded by the texture's own light and dark (folds, seams, weave) about its average.
-			"float shade = clamp(lum / max(Average, 0.02), 0.0, 2.0);\n"
+			"float shade = clamp(lum / max(Average, 0.02), 0.0, 1.4);\n"  // bright prints and stripes stay cloth, not pale patches
 			"float3 col = lerp(Tex.rgb, Tint * shade, saturate(Amount));\n"
 			"float2 q = UV * 9.0;\n"
 			"float n = 0.0; float amp = 0.5;\n"
