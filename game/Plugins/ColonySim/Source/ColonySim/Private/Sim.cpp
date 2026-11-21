@@ -1356,6 +1356,17 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
         return;
     }
+    if (const auto* setGrime = std::get_if<SetGrimeCommand>(&command)) {
+        const Thing* thing = things_->exists(setGrime->pawn) ? things_->registry().try_get<Thing>(setGrime->pawn) : nullptr;
+        if (thing == nullptr || thing->category != ThingCategory::Pawn) {
+            commandFailed(id, "only a pawn has grime");
+        } else {
+            const PawnGrime* had = grime_->of(setGrime->pawn);
+            grime_->set(setGrime->pawn, setGrime->dirtLegs, setGrime->dirtBody, had != nullptr ? had->blood : 0.0f,
+                        had != nullptr ? had->bloodKind : -1, had != nullptr ? had->bloodAt : time_.seconds);
+        }
+        return;
+    }
     if (const auto* group = std::get_if<SetWorkGroupCommand>(&command)) {
         Colonist* colonist = things_->exists(group->pawn) ? things_->registry().try_get<Colonist>(group->pawn) : nullptr;
         if (colonist == nullptr) {

@@ -1160,6 +1160,14 @@ struct SetWorkGroupCommand {
     std::string group;
 };
 
+// Dev command (docs/design/grime.md): sets a pawn's dirt on the legs and the body (0 to 1) outright, for smoke-test
+// pictures of how dirt looks. Fails for a thing that is not a pawn.
+struct SetGrimeCommand {
+    Entity pawn = kNoEntity;
+    float dirtLegs = 0.0f;
+    float dirtBody = 0.0f;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -1195,7 +1203,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand,
                              SleepCommand, SetLandingZoneCommand,
                              PatchCommand, SetAlertCommand, FocusCommand, SetFightResponseCommand,
-                             LevelEarthCommand, CancelEarthworksCommand, UnstuckCommand, SetWorkGroupCommand>;
+                             LevelEarthCommand, CancelEarthworksCommand, UnstuckCommand, SetWorkGroupCommand,
+                             SetGrimeCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
 // day) it was applied in. Failed commands are logged too.

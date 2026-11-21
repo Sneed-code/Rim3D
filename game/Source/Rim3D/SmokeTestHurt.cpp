@@ -17,6 +17,7 @@
 #include "PawnAnimInstance.h"
 #include "BloodSubsystem.h"
 #include "FightSubsystem.h"
+#include "GrimeSubsystem.h"
 #include "PawnSubsystem.h"
 #include "SeveredPieceActor.h"
 #include "SimSubsystem.h"
@@ -68,6 +69,11 @@ namespace
 		bool bCloseSetUp = false;
 		TArray<TWeakObjectPtr<UPrimitiveComponent>> CloseHidden;
 		TWeakObjectPtr<APointLight> CloseLight;
+		// dirt
+		int32 DirtShotsTaken = 0;
+		int32 MaxGrimyPawns = 0;
+		TArray<TWeakObjectPtr<UPrimitiveComponent>> DirtHidden;
+		bool bDirtSetUp = false;
 	};
 
 	/** The real bodies with their clothes instead of the bare mannequins (the pawn actors are made again). */
@@ -190,6 +196,122 @@ void USmokeTestSubsystem::BuildHurtPhases()
 			if (Sim && Sim->health().zoneNames(State->Pawn).size() != 6)
 			{
 				Fail(FString::Printf(TEXT("setup: the colonist's body has %d zones, not 6"), static_cast<int32>(Sim->health().zoneNames(State->Pawn).size())));
+			}
+		};
+		Phases.Add(MoveTemp(Phase));
+	}
+
+	{
+		// Dirt on a body (docs/design/grime.md, sneed 2026-11-20: fine spray over the broad smudges): legs caked, body
+		// dusty, pictured from 2 m, at the shins from 60 and 30 cm, from behind and from 10 m (dirt_<N>.png; no
+		// sparkle at range), then washed off again for the phases after.
+		FPhase Phase;
+		Phase.Name = TEXT("dirt");
+		Phase.Setup = [=, this]()
+		{
+			if (USimSubsystem* B = Bridge())
+			{
+				B->Submit(colony::SetGrimeCommand{State->Pawn, 0.85f, 0.35f});
+			}
+			// Noon, and time for the eye to adjust (the first PC round was at night with a fill light: blown out).
+			if (IConsoleVariable* Hour = IConsoleManager::Get().FindConsoleVariable(TEXT("Sky.Hour")))
+			{
+				Hour->Set(12.0f, ECVF_SetByCode);
+			}
+		};
+		Phase.WarmupSeconds = 3.0f;
+		Phase.MeasureSeconds = 8.5f;
+		Phase.ScreenshotAt = 0.6f;
+		Phase.OnFrame = [=, this]()
+		{
+			const ASimPawnActor* Actor = ActorOf();
+			if (!Actor)
+			{
+				return;
+			}
+			if (const UGrimeSubsystem* Grime = GetWorld()->GetSubsystem<UGrimeSubsystem>())
+			{
+				State->MaxGrimyPawns = FMath::Max(State->MaxGrimyPawns, Grime->GetGrimyPawns());
+			}
+			const FVector P = Actor->GetActorLocation();
+			const FVector Forward = Actor->GetActorForwardVector();
+			const FVector Side = Actor->GetActorRightVector();
+			if (!State->bDirtSetUp)
+			{
+				State->bDirtSetUp = true;
+				// Plants round the body out of the way.
+				const UTerrainSubsystem* Terrain = GetWorld()->GetSubsystem<UTerrainSubsystem>();
+				if (AActor* Ground = Terrain ? Terrain->GetTerrainActor() : nullptr)
+				{
+					TInlineComponentArray<UInstancedStaticMeshComponent*> Plants;
+					Ground->GetComponents(Plants);
+					for (UInstancedStaticMeshComponent* Kind : Plants)
+					{
+						if (Kind && Kind->IsVisible() && Kind->GetInstancesOverlappingSphere(P, 300.0f, true).Num() > 0)
+						{
+							Kind->SetVisibility(false);
+							State->DirtHidden.Add(Kind);
+						}
+					}
+				}
+			}
+			// Shot N from PhaseTime 3 + N: whole body, shins 60 cm, shins 30 cm, from behind, from 10 m.
+			const int32 Shot = FMath::Clamp(FMath::FloorToInt(PhaseTime - 3.0f), 0, 4);
+			FVector Look = P + FVector(0.0, 0.0, 90.0);
+			FVector Eye = Look + Forward * 220.0 + Side * 60.0;
+			if (Shot == 1)
+			{
+				Look = P + FVector(0.0, 0.0, 40.0);
+				Eye = Look + Forward * 60.0 + Side * 20.0 + FVector(0.0, 0.0, 10.0);
+			}
+			else if (Shot == 2)
+			{
+				Look = P + FVector(0.0, 0.0, 35.0) + Side * 10.0;
+				Eye = Look + Forward * 30.0 + Side * 8.0 + FVector(0.0, 0.0, 5.0);
+			}
+			else if (Shot == 3)
+			{
+				Eye = Look - Forward * 200.0 - Side * 50.0;
+			}
+			else if (Shot == 4)
+			{
+				Eye = Look + Forward * 1000.0 + Side * 200.0 + FVector(0.0, 0.0, 150.0);
+			}
+			ViewFrom(Eye, (Look - Eye).Rotation());
+			if (PhaseTime >= 3.0f && State->DirtShotsTaken == Shot && Shot < 5 && PhaseTime - 3.0f - Shot > 0.6f)
+			{
+				++State->DirtShotsTaken;
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke") / TEXT("hurt") / FString::Printf(TEXT("dirt_%d.png"), Shot), false, false);
+			}
+		};
+		Phase.Verify = [=, this]()
+		{
+			for (const TWeakObjectPtr<UPrimitiveComponent>& Hidden : State->DirtHidden)
+			{
+				if (UPrimitiveComponent* Kind = Hidden.Get())
+				{
+					Kind->SetVisibility(true);
+				}
+			}
+			State->DirtHidden.Reset();
+			if (IConsoleVariable* Hour = IConsoleManager::Get().FindConsoleVariable(TEXT("Sky.Hour")))
+			{
+				Hour->Set(-1.0f, ECVF_SetByCode);
+			}
+			const UGrimeSubsystem* Grime = GetWorld()->GetSubsystem<UGrimeSubsystem>();
+			PhaseNumbers.Add(TEXT("grimy_pawns"), State->MaxGrimyPawns);
+			PhaseNumbers.Add(TEXT("dirt_shots"), State->DirtShotsTaken);
+			if (Grime && Grime->IsMaterialMissing())
+			{
+				Fail(TEXT("dirt: M_GrimeOverlay is missing (run -run=BloodArt)"));
+			}
+			else if (State->MaxGrimyPawns < 1)
+			{
+				Fail(TEXT("dirt: the dirty colonist got no grime overlay"));
+			}
+			if (USimSubsystem* B = Bridge())
+			{
+				B->Submit(colony::SetGrimeCommand{State->Pawn, 0.0f, 0.0f});
 			}
 		};
 		Phases.Add(MoveTemp(Phase));
