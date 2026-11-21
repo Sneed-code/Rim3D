@@ -66,6 +66,9 @@ namespace
 		int32 Blows = 0;
 		float LastBlowAt = -1.0f;
 		float DownedAt = -1.0f;
+		float SentAt = -1.0f;
+		int32 Sends = 0;
+		float ShortAtStrike = 0.0f;
 		FString PinAtStrike;
 		FString PinAtStart;
 
@@ -368,18 +371,31 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 				State->DownedAt = PhaseTime;
 				B->Submit(colony::SetFactionCommand{State->Enemy, 2});
 			}
+			const bool bFinisherOn = Sim->melee().finisherOf(State->Me) != nullptr;
+			if (State->bSent && !bFinisherOn && State->MaxT <= 0.0f && State->Sends < 4 && PhaseTime - State->SentAt > 0.6f)
+			{
+				State->bSent = false;  // refused (out of reach, still recovering): walk in and try again
+			}
 			if (!State->bSent && State->DownedAt >= 0.0f && PhaseTime > State->DownedAt + 1.0f)
 			{
-				// Face it, then the attack: a finisher, since it is on the ground.
-				if (AProtagonistPawn* Body = Prot()->GetBody())
+				// Face it, step up to it if the blows knocked it away, then the attack: a finisher, since it is on the ground.
+				AProtagonistPawn* Body = Prot()->GetBody();
+				const colony::ThingView* MeNow = FinSmokeFind(*B, State->Me);
+				FVector Me, It;
+				if (Body && MeNow && B->GetBlendedLocation(State->Me, Me) && B->GetBlendedLocation(State->Enemy, It))
 				{
-					FVector Me, It;
-					if (B->GetBlendedLocation(State->Me, Me) && B->GetBlendedLocation(State->Enemy, It))
+					Body->Look(FRotator::NormalizeAxis(static_cast<float>((It - Me).Rotation().Yaw) - Body->GetYaw()), 0.0f);
+					const float Apart = FVector2D::Distance(FVector2D(MeNow->x, MeNow->y), FVector2D(Victim->x, Victim->y));
+					if (Apart > 0.8f && PhaseTime < State->DownedAt + 4.0f)
 					{
-						Body->Look(FRotator::NormalizeAxis(static_cast<float>((It - Me).Rotation().Yaw) - Body->GetYaw()), 0.0f);
+						Body->SetScriptedInput(0.0, 1.0, true);
+						return;
 					}
+					Body->ClearScriptedInput();
 				}
 				State->bSent = true;
+				State->SentAt = PhaseTime;
+				++State->Sends;
 				B->Submit(colony::MeleeCommand{State->Me, State->Enemy});
 			}
 			SideView(State->Me, State->Enemy, 280.0, 70.0);
@@ -407,6 +423,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			{
 				State->bShot63 = true;
 				State->PinAtStrike = Weapons()->GetPinDebug();
+				State->ShortAtStrike = Weapons()->GetFinisherShort();
 				Shot(PhaseName + TEXT("_strike"));
 			}
 			else if (!State->bShot80 && T >= 0.82f)
@@ -416,6 +433,10 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			}
 		}, [=, this]()
 		{
+			if (AProtagonistPawn* Body = Prot()->GetBody())
+			{
+				Body->ClearScriptedInput();
+			}
 			UWeaponDrawSubsystem* W = Weapons();
 			const int32 Frames = W->GetFinisherFrames() - State->FramesAtStart;
 			const int32 Fixes = W->GetFloatFixes() - State->FixesAtStart;
@@ -428,7 +449,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			PhaseNumbers.Add(TEXT("float_fixes"), Fixes);
 			Notes.Add(FString::Printf(TEXT("%s: %d finisher frames, got to T %.2f, tip %.0f cm from its goal at the strike, kneel %s, worst grip gap %.0f cm, %d float fixes, %d hits"),
 				*PhaseName, Frames, State->MaxT, State->BestTipGap, State->bKneelSeen ? TEXT("yes") : TEXT("no"), Gap, Fixes, Hits));
-			Notes.Add(FString::Printf(TEXT("%s: weapon hold at the start [%s], at the strike [%s]"), *PhaseName, *State->PinAtStart, *State->PinAtStrike));
+			Notes.Add(FString::Printf(TEXT("%s: weapon hold at the start [%s], at the strike [%s], pulled back %.0f cm to stay in reach, %d attack orders"), *PhaseName, *State->PinAtStart, *State->PinAtStrike, State->ShortAtStrike, State->Sends));
 			if (State->Enemy == colony::kNoEntity)
 			{
 				Fail(PhaseName + TEXT(": the victim did not appear"));

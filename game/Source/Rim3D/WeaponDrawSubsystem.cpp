@@ -1312,9 +1312,33 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 		const FVector Grip = OutDrawn.TransformPosition(Points.Main * Size);
 		OutPinned = FTransform(Up, Grip - Up.RotateVector(Points.Main * Size));
 	}
+	// Within the arms' reach: where the body (its ragdoll slid, a long blade, a standing attacker over a low body) puts
+	// the grip beyond what the arm can reach from the shoulder, the weapon comes back along that line until the hand
+	// holds it, and strikes short of the body instead of hanging off the hands.
+	if (const USkeletalMeshComponent* Mesh = HoldDraw::VisibleMesh(Actor); Mesh && Mesh->GetBoneIndex(TEXT("upperarm_r")) != INDEX_NONE &&
+		Mesh->GetBoneIndex(TEXT("lowerarm_r")) != INDEX_NONE && Mesh->GetBoneIndex(TEXT("hand_r")) != INDEX_NONE)
+	{
+		const FVector Shoulder = Mesh->GetSocketLocation(TEXT("upperarm_r"));
+		const double Arm = FVector::Dist(Mesh->GetSocketLocation(TEXT("upperarm_r")), Mesh->GetSocketLocation(TEXT("lowerarm_r"))) +
+			FVector::Dist(Mesh->GetSocketLocation(TEXT("lowerarm_r")), Mesh->GetSocketLocation(TEXT("hand_r")));
+		const double Reach = Arm * 0.92;
+		const FVector Grip = OutPinned.TransformPosition(Points.Main * Size);
+		const FVector Out = Grip - Shoulder;
+		if (Arm > 10.0 && Out.Size() > Reach)
+		{
+			const FVector Back = Out.GetSafeNormal() * (Out.Size() - Reach);
+			OutDrawn.AddToTranslation(-Back);
+			OutPinned.AddToTranslation(-Back);
+			FinisherShort = static_cast<float>(Back.Size());
+		}
+		else
+		{
+			FinisherShort = 0.0f;
+		}
+	}
 	// In over the first seventh, out over the last.
 	OutWeight = MeleePose::EaseInOut(FMath::Clamp(T / 0.14f, 0.0f, 1.0f)) * (1.0f - MeleePose::EaseInOut(FMath::Clamp((T - 0.86f) / 0.14f, 0.0f, 1.0f)));
-	FinisherTip = PointWorld;
+	FinisherTip = OutDrawn.TransformPosition(Points.Tip * Size);
 	FinisherGoal = Spot;
 	return true;
 }

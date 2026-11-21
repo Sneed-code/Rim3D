@@ -142,6 +142,7 @@ public:
 	FVector GetFinisherGoal() const { return FinisherGoal; }
 	/** For the player's colonist: why the weapon in its hands was or wasn't held at its place this frame (smoke tests). */
 	const FString& GetPinDebug() const { return PinDebug; }
+	float GetFinisherShort() const { return FinisherShort; }
 	float GetMaxStepsBehind() const { return MaxStepsBehind; }
 
 protected:
@@ -201,6 +202,8 @@ private:
 	FVector FinisherTip = FVector::ZeroVector;
 	FVector FinisherGoal = FVector::ZeroVector;
 	FString PinDebug;
+	/** How far the last finisher pose was pulled back to stay in the hands (cm). */
+	float FinisherShort = 0.0f;
 	/** Why PinWeapon or FinisherPose gave up, for PinDebug. */
 	const TCHAR* PinFailReason = TEXT("");
 	/** The finisher's weapon pose now (docs/design/lock-on.md "Finishers"): drawn, and the one the hands close on (they
