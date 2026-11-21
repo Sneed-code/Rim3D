@@ -23,6 +23,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "TreeFallSubsystem.h"
 #include "WorkToolSubsystem.h"
 
 #include <algorithm>
@@ -316,6 +317,34 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 			}
 		}
 		State->bDone = false;
+	});
+
+	// 3b. The felled tree topples over and lands, with no jump (docs/design/structure-damage.md "Falling trees").
+	AddPhase(TEXT("tree_falls"), [=, this]()
+	{
+		Release();
+	}, 0.0f, 9.0f, [=, this]() {}, [=, this]()
+	{
+		const UTreeFallSubsystem* Falls = GetWorld()->GetSubsystem<UTreeFallSubsystem>();
+		if (!Falls)
+		{
+			Fail(TEXT("The tree-fall subsystem did not start"));
+			return;
+		}
+		UE_LOG(LogTemp, Display, TEXT("handson tree fall: started %d, landed %d, still falling %d, biggest step %.2f degrees"),
+			Falls->GetFallsStarted(), Falls->GetFallsLanded(), Falls->GetFalling(), Falls->GetBiggestStepDegrees());
+		if (Falls->GetFallsStarted() == 0)
+		{
+			Fail(TEXT("The felled tree did not fall over (it just went)"));
+		}
+		else if (Falls->GetFallsLanded() == 0)
+		{
+			Fail(TEXT("The felled tree did not reach the ground in 9 seconds"));
+		}
+		else if (Falls->GetBiggestStepDegrees() > 12.0f)
+		{
+			Fail(FString::Printf(TEXT("The falling tree jumped %.1f degrees in one frame"), Falls->GetBiggestStepDegrees()));
+		}
 	});
 
 	// 4. Look down at the steel and pick it up.

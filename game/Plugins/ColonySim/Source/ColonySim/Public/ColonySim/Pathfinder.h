@@ -30,7 +30,8 @@ class StateHasher;
 //
 // Every walkable cell costs the same, except a door cell: it costs `doorCost` extra metres (a
 // pawn waits for the door to open, docs/design/rooms.md), so a path takes a gap in the wall that
-// is a few metres longer in preference to a door. Cells with a blocking building can't be walked.
+// is a few metres longer in preference to a door; and a ground cell with a tree trunk costs `treeCost`
+// extra (docs/design/structure-damage.md), so paths go round trees. Cells with a blocking building can't be walked.
 // Stairs and ladders join two cells on different levels and cost their climb (Map::LevelLink,
 // docs/design/levels.md), so a path can go up and down; a path's cells carry their level.
 // Terrain, slope and danger costs come later.
@@ -102,6 +103,14 @@ public:
     // Extra cost of walking through a door, in metres. Set once, before any request.
     void setDoorCost(float metres) { doorCost_ = metres; }
     float doorCost() const { return doorCost_; }
+    // Extra cost of walking through a cell with a tree trunk (Map::groundTrunks), in metres: RimWorld's tree path cost
+    // (42 ticks over the 13 of a step, about 3.2 m), so a path goes round a tree when that is not much further, and
+    // through a forest when there is no way round. 0 (the default): trees cost nothing.
+    // A step too tight between trunks for a walker to slip through (Map::tightSteps) costs kTightTreeSteps times as much
+    // again (ours): a path squeezes there only when every way round is longer still.
+    static constexpr float kTightTreeSteps = 3.0f;
+    void setTreeCost(float metres) { treeCost_ = metres; }
+    float treeCost() const { return treeCost_; }
 
     // Queues a path search from `start` to `goal`. A request that can't succeed (different
     // reachability groups, off the map) is Failed at once; start == goal is Found
@@ -186,6 +195,7 @@ private:
     CellPos goal_;
     bool corridorOnly_ = true;
     float doorCost_ = 3.5f;
+    float treeCost_ = 0.0f;
 
     // Region passes, indexed by region id, plus the goal node at goalNode_. The route pass fills
     // them with the cost from the start and the entry point, the guide pass then with the cost to

@@ -151,6 +151,7 @@ EVENT_CUES = {
     "Hit_Wood_Flesh", "Hit_Wood_Wood", "Hit_Wood_Steel", "Hit_Wood_Stone",
     "Hit_Steel_Flesh", "Hit_Steel_Wood", "Hit_Steel_Steel", "Hit_Steel_Stone",
     "Ui_KillConfirm",  # Unreal, the kill feed on the player's own kill (KillFeedSubsystem.cpp)
+    "Tree_Crack", "Tree_Fall",  # Unreal, a falling tree from the PlantRemoved event (TreeFallSubsystem.cpp)
 }
 
 

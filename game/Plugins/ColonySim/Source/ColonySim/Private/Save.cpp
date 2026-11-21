@@ -5854,6 +5854,24 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.zones_->restore(std::move(zones), d.nextZoneId, error)) {
         return false;
     }
+    {
+        // Older saves have no plants: the map starts bare. Before the path queue: tree trunks are path costs
+        // (Map::groundTrunks), and a half-done search is redone on the saved map.
+        std::vector<PlantRecord> records;
+        for (size_t i = 0; i < d.plants.cells.size(); ++i) {
+            if (d.plants.defIndex[i] >= d.plants.defs.size()) {
+                error = "the save has a plant of an unknown kind";
+                return false;
+            }
+            const DefId def = sim.defs_->idOf("Things", d.plants.defs[d.plants.defIndex[i]]);
+            records.push_back(PlantRecord{static_cast<int>(d.plants.cells[i]), def, d.plants.growth[i], d.plants.ageHours[i],
+                                          i < d.plants.damage.size() ? d.plants.damage[i] : 0u});
+        }
+        if (!sim.plants_->restore(records)) {
+            error = "the save has a plant the data files can't place";
+            return false;
+        }
+    }
     if (!sim.pathfinder_.loadState(std::move(d.paths), error)) {
         return false;
     }
@@ -5883,23 +5901,6 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
     }
 
-    {
-        // Older saves have no plants: the map starts bare.
-        std::vector<PlantRecord> records;
-        for (size_t i = 0; i < d.plants.cells.size(); ++i) {
-            if (d.plants.defIndex[i] >= d.plants.defs.size()) {
-                error = "the save has a plant of an unknown kind";
-                return false;
-            }
-            const DefId def = sim.defs_->idOf("Things", d.plants.defs[d.plants.defIndex[i]]);
-            records.push_back(PlantRecord{static_cast<int>(d.plants.cells[i]), def, d.plants.growth[i], d.plants.ageHours[i],
-                                          i < d.plants.damage.size() ? d.plants.damage[i] : 0u});
-        }
-        if (!sim.plants_->restore(records)) {
-            error = "the save has a plant the data files can't place";
-            return false;
-        }
-    }
     if (d.hasRock) {
         std::vector<MineableRecord> records;
         for (size_t i = 0; i < d.mineables.cells.size(); ++i) {

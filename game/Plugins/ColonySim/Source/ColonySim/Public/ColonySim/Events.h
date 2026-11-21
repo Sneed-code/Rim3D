@@ -277,7 +277,10 @@ struct Event {
     // CellMined: `cell` the cell, `def` the rock or ore's Things def, `amount` its hit points. The
     // chunk or ore it left comes as a ThingSpawned. PlantRemoved, PlantHarvested: `cell`, `def` the
     // plant's Things def, `amount` how many items it gave (they come as a ThingSpawned); `message`
-    // "felled" (a tree) or "cut" for removed, "picked" for harvested. PawnAction Mine, Cut, Harvest:
+    // "felled" (a tree) or "cut" for removed, "picked" for harvested; "broken" for a plant killed by blows, shots or a blast.
+    // A tree that falls ("felled", "broken") also has (x, y) the unit vector it falls along (away from the one who cut it,
+    // the blow, the shot or the blast), `count` its growth in millionths and, felled, `thing` the pawn: Unreal topples it
+    // (docs/design/structure-damage.md "Falling trees"); (0, 0) for anything that doesn't fall. PawnAction Mine, Cut, Harvest:
     // `thing` the pawn, `cell` the cell worked on, `def` the pawn's def.
     // RecipeDone: `thing` the pawn, `def` the Recipes def, `target` the work building, `cell` where the
     // pawn stood, `amount` how many products were made, `message` "bill finished" if that was the

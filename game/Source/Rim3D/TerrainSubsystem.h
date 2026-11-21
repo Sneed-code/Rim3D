@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 
+#include "ColonySim/Defs.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Grid.h"
 
@@ -38,6 +39,16 @@ struct FTerrainStats
 	double FullBuildMs = 0.0;
 	double SlowestChunkMs = 0.0;
 	int32 FullBuilds = 0;
+};
+
+/** How a plant is drawn in a cell (UTerrainSubsystem::GetPlantLook): its mesh, materials and world transform. */
+struct FTerrainPlantLook
+{
+	UStaticMesh* Mesh = nullptr;
+	TArray<UMaterialInterface*> Materials;
+	FTransform Transform;
+	bool bCastShadow = true;
+	float WindOffCm = 0.0f;
 };
 
 /**
@@ -100,6 +111,9 @@ public:
 	/** The chunk meshes (for tests: bounds, material, visibility). Null if there is no such chunk. */
 	UProceduralMeshComponent* GetChunkMesh(int32 ChunkX, int32 ChunkY) const;
 	AActor* GetTerrainActor() const { return TerrainActor; }
+	/** How a plant of this def and growth (millionths) is drawn in a ground cell, in world space, exactly as its chunk draws
+	 *  it; works after the sim removed it (the tree-fall subsystem copies a felled tree with it). False if it has no mesh. */
+	bool GetPlantLook(colony::CellPos Cell, colony::DefId Def, uint32 GrowthPpm, FTerrainPlantLook& Out) const;
 
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
@@ -136,6 +150,10 @@ private:
 
 	void OnSimEvent(const colony::Event& Event);
 	void Teardown();
+	/** Which of a def's meshes a cell draws (by its index), its growth stage, and its transform relative to the terrain actor. */
+	int32 PlantVariant(int32 Kind, uint32 DefValue, int32 Index) const;
+	static int32 PlantStage(uint32 GrowthPpm);
+	FTransform PlantTransform(const colony::Map& Map, int32 Kind, colony::CellPos Cell, int32 Stage) const;
 	void LoadPlantVisuals(const colony::Sim& Sim);
 	void ReadThinRoof(bool& bOutChanged);
 	void CreateChunk(int32 ChunkX, int32 ChunkY);

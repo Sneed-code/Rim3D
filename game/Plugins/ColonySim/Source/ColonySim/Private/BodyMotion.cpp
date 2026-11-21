@@ -335,8 +335,9 @@ float BodyMotionSystem::forwardAt(DefId clipDef, float t) const {
 
 bool BodyMotionSystem::fits(Entity, float x, float y, int level) const {
     // Between walls a body is as wide as the pathfinder thinks (kPawnRadius), so a body never ends up where no path
-    // can get it out.
-    return pawnFitsAt(map_, x, y, kPawnRadius, level);
+    // can get it out. Tree trunks stop it too (docs/design/structure-damage.md): a stagger or a shove into a tree stops
+    // at the bark.
+    return pawnFitsAt(map_, x, y, kPawnRadius, level) && clearOfTrunks(map_, x, y, kTrunkBodyRadius, level);
 }
 
 void BodyMotionSystem::gatherBodies(Entity pawn, float x, float y, int level, float range) {

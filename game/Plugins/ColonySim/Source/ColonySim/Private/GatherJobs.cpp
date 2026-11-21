@@ -558,6 +558,18 @@ JobSystem::StepResult JobSystem::plantWork(Entity pawn, Job& job, std::string& w
         event.type = EventType::PlantHarvested;
         event.message = "picked";
     } else {
+        if (tree) {
+            // It falls away from the one who cut it (docs/design/structure-damage.md "Falling trees"): Unreal topples it.
+            float tx = 0.0f;
+            float ty = 0.0f;
+            float radius = 0.0f;
+            float height = 0.0f;
+            plants_.trunkOf(job.cell, tx, ty, radius, height);
+            const Position& at = things_.registry().get<Position>(pawn);
+            fallDirection(tx - at.x, ty - at.y, event.x, event.y);
+            event.thing = pawn;
+            event.count = static_cast<int>(plants_.growthPpm(job.cell));
+        }
         plants_.remove(job.cell);
         event.type = EventType::PlantRemoved;
         event.message = tree ? "felled" : (harvest ? "harvested" : "cut");

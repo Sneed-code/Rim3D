@@ -49,9 +49,31 @@ COLONY_API bool pawnFitsAt(const Map& map, float x, float y, float radius, int l
 // it can't walk. The start itself isn't tested (a pawn already hugging a wall may leave it).
 COLONY_API bool straightWalkIsClear(const Map& map, float x0, float y0, float x1, float y1, float radius, int level = 0);
 
+// ---- Tree trunks -----------------------------------------------------------------------------
+// Trunks are solid posts (Map::trunkAt, docs/design/structure-damage.md "Trees in the way"): walkers steer round them.
+
+// How wide a walker is against tree trunks, metres (ours): narrower than between walls (kPawnRadius), because a person
+// turns the shoulders to slip between two trees; so a forest a person could get through doesn't stop a pawn.
+inline constexpr float kTrunkBodyRadius = 0.22f;
+// Room a walker keeps between its body and a trunk, metres, on top of touching (kTrunkBodyRadius plus the trunk's radius).
+inline constexpr float kTrunkMargin = 0.05f;
+// True when a pawn of `radius` walking the straight line from (x0, y0) to (x1, y1) on `level` passes every trunk on the
+// way with `radius` plus the trunk's radius to spare. A trunk the start is already inside is left out (walking out).
+COLONY_API bool trunksClearOfLine(const Map& map, float x0, float y0, float x1, float y1, float radius, int level = 0);
+// True when a body of `radius` with its centre at (x, y) on `level` is clear of every trunk (touching is allowed).
+COLONY_API bool clearOfTrunks(const Map& map, float x, float y, float radius, int level = 0);
+// The point a walker aims for in a cell: its centre, or where the centre is too close to a trunk for a pawn to stand
+// there, the nearest point of the cell that leaves the pawn room beside the trunk.
+COLONY_API void cellWalkPoint(const Map& map, CellPos c, float& x, float& y);
+
+// Works out again which steps out of the ground cells from (x0, y0) to (x1, y1) (clamped to the map) are too tight for a
+// walker: the line between the two cells' walk points doesn't pass the trunks with kTrunkBodyRadius to spare
+// (Map::tightSteps). A trunk that changes alters the steps of the cells up to 2 away; Plants calls this for them.
+COLONY_API void refreshTrunkSteps(Map& map, int x0, int y0, int x1, int y1);
+
 // Straightens a cell path: drops every cell the pawn can skip by walking straight to a later one
-// where the ground allows (clear of walls for a pawn's width, and not slower than the cells it
-// replaces over mud or hills). `path` runs from the cell after the start to the goal, as the
+// where the ground allows (clear of walls and tree trunks for a pawn's width, and not slower than the cells it
+// replaces over mud or hills). The walk goes through each kept cell's cellWalkPoint. `path` runs from the cell after the start to the goal, as the
 // pathfinder returns it, and so does the result, a subset of its cells. The walk starts at
 // (startX, startY) in metres, on `startLevel` (-1: the level of the path's first cell). A path that
 // climbs stairs or a ladder keeps the cells at both ends of every climb.

@@ -2807,7 +2807,7 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
                     continue;
                 }
                 const int damage = static_cast<int>(std::lround(ex.damage * falloff(d) * model_->blastPlantFactor));
-                if (damage > 0 && plants_->damage(c, damage)) {
+                if (damage > 0 && hurtPlant(c, damage, ex.x, ex.y)) {
                     ++result.plantsDestroyed;
                 }
             }
@@ -2836,6 +2836,32 @@ bool CombatSystem::breakWindow(Entity wall, float x, float y, float z, Entity by
     return true;
 }
 
+bool CombatSystem::hurtPlant(CellPos c, int damage, float fromX, float fromY) {
+    if (plants_ == nullptr || !plants_->has(c)) {
+        return false;
+    }
+    Event fell;
+    fell.type = EventType::PlantRemoved;
+    fell.cell = c;
+    fell.def = plants_->defAt(c);
+    fell.message = "broken";
+    float tx = 0.0f;
+    float ty = 0.0f;
+    float radius = 0.0f;
+    float height = 0.0f;
+    if (plants_->trunkOf(c, tx, ty, radius, height)) {
+        fallDirection(tx - fromX, ty - fromY, fell.x, fell.y);
+        fell.count = static_cast<int>(plants_->growthPpm(c));
+    }
+    if (!plants_->damage(c, damage)) {
+        return false;
+    }
+    if (events_ != nullptr) {
+        events_->push_back(std::move(fell));
+    }
+    return true;
+}
+
 int CombatSystem::damageStruck(const TraceHit& hit, float amount, bool melee) {
     if (amount <= 0.0f) {
         return 0;
@@ -2846,7 +2872,8 @@ int CombatSystem::damageStruck(const TraceHit& hit, float amount, bool melee) {
             return 0;
         }
         const int damage = std::max(1, static_cast<int>(std::lround(amount * factor)));
-        plants_->damage(hit.cell, damage);
+        // It falls away from where it was struck (the hit point is on the side facing the blow or the shot).
+        hurtPlant(hit.cell, damage, hit.x, hit.y);
         return damage;
     }
     if (hit.kind != ProjectileHitKind::Building) {

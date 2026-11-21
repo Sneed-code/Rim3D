@@ -60,6 +60,8 @@
   {"defName": "Step_Water", "label": "wading", "loop": false, "volume": 0.3, "range": 25, "priority": 3, "tone": {"wave": "noise", "hz": 350, "seconds": 0.06}},
   {"defName": "Work_Mine", "label": "pick on rock", "loop": false, "volume": 0.35, "range": 30, "priority": 3, "tone": {"wave": "square", "hz": 800, "seconds": 0.12}},
   {"defName": "Work_Chop", "label": "axe on wood", "loop": false, "volume": 0.35, "range": 30, "priority": 3, "tone": {"wave": "noise", "hz": 300, "seconds": 0.12}},
+  {"defName": "Tree_Crack", "label": "a tree's last wood cracking as it starts to fall", "loop": false, "volume": 0.55, "range": 120, "near": 3, "priority": 2, "tone": {"wave": "noise", "hz": 260, "seconds": 0.35}},
+  {"defName": "Tree_Fall", "label": "a falling tree crashing down", "loop": false, "volume": 0.9, "range": 250, "near": 6, "priority": 1, "tone": {"wave": "noise", "hz": 90, "seconds": 0.7}},
   {"defName": "Work_Harvest", "label": "picking plants", "loop": false, "volume": 0.35, "range": 30, "priority": 3, "tone": {"wave": "noise", "hz": 600, "seconds": 0.12}},
   {"defName": "Work_Build", "label": "hammering", "loop": false, "volume": 0.35, "range": 30, "priority": 3, "tone": {"wave": "square", "hz": 500, "seconds": 0.12}},
   {"defName": "Work_Cook", "label": "cooking", "loop": false, "volume": 0.35, "range": 30, "priority": 3, "tone": {"wave": "noise", "hz": 1000, "seconds": 0.12}},

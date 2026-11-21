@@ -1059,35 +1059,81 @@ uint64 UTerrainSubsystem::GatherChunkPlants(int32 ChunkX, int32 ChunkY, TArray<T
 			{
 				continue;
 			}
-			if (const int32 Variants = VariantsOfDef[static_cast<int32>(DefValue)]; Variants > 1)
-			{
-				Kind += static_cast<int32>(TerrHash(static_cast<uint64>(Map.index(Cell)) * 31ULL + 0xA24BAED4ULL) % static_cast<uint64>(Variants));
-			}
-			const uint32 Growth = Plants.growthPpm(Cell);
-			const int32 Stage = Growth >= colony::kPlantFullGrowth
-				? TerrGrowthStages
-				: static_cast<int32>(static_cast<uint64>(Growth) * TerrGrowthStages / colony::kPlantFullGrowth);
+			Kind = PlantVariant(Kind, DefValue, Map.index(Cell));
+			const int32 Stage = PlantStage(Plants.growthPpm(Cell));
 			const int32 Index = Map.index(Cell);
 			Signature = (Signature ^ ((static_cast<uint64>(Index) << 12) | (static_cast<uint64>(Kind + 1) << 4) | static_cast<uint64>(Stage))) * 1099511628211ULL;
 			if (!Out)
 			{
 				continue;
 			}
-			// Where in the cell, which way round and how big: a look made from the cell, not from the sim.
-			const FPlantVisual& Visual = PlantVisuals[Kind];
-			const uint64 H = TerrHash(static_cast<uint64>(Index) + 0x517CC1B7ULL);
-			const float R3 = static_cast<float>((H >> 32) & 0xFFFF) / 65535.0f;
-			const float R4 = static_cast<float>((H >> 48) & 0xFFFF) / 65535.0f;
-			// Where the sim's trunk stands too (colony::Plants::stemPoint: bullets, blows and walkers meet it there).
-			float PX = 0.0f;
-			float PY = 0.0f;
-			colony::Plants::stemPoint(Index, X, Y, PX, PY);
-			const float Grown = TerrSproutScale + (1.0f - TerrSproutScale) * static_cast<float>(Stage) / static_cast<float>(TerrGrowthStages);
-			const float Size = Visual.Scale * Grown * (1.0f + (R4 - 0.5f) * 2.0f * Visual.Jitter);
-			(*Out)[Kind].Add(FTransform(FRotator(0.0, R3 * 360.0f, 0.0), FVector(PX * 100.0f, PY * 100.0f, Map.heightAt(PX, PY) * 100.0f), FVector(Size)));
+			(*Out)[Kind].Add(PlantTransform(Map, Kind, Cell, Stage));
 		}
 	}
 	return Signature;
+}
+
+int32 UTerrainSubsystem::PlantVariant(int32 Kind, uint32 DefValue, int32 Index) const
+{
+	if (const int32 Variants = VariantsOfDef[static_cast<int32>(DefValue)]; Variants > 1)
+	{
+		Kind += static_cast<int32>(TerrHash(static_cast<uint64>(Index) * 31ULL + 0xA24BAED4ULL) % static_cast<uint64>(Variants));
+	}
+	return Kind;
+}
+
+int32 UTerrainSubsystem::PlantStage(uint32 GrowthPpm)
+{
+	return GrowthPpm >= colony::kPlantFullGrowth
+		? TerrGrowthStages
+		: static_cast<int32>(static_cast<uint64>(GrowthPpm) * TerrGrowthStages / colony::kPlantFullGrowth);
+}
+
+FTransform UTerrainSubsystem::PlantTransform(const colony::Map& Map, int32 Kind, colony::CellPos Cell, int32 Stage) const
+{
+	// Where in the cell, which way round and how big: a look made from the cell, not from the sim.
+	const int32 Index = Map.index(Cell);
+	const FPlantVisual& Visual = PlantVisuals[Kind];
+	const uint64 H = TerrHash(static_cast<uint64>(Index) + 0x517CC1B7ULL);
+	const float R3 = static_cast<float>((H >> 32) & 0xFFFF) / 65535.0f;
+	const float R4 = static_cast<float>((H >> 48) & 0xFFFF) / 65535.0f;
+	// Where the sim's trunk stands too (colony::Plants::stemPoint: bullets, blows and walkers meet it there).
+	float PX = 0.0f;
+	float PY = 0.0f;
+	colony::Plants::stemPoint(Index, Cell.x, Cell.y, PX, PY);
+	const float Grown = TerrSproutScale + (1.0f - TerrSproutScale) * static_cast<float>(Stage) / static_cast<float>(TerrGrowthStages);
+	const float Size = Visual.Scale * Grown * (1.0f + (R4 - 0.5f) * 2.0f * Visual.Jitter);
+	return FTransform(FRotator(0.0, R3 * 360.0f, 0.0), FVector(PX * 100.0f, PY * 100.0f, Map.heightAt(PX, PY) * 100.0f), FVector(Size));
+}
+
+bool UTerrainSubsystem::GetPlantLook(colony::CellPos Cell, colony::DefId Def, uint32 GrowthPpm, FTerrainPlantLook& Out) const
+{
+	if (!BuiltSim || !TerrainActor || !Def.valid() || Def.value >= static_cast<uint32>(VisualOfDef.Num()))
+	{
+		return false;
+	}
+	const colony::Map& Map = BuiltSim->map();
+	if (!Map.onGround(Cell))
+	{
+		return false;
+	}
+	int32 Kind = VisualOfDef[static_cast<int32>(Def.value)];
+	if (Kind < 0)
+	{
+		return false;
+	}
+	Kind = PlantVariant(Kind, Def.value, Map.index(Cell));
+	const FPlantVisual& Visual = PlantVisuals[Kind];
+	if (!Visual.Mesh)
+	{
+		return false;
+	}
+	Out.Mesh = Visual.Mesh;
+	Out.Materials = Visual.Materials;
+	Out.Transform = PlantTransform(Map, Kind, Cell, PlantStage(GrowthPpm)) * TerrainActor->GetActorTransform();
+	Out.bCastShadow = Visual.bCastShadow;
+	Out.WindOffCm = Visual.WindOffCm;
+	return true;
 }
 
 namespace
