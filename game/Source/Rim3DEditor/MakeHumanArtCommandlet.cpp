@@ -2318,6 +2318,18 @@ namespace
 		Rough->ParameterName = TEXT("Roughness");
 		Rough->DefaultValue = 0.85f;
 		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
+		// Layers (FSimWornPiece::Puff, custom primitive data 5): a top pushed out over trousers, a jacket over a shirt, all
+		// made to sit on the skin, so the one under never pokes through.
+		auto* Puff = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -400, 800));
+		Puff->ParameterName = TEXT("Puff");
+		Puff->DefaultValue = 0.0f;
+		Puff->bUseCustomPrimitiveData = true;
+		Puff->PrimitiveDataIndex = MakeHumanGarmentPuffIndex;
+		auto* PuffNormal = Cast<UMaterialExpressionVertexNormalWS>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVertexNormalWS::StaticClass(), -400, 900));
+		auto* PuffOffset = Cast<UMaterialExpressionMultiply>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionMultiply::StaticClass(), -200, 850));
+		PuffOffset->A.Connect(0, PuffNormal);
+		PuffOffset->B.Connect(0, Puff);
+		UMaterialEditingLibrary::ConnectMaterialProperty(PuffOffset, TEXT(""), MP_WorldPositionOffset);
 		MhAddWetness(Material, 0.45f, 0.35f);
 		Material->PostEditChange();
 		MhSave(Material);

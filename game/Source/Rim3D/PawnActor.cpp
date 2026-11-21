@@ -1333,19 +1333,25 @@ namespace
 			}
 			return Out;
 		}();
+		TArray<const FString*> ForcedFits;
 		for (const FString* Fit : Fits)
 		{
+			TArray<FString> FitGarments;
+			Fit->ParseIntoArray(FitGarments, TEXT("+"));
 			for (const FString& Forced : PawnForcedGarments)
 			{
-				TArray<FString> FitGarments;
-				Fit->ParseIntoArray(FitGarments, TEXT("+"));
 				if (FitGarments.Contains(Forced))
 				{
-					return *Fit;
+					ForcedFits.Add(Fit);
+					break;
 				}
 			}
 		}
 		const uint32 Seed[2] = {Piece.Item, Piece.Def};
+		if (!ForcedFits.IsEmpty())
+		{
+			return *ForcedFits[FCrc::MemCrc32(Seed, sizeof(Seed)) % static_cast<uint32>(ForcedFits.Num())];  // spread over the pawns
+		}
 		return *Fits[FCrc::MemCrc32(Seed, sizeof(Seed)) % static_cast<uint32>(Fits.Num())];
 	}
 
@@ -1498,6 +1504,7 @@ void ASimPawnActor::StyleGarment(UMeshComponent* Mesh, const FSimWornPiece& Piec
 	Mesh->SetCustomPrimitiveDataVector3(MakeHumanGarmentTintIndex, FVector(Colour.R, Colour.G, Colour.B));
 	Mesh->SetCustomPrimitiveDataFloat(MakeHumanGarmentWearIndex, Piece.Wear);
 	Mesh->SetCustomPrimitiveDataFloat(MakeHumanGarmentTintAmountIndex, Piece.bHasTint ? 1.0f : 0.0f);
+	Mesh->SetCustomPrimitiveDataFloat(MakeHumanGarmentPuffIndex, Piece.Puff);
 }
 
 void ASimPawnActor::SyncGarmentMorphs()

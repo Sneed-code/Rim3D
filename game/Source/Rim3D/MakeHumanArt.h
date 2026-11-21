@@ -24,6 +24,8 @@ inline FString MakeHumanGarmentName(const FString& Base, const FString& Garment)
 inline constexpr int32 MakeHumanGarmentTintIndex = 0;
 inline constexpr int32 MakeHumanGarmentWearIndex = 3;
 inline constexpr int32 MakeHumanGarmentTintAmountIndex = 4;
+/** Custom primitive data on a garment at 5: cm pushed out along its normals (FSimWornPiece::Puff). */
+inline constexpr int32 MakeHumanGarmentPuffIndex = 5;
 /** Custom primitive data on a MakeHuman body: the cover bits of the garments worn (low 16 at 30, high 16 at 31); the skin
  *  material hides the skin where its GarmentCover texture has one of them (docs/design/clothes-draw.md "Skin under clothes"). */
 inline constexpr int32 MakeHumanCoverLowIndex = 30;

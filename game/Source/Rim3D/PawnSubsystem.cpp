@@ -374,16 +374,23 @@ FSimPawnApparel USimPawnSubsystem::MakeApparel(const colony::Snapshot& Snapshot,
 		Worn.bHidesHair = Def.flag("apparel.hidesHair", false);
 		bool bOverLegs = false;
 		bool bUnderShell = false;
+		bool bOverTorso = false;
+		int32 LayerRank = 0;
 		for (size_t G = 0; G < Def.count("apparel.bodyPartGroups"); ++G)
 		{
-			bOverLegs = bOverLegs || Def.textAt("apparel.bodyPartGroups", G) == "Legs";
+			const std::string Group = Def.textAt("apparel.bodyPartGroups", G);
+			bOverLegs = bOverLegs || Group == "Legs";
+			bOverTorso = bOverTorso || Group == "Torso";
 		}
 		for (size_t L = 0; L < Def.count("apparel.layers"); ++L)
 		{
+			const std::string Layer = Def.textAt("apparel.layers", L);
+			LayerRank = FMath::Max(LayerRank, Layer == "Shell" ? 2 : (Layer == "Middle" ? 1 : 0));
 			bUnderShell = bUnderShell || Def.textAt("apparel.layers", L) != "Shell";
 			Worn.bHeadwear = Worn.bHeadwear || Def.textAt("apparel.layers", L) == "Overhead";
 		}
 		Worn.bCoversCrotch = bOverLegs && bUnderShell;
+		Worn.Puff = (bOverTorso ? 0.8f : 0.0f) + 0.6f * static_cast<float>(LayerRank);
 		if (Piece->stuff.valid() && Piece->stuff.value < Defs->size())
 		{
 			const colony::Def& Stuff = Defs->get(Piece->stuff);
