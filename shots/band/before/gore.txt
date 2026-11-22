@@ -1,0 +1,12 @@
+﻿Running smoke test 'gore' at 1920x1080...
+
+Smoke test 'gore': PASS  (38 s, NVIDIA GeForce RTX 5080, 888x500)
+setup                        41.0 fps  game   6.0 ms  render  11.1 ms  gpu   9.5 ms  screenshot ok
+groin                        89.2 fps  game   6.1 ms  render  10.7 ms  gpu   9.2 ms  screenshot ok
+spray                        87.4 fps  game   6.2 ms  render  11.0 ms  gpu   9.4 ms  screenshot ok
+pileup                       79.7 fps  game   6.2 ms  render  10.8 ms  gpu   9.2 ms  screenshot ok
+head                         90.8 fps  game   5.2 ms  render  10.5 ms  gpu   9.0 ms  screenshot ok
+armoff                       86.8 fps  game   5.5 ms  render  11.2 ms  gpu   9.7 ms  screenshot ok
+corpse                       90.6 fps  game   5.4 ms  render  10.9 ms  gpu   9.3 ms  screenshot ok
+blast                        95.8 fps  game   6.0 ms  render  10.2 ms  gpu   8.6 ms  screenshot ok
+Screenshots: C:\Dev\Rim3D-climb\game\Saved\Smoke\gore
