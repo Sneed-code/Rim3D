@@ -295,11 +295,15 @@ sub-steps and 10 iterations (Unreal's default 5 and 5 let bare-skinned long hair
 the spot mid-walk; `HairGroomsCommandlet`). Right after a quick 180-degree turn on the spot the bare-skinned long hair dipped into the back or whipped round the
 side for a moment (PC strandwalk frames), then lay back on the back. Simulating it in the chest's frame
 (`Pawns.StrandHairTurnFollow`, Unreal's local simulation) was tried at 0.25: the swings went stiff and the hair stayed
-sunk after turns, so it is off by default. Turning the body at half the speed (360 degrees a second, PR #450 round 1)
-made no difference. So now, **while a body turns faster than 240 degrees a second** (`Pawns.StrandHairTurnHold`; a
-turn round, a swing at someone; a walk's gentle curves stay under it) its hair is held at its resting shape on the
-head, turning with the body, and it swings freely again from there 0.08 s after the turn eases
-(`Pawns.StrandHairTurnHoldAfter`; the groom's simulation is reset each held frame). Log `STRANDHAIR turn hold N`. Dressed bodies are clear (the
+sunk after turns, so it is off by default. Turning the body at half the speed (360 degrees a second, PR #450 round 1) made no difference, nor did holding the
+hair at rest through every turn (round 2; held rigid, hair on a bowed head lies inside the chest). Seen from above
+(round 3) the hair went into the torso, tips showing through the back. Two causes in the groom itself: Unreal's solver
+keeps only its guide points out of the shapes, 8 points along a guide by default, so on waist-long hair the straight
+pieces between points (10 cm) cut into the back; and with one guide per 40 strands, the strands drawn between two guides
+lying round the back cut a chord into it. `HairGroomsCommandlet` now gives each guide 32 points (`StrandsSize`, about
+2.5 cm apart) and one guide per 20 strands. Separately, a body's facing that jumps faster than 3000 degrees a second (a
+clip handing the body back facing another way: 16000 to 20000 measured) puts the hair back at rest on the head instead
+of dragging it through (`Pawns.StrandHairTurnHold`; log `STRANDHAIR turn hold N`). Dressed bodies are clear (the
 shapes stand 3 cm further out). `-CreatorRecord=1` with the demo also saves every other frame of the walk
 (`strandwalk_NNNN.png`). `-CreatorStrandWalkPitch=-70` holds the walk's view still, from one side and looking down
 at that pitch, so a turn shows whether the hair goes round the body or through it.
