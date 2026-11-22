@@ -22,6 +22,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Colonist.h"
 #include "ColonySim/Sim.h"
 
 #include <cmath>
@@ -90,11 +91,36 @@ namespace
 
 	std::string OverseerLabel(const USimSubsystem& Bridge, const colony::ThingView& View)
 	{
+		// A colonist by name ("Theo 'Rusty' Ito"); anything else by its label, capitalised ("Human", "Wood log").
+		if (const colony::Sim* Sim = Bridge.GetSim())
+		{
+			if (const colony::Colonist* Colonist = Sim->colonistOf(View.id))
+			{
+				std::string Name = Colonist->firstName;
+				if (!Colonist->nickName.empty())
+				{
+					Name += " '" + Colonist->nickName + "'";
+				}
+				if (!Colonist->lastName.empty())
+				{
+					Name += " " + Colonist->lastName;
+				}
+				if (!Name.empty())
+				{
+					return Name;
+				}
+			}
+		}
+		std::string Label = "thing";
 		if (const colony::DefDatabase* Defs = Bridge.GetDefs().get())
 		{
-			return Defs->get(View.def).label();
+			Label = Defs->get(View.def).label();
 		}
-		return "thing";
+		if (!Label.empty() && Label[0] >= 'a' && Label[0] <= 'z')
+		{
+			Label[0] = static_cast<char>(Label[0] - 'a' + 'A');
+		}
+		return Label;
 	}
 }
 
