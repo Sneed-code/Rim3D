@@ -185,5 +185,10 @@ title and new-game screens ([new-game.md](new-game.md)), instead of the mock-up'
 - The bottom bar has a jade hairline along its top, and the open tab a jade line on its top edge.
 - Smoke `hud` checks that the hook draws bars.
 
-Next steps in this look: the selected-thing panel and the colonist bar laid out as Canopy cards, the date box, then each
-tab's window.
+Part 2 (tidy the overseer screen): the selected panel names a colonist ("Theo 'Rusty' Ito") and capitalises anything
+else; the colonist panel shows backstory titles ("hunter's child", not `Child_HuntersKid`), what they do in plain words
+("Wear apparel"), Rest only when the pawn has a rest need, and jade skill bars with ember for passions. Boxes that stack
+over the date box (key hints, visitors) use where it was really drawn (`DateBoxTop`), the Power / Temperature ticks
+sit left of it, and the visitors strip shows only while visitors are here (Factions is the bar's flag).
+
+Next: Canopy cards for the colonist bar and the selected panel, then each tab's window.
