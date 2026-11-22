@@ -305,10 +305,8 @@ lying round the back cut a chord into it. `HairGroomsCommandlet` now gives each 
 between a guide over the shoulder and one down the back, a strand was drawn through the chest). Round 4 cost about 1.3
 ms of GPU per strand-haired person (4 people: 20.4 to 25.6 ms). The 180-degree jumps in the creator's walk turned out to be frame hitches (a quarter to half a second): a pawn's
 turn now advances by at most a twentieth of a second of turning per frame, so after a hitch it finishes the turn over the
-next frames instead of landing it at once (`PawnActor`; log `PAWN facing snap` for any left). Any other facing that
-jumps faster than 3000 degrees a second (a
-clip handing the body back facing another way: 16000 to 20000 measured) puts the hair back at rest on the head instead
-of dragging it through (`Pawns.StrandHairTurnHold`; log `STRANDHAIR turn hold N`). Dressed bodies are clear (the
+next frames instead of landing it at once (`PawnActor`; log `PAWN facing snap` for any left). Holding or resetting the hair on fast turns (rounds 2 to 6) was taken out again: reset to its resting shape on a
+walking, bowed body, the hair lay inside the back. Dressed bodies are clear (the
 shapes stand 3 cm further out). `-CreatorRecord=1` with the demo also saves every other frame of the walk
 (`strandwalk_NNNN.png`). `-CreatorStrandWalkPitch=-70` holds the walk's view still, from one side and looking down
 at that pitch, so a turn shows whether the hair goes round the body or through it.
