@@ -1,0 +1,183 @@
+Using bundled DotNet SDK version: 10.0 win-x64
+Running UnrealBuildTool: dotnet "..\..\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" -Mode=ValidatePlatforms -OutputSDKs  -AllPlatforms  -project="C:/Dev/Rim3D-climb/game/Rim3D.uproject" -log="C:/Dev/Rim3D-climb/game/Saved/Logs/AutoSDKInfo.txt" -verbose -timestamps
+Log file: C:\Dev\Rim3D-climb\game\Saved\Logs\AutoSDKInfo.txt
+##PlatformValidate: Win64 VALID 10.0.22621.0
+##PlatformValidate: Mac INVALID 26.1.1
+##PlatformValidate: IOS INVALID 26.1.1
+##PlatformValidate: Android INVALID r27c
+##PlatformValidate: Linux INVALID v26_clang-20.1.8-rockylinux8
+##PlatformValidate: LinuxArm64 INVALID <UNKNOWN>
+##PlatformValidate: TVOS INVALID 26.1.1
+##PlatformValidate: VisionOS INVALID <UNKNOWN>
+Unable to find required SDK version 'MainVersion' for platform LinuxArm64. Check your SDK.json files
+Unable to find required SDK version 'MainVersion' for platform VisionOS. Check your SDK.json files
+Trace written to file C:\Users\thill\AppData\Local\UnrealBuildTool\Trace.uba with size 318b
+[2026.11.22-10.27.14:860][  0]LogInit: Display: Running engine for game: Rim3D
+[2026.11.22-10.27.14:860][  0]LogCore: Display: Requested channels: 'cpu,gpu,frame,log,bookmark,screenshot,region'
+[2026.11.22-10.27.14:860][  0]LogTrace: Display: Control listening on port 1985
+[2026.11.22-10.27.14:860][  0]LogCsvProfiler: Display: Metadata set : platform="Windows"
+[2026.11.22-10.27.14:861][  0]LogCsvProfiler: Display: Metadata set : config="Development"
+[2026.11.22-10.27.14:861][  0]LogCsvProfiler: Display: Metadata set : buildversion="++UE5+Release-5.8-CL-58210709"
+[2026.11.22-10.27.14:861][  0]LogCsvProfiler: Display: Metadata set : engineversion="5.8.3-58210709+++UE5+Release-5.8"
+[2026.11.22-10.27.14:861][  0]LogCsvProfiler: Display: Metadata set : enginereleaseversion="5.8.3"
+[2026.11.22-10.27.14:861][  0]LogCsvProfiler: Display: Metadata set : os="Windows 10 (22H2) [10.0.19045.7846] "
+[2026.11.22-10.27.14:861][  0]LogCsvProfiler: Display: Metadata set : cpu="AuthenticAMD|AMD Ryzen 7 9800X3D 8-Core Processor"
+[2026.11.22-10.27.14:861][  0]LogCsvProfiler: Display: Metadata set : pgoenabled="0"
+[2026.11.22-10.27.14:861][  0]LogCsvProfiler: Display: Metadata set : pgoprofilingenabled="0"
+[2026.11.22-10.27.14:861][  0]LogCsvProfiler: Display: Metadata set : ltoenabled="0"
+[2026.11.22-10.27.14:861][  0]LogCsvProfiler: Display: Metadata set : asan="0"
+[2026.11.22-10.27.14:861][  0]LogCsvProfiler: Display: Metadata set : mergedmodules="0"
+[2026.11.22-10.27.14:862][  0]LogCsvProfiler: Display: Metadata set : compacttset="0"
+[2026.11.22-10.27.14:862][  0]LogCsvProfiler: Display: Metadata set : commandline="" C:\Dev\Rim3D-climb\game\Rim3D.uproject -run=AnimalArt -nullrhi -Models=WildGoose -unattended -nosplash""
+[2026.11.22-10.27.14:862][  0]LogCsvProfiler: Display: Metadata set : loginid="fb5536ce4b7b84c8fe293a874f527664"
+[2026.11.22-10.27.14:862][  0]LogCsvProfiler: Display: Metadata set : llm="0"
+[2026.11.22-10.27.14:862][  0]LogCsvProfiler: Display: Metadata set : zenstreaming="0"
+[2026.11.22-10.27.14:862][  0]LogCsvProfiler: Display: Metadata set : systemresolution.resx="1280"
+[2026.11.22-10.27.14:862][  0]LogCsvProfiler: Display: Metadata set : systemresolution.resy="720"
+[2026.11.22-10.27.14:862][  0]LogConfig: Display: Loading VulkanPC ini files took 0.05 seconds
+[2026.11.22-10.27.14:862][  0]LogConfig: Display: Loading Mac ini files took 0.05 seconds
+[2026.11.22-10.27.14:862][  0]LogConfig: Display: Loading Android ini files took 0.05 seconds
+[2026.11.22-10.27.14:863][  0]LogConfig: Display: Loading IOS ini files took 0.05 seconds
+[2026.11.22-10.27.14:863][  0]LogAudio: Display: Audio Device Manager not initializing due to all audio being disabled. If this is not intentional, please check command line arguments for "-nosound".
+[2026.11.22-10.27.14:863][  0]LogConfig: Display: Loading TVOS ini files took 0.06 seconds
+[2026.11.22-10.27.14:863][  0]LogConfig: Display: Loading Unix ini files took 0.07 seconds
+[2026.11.22-10.27.14:863][  0]LogConfig: Display: Loading VisionOS ini files took 0.07 seconds
+[2026.11.22-10.27.14:863][  0]LogConfig: Display: Loading Windows ini files took 0.07 seconds
+[2026.11.22-10.27.14:863][  0]LogConfig: Display: Loading Linux ini files took 0.07 seconds
+[2026.11.22-10.27.14:863][  0]RenderDocPlugin: Display: RenderDoc plugin will not be loaded. Use '-AttachRenderDoc' on the cmd line or enable 'renderdoc.AutoAttach' in the plugin settings.
+[2026.11.22-10.27.14:863][  0]LogAsyncCompilation: Display: MemorySharingInfo: UsedMemory=304MiB, MaxMemoryAvailable=91969MiB
+[2026.11.22-10.27.14:863][  0]LogAnalytics: Display: Provider StudioTelemetry.Provider.Log is disabled for this application
+[2026.11.22-10.27.14:864][  0]LogAnalytics: Display: Provider StudioTelemetry.Provider.CSV is disabled for this application
+[2026.11.22-10.27.14:864][  0]LogAnalytics: Display: Provider StudioTelemetry.Provider.Horde is disabled for this application
+[2026.11.22-10.27.14:864][  0]LogAnalytics: Display: Provider StudioTelemetry.Provider.Log is disabled for this application
+[2026.11.22-10.27.14:864][  0]LogAnalytics: Display: Provider StudioTelemetry.Provider.CSV is disabled for this application
+[2026.11.22-10.27.14:864][  0]LogAnalytics: Display: Provider StudioTelemetry.Provider.Horde is disabled for this application
+[2026.11.22-10.27.14:864][  0]LogStreaming: Display: AsyncLoading2 - Created: Async Loading Thread: false, Async Post Load: false, Multithreaded: false
+[2026.11.22-10.27.14:864][  0]LogHAL: Display: Platform has ~ 32 GB [33450541056 / 34359738368 / 32], which maps to Largest [LargestMinGB=32, LargerMinGB=12, DefaultMinGB=8, SmallerMinGB=6, SmallestMinGB=0)
+[2026.11.22-10.27.14:864][  0]LogCsvProfiler: Display: Metadata set : extradevelopmentmemorymb="0"
+[2026.11.22-10.27.14:864][  0]LogObj: Display: Attempting to load config data for Default__DownlinkBandwidthManagerConfig before the Class has been constructed/registered/linked (likely during module loading or early startup). This will result in the load silently failing and should be fixed.
+[2026.11.22-10.27.15:092][  0]LogObj: Display: Attempting to load config data for Default__SlateThemeManager before the Class has been constructed/registered/linked (likely during module loading or early startup). This will result in the load silently failing and should be fixed.
+[2026.11.22-10.27.15:513][  0]LogCsvProfiler: Display: Metadata set : verbatimrhiname="Null"
+[2026.11.22-10.27.15:513][  0]LogCsvProfiler: Display: Metadata set : rhiname="Null"
+[2026.11.22-10.27.15:513][  0]LogCsvProfiler: Display: Metadata set : rhifeaturelevel="SM6"
+[2026.11.22-10.27.15:513][  0]LogCsvProfiler: Display: Metadata set : shaderplatform="PCD3D_SM6"
+[2026.11.22-10.27.15:513][  0]LogCsvProfiler: Display: Metadata set : gpu=""
+[2026.11.22-10.27.15:513][  0]LogCsvProfiler: Display: Metadata set : gpudriver=""
+[2026.11.22-10.27.15:530][  0]LogTextureFormatASTC: Display: ASTCEnc version 5.0.1 library loaded
+[2026.11.22-10.27.15:530][  0]LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatASTC
+[2026.11.22-10.27.15:531][  0]LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatDXT
+[2026.11.22-10.27.15:531][  0]LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatETC2
+[2026.11.22-10.27.15:531][  0]LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatIntelISPCTexComp
+[2026.11.22-10.27.15:531][  0]LogTextureFormatOodle: Display: Oodle Texture TFO init; latest sdk version = 2.9.16
+[2026.11.22-10.27.15:531][  0]LogTextureFormatOodle: Display: Oodle Texture loading DLL: oo2tex_win64_2.9.16.dll
+[2026.11.22-10.27.15:532][  0]LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatOodle
+[2026.11.22-10.27.15:532][  0]LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatUncompressed
+[2026.11.22-10.27.15:574][  0]LogTargetPlatformManager: Display: Failed to SetupSDK for platform 'Android'
+[2026.11.22-10.27.15:595][  0]LogTargetPlatformManager: Display: Failed to SetupSDK for platform 'IOS'
+[2026.11.22-10.27.15:615][  0]LogTargetPlatformManager: Display: Failed to SetupSDK for platform 'Linux'
+[2026.11.22-10.27.15:636][  0]LogTargetPlatformManager: Display: Failed to SetupSDK for platform 'Mac'
+[2026.11.22-10.27.15:638][  0]LogTargetPlatformManager: Display: Failed to SetupSDK for platform 'TVOS'
+[2026.11.22-10.27.15:660][  0]LogTargetPlatformManager: Display: Loaded TargetPlatform 'Windows'
+[2026.11.22-10.27.15:660][  0]LogTargetPlatformManager: Display: Loaded TargetPlatform 'WindowsEditor'
+[2026.11.22-10.27.15:660][  0]LogTargetPlatformManager: Display: Loaded TargetPlatform 'WindowsServer'
+[2026.11.22-10.27.15:660][  0]LogTargetPlatformManager: Display: Loaded TargetPlatform 'WindowsClient'
+[2026.11.22-10.27.15:660][  0]LogTargetPlatformManager: Display: Building Assets For WindowsEditor
+[2026.11.22-10.27.15:668][  0]LogAudioDebug: Display: Lib vorbis DLL was dynamically loaded.
+[2026.11.22-10.27.16:018][  0]LogDerivedDataCache: Display: ../../../Engine/DerivedDataCache/Compressed.ddp: Opened pak cache for reading. (1670 MiB)
+[2026.11.22-10.27.16:022][  0]LogZenServiceInstance: Display: Launching zen utility 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/zen.exe service status'.
+[2026.11.22-10.27.16:437][  0]LogZenServiceInstance: Display: Writing plugin version info to 'C:/Users/thill/AppData/Local/UnrealEngine/Common/Zen/Install/zen_plugin_versions.json'
+[2026.11.22-10.27.16:438][  0]LogZenServiceInstance: Display: Read zen version cache file from 'C:/Users/thill/AppData/Local/UnrealEngine/5.8/Saved/Zen/zen.version', version: '5.8.13-202605190912-windows-x64-release-094f62c2'
+[2026.11.22-10.27.16:440][  0]LogZenServiceInstance: Display: Read zen version cache file from 'C:/Users/thill/AppData/Local/UnrealEngine/Common/Zen/Install/zen.version', version: '5.8.13-202605190912-windows-x64-release-094f62c2'
+[2026.11.22-10.27.16:440][  0]LogZenServiceInstance: Display: Installed service at 'C:/Users/thill/AppData/Local/UnrealEngine/Common/Zen/Install/zenserver.exe' is up to date
+[2026.11.22-10.27.16:445][  0]LogZenServiceInstance: Display: Launching executable 'C:/Users/thill/AppData/Local/UnrealEngine/Common/Zen/Install/zenserver.exe', working dir 'C:/Users/thill/AppData/Local/UnrealEngine/Common/Zen/Install', data dir 'C:/Users/thill/AppData/Local/UnrealEngine/Common/Zen/Data', args '--port 8558 --data-dir C:\Users\thill\AppData\Local\UnrealEngine\Common\Zen\Data --http asio --gc-cache-duration-seconds 1209600 --gc-interval-seconds 21600 --gc-low-diskspace-threshold 2147483648 --cache-bucket-limit-overwrites --quiet --restrict-content-types --allow-external-oidctoken-exe=false --plugins-config "C:/Users/thill/AppData/Local/UnrealEngine/Common/Zen/Install/zen_plugins_v1.json" --security-config-path "C:/Users/thill/AppData/Local/UnrealEngine/Common/Zen/Install/security-config.json" --owner-pid 16504  --child-id Zen_16504_Startup'
+[2026.11.22-10.27.23:310][  0]LogZenServiceInstance: Display: Unreal Zen Storage Server HTTP service at http://[::1]:8558 status: OK!.
+[2026.11.22-10.27.23:322][  0]LogDerivedDataCache: Display: ZenLocal: Using ZenServer HTTP service at [::1] with namespace ue.ddc. Status: OK!.
+[2026.11.22-10.27.23:377][  0]LogDerivedDataCache: Display: C:/Users/thill/AppData/Local/UnrealEngine/Common/DerivedDataCache: Performance: Latency=0.06ms. RandomReadSpeed=19.23MBs, RandomWriteSpeed=212.37MBs. Assigned SpeedClass 'Local'
+[2026.11.22-10.27.23:387][  0]LogUbaHorde: Display: UBA/Horde Configuration [Uba.Provider.Horde]: Not Enabled
+[2026.11.22-10.27.23:388][  0]LogShaderCompilers: Display: No distributed shader compiler controller found
+[2026.11.22-10.27.23:388][  0]LogShaderCompilers: Display: Using 13 local workers for shader compilation
+[2026.11.22-10.27.23:447][  0]LogShaderCompilers: Display: Compiling shader autogen file: ../../../../../../Dev/Rim3D-climb/game/Intermediate/ShaderAutogen/PCD3D_SM6/AutogenShaderHeaders.ush
+[2026.11.22-10.27.23:448][  0]LogShaderCompilers: Display: Autogen file is unchanged, skipping write.
+[2026.11.22-10.27.24:126][  0]LogEditorDomain: Display: EditorDomain is Disabled
+[2026.11.22-10.27.24:536][  0]LogDeviceProfileManager: Display: Deviceprofile LinuxArm64Editor not found.
+[2026.11.22-10.27.24:536][  0]LogDeviceProfileManager: Display: Deviceprofile LinuxArm64 not found.
+[2026.11.22-10.27.24:589][  0]LogCsvProfiler: Display: Metadata set : deviceprofile="WindowsEditor"
+[2026.11.22-10.27.24:608][  0]LogStreaming: Display: FlushAsyncLoading(1): 1 QueuedPackages, 0 AsyncPackages
+[2026.11.22-10.27.24:651][  0]LogTextureEncodingSettings: Display: Texture Encode Speed: Final (cook).
+[2026.11.22-10.27.24:651][  0]LogTextureEncodingSettings: Display: Oodle Texture Encode Speed settings: Fast: RDO Off Lambda=0, Effort=Normal Final: RDO Off Lambda=0, Effort=Normal
+[2026.11.22-10.27.24:652][  0]LogTextureEncodingSettings: Display: Shared linear texture encoding: Disabled
+[2026.11.22-10.27.24:739][  0]LogMeshReduction: Display: Using QuadricMeshReduction for automatic static mesh reduction
+[2026.11.22-10.27.24:739][  0]LogMeshReduction: Display: Using SkeletalMeshReduction for automatic skeletal mesh reduction
+[2026.11.22-10.27.24:739][  0]LogMeshReduction: Display: Using ProxyLODMeshReduction for automatic mesh merging
+[2026.11.22-10.27.24:739][  0]LogMeshReduction: Display: No distributed automatic mesh merging module available
+[2026.11.22-10.27.25:170][  0]LogShaderCompilers: Display: Compiling shader autogen file: ../../../../../../Dev/Rim3D-climb/game/Intermediate/ShaderAutogen/PCD3D_SM5/AutogenShaderHeaders.ush
+[2026.11.22-10.27.25:171][  0]LogShaderCompilers: Display: Autogen file is unchanged, skipping write.
+[2026.11.22-10.27.25:171][  0]LogVirtualization: Display: VirtualizationSystem name found in ini file: None
+[2026.11.22-10.27.25:171][  0]LogVirtualization: Display: FNullVirtualizationSystem mounted, virtualization will be disabled
+[2026.11.22-10.27.25:375][  0]LogWorldPartition: Display: FWorldPartitionClassDescRegistry::Initialize started...
+[2026.11.22-10.27.25:384][  0]LogWorldPartition: Display: FWorldPartitionClassDescRegistry::Initialize took 8.805 ms
+[2026.11.22-10.27.26:690][  0]LogMetaSound: Display: MetaSound Page Target Initialized to 'Default'
+[2026.11.22-10.27.26:696][  0]LogAudio: Display: Registering Engine Module Parameter Interfaces...
+[2026.11.22-10.27.27:095][  0]LogLiveLinkHub: Display: LiveLinkHubModule::StartupModule - LiveLinkHub instance will not be created. (Config: 0)
+[2026.11.22-10.27.28:521][  0]LogAudioCaptureCore: Display: No Audio Capture implementations found. Audio input will be silent.
+[2026.11.22-10.27.28:521][  0]LogAudioCaptureCore: Display: No Audio Capture implementations found. Audio input will be silent.
+[2026.11.22-10.27.29:781][  0]LogFabLauncher: Display: FabLauncher (version 0.6.0) active
+[2026.11.22-10.27.29:875][  0]LogGfxOptions: Display: Graphics: ray tracing off (hardware not available), TSR at 100%, frame generation 0, ray reconstruction 0
+[2026.11.22-10.27.29:929][  0]LogAssetRegistry: Display: PlatformFileJournal journal has wrapped for volume 'C:'. AssetRegistry discovery of files on this volume will be uncached. Notes on wrapping:
+NTFS Journal has wrapped for volume 'C:'; the number of files written to this volume exceeded the buffer size of the journal and some entries were dropped.
+If this happens frequently increase the buffer size of the journal:
+Launch cmd.exe as admin and run command `fsutil usn createJournal C: m=<SizeInBytes>`
+<SizeInBytes> defaults to 33554432 (32MB), Recommended <SizeInBytes> is 0x40000000 (1GB). You can see the current value via `fsutil usn queryJournal C:`, 'Maximum Size' field.
+[2026.11.22-10.27.29:981][  0]LogAssetRegistry: Display: CleanupOrphanedCacheFiles (PreLoad): 0 .ref files found, 0 referenced binaries
+[2026.11.22-10.27.29:981][  0]LogAssetRegistry: Display: CleanupOrphanedCacheFiles: 0 total binaries, 0 referenced (kept), 0 old-style pre-migration (kept), 0 orphans deleted, 0 orphans locked (kept)
+[2026.11.22-10.27.29:981][  0]LogAssetRegistry: Display: FindShardedCacheFiles: 0 via .ref, 0 via migration fallback, 0 total
+[2026.11.22-10.27.29:981][  0]LogAssetRegistry: Display: AssetDataGatherer spent 0.000s loading caches from ../../../../../../Dev/Rim3D-climb/game/Intermediate/CachedAssetRegistry.
+[2026.11.22-10.27.31:799][  0]LogCsvProfiler: Display: Metadata set : largeworldcoordinates="1"
+[2026.11.22-10.27.31:804][  0]LogGfxOptions: Display: Graphics: ray tracing off (hardware not available), TSR at 100%, frame generation 0, ray reconstruction 0
+[2026.11.22-10.27.31:902][  0]LogPython: Display: No pip-enabled plugins with python dependencies found, skipping
+[2026.11.22-10.27.32:298][  0]LogCsvProfiler: Display: Metadata set : raytracing="0"
+[2026.11.22-10.27.32:575][  0]LogGfxOptions: Display: Graphics: ray tracing off (hardware not available), TSR at 100%, frame generation 0, ray reconstruction 0
+[2026.11.22-10.27.32:671][  0]LogPython: Display: Running start-up script C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Animation/IKRig/Content/Python/init_unreal.py... started...
+[2026.11.22-10.27.32:684][  0]LogPython: Display: Running start-up script C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Animation/IKRig/Content/Python/init_unreal.py... took 13.039 ms
+[2026.11.22-10.27.32:684][  0]LogPython: Display: Running start-up script C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Animation/ControlRig/Content/Python/init_unreal.py... started...
+[2026.11.22-10.27.32:702][  0]LogPython: Display: Running start-up script C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Animation/ControlRig/Content/Python/init_unreal.py... took 17.758 ms (total: 30.798 ms)
+[2026.11.22-10.27.32:702][  0]LogPython: Display: Running start-up script C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Importers/USDImporter/Content/Python/init_unreal.py... started...
+[2026.11.22-10.27.32:702][  0]LogPython: Display: Running start-up script C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Importers/USDImporter/Content/Python/init_unreal.py... took 172 us (total: 30.970 ms)
+[2026.11.22-10.27.32:828][  0]LogInterchangeEngine: Display: Interchange start importing source [C:/Dev/Rim3D-climb/assets/raw/sketchfab/rim3d-animals-2/Rim3D_Goose.glb]
+[2026.11.22-10.27.32:879][  0]LogInterchangeImport: Warning: Node [Object_193] with a skinned mesh is not root. Parent transforms will not affect a skinned mesh.
+[2026.11.22-10.27.32:942][  0]LogLinker: Warning: [AssetLog] C:\Dev\Rim3D-climb\game\Content\Rim3D\Generated\Animals\WildGoose\Rim3D_Goose\Textures\Rim3D_Goose_texture_0.uasset: Error opening file.
+[2026.11.22-10.27.33:012][  0]LogLinker: Warning: [AssetLog] C:\Dev\Rim3D-climb\game\Content\Rim3D\Generated\Animals\WildGoose\Rim3D_Goose\SkeletalMeshes\Rim3D_Goose_Skeleton.uasset: Error opening file.
+[2026.11.22-10.27.33:013][  0]LogLinker: Warning: [AssetLog] C:\Dev\Rim3D-climb\game\Content\Rim3D\Generated\Animals\WildGoose\Rim3D_Goose\Materials\M_Goose.uasset: Error opening file.
+[2026.11.22-10.27.33:118][  0]LogLinker: Warning: [AssetLog] C:\Dev\Rim3D-climb\game\Content\Rim3D\Generated\Animals\WildGoose\Rim3D_Goose\SkeletalMeshes\Rim3D_Goose_PhysicsAsset.uasset: Error opening file.
+[2026.11.22-10.27.33:157][  0]LogAnimationCompression: Display: Building compressed animation data for AnimSequence /Game/Rim3D/Generated/Animals/WildGoose/Rim3D_Goose/SkeletalMeshes/Rim3D_GooseGoose_Goose_Idle.Rim3D_GooseGoose_Goose_Idle (Required Memory Estimate: 8.26 MB)
+[2026.11.22-10.27.33:211][  0]LogAnimationCompression: Display: Building compressed animation data for AnimSequence /Game/Rim3D/Generated/Animals/WildGoose/Rim3D_Goose/SkeletalMeshes/Rim3D_GooseGoose_Goose_WalkGrazing.Rim3D_GooseGoose_Goose_WalkGrazing (Required Memory Estimate: 10.92 MB)
+[2026.11.22-10.27.33:220][  0]LogLinker: Warning: [AssetLog] C:\Dev\Rim3D-climb\game\Content\Rim3D\Generated\Animals\WildGoose\Rim3D_Goose\SkeletalMeshes\Rim3D_GooseGoose_Goose_Z_FlyFlapping.uasset: Error opening file.
+[2026.11.22-10.27.33:280][  0]LogAnimationCompression: Display: Storing compressed animation data for /Game/Rim3D/Generated/Animals/WildGoose/Rim3D_Goose/SkeletalMeshes/Rim3D_GooseGoose_Goose_Idle.Rim3D_GooseGoose_Goose_Idle, at AnimationSequence/b7af14d63289e5f0438b2988da1c540fc28ea060
+[2026.11.22-10.27.33:495][  0]LogAnimationCompression: Display: Storing compressed animation data for /Game/Rim3D/Generated/Animals/WildGoose/Rim3D_Goose/SkeletalMeshes/Rim3D_GooseGoose_Goose_WalkGrazing.Rim3D_GooseGoose_Goose_WalkGrazing, at AnimationSequence/491393fee4d40fbd86ff64cd8e1263f092270893
+[2026.11.22-10.27.33:555][  0]LogInterchangeEngine: Display: Interchange import completed [C:/Dev/Rim3D-climb/a...hfab/rim3d-animals-2/Rim3D_Goose.glb]
+[2026.11.22-10.27.33:595][  0]LogSourceControl: Display: Uncontrolled Changelist persistency file loaded ../../../../../../Dev/Rim3D-climb/game/Saved/SourceControl/UncontrolledChangelists.json
+[2026.11.22-10.27.33:653][  0]LogAnimation: Warning: Animation Compression request for Rim3D_GooseGoose_Goose_Z_FlyFlapping failed, BoneCompressionSettings == nullptr || CurveCompressionSettings == nullptr || VariableFrameStrippingSettings == nullptr.
+[2026.11.22-10.27.33:654][  0]LogAnimation: Warning: HasCompressedDataForHash: Zero key hash Rim3D_GooseGoose_Goose_Z_FlyFlapping 
+[2026.11.22-10.27.33:682][  0]LogAnimalArt: Display: WildGoose: 1 skeletal mesh, 1 skeleton, 3 clips: Rim3D_GooseGoose_Goose_Idle (7.5 s), Rim3D_GooseGoose_Goose_WalkGrazing (10.0 s), Rim3D_GooseGoose_Goose_Z_FlyFlapping (5.0 s)
+[2026.11.22-10.27.33:875][  0]LogAnimalArt: Display: WildGoose: mesh 1.82 x 0.53 x 0.96 m, 1 materials
+[2026.11.22-10.27.33:875][  0]LogAnimalArt: Display: WildGoose: material M_Goose (slot M_Goose): parent MI_SpecularGlossiness_Opaque_DS; tex NormalTexture=T_Generic_N; tex OcclusionTexture=T_White_Linear; tex EmissiveTexture=T_White_srgb; tex DiffuseTexture=Rim3D_Goose_texture_0; tex SpecularGlossinessTexture=T_White_srgb; vec NormalTexture_OffsetScale=(0.00 0.00 1.00); vec OcclusionTexture_OffsetScale=(0.00 0.00 1.00); vec EmissiveTexture_OffsetScale=(0.00 0.00 1.00); vec EmissiveFactor=(0.00 0.00 0.00); vec DiffuseTexture_OffsetScale=(0.00 0.00 1.00); vec DiffuseFactor=(1.00 1.00 1.00); vec SpecFactor=(0.00 0.00 0.00); vec SpecularGlossinessTexture_OffsetScale=(0.00 0.00 1.00); vec DiffuseTexture_TilingMethod=(0.00 0.00 0.00); vec SpecularGlossinessTexture_TilingMethod=(0.00 0.00 0.00); vec EmissiveTexture_TilingMethod=(0.00 0.00 0.00); vec NormalTexture_TilingMethod=(0.00 0.00 0.00); vec OcclusionTexture_TilingMethod=(0.00 0.00 0.00); num NormalTexture_Rotation=0.00; num NormalTexture_TexCoord=0.00; num NormalScale=1.00; num OcclusionTexture_Rotation=0.00; num OcclusionTexture_TexCoord=0.00; num OcclusionStrength=1.00; num EmissiveTexture_Rotation=0.00; num EmissiveTexture_TexCoord=0.00; num EmissiveStrength=1.00; num DiffuseTexture_Rotation=0.00; num DiffuseTexture_TexCoord=0.00; num GlossinessFactor=0.00; num SpecularGlossinessTexture_Rotation=0.00; num SpecularGlossinessTexture_TexCoord=0.00; num AlphaCutoff=0.00;
+[2026.11.22-10.27.34:135][  0]LogAnimalArt: Display: AnimalArt done
+[2026.11.22-10.27.34:135][  0]LogInit: Display: 
+[2026.11.22-10.27.34:135][  0]LogInit: Display: Warning/Error Summary (Unique only)
+[2026.11.22-10.27.34:135][  0]LogInit: Display: -----------------------------------
+[2026.11.22-10.27.34:135][  0]LogInit: Display: LogInterchangeImport: Warning: Node [Object_193] with a skinned mesh is not root. Parent transforms will not affect a skinned mesh.
+[2026.11.22-10.27.34:135][  0]LogInit: Display: LogLinker: Warning: [AssetLog] C:\Dev\Rim3D-climb\game\Content\Rim3D\Generated\Animals\WildGoose\Rim3D_Goose\Textures\Rim3D_Goose_texture_0.uasset: Error opening file.
+[2026.11.22-10.27.34:136][  0]LogInit: Display: LogLinker: Warning: [AssetLog] C:\Dev\Rim3D-climb\game\Content\Rim3D\Generated\Animals\WildGoose\Rim3D_Goose\SkeletalMeshes\Rim3D_Goose_Skeleton.uasset: Error opening file.
+[2026.11.22-10.27.34:136][  0]LogInit: Display: LogLinker: Warning: [AssetLog] C:\Dev\Rim3D-climb\game\Content\Rim3D\Generated\Animals\WildGoose\Rim3D_Goose\Materials\M_Goose.uasset: Error opening file.
+[2026.11.22-10.27.34:136][  0]LogInit: Display: LogLinker: Warning: [AssetLog] C:\Dev\Rim3D-climb\game\Content\Rim3D\Generated\Animals\WildGoose\Rim3D_Goose\SkeletalMeshes\Rim3D_Goose_PhysicsAsset.uasset: Error opening file.
+[2026.11.22-10.27.34:136][  0]LogInit: Display: LogLinker: Warning: [AssetLog] C:\Dev\Rim3D-climb\game\Content\Rim3D\Generated\Animals\WildGoose\Rim3D_Goose\SkeletalMeshes\Rim3D_GooseGoose_Goose_Z_FlyFlapping.uasset: Error opening file.
+[2026.11.22-10.27.34:136][  0]LogInit: Display: LogAnimation: Warning: Animation Compression request for Rim3D_GooseGoose_Goose_Z_FlyFlapping failed, BoneCompressionSettings == nullptr || CurveCompressionSettings == nullptr || VariableFrameStrippingSettings == nullptr.
+[2026.11.22-10.27.34:137][  0]LogInit: Display: LogAnimation: Warning: HasCompressedDataForHash: Zero key hash Rim3D_GooseGoose_Goose_Z_FlyFlapping 
+[2026.11.22-10.27.34:137][  0]LogInit: Display: 
+[2026.11.22-10.27.34:137][  0]LogInit: Display: Success - 0 error(s), 8 warning(s)
+[2026.11.22-10.27.34:137][  0]LogInit: Display: 
+Execution of commandlet took:  1.46 seconds, PeakPhysMemoryMB=2112 MB, PeakVirtMemoryMB=2027 MB
+[2026.11.22-10.27.34:257][  0]LogAssetRegistry: Display: CleanupOrphanedCacheFiles (PostWrite): 0 .ref files found, 0 referenced binaries
+[2026.11.22-10.27.34:258][  0]LogAssetRegistry: Display: CleanupOrphanedCacheFiles: 0 total binaries, 0 referenced (kept), 0 old-style pre-migration (kept), 0 orphans deleted, 0 orphans locked (kept)
+[2026.11.22-10.27.34:501][  0]LogShaderCompilers: Display: Exiting ShaderCompilingThread
+[2026.11.22-10.27.34:543][  0]LogSourceControl: Display: Uncontrolled Changelist persistency file saved ../../../../../../Dev/Rim3D-climb/game/Saved/SourceControl/UncontrolledChangelists.json

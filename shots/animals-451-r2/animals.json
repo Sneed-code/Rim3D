@@ -1,0 +1,64 @@
+{
+	"test": "animals",
+	"status": "fail",
+	"durationSeconds": 36.294291198253632,
+	"errors": [
+		"animals_row: 1688 problems; the first: an animal is 27552 cm across (draw scale 0.75)",
+		"animals_detail: 769 problems; the first: an animal is 27546 cm across (draw scale 0.75)",
+		"animals_close: 446 problems; the first: an animal is 27546 cm across (draw scale 0.75)",
+		"animals_new: 2658 problems; the first: an animal is 27546 cm across (draw scale 0.75)"
+	],
+	"gpu": "NVIDIA GeForce RTX 5080",
+	"resolution": "1920x1080",
+	"phases": [
+		{
+			"phase": "animals_row",
+			"frames": 1213,
+			"avgFps": 151.48380380677759,
+			"p95FrameMs": 7.1375036239624023,
+			"medianGameThreadMs": 3.9326000213623047,
+			"medianRenderThreadMs": 6.2266998291015625,
+			"medianGpuMs": 5.0668001174926758,
+			"actors": 0,
+			"screenshot": "animals/animals_row.png"
+		},
+		{
+			"phase": "animals_detail",
+			"frames": 610,
+			"avgFps": 152.22526784190202,
+			"p95FrameMs": 7.0869998931884766,
+			"medianGameThreadMs": 3.6145999431610107,
+			"medianRenderThreadMs": 6.1883001327514648,
+			"medianGpuMs": 5.0511999130249023,
+			"actors": 0,
+			"screenshot": "animals/animals_detail.png"
+		},
+		{
+			"phase": "animals_close",
+			"frames": 287,
+			"avgFps": 143.19004391565591,
+			"p95FrameMs": 6.9995970726013184,
+			"medianGameThreadMs": 3.9365999698638916,
+			"medianRenderThreadMs": 6.2888998985290527,
+			"medianGpuMs": 5.067500114440918,
+			"actors": 0,
+			"screenshot": "animals/animals_close.png"
+		},
+		{
+			"phase": "animals_new",
+			"frames": 286,
+			"avgFps": 142.6269093352318,
+			"p95FrameMs": 7.2081985473632812,
+			"medianGameThreadMs": 4.1679000854492188,
+			"medianRenderThreadMs": 6.2884998321533203,
+			"medianGpuMs": 5.0829000473022461,
+			"actors": 0,
+			"screenshot": "animals/animals_new.png"
+		}
+	],
+	"notes": [
+		"animals_row: 18 animals, 18 actors, 18 defs drawn, 18 models loaded, poses seen 3",
+		"animals_detail: near 1, mid 4, far 13, hidden 0",
+		"animals_new: 31 models loaded"
+	]
+}

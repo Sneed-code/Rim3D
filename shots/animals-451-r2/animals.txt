@@ -1,0 +1,15 @@
+﻿Running smoke test 'animals' at 1920x1080...
+
+Smoke test 'animals': FAIL  (38 s, NVIDIA GeForce RTX 5080, 888x500)
+animals_row                 186.9 fps  game   4.0 ms  render   5.0 ms  gpu   3.6 ms  screenshot ok
+animals_detail              196.5 fps  game   3.7 ms  render   4.9 ms  gpu   3.5 ms  screenshot ok
+animals_close               191.7 fps  game   4.0 ms  render   5.0 ms  gpu   3.7 ms  screenshot ok
+animals_new                 190.1 fps  game   4.1 ms  render   5.0 ms  gpu   3.7 ms  screenshot ok
+note: animals_row: 18 animals, 18 actors, 18 defs drawn, 18 models loaded, poses seen 3
+note: animals_detail: near 1, mid 4, far 13, hidden 0
+note: animals_new: 31 models loaded
+ERROR: animals_row: 2077 problems; the first: an animal is 27552 cm across (draw scale 0.75)
+ERROR: animals_detail: 986 problems; the first: an animal is 27546 cm across (draw scale 0.75)
+ERROR: animals_close: 579 problems; the first: an animal is 27546 cm across (draw scale 0.75)
+ERROR: animals_new: 3438 problems; the first: an animal is 27546 cm across (draw scale 0.75)
+Screenshots: C:\Dev\Rim3D-climb\game\Saved\Smoke\animals
