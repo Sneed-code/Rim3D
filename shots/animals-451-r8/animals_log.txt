@@ -1,0 +1,57 @@
+LogSmoke: Display: Smoke test 'animals' starting
+LogSmoke: Display: Phase animals_row
+LogTemp: Display: Animal WildBear fitted on its pose: bones span 58.6 x 262.7 x 158.4 cm, fit 0.754
+LogSmoke: Display: Phase animals_row: 156.9 fps, GPU 4.9 ms, game 3.9 ms
+LogSmoke: Display: Phase animals_detail
+LogSmoke: Display: Phase animals_detail: 160.0 fps, GPU 5.0 ms, game 3.8 ms
+LogSmoke: Display: Phase animals_close
+LogSmoke: Display: Phase animals_close: 152.8 fps, GPU 4.9 ms, game 4.4 ms
+LogSmoke: Display: Phase animals_new
+LogTemp: Display: Animal WildDoe fitted on its pose: bones span 34.4 x 227.4 x 161.0 cm, fit 0.633
+LogTemp: Display: Animal WolfSpider fitted on its pose: bones span 3.2 x 2.4 x 2.0 cm, fit 55.592
+LogTemp: Display: Animal Iguana fitted on its pose: bones span 143.3 x 412.5 x 70.6 cm, fit 0.327
+LogTemp: Display: Animal Turkey fitted on its pose: bones span 0.7 x 0.5 x 0.7 cm, fit 149.819
+LogSmoke: Display: Phase animals_new: 153.2 fps, GPU 5.0 ms, game 4.8 ms
+LogSmoke: Display: Phase animal_GrizzlyBear
+LogSmoke: Display: Phase animal_GrizzlyBear: 91.6 fps, GPU 5.0 ms, game 4.7 ms
+LogSmoke: Display: Phase animal_PolarBear
+LogSmoke: Display: Phase animal_PolarBear: 97.4 fps, GPU 5.0 ms, game 4.3 ms
+LogSmoke: Display: Phase animal_Caribou
+LogSmoke: Display: Phase animal_Caribou: 100.1 fps, GPU 5.0 ms, game 4.4 ms
+LogSmoke: Display: Phase animal_Muskox
+LogSmoke: Display: Phase animal_Muskox: 100.5 fps, GPU 5.1 ms, game 4.4 ms
+LogSmoke: Display: Phase animal_Yak
+LogSmoke: Display: Phase animal_Yak: 98.8 fps, GPU 5.1 ms, game 4.4 ms
+LogSmoke: Display: Phase animal_Dromedary
+LogSmoke: Display: Phase animal_Dromedary: 101.2 fps, GPU 5.1 ms, game 4.5 ms
+LogSmoke: Display: Phase animal_Gazelle
+LogSmoke: Display: Phase animal_Gazelle: 96.7 fps, GPU 5.1 ms, game 4.5 ms
+LogSmoke: Display: Phase animal_Goat
+LogSmoke: Display: Phase animal_Goat: 107.1 fps, GPU 5.0 ms, game 4.4 ms
+LogSmoke: Display: Phase animal_Sheep
+LogSmoke: Display: Phase animal_Sheep: 107.9 fps, GPU 5.0 ms, game 4.5 ms
+LogSmoke: Display: Phase animal_Megaspider
+LogSmoke: Display: Phase animal_Megaspider: 102.4 fps, GPU 5.0 ms, game 4.5 ms
+LogSmoke: Display: Phase animal_Spelopede
+LogSmoke: Display: Phase animal_Spelopede: 99.0 fps, GPU 5.0 ms, game 4.5 ms
+LogSmoke: Display: Phase animal_Capybara
+LogSmoke: Display: Phase animal_Capybara: 95.3 fps, GPU 5.1 ms, game 4.6 ms
+LogSmoke: Display: Phase animal_Iguana
+LogSmoke: Display: Phase animal_Iguana: 103.4 fps, GPU 4.8 ms, game 4.9 ms
+LogSmoke: Display: Phase animal_Chicken
+LogSmoke: Display: Phase animal_Chicken: 90.5 fps, GPU 5.1 ms, game 5.9 ms
+LogSmoke: Display: Phase animal_Duck
+LogSmoke: Display: Phase animal_Duck: 92.3 fps, GPU 5.2 ms, game 5.3 ms
+LogSmoke: Display: Phase animal_Goose
+LogSmoke: Display: Phase animal_Goose: 96.9 fps, GPU 5.2 ms, game 5.5 ms
+LogSmoke: Display: Phase animal_Turkey
+LogSmoke: Display: Phase animal_Turkey: 98.3 fps, GPU 5.1 ms, game 5.1 ms
+LogSmoke: Display: Phase animal_ArcticFox
+LogSmoke: Display: Phase animal_ArcticFox: 95.0 fps, GPU 5.2 ms, game 5.0 ms
+LogSmoke: Display: Phase animal_ArcticWolf
+LogSmoke: Display: Phase animal_ArcticWolf: 101.2 fps, GPU 5.0 ms, game 5.2 ms
+LogSmoke: Display: Phase animal_Ostrich
+LogSmoke: Display: Phase animal_Ostrich: 101.3 fps, GPU 5.1 ms, game 5.3 ms
+LogSmoke: Display: Phase animal_Megascarab
+LogSmoke: Display: Phase animal_Megascarab: 105.3 fps, GPU 5.0 ms, game 5.4 ms
+LogSmoke: Display: Smoke test animals: pass, results written to ../../../../../../Dev/Rim3D-climb/game/Saved/Smoke/animals.json
