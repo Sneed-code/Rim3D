@@ -419,16 +419,17 @@ UProceduralMeshComponent* GoreMakeGibChunk(AActor* Owner, USceneComponent* Paren
 				{
 					return GoreWet(FMath::Lerp(GoreMuscleDark, GoreBlood, 0.4f + 0.4f * Noise), 0.02f);
 				}
+				// (PC round 3: dark muscle all over vanished into the blood pool; more skin and fat, brighter meat.)
 				const float Facing = FVector::DotProduct(Dir, SkinSide);
-				if (Facing > 0.55f)
+				if (Facing > 0.3f)
 				{
-					return GoreWet(FMath::Lerp(Skin, GoreBlood, 0.15f + 0.35f * Noise), 0.55f);  // skin, smeared
+					return GoreWet(FMath::Lerp(Skin, GoreBlood, 0.1f + 0.3f * Noise), 0.6f);  // skin, smeared
 				}
-				if (Facing > 0.35f)
+				if (Facing > 0.05f)
 				{
-					return GoreWet(FMath::Lerp(GoreFat, GoreBlood, 0.2f + 0.3f * Noise), 0.3f);  // the fat under it
+					return GoreWet(FMath::Lerp(GoreFat, GoreBlood, 0.15f + 0.25f * Noise), 0.35f);  // the fat under it
 				}
-				return GoreWet(FMath::Lerp(GoreMuscleDark, GoreMuscleLight, Noise), 0.08f);  // torn muscle
+				return GoreWet(FMath::Lerp(GoreMuscleLight, FLinearColor(0.5f, 0.07f, 0.05f), Noise), 0.25f);  // torn muscle
 			});
 		break;
 	}

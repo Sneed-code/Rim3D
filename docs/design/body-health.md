@@ -222,7 +222,7 @@ torsos, whole-corpse gibs) was never merged.
   and bursts the trunk at once. In the sim the torso (part 0) is destroyed, so every part is gone: `HealthSystem::gibbed`,
   SeveredBit `kSeveredTrunk` (with all the others), no hitbox, no more corpse hits; the body stays as a record (who
   died, what they wore). Events: a PawnPartLost for the torso (the wet tear) and PawnGibbed (`amount` the pile that burst
-  it; three chunk slaps follow). Unreal (`ASimPawnActor::BurstIntoGibs`, `AGoreGibActor`): 18 chunks (`Gore.GibCount`),
+  it; three chunk slaps follow). Unreal (`ASimPawnActor::BurstIntoGibs`, `AGoreGibActor`): 22 chunks (`Gore.GibCount`),
   procedural like the stumps in M_Gore (`GoreMakeGibChunk`): lumps of torn muscle with a patch of skin and fat, curved
   ribs with meat on them, broken bone shards with marrow at the ends, dark wet lumps; thrown out and up at 1.5 to 4 m/s
   (harder for more overkill, `Gore.GibSpeed`; most land within 3 m), tumbling, bouncing on the sim's ground and leaving a splat where every

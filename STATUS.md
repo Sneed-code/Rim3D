@@ -37,7 +37,7 @@ borders from one island only. Smoke `gore -GoreWoman` adds thigh close-ups front
 
 Corpse trunks burst into gibs (sneed, 2026-11-22: "keep overkill damage until it gibs ... until none"; sim and Unreal,
 `docs/design/body-health.md` part F "Trunks burst"): once only the trunk is left, another 25 piled past 0 bursts it;
-one hit 50 past 0 (a rocket in the chest) takes everything at once. The body goes and 18 chunks fly out (torn muscle with
+one hit 50 past 0 (a rocket in the chest) takes everything at once. The body goes and 22 chunks fly out (torn muscle with
 skin, ribs, bone shards, dark wet lumps, made in code like the stumps) with sprays of blood; they tumble, bounce, leave
 splats where they land and lie 5 minutes like blood, then shrink away. **Next:** PC build, smoke `gore` (phases `gibs`,
 `gibsclose`), gun range look.

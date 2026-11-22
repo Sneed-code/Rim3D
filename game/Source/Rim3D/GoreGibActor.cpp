@@ -13,7 +13,7 @@
 
 namespace
 {
-	TAutoConsoleVariable<int32> GGibCount(TEXT("Gore.GibCount"), 18,
+	TAutoConsoleVariable<int32> GGibCount(TEXT("Gore.GibCount"), 22,
 		TEXT("How many chunks a corpse's trunk bursts into (body-health.md part F, \"Trunks burst\")."), ECVF_Default);
 	TAutoConsoleVariable<float> GGibSeconds(TEXT("Gore.GibSeconds"), 300.0f,
 		TEXT("How long a gib lies (real seconds) before it shrinks away; 300 matches the 5 minutes blood takes to fade."), ECVF_Default);
@@ -181,9 +181,9 @@ int32 AGoreGibActor::Burst(UWorld* World, const FVector& Centre, float BodyScale
 		switch (Kind)
 		{
 		// (PC round 1: at 5 to 13 cm they were lost in the grass.)
-		case EGoreGibKind::Meat: Size = Random.FRandRange(8.0f, 18.0f); break;
+		case EGoreGibKind::Meat: Size = Random.FRandRange(11.0f, 22.0f); break;
 		case EGoreGibKind::Rib: Size = Random.FRandRange(18.0f, 28.0f); break;
-		case EGoreGibKind::Bone: Size = Random.FRandRange(9.0f, 16.0f); break;
+		case EGoreGibKind::Bone: Size = Random.FRandRange(11.0f, 18.0f); break;
 		case EGoreGibKind::Offal: Size = Random.FRandRange(9.0f, 15.0f); break;
 		}
 		Size *= Scale;
