@@ -1298,3 +1298,32 @@ TEST_CASE("Blasts: a rocket at people's feet throws them down metres away and te
     CHECK(torn >= people / 3);
     CHECK(thrown >= people * 3 / 4);
 }
+
+TEST_CASE("Dismemberment: rockets on a corpse burst its trunk (smoke gore phase gibs)") {
+    int burst = 0;
+    for (int seed = 0; seed < 8; ++seed) {
+        SimSettings settings;
+        settings.seed = 900 + static_cast<uint64_t>(seed);
+        settings.mapSize = 64;
+        settings.flatMap = true;
+        settings.pawns = 0;
+        settings.items = 0;
+        auto sim = std::make_unique<Sim>(settings, zoneTestDefs());
+        const Entity pawn = zoneTestPawn(*sim, 20, 20, true);
+        sim->submit(DamagePawnCommand{pawn, "Blunt", 62.0f, zoneTestPart(*sim, pawn, "head")});
+        zoneTestRun(*sim, 3);
+        Position at = sim->things().registry().get<Position>(pawn);
+        sim->submit(ExplodeCommand{at.x + 1.0f, at.y, 3.9f, 50.0f, "Bomb", 0.1f});
+        zoneTestRun(*sim, 60);
+        int blasts = 0;
+        for (; blasts < 4 && !sim->health().gibbed(pawn); ++blasts) {
+            at = sim->things().registry().get<Position>(pawn);
+            sim->submit(ExplodeCommand{at.x + 0.3f, at.y, 1.6f, 120.0f, "Bomb", 0.1f});
+            zoneTestRun(*sim, 18);
+        }
+        MESSAGE("seed " << seed << ": severed " << sim->health().severed(pawn) << " after " << blasts << " blasts, torso pile "
+                        << sim->health().zoneOverkill(pawn, zoneTestZone(*sim, pawn, "Torso")));
+        burst += sim->health().gibbed(pawn) ? 1 : 0;
+    }
+    CHECK(burst == 8);
+}

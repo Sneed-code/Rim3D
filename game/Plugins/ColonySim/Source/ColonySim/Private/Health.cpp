@@ -1797,7 +1797,14 @@ bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int targ
             }
             const float pile = health.zoneOverkill[static_cast<size_t>(z)];
             const float enough = enoughOf(z);
-            if (pile > 0.0f && pile >= enough && healthZoneCanLose(*model_, body, health, z)) {
+            if (pile > 0.0f && !healthZoneCanLose(*model_, body, health, z)) {
+                // Nothing more can come off this zone (a shoulder or the neck left after the arm or head went): what piles
+                // on it goes to the trunk, or blows on the stumps were lost and the trunk never burst (PC round 4).
+                health.zoneOverkill[static_cast<size_t>(z)] = 0.0f;
+                carry(pile);
+                continue;
+            }
+            if (pile > 0.0f && pile >= enough) {
                 health.zoneOverkill[static_cast<size_t>(z)] = 0.0f;  // what is left of the limb piles up again
                 dismember(pawn, health, z, z == zone ? target : body.zones[static_cast<size_t>(z)].root, pile);
                 carry(pile - enough);
