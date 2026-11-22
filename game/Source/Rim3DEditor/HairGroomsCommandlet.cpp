@@ -162,6 +162,10 @@ namespace
 		for (FHairGroupsPhysics& Physics : Groom->GetHairGroupsPhysics())
 		{
 			Physics.SolverSettings.EnableSimulation = bSimulate;
+			// Twice Unreal's default steps and iterations: at 5 and 5, long hair on bare skin could pass through the
+			// collision shell while the body turned on the spot mid-walk (PC, 2026-11-22) and end up in front or inside.
+			Physics.SolverSettings.SubSteps = 10;
+			Physics.SolverSettings.IterationCount = 10;
 		}
 		Groom->PostEditChange();
 		UE_LOG(LogHairGrooms, Display, TEXT("Groom %s from %s: %d groups, %d materials, physics %s"), *Groom->GetName(), *File, Groom->GetNumHairGroups(),

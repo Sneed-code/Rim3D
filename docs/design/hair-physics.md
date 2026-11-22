@@ -290,4 +290,7 @@ Console: `Pawns.StrandHairClothes 0` leaves the shapes inside the skin (to compa
 **PC check:** the creator's `-CreatorStrandDemo` (with `-CreatorFemale -CreatorHair=Long`, and `-CreatorDressed
 -CreatorSelect=2` for a T-shirt under a jacket): close from behind and from the side, standing, aiming a rifle, swinging
 a sword, shadowboxing, walking, then aiming with the shapes drawn; pictures `Saved/Smoke/creator/strand_NN_*.png`.
-Needs the `hair-grow` art step again (new `grooms.json`; `update-and-play.bat` runs it).
+Needs the `hair-grow` art step again (new `grooms.json`; `update-and-play.bat` runs it). The grooms simulate with 10
+sub-steps and 10 iterations (Unreal's default 5 and 5 let bare-skinned long hair pass the shell as the body turned on
+the spot mid-walk; `HairGroomsCommandlet`). `-CreatorRecord=1` with the demo also saves every other frame of the walk
+(`strandwalk_NNNN.png`).

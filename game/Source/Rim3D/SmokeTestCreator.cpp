@@ -1461,6 +1461,14 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					FString::Printf(TEXT("strand_%02d_%s_%s.png"), State->StrandDemoShot, StrandPhases[Phase], bSide ? TEXT("side") : TEXT("back")), false, false);
 				++State->StrandDemoShot;
 			}
+			// -CreatorRecord=<any>: every other frame of the walk too (creator/strandwalk_NNNN.png), to see where the hair goes as
+			// they turn.
+			float StrandRecord = 0.0f;
+			if (Phase == 4 && FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), StrandRecord) && StrandRecord > 0.0f && FMath::Fmod(T, 3.0f) < 2.5f
+				&& (State->Recorded++ % 2) == 0)
+			{
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") / FString::Printf(TEXT("strandwalk_%04d.png"), State->Recorded), false, false);
+			}
 			if (Phase >= NumStrandPhases && StrandDebugVar && StrandDebugVar->GetInt() != 0)
 			{
 				StrandDebugVar->Set(0);
