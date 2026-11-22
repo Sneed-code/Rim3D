@@ -2,6 +2,16 @@
 
 Updated 2026-11-22.
 
+Solar panel and wind turbine models (sneed, 2026-11-22; tools, data and Unreal, `docs/design/building-draw.md`
+"Downloaded models with a moving part"): the two power buildings were still box shapes. Now they use free Fab models,
+downloaded once into `assets/raw/fab/` on the PC: "Animated Wind Turbine" (Glowbox3D, CC BY) and "Solar Panel Array
+Rack" (FunkFX, free Personal licence). `tools/fab_prep.py` (Blender) fits the turbine to RimWorld's 5 x 2 footprint
+(4.8 m rotor, hub 6.6 m up, tower stretched to suit) and splits off its blades as their own mesh with its origin on the
+hub; the solar generator is two racks side by side on its 4 x 4 (their node colours baked to textures). GunArt imports
+them (`assets/power_art.json`). A def's new `visual.rotor` turns the blades every frame, faster with more wind power,
+still with none (`UBuildingSubsystem::AnimateRotors`). Art steps `power-models` and `power-art` run them in
+`update-and-play.bat`. Smoke test `power` (pictures; fails if the turbine makes power and the blades do not turn).
+
 Hair no longer through the body or clothes (sneed, 2026-11-22; hair tools and Unreal, `docs/design/hair-physics.md`
 "A shell with no gaps"): long strand hair still went into the back and through the shirt. Measured: between the old
 collision spheres a strand could sink 2 cm into the back (up to 5 cm), and resting hair lay 1.5 to 3 cm inside the
