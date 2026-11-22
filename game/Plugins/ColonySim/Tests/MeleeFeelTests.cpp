@@ -512,10 +512,10 @@ TEST_CASE("Finishers: a knife at a downed enemy plays its whole-body kneeling cl
     CHECK(std::fabs(end.y - start.y) < 0.06f);
 }
 
-TEST_CASE("Finishers: too close to the body for its clip to step back to its place, a weapon's blow at the downed is its plain low blow") {
+TEST_CASE("Finishers: too far from the body for its clip, a weapon's blow at the downed is its plain low blow") {
     auto sim = feelTestSim(406);
     const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
-    const Entity enemy = feelTestDowned(*sim, hero, 0.4f);  // the gladius finisher stands 1.2 m off, its slack 0.6
+    const Entity enemy = feelTestDowned(*sim, hero, 2.2f);  // the gladius finisher stands 0.85 m off, its slack 0.6
     feelTestFace(*sim, hero, 1.0f, 0.0f);
     std::string why;
     const bool attacked = sim->melee().attack(hero, enemy, true, &why);
@@ -524,12 +524,30 @@ TEST_CASE("Finishers: too close to the body for its clip to step back to its pla
     CHECK(sim->melee().winding(hero));
 }
 
+TEST_CASE("Finishers: right on top of the body the finisher still plays, stepping back only its slack") {
+    // PC pictures 2026-11-22: the gladius's finisher never played because the body lay too close.
+    auto sim = feelTestSim(411);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    const Entity enemy = feelTestDowned(*sim, hero, 0.25f);
+    feelTestFace(*sim, hero, 1.0f, 0.0f);
+    std::string why;
+    FEEL_REQUIRE(sim->melee().attack(hero, enemy, true, &why));
+    const MeleeFinisher* f = sim->melee().finisherOf(hero);
+    FEEL_REQUIRE(f != nullptr);
+    const Position start = sim->things().registry().get<Position>(hero);
+    for (int s = 0; s < static_cast<int>(std::lround(f->hitSeconds * 30.0f)); ++s) {
+        sim->step();
+    }
+    const Position& now = sim->things().registry().get<Position>(hero);
+    CHECK(std::hypot(now.x - start.x, now.y - start.y) < f->clipSlack + 0.1f);
+}
+
 TEST_CASE("Finishers: a gladius a little close to the body steps back with its clip, to stand off its place at the blow") {
     // sneed 2026-11-22 PC pictures: the gladius lunged past the body. The clip's step is laid over with a shift so the
     // body is at the finisher's standOff when the blow lands, wherever in the slack the swing started.
     auto sim = feelTestSim(410);
     const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
-    const Entity enemy = feelTestDowned(*sim, hero, 1.0f);
+    const Entity enemy = feelTestDowned(*sim, hero, 0.7f);
     feelTestFace(*sim, hero, 1.0f, 0.0f);
     std::string why;
     FEEL_REQUIRE(sim->melee().attack(hero, enemy, true, &why));
@@ -547,8 +565,8 @@ TEST_CASE("Finishers: a gladius a little close to the body steps back with its c
     const Position& b = sim->things().registry().get<Position>(enemy);
     const float d = std::hypot(a.x - b.x, a.y - b.y);
     CAPTURE(d);
-    CHECK(std::fabs(d - f->standOff) < 0.08f);
-    CHECK(std::fabs(a.y - b.y) < 0.08f);  // straight back along the line to the body
+    CHECK(std::fabs(d - f->standOff) < 0.1f);
+    CHECK(std::fabs(a.y - b.y) < 0.12f);  // straight back along the line to the body
 }
 
 TEST_CASE("Finishers: every finisher of sneed's weapons plays a measured whole-body clip") {

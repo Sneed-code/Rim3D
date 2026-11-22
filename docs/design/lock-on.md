@@ -224,12 +224,14 @@ a MotionClips def): the knife kneels and drives both hands down (Mixamo Farming 
 longsword's low hack: the Fighting spear stab thrust level, over the body, in the PC pictures). The
 sim plays the clip on the whole body, timed so the blow lands at `hitSeconds`, and the finisher lasts as long as the clip
 (`MeleeSystem::finisherPlaysClip`). Unreal draws no hand-made pose, kneel or bend for it: the weapon stays in the hand
-the clip moves, like any clip swing. The mocap swings lunge their hips forward in place, so `standOff`
-(the distance to the body's middle at the blow) is set from where each clip's blade comes down: knife 0.75 m, club
-0.95, gladius and mace 1.2, longsword 1.25, spear 1.5. The attacker steps the last few centimetres to it over the
-first two thirds of the wind-up (`BodyMotionSystem::shiftClip`, laid over the clip's own path; the world still stops
-it), so the blow lands on the body wherever the swing started. More than `clipSlack` away (too far, or right on top of
-the body) the weapon's low blow plays instead. A finisher whose clip is not measured yet falls
+the clip moves, like any clip swing. Unreal sets the drawn hips back to the body's place
+through a clip, so the blade reaches only as far as the arms and weapon do from the hips: `standOff` (the distance to
+the body's middle at the blow) is knife 0.8 m, club 0.9, gladius, mace and longsword 0.85, spear 1.1 (PC round 2: at
+1.25-1.5 the longsword and spear came down short of the body). The attacker steps to it over the first two thirds of
+the wind-up (`BodyMotionSystem::shiftClip`, laid over the clip's own path; the world still stops it), so the blow lands
+on the body wherever the swing started. More than `clipSlack` too far, the weapon's low blow plays instead; right on top
+of the body it steps back at most `clipSlack` and still plays the finisher (round 2: the gladius's never played). The
+`finishers` smoke takes a `_blow` picture at the hit and notes where the drawn bodies and the weapon are. A finisher whose clip is not measured yet falls
 back to the old drawn one.
 
 The punches and the low blows (`Mixamo/Fighting/*`) had never been imported into the one game (they were made in a test

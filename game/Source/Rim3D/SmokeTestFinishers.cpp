@@ -64,6 +64,8 @@ namespace
 		bool bShot45 = false;
 		bool bShot63 = false;
 		bool bShot80 = false;
+		bool bShotBlow = false;
+		FString BlowGeometry;
 		int32 Blows = 0;
 		float LastBlowAt = -1.0f;
 		float DownedAt = -1.0f;
@@ -430,6 +432,44 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			{
 				State->PinAtStart = Weapons()->GetPinDebug();
 			}
+			// At the blow itself (a clip finisher's hit moment): a picture and where everything is, so the distance from the
+			// body can be tuned from numbers, not guessed from a camera angle (sneed 2026-11-22, round 2).
+			float BlowT = -1.0f;
+			if (const colony::Sim* BlowSim = Bridge()->GetSim(); BlowSim && MeView && MeView->meleeFinisher != 0 &&
+				BlowSim->melee().finisherPlaysClip(MeView->meleeFinisher))
+			{
+				const colony::MeleeFinisher& Rule = BlowSim->melee().rules().finishers[static_cast<size_t>(MeView->meleeFinisher - 1)];
+				if (const colony::MotionClip* BlowClip = BlowSim->combat().motion().clip(Rule.clip); BlowClip && BlowClip->seconds > 0.0f)
+				{
+					BlowT = BlowClip->hitSeconds / BlowClip->seconds;
+				}
+			}
+			if (!State->bShotBlow && BlowT > 0.0f && T >= BlowT)
+			{
+				State->bShotBlow = true;
+				Shot(PhaseName + TEXT("_blow"));
+				const colony::ThingView* It = FinSmokeFind(*B, State->Enemy);
+				const ASimPawnActor* MeActor = ActorOf(State->Me);
+				const ASimPawnActor* ItActor = ActorOf(State->Enemy);
+				const USkeletalMeshComponent* MeBody = MeActor ? MeActor->GetBody() : nullptr;
+				const USkeletalMeshComponent* ItBody = ItActor ? ItActor->GetBody() : nullptr;
+				const FVector MePelvis = MeBody && MeBody->GetBoneIndex(TEXT("pelvis")) != INDEX_NONE ? MeBody->GetBoneLocation(TEXT("pelvis")) : FVector::ZeroVector;
+				const FVector ItPelvis = ItBody && ItBody->GetBoneIndex(TEXT("pelvis")) != INDEX_NONE ? ItBody->GetBoneLocation(TEXT("pelvis")) : FVector::ZeroVector;
+				const FVector ItHead = ItBody && ItBody->GetBoneIndex(TEXT("head")) != INDEX_NONE ? ItBody->GetBoneLocation(TEXT("head")) : FVector::ZeroVector;
+				const UStaticMeshComponent* Held = Weapons()->GetHandsComponent(State->Me);
+				const FBox WeaponBox = Held ? Held->Bounds.GetBox() : FBox(ForceInit);
+				const float SimApart = It && MeView ? FVector2D::Distance(FVector2D(MeView->x, MeView->y), FVector2D(It->x, It->y)) : -1.0f;
+				FVector MeSpot = FVector::ZeroVector;
+				FVector ItSpot = FVector::ZeroVector;
+				B->GetBlendedLocation(State->Me, MeSpot);
+				B->GetBlendedLocation(State->Enemy, ItSpot);
+				State->BlowGeometry = FString::Printf(
+					TEXT("sim apart %.2f m; drawn: my pelvis %.0f cm from my sim spot, its pelvis %.0f cm and its head %.0f cm from its sim spot, pelvis to pelvis %.0f cm; weapon box %.0f cm from its pelvis, lowest at %.0f cm, reaching %.0f cm out from my pelvis"),
+					SimApart, FVector::Dist2D(MePelvis, MeSpot), FVector::Dist2D(ItPelvis, ItSpot), FVector::Dist2D(ItHead, ItSpot),
+					FVector::Dist2D(MePelvis, ItPelvis), Held ? FMath::Sqrt(WeaponBox.ComputeSquaredDistanceToPoint(ItPelvis)) : -1.0,
+					Held ? WeaponBox.Min.Z - ItPelvis.Z : -1.0,
+					Held ? FMath::Max(FVector::Dist2D(WeaponBox.Min, MePelvis), FVector::Dist2D(WeaponBox.Max, MePelvis)) : -1.0);
+			}
 			if (!State->bShot45 && T >= 0.45f)
 			{
 				State->bShot45 = true;
@@ -465,6 +505,10 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			PhaseNumbers.Add(TEXT("float_fixes"), Fixes);
 			Notes.Add(FString::Printf(TEXT("%s: %d finisher frames, got to T %.2f, tip %.0f cm from its goal at the strike, kneel %s, worst grip gap %.0f cm, %d float fixes, %d hits"),
 				*PhaseName, Frames, State->MaxT, State->BestTipGap, State->bKneelSeen ? TEXT("yes") : TEXT("no"), Gap, Fixes, Hits));
+			if (!State->BlowGeometry.IsEmpty())
+			{
+				Notes.Add(FString::Printf(TEXT("%s: at the blow: %s"), *PhaseName, *State->BlowGeometry));
+			}
 			Notes.Add(FString::Printf(TEXT("%s: weapon hold at the start [%s], at the strike [%s], pulled back %.0f cm to stay in reach, %d attack orders"), *PhaseName, *State->PinAtStart, *State->PinAtStrike, State->ShortAtStrike, State->Sends));
 			if (State->Enemy == colony::kNoEntity)
 			{

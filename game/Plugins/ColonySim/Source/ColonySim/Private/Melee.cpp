@@ -725,9 +725,13 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         // Where the clip alone would leave it at the blow: its own step forward (scaled to the body) taken off.
         finisherShift = d - combat_.motion().forwardAt(finisherClip->def, finisherClip->hitSeconds) * combat_.motion().sizeScale(pawn) -
                         finisherRule->standOff;
-        if (std::fabs(finisherShift) > finisherRule->clipSlack) {
-            finisherRule = nullptr;  // too far off (or right on top of it): the plain low blow
+        if (finisherShift > finisherRule->clipSlack) {
+            finisherRule = nullptr;  // too far off: the plain low blow
             finisherClip = nullptr;
+        } else {
+            // Right on top of the body it steps back only so far (the blow lands a little short of its place rather than
+            // the finisher giving way to the arms-only low blow: PC pictures 2026-11-22, the gladius's never played).
+            finisherShift = std::max(finisherShift, -finisherRule->clipSlack);
         }
     }
     if (finisherRule != nullptr) {

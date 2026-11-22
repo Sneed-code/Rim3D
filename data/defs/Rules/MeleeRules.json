@@ -65,11 +65,11 @@
       "Melee_Spear": ["Motion_Spear_Stab_Low"]
     },
     "finishers": {
-      "Melee_Spear": {"move": "Spear", "clip": "Motion_TwoHand_Hack_Low", "seconds": 1.8, "hitSeconds": 0.9, "standOff": 1.5, "clipSlack": 0.7, "kneel": false, "bend": 20},
-      "Club": {"move": "Club", "clip": "Motion_Club_Downward", "seconds": 1.7, "hitSeconds": 0.8, "standOff": 0.95, "clipSlack": 0.6, "kneel": true, "bend": 25},
-      "OneHand": {"move": "Sword", "clip": "Motion_OneHand_Hack_Low", "seconds": 1.9, "hitSeconds": 0.8, "standOff": 1.2, "clipSlack": 0.6, "kneel": true, "bend": 30},
-      "TwoHand": {"move": "Sword", "clip": "Motion_TwoHand_Hack_Low", "seconds": 1.9, "hitSeconds": 0.8, "standOff": 1.25, "clipSlack": 0.6, "kneel": false, "bend": 40},
-      "Melee_Knife": {"move": "Knife", "clip": "Motion_Knife_Kneel", "seconds": 1.6, "hitSeconds": 0.9, "standOff": 0.75, "clipSlack": 0.5, "kneel": true, "bend": 60}
+      "Melee_Spear": {"move": "Spear", "clip": "Motion_TwoHand_Hack_Low", "seconds": 1.8, "hitSeconds": 0.9, "standOff": 1.1, "clipSlack": 0.6, "kneel": false, "bend": 20},
+      "Club": {"move": "Club", "clip": "Motion_Club_Downward", "seconds": 1.7, "hitSeconds": 0.8, "standOff": 0.9, "clipSlack": 0.6, "kneel": true, "bend": 25},
+      "OneHand": {"move": "Sword", "clip": "Motion_OneHand_Hack_Low", "seconds": 1.9, "hitSeconds": 0.8, "standOff": 0.85, "clipSlack": 0.6, "kneel": true, "bend": 30},
+      "TwoHand": {"move": "Sword", "clip": "Motion_TwoHand_Hack_Low", "seconds": 1.9, "hitSeconds": 0.8, "standOff": 0.85, "clipSlack": 0.6, "kneel": false, "bend": 40},
+      "Melee_Knife": {"move": "Knife", "clip": "Motion_Knife_Kneel", "seconds": 1.6, "hitSeconds": 0.9, "standOff": 0.8, "clipSlack": 0.5, "kneel": true, "bend": 60}
     },
     "finisherStepMetres": 0.06,
     "focusRange": 20, "focusBreakRange": 25, "focusFrontCos": 0.5, "focusBehindFactor": 2, "aiFocusRange": 8,
