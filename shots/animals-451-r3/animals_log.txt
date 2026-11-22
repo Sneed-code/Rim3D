@@ -1,0 +1,17 @@
+LogSmoke: Display: Smoke test 'animals' starting
+LogSmoke: Display: Phase animals_row
+LogTemp: Display: Animal WildBear fitted on its pose: bones span 58.6 x 262.7 x 158.4 cm, fit 0.754
+LogSmoke: Display: Phase animals_row: 146.9 fps, GPU 5.1 ms, game 3.6 ms
+LogSmoke: Display: Phase animals_detail
+LogSmoke: Display: Phase animals_detail: 147.0 fps, GPU 5.2 ms, game 3.4 ms
+LogSmoke: Display: Phase animals_close
+LogSmoke: Display: Phase animals_close: 135.2 fps, GPU 5.3 ms, game 3.9 ms
+LogSmoke: Display: Phase animals_new
+LogTemp: Display: Animal WildElk fitted on its pose: bones span 34.4 x 227.4 x 165.6 cm, fit 0.910
+LogTemp: Display: Animal WildDoe fitted on its pose: bones span 34.4 x 227.4 x 161.0 cm, fit 0.633
+LogTemp: Display: Animal WolfSpider fitted on its pose: bones span 3.2 x 2.4 x 2.0 cm, fit 3.891
+LogTemp: Display: Animal Iguana fitted on its pose: bones span 143.3 x 412.5 x 70.6 cm, fit 0.327
+LogTemp: Display: Animal Turkey fitted on its pose: bones span 0.7 x 0.5 x 0.7 cm, fit 149.819
+LogSmoke: Error: animals_new: 419 problems; the first: an animal is 7 cm across (draw scale 1.95)
+LogSmoke: Display: Phase animals_new: 134.9 fps, GPU 5.3 ms, game 4.0 ms
+LogSmoke: Display: Smoke test animals: FAIL, results written to ../../../../../../Dev/Rim3D-climb/game/Saved/Smoke/animals.json
