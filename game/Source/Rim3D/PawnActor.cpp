@@ -51,6 +51,8 @@ namespace
 {
 	TAutoConsoleVariable<int32> GPawnsHairCards(
 		TEXT("Pawns.HairCards"), 1, TEXT("1 draws hair cards on pawns away from full detail (their strands only show at full detail), 0 none."), ECVF_Default);
+	TAutoConsoleVariable<int32> GPawnsTurnFeetInSwing(
+		TEXT("Pawns.TurnFeetInSwing"), 1, TEXT("1 lets the feet turn with the body through a melee swing (no spine twist when turning mid-swing), 0 keeps them planted."), ECVF_Default);
 
 	// How fast a pawn turns to face where it walks, degrees per second at 1x.
 	constexpr float PawnTurnRate = 720.0f;
@@ -494,7 +496,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		// Through a melee swing the whole body turns with the weapon, feet and all (sneed 2026-11-22: turning mid-swing
 		// with a mace contorted the body, the feet held and the spine twisted up to 60 degrees under the swing).
 		// (Not in a finisher: it steps to its place and holds still, feet planted.)
-		In.bTurnFeet = Now.meleeFinisher == 0 && (Now.meleePhase != colony::MeleePhase::Ready || GetSwing().IsActive());
+		In.bTurnFeet = GPawnsTurnFeetInSwing.GetValueOnGameThread() != 0 && Now.meleeFinisher == 0 && (Now.meleePhase != colony::MeleePhase::Ready || GetSwing().IsActive());
 		In.bStandTwist = !(IsInMotionClip() && !bMotionUpper) && RollProgress <= 0.0f && !IsJumping() && !Now.crawling && !Now.downed && !KneelMontage.IsValid();
 		In.bLegsFromClip = LegsClipWeight > 0.001f || ActionEndSeconds > 0.0 || (IsInMotionClip() && !bMotionUpper) || KneelMontage.IsValid();
 		In.bHitLayer = true;
