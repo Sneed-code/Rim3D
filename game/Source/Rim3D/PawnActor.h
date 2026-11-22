@@ -191,8 +191,11 @@ public:
 	/** A blast throws a ragdoll (a corpse or a downed body): a velocity change of up to `SpeedCmPerSecond` at the
 	 *  centre, falling off to nothing at `RadiusCm` (sneed 2026-11-20). Wakes a body that had gone to sleep. */
 	void PushRagdoll(const FVector& Centre, float RadiusCm, float SpeedCmPerSecond);
-	/** A bullet or blow on a ragdoll: an impulse at the bone nearest `At`. */
+	/** A bullet or blow on a ragdoll (a corpse, the knocked out): a velocity change `Impulse` (cm/s) on the bone
+	 *  nearest `At`, and a little of it on the whole body, waking it if it slept. */
 	void PushRagdollAt(const FVector& At, const FVector& Impulse);
+	/** For the tests: shots and blows that jolted this ragdoll. */
+	int32 GetRagdollHitPushes() const { return RagdollHitPushes; }
 	/** For the tests: ragdolls put to sleep once settled, and blasts that threw one. */
 	int32 GetRagdollSleeps() const { return RagdollSleeps; }
 	int32 GetRagdollPushes() const { return RagdollPushes; }
@@ -435,6 +438,7 @@ private:
 	bool bSoftTissueBeforeRagdoll = true;
 	int32 RagdollSleeps = 0;
 	int32 RagdollPushes = 0;
+	int32 RagdollHitPushes = 0;
 	void UpdateRagdollRest(float DeltaTime);
 	/** The tick group the meshes were last put in, and how many meshes that was (more come with looks). */
 	int32 MeshTickGroup = -1;

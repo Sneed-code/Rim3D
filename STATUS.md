@@ -2,6 +2,16 @@
 
 Updated 2026-11-22.
 
+Corpses come apart, jolt and stay silent; blasts throw people (sneed, 2026-11-22; sim, data and Unreal,
+`docs/design/body-health.md` part F): **overkill on a corpse is kept until it is in pieces**: every 25 piled past 0 on
+the torso takes one more limb off (the most battered first), then the head, until only the trunk is left; what a cut
+limb piled past its quarter goes on to the torso. **Rockets tear living limbs off**: a blast piece doing 30% of an arm
+or leg's hit points takes it off (a rocket at someone's feet takes a piece off about every other person, test). **Blasts
+throw living people** down with the knockdown fall, about 3 m from a close rocket (was a 1.5 m slide), and a body the
+blast kills is thrown too. **Corpses jolt** where a shot or blow lands (the ragdoll wakes, then settles again). **The
+dead make no vocals** (no grunt or hurt cry on a corpse). **The player's swing hits a corpse** lying before it in reach
+(downward clip) when nobody living is there. **Next:** PC build, smoke `gore` (new phase `corpsehit`), gun range look.
+
 Google Neon asset test and AI Studio sounds (sneed, 2026-11-22; tools and docs, `docs/design/neon-assets.md`):
 sneed's Google AI Pro plan gives **Gemini 4 Neon** in the Antigravity CLI, now run headless on the PC like Codex
 (`tools/neon_assets/run_neon_assets.sh`, Neon High, no windows). It made **seven models first try**: the ship sensor

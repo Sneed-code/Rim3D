@@ -8,6 +8,7 @@
 #include "Components/SceneComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "HAL/PlatformTime.h"
 #include "GameFramework/Pawn.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
@@ -230,6 +231,28 @@ bool UBlastFxSubsystem::EnsureScene()
 // ---------------------------------------------------------------------------
 // Blasts.
 
+bool UBlastFxSubsystem::ThrowNewRagdoll(ASimPawnActor& Actor, double Seconds)
+{
+	if (!Actor.IsRagdoll())
+	{
+		return false;
+	}
+	const double WallNow = FPlatformTime::Seconds();
+	FVector Lying = Actor.GetActorLocation();
+	Actor.GetRagdollPelvis(Lying);
+	for (int32 I = RecentBlasts.Num() - 1; I >= 0; --I)
+	{
+		const FRecentBlast& B = RecentBlasts[I];
+		if (WallNow - B.At <= Seconds && FVector::Dist(Lying, B.Centre) < B.Reach + 100.0)
+		{
+			Actor.PushRagdoll(B.Centre, static_cast<float>(B.Reach + 100.0), B.Speed);
+			++RagdollsThrown;
+			return true;
+		}
+	}
+	return false;
+}
+
 void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 {
 	if (Event.type != colony::EventType::Explosion)
@@ -252,6 +275,10 @@ void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 	{
 		const float Speed = FMath::Clamp(250.0f + 120.0f * RadiusM, 300.0f, 900.0f);
 		const double Reach = RadiusM * 120.0;
+		// Remembered a moment for the bodies it kills: they go limp only when the next snapshot says so.
+		const double WallNow = FPlatformTime::Seconds();
+		RecentBlasts.RemoveAll([WallNow](const FRecentBlast& B) { return WallNow - B.At > 2.0; });
+		RecentBlasts.Add(FRecentBlast{Centre, Reach, Speed, WallNow});
 		if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
 		{
 			for (const TPair<uint32, TObjectPtr<ASimPawnActor>>& Pair : Pawns->GetPawns())

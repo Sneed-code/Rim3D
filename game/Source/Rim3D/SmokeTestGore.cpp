@@ -12,6 +12,7 @@
 
 #include "BlastFxSubsystem.h"
 #include "CreatorPeople.h"
+#include "FightSubsystem.h"
 #include "BloodSubsystem.h"
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
@@ -50,6 +51,10 @@ namespace
 		FVector CorpseBefore = FVector::ZeroVector;
 		double CorpseMoved = 0.0;
 		uint16 SeveredBefore = 0;
+		int32 HitPushesAtStart = 0;
+		FVector HitPelvisBefore = FVector::ZeroVector;
+		double HitPelvisMoved = 0.0;
+		int32 CorpseBlows = 0;
 	};
 
 	void GoreSmokeRealBodies(bool bOn)
@@ -442,6 +447,66 @@ void USmokeTestSubsystem::BuildGorePhases()
 			else if (Sleeps < 1)
 			{
 				Fail(TEXT("corpse: the ragdoll never settled and slept (it keeps twitching)"));
+			}
+		};
+		Phases.Add(MoveTemp(Phase));
+	}
+
+	{
+		// The settled corpse struck four times (sneed 2026-11-22: "corpses need to wriggle, have ragdoll physics when
+		// hit, not just still"): each blow wakes the ragdoll and jolts the bone it hit.
+		FPhase Phase;
+		Phase.Name = TEXT("corpsehit");
+		Phase.Setup = [=]()
+		{
+			const ASimPawnActor* Actor = ActorOf();
+			State->HitPushesAtStart = Actor ? Actor->GetRagdollHitPushes() : 0;
+			State->HitPelvisBefore = FVector::ZeroVector;
+			if (Actor)
+			{
+				Actor->GetRagdollPelvis(State->HitPelvisBefore);
+			}
+			State->HitPelvisMoved = 0.0;
+			State->CorpseBlows = 0;
+		};
+		Phase.WarmupSeconds = 0.0f;
+		Phase.MeasureSeconds = 2.5f;
+		Phase.ScreenshotAt = 0.4f;
+		Phase.OnFrame = [=, this]()
+		{
+			Front(30.0f, 260.0f);
+			ASimPawnActor* Actor = ActorOf();
+			UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>();
+			if (!Actor || !Fight)
+			{
+				return;
+			}
+			FVector Pelvis;
+			if (Actor->GetRagdollPelvis(Pelvis))
+			{
+				State->HitPelvisMoved = FMath::Max(State->HitPelvisMoved, FVector::Dist(Pelvis, State->HitPelvisBefore));
+				while (State->CorpseBlows < 4 && PhaseTime >= 0.4f * State->CorpseBlows)
+				{
+					// A sword blow from the side, at the pelvis, then the chest.
+					const FVector At = Pelvis + FVector(0.0, 0.0, State->CorpseBlows % 2 == 0 ? 5.0 : 25.0);
+					Fight->SpawnMeleeImpact(colony::ProjectileHitKind::Pawn, colony::kNoEntity, State->Pawn, At, FVector(0.0, 1.0, -0.2), -1, 12.0f);
+					++State->CorpseBlows;
+				}
+			}
+		};
+		Phase.Verify = [=, this]()
+		{
+			const ASimPawnActor* Actor = ActorOf();
+			const int32 Pushes = Actor ? Actor->GetRagdollHitPushes() - State->HitPushesAtStart : 0;
+			PhaseNumbers.Add(TEXT("corpseJolts"), Pushes);
+			PhaseNumbers.Add(TEXT("pelvisMovedCm"), State->HitPelvisMoved);
+			if (Pushes < 3)
+			{
+				Fail(FString::Printf(TEXT("corpsehit: %d of %d blows jolted the corpse's ragdoll"), Pushes, State->CorpseBlows));
+			}
+			else if (State->HitPelvisMoved < 2.0)
+			{
+				Fail(FString::Printf(TEXT("corpsehit: the corpse barely moved under the blows (%.1f cm)"), State->HitPelvisMoved));
 			}
 		};
 		Phases.Add(MoveTemp(Phase));

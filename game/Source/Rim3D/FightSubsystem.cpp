@@ -1,4 +1,6 @@
 #include "FightSubsystem.h"
+
+#include "BlastFxSubsystem.h"
 #include "SeveredPieceActor.h"
 
 #include "BloodSubsystem.h"
@@ -82,6 +84,10 @@ namespace
 	// Cm per second of velocity change a hit gives a falling pawn, per point of damage.
 	constexpr float FightImpulsePerDamage = 25.0f;
 	constexpr float FightImpulseMax = 700.0f;
+	// A shot or blow on a ragdoll: the struck bone's velocity change, cm/s per point of damage, and its bounds.
+	constexpr float FightRagdollHitPerDamage = 40.0f;
+	constexpr float FightRagdollHitMin = 250.0f;
+	constexpr float FightRagdollHitMax = 900.0f;
 
 	struct FFightParticleLook
 	{
@@ -678,6 +684,14 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 					}
 					Actor->PlayHitReaction(Dir, Strength);
 					++HitReactionsPlayed;
+					// A body lying limp (a corpse, the knocked out) jolts where it was hit: the struck bone is knocked
+					// along the shot or blow, a little up, and the ragdoll wakes (sneed, 2026-11-22).
+					if (Actor->IsRagdoll())
+					{
+						const float JoltSpeed = FMath::Clamp(Tracer.Amount * FightRagdollHitPerDamage, FightRagdollHitMin, FightRagdollHitMax);
+						Actor->PushRagdollAt(At, (Dir.GetSafeNormal() + FVector::UpVector * 0.35f).GetSafeNormal() * JoltSpeed);
+						++RagdollHitPushes;
+					}
 					// The struck zone is knocked along the hit and wobbles back, whatever else the body does: small hits
 					// that stagger nothing too (body-health.md part E).
 					if (StaggerBridge)
@@ -1350,6 +1364,11 @@ void UFightSubsystem::SyncPawns()
 			if (Actor->IsRagdoll())
 			{
 				++RagdollsStarted;
+				// Killed or knocked out by a blast: thrown by it like the corpses already lying there (sneed, 2026-11-22).
+				if (UBlastFxSubsystem* Blasts = GetWorld()->GetSubsystem<UBlastFxSubsystem>())
+				{
+					Blasts->ThrowNewRagdoll(*Actor);
+				}
 			}
 		}
 		else if (!bDown && Actor->IsRagdoll())

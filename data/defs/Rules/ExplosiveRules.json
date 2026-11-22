@@ -8,7 +8,7 @@
     "knockdownBaseSteps": 20,
     "knockdownStepsPerDamage": 0.6,
     "knockdownMaxSteps": 90,
-    "knockbackMetres": 1.5,
+    "knockbackMetres": 3.0,
     "missDistance": 9,
     "missFactorBySkill": [1.0, 0.5],
     "playerMissFactor": 0.6,

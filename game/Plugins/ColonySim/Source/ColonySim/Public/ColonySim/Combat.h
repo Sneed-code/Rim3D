@@ -217,6 +217,7 @@ struct Explosion {
 struct ExplosionResult {
     int pawnsHurt = 0;
     int pawnsKnocked = 0;
+    int limbsTorn = 0;  // arms and legs a blast tore off the living (Health blastTear)
     int buildingsHit = 0;
     int buildingsDestroyed = 0;
     int plantsDestroyed = 0;
