@@ -421,6 +421,16 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 			DrawnYaw = FRotator::NormalizeAxis(Yaw + FMath::Sign(Behind) * PawnDrawnYawMaxLag);
 		}
 	}
+	// A facing that jumps in one frame throws long strand hair through the body (#450: 180-degree snaps measured in the
+	// creator's walk). Logged, a few times, with what drove it.
+	if (static int32 PawnFacingSnaps = 0; bPlaced && FMath::Abs(FMath::FindDeltaAngleDegrees(static_cast<float>(GetActorRotation().Yaw), DrawnYaw + PreviewSpin)) > 60.0f &&
+		PawnFacingSnaps < 30)
+	{
+		++PawnFacingSnaps;
+		UE_LOG(LogTemp, Display, TEXT("PAWN facing snap %d on %s: %.0f -> %.0f (yaw %.0f, teleported %d, dt %.4f x%d, speed %.0f cm/s, clip %d, focus %d, melee %d)"),
+			PawnFacingSnaps, *GetName(), GetActorRotation().Yaw, DrawnYaw + PreviewSpin, Yaw, bTeleported ? 1 : 0, DeltaTime, Speed, GroundSpeed,
+			Now.motionClip.valid() ? 1 : 0, Now.focusTarget != colony::kNoEntity ? 1 : 0, static_cast<int32>(Now.meleePhase));
+	}
 	SetActorLocationAndRotation(Location, FRotator(0.0, DrawnYaw + PreviewSpin, 0.0));
 	ApplySevered(Now.severed);
 	UpdateFightFace(Bridge, Now, DeltaTime * Speed);

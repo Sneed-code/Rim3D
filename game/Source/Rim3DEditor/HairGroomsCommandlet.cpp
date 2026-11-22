@@ -153,10 +153,11 @@ namespace
 		{
 			return false;
 		}
-		// Guides for the physics, made from the strands (the file has none): one strand in 20 drives its neighbours. At one
-		// in 40 the strands drawn between two guides lying round the back cut a chord into it (PC 2026-11-22, #450: tips
-		// showing through the back after turns).
-		GroomsSet(Groom, TEXT("HairGroupsInterpolation"), TEXT("((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))"));
+		// Guides for the physics, made from the strands (the file has none): one strand in 20 drives its neighbours, and
+		// each strand follows its one nearest guide. Blended between guides, a strand whose guides lay either side of the
+		// body (one over the shoulder, one down the back) was drawn straight through the chest (PC 2026-11-22, #450).
+		GroomsSet(Groom, TEXT("HairGroupsInterpolation"),
+			TEXT("((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05,bUseUniqueGuide=True)))"));
 		// Full strands near; further off a second LOD with a third of the strands, a little thicker so it stays as full.
 		GroomsSet(Groom, TEXT("HairGroupsLOD"),
 			TEXT("((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),")
