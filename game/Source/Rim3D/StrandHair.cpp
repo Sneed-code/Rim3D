@@ -13,6 +13,7 @@
 #include "Rendering/SkeletalMeshRenderData.h"
 #include "MakeHumanArt.h"
 #include "UObject/ObjectKey.h"
+#include "UObject/UnrealType.h"
 #include "UObject/Package.h"
 #include "AnimationRuntime.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -55,6 +56,10 @@ namespace
 	TAutoConsoleVariable<float> GStrandHairClothGap(TEXT("Pawns.StrandHairClothGap"), 0.3f,
 		TEXT("Strand hair: cm past the cloth's surface that its collision shapes reach (hair strands follow the guide strands ")
 		TEXT("that collide, give or take half a centimetre, so a little past the cloth keeps them all out of it)."));
+	TAutoConsoleVariable<float> GStrandHairTurnFollow(TEXT("Pawns.StrandHairTurnFollow"), 0.25f,
+		TEXT("Strand hair is simulated in the upper chest's frame (Unreal's local simulation) and keeps only this share of the ")
+		TEXT("body's turning as swing: at 1 a fast turn on the spot left long hair behind and the body turned through it (PC, ")
+		TEXT("2026-11-22). Negative: simulated in the world, as before."));
 	TAutoConsoleVariable<int32> GStrandHairDebug(TEXT("Pawns.StrandHairDebug"), 0,
 		TEXT("1: draw the shapes each strand-haired person's hair collides with (green inside the skin, yellow grown out to clothes)."));
 
@@ -112,6 +117,34 @@ UGroomAsset* StrandHairFind(const FString& Name)
 
 namespace
 {
+	/** Pawns.StrandHairTurnFollow: the groom simulated in spine_03's frame keeping that share of the body's turning (Unreal's
+	 *  groom local simulation), so a quick turn on the spot carries the hair round with the body instead of turning the
+	 *  body through it. Set by text so it is checked in the log (an engine field renamed shows up as a warning, not a
+	 *  broken build). */
+	void StrandHairFollowTurns(UGroomComponent& Hair)
+	{
+		FStructProperty* Property = FindFProperty<FStructProperty>(UGroomComponent::StaticClass(), TEXT("SimulationSettings"));
+		if (!Property)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("STRANDHAIR no SimulationSettings on the groom component: hair is simulated in the world"));
+			return;
+		}
+		const float Follow = GStrandHairTurnFollow.GetValueOnGameThread();
+		const FString Text = Follow < 0.0f ? FString(TEXT("(bOverrideSettings=False)"))
+			: FString::Printf(TEXT("(bOverrideSettings=True,SimulationSetup=(bLocalSimulation=True,LinearVelocityScale=(X=1.0,Y=1.0,Z=1.0),AngularVelocityScale=%.3f,LocalBone=\"spine_03\"))"),
+				FMath::Clamp(Follow, 0.0f, 1.0f));
+		void* Value = Property->ContainerPtrToValuePtr<void>(&Hair);
+		Property->ImportText_Direct(*Text, Value, &Hair, PPF_None);
+		static bool bLogged = false;
+		if (!bLogged)
+		{
+			bLogged = true;
+			FString Applied;
+			Property->ExportTextItem_Direct(Applied, Value, nullptr, &Hair, PPF_None);
+			UE_LOG(LogTemp, Display, TEXT("STRANDHAIR turn follow %.2f: simulation settings now %s"), Follow, *Applied);
+		}
+	}
+
 	/** Puts Groom on Body's head: the groom's curves are in a space where the head they were made on is at SourceHead
 	 *  (component space, cm) with a neck-to-head length of SourceNeck; they are moved onto Body's head bone, scaled by
 	 *  the two lengths (within 15%), turned by the yaw cvar, then the offset cvars. */
@@ -174,6 +207,7 @@ namespace
 		// grown lying on the skin started inside them and was thrown out into a puffball (PC, 2026-11-21).
 		if (bNewGroom || Hair->PhysicsAsset != Collision)
 		{
+			StrandHairFollowTurns(*Hair);
 			Hair->ResetCollisionComponents();
 			Hair->SetPhysicsAsset(Collision);
 		}
