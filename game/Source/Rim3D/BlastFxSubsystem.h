@@ -47,6 +47,16 @@ public:
 	/** A scorch mark alone at a map point, with no blast over it (the smoke test pictures it clear of smoke). */
 	void AddScorchForTest(float MapX, float MapY, float RadiusM);
 
+	/**
+	 * What a projectile in flight leaves behind this frame (UShooterFeelSubsystem calls it): `Kind` is the Projectiles def's
+	 * visual.trail ("rocket": exhaust smoke and a flame at the nozzle; "puff": a launcher shell's thin smoke; "flame": a
+	 * molotov's burning rag). `Back` points the way it came from.
+	 */
+	void AddTrail(const FVector& At, const FVector& Back, const FString& Kind, float DeltaTime);
+
+	/** A rocket's trail along From -> To as if it had just flown it in `Seconds` (the smoke test pictures the trail). */
+	void AddTrailForTest(const FVector& From, const FVector& To, float Seconds);
+
 	/** A puff of dust behind a piece of debris in flight (UShooterFeelSubsystem calls it). */
 	void AddDebrisTrail(const FVector& At, float SizeCm);
 
