@@ -1,4 +1,6 @@
 #include "BlastFxSubsystem.h"
+#include "SeveredPieceActor.h"
+#include "EngineUtils.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -248,10 +250,10 @@ void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 	// the edge. The sim moves the corpse's place the same way (CombatSystem::explode).
 	if (!bFire)
 	{
+		const float Speed = FMath::Clamp(250.0f + 120.0f * RadiusM, 300.0f, 900.0f);
+		const double Reach = RadiusM * 120.0;
 		if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
 		{
-			const float Speed = FMath::Clamp(250.0f + 120.0f * RadiusM, 300.0f, 900.0f);
-			const double Reach = RadiusM * 120.0;
 			for (const TPair<uint32, TObjectPtr<ASimPawnActor>>& Pair : Pawns->GetPawns())
 			{
 				ASimPawnActor* Actor = Pair.Value.Get();
@@ -273,6 +275,21 @@ void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 					++RagdollsThrown;
 				}
 			}
+		}
+		// Severed limbs and heads fly too, lighter than a body: half again as fast, falling off to the edge, lifted.
+		for (TActorIterator<ASeveredPieceActor> It(GetWorld()); It; ++It)
+		{
+			ASeveredPieceActor* Piece = *It;
+			const FVector Offset = Piece->GetActorLocation() - (Centre - FVector(0.0, 0.0, 40.0));
+			const double Away = Offset.Size();
+			if (Away >= Reach + 100.0)
+			{
+				continue;
+			}
+			const float Falloff = 1.0f - static_cast<float>(Away / (Reach + 100.0));
+			const FVector Out = Offset.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+			Piece->Push((Out + FVector(0.0, 0.0, 0.6)).GetSafeNormal() * Speed * 1.5f * Falloff, Piece->GetActorLocation() - Out * 5.0);
+			++PiecesThrown;
 		}
 	}
 

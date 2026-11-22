@@ -43,9 +43,7 @@
       "hip": [22, 10, -5],
       "sightDistance": 8,
       "scope": {"fov": 16},
-      "kick": {"back": 7, "up": 5, "recover": 8},
-      "cycle": {"part": "bolt", "start": 0.25, "seconds": 0.9, "lift": 60, "back": -9},
-      "reloadBolt": true
+      "kick": {"back": 7, "up": 5, "recover": 8}
     },
     {
       "def": "Gun_AssaultRifle",

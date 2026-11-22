@@ -309,3 +309,9 @@ sneed: realistic free sounds for every weapon (each gun its own: pistol, rifle, 
 - **Footsteps**: short range (26 m walking), by terrain and floor; **your own character makes none**; crouched a third as
   loud within 8 m, prone a fifth within 5 m, sprinting half again as loud. Snow and ice have their own steps.
 - Delayed plays (`SoundPlay.delay`) wait on top of the speed-of-sound delay.
+
+## Proof that shots are heard (2026-11-22)
+
+`USoundSubsystem` counts every voiced play by cue (`GetVoicedWithPrefix`: all plays, or only plays of a recorded file,
+not the fallback tone). `Sound.Debug 1` logs each one. The gun range smoke fails when it fires but no recorded `Shot`
+plays. sneed's "no gun sounds" (2026-11-22) came from the old `Rim3D-gunrange` copy, which never had the files.

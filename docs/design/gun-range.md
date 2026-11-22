@@ -140,3 +140,12 @@ file's name (`AssaultRifle_Game`). `meshTextures` gives meshes their own maps (t
   animation are not used yet).
 - No sounds of its own (the game's gunshot cues play from the sim's events as anywhere), no shell ejection.
 - Targets have no clothes or armour (MakeHuman bodies have no clothes yet).
+
+## Casings and the bolt (sneed, 2026-11-22)
+
+The bolt action's cycle and bolt-reload poses are gone (sneed: an awful delay each shot); the shot cooldown is the same,
+and a brass casing flies out instead. Every cartridge gun throws casings (`UFightSubsystem::EjectCasing`): rifle and
+pistol brass, red shotgun shells; from the first person gun frame (`GetViewGunFrame`) or the held gun in third person,
+within 25 m of the camera, at most 80, they bounce, settle flat and shrink away after 30 s. Bows, launchers, charge,
+fire, foam and grenade weapons throw none. The smoke fails if shots are fired but no casing flies, or no recorded shot
+sound plays (`Sound` counters, `GetVoicedWithPrefix`).

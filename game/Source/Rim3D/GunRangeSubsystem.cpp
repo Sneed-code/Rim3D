@@ -1509,6 +1509,17 @@ bool UGunRangeSubsystem::GetViewMuzzle(FVector& Out) const
 	return true;
 }
 
+bool UGunRangeSubsystem::GetViewGunFrame(FTransform& OutFrame, FVector& OutMuzzle) const
+{
+	if (!bShown || bHeldView || !GunFrame || !Guns.IsValidIndex(Current))
+	{
+		return false;
+	}
+	OutFrame = GunFrame->GetComponentTransform();
+	OutMuzzle = Guns[Current].Muzzle;
+	return true;
+}
+
 void UGunRangeSubsystem::DrawPanel()
 {
 	const ImGui::FScopedContext ScopedContext;

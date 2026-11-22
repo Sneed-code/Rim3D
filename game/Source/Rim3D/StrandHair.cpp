@@ -46,6 +46,8 @@ namespace
 		TEXT("What grown strand hair collides with: 1 spheres fitted inside the body's skin (grow_hair.py, grooms.json), 0 nothing, ")
 		TEXT("2 the body's own physics asset (stands proud of the skin, so it throws the hair out: for comparison)."));
 
+	// Unreal's hair simulation reads at most 100 shapes from a physics asset (grow_hair.py keeps to 90).
+	constexpr int32 StrandHairMaxShapes = 96;
 	const TCHAR* const StrandHairPhysicsAssetPath = TEXT("/Game/Characters/UEFN_Mannequin/Rigs/PA_UEFN_Mannequin.PA_UEFN_Mannequin");
 
 	/** A skeleton's head and neck_01 in the reference pose, component space. */
@@ -306,9 +308,17 @@ namespace
 		int32 Placed = 0;
 		for (const FStrandHairSphere& Sphere : HeadFit.Collision)
 		{
+			if (Placed >= StrandHairMaxShapes)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("STRANDHAIR collision for %s: more than %d spheres, the rest left out"), *Mesh.GetName(), StrandHairMaxShapes);
+				break;
+			}
 			const FVector Centre = Head.GetLocation() + Sphere.Centre;
+			// head, neck, torso, or a bone by name (the arms' spheres, on upperarm_l, lowerarm_r...: sneed 2026-11-22,
+			// hair through the arms as they move).
 			int32 Bone = Sphere.Part == TEXT("head") ? Ref.FindBoneIndex(TEXT("head"))
-				: Sphere.Part == TEXT("neck") ? Ref.FindBoneIndex(TEXT("neck_01")) : INDEX_NONE;
+				: Sphere.Part == TEXT("neck") ? Ref.FindBoneIndex(TEXT("neck_01"))
+				: Sphere.Part == TEXT("torso") ? INDEX_NONE : Ref.FindBoneIndex(FName(*Sphere.Part));
 			if (Sphere.Part == TEXT("torso"))
 			{
 				double Nearest = TNumericLimits<double>::Max();

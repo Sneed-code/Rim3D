@@ -578,7 +578,7 @@ TEST_CASE("Crawling: a person downed by the torso crawls away from an enemy near
     const float crawled = run("torso", 80.0f, true);
     MESSAGE("crawled " << crawled << " m in 20 s");
     CHECK(crawled > 1.5f);   // away from the raider (it stands to the west)
-    CHECK(crawled < 9.0f);   // and slowly (a tenth of its walk, a cell at a time)
+    CHECK(crawled < 5.0f);   // and slowly (a twentieth of its walk, a cell at a time: sneed 2026-11-22, too fast)
     CHECK(std::abs(run("torso", 80.0f, false)) < 0.01f);
     CHECK(std::abs(run("left leg", 60.0f, true)) < 0.01f);
 }
@@ -999,6 +999,63 @@ TEST_CASE("Dismemberment: damage past 0 piles up over many hits, on the living a
     }
     CHECK(loaded.sim->health().zoneOverkill(piled, head) == doctest::Approx(12.0f));
     CHECK(loaded.sim->stateHash() == sim->stateHash());
+}
+
+TEST_CASE("Dismemberment: an arm at 0 keeps its hitbox, so shots and blows still land on it and pile up (sneed, 2026-11-22)") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim, 20, 20, true);
+    const int arm = zoneTestPart(*sim, pawn, "left arm");
+    CHECK(arm >= 0);
+    const auto armBox = [&](HitboxView& out) {
+        std::vector<HitboxView> boxes;
+        CHECK(sim->combat().hitboxesOf(pawn, boxes));
+        for (const HitboxView& b : boxes) {
+            if (b.part == arm) {
+                out = b;
+                return true;
+            }
+        }
+        return false;
+    };
+    HitboxView before;
+    if (arm < 0 || !armBox(before)) {
+        CHECK(false);
+        return;
+    }
+    // The arm at 0 (alive: an arm alone doesn't kill): the box is still there.
+    CHECK(zoneTestHit(*sim, pawn, "Blunt", 50.0f, "left arm"));
+    CHECK_FALSE(zoneTestHealth(*sim, pawn).dead);
+    CHECK(zoneTestLeft(*sim, pawn, "Arm") == doctest::Approx(0.0f));
+    HitboxView after;
+    const bool kept = armBox(after);
+    CHECK(kept);
+    if (!kept) {
+        return;
+    }
+    // A bullet's line from the side through the middle of the arm meets the arm, not the torso behind it.
+    const Position& pos = sim->things().registry().get<Position>(pawn);
+    const float mx = 0.5f * (after.ax + after.bx);
+    const float my = 0.5f * (after.ay + after.by);
+    const float mz = 0.5f * (after.az + after.bz);
+    float sx = mx - pos.x;
+    float sy = my - pos.y;
+    const float len = std::sqrt(sx * sx + sy * sy);
+    CHECK(len > 0.01f);
+    sx /= len;
+    sy /= len;
+    const TraceHit hit = sim->combat().trace(mx + sx * 2.0f, my + sy * 2.0f, mz, mx - sx * 0.05f, my - sy * 0.05f, mz, 0, kNoEntity,
+                                             CellPos{-1000, -1000, 0});
+    CHECK(hit.kind == ProjectileHitKind::Pawn);
+    CHECK(hit.thing == pawn);
+    CHECK(hit.part == arm);
+    // Shot again and again where it is at 0, it comes off.
+    for (int i = 0; i < 3 && sim->health().severed(pawn) == 0; ++i) {
+        CHECK(zoneTestCorpseHit(*sim, pawn, "Bullet", 5.0f, "left arm"));
+    }
+    CHECK(sim->health().severed(pawn) == kSeveredLeftArm);
+    // Once it is off there is nothing left to hit.
+    HitboxView gone;
+    CHECK_FALSE(armBox(gone));
 }
 
 TEST_CASE("Dismemberment: never the protagonist, never an animal") {

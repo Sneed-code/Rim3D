@@ -26,6 +26,12 @@ public:
 
 	/** Thrown: a speed in cm/s and a spin in degrees a second. `Radius`: how far its middle rests over the ground, cm. */
 	void Throw(const FVector& InVelocity, const FRotator& InSpin, float InRadius);
+	/** Knocked by a bullet, a blow or a blast (sneed, 2026-11-22: severed parts must obey physics): a change of speed in
+	 *  cm/s, applied at `At` (world) so an off-centre hit sets it spinning; a piece at rest wakes and flies again. */
+	void Push(const FVector& DeltaVelocity, const FVector& At);
+	/** Roughly how far the piece reaches from its middle, cm (a bullet's line passing this close knocks it). */
+	float GetReachCm() const { return FMath::Max(Radius * 2.5f, 12.0f); }
+	int32 GetPushes() const { return Pushes; }
 	void AddMesh(UPoseableMeshComponent* Mesh) { Meshes.Add(Mesh); }
 	int32 GetMeshCount() const { return Meshes.Num(); }
 	bool IsAtRest() const { return bAtRest; }
@@ -48,4 +54,5 @@ private:
 	float Radius = 8.0f;
 	bool bAtRest = false;
 	bool bLanded = false;
+	int32 Pushes = 0;
 };
