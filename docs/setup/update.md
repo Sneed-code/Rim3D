@@ -38,7 +38,8 @@ python tools/update.py --no-pull --no-build --offline
 to `tools/art_steps.json` in the same PR, so the next update runs it on sneed's PC by itself. Never tell sneed to run a
 commandlet by hand. Steps that write files in Git (`MotionClips`, `tools/clothes_art.py` setting defs) stay out: their
 output is committed. Needs Blender 5.2 with MPFB for the MakeHuman steps (`BLENDER` overrides the path); a step whose
-need is missing waits for the next update.
+need is missing waits for the next update. `{codex}` in a step is the Codex models folder outside the repo
+(`RIM3D_CODEX` overrides `~\OneDrive\Documents\ChatGPT\Models\Rim3D_Codex`).
 
 ## Test copies (Claude only)
 

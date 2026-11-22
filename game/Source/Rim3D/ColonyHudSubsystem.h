@@ -297,6 +297,8 @@ private:
 	int32 DebugScenePicked = 0;
 	/** F10 in a debug scene has started the title screen; this copy is closing. */
 	bool bLeavingDebugScene = false;
+	/** The menu has the mouse (cursor shown, UI input) while it is open; given back when the game takes over. */
+	bool bMenuMouse = false;
 	FString NewScenario = TEXT("CrashLanded");
 	FString NewNarrator = TEXT("Orrin");
 	// The only difficulty for now, never shown (sneed 2026-11-21: "standard").

@@ -1,5 +1,5 @@
 {
-  "comment": "The one-off art steps tools/update.py runs after a pull and a build (docs/setup/update.md). A step runs again only when one of its inputs changed since it last ran on this PC (the stamps in game/Saved/ArtSteps/stamps.json), when a step it comes 'after' ran in this update, or when something it 'makes' is missing. inputs: files in Git (globs), fingerprinted by their Git blob ids. raw: folders not in Git (downloads, Blender output), fingerprinted by their files' names, sizes and times. A commandlet step's own source files (Rim3DEditor/<Name>Commandlet.cpp/.h and the project headers they include) are inputs too. needs: 'internet' or 'blender'; a step whose need is missing is skipped and tried again next time. Steps that write files in Git (MotionClips, tools/clothes_art.py setting defs) are left out on purpose: their output is committed.",
+  "comment": "The one-off art steps tools/update.py runs after a pull and a build (docs/setup/update.md). A step runs again only when one of its inputs changed since it last ran on this PC (the stamps in game/Saved/ArtSteps/stamps.json), when a step it comes 'after' ran in this update, or when something it 'makes' is missing. inputs: files in Git (globs), fingerprinted by their Git blob ids. raw: folders not in Git (downloads, Blender output), fingerprinted by their files' names, sizes and times. A commandlet step's own source files (Rim3DEditor/<Name>Commandlet.cpp/.h and the project headers they include) are inputs too. needs: 'internet', 'blender' or 'codex' (the Codex models folder); {codex} in a command or raw folder is that folder (RIM3D_CODEX overrides it); a step whose need is missing is skipped and tried again next time. Steps that write files in Git (MotionClips, tools/clothes_art.py setting defs) are left out on purpose: their output is committed.",
   "steps": [
     {
       "name": "sounds",
@@ -71,6 +71,14 @@
       "inputs": ["tools/shield_models.py"],
       "needs": ["blender"],
       "run": [{"blender": ["-b", "--python", "tools/shield_models.py", "--", "game/Content/ThirdParty/Shields"]}]
+    },
+    {
+      "name": "codex-models",
+      "what": "Turn the Codex models into game files in Blender",
+      "inputs": ["tools/codex_prep.py", "assets/codex_art.json"],
+      "raw": ["{codex}"],
+      "needs": ["blender", "codex"],
+      "run": [{"blender": ["-b", "--factory-startup", "-P", "tools/codex_prep.py", "--", "{codex}"]}]
     },
     {
       "name": "placeholder-art",
@@ -218,6 +226,7 @@
       "name": "codex-art",
       "what": "Codex buildings, items and weapons",
       "inputs": ["assets/codex_art.json"],
+      "after": ["codex-models"],
       "raw": ["assets/raw/codex"],
       "commandletSource": "GunArt",
       "run": [{"commandlet": "GunArt", "args": ["-List=assets/codex_art.json", "-nullrhi"]}]

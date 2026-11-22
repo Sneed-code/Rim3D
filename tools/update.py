@@ -32,6 +32,10 @@ STAMPS_FILE = STATE_DIR / "stamps.json"
 SOURCE_DIRS = [ROOT / "game" / "Source" / "Rim3DEditor", ROOT / "game" / "Source" / "Rim3D"]
 DEFAULT_ENGINE = r"C:\Program Files\Epic Games\UE_5.8"
 DEFAULT_BLENDER = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
+# Folders outside the repo that steps name as {key} in their commands and raw folders.
+PLACES = {
+    "codex": os.environ.get("RIM3D_CODEX", os.path.expanduser(os.path.join("~", "OneDrive", "Documents", "ChatGPT", "Models", "Rim3D_Codex"))),
+}
 BELOW_NORMAL = 0x00004000  # Windows BELOW_NORMAL_PRIORITY_CLASS: sneed's games and tools keep the CPU
 
 
@@ -109,11 +113,18 @@ def commandlet_sources(name, source_dirs=SOURCE_DIRS, root=ROOT):
     return sorted(p.relative_to(root).as_posix() for p in found)
 
 
+def expand(text, places=None):
+    """{codex} and the like -> the folder (PLACES)."""
+    for key, value in (PLACES if places is None else places).items():
+        text = text.replace("{" + key + "}", value)
+    return text
+
+
 def raw_listing(folders, root=ROOT):
     """Names, sizes and modified times of every file under the folders (downloads and Blender output, not in Git)."""
     rows = []
     for folder in folders:
-        base = root / folder
+        base = root / expand(folder)
         if not base.exists():
             rows.append(f"{folder}: missing")
             continue
@@ -125,7 +136,11 @@ def raw_listing(folders, root=ROOT):
                     st = p.stat()
                 except OSError:
                     continue
-                rows.append(f"{p.relative_to(root).as_posix()} {st.st_size} {int(st.st_mtime)}")
+                try:
+                    name = p.relative_to(root).as_posix()
+                except ValueError:  # a folder outside the repo ({codex})
+                    name = p.relative_to(base).as_posix()
+                rows.append(f"{folder}/{name} {st.st_size} {int(st.st_mtime)}")
     return rows
 
 
@@ -212,9 +227,9 @@ def run_logged(cmd, log_path, cwd=ROOT):
 
 def command_line(command, engine, blender):
     if "python" in command:
-        return [sys.executable] + command["python"]
+        return [sys.executable] + [expand(a) for a in command["python"]]
     if "blender" in command:
-        return [blender] + command["blender"]
+        return [blender] + [expand(a) for a in command["blender"]]
     editor_cmd = Path(engine) / "Engine" / "Binaries" / "Win64" / "UnrealEditor-Cmd.exe"
     return [editor_cmd, PROJECT, f"-run={command['commandlet']}", "-unattended", "-nosplash"] + command.get("args", [])
 
@@ -266,7 +281,7 @@ def update(args):
     stamps = load_stamps()
     blender = os.environ.get("BLENDER", DEFAULT_BLENDER)
     engine = os.environ.get("UE_ROOT", args.engine)
-    have = {"internet": not args.offline, "blender": Path(blender).exists()}
+    have = {"internet": not args.offline, "blender": Path(blender).exists(), "codex": Path(PLACES["codex"]).exists()}
     prints = {s["name"]: fingerprint(s) for s in steps}
     unknown = [f for f in args.force if f not in prints]
     if unknown:
