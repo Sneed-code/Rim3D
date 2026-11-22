@@ -1,0 +1,11 @@
+﻿Running smoke test 'sound' at 1920x1080...
+
+Smoke test 'sound': PASS  (31 s, NVIDIA GeForce RTX 5080, 888x500)
+sound_cues                  142.8 fps  game   3.2 ms  render   4.3 ms  gpu   2.7 ms  screenshot ok
+sound_budget                219.0 fps  game   3.2 ms  render   4.3 ms  gpu   2.7 ms  screenshot ok
+sound_voices                209.2 fps  game   3.3 ms  render   4.4 ms  gpu   2.7 ms  screenshot ok
+sound_steps                 214.4 fps  game   3.6 ms  render   4.4 ms  gpu   2.8 ms  screenshot ok
+sound_weather_music         174.4 fps  game   4.3 ms  render   5.4 ms  gpu   2.8 ms  screenshot ok
+sound_mixer                 158.2 fps  game   4.3 ms  render   5.5 ms  gpu   2.8 ms  screenshot ok
+note: sound_weather_music: weather loop Weather_Rain, music tense/1.wav
+Screenshots: C:\Dev\Rim3D-gunhits\game\Saved\Smoke\sound

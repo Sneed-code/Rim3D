@@ -1,0 +1,28 @@
+﻿Running smoke test 'buildings' at 1920x1080...
+
+Smoke test 'buildings': PASS  (164 s, NVIDIA GeForce RTX 5080, 888x500)
+buildings_items             182.0 fps  game   4.1 ms  render   4.3 ms  gpu   2.4 ms  screenshot ok
+buildings_stacks            220.5 fps  game   4.1 ms  render   4.4 ms  gpu   2.5 ms  screenshot ok
+buildings_blueprints        215.6 fps  game   4.2 ms  render   4.4 ms  gpu   2.5 ms  screenshot ok
+buildings_frames            216.5 fps  game   4.2 ms  render   4.4 ms  gpu   2.6 ms  screenshot ok
+buildings_built             221.4 fps  game   4.1 ms  render   4.5 ms  gpu   2.6 ms  screenshot ok
+buildings_inside            211.2 fps  game   4.2 ms  render   4.5 ms  gpu   2.6 ms  screenshot ok
+buildings_roofed            217.4 fps  game   4.1 ms  render   4.5 ms  gpu   2.5 ms  screenshot ok
+buildings_door              212.8 fps  game   4.1 ms  render   4.6 ms  gpu   2.9 ms  screenshot ok
+buildings_wreck             206.6 fps  game   4.3 ms  render   4.6 ms  gpu   2.6 ms  screenshot ok
+buildings_moving            203.7 fps  game   4.5 ms  render   4.6 ms  gpu   2.7 ms  screenshot ok
+buildings_moving_later      200.6 fps  game   4.5 ms  render   4.6 ms  gpu   2.7 ms  screenshot ok
+buildings_new_sim           244.5 fps  game   3.4 ms  render   3.8 ms  gpu   2.5 ms  screenshot ok
+note: buildings_items: 95 defs name a mesh, 95 found
+note: buildings_items: 4 defs with moving parts, 13 part meshes found
+note: buildings_items: 38 items drawn as 190 instances in 33 components, 21 meshes, first build 11 chunk rebuilds, 
+slowest 1.11 ms
+note: buildings_stacks: a stack of 1 and a stack of 75 added 7 instances
+note: buildings_blueprints: 21 blueprints drawn as ghosts, 35 meshes made
+note: buildings_frames: 1 frames, 16 built, 20 blueprints at once, slowest chunk rebuild 17.24 ms
+note: buildings_built: 21 buildings standing as 193 instances in 39 components, 35 meshes, slowest chunk rebuild 17.24 
+ms
+note: buildings_door: drawn open up to 1.00 (leaf moved up to 85 cm), shut again: 1
+note: buildings_wreck: 1 wrecks drawn, 18 pieces settled, 18 lying now; 2 rubble layers on the west wall
+note: buildings_moving: 13 moving parts drawn, 11 moved by a clip this frame
+Screenshots: C:\Dev\Rim3D-gunhits\game\Saved\Smoke\buildings
