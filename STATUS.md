@@ -8,6 +8,14 @@ morning (`TitleBackdrop` scenario, no people), with a slow camera circling an op
 the big RIM3D name, a menu of large plain words that fade in, no boxes. The load page matches the new-game screens.
 Smoke test `newgame` checks the backdrop, its camera and its light. **Next:** sneed's verdict on the look.
 
+Groin and thigh blood band (sneed, 2026-11-22, asked many times; Unreal editor, `docs/design/blood.md`): the ring of
+blood round the top of both thighs, like a stocking top, with thin lines up the belly and an arm, came from the woman's
+anatomy body: about 47 tiny triangles that stitch the vulva to the body stretch hundreds of texels across the skin's UV
+map, right over both thighs, and the skin blood's position map took those texels as "groin", so any groin or hip wound
+painted them. `BloodArt` now leaves out triangles stretched over 8x the median (the man's body has none) and grows island
+borders from one island only. Smoke `gore -GoreWoman` adds thigh close-ups front and back. Needs the `blood-art` step
+(update-and-play reruns it, since the commandlet changed). **Next:** PC before and after pictures, woman and man.
+
 Google Neon asset test and AI Studio sounds (sneed, 2026-11-22; tools and docs, `docs/design/neon-assets.md`):
 sneed's Google AI Pro plan gives **Gemini 4 Neon** in the Antigravity CLI, now run headless on the PC like Codex
 (`tools/neon_assets/run_neon_assets.sh`, Neon High, no windows). It made **seven models first try**: the ship sensor
