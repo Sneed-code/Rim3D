@@ -71,13 +71,23 @@ public:
 
 	const FWorldScreenStats& GetStats() const { return Stats; }
 
+	/** New-game mode (docs/design/new-game.md): only tiles of these biomes (Biomes defNames) can be settled, the others
+	 *  are dimmed, the button reads "Land here" and Back returns to the menu. An empty list ends the mode. */
+	void SetNewGame(const TArray<FString>& Biomes);
+	bool IsNewGame() const { return bNewGame; }
+	/** True once after a landing in new-game mode (StartHere started the colony). */
+	bool ConsumeLanding();
+	/** True once after Back (or Esc) in new-game mode. */
+	bool ConsumeCancel();
+	/** Picks a random tile a colony may start on (new-game biomes only, in that mode). False if there is none. */
+	bool PickRandomSite();
+
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
 
 private:
 	USimSubsystem* GetBridge() const;
 	void DrawScreen(USimSubsystem& Bridge);
-	void DrawOpenButton(float Scale, float Margin);
 
 	bool bOpen = false;
 	bool bPreview = true;
@@ -87,4 +97,10 @@ private:
 	int32 Selected = -1;
 	int32 SimGeneration = -1;
 	FWorldScreenStats Stats;
+	bool bNewGame = false;
+	bool bLanded = false;
+	bool bCancelled = false;
+	TArray<FString> NewGameBiomes;
+	/** In new-game mode, whether a tile's biome may be settled (always true outside it). */
+	bool NewGameAllows(const colony::World& World, int32 Tile) const;
 };

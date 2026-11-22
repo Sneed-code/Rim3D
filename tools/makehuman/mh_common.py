@@ -1831,11 +1831,66 @@ def make_fur_textures(out_dir, size=512, log=print):
     return paths
 
 
-def add_cat_ears(rig, body, height=0.066, width=0.062, depth=0.03, tilt=0.35, log=print):
-    """Cat ears for any MakeHuman head: up out of the top of the head either side of the crown, tilted out a little and
-    turned a little outwards, a crescent in section (cupped at the front), weighted wholly to the head. The outside is
-    the fur material (CatFur), the cup's inside CatEarInner. Returns the ear objects."""
+def _cat_ear_mesh(base, axis, fwd, lat, height, width, depth, thick, rows=14, cols=13):
+    """The points and faces of one realistic cat ear (a pinna): a thin shell, not a solid. Seen from the front it is a
+    broad-based triangle with gently bowed sides and a rounded tip; across, the front is a deep cup (pushed back in the
+    middle, the edges rolled forward a little) and the back follows it, a few millimetres behind and fuller in the
+    middle, as the cartilage is. The base runs 1.5 cm down into the skull so no seam shows under the hair.
+    `base` is the middle of the ear's root on the skull; `axis` up the ear, `fwd` the way its opening faces, `lat` across.
+    Returns (verts, faces, front_faces, uvs): front_faces are the inside of the cup (the pink skin)."""
     import math
+    sink = 0.015
+    front, back = [], []
+    for i in range(rows + 1):
+        v = i / rows
+        # Outline: broad base, slightly bowed sides, rounded tip (the last rows close in on a curve, not a point).
+        half = 0.5 * width * (1.0 - v ** 1.7) ** 0.75 * (1.0 + 0.12 * math.sin(math.pi * v))
+        up = -sink + (height + sink) * (1.0 - (1.0 - v) ** 1.08)
+        cup_v = (1.0 - v) ** 0.6 * min(1.0, v * 6.0 + 0.35)       # deepest above the root, shallow at the tip
+        t = thick * (1.0 - 0.6 * v) + 0.0006                      # thinner towards the tip
+        frow, brow = [], []
+        for j in range(cols + 1):
+            s = -1.0 + 2.0 * j / cols
+            cup = depth * (1.0 - s * s) * cup_v                     # the middle pushed back: the cup opens forward
+            roll = 0.004 * s ** 4 * (1.0 - v)                       # the rim curls forward a little
+            p = base + axis * up + lat * (s * half) - fwd * cup + fwd * roll
+            frow.append(p)
+            bulge = 0.0025 * (1.0 - s * s) * (1.0 - v)
+            brow.append(p - fwd * (t + bulge) * (1.0 if abs(s) < 0.999 else 0.25))
+        front.append(frow)
+        back.append(brow)
+    n = (rows + 1) * (cols + 1)
+    verts = [tuple(p) for row in front for p in row] + [tuple(p) for row in back for p in row]
+    idx = lambda i, j: i * (cols + 1) + j
+    faces, front_faces, uvs = [], [], []
+    for i in range(rows):
+        for j in range(cols):
+            a, b, c, d = idx(i, j), idx(i, j + 1), idx(i + 1, j + 1), idx(i + 1, j)
+            faces.append((a, b, c, d))                    # front, facing forward
+            front_faces.append(len(faces) - 1)
+            faces.append((n + a, n + d, n + c, n + b))    # back, facing back
+    for i in range(rows):                                  # the two edges, closed
+        faces.append((idx(i, 0), idx(i + 1, 0), n + idx(i + 1, 0), n + idx(i, 0)))
+        faces.append((idx(i, cols), n + idx(i, cols), n + idx(i + 1, cols), idx(i + 1, cols)))
+    for j in range(cols):                                  # the tip row, closed
+        faces.append((idx(rows, j), idx(rows, j + 1), n + idx(rows, j + 1), n + idx(rows, j)))
+    for j in range(cols):                                  # the root, closed (inside the skull)
+        faces.append((idx(0, j), n + idx(0, j), n + idx(0, j + 1), idx(0, j + 1)))
+    for k in range(2 * n):
+        i, j = (k % n) // (cols + 1), (k % n) % (cols + 1)
+        uvs.append((j / cols * 0.5 + (0.5 if k >= n else 0.0), i / rows))
+    return verts, faces, front_faces, uvs
+
+
+def add_cat_ears(rig, body, height=0.078, width=0.068, depth=0.022, tilt=0.2, thick=0.003, tufts=36, skirt=96, log=print):
+    """Realistic cat ears for any MakeHuman head (sneed 2026-11-19: the old ones looked like cones): up out of the top of
+    the head either side of the crown, tilted out a little and turned a little outwards, each a thin cupped pinna
+    (`_cat_ear_mesh`) with a few pale fur tufts growing out of the bottom of the cup, weighted wholly to the head. The
+    outside is the fur material (CatFur), the inside of the cup CatEarInner (skin, pinker). A skirt of short CatFur strands
+    round the base lies down over the scalp into the hair, so the ear grows out of it instead of sitting on it (PC look
+    2026-11-20: the base had a hard edge). Returns the ear objects."""
+    import math
+    import bmesh
     from mathutils import Vector
     head = rig.data.bones.get("head")
     if head is None:
@@ -1854,47 +1909,96 @@ def add_cat_ears(rig, body, height=0.066, width=0.062, depth=0.03, tilt=0.35, lo
     upper = [p for p in skull if p.z > top - 0.05]
     objs = []
     for side in (1.0, -1.0):
-        want = Vector((hx + side * 0.05, top_p.y + 0.008, top - 0.018))
+        want = Vector((hx + side * 0.052, top_p.y + 0.006, top - 0.02))
         base = min(upper, key=lambda p: (p - want).length)
         normal = (base - centre).normalized()
-        axis = (normal * 0.4 + Vector((0, 0, 1)) * 0.6 + Vector((side, 0, 0)) * tilt).normalized()
-        fwd = Vector((side * math.sin(math.radians(20)), -math.cos(math.radians(20)), 0.0))   # forward, turned out
+        axis = (normal * 0.35 + Vector((0, 0, 1)) * 0.65 + Vector((side, 0, 0)) * tilt).normalized()
+        fwd = Vector((side * math.sin(math.radians(25)), -math.cos(math.radians(25)), 0.0))   # forward, turned out
         fwd = (fwd - axis * fwd.dot(axis)).normalized()
         lat = axis.cross(fwd).normalized()
-        rings_n, seg = 10, 16
-        rings = []
-        for i in range(rings_n):
-            t = i / rings_n
-            c = base - axis * 0.012 + axis * (height + 0.012) * t
-            a = 0.5 * width * (1.0 - t ** 1.15) * (1.0 - t) ** 0.35 + 0.001   # a little rounded out, a soft tip
-            b = 0.5 * depth * (1.0 - t) + 0.0008
-            ring = []
-            for s in range(seg):
-                th = 2.0 * math.pi * s / seg
-                cos = math.cos(th)
-                o_f = b * cos - 1.5 * b * max(cos, 0.0) ** 2   # the front cupped in
-                ring.append(c + lat * a * math.sin(th) + fwd * o_f)
-            rings.append(ring)
-        apex = base - axis * 0.012 + axis * (height + 0.012) - fwd * 0.004
-        obj = _loft("CatEar_" + ("l" if side > 0 else "r"), rings, apex)
-        import bmesh
+        verts, faces, front_faces, uvs = _cat_ear_mesh(base, axis, fwd, lat, height, width, depth, thick)
+        name = "CatEar_" + ("l" if side > 0 else "r")
+        mesh = bpy.data.meshes.new(name)
+        mesh.from_pydata(verts, [], faces)
+        mesh.update()
+        uv = mesh.uv_layers.new(name="UVMap")
+        for poly in mesh.polygons:
+            poly.use_smooth = True
+            for li in poly.loop_indices:
+                uv.data[li].uv = uvs[mesh.loops[li].vertex_index]
+        mesh.materials.append(fur)
+        mesh.materials.append(inner)
+        front_set = set(front_faces)
+        rows, cols = 14, 13
+        for k, poly in enumerate(mesh.polygons):
+            if k in front_set:
+                i, j = (k // 2) // cols, (k // 2) % cols
+                # The pink skin inside the cup; a furred rim round it and up the tip, as on a real cat.
+                if 1 <= i < rows - 3 and 2 <= j < cols - 2:
+                    poly.material_index = 1
+        obj = bpy.data.objects.new(name, mesh)
+        bpy.context.scene.collection.objects.link(obj)
         bm = bmesh.new()
         bm.from_mesh(obj.data)
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
         bm.to_mesh(obj.data)
         bm.free()
-        obj.data.materials.append(fur)
-        obj.data.materials.append(inner)
-        for poly in obj.data.polygons:
-            vs = list(poly.vertices)
-            if any(v >= rings_n * seg for v in vs):
-                continue
-            ring_i = min(v // seg for v in vs)
-            if 1 <= ring_i < rings_n - 2 and all(math.cos(2.0 * math.pi * (v % seg) / seg) > 0.35 for v in vs):
-                poly.material_index = 1
-        _skin_to(obj, rig, {i: {"head": 1.0} for i in range(len(obj.data.vertices))})
-        objs.append(obj)
-    log("cat ears", height, "m on the skull at z", round(top, 3))
+        parts = [obj]
+        # Ear furnishings: pale tufts out of the bottom of the cup, curving up and fanning out past the rim (the inner
+        # material), long and thick enough to read against the dark fur at play distance.
+        for k in range(tufts):
+            s = -0.6 + 1.2 * (k + 0.5) / tufts
+            v0 = 0.1 + 0.16 * ((k * 7) % 3) / 2.0
+            half = 0.5 * width * (1.0 - v0 ** 1.7) ** 0.75
+            root = base + axis * (height * v0) + lat * (s * half) - fwd * (depth * (1.0 - s * s) * 0.8 - 0.002)
+            length = height * (0.36 + 0.16 * ((k * 5) % 4) / 3.0)
+            out = (axis * 0.85 + fwd * 0.3 + lat * (s * 0.35)).normalized()
+            # Soft and curling: they start up the cup, then bend out of it and to the side, like a wisp of hair.
+            bend = (fwd * 0.7 + lat * (s * 0.9 + 0.25 * (((k * 11) % 5) / 4.0 - 0.5))).normalized()
+            n = 7
+            centres = [root + out * length * t + bend * length * 0.45 * t * t for t in [q / (n - 1) for q in range(n)]]
+            radii = [max(0.0009 * (1.0 - q / (n - 1)) ** 0.8, 0.00008) for q in range(n)]
+            frames = []
+            for q in range(n):
+                dd = (centres[min(q + 1, n - 1)] - centres[max(q - 1, 0)]).normalized()
+                a = dd.cross(fwd).normalized()
+                frames.append((a, dd.cross(a).normalized()))
+            tuft = _tube("%s_tuft%d" % (name, k), centres, radii, frames, segments=5)
+            tuft.data.materials.append(inner)  # pale, as a cat's ear furnishings are
+            tuft.data.materials.append(fur)
+            parts.append(tuft)
+        # The fur skirt: two rings of short strands round the foot of the ear, rooted a little inside the scalp and lying
+        # out and down over it into the hair, longer behind than in front, the way a cat's ear fur runs into its coat.
+        for k in range(skirt):
+            ring = k % 2
+            a = 2.0 * math.pi * (k // 2 + 0.5 * ring) / max(skirt // 2, 1)
+            radial = (lat * math.cos(a) * 0.5 * width * (1.05 + 0.15 * ring) + fwd * math.sin(a) * (depth * 0.9 + 0.006))
+            root = base + radial - normal * 0.003 + axis * (0.004 + 0.004 * ring)
+            flat = (radial - normal * radial.dot(normal)).normalized() if radial.length > 1e-6 else lat
+            behind = 0.5 - 0.5 * math.sin(a)  # 1 at the back of the ear (fwd points forward)
+            length = 0.006 + 0.006 * behind + 0.002 * ((k * 3) % 4) / 3.0
+            # Short, back over the scalp and bending down onto it: fur lying flat, not a frill (PC look v2: it stuck out sideways).
+            down_back = (fwd * -1.0 - normal * fwd.dot(normal) * -1.0)
+            down_back = down_back.normalized() if down_back.length > 1e-6 else flat
+            out = (flat * 0.3 + down_back * 0.7 + axis * (0.08 - 0.06 * ring)).normalized()
+            out = (out - normal * max(out.dot(normal), 0.0) * 0.8).normalized()
+            n = 5
+            centres = [root + out * length * t - normal * length * 0.8 * t * t for t in [q / (n - 1) for q in range(n)]]
+            radii = [max(0.0008 * (1.0 - q / (n - 1)) ** 0.6, 0.0001) for q in range(n)]
+            frames = []
+            for q in range(n):
+                dd = (centres[min(q + 1, n - 1)] - centres[max(q - 1, 0)]).normalized()
+                side_axis = dd.cross(normal)
+                side_axis = side_axis.normalized() if side_axis.length > 1e-6 else lat
+                frames.append((side_axis, dd.cross(side_axis).normalized()))
+            strand = _tube("%s_skirt%d" % (name, k), centres, radii, frames, segments=4)
+            strand.data.materials.append(fur)
+            parts.append(strand)
+        ear = _join(parts) if len(parts) > 1 else obj
+        ear.name = name
+        _skin_to(ear, rig, {i: {"head": 1.0} for i in range(len(ear.data.vertices))})
+        objs.append(ear)
+    log("cat ears", height, "m, thin cupped pinnae with", tufts, "tufts and a", skirt, "strand fur skirt, on the skull at z", round(top, 3))
     return objs
 
 
@@ -2113,3 +2217,224 @@ def add_hair_bones(rig, hairs, azimuths=(0.0, 55.0, -55.0, 115.0, -115.0), bones
             made += 1
         log("hair bones on", h.name, ":", made, "points")
     log("hair bones:", len(chains), "chains of", bones)
+
+
+def _mask_groups(obj):
+    """{vertex group name: {vertex index: weight}} for every group a MASK modifier on obj reads (MakeHuman's "delete"
+    groups, which cut away the skin under clothes)."""
+    if obj is None:
+        return {}
+    names = {m.vertex_group for m in obj.modifiers if m.type == "MASK" and m.vertex_group}
+    out = {}
+    for name in names:
+        group = obj.vertex_groups.get(name)
+        if group is None:
+            continue
+        members = {}
+        for v in obj.data.vertices:
+            for g in v.groups:
+                if g.group == group.index:
+                    members[v.index] = g.weight
+        out[name] = members
+    return out
+
+
+def _restore_mask_groups(obj, before, log=print):
+    """Puts obj's mask groups (and MASK modifiers) back as they were before garments were fitted, so a garment never
+    cuts the body: the game puts it on and takes it off."""
+    if obj is None:
+        return
+    for m in list(obj.modifiers):
+        if m.type == "MASK" and m.vertex_group not in before:
+            obj.modifiers.remove(m)
+    for name, members in _mask_groups(obj).items():
+        old = before.get(name, {})
+        group = obj.vertex_groups.get(name)
+        extra = [i for i in members if i not in old]
+        if group is not None and extra:
+            group.remove(extra)
+            log("garments: kept", len(extra), "body vertices out of", name, "on", obj.name)
+
+
+def fit_garments(basemesh, proxy, garments, place=lambda p: p, log=print):
+    """Fits each garment ({"name", "mhclo"}) to the human as MPFB clothes and names its object G_<name> (the same in every
+    creator variant, so its morphs line up). The body keeps every vertex. Returns the garment objects."""
+    if not garments:
+        return []
+    from bl_ext.user_default.mpfb.services.humanservice import HumanService
+    before = {o.name: _mask_groups(o) for o in (basemesh, proxy) if o is not None}
+    out = []
+    for g in garments:
+        path = place(g["mhclo"])
+        if os.path.isdir(path):  # an asset folder: the .mhclo in it
+            found = sorted(f for f in os.listdir(path) if f.lower().endswith(".mhclo"))
+            path = os.path.join(path, found[0]) if found else path
+        if not os.path.isfile(path):
+            log("garments: missing", g["name"], path)
+            continue
+        obj = HumanService.add_mhclo_asset(path, basemesh, asset_type="Clothes", subdiv_levels=0, material_type="GAMEENGINE")
+        obj.name = "G_" + g["name"]
+        obj["rim3d_garment"] = g["name"]
+        out.append(obj)
+        log("garment", g["name"], len(obj.data.vertices), "vertices")
+    for o in (basemesh, proxy):
+        if o is not None:
+            _restore_mask_groups(o, before.get(o.name, {}), log=log)
+    return out
+
+
+def export_garments(rig, garments, out_dir, log=print):
+    """Each garment with the skeleton as <out_dir>/<name>/<name>.fbx and its materials.json beside it (as the body's;
+    the MakeHumanArt commandlet imports them onto the body's skeleton). Call after the body's export: the objects are
+    already in centimetres, morphs and all."""
+    for obj in garments:
+        name = obj.get("rim3d_garment") or obj.name
+        folder = os.path.join(out_dir, name)
+        os.makedirs(folder, exist_ok=True)
+        manifest = write_materials([obj], folder)
+        for entry in manifest.values():
+            entry["garment"] = True
+        with open(os.path.join(folder, "materials.json"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=1)
+        bpy.ops.object.select_all(action="DESELECT")
+        rig.select_set(True)
+        obj.hide_set(False)
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = rig
+        path = os.path.join(folder, name + ".fbx")
+        bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={"ARMATURE", "MESH"},
+                                 apply_scale_options="FBX_SCALE_NONE", add_leaf_bones=False, bake_anim=False,
+                                 mesh_smooth_type="FACE", use_armature_deform_only=True, path_mode="COPY", embed_textures=False,
+                                 axis_forward="-Y", axis_up="Z")
+        keys = len(obj.data.shape_keys.key_blocks) - 1 if obj.data.shape_keys else 0
+        log("garment exported", name, len(obj.data.vertices), "vertices", keys, "morphs", path)
+
+
+def _erode_cover(verts, covered, margin=0.04):
+    """A covered vertex stays covered only if no uncovered one is within `margin` metres: the skin near a garment's edge
+    stays drawn, so a hem that rides up when the body moves, or the gap between a top and trousers, never shows a hole
+    through the body (bare skin at a hem is fine; a see-through gap is not)."""
+    from mathutils.kdtree import KDTree
+    open_ = [i for i in range(len(verts)) if not covered[i]]
+    if not open_:
+        return covered
+    tree = KDTree(len(open_))
+    for n, i in enumerate(open_):
+        tree.insert(verts[i], n)
+    tree.balance()
+    keep = covered.copy()
+    for i in range(len(verts)):
+        if covered[i] and tree.find(verts[i])[2] < margin:
+            keep[i] = False
+    return keep
+
+
+def _cover_raster(bits, uv, size, faces, mask):
+    """Sets `mask` in `bits` (size x size, on the body's UVs) under each face (vertex ids, loop ids)."""
+    import numpy as np
+    for _, loops in faces:
+        a, b, c = (uv[k] * size for k in loops)
+        lo = np.floor(np.minimum(np.minimum(a, b), c)).astype(int)
+        hi = np.ceil(np.maximum(np.maximum(a, b), c)).astype(int)
+        lo = np.clip(lo, 0, size - 1)
+        hi = np.clip(hi, 0, size)
+        if hi[0] <= lo[0] or hi[1] <= lo[1]:
+            continue
+        xs, ys = np.meshgrid(np.arange(lo[0], hi[0]) + 0.5, np.arange(lo[1], hi[1]) + 0.5)
+        d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+        if abs(d) < 1e-12:
+            continue
+        w0 = ((b[1] - c[1]) * (xs - c[0]) + (c[0] - b[0]) * (ys - c[1])) / d
+        w1 = ((c[1] - a[1]) * (xs - c[0]) + (a[0] - c[0]) * (ys - c[1])) / d
+        inside = (w0 >= -1e-6) & (w1 >= -1e-6) & (w0 + w1 <= 1 + 1e-6)
+        rows = ys[inside].astype(int)
+        cols = xs[inside].astype(int)
+        bits[rows, cols] |= mask
+
+
+def bake_garment_cover(body, garments, out_png, size=1024, reach=0.03, rig=None, log=print):
+    """Where each garment covers the body, as bits in a texture on the body's UVs (docs/design/clothes-draw.md "Skin under
+    clothes"): a body face is covered when a ray out of each of its corners along the skin's normal meets the garment
+    within `reach` metres (or the garment lies just under the skin). Garment i that covers anything gets bit i (up to 32,
+    in RGBA, 8 bits a channel); the game hides the skin where a worn garment's bit is set, so nothing pokes through.
+    Writes the PNG and returns {garment name: bit}."""
+    import numpy as np
+    from mathutils.bvhtree import BVHTree
+    deps = bpy.context.evaluated_depsgraph_get()
+    to_world = body.matrix_world
+    normal_world = to_world.to_3x3().inverted().transposed()
+    verts = [to_world @ v.co for v in body.data.vertices]
+    normals = [(normal_world @ v.normal).normalized() for v in body.data.vertices]
+    body.data.calc_loop_triangles()
+    uv_layer = body.data.uv_layers.active
+    if uv_layer is None:
+        log("garment cover: the body has no UVs")
+        return {}
+    uv = np.empty(len(body.data.loops) * 2, dtype=np.float64)
+    uv_layer.data.foreach_get("uv", uv)
+    uv = uv.reshape(-1, 2)
+    tris = [(t.vertices[:], t.loops[:]) for t in body.data.loop_triangles]
+    bits = np.zeros((size, size), dtype=np.uint32)
+    out = {}
+    zs = [p.z for p in verts]
+    head_line = min(zs) + 0.80 * (max(zs) - min(zs))  # about the chin of a standing body
+    for g in garments:
+        if len(out) >= 31:
+            log("garment cover: more than 31 covering garments;", g.name, "left out")
+            break
+        # Headwear never hides skin: a brim or visor is far from the face, and the scalp is under the hair anyway.
+        lowest = min((g.matrix_world @ v.co).z for v in g.data.vertices) if g.data.vertices else 0.0
+        if lowest > head_line:
+            log("garment cover:", g.name, "is headwear: no cover")
+            continue
+        tree = BVHTree.FromObject(g, deps)  # in the garment's own space
+        inv = g.matrix_world.inverted()
+        inv3 = inv.to_3x3()
+        covered = np.zeros(len(verts), dtype=bool)
+        for i, (p, n) in enumerate(zip(verts, normals)):
+            pl = inv @ p
+            nl = inv3 @ n
+            k = nl.length  # metres to the garment's units
+            nl.normalize()
+            hit = tree.ray_cast(pl + nl * (0.004 * k), nl, reach * k)
+            if hit[0] is None:
+                hit = tree.ray_cast(pl + nl * (0.01 * k), -nl, 0.012 * k)  # the garment sunk just under the skin
+            covered[i] = hit[0] is not None
+        covered = _erode_cover(verts, covered)
+        faces = [(v, l) for v, l in tris if covered[v[0]] and covered[v[1]] and covered[v[2]]]
+        if len(faces) < 40:
+            continue  # a hat, gloves or a strap: nothing worth hiding
+        bit = len(out)
+        _cover_raster(bits, uv, size, faces, np.uint32(1 << bit))
+        out[g.get("rim3d_garment") or g.name] = bit
+        log("garment cover:", g.name, "bit", bit, len(faces), "body faces")
+    # Bit 31: the crotch (genitals, pubic area, inner thighs). They stand out past trousers fitted to the basemesh, so the
+    # game hides them whenever trousers are drawn (MakeHumanCrotchCoverBit), whatever the rays found.
+    if rig is not None and "pelvis" in rig.data.bones:
+        local = [v.co for v in body.data.vertices]
+        cx, crotch = _crotch(rig, local)
+        if crotch is not None:
+            gi = body.vertex_groups["genital"].index if "genital" in body.vertex_groups else -1
+            near = np.zeros(len(local), dtype=bool)
+            for v in body.data.vertices:
+                p = v.co
+                in_box = abs(p.x - cx) < 0.075 and crotch - 0.10 < p.z < crotch + 0.09
+                in_group = gi >= 0 and any(e.group == gi and e.weight > 0.02 for e in v.groups)
+                near[v.index] = in_box or in_group
+            faces = [(v, l) for v, l in tris if near[v[0]] or near[v[1]] or near[v[2]]]
+            _cover_raster(bits, uv, size, faces, np.uint32(1 << 31))
+            log("garment cover: crotch bit 31,", len(faces), "body faces")
+    # RGBA8: bits 0-7 red, 8-15 green, 16-23 blue, 24-31 alpha. Blender images start at the bottom row, like UV v.
+    rgba = np.stack([(bits >> s) & 0xFF for s in (0, 8, 16, 24)], axis=-1).astype(np.float32) / 255.0
+    image = bpy.data.images.new("GarmentCover", size, size, alpha=True, float_buffer=False)
+    image.colorspace_settings.name = "Non-Color"
+    image.alpha_mode = "STRAIGHT"
+    image.pixels.foreach_set(rgba.ravel())
+    os.makedirs(os.path.dirname(out_png), exist_ok=True)
+    image.filepath_raw = out_png
+    image.file_format = "PNG"
+    image.save()
+    with open(os.path.splitext(out_png)[0] + ".json", "w", encoding="utf-8") as f:
+        json.dump(out, f, indent=1)
+    log("garment cover:", len(out), "garments in", out_png)
+    return out

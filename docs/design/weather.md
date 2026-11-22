@@ -37,7 +37,9 @@ With no biome the temperature is a constant 15.
 
 ## Weather
 
-Weather kinds are `Weathers` defs. The sim starts clear. When a weather's length is up (its
+Weather kinds are `Weathers` defs. The sim starts clear, for that weather's usual length from the hour the game
+starts (`Weather::startAt`: a scenario's morning landing or a later map's start moves it, so the first step can't end it
+at once). When a weather's length is up (its
 `durationHours`, a random time in the range) the next is chosen: every kind the biome gives a commonality
 (`weather.<kind>`) and whose `temperatureRange` holds the outdoor temperature at that moment, by
 weighted random draw from the weather's own seeded stream. So snow can't start above -0.5 degrees and rain
@@ -46,6 +48,8 @@ not below 0; a weather that has begun carries on when the temperature leaves its
 
 A change blends in over 1.6 hours (`transitionHours`): `effects()` is the old weather's numbers eased
 into the new one's, and the snapshot gives `transition` 0 to 1 for Unreal to blend the sky. The dev
+HUD names `Weather::shown()`: the old weather until the new one is half way in (when lightning switches too), so the
+words match the rain and cloud on screen. The dev
 command `SetWeatherCommand{weather, hours}` forces a kind (the weather's usual length if hours is 0).
 
 ### What it does

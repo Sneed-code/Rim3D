@@ -8,6 +8,8 @@
 
 #include <imgui.h>
 
+#include "ColonyHudStyle.h"
+
 #include "OverseerSubsystem.h"
 #include "ProtagonistSubsystem.h"
 #include "SimPicking.h"
@@ -252,7 +254,7 @@ void UInventoryPanelSubsystem::DrawWindow(USimSubsystem& Bridge, colony::Entity 
 		return;
 	}
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	ColonyHud::ApplyFrameStyle(Scale);
 
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const colony::Snapshot& Snap = Bridge.GetCurrentSnapshot();
@@ -263,10 +265,14 @@ void UInventoryPanelSubsystem::DrawWindow(USimSubsystem& Bridge, colony::Entity 
 	}
 
 	const float Width = 720.0f * Scale;
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.5f),
-		ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(Width, 0.0f), ImVec2(Width, Viewport->Size.y * 0.85f));
-	const ImGuiWindowFlags Flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize |
+	// A fixed place that covers nothing else (docs/design/ui-layout.md): centred, its top under the clock box at the top middle
+	// (two lines and padding), its bottom above the bottom bar's line, so the clock, the date and the key hints in the corners stay readable.
+	const float ClockBottom = Viewport->Pos.y + 12.0f * Scale + 2.0f * ImGui::GetTextLineHeightWithSpacing() + 2.0f * ImGui::GetStyle().WindowPadding.y;
+	const float Top = ClockBottom + 10.0f * Scale;
+	const float Bottom = ColonyHud::AboveBar(Viewport, Scale);
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Top), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(Width, 0.0f), ImVec2(Width, FMath::Max(200.0f * Scale, Bottom - Top)));
+	const ImGuiWindowFlags Flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
 	if (!ImGui::Begin("##InventoryWindow", nullptr, Flags))
 	{

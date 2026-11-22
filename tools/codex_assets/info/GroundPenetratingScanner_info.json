@@ -1,0 +1,57 @@
+{
+ "name": "GroundPenetratingScanner",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -143.9,
+   -147.5,
+   0.0
+  ],
+  "max": [
+   143.9,
+   147.5,
+   180.0
+  ]
+ },
+ "sizeM": [
+  2.878,
+  2.95,
+  1.8
+ ],
+ "parts": {
+  "GroundPenetratingScanner": {
+   "boundsCm": {
+    "min": [
+     -143.9,
+     -147.5,
+     0.0
+    ],
+    "max": [
+     143.9,
+     147.5,
+     180.0
+    ]
+   },
+   "tris": 17570
+  }
+ },
+ "sockets": {
+  "Screen": [
+   -85.6,
+   85.97,
+   131.27
+  ]
+ },
+ "slots": {
+  "GroundPenetratingScanner": {
+   "from": "Scanner_PBR",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

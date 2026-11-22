@@ -15,7 +15,7 @@ degrees).
 
 | Key | What |
 | --- | --- |
-| Hold right mouse button, gun in hand | aim: the view blends to over the shoulder (camera 120 cm back and 42 cm to the right, field of view 80 to 62 degrees) in about a fifth of a second, and back when let go. `Feel.AimView 1` goes to first person instead (camera to the eyes, body hidden). A melee weapon blocks with the same button |
+| Hold right mouse button, gun in hand | aim: the view blends to over the shoulder (camera 120 cm back, 45 cm to the right and 8 cm up so the colonist sits left of the crosshair, the rifle points into the middle of the screen and the head stays clear of it; the body turns with the view while aimed and strafes, field of view 80 to 62 degrees) in about a fifth of a second, and back when let go. `Feel.AimView 1` goes to first person instead (camera to the eyes, body hidden). A melee weapon blocks with the same button |
 | Left Alt (was Left Shift; Shift sprints now) | dodge roll in the direction of the movement keys (relative to the view; none held is a backstep): `DodgeRollCommand`. Refused while rolling or waiting out the last roll |
 | G | throw the first grenade on the belt at the crosshair's point (`ThrowCommand` with `player`) |
 
@@ -30,7 +30,10 @@ to the aim, and the post-process:
   plus 0.07 per degree of the gun's first kick, 0.13 s), a hit on the player (1.1 degrees, 0.3 s), a knock-down (3.5 degrees,
   0.9 s), a blast by its nearness (5.5 degrees x a strength from its radius x closeness squared, out to 6 radii plus 30 m).
   Times `Feel.Shake`.
-- **Roll**: the camera ducks 55 cm and tips down 9 degrees under a roll, following the sim's 27 steps.
+- **Roll** (third person, Elden Ring, sneed 2026-11-19): the camera does **not** duck or zoom. It keeps its height and
+  distance and follows the body softly: its pivot trails the body with a 0.05 s time constant while running (as good as
+  fixed) and 0.2 s in a roll, eased between over a third of a second, never more than 1.4 m behind, and exactly while
+  aimed. Only a light blur pulse. First person keeps the dash (level view, hard blur, wider view).
 - **Motion blur, vignette, chromatic fringe**: blur is 0.5 (the engine's) times `Feel.Blur`, plus a pulse of up to 0.8 near
   blasts and in the rolling steps; the vignette (on top of the engine's 0.4) and the fringe pulse when the player is hit or
   knocked down and near blasts.
@@ -69,7 +72,7 @@ A flat 128 m map with the Crashlanded start, the protagonist in third person wit
 camera is not nudged when nothing happens; holding aim gives blend 1, the 62 degree field of view and a camera 120 cm back with the body
 still drawn; the first person aim view hides the body and puts the camera at the eyes; letting go restores everything; a burst lifts
 the view (up to 2.3 degrees), moves the aim by nothing, shakes the camera and settles to 0; with shake, kick and blur at 0 the view does not
-move and the settings are saved; a roll (the sim moves the pawn 4 m, the body turns over 360 degrees, the camera ducks 8 degrees, the
+move and the settings are saved; a roll (the sim moves the pawn 4 m, the body turns over 360 degrees, the camera glides after it without ducking, the
 blur rises to 1, a second roll is refused); a thrown grenade is drawn in the air, then its blast makes particles, a flash, shake, blur
 and 25 debris pieces that go about 6 m out and 2 m up without falling through the ground and are gone after 5 s; a 5 m blast 9 m away
 shakes the camera over 5 degrees. About 45 s, 220 to 240 fps at 888 x 500, game thread 4 ms.
@@ -80,3 +83,4 @@ Aim-down-sights sight picture and a held gun that follows the aim; a real roll a
 (a procedural shake stands in); blast decals, scorched ground and fire from blasts (E4's fire starts from Burn blasts through the sim);
 debris from walls (a destroyed building leaves nothing to fall yet); sound; the kick for AI fighters (none by design); stance effects on
 the kick; a `Feel` panel in direct mode itself (the mouse is the camera there, so the sliders live in the overseer view).
+- Since 2026-11-20 the fire, smoke, sparks and light of a blast are drawn by `UBlastFxSubsystem` when its art is in ([blast-draw.md](blast-draw.md)); this subsystem keeps the camera's feel and the debris (soil and stone clods trailing dust).

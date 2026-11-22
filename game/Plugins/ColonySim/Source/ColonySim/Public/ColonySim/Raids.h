@@ -301,6 +301,8 @@ public:
     }
     // Gives a new raider its looks (Sim::giveLooks): pawn, seed, female.
     void setLooksMaker(std::function<void(Entity, uint64_t, bool)> maker) { looks_ = std::move(maker); }
+    // The scenario's trait-point pool (-1: backstories): people made here follow it, all points spent.
+    void setTraitPoints(int points) { traitPoints_ = points; }
     // A bullet or blow hurt `victim` (CombatSystem's hurt hook): a routed raider caught by its attacker fights back.
     void hurt(Entity victim, Entity attacker);
     // Colonists hurt by an enemy this step take cover and fight back, or run (real-time-combat.md phase 3). Sim calls it
@@ -446,6 +448,7 @@ private:
     std::vector<float> armor_;        // per def id: gear.mitigation.sharp / 50 of armour
     std::vector<Event>* events_ = nullptr;
     std::function<void(Entity, uint64_t, bool)> looks_;
+    int traitPoints_ = -1;
     uint64_t cornered_ = 0;
     std::vector<std::pair<Entity, Entity>> underFire_;  // (colonist, attacker) hurt this step; emptied by takeFire
     Construction* construction_ = nullptr;

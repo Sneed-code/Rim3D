@@ -1,0 +1,16 @@
+[
+  {
+    "defName": "WindowTool", "category": "BuildTool", "buildTool": "AddWindow", "label": "window",
+    "designationCategory": "Structure", "source": "ours (sneed, 2026-11-19)",
+    "description": "Cut a window in a wall, or put new glass in a broken one. Costs nothing; a builder does the work. Lets light and sight through; bullets and blasts break the glass.",
+    "visual": {"parts": [{"shape": "box", "size": [0.9, 0.06, 1.2], "at": [0, 0, 0.9], "color": [0.65, 0.85, 1.0]}]},
+    "note": "A tool on the build menu, never a thing (docs/design/windows.md). Dragged along a wall line."
+  },
+  {
+    "defName": "RemoveWindowTool", "category": "BuildTool", "buildTool": "RemoveWindow", "label": "fill in window",
+    "designationCategory": "Structure", "source": "ours (sneed, 2026-11-19)",
+    "description": "Fill a wall's window in again. Costs nothing; a builder does the work.",
+    "visual": {"parts": [{"shape": "box", "size": [0.9, 0.5, 1.2], "at": [0, 0, 0.9], "color": [0.55, 0.5, 0.45]}]},
+    "note": "A tool on the build menu, never a thing (docs/design/windows.md)."
+  }
+]

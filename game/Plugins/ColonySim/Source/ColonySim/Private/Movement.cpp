@@ -69,6 +69,9 @@ float groundSpeedFactor(const Map& map, float x, float y, float bodyHeightM, int
     if (level != 0) {
         return terrainSpeedFactor(t);
     }
+    if (map.hasDeck(cell)) {
+        return terrainSpeedFactor(Terrain::UpperFloor);  // a bridge deck: a built floor, no path cost (RimWorld: move speed 100%)
+    }
     // Water by its depth against the body (docs/design/water.md): shallow water's cost to the waist,
     // chest-deep water's beyond, then swimming. Marsh and mud keep their own cost until the water is deeper.
     const WaterBand band = waterBandFor(map.waterDepthAt(x, y, 0), bodyHeightM);
@@ -145,6 +148,180 @@ bool straightWalkIsClear(const Map& map, float x0, float y0, float x1, float y1,
     return true;
 }
 
+bool trunksClearOfLine(const Map& map, float x0, float y0, float x1, float y1, float radius, int level) {
+    if (level != 0 || map.trunkCount() == 0) {
+        return true;
+    }
+    // A trunk stands within 0.35 m of its cell's centre: cells more than a metre off the line's box can't reach it.
+    const int minX = static_cast<int>(std::floor(std::min(x0, x1) - radius - 1.0f));
+    const int maxX = static_cast<int>(std::floor(std::max(x0, x1) + radius + 1.0f));
+    const int minY = static_cast<int>(std::floor(std::min(y0, y1) - radius - 1.0f));
+    const int maxY = static_cast<int>(std::floor(std::max(y0, y1) + radius + 1.0f));
+    const float dx = x1 - x0;
+    const float dy = y1 - y0;
+    const float length2 = dx * dx + dy * dy;
+    for (int cy = minY; cy <= maxY; ++cy) {
+        for (int cx = minX; cx <= maxX; ++cx) {
+            float tx = 0.0f;
+            float ty = 0.0f;
+            float tr = 0.0f;
+            if (!map.trunkAt(CellPos{cx, cy, 0}, tx, ty, tr)) {
+                continue;
+            }
+            const float reach = radius + tr;
+            const float sx = x0 - tx;
+            const float sy = y0 - ty;
+            if (sx * sx + sy * sy < reach * reach) {
+                continue;  // already beside it: walking away is allowed
+            }
+            const float t = length2 > 1.0e-8f ? std::clamp(((tx - x0) * dx + (ty - y0) * dy) / length2, 0.0f, 1.0f) : 0.0f;
+            const float nx = x0 + dx * t - tx;
+            const float ny = y0 + dy * t - ty;
+            if (nx * nx + ny * ny < reach * reach) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool clearOfTrunks(const Map& map, float x, float y, float radius, int level) {
+    if (level != 0 || map.trunkCount() == 0) {
+        return true;
+    }
+    const int cx = static_cast<int>(std::floor(x));
+    const int cy = static_cast<int>(std::floor(y));
+    const int span = 1 + static_cast<int>(std::ceil(radius));
+    for (int ty = cy - span; ty <= cy + span; ++ty) {
+        for (int tx = cx - span; tx <= cx + span; ++tx) {
+            float sx = 0.0f;
+            float sy = 0.0f;
+            float tr = 0.0f;
+            if (map.trunkAt(CellPos{tx, ty, 0}, sx, sy, tr)) {
+                const float reach = radius + tr;
+                if ((x - sx) * (x - sx) + (y - sy) * (y - sy) < reach * reach) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+void cellWalkPoint(const Map& map, CellPos c, float& x, float& y) {
+    x = static_cast<float>(c.x) + 0.5f;
+    y = static_cast<float>(c.y) + 0.5f;
+    if (c.level != 0 || map.trunkCount() == 0) {
+        return;
+    }
+    const float lowX = static_cast<float>(c.x) + 0.05f;
+    const float highX = static_cast<float>(c.x) + 0.95f;
+    const float lowY = static_cast<float>(c.y) + 0.05f;
+    const float highY = static_cast<float>(c.y) + 0.95f;
+    // Pushed out of each trunk near enough to matter (its own and the neighbours'), twice over for a point between two.
+    for (int pass = 0; pass < 2; ++pass) {
+        bool moved = false;
+        for (int ny = c.y - 1; ny <= c.y + 1; ++ny) {
+            for (int nx = c.x - 1; nx <= c.x + 1; ++nx) {
+                float tx = 0.0f;
+                float ty = 0.0f;
+                float tr = 0.0f;
+                if (!map.trunkAt(CellPos{nx, ny, 0}, tx, ty, tr)) {
+                    continue;
+                }
+                const float reach = kTrunkBodyRadius + tr + kTrunkMargin;
+                float ox = x - tx;
+                float oy = y - ty;
+                const float d2 = ox * ox + oy * oy;
+                if (d2 >= reach * reach) {
+                    continue;
+                }
+                const float d = std::sqrt(d2);
+                if (d < 1.0e-4f) {
+                    ox = 1.0f;  // right on it: out along +x, the same way every time
+                    oy = 0.0f;
+                } else {
+                    ox /= d;
+                    oy /= d;
+                }
+                x = std::clamp(tx + ox * reach, lowX, highX);
+                y = std::clamp(ty + oy * reach, lowY, highY);
+                moved = true;
+            }
+        }
+        if (!moved) {
+            return;
+        }
+    }
+    // Still too close (a thick trunk in the middle of the cell): the inset corner farthest from the trunks.
+    float best = -1.0e9f;
+    float bestX = x;
+    float bestY = y;
+    for (const float cornerY : {lowY + 0.1f, highY - 0.1f}) {
+        for (const float cornerX : {lowX + 0.1f, highX - 0.1f}) {
+            float nearest = 1.0e9f;
+            for (int ny = c.y - 1; ny <= c.y + 1; ++ny) {
+                for (int nx = c.x - 1; nx <= c.x + 1; ++nx) {
+                    float tx = 0.0f;
+                    float ty = 0.0f;
+                    float tr = 0.0f;
+                    if (map.trunkAt(CellPos{nx, ny, 0}, tx, ty, tr)) {
+                        nearest = std::min(nearest, std::sqrt((cornerX - tx) * (cornerX - tx) + (cornerY - ty) * (cornerY - ty)) - tr);
+                    }
+                }
+            }
+            if (nearest > best) {
+                best = nearest;
+                bestX = cornerX;
+                bestY = cornerY;
+            }
+        }
+    }
+    x = bestX;
+    y = bestY;
+}
+
+void refreshTrunkSteps(Map& map, int x0, int y0, int x1, int y1) {
+    if (map.trunkCount() == 0 && map.groundTightSteps() == nullptr) {
+        return;  // no trees, and never were: no steps to work out
+    }
+    x0 = std::max(x0, 0);
+    y0 = std::max(y0, 0);
+    x1 = std::min(x1, map.width() - 1);
+    y1 = std::min(y1, map.height() - 1);
+    for (int y = y0; y <= y1; ++y) {
+        for (int x = x0; x <= x1; ++x) {
+            const CellPos c{x, y, 0};
+            // Nothing to work out with no trunk within 2 cells (all a step's line and walk points can meet).
+            bool near = false;
+            for (int ty = y - 2; ty <= y + 2 && !near; ++ty) {
+                for (int tx = x - 2; tx <= x + 2 && !near; ++tx) {
+                    near = map.hasTrunk(CellPos{tx, ty, 0});
+                }
+            }
+            uint8_t steps = 0;
+            if (near && map.walkable(c)) {
+                float fromX = 0.0f;
+                float fromY = 0.0f;
+                cellWalkPoint(map, c, fromX, fromY);
+                for (int d = 0; d < 8; ++d) {
+                    const CellPos n{x + Map::kStepDx[d], y + Map::kStepDy[d], 0};
+                    if (!map.inBounds(n)) {
+                        continue;
+                    }
+                    float toX = 0.0f;
+                    float toY = 0.0f;
+                    cellWalkPoint(map, n, toX, toY);
+                    if (!trunksClearOfLine(map, fromX, fromY, toX, toY, kTrunkBodyRadius, 0)) {
+                        steps = static_cast<uint8_t>(steps | (1u << d));
+                    }
+                }
+            }
+            map.setTightSteps(c, steps);
+        }
+    }
+}
+
 namespace {
 
 void moveSmoothLevel(const Map& map, float startX, float startY, std::vector<CellPos>& path);
@@ -199,8 +376,14 @@ void moveSmoothLevel(const Map& map, float startX, float startY, std::vector<Cel
     if (n <= 1) {
         return;
     }
-    const auto px = [&path](int k) { return static_cast<float>(path[static_cast<size_t>(k)].x) + 0.5f; };
-    const auto py = [&path](int k) { return static_cast<float>(path[static_cast<size_t>(k)].y) + 0.5f; };
+    // Each cell's walk point (its centre unless a trunk is in the way), worked out once.
+    std::vector<float> walkX(static_cast<size_t>(n));
+    std::vector<float> walkY(static_cast<size_t>(n));
+    for (int k = 0; k < n; ++k) {
+        cellWalkPoint(map, path[static_cast<size_t>(k)], walkX[static_cast<size_t>(k)], walkY[static_cast<size_t>(k)]);
+    }
+    const auto px = [&walkX](int k) { return walkX[static_cast<size_t>(k)]; };
+    const auto py = [&walkY](int k) { return walkY[static_cast<size_t>(k)]; };
     const int level = path[0].level;
 
     // effort[k]: the effort of walking from the start along the cell path to its cell k.
@@ -220,7 +403,8 @@ void moveSmoothLevel(const Map& map, float startX, float startY, std::vector<Cel
         if (j == cur + 1) {
             return true;  // the path's own step
         }
-        if (!straightWalkIsClear(map, curX, curY, px(j), py(j), kMoveSmoothRadius, level)) {
+        if (!straightWalkIsClear(map, curX, curY, px(j), py(j), kMoveSmoothRadius, level) ||
+            !trunksClearOfLine(map, curX, curY, px(j), py(j), kMoveSmoothRadius, level)) {
             return false;
         }
         const float before = cur < 0 ? 0.0f : effort[static_cast<size_t>(cur)];

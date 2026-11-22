@@ -1,0 +1,50 @@
+{
+ "name": "AnimalSleepingBox",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -42.5,
+   -42.63,
+   0.0
+  ],
+  "max": [
+   42.5,
+   42.63,
+   35.0
+  ]
+ },
+ "sizeM": [
+  0.85,
+  0.853,
+  0.35
+ ],
+ "parts": {
+  "AnimalSleepingBox": {
+   "boundsCm": {
+    "min": [
+     -42.5,
+     -42.63,
+     0.0
+    ],
+    "max": [
+     42.5,
+     42.63,
+     35.0
+    ]
+   },
+   "tris": 5942
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "AnimalSleepingBox": {
+   "from": "AnimalSleepingBox_PBR",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

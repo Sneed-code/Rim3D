@@ -7,6 +7,9 @@
 #include "AnimNodes/AnimNode_RetargetPoseFromMesh.h"
 #include "BoneControllers/AnimNode_AnimDynamics.h"
 #include "BoneControllers/AnimNode_TwoBoneIK.h"
+#include "ColonySim/HairStrands.h"
+
+#include "ColonySim/ArmPose.h"
 
 #include "MakeHumanAnimInstance.generated.h"
 
@@ -88,29 +91,44 @@ struct FMakeHumanTailNode : public FAnimNode_SkeletalControlBase
 };
 
 /**
- * Long hair (mh_common.add_hair_bones: hair_c1_1 ... chains under the head): no physics engine, a spring of our own
- * that cannot blow up. Each chain first hangs towards the ground (a bowed head lets the hair fall forward), then all
- * swing together against the head's acceleration (starts, stops, turns, a jump) through a damped spring, limited to a
- * few tens of degrees. (AnimDynamics chains flung the hair into a sheet now and then.)
+ * Long hair (docs/design/hair-physics.md): the long, bob and braid styles' chains (mh_common.add_hair_bones: hair_c1_1 ...
+ * under the head) and a ponytail's (ponytail1 ...), as strands of colony::HairStrands. Each point falls under gravity,
+ * keeps its length, lags behind the head and is pulled softly back towards the style's shape; capsules round the skull,
+ * neck, chest and upper back, shoulders and upper arms (fitted to each skeleton so the hair at rest just touches them)
+ * push it out of the body, so it rests on the back and shoulders instead of passing through them. Full simulation near
+ * the camera (Pawns.HairSimFar), only pushed out of the body further off (Pawns.HairCollideFar), as animated beyond.
  */
 USTRUCT()
 struct FMakeHumanHairNode : public FAnimNode_SkeletalControlBase
 {
 	GENERATED_BODY()
 
-	TArray<TArray<FBoneReference>> Chains;
-	FBoneReference Head;
+	/** A collision shape riding on a bone: a capsule between two points in the bone's space. */
+	struct FShape
+	{
+		FBoneReference Bone;
+		FVector A = FVector::ZeroVector;
+		FVector B = FVector::ZeroVector;
+		float Radius = 0.0f;  // cm, component space
+	};
+
+	TArray<TArray<FBoneReference>> Chains;  // the hair_c chains (one sheet) first, then a ponytail's
+	TArray<FShape> Shapes;
 	float DeltaTime = 0.0f;
-	FVector LastHead = FVector::ZeroVector;      // world
-	FVector HeadVelocity = FVector::ZeroVector;  // world, cm/s
-	FVector Swing = FVector::ZeroVector;         // world, horizontal: which way and how far (degrees) the hair swings
-	FVector SwingVelocity = FVector::ZeroVector;
-	bool bStarted = false;
+	int32 Mode = 2;                         // 2 full simulation, 1 pushed out of the body only, 0 as animated
+	colony::HairStrands Strands;
+	colony::HairSettings Settings;
+	std::vector<std::vector<colony::HairVec>> Goals;  // this frame's animated points, world
+	std::vector<colony::HairCapsule> Capsules;        // this frame's body, world (also drawn by Pawns.HairDebug)
+	float LargestPenetration = 0.0f;                  // cm into the body, since the last read (tests)
+	float LargestAnimatedPenetration = 0.0f;          // cm the animated hair alone would have gone in (tests)
 
 	virtual void UpdateInternal(const FAnimationUpdateContext& Context) override;
 	virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) override;
 	virtual bool IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones) override;
 	virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override;
+	/** Chains and shapes for a skeleton (game thread, when the animation starts). */
+	void Setup(const FReferenceSkeleton& Ref);
 };
 
 /**
@@ -130,9 +148,85 @@ struct FMakeHumanSeverNode : public FAnimNode_SkeletalControlBase
 	virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override {}
 };
 
+/** Where a hand's goal is given (FMakeHumanHandGoal). */
+enum class EMakeHumanGoalSpace : uint8
+{
+	Component,  // the mesh component's space
+	Anchor,     // offset from a bone's place in component space this very pose (no lag behind the body), rotation in component space
+	OtherHand,  // in the other hand's bone space after that hand is solved (a second hand on the same weapon)
+};
+
+/** A hand's goal for the arm solver (FMakeHumanArmsNode). */
+struct FMakeHumanHandGoal
+{
+	float Alpha = 0.0f;                 // 0 off .. 1 fully on the goal
+	EMakeHumanGoalSpace Space = EMakeHumanGoalSpace::Component;
+	FName Anchor;                       // Space Anchor: the bone
+	FTransform Target;                  // the hand bone's goal (its location and, with bRotation, its rotation)
+	bool bRotation = false;             // false: the hand keeps its animated rotation (still within the wrist's range)
+	bool bCurl = false;                 // close the fingers round a grip (only adds curl the animation lacks)
+	float CurlWrap = 1.0f;              // how far round: 1 a pistol or hilt grip, more for a hand wrapped round a fore-end
+	float RollFree = 0.0f;              // with bRotation: degrees the hand may turn about a round shaft either way to fit the wrist
+	FVector RollAxis = FVector::ZeroVector;   // the shaft's axis in the hand goal's own space
+	FVector RollPoint = FVector::ZeroVector;  // a point on the shaft in the hand goal's own space
+	FVector Pole = FVector::ZeroVector; // component-space direction the elbow points; zero: naturally down and out
+	bool bElbowPoint = false;           // instead, a component-space point the elbow bends towards
+	FVector ElbowPoint = FVector::ZeroVector;
+};
+
+/**
+ * Both arms onto their hands' goals without a joint a person couldn't make (docs/design/weapon-hold.md, "Arms that
+ * can't bend wrong"): the elbow is a hinge about the axis the animation gave it (the upper arm rolls to keep it so),
+ * never past 145 degrees nor straighter than the arm's reach allows (no stretching), the forearm's twist and the
+ * wrist's bend are clamped to human range (colony::arm, tested in the sim's ArmPoseTests). A goal the arm can't
+ * reach leaves the hand short of it, never a stretched or snapped arm.
+ */
+USTRUCT()
+struct FMakeHumanArmsNode : public FAnimNode_SkeletalControlBase
+{
+	GENERATED_BODY()
+
+	struct FArm
+	{
+		FBoneReference Upper, Lower, Hand, Index, Pinky, Middle, IndexTip;
+		FBoneReference Clavicle;                     // optional: the shoulder girdle, brought forward for a far grip
+		FBoneReference Fingers[4][3];                // optional: index, middle, ring, pinky joints 01..03 (curled round a grip)
+		FVector HingeInUpper = FVector::ZeroVector;  // the elbow's medial hinge in the upper arm's space, last seen bent
+		bool bHinge = false;
+		double NeutralFlex = 0.0;       // the rest pose's wrist readings (its knuckles off the forearm's line)
+		double NeutralDeviation = 0.0;
+		double LastSwivel = 0.0;        // last solve's elbow swing and turn round a shaft (degrees): kept unless clearly better
+		float LastRoll = 0.0f;
+		bool bValid = false;
+	};
+	FArm Arms[2];                        // 0 left, 1 right
+	FBoneReference Spine, Neck;          // optional: the chest turns about the body's up axis to reach a long gun (the neck turns back)
+	FMakeHumanHandGoal Goals[2];
+	/** The body's axes in component space (up, forward, right), from the owner each update unless overridden. */
+	FVector Up = FVector::UpVector;
+	FVector Forward = FVector(0.0, 1.0, 0.0);
+	FVector Right = FVector(-1.0, 0.0, 0.0);
+	bool bLimits = true;                 // Pawns.ArmLimits
+	/** What each arm read after the last solve (tests): angles, and how far the goal was out of reach (cm). */
+	colony::arm::ArmAngles Measured[2];
+	colony::arm::ArmAngles Wanted[2];    // the goal's own hand turn read the same way, before the wrist's limits
+	float Swivel[2] = {0.0f, 0.0f};      // degrees the elbow was swung round from its natural way so the wrist fits the grip
+	float CurlAdded[2] = {0.0f, 0.0f};   // mean degrees of curl added per finger last solve (-1 no hand frame, -2 no finger bones)
+	float ShortBy[2] = {0.0f, 0.0f};
+	bool bSolved[2] = {false, false};
+	/** The goal each hand was solved to (component space) and how far the shoulder was brought forward for it (cm). */
+	FTransform GoalCS[2];
+	float ShoulderReach[2] = {0.0f, 0.0f};
+	float ChestTurn = 0.0f;              // degrees the chest turned for the last solve (+ brings the left shoulder forward)
+
+	virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) override;
+	virtual bool IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones) override;
+	virtual void InitializeBoneReferences(const FBoneContainer& RequiredBones) override;
+};
+
 /**
  * The pose of the mesh this one is attached to (the pawn's hidden mannequin), retargeted; then, where the skeleton
- * has them, soft-body jiggle on the breast bones and a swinging chain on a ponytail's bones (AnimDynamics).
+ * has them, soft-body jiggle on the soft-tissue bones, a tail's swish and long hair's strands.
  */
 USTRUCT()
 struct FMakeHumanAnimProxy : public FAnimInstanceProxy
@@ -147,11 +241,9 @@ struct FMakeHumanAnimProxy : public FAnimInstanceProxy
 	FMakeHumanJiggleNode Jiggle;
 	FMakeHumanTailNode Tail;
 	FMakeHumanHairNode Hair;
-	TArray<TSharedPtr<FAnimNode_AnimDynamics>> Dynamics;
 	FMakeHumanSeverNode Sever;       // last: what was cut off folds away after everything else has moved
 	FAnimNode_ConvertComponentToLocalSpace ToLocal;
-	FAnimNode_TwoBoneIK RightHandIK; // the gun range: the right hand moved so the gun's sight is before the eye
-	FAnimNode_TwoBoneIK LeftHandIK;  // creator weapons: the left hand on a two-handed hilt (Pawns.MakeHumanHandIK)
+	FMakeHumanArmsNode ArmsIK;       // both hands on weapons and reaches, within human joint limits (Pawns.MakeHumanHandIK)
 	bool bPhysics = false;
 
 	virtual void Initialize(UAnimInstance* Instance) override;
@@ -172,12 +264,17 @@ class UMakeHumanAnimInstance : public UAnimInstance
 public:
 	void SetRetargeter(UIKRetargeter* InRetargeter);
 	UIKRetargeter* GetRetargeter() const { return Retargeter; }
-	/** How many soft bodies run (jiggle bones and hair chains), for the tests. */
+	/** How many soft bodies run (jiggle bones, hair strands and a tail), for the tests. */
 	int32 GetPhysicsChains() const;
 	/** The largest jiggle offset (cm) since the last call, for the tests. */
 	float TakeLargestJiggle();
 	/** The largest tail swing at the tip (degrees) since the last call, for the tests; 0 without a tail. */
 	float TakeLargestTailSwing();
+	/** How many hair strands simulate (0 without long hair or a ponytail), for the tests. */
+	int32 GetHairStrands() const;
+	/** The deepest any hair went into the body (cm) since the last call, for the tests; OutAnimated: how deep the hair
+	 *  as animated (no physics) would have gone in the same frames. */
+	float TakeLargestHairPenetration(float* OutAnimated = nullptr);
 	/** Soft-tissue jiggle on or off (on by default). Off, breasts, buttocks and genitals stay as animated. */
 	void SetSoftTissueEnabled(bool bEnabled);
 	/** Whether the soft parts run (the creator's "Jiggle" box); skin squish on contact follows it too. */
@@ -203,38 +300,40 @@ public:
 	/** The deepest skin dent (cm) since the last call, for the tests. */
 	float TakeDeepestDent();
 	/** The left hand's wrist pulled to a point given in the right hand bone's space (a two-handed grip), the elbow bent
-	 *  towards ElbowWorld; Alpha 0 is off. Read once a frame before the animation updates (creator weapons). */
-	void SetLeftHandGrip(float Alpha, const FVector& InRightHandOffset, const FVector& InElbowWorld)
-	{
-		bLeftReach = false;
-		LeftGripAlpha = Alpha;
-		LeftGripOffset = InRightHandOffset;
-		LeftElbowWorld = InElbowWorld;
-	}
+	 *  towards ElbowWorld; Alpha 0 is off. Its rotation stays as animated (within the wrist's range). */
+	void SetLeftHandGrip(float Alpha, const FVector& InRightHandOffset, const FVector& InElbowWorld);
 	/** The right hand's wrist moved to a point in this component's space (its rotation kept as animated), the elbow
-	 *  bent towards a point in the same space; Alpha 0 is off. Evaluated before the left hand's grip (the gun range). */
-	void SetRightHandReach(float Alpha, const FVector& InTargetComponent, const FVector& InElbowComponent)
-	{
-		RightReachAlpha = Alpha;
-		RightReachTarget = InTargetComponent;
-		RightElbowComponent = InElbowComponent;
-	}
+	 *  bent towards a point in the same space; Alpha 0 is off. */
+	void SetRightHandReach(float Alpha, const FVector& InTargetComponent, const FVector& InElbowComponent);
 	/** The left hand's wrist moved to a point in this component's space instead (a guard, a shield raised, hands under a
 	 *  carried body's legs), the elbow bent towards a point in the same space; Alpha 0 is off. Replaces the grip. */
-	void SetLeftHandReach(float Alpha, const FVector& InTargetComponent, const FVector& InElbowComponent)
+	void SetLeftHandReach(float Alpha, const FVector& InTargetComponent, const FVector& InElbowComponent);
+	/** A hand's full goal (location and rotation, in any space): a weapon's grip (docs/design/weapon-hold.md). Replaces
+	 *  whatever the hand was given before; Alpha 0 lets it go. */
+	void SetHandGoal(bool bRight, const FMakeHumanHandGoal& Goal) { HandGoals[bRight ? 1 : 0] = Goal; }
+	const FMakeHumanHandGoal& GetHandGoal(bool bRight) const { return HandGoals[bRight ? 1 : 0]; }
+	/** The body's up, forward and right in world space, used instead of the owner actor's (the first-person arms face
+	 *  the view, not their holder); off with bOn false. */
+	void SetBodyAxesOverride(bool bOn, const FVector& InUp = FVector::UpVector, const FVector& InForward = FVector::ForwardVector,
+							 const FVector& InRight = FVector::RightVector)
 	{
-		bLeftReach = true;
-		LeftGripAlpha = Alpha;
-		LeftGripOffset = InTargetComponent;
-		LeftElbowWorld = InElbowComponent;
+		bAxesOverride = bOn;
+		AxesUp = InUp;
+		AxesForward = InForward;
+		AxesRight = InRight;
 	}
-	bool bLeftReach = false;
-	float RightReachAlpha = 0.0f;
-	FVector RightReachTarget = FVector::ZeroVector;
-	FVector RightElbowComponent = FVector::ZeroVector;
-	float LeftGripAlpha = 0.0f;
-	FVector LeftGripOffset = FVector::ZeroVector;
-	FVector LeftElbowWorld = FVector::ZeroVector;
+	/** What an arm read after the solver's last pass (degrees; tests), false if it was not solved. */
+	bool GetSolvedArm(bool bRight, colony::arm::ArmAngles& Out, float& OutShortBy) const;
+	/** What the goal's hand turn asked of the arm before the wrist's limits (degrees; tests' notes), and the fingers' added curl. */
+	bool GetWantedArm(bool bRight, colony::arm::ArmAngles& Out, float& OutCurl, float& OutSwivel) const;
+	/** The goal the arm was last solved to, in world space (tests: compared with where the hand is drawn), and how far
+	 *  the shoulder came forward for it (cm, component units). */
+	bool GetSolvedGoal(bool bRight, FTransform& OutGoalWorld, float& OutShoulderReach) const;
+	FMakeHumanHandGoal HandGoals[2];  // 0 left, 1 right
+	bool bAxesOverride = false;
+	FVector AxesUp = FVector::UpVector;
+	FVector AxesForward = FVector::ForwardVector;
+	FVector AxesRight = FVector::RightVector;
 
 protected:
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;

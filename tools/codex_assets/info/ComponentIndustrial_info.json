@@ -1,0 +1,50 @@
+{
+ "name": "ComponentIndustrial",
+ "kind": "item",
+ "turned": "x-90",
+ "boundsCm": {
+  "min": [
+   -7.7,
+   -5.66,
+   -0.0
+  ],
+  "max": [
+   7.7,
+   5.66,
+   8.0
+  ]
+ },
+ "sizeM": [
+  0.154,
+  0.113,
+  0.08
+ ],
+ "parts": {
+  "ComponentIndustrial": {
+   "boundsCm": {
+    "min": [
+     -7.7,
+     -5.66,
+     -0.0
+    ],
+    "max": [
+     7.7,
+     5.66,
+     8.0
+    ]
+   },
+   "tris": 2822
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "ComponentIndustrial": {
+   "from": "ComponentIndustrial | PBR",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

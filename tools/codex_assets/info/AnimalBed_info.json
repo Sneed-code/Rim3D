@@ -1,0 +1,50 @@
+{
+ "name": "AnimalBed",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -46.0,
+   -45.7,
+   0.0
+  ],
+  "max": [
+   46.0,
+   45.7,
+   24.9
+  ]
+ },
+ "sizeM": [
+  0.92,
+  0.914,
+  0.249
+ ],
+ "parts": {
+  "AnimalBed": {
+   "boundsCm": {
+    "min": [
+     -46.0,
+     -45.7,
+     0.0
+    ],
+    "max": [
+     46.0,
+     45.7,
+     24.9
+    ]
+   },
+   "tris": 7920
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "AnimalBed": {
+   "from": "AnimalBed Canvas",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

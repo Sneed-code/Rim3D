@@ -709,14 +709,14 @@ void AnimalSystem::begin(Entity e, Animal& a, const Kind& kind) {
     things_.registry().emplace_or_replace<Faction>(e, Faction{a.wild ? kWildFaction : kPlayerFaction});
 }
 
-// Animals can't open doors, so a door is a gate: true when the straight line crosses one.
-static bool animalLineCrossesDoor(const Map& map, float x0, float y0, float x1, float y1, int level) {
+// Animals can't open doors or cross fences: true when the straight line crosses one.
+bool animalLineCrossesDoor(const Map& map, float x0, float y0, float x1, float y1, int level) {
     const float length = std::hypot(x1 - x0, y1 - y0);
     const int samples = std::max(1, static_cast<int>(std::ceil(length * 4.0f)));
     for (int i = 0; i <= samples; ++i) {
         const float t = static_cast<float>(i) / static_cast<float>(samples);
         const CellPos c{static_cast<int>(std::floor(x0 + (x1 - x0) * t)), static_cast<int>(std::floor(y0 + (y1 - y0) * t)), level};
-        if (map.inBounds(c) && map.isDoor(c) && !(c.x == static_cast<int>(std::floor(x0)) && c.y == static_cast<int>(std::floor(y0)))) {
+        if (map.inBounds(c) && map.blocksAnimals(c) && !(c.x == static_cast<int>(std::floor(x0)) && c.y == static_cast<int>(std::floor(y0)))) {
             return true;
         }
     }
@@ -1002,22 +1002,41 @@ void AnimalSystem::think(Entity e) {
     }
 
     const bool hurt = health != nullptr && !health->injuries.empty();
+    // A tame animal sleeps on its animal bed, and a hurt one rests there and heals as in a bed (docs/design/husbandry.md).
+    const bool tame = !a.wild && husbandry_ != nullptr;
+    const bool inBed = tame && onOwnBed(e);
+    if (a.mode != AnimalMode::Sleep || !inBed) {
+        if (Health* body = reg.try_get<Health>(e); body != nullptr && body->rest != RestKind::Ground) {
+            body->rest = RestKind::Ground;
+        }
+    }
     if (a.mode == AnimalMode::Sleep) {
-        if (now < a.until && !hurt) {
+        if (now < a.until && (!hurt || inBed)) {
             a.nextThink = std::min(a.until, now + kAnimalSleepCheck);
             return;
         }
         a.mode = AnimalMode::Idle;
     }
-    if (!hurt && sleepNow(kind, a, now) && a.mode != AnimalMode::Eat) {
-        mover.path.clear();
-        mover.next = 0;
-        mover.vx = 0.0f;
-        mover.vy = 0.0f;
-        a.mode = AnimalMode::Sleep;
-        a.until = sleepEnd(kind, a, now);
-        a.nextThink = std::min(a.until, now + kAnimalSleepCheck);
-        return;
+    const bool sleepy = sleepNow(kind, a, now) && a.mode != AnimalMode::Eat;
+    if ((sleepy && !hurt) || (hurt && tame)) {
+        if (tame && !inBed && walkToBed(e, a, kind, now)) {
+            return;
+        }
+        if (!hurt || inBed) {
+            mover.path.clear();
+            mover.next = 0;
+            mover.vx = 0.0f;
+            mover.vy = 0.0f;
+            a.mode = AnimalMode::Sleep;
+            a.until = sleepy ? sleepEnd(kind, a, now) : now + kSecondsPerHour;
+            a.nextThink = std::min(a.until, now + kAnimalSleepCheck);
+            if (inBed) {
+                if (Health* body = reg.try_get<Health>(e)) {
+                    body->rest = RestKind::Bed;
+                }
+            }
+            return;
+        }
     }
     if (a.mode == AnimalMode::Eat) {
         if (now < a.until) {

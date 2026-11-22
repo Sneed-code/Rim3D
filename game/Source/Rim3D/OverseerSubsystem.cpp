@@ -11,14 +11,14 @@
 
 #include <imgui.h>
 
+#include "ColonyHudStyle.h"
+#include "ColonyHudSubsystem.h"
+
 #include "LevelsSubsystem.h"
 #include "OrdersSubsystem.h"
 #include "OverseerPawn.h"
 #include "ProtagonistSubsystem.h"
-#include "ShooterFeelSubsystem.h"
-#include "SoundSubsystem.h"
 #include "SimSubsystem.h"
-#include "SkySubsystem.h"
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Map.h"
@@ -95,25 +95,6 @@ namespace
 			return Defs->get(View.def).label();
 		}
 		return "thing";
-	}
-
-	bool OverseerSpeedButton(const char* Label, int32 Speed, USimSubsystem& Bridge)
-	{
-		const bool bActive = Bridge.GetSpeed() == Speed;
-		if (bActive)
-		{
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.45f, 0.75f, 1.0f));
-		}
-		const bool bClicked = ImGui::Button(Label);
-		if (bActive)
-		{
-			ImGui::PopStyleColor();
-		}
-		if (bClicked)
-		{
-			Bridge.SetSpeed(Speed);
-		}
-		return bClicked;
 	}
 }
 
@@ -296,63 +277,23 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 
 	// Readable from 1080p to 4K.
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	ColonyHud::ApplyFrameStyle(Scale);
 	const float Margin = 12.0f * Scale;
 	const ImGuiWindowFlags PanelFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
 
-	// Speed controls, top middle. The same speeds the keys set.
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Margin), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
-	if (ImGui::Begin("##OverseerSpeed", nullptr, PanelFlags))
-	{
-		const colony::GameTime& Time = Sim.time();
-		OverseerText(FString::Printf(TEXT("Day %lld   %02d:%02d"), static_cast<long long>(Time.day() + 1), Time.hourOfDay(),
-			static_cast<int32>((Time.seconds % colony::kSecondsPerHour) / colony::kSecondsPerMinute)));
-		ImGui::SameLine(0.0f, 24.0f * Scale);
-		OverseerSpeedButton("Pause", 0, Bridge);
-		ImGui::SameLine();
-		OverseerSpeedButton("1x", 1, Bridge);
-		ImGui::SameLine();
-		OverseerSpeedButton("2x", 2, Bridge);
-		ImGui::SameLine();
-		OverseerSpeedButton("3x", 3, Bridge);
-		if (Bridge.GetSpeed() == 0)
-		{
-			ImGui::SameLine();
-			if (ImGui::Button("Step"))
-			{
-				Bridge.StepOnce();
-			}
-		}
-		// The date, the season's temperature and the weather (U13), and the level looked at (U17).
-		OverseerText(USkySubsystem::DescribeDate(Sim) + TEXT("   ") + USkySubsystem::DescribeClimate(Sim));
-		if (ULevelsSubsystem* Levels = GetWorld()->GetSubsystem<ULevelsSubsystem>())
-		{
-			OverseerText(ULevelsSubsystem::DescribeLevel(Levels->GetViewLevel()));
-			ImGui::SameLine();
-			if (ImGui::SmallButton("Up (PgUp)") && Pawn)
-			{
-				Pawn->StepLevel(1);
-			}
-			ImGui::SameLine();
-			if (ImGui::SmallButton("Down (PgDn)") && Pawn)
-			{
-				Pawn->StepLevel(-1);
-			}
-		}
-	}
-	ImGui::End();
+	// The speed buttons, the date and the level looked at are on the bottom bar now (UColonyHudSubsystem).
 
 	// Inspect panel, bottom left: what is selected.
 	if (Selection.IsValid())
 	{
-		// Above the architect bar where the two would overlap (its Structure and Wall buttons were under this panel on small screens).
-		float Bottom = Viewport->Pos.y + Viewport->Size.y - Margin;
-		FBox2D Bar;
-		if (const UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>(); Orders && Orders->GetBarRect(Bar) &&
-			Bar.Min.X < Viewport->Pos.x + Margin + 560.0f * Scale)
+		// Bottom left, just above the tab bar; above the Build menu while it is open (docs/design/ui-layout.md).
+		float Bottom = ColonyHud::AboveBar(Viewport, Scale);
+		FBox2D Menu;
+		if (const UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>(); Orders && Orders->IsBuildMenuOpen() && Orders->GetBuildMenuRect(Menu) &&
+			Menu.Min.X < Viewport->Pos.x + Margin + 560.0f * Scale)
 		{
-			Bottom = FMath::Min(Bottom, static_cast<float>(Bar.Min.Y) - Margin * 0.5f);
+			Bottom = FMath::Min(Bottom, static_cast<float>(Menu.Min.Y) - 6.0f * Scale);
 		}
 		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Margin, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
 		ImGui::SetNextWindowSizeConstraints(ImVec2(300.0f * Scale, 0.0f), ImVec2(560.0f * Scale, FLT_MAX));
@@ -362,7 +303,25 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 			{
 				if (const colony::ThingView* View = Snapshot.find(Selection.Thing))
 				{
+					// The name large, with the info button ("i", the full info window) and close at the right.
+					ColonyHud::PushLarge();
 					OverseerText(OverseerLabel(Bridge, *View));
+					ColonyHud::PopLarge();
+					ImGui::SameLine(0.0f, 16.0f * Scale);
+					if (ImGui::SmallButton(" i "))
+					{
+						if (UColonyHudSubsystem* Hud = GetWorld()->GetSubsystem<UColonyHudSubsystem>())
+						{
+							Hud->OpenInfo(View->id);
+						}
+					}
+					ColonyHud::Tip(TEXT("Everything about it"));
+					ImGui::SameLine();
+					if (ImGui::SmallButton(" x "))
+					{
+						ClearSelection();
+					}
+					ColonyHud::Tip(TEXT("Deselect (Esc)"));
 					ImGui::Separator();
 					OverseerText(FString::Printf(TEXT("%s   #%u"), OverseerCategoryName(View->category), OverseerIdNumber(View->id)));
 					OverseerText(FString::Printf(TEXT("Cell %d, %d   ground %.1f m"), FMath::FloorToInt32(View->x), FMath::FloorToInt32(View->y), View->z));
@@ -435,8 +394,9 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 		ImGui::End();
 	}
 
-	// Key hints, bottom right, folded behind F1.
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - Margin, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+	// Key hints, bottom right above the date box, folded behind F1 (and the bar's Keys button).
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - Margin, ColonyHud::AboveBar(Viewport, Scale) - ColonyHud::DateBoxHeight(Scale)),
+		ImGuiCond_Always, ImVec2(1.0f, 1.0f));
 	ImGui::SetNextWindowBgAlpha(0.6f);
 	if (!USimSubsystem::IsKeyHelpShown())
 	{
@@ -456,16 +416,7 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 	}
 	ImGui::End();
 
-	// The settings for the shooter feel (shake, blur, kick, aim view), kept folded under the alarm button (U21).
-	if (UShooterFeelSubsystem* Feel = GetWorld()->GetSubsystem<UShooterFeelSubsystem>())
-	{
-		Feel->DrawSettingsPanel(Viewport->Pos.x + Viewport->Size.x, Scale);
-	}
-	// The sound mixer (V20), folded under it.
-	if (USoundSubsystem* Sound = GetWorld()->GetSubsystem<USoundSubsystem>())
-	{
-		Sound->DrawMixerPanel(Viewport->Pos.x + Viewport->Size.x, Scale);
-	}
+	// The shooter feel and sound settings are pages of Settings now (Menu > Settings).
 
 	++PanelFramesDrawn;
 }

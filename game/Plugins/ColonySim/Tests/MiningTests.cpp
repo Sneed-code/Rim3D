@@ -17,6 +17,7 @@
 #include <doctest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -473,6 +474,11 @@ TEST_CASE("Chopping: felling a grown tree gives wood by growth and skill, a sapl
     CHECK(log.count(EventType::PlantRemoved) == 1);
     CHECK(log.first(EventType::PlantRemoved)->message == "felled");
     CHECK(log.first(EventType::PlantRemoved)->amount == 46.0f);
+    // It falls away from the woodcutter, who stood on its west side (docs/design/structure-damage.md "Falling trees").
+    CHECK(log.first(EventType::PlantRemoved)->thing == pawn);
+    CHECK(log.first(EventType::PlantRemoved)->x > 0.6f);
+    CHECK(std::fabs(std::hypot(log.first(EventType::PlantRemoved)->x, log.first(EventType::PlantRemoved)->y) - 1.0f) < 1e-4f);
+    CHECK(log.first(EventType::PlantRemoved)->count == static_cast<int>(kPlantFullGrowth));
     CHECK(log.actions(PawnAction::Cut) == 1);
     CHECK(sim.designations().count() == 0);
     (void)pawn;

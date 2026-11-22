@@ -16,6 +16,8 @@
 
 #include <doctest.h>
 
+#include "TestPlants.h"
+
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -76,7 +78,7 @@ std::unique_ptr<Sim> meleeTestSim(uint64_t seed = 11, int size = 64) {
     settings.seed = seed;
     settings.mapSize = size;
     settings.flatMap = true;
-    return std::make_unique<Sim>(settings, meleeTestDefs());
+    return withoutPlants(std::make_unique<Sim>(settings, meleeTestDefs()));
 }
 
 Entity meleeTestPawn(Sim& sim, float x, float y, const char* weapon = nullptr) {
@@ -202,10 +204,10 @@ TEST_CASE("Melee: skill sets swing speed, damage, the hand's wobble and reaction
         CHECK(sim->melee().aimWobble(pawn) == doctest::Approx(wobble));
         CHECK(sim->melee().reactionSteps(pawn) == doctest::Approx(reaction));
     };
-    at(0, nullptr, 0.8f, 0.8f, 0.12f, 14.0f);
-    at(10, nullptr, 1.0f, 1.0f, 0.075f, 9.5f);
-    at(20, nullptr, 1.2f, 1.2f, 0.03f, 5.0f);
-    at(20, "Nimble", 1.2f, 1.2f, 0.03f, 2.0f);  // Nimble reads swings quicker
+    at(0, nullptr, 0.8f, 0.8f, 0.12f, 9.0f);  // quicker since sneed's 2026-11-19 feedback (fast swings were unreadable)
+    at(10, nullptr, 1.0f, 1.0f, 0.075f, 6.0f);
+    at(20, nullptr, 1.2f, 1.2f, 0.03f, 3.0f);
+    at(20, "Nimble", 1.2f, 1.2f, 0.03f, 1.0f);  // Nimble reads swings quicker
     // A pawn with no skills counts as level 4.
     const Entity raider = meleeTestPawn(*sim, 12.5f, 10.5f);
     CHECK(sim->melee().swingSpeed(raider) == doctest::Approx(0.88f));
@@ -407,7 +409,9 @@ TEST_CASE("Melee: an unarmed fighter sidesteps the swings it reads in time; a sl
     int hits = 0;
     run(20, swings, dodged, hits);
     CHECK(swings >= 100);
-    CHECK(dodged > swings * 3 / 4);  // a skilled fighter reads nearly every swing in time and gets clear
+    // A skilled fighter reads most swings in time and gets clear of a good share of them: since 2026-11-19 it defends by
+    // skill (85% at 20) and a master's club winds up in 7 steps, so a late read is a flinch that doesn't clear the blow.
+    CHECK(dodged > swings / 5);
     int slowSwings = 0;
     int slowDodged = 0;
     int slowHits = 0;
@@ -454,7 +458,7 @@ TEST_CASE("Melee: a pawn with a melee weapon parries swings from the front until
     MESSAGE("swings " << swings << ", raised " << raised << ", blocked " << blocked << ", guard breaks "
                        << sim->melee().guardBreaks());
     CHECK(swings == 80);
-    CHECK(raised > 50);                  // it parries whenever its guard holds...
+    CHECK(raised > 40);                  // it parries when it defends (85% at skill 20) and its guard holds...
     CHECK(blocked > raised * 3 / 4);     // ...and the raised weapon catches the strike
     CHECK(sim->melee().guardBreaks() > 10);  // every third parry in a row breaks the guard...
     CHECK(blocked < 70);                 // ...and the next blow gets through
@@ -742,5 +746,5 @@ TEST_CASE("Melee: an AI fighter rolls clear of a heavy blow and sidesteps a ligh
     CHECK(strong >= 5);
     CHECK(rolled >= 5);       // rolls from heavy blows (fewer since tuning.json halved two-handed cooldowns), at most one every aiRollEverySteps...
     CHECK(rolled <= strong);  // ...and none from the light ones (sidesteps)
-    CHECK(dodged >= 10);      // twice-as-fast longsword swings leave less time to step aside
+    CHECK(dodged >= 6);       // three-times-as-fast longsword swings leave less time to step aside, and it defends by skill
 }

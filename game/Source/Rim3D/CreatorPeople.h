@@ -22,4 +22,39 @@ namespace CreatorPeople
 	 *  generic woman or man. Looks and apply as for the random ones. */
 	FSimPawnLooks DefaultLooks(bool bFemale, const FSimPawnLooks& From);
 	bool ApplyDefault(bool bFemale, ASimPawnActor& Pawn);
+
+	/**
+	 * The character screen's look of a colonist (docs/design/new-game.md): the random person Seed (as RandomLooks makes),
+	 * or for a negative Seed the creator's untouched base person (DefaultLooks, the gun range's woman: kDefaultSeed),
+	 * with the player's changes on top, by name. It travels through the sim as text (PawnLooks::creator,
+	 * "seed=12;female=1;height=1.02;"), so in-game pawns are drawn with exactly the same CreatorApply as the creator:
+	 * hair, clothes and body updates show in both. Names: height (mesh scale), sex, older, weight, muscle, breasts (-1..1
+	 * where they are signed), hairStyle (index, HairStyleLabel), hairR/G/B, skinR/G/B, irisR/G/B (sRGB 0..1),
+	 * pubic (0 none, 1 natural, 2 trimmed, 3 shaved).
+	 */
+	constexpr int32 kDefaultSeed = -1;
+	struct FLook
+	{
+		int32 Seed = 0;
+		bool bFemale = true;
+		TMap<FString, float> Values;
+
+		float Get(const TCHAR* Name, float Default) const
+		{
+			const float* Found = Values.Find(Name);
+			return Found ? *Found : Default;
+		}
+	};
+	FString Encode(const FLook& Look);
+	/** False for text that is not a look (no seed). */
+	bool Decode(const FString& Text, FLook& Out);
+	/** The look's values as the random person has them before any change (for the sliders' starting points). */
+	FLook Expanded(const FLook& Look);
+	FSimPawnLooks LooksFor(const FLook& Look, const FSimPawnLooks& From);
+	/** Puts the look on the pawn's MakeHuman body; false if its creator base is not on yet (call again next frame). */
+	bool Apply(const FLook& Look, ASimPawnActor& Pawn);
+	int32 HairStyleCount();
+	FString HairStyleLabel(int32 Index);
+	/** Whether the pawn's base has this hair style (bald always). */
+	bool HasHairStyle(int32 Index, const ASimPawnActor& Pawn);
 }

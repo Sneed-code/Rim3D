@@ -65,6 +65,13 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
         j["pawn"] = entt::to_integral(focus->pawn);
         j["target"] = entt::to_integral(focus->target);
         j["mode"] = static_cast<int>(focus->mode);
+        if (focus->viewX != 0.0f || focus->viewY != 0.0f) {
+            j["viewX"] = focus->viewX;
+            j["viewY"] = focus->viewY;
+        }
+        if (focus->anySide) {
+            j["anySide"] = true;
+        }
         return j;
     }
     if (const auto* response = std::get_if<SetFightResponseCommand>(&logged.command)) {
@@ -93,8 +100,36 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
         j["pawn"] = entt::to_integral(unstuck->pawn);
         return j;
     }
+    if (const auto* group = std::get_if<SetWorkGroupCommand>(&logged.command)) {
+        j["pawn"] = entt::to_integral(group->pawn);
+        j["group"] = group->group;
+        return j;
+    }
+    if (const auto* setGrime = std::get_if<SetGrimeCommand>(&logged.command)) {
+        j["pawn"] = entt::to_integral(setGrime->pawn);
+        j["dirtLegs"] = setGrime->dirtLegs;
+        j["dirtBody"] = setGrime->dirtBody;
+        return j;
+    }
     if (const auto* reroll = std::get_if<RerollColonistCommand>(&logged.command)) {
         j["slot"] = reroll->slot;
+        return j;
+    }
+    if (const auto* edit = std::get_if<EditColonistCommand>(&logged.command)) {
+        j["slot"] = edit->slot;
+        j["firstName"] = edit->firstName;
+        j["nickName"] = edit->nickName;
+        j["lastName"] = edit->lastName;
+        j["female"] = edit->female;
+        j["setCreator"] = edit->setCreator;
+        j["creator"] = edit->creator;
+        return j;
+    }
+    if (const auto* setTraits = std::get_if<SetColonistTraitsCommand>(&logged.command)) {
+        j["slot"] = setTraits->slot;
+        j["traits"] = setTraits->traits;
+        j["randomize"] = setTraits->randomize;
+        j["roll"] = setTraits->roll;
         return j;
     }
     std::visit(
@@ -598,7 +633,11 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                                           std::is_same_v<Type, SetFightResponseCommand> ||
                                           std::is_same_v<Type, LevelEarthCommand> ||
                                           std::is_same_v<Type, CancelEarthworksCommand> ||
-                                          std::is_same_v<Type, UnstuckCommand>,
+                                          std::is_same_v<Type, UnstuckCommand> ||
+                                          std::is_same_v<Type, SetWorkGroupCommand> ||
+                                          std::is_same_v<Type, SetGrimeCommand> ||
+                                          std::is_same_v<Type, EditColonistCommand> ||
+                                          std::is_same_v<Type, SetColonistTraitsCommand>,
                                       "write every command type");
                     }
                 }
@@ -743,19 +782,20 @@ bool replayReadPriority(ReplayReader& r, const ReplayJson& j, const std::string&
 }
 
 
-// "kind": "Mine", "CutPlant", "HarvestPlant" or "RemoveFloor"; "None" (cancelling only) means every kind.
+// "kind": "Mine", "CutPlant", "HarvestPlant", "RemoveFloor", "AddWindow" or "RemoveWindow"; "None" (cancelling only) means every kind.
 bool replayReadDesignation(ReplayReader& r, const ReplayJson& j, const std::string& where, DesignationKind& out) {
     std::string name = designationKindName(out);
     if (!r.text(j, "kind", name, where)) {
         return false;
     }
-    for (const DesignationKind k : {DesignationKind::None, DesignationKind::Mine, DesignationKind::CutPlant, DesignationKind::HarvestPlant, DesignationKind::RemoveFloor}) {
+    for (const DesignationKind k : {DesignationKind::None, DesignationKind::Mine, DesignationKind::CutPlant, DesignationKind::HarvestPlant, DesignationKind::RemoveFloor,
+                                    DesignationKind::AddWindow, DesignationKind::RemoveWindow}) {
         if (name == designationKindName(k)) {
             out = k;
             return true;
         }
     }
-    return r.fail(where + ".kind must be None, Mine, CutPlant, HarvestPlant or RemoveFloor");
+    return r.fail(where + ".kind must be None, Mine, CutPlant, HarvestPlant, RemoveFloor, AddWindow or RemoveWindow");
 }
 
 // "mode": "Count" (the default), "UntilHave" or "Forever"
@@ -1048,7 +1088,7 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             return false;
         }
         if (c.kind == DesignationKind::None) {
-            return r.fail(where + ".kind must be Mine, CutPlant, HarvestPlant or RemoveFloor");
+            return r.fail(where + ".kind must be Mine, CutPlant, HarvestPlant, RemoveFloor, AddWindow or RemoveWindow");
         }
         out.command = c;
     } else if (type == "CancelDesignations") {
@@ -1971,6 +2011,47 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             out.command = std::move(c);
             return true;
         }
+        if (type == "EditColonist") {
+            EditColonistCommand c;
+            if (!r.integer(j, "slot", c.slot, where) || !r.text(j, "firstName", c.firstName, where) ||
+                !r.text(j, "nickName", c.nickName, where) || !r.text(j, "lastName", c.lastName, where) ||
+                !r.integer(j, "female", c.female, where) || !r.flag(j, "setCreator", c.setCreator, where) ||
+                !r.text(j, "creator", c.creator, where)) {
+                return false;
+            }
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetColonistTraits") {
+            SetColonistTraitsCommand c;
+            if (!r.integer(j, "slot", c.slot, where) || !r.text(j, "traits", c.traits, where) ||
+                !r.flag(j, "randomize", c.randomize, where) || !r.integer(j, "roll", c.roll, where)) {
+                return false;
+            }
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetGrime") {
+            SetGrimeCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            if (!r.integer(j, "pawn", pawn, where) || !r.number(j, "dirtLegs", c.dirtLegs, where) ||
+                !r.number(j, "dirtBody", c.dirtBody, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            out.command = std::move(c);
+            return true;
+        }
+        if (type == "SetWorkGroup") {
+            SetWorkGroupCommand c;
+            uint32_t pawn = entt::to_integral(kNoEntity);
+            if (!r.integer(j, "pawn", pawn, where) || !r.text(j, "group", c.group, where)) {
+                return false;
+            }
+            c.pawn = static_cast<Entity>(pawn);
+            out.command = std::move(c);
+            return true;
+        }
         if (type == "Focus") {
             FocusCommand c;
             uint32_t pawn = entt::to_integral(kNoEntity);
@@ -1979,8 +2060,12 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             if (!r.integer(j, "pawn", pawn, where) || !r.integer(j, "target", target, where) || !r.integer(j, "mode", mode, where)) {
                 return false;
             }
-            if (mode < 0 || mode > static_cast<int>(FocusMode::Clear)) {
+            if (mode < 0 || mode > static_cast<int>(FocusMode::Right)) {
                 return r.fail(where + ": bad focus mode");
+            }
+            if ((j.contains("viewX") && !r.number(j, "viewX", c.viewX, where)) || (j.contains("viewY") && !r.number(j, "viewY", c.viewY, where)) ||
+                (j.contains("anySide") && !r.flag(j, "anySide", c.anySide, where))) {
+                return false;
             }
             c.pawn = static_cast<Entity>(pawn);
             c.target = static_cast<Entity>(target);

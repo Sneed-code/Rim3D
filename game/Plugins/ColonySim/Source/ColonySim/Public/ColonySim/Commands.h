@@ -572,8 +572,9 @@ struct SetMedicalCareCommand {
 };
 
 // Prisoners (task C22, docs/design/prisoners.md): what wardens do with a prisoner. `mode` is NoInteraction, ReduceResistance,
-// AttemptRecruit or Release (prisonerModeName). Fails for a pawn that is no prisoner, or a name that isn't one; Release also fails
-// for a prisoner who can't walk.
+// AttemptRecruit, Release, Execute, Enslave or ReduceWill (prisonerModeName). Fails for a pawn that is no prisoner, or a name that
+// isn't one; Release also fails for a prisoner who can't walk. For a slave `mode` is "Emancipate" (it becomes a free colonist)
+// or "Release" (it goes back to its side and walks off the map).
 struct SetPrisonerModeCommand {
     Entity pawn = kNoEntity;
     std::string mode;
@@ -1107,14 +1108,20 @@ struct SetAlertCommand {
     uint8_t alert = 0;
 };
 
-// Lock-on focus (sneed, 2026-11-17; docs/design/focus.md), Dark Souls style. Set: `pawn` locks on to `target` (any
-// living pawn within 25 m). Next: the next nearest target (Tab, WoW style): enemies within 20 m, nearest first, those in
-// front before those behind. Clear: let go (F1). A focused pawn faces its target, and the player's swing with no target
+// Lock-on focus (sneed, 2026-11-17; docs/design/focus.md, lock-on.md), Elden Ring style. Set: `pawn` locks on to
+// `target` (any living pawn within 25 m). Next (Tab): enemies within 20 m, standing before downed, nearest first with
+// those in view before those behind; each Tab within 5 s gives the nearest one not yet given (then round again).
+// Left / Right (a mouse flick): the nearest enemy on that side of the current one (Right turns from +x towards +y,
+// which Unreal draws to the player's right). `viewX`, `viewY`: where the camera looks (zero: the body's facing). `anySide`: own
+// side too (the practice range). Clear: let go. A focused pawn faces its target, and the player's swing with no target
 // goes at the focus's centre when it is in reach. Fails if the pawn isn't on the map, or there is nothing to lock on to.
 struct FocusCommand {
     Entity pawn = kNoEntity;
     Entity target = kNoEntity;
     FocusMode mode = FocusMode::Next;
+    float viewX = 0.0f;
+    float viewY = 0.0f;
+    bool anySide = false;
 };
 
 // What a pawn does about enemies (docs/design/focus.md "Fight response"): Attack (as now), Fists (fights back, with its
@@ -1142,6 +1149,50 @@ struct CancelEarthworksCommand {
 // Fails if the pawn can't be moved or there is no clear spot.
 struct UnstuckCommand {
     Entity pawn = kNoEntity;
+};
+
+// Work groups (docs/design/ui-layout.md, the Work tab): puts a colonist in a named group the player uses to sort and
+// filter the work grid (Fighters, Growers, any name). Up to 24 characters; an empty name takes the colonist out of its
+// group. Groups only sort the grid: the work a colonist does still comes from its priorities. Fails for a pawn that is
+// no colonist or a name that is too long.
+struct SetWorkGroupCommand {
+    Entity pawn = kNoEntity;
+    std::string group;
+};
+
+// Dev command (docs/design/grime.md): sets a pawn's dirt on the legs and the body (0 to 1) outright, for smoke-test
+// pictures of how dirt looks. Fails for a thing that is not a pawn.
+struct SetGrimeCommand {
+    Entity pawn = kNoEntity;
+    float dirtLegs = 0.0f;
+    float dirtBody = 0.0f;
+};
+
+// Before the game starts (game second 0), from the new-game character screen (docs/design/new-game.md): edits the
+// starting colonist in slot `slot` (as RerollColonistCommand counts them). Empty names keep theirs; `female` -1 keeps the
+// gender, 0 or 1 sets it (and makes the looks again for that gender, the lineage kept); `setCreator` stores `creator`
+// (the character creator's look text, empty to clear it). Fails later in the game, for a bad slot, or a name over 24
+// letters.
+struct EditColonistCommand {
+    int slot = 0;
+    std::string firstName;
+    std::string nickName;
+    std::string lastName;
+    int female = -1;
+    bool setCreator = false;
+    std::string creator;
+};
+
+// Before the game starts, from the new-game companions screen (docs/design/new-game.md): gives the starting colonist
+// in slot `slot` these traits, bought from the scenario's `traitPoints` pool (negative traits give points).
+// `traits` is "Def:degree" entries split by ';' (a degree of 0 may be left out). With `randomize` the traits are drawn
+// instead (all points spent), from the game seed, the slot and `roll`. Fails later in the game, for a bad slot, the
+// protagonist (no traits), a scenario without trait points, or a set that doesn't fit the pool (traitSetFits).
+struct SetColonistTraitsCommand {
+    int slot = 0;
+    std::string traits;
+    bool randomize = false;
+    uint32_t roll = 0;
 };
 
 // New commands go at the end: a save names a command by its place in this list.
@@ -1179,7 +1230,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand,
                              SleepCommand, SetLandingZoneCommand,
                              PatchCommand, SetAlertCommand, FocusCommand, SetFightResponseCommand,
-                             LevelEarthCommand, CancelEarthworksCommand, UnstuckCommand>;
+                             LevelEarthCommand, CancelEarthworksCommand, UnstuckCommand, SetWorkGroupCommand,
+                             SetGrimeCommand, EditColonistCommand, SetColonistTraitsCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
 // day) it was applied in. Failed commands are logged too.

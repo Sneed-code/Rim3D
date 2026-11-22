@@ -584,6 +584,7 @@ Pathfinder::Outcome Pathfinder::runCells(int64_t& work, int64_t budget) {
     }
     const auto at = [](auto& v, int i) -> auto& { return v[static_cast<size_t>(i)]; };
 
+    // The same order as Map::kStepDx and kStepDy, which the tight-step bits follow.
     static constexpr int kDx[8] = {1, -1, 0, 0, 1, 1, -1, -1};
     static constexpr int kDy[8] = {0, 0, 1, -1, 1, -1, 1, -1};
 
@@ -621,6 +622,9 @@ Pathfinder::Outcome Pathfinder::runCells(int64_t& work, int64_t budget) {
         const int cy = (c % perLevel) / w;
         const RegionId* regionOf = regionOfLevel[level];
         const Passage* passage = level == 0 ? map_.groundPassage() : nullptr;  // null: ask the regions
+        const uint8_t* trunks = level == 0 && treeCost_ > 0.0f ? map_.groundTrunks() : nullptr;  // null: no trees to pay for
+        const uint8_t* tight = trunks != nullptr ? map_.groundTightSteps() : nullptr;
+        const uint8_t tightHere = tight != nullptr ? tight[cy * w + cx] : uint8_t{0};
         const int base = level * perLevel;
         for (int d = 0; d < 8; ++d) {
             const int nx = cx + kDx[d];
@@ -642,7 +646,15 @@ Pathfinder::Outcome Pathfinder::runCells(int64_t& work, int64_t budget) {
                 continue;
             }
             const bool door = passage != nullptr ? passage[i] == Passage::Door : regions.region(region).kind == RegionKind::Door;
-            relax(c, n, region, (diagonal ? kPathDiagonalCost : 1.0f) + (door ? doorCost_ : 0.0f), nx, ny);
+            // A trunk in the cell costs; so does squeezing diagonally between two trunks on either side, and far more a
+            // step too tight between trunks to slip through (Map::tightSteps; its bits follow kDx and kDy).
+            float tree = 0.0f;
+            if (trunks != nullptr) {
+                tree = (trunks[i] != 0 ? treeCost_ : 0.0f) +
+                       (diagonal && trunks[cy * w + nx] != 0 && trunks[ny * w + cx] != 0 ? treeCost_ : 0.0f) +
+                       ((tightHere >> d) & 1u ? treeCost_ * kTightTreeSteps : 0.0f);
+            }
+            relax(c, n, region, (diagonal ? kPathDiagonalCost : 1.0f) + (door ? doorCost_ : 0.0f) + tree, nx, ny);
         }
 
         // Up or down stairs and ladders that start or end here.
@@ -650,6 +662,9 @@ Pathfinder::Outcome Pathfinder::runCells(int64_t& work, int64_t budget) {
             continue;
         }
         const CellPos here{cx, cy, level};
+        if (!map_.linkAt(here)) {
+            continue;
+        }
         for (const LevelLink& link : map_.levelLinks()) {
             const CellPos other = link.low == here ? link.high : link.high == here ? link.low : CellPos{-1, -1, -1};
             if (other.level < 0 || !map_.inBounds(other) || regionOfLevel[other.level] == nullptr) {

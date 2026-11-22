@@ -75,6 +75,7 @@ REFERENCES = [
     ("Hediffs", "stages[].capacityOffsets{}", "Capacities"),
     ("Hediffs", "stages[].capacityMax{}", "Capacities"),
     ("Scenarios", "startingThings[].thing", "Things"),
+    ("Scenarios", "startingThings[].stuff", "Things"),
     ("Scenarios", "nearbyThings[].thing", "Things"),
     ("Scenarios", "scatteredThings[].thing", "Things"),
     ("Scenarios", "colonistKind", "Things"),
@@ -103,6 +104,7 @@ REFERENCES = [
     ("LootTables", "items[].thing", "Things"),
     ("LootTables", "stacks.from[].thing", "Things"),
     ("Scenarios", "biome", "Biomes"),
+    ("Scenarios", "siteBiomes[]", "Biomes"),
     ("Scenarios", "lineage", "Lineages"),
     ("RecreationActivities", "kind", "RecreationKinds"),
     ("RecreationActivities", "building", "Things"),
@@ -141,7 +143,7 @@ RESEARCH_GATED_KINDS = ("Things", "Recipes", "Terrain")
 # Cues the sim plays for an event with no def to name them (Sound.cpp, docs/design/sound.md).
 EVENT_CUES = {
     "Impact_Armor", "Impact_Building", "Impact_Ground", "Impact_Rock", "Melee_Clang", "Melee_Block", "Punch", "Dodge", "Alert_Suspicious", "Alert_Spotted",
-    "Grenade_Throw", "Grenade_Landed", "Trap_Spring", "Trap_Rearm", "Item_PickUp", "Item_PutDown", "Power_On",
+    "Grenade_Throw", "Grenade_Landed", "Trap_Spring", "Trap_Rearm", "Window_Shatter", "Item_PickUp", "Item_PutDown", "Power_On",
     "Power_Off", "Short_Circuit", "Roof_Collapse", "Fire_Ignite", "Fire_Burning", "Fire_Out", "Alarm", "Raid_Horn",
     "Research_Done", "Work_Mine", "Work_Chop", "Work_Harvest", "Work_Build", "Work_Cook", "Work_Smith", "Work_Craft",
     "Work_Tailor", "Work_Research", "Work_Clean", "Work_Tend", "Work_Stonecut", "Work_Butcher", "Work_Eat",
@@ -151,6 +153,13 @@ EVENT_CUES = {
     "Hit_Wood_Flesh", "Hit_Wood_Wood", "Hit_Wood_Steel", "Hit_Wood_Stone",
     "Hit_Steel_Flesh", "Hit_Steel_Wood", "Hit_Steel_Steel", "Hit_Steel_Stone",
     "Ui_KillConfirm",  # Unreal, the kill feed on the player's own kill (KillFeedSubsystem.cpp)
+    # Impacts by surface (soundImpactCue): bullets and arrows on what they struck; ricochets off stone and steel
+    "Impact_Wood", "Impact_Steel", "Impact_Stone", "Impact_Dirt", "Impact_Sand", "Impact_Water", "Impact_Glass",
+    "Arrow_Flesh", "Arrow_Wood", "Arrow_Stone", "Arrow_Dirt", "Ricochet",
+    # Blasts by size and their debris, gore when a part comes off, a felled tree (soundForEvent)
+    "Explosion_Large", "Explosion_Debris", "Gore_Sever", "Gore_Decap", "Gore_Splat", "Tree_Fall",
+    # Work by the job (soundWorkCue): plants cut, soil dug to sow, buildings taken apart, repairs, drills, a bed
+    "Work_PlantCut", "Work_Sow", "Work_Deconstruct", "Work_Repair", "Work_Drill", "Bed_Creak",
 }
 
 
@@ -218,6 +227,29 @@ def check_research_unlocks(defs_by_kind):
     return problems
 
 
+def check_garment_cuts(defs_by_kind):
+    """Every garment a def's visual.cuts names ('+' joins several) must be in assets/makehuman_garments.json."""
+    path = Path(__file__).resolve().parent.parent / "assets" / "makehuman_garments.json"
+    if not path.exists():
+        return []
+    garments = {g["name"] for g in json.loads(path.read_text(encoding="utf-8"))["garments"]}
+    problems = []
+    for kind, kind_defs in defs_by_kind.items():
+        for name, (file, entry) in kind_defs.items():
+            visual = entry.get("visual")
+            cuts = visual.get("cuts") if isinstance(visual, dict) else None
+            if cuts is None:
+                continue
+            if not isinstance(cuts, list) or not all(isinstance(c, str) and c for c in cuts):
+                problems.append(f"{file}: {kind} '{name}' visual.cuts must be a list of garment names")
+                continue
+            for cut in cuts:
+                for garment in cut.split("+"):
+                    if garment not in garments:
+                        problems.append(f"{file}: {kind} '{name}' visual.cuts names unknown garment '{garment}'")
+    return problems
+
+
 def check_sound_cues(defs_by_kind):
     """Every cue a def names under visual.sound must be a SoundCues def; returns the problems and the cues used."""
     problems = []
@@ -236,6 +268,12 @@ def check_sound_cues(defs_by_kind):
                 if slot == "material":  # what it sounds like when struck or striking (melee by material)
                     if cue not in ("Wood", "Steel", "Stone", "Flesh"):
                         problems.append(f"{file}: {kind} '{name}' visual.sound.material must be Wood, Steel, Stone or Flesh")
+                    continue
+                if slot == "impactSet":  # the family of impact cues a projectile uses (soundImpactCue)
+                    if cue not in ("Impact", "Arrow"):
+                        problems.append(f"{file}: {kind} '{name}' visual.sound.impactSet must be Impact or Arrow")
+                    continue
+                if cue == "":  # an empty slot clears what the parent gives (a bow throws no spent case)
                     continue
                 if not isinstance(cue, str) or cue not in cues:
                     problems.append(f"{file}: {kind} '{name}' visual.sound.{slot} names unknown SoundCues def '{cue}'")
@@ -266,7 +304,34 @@ def check_hold_styles(defs_by_kind):
     rules = defs_by_kind.get("Rules", {}).get("MeleeRules")
     attack_styles = set((rules[1].get("styleAttacks") or {}).keys()) if rules else set()
     point = lambda v: isinstance(v, list) and len(v) == 3 and all(isinstance(x, (int, float)) for x in v)
+    place_keys = ("ready", "aim", "block", "fpReady", "fpAim", "fpBlock")
+
+    def check_places(where, places):
+        # Where the weapon is held: {anchor, point, at, turn} per state (docs/design/weapon-hold.md).
+        if not isinstance(places, dict):
+            problems.append(f"{where} places must be an object")
+            return
+        for key, place in places.items():
+            if key not in place_keys:
+                problems.append(f"{where} places.{key} is not one of {', '.join(place_keys)}")
+            elif not isinstance(place, dict) or not point(place.get("at")):
+                problems.append(f"{where} places.{key} needs at: [x, y, z]")
+            else:
+                if place.get("anchor", "Chest") not in ("Chest", "Head", "View"):
+                    problems.append(f"{where} places.{key} anchor must be Chest, Head or View")
+                if place.get("point", "Main") not in ("Main", "Sight", "Stock"):
+                    problems.append(f"{where} places.{key} point must be Main, Sight or Stock")
+                if "turn" in place and not point(place["turn"]):
+                    problems.append(f"{where} places.{key} turn must be [pitch, yaw, roll]")
+                if key.startswith("fp") != (place.get("anchor", "Chest") == "View"):
+                    problems.append(f"{where} places.{key}: first-person places use anchor View, third-person ones Chest or Head")
+
     for name, (file, entry) in defs_by_kind.get("HoldStyles", {}).items():
+        if "places" in entry:
+            check_places(f"{file}: HoldStyles '{name}'", entry["places"])
+        for key in ("support", "offTurn"):
+            if key in entry and not point(entry[key]):
+                problems.append(f"{file}: HoldStyles '{name}' {key} must be [x, y, z]")
         if entry.get("grip", "Blade") not in ("None", "Blade", "Gun", "Bow", "Shield", "Pole"):
             problems.append(f"{file}: HoldStyles '{name}' grip must be None, Blade, Gun, Bow, Shield or Pole")
         if entry.get("hand", "Right") not in ("Right", "Left"):
@@ -288,9 +353,11 @@ def check_hold_styles(defs_by_kind):
         if not isinstance(hold, dict) or "style" not in hold:
             problems.append(f"{file}: Things '{name}' hold needs a style")
             continue
-        for key in ("main", "off"):
+        for key in ("main", "off", "support", "offTurn"):
             if key in hold and not point(hold[key]):
                 problems.append(f"{file}: Things '{name}' hold.{key} must be [x, y, z]")
+        if "places" in hold:
+            check_places(f"{file}: Things '{name}' hold", hold["places"])
     return problems
 
 
@@ -348,6 +415,7 @@ def main() -> int:
 
     if CHECK_REFERENCES and "HoldStyles" in defs_by_kind:
         problems.extend(check_hold_styles(defs_by_kind))
+        problems.extend(check_garment_cuts(defs_by_kind))
 
     if CHECK_REFERENCES and "SoundCues" in defs_by_kind:
         sound_problems, used = check_sound_cues(defs_by_kind)

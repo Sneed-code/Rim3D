@@ -169,8 +169,10 @@ bool MoodSystem::conditionValue(Entity pawn, const std::string& condition, float
             return true;
         }
         if (condition == "outdoorsNeed") {
+            // Like an undergrounder, a drow never feels cooped up (docs/design/races.md).
+            const PawnGenes* genes = reg.try_get<PawnGenes>(pawn);
             value = joy->outdoors;
-            return true;
+            return genes == nullptr || !genes->effects.noOutdoorsNeed;
         }
     }
     if (condition == "colonyWealth") {
@@ -382,6 +384,14 @@ std::vector<ThoughtView> MoodSystem::thoughtList(Entity pawn, int64_t now, bool 
             }
             if (def != nullptr) {
                 out.push_back(ThoughtView{def->defName(), labels ? def->label() : std::string(), moodFloat(*def, "moodOffset", 0.0f), false, memory.expires});
+            }
+        }
+    }
+    // Cat-strain feel every bad mood a third worse (docs/design/races.md).
+    if (const PawnGenes* genes = reg.try_get<PawnGenes>(pawn); genes != nullptr && genes->effects.debuffFactor != 1.0f) {
+        for (ThoughtView& thought : out) {
+            if (thought.offset < 0.0f) {
+                thought.offset *= genes->effects.debuffFactor;
             }
         }
     }

@@ -23,12 +23,14 @@
   "lightningLux": 30000,
 
   "exposure": {
-    "_about": "The camera is held near a target that follows the light: noonEV at a clear midsummer noon, and for every stop darker the scene is, the target drops `follow` stops (1 would make night as bright as day). The auto exposure may move `brighterEV` below and `darkerEV` above the target, for rooms and bright snow.",
+    "_about": "The camera is held near a target that follows the light: noonEV at a clear midsummer noon, and for every stop darker the scene is, the target drops `follow` stops (1 would make night as bright as day). The auto exposure may move `brighterEV` below and `darkerEV` above the target, for rooms and bright snow. With the camera under a roof it may go `indoorBrighterEV` below instead, easing in and out at `indoorEase` (share per second), so rooms lit through windows read as lit.",
     "noonEV": 15.0,
     "follow": 0.88,
     "minEV": -1.5,
     "maxEV": 16.0,
     "brighterEV": 0.75,
+    "indoorBrighterEV": 5.0,
+    "indoorEase": 1.5,
     "darkerEV": 0.25,
     "speedUp": 2.0,
     "speedDown": 1.5,
@@ -53,6 +55,15 @@
     "lowSunMist": 0.03,
     "lowSunMistFromDeg": -3.0,
     "lowSunMistToDeg": 14.0
+  },
+
+  "indoorDust": {
+    "_about": "With the camera under a roof (the same test as exposure.indoorBrighterEV) the air shows its dust, so sunbeams through windows draw shafts: the volumetric fog starts `startDistanceCm` from the camera instead of fog.startDistanceCm, is `extinction` times thicker and reaches only `distanceCm` (the plain height fog beyond keeps the weather's thin density, so the outdoors stays clear). The sky light and the sky's ambient light light the fog only `skyScattering` and `ambient` as much (they shine through the roof and made the room milky), so the room's air is dark and the sun's beams stand out. Needs a quality step with volumetric fog (High, Epic).",
+    "startDistanceCm": 0,
+    "extinction": 12.0,
+    "distanceCm": 1500,
+    "skyScattering": 0.0,
+    "ambient": 0.0
   },
 
   "morningMist": {

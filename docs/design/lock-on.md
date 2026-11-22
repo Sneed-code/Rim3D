@@ -53,7 +53,10 @@ that had EndFocus on F1 move to the new default.
 - **Melee weapon or fists in hand**: the sim turns the body to the target (as `MeleeSystem::faceFocus` does now). WASD is
   read **around the target**: W toward it, S straight back, A/D walk a circle round it at the current distance (the move
   direction is the tangent, corrected each step so the distance holds). The third-person camera turns to keep the target
-  ahead (as `FollowFocus` does now); the mouse tilts it and flicks switch targets.
+  ahead (as `FollowFocus` does now); the mouse tilts it and flicks switch targets. The turn is eased, not a fixed
+  spin: it closes its gap with a 0.08 s time constant, capped at 360 degrees a second (100 in first person). After a
+  roll the cap starts at a tenth and eases up to full over 0.5 s, so the view swings back to the enemy gently instead of
+  whipping round (sneed 2026-11-19).
 - **Gun in hand**: no auto-face, no camera pull. WASD and the mouse work exactly as unlocked. The marker and HP bar stay.
 - **Sprint while locked**: the body turns to the run direction (as Elden Ring), facing returns when sprint stops.
 - **Roll**: goes the way you press, relative to the target when locked with melee.
@@ -126,6 +129,89 @@ An aimed ability asks `focusPoint(target)` for its aim when the caster is locked
 - Not yet: the mouse-flick target switch, the marker moving to the head with fists, nearest-to-view-centre first pick
   (Tab's nearest-in-front pick is used), and the body turning to run while sprinting locked on (the lock lets go after
   0.75 s instead).
+
+## Tab, flicks and landing blows (sneed 2026-11-19, after the gun range)
+
+sneed: "tab doesn't shuffle or work intuitively to target closest", "when I'm swinging at someone it doesn't always hit,
+and they don't dodge it or anything", swing speeds up (club x2, the rest +50%), a spear or knife at a downed target stabs
+down into the body.
+
+- **Why Tab felt stuck**: it took the one after the held target in a list sorted by distance at each press. Walking to
+  the second nearest made it the nearest, so Tab swapped between the two nearest for ever. **Now a round**: each Tab
+  within `focusRoundSteps` (5 s) of the last gives the nearest enemy not given yet (standing ones before downed ones,
+  those in view before those behind), then round again from the nearest. After 5 s without Tab a new round starts
+  from the nearest other than the one held. "In view" is where the **camera** looks (FocusCommand `viewX/viewY`), not
+  where the body faces.
+- **Mouse flick** (Unreal `UProtagonistSubsystem::UpdateFlick`): locked on with melee or fists, a quick sideways mouse
+  move (`LockOn.FlickMouse`, 40 units within 0.15 s, 0.4 s between flicks) sends FocusMode `Left`/`Right`: the enemy
+  with the smallest turn that way from the one held (within `flickMaxDegrees` 150). Not with a gun (free aim).
+- **The practice range** picks its own-side targets through FocusCommand `anySide` (it used to pick them itself, Tab
+  only, so middle mouse found nobody there).
+- **Faster swings**: `data/tuning.json` cooldown multipliers (RimWorld's numbers stay in the defs): club 0.5, knife
+  0.222 (x3 then +50%), longsword, breach axe, spear and monosword 0.333 (x2 then +50%), gladius, mace, plasma sword and
+  zeushammer 0.667. The wind-up is `windupShare` of it (at least `minWindup`, 0.3 s) and the clip plays to fit.
+- **Why swings whiffed**: (1) a swing started with the lock just out of reach went straight ahead at nobody; (2) the
+  line fixed 0.2 s before the blow missed a target that only shuffled (footwork) without dodging. Now the player's swing
+  takes its lock up to `playerReachSlack` (0.6 m) past its reach (it walks on under it; the blow is still only as long as
+  the reach), else the nearest enemy within `assistCos` of ahead, else whoever walked into it by the commit. A target
+  that didn't dodge is followed to the blow if it moved no more than `strikeTrackDegrees` (35) off the line.
+- **Why nobody dodged**: the faster swings wind up in 9 steps; reading one took 14 steps at skill 0 and 5 at skill 20
+  (plus or minus 4), so most were too quick to read. Reaction is now `reactionStepsBySkill` 9 to 3 (plus or minus 3),
+  and a swing read in time is defended `defendChanceBySkill` (35% at skill 0, 85% at 20): with a weapon a parry
+  (`parryShare` 60% for a fighter), else (and the rest) a roll from a heavy blow, a **step back** out of reach
+  (`backstepShare` 40%, 1.3 m in 8 steps, clear of the attacker's own step in) or a sidestep. A dodge read in time keeps the fixed line, so it gets away.
+- **Blows at the downed**: the sim already picked the downward stab (`Motion_Spear_Stab_Low`, `Motion_Knife_Stab_Low`)
+  for a swing at a downed target; the PC's range build lacked those clips and played the standing one. In first person
+  the hands now drive down into the body for a low blow instead of straight ahead.
+
+## Finishers, aim assist and Tab that keeps you running (sneed 2026-11-20)
+
+sneed: "melee attack with spear / other melee weapons doesn't change on a downed enemy ... they have to be unique (a spear
+rams it in the back, club smashes, sword thrusts into chest, knife stabs down like slamming a knife into the table) - this
+requires my pawn to kneel down"; "if I use a melee weapon near a non-friendly (even neutral) it should have aim assist";
+"when I use Tab do not let it interrupt my movement (or sprint)"; "pressing Tab again still doesn't change targets".
+
+**Finishers (sim).** A swing at a body on the ground with a weapon that has a finisher is a finisher, not a swing:
+`MeleeRules.finishers` names one per weapon (`Melee_Spear`, `Melee_Knife`) or per style (`Club`, `OneHand`, `TwoHand`),
+each with its move (Spear, Club, Sword, Knife), total `seconds`, `hitSeconds` (when the blow lands), `standOff` (how far
+from the body's centre the attacker stands or kneels), `kneel` and `bend` (how far the back bends). The attacker steps to
+its place beside the body before the blow (`finisherStepMetres` a step, through BodyMotion), holds still (DirectMove is
+ignored, facing stays on the body) and is ready again when the move ends. Melee save section 7 keeps a finisher under way.
+The snapshot carries `meleeFinisher` (1-based index), `meleeFinisherT` (0..1) and `meleeFinisherTarget`.
+
+| Weapon | Move | Look |
+|---|---|---|
+| Spear | Spear | stands over the back, both hands raise the spear high, rams it down into the lower back |
+| Club, mace | Club | drops to one knee, swings the club up and smashes it down on the nearest part of the body |
+| Gladius (one hand) | Sword | kneels, reverse grip, drives the blade down into the chest |
+| Longsword (two hands) | Sword | stands, both hands, point down into the chest |
+| Knife | Knife | kneels, reverse grip, raises the knife and slams it straight down into the chest like into a table |
+
+**Drawing (Unreal).** `UWeaponDrawSubsystem::FinisherPose` moves the weapon along the move's keys (points in front of,
+right of and above the target's bone, `spine_02` for the spear, `head` for the club, `spine_03` for swords and knives;
+Hermite curves that hold still at held keys, no snapping) so the tip ends on the body at the hit; the hands are pinned on
+the weapon (weapon first, then the hands, as `weapon-hold.md`). It eases in over the first 14% and out over the last 14%.
+Kneeling moves play the crouch pose on the default slot while T < 0.86; the back bends by `bend` with an extra push near
+the hit. The spot is whichever of the move's bone (15 cm preferred), the spine, pelvis and thighs is nearest the
+attacker's shoulder (a ragdoll lies any way round). Where the grip would still be beyond the arm's reach (0.97 of the
+arm from `upperarm_r`), the weapon comes back along that line so it never leaves the hands, and the back bends up to 30
+degrees further while the spot is still ahead of the shoulder. The bend is put on after the montage slots (the kneel is
+a whole-body clip there). The drawn body never slides toward the victim. A finisher whose body leaves the map ends at
+once. Only MakeHuman bodies (the gun range, the creator) pin the hands to the finisher path; MetaHumans get the sim part
+(step in, hold, kneel, bend). Smoke test `finishers` pictures each move at the raise, strike and after (`Saved/Smoke/finishers/`).
+
+**Aim assist on anyone not friendly.** With no lock-on, the player's swing goes at the best target in a 70 degree cone
+ahead within reach: hostiles, **neutrals too** (another faction, wild animals), never its own side or prisoners (sim
+`MeleeSystem::setNotFriendly`; Unreal `FindSwingTarget` the same). The most centred wins; the nearest when two are within
+a few degrees. The body also keeps facing its target through the windup now: the walk direction no longer turns it away
+(the sim's combat step and the pawn actor both used to face the walk, which made swings "wonky").
+
+**Tab no longer stops you, and every Tab cycles.** The cause was Unreal's menu navigation: Tab (and the arrow keys) moved
+keyboard focus off the game viewport to the next widget, so held keys were let go (W and sprint stopped) and the next
+Tab went to that widget instead of the game. `UProtagonistSubsystem::Initialize` turns Slate's Tab, arrow and stick
+navigation off for the game (and puts it back on shutdown). A flick with nobody that way (one other target left, behind or on the other side) still switches, to the other
+target nearest in turn (PC gun range 2026-11-20). Smoke `finishers` phase `tab_run` sprints with real key
+events, presses Tab three times and checks the speed never drops and the lock moves to three different enemies.
 
 ## The original build plan
 

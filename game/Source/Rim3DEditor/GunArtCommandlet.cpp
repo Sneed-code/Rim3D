@@ -4,6 +4,7 @@
 #include "AssetToolsModule.h"
 #include "Dom/JsonObject.h"
 #include "Engine/StaticMesh.h"
+#include "HAL/FileManager.h"
 #include "Math/RotationMatrix.h"
 #include "StaticMeshResources.h"
 #include "Engine/Texture2D.h"
@@ -35,6 +36,8 @@ namespace
 	const TCHAR* const GunArtRoot = TEXT("/Game/Rim3D/Generated/Guns");
 	/** Where the "vehicles" of a list go (assets/shuttle.json, docs/design/shuttle-draw.md). */
 	const TCHAR* const GunArtVehicleRoot = TEXT("/Game/Rim3D/Generated/Vehicles");
+	// Buildings and items with a Codex model (assets/codex_art.json): one combined mesh each, SM_<name>, named by the def's visual.mesh.
+	const TCHAR* const GunArtBuildingRoot = TEXT("/Game/Rim3D/Generated/Buildings");
 
 	bool GunArtSave(UObject* Asset)
 	{
@@ -127,6 +130,9 @@ namespace
 		{
 			return nullptr;
 		}
+		// Buildings and items drawn with these maps go through instanced meshes (BuildingSubsystem); set it here so a
+		// packaged game has the shader permutation (the editor would add it on first use).
+		Material->bUsedWithInstancedStaticMeshes = true;
 		const auto Sample = [Material](const TCHAR* Name, int32 Y, UTexture2D* Default, EMaterialSamplerType Type)
 		{
 			auto* Node = GunArtNode<UMaterialExpressionTextureSampleParameter2D>(Material, -900, Y);
@@ -280,7 +286,7 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 	UMaterial* Master = GunArtMaster(Tools);
 	int32 Failed = Master ? 0 : 1;
 	TArray<TPair<TSharedPtr<FJsonValue>, const TCHAR*>> Entries;
-	for (const TPair<const TCHAR*, const TCHAR*> Section : {TPair<const TCHAR*, const TCHAR*>(TEXT("guns"), GunArtRoot), TPair<const TCHAR*, const TCHAR*>(TEXT("melee"), GunArtRoot), TPair<const TCHAR*, const TCHAR*>(TEXT("vehicles"), GunArtVehicleRoot)})
+	for (const TPair<const TCHAR*, const TCHAR*> Section : {TPair<const TCHAR*, const TCHAR*>(TEXT("guns"), GunArtRoot), TPair<const TCHAR*, const TCHAR*>(TEXT("melee"), GunArtRoot), TPair<const TCHAR*, const TCHAR*>(TEXT("vehicles"), GunArtVehicleRoot), TPair<const TCHAR*, const TCHAR*>(TEXT("buildings"), GunArtBuildingRoot)})
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Array = nullptr;
 		if (Root->TryGetArrayField(Section.Key, Array))
@@ -313,6 +319,11 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 			continue;
 		}
 		const FString Dest = FString(ListEntry.Value) / Name;
+		if (FString(ListEntry.Value) == GunArtBuildingRoot)
+		{
+			// Start clean so the combined mesh can be renamed to SM_<name> again (it imports as <file name>).
+			IFileManager::Get().DeleteDirectory(*FPackageName::LongPackageNameToFilename(Dest), false, true);
+		}
 
 		// The model: every object its own static mesh, no collision, its materials made but replaced below.
 		UFbxImportUI* Options = NewObject<UFbxImportUI>();
@@ -507,6 +518,66 @@ int32 UGunArtCommandlet::Main(const FString& Params)
 					}
 				}
 			}
+		}
+		// "slotTextureDir": each material slot named S takes <dir>/T_S_BaseColor.png and, when there, T_S_Normal, T_S_ORM and
+		// T_S_Emissive (tools/codex_prep.py writes them so, one set per material of a Codex model; "normalOpenGL" on the art).
+		FString SlotDir;
+		if (Master && Art->TryGetStringField(TEXT("slotTextureDir"), SlotDir))
+		{
+			SlotDir = GunArtResolve(SlotDir);
+			for (UStaticMesh* Mesh : Meshes)
+			{
+				for (int32 Slot = 0; Slot < Mesh->GetStaticMaterials().Num(); ++Slot)
+				{
+					const FString SlotName = Mesh->GetStaticMaterials()[Slot].ImportedMaterialSlotName.ToString();
+					const FString Stem = SlotDir / (TEXT("T_") + SlotName + TEXT("_"));
+					if (!FPaths::FileExists(Stem + TEXT("BaseColor.png")))
+					{
+						UE_LOG(LogGunArt, Warning, TEXT("%s: no %sBaseColor.png for slot %s; left as imported"), *Name, *Stem, *SlotName);
+						continue;
+					}
+					TSharedPtr<FJsonObject> Set = MakeShared<FJsonObject>();
+					Set->SetStringField(TEXT("baseColor"), Stem + TEXT("BaseColor.png"));
+					for (const TCHAR* Key : {TEXT("Normal"), TEXT("ORM"), TEXT("Emissive")})
+					{
+						if (FPaths::FileExists(Stem + Key + TEXT(".png")))
+						{
+							Set->SetStringField(FString(Key) == TEXT("ORM") ? TEXT("orm") : FString(Key).ToLower(), Stem + Key + TEXT(".png"));
+						}
+					}
+					bool bOpenGL = false;
+					Art->TryGetBoolField(TEXT("normalOpenGL"), bOpenGL);
+					Set->SetBoolField(TEXT("normalOpenGL"), bOpenGL);
+					double Glow = 1.0;
+					if (Art->TryGetNumberField(TEXT("emissiveStrength"), Glow))
+					{
+						Set->SetNumberField(TEXT("emissiveStrength"), Glow);
+					}
+					if (UMaterialInstanceConstant* Instance = MakeInstance(Set, TEXT("MI_") + SlotName))
+					{
+						Mesh->SetMaterial(Slot, Instance);
+					}
+				}
+			}
+		}
+		// A building's or item's single mesh goes to <root>/<name>/SM_<name>, the path its def's visual.mesh names.
+		if (FString(ListEntry.Value) == GunArtBuildingRoot)
+		{
+			if (Meshes.Num() != 1)
+			{
+				UE_LOG(LogGunArt, Error, TEXT("%s: a building needs one combined mesh (\"combine\": true), got %d"), *Name, Meshes.Num());
+				++Failed;
+				continue;
+			}
+			const FString Want = TEXT("SM_") + Name;
+			if (Meshes[0]->GetName() != Want)
+			{
+				TArray<FAssetRenameData> Rename;
+				Rename.Emplace(Meshes[0], Dest, Want);
+				Tools.RenameAssets(Rename);
+			}
+			Meshes[0]->NaniteSettings.bEnabled = false;
+			Meshes[0]->PostEditChange();
 		}
 		for (UStaticMesh* Mesh : Meshes)
 		{

@@ -40,6 +40,10 @@ class Things;
 // never take an animal for an enemy on their own (docs/design/animal-life.md).
 inline constexpr FactionId kWildFaction = 100;
 
+// Whether an animal's straight walk from (x0, y0) to (x1, y1) crosses a door or a fence, which animals can't pass
+// (the cell it starts in doesn't count, so one standing in a gate can step out).
+bool animalLineCrossesDoor(const Map& map, float x0, float y0, float x1, float y1, int level);
+
 enum class AnimalMode : uint8_t {
     Idle,      // standing about until `until`
     Wander,    // walking to `goal` (a wander spot, or the leader's side)
@@ -340,6 +344,10 @@ private:
     Entity edibleItemAt(Entity animal, CellPos cell) const;
     bool walkOrPath(Entity e, Animal& a, const Kind& kind, AnimalCare& care, CellPos goal, AnimalMode mode);
     bool pollPath(Entity e, Animal& a, const Kind& kind, AnimalCare& care);
+    // A tame animal that wants to sleep or rest heads for its animal bed: true while it is on its way (or waiting for the path).
+    bool walkToBed(Entity e, Animal& a, const Kind& kind, int64_t now);
+    // Whether a tame animal stands on its own animal bed.
+    bool onOwnBed(Entity e) const;
     void cancelPath(AnimalCare& care);
     void finishEatingItem(Entity e, Animal& a, const Kind& kind);
     void starveCheck(Entity e, Animal& a, const Kind& kind, AnimalCare& care);

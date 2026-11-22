@@ -55,6 +55,15 @@
       "reinstall": "\"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" game\\Rim3D.uproject -run=BuildingMaterials -unattended -nosplash -nullrhi"
     },
     {
+      "name": "Window glass material (generated)",
+      "source": "Made by the BuildingMaterials commandlet: our own lit translucent two-sided material (Tint, Metallic, Specular, Roughness, Opacity), marked for instanced static meshes",
+      "licence": "Our own",
+      "version": "UE 5.8",
+      "installedTo": "game/Content/Rim3D/Generated/Buildings/M_WindowGlass.uasset (not in Git)",
+      "usedFor": "the glass of windows in walls (docs/design/windows.md); without it windows are drawn open",
+      "reinstall": "\"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" game\\Rim3D.uproject -run=BuildingMaterials -unattended -nosplash -nullrhi (makes only what is missing)"
+    },
+    {
       "name": "Wound decal material (generated)",
       "source": "Made by the FightMaterials commandlet: our own deferred decal with a Color and an Opacity that blends a round soft-edged blob into what it lands on",
       "licence": "Our own",
@@ -188,6 +197,24 @@
       "installedTo": "game/Content/ThirdParty/Shields/ (not in Git), imported to /Game/Rim3D/Generated/Shields by the ShieldArt commandlet",
       "usedFor": "the shields on the arm and back (Apparel_Shield* visual.models, docs/design/shields.md)",
       "reinstall": "blender -b --python tools/shield_models.py -- game/Content/ThirdParty/Shields, then UnrealEditor-Cmd game/Rim3D.uproject -run=ShieldArt -unattended -nosplash -AllowCommandletRendering"
+    },
+    {
+      "name": "Codex models (ours): launchers, molotov, turrets, mortar, machines, component",
+      "source": "tools/codex_assets/ briefs run by the Codex CLI (GPT 6.2 Sol, sneed's ChatGPT plan, 2026-11-19); tools/codex_prep.py makes the game files",
+      "licence": "ours",
+      "version": "15 GLBs in sneed's Rim3D_Codex folder, 4-30k triangles, 2048 maps",
+      "installedTo": "assets/raw/codex/<Name>/ (not in Git), imported to /Game/Rim3D/Generated/Buildings and /Game/Rim3D/Generated/Guns by the GunArt commandlet",
+      "usedFor": "docs/design/codex-models.md: 13 buildings/items (visual.mesh) and the grenade and triple rocket launchers (assets/guns.json)",
+      "reinstall": "blender -b --factory-startup -P tools/codex_prep.py -- <Rim3D_Codex folder>, then UnrealEditor-Cmd game/Rim3D.uproject -run=GunArt -List=assets/codex_art.json -unattended -nosplash -nullrhi, then -run=GunArt (guns.json)"
+    },
+    {
+      "name": "MakeHuman community clothes (34 garments from 16 asset packs)",
+      "source": "https://static.makehumancommunity.org/assets/assetpacks/index.html (zips on files.makehumancommunity.org)",
+      "licence": "CC0 and CC-BY 4.0 (per garment author and licence in assets/makehuman_garments.json; credit the CC-BY authors)",
+      "version": "asset packs as downloaded 2026-11-20",
+      "installedTo": "Documents/makehuman/v1py3/data/clothes on sneed's PC (not in Git); fitted and exported by tools/makehuman/mh_garments.py to game/Saved/MakeHuman/<Base>/Garments",
+      "usedFor": "docs/design/clothes-draw.md 'MakeHuman bodies': clothes on the MakeHuman people (visual.cuts)",
+      "reinstall": "download the packs listed in assets/makehuman_garments.json into the MakeHuman data folder, python tools/makehuman/mh_garments.py, then UnrealEditor-Cmd game/Rim3D.uproject -run=MakeHumanArt -Garments -unattended -nosplash"
     }
   ]
 }

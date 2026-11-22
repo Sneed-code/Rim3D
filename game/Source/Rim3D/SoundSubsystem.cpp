@@ -21,6 +21,7 @@
 #include "OverseerPawn.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
+#include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
 #include "SkySubsystem.h"
 
@@ -402,6 +403,7 @@ bool USoundSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) con
 
 void USoundSubsystem::LoadCues()
 {
+	WorkBeats.Reset();  // they point at cues
 	USimSubsystem* Source = Bridge.Get();
 	std::shared_ptr<const colony::DefDatabase> Defs = Source ? Source->GetDefs() : nullptr;
 	if (!Defs)
@@ -434,6 +436,7 @@ void USoundSubsystem::LoadCues()
 		Cue.Group = SoundGroupOf(Cue.Name);
 		Cue.FarCue = UTF8_TO_TCHAR(Def.text("far").c_str());
 		Cue.FarFromM = static_cast<float>(Def.number("farFrom", 0.0));
+		Cue.RepeatS = static_cast<float>(Def.number("repeat", 0.0));
 		Cue.Tone = SoundMakeTone(UTF8_TO_TCHAR(Def.text("tone.wave", "sine").c_str()), static_cast<float>(Def.number("tone.hz", 440.0)),
 			static_cast<float>(Def.number("tone.seconds", 0.2)), Cue.bLoop, GetTypeHash(Cue.Name));
 		if (const TArray<TSharedPtr<const FSoundClip>>* Have = Files.Find(Cue.Name); Have && !bFirst)
@@ -572,6 +575,8 @@ void USoundSubsystem::ResetForSim()
 	PendingPlays.clear();
 	PlayCounts.Reset();
 	StepDistance.Reset();
+	WorkBeats.Reset();
+	FlyWatch.Reset();
 	LastStepPos.Reset();
 	DoorOpen.Reset();
 	NextCall.Reset();
@@ -672,7 +677,12 @@ void USoundSubsystem::OnSimEvent(const colony::Event& Event)
 	}
 	const colony::SoundDefOf DefOf = [this](colony::Entity E) { return DefOfEntity(E); };
 	const colony::SoundGenderOf Gender = [this](colony::Entity E) { return GenderOf(E); };
-	colony::soundForEvent(*Source->GetDefs(), Event, DefOf, PendingPlays, Gender);
+	// A bullet in the ground sounds like the ground: dirt, sand, water, a stone or wooden floor.
+	const colony::SoundStepAt StepAt = [this, Source](const colony::CellPos& Cell) {
+		const colony::Sim* Sim = Source->GetSim();
+		return Sim ? std::string(TCHAR_TO_UTF8(*StepCueAt(*Sim, Cell))) : std::string("Step_Dirt");
+	};
+	colony::soundForEvent(*Source->GetDefs(), Event, DefOf, PendingPlays, Gender, StepAt);
 }
 
 colony::SoundGender USoundSubsystem::GenderOf(colony::Entity Thing) const
@@ -716,7 +726,7 @@ TSharedPtr<const FSoundClip> USoundSubsystem::PickClip(const FCue& Cue)
 	return nullptr;
 }
 
-int32 USoundSubsystem::AddSound(const FCue& Cue, const FVector& Location, bool bEverywhere, colony::Entity Follow, uint64 Key)
+int32 USoundSubsystem::AddSound(const FCue& Cue, const FVector& Location, bool bEverywhere, colony::Entity Follow, uint64 Key, double Delay)
 {
 	FSound Sound;
 	Sound.Cue = &Cue;
@@ -739,6 +749,8 @@ int32 USoundSubsystem::AddSound(const FCue& Cue, const FVector& Location, bool b
 		const double Metres = FVector::Dist(Sound.Location, Ears) / 100.0;
 		Sound.StartedAt = Now + (Metres > 10.0 ? Metres / SoundMetresPerSecond : 0.0);
 	}
+	// Asked to wait (a spent case lands after its shot, debris rains down after a blast).
+	Sound.StartedAt += FMath::Max(0.0, Delay);
 	Sound.EndsAt = Sound.StartedAt + (Sound.Clip ? Sound.Clip->Seconds() / Sound.Pitch : 0.0) + 0.5;
 	// A shot or a blast with a distant layer plays both, crossfaded by distance in MixAndAssign.
 	const FCue* Far = !Cue.FarCue.IsEmpty() && Cue.FarFromM > 0.0f && !Cue.bLoop ? Cues.Find(Cue.FarCue) : nullptr;
@@ -839,7 +851,124 @@ void USoundSubsystem::HandlePlay(const colony::SoundPlay& Play)
 		PlayVoice(*Cue, Play, Location);
 		return;
 	}
-	AddSound(*Cue, Location, bEverywhere, Play.entity, Key);
+	AddSound(*Cue, Location, bEverywhere, Play.entity, Key, Play.delay);
+	// Work goes on: a cue with a `repeat` plays again every so often while its pawn stays at the same job (UpdateWorkBeats).
+	if (Cue->RepeatS > 0.0f && Play.entity != colony::kNoEntity && Play.mode == colony::SoundMode::Once)
+	{
+		const colony::ThingView* View = Source->GetCurrentSnapshot().find(Play.entity);
+		FVector At;
+		if (View && EntityLocation(Play.entity, At))
+		{
+			FWorkBeat& Beat = WorkBeats.FindOrAdd(SoundEntityId(Play.entity));
+			Beat.Cue = Cue;
+			Beat.Job = View->job;
+			Beat.Start = At;
+			Beat.NextAt = Now + Cue->RepeatS * Random.FRandRange(0.85f, 1.15f);
+			Beat.Until = Now + 600.0;  // ten real minutes at most, whatever happens
+		}
+	}
+}
+
+colony::Entity USoundSubsystem::ControlledPawn() const
+{
+	const UProtagonistSubsystem* Protagonist = GetWorld() ? GetWorld()->GetSubsystem<UProtagonistSubsystem>() : nullptr;
+	return Protagonist && Protagonist->IsDirectMode() ? Protagonist->GetControlled() : colony::kNoEntity;
+}
+
+void USoundSubsystem::UpdateWorkBeats(const colony::Snapshot& Snap)
+{
+	for (auto It = WorkBeats.CreateIterator(); It; ++It)
+	{
+		FWorkBeat& Beat = It.Value();
+		const colony::ThingView* View = nullptr;
+		for (const colony::ThingView& V : Snap.things)
+		{
+			if (SoundEntityId(V.id) == It.Key())
+			{
+				View = &V;
+				break;
+			}
+		}
+		FVector At;
+		// Stops when the pawn is gone, down, asleep, on another job, or walked off (work is done standing).
+		if (!View || View->dead || View->downed || View->asleep || View->job != Beat.Job || !Beat.Cue || Now > Beat.Until ||
+			!EntityLocation(View->id, At) || FVector::Dist2D(At, Beat.Start) > 80.0)
+		{
+			It.RemoveCurrent();
+			continue;
+		}
+		if (Now >= Beat.NextAt)
+		{
+			AddSound(*Beat.Cue, At, false, View->id, 0);
+			Beat.NextAt = Now + Beat.Cue->RepeatS * Random.FRandRange(0.85f, 1.15f);
+		}
+	}
+}
+
+void USoundSubsystem::UpdateFlybys(const colony::Snapshot& Snap, const USimSubsystem& Source)
+{
+	++FlyFrame;
+	if (!bEarsOnMap)
+	{
+		return;
+	}
+	const FVector Origin = Source.GetWorldOrigin();
+	for (const colony::ProjectileView& P : Snap.projectiles)
+	{
+		const FDefSounds& Slots = SoundsOfDef(P.def);
+		if (Slots.Flyby.IsEmpty() && Slots.Incoming.IsEmpty())
+		{
+			continue;
+		}
+		const uint32 Id = SoundEntityId(P.id);
+		FFlyWatch& W = FlyWatch.FindOrAdd(Id);
+		W.SeenFrame = FlyFrame;
+		if (W.bDone)
+		{
+			continue;
+		}
+		const FVector Where = Origin + FVector(P.x * 100.0, P.y * 100.0, P.z * 100.0);
+		const float DistM = FVector::Dist(Where, Ears) / 100.0f;
+		if (!Slots.Incoming.IsEmpty())
+		{
+			// A shell whistles for its last ~1.7 s down: when it falls and the ground is that close in time.
+			const float StepsPerSecond = 30.0f;
+			if (P.vz < 0.0f)
+			{
+				const float Ground = Source.SimToWorld(P.x, P.y, P.level).Z / 100.0f - Origin.Z / 100.0f;
+				const float Seconds = (P.z - Ground) / (-P.vz * StepsPerSecond);
+				if (Seconds <= 1.8f)
+				{
+					const FVector Land = Origin + FVector((P.x + P.vx * Seconds * StepsPerSecond) * 100.0, (P.y + P.vy * Seconds * StepsPerSecond) * 100.0, Ground * 100.0 + 50.0);
+					if (const FCue* Cue = FindCue(Slots.Incoming); Cue && FVector::Dist(Land, Ears) / 100.0f < Cue->RangeM)
+					{
+						AddSound(*Cue, Land, false, colony::kNoEntity, 0);
+					}
+					W.bDone = true;
+				}
+			}
+			continue;
+		}
+		// A bullet or arrow that came from afar (so not the player's own shot) and passes within 3 m: at its closest
+		// point, the whiz or whoosh.
+		W.bWasFar = W.bWasFar || DistM > 8.0f;
+		if (W.bWasFar && DistM > W.LastDistM && W.LastDistM < 3.0f)
+		{
+			if (const FCue* Cue = FindCue(Slots.Flyby))
+			{
+				AddSound(*Cue, Where, false, colony::kNoEntity, 0);
+			}
+			W.bDone = true;
+		}
+		W.LastDistM = DistM;
+	}
+	for (auto It = FlyWatch.CreateIterator(); It; ++It)
+	{
+		if (It.Value().SeenFrame != FlyFrame)
+		{
+			It.RemoveCurrent();
+		}
+	}
 }
 
 void USoundSubsystem::PlayVoice(const FCue& Cue, const colony::SoundPlay& Play, const FVector& Location)
@@ -1331,6 +1460,8 @@ const USoundSubsystem::FDefSounds& USoundSubsystem::SoundsOfDef(colony::DefId De
 		Slots.Loop = UTF8_TO_TCHAR(colony::soundSlot(D, "loop").c_str());
 		Slots.Idle = UTF8_TO_TCHAR(colony::soundSlot(D, "idle").c_str());
 		Slots.Step = D.kind() == "Terrain" ? FString(UTF8_TO_TCHAR(colony::soundStepCue(*Source->GetDefs(), Def).c_str())) : FString();
+		Slots.Flyby = UTF8_TO_TCHAR(colony::soundSlot(D, "flyby").c_str());
+		Slots.Incoming = UTF8_TO_TCHAR(colony::soundSlot(D, "incoming").c_str());
 	}
 	return DefSounds.Add(Def.value, Slots);
 }
@@ -1375,6 +1506,8 @@ void USoundSubsystem::ReadSnapshot(const USimSubsystem& Source, float Delta)
 	const colony::Sim& Sim = *Source.GetSim();
 	const colony::Snapshot& Snap = Source.GetCurrentSnapshot();
 	UpdateSteps(Sim, Snap, Source, Delta);
+	UpdateWorkBeats(Snap);
+	UpdateFlybys(Snap, Source);
 	LoopScanAge += Delta;
 	if (LoopScanAge >= 0.1f)
 	{
@@ -1388,9 +1521,11 @@ void USoundSubsystem::UpdateSteps(const colony::Sim& Sim, const colony::Snapshot
 {
 	constexpr float HearStepsCm = 2600.0f;
 	TSet<uint32> Seen;
+	// The player's own character makes no footsteps (sneed, 2026-11-20); everyone else does.
+	const colony::Entity Me = ControlledPawn();
 	for (const colony::ThingView& View : Snap.things)
 	{
-		if (View.category != colony::ThingCategory::Pawn || View.dead)
+		if (View.category != colony::ThingCategory::Pawn || View.dead || View.id == Me)
 		{
 			continue;
 		}
@@ -1425,14 +1560,20 @@ void USoundSubsystem::UpdateSteps(const colony::Sim& Sim, const colony::Snapshot
 				{
 					Walked += Moved;
 				}
-				if (Walked >= Stride && FVector::DistSquared(Location, Ears) < FMath::Square(HearStepsCm))
+				// Footsteps are quiet and short-ranged: crouched (sneaking) a third as loud and heard within 8 m, prone a
+				// fifth within 5 m, running half again as loud.
+				const bool bCrouched = !bAnimal && View.stance == colony::Stance::Crouching;
+				const bool bProne = !bAnimal && View.stance == colony::Stance::Prone;
+				const float StepGain = bProne ? 0.2f : bCrouched ? 0.35f : View.sprinting ? 1.5f : 1.0f;
+				const float HearCm = bProne ? 500.0f : bCrouched ? 800.0f : HearStepsCm;
+				if (Walked >= Stride && FVector::DistSquared(Location, Ears) < FMath::Square(HearCm))
 				{
 					Walked = FMath::Fmod(Walked, Stride);
 					const colony::CellPos Cell{FMath::FloorToInt(View.x), FMath::FloorToInt(View.y), View.level};
 					if (const FCue* Cue = FindCue(StepCueAt(Sim, Cell)))
 					{
 						const int32 Index = AddSound(*Cue, Location + FVector(0.0, 0.0, 10.0), false, colony::kNoEntity, 0);
-						Sounds[Index].Gain = bAnimal ? FMath::Clamp(View.bodySize, 0.3f, 1.5f) : 1.0f;
+						Sounds[Index].Gain = (bAnimal ? FMath::Clamp(View.bodySize, 0.3f, 1.5f) : 1.0f) * StepGain;
 					}
 				}
 			}
@@ -2073,16 +2214,9 @@ void USoundSubsystem::UpdateMusic(const colony::Snapshot& Snap, float Delta)
 
 // ---- Mixer panel ----------------------------------------------------------------------------------------------------
 
-void USoundSubsystem::DrawMixerPanel(float ViewportRight, float Scale)
+void USoundSubsystem::DrawMixerBody(float Scale)
 {
-	ImGui::SetNextWindowPos(ImVec2(ViewportRight - 12.0f * Scale, 100.0f * Scale), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-	ImGui::SetNextWindowBgAlpha(0.7f);
-	ImGui::SetNextWindowCollapsed(true, ImGuiCond_Once);
-	if (!ImGui::Begin("Sound##SoundMixer", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
-	{
-		ImGui::End();
-		return;
-	}
+	ImGui::PushItemWidth(260.0f * Scale);
 	bool bChanged = false;
 	float Master = GSoundMaster.GetValueOnGameThread();
 	if (ImGui::SliderFloat("Master", &Master, 0.0f, 1.0f, "%.2f"))
@@ -2105,9 +2239,9 @@ void USoundSubsystem::DrawMixerPanel(float ViewportRight, float Scale)
 	{
 		ImGui::Text("Music: %s", TCHAR_TO_UTF8(*MusicTrackName));
 	}
+	ImGui::PopItemWidth();
 	if (bChanged)
 	{
 		SaveMixer();
 	}
-	ImGui::End();
 }

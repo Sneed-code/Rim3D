@@ -21,6 +21,7 @@
 
 #include <imgui.h>
 
+#include "ColonyHudStyle.h"
 #include "KeyBindings.h"
 #include "OrdersSubsystem.h"
 #include "PawnActor.h"
@@ -605,6 +606,11 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 			SpawnBurst(EFightParticle::Spark, At, Back + FVector::UpVector * 0.3f, 8, 480.0f, 0.7f, 2.5f, 0.35f, 980.0f);
 			SpawnBurst(EFightParticle::Chip, At, Back + FVector::UpVector * 0.3f, 6, 320.0f, 0.8f, 5.0f, 0.7f, 980.0f);
 			SpawnBurst(EFightParticle::Dust, At, Back, 3, 120.0f, 0.6f, 9.0f, 0.7f, 100.0f);
+			break;
+		case colony::ProjectileHitKind::Plant:
+			// A tree's trunk (docs/design/structure-damage.md): bark and wood chips, a puff of dust, no sparks.
+			SpawnBurst(EFightParticle::Chip, At, Back + FVector::UpVector * 0.4f, 9, 340.0f, 0.9f, 5.0f, 0.8f, 980.0f);
+			SpawnBurst(EFightParticle::Dust, At, Back, 3, 110.0f, 0.6f, 8.0f, 0.6f, 100.0f);
 			break;
 		case colony::ProjectileHitKind::Armor:
 			SpawnBurst(EFightParticle::Spark, At, Back, 12, 560.0f, 0.9f, 3.0f, 0.35f, 980.0f);
@@ -1295,9 +1301,9 @@ bool UFightSubsystem::ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* Ou
 				continue;
 			}
 			const colony::ThingView* Other = Snap.find(Actor->GetThing());
-			if (!Other || Other->dead)
+			if (!Other || (Other->dead && !Bridge->GetSim()->health().takesCorpseHits(Actor->GetThing())))
 			{
-				continue;  // dead bodies don't stop bullets in the sim
+				continue;  // a dead body that can't be cut up doesn't stop bullets in the sim (a person's corpse does)
 			}
 			// Quick test: the body's middle against the ray, with room for a reach or a lying body.
 			const FVector Middle = Actor->GetActorLocation() + FVector(0.0, 0.0, 90.0 * Actor->GetBodyScale());
@@ -1883,7 +1889,7 @@ void UFightSubsystem::DrawHud()
 		return;
 	}
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	ColonyHud::ApplyFrameStyle(Scale);
 	const float Margin = 12.0f * Scale;
 	const colony::Sim& Sim = *Bridge->GetSim();
 	const colony::Entity Pawn = Protagonist->GetControlled();

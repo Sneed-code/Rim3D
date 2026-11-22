@@ -1,0 +1,13 @@
+[
+  {
+    "defName": "StructureDamageRules",
+    "source": "sneed (2026-11-20): anything that can take damage takes it from melee weapons; guns do 50% less to buildings and trees for now. Blasts hurting plants is RimWorld's (no plant factor on its damage defs, so 1).",
+    "meleeBuildingFactor": 1.0,
+    "meleePlantFactor": 1.0,
+    "rangedBuildingFactor": 0.5,
+    "rangedPlantFactor": 0.5,
+    "blastPlantFactor": 1.0,
+    "tracesMeetTrees": true,
+    "note": "docs/design/structure-damage.md. Factors times the blow's or bullet's damage after skill, quality and stuff. tracesMeetTrees: bullets, sight-free shots and melee blows stop at a tree's trunk (visual.stem radius and height, scaled by growth). Explosions keep their own building factors (DamageTypes explosion.*)."
+  }
+]

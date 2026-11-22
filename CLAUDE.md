@@ -76,6 +76,9 @@ Unreal-side code compiles only on sneed's PC, through a Remote Control session.
   (the repo went private again), merge on a full local pass (all ctest tests and `check_defs.py`) and
   write "merged on local test pass, CI out of minutes" in the PR.
 - Update `STATUS.md` in the same PR. New ideas from sneed go in `BACKLOG.md`.
+- One game: sneed plays only `C:\Dev\Rim3D` via `tools\update-and-play.bat` (test scenes under Debug on the
+  title). Any new one-off art step (commandlet, Blender or download script) goes in `tools/art_steps.json` in the same
+  PR (`docs/setup/update.md`); never ask sneed to run one by hand.
 - Routine work: Sonnet, medium effort. Architecture, combat AI, hard bugs: Opus, high effort.
 
 ## Working with sneed

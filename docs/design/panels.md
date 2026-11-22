@@ -1,5 +1,7 @@
 # Colony panels
 
+> 2026-11-17: placement replaced by the bottom tab bar layout, see [ui-layout.md](ui-layout.md) "As built". The Build menu and the Work tab changed with it.
+
 Code: `game/Source/Rim3D/PanelsSubsystem.*`. Smoke test: `panels` (`tools/smoke.ps1 -Test panels`).
 Task U8. Unreal side only; the sim is untouched. Everything is ImGui, drawn only while the overseer
 view is the one in use ([overseer.md](overseer.md)); `Panels.UI 0` (or `Overseer.UI 0`) hides it.
@@ -86,3 +88,24 @@ Code: `game/Source/Rim3D/ShipPanelSubsystem.*`. Smoke test: `ship`. Sim side: [s
 The parts are built from the build menu's Ship category (their defs' `designationCategory`) once researched. Not here yet: prisoners and tame animals in the casket list (the sim takes them), which casket touches no beam, jumping the camera to the reactor, a letter for the ending, and a launch animation.
 
 Smoke test `ship` (about 8 s), on a flat map with the Crashlanded colonists (paused): a whole ship is spawned (the Ship button shows only then, the window lists one casket, Launch is greyed and sends nothing); Start reactor warms it up (a second press sends nothing) and Board puts a colonist in the casket; the dev action `FinishWarmUp` makes the reactor active and Launch wakes up; Launch wins: the ending screen is drawn and names the one rider, and Keep playing closes it.
+
+## Power and temperature views (power thread, 2026-11-19; part of U19)
+
+Code: `game/Source/Rim3D/PowerOverlaySubsystem.*`. Overseer screen only, hidden with the rest of the UI (`Overseer.UI 0`).
+
+- **Toggles** at the bottom right, above the key hints: *Power* and *Temperature* (console `Overlay.Power 1`,
+  `Overlay.Temperature 1`).
+- **Power view:** a dot over each built building with a power part (within 160 m of the camera), filled with its grid's
+  colour (eight hues by grid id; grey on no grid), ringed green when it has power, red when it is on but has none
+  ("no power" over it) and grey when switched off. Conduits are small dots of their grid's colour. Generators show the
+  watts they make now, batteries a charge bar. A list at the right: each grid's watts made and used and battery charge,
+  red with "SHORT OF POWER" when it cannot cover its machines.
+- **Temperature view:** each enclosed room's temperature over the middle of its bounds (blue below 0, cyan below 12,
+  green to 26, orange to 35, red above), the outdoor temperature at the right, and on each cooler a blue dot on the cell
+  it cools and a red one on the cell it heats (`TemperatureSystem::sidesOf`).
+- **Selected building's power** (view on or off): has power / no power (not joined by conduits, or the grid is short) /
+  switched off, the watts it makes or uses (a heater or cooler idling at its target says so), a battery's charge, its
+  grid's numbers, and a *Switch off / Switch on* button (*Open / Close switch* for a power switch) that sends
+  `FlickCommand`. Plain conduits and batteries have no button, as in RimWorld.
+
+No smoke test yet: check by eye. `Overlay.Demo [x y]` (console) spawns a test scene at the map centre: a walled room with a cooler in its north wall, a vent and a passive cooler, a wood-fired generator with wood, a battery, a switch, a lamp, a solar panel and a wind turbine on conduits, a chemfuel generator and an unwired heater.

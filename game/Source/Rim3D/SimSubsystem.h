@@ -174,6 +174,9 @@ public:
 
 	/** Queues a command for the start of the next step. Returns its id (a CommandFailed event names it). */
 	uint64 Submit(colony::Command Command);
+	/** Before the first step (the new-game character screen): applies the submitted commands at once without
+	 *  stepping (colony::Sim::applyPregameCommands) and refreshes the snapshot. False once the game has stepped. */
+	bool ApplyPregameCommands();
 
 	/** Sim events, one call each, straight after the step. Failed commands also show on screen. */
 	FSimEventSignature OnSimEvent;
@@ -188,6 +191,8 @@ public:
 	int32 GetDefCount() const { return Defs ? static_cast<int32>(Defs->size()) : 0; }
 	const FString& GetDataRoot() const { return DataRoot; }
 	const FSimStartOptions& GetStartOptions() const { return StartOptions; }
+	/** Sets the options the next start reads (the world map's Start here takes them) without starting a sim. */
+	void SetStartOptions(const FSimStartOptions& Options) { StartOptions = Options; }
 
 	/** The state after the newest step, and the one before it. Blend positions between them. */
 	const colony::Snapshot& GetCurrentSnapshot() const { return Current; }

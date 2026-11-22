@@ -40,10 +40,11 @@ ours). Its mesh has its own height, so `Height` is 1 for it. For now only a look
 
 ## Jiggle and hair
 
-`UMakeHumanAnimInstance` runs, after the retarget, our own soft-tissue node (`FMakeHumanJiggleNode`) and a swinging
-AnimDynamics chain on a ponytail's bones (MakeHuman's ponytail sub-rig, joined into the main skeleton under the head by
-`mh_export.py`; enable Blender's Rigify add-on, which MPFB needs to read older sub-rigs). `Pawns.MakeHumanPhysics 0`
-turns both off (read when a character's animation starts). Hair without bones (the long01 style) stays still.
+`UMakeHumanAnimInstance` runs, after the retarget, our own soft-tissue node (`FMakeHumanJiggleNode`) and long hair's
+strands (`FMakeHumanHairNode`, [hair-physics.md](hair-physics.md)) on the long, bob and braid styles' chains and a
+ponytail's bones (MakeHuman's ponytail sub-rig, joined into the main skeleton under the head by `mh_export.py`; enable
+Blender's Rigify add-on, which MPFB needs to read older sub-rigs). `Pawns.MakeHumanPhysics 0` turns both off (read when
+a character's animation starts).
 
 Soft tissue: each soft bone's point follows where the animation puts it through a damped spring in world space (120 Hz
 steps), so it lags behind steps, starts, stops, turns and landings and bounces back, within a limit: the breast bones
@@ -216,9 +217,12 @@ sternum, their tail is in the breast (the pigment mask now uses the tail too).
 
 A fourth kind in the creator's Kind tab beside Baseline, Imp and Orcoid (sneed, 2026-11-15: cat only for now). It looks
 the same as a person except for these parts, all generated for whatever body they go on (`mh_common.py`):
-- `add_cat_ears`: cat ears coming up out of the top of the head either side of the crown, tilted out and turned slightly
-  outwards. They have a crescent cross-section with a cupped front, and are weighted to the head. Outside material
-  CatFur, inside CatEarInner (skin, pinker).
+- `add_cat_ears` (remade 2026-11-19, sneed: "the cat ears don't look realistic"): each ear is a thin cupped pinna
+  (`_cat_ear_mesh`), not a solid cone: a broad-based triangle with bowed sides and a rounded tip, a deep cup pushed back
+  in the middle with the rim rolled forward, the back a few millimetres behind and fuller in the middle, its root sunk
+  1.5 cm into the skull. Pale tufts (ear furnishings) grow out of the bottom of the cup. Up out of the top of the head
+  either side of the crown, tilted out and turned 25 degrees outwards, weighted to the head. Outside and rim CatFur;
+  inside of the cup and the tufts CatEarInner (skin, pinker). 7.8 cm tall, 6.8 cm wide.
 - `add_cat_claws`: one small curved claw per fingertip, starting at the nail side and curling towards the palm, weighted
   to the last finger bone. Material CatClaw.
 - A furred CatTail: `add_tail` called a second time, so it uses the imp tail's bones. That means the tail swish node
@@ -256,8 +260,7 @@ clothes have an "ears covered" flag.
 
 **Animation:**
 - Breast jiggle slider: 0 is the old default; 1 is softer and bouncier, still damped.
-- Long hair rests on the body: AnimDynamics outer spheres round the upper back, chest, neck, shoulders and breasts, with
-  more damping.
+- Long hair rests on the body (since 2026-11-19: strands with collision capsules, [hair-physics.md](hair-physics.md)).
 - People who are standing play a seamless breathing idle (a Mixamo unarmed idle) instead of the game's idle, which
   restarted.
 - Picking another clip while one plays switches to it.
@@ -284,7 +287,7 @@ sets it (rain raises it, shelter or a fire dries it), clothes and armour get the
 **Long hair** swings: `add_hair_bones` ("hair_bones" in a config) adds five chains, hair_c1_1 to hair_c5_4, under the
 head. They hang down the back, the back corners and the sides, shaped along the longest style, and are shared by long01,
 bob02 and braid01. The points of each style are weighted to the two nearest chains, with the head holding the top.
-`UMakeHumanAnimInstance` swings them as AnimDynamics chains (spring 260, 14° cone). `feather_hair_ends` rewrites the
+`UMakeHumanAnimInstance` simulates them as strands that fall, swing and rest on the body ([hair-physics.md](hair-physics.md)). `feather_hair_ends` rewrites the
 long style's alpha so the strands end at different lengths: wispy ends instead of one straight cut.
 
 ## Animation clips

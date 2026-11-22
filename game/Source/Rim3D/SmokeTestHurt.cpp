@@ -9,14 +9,19 @@
 #include "HAL/IConsoleManager.h"
 #include "Misc/Paths.h"
 #include "UnrealClient.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Engine/PointLight.h"
 
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
 #include "BloodSubsystem.h"
 #include "FightSubsystem.h"
+#include "GrimeSubsystem.h"
 #include "PawnSubsystem.h"
 #include "SeveredPieceActor.h"
 #include "SimSubsystem.h"
+#include "TerrainSubsystem.h"
 
 #include "ColonySim/Commands.h"
 #include "ColonySim/Health.h"
@@ -59,6 +64,16 @@ namespace
 		int32 PiecesAtRest = 0;
 		int32 BloodHitsAtStart = 0;
 		int32 CloseUpsTaken = 0;
+		// The close-ups clear the plants round the pieces and the corpse and bring a fill light along (else plants
+		// stood in front of the cut or shaded it black).
+		bool bCloseSetUp = false;
+		TArray<TWeakObjectPtr<UPrimitiveComponent>> CloseHidden;
+		TWeakObjectPtr<APointLight> CloseLight;
+		// dirt
+		int32 DirtShotsTaken = 0;
+		int32 MaxGrimyPawns = 0;
+		TArray<TWeakObjectPtr<UPrimitiveComponent>> DirtHidden;
+		bool bDirtSetUp = false;
 	};
 
 	/** The real bodies with their clothes instead of the bare mannequins (the pawn actors are made again). */
@@ -181,6 +196,122 @@ void USmokeTestSubsystem::BuildHurtPhases()
 			if (Sim && Sim->health().zoneNames(State->Pawn).size() != 6)
 			{
 				Fail(FString::Printf(TEXT("setup: the colonist's body has %d zones, not 6"), static_cast<int32>(Sim->health().zoneNames(State->Pawn).size())));
+			}
+		};
+		Phases.Add(MoveTemp(Phase));
+	}
+
+	{
+		// Dirt on a body (docs/design/grime.md, sneed 2026-11-20: fine spray over the broad smudges): legs caked, body
+		// dusty, pictured from 2 m, at the shins from 60 and 30 cm, from behind and from 10 m (dirt_<N>.png; no
+		// sparkle at range), then washed off again for the phases after.
+		FPhase Phase;
+		Phase.Name = TEXT("dirt");
+		Phase.Setup = [=, this]()
+		{
+			if (USimSubsystem* B = Bridge())
+			{
+				B->Submit(colony::SetGrimeCommand{State->Pawn, 0.85f, 0.35f});
+			}
+			// Noon, and time for the eye to adjust (the first PC round was at night with a fill light: blown out).
+			if (IConsoleVariable* Hour = IConsoleManager::Get().FindConsoleVariable(TEXT("Sky.Hour")))
+			{
+				Hour->Set(12.0f, ECVF_SetByCode);
+			}
+		};
+		Phase.WarmupSeconds = 3.0f;
+		Phase.MeasureSeconds = 8.5f;
+		Phase.ScreenshotAt = 0.6f;
+		Phase.OnFrame = [=, this]()
+		{
+			const ASimPawnActor* Actor = ActorOf();
+			if (!Actor)
+			{
+				return;
+			}
+			if (const UGrimeSubsystem* Grime = GetWorld()->GetSubsystem<UGrimeSubsystem>())
+			{
+				State->MaxGrimyPawns = FMath::Max(State->MaxGrimyPawns, Grime->GetGrimyPawns());
+			}
+			const FVector P = Actor->GetActorLocation();
+			const FVector Forward = Actor->GetActorForwardVector();
+			const FVector Side = Actor->GetActorRightVector();
+			if (!State->bDirtSetUp)
+			{
+				State->bDirtSetUp = true;
+				// Plants round the body out of the way.
+				const UTerrainSubsystem* Terrain = GetWorld()->GetSubsystem<UTerrainSubsystem>();
+				if (AActor* Ground = Terrain ? Terrain->GetTerrainActor() : nullptr)
+				{
+					TInlineComponentArray<UInstancedStaticMeshComponent*> Plants;
+					Ground->GetComponents(Plants);
+					for (UInstancedStaticMeshComponent* Kind : Plants)
+					{
+						if (Kind && Kind->IsVisible() && Kind->GetInstancesOverlappingSphere(P, 300.0f, true).Num() > 0)
+						{
+							Kind->SetVisibility(false);
+							State->DirtHidden.Add(Kind);
+						}
+					}
+				}
+			}
+			// Shot N from PhaseTime 3 + N: whole body, shins 60 cm, shins 30 cm, from behind, from 10 m.
+			const int32 Shot = FMath::Clamp(FMath::FloorToInt(PhaseTime - 3.0f), 0, 4);
+			FVector Look = P + FVector(0.0, 0.0, 90.0);
+			FVector Eye = Look + Forward * 220.0 + Side * 60.0;
+			if (Shot == 1)
+			{
+				Look = P + FVector(0.0, 0.0, 40.0);
+				Eye = Look + Forward * 60.0 + Side * 20.0 + FVector(0.0, 0.0, 10.0);
+			}
+			else if (Shot == 2)
+			{
+				Look = P + FVector(0.0, 0.0, 35.0) + Side * 10.0;
+				Eye = Look + Forward * 30.0 + Side * 8.0 + FVector(0.0, 0.0, 5.0);
+			}
+			else if (Shot == 3)
+			{
+				Eye = Look - Forward * 200.0 - Side * 50.0;
+			}
+			else if (Shot == 4)
+			{
+				Eye = Look + Forward * 1000.0 + Side * 200.0 + FVector(0.0, 0.0, 150.0);
+			}
+			ViewFrom(Eye, (Look - Eye).Rotation());
+			if (PhaseTime >= 3.0f && State->DirtShotsTaken == Shot && Shot < 5 && PhaseTime - 3.0f - Shot > 0.6f)
+			{
+				++State->DirtShotsTaken;
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke") / TEXT("hurt") / FString::Printf(TEXT("dirt_%d.png"), Shot), false, false);
+			}
+		};
+		Phase.Verify = [=, this]()
+		{
+			for (const TWeakObjectPtr<UPrimitiveComponent>& Hidden : State->DirtHidden)
+			{
+				if (UPrimitiveComponent* Kind = Hidden.Get())
+				{
+					Kind->SetVisibility(true);
+				}
+			}
+			State->DirtHidden.Reset();
+			if (IConsoleVariable* Hour = IConsoleManager::Get().FindConsoleVariable(TEXT("Sky.Hour")))
+			{
+				Hour->Set(-1.0f, ECVF_SetByCode);
+			}
+			const UGrimeSubsystem* Grime = GetWorld()->GetSubsystem<UGrimeSubsystem>();
+			PhaseNumbers.Add(TEXT("grimy_pawns"), State->MaxGrimyPawns);
+			PhaseNumbers.Add(TEXT("dirt_shots"), State->DirtShotsTaken);
+			if (Grime && Grime->IsMaterialMissing())
+			{
+				Fail(TEXT("dirt: M_GrimeOverlay is missing (run -run=BloodArt)"));
+			}
+			else if (State->MaxGrimyPawns < 1)
+			{
+				Fail(TEXT("dirt: the dirty colonist got no grime overlay"));
+			}
+			if (USimSubsystem* B = Bridge())
+			{
+				B->Submit(colony::SetGrimeCommand{State->Pawn, 0.0f, 0.0f});
 			}
 		};
 		Phases.Add(MoveTemp(Phase));
@@ -477,6 +608,40 @@ void USmokeTestSubsystem::BuildHurtPhases()
 				}
 				Close.Sort([](const AActor& A, const AActor& B) { return A.GetName() < B.GetName(); });
 				Close.Add(ActorOf());
+				if (!State->bCloseSetUp)
+				{
+					State->bCloseSetUp = true;
+					const UTerrainSubsystem* Terrain = GetWorld()->GetSubsystem<UTerrainSubsystem>();
+					if (AActor* Ground = Terrain ? Terrain->GetTerrainActor() : nullptr)
+					{
+						TInlineComponentArray<UInstancedStaticMeshComponent*> Plants;
+						Ground->GetComponents(Plants);
+						for (UInstancedStaticMeshComponent* Kind : Plants)
+						{
+							for (const AActor* Near : Close)
+							{
+								if (Kind && Near && Kind->IsVisible() && Kind->GetInstancesOverlappingSphere(Near->GetActorLocation(), 160.0f, true).Num() > 0)
+								{
+									Kind->SetVisibility(false);
+									State->CloseHidden.Add(Kind);
+									break;
+								}
+							}
+						}
+					}
+					FActorSpawnParameters LightParams;
+					LightParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+					if (APointLight* Fill = GetWorld()->SpawnActor<APointLight>(APointLight::StaticClass(), FTransform::Identity, LightParams))
+					{
+						Fill->SetMobility(EComponentMobility::Movable);
+						Fill->PointLightComponent->SetIntensityUnits(ELightUnits::Candelas);
+						Fill->PointLightComponent->SetIntensity(8000.0f);  // about as bright as the sun at 40 cm: 600 did nothing in daylight
+						Fill->PointLightComponent->SetAttenuationRadius(250.0f);
+						Fill->PointLightComponent->SetCastShadows(false);
+						State->CloseLight = Fill;
+					}
+					UE_LOG(LogTemp, Log, TEXT("Smoke hurt: close-ups hide %d plant groups and bring a fill light"), State->CloseHidden.Num());
+				}
 				// Each from two opposite sides (a head has a face on one of them).
 				const int32 Shot = FMath::FloorToInt(PhaseTime - 8.0f);
 				const int32 Which = Shot / 2;
@@ -484,14 +649,54 @@ void USmokeTestSubsystem::BuildHurtPhases()
 				{
 					const bool bCorpse = Which == Close.Num() - 1;
 					const double Side = Shot % 2 == 0 ? 1.0 : -1.0;
-					const FVector P = Close[Which]->GetActorLocation() + FVector(0.0, 0.0, bCorpse ? 20.0 : 0.0);
-					const FVector Eye = P + (bCorpse ? FVector(70.0 * Side, 50.0 * Side, 260.0) : FVector(75.0 * Side, 60.0 * Side, 65.0));
+					FVector P = Close[Which]->GetActorLocation() + FVector(0.0, 0.0, bCorpse ? 20.0 : 0.0);
+					FVector Eye = P + (bCorpse ? FVector(70.0 * Side, 50.0 * Side, 260.0) : FVector(75.0 * Side, 60.0 * Side, 65.0));
+					// A piece's first shot looks into its cut from 40 cm, a little off its line, to judge the stump (skin
+					// rim, fat, muscle, bone).
+					const ASeveredPieceActor* PieceShown = Cast<ASeveredPieceActor>(Close[Which]);
+					if (!bCorpse && Side > 0.0 && PieceShown && PieceShown->GetCutEnd())
+					{
+						P = PieceShown->GetCutEnd()->GetComponentLocation();
+						// Keep the cut's own sideways direction and only lift the eye a little: a head lies on its side with
+						// its neck facing along the ground, and clamping straight up put the camera in its hair.
+						const FVector CutOut = PieceShown->GetCutEnd()->GetUpVector();
+						FVector Across(CutOut.X, CutOut.Y, 0.0);
+						if (Across.SizeSquared() < 0.04)
+						{
+							Across = FVector(0.8, 0.6, 0.0);
+						}
+						const double Lift = FMath::Max(CutOut.Z, 0.15);
+						const FVector Look = Across.GetSafeNormal() * FMath::Sqrt(1.0 - Lift * Lift) + FVector(0.0, 0.0, Lift);
+						Eye = P + Look * 40.0 + FVector(4.0, 3.0, 2.0);
+					}
 					ViewFrom(Eye, (P - Eye).Rotation());
+					if (APointLight* Fill = State->CloseLight.Get())
+					{
+						// Beside and above the camera, so the cut is lit from the viewer's side.
+						Fill->SetActorLocation(Eye + FVector(0.0, 0.0, 25.0));
+					}
 					if (State->CloseUpsTaken == Shot && PhaseTime - 8.0f - Shot > 0.5f)
 					{
 						++State->CloseUpsTaken;
 						FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke") / TEXT("hurt") / FString::Printf(TEXT("dismember_close%d%s.png"), Which, Shot % 2 == 0 ? TEXT("a") : TEXT("b")), false, false);
 					}
+				}
+				else if (Which >= Close.Num() && (State->CloseLight.IsValid() || !State->CloseHidden.IsEmpty()))
+				{
+					// All taken: the plants and the light as they were.
+					for (const TWeakObjectPtr<UPrimitiveComponent>& Hidden : State->CloseHidden)
+					{
+						if (UPrimitiveComponent* Kind = Hidden.Get())
+						{
+							Kind->SetVisibility(true);
+						}
+					}
+					State->CloseHidden.Reset();
+					if (APointLight* Fill = State->CloseLight.Get())
+					{
+						Fill->Destroy();
+					}
+					State->CloseLight.Reset();
 				}
 			}
 			if (!State->bKillSent && PhaseTime > 2.5f)

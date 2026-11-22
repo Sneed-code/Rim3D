@@ -9,6 +9,8 @@
 
 #include <doctest.h>
 
+#include "TestPlants.h"
+
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -69,7 +71,7 @@ std::unique_ptr<Sim> vgearSim() {
     settings.seed = 11;
     settings.mapSize = 96;
     settings.flatMap = true;
-    return std::make_unique<Sim>(settings, vgearDefs());
+    return withoutPlants(std::make_unique<Sim>(settings, vgearDefs()));
 }
 
 Entity vgearPawn(Sim& sim, int x, int y, const char* gun = nullptr) {

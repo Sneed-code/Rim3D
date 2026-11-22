@@ -2,6 +2,8 @@
 #include "KeyBindings.h"
 
 #include "Engine/World.h"
+#include "Framework/Application/NavigationConfig.h"
+#include "Framework/Application/SlateApplication.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
@@ -9,6 +11,8 @@
 #include "Misc/Parse.h"
 
 #include <imgui.h>
+
+#include "ColonyHudStyle.h"
 
 #include "OverseerPawn.h"
 #include "OverseerSubsystem.h"
@@ -104,6 +108,19 @@ void UProtagonistSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 	Collection.InitializeDependency<UOverseerSubsystem>();
 	Collection.InitializeDependency<USimPawnSubsystem>();
+	// Tab is the lock-on key (sneed 2026-11-20: "when I use Tab it stops me, and pressing Tab again doesn't change
+	// targets"). Unreal's menus move keyboard focus to the next widget on Tab (and the arrow keys): Tab took the focus off
+	// the game view, which lets go of every held key (W, sprint) and sends the next Tab to that widget instead of the
+	// game. The game's screens are drawn with ImGui and need none of it, so it is turned off while the game runs.
+	if (FSlateApplication::IsInitialized())
+	{
+		PreviousNavigation = FSlateApplication::Get().GetNavigationConfig();
+		TSharedRef<FNavigationConfig> Navigation = MakeShared<FNavigationConfig>();
+		Navigation->bTabNavigation = false;
+		Navigation->bKeyNavigation = false;
+		Navigation->bAnalogNavigation = false;
+		FSlateApplication::Get().SetNavigationConfig(Navigation);
+	}
 }
 
 void UProtagonistSubsystem::Deinitialize()
@@ -114,6 +131,11 @@ void UProtagonistSubsystem::Deinitialize()
 		Bridge->OnSimEvent.Remove(EventHandle);
 	}
 	Body = nullptr;
+	if (FSlateApplication::IsInitialized() && PreviousNavigation.IsValid())
+	{
+		FSlateApplication::Get().SetNavigationConfig(PreviousNavigation.ToSharedRef());
+		PreviousNavigation.Reset();
+	}
 	Super::Deinitialize();
 }
 
@@ -534,7 +556,7 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 	if (Bridge->GetSim()->controlledPawn() == Controlled)
 	{
 		Body->FollowSim(FVector2D(View->x, View->y), View->level, View->climb > 0.0f);
-		if (!Body->IsClimbing() && (View->motionClip.valid() || View->motionPush) && !View->motionFreeFeet && View->rollPhase == 0)
+		if (!Body->IsClimbing() && (((View->motionClip.valid() || View->motionPush) && !View->motionFreeFeet) || View->meleeFinisher != 0) && View->rollPhase == 0)
 		{
 			// A stagger or a knockdown carries the colonist: the keys wait and the body is where the sim's clip takes it,
 			// so nothing snaps back a metre when it ends. (The player's own swings leave the feet to the keys.)
@@ -590,7 +612,7 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 	}
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	ColonyHud::ApplyFrameStyle(Scale);
 	const float Margin = 12.0f * Scale;
 	const ImGuiWindowFlags PanelFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
@@ -726,6 +748,14 @@ void UProtagonistSubsystem::SubmitFocus(USimSubsystem& Bridge, colony::FocusMode
 	colony::FocusCommand Command;
 	Command.pawn = Controlled;
 	Command.mode = Mode;
+	// Tab and flicks pick from where the camera looks (sneed 2026-11-19); the sim's x and y are the world's X and Y.
+	if (const APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
+	{
+		const double Yaw = FMath::DegreesToRadians(PC->GetControlRotation().Yaw);
+		Command.viewX = static_cast<float>(FMath::Cos(Yaw));
+		Command.viewY = static_cast<float>(FMath::Sin(Yaw));
+	}
+	Command.anySide = bFocusAnySide;
 	Bridge.Submit(Command);
 	++FocusCommandsSent;
 }
@@ -769,6 +799,7 @@ void UProtagonistSubsystem::UpdateFocus(APlayerController& PC, USimSubsystem& Br
 	if (Rim3DKeys::WasPressed(&PC, ERim3DAction::FocusNextTarget))
 	{
 		FocusNext();
+		FlickX = 0.0f;
 	}
 	else if (Rim3DKeys::WasPressed(&PC, ERim3DAction::EndFocus))
 	{
@@ -782,7 +813,60 @@ void UProtagonistSubsystem::UpdateFocus(APlayerController& PC, USimSubsystem& Br
 			FocusNext();
 		}
 	}
+	UpdateFlick(PC, Bridge, Focus);
 	UpdateTurnAway(Bridge);
+}
+
+namespace
+{
+	// docs/design/lock-on.md (sneed 2026-11-19): a quick sideways flick of the mouse while locked on with melee switches to
+	// the nearest enemy on that side, Elden Ring style. Mouse units summed over the window; tune with LockOn.FlickMouse.
+	TAutoConsoleVariable<float> CVarLockOnFlickMouse(TEXT("LockOn.FlickMouse"), 40.0f,
+		TEXT("Mouse movement (summed over 0.15 s) that counts as a flick to switch lock-on target; 0 turns flicks off."));
+	constexpr float LockFlickWindowSeconds = 0.15f;
+	constexpr float LockFlickCooldownSeconds = 0.4f;
+}
+
+void UProtagonistSubsystem::FlickFocus(bool bRight)
+{
+	USimSubsystem* Bridge = BridgeSource.Get();
+	if (bDirect && Bridge && Bridge->GetSim() && Controlled != colony::kNoEntity && GetFocusTarget() != colony::kNoEntity)
+	{
+		SubmitFocus(*Bridge, bRight ? colony::FocusMode::Right : colony::FocusMode::Left);
+		++FlicksSent;
+	}
+}
+
+void UProtagonistSubsystem::UpdateFlick(APlayerController& PC, USimSubsystem& Bridge, colony::Entity Focus)
+{
+	const UWorld* World = GetWorld();
+	const AProtagonistPawn* Player = GetBody();
+	const float Threshold = CVarLockOnFlickMouse.GetValueOnGameThread();
+	if (!World || !Player || Focus == colony::kNoEntity || Player->HasGunDrawn() || Threshold <= 0.0f)
+	{
+		FlickX = 0.0f;
+		FlickAge = 0.0f;
+		return;  // with a gun the mouse aims freely (sneed): no flicks
+	}
+	const float Dt = World->GetDeltaSeconds();
+	FlickCooldown = FMath::Max(0.0f, FlickCooldown - Dt);
+	float MouseX = 0.0f, MouseY = 0.0f;
+	PC.GetInputMouseDelta(MouseX, MouseY);
+	// A window of the last moments: the sum fades out over it, so slow drifts never add up to a flick.
+	FlickAge += Dt;
+	if (FlickAge > LockFlickWindowSeconds || MouseX * FlickX < 0.0f)
+	{
+		FlickX = 0.0f;
+		FlickAge = 0.0f;
+	}
+	FlickX += MouseX;
+	if (FlickCooldown <= 0.0f && FMath::Abs(FlickX) >= Threshold)
+	{
+		FlickFocus(FlickX > 0.0f);
+		FlickX = 0.0f;
+		FlickAge = 0.0f;
+		FlickCooldown = LockFlickCooldownSeconds;
+	}
 }
 
 namespace

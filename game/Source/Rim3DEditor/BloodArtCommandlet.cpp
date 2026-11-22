@@ -39,6 +39,8 @@
 #include "Materials/MaterialExpressionTextureSample.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialExpressionVertexInterpolator.h"
+#include "Materials/MaterialExpressionVertexColor.h"
+#include "Materials/MaterialExpressionLocalPosition.h"
 #include "MaterialShared.h"
 #include "Misc/PackageName.h"
 #include "Rendering/SkeletalMeshLODModel.h"
@@ -308,9 +310,19 @@ namespace
 		auto* Shade = BloodArtNode<UMaterialExpressionMultiply>(Material, -650, -150);
 		BloodArtConnect(ThickShade, TEXT(""), Shade, TEXT("A"));
 		BloodArtConnect(CoreShade, TEXT(""), Shade, TEXT("B"));
-		auto* Base = BloodArtNode<UMaterialExpressionMultiply>(Material, -500, -300);
-		BloodArtConnect(Rgb, TEXT(""), Base, TEXT("A"));
-		BloodArtConnect(Shade, TEXT(""), Base, TEXT("B"));
+		auto* Shaded = BloodArtNode<UMaterialExpressionMultiply>(Material, -500, -300);
+		BloodArtConnect(Rgb, TEXT(""), Shaded, TEXT("A"));
+		BloodArtConnect(Shade, TEXT(""), Shaded, TEXT("B"));
+		// WorldTint: white on bodies; on the ground and walls UBloodSubsystem sets it darker and redder (Blood.GroundShade),
+		// since the shared colour keeps a little green and blue for shaded faces, and in sun that read as flat pink paint
+		// (PC look, 2026-11-20).
+		auto* WorldTint = BloodArtNode<UMaterialExpressionVectorParameter>(Material, -650, -550);
+		WorldTint->ParameterName = TEXT("WorldTint");
+		WorldTint->DefaultValue = FLinearColor::White;
+		auto* WorldRgb = BloodArtMask(Material, -500, -550, WorldTint, TEXT(""), true, true, true, false);
+		auto* Base = BloodArtNode<UMaterialExpressionMultiply>(Material, -350, -300);
+		BloodArtConnect(Shaded, TEXT(""), Base, TEXT("A"));
+		BloodArtConnect(WorldRgb, TEXT(""), Base, TEXT("B"));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Base, TEXT(""), MP_BaseColor);
 
 		// Roughness: matte when dry; wet blood shines where it is thick, but soaks into the ground: not a mirror
@@ -402,6 +414,57 @@ namespace
 		Failures += BloodArtSave(Material) ? 0 : 1;
 	}
 
+	/**
+	 * M_Gore, the cut flesh of a stump (GoreStump.cpp, docs/design/body-health.md "Gore"): colour from the mesh's vertex
+	 * colours (skin rim, fat, muscle, bone, marrow), wetness from their alpha (0 wet and glossy, 1 dry bone), and a fine
+	 * noise bump so muscle doesn't read as plastic.
+	 */
+	void BloodArtMakeGore(IAssetTools& Tools, int32& Failures)
+	{
+		UMaterial* Material = BloodArtNewMaterial(Tools, TEXT("M_Gore"), Failures);
+		if (!Material)
+		{
+			return;
+		}
+		Material->MaterialDomain = MD_Surface;
+		Material->BlendMode = BLEND_Opaque;
+		Material->SetShadingModel(MSM_DefaultLit);
+		auto* Vertex = BloodArtNode<UMaterialExpressionVertexColor>(Material, -1000, -200);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Vertex, TEXT(""), MP_BaseColor);
+		auto* Wet = BloodArtNode<UMaterialExpressionConstant>(Material, -800, 50);
+		Wet->R = 0.32f;
+		auto* Dry = BloodArtNode<UMaterialExpressionConstant>(Material, -800, 150);
+		Dry->R = 0.6f;
+		auto* Rough = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -500, 100);
+		BloodArtConnect(Wet, TEXT(""), Rough, TEXT("A"));
+		BloodArtConnect(Dry, TEXT(""), Rough, TEXT("B"));
+		BloodArtConnect(Vertex, TEXT("A"), Rough, TEXT("Alpha"));
+		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
+		auto* Specular = BloodArtNode<UMaterialExpressionConstant>(Material, -400, 250);
+		Specular->R = 0.35f;
+		UMaterialEditingLibrary::ConnectMaterialProperty(Specular, TEXT(""), MP_Specular);
+		// A fine bump: the slope of a small noise in the mesh's own space (local position, cm).
+		auto* Bump = BloodArtNode<UMaterialExpressionCustom>(Material, -500, 400);
+		Bump->OutputType = CMOT_Float3;
+		Bump->Description = TEXT("GoreBump");
+		Bump->Code = TEXT("float3 p = LocalPos * 1.7;\n"
+			"float3 i = floor(p); float3 f = frac(p);\n"
+			"float a = frac(sin(dot(i, float3(12.9898, 78.233, 37.719))) * 43758.5453);\n"
+			"float b = frac(sin(dot(i + float3(1, 0, 0), float3(12.9898, 78.233, 37.719))) * 43758.5453);\n"
+			"float c = frac(sin(dot(i + float3(0, 1, 0), float3(12.9898, 78.233, 37.719))) * 43758.5453);\n"
+			"float2 g = float2(lerp(a, b, f.x) - a, lerp(a, c, f.y) - a) * 0.35 * (1.0 - Dryness);\n"
+			"return normalize(float3(g, 1.0));");
+		Bump->Inputs.SetNum(2);
+		Bump->Inputs[0].InputName = TEXT("LocalPos");
+		Bump->Inputs[1].InputName = TEXT("Dryness");
+		auto* Local = BloodArtNode<UMaterialExpressionLocalPosition>(Material, -800, 400);
+		Bump->Inputs[0].Input.Connect(0, Local);
+		Bump->Inputs[1].Input.Connect(4, Vertex);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Bump, TEXT(""), MP_Normal);
+		UMaterialEditingLibrary::RecompileMaterial(Material);
+		Failures += BloodArtSave(Material) ? 0 : 1;
+	}
+
 	/** M_BloodMist: a soft round puff in its instance's colour; opacity from instance data 3, faded where it meets a surface. */
 	void BloodArtMakeMist(IAssetTools& Tools, int32& Failures)
 	{
@@ -447,7 +510,7 @@ namespace
 		BloodArtConnect(Soft, TEXT(""), Opacity, TEXT("A"));
 		BloodArtConnect(InstanceOpacity, TEXT(""), Opacity, TEXT("B"));
 		auto* Fade = BloodArtNode<UMaterialExpressionDepthFade>(Material, -250, 300);
-		Fade->FadeDistanceDefault = 20.0f;
+		Fade->FadeDistanceDefault = 4.0f;  // (20 hid every puff made at a wound, right on the skin: sneed saw no spray)
 		BloodArtConnect(Opacity, TEXT(""), Fade, TEXT("Opacity"));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Fade, TEXT(""), MP_Opacity);
 		UMaterialEditingLibrary::RecompileMaterial(Material);
@@ -531,29 +594,100 @@ namespace
 		auto* H = BloodArtNode<UMaterialExpressionDivide>(Material, -2100, -300);
 		BloodArtConnect(Above, TEXT(""), H, TEXT("A"));
 		BloodArtConnect(Height, TEXT(""), H, TEXT("B"));
-		auto* LegsSlope = BloodArtNode<UMaterialExpressionMultiply>(Material, -1950, -300);
-		BloodArtConnect(H, TEXT(""), LegsSlope, TEXT("A"));
-		LegsSlope->ConstB = -2.6f;
-		auto* LegsRaw = BloodArtNode<UMaterialExpressionAdd>(Material, -1800, -300);
-		BloodArtConnect(LegsSlope, TEXT(""), LegsRaw, TEXT("A"));
-		LegsRaw->ConstB = 1.35f;
-		auto* Legs = BloodArtNode<UMaterialExpressionSaturate>(Material, -1650, -300);
-		BloodArtConnect(LegsRaw, TEXT(""), Legs, TEXT(""));
-
-		// Dirt amount: legs by height, plus the body all over.
+		// Dirt (sneed 2026-11-20: fine spray over the broad smudges, like blood): one node draws three layers and returns
+		// (cover, darkness).
+		//  - Broad smudges: two octaves of noise patches growing from their low spots as the level rises, the legs' top
+		//    edge ragged (fading out by about h 0.52), gritty inside (a 1 cm grain thins them in places).
+		//  - Spray: drops of mud flicked up by the feet or thrown by work, one jittered drop per 3D cell at three sizes
+		//    (0.35, 0.8 and 2.4 cm cells); on the legs they reach higher than the smudges (to the waist), stretched a
+		//    little upwards, and they crowd round the edges of each smudge so a smudge trails off into speckles.
+		//  - Drops smaller than about 3 pixels on screen fade into an even tint of the same average cover (no sparkle
+		//    at range).
+		//  Darkness: drops and smudge cores are wet dark mud, smudge edges dry pale dust.
 		auto* DirtLegs = BloodArtScalar(Material, TEXT("DirtLegs"), 0.0f, -1650, -450);
 		auto* DirtBody = BloodArtScalar(Material, TEXT("DirtBody"), 0.0f, -1500, -450);
-		auto* LegsDirt = BloodArtNode<UMaterialExpressionMultiply>(Material, -1500, -300);
-		BloodArtConnect(DirtLegs, TEXT(""), LegsDirt, TEXT("A"));
-		BloodArtConnect(Legs, TEXT(""), LegsDirt, TEXT("B"));
-		auto* DirtSum = BloodArtNode<UMaterialExpressionAdd>(Material, -1350, -350);
-		BloodArtConnect(LegsDirt, TEXT(""), DirtSum, TEXT("A"));
-		BloodArtConnect(DirtBody, TEXT(""), DirtSum, TEXT("B"));
-		auto* DirtAmount = BloodArtNode<UMaterialExpressionSaturate>(Material, -1200, -350);
-		BloodArtConnect(DirtSum, TEXT(""), DirtAmount, TEXT(""));
-
-		UMaterialExpression* DirtNoise = GrimeArtNoise(Material, -1200, -100, Position, NoiseScale, 1.0f, 0.0f);
-		UMaterialExpression* DirtCover = GrimeArtCover(Material, -800, -250, DirtAmount, 0.8f, DirtNoise, 3.0f);
+		auto* Dirt = BloodArtNode<UMaterialExpressionCustom>(Material, -1100, -250);
+		Dirt->Description = TEXT("GrimeDirt");
+		Dirt->OutputType = CMOT_Float2;
+		Dirt->Code = TEXT(R"HLSL(
+struct GrimeDirtFn
+{
+	float H1(float3 p) { p = frac(p * 0.3183099 + 0.1); p *= 17.0; return frac(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+	float3 H3(float3 p) { return float3(H1(p), H1(p + 19.19), H1(p + 47.31)); }
+	float N(float3 x)
+	{
+		float3 i = floor(x);
+		float3 f = frac(x);
+		f = f * f * (3.0 - 2.0 * f);
+		return lerp(lerp(lerp(H1(i), H1(i + float3(1, 0, 0)), f.x), lerp(H1(i + float3(0, 1, 0)), H1(i + float3(1, 1, 0)), f.x), f.y),
+			lerp(lerp(H1(i + float3(0, 0, 1)), H1(i + float3(1, 0, 1)), f.x), lerp(H1(i + float3(0, 1, 1)), H1(i + float3(1, 1, 1)), f.x), f.y), f.z);
+	}
+	float Fbm(float3 x) { return N(x) * 0.55 + N(x * 2.03 + 7.7) * 0.3 + N(x * 4.11 + 3.1) * 0.15; }
+	// One drop per cell of `cell` cm (z stretched by 1/stretch), kept where its hash is under `density`; x: cover with a
+	// pixel-wide soft rim, y: how visible the size is on screen (0 below about 2 pixels a cell).
+	float2 Drops(float3 p, float cell, float density, float rMin, float rMax, float stretch, float fwCm, float seed)
+	{
+		float3 q = p / cell;
+		q.z *= stretch;
+		float3 i = floor(q) + seed;
+		float3 f = frac(q);
+		float keep = step(H1(i + 5.31), density);
+		float h = H1(i + 2.17);
+		float r = lerp(rMin, rMax, h * h);
+		float3 c = r + H3(i + 11.1) * (1.0 - 2.0 * r);
+		float aa = max(fwCm / cell, 0.01);
+		float d = length(f - c);
+		float vis = saturate((cell / max(fwCm, 1e-4) - 2.0) * 0.5);
+		return float2(keep * (1.0 - smoothstep(r - aa, r + aa, d)), vis);
+	}
+};
+GrimeDirtFn g;
+if (Legs <= 0.001 && Body <= 0.001) return float2(0.0, 0.0);
+float3 p = Pre;
+float fwCm = max(length(fwidth(Pre)), 1e-4);
+// Smudges.
+float ragged = (g.N(p * 0.05 + 3.7) - 0.5) * 0.14;
+float legs = saturate(1.35 - 2.6 * (H + ragged));
+float amount = saturate(Legs * legs + Body);
+float broad = g.Fbm(p * Scale * 0.8);
+float mid = g.N(p * Scale * 3.0 + 17.0);
+float field = amount * 0.78 - broad * 0.74 - mid * 0.3 + 0.02;
+float smudge = saturate(field * 5.0);
+float grainVis = saturate((1.0 / fwCm - 2.0) * 0.5);
+float grain = lerp(0.6, g.N(p * 1.0 + 3.3), grainVis);
+smudge *= lerp(0.62, 1.0, grain);
+float core = saturate((field - 0.2) * 3.0);
+float nearEdge = saturate((field + 0.22) * 3.0);
+// Spray.
+float sprayLegs = saturate(1.25 - 1.8 * (H + ragged * 0.5));
+float spray = saturate(Legs * sprayLegs * 1.1 + Body * 0.55);
+float fineDensity = spray * (0.25 + 0.75 * nearEdge) * 0.6;
+float bigDensity = spray * nearEdge * nearEdge * 0.3;
+float stretch = lerp(1.0, 0.7, saturate(Legs * sprayLegs));
+float2 mist = g.Drops(p, 0.35, fineDensity * 0.9, 0.12, 0.32, stretch, fwCm, 0.0);
+float2 fine = g.Drops(p, 0.8, fineDensity, 0.08, 0.3, stretch, fwCm, 31.0);
+float2 big = g.Drops(p, 2.4, bigDensity, 0.07, 0.24, stretch, fwCm, 67.0);
+float drops = max(max(mist.x * mist.y, fine.x * fine.y), big.x * big.y);
+// What the eye can't resolve as drops: their average cover (about density x pi r^2).
+float tint = saturate((1.0 - mist.y) * fineDensity * 0.9 * 0.18 + (1.0 - fine.y) * fineDensity * 0.15 + (1.0 - big.y) * bigDensity * 0.12);
+float cover = 1.0 - (1.0 - smudge * 0.85) * (1.0 - drops * 0.95) * (1.0 - tint);
+float dark = saturate(max(drops, core * (0.55 + 0.45 * mid)) + tint * 0.5);
+return float2(saturate(cover), dark);
+)HLSL");
+		Dirt->Inputs.Reset();
+		const auto DirtIn = [&](const TCHAR* Name, UMaterialExpression* From)
+		{
+			FCustomInput& In = Dirt->Inputs.AddDefaulted_GetRef();
+			In.InputName = Name;
+			In.Input.Connect(0, From);
+		};
+		DirtIn(TEXT("Pre"), Position);
+		DirtIn(TEXT("H"), H);
+		DirtIn(TEXT("Legs"), DirtLegs);
+		DirtIn(TEXT("Body"), DirtBody);
+		DirtIn(TEXT("Scale"), NoiseScale);
+		UMaterialExpression* DirtCover = BloodArtMask(Material, -900, -300, Dirt, TEXT(""), true, false, false, false);
+		UMaterialExpression* DirtDark = BloodArtMask(Material, -900, -200, Dirt, TEXT(""), false, true, false, false);
 		auto* BloodAmount = BloodArtScalar(Material, TEXT("Blood"), 0.0f, -1200, 150);
 		UMaterialExpression* BloodNoise = GrimeArtNoise(Material, -1200, 300, Position, NoiseScale, 5.0f, 37.1f);
 		UMaterialExpression* BloodCover = GrimeArtCover(Material, -800, 200, BloodAmount, 0.34f, BloodNoise, 9.0f);  // small flecks, never a coat: the wound marks carry the look
@@ -630,7 +764,15 @@ return cover;
 		auto* BloodColor = BloodArtNode<UMaterialExpressionVectorParameter>(Material, -800, -400);
 		BloodColor->ParameterName = TEXT("BloodColor");
 		BloodColor->DefaultValue = FLinearColor(0.2f, 0.008f, 0.007f);
-		auto* Base = BloodArtLerp(Material, -500, -450, DirtColor, TEXT(""), BloodColor, TEXT(""), BloodCover, TEXT(""));
+		// Dry dust at the smudges' edges, dark wet mud in the drops and cores.
+		auto* DirtPale = BloodArtNode<UMaterialExpressionMultiply>(Material, -650, -560);
+		BloodArtConnect(DirtColor, TEXT(""), DirtPale, TEXT("A"));
+		DirtPale->ConstB = 1.35f;
+		auto* DirtDeep = BloodArtNode<UMaterialExpressionMultiply>(Material, -650, -500);
+		BloodArtConnect(DirtColor, TEXT(""), DirtDeep, TEXT("A"));
+		DirtDeep->ConstB = 0.55f;
+		auto* DirtShade = BloodArtLerp(Material, -550, -530, DirtPale, TEXT(""), DirtDeep, TEXT(""), DirtDark, TEXT(""));
+		auto* Base = BloodArtLerp(Material, -500, -450, DirtShade, TEXT(""), BloodColor, TEXT(""), BloodCover, TEXT(""));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Base, TEXT(""), MP_BaseColor);
 
 		// Wet blood is glossy, dry blood and dirt matte.
@@ -639,8 +781,10 @@ return cover;
 		BloodRough->ConstA = 0.75f;
 		BloodRough->ConstB = 0.3f;
 		BloodArtConnect(Wet, TEXT(""), BloodRough, TEXT("Alpha"));
-		auto* DirtRough = BloodArtNode<UMaterialExpressionConstant>(Material, -650, 500);
-		DirtRough->R = 0.92f;
+		auto* DirtRough = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -650, 500);  // wet mud a little less matte
+		DirtRough->ConstA = 0.95f;
+		DirtRough->ConstB = 0.78f;
+		BloodArtConnect(DirtDark, TEXT(""), DirtRough, TEXT("Alpha"));
 		auto* Roughness = BloodArtLerp(Material, -450, 450, DirtRough, TEXT(""), BloodRough, TEXT(""), BloodCover, TEXT(""));
 		UMaterialEditingLibrary::ConnectMaterialProperty(Roughness, TEXT(""), MP_Roughness);
 		auto* BloodSpec = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -650, 600);
@@ -655,7 +799,7 @@ return cover;
 		// Opacity: the stronger of the two.
 		auto* DirtOpacity = BloodArtNode<UMaterialExpressionMultiply>(Material, -500, -150);
 		BloodArtConnect(DirtCover, TEXT(""), DirtOpacity, TEXT("A"));
-		DirtOpacity->ConstB = 0.8f;
+		DirtOpacity->ConstB = 0.9f;
 		auto* BloodOpacity = BloodArtNode<UMaterialExpressionMultiply>(Material, -500, 150);
 		BloodArtConnect(BloodCover, TEXT(""), BloodOpacity, TEXT("A"));
 		BloodOpacity->ConstB = 0.92f;
@@ -689,6 +833,13 @@ return cover;
 		constexpr int32 Res = SkinBloodResolution;
 		TArray<FVector4f> Texels;
 		Texels.SetNumZeroed(Res * Res);
+		// Texels that more than one piece of skin is laid on (sneed's groin square, 2026-11-20): the tail, ears and other
+		// extras made with the skin material have their own small UV patches, laid over the body's own skin (the tail's
+		// over the hip). Each texel keeps the piece with the most texels per cm2 (the body's real skin, not a stretched
+		// extra), so a wound by the hips no longer lights up the tail's patch as a square on the hip.
+		TArray<float> Density;
+		Density.SetNumZeroed(Res * Res);
+		int32 Contested = 0;
 		int32 Triangles = 0;
 		for (const FSkelMeshSection& Section : Lod.Sections)
 		{
@@ -726,6 +877,8 @@ return cover;
 				{
 					continue;
 				}
+				const float WorldArea = 0.5f * FVector3f::CrossProduct(B.Position - A.Position, C.Position - A.Position).Size();
+				const float TexelsPerArea = 0.5f * FMath::Abs(Area) / FMath::Max(WorldArea, 1e-4f);
 				const int32 X0 = FMath::Clamp(FMath::FloorToInt(FMath::Min3(Pa.X, Pb.X, Pc.X)), 0, Res - 1);
 				const int32 X1 = FMath::Clamp(FMath::CeilToInt(FMath::Max3(Pa.X, Pb.X, Pc.X)), 0, Res - 1);
 				const int32 Y0 = FMath::Clamp(FMath::FloorToInt(FMath::Min3(Pa.Y, Pb.Y, Pc.Y)), 0, Res - 1);
@@ -744,7 +897,17 @@ return cover;
 							continue;
 						}
 						const FVector3f Position = A.Position * Wa + B.Position * Wb + C.Position * Wc;
-						Texels[Y * Res + X] = FVector4f(Position.X + SkinBloodPositionOffset, Position.Y + SkinBloodPositionOffset, Position.Z + SkinBloodPositionOffset, 1.0f);
+						FVector4f& Texel = Texels[Y * Res + X];
+						if (Texel.W > 0.5f && FVector3f::Dist(FVector3f(Texel.X, Texel.Y, Texel.Z) - FVector3f(SkinBloodPositionOffset), Position) > 3.0f)
+						{
+							++Contested;
+							if (TexelsPerArea < Density[Y * Res + X] * 1.5f)
+							{
+								continue;  // a sparser piece laid over skin already there
+							}
+						}
+						Density[Y * Res + X] = FMath::Max(Density[Y * Res + X], TexelsPerArea);
+						Texel = FVector4f(Position.X + SkinBloodPositionOffset, Position.Y + SkinBloodPositionOffset, Position.Z + SkinBloodPositionOffset, 1.0f);
 					}
 				}
 				++Triangles;
@@ -810,7 +973,8 @@ return cover;
 		Texture->AddressY = TA_Clamp;
 		Texture->LODGroup = TEXTUREGROUP_Pixels2D;
 		Texture->PostEditChange();
-		UE_LOG(LogBloodArt, Display, TEXT("%s: %d skin triangles, %.1f%% of the texture is skin"), *TextureName, Triangles, 100.0f * Filled / (Res * Res));
+		UE_LOG(LogBloodArt, Display, TEXT("%s: %d skin triangles, %.1f%% of the texture is skin, %d texels laid on twice (the denser skin kept)"), *TextureName, Triangles,
+			100.0f * Filled / (Res * Res), Contested);
 		return BloodArtSave(Texture);
 	}
 
@@ -993,6 +1157,82 @@ return max(float3(max(prev.r, paint), max(prev.g, saturate(paint * 4.0)), max(pr
 		Failures += BloodArtSave(Material) ? 0 : 1;
 	}
 
+	// A gush of blood in the air (sneed 2026-11-20): a ragged streak, thick at its head (+U) and thinning to a tail, with
+	// drops flying off it, different for every seed (instance data 4); instance colour (0-2) and opacity (3).
+	const TCHAR* const BloodArtSprayCode = TEXT(R"HLSL(
+struct BloodSprayNoise
+{
+	float H(float2 p) { return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
+	float N(float2 x)
+	{
+		float2 i = floor(x);
+		float2 f = frac(x);
+		f = f * f * (3.0 - 2.0 * f);
+		return lerp(lerp(H(i), H(i + float2(1, 0)), f.x), lerp(H(i + float2(0, 1)), H(i + float2(1, 1)), f.x), f.y);
+	}
+};
+BloodSprayNoise b;
+float2 p = UV * 2.0 - 1.0;
+float head = saturate(p.x * 0.5 + 0.5);
+float w = lerp(0.18, 0.85, head * head);
+float ragged = (b.N(float2(p.x * 5.0 + Seed, p.y * 5.0 - Seed)) - 0.5) * 0.55 + (b.N(float2(p.x * 13.0 - Seed, p.y * 13.0 + Seed * 0.5)) - 0.5) * 0.25;
+float edge = abs(p.y) / w + max(0.0, p.x) * max(0.0, p.x) * 0.9 + max(0.0, -p.x - 0.75) * 3.0;
+float body = 1.0 - smoothstep(0.7, 0.9, edge + ragged);
+float drops = 0.0;
+[unroll] for (int i = 0; i < 7; ++i)
+{
+	float2 c = float2(b.H(float2(Seed, i)) * 1.7 - 0.85, (b.H(float2(i, Seed)) * 2.0 - 1.0) * 0.75);
+	float r = 0.04 + 0.08 * b.H(float2(Seed + i, 3.7));
+	drops = max(drops, 1.0 - smoothstep(r * 0.65, r, length(p - c)));
+}
+return saturate(max(body, drops)) * Opacity;
+)HLSL");
+
+	void BloodArtMakeSpray(IAssetTools& Tools, int32& Failures)
+	{
+		UMaterial* Material = BloodArtNewMaterial(Tools, TEXT("M_BloodSpray"), Failures);
+		if (!Material)
+		{
+			return;
+		}
+		Material->MaterialDomain = MD_Surface;
+		Material->BlendMode = BLEND_Translucent;
+		Material->SetShadingModel(MSM_DefaultLit);
+		Material->TwoSided = true;
+		bool bNeedsRecompile = false;
+		Material->SetMaterialUsage(bNeedsRecompile, MATUSAGE_InstancedStaticMeshes);
+		UMaterialExpression* Color = BloodArtInstanceColor(Material, -1100, -300);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Color, TEXT(""), MP_BaseColor);
+		auto* Roughness = BloodArtNode<UMaterialExpressionConstant>(Material, -400, -100);
+		Roughness->R = 0.25f;  // wet
+		UMaterialEditingLibrary::ConnectMaterialProperty(Roughness, TEXT(""), MP_Roughness);
+		auto* Custom = BloodArtNode<UMaterialExpressionCustom>(Material, -500, 250);
+		Custom->Description = TEXT("BloodSpray");
+		Custom->OutputType = CMOT_Float1;
+		Custom->Code = BloodArtSprayCode;
+		Custom->Inputs.Reset();
+		SkinArtInput(Custom, TEXT("UV"), BloodArtNode<UMaterialExpressionTextureCoordinate>(Material, -900, 200));
+		auto* Seed = BloodArtNode<UMaterialExpressionPerInstanceCustomData>(Material, -900, 300);
+		Seed->DataIndex = 4;
+		Seed->ConstDefaultValue = 0.0f;
+		SkinArtInput(Custom, TEXT("Seed"), Seed);
+		auto* Opacity = BloodArtNode<UMaterialExpressionPerInstanceCustomData>(Material, -900, 400);
+		Opacity->DataIndex = 3;
+		Opacity->ConstDefaultValue = 0.9f;
+		SkinArtInput(Custom, TEXT("Opacity"), Opacity);
+		auto* Fade = BloodArtNode<UMaterialExpressionDepthFade>(Material, -250, 300);
+		Fade->FadeDistanceDefault = 3.0f;
+		BloodArtConnect(Custom, TEXT(""), Fade, TEXT("Opacity"));
+		UMaterialEditingLibrary::ConnectMaterialProperty(Fade, TEXT(""), MP_Opacity);
+		UMaterialEditingLibrary::RecompileMaterial(Material);
+		if (GShaderCompilingManager)
+		{
+			GShaderCompilingManager->FinishAllCompilation();
+		}
+		Failures += SkinArtReportErrors(Material) ? 1 : 0;
+		Failures += BloodArtSave(Material) ? 0 : 1;
+	}
+
 	/** Adds the blood mask to the MakeHuman skin material (again with -force). */
 	void SkinArtPatchSkin(bool bForce, int32& Failures)
 	{
@@ -1058,9 +1298,17 @@ int32 UBloodArtCommandlet::Main(const FString& Params)
 	{
 		BloodArtMakeDrop(Tools, Failures);
 	}
+	if (BloodArtWanted(TEXT("M_Gore"), bForce))
+	{
+		BloodArtMakeGore(Tools, Failures);
+	}
 	if (BloodArtWanted(TEXT("M_BloodMist"), bForce))
 	{
 		BloodArtMakeMist(Tools, Failures);
+	}
+	if (BloodArtWanted(TEXT("M_BloodSpray"), bForce))
+	{
+		BloodArtMakeSpray(Tools, Failures);
 	}
 	if (BloodArtWanted(TEXT("M_GrimeOverlay"), bForce))
 	{

@@ -28,6 +28,8 @@
 #include "PawnSubsystem.h"
 #include "MakeHumanArt.h"
 #include "SoftContactSubsystem.h"
+#include "StrandHair.h"
+#include "GroomComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
@@ -290,6 +292,11 @@ namespace
 		float SoftDemoT = -1.0f;   // -CreatorSoftDemo: seconds into the soft-body showcase
 		int32 SoftDemoStep = 0;
 		TWeakObjectPtr<AActor> SoftBall;  // the soft-body demo's pressing ball
+		float HairDemoT = -1.0f;   // -CreatorHairDemo: seconds into the long hair showcase
+		int32 HairDemoStep = 0;
+		int32 HairDemoShot = 0;
+		float HairDeepest[3] = {0.0f, 0.0f, 0.0f};          // per part of the demo: hair into the body, cm
+		float HairAnimatedDeepest[3] = {0.0f, 0.0f, 0.0f};  // the same hair as animated (no physics)
 		int32 SoftPressFrames = 0;      // frames in which the ball's press reached the skin table
 	};
 
@@ -745,16 +752,46 @@ namespace
 				}
 			}
 		}
-		// Only the chosen hair style shows.
-		const int32 Style = P.HairStyle >= 0 ? P.HairStyle : (P.bFemale ? 1 : 5);
+		// -CreatorGroom=<GA_Hair_...>: strand hair (a MetaHuman groom fitted to this head) instead of the hair meshes.
+		FString GroomName;
+		const bool bGroom = FParse::Value(FCommandLine::Get(), TEXT("CreatorGroom="), GroomName) && !GroomName.IsEmpty();
+		if (bGroom)
+		{
+			UGroomComponent* Existing = nullptr;
+			TArray<UGroomComponent*> Grooms;
+			Pawn.GetComponents(Grooms);
+			for (UGroomComponent* Candidate : Grooms)
+			{
+				Existing = Candidate->GetFName() == TEXT("StrandHair") ? Candidate : Existing;
+			}
+			StrandHairAttach(Mesh, StrandHairFind(GroomName), Existing);
+		}
+		// Only the chosen hair style shows (none under strand hair).
+		const int32 Style = bGroom ? 0 : (P.HairStyle >= 0 ? P.HairStyle : (P.bFemale ? 1 : 5));
+		const FCreatorHairStyle& Chosen = CreatorHairStyles[FMath::Clamp(Style, 0, static_cast<int32>(UE_ARRAY_COUNT(CreatorHairStyles)) - 1)];
+		TArray<int32> WigSections;
 		for (int32 i = 0; i < Slots.Num(); ++i)
 		{
 			const FString Slot = Slots[i].ToString();
 			if (CreatorIsHairSlot(Slot))
 			{
-				const TCHAR* Key = CreatorHairStyles[FMath::Clamp(Style, 0, static_cast<int32>(UE_ARRAY_COUNT(CreatorHairStyles)) - 1)].Key;
-				Mesh->ShowMaterialSection(i, 0, Key && Slot.Contains(Key), 0);
+				const bool bShown = Chosen.Key && Slot.Contains(Chosen.Key);
+				Mesh->ShowMaterialSection(i, 0, bShown, 0);
+				if (bShown)
+				{
+					WigSections.Add(i);
+				}
 			}
+		}
+		// Our own strand hair for that style on people near the camera (the wig further off): docs/design/hair-physics.md
+		// "Near and far". The MetaHuman groom test above replaces it.
+		if (UStrandHairSubsystem* Strands = Pawn.GetWorld() ? Pawn.GetWorld()->GetSubsystem<UStrandHairSubsystem>() : nullptr)
+		{
+			FString Base = Mesh->GetSkeletalMeshAsset() ? Mesh->GetSkeletalMeshAsset()->GetName() : FString();
+			Base.RemoveFromStart(TEXT("SK_MH_"));
+			// Under a drawn hat or helmet (or with -CreatorHairHat) the under-a-hat version: pressed flat above the brim, hanging below it.
+			Strands->Want(Mesh, Base, bGroom || !Chosen.Key ? FString() : FString(UTF8_TO_TCHAR(Chosen.Label)), HairColour, WigSections,
+				Pawn.WearsDrawnHeadwear() || FParse::Param(FCommandLine::Get(), TEXT("CreatorHairHat")));
 		}
 		// The panel's colour is as seen (sRGB); the skin material takes it linear, as FSimPawnLooks::Skin is.
 		const FLinearColor Skin = FLinearColor::FromSRGBColor(FLinearColor(P.Skin[0], P.Skin[1], P.Skin[2]).ToFColor(false));
@@ -959,11 +996,33 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			Person.Looks.Skin = FLinearColor(Person.Skin[0], Person.Skin[1], Person.Skin[2]);
 			CreatorSetGender(Person, Person.bFemale, *Pawns);
 			State->People.Add(Person);
-			for (const colony::Entity Item : Sim->apparel().worn(Person.Thing))
+			const std::vector<colony::Entity> StartClothes = Sim->apparel().worn(Person.Thing);
+			for (const colony::Entity Item : StartClothes)
 			{
 				std::string Error;
 				Sim->apparel().takeOff(Person.Thing, Item, Error);
 				B->Submit(colony::DestroyThingCommand{Item});
+			}
+			// -CreatorDressed: a set outfit per person (MakeHuman garments, docs/design/clothes-draw.md), the same every run
+			// whatever the start rolled (a nudist would stay bare); otherwise bare skin.
+			if (FParse::Param(FCommandLine::Get(), TEXT("CreatorDressed")))
+			{
+				static const char* const CreatorOutfits[4][3] = {{"Apparel_TShirt", "Apparel_Pants", "Apparel_Tuque"},
+					{"Apparel_ButtonShirt", "Apparel_Pants", "Apparel_CowboyHat"}, {"Apparel_TShirt", "Apparel_Jacket", "Apparel_Pants"},
+					{"Apparel_Tribalwear", "Apparel_Tuque", nullptr}};
+				for (const char* const Piece : CreatorOutfits[i % 4])
+				{
+					if (!Piece)
+					{
+						continue;
+					}
+					std::string Error;
+					const colony::Entity Item = Sim->apparel().make(Defs->idOf("Things", Piece), Defs->idOf("Things", "Cloth"), -1, Middle, &Error);
+					if (Item == colony::kNoEntity || !Sim->apparel().putOn(Person.Thing, Item, Error))
+					{
+						UE_LOG(LogTemp, Warning, TEXT("creator: could not dress %d in %hs: %hs"), i, Piece, Error.c_str());
+					}
+				}
 			}
 			B->Submit(colony::DraftCommand{Person.Thing, true});
 			B->Submit(colony::MoveOrderCommand{Person.Thing, colony::CellPos{Middle.x - 1, Middle.y + 6 - 3 + i * 2, 0}});
@@ -1162,7 +1221,8 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		}
 		// -CreatorRecord=<seconds> with -CreatorPlay: every frame of the clip at a fixed 30 a second (creator/rec_0000.png ...).
 		float PlayRecord = 0.0f;
-		if (State->bAutoPlayed && !FParse::Param(FCommandLine::Get(), TEXT("CreatorDemo")) && !FParse::Param(FCommandLine::Get(), TEXT("CreatorSoftDemo")) && FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), PlayRecord)
+		if (State->bAutoPlayed && !FParse::Param(FCommandLine::Get(), TEXT("CreatorDemo")) && !FParse::Param(FCommandLine::Get(), TEXT("CreatorSoftDemo")) &&
+			!FParse::Param(FCommandLine::Get(), TEXT("CreatorHairDemo")) && FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), PlayRecord)
 			&& State->Recorded < FMath::RoundToInt32(PlayRecord * 30.0f))
 		{
 			if (State->Recorded == 0)
@@ -1279,6 +1339,76 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				++State->SoftDemoStep;
 			}
 			if (RecordSeconds > 0.0f && State->Recorded < FMath::RoundToInt32(RecordSeconds * 30.0f))
+			{
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") / FString::Printf(TEXT("rec_%04d.png"), State->Recorded++), false, false);
+			}
+		}
+		// -CreatorHairDemo (docs/design/hair-physics.md): the picked one, seen from behind, fights the air with long hair:
+		// physics on (0-12 s), the same with the hair as animated (12-24 s), then on with the collision capsules drawn
+		// (24-36 s). Pictures at set moments (creator/hair_NN_*.png); with -CreatorRecord=<seconds> every frame at 30 a second.
+		if (FParse::Param(FCommandLine::Get(), TEXT("CreatorHairDemo")) && PhaseTime > 4.5f && State->bClipsListed && State->People.IsValidIndex(State->Selected))
+		{
+			float RecordSeconds = 0.0f;
+			FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), RecordSeconds);
+			if (State->HairDemoT < 0.0f)
+			{
+				State->HairDemoT = 0.0f;
+				State->bWalk = false;
+				State->CameraDistance = 230.0f;
+				State->CameraYaw = 30.0f;  // from behind, a little to her left
+				State->CameraPitch = -8.0f;
+				if (RecordSeconds > 0.0f)
+				{
+					FApp::SetUseFixedTimeStep(true);
+					FApp::SetFixedDeltaTime(1.0 / 30.0);
+				}
+			}
+			State->HairDemoT += GetWorld()->GetDeltaSeconds();
+			const float T = State->HairDemoT;
+			const int32 Part = T < 12.0f ? 0 : (T < 24.0f ? 1 : 2);
+			// Looked up once (a lookup every frame makes the engine warn).
+			static IConsoleVariable* const HairPhysicsVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.HairPhysics"));
+			static IConsoleVariable* const HairDebugVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.HairDebug"));
+			if (HairPhysicsVar && HairPhysicsVar->GetInt() != (Part == 1 ? 0 : 2))
+			{
+				HairPhysicsVar->Set(Part == 1 ? 0 : 2);
+			}
+			if (HairDebugVar && HairDebugVar->GetInt() != (Part == 2 ? 1 : 0))
+			{
+				HairDebugVar->Set(Part == 2 ? 1 : 0);
+			}
+			// Each part: shadowboxing (turns, punches, ducks), then sword swings (big arm and shoulder moves).
+			static const float ClipTimes[] = {0.0f, 6.0f, 12.0f, 18.0f, 24.0f, 30.0f};
+			static const TCHAR* const ClipNames[] = {TEXT("Shadowbox"), TEXT("SwordSwings"), TEXT("Shadowbox"), TEXT("SwordSwings"), TEXT("Shadowbox"), TEXT("SwordSwings")};
+			if (State->HairDemoStep < static_cast<int32>(UE_ARRAY_COUNT(ClipTimes)) && T >= ClipTimes[State->HairDemoStep])
+			{
+				const int32 Clip = State->ClipNames.IndexOfByKey(FString(ClipNames[State->HairDemoStep]));
+				while (State->Playing.Num() < State->People.Num()) { State->Playing.Add(-1); }
+				CreatorPlay(*State, State->Selected, Clip, Pawns->FindPawn(State->People[State->Selected].Thing), true);
+				UE_LOG(LogTemp, Display, TEXT("Hair demo: %s at %.1f s, hair physics %s"), ClipNames[State->HairDemoStep], T, Part == 1 ? TEXT("off") : TEXT("on"));
+				++State->HairDemoStep;
+			}
+			static const float ShotTimes[] = {2.0f, 4.0f, 8.0f, 10.0f, 14.0f, 16.0f, 20.0f, 22.0f, 26.0f, 32.0f};
+			bool bShotThisFrame = false;  // one screenshot request a frame: a later one replaces it, so the recording skips this frame
+			if (State->HairDemoShot < static_cast<int32>(UE_ARRAY_COUNT(ShotTimes)) && T >= ShotTimes[State->HairDemoShot])
+			{
+				static const TCHAR* const PartNames[] = {TEXT("on"), TEXT("off"), TEXT("capsules")};
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") /
+					FString::Printf(TEXT("hair_%02d_%s.png"), State->HairDemoShot, PartNames[Part]), false, false);
+				++State->HairDemoShot;
+				bShotThisFrame = true;
+			}
+			if (const ASimPawnActor* Pawn = Pawns->FindPawn(State->People[State->Selected].Thing))
+			{
+				const USkeletalMeshComponent* Mesh = Pawn->GetMakeHumanMesh();
+				if (UMakeHumanAnimInstance* Anim = Mesh ? Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()) : nullptr)
+				{
+					float Animated = 0.0f;
+					State->HairDeepest[Part] = FMath::Max(State->HairDeepest[Part], Anim->TakeLargestHairPenetration(&Animated));
+					State->HairAnimatedDeepest[Part] = FMath::Max(State->HairAnimatedDeepest[Part], Animated);
+				}
+			}
+			if (!bShotThisFrame && RecordSeconds > 0.0f && State->Recorded < FMath::RoundToInt32(RecordSeconds * 30.0f))
 			{
 				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") / FString::Printf(TEXT("rec_%04d.png"), State->Recorded++), false, false);
 			}
@@ -1883,6 +2013,15 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		{
 			Notes.Add(FString::Printf(TEXT("creator: %s"), *State->People[i].Label(i)));
 		}
+		if (State->HairDemoT >= 0.0f)
+		{
+			static const TCHAR* const PartNames[] = {TEXT("physics on"), TEXT("as animated (measured with physics off: none)"), TEXT("physics on, capsules drawn")};
+			for (int32 p = 0; p < 3; ++p)
+			{
+				Notes.Add(FString::Printf(TEXT("creator hair demo, %s: hair up to %.1f cm into the body; as animated it would have gone %.1f cm in"),
+					PartNames[p], State->HairDeepest[p], State->HairAnimatedDeepest[p]));
+			}
+		}
 	};
 	Phases.Add(MoveTemp(Play));
 }
@@ -1896,8 +2035,11 @@ namespace
 	{
 		FCreatorPerson Person;
 		Person.bFemale = bFemale;
-		FRandomStream Random(Seed);
-		CreatorRandomize(Person, Random);
+		if (Seed >= 0) // a negative seed is the creator's untouched base person (DefaultLooks): the gun range's woman
+		{
+			FRandomStream Random(Seed);
+			CreatorRandomize(Person, Random);
+		}
 		Person.Looks.bFemale = bFemale;
 		Person.Looks.MakeHuman = bFemale ? TEXT("CreatorFemale") : TEXT("CreatorMale");
 		return Person;
@@ -1951,4 +2093,175 @@ bool CreatorPeople::ApplyRandom(int32 Seed, bool bFemale, ASimPawnActor& Pawn)
 	Person.bBlink = false;
 	CreatorApply(Person, Pawn, false);
 	return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The character screen's looks (CreatorPeople::FLook, docs/design/new-game.md).
+
+namespace
+{
+	FCreatorPerson CreatorLookPerson(const CreatorPeople::FLook& Look)
+	{
+		FCreatorPerson P = CreatorPeopleMake(Look.Seed, Look.bFemale);
+		P.Height = Look.Get(TEXT("height"), P.Height);
+		P.Sex = Look.Get(TEXT("sex"), P.Sex);
+		P.Older = Look.Get(TEXT("older"), P.Older);
+		P.Weight = Look.Get(TEXT("weight"), P.Weight);
+		P.Muscle = Look.Get(TEXT("muscle"), P.Muscle);
+		P.Breasts = P.bFemale ? Look.Get(TEXT("breasts"), P.Breasts) : 0.0f;
+		P.HairStyle = FMath::RoundToInt(Look.Get(TEXT("hairStyle"), static_cast<float>(P.HairStyle)));
+		P.Hair[0] = Look.Get(TEXT("hairR"), P.Hair[0]);
+		P.Hair[1] = Look.Get(TEXT("hairG"), P.Hair[1]);
+		P.Hair[2] = Look.Get(TEXT("hairB"), P.Hair[2]);
+		CreatorSetSkin(P, Look.Get(TEXT("skinR"), P.Skin[0]), Look.Get(TEXT("skinG"), P.Skin[1]), Look.Get(TEXT("skinB"), P.Skin[2]));
+		if (Look.Values.Contains(TEXT("irisR")))
+		{
+			P.bOwnIris = true;
+			P.IrisStrength = 0.85f;
+			P.Iris[0] = Look.Get(TEXT("irisR"), P.Iris[0]);
+			P.Iris[1] = Look.Get(TEXT("irisG"), P.Iris[1]);
+			P.Iris[2] = Look.Get(TEXT("irisB"), P.Iris[2]);
+		}
+		switch (FMath::RoundToInt(Look.Get(TEXT("pubic"), 1.0f)))
+		{
+		case 0: P.Pubic = 0; break;
+		case 2: P.Pubic = 1; P.PubicLength = 0.45f; P.PubicCoverage = 0.6f; break;
+		case 3: P.Pubic = 1; P.bShaved = true; break;
+		default: P.Pubic = 1; break;
+		}
+		P.bBlink = false;
+		return P;
+	}
+}
+
+FString CreatorPeople::Encode(const FLook& Look)
+{
+	FString Text = FString::Printf(TEXT("seed=%d;female=%d;"), Look.Seed, Look.bFemale ? 1 : 0);
+	TArray<FString> Keys;
+	Look.Values.GetKeys(Keys);
+	Keys.Sort();
+	for (const FString& Key : Keys)
+	{
+		Text += FString::Printf(TEXT("%s=%.4g;"), *Key, Look.Values[Key]);
+	}
+	return Text;
+}
+
+bool CreatorPeople::Decode(const FString& Text, FLook& Out)
+{
+	Out = FLook();
+	bool bSeed = false;
+	TArray<FString> Parts;
+	Text.ParseIntoArray(Parts, TEXT(";"), true);
+	for (const FString& Part : Parts)
+	{
+		FString Key;
+		FString Value;
+		if (!Part.Split(TEXT("="), &Key, &Value))
+		{
+			continue;
+		}
+		if (Key == TEXT("seed"))
+		{
+			Out.Seed = FCString::Atoi(*Value);
+			bSeed = true;
+		}
+		else if (Key == TEXT("female"))
+		{
+			Out.bFemale = FCString::Atoi(*Value) != 0;
+		}
+		else if (!Key.IsEmpty())
+		{
+			Out.Values.Add(Key, FCString::Atof(*Value));
+		}
+	}
+	return bSeed;
+}
+
+CreatorPeople::FLook CreatorPeople::Expanded(const FLook& Look)
+{
+	const FCreatorPerson P = CreatorLookPerson(Look);
+	FLook Out = Look;
+	const auto Keep = [&Out](const TCHAR* Name, float Value)
+	{
+		if (!Out.Values.Contains(Name))
+		{
+			Out.Values.Add(Name, Value);
+		}
+	};
+	Keep(TEXT("height"), P.Height);
+	Keep(TEXT("sex"), P.Sex);
+	Keep(TEXT("older"), P.Older);
+	Keep(TEXT("weight"), P.Weight);
+	Keep(TEXT("muscle"), P.Muscle);
+	Keep(TEXT("breasts"), P.Breasts);
+	Keep(TEXT("hairStyle"), static_cast<float>(P.HairStyle));
+	Keep(TEXT("hairR"), P.Hair[0]);
+	Keep(TEXT("hairG"), P.Hair[1]);
+	Keep(TEXT("hairB"), P.Hair[2]);
+	Keep(TEXT("skinR"), P.Skin[0]);
+	Keep(TEXT("skinG"), P.Skin[1]);
+	Keep(TEXT("skinB"), P.Skin[2]);
+	Keep(TEXT("pubic"), 1.0f);
+	return Out;
+}
+
+FSimPawnLooks CreatorPeople::LooksFor(const FLook& Look, const FSimPawnLooks& From)
+{
+	const FCreatorPerson P = CreatorLookPerson(Look);
+	FSimPawnLooks Looks = From;
+	Looks.bFemale = Look.bFemale;
+	Looks.MakeHuman = P.Looks.MakeHuman;
+	Looks.Height = 1.0f;  // the MakeHuman mesh carries the height (CreatorApply)
+	// As CreatorApply sets them: the creator's colours are as seen (sRGB), the looks' are linear.
+	Looks.Skin = FLinearColor::FromSRGBColor(FLinearColor(P.Skin[0], P.Skin[1], P.Skin[2]).ToFColor(false));
+	Looks.Hair = FLinearColor::FromSRGBColor(FLinearColor(P.Hair[0], P.Hair[1], P.Hair[2]).ToFColor(false));
+	return Looks;
+}
+
+bool CreatorPeople::Apply(const FLook& Look, ASimPawnActor& Pawn)
+{
+	const FCreatorPerson P = CreatorLookPerson(Look);
+	if (!Pawn.GetMakeHumanMesh() || Pawn.GetLooks().MakeHuman != P.Looks.MakeHuman)
+	{
+		return false;
+	}
+	CreatorApply(P, Pawn, false);
+	return true;
+}
+
+int32 CreatorPeople::HairStyleCount()
+{
+	return UE_ARRAY_COUNT(CreatorHairStyles);
+}
+
+FString CreatorPeople::HairStyleLabel(int32 Index)
+{
+	return Index >= 0 && Index < HairStyleCount() ? FString(UTF8_TO_TCHAR(CreatorHairStyles[Index].Label)) : FString();
+}
+
+bool CreatorPeople::HasHairStyle(int32 Index, const ASimPawnActor& Pawn)
+{
+	if (Index < 0 || Index >= HairStyleCount())
+	{
+		return false;
+	}
+	const TCHAR* Key = CreatorHairStyles[Index].Key;
+	if (!Key)
+	{
+		return true;
+	}
+	const USkeletalMeshComponent* Mesh = Pawn.GetMakeHumanMesh();
+	if (!Mesh)
+	{
+		return false;
+	}
+	for (const FName& Slot : Mesh->GetMaterialSlotNames())
+	{
+		if (Slot.ToString().Contains(Key))
+		{
+			return true;
+		}
+	}
+	return false;
 }

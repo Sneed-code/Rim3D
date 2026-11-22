@@ -55,7 +55,7 @@ constexpr float kRockAbove = 0.62f;
 // Rivers (docs/design/mapgen.md). Distances are metres from the river's middle line.
 constexpr float kRiverDeepBed = 0.17f;     // fractions of max height
 constexpr float kRiverShallowBed = 0.20f;
-constexpr float kRiverBank = 6.0f;         // the ground slopes up to its old height over this far
+constexpr float kRiverBank = 8.0f;         // the ground slopes up to its old height over this far
 constexpr float kRiverBankLift = 0.15f;    // metres: a bank never sinks below the water table plus this
 constexpr float kRiverEdgeDepth = 0.25f;   // metres of water at the outer edge of the shallows
 constexpr float kRiverFlowMax = 1.0f;      // m/s in the middle of the channel (ours: a lowland tropical river)
@@ -65,8 +65,27 @@ constexpr int kMapGenWorldMin = 192;       // maps smaller than this (test maps)
 constexpr float kRiverFordHalf = 8.0f;     // along the river: no deep water this far from the ford
 constexpr float kRiverFordFade = 12.0f;
 
+// Flat ground (maps of 192 m or more; docs/design/mapgen.md "Flat ground"). Ours, in metres: most of
+// the map is open plain a couple of metres above the water table, the hills are a few big patches
+// (MapSettings::hills of the map) that rise gently from the plain, and a few lakes sink into it.
+constexpr float kPlainLowM = 15.0f;        // the plain's lowest ground
+constexpr float kPlainRiseM = 2.0f;        // and how much higher it rolls, over hundreds of metres
+constexpr float kHillFootprint = 1.7f;    // the hill share is ground over 2 m above the plain; the foot slopes are this much more
+constexpr float kHillRamp = 0.20f;         // hill noise from the edge of a hill area to its full height
+constexpr float kHillTopM = 26.0f;         // how high the tallest hills stand over the plain
+constexpr float kRockOfHills = 1.0f / 6.0f; // of the hill share, the highest ground is bare rock
+constexpr float kHillRockMinM = 8.0f;      // but only ground standing this far over the plain
+constexpr float kHillRockMaxM = 14.0f;     // and always ground standing this far over it
+constexpr float kLakeShare = 0.025f;       // of the map, times the biome's river (at most 1)
+constexpr float kLakeRamp = 0.18f;
+constexpr float kLakeBedM = 10.5f;         // the deepest lake bed
+constexpr float kBeachAboveWaterM = 1.2f;  // sand up to this far over the water table
+constexpr float kMiddleClearM = 150.0f;    // hills and lakes keep away from the middle, where colonies start
+constexpr float kRiverBankSlope = 0.3f;    // a river bank never falls faster than this (rise over run, on average)
+constexpr float kRiverBankMax = 60.0f;     // metres: the widest bank, down from a hill
+
 // Marsh and mud: low ground where a slow noise is high, and the shores of water.
-constexpr float kMarshBelow = 0.34f;       // fractions of max height
+constexpr float kMarshBelow = 15.5f / 60.0f;  // fractions of max height: the plain's lowest third and lakesides
 constexpr float kMarshAbove = 0.58f;       // wetness times the biome's marsh, from here it is marsh
 constexpr float kMudAbove = 0.72f;
 constexpr float kShoreMarshAbove = 0.35f;
@@ -91,7 +110,8 @@ Map::Map(const MapSettings& settings)
       regions_(std::make_unique<Regions>(*this)),
       cover_(std::make_unique<Cover>(*this)),
       river_(settings.river),
-      marsh_(settings.marsh) {
+      marsh_(settings.marsh),
+      hills_(settings.hills) {
     if (!settings.flat) {
         generate();
     }
@@ -169,6 +189,61 @@ float Map::waterSurface(CellPos c) const {
     const float own = ground + (t == Terrain::Water ? kHandDeepM : kHandShallowM);
     // The table, unless the cell's ground stands above it (water put down by hand up a hill).
     return !std::isnan(waterTable_) && waterTable_ > ground ? waterTable_ : own;
+}
+
+bool Map::bridgeable(CellPos c, bool deepRiver, bool anyWater) const {
+    if (!onGround(c) || hasDeck(c)) {
+        return false;
+    }
+    const Terrain t = terrain(c);
+    if (t == Terrain::ShallowWater || t == Terrain::Marsh || t == Terrain::Mud) {
+        return true;
+    }
+    return t == Terrain::Water && (anyWater || (deepRiver && flowing(c)));
+}
+
+void Map::setDeck(CellPos c) {
+    if (!onGround(c)) {
+        return;
+    }
+    if (deck_.empty()) {
+        deck_.assign(groundHeight_.size(), std::nanf(""));
+    }
+    const size_t i = static_cast<size_t>(index(c));
+    float top = groundHeight_[i];
+    const int x1 = std::min(c.x + 1, width_ - 1);
+    const int y1 = std::min(c.y + 1, height_ - 1);
+    top = std::max({top, groundHeight_[static_cast<size_t>(c.y * width_ + x1)], groundHeight_[static_cast<size_t>(y1 * width_ + c.x)],
+                    groundHeight_[static_cast<size_t>(y1 * width_ + x1)]});
+    const float surface = waterSurface(c);
+    if (!std::isnan(surface)) {
+        top = std::max(top, surface);
+    }
+    const bool had = !std::isnan(deck_[i]);
+    deck_[i] = top + kDeckLiftM;
+    if (!had) {
+        ++deckCount_;
+        regions_->markDirty(c);
+        cover_->markDirty(c);
+    }
+}
+
+void Map::clearDeck(CellPos c) {
+    if (!hasDeck(c)) {
+        return;
+    }
+    const size_t i = static_cast<size_t>(index(c));
+    deck_[i] = std::nanf("");
+    --deckCount_;
+    deckLost_.push_back(static_cast<uint32_t>(i));
+    regions_->markDirty(c);
+    cover_->markDirty(c);
+}
+
+std::vector<uint32_t> Map::takeLostDecks() {
+    std::vector<uint32_t> lost;
+    lost.swap(deckLost_);
+    return lost;
 }
 
 float Map::waterDepthAt(float x, float y, int level) const {
@@ -633,6 +708,8 @@ void Map::setBuilding(CellPos c, Entity building, Passage passage, uint8_t obsta
             chunk.passage[i] = passage;
             regions_->markDirty(c);
         }
+        refreshWallClimbs(c, true);
+        refreshWallClimbs(CellPos{c.x, c.y, c.level - 1}, false);  // a building on the wall's top
         return;
     }
     const size_t i = static_cast<size_t>(index(c));
@@ -645,6 +722,7 @@ void Map::setBuilding(CellPos c, Entity building, Passage passage, uint8_t obsta
         passage_[i] = passage;
         regions_->markDirty(c);
     }
+    refreshWallClimbs(c, true);
 }
 
 void Map::setObstacle(CellPos c, uint8_t obstacleDm) {
@@ -665,8 +743,97 @@ void Map::addLevelLink(const LevelLink& link) {
         return key(a.low) != key(b.low) ? key(a.low) < key(b.low) : key(a.high) < key(b.high);
     };
     levelLinks_.insert(std::upper_bound(levelLinks_.begin(), levelLinks_.end(), link, before), link);
+    linkCells_.insert(linkCellKey(link.low));
+    linkCells_.insert(linkCellKey(link.high));
     regions_->markDirty(link.low);
     regions_->markDirty(link.high);
+}
+
+void Map::rebuildLinkCells() {
+    linkCells_.clear();
+    for (const LevelLink& link : levelLinks_) {
+        linkCells_.insert(linkCellKey(link.low));
+        linkCells_.insert(linkCellKey(link.high));
+    }
+}
+
+void Map::setWallClimb(float speedFactor, float length) {
+    wallClimbSpeed_ = std::max(0.0f, speedFactor);
+    wallClimbLength_ = std::max(0.5f, length);
+    // Every wall climb is made again: drop them all, then look at every wall cell with a floor over it.
+    const size_t before = levelLinks_.size();
+    for (const LevelLink& link : levelLinks_) {
+        if (link.wall) {
+            regions_->markDirty(link.low);
+            regions_->markDirty(link.high);
+        }
+    }
+    levelLinks_.erase(std::remove_if(levelLinks_.begin(), levelLinks_.end(), [](const LevelLink& l) { return l.wall; }), levelLinks_.end());
+    if (levelLinks_.size() != before) {
+        rebuildLinkCells();
+    }
+    if (wallClimbSpeed_ <= 0.0f) {
+        return;
+    }
+    for (const CellPos& floor : upperFloorCells()) {
+        refreshWallClimb(CellPos{floor.x, floor.y, floor.level - 1});
+    }
+}
+
+void Map::refreshWallClimb(CellPos wall) {
+    if (!inBounds(wall)) {
+        return;
+    }
+    const CellPos top{wall.x, wall.y, wall.level + 1};
+    bool removed = false;
+    for (auto it = levelLinks_.begin(); it != levelLinks_.end();) {
+        if (it->wall && it->high == top) {
+            regions_->markDirty(it->low);
+            regions_->markDirty(it->high);
+            it = levelLinks_.erase(it);
+            removed = true;
+        } else {
+            ++it;
+        }
+    }
+    if (removed) {
+        rebuildLinkCells();
+    }
+    if (wallClimbSpeed_ <= 0.0f || !inBounds(top) || passage(wall) != Passage::Blocked || buildingAt(wall) == kNoEntity ||
+        obstacleDm(wall) < kObstacleTallDm || !walkable(top)) {
+        return;
+    }
+    static constexpr int kDx[4] = {0, 1, 0, -1};
+    static constexpr int kDy[4] = {1, 0, -1, 0};
+    for (int d = 0; d < 4; ++d) {
+        const CellPos low{wall.x + kDx[d], wall.y + kDy[d], wall.level};
+        const CellPos above{low.x, low.y, low.level + 1};
+        // From open air outside the wall: not from under a floor, where the climb would go through the ceiling.
+        if (!walkable(low) || !inBounds(above) || terrain(above) != Terrain::Air) {
+            continue;
+        }
+        LevelLink link;
+        link.low = low;
+        link.high = top;
+        link.building = buildingAt(wall);
+        link.length = wallClimbLength_;
+        link.speedFactor = wallClimbSpeed_;
+        link.wall = true;
+        addLevelLink(link);
+    }
+}
+
+void Map::refreshWallClimbs(CellPos wall, bool around) {
+    if (wallClimbSpeed_ <= 0.0f) {
+        return;
+    }
+    refreshWallClimb(wall);
+    if (around) {
+        refreshWallClimb(CellPos{wall.x + 1, wall.y, wall.level});
+        refreshWallClimb(CellPos{wall.x - 1, wall.y, wall.level});
+        refreshWallClimb(CellPos{wall.x, wall.y + 1, wall.level});
+        refreshWallClimb(CellPos{wall.x, wall.y - 1, wall.level});
+    }
 }
 
 void Map::removeLevelLinks(Entity building) {
@@ -679,6 +846,7 @@ void Map::removeLevelLinks(Entity building) {
             ++it;
         }
     }
+    rebuildLinkCells();
 }
 
 const LevelLink* Map::levelLinkBetween(CellPos a, CellPos b) const {
@@ -692,6 +860,70 @@ const LevelLink* Map::levelLinkBetween(CellPos a, CellPos b) const {
 
 void Map::clearBuilding(CellPos c) {
     setBuilding(c, kNoEntity, Passage::Open, 0);
+    setFence(c, 0);
+}
+
+void Map::setFence(CellPos c, int kind) {
+    if (c.level != 0 || !inBounds(c)) {
+        return;
+    }
+    if (fence_.empty()) {
+        if (kind == 0) {
+            return;
+        }
+        fence_.assign(static_cast<size_t>(width_) * static_cast<size_t>(height_), 0);
+    }
+    uint8_t& slot = fence_[static_cast<size_t>(index(c))];
+    if (slot != static_cast<uint8_t>(kind)) {
+        slot = static_cast<uint8_t>(kind);
+        ++buildingChanges_;
+    }
+}
+
+bool Map::setTrunk(CellPos c, float radius) {
+    if (c.level != 0 || !inBounds(c)) {
+        return false;
+    }
+    const uint8_t cm = radius > 0.0f ? static_cast<uint8_t>(std::clamp(std::lround(radius * 100.0f), 1L, 255L)) : uint8_t{0};
+    if (trunk_.empty()) {
+        if (cm == 0) {
+            return false;
+        }
+        trunk_.assign(static_cast<size_t>(width_) * static_cast<size_t>(height_), 0);
+    }
+    uint8_t& slot = trunk_[static_cast<size_t>(index(c))];
+    if (slot == cm) {
+        return false;
+    }
+    trunkCount_ += (cm != 0 ? 1 : 0) - (slot != 0 ? 1 : 0);
+    slot = cm;
+    return true;
+}
+
+void Map::setTightSteps(CellPos c, uint8_t steps) {
+    if (c.level != 0 || !inBounds(c)) {
+        return;
+    }
+    if (tight_.empty()) {
+        if (steps == 0) {
+            return;
+        }
+        tight_.assign(static_cast<size_t>(width_) * static_cast<size_t>(height_), 0);
+    }
+    tight_[static_cast<size_t>(index(c))] = steps;
+}
+
+void Map::plantSpot(int cellIndex, int x, int y, float& px, float& py) {
+    // The same hash and spread as UTerrainSubsystem's plant placement (TerrHash of the index + 0x517CC1B7).
+    uint64_t v = static_cast<uint64_t>(cellIndex) + 0x517CC1B7ULL;
+    v += 0x9E3779B97F4A7C15ULL;
+    v = (v ^ (v >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    v = (v ^ (v >> 27)) * 0x94D049BB133111EBULL;
+    v = v ^ (v >> 31);
+    const float r1 = static_cast<float>(v & 0xFFFF) / 65535.0f;
+    const float r2 = static_cast<float>((v >> 16) & 0xFFFF) / 65535.0f;
+    px = static_cast<float>(x) + 0.5f + (r1 - 0.5f) * 0.7f;
+    py = static_cast<float>(y) + 0.5f + (r2 - 0.5f) * 0.7f;
 }
 
 void Map::setGroundHeight(CellPos c, float metres) {
@@ -722,6 +954,7 @@ void Map::setTerrain(CellPos c, Terrain terrain) {
     }
     if (groundWalkable(c) != walkableBefore) {
         regions_->markDirty(c);
+        refreshWallClimbs(c, true);
     }
     if (obstacleDm(c) != obstacleBefore) {
         cover_->markDirty(c);
@@ -757,6 +990,8 @@ bool Map::setUpperFloor(CellPos c, bool floor) {
     upperChunkFor(c).floor[upperSlot(c)] = floor ? 1 : 0;
     ++upperFloorChanges_;
     regions_->markDirty(c);
+    refreshWallClimbs(CellPos{c.x, c.y, c.level - 1}, true);  // the wall under it, and the walls it roofs the front of
+    refreshWallClimbs(c, true);                                // a wall standing on this floor, and its neighbours'
     // The cell below gained or lost its roof; rooms below see it through buildingChanges.
     ++buildingChanges_;
     return true;
@@ -802,9 +1037,108 @@ uint64_t Map::upperFloorHash() const {
     return hash;
 }
 
+float mapHillShare(int hilliness) {
+    static constexpr float kShares[] = {0.15f, 0.20f, 0.25f, 0.30f, 0.35f};  // Flat ... Impassable
+    return kShares[std::clamp(hilliness, 0, 4)];
+}
+
+namespace {
+
+// The value of `field` that `share` of the cells are above, from every fourth cell each way.
+float mapGenThreshold(const std::vector<float>& field, int width, int height, float share) {
+    std::vector<float> sample;
+    sample.reserve(static_cast<size_t>((width / 4 + 1) * (height / 4 + 1)));
+    for (int y = 0; y < height; y += 4) {
+        for (int x = 0; x < width; x += 4) {
+            sample.push_back(field[static_cast<size_t>(y * width + x)]);
+        }
+    }
+    const float keep = mapGenClamp01(1.0f - share);
+    const size_t k = std::min(sample.size() - 1, static_cast<size_t>(keep * static_cast<float>(sample.size())));
+    std::nth_element(sample.begin(), sample.begin() + static_cast<std::ptrdiff_t>(k), sample.end());
+    return sample[k];
+}
+
+}  // namespace
+
+void Map::generateFlatLand() {
+    const size_t cells = static_cast<size_t>(width_) * static_cast<size_t>(height_);
+    const float midX = static_cast<float>(width_) * 0.5f;
+    const float midY = static_cast<float>(height_) * 0.5f;
+    std::vector<float> hill(cells);
+    std::vector<float> lake(cells);
+    for (int y = 0; y < height_; ++y) {
+        for (int x = 0; x < width_; ++x) {
+            const float fx = static_cast<float>(x);
+            const float fy = static_cast<float>(y);
+            const float dx = fx - midX;
+            const float dy = fy - midY;
+            const float middle = mapGenSmooth(mapGenClamp01(1.0f - std::sqrt(dx * dx + dy * dy) / kMiddleClearM));
+            const size_t i = static_cast<size_t>(y * width_ + x);
+            hill[i] = 0.65f * mapGenValueNoise(seed_, fx, fy, 260.0f, 70) + 0.35f * mapGenValueNoise(seed_, fx, fy, 110.0f, 71) -
+                      0.5f * middle;
+            lake[i] = 0.8f * mapGenValueNoise(seed_, fx, fy, 170.0f, 80) + 0.2f * mapGenValueNoise(seed_, fx, fy, 60.0f, 81) -
+                      0.6f * middle;
+        }
+    }
+    const float hillAt = mapGenThreshold(hill, width_, height_, hills_ * kHillFootprint);
+    // Lakes stay out of the hill areas, so they are chosen from the rest (pushed down smoothly, so no lake
+    // shore is cut off sharp at a hill's foot).
+    for (size_t i = 0; i < cells; ++i) {
+        lake[i] -= mapGenSmooth(mapGenClamp01((hill[i] - (hillAt - 2.0f * kHillRamp)) / kHillRamp));
+    }
+    const float lakeAt = mapGenThreshold(lake, width_, height_, kLakeShare * std::min(1.0f, river_));
+    const float deepBelowM = kDeepBelow * kMapGenMaxHeight;
+    std::vector<float> rise(cells, 0.0f);
+    for (int y = 0; y < height_; ++y) {
+        for (int x = 0; x < width_; ++x) {
+            const float fx = static_cast<float>(x);
+            const float fy = static_cast<float>(y);
+            const size_t i = static_cast<size_t>(y * width_ + x);
+            const float roll = 0.75f * mapGenValueNoise(seed_, fx, fy, 220.0f, 60) + 0.25f * mapGenValueNoise(seed_, fx, fy, 90.0f, 61);
+            float ground = kPlainLowM + kPlainRiseM * roll;
+            const float up = mapGenClamp01((hill[i] - hillAt) / kHillRamp);
+            if (up > 0.0f) {
+                const float detail = 0.7f * mapGenValueNoise(seed_, fx, fy, 48.0f, 72) + 0.3f * mapGenValueNoise(seed_, fx, fy, 20.0f, 73);
+                rise[i] = kHillTopM * mapGenSmooth(up) * (0.6f + 0.4f * detail);
+                ground += rise[i];
+            }
+            const float down = mapGenClamp01((lake[i] - lakeAt) / kLakeRamp);
+            if (down > 0.0f) {
+                ground += (kLakeBedM - ground) * mapGenSmooth(down);
+            }
+            groundHeight_[i] = ground;
+        }
+    }
+    // The highest hilltops are bare rock: a share of the map that follows the hills, so every seed has
+    // stone and ore to mine, but never on a low mound nor only on the very tops.
+    const float rockAt = std::clamp(mapGenThreshold(rise, width_, height_, hills_ * kRockOfHills), kHillRockMinM, kHillRockMaxM);
+    for (size_t i = 0; i < cells; ++i) {
+        const float ground = groundHeight_[i];
+        if (ground < deepBelowM) {
+            terrain_[i] = Terrain::Water;
+        } else if (ground < waterTable_) {
+            terrain_[i] = Terrain::ShallowWater;
+        } else if (ground < waterTable_ + kBeachAboveWaterM) {
+            terrain_[i] = Terrain::Sand;
+        } else if (rise[i] > rockAt) {
+            terrain_[i] = Terrain::Rock;
+            roof_[i] = Roof::Thick;
+        } else {
+            terrain_[i] = Terrain::Soil;
+        }
+    }
+}
+
 void Map::generate() {
     const bool world = std::min(width_, height_) >= kMapGenWorldMin;
     waterTable_ = kWaterBelow * kMapGenMaxHeight;  // every water cell lies below it (docs/design/water.md)
+    if (world) {
+        generateFlatLand();
+        carveRivers();
+        addWetlands();
+        return;
+    }
     for (int y = 0; y < height_; ++y) {
         for (int x = 0; x < width_; ++x) {
             float sum = 0.0f;
@@ -821,10 +1155,8 @@ void Map::generate() {
             const float h = sum / total;
             const size_t i = static_cast<size_t>(index(CellPos{x, y, 0}));
             groundHeight_[i] = h * kMapGenMaxHeight;
-            if (h < kDeepBelow || (h < kWaterBelow && !world)) {
+            if (h < kWaterBelow) {
                 terrain_[i] = Terrain::Water;
-            } else if (h < kWaterBelow) {
-                terrain_[i] = Terrain::ShallowWater;
             } else if (h < kSandBelow) {
                 terrain_[i] = Terrain::Sand;
             } else if (h > kRockAbove) {
@@ -834,10 +1166,6 @@ void Map::generate() {
                 terrain_[i] = Terrain::Soil;
             }
         }
-    }
-    if (world) {
-        carveRivers();
-        addWetlands();
     }
 }
 
@@ -886,7 +1214,7 @@ void Map::carveRivers() {
             const float mid = centre[static_cast<size_t>(a)];
             const float deepH = deepHalf[static_cast<size_t>(a)];
             const float shallowH = shallowHalf[static_cast<size_t>(a)];
-            const float reach = shallowH + kRiverBank;
+            const float reach = shallowH + kRiverBankMax;
             // The course's direction here: along the river, turned by how its middle line wanders.
             const float bend = (centre[static_cast<size_t>(std::min(a + 1, length - 1))] -
                                 centre[static_cast<size_t>(std::max(a - 1, 0))]) * 0.5f;
@@ -921,8 +1249,13 @@ void Map::carveRivers() {
                     flow_[i * 2] = static_cast<int16_t>(std::lround(fx * 100.0f));
                     flow_[i * 2 + 1] = static_cast<int16_t>(std::lround(fy * 100.0f));
                 } else {
-                    const float t = 1.0f - mapGenSmooth(mapGenClamp01((d - shallowH) / kRiverBank));
                     const float bed = waterTable_ + kRiverBankLift;  // dry banks stand above the water
+                    // The bank widens where the ground stands high (a hill), so it never drops as a cliff.
+                    const float bank = std::clamp((old - bed) / kRiverBankSlope, kRiverBank, kRiverBankMax);
+                    if (d - shallowH > bank) {
+                        continue;
+                    }
+                    const float t = 1.0f - mapGenSmooth(mapGenClamp01((d - shallowH) / bank));
                     groundHeight_[i] = old + (std::min(old, bed) - old) * t;
                     if (terrain_[i] == Terrain::Rock && t > 0.2f) {
                         terrain_[i] = Terrain::Soil;  // the river cuts a valley through the mountain
@@ -993,6 +1326,12 @@ float Map::heightAt(float x, float y, int level) const {
     const int y1 = std::min(y0 + 1, height_ - 1);
     const float fx = x - static_cast<float>(x0);
     const float fy = y - static_cast<float>(y0);
+    if (!deck_.empty() && level == 0) {
+        const float deck = deck_[static_cast<size_t>(y0 * width_ + x0)];
+        if (!std::isnan(deck)) {
+            return deck;  // a bridge deck is flat
+        }
+    }
     const auto h = [this](int cx, int cy) { return groundHeight_[static_cast<size_t>(cy * width_ + cx)]; };
     const float top = h(x0, y0) + (h(x1, y0) - h(x0, y0)) * fx;
     const float bottom = h(x0, y1) + (h(x1, y1) - h(x0, y1)) * fx;

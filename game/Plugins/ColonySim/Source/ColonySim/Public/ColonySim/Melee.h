@@ -41,7 +41,7 @@ enum class MeleePhase : uint8_t {
     Recovery,  // after the hit (or a blocked strike's stagger): no new swing until it is over
 };
 
-enum class MeleeDefense : uint8_t { None, Dodge, Block };
+enum class MeleeDefense : uint8_t { None, Dodge, Block, Backstep };
 
 // On a pawn once it has swung or been swung at. Every field is saved.
 struct Melee {
@@ -82,6 +82,30 @@ struct Melee {
     FightResponse response = FightResponse::Attack;  // what it does about enemies (SetFightResponseCommand)
     // Lock-on (melee section 5, docs/design/lock-on.md): the last step the player's pawn saw its focus.
     int64_t focusSeenAt = 0;
+    // Tab's round (melee section 6, sneed 2026-11-19): the targets Tab has already given this round, and the step of the
+    // last Tab. Tab gives the nearest one not yet given, so it walks out through every enemy instead of swapping two.
+    std::vector<Entity> focusTried;
+    int64_t focusTriedAt = 0;
+    // A finisher (melee section 7, sneed 2026-11-20): a blow at a body on the ground with its own slow move (the spear
+    // rammed down, the club smashed, the sword driven into the chest, the knife slammed down), 1 + its index in
+    // MeleeRules finishers (0: none); the step it began and its whole length in steps (wind-up and recovery).
+    uint8_t finisher = 0;
+    int64_t finisherFrom = 0;
+    int finisherSteps = 0;
+};
+
+// One finisher (MeleeRules `finishers`, ours: RimWorld has none). Keyed by weapon def name or attack style; `move` names
+// the drawn motion (Spear, Club, Sword, Knife), `seconds` its whole length and `hitSeconds` when the blow lands, `standOff`
+// the metres from the body's centre the attacker steps to, `kneel` whether it goes down on its knees, `bend` the degrees
+// it bends over at the waist.
+struct MeleeFinisher {
+    std::string key;
+    std::string move;
+    float seconds = 1.6f;
+    float hitSeconds = 1.0f;
+    float standOff = 0.6f;
+    bool kneel = false;
+    float bend = 25.0f;
 };
 
 // The numbers (MeleeRules in data/defs/Rules/MeleeRules.json). Ours and sneed's: RimWorld's hit and dodge
@@ -115,7 +139,7 @@ struct MeleeRules {
     float windupShare = 0.3f;         // of a tool's cooldown spent winding up; the rest is recovery
     int minWindup = 9;
     int commitSteps = 6;              // steps before the hit at which the strike's line is fixed
-    float reactionSteps[2] = {14.0f, 5.0f};  // at Melee skill 0 and 20: steps to read a swing
+    float reactionSteps[2] = {9.0f, 3.0f};  // at Melee skill 0 and 20: steps to read a swing
     float reactionJitter = 4.0f;      // plus or minus this, picked per swing
     int blockSteps = 4;               // to raise the weapon
     int blockRecoverySteps = 12;      // the blocker's stagger: no swing of its own meanwhile
@@ -138,6 +162,10 @@ struct MeleeRules {
     // def name (a weapon's own list wins): a stab down for knives and spears, an overhead smash for clubs and hammers,
     // a hack for blades and axes. A style with none of them measured swings its usual clips.
     std::vector<std::pair<std::string, std::vector<std::string>>> lowAttacks;
+    // Finishers (sneed 2026-11-20): a person's blow at a body on the ground with a weapon listed here (by def name, else
+    // its attack style) is a finisher instead of a low clip.
+    std::vector<MeleeFinisher> finishers;
+    float finisherStepMetres = 0.06f;  // the attacker closes to its finisher's standOff at most this far a step
     std::string unarmedStyle = "Unarmed";
     float maxAttackClipSeconds = 1.6f;
     float maxAttackHitSeconds = 0.8f;
@@ -152,6 +180,25 @@ struct MeleeRules {
     float lockBigBodySize = 2.0f;     // a target this big (a bear and up) is struck at its body part nearest the attacker
     int lockSightLostSteps = 90;      // the player's lock lets go after this long without seeing the target
     float orbitRadialShare = 0.35f;   // a locked-on step with melee mostly sideways (radial part under this share) circles the target
+    // Tab and flicks (sneed 2026-11-19, ours): Tab's round starts again after this long without a Tab; a flick takes
+    // the nearest enemy on that side within this many degrees of the current one.
+    int focusRoundSteps = 150;
+    float flickMaxDegrees = 150.0f;
+    // Landing blows (sneed 2026-11-19, ours). The player's swing with no lock takes the nearest enemy within this cosine
+    // of straight ahead and in reach; a locked target this far past its reach still gets the swing (the player walks on
+    // under it). A blow at someone who didn't dodge it follows them to the blow if they moved no more than
+    // strikeTrackDegrees off its line (a step aside that wasn't a dodge doesn't make it whiff).
+    float assistCos = 0.6f;
+    float playerReachSlack = 0.6f;
+    float strikeTrackDegrees = 35.0f;
+    // Defending (sneed 2026-11-19, ours): a defender that reads a swing in time defends with this chance by Melee skill
+    // (0 and 20); with a weapon it parries parryShare of those times, else (and the rest) it gets out of the way: a roll
+    // from a heavy blow, else a step back (backstepShare) or aside. The step back goes backstepMetres in backstepSteps.
+    float defendChance[2] = {0.35f, 0.85f};
+    float parryShare = 0.6f;
+    float backstepShare = 0.4f;
+    float backstepMetres = 1.3f;
+    int backstepSteps = 8;
     // Footwork (sneed: "move around a bit without compromising their ability to attack"; ours). Between its own swings,
     // in reach of its target, a melee fighter steps round it or back out of a blow it can't stop.
     int footworkEverySteps = 24;      // a choice at most this often
@@ -195,6 +242,11 @@ public:
     bool ready(Entity pawn) const;
     bool winding(Entity pawn) const;
     bool blocking(Entity pawn) const;
+    // A finisher under way (sneed 2026-11-20): its MeleeRules entry, else null; how far through it is (0 to 1).
+    const MeleeFinisher* finisherOf(Entity pawn) const;
+    float finisherProgress(Entity pawn) const;
+    // The finisher a melee weapon def would use at a body on the ground (1 + its index; 0 none).
+    int finisherFor(DefId weapon) const;
     // The swing under way (or the last one) uses a strong tool: one whose power is MeleeRules `strongPowerShare`
     // of its set's mean or more (a longsword's cut against its point). Unreal plays a heavy blow for it (AN1).
     bool strongSwing(Entity pawn) const;
@@ -232,7 +284,10 @@ public:
 
     // Focus (docs/design/focus.md). The player's FocusCommand: lock on to `target`, cycle to the next nearest target
     // (Tab), or let go (F1). False, with a reason, if it can't (no pawn, nothing to lock on to).
-    bool focusCommand(Entity pawn, Entity target, FocusMode mode, std::string* why = nullptr);
+    // Next and the flicks (Left, Right) take where the camera looks (viewX, viewY; zero: where the body faces) and
+    // `anySide` (also the pawn's own side: the practice range's targets).
+    bool focusCommand(Entity pawn, Entity target, FocusMode mode, std::string* why = nullptr, float viewX = 0.0f, float viewY = 0.0f,
+                      bool anySide = false);
     // The fighter AI: lock on to `target` (kNoEntity lets go). Never overrides a focus the player set.
     void setAiFocus(Entity pawn, Entity target);
     // The pawn it is locked on to, or kNoEntity.
@@ -251,6 +306,11 @@ public:
     // The player's swing with no target: its focus if in reach, else a body on the ground before it in reach (the blow
     // goes down at it), else kNoEntity (straight ahead).
     Entity playerTarget(Entity pawn) const;
+    // The target is in reach of the player's swing: its reach plus playerReachSlack (the player walks on under it).
+    bool inPlayerReach(Entity pawn, Entity target) const;
+    // Who the player's swing may be steered at without a lock (sneed 2026-11-20: "a non-friendly, even neutral"): Sim sets
+    // it (another side, a visitor, a wild animal; not its own side, tame animals or prisoners). Unset: hostile ones.
+    void setNotFriendly(std::function<bool(Entity, Entity)> notFriendly) { notFriendly_ = std::move(notFriendly); }
     // Footwork (the fighter AI between swings, in reach of `target`): maybe a step round it, or back out of a blow it
     // can't stop. True if it moved. `reckless`: its side presses (moves less).
     bool footwork(Entity pawn, Entity target, bool reckless);
@@ -269,6 +329,8 @@ public:
     // Counters for tests and simrun.
     uint64_t swings() const { return swings_; }
     uint64_t hits() const { return hits_; }
+    // Blows that hurt a building or a tree (docs/design/structure-damage.md).
+    uint64_t structureHits() const { return structureHits_; }
     uint64_t dodges() const { return dodges_; }
     uint64_t blocks() const { return blocks_; }
     uint64_t guardBreaks() const { return guardBreaks_; }
@@ -289,6 +351,7 @@ private:
         float reach = 0.0f;
         std::vector<DefId> attackClips;  // MotionClips of its style that are short enough
         std::vector<DefId> lowAttackClips;  // the same for blows at a body on the ground (MeleeRules lowAttacks)
+        int finisher = 0;                // 1 + its MeleeRules finishers index (0: none): its blow at a body on the ground
         float lunge = 0.0f;              // the least any of them steps forward by its blow (a man's metres)
     };
 
@@ -297,8 +360,11 @@ private:
     void prepareDefense(Entity defender, Entity attacker, int stepsToHit, uint64_t seed);
     void defend(Entity defender, Melee& d);
     void sidestep(Entity defender, Melee& d);
+    bool backstep(Entity defender, Melee& d);
+    bool focusNext(Entity pawn, FocusMode mode, float viewX, float viewY, bool anySide, std::string* why);
     bool roll(Entity defender, Melee& d);
     void commit(Entity pawn, Melee& m);
+    void followToBlow(Entity pawn, Melee& m);
     void strike(Entity pawn, Melee& m);
     bool arcSwing(DefId damageType) const;
     void face(Entity pawn, float x, float y);
@@ -319,8 +385,10 @@ private:
     std::vector<Entity> order_;
     std::vector<Event>* events_ = nullptr;
     std::function<bool(Entity, Entity)> hostile_;
+    std::function<bool(Entity, Entity)> notFriendly_;
     uint64_t swings_ = 0;
     uint64_t hits_ = 0;
+    uint64_t structureHits_ = 0;  // blows that hurt a building or a tree
     uint64_t dodges_ = 0;
     uint64_t blocks_ = 0;
     uint64_t guardBreaks_ = 0;

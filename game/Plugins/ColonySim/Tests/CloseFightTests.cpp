@@ -252,7 +252,10 @@ LineFightResult lineFightRun(uint64_t seed, bool corridor) {
             r.raiderGunshots += gunshot && e.thing == raider ? 1 : 0;
         }
     }
-    r.raiderOut = h.dead || h.downed;
+    // Out of the fight: down, dead, or routed far off (in pain it runs; seed 2 since the 2026-11-19 dodges).
+    const Position& rp = sim->things().registry().get<Position>(raider);
+    const Position& cp = sim->things().registry().get<Position>(clubman);
+    r.raiderOut = h.dead || h.downed || std::hypot(rp.x - cp.x, rp.y - cp.y) > 12.0f;
     return r;
 }
 }  // namespace

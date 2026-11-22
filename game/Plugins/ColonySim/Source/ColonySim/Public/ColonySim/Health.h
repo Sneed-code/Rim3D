@@ -158,8 +158,12 @@ struct Health {
     DeathCause cause = DeathCause::None;
     int64_t bleedStoppedAt = -1;  // body zones: game second its bleeding stopped (blood comes back after a while); -1 while it bleeds
     std::vector<int64_t> zoneHurtAt;  // body zones: the game second each zone was last hurt, -1 for never (it heals 10 real seconds on)
+    // Body zones: damage past 0 piled up on each zone, hit points (sneed, 2026-11-19). Once the body is dead, a zone whose
+    // pile reaches a quarter of its hit points comes off. Empty or 0 for none; a zone that heals above 0 starts again.
+    std::vector<float> zoneOverkill;
 
     // ---- Derived. Never saved or hashed.
+    float lineageHp = 1.0f;      // the lineage's hit points and blood (Orcoid 1.1), set with the genes; not saved
     float stageHp = 1.0f;        // young animals: the life stage's healthScaleFactor, set by AnimalSystem (N4 leftovers)
     bool downed = false;
     float pain = 0.0f;
@@ -188,6 +192,7 @@ struct Health {
 struct HealthMods {
     float painFactor = 1.0f;
     float movingMax = 1.0f;
+    float debuffFactor = 1.0f;  // the lineage's (cat-strain 1.33): pain, lost capacities and limb slows this much worse
 };
 
 // Everything a health panel shows, with names instead of ids. Filled by HealthSystem::report.
@@ -285,8 +290,14 @@ public:
 
     // Damage to exactly this part, after the hit has been aimed (combat picks the part from a
     // hitbox and goInside): as a random hit there would be, an inside part also hurts the outside
-    // part over it. Same failures as applyDamage.
-    bool applyHit(Entity pawn, DefId damageType, float amount, int part);
+    // part over it. Same failures as applyDamage, except that a body which can be cut up (takesCorpseHits) still takes
+    // hits once dead: they pile up past 0 until the piece comes off.
+    // `tear` (a blast at a corpse): on a dead body all of it piles past 0, whatever hit points the zone had left.
+    bool applyHit(Entity pawn, DefId damageType, float amount, int part, bool tear = false);
+    // A dead body with zones (not the protagonist's) still takes bullets, blows and blasts (sneed, 2026-11-19).
+    bool takesCorpseHits(Entity pawn) const;
+    // Whether body part `part` is still on the pawn (at 0 hit points or not).
+    bool hasPart(Entity pawn, int part) const;
     // Where a hit on `part` ends up if the damage type reaches inside: an organ or bone under it,
     // by coverage, as applyDamage's random hits do. `part` itself if not.
     int goInside(Entity pawn, DefId damageType, int part, Rng& rng) const;
@@ -330,9 +341,11 @@ public:
     // Arms under half slow attacks: 1 down to 0.5, half a percent for every percent an arm is under 50%, both arms
     // added. 1 for a body without zones.
     float attackSpeedFactor(Entity pawn) const;
-    // Dismemberment: only on the hit that kills, when it went over what the struck zone had left by a quarter of the
-    // zone's hit points. `severed`: the SeveredBits of what the body has lost (PawnDismembered says when).
+    // Dismemberment (sneed, 2026-11-19, replacing the single killing blow): damage past a zone's 0 piles up (over
+    // many hits, before or after death); once the body is dead, a zone whose pile is a quarter of its hit points or
+    // more comes off. `zoneOverkill`: that pile, hit points (0 for none). `severed`: the SeveredBits of what the body has lost (PawnDismembered says when).
     uint16_t severed(Entity pawn) const;
+    float zoneOverkill(Entity pawn, int zone) const;
     // The pieces lying about, by id; how many game days one lies before it is gone.
     const std::vector<SeveredPiece>& severedPieces() const { return severedPieces_.pieces; }
     float severedDecayDays() const;
@@ -476,10 +489,12 @@ private:
     // 1 downed and awake (a sound can give it a last scream), 2 downed and knocked out.
     void die(Entity pawn, Health& health, DeathCause cause, bool announce, bool downedAwake = false);
     bool downedAwake(const Health& health) const;
-    bool hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter);
+    bool hitPart(Entity pawn, DefId damageType, float amount, int target, bool hurtOuter, bool tear = false);
     bool damagePart(Entity pawn, Health& health, int part, DefId hediff, float amount);
     void destroyPart(Entity pawn, Health& health, int part, float amount);
     void dismember(Entity pawn, Health& health, int zone, int struck, float overkill);
+    // A body that piles damage past 0 and comes apart (zones, not the protagonist, dismemberment on).
+    bool cutsUp(const Health& health) const;
     void leaveScar(Entity pawn, Health& health, const Injury& healed, Rng& rng);
     // Rolls whether a fresh wound will turn infected, and when.
     void rollInfection(Entity pawn, Health& health, Injury& injury);

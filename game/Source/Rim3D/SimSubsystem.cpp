@@ -861,6 +861,17 @@ uint64 USimSubsystem::Submit(colony::Command Command)
 	return Sim ? Sim->submit(std::move(Command)) : 0;
 }
 
+bool USimSubsystem::ApplyPregameCommands()
+{
+	if (!Sim || !Sim->applyPregameCommands())
+	{
+		return false;
+	}
+	Sim->writeSnapshot(Current);
+	Previous = Current;
+	return true;
+}
+
 bool USimSubsystem::GetBlendedLocation(colony::Entity Thing, FVector& OutLocation) const
 {
 	const colony::ThingView* Newest = Current.find(Thing);
@@ -892,6 +903,13 @@ FVector USimSubsystem::GetViewLocation(const colony::ThingView& View) const
 	if (View.climb <= 0.0f || !Sim)
 	{
 		return SimToWorld(View.x, View.y, View.level);
+	}
+	if (View.wallClimb)
+	{
+		// Up a wall the sim gives the height itself (on the face, then over the top: docs/design/climbing.md), measured
+		// from its own ground; kept relative to that so the body sits on the drawn terrain the same way.
+		const float GroundSimM = Sim->map().heightAt(View.x, View.y, 0);
+		return SimToWorld(View.x, View.y, 0) + FVector(0.0, 0.0, (View.z - GroundSimM) * 100.0);
 	}
 	// The link the pawn is on: one end on its level, and the pawn on the line between the two ends' middles.
 	const FVector2D At(View.x, View.y);

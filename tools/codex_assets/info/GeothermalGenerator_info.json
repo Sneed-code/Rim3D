@@ -1,0 +1,56 @@
+{
+ "name": "GeothermalGenerator",
+ "kind": "building",
+ "turned": "x-90",
+ "boundsCm": {
+  "min": [
+   -100.0,
+   -100.0,
+   -0.0
+  ],
+  "max": [
+   100.0,
+   100.0,
+   247.5
+  ]
+ },
+ "sizeM": [
+  2.0,
+  2.0,
+  2.475
+ ],
+ "parts": {
+  "GeothermalGenerator": {
+   "boundsCm": {
+    "min": [
+     -100.0,
+     -100.0,
+     -0.0
+    ],
+    "max": [
+     100.0,
+     100.0,
+     247.5
+    ]
+   },
+   "tris": 29182
+  }
+ },
+ "sockets": {
+  "SteamOut": [
+   71.6,
+   -68.5,
+   247.5
+  ]
+ },
+ "slots": {
+  "GeothermalGenerator": {
+   "from": "GeothermalGenerator_PBR",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

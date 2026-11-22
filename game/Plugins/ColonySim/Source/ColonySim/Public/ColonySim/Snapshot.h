@@ -38,6 +38,12 @@ struct PathPointView {
 // bed, on the ground to sleep, downed or knocked down).
 enum class PawnPosture : uint8_t { Stand, Sit, Lie };
 
+// Share of a wall climb spent on the face; the rest is the mantle over the top (docs/design/climbing.md).
+inline constexpr float kWallMantleFrom = 0.8f;
+
+// A wall's window (docs/design/windows.md).
+enum class WindowState : uint8_t { None, Glass, Broken };
+
 struct ThingView {
     Entity id = kNoEntity;
     DefId def;
@@ -56,6 +62,12 @@ struct ThingView {
     // Pawns on stairs or a ladder: how far along the climb, 0 to 1; x, y and z are already that
     // share of the way to the end, `level` is the one it started on (docs/design/levels.md).
     float climb = 0.0f;
+    // The climb is up (or down) the face of a wall (docs/design/climbing.md): until kWallMantleFrom
+    // of the way the pawn hangs on the face, rising; after it, it mantles over the top onto the floor.
+    bool wallClimb = false;
+    bool wallClimbUp = false;  // going up (else down); facingX/Y point at the wall either way
+    // Times the height of its jump (its lineage: cat-strain 2), for Unreal's jump.
+    float jumpHeight = 1.0f;
     uint32_t firstWaypoint = 0;
     uint32_t waypointCount = 0;
     Rot4 rotation = Rot4::North;  // buildings
@@ -86,6 +98,7 @@ struct ThingView {
     uint32_t area = 0;  // the allowed area a pawn is limited to (AreaView::id), 0 for none
     Entity jobTarget = kNoEntity;
     float jobProgress = 0.0f;  // 0 to 1: a swing of the pick, a plant being cut, a frame being built (hands-on work, U10)
+    bool felling = false;      // at a tree, cutting it down (Unreal: a hand axe and the chop, docs/design/structure-damage.md)
     DefId carriedDef;
     int carriedCount = 0;
     // Buildings: Built, or a Blueprint or Frame still to be built (docs/design/construction.md). A
@@ -102,6 +115,7 @@ struct ThingView {
     bool markedForDeconstruct = false;
     // Doors: 0 closed to 1 open (it opens over about 0.75 real seconds while a pawn waits).
     float doorOpen = 0.0f;
+    WindowState window = WindowState::None;  // walls: a window with glass, or with the glass broken
     // Work buildings with bills (docs/design/bills.md): `billCount` bills from Snapshot::bills[firstBill].
     uint32_t firstBill = 0;
     uint32_t billCount = 0;
@@ -213,6 +227,11 @@ struct ThingView {
     bool prisoner = false;
     uint8_t prisonerMode = 0;
     float resistance = 0.0f;
+    float will = 0.0f;           // a prisoner's will (Enslave and ReduceWill wear it down)
+    // Slaves (docs/design/prisoners.md, Slaves): the colony's slave, and its suppression (0 to 1; low means it may rebel).
+    // The player frees one with SetPrisonerModeCommand "Emancipate" or "Release".
+    bool slave = false;
+    float suppression = 0.0f;
     // Visitors (docs/design/trade.md): a pawn of a visit (a VisitorRole number: 0 visitor, 1 trader, 2 guard) and the visit's id.
     bool visitor = false;
     uint8_t visitRole = 0;
@@ -267,6 +286,8 @@ struct ThingView {
     bool pregnant = false;
     float milkFullness = -1.0f;
     float woolFullness = -1.0f;
+    bool breedingOff = false;     // the player switched breeding off for this animal itself (its zone may switch it off too)
+    Entity animalBed = kNoEntity; // the animal bed it sleeps in (docs/design/husbandry.md, Animal beds); none: the ground
     // Pawns in melee (docs/design/melee.md): winding up a swing at meleeTarget (the hit comes in
     // meleeStepsLeft steps) or recovering from one, and whether their weapon is raised to block.
     MeleePhase meleePhase = MeleePhase::Ready;
@@ -278,6 +299,12 @@ struct ThingView {
     // smash or hack); the pawn it is locked on to (it faces it; the player's lock-on camera follows it when focusPlayer);
     // stepping round or back from its enemy (a strafe or back step, facing the focus); what it does about enemies.
     bool meleeLow = false;
+    // A finisher under way (sneed 2026-11-20): 1 + its MeleeRules finishers index (0: none), how far through it is (0 to
+    // 1, the blow at its hitSeconds share) and the body on the ground it is at. Unreal kneels or bends the body over it
+    // and drives the weapon in along the finisher's own path.
+    uint8_t meleeFinisher = 0;
+    float meleeFinisherT = 0.0f;
+    Entity meleeFinisherTarget = kNoEntity;
     Entity focusTarget = kNoEntity;
     bool focusPlayer = false;
     bool footwork = false;
@@ -537,6 +564,7 @@ struct PawnLooksView {
     float bodyHair = 0.0f;
     std::vector<LooksMark> tattoos;
     std::vector<LooksMark> scars;
+    std::string creator;  // the character creator's look text (PawnLooks::creator), or empty
 };
 
 // One bill on a work building, in the building's order (first is tried first).
@@ -571,6 +599,7 @@ struct AnimalZoneView {
     uint32_t firstCell = 0;
     uint32_t cellCount = 0;
     bool pen = false;
+    bool breedingOff = false;  // the animals in it do not mate
 };
 
 // One allowed area (docs/design/areas.md): `cellCount` cells from Snapshot::areaCells[firstCell].

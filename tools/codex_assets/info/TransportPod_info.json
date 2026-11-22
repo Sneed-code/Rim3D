@@ -1,0 +1,56 @@
+{
+ "name": "TransportPod",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -47.3,
+   -49.9,
+   0.0
+  ],
+  "max": [
+   47.3,
+   49.9,
+   193.0
+  ]
+ },
+ "sizeM": [
+  0.946,
+  0.998,
+  1.93
+ ],
+ "parts": {
+  "TransportPod": {
+   "boundsCm": {
+    "min": [
+     -47.3,
+     -49.9,
+     0.0
+    ],
+    "max": [
+     47.3,
+     49.9,
+     193.0
+    ]
+   },
+   "tris": 18530
+  }
+ },
+ "sockets": {
+  "Thrusters": [
+   -0.82,
+   0.4,
+   7.4
+  ]
+ },
+ "slots": {
+  "TransportPod": {
+   "from": "TransportPod / painted alloy and thermal ceramic",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

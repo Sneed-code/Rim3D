@@ -1,18 +1,35 @@
 [
   {
     "defName": "Baseline", "source": "Rim3D", "label": "baseline",
-    "description": "Unchanged humans, as the old ships carried them.",
-    "genes": [], "metabolicEfficiency": 0, "complexity": 0
+    "description": "Unchanged humans, as the old ships carried them: quick to learn.",
+    "genes": ["QuickLearner"], "metabolicEfficiency": 0, "complexity": 0,
+    "note": "sneed 2026-11-19: baseline humans learn 20% faster (docs/design/races.md)."
   },
   {
-    "defName": "Emberkin", "source": "RimWorld wiki", "label": "Emberkin",
-    "description": "A lineage made for hot worlds: red skin, small horns and fire in the lungs.",
+    "defName": "Emberkin", "source": "sneed", "label": "Impid",
+    "description": "A lineage made for hot worlds: red skin, small horns, untouched by heat and fire, quick on its feet but thin-skinned.",
     "geneType": "Endogene", "metabolicEfficiency": 0, "complexity": 11,
-    "genes": ["FireSpew", "WeakImmunity", "SlowWoundHealing", "VeryFastRunner", "Unhappy", "ColdWeakness",
-              "HeatSuperTolerant", "FireResistant", "WeakMelee", "Beardless", "MiniHorns", "EmberHair",
-              "DeepRedSkin", "PoorPlants", "PoorAnimals"],
-    "unverified": ["genes"],
-    "ours": ["genes: the cosmetic genes (the wiki's three skin and three hair choices are one each here)"]
+    "genes": ["ThermalResistance", "LightStep", "ThinHide", "FireSpew", "Beardless", "MiniHorns", "EmberHair", "DeepRedSkin"],
+    "note": "sneed 2026-11-19 (docs/design/races.md): his Impid stats replace the wiki's gene list (very fast runner, weak immunity and the rest). The label is sneed's name for it; the defName stays."
+  },
+  {
+    "defName": "Orcoid", "source": "sneed", "label": "Orcoid",
+    "description": "Big, hard to kill and strong in a fight, but slow to learn and slow at work.",
+    "geneType": "Endogene", "metabolicEfficiency": 0, "complexity": 0,
+    "genes": ["OrcStrength", "OrcHardiness", "OrcSlowness"]
+  },
+  {
+    "defName": "Drow", "source": "sneed", "label": "drow",
+    "description": "Dark-skinned, platinum-haired and red-eyed people of the dark: sharp shots and quick hands at night, troubled by the sun.",
+    "geneType": "Endogene", "metabolicEfficiency": 0, "complexity": 0,
+    "genes": ["DrowMarksman", "DrowDarkVision", "SunlightSensitivity", "Nocturnal", "DrowSkin", "PlatinumHair"],
+    "later": ["red irises and long pointed ears: drawn by Unreal from the lineage"]
+  },
+  {
+    "defName": "CatStrain", "source": "sneed", "label": "cat-strain",
+    "description": "Beast-strain people with a cat's ears, tail and claws: great leapers and climbers who land on their feet, but every hurt hits them harder.",
+    "geneType": "Endogene", "metabolicEfficiency": 0, "complexity": 0,
+    "genes": ["CatLeap", "CatLanding", "CatFragility", "CatEarsTail"]
   },
   {
     "defName": "Frostkin", "source": "RimWorld wiki", "label": "Frostkin",

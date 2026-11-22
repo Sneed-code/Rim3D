@@ -1,5 +1,7 @@
 #include "ColonySim/Save.h"
 
+#include "ColonySim/Genes.h"
+
 #include "ColonySim/Animals.h"
 #include "ColonySim/Areas.h"
 #include "ColonySim/Landing.h"
@@ -36,6 +38,7 @@
 #include "ColonySim/Hash.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Weather.h"
+#include "ColonySim/Windows.h"
 #include "ColonySim/DeepResources.h"
 #include "ColonySim/Designations.h"
 #include "ColonySim/RoofCollapse.h"
@@ -243,6 +246,7 @@ struct SaveHealth {
     bool dirty = false;
     int64_t bleedStoppedAt = -1;  // health section 7 on
     std::vector<int64_t> zoneHurtAt;  // health section 8 on (body-health.md part F)
+    std::vector<float> zoneOverkill;  // health section 9 on: damage piled up past each zone's 0
 };
 
 // An item's rot and wear and what a meal was cooked from, by defName (section "spoilage").
@@ -490,6 +494,7 @@ struct SaveEntity {
     std::optional<Prisoner> prisoner;       // section "prisoners" (C22)
     std::optional<PrisonBed> prisonBed;     // section "prisoners" (C22)
     std::optional<ArrestOrder> arrest;      // section "prisoners" version 3
+    std::optional<Slave> slave;             // section "prisoners" version 4 (slaves)
     std::optional<Fuel> fuel;               // "fuel" section (C11)
     std::optional<StoreIn> storeIn;         // "crafting" section (C14)
     std::optional<SaveRepair> repair;       // "repair" section (P4)
@@ -497,6 +502,7 @@ struct SaveEntity {
     std::optional<Visitor> visitor;         // section "trade" (C23)
     std::optional<Inspired> inspired;            // section "inspirations" (C25)
     std::optional<AwayPawn> away;                // section "maps" (W5)
+    std::optional<Window> window;                // section "windows" (docs/design/windows.md)
 };
 
 // Another map (W5): its tile, when it was made and its whole sim as a save of its own.
@@ -521,6 +527,7 @@ struct SavePlants {
     std::vector<uint32_t> defIndex;  // into `defs`
     std::vector<uint32_t> growth;
     std::vector<uint32_t> ageHours;
+    std::vector<uint32_t> damage;  // section v2 on: hit points lost (docs/design/structure-damage.md)
 };
 
 // The rock layer as parallel lists, one entry per rock or ore cell in cell order (format 10 on).
@@ -1346,7 +1353,9 @@ inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitComma
                                             std::is_same_v<Type, ShieldCommand> || std::is_same_v<Type, SetDayLengthCommand> ||
                                             std::is_same_v<Type, SleepCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||
                                             std::is_same_v<Type, PatchCommand> || std::is_same_v<Type, SetAlertCommand> ||
-                                            std::is_same_v<Type, FocusCommand> || std::is_same_v<Type, SetFightResponseCommand>;
+                                            std::is_same_v<Type, FocusCommand> || std::is_same_v<Type, SetFightResponseCommand> ||
+                                            std::is_same_v<Type, SetWorkGroupCommand> || std::is_same_v<Type, SetGrimeCommand> ||
+                                            std::is_same_v<Type, EditColonistCommand> || std::is_same_v<Type, SetColonistTraitsCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1408,11 +1417,36 @@ void saveTradeCommand(Ar& ar, Type& c) {
         ar.value("pawn", c.pawn);
         ar.value("target", c.target);
         ar.value("mode", c.mode);
-        ar.require(c.mode <= FocusMode::Clear, "the save file has a bad focus mode");
+        ar.require(c.mode <= FocusMode::Right, "the save file has a bad focus mode");
+        if (ar.sectionVersion() >= 6) {  // Tab and flicks take the view (sneed 2026-11-19)
+            ar.value("viewX", c.viewX);
+            ar.value("viewY", c.viewY);
+            ar.value("anySide", c.anySide);
+        }
     } else if constexpr (std::is_same_v<Type, SetFightResponseCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("response", c.response);
         ar.require(c.response <= FightResponse::FleeOnSight, "the save file has a bad fight response");
+    } else if constexpr (std::is_same_v<Type, SetWorkGroupCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.text("group", c.group);
+    } else if constexpr (std::is_same_v<Type, SetGrimeCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("dirtLegs", c.dirtLegs);
+        ar.value("dirtBody", c.dirtBody);
+    } else if constexpr (std::is_same_v<Type, EditColonistCommand>) {
+        ar.value("slot", c.slot);
+        ar.text("firstName", c.firstName);
+        ar.text("nickName", c.nickName);
+        ar.text("lastName", c.lastName);
+        ar.value("female", c.female);
+        ar.value("setCreator", c.setCreator);
+        ar.text("creator", c.creator);
+    } else if constexpr (std::is_same_v<Type, SetColonistTraitsCommand>) {
+        ar.value("slot", c.slot);
+        ar.text("traits", c.traits);
+        ar.value("randomize", c.randomize);
+        ar.value("roll", c.roll);
     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("up", c.up);
@@ -1603,13 +1637,13 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 auto* designate = &c;
                 ar.group("area", [&] { saveRect(ar, designate->area); });
                 ar.value("kind", designate->kind);
-                ar.require(designate->kind >= DesignationKind::Mine && designate->kind <= DesignationKind::RemoveFloor,
+                ar.require(designate->kind >= DesignationKind::Mine && designate->kind <= DesignationKind::RemoveWindow,
                        "the save file has a bad designation kind");
             } else if constexpr (std::is_same_v<Type, CancelDesignationsCommand>) {
                 auto* cancelMarks = &c;
                 ar.group("area", [&] { saveRect(ar, cancelMarks->area); });
                 ar.value("kind", cancelMarks->kind);
-                ar.require(cancelMarks->kind <= DesignationKind::RemoveFloor, "the save file has a bad designation kind");
+                ar.require(cancelMarks->kind <= DesignationKind::RemoveWindow, "the save file has a bad designation kind");
             } else if constexpr (std::is_same_v<Type, DraftCommand>) {
                 auto* draft = &c;
                 ar.value("pawn", draft->pawn);
@@ -1774,10 +1808,16 @@ void saveColonist(Ar& ar, Colonist& c) {
             ar.value("xpToday", s.xpToday);
         }
         ar.value("disabled", s.disabled);
+        if (ar.sectionVersion() >= 4) {  // trait points: skill traits' bonus levels
+            ar.value("bonus", s.bonus);
+        }
         ar.require(static_cast<int>(s.passion) <= static_cast<int>(Passion::Major), "the save file has a bad passion");
     });
     ar.list("disabledWorkTags", c.disabledWorkTags, [&](std::string& tag) { ar.text(nullptr, tag); });
     ar.value("protagonist", c.protagonist);
+    if (ar.sectionVersion() >= 3) {  // the Work tab's work groups
+        ar.text("workGroup", c.workGroup);
+    }
 }
 
 template <typename Ar>
@@ -1815,6 +1855,9 @@ void saveLooks(Ar& ar, PawnLooks& l) {
         ar.value("bodyHair", l.bodyHair);
         if (ar.sectionVersion() >= 3) {  // a name for pawns with no Colonist record (focus HP bar, kill feed)
             ar.text("name", l.name);
+        }
+        if (ar.sectionVersion() >= 4) {  // the character creator's look (docs/design/new-game.md)
+            ar.text("creator", l.creator);
         }
         ar.require(l.faceShape >= 0.0f && l.faceShape <= 1.0f && l.brow >= 0.0f && l.brow <= 1.0f && l.nose >= 0.0f &&
                        l.nose <= 1.0f && l.jaw >= 0.0f && l.jaw <= 1.0f && l.bodyHair >= 0.0f && l.bodyHair <= 1.0f &&
@@ -1915,7 +1958,7 @@ template <typename Ar>
 void saveWorkerPart(Ar& ar, SaveWorker& w) {
     Job& job = w.job;
     ar.value("job", job.type);
-    ar.require(job.type <= JobType::Earthworks, "the save file has a bad job");
+    ar.require(job.type <= JobType::WindowWork, "the save file has a bad job");
     ar.require(job.type <= JobType::HarvestPlant || ar.version() >= 18, "the save file has a bad job");
     ar.require(job.type <= JobType::LayDown || ar.version() >= 10, "the save file has a bad job");
     ar.require(job.type <= JobType::Deconstruct || ar.version() >= 14, "the save file has a bad job");
@@ -2046,6 +2089,13 @@ void saveHealthPart(Ar& ar, SaveHealth& h) {
     if (ar.sectionVersion() >= 8) {
         ar.list("zoneHurtAt", h.zoneHurtAt, [&](int64_t& at) { ar.value(nullptr, at); });
         ar.require(h.zoneHurtAt.size() <= 64, "the save file has too many body zones");
+    }
+    if (ar.sectionVersion() >= 9) {
+        ar.list("zoneOverkill", h.zoneOverkill, [&](float& pile) {
+            ar.value(nullptr, pile);
+            ar.require(pile >= 0.0f && pile < 1.0e6f, "the save file has an impossible pile of damage");
+        });
+        ar.require(h.zoneOverkill.size() <= 64, "the save file has too many body zones");
     }
 }
 
@@ -2317,6 +2367,9 @@ void saveCarePart(Ar& ar, AnimalCare& c) {
     ar.group("pathGoal", [&] { saveCell(ar, c.pathGoal); });
     ar.value("pathMode", c.pathMode);
     ar.require(static_cast<int>(c.pathMode) <= static_cast<int>(AnimalMode::EatItem), "the save file has a bad animal path mode");
+    if (ar.sectionVersion() >= 4) {  // animal beds
+        ar.value("bed", c.bed);
+    }
 }
 
 template <typename Ar>
@@ -2672,7 +2725,7 @@ void saveMeleePart(Ar& ar, Melee& m) {
     ar.value("seed", m.seed);
     ar.value("threat", m.threat);
     ar.value("defense", m.defense);
-    ar.require(m.defense <= MeleeDefense::Block, "the save file has a bad melee defense");
+    ar.require(m.defense <= MeleeDefense::Backstep, "the save file has a bad melee defense");
     ar.value("reactAt", m.reactAt);
     ar.value("blockFrom", m.blockFrom);
     ar.value("blockUntil", m.blockUntil);
@@ -2701,6 +2754,15 @@ void saveMeleePart(Ar& ar, Melee& m) {
     }
     if (ar.sectionVersion() >= 5) {  // lock-on, Elden Ring style (docs/design/lock-on.md)
         ar.value("focusSeenAt", m.focusSeenAt);
+    }
+    if (ar.sectionVersion() >= 6) {  // Tab's round (sneed 2026-11-19)
+        ar.list("focusTried", m.focusTried, [&](Entity& e) { ar.value(nullptr, e); });
+        ar.value("focusTriedAt", m.focusTriedAt);
+    }
+    if (ar.sectionVersion() >= 7) {  // finishers (sneed 2026-11-20)
+        ar.value("finisher", m.finisher);
+        ar.value("finisherFrom", m.finisherFrom);
+        ar.value("finisherSteps", m.finisherSteps);
     }
 }
 
@@ -2954,7 +3016,13 @@ void savePlants(Ar& ar, SavePlants& p) {
     ar.list("defIndex", p.defIndex, [&](uint32_t& v) { ar.value(nullptr, v); });
     ar.list("growth", p.growth, [&](uint32_t& v) { ar.value(nullptr, v); });
     ar.list("ageHours", p.ageHours, [&](uint32_t& v) { ar.value(nullptr, v); });
-    ar.require(p.cells.size() == p.defIndex.size() && p.cells.size() == p.growth.size() && p.cells.size() == p.ageHours.size(),
+    if (ar.sectionVersion() >= 2) {
+        ar.list("damage", p.damage, [&](uint32_t& v) { ar.value(nullptr, v); });
+    } else {
+        p.damage.assign(p.cells.size(), 0);  // older saves: every plant unhurt
+    }
+    ar.require(p.cells.size() == p.defIndex.size() && p.cells.size() == p.growth.size() && p.cells.size() == p.ageHours.size() &&
+                   p.cells.size() == p.damage.size(),
                "the save file's plant lists don't match");
 }
 
@@ -3509,7 +3577,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("repaths", d.repaths);
         ar.list("setupErrors", d.setupErrors, [&](std::string& s) { ar.text(nullptr, s); });
     });
-    ar.section("commands", 5, [&] { saveCommandsSection(ar, d); });
+    ar.section("commands", 6, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
     ar.section("movement", 3, [&] {
@@ -3520,10 +3588,10 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "work", e, &SaveEntity::work, [&](SaveWorkSettings& w) { saveWorkPart(ar, w); });
         saveParts(ar, "carrying", e, &SaveEntity::carrying, [&](Carrying& c) { saveCarryingPart(ar, c); });
     });
-    ar.section("colonists", 2, [&] {
+    ar.section("colonists", 4, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
-    ar.section("health", 8, [&] {
+    ar.section("health", 9, [&] {
         saveParts(ar, "health", e, &SaveEntity::health, [&](SaveHealth& h) { saveHealthPart(ar, h); });
     });
     ar.section("control", 1, [&] {
@@ -3581,7 +3649,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
-    ar.section("looks", 3, [&] {
+    ar.section("looks", 4, [&] {
         saveParts(ar, "looks", e, &SaveEntity::looks, [&](PawnLooks& l) { saveLooksPart(ar, l); });
     });
     ar.section("paths", 1, [&] { savePaths(ar, d.paths); });
@@ -3589,7 +3657,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("nextZoneId", d.nextZoneId);
         ar.list("zones", d.zones, [&](SaveZone& z) { saveZone(ar, z); });
     });
-    ar.section("plants", 1, [&] { savePlants(ar, d.plants); });
+    ar.section("plants", 2, [&] { savePlants(ar, d.plants); });
     ar.section("mining", 1, [&] {
         d.hasRock = true;
         saveMineables(ar, d.mineables);
@@ -3659,7 +3727,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.require(d.wildAnimals >= 0 && d.animals.percent >= 0, "the save file has a bad wild animal density");
         saveParts(ar, "animal", e, &SaveEntity::animal, [&](Animal& a) { saveAnimalPart(ar, a); });
     });
-    ar.section("husbandry", 3, [&] {
+    ar.section("husbandry", 4, [&] {
         ar.value("nextZone", d.husbandry.nextZone);
         ar.list("zones", d.husbandry.zones, [&](AnimalZone& z) {
             ar.value("id", z.id);
@@ -3746,7 +3814,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(c.days >= 0.0f && c.days <= 1000.0f, "the save file has an impossible corpse rot");
         });
     });
-    ar.section("melee", 5, [&] {
+    ar.section("melee", 7, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
     });
     ar.section("social", 3, [&] {
@@ -3903,7 +3971,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(p.zone >= 0 && p.zone < 64 && p.stepsLeft >= 0 && p.stepsLeft < 100000, "the save file has an impossible patch");
         });
     });
-    ar.section("prisoners", 3, [&] {
+    ar.section("prisoners", 4, [&] {
         saveParts(ar, "prisoner", e, &SaveEntity::prisoner, [&](Prisoner& p) {
             ar.value("mode", p.mode);
             ar.value("resistance", p.resistance);
@@ -3912,8 +3980,20 @@ void saveSections(Ar& ar, SaveData& d) {
             if (ar.sectionVersion() >= 2) {  // executions
                 ar.value("guiltyUntil", p.guiltyUntil);
             }
-            ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::Execute), "the save file has a bad prisoner mode");
+            if (ar.sectionVersion() >= 4) {  // slaves
+                ar.value("will", p.will);
+            }
+            ar.require(static_cast<int>(p.mode) <= static_cast<int>(PrisonerMode::ReduceWill), "the save file has a bad prisoner mode");
         });
+        if (ar.sectionVersion() >= 4) {
+            saveParts(ar, "slave", e, &SaveEntity::slave, [&](Slave& s) {
+                ar.value("suppression", s.suppression);
+                ar.value("enslavedAt", s.enslavedAt);
+                ar.value("nextSuppress", s.nextSuppress);
+                ar.value("homeFaction", s.homeFaction);
+                ar.require(s.suppression >= 0.0f && s.suppression <= 1.0f, "the save file has a bad slave suppression");
+            });
+        }
         saveParts(ar, "prisonBed", e, &SaveEntity::prisonBed, [&](PrisonBed& b) { ar.value("marked", b.marked); });
         if (ar.sectionVersion() >= 3) {  // arrests
             saveParts(ar, "arrest", e, &SaveEntity::arrest, [&](ArrestOrder& a) { ar.value("by", a.by); });
@@ -4026,7 +4106,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.group("social", [&] { saveSocialPart(ar, a.social, false); });  // maps 1: no lovin pause (it starts again at 0)
         });
     });
-    ar.section("comms", 1, [&] {  // the comms console's caravan requests (docs/design/comms-console.md)
+    ar.section("comms", 2, [&] {  // the comms console's caravan requests (docs/design/comms-console.md); 2: the goodwill log
         ar.list("requests", d.trade.requests, [&](CaravanRequest& r) {
             ar.text("faction", r.faction);
             ar.text("traderKind", r.traderKind);
@@ -4036,6 +4116,14 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.text("faction", c.faction);
             ar.value("at", c.at);
         });
+        if (ar.sectionVersion() >= 2) {
+            ar.list("goodwillLog", d.trade.goodwillLog, [&](GoodwillChange& g) {
+                ar.text("faction", g.faction);
+                ar.value("amount", g.amount);
+                ar.text("reason", g.reason);
+                ar.value("at", g.at);
+            });
+        }
     });
     ar.section("clock", 1, [&] {  // the step clock and the day length (docs/design/day-length.md)
         ar.value("steps", d.steps);
@@ -4087,6 +4175,9 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.value("lastY", g.lastY);
             ar.value("lastLevel", g.lastLevel);
         });
+    });
+    ar.section("windows", 1, [&] {  // windows in walls (docs/design/windows.md); the wall's footprint keeps its height
+        saveParts(ar, "window", e, &SaveEntity::window, [&](Window& w) { ar.value("broken", w.broken); });
     });
     // New sections go here, at the end.
 }
@@ -4424,6 +4515,7 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
         saved.bloodLoss = health->bloodLoss;
         saved.bleedStoppedAt = health->bleedStoppedAt;
         saved.zoneHurtAt = health->zoneHurtAt;
+        saved.zoneOverkill = health->zoneOverkill;
         for (const EnvironmentHediff& env : health->environment) {
             saved.environment.push_back(SaveEnvironmentHediff{sim.defs_->get(env.def).defName(), env.severity});
         }
@@ -4493,6 +4585,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     if (const ArrestOrder* arrest = reg.try_get<ArrestOrder>(e)) {
         out.arrest = *arrest;
     }
+    if (const Slave* slave = reg.try_get<Slave>(e)) {
+        out.slave = *slave;
+    }
     if (const Operations* operations = reg.try_get<Operations>(e)) {
         SaveOperations saved;
         saved.nextId = operations->nextId;
@@ -4530,6 +4625,9 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     }
     if (const Trap* trap = reg.try_get<Trap>(e)) {
         out.trap = *trap;
+    }
+    if (const Window* window = reg.try_get<Window>(e)) {
+        out.window = *window;
     }
     if (const Attunement* a = reg.try_get<Attunement>(e)) {
         SaveAttunement saved{a->level, a->strain, a->focus, {}};
@@ -4905,6 +5003,7 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
         health.bloodLoss = e.health->bloodLoss;
         health.bleedStoppedAt = e.health->bleedStoppedAt;
         health.zoneHurtAt = e.health->zoneHurtAt;
+        health.zoneOverkill = e.health->zoneOverkill;
         for (const SaveEnvironmentHediff& env : e.health->environment) {
             const Def* hediff = sim.defs_->find("Hediffs", env.hediff);
             if (hediff == nullptr) {
@@ -4948,6 +5047,12 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     } else if (e.thing && e.thing->category == ThingCategory::Pawn &&
                sim.defs_->get(reg.get<Thing>(entity).def).has("race.body")) {
         reg.emplace<Health>(entity);  // saved before pawns had health
+    }
+    // The lineage's hit points (Orcoid +10%) follow the genes, made above from the looks; not saved.
+    if (Health* loadedHealth = reg.try_get<Health>(entity)) {
+        if (const PawnGenes* loadedGenes = reg.try_get<PawnGenes>(entity)) {
+            loadedHealth->lineageHp = loadedGenes->effects.healthScale;
+        }
     }
     if (e.playerControlled) {
         reg.emplace<PlayerControl>(entity);
@@ -5107,6 +5212,9 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     if (e.arrest) {
         reg.emplace<ArrestOrder>(entity, *e.arrest);
     }
+    if (e.slave) {
+        reg.emplace<Slave>(entity, *e.slave);
+    }
     if (e.defense) {
         reg.emplace<DefensePlan>(entity, *e.defense);
     }
@@ -5182,6 +5290,9 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
             return false;
         }
         reg.emplace<ArtilleryShell>(entity, s);
+    }
+    if (e.window) {
+        reg.emplace<Window>(entity, *e.window);
     }
     if (e.trap) {
         reg.emplace<Trap>(entity, *e.trap);
@@ -5491,6 +5602,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.plants.defIndex.push_back(defIndexOf[r.def.value]);
         d.plants.growth.push_back(r.growth);
         d.plants.ageHours.push_back(r.ageHours);
+        d.plants.damage.push_back(r.damage);
     }
     std::vector<uint32_t> rockIndexOf(sim.defs_->size(), UINT32_MAX);
     for (const MineableRecord& r : sim.mineables_->records()) {
@@ -5767,6 +5879,24 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.zones_->restore(std::move(zones), d.nextZoneId, error)) {
         return false;
     }
+    {
+        // Older saves have no plants: the map starts bare. Before the path queue: tree trunks are path costs
+        // (Map::groundTrunks), and a half-done search is redone on the saved map.
+        std::vector<PlantRecord> records;
+        for (size_t i = 0; i < d.plants.cells.size(); ++i) {
+            if (d.plants.defIndex[i] >= d.plants.defs.size()) {
+                error = "the save has a plant of an unknown kind";
+                return false;
+            }
+            const DefId def = sim.defs_->idOf("Things", d.plants.defs[d.plants.defIndex[i]]);
+            records.push_back(PlantRecord{static_cast<int>(d.plants.cells[i]), def, d.plants.growth[i], d.plants.ageHours[i],
+                                          i < d.plants.damage.size() ? d.plants.damage[i] : 0u});
+        }
+        if (!sim.plants_->restore(records)) {
+            error = "the save has a plant the data files can't place";
+            return false;
+        }
+    }
     if (!sim.pathfinder_.loadState(std::move(d.paths), error)) {
         return false;
     }
@@ -5796,22 +5926,6 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
     }
 
-    {
-        // Older saves have no plants: the map starts bare.
-        std::vector<PlantRecord> records;
-        for (size_t i = 0; i < d.plants.cells.size(); ++i) {
-            if (d.plants.defIndex[i] >= d.plants.defs.size()) {
-                error = "the save has a plant of an unknown kind";
-                return false;
-            }
-            const DefId def = sim.defs_->idOf("Things", d.plants.defs[d.plants.defIndex[i]]);
-            records.push_back(PlantRecord{static_cast<int>(d.plants.cells[i]), def, d.plants.growth[i], d.plants.ageHours[i]});
-        }
-        if (!sim.plants_->restore(records)) {
-            error = "the save has a plant the data files can't place";
-            return false;
-        }
-    }
     if (d.hasRock) {
         std::vector<MineableRecord> records;
         for (size_t i = 0; i < d.mineables.cells.size(); ++i) {
@@ -5828,7 +5942,7 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
         std::vector<std::pair<int, DesignationKind>> marks;
         for (size_t i = 0; i < d.designations.cells.size(); ++i) {
-            if (d.designations.kinds[i] > static_cast<uint8_t>(DesignationKind::RemoveFloor)) {
+            if (d.designations.kinds[i] > static_cast<uint8_t>(DesignationKind::RemoveWindow)) {
                 error = "the save has a bad designation";
                 return false;
             }

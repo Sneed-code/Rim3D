@@ -60,7 +60,7 @@ down in half a minute. Tended or stopped wounds stop; the run stays as a stain.
 
 **Splatter on the ground at every hit** (sneed, 2026-11-17: "realistic blood splatter, like Baldur's Gate 3 after combat",
 not a tint; it must read from afar): besides what the flying drops leave, each hit that draws blood lays a pattern on
-the ground at once: a spatter fan 60 to 190 cm across, filled with 4 to 12 crowned drops, thrown the way the blow went (out of the exit of a shot through,
+the ground at once: a spatter fan 60 to 190 cm across, filled with 4 to 12 round drops, thrown the way the blow went (out of the exit of a shot through,
 back toward the shooter otherwise), 3 to 8 slanted drops with tails trailing further out, a few round drops near the
 feet and, for a bad wound or a body that is down, a patch under it. These are never culled by distance. Drops' own
 splats are bigger too (at least 2.4 cm across). On the body each such hit leaves the wound mark, a larger soaked patch
@@ -83,15 +83,31 @@ first; 32 per body, 400 on bodies.
 **The sim's filth** (blood, insect blood, machine fluid, dirt, vomit, ash, animal filth) is drawn as one decal per pile,
 sized by thickness, placed and turned by its cell. Piles there when a game loads are dry; new ones dry like spray.
 
+**Spray** (sneed, 2026-11-20: "i want to see big graphical blood spray when i melee enemies (and shoot) i can't see
+anything"): each hit throws **gushes**, ragged streaks with droplets (`M_BloodSpray`, made by `-run=BloodArt`) drawn
+as billboards stretched along their flight, thrown out of the wound and falling under gravity for about half a second:
+a gunshot a burst back out of the entry and a longer jet out of the exit, a cut a fan along the blade, a stab a jet
+straight back, blunt a splash. `Blood.SprayScale` (1) scales their size and count. The mist's depth fade was 20 cm,
+which hid it whenever it was near the body; it is now 4 cm.
+
+**No red flashing** (sneed, 2026-11-20, many hits at once): every decal gets its own sort order (layer x 100000 plus a
+counter) so two decals never tie and flicker; skin drops paint at most 24 times a frame; skin masks are 16, not 8, and
+the one dropped when full is the far, old one, never the one being hit. Clothes show at most 8 soaked patches per body; a hit on a patch already soaked now wets and widens that patch, and when all 8 are taken the new one joins the nearest (which grows to cover both, up to 40 cm), so a burst of hits on one spot no longer pushes every other patch off the clothes.
+
+**Exit wounds** are found on the drawn body: a trace from 70 cm beyond back towards the entry finds where the bullet
+left the skin; the exit mark is smaller than before (it read as a shorts-shaped stain on the hips).
+
 ## Blood in the skin (`USkinBlood`, sneed 2026-11-18)
 
 Decals on a moving body slid, clipped and went into the hair. A MakeHuman body now takes its blood **in its skin
 texture**, as Baldur's Gate 3 does:
 
-- Each bloodied body near the camera (at most `Blood.SkinMasks`, 8; 16 MB each) gets a **blood mask**, a 1024 x 1024
+- Each bloodied body near the camera (at most `Blood.SkinMasks`, 16; 8 MB each; when full, the farthest mask that has gone longest without a new hit is dropped) gets a **blood mask**, a 1024 x 1024
   render target in its skin's UV space. R: how much blood, G: how wet, B: a wound's dark open core.
 - `-run=BloodArt` bakes one **position map** per body base (`T_SkinPos_<Base>`): the bind-pose position of the skin
-  at each texel. A hit is taken back into the bind pose through the bone it moves with (the nearest bone span with a
+  at each texel. Extras (tail, ears) share the skin's UV space and their small UV patches overlap the body's; where two
+  triangles far apart (over 3 cm) claim a texel, the body's (denser in UV) keeps it, so the tail's patch no longer paints
+  a hard square on the hip (sneed's groin picture, 2026-11-20). A hit is taken back into the bind pose through the bone it moves with (the nearest bone span with a
   physics body, through the mesh's inverse bind matrix), and `M_SkinBloodPaint` adds the marks on the GPU: the wound,
   blood soaked round it, spatter, and runs down from it along the bind-pose "down" of that moment, broken up by noise.
   Only skin near the shot line takes it (not the far side). Because it is painted in body space, seams match and the
@@ -112,10 +128,25 @@ texture**, as Baldur's Gate 3 does:
   It relies on clothes sharing the body's bind pose. MakeHuman bodies wear no clothes yet (only MetaHumans do, and
   they keep decals, which land on their clothes), so this shows once MakeHuman clothes come.
 
+Splat shapes (PC look, 2026-11-19): drops are uneven round blots with a few short bulges and droplets near them,
+slanted drops a rounded body with a short tail, pools many melted lobes with drops on the rim. The old crown of thin
+spines with beads read as a cartoon starburst or a virus.
+Ground and wall splats (PC look, 2026-11-20): the shared colour keeps a little green and blue so wounds on shaded faces
+are not black, and on sunlit ground that read as flat pink paint, so ground and wall decals take `WorldTint`
+(Blood.GroundShade 0.6: red x0.6, green and blue x0.33), deep red wet and dark brown dry. They are drawn 1.9x
+(Blood.SplatScale; on the command line `-BloodSplatScale=2`, since a value set through `-ini` stayed "deferred"; the log
+prints both values at start), since the round shapes fill less of their square and read as specks from 10-20 m. The sim's filth
+stains keep their 1 m cell size. The pool under a bleeding body spreads faster (3-7 cm/s at first) and grows to a
+half size of 35-90 cm by blood loss, about a metre across at most, so it shows round a body lying on it (second PC look,
+2026-11-20: at 26-52 cm it hid under the body and nothing read from 12 m).
+A downed body that crawls leaves a smeared trail (a smear decal every 30 cm of crawl), and once it is more than
+60 cm past its pool's edge the old pool stops growing and a new one starts under it (third PC look, 2026-11-20: she
+crawled 2 m off her pool, and from 12 m only that patch showed).
+
 ## Assets
 
 `UnrealEditor-Cmd.exe Rim3D.uproject -run=BloodArt` (game/Source/Rim3DEditor/BloodArtCommandlet.cpp) makes
-`/Game/Rim3D/Generated/Blood`: `T_BloodAtlas` (4 x 4 splat pictures drawn from shapes in `BloodSplatAtlas.h`: crowned
+`/Game/Rim3D/Generated/Blood`: `T_BloodAtlas` (4 x 4 splat pictures drawn from shapes in `BloodSplatAtlas.h`: round
 drops, slanted drops with tails, fine spatter, pools, a run, a smear, a hole, a gash; R coverage, G thickness, B wound
 core), `T_BloodAtlasN` (normals from thickness), `M_BloodSplatter` (the decal; its decal colour's alpha packs wetness
 and opacity), `M_BloodDrop` and `M_BloodMist`; `T_SkinPos_<Base>` and `M_SkinBloodPaint` for blood in the skin, and the mask

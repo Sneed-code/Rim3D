@@ -112,9 +112,12 @@
       "healPerSecond": 0.001,
       "healAsleepFactor": 2,
       "dismember": {
-        "note": "sneed 2026-11-17 (body-health.md part F): only the hit that kills dismembers, when it went over what the struck zone had left by overkillShare of the zone's hit points: the arm or leg whole, or below the elbow or knee when the lower part was struck (lower, or a part in lowerAlso), the head, or for the torso the head and every limb",
+        "note": "sneed 2026-11-17, piling up 2026-11-19 (body-health.md part F): damage past a zone's 0 piles up over hits; on a dead body a zone with overkillShare of its hit points piled up comes off (the torso, with torsoSingleHit 1, only from one hit that alone went that far): the arm or leg whole, or below the elbow or knee when the lower part was struck (lower, or a part in lowerAlso), the head, or for the torso the head and every limb",
         "overkillShare": 0.25,
         "pieceDecayDays": 2,
+        "torsoSingleHit": 1,
+        "livingLimbs": 1,
+        "noteLiving": "sneed 2026-11-20: an arm or leg shot or hacked again and again comes off a living body too, at the same pile (head and torso only off the dead); a blast at a corpse piles all its damage past 0 on the part it meets, unsplit, and throws the corpse",
         "arm": { "whole": "Arm", "lower": "Hand", "lowerAlso": ["Radius"] },
         "leg": { "whole": "Leg", "lower": "Foot", "lowerAlso": ["Tibia"] },
         "head": "Head"
@@ -183,9 +186,9 @@
     "traitCount": [1, 3],
     "skillLevelRandomCurve": [[0, 0], [0.5, 150], [4, 150], [5, 25], [10, 5], [15, 0]], "backstoryDefinedSkills": ["Shooting", "Melee", "Social", "Medicine", "Artistic", "Intellectual"], "backstoryDefinedLevel": [0, 4], "ageSkillMaxFactorCurve": [[0, 0], [10, 0.7], [35, 1], [60, 1.6], [100, 1.6]],
     "passionCount": [0, 4],
-    "majorPassionChance": 0.33,
+    "majorPassionChance": 0.33, "pointSkillBoosts": [3, 3, 6],
     "unverified": ["ageGenerationCurve", "skillLevelRandomCurve", "backstoryDefinedSkills", "backstoryDefinedLevel", "ageSkillMaxFactorCurve"],
-    "ours": ["adultAgeMin", "passionCount", "majorPassionChance"]
+    "ours": ["adultAgeMin", "passionCount", "majorPassionChance", "pointSkillBoosts (trait-point colonists, no backstories: 3 skills get +3 to +6 in place of the backstories' gains)"]
   },
   {
     "defName": "ConstructionRules", "source": "RimWorld wiki",
@@ -194,6 +197,7 @@
     "deconstructWorkMin": 28.8,
     "deconstructWorkMax": 4320,
     "deconstructRefundFactor": 0.5,
+    "killLeaveFactor": 0.25,
     "skillSpeedBase": 0.3,
     "skillSpeedPerLevel": 0.0875,
     "defaultSkillLevel": 8,
@@ -204,7 +208,7 @@
     "architectCategories": ["Structure", "Production", "Furniture", "Power", "Security", "Misc", "Floors", "Joy", "Ship", "Temperature"],
     "architectLabels": {"Joy": "Recreation"},
     "unverified": ["buildWorkPerSecond", "deconstructWorkPerSecond", "deconstructWorkMin", "deconstructWorkMax",
-                   "deconstructRefundFactor", "skillSpeedBase", "skillSpeedPerLevel", "removeFloorWork"],
+                   "deconstructRefundFactor", "killLeaveFactor", "skillSpeedBase", "skillSpeedPerLevel", "removeFloorWork"],
     "ours": ["defaultSkillLevel", "architectCategories", "architectLabels", "earthWorkPerUnit", "betweenWallsCells", "earthMaxM"],
     "note": "Earthworks (docs/design/earthworks.md) are ours: RimWorld's ground is flat. One unit is one corner 0.25 m up or down; 51 work is 30 game seconds (1 real second at 1x) at speed 1. The limit is twice a 3 m wall."
   },
@@ -225,6 +229,12 @@
     "blockingHeightDm": 15,
     "unverified": ["skyGlowByHour", "workSpeedByGlow"],
     "ours": ["moveSpeedByGlow", "blockingHeightDm"]
+  },
+  {
+    "defName": "WindowRules", "source": "ours (RimWorld has no windows; sneed, 2026-11-19)",
+    "sillDm": 9, "lintelDm": 21, "lightRadius": 6, "lightGlow": 0.8, "addWork": 300, "removeWork": 300,
+    "ours": ["sillDm", "lintelDm", "lightRadius", "lightGlow", "addWork", "removeWork"],
+    "note": "Windows in walls (docs/design/windows.md): free, cut and filled in by builders. Heights in decimetres above the ground; work in game seconds at construction speed, like taking up a floor."
   },
   {
     "defName": "RoomRules", "source": "RimWorld wiki",

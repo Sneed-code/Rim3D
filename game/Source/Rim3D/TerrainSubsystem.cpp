@@ -23,6 +23,7 @@
 #include "SimWaterSubsystem.h"
 
 #include "ColonySim/Defs.h"
+#include "ColonySim/Floors.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
@@ -88,10 +89,47 @@ namespace
 			static_cast<uint8>(FMath::Clamp(static_cast<int32>(Color.B) + Delta, 0, 255)));
 	}
 
+	/** The road surfaces map generation lays (docs/design/roads-bridges.md): which floor defs they are, and the floors. */
+	struct FTerrRoads
+	{
+		const colony::Floors* Floors = nullptr;
+		colony::DefId Dirt;
+		colony::DefId Stone;
+		colony::DefId Asphalt;
+
+		/** 0 for no road, 1 packed dirt, 2 flagstone, 3 broken asphalt. */
+		int32 At(colony::CellPos Cell) const
+		{
+			if (!Floors)
+			{
+				return 0;
+			}
+			const colony::DefId Floor = Floors->at(Cell);
+			return !Floor.valid() ? 0 : Floor == Dirt ? 1 : Floor == Stone ? 2 : Floor == Asphalt ? 3 : 0;
+		}
+	};
+
+	FTerrRoads TerrRoadsOf(const colony::Sim& Sim)
+	{
+		FTerrRoads Roads;
+		Roads.Floors = &Sim.floors();
+		Roads.Dirt = Sim.defs().idOf("Terrain", "PackedDirt");
+		Roads.Stone = Sim.defs().idOf("Terrain", "Flagstone");
+		Roads.Asphalt = Sim.defs().idOf("Terrain", "BrokenAsphalt");
+		return Roads;
+	}
+
 	/** The colour of a cell's ground. Soil follows the fertility the plants use: gravel, soil, rich soil. */
-	FColor TerrCellColor(const colony::Map& Map, const colony::Plants& Plants, int32 X, int32 Y)
+	FColor TerrCellColor(const colony::Map& Map, const colony::Plants& Plants, const FTerrRoads& Roads, int32 X, int32 Y)
 	{
 		const colony::CellPos Cell{X, Y, 0};
+		switch (Roads.At(Cell))
+		{
+			case 1: return FColor(176, 144, 100);
+			case 2: return FColor(160, 156, 148);
+			case 3: return FColor(58, 58, 60);
+			default: break;
+		}
 		switch (Map.terrain(Cell))
 		{
 			case colony::Terrain::Water: return GTerrWaterBed ? FColor(70, 62, 48) : TerrWaterColor;
@@ -136,9 +174,17 @@ namespace
 	};
 
 	/** How a cell's ground looks with the terrain material. Soil follows the fertility the plants use: dry and gravelly, soil, rich and dark. */
-	FTerrLook TerrCellLook(const colony::Map& Map, const colony::Plants& Plants, int32 X, int32 Y)
+	FTerrLook TerrCellLook(const colony::Map& Map, const colony::Plants& Plants, const FTerrRoads& Roads, int32 X, int32 Y)
 	{
 		const colony::CellPos Cell{X, Y, 0};
+		// Roads: packed dirt is the gravel and sand layers tinted brown, flagstone the rock layer, broken asphalt dark gravel.
+		switch (Roads.At(Cell))
+		{
+			case 1: return FTerrLook(FLinearColor(0.95f, 0.8f, 0.6f), 0.35f, 0.0f, 0.65f, 0.0f);
+			case 2: return FTerrLook(FLinearColor(1.05f, 1.0f, 0.95f), 0.0f, 1.0f, 0.0f, 0.0f);
+			case 3: return FTerrLook(FLinearColor(0.32f, 0.32f, 0.34f), 0.0f, 0.0f, 1.0f, 0.0f);
+			default: break;
+		}
 		switch (Map.terrain(Cell))
 		{
 			// Under the water surface the bed shows through: wet, dark mud and gravel in deep water, wet sand in the shallows.
@@ -243,7 +289,7 @@ namespace
 	}
 
 	/** The ground of a chunk (section 0) and its roofs (section 1), as vertices in cm from the map's corner. */
-	void TerrBuildChunkMeshes(const colony::Map& Map, const colony::Plants& Plants, const TArray<uint8>& ThinRoof, bool bTextured,
+	void TerrBuildChunkMeshes(const colony::Map& Map, const colony::Plants& Plants, const FTerrRoads& Roads, const TArray<uint8>& ThinRoof, bool bTextured,
 		int32 ChunkX, int32 ChunkY, FTerrMesh& Ground, FTerrMesh& Roof)
 	{
 		const int32 MapW = Map.width();
@@ -293,7 +339,7 @@ namespace
 						{
 							if (bTextured)
 							{
-								const FTerrLook Look = TerrCellLook(Map, Plants, CX, CY);
+								const FTerrLook Look = TerrCellLook(Map, Plants, Roads, CX, CY);
 								Tint += Look.Tint;
 								Sand += Look.Sand;
 								Rock += Look.Rock;
@@ -302,7 +348,7 @@ namespace
 							}
 							else
 							{
-								const FColor Color = TerrCellColor(Map, Plants, CX, CY);
+								const FColor Color = TerrCellColor(Map, Plants, Roads, CX, CY);
 								R += Color.R;
 								G += Color.G;
 								B += Color.B;
@@ -539,6 +585,31 @@ void UTerrainSubsystem::MarkPlantDirty(colony::CellPos Cell)
 	{
 		Chunks[ChunkIndex(CX, CY)].bPlantsDirty = true;
 	}
+}
+
+void UTerrainSubsystem::SetPlantClearings(const TArray<FVector3f>& InClearings)
+{
+	if (InClearings == PlantClearings)
+	{
+		return;
+	}
+	// Both the old and the new clearings' chunks are drawn again.
+	const auto MarkAround = [this](const TArray<FVector3f>& List)
+	{
+		for (const FVector3f& C : List)
+		{
+			for (int32 Y = FMath::FloorToInt32(C.Y - C.Z); Y <= FMath::FloorToInt32(C.Y + C.Z); ++Y)
+			{
+				for (int32 X = FMath::FloorToInt32(C.X - C.Z); X <= FMath::FloorToInt32(C.X + C.Z); ++X)
+				{
+					MarkPlantDirty(colony::CellPos{X, Y, 0});
+				}
+			}
+		}
+	};
+	MarkAround(PlantClearings);
+	PlantClearings = InClearings;
+	MarkAround(PlantClearings);
 }
 
 void UTerrainSubsystem::OnSimEvent(const colony::Event& Event)
@@ -888,7 +959,7 @@ void UTerrainSubsystem::RebuildChunkGround(int32 ChunkX, int32 ChunkY)
 	FChunk& Chunk = Chunks[ChunkIndex(ChunkX, ChunkY)];
 	FTerrMesh Ground;
 	FTerrMesh Roof;
-	TerrBuildChunkMeshes(Sim.map(), Sim.plants(), ThinRoof, bTextured, ChunkX, ChunkY, Ground, Roof);
+	TerrBuildChunkMeshes(Sim.map(), Sim.plants(), TerrRoadsOf(Sim), ThinRoof, bTextured, ChunkX, ChunkY, Ground, Roof);
 	Stats.GroundVertices += Ground.Num() - Chunk.GroundVertices;
 	Stats.RoofVertices += Roof.Num() - Chunk.RoofVertices;
 	Chunk.GroundVertices = Ground.Num();
@@ -1013,35 +1084,96 @@ uint64 UTerrainSubsystem::GatherChunkPlants(int32 ChunkX, int32 ChunkY, TArray<T
 			{
 				continue;
 			}
-			if (const int32 Variants = VariantsOfDef[static_cast<int32>(DefValue)]; Variants > 1)
+			Kind = PlantVariant(Kind, DefValue, Map.index(Cell));
+			if (!PlantClearings.IsEmpty())
 			{
-				Kind += static_cast<int32>(TerrHash(static_cast<uint64>(Map.index(Cell)) * 31ULL + 0xA24BAED4ULL) % static_cast<uint64>(Variants));
+				float SX = 0.0f;
+				float SY = 0.0f;
+				colony::Plants::stemPoint(Map.index(Cell), X, Y, SX, SY);
+				bool bCleared = false;
+				for (const FVector3f& C : PlantClearings)
+				{
+					bCleared = bCleared || FMath::Square(SX - C.X) + FMath::Square(SY - C.Y) < FMath::Square(C.Z);
+				}
+				if (bCleared)
+				{
+					continue;
+				}
 			}
-			const uint32 Growth = Plants.growthPpm(Cell);
-			const int32 Stage = Growth >= colony::kPlantFullGrowth
-				? TerrGrowthStages
-				: static_cast<int32>(static_cast<uint64>(Growth) * TerrGrowthStages / colony::kPlantFullGrowth);
+			const int32 Stage = PlantStage(Plants.growthPpm(Cell));
 			const int32 Index = Map.index(Cell);
 			Signature = (Signature ^ ((static_cast<uint64>(Index) << 12) | (static_cast<uint64>(Kind + 1) << 4) | static_cast<uint64>(Stage))) * 1099511628211ULL;
 			if (!Out)
 			{
 				continue;
 			}
-			// Where in the cell, which way round and how big: a look made from the cell, not from the sim.
-			const FPlantVisual& Visual = PlantVisuals[Kind];
-			const uint64 H = TerrHash(static_cast<uint64>(Index) + 0x517CC1B7ULL);
-			const float R1 = static_cast<float>(H & 0xFFFF) / 65535.0f;
-			const float R2 = static_cast<float>((H >> 16) & 0xFFFF) / 65535.0f;
-			const float R3 = static_cast<float>((H >> 32) & 0xFFFF) / 65535.0f;
-			const float R4 = static_cast<float>((H >> 48) & 0xFFFF) / 65535.0f;
-			const float PX = static_cast<float>(X) + 0.5f + (R1 - 0.5f) * 0.7f;
-			const float PY = static_cast<float>(Y) + 0.5f + (R2 - 0.5f) * 0.7f;
-			const float Grown = TerrSproutScale + (1.0f - TerrSproutScale) * static_cast<float>(Stage) / static_cast<float>(TerrGrowthStages);
-			const float Size = Visual.Scale * Grown * (1.0f + (R4 - 0.5f) * 2.0f * Visual.Jitter);
-			(*Out)[Kind].Add(FTransform(FRotator(0.0, R3 * 360.0f, 0.0), FVector(PX * 100.0f, PY * 100.0f, Map.heightAt(PX, PY) * 100.0f), FVector(Size)));
+			(*Out)[Kind].Add(PlantTransform(Map, Kind, Cell, Stage));
 		}
 	}
 	return Signature;
+}
+
+int32 UTerrainSubsystem::PlantVariant(int32 Kind, uint32 DefValue, int32 Index) const
+{
+	if (const int32 Variants = VariantsOfDef[static_cast<int32>(DefValue)]; Variants > 1)
+	{
+		Kind += static_cast<int32>(TerrHash(static_cast<uint64>(Index) * 31ULL + 0xA24BAED4ULL) % static_cast<uint64>(Variants));
+	}
+	return Kind;
+}
+
+int32 UTerrainSubsystem::PlantStage(uint32 GrowthPpm)
+{
+	return GrowthPpm >= colony::kPlantFullGrowth
+		? TerrGrowthStages
+		: static_cast<int32>(static_cast<uint64>(GrowthPpm) * TerrGrowthStages / colony::kPlantFullGrowth);
+}
+
+FTransform UTerrainSubsystem::PlantTransform(const colony::Map& Map, int32 Kind, colony::CellPos Cell, int32 Stage) const
+{
+	// Where in the cell, which way round and how big: a look made from the cell, not from the sim.
+	const int32 Index = Map.index(Cell);
+	const FPlantVisual& Visual = PlantVisuals[Kind];
+	const uint64 H = TerrHash(static_cast<uint64>(Index) + 0x517CC1B7ULL);
+	const float R3 = static_cast<float>((H >> 32) & 0xFFFF) / 65535.0f;
+	const float R4 = static_cast<float>((H >> 48) & 0xFFFF) / 65535.0f;
+	// Where the sim's trunk stands too (colony::Plants::stemPoint: bullets, blows and walkers meet it there).
+	float PX = 0.0f;
+	float PY = 0.0f;
+	colony::Plants::stemPoint(Index, Cell.x, Cell.y, PX, PY);
+	const float Grown = TerrSproutScale + (1.0f - TerrSproutScale) * static_cast<float>(Stage) / static_cast<float>(TerrGrowthStages);
+	const float Size = Visual.Scale * Grown * (1.0f + (R4 - 0.5f) * 2.0f * Visual.Jitter);
+	return FTransform(FRotator(0.0, R3 * 360.0f, 0.0), FVector(PX * 100.0f, PY * 100.0f, Map.heightAt(PX, PY) * 100.0f), FVector(Size));
+}
+
+bool UTerrainSubsystem::GetPlantLook(colony::CellPos Cell, colony::DefId Def, uint32 GrowthPpm, FTerrainPlantLook& Out) const
+{
+	if (!BuiltSim || !TerrainActor || !Def.valid() || Def.value >= static_cast<uint32>(VisualOfDef.Num()))
+	{
+		return false;
+	}
+	const colony::Map& Map = BuiltSim->map();
+	if (!Map.onGround(Cell))
+	{
+		return false;
+	}
+	int32 Kind = VisualOfDef[static_cast<int32>(Def.value)];
+	if (Kind < 0)
+	{
+		return false;
+	}
+	Kind = PlantVariant(Kind, Def.value, Map.index(Cell));
+	const FPlantVisual& Visual = PlantVisuals[Kind];
+	if (!Visual.Mesh)
+	{
+		return false;
+	}
+	Out.Mesh = Visual.Mesh;
+	Out.Materials = Visual.Materials;
+	Out.Transform = PlantTransform(Map, Kind, Cell, PlantStage(GrowthPpm)) * TerrainActor->GetActorTransform();
+	Out.bCastShadow = Visual.bCastShadow;
+	Out.WindOffCm = Visual.WindOffCm;
+	return true;
 }
 
 namespace
@@ -1114,7 +1246,8 @@ void UTerrainSubsystem::GatherRocks(const colony::Map& Map, colony::CellPos Cell
 	// Boulders and mossy stones on open ground beside rock, so a mountain's foot is not a clean cut between ground and
 	// block. Never on built or levelled cells. Where, which and how big come from the cell's hash.
 	const colony::Terrain Here = Map.terrain(Cell);
-	if ((Here != colony::Terrain::Soil && Here != colony::Terrain::Sand && Here != colony::Terrain::RoughStone) || Map.levelled(Cell) || Map.buildingAt(Cell) != colony::kNoEntity)
+	if ((Here != colony::Terrain::Soil && Here != colony::Terrain::Sand && Here != colony::Terrain::RoughStone) || Map.levelled(Cell) || Map.buildingAt(Cell) != colony::kNoEntity ||
+		(BuiltSim && BuiltSim->floors().at(Cell).valid()))
 	{
 		return;
 	}
@@ -1155,7 +1288,8 @@ void UTerrainSubsystem::GatherCover(const colony::Map& Map, const colony::Plants
 	// Cosmetic ground cover (L2): low leafy tufts on open, fertile soil, thicker on rich ground. Never on built or levelled
 	// cells, under walls or inside roofed rooms. Where and how much comes from a hash of the cell; none of it is sim state.
 	// Ground only planned flat keeps its cover until the earthworks are done (docs/design/earthworks.md).
-	if (Map.terrain(Cell) != colony::Terrain::Soil || (Map.levelled(Cell) && !Map.earthPending(Cell)) || Map.buildingAt(Cell) != colony::kNoEntity)
+	if (Map.terrain(Cell) != colony::Terrain::Soil || (Map.levelled(Cell) && !Map.earthPending(Cell)) || Map.buildingAt(Cell) != colony::kNoEntity ||
+		(BuiltSim && BuiltSim->floors().at(Cell).valid()))  // no tufts on a road or a floor
 	{
 		return;
 	}
@@ -1300,12 +1434,13 @@ void UTerrainSubsystem::RebuildAll()
 		const int32 Count = FMath::Min(TerrBuildBatch, Total - First);
 		TArray<FTerrChunkBuild> Builds;
 		Builds.SetNum(Count);
-		ParallelFor(Count, [this, &Builds, &Core, First](int32 I)
+		const FTerrRoads Roads = TerrRoadsOf(Core);
+		ParallelFor(Count, [this, &Builds, &Core, &Roads, First](int32 I)
 		{
 			const int32 CX = (First + I) % ChunksX;
 			const int32 CY = (First + I) / ChunksX;
 			FTerrChunkBuild& Build = Builds[I];
-			TerrBuildChunkMeshes(Core.map(), Core.plants(), ThinRoof, bTextured, CX, CY, Build.Ground, Build.Roof);
+			TerrBuildChunkMeshes(Core.map(), Core.plants(), Roads, ThinRoof, bTextured, CX, CY, Build.Ground, Build.Roof);
 			Build.Plants.SetNum(PlantVisuals.Num());
 			Build.PlantSignature = GatherChunkPlants(CX, CY, &Build.Plants);
 		});

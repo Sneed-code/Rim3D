@@ -692,3 +692,221 @@ TEST_CASE("Husbandry: an animal trained to Rescue carries a downed colonist to a
     CHECK(laid);
     CHECK(f.cellOfThing(patient) == CellPos{20, 20, 0});
 }
+
+// ---- Fences, animal beds and revenge on a failed taming (docs/design/husbandry.md) ----------------
+
+namespace {
+
+// A ring of fence round x 30..36, y 30..36 (the ring on 29 and 37), with a gate at (33, 29).
+void husbFenceRing(HusbFixture& f, bool gate = true) {
+    for (int i = 29; i <= 37; ++i) {
+        for (int j = 29; j <= 37; ++j) {
+            const bool edge = i == 29 || i == 37 || j == 29 || j == 37;
+            if (!edge) {
+                continue;
+            }
+            if (i == 33 && j == 29) {
+                if (gate) {
+                    f.sim.things().spawn("FenceGate", CellPos{i, j, 0});
+                }
+            } else {
+                f.sim.things().spawn("Fence", CellPos{i, j, 0});
+            }
+        }
+    }
+    f.sim.stepMany(5);
+}
+
+}  // namespace
+
+TEST_CASE("Husbandry: a fence ring with a gate is a pen; people cross it, animals don't") {
+    HusbFixture f;
+    husbFenceRing(f);
+    const Map& map = f.sim.map();
+    CHECK(map.isFence(CellPos{29, 32, 0}));
+    CHECK(map.isFence(CellPos{33, 29, 0}));  // the gate
+    CHECK(map.walkable(CellPos{29, 32, 0}));  // people step over it
+    CHECK(map.blocksAnimals(CellPos{29, 32, 0}));
+    CHECK_FALSE(map.blocksAnimals(CellPos{32, 32, 0}));
+    const AnimalZoneId zone = f.hu().createZone(CellRect{29, 29, 9, 9});  // over the fence too: the fence cells stay out
+    HUSB_REQUIRE(zone != kNoAnimalZone);
+    CHECK(f.hu().findZone(zone)->cells.size() == 49u);
+    CHECK(f.hu().isPen(zone));
+
+    // A colonist walks into the pen and out again.
+    const Entity colonist = f.addColonist(CellPos{20, 20, 0}, 10);
+    std::string error;
+    HUSB_REQUIRE(f.sim.fighters().draft(colonist, true, error));
+    f.sim.submit(MoveOrderCommand{colonist, CellPos{33, 33, 0}});
+    CHECK(f.runUntil(2000, [&] { return f.cellOfThing(colonist) == CellPos{33, 33, 0}; }));
+
+    // A tame cow kept in it stays in; a wild deer in it never gets out either.
+    const Entity cow = f.animal("Cow", CellPos{32, 32, 0});
+    HUSB_REQUIRE(f.tameNow(cow));
+    HUSB_REQUIRE(f.hu().assignZone(cow, zone, error));
+    const Entity deer = f.animal("Deer", CellPos{34, 34, 0});
+    int out = 0;
+    for (int i = 0; i < 4000; ++i) {
+        f.sim.animals().addFood(cow, 0.01f);
+        f.sim.animals().addFood(deer, 0.01f);
+        f.sim.step();
+        const CellPos c = f.cellOfThing(cow);
+        const CellPos d = f.cellOfThing(deer);
+        out += (c.x < 29 || c.x > 37 || c.y < 29 || c.y > 37) ? 1 : 0;
+        out += (d.x < 29 || d.x > 37 || d.y < 29 || d.y > 37) ? 1 : 0;
+    }
+    CHECK(out == 0);
+
+    // The fence saves and loads: the loaded map has it too.
+    const std::vector<uint8_t> bytes = saveSim(f.sim);
+    SaveLoadResult loaded = loadSim(bytes, husbDefs());
+    HUSB_REQUIRE(loaded.error.empty());
+    CHECK(loaded.sim->map().isFence(CellPos{29, 32, 0}));
+    CHECK(loaded.sim->husbandry().isPen(zone));
+    CHECK(loaded.sim->stateHash() == f.sim.stateHash());
+
+    // Without the gate there is a hole: no pen.
+    HusbFixture g;
+    husbFenceRing(g, false);
+    const AnimalZoneId open = g.hu().createZone(CellRect{30, 30, 7, 7});
+    CHECK_FALSE(g.hu().isPen(open));
+}
+
+TEST_CASE("Husbandry: a tame animal sleeps on its own animal bed, one that doesn't fit it is not used") {
+    HusbFixture f;
+    f.addColonist(CellPos{5, 5, 0}, 10);
+    const AnimalZoneId zone = f.hu().createZone(CellRect{30, 30, 8, 8});
+    HUSB_REQUIRE(zone != kNoAnimalZone);
+    const Entity bed = f.spawn("AnimalBed", CellPos{36, 36, 0});
+    const Entity box = f.spawn("AnimalSleepingBox", CellPos{31, 36, 0});  // too small for a cow
+    const Entity cow = f.animal("Cow", CellPos{32, 32, 0});
+    const Entity cow2 = f.animal("Cow", CellPos{33, 32, 0});
+    HUSB_REQUIRE(f.tameNow(cow));
+    HUSB_REQUIRE(f.tameNow(cow2));
+    std::string error;
+    HUSB_REQUIRE(f.hu().assignZone(cow, zone, error));
+    HUSB_REQUIRE(f.hu().assignZone(cow2, zone, error));
+    CHECK(f.hu().bedSuits(cow, bed));
+    CHECK_FALSE(f.hu().bedSuits(cow, box));
+    // Run into the night: one cow sleeps on the bed, the other on the ground (the bed is the first's).
+    f.sim.animals().addFood(cow, 1.0f);
+    f.sim.animals().addFood(cow2, 1.0f);
+    const bool asleep = f.runUntil(int(16 * kSecondsPerHour), [&] {
+        f.sim.animals().addFood(cow, 0.001f);
+        f.sim.animals().addFood(cow2, 0.001f);
+        const Animal& a = f.reg().get<Animal>(cow);
+        const Animal& b = f.reg().get<Animal>(cow2);
+        return a.mode == AnimalMode::Sleep && b.mode == AnimalMode::Sleep && f.sim.time().hourOfDay() >= 23;
+    });
+    HUSB_REQUIRE(asleep);
+    const AnimalCare* careA = f.hu().care(cow);
+    const AnimalCare* careB = f.hu().care(cow2);
+    HUSB_REQUIRE(careA != nullptr);
+    HUSB_REQUIRE(careB != nullptr);
+    const Entity owner = careA->bed == bed ? cow : cow2;
+    const Entity other = owner == cow ? cow2 : cow;
+    CHECK((careA->bed == bed) != (careB->bed == bed));  // exactly one has it
+    CHECK(f.cellOfThing(owner) == CellPos{36, 36, 0});
+    CHECK(f.reg().get<Health>(owner).rest == RestKind::Bed);  // heals as in a bed
+    CHECK(f.reg().get<Health>(other).rest == RestKind::Ground);
+    CHECK(f.hu().care(other)->bed == kNoEntity);
+    {
+        Snapshot snap;
+        f.sim.writeSnapshot(snap);
+        const ThingView* ownerView = snap.find(owner);
+        const ThingView* otherView = snap.find(other);
+        HUSB_REQUIRE(ownerView != nullptr);
+        HUSB_REQUIRE(otherView != nullptr);
+        CHECK(ownerView->animalBed == bed);  // the Animals tab shows it
+        CHECK(otherView->animalBed == kNoEntity);
+    }
+
+    // Save and load in the night: the bed stays its own and the game goes on the same.
+    const std::vector<uint8_t> bytes = saveSim(f.sim);
+    SaveLoadResult loaded = loadSim(bytes, husbDefs());
+    HUSB_REQUIRE(loaded.error.empty());
+    Sim& copy = *loaded.sim;
+    CHECK(copy.husbandry().care(owner)->bed == bed);
+    CHECK(copy.stateHash() == f.sim.stateHash());
+    f.sim.stepMany(3000);
+    copy.stepMany(3000);
+    CHECK(copy.stateHash() == f.sim.stateHash());
+}
+
+TEST_CASE("Husbandry: a hurt tame animal rests on its animal bed by day") {
+    HusbFixture f;
+    f.addColonist(CellPos{5, 5, 0}, 10);
+    const AnimalZoneId zone = f.hu().createZone(CellRect{30, 30, 8, 8});
+    const Entity bed = f.spawn("AnimalSleepingSpot", CellPos{35, 35, 0});
+    const Entity cow = f.animal("Cow", CellPos{31, 31, 0});
+    HUSB_REQUIRE(f.tameNow(cow));
+    std::string error;
+    HUSB_REQUIRE(f.hu().assignZone(cow, zone, error));
+    Rng rng(4);
+    const std::vector<std::string> labels = f.sim.health().partLabels(f.reg().get<Thing>(cow).def);
+    HUSB_REQUIRE(!labels.empty());
+    f.sim.health().applyDamage(cow, f.sim.health().damageTypeId("Blunt"), 3.0f, 0, rng);
+    HUSB_REQUIRE(!f.reg().get<Health>(cow).injuries.empty());
+    const bool resting = f.runUntil(3000, [&] {
+        f.sim.animals().addFood(cow, 0.01f);
+        return f.reg().get<Animal>(cow).mode == AnimalMode::Sleep && f.cellOfThing(cow) == CellPos{35, 35, 0};
+    });
+    CHECK(resting);
+    CHECK(f.hu().care(cow)->bed == bed);
+}
+
+TEST_CASE("Husbandry: a failed taming can turn a cougar on its handler, never a cow") {
+    HusbFixture f;
+    const Entity handler = f.addColonist(CellPos{5, 5, 0}, 0);
+    std::string error;
+    // Cougars until one turns (30% a failed try); each is tried until it is tame or angry.
+    bool angry = false;
+    Entity cougar = kNoEntity;
+    for (int n = 0; n < 40 && !angry; ++n) {
+        cougar = f.animal("Cougar", CellPos{20 + n % 20, 20 + n / 20, 0});
+        HUSB_REQUIRE(f.hu().markTame(cougar, true, error));
+        for (int i = 0; i < 50 && !angry && !f.hu().isTame(cougar); ++i) {
+            f.hu().finishTame(handler, cougar, 0);
+            angry = f.reg().get<Animal>(cougar).temper == AnimalTemper::Revenge;
+            f.sim.step();
+        }
+    }
+    CHECK(angry);
+    if (angry) {
+        CHECK(f.reg().get<Animal>(cougar).enemy == handler);
+    }
+    const Entity cow = f.animal("Cow", CellPos{40, 40, 0});
+    HUSB_REQUIRE(f.hu().markTame(cow, true, error));
+    for (int i = 0; i < 200 && !f.hu().isTame(cow); ++i) {
+        f.hu().finishTame(handler, cow, 0);
+        CHECK(f.reg().get<Animal>(cow).temper == AnimalTemper::Calm);
+        f.sim.step();
+    }
+}
+
+TEST_CASE("Husbandry: a tame animal outside its fenced pen walks in through the gate and then stays in") {
+    HusbFixture f;
+    f.addColonist(CellPos{5, 5, 0}, 10);
+    husbFenceRing(f);
+    CHECK(f.sim.map().isFenceGate(CellPos{33, 29, 0}));
+    CHECK_FALSE(f.sim.map().isFenceGate(CellPos{29, 32, 0}));
+    const AnimalZoneId zone = f.hu().createZone(CellRect{30, 30, 7, 7});
+    HUSB_REQUIRE(zone != kNoAnimalZone);
+    const Entity cow = f.animal("Cow", CellPos{33, 20, 0});
+    HUSB_REQUIRE(f.tameNow(cow));
+    std::string error;
+    HUSB_REQUIRE(f.hu().assignZone(cow, zone, error));
+    const bool in = f.runUntil(6000, [&] {
+        f.sim.animals().addFood(cow, 0.01f);
+        return f.hu().zoneAt(f.cellOfThing(cow)) == zone;
+    });
+    CHECK(in);
+    int out = 0;
+    for (int i = 0; i < 3000; ++i) {
+        f.sim.animals().addFood(cow, 0.01f);
+        f.sim.step();
+        const CellPos c = f.cellOfThing(cow);
+        out += (c.x < 30 || c.x > 36 || c.y < 30 || c.y > 36) ? 1 : 0;
+    }
+    CHECK(out < 30);  // at most a few seconds in the gate itself on the way
+}

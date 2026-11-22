@@ -10,6 +10,7 @@
 #include "SimSubsystem.h"
 #include "TerrainDraw.h"
 #include "TerrainSubsystem.h"
+#include "WetnessShared.h"
 
 #include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
@@ -29,7 +30,6 @@ namespace
 			}
 		}));
 
-	const TCHAR* const LvlSolidMaterialPath = TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial");
 
 	// sRGB, as picked in a paint program: boards on top (two shades, alternating by cell), plaster under, the cut edge.
 	const FColor LvlFloorColor(150, 112, 74);
@@ -240,7 +240,7 @@ void ULevelsSubsystem::RebuildAll()
 #if WITH_EDITOR
 	DrawActor->SetActorLabel(TEXT("UpperLevels"));
 #endif
-	SolidMaterial = LoadObject<UMaterialInterface>(nullptr, LvlSolidMaterialPath);
+	SolidMaterial = WetnessShared::LoadSolidMaterial();
 	Chunks.SetNum(colony::Map::kLevels * ChunksX * ChunksY);
 	bBuilt = true;
 	++Stats.FullBuilds;

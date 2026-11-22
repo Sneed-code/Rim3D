@@ -1,0 +1,56 @@
+{
+ "name": "MiniTurret",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -40.72,
+   -41.97,
+   0.0
+  ],
+  "max": [
+   40.72,
+   66.03,
+   142.4
+  ]
+ },
+ "sizeM": [
+  0.814,
+  1.08,
+  1.424
+ ],
+ "parts": {
+  "MiniTurret": {
+   "boundsCm": {
+    "min": [
+     -40.72,
+     -41.97,
+     0.0
+    ],
+    "max": [
+     40.72,
+     66.03,
+     142.4
+    ]
+   },
+   "tris": 19690
+  }
+ },
+ "sockets": {
+  "Muzzle": [
+   0.0,
+   66.03,
+   110.2
+  ]
+ },
+ "slots": {
+  "MiniTurret": {
+   "from": "MiniTurret | Frontier Steel",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

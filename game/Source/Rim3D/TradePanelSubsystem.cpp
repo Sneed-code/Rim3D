@@ -5,6 +5,8 @@
 
 #include <imgui.h>
 
+#include "ColonyHudStyle.h"
+
 #include "OverseerSubsystem.h"
 #include "SimSubsystem.h"
 
@@ -544,7 +546,7 @@ void UTradePanelSubsystem::DrawAll(USimSubsystem& Bridge)
 		return;
 	}
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	ImGui::GetStyle().FontScaleMain = 1.2f * Scale;
+	ColonyHud::ApplyFrameStyle(Scale);
 	const float Margin = 12.0f * Scale;
 
 	DrawStrip(Bridge, Scale, Margin);
@@ -610,6 +612,28 @@ void UTradePanelSubsystem::DrawStrip(USimSubsystem& Bridge, float Scale, float M
 	ImGui::End();
 }
 
+int32 UTradePanelSubsystem::CountSellable(USimSubsystem& Bridge, const colony::Visit* SimVisit) const
+{
+	// The same filter as the You sell list: items on the map, not silver, worth something, that this trader takes.
+	const colony::Sim& Sim = *Bridge.GetSim();
+	TSet<uint32> Seen;
+	int32 Count = 0;
+	for (const colony::ThingView& View : Bridge.GetCurrentSnapshot().things)
+	{
+		if (View.category != colony::ThingCategory::Item || Seen.Contains(View.def.value))
+		{
+			continue;
+		}
+		Seen.Add(View.def.value);
+		const colony::Def& Def = Sim.defs().get(View.def);
+		if (Def.defName() != "Silver" && Def.number("stats.marketValue", 0.0) > 0.0 && (!SimVisit || Sim.trade().accepts(*SimVisit, Def)))
+		{
+			++Count;
+		}
+	}
+	return Count;
+}
+
 void UTradePanelSubsystem::DrawTradeWindow(USimSubsystem& Bridge, const colony::VisitView& Visit, float Scale)
 {
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
@@ -619,9 +643,14 @@ void UTradePanelSubsystem::DrawTradeWindow(USimSubsystem& Bridge, const colony::
 	const colony::Def* Faction = Sim.defs().find("Factions", Visit.faction);
 	const colony::Def* TraderKind = Sim.defs().find("TraderKinds", Visit.traderKind);
 
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.45f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(760.0f * Scale, 0.0f), ImVec2(Viewport->Size.x * 0.85f, Viewport->Size.y * 0.8f));
-	if (ImGui::Begin("##TradeWindow", nullptr, TpFlags() & ~ImGuiWindowFlags_NoScrollbar))
+	// Its bottom edge just above the bar (clear of the date box's top at any size), as tall as the room there allows; the two
+	// lists scroll inside it so the header and the Make the trade button always show.
+	const float TradeBottom = ColonyHud::AboveBar(Viewport, Scale) - ColonyHud::DateBoxHeight(Scale);
+	const float TradeMaxHeight = TradeBottom - Viewport->Pos.y - 8.0f * Scale;
+	const float TradeWidth = FMath::Min(900.0f * Scale, Viewport->Size.x - 16.0f * Scale);
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, TradeBottom), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(TradeWidth, 0.0f), ImVec2(TradeWidth, TradeMaxHeight));
+	if (ImGui::Begin("##TradeWindow", nullptr, TpFlags()))
 	{
 		++Stats.TradeFrames;
 		const float Goodwill = Trade.goodwill(Visit.faction);
@@ -661,6 +690,13 @@ void UTradePanelSubsystem::DrawTradeWindow(USimSubsystem& Bridge, const colony::
 		TpText(FString::Printf(TEXT("Colony silver on the map: %d     The trader has %d silver"), Trade.silverOnMap(), Visit.silver));
 		ImGui::Separator();
 
+		// The lists: as tall as their longer side needs, but leaving room for the totals and buttons under them.
+		const float RowHeight = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing();
+		const int32 Rows = FMath::Max(static_cast<int32>(Visit.stock.size()), CountSellable(Bridge, SimVisit)) + 1;
+		const float FooterHeight = 4.0f * ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().WindowPadding.y;
+		const float ListRoom = TradeMaxHeight - (ImGui::GetCursorPosY() + FooterHeight);
+		const float ListHeight = FMath::Max(3.0f * RowHeight, FMath::Min(RowHeight * static_cast<float>(Rows), ListRoom));
+		ImGui::BeginChild("##TradeLists", ImVec2(0.0f, ListHeight), ImGuiChildFlags_None);
 		if (ImGui::BeginTable("##TradeColumns", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame))
 		{
 			ImGui::TableNextColumn();
@@ -737,6 +773,7 @@ void UTradePanelSubsystem::DrawTradeWindow(USimSubsystem& Bridge, const colony::
 			}
 			ImGui::EndTable();
 		}
+		ImGui::EndChild();
 
 		ImGui::Separator();
 		FTradePanelQuote Quote;
@@ -869,25 +906,213 @@ void UTradePanelSubsystem::DrawGiftWindow(USimSubsystem& Bridge, const colony::V
 
 void UTradePanelSubsystem::DrawFactionsWindow(USimSubsystem& Bridge, float Scale)
 {
+	// RimWorld's Factions tab: each faction with its tech level, what it does, a goodwill bar with the hostile and ally lines,
+	// and the comms console's caravan request for an ally (docs/design/comms-console.md).
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	const colony::Sim& Sim = *Bridge.GetSim();
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.30f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(420.0f * Scale, 0.0f), ImVec2(Viewport->Size.x * 0.5f, Viewport->Size.y * 0.5f));
-	if (ImGui::Begin("##FactionsWindow", nullptr, TpFlags() & ~ImGuiWindowFlags_NoScrollbar))
+	const colony::TradeSystem& Trade = Sim.trade();
+	const colony::TradeRules& Rules = Trade.rules();
+	const int64 Now = Bridge.GetGameSeconds();
+	const float Width = FMath::Min(760.0f * Scale, Viewport->Size.x - 32.0f * Scale);
+	// Bottom edge just above the bar, so a long list grows upward and scrolls rather than running off the screen.
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(Width, 0.0f), ImVec2(Width, (ColonyHud::AboveBar(Viewport, Scale) - Viewport->Pos.y) * 0.85f));
+	if (ImGui::Begin("##FactionsWindow", nullptr, ColonyHud::BoxFlags() & ~ImGuiWindowFlags_NoScrollbar))
 	{
 		++Stats.FactionFrames;
-		TpText(TEXT("Factions"));
-		ImGui::SameLine();
-		if (ImGui::SmallButton("Close"))
+		ColonyHud::Title(TEXT("Factions"));
+		ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x - ImGui::CalcTextSize("Close").x - 2.0f * ImGui::GetStyle().FramePadding.x);
+		if (ColonyHud::Button(TEXT("Close")))
 		{
 			bFactionsOpen = false;
 		}
+		const colony::Entity Speaker = GetNegotiator();
+		const bool bConsole = Trade.commsConsole(Speaker) != colony::kNoEntity;
+		ColonyHud::TextColored(ColonyHud::TextDim(), bConsole
+			? FString::Printf(TEXT("Comms console ready. %s does the talking."), *NameOf(Speaker))
+			: FString(TEXT("Build a comms console (and power it) to call allies for a caravan.")));
 		ImGui::Separator();
+
+		const colony::TradeState& State = Trade.state();
 		for (const colony::GoodwillView& Line : Bridge.GetCurrentSnapshot().goodwill)
 		{
 			const colony::Def* Faction = Sim.defs().find("Factions", Line.faction);
 			const FString Name = Faction ? TpCapital(Faction->label()) : UTF8_TO_TCHAR(Line.faction.c_str());
-			TpTextColored(TpRelationColor(Line.relation), FString::Printf(TEXT("%-26s %5.0f   %s"), *Name, Line.goodwill, UTF8_TO_TCHAR(TpRelationWord(Line.relation))));
+			const ImVec4 Color = Line.relation == 0 ? ColonyHud::Bad() : Line.relation == 2 ? ColonyHud::Good() : ColonyHud::TextMain();
+			ImGui::PushID(Line.faction.c_str());
+
+			// Name, relation and what the faction does.
+			ColonyHud::Heading(Name);
+			ImGui::SameLine();
+			ColonyHud::TextColored(Color, UTF8_TO_TCHAR(TpRelationWord(Line.relation)));
+			if (Faction)
+			{
+				TArray<FString> Does;
+				Does.Add(UTF8_TO_TCHAR(Faction->text("techLevel", "Industrial").c_str()));
+				if (Faction->flag("canRaid"))
+				{
+					Does.Add(TEXT("raids"));
+				}
+				if (Faction->flag("canTrade"))
+				{
+					Does.Add(TEXT("trades"));
+				}
+				if (Faction->flag("canVisit"))
+				{
+					Does.Add(TEXT("visits"));
+				}
+				ImGui::SameLine();
+				ColonyHud::TextColored(ColonyHud::TextFaint(), FString::Join(Does, TEXT(", ")));
+				if (Faction->flag("permanentEnemy"))
+				{
+					ImGui::SameLine();
+					ColonyHud::TextColored(ColonyHud::Bad(), TEXT("permanent enemy"));
+					ColonyHud::Tip(TEXT("Never makes peace, whatever you give"));
+				}
+			}
+
+			// The goodwill bar: -100 to 100, filled from the middle, with the hostile and ally lines.
+			{
+				const float BarWidth = Width - 2.0f * ImGui::GetStyle().WindowPadding.x - 80.0f * Scale;
+				const float BarHeight = 14.0f * Scale;
+				const ImVec2 Min = ImGui::GetCursorScreenPos();
+				const ImVec2 Max(Min.x + BarWidth, Min.y + BarHeight);
+				ImDrawList* Draw = ImGui::GetWindowDrawList();
+				const float Span = FMath::Max(1.0f, Rules.goodwillMax - Rules.goodwillMin);
+				const auto At = [&](float Goodwill) { return Min.x + BarWidth * FMath::Clamp((Goodwill - Rules.goodwillMin) / Span, 0.0f, 1.0f); };
+				Draw->AddRectFilled(Min, Max, ImGui::GetColorU32(ColonyHud::FieldBg()));
+				const float Zero = At(0.0f);
+				const float Value = At(Line.goodwill);
+				Draw->AddRectFilled(ImVec2(FMath::Min(Zero, Value), Min.y + 2.0f * Scale), ImVec2(FMath::Max(Zero, Value), Max.y - 2.0f * Scale),
+					ImGui::GetColorU32(Line.relation == 0 ? ColonyHud::Bad() : Line.relation == 2 ? ColonyHud::Good() : ColonyHud::Accent()));
+				for (const float Mark : {Rules.hostileAtOrBelow, 0.0f, Rules.alliedAtOrAbove})
+				{
+					const float X = At(Mark);
+					Draw->AddLine(ImVec2(X, Min.y), ImVec2(X, Max.y), ImGui::GetColorU32(ColonyHud::ButtonBorder()), 1.0f);
+				}
+				Draw->AddRect(Min, Max, ImGui::GetColorU32(ColonyHud::Border()));
+				ImGui::Dummy(ImVec2(BarWidth, BarHeight));
+				ColonyHud::Tip(FString::Printf(TEXT("Goodwill %.0f. Hostile at %.0f or less, ally at %.0f or more. It drifts back toward where it started by %.1f a day."),
+					Line.goodwill, Rules.hostileAtOrBelow, Rules.alliedAtOrAbove, Rules.driftPerDay));
+				ImGui::SameLine();
+				ColonyHud::TextColored(Color, FString::Printf(TEXT("%+.0f"), Line.goodwill));
+			}
+
+			// Its last few goodwill changes, newest first, with why (the sim's goodwill log).
+			{
+				int32 Shown = 0;
+				FString Recent;
+				for (auto It = State.goodwillLog.rbegin(); It != State.goodwillLog.rend() && Shown < 3; ++It)
+				{
+					if (It->faction != Line.faction)
+					{
+						continue;
+					}
+					const FString Why = It->reason.empty() ? FString(TEXT("change")) : FString(UTF8_TO_TCHAR(It->reason.c_str()));
+					Recent += FString::Printf(TEXT("%s%+.0f %s (day %lld)"), Shown > 0 ? TEXT(",  ") : TEXT(""), It->amount, *Why,
+						static_cast<long long>(It->at / colony::kSecondsPerDay) + 1);
+					++Shown;
+				}
+				if (Shown > 0)
+				{
+					ColonyHud::TextColored(ColonyHud::TextDim(), FString::Printf(TEXT("Lately: %s"), *Recent));
+				}
+			}
+
+			// The caravan request: only factions that send caravans.
+			const size_t KindCount = Faction ? Faction->count("traders.caravan") : 0;
+			if (Faction && Faction->flag("canTrade") && KindCount > 0)
+			{
+				const colony::CaravanRequest* Coming = nullptr;
+				for (const colony::CaravanRequest& Request : State.requests)
+				{
+					if (Request.faction == Line.faction)
+					{
+						Coming = &Request;
+					}
+				}
+				int64 CalledAt = -1;
+				for (const colony::CommsCall& Call : State.calls)
+				{
+					if (Call.faction == Line.faction)
+					{
+						CalledAt = Call.at;
+					}
+				}
+				const int64 ReadyAt = CalledAt < 0 ? 0 : CalledAt + static_cast<int64>(Rules.requestCooldownDays * static_cast<float>(colony::kSecondsPerDay));
+				FString Blocker;
+				if (Coming)
+				{
+					Blocker = FString::Printf(TEXT("A caravan is on its way: it walks in within %.0f hours."),
+						FMath::Max(0.0, static_cast<double>(Coming->arriveAt - Now) / colony::kSecondsPerHour));
+				}
+				else if (Line.relation != 2)
+				{
+					Blocker = FString::Printf(TEXT("Only an ally sends caravans when called (goodwill %.0f or more)."), Rules.alliedAtOrAbove);
+				}
+				else if (ReadyAt > Now)
+				{
+					Blocker = FString::Printf(TEXT("Asked lately: they can be called again in %.1f days."), static_cast<double>(ReadyAt - Now) / colony::kSecondsPerDay);
+				}
+				else if (!bConsole)
+				{
+					Blocker = TEXT("Needs a powered comms console a colonist can walk to.");
+				}
+
+				// A faction that is no ally gets one quiet line, not a greyed button.
+				if (!Coming && Line.relation != 2)
+				{
+					ColonyHud::TextColored(ColonyHud::TextFaint(), FString::Printf(TEXT("Sends a caravan when called once it is an ally (goodwill %.0f)."), Rules.alliedAtOrAbove));
+					ImGui::Spacing();
+					ImGui::PopID();
+					continue;
+				}
+				FString& Kind = RequestKinds.FindOrAdd(UTF8_TO_TCHAR(Line.faction.c_str()));
+				ImGui::BeginDisabled(!Blocker.IsEmpty());
+				if (ColonyHud::Button(FString::Printf(TEXT("Call for a caravan (-%.0f goodwill)"), Rules.requestGoodwillCost)))
+				{
+					colony::CommsCommand Command;
+					Command.action = "RequestCaravan";
+					Command.faction = Line.faction;
+					Command.traderKind = TCHAR_TO_UTF8(*Kind);
+					Command.negotiator = Speaker;
+					Submit(Command);
+				}
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(200.0f * Scale);
+				const colony::Def* KindDef = Kind.IsEmpty() ? nullptr : Sim.defs().find("TraderKinds", TCHAR_TO_UTF8(*Kind));
+				const FString KindLabel = Kind.IsEmpty() ? FString(TEXT("Any trader")) : KindDef ? TpCapital(KindDef->label()) : Kind;
+				if (ImGui::BeginCombo("##kind", TCHAR_TO_UTF8(*KindLabel)))
+				{
+					if (ImGui::Selectable("Any trader", Kind.IsEmpty()))
+					{
+						Kind.Reset();
+					}
+					for (size_t Index = 0; Index < KindCount; ++Index)
+					{
+						const std::string KindName = Faction->textAt("traders.caravan", Index);
+						const colony::Def* Option = Sim.defs().find("TraderKinds", KindName);
+						const FString OptionName = UTF8_TO_TCHAR(KindName.c_str());
+						const FString OptionLabel = Option ? TpCapital(Option->label()) : OptionName;
+						if (ImGui::Selectable(TCHAR_TO_UTF8(*OptionLabel), Kind == OptionName))
+						{
+							Kind = OptionName;
+						}
+					}
+					ImGui::EndCombo();
+				}
+				ImGui::EndDisabled();
+				if (!Blocker.IsEmpty())
+				{
+					ColonyHud::TextColored(ColonyHud::TextFaint(), Blocker);
+				}
+				else
+				{
+					ColonyHud::TextColored(ColonyHud::TextFaint(), FString::Printf(TEXT("They come %.0f days after the call."), Rules.requestArrivalDays));
+				}
+			}
+			ImGui::Spacing();
+			ImGui::PopID();
 		}
 	}
 	ImGui::End();

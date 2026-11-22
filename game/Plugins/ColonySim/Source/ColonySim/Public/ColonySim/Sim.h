@@ -42,6 +42,7 @@ class RoomStats;
 struct Colonist;
 struct PawnLooks;
 struct PawnGenes;
+struct GeneEffects;
 class Designations;
 class ExplosiveSystem;
 class FighterSystem;
@@ -52,6 +53,7 @@ class MentalBreakSystem;
 class NatureEvents;
 class JobSystem;
 class Lights;
+class Windows;
 class MeleeSystem;
 class DeepResources;
 class Mineables;
@@ -211,6 +213,11 @@ public:
     // then runs every system.
     void step();
     void stepMany(int64_t steps);
+    // Before the first step only (the new-game character screen, docs/design/new-game.md): applies the commands
+    // submitted so far without running anything else or moving the clock, so the player can reroll and edit the
+    // starting colonists while the game waits. They are logged at step 0, so a replay applies them in its first step
+    // before anything runs, with the same result. False (and nothing applied) once the game has stepped.
+    bool applyPregameCommands();
     // Times each system of the following steps into `profile` (null: off, the default). Not saved,
     // not hashed.
     void setProfile(StepProfile* profile) { profile_ = profile; }
@@ -241,6 +248,8 @@ public:
     // before the first step). Clamped to 48 to 120.
     void setDayMinutes(int minutes);
     const Map& map() const { return map_; }
+    // For tests and dev tools that change map-wide rules (Map::setWallClimb).
+    Map& mapRules() { return map_; }
     // For map generation and tests that set the world up; the game changes the map through commands.
     Map& editMap() { return map_; }
     // Regions and reachability (docs/design/regions.md). Queries may rebuild, so not const.
@@ -303,6 +312,10 @@ public:
     Entity controlledPawn() const;
     // A pawn's colonist record (name, skills...), or null if it is not a colonist.
     const Colonist* colonistOf(Entity pawn) const;
+    // The player's colonists in slot order (by entity index), as RerollColonist and EditColonist count them.
+    std::vector<Entity> startingColonistSlots() const;
+    // The scenario's trait-point pool (its `traitPoints`), or -1 when its people have backstories.
+    int scenarioTraitPoints() const;
     // The kill feed (docs/design/kill-feed.md). A PawnDied event's `target` is the killer: whoever last hurt the pawn with
     // a bullet, blow or blast within kKillCreditSteps, unless it died of something else (hunger, cold, illness...).
     // Which colour a name shows in, seen from the player: friendly (the colony, its tame animals), enemy (raiders,
@@ -318,6 +331,13 @@ public:
     const PawnLooks* looksOf(Entity pawn) const;
     // A humanlike pawn's genes, made from its lineage (docs/design/genes.md), or null for other things.
     const PawnGenes* genesOf(Entity pawn) const;
+    // sneed's races (docs/design/races.md): the pawn's debuff factor (1 without genes), whether it
+    // stands under open sky with the sun up, the lineage a joiner or raider rolls from its seed, and
+    // a nocturnal lineage's turned-round schedule.
+    float geneDebuff(Entity pawn) const;
+    bool sunlit(Entity pawn, const GeneEffects& fx) const;
+    std::string joinerLineage(uint64_t seed) const;
+    void giveNocturnalSchedule(Entity pawn);
 
     // The plant layer: wild plants from map generation, growing hourly (docs/design/plants.md).
     Plants& plants() { return *plants_; }
@@ -358,6 +378,8 @@ public:
     const Farming& farming() const { return *farming_; }
     Lights& lights() { return *lights_; }
     const Lights& lights() const { return *lights_; }
+    Windows& windows() { return *windows_; }
+    const Windows& windows() const { return *windows_; }
     // Floors, filth, room stats and the beauty need (docs/design/room-stats.md).
     Floors& floors() { return *floors_; }
     const Floors& floors() const { return *floors_; }
@@ -534,6 +556,11 @@ public:
 private:
     float lowestPartHealth(Entity pawn) const;  // the focus HP bar (docs/design/focus.md)
     float pawnMoveFactor(Entity pawn) const;  // see Sim.cpp
+    void dropLostDecks();  // what stood on a bridge that fell into deep water is gone (docs/design/roads-bridges.md)
+    // Buildings wrecked by damage (docs/design/destruction.md): noted just before they go, then at the end of the step,
+    // once the footprint is free, their rubble and leftovers are laid and a BuildingWrecked is sent.
+    void noteWreck(Entity building);
+    void settleWrecks();
     bool takeIntoBag(Entity pawn, Entity item, int count, std::string& error);  // Inventory.cpp
     void autoPickUp();                                                          // Inventory.cpp
     friend class SimSaveAccess;  // saves read and restore the private state (Save.h)
@@ -579,6 +606,11 @@ private:
     Entity makeScenarioColonist(const Def& scenario, CellPos cell, uint64_t colonistSeed, bool protagonist);
     // RerollColonist: another starting colonist in the same place, before the first step.
     bool rerollColonist(int slot, std::string& error);
+    // EditColonist: names, gender and the creator's look of a starting colonist, before the first step.
+    bool editColonist(const EditColonistCommand& edit, std::string& error);
+    // SetColonistTraits: a starting colonist's traits from the scenario's point pool, before the first step.
+    bool setStartingTraits(const SetColonistTraitsCommand& command, std::string& error);
+
     // Gives a new pawn its looks if it is humanlike (its def names no other intelligence).
     Entity makeJoiner(CellPos cell, uint64_t seed);
     void giveLooks(Entity pawn, uint64_t seed, bool female, const std::string& lineage);
@@ -607,6 +639,7 @@ private:
     std::unique_ptr<Rooms> rooms_;
     std::unique_ptr<PowerGrid> power_;
     std::unique_ptr<Lights> lights_;
+    std::unique_ptr<Windows> windows_;  // docs/design/windows.md
     std::unique_ptr<TemperatureSystem> temperature_;  // after rooms_ and health_
     std::unique_ptr<Farming> farming_;                // after temperature_, lights_ and zones_
     std::unique_ptr<SpoilageSystem> spoilage_;        // after temperature_ and roomStats_
@@ -670,6 +703,14 @@ private:
     uint64_t submitted_ = 0;
     std::vector<LoggedCommand> commandLog_;
     std::vector<Event> events_;
+    struct PendingWreck {
+        DefId def;
+        DefId stuff;
+        CellRect rect;
+        bool finished = true;
+        Event event;  // the BuildingWrecked, sent with the rubble so it reaches Unreal with that step's events
+    };
+    std::vector<PendingWreck> wrecks_;  // empty between steps (settleWrecks), so not saved
     std::vector<Checkpoint> checkpoints_;
     std::unique_ptr<MeleeSystem> melee_;  // after the fighters, which hold a pointer to it
     std::unique_ptr<DefenseSystem> defense_;  // after the fighters, which hold a pointer to it

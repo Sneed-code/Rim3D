@@ -31,7 +31,7 @@
   ]
  },
  {
-  "defName": "ShipCryptosleepCasket",
+  "defName": "ShipCryptosleepCasket", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/ShipCryptosleepCasket/SM_ShipCryptosleepCasket.SM_ShipCryptosleepCasket"},
   "parent": "BuildingBase",
   "label": "ship cryptosleep casket",
   "size": [

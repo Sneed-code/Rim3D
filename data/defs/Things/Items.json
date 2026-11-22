@@ -47,7 +47,7 @@
   },
   {"defName": "Jade", "parent": "ItemBase", "label": "jade", "stackLimit": 75, "visual": {"pieces": 4, "layer": 0.05, "parts": [{"shape": "box", "size": [0.18, 0.14, 0.07], "color": [0.2, 0.62, 0.42]}]}, "stats": {"marketValue": 3.0, "mass": 0.5}, "deep": {"lumpSize": [1, 5], "commonality": 0.5, "portion": 10}, "unverified": ["stats"]},
   {
-    "defName": "ComponentIndustrial", "visual": {"pieces": 4, "layer": 0.05, "parts": [{"shape": "box", "size": [0.14, 0.14, 0.04], "color": [0.14, 0.45, 0.3]}, {"shape": "box", "size": [0.06, 0.06, 0.03], "at": [0, 0, 0.04], "color": [0.1, 0.1, 0.12]}]}, "parent": "ItemBase", "label": "component", "stackLimit": 50,
+    "defName": "ComponentIndustrial", "visual": { "mesh": "/Game/Rim3D/Generated/Buildings/ComponentIndustrial/SM_ComponentIndustrial.SM_ComponentIndustrial","pieces": 4, "layer": 0.05, "parts": [{"shape": "box", "size": [0.14, 0.14, 0.04], "color": [0.14, 0.45, 0.3]}, {"shape": "box", "size": [0.06, 0.06, 0.03], "at": [0, 0, 0.04], "color": [0.1, 0.1, 0.12]}]}, "parent": "ItemBase", "label": "component", "stackLimit": 50,
     "stats": {
       "maxHitPoints": 70, "marketValue": 32, "mass": 0.6, "flammability": 0.6, "deteriorationRate": 2,
       "workToMake": 7200

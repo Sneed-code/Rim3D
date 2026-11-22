@@ -33,6 +33,7 @@ namespace colony { class Map; }
  * sky (sun and moon from the sim's clock, the season's sun height, rain, snow in the air and on the ground, wet ground, fog,
  * thunderstorm flashes and the date readout).
  * melee (carried and holstered weapons, the weapon switch key, melee swings timed to the sim, blocks, dodges and hit-stop),
+ * finishers (a finisher per melee weapon at a downed enemy, Tab lock-on while sprinting by real keys, 3rd person aim, no floating weapons),
  * hurt (body-health.md part E: a hit zone wobbles and settles, a hurt leg limps, patching bends over the wound, a torso-downed pawn crawls),
  * motion (the sim's motion clips drawn: the hips stay on the sim's position through a roll, staggers, a sidestep and a knockdown),
  * clothes (worn apparel drawn on MetaHumans over a skin layer: stuff tint, torn look, hats and hair, taking off and stripping),
@@ -101,6 +102,8 @@ private:
 	void BuildOrdersPhases();       // SmokeTestOrders.cpp
 	void BuildOrdersWorldPhases();  // SmokeTestOrdersWorld.cpp
 	void BuildPanelsPhases();       // SmokeTestPanels.cpp
+	void BuildHudPhases();          // SmokeTestHud.cpp
+	void BuildNewGamePhases();      // SmokeTestNewGame.cpp
 	void BuildTradePhases();        // SmokeTestTrade.cpp
 	void BuildShuttlePhases();      // SmokeTestShuttle.cpp
 	void BuildQuestsPhases();       // SmokeTestQuests.cpp
@@ -111,9 +114,11 @@ private:
 	void BuildAnimalsPhases();      // SmokeTestAnimals.cpp
 	void BuildSkyPhases();          // SmokeTestSky.cpp
 	void BuildMeleePhases();        // SmokeTestMelee.cpp
+	void BuildFinishersPhases();    // SmokeTestFinishers.cpp
 	void BuildMotionPhases();       // SmokeTestMotion.cpp
 	void BuildIdlePhases();         // SmokeTestIdle.cpp
 	void BuildHurtPhases();         // SmokeTestHurt.cpp
+	void BuildGorePhases();         // SmokeTestGore.cpp
 	void BuildClothesPhases();      // SmokeTestClothes.cpp
 	void BuildLevelsPhases();       // SmokeTestLevels.cpp
 	void BuildFeelPhases();         // SmokeTestFeel.cpp

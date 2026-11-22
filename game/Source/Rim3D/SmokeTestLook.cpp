@@ -22,6 +22,7 @@
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
 #include "SkySubsystem.h"
+#include "WindowLightSubsystem.h"
 #include "SnowSubsystem.h"
 
 #include "ColonySim/Clock.h"
@@ -34,6 +35,7 @@
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Windows.h"
 
 #include <optional>
 
@@ -338,6 +340,18 @@ void USmokeTestSubsystem::BuildLookPhases()
 			SampleWalls += MakeOf(At(LookSampleX, LookSampleY + Y), LookSampleStuffs[Y / 2]) ? 1 : 0;
 		}
 		SampleWalls += MakeOf(At(LookSampleX - 1, LookSampleY), LookSampleStuffs[0]) ? 1 : 0;
+		// Windows (docs/design/windows.md): two in the room's north wall, and one in the second cell of each stuff in the
+		// sample wall, the granite one with its glass broken.
+		int32 WindowsCut = 0;
+		for (const int32 X : {2, 4})
+		{
+			WindowsCut += Sim->windows().add(At(X, LookRoomH - 1)) ? 1 : 0;
+		}
+		for (int32 Y = 1; Y < 2 * static_cast<int32>(UE_ARRAY_COUNT(LookSampleStuffs)); Y += 2)
+		{
+			WindowsCut += Sim->windows().add(At(LookSampleX, LookSampleY + Y)) ? 1 : 0;
+		}
+		colony::Windows::breakGlass(Sim->things(), Sim->map().buildingAt(At(LookSampleX, LookSampleY + 1)));
 		int32 Torches = 0;
 		for (const colony::CellPos Cell : {At(5, 1), At(1, 4)})
 		{
@@ -349,8 +363,8 @@ void USmokeTestSubsystem::BuildLookPhases()
 			}
 		}
 		State->bRoomBuilt = Sim->map().buildingAt(At(0, 0)) != colony::kNoEntity && Torches == 2;
-		Notes.Add(FString::Printf(TEXT("_prepare: home (%d, %d), room at (%d, %d), %d torches fuelled, %d sample walls"), State->Home.x, State->Home.y, State->Room.x, State->Room.y, Torches,
-			SampleWalls));
+		Notes.Add(FString::Printf(TEXT("_prepare: home (%d, %d), room at (%d, %d), %d torches fuelled, %d sample walls, %d windows"), State->Home.x, State->Home.y, State->Room.x,
+			State->Room.y, Torches, SampleWalls, WindowsCut));
 		{
 			// Which plants the bench's map grows (the look tasks dress the common ones first).
 			TMap<FString, int32> Kinds;
@@ -642,6 +656,99 @@ void USmokeTestSubsystem::BuildLookPhases()
 	};
 	Walls.Verify = [=]() { NoteShot(TEXT("walls")); };
 	Phases.Add(MoveTemp(Walls));
+
+	// 8b. Windows (docs/design/windows.md): inside the room at noon, looking at the two windows of its north wall, with the
+	// sun coming in through them.
+	FPhase WindowsShot;
+	WindowsShot.Name = TEXT("windows");
+	WindowsShot.WarmupSeconds = 4.0f;
+	WindowsShot.MeasureSeconds = 2.0f;
+	WindowsShot.Setup = [=, this]()
+	{
+		SetClock(12.0f, LookSmokeMidsummer);
+		const float NorthY = static_cast<float>(State->Room.y + LookRoomH - 1);
+		const FVector To = CellWorld(static_cast<float>(State->Room.x) + 3.5f, NorthY + 0.5f, 150.0);
+		const FVector From = CellWorld(static_cast<float>(State->Room.x) + 3.5f, NorthY - 3.6f, 165.0);
+		ViewFrom(From, (To - From).Rotation());
+	};
+	WindowsShot.Verify = [=, this]()
+	{
+		NoteShot(TEXT("windows"));
+		const UWindowLightSubsystem* WinLights = GetWorld()->GetSubsystem<UWindowLightSubsystem>();
+		const USkySubsystem* SkyNow = Sky();
+		Notes.Add(FString::Printf(TEXT("windows: %d window lights shining, indoor exposure share %.2f"), WinLights ? WinLights->GetShining() : -1, SkyNow ? SkyNow->GetIndoorShare() : -1.0f));
+		if (!WinLights || WinLights->GetShining() < 2)
+		{
+			Fail(TEXT("windows: the room's two windows should each have a daylight light"));
+		}
+	};
+	Phases.Add(MoveTemp(WindowsShot));
+
+	// 8c. Sunbeams: at half past eight on a midsummer morning the sun is low in the north-east of the sky's turn (azimuth about
+	// 128 degrees, 41 degrees up), so it shines in through the room's north windows and lays two bright patches on the floor and
+	// furniture, which bounce light round the room (docs/design/windows.md "Drawing"). From the south-west corner, looking down
+	// at where they fall.
+	FPhase Sunbeams;
+	Sunbeams.Name = TEXT("sunbeams");
+	Sunbeams.WarmupSeconds = 4.0f;
+	Sunbeams.MeasureSeconds = 2.0f;
+	Sunbeams.Setup = [=, this]()
+	{
+		SetClock(8.5f, LookSmokeMidsummer);
+		const FVector To = CellWorld(static_cast<float>(State->Room.x) + 3.8f, static_cast<float>(State->Room.y) + 3.6f, 20.0);
+		const FVector From = CellWorld(static_cast<float>(State->Room.x) + 1.4f, static_cast<float>(State->Room.y) + 1.3f, 215.0);
+		ViewFrom(From, (To - From).Rotation());
+	};
+	Sunbeams.Verify = [=, this]()
+	{
+		NoteShot(TEXT("sunbeams"));
+		if (const USkySubsystem* SkyDust = Sky(); SkyDust && SkyDust->GetFog())
+		{
+			const UExponentialHeightFogComponent* DustFog = SkyDust->GetFog();
+			Notes.Add(FString::Printf(TEXT("sunbeams: indoor share %.2f, volumetric fog %d, fog starts %.0f cm, extinction x%.2f, reach %.0f cm"), SkyDust->GetIndoorShare(),
+				DustFog->bEnableVolumetricFog ? 1 : 0, DustFog->StartDistance, DustFog->VolumetricFogExtinctionScale, DustFog->VolumetricFogDistance));
+		}
+		if (const USkySubsystem* SkyScat = Sky())
+		{
+			Notes.Add(FString::Printf(TEXT("sunbeams: sky light volumetric scattering %.2f"), SkyScat->GetSkyLightScattering()));
+		}
+	};
+	Phases.Add(MoveTemp(Sunbeams));
+
+	// 8d, 8e. The same view with thinner and thicker dust (tests for tuning indoorDust.extinction).
+	for (const float Times : {4.0f, 30.0f})
+	{
+		FPhase DustTry;
+		DustTry.Name = FString::Printf(TEXT("sunbeams_dust%.0f"), Times);
+		DustTry.WarmupSeconds = 3.0f;
+		DustTry.MeasureSeconds = 1.0f;
+		DustTry.Setup = [=, this]()
+		{
+			if (IConsoleVariable* DustVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Look.IndoorDust")))
+			{
+				DustVar->Set(Times, ECVF_SetByCode);
+			}
+			SetClock(8.5f, LookSmokeMidsummer);
+			const FVector To = CellWorld(static_cast<float>(State->Room.x) + 3.8f, static_cast<float>(State->Room.y) + 3.6f, 20.0);
+			const FVector From = CellWorld(static_cast<float>(State->Room.x) + 1.4f, static_cast<float>(State->Room.y) + 1.3f, 215.0);
+			ViewFrom(From, (To - From).Rotation());
+		};
+		const FString TryName = DustTry.Name;
+		DustTry.Verify = [=, this]()
+		{
+			NoteShot(*TryName);
+			if (const USkySubsystem* SkyTry = Sky(); SkyTry && SkyTry->GetFog())
+			{
+				Notes.Add(FString::Printf(TEXT("%s: volumetric extinction x%.2f, reach %.0f cm, fog density %.4f"), *TryName, SkyTry->GetFog()->VolumetricFogExtinctionScale,
+					SkyTry->GetFog()->VolumetricFogDistance, SkyTry->GetFog()->FogDensity));
+			}
+			if (IConsoleVariable* DustVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Look.IndoorDust")))
+			{
+				DustVar->Set(-1.0f, ECVF_SetByCode);
+			}
+		};
+		Phases.Add(MoveTemp(DustTry));
+	}
 
 	// 9. A snowy day: a new game on the same seed snows hard through the cold night, then the overseer looks at it at eleven
 	// on a midwinter morning. (The sim's first day is spring; the night is cold enough for the snow to lie.)
