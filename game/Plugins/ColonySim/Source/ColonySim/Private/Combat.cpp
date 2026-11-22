@@ -923,7 +923,9 @@ bool CombatSystem::hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const {
         wz = ground + k * l[2];
     };
     for (const CombatModel::Shape& shape : kind->poses[static_cast<int>(combatStanceOf(reg, pawn))].shapes) {
-        if (health_.partHitPoints(pawn, shape.part) <= 0.0f) {
+        // A part at 0 that is still on the body (an arm or leg at 0 stays on: body zones) is still there to hit, so
+        // damage keeps piling up past 0 until it comes off (sneed, 2026-11-22). Only a part that is gone has no box.
+        if (!health_.hasPart(pawn, shape.part)) {
             continue;
         }
         HitboxView v;
@@ -1166,8 +1168,8 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
             if (t < 0.0f || !better) {
                 continue;
             }
-            if (health_.partHitPoints(pawn, shape.part) <= 0.0f) {
-                continue;  // that part is gone: nothing there to hit
+            if (!health_.hasPart(pawn, shape.part)) {
+                continue;  // that part is gone: nothing there to hit (a limb at 0 is still on, and takes the bullet)
             }
             at(t, best);
             best.kind = ProjectileHitKind::Pawn;

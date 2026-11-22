@@ -51,6 +51,8 @@ namespace
 {
 	TAutoConsoleVariable<int32> GPawnsHairCards(
 		TEXT("Pawns.HairCards"), 1, TEXT("1 draws hair cards on pawns away from full detail (their strands only show at full detail), 0 none."), ECVF_Default);
+	TAutoConsoleVariable<int32> GPawnsTurnFeetInSwing(
+		TEXT("Pawns.TurnFeetInSwing"), 1, TEXT("1 lets the feet turn with the body through a melee swing (no spine twist when turning mid-swing), 0 keeps them planted."), ECVF_Default);
 
 	// How fast a pawn turns to face where it walks, degrees per second at 1x.
 	constexpr float PawnTurnRate = 720.0f;
@@ -382,8 +384,10 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	}
 	else if (Velocity.Size2D() > (Now.crawling ? PawnCrawlStill : PawnTurnSpeed))
 	{
+		// A crawler turns its body to where it drags itself at once (sneed 2026-11-22: crawling enemies turned slowly and
+		// slid sideways): three times a walker's turn.
 		const float Wanted = Velocity.Rotation().Yaw;
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * Speed);
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * (Now.crawling ? 3.0f : 1.0f) * DeltaTime * Speed);
 	}
 	else if ((Now.shotReadyIn > 0 || Now.fighting || Now.meleePhase != colony::MeleePhase::Ready || Now.blocking || Now.shieldUp) && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
 	{
@@ -489,6 +493,10 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		In.Detail = Detail;
 		In.bTeleported = bTeleported;
 		In.bHoldFacing = bHoldFacing;
+		// Through a melee swing the whole body turns with the weapon, feet and all (sneed 2026-11-22: turning mid-swing
+		// with a mace contorted the body, the feet held and the spine twisted up to 60 degrees under the swing).
+		// (Not in a finisher: it steps to its place and holds still, feet planted.)
+		In.bTurnFeet = GPawnsTurnFeetInSwing.GetValueOnGameThread() != 0 && Now.meleeFinisher == 0 && (Now.meleePhase != colony::MeleePhase::Ready || GetSwing().IsActive());
 		In.bStandTwist = !(IsInMotionClip() && !bMotionUpper) && RollProgress <= 0.0f && !IsJumping() && !Now.crawling && !Now.downed && !KneelMontage.IsValid();
 		In.bLegsFromClip = LegsClipWeight > 0.001f || ActionEndSeconds > 0.0 || (IsInMotionClip() && !bMotionUpper) || KneelMontage.IsValid();
 		In.bHitLayer = true;
@@ -2313,7 +2321,8 @@ void ASimPawnActor::UpdateCrawl(const colony::ThingView& Now, float GameDelta)
 	else
 	{
 		const float Height = bHasLooks ? Looks.Height : 1.0f;
-		const float Rate = GroundSpeed > PawnCrawlStill ? FMath::Clamp(GroundSpeed / (CrawlClipSpeed * Height), 0.4f, 2.0f) : 0.02f;  // all but still: lying where it is
+		// The arms and legs keep up with the ground (no sliding): the clip plays as fast as the body moves, up to 3 times.
+		const float Rate = GroundSpeed > PawnCrawlStill ? FMath::Clamp(GroundSpeed / (CrawlClipSpeed * Height), 0.4f, 3.0f) : 0.02f;  // all but still: lying where it is
 		if (!bCrawling || !CrawlMontage.IsValid() || !Anim->Montage_IsPlaying(CrawlMontage.Get()))
 		{
 			CrawlMontage = Anim->PlaySlotAnimationAsDynamicMontage(CrawlClip, FAnimSlotGroup::DefaultSlotName, PawnCrawlBlend, PawnCrawlBlend, 1.0f, 2000);

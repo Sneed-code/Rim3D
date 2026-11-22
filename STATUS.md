@@ -11,6 +11,21 @@ core (fans, crystal, boot lights), power switch (lever, lamps, spark) and hatche
 revolver. AI Studio in sneed's Chrome made a Lyria theme, robot and insect sound tests and TTS pain, begging and
 pleasure noises (muted while made). **Next: import the seven GLBs (codex_prep, GunArt) and wire their animations;
 pick sounds by ear.** Not in the game yet.
+Playtest fixes from the gun range (sneed, 2026-11-22; sim, data, Unreal and hair tools): **dismemberment piles up
+again**: a limb at 0 kept no hitbox, so later shots and blows passed through it and never reached the 13 (arm) or 19
+(leg) past 0 that takes it off; now a limb keeps its hitbox until it is really gone (`Combat.cpp`, test in
+`BodyZoneTests.cpp`). **Severed parts are pushed** by shots and blows that pass by them and thrown by blasts
+(`SeveredPieceActor::Push`). **Crawlers** turn 3x faster and crawl at 5% of walking speed (was 10%, about 3 m in 20 s).
+**Bolt action**: no reload pose between shots, only a brass casing flying out; every gun now throws casings (shells
+red), in first and third person (`FightSubsystem` casings). **Shotgun and rifles** slide forward along the barrel
+until the stock clears the head (`WeaponDrawSubsystem`, up to 12 cm). **Melee**: the feet turn with the body during a
+swing, so a mace swing while turning no longer twists the spine. **Hair**: a soft centre parting (strands cross the
+line), and the groom collides with the chest, back, shoulders and both arms (90 spheres, inside the skin, so no
+jitter); needs the `hair-grow` and `hair-grooms` art steps (run by `update-and-play.bat`). **Gun sounds**: sneed played
+the old `C:\Dev\Rim3D-gunrange` copy (171 cues); the one game has 222 cues with 219 recordings. The gun range smoke now
+fails if shots are fired but no recorded shot sound plays, or no casing flies. **Groin blood**: not seen in the one
+game yet; checked with a PC picture after torso shots. **Next:** PC build and smokes (gunrange, hurt, gore, melee),
+pictures of the hair, shotgun aim, groin and crawlers.
 
 One game folder, one-click update, Debug scenes (sneed, 2026-11-21; Unreal and tools, `docs/setup/update.md`,
 `docs/design/new-game.md` "Debug scenes"): sneed played the gun range from its own copy (`C:\Dev\Rim3D-gunrange`) and saw

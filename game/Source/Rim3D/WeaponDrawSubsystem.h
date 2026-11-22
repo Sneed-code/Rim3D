@@ -135,6 +135,8 @@ public:
 	int32 GetFloatFrames() const { return FloatFrames; }
 	int32 GetFloatFixes() const { return FloatFixes; }
 	int32 GetFinisherFrames() const { return FinisherFrames; }
+	/** The most a long gun was slid forward so its stock cleared the head (cm, smoke tests and Weapons.Debug). */
+	float GetStockSlideCm() const { return StockSlideCm; }
 	/** The worst gap seen between a held weapon's grip and its hand (cm) since the last call, and resets it. */
 	float TakeWorstGripGap() { const float W = WorstGripGap; WorstGripGap = 0.0f; return W; }
 	/** The last finisher frame: the weapon's point and the body point it is driven at (world cm). */
@@ -201,6 +203,7 @@ private:
 	int32 FloatFrames = 0;
 	int32 FloatFixes = 0;
 	int32 FinisherFrames = 0;
+	float StockSlideCm = 0.0f;
 	float WorstGripGap = 0.0f;
 	FVector FinisherTip = FVector::ZeroVector;
 	FVector FinisherGoal = FVector::ZeroVector;

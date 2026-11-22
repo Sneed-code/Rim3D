@@ -239,3 +239,13 @@ About 30 points against 10 capsules: a few tens of microseconds per pawn per fra
 - Animals: the solver and the body shapes take any chain of points and any capsules, but none of the animal models has
   bones in its mane, fur or tail to swing yet (their manes are solid mesh) and animals play single clips with no
   animation graph; a model with mane or tail bones would get the same node.
+
+## Body collision and the parting (sneed, 2026-11-22)
+
+Long hair went through the chest, back and arms: the groom only collided with head, neck and a few torso spheres.
+`grow_hair.py` now lays torso slices with spheres at the front and back (30% and 70% of depth, plus left and right of
+centre at the front) and spheres along each upper arm (4) and forearm (3), each bound to its own bone in
+`StrandHair.cpp`. The spheres stay 4 mm inside the skin, as before, so strands rest on the body instead of fighting it
+(the wig's jitter came from shapes outside the skin). At most 90 spheres (Unreal reads about 100; the smallest torso
+ones go first). A middle or side parting is now soft: each strand's side is picked from its distance to the line plus
+noise (`parting_cross` 0.6, `parting_width` 1.4 cm), so strands cross over and the scalp line no longer shows.

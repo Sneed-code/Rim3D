@@ -1623,8 +1623,8 @@ void FSimPawnHitLayerNode::Update_AnyThread(const FAnimationUpdateContext& Conte
 	Walking = PawnApproach(Walking, In.Velocity.Size2D() > PawnStandSpeed ? 1.0f : 0.0f, DeltaTime / 0.25f);
 
 	// Standing feet and turns are worked out in Evaluate, where the feet are known.
-	bWantFootLock = Proxy->bStandingIdleNow && In.bStandTwist && !In.bLegsFromClip;
-	bWantWalkLock = In.bStandTwist && !In.bLegsFromClip;
+	bWantFootLock = Proxy->bStandingIdleNow && In.bStandTwist && !In.bLegsFromClip && !In.bTurnFeet;
+	bWantWalkLock = In.bStandTwist && !In.bLegsFromClip && !In.bTurnFeet;
 
 	// The springs, in steps short enough to stay steady on a slow frame.
 	const int32 Steps = FMath::Clamp(FMath::CeilToInt32(DeltaTime / PawnKickStep), 1, 30);

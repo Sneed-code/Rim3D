@@ -138,6 +138,17 @@ public:
 	/** Sounds asked for since the sim started, by cue. */
 	int32 GetPlayCount(const FString& Cue) const { const int32* N = PlayCounts.Find(Cue); return N ? *N : 0; }
 	int32 GetPlaysTotal() const { return PlaysTotal; }
+	/** Sounds that really started on a voice (heard, not dropped), whose cue name starts with `Prefix` (e.g. "Shot_"),
+	 *  and of those how many played a recorded file rather than a placeholder tone (smoke tests: guns are heard). */
+	int32 GetVoicedWithPrefix(const FString& Prefix, bool bFilesOnly) const
+	{
+		int32 Count = 0;
+		for (const TPair<FString, FIntPoint>& Pair : VoicedCounts)
+		{
+			Count += Pair.Key.StartsWith(Prefix) ? (bFilesOnly ? Pair.Value.Y : Pair.Value.X) : 0;
+		}
+		return Count;
+	}
 	/** Sounds that were pushed out of, or never got, a voice. */
 	int32 GetDropped() const { return Dropped; }
 	int32 GetVoicesInUse() const;
@@ -389,6 +400,7 @@ private:
 	double BirdBurstUntil = -1.0;
 	int32 BirdPlays = 0;
 	float BirdSecondsPlayed = 0.0f;
+	TMap<FString, FIntPoint> VoicedCounts;  // by cue: started on a voice (X), of those from a recorded file (Y)
 	FString LastWeatherLoop;
 	int32 Environment = -1;
 	TMap<uint32, FPawnVoice> PawnVoices;

@@ -42,6 +42,12 @@ def log(*a):
 
 # ---- the body ---------------------------------------------------------------------------------------------------------
 
+# The arm bones whose joints are read from the rig (their heads: shoulder, elbow, wrist on each side).
+ARM_BONES = ("upperarm_l", "lowerarm_l", "hand_l", "upperarm_r", "lowerarm_r", "hand_r")
+# At most this many collision spheres: Unreal's hair simulation reads at most 100 shapes from a physics asset.
+MAX_COLLISION_SPHERES = 90
+
+
 def load_body(path, joints_path):
     """The body mesh as (vertices in metres, triangles) and its head and neck joints, from an FBX (bones head, neck_01)
     or an OBJ with a joints json."""
@@ -78,12 +84,17 @@ def load_body(path, joints_path):
             tris.append((vs[0], vs[i], vs[i + 1]))
     tris = np.array(tris, dtype=np.int64)
     head = neck = None
+    arms = {}
     rig = next((o for o in bpy.data.objects if o.type == "ARMATURE"), None)
     if rig:
         bones = rig.data.bones
         if "head" in bones and "neck_01" in bones:
             head = np.array(tuple(rig.matrix_world @ bones["head"].head_local))
             neck = np.array(tuple(rig.matrix_world @ bones["neck_01"].head_local))
+        # The arms' joints (shoulder, elbow, wrist), so the hair collides with the arms too, on the arm bones.
+        for name in ARM_BONES:
+            if name in bones:
+                arms[name] = np.array(tuple(rig.matrix_world @ bones[name].head_local))
     if head is None and joints_path:
         joints = json.load(open(joints_path))
         head = np.array(joints["head"])
@@ -96,7 +107,7 @@ def load_body(path, joints_path):
     log("body", body.name, len(verts), "vertices,", len(tris), "triangles, height", round(height * scale, 3), "m,", len(keys), "shape keys")
     for o in list(bpy.data.objects):
         bpy.data.objects.remove(o)
-    return verts * scale, tris, head * scale, neck * scale, [(n, k * scale) for n, k in keys]
+    return verts * scale, tris, head * scale, neck * scale, [(n, k * scale) for n, k in keys], {n: j * scale for n, j in arms.items()}
 
 
 def fit_sphere(points):
@@ -121,8 +132,9 @@ def head_morphs(body, keys):
 
 
 class Body:
-    def __init__(self, verts, tris, head, neck):
+    def __init__(self, verts, tris, head, neck, arms=None):
         self.verts, self.tris, self.head, self.neck = verts, tris, head, neck
+        self.arms = arms or {}
         self.bvh = BVHTree.FromPolygons([tuple(v) for v in verts], [tuple(t) for t in tris])
         self.top = verts[:, 2].max()
         self.bottom = verts[:, 2].min()
@@ -179,7 +191,7 @@ def collision_spheres(body):
     down to the waist (where the long styles reach). Each sits at a point inside the body with the largest radius that
     stays `margin` inside its surface. The body's own physics asset wraps each bone's vertices in a capsule standing
     centimetres proud of the scalp and back, so hair grown lying on the skin started inside it and the simulation threw
-    it out into a puffball (PC, 2026-11-21). Returns [(part, centre, radius)] in metres; part is head, neck or torso."""
+    it out into a puffball (PC, 2026-11-21). Returns [(part, centre, radius)] in metres; part is head, neck, torso or an arm bone (upperarm_l...)."""
     margin = 0.004
     out = []
 
@@ -219,16 +231,30 @@ def collision_spheres(body):
         right = hit((mid_x, y, z), (1, 0, 0))
         return None if left is None or right is None else (left[0], right[0])
 
-    def slice_spheres(part, z, columns, smallest=0.012):
+    def depth_sides(x, z):
+        front = hit((x, -1.0, z), (0, 1, 0))
+        back = hit((x, 1.0, z), (0, -1, 0))
+        return None if front is None or back is None or back[1] <= front[1] else (front[1], back[1])
+
+    def slice_spheres(part, z, columns, smallest=0.012, fronts=(), backs=()):
+        """Spheres in the middle of the body's depth at each column, and for the columns in `fronts` and `backs` one more
+        nearer the front or the back surface (a chest, a bust or shoulder blades that the middle sphere can't reach:
+        sneed, 2026-11-22, hair passing into the body)."""
         sides = cross_section(z)
         if sides is None:
             return
         x0, x1 = sides
         for f in columns:
             x = (x0 + x1) / 2 + f * (x1 - x0) / 2
-            y = depth_middle(x, z)
-            if y is not None:
-                add(part, np.array([x, y, z]), smallest)
+            ys = depth_sides(x, z)
+            if ys is None:
+                continue
+            front, back = ys
+            add(part, np.array([x, (front + back) / 2, z]), smallest)
+            if f in fronts:
+                add(part, np.array([x, front + 0.3 * (back - front), z]), smallest)
+            if f in backs:
+                add(part, np.array([x, front + 0.7 * (back - front), z]), smallest)
 
     # The neck, from its base to under the skull.
     for t in (0.2, 0.55, 0.9):
@@ -239,14 +265,31 @@ def collision_spheres(body):
     # which keeps the count well within what the hair simulation reads from a physics asset.
     z = body.heights["shoulder"] + 0.03
     while z >= body.heights["waist"] - 1e-6:
-        slice_spheres("torso", z, (0.0, -0.45, 0.45, -0.8, 0.8), 0.012 if z > body.heights["shoulder"] - 0.04 else 0.025)
+        slice_spheres("torso", z, (0.0, -0.45, 0.45, -0.8, 0.8), 0.012 if z > body.heights["shoulder"] - 0.04 else 0.025,
+                      fronts=(0.0, -0.45, 0.45), backs=(0.0,))
         z -= 0.055
 
-    # Drop spheres inside another.
+    # The arms (sneed, 2026-11-22: hair through the body as the arms move): spheres along each upper arm and forearm,
+    # on its own bone so they follow the arm. Each is as big as fits inside the arm (the armpit's nearest skin is the
+    # torso's, which keeps the first one small).
+    for upper, lower, hand in (("upperarm_l", "lowerarm_l", "hand_l"), ("upperarm_r", "lowerarm_r", "hand_r")):
+        joints = [body.arms.get(n) for n in (upper, lower, hand)]
+        if any(j is None for j in joints):
+            continue
+        for bone, a, b, ts in ((upper, joints[0], joints[1], (0.2, 0.4, 0.6, 0.8)), (lower, joints[1], joints[2], (0.15, 0.45, 0.75))):
+            for t in ts:
+                add(bone, a + t * (b - a), 0.012)
+
+    # Drop spheres inside another (of the same part: an arm's sphere inside a torso one still moves with the arm).
     keep = []
     for i, (part, c, r) in enumerate(out):
-        if not any(j != i and np.linalg.norm(c - c2) + r <= r2 + 1e-6 and (r2 > r or j < i) for j, (_, c2, r2) in enumerate(out)):
+        if not any(j != i and p2 == part and np.linalg.norm(c - c2) + r <= r2 + 1e-6 and (r2 > r or j < i)
+                   for j, (p2, c2, r2) in enumerate(out)):
             keep.append((part, c, r))
+    # Within what the hair simulation reads: the smallest torso spheres go first.
+    while len(keep) > MAX_COLLISION_SPHERES:
+        torso = [i for i, (part, _, _) in enumerate(keep) if part == "torso"] or list(range(len(keep)))
+        keep.pop(min(torso, key=lambda i: keep[i][2]))
     return keep
 
 
@@ -317,6 +360,12 @@ def flow_directions(body, style, roots, rng):
         x = x - body.skull_r * 0.38
     side = np.sign(x)
     side[side == 0] = 1
+    if part in ("middle", "side"):
+        # A soft parting (sneed, 2026-11-22: "a central hair part that doesn't look good, more hair in the middle line"):
+        # strands rooted within `parting_width` of the line are combed less to the side the nearer they are to it, and
+        # some cross over onto the other side, so the line is covered and reads as a natural parting, not a bald stripe.
+        width = style.get("parting_width", 0.014)
+        side = np.clip(x / width + rng.normal(0, style.get("parting_cross", 0.6), len(x)), -1.0, 1.0)
     az, el, _ = scalp_frame(body, roots)
     front = np.clip(1.0 - np.abs(az) / 90.0, 0.0, 1.0)  # 1 at the forehead, 0 from the ears back
     top = np.clip((el - 10.0) / 50.0, 0.0, 1.0)          # 1 on the crown, 0 low on the head
@@ -786,8 +835,8 @@ def main():
     a.joints = os.path.abspath(a.joints) if a.joints else ""
     styles = json.load(open(a.config))["styles"]
     wanted = [s for s in a.styles.split(",") if s] or list(styles)
-    verts, tris, head, neck, keys = load_body(a.body, a.joints)
-    body = Body(verts, tris, head, neck)
+    verts, tris, head, neck, keys, arms = load_body(a.body, a.joints)
+    body = Body(verts, tris, head, neck, arms)
     morphs = head_morphs(body, keys)
     log("head-changing sliders:", len(morphs), "of", len(keys))
     os.makedirs(a.out, exist_ok=True)
@@ -799,7 +848,7 @@ def main():
                 "skull_radius_cm": round(body.skull_r * 100.0, 3),
                 "head_morphs": morphs,
                 # What the groom's physics collides with (StrandHair.cpp builds a physics asset from them): spheres inside
-                # the skin, centre from the head bone in Unreal's axes and cm; part head, neck or torso picks the bone.
+                # the skin, centre from the head bone in Unreal's axes and cm; part head, neck, torso or an arm bone picks the bone.
                 "collision": [{"part": part, "centre_cm": [round(float(x), 2) for x in ((c - head) * 100.0 * np.array([1, -1, 1]))],
                                "radius_cm": round(r * 100.0, 2)} for part, c, r in collision_spheres(body)],
                 "styles": {}}
