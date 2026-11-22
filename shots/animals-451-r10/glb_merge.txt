@@ -1,0 +1,2 @@
+WildBear: Rim3D_Bear.glb: joined 3 skinned meshes into Rim3D_Bear_joined.glb
+WildDoe: Rim3D_Doe.glb: joined 3 skinned meshes into Rim3D_Doe_joined.glb
