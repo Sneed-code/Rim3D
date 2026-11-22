@@ -2875,11 +2875,18 @@ void ASimPawnActor::PushRagdollAt(const FVector& At, const FVector& Impulse)
 	{
 		return;
 	}
+	// A velocity change, so a light limb and the heavy pelvis jolt alike: the bone struck takes it all, the rest of the
+	// body a little (sneed 2026-11-22: "corpses need to wriggle, have ragdoll physics when hit, not just lie still").
 	const FName Bone = Body->FindClosestBone(At, nullptr, 0.0f, true);
 	Body->WakeAllRigidBodies();
-	Body->AddImpulseAtLocation(Impulse, At, Bone);
+	if (!Bone.IsNone())
+	{
+		Body->AddImpulse(Impulse, Bone, true);
+	}
+	Body->AddImpulse(Impulse * 0.15f, NAME_None, true);
 	RagdollSeconds = 0.0f;
 	RagdollStillSeconds = 0.0f;
+	++RagdollHitPushes;
 }
 
 bool ASimPawnActor::GetRagdollPelvis(FVector& OutLocation) const

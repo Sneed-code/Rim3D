@@ -157,6 +157,10 @@ public:
     // times `strength` (scaled by the body's size). False if nothing moved it (a zero direction).
     // `plainPush` false: only a clip moves it (a bullet's stagger doesn't shove a body that has no flinch clip).
     bool throwBody(Entity pawn, float pushX, float pushY, bool knockdown, float strength = 1.0f, bool plainPush = true);
+    // A blast throws a person down (sneed, 2026-11-22: "rockets should push living people too"): the knockdown clip
+    // for the way it goes, its path stretched so the body lands at least `metres` away (at most 4 times the clip's
+    // own); anyone without the clip gets a plain push of `metres` over `steps`. False for a zero direction.
+    bool blastThrow(Entity pawn, float pushX, float pushY, float metres, int steps);
     // A quick step along (dx, dy): to the body's left or right it is the sidestep clip, otherwise (or with no clip)
     // a plain push of sidestepMetres.
     bool sidestep(Entity pawn, float dx, float dy);

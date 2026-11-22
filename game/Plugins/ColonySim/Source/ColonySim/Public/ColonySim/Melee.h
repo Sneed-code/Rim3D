@@ -199,6 +199,7 @@ struct MeleeRules {
     // strikeTrackDegrees off its line (a step aside that wasn't a dodge doesn't make it whiff).
     float assistCos = 0.6f;
     float playerReachSlack = 0.6f;
+    float corpseReachExtra = 0.6f;  // a lying corpse is long: the player's swing reaches its centre this much further
     float strikeTrackDegrees = 35.0f;
     // Defending (sneed 2026-11-19, ours): a defender that reads a swing in time defends with this chance by Melee skill
     // (0 and 20); with a weapon it parries parryShare of those times, else (and the rest) it gets out of the way: a roll
@@ -324,6 +325,10 @@ public:
     Entity playerTarget(Entity pawn) const;
     // The target is in reach of the player's swing: its reach plus playerReachSlack (the player walks on under it).
     bool inPlayerReach(Entity pawn, Entity target) const;
+    // A corpse that can still be cut up lying before the player within reach of its swing (within 60 degrees; a lying
+    // body reaches half its length further), nearest first; kNoEntity for none. A swing at nobody with no living one
+    // to take it goes down at this one (sneed, 2026-11-22: "melee weapons need to hit corpses if I swing at them").
+    Entity corpseAhead(Entity pawn) const;
     // Who the player's swing may be steered at without a lock (sneed 2026-11-20: "a non-friendly, even neutral"): Sim sets
     // it (another side, a visitor, a wild animal; not its own side, tame animals or prisoners). Unset: hostile ones.
     void setNotFriendly(std::function<bool(Entity, Entity)> notFriendly) { notFriendly_ = std::move(notFriendly); }

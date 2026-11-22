@@ -56,6 +56,9 @@ using SoundDefOf = std::function<DefId(Entity)>;
 // A humanlike pawn's gender, for its voice; null or Unknown: no voice sounds.
 using SoundGenderOf = std::function<SoundGender(Entity)>;
 
+// Whether a pawn is alive now (the dead make no vocals: sneed, 2026-11-22). Null: everyone is.
+using SoundAliveOf = std::function<bool(Entity)>;
+
 // The `step` cue of the ground or floor in a cell (Unreal's StepCueAt), so a bullet in the ground sounds like what it hit:
 // dirt, sand, water, stone, wood. Null: dirt.
 using SoundStepAt = std::function<std::string(CellPos)>;
@@ -76,9 +79,11 @@ COLONY_API std::string soundStepCue(const DefDatabase& db, DefId terrain);
 // `visual.sound.impactSet` ("Impact" for bullets, "Arrow" for arrows and the pila) names the family, and what it struck the
 // surface: `<Set>_<Flesh|Wood|Steel|Stone|Dirt|Sand|Water>`, falling back to the older general cues. Blasts by their source's
 // `explosion` slot or their size; a severed part `Gore_Sever` (`Gore_Decap` for a head); a felled tree `Tree_Fall`.
+// With `aliveOf`, a corpse never cries out (sneed, 2026-11-22: "dead pawns don't make vocals"): no hit grunt and no
+// `hurt` cue for a body that is dead when the event is heard (the blow that kills gives its scream, PawnDied, instead).
 COLONY_API void soundForEvent(const DefDatabase& db, const Event& event, const SoundDefOf& defOf,
                               std::vector<SoundPlay>& out, const SoundGenderOf& genderOf = {},
-                              const SoundStepAt& stepAt = {});
+                              const SoundStepAt& stepAt = {}, const SoundAliveOf& aliveOf = {});
 
 // What a step cue says about the ground for a bullet: "Dirt" (grass, soil, carpet, leaves, mud, snow), "Sand", "Water",
 // "Stone" (stone, tile), "Wood", "Steel" (metal).

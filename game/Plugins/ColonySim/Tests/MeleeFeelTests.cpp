@@ -740,3 +740,41 @@ TEST_CASE("Facing: a swing at someone while walking keeps the body turned to the
         }
     }
 }
+
+TEST_CASE("Corpses: the player's swing at nobody goes down at a corpse lying before it and lands (sneed 2026-11-22)") {
+    auto sim = feelTestSim(318);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    const Entity body = feelTestPawn(*sim, 31.7f, 30.6f);
+    int torso = -1;
+    const std::vector<std::string> labels = sim->health().partLabels(sim->things().registry().get<Thing>(body).def);
+    for (size_t i = 0; i < labels.size(); ++i) {
+        if (labels[i] == "torso") {
+            torso = static_cast<int>(i);
+        }
+    }
+    FEEL_REQUIRE(torso >= 0);
+    sim->submit(DamagePawnCommand{body, "Blunt", 150.0f, torso});
+    for (int i = 0; i < 20; ++i) {
+        sim->step();
+    }
+    FEEL_REQUIRE(sim->things().registry().get<Health>(body).dead);
+    feelTestFace(*sim, hero, 1.0f, 0.0f);
+    CHECK(sim->melee().playerTarget(hero) == kNoEntity);  // the dead draw no aim assist ...
+    CHECK(sim->melee().corpseAhead(hero) == body);         // ... but a swing at nobody goes down at the body
+    feelTestFace(*sim, hero, -1.0f, 0.0f);
+    CHECK(sim->melee().corpseAhead(hero) == kNoEntity);    // behind it: not taken
+    feelTestFace(*sim, hero, 1.0f, 0.0f);
+    int hits = 0;
+    for (int swing = 0; swing < 3; ++swing) {
+        std::string why;
+        FEEL_REQUIRE(sim->melee().attack(hero, kNoEntity, true, &why));
+        for (int s = 0; s < 200 && !(s > 2 && sim->melee().ready(hero)); ++s) {
+            sim->step();
+            for (const Event& e : sim->events()) {
+                hits += e.type == EventType::MeleeHit && e.target == body && e.message == "hit" ? 1 : 0;
+            }
+        }
+    }
+    MESSAGE(hits << " of 3 swings landed on the corpse");
+    CHECK(hits >= 2);
+}

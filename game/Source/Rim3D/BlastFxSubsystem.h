@@ -8,6 +8,7 @@
 #include "BlastFxSubsystem.generated.h"
 
 class AActor;
+class ASimPawnActor;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
 class UPointLightComponent;
@@ -63,6 +64,9 @@ public:
 	// For the smoke test and the screen.
 	int32 GetBlastsDrawn() const { return BlastsDrawn; }
 	int32 GetRagdollsThrown() const { return RagdollsThrown; }
+	/** A body that goes limp just after a blast near it (the blast killed or knocked it out) is thrown by it too:
+	 *  throws it if a blast in the last `Seconds` reached where it lies. True if it did. */
+	bool ThrowNewRagdoll(ASimPawnActor& Actor, double Seconds = 0.6);
 	int32 GetPiecesThrown() const { return PiecesThrown; }
 	int32 GetSpritesAlive() const { return Sprites.Num(); }
 	int32 GetSmokeAlive() const;
@@ -145,6 +149,14 @@ private:
 	bool bReady = false;
 	int32 BlastsDrawn = 0;
 	int32 RagdollsThrown = 0;
+	struct FRecentBlast
+	{
+		FVector Centre = FVector::ZeroVector;
+		double Reach = 0.0;
+		float Speed = 0.0f;
+		double At = 0.0;
+	};
+	TArray<FRecentBlast> RecentBlasts;
 	int32 PiecesThrown = 0;
 	// The light: a white-hot peak, then an orange glow dying away.
 	FVector FlashAt = FVector::ZeroVector;
