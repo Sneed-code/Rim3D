@@ -787,6 +787,53 @@ void USmokeTestSubsystem::BuildBuildingsPhases()
 	};
 	Phases.Add(MoveTemp(Wreck));
 
+	// 7b. The Neon models with moving parts stand south of the room (spawned built): the parts are drawn and move; two
+	// pictures a second and a half apart show the dish, lever, fans and egg in different poses.
+	FPhase Moving;
+	Moving.Name = TEXT("buildings_moving");
+	Moving.WarmupSeconds = 2.0f;
+	Moving.MeasureSeconds = 1.0f;
+	Moving.Setup = [=, this]()
+	{
+		USimSubsystem* B = Bridge();
+		UBuildingSubsystem* Buildings = Drawn();
+		if (!B || !Buildings || !State->bRoomFound)
+		{
+			return;
+		}
+		const auto SpawnBuilt = [&](const char* Def, int32 DX)
+		{
+			B->Submit(colony::SpawnThingCommand{Def, Cell(DX, RoomH + 3), 1});
+		};
+		SpawnBuilt("ShipSensorCluster", 0);
+		SpawnBuilt("ShipComputerCore", 3);
+		SpawnBuilt("PowerSwitch", 6);
+		SpawnBuilt("Hatchery", 8);
+		B->StepOnce();
+		Buildings->Refresh();
+		LookAt(Cell(4, RoomH + 3), 7.0, 160.0, 30.0, 0.0, 0.0f, 0.5f);
+	};
+	Moving.Verify = [=, this]()
+	{
+		UBuildingSubsystem* Buildings = Drawn();
+		if (!Buildings || !State->bRoomFound)
+		{
+			return;
+		}
+		Notes.Add(FString::Printf(TEXT("buildings_moving: %d moving parts drawn, %d moved by a clip this frame"), Buildings->GetMovingParts(), Buildings->GetMovingPartsAnimated()));
+		if (Buildings->GetMovingParts() > 0 && Buildings->GetMovingPartsAnimated() == 0)
+		{
+			Fail(TEXT("buildings_moving: moving parts are drawn but no clip moves them (PropAnims files from the codex-models step?)"));
+		}
+	};
+	Phases.Add(MoveTemp(Moving));
+
+	FPhase MovingLater;
+	MovingLater.Name = TEXT("buildings_moving_later");
+	MovingLater.WarmupSeconds = 1.5f;
+	MovingLater.MeasureSeconds = 1.0f;
+	Phases.Add(MoveTemp(MovingLater));
+
 	// 8. A new sim wipes the picture.
 	FPhase Fresh;
 	Fresh.Name = TEXT("buildings_new_sim");
