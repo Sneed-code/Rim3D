@@ -1,0 +1,59 @@
+{
+	"test": "animals",
+	"status": "pass",
+	"durationSeconds": 36.4209736995399,
+	"errors": [],
+	"gpu": "NVIDIA GeForce RTX 5080",
+	"resolution": "1920x1080",
+	"phases": [
+		{
+			"phase": "animals_row",
+			"frames": 1308,
+			"avgFps": 163.36051260958703,
+			"p95FrameMs": 6.3482003211975098,
+			"medianGameThreadMs": 3.7228000164031982,
+			"medianRenderThreadMs": 5.7383999824523926,
+			"medianGpuMs": 4.8977999687194824,
+			"actors": 0,
+			"screenshot": "animals/animals_row.png"
+		},
+		{
+			"phase": "animals_detail",
+			"frames": 641,
+			"avgFps": 160.00942200246433,
+			"p95FrameMs": 6.5281987190246582,
+			"medianGameThreadMs": 3.5506000518798828,
+			"medianRenderThreadMs": 5.8049001693725586,
+			"medianGpuMs": 5.0026998519897461,
+			"actors": 0,
+			"screenshot": "animals/animals_detail.png"
+		},
+		{
+			"phase": "animals_close",
+			"frames": 310,
+			"avgFps": 154.71367039260602,
+			"p95FrameMs": 6.2425994873046875,
+			"medianGameThreadMs": 3.6517000198364258,
+			"medianRenderThreadMs": 5.7590999603271484,
+			"medianGpuMs": 4.927299976348877,
+			"actors": 0,
+			"screenshot": "animals/animals_close.png"
+		},
+		{
+			"phase": "animals_new",
+			"frames": 279,
+			"avgFps": 139.22282065017137,
+			"p95FrameMs": 6.6914000511169434,
+			"medianGameThreadMs": 4.245999813079834,
+			"medianRenderThreadMs": 5.8043999671936035,
+			"medianGpuMs": 4.9295001029968262,
+			"actors": 0,
+			"screenshot": "animals/animals_new.png"
+		}
+	],
+	"notes": [
+		"animals_row: 18 animals, 18 actors, 18 defs drawn, 18 models loaded, poses seen 3",
+		"animals_detail: near 1, mid 4, far 13, hidden 0",
+		"animals_new: 30 models loaded; lengths: Cow 230 cm, Muffalo 262 cm, Deer 170 cm, Husky 100 cm, TimberWolf 130 cm, Thrumbo 312 cm, Alpaca 140 cm, Cat 80 cm, WildBoar 104 cm, Cougar 208 cm, GrizzlyBear 220 cm, Chicken 49 cm, Monkey 88 cm, Elephant 627 cm, Rhinoceros 510 cm, Lion 286 cm, Raptor 350 cm, TRex 1200 cm, Monkey 88 cm, Cat 80 cm, Cougar 208 cm, Thrumbo 312 cm, Elephant 627 cm, Rhinoceros 510 cm, Muffalo 262 cm, Raptor 350 cm, TRex 1200 cm, GrizzlyBear 220 cm, PolarBear 253 cm, Caribou 192 cm, Muskox 240 cm, Yak 270 cm, Dromedary 300 cm, Gazelle 112 cm, Goat 135 cm, Sheep 136 cm, Megaspider 100 cm, Spelopede 66 cm, Capybara 120 cm, Iguana 150 cm, Chicken 49 cm, Duck 58 cm, Goose 90 cm, Turkey 110 cm, ArcticFox 76 cm, ArcticWolf 130 cm, Ostrich 198 cm, Megascarab 30 cm,"
+	]
+}
