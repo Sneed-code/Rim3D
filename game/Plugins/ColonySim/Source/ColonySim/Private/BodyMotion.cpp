@@ -250,6 +250,37 @@ bool BodyMotionSystem::throwBody(Entity pawn, float pushX, float pushY, bool kno
     return push(pawn, pushX, pushY, metres, knockdown ? rules_.knockdownSteps : rules_.staggerSteps);
 }
 
+bool BodyMotionSystem::blastThrow(Entity pawn, float pushX, float pushY, float metres, int steps) {
+    entt::registry& reg = things_.registry();
+    const float len = std::sqrt(pushX * pushX + pushY * pushY);
+    if (!reg.valid(pawn) || !reg.all_of<Position, Posture>(pawn) || !(len > 1e-4f)) {
+        return false;
+    }
+    const Posture& posture = reg.get<Posture>(pawn);
+    if (hasClips(pawn)) {
+        const int side = motionSideOf(posture.facingX, posture.facingY, pushX, pushY);
+        const DefId id = clipId(rules_.knockdownClip[side]);
+        const MotionClip* c = clip(id);
+        if (c != nullptr && play(pawn, id, posture.facingX, posture.facingY, 0, false)) {
+            BodyMotion& m = reg.get<BodyMotion>(pawn);
+            float f0 = 0.0f;
+            float r0 = 0.0f;
+            float y0 = 0.0f;
+            float f1 = 0.0f;
+            float r1 = 0.0f;
+            float y1 = 0.0f;
+            c->sample(0.0f, f0, r0, y0);
+            c->sample(c->seconds, f1, r1, y1);
+            const float own = std::sqrt((f1 - f0) * (f1 - f0) + (r1 - r0) * (r1 - r0)) * m.scale;
+            if (own > 0.1f && metres > own) {
+                m.scale *= std::min(4.0f, metres / own);
+            }
+            return true;
+        }
+    }
+    return push(pawn, pushX, pushY, metres, steps);
+}
+
 bool BodyMotionSystem::sidestep(Entity pawn, float dx, float dy) {
     entt::registry& reg = things_.registry();
     const float len = std::sqrt(dx * dx + dy * dy);
