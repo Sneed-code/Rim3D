@@ -597,7 +597,7 @@ TEST_CASE("Corpses: the player's swing at nobody goes down at a corpse lying bef
         }
     }
     FEEL_REQUIRE(torso >= 0);
-    sim->submit(DamagePawnCommand{body, "Blunt", 150.0f, torso});
+    sim->submit(DamagePawnCommand{body, "Blunt", 120.0f, torso});
     for (int i = 0; i < 20; ++i) {
         sim->step();
     }
