@@ -1,6 +1,16 @@
 # Status
 
-Updated 2026-11-21.
+Updated 2026-11-22.
+
+Google Neon asset test and AI Studio sounds (sneed, 2026-11-22; tools and docs, `docs/design/neon-assets.md`):
+sneed's Google AI Pro plan gives **Gemini 4 Neon** in the Antigravity CLI, now run headless on the PC like Codex
+(`tools/neon_assets/run_neon_assets.sh`, Neon High, no windows). It made **seven models first try**: the ship sensor
+cluster (turning dish, pulsing beacon), a cowboy hat, minigun (spinning barrels), LMG (reload, bipod), ship computer
+core (fans, crystal, boot lights), power switch (lever, lamps, spark) and hatchery (lid, lamp, wobbling egg), each
+22-41 min, about 3% of the weekly Gemini allowance each. Opus 5.5 through the same plan ran out after one half-made
+revolver. AI Studio in sneed's Chrome made a Lyria theme, robot and insect sound tests and TTS pain, begging and
+pleasure noises (muted while made). **Next: import the seven GLBs (codex_prep, GunArt) and wire their animations;
+pick sounds by ear.** Not in the game yet.
 
 One game folder, one-click update, Debug scenes (sneed, 2026-11-21; Unreal and tools, `docs/setup/update.md`,
 `docs/design/new-game.md` "Debug scenes"): sneed played the gun range from its own copy (`C:\Dev\Rim3D-gunrange`) and saw
