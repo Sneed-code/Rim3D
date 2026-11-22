@@ -465,6 +465,85 @@
   },
   "Melee_BreachAxe": {
    "kind": "gun"
+  },
+  "ShipSensorCluster": {
+   "kind": "building",
+   "def": "ShipSensorCluster",
+   "size": [
+    1.72,
+    1.72,
+    2.15
+   ],
+   "parts": [
+    "Dish",
+    "BeaconLens"
+   ]
+  },
+  "ShipComputerCore": {
+   "kind": "building",
+   "def": "ShipComputerCore",
+   "size": [
+    1.98,
+    1.91,
+    2.23
+   ],
+   "parts": [
+    "CoreCrystal",
+    "FanL",
+    "FanR",
+    "StatusLights"
+   ]
+  },
+  "PowerSwitch": {
+   "kind": "building",
+   "def": "PowerSwitch",
+   "size": [
+    0.41,
+    0.48,
+    1.16
+   ],
+   "parts": [
+    "Lever",
+    "LampGreen",
+    "LampRed",
+    "Spark"
+   ]
+  },
+  "Hatchery": {
+   "kind": "building",
+   "def": "Hatchery",
+   "size": [
+    0.94,
+    0.93,
+    0.8
+   ],
+   "parts": [
+    "Lid",
+    "HeatLamp",
+    "Egg1"
+   ]
+  },
+  "CowboyHat": {
+   "kind": "item",
+   "def": "Apparel_CowboyHat",
+   "size": [
+    0.328,
+    0.382,
+    0.139
+   ]
+  },
+  "Gun_Minigun": {
+   "kind": "gun",
+   "parts": [
+    "Barrels",
+    "Trigger"
+   ]
+  },
+  "Gun_LMG": {
+   "kind": "gun",
+   "parts": [
+    "Trigger"
+   ]
   }
  },
  "buildings": [
