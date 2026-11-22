@@ -1,0 +1,11 @@
+﻿Running smoke test 'creator' at 1920x1080...
+
+Smoke test 'creator': PASS  (111 s, NVIDIA GeForce RTX 5080, 1920x1080)
+creator                      43.3 fps  game   6.7 ms  render  20.5 ms  gpu  19.0 ms  screenshot ok
+note: creator: 4 people, panel drawn 4177 frames, tail swung up to 28 degrees, soft tissue up to 6.4 cm, skin dents up 
+to 0.0 cm, ball pressing the skin 0 frames
+note: creator: 1 woman Baseline
+note: creator: 2 man Baseline
+note: creator: 3 woman Baseline
+note: creator: 4 man Baseline
+Screenshots: C:\Dev\Rim3D-blood\game\Saved\Smoke\creator
