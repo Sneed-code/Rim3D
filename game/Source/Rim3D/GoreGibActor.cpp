@@ -20,7 +20,7 @@ namespace
 	TAutoConsoleVariable<int32> GGibMax(TEXT("Gore.GibMax"), 240,
 		TEXT("At most this many gibs lie at once; the oldest go first."), ECVF_Default);
 	TAutoConsoleVariable<float> GGibSpeed(TEXT("Gore.GibSpeed"), 1.0f,
-		TEXT("How hard a burst throws its chunks (1: about 3 to 7 m/s)."), ECVF_Default);
+		TEXT("How hard a burst throws its chunks (1: about 1.5 to 4 m/s, most land within 3 m)."), ECVF_Default);
 
 	constexpr float GibGravity = 980.0f;
 	constexpr float GibBounce = 0.22f;
@@ -157,7 +157,7 @@ int32 AGoreGibActor::Burst(UWorld* World, const FVector& Centre, float BodyScale
 	FRandomStream Random(Seed);
 	const int32 Count = FMath::Clamp(GGibCount.GetValueOnGameThread(), 0, 64);
 	const float Scale = FMath::Clamp(BodyScale, 0.5f, 1.5f);
-	const float Speed = FMath::Clamp(Strength, 0.6f, 2.0f) * FMath::Max(GGibSpeed.GetValueOnGameThread(), 0.0f);
+	const float Speed = FMath::Clamp(Strength, 0.8f, 1.4f) * FMath::Max(GGibSpeed.GetValueOnGameThread(), 0.0f);
 	// Room for them: the oldest gibs go first.
 	TArray<TWeakObjectPtr<AGoreGibActor>>& Live = GibLive();
 	Live.RemoveAll([](const TWeakObjectPtr<AGoreGibActor>& Gib) { return !Gib.IsValid(); });
@@ -206,7 +206,8 @@ int32 AGoreGibActor::Burst(UWorld* World, const FVector& Centre, float BodyScale
 			continue;
 		}
 		Gib->SetChunk(Mesh);
-		const float Thrown = Random.FRandRange(300.0f, 700.0f) * Speed * FMath::Lerp(1.15f, 0.75f, FMath::Clamp((Size - 8.0f) / 20.0f, 0.0f, 1.0f));
+		// (PC round 2: at 3 to 7 m/s, times up to 2, they flew 5 to 20 m and none lay near the body.) Most land within 1 to 3 m.
+		const float Thrown = Random.FRandRange(150.0f, 380.0f) * Speed * FMath::Lerp(1.15f, 0.75f, FMath::Clamp((Size - 8.0f) / 20.0f, 0.0f, 1.0f));
 		const FRotator GibSpin(Random.FRandRange(-900.0f, 900.0f), Random.FRandRange(-900.0f, 900.0f), Random.FRandRange(-900.0f, 900.0f));
 		// A rib or shard rests on its side: its middle lies about its thickness over the ground.
 		const float Rest = Kind == EGoreGibKind::Rib || Kind == EGoreGibKind::Bone ? Size * 0.08f : Size * 0.3f;

@@ -696,10 +696,19 @@ void USmokeTestSubsystem::BuildGorePhases()
 			const int32 Burst = Fight ? Fight->GetTrunksBurst() - State->TrunksAtStart : 0;
 			const int32 Live = AGoreGibActor::CountLive(GetWorld());
 			int32 Resting = 0;
+			FVector Mid = FVector::ZeroVector;
 			for (TActorIterator<AGoreGibActor> It(GetWorld()); It; ++It)
 			{
 				Resting += It->IsAtRest() ? 1 : 0;
+				Mid += It->GetActorLocation();
 			}
+			Mid /= FMath::Max(Live, 1);
+			double Spread = 0.0;
+			for (TActorIterator<AGoreGibActor> It(GetWorld()); It; ++It)
+			{
+				Spread += FVector::Dist2D(It->GetActorLocation(), Mid) / FMath::Max(Live, 1);
+			}
+			PhaseNumbers.Add(TEXT("gibsSpreadCm"), Spread);
 			PhaseNumbers.Add(TEXT("gibBlasts"), State->GibBlasts);
 			PhaseNumbers.Add(TEXT("trunksBurst"), Burst);
 			PhaseNumbers.Add(TEXT("gibsLying"), Live);

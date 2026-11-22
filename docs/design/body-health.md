@@ -224,8 +224,8 @@ torsos, whole-corpse gibs) was never merged.
   died, what they wore). Events: a PawnPartLost for the torso (the wet tear) and PawnGibbed (`amount` the pile that burst
   it; three chunk slaps follow). Unreal (`ASimPawnActor::BurstIntoGibs`, `AGoreGibActor`): 18 chunks (`Gore.GibCount`),
   procedural like the stumps in M_Gore (`GoreMakeGibChunk`): lumps of torn muscle with a patch of skin and fat, curved
-  ribs with meat on them, broken bone shards with marrow at the ends, dark wet lumps; thrown out and up at 3 to 7 m/s
-  (harder for more overkill, `Gore.GibSpeed`), tumbling, bouncing on the sim's ground and leaving a splat where every
+  ribs with meat on them, broken bone shards with marrow at the ends, dark wet lumps; thrown out and up at 1.5 to 4 m/s
+  (harder for more overkill, `Gore.GibSpeed`; most land within 3 m), tumbling, bouncing on the sim's ground and leaving a splat where every
   other one first lands, with six blast sprays of the body's blood and a heavy one onto where it lay. The body hides a
   few frames later (after the limbs that came off in the same hit are copied into their pieces), with no collision or
   physics. Gibs lie 5 minutes like blood (`Gore.GibSeconds`), then shrink away; at most 240 at once (`Gore.GibMax`).
