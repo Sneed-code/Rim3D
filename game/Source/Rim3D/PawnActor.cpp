@@ -56,6 +56,8 @@ namespace
 
 	// How fast a pawn turns to face where it walks, degrees per second at 1x.
 	constexpr float PawnTurnRate = 720.0f;
+	// The most time (seconds at 1x) one frame's turn may take; a longer frame (a hitch) finishes the turn over the next few.
+	constexpr float PawnTurnMaxStep = 1.0f / 20.0f;
 	// Slower than this (cm/s) a pawn keeps facing the way it faced.
 	constexpr float PawnTurnSpeed = 30.0f;
 	// Farther than this in one frame is a jump (spawn, load), not a walk.
@@ -330,6 +332,10 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	}
 	GroundSpeed = Velocity.Size2D();
 
+	// Turns advance by at most PawnTurnMaxStep of time a frame: after a hitch (a quarter to half a second measured in the
+	// creator) the body would otherwise land a whole half turn in one frame, throwing long strand hair through it (#450).
+	const float TurnDt = FMath::Min(DeltaTime, PawnTurnMaxStep);
+
 	// Whether the body keeps a facing of its own while it moves (a clip, a lock-on): the walk then steps sideways or
 	// backwards under it instead of turning the hips the way it goes.
 	bool bHoldFacing = false;
@@ -338,7 +344,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	{
 		// On a wall: facing it, up or down (docs/design/climbing.md).
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * TurnDt * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}
 	else if (Now.motionClip.valid() && !bRagdoll && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
@@ -346,7 +352,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		// A clip the sim moves the body along plays facing the way the sim has the body face, not the way it is
 		// thrown: a stagger back must not turn the body round to face its own push (docs/design/body-motion.md).
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * TurnDt * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}
 	else if (const AProtagonistPawn* Aimer = PawnAimingPlayer(GetWorld(), Thing, Now))
@@ -354,14 +360,14 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		// The player's colonist aiming a gun: the body turns with the view and strafes, as in any over-the-shoulder
 		// shooter (PC run 11: standing still it kept its old facing and the rifle pointed off to the side of the view).
 		const float Wanted = Aimer->GetYaw();
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * TurnDt * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}
 	else if (Now.focusTarget != colony::kNoEntity && Now.rollPhase == 0 && !Now.downed && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
 	{
 		// Locked on (docs/design/focus.md): the body keeps facing its focus and walks sideways or backwards (strafes).
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * TurnDt * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}
 	else if ((Now.meleeFinisher != 0 || (Now.meleePhase == colony::MeleePhase::Windup && Now.meleeTarget != colony::kNoEntity)) && !bRagdoll &&
@@ -370,7 +376,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		// Swinging at someone, or through a finisher (sneed 2026-11-20): the body turns to whom it strikes and the feet
 		// step under it, instead of the body facing the way it walks while the blow goes off to the side.
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * 2.0f * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * 2.0f * TurnDt * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}
 	else if (PawnAimsThirdPerson(GetWorld(), Thing, Now))
@@ -379,7 +385,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		// turns with the view, walking sideways or back under it, so the gun and arms point where the crosshair is.
 		const UProtagonistSubsystem* ProtSub = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
 		const float Wanted = ProtSub->GetBody()->GetYaw();
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * 2.0f * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * 2.0f * TurnDt * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}
 	else if (Velocity.Size2D() > (Now.crawling ? PawnCrawlStill : PawnTurnSpeed))
@@ -387,13 +393,13 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		// A crawler turns its body to where it drags itself at once (sneed 2026-11-22: crawling enemies turned slowly and
 		// slid sideways): three times a walker's turn.
 		const float Wanted = Velocity.Rotation().Yaw;
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * (Now.crawling ? 3.0f : 1.0f) * DeltaTime * Speed);
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * (Now.crawling ? 3.0f : 1.0f) * TurnDt * Speed);
 	}
 	else if ((Now.shotReadyIn > 0 || Now.fighting || Now.meleePhase != colony::MeleePhase::Ready || Now.blocking || Now.shieldUp) && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
 	{
 		// Standing and shooting or swinging: face where the sim says the pawn aims (docs/design/fights.md).
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * TurnDt * FMath::Max(Speed, 1));
 	}
 	// Swimming: the body floats with its shoulders at the surface (docs/design/water.md, W4).
 	SwimLiftCm = WaterDraw::SwimLiftEase(SwimLiftCm, Bridge.GetSim() ? WaterDraw::SwimLiftTargetCm(Now, Bridge.GetSim()->bodyHeightM(Thing)) : 0.0f, DeltaTime, bTeleported);
@@ -407,7 +413,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	}
 	else
 	{
-		const float YawDelta = DeltaTime * Speed;
+		const float YawDelta = TurnDt * Speed;
 		const int32 YawSteps = FMath::Clamp(FMath::CeilToInt32(YawDelta * 120.0f), 1, 30);
 		for (int32 i = 0; i < YawSteps; ++i)
 		{
