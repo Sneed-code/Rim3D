@@ -467,6 +467,18 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
             }
             break;
         }
+        case EventType::PawnGibbed: {
+            // The trunk bursts (sneed, 2026-11-22): its tear came with the PawnPartLost; the chunks slap down round about
+            // over the next second.
+            if (db.find("SoundCues", "Gore_Splat") != nullptr && soundSlotOr(soundDefOfEntity(db, defOf, e.thing), "gore", "") != "none") {
+                for (const float delay : {0.35f, 0.6f, 0.9f}) {
+                    SoundPlay p = soundOn("Gore_Splat", e.thing);
+                    p.delay = delay;
+                    out.push_back(p);
+                }
+            }
+            break;
+        }
         case EventType::PlantRemoved:
             if (e.message == "felled") {
                 const std::string fall = soundSlotOr(soundDef(db, e.def), "fall", "Tree_Fall");

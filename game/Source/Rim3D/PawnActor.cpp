@@ -3045,7 +3045,7 @@ bool ASimPawnActor::GetDrawnHeadCentre(FVector& Out) const
 void ASimPawnActor::SetBodyHidden(bool bHide)
 {
 	bBodyHidden = bHide;
-	const bool bAnyHidden = bBodyHidden || bCutAway;
+	const bool bAnyHidden = bBodyHidden || bCutAway || bGibHidden;
 	SetActorHiddenInGame(bAnyHidden);
 	if (MetaHuman)
 	{

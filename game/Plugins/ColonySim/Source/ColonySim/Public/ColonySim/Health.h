@@ -121,6 +121,9 @@ enum SeveredBit : uint16_t {
     kSeveredRightLowerLeg = 1u << 6,
     kSeveredRightLeg = 1u << 7,
     kSeveredHead = 1u << 8,
+    // The trunk itself burst into gibs (sneed, 2026-11-22: overkill on a corpse carries until it is fully gibbed): the
+    // body is gone; every other bit is set with it. Never on its own piece (the gibs are drawn, not kept).
+    kSeveredTrunk = 1u << 9,
 };
 
 // A piece the killing blow took off a body (body-health.md part F): it lies where it fell until it has rotted away
@@ -353,6 +356,8 @@ public:
     // (as dismemberment picks by the part struck). True if it came off. Never the head or torso, the dead (their
     // blasts pile past 0 in applyHit) or the protagonist.
     bool blastTear(Entity pawn, int part, float amount);
+    // Whether the body burst into gibs (kSeveredTrunk): nothing is left of it to hit, carry or draw.
+    bool gibbed(Entity pawn) const;
     // The pieces lying about, by id; how many game days one lies before it is gone.
     const std::vector<SeveredPiece>& severedPieces() const { return severedPieces_.pieces; }
     float severedDecayDays() const;

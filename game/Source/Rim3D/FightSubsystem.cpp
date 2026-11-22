@@ -341,6 +341,18 @@ void UFightSubsystem::OnSimEvent(const colony::Event& Event)
 	{
 		OnProjectileHit(Event);
 	}
+	else if (Event.type == colony::EventType::PawnGibbed)
+	{
+		// A corpse's bare trunk burst (body-health.md part F, "Trunks burst"): its chunks fly and the body goes.
+		if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
+		{
+			if (ASimPawnActor* Actor = Pawns->FindPawn(Event.thing))
+			{
+				GibsThrown += Actor->BurstIntoGibs(Event.amount);
+				++TrunksBurst;
+			}
+		}
+	}
 	else if (Event.type == colony::EventType::PawnDowned || Event.type == colony::EventType::PawnDied || Event.type == colony::EventType::PawnPartLost)
 	{
 		// The hit that did this was checked against hitboxes that are already gone or lying down: not a fair check.

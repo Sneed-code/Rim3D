@@ -55,6 +55,13 @@ painted them. `BloodArt` now leaves out triangles stretched over 8x the median (
 borders from one island only. Smoke `gore -GoreWoman` adds thigh close-ups front and back. Needs the `blood-art` step
 (update-and-play reruns it, since the commandlet changed). **Next:** PC before and after pictures, woman and man.
 
+Corpse trunks burst into gibs (sneed, 2026-11-22: "keep overkill damage until it gibs ... until none"; sim and Unreal,
+`docs/design/body-health.md` part F "Trunks burst"): once only the trunk is left, another 25 piled past 0 bursts it;
+one hit 50 past 0 (a rocket in the chest) takes everything at once. The body goes and 22 chunks fly out (torn muscle with
+skin, ribs, bone shards, dark wet lumps, made in code like the stumps) with sprays of blood; they tumble, bounce, leave
+splats where they land and lie 5 minutes like blood, then shrink away. **Next:** PC build, smoke `gore` (phases `gibs`,
+`gibsclose`), gun range look.
+
 Corpses come apart, jolt and stay silent; blasts throw people (sneed, 2026-11-22; sim, data and Unreal,
 `docs/design/body-health.md` part F): **overkill on a corpse is kept until it is in pieces**: every 25 piled past 0 on
 the torso takes one more limb off (the most battered first), then the head, until only the trunk is left; what a cut

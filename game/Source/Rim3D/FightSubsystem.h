@@ -207,6 +207,9 @@ public:
 	/** Severed limbs and heads on the ground now, and how many were thrown since the start (body-health.md part F). */
 	int32 GetSeveredPiecesShown() const;
 	int32 GetSeveredPiecesThrown() const { return SeveredPiecesThrown; }
+	/** For the tests: corpses whose trunk burst into gibs, and the chunks thrown. */
+	int32 GetTrunksBurst() const { return TrunksBurst; }
+	int32 GetGibsThrown() const { return GibsThrown; }
 	/** How many times a bullet's line knocked a severed piece. */
 	int32 GetSeveredPiecesPushed() const { return SeveredPiecesPushed; }
 	/** How many spent cases guns have thrown out (smoke tests). */
@@ -421,6 +424,8 @@ private:
 	int32 RagdollHitPushes = 0;
 	TMap<uint32, TWeakObjectPtr<class ASeveredPieceActor>> SeveredPieces;  // by the sim's piece id
 	int32 SeveredPiecesThrown = 0;
+	int32 TrunksBurst = 0;
+	int32 GibsThrown = 0;
 	int32 SeveredPiecesPushed = 0;
 	int32 FireOrders = 0;
 	int32 HitMarkers = 0;

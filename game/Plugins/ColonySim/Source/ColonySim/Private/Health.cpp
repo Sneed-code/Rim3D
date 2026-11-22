@@ -1557,6 +1557,16 @@ void HealthSystem::refreshAll() {
 
 namespace {
 
+// Whether the body's trunk burst into gibs: its core part (the torso, part 0) is gone, and everything with it.
+bool healthTrunkGone(const Health& health) {
+    for (const MissingPart& lost : health.missing) {
+        if (lost.part == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Whether zone `z` still has a piece that can come off (dismember's whole arm or leg, or the head).
 bool healthZoneCanLose(const HealthModel& model, const HealthModel::Body& body, const Health& health, int z) {
     const HealthModel::Zone& zone = body.zones[static_cast<size_t>(z)];
@@ -1565,7 +1575,7 @@ bool healthZoneCanLose(const HealthModel& model, const HealthModel::Body& body, 
                              : zone.kind == HealthModel::ZoneKind::Head ? &model.dismemberHead
                                                                          : nullptr;
     if (def == nullptr) {
-        return zone.kind == HealthModel::ZoneKind::Torso;
+        return zone.kind == HealthModel::ZoneKind::Torso && !healthTrunkGone(health);
     }
     const HealthEval eval(model, body, health, healthHpFactor(model, body, health));
     for (int i = zone.root; i < body.parts[static_cast<size_t>(zone.root)].end; ++i) {
@@ -1792,7 +1802,14 @@ bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int targ
             }
             const float pile = health.zoneOverkill[static_cast<size_t>(z)];
             const float enough = enoughOf(z);
-            if (pile > 0.0f && pile >= enough && healthZoneCanLose(*model_, body, health, z)) {
+            if (pile > 0.0f && !healthZoneCanLose(*model_, body, health, z)) {
+                // Nothing more can come off this zone (a shoulder or the neck left after the arm or head went): what piles
+                // on it goes to the trunk, or blows on the stumps were lost and the trunk never burst (PC round 4).
+                health.zoneOverkill[static_cast<size_t>(z)] = 0.0f;
+                carry(pile);
+                continue;
+            }
+            if (pile > 0.0f && pile >= enough) {
                 health.zoneOverkill[static_cast<size_t>(z)] = 0.0f;  // what is left of the limb piles up again
                 dismember(pawn, health, z, z == zone ? target : body.zones[static_cast<size_t>(z)].root, pile);
                 carry(pile - enough);
@@ -1806,7 +1823,8 @@ bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int targ
             // at once (with torsoSingleHit 0, any pile big enough does).
             if (zone == torso && enough > 0.0f && pile >= enough &&
                 (model_->dismemberTorsoSingleHit <= 0.0f || overThisHit >= enough)) {
-                pile = 0.0f;
+                // What went past that quarter is kept (sneed, 2026-11-22): a hit twice as far past 0 bursts the trunk too.
+                pile -= enough;
                 dismember(pawn, health, torso, target, overThisHit);
                 cut = true;
             }
@@ -1834,7 +1852,18 @@ bool HealthSystem::hitPart(Entity pawn, DefId damageType, float amount, int targ
                     }
                 }
                 if (next < 0) {
-                    break;  // nothing left to come off: the trunk lies alone
+                    // Nothing left to come off but the trunk itself (sneed, 2026-11-22: "keep overkill damage until it
+                    // gibs ... until none"): another quarter piled past 0 bursts it into gibs. The body stays as a record
+                    // (who died, what they wore) with every part gone: nothing is left to hit, carry or draw.
+                    if (healthTrunkGone(health)) {
+                        break;
+                    }
+                    const float burst = pile;
+                    pile = 0.0f;
+                    destroyPart(pawn, health, 0, burst);
+                    emit(EventType::PawnGibbed, pawn, DefId{}, 0, burst);
+                    cut = true;
+                    break;
                 }
                 pile -= enough;
                 health.zoneOverkill[static_cast<size_t>(next)] = 0.0f;
@@ -1898,7 +1927,13 @@ bool HealthSystem::cutsUp(const Health& health) const {
 bool HealthSystem::takesCorpseHits(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
-    return health != nullptr && healthKindOf(*model_, reg, pawn) != nullptr && cutsUp(*health);
+    return health != nullptr && healthKindOf(*model_, reg, pawn) != nullptr && cutsUp(*health) && !healthTrunkGone(*health);
+}
+
+bool HealthSystem::gibbed(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Health* health = reg.valid(pawn) ? reg.try_get<Health>(pawn) : nullptr;
+    return health != nullptr && health->dead && healthTrunkGone(*health);
 }
 
 bool HealthSystem::hasPart(Entity pawn, int part) const {
@@ -2036,6 +2071,9 @@ uint16_t HealthSystem::severed(Entity pawn) const {
     const Health& health = reg.get<Health>(pawn);
     if (body.zones.empty() || health.missing.empty()) {
         return 0;
+    }
+    if (healthTrunkGone(health)) {
+        return static_cast<uint16_t>(kSeveredHead | kSeveredLeftArm | kSeveredRightArm | kSeveredLeftLeg | kSeveredRightLeg | kSeveredTrunk);
     }
     uint16_t out = 0;
     for (const MissingPart& lost : health.missing) {
