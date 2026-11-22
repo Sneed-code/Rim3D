@@ -1,0 +1,57 @@
+{
+ "name": "ComponentSpacer",
+ "kind": "item",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -7.0,
+   -5.0,
+   0.0
+  ],
+  "max": [
+   7.0,
+   5.0,
+   5.0
+  ]
+ },
+ "sizeM": [
+  0.14,
+  0.1,
+  0.05
+ ],
+ "parts": {
+  "ComponentSpacer": {
+   "boundsCm": {
+    "min": [
+     -7.0,
+     -5.0,
+     0.0
+    ],
+    "max": [
+     7.0,
+     5.0,
+     5.0
+    ]
+   },
+   "tris": 1496
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "ComponentSpacer_0": {
+   "from": "Ceramic | Anodized alloy | Edge contacts",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  },
+  "ComponentSpacer_1": {
+   "from": "Inspection window | Fused silica",
+   "maps": [
+    "baseColor"
+   ]
+  }
+ }
+}

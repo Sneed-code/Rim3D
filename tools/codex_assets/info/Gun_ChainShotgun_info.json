@@ -1,0 +1,56 @@
+{
+ "name": "Gun_ChainShotgun",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -40.3,
+   -6.9,
+   -18.51
+  ],
+  "max": [
+   54.7,
+   8.2,
+   26.21
+  ]
+ },
+ "sizeM": [
+  0.95,
+  0.151,
+  0.447
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -40.3,
+     -6.9,
+     -18.51
+    ],
+    "max": [
+     54.7,
+     8.2,
+     26.21
+    ]
+   },
+   "tris": 15884
+  }
+ },
+ "sockets": {
+  "Muzzle": [
+   54.7,
+   -0.0,
+   13.2
+  ]
+ },
+ "slots": {
+  "Gun_ChainShotgun": {
+   "from": "Gun_ChainShotgun | exterior PBR",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

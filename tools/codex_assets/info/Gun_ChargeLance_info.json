@@ -1,0 +1,57 @@
+{
+ "name": "Gun_ChargeLance",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -46.3,
+   -6.46,
+   -11.2
+  ],
+  "max": [
+   73.7,
+   6.46,
+   29.1
+  ]
+ },
+ "sizeM": [
+  1.2,
+  0.129,
+  0.403
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -46.3,
+     -6.46,
+     -11.2
+    ],
+    "max": [
+     73.7,
+     6.46,
+     29.1
+    ]
+   },
+   "tris": 10916
+  }
+ },
+ "sockets": {
+  "Muzzle": [
+   73.7,
+   -0.0,
+   15.7
+  ]
+ },
+ "slots": {
+  "Gun_ChargeLance": {
+   "from": "Charge Lance | PBR",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

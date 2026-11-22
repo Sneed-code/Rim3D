@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Make Rim3D assets with the Codex CLI, one job per brief, a few at a time. Git Bash on sneed's PC.
-#   CODEX_MODEL=<model id> OUT=<folder> JOBS=3 tools/codex_assets/run_codex_assets.sh [Name ...]
+#   CODEX_MODEL=<model id> CODEX_EFFORT=high OUT=<folder> JOBS=3 tools/codex_assets/run_codex_assets.sh [Name ...]
 # With no names it runs every <Name>.md here except _common.md. A job whose folder already has
 # contact_sheet.jpg is skipped (delete it to remake). Each job gets its own folder OUT/<Name> holding
 # BRIEF.md (the shared brief + the asset's brief), codex.log and what Codex makes.
@@ -10,6 +10,8 @@ OUT="${OUT:-/c/Users/thill/OneDrive/Documents/ChatGPT/Models/Rim3D_Codex}"
 JOBS="${JOBS:-3}"
 MODEL_ARGS=()
 [ -n "${CODEX_MODEL:-}" ] && MODEL_ARGS=(-m "$CODEX_MODEL")
+# CODEX_EFFORT=high (sneed 2026-11-22: "quality matters") sets the model's reasoning effort.
+[ -n "${CODEX_EFFORT:-}" ] && MODEL_ARGS+=(-c "model_reasoning_effort=\"$CODEX_EFFORT\"")
 
 names=("$@")
 if [ ${#names[@]} -eq 0 ]; then
