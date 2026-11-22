@@ -194,8 +194,8 @@ namespace blastfx
 		S.Density = SmoothStep(0.0f, 0.3f, Shape) * (10.0f + 14.0f * (1.0f - T)) * (0.35f + 0.65f * Fade);
 		// Heat: high in the middle of the field, cooling with time from the outside in; noise makes tongues of flame.
 		const float Core = SmoothStep(-0.25f, 0.6f, Field + (Fbm(N * 0.7f + Vec3{3.0f, 1.0f, 0.0f}, Seed + 3u, 4, true) - 0.5f) * 0.7f);
-		const float Cool = std::pow(Clamp01(1.0f - T * 1.25f), 1.3f);
-		S.Heat = Clamp01(Core * (0.2f + 1.4f * Cool) - T * 0.3f) * SmoothStep(0.0f, 0.12f, Shape);
+		const float Cool = std::pow(Clamp01(1.0f - T * 1.5f), 1.3f);
+		S.Heat = Clamp01(Core * (0.15f + 0.95f * Cool) - T * 0.3f) * SmoothStep(0.0f, 0.12f, Shape);
 		return S;
 	}
 

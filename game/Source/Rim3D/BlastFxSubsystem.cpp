@@ -664,11 +664,13 @@ void UBlastFxSubsystem::AddTrail(const FVector& At, const FVector& Back, const F
 		Smoke.Drag = 1.5f;
 		Smoke.Gravity = -12.0f;
 		Smoke.Wind = 0.7f;
-		Smoke.StartCm = bRocket ? 22.0f : 10.0f;
-		Smoke.EndCm = (bRocket ? Random.FRandRange(110.0f, 160.0f) : Random.FRandRange(40.0f, 70.0f));
-		Smoke.Life = bRocket ? Random.FRandRange(2.2f, 3.2f) : Random.FRandRange(0.8f, 1.3f);
+		// A flipbook's early cloud fills only about a third of its square: these sizes make a trail about half a metre wide
+		// at once, swelling to a couple of metres (PC round 13: 22 cm puffs were dots at 13 m).
+		Smoke.StartCm = bRocket ? 70.0f : 25.0f;
+		Smoke.EndCm = (bRocket ? Random.FRandRange(280.0f, 380.0f) : Random.FRandRange(90.0f, 140.0f));
+		Smoke.Life = bRocket ? Random.FRandRange(3.0f, 4.2f) : Random.FRandRange(1.0f, 1.6f);
 		Smoke.FadeIn = 0.03f;
-		Smoke.Opacity = bRocket ? 0.55f : 0.4f;
+		Smoke.Opacity = bRocket ? 0.7f : 0.45f;
 		Smoke.FrameFrom = 6.0f;
 		Smoke.FrameTo = 63.0f;
 		Smoke.Spin = Random.FRandRange(-20.0f, 20.0f);

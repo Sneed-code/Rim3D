@@ -26,8 +26,8 @@ recorded blasts, a far layer past 100 m, heard late by the speed of sound).
 | Scorch | a ragged charred core (mottled soot darker along cracks, patches of grey ash, a little sheen, embers a few centimetres across glowing and flickering for the first half minute) with spokes of soot thrown out past it, pale blown-out dust between the spokes, a small pit of churned soil in the middle and dark fragment pocks, 1.4 to 1.8 radii across, at a random turn, on a flat square laid on the ground along its slope 4 cm up (a deferred decal never showed on the PC); fades over `Blast.ScorchSeconds` (5 minutes, slowly at first), at most 40 at once |
 | Camera | `UShooterFeelSubsystem`'s shake, blur and vignette by distance (unchanged) |
 
-**In flight**, a rocket leaves pale grey exhaust smoke (45 puffs a second, each swelling from 22 cm to 1.1 to 1.6 m over 2 to
-3 s, drifting with the wind) with a flame at its nozzle; a launcher shell a thin grey puff; a molotov small flames
+**In flight**, a rocket leaves pale grey exhaust smoke (45 puffs a second, each swelling from 70 cm to 2.8 to 3.8 m over 3 to
+4 s, drifting with the wind) with a flame at its nozzle; a launcher shell a thin grey puff; a molotov small flames
 (`UBlastFxSubsystem::AddTrail`, from the Projectiles def's `visual.trail`). Without the art the old solid balls stay.
 
 Everything scales with the blast's radius against the frag grenade's 1.9 m. A **fire blast** (damage type with `mix.sub`
