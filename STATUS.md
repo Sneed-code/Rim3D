@@ -2,6 +2,17 @@
 
 Updated 2026-11-22.
 
+Third person only (sneed, 2026-11-22: "lets forget first person view now ... its a 3rd person game"; Unreal,
+`docs/decisions/0012-third-person-only.md`): the first-person view is gone (no V key, no first-person aim). Right mouse
+with a gun keeps the third-person zoom and steady aim; only a scoped gun (bolt action) goes to a scope picture at full
+aim, body hidden, never first-person arms. **Gun holds**: rifles and the shotgun slide back to the right shoulder when
+aimed (stock no longer in the cheek or through the head), the left hand keeps its grip (grips moved nearer in
+`assets/guns.json`), the grenade launcher is raised and aimed. **Debug scenes load inside the running game**: Debug >
+Gun range opens the range in the same window (no close and relaunch) and F10 goes back to the title, with every setting
+the scene changed put back (`DebugScenes::Launch`). Smoke `-DebugSceneHop` checks title > range > title in one process.
+**Open:** after the in-game load the range picture came out almost white in the test copy (settings and exposure match a
+fresh start; next PC round checks whether full-window resolution, not the in-game load, causes it). Not merged yet.
+
 Title screen (sneed, 2026-11-22: "fix the actual title screen ... make the actual game's UI", `docs/design/new-game.md`):
 a plain launch no longer opens over the engine's sample level. It starts its own scene, a wild rainforest tile in the
 morning (`TitleBackdrop` scenario, no people), with a slow camera circling an open glade, and a new full-screen title:
