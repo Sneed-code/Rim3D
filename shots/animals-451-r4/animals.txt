@@ -1,0 +1,17 @@
+﻿Running smoke test 'animals' at 1920x1080...
+
+Smoke test 'animals': PASS  (37 s, NVIDIA GeForce RTX 5080, 1920x1080)
+animals_row                 152.8 fps  game   4.2 ms  render   6.1 ms  gpu   5.0 ms  screenshot ok
+animals_detail              148.8 fps  game   3.9 ms  render   6.2 ms  gpu   5.1 ms  screenshot ok
+animals_close               140.9 fps  game   4.2 ms  render   6.2 ms  gpu   5.1 ms  screenshot ok
+animals_new                 137.8 fps  game   4.6 ms  render   6.2 ms  gpu   5.2 ms  screenshot ok
+note: animals_row: 18 animals, 18 actors, 18 defs drawn, 18 models loaded, poses seen 3
+note: animals_detail: near 1, mid 4, far 13, hidden 0
+note: animals_new: 31 models loaded; lengths: Cow 230 cm, Muffalo 262 cm, Deer 170 cm, Husky 100 cm, TimberWolf 130 
+cm, Thrumbo 312 cm, Alpaca 140 cm, Cat 80 cm, WildBoar 104 cm, Cougar 208 cm, GrizzlyBear 220 cm, Chicken 49 cm, 
+Monkey 88 cm, Elephant 627 cm, Rhinoceros 510 cm, Lion 286 cm, Raptor 350 cm, TRex 1200 cm, Monkey 88 cm, Cat 80 cm, 
+Cougar 208 cm, Thrumbo 312 cm, Elephant 627 cm, Rhinoceros 510 cm, Muffalo 262 cm, Raptor 350 cm, TRex 1200 cm, 
+GrizzlyBear 220 cm, PolarBear 253 cm, Caribou 196 cm, Muskox 240 cm, Yak 270 cm, Dromedary 300 cm, Gazelle 112 cm, 
+Goat 135 cm, Sheep 136 cm, Megaspider 100 cm, Spelopede 66 cm, Capybara 120 cm, Iguana 150 cm, Chicken 49 cm, Duck 58 
+cm, Goose 90 cm, Turkey 110 cm, ArcticFox 76 cm, ArcticWolf 130 cm, Ostrich 198 cm, Megascarab 30 cm,
+Screenshots: C:\Dev\Rim3D-climb\game\Saved\Smoke\animals
