@@ -186,6 +186,9 @@ enum class EventType : uint8_t {
                       // (a ThingDestroyed follows; forget its id), `def` its def, `cell` its footprint origin, `count` and
                       // `part` its footprint size (rotation applied), (x, y, z) its middle on the ground in metres,
                       // `message` its stuff's defName ("" if none), `amount` 1 if it was finished, 0 a frame
+    PawnGibbed,       // a corpse with nothing left on it but the trunk burst into gibs (docs/design/body-health.md part F,
+                      // "Trunks burst"): `thing` the body (it stays as a record; Unreal hides it and throws the gibs),
+                      // `amount` the damage piled past 0 that burst it, `cell` where it lay
 };
 
 // What stopped a projectile (ProjectileHit).

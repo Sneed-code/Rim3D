@@ -6,6 +6,7 @@
 #include "SmokeTest.h"
 
 #include "Components/SkeletalMeshComponent.h"
+#include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Paths.h"
@@ -14,6 +15,7 @@
 #include "BlastFxSubsystem.h"
 #include "CreatorPeople.h"
 #include "FightSubsystem.h"
+#include "GoreGibActor.h"
 #include "BloodSubsystem.h"
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
@@ -56,6 +58,10 @@ namespace
 		FVector HitPelvisBefore = FVector::ZeroVector;
 		double HitPelvisMoved = 0.0;
 		int32 CorpseBlows = 0;
+		int32 GibBlasts = 0;
+		int32 TrunksAtStart = 0;
+		bool bGibbedSeen = false;
+		int32 MostGibsInAir = 0;
 	};
 
 	void GoreSmokeRealBodies(bool bOn)
@@ -610,8 +616,98 @@ void USmokeTestSubsystem::BuildGorePhases()
 			{
 				Fail(FString::Printf(TEXT("blast: the corpse flew %.0f cm (cartoonish; 6 m at most)"), State->CorpseMoved));
 			}
-			GoreSmokeRealBodies(false);
 		};
+		Phases.Add(MoveTemp(Phase));
+	}
+
+	{
+		// Rockets on what is left (sneed 2026-11-22: "keep overkill damage until it gibs ... until none"): the rest of the
+		// limbs and the head come off, then the bare trunk bursts into chunks of meat, ribs and bone with sprays of blood,
+		// and the body is gone.
+		FPhase Phase;
+		Phase.Name = TEXT("gibs");
+		Phase.Setup = [=, this]()
+		{
+			const UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>();
+			State->TrunksAtStart = Fight ? Fight->GetTrunksBurst() : 0;
+			State->GibBlasts = 0;
+		};
+		Phase.WarmupSeconds = 0.0f;
+		Phase.MeasureSeconds = 4.0f;
+		Phase.ScreenshotAt = 0.35f;  // the chunks in the air
+		Phase.OnFrame = [=, this]()
+		{
+			Front(40.0f, 420.0f);
+			USimSubsystem* B = Bridge();
+			const colony::ThingView* Now = B ? B->GetCurrentSnapshot().find(State->Pawn) : nullptr;
+			const bool bGone = Now && (Now->severed & colony::kSeveredTrunk) != 0;
+			// A blast at the corpse every 0.6 s until the trunk has burst (4 at most).
+			if (B && Now && !bGone && State->GibBlasts < 4 && PhaseTime >= 0.6f * State->GibBlasts)
+			{
+				colony::ExplodeCommand Blast;
+				Blast.x = Now->x + 0.3f;
+				Blast.y = Now->y;
+				Blast.radius = 1.6f;
+				Blast.damage = 120.0f;
+				B->Submit(Blast);
+				++State->GibBlasts;
+			}
+			State->bGibbedSeen |= bGone;
+			int32 InAir = 0;
+			for (TActorIterator<AGoreGibActor> It(GetWorld()); It; ++It)
+			{
+				InAir += It->HasLanded() ? 0 : 1;
+			}
+			State->MostGibsInAir = FMath::Max(State->MostGibsInAir, InAir);
+		};
+		Phase.Verify = [=, this]()
+		{
+			const UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>();
+			const ASimPawnActor* Actor = ActorOf();
+			const int32 Burst = Fight ? Fight->GetTrunksBurst() - State->TrunksAtStart : 0;
+			const int32 Live = AGoreGibActor::CountLive(GetWorld());
+			int32 Resting = 0;
+			for (TActorIterator<AGoreGibActor> It(GetWorld()); It; ++It)
+			{
+				Resting += It->IsAtRest() ? 1 : 0;
+			}
+			PhaseNumbers.Add(TEXT("gibBlasts"), State->GibBlasts);
+			PhaseNumbers.Add(TEXT("trunksBurst"), Burst);
+			PhaseNumbers.Add(TEXT("gibsLying"), Live);
+			PhaseNumbers.Add(TEXT("gibsAtRest"), Resting);
+			PhaseNumbers.Add(TEXT("gibsMostInAir"), State->MostGibsInAir);
+			PhaseNumbers.Add(TEXT("bodyHidden"), Actor && Actor->IsGibbed() ? 1 : 0);
+			if (!State->bGibbedSeen || Burst < 1)
+			{
+				Fail(FString::Printf(TEXT("gibs: %d blasts on the corpse and its trunk never burst (sim %d, drawn %d)"), State->GibBlasts,
+					State->bGibbedSeen ? 1 : 0, Burst));
+			}
+			else if (Live < 10)
+			{
+				Fail(FString::Printf(TEXT("gibs: only %d chunks lie about after the burst (10 at least)"), Live));
+			}
+			else if (!Actor || !Actor->IsGibbed() || !Actor->IsHidden())
+			{
+				Fail(TEXT("gibs: the body still shows after its trunk burst"));
+			}
+			else if (Resting < Live / 2)
+			{
+				Fail(FString::Printf(TEXT("gibs: %d of %d chunks came to rest on the ground in 4 s"), Resting, Live));
+			}
+		};
+		Phases.Add(MoveTemp(Phase));
+	}
+
+	{
+		// Close on the chunks lying where they came down, with the blood round them.
+		FPhase Phase;
+		Phase.Name = TEXT("gibsclose");
+		Phase.Setup = []() {};
+		Phase.WarmupSeconds = 0.5f;
+		Phase.MeasureSeconds = 1.0f;
+		Phase.ScreenshotAt = 0.3f;
+		Phase.OnFrame = [=]() { Front(10.0f, 170.0f); };
+		Phase.Verify = [=, this]() { GoreSmokeRealBodies(false); };
 		Phases.Add(MoveTemp(Phase));
 	}
 }

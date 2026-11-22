@@ -209,6 +209,14 @@ public:
 	 *  every mesh, and what hung on them is hidden. Only ever more: a body does not grow them back. */
 	void ApplySevered(uint16 Bits);
 	uint16 GetSeveredShown() const { return SeveredShown; }
+	/** The trunk burst (the sim's PawnGibbed; body-health.md part F, "Trunks burst"): its chunks are thrown out from
+	 *  where it lies with sprays of blood (AGoreGibActor::Burst), harder for more `Overkill` (damage past 0 that burst
+	 *  it), and the body goes (hidden a couple of frames later, once the limbs and head this hit took off have been
+	 *  copied into their pieces). Once only; returns how many chunks were thrown. */
+	int32 BurstIntoGibs(float Overkill);
+	/** Whether the body is gone in gibs (hidden, no collision, no physics). */
+	bool IsGibbed() const { return bGibHidden; }
+	int32 GetGibsThrown() const { return GibsThrown; }
 	/** How many stumps got their flesh cap. */
 	int32 GetSeveredCaps() const { return SeveredCaps; }
 	/** The piece itself, as the body has it now, thrown clear (SeveredPieceActor.cpp). Null if the body has no such bone. */
@@ -445,6 +453,13 @@ private:
 	int32 MeshTickCount = 0;
 	uint16 SeveredShown = 0;
 	int32 SeveredCaps = 0;
+	/** The trunk burst: the body hides once GibHideFrames more frames have passed (pieces copy it first). */
+	bool bGibPending = false;
+	bool bGibHidden = false;
+	bool bGibsBurst = false;
+	int32 GibHideFrames = 0;
+	int32 GibsThrown = 0;
+	void HideGibbedBody();
 	/** Meshes hidden whole because the head is off (a MetaHuman face); they still go into the head's piece. */
 	TSet<TWeakObjectPtr<class USkinnedMeshComponent>> SeveredHidden;
 	int32 RagdollsStarted = 0;
