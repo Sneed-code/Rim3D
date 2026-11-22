@@ -22,6 +22,10 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Scalability.h"
+#include "SceneView.h"
+#include "SceneViewExtension.h"
+
+#include <atomic>
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
@@ -84,6 +88,12 @@ namespace
 	constexpr float SkyReferenceNoonDeg = 68.0f;
 	// The exposure jumps to its target, instead of easing there, when the target moves more than this in a frame.
 	constexpr float SkyExposureJumpEV = 2.0f;
+	// The camera's real exposure (read back from the renderer) further than this from the one asked for, for longer than
+	// SkyExposureHealSeconds, is a stuck eye adaptation (a scene loaded inside the game came out white): its view history
+	// is reset. The auto exposure itself only moves a few EV either side (data/look.json brighter/darker).
+	constexpr float SkyExposureHealEV = 6.0f;
+	constexpr float SkyExposureHealSeconds = 2.0f;
+	constexpr int32 SkyExposureMaxHeals = 3;
 
 	// Rain and snow: a block of air round where the camera looks, and how much goes in it.
 	constexpr float SkyPrecipHalfSizeCm = 3500.0f;
@@ -310,6 +320,60 @@ TStatId USkySubsystem::GetStatId() const
 float USkySubsystem::GetPrecipitationHalfSizeCm() const
 {
 	return SkyPrecipHalfSizeCm;
+}
+
+// The eye adaptation exposure the renderer last used for the player's view, read on the game thread as each view is set up.
+class FSkyExposureWatch : public FSceneViewExtensionBase
+{
+public:
+	explicit FSkyExposureWatch(const FAutoRegister& AutoRegister) : FSceneViewExtensionBase(AutoRegister) {}
+	virtual void SetupView(FSceneViewFamily& /*InViewFamily*/, FSceneView& InView) override
+	{
+		if (InView.bIsGameView && !InView.bIsSceneCapture)
+		{
+			SeenExposure.store(InView.GetLastEyeAdaptationExposure());
+		}
+	}
+	std::atomic<float> SeenExposure{0.0f};
+};
+
+void USkySubsystem::WatchExposure(float RealDelta)
+{
+	if (!Exposure)
+	{
+		return;
+	}
+	if (!ExposureWatch)
+	{
+		ExposureWatch = FSceneViewExtensions::NewExtension<FSkyExposureWatch>();
+	}
+	const float Seen = ExposureWatch->SeenExposure.load();
+	if (Seen == 0.0f)
+	{
+		// No eye adaptation buffer yet (the first frames of a level).
+		MeasuredExposureEV = -99.0f;
+		return;
+	}
+	// Exposure = 1 / (1.2 * 2^EV100), the engine's own lens model.
+	const bool bSane = FMath::IsFinite(Seen) && Seen > 0.0f;
+	MeasuredExposureEV = bSane ? -FMath::Log2(Seen * 1.2f) : -99.0f;
+	const bool bStuck = !bSane || FMath::Abs(MeasuredExposureEV - State.ExposureEV) > SkyExposureHealEV;
+	ExposureStuckSeconds = bStuck ? ExposureStuckSeconds + RealDelta : 0.0f;
+	if (ExposureStuckSeconds > SkyExposureHealSeconds && ExposureHeals < SkyExposureMaxHeals)
+	{
+		ExposureStuckSeconds = 0.0f;
+		++ExposureHeals;
+		UE_LOG(LogSky, Warning, TEXT("Sky: the camera's exposure is %.2f EV, the light calls for %.2f EV: resetting the view's history (%d)"), MeasuredExposureEV,
+			State.ExposureEV, ExposureHeals);
+		if (APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
+		{
+			PC->ConsoleCommand(TEXT("r.ResetViewState"));
+		}
+		if (APlayerCameraManager* CameraManager = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0))
+		{
+			CameraManager->SetGameCameraCutThisFrame();
+		}
+	}
 }
 
 void USkySubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -1348,6 +1412,7 @@ void USkySubsystem::Tick(float DeltaTime)
 	}
 	UpdateIndoorShare(Sim, *Source, DeltaTime);
 	ApplyState(ComputeState(Sim, Hour, DayOfYear));
+	WatchExposure(DeltaTime);
 	// The star dome stays centred on the camera, so the stars sit at the same place in the sky wherever it looks from.
 	if (StarDome && StarDome->IsVisible())
 	{

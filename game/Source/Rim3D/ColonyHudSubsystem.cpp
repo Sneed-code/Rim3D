@@ -555,7 +555,8 @@ void UColonyHudSubsystem::TickSceneHop()
 		DebugScenes::DumpConsoleVariables(FPaths::ProjectSavedDir() / TEXT("Smoke/scenehop/cvars_fresh.txt"));
 		hudDescribeLighting(GetWorld(), FPaths::ProjectSavedDir() / TEXT("Smoke/scenehop/light_fresh.txt"));
 		const USkySubsystem* DumpSky = GetWorld()->GetSubsystem<USkySubsystem>();
-		UE_LOG(LogTemp, Display, TEXT("CVARDUMP: sky exposure %.2f EV, cuts %d"), DumpSky ? DumpSky->GetExposure() : -99.0f, DumpSky ? DumpSky->GetExposureCuts() : -1);
+		UE_LOG(LogTemp, Display, TEXT("CVARDUMP: sky exposure %.2f EV, cuts %d, camera really at %.2f EV, heals %d"), DumpSky ? DumpSky->GetExposure() : -99.0f,
+			DumpSky ? DumpSky->GetExposureCuts() : -1, DumpSky ? DumpSky->GetMeasuredExposure() : -99.0f, DumpSky ? DumpSky->GetExposureHeals() : -1);
 		FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/scenehop/fresh.png"), true, false);
 	}
 	if (!FParse::Param(FCommandLine::Get(), TEXT("DebugSceneHop")) || bLeavingDebugScene)
@@ -598,7 +599,8 @@ void UColonyHudSubsystem::TickSceneHop()
 		DebugScenes::DumpConsoleVariables(FPaths::ProjectSavedDir() / TEXT("Smoke/scenehop/cvars_hop.txt"));
 		hudDescribeLighting(GetWorld(), FPaths::ProjectSavedDir() / TEXT("Smoke/scenehop/light_hop.txt"));
 		const USkySubsystem* HopSky = GetWorld()->GetSubsystem<USkySubsystem>();
-		UE_LOG(LogTemp, Display, TEXT("SCENEHOP: range sky exposure %.2f EV, cuts %d"), HopSky ? HopSky->GetExposure() : -99.0f, HopSky ? HopSky->GetExposureCuts() : -1);
+		UE_LOG(LogTemp, Display, TEXT("SCENEHOP: range sky exposure %.2f EV, cuts %d, camera really at %.2f EV, heals %d"), HopSky ? HopSky->GetExposure() : -99.0f,
+			HopSky ? HopSky->GetExposureCuts() : -1, HopSky ? HopSky->GetMeasuredExposure() : -99.0f, HopSky ? HopSky->GetExposureHeals() : -1);
 		HopStage = 10;
 		HopSince = Now;
 	}
