@@ -11,6 +11,7 @@ core (fans, crystal, boot lights), power switch (lever, lamps, spark) and hatche
 revolver. AI Studio in sneed's Chrome made a Lyria theme, robot and insect sound tests and TTS pain, begging and
 pleasure noises (muted while made). **Next: import the seven GLBs (codex_prep, GunArt) and wire their animations;
 pick sounds by ear.** Not in the game yet.
+
 Playtest fixes from the gun range (sneed, 2026-11-22; sim, data, Unreal and hair tools): **dismemberment piles up
 again**: a limb at 0 kept no hitbox, so later shots and blows passed through it and never reached the 13 (arm) or 19
 (leg) past 0 that takes it off; now a limb keeps its hitbox until it is really gone (`Combat.cpp`, test in
