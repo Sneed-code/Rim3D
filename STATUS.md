@@ -9,7 +9,10 @@ clothes, which the physics never saw. Now `grow_hair.py` picks 90 spheres and ca
 gaps (0.7 cm typical, 1.8 cm worst; mirrored; each on the bone of its skin, including clavicles and both arm bones), and
 the game grows each one under a worn garment out to just past the cloth and its puff, per outfit (remade when clothes
 change). `-CreatorStrandDemo` takes the pictures (behind and side; standing, rifle aim, sword, shadowbox, walk, shapes
-drawn). Needs the `hair-grow` art step (runs in `update-and-play.bat`). **Next:** PC compile and pictures, clothed and nude.
+drawn). Capsules also fill the body's core, and the hair physics takes 10 steps (was 5). PC (4 rounds): dressed hair
+stays on the clothes in every pose; nude hair lies on the back standing, aiming, swinging and boxing. Needs the
+`hair-grow` and `hair-grooms` art steps (run by `update-and-play.bat`). **Still open:** right after a fast 180-degree
+turn on the spot, nude long hair dips into the back for a moment, then comes back out.
 
 Google Neon asset test and AI Studio sounds (sneed, 2026-11-22; tools and docs, `docs/design/neon-assets.md`):
 sneed's Google AI Pro plan gives **Gemini 4 Neon** in the Antigravity CLI, now run headless on the PC like Codex

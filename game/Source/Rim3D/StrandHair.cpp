@@ -56,10 +56,10 @@ namespace
 	TAutoConsoleVariable<float> GStrandHairClothGap(TEXT("Pawns.StrandHairClothGap"), 0.3f,
 		TEXT("Strand hair: cm past the cloth's surface that its collision shapes reach (hair strands follow the guide strands ")
 		TEXT("that collide, give or take half a centimetre, so a little past the cloth keeps them all out of it)."));
-	TAutoConsoleVariable<float> GStrandHairTurnFollow(TEXT("Pawns.StrandHairTurnFollow"), 0.25f,
-		TEXT("Strand hair is simulated in the upper chest's frame (Unreal's local simulation) and keeps only this share of the ")
-		TEXT("body's turning as swing: at 1 a fast turn on the spot left long hair behind and the body turned through it (PC, ")
-		TEXT("2026-11-22). Negative: simulated in the world, as before."));
+	TAutoConsoleVariable<float> GStrandHairTurnFollow(TEXT("Pawns.StrandHairTurnFollow"), -1.0f,
+		TEXT("0 to 1: strand hair is simulated in the upper chest's frame (Unreal's local simulation), keeping this share of the ")
+		TEXT("body's turning as swing. Negative (default): simulated in the world. Tried at 0.25 on the PC (2026-11-22): the hair ")
+		TEXT("swung stiffly and sank into the back after turns, so it is off."));
 	TAutoConsoleVariable<int32> GStrandHairDebug(TEXT("Pawns.StrandHairDebug"), 0,
 		TEXT("1: draw the shapes each strand-haired person's hair collides with (green inside the skin, yellow grown out to clothes)."));
 

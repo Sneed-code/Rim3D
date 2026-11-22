@@ -292,8 +292,9 @@ Console: `Pawns.StrandHairClothes 0` leaves the shapes inside the skin (to compa
 a sword, shadowboxing, walking, then aiming with the shapes drawn; pictures `Saved/Smoke/creator/strand_NN_*.png`.
 Needs the `hair-grow` art step again (new `grooms.json`; `update-and-play.bat` runs it). The grooms simulate with 10
 sub-steps and 10 iterations (Unreal's default 5 and 5 let bare-skinned long hair pass the shell as the body turned on
-the spot mid-walk; `HairGroomsCommandlet`). Round 3 showed the hair still went into the bare back for a moment right after each quick turn on the spot (the body
-turns 180 degrees in a quarter second): the groom is now simulated in the upper chest's frame (Unreal's local simulation,
-`spine_03`) keeping a quarter of the body's turning as swing (`Pawns.StrandHairTurnFollow` 0.25; negative: in the world,
-as before), so the hair turns with the body and only swings a little. `-CreatorRecord=1` with the demo also saves every other frame of the walk
+the spot mid-walk; `HairGroomsCommandlet`). Still open: right after a quick 180-degree turn on the spot (720 degrees a second, a quarter second) the bare-skinned
+long hair dips into the back or whips round the side for a moment (PC strandwalk frames, round 3), then lies back on
+the back. Simulating it in the chest's frame (`Pawns.StrandHairTurnFollow`, Unreal's local simulation) was tried at
+0.25: the swings went stiff and the hair stayed sunk after turns, so it is off by default. Dressed bodies are clear (the
+shapes stand 3 cm further out). `-CreatorRecord=1` with the demo also saves every other frame of the walk
 (`strandwalk_NNNN.png`).
