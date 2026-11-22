@@ -1,0 +1,83 @@
+﻿Running smoke test 'finishers' at 1920x1080...
+
+Smoke test 'finishers': PASS  (92 s, NVIDIA GeForce RTX 5080, 888x500)
+setup                        68.2 fps  game   4.1 ms  render   6.5 ms  gpu   5.1 ms  screenshot ok
+finisher_spear              117.0 fps  game   4.8 ms  render   8.3 ms  gpu   6.8 ms  screenshot ok
+finisher_club               109.1 fps  game   4.7 ms  render   8.8 ms  gpu   7.3 ms  screenshot ok
+finisher_gladius            112.8 fps  game   5.1 ms  render   8.5 ms  gpu   7.0 ms  screenshot ok
+finisher_longsword          122.7 fps  game   4.6 ms  render   7.8 ms  gpu   6.3 ms  screenshot ok
+finisher_knife              108.3 fps  game   5.5 ms  render   8.9 ms  gpu   7.3 ms  screenshot ok
+tab_run                     108.5 fps  game   5.9 ms  render   9.0 ms  gpu   7.5 ms  screenshot ok
+aim3p                       119.9 fps  game   4.8 ms  render   8.0 ms  gpu   6.6 ms  screenshot ok
+swap_prone                  143.2 fps  game   4.4 ms  render   6.8 ms  gpu   5.5 ms  screenshot ok
+swap_crouch                 141.7 fps  game   4.4 ms  render   6.9 ms  gpu   5.5 ms  screenshot ok
+note: finisher_spear: 0 finisher frames, got to T 1.00, tip 0 cm from its goal at the strike, kneel no, worst grip gap 
+12 cm, 0 float fixes, 1 hits
+note: finisher_spear: at the blow: sim apart 1.10 m; drawn: my pelvis 3 cm from my sim spot, its pelvis 67 cm and its 
+head 112 cm from its sim spot, pelvis to pelvis 180 cm; weapon box 170 cm from its pelvis, lowest at 111 cm, reaching 
+101 cm out from my pelvis
+note: finisher_spear: weapon hold at the start [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 3, pinned 1, aim 0.00, hand free 0.61, finisher blend 0.00], at the strike [show 1 hands 1 standing 1 hold 1 
+inhand 1.00 places 1 force 0.00 finisher 3, pinned 1, aim 0.00, hand free 1.00, finisher blend 0.00], pulled back 0 cm 
+to stay in reach, 1 attack orders
+note: finisher_spear: whole-body clip finisher
+note: finisher_club: 0 finisher frames, got to T 1.00, tip 0 cm from its goal at the strike, kneel no, worst grip gap 
+37 cm, 0 float fixes, 1 hits
+note: finisher_club: at the blow: sim apart 0.90 m; drawn: my pelvis 2 cm from my sim spot, its pelvis 65 cm and its 
+head 125 cm from its sim spot, pelvis to pelvis 154 cm; weapon box 133 cm from its pelvis, lowest at 98 cm, reaching 
+90 cm out from my pelvis
+note: finisher_club: weapon hold at the start [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 1, pinned 1, aim 0.00, hand free 0.64, finisher blend 0.00], at the strike [show 1 hands 1 standing 1 hold 1 
+inhand 1.00 places 1 force 0.00 finisher 1, pinned 1, aim 0.00, hand free 1.00, finisher blend 0.00], pulled back 0 cm 
+to stay in reach, 1 attack orders
+note: finisher_club: whole-body clip finisher
+note: finisher_gladius: 0 finisher frames, got to T 1.00, tip 0 cm from its goal at the strike, kneel no, worst grip 
+gap 19 cm, 0 float fixes, 1 hits
+note: finisher_gladius: at the blow: sim apart 0.84 m; drawn: my pelvis 3 cm from my sim spot, its pelvis 63 cm and 
+its head 113 cm from its sim spot, pelvis to pelvis 148 cm; weapon box 132 cm from its pelvis, lowest at 91 cm, 
+reaching 105 cm out from my pelvis
+note: finisher_gladius: weapon hold at the start [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 4, pinned 1, aim 0.00, hand free 0.62, finisher blend 0.00], at the strike [show 1 hands 1 standing 1 hold 1 
+inhand 1.00 places 1 force 0.00 finisher 4, pinned 1, aim 0.00, hand free 1.00, finisher blend 0.00], pulled back 0 cm 
+to stay in reach, 1 attack orders
+note: finisher_gladius: whole-body clip finisher
+note: finisher_longsword: 0 finisher frames, got to T 1.00, tip 0 cm from its goal at the strike, kneel no, worst grip 
+gap 19 cm, 0 float fixes, 1 hits
+note: finisher_longsword: at the blow: sim apart 0.83 m; drawn: my pelvis 4 cm from my sim spot, its pelvis 42 cm and 
+its head 17 cm from its sim spot, pelvis to pelvis 122 cm; weapon box 121 cm from its pelvis, lowest at 94 cm, 
+reaching 90 cm out from my pelvis
+note: finisher_longsword: weapon hold at the start [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 5, pinned 1, aim 0.00, hand free 0.62, finisher blend 0.00], at the strike [show 1 hands 1 standing 1 hold 1 
+inhand 1.00 places 1 force 0.00 finisher 5, pinned 1, aim 0.00, hand free 1.00, finisher blend 0.00], pulled back 0 cm 
+to stay in reach, 1 attack orders
+note: finisher_longsword: whole-body clip finisher
+note: finisher_knife: 0 finisher frames, got to T 1.00, tip 0 cm from its goal at the strike, kneel no, worst grip gap 
+14 cm, 0 float fixes, 1 hits
+note: finisher_knife: at the blow: sim apart 0.79 m; drawn: my pelvis 4 cm from my sim spot, its pelvis 123 cm and its 
+head 176 cm from its sim spot, pelvis to pelvis 86 cm; weapon box 109 cm from its pelvis, lowest at -25 cm, reaching 
+70 cm out from my pelvis
+note: finisher_knife: weapon hold at the start [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 2, pinned 1, aim 0.00, hand free 0.60, finisher blend 0.00], at the strike [show 1 hands 1 standing 1 hold 1 
+inhand 1.00 places 1 force 0.00 finisher 2, pinned 1, aim 0.00, hand free 1.00, finisher blend 0.00], pulled back 0 cm 
+to stay in reach, 1 attack orders
+note: finisher_knife: whole-body clip finisher
+note: tab_run: 6.1 m/s before the first Tab, 3 Tabs, 3 different lock-on targets in turn, slowest 4.2 m/s after a Tab, 
+keyboard focus stayed on the game
+note: aim3p frame 1: rifle 0.7 degrees off (forward V(X=0.74, Y=0.66, Z=-0.13), to the aim V(X=0.75, Y=0.66, Z=-0.12), 
+aim point 11 m away), aim blend 1.00, hold [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 finisher 
+0, pinned 1, aim 1.00, hand free 0.00, finisher blend 0.00]
+note: aim3p frame 61: rifle 0.7 degrees off (forward V(X=0.74, Y=0.66, Z=-0.13), to the aim V(X=0.74, Y=0.66, 
+Z=-0.12), aim point 11 m away), aim blend 1.00, hold [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 0, pinned 1, aim 1.00, hand free 0.00, finisher blend 0.00]
+note: aim3p frame 121: rifle 0.7 degrees off (forward V(X=0.74, Y=0.66, Z=-0.13), to the aim V(X=0.74, Y=0.66, 
+Z=-0.12), aim point 11 m away), aim blend 1.00, hold [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 0, pinned 1, aim 1.00, hand free 0.00, finisher blend 0.00]
+note: aim3p frame 181: rifle 0.7 degrees off (forward V(X=0.74, Y=0.66, Z=-0.13), to the aim V(X=0.74, Y=0.66, 
+Z=-0.12), aim point 11 m away), aim blend 1.00, hold [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 0, pinned 1, aim 1.00, hand free 0.00, finisher blend 0.00]
+note: aim3p: 181 frames, rifle at most 0.7 degrees off the crosshair, body at most 0.0 degrees off the camera
+note: swap_prone: 7 keys sent, weapon in hands yes, worst grip gap 5 cm once down, float fixes 0 once down (0 over the 
+whole sequence)
+note: swap_crouch: 7 keys sent, weapon in hands yes, worst grip gap 5 cm once down, float fixes 0 once down (0 over 
+the whole sequence)
+Screenshots: C:\Dev\Rim3D-climb\game\Saved\Smoke\finishers
