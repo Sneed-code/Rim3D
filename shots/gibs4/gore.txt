@@ -1,0 +1,19 @@
+﻿Running smoke test 'gore' at 1920x1080...
+
+Smoke test 'gore': FAIL  (52 s, NVIDIA GeForce RTX 5080, 1920x1080)
+setup                        36.1 fps  game   5.8 ms  render  12.9 ms  gpu  11.4 ms  screenshot ok
+groin                        66.5 fps  game   6.0 ms  render  12.8 ms  gpu  11.3 ms  screenshot ok
+thighs                       66.8 fps  game   6.2 ms  render  12.8 ms  gpu  11.3 ms  screenshot ok
+thighsback                   60.6 fps  game   6.2 ms  render  12.6 ms  gpu  11.2 ms  screenshot ok
+spray                        64.6 fps  game   6.3 ms  render  13.1 ms  gpu  11.5 ms  screenshot ok
+pileup                       53.7 fps  game   6.6 ms  render  13.4 ms  gpu  11.8 ms  screenshot ok
+head                         53.0 fps  game   6.1 ms  render  13.1 ms  gpu  11.5 ms  screenshot ok
+armoff                       68.2 fps  game   6.4 ms  render  13.3 ms  gpu  11.7 ms  screenshot ok
+corpse                       71.4 fps  game   6.3 ms  render  13.6 ms  gpu  11.9 ms  screenshot ok
+corpsehit                    66.7 fps  game   6.3 ms  render  13.6 ms  gpu  12.0 ms  screenshot ok
+blast                        57.1 fps  game   7.1 ms  render  15.6 ms  gpu  13.8 ms  screenshot ok
+gibs                         60.0 fps  game   7.7 ms  render  15.7 ms  gpu  14.1 ms  screenshot ok
+gibsclose                    54.2 fps  game   6.9 ms  render  14.1 ms  gpu  12.4 ms  screenshot ok
+ERROR: head: a rifle hit snapped the head only 6.0 degrees (12 at least)
+ERROR: gibs: 4 blasts on the corpse and its trunk never burst (sim 0, drawn 0)
+Screenshots: C:\Dev\Rim3D-blood\game\Saved\Smoke\gore
