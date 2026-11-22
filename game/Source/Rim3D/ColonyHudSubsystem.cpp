@@ -570,7 +570,7 @@ void UColonyHudSubsystem::Tick(float DeltaTime)
 	{
 		bMainMenuChecked = true;
 		const TCHAR* Line = FCommandLine::Get();
-		bMainMenuOpen = Bridge->GetStartOptions().Scenario.IsEmpty() && !FParse::Param(Line, TEXT("NoMenu")) && !FString(Line).Contains(TEXT("-SmokeTest="));
+		bMainMenuOpen = (Bridge->GetStartOptions().Scenario.IsEmpty() || Bridge->IsTitleBackdrop()) && !FParse::Param(Line, TEXT("NoMenu")) && !FString(Line).Contains(TEXT("-SmokeTest="));
 	}
 	CheckLanding(*Bridge);
 	// The menus are clicked with the mouse: show the cursor and let the UI have it while one is open (the level's
@@ -606,6 +606,7 @@ void UColonyHudSubsystem::Tick(float DeltaTime)
 		DrawMainMenu(*Bridge);
 		return;
 	}
+	EndTitleCamera();  // the world map or the game took over from the title
 	UpdateMugshots(*Bridge);
 	if (!IsOverseerActive() || GHudShowUi.GetValueOnGameThread() == 0)
 	{

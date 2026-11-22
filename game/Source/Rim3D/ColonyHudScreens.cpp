@@ -845,6 +845,7 @@ bool UColonyHudSubsystem::StartNewColony(bool bPickSite)
 		return false;
 	}
 	FSimStartOptions Options = Bridge->GetStartOptions();
+	Options.bTitle = false;
 	Options.Scenario = NewScenario;
 	Options.Seed = static_cast<uint64>(FMath::Max(NewSeed, 0));
 	Options.MapSize = NewMapSize;
@@ -916,16 +917,23 @@ void UColonyHudSubsystem::DrawMainMenu(USimSubsystem& Bridge)
 	if (MainMenuPage == 3 || MainMenuPage == 4)
 	{
 		// The people page shows the colony's real 3D people: no veil over them.
+		EndTitleCamera();
 		DrawPeoplePage(Bridge, Scale);
 	}
 	else
 	{
 		EndPeopleCamera();
-		// A dark veil over the scene behind, heavier on the left where the menu is.
-		ImDrawList* Back = ImGui::GetBackgroundDrawList();
-		const ImVec2 A = Viewport->Pos;
-		const ImVec2 B(Viewport->Pos.x + Viewport->Size.x, Viewport->Pos.y + Viewport->Size.y);
-		Back->AddRectFilledMultiColor(A, B, IM_COL32(6, 8, 10, 215), IM_COL32(6, 8, 10, 90), IM_COL32(6, 8, 10, 90), IM_COL32(6, 8, 10, 215));
+		// The title's own living backdrop (a wild rainforest map) gets a slow camera of its own; over a game in progress
+		// the menu shows that game behind it.
+		if (Bridge.IsTitleBackdrop())
+		{
+			UpdateTitleCamera(Bridge);
+		}
+		else
+		{
+			EndTitleCamera();
+		}
+		DrawMenuBackdrop(Bridge, Scale);
 		if (MainMenuPage == 0)
 		{
 			DrawTitlePage(Bridge, Scale);
@@ -940,42 +948,7 @@ void UColonyHudSubsystem::DrawMainMenu(USimSubsystem& Bridge)
 		}
 		else
 		{
-			const float Wide = 480.0f * Scale;
-			ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-			ImGui::SetNextWindowSizeConstraints(ImVec2(520.0f * Scale, 0.0f), ImVec2(900.0f * Scale, Viewport->Size.y * 0.85f));
-			if (ImGui::Begin("##HudMainMenu", nullptr, ColonyHud::BoxFlags() & ~ImGuiWindowFlags_NoFocusOnAppearing))
-			{
-				ColonyHud::Heading(TEXT("Load a game"));
-				if (SaveSlots.IsEmpty())
-				{
-					ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("No saved games yet (F5 saves while playing)."));
-				}
-				for (const FString& Slot : SaveSlots)
-				{
-					const FDateTime Time = IFileManager::Get().GetTimeStamp(*(USimSubsystem::GetSaveDirectory() / (Slot + TEXT(".save"))));
-					if (ColonyHud::Button(FString::Printf(TEXT("%s##slot"), *Slot), false, ImVec2(Wide, 0.0f)))
-					{
-						if (Bridge.LoadGame(Slot))
-						{
-							bNarratorPending = false;
-							bMainMenuOpen = false;
-							MainMenuPage = 0;
-							if (UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>())
-							{
-								Overseer->EnterOverseerMode();
-							}
-						}
-					}
-					ImGui::SameLine();
-					ColonyHud::TextColored(ColonyHud::TextFaint(), Time.ToString(TEXT("%d %b %Y  %H:%M")));
-				}
-				ImGui::Spacing();
-				if (ColonyHud::Button(TEXT("Back"), false, ImVec2(Wide, 0.0f)))
-				{
-					MainMenuPage = 0;
-				}
-			}
-			ImGui::End();
+			DrawLoadPage(Bridge, Scale);
 		}
 	}
 	if (bSettingsOpen)

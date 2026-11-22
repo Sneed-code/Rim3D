@@ -129,6 +129,8 @@ public:
 	/** The main menu's page: 0 title, 1 scenario, 2 load, 3 people (docs/design/new-game.md). For the smoke test. */
 	int32 GetMainMenuPage() const { return MainMenuPage; }
 	void SetMainMenuPageForTest(int32 Page) { MainMenuPage = Page; }
+	/** True while the title's own camera circles the backdrop map (smoke tests). */
+	bool HasTitleCamera() const { return TitleCamera.IsValid(); }
 	/** The new game's seed and map size, and the people page's picked colonist and tab (smoke test `newgame`). */
 	void SetNewGameForTest(int32 Seed, int32 MapSize) { NewSeed = Seed; NewMapSize = MapSize; }
 	/** Slot 0 opens "You", another slot "Your companions" on that stranger; Tab 0 traits, 1 looks. */
@@ -221,6 +223,14 @@ private:
 
 	// The title screen and the new game (ColonyHudNewGame.cpp, docs/design/new-game.md).
 	void DrawTitlePage(USimSubsystem& Bridge, float Scale);
+	/** The veil and vignette behind every menu page but the people pages. */
+	void DrawMenuBackdrop(USimSubsystem& Bridge, float Scale);
+	void DrawLoadPage(USimSubsystem& Bridge, float Scale);
+	/** The title's camera: a slow drift round an open glade of the backdrop map, in morning light. */
+	void UpdateTitleCamera(USimSubsystem& Bridge);
+	void EndTitleCamera();
+	/** Loads a save from the title or the load page and goes to the colony. */
+	void LoadFromMenu(USimSubsystem& Bridge, const FString& Slot);
 	void DrawScenarioPage(USimSubsystem& Bridge, float Scale);
 	/** The Debug page: the test scenes (gun range, creator, ...) started from the title screen (DebugScenes.h). */
 	void DrawDebugPage(float Scale);
@@ -300,6 +310,11 @@ private:
 	void TickSceneHop();
 	/** The menu has the mouse (cursor shown, UI input) while it is open; given back when the game takes over. */
 	bool bMenuMouse = false;
+	TWeakObjectPtr<ACameraActor> TitleCamera;
+	FVector2D TitleFocus = FVector2D::ZeroVector;  // sim metres: the glade the title camera circles
+	float TitleRadius = 14.0f;                    // metres from the glade's middle to the camera
+	float TitleYaw = 0.0f;                        // degrees round the glade
+	double TitleShownAt = -1.0;                   // ImGui time the title page was first drawn (its fade-in)
 	FString NewScenario = TEXT("CrashLanded");
 	FString NewNarrator = TEXT("Orrin");
 	// The only difficulty for now, never shown (sneed 2026-11-21: "standard").

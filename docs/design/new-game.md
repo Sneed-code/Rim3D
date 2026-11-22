@@ -26,7 +26,17 @@ from a point pool ([traits.md](traits.md) "Trait points"); you have none. Biome 
 
 1. **Title** (`MainMenuPage` 0): shown at launch without `-SimScenario` (not in smoke tests; `-NoMenu` skips it) and
    from Menu > Main menu. Continue (the newest save), New colony, Load a game (newest first, with the save's date),
-   Settings, Quit. "Back to the game" while one runs.
+   Settings, Debug, Quit. "Back to the game" while one runs.
+   **Its own scene** (sneed 2026-11-22: not the engine's sample level, not the gun range): a plain launch starts the
+   `TitleBackdrop` scenario (a wild tropical rainforest tile, 256 m, no people or cargo, animals on, 7:00) off the sample
+   level (`-SimOriginX` 300000), flagged `FSimStartOptions::bTitle` so it never counts as a game (no "Back to the game";
+   New colony or a load replaces it; `-SimNoTitleScene` keeps the old empty start). The title camera circles the
+   open glade with the fewest trees in the map's middle (14 m out, 2.3 m up, 1.6 degrees a second, the glade right of
+   the middle), trunks on its circle hidden (`SetPlantClearings` trees-only), the sky held at a calm morning hour.
+   **Layout**: no box. The name in big, widely spaced capitals with a jade bar and the setting line under it, then the
+   menu as big plain words (the hovered one brightens, steps in and gets the jade bar; Continue or New colony in jade),
+   fading and sliding in one by one; a deep shade on the left fading out by the middle, darker top and bottom edges; the
+   land's name bottom right. The load page uses the Canopy panel too.
 2. **Scenario** (1): the menu scenarios on the left; the picked one's description, people and kit on the right, the
    narrator, and a folded "World seed and map size". Difficulty is `StriveToSurvive`, never shown. **Choose landing
    site** or **Land somewhere random** (the world's own pick in the scenario's biome).
@@ -118,5 +128,5 @@ The old launch files still work and run the same scenes in the same copy of the 
 
 ## Not done yet
 
-sneed's verdict on the Canopy look; the cargo pack as a thing to unpack; a live title-screen camera through the rainforest; save pictures and day/wealth
+sneed's verdict on the Canopy look; the cargo pack as a thing to unpack; save pictures and day/wealth
 on the load list; age; face and expression sliders; a 3D globe for the landing site.

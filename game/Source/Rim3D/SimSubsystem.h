@@ -46,6 +46,9 @@ struct FSimStartOptions
 	/** Real minutes a game day lasts at 1x, 48 to 120 (docs/design/day-length.md). The game's own start takes the
 	 *  player's setting (the Settings window); command line: -SimDayMinutes=<n>. */
 	int32 DayMinutes = 48;
+	/** The title screen's living backdrop (the TitleBackdrop scenario: a wild rainforest tile, no people), not a game:
+	 *  the title offers no "Back to the game" for it and a new colony replaces it. */
+	bool bTitle = false;
 };
 
 /** Sim cost, averaged over about a second of real time. */
@@ -191,6 +194,8 @@ public:
 	int32 GetDefCount() const { return Defs ? static_cast<int32>(Defs->size()) : 0; }
 	const FString& GetDataRoot() const { return DataRoot; }
 	const FSimStartOptions& GetStartOptions() const { return StartOptions; }
+	/** True while the sim is only the title screen's backdrop (FSimStartOptions::bTitle). */
+	bool IsTitleBackdrop() const { return StartOptions.bTitle; }
 	/** Sets the options the next start reads (the world map's Start here takes them) without starting a sim. */
 	void SetStartOptions(const FSimStartOptions& Options) { StartOptions = Options; }
 
