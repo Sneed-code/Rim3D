@@ -1,0 +1,57 @@
+{
+ "name": "ShipReactor",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -299.9,
+   -350.0,
+   0.0
+  ],
+  "max": [
+   299.9,
+   350.0,
+   400.0
+  ]
+ },
+ "sizeM": [
+  5.998,
+  7.0,
+  4.0
+ ],
+ "parts": {
+  "ShipReactor": {
+   "boundsCm": {
+    "min": [
+     -299.9,
+     -350.0,
+     0.0
+    ],
+    "max": [
+     299.9,
+     350.0,
+     400.0
+    ]
+   },
+   "tris": 36422
+  }
+ },
+ "sockets": {
+  "Console": [
+   71.6,
+   222.88,
+   198.4
+  ]
+ },
+ "slots": {
+  "ShipReactor": {
+   "from": "ShipReactor_PBR",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

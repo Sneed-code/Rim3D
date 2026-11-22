@@ -1,0 +1,58 @@
+{
+ "name": "MedicineIndustrial",
+ "kind": "item",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -14.5,
+   -11.46,
+   0.0
+  ],
+  "max": [
+   14.5,
+   11.46,
+   14.76
+  ]
+ },
+ "sizeM": [
+  0.29,
+  0.229,
+  0.148
+ ],
+ "parts": {
+  "MedicineIndustrial": {
+   "boundsCm": {
+    "min": [
+     -14.5,
+     -11.46,
+     0.0
+    ],
+    "max": [
+     14.5,
+     11.46,
+     14.76
+    ]
+   },
+   "tris": 2972
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "MedicineIndustrial_0": {
+   "from": "MedicineIndustrial_PBR",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  },
+  "MedicineIndustrial_1": {
+   "from": "MedicineIndustrial_Clear",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}
