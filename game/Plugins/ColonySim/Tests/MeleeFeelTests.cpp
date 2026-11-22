@@ -467,7 +467,7 @@ TEST_CASE("Finishers: a knife at a downed enemy plays its whole-body kneeling cl
     const int hitStep = static_cast<int>(std::lround(f->hitSeconds * 30.0f));
     // The finisher lasts as long as the clip, played at the pace that lands its blow on the hit step.
     const int total = sim->things().registry().get<Melee>(hero).finisherSteps;
-    const int clipTotal = static_cast<int>(std::lround(clip->seconds * static_cast<float>(hitStep) / clip->hitSeconds));
+    const int clipTotal = static_cast<int>(std::lround(clip->seconds * static_cast<float>(hitStep) / sim->melee().finisherClipHit(finisher)));
     CHECK(std::abs(total - clipTotal) <= 1);
     const Position start = sim->things().registry().get<Position>(hero);
     Position end = start;
@@ -547,7 +547,7 @@ TEST_CASE("Finishers: a gladius a little close to the body steps back with its c
     // body is at the finisher's standOff when the blow lands, wherever in the slack the swing started.
     auto sim = feelTestSim(410);
     const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
-    const Entity enemy = feelTestDowned(*sim, hero, 0.7f);
+    const Entity enemy = feelTestDowned(*sim, hero, 1.0f);
     feelTestFace(*sim, hero, 1.0f, 0.0f);
     std::string why;
     FEEL_REQUIRE(sim->melee().attack(hero, enemy, true, &why));
@@ -576,6 +576,11 @@ TEST_CASE("Finishers: every finisher of sneed's weapons plays a measured whole-b
         const int f = sim->melee().finisherFor(sim->defs().idOf("Things", weapon));
         CHECK(f > 0);
         CHECK(sim->melee().finisherPlaysClip(f));
+        // Its blow when the blade comes down (clipHitSeconds), inside the clip.
+        const MotionClip* clip = sim->combat().motion().clip(sim->melee().rules().finishers[static_cast<size_t>(f - 1)].clip);
+        FEEL_REQUIRE(clip != nullptr);
+        CHECK(sim->melee().finisherClipHit(f) > 0.0f);
+        CHECK(sim->melee().finisherClipHit(f) < clip->seconds);
     }
 }
 

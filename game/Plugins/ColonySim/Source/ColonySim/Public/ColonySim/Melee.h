@@ -106,6 +106,9 @@ struct MeleeFinisher {
     std::string move;
     std::string clip;
     float clipSlack = 0.45f;
+    // When in the clip (its seconds from its start) the blade comes down on the body, if not the clip's own measured
+    // hitSeconds: those are mid-swing, the weapon still a metre up (PC round 3, 2026-11-22). 0: the clip's own.
+    float clipHitSeconds = 0.0f;
     float seconds = 1.6f;
     float hitSeconds = 1.0f;
     float standOff = 0.6f;
@@ -257,6 +260,9 @@ public:
     // Whether finisher `finisher` (1 + its MeleeRules index) plays its whole-body clip (sneed 2026-11-22): the clip is
     // named and measured. Unreal then draws no hand-made pose, kneel or bend for it.
     bool finisherPlaysClip(int finisher) const;
+    // When in its clip finisher `finisher`'s blow lands (clip seconds from the clip's start): its clipHitSeconds, else the
+    // clip's own hitSeconds. 0 if it plays no clip.
+    float finisherClipHit(int finisher) const;
     // The swing under way (or the last one) uses a strong tool: one whose power is MeleeRules `strongPowerShare`
     // of its set's mean or more (a longsword's cut against its point). Unreal plays a heavy blow for it (AN1).
     bool strongSwing(Entity pawn) const;

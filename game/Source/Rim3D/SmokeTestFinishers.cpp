@@ -442,7 +442,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 				const colony::MeleeFinisher& Rule = BlowSim->melee().rules().finishers[static_cast<size_t>(MeView->meleeFinisher - 1)];
 				if (const colony::MotionClip* BlowClip = BlowSim->combat().motion().clip(Rule.clip); BlowClip && BlowClip->seconds > 0.0f)
 				{
-					BlowT = BlowClip->hitSeconds / BlowClip->seconds;
+					BlowT = BlowSim->melee().finisherClipHit(MeView->meleeFinisher) / BlowClip->seconds;
 				}
 			}
 			if (!State->bShotBlow && BlowT > 0.0f && T >= BlowT)
@@ -464,7 +464,14 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 				FVector ItSpot = FVector::ZeroVector;
 				B->GetBlendedLocation(State->Me, MeSpot);
 				B->GetBlendedLocation(State->Enemy, ItSpot);
-				State->BlowGeometry = FString::Printf(
+				// Which way the drawn body lies off its sim spot: along its facing (its head's way) and to its left, and
+				// toward me (cm), so the drawn body can be brought back over the body the sim hits.
+				const FVector2D ItFacing = It ? FVector2D(It->facingX, It->facingY).GetSafeNormal() : FVector2D::ZeroVector;
+				const FVector2D Drift = FVector2D(ItPelvis - ItSpot);
+				const FVector2D ToMe = FVector2D(MeSpot - ItSpot).GetSafeNormal();
+				const FString DriftText = FString::Printf(TEXT("its pelvis off its spot %.0f cm along its facing, %.0f cm across, %.0f cm toward me; its sim facing %s, the way to me %s"),
+					FVector2D::DotProduct(Drift, ItFacing), FVector2D::CrossProduct(ItFacing, Drift), FVector2D::DotProduct(Drift, ToMe), *ItFacing.ToString(), *ToMe.ToString());
+				State->BlowGeometry = DriftText + TEXT("; ") + FString::Printf(
 					TEXT("sim apart %.2f m; drawn: my pelvis %.0f cm from my sim spot, its pelvis %.0f cm and its head %.0f cm from its sim spot, pelvis to pelvis %.0f cm; weapon box %.0f cm from its pelvis, lowest at %.0f cm, reaching %.0f cm out from my pelvis"),
 					SimApart, FVector::Dist2D(MePelvis, MeSpot), FVector::Dist2D(ItPelvis, ItSpot), FVector::Dist2D(ItHead, ItSpot),
 					FVector::Dist2D(MePelvis, ItPelvis), Held ? FMath::Sqrt(WeaponBox.ComputeSquaredDistanceToPoint(ItPelvis)) : -1.0,

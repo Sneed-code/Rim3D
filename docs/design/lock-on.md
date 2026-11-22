@@ -231,7 +231,11 @@ the body's middle at the blow) is knife 0.8 m, club 0.9, gladius, mace and longs
 the wind-up (`BodyMotionSystem::shiftClip`, laid over the clip's own path; the world still stops it), so the blow lands
 on the body wherever the swing started. More than `clipSlack` too far, the weapon's low blow plays instead; right on top
 of the body it steps back at most `clipSlack` and still plays the finisher (round 2: the gladius's never played). The
-`finishers` smoke takes a `_blow` picture at the hit and notes where the drawn bodies and the weapon are. A finisher whose clip is not measured yet falls
+`finishers` smoke takes a `_blow` picture at the hit and notes where the drawn bodies and the weapon are. The clips'
+measured `hitSeconds` are mid-swing (round 3: every weapon still about a metre up at the blow), so each finisher names
+`clipHitSeconds`, the moment in its clip the blade comes down (`MeleeSystem::finisherClipHit`), read off the clips' hand
+heights. Round 3 also showed the downed body drawn 0.4-1.2 m off its spot (its ragdoll falls back from the feet, while
+the sim's prone hitboxes lie centred on the spot); the smoke now notes which way. A finisher whose clip is not measured yet falls
 back to the old drawn one.
 
 The punches and the low blows (`Mixamo/Fighting/*`) had never been imported into the one game (they were made in a test

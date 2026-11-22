@@ -185,6 +185,7 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
         f.move = def->text((base + "move").c_str(), f.move);
         f.clip = def->text((base + "clip").c_str(), f.clip);
         f.clipSlack = std::max(0.0f, static_cast<float>(def->number((base + "clipSlack").c_str(), f.clipSlack)));
+        f.clipHitSeconds = std::max(0.0f, static_cast<float>(def->number((base + "clipHitSeconds").c_str(), f.clipHitSeconds)));
         f.seconds = std::max(0.2f, static_cast<float>(def->number((base + "seconds").c_str(), f.seconds)));
         f.hitSeconds = std::clamp(static_cast<float>(def->number((base + "hitSeconds").c_str(), f.hitSeconds)), 0.1f, f.seconds - 0.05f);
         f.standOff = std::max(0.2f, static_cast<float>(def->number((base + "standOff").c_str(), f.standOff)));
@@ -589,6 +590,15 @@ bool MeleeSystem::finisherPlaysClip(int finisher) const {
     return c != nullptr && c->hitSeconds > 0.0f;
 }
 
+float MeleeSystem::finisherClipHit(int finisher) const {
+    if (!finisherPlaysClip(finisher)) {
+        return 0.0f;
+    }
+    const MeleeFinisher& f = rules_.finishers[static_cast<size_t>(finisher - 1)];
+    const MotionClip* c = combat_.motion().clip(f.clip);
+    return f.clipHitSeconds > 0.0f ? std::clamp(f.clipHitSeconds, 0.05f, c->seconds - 0.05f) : c->hitSeconds;
+}
+
 const MeleeFinisher* MeleeSystem::finisherOf(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     const Melee* m = reg.valid(pawn) ? reg.try_get<Melee>(pawn) : nullptr;
@@ -715,15 +725,17 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
                                             ? &rules_.finishers[static_cast<size_t>(set->finisher - 1)]
                                             : nullptr;
     const MotionClip* finisherClip = nullptr;
+    float clipBlowAt = 0.0f;  // when in the clip its blow lands
     float finisherShift = 0.0f;  // metres it moves in (out, if negative) over the clip to be at standOff at the blow
     if (finisherRule != nullptr && finisherPlaysClip(set->finisher) && combat_.motion().hasClips(pawn)) {
         // (A clip not measured yet leaves the old drawn finisher.)
         finisherClip = combat_.motion().clip(finisherRule->clip);
+        clipBlowAt = finisherClipHit(set->finisher);
         const Position& a = reg.get<Position>(pawn);
         const Position& b = reg.get<Position>(target);
         const float d = std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
         // Where the clip alone would leave it at the blow: its own step forward (scaled to the body) taken off.
-        finisherShift = d - combat_.motion().forwardAt(finisherClip->def, finisherClip->hitSeconds) * combat_.motion().sizeScale(pawn) -
+        finisherShift = d - combat_.motion().forwardAt(finisherClip->def, clipBlowAt) * combat_.motion().sizeScale(pawn) -
                         finisherRule->standOff;
         if (finisherShift > finisherRule->clipSlack) {
             finisherRule = nullptr;  // too far off: the plain low blow
@@ -749,13 +761,13 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         // The whole body plays the clip, timed so its blow lands on the hit step; the finisher lasts as long as the clip.
         const Position& a = reg.get<Position>(pawn);
         const Position& b = reg.get<Position>(target);
-        combat_.motion().playTimed(pawn, finisherClip->def, finisherClip->hitSeconds, windup, b.x - a.x, b.y - a.y, false);
+        combat_.motion().playTimed(pawn, finisherClip->def, clipBlowAt, windup, b.x - a.x, b.y - a.y, false);
         // To its place by the body during the clip's start (no glide before it): done by two thirds of the wind-up.
         if (std::fabs(finisherShift) > 0.02f) {
             combat_.motion().shiftClip(pawn, finisherShift, std::max(4, windup * 2 / 3));
         }
-        const float stepsPerClipSecond = static_cast<float>(windup) / finisherClip->hitSeconds;
-        m.finisherSteps = windup + std::max(1, static_cast<int>(std::lround((finisherClip->seconds - finisherClip->hitSeconds) * stepsPerClipSecond)));
+        const float stepsPerClipSecond = static_cast<float>(windup) / clipBlowAt;
+        m.finisherSteps = windup + std::max(1, static_cast<int>(std::lround((finisherClip->seconds - clipBlowAt) * stepsPerClipSecond)));
     } else if (finisherRule != nullptr) {
         const MeleeFinisher& f = *finisherRule;
         // To its place: standOff from the body's centre, on the side it came from.
