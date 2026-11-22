@@ -21,12 +21,18 @@
 namespace
 {
 	const FVector AnimalSmokeOrigin(-900000.0, 0.0, 0.0);
-	// Every def A4 has art for, the realistic Sketchfab ones (monkey, cat, cougar, thrumbo), plus two with none (they fall back on a stand-in model).
+	// Every def A4 has art for, the realistic Sketchfab ones (monkey, cat, cougar, thrumbo), plus the grizzly and chicken.
 	const TCHAR* const AnimalSmokeDefs[] = {TEXT("Cow"), TEXT("Muffalo"), TEXT("Deer"), TEXT("Husky"), TEXT("TimberWolf"), TEXT("Thrumbo"),
 		TEXT("Alpaca"), TEXT("Cat"), TEXT("WildBoar"), TEXT("Cougar"), TEXT("GrizzlyBear"), TEXT("Chicken"), TEXT("Monkey"), TEXT("Elephant"), TEXT("Rhinoceros"), TEXT("Lion"), TEXT("Raptor"), TEXT("TRex")};
 	constexpr float AnimalSmokeSpacing = 2.0f;
 	// The realistic Sketchfab models, side by side in daylight for a close look (phase animals_close).
 	const TCHAR* const AnimalSmokeCloseDefs[] = {TEXT("Monkey"), TEXT("Cat"), TEXT("Cougar"), TEXT("Thrumbo"), TEXT("Elephant"), TEXT("Rhinoceros"), TEXT("Muffalo"), TEXT("Raptor"), TEXT("TRex")};
+
+	// The 2026-11-22 batch that replaced the husky stand-in (phase animals_new): big ones in the back row, small ones in front.
+	const TCHAR* const AnimalSmokeNewBigDefs[] = {TEXT("GrizzlyBear"), TEXT("PolarBear"), TEXT("Caribou"), TEXT("Muskox"), TEXT("Yak"), TEXT("Dromedary"),
+		TEXT("Gazelle"), TEXT("Goat"), TEXT("Sheep"), TEXT("Megaspider"), TEXT("Spelopede")};
+	const TCHAR* const AnimalSmokeNewSmallDefs[] = {TEXT("Capybara"), TEXT("Iguana"), TEXT("Chicken"), TEXT("Duck"), TEXT("Goose"), TEXT("Turkey"),
+		TEXT("ArcticFox"), TEXT("ArcticWolf"), TEXT("Ostrich"), TEXT("Megascarab")};
 
 	struct FAnimalSmokeState
 	{
@@ -304,4 +310,67 @@ void USmokeTestSubsystem::BuildAnimalsPhases()
 		AnimalSmokeSetDistance(TEXT("Sky.DayOfYear"), -1.0f);
 	};
 	Phases.Add(MoveTemp(Near));
+
+	// 4. The batch that replaced the husky stand-in, close up in daylight and paused: every one must have its own model.
+	FPhase Batch;
+	Batch.Name = TEXT("animals_new");
+	Batch.WarmupSeconds = 3.0f;
+	Batch.MeasureSeconds = 2.0f;
+	Batch.Setup = [=, this]()
+	{
+		USimSubsystem* B = Bridge();
+		if (!B || !B->GetSim())
+		{
+			return;
+		}
+		AnimalSmokeSetDistance(TEXT("Sky.Hour"), 12.0f);
+		AnimalSmokeSetDistance(TEXT("Sky.DayOfYear"), 22.5f);
+		const colony::CellPos M = Middle();
+		int32 I = 0;
+		for (const TCHAR* Def : AnimalSmokeNewBigDefs)
+		{
+			B->Submit(colony::SpawnThingCommand{std::string(TCHAR_TO_UTF8(Def)), colony::CellPos{M.x + 26, M.y - 20 + I++ * 4, 0}});
+		}
+		I = 0;
+		for (const TCHAR* Def : AnimalSmokeNewSmallDefs)
+		{
+			B->Submit(colony::SpawnThingCommand{std::string(TCHAR_TO_UTF8(Def)), colony::CellPos{M.x + 31, M.y - 18 + I++ * 4, 0}});
+		}
+		B->StepOnce();
+		B->SetSpeed(0);
+		const FVector Target = B->SimToWorld(M.x + 28.0f, M.y, 0) + FVector(0.0, 0.0, 80.0);
+		const FVector From = Target + FVector(2200.0, -500.0, 600.0);
+		ViewFrom(From, (Target - From).Rotation());
+		State->Reset();
+	};
+	Batch.OnFrame = CheckFrame;
+	Batch.Verify = [=, this]()
+	{
+		VerifyFrames(TEXT("animals_new"));
+		USimAnimalSubsystem* Animals = AnimalsOf();
+		USimSubsystem* B = Bridge();
+		if (Animals && B && B->GetSim())
+		{
+			// A def with no entry in assets/animal_art.json is drawn as the husky and marked a stand-in; these all have one.
+			const auto CheckDef = [&](const TCHAR* Def)
+			{
+				FSimAnimalArt Art;
+				Animals->GetModelFor(FName(Def), Art);
+				if (!State->DefsDrawn.Contains(FName(Def)))
+				{
+					Fail(FString::Printf(TEXT("animals_new: %s was not drawn"), Def));
+				}
+				else if (Art.Model == FName(TEXT("Husky")))
+				{
+					Fail(FString::Printf(TEXT("animals_new: %s is still drawn as the husky"), Def));
+				}
+			};
+			for (const TCHAR* Def : AnimalSmokeNewBigDefs) { CheckDef(Def); }
+			for (const TCHAR* Def : AnimalSmokeNewSmallDefs) { CheckDef(Def); }
+			Notes.Add(FString::Printf(TEXT("animals_new: %d models loaded"), Animals->GetModelsLoaded()));
+		}
+		AnimalSmokeSetDistance(TEXT("Sky.Hour"), -1.0f);
+		AnimalSmokeSetDistance(TEXT("Sky.DayOfYear"), -1.0f);
+	};
+	Phases.Add(MoveTemp(Batch));
 }
