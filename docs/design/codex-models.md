@@ -29,6 +29,17 @@ bed (all `visual.mesh`), monosword and plasma sword (`assets/guns.json` melee, p
 mesh is one sliding leaf and the cooler def is a wall-height block. Zeushammer, breach axe, HE mortar shell,
 spacer component and bionic arm were cut off by the limit; their briefs stay, rerun them later.
 
+### Batch 3b and batch 4 (2026-11-22, high effort)
+
+After the usage limit reset, the 5 cut-off models were made (zeushammer and breach axe in `assets/guns.json`
+melee; HE mortar shell, spacer component, bionic arm by `visual.mesh`). Batch 4 ran with `CODEX_EFFORT=high`
+(sneed: quality matters): 8 guns in `assets/guns.json` (chain shotgun, charge rifle, heavy SMG, machine pistol,
+revolver, sniper rifle, charge lance, needle gun; hold points first guesses from the model bounds and Muzzle
+sockets, tune on the PC), and by `visual.mesh` the double bed, flatscreen TV, spike trap, ship engine, ship
+reactor, sandbags, barricade, bionic leg, EMP grenade and industrial medicine. Made but not wired in: the recurve
+bow (no bow entry in guns.json yet) and the vent (like the cooler, the def is a wall-height block). Neon made the
+LMG, minigun, hatchery, power switch, ship computer core and sensor cluster, so Codex skipped them.
+
 ## How a model is made
 
 `tools/codex_assets/`: `_common.md` is the brief every job shares (GLB in metres, +Z up, real scale, PBR BaseColor /
