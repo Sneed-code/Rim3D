@@ -8,6 +8,7 @@
 
 #include <imgui.h>
 
+#include "ColonyHudStyle.h"
 #include "OverseerSubsystem.h"
 #include "SimPicking.h"
 #include "SimSubsystem.h"
@@ -232,9 +233,10 @@ void UPowerOverlaySubsystem::DrawToggles(float Scale)
 {
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	const float Margin = 12.0f * Scale;
-	// Bottom right, above the key hints.
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - Margin, Viewport->Pos.y + Viewport->Size.y - Margin - 44.0f * Scale),
-		ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+	// Bottom right, just left of the date box (the key hints stack above it).
+	const float DateLeft = ColonyHud::DateBoxLeft();
+	ImGui::SetNextWindowPos(ImVec2(DateLeft > 0.0f ? DateLeft - 8.0f * Scale : Viewport->Pos.x + Viewport->Size.x - Margin - 420.0f * Scale,
+		ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
 	ImGui::SetNextWindowBgAlpha(0.6f);
 	if (ImGui::Begin("##OverlayToggles", nullptr, PowerOverlayFlags()))
 	{

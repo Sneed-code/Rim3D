@@ -19,7 +19,8 @@ class USkeletalMeshComponent;
  *   commandlet (GA_<base>_<Style> in /Game/Rim3D/Generated/Grooms): their curves are already relative to that base's
  *   head bone, so they only need scaling by the neck-to-head lengths.
  * Either rides on the head bone, so it turns and moves with it; Unreal's groom physics swings the strands and keeps them
- * off the body through the mannequin physics asset (same bone names). Cosmetic only.
+ * off the body: our own grooms through shapes fitted inside the skin (grow_hair.py) and grown out to the worn clothes,
+ * the MetaHuman ones through the mannequin physics asset (same bone names). Cosmetic only.
  *
  * Tuning (console): Pawns.StrandHairScale (times the fitted size), Pawns.StrandHairOffsetX/Y/Z (cm, the body's
  * component axes), Pawns.StrandHairYaw (degrees, if a body faces another way than the MetaHuman meshes).
@@ -83,6 +84,7 @@ private:
 		FLinearColor Colour = FLinearColor::Black;
 		TArray<int32> WigSections;
 		bool bStrands = false;
+		uint32 ClothKey = 0;  // the outfit (garments and puff) the strands' collision was made for
 	};
 	TArray<FWearer> Wearers;
 	float SinceSort = 1.0f;
