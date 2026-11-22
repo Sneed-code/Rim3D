@@ -2245,7 +2245,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 				if (bLocked)
 				{
 					ImGui::PushStyleColor(ImGuiCol_Text, ColonyHud::TextFaint());
-					ImGui::PushStyleColor(ImGuiCol_Button, ColonyHud::Rgb(0x15181b));
+					ImGui::PushStyleColor(ImGuiCol_Button, ColonyHud::Locked());
 				}
 				// The button carries no text: the name is drawn under the picture below, on two lines when it is long.
 				bool bClicked = false;

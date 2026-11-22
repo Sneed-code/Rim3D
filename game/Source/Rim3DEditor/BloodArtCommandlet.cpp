@@ -841,6 +841,13 @@ return cover;
 		Density.SetNumZeroed(Res * Res);
 		int32 Contested = 0;
 		int32 Triangles = 0;
+		// Every skin triangle first, so the stretched ones can be told apart from the rest.
+		struct FSkinArtTriangle
+		{
+			const FSoftSkinVertex* V[3];
+			float Stretch;  // longest UV edge (texels) per longest edge on the body (cm)
+		};
+		TArray<FSkinArtTriangle> Skin;
 		for (const FSkelMeshSection& Section : Lod.Sections)
 		{
 			const UMaterialInterface* Material = Materials.IsValidIndex(Section.MaterialIndex) ? Materials[Section.MaterialIndex].MaterialInterface.Get() : nullptr;
@@ -860,66 +867,108 @@ return cover;
 					break;
 				}
 			}
-			const auto Vertex = [&](uint32 Index) -> const FSoftSkinVertex&
+			const auto Vertex = [&](uint32 Index) -> const FSoftSkinVertex*
 			{
-				return bGlobal ? Vertices[Index] : Section.SoftVertices[FMath::Min<int32>(Index, Section.SoftVertices.Num() - 1)];
+				return bGlobal ? &Vertices[Index] : &Section.SoftVertices[FMath::Min<int32>(Index, Section.SoftVertices.Num() - 1)];
 			};
 			for (uint32 T = 0; T < Section.NumTriangles; ++T)
 			{
-				const FSoftSkinVertex& A = Vertex(Lod.IndexBuffer[Section.BaseIndex + T * 3 + 0]);
-				const FSoftSkinVertex& B = Vertex(Lod.IndexBuffer[Section.BaseIndex + T * 3 + 1]);
-				const FSoftSkinVertex& C = Vertex(Lod.IndexBuffer[Section.BaseIndex + T * 3 + 2]);
-				const FVector2f Pa = A.UVs[0] * Res;
-				const FVector2f Pb = B.UVs[0] * Res;
-				const FVector2f Pc = C.UVs[0] * Res;
-				const float Area = (Pb.X - Pa.X) * (Pc.Y - Pa.Y) - (Pc.X - Pa.X) * (Pb.Y - Pa.Y);
-				if (FMath::Abs(Area) < 1e-8f)
+				FSkinArtTriangle& Tri = Skin.AddDefaulted_GetRef();
+				float LongestUV = 0.0f;
+				float LongestBody = 0.0f;
+				for (int32 K = 0; K < 3; ++K)
 				{
-					continue;
+					Tri.V[K] = Vertex(Lod.IndexBuffer[Section.BaseIndex + T * 3 + K]);
 				}
-				const float WorldArea = 0.5f * FVector3f::CrossProduct(B.Position - A.Position, C.Position - A.Position).Size();
-				const float TexelsPerArea = 0.5f * FMath::Abs(Area) / FMath::Max(WorldArea, 1e-4f);
-				const int32 X0 = FMath::Clamp(FMath::FloorToInt(FMath::Min3(Pa.X, Pb.X, Pc.X)), 0, Res - 1);
-				const int32 X1 = FMath::Clamp(FMath::CeilToInt(FMath::Max3(Pa.X, Pb.X, Pc.X)), 0, Res - 1);
-				const int32 Y0 = FMath::Clamp(FMath::FloorToInt(FMath::Min3(Pa.Y, Pb.Y, Pc.Y)), 0, Res - 1);
-				const int32 Y1 = FMath::Clamp(FMath::CeilToInt(FMath::Max3(Pa.Y, Pb.Y, Pc.Y)), 0, Res - 1);
-				for (int32 Y = Y0; Y <= Y1; ++Y)
+				for (int32 K = 0; K < 3; ++K)
 				{
-					for (int32 X = X0; X <= X1; ++X)
-					{
-						const FVector2f P(X + 0.5f, Y + 0.5f);
-						const float Wa = ((Pb.X - P.X) * (Pc.Y - P.Y) - (Pc.X - P.X) * (Pb.Y - P.Y)) / Area;
-						const float Wb = ((Pc.X - P.X) * (Pa.Y - P.Y) - (Pa.X - P.X) * (Pc.Y - P.Y)) / Area;
-						const float Wc = 1.0f - Wa - Wb;
-						constexpr float Edge = -0.02f;
-						if (Wa < Edge || Wb < Edge || Wc < Edge)
-						{
-							continue;
-						}
-						const FVector3f Position = A.Position * Wa + B.Position * Wb + C.Position * Wc;
-						FVector4f& Texel = Texels[Y * Res + X];
-						if (Texel.W > 0.5f && FVector3f::Dist(FVector3f(Texel.X, Texel.Y, Texel.Z) - FVector3f(SkinBloodPositionOffset), Position) > 3.0f)
-						{
-							++Contested;
-							if (TexelsPerArea < Density[Y * Res + X] * 1.5f)
-							{
-								continue;  // a sparser piece laid over skin already there
-							}
-						}
-						Density[Y * Res + X] = FMath::Max(Density[Y * Res + X], TexelsPerArea);
-						Texel = FVector4f(Position.X + SkinBloodPositionOffset, Position.Y + SkinBloodPositionOffset, Position.Z + SkinBloodPositionOffset, 1.0f);
-					}
+					const FSoftSkinVertex& P = *Tri.V[K];
+					const FSoftSkinVertex& Q = *Tri.V[(K + 1) % 3];
+					LongestUV = FMath::Max(LongestUV, FVector2f::Distance(P.UVs[0], Q.UVs[0]) * Res);
+					LongestBody = FMath::Max(LongestBody, FVector3f::Dist(P.Position, Q.Position));
 				}
-				++Triangles;
+				Tri.Stretch = LongestUV / FMath::Max(LongestBody, 0.001f);
 			}
 			UE_LOG(LogBloodArt, Display, TEXT("  %s: skin section %s, %u triangles (%s indices)"), *Base, *Slot, Section.NumTriangles, bGlobal ? TEXT("global") : TEXT("section"));
 		}
+		// The stocking band (sneed, 2026-11-20 to 11-22): the woman's anatomy body joins its vulva to the body with ~47
+		// triangles a few mm across on the body but hundreds of texels long in UV, laid right across the top of both
+		// thighs, the belly and an arm. Drawn into the position map they won every texel they crossed (densest in UV),
+		// so those texels said "groin" and any groin or hip wound painted a band round the thighs and lines up the body.
+		// A triangle whose UV edge is over 8 times longer per cm than the median skin's is such a stitch (the man's body
+		// has none; the next most stretched skin is under 5 times): it is left out and the real skin keeps its texels.
+		TArray<float> Stretches;
+		Stretches.Reserve(Skin.Num());
+		for (const FSkinArtTriangle& Tri : Skin)
+		{
+			Stretches.Add(Tri.Stretch);
+		}
+		Stretches.Sort();
+		const float MedianStretch = Stretches.Num() > 0 ? Stretches[Stretches.Num() / 2] : 0.0f;
+		const float MaxStretch = MedianStretch * 8.0f;
+		int32 Stitches = 0;
+		for (const FSkinArtTriangle& Tri : Skin)
+		{
+			const FSoftSkinVertex& A = *Tri.V[0];
+			const FSoftSkinVertex& B = *Tri.V[1];
+			const FSoftSkinVertex& C = *Tri.V[2];
+			if (MedianStretch > 0.0f && Tri.Stretch > MaxStretch)
+			{
+				++Stitches;
+				continue;
+			}
+			const FVector2f Pa = A.UVs[0] * Res;
+			const FVector2f Pb = B.UVs[0] * Res;
+			const FVector2f Pc = C.UVs[0] * Res;
+			const float Area = (Pb.X - Pa.X) * (Pc.Y - Pa.Y) - (Pc.X - Pa.X) * (Pb.Y - Pa.Y);
+			if (FMath::Abs(Area) < 1e-8f)
+			{
+				continue;
+			}
+			const float WorldArea = 0.5f * FVector3f::CrossProduct(B.Position - A.Position, C.Position - A.Position).Size();
+			const float TexelsPerArea = 0.5f * FMath::Abs(Area) / FMath::Max(WorldArea, 1e-4f);
+			const int32 X0 = FMath::Clamp(FMath::FloorToInt(FMath::Min3(Pa.X, Pb.X, Pc.X)), 0, Res - 1);
+			const int32 X1 = FMath::Clamp(FMath::CeilToInt(FMath::Max3(Pa.X, Pb.X, Pc.X)), 0, Res - 1);
+			const int32 Y0 = FMath::Clamp(FMath::FloorToInt(FMath::Min3(Pa.Y, Pb.Y, Pc.Y)), 0, Res - 1);
+			const int32 Y1 = FMath::Clamp(FMath::CeilToInt(FMath::Max3(Pa.Y, Pb.Y, Pc.Y)), 0, Res - 1);
+			for (int32 Y = Y0; Y <= Y1; ++Y)
+			{
+				for (int32 X = X0; X <= X1; ++X)
+				{
+					const FVector2f P(X + 0.5f, Y + 0.5f);
+					const float Wa = ((Pb.X - P.X) * (Pc.Y - P.Y) - (Pc.X - P.X) * (Pb.Y - P.Y)) / Area;
+					const float Wb = ((Pc.X - P.X) * (Pa.Y - P.Y) - (Pa.X - P.X) * (Pc.Y - P.Y)) / Area;
+					const float Wc = 1.0f - Wa - Wb;
+					constexpr float Edge = -0.02f;
+					if (Wa < Edge || Wb < Edge || Wc < Edge)
+					{
+						continue;
+					}
+					const FVector3f Position = A.Position * Wa + B.Position * Wb + C.Position * Wc;
+					FVector4f& Texel = Texels[Y * Res + X];
+					if (Texel.W > 0.5f && FVector3f::Dist(FVector3f(Texel.X, Texel.Y, Texel.Z) - FVector3f(SkinBloodPositionOffset), Position) > 3.0f)
+					{
+						++Contested;
+						if (TexelsPerArea < Density[Y * Res + X] * 1.5f)
+						{
+							continue;  // a sparser piece laid over skin already there
+						}
+					}
+					Density[Y * Res + X] = FMath::Max(Density[Y * Res + X], TexelsPerArea);
+					Texel = FVector4f(Position.X + SkinBloodPositionOffset, Position.Y + SkinBloodPositionOffset, Position.Z + SkinBloodPositionOffset, 1.0f);
+				}
+			}
+			++Triangles;
+		}
+		UE_LOG(LogBloodArt, Display, TEXT("  %s: %d stretched stitch triangles left out (UV over %.0f texels per cm, 8x the median)"), *Base, Stitches, MaxStretch);
 		if (Triangles == 0)
 		{
 			UE_LOG(LogBloodArt, Error, TEXT("%s: no skin sections (material %s*)"), *Mesh->GetName(), *SkinName);
 			return false;
 		}
-		// Grow each island a few texels so the skin's filtered lookups across a UV seam find blood on both sides.
+		// Grow each island a few texels so the skin's filtered lookups across a UV seam find blood on both sides. A texel
+		// between two islands takes one island's skin only (neighbours more than 3 cm from the first one found are not
+		// averaged in): a mix of two far-apart places is a point inside the body that a wound near neither could paint.
 		for (int32 Pass = 0; Pass < 4; ++Pass)
 		{
 			TArray<FVector4f> Grown = Texels;
@@ -940,7 +989,11 @@ return cover;
 							const int32 Ny = Y + Dy;
 							if (Nx >= 0 && Ny >= 0 && Nx < Res && Ny < Res && Texels[Ny * Res + Nx].W > 0.5f)
 							{
-								Sum += Texels[Ny * Res + Nx];
+								const FVector4f& Near = Texels[Ny * Res + Nx];
+								if (Sum.W < 0.5f || FVector3f::Dist(FVector3f(Near.X, Near.Y, Near.Z), FVector3f(Sum.X, Sum.Y, Sum.Z) / Sum.W) <= 3.0f)
+								{
+									Sum += Near;
+								}
 							}
 						}
 					}
