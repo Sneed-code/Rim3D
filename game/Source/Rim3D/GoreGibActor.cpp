@@ -180,10 +180,11 @@ int32 AGoreGibActor::Burst(UWorld* World, const FVector& Centre, float BodyScale
 		float Size = 0.0f;
 		switch (Kind)
 		{
-		case EGoreGibKind::Meat: Size = Random.FRandRange(5.0f, 13.0f); break;
-		case EGoreGibKind::Rib: Size = Random.FRandRange(14.0f, 22.0f); break;
-		case EGoreGibKind::Bone: Size = Random.FRandRange(6.0f, 12.0f); break;
-		case EGoreGibKind::Offal: Size = Random.FRandRange(6.0f, 11.0f); break;
+		// (PC round 1: at 5 to 13 cm they were lost in the grass.)
+		case EGoreGibKind::Meat: Size = Random.FRandRange(8.0f, 18.0f); break;
+		case EGoreGibKind::Rib: Size = Random.FRandRange(18.0f, 28.0f); break;
+		case EGoreGibKind::Bone: Size = Random.FRandRange(9.0f, 16.0f); break;
+		case EGoreGibKind::Offal: Size = Random.FRandRange(9.0f, 15.0f); break;
 		}
 		Size *= Scale;
 		// Out from the trunk all round, a little up; the big ones don't go as far.
@@ -205,7 +206,7 @@ int32 AGoreGibActor::Burst(UWorld* World, const FVector& Centre, float BodyScale
 			continue;
 		}
 		Gib->SetChunk(Mesh);
-		const float Thrown = Random.FRandRange(300.0f, 700.0f) * Speed * FMath::Lerp(1.15f, 0.75f, FMath::Clamp((Size - 5.0f) / 17.0f, 0.0f, 1.0f));
+		const float Thrown = Random.FRandRange(300.0f, 700.0f) * Speed * FMath::Lerp(1.15f, 0.75f, FMath::Clamp((Size - 8.0f) / 20.0f, 0.0f, 1.0f));
 		const FRotator GibSpin(Random.FRandRange(-900.0f, 900.0f), Random.FRandRange(-900.0f, 900.0f), Random.FRandRange(-900.0f, 900.0f));
 		// A rib or shard rests on its side: its middle lies about its thickness over the ground.
 		const float Rest = Kind == EGoreGibKind::Rib || Kind == EGoreGibKind::Bone ? Size * 0.08f : Size * 0.3f;

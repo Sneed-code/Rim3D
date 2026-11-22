@@ -109,6 +109,35 @@ void USmokeTestSubsystem::BuildGorePhases()
 			ViewFrom(Eye, (Target - Eye).Rotation());
 		}
 	};
+	// Where the trunk burst: the middle of the gibs once there are some, else the corpse's pelvis (a blast may have
+	// thrown the ragdoll metres from its actor). The camera looks down at it from `Back` cm away, `Up` cm up.
+	const auto AtGibs = [=, this](float Up, float Back)
+	{
+		FVector Sum = FVector::ZeroVector;
+		int32 N = 0;
+		for (TActorIterator<AGoreGibActor> It(GetWorld()); It; ++It)
+		{
+			Sum += It->GetActorLocation();
+			++N;
+		}
+		FVector Target;
+		const ASimPawnActor* Actor = ActorOf();
+		if (N > 0)
+		{
+			Target = Sum / N;
+		}
+		else if (!Actor || !Actor->GetRagdollPelvis(Target))
+		{
+			if (!Actor)
+			{
+				return;
+			}
+			Target = Actor->GetActorLocation();
+		}
+		const FVector Side = Actor ? Actor->GetActorForwardVector() : FVector::ForwardVector;
+		const FVector Eye = Target + Side * Back + FVector(0.0, 0.0, Up);
+		ViewFrom(Eye, (Target - Eye).Rotation());
+	};
 	// A hit drawn at the body (blood only): from in front at `Height` (share of the body's height), along `Way` in the
 	// actor's frame (X forward).
 	const auto DrawnHit = [=](EBloodWound Kind, float Height, float Right, const FVector& Way, float Damage)
@@ -637,7 +666,7 @@ void USmokeTestSubsystem::BuildGorePhases()
 		Phase.ScreenshotAt = 0.35f;  // the chunks in the air
 		Phase.OnFrame = [=, this]()
 		{
-			Front(40.0f, 420.0f);
+			AtGibs(170.0f, 450.0f);
 			USimSubsystem* B = Bridge();
 			const colony::ThingView* Now = B ? B->GetCurrentSnapshot().find(State->Pawn) : nullptr;
 			const bool bGone = Now && (Now->severed & colony::kSeveredTrunk) != 0;
@@ -706,7 +735,7 @@ void USmokeTestSubsystem::BuildGorePhases()
 		Phase.WarmupSeconds = 0.5f;
 		Phase.MeasureSeconds = 1.0f;
 		Phase.ScreenshotAt = 0.3f;
-		Phase.OnFrame = [=]() { Front(10.0f, 170.0f); };
+		Phase.OnFrame = [=]() { AtGibs(150.0f, 190.0f); };
 		Phase.Verify = [=, this]() { GoreSmokeRealBodies(false); };
 		Phases.Add(MoveTemp(Phase));
 	}
