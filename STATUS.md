@@ -12,6 +12,13 @@ revolver. AI Studio in sneed's Chrome made a Lyria theme, robot and insect sound
 pleasure noises (muted while made). **Next: import the seven GLBs (codex_prep, GunArt) and wire their animations;
 pick sounds by ear.** Not in the game yet.
 
+Rocket and grenade blasts look high quality (sneed, 2026-11-22; Unreal and blast art, `docs/design/blast-draw.md`): the
+fire and smoke pictures are **512 px a frame** (were 256), never streamed at a low mip, no longer **cut off square** at
+their edges, and drawn with round billowing lumps (gradient-noise turbulence) instead of boxy ones. Blasts throw **jets
+of dark soil** up in a cone; the flying **debris cubes are now lumpy soil clods and stones**; a rocket's trail is soft
+grey exhaust smoke with a flame at the nozzle, not solid balls. Needs the `blast-art` art step again (run by
+`update-and-play.bat`). **Next:** PC pictures in the gun range, third person.
+
 Playtest fixes from the gun range (sneed, 2026-11-22; sim, data, Unreal and hair tools): **dismemberment piles up
 again**: a limb at 0 kept no hitbox, so later shots and blows passed through it and never reached the 13 (arm) or 19
 (leg) past 0 that takes it off; now a limb keeps its hitbox until it is really gone (`Combat.cpp`, test in

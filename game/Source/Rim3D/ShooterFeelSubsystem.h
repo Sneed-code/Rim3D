@@ -149,6 +149,8 @@ private:
 	void EnsureScene();
 	void Teardown();
 	UStaticMesh* MakeSolid(int32 Shape, float X, float Y, float Z, const FLinearColor& Color);
+	/** A lumpy clod of soil or a stone, about 10 cm across, smooth shaded with mottled colour, with a sphere to roll on. */
+	UStaticMesh* MakeClod(int32 Seed, const FLinearColor& Color, float Lumpiness);
 	UInstancedStaticMeshComponent* MakeInstanced(UStaticMesh* Mesh);
 	void Advance(float DeltaTime);
 	void UpdateKick(float DeltaTime, const colony::Sim& Sim, const USimSubsystem& Bridge);

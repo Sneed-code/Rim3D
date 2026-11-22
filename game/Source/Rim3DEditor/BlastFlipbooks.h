@@ -20,8 +20,13 @@
 namespace blastfx
 {
 	constexpr int kFrames = 8;  // per side
-	// The volume is drawn this much smaller than the frame's -1..1, so the largest cloud nearly fills it.
-	constexpr float kFill = 0.74f;
+	// The frame's -1..1 shows the volume's -kFill..kFill. The biggest cloud reaches about 1.0, so it fits inside with a soft
+	// edge (sneed 2026-11-22: at 0.74 the clouds were cut off square at the frame's edges and read as low quality). The game
+	// draws sprites kSpriteScale times bigger than before to keep the same size on screen.
+	constexpr float kFill = 1.05f;
+	constexpr float kOldFill = 0.74f;
+	// How many octaves of noise: enough for detail at 512 px a frame.
+	constexpr int kOctaves = 6;
 
 	struct Pixel
 	{
@@ -80,34 +85,66 @@ namespace blastfx
 		return L(L(L(C000, C100, Fx), L(C010, C110, Fx), Fy), L(L(C001, C101, Fx), L(C011, C111, Fx), Fy), Fz);
 	}
 
+	/** A pseudo-random unit-ish gradient at a lattice corner (one of 12 cube edge directions). */
+	inline float GradDot(int X, int Y, int Z, uint32_t Seed, float Dx, float Dy, float Dz)
+	{
+		const int H = static_cast<int>(Hash3(X, Y, Z, Seed) * 12.0f) % 12;
+		const float U = H < 8 ? Dx : Dy;
+		const float V = H < 4 ? Dy : Dz;
+		return ((H & 1) ? -U : U) + ((H & 2) ? -V : V);
+	}
+
+	/** Smooth gradient (Perlin) noise, about 0 to 1: rounder lumps than value noise, which drew the clouds boxy. */
+	inline float GNoise3(Vec3 P, uint32_t Seed)
+	{
+		const float Fx0 = std::floor(P.X), Fy0 = std::floor(P.Y), Fz0 = std::floor(P.Z);
+		const int X0 = static_cast<int>(Fx0), Y0 = static_cast<int>(Fy0), Z0 = static_cast<int>(Fz0);
+		const float Dx = P.X - Fx0, Dy = P.Y - Fy0, Dz = P.Z - Fz0;
+		auto Fade = [](float T) { return T * T * T * (T * (T * 6.0f - 15.0f) + 10.0f); };
+		const float U = Fade(Dx), V = Fade(Dy), W = Fade(Dz);
+		auto L = [](float A, float B, float T) { return A + (B - A) * T; };
+		const float N000 = GradDot(X0, Y0, Z0, Seed, Dx, Dy, Dz);
+		const float N100 = GradDot(X0 + 1, Y0, Z0, Seed, Dx - 1.0f, Dy, Dz);
+		const float N010 = GradDot(X0, Y0 + 1, Z0, Seed, Dx, Dy - 1.0f, Dz);
+		const float N110 = GradDot(X0 + 1, Y0 + 1, Z0, Seed, Dx - 1.0f, Dy - 1.0f, Dz);
+		const float N001 = GradDot(X0, Y0, Z0 + 1, Seed, Dx, Dy, Dz - 1.0f);
+		const float N101 = GradDot(X0 + 1, Y0, Z0 + 1, Seed, Dx - 1.0f, Dy, Dz - 1.0f);
+		const float N011 = GradDot(X0, Y0 + 1, Z0 + 1, Seed, Dx, Dy - 1.0f, Dz - 1.0f);
+		const float N111 = GradDot(X0 + 1, Y0 + 1, Z0 + 1, Seed, Dx - 1.0f, Dy - 1.0f, Dz - 1.0f);
+		const float N = L(L(L(N000, N100, U), L(N010, N110, U), V), L(L(N001, N101, U), L(N011, N111, U), V), W);
+		return Clamp01(0.5f + 0.63f * N);  // 0.63: the same spread as the value noise the shapes were tuned with
+	}
+
 	/** Turns a point so value noise's grid does not show as square edges (a fixed rotation, applied every octave). */
 	inline Vec3 Turn(Vec3 P)
 	{
 		return {0.00f * P.X + 0.80f * P.Y + 0.60f * P.Z, -0.80f * P.X + 0.36f * P.Y - 0.48f * P.Z, -0.60f * P.X - 0.48f * P.Y + 0.64f * P.Z};
 	}
 
-	/** Billowy turbulence: sum of |2n - 1|, bright round lumps like rolling smoke. About 0 to 1. */
+	/** Billowy turbulence: sum of |2n - 1|, round lumps like rolling smoke. About 0.34 to 1.3, 0.62 on average. */
 	inline float Billow(Vec3 P, uint32_t Seed, int Octaves)
 	{
 		float Sum = 0.0f, Amp = 0.5f, Norm = 0.0f;
 		P = Turn(P);
 		for (int I = 0; I < Octaves; ++I)
 		{
-			Sum += (1.0f - std::fabs(2.0f * Noise3(P, Seed + static_cast<uint32_t>(I) * 131u) - 1.0f)) * Amp;
+			Sum += std::fabs(2.0f * GNoise3(P, Seed + static_cast<uint32_t>(I) * 131u) - 1.0f) * Amp;
 			Norm += Amp;
 			P = Turn(P) * 2.03f + Vec3{17.1f, 3.7f, 9.3f};
 			Amp *= 0.5f;
 		}
-		return Sum / Norm;
+		// Turbulence (|2n - 1|) bulges out in round lumps with creases between them, like the cauliflower of a real blast;
+		// the 1 - |2n - 1| it used to be drew thin ridges once the noise was gradient noise. Shifted to the old average (0.62).
+		return 0.34f + Sum / Norm;
 	}
 
-	inline float Fbm(Vec3 P, uint32_t Seed, int Octaves)
+	inline float Fbm(Vec3 P, uint32_t Seed, int Octaves, bool bGradient = false)
 	{
 		float Sum = 0.0f, Amp = 0.5f, Norm = 0.0f;
 		P = Turn(P);
 		for (int I = 0; I < Octaves; ++I)
 		{
-			Sum += Noise3(P, Seed + static_cast<uint32_t>(I) * 97u) * Amp;
+			Sum += (bGradient ? GNoise3(P, Seed + static_cast<uint32_t>(I) * 97u) : Noise3(P, Seed + static_cast<uint32_t>(I) * 97u)) * Amp;
 			Norm += Amp;
 			P = Turn(P) * 2.01f + Vec3{5.3f, 11.9f, 2.1f};
 			Amp *= 0.5f;
@@ -151,12 +188,12 @@ namespace blastfx
 		}
 		// Rolling surface: billow noise in the ball's own scale, drifting up as it grows.
 		const Vec3 N = Q * (2.2f / Radius) + Vec3{0.0f, -1.6f * T, 0.7f * T};
-		const float Lumps = Billow(N, Seed + 7u, 4);
+		const float Lumps = Billow(N, Seed + 7u, kOctaves);
 		const float Shape = Field + (Lumps - 0.62f) * 0.95f;
 		const float Fade = 1.0f - SmoothStep(0.55f, 1.0f, T);  // thins out at the end
 		S.Density = SmoothStep(0.0f, 0.3f, Shape) * (10.0f + 14.0f * (1.0f - T)) * (0.35f + 0.65f * Fade);
 		// Heat: high in the middle of the field, cooling with time from the outside in; noise makes tongues of flame.
-		const float Core = SmoothStep(-0.25f, 0.6f, Field + (Fbm(N * 0.7f + Vec3{3.0f, 1.0f, 0.0f}, Seed + 3u, 3) - 0.5f) * 0.7f);
+		const float Core = SmoothStep(-0.25f, 0.6f, Field + (Fbm(N * 0.7f + Vec3{3.0f, 1.0f, 0.0f}, Seed + 3u, 4, true) - 0.5f) * 0.7f);
 		const float Cool = std::pow(Clamp01(1.0f - T * 1.25f), 1.3f);
 		S.Heat = Clamp01(Core * (0.2f + 1.4f * Cool) - T * 0.3f) * SmoothStep(0.0f, 0.12f, Shape);
 		return S;
@@ -186,7 +223,7 @@ namespace blastfx
 			return S;
 		}
 		const Vec3 N = Q * (1.9f / Radius) + Vec3{0.3f * T, -0.9f * T, 0.5f * T};
-		const float Lumps = Billow(N, Seed + 11u, 4);
+		const float Lumps = Billow(N, Seed + 11u, kOctaves);
 		const float Shape = Field + (Lumps - 0.62f) * (0.7f + 0.3f * T);
 		const float Thin = 1.0f - SmoothStep(0.35f, 1.0f, T);
 		S.Density = SmoothStep(0.0f, 0.25f + 0.2f * T, Shape) * (6.0f + 6.0f * (1.0f - T)) * (0.15f + 0.85f * Thin);
@@ -206,7 +243,7 @@ namespace blastfx
 		const int CX = (Frame % kFrames) * Cell;
 		const int CY = (Frame / kFrames) * Cell;
 		const float T = static_cast<float>(Frame) / static_cast<float>(kFrames * kFrames - 1);
-		const int Steps = 72;
+		const int Steps = 128;
 		const float Dz = 2.0f / Steps;
 		const Vec3 LightDir{-0.35f, 0.85f, -0.4f};  // up, a little left and toward the viewer (z is away from the viewer)
 		const float LightLen = Length(LightDir);
@@ -230,17 +267,20 @@ namespace blastfx
 				for (int I = 0; I < Steps && Trans > 0.01f; ++I)
 				{
 					const Vec3 P{U * kFill, V * kFill, (-1.0f + (I + Jitter) * Dz) * kFill};
-					const Sample S = At(P);
+					Sample S = At(P);
+					// Nothing may touch the frame's edge: fade the volume out softly before it (a square cut reads as cheap).
+					const float Edge = std::sqrt(P.X * P.X + P.Y * P.Y + P.Z * P.Z) / kFill;
+					S.Density *= 1.0f - SmoothStep(0.86f, 1.0f, Edge);
 					if (S.Density <= 0.0f)
 					{
 						continue;
 					}
-					const float Absorb = 1.0f - std::exp(-S.Density * Dz);
+					const float Absorb = 1.0f - std::exp(-S.Density * Dz * (kFill / kOldFill));
 					// Light: a few steps toward the light.
 					float Shadow = 0.0f;
-					for (int J = 1; J <= 4; ++J)
+					for (int J = 1; J <= 6; ++J)
 					{
-						Shadow += At(P + L * (0.09f * J * J * 0.5f + 0.04f)).Density * 0.09f * J;
+						Shadow += At(P + L * (0.04f * J * J * 0.5f + 0.03f)).Density * 0.04f * J;
 					}
 					const float Lit = std::exp(-Shadow * 0.9f);
 					const float Ambient = 0.18f;

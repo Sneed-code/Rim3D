@@ -14,16 +14,21 @@ recorded blasts, a far layer past 100 m, heard late by the speed of sound).
 | What | How |
 | --- | --- |
 | Flash | a white-hot fireball sprite for 0.14 s (the flipbook's first frames, 3 x the fire's glow) |
-| Fireball | 5 flipbook sprites thrown out and up, each 1.3 to 1.8 s from white-hot through orange to dark smoke |
+| Fireball | 7 flipbook sprites thrown out and up, each 1.3 to 1.8 s from white-hot through orange to dark smoke |
 | Light | a shadow-casting point light: a white peak of 400,000 cd gone in about 0.05 s, under it an orange glow of 60,000 cd fading over a second, rising with the smoke (x radius / 1.9 m, x `Blast.LightScale`). A real fireball is about a million candelas; 14,000 did nothing visible at noon (PC round 2) |
 | Smoke | 8 grey-brown puffs of soot and dust, staggered over half a second, lifting, swelling to 4 to 6 m (x the square root of radius / 1.9 m) and drifting with the sim's wind; they hang `Blast.SmokeSeconds` (14 s, each 70% to 120% of it) and glow orange from the fire under them for the first second |
 | Dirt | 7 brown puffs thrown 5 to 9 m/s up from the ground under the blast that fall back as a haze over 2 to 3.5 s |
 | Shock wave | a ring of 20 dust puffs racing out along the ground at 11 to 16 m/s and stopping 3 to 4 m out |
 | Heat shimmer | a ring of bent light swelling from 1.2 to 11 m in a third of a second |
 | Fragments | 40 glowing streaks at 15 to 35 m/s (each as long as it flies in 1/25 s) and 10 slower embers that arc down |
-| Debris | `UShooterFeelSubsystem`'s Chaos rigid bodies, now dark soil, brown soil and grey stone clods, mostly small; the fast ones trail dust for their first second |
+| Soil jets | 8 to 30 jets of dark earth flung up in a cone from the crater at 9 to 15 m/s, three blobs down each so it stretches as it flies, raining back down over 2 s |
+| Debris | `UShooterFeelSubsystem`'s Chaos rigid bodies: lumpy clods of dark and brown soil and a few grey stones (320-triangle noise-pushed balls, smooth shaded, mottled colour, rolling on a sphere), mostly small; the fast ones trail dust for their first second. sneed 2026-11-22: the old 10 cm cubes read as "ultra low poly" |
 | Scorch | a ragged charred core (mottled soot darker along cracks, patches of grey ash, a little sheen, embers a few centimetres across glowing and flickering for the first half minute) with spokes of soot thrown out past it, pale blown-out dust between the spokes, a small pit of churned soil in the middle and dark fragment pocks, 1.4 to 1.8 radii across, at a random turn, on a flat square laid on the ground along its slope 4 cm up (a deferred decal never showed on the PC); fades over `Blast.ScorchSeconds` (5 minutes, slowly at first), at most 40 at once |
 | Camera | `UShooterFeelSubsystem`'s shake, blur and vignette by distance (unchanged) |
+
+**In flight**, a rocket leaves pale grey exhaust smoke (45 puffs a second, each swelling from 22 cm to 1.1 to 1.6 m over 2 to
+3 s, drifting with the wind) with a flame at its nozzle; a launcher shell a thin grey puff; a molotov small flames
+(`UBlastFxSubsystem::AddTrail`, from the Projectiles def's `visual.trail`). Without the art the old solid balls stay.
 
 Everything scales with the blast's radius against the frag grenade's 1.9 m. A **fire blast** (damage type with `mix.sub`
 Fire: a molotov) is a wide low splash of 9 fire sprites, 6 black smoke puffs for 6 to 9 s, 14 sparks and an orange glow;
@@ -37,8 +42,8 @@ Each kind (fire, smoke, sparks, shimmer) is one instanced mesh of the engine's 1
 frame and **sorted far to near** so the see-through layers blend right. Per-instance data (`BlastFxData.h`): flipbook
 frame, opacity, tint, fire glow, a left-right mirror (so neighbours differ) and the orange glow from below.
 
-The **flipbooks** are 8 x 8 frames of 256 px (2048 textures, BC7), drawn by marching rays through a noise volume:
-billowing lumps (turbulence noise round a cluster of spheres) that swell and lift; for the fireball a heat field, hot in the
+The **flipbooks** are 8 x 8 frames of 512 px (4096 textures, BC7, never streamed), drawn by marching rays (128 steps, 6 toward
+the light) through a noise volume: billowing lumps (6 octaves of gradient-noise turbulence round a cluster of spheres) that swell and lift; for the fireball a heat field, hot in the
 middle and cooling from the outside in. Each pixel keeps heat (R), the light the smoke gets from above (G, baked
 self-shadowing), a little depth noise (B) and opacity (A). The materials (`M_BlastFire`, `M_BlastSmoke`) blend the two frames
 either side of the sprite's moment, colour the smoke by its tint and baked light (lit translucent, volumetric, so the sun,
@@ -46,13 +51,19 @@ the sky and the blast's own light reach it), make the heat glow as a black body 
 `Blast.FireBrightness` **through the inverse of the camera's exposure** (so a glow of 1 is plain white at noon, EV 15, and at night alike;
 a plain emissive of 40 was invisible at noon in PC round 2), and fade softly where a sprite cuts into the ground (depth fade 60 cm).
 
+sneed 2026-11-22 ("the explosion graphic is low pixel"): the frames were 256 px, the texture was streamed at a small mip
+(the streamer judges a 1 m plane, not the 5 m it is scaled to), the clouds were cut off square at the frame's edges (the
+volume reached past what a frame showed) and value noise drew boxy lumps. Now 512 px, never streamed, the frame shows
+the volume's -1.05..1.05 with a soft fade before the edge (sprites drawn `BlastFxData::SpriteScale` = 1.05 / 0.74 bigger to
+keep their size), and gradient-noise turbulence draws round cauliflower billows.
+
 All numbers are ours, found by eye in the previews (no RimWorld numbers apply: RimWorld draws a blast as a flat ring).
 
 ## Art and fallbacks
 
 `UnrealEditor-Cmd.exe game\Rim3D.uproject -run=BlastArt -unattended -nosplash -nullrhi [-force]` makes
 `/Game/Rim3D/Generated/Blast` (not in Git): T_BlastFire, T_BlastSmoke, T_BlastScorch, M_BlastFire, M_BlastSmoke, M_BlastSpark,
-M_BlastHaze, M_BlastScorch. It takes about a minute (the flipbooks are drawn on all cores). Without the art, or with
+M_BlastHaze, M_BlastScorch. It takes a few minutes (the flipbooks are drawn on all cores). Without the art, or with
 `Blast.Enable 0`, `UShooterFeelSubsystem` draws its old simple blast (coloured balls) as before.
 
 If the fire comes out upside down on the PC (the plane's texture runs the other way), `Blast.FlipV 1` turns it.
