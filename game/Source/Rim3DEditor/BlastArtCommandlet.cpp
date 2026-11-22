@@ -28,7 +28,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogBlastArt, Log, All);
 
 namespace
 {
-	constexpr int32 BlastArtFlipbookSize = 2048;  // 256 px a frame
+	constexpr int32 BlastArtFlipbookSize = 4096;  // 512 px a frame (sneed 2026-11-22: 256 px read as low pixel up close)
 	constexpr int32 BlastArtScorchSize = 1024;
 
 	template <typename T>
@@ -95,6 +95,9 @@ namespace
 		Texture->SRGB = false;
 		Texture->CompressionSettings = TC_BC7;
 		Texture->LODGroup = TEXTUREGROUP_Effects;
+		// Always the full picture: the streamer judged a 1 m plane scaled up many times by its own size and kept a small mip,
+		// so close blasts were blurry.
+		Texture->NeverStream = true;
 		Texture->MipGenSettings = TMGS_FromTextureGroup;
 		Texture->AddressX = TA_Clamp;
 		Texture->AddressY = TA_Clamp;
