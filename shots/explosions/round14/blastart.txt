@@ -1,0 +1,1 @@
+BlastArt -force -nullrhi took 207 s, Blast art done, 0 failures
