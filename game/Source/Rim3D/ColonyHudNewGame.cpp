@@ -6,6 +6,7 @@
 #include "ColonyHudSubsystem.h"
 
 #include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/PointLight.h"
@@ -55,6 +56,34 @@ namespace
 	// nearest NgPreviewHour, earlier in the morning, whose exposure (ours, which reads a little above the engine's) stays
 	// under this. At 6:30, 12.1 of ours showed no warning; 10:30 did.
 	constexpr float NgPreviewMaxEV = 12.25f;
+
+	// The title screen's camera (cosmetic): the glade it circles is the open spot with the fewest trees within
+	// NgTitleGladeMetres; it circles at NgTitleOrbitMetres, NgTitleEyeHeightCm over the ground, with the glade
+	// NgTitleSubjectOffsetDegrees right of the middle, in the morning (NgTitleHour, or earlier if too bright).
+	constexpr float NgTitleGladeMetres = 16.0f;
+	constexpr float NgTitleOrbitMetres = 14.0f;
+	constexpr float NgTitleEyeHeightCm = 230.0f;
+	constexpr float NgTitleFieldOfView = 55.0f;
+	constexpr float NgTitleDegreesPerSecond = 1.6f;
+	constexpr float NgTitleSubjectOffsetDegrees = 14.0f;
+	constexpr float NgTitleHour = 7.25f;
+	constexpr float NgTitleLetterSpacing = 0.16f;  // of the name's size, between its letters
+
+	/** The hour nearest `Preferred`, earlier in the morning, whose exposure stays under NgPreviewMaxEV (see there). */
+	float NgCalmHour(const USkySubsystem& Sky, const USimSubsystem& Bridge, float Preferred)
+	{
+		if (!Bridge.GetSim())
+		{
+			return Preferred;
+		}
+		const float Day = static_cast<float>(FMath::Fmod(static_cast<double>(Bridge.GetGameSeconds()) / colony::kSecondsPerDay, static_cast<double>(colony::kDaysPerYear)));
+		float Hour = Preferred;
+		while (Hour > 6.5f && Sky.ComputeState(*Bridge.GetSim(), Hour, Day).ExposureEV + Sky.GetLook().DarkerEV > NgPreviewMaxEV)
+		{
+			Hour -= 0.25f;
+		}
+		return Hour;
+	}
 
 	/**
 	 * "Canopy", the new-game screens' own look: dark green-black glass panels with square corners and a short jade bar on
@@ -364,6 +393,12 @@ void UColonyHudSubsystem::LandColonyForTest()
 
 void UColonyHudSubsystem::EndPeopleCamera()
 {
+	// Called every frame on the other menu pages: only a screen that was shown has anything to end (the title keeps its
+	// own clearings and light).
+	if (!PeopleCamera.IsValid() && !PeopleLamp.IsValid())
+	{
+		return;
+	}
 	if (ACameraActor* Camera = PeopleCamera.Get())
 	{
 		Camera->Destroy();
@@ -509,25 +544,19 @@ void UColonyHudSubsystem::UpdatePeopleCamera(colony::Entity Pawn)
 	USimSubsystem* Bridge = World->GetSubsystem<USimSubsystem>();
 	if (USkySubsystem* Sky = World->GetSubsystem<USkySubsystem>(); Sky && Sky->GetHourOverride() < 0.0f && Bridge && Bridge->GetSim())
 	{
-		const float Day = static_cast<float>(FMath::Fmod(static_cast<double>(Bridge->GetGameSeconds()) / colony::kSecondsPerDay, static_cast<double>(colony::kDaysPerYear)));
-		float Hour = NgPreviewHour;
-		while (Hour > 6.5f && Sky->ComputeState(*Bridge->GetSim(), Hour, Day).ExposureEV + Sky->GetLook().DarkerEV > NgPreviewMaxEV)
-		{
-			Hour -= 0.25f;
-		}
-		Sky->SetHourOverride(Hour);
+		Sky->SetHourOverride(NgCalmHour(*Sky, *Bridge, NgPreviewHour));
 	}
 	// A clearing round each person on show, so no tree stands over them or between them and the camera.
 	if (UTerrainSubsystem* Terrain = World->GetSubsystem<UTerrainSubsystem>(); Terrain && Bridge && Bridge->GetSim())
 	{
 		const FVector Origin = Bridge->SimToWorld(0.0f, 0.0f, 0);
-		TArray<FVector3f> Clearings;
+		TArray<FVector4f> Clearings;
 		for (const colony::Entity Shown : Bridge->GetSim()->startingColonistSlots())
 		{
 			if (const ASimPawnActor* ShownActor = Pawns->FindPawn(Shown))
 			{
 				const FVector P = (ShownActor->GetActorLocation() - Origin) / 100.0;
-				Clearings.Add(FVector3f(static_cast<float>(P.X), static_cast<float>(P.Y), NgPreviewClearingMetres));
+				Clearings.Add(FVector4f(static_cast<float>(P.X), static_cast<float>(P.Y), NgPreviewClearingMetres, 0.0f));
 			}
 		}
 		Terrain->SetPlantClearings(Clearings);
@@ -616,21 +645,186 @@ void UColonyHudSubsystem::SubmitPeopleLook(colony::Entity Pawn, int32 Slot, cons
 
 // ---- Pages ----------------------------------------------------------------------------------------
 
+// ---- The title screen -----------------------------------------------------------------------------
+
+void UColonyHudSubsystem::UpdateTitleCamera(USimSubsystem& Bridge)
+{
+	UWorld* World = GetWorld();
+	APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	const colony::Sim* Sim = Bridge.GetSim();
+	if (!PC || !Sim)
+	{
+		return;
+	}
+	const colony::Map& Map = Sim->map();
+	const FVector Origin = Bridge.SimToWorld(0.0f, 0.0f, 0);
+	if (!TitleCamera.IsValid())
+	{
+		// The glade: of a grid of walkable spots in the map's middle, the one with the fewest trees round it (a little
+		// pull towards the middle), so the camera sees the forest's edge across open ground.
+		const colony::Plants& Plants = Sim->plants();
+		const float Size = static_cast<float>(FMath::Min(Map.width(), Map.height()));
+		float BestScore = TNumericLimits<float>::Max();
+		TitleFocus = FVector2D(Map.width() * 0.5, Map.height() * 0.5);
+		for (float Y = Size * 0.2f; Y <= Size * 0.8f; Y += 8.0f)
+		{
+			for (float X = Size * 0.2f; X <= Size * 0.8f; X += 8.0f)
+			{
+				if (!Map.walkable(colony::CellPos{FMath::FloorToInt32(X), FMath::FloorToInt32(Y), 0}))
+				{
+					continue;
+				}
+				float Trees = 0.0f;
+				for (float DY = -NgTitleGladeMetres; DY <= NgTitleGladeMetres; DY += 2.0f)
+				{
+					for (float DX = -NgTitleGladeMetres; DX <= NgTitleGladeMetres; DX += 2.0f)
+					{
+						const colony::CellPos Cell{FMath::FloorToInt32(X + DX), FMath::FloorToInt32(Y + DY), 0};
+						if (DX * DX + DY * DY <= NgTitleGladeMetres * NgTitleGladeMetres && Map.inBounds(Cell) && (Plants.isTree(Cell) || !Map.walkable(Cell)))
+						{
+							Trees += 1.0f;
+						}
+					}
+				}
+				const float Score = Trees + 0.03f * FVector2D::Distance(FVector2D(X, Y), FVector2D(Size * 0.5f, Size * 0.5f));
+				if (Score < BestScore)
+				{
+					BestScore = Score;
+					TitleFocus = FVector2D(X, Y);
+				}
+			}
+		}
+		TitleRadius = NgTitleOrbitMetres;
+		TitleYaw = 0.0f;
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		TitleCamera = World->SpawnActor<ACameraActor>(Origin + FVector(TitleFocus.X * 100.0, TitleFocus.Y * 100.0, 300.0), FRotator::ZeroRotator, Params);
+		if (ACameraActor* Made = TitleCamera.Get())
+		{
+			Made->GetCameraComponent()->SetFieldOfView(NgTitleFieldOfView);
+		}
+		// No trunk across the camera's circle or in the glade (undergrowth stays): cosmetic, gone when the title goes.
+		if (UTerrainSubsystem* Terrain = World->GetSubsystem<UTerrainSubsystem>())
+		{
+			TArray<FVector4f> Clearings;
+			Clearings.Add(FVector4f(static_cast<float>(TitleFocus.X), static_cast<float>(TitleFocus.Y), 5.0f, 1.0f));
+			for (int32 i = 0; i < 20; ++i)
+			{
+				const float A = static_cast<float>(i) / 20.0f * 2.0f * PI;
+				Clearings.Add(FVector4f(static_cast<float>(TitleFocus.X) + FMath::Cos(A) * TitleRadius, static_cast<float>(TitleFocus.Y) + FMath::Sin(A) * TitleRadius, 4.5f, 1.0f));
+			}
+			Terrain->SetPlantClearings(Clearings);
+		}
+		// Calm morning light, held while the title shows.
+		if (USkySubsystem* Sky = World->GetSubsystem<USkySubsystem>())
+		{
+			Sky->SetHourOverride(NgCalmHour(*Sky, Bridge, NgTitleHour));
+		}
+	}
+	ACameraActor* Camera = TitleCamera.Get();
+	if (!Camera)
+	{
+		return;
+	}
+	// A slow drift round the glade, low, the glade a little right of the middle (the menu is on the left).
+	const float Delta = FMath::Clamp(ImGui::GetIO().DeltaTime, 0.0f, 0.1f);
+	TitleYaw = FRotator::NormalizeAxis(TitleYaw + NgTitleDegreesPerSecond * Delta);
+	const float Rad = FMath::DegreesToRadians(TitleYaw);
+	const float EyeX = static_cast<float>(TitleFocus.X) + FMath::Cos(Rad) * TitleRadius;
+	const float EyeY = static_cast<float>(TitleFocus.Y) + FMath::Sin(Rad) * TitleRadius;
+	const FVector Eye = Bridge.SimToWorld(EyeX, EyeY, 0) + FVector(0.0, 0.0, NgTitleEyeHeightCm);
+	const FVector Look = Bridge.SimToWorld(static_cast<float>(TitleFocus.X), static_cast<float>(TitleFocus.Y), 0) + FVector(0.0, 0.0, 160.0);
+	FRotator View = (Look - Eye).Rotation();
+	View.Yaw -= NgTitleSubjectOffsetDegrees;
+	View.Pitch = FMath::Clamp(View.Pitch + 2.0, -15.0, 10.0);
+	Camera->SetActorLocationAndRotation(Eye, View);
+	if (PC->GetViewTarget() != Camera)
+	{
+		PC->SetViewTarget(Camera);
+	}
+}
+
+void UColonyHudSubsystem::EndTitleCamera()
+{
+	ACameraActor* Camera = TitleCamera.Get();
+	if (!Camera)
+	{
+		return;
+	}
+	UWorld* World = GetWorld();
+	if (APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr; PC && PC->GetViewTarget() == Camera)
+	{
+		PC->SetViewTarget(PC->GetPawn() ? static_cast<AActor*>(PC->GetPawn()) : static_cast<AActor*>(PC));
+	}
+	Camera->Destroy();
+	TitleCamera.Reset();
+	TitleShownAt = -1.0;
+	if (World)
+	{
+		if (UTerrainSubsystem* Terrain = World->GetSubsystem<UTerrainSubsystem>())
+		{
+			Terrain->SetPlantClearings({});
+		}
+		if (USkySubsystem* Sky = World->GetSubsystem<USkySubsystem>())
+		{
+			Sky->SetHourOverride(-1.0f);
+		}
+	}
+}
+
+void UColonyHudSubsystem::DrawMenuBackdrop(USimSubsystem& Bridge, float Scale)
+{
+	(void)Scale;
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	ImDrawList* Back = ImGui::GetBackgroundDrawList();
+	const ImVec2 A = Viewport->Pos;
+	const ImVec2 B(Viewport->Pos.x + Viewport->Size.x, Viewport->Pos.y + Viewport->Size.y);
+	if (MainMenuPage != 0)
+	{
+		// The other pages: a dark veil, heavier on the left.
+		Back->AddRectFilledMultiColor(A, B, IM_COL32(6, 8, 10, 215), IM_COL32(6, 8, 10, 120), IM_COL32(6, 8, 10, 120), IM_COL32(6, 8, 10, 215));
+		return;
+	}
+	// The title: the world shows; a deep shade behind the menu on the left fades out by the middle, the bottom and the
+	// top edge darken a little (a film's framing).
+	const float W = Viewport->Size.x;
+	const float H = Viewport->Size.y;
+	const ImU32 Deep = IM_COL32(4, 7, 6, Bridge.IsTitleBackdrop() ? 200 : 225);
+	const ImU32 Clear = IM_COL32(4, 7, 6, 0);
+	Back->AddRectFilledMultiColor(A, ImVec2(A.x + W * 0.62f, B.y), Deep, Clear, Clear, Deep);
+	Back->AddRectFilledMultiColor(ImVec2(A.x, A.y + H * 0.70f), B, Clear, Clear, IM_COL32(4, 7, 6, 170), IM_COL32(4, 7, 6, 170));
+	Back->AddRectFilledMultiColor(A, ImVec2(B.x, A.y + H * 0.14f), IM_COL32(4, 7, 6, 110), IM_COL32(4, 7, 6, 110), Clear, Clear);
+}
+
+void UColonyHudSubsystem::LoadFromMenu(USimSubsystem& Bridge, const FString& Slot)
+{
+	if (!Bridge.LoadGame(Slot))
+	{
+		return;
+	}
+	EndTitleCamera();
+	bNarratorPending = false;
+	bMainMenuOpen = false;
+	MainMenuPage = 0;
+	if (UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>())
+	{
+		Overseer->EnterOverseerMode();
+	}
+}
+
 void UColonyHudSubsystem::DrawTitlePage(USimSubsystem& Bridge, float Scale)
 {
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
-	const float Wide = 380.0f * Scale;
-	if (!NgBeginPanel("##NgTitle", ImVec2(Viewport->Pos.x + 80.0f * Scale, Viewport->Pos.y + Viewport->Size.y * 0.28f), ImVec2(Wide + 40.0f * Scale, 0.0f)))
+	const double Now = ImGui::GetTime();
+	if (TitleShownAt < 0.0)
 	{
-		NgEndPanel();
-		return;
+		TitleShownAt = Now;
 	}
-	NgTitle(TEXT("Rim3D"));
-	ColonyHud::TextColored(NgStyle::Dim, TEXT("A colony on the rim, year 6650"));
-	NgRule();
-	ImGui::Spacing();
+	const float Age = static_cast<float>(Now - TitleShownAt);
+	const auto Fade = [Age](float Start, float Length) { const float T = FMath::Clamp((Age - Start) / Length, 0.0f, 1.0f); return 1.0f - (1.0f - T) * (1.0f - T) * (1.0f - T); };
+	const auto Colour = [](const ImVec4& C, float Alpha) { return ImGui::GetColorU32(ImVec4(C.x, C.y, C.z, C.w * Alpha)); };
 
-	// Continue: the newest save.
+	// The newest save, for Continue.
 	FString Newest;
 	FDateTime NewestTime = FDateTime::MinValue();
 	{
@@ -646,35 +840,106 @@ void UColonyHudSubsystem::DrawTitlePage(USimSubsystem& Bridge, float Scale)
 			}
 		}
 	}
-	const bool bRunning = Bridge.GetSim() && Bridge.GetSim()->time().steps > 0;
-	if (bRunning && NgButton(TEXT("Back to the game"), false, ImVec2(Wide, 0.0f), true))
+	const bool bInGame = Bridge.GetSim() && !Bridge.IsTitleBackdrop();
+
+	ImGui::SetNextWindowPos(Viewport->Pos, ImGuiCond_Always);
+	ImGui::SetNextWindowSize(Viewport->Size, ImGuiCond_Always);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+	const bool bOpen = ImGui::Begin("##NgTitleScreen", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove |
+		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
+	ImGui::PopStyleVar();
+	if (!bOpen)
+	{
+		ImGui::End();
+		return;
+	}
+	ImDrawList* Draw = ImGui::GetWindowDrawList();
+	const float W = Viewport->Size.x;
+	const float H = Viewport->Size.y;
+	const float Left = Viewport->Pos.x + FMath::Max(W * 0.075f, 48.0f * Scale);
+	// Sizes below are in pixels; PushFont takes them before the frame's text scale, hence ToFont.
+	const float Base = ImGui::GetFontSize();
+	const float ToFont = ImGui::GetStyle().FontSizeBase / FMath::Max(Base, 1.0f);
+
+	// The name: big, widely spaced capitals, a short jade bar under it, then the line about the setting.
+	const float LogoSize = FMath::Clamp(H * 0.11f, 64.0f * Scale, 168.0f * Scale);
+	const float LogoTop = Viewport->Pos.y + H * 0.20f;
+	const float LogoAlpha = Fade(0.1f, 1.1f);
+	{
+		ImGui::PushFont(nullptr, LogoSize * ToFont);
+		float X = Left + (1.0f - LogoAlpha) * -24.0f * Scale;
+		for (const char* Letter = "RIM3D"; *Letter; ++Letter)
+		{
+			const char Glyph[2] = {*Letter, 0};
+			Draw->AddText(ImVec2(X, LogoTop), Colour(NgStyle::Text, LogoAlpha), Glyph);
+			X += ImGui::CalcTextSize(Glyph).x + LogoSize * NgTitleLetterSpacing;
+		}
+		ImGui::PopFont();
+	}
+	const float BarTop = LogoTop + LogoSize * 1.08f;
+	const float BarAlpha = Fade(0.5f, 0.8f);
+	Draw->AddRectFilled(ImVec2(Left, BarTop), ImVec2(Left + 84.0f * Scale * BarAlpha, BarTop + 4.0f * Scale), Colour(NgStyle::Jade, BarAlpha));
+	ImGui::PushFont(nullptr, Base * 1.2f * ToFont);
+	Draw->AddText(ImVec2(Left, BarTop + 18.0f * Scale), Colour(NgStyle::Dim, Fade(0.6f, 0.9f)), "A colony on the rim, year 6650");
+	ImGui::PopFont();
+
+	// The menu: big plain words, no boxes; the one under the mouse brightens, moves in a little and gets the jade bar.
+	float ItemTop = BarTop + 18.0f * Scale + Base * 1.2f + H * 0.07f;
+	const float ItemWidth = FMath::Min(W * 0.32f, 520.0f * Scale);
+	const float ItemHeight = Base * 2.35f;
+	int32 ItemIndex = 0;
+	const auto Item = [&](const TCHAR* Label, const FString& Note, bool bPrimary, float GapBefore) -> bool
+	{
+		ItemTop += GapBefore;
+		const float Alpha = Fade(0.75f + ItemIndex * 0.07f, 0.55f);
+		const float Slide = (1.0f - Alpha) * -18.0f * Scale;
+		ImGui::SetCursorScreenPos(ImVec2(Left + Slide, ItemTop));
+		ImGui::PushID(ItemIndex++);
+		const bool bClicked = ImGui::InvisibleButton("##item", ImVec2(ItemWidth, ItemHeight)) && Alpha > 0.5f;
+		const bool bHovered = ImGui::IsItemHovered();
+		ImGui::PopID();
+		const float Size = Base * 1.6f;
+		const float TextY = ItemTop + (ItemHeight - Size) * 0.5f;
+		const float Indent = bHovered ? 22.0f * Scale : 0.0f;
+		if (bHovered)
+		{
+			Draw->AddRectFilled(ImVec2(Left + Slide, TextY + Size * 0.12f), ImVec2(Left + Slide + 4.0f * Scale, TextY + Size * 0.92f), Colour(NgStyle::Jade, Alpha));
+		}
+		const ImVec4& Tone = bPrimary ? NgStyle::Jade : NgStyle::Text;
+		const FTCHARToUTF8 Text(Label);
+		ImGui::PushFont(nullptr, Size * ToFont);
+		Draw->AddText(ImVec2(Left + Slide + Indent, TextY), Colour(Tone, Alpha * (bHovered || bPrimary ? 1.0f : 0.80f)), Text.Get());
+		const float TextWide = ImGui::CalcTextSize(Text.Get()).x;
+		ImGui::PopFont();
+		if (!Note.IsEmpty())
+		{
+			const FTCHARToUTF8 Small(*Note);
+			ImGui::PushFont(nullptr, Base * 0.95f * ToFont);
+			Draw->AddText(ImVec2(Left + Slide + Indent + TextWide + 16.0f * Scale, TextY + Size - Base * 1.05f), Colour(NgStyle::Faint, Alpha * (bHovered ? 1.4f : 1.0f)), Small.Get());
+			ImGui::PopFont();
+		}
+		ItemTop += ItemHeight;
+		return bClicked;
+	};
+
+	if (bInGame && Item(TEXT("Back to the game"), FString(), true, 0.0f))
 	{
 		bMainMenuOpen = false;
 	}
-	if (!bRunning && !Newest.IsEmpty())
+	if (!bInGame && !Newest.IsEmpty() && Item(TEXT("Continue"), FString::Printf(TEXT("%s, %s"), *Newest, *NewestTime.ToString(TEXT("%d %b %H:%M"))), true, 0.0f))
 	{
-		if (NgButton(TEXT("Continue"), false, ImVec2(Wide, 0.0f), true) && Bridge.LoadGame(Newest))
-		{
-			bNarratorPending = false;
-			bMainMenuOpen = false;
-			if (UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>())
-			{
-				Overseer->EnterOverseerMode();
-			}
-		}
-		ColonyHud::Tip(FString::Printf(TEXT("%s, saved %s"), *Newest, *NewestTime.ToString(TEXT("%d %b %Y %H:%M"))));
+		LoadFromMenu(Bridge, Newest);
 	}
-	if (NgButton(TEXT("New colony"), false, ImVec2(Wide, 0.0f)))
+	if (Item(TEXT("New colony"), FString(), !bInGame && Newest.IsEmpty(), 0.0f))
 	{
 		MainMenuPage = 1;
 	}
-	if (NgButton(TEXT("Load a game"), false, ImVec2(Wide, 0.0f)))
+	if (Item(TEXT("Load a game"), FString(), false, 0.0f))
 	{
 		MainMenuPage = 2;
 		SaveSlots.Reset();
 		TArray<FString> Files;
 		IFileManager::Get().FindFiles(Files, *(USimSubsystem::GetSaveDirectory() / TEXT("*.save")), true, false);
-		// Newest first.
 		Files.Sort([](const FString& A, const FString& B)
 		{
 			return IFileManager::Get().GetTimeStamp(*(USimSubsystem::GetSaveDirectory() / A)) > IFileManager::Get().GetTimeStamp(*(USimSubsystem::GetSaveDirectory() / B));
@@ -684,21 +949,82 @@ void UColonyHudSubsystem::DrawTitlePage(USimSubsystem& Bridge, float Scale)
 			SaveSlots.Add(FPaths::GetBaseFilename(File));
 		}
 	}
-	if (NgButton(TEXT("Settings"), bSettingsOpen, ImVec2(Wide, 0.0f)))
+	if (Item(TEXT("Settings"), FString(), false, 0.0f))
 	{
 		bSettingsOpen = !bSettingsOpen;
 	}
-	if (NgButton(TEXT("Debug"), false, ImVec2(Wide, 0.0f)))
+	if (Item(TEXT("Debug"), TEXT("test scenes"), false, 0.0f))
 	{
 		MainMenuPage = 5;
 	}
-	ColonyHud::Tip(TEXT("Test scenes: the gun range, the character creator and more"));
-	ImGui::Spacing();
-	if (NgButton(TEXT("Quit to desktop"), false, ImVec2(Wide, 0.0f)))
+	if (Item(TEXT("Quit"), FString(), false, ItemHeight * 0.35f))
 	{
 		UKismetSystemLibrary::QuitGame(GetWorld(), GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
 	}
+
+	// The foot of the screen: where the land behind is, and the build.
+	const float FootAlpha = Fade(1.4f, 1.0f);
+	ImGui::PushFont(nullptr, Base * 0.95f * ToFont);
+	const float FootY = Viewport->Pos.y + H - FMath::Max(H * 0.06f, 32.0f * Scale);
+	FString Where;
+	if (Bridge.IsTitleBackdrop() && Bridge.GetSim() && Bridge.GetDefs())
+	{
+		const colony::Def* Biome = Bridge.GetDefs()->find("Biomes", Bridge.GetSim()->biome());
+		Where = Biome ? FString::Printf(TEXT("The wilds: %s, morning"), *NgCapital(Biome->label())) : FString();
+	}
+	if (!Where.IsEmpty())
+	{
+		const FTCHARToUTF8 WhereText(*Where);
+		const float WhereWide = ImGui::CalcTextSize(WhereText.Get()).x;
+		Draw->AddText(ImVec2(Viewport->Pos.x + W - FMath::Max(W * 0.075f, 48.0f * Scale) - WhereWide, FootY), Colour(NgStyle::Dim, FootAlpha * 0.8f), WhereText.Get());
+	}
+	Draw->AddText(ImVec2(Left, FootY), Colour(NgStyle::Faint, FootAlpha), "Early build. Made for sneed.");
+	ImGui::PopFont();
+	ImGui::End();
+}
+
+void UColonyHudSubsystem::DrawLoadPage(USimSubsystem& Bridge, float Scale)
+{
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	const ImVec2 Size(FMath::Min(760.0f * Scale, Viewport->Size.x - 80.0f * Scale), FMath::Min(620.0f * Scale, Viewport->Size.y - 120.0f * Scale));
+	const ImVec2 Pos(Viewport->Pos.x + (Viewport->Size.x - Size.x) * 0.5f, Viewport->Pos.y + (Viewport->Size.y - Size.y) * 0.5f);
+	if (!NgBeginPanel("##NgLoad", Pos, Size))
+	{
+		NgEndPanel();
+		return;
+	}
+	NgTitle(TEXT("Load a game"));
+	NgRule();
+	const float FooterH = ImGui::GetFrameHeightWithSpacing() * 1.6f;
+	ImGui::BeginChild("##NgLoadList", ImVec2(0.0f, -FooterH), ImGuiChildFlags_None);
+	if (SaveSlots.IsEmpty())
+	{
+		ColonyHud::TextColored(NgStyle::Dim, TEXT("No saved games yet. F5 saves while you play."));
+	}
+	FString Picked;
+	const float DateW = 220.0f * Scale;
+	for (const FString& Slot : SaveSlots)
+	{
+		const FDateTime Time = IFileManager::Get().GetTimeStamp(*(USimSubsystem::GetSaveDirectory() / (Slot + TEXT(".save"))));
+		if (NgButton(FString::Printf(TEXT("%s##slot"), *Slot), false, ImVec2(ImGui::GetContentRegionAvail().x - DateW, ImGui::GetFrameHeight() * 1.5f)))
+		{
+			Picked = Slot;
+		}
+		ImGui::SameLine();
+		ImGui::AlignTextToFramePadding();
+		ColonyHud::TextColored(NgStyle::Faint, Time.ToString(TEXT("%d %b %Y  %H:%M")));
+	}
+	ImGui::EndChild();
+	NgRule();
+	if (NgButton(TEXT("Back"), false, ImVec2(160.0f * Scale, 0.0f)))
+	{
+		MainMenuPage = 0;
+	}
 	NgEndPanel();
+	if (!Picked.IsEmpty())
+	{
+		LoadFromMenu(Bridge, Picked);
+	}
 }
 
 void UColonyHudSubsystem::DrawScenarioPage(USimSubsystem& Bridge, float Scale)
