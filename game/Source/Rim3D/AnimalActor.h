@@ -69,6 +69,8 @@ private:
 	void SetPose(ESimAnimalPose NewPose, float PlayRate);
 	/** Turns the mesh to face forward, or onto its side for a dead model with no death clip. */
 	void PlaceBody(bool bOnSide);
+	/** For a `"fit": "pose"` model: sets ArtScale from the skeleton's reach in the idle pose. */
+	void FitToPose(float InArtScale);
 
 	FSimAnimalModel Model;
 	colony::Entity Thing = colony::kNoEntity;
@@ -80,4 +82,6 @@ private:
 	float DrawScale = 1.0f;
 	float Yaw = 0.0f;
 	float SwimLiftCm = 0.0f;
+	/** Half the posed skeleton's size at scale 1 (a pose-fitted model), else zero: the mesh's bounds are used. */
+	FVector PoseHalfSize = FVector::ZeroVector;
 };

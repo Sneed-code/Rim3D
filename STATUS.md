@@ -9,7 +9,9 @@ defs and the 3 chitinids had no model and were drawn as the husky. Each now has 
 ostrich (guineafowl), turkey, dromedary (camel), arctic fox (fox), capybara and iguana (tropical), brood scarab and brood
 delver (rhino beetle), giant spider (wolf spider). Arctic wolf uses the timber wolf's model. Lookalikes are marked
 `stand_in` until a closer free model turns up. Sketchfab had no free realistic chicken, duck, ostrich, muskox or yak.
-`AnimalArt` now picks the shortest clip name that matches (so "Run" is not "Trans_Stand_to_Run"). Smoke `animals` has
+`AnimalArt` now picks the shortest clip name that matches (so "Run" is not "Trans_Stand_to_Run"). Six of the files
+(bear, elk, doe, turkey, spider, iguana) are Sketchfab FBX conversions whose mesh is in another unit than its
+animation (they drew 100 times too big or too small), so `"fit": "pose"` sizes them on their skeleton in the idle pose. Smoke `animals` has
 a new phase `animals_new` that fails if any of these is still the husky. The 4 mechanoids are drawn as people, not as
 the husky, and are left for a later task. **Next:** PC import and pictures.
 

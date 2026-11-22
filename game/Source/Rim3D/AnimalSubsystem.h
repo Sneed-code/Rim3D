@@ -36,6 +36,11 @@ struct FSimAnimalModel
 	FVector Extent = FVector::ZeroVector;
 	/** Scale that makes the imported mesh as long as the animal really is (`lengthM` in the art table). */
 	float FitScale = 1.0f;
+	/** `lengthM` in cm (0: none), and true for an import with `"fit": "pose"`: its file carries a unit scale that the
+	 *  mesh's bounds miss (Sketchfab's FBX conversions: a 0.01 node above the skeleton), so each actor measures its
+	 *  skeleton in the idle pose instead and fits that to the length. */
+	float WantedLengthCm = 0.0f;
+	bool bFitFromPose = false;
 	/** Degrees the mesh is turned so it faces the actor's forward (`yaw` in the art table's imports; Quaternius -90). */
 	float YawOffset = -90.0f;
 	/** How far the walk and gallop clips go per second at scale 1, in cm (`walkCm`, `gallopCm`). */
@@ -106,6 +111,8 @@ private:
 	TMap<FName, float> LengthsCm;
 	/** Per model from the art table's `imports`: yaw, walkCm, gallopCm. */
 	TMap<FName, FVector3f> ImportLooks;
+	/** Imports whose size is measured on the posed skeleton (`"fit": "pose"`). */
+	TSet<FName> FitFromPose;
 	/** Models already in Unreal's format (Fab packs): `assets` (mesh and clip object paths by role) and `parts`. */
 	TMap<FName, TMap<FString, FString>> ImportAssets;
 	TMap<FName, TArray<FString>> ImportParts;

@@ -117,6 +117,10 @@ void USimAnimalSubsystem::LoadArtTable()
 			Entry->TryGetNumberField(TEXT("gallopCm"), Gallop);
 			const FName ModelName(*Entry->GetStringField(TEXT("model")));
 			ImportLooks.Add(ModelName, FVector3f(YawValue, Walk, Gallop));
+			if (FString Fit; Entry->TryGetStringField(TEXT("fit"), Fit) && Fit == TEXT("pose"))
+			{
+				FitFromPose.Add(ModelName);
+			}
 			if (const TSharedPtr<FJsonObject>* Paths = nullptr; Entry->TryGetObjectField(TEXT("assets"), Paths))
 			{
 				TMap<FString, FString>& Roles = ImportAssets.Add(ModelName);
@@ -240,6 +244,8 @@ const FSimAnimalModel* USimAnimalSubsystem::GetModelFor(FName DefName, FSimAnima
 		const float NativeLength = FMath::Max(Model.Extent.X, Model.Extent.Y) * 2.0f;
 		const float* WantedLength = LengthsCm.Find(OutArt.Model);
 		Model.FitScale = WantedLength && NativeLength > 1.0f ? *WantedLength / NativeLength : 1.0f;
+		Model.WantedLengthCm = WantedLength ? *WantedLength : 0.0f;
+		Model.bFitFromPose = Model.WantedLengthCm > 0.0f && FitFromPose.Contains(OutArt.Model);
 		Model.bLoaded = true;
 		KeepAlive.Add(Model.Mesh);
 		KeepAlive.Add(Model.Idle);
