@@ -1,0 +1,4 @@
+[2026.11.22-07.41.47:475][  0]LogBlastArt: Display: Saved ../../../../../../Dev/Rim3D-blast/game/Content/Rim3D/Generated/Blast/M_BlastHaze.uasset
+[2026.11.22-07.41.47:506][  0]LogBlastArt: Display: Saved ../../../../../../Dev/Rim3D-blast/game/Content/Rim3D/Generated/Blast/M_BlastScorch.uasset
+[2026.11.22-07.41.47:506][  0]LogBlastArt: Display: Blast art done, 0 failures
+BlastArt -force -nullrhi took 214 s
