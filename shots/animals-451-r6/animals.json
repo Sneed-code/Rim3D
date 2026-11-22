@@ -1,0 +1,64 @@
+{
+	"test": "animals",
+	"status": "fail",
+	"durationSeconds": 37.096649099141359,
+	"errors": [
+		"animals_row: 1594 problems; the first: an animal is 11 cm across (draw scale 0.04)",
+		"animals_detail: 723 problems; the first: an animal is 11 cm across (draw scale 0.04)",
+		"animals_close: 424 problems; the first: an animal is 11 cm across (draw scale 0.04)",
+		"animals_new: 1272 problems; the first: an animal is 11 cm across (draw scale 0.04)"
+	],
+	"gpu": "NVIDIA GeForce RTX 5080",
+	"resolution": "1920x1080",
+	"phases": [
+		{
+			"phase": "animals_row",
+			"frames": 1142,
+			"avgFps": 142.58679702555344,
+			"p95FrameMs": 7.5469017028808594,
+			"medianGameThreadMs": 4.266200065612793,
+			"medianRenderThreadMs": 6.666100025177002,
+			"medianGpuMs": 5.4327001571655273,
+			"actors": 0,
+			"screenshot": "animals/animals_row.png"
+		},
+		{
+			"phase": "animals_detail",
+			"frames": 572,
+			"avgFps": 142.59512233752841,
+			"p95FrameMs": 7.5357036590576172,
+			"medianGameThreadMs": 3.8947000503540039,
+			"medianRenderThreadMs": 6.5781998634338379,
+			"medianGpuMs": 5.377500057220459,
+			"actors": 0,
+			"screenshot": "animals/animals_detail.png"
+		},
+		{
+			"phase": "animals_close",
+			"frames": 272,
+			"avgFps": 135.63081936052561,
+			"p95FrameMs": 7.4150004386901855,
+			"medianGameThreadMs": 4.3102998733520508,
+			"medianRenderThreadMs": 6.5208001136779785,
+			"medianGpuMs": 5.3298001289367676,
+			"actors": 0,
+			"screenshot": "animals/animals_close.png"
+		},
+		{
+			"phase": "animals_new",
+			"frames": 273,
+			"avgFps": 135.78823235653053,
+			"p95FrameMs": 7.6107978820800781,
+			"medianGameThreadMs": 4.4516000747680664,
+			"medianRenderThreadMs": 6.5620999336242676,
+			"medianGpuMs": 5.378699779510498,
+			"actors": 0,
+			"screenshot": "animals/animals_new.png"
+		}
+	],
+	"notes": [
+		"animals_row: 18 animals, 18 actors, 18 defs drawn, 18 models loaded, poses seen 3",
+		"animals_detail: near 1, mid 4, far 13, hidden 0",
+		"animals_new: 31 models loaded; lengths: Cow 230 cm, Muffalo 262 cm, Deer 170 cm, Husky 100 cm, TimberWolf 130 cm, Thrumbo 312 cm, Alpaca 140 cm, Cat 80 cm, WildBoar 104 cm, Cougar 208 cm, GrizzlyBear 11 cm, Chicken 49 cm, Monkey 88 cm, Elephant 627 cm, Rhinoceros 510 cm, Lion 286 cm, Raptor 350 cm, TRex 1200 cm, Monkey 88 cm, Cat 80 cm, Cougar 208 cm, Thrumbo 312 cm, Elephant 627 cm, Rhinoceros 510 cm, Muffalo 262 cm, Raptor 350 cm, TRex 1200 cm, GrizzlyBear 11 cm, PolarBear 13 cm, Caribou 196 cm, Muskox 240 cm, Yak 270 cm, Dromedary 300 cm, Gazelle 112 cm, Goat 135 cm, Sheep 136 cm, Megaspider 100 cm, Spelopede 66 cm, Capybara 120 cm, Iguana 150 cm, Chicken 49 cm, Duck 58 cm, Goose 90 cm, Turkey 110 cm, ArcticFox 76 cm, ArcticWolf 130 cm, Ostrich 198 cm, Megascarab 30 cm,"
+	]
+}
