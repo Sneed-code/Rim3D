@@ -1,0 +1,51 @@
+{
+ "name": "BionicArm",
+ "kind": "item",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -37.21,
+   -9.78,
+   0.0
+  ],
+  "max": [
+   37.21,
+   9.78,
+   13.46
+  ]
+ },
+ "sizeM": [
+  0.744,
+  0.196,
+  0.135
+ ],
+ "parts": {
+  "BionicArm": {
+   "boundsCm": {
+    "min": [
+     -37.21,
+     -9.78,
+     0.0
+    ],
+    "max": [
+     37.21,
+     9.78,
+     13.46
+    ]
+   },
+   "tris": 11498
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "BionicArm": {
+   "from": "BionicArm",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

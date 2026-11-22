@@ -1,0 +1,57 @@
+{
+ "name": "ShipEngine",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -150.0,
+   -199.5,
+   0.0
+  ],
+  "max": [
+   150.0,
+   199.5,
+   320.0
+  ]
+ },
+ "sizeM": [
+  3.0,
+  3.99,
+  3.2
+ ],
+ "parts": {
+  "ShipEngine": {
+   "boundsCm": {
+    "min": [
+     -150.0,
+     -199.5,
+     0.0
+    ],
+    "max": [
+     150.0,
+     199.5,
+     320.0
+    ]
+   },
+   "tris": 28590
+  }
+ },
+ "sockets": {
+  "Exhaust": [
+   0.0,
+   -199.5,
+   191.0
+  ]
+ },
+ "slots": {
+  "ShipEngine": {
+   "from": "ShipEngine | Flight hardware",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

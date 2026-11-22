@@ -1,0 +1,58 @@
+{
+ "name": "TrapSpike",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -50.0,
+   -50.0,
+   0.0
+  ],
+  "max": [
+   50.0,
+   50.0,
+   25.09
+  ]
+ },
+ "sizeM": [
+  1.0,
+  1.0,
+  0.251
+ ],
+ "parts": {
+  "TrapSpike": {
+   "boundsCm": {
+    "min": [
+     -50.0,
+     -50.0,
+     0.0
+    ],
+    "max": [
+     50.0,
+     50.0,
+     25.09
+    ]
+   },
+   "tris": 4944
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "TrapSpike_0": {
+   "from": "TrapSpike_Structure",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  },
+  "TrapSpike_1": {
+   "from": "TrapSpike_Foliage",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

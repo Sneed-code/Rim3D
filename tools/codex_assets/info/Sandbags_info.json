@@ -1,0 +1,50 @@
+{
+ "name": "Sandbags",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -50.0,
+   -27.5,
+   0.0
+  ],
+  "max": [
+   50.0,
+   27.5,
+   75.0
+  ]
+ },
+ "sizeM": [
+  1.0,
+  0.55,
+  0.75
+ ],
+ "parts": {
+  "Sandbags": {
+   "boundsCm": {
+    "min": [
+     -50.0,
+     -27.5,
+     0.0
+    ],
+    "max": [
+     50.0,
+     27.5,
+     75.0
+    ]
+   },
+   "tris": 5956
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "Sandbags": {
+   "from": "Jute and Sand",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}
