@@ -1,6 +1,15 @@
 #include "ColonyHudSubsystem.h"
 
+#include "Components/ExponentialHeightFogComponent.h"
+#include "Components/LightComponent.h"
+#include "Components/PostProcessComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
+#include "Components/SkyAtmosphereComponent.h"
+#include "Components/SkyLightComponent.h"
+#include "Engine/GameViewportClient.h"
+#include "EngineUtils.h"
+#include "Interfaces/Interface_PostProcessVolume.h"
+#include "Misc/FileHelper.h"
 #include "Engine/Engine.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -466,6 +475,71 @@ void UColonyHudSubsystem::OpenSettingsPage(const FString& Name)
 
 // ---- The tick ----------------------------------------------------------------------------------
 
+namespace
+{
+	// The lights, fog, sky and post-process volumes the world draws with, and the viewport's show flags, written to a file:
+	// a fresh scene and one loaded inside the game are compared line by line (the washed-out range after a scene hop).
+	void hudDescribeLighting(UWorld* World, const FString& Path)
+	{
+		TArray<FString> Lines;
+		if (!World)
+		{
+			return;
+		}
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			TInlineComponentArray<USceneComponent*> Components;
+			It->GetComponents(Components);
+			for (const USceneComponent* Component : Components)
+			{
+				const FString Where = FString::Printf(TEXT("%s.%s visible %d"), *It->GetName(), *Component->GetName(), Component->IsVisible() ? 1 : 0);
+				if (const ULightComponent* Light = Cast<ULightComponent>(Component))
+				{
+					Lines.Add(FString::Printf(TEXT("light %s %s intensity %.2f atmosphereSun %d"), *Light->GetClass()->GetName(), *Where, Light->Intensity,
+						Light->IsUsedAsAtmosphereSunLight() ? 1 : 0));
+				}
+				else if (const USkyLightComponent* Sky = Cast<USkyLightComponent>(Component))
+				{
+					Lines.Add(FString::Printf(TEXT("skylight %s intensity %.2f realtime %d"), *Where, Sky->Intensity, Sky->IsRealTimeCaptureEnabled() ? 1 : 0));
+				}
+				else if (const UExponentialHeightFogComponent* Fog = Cast<UExponentialHeightFogComponent>(Component))
+				{
+					Lines.Add(FString::Printf(TEXT("fog %s density %.5f volumetric %d"), *Where, Fog->FogDensity, Fog->bEnableVolumetricFog ? 1 : 0));
+				}
+				else if (Component->IsA<USkyAtmosphereComponent>())
+				{
+					Lines.Add(FString::Printf(TEXT("atmosphere %s"), *Where));
+				}
+			}
+		}
+		for (IInterface_PostProcessVolume* Volume : World->PostProcessVolumes)
+		{
+			if (!Volume)
+			{
+				continue;
+			}
+			const FPostProcessVolumeProperties Props = Volume->GetProperties();
+			const FPostProcessSettings* P = Props.Settings;
+			const UObject* Object = Cast<UObject>(Volume);
+			Lines.Add(FString::Printf(TEXT("postprocess %s priority %.1f weight %.2f enabled %d unbound %d method %d(%d) bias %.2f(%d) min %.2f(%d) max %.2f(%d) physical %d(%d)"),
+				Object ? *Object->GetPathName() : TEXT("?"), Props.Priority, Props.BlendWeight, Props.bIsEnabled ? 1 : 0, Props.bIsUnbound ? 1 : 0,
+				P ? static_cast<int32>(P->AutoExposureMethod) : -1, P ? P->bOverride_AutoExposureMethod : 0, P ? P->AutoExposureBias : 0.0f,
+				P ? P->bOverride_AutoExposureBias : 0, P ? P->AutoExposureMinBrightness : 0.0f, P ? P->bOverride_AutoExposureMinBrightness : 0,
+				P ? P->AutoExposureMaxBrightness : 0.0f, P ? P->bOverride_AutoExposureMaxBrightness : 0, P ? P->AutoExposureApplyPhysicalCameraExposure : 0,
+				P ? P->bOverride_AutoExposureApplyPhysicalCameraExposure : 0));
+		}
+		if (const UGameViewportClient* Viewport = World->GetGameViewport())
+		{
+			const FEngineShowFlags& F = Viewport->EngineShowFlags;
+			Lines.Add(FString::Printf(TEXT("showflags eyeAdaptation %d postProcessing %d fog %d atmosphere %d lighting %d lumen %d viewmode %d"),
+				F.EyeAdaptation ? 1 : 0, F.PostProcessing ? 1 : 0, F.Fog ? 1 : 0, F.Atmosphere ? 1 : 0, F.Lighting ? 1 : 0,
+				F.LumenGlobalIllumination ? 1 : 0, Viewport->ViewModeIndex));
+		}
+		Lines.Add(FString::Printf(TEXT("world %s"), *World->GetPathName()));
+		FFileHelper::SaveStringArrayToFile(Lines, *Path);
+	}
+}
+
 // -DebugSceneHop, the PC check of scenes loading inside the game: title, Debug > Gun range in this same game, F10 back
 // to the title, then quit, with a picture of each and log lines. The stage lives in a static, so it surviving the level
 // loads shows it all happened in one process.
@@ -479,6 +553,7 @@ void UColonyHudSubsystem::TickSceneHop()
 	{
 		bCvarDumped = true;
 		DebugScenes::DumpConsoleVariables(FPaths::ProjectSavedDir() / TEXT("Smoke/scenehop/cvars_fresh.txt"));
+		hudDescribeLighting(GetWorld(), FPaths::ProjectSavedDir() / TEXT("Smoke/scenehop/light_fresh.txt"));
 		const USkySubsystem* DumpSky = GetWorld()->GetSubsystem<USkySubsystem>();
 		UE_LOG(LogTemp, Display, TEXT("CVARDUMP: sky exposure %.2f EV, cuts %d"), DumpSky ? DumpSky->GetExposure() : -99.0f, DumpSky ? DumpSky->GetExposureCuts() : -1);
 		FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/scenehop/fresh.png"), true, false);
@@ -494,7 +569,7 @@ void UColonyHudSubsystem::TickSceneHop()
 	};
 	const bool bInScene = DebugScenes::IsDebugScene();
 	// Each stage waits for its world (the title, or the scene) and counts from its first frame there.
-	if (bInScene != (HopStage == 1))
+	if (bInScene != (HopStage == 1 || HopStage >= 10))
 	{
 		return;
 	}
@@ -521,8 +596,46 @@ void UColonyHudSubsystem::TickSceneHop()
 	{
 		Picture(TEXT("2_range"));
 		DebugScenes::DumpConsoleVariables(FPaths::ProjectSavedDir() / TEXT("Smoke/scenehop/cvars_hop.txt"));
+		hudDescribeLighting(GetWorld(), FPaths::ProjectSavedDir() / TEXT("Smoke/scenehop/light_hop.txt"));
 		const USkySubsystem* HopSky = GetWorld()->GetSubsystem<USkySubsystem>();
 		UE_LOG(LogTemp, Display, TEXT("SCENEHOP: range sky exposure %.2f EV, cuts %d"), HopSky ? HopSky->GetExposure() : -99.0f, HopSky ? HopSky->GetExposureCuts() : -1);
+		HopStage = 10;
+		HopSince = Now;
+	}
+	else if (HopStage >= 10 && HopStage < 14 && Now - HopSince > 3.0)
+	{
+		// Toggles with a picture each, to see what the white comes from: fog, the eye adaptation, a held exposure.
+		static const TCHAR* const Tries[][3] = {
+			{TEXT("ShowFlag.Fog 0"), TEXT("2b_nofog"), TEXT("ShowFlag.Fog 2")},
+			{TEXT("ShowFlag.EyeAdaptation 0"), TEXT("2c_noeye"), TEXT("ShowFlag.EyeAdaptation 2")},
+			{TEXT("Look.Exposure 17"), TEXT("2d_ev17"), TEXT("Look.Exposure -99")},
+			{TEXT("ShowFlag.Lighting 0"), TEXT("2e_nolight"), TEXT("ShowFlag.Lighting 2")},
+		};
+		APlayerController* HopPC = GetWorld()->GetFirstPlayerController();
+		const int32 Try = HopStage - 10;
+		if (HopPC && HopSince > 0.0)
+		{
+			if (Try > 0)
+			{
+				HopPC->ConsoleCommand(Tries[Try - 1][2]);
+			}
+			HopPC->ConsoleCommand(Tries[Try][0]);
+			HopSince = -Now;  // the toggle is on; the picture comes after it has settled
+		}
+		else if (Now + HopSince > 3.0)
+		{
+			Picture(Tries[Try][1]);
+			UE_LOG(LogTemp, Display, TEXT("SCENEHOP: picture %s after %s"), Tries[Try][1], Tries[Try][0]);
+			++HopStage;
+			HopSince = Now;
+		}
+	}
+	else if (HopStage == 14 && Now - HopSince > 3.0)
+	{
+		if (APlayerController* HopPC = GetWorld()->GetFirstPlayerController())
+		{
+			HopPC->ConsoleCommand(TEXT("ShowFlag.Lighting 2"));
+		}
 		UE_LOG(LogTemp, Display, TEXT("SCENEHOP: in the gun range (pid %u), back to the title"), FPlatformProcess::GetCurrentProcessId());
 		HopStage = 2;
 		HopSince = 0.0;
