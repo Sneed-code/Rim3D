@@ -195,6 +195,8 @@ public:
 	void PushRagdollAt(const FVector& At, const FVector& Impulse);
 	/** For the tests: ragdolls put to sleep once settled, and blasts that threw one. */
 	int32 GetRagdollSleeps() const { return RagdollSleeps; }
+	/** Frames a downed body's ragdoll was steered back over its sim spot (UpdateRagdollTether). */
+	int32 GetRagdollTethers() const { return RagdollTethers; }
 	int32 GetRagdollPushes() const { return RagdollPushes; }
 	/** The ragdoll's floor taken away (carried on a back, BodyCarrySubsystem) or made again under where the pawn is now. */
 	void ResetRagdollFloor(bool bWanted);
@@ -435,7 +437,10 @@ private:
 	bool bSoftTissueBeforeRagdoll = true;
 	int32 RagdollSleeps = 0;
 	int32 RagdollPushes = 0;
+	int32 RagdollTethers = 0;
 	void UpdateRagdollRest(float DeltaTime);
+	/** A downed body's ragdoll is drawn over its sim spot: its pelvis is steered back there while it falls. */
+	void UpdateRagdollTether(float DeltaTime);
 	/** The tick group the meshes were last put in, and how many meshes that was (more come with looks). */
 	int32 MeshTickGroup = -1;
 	int32 MeshTickCount = 0;

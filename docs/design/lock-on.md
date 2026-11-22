@@ -235,7 +235,11 @@ of the body it steps back at most `clipSlack` and still plays the finisher (roun
 measured `hitSeconds` are mid-swing (round 3: every weapon still about a metre up at the blow), so each finisher names
 `clipHitSeconds`, the moment in its clip the blade comes down (`MeleeSystem::finisherClipHit`), read off the clips' hand
 heights. Round 3 also showed the downed body drawn 0.4-1.2 m off its spot (its ragdoll falls back from the feet, while
-the sim's prone hitboxes lie centred on the spot); the smoke now notes which way. A finisher whose clip is not measured yet falls
+the sim's prone hitboxes lie centred on the spot); round 4 showed no one way (50-70 cm, any direction), so a downed
+body's ragdoll now steers its pelvis back over its sim spot while it falls and after a push wakes it
+(`ASimPawnActor::UpdateRagdollTether`: a speed it eases toward, up to 1.6 m/s, for the first 2.5 s; asleep it is left
+alone). Dead bodies are not steered. Round 4 with the blow timing: spear and gladius hit, club just short, longsword and
+knife overlapped the drawn body (it had fallen toward them). A finisher whose clip is not measured yet falls
 back to the old drawn one.
 
 The punches and the low blows (`Mixamo/Fighting/*`) had never been imported into the one game (they were made in a test

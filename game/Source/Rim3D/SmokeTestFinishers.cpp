@@ -471,7 +471,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 				const FVector2D ToMe = FVector2D(MeSpot - ItSpot).GetSafeNormal();
 				const FString DriftText = FString::Printf(TEXT("its pelvis off its spot %.0f cm along its facing, %.0f cm across, %.0f cm toward me; its sim facing %s, the way to me %s"),
 					FVector2D::DotProduct(Drift, ItFacing), FVector2D::CrossProduct(ItFacing, Drift), FVector2D::DotProduct(Drift, ToMe), *ItFacing.ToString(), *ToMe.ToString());
-				State->BlowGeometry = DriftText + TEXT("; ") + FString::Printf(
+				State->BlowGeometry = DriftText + FString::Printf(TEXT(" (steered back %d frames)"), ItActor ? ItActor->GetRagdollTethers() : -1) + TEXT("; ") + FString::Printf(
 					TEXT("sim apart %.2f m; drawn: my pelvis %.0f cm from my sim spot, its pelvis %.0f cm and its head %.0f cm from its sim spot, pelvis to pelvis %.0f cm; weapon box %.0f cm from its pelvis, lowest at %.0f cm, reaching %.0f cm out from my pelvis"),
 					SimApart, FVector::Dist2D(MePelvis, MeSpot), FVector::Dist2D(ItPelvis, ItSpot), FVector::Dist2D(ItHead, ItSpot),
 					FVector::Dist2D(MePelvis, ItPelvis), Held ? FMath::Sqrt(WeaponBox.ComputeSquaredDistanceToPoint(ItPelvis)) : -1.0,
