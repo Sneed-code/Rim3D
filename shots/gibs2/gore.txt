@@ -1,0 +1,19 @@
+﻿Running smoke test 'gore' at 1920x1080...
+
+Smoke test 'gore': FAIL  (51 s, NVIDIA GeForce RTX 5080, 1920x1080)
+setup                        35.2 fps  game   5.6 ms  render  12.4 ms  gpu  10.9 ms  screenshot ok
+groin                        67.8 fps  game   5.7 ms  render  12.2 ms  gpu  10.7 ms  screenshot ok
+thighs                       67.8 fps  game   5.7 ms  render  12.3 ms  gpu  10.7 ms  screenshot ok
+thighsback                   63.1 fps  game   5.7 ms  render  12.1 ms  gpu  10.7 ms  screenshot ok
+spray                        68.1 fps  game   5.8 ms  render  12.4 ms  gpu  10.9 ms  screenshot ok
+pileup                       56.5 fps  game   6.1 ms  render  12.7 ms  gpu  11.1 ms  screenshot ok
+head                         54.2 fps  game   5.8 ms  render  12.5 ms  gpu  11.0 ms  screenshot ok
+armoff                       67.4 fps  game   6.1 ms  render  13.2 ms  gpu  11.7 ms  screenshot ok
+corpse                       73.9 fps  game   6.0 ms  render  12.9 ms  gpu  11.3 ms  screenshot ok
+corpsehit                    69.6 fps  game   6.0 ms  render  12.8 ms  gpu  11.3 ms  screenshot ok
+blast                        55.9 fps  game   7.3 ms  render  15.8 ms  gpu  14.0 ms  screenshot ok
+gibs                         65.6 fps  game   6.8 ms  render  14.1 ms  gpu  12.5 ms  screenshot ok
+gibsclose                    61.3 fps  game   6.4 ms  render  11.9 ms  gpu  10.4 ms  screenshot ok
+ERROR: head: a rifle hit snapped the head only 5.7 degrees (12 at least)
+ERROR: corpse: the ragdoll never settled and slept (it keeps twitching)
+Screenshots: C:\Dev\Rim3D-blood\game\Saved\Smoke\gore

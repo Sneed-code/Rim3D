@@ -1,0 +1,32 @@
+LogSmoke: Display: Smoke test 'gore' starting
+LogSmoke: Display: Phase setup
+LogSmoke: Display: Phase setup: 35.2 fps, GPU 10.9 ms, game 5.6 ms
+LogSmoke: Display: Phase groin
+LogSmoke: Display: Phase groin: 67.8 fps, GPU 10.7 ms, game 5.7 ms
+LogSmoke: Display: Phase thighs
+LogSmoke: Display: Phase thighs: 67.8 fps, GPU 10.7 ms, game 5.7 ms
+LogSmoke: Display: Phase thighsback
+LogSmoke: Display: Phase thighsback: 63.1 fps, GPU 10.7 ms, game 5.7 ms
+LogSmoke: Display: Phase spray
+LogSmoke: Display: Phase spray: 68.1 fps, GPU 10.9 ms, game 5.8 ms
+LogSmoke: Display: Phase pileup
+LogSmoke: Display: Phase pileup: 56.5 fps, GPU 11.1 ms, game 6.1 ms
+LogSmoke: Display: Phase head
+LogSmoke: Error: head: a rifle hit snapped the head only 5.7 degrees (12 at least)
+LogSmoke: Display: Phase head: 54.2 fps, GPU 11.0 ms, game 5.8 ms
+LogSmoke: Display: Phase armoff
+LogSmoke: Display: Phase armoff: 67.4 fps, GPU 11.7 ms, game 6.1 ms
+LogSmoke: Display: Phase corpse
+LogSmoke: Error: corpse: the ragdoll never settled and slept (it keeps twitching)
+LogSmoke: Display: Phase corpse: 73.9 fps, GPU 11.3 ms, game 6.0 ms
+LogSmoke: Display: Phase corpsehit
+LogSmoke: Display: Phase corpsehit: 69.6 fps, GPU 11.3 ms, game 6.0 ms
+LogSmoke: Display: Phase blast
+LogSmoke: Display: Phase blast: 55.9 fps, GPU 14.0 ms, game 7.3 ms
+LogSmoke: Display: Phase gibs
+LogTemp: Gibs: a trunk burst into 18 chunks at X=366484.457 Y=6171.321 Z=15.737 (strength 1.61)
+LogTemp: Gibs: body 1 hidden (trunk burst)
+LogSmoke: Display: Phase gibs: 65.6 fps, GPU 12.5 ms, game 6.8 ms
+LogSmoke: Display: Phase gibsclose
+LogSmoke: Display: Phase gibsclose: 61.3 fps, GPU 10.4 ms, game 6.4 ms
+LogSmoke: Display: Smoke test gore: FAIL, results written to ../../../../../../Dev/Rim3D-blood/game/Saved/Smoke/gore.json
