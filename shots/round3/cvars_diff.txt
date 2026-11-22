@@ -1,0 +1,2 @@
+Slate.DeferWindowsMessageProcessing: fresh=<missing> | hop=1
+r.SetRes: fresh=888x500w | hop=1920x1080w
