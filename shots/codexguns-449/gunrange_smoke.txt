@@ -1,0 +1,1057 @@
+﻿Running smoke test 'gunrange' at 1920x1080...
+
+Smoke test 'gunrange': PASS  (373 s, NVIDIA GeForce RTX 5080, 1920x1080)
+gunrange                     62.7 fps  game   5.4 ms  render  13.7 ms  gpu  12.4 ms  screenshot ok
+note: gunrange: group 1, 8 targets
+note: gunrange:   target 1048608 stands
+note: gunrange:   target 1048607 flees when hit
+note: gunrange:   target 1048606 fights back
+note: gunrange:   target 1048605 flees on sight
+note: gunrange:   target 1048604 stands, walking
+note: gunrange:   target 1048603 flees when hit, walking
+note: gunrange:   target 1048602 fights back, walking
+note: gunrange:   target 1048601 flees on sight, walking
+note: gunrange: HAND TURNED FROM ITS GRIP other first person right: 112 degrees (the wrist's limits held it back); the 
+grip asked twist -30 wrist -182/100, got twist -30 wrist -70/28, elbow 11 swung 0; fingers curled 0 more
+note: gunrange: HAND TURNED FROM ITS GRIP other first person left: 178 degrees (the wrist's limits held it back); the 
+grip asked twist 36 wrist -7/-95, got twist 36 wrist -7/-28, elbow 11 swung 0; fingers curled 0 more
+note: gunrange: picture 00_gun1_hip.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 0, reloads 0)
+note: gunrange:   bones head(16,-0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,23,-21) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(29,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 
+1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] 
+trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Bolt-action rifle first person right: 28 degrees (the wrist's limits held it 
+back); the grip asked twist -85 wrist -47/60, got twist -85 wrist -47/28, elbow 107 swung 34; fingers curled 80 more
+note: gunrange: picture 01_gun1_raising.png (gun 0, barrel off 0.0 deg, sight off 6.9 cm, shots 0, reloads 0)
+note: gunrange:   bones head(14,-0,-7) neck_01(12,-6,-17) clavicle_r(11,-5,-25) upperarm_r(1,3,-25) 
+lowerarm_r(11,24,-21) hand_r(24,10,-12) clavicle_l(15,-8,-24) upperarm_l(27,-14,-24) lowerarm_l(42,2,-32) 
+hand_l(59,5,-21) 
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (42,7,-10) materials 
+1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (42,7,-10) materials 1] 
+trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (33,9,-17) materials 1] 
+note: gunrange: picture 02_gun1_aimed.png (gun 0, barrel off 0.0 deg, sight off 0.0 cm, shots 0, reloads 0)
+note: gunrange:   bones head(-6,0,-7) neck_01(-9,-6,-17) clavicle_r(-10,-5,-25) upperarm_r(-20,3,-26) 
+lowerarm_r(-3,16,-17) hand_r(10,3,-8) clavicle_l(-6,-8,-24) upperarm_l(5,-15,-24) lowerarm_l(26,-5,-25) 
+hand_l(45,-3,-18) 
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] 
+bolt[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] 
+trigger[SM_BoltActionRifle_PIVOT_Trigger flag 0 shown 0 attached 1 size 1x1x2 at (19,3,-14) materials 1] 
+note: gunrange: picture 03_gun1_firing.png (gun 0, barrel off 0.0 deg, sight off 0.0 cm, shots 1, reloads 0)
+note: gunrange:   bones head(-6,0,-7) neck_01(-8,-5,-17) clavicle_r(-9,-5,-25) upperarm_r(-19,4,-26) 
+lowerarm_r(-3,17,-17) hand_r(11,4,-9) clavicle_l(-5,-7,-24) upperarm_l(6,-14,-25) lowerarm_l(27,-5,-25) 
+hand_l(46,-2,-18) 
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] 
+bolt[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] 
+trigger[SM_BoltActionRifle_PIVOT_Trigger flag 0 shown 0 attached 1 size 1x1x2 at (19,3,-14) materials 1] 
+note: gunrange: gun 1 fired 2 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: HAND TURNED FROM ITS GRIP Bolt-action rifle first person left: 28 degrees (the wrist's limits held it 
+back); the grip asked twist 85 wrist -6/-56, got twist 85 wrist -6/-28, elbow 11 swung 72; fingers curled 122 more
+note: gunrange: picture 04_gun1_cooldown.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 2, reloads 0)
+note: gunrange:   bones head(13,0,-7) neck_01(11,-5,-17) clavicle_r(10,-5,-25) upperarm_r(0,4,-26) 
+lowerarm_r(15,21,-21) hand_r(32,13,-13) clavicle_l(14,-7,-24) upperarm_l(27,-9,-24) lowerarm_l(48,-1,-24) 
+hand_l(68,5,-20) 
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (50,11,-12) materials 
+1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (50,11,-12) materials 1] 
+trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: picture 05_gun2_hip.png (gun 1, barrel off 0.0 deg, sight off 10.8 cm, shots 2, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-6,-17) clavicle_r(14,-5,-24) upperarm_r(4,3,-25) 
+lowerarm_r(15,23,-24) hand_r(30,9,-18) clavicle_l(17,-8,-24) upperarm_l(29,-15,-24) lowerarm_l(48,-3,-25) 
+hand_l(67,4,-20) 
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (52,10,-19) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Assault rifle first person right: 26 degrees (the wrist's limits held it 
+back); the grip asked twist -111 wrist -57/29, got twist -85 wrist -57/28, elbow 118 swung 56; fingers curled 80 more
+note: gunrange: picture 06_gun2_raising.png (gun 1, barrel off 0.0 deg, sight off 6.5 cm, shots 2, reloads 0)
+note: gunrange:   bones head(15,0,-7) neck_01(12,-6,-17) clavicle_r(12,-5,-25) upperarm_r(2,3,-26) 
+lowerarm_r(12,23,-22) hand_r(23,7,-17) clavicle_l(15,-8,-24) upperarm_l(27,-14,-24) lowerarm_l(44,-0,-30) 
+hand_l(61,1,-18) 
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (45,7,-17) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Assault rifle first person left: 25 degrees (the wrist's limits held it 
+back); the grip asked twist 85 wrist -23/-54, got twist 85 wrist -23/-28, elbow 31 swung 74; fingers curled 122 more
+note: gunrange: picture 07_gun2_aimed.png (gun 1, barrel off 0.0 deg, sight off 0.0 cm, shots 2, reloads 0)
+note: gunrange:   bones head(-4,-0,-7) neck_01(-6,-5,-17) clavicle_r(-6,-4,-25) upperarm_r(-16,4,-26) 
+lowerarm_r(1,17,-18) hand_r(12,0,-12) clavicle_l(-3,-7,-24) upperarm_l(9,-13,-24) lowerarm_l(31,-5,-23) 
+hand_l(49,-5,-14) 
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (34,1,-13) materials 1] 
+note: gunrange: picture 08_gun2_firing.png (gun 1, barrel off 0.0 deg, sight off 0.0 cm, shots 3, reloads 0)
+note: gunrange:   bones head(-4,-0,-7) neck_01(-6,-6,-17) clavicle_r(-7,-5,-25) upperarm_r(-17,3,-25) 
+lowerarm_r(1,16,-18) hand_r(11,-1,-12) clavicle_l(-3,-8,-24) upperarm_l(9,-14,-24) lowerarm_l(30,-6,-23) 
+hand_l(48,-6,-14) 
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (34,1,-13) materials 1] 
+note: gunrange: gun 2 fired 12 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 09_gun2_cooldown.png (gun 1, barrel off 0.0 deg, sight off 10.8 cm, shots 14, reloads 0)
+note: gunrange:   bones head(11,-0,-7) neck_01(10,-6,-17) clavicle_r(9,-5,-25) upperarm_r(-1,4,-25) 
+lowerarm_r(14,21,-23) hand_r(30,9,-18) clavicle_l(13,-8,-24) upperarm_l(26,-8,-23) lowerarm_l(47,-1,-23) 
+hand_l(67,4,-20) 
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (52,10,-19) materials 1] 
+note: gunrange: picture 10_gun3_hip.png (gun 2, barrel off 0.0 deg, sight off 9.2 cm, shots 14, reloads 0)
+note: gunrange:   bones head(1,0,-7) neck_01(-4,0,-18) clavicle_r(-0,2,-24) upperarm_r(9,11,-23) lowerarm_r(29,21,-18) 
+hand_r(39,4,-15) clavicle_l(-1,-3,-24) upperarm_l(1,-16,-24) lowerarm_l(23,-14,-27) hand_l(42,-7,-21) 
+note: gunrange:   parts body[PistolBody flag 1 shown 1 attached 1 size 19x3x12 at (51,3,-11) materials 1] 
+magazine[PistolMagazine flag 1 shown 1 attached 1 size 7x2x10 at (46,3,-13) materials 1] 
+note: gunrange: picture 11_gun3_raising.png (gun 2, barrel off 0.0 deg, sight off 5.6 cm, shots 14, reloads 0)
+note: gunrange:   bones head(2,-0,-7) neck_01(-3,0,-18) clavicle_r(0,2,-24) upperarm_r(10,11,-23) 
+lowerarm_r(30,19,-17) hand_r(41,2,-13) clavicle_l(-1,-3,-24) upperarm_l(1,-16,-24) lowerarm_l(24,-13,-23) 
+hand_l(44,-9,-19) 
+note: gunrange:   parts body[PistolBody flag 1 shown 1 attached 1 size 19x3x12 at (53,1,-9) materials 1] 
+magazine[PistolMagazine flag 1 shown 1 attached 1 size 7x2x10 at (49,1,-10) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Pistol first person right: 25 degrees (the wrist's limits held it back); the 
+grip asked twist -85 wrist -58/61, got twist -85 wrist -58/28, elbow 67 swung 57; fingers curled 68 more
+note: gunrange: picture 12_gun3_aimed.png (gun 2, barrel off 0.0 deg, sight off 0.0 cm, shots 14, reloads 0)
+note: gunrange:   bones head(8,-0,-7) neck_01(3,0,-18) clavicle_r(6,2,-24) upperarm_r(15,11,-23) lowerarm_r(36,15,-13) 
+hand_r(45,-2,-8) clavicle_l(5,-3,-24) upperarm_l(7,-16,-24) lowerarm_l(30,-18,-23) hand_l(48,-13,-14) 
+note: gunrange:   parts body[PistolBody flag 1 shown 1 attached 1 size 19x3x12 at (57,-3,-4) materials 1] 
+magazine[PistolMagazine flag 1 shown 1 attached 1 size 7x2x10 at (52,-3,-6) materials 1] 
+note: gunrange: picture 13_gun3_firing.png (gun 2, barrel off 0.0 deg, sight off 0.0 cm, shots 15, reloads 0)
+note: gunrange:   bones head(8,-0,-7) neck_01(3,0,-18) clavicle_r(6,2,-24) upperarm_r(15,11,-23) lowerarm_r(36,15,-13) 
+hand_r(45,-2,-8) clavicle_l(5,-3,-24) upperarm_l(7,-16,-24) lowerarm_l(30,-18,-23) hand_l(48,-13,-14) 
+note: gunrange:   parts body[PistolBody flag 1 shown 1 attached 1 size 19x3x12 at (57,-3,-4) materials 1] 
+magazine[PistolMagazine flag 1 shown 1 attached 1 size 7x2x10 at (52,-3,-6) materials 1] 
+note: gunrange: gun 3 fired 4 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 14_gun3_cooldown.png (gun 2, barrel off 0.0 deg, sight off 9.2 cm, shots 19, reloads 0)
+note: gunrange:   bones head(2,-0,-7) neck_01(-3,0,-18) clavicle_r(-0,2,-24) upperarm_r(9,11,-23) 
+lowerarm_r(29,21,-18) hand_r(39,4,-15) clavicle_l(-1,-3,-24) upperarm_l(1,-16,-24) lowerarm_l(23,-15,-27) 
+hand_l(42,-7,-21) 
+note: gunrange:   parts body[PistolBody flag 1 shown 1 attached 1 size 19x3x12 at (51,3,-11) materials 1] 
+magazine[PistolMagazine flag 1 shown 1 attached 1 size 7x2x10 at (46,3,-13) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Pump shotgun first person left: 26 degrees (the wrist's limits held it 
+back); the grip asked twist 85 wrist -11/-55, got twist 85 wrist -11/-28, elbow 11 swung 50; fingers curled 121 more
+note: gunrange: HAND OFF ITS GRIP Pump shotgun first person left: out of reach by 4.1 cm, drawn 4.1 cm from the goal, 
+shoulder forward 5.7 cm, goal from shoulder (ahead 46, right 11, up 5)
+note: gunrange: picture 15_gun4_hip.png (gun 3, barrel off 0.0 deg, sight off 10.8 cm, shots 19, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(15,-4,-25) upperarm_r(5,4,-25) 
+lowerarm_r(17,24,-23) hand_r(31,9,-17) clavicle_l(18,-7,-24) upperarm_l(32,-8,-23) lowerarm_l(54,-1,-23) 
+hand_l(73,3,-19) 
+note: gunrange:   parts body[ShotgunBody flag 1 shown 1 attached 1 size 127x5x22 at (59,9,-19) materials 1] 
+pump[ShotgunPump flag 1 shown 1 attached 1 size 24x5x5 at (89,9,-14) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Pump shotgun first person right: 30 degrees (the wrist's limits held it 
+back); the grip asked twist -114 wrist -60/30, got twist -85 wrist -60/28, elbow 120 swung 55; fingers curled 80 more
+note: gunrange: picture 16_gun4_raising.png (gun 3, barrel off 0.0 deg, sight off 6.5 cm, shots 19, reloads 0)
+note: gunrange:   bones head(17,-0,-7) neck_01(15,-6,-17) clavicle_r(15,-5,-25) upperarm_r(5,4,-26) 
+lowerarm_r(15,24,-21) hand_r(25,7,-15) clavicle_l(18,-7,-24) upperarm_l(31,-8,-23) lowerarm_l(53,-2,-23) 
+hand_l(73,2,-20) 
+note: gunrange:   parts body[ShotgunBody flag 1 shown 1 attached 1 size 127x5x22 at (52,5,-17) materials 1] 
+pump[ShotgunPump flag 1 shown 1 attached 1 size 24x5x5 at (82,5,-12) materials 1] 
+note: gunrange: picture 17_gun4_aimed.png (gun 3, barrel off 0.0 deg, sight off 0.0 cm, shots 19, reloads 0)
+note: gunrange:   bones head(8,0,-7) neck_01(6,-6,-17) clavicle_r(5,-5,-25) upperarm_r(-5,3,-26) lowerarm_r(4,19,-12) 
+hand_r(13,0,-11) clavicle_l(8,-8,-24) upperarm_l(21,-10,-22) lowerarm_l(44,-5,-21) hand_l(64,-5,-16) 
+note: gunrange:   parts body[ShotgunBody flag 1 shown 1 attached 1 size 127x5x22 at (41,-0,-13) materials 1] 
+pump[ShotgunPump flag 1 shown 1 attached 1 size 24x5x5 at (71,0,-8) materials 1] 
+note: gunrange: picture 18_gun4_firing.png (gun 3, barrel off 0.0 deg, sight off 0.0 cm, shots 20, reloads 0)
+note: gunrange:   bones head(9,1,-7) neck_01(7,-5,-18) clavicle_r(6,-4,-25) upperarm_r(-4,4,-26) lowerarm_r(5,20,-13) 
+hand_r(14,1,-12) clavicle_l(9,-7,-24) upperarm_l(22,-8,-23) lowerarm_l(45,-4,-22) hand_l(65,-4,-17) 
+note: gunrange:   parts body[ShotgunBody flag 1 shown 1 attached 1 size 127x5x22 at (41,-0,-13) materials 1] 
+pump[ShotgunPump flag 1 shown 1 attached 1 size 24x5x5 at (71,0,-8) materials 1] 
+note: gunrange: gun 4 fired 4 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 19_gun4_cooldown.png (gun 3, barrel off 0.3 deg, sight off 10.8 cm, shots 23, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-6,-17) clavicle_r(14,-5,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,23,-23) hand_r(30,9,-17) clavicle_l(18,-8,-24) upperarm_l(31,-9,-23) lowerarm_l(52,-0,-24) 
+hand_l(72,5,-22) 
+note: gunrange:   parts body[ShotgunBody flag 1 shown 1 attached 1 size 127x5x22 at (59,9,-19) materials 1] 
+pump[ShotgunPump flag 1 shown 1 attached 1 size 24x5x5 at (83,9,-14) materials 1] 
+note: gunrange: picture 20_gun5_hip.png (gun 4, barrel off 0.0 deg, sight off 10.8 cm, shots 23, reloads 0)
+note: gunrange:   bones head(2,-0,-7) neck_01(-0,-6,-17) clavicle_r(-1,-5,-24) upperarm_r(-11,3,-25) 
+lowerarm_r(10,12,-23) hand_r(30,9,-18) clavicle_l(3,-8,-24) upperarm_l(14,-15,-24) lowerarm_l(34,-5,-28) 
+hand_l(53,2,-23) 
+note: gunrange:   parts body[GrenadeLauncher_Game flag 1 shown 1 attached 1 size 79x8x35 at (37,9,-13) materials 1] 
+note: gunrange: picture 21_gun5_raising.png (gun 4, barrel off 0.0 deg, sight off 6.5 cm, shots 23, reloads 0)
+note: gunrange:   bones head(0,0,-7) neck_01(-2,-6,-17) clavicle_r(-3,-5,-25) upperarm_r(-13,3,-26) 
+lowerarm_r(6,16,-22) hand_r(23,7,-16) clavicle_l(1,-8,-24) upperarm_l(12,-15,-24) lowerarm_l(28,-1,-33) 
+hand_l(47,1,-24) 
+note: gunrange:   parts body[GrenadeLauncher_Game flag 1 shown 1 attached 1 size 79x8x35 at (30,6,-10) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Grenade launcher first person right: 27 degrees (the wrist's limits held it 
+back); the grip asked twist -84 wrist -60/64, got twist -84 wrist -60/28, elbow 97 swung 46; fingers curled 80 more
+note: gunrange: HAND TURNED FROM ITS GRIP Grenade launcher first person left: 31 degrees (the wrist's limits held it 
+back); the grip asked twist 116 wrist -36/-28, got twist 85 wrist -36/-28, elbow 104 swung 59; fingers curled 122 more
+note: gunrange: picture 22_gun5_aimed.png (gun 4, barrel off 0.0 deg, sight off 0.0 cm, shots 23, reloads 0)
+note: gunrange:   bones head(-8,-0,-7) neck_01(-10,-5,-17) clavicle_r(-10,-4,-25) upperarm_r(-20,4,-26) 
+lowerarm_r(-1,15,-18) hand_r(12,0,-12) clavicle_l(-7,-7,-24) upperarm_l(5,-13,-24) lowerarm_l(21,-3,-36) 
+hand_l(35,-2,-21) 
+note: gunrange:   parts body[GrenadeLauncher_Game flag 1 shown 1 attached 1 size 79x8x35 at (19,0,-7) materials 1] 
+note: gunrange: picture 23_gun5_firing.png (gun 4, barrel off 0.0 deg, sight off 0.0 cm, shots 24, reloads 0)
+note: gunrange:   bones head(-8,-0,-7) neck_01(-10,-6,-17) clavicle_r(-11,-5,-25) upperarm_r(-21,4,-25) 
+lowerarm_r(-2,14,-18) hand_r(11,-0,-12) clavicle_l(-7,-8,-24) upperarm_l(5,-14,-24) lowerarm_l(21,-3,-36) 
+hand_l(35,-3,-21) 
+note: gunrange:   parts body[GrenadeLauncher_Game flag 1 shown 1 attached 1 size 79x8x35 at (19,0,-7) materials 1] 
+note: gunrange: gun 5 fired 1 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 24_gun5_cooldown.png (gun 4, barrel off 0.0 deg, sight off 10.8 cm, shots 24, reloads 0)
+note: gunrange:   bones head(-2,-0,-7) neck_01(-4,-6,-17) clavicle_r(-5,-5,-25) upperarm_r(-13,6,-25) 
+lowerarm_r(10,9,-23) hand_r(30,9,-18) clavicle_l(-1,-7,-24) upperarm_l(12,-10,-24) lowerarm_l(34,-3,-26) 
+hand_l(53,1,-23) 
+note: gunrange:   parts body[GrenadeLauncher_Game flag 1 shown 1 attached 1 size 79x8x35 at (37,9,-13) materials 1] 
+note: gunrange: picture 25_gun6_hip.png (gun 5, barrel off 0.0 deg, sight off 10.8 cm, shots 24, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(15,-4,-25) upperarm_r(5,4,-26) 
+lowerarm_r(15,21,-37) hand_r(34,26,-30) clavicle_l(18,-7,-24) upperarm_l(31,-8,-25) lowerarm_l(48,5,-34) 
+hand_l(64,18,-33) 
+note: gunrange:   parts body[TripleRocketLauncher_Game flag 1 shown 1 attached 1 size 121x37x49 at (55,22,-18) 
+materials 1] 
+note: gunrange: picture 26_gun6_raising.png (gun 5, barrel off 0.0 deg, sight off 6.6 cm, shots 24, reloads 0)
+note: gunrange:   bones head(17,-0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(9,23,-37) hand_r(28,24,-28) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(45,1,-34) 
+hand_l(60,15,-31) 
+note: gunrange:   parts body[TripleRocketLauncher_Game flag 1 shown 1 attached 1 size 121x37x49 at (48,18,-16) 
+materials 1] 
+note: gunrange: picture 27_gun6_aimed.png (gun 5, barrel off 0.0 deg, sight off 0.0 cm, shots 24, reloads 0)
+note: gunrange:   bones head(1,-0,-7) neck_01(-1,-6,-17) clavicle_r(-2,-5,-24) upperarm_r(-12,3,-25) 
+lowerarm_r(-3,22,-32) hand_r(16,17,-24) clavicle_l(2,-8,-24) upperarm_l(13,-15,-24) lowerarm_l(30,-1,-32) 
+hand_l(47,10,-30) 
+note: gunrange:   parts body[TripleRocketLauncher_Game flag 1 shown 1 attached 1 size 121x37x49 at (37,13,-12) 
+materials 1] 
+note: gunrange: picture 28_gun6_firing.png (gun 5, barrel off 0.0 deg, sight off 0.0 cm, shots 25, reloads 0)
+note: gunrange:   bones head(1,0,-7) neck_01(-1,-6,-17) clavicle_r(-2,-5,-25) upperarm_r(-12,3,-26) 
+lowerarm_r(-3,23,-32) hand_r(16,17,-24) clavicle_l(2,-8,-24) upperarm_l(13,-15,-24) lowerarm_l(30,-1,-32) 
+hand_l(47,10,-30) 
+note: gunrange:   parts body[TripleRocketLauncher_Game flag 1 shown 1 attached 1 size 121x37x49 at (37,13,-12) 
+materials 1] 
+note: gunrange: gun 6 fired 3 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 29_gun6_cooldown.png (gun 5, barrel off 0.0 deg, sight off 10.8 cm, shots 27, reloads 0)
+note: gunrange:   bones head(16,0,-7) neck_01(14,-6,-17) clavicle_r(13,-5,-25) upperarm_r(3,3,-26) 
+lowerarm_r(15,20,-36) hand_r(34,26,-30) clavicle_l(17,-8,-24) upperarm_l(30,-9,-26) lowerarm_l(47,5,-32) 
+hand_l(62,18,-33) 
+note: gunrange:   parts body[TripleRocketLauncher_Game flag 1 shown 1 attached 1 size 121x37x49 at (55,22,-18) 
+materials 1] 
+note: gunrange: picture 30_gun7_hip.png (gun 6, barrel off 0.0 deg, sight off 10.8 cm, shots 27, reloads 0)
+note: gunrange:   bones head(7,-0,-7) neck_01(5,-6,-17) clavicle_r(4,-5,-25) upperarm_r(-6,3,-25) 
+lowerarm_r(11,18,-28) hand_r(30,9,-23) clavicle_l(8,-8,-24) upperarm_l(19,-14,-24) lowerarm_l(40,-5,-27) 
+hand_l(59,1,-21) 
+note: gunrange:   parts body[Gun_ChainShotgun_Game flag 1 shown 1 attached 1 size 95x15x45 at (42,10,-20) materials 1] 
+note: gunrange: picture 31_gun7_raising.png (gun 6, barrel off 0.0 deg, sight off 6.7 cm, shots 27, reloads 0)
+note: gunrange:   bones head(6,0,-7) neck_01(3,-6,-17) clavicle_r(3,-5,-24) upperarm_r(-8,3,-25) lowerarm_r(8,20,-25) 
+hand_r(23,7,-22) clavicle_l(6,-8,-24) upperarm_l(18,-15,-24) lowerarm_l(34,-1,-32) hand_l(52,1,-22) 
+note: gunrange:   parts body[Gun_ChainShotgun_Game flag 1 shown 1 attached 1 size 95x15x45 at (35,6,-18) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Chain shotgun first person left: 28 degrees (the wrist's limits held it 
+back); the grip asked twist 113 wrist -37/-28, got twist 85 wrist -37/-28, elbow 101 swung 62; fingers curled 122 more
+note: gunrange: picture 32_gun7_aimed.png (gun 6, barrel off 0.0 deg, sight off 0.0 cm, shots 27, reloads 0)
+note: gunrange:   bones head(-8,0,-7) neck_01(-10,-5,-17) clavicle_r(-10,-4,-25) upperarm_r(-20,4,-26) 
+lowerarm_r(-1,16,-21) hand_r(12,0,-17) clavicle_l(-7,-7,-24) upperarm_l(5,-13,-24) lowerarm_l(22,2,-27) 
+hand_l(41,-2,-19) 
+note: gunrange:   parts body[Gun_ChainShotgun_Game flag 1 shown 1 attached 1 size 95x15x45 at (24,1,-14) materials 1] 
+note: gunrange: picture 33_gun7_firing.png (gun 6, barrel off 0.0 deg, sight off 0.0 cm, shots 28, reloads 0)
+note: gunrange:   bones head(-8,0,-7) neck_01(-10,-5,-17) clavicle_r(-10,-4,-25) upperarm_r(-20,4,-25) 
+lowerarm_r(-1,16,-21) hand_r(12,0,-17) clavicle_l(-6,-7,-24) upperarm_l(5,-13,-24) lowerarm_l(22,2,-27) 
+hand_l(41,-2,-19) 
+note: gunrange:   parts body[Gun_ChainShotgun_Game flag 1 shown 1 attached 1 size 95x15x45 at (24,1,-14) materials 1] 
+note: gunrange: gun 7 fired 16 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 34_gun7_cooldown.png (gun 6, barrel off 0.4 deg, sight off 10.8 cm, shots 43, reloads 0)
+note: gunrange:   bones head(1,-0,-7) neck_01(-0,-5,-17) clavicle_r(-1,-4,-25) upperarm_r(-11,4,-26) 
+lowerarm_r(10,13,-29) hand_r(29,9,-23) clavicle_l(3,-7,-24) upperarm_l(16,-8,-23) lowerarm_l(38,-2,-24) 
+hand_l(58,2,-21) 
+note: gunrange:   parts body[Gun_ChainShotgun_Game flag 1 shown 1 attached 1 size 95x15x45 at (42,10,-20) materials 1] 
+note: gunrange: picture 35_gun8_hip.png (gun 7, barrel off 0.0 deg, sight off 10.8 cm, shots 43, reloads 0)
+note: gunrange:   bones head(8,0,-7) neck_01(6,-5,-17) clavicle_r(5,-5,-25) upperarm_r(-5,4,-26) lowerarm_r(12,19,-22) 
+hand_r(30,9,-15) clavicle_l(9,-7,-24) upperarm_l(20,-14,-24) lowerarm_l(41,-4,-28) hand_l(59,2,-21) 
+note: gunrange:   parts body[Gun_ChargeRifle_Game flag 1 shown 1 attached 1 size 85x11x32 at (48,9,-15) materials 2] 
+note: gunrange: HAND TURNED FROM ITS GRIP Charge rifle first person left: 25 degrees (the wrist's limits held it 
+back); the grip asked twist 85 wrist -32/-55, got twist 85 wrist -32/-28, elbow 70 swung 67; fingers curled 122 more
+note: gunrange: picture 36_gun8_raising.png (gun 7, barrel off 0.0 deg, sight off 5.8 cm, shots 43, reloads 0)
+note: gunrange:   bones head(4,0,-7) neck_01(2,-5,-17) clavicle_r(2,-4,-25) upperarm_r(-8,4,-25) lowerarm_r(8,20,-20) 
+hand_r(22,6,-13) clavicle_l(5,-7,-24) upperarm_l(17,-13,-24) lowerarm_l(33,0,-32) hand_l(51,1,-22) 
+note: gunrange:   parts body[Gun_ChargeRifle_Game flag 1 shown 1 attached 1 size 85x11x32 at (40,5,-13) materials 2] 
+note: gunrange: HAND TURNED FROM ITS GRIP Charge rifle first person right: 39 degrees (the wrist's limits held it 
+back); the grip asked twist -84 wrist -65/76, got twist -84 wrist -65/28, elbow 103 swung 43; fingers curled 80 more
+note: gunrange: picture 37_gun8_aimed.png (gun 7, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones head(-8,-0,-7) neck_01(-10,-6,-17) clavicle_r(-11,-5,-25) upperarm_r(-21,3,-25) 
+lowerarm_r(-2,13,-17) hand_r(12,0,-9) clavicle_l(-7,-8,-24) upperarm_l(4,-14,-24) lowerarm_l(24,-3,-29) 
+hand_l(41,-5,-18) 
+note: gunrange:   parts body[Gun_ChargeRifle_Game flag 1 shown 1 attached 1 size 85x11x32 at (30,-0,-9) materials 2] 
+note: gunrange: picture 38_gun8_firing.png (gun 7, barrel off 0.0 deg, sight off 0.0 cm, shots 44, reloads 0)
+note: gunrange:   bones head(-9,-1,-7) neck_01(-11,-6,-17) clavicle_r(-12,-6,-24) upperarm_r(-22,2,-25) 
+lowerarm_r(-3,12,-17) hand_r(10,-1,-9) clavicle_l(-8,-9,-23) upperarm_l(3,-15,-24) lowerarm_l(23,-4,-29) 
+hand_l(40,-6,-17) 
+note: gunrange:   parts body[Gun_ChargeRifle_Game flag 1 shown 1 attached 1 size 85x11x32 at (30,-0,-9) materials 2] 
+note: gunrange: gun 8 fired 9 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 39_gun8_cooldown.png (gun 7, barrel off 0.0 deg, sight off 10.8 cm, shots 52, reloads 0)
+note: gunrange:   bones head(4,0,-7) neck_01(2,-6,-17) clavicle_r(1,-5,-24) upperarm_r(-9,3,-25) lowerarm_r(11,14,-21) 
+hand_r(30,9,-15) clavicle_l(5,-8,-24) upperarm_l(18,-10,-24) lowerarm_l(40,-3,-24) hand_l(59,2,-21) 
+note: gunrange:   parts body[Gun_ChargeRifle_Game flag 1 shown 1 attached 1 size 85x11x32 at (48,9,-15) materials 2] 
+note: gunrange: picture 40_gun9_hip.png (gun 8, barrel off 0.0 deg, sight off 10.8 cm, shots 52, reloads 0)
+note: gunrange:   bones head(1,-0,-7) neck_01(-1,-6,-17) clavicle_r(-2,-5,-25) upperarm_r(-12,4,-25) 
+lowerarm_r(10,11,-25) hand_r(30,9,-20) clavicle_l(2,-8,-24) upperarm_l(13,-14,-24) lowerarm_l(30,-0,-31) 
+hand_l(49,4,-24) 
+note: gunrange:   parts body[Gun_HeavySMG_Game flag 1 shown 1 attached 1 size 70x12x35 at (37,11,-21) materials 1] 
+note: gunrange: picture 41_gun9_raising.png (gun 8, barrel off 0.0 deg, sight off 5.8 cm, shots 52, reloads 0)
+note: gunrange:   bones head(-1,-0,-7) neck_01(-3,-6,-17) clavicle_r(-4,-5,-25) upperarm_r(-14,3,-25) 
+lowerarm_r(4,16,-22) hand_r(22,6,-18) clavicle_l(-1,-8,-24) upperarm_l(11,-14,-24) lowerarm_l(25,1,-34) 
+hand_l(42,1,-22) 
+note: gunrange:   parts body[Gun_HeavySMG_Game flag 1 shown 1 attached 1 size 70x12x35 at (28,6,-18) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Heavy SMG first person left: 31 degrees (the wrist's limits held it back); 
+the grip asked twist 116 wrist -22/-28, got twist 85 wrist -22/-28, elbow 84 swung 53; fingers curled 122 more
+note: gunrange: picture 42_gun9_aimed.png (gun 8, barrel off 0.0 deg, sight off 0.0 cm, shots 52, reloads 0)
+note: gunrange:   bones head(-8,0,-7) neck_01(-10,-5,-17) clavicle_r(-10,-5,-25) upperarm_r(-20,4,-26) 
+lowerarm_r(-2,15,-19) hand_r(12,0,-14) clavicle_l(-7,-7,-24) upperarm_l(5,-14,-24) lowerarm_l(19,0,-35) 
+hand_l(32,-2,-19) 
+note: gunrange:   parts body[Gun_HeavySMG_Game flag 1 shown 1 attached 1 size 70x12x35 at (19,2,-15) materials 1] 
+note: gunrange: picture 43_gun9_firing.png (gun 8, barrel off 0.0 deg, sight off 0.0 cm, shots 53, reloads 0)
+note: gunrange:   bones head(-7,1,-7) neck_01(-9,-5,-18) clavicle_r(-10,-4,-25) upperarm_r(-20,5,-26) 
+lowerarm_r(-1,16,-20) hand_r(13,1,-14) clavicle_l(-6,-7,-24) upperarm_l(6,-13,-24) lowerarm_l(20,1,-36) 
+hand_l(33,-1,-20) 
+note: gunrange:   parts body[Gun_HeavySMG_Game flag 1 shown 1 attached 1 size 70x12x35 at (18,2,-15) materials 1] 
+note: gunrange: gun 9 fired 13 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 44_gun9_cooldown.png (gun 8, barrel off 0.0 deg, sight off 10.8 cm, shots 65, reloads 0)
+note: gunrange:   bones head(-4,0,-7) neck_01(-6,-5,-17) clavicle_r(-6,-4,-25) upperarm_r(-13,7,-25) 
+lowerarm_r(10,9,-24) hand_r(30,9,-20) clavicle_l(-2,-7,-24) upperarm_l(9,-13,-24) lowerarm_l(30,-5,-25) 
+hand_l(50,2,-21) 
+note: gunrange:   parts body[Gun_HeavySMG_Game flag 1 shown 1 attached 1 size 70x12x35 at (36,11,-21) materials 1] 
+note: gunrange: picture 45_gun10_hip.png (gun 9, barrel off 0.0 deg, sight off 9.2 cm, shots 65, reloads 0)
+note: gunrange:   bones head(3,0,-7) neck_01(-2,0,-18) clavicle_r(2,2,-24) upperarm_r(11,11,-23) lowerarm_r(30,23,-19) 
+hand_r(41,6,-16) clavicle_l(1,-3,-24) upperarm_l(3,-16,-24) lowerarm_l(25,-14,-27) hand_l(43,-5,-22) 
+note: gunrange:   parts body[Gun_MachinePistol_Game flag 1 shown 1 attached 1 size 30x8x28 at (52,7,-17) materials 1] 
+note: gunrange: picture 46_gun10_raising.png (gun 9, barrel off 0.0 deg, sight off 4.8 cm, shots 65, reloads 0)
+note: gunrange:   bones head(4,-0,-7) neck_01(-1,0,-18) clavicle_r(2,2,-24) upperarm_r(12,11,-23) 
+lowerarm_r(32,21,-17) hand_r(43,4,-13) clavicle_l(2,-3,-24) upperarm_l(4,-16,-24) lowerarm_l(26,-13,-23) 
+hand_l(46,-7,-19) 
+note: gunrange:   parts body[Gun_MachinePistol_Game flag 1 shown 1 attached 1 size 30x8x28 at (55,4,-14) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Machine pistol first person right: 25 degrees (the wrist's limits held it 
+back); the grip asked twist -84 wrist -59/61, got twist -84 wrist -59/28, elbow 75 swung 54; fingers curled 68 more
+note: gunrange: picture 47_gun10_aimed.png (gun 9, barrel off 0.0 deg, sight off 0.0 cm, shots 65, reloads 0)
+note: gunrange:   bones head(9,0,-7) neck_01(4,0,-18) clavicle_r(8,2,-24) upperarm_r(17,11,-23) lowerarm_r(37,18,-14) 
+hand_r(47,0,-9) clavicle_l(7,-3,-24) upperarm_l(8,-16,-24) lowerarm_l(31,-16,-24) hand_l(49,-11,-15) 
+note: gunrange:   parts body[Gun_MachinePistol_Game flag 1 shown 1 attached 1 size 30x8x28 at (58,1,-10) materials 1] 
+note: gunrange: picture 48_gun10_firing.png (gun 9, barrel off 0.0 deg, sight off 0.0 cm, shots 66, reloads 0)
+note: gunrange:   bones head(9,-0,-7) neck_01(4,0,-18) clavicle_r(8,2,-24) upperarm_r(17,11,-23) lowerarm_r(37,18,-14) 
+hand_r(47,0,-9) clavicle_l(7,-3,-24) upperarm_l(8,-16,-24) lowerarm_l(31,-16,-24) hand_l(49,-11,-15) 
+note: gunrange:   parts body[Gun_MachinePistol_Game flag 1 shown 1 attached 1 size 30x8x28 at (58,1,-10) materials 1] 
+note: gunrange: gun 10 fired 20 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 49_gun10_cooldown.png (gun 9, barrel off 0.0 deg, sight off 9.2 cm, shots 86, reloads 0)
+note: gunrange:   bones head(3,0,-7) neck_01(-2,0,-18) clavicle_r(2,2,-24) upperarm_r(11,11,-23) lowerarm_r(29,23,-17) 
+hand_r(41,6,-16) clavicle_l(1,-3,-24) upperarm_l(3,-16,-24) lowerarm_l(25,-14,-27) hand_l(43,-5,-22) 
+note: gunrange:   parts body[Gun_MachinePistol_Game flag 1 shown 1 attached 1 size 30x8x28 at (52,7,-17) materials 1] 
+note: gunrange: picture 50_gun11_hip.png (gun 10, barrel off 0.0 deg, sight off 9.2 cm, shots 86, reloads 0)
+note: gunrange:   bones head(3,0,-7) neck_01(-2,0,-18) clavicle_r(2,2,-24) upperarm_r(11,11,-23) lowerarm_r(30,23,-19) 
+hand_r(41,6,-15) clavicle_l(1,-3,-24) upperarm_l(3,-16,-24) lowerarm_l(25,-14,-27) hand_l(43,-5,-22) 
+note: gunrange:   parts body[Gun_Revolver_Game flag 1 shown 1 attached 1 size 30x4x20 at (57,6,-16) materials 1] 
+note: gunrange: picture 51_gun11_raising.png (gun 10, barrel off 0.0 deg, sight off 4.8 cm, shots 86, reloads 0)
+note: gunrange:   bones head(4,0,-7) neck_01(-1,0,-18) clavicle_r(2,2,-24) upperarm_r(12,11,-23) lowerarm_r(32,21,-17) 
+hand_r(43,4,-13) clavicle_l(2,-3,-24) upperarm_l(4,-16,-24) lowerarm_l(26,-13,-23) hand_l(46,-7,-19) 
+note: gunrange:   parts body[Gun_Revolver_Game flag 1 shown 1 attached 1 size 30x4x20 at (60,3,-13) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Revolver first person right: 25 degrees (the wrist's limits held it back); 
+the grip asked twist -85 wrist -59/61, got twist -85 wrist -59/28, elbow 74 swung 54; fingers curled 68 more
+note: gunrange: picture 52_gun11_aimed.png (gun 10, barrel off 0.0 deg, sight off 0.0 cm, shots 86, reloads 0)
+note: gunrange:   bones head(9,-0,-7) neck_01(4,0,-18) clavicle_r(8,2,-24) upperarm_r(17,11,-23) lowerarm_r(37,18,-14) 
+hand_r(47,0,-8) clavicle_l(7,-3,-24) upperarm_l(9,-16,-24) lowerarm_l(31,-16,-23) hand_l(49,-11,-15) 
+note: gunrange:   parts body[Gun_Revolver_Game flag 1 shown 1 attached 1 size 30x4x20 at (63,-0,-9) materials 1] 
+note: gunrange: picture 53_gun11_firing.png (gun 10, barrel off 0.0 deg, sight off 0.0 cm, shots 87, reloads 0)
+note: gunrange:   bones head(9,0,-7) neck_01(4,0,-18) clavicle_r(8,2,-24) upperarm_r(17,11,-23) lowerarm_r(37,18,-14) 
+hand_r(47,0,-8) clavicle_l(7,-3,-24) upperarm_l(9,-16,-24) lowerarm_l(31,-16,-23) hand_l(49,-11,-15) 
+note: gunrange:   parts body[Gun_Revolver_Game flag 1 shown 1 attached 1 size 30x4x20 at (63,-0,-9) materials 1] 
+note: gunrange: gun 11 fired 3 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 54_gun11_cooldown.png (gun 10, barrel off 0.0 deg, sight off 9.2 cm, shots 89, reloads 0)
+note: gunrange:   bones head(4,-0,-7) neck_01(-1,0,-18) clavicle_r(2,2,-24) upperarm_r(11,11,-23) 
+lowerarm_r(30,24,-19) hand_r(41,6,-15) clavicle_l(1,-3,-24) upperarm_l(3,-16,-24) lowerarm_l(25,-14,-27) 
+hand_l(43,-5,-22) 
+note: gunrange:   parts body[Gun_Revolver_Game flag 1 shown 1 attached 1 size 30x4x20 at (57,6,-16) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Sniper rifle first person left: 26 degrees (the wrist's limits held it 
+back); the grip asked twist 84 wrist -6/-54, got twist 84 wrist -6/-28, elbow 11 swung 49; fingers curled 120 more
+note: gunrange: picture 55_gun12_hip.png (gun 11, barrel off 0.0 deg, sight off 10.8 cm, shots 89, reloads 0)
+note: gunrange:   bones head(17,-0,-7) neck_01(15,-5,-17) clavicle_r(15,-4,-25) upperarm_r(5,4,-26) 
+lowerarm_r(21,20,-29) hand_r(39,9,-24) clavicle_l(18,-7,-24) upperarm_l(32,-8,-24) lowerarm_l(53,-1,-26) 
+hand_l(73,3,-23) 
+note: gunrange:   parts body[Gun_SniperRifle_Game flag 1 shown 1 attached 1 size 120x15x33 at (74,11,-18) materials 1] 
+note: gunrange: picture 56_gun12_raising.png (gun 11, barrel off 0.0 deg, sight off 5.5 cm, shots 89, reloads 0)
+note: gunrange:   bones head(17,-0,-7) neck_01(15,-6,-17) clavicle_r(14,-5,-25) upperarm_r(4,4,-25) 
+lowerarm_r(19,22,-25) hand_r(32,6,-22) clavicle_l(18,-8,-24) upperarm_l(31,-8,-23) lowerarm_l(54,-4,-24) 
+hand_l(74,-1,-21) 
+note: gunrange:   parts body[Gun_SniperRifle_Game flag 1 shown 1 attached 1 size 120x15x33 at (65,6,-15) materials 1] 
+note: gunrange: picture 57_gun12_aimed.png (gun 11, barrel off 0.0 deg, sight off 0.0 cm, shots 89, reloads 0)
+note: gunrange:   bones head(12,0,-7) neck_01(10,-6,-17) clavicle_r(9,-5,-25) upperarm_r(-1,3,-26) 
+lowerarm_r(13,20,-19) hand_r(21,0,-19) clavicle_l(13,-8,-24) upperarm_l(25,-13,-24) lowerarm_l(47,-7,-23) 
+hand_l(67,-5,-19) 
+note: gunrange:   parts body[Gun_SniperRifle_Game flag 0 shown 0 attached 1 size 120x15x33 at (56,2,-12) materials 1] 
+note: gunrange: picture 58_gun12_firing.png (gun 11, barrel off 0.0 deg, sight off 0.0 cm, shots 90, reloads 0)
+note: gunrange:   bones head(13,0,-7) neck_01(10,-5,-17) clavicle_r(10,-5,-25) upperarm_r(-0,4,-26) 
+lowerarm_r(14,20,-20) hand_r(22,1,-19) clavicle_l(13,-7,-24) upperarm_l(26,-12,-24) lowerarm_l(48,-7,-24) 
+hand_l(68,-4,-20) 
+note: gunrange:   parts body[Gun_SniperRifle_Game flag 0 shown 0 attached 1 size 120x15x33 at (56,2,-12) materials 1] 
+note: gunrange: gun 12 fired 2 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 59_gun12_cooldown.png (gun 11, barrel off 0.0 deg, sight off 10.8 cm, shots 91, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-6,-17) clavicle_r(14,-5,-25) upperarm_r(4,4,-26) 
+lowerarm_r(21,19,-29) hand_r(39,9,-25) clavicle_l(18,-7,-24) upperarm_l(31,-8,-24) lowerarm_l(53,-2,-26) 
+hand_l(73,3,-23) 
+note: gunrange:   parts body[Gun_SniperRifle_Game flag 1 shown 1 attached 1 size 120x15x33 at (74,11,-18) materials 1] 
+note: gunrange: picture 60_gun13_hip.png (gun 12, barrel off 0.0 deg, sight off 10.8 cm, shots 91, reloads 0)
+note: gunrange:   bones head(17,-0,-7) neck_01(15,-6,-17) clavicle_r(14,-5,-24) upperarm_r(4,3,-25) 
+lowerarm_r(14,23,-28) hand_r(30,9,-26) clavicle_l(17,-8,-24) upperarm_l(29,-15,-24) lowerarm_l(49,-5,-27) 
+hand_l(68,2,-21) 
+note: gunrange:   parts body[Gun_ChargeLance_Game flag 1 shown 1 attached 1 size 120x13x40 at (49,9,-18) materials 1] 
+note: gunrange: picture 61_gun13_raising.png (gun 12, barrel off 0.0 deg, sight off 6.5 cm, shots 91, reloads 0)
+note: gunrange:   bones head(15,0,-7) neck_01(13,-6,-17) clavicle_r(12,-5,-25) upperarm_r(2,3,-26) 
+lowerarm_r(12,24,-25) hand_r(23,7,-24) clavicle_l(16,-8,-24) upperarm_l(27,-14,-24) lowerarm_l(44,-1,-32) 
+hand_l(62,1,-22) 
+note: gunrange:   parts body[Gun_ChargeLance_Game flag 1 shown 1 attached 1 size 120x13x40 at (42,5,-15) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Charge lance first person right: 70 degrees (the wrist's limits held it 
+back); the grip asked twist 45 wrist 53/93, got twist 45 wrist 53/28, elbow 145 swung -100; fingers curled 80 more
+note: gunrange: HAND TURNED FROM ITS GRIP Charge lance first person left: 29 degrees (the wrist's limits held it 
+back); the grip asked twist 113 wrist -39/-29, got twist 85 wrist -39/-28, elbow 103 swung 63; fingers curled 122 more
+note: gunrange: picture 62_gun13_aimed.png (gun 12, barrel off 0.0 deg, sight off 0.0 cm, shots 91, reloads 0)
+note: gunrange:   bones head(-4,0,-7) neck_01(-6,-5,-17) clavicle_r(-6,-4,-25) upperarm_r(-16,4,-26) 
+lowerarm_r(1,18,-21) hand_r(12,0,-20) clavicle_l(-3,-7,-24) upperarm_l(9,-13,-24) lowerarm_l(31,-6,-25) 
+hand_l(50,-5,-18) 
+note: gunrange:   parts body[Gun_ChargeLance_Game flag 1 shown 1 attached 1 size 120x13x40 at (31,-0,-12) materials 1] 
+note: gunrange: picture 63_gun13_firing.png (gun 12, barrel off 0.0 deg, sight off 0.0 cm, shots 92, reloads 0)
+note: gunrange:   bones head(-4,-0,-7) neck_01(-6,-6,-17) clavicle_r(-7,-5,-25) upperarm_r(-17,3,-25) 
+lowerarm_r(1,17,-20) hand_r(11,-0,-19) clavicle_l(-3,-8,-24) upperarm_l(9,-14,-23) lowerarm_l(30,-6,-25) 
+hand_l(49,-6,-17) 
+note: gunrange:   parts body[Gun_ChargeLance_Game flag 1 shown 1 attached 1 size 120x13x40 at (31,-0,-12) materials 1] 
+note: gunrange: gun 13 fired 1 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 64_gun13_cooldown.png (gun 12, barrel off 0.0 deg, sight off 10.8 cm, shots 92, reloads 0)
+note: gunrange:   bones head(12,-0,-7) neck_01(10,-6,-17) clavicle_r(10,-5,-25) upperarm_r(-0,4,-25) 
+lowerarm_r(14,21,-29) hand_r(30,9,-26) clavicle_l(13,-7,-24) upperarm_l(26,-8,-23) lowerarm_l(48,-3,-24) 
+hand_l(68,1,-21) 
+note: gunrange:   parts body[Gun_ChargeLance_Game flag 1 shown 1 attached 1 size 120x13x40 at (49,9,-18) materials 1] 
+note: gunrange: picture 65_gun14_hip.png (gun 13, barrel off 0.0 deg, sight off 10.8 cm, shots 92, reloads 0)
+note: gunrange:   bones head(12,0,-7) neck_01(10,-5,-17) clavicle_r(10,-4,-25) upperarm_r(-0,4,-26) 
+lowerarm_r(14,21,-21) hand_r(30,9,-14) clavicle_l(13,-7,-24) upperarm_l(25,-13,-24) lowerarm_l(46,-4,-28) 
+hand_l(64,2,-21) 
+note: gunrange:   parts body[Gun_NeedleGun_Game flag 1 shown 1 attached 1 size 110x9x33 at (46,9,-16) materials 2] 
+note: gunrange: HAND TURNED FROM ITS GRIP Needle gun first person right: 27 degrees (the wrist's limits held it back); 
+the grip asked twist -85 wrist -53/61, got twist -85 wrist -53/28, elbow 100 swung 40; fingers curled 80 more
+note: gunrange: HAND TURNED FROM ITS GRIP Needle gun first person left: 25 degrees (the wrist's limits held it back); 
+the grip asked twist 85 wrist -30/-54, got twist 85 wrist -30/-28, elbow 68 swung 67; fingers curled 122 more
+note: gunrange: picture 66_gun14_raising.png (gun 13, barrel off 0.0 deg, sight off 6.1 cm, shots 92, reloads 0)
+note: gunrange:   bones head(9,-0,-7) neck_01(7,-5,-17) clavicle_r(7,-5,-25) upperarm_r(-3,4,-26) 
+lowerarm_r(11,22,-20) hand_r(22,6,-12) clavicle_l(11,-7,-24) upperarm_l(22,-13,-24) lowerarm_l(39,0,-32) 
+hand_l(57,1,-22) 
+note: gunrange:   parts body[Gun_NeedleGun_Game flag 1 shown 1 attached 1 size 110x9x33 at (38,5,-13) materials 2] 
+note: gunrange: picture 67_gun14_aimed.png (gun 13, barrel off 0.0 deg, sight off 0.0 cm, shots 92, reloads 0)
+note: gunrange:   bones head(-6,0,-7) neck_01(-9,-6,-17) clavicle_r(-9,-5,-24) upperarm_r(-20,3,-25) 
+lowerarm_r(-2,14,-16) hand_r(12,0,-8) clavicle_l(-6,-8,-24) upperarm_l(6,-15,-24) lowerarm_l(27,-7,-25) 
+hand_l(46,-5,-18) 
+note: gunrange:   parts body[Gun_NeedleGun_Game flag 1 shown 1 attached 1 size 110x9x33 at (28,-0,-10) materials 2] 
+note: gunrange: picture 68_gun14_firing.png (gun 13, barrel off 0.0 deg, sight off 0.0 cm, shots 93, reloads 0)
+note: gunrange:   bones head(-6,0,-7) neck_01(-8,-6,-17) clavicle_r(-9,-5,-25) upperarm_r(-19,3,-26) 
+lowerarm_r(-1,14,-17) hand_r(12,1,-8) clavicle_l(-6,-8,-24) upperarm_l(6,-14,-25) lowerarm_l(27,-6,-25) 
+hand_l(47,-5,-18) 
+note: gunrange:   parts body[Gun_NeedleGun_Game flag 1 shown 1 attached 1 size 110x9x33 at (28,-0,-10) materials 2] 
+note: gunrange: gun 14 fired 1 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 69_gun14_cooldown.png (gun 13, barrel off 0.0 deg, sight off 10.8 cm, shots 93, reloads 0)
+note: gunrange:   bones head(10,0,-7) neck_01(7,-6,-17) clavicle_r(7,-5,-25) upperarm_r(-4,3,-26) 
+lowerarm_r(13,18,-21) hand_r(30,9,-14) clavicle_l(10,-8,-24) upperarm_l(23,-10,-24) lowerarm_l(45,-3,-25) 
+hand_l(65,2,-21) 
+note: gunrange:   parts body[Gun_NeedleGun_Game flag 1 shown 1 attached 1 size 110x9x33 at (46,9,-16) materials 2] 
+note: gunrange: picture 70_downed.png (gun 1, barrel off 0.0 deg, sight off 10.8 cm, shots 102, reloads 0)
+note: gunrange:   bones head(16,0,-7) neck_01(14,-5,-17) clavicle_r(14,-5,-25) upperarm_r(4,4,-26) 
+lowerarm_r(15,23,-23) hand_r(30,9,-18) clavicle_l(17,-7,-24) upperarm_l(29,-13,-24) lowerarm_l(48,-2,-26) 
+hand_l(67,4,-20) 
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (52,10,-19) materials 1] 
+note: gunrange: picture 71_downed_shot.png (gun 1, barrel off 0.0 deg, sight off 0.0 cm, shots 108, reloads 0)
+note: gunrange:   bones head(-2,0,-7) neck_01(-5,-6,-17) clavicle_r(-5,-5,-25) upperarm_r(-15,3,-26) 
+lowerarm_r(1,17,-18) hand_r(12,0,-12) clavicle_l(-2,-8,-24) upperarm_l(10,-14,-24) lowerarm_l(30,-4,-22) 
+hand_l(49,-2,-16) 
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (34,1,-13) materials 1] 
+note: gunrange: close look at 1048608's last wound, 8 m away
+note: gunrange: picture 72_downed_far.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,-0,-7) neck_01(15,-6,-17) clavicle_r(14,-5,-25) upperarm_r(4,4,-25) 
+lowerarm_r(16,23,-22) hand_r(32,13,-13) clavicle_l(18,-8,-24) upperarm_l(29,-14,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 
+1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] 
+trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: picture 73_downed_scope.png (gun 0, barrel off 0.0 deg, sight off 0.0 cm, shots 108, reloads 0)
+note: gunrange:   bones head(-8,-0,-7) neck_01(-10,-6,-17) clavicle_r(-10,-5,-25) upperarm_r(-21,3,-25) 
+lowerarm_r(-4,16,-17) hand_r(10,3,-8) clavicle_l(-7,-8,-24) upperarm_l(5,-14,-24) lowerarm_l(26,-5,-24) 
+hand_l(45,-3,-18) 
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] 
+bolt[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] 
+trigger[SM_BoltActionRifle_PIVOT_Trigger flag 0 shown 0 attached 1 size 1x1x2 at (19,3,-14) materials 1] 
+note: gunrange: HAND TURNED FROM ITS GRIP Bolt-action rifle third person left: 177 degrees (the wrist's limits held it 
+back); the grip asked twist -178 wrist 0/12, got twist -85 wrist 0/12, elbow 50 swung 0; fingers curled 0 more
+note: gunrange: picture 74_third_person.png (gun 0, barrel off 0.0 deg, sight off 0.0 cm, shots 108, reloads 0)
+note: gunrange:   bones head(-8,-0,-7) neck_01(-10,-6,-17) clavicle_r(-10,-5,-25) upperarm_r(-21,3,-25) 
+lowerarm_r(-4,16,-17) hand_r(10,3,-8) clavicle_l(-7,-8,-24) upperarm_l(5,-14,-24) lowerarm_l(26,-5,-24) 
+hand_l(45,-3,-18) 
+note: gunrange: picture 75_third_person_aimed.png (gun 0, barrel off 0.0 deg, sight off 0.0 cm, shots 108, reloads 0)
+note: gunrange:   bones head(-8,-0,-7) neck_01(-10,-6,-17) clavicle_r(-10,-5,-25) upperarm_r(-21,3,-25) 
+lowerarm_r(-4,16,-17) hand_r(10,3,-8) clavicle_l(-7,-8,-24) upperarm_l(5,-14,-24) lowerarm_l(26,-5,-24) 
+hand_l(45,-3,-18) 
+note: gunrange: picture 76_hair_back_aimed.png (gun 0, barrel off 0.0 deg, sight off 0.0 cm, shots 108, reloads 0)
+note: gunrange:   bones head(-8,-0,-7) neck_01(-10,-6,-17) clavicle_r(-10,-5,-25) upperarm_r(-21,3,-25) 
+lowerarm_r(-4,16,-17) hand_r(10,3,-8) clavicle_l(-7,-8,-24) upperarm_l(5,-14,-24) lowerarm_l(26,-5,-24) 
+hand_l(45,-3,-18) 
+note: gunrange: picture 77_hair_parting_above.png (gun 0, barrel off 0.0 deg, sight off 0.0 cm, shots 108, reloads 0)
+note: gunrange:   bones head(-8,-0,-7) neck_01(-10,-6,-17) clavicle_r(-10,-5,-25) upperarm_r(-21,3,-25) 
+lowerarm_r(-4,16,-17) hand_r(10,3,-8) clavicle_l(-7,-8,-24) upperarm_l(5,-14,-24) lowerarm_l(26,-5,-24) 
+hand_l(45,-3,-18) 
+note: gunrange: melee rack 18 in hand, view first person, arms shown
+note: gunrange: picture 78_melee_held.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: HAND TURNED FROM ITS GRIP Longsword first person right: 27 degrees (the wrist's limits held it back); 
+the grip asked twist 85 wrist 12/55, got twist 85 wrist 12/28, elbow 41 swung -85; fingers curled 28 more
+note: gunrange: HAND OFF ITS GRIP Longsword first person right: out of reach by 4.2 cm, drawn 4.2 cm from the goal, 
+shoulder forward 5.7 cm, goal from shoulder (ahead 45, right -10, up 11)
+note: gunrange: HAND OFF ITS GRIP Longsword first person right: out of reach by 6.1 cm, drawn 6.1 cm from the goal, 
+shoulder forward 5.7 cm, goal from shoulder (ahead 46, right -16, up 6)
+note: gunrange: picture 79_melee_swing.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: first-person swings seen 1
+note: gunrange: picture 80_melee_Knife_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 81_melee_Knife_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 82_melee_Club_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 83_melee_Club_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 84_melee_Gladius_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 85_melee_Gladius_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 86_melee_Mace_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 87_melee_Mace_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 88_melee_Longsword_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 89_melee_Longsword_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 90_melee_Spear_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 91_melee_Spear_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 92_melee_Monosword_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 93_melee_Monosword_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 94_melee_Plasma sword_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 95_melee_Plasma sword_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 96_melee_Zeushammer_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 
+0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 97_melee_Zeushammer_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 
+0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 98_melee_Breach axe_fp.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 
+0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: HAND OFF ITS GRIP Breach axe third person left: out of reach by 5.0 cm, drawn 5.0 cm from the goal, 
+shoulder forward 5.7 cm, goal from shoulder (ahead 12, right 18, up -43)
+note: gunrange: HAND OFF ITS GRIP Breach axe third person left: out of reach by 4.9 cm, drawn 4.9 cm from the goal, 
+shoulder forward 5.7 cm, goal from shoulder (ahead 12, right 18, up -43)
+note: gunrange: picture 99_melee_Breach axe_3p.png (gun -1, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 
+0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-26) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange: picture 100_hold_Bolt-actionrifle_fp_hip.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(15,-5,-25) upperarm_r(5,4,-26) 
+lowerarm_r(16,23,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-14,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 
+1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] 
+trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: picture 101_hold_Bolt-actionrifle_fp_aimed.png (gun 0, barrel off 0.0 deg, sight off 0.0 cm, shots 
+108, reloads 0)
+note: gunrange:   bones head(-7,-0,-7) neck_01(-10,-6,-17) clavicle_r(-10,-5,-25) upperarm_r(-20,3,-25) 
+lowerarm_r(-4,16,-17) hand_r(10,3,-8) clavicle_l(-7,-8,-24) upperarm_l(5,-14,-24) lowerarm_l(26,-5,-24) 
+hand_l(45,-3,-18) 
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] 
+bolt[SM_BoltActionRifle_Body flag 0 shown 0 attached 1 size 112x8x20 at (29,1,-7) materials 1] 
+trigger[SM_BoltActionRifle_PIVOT_Trigger flag 0 shown 0 attached 1 size 1x1x2 at (19,3,-14) materials 1] 
+note: gunrange: picture 102_hold_Bolt-actionrifle_3p_ready.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 
+108, reloads 0)
+note: gunrange:   bones head(7,0,-7) neck_01(5,-6,-17) clavicle_r(4,-5,-24) upperarm_r(-6,3,-25) lowerarm_r(15,10,-19) 
+hand_r(34,13,-13) clavicle_l(8,-8,-24) upperarm_l(21,-9,-24) lowerarm_l(41,1,-24) hand_l(60,8,-21) 
+note: gunrange: picture 103_hold_Bolt-actionrifle_3p_aimed.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 
+108, reloads 0)
+note: gunrange:   bones head(7,0,-7) neck_01(5,-6,-17) clavicle_r(4,-5,-24) upperarm_r(-6,3,-25) lowerarm_r(15,10,-19) 
+hand_r(34,13,-13) clavicle_l(8,-8,-24) upperarm_l(21,-9,-24) lowerarm_l(41,1,-24) hand_l(60,8,-21) 
+note: gunrange: picture 104_hold_Bolt-actionrifle_3p_side.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 
+108, reloads 0)
+note: gunrange:   bones head(7,0,-7) neck_01(5,-6,-17) clavicle_r(4,-5,-24) upperarm_r(-6,3,-25) lowerarm_r(15,10,-19) 
+hand_r(34,13,-13) clavicle_l(8,-8,-24) upperarm_l(21,-9,-24) lowerarm_l(41,1,-24) hand_l(60,8,-21) 
+note: gunrange: picture 105_hold_Assaultrifle_fp_hip.png (gun 1, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-6,-17) clavicle_r(14,-5,-25) upperarm_r(4,3,-26) 
+lowerarm_r(15,23,-24) hand_r(30,9,-18) clavicle_l(17,-8,-24) upperarm_l(29,-15,-24) lowerarm_l(48,-3,-25) 
+hand_l(67,4,-20) 
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (52,10,-19) materials 1] 
+note: gunrange: picture 106_hold_Assaultrifle_fp_aimed.png (gun 1, barrel off 0.0 deg, sight off 0.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-4,-0,-7) neck_01(-6,-6,-17) clavicle_r(-6,-5,-25) upperarm_r(-16,4,-26) 
+lowerarm_r(1,17,-18) hand_r(12,0,-12) clavicle_l(-3,-7,-24) upperarm_l(9,-13,-24) lowerarm_l(31,-6,-23) 
+hand_l(49,-5,-14) 
+note: gunrange:   parts body[AssaultRifle_Game flag 1 shown 1 attached 1 size 89x7x26 at (34,1,-13) materials 1] 
+note: gunrange: picture 107_hold_Assaultrifle_3p_ready.png (gun 1, barrel off 0.0 deg, sight off 8.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(1,-0,-7) neck_01(-1,-6,-17) clavicle_r(-2,-5,-25) upperarm_r(-12,3,-25) 
+lowerarm_r(7,15,-21) hand_r(25,6,-16) clavicle_l(2,-8,-24) upperarm_l(15,-9,-22) lowerarm_l(37,-2,-22) 
+hand_l(57,1,-18) 
+note: gunrange: HAND TURNED FROM ITS GRIP Assault rifle third person left: 30 degrees (the wrist's limits held it 
+back); the grip asked twist 85 wrist -42/-61, got twist 85 wrist -42/-28, elbow 83 swung 29; fingers curled 122 more
+note: gunrange: picture 108_hold_Assaultrifle_3p_aimed.png (gun 1, barrel off 0.0 deg, sight off 8.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(1,-0,-7) neck_01(-1,-6,-17) clavicle_r(-2,-5,-25) upperarm_r(-12,3,-25) 
+lowerarm_r(7,15,-21) hand_r(25,6,-16) clavicle_l(2,-8,-24) upperarm_l(15,-9,-22) lowerarm_l(37,-2,-22) 
+hand_l(57,1,-18) 
+note: gunrange: picture 109_hold_Assaultrifle_3p_side.png (gun 1, barrel off 0.0 deg, sight off 8.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(1,-0,-7) neck_01(-1,-6,-17) clavicle_r(-2,-5,-25) upperarm_r(-12,3,-25) 
+lowerarm_r(7,15,-21) hand_r(25,6,-16) clavicle_l(2,-8,-24) upperarm_l(15,-9,-22) lowerarm_l(37,-2,-22) 
+hand_l(57,1,-18) 
+note: gunrange: HAND OFF ITS GRIP Pistol first person right: out of reach by 3.6 cm, drawn 3.6 cm from the goal, 
+shoulder forward 5.7 cm, goal from shoulder (ahead 46, right -6, up -0)
+note: gunrange: picture 110_hold_Pistol_fp_hip.png (gun 2, barrel off 0.0 deg, sight off 9.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(1,0,-7) neck_01(-4,0,-18) clavicle_r(-0,2,-24) upperarm_r(9,11,-23) lowerarm_r(29,21,-18) 
+hand_r(39,4,-15) clavicle_l(-1,-3,-24) upperarm_l(1,-16,-24) lowerarm_l(23,-14,-27) hand_l(42,-7,-21) 
+note: gunrange:   parts body[PistolBody flag 1 shown 1 attached 1 size 19x3x12 at (51,3,-11) materials 1] 
+magazine[PistolMagazine flag 1 shown 1 attached 1 size 7x2x10 at (46,3,-13) materials 1] 
+note: gunrange: picture 111_hold_Pistol_fp_aimed.png (gun 2, barrel off 0.0 deg, sight off 0.0 cm, shots 108, reloads 
+0)
+note: gunrange:   bones head(8,0,-7) neck_01(3,0,-18) clavicle_r(6,2,-24) upperarm_r(15,11,-23) lowerarm_r(36,15,-13) 
+hand_r(45,-2,-8) clavicle_l(5,-3,-24) upperarm_l(7,-16,-24) lowerarm_l(30,-18,-23) hand_l(48,-13,-14) 
+note: gunrange:   parts body[PistolBody flag 1 shown 1 attached 1 size 19x3x12 at (57,-3,-4) materials 1] 
+magazine[PistolMagazine flag 1 shown 1 attached 1 size 7x2x10 at (52,-3,-6) materials 1] 
+note: gunrange: picture 112_hold_Pistol_3p_ready.png (gun 2, barrel off 0.0 deg, sight off 5.6 cm, shots 108, reloads 
+0)
+note: gunrange:   bones head(6,-0,-7) neck_01(1,0,-18) clavicle_r(5,2,-24) upperarm_r(14,11,-23) lowerarm_r(32,19,-12) 
+hand_r(41,1,-11) clavicle_l(4,-3,-24) upperarm_l(5,-16,-24) lowerarm_l(28,-18,-28) hand_l(44,-10,-17) 
+note: gunrange: HAND TURNED FROM ITS GRIP Pistol third person right: 25 degrees (the wrist's limits held it back); the 
+grip asked twist -84 wrist -48/57, got twist -84 wrist -48/28, elbow 48 swung 54; fingers curled 48 more
+note: gunrange: picture 113_hold_Pistol_3p_aimed.png (gun 2, barrel off 0.0 deg, sight off 5.6 cm, shots 108, reloads 
+0)
+note: gunrange:   bones head(6,-0,-7) neck_01(1,0,-18) clavicle_r(5,2,-24) upperarm_r(14,11,-23) lowerarm_r(32,19,-12) 
+hand_r(41,1,-11) clavicle_l(4,-3,-24) upperarm_l(5,-16,-24) lowerarm_l(28,-18,-28) hand_l(44,-10,-17) 
+note: gunrange: picture 114_hold_Pistol_3p_side.png (gun 2, barrel off 0.0 deg, sight off 5.6 cm, shots 108, reloads 0)
+note: gunrange:   bones head(6,-0,-7) neck_01(1,0,-18) clavicle_r(5,2,-24) upperarm_r(14,11,-23) lowerarm_r(32,19,-12) 
+hand_r(41,1,-11) clavicle_l(4,-3,-24) upperarm_l(5,-16,-24) lowerarm_l(28,-18,-28) hand_l(44,-10,-17) 
+note: gunrange: HAND OFF ITS GRIP Pump shotgun first person right: out of reach by 5.6 cm, drawn 5.6 cm from the goal, 
+shoulder forward 0.0 cm, goal from shoulder (ahead 0, right -6, up -5)
+note: gunrange: HAND OFF ITS GRIP Pump shotgun first person right: out of reach by 5.0 cm, drawn 5.0 cm from the goal, 
+shoulder forward 0.0 cm, goal from shoulder (ahead 4, right -6, up -4)
+note: gunrange: HAND OFF ITS GRIP Pump shotgun first person left: out of reach by 3.3 cm, drawn 3.3 cm from the goal, 
+shoulder forward 5.7 cm, goal from shoulder (ahead 45, right 11, up 5)
+note: gunrange: picture 115_hold_Pumpshotgun_fp_hip.png (gun 3, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(15,-5,-25) upperarm_r(5,4,-26) 
+lowerarm_r(16,23,-23) hand_r(31,9,-17) clavicle_l(18,-7,-24) upperarm_l(31,-8,-23) lowerarm_l(53,-2,-23) 
+hand_l(73,3,-19) 
+note: gunrange:   parts body[ShotgunBody flag 1 shown 1 attached 1 size 127x5x22 at (59,9,-19) materials 1] 
+pump[ShotgunPump flag 1 shown 1 attached 1 size 24x5x5 at (89,9,-14) materials 1] 
+note: gunrange: picture 116_hold_Pumpshotgun_fp_aimed.png (gun 3, barrel off 0.0 deg, sight off 0.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(8,-0,-7) neck_01(5,-6,-17) clavicle_r(5,-5,-25) upperarm_r(-6,3,-25) lowerarm_r(4,19,-12) 
+hand_r(13,0,-11) clavicle_l(8,-8,-24) upperarm_l(21,-9,-22) lowerarm_l(44,-5,-21) hand_l(64,-5,-16) 
+note: gunrange:   parts body[ShotgunBody flag 1 shown 1 attached 1 size 127x5x22 at (41,-0,-13) materials 1] 
+pump[ShotgunPump flag 1 shown 1 attached 1 size 24x5x5 at (71,0,-8) materials 1] 
+note: gunrange: picture 117_hold_Pumpshotgun_3p_ready.png (gun 3, barrel off 0.0 deg, sight off 7.7 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(12,-0,-7) neck_01(10,-6,-17) clavicle_r(9,-5,-24) upperarm_r(-1,3,-25) 
+lowerarm_r(12,20,-21) hand_r(25,6,-15) clavicle_l(12,-8,-24) upperarm_l(25,-9,-23) lowerarm_l(47,-2,-23) 
+hand_l(67,2,-19) 
+note: gunrange: HAND TURNED FROM ITS GRIP Pump shotgun third person left: 27 degrees (the wrist's limits held it 
+back); the grip asked twist 85 wrist -4/-55, got twist 85 wrist -4/-28, elbow 23 swung 32; fingers curled 122 more
+note: gunrange: HAND TURNED FROM ITS GRIP Pump shotgun third person right: 26 degrees (the wrist's limits held it 
+back); the grip asked twist -84 wrist -55/61, got twist -84 wrist -55/28, elbow 96 swung 43; fingers curled 80 more
+note: gunrange: picture 118_hold_Pumpshotgun_3p_aimed.png (gun 3, barrel off 0.0 deg, sight off 7.7 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(12,-0,-7) neck_01(10,-6,-17) clavicle_r(9,-5,-24) upperarm_r(-1,3,-25) 
+lowerarm_r(12,20,-21) hand_r(25,6,-15) clavicle_l(12,-8,-24) upperarm_l(25,-9,-23) lowerarm_l(47,-2,-23) 
+hand_l(67,2,-19) 
+note: gunrange: picture 119_hold_Pumpshotgun_3p_side.png (gun 3, barrel off 0.0 deg, sight off 7.7 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(12,-0,-7) neck_01(10,-6,-17) clavicle_r(9,-5,-24) upperarm_r(-1,3,-25) 
+lowerarm_r(12,20,-21) hand_r(25,6,-15) clavicle_l(12,-8,-24) upperarm_l(25,-9,-23) lowerarm_l(47,-2,-23) 
+hand_l(67,2,-19) 
+note: gunrange: picture 120_hold_Grenadelauncher_fp_hip.png (gun 4, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(3,0,-7) neck_01(0,-6,-17) clavicle_r(-1,-5,-25) upperarm_r(-11,3,-26) 
+lowerarm_r(10,12,-23) hand_r(30,9,-18) clavicle_l(3,-8,-24) upperarm_l(14,-15,-24) lowerarm_l(34,-5,-29) 
+hand_l(53,2,-23) 
+note: gunrange:   parts body[GrenadeLauncher_Game flag 1 shown 1 attached 1 size 79x8x35 at (37,9,-13) materials 1] 
+note: gunrange: picture 121_hold_Grenadelauncher_fp_aimed.png (gun 4, barrel off 0.0 deg, sight off 0.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-8,-0,-7) neck_01(-10,-6,-17) clavicle_r(-10,-5,-25) upperarm_r(-20,4,-26) 
+lowerarm_r(-2,15,-18) hand_r(12,0,-12) clavicle_l(-7,-7,-24) upperarm_l(5,-13,-24) lowerarm_l(21,-3,-36) 
+hand_l(35,-2,-21) 
+note: gunrange:   parts body[GrenadeLauncher_Game flag 1 shown 1 attached 1 size 79x8x35 at (19,0,-7) materials 1] 
+note: gunrange: picture 122_hold_Grenadelauncher_3p_ready.png (gun 4, barrel off 0.0 deg, sight off 9.3 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-7,-0,-7) neck_01(-9,-6,-17) clavicle_r(-10,-5,-25) upperarm_r(-16,6,-24) 
+lowerarm_r(6,8,-22) hand_r(26,7,-17) clavicle_l(-6,-8,-24) upperarm_l(7,-9,-23) lowerarm_l(29,-4,-25) 
+hand_l(50,-0,-22) 
+note: gunrange: picture 123_hold_Grenadelauncher_3p_aimed.png (gun 4, barrel off 0.0 deg, sight off 9.3 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-7,-0,-7) neck_01(-9,-6,-17) clavicle_r(-10,-5,-25) upperarm_r(-16,6,-24) 
+lowerarm_r(6,8,-22) hand_r(26,7,-17) clavicle_l(-6,-8,-24) upperarm_l(7,-9,-23) lowerarm_l(29,-4,-25) 
+hand_l(50,-0,-22) 
+note: gunrange: picture 124_hold_Grenadelauncher_3p_side.png (gun 4, barrel off 0.0 deg, sight off 9.3 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-7,-0,-7) neck_01(-9,-6,-17) clavicle_r(-10,-5,-25) upperarm_r(-16,6,-24) 
+lowerarm_r(6,8,-22) hand_r(26,7,-17) clavicle_l(-6,-8,-24) upperarm_l(7,-9,-23) lowerarm_l(29,-4,-25) 
+hand_l(50,-0,-22) 
+note: gunrange: picture 125_hold_Rocketlauncher_fp_hip.png (gun 5, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(17,-0,-7) neck_01(15,-6,-17) clavicle_r(14,-5,-25) upperarm_r(4,3,-25) 
+lowerarm_r(15,20,-36) hand_r(33,26,-30) clavicle_l(17,-8,-24) upperarm_l(31,-9,-25) lowerarm_l(47,5,-33) 
+hand_l(63,18,-33) 
+note: gunrange:   parts body[TripleRocketLauncher_Game flag 1 shown 1 attached 1 size 121x37x49 at (55,22,-18) 
+materials 1] 
+note: gunrange: picture 126_hold_Rocketlauncher_fp_aimed.png (gun 5, barrel off 0.0 deg, sight off 0.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-1,0,-7) neck_01(-2,-5,-17) clavicle_r(-3,-4,-25) upperarm_r(-13,4,-25) 
+lowerarm_r(-3,24,-32) hand_r(16,17,-24) clavicle_l(1,-7,-24) upperarm_l(12,-13,-24) lowerarm_l(29,-1,-32) 
+hand_l(47,10,-30) 
+note: gunrange:   parts body[TripleRocketLauncher_Game flag 1 shown 1 attached 1 size 121x37x49 at (37,13,-12) 
+materials 1] 
+note: gunrange: picture 127_hold_Rocketlauncher_3p_ready.png (gun 5, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(11,-0,-7) neck_01(9,-6,-17) clavicle_r(8,-5,-25) upperarm_r(-1,4,-26) 
+lowerarm_r(17,17,-30) hand_r(36,26,-30) clavicle_l(12,-7,-24) upperarm_l(25,-8,-25) lowerarm_l(43,6,-31) 
+hand_l(59,18,-31) 
+note: gunrange: picture 128_hold_Rocketlauncher_3p_aimed.png (gun 5, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(11,-0,-7) neck_01(9,-6,-17) clavicle_r(8,-5,-25) upperarm_r(-1,4,-26) 
+lowerarm_r(17,17,-30) hand_r(36,26,-30) clavicle_l(12,-7,-24) upperarm_l(25,-8,-25) lowerarm_l(43,6,-31) 
+hand_l(59,18,-31) 
+note: gunrange: picture 129_hold_Rocketlauncher_3p_side.png (gun 5, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(11,-0,-7) neck_01(9,-6,-17) clavicle_r(8,-5,-25) upperarm_r(-1,4,-26) 
+lowerarm_r(17,17,-30) hand_r(36,26,-30) clavicle_l(12,-7,-24) upperarm_l(25,-8,-25) lowerarm_l(43,6,-31) 
+hand_l(59,18,-31) 
+note: gunrange: picture 130_hold_Chainshotgun_fp_hip.png (gun 6, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(6,-0,-7) neck_01(4,-6,-17) clavicle_r(4,-5,-25) upperarm_r(-6,4,-26) 
+lowerarm_r(11,18,-28) hand_r(30,9,-23) clavicle_l(7,-7,-24) upperarm_l(19,-13,-24) lowerarm_l(40,-4,-27) 
+hand_l(59,2,-21) 
+note: gunrange:   parts body[Gun_ChainShotgun_Game flag 1 shown 1 attached 1 size 95x15x45 at (42,10,-20) materials 1] 
+note: gunrange: picture 131_hold_Chainshotgun_fp_aimed.png (gun 6, barrel off 0.0 deg, sight off 0.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-8,0,-7) neck_01(-10,-6,-17) clavicle_r(-11,-5,-25) upperarm_r(-21,4,-26) 
+lowerarm_r(-1,16,-22) hand_r(12,0,-18) clavicle_l(-7,-7,-24) upperarm_l(5,-14,-24) lowerarm_l(22,1,-27) 
+hand_l(41,-2,-19) 
+note: gunrange:   parts body[Gun_ChainShotgun_Game flag 1 shown 1 attached 1 size 95x15x45 at (24,1,-14) materials 1] 
+note: gunrange: picture 132_hold_Chainshotgun_3p_ready.png (gun 6, barrel off 0.0 deg, sight off 9.5 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-5,0,-7) neck_01(-7,-5,-17) clavicle_r(-7,-4,-25) upperarm_r(-16,6,-25) 
+lowerarm_r(7,8,-25) hand_r(27,7,-22) clavicle_l(-4,-7,-24) upperarm_l(10,-8,-23) lowerarm_l(31,-1,-25) 
+hand_l(52,3,-23) 
+note: gunrange: HAND TURNED FROM ITS GRIP Chain shotgun third person left: 30 degrees (the wrist's limits held it 
+back); the grip asked twist 114 wrist -38/-28, got twist 85 wrist -38/-28, elbow 95 swung 21; fingers curled 122 more
+note: gunrange: picture 133_hold_Chainshotgun_3p_aimed.png (gun 6, barrel off 0.0 deg, sight off 9.5 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-5,0,-7) neck_01(-7,-5,-17) clavicle_r(-7,-4,-25) upperarm_r(-16,6,-25) 
+lowerarm_r(7,8,-25) hand_r(27,7,-22) clavicle_l(-4,-7,-24) upperarm_l(10,-8,-23) lowerarm_l(31,-1,-25) 
+hand_l(52,3,-23) 
+note: gunrange: picture 134_hold_Chainshotgun_3p_side.png (gun 6, barrel off 0.0 deg, sight off 9.5 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-5,0,-7) neck_01(-7,-5,-17) clavicle_r(-7,-4,-25) upperarm_r(-16,6,-25) 
+lowerarm_r(7,8,-25) hand_r(27,7,-22) clavicle_l(-4,-7,-24) upperarm_l(10,-8,-23) lowerarm_l(31,-1,-25) 
+hand_l(52,3,-23) 
+note: gunrange: picture 135_hold_Chargerifle_fp_hip.png (gun 7, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(7,0,-7) neck_01(5,-5,-17) clavicle_r(4,-4,-25) upperarm_r(-5,4,-25) lowerarm_r(12,18,-21) 
+hand_r(30,9,-15) clavicle_l(8,-7,-24) upperarm_l(20,-13,-24) lowerarm_l(40,-4,-28) hand_l(59,2,-21) 
+note: gunrange:   parts body[Gun_ChargeRifle_Game flag 1 shown 1 attached 1 size 85x11x32 at (48,9,-15) materials 2] 
+note: gunrange: picture 136_hold_Chargerifle_fp_aimed.png (gun 7, barrel off 0.0 deg, sight off 0.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-8,0,-7) neck_01(-10,-6,-17) clavicle_r(-11,-5,-24) upperarm_r(-21,3,-26) 
+lowerarm_r(-3,13,-17) hand_r(12,0,-9) clavicle_l(-8,-8,-24) upperarm_l(4,-15,-24) lowerarm_l(22,-1,-26) 
+hand_l(41,-2,-19) 
+note: gunrange:   parts body[Gun_ChargeRifle_Game flag 1 shown 1 attached 1 size 85x11x32 at (30,-0,-9) materials 2] 
+note: gunrange: picture 137_hold_Chargerifle_3p_ready.png (gun 7, barrel off 0.0 deg, sight off 8.7 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-5,0,-7) neck_01(-7,-6,-17) clavicle_r(-8,-5,-25) upperarm_r(-16,6,-25) 
+lowerarm_r(6,8,-19) hand_r(26,7,-14) clavicle_l(-4,-7,-24) upperarm_l(9,-8,-23) lowerarm_l(31,-2,-24) hand_l(51,2,-21) 
+note: gunrange: HAND TURNED FROM ITS GRIP Charge rifle third person left: 26 degrees (the wrist's limits held it 
+back); the grip asked twist 111 wrist -40/-29, got twist 85 wrist -40/-28, elbow 107 swung 8; fingers curled 122 more
+note: gunrange: HAND TURNED FROM ITS GRIP Charge rifle third person right: 25 degrees (the wrist's limits held it 
+back); the grip asked twist -84 wrist -48/58, got twist -84 wrist -48/28, elbow 83 swung 42; fingers curled 80 more
+note: gunrange: picture 138_hold_Chargerifle_3p_aimed.png (gun 7, barrel off 0.0 deg, sight off 8.7 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-5,0,-7) neck_01(-7,-6,-17) clavicle_r(-8,-5,-25) upperarm_r(-16,6,-25) 
+lowerarm_r(6,8,-19) hand_r(26,7,-14) clavicle_l(-4,-7,-24) upperarm_l(9,-8,-23) lowerarm_l(31,-2,-24) hand_l(51,2,-21) 
+note: gunrange: picture 139_hold_Chargerifle_3p_side.png (gun 7, barrel off 0.0 deg, sight off 8.7 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-5,0,-7) neck_01(-7,-6,-17) clavicle_r(-8,-5,-25) upperarm_r(-16,6,-25) 
+lowerarm_r(6,8,-19) hand_r(26,7,-14) clavicle_l(-4,-7,-24) upperarm_l(9,-8,-23) lowerarm_l(31,-2,-24) hand_l(51,2,-21) 
+note: gunrange: picture 140_hold_HeavySMG_fp_hip.png (gun 8, barrel off 0.0 deg, sight off 10.8 cm, shots 108, reloads 
+0)
+note: gunrange:   bones head(1,0,-7) neck_01(-1,-5,-17) clavicle_r(-1,-5,-25) upperarm_r(-11,4,-26) 
+lowerarm_r(10,12,-25) hand_r(30,9,-20) clavicle_l(2,-7,-24) upperarm_l(14,-14,-24) lowerarm_l(31,0,-31) 
+hand_l(49,4,-24) 
+note: gunrange:   parts body[Gun_HeavySMG_Game flag 1 shown 1 attached 1 size 70x12x35 at (36,11,-21) materials 1] 
+note: gunrange: picture 141_hold_HeavySMG_fp_aimed.png (gun 8, barrel off 0.0 deg, sight off 0.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-8,-0,-7) neck_01(-10,-6,-17) clavicle_r(-11,-5,-25) upperarm_r(-21,3,-25) 
+lowerarm_r(-2,14,-19) hand_r(12,0,-14) clavicle_l(-7,-8,-24) upperarm_l(4,-14,-24) lowerarm_l(18,-0,-35) 
+hand_l(31,-2,-19) 
+note: gunrange:   parts body[Gun_HeavySMG_Game flag 1 shown 1 attached 1 size 70x12x35 at (18,2,-15) materials 1] 
+note: gunrange: picture 142_hold_HeavySMG_3p_ready.png (gun 8, barrel off 0.0 deg, sight off 9.3 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-7,-0,-7) neck_01(-9,-6,-17) clavicle_r(-10,-5,-24) upperarm_r(-17,6,-25) 
+lowerarm_r(6,8,-23) hand_r(26,7,-18) clavicle_l(-6,-8,-24) upperarm_l(5,-14,-24) lowerarm_l(26,-5,-25) 
+hand_l(45,1,-22) 
+note: gunrange: picture 143_hold_HeavySMG_3p_aimed.png (gun 8, barrel off 0.0 deg, sight off 9.3 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-7,-0,-7) neck_01(-9,-6,-17) clavicle_r(-10,-5,-24) upperarm_r(-17,6,-25) 
+lowerarm_r(6,8,-23) hand_r(26,7,-18) clavicle_l(-6,-8,-24) upperarm_l(5,-14,-24) lowerarm_l(26,-5,-25) 
+hand_l(45,1,-22) 
+note: gunrange: picture 144_hold_HeavySMG_3p_side.png (gun 8, barrel off 0.0 deg, sight off 9.3 cm, shots 108, reloads 
+0)
+note: gunrange:   bones head(-7,-0,-7) neck_01(-9,-6,-17) clavicle_r(-10,-5,-24) upperarm_r(-17,6,-25) 
+lowerarm_r(6,8,-23) hand_r(26,7,-18) clavicle_l(-6,-8,-24) upperarm_l(5,-14,-24) lowerarm_l(26,-5,-25) 
+hand_l(45,1,-22) 
+note: gunrange: HAND OFF ITS GRIP Machine pistol first person right: out of reach by 7.3 cm, drawn 7.3 cm from the 
+goal, shoulder forward 5.7 cm, goal from shoulder (ahead 50, right -3, up -1)
+note: gunrange: HAND OFF ITS GRIP Machine pistol first person right: out of reach by 5.3 cm, drawn 5.3 cm from the 
+goal, shoulder forward 5.7 cm, goal from shoulder (ahead 48, right -3, up -2)
+note: gunrange: picture 145_hold_Machinepistol_fp_hip.png (gun 9, barrel off 0.0 deg, sight off 9.2 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(3,0,-7) neck_01(-2,0,-18) clavicle_r(2,2,-24) upperarm_r(11,11,-23) lowerarm_r(30,23,-19) 
+hand_r(41,6,-16) clavicle_l(1,-3,-24) upperarm_l(3,-16,-24) lowerarm_l(25,-14,-27) hand_l(43,-5,-22) 
+note: gunrange:   parts body[Gun_MachinePistol_Game flag 1 shown 1 attached 1 size 30x8x28 at (52,7,-17) materials 1] 
+note: gunrange: picture 146_hold_Machinepistol_fp_aimed.png (gun 9, barrel off 0.0 deg, sight off 0.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(9,-0,-7) neck_01(4,0,-18) clavicle_r(8,2,-24) upperarm_r(17,11,-23) lowerarm_r(37,18,-14) 
+hand_r(47,0,-9) clavicle_l(7,-3,-24) upperarm_l(8,-16,-24) lowerarm_l(31,-16,-24) hand_l(49,-11,-15) 
+note: gunrange:   parts body[Gun_MachinePistol_Game flag 1 shown 1 attached 1 size 30x8x28 at (58,1,-10) materials 1] 
+note: gunrange: picture 147_hold_Machinepistol_3p_ready.png (gun 9, barrel off 0.0 deg, sight off 7.7 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(7,0,-7) neck_01(2,0,-18) clavicle_r(5,2,-24) upperarm_r(15,11,-23) lowerarm_r(32,23,-14) 
+hand_r(41,5,-14) clavicle_l(4,-3,-24) upperarm_l(6,-16,-24) lowerarm_l(28,-16,-30) hand_l(44,-6,-20) 
+note: gunrange: HAND TURNED FROM ITS GRIP Machine pistol third person right: 25 degrees (the wrist's limits held it 
+back); the grip asked twist -84 wrist -48/57, got twist -84 wrist -48/28, elbow 57 swung 51; fingers curled 63 more
+note: gunrange: picture 148_hold_Machinepistol_3p_aimed.png (gun 9, barrel off 0.0 deg, sight off 7.7 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(7,0,-7) neck_01(2,0,-18) clavicle_r(5,2,-24) upperarm_r(15,11,-23) lowerarm_r(32,23,-14) 
+hand_r(41,5,-14) clavicle_l(4,-3,-24) upperarm_l(6,-16,-24) lowerarm_l(28,-16,-30) hand_l(44,-6,-20) 
+note: gunrange: picture 149_hold_Machinepistol_3p_side.png (gun 9, barrel off 0.0 deg, sight off 7.7 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(7,0,-7) neck_01(2,0,-18) clavicle_r(5,2,-24) upperarm_r(15,11,-23) lowerarm_r(32,23,-14) 
+hand_r(41,5,-14) clavicle_l(4,-3,-24) upperarm_l(6,-16,-24) lowerarm_l(28,-16,-30) hand_l(44,-6,-20) 
+note: gunrange: picture 150_hold_Revolver_fp_hip.png (gun 10, barrel off 0.0 deg, sight off 9.2 cm, shots 108, reloads 
+0)
+note: gunrange:   bones head(3,-0,-7) neck_01(-2,0,-18) clavicle_r(2,2,-24) upperarm_r(11,11,-23) 
+lowerarm_r(30,23,-19) hand_r(41,6,-15) clavicle_l(1,-3,-24) upperarm_l(3,-16,-24) lowerarm_l(25,-14,-27) 
+hand_l(43,-5,-22) 
+note: gunrange:   parts body[Gun_Revolver_Game flag 1 shown 1 attached 1 size 30x4x20 at (57,6,-16) materials 1] 
+note: gunrange: picture 151_hold_Revolver_fp_aimed.png (gun 10, barrel off 0.0 deg, sight off 0.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(9,0,-7) neck_01(4,0,-18) clavicle_r(8,2,-24) upperarm_r(17,11,-23) lowerarm_r(37,18,-14) 
+hand_r(47,0,-8) clavicle_l(7,-3,-24) upperarm_l(9,-16,-24) lowerarm_l(31,-16,-23) hand_l(49,-11,-15) 
+note: gunrange:   parts body[Gun_Revolver_Game flag 1 shown 1 attached 1 size 30x4x20 at (63,-0,-9) materials 1] 
+note: gunrange: picture 152_hold_Revolver_3p_ready.png (gun 10, barrel off 0.0 deg, sight off 8.1 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(7,0,-7) neck_01(2,0,-18) clavicle_r(5,2,-24) upperarm_r(14,11,-23) lowerarm_r(32,23,-14) 
+hand_r(41,5,-14) clavicle_l(4,-3,-24) upperarm_l(6,-16,-24) lowerarm_l(28,-16,-30) hand_l(44,-6,-20) 
+note: gunrange: HAND TURNED FROM ITS GRIP Revolver third person right: 26 degrees (the wrist's limits held it back); 
+the grip asked twist -85 wrist -48/58, got twist -85 wrist -48/28, elbow 58 swung 51; fingers curled 62 more
+note: gunrange: picture 153_hold_Revolver_3p_aimed.png (gun 10, barrel off 0.0 deg, sight off 8.1 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(7,0,-7) neck_01(2,0,-18) clavicle_r(5,2,-24) upperarm_r(14,11,-23) lowerarm_r(32,23,-14) 
+hand_r(41,5,-14) clavicle_l(4,-3,-24) upperarm_l(6,-16,-24) lowerarm_l(28,-16,-30) hand_l(44,-6,-20) 
+note: gunrange: picture 154_hold_Revolver_3p_side.png (gun 10, barrel off 0.0 deg, sight off 8.1 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(7,0,-7) neck_01(2,0,-18) clavicle_r(5,2,-24) upperarm_r(14,11,-23) lowerarm_r(32,23,-14) 
+hand_r(41,5,-14) clavicle_l(4,-3,-24) upperarm_l(6,-16,-24) lowerarm_l(28,-16,-30) hand_l(44,-6,-20) 
+note: gunrange: picture 155_hold_Sniperrifle_fp_hip.png (gun 11, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(15,-5,-25) upperarm_r(5,4,-26) 
+lowerarm_r(21,19,-29) hand_r(39,9,-25) clavicle_l(18,-7,-24) upperarm_l(31,-8,-24) lowerarm_l(53,-2,-26) 
+hand_l(73,3,-23) 
+note: gunrange:   parts body[Gun_SniperRifle_Game flag 1 shown 1 attached 1 size 120x15x33 at (74,11,-18) materials 1] 
+note: gunrange: picture 156_hold_Sniperrifle_fp_aimed.png (gun 11, barrel off 0.0 deg, sight off 0.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(12,-0,-7) neck_01(9,-6,-17) clavicle_r(9,-5,-25) upperarm_r(-1,3,-25) 
+lowerarm_r(13,19,-19) hand_r(21,0,-18) clavicle_l(12,-8,-24) upperarm_l(25,-13,-23) lowerarm_l(47,-7,-23) 
+hand_l(67,-5,-19) 
+note: gunrange:   parts body[Gun_SniperRifle_Game flag 0 shown 0 attached 1 size 120x15x33 at (56,2,-12) materials 1] 
+note: gunrange: picture 157_hold_Sniperrifle_3p_ready.png (gun 11, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(16,0,-7) neck_01(14,-6,-17) clavicle_r(13,-5,-24) upperarm_r(2,3,-25) 
+lowerarm_r(20,17,-29) hand_r(39,9,-24) clavicle_l(16,-8,-24) upperarm_l(29,-9,-24) lowerarm_l(51,-2,-26) 
+hand_l(71,3,-23) 
+note: gunrange: HAND TURNED FROM ITS GRIP Sniper rifle third person left: 26 degrees (the wrist's limits held it 
+back); the grip asked twist 85 wrist -19/-54, got twist 85 wrist -19/-28, elbow 34 swung 11; fingers curled 122 more
+note: gunrange: HAND OFF ITS GRIP Sniper rifle third person left: out of reach by 4.9 cm, drawn 4.9 cm from the goal, 
+shoulder forward 5.7 cm, goal from shoulder (ahead 48, right 3, up 2)
+note: gunrange: HAND OFF ITS GRIP Sniper rifle third person left: out of reach by 5.8 cm, drawn 5.8 cm from the goal, 
+shoulder forward 5.7 cm, goal from shoulder (ahead 49, right 4, up 3)
+note: gunrange: picture 158_hold_Sniperrifle_3p_aimed.png (gun 11, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(16,0,-7) neck_01(14,-6,-17) clavicle_r(13,-5,-24) upperarm_r(2,3,-25) 
+lowerarm_r(20,17,-29) hand_r(39,9,-24) clavicle_l(16,-8,-24) upperarm_l(29,-9,-24) lowerarm_l(51,-2,-26) 
+hand_l(71,3,-23) 
+note: gunrange: picture 159_hold_Sniperrifle_3p_side.png (gun 11, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(16,0,-7) neck_01(14,-6,-17) clavicle_r(13,-5,-24) upperarm_r(2,3,-25) 
+lowerarm_r(20,17,-29) hand_r(39,9,-24) clavicle_l(16,-8,-24) upperarm_l(29,-9,-24) lowerarm_l(51,-2,-26) 
+hand_l(71,3,-23) 
+note: gunrange: picture 160_hold_Chargelance_fp_hip.png (gun 12, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-6,-17) clavicle_r(14,-5,-25) upperarm_r(4,3,-26) 
+lowerarm_r(14,23,-28) hand_r(30,9,-26) clavicle_l(17,-8,-24) upperarm_l(29,-15,-24) lowerarm_l(49,-5,-27) 
+hand_l(68,2,-21) 
+note: gunrange:   parts body[Gun_ChargeLance_Game flag 1 shown 1 attached 1 size 120x13x40 at (49,9,-18) materials 1] 
+note: gunrange: picture 161_hold_Chargelance_fp_aimed.png (gun 12, barrel off 0.0 deg, sight off 0.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-4,-0,-7) neck_01(-6,-6,-17) clavicle_r(-6,-5,-25) upperarm_r(-16,4,-26) 
+lowerarm_r(1,18,-21) hand_r(12,0,-20) clavicle_l(-3,-7,-24) upperarm_l(9,-13,-24) lowerarm_l(31,-6,-25) 
+hand_l(50,-5,-18) 
+note: gunrange:   parts body[Gun_ChargeLance_Game flag 1 shown 1 attached 1 size 120x13x40 at (31,-0,-12) materials 1] 
+note: gunrange: picture 162_hold_Chargelance_3p_ready.png (gun 12, barrel off 0.0 deg, sight off 8.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(1,-0,-7) neck_01(-1,-6,-17) clavicle_r(-2,-5,-25) upperarm_r(-12,3,-25) 
+lowerarm_r(7,16,-27) hand_r(25,6,-24) clavicle_l(2,-8,-24) upperarm_l(15,-9,-23) lowerarm_l(37,-2,-24) 
+hand_l(57,1,-22) 
+note: gunrange: HAND TURNED FROM ITS GRIP Charge lance third person left: 26 degrees (the wrist's limits held it 
+back); the grip asked twist 86 wrist -25/-54, got twist 85 wrist -25/-28, elbow 59 swung 48; fingers curled 122 more
+note: gunrange: picture 163_hold_Chargelance_3p_aimed.png (gun 12, barrel off 0.0 deg, sight off 8.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(1,-0,-7) neck_01(-1,-6,-17) clavicle_r(-2,-5,-25) upperarm_r(-12,3,-25) 
+lowerarm_r(7,16,-27) hand_r(25,6,-24) clavicle_l(2,-8,-24) upperarm_l(15,-9,-23) lowerarm_l(37,-2,-24) 
+hand_l(57,1,-22) 
+note: gunrange: picture 164_hold_Chargelance_3p_side.png (gun 12, barrel off 0.0 deg, sight off 8.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(1,-0,-7) neck_01(-1,-6,-17) clavicle_r(-2,-5,-25) upperarm_r(-12,3,-25) 
+lowerarm_r(7,16,-27) hand_r(25,6,-24) clavicle_l(2,-8,-24) upperarm_l(15,-9,-23) lowerarm_l(37,-2,-24) 
+hand_l(57,1,-22) 
+note: gunrange: picture 165_hold_Needlegun_fp_hip.png (gun 13, barrel off 0.0 deg, sight off 10.8 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(13,-0,-7) neck_01(11,-6,-17) clavicle_r(10,-5,-25) upperarm_r(-0,3,-25) 
+lowerarm_r(14,21,-21) hand_r(30,9,-14) clavicle_l(14,-8,-24) upperarm_l(25,-14,-24) lowerarm_l(46,-5,-27) 
+hand_l(64,1,-21) 
+note: gunrange:   parts body[Gun_NeedleGun_Game flag 1 shown 1 attached 1 size 110x9x33 at (46,9,-16) materials 2] 
+note: gunrange: picture 166_hold_Needlegun_fp_aimed.png (gun 13, barrel off 0.0 deg, sight off 0.0 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-8,0,-7) neck_01(-9,-5,-17) clavicle_r(-10,-4,-25) upperarm_r(-20,4,-25) 
+lowerarm_r(-1,14,-16) hand_r(12,0,-8) clavicle_l(-6,-7,-24) upperarm_l(6,-13,-24) lowerarm_l(27,-6,-25) 
+hand_l(46,-5,-18) 
+note: gunrange:   parts body[Gun_NeedleGun_Game flag 1 shown 1 attached 1 size 110x9x33 at (28,-0,-10) materials 2] 
+note: gunrange: picture 167_hold_Needlegun_3p_ready.png (gun 13, barrel off 0.0 deg, sight off 7.3 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-4,-0,-7) neck_01(-6,-6,-17) clavicle_r(-6,-5,-25) upperarm_r(-16,4,-26) 
+lowerarm_r(5,10,-19) hand_r(23,5,-11) clavicle_l(-3,-7,-24) upperarm_l(10,-8,-23) lowerarm_l(32,-2,-23) 
+hand_l(53,1,-20) 
+note: gunrange: HAND TURNED FROM ITS GRIP Needle gun third person left: 29 degrees (the wrist's limits held it back); 
+the grip asked twist 85 wrist -42/-59, got twist 85 wrist -42/-28, elbow 86 swung 27; fingers curled 122 more
+note: gunrange: HAND TURNED FROM ITS GRIP Needle gun third person right: 25 degrees (the wrist's limits held it back); 
+the grip asked twist -86 wrist -57/60, got twist -85 wrist -57/28, elbow 102 swung 46; fingers curled 80 more
+note: gunrange: picture 168_hold_Needlegun_3p_aimed.png (gun 13, barrel off 0.0 deg, sight off 7.3 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-4,-0,-7) neck_01(-6,-6,-17) clavicle_r(-6,-5,-25) upperarm_r(-16,4,-26) 
+lowerarm_r(5,10,-19) hand_r(23,5,-11) clavicle_l(-3,-7,-24) upperarm_l(10,-8,-23) lowerarm_l(32,-2,-23) 
+hand_l(53,1,-20) 
+note: gunrange: picture 169_hold_Needlegun_3p_side.png (gun 13, barrel off 0.0 deg, sight off 7.3 cm, shots 108, 
+reloads 0)
+note: gunrange:   bones head(-4,-0,-7) neck_01(-6,-6,-17) clavicle_r(-6,-5,-25) upperarm_r(-16,4,-26) 
+lowerarm_r(5,10,-19) hand_r(23,5,-11) clavicle_l(-3,-7,-24) upperarm_l(10,-8,-23) lowerarm_l(32,-2,-23) 
+hand_l(53,1,-20) 
+note: gunrange: picture 170_groin_after_shots.png (gun 0, barrel off 0.3 deg, sight off 11.3 cm, shots 108, reloads 0)
+note: gunrange:   bones head(10,-0,-7) neck_01(8,-6,-17) clavicle_r(7,-5,-25) upperarm_r(-3,3,-25) 
+lowerarm_r(14,17,-21) hand_r(33,13,-14) clavicle_l(11,-8,-24) upperarm_l(24,-9,-24) lowerarm_l(45,-0,-25) 
+hand_l(64,7,-21) 
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (50,11,-12) materials 
+1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (50,11,-12) materials 1] 
+trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: gun back in hand, view first person, gun model shown
+note: gunrange: picture 171_gun_again.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,-0,-7) neck_01(15,-6,-17) clavicle_r(14,-5,-25) upperarm_r(4,4,-25) 
+lowerarm_r(16,23,-22) hand_r(32,13,-13) clavicle_l(18,-8,-24) upperarm_l(29,-14,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 
+1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] 
+trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: picture 172_kill_feed.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-6,-17) clavicle_r(14,-5,-25) upperarm_r(4,3,-26) 
+lowerarm_r(16,23,-22) hand_r(32,13,-13) clavicle_l(18,-8,-24) upperarm_l(29,-14,-24) lowerarm_l(49,-3,-25) 
+hand_l(67,5,-20) 
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 
+1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] 
+trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: Tab focus on 1048604 (locked on), HP bar frames 92
+note: gunrange: picture 173_focus_hpbar.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,-0,-7) neck_01(15,-6,-17) clavicle_r(14,-5,-25) upperarm_r(4,3,-25) 
+lowerarm_r(15,22,-22) hand_r(32,13,-13) clavicle_l(17,-8,-24) upperarm_l(29,-14,-24) lowerarm_l(49,-3,-25) 
+hand_l(67,5,-20) 
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 
+1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] 
+trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: flick from 1048604 to 1048608 (switched), 1 flicks, 1 living targets within 20 m besides the one held
+note: gunrange: picture 174_focus_flick.png (gun 0, barrel off 0.0 deg, sight off 11.2 cm, shots 108, reloads 0)
+note: gunrange:   bones head(17,0,-7) neck_01(15,-5,-17) clavicle_r(14,-4,-25) upperarm_r(4,4,-25) 
+lowerarm_r(16,24,-22) hand_r(32,13,-13) clavicle_l(18,-7,-24) upperarm_l(30,-13,-24) lowerarm_l(49,-2,-27) 
+hand_l(67,5,-20) 
+note: gunrange:   parts body[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 
+1] bolt[SM_BoltActionRifle_Body flag 1 shown 1 attached 1 size 112x8x20 at (51,11,-12) materials 1] 
+trigger[SM_BoltActionRifle_PIVOT_Trigger flag 1 shown 1 attached 1 size 1x1x2 at (41,13,-19) materials 1] 
+note: gunrange: Bolt-action rifle: model
+note: gunrange: Assault rifle: model
+note: gunrange: Pistol: model
+note: gunrange: Pump shotgun: model
+note: gunrange: Grenade launcher: model
+note: gunrange: Rocket launcher: model
+note: gunrange: Chain shotgun: model
+note: gunrange: Charge rifle: model
+note: gunrange: Heavy SMG: model
+note: gunrange: Machine pistol: model
+note: gunrange: Revolver: model
+note: gunrange: Sniper rifle: model
+note: gunrange: Charge lance: model
+note: gunrange: Needle gun: model
+note: gunrange: Knife (melee): model
+note: gunrange: Club (melee): model
+note: gunrange: Gladius (melee): model
+note: gunrange: Mace (melee): model
+note: gunrange: Longsword (melee): model
+note: gunrange: Spear (melee): model
+note: gunrange: Monosword (melee): model
+note: gunrange: Plasma sword (melee): model
+note: gunrange: Zeushammer (melee): model
+note: gunrange: Breach axe (melee): model
+note: gunrange: blood assets in: 24 hits, 1306 drops, 411 mist, 23 wound marks, 0 body stains, 1689 ground splats, 43 
+painted into skin (4 bodies now)
+note: gunrange: arms checked on 42119 hand-frames: 0 outside human limits, 168 off the grip; worst twist 88, wrist 72, 
+elbow 145 deg, out of reach 7.6 cm, drawn off the goal 7.6 cm
+note: gunrange: 2 targets ran, 3 sprinted, 1 charged you, 0 punches thrown at you, 1 lock-on flicks
+note: gunrange: 0 guards set unaware, 0 alert events, 0 alert marks drawn
+note: gunrange: 108 shots fired, 108 gunshot sounds started on a voice, 108 of them recordings (219 cues have files)
+note: gunrange: a long gun slid forward at most 0 cm to keep its stock out of the head
+Screenshots: C:\Dev\Rim3D\game\Saved\Smoke\gunrange
