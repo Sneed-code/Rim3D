@@ -739,3 +739,54 @@ TEST_CASE("sound: people lying downed beg and groan; mechanoids and chitinids ha
     CHECK(soundSlot(*spider, "death") == "Animal_Chitinid_Death");
     CHECK(soundDownedVoice(*scyther, SoundGender::Unknown).empty());
 }
+
+TEST_CASE("sound: a corpse makes no vocals when shot or hit, but the blow itself still sounds (sneed 2026-11-22)") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    const Entity woman = static_cast<Entity>(11);
+    const DefId human = db.idOf("Things", "Human");
+    const SoundDefOf defOf = [&](Entity e) { return e == woman ? human : DefId{}; };
+    const SoundGenderOf genderOf = [&](Entity) { return SoundGender::Female; };
+    bool alive = true;
+    const SoundAliveOf aliveOf = [&](Entity) { return alive; };
+    Event mh;
+    mh.type = EventType::MeleeHit;
+    mh.def = db.idOf("Things", "Melee_Club");
+    mh.message = "hit";
+    mh.hit = ProjectileHitKind::Pawn;
+    mh.target = woman;
+    mh.amount = 8.0f;
+    int livingGrunts = 0;
+    int deadGrunts = 0;
+    int deadOther = 0;
+    for (int i = 0; i < 100; ++i) {
+        mh.x = static_cast<float>(i) * 0.37f;
+        for (const bool a : {true, false}) {
+            alive = a;
+            std::vector<SoundPlay> out;
+            soundForEvent(db, mh, defOf, out, genderOf, {}, aliveOf);
+            for (const SoundPlay& p : out) {
+                if (p.voice != SoundVoice::None) {
+                    (a ? livingGrunts : deadGrunts) += 1;
+                } else if (!a) {
+                    ++deadOther;
+                }
+            }
+        }
+    }
+    CHECK(livingGrunts > 20);
+    CHECK(deadGrunts == 0);
+    CHECK(deadOther >= 100);  // the club on flesh still sounds
+    // A part torn off a corpse: the gore sounds, no hurt cry.
+    Event lost;
+    lost.type = EventType::PawnPartLost;
+    lost.thing = woman;
+    lost.message = "Arm";
+    alive = false;
+    std::vector<SoundPlay> out;
+    soundForEvent(db, lost, defOf, out, genderOf, {}, aliveOf);
+    for (const SoundPlay& p : out) {
+        CHECK(p.voice == SoundVoice::None);
+        CHECK(p.cue.rfind("Voice_", 0) != 0);
+    }
+}

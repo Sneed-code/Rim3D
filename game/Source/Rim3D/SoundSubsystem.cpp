@@ -28,10 +28,12 @@
 #include "ColonySim/Defs.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/Floors.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
 #include "ColonySim/Sound.h"
+#include "ColonySim/Things.h"
 
 #include <imgui.h>
 
@@ -685,7 +687,17 @@ void USoundSubsystem::OnSimEvent(const colony::Event& Event)
 		const colony::Sim* Sim = Source->GetSim();
 		return Sim ? std::string(TCHAR_TO_UTF8(*StepCueAt(*Sim, Cell))) : std::string("Step_Dirt");
 	};
-	colony::soundForEvent(*Source->GetDefs(), Event, DefOf, PendingPlays, Gender, StepAt);
+	// The dead make no vocals (sneed, 2026-11-22): a shot or blow on a corpse gives no grunt.
+	const colony::SoundAliveOf Alive = [Source](colony::Entity E) {
+		const colony::Sim* Sim = Source->GetSim();
+		if (!Sim || !Sim->things().registry().valid(E))
+		{
+			return true;
+		}
+		const colony::Health* Health = Sim->things().registry().try_get<colony::Health>(E);
+		return !Health || !Health->dead;
+	};
+	colony::soundForEvent(*Source->GetDefs(), Event, DefOf, PendingPlays, Gender, StepAt, Alive);
 }
 
 colony::SoundGender USoundSubsystem::GenderOf(colony::Entity Thing) const

@@ -29,6 +29,12 @@ namespace colony {
 
 namespace {
 
+// A dead body (a corpse the player's swing went down at).
+bool meleeDeadBody(const entt::registry& reg, Entity e) {
+    const Health* h = e != kNoEntity && reg.valid(e) ? reg.try_get<Health>(e) : nullptr;
+    return h != nullptr && h->dead;
+}
+
 // The player's own swing at someone standing: the clip is drawn on the upper body and the feet stay the player's
 // (BodyMotion::freeFeet). A blow at someone on the ground keeps the whole body's clip.
 bool meleeFreeFeet(const Melee& m) {
@@ -126,6 +132,7 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     num("flickMaxDegrees", r.flickMaxDegrees);
     num("assistCos", r.assistCos);
     num("playerReachSlack", r.playerReachSlack);
+    num("corpseReachExtra", r.corpseReachExtra);
     num("strikeTrackDegrees", r.strikeTrackDegrees);
     bySkill("defendChanceBySkill", r.defendChance);
     num("parryShare", r.parryShare);
@@ -692,12 +699,20 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     m.target = target;
     // A blow at a body on the ground goes down at it (the strike already aims at its aim point there): Unreal plays a
     // downward poke, smash or hack (docs/design/focus.md).
-    m.low = target != kNoEntity && (health_.incapacitated(target) || reg.get<Posture>(target).stance == Stance::Prone);
+    // The player's swing at nobody, with nobody living to take it, goes down at a corpse lying before it (sneed,
+    // 2026-11-22): the downward clip now, the corpse its target when the line is fixed (commit).
+    const Entity corpse = player && target == kNoEntity && playerTarget(pawn) == kNoEntity ? corpseAhead(pawn) : kNoEntity;
+    m.low = (target != kNoEntity && (health_.incapacitated(target) || reg.get<Posture>(target).stance == Stance::Prone)) ||
+            corpse != kNoEntity;
+    if (corpse != kNoEntity) {
+        const Position& to = reg.get<Position>(corpse);
+        face(pawn, to.x, to.y);
+    }
     // At a body on the ground with a weapon that has one, a finisher (sneed 2026-11-20): its own slow move, timed by
     // MeleeRules finishers, the attacker stepping to its place beside the body and holding still till it is over.
     m.finisher = 0;
     m.finisherSteps = 0;
-    if (m.low && weapon && set->finisher > 0 && static_cast<size_t>(set->finisher) <= rules_.finishers.size()) {
+    if (m.low && target != kNoEntity && weapon && set->finisher > 0 && static_cast<size_t>(set->finisher) <= rules_.finishers.size()) {
         const MeleeFinisher& f = rules_.finishers[static_cast<size_t>(set->finisher - 1)];
         m.finisher = static_cast<uint8_t>(set->finisher);
         m.finisherFrom = now();
@@ -1077,6 +1092,8 @@ void MeleeSystem::commit(Entity pawn, Melee& m) {
         const Entity late = playerTarget(pawn);
         if (late != kNoEntity && inPlayerReach(pawn, late)) {
             m.target = late;
+        } else if (const Entity corpse = corpseAhead(pawn); corpse != kNoEntity) {
+            m.target = corpse;  // a body lying before it takes the blow (sneed, 2026-11-22)
         }
     }
     float ox = 0.0f;
@@ -1086,7 +1103,7 @@ void MeleeSystem::commit(Entity pawn, Melee& m) {
     // Locked on or not, a swing at someone goes at its focus point (lock-on.md); one at a body on the ground at its aim
     // point there.
     const bool hasTarget = m.target != kNoEntity && reg.valid(m.target) && things_.spawned(m.target) &&
-                           (m.low ? combat_.aimPoint(m.target, m.aimX, m.aimY, m.aimZ)
+                           (m.low || meleeDeadBody(reg, m.target) ? combat_.aimPoint(m.target, m.aimX, m.aimY, m.aimZ)
                                   : focusPoint(pawn, m.target, !m.weaponTool, m.aimX, m.aimY, m.aimZ));
     if (!hasTarget) {
         const Posture& posture = reg.get<Posture>(pawn);
@@ -2001,6 +2018,35 @@ Entity MeleeSystem::playerTarget(Entity pawn) const {
             best = e;
             bestD = d;
             bestDown = down;
+        }
+    }
+    return best;
+}
+
+Entity MeleeSystem::corpseAhead(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Position, Posture>(pawn)) {
+        return kNoEntity;
+    }
+    const Position& pos = reg.get<Position>(pawn);
+    const Posture& posture = reg.get<Posture>(pawn);
+    Entity best = kNoEntity;
+    float bestD = 0.0f;
+    for (const auto [e, thing, p, h] : reg.view<const Thing, const Position, const Health>().each()) {
+        if (e == pawn || !h.dead || thing.category != ThingCategory::Pawn || p.level != pos.level || !things_.spawned(e) ||
+            !health_.takesCorpseHits(e)) {
+            continue;
+        }
+        const float dx = p.x - pos.x;
+        const float dy = p.y - pos.y;
+        const float d = std::sqrt(dx * dx + dy * dy);
+        const float r = engageDistance(pawn, e) + rules_.reachSlack + rules_.playerReachSlack + rules_.corpseReachExtra;
+        if (d > r || (d > 0.01f && (dx * posture.facingX + dy * posture.facingY) / d < 0.5f)) {
+            continue;
+        }
+        if (best == kNoEntity || d < bestD) {
+            best = e;
+            bestD = d;
         }
     }
     return best;
