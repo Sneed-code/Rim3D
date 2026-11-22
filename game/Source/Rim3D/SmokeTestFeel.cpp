@@ -746,4 +746,77 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		FeelSmokeSet(TEXT("Sky.Hour"), -1.0f);
 	};
 	Phases.Add(MoveTemp(Molotov));
+
+	// A frag blast 8 m off pictured at 0.45 s: the jets of soil flung up, the fireball's billows and the soil clods in the air
+	// (sneed 2026-11-22: "the explosion graphic is low pixel and the puffs of dirt are basic ultra low poly").
+	FPhase Jets;
+	Jets.Name = TEXT("blast_jets");
+	Jets.WarmupSeconds = 0.2f;
+	Jets.MeasureSeconds = 1.0f;
+	Jets.ScreenshotAt = 0.45f;
+	Jets.Setup = [=, this]()
+	{
+		State->Reset();
+		FeelSmokeSet(TEXT("Sky.Hour"), 14.0f);
+		const colony::ThingView* Me = MyView();
+		if (!Me)
+		{
+			return;
+		}
+		if (Fx())
+		{
+			Fx()->ClearForTest();
+		}
+		State->BlastX = Me->x + 7.0f;
+		State->BlastY = Me->y - 4.0f;
+		LookAtBlast(State->BlastX, State->BlastY, 4.0f, -20.0f);
+		Bridge()->Submit(colony::ExplodeCommand{State->BlastX, State->BlastY, 1.9f, 50.0f, "Bomb", 0.1f});
+	};
+	Jets.OnFrame = Watch;
+	Jets.Verify = [=, this]()
+	{
+		if (Fx() && Fx()->IsReady())
+		{
+			Notes.Add(FString::Printf(TEXT("blast_jets: %d sprites at most, %d debris clods at most: look for dark soil jets and lumpy clods, no cubes"), State->MaxBlast, State->MaxDebris));
+		}
+	};
+	Phases.Add(MoveTemp(Jets));
+
+	// A rocket's trail (soft grey exhaust, not solid balls) and its blast, a triple rocket's 3.9 m, pictured 0.25 s after.
+	FPhase Rocket;
+	Rocket.Name = TEXT("blast_rocket");
+	Rocket.WarmupSeconds = 0.2f;
+	Rocket.MeasureSeconds = 1.5f;
+	Rocket.ScreenshotAt = 0.25f;
+	Rocket.Setup = [=, this]()
+	{
+		State->Reset();
+		const colony::ThingView* Me = MyView();
+		USimSubsystem* B = Bridge();
+		if (!Me || !Fx() || !B)
+		{
+			return;
+		}
+		Fx()->ClearForTest();
+		State->BlastX = Me->x + 16.0f;
+		State->BlastY = Me->y - 9.0f;
+		// Across the view, from off to the left, so the trail is seen side on (round 12: fired from beside the camera it ran
+		// along the line of sight and hid behind the player's body).
+		const FVector From = B->SimToWorld(Me->x + 12.0f, Me->y + 5.0f, 0) + FVector(0.0, 0.0, 300.0);
+		const FVector To = B->SimToWorld(State->BlastX, State->BlastY, 0) + FVector(0.0, 0.0, 20.0);
+		Fx()->AddTrailForTest(From, To, 0.35f);
+		// The camera between the trail's start and the blast, so the trail crosses the picture.
+		LookAtBlast(State->BlastX, State->BlastY, 4.0f, 22.0f);
+		B->Submit(colony::ExplodeCommand{State->BlastX, State->BlastY, 3.9f, 50.0f, "Bomb", 0.1f});
+	};
+	Rocket.OnFrame = Watch;
+	Rocket.Verify = [=, this]()
+	{
+		if (Fx() && Fx()->IsReady())
+		{
+			Notes.Add(FString::Printf(TEXT("blast_rocket: %d sprites at most: look for a soft grey trail to a big blast"), State->MaxBlast));
+		}
+		FeelSmokeSet(TEXT("Sky.Hour"), -1.0f);
+	};
+	Phases.Add(MoveTemp(Rocket));
 }

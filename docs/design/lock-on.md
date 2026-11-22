@@ -213,6 +213,52 @@ navigation off for the game (and puts it back on shutdown). A flick with nobody 
 target nearest in turn (PC gun range 2026-11-20). Smoke `finishers` phase `tab_run` sprints with real key
 events, presses Tab three times and checks the speed never drops and the lock moves to three different enemies.
 
+## Whole-body finishers, held blocks, no crouch slides (sneed 2026-11-22, after the gun range)
+
+sneed: the longsword's downward stab "only moved the arms": the hand-made finisher pose (an arm path, a crouch laid on
+the legs, a waist bend of up to 60 degrees) pushed the arms through the attacker's own body, and the knife's version
+shook and showed the joints at the waist. **Each finisher now plays a whole-body mocap clip** (`MeleeRules.finishers.*.clip`,
+a MotionClips def): the knife kneels and drives both hands down (Mixamo Farming "Plant A Plant", 1.6-3.3 s, blow at
+2.4 s: `Motion_Knife_Kneel`), the gladius and mace hack low (Sword And Shield Slash), the club smashes overhead
+(Melee Axe Downward), the longsword hacks low two-handed (Great Sword Slash), the spear drives down two-handed (the
+longsword's low hack: the Fighting spear stab thrust level, over the body, in the PC pictures). The
+sim plays the clip on the whole body, timed so the blow lands at `hitSeconds`, and the finisher lasts as long as the clip
+(`MeleeSystem::finisherPlaysClip`). Unreal draws no hand-made pose, kneel or bend for it: the weapon stays in the hand
+the clip moves, like any clip swing. Unreal sets the drawn hips back to the body's place
+through a clip, so the blade reaches only as far as the arms and weapon do from the hips: `standOff` (the distance to
+the body's middle at the blow) is knife 0.8 m, club 0.9, gladius, mace and longsword 0.85, spear 1.1 (PC round 2: at
+1.25-1.5 the longsword and spear came down short of the body). The attacker steps to it over the first two thirds of
+the wind-up (`BodyMotionSystem::shiftClip`, laid over the clip's own path; the world still stops it), so the blow lands
+on the body wherever the swing started. More than `clipSlack` too far, the weapon's low blow plays instead; right on top
+of the body it steps back at most `clipSlack` and still plays the finisher (round 2: the gladius's never played). The
+`finishers` smoke takes a `_blow` picture at the hit and notes where the drawn bodies and the weapon are. The clips'
+measured `hitSeconds` are mid-swing (round 3: every weapon still about a metre up at the blow), so each finisher names
+`clipHitSeconds`, the moment in its clip the blade comes down (`MeleeSystem::finisherClipHit`), read off the clips' hand
+heights. Round 3 also showed the downed body drawn 0.4-1.2 m off its spot (its ragdoll falls back from the feet, while
+the sim's prone hitboxes lie centred on the spot); round 4 showed no one way (50-70 cm, any direction), so a downed
+body's ragdoll now steers its pelvis back over its sim spot while it falls and after a push wakes it
+(`ASimPawnActor::UpdateRagdollTether`: a speed it eases toward, up to 1.6 m/s, for the first 2.5 s; asleep it is left
+alone; round 5: steering the pelvis alone could not drag the body against the ground's grip, so the whole body is
+steered alike). Dead bodies are not steered. Round 6: spear, club, gladius and longsword all come down on the body. The
+knife tried the gladius's standing low hack in round 6, but a knife's short blade stopped 40 cm above the body, so it
+kneels again (the kneel had looked like lying on the body only because the body was drawn off its spot), 0.85 m off. Round 4 with the blow timing: spear and gladius hit, club just short, longsword and
+knife overlapped the drawn body (it had fallen toward them). A finisher whose clip is not measured yet falls
+back to the old drawn one.
+
+The punches and the low blows (`Mixamo/Fighting/*`) had never been imported into the one game (they were made in a test
+copy), so those moves had nothing to play. The art step `mixamo-extra` copies their prepared FBX files from
+`assets/raw/mixamo/extra/` into the Mixamo manifest and imports them (`tools/makehuman/mixamo_extra.py`).
+
+**Blocking.** Right mouse with a melee weapon or bare fists blocks, for as long as it is held (`MeleeSystem::block` sent
+every step keeps it up `playerBlockHoldSteps` longer; the first press still gives the `playerBlockSteps` parry window).
+Fists stop a punch; a weapon's blow on raised fists lands on the left arm instead of the body (`armBlocks`). A gun aims.
+
+**No crouch slides.** Every pawn action that had no animation of its own (a block, a dodge, a reload, a weapon switch,
+a throw, an alert, a dive...) fell through to the pick-up crouch on the whole body for 0.6 s, so fighters ducked every
+time they parried or reloaded and slid along on crouched legs if they moved. Only standing work (pick up, put down,
+eat, build, cook...) crouches now, never while moving faster than 40 cm/s, and a crouch stands up at once if the body
+starts to move.
+
 ## The original build plan
 
 - **Sim (cloud)**: `focusPoint`, wind-up turn rate, lunge, letting go (turn-away and sight timers), "locked but don't

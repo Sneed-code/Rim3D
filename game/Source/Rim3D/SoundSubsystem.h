@@ -213,6 +213,8 @@ private:
 		float FarFromM = 0.0f;
 		/** Work: seconds between plays while the same pawn keeps at the same job, standing (`repeat`; 0 plays once). */
 		float RepeatS = 0.0f;
+		/** Downed voices: seconds between one and the next from the same pawn, a random pick in [min, max] (`every`). */
+		FVector2f EveryS = FVector2f::ZeroVector;
 		/** The cut files; empty plays the tone. */
 		TArray<TSharedPtr<const FSoundClip>> Clips;
 		TSharedPtr<const FSoundClip> Tone;
@@ -411,6 +413,8 @@ private:
 	TMap<uint32, FVector> LastStepPos;
 	TMap<uint32, float> DoorOpen;
 	TMap<uint32, float> NextCall;
+	/** Pawns lying downed and awake: seconds to their next moan or plea (docs/design/sound.md "Downed voices"). */
+	TMap<uint32, float> NextMoan;
 	TMap<uint32, FDefSounds> DefSounds;
 	TMap<int32, FString> GroundStep;
 	TMap<uint32, FWorkBeat> WorkBeats;

@@ -103,3 +103,8 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
   def is a whole wall-height block, so both need a small draw change first. Zeushammer, breach axe, HE mortar shell,
   advanced component and bionic arm were cut off by the Codex usage limit (2026-11-20); rerun after Nov 22 2:38 PM.
 - Daytime exposure above 12 EV makes the engine print a red "lighting is going to be clipped ... r.EyeAdaptation.CachedLightingPreExposure" warning on screen (seen on the character screen, 2026-11-21; the screen now stays under it). Check whether normal daytime play shows it too and set the project's exposure range or that cvar.
+- Neon models (2026-11-22): the minigun's heat tint is too rainbow, the LMG's colours look toy-like and the computer
+  core's crystal looks like paper (texture fixes). The hatchery's LidOpen/LidClose and the LMG's Reload/BipodDeploy
+  clips are imported but unused. The new moving-parts system (`visual.moving`) could now move the Codex models' parts
+  too (telescope tube, turret heads).
+- Codex recurve bow and vent (2026-11-22): models made (Rim3D_Codex), not wired in: guns.json has no bow handling yet (draw and string pull, StringTop/StringBottom sockets in the GLB), and the vent def is a wall-height block like the cooler.

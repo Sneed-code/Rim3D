@@ -337,6 +337,8 @@ public:
     int partZone(Entity pawn, int part) const;
     float blood(Entity pawn) const;
     bool unconscious(Entity pawn) const;
+    // Downed but still awake (down from pain or legs, not knocked out): it can moan and beg (docs/design/sound.md).
+    bool downedAwake(Entity pawn) const;
     // sneed's rules of 2026-11-17 (docs/design/body-health.md "Part F as built").
     // Arms under half slow attacks: 1 down to 0.5, half a percent for every percent an arm is under 50%, both arms
     // added. 1 for a body without zones.
@@ -346,6 +348,11 @@ public:
     // more comes off. `zoneOverkill`: that pile, hit points (0 for none). `severed`: the SeveredBits of what the body has lost (PawnDismembered says when).
     uint16_t severed(Entity pawn) const;
     float zoneOverkill(Entity pawn, int zone) const;
+    // A blast's piece on a living arm or leg (sneed, 2026-11-22: "dismembering seems hard even with a rocket"): one
+    // doing zones.dismember.blastTear of the zone's hit points tears the limb off, whole or below the elbow or knee
+    // (as dismemberment picks by the part struck). True if it came off. Never the head or torso, the dead (their
+    // blasts pile past 0 in applyHit) or the protagonist.
+    bool blastTear(Entity pawn, int part, float amount);
     // The pieces lying about, by id; how many game days one lies before it is gone.
     const std::vector<SeveredPiece>& severedPieces() const { return severedPieces_.pieces; }
     float severedDecayDays() const;

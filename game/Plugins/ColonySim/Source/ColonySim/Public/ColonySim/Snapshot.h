@@ -82,6 +82,7 @@ struct ThingView {
     // stays where it fell. A full health report is `Sim::healthReport`.
     bool downed = false;
     bool dead = false;
+    bool downedAwake = false;  // downed but conscious (not knocked out): Unreal lets it moan and beg
     // Dead bodies (docs/design/spoilage.md "Corpses"): rot-days so far, the rot stage, and the flies and
     // maggots to draw on it, 0 none to 1 a full swarm; `fliesFlying` is the share of the flies on the
     // wing (the rest sit on the body). All 0 and None for the living, machines and a body not yet looked at.

@@ -315,3 +315,13 @@ sneed: realistic free sounds for every weapon (each gun its own: pistol, rifle, 
 `USoundSubsystem` counts every voiced play by cue (`GetVoicedWithPrefix`: all plays, or only plays of a recorded file,
 not the fallback tone). `Sound.Debug 1` logs each one. The gun range smoke fails when it fires but no recorded `Shot`
 plays. sneed's "no gun sounds" (2026-11-22) came from the old `Rim3D-gunrange` copy, which never had the files.
+
+## Downed voices and machine sounds (2026-11-22)
+
+- A person lying downed and awake (not knocked out: `ThingView::downedAwake`) moans every 6-14 s, the gap read from
+  the cue's `"every": [min, max]`. Slots `femaleDowned` / `maleDowned` on the Human def (`soundDownedVoice`), cues
+  `Voice_FemDowned` (pain groans and begging) and `Voice_MaleDowned` (long groans); played as `SoundVoice::Moan`
+  through the pawn's own voice, so it never talks over itself.
+- Mechanoids and chitinids have their own idle calls, hurt and death sounds (`Animal_Mech_*`, `Animal_Chitinid_*`),
+  cut from the AI Studio Lyria clips (`docs/design/neon-assets.md`, "Sounds in the game"). Idle calls now play for
+  any pawn whose def has an idle slot, not only animals.

@@ -24,6 +24,7 @@
 #include "SimSubsystem.h"
 #include "WeaponDrawSubsystem.h"
 
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Cover.h"
@@ -64,6 +65,8 @@ namespace
 		bool bShot45 = false;
 		bool bShot63 = false;
 		bool bShot80 = false;
+		bool bShotBlow = false;
+		FString BlowGeometry;
 		int32 Blows = 0;
 		float LastBlowAt = -1.0f;
 		float DownedAt = -1.0f;
@@ -387,7 +390,17 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 				{
 					Body->Look(FRotator::NormalizeAxis(static_cast<float>((It - Me).Rotation().Yaw) - Body->GetYaw()), 0.0f);
 					const float Apart = FVector2D::Distance(FVector2D(MeNow->x, MeNow->y), FVector2D(Victim->x, Victim->y));
-					if (Apart > 0.8f && PhaseTime < State->DownedAt + 4.0f)
+					// Up to the finisher's own distance from the body (a clip finisher steps the rest itself).
+					float WalkTo = 0.8f;
+					if (const colony::Sim* StandSim = Bridge()->GetSim())
+					{
+						const int StandFinisher = StandSim->melee().finisherFor(StandSim->defs().idOf("Things", Weapon.Def));
+						if (StandSim->melee().finisherPlaysClip(StandFinisher))
+						{
+							WalkTo = StandSim->melee().rules().finishers[static_cast<size_t>(StandFinisher - 1)].standOff + 0.2f;
+						}
+					}
+					if (Apart > WalkTo && PhaseTime < State->DownedAt + 4.0f)
 					{
 						Body->SetScriptedInput(0.0, 1.0, true);
 						return;
@@ -419,6 +432,51 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			if (T > 0.05f && State->PinAtStart.IsEmpty())
 			{
 				State->PinAtStart = Weapons()->GetPinDebug();
+			}
+			// At the blow itself (a clip finisher's hit moment): a picture and where everything is, so the distance from the
+			// body can be tuned from numbers, not guessed from a camera angle (sneed 2026-11-22, round 2).
+			float BlowT = -1.0f;
+			if (const colony::Sim* BlowSim = Bridge()->GetSim(); BlowSim && MeView && MeView->meleeFinisher != 0 &&
+				BlowSim->melee().finisherPlaysClip(MeView->meleeFinisher))
+			{
+				const colony::MeleeFinisher& Rule = BlowSim->melee().rules().finishers[static_cast<size_t>(MeView->meleeFinisher - 1)];
+				if (const colony::MotionClip* BlowClip = BlowSim->combat().motion().clip(Rule.clip); BlowClip && BlowClip->seconds > 0.0f)
+				{
+					BlowT = BlowSim->melee().finisherClipHit(MeView->meleeFinisher) / BlowClip->seconds;
+				}
+			}
+			if (!State->bShotBlow && BlowT > 0.0f && T >= BlowT)
+			{
+				State->bShotBlow = true;
+				Shot(PhaseName + TEXT("_blow"));
+				const colony::ThingView* It = FinSmokeFind(*B, State->Enemy);
+				const ASimPawnActor* MeActor = ActorOf(State->Me);
+				const ASimPawnActor* ItActor = ActorOf(State->Enemy);
+				const USkeletalMeshComponent* MeBody = MeActor ? MeActor->GetBody() : nullptr;
+				const USkeletalMeshComponent* ItBody = ItActor ? ItActor->GetBody() : nullptr;
+				const FVector MePelvis = MeBody && MeBody->GetBoneIndex(TEXT("pelvis")) != INDEX_NONE ? MeBody->GetBoneLocation(TEXT("pelvis")) : FVector::ZeroVector;
+				const FVector ItPelvis = ItBody && ItBody->GetBoneIndex(TEXT("pelvis")) != INDEX_NONE ? ItBody->GetBoneLocation(TEXT("pelvis")) : FVector::ZeroVector;
+				const FVector ItHead = ItBody && ItBody->GetBoneIndex(TEXT("head")) != INDEX_NONE ? ItBody->GetBoneLocation(TEXT("head")) : FVector::ZeroVector;
+				const UStaticMeshComponent* Held = Weapons()->GetHandsComponent(State->Me);
+				const FBox WeaponBox = Held ? Held->Bounds.GetBox() : FBox(ForceInit);
+				const float SimApart = It && MeView ? FVector2D::Distance(FVector2D(MeView->x, MeView->y), FVector2D(It->x, It->y)) : -1.0f;
+				FVector MeSpot = FVector::ZeroVector;
+				FVector ItSpot = FVector::ZeroVector;
+				B->GetBlendedLocation(State->Me, MeSpot);
+				B->GetBlendedLocation(State->Enemy, ItSpot);
+				// Which way the drawn body lies off its sim spot: along its facing (its head's way) and to its left, and
+				// toward me (cm), so the drawn body can be brought back over the body the sim hits.
+				const FVector2D ItFacing = It ? FVector2D(It->facingX, It->facingY).GetSafeNormal() : FVector2D::ZeroVector;
+				const FVector2D Drift = FVector2D(ItPelvis - ItSpot);
+				const FVector2D ToMe = FVector2D(MeSpot - ItSpot).GetSafeNormal();
+				const FString DriftText = FString::Printf(TEXT("its pelvis off its spot %.0f cm along its facing, %.0f cm across, %.0f cm toward me; its sim facing %s, the way to me %s"),
+					FVector2D::DotProduct(Drift, ItFacing), FVector2D::CrossProduct(ItFacing, Drift), FVector2D::DotProduct(Drift, ToMe), *ItFacing.ToString(), *ToMe.ToString());
+				State->BlowGeometry = DriftText + FString::Printf(TEXT(" (steered back %d frames)"), ItActor ? ItActor->GetRagdollTethers() : -1) + TEXT("; ") + FString::Printf(
+					TEXT("sim apart %.2f m; drawn: my pelvis %.0f cm from my sim spot, its pelvis %.0f cm and its head %.0f cm from its sim spot, pelvis to pelvis %.0f cm; weapon box %.0f cm from its pelvis, lowest at %.0f cm, reaching %.0f cm out from my pelvis"),
+					SimApart, FVector::Dist2D(MePelvis, MeSpot), FVector::Dist2D(ItPelvis, ItSpot), FVector::Dist2D(ItHead, ItSpot),
+					FVector::Dist2D(MePelvis, ItPelvis), Held ? FMath::Sqrt(WeaponBox.ComputeSquaredDistanceToPoint(ItPelvis)) : -1.0,
+					Held ? WeaponBox.Min.Z - ItPelvis.Z : -1.0,
+					Held ? FMath::Max(FVector::Dist2D(WeaponBox.Min, MePelvis), FVector::Dist2D(WeaponBox.Max, MePelvis)) : -1.0);
 			}
 			if (!State->bShot45 && T >= 0.45f)
 			{
@@ -455,6 +513,10 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			PhaseNumbers.Add(TEXT("float_fixes"), Fixes);
 			Notes.Add(FString::Printf(TEXT("%s: %d finisher frames, got to T %.2f, tip %.0f cm from its goal at the strike, kneel %s, worst grip gap %.0f cm, %d float fixes, %d hits"),
 				*PhaseName, Frames, State->MaxT, State->BestTipGap, State->bKneelSeen ? TEXT("yes") : TEXT("no"), Gap, Fixes, Hits));
+			if (!State->BlowGeometry.IsEmpty())
+			{
+				Notes.Add(FString::Printf(TEXT("%s: at the blow: %s"), *PhaseName, *State->BlowGeometry));
+			}
 			Notes.Add(FString::Printf(TEXT("%s: weapon hold at the start [%s], at the strike [%s], pulled back %.0f cm to stay in reach, %d attack orders"), *PhaseName, *State->PinAtStart, *State->PinAtStrike, State->ShortAtStrike, State->Sends));
 			if (State->Enemy == colony::kNoEntity)
 			{
@@ -466,6 +528,28 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 				Fail(FString::Printf(TEXT("%s: %d blows to the head never downed the victim"), *PhaseName, State->Blows));
 			}
 			Bridge()->Submit(colony::DestroyThingCommand{State->Enemy});
+			// A finisher that plays a whole-body clip (sneed 2026-11-22) has no hand-made weapon path, kneel or reach:
+			// it must play, land its blow and keep the weapon in the hand.
+			const colony::Sim* ClipSim = Bridge()->GetSim();
+			const int ClipFinisher = ClipSim ? ClipSim->melee().finisherFor(ClipSim->defs().idOf("Things", Weapon.Def)) : 0;
+			const bool bClip = ClipSim && ClipSim->melee().finisherPlaysClip(ClipFinisher);
+			Notes.Add(FString::Printf(TEXT("%s: %s"), *PhaseName, bClip ? TEXT("whole-body clip finisher") : TEXT("hand-drawn finisher")));
+			if (bClip)
+			{
+				if (State->MaxT < 0.8f)
+				{
+					Fail(FString::Printf(TEXT("%s: the %s finisher clip did not play through (T %.2f)"), *PhaseName, UTF8_TO_TCHAR(Weapon.Move), State->MaxT));
+				}
+				if (Fixes > 0)
+				{
+					Fail(FString::Printf(TEXT("%s: the weapon floated off the hand %d times"), *PhaseName, Fixes));
+				}
+				if (Hits <= 0)
+				{
+					Fail(PhaseName + TEXT(": the finisher's blow did not land"));
+				}
+				return;
+			}
 			if (Frames <= 0 || State->MaxT < 0.8f)
 			{
 				Fail(FString::Printf(TEXT("%s: no %s finisher played (frames %d, T %.2f)"), *PhaseName, UTF8_TO_TCHAR(Weapon.Move), Frames, State->MaxT));

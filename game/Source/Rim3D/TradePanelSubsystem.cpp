@@ -572,16 +572,17 @@ void UTradePanelSubsystem::DrawStrip(USimSubsystem& Bridge, float Scale, float M
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
 	const colony::Sim& Sim = *Bridge.GetSim();
+	// Only while visitors are here: Factions has its own flag button on the bottom bar.
+	if (Snapshot.visits.empty())
+	{
+		return;
+	}
 	// Under the clock at the top, in the middle.
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Margin + 100.0f * Scale), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
 	ImGui::SetNextWindowBgAlpha(0.6f);
 	if (ImGui::Begin("##TradeStrip", nullptr, TpFlags()))
 	{
 		++Stats.StripFrames;
-		if (ImGui::SmallButton(bFactionsOpen ? "Factions (hide)" : "Factions"))
-		{
-			bFactionsOpen = !bFactionsOpen;
-		}
 		for (const colony::VisitView& Visit : Snapshot.visits)
 		{
 			const colony::Def* Faction = Sim.defs().find("Factions", Visit.faction);

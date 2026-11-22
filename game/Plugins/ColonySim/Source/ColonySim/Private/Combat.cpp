@@ -2683,10 +2683,17 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
                 wearApparel(pawn, piece);
                 continue;
             }
-            const bool alive = health_.applyHit(pawn, piece.damageType, piece.amount, part, corpse);
+            // A piece after the one that killed tears like a blast at a corpse: all of it past 0 (sneed, 2026-11-22).
+            const bool deadNow = health != nullptr && health->dead;
+            const bool alive = health_.applyHit(pawn, piece.damageType, piece.amount, part, corpse || deadNow);
             wearApparel(pawn, piece);
             if (!corpse) {
                 noteHarm(pawn, ex.instigator);
+                // A hard piece on a living arm or leg tears it off (sneed, 2026-11-22: "dismembering seems hard to do even
+                // with a rocket").
+                if (health != nullptr && !health->dead && health_.blastTear(pawn, part, piece.amount)) {
+                    ++result.limbsTorn;
+                }
             }
             if (!alive) {
                 break;
@@ -2696,8 +2703,9 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
         if (dealt > 0.0f && !corpse) {
             ++result.pawnsHurt;
         }
-        // A corpse is thrown too (sneed, 2026-11-20), as far as a living body would be, without the knock-down.
-        if (corpse && amount >= model_->knockMinDamage && things_.spawned(pawn)) {
+        // A corpse is thrown too (sneed, 2026-11-20), as far as a living body would be, without the knock-down; so is
+        // one this blast just killed.
+        if ((corpse || (health != nullptr && health->dead)) && amount >= model_->knockMinDamage && things_.spawned(pawn)) {
             const Position& at = reg.get<Position>(pawn);
             const float pushX = at.x - bx;
             const float pushY = at.y - by;
@@ -2732,9 +2740,10 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
             len = 1.0f;
         }
         const float share = std::clamp(1.0f - nearest / ex.radius, 0.0f, 1.0f);
-        // Thrown away from the blast over a few steps, against walls and bodies (docs/design/body-motion.md).
+        // Thrown down and away from the blast, against walls and bodies (docs/design/body-motion.md): a person falls
+        // with the knockdown clip for the way it goes, carried as far as the blast throws it (sneed, 2026-11-22).
         if (const float push = model_->knockbackMetres * share; push > 0.01f) {
-            motion_->push(pawn, pushX, pushY, push, motion_->rules().blastSteps);
+            motion_->blastThrow(pawn, pushX, pushY, push, motion_->rules().blastSteps);
         }
         if (Mover* mover = reg.try_get<Mover>(pawn)) {
             mover->path.clear();

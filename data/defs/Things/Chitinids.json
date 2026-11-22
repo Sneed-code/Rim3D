@@ -64,9 +64,9 @@
   ],
   "visual": {
    "sound": {
-    "idle": "Animal_Rodent_Idle",
-    "hurt": "Animal_Rodent_Hurt",
-    "death": "Animal_Rodent_Death",
+    "idle": "Animal_Chitinid_Idle",
+    "hurt": "Animal_Chitinid_Hurt",
+    "death": "Animal_Chitinid_Death",
     "burning": "Pawn_Burning"
    }
   }
@@ -135,9 +135,9 @@
   ],
   "visual": {
    "sound": {
-    "idle": "Animal_Rodent_Idle",
-    "hurt": "Animal_Rodent_Hurt",
-    "death": "Animal_Rodent_Death",
+    "idle": "Animal_Chitinid_Idle",
+    "hurt": "Animal_Chitinid_Hurt",
+    "death": "Animal_Chitinid_Death",
     "burning": "Pawn_Burning"
    }
   }
@@ -207,9 +207,9 @@
   ],
   "visual": {
    "sound": {
-    "idle": "Animal_Rodent_Idle",
-    "hurt": "Animal_Rodent_Hurt",
-    "death": "Animal_Rodent_Death",
+    "idle": "Animal_Chitinid_Idle",
+    "hurt": "Animal_Chitinid_Hurt",
+    "death": "Animal_Chitinid_Death",
     "burning": "Pawn_Burning"
    }
   }

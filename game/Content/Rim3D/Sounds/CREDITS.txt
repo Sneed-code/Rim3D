@@ -31,3 +31,10 @@ cues/Amb_Tropical_Night/1.wav | night chorus of frogs and toads, Niger Delta, Ni
 
 == Ui_KillConfirm (kill-confirm sound, 3 variations) ==
 cues/Ui_KillConfirm/1-3.wav | made for Rim3D from sine waves and noise by tools/sounds/kill_confirm.py | no third-party material
+
+== Neon set: voices and creature sounds (made for Rim3D in Google AI Studio, 2026-11-22; cut by tools/neon_sounds.py) ==
+cues/Voice_MaleHit/neon_m*.wav, cues/Voice_MaleDowned/neon_m*.wav | gruff male grunts and groans | Gemini TTS (AI Studio), made for Rim3D | no third-party material
+cues/Voice_FemHit/neon_female_pain_*.wav, cues/Voice_FemDowned/neon_female_*.wav | female pain and begging | Gemini TTS (AI Studio), made for Rim3D | no third-party material
+cues/Voice_LovinFem/neon_pleasure_take*.wav | pleasure sounds strung into three long takes | Gemini TTS (AI Studio), made for Rim3D | no third-party material
+cues/Animal_Mech_*/neon_*.wav | robot servos and hydraulics (cut from a 30 s clip) | Lyria 3 Clip (AI Studio), made for Rim3D | no third-party material
+cues/Animal_Chitinid_*/neon_*.wav | insect chittering and hiss (cut from a 30 s clip) | Lyria 3 Clip (AI Studio), made for Rim3D | no third-party material

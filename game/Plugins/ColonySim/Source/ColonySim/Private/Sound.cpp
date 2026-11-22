@@ -338,6 +338,12 @@ void soundHitVoice(const DefDatabase& db, const Event& e, const SoundDefOf& defO
 
 }  // namespace
 
+std::string soundDownedVoice(const Def& pawnDef, SoundGender gender) {
+    if (gender == SoundGender::Female) return soundSlot(pawnDef, "femaleDowned");
+    if (gender == SoundGender::Male) return soundSlot(pawnDef, "maleDowned");
+    return {};
+}
+
 std::string soundLovinCue(SoundGender a, SoundGender b) {
     const int women = (a == SoundGender::Female ? 1 : 0) + (b == SoundGender::Female ? 1 : 0);
     const int men = (a == SoundGender::Male ? 1 : 0) + (b == SoundGender::Male ? 1 : 0);
@@ -360,7 +366,8 @@ std::string soundStepCue(const DefDatabase& db, DefId terrain) {
 }
 
 void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defOf, std::vector<SoundPlay>& out,
-                   const SoundGenderOf& genderOf, const SoundStepAt& stepAt) {
+                   const SoundGenderOf& genderOf, const SoundStepAt& stepAt, const SoundAliveOf& aliveOf) {
+    const auto voiced = [&](Entity pawn) { return !aliveOf || pawn == kNoEntity || aliveOf(pawn); };
     switch (e.type) {
         case EventType::ShotFired: {
             const Def* gun = soundDef(db, e.def);
@@ -379,7 +386,7 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
             const std::string cue = soundImpactCue(db, e, stepAt);
             if (!cue.empty()) out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));
             if (e.hit == ProjectileHitKind::Pawn) {
-                soundHitVoice(db, e, defOf, genderOf, out);
+                if (voiced(e.target)) soundHitVoice(db, e, defOf, genderOf, out);
             } else if (e.hit == ProjectileHitKind::Rock || e.hit == ProjectileHitKind::Armor ||
                        (e.hit == ProjectileHitKind::Building && cue.find("_Wood") == std::string::npos)) {
                 // A bullet off stone or steel whines away now and then (a quarter of the time, by a hash of the hit).
@@ -401,7 +408,7 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
         }
         case EventType::MeleeHit:
             soundMeleeHit(db, e, out);
-            soundHitVoice(db, e, defOf, genderOf, out);
+            if (voiced(e.target)) soundHitVoice(db, e, defOf, genderOf, out);
             break;
         // A hit softened by a raised shield (docs/design/shields.md); one it stopped already sounds as a blocked blow or an
         // armour impact.
@@ -442,7 +449,7 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
         case EventType::PawnPartLost: {
             const Def* pawn = soundDefOfEntity(db, defOf, e.thing);
             const std::string cue = soundSlotOr(pawn, "hurt", "");
-            if (!cue.empty()) out.push_back(soundOn(cue, e.thing));
+            if (!cue.empty() && voiced(e.thing)) out.push_back(soundOn(cue, e.thing));
             if (e.type == EventType::PawnPartLost) {
                 // Gore (sneed, 2026-11-20): a limb comes off with a wet tear and a crack of bone, a head with a heavier
                 // chop; the piece slaps down on the ground a moment later. Mechanoids (a `gore` slot of "none") don't.

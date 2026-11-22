@@ -1,0 +1,56 @@
+{
+ "name": "Melee_BreachAxe",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -13.72,
+   -4.77,
+   -20.3
+  ],
+  "max": [
+   97.9,
+   4.83,
+   12.09
+  ]
+ },
+ "sizeM": [
+  1.116,
+  0.096,
+  0.324
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -13.72,
+     -4.77,
+     -20.3
+    ],
+    "max": [
+     97.9,
+     4.83,
+     12.09
+    ]
+   },
+   "tris": 7942
+  }
+ },
+ "sockets": {
+  "Head": [
+   91.6,
+   -0.0,
+   -4.9
+  ]
+ },
+ "slots": {
+  "Melee_BreachAxe": {
+   "from": "Breach axe \u00b7 steel, fiberglass and rubber",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

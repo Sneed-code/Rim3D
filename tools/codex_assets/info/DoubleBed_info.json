@@ -1,0 +1,69 @@
+{
+ "name": "DoubleBed",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -115.9,
+   -100.73,
+   0.0
+  ],
+  "max": [
+   115.9,
+   100.73,
+   103.0
+  ]
+ },
+ "sizeM": [
+  2.318,
+  2.015,
+  1.03
+ ],
+ "parts": {
+  "DoubleBed": {
+   "boundsCm": {
+    "min": [
+     -115.9,
+     -100.73,
+     0.0
+    ],
+    "max": [
+     115.9,
+     100.73,
+     103.0
+    ]
+   },
+   "tris": 9698
+  }
+ },
+ "sockets": {
+  "Sleeper1": [
+   -60.26,
+   -21.11,
+   58.21
+  ],
+  "Sleeper2": [
+   25.14,
+   -21.11,
+   58.17
+  ]
+ },
+ "slots": {
+  "DoubleBed_0": {
+   "from": "Textiles_and_Hardware",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  },
+  "DoubleBed_1": {
+   "from": "Timber_Tint",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

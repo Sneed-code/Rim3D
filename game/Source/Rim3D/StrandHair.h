@@ -19,7 +19,8 @@ class USkeletalMeshComponent;
  *   commandlet (GA_<base>_<Style> in /Game/Rim3D/Generated/Grooms): their curves are already relative to that base's
  *   head bone, so they only need scaling by the neck-to-head lengths.
  * Either rides on the head bone, so it turns and moves with it; Unreal's groom physics swings the strands and keeps them
- * off the body through the mannequin physics asset (same bone names). Cosmetic only.
+ * off the body: our own grooms through shapes fitted inside the skin (grow_hair.py) and grown out to the worn clothes,
+ * the MetaHuman ones through the mannequin physics asset (same bone names). Cosmetic only.
  *
  * Tuning (console): Pawns.StrandHairScale (times the fitted size), Pawns.StrandHairOffsetX/Y/Z (cm, the body's
  * component axes), Pawns.StrandHairYaw (degrees, if a body faces another way than the MetaHuman meshes).
@@ -69,6 +70,9 @@ public:
 	/** How many people wear strands now (for tests and notes). */
 	int32 NumWearing() const;
 
+	/** Frames (summed over wearers) a fast turn held someone's hair at rest (Pawns.StrandHairTurnHold), for notes. */
+	int32 GetTurnHoldFrames() const { return TurnHoldFrames; }
+
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override;
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
@@ -83,9 +87,15 @@ private:
 		FLinearColor Colour = FLinearColor::Black;
 		TArray<int32> WigSections;
 		bool bStrands = false;
+		uint32 ClothKey = 0;  // the outfit (garments and puff) the strands' collision was made for
+		float LastYaw = 0.0f;  // the body's facing last tick (degrees), for Pawns.StrandHairTurnHold
+		bool bHaveYaw = false;
+		float TurnHold = 0.0f;  // seconds the hair is still held at rest after a fast turn
 	};
 	TArray<FWearer> Wearers;
 	float SinceSort = 1.0f;
+	int32 TurnHoldFrames = 0;
+	int32 TurnHolds = 0;
 
 	void Show(FWearer& Wearer, bool bStrands);
 };

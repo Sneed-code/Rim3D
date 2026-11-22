@@ -30,4 +30,9 @@ namespace BlastFxData
 	constexpr int32 HazeFloats = 1;
 
 	constexpr int32 FlipbookFrames = 64;
+
+	// The flipbooks (Rim3DEditor/BlastFlipbooks.h) show the volume's -1.05..1.05 across a frame, where they showed
+	// -0.74..0.74 when the sprite sizes were found by eye: a cloud fills 0.74 / 1.05 of what it did, so sprites are drawn this
+	// much bigger. Keep it kFill / kOldFill.
+	constexpr float SpriteScale = 1.05f / 0.74f;
 }

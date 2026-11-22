@@ -145,6 +145,19 @@ void UGunRangeSubsystem::SetEnabled(bool bOn)
 	}
 }
 
+float GunRangeSpinSpeed(const FGunRangeGun::FPart& Part, float Speed, float SinceShot, float Dt)
+{
+	const bool bFiring = SinceShot < 0.35f;
+	const float Rate = Part.SpinRps / FMath::Max(bFiring ? Part.SpinUp : Part.SpinDown, 0.05f);
+	return FMath::FInterpConstantTo(Speed, bFiring ? Part.SpinRps : 0.0f, Dt, Rate);
+}
+
+FTransform GunRangeSpinTransform(const FGunRangeGun::FPart& Part, float AngleDegrees)
+{
+	const FTransform Turn(FQuat(Part.SpinAxis, FMath::DegreesToRadians(AngleDegrees)));
+	return FTransform(-Part.Pivot) * Turn * FTransform(Part.Pivot);
+}
+
 bool UGunRangeSubsystem::LoadConfig()
 {
 	FString Text;
@@ -184,6 +197,15 @@ bool UGunRangeSubsystem::LoadConfig()
 				Part.Name = GunRangeStr(PO, TEXT("name"));
 				Part.Match = GunRangeStr(PO, TEXT("match"));
 				Part.Pivot = GunRangeVec(PO, TEXT("pivot"), FVector::ZeroVector);
+				const TSharedPtr<FJsonObject>* Spin = nullptr;
+				if (PO->TryGetObjectField(TEXT("spin"), Spin))
+				{
+					Part.bSpin = true;
+					Part.SpinAxis = GunRangeVec(*Spin, TEXT("axis"), FVector::ForwardVector).GetSafeNormal();
+					Part.SpinRps = GunRangeNum(*Spin, TEXT("rps"), Part.SpinRps);
+					Part.SpinUp = GunRangeNum(*Spin, TEXT("up"), Part.SpinUp);
+					Part.SpinDown = GunRangeNum(*Spin, TEXT("down"), Part.SpinDown);
+				}
 				G.Parts.Add(Part);
 			}
 		}
@@ -1045,6 +1067,12 @@ void UGunRangeSubsystem::UpdateView(float Dt, ASimPawnActor& Player)
 				const FTransform Turn(FQuat(FVector::ForwardVector, FMath::DegreesToRadians(-Bolt.X)));
 				const FTransform AroundPivot = FTransform(-PartDef.Pivot) * Turn * FTransform(PartDef.Pivot + FVector(Bolt.Y, 0.0f, 0.0f));
 				Local = AroundPivot * MeshFix;
+			}
+			else if (PartDef.bSpin)
+			{
+				ViewSpinSpeed = GunRangeSpinSpeed(PartDef, ViewSpinSpeed, SinceShot, Dt);
+				ViewSpinAngle = FMath::Fmod(ViewSpinAngle + ViewSpinSpeed * 360.0f * Dt, 360.0f);
+				Local = GunRangeSpinTransform(PartDef, ViewSpinAngle) * MeshFix;
 			}
 			else if (PartDef.Name == TEXT("trigger"))
 			{

@@ -13,6 +13,45 @@ the scene changed put back (`DebugScenes::Launch`). Smoke `-DebugSceneHop` check
 **Open:** after the in-game load the range picture came out almost white in the test copy (settings and exposure match a
 fresh start; next PC round checks whether full-window resolution, not the in-game load, causes it). Not merged yet.
 
+Whole-body melee finishers, held blocks, no crouch slides (sneed, 2026-11-22; sim, data, Unreal, tools,
+`docs/design/lock-on.md` "Whole-body finishers"): **finishers at the downed are now whole-body mocap clips** instead of
+arms posed by hand (the longsword's arms went through its body, the knife's shook and showed the joints): knife kneels and
+drives both hands down, gladius and mace hack low, club smashes overhead, longsword hacks low, spear drives down; the
+weapon simply stays in the hand. **The punches and low blows were never in the one game** (made in a test copy): new art
+step `mixamo-extra` brings them in. **Right mouse blocks with a melee weapon or fists, for as long as it is held**;
+fists stop punches, a blade lands on the forearm. **Crouch slides**: every block, dodge, reload or shout played a
+half-second whole-body crouch, so fighters ducked and slid; now only standing work crouches. PC round 1 pictures: block
+good, finishers too close (knife lay on the body, gladius and longsword lunged past it, spear thrust over it); now each
+finisher steps to its own distance from the body and the spear drives down two-handed. Rounds 2-6: the blow now lands
+when the blade comes down (the clips' measured hit was mid-swing), and a downed ragdoll is steered back over the spot
+the game thinks it lies on (it fell up to 1 m off, so blows missed or the attacker knelt on it); spear, club, gladius
+and longsword now all come down on the body. The melee smoke's `switch_key` revolver check (11 cm) had only passed
+because the switch used to crouch the whole body. Round 7: the knife kneels and drives down at his upper body. **Next:**
+sneed plays it (title > Debug > Gun range).
+
+Hair no longer through the body or clothes (sneed, 2026-11-22; hair tools and Unreal, `docs/design/hair-physics.md`
+"A shell with no gaps"): long strand hair still went into the back and through the shirt. Measured: between the old
+collision spheres a strand could sink 2 cm into the back (up to 5 cm), and resting hair lay 1.5 to 3 cm inside the
+clothes, which the physics never saw. Now `grow_hair.py` picks 90 spheres and capsules just under the skin that leave no
+gaps (0.7 cm typical, 1.8 cm worst; mirrored; each on the bone of its skin, including clavicles and both arm bones), and
+the game grows each one under a worn garment out to just past the cloth and its puff, per outfit (remade when clothes
+change). `-CreatorStrandDemo` takes the pictures (behind and side; standing, rifle aim, sword, shadowbox, walk, shapes
+drawn). Capsules also fill the body's core, and the hair physics takes 10 steps (was 5). PC (4 rounds): dressed hair
+stays on the clothes in every pose; nude hair lies on the back standing, aiming, swinging and boxing. Needs the
+`hair-grow` and `hair-grooms` art steps (run by `update-and-play.bat`). Quick turns (2026-11-22): right after
+a fast turn, nude long hair went into the back for a moment. Slower turns and holding the hair still did not help (PC);
+seen from above, the hair's physics only kept 8 points per strand out of the body, 10 cm apart on long hair. Now 32
+points and twice the guide strands, each strand following one (`HairGroomsCommandlet`, reruns the `hair-grooms` step),
+a frame hitch no longer lands a whole turn in one frame, and through fast turns and hitches the hair is held at its
+resting shape (which lies clear of the body) and swings freely again after. **Next:** PC walk-turn frames.
+
+In-game UI in the Canopy look (sneed, 2026-11-22: "make the actual game's UI ... high quality, well made",
+`docs/design/ui-layout.md`): every in-game box now matches the title and new-game screens: dark green-black glass, square
+corners, a jade bar on each box's top edge (one ImGui end-of-frame hook), jade for what is open or picked (was amber),
+ember for costs and warnings. The bottom bar gets a jade top line and a jade edge on the open tab (#447). Part 2 tidies the
+overseer screen: colonist names and backstory titles instead of code names, plain job words, no boxes hidden behind the
+date box, no stray Factions button. **Next:** Canopy cards for the colonist bar and selected panel, then each tab.
+
 Title screen (sneed, 2026-11-22: "fix the actual title screen ... make the actual game's UI", `docs/design/new-game.md`):
 a plain launch no longer opens over the engine's sample level. It starts its own scene, a wild rainforest tile in the
 morning (`TitleBackdrop` scenario, no people), with a slow camera circling an open glade, and a new full-screen title:
@@ -27,6 +66,16 @@ painted them. `BloodArt` now leaves out triangles stretched over 8x the median (
 borders from one island only. Smoke `gore -GoreWoman` adds thigh close-ups front and back. Needs the `blood-art` step
 (update-and-play reruns it, since the commandlet changed). **Next:** PC before and after pictures, woman and man.
 
+Corpses come apart, jolt and stay silent; blasts throw people (sneed, 2026-11-22; sim, data and Unreal,
+`docs/design/body-health.md` part F): **overkill on a corpse is kept until it is in pieces**: every 25 piled past 0 on
+the torso takes one more limb off (the most battered first), then the head, until only the trunk is left; what a cut
+limb piled past its quarter goes on to the torso. **Rockets tear living limbs off**: a blast piece doing 30% of an arm
+or leg's hit points takes it off (a rocket at someone's feet takes a piece off about every other person, test). **Blasts
+throw living people** down with the knockdown fall, about 3 m from a close rocket (was a 1.5 m slide), and a body the
+blast kills is thrown too. **Corpses jolt** where a shot or blow lands (the ragdoll wakes, then settles again). **The
+dead make no vocals** (no grunt or hurt cry on a corpse). **The player's swing hits a corpse** lying before it in reach
+(downward clip) when nobody living is there. **Next:** PC build, smoke `gore` (new phase `corpsehit`), gun range look.
+
 Google Neon asset test and AI Studio sounds (sneed, 2026-11-22; tools and docs, `docs/design/neon-assets.md`):
 sneed's Google AI Pro plan gives **Gemini 4 Neon** in the Antigravity CLI, now run headless on the PC like Codex
 (`tools/neon_assets/run_neon_assets.sh`, Neon High, no windows). It made **seven models first try**: the ship sensor
@@ -34,8 +83,19 @@ cluster (turning dish, pulsing beacon), a cowboy hat, minigun (spinning barrels)
 core (fans, crystal, boot lights), power switch (lever, lamps, spark) and hatchery (lid, lamp, wobbling egg), each
 22-41 min, about 3% of the weekly Gemini allowance each. Opus 5.5 through the same plan ran out after one half-made
 revolver. AI Studio in sneed's Chrome made a Lyria theme, robot and insect sound tests and TTS pain, begging and
-pleasure noises (muted while made). **Next: import the seven GLBs (codex_prep, GunArt) and wire their animations;
-pick sounds by ear.** Not in the game yet.
+pleasure noises (muted while made). **In the game (2026-11-22):** the four buildings move (dish scans, beacon blinks,
+core boots then hums with turning fans, switch lever and lamps follow on/off with a spark, hatchery egg wobbles:
+`visual.moving`, `PropAnims`), the minigun barrels spin up while firing, the LMG is a gun, the cowboy hat sits on the
+head as a rigid prop. Sounds: short gruff male grunts, female pain, begging and groans for people lying downed, three
+long lovin takes, and robot and insect sounds for mechanoids and chitinids (`tools/neon_sounds.py`, picked by
+measurement, sneed can swap). Not fixed: minigun heat tint too rainbow, LMG colours, paper-like crystal (BACKLOG).
+
+Rocket and grenade blasts look high quality (sneed, 2026-11-22; Unreal and blast art, `docs/design/blast-draw.md`): the
+fire and smoke pictures are **512 px a frame** (were 256), never streamed at a low mip, no longer **cut off square** at
+their edges, and drawn with round billowing lumps (gradient-noise turbulence) instead of boxy ones. Blasts throw **jets
+of dark soil** up in a cone; the flying **debris cubes are now lumpy soil clods and stones**; a rocket's trail is soft
+grey exhaust smoke with a flame at the nozzle, not solid balls. Needs the `blast-art` art step again (run by
+`update-and-play.bat`). **Next:** PC pictures in the gun range, third person.
 
 Playtest fixes from the gun range (sneed, 2026-11-22; sim, data, Unreal and hair tools): **dismemberment piles up
 again**: a limb at 0 kept no hitbox, so later shots and blows passed through it and never reached the 13 (arm) or 19
@@ -138,6 +198,8 @@ Buttons for animals, pens, prisoners and slaves (2026-11-20; Unreal UI on the ne
 Melee hurts buildings and trees, solid trunks, axe for felling (sneed, 2026-11-20; sim, data and Unreal, `docs/design/structure-damage.md`): **a melee blow now takes its damage off any wall, door, building or tree it meets** (a player's free swing catches one anywhere in its arc); **guns do half** to buildings and trees for now (`data/defs/Rules/StructureDamageRules.json`); **blasts hurt plants** (grass at the heart goes, trees at the edge are hurt). Plants have RimWorld's hit points (a tree 200), the damage is saved. **Tree trunks are solid**: bullets and blows stop at the trunk where Unreal draws it (bark and wood chips fly), and the player's body slides round a trunk instead of walking through it, in the gun range and normal maps alike. **A pawn felling a tree holds a hand axe** (drawn, not an item; Rules def `WorkTools`) and plays the two-handed chop clip on a loop, its own weapon holstered (`UWorkToolSubsystem`; `Work.ChopClip 1` tries Mixamo's horizontal axe swing). Tests `StructureDamageTests.cpp`. Merged (#413), PC compile and `handson` passed; tune the axe in the fist with `Work.AxeRoll/Pitch/Yaw` if it looks off.
 
 Natural blood splats (2026-11-19; Unreal art, `docs/design/blood.md`): the ground blood pictures no longer have the spiky crown that read as starbursts or viruses: drops are uneven round blots with droplets, slanted drops have a short tail, pools are lumpy puddles with drops on the rim. Checked on the PC 2026-11-20: spikes gone. Follow-up: blood on the ground and walls is darker and deeper red (it read pink in sun) (PC checked: fixed). Splats are drawn 1.9x (after the 12 m check read but small; `-BloodSplatScale=` / `-BloodGroundShade=` on the command line now set them, the log prints both) and the pool under a bleeding body spreads faster and up to about a metre across, so it shows round the body from 10-20 m (Blood.SplatScale; it hid under the body before). A downed pawn crawling away now leaves a smeared blood trail and a new pool where it stops (the old one stops growing). **Needs a compile; check the 12 m view with the gun range tour.**
+
+Codex models, batch 3b and 4 (sneed, 2026-11-22; `docs/design/codex-models.md`): **23 more wired in** (8 guns, 2 hammers/axes, ship engine and reactor, double bed, flatscreen TV, sandbags, barricade, spike trap, bionic arm and leg, EMP grenade, HE shell, medicine, spacer component), made at high effort and converted into `assets/raw/codex/`. **Next: the PC import (GunArt -List=assets/codex_art.json, then GunArt), gun hold points tuned from pictures.** Bow and vent made, not wired.
 
 Codex models, batches 2 and 3 (sneed, 2026-11-20; `docs/design/codex-models.md`): **33 more** made by Codex on sneed's PC and wired in (20 buildings from batch 2, 11 buildings and 2 swords from batch 3), converted into `assets/raw/codex/`, same GunArt import as the first 15. Autodoor and wall cooler models made but not wired in; 5 more wait for the Codex usage limit (Nov 22).
 

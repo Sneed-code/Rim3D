@@ -188,6 +188,16 @@
       "run": [{"commandlet": "MakeHumanArt", "args": ["-Garments", "-nullrhi"]}]
     },
     {
+      "name": "mixamo-extra",
+      "what": "Punches and downward blows at the downed (Mixamo clips made in a test copy)",
+      "inputs": ["tools/makehuman/mixamo_extra.py"],
+      "raw": ["assets/raw/mixamo/extra"],
+      "run": [
+        {"python": ["tools/makehuman/mixamo_extra.py"]},
+        {"commandlet": "MakeHumanArt", "args": ["-Clips", "-Only=LeadJab,CrossPunch,HookPunch,KnifeStabLow,SpearStabLow,OneHandHackLow,TwoHandHackLow,UnarmedStomp", "-nullrhi"]}
+      ]
+    },
+    {
       "name": "makehuman-clips",
       "what": "Animation clips",
       "inputs": ["assets/animations.json"],
@@ -208,6 +218,7 @@
       "name": "gun-art",
       "what": "Guns and melee weapons",
       "inputs": ["assets/guns.json"],
+      "after": ["codex-models"],
       "raw": ["assets/raw/guns", "assets/raw/melee"],
       "makes": ["game/Content/Rim3D/Generated/Guns"],
       "run": [{"commandlet": "GunArt", "args": ["-nullrhi"]}]

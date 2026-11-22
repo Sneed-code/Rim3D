@@ -297,6 +297,10 @@ namespace
 		int32 HairDemoShot = 0;
 		float HairDeepest[3] = {0.0f, 0.0f, 0.0f};          // per part of the demo: hair into the body, cm
 		float HairAnimatedDeepest[3] = {0.0f, 0.0f, 0.0f};  // the same hair as animated (no physics)
+		float StrandDemoT = -1.0f;  // -CreatorStrandDemo: seconds into the strand hair clipping check
+		int32 StrandDemoPhase = -1;
+		int32 StrandDemoShot = 0;
+		float StrandWalkYaw = 9999.0f;  // -CreatorStrandWalkPitch: the fixed view's yaw through the walk (over 1000: not set yet)
 		int32 SoftPressFrames = 0;      // frames in which the ball's press reached the skin table
 	};
 
@@ -1411,6 +1415,83 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			if (!bShotThisFrame && RecordSeconds > 0.0f && State->Recorded < FMath::RoundToInt32(RecordSeconds * 30.0f))
 			{
 				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") / FString::Printf(TEXT("rec_%04d.png"), State->Recorded++), false, false);
+			}
+		}
+		// -CreatorStrandDemo (docs/design/hair-physics.md "Clothes"): the picked one's strand hair, close, from behind and from
+		// the side, standing, aiming a rifle, swinging a sword, shadowboxing and walking, then aiming again with the hair's
+		// collision shapes drawn (Pawns.StrandHairDebug). Each phase is 6 s: 3 s from behind, 3 s from the side, a picture
+		// near the end of each (creator/strand_NN_<phase>_<view>.png). Add -CreatorDressed for clothes (person 2 wears a
+		// T-shirt under a jacket). About 45 s.
+		if (FParse::Param(FCommandLine::Get(), TEXT("CreatorStrandDemo")) && PhaseTime > 4.5f && State->bClipsListed && State->People.IsValidIndex(State->Selected))
+		{
+			static const TCHAR* const StrandPhases[] = {TEXT("idle"), TEXT("RifleAim"), TEXT("SwordSwings"), TEXT("Shadowbox"), TEXT("walk"), TEXT("shapes")};
+			constexpr int32 NumStrandPhases = UE_ARRAY_COUNT(StrandPhases);
+			if (State->StrandDemoT < 0.0f)
+			{
+				State->StrandDemoT = 0.0f;
+				State->CameraDistance = 170.0f;
+				State->CameraPitch = -10.0f;
+				State->FocusOffset = FVector(0.0, 0.0, 30.0 * State->People[State->Selected].Height);  // the head and back
+			}
+			State->StrandDemoT += GetWorld()->GetDeltaSeconds();
+			const float T = State->StrandDemoT;
+			const int32 Phase = FMath::Min(FMath::FloorToInt32(T / 6.0f), NumStrandPhases);
+			ASimPawnActor* Pawn = Pawns->FindPawn(State->People[State->Selected].Thing);
+			static IConsoleVariable* const StrandDebugVar = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.StrandHairDebug"));
+			if (Phase != State->StrandDemoPhase && Phase < NumStrandPhases)
+			{
+				State->StrandDemoPhase = Phase;
+				const FString Name = StrandPhases[Phase];
+				State->bWalk = Name == TEXT("walk");
+				while (State->Playing.Num() < State->People.Num()) { State->Playing.Add(-1); }
+				const int32 Clip = Name == TEXT("shapes") ? State->ClipNames.IndexOfByKey(FString(TEXT("RifleAim"))) : State->ClipNames.IndexOfByKey(Name);
+				CreatorPlay(*State, State->Selected, State->bWalk ? -1 : (Clip >= 0 ? Clip : State->IdleClip), Pawn, true);
+				if (StrandDebugVar)
+				{
+					StrandDebugVar->Set(Name == TEXT("shapes") ? 1 : 0);
+				}
+				UE_LOG(LogTemp, Display, TEXT("Strand demo: %s at %.1f s"), *Name, T);
+			}
+			// Behind is the person's own back (they turn while walking and swinging), the side their left.
+			const float Facing = Pawn ? static_cast<float>(Pawn->GetActorRotation().Yaw) : 0.0f;
+			const bool bSide = FMath::Fmod(T, 6.0f) >= 3.0f;
+			State->CameraYaw = Facing + (bSide ? 90.0f : 15.0f);
+			// -CreatorStrandWalkPitch=<degrees> (e.g. -70): through the walk the view stops following her and looks down
+			// at that pitch from a fixed side, so a turn shows whether the hair goes round the body or through it.
+			float WalkPitch = 0.0f;
+			if (Phase == 4 && FParse::Value(FCommandLine::Get(), TEXT("CreatorStrandWalkPitch="), WalkPitch))
+			{
+				if (State->StrandWalkYaw > 1000.0f)
+				{
+					State->StrandWalkYaw = Facing + 90.0f;
+				}
+				State->CameraYaw = State->StrandWalkYaw;
+				State->CameraPitch = FMath::Clamp(WalkPitch, -85.0f, 0.0f);
+				State->CameraDistance = 260.0f;
+			}
+			else if (Phase == 5 && State->StrandWalkYaw < 1000.0f)
+			{
+				State->StrandWalkYaw = 9999.0f;
+				State->CameraPitch = -10.0f;
+				State->CameraDistance = 170.0f;
+			}
+			if (Phase < NumStrandPhases && FMath::Fmod(T, 3.0f) >= 2.6f && State->StrandDemoShot == Phase * 2 + (bSide ? 1 : 0))
+			{
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") /
+					FString::Printf(TEXT("strand_%02d_%s_%s.png"), State->StrandDemoShot, StrandPhases[Phase], bSide ? TEXT("side") : TEXT("back")), false, false);
+				++State->StrandDemoShot;
+			}
+			// -CreatorRecord=<any>: every other frame of the walk too (creator/strandwalk_NNNN.png), to see where the hair goes as
+			// they turn.
+			float StrandRecord = 0.0f;
+			if (Phase == 4 && FParse::Value(FCommandLine::Get(), TEXT("CreatorRecord="), StrandRecord) && StrandRecord > 0.0f && FMath::Fmod(T, 3.0f) < 2.5f
+				&& (State->Recorded++ % 2) == 0)
+			{
+				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") / FString::Printf(TEXT("strandwalk_%04d.png"), State->Recorded), false, false);
+			}
+			if (Phase >= NumStrandPhases && StrandDebugVar && StrandDebugVar->GetInt() != 0)
+			{
+				StrandDebugVar->Set(0);
 			}
 		}
 		// Soft-body tests: a blast in front of the picked one (everyone feels it, less further away), or a slap on its belly.

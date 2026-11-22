@@ -414,6 +414,10 @@ FSimPawnApparel USimPawnSubsystem::MakeApparel(const colony::Snapshot& Snapshot,
 				Worn.Cuts.Add(UTF8_TO_TCHAR(Cut.c_str()));
 			}
 		}
+		Worn.HeadProp = UTF8_TO_TCHAR(Def.text("visual.headProp.mesh").c_str());
+		Worn.HeadPropAt = FVector(Def.numberAt("visual.headProp.at", 0, 0.0), Def.numberAt("visual.headProp.at", 1, 0.0), Def.numberAt("visual.headProp.at", 2, 0.0));
+		Worn.HeadPropYaw = static_cast<float>(Def.number("visual.headProp.yaw", 0.0));
+		Worn.HeadPropScale = static_cast<float>(Def.number("visual.headProp.scale", 1.0));
 		const size_t Count = Def.count("visual.worn");
 		for (size_t M = 0; M < Count; ++M)
 		{
@@ -622,8 +626,14 @@ UAnimSequence* USimPawnSubsystem::GetActionAnimation(colony::PawnAction Action) 
 		case colony::PawnAction::Deconstruct:
 		case colony::PawnAction::Cook:
 			return CrouchPose;
+		default:
+			break;
 	}
-	return CrouchPose;
+	// Everything else (a block, a dodge, a reload, a weapon switch, a throw, an alert, a dive for cover...) has no
+	// crouch: it used to fall through to it, so fighters ducked for half a second whenever they parried, reloaded or
+	// called out, and slid along the ground on crouched legs if they moved meanwhile (sneed 2026-11-22: "if enemies
+	// crouch and move they slide").
+	return nullptr;
 }
 
 USkeletalMesh* USimPawnSubsystem::GetGarmentMesh(const FString& Base, const FString& Garment)

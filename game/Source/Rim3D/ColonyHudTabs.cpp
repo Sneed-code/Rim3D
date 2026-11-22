@@ -767,7 +767,7 @@ void UColonyHudSubsystem::DrawResearchTab(USimSubsystem& Bridge, float Scale)
 			const FString Name = UTF8_TO_TCHAR(Def.defName().c_str());
 			ImGui::SetCursorScreenPos(Where[Def.defName()]);
 			ImGui::PushID(static_cast<int32>(Project.project.value));
-			const ImVec4 Fill = Project.done ? ColonyHud::Rgb(0x1f2a1f) : (Project.current ? ColonyHud::AccentDark() : (Project.available ? ColonyHud::ButtonBg() : ColonyHud::Rgb(0x15181b)));
+			const ImVec4 Fill = Project.done ? ColonyHud::Rgb(0x1f2a1f) : (Project.current ? ColonyHud::AccentDark() : (Project.available ? ColonyHud::ButtonBg() : ColonyHud::Locked()));
 			ImGui::PushStyleColor(ImGuiCol_Button, Fill);
 			ImGui::PushStyleColor(ImGuiCol_Border, ResearchPicked == Name ? ColonyHud::Accent() : ColonyHud::ButtonBorder());
 			ImGui::PushStyleColor(ImGuiCol_Text, Project.available || Project.done || Project.current ? ColonyHud::TextMain() : ColonyHud::TextFaint());

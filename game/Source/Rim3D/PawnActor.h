@@ -191,10 +191,15 @@ public:
 	/** A blast throws a ragdoll (a corpse or a downed body): a velocity change of up to `SpeedCmPerSecond` at the
 	 *  centre, falling off to nothing at `RadiusCm` (sneed 2026-11-20). Wakes a body that had gone to sleep. */
 	void PushRagdoll(const FVector& Centre, float RadiusCm, float SpeedCmPerSecond);
-	/** A bullet or blow on a ragdoll: an impulse at the bone nearest `At`. */
+	/** A bullet or blow on a ragdoll (a corpse, the knocked out): a velocity change `Impulse` (cm/s) on the bone
+	 *  nearest `At`, and a little of it on the whole body, waking it if it slept. */
 	void PushRagdollAt(const FVector& At, const FVector& Impulse);
+	/** For the tests: shots and blows that jolted this ragdoll. */
+	int32 GetRagdollHitPushes() const { return RagdollHitPushes; }
 	/** For the tests: ragdolls put to sleep once settled, and blasts that threw one. */
 	int32 GetRagdollSleeps() const { return RagdollSleeps; }
+	/** Frames a downed body's ragdoll was steered back over its sim spot (UpdateRagdollTether). */
+	int32 GetRagdollTethers() const { return RagdollTethers; }
 	int32 GetRagdollPushes() const { return RagdollPushes; }
 	/** The ragdoll's floor taken away (carried on a back, BodyCarrySubsystem) or made again under where the pawn is now. */
 	void ResetRagdollFloor(bool bWanted);
@@ -317,6 +322,8 @@ private:
 	void StyleWornMesh(UMeshComponent* Mesh, const FSimWornPiece& Piece);
 	/** ApplyApparel for a MakeHuman body: each piece's cut as garments that follow the body's pose and morphs. */
 	void ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnApparel& Wanted);
+	/** A worn piece's rigid head model (`visual.headProp`) on the MakeHuman head bone, or null to draw its cuts. */
+	UStaticMeshComponent* MakeHeadProp(USimPawnSubsystem& Pawns, const FSimWornPiece& Piece);
 	void StyleGarment(UMeshComponent* Mesh, const FSimWornPiece& Piece) const;
 	/** The body's skin-under-clothes bits (custom primitive data 30/31): skin a worn garment covers is cut away. */
 	void SetMakeHumanCoverBits(uint32 Bits);
@@ -435,7 +442,11 @@ private:
 	bool bSoftTissueBeforeRagdoll = true;
 	int32 RagdollSleeps = 0;
 	int32 RagdollPushes = 0;
+	int32 RagdollTethers = 0;
+	int32 RagdollHitPushes = 0;
 	void UpdateRagdollRest(float DeltaTime);
+	/** A downed body's ragdoll is drawn over its sim spot: its pelvis is steered back there while it falls. */
+	void UpdateRagdollTether(const FVector& SimSpot, float DeltaTime);
 	/** The tick group the meshes were last put in, and how many meshes that was (more come with looks). */
 	int32 MeshTickGroup = -1;
 	int32 MeshTickCount = 0;
@@ -575,6 +586,8 @@ private:
 	bool bBodyHidden = false;
 	bool bCutAway = false;
 	double ActionEndSeconds = 0.0;
+	/** The action playing is a short crouch (PlayAction), which stands up at once if the body starts to move. */
+	bool bActionCrouch = false;
 	TWeakObjectPtr<UAnimSequence> WorkLoopClip;
 	int32 ActionsPlayed = 0;
 };

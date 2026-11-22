@@ -28,6 +28,13 @@ struct FGunRangeGun
 		FString Name;
 		FString Match;
 		FVector Pivot = FVector::ZeroVector;
+		/** Spins about `SpinAxis` through Pivot while the gun fires (a minigun's barrels, "spin" in guns.json): up to
+		 *  `SpinRps` turns a second over `SpinUp` seconds from the first shot, and down over `SpinDown` after the last. */
+		bool bSpin = false;
+		FVector SpinAxis = FVector::ForwardVector;
+		float SpinRps = 5.0f;
+		float SpinUp = 1.0f;
+		float SpinDown = 1.5f;
 	};
 	FString Def;
 	FString Label;
@@ -78,6 +85,12 @@ struct FGunRangeGun
 	 *  and gun hidden). 0: open sights, the gun stays in view. */
 	float ScopeFov = 0.0f;
 };
+
+/** A spinning part's speed after `Dt` seconds (turns a second): up to its full speed while the gun has fired in the last
+ *  0.35 s, down to 0 after (docs/design/neon-assets.md "Minigun"). */
+float GunRangeSpinSpeed(const FGunRangeGun::FPart& Part, float Speed, float SinceShot, float Dt);
+/** The part turned `AngleDegrees` about its spin axis through its pivot, in the gun's frame. */
+FTransform GunRangeSpinTransform(const FGunRangeGun::FPart& Part, float AngleDegrees);
 
 /** A melee weapon on the combat range's rack, after the guns: drawn on the first-person arms like any weapon. */
 struct FGunRangeMelee
@@ -248,6 +261,9 @@ private:
 	float Kick = 0.0f;
 	float KickVelocity = 0.0f;
 	float SinceShot = 99.0f;
+	/** The first-person view's spinning part: turns a second now and the angle it is at (degrees). */
+	float ViewSpinSpeed = 0.0f;
+	float ViewSpinAngle = 0.0f;
 	FVector2D Sway = FVector2D::ZeroVector;
 	float BobPhase = 0.0f;
 	float Dip = 0.0f;

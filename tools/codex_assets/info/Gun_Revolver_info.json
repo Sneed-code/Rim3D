@@ -1,0 +1,56 @@
+{
+ "name": "Gun_Revolver",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -3.95,
+   -2.16,
+   -9.45
+  ],
+  "max": [
+   25.6,
+   2.16,
+   10.21
+  ]
+ },
+ "sizeM": [
+  0.296,
+  0.043,
+  0.197
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -3.95,
+     -2.16,
+     -9.45
+    ],
+    "max": [
+     25.6,
+     2.16,
+     10.21
+    ]
+   },
+   "tris": 8385
+  }
+ },
+ "sockets": {
+  "Muzzle": [
+   25.6,
+   -0.0,
+   7.5
+  ]
+ },
+ "slots": {
+  "Gun_Revolver": {
+   "from": "Gun_Revolver_PBR",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

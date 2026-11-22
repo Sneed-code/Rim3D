@@ -43,7 +43,7 @@
   "ours": ["costs: RimWorld's 1 steel is 1 copper here (sneed, 2026-11-15: copper is for wiring)"]
  },
  {
-  "defName": "PowerSwitch", "visual": {"cable": {"thickness": 0.07, "height": 0.05, "color": [0.12, 0.12, 0.13]}, "parts": [{"shape": "box", "size": [0.14, 0.14, 0.05], "color": [0.12, 0.12, 0.13]}, {"shape": "box", "size": [0.08, 0.08, 0.95], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [0.3, 0.16, 0.4], "at": [0, 0, 0.8], "color": [0.55, 0.6, 0.55]}, {"shape": "box", "size": [0.05, 0.06, 0.18], "at": [0.06, 0.1, 0.95], "rot": [0, 0, 0], "color": [0.75, 0.15, 0.1]}]}, "researchPrerequisite": "Electricity",
+  "defName": "PowerSwitch", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/PowerSwitch/SM_PowerSwitch.SM_PowerSwitch", "moving": {"anims": "PowerSwitch", "parts": [{"part": "Lever", "mesh": "/Game/Rim3D/Generated/Buildings/PowerSwitch_Lever/SM_PowerSwitch_Lever.SM_PowerSwitch_Lever"}, {"part": "LampGreen", "mesh": "/Game/Rim3D/Generated/Buildings/PowerSwitch_LampGreen/SM_PowerSwitch_LampGreen.SM_PowerSwitch_LampGreen"}, {"part": "LampRed", "mesh": "/Game/Rim3D/Generated/Buildings/PowerSwitch_LampRed/SM_PowerSwitch_LampRed.SM_PowerSwitch_LampRed"}, {"part": "Spark", "mesh": "/Game/Rim3D/Generated/Buildings/PowerSwitch_Spark/SM_PowerSwitch_Spark.SM_PowerSwitch_Spark"}], "play": [{"clip": "Spark", "when": "on"}, {"clip": "SwitchOn", "when": "on", "hold": true}, {"clip": "SwitchOff", "when": "off", "hold": true}]}, "cable": {"thickness": 0.07, "height": 0.05, "color": [0.12, 0.12, 0.13]}, "parts": [{"shape": "box", "size": [0.14, 0.14, 0.05], "color": [0.12, 0.12, 0.13]}, {"shape": "box", "size": [0.08, 0.08, 0.95], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [0.3, 0.16, 0.4], "at": [0, 0, 0.8], "color": [0.55, 0.6, 0.55]}, {"shape": "box", "size": [0.05, 0.06, 0.18], "at": [0.06, 0.1, 0.95], "rot": [0, 0, 0], "color": [0.75, 0.15, 0.1]}]}, "researchPrerequisite": "Electricity",
   "parent": "PowerBase",
   "label": "power switch",
   "size": [
@@ -378,7 +378,7 @@
   ]
  },
  {
-  "defName": "Hatchery",
+  "defName": "Hatchery", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/Hatchery/SM_Hatchery.SM_Hatchery", "moving": {"anims": "Hatchery", "parts": [{"part": "Lid", "mesh": "/Game/Rim3D/Generated/Buildings/Hatchery_Lid/SM_Hatchery_Lid.SM_Hatchery_Lid"}, {"part": "HeatLamp", "mesh": "/Game/Rim3D/Generated/Buildings/Hatchery_HeatLamp/SM_Hatchery_HeatLamp.SM_Hatchery_HeatLamp"}, {"part": "Egg1", "mesh": "/Game/Rim3D/Generated/Buildings/Hatchery_Egg1/SM_Hatchery_Egg1.SM_Hatchery_Egg1"}], "play": [{"clip": "Incubate", "when": "always", "loop": true}]}},
   "parent": "ClimateBase",
   "label": "hatchery",
   "description": "A warm egg box. Fertilized eggs within 2.5 m of it keep hatching however cold or hot the room is.",

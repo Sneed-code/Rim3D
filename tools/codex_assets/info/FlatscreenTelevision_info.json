@@ -1,0 +1,57 @@
+{
+ "name": "FlatscreenTelevision",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -95.0,
+   -28.53,
+   0.0
+  ],
+  "max": [
+   95.0,
+   28.53,
+   129.0
+  ]
+ },
+ "sizeM": [
+  1.9,
+  0.571,
+  1.29
+ ],
+ "parts": {
+  "FlatscreenTelevision": {
+   "boundsCm": {
+    "min": [
+     -95.0,
+     -28.53,
+     0.0
+    ],
+    "max": [
+     95.0,
+     28.53,
+     129.0
+    ]
+   },
+   "tris": 3776
+  }
+ },
+ "sockets": {
+  "Screen": [
+   0.0,
+   12.17,
+   81.1
+  ]
+ },
+ "slots": {
+  "FlatscreenTelevision": {
+   "from": "FlatscreenTelevision_PBR",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

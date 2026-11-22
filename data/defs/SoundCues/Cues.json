@@ -220,5 +220,13 @@
   {"defName": "Gun_Shell", "label": "spent case tinkles on the ground", "loop": false, "volume": 0.25, "range": 15, "priority": 3, "near": 1, "tone": {"wave": "square", "hz": 4000, "seconds": 0.04}},
   {"defName": "Step_Snow", "label": "footstep on snow", "loop": false, "volume": 0.2, "range": 25, "priority": 3, "tone": {"wave": "noise", "hz": 220, "seconds": 0.06}},
   {"defName": "Voice_MaleHit", "label": "man grunts at a hard hit", "loop": false, "volume": 0.75, "range": 80, "priority": 1, "near": 2, "chance": 0.5, "minDamage": 3, "cooldown": 5, "tone": {"wave": "saw", "hz": 260, "seconds": 0.25}},
-  {"defName": "Voice_MaleScream", "label": "man screams", "loop": false, "volume": 0.9, "range": 250, "priority": 0, "near": 3, "tone": {"wave": "saw", "hz": 350, "seconds": 0.6}}
+  {"defName": "Voice_MaleScream", "label": "man screams", "loop": false, "volume": 0.9, "range": 250, "priority": 0, "near": 3, "tone": {"wave": "saw", "hz": 350, "seconds": 0.6}},
+  {"defName": "Voice_FemDowned", "label": "woman lying hurt begs and groans", "loop": false, "volume": 0.6, "range": 60, "priority": 1, "near": 2, "every": [6, 14], "tone": {"wave": "saw", "hz": 480, "seconds": 0.4}},
+  {"defName": "Voice_MaleDowned", "label": "man lying hurt groans", "loop": false, "volume": 0.6, "range": 60, "priority": 1, "near": 2, "every": [6, 14], "tone": {"wave": "saw", "hz": 240, "seconds": 0.4}},
+  {"defName": "Animal_Mech_Idle", "label": "mechanoid servos and hydraulics", "loop": false, "volume": 0.45, "range": 60, "priority": 3, "tone": {"wave": "square", "hz": 140, "seconds": 0.3}},
+  {"defName": "Animal_Mech_Hurt", "label": "mechanoid hit, servo screech", "loop": false, "volume": 0.7, "range": 90, "priority": 2, "tone": {"wave": "square", "hz": 320, "seconds": 0.25}},
+  {"defName": "Animal_Mech_Death", "label": "mechanoid breaks down", "loop": false, "volume": 0.85, "range": 120, "priority": 1, "tone": {"wave": "square", "hz": 90, "seconds": 0.6}},
+  {"defName": "Animal_Chitinid_Idle", "label": "chitinid chittering", "loop": false, "volume": 0.4, "range": 50, "priority": 3, "tone": {"wave": "saw", "hz": 2200, "seconds": 0.2}},
+  {"defName": "Animal_Chitinid_Hurt", "label": "chitinid hiss", "loop": false, "volume": 0.65, "range": 70, "priority": 2, "tone": {"wave": "noise", "hz": 3000, "seconds": 0.25}},
+  {"defName": "Animal_Chitinid_Death", "label": "chitinid dies", "loop": false, "volume": 0.7, "range": 80, "priority": 2, "tone": {"wave": "saw", "hz": 1500, "seconds": 0.4}}
 ]

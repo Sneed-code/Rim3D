@@ -8,6 +8,7 @@
 #include "BlastFxSubsystem.generated.h"
 
 class AActor;
+class ASimPawnActor;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
 class UPointLightComponent;
@@ -47,12 +48,25 @@ public:
 	/** A scorch mark alone at a map point, with no blast over it (the smoke test pictures it clear of smoke). */
 	void AddScorchForTest(float MapX, float MapY, float RadiusM);
 
+	/**
+	 * What a projectile in flight leaves behind this frame (UShooterFeelSubsystem calls it): `Kind` is the Projectiles def's
+	 * visual.trail ("rocket": exhaust smoke and a flame at the nozzle; "puff": a launcher shell's thin smoke; "flame": a
+	 * molotov's burning rag). `Back` points the way it came from.
+	 */
+	void AddTrail(const FVector& At, const FVector& Back, const FString& Kind, float DeltaTime);
+
+	/** A rocket's trail along From -> To as if it had just flown it in `Seconds` (the smoke test pictures the trail). */
+	void AddTrailForTest(const FVector& From, const FVector& To, float Seconds);
+
 	/** A puff of dust behind a piece of debris in flight (UShooterFeelSubsystem calls it). */
 	void AddDebrisTrail(const FVector& At, float SizeCm);
 
 	// For the smoke test and the screen.
 	int32 GetBlastsDrawn() const { return BlastsDrawn; }
 	int32 GetRagdollsThrown() const { return RagdollsThrown; }
+	/** A body that goes limp just after a blast near it (the blast killed or knocked it out) is thrown by it too:
+	 *  throws it if a blast in the last `Seconds` reached where it lies. True if it did. */
+	bool ThrowNewRagdoll(ASimPawnActor& Actor, double Seconds = 0.6);
 	int32 GetPiecesThrown() const { return PiecesThrown; }
 	int32 GetSpritesAlive() const { return Sprites.Num(); }
 	int32 GetSmokeAlive() const;
@@ -135,6 +149,14 @@ private:
 	bool bReady = false;
 	int32 BlastsDrawn = 0;
 	int32 RagdollsThrown = 0;
+	struct FRecentBlast
+	{
+		FVector Centre = FVector::ZeroVector;
+		double Reach = 0.0;
+		float Speed = 0.0f;
+		double At = 0.0;
+	};
+	TArray<FRecentBlast> RecentBlasts;
 	int32 PiecesThrown = 0;
 	// The light: a white-hot peak, then an orange glow dying away.
 	FVector FlashAt = FVector::ZeroVector;

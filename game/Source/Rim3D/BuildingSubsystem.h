@@ -86,6 +86,9 @@ public:
 	float GetDrawnHeightCm(colony::DefId Def) const;
 	/** Instance components that currently hold at least one instance and use the ghost material. */
 	int32 GetGhostInstances() const;
+	/** Moving parts drawn (visual.moving), and how many of them are away from their rest pose right now. */
+	int32 GetMovingParts() const { return MovingSlots.Num(); }
+	int32 GetMovingPartsAnimated() const { return MovingAnimated; }
 
 	/** The mesh of a whole building of this def made of this stuff (invalid for none), made if it is new, for the placement ghost of
 	 *  the architect menu (docs/design/orders.md); null if the def has no picture or the subsystem is not built yet. */
@@ -98,6 +101,31 @@ protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
 
 private:
+	/** A moving part of a building's model: the part's name in its PropAnims set and its mesh. */
+	struct FMovingPart
+	{
+		FString Part;
+		UStaticMesh* Mesh = nullptr;
+	};
+
+	/** When a building plays a clip: `when` always, running (has power, or needs none), on or off (a switch, a consumer
+	 *  flicked); a looping clip plays while that holds, a one-shot plays once from the moment it starts to hold and then,
+	 *  with `hold`, keeps its last pose. The first rule that moves a part decides its pose; with none it rests. */
+	enum class EMoveWhen : uint8
+	{
+		Always,
+		Running,
+		On,
+		Off,
+	};
+	struct FMoveRule
+	{
+		FString Clip;
+		EMoveWhen When = EMoveWhen::Always;
+		bool bLoop = false;
+		bool bHold = false;
+	};
+
 	/** What a def looks like, read once. */
 	struct FDefLook
 	{
@@ -132,6 +160,11 @@ private:
 		float HeightCm = 0.0f;
 		/** The def's own mesh (visual.mesh, A1), already sized and stood on the ground; null draws the parts. A door's is its leaf. */
 		UStaticMesh* ArtMesh = nullptr;
+		/** Moving parts of a model with animations (visual.moving, docs/design/neon-assets.md): each part's own mesh, in the
+		 *  same frame as ArtMesh, and the rules that pick the clip it plays (PropAnims.h). Drawn only with ArtMesh. */
+		FString AnimSet;
+		TArray<FMovingPart> MovingParts;
+		TArray<FMoveRule> MoveRules;
 	};
 
 	/** One def made of one stuff: its meshes. */
@@ -152,6 +185,25 @@ private:
 		uint64 Signature = 0;
 		int32 Instances = 0;
 		TArray<colony::Entity> Doors;
+		TArray<uint64> Moving;
+	};
+
+	/** One moving part of one building, for the animation. */
+	struct FMovingSlot
+	{
+		UInstancedStaticMeshComponent* Component = nullptr;
+		int32 Index = 0;
+		FTransform Base;
+		colony::Entity Thing = colony::kNoEntity;
+		int32 DefValue = -1;
+		int32 Part = 0;
+	};
+
+	/** A building with moving parts: since when (world seconds) each of its def's rules has held, -1 while it doesn't. */
+	struct FMoveState
+	{
+		TArray<float> Since;
+		uint32 SeenFrame = 0;
 	};
 
 	/** A door's moving leaf, for the animation. */
@@ -182,6 +234,7 @@ private:
 	void ApplyCut(bool bForce);
 	UInstancedStaticMeshComponent* GetComponent(FChunk& Chunk, int32 Key, UStaticMesh* Mesh, bool bGhost, bool bItem, bool bCastShadow);
 	void AnimateDoors();
+	void AnimateMoving();
 	int32 ChunkIndex(int32 Level, int32 ChunkX, int32 ChunkY) const { return (Level * ChunksY + ChunkY) * ChunksX + ChunkX; }
 	int32 LevelOfChunk(int32 Index) const { return Index / FMath::Max(1, ChunksX * ChunksY); }
 
@@ -210,6 +263,10 @@ private:
 	TMap<uint64, int32> LookIndex;
 	TArray<FLook> Looks;
 	TMap<uint32, FDoorSlot> DoorSlots;
+	TMap<uint64, FMovingSlot> MovingSlots;
+	TMap<uint32, FMoveState> MoveStates;
+	uint32 MoveFrame = 0;
+	int32 MovingAnimated = 0;
 	/** Scratch space for one scan: the things of each chunk and the chunk's new signature. */
 	TArray<TArray<int32>> ScanLists;
 	TArray<uint64> ScanSignatures;
