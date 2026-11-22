@@ -1,0 +1,14 @@
+﻿Running smoke test 'newgame' at 1920x1080...
+
+Smoke test 'newgame': PASS  (41 s, NVIDIA GeForce RTX 5080, 1920x1080)
+newgame_title                49.6 fps  game   5.3 ms  render   9.0 ms  gpu   7.9 ms  screenshot ok
+newgame_loadpage             57.4 fps  game   4.7 ms  render   9.1 ms  gpu   7.9 ms  screenshot ok
+newgame_scenario             79.2 fps  game   4.6 ms  render   8.9 ms  gpu   7.9 ms  screenshot ok
+newgame_people               73.4 fps  game   5.3 ms  render  11.0 ms  gpu   9.7 ms  screenshot ok
+newgame_you_clothes          43.9 fps  game   5.2 ms  render  10.7 ms  gpu   9.5 ms  screenshot ok
+newgame_companions           56.0 fps  game   6.2 ms  render  10.8 ms  gpu   9.7 ms  screenshot ok
+newgame_looks                53.2 fps  game   5.8 ms  render  11.1 ms  gpu   9.7 ms  screenshot ok
+newgame_landed               84.6 fps  game   5.4 ms  render   7.1 ms  gpu   5.9 ms  screenshot ok
+note: NEWGAME title mouse cursor shown
+note: NEWGAME title backdrop TropicalRainforest, sky 6.50 h, exposure 12.1 EV, 51849 plants drawn
+Screenshots: C:\Dev\Rim3D\game\Saved\Smoke\newgame
