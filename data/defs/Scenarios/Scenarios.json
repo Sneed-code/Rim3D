@@ -91,5 +91,12 @@
       { "thing": "Steel", "count": 720 }
     ],
     "ours": ["colonists", "protagonist", "colonistApparel"]
+  },
+  {
+    "defName": "TitleBackdrop", "source": "ours", "label": "title screen backdrop",
+    "description": "The wild rainforest map behind the title screen: no people and no cargo, only the land, its plants and animals, in the morning.",
+    "colonists": 0, "protagonist": false, "colonistKind": "Human", "lineage": "Baseline", "biome": "TropicalRainforest",
+    "startHour": 7,
+    "ours": ["the whole def: the title screen's living backdrop (sneed 2026-11-22: no gun range, no engine sample level behind the title); needs SimWorld"]
   }
 ]

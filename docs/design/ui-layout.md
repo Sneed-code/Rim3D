@@ -171,3 +171,19 @@ research (from day 1), traders and visitors, prisoners, tame animals, cold (outd
 **Got it** marks it learned for good; **Hide the helper** or the book icon on the bar (between Keys and
 Factions, amber while on) turns it off. Both are saved with the HUD's settings (`Rim3D.Hud` keys
 `Lessons` and `LessonsOn`), not with the colony.
+
+## Canopy in game (2026-11-22)
+
+sneed: "make the actual game's UI ... high quality, well made". Every in-game box now uses **Canopy**, the look of the
+title and new-game screens ([new-game.md](new-game.md)), instead of the mock-up's grey and amber. It's all in
+`ColonyHudStyle.h`, so every subsystem that calls `ApplyFrameStyle` changes together:
+
+- Dark green-black glass, **square corners**, a faint jade edge; bone text; **jade** for what is open, picked or a
+  heading (it was amber); **ember** for costs, warnings and waiting quest offers.
+- A short **jade bar on each box's top edge**, drawn by one ImGui end-of-frame hook (`InstallCanopyBars`), not by each
+  window. Child windows, tooltips, popups, see-through and small boxes (key hints) and the bottom bar get none.
+- The bottom bar has a jade hairline along its top, and the open tab a jade line on its top edge.
+- Smoke `hud` checks that the hook draws bars.
+
+Next steps in this look: the selected-thing panel and the colonist bar laid out as Canopy cards, the date box, then each
+tab's window.

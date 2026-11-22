@@ -499,7 +499,7 @@ void UColonyHudSubsystem::Tick(float DeltaTime)
 	{
 		bMainMenuChecked = true;
 		const TCHAR* Line = FCommandLine::Get();
-		bMainMenuOpen = Bridge->GetStartOptions().Scenario.IsEmpty() && !FParse::Param(Line, TEXT("NoMenu")) && !FString(Line).Contains(TEXT("-SmokeTest="));
+		bMainMenuOpen = (Bridge->GetStartOptions().Scenario.IsEmpty() || Bridge->IsTitleBackdrop()) && !FParse::Param(Line, TEXT("NoMenu")) && !FString(Line).Contains(TEXT("-SmokeTest="));
 	}
 	CheckLanding(*Bridge);
 	// The menus are clicked with the mouse: show the cursor and let the UI have it while one is open (the level's
@@ -535,6 +535,7 @@ void UColonyHudSubsystem::Tick(float DeltaTime)
 		DrawMainMenu(*Bridge);
 		return;
 	}
+	EndTitleCamera();  // the world map or the game took over from the title
 	UpdateMugshots(*Bridge);
 	if (!IsOverseerActive() || GHudShowUi.GetValueOnGameThread() == 0)
 	{
@@ -624,6 +625,11 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 	{
 		++Stats.BarFrames;
 		const ImGuiStyle& Style = ImGui::GetStyle();
+		{
+			// Canopy: a faint jade hairline along the bar's top edge instead of a box border.
+			const ImVec2 BarPos = ImGui::GetWindowPos();
+			ImGui::GetWindowDrawList()->AddLine(BarPos, ImVec2(BarPos.x + ImGui::GetWindowWidth(), BarPos.y), ImGui::GetColorU32(ImVec4(0.37f, 0.83f, 0.66f, 0.35f)), 1.0f);
+		}
 		const auto Record = [this](const FString& Label)
 		{
 			const ImVec2 Min = ImGui::GetItemRectMin();
@@ -732,17 +738,17 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 		{
 			const EHudTab Tab = static_cast<EHudTab>(Index);
 			FString Label = TabLabel(Tab);
-			bool bAmber = false;
+			bool bEmber = false;
 			if (Tab == EHudTab::Quests && Quests)
 			{
-				// "Quests (2)" while offers wait for an answer; amber until the window has been opened since the newest one.
+				// "Quests (2)" while offers wait for an answer; ember until the window has been opened since the newest one.
 				const int32 Waiting = Quests->CountOffered();
 				Label = Waiting > 0 ? FString::Printf(TEXT("Quests (%d)"), Waiting) : Label;
-				bAmber = Quests->HasUnseenOffer() && Open != EHudTab::Quests;
+				bEmber = Quests->HasUnseenOffer() && Open != EHudTab::Quests;
 			}
-			if (bAmber)
+			if (bEmber)
 			{
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.40f, 0.12f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_Button, ColonyHud::EmberDark());
 			}
 			// On a narrow window a label that would be cut off is drawn smaller to fit its tab.
 			const float LabelWidth = ImGui::CalcTextSize(TCHAR_TO_UTF8(*Label)).x + 2.0f * Style.FramePadding.x;
@@ -760,9 +766,16 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 			{
 				ImGui::PopFont();
 			}
-			if (bAmber)
+			if (bEmber)
 			{
 				ImGui::PopStyleColor();
+			}
+			if (Open == Tab)
+			{
+				// Canopy: the open tab carries a jade line along its top, the bar's own edge.
+				const ImVec2 Min = ImGui::GetItemRectMin();
+				const ImVec2 Max = ImGui::GetItemRectMax();
+				ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(Min.x, Min.y), ImVec2(Max.x, Min.y + 2.0f * Scale), ImGui::GetColorU32(ColonyHud::Accent()));
 			}
 			Record(TabLabel(Tab));
 			switch (Tab)
