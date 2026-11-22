@@ -1,0 +1,310 @@
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_LongStraight from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/LongStraight.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_LongStraight
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_LongStraightHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/LongStraightHat.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_LongStraightHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_LongWavy from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/LongWavy.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_LongWavy
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_LongWavyHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/LongWavyHat.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_LongWavyHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_Ponytail from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/Ponytail.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_Ponytail
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_PonytailHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/PonytailHat.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_PonytailHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_Bob from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/Bob.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_Bob
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_BobHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/BobHat.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_BobHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_Short from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/Short.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_Short
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_ShortHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/ShortHat.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_ShortHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_Buzz from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/Buzz.abc: 1 groups, 1 materials, physics off
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_Buzz
+LogHairGrooms: Display: No C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/BuzzHat.abc: grow it with tools/makehuman/grow_hair.py (under a hat the plain style shows)
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_Braid from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/Braid.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_Braid
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_BraidHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/BraidHat.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_BraidHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_Afro from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/Afro.abc: 1 groups, 1 materials, physics off
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_Afro
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_AfroHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/AfroHat.abc: 1 groups, 1 materials, physics off
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_AfroHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_Messy from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/Messy.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_Messy
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorFemale_MessyHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorFemale/MessyHat.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorFemale_MessyHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_LongStraight from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/LongStraight.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_LongStraight
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_LongStraightHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/LongStraightHat.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_LongStraightHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_LongWavy from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/LongWavy.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_LongWavy
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_LongWavyHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/LongWavyHat.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_LongWavyHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_Ponytail from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/Ponytail.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_Ponytail
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_PonytailHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/PonytailHat.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_PonytailHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_Bob from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/Bob.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_Bob
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_BobHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/BobHat.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_BobHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_Short from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/Short.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_Short
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_ShortHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/ShortHat.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_ShortHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_Buzz from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/Buzz.abc: 1 groups, 1 materials, physics off
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_Buzz
+LogHairGrooms: Display: No C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/BuzzHat.abc: grow it with tools/makehuman/grow_hair.py (under a hat the plain style shows)
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_Braid from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/Braid.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_Braid
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_BraidHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/BraidHat.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_BraidHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_Afro from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/Afro.abc: 1 groups, 1 materials, physics off
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_Afro
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_AfroHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/AfroHat.abc: 1 groups, 1 materials, physics off
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_AfroHat
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_Messy from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/Messy.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_Messy
+LogHairGrooms: Display:   GroomImportOptions.ConversionSettings = (Rotation=(X=90.000000,Y=0.000000,Z=0.000000),Scale=(X=1.000000,Y=-1.000000,Z=1.000000))
+LogHairGrooms: Display:   groom importer reads: abc
+LogHairGrooms: Display:   GroomAsset.HairGroupsInterpolation = ((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05)))
+LogHairGrooms: Display:   GroomAsset.HairGroupsLOD = ((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),(CurveDecimation=0.350000,VertexDecimation=0.500000,ScreenSize=0.400000,ThicknessScale=1.600000))))
+LogHairGrooms: Display:   GroomAsset.HairGroupsMaterials = ((Material="/Game/MetaHumans/Common/Materials/MI_Hair.MI_Hair",SlotName="Hair"))
+LogHairGrooms: Display:   GroomAsset.HairGroupsRendering = ((MaterialSlotName="Hair"))
+LogHairGrooms: Display:   physics StrandsParameters = (StrandsSize=Size32), now (StrandsSize=Size32,StrandsDensity=1.000000,StrandsSmoothing=0.100000,StrandsThickness=0.010000,ThicknessScale=(EditorCurveData=(Keys=((InterpMode=RCIM_Cubic,Value=1.000000),(InterpMode=RCIM_Cubic,Time=1.000000,Value=1.000000)),DefaultValue=340282346638528859811704183484516925440.000000,PreInfinityExtrap=RCCE_Constant,PostInfinityExtrap=RCCE_Constant)))
+LogHairGrooms: Display: Groom GA_CreatorMale_MessyHat from C:/Dev/Rim3D-blood/game/Saved/Grooms/CreatorMale/MessyHat.abc: 1 groups, 1 materials, physics on
+LogHairGrooms: Display: Saved /Game/Rim3D/Generated/Grooms/GA_CreatorMale_MessyHat
+LogHairGrooms: Display: HairGrooms: 34 grooms made, 0 failed
+LogInit: Display: Success - 0 error(s), 0 warning(s)

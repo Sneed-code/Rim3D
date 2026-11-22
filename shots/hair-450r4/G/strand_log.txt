@@ -1,0 +1,19 @@
+Smoke test 'creator' starting
+Phase creator
+STRANDHAIR collision for SK_MH_CreatorMale: 90 shapes inside the skin on 11 bones; 0 garments worn (0 read), 0 shapes grown out to the clothes by 0.0 cm on average
+STRANDHAIR turn follow -1.00: simulation settings now (SimulationSetup=(bLocalSimulation=True,LinearVelocityScale=1.000000,AngularVelocityScale=1.000000,LocalBone="root",TeleportDistance=50.000000),SolverSettings=(),ExternalForces=(GravityVector=(X=0.000000,Y=0.000000,Z=-981.000000),AirDrag=0.100000,AirVelocity=(X=0.000000,Y=0.000000,Z=0.000000)),MaterialConstraints=(BendDamping=0.001000,BendStiffness=0.010000,StretchDamping=0.001000,StretchStiffness=1.000000,StaticFriction=0.100000,KineticFriction=0.100000,StrandsViscosity=1.000000,CollisionRadius=0.001000))
+STRANDHAIR GA_CreatorMale_LongStraight on SK_MH_CreatorMale: fitted scale 0.997 (neck to head 10.2 / 10.2 cm, fit 0.997, moved X=0.000 Y=-0.036 Z=-0.500), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000, collides with PA_StrandHair_0
+STRANDHAIR collision for SK_MH_CreatorFemale: 90 shapes inside the skin on 10 bones; 0 garments worn (0 read), 0 shapes grown out to the clothes by 0.0 cm on average
+STRANDHAIR GA_CreatorFemale_LongStraight on SK_MH_CreatorFemale: fitted scale 1.005 (neck to head 11.9 / 11.9 cm, fit 1.005, moved X=0.000 Y=0.048 Z=0.672), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000, collides with PA_StrandHair_1
+STRANDHAIR GA_CreatorMale_LongStraight on SK_MH_CreatorMale: fitted scale 0.999 (neck to head 10.2 / 10.2 cm, fit 0.999, moved X=0.000 Y=-0.012 Z=-0.166), body head at X=-0.000 Y=4.670 Z=159.999, groom head at X=0.000 Y=0.000 Z=0.000, collides with PA_StrandHair_0
+STRANDHAIR GA_CreatorFemale_LongStraight on SK_MH_CreatorFemale: fitted scale 1.002 (neck to head 11.9 / 11.9 cm, fit 1.002, moved X=0.000 Y=0.024 Z=0.336), body head at X=-0.000 Y=4.030 Z=142.573, groom head at X=0.000 Y=0.000 Z=0.000, collides with PA_StrandHair_1
+STRANDHAIR turn hold 1 on SimPawnActor_0: turning 17592 degrees a second
+STRANDHAIR turn hold 2 on SimPawnActor_1: turning 17374 degrees a second
+STRANDHAIR turn hold 3 on SimPawnActor_2: turning 18180 degrees a second
+STRANDHAIR turn hold 4 on SimPawnActor_3: turning 18174 degrees a second
+STRANDHAIR turn hold 5 on SimPawnActor_0: turning 17096 degrees a second
+STRANDHAIR turn hold 6 on SimPawnActor_1: turning 17096 degrees a second
+STRANDHAIR turn hold 7 on SimPawnActor_2: turning 17096 degrees a second
+STRANDHAIR turn hold 8 on SimPawnActor_3: turning 17096 degrees a second
+Phase creator: 33.4 fps, GPU 26.0 ms, game 6.3 ms
+Smoke test creator: pass, results written to ../../../../../../Dev/Rim3D-blood/game/Saved/Smoke/creator.json
