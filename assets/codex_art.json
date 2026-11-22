@@ -542,7 +542,10 @@
   "Gun_LMG": {
    "kind": "gun",
    "parts": [
-    "Trigger"
+    "Trigger",
+    "Bipod",
+    "AmmoBox",
+    "FeedCover"
    ]
   }
  },

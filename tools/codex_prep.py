@@ -95,10 +95,16 @@ def part_of(obj_name, parts):
     return next((p for p in parts if obj_name.startswith(p)), None)
 
 
+def min_scale(m):
+    return min(abs(v) for v in m.to_scale())
+
+
 def sample_actions(parts):
-    """Every action, sampled each frame: {action: {"seconds", "fps", "frames": {part: [Matrix world, ...]}}} plus the
-    rest matrices {part: Matrix} (the pose the meshes are baked in). Run straight after the import, before anything is
-    joined or removed: a part's motion can come from an animated parent (an empty at its pivot)."""
+    """Every action, sampled each frame: {action: {"seconds", "fps", "frames": {part: [Matrix world, ...]}}}, the rest
+    matrices {part: Matrix} and the bake matrices {part: Matrix} (the pose the part's mesh is baked in: the rest pose,
+    or for a part that rests shrunk to nothing, like a spark or a light that pops up, its biggest pose in any action).
+    Run straight after the import, before anything is joined or removed: a part's motion can come from an animated parent
+    (an empty at its pivot). Leaves every object at its rest pose, except shrunk parts, which are set to their bake pose."""
     scene = bpy.context.scene
     objs = list(scene.objects)
     saved = {}
@@ -106,10 +112,13 @@ def sample_actions(parts):
         saved[o.name] = (o.location.copy(), o.rotation_mode, o.rotation_quaternion.copy(), o.rotation_euler.copy(),
                          o.scale.copy())
     tracked = {}
+    members = {}
     for o in objs:
         p = part_of(o.name, parts) if o.type == "MESH" else None
-        if p and (p not in tracked or o.name == p):
-            tracked[p] = o
+        if p:
+            members.setdefault(p, []).append(o)
+            if p not in tracked or o.name == p:
+                tracked[p] = o
 
     def reset():
         for o in objs:
@@ -147,16 +156,38 @@ def sample_actions(parts):
             continue
         start, end = int(math.floor(act.frame_range[0])), int(math.ceil(act.frame_range[1]))
         frames = {p: [] for p in tracked}
+        every = {o.name: [] for ms in members.values() for o in ms}
         for f in range(start, end + 1):
             scene.frame_set(f)
             for p, o in tracked.items():
                 frames[p].append(o.matrix_world.copy())
-        out[act.name] = {"seconds": (end - start) / fps, "fps": fps, "frames": frames, "users": users}
+            for ms in members.values():
+                for o in ms:
+                    every[o.name].append(o.matrix_world.copy())
+        out[act.name] = {"seconds": (end - start) / fps, "fps": fps, "frames": frames, "users": users, "every": every}
     reset()
     scene.frame_set(scene.frame_start)
     bpy.context.view_layer.update()
     rest = {p: o.matrix_world.copy() for p, o in tracked.items()}
-    return out, rest
+    bake = dict(rest)
+    for p, o in tracked.items():
+        if min_scale(rest[p]) >= 0.05:
+            continue
+        best = None
+        for name, a in out.items():
+            for i, m in enumerate(a["frames"][p]):
+                if best is None or min_scale(m) > best[0]:
+                    best = (min_scale(m), name, i)
+        if best is None or best[0] < 0.05:
+            print(f"CODEXPREP part {p} is shrunk to nothing in every pose; left out")
+            continue
+        _, name, i = best
+        bake[p] = out[name]["frames"][p][i].copy()
+        for m in members[p]:
+            m.matrix_world = out[name]["every"][m.name][i]
+        print(f"CODEXPREP part {p} rests shrunk (scale {min_scale(rest[p]):.3f}): baked as in {name} frame {i}, hidden at rest")
+    bpy.context.view_layer.update()
+    return out, rest, bake
 
 
 def to_unreal(m):
@@ -165,6 +196,18 @@ def to_unreal(m):
     u = s @ m @ s
     u.translation = u.translation * 100.0
     return u
+
+
+def unreal_key(d):
+    loc, rot, scl = d.decompose()
+    return {"loc": [round(v, 3) for v in loc], "rot": [round(rot.x, 5), round(rot.y, 5), round(rot.z, 5), round(rot.w, 5)],
+            "scale": [round(v, 4) for v in scl]}
+
+
+def rest_poses(rest, bake):
+    """Each part's pose when no action plays, as a motion away from its baked mesh (identity unless it rests shrunk)."""
+    frame, inv = FRAME[0], FRAME[0].inverted()
+    return {p: unreal_key(to_unreal(frame @ (rest[p] @ bake[p].inverted()) @ inv)) for p in rest}
 
 
 def anim_tracks(sampled, rest):
@@ -365,7 +408,7 @@ def prep(src_root, name, entry):
     kind = entry["kind"]
     FRAME[0] = mathutils.Matrix.Identity(4)
     parts = entry.get("parts", [])
-    sampled, rest = sample_actions(parts) if parts else ({}, {})
+    sampled, rest, bake = sample_actions(parts) if parts else ({}, {}, {})
     drop = set(entry.get("drop", []))
     empties = [{"name": o.name, "pos": o.matrix_world.translation.copy()} for o in bpy.context.scene.objects if o.type == "EMPTY"]
     meshes = [o for o in bpy.context.scene.objects if o.type == "MESH" and not any(o.name.startswith(d) for d in drop)]
@@ -447,11 +490,11 @@ def prep(src_root, name, entry):
         key = f"{name}_{p}" if kind in ("building", "item") else p
         if key in info["parts"] and p in pivots_by_part(pivots, p):
             info["parts"][key]["pivotCm"] = unreal_cm(FRAME[0] @ pivots_by_part(pivots, p)[p])
-    anims = anim_tracks(sampled, rest) if sampled else {}
+    anims = anim_tracks(sampled, bake) if sampled else {}
     if anims:
         info["anims"] = {a: {"seconds": v["seconds"], "parts": sorted(v["parts"])} for a, v in anims.items()}
-        doc = {"name": name, "note": "Made by tools/codex_prep.py from the GLB's glTF actions: each part's motion away from its rest pose, Unreal frame, cm.",
-               "anims": anims}
+        doc = {"name": name, "note": "Made by tools/codex_prep.py from the GLB's glTF actions: each part's motion away from its baked mesh, Unreal frame, cm. 'rest': the pose when nothing plays (scale 0: hidden).",
+               "rest": rest_poses(rest, bake), "anims": anims}
         for path in (os.path.join(folder, f"{name}_anims.json"), os.path.join(ANIM_OUT, f"{name}.json")):
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w") as f:
