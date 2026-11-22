@@ -440,7 +440,7 @@ private:
 	int32 RagdollTethers = 0;
 	void UpdateRagdollRest(float DeltaTime);
 	/** A downed body's ragdoll is drawn over its sim spot: its pelvis is steered back there while it falls. */
-	void UpdateRagdollTether(float DeltaTime);
+	void UpdateRagdollTether(const FVector& SimSpot, float DeltaTime);
 	/** The tick group the meshes were last put in, and how many meshes that was (more come with looks). */
 	int32 MeshTickGroup = -1;
 	int32 MeshTickCount = 0;

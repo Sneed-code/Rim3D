@@ -430,7 +430,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	{
 		if (Now.downed && !Now.dead)
 		{
-			UpdateRagdollTether(DeltaTime);
+			UpdateRagdollTether(Location, DeltaTime);
 		}
 		UpdateRagdollRest(DeltaTime);
 		return;  // the physics body is on its own until the pawn gets up
@@ -2815,12 +2815,12 @@ void ASimPawnActor::UpdateRagdollRest(float DeltaTime)
 	}
 }
 
-void ASimPawnActor::UpdateRagdollTether(float DeltaTime)
+void ASimPawnActor::UpdateRagdollTether(const FVector& SimSpot, float DeltaTime)
 {
 	// The sim's downed body lies over its spot (its prone hitboxes), but the ragdoll fell wherever the blow and the
 	// physics took it: 50-70 cm off, any way, so finishers came down beside the drawn body or kneeled on it (PC round 4,
 	// sneed 2026-11-22). While it falls (and again after a push wakes it), its pelvis is steered back over the spot, as a
-	// velocity it eases toward: the limbs follow through the joints. A body asleep is left alone (no slide once it lies).
+	// velocity the whole body eases toward. A body asleep is left alone (no slide once it lies).
 	if (!Body || !Body->IsSimulatingPhysics() || !Body->RigidBodyIsAwake() || RagdollSeconds > 2.5f || DeltaTime <= 0.0f)
 	{
 		return;
@@ -2831,13 +2831,13 @@ void ASimPawnActor::UpdateRagdollTether(float DeltaTime)
 		return;
 	}
 	const FVector At = Pelvis->GetUnrealWorldTransform().GetLocation();
-	FVector Off = GetActorLocation() - At;
+	FVector Off = SimSpot - At;
 	Off.Z = 0.0;
 	const double Dist = Off.Size();
 	constexpr double TetherDeadCm = 8.0;
 	constexpr double TetherRate = 4.0;        // per second: the speed it wants is this times how far off it is
-	constexpr double TetherMaxSpeed = 160.0;  // cm/s
-	constexpr double TetherGrip = 10.0;       // per second: how fast its speed eases to that
+	constexpr double TetherMaxSpeed = 200.0;  // cm/s
+	constexpr double TetherGrip = 20.0;       // per second: how fast its speed eases to that
 	FVector Want = FVector::ZeroVector;
 	if (Dist > TetherDeadCm)
 	{
@@ -2850,7 +2850,8 @@ void ASimPawnActor::UpdateRagdollTether(float DeltaTime)
 		return;
 	}
 	const FVector Accel = (Want - Velocity) * TetherGrip;
-	Body->AddForce(FVector(Accel.X, Accel.Y, 0.0), TEXT("pelvis"), true);
+	// On every part alike (the pelvis alone, pulling a whole body against the ground's grip, barely moved it: PC round 5).
+	Body->AddForceToAllBodiesBelow(FVector(Accel.X, Accel.Y, 0.0), TEXT("pelvis"), true, true);
 	++RagdollTethers;
 }
 

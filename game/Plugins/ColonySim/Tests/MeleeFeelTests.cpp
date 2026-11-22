@@ -444,9 +444,9 @@ TEST_CASE("Finishers: every melee weapon of sneed's four kinds has its own finis
     CHECK(moveOf("Melee_Longsword") == "Sword");
 }
 
-TEST_CASE("Finishers: a knife at a downed enemy plays its whole-body kneeling clip, the blow at its hit time, the body held") {
+TEST_CASE("Finishers: a knife at a downed enemy plays its whole-body clip, the blow at its hit time, the body held") {
     // sneed 2026-11-22: "you only made the arms move but not the whole body as an animation". The knife's finisher is
-    // a measured whole-body clip (down on the knees, both hands driven down), not a pose made by hand.
+    // a measured whole-body clip (a low hack driven down; the kneeling clip lay flat in the PC pictures), not a pose made by hand.
     auto sim = feelTestSim(402);
     const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Knife");
     const Entity enemy = feelTestDowned(*sim, hero, 0.9f);
@@ -508,7 +508,7 @@ TEST_CASE("Finishers: a knife at a downed enemy plays its whole-body kneeling cl
     CHECK(sawT > 0.9f);
     // No glide in towards the body: it moved only its few cm to its place by the body (shiftClip) plus the clip's own,
     // and the player's walking never moved it sideways.
-    CHECK(std::hypot(end.x - start.x, end.y - start.y) < 0.2f);
+    CHECK(std::hypot(end.x - start.x, end.y - start.y) < 0.35f);  // its step back to its place, the clip's lunge and back
     CHECK(std::fabs(end.y - start.y) < 0.06f);
 }
 

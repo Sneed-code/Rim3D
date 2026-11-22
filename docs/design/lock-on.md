@@ -238,7 +238,9 @@ heights. Round 3 also showed the downed body drawn 0.4-1.2 m off its spot (its r
 the sim's prone hitboxes lie centred on the spot); round 4 showed no one way (50-70 cm, any direction), so a downed
 body's ragdoll now steers its pelvis back over its sim spot while it falls and after a push wakes it
 (`ASimPawnActor::UpdateRagdollTether`: a speed it eases toward, up to 1.6 m/s, for the first 2.5 s; asleep it is left
-alone). Dead bodies are not steered. Round 4 with the blow timing: spear and gladius hit, club just short, longsword and
+alone; round 5: steering the pelvis alone could not drag the body against the ground's grip, so the whole body is
+steered alike). Dead bodies are not steered. The knife's kneeling clip drew the attacker lying flat beside the body
+(round 5), so the knife hacks down with the gladius's low clip, standing 0.75 m off. Round 4 with the blow timing: spear and gladius hit, club just short, longsword and
 knife overlapped the drawn body (it had fallen toward them). A finisher whose clip is not measured yet falls
 back to the old drawn one.
 
