@@ -97,10 +97,15 @@ struct Melee {
 // One finisher (MeleeRules `finishers`, ours: RimWorld has none). Keyed by weapon def name or attack style; `move` names
 // the drawn motion (Spear, Club, Sword, Knife), `seconds` its whole length and `hitSeconds` when the blow lands, `standOff`
 // the metres from the body's centre the attacker steps to, `kneel` whether it goes down on its knees, `bend` the degrees
-// it bends over at the waist.
+// it bends over at the waist. `clip` (sneed 2026-11-22: "the whole body as an animation", not arms posed by hand): a
+// MotionClips def the whole body plays, its blow landing at `hitSeconds`; with it Unreal draws no hand-made pose, kneel
+// or bend, and the weapon simply stays in the hand. A clip finisher starts only within `standOff` + `clipSlack` metres of
+// the body (it does not glide the attacker in); further off the weapon's plain low blow plays instead.
 struct MeleeFinisher {
     std::string key;
     std::string move;
+    std::string clip;
+    float clipSlack = 0.45f;
     float seconds = 1.6f;
     float hitSeconds = 1.0f;
     float standOff = 0.6f;
@@ -144,6 +149,7 @@ struct MeleeRules {
     int blockSteps = 4;               // to raise the weapon
     int blockRecoverySteps = 12;      // the blocker's stagger: no swing of its own meanwhile
     int playerBlockSteps = 20;        // how long the player's block holds
+    int playerBlockHoldSteps = 6;     // held: each press while it is up keeps it up this much longer
     int dodgeHoldSteps = 3;           // a fighter that sidestepped stays put this long after the hit
     float strongPowerShare = 1.15f;   // a swing is strong when its tool's power is this share of the set's mean or more (AN1, ours)
     float arcHalfDegrees = 30.0f;     // a sweeping blow (part C) can meet a pawn this far either side of its aimed line
@@ -235,7 +241,8 @@ public:
     // still swinging or recovering, nothing to hit with, or the target out of reach.
     // `fists` swings the body's own tools even with a weapon in the hands (a social fight, C20).
     bool attack(Entity pawn, Entity target, bool player, std::string* why = nullptr, bool fists = false);
-    // The player's block: raises the weapon for playerBlockSteps (after blockSteps). Needs a melee weapon.
+    // The player's block: raises the weapon (or a person's fists) for playerBlockSteps (after blockSteps); sent again
+    // while it is up (the button held) it stays up playerBlockHoldSteps longer. Not with a gun in hand.
     bool block(Entity pawn, std::string* why = nullptr);
 
     // Whether the pawn could start a swing now (not winding up or recovering, able).
@@ -247,6 +254,9 @@ public:
     float finisherProgress(Entity pawn) const;
     // The finisher a melee weapon def would use at a body on the ground (1 + its index; 0 none).
     int finisherFor(DefId weapon) const;
+    // Whether finisher `finisher` (1 + its MeleeRules index) plays its whole-body clip (sneed 2026-11-22): the clip is
+    // named and measured. Unreal then draws no hand-made pose, kneel or bend for it.
+    bool finisherPlaysClip(int finisher) const;
     // The swing under way (or the last one) uses a strong tool: one whose power is MeleeRules `strongPowerShare`
     // of its set's mean or more (a longsword's cut against its point). Unreal plays a heavy blow for it (AN1).
     bool strongSwing(Entity pawn) const;
@@ -333,6 +343,7 @@ public:
     uint64_t structureHits() const { return structureHits_; }
     uint64_t dodges() const { return dodges_; }
     uint64_t blocks() const { return blocks_; }
+    uint64_t armBlocks() const { return armBlocks_; }  // weapon blows taken on a bare forearm held up
     uint64_t guardBreaks() const { return guardBreaks_; }
     uint64_t rolls() const { return rolls_; }
     uint64_t footworks() const { return footworks_; }
@@ -391,6 +402,7 @@ private:
     uint64_t structureHits_ = 0;  // blows that hurt a building or a tree
     uint64_t dodges_ = 0;
     uint64_t blocks_ = 0;
+    uint64_t armBlocks_ = 0;
     uint64_t guardBreaks_ = 0;
     uint64_t rolls_ = 0;
     uint64_t footworks_ = 0;

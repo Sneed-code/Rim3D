@@ -851,7 +851,9 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		FTransform WeaponPlaced;
 		// A finisher holds the weapon at its place whatever the stance clip or a recent float fix says: its own path
 		// puts the weapon on the body with both hands on it.
-		const bool bFinisherNow = View.meleeFinisher != 0 && !IsGun(Def);
+		// (A finisher that plays a whole-body clip, sneed 2026-11-22, holds the weapon in the hand like any clip swing.)
+		const colony::Sim* FinisherSim = BridgeSource.Get() ? BridgeSource.Get()->GetSim() : nullptr;
+		const bool bFinisherNow = View.meleeFinisher != 0 && !IsGun(Def) && !(FinisherSim && FinisherSim->melee().finisherPlaysClip(View.meleeFinisher));
 		if (bControlled && bPinSlot)
 		{
 			PinFailReason = TEXT("");
@@ -1306,9 +1308,9 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 	}
 	const std::vector<colony::MeleeFinisher>& Finishers = Bridge->GetSim()->melee().rules().finishers;
 	const size_t Index = static_cast<size_t>(View.meleeFinisher) - 1;
-	if (Index >= Finishers.size())
+	if (Index >= Finishers.size() || Bridge->GetSim()->melee().finisherPlaysClip(View.meleeFinisher))
 	{
-		return false;
+		return false;  // a whole-body clip plays it (sneed 2026-11-22): the weapon follows the hand, nothing drawn by hand
 	}
 	const FString MoveName = UTF8_TO_TCHAR(Finishers[Index].move.c_str());
 	const FWeaponFinisherMove* Move = WeaponFinisherMoves().FindByPredicate([&](const FWeaponFinisherMove& M) { return MoveName == M.Name; });
@@ -1506,7 +1508,8 @@ void UWeaponDrawSubsystem::UpdateStance(ASimPawnActor& Actor, const colony::Thin
 	float Bend = View.carryingPawn != colony::kNoEntity && !View.downed && !View.dead ? WeaponCarryBend : 0.0f;
 	// Through a finisher: bent over the body on the ground, most at the blow (sneed 2026-11-20).
 	const std::vector<colony::MeleeFinisher>& Finishers = Bridge->GetSim() ? Bridge->GetSim()->melee().rules().finishers : std::vector<colony::MeleeFinisher>{};
-	if (View.meleeFinisher != 0 && static_cast<size_t>(View.meleeFinisher) <= Finishers.size() && !View.downed)
+	if (View.meleeFinisher != 0 && static_cast<size_t>(View.meleeFinisher) <= Finishers.size() && !View.downed &&
+		!(Bridge->GetSim() && Bridge->GetSim()->melee().finisherPlaysClip(View.meleeFinisher)))
 	{
 		const colony::MeleeFinisher& F = Finishers[static_cast<size_t>(View.meleeFinisher) - 1];
 		const float T = View.meleeFinisherT;
@@ -1791,11 +1794,13 @@ bool UWeaponDrawSubsystem::Block()
 {
 	USimSubsystem* Bridge = nullptr;
 	const colony::ThingView* Me = ControlledView(Bridge);
-	if (!Me || Bridge->GetGameSeconds() <= LastOrderStep || !Me->weapon.valid() || IsGun(Me->weapon))
+	// A melee weapon or bare fists (sneed 2026-11-22); sent every step while the button is held, so the sim keeps the
+	// block up for as long as it is held (MeleeSystem::block).
+	if (!Me || Bridge->GetGameSeconds() <= LastOrderStep || (Me->weapon.valid() && IsGun(Me->weapon)))
 	{
 		return false;
 	}
-	if (Me->blocking || Me->meleePhase != colony::MeleePhase::Ready || Me->switchSlot < colony::kWeaponSlotCount)
+	if (Me->meleePhase != colony::MeleePhase::Ready || Me->switchSlot < colony::kWeaponSlotCount || Me->downed)
 	{
 		return false;
 	}

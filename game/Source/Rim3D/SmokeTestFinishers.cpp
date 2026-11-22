@@ -466,6 +466,28 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 				Fail(FString::Printf(TEXT("%s: %d blows to the head never downed the victim"), *PhaseName, State->Blows));
 			}
 			Bridge()->Submit(colony::DestroyThingCommand{State->Enemy});
+			// A finisher that plays a whole-body clip (sneed 2026-11-22) has no hand-made weapon path, kneel or reach:
+			// it must play, land its blow and keep the weapon in the hand.
+			const colony::Sim* ClipSim = Bridge()->GetSim();
+			const int ClipFinisher = ClipSim ? ClipSim->melee().finisherFor(ClipSim->defs().idOf("Things", Weapon.Def)) : 0;
+			const bool bClip = ClipSim && ClipSim->melee().finisherPlaysClip(ClipFinisher);
+			Notes.Add(FString::Printf(TEXT("%s: %s"), *PhaseName, bClip ? TEXT("whole-body clip finisher") : TEXT("hand-drawn finisher")));
+			if (bClip)
+			{
+				if (State->MaxT < 0.8f)
+				{
+					Fail(FString::Printf(TEXT("%s: the %s finisher clip did not play through (T %.2f)"), *PhaseName, UTF8_TO_TCHAR(Weapon.Move), State->MaxT));
+				}
+				if (Fixes > 0)
+				{
+					Fail(FString::Printf(TEXT("%s: the weapon floated off the hand %d times"), *PhaseName, Fixes));
+				}
+				if (Hits <= 0)
+				{
+					Fail(PhaseName + TEXT(": the finisher's blow did not land"));
+				}
+				return;
+			}
 			if (Frames <= 0 || State->MaxT < 0.8f)
 			{
 				Fail(FString::Printf(TEXT("%s: no %s finisher played (frames %d, T %.2f)"), *PhaseName, UTF8_TO_TCHAR(Weapon.Move), Frames, State->MaxT));

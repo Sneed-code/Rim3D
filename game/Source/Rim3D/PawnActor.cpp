@@ -64,6 +64,8 @@ namespace
 	constexpr float PawnActionBlendIn = 0.25f;
 	constexpr float PawnActionHold = 0.35f;
 	constexpr float PawnActionBlendOut = 0.35f;
+	// Faster than this (cm/s) a body doesn't crouch to a short action, and one crouched stands up: its feet would slide.
+	constexpr float PawnActionMaxSpeed = 40.0f;
 	// Where horns grow, in the MetaHuman's mesh space (cm; +Y forward, +Z up): the top of the
 	// forehead, measured on Kellan's head (its mesh spans z 135 to 173, y -10 to 14).
 	constexpr float PawnHornForward = 6.5f;
@@ -528,10 +530,18 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		if (ActionEndSeconds > 0.0)
 		{
 			ActionEndSeconds -= DeltaTime * Speed;
-			if (ActionEndSeconds <= 0.0)
+			// Walked off before the crouch was over: up at once, never crouched legs gliding along the ground.
+			if (bActionCrouch && GroundSpeed > PawnActionMaxSpeed)
+			{
+				ActionEndSeconds = 0.0;
+				bActionCrouch = false;
+				Anim->StopSlotAnimation(0.15f, FAnimSlotGroup::DefaultSlotName);
+			}
+			else if (ActionEndSeconds <= 0.0)
 			{
 				Anim->StopSlotAnimation(PawnActionBlendOut, FAnimSlotGroup::DefaultSlotName);
 				ActionEndSeconds = 0.0;
+				bActionCrouch = false;
 			}
 		}
 	}
@@ -564,9 +574,14 @@ void ASimPawnActor::PlayAction(colony::PawnAction Action)
 	{
 		return;  // a work loop (felling) owns the slot
 	}
+	if (GroundSpeed > PawnActionMaxSpeed || IsInMotionClip())
+	{
+		return;  // a crouch on the move would slide the feet: only a body standing still crouches to its work
+	}
 	if (Anim->PlaySlotAnimationAsDynamicMontage(Animation, FAnimSlotGroup::DefaultSlotName, PawnActionBlendIn, PawnActionBlendOut))
 	{
 		ActionEndSeconds = PawnActionBlendIn + PawnActionHold;
+		bActionCrouch = true;
 		++ActionsPlayed;
 	}
 }
@@ -2391,7 +2406,8 @@ void ASimPawnActor::UpdateFinisherKneel(const USimSubsystem& Bridge, const colon
 	{
 		const std::vector<colony::MeleeFinisher>& Finishers = Sim->melee().rules().finishers;
 		const size_t Index = static_cast<size_t>(Now.meleeFinisher) - 1;
-		bKneel = Index < Finishers.size() && Finishers[Index].kneel;
+		// A finisher with a whole-body clip kneels in the clip itself (sneed 2026-11-22): no crouch laid over it.
+		bKneel = Index < Finishers.size() && Finishers[Index].kneel && !Sim->melee().finisherPlaysClip(Now.meleeFinisher);
 	}
 	const USimPawnSubsystem* Pawns = GetWorld() ? GetWorld()->GetSubsystem<USimPawnSubsystem>() : nullptr;
 	UAnimSequence* Crouch = Pawns ? Pawns->GetActionAnimation(colony::PawnAction::PickUp) : nullptr;

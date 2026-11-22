@@ -2,6 +2,16 @@
 
 Updated 2026-11-22.
 
+Whole-body melee finishers, held blocks, no crouch slides (sneed, 2026-11-22; sim, data, Unreal, tools,
+`docs/design/lock-on.md` "Whole-body finishers"): **finishers at the downed are now whole-body mocap clips** instead of
+arms posed by hand (the longsword's arms went through its body, the knife's shook and showed the joints): knife kneels and
+drives both hands down, gladius and mace hack low, club smashes overhead, longsword hacks low, spear stabs down; the
+weapon simply stays in the hand. **The punches and low blows were never in the one game** (made in a test copy): new art
+step `mixamo-extra` brings them in. **Right mouse blocks with a melee weapon or fists, for as long as it is held**;
+fists stop punches, a blade lands on the forearm. **Crouch slides**: every block, dodge, reload or shout played a
+half-second whole-body crouch, so fighters ducked and slid; now only standing work crouches. **Next:** PC build, art
+steps, smoke `finishers` and `melee`, pictures of each finisher and a block.
+
 Google Neon asset test and AI Studio sounds (sneed, 2026-11-22; tools and docs, `docs/design/neon-assets.md`):
 sneed's Google AI Pro plan gives **Gemini 4 Neon** in the Antigravity CLI, now run headless on the PC like Codex
 (`tools/neon_assets/run_neon_assets.sh`, Neon High, no windows). It made **seven models first try**: the ship sensor

@@ -444,7 +444,9 @@ TEST_CASE("Finishers: every melee weapon of sneed's four kinds has its own finis
     CHECK(moveOf("Melee_Longsword") == "Sword");
 }
 
-TEST_CASE("Finishers: a knife at a downed enemy kneels into a slow slam that lands at its hit time, holding the body still") {
+TEST_CASE("Finishers: a knife at a downed enemy plays its whole-body kneeling clip, the blow at its hit time, the body held") {
+    // sneed 2026-11-22: "you only made the arms move but not the whole body as an animation". The knife's finisher is
+    // a measured whole-body clip (down on the knees, both hands driven down), not a pose made by hand.
     auto sim = feelTestSim(402);
     const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Knife");
     const Entity enemy = feelTestDowned(*sim, hero, 0.9f);
@@ -455,35 +457,45 @@ TEST_CASE("Finishers: a knife at a downed enemy kneels into a slow slam that lan
     const MeleeFinisher* f = sim->melee().finisherOf(hero);
     FEEL_REQUIRE(f != nullptr);
     CHECK(f->move == "Knife");
-    CHECK(f->kneel);
+    const int finisher = sim->things().registry().get<Melee>(hero).finisher;
+    CHECK(sim->melee().finisherPlaysClip(finisher));
+    const BodyMotionSystem& motion = sim->combat().motion();
+    const MotionClip* clip = motion.clip(f->clip);
+    FEEL_REQUIRE(clip != nullptr);
+    FEEL_REQUIRE(motion.moving(hero));
+    CHECK(sim->things().registry().get<BodyMotion>(hero).clip == clip->def);
     const int hitStep = static_cast<int>(std::lround(f->hitSeconds * 30.0f));
-    const int total = static_cast<int>(std::lround(f->seconds * 30.0f));
+    // The finisher lasts as long as the clip, played at the pace that lands its blow on the hit step.
+    const int total = sim->things().registry().get<Melee>(hero).finisherSteps;
+    const int clipTotal = static_cast<int>(std::lround(clip->seconds * static_cast<float>(hitStep) / clip->hitSeconds));
+    CHECK(std::abs(total - clipTotal) <= 1);
+    const Position start = sim->things().registry().get<Position>(hero);
+    Position end = start;
     int struckAt = -1;
     int readyAt = -1;
     float sawT = 0.0f;
-    float apartAtHit = -1.0f;
     for (int s = 1; s <= total + 10; ++s) {
-        // The player keeps pushing forward: through a finisher the body stays where it knelt.
-        const Position before = sim->things().registry().get<Position>(hero);
-        if (s > hitStep / 2) {
-            sim->submit(DirectMoveCommand{hero, before.x, before.y + 0.08f});
+        // The player keeps pushing forward: through a finisher the body stays where the clip has it.
+        const bool inFinisher = sim->melee().finisherOf(hero) != nullptr;
+        if (s > hitStep / 2 && inFinisher) {
+            const Position& now = sim->things().registry().get<Position>(hero);
+            sim->submit(DirectMoveCommand{hero, now.x, now.y + 0.08f});
         }
         sim->step();
-        if (s > hitStep / 2 && sim->melee().finisherOf(hero) != nullptr) {
-            CHECK(std::fabs(sim->things().registry().get<Position>(hero).y - before.y) < 1e-3f);
+        if (inFinisher) {
+            end = sim->things().registry().get<Position>(hero);
         }
         for (const Event& e : sim->events()) {
             if (e.type == EventType::MeleeHit && e.thing == hero && struckAt < 0) {
                 struckAt = s;
-                const Position& hp = sim->things().registry().get<Position>(hero);
-                const Position& ep = sim->things().registry().get<Position>(enemy);
-                apartAtHit = std::hypot(hp.x - ep.x, hp.y - ep.y);
             }
         }
         Snapshot snap;
         sim->writeSnapshot(snap);
         if (const ThingView* v = snap.find(hero); v != nullptr && v->meleeFinisher != 0) {
             CHECK(v->meleeFinisherTarget == enemy);
+            CHECK(v->motionClip == clip->def);  // Unreal plays the clip on the whole body
+            CHECK_FALSE(v->motionUpper);
             sawT = std::max(sawT, v->meleeFinisherT);
         }
         if (readyAt < 0 && sim->melee().ready(hero)) {
@@ -494,8 +506,102 @@ TEST_CASE("Finishers: a knife at a downed enemy kneels into a slow slam that lan
     CHECK(readyAt >= total - 1);
     CHECK(readyAt <= total + 1);
     CHECK(sawT > 0.9f);
-    // It stepped in to kneel at its place beside the body before the blow.
-    CHECK(std::fabs(apartAtHit - f->standOff) < 0.12f);
+    // No glide in towards the body: it moved only as far as the clip's own hips do (a few cm), not the 30 cm the old
+    // step-in took, and the player's walking never moved it sideways.
+    CHECK(std::hypot(end.x - start.x, end.y - start.y) < 0.2f);
+    CHECK(std::fabs(end.y - start.y) < 0.06f);
+}
+
+TEST_CASE("Finishers: too far from the body for its clip, a weapon's blow at the downed is its plain low blow") {
+    auto sim = feelTestSim(406);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    const Entity enemy = feelTestDowned(*sim, hero, 1.6f);  // gladius reach 1.2 plus the player's slack
+    feelTestFace(*sim, hero, 1.0f, 0.0f);
+    std::string why;
+    const bool attacked = sim->melee().attack(hero, enemy, true, &why);
+    FEEL_REQUIRE(attacked);
+    CHECK(sim->melee().finisherOf(hero) == nullptr);
+    CHECK(sim->melee().winding(hero));
+}
+
+TEST_CASE("Finishers: every finisher of sneed's weapons plays a measured whole-body clip") {
+    auto sim = feelTestSim(407);
+    for (const char* weapon : {"Melee_Spear", "Melee_Club", "Melee_Knife", "Melee_Gladius", "Melee_Longsword", "Melee_Mace"}) {
+        CAPTURE(weapon);
+        const int f = sim->melee().finisherFor(sim->defs().idOf("Things", weapon));
+        CHECK(f > 0);
+        CHECK(sim->melee().finisherPlaysClip(f));
+    }
+}
+
+// ---- Blocking (sneed 2026-11-22: "my right click with a melee weapon or fists doesn't block") ------------------------
+
+TEST_CASE("Block: the player's fists block, a gun never does") {
+    auto sim = feelTestSim(408);
+    const Entity bare = feelTestHero(*sim, 30.5f, 30.5f, nullptr);
+    std::string why;
+    CHECK(sim->melee().block(bare, &why));
+    sim->stepMany(sim->melee().rules().blockSteps + 1);
+    CHECK(sim->melee().blocking(bare));
+    const Entity rifleman = feelTestPawn(*sim, 20.5f, 20.5f, "Gun_BoltActionRifle");
+    CHECK_FALSE(sim->melee().block(rifleman, &why));
+}
+
+TEST_CASE("Block: held, the block stays up as long as the button is down and drops soon after it is let go") {
+    auto sim = feelTestSim(409);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Longsword");
+    const MeleeRules& rules = sim->melee().rules();
+    std::string why;
+    // The button held for three times the single block's length: sent every step, as Unreal does.
+    const int held = rules.blockSteps + rules.playerBlockSteps * 3;
+    int up = 0;
+    for (int s = 0; s < held; ++s) {
+        sim->melee().block(hero, &why);
+        sim->step();
+        up += sim->melee().blocking(hero) ? 1 : 0;
+    }
+    CHECK(up >= held - rules.blockSteps - 1);  // up the whole time after the first raise
+    int stillUp = 0;
+    for (int s = 0; s < rules.playerBlockSteps; ++s) {
+        sim->step();
+        stillUp += sim->melee().blocking(hero) ? 1 : 0;
+    }
+    CHECK(stillUp <= rules.playerBlockHoldSteps);
+}
+
+TEST_CASE("Block: bare fists stop a punch, and take a sword's blow on the forearm instead of the body") {
+    auto sim = feelTestSim(410);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, nullptr);
+    feelTestFace(*sim, hero, 1.0f, 0.0f);
+    const Entity swordsman = feelTestPawn(*sim, 31.4f, 30.5f, "Melee_Gladius");
+    sim->submit(SetFactionCommand{swordsman, 2});
+    sim->step();
+    feelTestFace(*sim, swordsman, -1.0f, 0.0f);
+    std::string why;
+    const uint64_t armBlocksBefore = sim->melee().armBlocks();
+    // (The enemy may already be swinging at the hero on its own.)
+    const bool swung = sim->melee().winding(swordsman) || sim->melee().attack(swordsman, hero, false, &why);
+    CAPTURE(why);
+    FEEL_REQUIRE(swung);
+    std::vector<std::string> parts = sim->health().partLabels(sim->things().registry().get<Thing>(hero).def);
+    int struckPart = -2;
+    for (int s = 0; s < 90 && struckPart == -2; ++s) {
+        sim->melee().block(hero, &why);
+        feelTestFace(*sim, hero, 1.0f, 0.0f);
+        sim->step();
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::MeleeHit && e.thing == swordsman) {
+                struckPart = e.part;
+            }
+        }
+    }
+    CHECK(sim->melee().armBlocks() == armBlocksBefore + 1);
+    FEEL_REQUIRE(struckPart >= 0);
+    FEEL_REQUIRE(static_cast<size_t>(struckPart) < parts.size());
+    const std::string& label = parts[static_cast<size_t>(struckPart)];
+    CAPTURE(label);
+    CHECK((label.find("arm") != std::string::npos || label.find("hand") != std::string::npos || label.find("finger") != std::string::npos ||
+           label.find("humerus") != std::string::npos || label.find("radius") != std::string::npos || label.find("clavicle") != std::string::npos));
 }
 
 TEST_CASE("Finishers: a finisher whose body is taken off the map ends at once, and the next swing is the weapon's own") {

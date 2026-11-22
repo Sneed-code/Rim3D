@@ -575,6 +575,8 @@ private:
 	bool bBodyHidden = false;
 	bool bCutAway = false;
 	double ActionEndSeconds = 0.0;
+	/** The action playing is a short crouch (PlayAction), which stands up at once if the body starts to move. */
+	bool bActionCrouch = false;
 	TWeakObjectPtr<UAnimSequence> WorkLoopClip;
 	int32 ActionsPlayed = 0;
 };
