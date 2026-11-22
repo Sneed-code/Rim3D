@@ -1,0 +1,281 @@
+﻿Running smoke test 'gunrange' at 1920x1080...
+
+Smoke test 'gunrange': PASS  (231 s, NVIDIA GeForce RTX 5080, 888x500)
+gunrange                     99.3 fps  game   5.7 ms  render   0.0 ms  gpu   7.7 ms  screenshot ok
+note: gunrange: group 1, 8 targets
+note: gunrange:   target 1048618 stands
+note: gunrange:   target 1048617 flees when hit
+note: gunrange:   target 1048616 fights back
+note: gunrange:   target 1048615 flees on sight
+note: gunrange:   target 1048614 stands, walking
+note: gunrange:   target 1048613 flees when hit, walking
+note: gunrange:   target 1048612 fights back, walking
+note: gunrange:   target 1048611 flees on sight, walking
+note: gunrange: picture 00_gun1_hip.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 0, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 01_gun1_raising.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 0, reloads 0)
+note: gunrange:   bones 
+note: gunrange: HAND OFF ITS GRIP Bolt-action rifle third person left: out of reach by 16.7 cm, drawn 16.7 cm from the 
+goal, shoulder forward 5.7 cm, goal from shoulder (ahead 11, right 58, up 7)
+note: gunrange: HAND TURNED FROM ITS GRIP Bolt-action rifle third person right: 30 degrees (the wrist's limits held it 
+back); the grip asked twist 62 wrist 19/58, got twist 62 wrist 19/28, elbow 64 swung -100; fingers curled 80 more
+note: gunrange: HAND OFF ITS GRIP Bolt-action rifle third person left: out of reach by 3.1 cm, drawn 3.1 cm from the 
+goal, shoulder forward 5.7 cm, goal from shoulder (ahead 27, right 37, up 7)
+note: gunrange: HAND TURNED FROM ITS GRIP Bolt-action rifle third person left: 25 degrees (the wrist's limits held it 
+back); the grip asked twist 85 wrist -6/-53, got twist 85 wrist -6/-28, elbow 11 swung 72; fingers curled 122 more
+note: gunrange: picture 02_gun1_aimed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 0, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 03_gun1_firing.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 1, reloads 0)
+note: gunrange:   bones 
+note: gunrange: gun 1 fired 2 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 04_gun1_cooldown.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 2, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 05_gun2_hip.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 2, reloads 0)
+note: gunrange:   bones 
+note: gunrange: HAND TURNED FROM ITS GRIP Assault rifle third person left: 25 degrees (the wrist's limits held it 
+back); the grip asked twist 85 wrist -36/-55, got twist 85 wrist -36/-28, elbow 79 swung 30; fingers curled 122 more
+note: gunrange: picture 06_gun2_raising.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 2, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 07_gun2_aimed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 2, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 08_gun2_firing.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 3, reloads 0)
+note: gunrange:   bones 
+note: gunrange: gun 2 fired 12 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: HAND TURNED FROM ITS GRIP Assault rifle third person right: 25 degrees (the wrist's limits held it 
+back); the grip asked twist -85 wrist -56/60, got twist -85 wrist -56/28, elbow 88 swung 47; fingers curled 80 more
+note: gunrange: picture 09_gun2_cooldown.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 14, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 10_gun3_hip.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 14, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 11_gun3_raising.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 14, reloads 0)
+note: gunrange:   bones 
+note: gunrange: HAND TURNED FROM ITS GRIP Pistol third person right: 25 degrees (the wrist's limits held it back); the 
+grip asked twist -85 wrist -48/57, got twist -85 wrist -48/28, elbow 48 swung 55; fingers curled 54 more
+note: gunrange: picture 12_gun3_aimed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 14, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 13_gun3_firing.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 15, reloads 0)
+note: gunrange:   bones 
+note: gunrange: gun 3 fired 4 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: HAND OFF ITS GRIP Pistol third person right: out of reach by 3.1 cm, drawn 3.1 cm from the goal, 
+shoulder forward 5.7 cm, goal from shoulder (ahead 43, right -13, up 11)
+note: gunrange: HAND OFF ITS GRIP Pistol third person right: out of reach by 3.8 cm, drawn 3.8 cm from the goal, 
+shoulder forward 5.7 cm, goal from shoulder (ahead 44, right -13, up 11)
+note: gunrange: picture 14_gun3_cooldown.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 19, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 15_gun4_hip.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 19, reloads 0)
+note: gunrange:   bones 
+note: gunrange: HAND TURNED FROM ITS GRIP Pump shotgun third person left: 26 degrees (the wrist's limits held it 
+back); the grip asked twist 84 wrist -2/-54, got twist 84 wrist -2/-28, elbow 19 swung 32; fingers curled 122 more
+note: gunrange: picture 16_gun4_raising.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 19, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 17_gun4_aimed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 19, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 18_gun4_firing.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 20, reloads 0)
+note: gunrange:   bones 
+note: gunrange: gun 4 fired 4 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 19_gun4_cooldown.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 23, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 20_gun5_hip.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 23, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 21_gun5_raising.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 23, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 22_gun5_aimed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 23, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 23_gun5_firing.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 24, reloads 0)
+note: gunrange:   bones 
+note: gunrange: gun 5 fired 1 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 24_gun5_cooldown.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 24, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 25_gun6_hip.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 24, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 26_gun6_raising.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 24, reloads 0)
+note: gunrange:   bones 
+note: gunrange: HAND OFF ITS GRIP Rocket launcher third person left: out of reach by 3.0 cm, drawn 3.0 cm from the 
+goal, shoulder forward 5.7 cm, goal from shoulder (ahead 30, right 35, up -6)
+note: gunrange: HAND OFF ITS GRIP Rocket launcher third person left: out of reach by 3.0 cm, drawn 3.0 cm from the 
+goal, shoulder forward 5.7 cm, goal from shoulder (ahead 30, right 35, up -6)
+note: gunrange: picture 27_gun6_aimed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 24, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 28_gun6_firing.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 25, reloads 0)
+note: gunrange:   bones 
+note: gunrange: gun 6 fired 3 shots in 2 s (no reloads: bursts and a cooldown)
+note: gunrange: picture 29_gun6_cooldown.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 27, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 30_downed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 36, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 31_downed_shot.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: close look at 1048618's last wound, 11 m away
+note: gunrange: picture 32_downed_far.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 33_downed_scope.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 34_third_person.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 35_third_person_aimed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 36_hair_back_aimed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 37_hair_parting_above.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: melee rack 10 in hand, view third person
+note: gunrange: picture 38_melee_held.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: HAND TURNED FROM ITS GRIP Longsword third person left: 37 degrees (the wrist's limits held it back); 
+the grip asked twist -122 wrist -41/-28, got twist -85 wrist -41/-28, elbow 78 swung 28; fingers curled 42 more
+note: gunrange: picture 39_melee_swing.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: melee swing done
+note: gunrange: picture 40_melee_Knife_3p.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 41_melee_Knife_3p_side.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 42_melee_Club_3p.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 43_melee_Club_3p_side.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 44_melee_Gladius_3p.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 45_melee_Gladius_3p_side.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 
+0)
+note: gunrange:   bones 
+note: gunrange: picture 46_melee_Mace_3p.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 47_melee_Mace_3p_side.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 48_melee_Longsword_3p.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 49_melee_Longsword_3p_side.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 50_melee_Spear_3p.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 51_melee_Spear_3p_side.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 52_melee_Monosword_3p.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 53_melee_Monosword_3p_side.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 54_melee_Plasma sword_3p.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 
+0)
+note: gunrange:   bones 
+note: gunrange: picture 55_melee_Plasma sword_3p_side.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 56_hold_Bolt-actionrifle_3p_ready.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 57_hold_Bolt-actionrifle_3p_aimed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: Bolt-actionrifle aimed: scope view 1, scope drawn 1, body hidden 1, camera 0 cm back
+note: gunrange: picture 58_hold_Bolt-actionrifle_3p_side.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 59_hold_Bolt-actionrifle_3p_front.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 60_hold_Assaultrifle_3p_ready.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 61_hold_Assaultrifle_3p_aimed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: Assaultrifle aimed: scope view 0, scope drawn 0, body hidden 0, camera 120 cm back
+note: gunrange: picture 62_hold_Assaultrifle_3p_side.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 63_hold_Assaultrifle_3p_front.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 64_hold_Pistol_3p_ready.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 65_hold_Pistol_3p_aimed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: Pistol aimed: scope view 0, scope drawn 0, body hidden 0, camera 120 cm back
+note: gunrange: picture 66_hold_Pistol_3p_side.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 67_hold_Pistol_3p_front.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: HAND OFF ITS GRIP Pump shotgun third person left: out of reach by 26.5 cm, drawn 26.5 cm from the 
+goal, shoulder forward 5.7 cm, goal from shoulder (ahead 68, right 16, up 3)
+note: gunrange: HAND OFF ITS GRIP Pump shotgun third person left: out of reach by 20.0 cm, drawn 20.0 cm from the 
+goal, shoulder forward 5.7 cm, goal from shoulder (ahead 62, right 14, up -3)
+note: gunrange: picture 68_hold_Pumpshotgun_3p_ready.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 69_hold_Pumpshotgun_3p_aimed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: Pumpshotgun aimed: scope view 0, scope drawn 0, body hidden 0, camera 120 cm back
+note: gunrange: picture 70_hold_Pumpshotgun_3p_side.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 71_hold_Pumpshotgun_3p_front.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: HAND TURNED FROM ITS GRIP Grenade launcher third person left: 27 degrees (the wrist's limits held it 
+back); the grip asked twist 112 wrist -24/-28, got twist 85 wrist -24/-28, elbow 80 swung 35; fingers curled 122 more
+note: gunrange: picture 72_hold_Grenadelauncher_3p_ready.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 73_hold_Grenadelauncher_3p_aimed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: Grenadelauncher aimed: scope view 0, scope drawn 0, body hidden 0, camera 120 cm back
+note: gunrange: picture 74_hold_Grenadelauncher_3p_side.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 75_hold_Grenadelauncher_3p_front.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 76_hold_Rocketlauncher_3p_ready.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 77_hold_Rocketlauncher_3p_aimed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: Rocketlauncher aimed: scope view 0, scope drawn 0, body hidden 0, camera 120 cm back
+note: gunrange: picture 78_hold_Rocketlauncher_3p_side.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 79_hold_Rocketlauncher_3p_front.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, 
+reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 80_groin_after_shots.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: gun back in hand, view third person, gun model NOT shown
+note: gunrange: picture 81_gun_again.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: picture 82_kill_feed.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: Tab focus on 1048617 (locked on), HP bar frames 156
+note: gunrange: picture 83_focus_hpbar.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: flick from 1048617 to 1048614 (switched), 1 flicks, 2 living targets within 20 m besides the one held
+note: gunrange: picture 84_focus_flick.png (gun -1, barrel off 0.0 deg, sight off 0.0 cm, shots 43, reloads 0)
+note: gunrange:   bones 
+note: gunrange: Bolt-action rifle: model
+note: gunrange: Assault rifle: model
+note: gunrange: Pistol: model
+note: gunrange: Pump shotgun: model
+note: gunrange: Grenade launcher: model
+note: gunrange: Rocket launcher: model
+note: gunrange: Knife (melee): model
+note: gunrange: Club (melee): model
+note: gunrange: Gladius (melee): model
+note: gunrange: Mace (melee): model
+note: gunrange: Longsword (melee): model
+note: gunrange: Spear (melee): model
+note: gunrange: Monosword (melee): model
+note: gunrange: Plasma sword (melee): model
+note: gunrange: blood assets in: 14 hits, 731 drops, 228 mist, 14 wound marks, 0 body stains, 952 ground splats, 26 
+painted into skin (2 bodies now)
+note: gunrange: arms checked on 40415 hand-frames: 0 outside human limits, 151 off the grip; worst twist 85, wrist 68, 
+elbow 128 deg, out of reach 26.5 cm, drawn off the goal 26.5 cm
+note: gunrange: 2 targets ran, 2 sprinted, 0 charged you, 0 punches thrown at you, 1 lock-on flicks
+note: gunrange: 0 guards set unaware, 0 alert events, 0 alert marks drawn
+note: gunrange: 43 shots fired, 43 gunshot sounds started on a voice, 43 of them recordings (219 cues have files)
+note: gunrange: a long gun slid forward at most 23 cm to keep its stock out of the head and in the shoulder
+Screenshots: C:\Dev\Rim3D-gunhits\game\Saved\Smoke\gunrange

@@ -1,0 +1,6 @@
+]LogTemp: Display: SCENEHOP: title shown, loading the gun range in this game (pid 41748)
+]LogDebugScenes: Display: Loading Gun range in this game: map /Game/Levels/DefaultLevel, command line /Game/Levels/DefaultLevel -game -windowed -ResX=1920 -ResY=1080 -nosplash -nosound -DebugSceneHop -SmokeTest=gunrange -SmokeTimeout=14700 -DebugScene=gunrange
+]LogTemp: Display: SCENEHOP: in the gun range (pid 41748), back to the title
+]LogDebugScenes: Display: Back from the scene: 26 console settings put back
+]LogDebugScenes: Display: Loading the title screen in this game: map /Game/Levels/DefaultLevel, command line /Game/Levels/DefaultLevel -game -windowed -ResX=1920 -ResY=1080 -nosplash -nosound -DebugSceneHop
+]LogTemp: Display: SCENEHOP OK: back on the title in the same game (pid 41748, menu 1), Sky.Hour -1, Overseer.UI 1, Pawns.MetaHumans 0, near clip 10.0

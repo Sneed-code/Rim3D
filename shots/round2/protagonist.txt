@@ -1,0 +1,17 @@
+﻿Running smoke test 'protagonist' at 1920x1080...
+
+Smoke test 'protagonist': FAIL  (34 s, NVIDIA GeForce RTX 5080, 888x500)
+overseer_view               128.3 fps  game   4.4 ms  render   4.1 ms  gpu   2.4 ms  screenshot ok
+direct_possess              202.0 fps  game   4.5 ms  render   4.5 ms  gpu   2.7 ms  screenshot ok
+direct_walk_third_person    204.4 fps  game   4.6 ms  render   4.5 ms  gpu   3.1 ms  screenshot ok
+direct_wall                 208.3 fps  game   4.6 ms  render   4.3 ms  gpu   2.9 ms  screenshot ok
+direct_third_person_only    209.7 fps  game   4.1 ms  render   4.5 ms  gpu   2.9 ms  screenshot ok
+direct_pause_and_speed      205.4 fps  game   4.1 ms  render   4.6 ms  gpu   2.9 ms  screenshot ok
+direct_save_and_load        208.8 fps  game   4.2 ms  render   4.4 ms  gpu   2.6 ms  screenshot ok
+back_to_overseer            214.5 fps  game   4.3 ms  render   4.2 ms  gpu   2.4 ms  screenshot ok
+note: walked 17.6 m in 5 s at an average of 3.21 m/s; the local position was at most 0.24 m from the sim and the drawn 
+pawn at most 13 cm
+note: stopped at x 89.70 by a wall at 90, then slid 6.2 m along it
+note: the session's 600 commands replay to the same state at second 765
+ERROR: The colonist that was let go is still moving by itself
+Screenshots: C:\Dev\Rim3D-gunhits\game\Saved\Smoke\protagonist
