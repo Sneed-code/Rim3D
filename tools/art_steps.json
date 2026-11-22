@@ -144,9 +144,16 @@
       "run": [{"commandlet": "ShieldArt", "args": ["-AllowCommandletRendering"]}]
     },
     {
+      "name": "animal-glb-join",
+      "what": "Join the split animal models (the bear, the doe) into one mesh each",
+      "inputs": ["tools/animals/glb_merge.py", "assets/animal_art.json"],
+      "run": [{"python": ["tools/animals/glb_merge.py"]}]
+    },
+    {
       "name": "animal-art",
       "what": "Animals",
       "inputs": ["assets/animal_art.json"],
+      "after": ["animal-glb-join"],
       "raw": ["game/Content/ThirdParty/Animals", "assets/raw/sketchfab"],
       "run": [{"commandlet": "AnimalArt", "args": ["-nullrhi"]}]
     },
