@@ -6,6 +6,7 @@
 
 #include "ColonySim/Entity.h"
 #include "ColonySim/Grid.h"
+#include "ColonySim/JobType.h"
 #include "ColonySim/Sound.h"
 
 #include <atomic>
@@ -137,6 +138,17 @@ public:
 	/** Sounds asked for since the sim started, by cue. */
 	int32 GetPlayCount(const FString& Cue) const { const int32* N = PlayCounts.Find(Cue); return N ? *N : 0; }
 	int32 GetPlaysTotal() const { return PlaysTotal; }
+	/** Sounds that really started on a voice (heard, not dropped), whose cue name starts with `Prefix` (e.g. "Shot_"),
+	 *  and of those how many played a recorded file rather than a placeholder tone (smoke tests: guns are heard). */
+	int32 GetVoicedWithPrefix(const FString& Prefix, bool bFilesOnly) const
+	{
+		int32 Count = 0;
+		for (const TPair<FString, FIntPoint>& Pair : VoicedCounts)
+		{
+			Count += Pair.Key.StartsWith(Prefix) ? (bFilesOnly ? Pair.Value.Y : Pair.Value.X) : 0;
+		}
+		return Count;
+	}
 	/** Sounds that were pushed out of, or never got, a voice. */
 	int32 GetDropped() const { return Dropped; }
 	int32 GetVoicesInUse() const;
@@ -199,6 +211,8 @@ private:
 		 * four times that, so a far gunshot is the low boom and rolling echo, not a quiet crack. */
 		FString FarCue;
 		float FarFromM = 0.0f;
+		/** Work: seconds between plays while the same pawn keeps at the same job, standing (`repeat`; 0 plays once). */
+		float RepeatS = 0.0f;
 		/** The cut files; empty plays the tone. */
 		TArray<TSharedPtr<const FSoundClip>> Clips;
 		TSharedPtr<const FSoundClip> Tone;
@@ -264,6 +278,28 @@ private:
 		FString Loop;
 		FString Idle;
 		FString Step;
+		/** Projectiles: what it sounds like passing the ears (`flyby`), and a shell's whistle as it comes down (`incoming`). */
+		FString Flyby;
+		FString Incoming;
+	};
+
+	/** A work sound repeating while its pawn works (sound.md "Every weapon, surface and job"). */
+	struct FWorkBeat
+	{
+		const FCue* Cue = nullptr;
+		colony::JobType Job = colony::JobType::None;
+		FVector Start = FVector::ZeroVector;
+		double NextAt = 0.0;
+		double Until = 0.0;
+	};
+
+	/** A projectile watched for its closest pass by the ears (a bullet's whiz) or its last seconds down (a shell). */
+	struct FFlyWatch
+	{
+		float LastDistM = 1.0e9f;
+		bool bWasFar = false;
+		bool bDone = false;
+		uint32 SeenFrame = 0;
 	};
 
 	void LoadCues();
@@ -280,13 +316,17 @@ private:
 	void UpdateEnvironment(const colony::Sim& Sim);
 	USoundAttenuation* SpatialFor(const FCue& Cue);
 	colony::SoundGender GenderOf(colony::Entity Thing) const;
-	int32 AddSound(const FCue& Cue, const FVector& Location, bool bEverywhere, colony::Entity Follow, uint64 Key);
+	int32 AddSound(const FCue& Cue, const FVector& Location, bool bEverywhere, colony::Entity Follow, uint64 Key, double Delay = 0.0);
+	void UpdateWorkBeats(const colony::Snapshot& Snap);
+	void UpdateFlybys(const colony::Snapshot& Snap, const USimSubsystem& Source);
+	/** The pawn the player walks as in direct mode (its own steps are not heard), else none. */
+	colony::Entity ControlledPawn() const;
 	void StopSound(int32 Index);
 	void ResetForSim();
 	void UpdateEars();
 	void ReadSnapshot(const USimSubsystem& Bridge, float Delta);
 	void UpdateSteps(const colony::Sim& Sim, const colony::Snapshot& Snap, const USimSubsystem& Bridge, float Delta);
-	void UpdateLoops(const colony::Snapshot& Snap, const USimSubsystem& Bridge);
+	void UpdateLoops(const colony::Snapshot& Snap, const USimSubsystem& Source);
 	void UpdateBeds(const colony::Sim& Sim, const colony::Snapshot& Snap, float Delta);
 	void UpdateMusic(const colony::Snapshot& Snap, float Delta);
 	void KeepLoop(const FString& CueName, uint64 Key, const FVector& Location, colony::Entity Follow, bool bEverywhere, float Gain);
@@ -360,6 +400,7 @@ private:
 	double BirdBurstUntil = -1.0;
 	int32 BirdPlays = 0;
 	float BirdSecondsPlayed = 0.0f;
+	TMap<FString, FIntPoint> VoicedCounts;  // by cue: started on a voice (X), of those from a recorded file (Y)
 	FString LastWeatherLoop;
 	int32 Environment = -1;
 	TMap<uint32, FPawnVoice> PawnVoices;
@@ -372,6 +413,9 @@ private:
 	TMap<uint32, float> NextCall;
 	TMap<uint32, FDefSounds> DefSounds;
 	TMap<int32, FString> GroundStep;
+	TMap<uint32, FWorkBeat> WorkBeats;
+	TMap<uint32, FFlyWatch> FlyWatch;
+	uint32 FlyFrame = 0;
 	float LoopScanAge = 99.0f;
 	bool bAlarmOn = false;
 

@@ -18,6 +18,8 @@
 #include "ColonySim/Things.h"
 #include "ColonySim/Windows.h"
 
+#include "WetnessShared.h"
+
 #include <string>
 
 DEFINE_LOG_CATEGORY_STATIC(LogSimBuildings, Log, All);
@@ -28,7 +30,6 @@ namespace
 		TEXT("Buildings.Enable"), 1, TEXT("1 draws the sim's buildings, blueprints and items, 0 draws nothing."), ECVF_Default);
 
 	// The same flat-colour material as the terrain, and the see-through one the BuildingMaterials commandlet makes for the ghosts.
-	const TCHAR* const BldSolidMaterialPath = TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial");
 	const TCHAR* const BldGhostMaterialPath = TEXT("/Game/Rim3D/Generated/Buildings/M_BuildingGhost.M_BuildingGhost");
 	const TCHAR* const BldGlassMaterialPath = TEXT("/Game/Rim3D/Generated/Buildings/M_WindowGlass.M_WindowGlass");
 	const FLinearColor BldGhostColor(0.18f, 0.42f, 0.95f, 0.38f);
@@ -326,7 +327,20 @@ namespace
 		bool bItem = false;
 		bool bShadow = true;
 		TArray<FTransform> Transforms;
+		TArray<float> Damage;  // per instance, 0 whole .. 1 nearly gone (custom data WetnessShared::DamageDataIndex)
 	};
+
+	/** How broken a finished building looks (docs/design/destruction.md): its lost hit points, in eight steps so a chunk is not
+	 * rebuilt for every bullet. */
+	float BldDamageOf(const colony::ThingView& View)
+	{
+		if (View.maxHitPoints <= 0 || View.hitPoints >= View.maxHitPoints)
+		{
+			return 0.0f;
+		}
+		const float Lost = 1.0f - static_cast<float>(FMath::Max(View.hitPoints, 0)) / static_cast<float>(View.maxHitPoints);
+		return FMath::CeilToFloat(FMath::Clamp(Lost, 0.0f, 1.0f) * 8.0f) / 8.0f;
+	}
 }
 
 bool UBuildingSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
@@ -692,6 +706,11 @@ UInstancedStaticMeshComponent* UBuildingSubsystem::GetComponent(FChunk& Chunk, i
 			Component->SetMaterial(Slot, GhostMaterial);
 		}
 	}
+	if (!bGhost && !bItem)
+	{
+		// Room for the damage look's value (docs/design/destruction.md).
+		Component->NumCustomDataFloats = WetnessShared::DamageDataIndex + 1;
+	}
 	if (bItem)
 	{
 		Component->SetCullDistances(static_cast<int32>(BldItemCullCm * 0.8f), static_cast<int32>(BldItemCullCm));
@@ -728,7 +747,7 @@ void UBuildingSubsystem::RebuildAll()
 	DrawActor->SetActorLabel(TEXT("Buildings"));
 #endif
 
-	SolidMaterial = LoadObject<UMaterialInterface>(nullptr, BldSolidMaterialPath);
+	SolidMaterial = WetnessShared::LoadSolidMaterial();
 	if (UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr, BldGhostMaterialPath))
 	{
 		UMaterialInstanceDynamic* Ghost = UMaterialInstanceDynamic::Create(Parent, this);
@@ -855,6 +874,7 @@ void UBuildingSubsystem::Refresh()
 			{
 				case colony::ConstructionStage::Built:
 					++Built;
+					H = BldCombine(H, 0xDA3AULL + static_cast<uint64>(BldDamageOf(View) * 8.0f));
 					break;
 				case colony::ConstructionStage::Frame:
 					++Frames;
@@ -948,13 +968,14 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 	};
 	TArray<FPendingDoor> Pending;
 
-	const auto Add = [&Batches](int32 Look, int32 Variant, UStaticMesh* Mesh, bool bGhost, bool bItem, bool bShadow, const FTransform& Transform) -> int32
+	const auto Add = [&Batches](int32 Look, int32 Variant, UStaticMesh* Mesh, bool bGhost, bool bItem, bool bShadow, const FTransform& Transform, float Damage = 0.0f) -> int32
 	{
 		FBldBatch& Batch = Batches.FindOrAdd(Look * BldVariants + Variant);
 		Batch.Mesh = Mesh;
 		Batch.bGhost = bGhost;
 		Batch.bItem = bItem;
 		Batch.bShadow = bShadow;
+		Batch.Damage.Add(Damage);
 		return Batch.Transforms.Add(Transform);
 	};
 
@@ -1046,7 +1067,8 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 			case colony::ConstructionStage::Built:
 				if (Look.Fixed)
 				{
-					Add(LookId, BldFixed, Look.Fixed, false, false, true, Placed);
+					// Cracked and grimy as it loses hit points (the materials' damage look, -run=WetLook).
+					Add(LookId, BldFixed, Look.Fixed, false, false, true, Placed, BldDamageOf(View));
 				}
 				if (Look.Glass)
 				{
@@ -1055,7 +1077,7 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 				}
 				if (Look.Sliding)
 				{
-					const int32 Index = Add(LookId, BldSliding, Look.Sliding, false, false, true, Placed);
+					const int32 Index = Add(LookId, BldSliding, Look.Sliding, false, false, true, Placed, BldDamageOf(View));
 					Pending.Add({static_cast<uint32>(View.id), LookId * BldVariants + BldSliding, Index, Placed, FRotator(0.0, Yaw, 0.0).RotateVector(FVector::XAxisVector), DefLook->SlideCm});
 				}
 				break;
@@ -1100,7 +1122,19 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 	{
 		FBldBatch& Batch = Pair.Value;
 		UInstancedStaticMeshComponent* Component = GetComponent(Chunk, Pair.Key, Batch.Mesh, Batch.bGhost, Batch.bItem, Batch.bShadow);
+		const int32 First = Component->GetInstanceCount();
 		Component->AddInstances(Batch.Transforms, false, false, false);
+		if (Component->NumCustomDataFloats > WetnessShared::DamageDataIndex)
+		{
+			for (int32 I = 0; I < Batch.Damage.Num(); ++I)
+			{
+				if (Batch.Damage[I] > 0.0f)
+				{
+					Component->SetCustomDataValue(First + I, WetnessShared::DamageDataIndex, Batch.Damage[I], false);
+				}
+			}
+			Component->MarkRenderStateDirty();
+		}
 		++Stats.Components;
 		Total += Batch.Transforms.Num();
 	}

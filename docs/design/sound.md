@@ -271,3 +271,47 @@ what is near.
 `assets/sound_picks.json` names Kenney impacts for the material cues (punch and soft thuds, wood and plank knocks, metal
 plates, mining clinks for stone), StarNinjas' CC0 sword clashes for steel on steel, EZduzziteh's CC0 explosions and
 NenadSimic's CC0 distant explosion. Picked by file name, not by ear: sneed should judge them in play.
+
+## Every weapon, surface and job (sneed, 2026-11-20)
+
+sneed: realistic free sounds for every weapon (each gun its own: pistol, rifle, rocket launcher), by what they hit
+(flesh, wood, steel, stone), for the projectiles too (bullets, arrows, shells), plus work, footsteps and gore.
+
+### Where the sounds come from
+
+- The firearm library (oga-firearms, CC0) gives the shots: near takes (`_P` files) per real gun. Each gun def has its
+  own `shot` cue (machine pistol, heavy SMG, LMG, minigun, sniper, chain shotgun, autocannon, uranium slug, mortar,
+  charge and heavy charge, needle gun, bows, greatbow, pila); the test "every gun sounds like itself" keeps them apart.
+- Freesound gives the rest: `assets/sound_freesound.json` lists 318 recordings (id, file stem, author, licence, title),
+  CC0 or CC-BY only. They download without an account as the site's HQ previews
+  (`python tools/sound_assets.py --freesound`); CC-BY authors go into `CREDITS.txt`. Picks were made by title and
+  description, not by ear: bad ones get swapped in `assets/sound_picks.json` after a listen.
+- The cloud cannot reach Freesound; the download runs on the PC.
+
+### What plays (sim, `Sound.cpp`)
+
+- **Impacts by surface**: a bullet in a pawn plays the damage type's flesh cue; armour rings as steel, a rock as stone,
+  a building by what it is made of (wood, steel, stone; `struckStuff`/`struckDef` on the hit), the ground by the
+  footstep surface of its cell (dirt, sand, water, stone, wood floor). Arrows have their own set (`impactSet` "Arrow").
+  A quarter of bullets off stone, steel and armour ricochet.
+- **Guns**: a spent case lands 0.45 s after the shot (the gun's `shell` slot; empty for bows, charge guns, launchers).
+- **Blasts**: the projectile's `explosion` slot (mortar, EMP, smoke, doomsday as large), big bombs large, debris rains
+  0.6 s after a big blast.
+- **Gore**: a severed part plays a sever (a head or neck a decapitation) and a wet splat after it.
+- **Work**: chopping for trees, plant cutting, sowing, deconstructing, repairing, drilling, tending; a felled tree crashes
+  down; lying in bed creaks. Work cues carry `repeat` seconds: Unreal plays them again while the pawn stays on the job.
+- Men grunt and scream now too (`maleHit`, `maleScream`).
+
+### What plays (Unreal, `USoundSubsystem`)
+
+- **Flybys**: a bullet or arrow that came from more than 8 m away and passes within 3 m of the ears whizzes or whooshes
+  (so your own shots don't). A falling shell whistles from its landing point in its last 1.8 s.
+- **Footsteps**: short range (26 m walking), by terrain and floor; **your own character makes none**; crouched a third as
+  loud within 8 m, prone a fifth within 5 m, sprinting half again as loud. Snow and ice have their own steps.
+- Delayed plays (`SoundPlay.delay`) wait on top of the speed-of-sound delay.
+
+## Proof that shots are heard (2026-11-22)
+
+`USoundSubsystem` counts every voiced play by cue (`GetVoicedWithPrefix`: all plays, or only plays of a recorded file,
+not the fallback tone). `Sound.Debug 1` logs each one. The gun range smoke fails when it fires but no recorded `Shot`
+plays. sneed's "no gun sounds" (2026-11-22) came from the old `Rim3D-gunrange` copy, which never had the files.

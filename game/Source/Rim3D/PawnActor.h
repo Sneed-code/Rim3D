@@ -13,6 +13,7 @@
 
 #include "PawnActor.generated.h"
 
+class UAnimSequence;
 class USimPawnSubsystem;
 class USimSubsystem;
 class USkeletalMeshComponent;
@@ -53,6 +54,12 @@ public:
 	/** Plays the short animation for what the pawn did (picked up, put down). */
 	void PlayAction(colony::PawnAction Action);
 
+	/** A work clip on a loop (felling a tree: UWorkToolSubsystem) in the action slot until StopWorkLoop; it takes over
+	 *  from a short action and no action plays over it. Playing the same clip again does nothing. */
+	void SetWorkLoop(UAnimSequence* Clip, float Rate);
+	void StopWorkLoop();
+	bool HasWorkLoop() const { return WorkLoopClip.IsValid(); }
+
 	/** A jump (the player's body, Space): the body goes up and down in an arc over kJumpSeconds of game time while the Game
 	 *  Animation Sample's jump plays (take-off by speed, the fall loop, the landing). Only the picture: the sim keeps the
 	 *  pawn on the ground. False if it is already in the air, lying or ragdolled. */
@@ -79,6 +86,15 @@ public:
 	USkeletalMeshComponent* GetFaceMesh() const { return FaceMesh; }
 	/** The MakeHuman character's mesh while the looks ask for one (docs/design/makehuman.md); null otherwise. */
 	USkeletalMeshComponent* GetMakeHumanMesh() const { return MakeHumanMesh; }
+	/** Puts the character screen's look (PawnLooks::creator text, docs/design/new-game.md) on the MakeHuman body once it
+	 *  is on, and again whenever the text changes or the body is remade. Call every frame with the pawn's text. */
+	void ApplyCreatorLook(const FString& Text);
+	/** The character screen's turntable (docs/design/new-game.md): turns the drawn body this many degrees past its
+	 *  facing, cosmetic only. The body really turns, so soft tissue and hair swing as it spins. 0 to stop. */
+	void SetPreviewSpin(float Degrees) { PreviewSpin = Degrees; }
+	float GetPreviewSpin() const { return PreviewSpin; }
+	/** The facing the body is drawn at before the turntable's spin, degrees. */
+	float GetDrawnYaw() const { return DrawnYaw; }
 	/** The MetaHuman's body (with the whole body, all of its skin); null for a mannequin. */
 	USkeletalMeshComponent* GetSkinBody() const { return MetaHumanBody; }
 	/** The eye slots of the face (left, right). */
@@ -94,6 +110,13 @@ public:
 	 *  removed. `Key` is USimPawnSubsystem::ApparelKey of the snapshot. Mannequins just remember the key. */
 	void ApplyApparel(USimPawnSubsystem& Pawns, const FSimPawnApparel& Wanted, uint64 Key);
 	bool HasApparel() const { return bApparelApplied; }
+	/** MakeHuman bodies: puts the body's slider and face morphs on its garments when they changed (cheap otherwise; the
+	 *  pawn subsystem calls it every frame). */
+	void SyncGarmentMorphs();
+	/** The garment names each worn piece is drawn as on a MakeHuman body (one cut of its `visual.cuts`), by item; empty on a MetaHuman. */
+	const TMap<uint32, FString>& GetGarmentCuts() const { return GarmentCuts; }
+	/** A hat or helmet is drawn on this MakeHuman body (its strand hair should take the under-a-hat groom). */
+	bool WearsDrawnHeadwear() const { return bHeadwearDrawn; }
 	uint64 GetApparelKey() const { return ApparelKey; }
 	const FSimPawnApparel& GetApparel() const { return Apparel; }
 	/** The meshes of the worn pieces now (skinned garments and head props), and the item each belongs to. */
@@ -165,6 +188,14 @@ public:
 	/** Gets up again: the animation takes over. */
 	void StopRagdoll();
 	bool IsRagdoll() const { return bRagdoll; }
+	/** A blast throws a ragdoll (a corpse or a downed body): a velocity change of up to `SpeedCmPerSecond` at the
+	 *  centre, falling off to nothing at `RadiusCm` (sneed 2026-11-20). Wakes a body that had gone to sleep. */
+	void PushRagdoll(const FVector& Centre, float RadiusCm, float SpeedCmPerSecond);
+	/** A bullet or blow on a ragdoll: an impulse at the bone nearest `At`. */
+	void PushRagdollAt(const FVector& At, const FVector& Impulse);
+	/** For the tests: ragdolls put to sleep once settled, and blasts that threw one. */
+	int32 GetRagdollSleeps() const { return RagdollSleeps; }
+	int32 GetRagdollPushes() const { return RagdollPushes; }
 	/** The ragdoll's floor taken away (carried on a back, BodyCarrySubsystem) or made again under where the pawn is now. */
 	void ResetRagdollFloor(bool bWanted);
 	/** Where the ragdoll's pelvis is now (world cm); false if the pawn is not a ragdoll. */
@@ -284,6 +315,15 @@ private:
 	void DestroyWorn();
 	/** Colour, wear and morphs of a garment mesh. */
 	void StyleWornMesh(UMeshComponent* Mesh, const FSimWornPiece& Piece);
+	/** ApplyApparel for a MakeHuman body: each piece's cut as garments that follow the body's pose and morphs. */
+	void ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnApparel& Wanted);
+	void StyleGarment(UMeshComponent* Mesh, const FSimWornPiece& Piece) const;
+	/** The body's skin-under-clothes bits (custom primitive data 30/31): skin a worn garment covers is cut away. */
+	void SetMakeHumanCoverBits(uint32 Bits);
+	/** Hides (or shows again) the MakeHuman body's scalp hair under a covering hat or helmet. */
+	void SetMakeHumanHairCovered(bool bCovered);
+	/** Hides (or shows again) the MakeHuman body's pubic hair under trousers (it would poke through them). */
+	void SetMakeHumanPubicCovered(bool bCovered);
 	void UpdateHairVisibility();
 	/** Grooms show at full detail, minus hair under a covering hat and grooms with nothing to draw (bald, no beard). */
 	void RefreshGroomVisibility();
@@ -351,6 +391,15 @@ private:
 	TObjectPtr<USkeletalMeshComponent> DefaultShoes;
 
 	FSimPawnApparel Apparel;
+	TMap<uint32, FString> GarmentCuts;
+	uint32 GarmentMorphHash = 0;
+	/** The body's hair sections hidden under a hat (shown again when it comes off). */
+	TArray<int32> CoveredHairSections;
+	/** The body's pubic hair sections hidden under trousers. */
+	TArray<int32> CoveredPubicSections;
+	bool bHeadwearDrawn = false;
+	/** The worn garments' cover bits (their UGarmentCoverData), without the crotch bit. */
+	uint32 GarmentCoverBits = 0;
 	uint64 ApparelKey = 0;
 	bool bApparelApplied = false;
 	bool bBareLayerTried = false;
@@ -359,6 +408,8 @@ private:
 	// A MakeHuman character drawn instead of the MetaHuman (docs/design/makehuman.md): its mesh, retargeted from the hidden mannequin.
 	TObjectPtr<USkeletalMeshComponent> MakeHumanMesh;
 	FString AppliedMakeHuman;
+	/** The character screen's look text put on the MakeHuman body (ApplyCreatorLook); cleared when the body is remade. */
+	FString AppliedCreatorLook;
 	void ApplyMakeHuman(USimPawnSubsystem& Pawns);
 	bool bHairHidden = false;
 	int32 ApparelRebuilds = 0;
@@ -379,6 +430,12 @@ private:
 	FSimPawnLooks Looks;
 	bool bHasLooks = false;
 	bool bRagdoll = false;
+	float RagdollSeconds = 0.0f;
+	float RagdollStillSeconds = 0.0f;
+	bool bSoftTissueBeforeRagdoll = true;
+	int32 RagdollSleeps = 0;
+	int32 RagdollPushes = 0;
+	void UpdateRagdollRest(float DeltaTime);
 	/** The tick group the meshes were last put in, and how many meshes that was (more come with looks). */
 	int32 MeshTickGroup = -1;
 	int32 MeshTickCount = 0;
@@ -476,6 +533,15 @@ private:
 	// A wall climb (docs/design/climbing.md): the Game Animation Sample's climb onto a ledge, its time following the sim's
 	// climb (on the face, then over the top), with its own set-back (its travel is in its root), facing the wall.
 	void UpdateWallClimb(const USimSubsystem& Bridge, const colony::ThingView& Now);
+	/** A finisher that kneels (docs/design/lock-on.md "Finishers"): the body goes down into the crouch over the body on
+	 *  the ground while the weapon is driven in (UWeaponDrawSubsystem), and comes back up at its end. */
+	void UpdateFinisherKneel(const USimSubsystem& Bridge, const colony::ThingView& Now);
+	TWeakObjectPtr<class UAnimMontage> KneelMontage;
+public:
+	/** Finishers this body has knelt for (smoke tests). */
+	int32 GetFinisherKneels() const { return FinisherKneels; }
+private:
+	int32 FinisherKneels = 0;
 	UPROPERTY()
 	TObjectPtr<UAnimSequence> WallClimbClip;
 	bool bWallClimbClipTried = false;
@@ -500,6 +566,8 @@ private:
 	 *  starts and stops turning smoothly; and how fast it turns (degrees a second). */
 	float DrawnYaw = 0.0f;
 	float DrawnYawRate = 0.0f;
+	/** The character screen's turntable (SetPreviewSpin), on top of the facing. */
+	float PreviewSpin = 0.0f;
 	/** How much of a whole-body clip shows now (the clip playing and the one fading out). */
 	float LegsClipWeight = 0.0f;
 	float SwimLiftCm = 0.0f;
@@ -507,5 +575,6 @@ private:
 	bool bBodyHidden = false;
 	bool bCutAway = false;
 	double ActionEndSeconds = 0.0;
+	TWeakObjectPtr<UAnimSequence> WorkLoopClip;
 	int32 ActionsPlayed = 0;
 };

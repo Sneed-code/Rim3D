@@ -10,6 +10,7 @@
 #include "OverseerSubsystem.h"
 #include "SimSubsystem.h"
 #include "SkySubsystem.h"
+#include "WetnessSubsystem.h"
 #include "SnowSubsystem.h"
 #include "TerrainSubsystem.h"
 
@@ -41,6 +42,8 @@ namespace
 		int32 MaxSnowDrawn = 0;
 		int32 MaxSplashes = 0;
 		float MaxWet = 0.0f;
+		float MaxSurfaceWet = 0.0f;
+		float MaxPawnWet = 0.0f;
 		int32 FlashesAtStart = 0;
 		double SlowestFrameMs = 0.0;
 		colony::CellPos Home = colony::CellPos{128, 128, 0};
@@ -119,6 +122,11 @@ void USmokeTestSubsystem::BuildSkyPhases()
 		State->MaxSnowDrawn = FMath::Max(State->MaxSnowDrawn, S->GetSnowDrawn());
 		State->MaxSplashes = FMath::Max(State->MaxSplashes, S->GetSplashesDrawn());
 		State->MaxWet = FMath::Max(State->MaxWet, T ? T->GetGroundWetness() : 0.0f);
+		if (const UWetnessSubsystem* W = GetWorld()->GetSubsystem<UWetnessSubsystem>())
+		{
+			State->MaxSurfaceWet = FMath::Max(State->MaxSurfaceWet, W->GetSurfaceWetness());
+			State->MaxPawnWet = FMath::Max(State->MaxPawnWet, W->GetWettestPawn());
+		}
 	};
 	const auto Reset = [=]()
 	{
@@ -318,6 +326,25 @@ void USmokeTestSubsystem::BuildSkyPhases()
 		if (State->MaxWet < 0.3f)
 		{
 			Fail(FString::Printf(TEXT("sky_rain: the ground only got to wetness %.2f after three hours of rain"), State->MaxWet));
+		}
+		// Rain makes buildings, plants, rocks and people wet too (docs/design/wetness.md).
+		if (const UWetnessSubsystem* W = GetWorld()->GetSubsystem<UWetnessSubsystem>())
+		{
+			Notes.Add(FString::Printf(TEXT("sky_rain: surfaces wetness %.2f, wettest pawn %.2f, %d cells under a roof or floor (cover written %d times), wet look assets %s"),
+				State->MaxSurfaceWet, State->MaxPawnWet, W->GetCoveredCells(), W->GetCoverWrites(), W->HasAssets() ? TEXT("found") : TEXT("missing (run -run=WetLook)")));
+			if (State->MaxSurfaceWet < 0.3f)
+			{
+				Fail(FString::Printf(TEXT("sky_rain: surfaces only got to wetness %.2f after three hours of rain"), State->MaxSurfaceWet));
+			}
+			Notes.Add(FString::Printf(TEXT("sky_rain: wetness %s"), *W->Describe()));
+			if (W->HasAssets() && (!W->IsCoverUsable() || W->GetCoverUploads() < 1))
+			{
+				Fail(TEXT("sky_rain: the roof cover never reached its texture, so roofs won't keep rooms dry (see the wetness note)"));
+			}
+			if (W->GetCoverWrites() < 1)
+			{
+				Fail(TEXT("sky_rain: the roof cover for the wet look was never written"));
+			}
 		}
 		if (S->GetRoofedHidden() < 200)
 		{

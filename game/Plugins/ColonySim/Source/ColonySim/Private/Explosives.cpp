@@ -331,7 +331,7 @@ void explosiveLanding(const Map& map, const Grenade& g, const TraceHit& hit, flo
     endX = hit.x;
     endY = hit.y;
     endZ = hit.z;
-    if (hit.kind == ProjectileHitKind::Building || hit.kind == ProjectileHitKind::Rock) {
+    if (hit.kind == ProjectileHitKind::Building || hit.kind == ProjectileHitKind::Rock || hit.kind == ProjectileHitKind::Plant) {
         const CellPos c{static_cast<int>(std::floor(hit.x)), static_cast<int>(std::floor(hit.y)), g.level};
         const uint8_t obstacle = map.inBounds(c) ? map.obstacleDm(c) : uint8_t{0};
         const bool onTop = hit.kind == ProjectileHitKind::Building && obstacle > 0 && obstacle != kObstacleTallDm &&
@@ -365,7 +365,7 @@ bool ExplosiveSystem::simulate(Grenade g, float& endX, float& endY, float& endZ,
             steps = i;
             return true;
         }
-        const TraceHit hit = combat_.trace(g.x, g.y, g.z, nx, ny, nz, g.level, g.thrower, g.startCell);
+        const TraceHit hit = combat_.trace(g.x, g.y, g.z, nx, ny, nz, g.level, g.thrower, g.startCell, true, nullptr, true);
         if (hit.kind != ProjectileHitKind::None) {
             explosiveLanding(map_, g, hit, endX, endY, endZ);
             steps = i;
@@ -613,7 +613,7 @@ void ExplosiveSystem::flyOrBlow(Entity grenade, Rng& rng) {
             ez = map_.heightAt(g.x, g.y) + 0.04f;
             landed = true;
         } else {
-            const TraceHit hit = combat_.trace(g.x, g.y, g.z, nx, ny, nz, g.level, g.thrower, g.startCell);
+            const TraceHit hit = combat_.trace(g.x, g.y, g.z, nx, ny, nz, g.level, g.thrower, g.startCell, true, nullptr, true);
             if (hit.glass != kNoEntity && (hit.kind == ProjectileHitKind::None || hit.glassT <= hit.t)) {
                 combat_.breakWindow(hit.glass, hit.glassX, hit.glassY, hit.glassZ, g.thrower);  // it flies on through
             }
@@ -656,6 +656,7 @@ void ExplosiveSystem::flyOrBlow(Entity grenade, Rng& rng) {
         return;
     }
     Explosion ex;
+    ex.sourceDef = g.def;
     ex.x = g.x;
     ex.y = g.y;
     ex.z = g.z;

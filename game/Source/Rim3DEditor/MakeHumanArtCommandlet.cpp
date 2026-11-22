@@ -29,6 +29,7 @@
 #include "Materials/Material.h"
 #include "Materials/MaterialExpressionBumpOffset.h"
 #include "Materials/MaterialExpressionTextureObjectParameter.h"
+#include "Materials/MaterialExpressionComponentMask.h"
 #include "Materials/MaterialExpressionCustom.h"
 #include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionTextureCoordinate.h"
@@ -59,6 +60,7 @@
 #include "UObject/UnrealType.h"
 
 #include "MakeHumanArt.h"
+#include "GarmentCoverData.h"
 #include "PawnLooks.h"
 #include "SkinBloodMaterial.h"
 
@@ -2142,6 +2144,348 @@ namespace
 		Failures += MhSave(Retargeter) ? 0 : 1;
 		return Failures;
 	}
+
+	// Skin under clothes (docs/design/clothes-draw.md): the garment cover texture (tools/makehuman bake_garment_cover: a
+	// bit per garment where it covers the body, on the body's UVs) against the worn garments' bits (custom primitive data
+	// 30 and 31): the skin is cut away where a worn garment covers it. Added once; true if the material changed.
+	bool MhAddGarmentCover(UMaterial* Material)
+	{
+		if (!Material)
+		{
+			return false;
+		}
+		for (UMaterialExpression* Expression : Material->GetExpressions())
+		{
+			if (const auto* Parameter = Cast<UMaterialExpressionTextureObjectParameter>(Expression); Parameter && Parameter->ParameterName == TEXT("GarmentCover"))
+			{
+				return false;
+			}
+		}
+		auto* Cover = Cast<UMaterialExpressionTextureObjectParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureObjectParameter::StaticClass(), -1400, 4200));
+		Cover->ParameterName = TEXT("GarmentCover");
+		Cover->Texture = LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineResources/Black.Black"));
+		Cover->SamplerType = SAMPLERTYPE_LinearColor;
+		auto* CoverUV = Cast<UMaterialExpressionTextureCoordinate>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureCoordinate::StaticClass(), -1400, 4300));
+		auto* Low = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1400, 4400));
+		Low->ParameterName = TEXT("GarmentBitsLow");
+		Low->DefaultValue = 0.0f;
+		Low->bUseCustomPrimitiveData = true;
+		Low->PrimitiveDataIndex = MakeHumanCoverLowIndex;
+		auto* High = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1400, 4500));
+		High->ParameterName = TEXT("GarmentBitsHigh");
+		High->DefaultValue = 0.0f;
+		High->bUseCustomPrimitiveData = true;
+		High->PrimitiveDataIndex = MakeHumanCoverHighIndex;
+		auto* Cut = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -900, 4300));
+		Cut->OutputType = CMOT_Float1;
+		Cut->Description = TEXT("GarmentCover");
+		Cut->Code = TEXT(
+			"uint worn = (uint)round(Low) | ((uint)round(High) << 16);\n"
+			"if (worn == 0) return 1.0;\n"
+			"uint2 size; Tex.GetDimensions(size.x, size.y);\n"
+			"int2 px = clamp(int2(frac(UV) * float2(size)), int2(0, 0), int2(size) - 1);\n"
+			"uint4 b = (uint4)round(Tex.Load(int3(px, 0)) * 255.0);\n"
+			"uint bits = b.r | (b.g << 8) | (b.b << 16) | (b.a << 24);\n"
+			"return (bits & worn) != 0 ? 0.0 : 1.0;\n");
+		Cut->Inputs.SetNum(4);
+		Cut->Inputs[0].InputName = TEXT("Tex");
+		Cut->Inputs[1].InputName = TEXT("UV");
+		Cut->Inputs[2].InputName = TEXT("Low");
+		Cut->Inputs[3].InputName = TEXT("High");
+		Cut->Inputs[0].Input.Connect(0, Cover);
+		Cut->Inputs[1].Input.Connect(0, CoverUV);
+		Cut->Inputs[2].Input.Connect(0, Low);
+		Cut->Inputs[3].Input.Connect(0, High);
+		UMaterialExpression* Result = Cut;
+		if (UMaterialExpression* Existing = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_OpacityMask))
+		{
+			auto* Both = Cast<UMaterialExpressionMultiply>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionMultiply::StaticClass(), -600, 4300));
+			Both->A.Connect(0, Existing);
+			Both->B.Connect(0, Cut);
+			Result = Both;
+		}
+		UMaterialEditingLibrary::ConnectMaterialProperty(Result, TEXT(""), MP_OpacityMask);
+		if (Material->BlendMode == BLEND_Opaque)
+		{
+			Material->BlendMode = BLEND_Masked;
+			Material->OpacityMaskClipValue = 0.5f;
+		}
+		UMaterialEditingLibrary::RecompileMaterial(Material);
+		MhSave(Material);
+		return true;
+	}
+
+	// Garments (docs/design/clothes-draw.md "MakeHuman bodies"): the garment's own colour map, tinted towards the stuff it is
+	// made of (custom primitive data, so one instance per garment serves every pawn) with its shading kept, holes for wear
+	// like M_Garment's, and wet like the skin.
+	UMaterial* MhGarmentMaterial(IAssetTools& Tools)
+	{
+		const FString Name = TEXT("M_MH_Garment");
+		const FString Path = MakeHumanAssetPath(MakeHumanGarmentFolder, Name);
+		if (UMaterial* Existing = FindObject<UMaterial>(nullptr, *Path))
+		{
+			return Existing;
+		}
+		UMaterial* Material = Cast<UMaterial>(Tools.CreateAsset(Name, MakeHumanGarmentFolder, UMaterial::StaticClass(), NewObject<UMaterialFactoryNew>()));
+		if (!Material)
+		{
+			return nullptr;
+		}
+		bool bRecompile = false;
+		UMaterialEditingLibrary::SetMaterialUsage(Material, MATUSAGE_SkeletalMesh, bRecompile);
+		UMaterialEditingLibrary::SetMaterialUsage(Material, MATUSAGE_MorphTargets, bRecompile);
+		Material->BlendMode = BLEND_Masked;
+		Material->OpacityMaskClipValue = 0.5f;
+		Material->TwoSided = true;
+		auto* Coord = Cast<UMaterialExpressionTextureCoordinate>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureCoordinate::StaticClass(), -1200, 0));
+		auto* Color = Cast<UMaterialExpressionTextureSampleParameter2D>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureSampleParameter2D::StaticClass(), -900, -200));
+		Color->ParameterName = TEXT("BaseColor");
+		Color->Texture = LoadObject<UTexture2D>(nullptr, TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture"));
+		Color->Coordinates.Connect(0, Coord);
+		auto* Normal = Cast<UMaterialExpressionTextureSampleParameter2D>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureSampleParameter2D::StaticClass(), -900, 500));
+		Normal->ParameterName = TEXT("Normal");
+		Normal->SamplerType = SAMPLERTYPE_Normal;
+		Normal->Texture = LoadObject<UTexture2D>(nullptr, TEXT("/Engine/EngineMaterials/FlatNormal.FlatNormal"));
+		Normal->Coordinates.Connect(0, Coord);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Normal, TEXT("RGB"), MP_Normal);
+		auto* Average = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -900, 100));
+		Average->ParameterName = TEXT("SourceLuminance");
+		Average->DefaultValue = 0.25f;
+		auto* Tint = Cast<UMaterialExpressionVectorParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVectorParameter::StaticClass(), -900, 200));
+		Tint->ParameterName = TEXT("Tint");
+		Tint->DefaultValue = FLinearColor(0.5f, 0.5f, 0.5f);
+		Tint->bUseCustomPrimitiveData = true;
+		Tint->PrimitiveDataIndex = MakeHumanGarmentTintIndex;
+		auto* Wear = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -900, 300));
+		Wear->ParameterName = TEXT("Wear");
+		Wear->DefaultValue = 0.0f;
+		Wear->bUseCustomPrimitiveData = true;
+		Wear->PrimitiveDataIndex = MakeHumanGarmentWearIndex;
+		auto* Amount = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -900, 400));
+		Amount->ParameterName = TEXT("TintAmount");
+		Amount->DefaultValue = 0.0f;
+		Amount->bUseCustomPrimitiveData = true;
+		Amount->PrimitiveDataIndex = MakeHumanGarmentTintAmountIndex;
+		auto* Look = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -400, 100));
+		Look->Description = TEXT("GarmentLook");
+		Look->OutputType = CMOT_Float4;
+		Look->Code = TEXT(
+			"float lum = dot(Tex.rgb, float3(0.2126, 0.7152, 0.0722));\n"
+			// The stuff's colour, shaded by the texture's own light and dark (folds, seams, weave) about its average.
+			"float shade = clamp(lum / max(Average, 0.02), 0.0, 1.4);\n"  // bright prints and stripes stay cloth, not pale patches
+			"float3 col = lerp(Tex.rgb, Tint * shade, saturate(Amount));\n"
+			"float2 q = UV * 9.0;\n"
+			"float n = 0.0; float amp = 0.5;\n"
+			"for (int i = 0; i < 3; i++) {\n"
+			"  float2 id = floor(q); float2 f = frac(q); f = f * f * (3.0 - 2.0 * f);\n"
+			"  float a = frac(sin(dot(id, float2(12.9898, 78.233))) * 43758.5453);\n"
+			"  float b = frac(sin(dot(id + float2(1, 0), float2(12.9898, 78.233))) * 43758.5453);\n"
+			"  float c = frac(sin(dot(id + float2(0, 1), float2(12.9898, 78.233))) * 43758.5453);\n"
+			"  float d = frac(sin(dot(id + float2(1, 1), float2(12.9898, 78.233))) * 43758.5453);\n"
+			"  n += amp * lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);\n"
+			"  amp *= 0.5; q *= 2.3;\n"
+			"}\n"
+			"n /= 0.875;\n"
+			"float w = saturate(Wear);\n"
+			"float hole = step(n, w * 0.55);\n"
+			"float rim = smoothstep(w * 0.55, w * 0.55 + 0.1, n);\n"
+			"col *= lerp(1.0, 0.7, w) * lerp(0.5, 1.0, w > 0.001 ? rim : 1.0);\n"
+			"return float4(col, Tex.a * (1.0 - hole));\n");
+		Look->Inputs.Reset();
+		const auto In = [Look](const TCHAR* InputName, UMaterialExpression* From, int32 Output)
+		{
+			FCustomInput& Input = Look->Inputs.AddDefaulted_GetRef();
+			Input.InputName = InputName;
+			Input.Input.Connect(Output, From);
+		};
+		In(TEXT("Tex"), Color, 5);  // output 5 is RGBA (0 is RGB only: Tex.a would not compile)
+		In(TEXT("UV"), Coord, 0);
+		In(TEXT("Average"), Average, 0);
+		In(TEXT("Tint"), Tint, 0);
+		In(TEXT("Wear"), Wear, 0);
+		In(TEXT("Amount"), Amount, 0);
+		auto* Rgb = Cast<UMaterialExpressionComponentMask>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionComponentMask::StaticClass(), -100, 0));
+		Rgb->R = Rgb->G = Rgb->B = 1;
+		Rgb->A = 0;
+		Rgb->Input.Connect(0, Look);
+		auto* Alpha = Cast<UMaterialExpressionComponentMask>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionComponentMask::StaticClass(), -100, 200));
+		Alpha->R = Alpha->G = Alpha->B = 0;
+		Alpha->A = 1;
+		Alpha->Input.Connect(0, Look);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Rgb, TEXT(""), MP_BaseColor);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Alpha, TEXT(""), MP_OpacityMask);
+		auto* Rough = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -400, 600));
+		Rough->ParameterName = TEXT("Roughness");
+		Rough->DefaultValue = 0.85f;
+		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
+		// Layers (FSimWornPiece::Puff, custom primitive data 5): a top pushed out over trousers, a jacket over a shirt, all
+		// made to sit on the skin, so the one under never pokes through.
+		auto* Puff = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -400, 800));
+		Puff->ParameterName = TEXT("Puff");
+		Puff->DefaultValue = 0.0f;
+		Puff->bUseCustomPrimitiveData = true;
+		Puff->PrimitiveDataIndex = MakeHumanGarmentPuffIndex;
+		auto* PuffNormal = Cast<UMaterialExpressionVertexNormalWS>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionVertexNormalWS::StaticClass(), -400, 900));
+		auto* PuffOffset = Cast<UMaterialExpressionMultiply>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionMultiply::StaticClass(), -200, 850));
+		PuffOffset->A.Connect(0, PuffNormal);
+		PuffOffset->B.Connect(0, Puff);
+		UMaterialEditingLibrary::ConnectMaterialProperty(PuffOffset, TEXT(""), MP_WorldPositionOffset);
+		MhAddWetness(Material, 0.45f, 0.35f);
+		Material->PostEditChange();
+		MhSave(Material);
+		return Material;
+	}
+
+	// Every garment exported beside a character (game/Saved/MakeHuman/<Name>/Garments/<Garment>/<Garment>.fbx, from
+	// mh_export.py "garments"): imported onto the character's own skeleton, morphs and all, each material slot an instance
+	// of M_MH_Garment with the garment's colour and normal maps.
+	int32 MhMakeGarments(IAssetTools& Tools, const FMakeHumanCharacterFiles& Files, USkeletalMesh* Body)
+	{
+		const FString Dir = FPaths::GetPath(Files.Fbx) / TEXT("Garments");
+		TArray<FString> Names;
+		IFileManager::Get().FindFiles(Names, *(Dir / TEXT("*")), false, true);
+		if (Names.IsEmpty() || !Body || !Body->GetSkeleton())
+		{
+			return 0;
+		}
+		UMaterial* Master = MhGarmentMaterial(Tools);
+		int32 Failures = 0;
+		int32 Made = 0;
+		// Which bit of the body's cover texture each garment covers (cover.json beside cover.png).
+		TSharedPtr<FJsonObject> CoverBits;
+		{
+			FString CoverText;
+			if (FFileHelper::LoadFileToString(CoverText, *(Dir / TEXT("cover.json"))))
+			{
+				FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(CoverText), CoverBits);
+			}
+		}
+		for (const FString& Garment : Names)
+		{
+			const FString Fbx = Dir / Garment / (Garment + TEXT(".fbx"));
+			if (!FPaths::FileExists(Fbx))
+			{
+				continue;
+			}
+			const FString Name = MakeHumanGarmentName(Files.Name, Garment);
+			UAssetImportTask* Task = NewObject<UAssetImportTask>();
+			Task->Filename = Fbx;
+			Task->DestinationPath = MakeHumanGarmentFolder;
+			Task->DestinationName = Name;
+			Task->bAutomated = true;
+			Task->bReplaceExisting = true;
+			Task->bSave = false;
+			UFbxFactory* Factory = NewObject<UFbxFactory>();
+			Factory->ImportUI = NewObject<UFbxImportUI>(Factory);
+			Factory->ImportUI->bImportMesh = true;
+			Factory->ImportUI->bImportAsSkeletal = true;
+			Factory->ImportUI->MeshTypeToImport = FBXIT_SkeletalMesh;
+			Factory->ImportUI->bImportAnimations = false;
+			Factory->ImportUI->bImportMaterials = false;
+			Factory->ImportUI->bImportTextures = false;
+			Factory->ImportUI->bCreatePhysicsAsset = false;
+			Factory->ImportUI->Skeleton = Body->GetSkeleton();  // the body's own: the garment follows its pose
+			Factory->ImportUI->SkeletalMeshImportData->bImportMorphTargets = true;
+			Factory->ImportUI->SkeletalMeshImportData->bConvertScene = true;
+			Factory->ImportUI->SkeletalMeshImportData->ImportUniformScale = 1.0f;
+			Factory->ImportUI->SkeletalMeshImportData->bUseT0AsRefPose = false;
+			Task->Factory = Factory;
+			Task->Options = Factory->ImportUI;
+			Tools.ImportAssetTasks({Task});
+			USkeletalMesh* Mesh = nullptr;
+			for (UObject* Object : Task->GetObjects())
+			{
+				Mesh = Mesh ? Mesh : Cast<USkeletalMesh>(Object);
+			}
+			if (!Mesh)
+			{
+				UE_LOG(LogMakeHumanArt, Error, TEXT("Garment %s: importing %s made no skeletal mesh"), *Name, *Fbx);
+				++Failures;
+				continue;
+			}
+			// Materials: materials.json beside the FBX (slot -> colour and normal maps), as the body's.
+			FString Text;
+			TSharedPtr<FJsonObject> Manifest;
+			if (FFileHelper::LoadFileToString(Text, *(Dir / Garment / TEXT("materials.json"))))
+			{
+				FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Manifest);
+			}
+			for (int32 Slot = 0; Slot < Mesh->GetMaterials().Num() && Master; ++Slot)
+			{
+				FSkeletalMaterial& Material = Mesh->GetMaterials()[Slot];
+				const TSharedPtr<FJsonObject>* Entry = nullptr;
+				FString ColorFile, NormalFile;
+				if (Manifest && Manifest->TryGetObjectField(Material.MaterialSlotName.ToString(), Entry))
+				{
+					(*Entry)->TryGetStringField(TEXT("color"), ColorFile);
+					(*Entry)->TryGetStringField(TEXT("normal"), NormalFile);
+				}
+				const FString Prefix = TEXT("T_MHG_") + Garment + TEXT("_") + FString::FromInt(Slot);
+				UTexture2D* ColorMap = ColorFile.IsEmpty() ? nullptr : MhImportTexture(ColorFile, MakeHumanGarmentFolder, Prefix + TEXT("_C"), true);
+				UTexture2D* NormalMap = NormalFile.IsEmpty() ? nullptr : MhImportTexture(NormalFile, MakeHumanGarmentFolder, Prefix + TEXT("_N"), false);
+				auto* InstanceFactory = NewObject<UMaterialInstanceConstantFactoryNew>();
+				InstanceFactory->InitialParent = Master;
+				const FString InstanceName = TEXT("MI_MHG_") + Files.Name + TEXT("_") + Garment + TEXT("_") + FString::FromInt(Slot);
+				auto* Instance = Cast<UMaterialInstanceConstant>(Tools.CreateAsset(InstanceName, MakeHumanGarmentFolder, UMaterialInstanceConstant::StaticClass(), InstanceFactory));
+				if (!Instance)
+				{
+					++Failures;
+					continue;
+				}
+				if (ColorMap)
+				{
+					MhSave(ColorMap);
+					Instance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("BaseColor")), ColorMap);
+					const FLinearColor Mean = MhAverage(ColorMap);
+					Instance->SetScalarParameterValueEditorOnly(FMaterialParameterInfo(TEXT("SourceLuminance")), FMath::Max(0.02f, 0.2126f * Mean.R + 0.7152f * Mean.G + 0.0722f * Mean.B));
+				}
+				if (NormalMap)
+				{
+					MhSave(NormalMap);
+					Instance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("Normal")), NormalMap);
+				}
+				Instance->PostEditChange();
+				Failures += MhSave(Instance) ? 0 : 1;
+				Material.MaterialInterface = Instance;
+			}
+			int32 Bit = -1;
+			if (CoverBits && CoverBits->TryGetNumberField(Garment, Bit) && Bit >= 0 && Bit < 32)
+			{
+				UGarmentCoverData* CoverData = NewObject<UGarmentCoverData>(Mesh);
+				CoverData->CoverBit = Bit;
+				Mesh->AddAssetUserData(CoverData);
+			}
+			Mesh->PostEditChange();
+			Failures += MhSave(Mesh) ? 0 : 1;
+			++Made;
+			UE_LOG(LogMakeHumanArt, Display, TEXT("Garment %s: %d material slots, %d morphs"), *Name, Mesh->GetMaterials().Num(), Mesh->GetMorphTargets().Num());
+		}
+		// The cover texture onto the body's skin: exact bits, so uncompressed, unfiltered and without mips.
+		const FString CoverPng = Dir / TEXT("cover.png");
+		UMaterialInstanceConstant* Skin = LoadObject<UMaterialInstanceConstant>(nullptr, *MakeHumanAssetPath(MakeHumanFolder, MakeHumanSkinName(Files.Name)));
+		if (FPaths::FileExists(CoverPng) && Skin)
+		{
+			if (UTexture2D* Cover = MhImportTexture(CoverPng, MakeHumanGarmentFolder, MakeHumanCoverTextureName(Files.Name), false))
+			{
+				Cover->PreEditChange(nullptr);
+				Cover->SRGB = false;
+				Cover->CompressionSettings = TC_VectorDisplacementmap;  // RGBA8 as is
+				Cover->Filter = TF_Nearest;
+				Cover->MipGenSettings = TMGS_NoMipmaps;
+				Cover->LODGroup = TEXTUREGROUP_Pixels2D;
+				Cover->NeverStream = true;
+				Cover->PostEditChange();
+				Failures += MhSave(Cover) ? 0 : 1;
+				MhAddGarmentCover(Skin->GetMaterial());
+				Skin->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("GarmentCover")), Cover);
+				Skin->PostEditChange();
+				Failures += MhSave(Skin) ? 0 : 1;
+				UE_LOG(LogMakeHumanArt, Display, TEXT("%s: garment cover %s on %s"), *Files.Name, *Cover->GetName(), *Skin->GetName());
+			}
+		}
+		UE_LOG(LogMakeHumanArt, Display, TEXT("%s: %d garments"), *Files.Name, Made);
+		return Failures;
+	}
 }
 
 UMakeHumanArtCommandlet::UMakeHumanArtCommandlet()
@@ -2244,10 +2588,20 @@ int32 UMakeHumanArtCommandlet::Main(const FString& Params)
 		UE_LOG(LogMakeHumanArt, Display, TEXT("Animation clips: done, %d problems"), Failures);
 		return Failures == 0 ? 0 : 1;
 	}
-	// Start clean: both folders hold only what this run makes.
-	for (const TCHAR* Folder : {MakeHumanFolder, MakeHumanLocalFolder})
+	// -Garments: only the garments of the characters already imported (the clothes the bodies wear), made again.
+	const bool bGarmentsOnly = Params.Contains(TEXT("-Garments"));
+	if (bGarmentsOnly)
 	{
-		IFileManager::Get().DeleteDirectory(*FPackageName::LongPackageNameToFilename(Folder), false, true);
+		IFileManager::Get().DeleteDirectory(*FPackageName::LongPackageNameToFilename(MakeHumanGarmentFolder), false, true);
+		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get().ScanPathsSynchronous({MakeHumanGarmentFolder}, true);
+	}
+	else
+	{
+		// Start clean: both folders hold only what this run makes.
+		for (const TCHAR* Folder : {MakeHumanFolder, MakeHumanLocalFolder})
+		{
+			IFileManager::Get().DeleteDirectory(*FPackageName::LongPackageNameToFilename(Folder), false, true);
+		}
 	}
 	const FString Root = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT(".."));
 	for (const FMhCharacter& Character : MakeHumanCharacters(Root))
@@ -2259,7 +2613,12 @@ int32 UMakeHumanArtCommandlet::Main(const FString& Params)
 			UE_LOG(LogMakeHumanArt, Warning, TEXT("%s: no %s (export it with tools/makehuman first); skipped"), *Files.Name, *Files.Fbx);
 			continue;
 		}
-		Failures += MhMakeCharacter(Tools, Files, Character.Config, Folder);
+		if (!bGarmentsOnly)
+		{
+			Failures += MhMakeCharacter(Tools, Files, Character.Config, Folder);
+		}
+		USkeletalMesh* Body = LoadObject<USkeletalMesh>(nullptr, *MakeHumanAssetPath(*Folder, MakeHumanMeshName(Files.Name)));
+		Failures += MhMakeGarments(Tools, Files, Body);
 	}
 	UE_LOG(LogMakeHumanArt, Display, TEXT("MakeHuman art: done, %d problems"), Failures);
 	return Failures == 0 ? 0 : 1;

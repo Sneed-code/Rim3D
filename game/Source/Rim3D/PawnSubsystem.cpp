@@ -19,6 +19,7 @@
 #include "LevelsSubsystem.h"
 #include "PawnActor.h"
 #include "PawnFaces.h"
+#include "CreatorPeople.h"
 #include "MakeHumanArt.h"
 #include "Retargeter/IKRetargeter.h"
 #include "PawnLooks.h"
@@ -372,6 +373,28 @@ FSimPawnApparel USimPawnSubsystem::MakeApparel(const colony::Snapshot& Snapshot,
 		Worn.Stuff = Piece->stuff.value;
 		Worn.Wear = PawnWearOf(Piece->hitPointShare);
 		Worn.bHidesHair = Def.flag("apparel.hidesHair", false);
+		bool bOverLegs = false;
+		bool bUnderShell = false;
+		bool bOverTorso = false;
+		int32 LayerRank = 0;
+		for (size_t G = 0; G < Def.count("apparel.bodyPartGroups"); ++G)
+		{
+			const std::string Group = Def.textAt("apparel.bodyPartGroups", G);
+			bOverLegs = bOverLegs || Group == "Legs";
+			bOverTorso = bOverTorso || Group == "Torso";
+		}
+		for (size_t L = 0; L < Def.count("apparel.layers"); ++L)
+		{
+			const std::string Layer = Def.textAt("apparel.layers", L);
+			LayerRank = FMath::Max(LayerRank, Layer == "Shell" ? 2 : (Layer == "Middle" ? 1 : 0));
+			bUnderShell = bUnderShell || Def.textAt("apparel.layers", L) != "Shell";
+			Worn.bHeadwear = Worn.bHeadwear || Def.textAt("apparel.layers", L) == "Overhead";
+		}
+		Worn.bCoversCrotch = bOverLegs && bUnderShell;
+		// Puff (cm along the normal): tops sit over waistbands and belts; legwear sits over the skin kept
+		// at its top edge (the cover bake keeps skin near uncovered skin, which pokes through a waistband
+		// left bare by a short top).
+		Worn.Puff = (bOverTorso ? 1.5f : (bOverLegs ? 0.8f : 0.0f)) + 0.6f * static_cast<float>(LayerRank);
 		if (Piece->stuff.valid() && Piece->stuff.value < Defs->size())
 		{
 			const colony::Def& Stuff = Defs->get(Piece->stuff);
@@ -379,6 +402,16 @@ FSimPawnApparel USimPawnSubsystem::MakeApparel(const colony::Snapshot& Snapshot,
 			{
 				Worn.bHasTint = true;
 				Worn.Tint = VisualMesh::ReadColor(Stuff, "visual.color", FLinearColor::White);
+			}
+		}
+		// MakeHuman bodies: the cuts this piece can be drawn as ("visual.cuts": ["Garment", "Top+Trousers", ...]).
+		const size_t CutCount = Def.count("visual.cuts");
+		for (size_t C = 0; C < CutCount; ++C)
+		{
+			const std::string Cut = Def.text(("visual.cuts." + std::to_string(C)).c_str());
+			if (!Cut.empty())
+			{
+				Worn.Cuts.Add(UTF8_TO_TCHAR(Cut.c_str()));
 			}
 		}
 		const size_t Count = Def.count("visual.worn");
@@ -593,9 +626,35 @@ UAnimSequence* USimPawnSubsystem::GetActionAnimation(colony::PawnAction Action) 
 	return CrouchPose;
 }
 
+USkeletalMesh* USimPawnSubsystem::GetGarmentMesh(const FString& Base, const FString& Garment)
+{
+	const FString Name = MakeHumanGarmentName(Base, Garment);
+	if (const TObjectPtr<USkeletalMesh>* Found = GarmentMeshes.Find(Name))
+	{
+		return *Found;
+	}
+	USkeletalMesh* Mesh = nullptr;
+	if (FPackageName::DoesPackageExist(FString(MakeHumanGarmentFolder) / Name))
+	{
+		Mesh = LoadObject<USkeletalMesh>(nullptr, *MakeHumanAssetPath(MakeHumanGarmentFolder, Name));
+	}
+	GarmentMeshes.Add(Name, Mesh);
+	return Mesh;
+}
+
 void USimPawnSubsystem::SetLooksOverride(colony::Entity Thing, const FSimPawnLooks& Looks)
 {
 	LooksOverrides.Add(PawnKey(Thing), Looks);
+}
+
+void USimPawnSubsystem::SetApparelPreview(colony::Entity Thing, const TArray<FString>& Pieces)
+{
+	ApparelPreviews.Add(PawnKey(Thing), Pieces);
+}
+
+void USimPawnSubsystem::ClearApparelPreview(colony::Entity Thing)
+{
+	ApparelPreviews.Remove(PawnKey(Thing));
 }
 
 ASimPawnActor* USimPawnSubsystem::FindPawn(colony::Entity Thing) const
@@ -699,14 +758,65 @@ void USimPawnSubsystem::Tick(float DeltaTime)
 		}
 		else if (View.looks >= 0 && View.looks < static_cast<int32>(Now.looks.size()))
 		{
-			Pawn->ApplyLooks(*this, MakeLooks(Now.looks[static_cast<size_t>(View.looks)], Defs));
+			const colony::PawnLooksView& LooksView = Now.looks[static_cast<size_t>(View.looks)];
+			FSimPawnLooks Looks = MakeLooks(LooksView, Defs);
+			// A colonist from the character screen (docs/design/new-game.md): drawn as the creator's MakeHuman person.
+			CreatorPeople::FLook Look;
+			const FString CreatorText = LooksView.creator.empty() ? FString() : FString(UTF8_TO_TCHAR(LooksView.creator.c_str()));
+			const bool bCreator = !CreatorText.IsEmpty() && CreatorPeople::Decode(CreatorText, Look);
+			if (bCreator)
+			{
+				Looks = CreatorPeople::LooksFor(Look, Looks);
+			}
+			Pawn->ApplyLooks(*this, Looks);
+			if (bCreator)
+			{
+				Pawn->ApplyCreatorLook(CreatorText);
+			}
 		}
 		// Worn clothes (U16): rebuilt only when what is worn, or how torn it is, changed.
-		const uint64 WornKey = ApparelKey(Now, View);
-		if (!Pawn->HasApparel() || Pawn->GetApparelKey() != WornKey)
+		if (const TArray<FString>* Preview = ApparelPreviews.Find(PawnKey(View.id)); Preview && Defs)
 		{
-			Pawn->ApplyApparel(*this, MakeApparel(Now, View, Defs), WornKey);
+			// The character screen's "clothes on": made-up pieces in a snapshot of their own, so they take exactly the
+			// path real clothes take (MakeApparel), keyed apart from anything the pawn really wears.
+			colony::Snapshot Dressed;
+			colony::ThingView Shown = View;
+			Shown.firstApparel = 0;
+			Shown.apparelCount = 0;
+			Shown.hideGear = false;
+			for (int32 P = 0; P < Preview->Num(); ++P)
+			{
+				FString DefName;
+				FString StuffName;
+				if (!(*Preview)[P].Split(TEXT(":"), &DefName, &StuffName))
+				{
+					DefName = (*Preview)[P];
+				}
+				colony::ApparelView Piece;
+				Piece.item = static_cast<colony::Entity>(0x7FFF0000u + static_cast<uint32>(P));
+				Piece.def = Defs->idOf("Things", TCHAR_TO_UTF8(*DefName));
+				Piece.stuff = StuffName.IsEmpty() ? colony::DefId{} : Defs->idOf("Things", TCHAR_TO_UTF8(*StuffName));
+				if (Piece.def.valid())
+				{
+					Dressed.apparel.push_back(Piece);
+					++Shown.apparelCount;
+				}
+			}
+			const uint64 PreviewKey = ApparelKey(Dressed, Shown) ^ 0x5052455649455721ULL;
+			if (!Pawn->HasApparel() || Pawn->GetApparelKey() != PreviewKey)
+			{
+				Pawn->ApplyApparel(*this, MakeApparel(Dressed, Shown, Defs), PreviewKey);
+			}
 		}
+		else
+		{
+			const uint64 WornKey = ApparelKey(Now, View);
+			if (!Pawn->HasApparel() || Pawn->GetApparelKey() != WornKey)
+			{
+				Pawn->ApplyApparel(*this, MakeApparel(Now, View, Defs), WornKey);
+			}
+		}
+		Pawn->SyncGarmentMorphs();
 	}
 	for (auto It = Pawns.CreateIterator(); It; ++It)
 	{

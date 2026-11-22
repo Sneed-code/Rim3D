@@ -144,6 +144,8 @@ public:
 	bool IsViewShown() const { return bShown; }
 	/** The first-person view gun's muzzle in the world (its guns.json `muzzle`), false while no view gun is drawn. */
 	bool GetViewMuzzle(FVector& Out) const;
+	/** The first-person gun's frame (+X out of the barrel, +Y right, +Z up) and its muzzle in that frame, if one is drawn. */
+	bool GetViewGunFrame(FTransform& OutFrame, FVector& OutMuzzle) const;
 	int32 GetCurrentGun() const { return Current; }
 	bool HasModel(int32 Index) const;
 	int32 GetShotsSeen() const { return ShotsSeen; }

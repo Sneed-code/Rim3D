@@ -57,6 +57,15 @@
     "lowSunMistToDeg": 14.0
   },
 
+  "indoorDust": {
+    "_about": "With the camera under a roof (the same test as exposure.indoorBrighterEV) the air shows its dust, so sunbeams through windows draw shafts: the volumetric fog starts `startDistanceCm` from the camera instead of fog.startDistanceCm, is `extinction` times thicker and reaches only `distanceCm` (the plain height fog beyond keeps the weather's thin density, so the outdoors stays clear). The sky light and the sky's ambient light light the fog only `skyScattering` and `ambient` as much (they shine through the roof and made the room milky), so the room's air is dark and the sun's beams stand out. Needs a quality step with volumetric fog (High, Epic).",
+    "startDistanceCm": 0,
+    "extinction": 12.0,
+    "distanceCm": 1500,
+    "skyScattering": 0.0,
+    "ambient": 0.0
+  },
+
   "morningMist": {
     "_about": "Ground mist, the height fog's second layer: it gathers from fromHour, is thickest at peakHour (about dawn) and has burnt off by toHour; a little (evening share) comes back after dusk. Every morning gets baseShare of it and wet ground (after rain) adds up to afterRain more; falling rain or snow clears it. density uses the fog's units (0.3 is a mist you cannot see 50 m through); heightFalloff makes it a low layer (1.0: halves about every 8 m); heightOffsetCm lifts it.",
     "density": 0.3,

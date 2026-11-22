@@ -182,6 +182,10 @@ enum class EventType : uint8_t {
     SlaveSuppressed,       // a warden suppressed a slave: `thing` the warden, `target` the slave, `amount` its suppression now (0 to 1)
     SlaveRebellion,        // slaves rose up and run for the map edge: `count` how many, `thing` the one who started it
     SlaveEmancipated,      // a slave was freed and joined the colony as a colonist: `thing` the pawn
+    BuildingWrecked,  // a building was shot, blown or battered to pieces (docs/design/destruction.md): `thing` the building
+                      // (a ThingDestroyed follows; forget its id), `def` its def, `cell` its footprint origin, `count` and
+                      // `part` its footprint size (rotation applied), (x, y, z) its middle on the ground in metres,
+                      // `message` its stuff's defName ("" if none), `amount` 1 if it was finished, 0 a frame
 };
 
 // What stopped a projectile (ProjectileHit).
@@ -193,6 +197,7 @@ enum class ProjectileHitKind : uint8_t {
     Pawn,      // a pawn (`target`) in the body part `part`; health events follow
     Armor,     // a pawn's armor stopped it (`target`, `part`)
     Gone,      // flew off the map or for too long, hitting nothing
+    Plant,     // a tree's trunk in `cell`; it lost `amount` hit points (docs/design/structure-damage.md)
 };
 
 // What a PawnAction event's pawn did. Later jobs add theirs (chop, mine, build, eat); Unreal plays
@@ -272,7 +277,10 @@ struct Event {
     // CellMined: `cell` the cell, `def` the rock or ore's Things def, `amount` its hit points. The
     // chunk or ore it left comes as a ThingSpawned. PlantRemoved, PlantHarvested: `cell`, `def` the
     // plant's Things def, `amount` how many items it gave (they come as a ThingSpawned); `message`
-    // "felled" (a tree) or "cut" for removed, "picked" for harvested. PawnAction Mine, Cut, Harvest:
+    // "felled" (a tree) or "cut" for removed, "picked" for harvested; "broken" for a plant killed by blows, shots or a blast.
+    // A tree that falls ("felled", "broken") also has (x, y) the unit vector it falls along (away from the one who cut it,
+    // the blow, the shot or the blast), `count` its growth in millionths and, felled, `thing` the pawn: Unreal topples it
+    // (docs/design/structure-damage.md "Falling trees"); (0, 0) for anything that doesn't fall. PawnAction Mine, Cut, Harvest:
     // `thing` the pawn, `cell` the cell worked on, `def` the pawn's def.
     // RecipeDone: `thing` the pawn, `def` the Recipes def, `target` the work building, `cell` where the
     // pawn stood, `amount` how many products were made, `message` "bill finished" if that was the
@@ -337,6 +345,8 @@ struct Event {
     // fists, teeth or a weapon of no stuff, whose def then says), and what the blow struck when it was not flesh: the
     // parrying weapon, the raised shield, the armour piece that turned it or the building, as `struckDef` and its
     // `struckStuff` (invalid when it has none). A blow into natural rock has `hit` Rock and neither.
+    // The same two on a ProjectileHit on a Building (the wall and its stuff), on an Explosion (`struckDef` the projectile
+    // or grenade def that burst), and on a PawnAction Cut or Harvest (`struckDef` the plant; `message` "sow" for sowing).
     DefId stuff;
     DefId struckDef;
     DefId struckStuff;

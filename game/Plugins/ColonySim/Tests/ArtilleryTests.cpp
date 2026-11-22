@@ -18,6 +18,8 @@
 
 #include <doctest.h>
 
+#include "TestPlants.h"
+
 #include <cmath>
 #include <memory>
 #include <set>
@@ -47,7 +49,7 @@ std::unique_ptr<Sim> artySim(uint64_t seed = 41) {
     settings.seed = seed;
     settings.mapSize = 160;
     settings.flatMap = true;
-    return std::make_unique<Sim>(settings, artyDefs());
+    return withoutPlants(std::make_unique<Sim>(settings, artyDefs()));
 }
 
 // A colonist with this Shooting level who works (no needs, so it stays at its post).

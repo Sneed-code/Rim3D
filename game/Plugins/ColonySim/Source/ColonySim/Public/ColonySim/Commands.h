@@ -1160,6 +1160,41 @@ struct SetWorkGroupCommand {
     std::string group;
 };
 
+// Dev command (docs/design/grime.md): sets a pawn's dirt on the legs and the body (0 to 1) outright, for smoke-test
+// pictures of how dirt looks. Fails for a thing that is not a pawn.
+struct SetGrimeCommand {
+    Entity pawn = kNoEntity;
+    float dirtLegs = 0.0f;
+    float dirtBody = 0.0f;
+};
+
+// Before the game starts (game second 0), from the new-game character screen (docs/design/new-game.md): edits the
+// starting colonist in slot `slot` (as RerollColonistCommand counts them). Empty names keep theirs; `female` -1 keeps the
+// gender, 0 or 1 sets it (and makes the looks again for that gender, the lineage kept); `setCreator` stores `creator`
+// (the character creator's look text, empty to clear it). Fails later in the game, for a bad slot, or a name over 24
+// letters.
+struct EditColonistCommand {
+    int slot = 0;
+    std::string firstName;
+    std::string nickName;
+    std::string lastName;
+    int female = -1;
+    bool setCreator = false;
+    std::string creator;
+};
+
+// Before the game starts, from the new-game companions screen (docs/design/new-game.md): gives the starting colonist
+// in slot `slot` these traits, bought from the scenario's `traitPoints` pool (negative traits give points).
+// `traits` is "Def:degree" entries split by ';' (a degree of 0 may be left out). With `randomize` the traits are drawn
+// instead (all points spent), from the game seed, the slot and `roll`. Fails later in the game, for a bad slot, the
+// protagonist (no traits), a scenario without trait points, or a set that doesn't fit the pool (traitSetFits).
+struct SetColonistTraitsCommand {
+    int slot = 0;
+    std::string traits;
+    bool randomize = false;
+    uint32_t roll = 0;
+};
+
 // New commands go at the end: a save names a command by its place in this list.
 using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnCommand, TendPawnCommand,
                              SetWorkPriorityCommand, CreateStockpileCommand, RemoveZoneCellsCommand,
@@ -1195,7 +1230,8 @@ using Command = std::variant<SpawnThingCommand, DestroyThingCommand, DamagePawnC
                              InventoryCommand, SetOutfitFightGearCommand, HideGearCommand, ShieldCommand, SetDayLengthCommand,
                              SleepCommand, SetLandingZoneCommand,
                              PatchCommand, SetAlertCommand, FocusCommand, SetFightResponseCommand,
-                             LevelEarthCommand, CancelEarthworksCommand, UnstuckCommand, SetWorkGroupCommand>;
+                             LevelEarthCommand, CancelEarthworksCommand, UnstuckCommand, SetWorkGroupCommand,
+                             SetGrimeCommand, EditColonistCommand, SetColonistTraitsCommand>;
 
 // A command as applied: `step` is the step (Sim::time().steps; the game second with the 48-minute
 // day) it was applied in. Failed commands are logged too.

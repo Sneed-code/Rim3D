@@ -81,6 +81,7 @@ GrimeNumbers GrimeNumbers::read(const DefDatabase& defs) {
     n.waistWashSeconds = num("waistWashSeconds", n.waistWashSeconds);
     n.swimWashSeconds = num("swimWashSeconds", n.swimWashSeconds);
     n.wearOffSeconds = num("wearOffSeconds", n.wearOffSeconds);
+    n.dirtFadeSeconds = num("dirtFadeSeconds", n.dirtFadeSeconds);
     return n;
 }
 
@@ -172,6 +173,7 @@ void Grime::step(int64_t now, const std::vector<Event>& events, float rainRate) 
 
     const float rain = std::clamp(rainRate, 0.0f, 1.5f);
     const float wear = grimePer(n.wearOffSeconds);
+    const float dirtFade = grimePer(n.dirtFadeSeconds);
     for (auto it = pawns_.begin(); it != pawns_.end();) {
         const Entity entity = static_cast<Entity>(it->first);
         if (!reg.valid(entity)) {
@@ -200,6 +202,9 @@ void Grime::step(int64_t now, const std::vector<Event>& events, float rainRate) 
         g.lastX = pos->x;
         g.lastY = pos->y;
         g.lastLevel = pos->level;
+        // What dirtied it this step (that level does not fade this step).
+        const float legsBefore = g.dirtLegs;
+        const float bodyBefore = g.dirtBody;
         if (walked > 0.0f && !lying) {
             // A metre of walking counts as about a second (people walk 1 to 2 m/s).
             if (ground == GroundKind::Soil) {
@@ -221,6 +226,9 @@ void Grime::step(int64_t now, const std::vector<Event>& events, float rainRate) 
             grimeRaise(g.dirtBody, per, n.workMax);
             grimeRaise(g.dirtLegs, per, n.workMax);
         }
+
+        const bool legsDirtied = g.dirtLegs > legsBefore;
+        const bool bodyDirtied = g.dirtBody > bodyBefore;
 
         // Water.
         const float height = bodyHeight_ ? bodyHeight_(entity) : kPersonHeightM;
@@ -254,10 +262,16 @@ void Grime::step(int64_t now, const std::vector<Event>& events, float rainRate) 
             grimeLower(g.blood, per);
             grimeLower(g.weaponBlood, per);
         }
-        // It all wears off in time (not off a corpse lying in the dirt).
+        // Dirt fades by itself in dirtFadeSeconds (sneed 2026-11-20: like blood, about 10 minutes), only while
+        // nothing is dirtying it (a corpse lying in the dirt stays dirty; one on a floor fades).
+        if (!legsDirtied) {
+            grimeLower(g.dirtLegs, dirtFade);
+        }
+        if (!bodyDirtied) {
+            grimeLower(g.dirtBody, dirtFade);
+        }
+        // Blood wears off in time (not off a corpse).
         if (!(health != nullptr && health->dead)) {
-            grimeLower(g.dirtLegs, wear);
-            grimeLower(g.dirtBody, wear);
             grimeLower(g.blood, wear);
             grimeLower(g.weaponBlood, wear);
         }

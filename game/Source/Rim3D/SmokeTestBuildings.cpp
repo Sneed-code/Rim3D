@@ -7,12 +7,15 @@
 
 #include "BuildingSubsystem.h"
 #include "SimSubsystem.h"
+#include "WreckSubsystem.h"
 
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Filth.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Needs.h"
 #include "ColonySim/Sim.h"
+#include "ColonySim/Combat.h"
 #include "ColonySim/Snapshot.h"
 
 #include <string>
@@ -33,6 +36,7 @@ namespace
 		FString FirstFailure;
 		colony::CellPos Room;  // the south-west corner wall
 		bool bRoomFound = false;
+		colony::CellPos WreckCell;
 		int32 Expected = 0;  // buildings placed
 		colony::CellPos StackCell[2];
 		int32 StackInstancesBefore = 0;
@@ -669,6 +673,82 @@ void USmokeTestSubsystem::BuildBuildingsPhases()
 		Notes.Add(FString::Printf(TEXT("buildings_door: drawn open up to %.2f (leaf moved up to %.0f cm), shut again: %d"), State->MaxDoorShown, State->MaxLeafCm, State->bArrived));
 	};
 	Phases.Add(MoveTemp(Door));
+
+	// 7b. Destruction (docs/design/destruction.md): one of the room's walls is battered half down and shows cracks, the
+	// next is wrecked outright and falls apart into pieces of steel and dust, which settle as its rubble.
+	FPhase Wreck;
+	Wreck.Name = TEXT("buildings_wreck");
+	Wreck.WarmupSeconds = 1.0f;
+	Wreck.MeasureSeconds = 8.0f;
+	Wreck.Setup = [=, this]()
+	{
+		USimSubsystem* B = Bridge();
+		colony::Sim* Sim = SimOf();
+		if (!B || !Sim || !State->bRoomFound)
+		{
+			return;
+		}
+		// The room's west wall, away from the door.
+		colony::Entity Cracked = colony::kNoEntity;
+		colony::Entity Broken = colony::kNoEntity;
+		for (int32 DY = 1; DY < RoomH - 1 && Broken == colony::kNoEntity; ++DY)
+		{
+			const colony::Entity Here = Sim->map().buildingAt(Cell(0, DY));
+			if (Here == colony::kNoEntity || Here == State->Door)
+			{
+				continue;
+			}
+			if (Cracked == colony::kNoEntity)
+			{
+				Cracked = Here;
+				State->WreckCell = Cell(0, DY);
+			}
+			else
+			{
+				Broken = Here;
+			}
+		}
+		if (Cracked == colony::kNoEntity || Broken == colony::kNoEntity)
+		{
+			Fail(TEXT("buildings_wreck: found no two walls on the room's west side"));
+			return;
+		}
+		const colony::ThingView* CrackedView = B->GetCurrentSnapshot().find(Cracked);
+		Sim->combat().damageBuilding(Cracked, CrackedView && CrackedView->maxHitPoints > 0 ? CrackedView->maxHitPoints * 6 / 10 : 100);
+		Sim->combat().damageBuilding(Broken, 1000000);
+		B->StepOnce();
+		B->StepOnce();
+		LookAt(State->WreckCell, 7.0, 0.0, 25.0, 1.0);
+	};
+	Wreck.Verify = [=, this]()
+	{
+		const UWreckSubsystem* Wrecks = GetWorld()->GetSubsystem<UWreckSubsystem>();
+		const colony::Sim* Sim = SimOf();
+		if (!Wrecks || !Sim || !State->bRoomFound)
+		{
+			return;
+		}
+		int32 Rubble = 0;
+		const int32 RubbleKind = Sim->filth().kindIndex("Rubble");
+		for (int32 DY = 0; DY < RoomH; ++DY)
+		{
+			for (const colony::FilthPile& Pile : Sim->filth().at(Cell(0, DY)))
+			{
+				Rubble += static_cast<int32>(Pile.kind) == RubbleKind ? Pile.thickness : 0;
+			}
+		}
+		Notes.Add(FString::Printf(TEXT("buildings_wreck: %d wrecks drawn, %d pieces settled, %d lying now; %d rubble layers on the west wall"),
+			Wrecks->GetWrecksMade(), Wrecks->GetPiecesSettled(), Wrecks->GetPiecesAlive(), Rubble));
+		if (Wrecks->GetWrecksMade() < 1 || Wrecks->GetPiecesSettled() < 4)
+		{
+			Fail(FString::Printf(TEXT("buildings_wreck: the wrecked wall made %d wrecks with %d settled pieces"), Wrecks->GetWrecksMade(), Wrecks->GetPiecesSettled()));
+		}
+		if (Rubble < 1)
+		{
+			Fail(TEXT("buildings_wreck: the sim left no rubble where the wall stood"));
+		}
+	};
+	Phases.Add(MoveTemp(Wreck));
 
 	// 8. A new sim wipes the picture.
 	FPhase Fresh;

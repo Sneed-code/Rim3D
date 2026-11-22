@@ -527,6 +527,7 @@ struct SavePlants {
     std::vector<uint32_t> defIndex;  // into `defs`
     std::vector<uint32_t> growth;
     std::vector<uint32_t> ageHours;
+    std::vector<uint32_t> damage;  // section v2 on: hit points lost (docs/design/structure-damage.md)
 };
 
 // The rock layer as parallel lists, one entry per rock or ore cell in cell order (format 10 on).
@@ -1353,7 +1354,8 @@ inline constexpr bool kSaveIsTradeCommand = std::is_same_v<Type, StartVisitComma
                                             std::is_same_v<Type, SleepCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||
                                             std::is_same_v<Type, PatchCommand> || std::is_same_v<Type, SetAlertCommand> ||
                                             std::is_same_v<Type, FocusCommand> || std::is_same_v<Type, SetFightResponseCommand> ||
-                                            std::is_same_v<Type, SetWorkGroupCommand>;
+                                            std::is_same_v<Type, SetWorkGroupCommand> || std::is_same_v<Type, SetGrimeCommand> ||
+                                            std::is_same_v<Type, EditColonistCommand> || std::is_same_v<Type, SetColonistTraitsCommand>;
 
 // The trade commands, apart from saveCommand's long chain (MSVC stops at 128 nested else-ifs).
 template <typename Ar, typename Type>
@@ -1428,6 +1430,23 @@ void saveTradeCommand(Ar& ar, Type& c) {
     } else if constexpr (std::is_same_v<Type, SetWorkGroupCommand>) {
         ar.value("pawn", c.pawn);
         ar.text("group", c.group);
+    } else if constexpr (std::is_same_v<Type, SetGrimeCommand>) {
+        ar.value("pawn", c.pawn);
+        ar.value("dirtLegs", c.dirtLegs);
+        ar.value("dirtBody", c.dirtBody);
+    } else if constexpr (std::is_same_v<Type, EditColonistCommand>) {
+        ar.value("slot", c.slot);
+        ar.text("firstName", c.firstName);
+        ar.text("nickName", c.nickName);
+        ar.text("lastName", c.lastName);
+        ar.value("female", c.female);
+        ar.value("setCreator", c.setCreator);
+        ar.text("creator", c.creator);
+    } else if constexpr (std::is_same_v<Type, SetColonistTraitsCommand>) {
+        ar.value("slot", c.slot);
+        ar.text("traits", c.traits);
+        ar.value("randomize", c.randomize);
+        ar.value("roll", c.roll);
     } else if constexpr (std::is_same_v<Type, ShieldCommand>) {
         ar.value("pawn", c.pawn);
         ar.value("up", c.up);
@@ -1789,6 +1808,9 @@ void saveColonist(Ar& ar, Colonist& c) {
             ar.value("xpToday", s.xpToday);
         }
         ar.value("disabled", s.disabled);
+        if (ar.sectionVersion() >= 4) {  // trait points: skill traits' bonus levels
+            ar.value("bonus", s.bonus);
+        }
         ar.require(static_cast<int>(s.passion) <= static_cast<int>(Passion::Major), "the save file has a bad passion");
     });
     ar.list("disabledWorkTags", c.disabledWorkTags, [&](std::string& tag) { ar.text(nullptr, tag); });
@@ -1833,6 +1855,9 @@ void saveLooks(Ar& ar, PawnLooks& l) {
         ar.value("bodyHair", l.bodyHair);
         if (ar.sectionVersion() >= 3) {  // a name for pawns with no Colonist record (focus HP bar, kill feed)
             ar.text("name", l.name);
+        }
+        if (ar.sectionVersion() >= 4) {  // the character creator's look (docs/design/new-game.md)
+            ar.text("creator", l.creator);
         }
         ar.require(l.faceShape >= 0.0f && l.faceShape <= 1.0f && l.brow >= 0.0f && l.brow <= 1.0f && l.nose >= 0.0f &&
                        l.nose <= 1.0f && l.jaw >= 0.0f && l.jaw <= 1.0f && l.bodyHair >= 0.0f && l.bodyHair <= 1.0f &&
@@ -2734,6 +2759,11 @@ void saveMeleePart(Ar& ar, Melee& m) {
         ar.list("focusTried", m.focusTried, [&](Entity& e) { ar.value(nullptr, e); });
         ar.value("focusTriedAt", m.focusTriedAt);
     }
+    if (ar.sectionVersion() >= 7) {  // finishers (sneed 2026-11-20)
+        ar.value("finisher", m.finisher);
+        ar.value("finisherFrom", m.finisherFrom);
+        ar.value("finisherSteps", m.finisherSteps);
+    }
 }
 
 template <typename Ar>
@@ -2986,7 +3016,13 @@ void savePlants(Ar& ar, SavePlants& p) {
     ar.list("defIndex", p.defIndex, [&](uint32_t& v) { ar.value(nullptr, v); });
     ar.list("growth", p.growth, [&](uint32_t& v) { ar.value(nullptr, v); });
     ar.list("ageHours", p.ageHours, [&](uint32_t& v) { ar.value(nullptr, v); });
-    ar.require(p.cells.size() == p.defIndex.size() && p.cells.size() == p.growth.size() && p.cells.size() == p.ageHours.size(),
+    if (ar.sectionVersion() >= 2) {
+        ar.list("damage", p.damage, [&](uint32_t& v) { ar.value(nullptr, v); });
+    } else {
+        p.damage.assign(p.cells.size(), 0);  // older saves: every plant unhurt
+    }
+    ar.require(p.cells.size() == p.defIndex.size() && p.cells.size() == p.growth.size() && p.cells.size() == p.ageHours.size() &&
+                   p.cells.size() == p.damage.size(),
                "the save file's plant lists don't match");
 }
 
@@ -3552,7 +3588,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "work", e, &SaveEntity::work, [&](SaveWorkSettings& w) { saveWorkPart(ar, w); });
         saveParts(ar, "carrying", e, &SaveEntity::carrying, [&](Carrying& c) { saveCarryingPart(ar, c); });
     });
-    ar.section("colonists", 3, [&] {
+    ar.section("colonists", 4, [&] {
         saveParts(ar, "colonist", e, &SaveEntity::colonist, [&](Colonist& c) { saveColonistPart(ar, c); });
     });
     ar.section("health", 9, [&] {
@@ -3613,7 +3649,7 @@ void saveSections(Ar& ar, SaveData& d) {
         saveParts(ar, "faction", e, &SaveEntity::faction, [&](Faction& f) { saveFactionPart(ar, f); });
         saveParts(ar, "fighter", e, &SaveEntity::fighter, [&](Fighter& f) { saveFighterPart(ar, f); });
     });
-    ar.section("looks", 3, [&] {
+    ar.section("looks", 4, [&] {
         saveParts(ar, "looks", e, &SaveEntity::looks, [&](PawnLooks& l) { saveLooksPart(ar, l); });
     });
     ar.section("paths", 1, [&] { savePaths(ar, d.paths); });
@@ -3621,7 +3657,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("nextZoneId", d.nextZoneId);
         ar.list("zones", d.zones, [&](SaveZone& z) { saveZone(ar, z); });
     });
-    ar.section("plants", 1, [&] { savePlants(ar, d.plants); });
+    ar.section("plants", 2, [&] { savePlants(ar, d.plants); });
     ar.section("mining", 1, [&] {
         d.hasRock = true;
         saveMineables(ar, d.mineables);
@@ -3778,7 +3814,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(c.days >= 0.0f && c.days <= 1000.0f, "the save file has an impossible corpse rot");
         });
     });
-    ar.section("melee", 6, [&] {
+    ar.section("melee", 7, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
     });
     ar.section("social", 3, [&] {
@@ -4070,7 +4106,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.group("social", [&] { saveSocialPart(ar, a.social, false); });  // maps 1: no lovin pause (it starts again at 0)
         });
     });
-    ar.section("comms", 1, [&] {  // the comms console's caravan requests (docs/design/comms-console.md)
+    ar.section("comms", 2, [&] {  // the comms console's caravan requests (docs/design/comms-console.md); 2: the goodwill log
         ar.list("requests", d.trade.requests, [&](CaravanRequest& r) {
             ar.text("faction", r.faction);
             ar.text("traderKind", r.traderKind);
@@ -4080,6 +4116,14 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.text("faction", c.faction);
             ar.value("at", c.at);
         });
+        if (ar.sectionVersion() >= 2) {
+            ar.list("goodwillLog", d.trade.goodwillLog, [&](GoodwillChange& g) {
+                ar.text("faction", g.faction);
+                ar.value("amount", g.amount);
+                ar.text("reason", g.reason);
+                ar.value("at", g.at);
+            });
+        }
     });
     ar.section("clock", 1, [&] {  // the step clock and the day length (docs/design/day-length.md)
         ar.value("steps", d.steps);
@@ -5558,6 +5602,7 @@ SaveData SimSaveAccess::collect(const Sim& sim) {
         d.plants.defIndex.push_back(defIndexOf[r.def.value]);
         d.plants.growth.push_back(r.growth);
         d.plants.ageHours.push_back(r.ageHours);
+        d.plants.damage.push_back(r.damage);
     }
     std::vector<uint32_t> rockIndexOf(sim.defs_->size(), UINT32_MAX);
     for (const MineableRecord& r : sim.mineables_->records()) {
@@ -5834,6 +5879,24 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
     if (!sim.zones_->restore(std::move(zones), d.nextZoneId, error)) {
         return false;
     }
+    {
+        // Older saves have no plants: the map starts bare. Before the path queue: tree trunks are path costs
+        // (Map::groundTrunks), and a half-done search is redone on the saved map.
+        std::vector<PlantRecord> records;
+        for (size_t i = 0; i < d.plants.cells.size(); ++i) {
+            if (d.plants.defIndex[i] >= d.plants.defs.size()) {
+                error = "the save has a plant of an unknown kind";
+                return false;
+            }
+            const DefId def = sim.defs_->idOf("Things", d.plants.defs[d.plants.defIndex[i]]);
+            records.push_back(PlantRecord{static_cast<int>(d.plants.cells[i]), def, d.plants.growth[i], d.plants.ageHours[i],
+                                          i < d.plants.damage.size() ? d.plants.damage[i] : 0u});
+        }
+        if (!sim.plants_->restore(records)) {
+            error = "the save has a plant the data files can't place";
+            return false;
+        }
+    }
     if (!sim.pathfinder_.loadState(std::move(d.paths), error)) {
         return false;
     }
@@ -5863,22 +5926,6 @@ bool SimSaveAccess::restore(Sim& sim, SaveData& d, std::string& error) {
         }
     }
 
-    {
-        // Older saves have no plants: the map starts bare.
-        std::vector<PlantRecord> records;
-        for (size_t i = 0; i < d.plants.cells.size(); ++i) {
-            if (d.plants.defIndex[i] >= d.plants.defs.size()) {
-                error = "the save has a plant of an unknown kind";
-                return false;
-            }
-            const DefId def = sim.defs_->idOf("Things", d.plants.defs[d.plants.defIndex[i]]);
-            records.push_back(PlantRecord{static_cast<int>(d.plants.cells[i]), def, d.plants.growth[i], d.plants.ageHours[i]});
-        }
-        if (!sim.plants_->restore(records)) {
-            error = "the save has a plant the data files can't place";
-            return false;
-        }
-    }
     if (d.hasRock) {
         std::vector<MineableRecord> records;
         for (size_t i = 0; i < d.mineables.cells.size(); ++i) {

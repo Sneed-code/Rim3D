@@ -99,7 +99,17 @@ namespace
 	const char* const HudScrCareNames[] = {"NoCare", "NoMedicine", "Herbal", "Normal", "Best"};
 	const TCHAR* const HudScrCareLabels[] = {TEXT("No care"), TEXT("No medicine"), TEXT("Herbal or worse"), TEXT("Normal or worse"), TEXT("Best")};
 	// The prisoner modes the window offers, in PrisonerMode order.
-	const TCHAR* const HudScrPrisonerModes[] = {TEXT("No interaction"), TEXT("Reduce resistance"), TEXT("Recruit"), TEXT("Release"), TEXT("Execute")};
+	const TCHAR* const HudScrPrisonerModes[] = {TEXT("No interaction"), TEXT("Reduce resistance"), TEXT("Recruit"), TEXT("Release"), TEXT("Execute"),
+		TEXT("Enslave"), TEXT("Reduce will")};
+	constexpr int32 HudScrPrisonerModeCount = UE_ARRAY_COUNT(HudScrPrisonerModes);
+	const TCHAR* const HudScrPrisonerModeTips[] = {
+		TEXT("Wardens only feed it"),
+		TEXT("Wardens talk its resistance down, but don't try to recruit it yet"),
+		TEXT("Wardens talk its resistance down, then try to win it over to join the colony"),
+		TEXT("A warden walks it out and lets it go home"),
+		TEXT("A warden kills it"),
+		TEXT("Wardens wear its will down to 0, then make it a slave of the colony"),
+		TEXT("Wardens wear its will down, but don't enslave it yet")};
 
 	/** Which group of the outfit editor an apparel def goes in, by its outermost layer. */
 	FString HudScrApparelGroup(const colony::Def& Def)
@@ -673,6 +683,7 @@ void UColonyHudSubsystem::DrawPrisonersScreen(USimSubsystem& Bridge, float Scale
 		OpenedScreen = EHudScreen::None;
 	}
 	ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("Downed enemies are carried to a prison bed by wardens. Here you say what wardens do with them."));
+	ColonyHud::Heading(TEXT("Prisoners"));
 	int32 Prisoners = 0;
 	if (ImGui::BeginTable("##HudPrisonersTable", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
 	{
@@ -693,19 +704,20 @@ void UColonyHudSubsystem::DrawPrisonersScreen(USimSubsystem& Bridge, float Scale
 			}
 			ColonyHud::Tip(TEXT("Click to go there"));
 			ImGui::TableNextColumn();
-			ColonyHud::TextColored(ColonyHud::TextDim(), FString::Printf(TEXT("Resistance %.1f"), View.resistance));
-			ColonyHud::Tip(TEXT("Wardens talk it down to 0; then a recruit attempt can win the prisoner over"));
+			ColonyHud::TextColored(ColonyHud::TextDim(), FString::Printf(TEXT("Resistance %.1f  Will %.1f"), View.resistance, View.will));
+			ColonyHud::Tip(TEXT("Resistance: wardens talk it down to 0, then a recruit attempt can win the prisoner over.\nWill: wardens wear it down to 0, then the prisoner can be enslaved."));
 			ImGui::TableNextColumn();
-			const int32 Mode = FMath::Clamp(static_cast<int32>(View.prisonerMode), 0, 4);
+			const int32 Mode = FMath::Clamp(static_cast<int32>(View.prisonerMode), 0, HudScrPrisonerModeCount - 1);
 			ImGui::SetNextItemWidth(220.0f * Scale);
 			if (ImGui::BeginCombo("##mode", TCHAR_TO_UTF8(HudScrPrisonerModes[Mode])))
 			{
-				for (int32 Index = 0; Index < 5; ++Index)
+				for (int32 Index = 0; Index < HudScrPrisonerModeCount; ++Index)
 				{
 					if (ImGui::Selectable(TCHAR_TO_UTF8(HudScrPrisonerModes[Index]), Index == Mode))
 					{
 						Submit(colony::SetPrisonerModeCommand{View.id, colony::prisonerModeName(static_cast<colony::PrisonerMode>(Index))});
 					}
+					ColonyHud::Tip(HudScrPrisonerModeTips[Index]);
 				}
 				ImGui::EndCombo();
 			}
@@ -721,6 +733,64 @@ void UColonyHudSubsystem::DrawPrisonersScreen(USimSubsystem& Bridge, float Scale
 	if (Prisoners == 0)
 	{
 		ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("No prisoners."));
+	}
+
+	// Slaves (docs/design/prisoners.md, Slaves): their suppression, and freeing them.
+	ImGui::Spacing();
+	ColonyHud::Heading(TEXT("Slaves"));
+	int32 Slaves = 0;
+	if (ImGui::BeginTable("##HudSlavesTable", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
+	{
+		for (const colony::ThingView& View : Snapshot.things)
+		{
+			if (View.category != colony::ThingCategory::Pawn || View.dead || !View.slave)
+			{
+				continue;
+			}
+			++Slaves;
+			ImGui::PushID(HudScrId(View.id));
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			const FString Name = HudScrPawnName(Sim, View);
+			if (ImGui::Selectable(TCHAR_TO_UTF8(*Name), false, ImGuiSelectableFlags_None, ImVec2(200.0f * Scale, 0.0f)))
+			{
+				HudScrGoTo(GetWorld(), View.id);
+			}
+			ColonyHud::Tip(TEXT("Click to go there"));
+			ImGui::TableNextColumn();
+			const float Suppression = FMath::Clamp(View.suppression, 0.0f, 1.0f);
+			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, Suppression < 0.333f ? ColonyHud::Bad() : (Suppression < 0.5f ? ColonyHud::Warn() : ColonyHud::Good()));
+			ImGui::ProgressBar(Suppression, ImVec2(180.0f * Scale, 0.0f), TCHAR_TO_UTF8(*FString::Printf(TEXT("Suppression %d%%"), FMath::RoundToInt32(Suppression * 100.0f))));
+			ImGui::PopStyleColor();
+			ColonyHud::Tip(TEXT("Falls by itself; wardens raise it by talking to the slave. Low suppression: the slaves may rise up, more so when no free colonist is around."));
+			ImGui::TableNextColumn();
+			if (ColonyHud::Button(TEXT("Emancipate")))
+			{
+				Submit(colony::SetPrisonerModeCommand{View.id, "Emancipate"});
+			}
+			ColonyHud::Tip(TEXT("Free the slave: it stays and joins the colony as a colonist"));
+			ImGui::SameLine();
+			if (ColonyHud::Button(TEXT("Release")))
+			{
+				Submit(colony::SetPrisonerModeCommand{View.id, "Release"});
+			}
+			ColonyHud::Tip(TEXT("Free the slave and let it go home"));
+			ImGui::TableNextColumn();
+			if (View.downed)
+			{
+				ColonyHud::TextColored(ColonyHud::Warn(), TEXT("Down"));
+			}
+			ImGui::PopID();
+		}
+		ImGui::EndTable();
+	}
+	if (Slaves == 0)
+	{
+		ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("No slaves. Set a prisoner to Enslave to make one."));
+	}
+	else
+	{
+		ColonyHud::TextColored(ColonyHud::TextFaint(), TEXT("Slaves work at 85% speed, can't be drafted and don't do warden, hunting, art or research work."));
 	}
 
 	// Beds: mark one for prisoners.
@@ -788,29 +858,42 @@ bool UColonyHudSubsystem::StartNewColony(bool bPickSite)
 	Options.DayMinutes = USimSubsystem::GetSavedDayMinutes();
 	bNarratorPending = true;
 	NarratorGeneration = Bridge->GetSimGeneration();
-	UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>();
+	// The biomes a site may be in: the scenario's `siteBiomes`, else its `biome` (docs/design/new-game.md).
+	TArray<FString> Biomes;
+	if (const colony::DefDatabase* Defs = Bridge->GetDefs().get())
+	{
+		if (const colony::Def* Scenario = Defs->find("Scenarios", TCHAR_TO_UTF8(*NewScenario)))
+		{
+			for (size_t i = 0; i < Scenario->count("siteBiomes"); ++i)
+			{
+				Biomes.Add(UTF8_TO_TCHAR(Scenario->textAt("siteBiomes", i).c_str()));
+			}
+			if (Biomes.IsEmpty() && !Scenario->text("biome").empty())
+			{
+				Biomes.Add(UTF8_TO_TCHAR(Scenario->text("biome").c_str()));
+			}
+		}
+	}
 	if (bPickSite)
 	{
-		// The world map picks the tile; its Start here starts the sim with these options.
+		// The world map picks the tile; its "Land here" starts the sim with these options and opens the people page.
 		Bridge->SetStartOptions(Options);
 		if (UWorldScreenSubsystem* WorldScreen = GetWorld()->GetSubsystem<UWorldScreenSubsystem>())
 		{
 			WorldScreen->MakeWorld(NewSeed);
+			WorldScreen->SetNewGame(Biomes);
 			WorldScreen->SetOpen(true);
+			bAwaitingLanding = true;
+			bMainMenuOpen = false;
+			return true;
 		}
-		if (Overseer)
-		{
-			Overseer->EnterOverseerMode();
-		}
-		bMainMenuOpen = false;
-		return true;
+		return false;
 	}
 	const bool bStarted = Bridge->StartSim(Options);
-	if (Overseer)
+	if (bStarted)
 	{
-		Overseer->EnterOverseerMode();
+		EnterPeoplePage(*Bridge);
 	}
-	bMainMenuOpen = !bStarted;
 	return bStarted;
 }
 
@@ -829,184 +912,72 @@ void UColonyHudSubsystem::DrawMainMenu(USimSubsystem& Bridge)
 	const float Scale = ColonyHud::ViewScale(Viewport);
 	ColonyHud::ApplyFrameStyle(Scale);
 	++Stats.MainMenuFrames;
-	const colony::DefDatabase* Defs = Bridge.GetDefs().get();
 
-	// A dark veil over the map behind, and the menu in the middle.
-	ImGui::GetBackgroundDrawList()->AddRectFilled(Viewport->Pos, ImVec2(Viewport->Pos.x + Viewport->Size.x, Viewport->Pos.y + Viewport->Size.y), IM_COL32(8, 10, 12, 170));
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(520.0f * Scale, 0.0f), ImVec2(900.0f * Scale, Viewport->Size.y * 0.85f));
-	if (!ImGui::Begin("##HudMainMenu", nullptr, ColonyHud::BoxFlags() & ~ImGuiWindowFlags_NoFocusOnAppearing))
+	if (MainMenuPage == 3 || MainMenuPage == 4)
 	{
-		ImGui::End();
-		return;
-	}
-	const float Wide = 480.0f * Scale;
-	ColonyHud::PushLarge();
-	ColonyHud::Title(TEXT("Rim3D"));
-	ColonyHud::PopLarge();
-	ImGui::Spacing();
-
-	if (MainMenuPage == 0)
-	{
-		if (ColonyHud::Button(TEXT("New colony"), false, ImVec2(Wide, 0.0f)))
-		{
-			MainMenuPage = 1;
-		}
-		if (ColonyHud::Button(TEXT("Load a game"), false, ImVec2(Wide, 0.0f)))
-		{
-			MainMenuPage = 2;
-			SaveSlots.Reset();
-			TArray<FString> Files;
-			IFileManager::Get().FindFiles(Files, *(USimSubsystem::GetSaveDirectory() / TEXT("*.save")), true, false);
-			for (const FString& File : Files)
-			{
-				SaveSlots.Add(FPaths::GetBaseFilename(File));
-			}
-			SaveSlots.Sort();
-		}
-		if (ColonyHud::Button(TEXT("Settings"), bSettingsOpen, ImVec2(Wide, 0.0f)))
-		{
-			bSettingsOpen = !bSettingsOpen;
-		}
-		if (Bridge.GetSim() && Bridge.GetSim()->time().steps > 0 && ColonyHud::Button(TEXT("Back to the game"), false, ImVec2(Wide, 0.0f)))
-		{
-			bMainMenuOpen = false;
-		}
-		ImGui::Spacing();
-		if (ColonyHud::Button(TEXT("Quit to desktop"), false, ImVec2(Wide, 0.0f)))
-		{
-			UKismetSystemLibrary::QuitGame(GetWorld(), GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
-		}
-	}
-	else if (MainMenuPage == 1)
-	{
-		ColonyHud::Heading(TEXT("New colony"));
-		// Scenario.
-		ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("Scenario"));
-		if (Defs)
-		{
-			for (const colony::DefId Id : Defs->idsOfKind("Scenarios"))
-			{
-				const colony::Def& Def = Defs->get(Id);
-				if (Def.defName() == "PerfColony")
-				{
-					continue;
-				}
-				const FString Name = UTF8_TO_TCHAR(Def.defName().c_str());
-				if (ColonyHud::Button(FString::Printf(TEXT("%s##scen"), *HudScrCapital(Def.label())), NewScenario == Name, ImVec2(Wide, 0.0f)))
-				{
-					NewScenario = Name;
-				}
-				ColonyHud::Tip(UTF8_TO_TCHAR(Def.text("description").c_str()));
-			}
-		}
-		// Narrator and difficulty.
-		ImGui::Spacing();
-		ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("Narrator"));
-		if (Defs)
-		{
-			for (const colony::DefId Id : Defs->idsOfKind("Narrators"))
-			{
-				const colony::Def& Def = Defs->get(Id);
-				const FString Name = UTF8_TO_TCHAR(Def.defName().c_str());
-				if (ColonyHud::Button(FString::Printf(TEXT("%s##narr"), *Name), NewNarrator == Name))
-				{
-					NewNarrator = Name;
-				}
-				ColonyHud::Tip(UTF8_TO_TCHAR(Def.text("description").c_str()));
-				ImGui::SameLine();
-			}
-			ImGui::NewLine();
-			ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("Difficulty"));
-			ImGui::SetNextItemWidth(Wide);
-			FString DifficultyLabel = NewDifficulty;
-			for (const colony::DefId Id : Defs->idsOfKind("Difficulties"))
-			{
-				const colony::Def& Def = Defs->get(Id);
-				DifficultyLabel = UTF8_TO_TCHAR(Def.defName().c_str()) == NewDifficulty ? HudScrCapital(Def.label()) : DifficultyLabel;
-			}
-			if (ImGui::BeginCombo("##difficulty", TCHAR_TO_UTF8(*DifficultyLabel)))
-			{
-				for (const colony::DefId Id : Defs->idsOfKind("Difficulties"))
-				{
-					const colony::Def& Def = Defs->get(Id);
-					const FString Name = UTF8_TO_TCHAR(Def.defName().c_str());
-					if (ImGui::Selectable(TCHAR_TO_UTF8(*HudScrCapital(Def.label())), Name == NewDifficulty))
-					{
-						NewDifficulty = Name;
-					}
-				}
-				ImGui::EndCombo();
-			}
-		}
-		// Seed and map size.
-		ImGui::Spacing();
-		ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("Seed (the same seed makes the same world)"));
-		ImGui::SetNextItemWidth(200.0f * Scale);
-		ImGui::InputInt("##seed", &NewSeed);
-		NewSeed = FMath::Max(NewSeed, 0);
-		ImGui::SameLine();
-		if (ColonyHud::Button(TEXT("Random")))
-		{
-			NewSeed = FMath::RandRange(1, 999999);
-		}
-		ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("Map size"));
-		const int32 Sizes[] = {256, 512, 1024};
-		for (const int32 Size : Sizes)
-		{
-			if (ColonyHud::Button(FString::Printf(TEXT("%d m"), Size), NewMapSize == Size))
-			{
-				NewMapSize = Size;
-			}
-			ImGui::SameLine();
-		}
-		ImGui::NewLine();
-		ImGui::Spacing();
-		if (ColonyHud::Button(TEXT("Start"), false, ImVec2(Wide * 0.49f, 0.0f)))
-		{
-			StartNewColony(false);
-		}
-		ColonyHud::Tip(TEXT("Lands where the scenario's biome is, on a world made from the seed"));
-		ImGui::SameLine();
-		if (ColonyHud::Button(TEXT("Pick a site on the world map"), false, ImVec2(Wide * 0.49f, 0.0f)))
-		{
-			StartNewColony(true);
-		}
-		if (ColonyHud::Button(TEXT("Back"), false, ImVec2(Wide, 0.0f)))
-		{
-			MainMenuPage = 0;
-		}
+		// The people page shows the colony's real 3D people: no veil over them.
+		DrawPeoplePage(Bridge, Scale);
 	}
 	else
 	{
-		ColonyHud::Heading(TEXT("Load a game"));
-		if (SaveSlots.IsEmpty())
+		EndPeopleCamera();
+		// A dark veil over the scene behind, heavier on the left where the menu is.
+		ImDrawList* Back = ImGui::GetBackgroundDrawList();
+		const ImVec2 A = Viewport->Pos;
+		const ImVec2 B(Viewport->Pos.x + Viewport->Size.x, Viewport->Pos.y + Viewport->Size.y);
+		Back->AddRectFilledMultiColor(A, B, IM_COL32(6, 8, 10, 215), IM_COL32(6, 8, 10, 90), IM_COL32(6, 8, 10, 90), IM_COL32(6, 8, 10, 215));
+		if (MainMenuPage == 0)
 		{
-			ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("No saved games yet (F5 saves while playing)."));
+			DrawTitlePage(Bridge, Scale);
 		}
-		for (const FString& Slot : SaveSlots)
+		else if (MainMenuPage == 1)
 		{
-			if (ColonyHud::Button(FString::Printf(TEXT("%s##slot"), *Slot), false, ImVec2(Wide, 0.0f)))
+			DrawScenarioPage(Bridge, Scale);
+		}
+		else if (MainMenuPage == 5)
+		{
+			DrawDebugPage(Scale);
+		}
+		else
+		{
+			const float Wide = 480.0f * Scale;
+			ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+			ImGui::SetNextWindowSizeConstraints(ImVec2(520.0f * Scale, 0.0f), ImVec2(900.0f * Scale, Viewport->Size.y * 0.85f));
+			if (ImGui::Begin("##HudMainMenu", nullptr, ColonyHud::BoxFlags() & ~ImGuiWindowFlags_NoFocusOnAppearing))
 			{
-				if (Bridge.LoadGame(Slot))
+				ColonyHud::Heading(TEXT("Load a game"));
+				if (SaveSlots.IsEmpty())
 				{
-					bNarratorPending = false;
-					bMainMenuOpen = false;
-					MainMenuPage = 0;
-					if (UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>())
+					ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("No saved games yet (F5 saves while playing)."));
+				}
+				for (const FString& Slot : SaveSlots)
+				{
+					const FDateTime Time = IFileManager::Get().GetTimeStamp(*(USimSubsystem::GetSaveDirectory() / (Slot + TEXT(".save"))));
+					if (ColonyHud::Button(FString::Printf(TEXT("%s##slot"), *Slot), false, ImVec2(Wide, 0.0f)))
 					{
-						Overseer->EnterOverseerMode();
+						if (Bridge.LoadGame(Slot))
+						{
+							bNarratorPending = false;
+							bMainMenuOpen = false;
+							MainMenuPage = 0;
+							if (UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>())
+							{
+								Overseer->EnterOverseerMode();
+							}
+						}
 					}
+					ImGui::SameLine();
+					ColonyHud::TextColored(ColonyHud::TextFaint(), Time.ToString(TEXT("%d %b %Y  %H:%M")));
+				}
+				ImGui::Spacing();
+				if (ColonyHud::Button(TEXT("Back"), false, ImVec2(Wide, 0.0f)))
+				{
+					MainMenuPage = 0;
 				}
 			}
-		}
-		ImGui::Spacing();
-		if (ColonyHud::Button(TEXT("Back"), false, ImVec2(Wide, 0.0f)))
-		{
-			MainMenuPage = 0;
+			ImGui::End();
 		}
 	}
-	ImGui::End();
 	if (bSettingsOpen)
 	{
 		DrawSettings(Bridge, Scale);

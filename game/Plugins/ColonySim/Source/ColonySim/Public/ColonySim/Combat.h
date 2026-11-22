@@ -24,6 +24,7 @@ class InspirationSystem;
 class TalentSystem;
 class TraitBook;
 class Map;
+class Plants;
 class StateHasher;
 class Things;
 class Weather;
@@ -210,6 +211,7 @@ struct Explosion {
     Entity source = kNoEntity;      // the grenade entity, for the event
     Entity instigator = kNoEntity;  // who threw or planted it
     uint64_t seed = 0;          // where its random choices come from
+    DefId sourceDef;            // the projectile, grenade or shell def that burst (for its sound), invalid if none
 };
 
 struct ExplosionResult {
@@ -217,6 +219,7 @@ struct ExplosionResult {
     int pawnsKnocked = 0;
     int buildingsHit = 0;
     int buildingsDestroyed = 0;
+    int plantsDestroyed = 0;
 };
 
 // A bullet in flight. Not a Thing: it has no def of kind Things and is not in the snapshot's
@@ -258,6 +261,7 @@ struct TraceHit {
     float x = 0.0f, y = 0.0f, z = 0.0f;
     Entity thing = kNoEntity;  // the pawn or building hit
     int part = -1;             // the body part whose hitbox was hit (outside part)
+    CellPos cell{};            // kind Plant: the tree's cell
     // The first window wall with whole glass the stretch went through on its way (docs/design/windows.md), and
     // where it met the glass. The glass doesn't stop anything; a bullet or grenade that gets that far breaks it.
     Entity glass = kNoEntity;
@@ -314,6 +318,9 @@ public:
     void setEventLog(std::vector<Event>* events) { events_ = events; }
     // Weather and snow cut a shooter's hit chance under the open sky (docs/design/weather.md).
     void setWeather(const Weather* weather) { weather_ = weather; }
+    // The plant layer: traces meet tree trunks, and blows, shots and blasts hurt plants (docs/design/structure-damage.md).
+    void setPlants(Plants* plants) { plants_ = plants; }
+    const Plants* plants() const { return plants_; }
     // The protagonist's talents make the spread of its shots smaller (docs/design/talents.md).
     void setTalents(const TalentSystem* talents) { talents_ = talents; }
     // A shooting frenzy narrows the spread and shortens the cooldown (docs/design/inspirations.md).
@@ -491,7 +498,9 @@ public:
     // With `pawns` false only the ground, rock and buildings count (blast lines of sight).
     // `drawn`: a player's shot at a drawn body part (DrawnAim); passing near that spot hits the part.
     TraceHit trace(float ax, float ay, float az, float bx, float by, float bz, int level, Entity skipPawn,
-                   CellPos skipCell, bool pawns = true, const DrawnAim* drawn = nullptr) const;
+                   CellPos skipCell, bool pawns = true, const DrawnAim* drawn = nullptr, bool trees = false) const;
+    // `trees`: tree trunks stop the line too (a bullet, a grenade or a blow in flight; docs/design/structure-damage.md).
+    // Sight checks leave it off: a shooter fires past a trunk and the bullet may meet it.
     // The point other pawns aim at on this pawn (its chest), world metres. False if not a pawn
     // on the map.
     bool aimPoint(Entity pawn, float& x, float& y, float& z) const;
@@ -512,6 +521,10 @@ public:
     // before-destroy hook and is destroyed. True if it was destroyed; false for a thing without hit points or one
     // that still stands.
     bool damageBuilding(Entity building, int damage);
+    // A melee blow (`melee`) or a shot that met a building or a tree (`hit` from trace, kind Building or Plant) takes
+    // `amount` times StructureDamageRules' factor off it (sneed 2026-11-20: melee whole, shots half; docs/design/
+    // structure-damage.md). Destroys what reaches 0. Returns the hit points taken (0 for something that can't be hurt).
+    int damageStruck(const TraceHit& hit, float amount, bool melee);
     // Breaks the glass of a window wall at (x, y, z), `by` who or what did it (docs/design/windows.md). Event
     // WindowBroken. False if it has no window or the glass is already gone.
     bool breakWindow(Entity wall, float x, float y, float z, Entity by = kNoEntity);
@@ -581,6 +594,9 @@ public:
     bool isGun(DefId def) const;
 
 private:
+    // Hurts the plant in a ground cell by `damage`; if that kills it, says so with a PlantRemoved "broken" (a tree with the
+    // way it falls, away from (fromX, fromY), and its growth: docs/design/structure-damage.md "Falling trees"). True if it died.
+    bool hurtPlant(CellPos c, int damage, float fromX, float fromY);
     Things& things_;
     Map& map_;
     HealthSystem& health_;
@@ -590,6 +606,7 @@ private:
     std::unique_ptr<BodyMotionSystem> motion_;
     std::vector<Event>* events_ = nullptr;
     const Weather* weather_ = nullptr;
+    Plants* plants_ = nullptr;
     const TraitBook* traits_ = nullptr;
     const TalentSystem* talents_ = nullptr;
     const InspirationSystem* inspirations_ = nullptr;

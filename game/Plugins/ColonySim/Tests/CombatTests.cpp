@@ -11,6 +11,8 @@
 
 #include <doctest.h>
 
+#include "TestPlants.h"
+
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -75,7 +77,7 @@ std::unique_ptr<Sim> combatTestSim(uint64_t seed = 11) {
     settings.seed = seed;
     settings.mapSize = 96;
     settings.flatMap = true;
-    return std::make_unique<Sim>(settings, combatTestDefs());
+    return withoutPlants(std::make_unique<Sim>(settings, combatTestDefs()));
 }
 
 // A pawn at the centre of cell (x, y) facing east, holding `gun` (if any).
@@ -218,13 +220,13 @@ TEST_CASE("Combat: walls stop bullets and break, sandbags hide a crouching pawn"
         CHECK(hit.hit == ProjectileHitKind::Building);
         CHECK(hit.target == wall);
         CHECK(hit.x == doctest::Approx(20.0f).epsilon(0.001));
-        CHECK(sim->things().registry().get<HitPoints>(wall).current == 300 - 9);  // 18, halved by tuning.json
+        CHECK(sim->things().registry().get<HitPoints>(wall).current == 300 - 5);  // 18, halved by tuning.json, halved again on buildings (sneed 2026-11-20), rounded up
         int shots = 1;
-        while (sim->things().exists(wall) && shots < 60) {
+        while (sim->things().exists(wall) && shots < 100) {
             combatTestShot(*sim, shooter, target, 0.0f, rng);
             ++shots;
         }
-        CHECK(shots == 34);  // 300 hit points, 9 a shot
+        CHECK(shots == 60);  // 300 hit points, 5 a shot
         CHECK(!sim->things().exists(wall));
         CHECK(combatTestShot(*sim, shooter, target, 0.0f, rng).hit == ProjectileHitKind::Pawn);
     }

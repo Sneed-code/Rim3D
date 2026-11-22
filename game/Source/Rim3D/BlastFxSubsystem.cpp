@@ -1,4 +1,6 @@
 #include "BlastFxSubsystem.h"
+#include "SeveredPieceActor.h"
+#include "EngineUtils.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -13,6 +15,8 @@
 #include "Materials/MaterialInterface.h"
 
 #include "BlastFxData.h"
+#include "PawnActor.h"
+#include "PawnSubsystem.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Defs.h"
@@ -196,7 +200,7 @@ bool UBlastFxSubsystem::EnsureScene()
 		ScorchInstances->bUseAsOccluder = false;
 		// Under the smoke and everything else see-through.
 		ScorchInstances->TranslucencySortPriority = -1;
-		ScorchInstances->NumCustomDataFloats = 1;
+		ScorchInstances->NumCustomDataFloats = 2;  // fade, age (for the embers)
 		ScorchInstances->SetupAttachment(Root);
 		ScorchInstances->RegisterComponent();
 		// The scorch never showed on the PC (rounds 3 to 7): say what it is drawn with, to tell a stale or wrong material.
@@ -233,15 +237,68 @@ void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 		return;
 	}
 	USimSubsystem* Source = Bridge.Get();
-	if (!Source || !Source->GetSim() || !EnsureScene())
+	if (!Source || !Source->GetSim())
 	{
 		return;
 	}
 	const float RadiusM = FMath::Max(Event.amount, 0.5f);
 	const FVector Centre = BlastSimToWorld(*Source, Event.x, Event.y, Event.z);
-	const FVector Ground = Source->SimToWorld(Event.x, Event.y, 0);
 	const colony::DefId Type = Event.def;
 	const bool bFire = Type.valid() && Source->GetDefs() && Source->GetDefs()->get(Type).text("mix.sub") == "Fire";
+	// Ragdolls (corpses, the knocked out) are thrown by it (sneed 2026-11-20: "punt and ragdoll corpses, not cartoonishly
+	// but a decent amount"): a frag grenade throws a body at about 5 m/s, a rocket about 7, a doomsday rocket 9, nothing at
+	// the edge. The sim moves the corpse's place the same way (CombatSystem::explode).
+	if (!bFire)
+	{
+		const float Speed = FMath::Clamp(250.0f + 120.0f * RadiusM, 300.0f, 900.0f);
+		const double Reach = RadiusM * 120.0;
+		if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
+		{
+			for (const TPair<uint32, TObjectPtr<ASimPawnActor>>& Pair : Pawns->GetPawns())
+			{
+				ASimPawnActor* Actor = Pair.Value.Get();
+				if (!Actor)
+				{
+					continue;
+				}
+				// Where the body lies (the ragdoll's pelvis), not where the actor stood when it fell.
+				FVector Lying = Actor->GetActorLocation();
+				Actor->GetRagdollPelvis(Lying);
+				const double Away = FVector::Dist(Lying, Centre);
+				if (Away < Reach + 300.0)
+				{
+					UE_LOG(LogTemp, Display, TEXT("Blast throw: pawn %u ragdoll %d, %.0f cm from the blast (reach %.0f)"), Pair.Key, Actor->IsRagdoll() ? 1 : 0, Away, Reach + 100.0);
+				}
+				if (Actor->IsRagdoll() && Away < Reach + 100.0)
+				{
+					Actor->PushRagdoll(Centre, static_cast<float>(Reach + 100.0), Speed);
+					++RagdollsThrown;
+				}
+			}
+		}
+		// Severed limbs and heads fly too, lighter than a body: half again as fast, falling off to the edge, lifted.
+		for (TActorIterator<ASeveredPieceActor> It(GetWorld()); It; ++It)
+		{
+			ASeveredPieceActor* Piece = *It;
+			const FVector Offset = Piece->GetActorLocation() - (Centre - FVector(0.0, 0.0, 40.0));
+			const double Away = Offset.Size();
+			if (Away >= Reach + 100.0)
+			{
+				continue;
+			}
+			const float Falloff = 1.0f - static_cast<float>(Away / (Reach + 100.0));
+			const FVector Out = Offset.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+			Piece->Push((Out + FVector(0.0, 0.0, 0.6)).GetSafeNormal() * Speed * 1.5f * Falloff, Piece->GetActorLocation() - Out * 5.0);
+			++PiecesThrown;
+		}
+	}
+
+	// The rest is art: without it (-run=BlastArt not run) the bodies are still thrown, above.
+	if (!EnsureScene())
+	{
+		return;
+	}
+	const FVector Ground = Source->SimToWorld(Event.x, Event.y, 0);
 	++BlastsDrawn;
 
 	// The light first: even a blast too far to draw lights the sky.
@@ -754,6 +811,7 @@ void UBlastFxSubsystem::UpdateScorches(float DeltaTime)
 			// Fades slowly at first, quicker at the end (as soot is scuffed and rained off).
 			const float Left = 1.0f - Scorches[I].Age / Seconds;
 			ScorchInstances->SetCustomDataValue(I, 0, Scorches[I].Strength * FMath::Sqrt(Left), false);
+			ScorchInstances->SetCustomDataValue(I, 1, Scorches[I].Age, false);
 		}
 		ScorchInstances->MarkRenderStateDirty();
 		if (!bLoggedScorchDraw)

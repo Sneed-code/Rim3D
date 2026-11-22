@@ -146,6 +146,39 @@ public:
     // `kind` 0 clears the cell, 1 is a fence, 2 a fence gate.
     void setFence(CellPos c, int kind);
 
+    // Tree trunks (docs/design/structure-damage.md "Trees in the way"): the ground layer of standing trunks that walkers
+    // steer round and paths avoid. Plants keeps it up to date (Plants::attachTrunks); nothing else should call setTrunk.
+    // A trunk stands at plantSpot(cell) with its radius in metres (0 clears the cell; kept to the centimetre).
+    // True if the stored radius changed.
+    bool setTrunk(CellPos c, float radius);
+    bool hasTrunk(CellPos c) const {
+        return c.level == 0 && !trunk_.empty() && inBounds(c) && trunk_[static_cast<size_t>(index(c))] != 0;
+    }
+    // The trunk in a ground cell: where it stands and its radius, metres. False where there is none.
+    bool trunkAt(CellPos c, float& x, float& y, float& radius) const {
+        if (!hasTrunk(c)) {
+            return false;
+        }
+        plantSpot(index(c), c.x, c.y, x, y);
+        radius = static_cast<float>(trunk_[static_cast<size_t>(index(c))]) * 0.01f;
+        return true;
+    }
+    // Raw trunk layer of the ground (radius in cm, 0 none) for the pathfinder's inner loop; null while there are none.
+    const uint8_t* groundTrunks() const { return trunk_.empty() ? nullptr : trunk_.data(); }
+    size_t trunkCount() const { return trunkCount_; }
+    // Steps out of a ground cell too tight between trunks for a walker (Movement.h refreshTrunkSteps): bit d for the step
+    // to the neighbour (kStepDx[d], kStepDy[d]). Null while there are none. The pathfinder makes them dear.
+    static constexpr int kStepDx[8] = {1, -1, 0, 0, 1, 1, -1, -1};
+    static constexpr int kStepDy[8] = {0, 0, 1, -1, 1, -1, 1, -1};
+    const uint8_t* groundTightSteps() const { return tight_.empty() ? nullptr : tight_.data(); }
+    uint8_t tightSteps(CellPos c) const {
+        return c.level == 0 && !tight_.empty() && inBounds(c) ? tight_[static_cast<size_t>(index(c))] : uint8_t{0};
+    }
+    void setTightSteps(CellPos c, uint8_t steps);
+    // Where in its cell a plant stands: the cell's centre moved up to 0.35 m each way by a hash of the cell's index.
+    // Unreal draws the plant there (TerrainSubsystem, through Plants::stemPoint), so trunks and drawn trees agree.
+    static void plantSpot(int cellIndex, int x, int y, float& px, float& py);
+
     // Height in metres of what a pawn stands on in the cell: the ground on level 0, the ground
     // plus kLevelHeightM per level above it (an upper floor runs parallel to the ground under it).
     // The cell must be in bounds.
@@ -468,6 +501,9 @@ private:
     std::vector<Entity> building_;
     std::vector<Passage> passage_;
     std::vector<uint8_t> obstacle_;
+    std::vector<uint8_t> trunk_;  // per ground cell, a standing trunk's radius in cm (0 none); empty until the first
+    std::vector<uint8_t> tight_;  // per ground cell, the steps out of it too tight between trunks; empty until the first
+    size_t trunkCount_ = 0;
     std::vector<uint8_t> fence_;  // per ground cell, 1 under a fence or fence gate; empty until the first
     std::vector<Roof> roof_;
     int chunksX_ = 0;

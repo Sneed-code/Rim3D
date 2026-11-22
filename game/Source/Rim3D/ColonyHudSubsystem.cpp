@@ -17,6 +17,7 @@
 #include <imgui.h>
 
 #include "ColonyHudStyle.h"
+#include "DebugScenes.h"
 
 #include "GraphicsOptionsSubsystem.h"
 #include "KeyBindings.h"
@@ -28,6 +29,7 @@
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
 #include "ProtagonistPawn.h"
+#include "ProtagonistSubsystem.h"
 #include "QuestPanelSubsystem.h"
 #include "ShipPanelSubsystem.h"
 #include "ShooterFeelSubsystem.h"
@@ -224,7 +226,13 @@ void UColonyHudSubsystem::Submit(colony::Command Command)
 	}
 	Bridge->Submit(std::move(Command));
 	++Stats.CommandsSent;
-	// Commands are applied by the next step; while the game is paused, one step makes the change show at once.
+	// Commands are applied by the next step; while the game is paused, one step makes the change show at once. Before
+	// the game starts (the new game's character screens, game second 0) a step would start the clock: those commands
+	// apply without one (docs/design/new-game.md).
+	if (Bridge->GetSim() && Bridge->GetSim()->time().steps == 0 && Bridge->ApplyPregameCommands())
+	{
+		return;
+	}
 	if (Bridge->GetSpeed() == 0)
 	{
 		Bridge->StepOnce();
@@ -236,12 +244,19 @@ void UColonyHudSubsystem::LoadPrefs()
 	Pinned.Reset();
 	FString PinnedText = TEXT("Silver");  // silver is pinned by default (ui-layout.md)
 	int32 TextSize = 0;
+	FString LessonsText;
+	bLessonsOn = true;
 	if (GConfig)
 	{
 		GConfig->GetString(HudPrefsSection, TEXT("Pinned"), PinnedText, GGameUserSettingsIni);
 		GConfig->GetInt(HudPrefsSection, TEXT("TextSize"), TextSize, GGameUserSettingsIni);
+		GConfig->GetString(HudPrefsSection, TEXT("Lessons"), LessonsText, GGameUserSettingsIni);
+		GConfig->GetBool(HudPrefsSection, TEXT("LessonsOn"), bLessonsOn, GGameUserSettingsIni);
 	}
 	PinnedText.ParseIntoArray(Pinned, TEXT(","), true);
+	TArray<FString> LessonIds;
+	LessonsText.ParseIntoArray(LessonIds, TEXT(","), true);
+	LearnedLessons = TSet<FString>(LessonIds);
 	GHudTextSize.AsVariable()->Set(TextSize == 1 ? 1 : 0, ECVF_SetByCode);
 }
 
@@ -253,6 +268,8 @@ void UColonyHudSubsystem::SavePrefs() const
 	}
 	GConfig->SetString(HudPrefsSection, TEXT("Pinned"), *FString::Join(Pinned, TEXT(",")), GGameUserSettingsIni);
 	GConfig->SetInt(HudPrefsSection, TEXT("TextSize"), GHudTextSize.GetValueOnGameThread(), GGameUserSettingsIni);
+	GConfig->SetString(HudPrefsSection, TEXT("Lessons"), *FString::Join(LearnedLessons.Array(), TEXT(",")), GGameUserSettingsIni);
+	GConfig->SetBool(HudPrefsSection, TEXT("LessonsOn"), bLessonsOn, GGameUserSettingsIni);
 	GConfig->Flush(false, GGameUserSettingsIni);
 }
 
@@ -448,6 +465,16 @@ void UColonyHudSubsystem::OpenSettingsPage(const FString& Name)
 void UColonyHudSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	// A scene started from the title screen's Debug page: F10 goes back to the title (docs/design/new-game.md).
+	static const bool bDebugScene = DebugScenes::IsDebugScene();
+	if (bDebugScene && !bLeavingDebugScene)
+	{
+		const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+		if (PC && PC->WasInputKeyJustPressed(EKeys::F10))
+		{
+			bLeavingDebugScene = DebugScenes::ReturnToTitle();
+		}
+	}
 	USimSubsystem* Bridge = GetBridge();
 	if (!Bridge || !Bridge->GetSim())
 	{
@@ -473,6 +500,35 @@ void UColonyHudSubsystem::Tick(float DeltaTime)
 		bMainMenuChecked = true;
 		const TCHAR* Line = FCommandLine::Get();
 		bMainMenuOpen = Bridge->GetStartOptions().Scenario.IsEmpty() && !FParse::Param(Line, TEXT("NoMenu")) && !FString(Line).Contains(TEXT("-SmokeTest="));
+	}
+	CheckLanding(*Bridge);
+	// The menus are clicked with the mouse: show the cursor and let the UI have it while one is open (the level's
+	// default pawn starts with the mouse captured for looking around, so the title's buttons could not be clicked),
+	// and give it back to a directly controlled body when the menu closes (the overseer sets its own).
+	if (APlayerController* MenuPC = GetWorld()->GetFirstPlayerController())
+	{
+		if (bMainMenuOpen)
+		{
+			MenuPC->bShowMouseCursor = true;
+			if (!bMenuMouse)
+			{
+				bMenuMouse = true;
+				FInputModeGameAndUI MenuMode;
+				MenuMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+				MenuMode.SetHideCursorDuringCapture(false);
+				MenuPC->SetInputMode(MenuMode);
+			}
+		}
+		else if (bMenuMouse)
+		{
+			bMenuMouse = false;
+			const UProtagonistSubsystem* Direct = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+			if (Direct && Direct->IsDirectMode())
+			{
+				MenuPC->bShowMouseCursor = false;
+				MenuPC->SetInputMode(FInputModeGameOnly());
+			}
+		}
 	}
 	if (bMainMenuOpen)
 	{
@@ -543,6 +599,7 @@ void UColonyHudSubsystem::DrawHud(USimSubsystem& Bridge)
 		default: break;
 	}
 	DrawScreen(Bridge, Scale);
+	DrawLessons(Bridge, Scale);
 	DrawHoverReadout(Bridge, Scale);
 	DrawInfoWindow(Bridge, Scale);
 	if (bSettingsOpen)
@@ -573,25 +630,95 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 			const ImVec2 Max = ImGui::GetItemRectMax();
 			ButtonRects.Add(Label, FBox2D(FVector2D(Min.x, Min.y), FVector2D(Max.x, Max.y)));
 		};
+		// A bar button with a drawn icon: 0 pause, 1-3 that many play arrows, 4 keyboard, 5 flag, 6 menu lines, 7 an open book.
+		const auto IconButton = [&](const TCHAR* Name, int32 Icon, bool bActive) -> bool
+		{
+			const bool bPressed = ColonyHud::Button(FString::Printf(TEXT("##icon%s"), Name), bActive, ImVec2(ImGui::GetFrameHeight() * 1.35f, ImGui::GetFrameHeight()));
+			const ImVec2 Min = ImGui::GetItemRectMin();
+			const ImVec2 Max = ImGui::GetItemRectMax();
+			const ImVec2 Mid((Min.x + Max.x) * 0.5f, (Min.y + Max.y) * 0.5f);
+			const float R = (Max.y - Min.y) * 0.28f;  // half the icon's height
+			const float Line = FMath::Max(1.5f, 1.6f * Scale);
+			const ImU32 Ink = ImGui::GetColorU32(bActive ? ColonyHud::Accent() : ColonyHud::TextMain());
+			ImDrawList* Draw = ImGui::GetWindowDrawList();
+			if (Icon == 0)
+			{
+				const float W = R * 0.32f;
+				Draw->AddRectFilled(ImVec2(Mid.x - R * 0.55f - W * 0.5f, Mid.y - R), ImVec2(Mid.x - R * 0.55f + W * 0.5f, Mid.y + R), Ink, 1.0f);
+				Draw->AddRectFilled(ImVec2(Mid.x + R * 0.55f - W * 0.5f, Mid.y - R), ImVec2(Mid.x + R * 0.55f + W * 0.5f, Mid.y + R), Ink, 1.0f);
+			}
+			else if (Icon <= 3)
+			{
+				// Arrows side by side, centred: each R wide, overlapping a little as RimWorld's speed buttons do.
+				const float Each = R * 0.95f;
+				const float Total = Each * static_cast<float>(Icon) + R * 0.1f;
+				float X = Mid.x - Total * 0.5f;
+				for (int32 Arrow = 0; Arrow < Icon; ++Arrow)
+				{
+					Draw->AddTriangleFilled(ImVec2(X, Mid.y - R * 0.85f), ImVec2(X + Each, Mid.y), ImVec2(X, Mid.y + R * 0.85f), Ink);
+					X += Each;
+				}
+			}
+			else if (Icon == 4)
+			{
+				// A keyboard: its outline, two rows of keys and the space bar.
+				const ImVec2 A(Mid.x - R * 1.5f, Mid.y - R * 0.9f);
+				const ImVec2 B(Mid.x + R * 1.5f, Mid.y + R * 0.9f);
+				Draw->AddRect(A, B, Ink, 2.0f * Scale, Line, 0);
+				const float Key = R * 0.32f;
+				for (int32 Row = 0; Row < 2; ++Row)
+				{
+					for (int32 Col = 0; Col < 5; ++Col)
+					{
+						const float KX = A.x + R * 0.38f + Col * R * 0.52f;
+						const float KY = A.y + R * 0.35f + Row * R * 0.5f;
+						Draw->AddRectFilled(ImVec2(KX, KY), ImVec2(KX + Key, KY + Key), Ink, 1.0f);
+					}
+				}
+				Draw->AddRectFilled(ImVec2(Mid.x - R * 0.7f, B.y - R * 0.5f), ImVec2(Mid.x + R * 0.7f, B.y - R * 0.5f + Key), Ink, 1.0f);
+			}
+			else if (Icon == 5)
+			{
+				// A flag on its pole.
+				const float PoleX = Mid.x - R * 0.8f;
+				Draw->AddLine(ImVec2(PoleX, Mid.y - R * 1.1f), ImVec2(PoleX, Mid.y + R * 1.1f), Ink, Line);
+				Draw->AddQuadFilled(ImVec2(PoleX, Mid.y - R * 1.05f), ImVec2(PoleX + R * 1.7f, Mid.y - R * 0.75f), ImVec2(PoleX + R * 1.7f, Mid.y + R * 0.05f),
+					ImVec2(PoleX, Mid.y - R * 0.15f), Ink);
+			}
+			else if (Icon == 7)
+			{
+				// An open book: two pages meeting at the spine, a line of text on each.
+				const ImVec2 Spine0(Mid.x, Mid.y - R * 0.7f);
+				const ImVec2 Spine1(Mid.x, Mid.y + R * 0.95f);
+				Draw->AddQuad(ImVec2(Mid.x - R * 1.4f, Mid.y - R * 0.95f), Spine0, Spine1, ImVec2(Mid.x - R * 1.4f, Mid.y + R * 0.7f), Ink, Line);
+				Draw->AddQuad(Spine0, ImVec2(Mid.x + R * 1.4f, Mid.y - R * 0.95f), ImVec2(Mid.x + R * 1.4f, Mid.y + R * 0.7f), Spine1, Ink, Line);
+				for (int32 Page = -1; Page <= 1; Page += 2)
+				{
+					Draw->AddLine(ImVec2(Mid.x + Page * R * 0.35f, Mid.y - R * 0.2f), ImVec2(Mid.x + Page * R * 1.05f, Mid.y - R * 0.35f), Ink, Line * 0.8f);
+					Draw->AddLine(ImVec2(Mid.x + Page * R * 0.35f, Mid.y + R * 0.25f), ImVec2(Mid.x + Page * R * 1.05f, Mid.y + R * 0.1f), Ink, Line * 0.8f);
+				}
+			}
+			else
+			{
+				for (int32 Bar = -1; Bar <= 1; ++Bar)
+				{
+					const float Y = Mid.y + Bar * R * 0.7f;
+					Draw->AddLine(ImVec2(Mid.x - R * 1.1f, Y), ImVec2(Mid.x + R * 1.1f, Y), Ink, Line);
+				}
+			}
+			return bPressed;
+		};
 
-		// The right-hand group: speed, key help, Factions, Menu (and Ship while there is one). Measured first so the tabs fit.
+		// The right-hand group: speed, key help, the learning helper, Factions, Menu (and Ship while there is one). Measured first so the tabs fit.
 		UShipPanelSubsystem* Ship = GetWorld()->GetSubsystem<UShipPanelSubsystem>();
 		const bool bShip = Ship && Ship->HasShip();
 		const TCHAR* const Speeds[] = {TEXT("Pause"), TEXT("1x"), TEXT("2x"), TEXT("3x")};
-		TArray<FString> RightLabels;
+		// Speed, Keys, Factions and Menu are drawn as clean line icons on square-ish buttons (their names in the tooltips); Ship stays a word.
+		const float IconWidth = ImGui::GetFrameHeight() * 1.35f;
+		float RightWidth = 8.0f * (IconWidth + Style.ItemSpacing.x);
 		if (bShip)
 		{
-			RightLabels.Add(TEXT("Ship"));
-		}
-		for (const TCHAR* Speed : Speeds)
-		{
-			RightLabels.Add(Speed);
-		}
-		RightLabels.Append({TEXT("Keys"), TEXT("Factions"), TEXT("Menu")});
-		float RightWidth = 0.0f;
-		for (const FString& Label : RightLabels)
-		{
-			RightWidth += ImGui::CalcTextSize(TCHAR_TO_UTF8(*Label)).x + 2.0f * Style.FramePadding.x + Style.ItemSpacing.x;
+			RightWidth += ImGui::CalcTextSize("Ship").x + 2.0f * Style.FramePadding.x + Style.ItemSpacing.x;
 		}
 		RightWidth += 18.0f * Scale;  // gap before the group
 
@@ -679,7 +806,7 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 		}
 		for (int32 Speed = 0; Speed < 4; ++Speed)
 		{
-			if (ColonyHud::Button(Speeds[Speed], Bridge.GetSpeed() == Speed))
+			if (IconButton(Speeds[Speed], Speed, Bridge.GetSpeed() == Speed))
 			{
 				Bridge.SetSpeed(Speed);
 			}
@@ -687,29 +814,39 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 			ColonyHud::Tip(Speed == 0 ? FString(TEXT("Pause (Space)")) : FString::Printf(TEXT("Speed %d (%d)"), Speed, Speed));
 			ImGui::SameLine();
 		}
-		if (ColonyHud::Button(TEXT("Keys"), USimSubsystem::IsKeyHelpShown()))
+		if (IconButton(TEXT("Keys"), 4, USimSubsystem::IsKeyHelpShown()))
 		{
 			if (IConsoleVariable* KeyHelp = IConsoleManager::Get().FindConsoleVariable(TEXT("UI.KeyHelp")))
 			{
 				KeyHelp->Set(USimSubsystem::IsKeyHelpShown() ? 0 : 1, ECVF_SetByCode);
 			}
 		}
-		ColonyHud::Tip(TEXT("Show or hide the list of keys"));
+		Record(TEXT("Keys"));
+		ColonyHud::Tip(TEXT("Keys: show or hide the list of keys"));
+		ImGui::SameLine();
+		if (IconButton(TEXT("Helper"), 7, bLessonsOn))
+		{
+			bLessonsOn = !bLessonsOn;
+			SavePrefs();
+		}
+		Record(TEXT("Helper"));
+		ColonyHud::Tip(FString::Printf(TEXT("Learning helper: short lessons as things happen (%d learned)"), LearnedLessons.Num()));
 		ImGui::SameLine();
 		UTradePanelSubsystem* Trade = GetWorld()->GetSubsystem<UTradePanelSubsystem>();
-		if (ColonyHud::Button(TEXT("Factions"), Trade && Trade->IsFactionsOpen()) && Trade)
+		if (IconButton(TEXT("Factions"), 5, Trade && Trade->IsFactionsOpen()) && Trade)
 		{
 			Trade->SetFactionsOpen(!Trade->IsFactionsOpen());
 		}
 		Record(TEXT("Factions"));
-		ColonyHud::Tip(TEXT("The other factions: what they are and what they think of the colony"));
+		ColonyHud::Tip(TEXT("Factions: who they are and what they think of the colony"));
 		ImGui::SameLine();
-		if (ColonyHud::Button(TEXT("Menu"), ImGui::IsPopupOpen("##HudMenu")))
+		if (IconButton(TEXT("Menu"), 6, ImGui::IsPopupOpen("##HudMenu")))
 		{
 			ImGui::OpenPopup("##HudMenu");
 			bQuitAsked = false;
 		}
 		Record(TEXT("Menu"));
+		ColonyHud::Tip(TEXT("Menu: settings, new colony or load, message log, quit"));
 		DrawMenuPopup(Bridge, Scale);
 	}
 	ImGui::End();
@@ -728,7 +865,7 @@ void UColonyHudSubsystem::DrawMenuPopup(USimSubsystem& Bridge, float Scale)
 		bSettingsOpen = !bSettingsOpen;
 		ImGui::CloseCurrentPopup();
 	}
-	if (ColonyHud::Button(TEXT("New colony / load"), false, ImVec2(Width, 0.0f)))
+	if (ColonyHud::Button(TEXT("Main menu"), false, ImVec2(Width, 0.0f)))
 	{
 		bMainMenuOpen = true;
 		MainMenuPage = 0;

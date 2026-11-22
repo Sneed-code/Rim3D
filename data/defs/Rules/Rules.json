@@ -102,7 +102,7 @@
       "patchQuality": 0.3,
       "coverBlood": 1500,
       "minMoving": 0.4,
-      "crawlMoving": 0.1,
+      "crawlMoving": 0.05,
       "note2": "sneed 2026-11-17: dead with the head or torso at 0, or with deadLimbs arms and legs at 0 and the head or torso at deadLimbsCoreAtOrBelow; an arm (attacks) or leg (walking) under limbSlowBelow slows by limbSlowPerShare for every share under it, both limbs added; a zone not hurt for healDelaySeconds (real) and not bleeding heals healPerSecond of its missing hit points a real second, healAsleepFactor times that asleep",
       "deadLimbs": 2,
       "deadLimbsCoreAtOrBelow": 0.5,
@@ -116,6 +116,8 @@
         "overkillShare": 0.25,
         "pieceDecayDays": 2,
         "torsoSingleHit": 1,
+        "livingLimbs": 1,
+        "noteLiving": "sneed 2026-11-20: an arm or leg shot or hacked again and again comes off a living body too, at the same pile (head and torso only off the dead); a blast at a corpse piles all its damage past 0 on the part it meets, unsplit, and throws the corpse",
         "arm": { "whole": "Arm", "lower": "Hand", "lowerAlso": ["Radius"] },
         "leg": { "whole": "Leg", "lower": "Foot", "lowerAlso": ["Tibia"] },
         "head": "Head"
@@ -184,9 +186,9 @@
     "traitCount": [1, 3],
     "skillLevelRandomCurve": [[0, 0], [0.5, 150], [4, 150], [5, 25], [10, 5], [15, 0]], "backstoryDefinedSkills": ["Shooting", "Melee", "Social", "Medicine", "Artistic", "Intellectual"], "backstoryDefinedLevel": [0, 4], "ageSkillMaxFactorCurve": [[0, 0], [10, 0.7], [35, 1], [60, 1.6], [100, 1.6]],
     "passionCount": [0, 4],
-    "majorPassionChance": 0.33,
+    "majorPassionChance": 0.33, "pointSkillBoosts": [3, 3, 6],
     "unverified": ["ageGenerationCurve", "skillLevelRandomCurve", "backstoryDefinedSkills", "backstoryDefinedLevel", "ageSkillMaxFactorCurve"],
-    "ours": ["adultAgeMin", "passionCount", "majorPassionChance"]
+    "ours": ["adultAgeMin", "passionCount", "majorPassionChance", "pointSkillBoosts (trait-point colonists, no backstories: 3 skills get +3 to +6 in place of the backstories' gains)"]
   },
   {
     "defName": "ConstructionRules", "source": "RimWorld wiki",
@@ -195,6 +197,7 @@
     "deconstructWorkMin": 28.8,
     "deconstructWorkMax": 4320,
     "deconstructRefundFactor": 0.5,
+    "killLeaveFactor": 0.25,
     "skillSpeedBase": 0.3,
     "skillSpeedPerLevel": 0.0875,
     "defaultSkillLevel": 8,
@@ -205,7 +208,7 @@
     "architectCategories": ["Structure", "Production", "Furniture", "Power", "Security", "Misc", "Floors", "Joy", "Ship", "Temperature"],
     "architectLabels": {"Joy": "Recreation"},
     "unverified": ["buildWorkPerSecond", "deconstructWorkPerSecond", "deconstructWorkMin", "deconstructWorkMax",
-                   "deconstructRefundFactor", "skillSpeedBase", "skillSpeedPerLevel", "removeFloorWork"],
+                   "deconstructRefundFactor", "killLeaveFactor", "skillSpeedBase", "skillSpeedPerLevel", "removeFloorWork"],
     "ours": ["defaultSkillLevel", "architectCategories", "architectLabels", "earthWorkPerUnit", "betweenWallsCells", "earthMaxM"],
     "note": "Earthworks (docs/design/earthworks.md) are ours: RimWorld's ground is flat. One unit is one corner 0.25 m up or down; 51 work is 30 game seconds (1 real second at 1x) at speed 1. The limit is twice a 3 m wall."
   },

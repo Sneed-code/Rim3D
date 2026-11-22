@@ -880,6 +880,52 @@ void Map::setFence(CellPos c, int kind) {
     }
 }
 
+bool Map::setTrunk(CellPos c, float radius) {
+    if (c.level != 0 || !inBounds(c)) {
+        return false;
+    }
+    const uint8_t cm = radius > 0.0f ? static_cast<uint8_t>(std::clamp(std::lround(radius * 100.0f), 1L, 255L)) : uint8_t{0};
+    if (trunk_.empty()) {
+        if (cm == 0) {
+            return false;
+        }
+        trunk_.assign(static_cast<size_t>(width_) * static_cast<size_t>(height_), 0);
+    }
+    uint8_t& slot = trunk_[static_cast<size_t>(index(c))];
+    if (slot == cm) {
+        return false;
+    }
+    trunkCount_ += (cm != 0 ? 1 : 0) - (slot != 0 ? 1 : 0);
+    slot = cm;
+    return true;
+}
+
+void Map::setTightSteps(CellPos c, uint8_t steps) {
+    if (c.level != 0 || !inBounds(c)) {
+        return;
+    }
+    if (tight_.empty()) {
+        if (steps == 0) {
+            return;
+        }
+        tight_.assign(static_cast<size_t>(width_) * static_cast<size_t>(height_), 0);
+    }
+    tight_[static_cast<size_t>(index(c))] = steps;
+}
+
+void Map::plantSpot(int cellIndex, int x, int y, float& px, float& py) {
+    // The same hash and spread as UTerrainSubsystem's plant placement (TerrHash of the index + 0x517CC1B7).
+    uint64_t v = static_cast<uint64_t>(cellIndex) + 0x517CC1B7ULL;
+    v += 0x9E3779B97F4A7C15ULL;
+    v = (v ^ (v >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    v = (v ^ (v >> 27)) * 0x94D049BB133111EBULL;
+    v = v ^ (v >> 31);
+    const float r1 = static_cast<float>(v & 0xFFFF) / 65535.0f;
+    const float r2 = static_cast<float>((v >> 16) & 0xFFFF) / 65535.0f;
+    px = static_cast<float>(x) + 0.5f + (r1 - 0.5f) * 0.7f;
+    py = static_cast<float>(y) + 0.5f + (r2 - 0.5f) * 0.7f;
+}
+
 void Map::setGroundHeight(CellPos c, float metres) {
     if (c.level != 0 || !inBounds(c)) {
         return;

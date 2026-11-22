@@ -335,8 +335,9 @@ float BodyMotionSystem::forwardAt(DefId clipDef, float t) const {
 
 bool BodyMotionSystem::fits(Entity, float x, float y, int level) const {
     // Between walls a body is as wide as the pathfinder thinks (kPawnRadius), so a body never ends up where no path
-    // can get it out.
-    return pawnFitsAt(map_, x, y, kPawnRadius, level);
+    // can get it out. Tree trunks stop it too (docs/design/structure-damage.md): a stagger or a shove into a tree stops
+    // at the bark.
+    return pawnFitsAt(map_, x, y, kPawnRadius, level) && clearOfTrunks(map_, x, y, kTrunkBodyRadius, level);
 }
 
 void BodyMotionSystem::gatherBodies(Entity pawn, float x, float y, int level, float range) {
@@ -467,7 +468,8 @@ void BodyMotionSystem::step() {
     for (const Entity pawn : order_) {
         BodyMotion& m = reg.get<BodyMotion>(pawn);
         const MotionClip* c = clip(m.clip);
-        const bool keep = c != nullptr && c->keepWhenDown;
+        // A plain push (a blast's) moves a body that can't move itself too: a downed pawn, a corpse (sneed 2026-11-20).
+        const bool keep = c == nullptr || c->keepWhenDown;
         if (!things_.spawned(pawn) || !reg.all_of<Position>(pawn) || (able_ && !keep && !able_(pawn))) {
             reg.remove<BodyMotion>(pawn);  // it ends where the body is
             continue;

@@ -2,6 +2,7 @@
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/Movement.h"
 #include "ColonySim/Random.h"
 
 #include <algorithm>
@@ -55,7 +56,8 @@ Plants::Plants(const Map& map, const DefDatabase& defs, uint64_t seed, const std
       fertility_(static_cast<size_t>(map.width()) * static_cast<size_t>(map.height()), 0.0f),
       kind_(fertility_.size(), 0),
       growth_(fertility_.size(), 0),
-      age_(fertility_.size(), 0) {
+      age_(fertility_.size(), 0),
+      damage_(fertility_.size(), 0) {
     // The life pace speeds growth and shortens lifespans alike, so a plant's life keeps its shape.
     const double pace = std::max(0.01, defs.tuning(kPaceLifeTuning));
     growthTuning_ = defs.tuning("plantGrowth") * pace;
@@ -80,6 +82,12 @@ Plants::Plants(const Map& map, const DefDatabase& defs, uint64_t seed, const std
         k.fertilitySensitivity = static_cast<float>(def.number("plant.fertilitySensitivity", 0.0));
         k.lifespanHours = static_cast<uint32_t>(std::max<long>(1, std::lround(growDays * def.number("plant.lifespanDaysPerGrowDays", 8.0) * 24.0 / pace)));
         k.isTree = def.flag("plant.isTree");
+        if (k.isTree) {
+            treePathCost_ = std::max(treePathCost_, def.number("pathCost", 0.0));
+        }
+        k.maxHitPoints = std::max(1, static_cast<int>(std::lround(def.number("stats.maxHitPoints", 85.0))));
+        k.trunkRadius = static_cast<float>(def.number("visual.stem.radius", 0.25));
+        k.trunkHeight = static_cast<float>(def.number("visual.stem.height", 3.0));
         if (biomeDef != nullptr) {
             k.commonality = biomeDef->number(("wildPlants." + def.defName()).c_str(), 0.0);
         }
@@ -164,14 +172,19 @@ uint32_t Plants::lifespanHours(DefId def) const {
 }
 
 uint64_t Plants::cellHash(size_t i) const {
-    return splitMix64(splitMix64((static_cast<uint64_t>(i) << 16) | kind_[i]) ^
-                      ((static_cast<uint64_t>(growth_[i]) << 32) | age_[i]));
+    const uint64_t h = splitMix64(splitMix64((static_cast<uint64_t>(i) << 16) | kind_[i]) ^
+                                  ((static_cast<uint64_t>(growth_[i]) << 32) | age_[i]));
+    // An unhurt plant hashes as it always did, so old replays keep their checkpoints.
+    return damage_[i] == 0 ? h : h ^ splitMix64(0xDA4A6EULL + damage_[i]);
 }
 
 void Plants::set(size_t i, uint16_t kind, uint32_t growth, uint32_t age) {
     if (kind_[i] != 0) {
         hash_ ^= cellHash(i);
         --count_;
+    }
+    if (kind == 0 || kind != kind_[i]) {
+        damage_[i] = 0;
     }
     kind_[i] = kind;
     growth_[i] = kind != 0 ? growth : 0;
@@ -180,6 +193,7 @@ void Plants::set(size_t i, uint16_t kind, uint32_t growth, uint32_t age) {
         hash_ ^= cellHash(i);
         ++count_;
     }
+    syncTrunk(i);
 }
 
 bool Plants::place(CellPos c, DefId def, float growth) {
@@ -203,6 +217,100 @@ bool Plants::underUpperFloor(CellPos c) const {
         }
     }
     return false;
+}
+
+void Plants::setDamage(size_t i, uint16_t damage) {
+    if (kind_[i] == 0) {
+        return;
+    }
+    hash_ ^= cellHash(i);
+    damage_[i] = damage;
+    hash_ ^= cellHash(i);
+}
+
+int Plants::maxHitPoints(CellPos c) const {
+    if (!map_.onGround(c) || !has(c)) {
+        return 0;
+    }
+    return kinds_[static_cast<size_t>(kind_[indexOf(c)]) - 1].maxHitPoints;
+}
+
+int Plants::hitPoints(CellPos c) const {
+    const int most = maxHitPoints(c);
+    return most <= 0 ? 0 : std::max(0, most - static_cast<int>(damage_[indexOf(c)]));
+}
+
+bool Plants::damage(CellPos c, int amount) {
+    if (amount <= 0 || !map_.onGround(c) || !has(c)) {
+        return false;
+    }
+    const size_t i = indexOf(c);
+    const int lost = static_cast<int>(damage_[i]) + amount;
+    if (lost >= kinds_[static_cast<size_t>(kind_[i]) - 1].maxHitPoints) {
+        set(i, 0, 0, 0);
+        return true;
+    }
+    setDamage(i, static_cast<uint16_t>(lost));
+    return false;
+}
+
+bool Plants::isTree(CellPos c) const {
+    return map_.onGround(c) && has(c) && kinds_[static_cast<size_t>(kind_[indexOf(c)]) - 1].isTree;
+}
+
+void Plants::stemPoint(int cellIndex, int x, int y, float& px, float& py) {
+    Map::plantSpot(cellIndex, x, y, px, py);
+}
+
+float Plants::trunkRadiusAt(size_t i) const {
+    if (kind_[i] == 0) {
+        return 0.0f;
+    }
+    const Kind& k = kinds_[static_cast<size_t>(kind_[i]) - 1];
+    if (!k.isTree) {
+        return 0.0f;
+    }
+    // A sapling is thin and short; it fills out as it grows (Unreal draws it from 0.2 of its size up, TerrSproutScale).
+    const float grown = 0.2f + 0.8f * static_cast<float>(growth_[i]) / static_cast<float>(kPlantFullGrowth);
+    return std::max(0.05f, k.trunkRadius * grown);
+}
+
+void Plants::syncTrunk(size_t i) {
+    if (trunks_ == nullptr) {
+        return;
+    }
+    const int w = map_.width();
+    const CellPos c{static_cast<int>(i % static_cast<size_t>(w)), static_cast<int>(i / static_cast<size_t>(w)), 0};
+    if (trunks_->setTrunk(c, trunkRadiusAt(i)) && !bulkTrunks_) {
+        refreshTrunkSteps(*trunks_, c.x - 2, c.y - 2, c.x + 2, c.y + 2);
+    }
+}
+
+void Plants::attachTrunks(Map* map) {
+    trunks_ = map;
+    if (trunks_ == nullptr) {
+        return;
+    }
+    // The whole layer at once, then every cell's steps once (not 25 cells a tree).
+    bulkTrunks_ = true;
+    for (size_t i = 0; i < kind_.size(); ++i) {
+        syncTrunk(i);
+    }
+    bulkTrunks_ = false;
+    refreshTrunkSteps(*trunks_, 0, 0, map_.width() - 1, map_.height() - 1);
+}
+
+bool Plants::trunkOf(CellPos c, float& x, float& y, float& radius, float& height) const {
+    if (!isTree(c)) {
+        return false;
+    }
+    const size_t i = indexOf(c);
+    const Kind& k = kinds_[static_cast<size_t>(kind_[i]) - 1];
+    stemPoint(static_cast<int>(i), c.x, c.y, x, y);
+    const float grown = 0.2f + 0.8f * growth(c);
+    radius = trunkRadiusAt(i);
+    height = std::max(0.5f, k.trunkHeight * grown);
+    return true;
 }
 
 void Plants::remove(CellPos c) {
@@ -358,7 +466,7 @@ std::vector<PlantRecord> Plants::records() const {
     out.reserve(count_);
     for (size_t i = 0; i < kind_.size(); ++i) {
         if (kind_[i] != 0) {
-            out.push_back(PlantRecord{static_cast<int>(i), kinds_[static_cast<size_t>(kind_[i]) - 1].def, growth_[i], age_[i]});
+            out.push_back(PlantRecord{static_cast<int>(i), kinds_[static_cast<size_t>(kind_[i]) - 1].def, growth_[i], age_[i], damage_[i]});
         }
     }
     return out;
@@ -368,16 +476,23 @@ bool Plants::restore(const std::vector<PlantRecord>& records) {
     std::fill(kind_.begin(), kind_.end(), uint16_t{0});
     std::fill(growth_.begin(), growth_.end(), 0u);
     std::fill(age_.begin(), age_.end(), 0u);
+    std::fill(damage_.begin(), damage_.end(), uint16_t{0});
     count_ = 0;
     hash_ = 0;
+    bulkTrunks_ = trunks_ != nullptr;  // the trunks follow at the end, all at once
     for (const PlantRecord& r : records) {
         const int k = kindOfDef(r.def);
         if (k < 0 || r.cell < 0 || static_cast<size_t>(r.cell) >= kind_.size() || kind_[static_cast<size_t>(r.cell)] != 0 ||
-            r.growth > kPlantFullGrowth) {
+            r.growth > kPlantFullGrowth || r.damage >= static_cast<uint32_t>(kinds_[static_cast<size_t>(k)].maxHitPoints)) {
             restore({});
             return false;
         }
         set(static_cast<size_t>(r.cell), static_cast<uint16_t>(k + 1), r.growth, r.ageHours);
+        setDamage(static_cast<size_t>(r.cell), static_cast<uint16_t>(r.damage));
+    }
+    if (trunks_ != nullptr) {
+        bulkTrunks_ = false;
+        attachTrunks(trunks_);
     }
     return true;
 }

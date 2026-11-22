@@ -43,6 +43,12 @@ const char* bridgeLateCommandName() {
         return "Unstuck";
     } else if constexpr (std::is_same_v<Type, SetWorkGroupCommand>) {
         return "SetWorkGroup";
+    } else if constexpr (std::is_same_v<Type, SetGrimeCommand>) {
+        return "SetGrime";
+    } else if constexpr (std::is_same_v<Type, EditColonistCommand>) {
+        return "EditColonist";
+    } else if constexpr (std::is_same_v<Type, SetColonistTraitsCommand>) {
+        return "SetColonistTraits";
     } else {
         // FocusCommand and SetFightResponseCommand are named before the visit (commandName).
         static_assert(std::is_same_v<Type, RerollColonistCommand> || std::is_same_v<Type, SetLandingZoneCommand> ||
@@ -484,6 +490,7 @@ const char* eventTypeName(EventType type) {
         case EventType::PodsArrived: return "PodsArrived";
         case EventType::CaravanRequested: return "CaravanRequested";
         case EventType::CaravanRequestFailed: return "CaravanRequestFailed";
+        case EventType::BuildingWrecked: return "BuildingWrecked";
     }
     return "?";
 }
@@ -547,6 +554,7 @@ const char* projectileHitKindName(ProjectileHitKind kind) {
         case ProjectileHitKind::Pawn: return "Pawn";
         case ProjectileHitKind::Armor: return "Armor";
         case ProjectileHitKind::Gone: return "Gone";
+        case ProjectileHitKind::Plant: return "Plant";
     }
     return "?";
 }

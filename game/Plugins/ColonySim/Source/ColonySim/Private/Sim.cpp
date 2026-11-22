@@ -246,6 +246,13 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
             placeMapRoads(map_, *things_, *plants_, *floors_, site_->roadEdges, splitMix64(settings_.seed ^ 0x726F6164ULL));
         }
     }
+    // A scenario may land at an hour of the morning (Crash Landed: 7:00, by daylight) instead of midnight. Only the
+    // calendar moves: steps still start at 0, which is how the character screen knows the game hasn't begun.
+    if (!settings_.scenario.empty() && settings_.startSecond == 0) {
+        if (const Def* landing = defs_->find("Scenarios", settings_.scenario)) {
+            time_.seconds = static_cast<int64_t>(std::clamp(landing->number("startHour", 0.0), 0.0, 23.0) * kSecondsPerHour);
+        }
+    }
     placeStockpileAndThings();
     if (!settings_.scenario.empty()) {
         startScenario();
@@ -256,6 +263,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs)
     power_->update();
     lights_->update();
     roomStats_->refresh();
+    weather_->startAt(time_.seconds);  // again, in case the scenario moved the calendar (a morning landing)
 }
 
 Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, EmptyStart)
@@ -304,9 +312,15 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     // The start tile's own yearly mean temperature; the seasons and the daily swing are its biome's.
     weather_ = std::make_unique<Weather>(map_, *defs_, splitMix64(settings.seed ^ 0x636C696D617465ULL), biome_,
                                          site_ ? std::optional<double>(site_->temperature) : std::nullopt);
+    // The opening clear weather begins when the game does (a scenario's morning landing, a later map's start), not at
+    // midnight of day 1: otherwise it could be long over by the first step, which would then start a storm that the
+    // HUD names at once while the sky has hardly begun to cloud over.
+    weather_->startAt(time_.seconds);
     weather_->setEventLog(&events_);
     movement_->setWeather(weather_.get());
     combat_->setWeather(weather_.get());
+    combat_->setPlants(plants_.get());
+    plants_->attachTrunks(&map_);  // trunks are solid: walkers steer round them, paths avoid them
     construction_ = std::make_unique<Construction>(map_, *things_, *plants_, *defs_, rng_, events_);
     needs_ = std::make_unique<NeedsSystem>(*things_, *health_, *defs_);
     mood_ = std::make_unique<MoodSystem>(*things_, *needs_, *defs_);
@@ -320,6 +334,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     doorNumbers_ = DoorNumbers::read(*defs_);
     movement_->setDoors(doorNumbers_);
     pathfinder_.setDoorCost(doorNumbers_.pathCost);
+    // RimWorld's tree path cost is in ticks on top of the 13 a step takes a pawn of 4.6 cells a second (60 ticks a
+    // second): 42 makes a tree cell cost about 3.2 m more (docs/design/structure-damage.md "Trees in the way").
+    pathfinder_.setTreeCost(static_cast<float>(plants_->treePathCostTicks() * 4.6 / 60.0 * defs_->tuning("treePathCost")));
     rooms_ = std::make_unique<Rooms>(map_, *things_, *defs_);
     mood_->setRooms(rooms_.get());
     floors_ = std::make_unique<Floors>(map_, *defs_);
@@ -522,6 +539,8 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     trade_->setTalents(talents_.get());
     trade_->setRunning([this](Entity building) { return power_->running(building); });
     trade_->setLooksMaker([this](Entity pawn, uint64_t seed, bool female) { giveLooks(pawn, seed, female, "Baseline"); });
+    raids_->setTraitPoints(scenarioTraitPoints());
+    trade_->setTraitPoints(scenarioTraitPoints());
     landing_ = std::make_unique<LandingSystem>(*things_, map_, *plants_, *defs_, time_, rng_);
     trade_->setLanding(landing_.get());
     landing_->setOnLanded([this](const Shuttle& shuttle) { trade_->shuttleLanded(shuttle); });
@@ -588,6 +607,7 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         return units > 0 ? std::min(units, 4) - 1 : -1;
     });
     combat_->setBeforeDestroy([this](Entity thing) {
+        noteWreck(thing);
         jobs_->forget(thing);
         raids_->forget(thing);
         trade_->forget(thing);
@@ -622,6 +642,18 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
         }
         if (reg.any_of<Visitor, Prisoner>(other)) {
             return false;
+        }
+        return fighters_->factionOf(other) != fighters_->factionOf(pawn);
+    });
+    // The player's swing without a lock is steered at anyone not on its side (sneed 2026-11-20: "a non-friendly, even
+    // neutral"): another faction, a visitor, a wild animal; not its own side, tame animals or prisoners.
+    melee_->setNotFriendly([this](Entity pawn, Entity other) {
+        const entt::registry& reg = things_->registry();
+        if (reg.any_of<Prisoner>(other)) {
+            return false;
+        }
+        if (const Animal* animal = reg.try_get<Animal>(other)) {
+            return animal->wild || fighters_->factionOf(other) != fighters_->factionOf(pawn);
         }
         return fighters_->factionOf(other) != fighters_->factionOf(pawn);
     });
@@ -959,7 +991,9 @@ void Sim::placeStockpileAndThings() {
 Entity Sim::makeJoiner(CellPos cell, uint64_t seed) {
     Colonist colonist;
     std::string error;
-    if (!generateColonist(*defs_, seed, false, colonist, error)) {
+    ColonistGenOptions options;
+    options.traitPoints = scenarioTraitPoints();
+    if (!generateColonist(*defs_, seed, false, colonist, error, options)) {
         return kNoEntity;
     }
     makeNameUnique(colonist, seed);
@@ -1343,6 +1377,31 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
         return;
     }
+    if (const auto* edit = std::get_if<EditColonistCommand>(&command)) {
+        error.clear();
+        if (!editColonist(*edit, error)) {
+            commandFailed(id, error);
+        }
+        return;
+    }
+    if (const auto* setTraits = std::get_if<SetColonistTraitsCommand>(&command)) {
+        error.clear();
+        if (!setStartingTraits(*setTraits, error)) {
+            commandFailed(id, error);
+        }
+        return;
+    }
+    if (const auto* setGrime = std::get_if<SetGrimeCommand>(&command)) {
+        const Thing* thing = things_->exists(setGrime->pawn) ? things_->registry().try_get<Thing>(setGrime->pawn) : nullptr;
+        if (thing == nullptr || thing->category != ThingCategory::Pawn) {
+            commandFailed(id, "only a pawn has grime");
+        } else {
+            const PawnGrime* had = grime_->of(setGrime->pawn);
+            grime_->set(setGrime->pawn, setGrime->dirtLegs, setGrime->dirtBody, had != nullptr ? had->blood : 0.0f,
+                        had != nullptr ? had->bloodKind : -1, had != nullptr ? had->bloodAt : time_.seconds);
+        }
+        return;
+    }
     if (const auto* group = std::get_if<SetWorkGroupCommand>(&command)) {
         Colonist* colonist = things_->exists(group->pawn) ? things_->registry().try_get<Colonist>(group->pawn) : nullptr;
         if (colonist == nullptr) {
@@ -1629,7 +1688,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         }
     } else if (const auto* goodwillCommand = std::get_if<AdjustGoodwillCommand>(&command)) {
         std::string why;
-        if (!trade_->adjustGoodwill(goodwillCommand->faction, goodwillCommand->delta, why)) {
+        if (!trade_->adjustGoodwill(goodwillCommand->faction, goodwillCommand->delta, why, "dev tool")) {
             commandFailed(id, why);
         }
     } else if (const auto* prisonBed = std::get_if<SetPrisonBedCommand>(&command)) {
@@ -1863,6 +1922,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             // Rolling (P2), stunned, winding up a power (X2) or carried by a clip (a stagger): the player's position is
             // ignored, without a failure because Unreal sends one every step. The player's own swings leave the feet
             // free (BodyMotion::freeFeet): walking goes on while the arms swing.
+        } else if (melee_->finisherOf(move->pawn) != nullptr) {
+            // Through a finisher (sneed 2026-11-20) the body stays at its place beside the body on the ground; no failure.
         } else if (jobs_->sleepingByHand(move->pawn)) {
             // Asleep (SleepCommand): lying still until morning or SleepCommand{wake}; the same, no failure.
         } else if (reg.get<Mover>(move->pawn).climbing(reg.get<Position>(move->pawn).level)) {
@@ -1878,6 +1939,40 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                 dy *= kDirectMaxStep / length;
             }
             melee_->orbitMove(move->pawn, dx, dy);  // locked on with melee: sideways walks round the target (lock-on.md)
+            // Tree trunks are solid (sneed 2026-11-20, docs/design/structure-damage.md): the part of the move into a trunk
+            // is taken off, so the body slides round it instead of through.
+            if (pos.level == 0) {
+                const int tcx = static_cast<int>(std::floor(pos.x));
+                const int tcy = static_cast<int>(std::floor(pos.y));
+                for (int ty = tcy - 1; ty <= tcy + 1; ++ty) {
+                    for (int tx = tcx - 1; tx <= tcx + 1; ++tx) {
+                        const CellPos tc{tx, ty, 0};
+                        float sx = 0.0f;
+                        float sy = 0.0f;
+                        float radius = 0.0f;
+                        float height = 0.0f;
+                        if (!map_.inBounds(tc) || !plants_->trunkOf(tc, sx, sy, radius, height)) {
+                            continue;
+                        }
+                        const float reach = radius + kPawnRadius;
+                        const float nx = pos.x + dx - sx;
+                        const float ny = pos.y + dy - sy;
+                        const float d2 = nx * nx + ny * ny;
+                        if (d2 >= reach * reach || d2 < 1.0e-8f) {
+                            continue;
+                        }
+                        const float d = std::sqrt(d2);
+                        const float ox = pos.x - sx;
+                        const float oy = pos.y - sy;
+                        if (ox * ox + oy * oy < d2) {
+                            continue;  // already in and walking out (a tree grew round it): let it go
+                        }
+                        // Onto the trunk's edge: keep the sideways part of the move, drop the part going in.
+                        dx = sx + nx / d * reach - pos.x;
+                        dy = sy + ny / d * reach - pos.y;
+                    }
+                }
+            }
             // The whole move, or sliding along one axis (a wall), or staying where it is.
             const float tries[3][2] = {{dx, dy}, {dx, 0.0f}, {0.0f, dy}};
             float moveX = 0.0f;
@@ -2353,6 +2448,63 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
     }
 }
 
+void Sim::noteWreck(Entity building) {
+    const entt::registry& reg = things_->registry();
+    const Footprint* footprint = reg.valid(building) ? reg.try_get<Footprint>(building) : nullptr;
+    const Thing* thing = footprint != nullptr ? reg.try_get<Thing>(building) : nullptr;
+    if (thing == nullptr || thing->category != ThingCategory::Building) {
+        return;  // only buildings (and frames) leave a wreck
+    }
+    const BuiltOf* made = reg.try_get<BuiltOf>(building);
+    PendingWreck wreck;
+    wreck.def = thing->def;
+    wreck.stuff = made != nullptr ? made->stuff : DefId{};
+    wreck.rect = footprint->rect();
+    wreck.finished = !reg.all_of<ConstructionSite>(building);
+
+    Event& e = wreck.event;
+    e.type = EventType::BuildingWrecked;
+    e.thing = building;
+    e.def = wreck.def;
+    e.cell = footprint->origin;
+    e.count = wreck.rect.sizeX;
+    e.part = wreck.rect.sizeY;
+    e.x = static_cast<float>(wreck.rect.minX) + 0.5f * static_cast<float>(wreck.rect.sizeX);
+    e.y = static_cast<float>(wreck.rect.minY) + 0.5f * static_cast<float>(wreck.rect.sizeY);
+    const CellPos middle{wreck.rect.minX + wreck.rect.sizeX / 2, wreck.rect.minY + wreck.rect.sizeY / 2, wreck.rect.level};
+    e.z = map_.inBounds(middle) ? map_.groundHeight(middle) : 0.0f;
+    e.message = wreck.stuff.valid() ? defs_->get(wreck.stuff).defName() : std::string();
+    e.amount = wreck.finished ? 1.0f : 0.0f;
+    wrecks_.push_back(std::move(wreck));
+}
+
+void Sim::settleWrecks() {
+    if (wrecks_.empty()) {
+        return;
+    }
+    const std::vector<PendingWreck> wrecks = std::move(wrecks_);
+    wrecks_.clear();
+    const int rubble = filth_->kindIndex("Rubble");
+    for (const PendingWreck& wreck : wrecks) {
+        // Rolled from the wreck's place and time, not the sim's stream, so a wreck changes no other roll in the game.
+        const uint64_t seed = splitMix64(settings_.seed ^ (static_cast<uint64_t>(time_.steps) << 20) ^
+                                         static_cast<uint64_t>(static_cast<uint32_t>(wreck.rect.minY * 4096 + wreck.rect.minX)) ^
+                                         (static_cast<uint64_t>(wreck.rect.level) << 52));
+        Rng roll(seed, 0x52554242ULL);
+        // RimWorld's filthLeaving: rubble on every cell of the footprint, 1 to 3 layers each.
+        if (rubble >= 0) {
+            for (int dy = 0; dy < wreck.rect.sizeY; ++dy) {
+                for (int dx = 0; dx < wreck.rect.sizeX; ++dx) {
+                    const CellPos c{wreck.rect.minX + dx, wreck.rect.minY + dy, wreck.rect.level};
+                    filth_->add(c, rubble, 1 + static_cast<int>(roll.below(3)));
+                }
+            }
+        }
+        construction_->leaveWreck(wreck.def, wreck.stuff, wreck.rect, wreck.finished, splitMix64(seed));
+        events_.push_back(wreck.event);
+    }
+}
+
 void Sim::dropLostDecks() {
     // Items on a bridge that fell are swept away where the water is deep; in shallow water, marsh or mud they stay where
     // they fell. Pawns need nothing here: one in deep water off a path swims for the nearest shore (MovementSystem).
@@ -2367,6 +2519,19 @@ void Sim::dropLostDecks() {
             things_->destroy(item);
         }
     }
+}
+
+bool Sim::applyPregameCommands() {
+    if (time_.steps != 0) {
+        return false;
+    }
+    std::vector<std::pair<uint64_t, Command>> applying;
+    applying.swap(pending_);
+    for (auto& [id, command] : applying) {
+        applyCommand(command, id);
+        commandLog_.push_back(LoggedCommand{time_.steps, std::move(command)});
+    }
+    return true;
 }
 
 void Sim::step() {
@@ -2557,6 +2722,7 @@ void Sim::stepOnce(bool keepEvents, int tick) {
             { SimLap lap(profile_, "disasters"); disasters_->step(); }  // T3: conditions end, work and strike (held while skipping, like the narrator)
         }
     }
+    settleWrecks();
     creditKills();
     travel_->afterStep();
     narrator_->postpone(travel_->takeHold());  // a skip that ended (here or by a command) held the narrator back
@@ -2762,7 +2928,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
     }
     for (const AnimalZone& zone : husbandry_->zones()) {
         out.animalZones.push_back(AnimalZoneView{zone.id, static_cast<uint32_t>(out.animalZoneCells.size()),
-                                                 static_cast<uint32_t>(zone.cells.size()), husbandry_->isPen(zone.id)});
+                                                 static_cast<uint32_t>(zone.cells.size()), husbandry_->isPen(zone.id), zone.breedingOff});
         out.animalZoneCells.insert(out.animalZoneCells.end(), zone.cells.begin(), zone.cells.end());
     }
     for (const GrowingZone& zone : farming_->zones()) {
@@ -2960,6 +3126,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             l.bodyHair = looks->bodyHair;
             l.tattoos = looks->tattoos;
             l.scars = looks->scars;
+            l.creator = looks->creator;
             view.looks = static_cast<int32_t>(out.looks.size());
             out.looks.push_back(l);
         }
@@ -2968,6 +3135,8 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.area = areas_->areaOf(entity);
             view.jobTarget = worker->job.thing;
             view.jobProgress = worker->job.type != JobType::None ? jobs_->jobProgress(entity) : 0.0f;
+            // At work on a tree: work done piles up only in the plant work step, once the walk is over.
+            view.felling = worker->job.type == JobType::CutPlant && worker->job.progress > 0.0f && plants_->isTree(worker->job.cell);
             view.carryingPawn = jobs_->carryingPawn(entity);
         }
         const bool noMind = mindIsPlayersOwn(reg, entity);  // the protagonist: no mood, recreation, beauty or rest need
@@ -3178,11 +3347,15 @@ void Sim::writeSnapshot(Snapshot& out) const {
                 view.animalName = care->name;
                 view.learnedTricks = husbandry_->learnedMask(entity);
                 view.wantedTricks = husbandry_->wantedMask(entity);
+                view.animalBed = care->bed;
             }
             view.sex = static_cast<int>(breeding_->sexOf(entity));
             view.pregnant = breeding_->pregnant(entity);
             view.milkFullness = breeding_->fullness(entity, AnimalProduct::Milk);
             view.woolFullness = breeding_->fullness(entity, AnimalProduct::Wool);
+            if (const AnimalBreed* breed = breeding_->breed(entity)) {
+                view.breedingOff = breed->breedingOff;
+            }
         }
         view.onFire = reg.all_of<Burning>(entity);
         if (const Fighter* fighter = reg.try_get<Fighter>(entity)) {
@@ -3233,6 +3406,11 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.meleeTool = melee->tool;
             view.meleeStrong = melee_->strongSwing(entity);
             view.meleeLow = melee->phase != MeleePhase::Ready && melee->low;
+            if (melee_->finisherOf(entity) != nullptr) {
+                view.meleeFinisher = melee->finisher;
+                view.meleeFinisherT = melee_->finisherProgress(entity);
+                view.meleeFinisherTarget = melee->target;
+            }
             view.focusTarget = melee->focus;
             view.focusPlayer = melee->focusPlayer;
             view.footwork = time_.steps < melee->footworkUntil;
@@ -3731,6 +3909,9 @@ uint64_t Sim::stateHash() const {
                 h.add(s.xp);
                 h.add(s.xpToday);
                 h.add(s.disabled);
+                if (s.bonus != 0) {
+                    h.add(s.bonus);  // only when set, so older hashes stay
+                }
             }
             for (const std::string& tag : c->disabledWorkTags) {
                 h.add(tag.data(), tag.size());
@@ -3778,6 +3959,7 @@ uint64_t Sim::stateHash() const {
             h.add(looks->naturalBeard.data(), looks->naturalBeard.size());
             h.add(looks->beard.data(), looks->beard.size());
             h.add(looks->name.data(), looks->name.size());
+            h.add(looks->creator.data(), looks->creator.size());
             h.add(looks->naturalBodyHair);
             h.add(looks->bodyHair);
             for (const std::vector<LooksMark>* marks : {&looks->tattoos, &looks->scars}) {

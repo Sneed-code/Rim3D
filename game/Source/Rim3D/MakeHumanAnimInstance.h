@@ -165,6 +165,7 @@ struct FMakeHumanHandGoal
 	FTransform Target;                  // the hand bone's goal (its location and, with bRotation, its rotation)
 	bool bRotation = false;             // false: the hand keeps its animated rotation (still within the wrist's range)
 	bool bCurl = false;                 // close the fingers round a grip (only adds curl the animation lacks)
+	float CurlWrap = 1.0f;              // how far round: 1 a pistol or hilt grip, more for a hand wrapped round a fore-end
 	float RollFree = 0.0f;              // with bRotation: degrees the hand may turn about a round shaft either way to fit the wrist
 	FVector RollAxis = FVector::ZeroVector;   // the shaft's axis in the hand goal's own space
 	FVector RollPoint = FVector::ZeroVector;  // a point on the shaft in the hand goal's own space

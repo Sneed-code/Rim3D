@@ -98,6 +98,7 @@ struct ThingView {
     uint32_t area = 0;  // the allowed area a pawn is limited to (AreaView::id), 0 for none
     Entity jobTarget = kNoEntity;
     float jobProgress = 0.0f;  // 0 to 1: a swing of the pick, a plant being cut, a frame being built (hands-on work, U10)
+    bool felling = false;      // at a tree, cutting it down (Unreal: a hand axe and the chop, docs/design/structure-damage.md)
     DefId carriedDef;
     int carriedCount = 0;
     // Buildings: Built, or a Blueprint or Frame still to be built (docs/design/construction.md). A
@@ -285,6 +286,8 @@ struct ThingView {
     bool pregnant = false;
     float milkFullness = -1.0f;
     float woolFullness = -1.0f;
+    bool breedingOff = false;     // the player switched breeding off for this animal itself (its zone may switch it off too)
+    Entity animalBed = kNoEntity; // the animal bed it sleeps in (docs/design/husbandry.md, Animal beds); none: the ground
     // Pawns in melee (docs/design/melee.md): winding up a swing at meleeTarget (the hit comes in
     // meleeStepsLeft steps) or recovering from one, and whether their weapon is raised to block.
     MeleePhase meleePhase = MeleePhase::Ready;
@@ -296,6 +299,12 @@ struct ThingView {
     // smash or hack); the pawn it is locked on to (it faces it; the player's lock-on camera follows it when focusPlayer);
     // stepping round or back from its enemy (a strafe or back step, facing the focus); what it does about enemies.
     bool meleeLow = false;
+    // A finisher under way (sneed 2026-11-20): 1 + its MeleeRules finishers index (0: none), how far through it is (0 to
+    // 1, the blow at its hitSeconds share) and the body on the ground it is at. Unreal kneels or bends the body over it
+    // and drives the weapon in along the finisher's own path.
+    uint8_t meleeFinisher = 0;
+    float meleeFinisherT = 0.0f;
+    Entity meleeFinisherTarget = kNoEntity;
     Entity focusTarget = kNoEntity;
     bool focusPlayer = false;
     bool footwork = false;
@@ -555,6 +564,7 @@ struct PawnLooksView {
     float bodyHair = 0.0f;
     std::vector<LooksMark> tattoos;
     std::vector<LooksMark> scars;
+    std::string creator;  // the character creator's look text (PawnLooks::creator), or empty
 };
 
 // One bill on a work building, in the building's order (first is tried first).
@@ -589,6 +599,7 @@ struct AnimalZoneView {
     uint32_t firstCell = 0;
     uint32_t cellCount = 0;
     bool pen = false;
+    bool breedingOff = false;  // the animals in it do not mate
 };
 
 // One allowed area (docs/design/areas.md): `cellCount` cells from Snapshot::areaCells[firstCell].

@@ -94,6 +94,15 @@ struct FLookConfig
 	float VolumetricExtinction = 1.0f;
 	float VolumetricScatteringDistribution = 0.55f;
 	float VolumetricDistanceCm = 9000.0f;
+	/** Under a roof (IndoorShare): dust in the air, so sunbeams through windows show as soft shafts. The fog starts at the camera,
+	 *  thickens by DustExtinction and reaches only DustDistanceCm, which also packs the fog's slices close for crisp shafts. */
+	float DustStartDistanceCm = 0.0f;
+	float DustExtinction = 4.0f;
+	float DustDistanceCm = 3000.0f;
+	/** Indoors the sky light and the sky's ambient light hardly light the fog (they would light it all through the roof, as a milky
+	 *  haze), so the sun's beams through windows stand out against the dark air of the room. */
+	float DustSkyScattering = 0.0f;
+	float DustAmbient = 0.0f;
 	float LowSunMist = 0.03f;
 	float LowSunMistFromDeg = -3.0f;
 	float LowSunMistToDeg = 14.0f;
@@ -222,6 +231,8 @@ public:
 
 	/** 0 with the camera outdoors, 1 under a roof (the indoor exposure allowance). */
 	float GetIndoorShare() const { return IndoorShare; }
+	/** The sky light's volumetric scattering now (smoke tests). */
+	float GetSkyLightScattering() const;
 	/** The state the sky was last set to. */
 	const FSkyState& GetState() const { return State; }
 	/** Works out the state for a time of day and day of the year with the weather the sim has now (no scene needed). */
@@ -262,6 +273,9 @@ public:
 	FString GetQualityName() const;
 	/** The post-process settings the sky drives (exposure, film, grade); null before the scene is built. */
 	const FPostProcessSettings* GetPostProcess() const;
+	/** Holds the sky at this hour of the day whatever the sim's clock says (the new game's character screen); < 0 lets go. */
+	void SetHourOverride(float Hour) { HourOverride = Hour; }
+	float GetHourOverride() const { return HourOverride; }
 	/** Times the camera's exposure was made to jump to its target (a time jump, a new game). */
 	int32 GetExposureCuts() const { return ExposureCuts; }
 
@@ -346,6 +360,7 @@ private:
 	bool bLookLoaded = false;
 	int32 AppliedQuality = -1;
 	int32 ExposureCuts = 0;
+	float HourOverride = -1.0f;
 	float LastExposureEV = -100.0f;
 	/** 0 with the camera outdoors, 1 under a roof; eased so stepping through a door is not a jump. */
 	float IndoorShare = 0.0f;

@@ -3,6 +3,7 @@
 #include "ColonySim/Construction.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Events.h"
+#include "ColonySim/Filth.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Regions.h"
@@ -634,4 +635,98 @@ TEST_CASE("Construction: a builder holds still while it builds, and walks free a
     CHECK(buildIsWall(sim, CellPos{14, 10, 0}));
     CHECK(heldWhileWorking);
     CHECK_FALSE(heldWhileWalking);
+}
+
+// docs/design/destruction.md: a building wrecked by damage leaves rubble and a quarter of what it was made of.
+namespace {
+
+int wreckRubbleLayers(const Sim& sim, CellPos cell) {
+    const int rubble = sim.filth().kindIndex("Rubble");
+    int layers = 0;
+    for (const FilthPile& pile : sim.filth().at(cell)) {
+        layers += static_cast<int>(pile.kind) == rubble ? pile.thickness : 0;
+    }
+    return layers;
+}
+
+}  // namespace
+
+TEST_CASE("Destruction: a stove shot to pieces leaves rubble, a quarter of its steel and a BuildingWrecked") {
+    Sim sim = buildSim();
+    buildSpawn(sim, "Human", CellPos{10, 10, 0});
+    buildSpawn(sim, "Steel", CellPos{6, 6, 0}, 75);
+    buildSpawn(sim, "Steel", CellPos{6, 7, 0}, 30);
+    const Entity site = buildPlace(sim, "FueledStove", "", CellPos{20, 20, 0}, Rot4::East);
+    BUILD_REQUIRE(site != kNoEntity);
+    BUILD_REQUIRE(buildRunUntil(sim, 6000, [&] { return sim.map().buildingAt(CellPos{20, 21, 0}) != kNoEntity; }) >= 0);
+    const Entity stove = sim.map().buildingAt(CellPos{20, 21, 0});
+    BUILD_REQUIRE(stove != kNoEntity);
+    CHECK(buildItemTotal(sim, "Steel") == 25);
+    const CellRect rect = sim.things().registry().get<Footprint>(stove).rect();
+
+    CHECK(sim.combat().damageBuilding(stove, 10000));
+    sim.step();
+    CHECK_FALSE(sim.things().registry().valid(stove));
+    // Dealt between steps here: the rubble, steel and event come at the end of the next step.
+    CHECK(buildCount(sim, EventType::BuildingWrecked) == 1);
+    int rubbleCells = 0;
+    for (int dy = 0; dy < rect.sizeY; ++dy) {
+        for (int dx = 0; dx < rect.sizeX; ++dx) {
+            const int layers = wreckRubbleLayers(sim, CellPos{rect.minX + dx, rect.minY + dy, 0});
+            CHECK(layers >= 1);
+            CHECK(layers <= 3);
+            rubbleCells += layers > 0 ? 1 : 0;
+        }
+    }
+    CHECK(rubbleCells == rect.sizeX * rect.sizeY);
+    // 80 steel x 0.25 = 20, back on the map beside what was left over.
+    CHECK(buildItemTotal(sim, "Steel") == 45);
+}
+
+TEST_CASE("Destruction: the BuildingWrecked event names the building, its size and its stuff") {
+    Sim sim = buildSim();
+    buildSpawn(sim, "Human", CellPos{10, 10, 0});
+    buildSpawn(sim, "WoodLog", CellPos{4, 4, 0}, 5);
+    BUILD_REQUIRE(buildPlace(sim, "Wall", "WoodLog", CellPos{12, 12, 0}) != kNoEntity);
+    BUILD_REQUIRE(buildRunUntil(sim, 6000, [&] { return buildIsWall(sim, CellPos{12, 12, 0}); }) >= 0);
+    const Entity wall = sim.map().buildingAt(CellPos{12, 12, 0});
+    BUILD_REQUIRE(wall != kNoEntity);
+    CHECK(buildItemTotal(sim, "WoodLog") == 0);
+
+    // A raid sapper's blows go through the same call.
+    CHECK_FALSE(sim.combat().damageBuilding(wall, 50));
+    CHECK(sim.things().registry().valid(wall));  // 195 hit points: still standing
+    CHECK(sim.combat().damageBuilding(wall, 1000));
+    // The event, the rubble and the logs come at the end of the next step, once the cell is free.
+    sim.step();
+    const auto it = std::find_if(sim.events().begin(), sim.events().end(), [](const Event& e) { return e.type == EventType::BuildingWrecked; });
+    BUILD_REQUIRE(it != sim.events().end());
+    CHECK(it->thing == wall);
+    CHECK(sim.defs().get(it->def).defName() == "Wall");
+    CHECK(it->count == 1);
+    CHECK(it->part == 1);
+    CHECK(it->message == "WoodLog");
+    CHECK(it->amount == doctest::Approx(1.0f));
+    CHECK(it->x == doctest::Approx(12.5f));
+    CHECK(it->y == doctest::Approx(12.5f));
+    CHECK(wreckRubbleLayers(sim, CellPos{12, 12, 0}) >= 1);
+    // 5 wood x 0.25 = 1.25: 1 or 2 logs.
+    const int logs = buildItemTotal(sim, "WoodLog");
+    CHECK(logs >= 1);
+    CHECK(logs <= 2);
+}
+
+TEST_CASE("Destruction: a wall taken away by a dev command is no wreck") {
+    Sim sim = buildSim();
+    buildSpawn(sim, "Human", CellPos{10, 10, 0});
+    buildSpawn(sim, "WoodLog", CellPos{4, 4, 0}, 5);
+    BUILD_REQUIRE(buildPlace(sim, "Wall", "WoodLog", CellPos{12, 12, 0}) != kNoEntity);
+    BUILD_REQUIRE(buildRunUntil(sim, 6000, [&] { return buildIsWall(sim, CellPos{12, 12, 0}); }) >= 0);
+    const Entity wall = sim.map().buildingAt(CellPos{12, 12, 0});
+    BUILD_REQUIRE(wall != kNoEntity);
+    // A dev destroy is not a wreck: no rubble.
+    sim.submit(DestroyThingCommand{wall});
+    sim.step();
+    CHECK(buildCount(sim, EventType::BuildingWrecked) == 0);
+    CHECK(wreckRubbleLayers(sim, CellPos{12, 12, 0}) == 0);
 }

@@ -59,6 +59,10 @@ constexpr int kMoveShoreRadius = 24;             // metres a swimmer looks for t
 constexpr float kMoveFlowPerStep = 1.0f / static_cast<float>(kStepsPerRealSecondAt1x);
 constexpr float kMoveCurrentFloor = 0.25f;        // against the current a wader keeps at least this share of its pace (ours)
 constexpr float kMoveDoorLookAhead = 8.0f;        // steps ahead the pawn the player walks asks a door to open
+constexpr float kMoveTrunkHorizon = 10.0f;        // steps ahead a meeting with a tree trunk is looked for
+constexpr float kMoveTrunkWeight = 0.6f;
+constexpr int kMoveTrunkCells = 2;                // cells each way round a pawn whose tree trunks it steers round
+constexpr int kMoveMaxTrunks = (2 * kMoveTrunkCells + 1) * (2 * kMoveTrunkCells + 1);
 
 // Unit vectors every 22.5 degrees (cos, sin), counter-clockwise on a map with y up. Written out
 // so no platform's cos() and sin() can make two machines disagree.
@@ -98,6 +102,13 @@ const std::array<MoveCandidateSlot, kMoveCandidates>& moveCandidateOrder() {
     }();
     return order;
 }
+
+// A tree trunk near a walker, relative to it (docs/design/structure-damage.md "Trees in the way").
+struct MoveTrunk {
+    float px = 0.0f;
+    float py = 0.0f;
+    float radius = 0.0f;
+};
 
 struct MoveNeighbour {
     float dist2 = 0.0f;
@@ -288,20 +299,25 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         // climbing, below).
         while (!mover.arrived() && !mover.climbing(a.level)) {
             const CellPos wp = mover.path[mover.next];
-            const float dx = static_cast<float>(wp.x) + 0.5f - a.x;
-            const float dy = static_cast<float>(wp.y) + 0.5f - a.y;
+            float wpX = 0.0f;
+            float wpY = 0.0f;
+            cellWalkPoint(map, wp, wpX, wpY);  // the centre, or beside the trunk standing there
+            const float dx = wpX - a.x;
+            const float dy = wpY - a.y;
             const float d2 = dx * dx + dy * dy;
             const bool last = mover.next + 1 == mover.path.size();
             const float reachDist = last ? kMoveReachGoal : kMoveReachWaypoint;
-            bool reached = d2 <= reachDist * reachDist;
+            // The goal is reached in its own cell (a walk point beside a trunk can lie near the cell's edge).
+            bool reached = d2 <= reachDist * reachDist &&
+                           (!last || (static_cast<int>(std::floor(a.x)) == wp.x && static_cast<int>(std::floor(a.y)) == wp.y));
             if (last && !reached && mover.blockedSteps >= kMoveArrivedBlockedSteps) {
                 reached = static_cast<int>(std::floor(a.x)) == wp.x && static_cast<int>(std::floor(a.y)) == wp.y;
             }
             if (!reached) {
                 break;
             }
-            mover.fromX = static_cast<float>(wp.x) + 0.5f;
-            mover.fromY = static_cast<float>(wp.y) + 0.5f;
+            mover.fromX = wpX;
+            mover.fromY = wpY;
             ++mover.next;
             mover.blockedSteps = 0;
         }
@@ -382,8 +398,9 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             // closest point on it: a pawn pushed off the line comes back to it, and the line was
             // checked for room, so it never cuts a corner.
             const CellPos wp = mover.path[mover.next];
-            const float wx = static_cast<float>(wp.x) + 0.5f;
-            const float wy = static_cast<float>(wp.y) + 0.5f;
+            float wx = 0.0f;
+            float wy = 0.0f;
+            cellWalkPoint(map, wp, wx, wy);
             const float sx = wx - mover.fromX;
             const float sy = wy - mover.fromY;
             const float segLen2 = sx * sx + sy * sy;
@@ -426,8 +443,11 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
             } else {
                 // Slow down for a turn at the waypoint: the sharper, the slower.
                 const CellPos after = mover.path[mover.next + 1];
-                const float ox = static_cast<float>(after.x) + 0.5f - wx;
-                const float oy = static_cast<float>(after.y) + 0.5f - wy;
+                float afterX = 0.0f;
+                float afterY = 0.0f;
+                cellWalkPoint(map, after, afterX, afterY);
+                const float ox = afterX - wx;
+                const float oy = afterY - wy;
                 const float outLen = std::sqrt(ox * ox + oy * oy);
                 const float straight = (outLen > 1.0e-6f && segLen2 > 1.0e-6f) ? (inX * ox + inY * oy) / outLen : 1.0f;
                 const float keep = kMoveCornerSpeed + (1.0f - kMoveCornerSpeed) * std::max(0.0f, straight);
@@ -498,6 +518,58 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
 
         const bool ghost = mover.ghostSteps > 0;
 
+        // Tree trunks near it: solid posts it steers round like a pawn standing still, and never walks into.
+        MoveTrunk trunks[kMoveMaxTrunks];
+        int trunkCount = 0;
+        if (a.level == 0 && map.trunkCount() > 0) {
+            for (int ty = here.y - kMoveTrunkCells; ty <= here.y + kMoveTrunkCells; ++ty) {
+                for (int tx = here.x - kMoveTrunkCells; tx <= here.x + kMoveTrunkCells; ++tx) {
+                    float sx = 0.0f;
+                    float sy = 0.0f;
+                    float radius = 0.0f;
+                    if (map.trunkAt(CellPos{tx, ty, 0}, sx, sy, radius)) {
+                        trunks[trunkCount++] = MoveTrunk{sx - a.x, sy - a.y, radius};
+                    }
+                }
+            }
+        }
+        // The part of a step going into a trunk is taken off, so the body slides round its edge. Already inside one (a tree
+        // grew round it, or it was pushed in): only the part going deeper is taken off, so it walks out without a jump.
+        const auto slideOffTrunks = [&](float& vx, float& vy) {
+            for (int k = 0; k < trunkCount; ++k) {
+                const MoveTrunk& post = trunks[k];
+                const float trunkReach = kTrunkBodyRadius + post.radius;
+                const float nx = vx - post.px;
+                const float ny = vy - post.py;
+                const float d2 = nx * nx + ny * ny;
+                if (d2 >= trunkReach * trunkReach) {
+                    continue;
+                }
+                const float o2 = post.px * post.px + post.py * post.py;
+                if (o2 < trunkReach * trunkReach) {
+                    const float o = std::sqrt(o2);
+                    if (o > 1.0e-4f) {
+                        const float ux = -post.px / o;  // out of the trunk
+                        const float uy = -post.py / o;
+                        const float out = vx * ux + vy * uy;
+                        if (out < 0.0f) {
+                            vx -= out * ux;
+                            vy -= out * uy;
+                        }
+                    }
+                    continue;
+                }
+                const float d = std::sqrt(d2);
+                if (d < 1.0e-6f) {
+                    vx = 0.0f;
+                    vy = 0.0f;
+                    continue;
+                }
+                vx = post.px + nx / d * trunkReach;
+                vy = post.py + ny / d * trunkReach;
+            }
+        };
+
         // Pawns standing in each other push apart, so a pile (everyone spawned on one cell) spreads.
         if (!ghost) {
             float pushX = 0.0f;
@@ -562,6 +634,11 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
         int bestNumber = kMoveCandidates;
         float bestVx = 0.0f;
         float bestVy = 0.0f;
+        // The best by everything but the trunks' costs (they only steer: the bark itself is kept off by the slide).
+        float plainBestCost = 1.0e30f;
+        int plainBestNumber = kMoveCandidates;
+        float plainBestVx = 0.0f;
+        float plainBestVy = 0.0f;
         const int candidates = wantLen > 1.0e-6f ? kMoveCandidates : 1;
         const MoveCandidateSlot* order = moveCandidateOrder().data();
         for (int t = 0; t < candidates; ++t) {
@@ -591,8 +668,10 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
                 dvx *= scale;
                 dvy *= scale;
             }
-            const float nvx = a.vx + dvx;
-            const float nvy = a.vy + dvy;
+            float nvx = a.vx + dvx;
+            float nvy = a.vy + dvy;
+            // Against a trunk, judged by the slide it comes to, so a walker pressed against the bark slides on round it.
+            slideOffTrunks(nvx, nvy);
 
             float cost = ((nvx - wantX) * (nvx - wantX) + (nvy - wantY) * (nvy - wantY)) / (base * base);
             const int steps = turn < 0 ? -turn : turn;
@@ -621,11 +700,49 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
                     }
                 }
             }
+            if (cost < plainBestCost || (cost == plainBestCost && c < plainBestNumber)) {
+                plainBestCost = cost;
+                plainBestNumber = c;
+                plainBestVx = nvx;
+                plainBestVy = nvy;
+            }
+            // Trunks are posts that stay put: a trunk it would meet soon costs a little (so it curves round in good time,
+            // not at the bark), and so does coming closer to one than it is now. Only closer: in a forest every way leads
+            // past some trunk, and a walker that paid for being near one would rather stand still.
+            for (int k = 0; k < trunkCount; ++k) {
+                const MoveTrunk& post = trunks[k];
+                const float trunkReach = kTrunkBodyRadius + post.radius + kTrunkMargin;
+                const float now = std::sqrt(post.px * post.px + post.py * post.py);
+                // Already that close (spawned or pushed against it, or a tree grew there): every step but standing still
+                // would "meet" it at once, and the pawn froze there for good. It walks off along the bark instead.
+                const float meet = now > trunkReach ? moveTimeToMeet(post.px, post.py, nvx, nvy, trunkReach) : 1.0e9f;
+                if (meet < kMoveTrunkHorizon) {
+                    cost += kMoveTrunkWeight * (kMoveTrunkHorizon - meet) / kMoveTrunkHorizon;
+                }
+                const float rx = post.px - nvx;
+                const float ry = post.py - nvy;
+                const float after = std::sqrt(rx * rx + ry * ry);
+                const float near = std::min(now, trunkReach + kMoveSpace);
+                if (after < near) {
+                    cost += kMoveSpaceWeight * (near - after) / kMoveSpace;
+                }
+            }
             if (cost < bestCost || (cost == bestCost && c < bestNumber)) {
                 bestCost = cost;
                 bestNumber = c;
                 bestVx = nvx;
                 bestVy = nvy;
+            }
+        }
+        // The trunks' costs never hold a walker back: when they would (it brakes into a goal beside a trunk, or a gap
+        // between two trunks costs more than standing), it takes the best way by the rest. Its slide keeps it off the bark.
+        // (Found by the raid soak: fighters stood for good a step from a goal cell beside a tree.)
+        if (wantLen > 1.0e-6f && plainBestNumber != bestNumber) {
+            const float trunkGot = (bestVx * wantX + bestVy * wantY) / wantLen;
+            const float plainGot = (plainBestVx * wantX + plainBestVy * wantY) / wantLen;
+            if (trunkGot < kMoveHeldBackShare * wantLen && plainGot > trunkGot) {
+                bestVx = plainBestVx;
+                bestVy = plainBestVy;
             }
         }
         if (bestVx * bestVx + bestVy * bestVy < 1.0e-10f) {
@@ -643,6 +760,8 @@ void MovementSystem::movePawns(entt::registry& reg, const Map& map) {
                 bestVy = 0.0f;
             }
         }
+        // Trunks are solid (docs/design/structure-damage.md): never into the bark.
+        slideOffTrunks(bestVx, bestVy);
         // The wall costs only steer, so a pawn squeezed by others (or walking through them) could still be pushed into a
         // wall's cell and be shut in there for good, starving (found by the year run). Never into a cell it cannot stand in:
         // keep the part along one axis that stays out, else stand still.

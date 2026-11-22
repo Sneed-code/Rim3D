@@ -810,6 +810,16 @@ TEST_CASE("Husbandry: a tame animal sleeps on its own animal bed, one that doesn
     CHECK(f.reg().get<Health>(owner).rest == RestKind::Bed);  // heals as in a bed
     CHECK(f.reg().get<Health>(other).rest == RestKind::Ground);
     CHECK(f.hu().care(other)->bed == kNoEntity);
+    {
+        Snapshot snap;
+        f.sim.writeSnapshot(snap);
+        const ThingView* ownerView = snap.find(owner);
+        const ThingView* otherView = snap.find(other);
+        HUSB_REQUIRE(ownerView != nullptr);
+        HUSB_REQUIRE(otherView != nullptr);
+        CHECK(ownerView->animalBed == bed);  // the Animals tab shows it
+        CHECK(otherView->animalBed == kNoEntity);
+    }
 
     // Save and load in the night: the bed stays its own and the game goes on the same.
     const std::vector<uint8_t> bytes = saveSim(f.sim);

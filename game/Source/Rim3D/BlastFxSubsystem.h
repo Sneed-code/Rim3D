@@ -52,6 +52,8 @@ public:
 
 	// For the smoke test and the screen.
 	int32 GetBlastsDrawn() const { return BlastsDrawn; }
+	int32 GetRagdollsThrown() const { return RagdollsThrown; }
+	int32 GetPiecesThrown() const { return PiecesThrown; }
 	int32 GetSpritesAlive() const { return Sprites.Num(); }
 	int32 GetSmokeAlive() const;
 	int32 GetScorchMarks() const { return Scorches.Num(); }
@@ -132,6 +134,8 @@ private:
 	bool bTriedLoad = false;
 	bool bReady = false;
 	int32 BlastsDrawn = 0;
+	int32 RagdollsThrown = 0;
+	int32 PiecesThrown = 0;
 	// The light: a white-hot peak, then an orange glow dying away.
 	FVector FlashAt = FVector::ZeroVector;
 	float FlashAge = 99.0f;

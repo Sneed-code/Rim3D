@@ -204,7 +204,9 @@ namespace
 	constexpr float PawnKickMaxAngle = 0.6f;
 	constexpr float PawnKickStep = 1.0f / 120.0f;
 	// How far a full-strength hit bends each zone at the top of its first swing (radians), by ESimPawnZone.
-	constexpr float PawnKickPeak[static_cast<int32>(ESimPawnZone::Count)] = {0.28f, 0.16f, 0.38f, 0.38f, 0.2f, 0.2f};
+	// (Head 0.28 at first: a rifle's 9 damage turned it 7 degrees, which nobody could see; sneed 2026-11-20 wants the head to
+	// snap back like the knee does.)
+	constexpr float PawnKickPeak[static_cast<int32>(ESimPawnZone::Count)] = {0.5f, 0.16f, 0.38f, 0.38f, 0.2f, 0.2f};
 	// A spring this damped reaches about 0.7 of (start speed / frequency) on its first swing.
 	constexpr float PawnKickPeakShare = 0.7f;
 	// The limp: over a hurt leg the body tips to that side and forward, the head stays level and the hips drop.
@@ -515,8 +517,10 @@ struct FSimPawnUpperSlotNode : public FAnimNode_Base
 	}
 
 	virtual void Evaluate_AnyThread(FPoseContext& Output) override;
+	struct FSimPawnAnimInstanceProxy* Proxy = nullptr;
 
 private:
+	void EvaluateSlotted(FPoseContext& Output);
 	FGraphTraversalCounter Registered;
 	float SlotNodeWeight = 0.0f;
 	float SourceWeight = 1.0f;
@@ -684,6 +688,7 @@ protected:
 		HitLayer.Source = &UpperSlot;
 		HitLayer.Proxy = this;
 		UpperSlot.Source = &Slot;
+		UpperSlot.Proxy = this;
 		Slot.Source = &Upper;
 		Upper.Source = &Locomotion;
 		Upper.Proxy = this;
@@ -936,14 +941,7 @@ void FSimPawnUpperNode::Evaluate_AnyThread(FPoseContext& Output)
 			}
 		}
 	}
-	// The bend: the whole upper body tips forward about spine_01. The mesh faces +Y, so forward is a turn about -X.
-	if (FMath::Abs(P->SpineBend) > 0.05f)
-	{
-		const FQuat PelvisRot = PawnUpperComponent(Output.Pose, Pelvis).GetRotation();
-		const FQuat Delta(FVector::XAxisVector, -FMath::DegreesToRadians(P->SpineBend));
-		const FQuat Local = Output.Pose[Spine].GetRotation();
-		Output.Pose[Spine].SetRotation((PelvisRot.Inverse() * Delta * PelvisRot * Local).GetNormalized());
-	}
+	// (The bend over a body on the back or the downed is put on after the montage slots: FSimPawnUpperSlotNode.)
 }
 
 // ---------------------------------------------------------------------------
@@ -983,11 +981,29 @@ void FSimPawnUpperSlotNode::CacheBones_AnyThread(const FAnimationCacheBonesConte
 void FSimPawnUpperSlotNode::Evaluate_AnyThread(FPoseContext& Output)
 {
 	Source->Evaluate_AnyThread(Output);
-	if (SlotNodeWeight <= ZERO_ANIMWEIGHT_THRESH || Spine.GetInt() == INDEX_NONE || Pelvis.GetInt() == INDEX_NONE ||
-		BoneWeights.Num() != Output.Pose.GetNumBones())
+	if (Spine.GetInt() == INDEX_NONE || Pelvis.GetInt() == INDEX_NONE || BoneWeights.Num() != Output.Pose.GetNumBones())
 	{
 		return;
 	}
+	if (SlotNodeWeight > ZERO_ANIMWEIGHT_THRESH)
+	{
+		EvaluateSlotted(Output);
+	}
+	// The bend: the whole upper body tips forward about spine_01. The mesh faces +Y, so forward is a turn about -X.
+	// Last of all, over the montages too: a finisher's kneel is a whole-body clip in the montage slot, and under it the
+	// bend was lost (round 8, 2026-11-21: the knife and gladius knelt bolt upright with the blade 70 cm off the body).
+	const float Bend = Proxy ? Proxy->SpineBend : 0.0f;
+	if (FMath::Abs(Bend) > 0.05f)
+	{
+		const FQuat PelvisRot = PawnUpperComponent(Output.Pose, Pelvis).GetRotation();
+		const FQuat Delta(FVector::XAxisVector, -FMath::DegreesToRadians(Bend));
+		const FQuat Local = Output.Pose[Spine].GetRotation();
+		Output.Pose[Spine].SetRotation((PelvisRot.Inverse() * Delta * PelvisRot * Local).GetNormalized());
+	}
+}
+
+void FSimPawnUpperSlotNode::EvaluateSlotted(FPoseContext& Output)
+{
 	// The whole-body pose the montage makes over what plays under it (blended in and out by the montage's weight) ...
 	FPoseContext Slotted(Output);
 	{
@@ -1607,8 +1623,8 @@ void FSimPawnHitLayerNode::Update_AnyThread(const FAnimationUpdateContext& Conte
 	Walking = PawnApproach(Walking, In.Velocity.Size2D() > PawnStandSpeed ? 1.0f : 0.0f, DeltaTime / 0.25f);
 
 	// Standing feet and turns are worked out in Evaluate, where the feet are known.
-	bWantFootLock = Proxy->bStandingIdleNow && In.bStandTwist && !In.bLegsFromClip;
-	bWantWalkLock = In.bStandTwist && !In.bLegsFromClip;
+	bWantFootLock = Proxy->bStandingIdleNow && In.bStandTwist && !In.bLegsFromClip && !In.bTurnFeet;
+	bWantWalkLock = In.bStandTwist && !In.bLegsFromClip && !In.bTurnFeet;
 
 	// The springs, in steps short enough to stay steady on a slow frame.
 	const int32 Steps = FMath::Clamp(FMath::CeilToInt32(DeltaTime / PawnKickStep), 1, 30);

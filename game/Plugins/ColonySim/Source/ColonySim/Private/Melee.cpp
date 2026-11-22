@@ -1,4 +1,5 @@
 #include "ColonySim/Melee.h"
+#include "ColonySim/Plants.h"
 
 #include "ColonySim/Animals.h"
 #include "ColonySim/Apparel.h"
@@ -40,7 +41,7 @@ float meleeLerp(float a, float b, float t) { return a + (b - a) * t; }
 
 // A MeleeRules value given at Melee skill 0 and 20, at this skill.
 float meleeBySkill(const float (&v)[2], int skill) {
-    return meleeLerp(v[0], v[1], static_cast<float>(std::clamp(skill, 0, 20)) / 20.0f);
+    return meleeLerp(v[0], v[1], static_cast<float>(std::clamp(skill, 0, kSkillLevelLimit)) / 20.0f);  // goes on past 20
 }
 
 void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
@@ -176,6 +177,19 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     for (const std::string& weapon : def->keys("weaponStyle")) {
         r.weaponStyle.emplace_back(weapon, def->text(("weaponStyle." + weapon).c_str()));
     }
+    for (const std::string& key : def->keys("finishers")) {
+        const std::string base = "finishers." + key + ".";
+        MeleeFinisher f;
+        f.key = key;
+        f.move = def->text((base + "move").c_str(), f.move);
+        f.seconds = std::max(0.2f, static_cast<float>(def->number((base + "seconds").c_str(), f.seconds)));
+        f.hitSeconds = std::clamp(static_cast<float>(def->number((base + "hitSeconds").c_str(), f.hitSeconds)), 0.1f, f.seconds - 0.05f);
+        f.standOff = std::max(0.2f, static_cast<float>(def->number((base + "standOff").c_str(), f.standOff)));
+        f.kneel = def->flag((base + "kneel").c_str(), f.kneel);
+        f.bend = static_cast<float>(def->number((base + "bend").c_str(), f.bend));
+        r.finishers.push_back(std::move(f));
+    }
+    num("finisherStepMetres", r.finisherStepMetres);
     r.arcRaysPerSide = std::clamp(r.arcRaysPerSide, 0, 8);
     r.minWindup = std::max(1, r.minWindup);
     r.commitSteps = std::max(0, r.commitSteps);
@@ -317,6 +331,16 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
                 }
             }
         }
+        // A finisher at the downed (sneed 2026-11-20): the weapon's own entry if it has one, else its style's.
+        if (weapon) {
+            for (size_t i = 0; i < rules_.finishers.size(); ++i) {
+                if (rules_.finishers[i].key == def.defName()) {
+                    set.finisher = static_cast<int>(i) + 1;
+                } else if (set.finisher == 0 && rules_.finishers[i].key == style) {
+                    set.finisher = static_cast<int>(i) + 1;
+                }
+            }
+        }
     }
 }
 
@@ -454,7 +478,7 @@ bool MeleeSystem::charges(Entity pawn) const {
 int MeleeSystem::meleeSkill(Entity pawn) const {
     if (const Colonist* colonist = things_.registry().try_get<Colonist>(pawn)) {
         if (const SkillRecord* skill = colonist->skill("Melee")) {
-            return std::clamp(skill->level, 0, 20);
+            return std::clamp(skill->level, 0, kSkillLevelLimit);
         }
     }
     return std::clamp(rules_.defaultSkill, 0, 20);
@@ -549,6 +573,27 @@ std::vector<DefId> MeleeSystem::lowAttackClipsOf(DefId def) const {
     return tools_[def.value].lowAttackClips;
 }
 
+int MeleeSystem::finisherFor(DefId weapon) const {
+    return weapon.valid() && weapon.value < tools_.size() ? tools_[weapon.value].finisher : 0;
+}
+
+const MeleeFinisher* MeleeSystem::finisherOf(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Melee* m = reg.valid(pawn) ? reg.try_get<Melee>(pawn) : nullptr;
+    if (m == nullptr || m->finisher == 0 || m->phase == MeleePhase::Ready || m->finisher > rules_.finishers.size()) {
+        return nullptr;
+    }
+    return &rules_.finishers[m->finisher - 1];
+}
+
+float MeleeSystem::finisherProgress(Entity pawn) const {
+    const Melee* m = finisherOf(pawn) != nullptr ? things_.registry().try_get<Melee>(pawn) : nullptr;
+    if (m == nullptr || m->finisherSteps <= 0) {
+        return 0.0f;
+    }
+    return std::clamp(static_cast<float>(now() - m->finisherFrom) / static_cast<float>(m->finisherSteps), 0.0f, 1.0f);
+}
+
 bool MeleeSystem::ready(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     if (!reg.valid(pawn) || !meleeAble(reg, pawn)) {
@@ -641,14 +686,42 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     }
     const Tool& tool = set->tools[m.tool];
     // Worn armour's weight slows a swing (docs/design/armour.md), melee skill changes its pace (real-time-combat.md).
-    const int windup =
+    int windup =
         std::max(1, static_cast<int>(std::lround(static_cast<float>(meleeWindup(rules_, tool.cooldown)) * swingTimeFactor(pawn))));
     m.phase = MeleePhase::Windup;
-    m.stepsLeft = windup;
     m.target = target;
     // A blow at a body on the ground goes down at it (the strike already aims at its aim point there): Unreal plays a
     // downward poke, smash or hack (docs/design/focus.md).
     m.low = target != kNoEntity && (health_.incapacitated(target) || reg.get<Posture>(target).stance == Stance::Prone);
+    // At a body on the ground with a weapon that has one, a finisher (sneed 2026-11-20): its own slow move, timed by
+    // MeleeRules finishers, the attacker stepping to its place beside the body and holding still till it is over.
+    m.finisher = 0;
+    m.finisherSteps = 0;
+    if (m.low && weapon && set->finisher > 0 && static_cast<size_t>(set->finisher) <= rules_.finishers.size()) {
+        const MeleeFinisher& f = rules_.finishers[static_cast<size_t>(set->finisher - 1)];
+        m.finisher = static_cast<uint8_t>(set->finisher);
+        m.finisherFrom = now();
+        m.finisherSteps = std::max(2, static_cast<int>(std::lround(f.seconds * 30.0f)));
+        windup = std::clamp(static_cast<int>(std::lround(f.hitSeconds * 30.0f)), 1, m.finisherSteps - 1);
+        if (Mover* mover = reg.try_get<Mover>(pawn)) {
+            mover->vx = 0.0f;  // the player's last walk no longer turns it
+            mover->vy = 0.0f;
+        }
+        // To its place: standOff from the body's centre, on the side it came from.
+        const Position& a = reg.get<Position>(pawn);
+        const Position& b = reg.get<Position>(target);
+        float dx = a.x - b.x;
+        float dy = a.y - b.y;
+        const float d = std::sqrt(dx * dx + dy * dy);
+        if (d > 0.01f && std::fabs(d - f.standOff) > 0.05f && !combat_.motion().moving(pawn)) {
+            dx /= d;
+            dy /= d;
+            const float metres = d - f.standOff;  // positive: in towards the body
+            const int steps = std::max(3, static_cast<int>(std::ceil(std::fabs(metres) / std::max(0.01f, rules_.finisherStepMetres))));
+            combat_.motion().push(pawn, metres > 0.0f ? -dx : dx, metres > 0.0f ? -dy : dy, std::fabs(metres), std::min(steps, windup));
+        }
+    }
+    m.stepsLeft = windup;
     if (target != kNoEntity) {
         m.engagedAt = now();
     }
@@ -665,7 +738,7 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     // A person's swing is one of its style's attack clips, timed so the clip's blow lands on the hit step; the clip's
     // step forward moves the body through the world (docs/design/body-motion.md). Faster swings play the clip faster.
     // A blow at a body on the ground plays one of the downward clips when the weapon has any (focus.md).
-    if (!set->attackClips.empty() && combat_.motion().hasClips(pawn) && !reg.all_of<BodyMotion>(pawn)) {
+    if (m.finisher == 0 && !set->attackClips.empty() && combat_.motion().hasClips(pawn) && !reg.all_of<BodyMotion>(pawn)) {
         const std::vector<DefId>& clips = m.low && !set->lowAttackClips.empty() ? set->lowAttackClips : set->attackClips;
         Rng pick(splitMix64(m.seed ^ 0xC11FULL));
         const DefId clipDef = clips[static_cast<size_t>(pick.unit() * static_cast<float>(clips.size())) % clips.size()];
@@ -1191,8 +1264,9 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
         const float ly = dx * sn + dy * c;
         const float lex = ox + lx * length;
         const float ley = oy + ly * length;
-        TraceHit found = combat_.trace(ox, oy, oz, lex, ley, ez, pos.level, pawn, cellOf(pos));
-        if (found.kind != ProjectileHitKind::Pawn && found.kind != ProjectileHitKind::Building && m.target != kNoEntity &&
+        TraceHit found = combat_.trace(ox, oy, oz, lex, ley, ez, pos.level, pawn, cellOf(pos), true, nullptr, true);
+        if (found.kind != ProjectileHitKind::Pawn && found.kind != ProjectileHitKind::Building && found.kind != ProjectileHitKind::Plant &&
+            m.target != kNoEntity &&
             reg.valid(m.target) && things_.spawned(m.target)) {
             std::vector<HitboxView> boxes;
             if (!combat_.hitboxesOf(m.target, boxes)) {
@@ -1227,6 +1301,8 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
                 const Melee* dodger = swept.kind == ProjectileHitKind::Pawn ? reg.try_get<Melee>(swept.thing) : nullptr;
                 if (swept.kind == ProjectileHitKind::Pawn && !(dodger != nullptr && dodger->dodged && dodger->threat == pawn)) {
                     hit = swept;
+                } else if (m.target == kNoEntity && (swept.kind == ProjectileHitKind::Building || swept.kind == ProjectileHitKind::Plant)) {
+                    hit = swept;  // a swing at nobody (the player's at a wall or a tree) meets what stands in its arc
                 }
             }
         }
@@ -1248,6 +1324,20 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
     }
     if (hit.kind == ProjectileHitKind::Building && reg.valid(hit.thing)) {
         meleeSoundStruck(reg, hit.thing, e);
+    }
+    if (hit.kind == ProjectileHitKind::Plant) {
+        e.cell = hit.cell;
+        e.struckDef = combat_.plants() != nullptr ? combat_.plants()->defAt(hit.cell) : DefId{};
+    }
+    // Anything that can be hurt takes the blow: buildings, walls, doors and trees (sneed 2026-11-20,
+    // docs/design/structure-damage.md). The event is built first: the thing may be gone after it.
+    if (hit.kind == ProjectileHitKind::Building || hit.kind == ProjectileHitKind::Plant) {
+        const int taken = combat_.damageStruck(hit, power, true);
+        if (taken > 0) {
+            e.message = "hit";
+            e.amount = static_cast<float>(taken);
+            ++structureHits_;
+        }
     }
     if (hit.kind == ProjectileHitKind::Pawn) {
         const Entity victim = hit.thing;
@@ -1354,6 +1444,14 @@ void MeleeSystem::step() {
     }
     for (const Entity pawn : order_) {
         Melee& m = reg.get<Melee>(pawn);
+        // A finisher whose body is gone (taken off the map) ends there: nothing is left to strike or kneel over.
+        if (m.finisher != 0 && m.phase != MeleePhase::Ready &&
+            (m.target == kNoEntity || !reg.valid(m.target) || !things_.spawned(m.target))) {
+            m.phase = MeleePhase::Ready;
+            m.stepsLeft = 0;
+            m.finisher = 0;
+            continue;
+        }
         switch (m.phase) {
             case MeleePhase::Ready:
                 break;
@@ -1382,7 +1480,8 @@ void MeleeSystem::step() {
                     m.noDefendUntil = std::max(m.noDefendUntil, now() + rules_.recoveryNoDefendSteps);
                     const Tool* tool = toolOf(pawn, m);
                     m.phase = MeleePhase::Recovery;
-                    m.stepsLeft = tool != nullptr
+                    m.stepsLeft = m.finisher != 0 ? std::max(1, m.finisherSteps - static_cast<int>(now() - m.finisherFrom))
+                                  : tool != nullptr
                                       ? std::max(1, static_cast<int>(std::lround(
                                                         static_cast<float>(tool->cooldown - meleeWindup(rules_, tool->cooldown)) *
                                                         swingTimeFactor(pawn))))
@@ -1436,6 +1535,9 @@ void MeleeSystem::hashThing(Entity e, StateHasher& h) const {
     h.add(m->footworkUntil);
     h.add(m->engagedAt);
     h.add(static_cast<int>(m->response));
+    h.add(static_cast<int>(m->finisher));
+    h.add(m->finisherFrom);
+    h.add(m->finisherSteps);
 }
 
 // ---- Fight response, focus and footwork (docs/design/focus.md) ----------------------------------
@@ -1646,7 +1748,20 @@ bool MeleeSystem::focusNext(Entity pawn, FocusMode mode, float viewX, float view
             }
         }
         if (chosen == kNoEntity) {
-            return fail("nobody that way to focus on");
+            // Nobody that way (PC gun range 2026-11-20: one other target left, on the other side, and the flick did nothing):
+            // the flick still switches, to the other target nearest in turn, standing ones first.
+            for (const Pick& p : picks) {
+                const float turn = std::fabs(p.angle);
+                const int g = p.group % 2;
+                if (p.pawn != m.focus && (chosen == kNoEntity || g < bestGroup || (g == bestGroup && turn < best))) {
+                    chosen = p.pawn;
+                    best = turn;
+                    bestGroup = g;
+                }
+            }
+        }
+        if (chosen == kNoEntity) {
+            return fail("nobody else to focus on");
         }
     } else {
         // Tab: a round starts again after focusRoundSteps without a Tab; the target held counts as given.
@@ -1858,8 +1973,8 @@ Entity MeleeSystem::playerTarget(Entity pawn) const {
         return m->focus;
     }
     // No focus in reach: a body on the ground before it (within 60 degrees), nearest first (swung straight ahead, a level
-    // blow passes over a man lying at its feet); else an enemy on its feet ahead (within assistCos), nearest first
-    // (sneed 2026-11-19: swings that land).
+    // blow passes over a man lying at its feet); else anyone not on its side on their feet ahead (within assistCos),
+    // nearest first (sneed 2026-11-19: swings that land; 2026-11-20: neutrals too).
     const Position& pos = reg.get<Position>(pawn);
     const Posture& posture = reg.get<Posture>(pawn);
     Entity best = kNoEntity;
@@ -1870,8 +1985,8 @@ Entity MeleeSystem::playerTarget(Entity pawn) const {
             continue;
         }
         const bool down = health_.incapacitated(e);
-        if (!down && !(hostile_ && hostile_(pawn, e))) {
-            continue;
+        if (!down && !(notFriendly_ ? notFriendly_(pawn, e) : (hostile_ && hostile_(pawn, e)))) {
+            continue;  // its own side (sneed 2026-11-20: anyone else, even a neutral, draws the swing)
         }
         const float dx = p.x - pos.x;
         const float dy = p.y - pos.y;

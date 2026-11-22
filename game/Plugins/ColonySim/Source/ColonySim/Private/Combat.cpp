@@ -1,4 +1,5 @@
 #include "ColonySim/Combat.h"
+#include "ColonySim/Construction.h"
 #include "ColonySim/Genes.h"
 
 #include "ColonySim/Apparel.h"
@@ -10,6 +11,7 @@
 #include "ColonySim/Looks.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Melee.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Talents.h"
 #include "ColonySim/Things.h"
@@ -149,6 +151,14 @@ struct CombatModel {
         float fragmentMinDamage = 1e30f;
     };
     std::vector<Blast> blast;  // by DamageTypes DefId value
+    // StructureDamageRules (sneed 2026-11-20, docs/design/structure-damage.md): what blows, shots and blasts do to
+    // buildings and plants.
+    float meleeBuildingFactor = 1.0f;
+    float meleePlantFactor = 1.0f;
+    float rangedBuildingFactor = 1.0f;
+    float rangedPlantFactor = 1.0f;
+    float blastPlantFactor = 0.0f;
+    bool tracesMeetTrees = false;
     float edgeFactor = 0.4f;
     float stanceFactor[3] = {1.0f, 0.85f, 0.5f};
     float blastHeight = 0.3f;
@@ -330,6 +340,15 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         for (size_t i = 0; i < 21; ++i) {
             accuracyBySkill[i] = 0.89f + 0.005f * static_cast<float>(i);
         }
+    }
+
+    if (const Def* rules = defs.find("Rules", "StructureDamageRules")) {
+        meleeBuildingFactor = std::max(0.0f, combatNum(*rules, "meleeBuildingFactor", meleeBuildingFactor));
+        meleePlantFactor = std::max(0.0f, combatNum(*rules, "meleePlantFactor", meleePlantFactor));
+        rangedBuildingFactor = std::max(0.0f, combatNum(*rules, "rangedBuildingFactor", rangedBuildingFactor));
+        rangedPlantFactor = std::max(0.0f, combatNum(*rules, "rangedPlantFactor", rangedPlantFactor));
+        blastPlantFactor = std::max(0.0f, combatNum(*rules, "blastPlantFactor", blastPlantFactor));
+        tracesMeetTrees = rules->flag("tracesMeetTrees");
     }
 
     if (const Def* rules = defs.find("Rules", "ApparelRules")) {
@@ -637,8 +656,9 @@ float combatPowDistance(float a, float d) {
 float combatLerp(float a, float b, float t) { return a + (b - a) * t; }
 
 // A CombatRules value given at Shooting skill 0 and 20, at this skill.
+// Past 20 (a skill trait's bonus) the line goes on.
 float combatBySkill(const float (&v)[2], int skill) {
-    return combatLerp(v[0], v[1], static_cast<float>(std::clamp(skill, 0, 20)) / 20.0f);
+    return combatLerp(v[0], v[1], static_cast<float>(std::clamp(skill, 0, kSkillLevelLimit)) / 20.0f);
 }
 
 Stance combatStanceOf(const entt::registry& reg, Entity pawn) {
@@ -772,7 +792,7 @@ int CombatSystem::shootingSkill(Entity pawn) const {
     if (const Colonist* colonist = things_.registry().try_get<Colonist>(pawn)) {
         for (const SkillRecord& skill : colonist->skills) {
             if (skill.def == "Shooting") {
-                return std::clamp(skill.level + bonus, 0, 20);
+                return std::clamp(skill.level + bonus, 0, kSkillLevelLimit);
             }
         }
     }
@@ -806,7 +826,12 @@ float CombatSystem::spread(DefId weapon, int skill, float distance, bool player,
         return model_->radiusFor(hit) / d * model_->playerSpreadFactor;
     }
     const float d = std::max(distance, 1.0f);
-    const float shooter = combatPowDistance(model_->accuracyBySkill[std::clamp(skill, 0, 20)], d);
+    // Past 20 (a skill trait's bonus) each level adds what the 19-to-20 step added, short of certainty.
+    float perShot = model_->accuracyBySkill[std::clamp(skill, 0, 20)];
+    if (skill > 20) {
+        perShot = std::min(0.995f, perShot + (model_->accuracyBySkill[20] - model_->accuracyBySkill[19]) * static_cast<float>(skill - 20));
+    }
+    const float shooter = combatPowDistance(perShot, d);
     const float hit = std::clamp(shooter * gunAccuracy(d) * accuracyFactor, model_->minHitChance, 1.0f);
     return model_->radiusFor(hit) / d;
 }
@@ -898,7 +923,9 @@ bool CombatSystem::hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const {
         wz = ground + k * l[2];
     };
     for (const CombatModel::Shape& shape : kind->poses[static_cast<int>(combatStanceOf(reg, pawn))].shapes) {
-        if (health_.partHitPoints(pawn, shape.part) <= 0.0f) {
+        // A part at 0 that is still on the body (an arm or leg at 0 stays on: body zones) is still there to hit, so
+        // damage keeps piling up past 0 until it comes off (sneed, 2026-11-22). Only a part that is gone has no box.
+        if (!health_.hasPart(pawn, shape.part)) {
             continue;
         }
         HitboxView v;
@@ -923,8 +950,28 @@ bool CombatSystem::hitboxesOf(Entity pawn, std::vector<HitboxView>& out) const {
     return true;
 }
 
+namespace {
+
+// Where a line from (ax, ay) along (dx, dy), t from 0 to 1, first enters a circle of radius r round the origin: t, or -1
+// if it misses or starts inside.
+float combatSegmentCircle(float ax, float ay, float dx, float dy, float r) {
+    const float a = dx * dx + dy * dy;
+    const float b = 2.0f * (ax * dx + ay * dy);
+    const float c = ax * ax + ay * ay - r * r;
+    if (a <= 1.0e-12f || c <= 0.0f) {
+        return -1.0f;
+    }
+    const float disc = b * b - 4.0f * a * c;
+    if (disc < 0.0f) {
+        return -1.0f;
+    }
+    return (-b - std::sqrt(disc)) / (2.0f * a);
+}
+
+}  // namespace
+
 TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, float bz, int level, Entity skipPawn,
-                             CellPos skipCell, bool pawns, const DrawnAim* drawn) const {
+                             CellPos skipCell, bool pawns, const DrawnAim* drawn, bool trees) const {
     TraceHit best;
     const float dx = bx - ax;
     const float dy = by - ay;
@@ -992,6 +1039,26 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
                         best.glassX = ax + dx * tIn;
                         best.glassY = ay + dy * tIn;
                         best.glassZ = z0;
+                    }
+                }
+            }
+            // A tree's trunk (docs/design/structure-damage.md): a standing cylinder at the spot Unreal draws the tree.
+            if (trees && plants_ != nullptr && model_->tracesMeetTrees && level == 0 && !(c == skipCell) && plants_->has(c)) {
+                float tx = 0.0f;
+                float ty = 0.0f;
+                float radius = 0.0f;
+                float height = 0.0f;
+                if (plants_->trunkOf(c, tx, ty, radius, height)) {
+                    const float t = combatSegmentCircle(ax - tx, ay - ty, dx, dy, radius);
+                    if (t >= 0.0f && t <= 1.0f) {
+                        const float z = az + dz * t;
+                        const float base = map_.heightAt(tx, ty);
+                        if (z >= base - 0.05f && z <= base + height) {
+                            at(t, best);
+                            best.kind = ProjectileHitKind::Plant;
+                            best.cell = c;
+                            break;
+                        }
                     }
                 }
             }
@@ -1101,8 +1168,8 @@ TraceHit CombatSystem::trace(float ax, float ay, float az, float bx, float by, f
             if (t < 0.0f || !better) {
                 continue;
             }
-            if (health_.partHitPoints(pawn, shape.part) <= 0.0f) {
-                continue;  // that part is gone: nothing there to hit
+            if (!health_.hasPart(pawn, shape.part)) {
+                continue;  // that part is gone: nothing there to hit (a limb at 0 is still on, and takes the bullet)
             }
             at(t, best);
             best.kind = ProjectileHitKind::Pawn;
@@ -1828,7 +1895,15 @@ void CombatSystem::emitHit(Entity projectile, const Projectile& p, const TraceHi
     e.x = hit.x;
     e.y = hit.y;
     e.z = hit.z;
-    e.cell = CellPos{static_cast<int>(std::floor(hit.x)), static_cast<int>(std::floor(hit.y)), p.level};
+    e.cell = hit.kind == ProjectileHitKind::Plant ? hit.cell
+                                                 : CellPos{static_cast<int>(std::floor(hit.x)), static_cast<int>(std::floor(hit.y)), p.level};
+    // What it struck, for its sound (docs/design/sound.md "Every weapon, surface and job"): the wall and its stuff.
+    const entt::registry& reg = things_.registry();
+    if (hit.kind == ProjectileHitKind::Building && hit.thing != kNoEntity && reg.valid(hit.thing)) {
+        if (const Thing* t = reg.try_get<Thing>(hit.thing)) e.struckDef = t->def;
+        if (const MadeOf* made = reg.try_get<MadeOf>(hit.thing)) e.struckStuff = made->stuff;
+        else if (const BuiltOf* built = reg.try_get<BuiltOf>(hit.thing)) e.struckStuff = built->stuff;
+    }
     events_->push_back(std::move(e));
 }
 
@@ -1840,6 +1915,7 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
         // A rocket does nothing on its own: wherever it ends (pawn, wall, ground, out of range) it bursts.
         emitHit(projectile, p, h, 0.0f);
         Explosion ex;
+        ex.sourceDef = p.def;
         ex.x = hit.x;
         ex.y = hit.y;
         ex.z = hit.z;
@@ -1855,19 +1931,20 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
         return;
     }
     switch (hit.kind) {
-        case ProjectileHitKind::Building: {
-            HitPoints* hp = reg.valid(hit.thing) ? reg.try_get<HitPoints>(hit.thing) : nullptr;
-            const int damage = hp != nullptr ? std::max(1, static_cast<int>(std::lround(bullet.damage * p.damageFactor))) : 0;
-            emitHit(projectile, p, h, static_cast<float>(damage));
-            if (hp != nullptr) {
-                hp->current -= damage;
-                if (hp->current <= 0) {
-                    if (beforeDestroy_) {
-                        beforeDestroy_(hit.thing);
-                    }
-                    things_.destroy(hit.thing);
-                }
+        case ProjectileHitKind::Building:
+        case ProjectileHitKind::Plant: {
+            // Shots do half to buildings and trees for now (sneed 2026-11-20, StructureDamageRules).
+            const Entity struck = hit.thing;
+            const bool hurtable = hit.kind == ProjectileHitKind::Plant || (reg.valid(struck) && reg.all_of<HitPoints>(struck));
+            if (!hurtable) {
+                emitHit(projectile, p, h, 0.0f);
+                break;
             }
+            // The event goes first: the building may be gone after the damage.
+            const float amount = bullet.damage * p.damageFactor;
+            const float factor = hit.kind == ProjectileHitKind::Plant ? model_->rangedPlantFactor : model_->rangedBuildingFactor;
+            emitHit(projectile, p, h, factor > 0.0f && amount > 0.0f ? static_cast<float>(std::max(1, static_cast<int>(std::lround(amount * factor)))) : 0.0f);
+            damageStruck(hit, amount, false);
             break;
         }
         case ProjectileHitKind::Pawn: {
@@ -2222,6 +2299,11 @@ void CombatSystem::step(Rng& rng) {
                 posture.facingX = dx / len;
                 posture.facingY = dy / len;
             }
+        } else if (const Melee* swing = reg.try_get<Melee>(pawn);
+                   swing != nullptr && swing->target != kNoEntity && (swing->phase == MeleePhase::Windup || swing->finisher != 0) &&
+                   swing->phase != MeleePhase::Ready) {
+            // Swinging at someone (or through a finisher): it keeps facing its target while its feet walk (sneed
+            // 2026-11-20: a swing while walking turned the body the way it walked, away from whom it struck).
         } else if (!health_.incapacitated(pawn) && !reg.all_of<BodyMotion>(pawn)) {
             // A body a clip or a push is moving keeps the way it faced (or the clip's own turn): a stagger back
             // doesn't turn it round to face its push (docs/design/body-motion.md).
@@ -2301,7 +2383,7 @@ void CombatSystem::step(Rng& rng) {
         const float ny = p.y + p.vy;
         const float nz = p.z + p.vz - 0.5f * g;
         TraceHit hit = trace(p.x, p.y, p.z, nx, ny, nz, p.level, p.launcher, p.startCell, true,
-                             p.drawn.pawn != kNoEntity ? &p.drawn : nullptr);
+                             p.drawn.pawn != kNoEntity ? &p.drawn : nullptr, true);
         const CellPos next{static_cast<int>(std::floor(nx)), static_cast<int>(std::floor(ny)), p.level};
         if (hit.kind == ProjectileHitKind::None && (p.age > model_->maxFlight || !map_.inBounds(next))) {
             hit.kind = ProjectileHitKind::Gone;
@@ -2499,6 +2581,7 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
         e.thing = ex.source;
         e.target = ex.instigator;
         e.def = ex.damageType;
+        e.struckDef = ex.sourceDef;
         e.amount = ex.radius;
         e.x = ex.x;
         e.y = ex.y;
@@ -2563,7 +2646,10 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
         }
         // Fragments: a hard enough blast splits into 2 to 4 pieces, each on a part of its own.
         int pieces = 1;
-        if (amount >= blast.fragmentMinDamage && blast.fragmentsMax > blast.fragmentsMin) {
+        if (corpse) {
+            // A blast at a corpse tears it whole (sneed, 2026-11-20: a rocket at a corpse must take it apart): one piece,
+            // all of it piling past 0 on the part it meets.
+        } else if (amount >= blast.fragmentMinDamage && blast.fragmentsMax > blast.fragmentsMin) {
             pieces = blast.fragmentsMin + static_cast<int>(rng.below(static_cast<uint32_t>(blast.fragmentsMax - blast.fragmentsMin + 1)));
         } else if (amount >= blast.fragmentMinDamage) {
             pieces = blast.fragmentsMin;
@@ -2576,8 +2662,18 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
             weightSum += weights[i];
         }
         float dealt = 0.0f;
+        const std::vector<std::string> zoneNamesOf = corpse ? health_.zoneNames(pawn) : std::vector<std::string>{};
         for (int i = 0; i < pieces; ++i) {
-            const int part = pickOutsidePart(pawn, rng);
+            int part = pickOutsidePart(pawn, rng);
+            // On a corpse the blast tears off what sticks out (a limb, the head): the trunk comes apart only from one
+            // hit big enough on its own, which a blast's share rarely is, so a pick on the trunk is tried again.
+            for (int retry = 0; corpse && part >= 0 && retry < 8; ++retry) {
+                const int zone = health_.partZone(pawn, part);
+                if (zone < 0 || zone >= static_cast<int>(zoneNamesOf.size()) || zoneNamesOf[static_cast<size_t>(zone)] != "Torso") {
+                    break;
+                }
+                part = pickOutsidePart(pawn, rng);
+            }
             if (part < 0) {
                 break;
             }
@@ -2587,7 +2683,7 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
                 wearApparel(pawn, piece);
                 continue;
             }
-            const bool alive = health_.applyHit(pawn, piece.damageType, piece.amount, part);
+            const bool alive = health_.applyHit(pawn, piece.damageType, piece.amount, part, corpse);
             wearApparel(pawn, piece);
             if (!corpse) {
                 noteHarm(pawn, ex.instigator);
@@ -2599,6 +2695,17 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
         }
         if (dealt > 0.0f && !corpse) {
             ++result.pawnsHurt;
+        }
+        // A corpse is thrown too (sneed, 2026-11-20), as far as a living body would be, without the knock-down.
+        if (corpse && amount >= model_->knockMinDamage && things_.spawned(pawn)) {
+            const Position& at = reg.get<Position>(pawn);
+            const float pushX = at.x - bx;
+            const float pushY = at.y - by;
+            const float share = std::clamp(1.0f - nearest / ex.radius, 0.0f, 1.0f);
+            if (const float push = model_->knockbackMetres * share; push > 0.01f && pushX * pushX + pushY * pushY > 1e-4f) {
+                motion_->push(pawn, pushX, pushY, push, motion_->rules().blastSteps);
+            }
+            continue;
         }
         // Knock-down: the blast throws the pawn down and away, armor or not.
         if (amount < model_->knockMinDamage || (health != nullptr && health->dead) || !things_.spawned(pawn)) {
@@ -2731,6 +2838,28 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
             things_.destroy(target.building);
         }
     }
+    // ---- Plants: grass, bushes and trees in the radius lose hit points as buildings do (RimWorld: blasts hurt plants;
+    // docs/design/structure-damage.md). Cell order, so it is the same on every machine.
+    if (plants_ != nullptr && model_->blastPlantFactor > 0.0f && ex.level == 0 && ex.damage > 0.0f) {
+        for (int y = cy - reach; y <= cy + reach; ++y) {
+            for (int x = cx - reach; x <= cx + reach; ++x) {
+                const CellPos c{x, y, 0};
+                if (!map_.inBounds(c) || !plants_->has(c)) {
+                    continue;
+                }
+                const float px = static_cast<float>(x) + 0.5f - ex.x;
+                const float py = static_cast<float>(y) + 0.5f - ex.y;
+                const float d = std::sqrt(px * px + py * py);
+                if (d > ex.radius) {
+                    continue;
+                }
+                const int damage = static_cast<int>(std::lround(ex.damage * falloff(d) * model_->blastPlantFactor));
+                if (damage > 0 && hurtPlant(c, damage, ex.x, ex.y)) {
+                    ++result.plantsDestroyed;
+                }
+            }
+        }
+    }
     return result;
 }
 
@@ -2752,6 +2881,59 @@ bool CombatSystem::breakWindow(Entity wall, float x, float y, float z, Entity by
         events_->push_back(std::move(e));
     }
     return true;
+}
+
+bool CombatSystem::hurtPlant(CellPos c, int damage, float fromX, float fromY) {
+    if (plants_ == nullptr || !plants_->has(c)) {
+        return false;
+    }
+    Event fell;
+    fell.type = EventType::PlantRemoved;
+    fell.cell = c;
+    fell.def = plants_->defAt(c);
+    fell.message = "broken";
+    float tx = 0.0f;
+    float ty = 0.0f;
+    float radius = 0.0f;
+    float height = 0.0f;
+    if (plants_->trunkOf(c, tx, ty, radius, height)) {
+        fallDirection(tx - fromX, ty - fromY, fell.x, fell.y);
+        fell.count = static_cast<int>(plants_->growthPpm(c));
+    }
+    if (!plants_->damage(c, damage)) {
+        return false;
+    }
+    if (events_ != nullptr) {
+        events_->push_back(std::move(fell));
+    }
+    return true;
+}
+
+int CombatSystem::damageStruck(const TraceHit& hit, float amount, bool melee) {
+    if (amount <= 0.0f) {
+        return 0;
+    }
+    if (hit.kind == ProjectileHitKind::Plant) {
+        const float factor = melee ? model_->meleePlantFactor : model_->rangedPlantFactor;
+        if (plants_ == nullptr || factor <= 0.0f || !plants_->has(hit.cell)) {
+            return 0;
+        }
+        const int damage = std::max(1, static_cast<int>(std::lround(amount * factor)));
+        // It falls away from where it was struck (the hit point is on the side facing the blow or the shot).
+        hurtPlant(hit.cell, damage, hit.x, hit.y);
+        return damage;
+    }
+    if (hit.kind != ProjectileHitKind::Building) {
+        return 0;
+    }
+    entt::registry& reg = things_.registry();
+    const float factor = melee ? model_->meleeBuildingFactor : model_->rangedBuildingFactor;
+    if (factor <= 0.0f || !reg.valid(hit.thing) || !reg.all_of<HitPoints>(hit.thing)) {
+        return 0;
+    }
+    const int damage = std::max(1, static_cast<int>(std::lround(amount * factor)));
+    damageBuilding(hit.thing, damage);
+    return damage;
 }
 
 bool CombatSystem::damageBuilding(Entity building, int damage) {

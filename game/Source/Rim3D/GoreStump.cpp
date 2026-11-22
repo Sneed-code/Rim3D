@@ -93,7 +93,9 @@ namespace
 					const int32 B = Base + (R + 1) * Cols + C;
 					const int32 D = Base + R * Cols + (C + 1) % Cols;
 					const int32 E = Base + (R + 1) * Cols + (C + 1) % Cols;
-					Triangles.Append({A, B, D, B, E, D});
+					// Unreal draws a triangle's front where its corners run clockwise as seen: wound the other way, every
+					// face showed its back (culled or black) and the meat was never seen, only the skirt's inside.
+					Triangles.Append({A, D, B, B, D, E});
 				}
 			}
 		}
@@ -105,13 +107,13 @@ namespace
 	}
 
 	// The tissue colours (linear).
-	const FLinearColor GoreMuscleDark(0.20f, 0.014f, 0.010f);
-	const FLinearColor GoreMuscleLight(0.46f, 0.045f, 0.032f);
-	const FLinearColor GoreFat(1.0f, 0.78f, 0.30f);
-	const FLinearColor GoreCloth(0.50f, 0.16f, 0.11f);
+	const FLinearColor GoreMuscleDark(0.12f, 0.007f, 0.005f);
+	const FLinearColor GoreMuscleLight(0.32f, 0.026f, 0.018f);
+	const FLinearColor GoreFat(0.72f, 0.52f, 0.21f);
+	const FLinearColor GoreCloth(0.26f, 0.05f, 0.035f);
 	const FLinearColor GoreDermis(0.40f, 0.07f, 0.05f);
 	const FLinearColor GoreBlood(0.18f, 0.008f, 0.006f);
-	const FLinearColor GoreBone(0.90f, 0.86f, 0.74f);
+	const FLinearColor GoreBone(0.45f, 0.40f, 0.32f);  // 0.66 still read bright white in daylight (PC round 17)
 	const FLinearColor GoreMarrow(0.30f, 0.06f, 0.035f);
 	const FLinearColor GoreCord(0.82f, 0.76f, 0.66f);
 	const FLinearColor GoreCartilage(0.80f, 0.62f, 0.56f);
@@ -141,7 +143,7 @@ namespace
 		// The ring of hard bone across the top, marrow edge out to the wall.
 		Mesh.AddRingGrid(2, Cols,
 			[&](int32 R, int32 C) { return Round(R == 0 ? Marrow : Radius, C, Tops[C] - (R == 0 ? 0.08f * Radius : 0.0f)); },
-			[&](int32 R, int32 C) { return GoreWet(FMath::Lerp(GoreBone, GoreMarrow, R == 0 ? 0.25f : 0.0f), 0.85f); });
+			[&](int32 R, int32 C) { return GoreWet(FMath::Lerp(FMath::Lerp(GoreBone, GoreMarrow, R == 0 ? 0.25f : 0.0f), GoreBlood, 0.25f + 0.3f * Random.FRand()), 0.5f); });
 		// The marrow, sunk a little.
 		Mesh.AddRingGrid(2, Cols,
 			[&](int32 R, int32 C) { return Round(R == 0 ? 0.0f : Marrow, C, (R == 0 ? Top - 0.35f * Radius : Tops[C] - 0.08f * Radius)); },
@@ -221,48 +223,79 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			const float F = Rings[FMath::Min(Row, RingCount - 1)];
 			// The edge is torn, not round: the outer rings wander in and out.
 			const float Torn = F >= 0.94f ? 1.0f + 0.05f * Edge.At(Theta) + (bSkirt ? 0.03f * Random.FRandRange(-1.0f, 1.0f) : 0.0f) : 1.0f;
-			// Clothed, the outer rings are torn, soaked cloth, but they stay the limb's width: spread out over the sleeve
-			// they read as a loose hoop round every stump in the PC pictures.
-			const float Spread = F;
+			// Clothed, the outer rings are torn, soaked cloth reaching out to the sleeve's own measured width (ClothOuter),
+			// covering the white inside of the open sleeve round the meat.
+			const float Spread = bClothed && F > 1.0f ? 1.0f + (F - 1.0f) / 0.05f * (ClothOuter - 1.0f) : F;
 			// The skirt hangs back onto the limb: bare skin just inside its own edge, soaked cloth folded back down onto
 			// the sleeve rather than standing off it as a wide hollow collar.
 			// Tucked in a little and short, so it reads as an edge curling back onto the limb, never a hoop standing off a
 			// thinner sleeve.
-			const float SkirtSpread = 0.88f;
+			const float SkirtSpread = bClothed ? ClothOuter * 0.97f : 0.88f;
 			const float Radius = R * (bSkirt ? SkirtSpread : Spread) * Torn;
 			const float Z = bSkirt ? -(Skirt + Lift) * (0.75f + 0.25f * Edge.At(Theta * 1.7f + 1.0f)) : FaceZ(F, Theta) + (F < 0.7f ? 0.04f * R * Random.FRandRange(-0.5f, 0.5f) : 0.0f);
 			return FVector(Radius * FMath::Cos(Theta), Radius * FMath::Sin(Theta), Z);
 		},
 		[&](int32 Row, int32 C)
 		{
-			const float Theta = 2.0f * PI * C / Cols;
-			const float F = Rings[FMath::Min(Row, RingCount - 1)];
-			const float Wobble = 0.03f * Edge.At(Theta * 2.0f);
-			const float G = F + Wobble;
-			if (bClothed && (Row == RingCount || F > 1.0f))
+			// Rough, wet and smeared rather than clean rings ("cartoon salami" on the PC): the layer edges wander a lot,
+			// and blood lies in patches across everything.
+			const FLinearColor Tissue = [&]() -> FLinearColor
 			{
-				return GoreWet(FMath::Lerp(GoreCloth, GoreBlood, 0.1f + 0.3f * Random.FRand()), 0.45f);
-			}
-			if (Row == RingCount)
+				const float Theta = 2.0f * PI * C / Cols;
+				const float F = Rings[FMath::Min(Row, RingCount - 1)];
+				const float Wobble = 0.07f * Edge.At(Theta * 2.0f) + 0.04f * Fibres.At(Theta * 5.0f + F * 3.0f) + 0.03f * Random.FRandRange(-1.0f, 1.0f);
+				const float G = F + Wobble;
+				if (bClothed && (Row == RingCount || F > 1.0f))
+				{
+					return GoreWet(FMath::Lerp(GoreCloth, GoreBlood, 0.1f + 0.3f * Random.FRand()), 0.45f);
+				}
+				if (Row == RingCount)
+				{
+					return GoreWet(FMath::Lerp(Skin, GoreBlood, 0.35f + 0.3f * Random.FRand()), 0.35f);
+				}
+				if (G < 0.71f)
+				{
+					// Muscle in bundles: darker and lighter streaks across the cut, wet.
+					const float Streak = 0.5f + 0.5f * Fibres.At(Theta * 3.0f + F * 11.0f);
+					return GoreWet(FMath::Lerp(GoreMuscleDark, GoreMuscleLight, Streak * 0.8f + 0.2f * Random.FRand()), 0.0f);
+				}
+				if (G < 0.89f)
+				{
+					return GoreWet(FMath::Lerp(GoreFat, GoreBlood, 0.1f + 0.25f * Random.FRand()), 0.15f);
+				}
+				if (G < 0.975f)
+				{
+					return GoreWet(GoreDermis, 0.05f);
+				}
+				return GoreWet(FMath::Lerp(SkinBloodied, GoreBlood, 0.3f + 0.4f * Random.FRand()), 0.3f);
+			}();
+			// Blood lies in smeared patches (smooth noise round and across the cut, so they read as smears, not as speckle),
+			// out over the skin rim too.
+			const float SmearTheta = 2.0f * PI * C / Cols;
+			const float SmearF = Rings[FMath::Min(Row, RingCount - 1)];
+			const float Smear = 0.6f * Bulge.At(SmearTheta * 2.0f + SmearF * 4.0f + 1.3f) + 0.4f * Edge.At(SmearTheta * 3.0f - SmearF * 6.0f);
+			if (Smear > 0.15f)
 			{
-				return GoreWet(FMath::Lerp(Skin, GoreBlood, 0.35f + 0.3f * Random.FRand()), 0.35f);
+				return GoreWet(FMath::Lerp(Tissue, GoreBlood, FMath::Clamp(0.35f + Smear, 0.35f, 0.8f)), 0.0f);
 			}
-			if (G < 0.71f)
-			{
-				// Muscle in bundles: darker and lighter streaks across the cut, wet.
-				const float Streak = 0.5f + 0.5f * Fibres.At(Theta * 3.0f + F * 11.0f);
-				return GoreWet(FMath::Lerp(GoreMuscleDark, GoreMuscleLight, Streak * 0.8f + 0.2f * Random.FRand()), 0.0f);
-			}
-			if (G < 0.89f)
-			{
-				return GoreWet(FMath::Lerp(GoreFat, GoreBlood, 0.02f + 0.08f * Random.FRand()), 0.3f);
-			}
-			if (G < 0.975f)
-			{
-				return GoreWet(GoreDermis, 0.1f);
-			}
-			return GoreWet(FMath::Lerp(SkinBloodied, GoreBlood, 0.3f + 0.4f * Random.FRand()), 0.3f);
+			return Tissue;
 		});
+
+	// Clothed: a sleeve or trouser leg often runs on past the cut as an open tube. A ragged, blood-soaked lining just
+	// inside it, facing in, so looking down the tube shows wet red cloth instead of a hollow white sleeve.
+	if (bClothed)
+	{
+		const float Lining = 0.45f * R;
+		Mesh.AddRingGrid(2, Cols,
+			[&](int32 Row, int32 C)
+			{
+				const float Theta = 2.0f * PI * C / Cols;
+				const float Rr = R * ClothOuter * (0.99f + 0.02f * Edge.At(Theta));
+				const float Z = Row == 0 ? FaceZ(1.0f, Theta) - 0.02f * R : Lining * (0.55f + 0.45f * (0.5f + 0.5f * Fibres.At(Theta * 2.3f + 0.7f)));
+				return FVector(Rr * FMath::Cos(Theta), Rr * FMath::Sin(Theta), Z);
+			},
+			[&](int32 Row, int32 C) { return GoreWet(FMath::Lerp(GoreCloth, GoreBlood, Row == 0 ? 0.6f : 0.25f + 0.3f * Random.FRand()), 0.4f); });
+	}
 
 	// What stands out of the middle.
 	const auto TopOver = [&](const FVector2D& Centre, float Radius)

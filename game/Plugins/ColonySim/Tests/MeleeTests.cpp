@@ -16,6 +16,8 @@
 
 #include <doctest.h>
 
+#include "TestPlants.h"
+
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -76,7 +78,7 @@ std::unique_ptr<Sim> meleeTestSim(uint64_t seed = 11, int size = 64) {
     settings.seed = seed;
     settings.mapSize = size;
     settings.flatMap = true;
-    return std::make_unique<Sim>(settings, meleeTestDefs());
+    return withoutPlants(std::make_unique<Sim>(settings, meleeTestDefs()));
 }
 
 Entity meleeTestPawn(Sim& sim, float x, float y, const char* weapon = nullptr) {

@@ -98,8 +98,9 @@ one border and radius, two text sizes, 1.2 s tooltips). Every subsystem that dra
 - **Work**: a Group column (sim `SetWorkGroupCommand`, saved and replayed; up to 24 letters) and
   filter buttons Everyone / each group above the table; prisoners get rows that say they don't work.
 - **Assign** (outfit, drug policy, medical care, allowed area), **Animals** (name, kind, age and sex,
-  health, the four trainings, zone; right click renames or marks for slaughter), **Wildlife** (tame,
-  hunt), **Mechs** (colony robots; none yet), **Research** (tree by depth with lines, current
+  health, the four trainings, zone or pen, breeding tick, pregnancy and milk / wool fullness, animal
+  bed; right click renames, marks for slaughter or releases to the wild; below it a list of zones and
+  pens with a breeding tick each), **Wildlife** (tame, hunt), **Mechs** (colony robots; none yet), **Research** (tree by depth with lines, current
   project bar, an info panel with Research this / Stop), **Inventory** (colony stock by category,
   search, a star pins a resource under the colonist bar; silver pinned by default).
 - **Bottom left**: the hover readout (ground, walk speed, fertility, light) when nothing is selected
@@ -132,15 +133,41 @@ one border and radius, two text sizes, 1.2 s tooltips). Every subsystem that dra
 - **Medical**: colonists and prisoners with their state and medical care; for the picked one the
   health report (injuries, missing and added parts, diseases), the planned operations with Remove,
   and "Add an operation" listing every recipe and part `SurgerySystem::targets` allows now.
-- **Prisoners**: each prisoner's resistance and mode (no interaction, reduce resistance, recruit,
-  release, execute), and every built bed with a "for prisoners" tick.
+- **Prisoners**: each prisoner's resistance and will and mode (no interaction, reduce resistance,
+  recruit, release, execute, enslave, reduce will), a Slaves list (suppression bar, Emancipate,
+  Release), and every built bed with a "for prisoners" tick.
+- **Build > Zone > Animal zone** paints animal zones (drawn as tan rings; Remove zone takes them off
+  too); **Build > Orders** has Tame, Hunt and Slaughter drag tools (`MarkAnimalsInAreaCommand`).
 
-**Main menu**: shown at launch when the game starts without `-SimScenario` (not in smoke tests;
-`-NoMenu` skips it) and from Menu > New colony / load. New colony picks the scenario (rainforest
-first), narrator, difficulty, seed and map size, then Start (the scenario's biome picks the site) or
-Pick a site on the world map (the World screen's Start here). The new game gets `SetNarratorCommand`,
-which no start sent before, so playtests until now had no narrator events. Load a game lists
-`Saved/Saves/*.save`. Settings opens over it.
+**Main menu**: the title screen and the new game (scenario, landing site, people screen) are in [new-game.md](new-game.md). Load a game lists `Saved/Saves/*.save`, newest first. Settings opens over it.
 
-Still to do: a better Factions window (relations, goodwill history), icons for the bar's right-hand
-buttons, real tile icons for every building, the learning helper's lessons.
+**Factions** (2026-11-20): one block per faction with its relation in colour, tech level, what it
+does (raids, trades, visits), "permanent enemy" where it is, and a goodwill bar from -100 to 100 filled
+from the middle with lines at the hostile (-75) and ally (75) marks (hover: the numbers and the daily
+drift). A faction that sends caravans has **Call for a caravan** (the comms console's
+`CommsCommand` "RequestCaravan", -19 goodwill) with a trader kind picker; it is greyed with the
+reason when the faction is no ally, was called in the last 4 days, a caravan is already coming, or
+there is no powered comms console. The best talker (highest price improvement) makes the call.
+
+**Tile pictures** (2026-11-20): a building's Build tile shows its own mesh (made of the best stuff in
+stock), seen from the south-west and above, taken once per def by a show-only scene capture on a stage
+4 km under the map (one picture a frame, 128 px). Unlit by default so it reads the same day and
+night; `Orders.TileIconsLit 1` lights it by the world instead, `Orders.TileIcons 0` goes back to the
+drawn footprints. Floors and orders keep their drawn icons.
+
+**Bar icons** (2026-11-20): the speed buttons (pause bars, one to three play arrows), Keys (a
+keyboard), the learning helper (an open book), Factions (a flag) and Menu (three lines) are clean line icons drawn by ImGui on
+square-ish buttons, amber when on; their names are in the tooltips. Ship stays a word.
+
+Each faction also shows its last three goodwill changes with why and the day ("Lately: -19 a caravan called (day 3)"),
+from the sim's goodwill log (`comms-console.md`). Build tiles fill their rows evenly (27 tiles: 9, 9, 9, not 13, 13, 1).
+
+**Learning helper** (2026-11-20, `ColonyHudLessons.cpp`): 16 short lessons in plain words, each shown
+when it matters, one at a time, in a box at the top right under the alarm: the camera, selecting colonists,
+a stockpile (until there is one), building, the Work tab, then on their moment: hungry colonists (food
+under 30%), beds (rest under 30%), strangers attack (draft), someone is down, playing as a colonist and
+research (from day 1), traders and visitors, prisoners, tame animals, cold (outdoors under 0 C) and heat
+(over 35 C). The first unlearned lesson whose moment has come shows, with "Learning helper n / 16".
+**Got it** marks it learned for good; **Hide the helper** or the book icon on the bar (between Keys and
+Factions, amber while on) turns it off. Both are saved with the HUD's settings (`Rim3D.Hud` keys
+`Lessons` and `LessonsOn`), not with the colony.

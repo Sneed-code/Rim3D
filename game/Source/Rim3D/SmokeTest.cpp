@@ -31,6 +31,7 @@
 #include "Serialization/JsonWriter.h"
 #include "UnrealClient.h"
 
+#include "DebugScenes.h"
 #include "OverseerPawn.h"
 #include "OverseerSubsystem.h"
 #include "PawnActor.h"
@@ -177,6 +178,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildHudPhases();
 	}
+	else if (TestName == TEXT("newgame"))
+	{
+		BuildNewGamePhases();
+	}
 	else if (TestName == TEXT("trade"))
 	{
 		BuildTradePhases();
@@ -221,6 +226,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildMeleePhases();
 	}
+	else if (TestName == TEXT("finishers"))
+	{
+		BuildFinishersPhases();
+	}
 	else if (TestName == TEXT("motion"))
 	{
 		BuildMotionPhases();
@@ -232,6 +241,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	else if (TestName == TEXT("hurt"))
 	{
 		BuildHurtPhases();
+	}
+	else if (TestName == TEXT("gore"))
+	{
+		BuildGorePhases();
 	}
 	else if (TestName == TEXT("levels"))
 	{
@@ -1294,7 +1307,7 @@ void USmokeTestSubsystem::Tick(float DeltaTime)
 		bScreenshotTaken = true;
 		const FString Path = FPaths::ProjectSavedDir() / TEXT("Smoke") / TestName / (Phase.Name + TEXT(".png"));
 		// The sim tests show the on-screen sim timings and the overseer its ImGui panels, which count as UI.
-		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist") || TestName == TEXT("orders") || TestName == TEXT("orders_world") || TestName == TEXT("panels") || TestName == TEXT("hud") || TestName == TEXT("trade") || TestName == TEXT("shuttle") || TestName == TEXT("quests") || TestName == TEXT("ship") || TestName == TEXT("worldmap") || TestName == TEXT("fights") || TestName == TEXT("handson") || TestName == TEXT("sky") || TestName == TEXT("melee") || TestName == TEXT("levels") || TestName == TEXT("creator") || (TestName == TEXT("look") && Phase.Name == TEXT("hud")), false);
+		FScreenshotRequest::RequestScreenshot(Path, TestName == TEXT("sim") || TestName == TEXT("overseer") || TestName == TEXT("saves") || TestName == TEXT("protagonist") || TestName == TEXT("orders") || TestName == TEXT("orders_world") || TestName == TEXT("panels") || TestName == TEXT("hud") || TestName == TEXT("newgame") || TestName == TEXT("trade") || TestName == TEXT("shuttle") || TestName == TEXT("quests") || TestName == TEXT("ship") || TestName == TEXT("worldmap") || TestName == TEXT("fights") || TestName == TEXT("handson") || TestName == TEXT("sky") || TestName == TEXT("melee") || TestName == TEXT("levels") || TestName == TEXT("creator") || (TestName == TEXT("look") && Phase.Name == TEXT("hud")), false);
 	}
 	if (PhaseTime >= Phase.WarmupSeconds + Phase.MeasureSeconds)
 	{
@@ -1386,6 +1399,11 @@ void USmokeTestSubsystem::WriteResultsAndQuit()
 	FFileHelper::SaveStringToFile(Json, *Path);
 	UE_LOG(LogSmoke, Display, TEXT("Smoke test %s: %s, results written to %s"), *TestName, Errors.IsEmpty() ? TEXT("pass") : TEXT("FAIL"), *Path);
 
+	// Started from the title screen's Debug page: back to the title instead of closing the game.
+	if (DebugScenes::IsDebugScene() && DebugScenes::ReturnToTitle())
+	{
+		return;
+	}
 	FPlatformMisc::RequestExitWithStatus(false, Errors.IsEmpty() ? 0 : 1);
 }
 

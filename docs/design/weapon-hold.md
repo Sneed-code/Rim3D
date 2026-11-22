@@ -118,7 +118,8 @@ round, one system for every weapon, both views:
    shoulder pocket**. A weapon def can override any place under `hold.places`. Places blend over a quarter second.
 2. **Both hands are pinned to the weapon's grips** (`HoldDraw::PinHands` / `ApplyPinned`): the main hand on `main`,
    the other on `off` turned by `offTurn` (a rifle's palm up under the fore-end), or for one-handed guns on `support`
-   (the other hand cupping the grip, a two-handed pistol hold).
+   (the other hand cupping the grip, a two-handed pistol hold; `support` is measured from the main grip, so it follows
+   wherever a pistol's grip point sits).
 3. **Swings and full-body clips free the main hand** (third person: the clip moves the arm and the weapon stays in the
    hand; the off hand follows it). First person melee swings move the *weapon* along an arc (windup, strike, back to
    ready, timed by the sim's clip) and the hands follow. A third-person swing with no clip playing on the body moves
@@ -157,7 +158,7 @@ sim's plain C++ `colony::arm` (`ArmPose.h`), so it is unit tested:
   the shoulder-wrist line (up to 100 degrees from its natural down-and-out) to where the forearm lets the wrist take
   that turn inside its limits, as a rifleman lifts the trigger arm's elbow out to the side. A swing costs a little, an
   elbow over the shoulder or in across the chest costs more, and a change from last frame's swing costs a little too
-  (no hopping). The support hand may also **turn round the fore-end or shaft** (it is round): up to 90 degrees on a
+  (no hopping). The support hand may also **turn round the fore-end or shaft** (it is round; a pistol's cupping hand does not turn): up to 90 degrees on a
   gun, 180 on a spear, 45 on a two-handed hilt, chosen with the elbow's swing. PC round 7 measured why: the grips
   asked the right wrist for 54 to 96 degrees of sideways bend (limit 28) and the left forearm for 130 of twist (85).
 - **Fingers close round the grip**: a pinned hand's four fingers get only the curl its clip lacks, towards the palm,
@@ -169,3 +170,28 @@ and every one is inside the limits. On the PC, smoke test `gunrange` measures **
 first-person arms and the third-person body), from the solver and from the drawn bones, and fails on any joint out of
 range (`arm_limit_fails`), and on more than 1% of hand-frames with a hand over 3 cm off its grip (`arm_hand_short`, the `HAND OFF ITS GRIP` notes give the gun, view, hand and where the goal was); its step 16 pictures every gun hip, aimed, third-person ready and aimed (`hold_<Gun>_*`).
 Cvars: `Pawns.ArmLimits`, `Weapons.Places`, `Weapons.PlacesFirstPerson` (0 = the old way, for comparing).
+
+## Never floating, and aiming at the crosshair in third person (sneed 2026-11-20)
+
+sneed: "a bug ... makes the graphic for melee attacks screw up (and I drop the weapon) but I keep it. The weapon then
+floats but the hand animations still work"; "if I swap weapons, go unarmed and back and press Z the weapons can bug and
+float"; "I like the ability to aim in 3rd person but the weapon doesn't move with my cursor to aim, and arms".
+
+- **Crouched and prone.** The weapon used to leave the hand below 0.9 m body height (crouch C, prone Z) for an old
+  fixed spot in the air. Now the hands hold it at any height; the weapon-first pinning runs only when standing.
+- **The float guard.** Each frame a weapon fully in the hands measures how far its grip is from its hand bone. More than
+  22 cm (`WeaponFloatCm`, scaled by body size) for 0.1 s puts it back on the hand's own grip frame and holds it there
+  0.6 s (`ForceHandSeconds`), whatever drew it away (a swing path, a pinned place the arm can't reach, a switch).
+  The log says `WEAPON FLOAT` once per pawn with what was going on, so a cause shows up in play.
+- **3rd person aim.** While aiming a gun in third person the body turns to the camera's yaw, and the aimed place is
+  turned (twice, from the sight) so the sight line meets what the crosshair is on, up to 60 degrees round and nearly
+  straight up or down; the arms follow because the hands are pinned on the weapon. Smoke `finishers` phase `aim3p`
+  checks the rifle within 8 degrees of the crosshair and the body within 20 degrees of the camera.
+
+## Stock clear of the head (sneed, 2026-11-22)
+
+The shotgun's stock went through the head when aiming. For two-handed guns, after the aim blend the gun slides forward
+along its barrel in 1 cm steps (up to 12 cm) until the stock-to-grip line clears a 7.5 cm skull round a point 9 cm
+above the head bone (both scaled by body size). `GetStockSlideCm` reports it; the gun range smoke notes it. In melee,
+the feet now turn with the body through a swing (`bTurnFeet`), so a turning mace swing no longer twists the spine up to
+60 degrees and the weapon follows the body.

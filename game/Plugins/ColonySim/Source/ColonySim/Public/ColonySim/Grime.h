@@ -49,7 +49,8 @@ struct COLONY_API GrimeNumbers {
     float ankleWashSeconds = 600.0f;   // feet in water: the legs
     float waistWashSeconds = 900.0f;   // waist or chest deep: the legs at once and the body at this pace
     float swimWashSeconds = 600.0f;    // swimming: everything, the weapon too
-    float wearOffSeconds = 172800.0f;  // without water it all wears off in this long (two game days)
+    float wearOffSeconds = 172800.0f;  // without water blood wears off in this long (two game days)
+    float dirtFadeSeconds = 18000.0f;  // dirt fades from 1 to clean in this long while nothing dirties it (10 real min)
 
     static GrimeNumbers read(const DefDatabase& defs);
 };

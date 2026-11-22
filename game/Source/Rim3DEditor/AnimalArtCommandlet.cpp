@@ -361,8 +361,16 @@ int32 UAnimalArtCommandlet::Main(const FString& Params)
 			Anims += Cast<UAnimSequence>(Object) ? 1 : 0;
 			Skeletons += Cast<USkeleton>(Object) ? 1 : 0;
 		}
-		UE_LOG(LogAnimalArt, Display, TEXT("%s: %d skeletal mesh, %d skeleton, %d animations"), *Model, Meshes, Skeletons, Anims);
-		if (Meshes == 0 || Skeletons == 0)
+		// A re-import reuses the skeleton made the first time (none new among the objects): the mesh's own skeleton counts.
+		bool bHasSkeleton = Skeletons > 0;
+		for (UObject* Object : Task->GetObjects())
+		{
+			const USkeletalMesh* Mesh = Cast<USkeletalMesh>(Object);
+			bHasSkeleton = bHasSkeleton || (Mesh && Mesh->GetSkeleton());
+		}
+		UE_LOG(LogAnimalArt, Display, TEXT("%s: %d skeletal mesh, %d skeleton (%s), %d animations"), *Model, Meshes, Skeletons,
+			bHasSkeleton ? TEXT("has one") : TEXT("NONE"), Anims);
+		if (Meshes == 0 || !bHasSkeleton)
 		{
 			++Failed;
 		}

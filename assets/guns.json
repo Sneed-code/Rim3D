@@ -43,9 +43,7 @@
       "hip": [22, 10, -5],
       "sightDistance": 8,
       "scope": {"fov": 16},
-      "kick": {"back": 7, "up": 5, "recover": 8},
-      "cycle": {"part": "bolt", "start": 0.25, "seconds": 0.9, "lift": 60, "back": -9},
-      "reloadBolt": true
+      "kick": {"back": 7, "up": 5, "recover": 8}
     },
     {
       "def": "Gun_AssaultRifle",
@@ -107,7 +105,7 @@
       ],
       "meshRotation": [0, 0, 0],
       "meshOffset": [0, 0, 0],
-      "grip": [0, 0, 0],
+      "grip": [-1.5, 0, -3.5],
       "sight": [-2, 2.6, 5.4],
       "muzzle": [14, 0, 4.5],
       "reloadSpot": [28, 2, -6],
@@ -116,8 +114,8 @@
       "stanceHold": 1.0,
       "reload": "Mixamo/Firearms/A_Reload",
       "magazine": {"part": "magazine", "out": 0.2, "in": 0.6},
-      "hip": [6, 6, -10],
-      "sightDistance": 44,
+      "hip": [-6, 6, -7],
+      "sightDistance": 50,
       "kick": {"back": 2.5, "up": 6, "recover": 16}
     },
     {

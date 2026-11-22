@@ -274,19 +274,26 @@ void UColonyHudSubsystem::DrawAnimalsTab(USimSubsystem& Bridge, float Scale, boo
 {
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
-	PlaceTabWindow(Scale, (bWild ? 820.0f : 1120.0f) * Scale);
+	PlaceTabWindow(Scale, (bWild ? 820.0f : 1420.0f) * Scale);
 	if (ImGui::Begin(bWild ? "##HudWildlife" : "##HudAnimals", nullptr, ColonyHud::BoxFlags()))
 	{
 		++Stats.TabWindowFrames;
 		ColonyHud::Title(bWild ? TEXT("Wildlife") : TEXT("Animals"));
 		ColonyHud::TextColored(ColonyHud::TextDim(), bWild ? TEXT("Wild animals on the map. Tame needs a colonist with Handling work; Hunt one with Hunting work and a gun.")
-			: TEXT("The colony's tame animals: what they learn, the zone they stay in, and their names."));
+			: TEXT("The colony's tame animals: what they learn, the zone or pen they stay in, breeding, and their names."));
 		const ImGuiViewport* Viewport = ImGui::GetMainViewport();
-		const int32 Columns = bWild ? 5 : 9;
+		const int32 Columns = bWild ? 5 : 12;
 		int32 Rows = 0;
 		if (ImGui::BeginTable("##HudAnimalTable", Columns, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY,
 			ImVec2(0.0f, Viewport->Size.y * 0.5f)))
 		{
+			// Fixed widths, so the headers read in full even with no rows under them (empty columns would get no width).
+			static const float WildWidths[] = {150.0f, 110.0f, 110.0f, 90.0f, 130.0f};
+			static const float TameWidths[] = {150.0f, 110.0f, 110.0f, 90.0f, 80.0f, 70.0f, 70.0f, 60.0f, 120.0f, 50.0f, 180.0f, 150.0f};
+			for (int32 Column = 0; Column < Columns; ++Column)
+			{
+				ImGui::TableSetupColumn(nullptr, ImGuiTableColumnFlags_WidthFixed, (bWild ? WildWidths[Column] : TameWidths[Column]) * Scale);
+			}
 			ImGui::TableSetupScrollFreeze(0, 1);
 			ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
 			HudTabHeader(TEXT("Name"), TEXT("Click to select, double click to go there"));
@@ -304,7 +311,10 @@ void UColonyHudSubsystem::DrawAnimalsTab(USimSubsystem& Bridge, float Scale, boo
 					const FString Label = UTF8_TO_TCHAR(Trick);
 					HudTabHeader(*Label, TEXT("Tick to have a handler teach it this. Green: learned"));
 				}
-				HudTabHeader(TEXT("Zone"), TEXT("The animal zone it stays in. None: it roams near home"));
+				HudTabHeader(TEXT("Zone"), TEXT("The animal zone or pen it stays in. None: it roams near home"));
+				HudTabHeader(TEXT("Breed"), TEXT("Tick to let it mate. Its zone can switch breeding off for all its animals too"));
+				HudTabHeader(TEXT("Products"), TEXT("Carrying young, and how full its milk or wool is; handlers milk and shear it when full"));
+				HudTabHeader(TEXT("Bed"), TEXT("The animal bed it sleeps in. Build animal sleeping spots, boxes or beds (Furniture)"));
 			}
 			for (const colony::ThingView& View : Snapshot.things)
 			{
@@ -345,6 +355,10 @@ void UColonyHudSubsystem::DrawAnimalsTab(USimSubsystem& Bridge, float Scale, boo
 						{
 							Submit(colony::MarkAnimalCommand{View.id, "Slaughter", !View.markSlaughter});
 						}
+						if (ImGui::Selectable("Release to the wild"))
+						{
+							Submit(colony::MarkAnimalCommand{View.id, "Release", true});
+						}
 						ImGui::EndPopup();
 					}
 				}
@@ -355,12 +369,16 @@ void UColonyHudSubsystem::DrawAnimalsTab(USimSubsystem& Bridge, float Scale, boo
 				ColonyHud::Text(FString::Printf(TEXT("%s%s"), Stages[FMath::Clamp(View.lifeStage, 0, 2)],
 					View.sex == 1 ? TEXT(", female") : (View.sex == 0 ? TEXT(", male") : TEXT(""))));
 				ImGui::TableNextColumn();
-				if (View.maxHitPoints > 0)
+				if (View.maxHitPoints > 0 && (View.downed || View.hitPoints < View.maxHitPoints))
 				{
 					const float Share = static_cast<float>(View.hitPoints) / static_cast<float>(View.maxHitPoints);
 					ImGui::PushStyleColor(ImGuiCol_PlotHistogram, Share < 0.5f ? ColonyHud::Bad() : ColonyHud::Good());
 					ImGui::ProgressBar(Share, ImVec2(90.0f * Scale, 0.0f), View.downed ? "down" : "");
 					ImGui::PopStyleColor();
+				}
+				else
+				{
+					ColonyHud::TextColored(ColonyHud::Good(), TEXT("Healthy"));
 				}
 				if (bWild)
 				{
@@ -400,7 +418,12 @@ void UColonyHudSubsystem::DrawAnimalsTab(USimSubsystem& Bridge, float Scale, boo
 						}
 					}
 					ImGui::TableNextColumn();
-					const FString ZoneName = View.animalZone == 0 ? FString(TEXT("None")) : FString::Printf(TEXT("Zone %u"), View.animalZone);
+					bool bPen = false;
+					for (const colony::AnimalZoneView& Zone : Snapshot.animalZones)
+					{
+						bPen = bPen || (Zone.id == View.animalZone && Zone.pen);
+					}
+					const FString ZoneName = View.animalZone == 0 ? FString(TEXT("None")) : FString::Printf(TEXT("%s %u"), bPen ? TEXT("Pen") : TEXT("Zone"), View.animalZone);
 					ImGui::SetNextItemWidth(120.0f * Scale);
 					if (ImGui::BeginCombo("##zone", TCHAR_TO_UTF8(*ZoneName)))
 					{
@@ -418,6 +441,41 @@ void UColonyHudSubsystem::DrawAnimalsTab(USimSubsystem& Bridge, float Scale, boo
 						}
 						ImGui::EndCombo();
 					}
+					// Breeding: its own switch.
+					ImGui::TableNextColumn();
+					bool bBreed = !View.breedingOff;
+					if (ImGui::Checkbox("##breed", &bBreed))
+					{
+						Submit(colony::SetBreedingCommand{View.id, 0, bBreed});
+					}
+					// Products: young on the way, milk and wool.
+					ImGui::TableNextColumn();
+					FString Products;
+					if (View.pregnant)
+					{
+						Products += TEXT("With young  ");
+					}
+					if (View.milkFullness >= 0.0f)
+					{
+						Products += FString::Printf(TEXT("Milk %d%%  "), FMath::RoundToInt32(View.milkFullness * 100.0f));
+					}
+					if (View.woolFullness >= 0.0f)
+					{
+						Products += FString::Printf(TEXT("Wool %d%%"), FMath::RoundToInt32(View.woolFullness * 100.0f));
+					}
+					ColonyHud::TextColored(ColonyHud::TextDim(), Products.IsEmpty() ? FString(TEXT("-")) : Products.TrimEnd());
+					// Bed.
+					ImGui::TableNextColumn();
+					if (View.animalBed != colony::kNoEntity)
+					{
+						const colony::ThingView* Bed = Snapshot.find(View.animalBed);
+						const FString BedName = Bed ? HudTabCapital(Sim.defs().get(Bed->def).label()) : FString(TEXT("Bed"));
+						HudTabNameButton(GetWorld(), BedName, View.animalBed, 150.0f * Scale);
+					}
+					else
+					{
+						ColonyHud::TextColored(ColonyHud::TextFaint(), TEXT("Ground"));
+					}
 				}
 				ImGui::PopID();
 			}
@@ -429,7 +487,40 @@ void UColonyHudSubsystem::DrawAnimalsTab(USimSubsystem& Bridge, float Scale, boo
 		}
 		else if (!bWild)
 		{
-			ColonyHud::TextColored(ColonyHud::TextFaint(), TEXT("Right click a name to rename it or mark it for slaughter."));
+			ColonyHud::TextColored(ColonyHud::TextFaint(), TEXT("Right click a name to rename it, mark it for slaughter or release it to the wild."));
+		}
+		if (!bWild)
+		{
+			// Zones and pens (docs/design/husbandry.md): paint them with Build > Zone > Animal zone; a zone walled or fenced in
+			// all round, with gates, is a pen. Breeding can be switched off for a whole zone here.
+			ImGui::Spacing();
+			ColonyHud::Heading(TEXT("Zones and pens"));
+			if (Snapshot.animalZones.empty())
+			{
+				ColonyHud::TextColored(ColonyHud::TextDim(), TEXT("No animal zones yet. Paint one with Build > Zone > Animal zone, then ring it with fence and a gate to make a pen."));
+			}
+			for (const colony::AnimalZoneView& Zone : Snapshot.animalZones)
+			{
+				ImGui::PushID(static_cast<int32>(Zone.id));
+				int32 Count = 0;
+				for (const colony::ThingView& View : Snapshot.things)
+				{
+					Count += (View.category == colony::ThingCategory::Pawn && !View.dead && View.lifeStage >= 0 && View.faction == 1 && View.animalZone == Zone.id) ? 1 : 0;
+				}
+				ColonyHud::Text(FString::Printf(TEXT("%s %u: %u cells, %d animals"), Zone.pen ? TEXT("Pen") : TEXT("Zone"), Zone.id, Zone.cellCount, Count));
+				if (!Zone.pen)
+				{
+					ImGui::SameLine();
+					ColonyHud::TextColored(ColonyHud::TextFaint(), TEXT("(open: not fenced or walled in all round)"));
+				}
+				ImGui::SameLine();
+				bool bBreed = !Zone.breedingOff;
+				if (ImGui::Checkbox("Breeding", &bBreed))
+				{
+					Submit(colony::SetBreedingCommand{colony::kNoEntity, Zone.id, bBreed});
+				}
+				ImGui::PopID();
+			}
 		}
 	}
 	ImGui::End();

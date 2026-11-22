@@ -75,6 +75,7 @@ REFERENCES = [
     ("Hediffs", "stages[].capacityOffsets{}", "Capacities"),
     ("Hediffs", "stages[].capacityMax{}", "Capacities"),
     ("Scenarios", "startingThings[].thing", "Things"),
+    ("Scenarios", "startingThings[].stuff", "Things"),
     ("Scenarios", "nearbyThings[].thing", "Things"),
     ("Scenarios", "scatteredThings[].thing", "Things"),
     ("Scenarios", "colonistKind", "Things"),
@@ -103,6 +104,7 @@ REFERENCES = [
     ("LootTables", "items[].thing", "Things"),
     ("LootTables", "stacks.from[].thing", "Things"),
     ("Scenarios", "biome", "Biomes"),
+    ("Scenarios", "siteBiomes[]", "Biomes"),
     ("Scenarios", "lineage", "Lineages"),
     ("RecreationActivities", "kind", "RecreationKinds"),
     ("RecreationActivities", "building", "Things"),
@@ -151,6 +153,13 @@ EVENT_CUES = {
     "Hit_Wood_Flesh", "Hit_Wood_Wood", "Hit_Wood_Steel", "Hit_Wood_Stone",
     "Hit_Steel_Flesh", "Hit_Steel_Wood", "Hit_Steel_Steel", "Hit_Steel_Stone",
     "Ui_KillConfirm",  # Unreal, the kill feed on the player's own kill (KillFeedSubsystem.cpp)
+    # Impacts by surface (soundImpactCue): bullets and arrows on what they struck; ricochets off stone and steel
+    "Impact_Wood", "Impact_Steel", "Impact_Stone", "Impact_Dirt", "Impact_Sand", "Impact_Water", "Impact_Glass",
+    "Arrow_Flesh", "Arrow_Wood", "Arrow_Stone", "Arrow_Dirt", "Ricochet",
+    # Blasts by size and their debris, gore when a part comes off, a felled tree (soundForEvent)
+    "Explosion_Large", "Explosion_Debris", "Gore_Sever", "Gore_Decap", "Gore_Splat", "Tree_Fall",
+    # Work by the job (soundWorkCue): plants cut, soil dug to sow, buildings taken apart, repairs, drills, a bed
+    "Work_PlantCut", "Work_Sow", "Work_Deconstruct", "Work_Repair", "Work_Drill", "Bed_Creak",
 }
 
 
@@ -218,6 +227,29 @@ def check_research_unlocks(defs_by_kind):
     return problems
 
 
+def check_garment_cuts(defs_by_kind):
+    """Every garment a def's visual.cuts names ('+' joins several) must be in assets/makehuman_garments.json."""
+    path = Path(__file__).resolve().parent.parent / "assets" / "makehuman_garments.json"
+    if not path.exists():
+        return []
+    garments = {g["name"] for g in json.loads(path.read_text(encoding="utf-8"))["garments"]}
+    problems = []
+    for kind, kind_defs in defs_by_kind.items():
+        for name, (file, entry) in kind_defs.items():
+            visual = entry.get("visual")
+            cuts = visual.get("cuts") if isinstance(visual, dict) else None
+            if cuts is None:
+                continue
+            if not isinstance(cuts, list) or not all(isinstance(c, str) and c for c in cuts):
+                problems.append(f"{file}: {kind} '{name}' visual.cuts must be a list of garment names")
+                continue
+            for cut in cuts:
+                for garment in cut.split("+"):
+                    if garment not in garments:
+                        problems.append(f"{file}: {kind} '{name}' visual.cuts names unknown garment '{garment}'")
+    return problems
+
+
 def check_sound_cues(defs_by_kind):
     """Every cue a def names under visual.sound must be a SoundCues def; returns the problems and the cues used."""
     problems = []
@@ -236,6 +268,12 @@ def check_sound_cues(defs_by_kind):
                 if slot == "material":  # what it sounds like when struck or striking (melee by material)
                     if cue not in ("Wood", "Steel", "Stone", "Flesh"):
                         problems.append(f"{file}: {kind} '{name}' visual.sound.material must be Wood, Steel, Stone or Flesh")
+                    continue
+                if slot == "impactSet":  # the family of impact cues a projectile uses (soundImpactCue)
+                    if cue not in ("Impact", "Arrow"):
+                        problems.append(f"{file}: {kind} '{name}' visual.sound.impactSet must be Impact or Arrow")
+                    continue
+                if cue == "":  # an empty slot clears what the parent gives (a bow throws no spent case)
                     continue
                 if not isinstance(cue, str) or cue not in cues:
                     problems.append(f"{file}: {kind} '{name}' visual.sound.{slot} names unknown SoundCues def '{cue}'")
@@ -377,6 +415,7 @@ def main() -> int:
 
     if CHECK_REFERENCES and "HoldStyles" in defs_by_kind:
         problems.extend(check_hold_styles(defs_by_kind))
+        problems.extend(check_garment_cuts(defs_by_kind))
 
     if CHECK_REFERENCES and "SoundCues" in defs_by_kind:
         sound_problems, used = check_sound_cues(defs_by_kind)
