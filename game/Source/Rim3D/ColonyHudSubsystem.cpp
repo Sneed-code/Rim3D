@@ -466,13 +466,13 @@ void UColonyHudSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	// A scene started from the title screen's Debug page: F10 goes back to the title (docs/design/new-game.md).
-	static const bool bDebugScene = DebugScenes::IsDebugScene();
-	if (bDebugScene && !bLeavingDebugScene)
+	// Not cached: scenes load inside this game, so the command line changes while it runs.
+	if (!bLeavingDebugScene && DebugScenes::IsDebugScene())
 	{
 		const APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
 		if (PC && PC->WasInputKeyJustPressed(EKeys::F10))
 		{
-			bLeavingDebugScene = DebugScenes::ReturnToTitle();
+			bLeavingDebugScene = DebugScenes::ReturnToTitle(GetWorld());
 		}
 	}
 	USimSubsystem* Bridge = GetBridge();

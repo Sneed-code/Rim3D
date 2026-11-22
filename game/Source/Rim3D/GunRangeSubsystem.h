@@ -137,6 +137,11 @@ public:
 	UStaticMesh* FindMeleeMesh(const FString& Def);
 	/** The largest imported mesh of a gun's art whose name has Match in it (cached). */
 	UStaticMesh* FindMesh(const FString& Art, const FString& Match);
+	/** The held gun's scope field of view while the player holds a scoped gun (bolt-action rifle), else 0. Fully aimed,
+	 *  the third-person camera goes to the scope (AProtagonistPawn::IsScopeView) and the scope ring is drawn. */
+	float GetScopeFov() const { return ScopeFovNow; }
+	/** Whether the scope's ring is drawn this frame. */
+	bool IsScoped() const { return bScoped; }
 	/** A line for the panel from the scene (targets left and so on). */
 	void SetSceneLine(const FString& Line) { SceneLine = Line; }
 
@@ -264,6 +269,8 @@ private:
 	FTransform FallbackFix = FTransform::Identity;
 	/** Looking through a scope this frame (see FGunRangeGun::ScopeFov). */
 	bool bScoped = false;
+	/** The held gun's scope (0: none, or not usable now). */
+	float ScopeFovNow = 0.0f;
 	FString BoneLine;
 	// The hold-style path.
 	bool bHeldView = false;

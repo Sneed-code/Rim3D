@@ -7,6 +7,7 @@
 #include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
 
+#include "GunRangeSubsystem.h"
 #include "HandsOnSubsystem.h"
 #include "KeyBindings.h"
 #include "PawnActor.h"
@@ -77,6 +78,8 @@ namespace
 	constexpr float ProtagonistAimShoulder = 45.0f;
 	constexpr float ProtagonistAimLift = 8.0f;
 	constexpr float ProtagonistNormalFov = 80.0f;
+	// A scoped gun's aim goes to the scope only once this far aimed in (so the view never passes through the head).
+	constexpr float ProtagonistScopeAt = 0.97f;
 	// Locked on (docs/design/focus.md): how fast the view turns to keep the focus ahead, degrees a second.
 	constexpr float ProtagonistFocusTurnThird = 360.0f;
 	constexpr float ProtagonistFocusTurnFirst = 100.0f;
@@ -258,10 +261,6 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		{
 			Jump();
 		}
-		if (WasPressed(PC, ERim3DAction::ToggleView))
-		{
-			OnToggleViewPressed();
-		}
 		if (WasPressed(PC, ERim3DAction::SwitchMode))
 		{
 			OnSwitchModePressed();
@@ -368,7 +367,7 @@ void AProtagonistPawn::FollowFocus(float DeltaTime)
 
 bool AProtagonistPawn::IsBodyHiddenInView() const
 {
-	return bFirstPerson || (UShooterFeelSubsystem::IsAimFirstPerson() && AimBlend > 0.8f);
+	return bScopeView;
 }
 
 float AProtagonistPawn::GetFieldOfView() const
@@ -503,9 +502,9 @@ void AProtagonistPawn::Zoom(float Notches)
 	ArmLength = FMath::Clamp(ArmLength * FMath::Pow(ProtagonistZoomPerNotch, Notches), kMinArm, kMaxArm);
 }
 
-void AProtagonistPawn::SetFirstPerson(bool bFirst)
+void AProtagonistPawn::SetFirstPerson(bool /*bFirst*/)
 {
-	bFirstPerson = bFirst;
+	bFirstPerson = false;
 	SnapCamera();
 }
 
@@ -642,24 +641,35 @@ void AProtagonistPawn::UpdateCamera()
 			const double GroundZ = Bridge->SimToWorld(static_cast<float>(Local.X), static_cast<float>(Local.Y), 0).Z;
 			Location.Z = FMath::Max(Location.Z, GroundZ + ProtagonistMinCameraHeight);
 		}
-		// Aimed in the first person way: the camera goes to the eyes.
-		if (UShooterFeelSubsystem::IsAimFirstPerson())
+	}
+	// A scoped gun (the bolt-action rifle) fully aimed: straight to the scope, never a first-person view of the arms or
+	// gun (sneed 2026-11-22). The camera goes to the eyes with the body hidden, the scope's field of view and its ring
+	// drawn over the view (UGunRangeSubsystem). Any other gun keeps the over-the-shoulder aim.
+	float ScopeFov = 0.0f;
+	if (const UWorld* World = GetWorld())
+	{
+		if (const UGunRangeSubsystem* Range = World->GetSubsystem<UGunRangeSubsystem>())
 		{
-			Location = FMath::Lerp(Location, Eye, Blend);
-			EffectiveArm = FMath::Lerp(EffectiveArm, 0.0f, Blend);
+			ScopeFov = Range->GetScopeFov();
 		}
+	}
+	bScopeView = bScopeAllowed && ScopeFov > 0.0f && bAimHeld && AimBlend >= ProtagonistScopeAt;
+	if (bScopeView)
+	{
+		Location = Eye;
+		EffectiveArm = 0.0f;
 	}
 	SetActorLocationAndRotation(Location, Look);
 
 	// The field of view narrows while aiming, and the camera is nudged by the gun's kick, the shake and a roll (the aim
 	// above is not: the crosshair stays where the bullet goes).
-	Camera->SetFieldOfView(FMath::Lerp(ProtagonistNormalFov, UShooterFeelSubsystem::GetAimFov(), Blend));
+	Camera->SetFieldOfView(bScopeView ? ScopeFov : FMath::Lerp(ProtagonistNormalFov, UShooterFeelSubsystem::GetAimFov(), Blend));
 	if (UWorld* World = GetWorld())
 	{
 		if (UShooterFeelSubsystem* Feel = World->GetSubsystem<UShooterFeelSubsystem>())
 		{
 			const FCameraFeel& Nudge = Feel->GetCameraFeel();
-			Camera->SetFieldOfView(FMath::Lerp(ProtagonistNormalFov, UShooterFeelSubsystem::GetAimFov(), Blend) + Nudge.FovAdd);
+			Camera->SetFieldOfView(bScopeView ? ScopeFov : FMath::Lerp(ProtagonistNormalFov, UShooterFeelSubsystem::GetAimFov(), Blend) + Nudge.FovAdd);
 			Camera->SetRelativeRotation(Nudge.Rotation);
 			Camera->SetRelativeLocation(Nudge.Location);
 			FPostProcessSettings& PostProcess = Camera->PostProcessSettings;
@@ -672,7 +682,7 @@ void AProtagonistPawn::UpdateCamera()
 			// Cinematic depth of field on the colonist, like a film camera: the far background softens a little. Off in first
 			// person and while aiming, so a distant target stays sharp.
 			const float FStop = GProtagonistDepthOfField.GetValueOnGameThread();
-			const bool bFocus = FStop > 0.0f && !bFirstPerson && Blend < 0.99f && EffectiveArm > 1.0f;
+			const bool bFocus = FStop > 0.0f && !bScopeView && Blend < 0.99f && EffectiveArm > 1.0f;
 			PostProcess.bOverride_DepthOfFieldFocalDistance = bFocus;
 			PostProcess.bOverride_DepthOfFieldFstop = bFocus;
 			PostProcess.bOverride_DepthOfFieldSensorWidth = bFocus;

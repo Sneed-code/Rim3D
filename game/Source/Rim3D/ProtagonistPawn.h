@@ -53,14 +53,21 @@ public:
 	void Look(float YawDegrees, float PitchDegrees);
 	/** Zooms the third person camera by wheel notches (positive: closer). */
 	void Zoom(float Notches);
+	/** Third person only (sneed 2026-11-22: "lets disable it its a 3rd person game"): first person is gone, so this
+	 *  always leaves the camera behind the body. Kept so older callers still build. The one view from the eyes is a
+	 *  scoped gun fully aimed (IsScopeView), which shows only the scope. */
 	void SetFirstPerson(bool bFirst);
-	bool IsFirstPerson() const { return bFirstPerson; }
-	void ToggleView() { SetFirstPerson(!bFirstPerson); }
+	bool IsFirstPerson() const { return false; }
+	/** Holding aim with a scoped gun (the bolt-action rifle), fully aimed: the camera is at the eyes, the body hidden and
+	 *  the view the scope's (UGunRangeSubsystem::GetScopeFov). */
+	bool IsScopeView() const { return bScopeView; }
+	/** For smoke tests' outside cameras: false keeps the over-the-shoulder aim even with a scope. */
+	void SetScopeAllowed(bool bAllowed) { bScopeAllowed = bAllowed; }
 	/** Puts the camera where it is heading right now (after switching bodies or views), with no soft follow. */
 	void SnapCamera();
 
 	/** Holding aim (right mouse button with a gun in hand): the view blends to the aimed one over about a fifth of a second
-	 *  (over the shoulder and zoomed, or first person with `Feel.AimView 1`) and back when it is let go (docs/design/shooter-feel-draw.md).
+	 *  (over the shoulder and zoomed; a scoped gun goes to its scope once fully aimed) and back when it is let go (docs/design/shooter-feel-draw.md).
 	 *  Test input: `SetScriptedAim` is used instead of the mouse button until ClearScriptedAim. */
 	void SetScriptedAim(bool bHeld) { bScriptedAim = true; bScriptAimHeld = bHeld; }
 	void ClearScriptedAim() { bScriptedAim = false; }
@@ -73,7 +80,7 @@ public:
 	double GetCameraTrail() const { return CameraTrail; }
 	/** The third person distance now, cm: the zoomed one, closer while aiming. Shots start this far along the view. */
 	float GetEffectiveArmLength() const { return EffectiveArm; }
-	/** Whether the body is hidden because the view is at its eyes: first person, or aimed in with the first person aim view. */
+	/** Whether the body is hidden because the view is at its eyes: only while looking through a scope. */
 	bool IsBodyHiddenInView() const;
 	/** The field of view now (80 degrees, narrowing while aimed). */
 	float GetFieldOfView() const;
@@ -133,7 +140,6 @@ public:
 
 private:
 	void OnSwitchModePressed();
-	void OnToggleViewPressed() { ToggleView(); }
 	void OnTakeOverPressed();
 	void OnZoomIn() { Zoom(1.0f); }
 	void OnZoomOut() { Zoom(-1.0f); }
@@ -161,7 +167,9 @@ private:
 	float Yaw = 0.0f;
 	float Pitch = -10.0f;
 	float ArmLength = 350.0f;
-	bool bFirstPerson = false;
+	bool bFirstPerson = false;  // always false now (third person only); the old first-person branches stay unused
+	bool bScopeView = false;
+	bool bScopeAllowed = true;
 	bool bAimHeld = false;
 	bool bFocusLocked = false;
 	void FollowFocus(float DeltaTime);

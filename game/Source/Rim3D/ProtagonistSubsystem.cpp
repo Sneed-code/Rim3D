@@ -713,7 +713,7 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 		const auto KeyOf = [](ERim3DAction Action) { return Rim3DKeys::GetKeyLabel(Action); };
 		const auto Line = [](const FString& Text) { ImGui::TextUnformatted(TCHAR_TO_UTF8(*Text)); };
 		Line(FString::Printf(TEXT("F1 hide   F3 speed   WASD walk   %s slow   %s sprint on/off   mouse look"), *KeyOf(ERim3DAction::WalkSlow), *KeyOf(ERim3DAction::Sprint)));
-		Line(FString::Printf(TEXT("%s jump   %s roll / dash   %s first / third person   wheel zoom"), *KeyOf(ERim3DAction::Jump), *KeyOf(ERim3DAction::RollDash), *KeyOf(ERim3DAction::ToggleView)));
+		Line(FString::Printf(TEXT("%s jump   %s roll / dash   right mouse aim (a scoped rifle: its scope)   wheel zoom"), *KeyOf(ERim3DAction::Jump), *KeyOf(ERim3DAction::RollDash)));
 		Line(FString::Printf(TEXT("%s hold: work / pick up / take weapon   %s put down   %s build"), *KeyOf(ERim3DAction::Interact), *KeyOf(ERim3DAction::PutDown), *KeyOf(ERim3DAction::BuildMode)));
 		Line(FString::Printf(TEXT("%s take over   %s overseer view   resources are picked up as you walk by"), *KeyOf(ERim3DAction::TakeOver), *KeyOf(ERim3DAction::SwitchMode)));
 		Line(FString::Printf(TEXT("%s sleep here (18:00 to 6:00)   %s on a bed: sleep   F5 quicksave"), *KeyOf(ERim3DAction::SleepHere), *KeyOf(ERim3DAction::Interact)));
