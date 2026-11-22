@@ -438,6 +438,12 @@ namespace
 		}
 		const FExpressionInput OldBase = *Base;
 		const FExpressionInput OldRough = *Rough;
+		if (!OldBase.Expression || !OldRough.Expression)
+		{
+			// A wrap left behind with nothing on its inputs (its material rebuilt round it, GunArt's M_GunPBR: PC
+			// 2026-11-22, this crashed): nothing to put back; WetLookClearLeftovers deals with it.
+			return false;
+		}
 		// Everything the wrap added: its own nodes and the inputs only they used (older runs didn't mark those).
 		TSet<UMaterialExpression*> Remove;
 		for (const TObjectPtr<UMaterialExpression>& Expression : Material->GetExpressions())
