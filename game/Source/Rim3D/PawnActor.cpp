@@ -54,8 +54,15 @@ namespace
 	TAutoConsoleVariable<int32> GPawnsTurnFeetInSwing(
 		TEXT("Pawns.TurnFeetInSwing"), 1, TEXT("1 lets the feet turn with the body through a melee swing (no spine twist when turning mid-swing), 0 keeps them planted."), ECVF_Default);
 
-	// How fast a pawn turns to face where it walks, degrees per second at 1x.
+	TAutoConsoleVariable<float> GPawnsTurnAroundRate(
+		TEXT("Pawns.TurnAroundRate"), 360.0f,
+		TEXT("Degrees a second at 1x a pawn turns to face where it walks or (standing) where it aims: a half turn takes half a ")
+		TEXT("second, as a person turns round (and as the walk's turn clips do). At 720 (before 2026-11-22) a half turn on the ")
+		TEXT("spot took a quarter second and long strand hair was swept into the back."), ECVF_Default);
+
+	// How fast a pawn turns to face its focus, a wall, a clip's facing or the player's view, degrees per second at 1x.
 	constexpr float PawnTurnRate = 720.0f;
+	float PawnTurnAroundRate() { return FMath::Clamp(GPawnsTurnAroundRate.GetValueOnGameThread(), 90.0f, 1440.0f); }
 	// Slower than this (cm/s) a pawn keeps facing the way it faced.
 	constexpr float PawnTurnSpeed = 30.0f;
 	// Farther than this in one frame is a jump (spawn, load), not a walk.
@@ -387,13 +394,15 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		// A crawler turns its body to where it drags itself at once (sneed 2026-11-22: crawling enemies turned slowly and
 		// slid sideways): three times a walker's turn.
 		const float Wanted = Velocity.Rotation().Yaw;
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * (Now.crawling ? 3.0f : 1.0f) * DeltaTime * Speed);
+		const float WalkTurnRate = Now.crawling ? PawnTurnRate * 3.0f : PawnTurnAroundRate();
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, WalkTurnRate * DeltaTime * Speed);
 	}
 	else if ((Now.shotReadyIn > 0 || Now.fighting || Now.meleePhase != colony::MeleePhase::Ready || Now.blocking || Now.shieldUp) && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
 	{
-		// Standing and shooting or swinging: face where the sim says the pawn aims (docs/design/fights.md).
+		// Standing and shooting or swinging: face where the sim says the pawn aims (docs/design/fights.md), turning round
+		// at a person's pace.
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnAroundRate() * DeltaTime * FMath::Max(Speed, 1));
 	}
 	// Swimming: the body floats with its shoulders at the surface (docs/design/water.md, W4).
 	SwimLiftCm = WaterDraw::SwimLiftEase(SwimLiftCm, Bridge.GetSim() ? WaterDraw::SwimLiftTargetCm(Now, Bridge.GetSim()->bodyHeightM(Thing)) : 0.0f, DeltaTime, bTeleported);

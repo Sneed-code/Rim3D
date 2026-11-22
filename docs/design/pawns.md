@@ -21,8 +21,11 @@ Each frame the subsystem calls `UpdateFromSim`:
 - **Position**: `USimSubsystem::GetBlendedLocation`, the same blend between the last two
   snapshots the rest of Unreal uses. The smoke test finds every actor within 16 cm of its sim cell
   position (one step of walking at 1x is 15 cm).
-- **Facing**: turns toward the blended sim velocity at 720 degrees a second (times the game speed);
-  a pawn slower than 0.3 m/s keeps its facing. The sim has no facing of its own yet.
+- **Facing**: turns toward the blended sim velocity at 360 degrees a second (times the game speed;
+  `Pawns.TurnAroundRate`), so a half turn takes half a second as a person turns round; at 720 a half turn on the spot
+  swept long strand hair into the back (`hair-physics.md`). Standing and shooting turns at the same pace; turns to a
+  lock-on focus, the player's view, a clip's facing or a wall stay at 720 (a melee strike 1440). A pawn slower than
+  0.3 m/s keeps its facing. The sim has no facing of its own yet.
 - **Animation speed**: the mesh's `GlobalAnimRateScale` is the game speed, so animations play 2x
   and 3x with the game and freeze while paused. Everything the animation sees is in "1x seconds":
   the velocity is the sim's metres per step times 30.
