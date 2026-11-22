@@ -2,6 +2,18 @@
 
 Updated 2026-11-22.
 
+Hair no longer through the body or clothes (sneed, 2026-11-22; hair tools and Unreal, `docs/design/hair-physics.md`
+"A shell with no gaps"): long strand hair still went into the back and through the shirt. Measured: between the old
+collision spheres a strand could sink 2 cm into the back (up to 5 cm), and resting hair lay 1.5 to 3 cm inside the
+clothes, which the physics never saw. Now `grow_hair.py` picks 90 spheres and capsules just under the skin that leave no
+gaps (0.7 cm typical, 1.8 cm worst; mirrored; each on the bone of its skin, including clavicles and both arm bones), and
+the game grows each one under a worn garment out to just past the cloth and its puff, per outfit (remade when clothes
+change). `-CreatorStrandDemo` takes the pictures (behind and side; standing, rifle aim, sword, shadowbox, walk, shapes
+drawn). Capsules also fill the body's core, and the hair physics takes 10 steps (was 5). PC (4 rounds): dressed hair
+stays on the clothes in every pose; nude hair lies on the back standing, aiming, swinging and boxing. Needs the
+`hair-grow` and `hair-grooms` art steps (run by `update-and-play.bat`). **Still open:** right after a fast 180-degree
+turn on the spot, nude long hair dips into the back for a moment, then comes back out.
+
 In-game UI in the Canopy look (sneed, 2026-11-22: "make the actual game's UI ... high quality, well made",
 `docs/design/ui-layout.md`): every in-game box now matches the title and new-game screens: dark green-black glass, square
 corners, a jade bar on each box's top edge (one ImGui end-of-frame hook), jade for what is open or picked (was amber),
