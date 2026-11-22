@@ -77,6 +77,27 @@ namespace
 		return Out;
 	}
 
+	/** A code name in plain words: "WearApparel" -> "Wear apparel", "HaulToStockpile" -> "Haul to stockpile". */
+	FString PWords(const char* Name)
+	{
+		const FString In = UTF8_TO_TCHAR(Name ? Name : "");
+		FString Out;
+		for (int32 Index = 0; Index < In.Len(); ++Index)
+		{
+			const TCHAR Letter = In[Index];
+			if (Index > 0 && FChar::IsUpper(Letter) && !FChar::IsUpper(In[Index - 1]))
+			{
+				Out += TEXT(' ');
+				Out += FChar::ToLower(Letter);
+			}
+			else
+			{
+				Out += Letter;
+			}
+		}
+		return Out;
+	}
+
 	int32 PId(colony::Entity Id)
 	{
 		return static_cast<int32>(entt::to_integral(Id));
@@ -977,7 +998,8 @@ void UPanelsSubsystem::DrawColonistPanel(USimSubsystem& Bridge, const colony::Th
 		const auto BackstoryLabel = [&](const std::string& Name) -> FString
 		{
 			const colony::Def* Def = Defs.find("Backstories", Name);
-			return PCapital(Def ? Def->label() : Name);
+			// Backstories carry a title ("hunter's child"), not a label.
+			return PCapital(Def ? Def->text("title", Def->label()) : Name);
 		};
 		if (!Colonist.childhood.empty() || !Colonist.adulthood.empty())
 		{
@@ -1005,7 +1027,7 @@ void UPanelsSubsystem::DrawColonistPanel(USimSubsystem& Bridge, const colony::Th
 		ImGui::Separator();
 
 		// What they are doing.
-		FString Doing = View.dead ? TEXT("Dead") : (View.downed ? TEXT("Down") : (View.asleep ? TEXT("Asleep") : (View.drafted ? TEXT("Drafted") : UTF8_TO_TCHAR(colony::jobTypeName(View.job)))));
+		FString Doing = View.dead ? TEXT("Dead") : (View.downed ? TEXT("Down") : (View.asleep ? TEXT("Asleep") : (View.drafted ? TEXT("Drafted") : PWords(colony::jobTypeName(View.job)))));
 		PText(FString::Printf(TEXT("Doing: %s"), *Doing));
 
 		// Needs and mood.
@@ -1018,7 +1040,10 @@ void UPanelsSubsystem::DrawColonistPanel(USimSubsystem& Bridge, const colony::Th
 		if (View.food >= 0.0f)
 		{
 			Bar("Food", View.food, FString::Printf(TEXT("%.0f%%"), View.food * 100.0f));
-			Bar("Rest", View.rest, FString::Printf(TEXT("%.0f%%"), View.rest * 100.0f));
+			if (View.rest >= 0.0f)  // below 0: this pawn has no rest need (never sleeps)
+			{
+				Bar("Rest", View.rest, FString::Printf(TEXT("%.0f%%"), View.rest * 100.0f));
+			}
 		}
 		if (View.mood >= 0.0f)
 		{
@@ -1097,7 +1122,9 @@ void UPanelsSubsystem::DrawColonistPanel(USimSubsystem& Bridge, const colony::Th
 			const colony::Def* SkillDef = Defs.find("Skills", Skill.def);
 			const FString Name = PCapital(SkillDef ? SkillDef->label() : Skill.def);
 			const char* Passion = Skill.passion == colony::Passion::Major ? "**" : (Skill.passion == colony::Passion::Minor ? "*" : "");
-			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, Skill.passion == colony::Passion::Major ? ImVec4(0.90f, 0.62f, 0.15f, 1.0f) : (Skill.passion == colony::Passion::Minor ? ImVec4(0.75f, 0.70f, 0.25f, 1.0f) : ImVec4(0.40f, 0.60f, 0.85f, 1.0f)));
+			// Canopy: jade bars, ember for a passion (deeper for a major one), as on the companions screen.
+			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, Skill.passion == colony::Passion::Major ? ColonyHud::Ember() :
+				(Skill.passion == colony::Passion::Minor ? ImVec4(0.85f, 0.55f, 0.38f, 0.85f) : ImVec4(0.30f, 0.66f, 0.53f, 0.85f)));
 			const FString Overlay = Skill.disabled ? FString(TEXT("incapable")) : FString::Printf(TEXT("%d %s"), Skill.level, UTF8_TO_TCHAR(Passion));
 			PText(Name);
 			ImGui::SameLine(110.0f * Scale);
