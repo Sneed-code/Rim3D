@@ -2,7 +2,7 @@
   "source": "Quaternius Ultimate Animated Animals (https://quaternius.com/packs/ultimateanimatedanimals.html), CC0, FBX",
   "folderId": "1uJ3N5HfB7jKTseJUNQr3N4YaN0UuEtHk",
   "note": "Each model is a rigged, animated skeletal mesh (own skeleton, walk/run/idle/eat/death clips) imported to /Game/Rim3D/Generated/Animals/<model>. `lengthM` is each model's real nose-to-tail length in metres (U15 fits the imported mesh to it, the import is about 3 times too big); `scale` is the multiplier on that size for the def's body size; a def with no real model yet is under `missing` and is drawn as the husky. Retargeting onto shared skeletons is left for U15.",
-  "lengthM": {"Alpaca": 1.4, "Bull": 2.5, "Cow": 2.3, "Deer": 1.7, "Donkey": 1.9, "Fox": 0.9, "Horse": 2.4, "Horse_White": 2.4, "Husky": 1.0, "ShibaInu": 0.8, "Stag": 1.9, "Wolf": 1.3, "TRex": 12.0, "Raptor": 3.5, "Buffalo": 2.9, "WildBear": 2.2, "WildElk": 2.3, "WildDoe": 1.6, "WildMountainGoat": 1.5, "WildBighorn": 1.6, "WildGoose": 0.9, "WildGuineafowl": 0.55, "WildFox": 0.9, "WildBuffalo": 3.0, "Turkey": 1.1, "Camel": 3.0, "Iguana": 1.5, "Capybara": 1.2, "WolfSpider": 2.0, "RhinoBeetle": 0.6},
+  "lengthM": {"Alpaca": 1.4, "Bull": 2.5, "Cow": 2.3, "Deer": 1.7, "Donkey": 1.9, "Fox": 0.9, "Horse": 2.4, "Horse_White": 2.4, "Husky": 1.0, "ShibaInu": 0.8, "Stag": 1.9, "Wolf": 1.3, "TRex": 12.0, "Raptor": 3.5, "Buffalo": 2.9, "WildBear": 2.2, "WildElk": 2.3, "WildDoe": 1.6, "WildMountainGoat": 1.5, "WildBighorn": 1.6, "WildGoose": 0.9, "WildGuineafowl": 0.55, "WildFox": 0.9, "WildBuffalo": 3.0, "Turkey": 1.1, "Camel": 3.0, "Capybara": 1.2, "RhinoBeetle": 0.6},
   "models": ["Alpaca", "Bull", "Cow", "Deer", "Donkey", "Fox", "Horse", "Horse_White", "Husky", "ShibaInu", "Stag", "Wolf"],
   "importsNote": "Realistic rigged Sketchfab models (sneed's downloads, assets/raw/sketchfab on the PC, not in Git). The AnimalArt commandlet imports each `file` (glTF, real size, so no lengthM) and renames the clips named in `clips` to <model>AnimalArmature_<role>, the names the game looks for. `yaw` turns the mesh to face the actor's forward (the Quaternius models need -90); `walkCm` and `gallopCm` are how far the walk and gallop clips go per second at scale 1. A model with no Death clip lies on its side, still, when it dies. `\"fit\": \"pose\"` (Sketchfab's FBX conversions, whose mesh bounds are in another unit than their animation) fits `lengthM` to the skeleton in the idle pose instead of the mesh's bounds. Entries with `assets` (object paths by role, plus `parts` drawn on the body's pose) are packs already in Unreal's format, copied into game/Content (the African Animals Pack: game/Content/AfricanAnimalsPack, not in Git); the commandlet skips them.",
   "imports": [
@@ -28,9 +28,7 @@
     {"model": "WildBuffalo", "file": "assets/raw/sketchfab/rim3d-animals-2/Rim3D_Buffalo.glb", "credit": "BUFFALO - Realistic 3D Model (demo) by WildMesh 3D, CC BY-NC", "clips": {"Idle": "Buffalo_Idle", "Walk": "Buffalo_WalkFast_F"}, "yaw": -90, "walkCm": 170, "gallopCm": 170},
     {"model": "Turkey", "file": "assets/raw/sketchfab/rim3d-animals-2/Rim3D_Turkey.glb", "credit": "Turkey (Rigged) by DreamingInAlternateRealities, CC BY", "clips": {"Idle": "Walking_Feathers_Spread", "Walk": "Walking_Feathers_Down"}, "fit": "pose", "yaw": -90, "walkCm": 60, "gallopCm": 60},
     {"model": "Camel", "file": "assets/raw/sketchfab/rim3d-animals-2/Rim3D_Camel.glb", "credit": "Camel by E.A.Cornell, CC BY", "clips": {"Idle": "Idle_01", "Walk": "WalkCycle"}, "yaw": -90, "walkCm": 150, "gallopCm": 150},
-    {"model": "Iguana", "skipMeshes": ["Tongue", "Object_193"], "file": "assets/raw/sketchfab/rim3d-animals-2/Rim3D_Iguana.glb", "credit": "Iguana by satishasc, Sketchfab Free Standard", "clips": {"Idle": "metarig_Idle", "Walk": "Walk_cycle_001"}, "fit": "pose", "yaw": -90, "walkCm": 40, "gallopCm": 40},
     {"model": "Capybara", "file": "assets/raw/sketchfab/rim3d-animals-2/Rim3D_Capybara.glb", "credit": "capybara by Ear.Rodriguez (Rectus' capybara, animated), CC BY", "clips": {"Idle": "skeleton_idle", "Walk": "skeleton_walk_cycle"}, "yaw": -90, "walkCm": 60, "gallopCm": 60},
-    {"model": "WolfSpider", "file": "assets/raw/sketchfab/rim3d-animals-2/Rim3D_WolfSpider.glb", "credit": "Wolf Spider (Rigged) by DreamingInAlternateRealities, CC BY", "clips": {"Idle": "Wolf_Spider_ArmatureAction", "Walk": "Spider_walking", "Gallop": "Spider_running"}, "fit": "pose", "yaw": -90, "walkCm": 120, "gallopCm": 500},
     {"model": "RhinoBeetle", "file": "assets/raw/sketchfab/rim3d-animals-2/Rim3D_RhinoBeetle.glb", "credit": "A Rhino beetle by aaadragon, CC BY", "clips": {"Idle": "Beetle_idle", "Walk": "Beetle_walk", "Death": "Beetle_death"}, "yaw": -90, "walkCm": 40, "gallopCm": 40}
   ],
   "defs": [
@@ -70,10 +68,10 @@
     {"def": "ArcticFox", "model": "WildFox", "scale": 0.85},
     {"def": "ArcticWolf", "model": "Wolf", "scale": 1.0},
     {"def": "Capybara", "model": "Capybara", "scale": 1.0},
-    {"def": "Iguana", "model": "Iguana", "scale": 1.0},
+    {"def": "Iguana", "model": "Raptor", "scale": 0.43, "stand_in": true},
     {"def": "Megascarab", "model": "RhinoBeetle", "scale": 1.0},
     {"def": "Spelopede", "model": "RhinoBeetle", "scale": 2.2, "stand_in": true},
-    {"def": "Megaspider", "model": "WolfSpider", "scale": 1.0}
+    {"def": "Megaspider", "model": "RhinoBeetle", "scale": 3.5, "stand_in": true}
   ],
   "missing": []
 }
