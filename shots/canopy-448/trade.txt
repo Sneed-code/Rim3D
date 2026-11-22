@@ -1,0 +1,16 @@
+﻿Running smoke test 'trade' at 1920x1080...
+
+Smoke test 'trade': PASS  (22 s, NVIDIA GeForce RTX 5080, 888x500)
+trade_setup                  96.2 fps  game   4.3 ms  render   4.5 ms  gpu   2.4 ms  screenshot ok
+trade_buy                   207.2 fps  game   4.4 ms  render   4.3 ms  gpu   2.4 ms  screenshot ok
+trade_sell                  235.5 fps  game   3.9 ms  render   3.8 ms  gpu   2.4 ms  screenshot ok
+trade_gift                  229.5 fps  game   3.8 ms  render   4.0 ms  gpu   2.4 ms  screenshot ok
+trade_factions              232.0 fps  game   3.8 ms  render   3.8 ms  gpu   2.4 ms  screenshot ok
+trade_thermostat            233.6 fps  game   3.8 ms  render   3.9 ms  gpu   2.4 ms  screenshot ok
+note: trade_setup: visit 1, 2000 silver, 1620 steel
+note: trade_buy: 40 steel cost 93 silver
+note: trade_buy: silver 2000 -> 1907, steel 1620 -> 1660
+note: trade_sell: silver 1907 -> 2036, steel 1660 -> 1560
+note: trade_gift: goodwill -53.00 -> -51.58 (+1.42 promised)
+note: trade_thermostat: heater target 18 C, 3 commands sent by the trade panel
+Screenshots: C:\Dev\Rim3D-climb\game\Saved\Smoke\trade
