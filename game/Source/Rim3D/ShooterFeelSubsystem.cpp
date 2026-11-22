@@ -16,6 +16,8 @@
 #include "PhysicsEngine/BodyInstance.h"
 #include "PhysicsEngine/BodySetup.h"
 #include "PhysicsEngine/BoxElem.h"
+#include "PhysicsEngine/SphereElem.h"
+#include "StaticMeshAttributes.h"
 
 #include <imgui.h>
 
@@ -203,6 +205,124 @@ UStaticMesh* UShooterFeelSubsystem::MakeSolid(int32 Shape, float X, float Y, flo
 	return Mesh;
 }
 
+UStaticMesh* UShooterFeelSubsystem::MakeClod(int32 Seed, const FLinearColor& Color, float Lumpiness)
+{
+	// An icosahedron split twice (320 triangles), pushed in and out by noise and squashed a little, smooth shaded. sneed
+	// 2026-11-22: the old 10 cm cubes read as "basic ultra low poly".
+	const float Golden = (1.0f + FMath::Sqrt(5.0f)) * 0.5f;
+	TArray<FVector3f> Points = {
+		{-1, Golden, 0}, {1, Golden, 0}, {-1, -Golden, 0}, {1, -Golden, 0}, {0, -1, Golden}, {0, 1, Golden},
+		{0, -1, -Golden}, {0, 1, -Golden}, {Golden, 0, -1}, {Golden, 0, 1}, {-Golden, 0, -1}, {-Golden, 0, 1}};
+	for (FVector3f& Point : Points)
+	{
+		Point.Normalize();
+	}
+	TArray<FIntVector> Faces = {
+		{0, 11, 5}, {0, 5, 1}, {0, 1, 7}, {0, 7, 10}, {0, 10, 11}, {1, 5, 9}, {5, 11, 4}, {11, 10, 2}, {10, 7, 6}, {7, 1, 8},
+		{3, 9, 4}, {3, 4, 2}, {3, 2, 6}, {3, 6, 8}, {3, 8, 9}, {4, 9, 5}, {2, 4, 11}, {6, 2, 10}, {8, 6, 7}, {9, 8, 1}};
+	for (int32 Split = 0; Split < 2; ++Split)
+	{
+		TMap<uint64, int32> Middles;
+		const auto Middle = [&Points, &Middles](int32 A, int32 B)
+		{
+			const uint64 Key = (static_cast<uint64>(FMath::Min(A, B)) << 32) | static_cast<uint64>(FMath::Max(A, B));
+			if (const int32* Found = Middles.Find(Key))
+			{
+				return *Found;
+			}
+			const int32 Index = Points.Add(((Points[A] + Points[B]) * 0.5f).GetSafeNormal());
+			Middles.Add(Key, Index);
+			return Index;
+		};
+		TArray<FIntVector> Finer;
+		for (const FIntVector& Face : Faces)
+		{
+			const int32 AB = Middle(Face.X, Face.Y);
+			const int32 BC = Middle(Face.Y, Face.Z);
+			const int32 CA = Middle(Face.Z, Face.X);
+			Finer.Add({Face.X, AB, CA});
+			Finer.Add({Face.Y, BC, AB});
+			Finer.Add({Face.Z, CA, BC});
+			Finer.Add({AB, BC, CA});
+		}
+		Faces = MoveTemp(Finer);
+	}
+	// Lumps: two scales of noise, then squashed so it lies flatter than a ball; 5 cm radius before the pieces are scaled.
+	const FVector3f Offset(Seed * 7.31f, Seed * 3.17f, Seed * 5.53f);
+	TArray<float> Shade;
+	Shade.SetNum(Points.Num());
+	for (int32 I = 0; I < Points.Num(); ++I)
+	{
+		const FVector3f N = Points[I];
+		const float Big = FMath::PerlinNoise3D(FVector(N * 1.3f + Offset));
+		const float Small = FMath::PerlinNoise3D(FVector(N * 3.7f + Offset * 1.7f));
+		const float Radius = 5.0f * (1.0f + Lumpiness * (0.45f * Big + 0.18f * Small));
+		Points[I] = FVector3f(N.X * Radius * 1.1f, N.Y * Radius * 0.95f, N.Z * Radius * 0.75f);
+		// Mottled: darker in the hollows, lighter grit here and there.
+		Shade[I] = FMath::Clamp(0.85f + 0.35f * Big + 0.3f * FMath::PerlinNoise3D(FVector(N * 9.0f + Offset * 2.3f)), 0.45f, 1.35f);
+	}
+	TArray<FVector3f> Normals;
+	Normals.SetNumZeroed(Points.Num());
+	for (const FIntVector& Face : Faces)
+	{
+		const FVector3f Normal = FVector3f::CrossProduct(Points[Face.Z] - Points[Face.X], Points[Face.Y] - Points[Face.X]);
+		Normals[Face.X] += Normal;
+		Normals[Face.Y] += Normal;
+		Normals[Face.Z] += Normal;
+	}
+	FMeshDescription Description;
+	FStaticMeshAttributes Attributes(Description);
+	Attributes.Register();
+	const FPolygonGroupID Group = Description.CreatePolygonGroup();
+	Attributes.GetPolygonGroupMaterialSlotNames()[Group] = FName(TEXT("Clod"));
+	TArray<FVertexID> Vertices;
+	for (const FVector3f& Point : Points)
+	{
+		const FVertexID Vertex = Description.CreateVertex();
+		Attributes.GetVertexPositions()[Vertex] = Point;
+		Vertices.Add(Vertex);
+	}
+	for (const FIntVector& Face : Faces)
+	{
+		TArray<FVertexInstanceID> Corners;
+		for (const int32 Index : {Face.X, Face.Y, Face.Z})
+		{
+			const FVertexInstanceID Instance = Description.CreateVertexInstance(Vertices[Index]);
+			const FVector3f Normal = Normals[Index].GetSafeNormal();
+			Attributes.GetVertexInstanceNormals()[Instance] = Normal;
+			Attributes.GetVertexInstanceTangents()[Instance] = FVector3f::CrossProduct(Normal, FVector3f::UpVector).GetSafeNormal(UE_SMALL_NUMBER, FVector3f::ForwardVector);
+			Attributes.GetVertexInstanceBinormalSigns()[Instance] = 1.0f;
+			Attributes.GetVertexInstanceColors()[Instance] = FVector4f(Color.R * Shade[Index], Color.G * Shade[Index], Color.B * Shade[Index], 1.0f);
+			Attributes.GetVertexInstanceUVs().Set(Instance, 0, FVector2f(0.0f, 0.0f));
+			Corners.Add(Instance);
+		}
+		Description.CreateTriangle(Group, Corners);
+	}
+	UStaticMesh* Mesh = NewObject<UStaticMesh>(this, NAME_None, RF_Transient);
+	Mesh->GetStaticMaterials().Add(FStaticMaterial(SolidMaterial, FName(TEXT("Clod"))));
+	UStaticMesh::FBuildMeshDescriptionsParams Params;
+	Params.bBuildSimpleCollision = false;
+	Params.bFastBuild = true;
+	Params.bMarkPackageDirty = false;
+	Params.bCommitMeshDescription = false;
+	Mesh->BuildFromMeshDescriptions({&Description}, Params);
+	// A mesh made at run time has no collision: a sphere to be a rigid body with (it rolls and settles like a clod).
+	if (!Mesh->GetBodySetup())
+	{
+		Mesh->CreateBodySetup();
+	}
+	if (UBodySetup* Setup = Mesh->GetBodySetup())
+	{
+		Setup->RemoveSimpleCollision();
+		Setup->AggGeom.SphereElems.Add(FKSphereElem(4.2f));
+		Setup->CollisionTraceFlag = CTF_UseSimpleAsComplex;
+		Setup->InvalidatePhysicsData();
+		Setup->CreatePhysicsMeshes();
+	}
+	KeepMeshes.Add(Mesh);
+	return Mesh;
+}
+
 UInstancedStaticMeshComponent* UShooterFeelSubsystem::MakeInstanced(UStaticMesh* Mesh)
 {
 	UInstancedStaticMeshComponent* Component = NewObject<UInstancedStaticMeshComponent>(Holder);
@@ -251,28 +371,17 @@ void UShooterFeelSubsystem::EnsureScene()
 	ParticleInstances.Add(MakeInstanced(MakeSolid(Box, 2.0f, 2.0f, 2.0f, FLinearColor(1.0f, 0.62f, 0.15f))));        // Spark
 	ParticleInstances.Add(MakeInstanced(MakeSolid(Sphere, 10.0f, 10.0f, 20.0f, FLinearColor(0.16f, 0.12f, 0.08f))));  // Dust
 	ParticleInstances.Add(MakeInstanced(MakeSolid(Sphere, 4.0f, 4.0f, 8.0f, FLinearColor(0.07f, 0.09f, 0.04f))));     // Grenade
-	// Debris: clods of dark and brown soil and grey stone.
+	// Debris: lumpy clods of dark and brown soil and a few grey stones (several shapes each).
 	DebrisMeshes.Reset();
+	int32 ClodSeed = 1;
 	for (const FLinearColor& Colour : {FLinearColor(0.07f, 0.055f, 0.04f), FLinearColor(0.15f, 0.11f, 0.07f), FLinearColor(0.2f, 0.19f, 0.17f)})
 	{
-		UStaticMesh* DebrisMesh = MakeSolid(Box, 10.0f, 10.0f, 10.0f, Colour);
-		// A mesh made at run time has no collision: give the debris a box to be a rigid body with (the mesh is a 10 cm cube on z = 0).
-		if (DebrisMesh)
+		const bool bStone = Colour.B > 0.16f;
+		for (int32 Shape = 0; Shape < (bStone ? 2 : 4); ++Shape)
 		{
-			DebrisMeshes.Add(DebrisMesh);
-			if (!DebrisMesh->GetBodySetup())
+			if (UStaticMesh* DebrisMesh = MakeClod(ClodSeed++, Colour, bStone ? 0.6f : 1.0f))
 			{
-				DebrisMesh->CreateBodySetup();
-			}
-			if (UBodySetup* Setup = DebrisMesh->GetBodySetup())
-			{
-				Setup->RemoveSimpleCollision();
-				FKBoxElem Cube(10.0f, 10.0f, 10.0f);
-				Cube.Center = FVector(0.0, 0.0, 5.0);
-				Setup->AggGeom.BoxElems.Add(Cube);
-				Setup->CollisionTraceFlag = CTF_UseSimpleAsComplex;
-				Setup->InvalidatePhysicsData();
-				Setup->CreatePhysicsMeshes();
+				DebrisMeshes.Add(DebrisMesh);
 			}
 		}
 	}
@@ -725,7 +834,14 @@ void UShooterFeelSubsystem::UpdateParticles(float DeltaTime, const USimSubsystem
 			const std::string Trail = Source.GetDefs()->get(View.def).text("visual.trail");
 			const int32 Puffs = FMath::Clamp(FMath::FloorToInt32(DeltaTime * 60.0f + Random.FRand()), 0, 4);
 			const FVector Back = -FVector(View.vx, View.vy, View.vz).GetSafeNormal() * 25.0;
-			if (Trail == "rocket" && Puffs > 0)
+			// With the blast art in, the trail is soft flipbook smoke and a flame at the nozzle (sneed 2026-11-22: the solid
+			// balls read as ultra low poly puffs).
+			UBlastFxSubsystem* TrailFx = GetWorld() ? GetWorld()->GetSubsystem<UBlastFxSubsystem>() : nullptr;
+			if (TrailFx && TrailFx->IsReady() && !Trail.empty())
+			{
+				TrailFx->AddTrail(At, Back.GetSafeNormal(), FString(UTF8_TO_TCHAR(Trail.c_str())), DeltaTime);
+			}
+			else if (Trail == "rocket" && Puffs > 0)
 			{
 				Burst(EBlastParticle::Smoke, At + Back, Puffs * 2, 25.0f, 0.3f, 22.0f, 1.8f, -15.0f);
 				Burst(EBlastParticle::FireCore, At + Back * 0.6, Puffs, 15.0f, 0.2f, 14.0f, 0.12f, 0.0f);

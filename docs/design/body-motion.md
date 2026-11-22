@@ -53,7 +53,7 @@ sim was stopped by a wall the body stops there and the clip plays on against it.
 | Stagger by a blow by hand (`CombatSystem::stagger`, `HitFrom::blow`) | `staggerClip.back/forward/left/right`, by the way the blow throws the body seen from the body (the measured ones stumble about 0.9 to 1.2 m) | a push of `staggerMetres` (0.5) away from it |
 | Stagger by a bullet | `flinchClip.*` (none measured yet: a bullet flinches on the spot, it doesn't send a body stumbling a metre) | nothing |
 | Knockdown by poise (`CombatSystem::jolt`) | `knockdownClip.*` | a push of `knockdownMetres` (1.0) |
-| Blast (`CombatSystem::explode`) | none | a push of the blast's knockback over `blastSteps` (12) |
+| Blast (`CombatSystem::explode`) | a person: the knockdown clip for the way it is thrown, its path stretched (up to 4x) to land `knockbackMetres` (3) x share away (sneed 2026-11-22, `blastThrow`) | a push of the blast's knockback over `blastSteps` (12) |
 | Melee swing (`MeleeSystem::attack`) | one of the weapon style's attack clips (the player's: upper body, free feet) | no body movement |
 
 Animals have no human clips: they always get the plain push, shorter the bigger they are (divided by the root of

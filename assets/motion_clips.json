@@ -191,6 +191,15 @@
       "hitSeconds": 1.35
     },
     {
+      "defName": "Motion_Knife_Kneel",
+      "anim": "Mixamo/Farming/A_FarmingPlantAPlant",
+      "from": 1.6,
+      "to": 3.3,
+      "hitSeconds": 2.4,
+      "kind": "Attack",
+      "comment": "The knife finisher (sneed 2026-11-22): down on both knees, both hands driven down into the body on the ground. Mixamo Farming 'Plant A Plant': the hands rise to the chest and push down to the ground; blow when they pass the body's top."
+    },
+    {
       "defName": "Motion_Spear_Stab_Low",
       "anim": "Mixamo/Fighting/A_SpearStabLow",
       "kind": "Attack",

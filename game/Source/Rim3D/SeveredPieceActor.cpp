@@ -18,6 +18,7 @@
 
 #include "BloodSubsystem.h"
 #include "GoreCut.h"
+#include "GoreGibActor.h"
 #include "GoreStump.h"
 #include "MakeHumanAnimInstance.h"
 #include "PawnActor.h"
@@ -544,6 +545,17 @@ void ASeveredPieceActor::Tick(float DeltaSeconds)
 
 void ASimPawnActor::ApplySevered(uint16 Bits)
 {
+	// The trunk burst (sneed, 2026-11-22: overkill carries until the corpse is fully gibbed): the body goes a couple of
+	// frames on, after the limbs and head that came off with it have been copied into their pieces from the drawn body.
+	if ((Bits & colony::kSeveredTrunk) != 0 && !bGibHidden && !bGibPending)
+	{
+		bGibPending = true;
+		GibHideFrames = 3;
+	}
+	if (bGibPending && !bGibHidden && --GibHideFrames <= 0)
+	{
+		HideGibbedBody();
+	}
 	const uint16 Fresh = static_cast<uint16>(Bits & ~SeveredShown);
 	if (Fresh == 0)
 	{
@@ -645,6 +657,71 @@ void ASimPawnActor::ApplySevered(uint16 Bits)
 			}
 		}
 	}
+}
+
+void ASimPawnActor::HideGibbedBody()
+{
+	bGibPending = false;
+	bGibHidden = true;
+	// Nothing of it is left to draw, push or stand on: every mesh stops simulating and colliding, and the actor (and its
+	// MetaHuman) is hidden through SetBodyHidden, which keeps it hidden whatever first person or cut-away do later.
+	TInlineComponentArray<UPrimitiveComponent*> Prims;
+	GetComponents(Prims);
+	if (MetaHuman)
+	{
+		TInlineComponentArray<UPrimitiveComponent*> More;
+		MetaHuman->GetComponents(More);
+		Prims.Append(More);
+	}
+	for (UPrimitiveComponent* Prim : Prims)
+	{
+		if (!Prim)
+		{
+			continue;
+		}
+		if (Prim->IsSimulatingPhysics())
+		{
+			Prim->SetSimulatePhysics(false);
+		}
+		Prim->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+	SetBodyHidden(bBodyHidden);
+	UE_LOG(LogTemp, Log, TEXT("Gibs: body %u hidden (trunk burst)"), static_cast<uint32>(entt::to_integral(Thing)));
+}
+
+int32 ASimPawnActor::BurstIntoGibs(float Overkill)
+{
+	if (bGibsBurst || !GetWorld())
+	{
+		return 0;
+	}
+	bGibsBurst = true;
+	// Where the trunk lies now: the ragdoll's pelvis, else the middle of the spine, else a little over the actor.
+	FVector Centre = GetActorLocation() + FVector(0.0, 0.0, 20.0);
+	FVector Pelvis;
+	if (GetRagdollPelvis(Pelvis))
+	{
+		Centre = Pelvis;
+	}
+	const USkeletalMeshComponent* Skin = GetDecalMesh();
+	if (!Skin || Skin->GetBoneIndex(TEXT("spine_02")) == INDEX_NONE)
+	{
+		Skin = Body.Get();
+	}
+	if (Skin && Skin->GetBoneIndex(TEXT("spine_02")) != INDEX_NONE)
+	{
+		Centre = Skin->GetBoneLocation(TEXT("spine_02"), EBoneSpaces::WorldSpace);
+	}
+	// 25 past 0 bursts it: that is strength 1; a rocket's far more throws harder.
+	const float Strength = 0.8f + FMath::Max(Overkill, 0.0f) / 60.0f;
+	GibsThrown = AGoreGibActor::Burst(GetWorld(), Centre, GetBodyScale(), Strength, SeveredSkinColour(*this),
+		static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 977u + 13u), Thing);
+	if (!bGibHidden && !bGibPending)
+	{
+		bGibPending = true;
+		GibHideFrames = 3;
+	}
+	return GibsThrown;
 }
 
 ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)

@@ -47,5 +47,40 @@ the weekly Gemini allowance and 10% of a 5-hour window, an animated one about 3%
   with `<short pause>`, then cut apart by silence (`ffmpeg silencedetect`, -38 dB, 0.25 s). Voice Design and voice
   cloning need a paid API project (not set up). Non-human TTS still sounds like a person imitating a machine.
 - Headless alternative: an API key sneed makes in AI Studio, stored as an environment variable on the PC.
-- Samples so far live on the PC in `Documents\Rimworld3D\ai_studio_sounds\` (not in Git); nothing is wired into the
-  game yet.
+- Samples live on the PC in `Documents\Rimworld3D\ai_studio_sounds\` (not in Git); the cut set is in the game (below).
+
+## Moving parts (in the game, 2026-11-22)
+
+- `tools/codex_prep.py` reads each model's glTF actions. Parts named in `assets/codex_art.json` (`"parts"`) are split
+  off as their own meshes (`<Name>_<Part>_Game.fbx`, pivot at the part's origin, `pivotCm` in `info.json`), and every
+  action is sampled per frame into `Content/Rim3D/Generated/PropAnims/<Name>.json` (not in Git): per clip, per part,
+  keys of location, rotation and scale away from the pose the mesh was baked in, in Unreal's frame (cm).
+- A part that rests shrunk to nothing (the power switch spark) is baked at its biggest pose and kept hidden at rest
+  (scale 0 in `rest`). A part that stays at rest through a clip gets no track there.
+- Buildings: `visual.moving` in the def (`parts` with their meshes, `play` rules). Rules: `always`, `running` (powered,
+  or needs no power), `on` / `off` (the power switch), each `loop`, `hold` (played once and held at the end) or neither (played once, then the next rule takes the part); the first rule whose clip moves a part wins.
+  `BuildingSubsystem` adds a part instance per building and moves it every frame (`AnimateMoving`, like doors);
+  cosmetic only. Sensor cluster: dish scans while running, beacon always blinks. Computer core: Boot once then Idle
+  (fans, crystal, lights) while powered. Hatchery: egg wobbles and lamp glows. Power switch: lever and lamps follow
+  on/off, the spark crackles while on.
+- The **minigun** barrels spin up while firing (5 turns a second, 1 s up, 1.5 s down) in the gun range and in pawns'
+  hands (`spin` on a part in `assets/guns.json`). The LMG's reload and bipod clips are imported but unused (no reloads).
+- The **cowboy hat** is a rigid head prop (`visual.headProp` on `Apparel_CowboyHat`: mesh, `at` cm from the head bone,
+  `yaw`, `scale`), not a cut garment; it hides the scalp hair.
+- Art steps: `codex-models` (prep) then `codex-art` and `gun-art` (GunArt imports), run by `update-and-play.bat`.
+
+## Sounds in the game (2026-11-22)
+
+`tools/neon_sounds.py <sounds folder>` cuts the AI Studio set into committed cue folders (`neon_*.wav`, mono, trimmed,
+peak -1 dB). Picks are by measurement, not by ear (sneed can swap any): cut-off or breath-only takes are left out.
+
+| Cue | Files | From |
+|---|---|---|
+| `Voice_MaleHit` / `Voice_MaleDowned` | 23 / 4 | gruff male takes, split at 0.75 s |
+| `Voice_FemHit` / `Voice_FemDowned` | 19 / 15 | female pain (split at 0.75 s) plus all begging in Downed |
+| `Voice_LovinFem` | 3 | pleasure sounds strung into 28 s takes; lovin only |
+| `Animal_Mech_Idle/Hurt/Death` | 8 / 4 / 2 | the Lyria robot clip (servo steps, two dead stops) |
+| `Animal_Chitinid_Idle/Hurt/Death` | 6 / 5 / 1 | the Lyria insect clip (chitter, hiss, final stop) |
+
+Downed people who are awake beg and groan every 6-14 s (`every` on the cue, `femaleDowned` / `maleDowned` slots);
+mechanoids and chitinids use their own idle, hurt and death cues.

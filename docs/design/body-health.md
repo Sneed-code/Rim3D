@@ -198,6 +198,39 @@ torsos, whole-corpse gibs) was never merged.
   section 9 and hashed), hit after hit, on the living and the dead; a zone that heals back above 0 starts again from
   nothing. Once the body is dead, a zone with a quarter of its hit points piled up comes off: 13 for an arm or the
   head, 19 for a leg, 25 for the torso. So one big killing blow still does it, and so do many knife stabs at a corpse. The torso is the exception (`torsoSingleHit` 1, sneed's pick): it piles up too, but comes apart only from one hit that alone went 25 past 0 (a blast, a huge blow), not from stabs piling up on a chest. **Living limbs** (sneed, 2026-11-20: "i cant seem to dismember anyone - even if i shoot an arm repeatedly"; `livingLimbs` 1): an arm or leg now comes off the living too once a quarter of its hit points has piled up past 0 (13 past 0 for an arm, 19 for a leg); the head and torso still only on the dead (a living head or torso at 0 kills first). **A limb at 0 keeps its hitbox** (sneed, 2026-11-22: "dead body parts accumulate damage so shooting it to do the % will do it"): hit boxes and traces skipped any part at 0 hit points, so once a limb reached 0 the next shots passed through it and the damage past 0 never piled up; now only a part that is really gone (`hasPart` false) has no box. Severed parts are pushed by shots and blows that pass within their reach and thrown by blasts (`ASeveredPieceActor::Push`). **Blasts on corpses** tear: a blast's whole share lands on one part of a corpse that sticks out (a pick on the torso is tried again, up to 8 times) (not split into small fragments that never reached the threshold), and that part's hit points count as gone, so a rocket takes a limb off a corpse; the blast also pushes the corpse (`knockbackMetres` x share; a plain push now moves a body that can't move itself, downed or dead) and Unreal throws its ragdoll with an impulse from the blast's centre (300 to 900 cm/s by radius). Corpses lie still: the ragdoll pauses the body's animation (fingers and toes twitched), turns off soft tissue, gets more damping and is put to sleep once still for half a second.
+  **Overkill kept until it is in pieces** (sneed, 2026-11-22: "if a dismembered corpse is attacked keep overkill
+  damage until it gibs; if the torso is maxed another limb comes off and so forth until none"): on a dead body, what a
+  cut limb had piled past its quarter goes on to the torso's pile, and every quarter of the torso's hit points (25)
+  piled past 0 takes one more piece off: the limb with the most piled on it (the left before the right on a tie),
+  then the head once no limb is left, until only the trunk lies there. One hit 25 past 0 on its own still takes the
+  head and every limb at once. A part that is gone has no hitbox, so later blows land on what is left.
+  **Blasts tear living limbs** (sneed, 2026-11-22: "dismembering seems hard to do even with a rocket"; `blastTear`
+  0.3): a blast's piece that lands on a living arm or leg and does 30% of the zone's hit points (15 for an arm, 23
+  for a leg) tears it off, whole or below the elbow or knee as the part struck says (`HealthSystem::blastTear`); a
+  piece after the one that killed tears like a blast at a corpse. A rocket at someone's feet takes a piece off about
+  every other person (test "Blasts: a rocket at people's feet").
+  **Corpses jolt when hit** (Unreal, `ASimPawnActor::PushRagdollAt`): a shot or blow on a ragdoll knocks the bone it
+  struck along the hit (250 to 900 cm/s by damage, a little up) and wakes the body, which settles and sleeps again.
+  A body killed or knocked out by a blast is thrown by it as it goes limp (`UBlastFxSubsystem::ThrowNewRagdoll`).
+  **The player's swing at nobody** with no living one to take it goes down at a corpse lying within reach before it
+  (`MeleeSystem::corpseAhead`: 60 degrees, the swing's reach plus `corpseReachExtra` 0.6 m), with the downward clip.
+  **The dead are silent**: a shot, blow or torn part on a corpse gives no grunt or hurt cry (`SoundAliveOf`); the
+  killing blow's scream (PawnDied) stays.
+  **Trunks burst** (sneed, 2026-11-22: "keep overkill damage until it gibs ... until none"): once nothing is left on a
+  corpse but the trunk, another quarter of the torso (25) piled past 0 bursts it. One hit that goes far past 0 keeps
+  what went past the quarter that took the head and limbs, so a hit 50 past 0 (a rocket in the chest) takes everything
+  and bursts the trunk at once. In the sim the torso (part 0) is destroyed, so every part is gone: `HealthSystem::gibbed`,
+  SeveredBit `kSeveredTrunk` (with all the others), no hitbox, no more corpse hits; the body stays as a record (who
+  died, what they wore). Events: a PawnPartLost for the torso (the wet tear) and PawnGibbed (`amount` the pile that burst
+  it; three chunk slaps follow). Blows on a zone with nothing left to come off (a shoulder or the neck left after the arm
+  or head went) pile on the trunk instead, so they are never lost. Unreal (`ASimPawnActor::BurstIntoGibs`, `AGoreGibActor`): 22 chunks (`Gore.GibCount`),
+  procedural like the stumps in M_Gore (`GoreMakeGibChunk`): lumps of torn muscle with a patch of skin and fat, curved
+  ribs with meat on them, broken bone shards with marrow at the ends, dark wet lumps; thrown out and up at 1.5 to 4 m/s
+  (harder for more overkill, `Gore.GibSpeed`; most land within 3 m), tumbling, bouncing on the sim's ground and leaving a splat where every
+  other one first lands, with six blast sprays of the body's blood and a heavy one onto where it lay. The body hides a
+  few frames later (after the limbs that came off in the same hit are copied into their pieces), with no collision or
+  physics. Gibs lie 5 minutes like blood (`Gore.GibSeconds`), then shrink away; at most 240 at once (`Gore.GibMax`).
+  Smoke `gore` phases `gibs` and `gibsclose`.
   The struck zone is looked at on every hit; on the blow that kills every other zone too (a leg already battered
   past 0 comes off with the death). After a cut the zone's pile starts again, so a forearm comes off first and the
   rest of the arm later. A corpse that can be cut up (`takesCorpseHits`: a body with zones, not the protagonist)

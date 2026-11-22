@@ -8,6 +8,7 @@
 #include "Components/SceneComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "HAL/PlatformTime.h"
 #include "GameFramework/Pawn.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
@@ -230,6 +231,28 @@ bool UBlastFxSubsystem::EnsureScene()
 // ---------------------------------------------------------------------------
 // Blasts.
 
+bool UBlastFxSubsystem::ThrowNewRagdoll(ASimPawnActor& Actor, double Seconds)
+{
+	if (!Actor.IsRagdoll())
+	{
+		return false;
+	}
+	const double WallNow = FPlatformTime::Seconds();
+	FVector Lying = Actor.GetActorLocation();
+	Actor.GetRagdollPelvis(Lying);
+	for (int32 I = RecentBlasts.Num() - 1; I >= 0; --I)
+	{
+		const FRecentBlast& B = RecentBlasts[I];
+		if (WallNow - B.At <= Seconds && FVector::Dist(Lying, B.Centre) < B.Reach + 100.0)
+		{
+			Actor.PushRagdoll(B.Centre, static_cast<float>(B.Reach + 100.0), B.Speed);
+			++RagdollsThrown;
+			return true;
+		}
+	}
+	return false;
+}
+
 void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 {
 	if (Event.type != colony::EventType::Explosion)
@@ -252,6 +275,10 @@ void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 	{
 		const float Speed = FMath::Clamp(250.0f + 120.0f * RadiusM, 300.0f, 900.0f);
 		const double Reach = RadiusM * 120.0;
+		// Remembered a moment for the bodies it kills: they go limp only when the next snapshot says so.
+		const double WallNow = FPlatformTime::Seconds();
+		RecentBlasts.RemoveAll([WallNow](const FRecentBlast& B) { return WallNow - B.At > 2.0; });
+		RecentBlasts.Add(FRecentBlast{Centre, Reach, Speed, WallNow});
 		if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
 		{
 			for (const TPair<uint32, TObjectPtr<ASimPawnActor>>& Pair : Pawns->GetPawns())
@@ -426,8 +453,9 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 		Flash.Roll = Random.FRandRange(-20.0f, 20.0f);
 		Flash.Tint = BlastSoot;
 	}
-	// The fireball: a few lumps thrown out and up, each a flipbook from white-hot to dark smoke.
-	for (int32 I = 0; I < 5; ++I)
+	// The fireball: a few lumps thrown out and up, each a flipbook from white-hot to dark smoke (seven, so the ball reads
+	// as many billows rather than a few big squares).
+	for (int32 I = 0; I < 7; ++I)
 	{
 		FSprite& Fire = Add(EKind::Fire);
 		const FVector Out = Random.VRand();
@@ -442,7 +470,9 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 		Fire.EndCm = Random.FRandRange(450.0f, 570.0f) * S;
 		Fire.Life = Random.FRandRange(1.3f, 1.8f);
 		Fire.FadeIn = 0.02f;
-		Fire.FireGain = FireGain;
+		// Under full brightness the 512 px billows burned out to flat white with dark holes (PC round 12): a little less, so
+		// the ball reads yellow and orange with its lumps showing (the flash above stays white-hot).
+		Fire.FireGain = FireGain * 0.6f;
 		Fire.Roll = Random.FRandRange(-20.0f, 20.0f);
 		Fire.Spin = Random.FRandRange(-10.0f, 10.0f);
 		Fire.Tint = BlastSoot;
@@ -486,6 +516,35 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 		Dirt.FrameFrom = 0.0f;
 		Dirt.FrameTo = 63.0f;
 		Dirt.Tint = BlastSoil;
+	}
+	// Jets of soil: a cone of dark earth flung up from the crater in streaks, the first thing a ground blast shows past its
+	// flash, which then rains back down (sneed 2026-11-22: make blasts look high quality).
+	const int32 Jets = FMath::Clamp(FMath::RoundToInt(12.0f * Root), 8, 30);
+	for (int32 I = 0; I < Jets; ++I)
+	{
+		const float Angle = Random.FRandRange(0.0f, 2.0f * PI);
+		const float Lean = Random.FRandRange(0.15f, 0.6f);
+		const FVector Dir = FVector(FMath::Cos(Angle) * Lean, FMath::Sin(Angle) * Lean, 1.0f).GetSafeNormal();
+		for (int32 Along = 0; Along < 5; ++Along)
+		{
+			// Five blobs down each jet, the tip fastest, so a jet stretches out into a spray as it flies (PC round 12: three big
+			// blobs flew apart and read as separate puffs in the sky).
+			FSprite& Jet = Add(EKind::Smoke);
+			Jet.Position = Ground + Dir * (15.0f + 10.0f * Along) + FVector(0.0, 0.0, 10.0);
+			Jet.Velocity = Dir * Random.FRandRange(700.0f, 1150.0f) * Root * (1.0f - 0.15f * Along);
+			Jet.Gravity = 980.0f;
+			Jet.Drag = 1.3f;
+			Jet.Wind = 0.3f;
+			Jet.StartCm = (22.0f - 2.5f * Along) * S;
+			Jet.EndCm = Random.FRandRange(90.0f, 140.0f) * S;
+			Jet.Life = Random.FRandRange(1.2f, 2.0f);
+			Jet.FadeIn = 0.02f;
+			Jet.Opacity = 0.85f;
+			Jet.FrameFrom = 2.0f;
+			Jet.FrameTo = 63.0f;
+			Jet.Spin = Random.FRandRange(-40.0f, 40.0f);
+			Jet.Tint = FLinearColor::LerpUsingHSV(BlastSoil, FLinearColor(0.06f, 0.045f, 0.03f), Random.FRand());
+		}
 	}
 	// The shock wave: a ring of dust racing out along the ground and stopping a few metres out.
 	const int32 Ring = FMath::Clamp(FMath::RoundToInt(20.0f * Root), 12, 40);
@@ -594,6 +653,98 @@ void UBlastFxSubsystem::AddScorchForTest(float MapX, float MapY, float RadiusM)
 		return;
 	}
 	SpawnScorch(Source->SimToWorld(MapX, MapY, 0), FVector::UpVector, RadiusM);
+}
+
+void UBlastFxSubsystem::AddTrail(const FVector& At, const FVector& Back, const FString& Kind, float DeltaTime)
+{
+	if (!EnsureScene() || DeltaTime <= 0.0f || Sprites.Num() >= GBlastMaxSprites.GetValueOnGameThread() - 100)
+	{
+		return;
+	}
+	const bool bRocket = Kind == TEXT("rocket");
+	const bool bFlame = Kind == TEXT("flame");
+	// Puffs a second, whatever the frame rate; spread back along the way it came so they don't bunch at the frame's end.
+	const float Rate = bRocket ? 45.0f : (bFlame ? 30.0f : 20.0f);
+	const int32 Count = FMath::Clamp(FMath::FloorToInt32(DeltaTime * Rate + Random.FRand()), 0, 6);
+	const float FireGain = FMath::Max(0.0f, GBlastFireBrightness.GetValueOnGameThread());
+	for (int32 I = 0; I < Count; ++I)
+	{
+		const FVector Where = At + Back * Random.FRandRange(20.0f, 60.0f) + Random.VRand() * 4.0f;
+		if (bFlame)
+		{
+			FSprite& Fire = Add(EKind::Fire);
+			Fire.Position = At + Random.VRand() * 3.0f;
+			Fire.Velocity = FVector(0.0, 0.0, 60.0);
+			Fire.StartCm = 18.0f;
+			Fire.EndCm = 10.0f;
+			Fire.Life = Random.FRandRange(0.15f, 0.25f);
+			Fire.FadeIn = 0.02f;
+			Fire.FrameFrom = 4.0f;
+			Fire.FrameTo = 24.0f;
+			Fire.FireGain = FireGain * 1.3f;
+			Fire.Tint = BlastSoot;
+			continue;
+		}
+		FSprite& Smoke = Add(EKind::Smoke);
+		Smoke.Position = Where;
+		Smoke.Velocity = Random.VRand() * (bRocket ? 40.0f : 15.0f) + FVector(0.0, 0.0, 15.0);
+		Smoke.Drag = 1.5f;
+		Smoke.Gravity = -12.0f;
+		Smoke.Wind = 0.7f;
+		// A flipbook's early cloud fills only about a third of its square: these sizes make a trail about half a metre wide
+		// at once, swelling to a couple of metres (PC round 13: 22 cm puffs were dots at 13 m).
+		Smoke.StartCm = bRocket ? 70.0f : 25.0f;
+		Smoke.EndCm = (bRocket ? Random.FRandRange(280.0f, 380.0f) : Random.FRandRange(90.0f, 140.0f));
+		Smoke.Life = bRocket ? Random.FRandRange(3.0f, 4.2f) : Random.FRandRange(1.0f, 1.6f);
+		Smoke.FadeIn = 0.03f;
+		Smoke.Opacity = bRocket ? 0.7f : 0.45f;
+		Smoke.FrameFrom = 6.0f;
+		Smoke.FrameTo = 63.0f;
+		Smoke.Spin = Random.FRandRange(-20.0f, 20.0f);
+		// Rocket exhaust is pale grey; the first moments glow from the motor.
+		Smoke.Tint = bRocket ? FLinearColor(0.42f, 0.41f, 0.39f) : FLinearColor(0.3f, 0.29f, 0.28f);
+		Smoke.Glow = bRocket ? 0.6f : 0.0f;
+	}
+	if (bRocket)
+	{
+		// The motor's flame: one bright short-lived blob right behind it each frame.
+		FSprite& Fire = Add(EKind::Fire);
+		Fire.Position = At + Back * 18.0f;
+		Fire.StartCm = Random.FRandRange(30.0f, 42.0f);
+		Fire.EndCm = 18.0f;
+		Fire.Life = FMath::Max(DeltaTime * 1.5f, 0.03f);
+		Fire.FadeIn = 0.0f;
+		Fire.FrameFrom = 0.0f;
+		Fire.FrameTo = 4.0f;
+		Fire.FireGain = FireGain * 2.5f;
+		Fire.Roll = Random.FRandRange(-180.0f, 180.0f);
+		Fire.Tint = BlastSoot;
+	}
+}
+
+void UBlastFxSubsystem::AddTrailForTest(const FVector& From, const FVector& To, float Seconds)
+{
+	if (!EnsureScene() || Seconds <= 0.0f)
+	{
+		return;
+	}
+	const FVector Back = (From - To).GetSafeNormal();
+	const int32 Frames = FMath::Max(1, FMath::RoundToInt32(Seconds * 60.0f));
+	for (int32 Frame = 0; Frame < Frames; ++Frame)
+	{
+		const int32 Before = Sprites.Num();
+		const float Born = Seconds * Frame / Frames;
+		AddTrail(FMath::Lerp(From, To, static_cast<float>(Frame) / Frames), Back, TEXT("rocket"), 1.0f / 60.0f);
+		// Aged as if laid down when the rocket passed (the nozzle flames of earlier frames are gone by now).
+		for (int32 I = Before; I < Sprites.Num(); ++I)
+		{
+			Sprites[I].Age = Seconds - Born;
+			if (Sprites[I].Kind == EKind::Fire && Frame < Frames - 1)
+			{
+				Sprites[I].Age = Sprites[I].Life;
+			}
+		}
+	}
 }
 
 void UBlastFxSubsystem::AddDebrisTrail(const FVector& At, float SizeCm)
@@ -713,7 +864,9 @@ void UBlastFxSubsystem::UpdateSprites(float DeltaTime, float Wind)
 				Out[1] = 1.0f;
 				continue;
 			}
-			const float SizeCm = FMath::Lerp(Sprite.StartCm, Sprite.EndCm, 1.0f - FMath::Square(1.0f - T));
+			// The flipbooks' clouds fill less of their square than they used to (they no longer touch its edges): drawn bigger.
+			const float Scale = Sprite.Kind == EKind::Haze ? 1.0f : BlastFxData::SpriteScale;
+			const float SizeCm = FMath::Lerp(Sprite.StartCm, Sprite.EndCm, 1.0f - FMath::Square(1.0f - T)) * Scale;
 			const FQuat Facing = FQuat(ToCamera, FMath::DegreesToRadians(Sprite.Roll)) * FRotationMatrix::MakeFromZX(ToCamera, CameraRight).ToQuat();
 			Transforms.Add(FTransform(Facing, Sprite.Position, FVector(SizeCm / 100.0f, SizeCm / 100.0f, 1.0f)));
 			if (Sprite.Kind == EKind::Haze)

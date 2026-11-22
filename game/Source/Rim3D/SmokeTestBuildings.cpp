@@ -6,6 +6,7 @@
 #include "HAL/IConsoleManager.h"
 
 #include "BuildingSubsystem.h"
+#include "PropAnims.h"
 #include "SimSubsystem.h"
 #include "WreckSubsystem.h"
 
@@ -268,6 +269,42 @@ void USmokeTestSubsystem::BuildBuildingsPhases()
 				}
 			}
 			Notes.Add(FString::Printf(TEXT("buildings_items: %d defs name a mesh, %d found"), Named, Named - Missing.Num()));
+			// Moving parts (visual.moving): each part's mesh is made (codex-art) and the model's clips were read (codex-models).
+			int32 MovingDefs = 0;
+			int32 MovingMeshes = 0;
+			TArray<FString> MovingMissing;
+			for (const colony::DefId Id : Defs.idsOfKind("Things"))
+			{
+				const colony::Def& Def = Defs.get(Id);
+				const size_t PartCount = Def.count("visual.moving.parts");
+				if (PartCount == 0)
+				{
+					continue;
+				}
+				++MovingDefs;
+				const FString SetName = UTF8_TO_TCHAR(Def.text("visual.moving.anims").c_str());
+				if (!PropAnims::Find(SetName))
+				{
+					MovingMissing.Add(SetName + TEXT(" clips"));
+				}
+				for (size_t P = 0; P < PartCount; ++P)
+				{
+					const std::string PartMesh = Def.text(("visual.moving.parts." + std::to_string(P) + ".mesh").c_str());
+					if (StaticLoadObject(UStaticMesh::StaticClass(), nullptr, UTF8_TO_TCHAR(PartMesh.c_str())))
+					{
+						++MovingMeshes;
+					}
+					else
+					{
+						MovingMissing.Add(UTF8_TO_TCHAR(PartMesh.c_str()));
+					}
+				}
+			}
+			Notes.Add(FString::Printf(TEXT("buildings_items: %d defs with moving parts, %d part meshes found"), MovingDefs, MovingMeshes));
+			if (!MovingMissing.IsEmpty())
+			{
+				Fail(FString::Printf(TEXT("buildings_items: moving parts missing %s: run the codex-models and codex-art art steps"), *FString::Join(MovingMissing, TEXT(", "))));
+			}
 			if (!Missing.IsEmpty())
 			{
 				Fail(FString::Printf(TEXT("buildings_items: no mesh for %s: run python tools/placeholder_art.py, then the PlaceholderArt commandlet (assets/manifest.json)"), *FString::Join(Missing, TEXT(", "))));
@@ -749,6 +786,54 @@ void USmokeTestSubsystem::BuildBuildingsPhases()
 		}
 	};
 	Phases.Add(MoveTemp(Wreck));
+
+	// 7b. The Neon models with moving parts stand south of the room (spawned built): the parts are drawn and move; two
+	// pictures a second and a half apart show the dish, lever, fans and egg in different poses.
+	FPhase Moving;
+	Moving.Name = TEXT("buildings_moving");
+	Moving.WarmupSeconds = 2.0f;
+	Moving.MeasureSeconds = 1.0f;
+	Moving.Setup = [=, this]()
+	{
+		USimSubsystem* B = Bridge();
+		UBuildingSubsystem* Buildings = Drawn();
+		if (!B || !Buildings || !State->bRoomFound)
+		{
+			return;
+		}
+		const auto SpawnBuilt = [&](const char* Def, int32 DX)
+		{
+			B->Submit(colony::SpawnThingCommand{Def, Cell(DX, RoomH + 3), 1});
+		};
+		SpawnBuilt("ShipSensorCluster", 0);
+		SpawnBuilt("ShipComputerCore", 3);
+		SpawnBuilt("PowerSwitch", 6);
+		SpawnBuilt("Hatchery", 8);
+		B->StepOnce();
+		Buildings->Refresh();
+		LookAt(Cell(5, RoomH + 3), 10.0, 160.0, 32.0, 0.0, 0.0f, 0.5f);
+	};
+	Moving.Verify = [=, this]()
+	{
+		UBuildingSubsystem* Buildings = Drawn();
+		if (!Buildings || !State->bRoomFound)
+		{
+			return;
+		}
+		Notes.Add(FString::Printf(TEXT("buildings_moving: %d moving parts drawn, %d moved by a clip this frame"), Buildings->GetMovingParts(), Buildings->GetMovingPartsAnimated()));
+		if (Buildings->GetMovingParts() > 0 && Buildings->GetMovingPartsAnimated() == 0)
+		{
+			Fail(TEXT("buildings_moving: moving parts are drawn but no clip moves them (PropAnims files from the codex-models step?)"));
+		}
+	};
+	Phases.Add(MoveTemp(Moving));
+
+	FPhase MovingLater;
+	MovingLater.Name = TEXT("buildings_moving_later");
+	MovingLater.WarmupSeconds = 1.5f;
+	MovingLater.MeasureSeconds = 1.0f;
+	MovingLater.Setup = []() {};
+	Phases.Add(MoveTemp(MovingLater));
 
 	// 8. A new sim wipes the picture.
 	FPhase Fresh;
