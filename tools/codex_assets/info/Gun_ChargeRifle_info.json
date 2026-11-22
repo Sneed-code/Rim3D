@@ -1,0 +1,63 @@
+{
+ "name": "Gun_ChargeRifle",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -29.2,
+   -5.56,
+   -15.06
+  ],
+  "max": [
+   55.8,
+   5.56,
+   16.7
+  ]
+ },
+ "sizeM": [
+  0.85,
+  0.111,
+  0.318
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -29.2,
+     -5.56,
+     -15.06
+    ],
+    "max": [
+     55.8,
+     5.56,
+     16.7
+    ]
+   },
+   "tris": 14190
+  }
+ },
+ "sockets": {
+  "Muzzle": [
+   55.8,
+   -0.0,
+   5.2
+  ]
+ },
+ "slots": {
+  "Gun_ChargeRifle_0": {
+   "from": "Charge rifle \u2022 PBR atlas",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  },
+  "Gun_ChargeRifle_1": {
+   "from": "Charge rifle \u2022 Tinted polymer",
+   "maps": [
+    "baseColor"
+   ]
+  }
+ }
+}

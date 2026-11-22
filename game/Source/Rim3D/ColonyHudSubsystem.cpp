@@ -965,6 +965,9 @@ void UColonyHudSubsystem::DrawDateBox(USimSubsystem& Bridge, float Scale)
 			}
 			ColonyHud::Tip(TEXT("Look at the level below (Page Down)"));
 		}
+		// Boxes that stack above it (key hints, the overlay ticks, the visitors) read this next frame.
+		ColonyHud::DateBoxTop() = ImGui::GetWindowPos().y;
+		ColonyHud::DateBoxLeft() = ImGui::GetWindowPos().x;
 	}
 	ImGui::End();
 }

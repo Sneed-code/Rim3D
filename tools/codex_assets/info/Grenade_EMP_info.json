@@ -1,0 +1,51 @@
+{
+ "name": "Grenade_EMP",
+ "kind": "item",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -3.39,
+   -3.18,
+   0.0
+  ],
+  "max": [
+   3.39,
+   3.18,
+   11.87
+  ]
+ },
+ "sizeM": [
+  0.068,
+  0.064,
+  0.119
+ ],
+ "parts": {
+  "Grenade_EMP": {
+   "boundsCm": {
+    "min": [
+     -3.39,
+     -3.18,
+     0.0
+    ],
+    "max": [
+     3.39,
+     3.18,
+     11.87
+    ]
+   },
+   "tris": 2992
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "Grenade_EMP": {
+   "from": "Grenade EMP | Weathered alloy",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

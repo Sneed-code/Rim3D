@@ -1,0 +1,56 @@
+{
+ "name": "Gun_MachinePistol",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -8.7,
+   -3.04,
+   -14.3
+  ],
+  "max": [
+   21.3,
+   4.7,
+   13.66
+  ]
+ },
+ "sizeM": [
+  0.3,
+  0.077,
+  0.28
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -8.7,
+     -3.04,
+     -14.3
+    ],
+    "max": [
+     21.3,
+     4.7,
+     13.66
+    ]
+   },
+   "tris": 5364
+  }
+ },
+ "sockets": {
+  "Muzzle": [
+   21.3,
+   -0.0,
+   7.9
+  ]
+ },
+ "slots": {
+  "Gun_MachinePistol": {
+   "from": "Receiver, steel and polymer",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

@@ -283,9 +283,33 @@ namespace ColonyHud
 		return Viewport->Pos.y + Viewport->Size.y - BarHeight(Scale) - 6.0f * Scale;
 	}
 
-	/** Space the date and weather box takes above the bar's right end (two lines and padding). */
+	/** The date box's top edge as it was last drawn (screen pixels), or a negative number before the first draw. */
+	inline float& DateBoxTop()
+	{
+		static float Top = -1.0f;
+		return Top;
+	}
+
+	/** The date box's left edge as it was last drawn, or a negative number before the first draw. */
+	inline float& DateBoxLeft()
+	{
+		static float Left = -1.0f;
+		return Left;
+	}
+
+	/**
+	 * Space the date and weather box takes above the bar's right end, with a small gap: measured from where it was last
+	 * drawn (its rows change: Step one second shows only while paused), else its three rows (time large, date, the level
+	 * row of small buttons) and padding.
+	 */
 	inline float DateBoxHeight(float Scale)
 	{
-		return 2.0f * ImGui::GetTextLineHeightWithSpacing() + 2.0f * ImGui::GetStyle().WindowPadding.y + 6.0f * Scale;
+		const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+		if (DateBoxTop() > 0.0f && Viewport)
+		{
+			return FMath::Max(0.0f, AboveBar(Viewport, Scale) - DateBoxTop()) + 6.0f * Scale;
+		}
+		return 1.3f * ImGui::GetTextLineHeightWithSpacing() + ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() +
+			2.0f * ImGui::GetStyle().WindowPadding.y + 6.0f * Scale;
 	}
 }

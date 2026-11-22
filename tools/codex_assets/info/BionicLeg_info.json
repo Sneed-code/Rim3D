@@ -1,0 +1,51 @@
+{
+ "name": "BionicLeg",
+ "kind": "item",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -51.72,
+   -12.99,
+   0.0
+  ],
+  "max": [
+   51.72,
+   12.99,
+   19.12
+  ]
+ },
+ "sizeM": [
+  1.034,
+  0.26,
+  0.191
+ ],
+ "parts": {
+  "BionicLeg": {
+   "boundsCm": {
+    "min": [
+     -51.72,
+     -12.99,
+     0.0
+    ],
+    "max": [
+     51.72,
+     12.99,
+     19.12
+    ]
+   },
+   "tris": 11944
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "BionicLeg": {
+   "from": "BionicLeg",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

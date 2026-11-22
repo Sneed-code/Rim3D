@@ -465,6 +465,132 @@
   },
   "Melee_BreachAxe": {
    "kind": "gun"
+  },
+  "DoubleBed": {
+   "kind": "building",
+   "def": "DoubleBed",
+   "size": [
+    2,
+    2,
+    1.0
+   ]
+  },
+  "FlatscreenTelevision": {
+   "kind": "building",
+   "def": "FlatscreenTelevision",
+   "size": [
+    1.9,
+    0.5,
+    1.3
+   ]
+  },
+  "TrapSpike": {
+   "kind": "building",
+   "def": "TrapSpike",
+   "size": [
+    1,
+    1,
+    0.25
+   ]
+  },
+  "ShipEngine": {
+   "kind": "building",
+   "def": "ShipEngine",
+   "size": [
+    3,
+    4,
+    3.2
+   ]
+  },
+  "ShipReactor": {
+   "kind": "building",
+   "def": "ShipReactor",
+   "size": [
+    6,
+    7,
+    4.0
+   ]
+  },
+  "Sandbags": {
+   "kind": "building",
+   "def": "Sandbags",
+   "size": [
+    1,
+    0.55,
+    0.75
+   ]
+  },
+  "Barricade": {
+   "kind": "building",
+   "def": "Barricade",
+   "size": [
+    1,
+    0.4,
+    1.0
+   ]
+  },
+  "BionicLeg": {
+   "kind": "item",
+   "def": "BionicLeg",
+   "size": [
+    1.0,
+    0.2,
+    0.15
+   ]
+  },
+  "Grenade_EMP": {
+   "kind": "item",
+   "def": "Grenade_EMP",
+   "size": [
+    0.06,
+    0.06,
+    0.12
+   ]
+  },
+  "MedicineIndustrial": {
+   "kind": "item",
+   "def": "MedicineIndustrial",
+   "size": [
+    0.3,
+    0.2,
+    0.15
+   ]
+  },
+  "Gun_ChainShotgun": {
+   "kind": "gun"
+  },
+  "Gun_ChargeRifle": {
+   "kind": "gun"
+  },
+  "Gun_HeavySMG": {
+   "kind": "gun"
+  },
+  "Gun_MachinePistol": {
+   "kind": "gun"
+  },
+  "Gun_RecurveBow": {
+   "kind": "gun"
+  },
+  "Gun_Revolver": {
+   "kind": "gun"
+  },
+  "Gun_SniperRifle": {
+   "kind": "gun"
+  },
+  "Gun_ChargeLance": {
+   "kind": "gun"
+  },
+  "Gun_NeedleGun": {
+   "kind": "gun"
+  },
+  "Vent": {
+   "kind": "building",
+   "def": "Vent",
+   "size": [
+    0.8,
+    0.5,
+    0.6
+   ]
   }
  },
  "buildings": [
@@ -964,6 +1090,156 @@
     "fbx": "assets/raw/codex/AnimalBed/AnimalBed_Game.fbx",
     "combine": true,
     "slotTextureDir": "assets/raw/codex/AnimalBed",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Shell_HighExplosive",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Shell_HighExplosive",
+    "fbx": "assets/raw/codex/Shell_HighExplosive/Shell_HighExplosive_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Shell_HighExplosive",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ComponentSpacer",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ComponentSpacer",
+    "fbx": "assets/raw/codex/ComponentSpacer/ComponentSpacer_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ComponentSpacer",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "BionicArm",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "BionicArm",
+    "fbx": "assets/raw/codex/BionicArm/BionicArm_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/BionicArm",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "DoubleBed",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "DoubleBed",
+    "fbx": "assets/raw/codex/DoubleBed/DoubleBed_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/DoubleBed",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "FlatscreenTelevision",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "FlatscreenTelevision",
+    "fbx": "assets/raw/codex/FlatscreenTelevision/FlatscreenTelevision_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/FlatscreenTelevision",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "TrapSpike",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "TrapSpike",
+    "fbx": "assets/raw/codex/TrapSpike/TrapSpike_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/TrapSpike",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ShipEngine",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ShipEngine",
+    "fbx": "assets/raw/codex/ShipEngine/ShipEngine_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ShipEngine",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "ShipReactor",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ShipReactor",
+    "fbx": "assets/raw/codex/ShipReactor/ShipReactor_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ShipReactor",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "Sandbags",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Sandbags",
+    "fbx": "assets/raw/codex/Sandbags/Sandbags_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Sandbags",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Barricade",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Barricade",
+    "fbx": "assets/raw/codex/Barricade/Barricade_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Barricade",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "BionicLeg",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "BionicLeg",
+    "fbx": "assets/raw/codex/BionicLeg/BionicLeg_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/BionicLeg",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "Grenade_EMP",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Grenade_EMP",
+    "fbx": "assets/raw/codex/Grenade_EMP/Grenade_EMP_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Grenade_EMP",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "MedicineIndustrial",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "MedicineIndustrial",
+    "fbx": "assets/raw/codex/MedicineIndustrial/MedicineIndustrial_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/MedicineIndustrial",
     "normalOpenGL": true
    }
   }
