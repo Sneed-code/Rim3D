@@ -1,0 +1,17 @@
+﻿Running smoke test 'hurt' at 1920x1080...
+
+Smoke test 'hurt': PASS  (79 s, NVIDIA GeForce RTX 5080, 888x500)
+setup                        91.3 fps  game   4.3 ms  render   4.5 ms  gpu   3.1 ms  screenshot ok
+dirt                        195.6 fps  game   3.6 ms  render   4.9 ms  gpu   3.7 ms  screenshot ok
+wobble                      224.5 fps  game   3.5 ms  render   4.4 ms  gpu   3.2 ms  screenshot ok
+limp                        208.7 fps  game   4.4 ms  render   4.7 ms  gpu   3.2 ms  screenshot ok
+patch                       210.6 fps  game   4.2 ms  render   4.6 ms  gpu   3.2 ms  screenshot ok
+crawl                       207.9 fps  game   4.1 ms  render   4.7 ms  gpu   3.2 ms  screenshot ok
+dismember                   110.0 fps  game   5.8 ms  render   8.7 ms  gpu   7.3 ms  screenshot ok
+note: wobble: 6 hits, one a zone; bent 26.8 degrees at most, 0.00 at the end; the animation underneath changed 0 times 
+(idle variety only)
+note: limp: left leg at 60%, walked 1400 cm, leaned over it up to 0.50 of the full limp
+note: patch: patched by itself, the body bent over the wound
+note: crawl: downed by the torso after 3 blows; crawl clip playing (played 1 times)
+note: dismember: head and four limbs off a real, dressed body; 5 pieces thrown, 19 meshes in them, 5 at rest
+Screenshots: C:\Dev\Rim3D-gunhits\game\Saved\Smoke\hurt
