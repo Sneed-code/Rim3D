@@ -378,8 +378,37 @@ void USmokeTestSubsystem::BuildAnimalsPhases()
 			}
 			Notes.Add(FString::Printf(TEXT("animals_new: %d models loaded; lengths:%s"), Animals->GetModelsLoaded(), *Lengths));
 		}
-		AnimalSmokeSetDistance(TEXT("Sky.Hour"), -1.0f);
-		AnimalSmokeSetDistance(TEXT("Sky.DayOfYear"), -1.0f);
 	};
 	Phases.Add(MoveTemp(Batch));
+
+	// 5. One picture of each animal of the batch, close up from its side (phases animal_<def>), so each model's look,
+	// size and facing can be checked on its own.
+	const auto AddCloseUp = [=, this](const TCHAR* Def, float CellX, float CellY, float DistanceCm)
+	{
+		FPhase One;
+		One.Name = FString::Printf(TEXT("animal_%s"), Def);
+		One.WarmupSeconds = 0.5f;
+		One.MeasureSeconds = 0.5f;
+		One.Setup = [=, this]()
+		{
+			USimSubsystem* B = Bridge();
+			if (!B || !B->GetSim())
+			{
+				return;
+			}
+			const colony::CellPos M = Middle();
+			const FVector Target = B->SimToWorld(M.x + CellX, M.y + CellY, 0) + FVector(0.0, 0.0, DistanceCm * 0.12);
+			const FVector From = Target + FVector(DistanceCm * 0.85, -DistanceCm * 0.45, DistanceCm * 0.3);
+			ViewFrom(From, (Target - From).Rotation());
+		};
+		Phases.Add(MoveTemp(One));
+	};
+	for (int32 Index = 0; Index < static_cast<int32>(UE_ARRAY_COUNT(AnimalSmokeNewBigDefs)); ++Index)
+	{
+		AddCloseUp(AnimalSmokeNewBigDefs[Index], 26.0f, -20.0f + Index * 4.0f, 900.0f);
+	}
+	for (int32 Index = 0; Index < static_cast<int32>(UE_ARRAY_COUNT(AnimalSmokeNewSmallDefs)); ++Index)
+	{
+		AddCloseUp(AnimalSmokeNewSmallDefs[Index], 31.0f, -18.0f + Index * 4.0f, 450.0f);
+	}
 }
