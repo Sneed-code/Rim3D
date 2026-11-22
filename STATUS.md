@@ -5,7 +5,7 @@ Updated 2026-11-22.
 The 18 missing animals and the giant insects (sneed, 2026-11-22; data and Unreal, `assets/animal_art.json`): 18 animal
 defs and the 3 chitinids had no model and were drawn as the husky. Each now has a free, rigged, animated Sketchfab model
 (`assets/manifest.json`, batch 2), mostly WildMesh 3D's realistic ones: grizzly and polar bear (bear, 81 clips), caribou
-(elk), gazelle (doe), goat (mountain goat), sheep (bighorn), muskox and yak (buffalo), goose and duck (goose), chicken and
+and gazelle (doe; the elk file draws a giant see-through part, so it waits), goat (mountain goat), sheep (bighorn), muskox and yak (buffalo), goose and duck (goose), chicken and
 ostrich (guineafowl), turkey, dromedary (camel), arctic fox (fox), capybara and iguana (tropical), brood scarab and brood
 delver (rhino beetle), giant spider (wolf spider). Arctic wolf uses the timber wolf's model. Lookalikes are marked
 `stand_in` until a closer free model turns up. Sketchfab had no free realistic chicken, duck, ostrich, muskox or yak.
@@ -13,7 +13,8 @@ delver (rhino beetle), giant spider (wolf spider). Arctic wolf uses the timber w
 (bear, elk, doe, turkey, spider, iguana) are Sketchfab FBX conversions whose mesh is in another unit than its
 animation (they drew 100 times too big or too small), so `"fit": "pose"` sizes them on their skeleton in the idle pose. Smoke `animals` has
 a new phase `animals_new` that fails if any of these is still the husky. The 4 mechanoids are drawn as people, not as
-the husky, and are left for a later task. **Next:** PC import and pictures.
+the husky, and are left for a later task. **Next:** PC check that the giant see-through creature in the `animals_new` picture is gone (likely the elk's extra part),
+then merge and update the game.
 
 Hair no longer through the body or clothes (sneed, 2026-11-22; hair tools and Unreal, `docs/design/hair-physics.md`
 "A shell with no gaps"): long strand hair still went into the back and through the shirt. Measured: between the old
