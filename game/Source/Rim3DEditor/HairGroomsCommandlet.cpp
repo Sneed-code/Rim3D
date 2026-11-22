@@ -71,6 +71,22 @@ namespace
 		return End != nullptr;
 	}
 
+	/** Sets part of one hair group's physics by text (only the fields named change), and logs what it became. */
+	bool GroomsPhysicsSet(FHairGroupsPhysics& Physics, const TCHAR* Field, const TCHAR* Text)
+	{
+		FProperty* Prop = FHairGroupsPhysics::StaticStruct()->FindPropertyByName(Field);
+		if (!Prop)
+		{
+			UE_LOG(LogHairGrooms, Warning, TEXT("  hair physics has no field %s"), Field);
+			return false;
+		}
+		const TCHAR* End = Prop->ImportText_InContainer(Text, &Physics, nullptr, PPF_None);
+		FString Now;
+		Prop->ExportTextItem_InContainer(Now, &Physics, nullptr, nullptr, PPF_None);
+		UE_LOG(LogHairGrooms, Display, TEXT("  physics %s = %s%s, now %s"), Field, Text, End ? TEXT("") : TEXT(" (NOT taken)"), *Now);
+		return End != nullptr;
+	}
+
 	UGroomAsset* GroomsImport(const FString& File, const FString& Name)
 	{
 		UClass* FactoryClass = GroomsFindClass(TEXT("HairStrandsFactory"));
@@ -137,8 +153,11 @@ namespace
 		{
 			return false;
 		}
-		// Guides for the physics, made from the strands (the file has none): one strand in 40 drives its neighbours.
-		GroomsSet(Groom, TEXT("HairGroupsInterpolation"), TEXT("((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.025)))"));
+		// Guides for the physics, made from the strands (the file has none): one strand in 20 drives its neighbours, and
+		// each strand follows its one nearest guide. Blended between guides, a strand whose guides lay either side of the
+		// body (one over the shoulder, one down the back) was drawn straight through the chest (PC 2026-11-22, #450).
+		GroomsSet(Groom, TEXT("HairGroupsInterpolation"),
+			TEXT("((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05,bUseUniqueGuide=True)))"));
 		// Full strands near; further off a second LOD with a third of the strands, a little thicker so it stays as full.
 		GroomsSet(Groom, TEXT("HairGroupsLOD"),
 			TEXT("((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),")
@@ -166,6 +185,11 @@ namespace
 			// collision shell while the body turned on the spot mid-walk (PC, 2026-11-22) and end up in front or inside.
 			Physics.SolverSettings.SubSteps = 10;
 			Physics.SolverSettings.IterationCount = 10;
+			// 32 points along each guide (Unreal's default is 8): the solver only keeps its points out of the collision
+			// shapes, and on waist-long hair 8 points are 10 cm apart, so the straight pieces between them cut into the
+			// back as it turns (PC 2026-11-22, #450). 32 makes them about 2.5 cm. Set by text so a renamed field is a
+			// log line, not a broken build.
+			GroomsPhysicsSet(Physics, TEXT("StrandsParameters"), TEXT("(StrandsSize=Size32)"));
 		}
 		Groom->PostEditChange();
 		UE_LOG(LogHairGrooms, Display, TEXT("Groom %s from %s: %d groups, %d materials, physics %s"), *Groom->GetName(), *File, Groom->GetNumHairGroups(),

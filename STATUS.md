@@ -27,8 +27,12 @@ the game grows each one under a worn garment out to just past the cloth and its 
 change). `-CreatorStrandDemo` takes the pictures (behind and side; standing, rifle aim, sword, shadowbox, walk, shapes
 drawn). Capsules also fill the body's core, and the hair physics takes 10 steps (was 5). PC (4 rounds): dressed hair
 stays on the clothes in every pose; nude hair lies on the back standing, aiming, swinging and boxing. Needs the
-`hair-grow` and `hair-grooms` art steps (run by `update-and-play.bat`). **Still open:** right after a fast 180-degree
-turn on the spot, nude long hair dips into the back for a moment, then comes back out.
+`hair-grow` and `hair-grooms` art steps (run by `update-and-play.bat`). Quick turns (2026-11-22): right after
+a fast turn, nude long hair went into the back for a moment. Slower turns and holding the hair still did not help (PC);
+seen from above, the hair's physics only kept 8 points per strand out of the body, 10 cm apart on long hair. Now 32
+points and twice the guide strands, each strand following one (`HairGroomsCommandlet`, reruns the `hair-grooms` step),
+a frame hitch no longer lands a whole turn in one frame, and through fast turns and hitches the hair is held at its
+resting shape (which lies clear of the body) and swings freely again after. **Next:** PC walk-turn frames.
 
 In-game UI in the Canopy look (sneed, 2026-11-22: "make the actual game's UI ... high quality, well made",
 `docs/design/ui-layout.md`): every in-game box now matches the title and new-game screens: dark green-black glass, square
