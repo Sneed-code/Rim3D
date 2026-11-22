@@ -1,0 +1,1 @@
+{"name":"CowboyHat","kind":"item","turned":"none","boundsCm":{"min":[-16.4,-19.08,0.0],"max":[16.4,19.08,13.89]},"sizeM":[0.328,0.382,0.139],"parts":{"CowboyHat":{"boundsCm":{"min":[-16.4,-19.08,0.0],"max":[16.4,19.08,13.89]},"tris":5892}},"sockets":{},"slots":{"CowboyHat":{"from":"M_CowboyHat","maps":["baseColor","normal","orm"]}}}
