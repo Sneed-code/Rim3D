@@ -24,6 +24,7 @@
 #include "SimSubsystem.h"
 #include "WeaponDrawSubsystem.h"
 
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Cover.h"
