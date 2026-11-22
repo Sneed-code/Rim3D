@@ -1,0 +1,60 @@
+﻿Running smoke test 'finishers' at 1920x1080...
+
+Smoke test 'finishers': PASS  (93 s, NVIDIA GeForce RTX 5080, 888x500)
+setup                        55.0 fps  game   5.1 ms  render   6.8 ms  gpu   5.2 ms  screenshot ok
+finisher_spear               88.3 fps  game   6.6 ms  render   9.3 ms  gpu   7.2 ms  screenshot ok
+finisher_club                82.5 fps  game   7.0 ms  render   9.9 ms  gpu   7.9 ms  screenshot ok
+finisher_gladius             93.2 fps  game   5.6 ms  render   9.1 ms  gpu   7.4 ms  screenshot ok
+finisher_longsword          119.4 fps  game   5.1 ms  render   8.1 ms  gpu   6.5 ms  screenshot ok
+finisher_knife              106.3 fps  game   5.4 ms  render   9.1 ms  gpu   7.3 ms  screenshot ok
+tab_run                     105.7 fps  game   5.8 ms  render   9.2 ms  gpu   7.5 ms  screenshot ok
+aim3p                       118.1 fps  game   4.7 ms  render   8.0 ms  gpu   6.4 ms  screenshot ok
+swap_prone                  134.4 fps  game   4.4 ms  render   7.2 ms  gpu   5.5 ms  screenshot ok
+swap_crouch                 137.6 fps  game   3.9 ms  render   7.1 ms  gpu   5.4 ms  screenshot ok
+note: finisher_spear: 139 finisher frames, got to T 1.00, tip 2 cm from its goal at the strike, kneel no, worst grip 
+gap 23 cm, 0 float fixes, 1 hits
+note: finisher_spear: weapon hold at the start [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 3, pinned 1, aim 0.00, hand free 0.00, finisher blend 0.35], at the strike [show 1 hands 1 standing 1 hold 1 
+inhand 1.00 places 1 force 0.00 finisher 3, pinned 1, aim 0.00, hand free 0.00, finisher blend 1.00], pulled back 0 cm 
+to stay in reach, 1 attack orders
+note: finisher_club: 127 finisher frames, got to T 1.00, tip 6 cm from its goal at the strike, kneel yes, worst grip 
+gap 47 cm, 0 float fixes, 1 hits
+note: finisher_club: weapon hold at the start [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 1, pinned 1, aim 0.00, hand free 0.00, finisher blend 0.38], at the strike [show 1 hands 1 standing 1 hold 1 
+inhand 1.00 places 1 force 0.00 finisher 1, pinned 1, aim 0.00, hand free 0.00, finisher blend 1.00], pulled back 3 cm 
+to stay in reach, 1 attack orders
+note: finisher_gladius: 146 finisher frames, got to T 1.00, tip 9 cm from its goal at the strike, kneel yes, worst 
+grip gap 28 cm, 0 float fixes, 1 hits
+note: finisher_gladius: weapon hold at the start [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 4, pinned 1, aim 0.00, hand free 0.00, finisher blend 0.32], at the strike [show 1 hands 1 standing 1 hold 1 
+inhand 1.00 places 1 force 0.00 finisher 4, pinned 1, aim 0.00, hand free 0.00, finisher blend 1.00], pulled back 0 cm 
+to stay in reach, 1 attack orders
+note: finisher_longsword: 209 finisher frames, got to T 1.00, tip 9 cm from its goal at the strike, kneel no, worst 
+grip gap 51 cm, 0 float fixes, 1 hits
+note: finisher_longsword: weapon hold at the start [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 5, pinned 1, aim 0.00, hand free 0.00, finisher blend 0.32], at the strike [show 1 hands 1 standing 1 hold 1 
+inhand 1.00 places 1 force 0.00 finisher 5, pinned 1, aim 0.00, hand free 0.00, finisher blend 1.00], pulled back 0 cm 
+to stay in reach, 1 attack orders
+note: finisher_knife: 146 finisher frames, got to T 1.00, tip 4 cm from its goal at the strike, kneel yes, worst grip 
+gap 27 cm, 0 float fixes, 1 hits
+note: finisher_knife: weapon hold at the start [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 2, pinned 1, aim 0.00, hand free 0.00, finisher blend 0.42], at the strike [show 1 hands 1 standing 1 hold 1 
+inhand 1.00 places 1 force 0.00 finisher 2, pinned 1, aim 0.00, hand free 0.00, finisher blend 1.00], pulled back 3 cm 
+to stay in reach, 1 attack orders
+note: tab_run: 6.0 m/s before the first Tab, 3 Tabs, 3 different lock-on targets in turn, slowest 3.9 m/s after a Tab, 
+keyboard focus stayed on the game
+note: aim3p frame 1: rifle 0.7 degrees off (forward V(X=0.75, Y=0.65, Z=-0.13), to the aim V(X=0.75, Y=0.65, Z=-0.11), 
+aim point 11 m away), aim blend 1.00, hold [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 finisher 
+0, pinned 1, aim 1.00, hand free 0.00, finisher blend 0.00]
+note: aim3p frame 61: rifle 0.7 degrees off (forward V(X=0.75, Y=0.65, Z=-0.13), to the aim V(X=0.75, Y=0.66, 
+Z=-0.12), aim point 11 m away), aim blend 1.00, hold [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 0, pinned 1, aim 1.00, hand free 0.00, finisher blend 0.00]
+note: aim3p frame 121: rifle 0.7 degrees off (forward V(X=0.74, Y=0.66, Z=-0.13), to the aim V(X=0.74, Y=0.66, 
+Z=-0.12), aim point 11 m away), aim blend 1.00, hold [show 1 hands 1 standing 1 hold 1 inhand 1.00 places 1 force 0.00 
+finisher 0, pinned 1, aim 1.00, hand free 0.00, finisher blend 0.00]
+note: aim3p: 178 frames, rifle at most 0.7 degrees off the crosshair, body at most 0.0 degrees off the camera
+note: swap_prone: 7 keys sent, weapon in hands yes, worst grip gap 5 cm once down, float fixes 0 once down (0 over the 
+whole sequence)
+note: swap_crouch: 7 keys sent, weapon in hands yes, worst grip gap 5 cm once down, float fixes 0 once down (0 over 
+the whole sequence)
+Screenshots: C:\Dev\Rim3D-gunhits\game\Saved\Smoke\finishers

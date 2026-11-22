@@ -1,0 +1,36 @@
+﻿Running smoke test 'melee' at 1920x1080...
+
+Smoke test 'melee': PASS  (89 s, NVIDIA GeForce RTX 5080, 888x500)
+setup                        81.5 fps  game   4.7 ms  render   4.4 ms  gpu   3.0 ms  screenshot ok
+holsters                    204.9 fps  game   4.1 ms  render   4.6 ms  gpu   3.1 ms  screenshot ok
+switch_key                  203.6 fps  game   4.2 ms  render   4.7 ms  gpu   3.1 ms  screenshot ok
+switch_frozen               205.4 fps  game   4.1 ms  render   4.7 ms  gpu   3.2 ms  screenshot ok
+draw_melee                  200.5 fps  game   4.2 ms  render   4.7 ms  gpu   3.1 ms  screenshot ok
+swing_windup                209.2 fps  game   4.2 ms  render   4.6 ms  gpu   2.9 ms  screenshot ok
+swing_blow                  194.5 fps  game   4.5 ms  render   4.8 ms  gpu   3.0 ms  screenshot ok
+swing_flow                  167.0 fps  game   5.4 ms  render   4.4 ms  gpu   3.2 ms  screenshot ok
+focus                       170.5 fps  game   5.3 ms  render   4.8 ms  gpu   3.2 ms  screenshot ok
+block                       184.1 fps  game   4.5 ms  render   4.9 ms  gpu   3.3 ms  screenshot ok
+duel                        144.8 fps  game   5.2 ms  render   4.7 ms  gpu   3.3 ms  screenshot ok
+shield                       94.5 fps  game   5.5 ms  render   9.9 ms  gpu   6.7 ms  screenshot ok
+note: switch_key: a 17 step switch; the rifle went 58 cm from the hand, the revolver 47 cm from its holster
+note: switch_frozen: stopped with the rifle 25 cm from the hand and 26 cm from the back
+note: swing_windup: stopped in the attack clip 0.15 s before its blow, right hand 126 cm up
+note: swing_blow: stopped on the blow, the attack clip 0.04 s from its own blow, right hand 121 cm up, enemy flinches 1
+note: swing_flow: 6 swings, 6 hits, 6 on time, 0 late, 0 with no swing on screen, 6 hit-stops, enemy flinched 14 
+times, body bent up to 0 degrees, right hand moved up to 109 cm (attack clips)
+note: focus: locked on, bar drawn 515 frames, body 0 degrees off, enemy worst part 100%
+note: block: the blade is across the chest at X=31.000 Y=0.000 Z=118.000
+note: duel: 53 swings, 32 hits, 7 blocked, 0 deflected, 5 dodged, 9 missed; 4 sidesteps (4 played), 11 raised weapons, 
+39 hit-stops
+note: shield: materials [0] Wood_worn_surface_003 (parent MI_Default_Opaque_DS, base M_Default) colour map 
+Wood_baked_wear_Medium, colour (R=1.000000,G=1.000000,B=1.000000,A=1.000000), metallic 0.00, roughness 0.82; [1] 
+Dark_iron_001 (parent MI_Default_Opaque_DS, base M_Default) colour map T_White_srgb, colour 
+(R=0.105000,G=0.115000,B=0.112000,A=1.000000), metallic 0.80, roughness 0.43; [2] Polished_edge_wear_001 (parent 
+MI_Default_Opaque_DS, base M_Default) colour map T_White_srgb, colour (R=0.420000,G=0.400000,B=0.340000,A=1.000000), 
+metallic 0.80, roughness 0.28; [3] Worn_leather_001 (parent MI_Default_Opaque_DS, base M_Default) colour map 
+T_White_srgb, colour (R=0.130000,G=0.075000,B=0.038000,A=1.000000), metallic 0.00, roughness 0.80
+note: shield: drawn as model SM_Shield_Wood_Medium, 19 x 62 x 77 cm
+note: shield: raised at X=45.529 Y=4.437 Z=133.899 on average over 731 frames (top 167.4), 5 blows on the shield, 8 
+sparks, 10 commands
+Screenshots: C:\Dev\Rim3D-climb\game\Saved\Smoke\melee
