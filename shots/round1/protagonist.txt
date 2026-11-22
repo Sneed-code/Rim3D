@@ -1,0 +1,19 @@
+﻿Running smoke test 'protagonist' at 1920x1080...
+
+Smoke test 'protagonist': FAIL  (34 s, NVIDIA GeForce RTX 5080, 888x500)
+overseer_view               119.4 fps  game   4.6 ms  render   4.5 ms  gpu   2.4 ms  screenshot ok
+direct_possess              206.0 fps  game   4.0 ms  render   4.4 ms  gpu   3.0 ms  screenshot ok
+direct_walk_third_person    200.2 fps  game   4.6 ms  render   4.3 ms  gpu   3.1 ms  screenshot ok
+direct_wall                 167.4 fps  game   4.5 ms  render   4.4 ms  gpu   3.0 ms  screenshot ok
+direct_third_person_only    161.7 fps  game   4.4 ms  render   5.0 ms  gpu   3.1 ms  screenshot ok
+direct_pause_and_speed       89.8 fps  game   8.1 ms  render   6.7 ms  gpu   2.9 ms  screenshot ok
+direct_save_and_load        154.3 fps  game   5.1 ms  render   5.0 ms  gpu   2.7 ms  screenshot ok
+back_to_overseer             93.5 fps  game   8.5 ms  render   6.4 ms  gpu   2.5 ms  screenshot ok
+note: walked 17.6 m in 5 s at an average of 3.17 m/s; the local position was at most 0.21 m from the sim and the drawn 
+pawn at most 13 cm
+note: stopped at x 89.70 by a wall at 90, then slid 6.2 m along it
+note: the session's 610 commands replay to the same state at second 765
+ERROR: Aimed at a colonist but the crosshair does not find it
+ERROR: Taking the protagonist back did not work
+ERROR: Taking over three times should log three ControlPawn commands
+Screenshots: C:\Dev\Rim3D-gunhits\game\Saved\Smoke\protagonist

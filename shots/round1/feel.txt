@@ -1,0 +1,33 @@
+﻿Running smoke test 'feel' at 1920x1080...
+
+Smoke test 'feel': FAIL  (65 s, NVIDIA GeForce RTX 5080, 888x500)
+feel_setup                  109.4 fps  game   4.6 ms  render   5.5 ms  gpu   3.8 ms  screenshot ok
+feel_aim_shoulder           176.5 fps  game   4.3 ms  render   5.4 ms  gpu   3.7 ms  screenshot ok
+feel_aim_no_first_person    176.6 fps  game   4.3 ms  render   5.4 ms  gpu   3.8 ms  screenshot ok
+feel_aim_release            170.8 fps  game   4.4 ms  render   5.5 ms  gpu   3.8 ms  screenshot ok
+feel_kick                   172.6 fps  game   4.5 ms  render   5.6 ms  gpu   3.8 ms  screenshot ok
+feel_settings_off           177.2 fps  game   4.5 ms  render   5.5 ms  gpu   3.7 ms  screenshot ok
+feel_roll                   167.2 fps  game   4.5 ms  render   5.6 ms  gpu   3.9 ms  screenshot ok
+feel_grenade                171.8 fps  game   4.7 ms  render   5.7 ms  gpu   4.0 ms  screenshot ok
+feel_big_blast              165.1 fps  game   5.0 ms  render   5.9 ms  gpu   4.5 ms  screenshot ok
+blast_fireball              161.4 fps  game   5.0 ms  render   5.7 ms  gpu   4.4 ms  screenshot ok
+blast_smoke                 165.1 fps  game   5.1 ms  render   5.8 ms  gpu   4.2 ms  screenshot ok
+blast_linger                172.8 fps  game   4.7 ms  render   5.6 ms  gpu   3.9 ms  screenshot ok
+blast_scorch                164.7 fps  game   4.5 ms  render   5.6 ms  gpu   3.8 ms  screenshot ok
+blast_scorch_close          188.6 fps  game   4.4 ms  render   4.7 ms  gpu   2.7 ms  screenshot ok
+blast_molotov               157.0 fps  game   5.1 ms  render   6.0 ms  gpu   4.5 ms  screenshot ok
+note: feel_aim_shoulder: blend 1.00, field of view 62.0, arm 120 of 350 cm
+note: feel_kick: 9 shots felt, the view lifted 6.39 degrees at most, aim off by 0.0000 degrees at most, shake up to 
+0.25 degrees, kick now 0.000
+note: feel_roll: moved 359 cm, the body turned over 0 degrees, the camera ducked -0.0 degrees, trailed up to 100 cm 
+and 0 cm at the end, blur up to 0.82, rolls drawn 122
+note: feel_grenade: 1 blast(s); a grenade drawn 1 at once; 294 blast particles, 25 debris pieces (25 made), flash up 
+to 417541 cd, camera shake up to 2.67 degrees, blur up to 0.95; debris went 547 cm out, 224 up and 0 down
+note: feel_big_blast: shake up to 4.78 degrees, blur up to 1.00, 50 debris pieces alive at most
+note: blast_fireball: 1 blast(s) drawn, 281 sprites at most, light up to 383687 cd
+note: blast_linger: 8 smoke puffs at the end, 1 scorch marks
+note: blast_scorch: 1 scorch mark(s), look for a dark burnt patch with rays on the ground
+note: blast_scorch_close: look for orange embers glowing in the charred core
+note: blast_molotov: 29 sprites at most, light up to 49342 cd
+ERROR: feel_roll: the body turned over 0 degrees at most and 0 now (rolls drawn 122)
+Screenshots: C:\Dev\Rim3D-gunhits\game\Saved\Smoke\feel
