@@ -1,0 +1,23 @@
+﻿Running smoke test 'buildings' at 1920x1080...
+CRASH or no result: C:\Dev\Rim3D-gunhits\game\Saved\Smoke\buildings.json was not written (exit code 3).
+Last log lines:
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007ffe9715bec8 UnrealEditor-Core.dll!UnknownFunction []
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007ffe9741e189 UnrealEditor-Core.dll!UnknownFunction []
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007ffe30431980 UnrealEditor-Rim3D.dll!USmokeTestSubsystem::StartPhase() [C:\Dev\Rim3D-gunhits\game\Source\Rim3D\SmokeTest.cpp:1246]
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007ffe3041286a UnrealEditor-Rim3D.dll!USmokeTestSubsystem::FinishPhase() [C:\Dev\Rim3D-gunhits\game\Source\Rim3D\SmokeTest.cpp:1360]
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007ffe30436675 UnrealEditor-Rim3D.dll!USmokeTestSubsystem::Tick() [C:\Dev\Rim3D-gunhits\game\Source\Rim3D\SmokeTest.cpp:1316]
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007ffe7f726862 UnrealEditor-Engine.dll!UnknownFunction []
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007ffe7e6f7729 UnrealEditor-Engine.dll!UnknownFunction []
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007ffe7e3666ce UnrealEditor-Engine.dll!UnknownFunction []
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007ff770bb2779 UnrealEditor.exe!UnknownFunction []
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007ff770b9c4ac UnrealEditor.exe!UnknownFunction []
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007ff770b9c5ba UnrealEditor.exe!UnknownFunction []
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007ff770ba1256 UnrealEditor.exe!UnknownFunction []
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007ff770bb5c74 UnrealEditor.exe!UnknownFunction []
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007ff770bb902a UnrealEditor.exe!UnknownFunction []
+[2026.11.22-08.44.27:889][275]LogWindows: Error: [Callstack] 0x00007fff189d7124 KERNEL32.DLL!UnknownFunction []
+[2026.11.22-08.44.27:889][275]LogWindows: Error: 
+[2026.11.22-08.44.27:896][275]LogExit: Executing StaticShutdownAfterError
+[2026.11.22-08.44.27:911][275]LogWindows: FPlatformMisc::RequestExit(1, LaunchWindowsStartup.ExceptionHandler)
+[2026.11.22-08.44.27:911][275]LogWindows: FPlatformMisc::RequestExitWithStatus(1, 3, LaunchWindowsStartup.ExceptionHandler)
+[2026.11.22-08.44.27:911][275]LogCore: Engine exit requested (reason: Win RequestExit)

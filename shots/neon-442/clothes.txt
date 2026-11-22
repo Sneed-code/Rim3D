@@ -1,0 +1,23 @@
+﻿Running smoke test 'clothes' at 1920x1080...
+
+Smoke test 'clothes': PASS  (73 s, NVIDIA GeForce RTX 5080, 888x500)
+clothes_dressed_left         71.4 fps  game   5.7 ms  render  12.3 ms  gpu  10.8 ms  screenshot ok
+clothes_dressed_right        78.5 fps  game   6.6 ms  render  12.5 ms  gpu  11.1 ms  screenshot ok
+clothes_close                82.3 fps  game   6.6 ms  render  11.9 ms  gpu  10.4 ms  screenshot ok
+clothes_torn                 69.8 fps  game   6.8 ms  render  14.0 ms  gpu  12.5 ms  screenshot ok
+clothes_off                  78.1 fps  game   6.6 ms  render  12.5 ms  gpu  11.1 ms  screenshot ok
+clothes_bare                 71.3 fps  game   6.6 ms  render  13.6 ms  gpu  12.1 ms  screenshot ok
+clothes_crowd_100            40.4 fps  game  23.8 ms  render  13.1 ms  gpu  18.2 ms  screenshot ok
+clothes_mannequins          203.1 fps  game   4.4 ms  render   4.1 ms  gpu   2.7 ms  screenshot ok
+note: clothes_dressed_left: 662 frames, 15888 pieces and 17212 garment and hat meshes checked
+note: clothes_dressed_right: 197 frames, 4728 pieces and 5122 garment and hat meshes checked
+note: clothes_close: 206 frames, 4944 pieces and 5356 garment and hat meshes checked
+note: clothes_torn: 175 frames, 4200 pieces and 4550 garment and hat meshes checked
+note: clothes_torn: the worst piece on the 11th pawn is drawn with wear 0.94
+note: clothes_off: 275 frames, 4950 pieces and 5225 garment and hat meshes checked
+note: clothes_off: the stripped pawn has 0 worn meshes, the 6th 2 (was 7)
+note: clothes_bare: 178 frames, 3204 pieces and 3382 garment and hat meshes checked
+note: clothes_bare: the twelve are 9 women, 1 heavy and 0 thin (each piece is drawn on whichever body it fell to)
+note: clothes_crowd_100: 547 frames, 106118 pieces and 106665 garment and hat meshes checked
+note: clothes_crowd_100: 100 pawns, 195 worn meshes on them
+Screenshots: C:\Dev\Rim3D-gunhits\game\Saved\Smoke\clothes

@@ -1,0 +1,13 @@
+﻿Running smoke test 'sound' at 1920x1080...
+
+Smoke test 'sound': FAIL  (31 s, NVIDIA GeForce RTX 5080, 888x500)
+sound_cues                  133.8 fps  game   3.3 ms  render   4.5 ms  gpu   2.8 ms  screenshot ok
+sound_budget                207.8 fps  game   3.2 ms  render   4.5 ms  gpu   2.8 ms  screenshot ok
+sound_voices                210.4 fps  game   3.2 ms  render   4.5 ms  gpu   2.8 ms  screenshot ok
+sound_steps                 210.2 fps  game   3.8 ms  render   4.7 ms  gpu   2.8 ms  screenshot ok
+sound_weather_music         209.3 fps  game   3.7 ms  render   4.6 ms  gpu   2.8 ms  screenshot ok
+sound_mixer                 191.3 fps  game   3.9 ms  render   4.6 ms  gpu   2.8 ms  screenshot ok
+note: sound_weather_music: weather loop Weather_Rain, music tense/1.wav
+ERROR: sound_voices: loaded 24 hit grunts, 4 screams, 9 couple and 6 women's lovin sounds from 
+game/Content/Rim3D/Sounds/cues (want 5, 4, 6, 3)
+Screenshots: C:\Dev\Rim3D-gunhits\game\Saved\Smoke\sound
