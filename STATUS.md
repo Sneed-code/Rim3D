@@ -2,6 +2,12 @@
 
 Updated 2026-11-22.
 
+Title screen (sneed, 2026-11-22: "fix the actual title screen ... make the actual game's UI", `docs/design/new-game.md`):
+a plain launch no longer opens over the engine's sample level. It starts its own scene, a wild rainforest tile in the
+morning (`TitleBackdrop` scenario, no people), with a slow camera circling an open glade, and a new full-screen title:
+the big RIM3D name, a menu of large plain words that fade in, no boxes. The load page matches the new-game screens.
+Smoke test `newgame` checks the backdrop, its camera and its light. **Next:** sneed's verdict on the look.
+
 Google Neon asset test and AI Studio sounds (sneed, 2026-11-22; tools and docs, `docs/design/neon-assets.md`):
 sneed's Google AI Pro plan gives **Gemini 4 Neon** in the Antigravity CLI, now run headless on the PC like Codex
 (`tools/neon_assets/run_neon_assets.sh`, Neon High, no windows). It made **seven models first try**: the ship sensor
