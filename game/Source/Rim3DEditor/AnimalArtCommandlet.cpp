@@ -231,7 +231,7 @@ namespace
 				Skeletons += Cast<USkeleton>(Object) ? 1 : 0;
 			}
 		}
-		// `skipMeshes`: parts left out (the iguana's tongue sits hundreds of metres from the body and hides the scene).
+		// `skipMeshes`: parts left out (the iguana's tongue, imported as Object_193, sits hundreds of metres from the body and hides the scene).
 		if (const TArray<TSharedPtr<FJsonValue>>* Skip = nullptr; Entry->TryGetArrayField(TEXT("skipMeshes"), Skip))
 		{
 			Meshes.RemoveAll([Skip, &Model](const USkeletalMesh* Mesh)
