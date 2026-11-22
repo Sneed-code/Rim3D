@@ -81,6 +81,11 @@ namespace
 		return Path;
 	}
 
+	// The title screen's backdrop map: off the sample level (like the playtest launchers' -SimOriginX=300000), small so
+	// the game opens quickly.
+	constexpr double SimBridgeTitleOriginX = 300000.0;
+	constexpr int32 SimBridgeTitleMapSize = 256;
+
 	FSimStartOptions SimBridgeOptionsFromCommandLine()
 	{
 		FSimStartOptions Options;
@@ -243,12 +248,30 @@ void USimSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	// -SimOriginX=<cm> moves the colony's map off the sample level the default map is made from (the playtest
 	// launcher, tools/play-rainforest.bat, uses 300000 like the smoke tests).
-	double OriginX = 0.0;
-	if (FParse::Value(FCommandLine::Get(), TEXT("SimOriginX="), OriginX))
+	FSimStartOptions Options = SimBridgeOptionsFromCommandLine();
+	const TCHAR* Line = FCommandLine::Get();
+	// A plain launch opens on the title screen (UColonyHudSubsystem): behind it, a wild rainforest tile in the morning
+	// (the TitleBackdrop scenario), not the sample level the default map is made from. -SimNoTitleScene keeps the old
+	// empty default sim.
+	const bool bTitle = Options.Scenario.IsEmpty() && !FParse::Param(Line, TEXT("NoMenu")) && !FString(Line).Contains(TEXT("-SmokeTest="))
+		&& !FParse::Param(Line, TEXT("SimNoTitleScene"));
+	double OriginX = bTitle ? SimBridgeTitleOriginX : 0.0;
+	if (FParse::Value(Line, TEXT("SimOriginX="), OriginX) || bTitle)
 	{
 		WorldOrigin = FVector(OriginX, 0.0, 0.0);
 	}
-	StartSim(SimBridgeOptionsFromCommandLine());
+	if (bTitle)
+	{
+		Options.Scenario = TEXT("TitleBackdrop");
+		Options.bWorld = true;
+		Options.MapSize = SimBridgeTitleMapSize;
+		Options.Pawns = 0;
+		Options.Items = 0;
+		Options.bFlatMap = false;
+		Options.WildAnimals = 100;
+		Options.bTitle = true;
+	}
+	StartSim(Options);
 
 	if (FSlateApplication::IsInitialized())
 	{
@@ -713,6 +736,8 @@ bool USimSubsystem::LoadGame(const FString& Slot)
 	StartOptions.WorldHeight = Settings.world.height;
 	StartOptions.WorldStartTile = Settings.world.startTile;
 	StartOptions.DayMinutes = Sim->dayMinutes();  // the save's day length
+	StartOptions.Scenario = UTF8_TO_TCHAR(Settings.scenario.c_str());
+	StartOptions.bTitle = false;  // a loaded game is a game, not the title's backdrop
 	ResetAfterSimChange();
 	UE_LOG(LogColonySim, Display, TEXT("Loaded %s: day %lld, %d things"), *Path, static_cast<long long>(Sim->time().day() + 1), static_cast<int32>(Current.things.size()));
 	SimBridgeScreenMessage(11, 3.0f, FColor::Green, FString::Printf(TEXT("Loaded: %s"), *Clean));

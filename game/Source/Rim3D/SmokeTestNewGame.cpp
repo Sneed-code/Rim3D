@@ -4,6 +4,7 @@
 // screenshot each, at 1080p, UI included.
 #include "SmokeTest.h"
 
+#include "Camera/CameraActor.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
@@ -50,10 +51,10 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 	const auto Hud = [this]() { return GetWorld()->GetSubsystem<UColonyHudSubsystem>(); };
 	const auto Pawns = [this]() { return GetWorld()->GetSubsystem<USimPawnSubsystem>(); };
 
-	// 1. The title screen over a running Crash Landed map.
+	// 1. The title screen over its own backdrop: a wild rainforest tile in the morning, the camera circling a glade.
 	FPhase TitlePhase;
 	TitlePhase.Name = TEXT("newgame_title");
-	TitlePhase.WarmupSeconds = 4.0f;
+	TitlePhase.WarmupSeconds = 7.0f;
 	TitlePhase.MeasureSeconds = 0.5f;
 	TitlePhase.Setup = [=, this]()
 	{
@@ -64,10 +65,14 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 			Fail(TEXT("USimSubsystem, UColonyHudSubsystem or USimPawnSubsystem did not start"));
 			return;
 		}
+		// As a plain launch starts it (USimSubsystem::Initialize).
 		FSimStartOptions Options;
-		Options.Seed = 7;
+		Options.Seed = 42;
 		Options.MapSize = 256;
-		Options.Scenario = TEXT("CrashLanded");
+		Options.Scenario = TEXT("TitleBackdrop");
+		Options.bWorld = true;
+		Options.WildAnimals = 100;
+		Options.bTitle = true;
 		B->SetWorldOrigin(NewGameSmokeOrigin);
 		if (!B->StartSim(Options))
 		{
@@ -92,8 +97,35 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 			Fail(TEXT("newgame_title: no mouse cursor on the title screen"));
 		}
 		Notes.Add(FString::Printf(TEXT("NEWGAME title mouse cursor %s"), TitlePC && TitlePC->bShowMouseCursor ? TEXT("shown") : TEXT("hidden")));
+		// sneed 2026-11-22: no engine sample level or gun range behind the title; the game's own land, by day.
+		const colony::Sim* TitleSim = Bridge()->GetSim();
+		if (!Bridge()->IsTitleBackdrop() || !TitleSim || !TitleSim->startingColonistSlots().empty())
+		{
+			Fail(TEXT("newgame_title: the title's backdrop is not the empty rainforest map"));
+		}
+		if (!Hud()->HasTitleCamera() || !TitlePC || !TitlePC->GetViewTarget() || !TitlePC->GetViewTarget()->IsA<ACameraActor>())
+		{
+			Fail(TEXT("newgame_title: the title's camera is not on the backdrop"));
+		}
+		const USkySubsystem* TitleSky = GetWorld()->GetSubsystem<USkySubsystem>();
+		const UTerrainSubsystem* TitleTerrain = GetWorld()->GetSubsystem<UTerrainSubsystem>();
+		if (!TitleSky || TitleSky->GetHourOverride() < 0.0f || !TitleTerrain || TitleTerrain->GetPlantClearingCount() == 0)
+		{
+			Fail(TEXT("newgame_title: no morning light or no trunk-free circle for the title camera"));
+		}
+		Notes.Add(FString::Printf(TEXT("NEWGAME title backdrop %s, sky %.2f h, exposure %.1f EV, %d plants drawn"),
+			TitleSim ? UTF8_TO_TCHAR(TitleSim->biome().c_str()) : TEXT("-"), TitleSky ? TitleSky->GetHourOverride() : -1.0f,
+			TitleSky ? TitleSky->GetExposure() : 0.0f, TitleTerrain ? static_cast<int32>(TitleTerrain->GetStats().PlantInstances) : -1));
 	};
 	Phases.Add(MoveTemp(TitlePhase));
+
+	// 1b. The load page, in the same look.
+	FPhase LoadPhase;
+	LoadPhase.Name = TEXT("newgame_loadpage");
+	LoadPhase.WarmupSeconds = 1.0f;
+	LoadPhase.MeasureSeconds = 0.3f;
+	LoadPhase.Setup = [=, this]() { Hud()->SetMainMenuPageForTest(2); };
+	Phases.Add(MoveTemp(LoadPhase));
 
 	// 2. The scenario page: Crash Landed with its kit.
 	FPhase ScenarioPhase;
@@ -123,6 +155,10 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 		{
 			Fail(TEXT("newgame_people: the You page is not open"));
 			return;
+		}
+		if (Bridge()->IsTitleBackdrop() || Hud()->HasTitleCamera())
+		{
+			Fail(TEXT("newgame_people: the title's backdrop or camera outlived the new colony"));
 		}
 		if (Sim->time().steps != 0)
 		{

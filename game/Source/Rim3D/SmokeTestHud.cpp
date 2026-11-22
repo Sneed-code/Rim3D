@@ -6,6 +6,7 @@
 #include "Engine/Engine.h"
 #include "HAL/IConsoleManager.h"
 
+#include "ColonyHudStyle.h"
 #include "ColonyHudSubsystem.h"
 #include "OrdersSubsystem.h"
 #include "OverseerPawn.h"
@@ -196,6 +197,10 @@ void USmokeTestSubsystem::BuildHudPhases()
 			if (bOwn && Hud()->GetStats().TabWindowFrames == State->TabFramesBefore)
 			{
 				Fail(FString::Printf(TEXT("hud_tab_%s: the tab's window was never drawn"), *Label.ToLower()));
+			}
+			if (bOwn && ColonyHud::CanopyBarsDrawn() == 0)
+			{
+				Fail(FString::Printf(TEXT("hud_tab_%s: no box got its Canopy jade bar (the ImGui end-of-frame hook did not run)"), *Label.ToLower()));
 			}
 			if (Tab == EHudTab::Build && !Orders()->IsBuildMenuOpen())
 			{
