@@ -375,3 +375,137 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 	Stump->SetWorldScale3D(FVector::OneVector);
 	return Stump;
 }
+
+UProceduralMeshComponent* GoreMakeGibChunk(AActor* Owner, USceneComponent* Parent, EGoreGibKind Kind, float SizeCm, const FLinearColor& Skin, int32 Seed)
+{
+	if (!Owner || !Parent || SizeCm <= 0.0f)
+	{
+		return nullptr;
+	}
+	FRandomStream Random(Seed);
+	FGoreMesh Mesh;
+	const FGoreWave Lumps(Random);
+	const FGoreWave Lumps2(Random);
+	const float LumpPhase = Random.FRandRange(0.0f, 2.0f * PI);
+	// The way the skin faced, for a meat chunk (a patch of the chunk's surface is skin, fat under it).
+	const FVector SkinSide = Random.GetUnitVector();
+	const float Half = SizeCm * 0.5f;
+	switch (Kind)
+	{
+	case EGoreGibKind::Meat:
+	case EGoreGibKind::Offal:
+	{
+		// A squashed, lumpy ball: rows from the top pole down (faces out: row step down, column step round, as the
+		// stump's grid wants).
+		constexpr int32 Rows = 9;
+		constexpr int32 Cols = 14;
+		const FVector Radii(Half * Random.FRandRange(0.8f, 1.2f), Half * Random.FRandRange(0.6f, 1.0f), Half * Random.FRandRange(0.45f, 0.8f));
+		const bool bOffal = Kind == EGoreGibKind::Offal;
+		Mesh.AddRingGrid(Rows, Cols,
+			[&](int32 R, int32 C)
+			{
+				const float Phi = PI * R / (Rows - 1);
+				const float Theta = 2.0f * PI * C / Cols;
+				const float Bump = 1.0f + 0.22f * Lumps.At(Theta) * FMath::Sin(Phi) + 0.12f * FMath::Sin(3.0f * Phi + LumpPhase) * Lumps2.At(Theta + 1.0f);
+				return FVector(FMath::Sin(Phi) * FMath::Cos(Theta) * Radii.X, FMath::Sin(Phi) * FMath::Sin(Theta) * Radii.Y, FMath::Cos(Phi) * Radii.Z) * Bump;
+			},
+			[&](int32 R, int32 C)
+			{
+				const float Phi = PI * R / (Rows - 1);
+				const float Theta = 2.0f * PI * C / Cols;
+				const FVector Dir(FMath::Sin(Phi) * FMath::Cos(Theta), FMath::Sin(Phi) * FMath::Sin(Theta), FMath::Cos(Phi));
+				const float Noise = Random.FRand();
+				if (bOffal)
+				{
+					return GoreWet(FMath::Lerp(GoreMuscleDark, GoreBlood, 0.4f + 0.4f * Noise), 0.02f);
+				}
+				// (PC round 3: dark muscle all over vanished into the blood pool; more skin and fat, brighter meat.)
+				const float Facing = FVector::DotProduct(Dir, SkinSide);
+				if (Facing > 0.3f)
+				{
+					return GoreWet(FMath::Lerp(Skin, GoreBlood, 0.1f + 0.3f * Noise), 0.6f);  // skin, smeared
+				}
+				if (Facing > 0.05f)
+				{
+					return GoreWet(FMath::Lerp(GoreFat, GoreBlood, 0.15f + 0.25f * Noise), 0.35f);  // the fat under it
+				}
+				return GoreWet(FMath::Lerp(GoreMuscleLight, FLinearColor(0.5f, 0.07f, 0.05f), Noise), 0.25f);  // torn muscle
+			});
+		break;
+	}
+	case EGoreGibKind::Bone:
+	case EGoreGibKind::Rib:
+	{
+		// A tube along Z with closed, jagged ends; a rib bends and keeps some meat on it.
+		const bool bRib = Kind == EGoreGibKind::Rib;
+		constexpr int32 Rows = 10;
+		constexpr int32 Cols = 8;
+		const float Length = SizeCm;
+		const float Radius = bRib ? SizeCm * 0.055f : SizeCm * Random.FRandRange(0.09f, 0.14f);
+		const float Bend = bRib ? SizeCm * 0.35f : SizeCm * 0.04f;
+		const float JagTop = Random.FRandRange(0.0f, 0.15f) * Length;
+		const float JagBottom = Random.FRandRange(0.0f, 0.15f) * Length;
+		Mesh.AddRingGrid(Rows, Cols,
+			[&](int32 R, int32 C)
+			{
+				const float Theta = 2.0f * PI * C / Cols;
+				// Rows 0 and Rows-1 close the ends to a point (jagged: pushed out unevenly).
+				const float T = static_cast<float>(R - 1) / (Rows - 3);  // 0 to 1 over the shaft
+				float Z;
+				float Rr = Radius * (bRib ? (0.8f + 0.4f * FMath::Abs(FMath::Cos(Theta))) : 1.0f) * (1.0f + 0.15f * Lumps.At(Theta + 3.0f * T));
+				if (R == 0)
+				{
+					Z = Length * 0.5f + JagTop * (0.5f + 0.5f * Lumps2.At(Theta));
+					Rr = 0.0f;
+				}
+				else if (R == Rows - 1)
+				{
+					Z = -Length * 0.5f - JagBottom * (0.5f + 0.5f * Lumps.At(Theta));
+					Rr = 0.0f;
+				}
+				else
+				{
+					Z = FMath::Lerp(Length * 0.5f, -Length * 0.5f, T);
+				}
+				const float U = Z / FMath::Max(Length * 0.5f, 0.1f);
+				const float X = Bend * (1.0f - U * U);
+				return FVector(X + Rr * FMath::Cos(Theta), Rr * FMath::Sin(Theta), Z);
+			},
+			[&](int32 R, int32 C)
+			{
+				const float Noise = Random.FRand();
+				if (R == 0 || R == Rows - 1)
+				{
+					return GoreWet(GoreMarrow, 0.1f);
+				}
+				if (bRib && (C <= 1 || C >= Cols - 1) && Noise > 0.3f)
+				{
+					return GoreWet(FMath::Lerp(GoreMuscleDark, GoreMuscleLight, Noise), 0.08f);  // meat left on the rib
+				}
+				return GoreWet(FMath::Lerp(GoreBone, GoreBlood, 0.15f + 0.45f * Noise * Noise), 0.45f);
+			});
+		break;
+	}
+	}
+
+	UProceduralMeshComponent* Chunk = NewObject<UProceduralMeshComponent>(Owner);
+	Chunk->bUseAsyncCooking = false;
+	Chunk->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Chunk->SetCanEverAffectNavigation(false);
+	Chunk->bReceivesDecals = false;
+	Chunk->SetCastShadow(true);
+	Chunk->CreateMeshSection(0, Mesh.Positions, Mesh.Triangles, Mesh.Normals, Mesh.UVs, Mesh.Colors, TArray<FProcMeshTangent>(), false);
+	UMaterialInterface* Flesh = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Rim3D/Generated/Blood/M_Gore.M_Gore"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (!Flesh)
+	{
+		Flesh = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Rim3D/Generated/Blood/M_BloodDrop.M_BloodDrop"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	}
+	if (Flesh)
+	{
+		Chunk->SetMaterial(0, Flesh);
+	}
+	Chunk->SetupAttachment(Parent);
+	Chunk->RegisterComponent();
+	Chunk->SetRelativeRotation(Random.GetUnitVector().Rotation());
+	return Chunk;
+}

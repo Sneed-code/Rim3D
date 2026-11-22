@@ -292,9 +292,26 @@ Console: `Pawns.StrandHairClothes 0` leaves the shapes inside the skin (to compa
 a sword, shadowboxing, walking, then aiming with the shapes drawn; pictures `Saved/Smoke/creator/strand_NN_*.png`.
 Needs the `hair-grow` art step again (new `grooms.json`; `update-and-play.bat` runs it). The grooms simulate with 10
 sub-steps and 10 iterations (Unreal's default 5 and 5 let bare-skinned long hair pass the shell as the body turned on
-the spot mid-walk; `HairGroomsCommandlet`). Still open: right after a quick 180-degree turn on the spot (720 degrees a second, a quarter second) the bare-skinned
-long hair dips into the back or whips round the side for a moment (PC strandwalk frames, round 3), then lies back on
-the back. Simulating it in the chest's frame (`Pawns.StrandHairTurnFollow`, Unreal's local simulation) was tried at
-0.25: the swings went stiff and the hair stayed sunk after turns, so it is off by default. Dressed bodies are clear (the
+the spot mid-walk; `HairGroomsCommandlet`). Right after a quick 180-degree turn on the spot the bare-skinned long hair dipped into the back or whipped round the
+side for a moment (PC strandwalk frames), then lay back on the back. Simulating it in the chest's frame
+(`Pawns.StrandHairTurnFollow`, Unreal's local simulation) was tried at 0.25: the swings went stiff and the hair stayed
+sunk after turns, so it is off by default. Turning the body at half the speed (360 degrees a second, PR #450 round 1) made no difference, nor did holding the
+hair at rest through every turn (round 2; held rigid, hair on a bowed head lies inside the chest). Seen from above
+(round 3) the hair went into the torso, tips showing through the back. Two causes in the groom itself: Unreal's solver
+keeps only its guide points out of the shapes, 8 points along a guide by default, so on waist-long hair the straight
+pieces between points (10 cm) cut into the back; and with one guide per 40 strands, the strands drawn between two guides
+lying round the back cut a chord into it. `HairGroomsCommandlet` now gives each guide 32 points (`StrandsSize`, about
+2.5 cm apart) and one guide per 20 strands, each strand following only its nearest guide (`bUseUniqueGuide`: blended
+between a guide over the shoulder and one down the back, a strand was drawn through the chest). Round 4 cost about 1.3
+ms of GPU per strand-haired person (4 people: 20.4 to 25.6 ms). The 180-degree jumps in the creator's walk turned out to be frame hitches (a quarter to half a second): a pawn's
+turn now advances by at most a twentieth of a second of turning per frame, so after a hitch it finishes the turn over the
+next frames instead of landing it at once (`PawnActor`; log `PAWN facing snap` for any left). With the hair simulated through every turn and hitch (round 7) it blew into a frizzy cloud after hitches, and with
+the simulation off (`r.HairStrands.Simulation 0`) the authored hair lies clear of the body the whole time. So **while a
+body turns faster than 240 degrees a second, or a frame takes longer than 0.1 s**, its hair is held at that resting
+shape on the head, turning with the body, and swings freely from there 0.08 s after (`Pawns.StrandHairTurnHold`,
+`Pawns.StrandHairHitch`, `Pawns.StrandHairTurnHoldAfter`; the groom's simulation is reset each held frame; log
+`STRANDHAIR turn hold N`). Still open: thin dark streaks on the chest and belly show even with the simulation off, so
+they are shadow or rendering, not hair through the body. Dressed bodies are clear (the
 shapes stand 3 cm further out). `-CreatorRecord=1` with the demo also saves every other frame of the walk
-(`strandwalk_NNNN.png`).
+(`strandwalk_NNNN.png`). `-CreatorStrandWalkPitch=-70` holds the walk's view still, from one side and looking down
+at that pitch, so a turn shows whether the hair goes round the body or through it.

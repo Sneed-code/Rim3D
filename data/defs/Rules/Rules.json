@@ -117,6 +117,8 @@
         "pieceDecayDays": 2,
         "torsoSingleHit": 1,
         "livingLimbs": 1,
+        "blastTear": 0.3,
+        "noteBlast": "sneed 2026-11-22 (dismembering hard even with a rocket; overkill kept until the body is in pieces): a blast's piece on a living arm or leg doing blastTear of the zone's hit points (15 for an arm, 23 for a leg) tears it off; on a corpse, what a cut limb piled past its quarter goes on to the torso, and every quarter of the torso's hit points piled past 0 takes one more limb off (the most battered first), then the head, until only the trunk is left",
         "noteLiving": "sneed 2026-11-20: an arm or leg shot or hacked again and again comes off a living body too, at the same pile (head and torso only off the dead); a blast at a corpse piles all its damage past 0 on the part it meets, unsplit, and throws the corpse",
         "arm": { "whole": "Arm", "lower": "Hand", "lowerAlso": ["Radius"] },
         "leg": { "whole": "Leg", "lower": "Foot", "lowerAlso": ["Tibia"] },

@@ -29,6 +29,12 @@ namespace colony {
 
 namespace {
 
+// A dead body (a corpse the player's swing went down at).
+bool meleeDeadBody(const entt::registry& reg, Entity e) {
+    const Health* h = e != kNoEntity && reg.valid(e) ? reg.try_get<Health>(e) : nullptr;
+    return h != nullptr && h->dead;
+}
+
 // The player's own swing at someone standing: the clip is drawn on the upper body and the feet stay the player's
 // (BodyMotion::freeFeet). A blow at someone on the ground keeps the whole body's clip.
 bool meleeFreeFeet(const Melee& m) {
@@ -100,6 +106,7 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     whole("blockSteps", r.blockSteps);
     whole("blockRecoverySteps", r.blockRecoverySteps);
     whole("playerBlockSteps", r.playerBlockSteps);
+    whole("playerBlockHoldSteps", r.playerBlockHoldSteps);
     whole("dodgeHoldSteps", r.dodgeHoldSteps);
     num("strongPowerShare", r.strongPowerShare);
     num("arcHalfDegrees", r.arcHalfDegrees);
@@ -126,6 +133,7 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     num("flickMaxDegrees", r.flickMaxDegrees);
     num("assistCos", r.assistCos);
     num("playerReachSlack", r.playerReachSlack);
+    num("corpseReachExtra", r.corpseReachExtra);
     num("strikeTrackDegrees", r.strikeTrackDegrees);
     bySkill("defendChanceBySkill", r.defendChance);
     num("parryShare", r.parryShare);
@@ -182,6 +190,9 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
         MeleeFinisher f;
         f.key = key;
         f.move = def->text((base + "move").c_str(), f.move);
+        f.clip = def->text((base + "clip").c_str(), f.clip);
+        f.clipSlack = std::max(0.0f, static_cast<float>(def->number((base + "clipSlack").c_str(), f.clipSlack)));
+        f.clipHitSeconds = std::max(0.0f, static_cast<float>(def->number((base + "clipHitSeconds").c_str(), f.clipHitSeconds)));
         f.seconds = std::max(0.2f, static_cast<float>(def->number((base + "seconds").c_str(), f.seconds)));
         f.hitSeconds = std::clamp(static_cast<float>(def->number((base + "hitSeconds").c_str(), f.hitSeconds)), 0.1f, f.seconds - 0.05f);
         f.standOff = std::max(0.2f, static_cast<float>(def->number((base + "standOff").c_str(), f.standOff)));
@@ -577,6 +588,24 @@ int MeleeSystem::finisherFor(DefId weapon) const {
     return weapon.valid() && weapon.value < tools_.size() ? tools_[weapon.value].finisher : 0;
 }
 
+bool MeleeSystem::finisherPlaysClip(int finisher) const {
+    if (finisher <= 0 || static_cast<size_t>(finisher) > rules_.finishers.size()) {
+        return false;
+    }
+    const MeleeFinisher& f = rules_.finishers[static_cast<size_t>(finisher - 1)];
+    const MotionClip* c = f.clip.empty() ? nullptr : combat_.motion().clip(f.clip);
+    return c != nullptr && c->hitSeconds > 0.0f;
+}
+
+float MeleeSystem::finisherClipHit(int finisher) const {
+    if (!finisherPlaysClip(finisher)) {
+        return 0.0f;
+    }
+    const MeleeFinisher& f = rules_.finishers[static_cast<size_t>(finisher - 1)];
+    const MotionClip* c = combat_.motion().clip(f.clip);
+    return f.clipHitSeconds > 0.0f ? std::clamp(f.clipHitSeconds, 0.05f, c->seconds - 0.05f) : c->hitSeconds;
+}
+
 const MeleeFinisher* MeleeSystem::finisherOf(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     const Melee* m = reg.valid(pawn) ? reg.try_get<Melee>(pawn) : nullptr;
@@ -692,13 +721,48 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     m.target = target;
     // A blow at a body on the ground goes down at it (the strike already aims at its aim point there): Unreal plays a
     // downward poke, smash or hack (docs/design/focus.md).
-    m.low = target != kNoEntity && (health_.incapacitated(target) || reg.get<Posture>(target).stance == Stance::Prone);
+    // The player's swing at nobody, with nobody living to take it, goes down at a corpse lying before it (sneed,
+    // 2026-11-22): the downward clip now, the corpse its target when the line is fixed (commit).
+    const Entity corpse = player && target == kNoEntity && playerTarget(pawn) == kNoEntity ? corpseAhead(pawn) : kNoEntity;
+    m.low = (target != kNoEntity && (health_.incapacitated(target) || reg.get<Posture>(target).stance == Stance::Prone)) ||
+            corpse != kNoEntity;
+    if (corpse != kNoEntity) {
+        const Position& to = reg.get<Position>(corpse);
+        face(pawn, to.x, to.y);
+    }
     // At a body on the ground with a weapon that has one, a finisher (sneed 2026-11-20): its own slow move, timed by
     // MeleeRules finishers, the attacker stepping to its place beside the body and holding still till it is over.
     m.finisher = 0;
     m.finisherSteps = 0;
-    if (m.low && weapon && set->finisher > 0 && static_cast<size_t>(set->finisher) <= rules_.finishers.size()) {
-        const MeleeFinisher& f = rules_.finishers[static_cast<size_t>(set->finisher - 1)];
+    // A finisher with a whole-body clip (sneed 2026-11-22) plays it where the attacker stands, so only close enough to
+    // the body; further off (or with no clips for this body) the weapon's low blow below.
+    const MeleeFinisher* finisherRule = m.low && target != kNoEntity && weapon && set->finisher > 0 && static_cast<size_t>(set->finisher) <= rules_.finishers.size()
+                                            ? &rules_.finishers[static_cast<size_t>(set->finisher - 1)]
+                                            : nullptr;
+    const MotionClip* finisherClip = nullptr;
+    float clipBlowAt = 0.0f;  // when in the clip its blow lands
+    float finisherShift = 0.0f;  // metres it moves in (out, if negative) over the clip to be at standOff at the blow
+    if (finisherRule != nullptr && finisherPlaysClip(set->finisher) && combat_.motion().hasClips(pawn)) {
+        // (A clip not measured yet leaves the old drawn finisher.)
+        finisherClip = combat_.motion().clip(finisherRule->clip);
+        clipBlowAt = finisherClipHit(set->finisher);
+        const Position& a = reg.get<Position>(pawn);
+        const Position& b = reg.get<Position>(target);
+        const float d = std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
+        // Where the clip alone would leave it at the blow: its own step forward (scaled to the body) taken off.
+        finisherShift = d - combat_.motion().forwardAt(finisherClip->def, clipBlowAt) * combat_.motion().sizeScale(pawn) -
+                        finisherRule->standOff;
+        if (finisherShift > finisherRule->clipSlack) {
+            finisherRule = nullptr;  // too far off: the plain low blow
+            finisherClip = nullptr;
+        } else {
+            // Right on top of the body it steps back only so far (the blow lands a little short of its place rather than
+            // the finisher giving way to the arms-only low blow: PC pictures 2026-11-22, the gladius's never played).
+            finisherShift = std::max(finisherShift, -finisherRule->clipSlack);
+        }
+    }
+    if (finisherRule != nullptr) {
+        const MeleeFinisher& f = *finisherRule;
         m.finisher = static_cast<uint8_t>(set->finisher);
         m.finisherFrom = now();
         m.finisherSteps = std::max(2, static_cast<int>(std::lround(f.seconds * 30.0f)));
@@ -707,6 +771,20 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
             mover->vx = 0.0f;  // the player's last walk no longer turns it
             mover->vy = 0.0f;
         }
+    }
+    if (finisherClip != nullptr) {
+        // The whole body plays the clip, timed so its blow lands on the hit step; the finisher lasts as long as the clip.
+        const Position& a = reg.get<Position>(pawn);
+        const Position& b = reg.get<Position>(target);
+        combat_.motion().playTimed(pawn, finisherClip->def, clipBlowAt, windup, b.x - a.x, b.y - a.y, false);
+        // To its place by the body during the clip's start (no glide before it): done by two thirds of the wind-up.
+        if (std::fabs(finisherShift) > 0.02f) {
+            combat_.motion().shiftClip(pawn, finisherShift, std::max(4, windup * 2 / 3));
+        }
+        const float stepsPerClipSecond = static_cast<float>(windup) / clipBlowAt;
+        m.finisherSteps = windup + std::max(1, static_cast<int>(std::lround((finisherClip->seconds - clipBlowAt) * stepsPerClipSecond)));
+    } else if (finisherRule != nullptr) {
+        const MeleeFinisher& f = *finisherRule;
         // To its place: standOff from the body's centre, on the side it came from.
         const Position& a = reg.get<Position>(pawn);
         const Position& b = reg.get<Position>(target);
@@ -784,11 +862,22 @@ bool MeleeSystem::block(Entity pawn, std::string* why) {
         return fail("rolling");
     }
     bool weapon = false;
-    toolsOf(pawn, weapon);
-    if (!weapon) {
-        return fail("only a melee weapon can block");
+    const ToolSet* set = toolsOf(pawn, weapon);
+    // A melee weapon blocks; so do bare fists (sneed 2026-11-22: "right click with a melee weapon or fists doesn't
+    // block"), a person's guard: they stop a punch, and take a weapon's blow on the arm (strike). A gun aims instead.
+    if (const Gear* gear = reg.try_get<Gear>(pawn); !weapon && gear != nullptr && gear->weapon != kNoEntity && reg.valid(gear->weapon)) {
+        return fail("a gun aims, it doesn't block");
+    }
+    if (set == nullptr || (!weapon && !combat_.motion().hasClips(pawn))) {
+        return fail("only a melee weapon or a person's fists can block");
     }
     Melee& m = reg.get_or_emplace<Melee>(pawn);
+    // Held (the player keeps the button down): a block already up, or about to be, is kept up a moment longer each
+    // time, so it lasts as long as the button is held and drops soon after it is let go.
+    if (now() < m.blockUntil && m.phase == MeleePhase::Ready) {
+        m.blockUntil = std::max(m.blockUntil, now() + rules_.playerBlockHoldSteps);
+        return true;
+    }
     if (m.phase != MeleePhase::Ready) {
         return fail("not ready to block yet");
     }
@@ -1077,6 +1166,8 @@ void MeleeSystem::commit(Entity pawn, Melee& m) {
         const Entity late = playerTarget(pawn);
         if (late != kNoEntity && inPlayerReach(pawn, late)) {
             m.target = late;
+        } else if (const Entity corpse = corpseAhead(pawn); corpse != kNoEntity) {
+            m.target = corpse;  // a body lying before it takes the blow (sneed, 2026-11-22)
         }
     }
     float ox = 0.0f;
@@ -1086,7 +1177,7 @@ void MeleeSystem::commit(Entity pawn, Melee& m) {
     // Locked on or not, a swing at someone goes at its focus point (lock-on.md); one at a body on the ground at its aim
     // point there.
     const bool hasTarget = m.target != kNoEntity && reg.valid(m.target) && things_.spawned(m.target) &&
-                           (m.low ? combat_.aimPoint(m.target, m.aimX, m.aimY, m.aimZ)
+                           (m.low || meleeDeadBody(reg, m.target) ? combat_.aimPoint(m.target, m.aimX, m.aimY, m.aimZ)
                                   : focusPoint(pawn, m.target, !m.weaponTool, m.aimX, m.aimY, m.aimZ));
     if (!hasTarget) {
         const Posture& posture = reg.get<Posture>(pawn);
@@ -1345,7 +1436,17 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
         const Position& vp = reg.get<Position>(victim);
         const Posture& vpost = reg.get<Posture>(victim);
         const bool facing = vpost.facingX * (pos.x - vp.x) + vpost.facingY * (pos.y - vp.y) > 0.0f;
-        if (vm != nullptr && blocking(victim) && facing && meleeAble(reg, victim)) {
+        // Bare fists up against a weapon (sneed 2026-11-22): the blow is stopped on the forearm, which takes it.
+        const Gear* victimGear = reg.try_get<Gear>(victim);
+        const bool victimArmed = victimGear != nullptr && victimGear->weapon != kNoEntity && reg.valid(victimGear->weapon);
+        if (vm != nullptr && blocking(victim) && facing && meleeAble(reg, victim) && !victimArmed && m.weaponTool) {
+            const int arm = combat_.hitboxPart(victim, "left arm");
+            if (arm >= 0) {
+                hit.part = arm;
+                ++armBlocks_;
+            }
+        }
+        if (vm != nullptr && blocking(victim) && facing && meleeAble(reg, victim) && !(!victimArmed && m.weaponTool)) {
             // The weapon takes it, and the blocker staggers: no swing of its own for a moment.
             e.message = "blocked";
             ++blocks_;
@@ -2001,6 +2102,35 @@ Entity MeleeSystem::playerTarget(Entity pawn) const {
             best = e;
             bestD = d;
             bestDown = down;
+        }
+    }
+    return best;
+}
+
+Entity MeleeSystem::corpseAhead(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Position, Posture>(pawn)) {
+        return kNoEntity;
+    }
+    const Position& pos = reg.get<Position>(pawn);
+    const Posture& posture = reg.get<Posture>(pawn);
+    Entity best = kNoEntity;
+    float bestD = 0.0f;
+    for (const auto [e, thing, p, h] : reg.view<const Thing, const Position, const Health>().each()) {
+        if (e == pawn || !h.dead || thing.category != ThingCategory::Pawn || p.level != pos.level || !things_.spawned(e) ||
+            !health_.takesCorpseHits(e)) {
+            continue;
+        }
+        const float dx = p.x - pos.x;
+        const float dy = p.y - pos.y;
+        const float d = std::sqrt(dx * dx + dy * dy);
+        const float r = engageDistance(pawn, e) + rules_.reachSlack + rules_.playerReachSlack + rules_.corpseReachExtra;
+        if (d > r || (d > 0.01f && (dx * posture.facingX + dy * posture.facingY) / d < 0.5f)) {
+            continue;
+        }
+        if (best == kNoEntity || d < bestD) {
+            best = e;
+            bestD = d;
         }
     }
     return best;

@@ -9,6 +9,7 @@
 #include "Materials/MaterialInterface.h"
 
 #include "LevelsSubsystem.h"
+#include "PropAnims.h"
 #include "SimSubsystem.h"
 #include "TerrainDraw.h"
 
@@ -42,6 +43,9 @@ namespace
 	constexpr int32 BldGlass = 4;  // a window's pane (docs/design/windows.md)
 	constexpr int32 BldRotor = 5;  // a turning part (visual.rotor: wind turbine blades)
 	constexpr int32 BldVariants = 8;  // batch and component keys are Look * BldVariants + variant
+	// Moving parts (visual.moving) have keys of their own, past every look's: base + def * 16 + part.
+	constexpr int32 BldMovingKeyBase = 1 << 29;
+	constexpr int32 BldMaxMovingParts = 16;
 
 	// A frame is drawn this fraction of its height with nothing delivered, and a full height when it is done.
 	constexpr float BldFrameMinScale = 0.1f;
@@ -367,6 +371,8 @@ void UBuildingSubsystem::Deinitialize()
 	Chunks.Reset();
 	DoorSlots.Reset();
 	RotorSlots.Reset();
+	MovingSlots.Reset();
+	MoveStates.Reset();
 	Super::Deinitialize();
 }
 
@@ -380,6 +386,9 @@ void UBuildingSubsystem::Teardown()
 	Chunks.Reset();
 	DoorSlots.Reset();
 	RotorSlots.Reset();
+	MovingSlots.Reset();
+	MoveStates.Reset();
+	PropAnims::Reset();
 	Looks.Reset();
 	LookIndex.Reset();
 	DefLooks.Reset();
@@ -608,6 +617,39 @@ void UBuildingSubsystem::ReadDefs(const colony::Sim& Sim)
 			else
 			{
 				UE_LOG(LogSimBuildings, Warning, TEXT("%s: rotor mesh %s not found; drawn without it"), UTF8_TO_TCHAR(Def.defName().c_str()), UTF8_TO_TCHAR(RotorPath.c_str()));
+			}
+		}
+
+		// Moving parts (docs/design/neon-assets.md): only with the model itself, whose frame they share.
+		const size_t PartCount = Def.count("visual.moving.parts");
+		if (Look.ArtMesh && PartCount > 0 && !Look.bDoor)
+		{
+			Look.AnimSet = UTF8_TO_TCHAR(Def.text("visual.moving.anims").c_str());
+			for (size_t P = 0; P < PartCount && Look.MovingParts.Num() < BldMaxMovingParts; ++P)
+			{
+				const std::string Base = "visual.moving.parts." + std::to_string(P);
+				FMovingPart Part;
+				Part.Part = UTF8_TO_TCHAR(Def.text((Base + ".part").c_str()).c_str());
+				Part.Mesh = LoadObject<UStaticMesh>(nullptr, UTF8_TO_TCHAR(Def.text((Base + ".mesh").c_str()).c_str()));
+				if (!Part.Mesh)
+				{
+					UE_LOG(LogSimBuildings, Warning, TEXT("%s: moving part %s has no mesh (the codex-art step makes it); not drawn"), UTF8_TO_TCHAR(Def.defName().c_str()), *Part.Part);
+					continue;
+				}
+				KeepMeshes.Add(Part.Mesh);
+				Look.MovingParts.Add(Part);
+			}
+			const size_t RuleCount = Def.count("visual.moving.play");
+			for (size_t R = 0; R < RuleCount; ++R)
+			{
+				const std::string Base = "visual.moving.play." + std::to_string(R);
+				FMoveRule Rule;
+				Rule.Clip = UTF8_TO_TCHAR(Def.text((Base + ".clip").c_str()).c_str());
+				const std::string When = Def.text((Base + ".when").c_str(), "always");
+				Rule.When = When == "running" ? EMoveWhen::Running : When == "on" ? EMoveWhen::On : When == "off" ? EMoveWhen::Off : EMoveWhen::Always;
+				Rule.bLoop = Def.flag((Base + ".loop").c_str());
+				Rule.bHold = Def.flag((Base + ".hold").c_str());
+				Look.MoveRules.Add(Rule);
 			}
 		}
 	}
@@ -1012,6 +1054,16 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 		float FullWatts;
 	};
 	TArray<FPendingRotor> PendingRotors;
+	struct FPendingMoving
+	{
+		colony::Entity Thing;
+		int32 DefValue;
+		int32 Part;
+		int32 Key;
+		int32 Index;
+		FTransform Base;
+	};
+	TArray<FPendingMoving> PendingMoving;
 
 	const auto Add = [&Batches](int32 Look, int32 Variant, UStaticMesh* Mesh, bool bGhost, bool bItem, bool bShadow, const FTransform& Transform, float Damage = 0.0f) -> int32
 	{
@@ -1115,10 +1167,32 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 					// Cracked and grimy as it loses hit points (the materials' damage look, -run=WetLook).
 					Add(LookId, BldFixed, Look.Fixed, false, false, true, Placed, BldDamageOf(View));
 				}
+				if (DefLook->bCable && DefLook->ArtMesh && Look.All && Look.All != Look.Fixed)
+				{
+					// A cable building with a model of its own (the power switch): the model stands on its cable runs.
+					Add(LookId, BldAll, Look.All, false, false, true, Placed);
+				}
 				if (Look.Glass)
 				{
 					// No shadow, so the sun comes in through it.
 					Add(LookId, BldGlass, Look.Glass, false, false, false, Placed);
+				}
+				if (Look.Fixed && Look.Fixed == DefLook->ArtMesh)
+				{
+					// The model's moving parts, each its own instance so it can move (AnimateMoving); drawn at rest until then.
+					const PropAnims::FSet* Set = DefLook->AnimSet.IsEmpty() ? nullptr : PropAnims::Find(DefLook->AnimSet);
+					for (int32 P = 0; P < DefLook->MovingParts.Num(); ++P)
+					{
+						const FMovingPart& Part = DefLook->MovingParts[P];
+						const int32 Key = BldMovingKeyBase + Look.DefValue * BldMaxMovingParts + P;
+						const FTransform Rest = (Set ? PropAnims::RestOf(*Set, Part.Part) : FTransform::Identity) * Placed;
+						FBldBatch& Batch = Batches.FindOrAdd(Key);
+						Batch.Mesh = Part.Mesh;
+						Batch.bShadow = true;
+						Batch.Damage.Add(0.0f);
+						const int32 Index = Batch.Transforms.Add(Rest);
+						PendingMoving.Add({View.id, Look.DefValue, P, Key, Index, Placed});
+					}
 				}
 				if (Look.Sliding)
 				{
@@ -1171,6 +1245,11 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 		}
 	}
 	Chunk.Rotors.Reset();
+	for (const uint64 Moving : Chunk.Moving)
+	{
+		MovingSlots.Remove(Moving);
+	}
+	Chunk.Moving.Reset();
 	Stats.Instances -= Chunk.Instances;
 	int32 Total = 0;
 	for (TPair<int32, UInstancedStaticMeshComponent*>& Pair : Chunk.Components)
@@ -1235,6 +1314,18 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 		}
 		RotorSlots.Add(Rotor.Id, Slot);
 		Chunk.Rotors.Add(static_cast<colony::Entity>(Rotor.Id));
+	for (const FPendingMoving& Moving : PendingMoving)
+	{
+		FMovingSlot Slot;
+		Slot.Component = Chunk.Components.FindRef(Moving.Key);
+		Slot.Index = Moving.Index;
+		Slot.Base = Moving.Base;
+		Slot.Thing = Moving.Thing;
+		Slot.DefValue = Moving.DefValue;
+		Slot.Part = Moving.Part;
+		const uint64 SlotKey = (static_cast<uint64>(static_cast<uint32>(Moving.Thing)) << 8) | static_cast<uint64>(Moving.Part);
+		MovingSlots.Add(SlotKey, Slot);
+		Chunk.Moving.Add(SlotKey);
 	}
 	Chunk.Instances = Total;
 	Stats.Instances += Total;
@@ -1324,6 +1415,102 @@ void UBuildingSubsystem::AnimateRotors(float DeltaTime)
 	}
 }
 
+void UBuildingSubsystem::AnimateMoving()
+{
+	USimSubsystem* Sim = Bridge.Get();
+	UWorld* World = GetWorld();
+	MovingAnimated = 0;
+	if (!Sim || !World || MovingSlots.IsEmpty())
+	{
+		return;
+	}
+	const colony::Snapshot& Current = Sim->GetCurrentSnapshot();
+	const float Now = World->GetTimeSeconds();
+	++MoveFrame;
+	TSet<UInstancedStaticMeshComponent*> Touched;
+	for (TPair<uint64, FMovingSlot>& Pair : MovingSlots)
+	{
+		FMovingSlot& Slot = Pair.Value;
+		const FDefLook* DefLook = DefLooks.IsValidIndex(Slot.DefValue) ? &DefLooks[Slot.DefValue] : nullptr;
+		const colony::ThingView* View = Current.find(Slot.Thing);
+		if (!DefLook || !View || !Slot.Component || !DefLook->MovingParts.IsValidIndex(Slot.Part))
+		{
+			continue;
+		}
+		const PropAnims::FSet* Set = DefLook->AnimSet.IsEmpty() ? nullptr : PropAnims::Find(DefLook->AnimSet);
+		if (!Set)
+		{
+			continue;
+		}
+		// Each building's rules once a frame: since when each holds. A building first seen with a rule holding counts it
+		// as long held, so a switch that was on before a load shows its lever down, with no spark.
+		FMoveState& State = MoveStates.FindOrAdd(static_cast<uint32>(Slot.Thing));
+		if (State.SeenFrame != MoveFrame)
+		{
+			const bool bFirst = State.Since.Num() != DefLook->MoveRules.Num();
+			State.Since.SetNum(DefLook->MoveRules.Num());
+			for (int32 R = 0; R < DefLook->MoveRules.Num(); ++R)
+			{
+				const colony::PowerState Power = View->power;
+				bool bHolds = true;
+				switch (DefLook->MoveRules[R].When)
+				{
+					case EMoveWhen::Running: bHolds = Power == colony::PowerState::None || Power == colony::PowerState::Powered; break;
+					case EMoveWhen::On: bHolds = Power != colony::PowerState::Off; break;
+					case EMoveWhen::Off: bHolds = Power == colony::PowerState::Off; break;
+					default: break;
+				}
+				float& Since = State.Since[R];
+				if (!bHolds)
+				{
+					Since = -1.0f;
+				}
+				else if (bFirst || Since < 0.0f)
+				{
+					Since = bFirst && !DefLook->MoveRules[R].bLoop ? Now - 1.0e4f : Now;
+				}
+			}
+			State.SeenFrame = MoveFrame;
+		}
+		const FMovingPart& Part = DefLook->MovingParts[Slot.Part];
+		FTransform Pose = PropAnims::RestOf(*Set, Part.Part);
+		for (int32 R = 0; R < DefLook->MoveRules.Num(); ++R)
+		{
+			const FMoveRule& Rule = DefLook->MoveRules[R];
+			const float Since = State.Since[R];
+			const PropAnims::FClip* Clip = Since < 0.0f ? nullptr : Set->Clips.Find(Rule.Clip);
+			if (!Clip || !Clip->Parts.Contains(Part.Part))
+			{
+				continue;
+			}
+			const float T = Now - Since;
+			if (!Rule.bLoop && !Rule.bHold && T > Clip->Seconds)
+			{
+				continue;  // a one-shot that is over leaves the part to the next rule
+			}
+			PropAnims::Evaluate(*Set, Rule.Clip, Part.Part, T, Rule.bLoop, Pose);
+			++MovingAnimated;
+			break;
+		}
+		Slot.Component->UpdateInstanceTransform(Slot.Index, Pose * Slot.Base, false, false, true);
+		Touched.Add(Slot.Component);
+	}
+	for (UInstancedStaticMeshComponent* Component : Touched)
+	{
+		Component->MarkRenderStateDirty();
+	}
+	if (MoveStates.Num() > MovingSlots.Num() * 2 + 64)
+	{
+		for (auto It = MoveStates.CreateIterator(); It; ++It)
+		{
+			if (It.Value().SeenFrame != MoveFrame)
+			{
+				It.RemoveCurrent();
+			}
+		}
+	}
+}
+
 void UBuildingSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -1352,4 +1539,5 @@ void UBuildingSubsystem::Tick(float DeltaTime)
 	ApplyCut(false);
 	AnimateDoors();
 	AnimateRotors(DeltaTime);
+	AnimateMoving();
 }

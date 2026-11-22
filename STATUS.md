@@ -12,6 +12,22 @@ them (`assets/power_art.json`). A def's new `visual.rotor` turns the blades ever
 still with none (`UBuildingSubsystem::AnimateRotors`). Art steps `power-models` and `power-art` run them in
 `update-and-play.bat`. Smoke test `power` (pictures; fails if the turbine makes power and the blades do not turn).
 
+Whole-body melee finishers, held blocks, no crouch slides (sneed, 2026-11-22; sim, data, Unreal, tools,
+`docs/design/lock-on.md` "Whole-body finishers"): **finishers at the downed are now whole-body mocap clips** instead of
+arms posed by hand (the longsword's arms went through its body, the knife's shook and showed the joints): knife kneels and
+drives both hands down, gladius and mace hack low, club smashes overhead, longsword hacks low, spear drives down; the
+weapon simply stays in the hand. **The punches and low blows were never in the one game** (made in a test copy): new art
+step `mixamo-extra` brings them in. **Right mouse blocks with a melee weapon or fists, for as long as it is held**;
+fists stop punches, a blade lands on the forearm. **Crouch slides**: every block, dodge, reload or shout played a
+half-second whole-body crouch, so fighters ducked and slid; now only standing work crouches. PC round 1 pictures: block
+good, finishers too close (knife lay on the body, gladius and longsword lunged past it, spear thrust over it); now each
+finisher steps to its own distance from the body and the spear drives down two-handed. Rounds 2-6: the blow now lands
+when the blade comes down (the clips' measured hit was mid-swing), and a downed ragdoll is steered back over the spot
+the game thinks it lies on (it fell up to 1 m off, so blows missed or the attacker knelt on it); spear, club, gladius
+and longsword now all come down on the body. The melee smoke's `switch_key` revolver check (11 cm) had only passed
+because the switch used to crouch the whole body. Round 7: the knife kneels and drives down at his upper body. **Next:**
+sneed plays it (title > Debug > Gun range).
+
 Hair no longer through the body or clothes (sneed, 2026-11-22; hair tools and Unreal, `docs/design/hair-physics.md`
 "A shell with no gaps"): long strand hair still went into the back and through the shirt. Measured: between the old
 collision spheres a strand could sink 2 cm into the back (up to 5 cm), and resting hair lay 1.5 to 3 cm inside the
@@ -21,8 +37,12 @@ the game grows each one under a worn garment out to just past the cloth and its 
 change). `-CreatorStrandDemo` takes the pictures (behind and side; standing, rifle aim, sword, shadowbox, walk, shapes
 drawn). Capsules also fill the body's core, and the hair physics takes 10 steps (was 5). PC (4 rounds): dressed hair
 stays on the clothes in every pose; nude hair lies on the back standing, aiming, swinging and boxing. Needs the
-`hair-grow` and `hair-grooms` art steps (run by `update-and-play.bat`). **Still open:** right after a fast 180-degree
-turn on the spot, nude long hair dips into the back for a moment, then comes back out.
+`hair-grow` and `hair-grooms` art steps (run by `update-and-play.bat`). Quick turns (2026-11-22): right after
+a fast turn, nude long hair went into the back for a moment. Slower turns and holding the hair still did not help (PC);
+seen from above, the hair's physics only kept 8 points per strand out of the body, 10 cm apart on long hair. Now 32
+points and twice the guide strands, each strand following one (`HairGroomsCommandlet`, reruns the `hair-grooms` step),
+a frame hitch no longer lands a whole turn in one frame, and through fast turns and hitches the hair is held at its
+resting shape (which lies clear of the body) and swings freely again after. **Next:** PC walk-turn frames.
 
 In-game UI in the Canopy look (sneed, 2026-11-22: "make the actual game's UI ... high quality, well made",
 `docs/design/ui-layout.md`): every in-game box now matches the title and new-game screens: dark green-black glass, square
@@ -45,6 +65,23 @@ painted them. `BloodArt` now leaves out triangles stretched over 8x the median (
 borders from one island only. Smoke `gore -GoreWoman` adds thigh close-ups front and back. Needs the `blood-art` step
 (update-and-play reruns it, since the commandlet changed). **Next:** PC before and after pictures, woman and man.
 
+Corpse trunks burst into gibs (sneed, 2026-11-22: "keep overkill damage until it gibs ... until none"; sim and Unreal,
+`docs/design/body-health.md` part F "Trunks burst"): once only the trunk is left, another 25 piled past 0 bursts it;
+one hit 50 past 0 (a rocket in the chest) takes everything at once. The body goes and 22 chunks fly out (torn muscle with
+skin, ribs, bone shards, dark wet lumps, made in code like the stumps) with sprays of blood; they tumble, bounce, leave
+splats where they land and lie 5 minutes like blood, then shrink away. **Next:** PC build, smoke `gore` (phases `gibs`,
+`gibsclose`), gun range look.
+
+Corpses come apart, jolt and stay silent; blasts throw people (sneed, 2026-11-22; sim, data and Unreal,
+`docs/design/body-health.md` part F): **overkill on a corpse is kept until it is in pieces**: every 25 piled past 0 on
+the torso takes one more limb off (the most battered first), then the head, until only the trunk is left; what a cut
+limb piled past its quarter goes on to the torso. **Rockets tear living limbs off**: a blast piece doing 30% of an arm
+or leg's hit points takes it off (a rocket at someone's feet takes a piece off about every other person, test). **Blasts
+throw living people** down with the knockdown fall, about 3 m from a close rocket (was a 1.5 m slide), and a body the
+blast kills is thrown too. **Corpses jolt** where a shot or blow lands (the ragdoll wakes, then settles again). **The
+dead make no vocals** (no grunt or hurt cry on a corpse). **The player's swing hits a corpse** lying before it in reach
+(downward clip) when nobody living is there. **Next:** PC build, smoke `gore` (new phase `corpsehit`), gun range look.
+
 Google Neon asset test and AI Studio sounds (sneed, 2026-11-22; tools and docs, `docs/design/neon-assets.md`):
 sneed's Google AI Pro plan gives **Gemini 4 Neon** in the Antigravity CLI, now run headless on the PC like Codex
 (`tools/neon_assets/run_neon_assets.sh`, Neon High, no windows). It made **seven models first try**: the ship sensor
@@ -52,8 +89,19 @@ cluster (turning dish, pulsing beacon), a cowboy hat, minigun (spinning barrels)
 core (fans, crystal, boot lights), power switch (lever, lamps, spark) and hatchery (lid, lamp, wobbling egg), each
 22-41 min, about 3% of the weekly Gemini allowance each. Opus 5.5 through the same plan ran out after one half-made
 revolver. AI Studio in sneed's Chrome made a Lyria theme, robot and insect sound tests and TTS pain, begging and
-pleasure noises (muted while made). **Next: import the seven GLBs (codex_prep, GunArt) and wire their animations;
-pick sounds by ear.** Not in the game yet.
+pleasure noises (muted while made). **In the game (2026-11-22):** the four buildings move (dish scans, beacon blinks,
+core boots then hums with turning fans, switch lever and lamps follow on/off with a spark, hatchery egg wobbles:
+`visual.moving`, `PropAnims`), the minigun barrels spin up while firing, the LMG is a gun, the cowboy hat sits on the
+head as a rigid prop. Sounds: short gruff male grunts, female pain, begging and groans for people lying downed, three
+long lovin takes, and robot and insect sounds for mechanoids and chitinids (`tools/neon_sounds.py`, picked by
+measurement, sneed can swap). Not fixed: minigun heat tint too rainbow, LMG colours, paper-like crystal (BACKLOG).
+
+Rocket and grenade blasts look high quality (sneed, 2026-11-22; Unreal and blast art, `docs/design/blast-draw.md`): the
+fire and smoke pictures are **512 px a frame** (were 256), never streamed at a low mip, no longer **cut off square** at
+their edges, and drawn with round billowing lumps (gradient-noise turbulence) instead of boxy ones. Blasts throw **jets
+of dark soil** up in a cone; the flying **debris cubes are now lumpy soil clods and stones**; a rocket's trail is soft
+grey exhaust smoke with a flame at the nozzle, not solid balls. Needs the `blast-art` art step again (run by
+`update-and-play.bat`). **Next:** PC pictures in the gun range, third person.
 
 Playtest fixes from the gun range (sneed, 2026-11-22; sim, data, Unreal and hair tools): **dismemberment piles up
 again**: a limb at 0 kept no hitbox, so later shots and blows passed through it and never reached the 13 (arm) or 19

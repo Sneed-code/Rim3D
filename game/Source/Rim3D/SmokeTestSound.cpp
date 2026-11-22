@@ -307,10 +307,10 @@ void USmokeTestSubsystem::BuildSoundPhases()
 		{
 			Fail(FString::Printf(TEXT("sound_voices: distance gains %.2f %.2f %.2f"), Near, Twice, Edge));
 		}
-		if (S->GetClipCount(TEXT("Voice_FemHit")) != 5 || S->GetClipCount(TEXT("Voice_FemScream")) != 4
-			|| S->GetClipCount(TEXT("Voice_LovinCouple")) != 6 || S->GetClipCount(TEXT("Voice_LovinFem")) != 3)
+		if (S->GetClipCount(TEXT("Voice_FemHit")) != 24 || S->GetClipCount(TEXT("Voice_FemScream")) != 4
+			|| S->GetClipCount(TEXT("Voice_LovinCouple")) != 9 || S->GetClipCount(TEXT("Voice_LovinFem")) != 6)
 		{
-			Fail(FString::Printf(TEXT("sound_voices: loaded %d hit grunts, %d screams, %d couple and %d women's lovin sounds from game/Content/Rim3D/Sounds/cues (want 5, 4, 6, 3)"),
+			Fail(FString::Printf(TEXT("sound_voices: loaded %d hit grunts, %d screams, %d couple and %d women's lovin sounds from game/Content/Rim3D/Sounds/cues (want 24, 4, 9, 6: the couple cue also plays the women's)"),
 				S->GetClipCount(TEXT("Voice_FemHit")), S->GetClipCount(TEXT("Voice_FemScream")), S->GetClipCount(TEXT("Voice_LovinCouple")),
 				S->GetClipCount(TEXT("Voice_LovinFem"))));
 		}

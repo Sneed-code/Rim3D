@@ -56,6 +56,8 @@ namespace
 
 	// How fast a pawn turns to face where it walks, degrees per second at 1x.
 	constexpr float PawnTurnRate = 720.0f;
+	// The most time (seconds at 1x) one frame's turn may take; a longer frame (a hitch) finishes the turn over the next few.
+	constexpr float PawnTurnMaxStep = 1.0f / 20.0f;
 	// Slower than this (cm/s) a pawn keeps facing the way it faced.
 	constexpr float PawnTurnSpeed = 30.0f;
 	// Farther than this in one frame is a jump (spawn, load), not a walk.
@@ -64,6 +66,8 @@ namespace
 	constexpr float PawnActionBlendIn = 0.25f;
 	constexpr float PawnActionHold = 0.35f;
 	constexpr float PawnActionBlendOut = 0.35f;
+	// Faster than this (cm/s) a body doesn't crouch to a short action, and one crouched stands up: its feet would slide.
+	constexpr float PawnActionMaxSpeed = 40.0f;
 	// Where horns grow, in the MetaHuman's mesh space (cm; +Y forward, +Z up): the top of the
 	// forehead, measured on Kellan's head (its mesh spans z 135 to 173, y -10 to 14).
 	constexpr float PawnHornForward = 6.5f;
@@ -330,6 +334,10 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	}
 	GroundSpeed = Velocity.Size2D();
 
+	// Turns advance by at most PawnTurnMaxStep of time a frame: after a hitch (a quarter to half a second measured in the
+	// creator) the body would otherwise land a whole half turn in one frame, throwing long strand hair through it (#450).
+	const float TurnDt = FMath::Min(DeltaTime, PawnTurnMaxStep);
+
 	// Whether the body keeps a facing of its own while it moves (a clip, a lock-on): the walk then steps sideways or
 	// backwards under it instead of turning the hips the way it goes.
 	bool bHoldFacing = false;
@@ -338,7 +346,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	{
 		// On a wall: facing it, up or down (docs/design/climbing.md).
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * TurnDt * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}
 	else if (Now.motionClip.valid() && !bRagdoll && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
@@ -346,7 +354,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		// A clip the sim moves the body along plays facing the way the sim has the body face, not the way it is
 		// thrown: a stagger back must not turn the body round to face its own push (docs/design/body-motion.md).
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * TurnDt * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}
 	else if (const AProtagonistPawn* Aimer = PawnAimingPlayer(GetWorld(), Thing, Now))
@@ -354,14 +362,14 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		// The player's colonist aiming a gun: the body turns with the view and strafes, as in any over-the-shoulder
 		// shooter (PC run 11: standing still it kept its old facing and the rifle pointed off to the side of the view).
 		const float Wanted = Aimer->GetYaw();
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * TurnDt * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}
 	else if (Now.focusTarget != colony::kNoEntity && Now.rollPhase == 0 && !Now.downed && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
 	{
 		// Locked on (docs/design/focus.md): the body keeps facing its focus and walks sideways or backwards (strafes).
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * TurnDt * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}
 	else if ((Now.meleeFinisher != 0 || (Now.meleePhase == colony::MeleePhase::Windup && Now.meleeTarget != colony::kNoEntity)) && !bRagdoll &&
@@ -370,7 +378,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		// Swinging at someone, or through a finisher (sneed 2026-11-20): the body turns to whom it strikes and the feet
 		// step under it, instead of the body facing the way it walks while the blow goes off to the side.
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * 2.0f * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * 2.0f * TurnDt * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}
 	else if (PawnAimsThirdPerson(GetWorld(), Thing, Now))
@@ -379,7 +387,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		// turns with the view, walking sideways or back under it, so the gun and arms point where the crosshair is.
 		const UProtagonistSubsystem* ProtSub = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
 		const float Wanted = ProtSub->GetBody()->GetYaw();
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * 2.0f * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * 2.0f * TurnDt * FMath::Max(Speed, 1));
 		bHoldFacing = true;
 	}
 	else if (Velocity.Size2D() > (Now.crawling ? PawnCrawlStill : PawnTurnSpeed))
@@ -387,13 +395,13 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		// A crawler turns its body to where it drags itself at once (sneed 2026-11-22: crawling enemies turned slowly and
 		// slid sideways): three times a walker's turn.
 		const float Wanted = Velocity.Rotation().Yaw;
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * (Now.crawling ? 3.0f : 1.0f) * DeltaTime * Speed);
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * (Now.crawling ? 3.0f : 1.0f) * TurnDt * Speed);
 	}
 	else if ((Now.shotReadyIn > 0 || Now.fighting || Now.meleePhase != colony::MeleePhase::Ready || Now.blocking || Now.shieldUp) && FMath::Abs(Now.facingX) + FMath::Abs(Now.facingY) > 0.1f)
 	{
 		// Standing and shooting or swinging: face where the sim says the pawn aims (docs/design/fights.md).
 		const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(Now.facingY, Now.facingX));
-		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * DeltaTime * FMath::Max(Speed, 1));
+		Yaw = bTeleported ? Wanted : FMath::FixedTurn(Yaw, Wanted, PawnTurnRate * TurnDt * FMath::Max(Speed, 1));
 	}
 	// Swimming: the body floats with its shoulders at the surface (docs/design/water.md, W4).
 	SwimLiftCm = WaterDraw::SwimLiftEase(SwimLiftCm, Bridge.GetSim() ? WaterDraw::SwimLiftTargetCm(Now, Bridge.GetSim()->bodyHeightM(Thing)) : 0.0f, DeltaTime, bTeleported);
@@ -407,7 +415,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	}
 	else
 	{
-		const float YawDelta = DeltaTime * Speed;
+		const float YawDelta = TurnDt * Speed;
 		const int32 YawSteps = FMath::Clamp(FMath::CeilToInt32(YawDelta * 120.0f), 1, 30);
 		for (int32 i = 0; i < YawSteps; ++i)
 		{
@@ -421,11 +429,25 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 			DrawnYaw = FRotator::NormalizeAxis(Yaw + FMath::Sign(Behind) * PawnDrawnYawMaxLag);
 		}
 	}
+	// A facing that jumps in one frame throws long strand hair through the body (#450: 180-degree snaps measured in the
+	// creator's walk). Logged, a few times, with what drove it.
+	if (static int32 PawnFacingSnaps = 0; bPlaced && FMath::Abs(FMath::FindDeltaAngleDegrees(static_cast<float>(GetActorRotation().Yaw), DrawnYaw + PreviewSpin)) > 60.0f &&
+		PawnFacingSnaps < 30)
+	{
+		++PawnFacingSnaps;
+		UE_LOG(LogTemp, Display, TEXT("PAWN facing snap %d on %s: %.0f -> %.0f (yaw %.0f, teleported %d, dt %.4f x%d, speed %.0f cm/s, clip %d, focus %d, melee %d)"),
+			PawnFacingSnaps, *GetName(), GetActorRotation().Yaw, DrawnYaw + PreviewSpin, Yaw, bTeleported ? 1 : 0, DeltaTime, Speed, GroundSpeed,
+			Now.motionClip.valid() ? 1 : 0, Now.focusTarget != colony::kNoEntity ? 1 : 0, static_cast<int32>(Now.meleePhase));
+	}
 	SetActorLocationAndRotation(Location, FRotator(0.0, DrawnYaw + PreviewSpin, 0.0));
 	ApplySevered(Now.severed);
 	UpdateFightFace(Bridge, Now, DeltaTime * Speed);
 	if (bRagdoll)
 	{
+		if (Now.downed && !Now.dead)
+		{
+			UpdateRagdollTether(Location, DeltaTime);
+		}
 		UpdateRagdollRest(DeltaTime);
 		return;  // the physics body is on its own until the pawn gets up
 	}
@@ -528,10 +550,18 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		if (ActionEndSeconds > 0.0)
 		{
 			ActionEndSeconds -= DeltaTime * Speed;
-			if (ActionEndSeconds <= 0.0)
+			// Walked off before the crouch was over: up at once, never crouched legs gliding along the ground.
+			if (bActionCrouch && GroundSpeed > PawnActionMaxSpeed)
+			{
+				ActionEndSeconds = 0.0;
+				bActionCrouch = false;
+				Anim->StopSlotAnimation(0.15f, FAnimSlotGroup::DefaultSlotName);
+			}
+			else if (ActionEndSeconds <= 0.0)
 			{
 				Anim->StopSlotAnimation(PawnActionBlendOut, FAnimSlotGroup::DefaultSlotName);
 				ActionEndSeconds = 0.0;
+				bActionCrouch = false;
 			}
 		}
 	}
@@ -564,9 +594,14 @@ void ASimPawnActor::PlayAction(colony::PawnAction Action)
 	{
 		return;  // a work loop (felling) owns the slot
 	}
+	if (GroundSpeed > PawnActionMaxSpeed || IsInMotionClip())
+	{
+		return;  // a crouch on the move would slide the feet: only a body standing still crouches to its work
+	}
 	if (Anim->PlaySlotAnimationAsDynamicMontage(Animation, FAnimSlotGroup::DefaultSlotName, PawnActionBlendIn, PawnActionBlendOut))
 	{
 		ActionEndSeconds = PawnActionBlendIn + PawnActionHold;
+		bActionCrouch = true;
 		++ActionsPlayed;
 	}
 }
@@ -1443,6 +1478,34 @@ namespace
 	}
 }
 
+UStaticMeshComponent* ASimPawnActor::MakeHeadProp(USimPawnSubsystem& Pawns, const FSimWornPiece& Piece)
+{
+	// A rigid hat on a MakeHuman head (docs/design/neon-assets.md "Cowboy hat"): placed from the head bone in the body's rest
+	// pose, so it fits whichever way that bone's own axes point, then it rides on the bone.
+	if (Piece.HeadProp.IsEmpty() || !MakeHumanMesh || !MakeHumanMesh->GetSkeletalMeshAsset())
+	{
+		return nullptr;
+	}
+	UStaticMesh* Mesh = Cast<UStaticMesh>(Pawns.GetClothesAsset(Piece.HeadProp));
+	const FReferenceSkeleton& Ref = MakeHumanMesh->GetSkeletalMeshAsset()->GetRefSkeleton();
+	const int32 Bone = Ref.FindBoneIndex(TEXT("head"));
+	if (!Mesh || Bone == INDEX_NONE)
+	{
+		return nullptr;
+	}
+	const FTransform BoneRest = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, Bone);
+	const FTransform Hat(FRotator(0.0f, Piece.HeadPropYaw, 0.0f), BoneRest.GetLocation() + Piece.HeadPropAt, FVector(Piece.HeadPropScale));
+	UStaticMeshComponent* Component = NewObject<UStaticMeshComponent>(this);
+	Component->SetStaticMesh(Mesh);
+	Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Component->SetCanEverAffectNavigation(false);
+	Component->bReceivesDecals = false;
+	Component->SetupAttachment(MakeHumanMesh, TEXT("head"));
+	Component->SetRelativeTransform(Hat.GetRelativeTransform(BoneRest));
+	Component->RegisterComponent();
+	return Component;
+}
+
 void ASimPawnActor::ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnApparel& Wanted)
 {
 	const FString Base = Looks.MakeHuman;
@@ -1453,6 +1516,13 @@ void ASimPawnActor::ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnAppare
 		++ApparelRebuilds;
 		for (const FSimWornPiece& Piece : Wanted.Pieces)
 		{
+			if (UStaticMeshComponent* Prop = MakeHeadProp(Pawns, Piece))
+			{
+				GarmentCuts.Add(Piece.Item, TEXT("HeadProp"));
+				WornMeshes.Add(Prop);
+				WornMeshItems.Add(Piece.Item);
+				continue;
+			}
 			const FString Cut = PawnGarmentCut(Pawns, Base, Piece);
 			UE_LOG(LogTemp, Display, TEXT("Garments: %s on %s wears item %u (%d cuts) as '%s'"), *GetName(), *Base, Piece.Item, Piece.Cuts.Num(), *Cut);
 			if (Cut.IsEmpty())
@@ -1509,7 +1579,8 @@ void ASimPawnActor::ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnAppare
 	for (const FSimWornPiece& Piece : Apparel.Pieces)
 	{
 		bHeadwearDrawn = bHeadwearDrawn || (Piece.bHeadwear && GarmentCuts.Contains(Piece.Item));
-		bCovered = bCovered || (Piece.bHidesHair && GarmentCuts.Contains(Piece.Item));
+		const FString* Drawn = GarmentCuts.Find(Piece.Item);
+		bCovered = bCovered || (Drawn && (Piece.bHidesHair || *Drawn == TEXT("HeadProp")));
 		bCrotchCovered = bCrotchCovered || (Piece.bCoversCrotch && GarmentCuts.Contains(Piece.Item));
 	}
 	SetMakeHumanHairCovered(bCovered);
@@ -2391,7 +2462,8 @@ void ASimPawnActor::UpdateFinisherKneel(const USimSubsystem& Bridge, const colon
 	{
 		const std::vector<colony::MeleeFinisher>& Finishers = Sim->melee().rules().finishers;
 		const size_t Index = static_cast<size_t>(Now.meleeFinisher) - 1;
-		bKneel = Index < Finishers.size() && Finishers[Index].kneel;
+		// A finisher with a whole-body clip kneels in the clip itself (sneed 2026-11-22): no crouch laid over it.
+		bKneel = Index < Finishers.size() && Finishers[Index].kneel && !Sim->melee().finisherPlaysClip(Now.meleeFinisher);
 	}
 	const USimPawnSubsystem* Pawns = GetWorld() ? GetWorld()->GetSubsystem<USimPawnSubsystem>() : nullptr;
 	UAnimSequence* Crouch = Pawns ? Pawns->GetActionAnimation(colony::PawnAction::PickUp) : nullptr;
@@ -2795,6 +2867,46 @@ void ASimPawnActor::UpdateRagdollRest(float DeltaTime)
 	}
 }
 
+void ASimPawnActor::UpdateRagdollTether(const FVector& SimSpot, float DeltaTime)
+{
+	// The sim's downed body lies over its spot (its prone hitboxes), but the ragdoll fell wherever the blow and the
+	// physics took it: 50-70 cm off, any way, so finishers came down beside the drawn body or kneeled on it (PC round 4,
+	// sneed 2026-11-22). While it falls (and again after a push wakes it), its pelvis is steered back over the spot, as a
+	// velocity the whole body eases toward. A body asleep is left alone (no slide once it lies).
+	if (!Body || !Body->IsSimulatingPhysics() || !Body->RigidBodyIsAwake() || RagdollSeconds > 2.5f || DeltaTime <= 0.0f)
+	{
+		return;
+	}
+	FBodyInstance* Pelvis = Body->GetBodyInstance(TEXT("pelvis"));
+	if (!Pelvis || !Pelvis->IsInstanceSimulatingPhysics())
+	{
+		return;
+	}
+	const FVector At = Pelvis->GetUnrealWorldTransform().GetLocation();
+	FVector Off = SimSpot - At;
+	Off.Z = 0.0;
+	const double Dist = Off.Size();
+	constexpr double TetherDeadCm = 8.0;
+	constexpr double TetherRate = 4.0;        // per second: the speed it wants is this times how far off it is
+	constexpr double TetherMaxSpeed = 200.0;  // cm/s
+	constexpr double TetherGrip = 20.0;       // per second: how fast its speed eases to that
+	FVector Want = FVector::ZeroVector;
+	if (Dist > TetherDeadCm)
+	{
+		Want = Off / Dist * FMath::Min((Dist - TetherDeadCm) * TetherRate, TetherMaxSpeed);
+	}
+	FVector Velocity = Pelvis->GetUnrealWorldVelocity();
+	Velocity.Z = 0.0;
+	if (Dist <= TetherDeadCm && Velocity.SizeSquared() < 1.0)
+	{
+		return;
+	}
+	const FVector Accel = (Want - Velocity) * TetherGrip;
+	// On every part alike (the pelvis alone, pulling a whole body against the ground's grip, barely moved it: PC round 5).
+	Body->AddForceToAllBodiesBelow(FVector(Accel.X, Accel.Y, 0.0), TEXT("pelvis"), true, true);
+	++RagdollTethers;
+}
+
 void ASimPawnActor::PushRagdoll(const FVector& Centre, float RadiusCm, float SpeedCmPerSecond)
 {
 	if (!bRagdoll || !Body || !Body->IsSimulatingPhysics() || RadiusCm <= 0.0f)
@@ -2815,11 +2927,18 @@ void ASimPawnActor::PushRagdollAt(const FVector& At, const FVector& Impulse)
 	{
 		return;
 	}
+	// A velocity change, so a light limb and the heavy pelvis jolt alike: the bone struck takes it all, the rest of the
+	// body a little (sneed 2026-11-22: "corpses need to wriggle, have ragdoll physics when hit, not just lie still").
 	const FName Bone = Body->FindClosestBone(At, nullptr, 0.0f, true);
 	Body->WakeAllRigidBodies();
-	Body->AddImpulseAtLocation(Impulse, At, Bone);
+	if (!Bone.IsNone())
+	{
+		Body->AddImpulse(Impulse, Bone, true);
+	}
+	Body->AddImpulse(Impulse * 0.15f, NAME_None, true);
 	RagdollSeconds = 0.0f;
 	RagdollStillSeconds = 0.0f;
+	++RagdollHitPushes;
 }
 
 bool ASimPawnActor::GetRagdollPelvis(FVector& OutLocation) const
@@ -2926,7 +3045,7 @@ bool ASimPawnActor::GetDrawnHeadCentre(FVector& Out) const
 void ASimPawnActor::SetBodyHidden(bool bHide)
 {
 	bBodyHidden = bHide;
-	const bool bAnyHidden = bBodyHidden || bCutAway;
+	const bool bAnyHidden = bBodyHidden || bCutAway || bGibHidden;
 	SetActorHiddenInGame(bAnyHidden);
 	if (MetaHuman)
 	{

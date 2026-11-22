@@ -826,9 +826,11 @@ TEST_CASE("Dismemberment: only the hit that kills, a quarter of the zone over wh
     if (view != nullptr) {
         CHECK(view->severed == kSeveredRightForearm);
     }
-    // A corpse can still be cut up (sneed, 2026-11-19): a hit on a dead body goes in, and past 0 it piles up.
+    // A corpse can still be cut up (sneed, 2026-11-19): a hit on a dead body goes in, and past 0 it piles up; what is
+    // left over after the leg comes off goes on to the torso, which sheds everything else (sneed, 2026-11-22).
     CHECK(zoneTestCorpseHit(*sim, lower, "Cut", 200.0f, "left leg"));
-    CHECK(sim->health().severed(lower) == (kSeveredRightForearm | kSeveredLeftLeg));
+    CHECK((sim->health().severed(lower) & kSeveredLeftLeg) != 0);
+    CHECK((sim->health().severed(lower) & kSeveredHead) != 0);
 }
 
 TEST_CASE("Dismemberment: a leg whole or below the knee, the head off, a torso comes apart") {
@@ -965,14 +967,14 @@ TEST_CASE("Dismemberment: damage past 0 piles up over many hits, on the living a
     CHECK(zoneTestLeft(*sim, healing, "Arm") > 0.0f);
     CHECK(sim->health().zoneOverkill(healing, healingArm) == doctest::Approx(0.0f));
 
-    // A torso doesn't come apart from blows piling up on a corpse's chest, only from one big enough on its own.
+    // Blows piling up on a corpse's chest take a limb off for every quarter of the torso (25) past 0 (sneed,
+    // 2026-11-22); one hit 25 past 0 on its own takes the head and every limb at once.
     const Entity chest = zoneTestPawn(*sim, 22, 6, true);
     CHECK(zoneTestHit(*sim, chest, "Blunt", 124.0f, "torso"));
     CHECK(zoneTestHealth(*sim, chest).dead);
-    for (int i = 0; i < 5; ++i) {
-        CHECK(zoneTestCorpseHit(*sim, chest, "Stab", 10.0f, "torso"));
-    }
-    CHECK(sim->health().severed(chest) == 0);
+    CHECK(sim->health().severed(chest) == 0);  // 24 past 0
+    CHECK(zoneTestCorpseHit(*sim, chest, "Stab", 10.0f, "torso"));
+    CHECK(sim->health().severed(chest) == kSeveredLeftArm);  // 34: one limb, 9 left on the pile
     CHECK(zoneTestCorpseHit(*sim, chest, "Bomb", 25.0f, "torso"));
     CHECK(sim->health().severed(chest) == (kSeveredHead | kSeveredLeftArm | kSeveredRightArm | kSeveredLeftLeg | kSeveredRightLeg));
 
@@ -1152,4 +1154,198 @@ TEST_CASE("Dismemberment: a blast a metre from a corpse throws it and tears a pa
     CHECK(sim->health().severed(pawn) != before);
     CHECK(moved > 0.3f);
     CHECK(after.x < at.x);
+}
+
+TEST_CASE("Body zones: a person down from a leg is downed and awake, one knocked out is not (downed voices)") {
+    const auto viewOf = [](Sim& sim, Entity pawn) {
+        Snapshot snap;
+        sim.writeSnapshot(snap);
+        const auto it = std::find_if(snap.things.begin(), snap.things.end(), [&](const ThingView& v) { return v.id == pawn; });
+        return it == snap.things.end() ? ThingView{} : *it;
+    };
+    auto sim = zoneTestSim();
+    const Entity legs = zoneTestPawn(*sim, 10, 10);
+    const Entity head = zoneTestPawn(*sim, 20, 10);
+    CHECK_FALSE(sim->health().downedAwake(legs));
+    CHECK_FALSE(viewOf(*sim, legs).downedAwake);
+    CHECK(zoneTestHit(*sim, legs, "Blunt", 60.0f, "left leg"));
+    CHECK(sim->health().downedAwake(legs));
+    CHECK(viewOf(*sim, legs).downed);
+    CHECK(viewOf(*sim, legs).downedAwake);
+    CHECK(zoneTestHit(*sim, head, "Blunt", 20.0f, "neck"));
+    CHECK(zoneTestHit(*sim, head, "Blunt", 20.0f, "jaw"));
+    CHECK(viewOf(*sim, head).downed);
+    CHECK_FALSE(viewOf(*sim, head).downedAwake);
+}
+
+TEST_CASE("Dismemberment: overkill on a corpse is kept until it is all in pieces, a limb a quarter of the torso (sneed, 2026-11-22)") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim, 6, 6, true);
+    CHECK(zoneTestHit(*sim, pawn, "Blunt", 100.0f, "torso"));
+    CHECK(zoneTestHealth(*sim, pawn).dead);
+    const int torso = zoneTestZone(*sim, pawn, "Torso");
+    // The right leg battered first: it is the first to go when the torso's pile fills.
+    CHECK(zoneTestCorpseHit(*sim, pawn, "Blunt", 80.0f, "right leg"));  // 5 past 0, not yet off
+    CHECK(sim->health().severed(pawn) == 0);
+    CHECK(zoneTestCorpseHit(*sim, pawn, "Stab", 24.0f, "torso"));
+    CHECK(sim->health().severed(pawn) == 0);
+    CHECK(zoneTestCorpseHit(*sim, pawn, "Stab", 2.0f, "torso"));  // 26
+    CHECK(sim->health().severed(pawn) == kSeveredRightLeg);
+    CHECK(sim->health().zoneOverkill(pawn, torso) == doctest::Approx(1.0f));
+    // Small blows on the trunk: the other 3 limbs, then the head (100 more piled; 1 + 100 = 101, 1 left over).
+    for (int i = 0; i < 8; ++i) {
+        CHECK(zoneTestCorpseHit(*sim, pawn, "Stab", 12.5f, "torso"));
+    }
+    const uint16_t all = kSeveredHead | kSeveredLeftArm | kSeveredRightArm | kSeveredLeftLeg | kSeveredRightLeg;
+    CHECK(sim->health().severed(pawn) == all);
+    CHECK_FALSE(sim->health().gibbed(pawn));
+    CHECK(sim->health().zoneOverkill(pawn, torso) == doctest::Approx(1.0f));
+    const std::vector<std::string> messages = zoneTestMessages(*sim, pawn, EventType::PawnDismembered);
+    CHECK(messages.size() == 5);
+    if (messages.size() != 5) {
+        return;
+    }
+    CHECK(messages.front() == "right leg");
+    CHECK(messages.back() == "head");  // the head goes last, once no limb is left
+
+    // What a cut limb piled past its quarter goes on to the torso: a 40 blow on a dead arm at 0 takes it off (13) and
+    // leaves 27 for the torso, which takes another limb.
+    const Entity second = zoneTestPawn(*sim, 12, 6, true);
+    CHECK(zoneTestHit(*sim, second, "Blunt", 100.0f, "torso"));
+    CHECK(zoneTestCorpseHit(*sim, second, "Blunt", 50.0f, "left arm"));
+    CHECK(sim->health().severed(second) == 0);
+    CHECK(zoneTestCorpseHit(*sim, second, "Blunt", 40.0f, "left arm"));
+    CHECK((sim->health().severed(second) & kSeveredLeftArm) != 0);
+    int pieces = 0;
+    for (uint16_t bits = sim->health().severed(second); bits != 0; bits = static_cast<uint16_t>(bits & (bits - 1))) {
+        ++pieces;
+    }
+    CHECK(pieces == 2);
+}
+
+TEST_CASE("Dismemberment: the bare trunk bursts into gibs at another quarter piled past 0; nothing is left to hit (sneed, 2026-11-22)") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim, 6, 6, true);
+    CHECK(zoneTestHit(*sim, pawn, "Blunt", 125.0f, "torso"));  // 25 past 0 in one hit: head and every limb off
+    const uint16_t all = kSeveredHead | kSeveredLeftArm | kSeveredRightArm | kSeveredLeftLeg | kSeveredRightLeg;
+    CHECK(sim->health().severed(pawn) == all);
+    const int torso = zoneTestZone(*sim, pawn, "Torso");
+    CHECK(sim->health().zoneOverkill(pawn, torso) == doctest::Approx(0.0f));
+    CHECK(zoneTestCorpseHit(*sim, pawn, "Stab", 24.0f, "torso"));
+    CHECK_FALSE(sim->health().gibbed(pawn));
+    CHECK(sim->health().takesCorpseHits(pawn));
+    CHECK(zoneTestCorpseHit(*sim, pawn, "Stab", 2.0f, "torso"));  // 26: it bursts
+    CHECK(sim->health().gibbed(pawn));
+    CHECK(sim->health().severed(pawn) == (all | kSeveredTrunk));
+    CHECK(zoneTestMessages(*sim, pawn, EventType::PawnGibbed).size() == 1);
+    CHECK(zoneTestMessages(*sim, pawn, EventType::PawnDied).size() <= 1);  // it died once, not again as it burst
+    // Nothing is left to hit: no hitbox, no corpse hits, no second burst.
+    CHECK_FALSE(sim->health().takesCorpseHits(pawn));
+    CHECK_FALSE(sim->health().hasPart(pawn, 0));
+    CHECK_FALSE(zoneTestCorpseHit(*sim, pawn, "Stab", 50.0f, "torso"));
+    CHECK(zoneTestMessages(*sim, pawn, EventType::PawnGibbed).size() == 1);
+    zoneTestRun(*sim, 60);
+    CHECK(sim->health().gibbed(pawn));
+    // The snapshot tells Unreal (it hides the body and throws the gibs), and a save keeps it.
+    Snapshot snap;
+    sim->writeSnapshot(snap);
+    bool seen = false;
+    for (const ThingView& view : snap.things) {
+        if (view.id == pawn) {
+            seen = true;
+            CHECK((view.severed & kSeveredTrunk) != 0);
+        }
+    }
+    CHECK(seen);
+    SaveLoadResult loaded = loadSim(saveSim(*sim), zoneTestDefs());
+    CHECK(loaded.error == "");
+    if (loaded.sim != nullptr) {
+        CHECK(loaded.sim->health().gibbed(pawn));
+        CHECK(loaded.sim->stateHash() == sim->stateHash());
+    }
+
+    // One hit far past 0 (a rocket in the chest): everything off and the trunk burst at once (125 + 25 past 0).
+    const Entity blown = zoneTestPawn(*sim, 12, 6, true);
+    CHECK(zoneTestHit(*sim, blown, "Bomb", 150.0f, "torso"));
+    CHECK(sim->health().gibbed(blown));
+    CHECK(zoneTestMessages(*sim, blown, EventType::PawnDismembered).size() == 5);
+}
+
+TEST_CASE("Dismemberment: a hard blast piece tears a living arm or leg off; never the head (sneed, 2026-11-22)") {
+    auto sim = zoneTestSim();
+    const Entity pawn = zoneTestPawn(*sim, 6, 6, true);
+    const int arm = zoneTestPart(*sim, pawn, "left arm");
+    CHECK_FALSE(sim->health().blastTear(pawn, arm, 14.0f));  // under 0.3 of 50
+    CHECK(sim->health().blastTear(pawn, arm, 15.0f));
+    CHECK(sim->health().severed(pawn) == kSeveredLeftArm);
+    CHECK_FALSE(zoneTestHealth(*sim, pawn).dead);
+    CHECK_FALSE(sim->health().blastTear(pawn, zoneTestPart(*sim, pawn, "head"), 50.0f));
+    CHECK_FALSE(sim->health().blastTear(pawn, zoneTestPart(*sim, pawn, "torso"), 100.0f));
+    // A foot: below the knee.
+    CHECK(sim->health().blastTear(pawn, zoneTestPart(*sim, pawn, "left foot"), 30.0f));
+    CHECK((sim->health().severed(pawn) & kSeveredLeftLowerLeg) != 0);
+}
+
+TEST_CASE("Blasts: a rocket at people's feet throws them down metres away and tears limbs off some of them") {
+    int torn = 0;
+    int thrown = 0;
+    const int people = 12;
+    for (int i = 0; i < people; ++i) {
+        SimSettings settings;
+        settings.seed = 500 + static_cast<uint64_t>(i);
+        settings.mapSize = 64;
+        settings.flatMap = true;
+        settings.pawns = 0;
+        settings.items = 0;
+        auto sim = std::make_unique<Sim>(settings, zoneTestDefs());
+        const Entity pawn = zoneTestPawn(*sim, 20, 20, false);
+        zoneTestRun(*sim, 2);
+        const Position at = sim->things().registry().get<Position>(pawn);
+        const float angle = 6.2831853f * static_cast<float>(i) / static_cast<float>(people);
+        const float bx = at.x + 0.8f * std::cos(angle);
+        const float by = at.y + 0.8f * std::sin(angle);
+        sim->submit(ExplodeCommand{bx, by, 3.9f, 50.0f, "Bomb", 0.1f});
+        zoneTestRun(*sim, 90);
+        const Position after = sim->things().registry().get<Position>(pawn);
+        const float moved = std::hypot(after.x - at.x, after.y - at.y);
+        const float away = (after.x - at.x) * (at.x - bx) + (after.y - at.y) * (at.y - by);
+        thrown += moved > 1.5f && away > 0.0f ? 1 : 0;
+        for (uint16_t bits = sim->health().severed(pawn); bits != 0; bits = static_cast<uint16_t>(bits & (bits - 1))) {
+            ++torn;
+        }
+        MESSAGE("person " << i << ": moved " << moved << ", severed " << sim->health().severed(pawn) << ", dead "
+                          << zoneTestHealth(*sim, pawn).dead);
+    }
+    MESSAGE(torn << " pieces off, " << thrown << " of " << people << " thrown past 1.5 m");
+    CHECK(torn >= people / 3);
+    CHECK(thrown >= people * 3 / 4);
+}
+
+TEST_CASE("Dismemberment: rockets on a corpse burst its trunk (smoke gore phase gibs)") {
+    int burst = 0;
+    for (int seed = 0; seed < 8; ++seed) {
+        SimSettings settings;
+        settings.seed = 900 + static_cast<uint64_t>(seed);
+        settings.mapSize = 64;
+        settings.flatMap = true;
+        settings.pawns = 0;
+        settings.items = 0;
+        auto sim = std::make_unique<Sim>(settings, zoneTestDefs());
+        const Entity pawn = zoneTestPawn(*sim, 20, 20, true);
+        sim->submit(DamagePawnCommand{pawn, "Blunt", 62.0f, zoneTestPart(*sim, pawn, "head")});
+        zoneTestRun(*sim, 3);
+        Position at = sim->things().registry().get<Position>(pawn);
+        sim->submit(ExplodeCommand{at.x + 1.0f, at.y, 3.9f, 50.0f, "Bomb", 0.1f});
+        zoneTestRun(*sim, 60);
+        int blasts = 0;
+        for (; blasts < 4 && !sim->health().gibbed(pawn); ++blasts) {
+            at = sim->things().registry().get<Position>(pawn);
+            sim->submit(ExplodeCommand{at.x + 0.3f, at.y, 1.6f, 120.0f, "Bomb", 0.1f});
+            zoneTestRun(*sim, 18);
+        }
+        MESSAGE("seed " << seed << ": severed " << sim->health().severed(pawn) << " after " << blasts << " blasts, torso pile "
+                        << sim->health().zoneOverkill(pawn, zoneTestZone(*sim, pawn, "Torso")));
+        burst += sim->health().gibbed(pawn) ? 1 : 0;
+    }
+    CHECK(burst == 8);
 }

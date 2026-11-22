@@ -158,6 +158,10 @@ private:
 		/** A real gun model (assets/guns.json): its body is Component, its other parts ride on it. */
 		bool bArt = false;
 		TArray<TWeakObjectPtr<UStaticMeshComponent>> Parts;
+		/** Each of Parts' index in the gun's assets/guns.json parts, and a spinning part's speed (turns a second) and angle. */
+		TArray<int32> PartDefs;
+		float SpinSpeed = 0.0f;
+		float SpinAngle = 0.0f;
 	};
 
 	struct FPawnWeapons
@@ -256,6 +260,8 @@ private:
 	TMap<uint64, TObjectPtr<UStaticMesh>> ShieldMeshes;
 
 	TMap<uint32, FPawnWeapons> Weapons;
+	/** World seconds each pawn last fired (ShotFired), for a minigun's spinning barrels. */
+	TMap<uint32, float> LastShotAt;
 	FDelegateHandle EventHandle;
 	TWeakObjectPtr<USimSubsystem> BridgeSource;
 	int32 LastGeneration = -1;

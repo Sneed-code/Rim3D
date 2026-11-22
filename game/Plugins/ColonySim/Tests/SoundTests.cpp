@@ -713,3 +713,80 @@ TEST_CASE("sound: what a step says about the ground") {
     CHECK(soundSurfaceOfStep("Step_Tile") == "Stone");
     CHECK(soundSurfaceOfStep("Step_Wood") == "Wood");
 }
+
+TEST_CASE("sound: people lying downed beg and groan; mechanoids and chitinids have their own sounds") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    const Def* human = db.find("Things", "Human");
+    if (human == nullptr) { CHECK(false); return; }
+    CHECK(soundDownedVoice(*human, SoundGender::Female) == "Voice_FemDowned");
+    CHECK(soundDownedVoice(*human, SoundGender::Male) == "Voice_MaleDowned");
+    CHECK(soundDownedVoice(*human, SoundGender::Unknown).empty());
+    for (const char* cue : {"Voice_FemDowned", "Voice_MaleDowned"}) {
+        const Def* c = db.find("SoundCues", cue);
+        if (c == nullptr) { CHECK_MESSAGE(false, cue); continue; }
+        CHECK(c->number("every.0", 0.0) >= 3.0);  // now and then, not a constant drone
+        CHECK(c->number("every.1", 0.0) > c->number("every.0", 0.0));
+        CHECK(c->integer("priority", 3) == 1);
+    }
+    const Def* scyther = db.find("Things", "Mech_Scyther");
+    const Def* spider = db.find("Things", "Megaspider");
+    if (scyther == nullptr || spider == nullptr) { CHECK(false); return; }
+    CHECK(soundSlot(*scyther, "idle") == "Animal_Mech_Idle");
+    CHECK(soundSlot(*scyther, "hurt") == "Animal_Mech_Hurt");
+    CHECK(soundSlot(*scyther, "death") == "Animal_Mech_Death");
+    CHECK(soundSlot(*spider, "idle") == "Animal_Chitinid_Idle");
+    CHECK(soundSlot(*spider, "death") == "Animal_Chitinid_Death");
+    CHECK(soundDownedVoice(*scyther, SoundGender::Unknown).empty());
+}
+
+TEST_CASE("sound: a corpse makes no vocals when shot or hit, but the blow itself still sounds (sneed 2026-11-22)") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    const Entity woman = static_cast<Entity>(11);
+    const DefId human = db.idOf("Things", "Human");
+    const SoundDefOf defOf = [&](Entity e) { return e == woman ? human : DefId{}; };
+    const SoundGenderOf genderOf = [&](Entity) { return SoundGender::Female; };
+    bool alive = true;
+    const SoundAliveOf aliveOf = [&](Entity) { return alive; };
+    Event mh;
+    mh.type = EventType::MeleeHit;
+    mh.def = db.idOf("Things", "Melee_Club");
+    mh.message = "hit";
+    mh.hit = ProjectileHitKind::Pawn;
+    mh.target = woman;
+    mh.amount = 8.0f;
+    int livingGrunts = 0;
+    int deadGrunts = 0;
+    int deadOther = 0;
+    for (int i = 0; i < 100; ++i) {
+        mh.x = static_cast<float>(i) * 0.37f;
+        for (const bool a : {true, false}) {
+            alive = a;
+            std::vector<SoundPlay> out;
+            soundForEvent(db, mh, defOf, out, genderOf, {}, aliveOf);
+            for (const SoundPlay& p : out) {
+                if (p.voice != SoundVoice::None) {
+                    (a ? livingGrunts : deadGrunts) += 1;
+                } else if (!a) {
+                    ++deadOther;
+                }
+            }
+        }
+    }
+    CHECK(livingGrunts > 20);
+    CHECK(deadGrunts == 0);
+    CHECK(deadOther >= 100);  // the club on flesh still sounds
+    // A part torn off a corpse: the gore sounds, no hurt cry.
+    Event lost;
+    lost.type = EventType::PawnPartLost;
+    lost.thing = woman;
+    lost.message = "Arm";
+    alive = false;
+    std::vector<SoundPlay> out;
+    soundForEvent(db, lost, defOf, out, genderOf, {}, aliveOf);
+    for (const SoundPlay& p : out) {
+        CHECK(p.voice == SoundVoice::None);
+        CHECK(p.cue.rfind("Voice_", 0) != 0);
+    }
+}
