@@ -49,6 +49,11 @@ namespace
 		if (Material)
 		{
 			UMaterialEditingLibrary::DeleteAllMaterialExpressions(Material);
+			// Anything it left (WetLook's wrap nodes were left on M_GunPBR, PC 2026-11-22) goes too, one at a time.
+			for (int32 Left = Material->GetExpressions().Num(); Left > 0 && Material->GetExpressions().Num() > 0; --Left)
+			{
+				UMaterialEditingLibrary::DeleteMaterialExpression(Material, Material->GetExpressions().Last().Get());
+			}
 		}
 		else
 		{

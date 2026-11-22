@@ -438,6 +438,12 @@ namespace
 		}
 		const FExpressionInput OldBase = *Base;
 		const FExpressionInput OldRough = *Rough;
+		if (!OldBase.Expression || !OldRough.Expression)
+		{
+			// A wrap left behind with nothing on its inputs (its material rebuilt round it, GunArt's M_GunPBR: PC
+			// 2026-11-22, this crashed): nothing to put back; WetLookClearLeftovers deals with it.
+			return false;
+		}
 		// Everything the wrap added: its own nodes and the inputs only they used (older runs didn't mark those).
 		TSet<UMaterialExpression*> Remove;
 		for (const TObjectPtr<UMaterialExpression>& Expression : Material->GetExpressions())
@@ -470,6 +476,41 @@ namespace
 		{
 			UMaterialEditingLibrary::DeleteMaterialExpression(Material, Expression);
 		}
+		return true;
+	}
+
+	/** Leftover wrap nodes with nothing of the wrap on the material's base colour or roughness (a material its own
+	 *  commandlet just built again, like GunArt's M_GunPBR, PC 2026-11-22): the leftovers are deleted so it is wrapped
+	 *  afresh. False if the wrap still feeds a property (that one needs WetLookUnwrap). */
+	bool WetLookClearLeftovers(UMaterial* Material)
+	{
+		UMaterialEditorOnlyData* Data = Material->GetEditorOnlyData();
+		if (!Data)
+		{
+			return false;
+		}
+		const auto Tagged = [](const UMaterialExpression* Expression)
+		{
+			const UMaterialExpressionCustom* Custom = Cast<UMaterialExpressionCustom>(Expression);
+			return (Custom && Custom->Description.StartsWith(WetLookTag)) || (Expression && Expression->Desc.StartsWith(WetLookTag));
+		};
+		if (Tagged(Data->BaseColor.Expression) || Tagged(Data->Roughness.Expression))
+		{
+			return false;
+		}
+		TArray<UMaterialExpression*> Gone;
+		for (const TObjectPtr<UMaterialExpression>& Expression : Material->GetExpressions())
+		{
+			if (Tagged(Expression.Get()))
+			{
+				Gone.Add(Expression.Get());
+			}
+		}
+		for (UMaterialExpression* Expression : Gone)
+		{
+			UMaterialEditingLibrary::DeleteMaterialExpression(Material, Expression);
+		}
+		UE_LOG(LogWetLook, Display, TEXT("%s: %d leftover wrap nodes cleared, wrapped afresh"), *Material->GetPathName(), Gone.Num());
 		return true;
 	}
 
@@ -618,7 +659,7 @@ int32 UWetLookCommandlet::Main(const FString& Params)
 				++Redone;
 				continue;
 			}
-			if (!WetLookUnwrap(Material))
+			if (!WetLookUnwrap(Material) && !WetLookClearLeftovers(Material))
 			{
 				UE_LOG(LogWetLook, Warning, TEXT("%s: could not take the old wrap out; left as it was"), *Name);
 				++Failed;
