@@ -107,7 +107,14 @@ texture**, as Baldur's Gate 3 does:
 - `-run=BloodArt` bakes one **position map** per body base (`T_SkinPos_<Base>`): the bind-pose position of the skin
   at each texel. Extras (tail, ears) share the skin's UV space and their small UV patches overlap the body's; where two
   triangles far apart (over 3 cm) claim a texel, the body's (denser in UV) keeps it, so the tail's patch no longer paints
-  a hard square on the hip (sneed's groin picture, 2026-11-20). A hit is taken back into the bind pose through the bone it moves with (the nearest bone span with a
+  a hard square on the hip (sneed's groin picture, 2026-11-20). **The stocking band** (sneed, 2026-11-20 to 11-22: a ring of
+  blood round the top of both thighs and thin lines up the belly and an arm after groin or hip hits) was the woman's anatomy
+  body (`adult_female_anatomy_body`): about 47 triangles that stitch the vulva to the body are a few mm across on the body
+  but hundreds of texels long in UV, laid across both thighs, the belly and the right arm. Drawn into the position map they
+  claimed those texels as "groin". The bake now leaves out any triangle whose UV edge per cm is over 8 times the median
+  skin's (the man's body has none; ordinary skin stays under 5 times), and the grown border round each island copies one
+  island only, never an average of two far-apart places. The `gore` smoke test takes `-GoreWoman` and has `thighs` and
+  `thighsback` close-ups after torso, groin, hip and thigh shots. A hit is taken back into the bind pose through the bone it moves with (the nearest bone span with a
   physics body, through the mesh's inverse bind matrix), and `M_SkinBloodPaint` adds the marks on the GPU: the wound,
   blood soaked round it, spatter, and runs down from it along the bind-pose "down" of that moment, broken up by noise.
   Only skin near the shot line takes it (not the far side). Because it is painted in body space, seams match and the
