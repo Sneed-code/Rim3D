@@ -1,0 +1,50 @@
+{
+ "name": "Shell_HighExplosive",
+ "kind": "item",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -21.1,
+   -4.14,
+   0.0
+  ],
+  "max": [
+   21.1,
+   4.14,
+   8.28
+  ]
+ },
+ "sizeM": [
+  0.422,
+  0.083,
+  0.083
+ ],
+ "parts": {
+  "Shell_HighExplosive": {
+   "boundsCm": {
+    "min": [
+     -21.1,
+     -4.14,
+     0.0
+    ],
+    "max": [
+     21.1,
+     4.14,
+     8.28
+    ]
+   },
+   "tris": 3936
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "Shell_HighExplosive": {
+   "from": "Shell_HighExplosive",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}
