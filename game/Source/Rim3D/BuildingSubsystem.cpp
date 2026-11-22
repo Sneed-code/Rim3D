@@ -40,6 +40,7 @@ namespace
 	constexpr int32 BldAll = 2;
 	constexpr int32 BldGhost = 3;
 	constexpr int32 BldGlass = 4;  // a window's pane (docs/design/windows.md)
+	constexpr int32 BldRotor = 5;  // a turning part (visual.rotor: wind turbine blades)
 	constexpr int32 BldVariants = 8;  // batch and component keys are Look * BldVariants + variant
 
 	// A frame is drawn this fraction of its height with nothing delivered, and a full height when it is done.
@@ -365,6 +366,7 @@ void UBuildingSubsystem::Deinitialize()
 	DrawActor = nullptr;
 	Chunks.Reset();
 	DoorSlots.Reset();
+	RotorSlots.Reset();
 	Super::Deinitialize();
 }
 
@@ -377,6 +379,7 @@ void UBuildingSubsystem::Teardown()
 	DrawActor = nullptr;
 	Chunks.Reset();
 	DoorSlots.Reset();
+	RotorSlots.Reset();
 	Looks.Reset();
 	LookIndex.Reset();
 	DefLooks.Reset();
@@ -426,6 +429,18 @@ int32 UBuildingSubsystem::GetLevelInstances(int32 Level, bool bVisibleOnly) cons
 		}
 	}
 	return Count;
+}
+
+bool UBuildingSubsystem::GetRotor(colony::Entity Thing, float& OutAngleDeg, float& OutRpm) const
+{
+	const FRotorSlot* Slot = RotorSlots.Find(static_cast<uint32>(Thing));
+	if (!Slot)
+	{
+		return false;
+	}
+	OutAngleDeg = Slot->AngleDeg;
+	OutRpm = Slot->Rpm;
+	return true;
 }
 
 float UBuildingSubsystem::GetDoorShown(colony::Entity Door) const
@@ -574,6 +589,25 @@ void UBuildingSubsystem::ReadDefs(const colony::Sim& Sim)
 			else
 			{
 				UE_LOG(LogSimBuildings, Warning, TEXT("%s: mesh %s not found, drawing its shapes instead (python tools/placeholder_art.py, then the PlaceholderArt commandlet)"), UTF8_TO_TCHAR(Def.defName().c_str()), UTF8_TO_TCHAR(MeshPath.c_str()));
+			}
+		}
+		// Its turning part (docs/design/building-draw.md "Downloaded models with a moving part"): only with the def's own
+		// mesh, since the shapes drawn without one already have their blades.
+		const std::string RotorPath = Def.text("visual.rotor.mesh");
+		if (Look.ArtMesh && !RotorPath.empty())
+		{
+			Look.RotorMesh = LoadObject<UStaticMesh>(nullptr, UTF8_TO_TCHAR(RotorPath.c_str()));
+			if (Look.RotorMesh)
+			{
+				KeepMeshes.Add(Look.RotorMesh);
+				Look.RotorAtCm = FVector(Def.numberAt("visual.rotor.at", 0, 0.0), Def.numberAt("visual.rotor.at", 1, 0.0), Def.numberAt("visual.rotor.at", 2, 0.0)) * 100.0;
+				Look.RotorAxis = FVector(Def.numberAt("visual.rotor.axis", 0, 0.0), Def.numberAt("visual.rotor.axis", 1, 1.0), Def.numberAt("visual.rotor.axis", 2, 0.0)).GetSafeNormal(UE_SMALL_NUMBER, FVector::YAxisVector);
+				Look.RotorRpm = static_cast<float>(Def.number("visual.rotor.rpm", 20.0));
+				Look.RotorFullWatts = static_cast<float>(Def.number("power.output", 0.0));
+			}
+			else
+			{
+				UE_LOG(LogSimBuildings, Warning, TEXT("%s: rotor mesh %s not found; drawn without it"), UTF8_TO_TCHAR(Def.defName().c_str()), UTF8_TO_TCHAR(RotorPath.c_str()));
 			}
 		}
 	}
@@ -967,6 +1001,17 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 		float SlideCm;
 	};
 	TArray<FPendingDoor> Pending;
+	struct FPendingRotor
+	{
+		uint32 Id;
+		int32 Key;
+		int32 Index;
+		FTransform Base;
+		FVector Axis;
+		float MaxRpm;
+		float FullWatts;
+	};
+	TArray<FPendingRotor> PendingRotors;
 
 	const auto Add = [&Batches](int32 Look, int32 Variant, UStaticMesh* Mesh, bool bGhost, bool bItem, bool bShadow, const FTransform& Transform, float Damage = 0.0f) -> int32
 	{
@@ -1080,6 +1125,13 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 					const int32 Index = Add(LookId, BldSliding, Look.Sliding, false, false, true, Placed, BldDamageOf(View));
 					Pending.Add({static_cast<uint32>(View.id), LookId * BldVariants + BldSliding, Index, Placed, FRotator(0.0, Yaw, 0.0).RotateVector(FVector::XAxisVector), DefLook->SlideCm});
 				}
+				if (DefLook->RotorMesh && Look.Fixed == DefLook->ArtMesh)
+				{
+					const FTransform Hub = FTransform(FQuat::Identity, DefLook->RotorAtCm) * Placed;
+					const int32 Index = Add(LookId, BldRotor, DefLook->RotorMesh, false, false, true, Hub, BldDamageOf(View));
+					PendingRotors.Add({static_cast<uint32>(View.id), LookId * BldVariants + BldRotor, Index, Hub,
+						Placed.TransformVectorNoScale(DefLook->RotorAxis).GetSafeNormal(), DefLook->RotorRpm, DefLook->RotorFullWatts});
+				}
 				break;
 			case colony::ConstructionStage::Frame:
 			{
@@ -1108,6 +1160,17 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 		DoorSlots.Remove(static_cast<uint32>(Door));
 	}
 	Chunk.Doors.Reset();
+	// A rotor keeps its angle and speed through a rebuild of its chunk, so it does not jump back.
+	TMap<uint32, FRotorSlot> OldRotors;
+	for (const colony::Entity Rotor : Chunk.Rotors)
+	{
+		FRotorSlot Old;
+		if (RotorSlots.RemoveAndCopyValue(static_cast<uint32>(Rotor), Old))
+		{
+			OldRotors.Add(static_cast<uint32>(Rotor), Old);
+		}
+	}
+	Chunk.Rotors.Reset();
 	Stats.Instances -= Chunk.Instances;
 	int32 Total = 0;
 	for (TPair<int32, UInstancedStaticMeshComponent*>& Pair : Chunk.Components)
@@ -1149,6 +1212,29 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 		Slot.Shown = 0.0f;
 		DoorSlots.Add(Door.Id, Slot);
 		Chunk.Doors.Add(static_cast<colony::Entity>(Door.Id));
+	}
+	for (const FPendingRotor& Rotor : PendingRotors)
+	{
+		FRotorSlot Slot;
+		if (const FRotorSlot* Old = OldRotors.Find(Rotor.Id))
+		{
+			Slot.Rpm = Old->Rpm;
+			Slot.AngleDeg = Old->AngleDeg;
+		}
+		Slot.Component = Chunk.Components.FindRef(Rotor.Key);
+		Slot.Index = Rotor.Index;
+		Slot.Base = Rotor.Base;
+		Slot.Axis = Rotor.Axis;
+		Slot.MaxRpm = Rotor.MaxRpm;
+		Slot.FullWatts = Rotor.FullWatts;
+		if (Slot.Component && Slot.AngleDeg != 0.0f)
+		{
+			FTransform Turned = Slot.Base;
+			Turned.SetRotation(FQuat(Slot.Axis, FMath::DegreesToRadians(Slot.AngleDeg)) * Slot.Base.GetRotation());
+			Slot.Component->UpdateInstanceTransform(Slot.Index, Turned, false, true, true);
+		}
+		RotorSlots.Add(Rotor.Id, Slot);
+		Chunk.Rotors.Add(static_cast<colony::Entity>(Rotor.Id));
 	}
 	Chunk.Instances = Total;
 	Stats.Instances += Total;
@@ -1194,6 +1280,47 @@ void UBuildingSubsystem::AnimateDoors()
 	}
 }
 
+void UBuildingSubsystem::AnimateRotors(float DeltaTime)
+{
+	USimSubsystem* Sim = Bridge.Get();
+	if (!Sim || RotorSlots.IsEmpty() || Sim->GetSpeed() <= 0)
+	{
+		return;
+	}
+	const colony::Snapshot& Current = Sim->GetCurrentSnapshot();
+	// Real time, not game time: at 1x a game second passes in a thirtieth of a real one, and blades turning thirty
+	// times too fast would blur. Speed eases over a few seconds, the way a rotor's weight spins up and down.
+	const float Ease = FMath::Clamp(DeltaTime / 4.0f, 0.0f, 1.0f);
+	TSet<UInstancedStaticMeshComponent*> Touched;
+	for (TPair<uint32, FRotorSlot>& Pair : RotorSlots)
+	{
+		FRotorSlot& Slot = Pair.Value;
+		const colony::ThingView* Now = Current.find(static_cast<colony::Entity>(Pair.Key));
+		if (!Now || !Slot.Component)
+		{
+			continue;
+		}
+		// The share of full power it makes now (wind, and how open the ground round it is). Below 2% it stands still;
+		// above, a slow turn rising to full speed, so a light breeze still shows.
+		const float Share = Slot.FullWatts > 0.0f ? FMath::Clamp(Now->powerWatts / Slot.FullWatts, 0.0f, 1.0f) : 1.0f;
+		const float Target = Share > 0.02f ? Slot.MaxRpm * (0.3f + 0.7f * Share) : 0.0f;
+		Slot.Rpm += (Target - Slot.Rpm) * Ease;
+		if (Slot.Rpm < 0.01f)
+		{
+			continue;
+		}
+		Slot.AngleDeg = FMath::Fmod(Slot.AngleDeg + Slot.Rpm * 6.0f * DeltaTime, 360.0f);
+		FTransform Turned = Slot.Base;
+		Turned.SetRotation(FQuat(Slot.Axis, FMath::DegreesToRadians(Slot.AngleDeg)) * Slot.Base.GetRotation());
+		Slot.Component->UpdateInstanceTransform(Slot.Index, Turned, false, false, true);
+		Touched.Add(Slot.Component);
+	}
+	for (UInstancedStaticMeshComponent* Component : Touched)
+	{
+		Component->MarkRenderStateDirty();
+	}
+}
+
 void UBuildingSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -1221,4 +1348,5 @@ void UBuildingSubsystem::Tick(float DeltaTime)
 	}
 	ApplyCut(false);
 	AnimateDoors();
+	AnimateRotors(DeltaTime);
 }
