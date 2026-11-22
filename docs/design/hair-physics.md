@@ -230,7 +230,7 @@ About 30 points against 10 capsules: a few tens of microseconds per pawn per fra
 
 - MetaHuman strand hair (grooms, `Pawns.MetaHumans 1`, not used by the game's pawns now) has no physics.
 - Short styles and the afro have no bones and stay as styled (they don't reach the body).
-- Hits, blasts and wind don't push the hair yet; clothes and armour will need their own capsules once bodies wear them.
+- Hits, blasts and wind don't push the hair yet. Clothes are handled for strand hair (below); the wig node's capsules still ignore them.
 - The bust bar is sized from the skeleton and the back hair, not from the mesh, so a very large or very flat chest is
   only roughly matched; reading the body mesh needs CPU copies of the meshes (not kept in packaged builds).
 - Five chains carry the whole sheet of hair; the mesh between two chains is blended between them, so where two chains
@@ -249,3 +249,43 @@ centre at the front) and spheres along each upper arm (4) and forearm (3), each 
 (the wig's jitter came from shapes outside the skin). At most 90 spheres (Unreal reads about 100; the smallest torso
 ones go first). A middle or side parting is now soft: each strand's side is picked from its distance to the line plus
 noise (`parting_cross` 0.6, `parting_width` 1.4 cm), so strands cross over and the scalp line no longer shows.
+
+## A shell with no gaps, grown out to the clothes (sneed, 2026-11-22)
+
+After the parting and arm spheres, long strand hair still went into the back and through the shirt (gun range, aiming
+the bolt-action rifle). Measured on the CreatorFemale body and its garments (cloud, `bpy`):
+
+- **Gaps.** The spheres sat in a few columns, so between them a strand could sink 2 cm into the back (median), up to 5 cm,
+  before anything stopped it; 1.4 cm on the chest and shoulders.
+- **Clothes.** The garments sit 0.5 to 1 cm off the skin and the material pushes tops out 1.5 cm more (0.6 a layer), so
+  hair grown 0.15 to 1.15 cm off the skin rests 1.5 to 3 cm inside the shirt, and the physics never saw the shirt.
+
+**The shell.** `grow_hair.py` (`collision_shapes`) now picks the shapes instead of laying them in a grid: candidates are
+spheres and capsules 1.5 to 5 cm under the skin (along its normal), each as big as stays 4 mm inside it; the one that
+most cuts how deep hair could sink into the skin is taken, again and again, until 90 shapes in all (12 spheres in the
+cranium, then about 40 capsules over the torso, 7 on the neck, 2 on each shoulder top, 13 on each arm). The depth is
+measured at the skin's vertices from the waist to under the skull, the back and the shoulder tops counting double. Every
+shape belongs to the skin of one bone (its vertices' largest skin weight: torso, neck, a clavicle, an upper arm, a
+forearm), moves with that bone, and only counts for that skin. Left and right are mirror images. Hair can now sink 0.7 cm
+into the back (median; 1.2 cm for 99 in 100 points, 1.8 worst), the chest, shoulders and arms the same, against 2 and 5
+cm before; the 4 mm inside the skin is the floor, so resting hair still never starts inside a shape (no jitter). Each
+shape also keeps the skin's outward normal (`out` in `grooms.json`); capsules have `a_cm` and `b_cm`.
+
+**Clothes.** `StrandHair.cpp` builds the physics asset per body mesh *and outfit*: for each shape (not the head's) and
+each worn MakeHuman garment (`SK_MHG_*` following the body), if at least 3 of the garment's vertices lie within 6 cm of
+the shape and within 50 degrees of its `out`, the shape grows to the garment's nearest vertex there (never past its
+nearest vertex anywhere round the shape), plus the garment's puff, plus `Pawns.StrandHairClothGap` (0.3 cm: the drawn
+strands follow the colliding guide strands give or take half a centimetre); the outermost covering garment wins, at
+most 6 cm more. A short sleeve leaves the forearm's shapes alone. Measured with the blouse, tee, knit sweater and winter
+coat: hair could sink 0.4 to 1 cm below the cloth's surface (median), against 2.5 to 4 cm with the shapes left inside the
+skin. The outfit is checked four times a second, so clothes put on or off remake it (one log line per new asset:
+`STRANDHAIR collision for ...: N shapes ..., K shapes grown out to the clothes by G cm`). The garment vertices come from
+the mesh's CPU copy (kept in the editor build the game runs in; a mesh without one is logged and left out).
+
+Console: `Pawns.StrandHairClothes 0` leaves the shapes inside the skin (to compare), `Pawns.StrandHairClothGap` (cm),
+`Pawns.StrandHairDebug 1` draws the shapes on the posed body (green inside the skin, yellow grown to the clothes).
+
+**PC check:** the creator's `-CreatorStrandDemo` (with `-CreatorFemale -CreatorHair=Long`, and `-CreatorDressed
+-CreatorSelect=2` for a T-shirt under a jacket): close from behind and from the side, standing, aiming a rifle, swinging
+a sword, shadowboxing, walking, then aiming with the shapes drawn; pictures `Saved/Smoke/creator/strand_NN_*.png`.
+Needs the `hair-grow` art step again (new `grooms.json`; `update-and-play.bat` runs it).

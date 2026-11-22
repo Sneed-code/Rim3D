@@ -2,6 +2,15 @@
 
 Updated 2026-11-22.
 
+Hair no longer through the body or clothes (sneed, 2026-11-22; hair tools and Unreal, `docs/design/hair-physics.md`
+"A shell with no gaps"): long strand hair still went into the back and through the shirt. Measured: between the old
+collision spheres a strand could sink 2 cm into the back (up to 5 cm), and resting hair lay 1.5 to 3 cm inside the
+clothes, which the physics never saw. Now `grow_hair.py` picks 90 spheres and capsules just under the skin that leave no
+gaps (0.7 cm typical, 1.8 cm worst; mirrored; each on the bone of its skin, including clavicles and both arm bones), and
+the game grows each one under a worn garment out to just past the cloth and its puff, per outfit (remade when clothes
+change). `-CreatorStrandDemo` takes the pictures (behind and side; standing, rifle aim, sword, shadowbox, walk, shapes
+drawn). Needs the `hair-grow` art step (runs in `update-and-play.bat`). **Next:** PC compile and pictures, clothed and nude.
+
 Google Neon asset test and AI Studio sounds (sneed, 2026-11-22; tools and docs, `docs/design/neon-assets.md`):
 sneed's Google AI Pro plan gives **Gemini 4 Neon** in the Antigravity CLI, now run headless on the PC like Codex
 (`tools/neon_assets/run_neon_assets.sh`, Neon High, no windows). It made **seven models first try**: the ship sensor
