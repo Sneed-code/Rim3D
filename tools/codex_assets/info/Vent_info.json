@@ -1,0 +1,50 @@
+{
+ "name": "Vent",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -27.4,
+   -16.64,
+   0.0
+  ],
+  "max": [
+   27.4,
+   16.64,
+   54.8
+  ]
+ },
+ "sizeM": [
+  0.548,
+  0.333,
+  0.548
+ ],
+ "parts": {
+  "Vent": {
+   "boundsCm": {
+    "min": [
+     -27.4,
+     -16.64,
+     0.0
+    ],
+    "max": [
+     27.4,
+     16.64,
+     54.8
+    ]
+   },
+   "tris": 1940
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "Vent": {
+   "from": "Vent | Painted and galvanized steel",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

@@ -1,0 +1,50 @@
+{
+ "name": "Barricade",
+ "kind": "building",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -49.85,
+   -20.13,
+   0.0
+  ],
+  "max": [
+   49.85,
+   20.13,
+   100.11
+  ]
+ },
+ "sizeM": [
+  0.997,
+  0.403,
+  1.001
+ ],
+ "parts": {
+  "Barricade": {
+   "boundsCm": {
+    "min": [
+     -49.85,
+     -20.13,
+     0.0
+    ],
+    "max": [
+     49.85,
+     20.13,
+     100.11
+    ]
+   },
+   "tris": 5572
+  }
+ },
+ "sockets": {},
+ "slots": {
+  "Barricade": {
+   "from": "Barricade | Scrap, Timber & Burlap",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

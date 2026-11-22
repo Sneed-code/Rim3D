@@ -62,7 +62,7 @@
   ]
  },
  {
-  "defName": "ShipReactor",
+  "defName": "ShipReactor", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/ShipReactor/SM_ShipReactor.SM_ShipReactor"},
   "parent": "BuildingBase",
   "label": "ship reactor",
   "size": [
@@ -96,7 +96,7 @@
   }
  },
  {
-  "defName": "ShipEngine",
+  "defName": "ShipEngine", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/ShipEngine/SM_ShipEngine.SM_ShipEngine"},
   "parent": "BuildingBase",
   "label": "ship engine",
   "size": [

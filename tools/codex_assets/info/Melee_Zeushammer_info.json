@@ -1,0 +1,57 @@
+{
+ "name": "Melee_Zeushammer",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -14.5,
+   -4.96,
+   -11.0
+  ],
+  "max": [
+   75.5,
+   4.96,
+   11.0
+  ]
+ },
+ "sizeM": [
+  0.9,
+  0.099,
+  0.22
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -14.5,
+     -4.96,
+     -11.0
+    ],
+    "max": [
+     75.5,
+     4.96,
+     11.0
+    ]
+   },
+   "tris": 7060
+  }
+ },
+ "sockets": {
+  "Head": [
+   71.0,
+   -0.0,
+   0.0
+  ]
+ },
+ "slots": {
+  "Melee_Zeushammer": {
+   "from": "Zeushammer | Worn alloy, copper and elastomer",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

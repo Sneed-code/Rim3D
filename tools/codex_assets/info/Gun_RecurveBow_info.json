@@ -1,0 +1,61 @@
+{
+ "name": "Gun_RecurveBow",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -15.69,
+   -3.0,
+   -72.58
+  ],
+  "max": [
+   60.22,
+   2.2,
+   72.77
+  ]
+ },
+ "sizeM": [
+  0.759,
+  0.052,
+  1.453
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -15.69,
+     -3.0,
+     -72.58
+    ],
+    "max": [
+     60.22,
+     2.2,
+     72.77
+    ]
+   },
+   "tris": 5954
+  }
+ },
+ "sockets": {
+  "StringBottom": [
+   -15.05,
+   -0.0,
+   -68.2
+  ],
+  "StringTop": [
+   -15.05,
+   -0.0,
+   68.7
+  ]
+ },
+ "slots": {
+  "Gun_RecurveBow": {
+   "from": "Recurve | Wood, hide, fibre and iron",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

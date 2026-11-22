@@ -1,0 +1,56 @@
+{
+ "name": "Gun_HeavySMG",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -33.5,
+   -4.32,
+   -17.9
+  ],
+  "max": [
+   36.5,
+   7.34,
+   16.85
+  ]
+ },
+ "sizeM": [
+  0.7,
+  0.117,
+  0.348
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -33.5,
+     -4.32,
+     -17.9
+    ],
+    "max": [
+     36.5,
+     7.34,
+     16.85
+    ]
+   },
+   "tris": 13451
+  }
+ },
+ "sockets": {
+  "Muzzle": [
+   36.5,
+   -0.0,
+   9.6
+  ]
+ },
+ "slots": {
+  "Gun_HeavySMG": {
+   "from": "Gun_HeavySMG \u00c3\u0192\u00c6\u2019\u00c3\u201a\u00c2\u00a2\u00c3\u0192\u00c2\u00a2\u00c3\u00a2\u00e2\u201a\u00ac\u00c5\u00a1\u00c3\u201a\u00c2\u00ac\u00c3\u0192\u00e2\u20ac\u0161\u00c3\u201a\u00c2\u00a2 Surplus steel and phenolic",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

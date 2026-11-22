@@ -1,0 +1,65 @@
+{
+ "name": "Gun_NeedleGun",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -43.8,
+   -4.71,
+   -17.2
+  ],
+  "max": [
+   66.2,
+   4.71,
+   15.7
+  ]
+ },
+ "sizeM": [
+  1.1,
+  0.094,
+  0.329
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -43.8,
+     -4.71,
+     -17.2
+    ],
+    "max": [
+     66.2,
+     4.71,
+     15.7
+    ]
+   },
+   "tris": 6531
+  }
+ },
+ "sockets": {
+  "Muzzle": [
+   66.2,
+   -0.0,
+   3.9
+  ]
+ },
+ "slots": {
+  "Gun_NeedleGun_0": {
+   "from": "NeedleGun_PBR",
+   "maps": [
+    "baseColor",
+    "emissive",
+    "normal",
+    "orm"
+   ]
+  },
+  "Gun_NeedleGun_1": {
+   "from": "NeedleGun_Window",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}

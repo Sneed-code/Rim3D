@@ -107,3 +107,4 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
   core's crystal looks like paper (texture fixes). The hatchery's LidOpen/LidClose and the LMG's Reload/BipodDeploy
   clips are imported but unused. The new moving-parts system (`visual.moving`) could now move the Codex models' parts
   too (telescope tube, turret heads).
+- Codex recurve bow and vent (2026-11-22): models made (Rim3D_Codex), not wired in: guns.json has no bow handling yet (draw and string pull, StringTop/StringBottom sockets in the GLB), and the vent def is a wall-height block like the cooler.

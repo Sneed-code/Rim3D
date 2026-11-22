@@ -1,0 +1,61 @@
+{
+ "name": "Gun_SniperRifle",
+ "kind": "gun",
+ "turned": "none",
+ "boundsCm": {
+  "min": [
+   -30.5,
+   -5.75,
+   -9.2
+  ],
+  "max": [
+   89.5,
+   8.95,
+   24.1
+  ]
+ },
+ "sizeM": [
+  1.2,
+  0.147,
+  0.333
+ ],
+ "parts": {
+  "Body": {
+   "boundsCm": {
+    "min": [
+     -30.5,
+     -5.75,
+     -9.2
+    ],
+    "max": [
+     89.5,
+     8.95,
+     24.1
+    ]
+   },
+   "tris": 14068
+  }
+ },
+ "sockets": {
+  "Muzzle": [
+   89.5,
+   -0.0,
+   12.6
+  ],
+  "ScopeEye": [
+   -18.1,
+   -0.0,
+   19.2
+  ]
+ },
+ "slots": {
+  "Gun_SniperRifle": {
+   "from": "Frontier rifle | 2K PBR",
+   "maps": [
+    "baseColor",
+    "normal",
+    "orm"
+   ]
+  }
+ }
+}
