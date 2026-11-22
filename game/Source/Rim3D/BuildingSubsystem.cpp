@@ -1288,6 +1288,9 @@ void UBuildingSubsystem::AnimateRotors(float DeltaTime)
 		return;
 	}
 	const colony::Snapshot& Current = Sim->GetCurrentSnapshot();
+	// The wind itself, for a turbine on no grid: it makes no power then (the sim counts power only in a net), but its
+	// blades still turn in the wind.
+	const float Wind = Sim->GetSim() ? FMath::Clamp(static_cast<float>(Sim->GetSim()->weather().wind()), 0.0f, 1.0f) : 0.5f;
 	// Real time, not game time: at 1x a game second passes in a thirtieth of a real one, and blades turning thirty
 	// times too fast would blur. Speed eases over a few seconds, the way a rotor's weight spins up and down.
 	const float Ease = FMath::Clamp(DeltaTime / 4.0f, 0.0f, 1.0f);
@@ -1300,9 +1303,9 @@ void UBuildingSubsystem::AnimateRotors(float DeltaTime)
 		{
 			continue;
 		}
-		// The share of full power it makes now (wind, and how open the ground round it is). Below 2% it stands still;
-		// above, a slow turn rising to full speed, so a light breeze still shows.
-		const float Share = Slot.FullWatts > 0.0f ? FMath::Clamp(Now->powerWatts / Slot.FullWatts, 0.0f, 1.0f) : 1.0f;
+		// The share of full power it makes now (wind, and how open the ground round it is); on no grid, the wind. Below 2%
+		// it stands still; above, a slow turn rising to full speed, so a light breeze still shows.
+		const float Share = Now->powerNet == 0 ? Wind : Slot.FullWatts > 0.0f ? FMath::Clamp(Now->powerWatts / Slot.FullWatts, 0.0f, 1.0f) : 1.0f;
 		const float Target = Share > 0.02f ? Slot.MaxRpm * (0.3f + 0.7f * Share) : 0.0f;
 		Slot.Rpm += (Target - Slot.Rpm) * Ease;
 		if (Slot.Rpm < 0.01f)

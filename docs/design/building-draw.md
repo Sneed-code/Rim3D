@@ -160,11 +160,11 @@ panels on a rack). Two art steps make them on every PC, run by `update-and-play.
 
 A def's **`visual.rotor`** (`mesh`, `at` [x, y, z] m in the building's frame, `axis`, `rpm`) is drawn beside its
 `visual.mesh` as one more instance, turned every frame about the axis through `at` (`UBuildingSubsystem::AnimateRotors`;
-the same per-instance update the doors use, kept through chunk rebuilds). Speed follows the power it makes: still below
+the same per-instance update the doors use, kept through chunk rebuilds). Speed follows the power it makes (on no grid, where the sim counts no power, the weather's wind instead): still below
 2% of `power.output`, then from 30% of `rpm` up to full `rpm` (24 turns a minute for the turbine) at full output, eased
 over about 4 s; it runs in real time while the game is unpaused, since at 1x a game second is a thirtieth of a real one.
 Without its `visual.mesh` the def's shapes are drawn whole and no rotor is added. Smoke test `power` stands both in the
-open, takes pictures and fails if the turbine makes power but its blades do not turn.
+open, takes pictures and fails if the turbine's blades do not turn (the wind never drops below a quarter).
 
 Building heights are what picking uses (`UBuildingSubsystem::GetDrawnHeightCm`), so a click lands on what
 you see. Walls are 3 m, the height of the thin roof ([terrain.md](terrain.md)); a door has a 0.8 m lintel

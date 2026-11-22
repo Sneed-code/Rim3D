@@ -184,9 +184,11 @@ void USmokeTestSubsystem::BuildPowerPhases()
 			Fail(TEXT("power_turbine: the wind turbine's blades are not drawn as a turning part"));
 			return;
 		}
-		if (State->MaxWatts > 1.0f && State->Turned < 20.0f)
+		// On no grid the turbine makes no power but turns in the wind, which never drops below a quarter (ClimateRules gusts).
+		if (State->Turned < 20.0f)
 		{
-			Fail(FString::Printf(TEXT("power_turbine: making %.0f W but the blades turned only %.1f degrees"), State->MaxWatts, State->Turned));
+			Fail(FString::Printf(TEXT("power_turbine: the blades turned only %.1f degrees in 4 s (wind %.2f, %.0f W)"), State->Turned,
+				Sim->weather().wind(), State->MaxWatts));
 		}
 		Notes.Add(FString::Printf(TEXT("power_turbine: up to %.0f W, blades turned %.0f degrees, up to %.1f turns a minute"), State->MaxWatts, State->Turned, State->MaxRpm));
 		PhaseNumbers.Add(TEXT("turbine_watts"), State->MaxWatts);
@@ -199,7 +201,7 @@ void USmokeTestSubsystem::BuildPowerPhases()
 	Solar.Name = TEXT("power_solar");
 	Solar.WarmupSeconds = 2.0f;
 	Solar.MeasureSeconds = 1.5f;
-	Solar.Setup = [=]() { LookAt(State->Solar, 8.0, 60.0, 30.0, 0.5); };
+	Solar.Setup = [=]() { LookAt(State->Solar, 9.0, 30.0, 45.0, 0.3); };
 	Solar.OnFrame = Watch;
 	Phases.Add(MoveTemp(Solar));
 
