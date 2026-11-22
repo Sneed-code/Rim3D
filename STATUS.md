@@ -15,7 +15,8 @@ finisher steps to its own distance from the body and the spear drives down two-h
 when the blade comes down (the clips' measured hit was mid-swing), and a downed ragdoll is steered back over the spot
 the game thinks it lies on (it fell up to 1 m off, so blows missed or the attacker knelt on it); spear, club, gladius
 and longsword now all come down on the body. The melee smoke's `switch_key` revolver check (11 cm) had only passed
-because the switch used to crouch the whole body. **Next:** PC round 7 for the knife's kneel, then merge.
+because the switch used to crouch the whole body. Round 7: the knife kneels and drives down at his upper body. **Next:**
+sneed plays it (title > Debug > Gun range).
 
 In-game UI in the Canopy look (sneed, 2026-11-22: "make the actual game's UI ... high quality, well made",
 `docs/design/ui-layout.md`): every in-game box now matches the title and new-game screens: dark green-black glass, square
