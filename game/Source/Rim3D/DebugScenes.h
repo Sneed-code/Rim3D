@@ -38,6 +38,10 @@ namespace DebugScenes
 	/** Loads the title screen again in this game, with the console settings as they were before the scene. */
 	bool ReturnToTitle(UWorld* World);
 
+	/** Writes every console variable's value (name = value, sorted) to a file: the PC check compares a scene loaded in
+	 *  the game against a fresh start of it. */
+	void DumpConsoleVariables(const FString& Path);
+
 	/** This copy was started from the Debug page (-DebugScene= on its command line). */
 	bool IsDebugScene();
 

@@ -308,6 +308,7 @@ private:
 	/** F10 in a debug scene has started the title screen; this copy is closing. */
 	bool bLeavingDebugScene = false;
 	void TickSceneHop();
+	bool bCvarDumped = false;
 	/** The menu has the mouse (cursor shown, UI input) while it is open; given back when the game takes over. */
 	bool bMenuMouse = false;
 	TWeakObjectPtr<ACameraActor> TitleCamera;

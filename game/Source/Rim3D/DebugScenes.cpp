@@ -7,6 +7,7 @@
 #include "HAL/PlatformProcess.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "UObject/Package.h"
 
@@ -255,6 +256,24 @@ bool DebugScenes::Launch(UWorld* World, const FScene& Scene)
 bool DebugScenes::ReturnToTitle(UWorld* World)
 {
 	return DebugSceneTravel(World, FString(), TEXT("the title screen"), false);
+}
+
+void DebugScenes::DumpConsoleVariables(const FString& Path)
+{
+	TArray<FString> Lines;
+	IConsoleManager::Get().ForEachConsoleObjectThatStartsWith(FConsoleObjectVisitor::CreateLambda(
+		[&Lines](const TCHAR* Name, IConsoleObject* Object)
+		{
+			if (IConsoleVariable* Var = Object ? Object->AsVariable() : nullptr)
+			{
+				Lines.Add(FString::Printf(TEXT("%s = %s"), Name, *Var->GetString()));
+			}
+		}),
+		TEXT(""));
+	Lines.Sort();
+	Lines.Add(FString::Printf(TEXT("(near clip %.2f, screen messages %d)"), GNearClippingPlane, GAreScreenMessagesEnabled ? 1 : 0));
+	FFileHelper::SaveStringArrayToFile(Lines, *Path);
+	UE_LOG(LogDebugScenes, Display, TEXT("Console variables written to %s (%d)"), *Path, Lines.Num());
 }
 
 bool DebugScenes::IsDebugScene()

@@ -1166,6 +1166,7 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 		{
 			Slide += 1.0;
 		}
+		const double SkullSlide = Slide;
 		// Aimed, the butt sits in the shoulder, never out behind it (sneed 2026-11-22, PC round 1: the shotgun's and the
 		// bolt-action's stocks ran 20 cm back past the cheek and the shoulder, through the side of the head; the assault
 		// rifle's short stock already ended at the shoulder). Along the barrel, the butt goes no further back than a few
@@ -1177,6 +1178,24 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 			if (Behind > 0.0)
 			{
 				Slide = FMath::Min(25.0, Slide + Behind * MeleePose::EaseInOut(FMath::Clamp(Pawn.AimBlend, 0.0f, 1.0f)));
+			}
+			// ...but not so far that the off hand can't reach its grip (PC round 2: the shotgun's pump hand fell 26 cm
+			// short): back again as far as needed, never into the skull.
+			if (Points.bOff && Mesh->GetBoneIndex(TEXT("upperarm_l")) != INDEX_NONE)
+			{
+				const FVector ShoulderL = Mesh->GetSocketLocation(TEXT("upperarm_l"));
+				const double ArmReach = 0.97 * (FVector::Dist(ShoulderL, Mesh->GetSocketLocation(TEXT("lowerarm_l"))) +
+					FVector::Dist(Mesh->GetSocketLocation(TEXT("lowerarm_l")), Mesh->GetSocketLocation(TEXT("hand_l"))));
+				const FVector Off = Weapon.TransformPosition(Points.Off * Size);
+				for (int32 Pass = 0; Pass < 3 && Slide > SkullSlide; ++Pass)
+				{
+					const double Short = FVector::Dist(Off + Barrel * Slide, ShoulderL) - ArmReach;
+					if (Short <= 0.5)
+					{
+						break;
+					}
+					Slide = FMath::Max(SkullSlide, Slide - Short);
+				}
 			}
 		}
 		if (Slide > 0.0)

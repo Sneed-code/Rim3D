@@ -472,6 +472,16 @@ void UColonyHudSubsystem::TickSceneHop()
 {
 	static int32 HopStage = 0;
 	static double HopSince = 0.0;
+	// -CvarDump=<seconds>: the same list from a fresh start (compared with the scene loaded in the game).
+	float DumpAt = 0.0f;
+	if (!bCvarDumped && FParse::Value(FCommandLine::Get(), TEXT("CvarDump="), DumpAt) && GetWorld()->GetTimeSeconds() > DumpAt)
+	{
+		bCvarDumped = true;
+		DebugScenes::DumpConsoleVariables(FPaths::ProjectSavedDir() / TEXT("Smoke/scenehop/cvars_fresh.txt"));
+		const USkySubsystem* DumpSky = GetWorld()->GetSubsystem<USkySubsystem>();
+		UE_LOG(LogTemp, Display, TEXT("CVARDUMP: sky exposure %.2f EV, cuts %d"), DumpSky ? DumpSky->GetExposure() : -99.0f, DumpSky ? DumpSky->GetExposureCuts() : -1);
+		FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/scenehop/fresh.png"), true, false);
+	}
 	if (!FParse::Param(FCommandLine::Get(), TEXT("DebugSceneHop")) || bLeavingDebugScene)
 	{
 		return;
@@ -509,6 +519,9 @@ void UColonyHudSubsystem::TickSceneHop()
 	else if (HopStage == 1 && bInScene && Now - HopSince > 30.0)
 	{
 		Picture(TEXT("2_range"));
+		DebugScenes::DumpConsoleVariables(FPaths::ProjectSavedDir() / TEXT("Smoke/scenehop/cvars_hop.txt"));
+		const USkySubsystem* HopSky = GetWorld()->GetSubsystem<USkySubsystem>();
+		UE_LOG(LogTemp, Display, TEXT("SCENEHOP: range sky exposure %.2f EV, cuts %d"), HopSky ? HopSky->GetExposure() : -99.0f, HopSky ? HopSky->GetExposureCuts() : -1);
 		UE_LOG(LogTemp, Display, TEXT("SCENEHOP: in the gun range (pid %u), back to the title"), FPlatformProcess::GetCurrentProcessId());
 		HopStage = 2;
 		HopSince = 0.0;
