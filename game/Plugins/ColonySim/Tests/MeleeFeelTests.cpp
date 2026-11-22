@@ -506,22 +506,49 @@ TEST_CASE("Finishers: a knife at a downed enemy plays its whole-body kneeling cl
     CHECK(readyAt >= total - 1);
     CHECK(readyAt <= total + 1);
     CHECK(sawT > 0.9f);
-    // No glide in towards the body: it moved only as far as the clip's own hips do (a few cm), not the 30 cm the old
-    // step-in took, and the player's walking never moved it sideways.
+    // No glide in towards the body: it moved only its few cm to its place by the body (shiftClip) plus the clip's own,
+    // and the player's walking never moved it sideways.
     CHECK(std::hypot(end.x - start.x, end.y - start.y) < 0.2f);
     CHECK(std::fabs(end.y - start.y) < 0.06f);
 }
 
-TEST_CASE("Finishers: too far from the body for its clip, a weapon's blow at the downed is its plain low blow") {
+TEST_CASE("Finishers: too close to the body for its clip to step back to its place, a weapon's blow at the downed is its plain low blow") {
     auto sim = feelTestSim(406);
     const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
-    const Entity enemy = feelTestDowned(*sim, hero, 1.6f);  // gladius reach 1.2 plus the player's slack
+    const Entity enemy = feelTestDowned(*sim, hero, 0.4f);  // the gladius finisher stands 1.2 m off, its slack 0.6
     feelTestFace(*sim, hero, 1.0f, 0.0f);
     std::string why;
     const bool attacked = sim->melee().attack(hero, enemy, true, &why);
     FEEL_REQUIRE(attacked);
     CHECK(sim->melee().finisherOf(hero) == nullptr);
     CHECK(sim->melee().winding(hero));
+}
+
+TEST_CASE("Finishers: a gladius a little close to the body steps back with its clip, to stand off its place at the blow") {
+    // sneed 2026-11-22 PC pictures: the gladius lunged past the body. The clip's step is laid over with a shift so the
+    // body is at the finisher's standOff when the blow lands, wherever in the slack the swing started.
+    auto sim = feelTestSim(410);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    const Entity enemy = feelTestDowned(*sim, hero, 1.0f);
+    feelTestFace(*sim, hero, 1.0f, 0.0f);
+    std::string why;
+    FEEL_REQUIRE(sim->melee().attack(hero, enemy, true, &why));
+    const MeleeFinisher* f = sim->melee().finisherOf(hero);
+    FEEL_REQUIRE(f != nullptr);
+    FEEL_REQUIRE(sim->melee().finisherPlaysClip(sim->things().registry().get<Melee>(hero).finisher));
+    const BodyMotionSystem& motion = sim->combat().motion();
+    const MotionClip* clip = motion.clip(f->clip);
+    FEEL_REQUIRE(clip != nullptr);
+    const int hitStep = static_cast<int>(std::lround(f->hitSeconds * 30.0f));
+    for (int s = 0; s < hitStep; ++s) {
+        sim->step();
+    }
+    const Position& a = sim->things().registry().get<Position>(hero);
+    const Position& b = sim->things().registry().get<Position>(enemy);
+    const float d = std::hypot(a.x - b.x, a.y - b.y);
+    CAPTURE(d);
+    CHECK(std::fabs(d - f->standOff) < 0.08f);
+    CHECK(std::fabs(a.y - b.y) < 0.08f);  // straight back along the line to the body
 }
 
 TEST_CASE("Finishers: every finisher of sneed's weapons plays a measured whole-body clip") {
@@ -607,7 +634,7 @@ TEST_CASE("Block: bare fists stop a punch, and take a sword's blow on the forear
 TEST_CASE("Finishers: a finisher whose body is taken off the map ends at once, and the next swing is the weapon's own") {
     auto sim = feelTestSim(404);
     const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Spear");
-    const Entity enemy = feelTestDowned(*sim, hero, 0.9f);
+    const Entity enemy = feelTestDowned(*sim, hero, 1.4f);
     feelTestFace(*sim, hero, 1.0f, 0.0f);
     std::string why;
     FEEL_REQUIRE(sim->melee().attack(hero, enemy, true, &why));

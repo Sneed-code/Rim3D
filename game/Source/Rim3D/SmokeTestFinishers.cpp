@@ -387,7 +387,17 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 				{
 					Body->Look(FRotator::NormalizeAxis(static_cast<float>((It - Me).Rotation().Yaw) - Body->GetYaw()), 0.0f);
 					const float Apart = FVector2D::Distance(FVector2D(MeNow->x, MeNow->y), FVector2D(Victim->x, Victim->y));
-					if (Apart > 0.8f && PhaseTime < State->DownedAt + 4.0f)
+					// Up to the finisher's own distance from the body (a clip finisher steps the rest itself).
+					float WalkTo = 0.8f;
+					if (const colony::Sim* StandSim = Bridge()->GetSim())
+					{
+						const int StandFinisher = StandSim->melee().finisherFor(StandSim->defs().idOf("Things", Weapon.Def));
+						if (StandSim->melee().finisherPlaysClip(StandFinisher))
+						{
+							WalkTo = StandSim->melee().rules().finishers[static_cast<size_t>(StandFinisher - 1)].standOff + 0.2f;
+						}
+					}
+					if (Apart > WalkTo && PhaseTime < State->DownedAt + 4.0f)
 					{
 						Body->SetScriptedInput(0.0, 1.0, true);
 						return;

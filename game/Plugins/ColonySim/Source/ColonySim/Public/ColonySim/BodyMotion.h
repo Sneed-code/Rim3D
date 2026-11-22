@@ -65,7 +65,8 @@ struct BodyMotion {
     float doneR = 0.0f;
     float doneYaw = 0.0f;
     // A plain push: `pushMetres` along (faceX, faceY), eased in and out between steps pushFrom and pushTo of
-    // pushSteps (clip-less motions count steps, `time` is the step reached).
+    // pushSteps (clip-less motions count steps, `time` is the step reached). With a clip, `pushMetres` over its first
+    // `pushTo` steps is a shift laid over the clip's path (shiftClip).
     float pushMetres = 0.0f;
     int pushSteps = 0;
     int pushFrom = 0;
@@ -145,6 +146,10 @@ public:
     // already did: the player's walking stops against bodies (sneed 2026-11-18: "I can't run through them") but can
     // always walk out of an overlap.
     bool bodiesClear(Entity pawn, float fromX, float fromY, float x, float y, int level) const;
+    // Over the clip playing on the pawn, an extra `metres` forward (negative: back) along the clip's facing, eased in
+    // over its first `steps` steps (a finisher stepping to its place by the body; sneed 2026-11-22). The world still
+    // stops it. False if no clip plays.
+    bool shiftClip(Entity pawn, float metres, int steps);
     // A plain push: `metres` along (dx, dy) over `steps` steps, moving only from step `from` to step `to`.
     bool push(Entity pawn, float dx, float dy, float metres, int steps, int from = 0, int to = -1);
     // A blow throws the body along (pushX, pushY): a person plays the stagger (or knockdown) clip for the way it goes,
