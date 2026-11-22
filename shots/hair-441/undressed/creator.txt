@@ -1,0 +1,5 @@
+﻿Running smoke test 'creator' at 1920x1080...
+
+Smoke test 'creator': FAIL  (900 s, NVIDIA GeForce RTX 5080, 1920x1080)
+ERROR: Timed out after 900 s in phase 0
+Screenshots: C:\Dev\Rim3D-blood\game\Saved\Smoke\creator

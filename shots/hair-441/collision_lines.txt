@@ -1,0 +1,12 @@
+]LogTemp: Display: Strand hair: CreatorMale head fit, skull X=0.000 Y=1.240 Z=6.196 from the head bone, 6 head sliders, 90 collision shapes (78 capsules)
+]LogTemp: Display: STRANDHAIR collision for SK_MH_CreatorMale: 90 shapes inside the skin on 11 bones; 0 garments worn (0 read), 0 shapes grown out to the clothes by 0.0 cm on average
+]LogTemp: Display: Strand hair: CreatorFemale head fit, skull X=0.000 Y=0.773 Z=5.225 from the head bone, 6 head sliders, 90 collision shapes (76 capsules)
+]LogTemp: Display: STRANDHAIR collision for SK_MH_CreatorFemale: 90 shapes inside the skin on 10 bones; 0 garments worn (0 read), 0 shapes grown out to the clothes by 0.0 cm on average
+]LogTemp: Display: Strand hair: CreatorMale head fit, skull X=0.000 Y=1.240 Z=6.196 from the head bone, 6 head sliders, 90 collision shapes (78 capsules)
+]LogTemp: Display: STRANDHAIR collision for SK_MH_CreatorMale: 90 shapes inside the skin on 11 bones; 3 garments worn (3 read), 78 shapes grown out to the clothes by 3.0 cm on average
+]LogTemp: Display: Strand hair: CreatorFemale head fit, skull X=0.000 Y=0.773 Z=5.225 from the head bone, 6 head sliders, 90 collision shapes (76 capsules)
+]LogTemp: Display: STRANDHAIR collision for SK_MH_CreatorFemale: 90 shapes inside the skin on 10 bones; 3 garments worn (3 read), 56 shapes grown out to the clothes by 3.3 cm on average
+]LogTemp: Display: STRANDHAIR collision for SK_MH_CreatorMale: 90 shapes inside the skin on 11 bones; 3 garments worn (3 read), 78 shapes grown out to the clothes by 3.5 cm on average
+]LogTemp: Display: STRANDHAIR collision for SK_MH_CreatorFemale: 90 shapes inside the skin on 10 bones; 2 garments worn (2 read), 77 shapes grown out to the clothes by 4.0 cm on average
+[grow_hair] collision: 90 shapes; hair can sink into the skin (cm) median 0.72, 90% 1.16, worst 2.78
+[grow_hair] collision: 90 shapes; hair can sink into the skin (cm) median 0.66, 90% 1.02, worst 1.81
