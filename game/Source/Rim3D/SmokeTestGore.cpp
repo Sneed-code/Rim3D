@@ -7,6 +7,7 @@
 
 #include "Components/SkeletalMeshComponent.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/CommandLine.h"
 #include "Misc/Paths.h"
 #include "UnrealClient.h"
 
@@ -185,7 +186,10 @@ void USmokeTestSubsystem::BuildGorePhases()
 			{
 				const colony::Snapshot& Snapshot = B->GetCurrentSnapshot();
 				const FSimPawnLooks From = View->looks >= 0 ? USimPawnSubsystem::MakeLooks(Snapshot.looks[static_cast<size_t>(View->looks)], B->GetDefs().get()) : FSimPawnLooks();
-				Pawns()->SetLooksOverride(State->Pawn, CreatorPeople::RandomLooks(4242, false, From));
+				// -GoreWoman: a woman's body (her anatomy body is the one whose stitch triangles drew the thigh band).
+				const bool bWoman = FParse::Param(FCommandLine::Get(), TEXT("GoreWoman"));
+				Pawns()->SetLooksOverride(State->Pawn, CreatorPeople::RandomLooks(4242, bWoman, From));
+				PhaseNumbers.Add(TEXT("woman"), bWoman ? 1 : 0);
 			}
 			B->Submit(colony::DraftCommand{State->Pawn, true});
 		};
@@ -244,6 +248,39 @@ void USmokeTestSubsystem::BuildGorePhases()
 				Notes.Add(TEXT("groin: the exit was guessed, not found on the drawn body (a weak shot may not go through)"));
 			}
 		};
+		Phases.Add(MoveTemp(Phase));
+	}
+
+	{
+		// The stocking band (sneed, 2026-11-22): after torso, groin and thigh shots no ring or line of blood may go round
+		// the thighs or up the body; the blood stays at the wounds. Close-ups from the front and the back.
+		FPhase Phase;
+		Phase.Name = TEXT("thighs");
+		Phase.Setup = [=, this]()
+		{
+			const bool bTorso = DrawnHit(EBloodWound::Gunshot, 0.62f, 6.0f, FVector(-1.0, 0.0, 0.0), 14.0f);
+			const bool bThigh = DrawnHit(EBloodWound::Gunshot, 0.38f, 11.0f, FVector(-1.0, 0.0, 0.0), 14.0f);
+			const bool bHip = DrawnHit(EBloodWound::Gunshot, 0.50f, -13.0f, FVector(-1.0, 0.0, 0.0), 12.0f);
+			if (!bTorso || !bThigh || !bHip)
+			{
+				Fail(TEXT("thighs: could not draw the hits"));
+			}
+		};
+		Phase.WarmupSeconds = 1.5f;
+		Phase.MeasureSeconds = 1.5f;
+		Phase.ScreenshotAt = 0.5f;
+		Phase.OnFrame = [=]() { Front(80.0f, 110.0f); };
+		Phases.Add(MoveTemp(Phase));
+	}
+
+	{
+		FPhase Phase;
+		Phase.Name = TEXT("thighsback");
+		Phase.Setup = []() {};
+		Phase.WarmupSeconds = 1.0f;
+		Phase.MeasureSeconds = 1.0f;
+		Phase.ScreenshotAt = 0.3f;
+		Phase.OnFrame = [=]() { Front(80.0f, -110.0f); };
 		Phases.Add(MoveTemp(Phase));
 	}
 

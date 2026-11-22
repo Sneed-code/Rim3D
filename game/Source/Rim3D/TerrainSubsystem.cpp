@@ -587,16 +587,16 @@ void UTerrainSubsystem::MarkPlantDirty(colony::CellPos Cell)
 	}
 }
 
-void UTerrainSubsystem::SetPlantClearings(const TArray<FVector3f>& InClearings)
+void UTerrainSubsystem::SetPlantClearings(const TArray<FVector4f>& InClearings)
 {
 	if (InClearings == PlantClearings)
 	{
 		return;
 	}
 	// Both the old and the new clearings' chunks are drawn again.
-	const auto MarkAround = [this](const TArray<FVector3f>& List)
+	const auto MarkAround = [this](const TArray<FVector4f>& List)
 	{
-		for (const FVector3f& C : List)
+		for (const FVector4f& C : List)
 		{
 			for (int32 Y = FMath::FloorToInt32(C.Y - C.Z); Y <= FMath::FloorToInt32(C.Y + C.Z); ++Y)
 			{
@@ -1091,9 +1091,10 @@ uint64 UTerrainSubsystem::GatherChunkPlants(int32 ChunkX, int32 ChunkY, TArray<T
 				float SY = 0.0f;
 				colony::Plants::stemPoint(Map.index(Cell), X, Y, SX, SY);
 				bool bCleared = false;
-				for (const FVector3f& C : PlantClearings)
+				const bool bTree = Plants.isTree(Cell);
+				for (const FVector4f& C : PlantClearings)
 				{
-					bCleared = bCleared || FMath::Square(SX - C.X) + FMath::Square(SY - C.Y) < FMath::Square(C.Z);
+					bCleared = bCleared || ((bTree || C.W < 0.5f) && FMath::Square(SX - C.X) + FMath::Square(SY - C.Y) < FMath::Square(C.Z));
 				}
 				if (bCleared)
 				{

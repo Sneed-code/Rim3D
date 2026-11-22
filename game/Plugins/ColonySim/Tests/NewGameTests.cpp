@@ -6,6 +6,7 @@
 #include "ColonySim/Looks.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Skills.h"
 #include "ColonySim/Snapshot.h"
@@ -439,4 +440,25 @@ TEST_CASE("Crash Landed: the companions screen buys and randomizes traits, befor
     const uint64_t lateId = sim.submit(late);
     sim.step();
     CHECK(newGameFailures(sim).count(lateId) == 1);
+}
+
+TEST_CASE("Title backdrop: a wild rainforest tile in the morning, with no people and no cargo, off the menu") {
+    const auto defs = newGameDefs();
+    const Def* scenario = defs->find("Scenarios", "TitleBackdrop");
+    NG_REQUIRE(scenario != nullptr);
+    CHECK_FALSE(scenario->flag("menu"));
+    SimSettings settings = newGameSettings(42);
+    settings.scenario = "TitleBackdrop";
+    settings.world.enabled = true;
+    settings.wildAnimals = 100;
+    Sim sim(settings, defs);
+    for (const std::string& e : sim.setupErrors()) {
+        MESSAGE(e);
+    }
+    CHECK(sim.setupErrors().empty());
+    CHECK(sim.biome() == "TropicalRainforest");
+    CHECK(newGameColonists(sim).empty());
+    CHECK(sim.time().hourOfDay() == 7);
+    CHECK(sim.time().steps == 0);
+    CHECK(sim.plants().count() > 0);
 }
