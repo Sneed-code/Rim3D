@@ -493,7 +493,8 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		In.bHoldFacing = bHoldFacing;
 		// Through a melee swing the whole body turns with the weapon, feet and all (sneed 2026-11-22: turning mid-swing
 		// with a mace contorted the body, the feet held and the spine twisted up to 60 degrees under the swing).
-		In.bTurnFeet = Now.meleePhase != colony::MeleePhase::Ready || Now.meleeFinisher != 0 || GetSwing().IsActive();
+		// (Not in a finisher: it steps to its place and holds still, feet planted.)
+		In.bTurnFeet = Now.meleeFinisher == 0 && (Now.meleePhase != colony::MeleePhase::Ready || GetSwing().IsActive());
 		In.bStandTwist = !(IsInMotionClip() && !bMotionUpper) && RollProgress <= 0.0f && !IsJumping() && !Now.crawling && !Now.downed && !KneelMontage.IsValid();
 		In.bLegsFromClip = LegsClipWeight > 0.001f || ActionEndSeconds > 0.0 || (IsInMotionClip() && !bMotionUpper) || KneelMontage.IsValid();
 		In.bHitLayer = true;

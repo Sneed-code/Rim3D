@@ -191,7 +191,7 @@ float"; "I like the ability to aim in 3rd person but the weapon doesn't move wit
 ## Stock clear of the head (sneed, 2026-11-22)
 
 The shotgun's stock went through the head when aiming. For two-handed guns, after the aim blend the gun slides forward
-along its barrel in 1 cm steps (up to 30 cm) until the stock-to-grip line clears an 11.5 cm skull round a point 9 cm
+along its barrel in 1 cm steps (up to 12 cm) until the stock-to-grip line clears a 7.5 cm skull round a point 9 cm
 above the head bone (both scaled by body size). `GetStockSlideCm` reports it; the gun range smoke notes it. In melee,
 the feet now turn with the body through a swing (`bTurnFeet`), so a turning mace swing no longer twists the spine up to
 60 degrees and the weapon follows the body.

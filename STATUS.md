@@ -9,7 +9,7 @@ again**: a limb at 0 kept no hitbox, so later shots and blows passed through it 
 (`SeveredPieceActor::Push`). **Crawlers** turn 3x faster and crawl at 5% of walking speed (was 10%, about 3 m in 20 s).
 **Bolt action**: no reload pose between shots, only a brass casing flying out; every gun now throws casings (shells
 red), in first and third person (`FightSubsystem` casings). **Shotgun and rifles** slide forward along the barrel
-until the stock clears the head (`WeaponDrawSubsystem`, up to 30 cm). **Melee**: the feet turn with the body during a
+until the stock clears the head (`WeaponDrawSubsystem`, up to 12 cm). **Melee**: the feet turn with the body during a
 swing, so a mace swing while turning no longer twists the spine. **Hair**: a soft centre parting (strands cross the
 line), and the groom collides with the chest, back, shoulders and both arms (90 spheres, inside the skin, so no
 jitter); needs the `hair-grow` and `hair-grooms` art steps (run by `update-and-play.bat`). **Gun sounds**: sneed played

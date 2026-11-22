@@ -158,6 +158,10 @@ namespace
 		// -GunRangeIdleRecord=<seconds>: frames of a standing target close up (gunrange_idle/rec_0000.png ...).
 		int32 IdleRecorded = 0;
 		TWeakObjectPtr<ACameraActor> IdleCamera;
+		// Close-up pictures from a camera of their own (sneed's 2026-11-22 list: the stock from the side, the parting,
+		// the groin after torso shots): the view goes back to what it was right after.
+		TWeakObjectPtr<ACameraActor> ShotCamera;
+		TWeakObjectPtr<AActor> ShotCameraFrom;
 	};
 
 	void GunRangeStrip(colony::Sim& Sim, USimSubsystem& B, colony::Entity Pawn)
@@ -829,6 +833,44 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				Notes.Add(FString::Printf(TEXT("gunrange:   parts %s"), *G->DescribeGunParts()));
 			}
 		};
+		// A close-up from its own camera: Look() puts it there (the picture is taken a frame later), Done() puts the view back.
+		const auto ShotLook = [=, this](const FVector& Eye, const FVector& Target)
+		{
+			APlayerController* Viewer = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+			if (!Viewer)
+			{
+				return;
+			}
+			if (!State->ShotCamera.IsValid())
+			{
+				State->ShotCameraFrom = Viewer->GetViewTarget();
+				State->ShotCamera = GetWorld()->SpawnActor<ACameraActor>(Eye, (Target - Eye).Rotation());
+			}
+			if (ACameraActor* Cam = State->ShotCamera.Get())
+			{
+				Cam->SetActorLocationAndRotation(Eye, (Target - Eye).Rotation());
+				Viewer->SetViewTarget(Cam);
+			}
+		};
+		const auto ShotDone = [=, this]()
+		{
+			APlayerController* Viewer = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+			if (Viewer && State->ShotCameraFrom.IsValid())
+			{
+				Viewer->SetViewTarget(State->ShotCameraFrom.Get());
+			}
+			if (ACameraActor* Cam = State->ShotCamera.Get())
+			{
+				Cam->Destroy();
+			}
+			State->ShotCamera.Reset();
+			State->ShotCameraFrom.Reset();
+		};
+		const auto PlayerActor = [=, this]() -> const ASimPawnActor*
+		{
+			const USimPawnSubsystem* PawnsNow = GetWorld()->GetSubsystem<USimPawnSubsystem>();
+			return PawnsNow ? PawnsNow->FindPawn(State->Player) : nullptr;
+		};
 		const auto AimAtNearest = [=]() -> bool
 		{
 			float Best = 1e9f;
@@ -1035,9 +1077,35 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					State->bFiringPicture = true;
 				}
 				Body->SetScriptedAim(State->StepTime > 2.0f);
-				if (State->StepTime > 3.5f)
+				if (State->StepTime > 3.5f && State->StepTime - Dt <= 3.5f)
 				{
 					Picture(TEXT("third_person_aimed"));
+				}
+				if (const ASimPawnActor* Me = PlayerActor(); Me && State->StepTime > 3.6f)
+				{
+					// The hair: from behind and close while aimed (any strands through the back or arms?), then the parting
+					// from above.
+					const FVector Head = Me->GetActorLocation() + Me->GetActorUpVector() * (165.0 * Me->GetBodyScale());
+					if (State->StepTime < 3.8f)
+					{
+						ShotLook(Head - Me->GetActorForwardVector() * 90.0 + Me->GetActorUpVector() * 5.0, Head - Me->GetActorUpVector() * 25.0);
+					}
+					else if (State->StepTime - Dt <= 3.8f)
+					{
+						Picture(TEXT("hair_back_aimed"));
+					}
+					else if (State->StepTime < 4.1f)
+					{
+						ShotLook(Head + Me->GetActorUpVector() * 55.0 - Me->GetActorForwardVector() * 12.0, Head);
+					}
+					else if (State->StepTime - Dt <= 4.1f)
+					{
+						Picture(TEXT("hair_parting_above"));
+					}
+				}
+				if (State->StepTime > 4.3f)
+				{
+					ShotDone();
 					Body->SetScriptedAim(false);
 					Next(G->GetMelee().Num() > 0 ? 7 : 10);
 				}
@@ -1168,8 +1236,19 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				{
 					Picture(*FString::Printf(TEXT("hold_%s_3p_aimed"), *Name));
 				}
-				if (T > 7.6f)
+				if (const ASimPawnActor* Me = PlayerActor(); Me && T > 7.5f && T < 7.8f)
 				{
+					// From the side, close: is the stock clear of the head, the cheek on it?
+					const FVector Head = Me->GetActorLocation() + Me->GetActorUpVector() * (155.0 * Me->GetBodyScale());
+					ShotLook(Head + Me->GetActorRightVector() * 130.0 + Me->GetActorForwardVector() * 20.0, Head + Me->GetActorForwardVector() * 20.0);
+				}
+				if (At(7.7f))
+				{
+					Picture(*FString::Printf(TEXT("hold_%s_3p_side"), *Name));
+				}
+				if (T > 7.9f)
+				{
+					ShotDone();
 					Body->SetScriptedAim(false);
 					if (!Body->IsFirstPerson())
 					{
@@ -1188,7 +1267,35 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				}
 				break;
 			}
-			case 11:  // a gun again: its model in the hands
+			case 11:  // a gun again: its model in the hands; first the groin of the nearest shot target (sneed: blood on the groin)
+				if (State->StepTime < 0.6f)
+				{
+					float Best = 1e9f;
+					FVector Where = FVector::ZeroVector;
+					for (const FGunRangeTarget& Tg : State->Targets)
+					{
+						const colony::ThingView* View = B->GetCurrentSnapshot().find(Tg.Thing);
+						FVector At2;
+						if (View && (View->downed || View->dead) && B->GetBlendedLocation(Tg.Thing, At2) && FVector::Dist(At2, Body->GetViewLocation()) < Best)
+						{
+							Best = static_cast<float>(FVector::Dist(At2, Body->GetViewLocation()));
+							Where = At2;
+						}
+					}
+					if (Best < 1e8f)
+					{
+						if (State->StepTime < 0.3f)
+						{
+							ShotLook(Where + FVector(60.0, 40.0, 80.0), Where + FVector(0.0, 0.0, 15.0));
+						}
+						else if (State->StepTime - Dt <= 0.3f)
+						{
+							Picture(TEXT("groin_after_shots"));
+						}
+					}
+					break;
+				}
+				ShotDone();
 				if (State->StepTime > 2.0f)
 				{
 					Notes.Add(FString::Printf(TEXT("gunrange: gun back in hand, view %s, gun model %s"), Body->IsFirstPerson() ? TEXT("first person") : TEXT("third person"),
