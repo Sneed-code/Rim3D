@@ -1,0 +1,16 @@
+﻿Building Rim3DEditor (below-normal priority, 6 jobs)...
+Build ok.
+Running smoke test 'newgame' at 1920x1080...
+
+Smoke test 'newgame': PASS  (41 s, NVIDIA GeForce RTX 5080, 1920x1080)
+newgame_title                49.5 fps  game   4.0 ms  render   9.0 ms  gpu   7.9 ms  screenshot ok
+newgame_loadpage             62.2 fps  game   3.7 ms  render   9.0 ms  gpu   7.9 ms  screenshot ok
+newgame_scenario             80.7 fps  game   3.9 ms  render   9.0 ms  gpu   8.0 ms  screenshot ok
+newgame_people               75.4 fps  game   4.4 ms  render  10.9 ms  gpu   9.7 ms  screenshot ok
+newgame_you_clothes          46.1 fps  game   4.4 ms  render  10.9 ms  gpu   9.6 ms  screenshot ok
+newgame_companions           58.0 fps  game   5.1 ms  render  10.8 ms  gpu   9.6 ms  screenshot ok
+newgame_looks                57.6 fps  game   4.5 ms  render  10.9 ms  gpu   9.7 ms  screenshot ok
+newgame_landed               84.4 fps  game   4.7 ms  render   7.0 ms  gpu   5.9 ms  screenshot ok
+note: NEWGAME title mouse cursor shown
+note: NEWGAME title backdrop TropicalRainforest, sky 6.50 h, exposure 12.1 EV, 51849 plants drawn
+Screenshots: C:\Dev\Rim3D-climb\game\Saved\Smoke\newgame
