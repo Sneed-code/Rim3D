@@ -301,4 +301,5 @@ turn round, a swing at someone; a walk's gentle curves stay under it) its hair i
 head, turning with the body, and it swings freely again from there 0.08 s after the turn eases
 (`Pawns.StrandHairTurnHoldAfter`; the groom's simulation is reset each held frame). Log `STRANDHAIR turn hold N`. Dressed bodies are clear (the
 shapes stand 3 cm further out). `-CreatorRecord=1` with the demo also saves every other frame of the walk
-(`strandwalk_NNNN.png`).
+(`strandwalk_NNNN.png`). `-CreatorStrandWalkPitch=-70` holds the walk's view still, from one side and looking down
+at that pitch, so a turn shows whether the hair goes round the body or through it.

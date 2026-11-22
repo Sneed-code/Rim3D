@@ -300,6 +300,7 @@ namespace
 		float StrandDemoT = -1.0f;  // -CreatorStrandDemo: seconds into the strand hair clipping check
 		int32 StrandDemoPhase = -1;
 		int32 StrandDemoShot = 0;
+		float StrandWalkYaw = 9999.0f;  // -CreatorStrandWalkPitch: the fixed view's yaw through the walk (over 1000: not set yet)
 		int32 SoftPressFrames = 0;      // frames in which the ball's press reached the skin table
 	};
 
@@ -1455,6 +1456,25 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			const float Facing = Pawn ? static_cast<float>(Pawn->GetActorRotation().Yaw) : 0.0f;
 			const bool bSide = FMath::Fmod(T, 6.0f) >= 3.0f;
 			State->CameraYaw = Facing + (bSide ? 90.0f : 15.0f);
+			// -CreatorStrandWalkPitch=<degrees> (e.g. -70): through the walk the view stops following her and looks down
+			// at that pitch from a fixed side, so a turn shows whether the hair goes round the body or through it.
+			float WalkPitch = 0.0f;
+			if (Phase == 4 && FParse::Value(FCommandLine::Get(), TEXT("CreatorStrandWalkPitch="), WalkPitch))
+			{
+				if (State->StrandWalkYaw > 1000.0f)
+				{
+					State->StrandWalkYaw = Facing + 90.0f;
+				}
+				State->CameraYaw = State->StrandWalkYaw;
+				State->CameraPitch = FMath::Clamp(WalkPitch, -85.0f, 0.0f);
+				State->CameraDistance = 260.0f;
+			}
+			else if (Phase == 5 && State->StrandWalkYaw < 1000.0f)
+			{
+				State->StrandWalkYaw = 9999.0f;
+				State->CameraPitch = -10.0f;
+				State->CameraDistance = 170.0f;
+			}
 			if (Phase < NumStrandPhases && FMath::Fmod(T, 3.0f) >= 2.6f && State->StrandDemoShot == Phase * 2 + (bSide ? 1 : 0))
 			{
 				FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/creator") /
