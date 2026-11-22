@@ -1258,6 +1258,11 @@ bool HealthSystem::unconscious(Entity pawn) const {
     return reg.valid(pawn) && reg.all_of<Health>(pawn) && !reg.get<Health>(pawn).dead && reg.get<Health>(pawn).unconscious;
 }
 
+bool HealthSystem::downedAwake(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    return reg.valid(pawn) && reg.all_of<Health>(pawn) && downedAwake(reg.get<Health>(pawn));
+}
+
 bool HealthSystem::kill(Entity pawn, DeathCause cause) {
     entt::registry& reg = things_.registry();
     if (!tracks(pawn) || !reg.all_of<Health>(pawn) || reg.get<Health>(pawn).dead) {

@@ -208,6 +208,7 @@
       "name": "gun-art",
       "what": "Guns and melee weapons",
       "inputs": ["assets/guns.json"],
+      "after": ["codex-models"],
       "raw": ["assets/raw/guns", "assets/raw/melee"],
       "makes": ["game/Content/Rim3D/Generated/Guns"],
       "run": [{"commandlet": "GunArt", "args": ["-nullrhi"]}]

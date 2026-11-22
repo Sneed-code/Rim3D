@@ -1,5 +1,5 @@
 {
- "comment": "Codex models for buildings and items (docs/design/codex-models.md). 'prep' is read by tools/codex_prep.py (Blender: GLB from sneed's Rim3D_Codex folder -> assets/raw/codex/<Name>/, not in Git). 'buildings' is read by the GunArt commandlet (-List=assets/codex_art.json): each FBX is imported as one combined mesh, /Game/Rim3D/Generated/Buildings/<name>/SM_<name>, with M_GunPBR instances from the T_<slot>_* maps; the def's visual.mesh names it. The launchers' art is in assets/guns.json. All numbers are ours.",
+ "comment": "Codex models for buildings and items (docs/design/codex-models.md). 'prep' is read by tools/codex_prep.py (Blender: GLB from sneed's Rim3D_Codex folder -> assets/raw/codex/<Name>/, not in Git). 'buildings' is read by the GunArt commandlet (-List=assets/codex_art.json): each FBX is imported as one combined mesh, /Game/Rim3D/Generated/Buildings/<name>/SM_<name>, with M_GunPBR instances from the T_<slot>_* maps; the def's visual.mesh names it. The launchers' art is in assets/guns.json. A model with moving parts (the Neon ones, 'parts' in its prep entry) has one entry for its body and one per part, <Name>_<Part>, all in the same frame (docs/design/neon-assets.md). All numbers are ours.",
  "prep": {
   "GrenadeLauncher": {
    "kind": "gun",
@@ -1046,6 +1046,204 @@
     "fbx": "assets/raw/codex/AnimalBed/AnimalBed_Game.fbx",
     "combine": true,
     "slotTextureDir": "assets/raw/codex/AnimalBed",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ShipSensorCluster",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ShipSensorCluster",
+    "fbx": "assets/raw/codex/ShipSensorCluster/ShipSensorCluster_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ShipSensorCluster",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ShipSensorCluster",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ShipSensorCluster_Dish",
+    "fbx": "assets/raw/codex/ShipSensorCluster/ShipSensorCluster_Dish_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ShipSensorCluster",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ShipSensorCluster",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ShipSensorCluster_BeaconLens",
+    "fbx": "assets/raw/codex/ShipSensorCluster/ShipSensorCluster_BeaconLens_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ShipSensorCluster",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ShipComputerCore",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ShipComputerCore",
+    "fbx": "assets/raw/codex/ShipComputerCore/ShipComputerCore_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ShipComputerCore",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ShipComputerCore",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ShipComputerCore_CoreCrystal",
+    "fbx": "assets/raw/codex/ShipComputerCore/ShipComputerCore_CoreCrystal_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ShipComputerCore",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ShipComputerCore",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ShipComputerCore_FanL",
+    "fbx": "assets/raw/codex/ShipComputerCore/ShipComputerCore_FanL_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ShipComputerCore",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ShipComputerCore",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ShipComputerCore_FanR",
+    "fbx": "assets/raw/codex/ShipComputerCore/ShipComputerCore_FanR_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ShipComputerCore",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ShipComputerCore",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ShipComputerCore_StatusLights",
+    "fbx": "assets/raw/codex/ShipComputerCore/ShipComputerCore_StatusLights_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ShipComputerCore",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "PowerSwitch",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "PowerSwitch",
+    "fbx": "assets/raw/codex/PowerSwitch/PowerSwitch_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/PowerSwitch",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "PowerSwitch",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "PowerSwitch_Lever",
+    "fbx": "assets/raw/codex/PowerSwitch/PowerSwitch_Lever_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/PowerSwitch",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "PowerSwitch",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "PowerSwitch_LampGreen",
+    "fbx": "assets/raw/codex/PowerSwitch/PowerSwitch_LampGreen_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/PowerSwitch",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "PowerSwitch",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "PowerSwitch_LampRed",
+    "fbx": "assets/raw/codex/PowerSwitch/PowerSwitch_LampRed_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/PowerSwitch",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "PowerSwitch",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "PowerSwitch_Spark",
+    "fbx": "assets/raw/codex/PowerSwitch/PowerSwitch_Spark_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/PowerSwitch",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Hatchery",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "Hatchery",
+    "fbx": "assets/raw/codex/Hatchery/Hatchery_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Hatchery",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Hatchery",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "Hatchery_Lid",
+    "fbx": "assets/raw/codex/Hatchery/Hatchery_Lid_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Hatchery",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Hatchery",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "Hatchery_HeatLamp",
+    "fbx": "assets/raw/codex/Hatchery/Hatchery_HeatLamp_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Hatchery",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Hatchery",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "Hatchery_Egg1",
+    "fbx": "assets/raw/codex/Hatchery/Hatchery_Egg1_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Hatchery",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Apparel_CowboyHat",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "CowboyHat",
+    "fbx": "assets/raw/codex/CowboyHat/CowboyHat_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/CowboyHat",
     "normalOpenGL": true
    }
   }

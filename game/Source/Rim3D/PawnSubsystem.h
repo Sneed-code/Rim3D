@@ -125,9 +125,16 @@ struct FSimWornPiece
 	/** The cuts a MakeHuman body can wear this piece as (`visual.cuts`, docs/design/clothes-draw.md "MakeHuman bodies"):
 	 *  each one or more garment names joined by '+'; the pawn draws one of them, picked by the item. */
 	TArray<FString> Cuts;
+	/** A rigid model worn on a MakeHuman body's head in place of a cut (`visual.headProp`, the Neon cowboy hat): its static
+	 *  mesh, where its bottom middle sits from the head bone in the body's rest pose (cm, the body's own axes), a turn about
+	 *  up (degrees) and a size. Empty: the cuts are drawn. */
+	FString HeadProp;
+	FVector HeadPropAt = FVector::ZeroVector;
+	float HeadPropYaw = 0.0f;
+	float HeadPropScale = 1.0f;
 
 	/** Same item, def, stuff and meshes (what a rebuild of the components is for); wear and tint change in place. */
-	bool SameStructure(const FSimWornPiece& Other) const { return Item == Other.Item && Def == Other.Def && Stuff == Other.Stuff && Meshes == Other.Meshes && Cuts == Other.Cuts; }
+	bool SameStructure(const FSimWornPiece& Other) const { return Item == Other.Item && Def == Other.Def && Stuff == Other.Stuff && Meshes == Other.Meshes && Cuts == Other.Cuts && HeadProp == Other.HeadProp; }
 };
 
 struct FSimPawnApparel

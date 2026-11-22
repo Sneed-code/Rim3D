@@ -6,6 +6,7 @@
 #include "HAL/IConsoleManager.h"
 
 #include "BuildingSubsystem.h"
+#include "PropAnims.h"
 #include "SimSubsystem.h"
 #include "WreckSubsystem.h"
 
@@ -268,6 +269,42 @@ void USmokeTestSubsystem::BuildBuildingsPhases()
 				}
 			}
 			Notes.Add(FString::Printf(TEXT("buildings_items: %d defs name a mesh, %d found"), Named, Named - Missing.Num()));
+			// Moving parts (visual.moving): each part's mesh is made (codex-art) and the model's clips were read (codex-models).
+			int32 MovingDefs = 0;
+			int32 MovingMeshes = 0;
+			TArray<FString> MovingMissing;
+			for (const colony::DefId Id : Defs.idsOfKind("Things"))
+			{
+				const colony::Def& Def = Defs.get(Id);
+				const size_t PartCount = Def.count("visual.moving.parts");
+				if (PartCount == 0)
+				{
+					continue;
+				}
+				++MovingDefs;
+				const FString SetName = UTF8_TO_TCHAR(Def.text("visual.moving.anims").c_str());
+				if (!PropAnims::Find(SetName))
+				{
+					MovingMissing.Add(SetName + TEXT(" clips"));
+				}
+				for (size_t P = 0; P < PartCount; ++P)
+				{
+					const std::string PartMesh = Def.text(("visual.moving.parts." + std::to_string(P) + ".mesh").c_str());
+					if (StaticLoadObject(UStaticMesh::StaticClass(), nullptr, UTF8_TO_TCHAR(PartMesh.c_str())))
+					{
+						++MovingMeshes;
+					}
+					else
+					{
+						MovingMissing.Add(UTF8_TO_TCHAR(PartMesh.c_str()));
+					}
+				}
+			}
+			Notes.Add(FString::Printf(TEXT("buildings_items: %d defs with moving parts, %d part meshes found"), MovingDefs, MovingMeshes));
+			if (!MovingMissing.IsEmpty())
+			{
+				Fail(FString::Printf(TEXT("buildings_items: moving parts missing %s: run the codex-models and codex-art art steps"), *FString::Join(MovingMissing, TEXT(", "))));
+			}
 			if (!Missing.IsEmpty())
 			{
 				Fail(FString::Printf(TEXT("buildings_items: no mesh for %s: run python tools/placeholder_art.py, then the PlaceholderArt commandlet (assets/manifest.json)"), *FString::Join(Missing, TEXT(", "))));

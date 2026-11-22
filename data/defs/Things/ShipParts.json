@@ -127,7 +127,7 @@
   ]
  },
  {
-  "defName": "ShipComputerCore",
+  "defName": "ShipComputerCore", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/ShipComputerCore/SM_ShipComputerCore.SM_ShipComputerCore", "moving": {"anims": "ShipComputerCore", "parts": [{"part": "CoreCrystal", "mesh": "/Game/Rim3D/Generated/Buildings/ShipComputerCore_CoreCrystal/SM_ShipComputerCore_CoreCrystal.SM_ShipComputerCore_CoreCrystal"}, {"part": "FanL", "mesh": "/Game/Rim3D/Generated/Buildings/ShipComputerCore_FanL/SM_ShipComputerCore_FanL.SM_ShipComputerCore_FanL"}, {"part": "FanR", "mesh": "/Game/Rim3D/Generated/Buildings/ShipComputerCore_FanR/SM_ShipComputerCore_FanR.SM_ShipComputerCore_FanR"}, {"part": "StatusLights", "mesh": "/Game/Rim3D/Generated/Buildings/ShipComputerCore_StatusLights/SM_ShipComputerCore_StatusLights.SM_ShipComputerCore_StatusLights"}], "play": [{"clip": "Boot", "when": "running"}, {"clip": "Idle", "when": "running", "loop": true}]}},
   "parent": "BuildingBase",
   "label": "ship computer core",
   "size": [
@@ -158,7 +158,7 @@
   ]
  },
  {
-  "defName": "ShipSensorCluster",
+  "defName": "ShipSensorCluster", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/ShipSensorCluster/SM_ShipSensorCluster.SM_ShipSensorCluster", "moving": {"anims": "ShipSensorCluster", "parts": [{"part": "Dish", "mesh": "/Game/Rim3D/Generated/Buildings/ShipSensorCluster_Dish/SM_ShipSensorCluster_Dish.SM_ShipSensorCluster_Dish"}, {"part": "BeaconLens", "mesh": "/Game/Rim3D/Generated/Buildings/ShipSensorCluster_BeaconLens/SM_ShipSensorCluster_BeaconLens.SM_ShipSensorCluster_BeaconLens"}], "play": [{"clip": "DishScan", "when": "running", "loop": true}, {"clip": "BeaconBlink", "when": "always", "loop": true}]}},
   "parent": "BuildingBase",
   "label": "ship sensor cluster",
   "size": [

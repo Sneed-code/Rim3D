@@ -210,23 +210,25 @@ def rest_poses(rest, bake):
     return {p: unreal_key(to_unreal(frame @ (rest[p] @ bake[p].inverted()) @ inv)) for p in rest}
 
 
-def anim_tracks(sampled, rest):
-    """Per action, per part that moves: times and the part's motion away from its rest pose (delta = now x rest^-1, in
-    the model's final frame, then Unreal's), as location cm, rotation quaternion [x, y, z, w] and scale. Samples a
-    straight blend of their neighbours can rebuild are dropped."""
+def anim_tracks(sampled, bake, rest):
+    """Per action, per part it moves: times and the part's motion away from its baked mesh (delta = now x bake^-1, in
+    the model's final frame, then Unreal's), as location cm, rotation quaternion [x, y, z, w] and scale. A part that stays
+    at its rest pose all through the action gets no track (so a spark hidden at rest is not forced hidden by every other
+    action). Samples a straight blend of their neighbours can rebuild are dropped."""
     frame, inv = FRAME[0], FRAME[0].inverted()
     anims = {}
     for name, a in sampled.items():
         parts = {}
         for p, mats in a["frames"].items():
-            r_inv = rest[p].inverted()
+            r_inv = bake[p].inverted()
+            at_rest = to_unreal(frame @ (rest[p] @ r_inv) @ inv).decompose()
             keys = []
             for i, m in enumerate(mats):
                 d = to_unreal(frame @ (m @ r_inv) @ inv)
                 loc, rot, scl = d.decompose()
                 keys.append((i / a["fps"], loc, rot, scl))
-            moves = any((k[1].length > 0.05 or k[2].angle > math.radians(0.1) or (k[3] - mathutils.Vector((1, 1, 1))).length > 1e-3)
-                        for k in keys)
+            moves = any(((k[1] - at_rest[0]).length > 0.05 or k[2].rotation_difference(at_rest[1]).angle > math.radians(0.1)
+                         or (k[3] - at_rest[2]).length > 1e-3) for k in keys)
             if not moves:
                 continue
             kept = [keys[0]]
@@ -490,7 +492,7 @@ def prep(src_root, name, entry):
         key = f"{name}_{p}" if kind in ("building", "item") else p
         if key in info["parts"] and p in pivots_by_part(pivots, p):
             info["parts"][key]["pivotCm"] = unreal_cm(FRAME[0] @ pivots_by_part(pivots, p)[p])
-    anims = anim_tracks(sampled, bake) if sampled else {}
+    anims = anim_tracks(sampled, bake, rest) if sampled else {}
     if anims:
         info["anims"] = {a: {"seconds": v["seconds"], "parts": sorted(v["parts"])} for a, v in anims.items()}
         doc = {"name": name, "note": "Made by tools/codex_prep.py from the GLB's glTF actions: each part's motion away from its baked mesh, Unreal frame, cm. 'rest': the pose when nothing plays (scale 0: hidden).",

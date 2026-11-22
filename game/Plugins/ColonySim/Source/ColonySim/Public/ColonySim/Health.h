@@ -337,6 +337,8 @@ public:
     int partZone(Entity pawn, int part) const;
     float blood(Entity pawn) const;
     bool unconscious(Entity pawn) const;
+    // Downed but still awake (down from pain or legs, not knocked out): it can moan and beg (docs/design/sound.md).
+    bool downedAwake(Entity pawn) const;
     // sneed's rules of 2026-11-17 (docs/design/body-health.md "Part F as built").
     // Arms under half slow attacks: 1 down to 0.5, half a percent for every percent an arm is under 50%, both arms
     // added. 1 for a body without zones.

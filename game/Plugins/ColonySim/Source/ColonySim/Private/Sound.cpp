@@ -338,6 +338,12 @@ void soundHitVoice(const DefDatabase& db, const Event& e, const SoundDefOf& defO
 
 }  // namespace
 
+std::string soundDownedVoice(const Def& pawnDef, SoundGender gender) {
+    if (gender == SoundGender::Female) return soundSlot(pawnDef, "femaleDowned");
+    if (gender == SoundGender::Male) return soundSlot(pawnDef, "maleDowned");
+    return {};
+}
+
 std::string soundLovinCue(SoundGender a, SoundGender b) {
     const int women = (a == SoundGender::Female ? 1 : 0) + (b == SoundGender::Female ? 1 : 0);
     const int men = (a == SoundGender::Male ? 1 : 0) + (b == SoundGender::Male ? 1 : 0);

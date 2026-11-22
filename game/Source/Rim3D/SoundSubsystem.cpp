@@ -437,6 +437,7 @@ void USoundSubsystem::LoadCues()
 		Cue.FarCue = UTF8_TO_TCHAR(Def.text("far").c_str());
 		Cue.FarFromM = static_cast<float>(Def.number("farFrom", 0.0));
 		Cue.RepeatS = static_cast<float>(Def.number("repeat", 0.0));
+		Cue.EveryS = FVector2f(static_cast<float>(Def.number("every.0", 0.0)), static_cast<float>(Def.number("every.1", 0.0)));
 		Cue.Tone = SoundMakeTone(UTF8_TO_TCHAR(Def.text("tone.wave", "sine").c_str()), static_cast<float>(Def.number("tone.hz", 440.0)),
 			static_cast<float>(Def.number("tone.seconds", 0.2)), Cue.bLoop, GetTypeHash(Cue.Name));
 		if (const TArray<TSharedPtr<const FSoundClip>>* Have = Files.Find(Cue.Name); Have && !bFirst)
@@ -581,6 +582,7 @@ void USoundSubsystem::ResetForSim()
 	LastStepPos.Reset();
 	DoorOpen.Reset();
 	NextCall.Reset();
+	NextMoan.Reset();
 	ThunderAt.Reset();
 	PlaysTotal = 0;
 	Dropped = 0;
@@ -990,6 +992,10 @@ void USoundSubsystem::PlayVoice(const FCue& Cue, const colony::SoundPlay& Play, 
 		{
 			Skip = TEXT("hit grunt over a scream");
 		}
+	}
+	else if (Play.voice == colony::SoundVoice::Moan && bSpeaking)
+	{
+		Skip = TEXT("moan while that pawn speaks");
 	}
 	else if (bScreaming && Now - Sounds[Voice.Sound].StartedAt < SoundScreamRepeatS)
 	{
@@ -1579,8 +1585,36 @@ void USoundSubsystem::UpdateSteps(const colony::Sim& Sim, const colony::Snapshot
 				}
 			}
 		}
-		// Animals call now and then (cosmetic, Unreal's own random).
-		if (bAnimal && !View.downed && !View.asleep && bNear)
+		// People lying downed and awake moan, groan and beg now and then (cosmetic, Unreal's own random): only while that
+		// pawn's voice is silent, so a hit grunt or a scream always wins.
+		if (!bAnimal && View.downedAwake && bNear)
+		{
+			float& Next = NextMoan.FindOrAdd(Id);
+			const FString CueName = Source.GetDefs() && View.def.valid()
+				? FString(UTF8_TO_TCHAR(colony::soundDownedVoice(Source.GetDefs()->get(View.def), GenderOf(View.id)).c_str())) : FString();
+			const FCue* Cue = CueName.IsEmpty() ? nullptr : FindCue(CueName);
+			if (Cue && Next <= 0.0f)
+			{
+				Next = Random.FRandRange(1.5f, FMath::Max(Cue->EveryS.X, 2.0f));  // the first a moment after going down
+			}
+			Next -= Delta;
+			if (Cue && Next <= 0.0f)
+			{
+				colony::SoundPlay Play;
+				Play.cue = TCHAR_TO_UTF8(*CueName);
+				Play.entity = View.id;
+				Play.voice = colony::SoundVoice::Moan;
+				PlayVoice(*Cue, Play, Location + FVector(0.0, 0.0, 20.0));
+				Next = Random.FRandRange(FMath::Max(Cue->EveryS.X, 1.0f), FMath::Max(Cue->EveryS.Y, Cue->EveryS.X + 1.0f));
+			}
+		}
+		else if (!bAnimal)
+		{
+			NextMoan.Remove(Id);
+		}
+		// Animals, mechanoids and chitinids call now and then (cosmetic, Unreal's own random).
+		const bool bCalls = bAnimal || !SoundsOfDef(View.def).Idle.IsEmpty();
+		if (bCalls && !View.downed && !View.asleep && bNear)
 		{
 			float& Next = NextCall.FindOrAdd(Id);
 			if (Next <= 0.0f)

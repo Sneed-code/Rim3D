@@ -713,3 +713,29 @@ TEST_CASE("sound: what a step says about the ground") {
     CHECK(soundSurfaceOfStep("Step_Tile") == "Stone");
     CHECK(soundSurfaceOfStep("Step_Wood") == "Wood");
 }
+
+TEST_CASE("sound: people lying downed beg and groan; mechanoids and chitinids have their own sounds") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    const Def* human = db.find("Things", "Human");
+    if (human == nullptr) { CHECK(false); return; }
+    CHECK(soundDownedVoice(*human, SoundGender::Female) == "Voice_FemDowned");
+    CHECK(soundDownedVoice(*human, SoundGender::Male) == "Voice_MaleDowned");
+    CHECK(soundDownedVoice(*human, SoundGender::Unknown).empty());
+    for (const char* cue : {"Voice_FemDowned", "Voice_MaleDowned"}) {
+        const Def* c = db.find("SoundCues", cue);
+        if (c == nullptr) { CHECK_MESSAGE(false, cue); continue; }
+        CHECK(c->number("every.0", 0.0) >= 3.0);  // now and then, not a constant drone
+        CHECK(c->number("every.1", 0.0) > c->number("every.0", 0.0));
+        CHECK(c->integer("priority", 3) == 1);
+    }
+    const Def* scyther = db.find("Things", "Mech_Scyther");
+    const Def* spider = db.find("Things", "Megaspider");
+    if (scyther == nullptr || spider == nullptr) { CHECK(false); return; }
+    CHECK(soundSlot(*scyther, "idle") == "Animal_Mech_Idle");
+    CHECK(soundSlot(*scyther, "hurt") == "Animal_Mech_Hurt");
+    CHECK(soundSlot(*scyther, "death") == "Animal_Mech_Death");
+    CHECK(soundSlot(*spider, "idle") == "Animal_Chitinid_Idle");
+    CHECK(soundSlot(*spider, "death") == "Animal_Chitinid_Death");
+    CHECK(soundDownedVoice(*scyther, SoundGender::Unknown).empty());
+}

@@ -27,6 +27,7 @@ enum class SoundVoice : uint8_t {
     None,    // not a voice
     Hit,     // a grunt at a hard melee hit; Unreal plays at most one per pawn every `cooldown` seconds (the cue def's)
     Scream,  // downed or killed: no cooldown, cuts that pawn's hit grunt, never cut by one
+    Moan,    // lying downed and awake (Unreal, now and then): plays only when that pawn is silent, cut by any other voice
 };
 
 // The gender of a pawn for its voice: no voice for Unknown (animals, mechanoids, things).
@@ -86,6 +87,10 @@ COLONY_API std::string soundSurfaceOfStep(const std::string& stepCue);
 
 // The cue a ProjectileHit plays on what it struck (empty for none): see soundForEvent.
 COLONY_API std::string soundImpactCue(const DefDatabase& db, const Event& event, const SoundStepAt& stepAt = {});
+
+// What a pawn says while it lies downed and awake (docs/design/sound.md "Downed voices"): its def's `femaleDowned` or
+// `maleDowned` slot (women beg and groan, men groan); empty for no voice (animals, mechanoids, Unknown).
+COLONY_API std::string soundDownedVoice(const Def& pawnDef, SoundGender gender);
 
 // The lovin sound for a pair (docs/design/sound.md "Lovin"): a man and a woman `Voice_LovinCouple` (sneed's six
 // recordings), two women or a woman alone (`b` Unknown) `Voice_LovinFem` (the three women's ones), two men or a man alone
