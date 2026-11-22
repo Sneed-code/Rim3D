@@ -42,6 +42,9 @@ namespace DebugScenes
 	 *  the game against a fresh start of it. */
 	void DumpConsoleVariables(const FString& Path);
 
+	/** Whether a scene or the title has been loaded inside this game (the level loaded again by Launch or ReturnToTitle). */
+	bool HasLoadedInGame();
+
 	/** This copy was started from the Debug page (-DebugScene= on its command line). */
 	bool IsDebugScene();
 

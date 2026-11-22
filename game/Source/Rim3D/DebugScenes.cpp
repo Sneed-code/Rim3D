@@ -138,6 +138,7 @@ namespace
 	bool GDebugSceneSaved = false;
 	float GDebugSceneNearClip = 0.0f;
 	bool GDebugSceneScreenMessages = true;
+	bool GDebugSceneTravelled = false;
 
 	void DebugSceneRemember()
 	{
@@ -214,6 +215,7 @@ namespace
 		}
 		UE_LOG(LogDebugScenes, Display, TEXT("Loading %s in this game: map %s, command line %s"), What, *Map, *Line);
 		FCommandLine::Set(*Line);
+		GDebugSceneTravelled = true;
 		UGameplayStatics::OpenLevel(World, FName(*Map), true);
 		return true;
 	}
@@ -274,6 +276,11 @@ void DebugScenes::DumpConsoleVariables(const FString& Path)
 	Lines.Add(FString::Printf(TEXT("(near clip %.2f, screen messages %d)"), GNearClippingPlane, GAreScreenMessagesEnabled ? 1 : 0));
 	FFileHelper::SaveStringArrayToFile(Lines, *Path);
 	UE_LOG(LogDebugScenes, Display, TEXT("Console variables written to %s (%d)"), *Path, Lines.Num());
+}
+
+bool DebugScenes::HasLoadedInGame()
+{
+	return GDebugSceneTravelled;
 }
 
 bool DebugScenes::IsDebugScene()

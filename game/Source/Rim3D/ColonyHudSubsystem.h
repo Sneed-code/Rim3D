@@ -309,6 +309,7 @@ private:
 	bool bLeavingDebugScene = false;
 	void TickSceneHop();
 	bool bCvarDumped = false;
+	int32 ViewResetFrames = 0;
 	/** The menu has the mouse (cursor shown, UI input) while it is open; given back when the game takes over. */
 	bool bMenuMouse = false;
 	TWeakObjectPtr<ACameraActor> TitleCamera;

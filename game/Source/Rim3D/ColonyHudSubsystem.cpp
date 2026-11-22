@@ -15,6 +15,7 @@
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
+#include "RenderingThread.h"
 #include "UnrealClient.h"
 
 #include <imgui.h>
@@ -559,6 +560,19 @@ void UColonyHudSubsystem::Tick(float DeltaTime)
 		}
 	}
 	TickSceneHop();
+	// After a level load inside the game, the player's view keeps the last level's rendering history (its exposure,
+	// Lumen's cached lighting, temporal buffers): the gun range loaded from the title came up washed out white (PC
+	// round 3, 2026-11-22) while a fresh start of it was fine. Its first frames reset that history, as a fresh start has.
+	if (ViewResetFrames < 2 && DebugScenes::HasLoadedInGame())
+	{
+		if (APlayerController* ResetPC = GetWorld()->GetFirstPlayerController(); ResetPC && GetWorld()->GetTimeSeconds() > (ViewResetFrames == 0 ? 0.1f : 1.0f))
+		{
+			FlushRenderingCommands();
+			ResetPC->ConsoleCommand(TEXT("r.ResetViewState"));
+			++ViewResetFrames;
+			UE_LOG(LogTemp, Display, TEXT("Level loaded in the game: view history reset (%d)"), ViewResetFrames);
+		}
+	}
 	USimSubsystem* Bridge = GetBridge();
 	if (!Bridge || !Bridge->GetSim())
 	{

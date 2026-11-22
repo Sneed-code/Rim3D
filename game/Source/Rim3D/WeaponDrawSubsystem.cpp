@@ -1169,12 +1169,12 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 		const double SkullSlide = Slide;
 		// Aimed, the butt sits in the shoulder, never out behind it (sneed 2026-11-22, PC round 1: the shotgun's and the
 		// bolt-action's stocks ran 20 cm back past the cheek and the shoulder, through the side of the head; the assault
-		// rifle's short stock already ended at the shoulder). Along the barrel, the butt goes no further back than a few
-		// cm behind the right shoulder joint; at most 25 cm in all.
+		// rifle's short stock already ended at the shoulder). Along the barrel, the butt goes no further back than 7 cm
+		// behind the right shoulder joint; at most 25 cm in all.
 		if (Pawn.AimBlend > 0.0f && Mesh->GetBoneIndex(TEXT("upperarm_r")) != INDEX_NONE)
 		{
 			const FVector Shoulder = Mesh->GetSocketLocation(TEXT("upperarm_r"));
-			const double Behind = -FVector::DotProduct(Butt + Barrel * Slide - Shoulder, Barrel) - 4.0 * BodyScale;
+			const double Behind = -FVector::DotProduct(Butt + Barrel * Slide - Shoulder, Barrel) - 7.0 * BodyScale;
 			if (Behind > 0.0)
 			{
 				Slide = FMath::Min(25.0, Slide + Behind * MeleePose::EaseInOut(FMath::Clamp(Pawn.AimBlend, 0.0f, 1.0f)));
