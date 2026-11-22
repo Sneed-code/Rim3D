@@ -1,0 +1,30 @@
+﻿Running smoke test 'hud' at 1920x1080...
+
+Smoke test 'hud': PASS  (58 s, NVIDIA GeForce RTX 5080, 1920x1080)
+hud_bar                     119.5 fps  game   4.4 ms  render   5.0 ms  gpu   3.9 ms  screenshot ok
+hud_tab_build               113.6 fps  game   4.4 ms  render   5.0 ms  gpu   3.9 ms  screenshot ok
+hud_tab_work                121.1 fps  game   4.5 ms  render   5.0 ms  gpu   3.9 ms  screenshot ok
+hud_tab_schedule            116.6 fps  game   4.3 ms  render   4.8 ms  gpu   3.8 ms  screenshot ok
+hud_tab_assign              118.1 fps  game   4.5 ms  render   4.8 ms  gpu   3.8 ms  screenshot ok
+hud_tab_animals             111.9 fps  game   4.9 ms  render   4.8 ms  gpu   3.9 ms  screenshot ok
+hud_tab_mechs               117.1 fps  game   4.4 ms  render   4.9 ms  gpu   3.8 ms  screenshot ok
+hud_tab_wildlife            114.1 fps  game   4.6 ms  render   5.0 ms  gpu   3.8 ms  screenshot ok
+hud_tab_research            132.6 fps  game   4.6 ms  render   4.8 ms  gpu   3.9 ms  screenshot ok
+hud_tab_quests              116.1 fps  game   4.2 ms  render   4.9 ms  gpu   3.8 ms  screenshot ok
+hud_tab_world               152.4 fps  game   5.5 ms  render   4.2 ms  gpu   3.9 ms  screenshot ok
+hud_tab_inventory           112.6 fps  game   4.6 ms  render   4.9 ms  gpu   3.8 ms  screenshot ok
+hud_build_structure         117.6 fps  game   4.5 ms  render   5.0 ms  gpu   3.9 ms  screenshot ok
+hud_build_lit               113.5 fps  game   5.1 ms  render   4.6 ms  gpu   3.9 ms  screenshot ok
+hud_info                    112.6 fps  game   4.5 ms  render   4.9 ms  gpu   3.9 ms  screenshot ok
+hud_outfits                 122.5 fps  game   4.7 ms  render   4.9 ms  gpu   3.9 ms  screenshot ok
+hud_areas                   101.1 fps  game   5.1 ms  render   4.6 ms  gpu   3.9 ms  screenshot ok
+hud_medical                  66.5 fps  game   4.4 ms  render   8.7 ms  gpu   6.2 ms  screenshot ok
+hud_prisoners                52.3 fps  game   8.6 ms  render   6.1 ms  gpu   3.9 ms  screenshot ok
+hud_factions                122.0 fps  game   4.5 ms  render   5.0 ms  gpu   3.9 ms  screenshot ok
+hud_lessons                 107.4 fps  game   5.3 ms  render   5.2 ms  gpu   4.0 ms  screenshot ok
+hud_main_menu               117.7 fps  game   4.6 ms  render   4.9 ms  gpu   3.9 ms  screenshot ok
+hud_settings_controls       105.6 fps  game   5.2 ms  render   4.8 ms  gpu   3.9 ms  screenshot ok
+note: hud_bar: 6 colonists, bar drawn 753 frames
+note: hud_build_structure: 10 tile pictures made
+note: hud_lessons: 16 lessons, drawn 345 frames
+Screenshots: C:\Dev\Rim3D-climb\game\Saved\Smoke\hud
