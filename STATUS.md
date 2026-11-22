@@ -2,6 +2,22 @@
 
 Updated 2026-11-22.
 
+Whole-body melee finishers, held blocks, no crouch slides (sneed, 2026-11-22; sim, data, Unreal, tools,
+`docs/design/lock-on.md` "Whole-body finishers"): **finishers at the downed are now whole-body mocap clips** instead of
+arms posed by hand (the longsword's arms went through its body, the knife's shook and showed the joints): knife kneels and
+drives both hands down, gladius and mace hack low, club smashes overhead, longsword hacks low, spear drives down; the
+weapon simply stays in the hand. **The punches and low blows were never in the one game** (made in a test copy): new art
+step `mixamo-extra` brings them in. **Right mouse blocks with a melee weapon or fists, for as long as it is held**;
+fists stop punches, a blade lands on the forearm. **Crouch slides**: every block, dodge, reload or shout played a
+half-second whole-body crouch, so fighters ducked and slid; now only standing work crouches. PC round 1 pictures: block
+good, finishers too close (knife lay on the body, gladius and longsword lunged past it, spear thrust over it); now each
+finisher steps to its own distance from the body and the spear drives down two-handed. Rounds 2-6: the blow now lands
+when the blade comes down (the clips' measured hit was mid-swing), and a downed ragdoll is steered back over the spot
+the game thinks it lies on (it fell up to 1 m off, so blows missed or the attacker knelt on it); spear, club, gladius
+and longsword now all come down on the body. The melee smoke's `switch_key` revolver check (11 cm) had only passed
+because the switch used to crouch the whole body. Round 7: the knife kneels and drives down at his upper body. **Next:**
+sneed plays it (title > Debug > Gun range).
+
 Hair no longer through the body or clothes (sneed, 2026-11-22; hair tools and Unreal, `docs/design/hair-physics.md`
 "A shell with no gaps"): long strand hair still went into the back and through the shirt. Measured: between the old
 collision spheres a strand could sink 2 cm into the back (up to 5 cm), and resting hair lay 1.5 to 3 cm inside the

@@ -187,8 +187,11 @@ TEST_CASE("Melee: weapons and fists come from the data, and only melee fighters 
     CHECK_FALSE(sim->melee().charges(bare));
     CHECK(sim->melee().charges(brawler));  // the trait says so
 
-    // Only a melee weapon blocks.
+    // A melee weapon or a person's bare fists block (sneed 2026-11-22); a gun in the hands never does.
     sim->submit(MeleeCommand{bare, kNoEntity, MeleeMode::Block});
+    sim->step();
+    CHECK_FALSE(meleeTestFailed(*sim));
+    sim->submit(MeleeCommand{rifleman, kNoEntity, MeleeMode::Block});
     sim->step();
     CHECK(meleeTestFailed(*sim));
 }

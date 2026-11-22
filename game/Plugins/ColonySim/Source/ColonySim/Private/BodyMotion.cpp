@@ -206,6 +206,18 @@ bool BodyMotionSystem::playTimed(Entity pawn, DefId clipDef, float atSeconds, in
     return true;
 }
 
+bool BodyMotionSystem::shiftClip(Entity pawn, float metres, int steps) {
+    entt::registry& reg = things_.registry();
+    BodyMotion* m = reg.valid(pawn) ? reg.try_get<BodyMotion>(pawn) : nullptr;
+    if (m == nullptr || !m->clip.valid() || !std::isfinite(metres)) {
+        return false;
+    }
+    m->pushMetres = metres / std::max(1e-3f, m->scale);
+    m->pushFrom = 0;
+    m->pushTo = std::max(1, steps);
+    return true;
+}
+
 bool BodyMotionSystem::push(Entity pawn, float dx, float dy, float metres, int steps, int from, int to) {
     entt::registry& reg = things_.registry();
     const float len = std::sqrt(dx * dx + dy * dy);
@@ -513,6 +525,12 @@ void BodyMotionSystem::step() {
             m.time = std::min(c->seconds, m.time + m.rate * kMotionStepSeconds);
             c->sample(m.time, wantF, wantR, wantYaw);
             done = m.time >= c->seconds - 1e-5f;
+            // A shift laid over the clip (shiftClip: a finisher's few centimetres to its place by the body), eased over
+            // its first pushTo steps, in the clip's unscaled metres like the path.
+            if (m.pushMetres != 0.0f && m.pushTo > 0) {
+                const float steps = m.time / std::max(1e-4f, m.rate * kMotionStepSeconds);
+                wantF += m.pushMetres * motionEase(std::min(1.0f, steps / static_cast<float>(m.pushTo)));
+            }
         } else {
             m.time += 1.0f;
             const int now = static_cast<int>(m.time);

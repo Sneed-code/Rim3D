@@ -198,6 +198,8 @@ public:
 	int32 GetRagdollHitPushes() const { return RagdollHitPushes; }
 	/** For the tests: ragdolls put to sleep once settled, and blasts that threw one. */
 	int32 GetRagdollSleeps() const { return RagdollSleeps; }
+	/** Frames a downed body's ragdoll was steered back over its sim spot (UpdateRagdollTether). */
+	int32 GetRagdollTethers() const { return RagdollTethers; }
 	int32 GetRagdollPushes() const { return RagdollPushes; }
 	/** The ragdoll's floor taken away (carried on a back, BodyCarrySubsystem) or made again under where the pawn is now. */
 	void ResetRagdollFloor(bool bWanted);
@@ -438,8 +440,11 @@ private:
 	bool bSoftTissueBeforeRagdoll = true;
 	int32 RagdollSleeps = 0;
 	int32 RagdollPushes = 0;
+	int32 RagdollTethers = 0;
 	int32 RagdollHitPushes = 0;
 	void UpdateRagdollRest(float DeltaTime);
+	/** A downed body's ragdoll is drawn over its sim spot: its pelvis is steered back there while it falls. */
+	void UpdateRagdollTether(const FVector& SimSpot, float DeltaTime);
 	/** The tick group the meshes were last put in, and how many meshes that was (more come with looks). */
 	int32 MeshTickGroup = -1;
 	int32 MeshTickCount = 0;
@@ -579,6 +584,8 @@ private:
 	bool bBodyHidden = false;
 	bool bCutAway = false;
 	double ActionEndSeconds = 0.0;
+	/** The action playing is a short crouch (PlayAction), which stands up at once if the body starts to move. */
+	bool bActionCrouch = false;
 	TWeakObjectPtr<UAnimSequence> WorkLoopClip;
 	int32 ActionsPlayed = 0;
 };

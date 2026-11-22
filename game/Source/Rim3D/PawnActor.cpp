@@ -64,6 +64,8 @@ namespace
 	constexpr float PawnActionBlendIn = 0.25f;
 	constexpr float PawnActionHold = 0.35f;
 	constexpr float PawnActionBlendOut = 0.35f;
+	// Faster than this (cm/s) a body doesn't crouch to a short action, and one crouched stands up: its feet would slide.
+	constexpr float PawnActionMaxSpeed = 40.0f;
 	// Where horns grow, in the MetaHuman's mesh space (cm; +Y forward, +Z up): the top of the
 	// forehead, measured on Kellan's head (its mesh spans z 135 to 173, y -10 to 14).
 	constexpr float PawnHornForward = 6.5f;
@@ -426,6 +428,10 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	UpdateFightFace(Bridge, Now, DeltaTime * Speed);
 	if (bRagdoll)
 	{
+		if (Now.downed && !Now.dead)
+		{
+			UpdateRagdollTether(Location, DeltaTime);
+		}
 		UpdateRagdollRest(DeltaTime);
 		return;  // the physics body is on its own until the pawn gets up
 	}
@@ -528,10 +534,18 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		if (ActionEndSeconds > 0.0)
 		{
 			ActionEndSeconds -= DeltaTime * Speed;
-			if (ActionEndSeconds <= 0.0)
+			// Walked off before the crouch was over: up at once, never crouched legs gliding along the ground.
+			if (bActionCrouch && GroundSpeed > PawnActionMaxSpeed)
+			{
+				ActionEndSeconds = 0.0;
+				bActionCrouch = false;
+				Anim->StopSlotAnimation(0.15f, FAnimSlotGroup::DefaultSlotName);
+			}
+			else if (ActionEndSeconds <= 0.0)
 			{
 				Anim->StopSlotAnimation(PawnActionBlendOut, FAnimSlotGroup::DefaultSlotName);
 				ActionEndSeconds = 0.0;
+				bActionCrouch = false;
 			}
 		}
 	}
@@ -564,9 +578,14 @@ void ASimPawnActor::PlayAction(colony::PawnAction Action)
 	{
 		return;  // a work loop (felling) owns the slot
 	}
+	if (GroundSpeed > PawnActionMaxSpeed || IsInMotionClip())
+	{
+		return;  // a crouch on the move would slide the feet: only a body standing still crouches to its work
+	}
 	if (Anim->PlaySlotAnimationAsDynamicMontage(Animation, FAnimSlotGroup::DefaultSlotName, PawnActionBlendIn, PawnActionBlendOut))
 	{
 		ActionEndSeconds = PawnActionBlendIn + PawnActionHold;
+		bActionCrouch = true;
 		++ActionsPlayed;
 	}
 }
@@ -2391,7 +2410,8 @@ void ASimPawnActor::UpdateFinisherKneel(const USimSubsystem& Bridge, const colon
 	{
 		const std::vector<colony::MeleeFinisher>& Finishers = Sim->melee().rules().finishers;
 		const size_t Index = static_cast<size_t>(Now.meleeFinisher) - 1;
-		bKneel = Index < Finishers.size() && Finishers[Index].kneel;
+		// A finisher with a whole-body clip kneels in the clip itself (sneed 2026-11-22): no crouch laid over it.
+		bKneel = Index < Finishers.size() && Finishers[Index].kneel && !Sim->melee().finisherPlaysClip(Now.meleeFinisher);
 	}
 	const USimPawnSubsystem* Pawns = GetWorld() ? GetWorld()->GetSubsystem<USimPawnSubsystem>() : nullptr;
 	UAnimSequence* Crouch = Pawns ? Pawns->GetActionAnimation(colony::PawnAction::PickUp) : nullptr;
@@ -2793,6 +2813,46 @@ void ASimPawnActor::UpdateRagdollRest(float DeltaTime)
 		Body->PutAllRigidBodiesToSleep();
 		++RagdollSleeps;
 	}
+}
+
+void ASimPawnActor::UpdateRagdollTether(const FVector& SimSpot, float DeltaTime)
+{
+	// The sim's downed body lies over its spot (its prone hitboxes), but the ragdoll fell wherever the blow and the
+	// physics took it: 50-70 cm off, any way, so finishers came down beside the drawn body or kneeled on it (PC round 4,
+	// sneed 2026-11-22). While it falls (and again after a push wakes it), its pelvis is steered back over the spot, as a
+	// velocity the whole body eases toward. A body asleep is left alone (no slide once it lies).
+	if (!Body || !Body->IsSimulatingPhysics() || !Body->RigidBodyIsAwake() || RagdollSeconds > 2.5f || DeltaTime <= 0.0f)
+	{
+		return;
+	}
+	FBodyInstance* Pelvis = Body->GetBodyInstance(TEXT("pelvis"));
+	if (!Pelvis || !Pelvis->IsInstanceSimulatingPhysics())
+	{
+		return;
+	}
+	const FVector At = Pelvis->GetUnrealWorldTransform().GetLocation();
+	FVector Off = SimSpot - At;
+	Off.Z = 0.0;
+	const double Dist = Off.Size();
+	constexpr double TetherDeadCm = 8.0;
+	constexpr double TetherRate = 4.0;        // per second: the speed it wants is this times how far off it is
+	constexpr double TetherMaxSpeed = 200.0;  // cm/s
+	constexpr double TetherGrip = 20.0;       // per second: how fast its speed eases to that
+	FVector Want = FVector::ZeroVector;
+	if (Dist > TetherDeadCm)
+	{
+		Want = Off / Dist * FMath::Min((Dist - TetherDeadCm) * TetherRate, TetherMaxSpeed);
+	}
+	FVector Velocity = Pelvis->GetUnrealWorldVelocity();
+	Velocity.Z = 0.0;
+	if (Dist <= TetherDeadCm && Velocity.SizeSquared() < 1.0)
+	{
+		return;
+	}
+	const FVector Accel = (Want - Velocity) * TetherGrip;
+	// On every part alike (the pelvis alone, pulling a whole body against the ground's grip, barely moved it: PC round 5).
+	Body->AddForceToAllBodiesBelow(FVector(Accel.X, Accel.Y, 0.0), TEXT("pelvis"), true, true);
+	++RagdollTethers;
 }
 
 void ASimPawnActor::PushRagdoll(const FVector& Centre, float RadiusCm, float SpeedCmPerSecond)

@@ -622,8 +622,14 @@ UAnimSequence* USimPawnSubsystem::GetActionAnimation(colony::PawnAction Action) 
 		case colony::PawnAction::Deconstruct:
 		case colony::PawnAction::Cook:
 			return CrouchPose;
+		default:
+			break;
 	}
-	return CrouchPose;
+	// Everything else (a block, a dodge, a reload, a weapon switch, a throw, an alert, a dive for cover...) has no
+	// crouch: it used to fall through to it, so fighters ducked for half a second whenever they parried, reloaded or
+	// called out, and slid along the ground on crouched legs if they moved meanwhile (sneed 2026-11-22: "if enemies
+	// crouch and move they slide").
+	return nullptr;
 }
 
 USkeletalMesh* USimPawnSubsystem::GetGarmentMesh(const FString& Base, const FString& Garment)
