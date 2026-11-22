@@ -966,6 +966,41 @@
     "slotTextureDir": "assets/raw/codex/AnimalBed",
     "normalOpenGL": true
    }
+  },
+  {
+   "def": "Shell_HighExplosive",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Shell_HighExplosive",
+    "fbx": "assets/raw/codex/Shell_HighExplosive/Shell_HighExplosive_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Shell_HighExplosive",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ComponentSpacer",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ComponentSpacer",
+    "fbx": "assets/raw/codex/ComponentSpacer/ComponentSpacer_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ComponentSpacer",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "BionicArm",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "BionicArm",
+    "fbx": "assets/raw/codex/BionicArm/BionicArm_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/BionicArm",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
   }
  ]
 }
