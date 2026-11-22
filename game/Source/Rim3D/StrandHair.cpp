@@ -60,6 +60,13 @@ namespace
 		TEXT("0 to 1: strand hair is simulated in the upper chest's frame (Unreal's local simulation), keeping this share of the ")
 		TEXT("body's turning as swing. Negative (default): simulated in the world. Tried at 0.25 on the PC (2026-11-22): the hair ")
 		TEXT("swung stiffly and sank into the back after turns, so it is off."));
+	TAutoConsoleVariable<float> GStrandHairTurnHold(TEXT("Pawns.StrandHairTurnHold"), 240.0f,
+		TEXT("Degrees a second: while a strand-haired body turns faster than this (a turn round on the spot, a swing at someone) its ")
+		TEXT("hair is held at its resting shape on the head, turning with the body, and swings freely again from there once the turn ")
+		TEXT("ends. Simulated through a fast turn, long bare-skinned hair passed into the back for a moment (PC 2026-11-22, at 720 and ")
+		TEXT("at 360 degrees a second alike). 0: never held."));
+	TAutoConsoleVariable<float> GStrandHairTurnHoldAfter(TEXT("Pawns.StrandHairTurnHoldAfter"), 0.08f,
+		TEXT("Seconds the hair stays held after the body's turn slows below Pawns.StrandHairTurnHold (the drawn turn eases out)."));
 	TAutoConsoleVariable<int32> GStrandHairDebug(TEXT("Pawns.StrandHairDebug"), 0,
 		TEXT("1: draw the shapes each strand-haired person's hair collides with (green inside the skin, yellow grown out to clothes)."));
 
@@ -809,6 +816,34 @@ void UStrandHairSubsystem::Show(FWearer& Wearer, bool bStrands)
 void UStrandHairSubsystem::Tick(float DeltaTime)
 {
 	Wearers.RemoveAll([](const FWearer& W) { return !W.Body.IsValid(); });
+	// Fast turns: the hair is held at its resting shape (reset every frame) while the body turns faster than
+	// Pawns.StrandHairTurnHold, so the back never turns through it; it swings freely again from rest once the turn ends.
+	const float HoldRate = GStrandHairTurnHold.GetValueOnGameThread();
+	for (FWearer& Wearer : Wearers)
+	{
+		const float Yaw = static_cast<float>(Wearer.Body->GetComponentRotation().Yaw);
+		UGroomComponent* Strands = Wearer.Strands.Get();
+		if (Wearer.bHaveYaw && DeltaTime > 0.0f && HoldRate > 0.0f && FMath::Abs(FMath::FindDeltaAngleDegrees(Wearer.LastYaw, Yaw)) > HoldRate * DeltaTime)
+		{
+			if (Wearer.TurnHold <= 0.0f && ++TurnHolds <= 40)
+			{
+				UE_LOG(LogTemp, Display, TEXT("STRANDHAIR turn hold %d on %s: turning %.0f degrees a second"), TurnHolds,
+					*GetNameSafe(Wearer.Body->GetOwner()), FMath::Abs(FMath::FindDeltaAngleDegrees(Wearer.LastYaw, Yaw)) / DeltaTime);
+			}
+			Wearer.TurnHold = FMath::Max(0.0f, GStrandHairTurnHoldAfter.GetValueOnGameThread()) + DeltaTime;
+		}
+		Wearer.LastYaw = Yaw;
+		Wearer.bHaveYaw = true;
+		if (Wearer.TurnHold > 0.0f)
+		{
+			Wearer.TurnHold -= DeltaTime;
+			if (Wearer.bStrands && Strands && Strands->IsVisible())
+			{
+				Strands->ResetSimulation();
+				++TurnHoldFrames;
+			}
+		}
+	}
 	if (GStrandHairDebug.GetValueOnGameThread() != 0)
 	{
 		for (const FWearer& Wearer : Wearers)

@@ -292,12 +292,13 @@ Console: `Pawns.StrandHairClothes 0` leaves the shapes inside the skin (to compa
 a sword, shadowboxing, walking, then aiming with the shapes drawn; pictures `Saved/Smoke/creator/strand_NN_*.png`.
 Needs the `hair-grow` art step again (new `grooms.json`; `update-and-play.bat` runs it). The grooms simulate with 10
 sub-steps and 10 iterations (Unreal's default 5 and 5 let bare-skinned long hair pass the shell as the body turned on
-the spot mid-walk; `HairGroomsCommandlet`). Right after a quick 180-degree turn on the spot (720 degrees a second, a quarter second) the bare-skinned
-long hair dipped into the back or whipped round the side for a moment (PC strandwalk frames, round 3), then lay back on
-the back. Simulating it in the chest's frame (`Pawns.StrandHairTurnFollow`, Unreal's local simulation) was tried at
-0.25: the swings went stiff and the hair stayed sunk after turns, so it is off by default. The fix is the turn itself:
-walking and standing pawns now turn at 360 degrees a second (`Pawns.TurnAroundRate`, `pawns.md`), half a second for a
-half turn, as a person turns round and as the walk's own turn clips do, so the back sweeps the hair round instead of
-through it. Dressed bodies are clear (the
+the spot mid-walk; `HairGroomsCommandlet`). Right after a quick 180-degree turn on the spot the bare-skinned long hair dipped into the back or whipped round the
+side for a moment (PC strandwalk frames), then lay back on the back. Simulating it in the chest's frame
+(`Pawns.StrandHairTurnFollow`, Unreal's local simulation) was tried at 0.25: the swings went stiff and the hair stayed
+sunk after turns, so it is off by default. Turning the body at half the speed (360 degrees a second, PR #450 round 1)
+made no difference. So now, **while a body turns faster than 240 degrees a second** (`Pawns.StrandHairTurnHold`; a
+turn round, a swing at someone; a walk's gentle curves stay under it) its hair is held at its resting shape on the
+head, turning with the body, and it swings freely again from there 0.08 s after the turn eases
+(`Pawns.StrandHairTurnHoldAfter`; the groom's simulation is reset each held frame). Log `STRANDHAIR turn hold N`. Dressed bodies are clear (the
 shapes stand 3 cm further out). `-CreatorRecord=1` with the demo also saves every other frame of the walk
 (`strandwalk_NNNN.png`).

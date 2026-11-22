@@ -11,10 +11,10 @@ the game grows each one under a worn garment out to just past the cloth and its 
 change). `-CreatorStrandDemo` takes the pictures (behind and side; standing, rifle aim, sword, shadowbox, walk, shapes
 drawn). Capsules also fill the body's core, and the hair physics takes 10 steps (was 5). PC (4 rounds): dressed hair
 stays on the clothes in every pose; nude hair lies on the back standing, aiming, swinging and boxing. Needs the
-`hair-grow` and `hair-grooms` art steps (run by `update-and-play.bat`). Quick turns (2026-11-22): a pawn
-turning round on the spot did a half turn in a quarter second, so nude long hair dipped into the back for a moment.
-Walking and standing pawns now turn at a person's pace, half a second for a half turn (`Pawns.TurnAroundRate` 360, was
-720; aiming, lock-on and strikes keep their speed). **Next:** PC walk-turn frames before and after.
+`hair-grow` and `hair-grooms` art steps (run by `update-and-play.bat`). Quick turns (2026-11-22): right after
+a fast turn round on the spot, nude long hair dipped into the back for a moment; turning slower did not help (PC). Now
+while a body turns fast (over 240 degrees a second) its hair is held at rest on the head and swings freely again once
+the turn ends (`Pawns.StrandHairTurnHold`). **Next:** PC walk-turn frames.
 
 In-game UI in the Canopy look (sneed, 2026-11-22: "make the actual game's UI ... high quality, well made",
 `docs/design/ui-layout.md`): every in-game box now matches the title and new-game screens: dark green-black glass, square
