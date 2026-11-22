@@ -438,7 +438,7 @@ void USmokeTestSubsystem::BuildGorePhases()
 		};
 		Phase.WarmupSeconds = 0.0f;
 		Phase.MeasureSeconds = 1.5f;
-		Phase.OnFrame = [=]()
+		Phase.OnFrame = [=, this]()
 		{
 			Front(160.0f, 200.0f);
 			if (const ASimPawnActor* Actor = ActorOf(); Actor && Actor->GetAnim())
@@ -500,7 +500,7 @@ void USmokeTestSubsystem::BuildGorePhases()
 		Phase.WarmupSeconds = 0.0f;
 		Phase.MeasureSeconds = 7.0f;
 		Phase.ScreenshotAt = 6.0f;
-		Phase.OnFrame = [=]()
+		Phase.OnFrame = [=, this]()
 		{
 			Front(30.0f, 260.0f);
 			if (const ASimPawnActor* Actor = ActorOf())
