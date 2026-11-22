@@ -1,14 +1,17 @@
 #pragma once
 
-// One look for every ImGui box on screen (docs/design/ui-layout.md, "Rules for every box"): one panel colour, one border,
-// one corner radius, one padding, two text sizes (large for titles and buttons that name a window, medium for the rest),
-// tooltips after the mouse rests 1.2 s. Colours are the mock-up's (https://claude.ai/artifact/QXsccQCbcwoBLcugZisa6N).
-// Every subsystem that draws ImGui calls ColonyHud::ApplyFrameStyle(Scale) where it used to set FontScaleMain itself.
+// One look for every ImGui box on screen: "Canopy" (docs/design/ui-layout.md, "Canopy in game"), the same look as the title
+// and new-game screens (docs/design/new-game.md). Dark green-black glass with square corners and a short jade bar on each
+// box's top edge, bone text, jade for what is open or chosen, ember for costs and warnings. One border, one padding, two
+// text sizes in boxes (large for titles and buttons that name a window, medium for the rest), tooltips after the mouse
+// rests 1.2 s. Every subsystem that draws ImGui calls ColonyHud::ApplyFrameStyle(Scale) where it used to set
+// FontScaleMain itself; the first call on an ImGui context also hooks the jade bars in (InstallCanopyBars).
 
 #include "CoreMinimal.h"
 #include "HAL/IConsoleManager.h"
 
 #include <imgui.h>
+#include <imgui_internal.h>
 
 namespace ColonyHud
 {
@@ -18,21 +21,99 @@ namespace ColonyHud
 			static_cast<float>(Hex & 0xFF) / 255.0f, Alpha);
 	}
 
-	// The palette.
-	inline ImVec4 PanelBg() { return ImVec4(18.0f / 255.0f, 21.0f / 255.0f, 24.0f / 255.0f, 0.94f); }
-	inline ImVec4 Border() { return Rgb(0x353d45); }
-	inline ImVec4 TextMain() { return Rgb(0xe9e4d8); }
-	inline ImVec4 TextDim() { return Rgb(0xa7b0b5); }
-	inline ImVec4 TextFaint() { return Rgb(0x8d969c); }
-	inline ImVec4 Accent() { return Rgb(0xe0b04a); }     // amber: the open tab, the picked category, headings
-	inline ImVec4 AccentDark() { return Rgb(0x3a2c17); }
-	inline ImVec4 Good() { return Rgb(0x79c983); }
-	inline ImVec4 Warn() { return Rgb(0xe0a04a); }
-	inline ImVec4 Bad() { return Rgb(0xe5675c); }
-	inline ImVec4 ButtonBg() { return Rgb(0x1c2126); }
-	inline ImVec4 ButtonHover() { return Rgb(0x262c32); }
-	inline ImVec4 ButtonBorder() { return Rgb(0x4a535c); }
-	inline ImVec4 FieldBg() { return Rgb(0x0e1013); }
+	// The Canopy palette (the same values as the new-game screens' NgStyle).
+	inline ImVec4 PanelBg() { return ImVec4(0.030f, 0.050f, 0.043f, 0.92f); }
+	inline ImVec4 Border() { return ImVec4(0.37f, 0.83f, 0.66f, 0.18f); }
+	inline ImVec4 TextMain() { return ImVec4(0.91f, 0.89f, 0.84f, 1.0f); }   // bone
+	inline ImVec4 TextDim() { return ImVec4(0.66f, 0.70f, 0.67f, 1.0f); }
+	inline ImVec4 TextFaint() { return ImVec4(0.47f, 0.52f, 0.49f, 1.0f); }
+	inline ImVec4 Accent() { return ImVec4(0.37f, 0.83f, 0.66f, 1.0f); }     // jade: the open tab, the picked category, headings
+	inline ImVec4 AccentDark() { return ImVec4(0.08f, 0.26f, 0.20f, 0.95f); }
+	inline ImVec4 AccentHover() { return ImVec4(0.12f, 0.33f, 0.26f, 0.98f); }
+	inline ImVec4 Ember() { return ImVec4(1.00f, 0.56f, 0.36f, 1.0f); }      // costs, waiting offers
+	inline ImVec4 EmberDark() { return ImVec4(0.36f, 0.16f, 0.08f, 0.95f); }
+	inline ImVec4 Good() { return ImVec4(0.52f, 0.82f, 0.50f, 1.0f); }
+	inline ImVec4 Warn() { return Ember(); }
+	inline ImVec4 Bad() { return ImVec4(0.93f, 0.38f, 0.34f, 1.0f); }
+	inline ImVec4 ButtonBg() { return ImVec4(0.055f, 0.085f, 0.075f, 0.90f); }
+	inline ImVec4 ButtonHover() { return ImVec4(0.10f, 0.17f, 0.145f, 0.95f); }
+	inline ImVec4 ButtonBorder() { return ImVec4(0.40f, 0.48f, 0.44f, 0.55f); }
+	inline ImVec4 FieldBg() { return ImVec4(0.015f, 0.025f, 0.022f, 0.95f); }
+	inline ImVec4 Locked() { return ImVec4(0.035f, 0.045f, 0.042f, 0.90f); }  // a button for something not yet open (research)
+
+	/** How many jade bars have been drawn since the game started (the smoke test checks the hook runs). */
+	inline int64& CanopyBarsDrawn()
+	{
+		static int64 Count = 0;
+		return Count;
+	}
+
+	/** Name prefix of boxes that get no jade bar (the bottom bar draws its own line). */
+	inline const char* NoBarPrefix() { return "##HudBar"; }
+
+	/**
+	 * Draws the jade bar on the top edge of every plain box this frame, just before ImGui ends it, so no window has to do
+	 * it itself. Skipped: child windows, tooltips, popups, menus, see-through boxes (no background) and small ones (key
+	 * hints, a single readout), and the bottom bar.
+	 */
+	inline void DrawCanopyBars(ImGuiContext* Context, ImGuiContextHook*)
+	{
+		if (!Context)
+		{
+			return;
+		}
+		const float ViewHeight = Context->Viewports.Size > 0 ? Context->Viewports[0]->Size.y : 1080.0f;
+		const float Scale = FMath::Clamp(ViewHeight / 1080.0f, 1.0f, 2.0f);
+		const ImU32 Jade = ImGui::ColorConvertFloat4ToU32(Accent());
+		const ImGuiWindowFlags Skip = ImGuiWindowFlags_ChildWindow | ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_Popup |
+			ImGuiWindowFlags_ChildMenu | ImGuiWindowFlags_NoBackground;
+		const size_t PrefixLength = FCStringAnsi::Strlen(NoBarPrefix());
+		for (ImGuiWindow* Window : Context->Windows)
+		{
+			if (!Window || !Window->Active || Window->Hidden || Window->Collapsed || (Window->Flags & Skip) != 0 || !Window->DrawList)
+			{
+				continue;
+			}
+			if (Window->Size.x < 150.0f * Scale || Window->Size.y < 56.0f * Scale)
+			{
+				continue;
+			}
+			if (Window->Name && FCStringAnsi::Strncmp(Window->Name, NoBarPrefix(), PrefixLength) == 0)
+			{
+				continue;
+			}
+			const ImVec2 At = Window->Pos;
+			Window->DrawList->PushClipRect(At, ImVec2(At.x + Window->Size.x, At.y + Window->Size.y), false);
+			Window->DrawList->AddRectFilled(At, ImVec2(At.x + 36.0f * Scale, At.y + 3.0f), Jade);
+			Window->DrawList->PopClipRect();
+			++CanopyBarsDrawn();
+		}
+	}
+
+	/** Our hook's owner id, so one context gets it once. */
+	inline ImGuiID CanopyHookOwner() { return 0x43414E4F; }
+
+	/** Hooks DrawCanopyBars into the current ImGui context once. */
+	inline void InstallCanopyBars()
+	{
+		ImGuiContext* Context = ImGui::GetCurrentContext();
+		if (!Context)
+		{
+			return;
+		}
+		for (const ImGuiContextHook& Hook : Context->Hooks)
+		{
+			if (Hook.Owner == CanopyHookOwner())
+			{
+				return;
+			}
+		}
+		ImGuiContextHook Hook;
+		Hook.Type = ImGuiContextHookType_EndFramePre;
+		Hook.Owner = CanopyHookOwner();
+		Hook.Callback = &DrawCanopyBars;
+		ImGui::AddContextHook(Context, &Hook);
+	}
 
 	/** Readable from 1080p to 4K: 1 at 1080 lines, 2 at 2160. */
 	inline float ViewScale(const ImGuiViewport* Viewport)
@@ -54,14 +135,15 @@ namespace ColonyHud
 	/** Sets the shared look for this frame's windows. Cheap: a few style fields. */
 	inline void ApplyFrameStyle(float Scale)
 	{
+		InstallCanopyBars();
 		ImGuiStyle& Style = ImGui::GetStyle();
 		Style.FontScaleMain = 1.2f * Scale * TextSizeFactor();
-		Style.WindowRounding = 6.0f * Scale;
-		Style.ChildRounding = 4.0f * Scale;
-		Style.FrameRounding = 4.0f * Scale;
-		Style.PopupRounding = 6.0f * Scale;
-		Style.GrabRounding = 3.0f * Scale;
-		Style.TabRounding = 4.0f * Scale;
+		Style.WindowRounding = 0.0f;
+		Style.ChildRounding = 0.0f;
+		Style.FrameRounding = 0.0f;
+		Style.PopupRounding = 0.0f;
+		Style.GrabRounding = 0.0f;
+		Style.TabRounding = 0.0f;
 		Style.WindowBorderSize = 1.0f;
 		Style.FrameBorderSize = 1.0f;
 		Style.PopupBorderSize = 1.0f;
@@ -80,23 +162,23 @@ namespace ColonyHud
 		C[ImGuiCol_TextDisabled] = TextFaint();
 		C[ImGuiCol_WindowBg] = PanelBg();
 		C[ImGuiCol_ChildBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-		C[ImGuiCol_PopupBg] = ImVec4(14.0f / 255.0f, 16.0f / 255.0f, 19.0f / 255.0f, 0.98f);
+		C[ImGuiCol_PopupBg] = ImVec4(0.020f, 0.034f, 0.030f, 0.98f);
 		C[ImGuiCol_Border] = Border();
 		C[ImGuiCol_FrameBg] = FieldBg();
 		C[ImGuiCol_FrameBgHovered] = ButtonHover();
 		C[ImGuiCol_FrameBgActive] = ButtonHover();
 		C[ImGuiCol_TitleBg] = PanelBg();
-		C[ImGuiCol_TitleBgActive] = Rgb(0x1c2126, 0.98f);
+		C[ImGuiCol_TitleBgActive] = ImVec4(0.045f, 0.075f, 0.065f, 0.98f);
 		C[ImGuiCol_TitleBgCollapsed] = PanelBg();
 		C[ImGuiCol_Button] = ButtonBg();
 		C[ImGuiCol_ButtonHovered] = ButtonHover();
-		C[ImGuiCol_ButtonActive] = Rgb(0x2f363d);
+		C[ImGuiCol_ButtonActive] = AccentDark();
 		C[ImGuiCol_Header] = ButtonBg();
 		C[ImGuiCol_HeaderHovered] = ButtonHover();
-		C[ImGuiCol_HeaderActive] = Rgb(0x2f363d);
+		C[ImGuiCol_HeaderActive] = AccentDark();
 		C[ImGuiCol_CheckMark] = Accent();
 		C[ImGuiCol_SliderGrab] = Accent();
-		C[ImGuiCol_SliderGrabActive] = Rgb(0xf0c45e);
+		C[ImGuiCol_SliderGrabActive] = TextMain();
 		C[ImGuiCol_Separator] = Border();
 		C[ImGuiCol_Tab] = ButtonBg();
 		C[ImGuiCol_TabHovered] = ButtonHover();
@@ -104,7 +186,7 @@ namespace ColonyHud
 		C[ImGuiCol_PlotHistogram] = Good();
 		C[ImGuiCol_TableHeaderBg] = ButtonBg();
 		C[ImGuiCol_TableBorderStrong] = Border();
-		C[ImGuiCol_TableBorderLight] = Rgb(0x2b3238);
+		C[ImGuiCol_TableBorderLight] = ImVec4(0.37f, 0.83f, 0.66f, 0.08f);
 		C[ImGuiCol_TableRowBgAlt] = ImVec4(1.0f, 1.0f, 1.0f, 0.03f);
 	}
 
@@ -139,7 +221,7 @@ namespace ColonyHud
 		PopLarge();
 	}
 
-	/** A heading inside a window (Basics, Building...): amber, large. */
+	/** A heading inside a window (Basics, Building...): jade, large. */
 	inline void Heading(const FString& Value)
 	{
 		PushLarge();
@@ -157,15 +239,15 @@ namespace ColonyHud
 		}
 	}
 
-	/** A button that stays lit (amber edge, dark amber fill) while `bActive`. */
+	/** A button that stays lit (jade edge, deep jade fill) while `bActive`. */
 	inline bool Button(const FString& Label, bool bActive = false, const ImVec2& Size = ImVec2(0.0f, 0.0f))
 	{
 		if (bActive)
 		{
 			ImGui::PushStyleColor(ImGuiCol_Button, AccentDark());
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Rgb(0x4a3a1f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, AccentHover());
 			ImGui::PushStyleColor(ImGuiCol_Border, Accent());
-			ImGui::PushStyleColor(ImGuiCol_Text, Rgb(0xf5e3c3));
+			ImGui::PushStyleColor(ImGuiCol_Text, TextMain());
 		}
 		const FTCHARToUTF8 Utf8(*Label);
 		const bool bClicked = ImGui::Button(Utf8.Get(), Size);

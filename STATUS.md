@@ -2,6 +2,12 @@
 
 Updated 2026-11-22.
 
+In-game UI in the Canopy look (sneed, 2026-11-22: "make the actual game's UI ... high quality, well made",
+`docs/design/ui-layout.md`): every in-game box now matches the title and new-game screens: dark green-black glass, square
+corners, a jade bar on each box's top edge (one ImGui end-of-frame hook), jade for what is open or picked (was amber),
+ember for costs and warnings. The bottom bar gets a jade top line and a jade edge on the open tab. **Next:** Canopy cards
+for the selected panel, colonist bar and date box, then each tab's window.
+
 Title screen (sneed, 2026-11-22: "fix the actual title screen ... make the actual game's UI", `docs/design/new-game.md`):
 a plain launch no longer opens over the engine's sample level. It starts its own scene, a wild rainforest tile in the
 morning (`TitleBackdrop` scenario, no people), with a slow camera circling an open glade, and a new full-screen title:
