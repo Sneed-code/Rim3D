@@ -1,0 +1,13 @@
+LogTemp: Display: SCENEHOP: title shown, loading the gun range in this game (pid 43844)
+LogDebugScenes: Display: Loading Gun range in this game: map /Game/Levels/DefaultLevel, command line /Game/Levels/DefaultLevel -game -windowed -ResX=1920 -ResY=1080 -nosplash -nosound -DebugSceneHop -SmokeTest=gunrange -SmokeTimeout=14700 -DebugScene=gunrange
+LogTemp: Display: Level loaded in the game: view history reset (1)
+LogTemp: Display: Level loaded in the game: view history reset (1)
+LogTemp: Display: Level loaded in the game: view history reset (2)
+LogDebugScenes: Display: Console variables written to ../../../../../../Dev/Rim3D-gunhits/game/Saved/Smoke/scenehop/cvars_hop.txt (10201)
+LogTemp: Display: SCENEHOP: range sky exposure 14.91 EV, cuts 1
+LogTemp: Display: SCENEHOP: in the gun range (pid 43844), back to the title
+LogDebugScenes: Display: Back from the scene: 17 console settings put back
+LogDebugScenes: Display: Loading the title screen in this game: map /Game/Levels/DefaultLevel, command line /Game/Levels/DefaultLevel -game -windowed -ResX=1920 -ResY=1080 -nosplash -nosound -DebugSceneHop
+LogTemp: Display: Level loaded in the game: view history reset (1)
+LogTemp: Display: Level loaded in the game: view history reset (2)
+LogTemp: Display: SCENEHOP OK: back on the title in the same game (pid 43844, menu 1), Sky.Hour -1, Overseer.UI 1, Pawns.MetaHumans 0, near clip 10.0
