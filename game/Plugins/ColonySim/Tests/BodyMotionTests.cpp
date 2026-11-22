@@ -572,8 +572,8 @@ TEST_CASE("Motion: a blow at a body on the ground plays the weapon's downward cl
     };
     // A weapon with a finisher (MeleeRules finishers, sneed 2026-11-20) plays that at the downed instead of a low clip.
     // A finisher whose whole-body clip is measured plays that clip (sneed 2026-11-22: the gladius's low hack, here a
-    // test clip), the knife's too since 2026-11-22 (its kneel lay flat in the PC pictures).
-    const Case cases[] = {{"Melee_Knife", false, slash}, {"Melee_Knife", true, hack}, {"Melee_Gladius", false, slash},
+    // test clip); one whose clip isn't (the knife's kneel is not among these test clips) steps in and plays no clip.
+    const Case cases[] = {{"Melee_Knife", false, slash}, {"Melee_Knife", true, DefId{}}, {"Melee_Gladius", false, slash},
                           {"Melee_Gladius", true, hack}, {nullptr, false, jab},         {nullptr, true, jab}};
     float x = 10.5f;
     for (const Case& c : cases) {
