@@ -1,0 +1,33 @@
+﻿Running smoke test 'fights' at 1920x1080...
+
+Smoke test 'fights': FAIL  (84 s, NVIDIA GeForce RTX 5080, 888x500)
+setup                        82.3 fps  game   4.3 ms  render   4.8 ms  gpu   3.1 ms  screenshot ok
+equip_and_aim               198.9 fps  game   4.2 ms  render   4.7 ms  gpu   3.0 ms  screenshot ok
+fire_at_pawn                201.0 fps  game   4.4 ms  render   4.9 ms  gpu   3.1 ms  screenshot ok
+head_shots                  187.6 fps  game   4.8 ms  render   5.1 ms  gpu   3.2 ms  screenshot ok
+frozen_shot                 186.6 fps  game   4.4 ms  render   5.0 ms  gpu   3.1 ms  screenshot ok
+frozen_hit                  198.2 fps  game   4.3 ms  render   4.8 ms  gpu   3.1 ms  screenshot ok
+wounds                      200.0 fps  game   4.4 ms  render   4.8 ms  gpu   3.0 ms  screenshot ok
+hitbox_view                 170.1 fps  game   4.7 ms  render   5.6 ms  gpu   3.2 ms  screenshot ok
+ragdoll                     188.6 fps  game   4.5 ms  render   5.1 ms  gpu   3.4 ms  screenshot ok
+firefight                   177.4 fps  game   5.5 ms  render   4.6 ms  gpu   3.5 ms  screenshot ok
+note: equip_and_aim: E picked up the gun; crosshair on the middle pawn
+note: 
+note: fire_at_pawn: 18 shots, 0 hits on pawns, 18 impacts, 0 flinches, 0 wound decals, 0 blood decals, hits within 0.0 
+cm of the hitboxes, at most 1 tracers and 19 particles at once
+note: head_shots: 7 of 7 hits on the head (left eye, head, head, head, head, jaw, head)
+note: frozen_shot: paused with 1 tracer(s) and 5 particles up, the first tracer 86 cm out
+note: wounds: 567 blood stains alive (32 on bodies, 535 on the world)
+note: hitbox_view: 153 shapes drawn; hitboxes 184 cm tall, drawn body bounds 163 cm tall, tops 15 cm apart, centres 6 
+cm apart
+note: ragdoll: pelvis 19 cm above the ground after 6 s, slid 86 cm
+note: worst hit: pawn 56 part left leg at sim (76.66, 60.59, 0.77); 0.0 cm from the sim hitboxes, 7.1 cm from the 
+drawn body; drawn body at (307650, 6066) yaw -90, sim pawn at (307650, 6066) yaw -90 (world cm): 0.0 cm apart, 0 deg 
+apart; hit 77 cm above the drawn feet
+note: firefight: 322 shots, 321 bullets stopped (32 on pawns, 32 reactions), 0 went down, 0 ragdolls, 0 wound decals, 
+0 blood decals (0 live), at most 12 tracers and 389 particles at once, 6 lights, hits within 0.0 cm of the hitboxes
+note: hud frames drawn: 15194 (direct mode only)
+ERROR: fire_at_pawn: no shot hit a pawn that was aimed at from 12 m
+ERROR: fire_at_pawn: no hit was checked against the hitboxes
+ERROR: frozen_hit: no shot hit a pawn in 14 s
+Screenshots: C:\Dev\Rim3D\game\Saved\Smoke\fights
