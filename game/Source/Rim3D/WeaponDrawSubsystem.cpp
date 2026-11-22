@@ -154,6 +154,12 @@ void UWeaponDrawSubsystem::OnSimEvent(const colony::Event& Event)
 		case colony::EventType::ShieldBlocked:
 			OnShieldBlocked(Event);
 			break;
+		case colony::EventType::ShotFired:
+			if (const UWorld* World = GetWorld())
+			{
+				LastShotAt.Add(entt::to_integral(Event.thing), World->GetTimeSeconds());
+			}
+			break;
 		case colony::EventType::WeaponSwitched:
 			++SwitchesDone;
 			if (FPawnWeapons* Found = Weapons.Find(entt::to_integral(Event.thing)))
@@ -568,6 +574,7 @@ bool UWeaponDrawSubsystem::MakeDisplayed(ASimPawnActor& Actor, FDisplayed& Shown
 				Part->AttachToComponent(Shown.Component.Get(), FAttachmentTransformRules::KeepRelativeTransform);
 				Part->SetRelativeTransform(FTransform::Identity);
 				Shown.Parts.Add(Part);
+				Shown.PartDefs.Add(i);
 			}
 		}
 		// The model's own fix-up (zero for the guns so far): the body carries it, the parts ride on the body.
@@ -981,6 +988,21 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 			{
 				Part->SetVisibility(bShow);
 			}
+		}
+		// A minigun's barrels spin up while it fires and run down after (docs/design/neon-assets.md "Minigun").
+		for (int32 P = 0; Art && bShow && P < Shown.Parts.Num() && P < Shown.PartDefs.Num(); ++P)
+		{
+			const FGunRangeGun::FPart* PartDef = Art->Parts.IsValidIndex(Shown.PartDefs[P]) ? &Art->Parts[Shown.PartDefs[P]] : nullptr;
+			if (!PartDef || !PartDef->bSpin || !Shown.Parts[P].IsValid())
+			{
+				continue;
+			}
+			const float Now = GetWorld()->GetTimeSeconds();
+			const float* Shot = LastShotAt.Find(entt::to_integral(View.id));
+			const float Dt = GetWorld()->GetDeltaSeconds();
+			Shown.SpinSpeed = GunRangeSpinSpeed(*PartDef, Shown.SpinSpeed, Shot ? Now - *Shot : 99.0f, Dt);
+			Shown.SpinAngle = FMath::Fmod(Shown.SpinAngle + Shown.SpinSpeed * 360.0f * Dt, 360.0f);
+			Shown.Parts[P]->SetRelativeTransform(GunRangeSpinTransform(*PartDef, Shown.SpinAngle));
 		}
 		if (Slot == InHands && InHand >= 0.999f && bInHandFrame)
 		{

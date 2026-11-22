@@ -3087,6 +3087,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
         }
         if (const Health* health = reg.try_get<Health>(entity)) {
             view.downed = health->downed;
+            view.downedAwake = health_->downedAwake(entity);
             view.crawling = health->downed && health->crawls;
             view.severed = health->missing.empty() ? uint16_t{0} : health_->severed(entity);
             view.dead = health->dead;

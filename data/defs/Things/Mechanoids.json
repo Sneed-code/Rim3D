@@ -85,9 +85,9 @@
   ],
   "visual": {
    "sound": {
-    "idle": "Hum_Generator",
-    "hurt": "Impact_Armor",
-    "death": "Explosion_Blast",
+    "idle": "Animal_Mech_Idle",
+    "hurt": "Animal_Mech_Hurt",
+    "death": "Animal_Mech_Death",
     "burning": "Pawn_Burning"
    }
   }
@@ -160,9 +160,9 @@
   ],
   "visual": {
    "sound": {
-    "idle": "Hum_Generator",
-    "hurt": "Impact_Armor",
-    "death": "Explosion_Blast",
+    "idle": "Animal_Mech_Idle",
+    "hurt": "Animal_Mech_Hurt",
+    "death": "Animal_Mech_Death",
     "burning": "Pawn_Burning"
    }
   }
@@ -235,9 +235,9 @@
   ],
   "visual": {
    "sound": {
-    "idle": "Hum_Generator",
-    "hurt": "Impact_Armor",
-    "death": "Explosion_Blast",
+    "idle": "Animal_Mech_Idle",
+    "hurt": "Animal_Mech_Hurt",
+    "death": "Animal_Mech_Death",
     "burning": "Pawn_Burning"
    }
   }
@@ -291,9 +291,9 @@
   ],
   "visual": {
    "sound": {
-    "idle": "Hum_Generator",
-    "hurt": "Impact_Armor",
-    "death": "Explosion_Blast",
+    "idle": "Animal_Mech_Idle",
+    "hurt": "Animal_Mech_Hurt",
+    "death": "Animal_Mech_Death",
     "burning": "Pawn_Burning"
    }
   }

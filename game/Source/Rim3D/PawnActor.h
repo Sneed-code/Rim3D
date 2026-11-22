@@ -322,6 +322,8 @@ private:
 	void StyleWornMesh(UMeshComponent* Mesh, const FSimWornPiece& Piece);
 	/** ApplyApparel for a MakeHuman body: each piece's cut as garments that follow the body's pose and morphs. */
 	void ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnApparel& Wanted);
+	/** A worn piece's rigid head model (`visual.headProp`) on the MakeHuman head bone, or null to draw its cuts. */
+	UStaticMeshComponent* MakeHeadProp(USimPawnSubsystem& Pawns, const FSimWornPiece& Piece);
 	void StyleGarment(UMeshComponent* Mesh, const FSimWornPiece& Piece) const;
 	/** The body's skin-under-clothes bits (custom primitive data 30/31): skin a worn garment covers is cut away. */
 	void SetMakeHumanCoverBits(uint32 Bits);

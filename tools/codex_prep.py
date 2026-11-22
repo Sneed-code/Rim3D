@@ -18,6 +18,14 @@ Kinds ("kind" in the prep entry):
   gun              the origin is kept (the firing hand's palm on the grip), +X out of the muzzle; the named "parts" are
                    kept as their own objects and everything else is joined into "Body".
 "drop" lists objects to leave out (a second copy, a stack). Empties are recorded as sockets and not exported.
+
+Moving parts (Neon models, docs/design/neon-assets.md): a building or item with "parts" keeps each named part as its own
+object, <Name>_<Part>, exported to its own <Name>_<Part>_Game.fbx next to the body's <Name>_Game.fbx (the rest of the
+model), all in the same frame, so a part drawn with no motion sits where it belongs. Every glTF action in the GLB is
+sampled frame by frame and written as tracks of each part's motion away from that rest pose, in Unreal's frame (cm),
+to <Name>_anims.json and to game/Content/Rim3D/Generated/PropAnims/<Name>.json (not in Git), which the game reads
+(PropAnims.h). Guns get the tracks too (their parts stay in the one FBX as before). Actions that move no mesh (a
+material that pulses) are listed with no parts.
 """
 import json
 import math
@@ -30,6 +38,9 @@ import mathutils
 ROOT = os.getcwd()
 OUT = os.path.join(ROOT, "assets", "raw", "codex")
 CONFIG = os.path.join(ROOT, "assets", "codex_art.json")
+ANIM_OUT = os.path.join(ROOT, "game", "Content", "Rim3D", "Generated", "PropAnims")
+# Everything transform_all did to the model since import (stand up, centre), so animation deltas can follow it.
+FRAME = [mathutils.Matrix.Identity(4)]
 
 
 def world_points(objs, m=None):
@@ -76,6 +87,182 @@ def transform_all(meshes, empties, m):
         o.data.transform(m)
     for e in empties:
         e["pos"] = m @ e["pos"]
+    FRAME[0] = m @ FRAME[0]
+
+
+def part_of(obj_name, parts):
+    """The named part an object belongs to (its name starts with the part's name), or None."""
+    return next((p for p in parts if obj_name.startswith(p)), None)
+
+
+def min_scale(m):
+    return min(abs(v) for v in m.to_scale())
+
+
+def sample_actions(parts):
+    """Every action, sampled each frame: {action: {"seconds", "fps", "frames": {part: [Matrix world, ...]}}}, the rest
+    matrices {part: Matrix} and the bake matrices {part: Matrix} (the pose the part's mesh is baked in: the rest pose,
+    or for a part that rests shrunk to nothing, like a spark or a light that pops up, its biggest pose in any action).
+    Run straight after the import, before anything is joined or removed: a part's motion can come from an animated parent
+    (an empty at its pivot). Leaves every object at its rest pose, except shrunk parts, which are set to their bake pose."""
+    scene = bpy.context.scene
+    objs = list(scene.objects)
+    saved = {}
+    for o in objs:
+        saved[o.name] = (o.location.copy(), o.rotation_mode, o.rotation_quaternion.copy(), o.rotation_euler.copy(),
+                         o.scale.copy())
+    tracked = {}
+    members = {}
+    for o in objs:
+        p = part_of(o.name, parts) if o.type == "MESH" else None
+        if p:
+            members.setdefault(p, []).append(o)
+            if p not in tracked or o.name == p:
+                tracked[p] = o
+
+    def reset():
+        for o in objs:
+            ad = o.animation_data
+            if ad:
+                ad.action = None
+                ad.use_nla = False
+            loc, mode, quat, eul, scl = saved[o.name]
+            o.location = loc
+            o.rotation_mode = mode
+            o.rotation_quaternion = quat
+            o.rotation_euler = eul
+            o.scale = scl
+
+    fps = scene.render.fps / (scene.render.fps_base or 1.0)
+    out = {}
+    for act in list(bpy.data.actions):
+        reset()
+        users = []
+        for o in objs:
+            slot = None
+            if hasattr(act, "slots"):
+                slot = next((s for s in act.slots if s.identifier[2:] == o.name), None)
+                if slot is None:
+                    continue
+            elif not any(fc.data_path for fc in act.fcurves):
+                continue
+            if not o.animation_data:
+                o.animation_data_create()
+            o.animation_data.action = act
+            if slot is not None:
+                o.animation_data.action_slot = slot
+            users.append(o.name)
+        if not users:
+            continue
+        start, end = int(math.floor(act.frame_range[0])), int(math.ceil(act.frame_range[1]))
+        frames = {p: [] for p in tracked}
+        every = {o.name: [] for ms in members.values() for o in ms}
+        for f in range(start, end + 1):
+            scene.frame_set(f)
+            for p, o in tracked.items():
+                frames[p].append(o.matrix_world.copy())
+            for ms in members.values():
+                for o in ms:
+                    every[o.name].append(o.matrix_world.copy())
+        out[act.name] = {"seconds": (end - start) / fps, "fps": fps, "frames": frames, "users": users, "every": every}
+    reset()
+    scene.frame_set(scene.frame_start)
+    bpy.context.view_layer.update()
+    rest = {p: o.matrix_world.copy() for p, o in tracked.items()}
+    bake = dict(rest)
+    for p, o in tracked.items():
+        if min_scale(rest[p]) >= 0.05:
+            continue
+        best = None
+        for name, a in out.items():
+            for i, m in enumerate(a["frames"][p]):
+                if best is None or min_scale(m) > best[0]:
+                    best = (min_scale(m), name, i)
+        if best is None or best[0] < 0.05:
+            print(f"CODEXPREP part {p} is shrunk to nothing in every pose; left out")
+            continue
+        _, name, i = best
+        bake[p] = out[name]["frames"][p][i].copy()
+        for m in members[p]:
+            m.matrix_world = out[name]["every"][m.name][i]
+        print(f"CODEXPREP part {p} rests shrunk (scale {min_scale(rest[p]):.3f}): baked as in {name} frame {i}, hidden at rest")
+    bpy.context.view_layer.update()
+    return out, rest, bake
+
+
+def to_unreal(m):
+    """A Blender-frame transform (m) as one in Unreal's frame (cm, Y flipped): S M S, translation x 100."""
+    s = mathutils.Matrix.Diagonal((1.0, -1.0, 1.0, 1.0))
+    u = s @ m @ s
+    u.translation = u.translation * 100.0
+    return u
+
+
+def unreal_key(d):
+    loc, rot, scl = d.decompose()
+    return {"loc": [round(v, 3) for v in loc], "rot": [round(rot.x, 5), round(rot.y, 5), round(rot.z, 5), round(rot.w, 5)],
+            "scale": [round(v, 4) for v in scl]}
+
+
+def rest_poses(rest, bake):
+    """Each part's pose when no action plays, as a motion away from its baked mesh (identity unless it rests shrunk)."""
+    frame, inv = FRAME[0], FRAME[0].inverted()
+    return {p: unreal_key(to_unreal(frame @ (rest[p] @ bake[p].inverted()) @ inv)) for p in rest}
+
+
+def anim_tracks(sampled, bake, rest):
+    """Per action, per part it moves: times and the part's motion away from its baked mesh (delta = now x bake^-1, in
+    the model's final frame, then Unreal's), as location cm, rotation quaternion [x, y, z, w] and scale. A part that stays
+    at its rest pose all through the action gets no track (so a spark hidden at rest is not forced hidden by every other
+    action). Samples a straight blend of their neighbours can rebuild are dropped."""
+    frame, inv = FRAME[0], FRAME[0].inverted()
+    anims = {}
+    for name, a in sampled.items():
+        parts = {}
+        for p, mats in a["frames"].items():
+            r_inv = bake[p].inverted()
+            at_rest = to_unreal(frame @ (rest[p] @ r_inv) @ inv).decompose()
+            keys = []
+            for i, m in enumerate(mats):
+                d = to_unreal(frame @ (m @ r_inv) @ inv)
+                loc, rot, scl = d.decompose()
+                keys.append((i / a["fps"], loc, rot, scl))
+            moves = any(((k[1] - at_rest[0]).length > 0.05 or k[2].rotation_difference(at_rest[1]).angle > math.radians(0.1)
+                         or (k[3] - at_rest[2]).length > 1e-3) for k in keys)
+            if not moves:
+                continue
+            kept = [keys[0]]
+            for i in range(1, len(keys) - 1):
+                prev, nxt = kept[-1], keys[i + 1]
+                u = (keys[i][0] - prev[0]) / max(nxt[0] - prev[0], 1e-6)
+                lerp_loc = prev[1].lerp(nxt[1], u)
+                q = prev[2].slerp(nxt[2], u)
+                ok = ((lerp_loc - keys[i][1]).length < 0.02 and q.rotation_difference(keys[i][2]).angle < math.radians(0.05)
+                      and (prev[3].lerp(nxt[3], u) - keys[i][3]).length < 1e-3
+                      and prev[2].rotation_difference(nxt[2]).angle < math.radians(90))
+                if not ok:
+                    kept.append(keys[i])
+            kept.append(keys[-1])
+            parts[p] = {
+                "t": [round(k[0], 4) for k in kept],
+                "loc": [[round(v, 3) for v in k[1]] for k in kept],
+                "rot": [[round(k[2].x, 5), round(k[2].y, 5), round(k[2].z, 5), round(k[2].w, 5)] for k in kept],
+                "scale": [[round(v, 4) for v in k[3]] for k in kept],
+            }
+        anims[name] = {"seconds": round(a["seconds"], 4), "parts": parts}
+    return anims
+
+
+def describe_track(tr):
+    """One line on how far a part goes: the biggest turn (degrees, about which Unreal axis) and shift (cm)."""
+    best_angle, best_axis = 0.0, (0, 0, 0)
+    for r in tr["rot"]:
+        q = mathutils.Quaternion((r[3], r[0], r[1], r[2]))
+        if q.angle > best_angle:
+            best_angle, best_axis = q.angle, tuple(round(v, 2) for v in q.axis)
+    shift = max(mathutils.Vector(l).length for l in tr["loc"])
+    scale = max(max(abs(v - 1.0) for v in s) for s in tr["scale"])
+    return f"turn {math.degrees(best_angle):.0f} deg about {best_axis}, shift {shift:.1f} cm, scale {scale:+.2f}, {len(tr['t'])} keys"
 
 
 def stand_up(meshes, empties, size, force=None):
@@ -204,6 +391,14 @@ def write_textures(mat, slot, folder):
     return files
 
 
+def pivots_by_part(pivots, part):
+    """The rest origin of a part's own object (the exact name, else the first that starts with it)."""
+    if part in pivots:
+        return {part: pivots[part]}
+    hit = next((k for k in pivots if k.startswith(part)), None)
+    return {part: pivots[hit]} if hit else {}
+
+
 def prep(src_root, name, entry):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     glb = os.path.join(src_root, name, f"{name}.glb")
@@ -213,6 +408,9 @@ def prep(src_root, name, entry):
     bpy.ops.import_scene.gltf(filepath=glb)
     bpy.context.view_layer.update()  # matrix_world is stale until then
     kind = entry["kind"]
+    FRAME[0] = mathutils.Matrix.Identity(4)
+    parts = entry.get("parts", [])
+    sampled, rest, bake = sample_actions(parts) if parts else ({}, {}, {})
     drop = set(entry.get("drop", []))
     empties = [{"name": o.name, "pos": o.matrix_world.translation.copy()} for o in bpy.context.scene.objects if o.type == "EMPTY"]
     meshes = [o for o in bpy.context.scene.objects if o.type == "MESH" and not any(o.name.startswith(d) for d in drop)]
@@ -245,9 +443,16 @@ def prep(src_root, name, entry):
         lo, hi = world_bounds(base or meshes)
         lo.z = world_bounds(meshes)[0].z
         transform_all(meshes, empties, mathutils.Matrix.Translation((-(lo.x + hi.x) / 2, -(lo.y + hi.y) / 2, -lo.z)))
-        kept = [join(meshes, name)]
+        kept = []
+        for part in parts:
+            objs = [o for o in meshes if part_of(o.name, [part])]
+            if objs:
+                kept.append(join(objs, f"{name}_{part}"))
+                meshes = [o for o in meshes if o not in objs]
+            else:
+                print(f"CODEXPREP {name}: no object for part {part}")
+        kept.insert(0, join(meshes, name))
     else:
-        parts = entry.get("parts", [])
         kept = []
         for part in parts:
             objs = [o for o in meshes if o.name.startswith(part)]
@@ -283,12 +488,39 @@ def prep(src_root, name, entry):
         "sockets": {e["name"]: unreal_cm(e["pos"]) for e in empties},
         "slots": slots,
     }
+    for p in parts:
+        key = f"{name}_{p}" if kind in ("building", "item") else p
+        if key in info["parts"] and p in pivots_by_part(pivots, p):
+            info["parts"][key]["pivotCm"] = unreal_cm(FRAME[0] @ pivots_by_part(pivots, p)[p])
+    anims = anim_tracks(sampled, bake, rest) if sampled else {}
+    if anims:
+        info["anims"] = {a: {"seconds": v["seconds"], "parts": sorted(v["parts"])} for a, v in anims.items()}
+        doc = {"name": name, "note": "Made by tools/codex_prep.py from the GLB's glTF actions: each part's motion away from its baked mesh, Unreal frame, cm. 'rest': the pose when nothing plays (scale 0: hidden).",
+               "rest": rest_poses(rest, bake), "anims": anims}
+        for path in (os.path.join(folder, f"{name}_anims.json"), os.path.join(ANIM_OUT, f"{name}.json")):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                json.dump(doc, f, separators=(",", ":"))
+        for a, v in anims.items():
+            if not v["parts"]:
+                print(f"CODEXPREP {name}: action {a} ({v['seconds']} s) moves no mesh (a material change?)")
+            for p, tr in v["parts"].items():
+                print(f"CODEXPREP {name}: action {a} ({v['seconds']} s) {p}: {describe_track(tr)}")
     with open(os.path.join(folder, f"{name}_info.json"), "w") as f:
         json.dump(info, f, indent=1)
-    bpy.ops.object.select_all(action="DESELECT")
+    def export(objs, path):
+        bpy.ops.object.select_all(action="DESELECT")
+        for o in objs:
+            o.select_set(True)
+        bpy.ops.export_scene.fbx(filepath=path, use_selection=True, object_types={"MESH"}, mesh_smooth_type="FACE",
+                                 add_leaf_bones=False, bake_anim=False, path_mode="STRIP", use_tspace=True)
     out = os.path.join(folder, f"{name}_Game.fbx")
-    bpy.ops.export_scene.fbx(filepath=out, use_selection=False, object_types={"MESH"}, mesh_smooth_type="FACE",
-                             add_leaf_bones=False, bake_anim=False, path_mode="STRIP", use_tspace=True)
+    if kind in ("building", "item") and len(kept) > 1:
+        export(kept[:1], out)  # the body; each moving part to its own file, in the same frame
+        for o in kept[1:]:
+            export([o], os.path.join(folder, f"{o.name}_Game.fbx"))
+    else:
+        export(kept, out)
     print(f"CODEXPREP {name}: {kind}, turned {turn}, {info['sizeM']} m, parts {list(info['parts'])}, slots {list(slots)} -> {out}")
     return True
 

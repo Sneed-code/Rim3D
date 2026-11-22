@@ -414,6 +414,10 @@ FSimPawnApparel USimPawnSubsystem::MakeApparel(const colony::Snapshot& Snapshot,
 				Worn.Cuts.Add(UTF8_TO_TCHAR(Cut.c_str()));
 			}
 		}
+		Worn.HeadProp = UTF8_TO_TCHAR(Def.text("visual.headProp.mesh").c_str());
+		Worn.HeadPropAt = FVector(Def.numberAt("visual.headProp.at", 0, 0.0), Def.numberAt("visual.headProp.at", 1, 0.0), Def.numberAt("visual.headProp.at", 2, 0.0));
+		Worn.HeadPropYaw = static_cast<float>(Def.number("visual.headProp.yaw", 0.0));
+		Worn.HeadPropScale = static_cast<float>(Def.number("visual.headProp.scale", 1.0));
 		const size_t Count = Def.count("visual.worn");
 		for (size_t M = 0; M < Count; ++M)
 		{

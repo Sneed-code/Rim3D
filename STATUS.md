@@ -68,8 +68,12 @@ cluster (turning dish, pulsing beacon), a cowboy hat, minigun (spinning barrels)
 core (fans, crystal, boot lights), power switch (lever, lamps, spark) and hatchery (lid, lamp, wobbling egg), each
 22-41 min, about 3% of the weekly Gemini allowance each. Opus 5.5 through the same plan ran out after one half-made
 revolver. AI Studio in sneed's Chrome made a Lyria theme, robot and insect sound tests and TTS pain, begging and
-pleasure noises (muted while made). **Next: import the seven GLBs (codex_prep, GunArt) and wire their animations;
-pick sounds by ear.** Not in the game yet.
+pleasure noises (muted while made). **In the game (2026-11-22):** the four buildings move (dish scans, beacon blinks,
+core boots then hums with turning fans, switch lever and lamps follow on/off with a spark, hatchery egg wobbles:
+`visual.moving`, `PropAnims`), the minigun barrels spin up while firing, the LMG is a gun, the cowboy hat sits on the
+head as a rigid prop. Sounds: short gruff male grunts, female pain, begging and groans for people lying downed, three
+long lovin takes, and robot and insect sounds for mechanoids and chitinids (`tools/neon_sounds.py`, picked by
+measurement, sneed can swap). Not fixed: minigun heat tint too rainbow, LMG colours, paper-like crystal (BACKLOG).
 
 Rocket and grenade blasts look high quality (sneed, 2026-11-22; Unreal and blast art, `docs/design/blast-draw.md`): the
 fire and smoke pictures are **512 px a frame** (were 256), never streamed at a low mip, no longer **cut off square** at

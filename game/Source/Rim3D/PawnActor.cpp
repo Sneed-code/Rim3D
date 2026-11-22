@@ -1462,6 +1462,34 @@ namespace
 	}
 }
 
+UStaticMeshComponent* ASimPawnActor::MakeHeadProp(USimPawnSubsystem& Pawns, const FSimWornPiece& Piece)
+{
+	// A rigid hat on a MakeHuman head (docs/design/neon-assets.md "Cowboy hat"): placed from the head bone in the body's rest
+	// pose, so it fits whichever way that bone's own axes point, then it rides on the bone.
+	if (Piece.HeadProp.IsEmpty() || !MakeHumanMesh || !MakeHumanMesh->GetSkeletalMeshAsset())
+	{
+		return nullptr;
+	}
+	UStaticMesh* Mesh = Cast<UStaticMesh>(Pawns.GetClothesAsset(Piece.HeadProp));
+	const FReferenceSkeleton& Ref = MakeHumanMesh->GetSkeletalMeshAsset()->GetRefSkeleton();
+	const int32 Bone = Ref.FindBoneIndex(TEXT("head"));
+	if (!Mesh || Bone == INDEX_NONE)
+	{
+		return nullptr;
+	}
+	const FTransform BoneRest = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, Bone);
+	const FTransform Hat(FRotator(0.0f, Piece.HeadPropYaw, 0.0f), BoneRest.GetLocation() + Piece.HeadPropAt, FVector(Piece.HeadPropScale));
+	UStaticMeshComponent* Component = NewObject<UStaticMeshComponent>(this);
+	Component->SetStaticMesh(Mesh);
+	Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Component->SetCanEverAffectNavigation(false);
+	Component->bReceivesDecals = false;
+	Component->SetupAttachment(MakeHumanMesh, TEXT("head"));
+	Component->SetRelativeTransform(Hat.GetRelativeTransform(BoneRest));
+	Component->RegisterComponent();
+	return Component;
+}
+
 void ASimPawnActor::ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnApparel& Wanted)
 {
 	const FString Base = Looks.MakeHuman;
@@ -1472,6 +1500,13 @@ void ASimPawnActor::ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnAppare
 		++ApparelRebuilds;
 		for (const FSimWornPiece& Piece : Wanted.Pieces)
 		{
+			if (UStaticMeshComponent* Prop = MakeHeadProp(Pawns, Piece))
+			{
+				GarmentCuts.Add(Piece.Item, TEXT("HeadProp"));
+				WornMeshes.Add(Prop);
+				WornMeshItems.Add(Piece.Item);
+				continue;
+			}
 			const FString Cut = PawnGarmentCut(Pawns, Base, Piece);
 			UE_LOG(LogTemp, Display, TEXT("Garments: %s on %s wears item %u (%d cuts) as '%s'"), *GetName(), *Base, Piece.Item, Piece.Cuts.Num(), *Cut);
 			if (Cut.IsEmpty())
@@ -1528,7 +1563,8 @@ void ASimPawnActor::ApplyGarments(USimPawnSubsystem& Pawns, const FSimPawnAppare
 	for (const FSimWornPiece& Piece : Apparel.Pieces)
 	{
 		bHeadwearDrawn = bHeadwearDrawn || (Piece.bHeadwear && GarmentCuts.Contains(Piece.Item));
-		bCovered = bCovered || (Piece.bHidesHair && GarmentCuts.Contains(Piece.Item));
+		const FString* Drawn = GarmentCuts.Find(Piece.Item);
+		bCovered = bCovered || (Drawn && (Piece.bHidesHair || *Drawn == TEXT("HeadProp")));
 		bCrotchCovered = bCrotchCovered || (Piece.bCoversCrotch && GarmentCuts.Contains(Piece.Item));
 	}
 	SetMakeHumanHairCovered(bCovered);

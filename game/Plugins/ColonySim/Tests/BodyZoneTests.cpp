@@ -1156,6 +1156,28 @@ TEST_CASE("Dismemberment: a blast a metre from a corpse throws it and tears a pa
     CHECK(after.x < at.x);
 }
 
+TEST_CASE("Body zones: a person down from a leg is downed and awake, one knocked out is not (downed voices)") {
+    const auto viewOf = [](Sim& sim, Entity pawn) {
+        Snapshot snap;
+        sim.writeSnapshot(snap);
+        const auto it = std::find_if(snap.things.begin(), snap.things.end(), [&](const ThingView& v) { return v.id == pawn; });
+        return it == snap.things.end() ? ThingView{} : *it;
+    };
+    auto sim = zoneTestSim();
+    const Entity legs = zoneTestPawn(*sim, 10, 10);
+    const Entity head = zoneTestPawn(*sim, 20, 10);
+    CHECK_FALSE(sim->health().downedAwake(legs));
+    CHECK_FALSE(viewOf(*sim, legs).downedAwake);
+    CHECK(zoneTestHit(*sim, legs, "Blunt", 60.0f, "left leg"));
+    CHECK(sim->health().downedAwake(legs));
+    CHECK(viewOf(*sim, legs).downed);
+    CHECK(viewOf(*sim, legs).downedAwake);
+    CHECK(zoneTestHit(*sim, head, "Blunt", 20.0f, "neck"));
+    CHECK(zoneTestHit(*sim, head, "Blunt", 20.0f, "jaw"));
+    CHECK(viewOf(*sim, head).downed);
+    CHECK_FALSE(viewOf(*sim, head).downedAwake);
+}
+
 TEST_CASE("Dismemberment: overkill on a corpse is kept until it is all in pieces, a limb a quarter of the torso (sneed, 2026-11-22)") {
     auto sim = zoneTestSim();
     const Entity pawn = zoneTestPawn(*sim, 6, 6, true);
