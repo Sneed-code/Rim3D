@@ -690,6 +690,31 @@ void UBlastFxSubsystem::AddTrail(const FVector& At, const FVector& Back, const F
 	}
 }
 
+void UBlastFxSubsystem::AddTrailForTest(const FVector& From, const FVector& To, float Seconds)
+{
+	if (!EnsureScene() || Seconds <= 0.0f)
+	{
+		return;
+	}
+	const FVector Back = (From - To).GetSafeNormal();
+	const int32 Frames = FMath::Max(1, FMath::RoundToInt32(Seconds * 60.0f));
+	for (int32 Frame = 0; Frame < Frames; ++Frame)
+	{
+		const int32 Before = Sprites.Num();
+		const float Born = Seconds * Frame / Frames;
+		AddTrail(FMath::Lerp(From, To, static_cast<float>(Frame) / Frames), Back, TEXT("rocket"), 1.0f / 60.0f);
+		// Aged as if laid down when the rocket passed (the nozzle flames of earlier frames are gone by now).
+		for (int32 I = Before; I < Sprites.Num(); ++I)
+		{
+			Sprites[I].Age = Seconds - Born;
+			if (Sprites[I].Kind == EKind::Fire && Frame < Frames - 1)
+			{
+				Sprites[I].Age = Sprites[I].Life;
+			}
+		}
+	}
+}
+
 void UBlastFxSubsystem::AddDebrisTrail(const FVector& At, float SizeCm)
 {
 	if (!Holder || Sprites.Num() >= GBlastMaxSprites.GetValueOnGameThread())

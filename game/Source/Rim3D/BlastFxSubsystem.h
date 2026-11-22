@@ -54,6 +54,9 @@ public:
 	 */
 	void AddTrail(const FVector& At, const FVector& Back, const FString& Kind, float DeltaTime);
 
+	/** A rocket's trail along From -> To as if it had just flown it in `Seconds` (the smoke test pictures the trail). */
+	void AddTrailForTest(const FVector& From, const FVector& To, float Seconds);
+
 	/** A puff of dust behind a piece of debris in flight (UShooterFeelSubsystem calls it). */
 	void AddDebrisTrail(const FVector& At, float SizeCm);
 
