@@ -231,6 +231,22 @@ namespace
 				Skeletons += Cast<USkeleton>(Object) ? 1 : 0;
 			}
 		}
+		// `skipMeshes`: parts left out (the iguana's tongue sits hundreds of metres from the body and hides the scene).
+		if (const TArray<TSharedPtr<FJsonValue>>* Skip = nullptr; Entry->TryGetArrayField(TEXT("skipMeshes"), Skip))
+		{
+			Meshes.RemoveAll([Skip, &Model](const USkeletalMesh* Mesh)
+			{
+				for (const TSharedPtr<FJsonValue>& Word : *Skip)
+				{
+					if (Mesh->GetName().Contains(Word->AsString()))
+					{
+						UE_LOG(LogAnimalArt, Display, TEXT("%s: left out %s"), *Model, *Mesh->GetName());
+						return true;
+					}
+				}
+				return false;
+			});
+		}
 		FString Names;
 		for (const UAnimSequence* Clip : Clips)
 		{
