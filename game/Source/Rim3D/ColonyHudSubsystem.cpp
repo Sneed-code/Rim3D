@@ -8,11 +8,14 @@
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
+#include "HAL/PlatformProcess.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/CommandLine.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
+#include "UnrealClient.h"
 
 #include <imgui.h>
 
@@ -462,6 +465,73 @@ void UColonyHudSubsystem::OpenSettingsPage(const FString& Name)
 
 // ---- The tick ----------------------------------------------------------------------------------
 
+// -DebugSceneHop, the PC check of scenes loading inside the game: title, Debug > Gun range in this same game, F10 back
+// to the title, then quit, with a picture of each and log lines. The stage lives in a static, so it surviving the level
+// loads shows it all happened in one process.
+void UColonyHudSubsystem::TickSceneHop()
+{
+	static int32 HopStage = 0;
+	static double HopSince = 0.0;
+	if (!FParse::Param(FCommandLine::Get(), TEXT("DebugSceneHop")) || bLeavingDebugScene)
+	{
+		return;
+	}
+	const double Now = FPlatformTime::Seconds();
+	const auto Picture = [](const TCHAR* Name)
+	{
+		FScreenshotRequest::RequestScreenshot(FPaths::ProjectSavedDir() / TEXT("Smoke/scenehop") / FString::Printf(TEXT("%s.png"), Name), true, false);
+	};
+	const bool bInScene = DebugScenes::IsDebugScene();
+	// Each stage waits for its world (the title, or the scene) and counts from its first frame there.
+	if (bInScene != (HopStage == 1))
+	{
+		return;
+	}
+	if (HopSince == 0.0)
+	{
+		HopSince = Now;
+		return;
+	}
+	if (HopStage == 0 && bMainMenuOpen && Now - HopSince > 10.0)
+	{
+		Picture(TEXT("1_title"));
+		for (const DebugScenes::FScene& Scene : DebugScenes::All())
+		{
+			if (FCString::Strcmp(Scene.Id, TEXT("gunrange")) == 0)
+			{
+				UE_LOG(LogTemp, Display, TEXT("SCENEHOP: title shown, loading the gun range in this game (pid %u)"), FPlatformProcess::GetCurrentProcessId());
+				HopStage = 1;
+				HopSince = 0.0;
+				bLeavingDebugScene = DebugScenes::Launch(GetWorld(), Scene);
+			}
+		}
+	}
+	else if (HopStage == 1 && bInScene && Now - HopSince > 30.0)
+	{
+		Picture(TEXT("2_range"));
+		UE_LOG(LogTemp, Display, TEXT("SCENEHOP: in the gun range (pid %u), back to the title"), FPlatformProcess::GetCurrentProcessId());
+		HopStage = 2;
+		HopSince = 0.0;
+		bLeavingDebugScene = DebugScenes::ReturnToTitle(GetWorld());
+	}
+	else if (HopStage == 2 && !bInScene && Now - HopSince > 10.0)
+	{
+		Picture(TEXT("3_title_again"));
+		const auto Cvar = [](const TCHAR* Name)
+		{
+			const IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(Name);
+			return Var ? Var->GetString() : FString(TEXT("(none)"));
+		};
+		UE_LOG(LogTemp, Display, TEXT("SCENEHOP OK: back on the title in the same game (pid %u, menu %d), Sky.Hour %s, Overseer.UI %s, Pawns.MetaHumans %s, near clip %.1f"),
+			FPlatformProcess::GetCurrentProcessId(), bMainMenuOpen ? 1 : 0, *Cvar(TEXT("Sky.Hour")), *Cvar(TEXT("Overseer.UI")), *Cvar(TEXT("Pawns.MetaHumans")), GNearClippingPlane);
+		HopStage = 3;
+	}
+	else if (HopStage == 3 && Now - HopSince > 12.0)
+	{
+		FPlatformMisc::RequestExit(false, TEXT("SceneHop"));
+	}
+}
+
 void UColonyHudSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -475,6 +545,7 @@ void UColonyHudSubsystem::Tick(float DeltaTime)
 			bLeavingDebugScene = DebugScenes::ReturnToTitle(GetWorld());
 		}
 	}
+	TickSceneHop();
 	USimSubsystem* Bridge = GetBridge();
 	if (!Bridge || !Bridge->GetSim())
 	{

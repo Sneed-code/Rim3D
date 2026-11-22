@@ -1457,7 +1457,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		}
 		if (const UWeaponDrawSubsystem* Draw = GetWorld()->GetSubsystem<UWeaponDrawSubsystem>())
 		{
-			Notes.Add(FString::Printf(TEXT("gunrange: a long gun slid forward at most %.0f cm to keep its stock out of the head"), Draw->GetStockSlideCm()));
+			Notes.Add(FString::Printf(TEXT("gunrange: a long gun slid forward at most %.0f cm to keep its stock out of the head and in the shoulder"), Draw->GetStockSlideCm()));
 		}
 	};
 	Phases.Add(MoveTemp(Play));

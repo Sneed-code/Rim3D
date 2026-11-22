@@ -303,10 +303,13 @@ void USmokeTestSubsystem::BuildProtagonistPhases()
 				Fail(TEXT("No other colonist to aim at"));
 				return;
 			}
-			// First person: the camera is at the head, so aiming is one turn.
-			const FRotator Look = (Box.GetCenter() - Body->GetViewLocation()).Rotation();
-			Body->Look(FRotator::NormalizeAxis(Look.Yaw - Body->GetYaw()), Look.Pitch - Body->GetPitch());
-			Body->SnapCamera();
+			// Third person: the camera swings round the body as it turns, so a few turns close in on the colonist.
+			for (int32 Turn = 0; Turn < 6; ++Turn)
+			{
+				const FRotator Look = (Box.GetCenter() - Body->GetViewLocation()).Rotation();
+				Body->Look(FRotator::NormalizeAxis(Look.Yaw - Body->GetYaw()), Look.Pitch - Body->GetPitch());
+				Body->SnapCamera();
+			}
 			if (P->GetLookedAtColonist() != State->Other)
 			{
 				Fail(TEXT("Aimed at a colonist but the crosshair does not find it"));

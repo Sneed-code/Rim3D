@@ -108,10 +108,12 @@ you leave (the gun range, the gun range with unaware guards, the character creat
 colony straight from the menus) and **watch** scenes, the smoke tests that show something and end (finishers, melee,
 gore, wounds and dirt, a gunfight, hands-on work, sky, fire, water, animals, clothes, the shuttle, sounds).
 
-**Start scene** launches a fresh copy of the game with the scene's arguments (exactly what its old `.bat` passed) and
-closes this one: every scene sets its own graphics settings, console variables and sim, and a fresh start is the only
-way to get each as tested. The copy carries `-DebugScene=<id>`: **F10** there, or the scene ending, starts the title
-screen again (the command line without any scene's arguments, `DebugScenes::StripSceneArgs`) instead of quitting.
+**Start scene** loads the scene inside the running game (sneed 2026-11-22: the window closing and reopening felt like a
+separate program): the scene's arguments (exactly what its old `.bat` passed) go on the game's command line and the level
+loads again, so every world system starts fresh and reads them as in a fresh copy. The console settings a scene changes
+(graphics, the sky's hour, the overseer UI, the near clip plane, screen messages) are remembered when it starts and put
+back when it ends. The command line carries `-DebugScene=<id>`: **F10**, or the scene ending, loads the title screen
+again (the command line without any scene's arguments, `DebugScenes::StripSceneArgs`) instead of quitting.
 The old launch files still work and run the same scenes in the same copy of the game.
 
 ## Not done yet

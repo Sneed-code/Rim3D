@@ -297,6 +297,7 @@ private:
 	int32 DebugScenePicked = 0;
 	/** F10 in a debug scene has started the title screen; this copy is closing. */
 	bool bLeavingDebugScene = false;
+	void TickSceneHop();
 	/** The menu has the mouse (cursor shown, UI input) while it is open; given back when the game takes over. */
 	bool bMenuMouse = false;
 	FString NewScenario = TEXT("CrashLanded");
