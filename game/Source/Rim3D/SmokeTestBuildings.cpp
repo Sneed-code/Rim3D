@@ -811,7 +811,7 @@ void USmokeTestSubsystem::BuildBuildingsPhases()
 		SpawnBuilt("Hatchery", 8);
 		B->StepOnce();
 		Buildings->Refresh();
-		LookAt(Cell(4, RoomH + 3), 7.0, 160.0, 30.0, 0.0, 0.0f, 0.5f);
+		LookAt(Cell(5, RoomH + 3), 10.0, 160.0, 32.0, 0.0, 0.0f, 0.5f);
 	};
 	Moving.Verify = [=, this]()
 	{
@@ -832,6 +832,7 @@ void USmokeTestSubsystem::BuildBuildingsPhases()
 	MovingLater.Name = TEXT("buildings_moving_later");
 	MovingLater.WarmupSeconds = 1.5f;
 	MovingLater.MeasureSeconds = 1.0f;
+	MovingLater.Setup = []() {};
 	Phases.Add(MoveTemp(MovingLater));
 
 	// 8. A new sim wipes the picture.
