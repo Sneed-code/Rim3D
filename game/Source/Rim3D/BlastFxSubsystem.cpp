@@ -443,7 +443,9 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 		Fire.EndCm = Random.FRandRange(450.0f, 570.0f) * S;
 		Fire.Life = Random.FRandRange(1.3f, 1.8f);
 		Fire.FadeIn = 0.02f;
-		Fire.FireGain = FireGain;
+		// Under full brightness the 512 px billows burned out to flat white with dark holes (PC round 12): a little less, so
+		// the ball reads yellow and orange with its lumps showing (the flash above stays white-hot).
+		Fire.FireGain = FireGain * 0.6f;
 		Fire.Roll = Random.FRandRange(-20.0f, 20.0f);
 		Fire.Spin = Random.FRandRange(-10.0f, 10.0f);
 		Fire.Tint = BlastSoot;
@@ -496,20 +498,21 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 		const float Angle = Random.FRandRange(0.0f, 2.0f * PI);
 		const float Lean = Random.FRandRange(0.15f, 0.6f);
 		const FVector Dir = FVector(FMath::Cos(Angle) * Lean, FMath::Sin(Angle) * Lean, 1.0f).GetSafeNormal();
-		for (int32 Along = 0; Along < 3; ++Along)
+		for (int32 Along = 0; Along < 5; ++Along)
 		{
-			// Three blobs down each jet, the tip fastest, so a jet stretches out as it flies.
+			// Five blobs down each jet, the tip fastest, so a jet stretches out into a spray as it flies (PC round 12: three big
+			// blobs flew apart and read as separate puffs in the sky).
 			FSprite& Jet = Add(EKind::Smoke);
-			Jet.Position = Ground + Dir * (20.0f + 15.0f * Along) + FVector(0.0, 0.0, 10.0);
-			Jet.Velocity = Dir * Random.FRandRange(900.0f, 1500.0f) * Root * (1.0f - 0.22f * Along);
+			Jet.Position = Ground + Dir * (15.0f + 10.0f * Along) + FVector(0.0, 0.0, 10.0);
+			Jet.Velocity = Dir * Random.FRandRange(700.0f, 1150.0f) * Root * (1.0f - 0.15f * Along);
 			Jet.Gravity = 980.0f;
-			Jet.Drag = 1.1f;
+			Jet.Drag = 1.3f;
 			Jet.Wind = 0.3f;
-			Jet.StartCm = (35.0f - 6.0f * Along) * S;
-			Jet.EndCm = Random.FRandRange(150.0f, 220.0f) * S;
-			Jet.Life = Random.FRandRange(1.6f, 2.6f);
+			Jet.StartCm = (22.0f - 2.5f * Along) * S;
+			Jet.EndCm = Random.FRandRange(90.0f, 140.0f) * S;
+			Jet.Life = Random.FRandRange(1.2f, 2.0f);
 			Jet.FadeIn = 0.02f;
-			Jet.Opacity = 0.95f;
+			Jet.Opacity = 0.85f;
 			Jet.FrameFrom = 2.0f;
 			Jet.FrameTo = 63.0f;
 			Jet.Spin = Random.FRandRange(-40.0f, 40.0f);

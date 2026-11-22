@@ -799,10 +799,13 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		Fx()->ClearForTest();
 		State->BlastX = Me->x + 16.0f;
 		State->BlastY = Me->y - 9.0f;
-		const FVector From = B->SimToWorld(Me->x + 1.0f, Me->y - 1.0f, 0) + FVector(0.0, 0.0, 150.0);
+		// Across the view, from off to the left, so the trail is seen side on (round 12: fired from beside the camera it ran
+		// along the line of sight and hid behind the player's body).
+		const FVector From = B->SimToWorld(Me->x + 12.0f, Me->y + 5.0f, 0) + FVector(0.0, 0.0, 300.0);
 		const FVector To = B->SimToWorld(State->BlastX, State->BlastY, 0) + FVector(0.0, 0.0, 20.0);
 		Fx()->AddTrailForTest(From, To, 0.35f);
-		LookAtBlast(State->BlastX, State->BlastY, 2.0f, -25.0f);
+		// The camera between the trail's start and the blast, so the trail crosses the picture.
+		LookAtBlast(State->BlastX, State->BlastY, 4.0f, 22.0f);
 		B->Submit(colony::ExplodeCommand{State->BlastX, State->BlastY, 3.9f, 50.0f, "Bomb", 0.1f});
 	};
 	Rocket.OnFrame = Watch;
