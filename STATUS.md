@@ -2,6 +2,16 @@
 
 Updated 2026-11-22.
 
+Google Neon asset test and AI Studio sounds (sneed, 2026-11-22; tools and docs, `docs/design/neon-assets.md`):
+sneed's Google AI Pro plan gives **Gemini 4 Neon** in the Antigravity CLI, now run headless on the PC like Codex
+(`tools/neon_assets/run_neon_assets.sh`, Neon High, no windows). It made **seven models first try**: the ship sensor
+cluster (turning dish, pulsing beacon), a cowboy hat, minigun (spinning barrels), LMG (reload, bipod), ship computer
+core (fans, crystal, boot lights), power switch (lever, lamps, spark) and hatchery (lid, lamp, wobbling egg), each
+22-41 min, about 3% of the weekly Gemini allowance each. Opus 5.5 through the same plan ran out after one half-made
+revolver. AI Studio in sneed's Chrome made a Lyria theme, robot and insect sound tests and TTS pain, begging and
+pleasure noises (muted while made). **Next: import the seven GLBs (codex_prep, GunArt) and wire their animations;
+pick sounds by ear.** Not in the game yet.
+
 Playtest fixes from the gun range (sneed, 2026-11-22; sim, data, Unreal and hair tools): **dismemberment piles up
 again**: a limb at 0 kept no hitbox, so later shots and blows passed through it and never reached the 13 (arm) or 19
 (leg) past 0 that takes it off; now a limb keeps its hitbox until it is really gone (`Combat.cpp`, test in
