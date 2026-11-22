@@ -268,7 +268,9 @@ measured at the skin's vertices from the waist to under the skull, the back and 
 shape belongs to the skin of one bone (its vertices' largest skin weight: torso, neck, a clavicle, an upper arm, a
 forearm), moves with that bone, and only counts for that skin. Left and right are mirror images. Hair can now sink 0.7 cm
 into the back (median; 1.2 cm for 99 in 100 points, 1.8 worst), the chest, shoulders and arms the same, against 2 and 5
-cm before; the 4 mm inside the skin is the floor, so resting hair still never starts inside a shape (no jitter). Each
+cm before; the 4 mm inside the skin is the floor, so resting hair still never starts inside a shape (no jitter). Eight more capsules fill the core (three columns down the middle of the torso's depth and one along the neck): the shell
+alone was hollow, and in one PC walk the long hair, once past it, stayed sunk in the bare back; now 95% of the torso's
+inside is held by a shape (89% without the core), so hair that gets in is pushed back out. Each
 shape also keeps the skin's outward normal (`out` in `grooms.json`); capsules have `a_cm` and `b_cm`.
 
 **Clothes.** `StrandHair.cpp` builds the physics asset per body mesh *and outfit*: for each shape (not the head's) and

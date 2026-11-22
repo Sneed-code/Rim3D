@@ -355,6 +355,44 @@ def collision_shapes(body, budget=MAX_COLLISION_SHAPES, target=COLLISION_TARGET,
             D[k, mine] = np.minimum(D[k, mine], np.linalg.norm(P[mine] - (a + tt[:, None] * ab), axis=1) - r)
     current = np.full(len(sample), cap, dtype=np.float32)
 
+    # The core. The shell alone is hollow, and a strand that got past it (a sudden turn, the simulation restarting in a
+    # bent pose) stayed inside the body (PC, 2026-11-22: long hair sunk into a bare back mid-walk). Capsules down the
+    # middle of the torso's depth in three columns, and along the neck, fill it, so whatever is inside is pushed out.
+    def ray(origin, direction):
+        loc, _, _, _ = bvh.ray_cast(Vector(origin), Vector(direction), 2.0)
+        return None if loc is None else np.array(loc)
+
+    def middle(x, z):
+        front, back = ray((x, -1.0, z), (0, 1, 0)), ray((x, 1.0, z), (0, -1, 0))
+        return None if front is None or back is None or back[1] <= front[1] else np.array([x, (front[1] + back[1]) / 2, z])
+
+    core = []
+    torso = names.index("torso") if "torso" in names else -1
+    if torso >= 0:
+        for f in (0.0, -0.5, 0.5):
+            knots = []
+            for z in np.linspace(low + 0.02, body.heights["shoulder"] - 0.01, 5):
+                m = middle(mid_x, z)
+                left = ray(m, (-1, 0, 0)) if m is not None else None
+                right = ray(m, (1, 0, 0)) if m is not None else None
+                knots.append(None if left is None or right is None else middle((left[0] + right[0]) / 2 + f * (right[0] - left[0]) / 2, z))
+            for a, b in zip(knots[:-1], knots[1:]):
+                if a is not None and b is not None:
+                    r = min(inside(a + s_ * (b - a)) for s_ in np.linspace(0.0, 1.0, 7))
+                    if r - margin > 0.02:
+                        core.append((torso, a, b, r - margin, np.zeros(3)))
+    if "neck" in names:
+        a, b = body.neck + 0.15 * (body.head - body.neck), body.head - 0.1 * (body.head - body.neck)
+        r = min(inside(a + s_ * (b - a)) for s_ in np.linspace(0.0, 1.0, 7))
+        if r - margin > 0.01:
+            core.append((names.index("neck"), a, b, r - margin, np.zeros(3)))
+    for owner, a, b, r, out in core:
+        mine = sample_part == owner
+        ab = b - a
+        tt = np.clip(((P[mine] - a) @ ab) / max(float(ab @ ab), 1e-12), 0.0, 1.0)
+        current[mine] = np.minimum(current[mine], np.linalg.norm(P[mine] - (a + tt[:, None] * ab), axis=1) - r)
+        shapes.append(("capsule", names[owner], np.array(a), np.array(b), float(r), out))
+
     def cost(d):
         return (np.clip(d - target, 0.0, None) * sample_w).sum(axis=-1)
 
@@ -372,8 +410,18 @@ def collision_shapes(body, budget=MAX_COLLISION_SHAPES, target=COLLISION_TARGET,
         for owner, a, b, r, out in pair(cands[best]):
             shapes.append(("sphere" if np.allclose(a, b) else "capsule", names[owner], np.array(a), np.array(b), float(r), np.array(out)))
     deep = current - 0.0
-    log("collision: %d shapes; hair can sink into the skin (cm) median %.2f, 90%% %.2f, worst %.2f" % (
-        len(shapes), np.median(deep) * 100, np.percentile(deep, 90) * 100, deep.max() * 100))
+    # How much of the body's inside (neck to waist, arms out) no shape holds: a strand there would not be pushed out.
+    lo, hi = np.array([v[skin, 0].min(), v[skin, 1].min(), low]), np.array([v[skin, 0].max(), v[skin, 1].max(), high])
+    grid = lo + rng.random((4000, 3)) * (hi - lo)
+    grid = np.array([g for g in grid if inside(g) > 0.006 and abs(g[0] - mid_x) < 0.17])
+    held = np.zeros(len(grid), bool)
+    for _, _, a, b, r, _ in shapes:
+        ab = b - a
+        tt = np.clip(((grid - a) @ ab) / max(float(ab @ ab), 1e-12), 0.0, 1.0)
+        held |= np.linalg.norm(grid - (a + tt[:, None] * ab), axis=1) < r
+    log("collision: %d shapes (%d filling the core); hair can sink into the skin (cm) median %.2f, 90%% %.2f, worst %.2f; "
+        "inside the torso %.0f%% held by a shape" % (len(shapes), len(core), np.median(deep) * 100, np.percentile(deep, 90) * 100,
+                                                      deep.max() * 100, held.mean() * 100 if len(grid) else 0.0))
     return shapes
 
 
