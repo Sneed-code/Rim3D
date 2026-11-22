@@ -3,15 +3,33 @@
  "prep": {
   "WindTurbine": {
    "kind": "rotor",
-   "source": ["assets/raw/fab/wind-turbine/*.glb", "assets/raw/fab/wind-turbine/**/*.fbx"],
+   "source": [
+    "assets/raw/fab/wind-turbine/*.glb",
+    "assets/raw/fab/wind-turbine/**/*.fbx"
+   ],
    "rotorDiameter": 4.8,
-   "hub": [0, 0.55, 6.6]
+   "hub": [
+    0,
+    0.55,
+    6.6
+   ]
   },
   "SolarGenerator": {
    "kind": "building",
-   "source": ["assets/raw/fab/solar-rack/*.blend"],
-   "fit": [3.9, 3.9],
-   "rows": 2
+   "source": [
+    "assets/raw/fab/solar-rack/*.blend"
+   ],
+   "fit": [
+    3.9,
+    3.9
+   ],
+   "rows": 2,
+   "drop": [
+    "Studio",
+    "Backdrop",
+    "Floor",
+    "Ground"
+   ]
   }
  },
  "buildings": [

@@ -122,6 +122,10 @@ def find_rotor(name, scene):
     hub = hub + ax * (np.dot(np.array(m0.translation) - hub, ax))
     scene.frame_set(f0)
     rotor_objs = descendants(root)
+    # Along the axis, the hub is where the rotor's own vertices are (an object's origin can sit metres off its mesh).
+    shapes = [o for o in rotor_objs if o.type == "MESH" and len(o.data.vertices)]
+    if shapes:
+        hub = hub + ax * float(np.mean(cp.world_points(shapes) @ ax) - np.dot(hub, ax))
     log(name, f"rotor root {root.name} ({len(rotor_objs)} objects), turns {math.degrees(angle):.2f} deg per {step} frame(s), "
               f"axis {tuple(round(v, 3) for v in axis)}, hub {tuple(round(float(v), 3) for v in hub)}")
     return [o.name for o in rotor_objs], mathutils.Vector(hub), mathutils.Vector(axis).normalized()
@@ -419,6 +423,18 @@ def prep(name, entry):
         for o in scene.objects:
             o["fab_rotor"] = o.name in rotor_names
     meshes = realise()
+    # "drop": objects whose name or any material's name holds one of these (a studio floor that would set the size).
+    drop = entry.get("drop", [])
+    for o in list(meshes):
+        names = [o.name] + [sl.material.name for sl in o.material_slots if sl.material]
+        if any(d.lower() in n.lower() for d in drop for n in names):
+            log(name, f"dropped {o.name}")
+            meshes.remove(o)
+            bpy.data.objects.remove(o, do_unlink=True)
+    for o in sorted(meshes, key=lambda o: -len(o.data.vertices))[:25]:
+        lo, hi = cp.world_bounds([o])
+        log(name, f"  object {o.name}: {len(o.data.polygons)} faces, size {tuple(round(v, 3) for v in (hi - lo))}, "
+                  f"materials {[sl.material.name for sl in o.material_slots if sl.material]}")
     rotor_names = {o.name for o in meshes if o.get("fab_rotor")}
     if entry["kind"] == "rotor":
         kept, extra = prep_rotor(name, entry, meshes, rotor_names, hub, axis)
