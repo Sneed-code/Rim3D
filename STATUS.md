@@ -15,7 +15,8 @@ stays on the clothes in every pose; nude hair lies on the back standing, aiming,
 a fast turn, nude long hair went into the back for a moment. Slower turns and holding the hair still did not help (PC);
 seen from above, the hair's physics only kept 8 points per strand out of the body, 10 cm apart on long hair. Now 32
 points and twice the guide strands, each strand following one (`HairGroomsCommandlet`, reruns the `hair-grooms` step),
-and a frame hitch no longer lands a whole turn in one frame. **Next:** PC walk-turn frames.
+a frame hitch no longer lands a whole turn in one frame, and through fast turns and hitches the hair is held at its
+resting shape (which lies clear of the body) and swings freely again after. **Next:** PC walk-turn frames.
 
 In-game UI in the Canopy look (sneed, 2026-11-22: "make the actual game's UI ... high quality, well made",
 `docs/design/ui-layout.md`): every in-game box now matches the title and new-game screens: dark green-black glass, square
