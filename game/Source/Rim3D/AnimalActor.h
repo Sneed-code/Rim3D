@@ -52,6 +52,8 @@ public:
 	ESimAnimalPose GetPose() const { return Pose; }
 	USkeletalMeshComponent* GetBody() const { return Body; }
 	/** The clip playing now (null before the first update). */
+	/** About how long the drawn body is, nose to tail, in cm (for the tests). */
+	float GetDrawLengthCm() const;
 	const UAnimSequence* GetClip() const;
 	/** The scale the body is drawn at (model scale from the art table, life stage, body size). */
 	float GetDrawScale() const { return DrawScale; }

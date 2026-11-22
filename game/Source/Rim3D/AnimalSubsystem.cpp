@@ -121,6 +121,10 @@ void USimAnimalSubsystem::LoadArtTable()
 			{
 				FitFromPose.Add(ModelName);
 			}
+			if (double Fix = 1.0; Entry->TryGetNumberField(TEXT("sizeFix"), Fix) && Fix > 0.0)
+			{
+				SizeFixes.Add(ModelName, static_cast<float>(Fix));
+			}
 			if (const TSharedPtr<FJsonObject>* Paths = nullptr; Entry->TryGetObjectField(TEXT("assets"), Paths))
 			{
 				TMap<FString, FString>& Roles = ImportAssets.Add(ModelName);
@@ -246,6 +250,8 @@ const FSimAnimalModel* USimAnimalSubsystem::GetModelFor(FName DefName, FSimAnima
 		Model.FitScale = WantedLength && NativeLength > 1.0f ? *WantedLength / NativeLength : 1.0f;
 		Model.WantedLengthCm = WantedLength ? *WantedLength : 0.0f;
 		Model.bFitFromPose = Model.WantedLengthCm > 0.0f && FitFromPose.Contains(OutArt.Model);
+		Model.SizeFix = SizeFixes.Contains(OutArt.Model) ? SizeFixes[OutArt.Model] : 1.0f;
+		Model.FitScale *= Model.SizeFix;
 		Model.bLoaded = true;
 		KeepAlive.Add(Model.Mesh);
 		KeepAlive.Add(Model.Idle);

@@ -112,7 +112,7 @@ void USmokeTestSubsystem::BuildAnimalsPhases()
 			State->PosesSeen.Add(static_cast<uint8>(Animal->GetPose()));
 			State->DefsDrawn.Add(FName(UTF8_TO_TCHAR(B->GetDefs()->get(View.def).defName().c_str())));
 			// Drawn about as big as an animal: the whole body between 15 cm and 13 m long (the 12 m T-rex).
-			const double Size = Body->Bounds.BoxExtent.GetMax() * 2.0;
+			const double Size = Animal->GetDrawLengthCm();
 			if (Size < 15.0 || Size > 1300.0)
 			{
 				State->Error(FString::Printf(TEXT("an animal is %.0f cm across (draw scale %.2f)"), Size, Animal->GetDrawScale()));
@@ -367,7 +367,16 @@ void USmokeTestSubsystem::BuildAnimalsPhases()
 			};
 			for (const TCHAR* Def : AnimalSmokeNewBigDefs) { CheckDef(Def); }
 			for (const TCHAR* Def : AnimalSmokeNewSmallDefs) { CheckDef(Def); }
-			Notes.Add(FString::Printf(TEXT("animals_new: %d models loaded"), Animals->GetModelsLoaded()));
+			FString Lengths;
+			for (const TPair<uint32, TObjectPtr<ASimAnimalActor>>& Pair : Animals->GetAnimals())
+			{
+				const colony::ThingView* View = B->GetCurrentSnapshot().find(Pair.Value->GetThing());
+				if (View && View->def.valid())
+				{
+					Lengths += FString::Printf(TEXT(" %s %.0f cm,"), UTF8_TO_TCHAR(B->GetDefs()->get(View->def).defName().c_str()), Pair.Value->GetDrawLengthCm());
+				}
+			}
+			Notes.Add(FString::Printf(TEXT("animals_new: %d models loaded; lengths:%s"), Animals->GetModelsLoaded(), *Lengths));
 		}
 		AnimalSmokeSetDistance(TEXT("Sky.Hour"), -1.0f);
 		AnimalSmokeSetDistance(TEXT("Sky.DayOfYear"), -1.0f);

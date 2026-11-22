@@ -41,6 +41,8 @@ struct FSimAnimalModel
 	 *  skeleton in the idle pose instead and fits that to the length. */
 	float WantedLengthCm = 0.0f;
 	bool bFitFromPose = false;
+	/** `sizeFix` in the art table: a last multiplier on the fit, for a file whose skin and skeleton disagree (the wolf spider). */
+	float SizeFix = 1.0f;
 	/** Degrees the mesh is turned so it faces the actor's forward (`yaw` in the art table's imports; Quaternius -90). */
 	float YawOffset = -90.0f;
 	/** How far the walk and gallop clips go per second at scale 1, in cm (`walkCm`, `gallopCm`). */
@@ -113,6 +115,8 @@ private:
 	TMap<FName, FVector3f> ImportLooks;
 	/** Imports whose size is measured on the posed skeleton (`"fit": "pose"`). */
 	TSet<FName> FitFromPose;
+	/** `sizeFix` by model. */
+	TMap<FName, float> SizeFixes;
 	/** Models already in Unreal's format (Fab packs): `assets` (mesh and clip object paths by role) and `parts`. */
 	TMap<FName, TMap<FString, FString>> ImportAssets;
 	TMap<FName, TArray<FString>> ImportParts;

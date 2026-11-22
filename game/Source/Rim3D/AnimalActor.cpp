@@ -97,7 +97,7 @@ void ASimAnimalActor::FitToPose(float InArtScale)
 		return;
 	}
 	// Bones stop short of the nose and the tail tip: they span about nine tenths of the body.
-	const double Fit = Model.WantedLengthCm * 0.9 / Span;
+	const double Fit = Model.WantedLengthCm * 0.9 / Span * Model.SizeFix;
 	ArtScale = static_cast<float>(InArtScale * Fit);
 	PoseHalfSize = Size * 0.5;
 	// The mesh's bounds are in the file's other unit: grow them to the posed size so the body is not culled.
@@ -123,6 +123,13 @@ void ASimAnimalActor::PlaceBody(bool bOnSide)
 	const FVector Size = !PoseHalfSize.IsNearlyZero() ? PoseHalfSize : Model.Mesh ? Model.Mesh->GetBounds().BoxExtent : FVector(20.0);
 	const FVector Side = Facing.RotateVector(FVector(Size.X, Size.Y, 0.0)).GetAbs();
 	Body->SetRelativeLocationAndRotation(FVector(0.0, 0.0, Side.Y * DrawScale), FQuat(FVector::ForwardVector, UE_HALF_PI) * Facing);
+}
+
+float ASimAnimalActor::GetDrawLengthCm() const
+{
+	// A pose-fitted model's bones span about nine tenths of the body (FitToPose); the rest are measured on the mesh.
+	const double Half = !PoseHalfSize.IsNearlyZero() ? FMath::Max(PoseHalfSize.X, PoseHalfSize.Y) / 0.9 : FMath::Max(Model.Extent.X, Model.Extent.Y);
+	return static_cast<float>(Half * 2.0 * DrawScale);
 }
 
 const UAnimSequence* ASimAnimalActor::GetClip() const
