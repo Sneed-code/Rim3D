@@ -49,6 +49,8 @@
 
 namespace
 {
+	TAutoConsoleVariable<int32> GPawnSkin4K(TEXT("Pawns.Skin4K"), 1,
+		TEXT("1: MakeHuman people wear their 4K skin (the creator's) instead of the mesh's own 2K one (on the next look change)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GPawnsHairCards(
 		TEXT("Pawns.HairCards"), 1, TEXT("1 draws hair cards on pawns away from full detail (their strands only show at full detail), 0 none."), ECVF_Default);
 	TAutoConsoleVariable<int32> GPawnsTurnFeetInSwing(
@@ -929,6 +931,29 @@ void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 		bApparelApplied = false;
 	}
 	MakeHumanMesh->SetSkeletalMeshAsset(Mesh);
+	// Everyone wears the 4K skin (sneed 2026-11-23: "default all pawns to 4k skin textures ... the one on the character
+	// creator screen"): MakeHumanArt makes MI_MH_<base>_Skin4K beside the mesh's own 2K skin; the same look, denser detail.
+	if (GPawnSkin4K.GetValueOnGameThread() != 0)
+	{
+		const FString SkinName = MakeHumanSkinName(Looks.MakeHuman);
+		static TMap<FString, TWeakObjectPtr<UMaterialInterface>> PawnSkins4K;
+		TWeakObjectPtr<UMaterialInterface>& Known = PawnSkins4K.FindOrAdd(SkinName);
+		if (!Known.IsValid())
+		{
+			Known = LoadObject<UMaterialInterface>(nullptr, *MakeHumanAssetPath(MakeHumanFolder, SkinName + TEXT("4K")), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		}
+		if (UMaterialInterface* Skin4K = Known.Get())
+		{
+			for (int32 Slot = 0; Slot < MakeHumanMesh->GetNumMaterials(); ++Slot)
+			{
+				const UMaterialInterface* Now = MakeHumanMesh->GetMaterial(Slot);
+				if (Now && Now->GetName() == SkinName)
+				{
+					MakeHumanMesh->SetMaterial(Slot, Skin4K);
+				}
+			}
+		}
+	}
 	MakeHumanMesh->SetAnimInstanceClass(UMakeHumanAnimInstance::StaticClass());
 	if (UMakeHumanAnimInstance* Anim = Cast<UMakeHumanAnimInstance>(MakeHumanMesh->GetAnimInstance()))
 	{

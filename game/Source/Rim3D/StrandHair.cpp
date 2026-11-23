@@ -70,6 +70,8 @@ namespace
 		TEXT("Seconds: a frame longer than this holds strand hair at rest (as a fast turn does) instead of simulating one long step."));
 	TAutoConsoleVariable<float> GStrandHairTurnHoldAfter(TEXT("Pawns.StrandHairTurnHoldAfter"), 0.08f,
 		TEXT("Seconds the hair stays held after the body's turn slows below Pawns.StrandHairTurnHold (the drawn turn eases out)."));
+	TAutoConsoleVariable<int32> GStrandHairBreasts(TEXT("Pawns.StrandHairBreasts"), 1,
+		TEXT("1: a collision capsule in each breast, on its bone, sized to this person's bust (hair no longer through the chest)."));
 	TAutoConsoleVariable<int32> GStrandHairDebug(TEXT("Pawns.StrandHairDebug"), 0,
 		TEXT("1: draw the shapes each strand-haired person's hair collides with (green inside the skin, yellow grown out to clothes)."));
 
@@ -473,11 +475,110 @@ namespace
 	 *  "torso" the spine bone nearest it), so the hair rests where it was grown and is only pushed back when it swings into
 	 *  the body or the body moves into it. Shapes under worn clothes grow out to just past the cloth (sneed 2026-11-22:
 	 *  hair through the shirt), so the hair lies on the clothes. Made once per mesh and outfit. */
-	UPhysicsAsset* StrandHairFittedCollision(const USkeletalMesh& Mesh, const FStrandHairHeadFit& HeadFit, const TArray<FStrandHairCloth>& Cloth)
+	/** A capsule in each breast on its own bone (sneed 2026-11-23: "the hair still clips a bit of the chest"): grow_hair.py's
+	 *  shapes are made on the base body, on the spine, so a larger bust than the base's (the breast sliders) or one
+	 *  moving with its jiggle came out past them and the hair went in. Fitted from the mesh's own vertices round each
+	 *  breast bone (from the bone towards the middle of the skin near it, to its tip, as thick as the breast's middle),
+	 *  grown by this person's breast size (Scale), and out to the clothes like the other shapes. Returns shapes added. */
+	int32 StrandHairAddBreasts(const USkeletalMesh& Mesh, UPhysicsAsset& Asset, TMap<int32, USkeletalBodySetup*>& Bodies, float Scale,
+		bool bClothes, const TArray<FStrandHairCloth>& Cloth, float GapCm)
+	{
+		const TArray<FVector3f>& Vertices = StrandHairClothVertices(Mesh);
+		const FReferenceSkeleton& Ref = Mesh.GetRefSkeleton();
+		int32 Added = 0;
+		for (const TCHAR* Name : {TEXT("breast_l"), TEXT("breast_r")})
+		{
+			const int32 Bone = Ref.FindBoneIndex(FName(Name));
+			if (Bone == INDEX_NONE || Vertices.IsEmpty())
+			{
+				continue;
+			}
+			const FTransform BoneRef = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, Bone);
+			const FVector Origin = BoneRef.GetLocation();
+			FVector Sum = FVector::ZeroVector;
+			int32 Near = 0;
+			for (const FVector3f& V3 : Vertices)
+			{
+				const FVector V(V3);
+				if (FVector::DistSquared(V, Origin) < FMath::Square(14.0))
+				{
+					Sum += V;
+					++Near;
+				}
+			}
+			if (Near < 20)
+			{
+				continue;
+			}
+			const FVector Axis = (Sum / Near - Origin).GetSafeNormal();
+			if (Axis.IsNearlyZero())
+			{
+				continue;
+			}
+			// The tip: the furthest skin along the axis close to it; the thickness: the skin round the axis a third of the way out.
+			double Tip = 0.0;
+			for (const FVector3f& V3 : Vertices)
+			{
+				const FVector D = FVector(V3) - Origin;
+				const double Along = FVector::DotProduct(D, Axis);
+				if (Along > 0.0 && Along < 20.0 && (D - Axis * Along).SizeSquared() < FMath::Square(5.0))
+				{
+					Tip = FMath::Max(Tip, Along);
+				}
+			}
+			TArray<float> Round;
+			for (const FVector3f& V3 : Vertices)
+			{
+				const FVector D = FVector(V3) - Origin;
+				const double Along = FVector::DotProduct(D, Axis);
+				const double Off = (D - Axis * Along).Size();
+				if (Along > Tip * 0.25 && Along < Tip * 0.6 && Off < 12.0)
+				{
+					Round.Add(static_cast<float>(Off));
+				}
+			}
+			if (Tip < 2.0 || Round.Num() < 8)
+			{
+				continue;
+			}
+			Round.Sort();
+			const float Radius = FMath::Clamp(Round[Round.Num() / 5] * Scale - 0.4f, 1.5f, 10.0f);
+			const double Length = FMath::Max(0.2, Tip * Scale - Radius - 0.4);
+			const FVector A = Origin;
+			const FVector B = Origin + Axis * Length;
+			float Grown = Radius;
+			if (bClothes)
+			{
+				Grown = StrandHairClothRadius(A, B, Radius, Axis, Cloth, GapCm);
+			}
+			USkeletalBodySetup*& Setup = Bodies.FindOrAdd(Bone);
+			if (!Setup)
+			{
+				Setup = NewObject<USkeletalBodySetup>(&Asset);
+				Setup->BoneName = Ref.GetBoneName(Bone);
+				Setup->PhysicsType = PhysType_Kinematic;
+				Asset.SkeletalBodySetups.Add(Setup);
+			}
+			const FVector LocalA = BoneRef.InverseTransformPosition(A);
+			const FVector LocalB = BoneRef.InverseTransformPosition(B);
+			FKSphylElem Elem(Grown, static_cast<float>(FVector::Dist(LocalA, LocalB)));
+			Elem.SetName(TEXT("Breast"));
+			Elem.Center = (LocalA + LocalB) * 0.5;
+			Elem.Rotation = FQuat::FindBetweenNormals(FVector::UpVector, (LocalB - LocalA).GetSafeNormal()).Rotator();
+			Setup->AggGeom.SphylElems.Add(Elem);
+			++Added;
+			UE_LOG(LogTemp, Display, TEXT("STRANDHAIR breast %s on %s: tip %.1f cm, radius %.1f cm (size x%.2f, %.1f with clothes)"), Name, *Mesh.GetName(),
+				Tip, Radius, Scale, Grown);
+		}
+		return Added;
+	}
+
+	UPhysicsAsset* StrandHairFittedCollision(const USkeletalMesh& Mesh, const FStrandHairHeadFit& HeadFit, const TArray<FStrandHairCloth>& Cloth, float BreastScale)
 	{
 		const float GapCm = FMath::Clamp(GStrandHairClothGap.GetValueOnGameThread(), -1.0f, 2.0f);
 		const bool bClothes = GStrandHairClothes.GetValueOnGameThread() != 0 && !Cloth.IsEmpty();
-		const uint32 Key = HashCombineFast(GetTypeHash(&Mesh), bClothes ? HashCombineFast(StrandHairClothKey(Cloth), GetTypeHash(FMath::RoundToInt32(GapCm * 100.0f))) : 0u);
+		const uint32 Key = HashCombineFast(HashCombineFast(GetTypeHash(&Mesh), GetTypeHash(FMath::RoundToInt32(BreastScale * 20.0f))),
+			bClothes ? HashCombineFast(StrandHairClothKey(Cloth), GetTypeHash(FMath::RoundToInt32(GapCm * 100.0f))) : 0u);
 		static TMap<uint32, TWeakObjectPtr<UPhysicsAsset>> Made;
 		if (const TWeakObjectPtr<UPhysicsAsset>* Known = Made.Find(Key))
 		{
@@ -583,6 +684,10 @@ namespace
 			}
 			++Placed;
 		}
+		if (GStrandHairBreasts.GetValueOnGameThread() != 0)
+		{
+			Placed += StrandHairAddBreasts(Mesh, *Asset, Bodies, BreastScale, bClothes && ClothRead > 0, Cloth, GapCm);
+		}
 		Asset->UpdateBodySetupIndexMap();
 		UE_LOG(LogTemp, Display, TEXT("STRANDHAIR collision for %s: %d shapes inside the skin on %d bones; %d garments worn (%d read), %d shapes grown out to the clothes by %.1f cm on average%s"),
 			*Mesh.GetName(), Placed, Bodies.Num(), Cloth.Num(), ClothRead, Grown, Grown > 0 ? GrownCm / Grown : 0.0f,
@@ -650,7 +755,9 @@ UGroomComponent* StrandHairAttachGrown(USkeletalMeshComponent* Body, UGroomAsset
 		const FStrandHairHeadFit& HeadFit = StrandHairHeadFit(BaseName);
 		if (CollisionMode == 1 && Body->GetSkeletalMeshAsset())
 		{
-			Collision = StrandHairFittedCollision(*Body->GetSkeletalMeshAsset(), HeadFit, StrandHairWornCloth(*Body));
+			// This person's bust against the base's: the breast sliders (BreastsLarge grows it, BreastsSmall shrinks it).
+			const float BreastScale = FMath::Clamp(1.0f + 0.45f * Body->GetMorphTarget(TEXT("BreastsLarge")) - 0.3f * Body->GetMorphTarget(TEXT("BreastsSmall")), 0.6f, 1.6f);
+			Collision = StrandHairFittedCollision(*Body->GetSkeletalMeshAsset(), HeadFit, StrandHairWornCloth(*Body), BreastScale);
 		}
 		Skull = HeadFit.SkullFromHead;
 		for (const TPair<FName, FVector4f>& Morph : HeadFit.Morphs)
