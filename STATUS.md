@@ -1,6 +1,19 @@
 # Status
 
-Updated 2026-11-22.
+Updated 2026-11-23.
+
+Dismemberment with any weapon, clean severed heads (sneed, 2026-11-23; sim and Unreal, `docs/design/body-health.md`):
+**shooting a corpse's leg or head with a pistol again and again now takes it off** (about 19 autopistol shots for a
+leg, 13 for a head). The piling rule was right, but the player's shot at a dead body dropped the crosshair's spot on
+the drawn ragdoll, so bullets flew at the sim's lying hitboxes (seldom where the ragdoll's limbs are) and hit the ground
+or the chest; only blasts, which need no aim, ever took pieces off (`Combat.cpp` `updateShooter`; tests in
+`BodyZoneTests.cpp`, pistol and knife). **A severed head no longer trails a long stretched tube**: the hidden
+MetaHuman under a MakeHuman body had its face counted as drawn and copied into the head's piece, posed where it was
+left, and its neck was drawn out to the stump. Now only meshes really drawn go into a piece, a mesh posed away from the
+body is left out, everything outside the piece folds into the piece's own joint, the copy shows the same hair style
+and cut-away skin as the body, strand hair stays off a headless body (`SeveredPieceActor.cpp`, `StrandHair.cpp`).
+Smoke `gore` has a new `headoff` phase (the head piece must fit in 45 cm, close-up picture). Needs the PC to compile
+and run smoke `gore`.
 
 Solar panel and wind turbine models (sneed, 2026-11-22; tools, data and Unreal, `docs/design/building-draw.md`
 "Downloaded models with a moving part"): the two power buildings were still box shapes. Now they use free Fab models,

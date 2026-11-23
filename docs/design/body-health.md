@@ -240,6 +240,13 @@ torsos, whole-corpse gibs) was never merged.
   comes off below the elbow or knee (the Hand or Foot part goes); anywhere else on the limb: the whole Arm or Leg.
   Head zone: the Head part. Torso: the head and every limb. One `PawnDismembered` event for each piece, message
   "left forearm", "right arm", "left lower leg", "right leg", "head".
+  **Any weapon does it** (sneed, 2026-11-23: "shooting a leg with a pistol over and over will do this. Same with
+  head"): the player's shot at a corpse kept the crosshair's spot on the drawn body (DrawnAim) only while the target
+  lived; at a dead one it was dropped, so the bullet flew at the ragdoll's leg against the sim's lying hitboxes, which a
+  ragdoll's limbs are seldom near, and hit the ground or the chest: the leg's pile never grew, and only a blast (which
+  needs no aim) took pieces off. A corpse that can be cut up now keeps the spot (`CombatSystem::updateShooter`). An
+  autopistol takes a corpse's leg off in about 19 shots and its head in about 13 (test "a pistol shot again and again
+  at a corpse's leg"); a knife hacking at a corpse takes a piece off too.
 - **Never** the protagonist, animals, mechanoids (bodies without zones).
 - **For drawing**: the snapshot's `severed` (SeveredBits: each forearm, arm, lower leg, leg, and the head), worked out
   from the lost parts, so a surgeon's amputation shows too.
@@ -294,6 +301,19 @@ torsos, whole-corpse gibs) was never merged.
   stump for `Gore.DripSeconds` (120 s; a piece for 40% of it once it lands). `Gore.StumpScale` (1.08) sizes the caps
   against the limb thickness table. On a clothed limb (another drawn mesh covers the cut bone) the cap's rim spreads out
   ends in a band of torn, blood-soaked cloth at the limb's own width (spread wider it read as a loose hoop), and the whole face stands out past the cut by as much as any of the pawn's meshes still bulges there (skin weighted partly to both sides of the cut ends in a rounded dome, which hid the meat in the PC pictures; measured once per cut from the meshes' skin weights, logged as "bulges N cm"), the soaked cloth or skin hanging back over the gap. Where that can't be measured, a clothed limb uses `Gore.ClothLift` (0.25) radii. Without `M_Gore` (BloodArt not run) the caps draw in the blood drops' red.
+- **A severed head is a clean piece** (sneed, 2026-11-23: the head stayed tied to the neck stump by a long stretched
+  pink and white tube; limbs were fine). A MakeHuman person keeps the MetaHuman actor hidden underneath it, and that
+  actor's face kept its own "visible" flag, so cutting the head off counted it as drawn: it went into the head's piece
+  posed where it was left (standing, far from a body lying on the ground), every bone outside the head folded to the
+  real cut, and its neck skin was drawn out between the two. Now only meshes really drawn (their actor too,
+  `SeveredDrawn`) are hidden with the head and copied into it; a mesh whose cut bone stands over 30 cm from the drawn
+  body's is left out of any piece (logged); everything outside the piece folds into the piece's own joint (not the
+  hidden mannequin's, which sits centimetres off a smaller MakeHuman body's); the copy draws the same material sections
+  as the body (one hair style, not all of them; skin cut away under clothes stays away), and a head whose wig was
+  swapped for strands shows its wig. The MakeHuman body always goes into the head's piece (its one mesh holds the head).
+  Strand hair (`UStrandHairSubsystem`) is never shown again on a headless body. Hair cards and hats go with the head only
+  if they were drawn on this body. Smoke `gore` phase `headoff`: the corpse phase's blow (64 on the head) takes the head
+  off, and the head piece's skinned vertices (scalp hair left out) must fit in 45 cm (`ASeveredPieceActor::MeasureSkinLengthCm`).
 - Corpses and the unconscious were already ragdolls (`StartRagdoll`); a cut limb's physics shapes stay on the ragdoll,
   unseen.
 - Smoke test `hurt`, phase `dismember`: a 400 blow to the downed colonist's torso; the sim must take off the head and

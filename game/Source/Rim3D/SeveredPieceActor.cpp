@@ -23,6 +23,7 @@
 #include "MakeHumanAnimInstance.h"
 #include "PawnActor.h"
 #include "SimSubsystem.h"
+#include "StrandHair.h"
 
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
@@ -428,6 +429,22 @@ namespace
 		return FMath::Clamp(OpeningCm / RadiusCm, 1.02f, 1.08f);
 	}
 
+	/** Whether a material slot is scalp hair (it may hang long below the head, so the head's length leaves it out). */
+	bool SeveredIsHairSlot(const FName& Slot)
+	{
+		static const TCHAR* const Keys[] = {TEXT("hair"), TEXT("long0"), TEXT("bob0"), TEXT("short0"), TEXT("ponytail"), TEXT("braid"),
+			TEXT("afro"), TEXT("twintail"), TEXT("messy")};
+		const FString Lower = Slot.ToString().ToLower();
+		for (const TCHAR* Key : Keys)
+		{
+			if (Lower.Contains(Key))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** The component whose pose a mesh shows: itself, or the top of its leader chain. */
 	const USkinnedMeshComponent* SeveredPoseOf(const USkinnedMeshComponent* Mesh)
 	{
@@ -474,6 +491,73 @@ void ASeveredPieceActor::Push(const FVector& DeltaVelocity, const FVector& At)
 	Spin += FRotator(Local.Y, Local.Z, Local.X);
 	bAtRest = false;
 	++Pushes;
+}
+
+float ASeveredPieceActor::MeasureSkinLengthCm(int32& OutVertices) const
+{
+	OutVertices = 0;
+	FBox Box(ForceInit);
+	for (const TObjectPtr<UPoseableMeshComponent>& Held : Meshes)
+	{
+		UPoseableMeshComponent* Mesh = Held.Get();
+		const USkeletalMesh* Asset = Mesh ? Cast<USkeletalMesh>(Mesh->GetSkinnedAsset()) : nullptr;
+		FSkeletalMeshRenderData* Data = Asset ? Asset->GetResourceForRendering() : nullptr;
+		if (!Data || Data->LODRenderData.Num() == 0 || FPlatformProperties::RequiresCookedData())
+		{
+			continue;
+		}
+		FSkeletalMeshLODRenderData& Lod = Data->LODRenderData[0];
+		FPositionVertexBuffer& Positions = Lod.StaticVertexBuffers.PositionVertexBuffer;
+		const FSkinWeightVertexBuffer& Weights = Lod.SkinWeightVertexBuffer;
+		const TArray<FMatrix44f>& InvRef = Asset->GetRefBasesInvMatrix();
+		const TArray<FTransform>& Bones = Mesh->GetComponentSpaceTransforms();
+		if (Positions.GetNumVertices() == 0 || !Positions.GetVertexData() || Weights.GetNumVertices() != Positions.GetNumVertices() ||
+			InvRef.Num() != Bones.Num())
+		{
+			continue;
+		}
+		// Each bone's skinning matrix as the piece is posed now (reference pose to component space).
+		TArray<FMatrix44f> Skin;
+		Skin.SetNum(Bones.Num());
+		for (int32 b = 0; b < Bones.Num(); ++b)
+		{
+			Skin[b] = InvRef[b] * FMatrix44f(Bones[b].ToMatrixWithScale());
+		}
+		const FTransform ToWorld = Mesh->GetComponentTransform();
+		const TArray<FSkeletalMaterial>& Slots = Asset->GetMaterials();
+		const uint32 Influences = Weights.GetMaxBoneInfluences();
+		for (const FSkelMeshRenderSection& Section : Lod.RenderSections)
+		{
+			const int32 Material = Section.MaterialIndex;
+			if (!Mesh->IsMaterialSectionShown(Material, 0) || (Slots.IsValidIndex(Material) && SeveredIsHairSlot(Slots[Material].MaterialSlotName)))
+			{
+				continue;
+			}
+			for (uint32 V = Section.BaseVertexIndex; V < Section.BaseVertexIndex + Section.NumVertices && V < Positions.GetNumVertices(); ++V)
+			{
+				const FVector3f Ref = Positions.VertexPosition(V);
+				FVector3f Sum = FVector3f::ZeroVector;
+				float Total = 0.0f;
+				for (uint32 K = 0; K < Influences; ++K)
+				{
+					const float W = static_cast<float>(Weights.GetBoneWeight(V, K));
+					const uint32 Local = Weights.GetBoneIndex(V, K);
+					if (W <= 0.0f || static_cast<int32>(Local) >= Section.BoneMap.Num() || !Skin.IsValidIndex(Section.BoneMap[Local]))
+					{
+						continue;
+					}
+					Sum += FVector3f(Skin[Section.BoneMap[Local]].TransformPosition(Ref)) * W;
+					Total += W;
+				}
+				if (Total > 0.0f)
+				{
+					Box += ToWorld.TransformPosition(FVector(Sum / Total));
+					++OutVertices;
+				}
+			}
+		}
+	}
+	return OutVertices > 0 ? static_cast<float>(Box.GetSize().GetMax()) : -1.0f;
 }
 
 void ASeveredPieceActor::Tick(float DeltaSeconds)
@@ -604,8 +688,11 @@ void ASimPawnActor::ApplySevered(uint16 Bits)
 					Anim->SetSeveredBones(Gone);
 				}
 			}
-			else if (Bit == colony::kSeveredHead && Mesh->IsVisible())
+			else if (Bit == colony::kSeveredHead && SeveredDrawn(*Mesh))
 			{
+				// Only what is really drawn (SeveredDrawn: the actor too). The MetaHuman under a MakeHuman body is hidden as a
+				// whole actor while its face keeps its own visible flag: that face, posed where the body once stood, went
+				// into the head's piece and was stretched from the stump up to it as a long pink and white tube.
 				SeveredHidden.Add(Mesh);
 				Mesh->SetVisibility(false, true);
 			}
@@ -641,7 +728,7 @@ void ASimPawnActor::ApplySevered(uint16 Bits)
 			}
 			if (Bit == colony::kSeveredHead && Part->IsA<UGroomComponent>())
 			{
-				Part->SetVisibility(false, true);
+				Part->SetVisibility(false, true);  // (and UStrandHairSubsystem gives a headless body no strands again)
 				continue;
 			}
 			const USkinnedMeshComponent* On = Cast<USkinnedMeshComponent>(Part->GetAttachParent());
@@ -653,6 +740,10 @@ void ASimPawnActor::ApplySevered(uint16 Bits)
 			const FName Held = On->GetSocketBoneName(Socket);
 			if (!Held.IsNone() && (Held == Bone || (On->GetBoneIndex(Bone) != INDEX_NONE && On->BoneIsChildOf(Held, Bone))))
 			{
+				if (Part->IsVisible())
+				{
+					SeveredHiddenParts.Add(Part);  // it still goes into the piece
+				}
 				Part->SetVisibility(false, true);
 			}
 		}
@@ -745,6 +836,15 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 	{
 		return nullptr;
 	}
+	Piece->SetBit(Bit);
+	// Where the drawn body has the joint now (the MakeHuman body's own, which a short body has well below the hidden
+	// mannequin's): a mesh whose pose has its cut bone far from here is not posed as the body is drawn, and is left out.
+	FVector Joint = Cut;
+	if (const USkeletalMeshComponent* Drawn = GetDecalMesh(); Drawn && Drawn->GetBoneIndex(Bone) != INDEX_NONE)
+	{
+		Joint = Drawn->GetBoneLocation(Bone, EBoneSpaces::WorldSpace);
+	}
+	const float StaleCm = 30.0f * GetBodyScale();
 	TArray<USkinnedMeshComponent*> Skinned;
 	SeveredSkinned(*this, Skinned);
 	for (USkinnedMeshComponent* Source : Skinned)
@@ -754,15 +854,49 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		{
 			continue;  // (a face hidden because the head is off still goes into the head's piece)
 		}
+		if (const AActor* SourceOwner = Source->GetOwner(); SourceOwner && SourceOwner->IsHidden())
+		{
+			continue;  // a whole hidden actor (the MetaHuman under a MakeHuman body) is never part of what is drawn
+		}
 		const FReferenceSkeleton& Skeleton = Asset->GetRefSkeleton();
 		const int32 CutIndex = Skeleton.FindBoneIndex(Bone);
 		// Nothing of this mesh on the piece (a face has arm bones, but no arm): left out. A head only takes what is
 		// mostly head (the face, a hat): a shirt's collar or the body's neck skin, a little of it hanging on the head
-		// bone, was drawn out into a jagged shard under the head.
+		// bone, was drawn out into a jagged shard under the head. The MakeHuman body is the exception: its one mesh is
+		// the whole person, head and face included, so it always goes (everything below the neck folds into the cut).
 		const float Share = CutIndex == INDEX_NONE ? 0.0f : SeveredSkinnedTo(*Asset, CutIndex);
-		if (Share < 0.01f || (Bit == colony::kSeveredHead && Share < 0.5f))
+		if (Share < 0.01f || (Bit == colony::kSeveredHead && Share < 0.5f && Source != MakeHumanMesh.Get()))
 		{
 			continue;
+		}
+		// The piece's bones stand where the body has them now. Where the cut bone is, in the mesh's own space: as posed on
+		// the body, or straightened onto its parent if the body has folded or flattened it already (a piece made after the
+		// cut was shown).
+		const USkinnedMeshComponent* Pose = SeveredPoseOf(Source);
+		const FTransform ToCopy = Source->GetComponentTransform();
+		FTransform CutNow = FTransform::Identity;
+		bool bCutNow = false;
+		if (const int32 From = Pose->GetBoneIndex(Skeleton.GetBoneName(CutIndex)); From != INDEX_NONE)
+		{
+			FTransform Now = Pose->GetBoneTransform(From);
+			const FName PoseParent = Pose->GetParentBone(Skeleton.GetBoneName(CutIndex));
+			if (Now.GetScale3D().GetAbsMin() < 0.1 && !PoseParent.IsNone() && Pose->GetBoneIndex(PoseParent) != INDEX_NONE)
+			{
+				Now = Skeleton.GetRefBonePose()[CutIndex] * Pose->GetBoneTransform(Pose->GetBoneIndex(PoseParent));
+			}
+			Now.SetScale3D(ToCopy.GetScale3D());
+			CutNow = Now.GetRelativeTransform(ToCopy);
+			CutNow.SetScale3D(FVector::OneVector);
+			bCutNow = true;
+			const double Off = FVector::Dist(ToCopy.TransformPosition(CutNow.GetLocation()), Joint);
+			if (Off > StaleCm)
+			{
+				// Its pose is not the drawn body's (a mesh that stopped animating while hidden): copied, its skin would be
+				// pulled from where its cut bone is to the real cut, a long stretched tube.
+				UE_LOG(LogTemp, Warning, TEXT("Severed piece 0x%x: %s left out, its %s is %.0f cm from the body's"), Bit, *Source->GetName(),
+					*Bone.ToString(), Off);
+				continue;
+			}
 		}
 		UPoseableMeshComponent* Copy = NewObject<UPoseableMeshComponent>(Piece);
 		Copy->SetSkinnedAssetAndUpdate(Asset);
@@ -780,32 +914,47 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		}
 		Copy->SetupAttachment(Piece->GetRootComponent());
 		Copy->RegisterComponent();
-		Copy->SetWorldTransform(Source->GetComponentTransform());
-
-		// The piece's bones stand where the body has them now. The bone above the cut is flattened onto the joint across
-		// the piece's line (GoreCut.h), so the piece ends in a flat face under its cap; every other bone is folded into
-		// the middle of the cut (and the parent too where it can't be flattened cleanly).
-		const USkinnedMeshComponent* Pose = SeveredPoseOf(Source);
-		const FTransform ToCopy = Copy->GetComponentTransform();
-		const FTransform Folded(FQuat::Identity, ToCopy.InverseTransformPosition(Cut), FVector(SeveredFold));
-		const int32 ParentIndex = Skeleton.GetParentIndex(CutIndex);
-		// Where the cut bone is now, in the copy's space: as posed on the body, or straightened onto its parent if the
-		// body has folded or flattened it already (a piece made after the cut was shown).
-		FTransform CutNow = Folded;
-		bool bCutNow = false;
-		if (const int32 From = Pose->GetBoneIndex(Skeleton.GetBoneName(CutIndex)); From != INDEX_NONE)
+		Copy->SetWorldTransform(ToCopy);
+		// The same sections drawn as on the body: one hair style of the several the MakeHuman body carries, no skin cut
+		// away under clothes (a copy shows them all). A head whose wig the strands replaced shows the wig: strands can't
+		// go with the piece.
+		for (int32 Material = 0; Material < Source->GetNumMaterials(); ++Material)
 		{
-			FTransform Now = Pose->GetBoneTransform(From);
-			const FName PoseParent = Pose->GetParentBone(Skeleton.GetBoneName(CutIndex));
-			if (Now.GetScale3D().GetAbsMin() < 0.1 && !PoseParent.IsNone() && Pose->GetBoneIndex(PoseParent) != INDEX_NONE)
+			if (!Source->IsMaterialSectionShown(Material, 0))
 			{
-				Now = Skeleton.GetRefBonePose()[CutIndex] * Pose->GetBoneTransform(Pose->GetBoneIndex(PoseParent));
+				for (int32 Lod = 0; Lod < Copy->GetNumLODs(); ++Lod)
+				{
+					Copy->ShowMaterialSection(Material, 0, false, Lod);
+				}
 			}
-			Now.SetScale3D(Source->GetComponentTransform().GetScale3D());
-			CutNow = Now.GetRelativeTransform(ToCopy);
-			CutNow.SetScale3D(FVector::OneVector);
-			bCutNow = true;
 		}
+		if (Bit == colony::kSeveredHead && Source == MakeHumanMesh.Get())
+		{
+			TArray<int32> Wig;
+			const UStrandHairSubsystem* Strands = GetWorld()->GetSubsystem<UStrandHairSubsystem>();
+			if (Strands && Strands->GetHiddenWig(MakeHumanMesh.Get(), Wig))
+			{
+				for (const int32 Section : Wig)
+				{
+					for (int32 Lod = 0; Lod < Copy->GetNumLODs(); ++Lod)
+					{
+						Copy->ShowMaterialSection(Section, 0, true, Lod);
+					}
+				}
+			}
+		}
+
+		// The bone above the cut is flattened onto the joint across the piece's line (GoreCut.h), so the piece ends in a
+		// flat face under its cap; every other bone is folded into the middle of the cut (and the parent too where it
+		// can't be flattened cleanly). The middle of the cut is the piece's own joint (its cut bone as posed), never a
+		// point of another mesh: the hidden mannequin's joint stands centimetres off a smaller MakeHuman body's, and skin
+		// half on the head and half on the neck was drawn out between the two.
+		const FTransform Folded(FQuat::Identity, bCutNow ? CutNow.GetLocation() : ToCopy.InverseTransformPosition(Cut), FVector(SeveredFold));
+		if (!bCutNow)
+		{
+			CutNow = Folded;
+		}
+		const int32 ParentIndex = Skeleton.GetParentIndex(CutIndex);
 		for (int32 i = 0; i < Skeleton.GetNum(); ++i)
 		{
 			const FName Name = Skeleton.GetBoneName(i);
@@ -860,6 +1009,16 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		}
 		const FName Held = On->GetSocketBoneName(Socket);
 		if (Held.IsNone() || !(Held == Bone || (On->GetBoneIndex(Bone) != INDEX_NONE && On->BoneIsChildOf(Held, Bone))))
+		{
+			continue;
+		}
+		// Only what was drawn on this body: not what sits on the hidden MetaHuman under a MakeHuman body (its face's hair
+		// cards, posed where that face was left), nor anything hidden for its own reasons. The hair cards stand in for
+		// strands even when the strands were showing; never under a helmet.
+		const AActor* OnOwner = On->GetOwner();
+		const bool bCards = Part == HairCards.Get();
+		if ((OnOwner && OnOwner->IsHidden()) || (bCards && bHairHidden) ||
+			(!bCards && !Part->IsVisible() && !SeveredHiddenParts.Contains(Part)))
 		{
 			continue;
 		}
