@@ -2,6 +2,22 @@
 
 Updated 2026-11-23.
 
+Combat feel batch (sneed, 2026-11-23; sim, data and Unreal): **melee** every swing a quarter quicker (`MeleeRules`
+`attackTimeFactor` 0.75, finishers and their clips too), a person's fists four times as fast and a quarter as strong
+(`unarmedTimeFactor`, `unarmedPowerFactor`: RimWorld's damage per second kept); the player's swing from standing is the whole
+body's, so thrusts step in instead of leaning, and setting off mid-swing hands the clip to the upper body (`playerStepIn`,
+`stepInFreesFeet`: set both false to go back). **Roll end** no longer snaps body and hair back (the local body follows
+the sim through the roll). **Gun holds**: new `Shoulder` anchor; rifles (sniper, bolt action) cheek-welded on the
+shoulder, LMG, SMG, minigun and both shotguns stock low on the right shoulder; the rocket launchers' aim camera sits off
+to the side (`aimCamera`). **4K skin** on every MakeHuman pawn (`Pawns.Skin4K`). **Strand hair** collides with the
+breasts (capsules fitted per body, `Pawns.StrandHairBreasts`). **Death screen** (slow motion, black and white, red YOU
+DIED, piano sting; Space loads the newest save after 2 s), F5 quicksave, autosave every 15 min (5 kept), protagonist
+downed by combat or blood loss dies (`docs/design/saves.md`, `protagonist.md`). **Title from orbit** (`TitleStage`, art
+step `title-art`, `Title.Stage 0` for the old glade). **Friendly fire**: a gunman's check treats a friend as a solid body
+(a line between the legs was "clear"), allows for the gun's real stray at that distance, and every shooter, drafted or
+not, holds a shot through a friend (`Fighters.cpp` `friendInLine`). Boxing guard waits on a Mixamo login. Needs the PC
+to compile and run the smokes.
+
 Dismemberment with any weapon, clean severed heads (sneed, 2026-11-23; sim and Unreal, `docs/design/body-health.md`):
 **shooting a corpse's leg or head with a pistol again and again now takes it off** (about 19 autopistol shots for a
 leg, 13 for a head). The piling rule was right, but the player's shot at a dead body dropped the crosshair's spot on
