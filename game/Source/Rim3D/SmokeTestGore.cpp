@@ -6,6 +6,7 @@
 #include "SmokeTest.h"
 
 #include "Components/SkeletalMeshComponent.h"
+#include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Paths.h"
@@ -14,6 +15,7 @@
 #include "BlastFxSubsystem.h"
 #include "CreatorPeople.h"
 #include "FightSubsystem.h"
+#include "GoreGibActor.h"
 #include "BloodSubsystem.h"
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
@@ -56,6 +58,10 @@ namespace
 		FVector HitPelvisBefore = FVector::ZeroVector;
 		double HitPelvisMoved = 0.0;
 		int32 CorpseBlows = 0;
+		int32 GibBlasts = 0;
+		int32 TrunksAtStart = 0;
+		bool bGibbedSeen = false;
+		int32 MostGibsInAir = 0;
 	};
 
 	void GoreSmokeRealBodies(bool bOn)
@@ -102,6 +108,35 @@ void USmokeTestSubsystem::BuildGorePhases()
 			const FVector Eye = Target + Forward * Back + Actor->GetActorRightVector() * (Back * 0.25) + FVector(0.0, 0.0, 10.0);
 			ViewFrom(Eye, (Target - Eye).Rotation());
 		}
+	};
+	// Where the trunk burst: the middle of the gibs once there are some, else the corpse's pelvis (a blast may have
+	// thrown the ragdoll metres from its actor). The camera looks down at it from `Back` cm away, `Up` cm up.
+	const auto AtGibs = [=, this](float Up, float Back)
+	{
+		FVector Sum = FVector::ZeroVector;
+		int32 N = 0;
+		for (TActorIterator<AGoreGibActor> It(GetWorld()); It; ++It)
+		{
+			Sum += It->GetActorLocation();
+			++N;
+		}
+		FVector Target;
+		const ASimPawnActor* Actor = ActorOf();
+		if (N > 0)
+		{
+			Target = Sum / N;
+		}
+		else if (!Actor || !Actor->GetRagdollPelvis(Target))
+		{
+			if (!Actor)
+			{
+				return;
+			}
+			Target = Actor->GetActorLocation();
+		}
+		const FVector Side = Actor ? Actor->GetActorForwardVector() : FVector::ForwardVector;
+		const FVector Eye = Target + Side * Back + FVector(0.0, 0.0, Up);
+		ViewFrom(Eye, (Target - Eye).Rotation());
 	};
 	// A hit drawn at the body (blood only): from in front at `Height` (share of the body's height), along `Way` in the
 	// actor's frame (X forward).
@@ -403,12 +438,14 @@ void USmokeTestSubsystem::BuildGorePhases()
 		};
 		Phase.WarmupSeconds = 0.0f;
 		Phase.MeasureSeconds = 1.5f;
-		Phase.OnFrame = [=]()
+		Phase.OnFrame = [=, this]()
 		{
 			Front(160.0f, 200.0f);
 			if (const ASimPawnActor* Actor = ActorOf(); Actor && Actor->GetAnim())
 			{
-				State->MaxWobble = FMath::Max(State->MaxWobble, Actor->GetAnim()->GetStats().WobbleDegrees);
+				const float Wobble = Actor->GetAnim()->GetStats().WobbleDegrees;
+				State->MaxWobble = FMath::Max(State->MaxWobble, Wobble);
+				UE_LOG(LogTemp, Display, TEXT("GORETRACE head t=%.3f dt=%.4f wobble=%.2f"), PhaseTime, GetWorld()->GetDeltaSeconds(), Wobble);
 			}
 		};
 		Phase.Verify = [=, this]()
@@ -463,12 +500,14 @@ void USmokeTestSubsystem::BuildGorePhases()
 		Phase.WarmupSeconds = 0.0f;
 		Phase.MeasureSeconds = 7.0f;
 		Phase.ScreenshotAt = 6.0f;
-		Phase.OnFrame = [=]()
+		Phase.OnFrame = [=, this]()
 		{
 			Front(30.0f, 260.0f);
 			if (const ASimPawnActor* Actor = ActorOf())
 			{
 				State->bRagdoll |= Actor->IsRagdoll();
+				UE_LOG(LogTemp, Display, TEXT("GORETRACE corpse t=%.2f ragdoll=%d fastest=%.1f asleep=%d sleeps=%d"), PhaseTime, Actor->IsRagdoll() ? 1 : 0,
+					Actor->GetRagdollFastest(), Actor->IsRagdollAsleep() ? 1 : 0, Actor->GetRagdollSleeps());
 			}
 		};
 		Phase.Verify = [=, this]()
@@ -477,6 +516,8 @@ void USmokeTestSubsystem::BuildGorePhases()
 			const int32 Sleeps = Actor ? Actor->GetRagdollSleeps() - State->SleepsAtStart : 0;
 			PhaseNumbers.Add(TEXT("ragdoll"), State->bRagdoll ? 1 : 0);
 			PhaseNumbers.Add(TEXT("sleeps"), Sleeps);
+			PhaseNumbers.Add(TEXT("asleepAtEnd"), Actor && Actor->IsRagdollAsleep() ? 1 : 0);
+			PhaseNumbers.Add(TEXT("fastestAtEndCmS"), Actor ? Actor->GetRagdollFastest() : -1.0f);
 			if (!State->bKilled || !State->bRagdoll)
 			{
 				Fail(TEXT("corpse: the colonist was not killed into a ragdoll"));
@@ -610,8 +651,107 @@ void USmokeTestSubsystem::BuildGorePhases()
 			{
 				Fail(FString::Printf(TEXT("blast: the corpse flew %.0f cm (cartoonish; 6 m at most)"), State->CorpseMoved));
 			}
-			GoreSmokeRealBodies(false);
 		};
+		Phases.Add(MoveTemp(Phase));
+	}
+
+	{
+		// Rockets on what is left (sneed 2026-11-22: "keep overkill damage until it gibs ... until none"): the rest of the
+		// limbs and the head come off, then the bare trunk bursts into chunks of meat, ribs and bone with sprays of blood,
+		// and the body is gone.
+		FPhase Phase;
+		Phase.Name = TEXT("gibs");
+		Phase.Setup = [=, this]()
+		{
+			const UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>();
+			State->TrunksAtStart = Fight ? Fight->GetTrunksBurst() : 0;
+			State->GibBlasts = 0;
+		};
+		Phase.WarmupSeconds = 0.0f;
+		Phase.MeasureSeconds = 4.0f;
+		Phase.ScreenshotAt = 0.35f;  // the chunks in the air
+		Phase.OnFrame = [=, this]()
+		{
+			AtGibs(170.0f, 450.0f);
+			USimSubsystem* B = Bridge();
+			const colony::ThingView* Now = B ? B->GetCurrentSnapshot().find(State->Pawn) : nullptr;
+			const bool bGone = Now && (Now->severed & colony::kSeveredTrunk) != 0;
+			// A blast at the corpse every 0.6 s until the trunk has burst (4 at most).
+			if (B && Now && !bGone && State->GibBlasts < 4 && PhaseTime >= 0.6f * State->GibBlasts)
+			{
+				colony::ExplodeCommand Blast;
+				Blast.x = Now->x + 0.3f;
+				Blast.y = Now->y;
+				Blast.radius = 1.6f;
+				Blast.damage = 120.0f;
+				B->Submit(Blast);
+				++State->GibBlasts;
+			}
+			State->bGibbedSeen |= bGone;
+			int32 InAir = 0;
+			for (TActorIterator<AGoreGibActor> It(GetWorld()); It; ++It)
+			{
+				InAir += It->HasLanded() ? 0 : 1;
+			}
+			State->MostGibsInAir = FMath::Max(State->MostGibsInAir, InAir);
+		};
+		Phase.Verify = [=, this]()
+		{
+			const UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>();
+			const ASimPawnActor* Actor = ActorOf();
+			const int32 Burst = Fight ? Fight->GetTrunksBurst() - State->TrunksAtStart : 0;
+			const int32 Live = AGoreGibActor::CountLive(GetWorld());
+			int32 Resting = 0;
+			FVector Mid = FVector::ZeroVector;
+			for (TActorIterator<AGoreGibActor> It(GetWorld()); It; ++It)
+			{
+				Resting += It->IsAtRest() ? 1 : 0;
+				Mid += It->GetActorLocation();
+			}
+			Mid /= FMath::Max(Live, 1);
+			double Spread = 0.0;
+			for (TActorIterator<AGoreGibActor> It(GetWorld()); It; ++It)
+			{
+				Spread += FVector::Dist2D(It->GetActorLocation(), Mid) / FMath::Max(Live, 1);
+			}
+			PhaseNumbers.Add(TEXT("gibsSpreadCm"), Spread);
+			PhaseNumbers.Add(TEXT("gibBlasts"), State->GibBlasts);
+			PhaseNumbers.Add(TEXT("trunksBurst"), Burst);
+			PhaseNumbers.Add(TEXT("gibsLying"), Live);
+			PhaseNumbers.Add(TEXT("gibsAtRest"), Resting);
+			PhaseNumbers.Add(TEXT("gibsMostInAir"), State->MostGibsInAir);
+			PhaseNumbers.Add(TEXT("bodyHidden"), Actor && Actor->IsGibbed() ? 1 : 0);
+			if (!State->bGibbedSeen || Burst < 1)
+			{
+				Fail(FString::Printf(TEXT("gibs: %d blasts on the corpse and its trunk never burst (sim %d, drawn %d)"), State->GibBlasts,
+					State->bGibbedSeen ? 1 : 0, Burst));
+			}
+			else if (Live < 10)
+			{
+				Fail(FString::Printf(TEXT("gibs: only %d chunks lie about after the burst (10 at least)"), Live));
+			}
+			else if (!Actor || !Actor->IsGibbed() || !Actor->IsHidden())
+			{
+				Fail(TEXT("gibs: the body still shows after its trunk burst"));
+			}
+			else if (Resting < Live / 2)
+			{
+				Fail(FString::Printf(TEXT("gibs: %d of %d chunks came to rest on the ground in 4 s"), Resting, Live));
+			}
+		};
+		Phases.Add(MoveTemp(Phase));
+	}
+
+	{
+		// Close on the chunks lying where they came down, with the blood round them.
+		FPhase Phase;
+		Phase.Name = TEXT("gibsclose");
+		Phase.Setup = []() {};
+		Phase.WarmupSeconds = 0.5f;
+		Phase.MeasureSeconds = 1.0f;
+		Phase.ScreenshotAt = 0.3f;
+		Phase.OnFrame = [=]() { AtGibs(150.0f, 190.0f); };
+		Phase.Verify = [=, this]() { GoreSmokeRealBodies(false); };
 		Phases.Add(MoveTemp(Phase));
 	}
 }

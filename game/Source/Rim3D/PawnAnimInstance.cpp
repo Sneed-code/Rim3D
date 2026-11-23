@@ -1637,11 +1637,16 @@ void FSimPawnHitLayerNode::Update_AnyThread(const FAnimationUpdateContext& Conte
 			Spring = FSpring();
 			continue;
 		}
+		// The biggest swing within the frame's steps, not only where the frame ends: a slower frame must not miss the
+		// peak (the gore smoke's head snap read 6 degrees at 70 fps and 16 at 88).
+		double Peak = 0.0;
 		for (int32 i = 0; i < Steps; ++i)
 		{
 			Spring.Rate += (Spring.Angle * (-PawnKickFrequency * PawnKickFrequency) - Spring.Rate * (2.0f * PawnKickDamping * PawnKickFrequency)) * Step;
 			Spring.Angle += Spring.Rate * Step;
+			Peak = FMath::Max(Peak, FMath::Min(Spring.Angle.Size(), static_cast<double>(PawnKickMaxAngle)));
 		}
+		Most = FMath::Max(Most, static_cast<float>(Peak));
 		const double Size = Spring.Angle.Size();
 		if (Size > PawnKickMaxAngle)
 		{
