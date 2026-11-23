@@ -150,7 +150,7 @@ namespace
 		const uint32 Influences = Weights.GetMaxBoneInfluences();
 		for (const FSkelMeshRenderSection& Section : Lod.RenderSections)
 		{
-			if (!bAllSections && !Mesh.IsMaterialSectionShown(Section.MaterialIndex, 0))
+			if (!bAllSections && !const_cast<USkinnedMeshComponent&>(Mesh).IsMaterialSectionShown(Section.MaterialIndex, 0))
 			{
 				continue;
 			}
