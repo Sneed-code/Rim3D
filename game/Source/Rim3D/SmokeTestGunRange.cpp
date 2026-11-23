@@ -516,13 +516,13 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 			}
 		}
 
-		// Take control once the body is drawn, in first person, facing the field.
+		// Take control once the body is drawn (third person), facing the field.
 		if (!State->bControlled && PhaseTime > 1.0f)
 		{
 			if (P->EnterDirectMode(State->Player))
 			{
 				State->bControlled = true;
-				P->GetBody()->SetFirstPerson(true);
+				P->GetBody()->SetFirstPerson(false);  // third person only
 				P->GetBody()->Look(FRotator::NormalizeAxis(-P->GetBody()->GetYaw()), -2.0f - P->GetBody()->GetPitch());
 				P->GetBody()->SnapCamera();
 			}
@@ -1064,12 +1064,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					Next(5);
 				}
 				break;
-			case 5:  // third person (the V key): the body holding the gun, then aimed over the shoulder
-				if (Body->IsFirstPerson())
-				{
-					Body->ToggleView();
-					Body->SnapCamera();
-				}
+			case 5:  // third person: the body holding the gun, then aimed over the shoulder
 				AimAtNearest();
 				if (State->StepTime > 2.0f && !State->bFiringPicture)
 				{
@@ -1110,30 +1105,24 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 					Next(G->GetMelee().Num() > 0 ? 7 : 10);
 				}
 				break;
-			case 7:  // the combat range: back to first person with a gun, then a melee weapon from the rack
+			case 7:  // the combat range: a gun, then a melee weapon from the rack
 				G->SelectGun(0);
-				if (!Body->IsFirstPerson())
-				{
-					Body->ToggleView();
-					Body->SnapCamera();
-				}
 				if (State->StepTime > 1.0f)
 				{
 					Next(9);
 				}
 				break;
-			case 9:  // a melee weapon from the rack: first person stays on, the arms hold it and swing it
+			case 9:  // a melee weapon from the rack, held and swung (third person only)
 				G->SelectGun(GunCount + FMath::Min(4, G->GetMelee().Num() - 1));
-				if (!Body->IsFirstPerson())
-				{
-					Body->ToggleView();
-					Body->SnapCamera();
-				}
 				AimAtNearest();
 				if (State->StepTime > 1.5f && !State->bFiringPicture)
 				{
-					Notes.Add(FString::Printf(TEXT("gunrange: melee rack %d in hand, view %s, arms %s"), G->GetHeldRackIndex(),
-						Body->IsFirstPerson() ? TEXT("first person") : TEXT("third person (should stay first)"), G->IsHeldViewShown() ? TEXT("shown") : TEXT("NOT shown")));
+					Notes.Add(FString::Printf(TEXT("gunrange: melee rack %d in hand, view %s"), G->GetHeldRackIndex(),
+						Body->IsFirstPerson() ? TEXT("FIRST PERSON (should be third)") : TEXT("third person")));
+					if (Body->IsFirstPerson() || G->IsViewShown())
+					{
+						Fail(TEXT("gunrange: first-person view or arms shown; the game is third person only"));
+					}
 					Picture(TEXT("melee_held"));
 					State->bFiringPicture = true;
 					if (UWeaponDrawSubsystem* W = GetWorld()->GetSubsystem<UWeaponDrawSubsystem>())
@@ -1148,44 +1137,38 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				}
 				if (State->StepTime > 3.5f)
 				{
-					Notes.Add(FString::Printf(TEXT("gunrange: first-person swings seen %d"), G->GetHeldSwingsSeen()));
+					Notes.Add(TEXT("gunrange: melee swing done"));
 					State->MeleeTour = 0;
 					State->bSwingPicture = false;
 					Next(15);
 				}
 				break;
-			case 15:  // each melee weapon in the hand: a first-person and a third-person picture (is it in the palm, pointing right?)
+			case 15:  // each melee weapon in the hand: from behind and close from the side (is it in the palm, pointing right?)
 			{
 				const TArray<FGunRangeMelee>& Rack = G->GetMelee();
 				if (State->StepTime < Dt * 1.5f)
 				{
 					G->SelectGun(GunCount + State->MeleeTour);
-					if (!Body->IsFirstPerson())
-					{
-						Body->ToggleView();
-						Body->SnapCamera();
-					}
 				}
 				AimAtNearest();
-				if (State->StepTime > 2.2f && !State->bFiringPicture)  // after the view change back has settled (no blur)
+				if (State->StepTime > 2.2f && !State->bFiringPicture)
 				{
 					State->bFiringPicture = true;
-					Picture(*FString::Printf(TEXT("melee_%s_fp"), *Rack[State->MeleeTour].Label));
-					Body->ToggleView();
-					Body->SnapCamera();
+					Picture(*FString::Printf(TEXT("melee_%s_3p"), *Rack[State->MeleeTour].Label));
+				}
+				if (const ASimPawnActor* Me = PlayerActor(); Me && State->StepTime > 2.4f && State->StepTime < 4.0f)
+				{
+					const FVector Chest = Me->GetActorLocation() + Me->GetActorUpVector() * (120.0 * Me->GetBodyScale());
+					ShotLook(Chest + Me->GetActorRightVector() * 160.0 + Me->GetActorForwardVector() * 40.0, Chest + Me->GetActorForwardVector() * 20.0);
 				}
 				if (State->StepTime > 3.8f && !State->bSwingPicture)
 				{
 					State->bSwingPicture = true;
-					Picture(*FString::Printf(TEXT("melee_%s_3p"), *Rack[State->MeleeTour].Label));
+					Picture(*FString::Printf(TEXT("melee_%s_3p_side"), *Rack[State->MeleeTour].Label));
 				}
 				if (State->StepTime > 4.0f)
 				{
-					if (!Body->IsFirstPerson())
-					{
-						Body->ToggleView();
-						Body->SnapCamera();
-					}
+					ShotDone();
 					State->bSwingPicture = false;
 					if (++State->MeleeTour < Rack.Num())
 					{
@@ -1199,62 +1182,71 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 				}
 				break;
 			}
-			case 16:  // each gun held: first person from the hip and aimed, third person ready and aimed (hands on the grips?)
+			case 16:  // each gun held in third person: ready, aimed (a scoped gun: its scope), then close from the side and the front
 			{
 				if (State->StepTime < Dt * 1.5f)
 				{
 					G->SelectGun(State->GunTour);
-					if (!Body->IsFirstPerson())
-					{
-						Body->ToggleView();
-						Body->SnapCamera();
-					}
 				}
 				AimAtNearest();
-				const FString Name = G->GetGuns().IsValidIndex(State->GunTour) ? G->GetGuns()[State->GunTour].Label.Replace(TEXT(" "), TEXT("")) : TEXT("gun");
+				const FGunRangeGun* TourGun = G->GetGuns().IsValidIndex(State->GunTour) ? &G->GetGuns()[State->GunTour] : nullptr;
+				const FString Name = TourGun ? TourGun->Label.Replace(TEXT(" "), TEXT("")) : TEXT("gun");
+				const bool bScopedGun = TourGun && TourGun->ScopeFov > 0.0f && G->HasModel(State->GunTour);
 				const float T = State->StepTime;
 				const auto At = [T, Dt](float When) { return T >= When && T - Dt < When; };
-				Body->SetScriptedAim((T > 2.2f && T < 3.4f) || T > 6.0f);
+				Body->SetScriptedAim(T > 2.2f);
+				// The close-ups need the body seen: no scope view while the outside camera looks at it.
+				Body->SetScopeAllowed(T < 3.5f);
 				if (At(2.0f))
-				{
-					Picture(*FString::Printf(TEXT("hold_%s_fp_hip"), *Name));
-				}
-				if (At(3.2f))
-				{
-					Picture(*FString::Printf(TEXT("hold_%s_fp_aimed"), *Name));
-				}
-				if (At(3.6f))
-				{
-					Body->ToggleView();
-					Body->SnapCamera();
-				}
-				if (At(5.6f))
 				{
 					Picture(*FString::Printf(TEXT("hold_%s_3p_ready"), *Name));
 				}
-				if (At(7.4f))
+				if (At(3.4f))
 				{
 					Picture(*FString::Printf(TEXT("hold_%s_3p_aimed"), *Name));
+					Notes.Add(FString::Printf(TEXT("gunrange: %s aimed: scope view %d, scope drawn %d, body hidden %d, camera %.0f cm back"), *Name,
+						Body->IsScopeView(), G->IsScoped(), Body->IsBodyHiddenInView(), Body->GetEffectiveArmLength()));
+					if (bScopedGun && (!Body->IsScopeView() || !G->IsScoped()))
+					{
+						Fail(FString::Printf(TEXT("gunrange: %s has a scope but aiming did not show it"), *Name));
+					}
+					if (!bScopedGun && (Body->IsScopeView() || Body->IsBodyHiddenInView()))
+					{
+						Fail(FString::Printf(TEXT("gunrange: %s has no scope but aiming went to the eyes"), *Name));
+					}
+					if (G->IsViewShown())
+					{
+						Fail(FString::Printf(TEXT("gunrange: %s drew first-person arms; the game is third person only"), *Name));
+					}
 				}
-				if (const ASimPawnActor* Me = PlayerActor(); Me && T > 7.5f && T < 7.8f)
+				if (const ASimPawnActor* Me = PlayerActor(); Me && T > 3.5f)
 				{
-					// From the side, close: is the stock clear of the head, the cheek on it?
+					// From the side, close: is the stock clear of the head, the cheek on it? Then from the front left: the
+					// barrel ahead of the face, both hands on the gun.
 					const FVector Head = Me->GetActorLocation() + Me->GetActorUpVector() * (155.0 * Me->GetBodyScale());
-					ShotLook(Head + Me->GetActorRightVector() * 130.0 + Me->GetActorForwardVector() * 20.0, Head + Me->GetActorForwardVector() * 20.0);
+					if (T < 4.1f)
+					{
+						ShotLook(Head + Me->GetActorRightVector() * 130.0 + Me->GetActorForwardVector() * 20.0, Head + Me->GetActorForwardVector() * 20.0);
+					}
+					else
+					{
+						ShotLook(Head + Me->GetActorForwardVector() * 150.0 - Me->GetActorRightVector() * 70.0 + Me->GetActorUpVector() * 10.0,
+							Head + Me->GetActorForwardVector() * 15.0 - Me->GetActorUpVector() * 10.0);
+					}
 				}
-				if (At(7.7f))
+				if (At(4.0f))
 				{
 					Picture(*FString::Printf(TEXT("hold_%s_3p_side"), *Name));
 				}
-				if (T > 7.9f)
+				if (At(4.6f))
+				{
+					Picture(*FString::Printf(TEXT("hold_%s_3p_front"), *Name));
+				}
+				if (T > 4.8f)
 				{
 					ShotDone();
 					Body->SetScriptedAim(false);
-					if (!Body->IsFirstPerson())
-					{
-						Body->ToggleView();
-						Body->SnapCamera();
-					}
+					Body->SetScopeAllowed(true);
 					if (++State->GunTour < G->GetGuns().Num())
 					{
 						Next(16);
@@ -1465,7 +1457,7 @@ void USmokeTestSubsystem::BuildGunRangePhases()
 		}
 		if (const UWeaponDrawSubsystem* Draw = GetWorld()->GetSubsystem<UWeaponDrawSubsystem>())
 		{
-			Notes.Add(FString::Printf(TEXT("gunrange: a long gun slid forward at most %.0f cm to keep its stock out of the head"), Draw->GetStockSlideCm()));
+			Notes.Add(FString::Printf(TEXT("gunrange: a long gun slid forward at most %.0f cm to keep its stock out of the head and in the shoulder"), Draw->GetStockSlideCm()));
 		}
 	};
 	Phases.Add(MoveTemp(Play));

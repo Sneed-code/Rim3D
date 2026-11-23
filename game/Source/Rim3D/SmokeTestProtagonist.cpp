@@ -268,7 +268,7 @@ void USmokeTestSubsystem::BuildProtagonistPhases()
 			Fail(TEXT("Tab did not take control of the selected protagonist"));
 			return;
 		}
-		P->GetBody()->SetFirstPerson(true);
+		P->GetBody()->SetFirstPerson(true);  // ignored: third person only
 	}, 2.0f, 1.0f, [=, this]()
 	{
 		USimSubsystem* B = Bridge();
@@ -303,10 +303,13 @@ void USmokeTestSubsystem::BuildProtagonistPhases()
 				Fail(TEXT("No other colonist to aim at"));
 				return;
 			}
-			// First person: the camera is at the head, so aiming is one turn.
-			const FRotator Look = (Box.GetCenter() - Body->GetViewLocation()).Rotation();
-			Body->Look(FRotator::NormalizeAxis(Look.Yaw - Body->GetYaw()), Look.Pitch - Body->GetPitch());
-			Body->SnapCamera();
+			// Third person: the camera swings round the body as it turns, so a few turns close in on the colonist.
+			for (int32 Turn = 0; Turn < 6; ++Turn)
+			{
+				const FRotator Look = (Box.GetCenter() - Body->GetViewLocation()).Rotation();
+				Body->Look(FRotator::NormalizeAxis(Look.Yaw - Body->GetYaw()), Look.Pitch - Body->GetPitch());
+				Body->SnapCamera();
+			}
 			if (P->GetLookedAtColonist() != State->Other)
 			{
 				Fail(TEXT("Aimed at a colonist but the crosshair does not find it"));
@@ -507,8 +510,8 @@ void USmokeTestSubsystem::BuildProtagonistPhases()
 		Notes.Add(FString::Printf(TEXT("stopped at x %.2f by a wall at %d, then slid %.1f m along it"), End.X, State->WallX, FMath::Abs(End.Y - State->SlideStart.Y)));
 	});
 
-	// 5. First person: the camera is at the head and the body is hidden; third person shows it again.
-	AddPhase(TEXT("direct_first_person"), [=, this]()
+	// 5. Third person only (sneed 2026-11-22): asking for first person leaves the camera behind the body, which stays drawn.
+	AddPhase(TEXT("direct_third_person_only"), [=, this]()
 	{
 		UProtagonistSubsystem* P = Prot();
 		if (!P->IsDirectMode())
@@ -517,7 +520,7 @@ void USmokeTestSubsystem::BuildProtagonistPhases()
 			return;
 		}
 		P->GetBody()->ClearScriptedInput();
-		P->GetBody()->SetFirstPerson(true);
+		P->GetBody()->SetFirstPerson(true);  // ignored: third person only
 		P->GetBody()->Look(120.0f, 5.0f);  // turn away from the wall
 		State->ResetCounters();
 	}, 1.0f, 1.5f, nullptr, [=, this]()
@@ -533,13 +536,13 @@ void USmokeTestSubsystem::BuildProtagonistPhases()
 		const ASimPawnActor* Actor = Pawns->FindPawn(State->Protagonist);
 		const FVector Camera = P->GetBody()->GetViewLocation();
 		const FVector Feet = Actor->GetActorLocation();
-		if (FVector::Dist2D(Camera, Feet) > 30.0 || Camera.Z - Feet.Z < 155.0 || Camera.Z - Feet.Z > 175.0)
+		if (P->GetBody()->IsFirstPerson() || FVector::Dist2D(Camera, Feet) < 100.0)
 		{
-			Fail(FString::Printf(TEXT("The first person camera is %.0f cm sideways and %.0f cm up from the feet"), FVector::Dist2D(Camera, Feet), Camera.Z - Feet.Z));
+			Fail(FString::Printf(TEXT("First person came on: the camera is %.0f cm sideways from the feet (third person only)"), FVector::Dist2D(Camera, Feet)));
 		}
-		if (!Actor->IsBodyHidden())
+		if (Actor->IsBodyHidden())
 		{
-			Fail(TEXT("The player's own body is visible in first person"));
+			Fail(TEXT("The player's own body is hidden (third person only)"));
 		}
 		// Back to third person; the next phase checks that the body shows again.
 		P->GetBody()->SetFirstPerson(false);
@@ -583,7 +586,7 @@ void USmokeTestSubsystem::BuildProtagonistPhases()
 		{
 			Fail(FString::Printf(TEXT("Pressing 3 in direct mode gave speed %d, not 1"), B->GetSpeed()));
 		}
-		// The first person view ended in the last phase: the player's own body shows again.
+		// Still third person: the player's own body shows.
 		const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>();
 		if (const ASimPawnActor* Actor = Pawns ? Pawns->FindPawn(State->Protagonist) : nullptr; !Actor || Actor->IsBodyHidden())
 		{

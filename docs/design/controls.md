@@ -14,7 +14,7 @@ cancels; "Reset all keys to default" puts them back). Code reads keys only throu
 | Left Ctrl (hold) | walk slowly |
 | Left Shift | **sprint on / off**. It stays on until pressed again, also when you take over another colonist |
 | Space | jump |
-| T | **roll** in third person, **dash** in first person (the same move in the sim; the first person view stays level, blurs and widens). Left Alt does nothing now |
+| T | **roll** (third person only since 2026-11-22, `docs/decisions/0012-third-person-only.md`). Left Alt does nothing now |
 | F (hold) | **interact**: pick up, mine, chop, harvest, build, sleep in a bed, and take a weapon lying in reach into your hands |
 | X | put down what you hold |
 | E | take the nearest weapon (within 8 m) |
@@ -30,7 +30,6 @@ cancels; "Reset all keys to default" puts them back). Code reads keys only throu
 | N | sleep here at night |
 | I | inventory |
 | B | build mode |
-| V | first / third person |
 | O | overseer view and back (in the overseer view it takes control of the selected colonist). Was Tab, which is now focus |
 | Y | take over the colonist you look at. Was T, which is now roll / dash |
 | H | patch a bleeding wound (body health) |

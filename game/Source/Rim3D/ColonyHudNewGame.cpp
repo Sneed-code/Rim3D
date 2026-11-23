@@ -1205,7 +1205,7 @@ void UColonyHudSubsystem::DrawDebugPage(float Scale)
 	ImGui::PushTextWrapPos(0.0f);
 	ColonyHud::Text(Picked.Tip);
 	ImGui::Spacing();
-	ColonyHud::TextColored(NgStyle::Dim, TEXT("The game restarts into the scene, which takes as long as starting the game. F10 in the scene, or the scene ending, restarts it back to this title screen."));
+	ColonyHud::TextColored(NgStyle::Dim, TEXT("The scene loads inside this game. F10 in the scene, or the scene ending, comes back to this title screen."));
 	ImGui::PopTextWrapPos();
 	ImGui::EndChild();
 	NgRule();
@@ -1217,7 +1217,7 @@ void UColonyHudSubsystem::DrawDebugPage(float Scale)
 	ImGui::SameLine(FooterRight - 260.0f * Scale);
 	if (NgButton(TEXT("Start scene"), false, ImVec2(260.0f * Scale, 0.0f), true))
 	{
-		DebugScenes::Launch(Picked);
+		DebugScenes::Launch(GetWorld(), Picked);
 	}
 	NgEndPanel();
 }

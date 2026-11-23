@@ -35,7 +35,7 @@ enum class ERim3DAction : uint8
 	SleepHere,
 	Inventory,
 	BuildMode,
-	ToggleView,      // first or third person
+	ToggleView,      // unused: the game is third person only (kept so saved key numbers don't shift)
 	SwitchMode,      // overseer view and back
 	TakeOver,        // take control of the colonist you look at
 	FocusNextTarget, // lock-on focus: the next nearest enemy

@@ -242,7 +242,7 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 		Bridge()->SetSpeed(1);
 		Bridge()->Submit(colony::SpawnThingCommand{"Steel", HandsSteelCell, 10, colony::Rot4::North});
 		Bridge()->Submit(colony::PlaceBlueprintCommand{"Wall", "Steel", HandsPlanCell, colony::Rot4::North});
-		Prot()->GetBody()->SetFirstPerson(true);
+		Prot()->GetBody()->SetFirstPerson(false);  // third person only
 		Hands()->SetScripted(true);
 		Aim(0.0f, 0.0f);
 		State->bHeld = false;

@@ -1,4 +1,8 @@
-# Gun range (first person)
+# Gun range
+
+**Third person only since 2026-11-22** (`docs/decisions/0012-third-person-only.md`): the first-person arms below are no
+longer drawn; the range is played over the shoulder, the bolt-action rifle's scope is the one view from the eyes, and the
+range opens inside the running game (Debug > Gun range, `docs/design/new-game.md`). The first-person notes below are history.
 
 A scene to play, asked for by sneed (2026-11-16): first person with real gun models, unlimited ammunition (no reloads since 2026-11-17: guns fire bursts and cool
 down, aiming.md), and random creator women to shoot at who stand, walk, flinch, fall down and die. `tools\play-gunrange.bat`

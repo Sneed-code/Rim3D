@@ -1404,7 +1404,7 @@ void USmokeTestSubsystem::WriteResultsAndQuit()
 	UE_LOG(LogSmoke, Display, TEXT("Smoke test %s: %s, results written to %s"), *TestName, Errors.IsEmpty() ? TEXT("pass") : TEXT("FAIL"), *Path);
 
 	// Started from the title screen's Debug page: back to the title instead of closing the game.
-	if (DebugScenes::IsDebugScene() && DebugScenes::ReturnToTitle())
+	if (DebugScenes::IsDebugScene() && DebugScenes::ReturnToTitle(GetWorld()))
 	{
 		return;
 	}

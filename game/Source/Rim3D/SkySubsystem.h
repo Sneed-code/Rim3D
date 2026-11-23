@@ -8,6 +8,7 @@
 #include "SkySubsystem.generated.h"
 
 class AActor;
+class FSkyExposureWatch;
 class UDirectionalLightComponent;
 class UExponentialHeightFogComponent;
 class UInstancedStaticMeshComponent;
@@ -278,6 +279,10 @@ public:
 	float GetHourOverride() const { return HourOverride; }
 	/** Times the camera's exposure was made to jump to its target (a time jump, a new game). */
 	int32 GetExposureCuts() const { return ExposureCuts; }
+	/** The exposure (EV100) the renderer really used for the player's view, -99 before it has one. */
+	float GetMeasuredExposure() const { return MeasuredExposureEV; }
+	/** How many times a stuck exposure had its view history reset (WatchExposure). */
+	int32 GetExposureHeals() const { return ExposureHeals; }
 
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
@@ -300,6 +305,7 @@ private:
 	};
 
 	void BuildScene();
+	void WatchExposure(float RealDelta);
 	void DestroyScene();
 	void HideLevelParts();
 	void ShowLevelParts();
@@ -360,6 +366,10 @@ private:
 	bool bLookLoaded = false;
 	int32 AppliedQuality = -1;
 	int32 ExposureCuts = 0;
+	TSharedPtr<FSkyExposureWatch, ESPMode::ThreadSafe> ExposureWatch;
+	float MeasuredExposureEV = -99.0f;
+	float ExposureStuckSeconds = 0.0f;
+	int32 ExposureHeals = 0;
 	float HourOverride = -1.0f;
 	float LastExposureEV = -100.0f;
 	/** 0 with the camera outdoors, 1 under a roof; eased so stepping through a door is not a jump. */

@@ -764,6 +764,8 @@ void UGunRangeSubsystem::Tick(float DeltaTime)
 		{
 			HideAll();
 		}
+		ScopeFovNow = 0.0f;
+		bScoped = false;
 		return;
 	}
 	USimSubsystem* Bridge = BridgeSource.Get();
@@ -796,9 +798,23 @@ void UGunRangeSubsystem::Tick(float DeltaTime)
 			HeldRack = i;
 		}
 	}
+	// Third person only (sneed 2026-11-22): a gun with a scope (guns.json "scope", the bolt-action rifle) held and aimed
+	// shows the scope's view and nothing else; AProtagonistPawn reads the field of view and puts the camera at the eyes.
+	const FGunRangeGun* HeldGun = Def.IsEmpty() ? nullptr : FindGunByDef(Def);
+	ScopeFovNow = Body && Player && Me && !Me->downed && !Me->dead && !Me->reloading && HeldGun ? HeldGun->ScopeFov : 0.0f;
 	if (!Body || !Player || !Me || Me->downed || Me->dead || !Body->IsFirstPerson() || !EnsureRig(*Player))
 	{
 		HideAll();
+		bScoped = ScopeFovNow > 0.0f && Body && Body->IsScopeView();
+		if (bScoped && !bEnabled)
+		{
+			// The range's panel draws the scope when the range is on; in the colony it is drawn on its own.
+			const ImGui::FScopedContext ScopedContext;
+			if (ScopedContext)
+			{
+				DrawScope();
+			}
+		}
 		return;
 	}
 	// A gun with a model here is drawn as the range draws it; anything else by its hold style.
@@ -1597,7 +1613,7 @@ void UGunRangeSubsystem::DrawPanel()
 		}
 		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("1-%s or wheel: weapon   K: new targets   U: guards   F2 pause"), *KeyName(FMath::Max(0, Guns.Num() + Melee.Num() - 1)))));
 		ImGui::TextUnformatted("G: grenade (hold to aim, at the locked-on enemy in third person)   R: frag / molotov");
-		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("V: first/third person   [ ] mouse speed %.2f"), AProtagonistPawn::GetMouseTurn())));
+		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("Third person   [ ] mouse speed %.2f"), AProtagonistPawn::GetMouseTurn())));
 		if (!SceneLine.IsEmpty())
 		{
 			ImGui::TextUnformatted(TCHAR_TO_UTF8(*SceneLine));

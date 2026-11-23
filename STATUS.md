@@ -12,6 +12,18 @@ them (`assets/power_art.json`). A def's new `visual.rotor` turns the blades ever
 still with none (`UBuildingSubsystem::AnimateRotors`). Art steps `power-models` and `power-art` run them in
 `update-and-play.bat`. Smoke test `power` (pictures; fails if the turbine makes power and the blades do not turn).
 
+Third person only (sneed, 2026-11-22: "lets forget first person view now ... its a 3rd person game"; Unreal,
+`docs/decisions/0012-third-person-only.md`): the first-person view is gone (no V key, no first-person aim). Right mouse
+with a gun keeps the third-person zoom and steady aim; only a scoped gun (bolt action) goes to a scope picture at full
+aim, body hidden, never first-person arms. **Gun holds**: rifles and the shotgun slide back to the right shoulder when
+aimed (stock no longer in the cheek or through the head), the left hand keeps its grip (grips moved nearer in
+`assets/guns.json`), the grenade launcher is raised and aimed. **Debug scenes load inside the running game**: Debug >
+Gun range opens the range in the same window (no close and relaunch) and F10 goes back to the title, with every setting
+the scene changed put back (`DebugScenes::Launch`). Smoke `-DebugSceneHop` checks title > range > title in one process.
+A scene loaded inside the game once came out almost white (the camera's auto exposure stuck); the sky now reads back the
+camera's real exposure and resets the view history if it stays more than 6 EV off (`USkySubsystem::WatchExposure`);
+five later in-game loads on the PC were all lit normally. **Next:** rocket launcher aimed view covers the screen centre.
+
 The 18 missing animals and the giant insects (sneed, 2026-11-22; data and Unreal, `assets/animal_art.json`): 18 animal
 defs and the 3 chitinids had no model and were drawn as the husky. Each now has a free, rigged, animated model, 13 new
 Sketchfab imports (`assets/manifest.json`, batch 2), mostly WildMesh 3D's realistic ones: grizzly and polar bear (bear,

@@ -87,7 +87,8 @@ namespace
 float UShooterFeelSubsystem::GetShakeScale() { return FMath::Clamp(GFeelShake.GetValueOnGameThread(), 0.0f, 3.0f); }
 float UShooterFeelSubsystem::GetBlurScale() { return FMath::Clamp(GFeelBlur.GetValueOnGameThread(), 0.0f, 2.0f); }
 float UShooterFeelSubsystem::GetKickScale() { return FMath::Clamp(GFeelKick.GetValueOnGameThread(), 0.0f, 3.0f); }
-bool UShooterFeelSubsystem::IsAimFirstPerson() { return GFeelAimView.GetValueOnGameThread() != 0; }
+// Third person only (sneed 2026-11-22): aiming never goes to first person, whatever an old Feel.AimView setting says.
+bool UShooterFeelSubsystem::IsAimFirstPerson() { return false; }
 float UShooterFeelSubsystem::GetAimFov() { return FMath::Clamp(GFeelAimFov.GetValueOnGameThread(), 30.0f, 90.0f); }
 
 bool UShooterFeelSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
@@ -962,7 +963,6 @@ void UShooterFeelSubsystem::DrawSettingsBody(float Scale)
 	float Blur = GetBlurScale();
 	float Kick = GetKickScale();
 	float Fov = GetAimFov();
-	bool bFirst = IsAimFirstPerson();
 	if (ImGui::SliderFloat("Camera shake", &Shake, 0.0f, 2.0f, "%.2f"))
 	{
 		GFeelShake.AsVariable()->Set(Shake, ECVF_SetByCode);
@@ -983,13 +983,8 @@ void UShooterFeelSubsystem::DrawSettingsBody(float Scale)
 		GFeelAimFov.AsVariable()->Set(Fov, ECVF_SetByCode);
 		bChanged = true;
 	}
-	if (ImGui::Checkbox("Hold aim goes to first person", &bFirst))
-	{
-		GFeelAimView.AsVariable()->Set(bFirst ? 1 : 0, ECVF_SetByCode);
-		bChanged = true;
-	}
 	ImGui::TextUnformatted("0 turns shake, blur or kick off. Hold the right mouse");
-	ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("button with a gun to aim; %s rolls (dashes in first person); %s throws a grenade."),
+	ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("button with a gun to aim (a scoped rifle looks through its scope); %s rolls; %s throws a grenade."),
 		*Rim3DKeys::GetKeyLabel(ERim3DAction::RollDash), *Rim3DKeys::GetKeyLabel(ERim3DAction::Grenade))));
 	ImGui::PopItemWidth();
 	if (bChanged)

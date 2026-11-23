@@ -228,7 +228,7 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	Phases.Add(MoveTemp(Aim));
 
 	FPhase AimFirst;
-	AimFirst.Name = TEXT("feel_aim_first_person");
+	AimFirst.Name = TEXT("feel_aim_no_first_person");
 	AimFirst.WarmupSeconds = 1.5f;
 	AimFirst.MeasureSeconds = 1.5f;
 	AimFirst.Setup = [=, this]()
@@ -240,15 +240,16 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	AimFirst.Verify = [=, this]()
 	{
 		AProtagonistPawn* Body = Prot()->GetBody();
-		if (!Body->IsBodyHiddenInView() || Body->GetEffectiveArmLength() > 5.0f)
+		// Third person only (sneed 2026-11-22): an old "aim in first person" setting is ignored.
+		if (Body->IsBodyHiddenInView() || Body->GetEffectiveArmLength() < 60.0f)
 		{
-			Fail(FString::Printf(TEXT("feel_aim_first_person: body hidden %d and the camera %.0f cm back (first person: hidden, at the eyes)"), Body->IsBodyHiddenInView(), Body->GetEffectiveArmLength()));
+			Fail(FString::Printf(TEXT("feel_aim_no_first_person: body hidden %d and the camera %.0f cm back (should stay over the shoulder)"), Body->IsBodyHiddenInView(), Body->GetEffectiveArmLength()));
 		}
 		const USimPawnSubsystem* P = Pawns();
 		const ASimPawnActor* Actor = P ? P->FindPawn(State->Me) : nullptr;
-		if (!Actor || !Actor->IsBodyHidden())
+		if (!Actor || Actor->IsBodyHidden())
 		{
-			Fail(TEXT("feel_aim_first_person: the colonist's body is still drawn"));
+			Fail(TEXT("feel_aim_no_first_person: the colonist's body is hidden"));
 		}
 	};
 	Phases.Add(MoveTemp(AimFirst));
