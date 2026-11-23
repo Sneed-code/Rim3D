@@ -296,7 +296,7 @@ TEST_CASE("Explosives: a stack of grenades goes on the belt, up to the limit") {
     CHECK(lying == 14);
 }
 
-TEST_CASE("Explosives: a thrown grenade arcs, lands near the target and goes off when its fuse is out") {
+TEST_CASE("Explosives: a thrown grenade arcs, lands near the target and goes off 3 s after its first bounce") {
     auto sim = exploSim();
     const Entity thrower = exploPawn(*sim, 40, 40);
     exploHeal(*sim, thrower);
@@ -317,15 +317,19 @@ TEST_CASE("Explosives: a thrown grenade arcs, lands near the target and goes off
     float landY = 0.0f;
     float blastRadius = 0.0f;
     bool sawFlying = false;
+    bool refusedWhileCooling = false;
     for (int i = 0; i < 400 && blastAt < 0; ++i) {
         sim->step();
         for (const Event& e : sim->events()) {
             if (e.type == EventType::GrenadeThrown) {
                 thrownAt = i;
-            } else if (e.type == EventType::GrenadeLanded) {
+            } else if (e.type == EventType::GrenadeLanded && landedAt < 0) {  // the first touchdown (a bounce, since 2026-11-23)
                 landedAt = i;
                 landX = e.x;
                 landY = e.y;
+                sim->submit(ThrowCommand{thrower, "", kNoEntity, tx, ty, false});  // still cooling down: refused
+            } else if (e.type == EventType::CommandFailed && landedAt >= 0) {
+                refusedWhileCooling = true;
             } else if (e.type == EventType::Explosion) {
                 blastAt = i;
                 blastRadius = e.amount;
@@ -344,17 +348,14 @@ TEST_CASE("Explosives: a thrown grenade arcs, lands near the target and goes off
     EXPLO_REQUIRE(blastAt > landedAt);
     CHECK(thrownAt >= 40);  // the wind-up is 45 steps
     CHECK(sawFlying);
-    CHECK(blastAt - landedAt == 50);  // the fuse
+    CHECK(blastAt - landedAt == 90);  // 3 s after the first bounce (it would be 5 s after the throw if it never bounced)
+    CHECK(refusedWhileCooling);
     CHECK(blastRadius == doctest::Approx(1.9));
     // The miss radius is 1.9 m scaled by distance (8 m of 9) and skill (0.9 at skill 4 here).
     CHECK(std::hypot(landX - tx, landY - ty) <= 1.9f * 8.0f / 9.0f + 0.05f);
     CHECK(sim->explosives().count(thrower) == 1);
     CHECK(sim->things().registry().view<Grenade>().empty());
-    // Cooling down: a second throw is refused until 80 steps after the release.
-    sim->submit(ThrowCommand{thrower, "", kNoEntity, tx, ty, false});
-    sim->step();
-    CHECK(exploSaw(*sim, EventType::CommandFailed));
-    sim->stepMany(40);
+    // Cooling down: a second throw is refused until 80 steps after the release (checked at the touchdown above).
     CHECK(sim->explosives().throwReadyIn(thrower) == 0);
 }
 
@@ -596,7 +597,10 @@ TEST_CASE("Explosives: the grenade launcher lobs a frag shell that bursts like a
     EXPLO_REQUIRE(sim->defs().find("Projectiles", "Shell_Frag") != nullptr);
     const Entity target = exploPawn(*sim, 55, 40);
     exploHeal(*sim, target);
-    sim->submit(ShootCommand{shooter, kNoEntity, 55.5f, 40.5f, sim->map().heightAt(55.5f, 40.5f), true});
+    // At the man's chest: the shell bursts at once on a pawn (on the ground it would bounce and go off 3 s later).
+    float chestX = 0.0f, chestY = 0.0f, chestZ = 0.0f;
+    sim->combat().aimPoint(target, chestX, chestY, chestZ);
+    sim->submit(ShootCommand{shooter, kNoEntity, chestX, chestY, chestZ, true});
     bool fired = false;
     bool rose = false;
     float startZ = 0.0f;
