@@ -2,6 +2,16 @@
 
 Updated 2026-11-22.
 
+Solar panel and wind turbine models (sneed, 2026-11-22; tools, data and Unreal, `docs/design/building-draw.md`
+"Downloaded models with a moving part"): the two power buildings were still box shapes. Now they use free Fab models,
+downloaded once into `assets/raw/fab/` on the PC: "Animated Wind Turbine" (Glowbox3D, CC BY) and "Solar Panel Array
+Rack" (FunkFX, free Personal licence). `tools/fab_prep.py` (Blender) fits the turbine to RimWorld's 5 x 2 footprint
+(4.8 m rotor, hub 6.6 m up, tower stretched to suit) and splits off its blades as their own mesh with its origin on the
+hub; the solar generator is two racks side by side on its 4 x 4 (their node colours baked to textures). GunArt imports
+them (`assets/power_art.json`). A def's new `visual.rotor` turns the blades every frame, faster with more wind power,
+still with none (`UBuildingSubsystem::AnimateRotors`). Art steps `power-models` and `power-art` run them in
+`update-and-play.bat`. Smoke test `power` (pictures; fails if the turbine makes power and the blades do not turn).
+
 Third person only (sneed, 2026-11-22: "lets forget first person view now ... its a 3rd person game"; Unreal,
 `docs/decisions/0012-third-person-only.md`): the first-person view is gone (no V key, no first-person aim). Right mouse
 with a gun keeps the third-person zoom and steady aim; only a scoped gun (bolt action) goes to a scope picture at full

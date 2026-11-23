@@ -133,6 +133,7 @@ private:
 	void BuildSoundPhases();        // SmokeTestSound.cpp
 	void BuildLookPhases();         // SmokeTestLook.cpp
 	void BuildWaterPhases();        // SmokeTestWater.cpp
+	void BuildPowerPhases();        // SmokeTestPower.cpp
 	void StartPhase(int32 Index);
 	void FinishPhase();
 	void WriteResultsAndQuit();

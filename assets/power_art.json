@@ -1,0 +1,70 @@
+{
+ "comment": "Free downloaded models for power buildings (docs/design/building-draw.md \"Downloaded models with a moving part\"). 'prep' is read by tools/fab_prep.py (Blender: the files in assets/raw/fab/, downloaded once from Fab, not in Git -> assets/raw/power/<Name>/). 'buildings' is read by the GunArt commandlet (-List=assets/power_art.json): each FBX becomes one combined mesh, /Game/Rim3D/Generated/Buildings/<name>/SM_<name>, which the def's visual.mesh (and visual.rotor.mesh) names. Sizes are ours, fitted to RimWorld's footprints (wind turbine 5 x 2, solar generator 4 x 4).",
+ "prep": {
+  "WindTurbine": {
+   "kind": "rotor",
+   "source": [
+    "assets/raw/fab/wind-turbine/*.glb",
+    "assets/raw/fab/wind-turbine/**/*.fbx"
+   ],
+   "rotorDiameter": 4.8,
+   "hub": [
+    0,
+    0.55,
+    6.6
+   ]
+  },
+  "SolarGenerator": {
+   "kind": "building",
+   "source": [
+    "assets/raw/fab/solar-rack/*.blend"
+   ],
+   "fit": [
+    3.9,
+    3.9
+   ],
+   "rows": 2,
+   "drop": [
+    "Studio",
+    "Backdrop",
+    "Floor",
+    "Ground"
+   ]
+  }
+ },
+ "buildings": [
+  {
+   "def": "WindTurbine",
+   "credit": "\"Animated Wind Turbine\" by Glowbox3D (Fab, CC BY 4.0)",
+   "art": {
+    "name": "WindTurbine",
+    "fbx": "assets/raw/power/WindTurbine/WindTurbine_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/power/WindTurbine",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WindTurbine",
+   "credit": "\"Animated Wind Turbine\" by Glowbox3D (Fab, CC BY 4.0): its blades and hub",
+   "art": {
+    "name": "WindTurbineRotor",
+    "fbx": "assets/raw/power/WindTurbine/WindTurbineRotor_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/power/WindTurbine",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "SolarGenerator",
+   "credit": "\"Solar Panel Array Rack\" by FunkFX (Fab, free Personal licence), two racks side by side",
+   "art": {
+    "name": "SolarGenerator",
+    "fbx": "assets/raw/power/SolarGenerator/SolarGenerator_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/power/SolarGenerator",
+    "normalOpenGL": true
+   }
+  }
+ ]
+}

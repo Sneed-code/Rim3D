@@ -121,7 +121,7 @@ the size in metres it stands in, which footprint axis its long side takes, the t
 | StandingLamp, SunLamp, TorchLamp | street_lamp_01 (two heights), vintage_oil_lamp |
 | Armchair, EndTable, PlantPot | ArmChair_01, painted_wooden_nightstand, potted_plant_01 |
 | *Still shapes* | walls, Column, HorseshoesPin (no fitting free model), and floors (floors are terrain defs, drawn by the terrain, not as meshes) |
-| *Shapes in the data* (2026-11-19, power thread) | PowerConduit and PowerSwitch (a low dark cable stub; the switch a post with a box and a red lever), SolarGenerator (a dark blue panel tilted 20 degrees on three posts), WindTurbine (a 6.6 m white mast, nacelle and three blades), ChemfuelGenerator (an engine block with a red tank), Cooler (a piece of wall with a grille high on its cold side and a fan unit low on its hot side; the old aircon mesh stood loose in the room and is gone since the cooler went into the wall), Vent (a piece of wall with a louvred grille through it), PassiveCooler (a wooden box with a water tray) |
+| *Shapes in the data* (2026-11-19, power thread) | PowerConduit and PowerSwitch (a low dark cable stub; the switch a post with a box and a red lever), SolarGenerator and WindTurbine (a dark blue panel tilted 20 degrees on three posts; a 6.6 m white mast, nacelle and three blades: their frames and plans, and the finished look until their downloaded models are made, below), ChemfuelGenerator (an engine block with a red tank), Cooler (a piece of wall with a grille high on its cold side and a fan unit low on its hot side; the old aircon mesh stood loose in the room and is gone since the cooler went into the wall), Vent (a piece of wall with a louvred grille through it), PassiveCooler (a wooden box with a water tray) |
 
 Wall, steel, silver, the survival pack, components, medicine, chunks and guns stay as shapes: Poly Haven has no
 plain wall or ingot, and a box already reads as both.
@@ -139,6 +139,32 @@ the engine's glTF material, which instanced meshes cannot draw (the engine shows
 also makes `M_ArtLit` and `M_ArtLitMasked` (our own, colour texture only, marked for instanced meshes, two-sided;
 masked for leaves) and an instance of one of them per mesh and material slot. Normal maps are not used. To use
 another mesh, change `id` and `size` in the list and run both steps again.
+
+### Downloaded models with a moving part
+
+The solar generator and the wind turbine (sneed, 2026-11-22) use free Fab models, downloaded once into
+`assets/raw/fab/` (not in Git; `assets/manifest.json` says where from): "Animated Wind Turbine" by Glowbox3D (CC BY,
+its GLB with the blades' animation) and "Solar Panel Array Rack" by FunkFX (free Personal licence, a `.blend` of six
+panels on a rack). Two art steps make them on every PC, run by `update-and-play.bat` (`tools/art_steps.json`):
+
+- `power-models`: `tools/fab_prep.py` in Blender (it borrows `codex_prep.py`'s helpers) reads `assets/power_art.json`
+  `prep` and writes FBX files, one texture set per material and an info file to `assets/raw/power/<Name>/`, plus a small
+  Cycles preview picture. The **turbine** (kind `rotor`): the objects its animation turns are the rotor; the hub and
+  axis are read from two animation frames. The model is turned so the rotor faces north, scaled so the rotor is
+  `rotorDiameter` (4.8 m, inside the 5 x 2 footprint) across, and its tower stretched below the nacelle so the hub
+  stands at `hub` [0, 0.55, 6.6] m. The rotor is its own FBX with its origin on the hub. The **solar rack** (kind
+  `building`): turned long side east-west, scaled to fit, and set down twice side by side (`rows` 2) to fill the 4 x 4
+  footprint. Its colours are shader nodes, not pictures, so they are baked onto a new UV layout.
+- `power-art`: the GunArt commandlet (`-List=assets/power_art.json`) imports each FBX as one mesh,
+  `/Game/Rim3D/Generated/Buildings/<name>/SM_<name>`, with `M_GunPBR` instances from the maps.
+
+A def's **`visual.rotor`** (`mesh`, `at` [x, y, z] m in the building's frame, `axis`, `rpm`) is drawn beside its
+`visual.mesh` as one more instance, turned every frame about the axis through `at` (`UBuildingSubsystem::AnimateRotors`;
+the same per-instance update the doors use, kept through chunk rebuilds). Speed follows the power it makes (on no grid, where the sim counts no power, the weather's wind instead): still below
+2% of `power.output`, then from 30% of `rpm` up to full `rpm` (24 turns a minute for the turbine) at full output, eased
+over about 4 s; it runs in real time while the game is unpaused, since at 1x a game second is a thirtieth of a real one.
+Without its `visual.mesh` the def's shapes are drawn whole and no rotor is added. Smoke test `power` stands both in the
+open, takes pictures and fails if the turbine's blades do not turn (the wind never drops below a quarter).
 
 Building heights are what picking uses (`UBuildingSubsystem::GetDrawnHeightCm`), so a click lands on what
 you see. Walls are 3 m, the height of the thin roof ([terrain.md](terrain.md)); a door has a 0.8 m lintel

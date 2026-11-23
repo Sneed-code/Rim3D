@@ -151,7 +151,7 @@
   "ours": ["dries"]
  },
  {
-  "defName": "SolarGenerator", "visual": {"parts": [{"shape": "box", "size": [0.1, 0.1, 1.0], "at": [-1.5, 0, 0], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [0.1, 0.1, 1.0], "at": [0, 0, 0], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [0.1, 0.1, 1.0], "at": [1.5, 0, 0], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [3.5, 0.12, 0.12], "at": [0, 0, 0.9], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [3.9, 3.9, 0.05], "at": [0, 0, 0.98], "rot": [0, 0, 20], "color": [0.72, 0.74, 0.77]}, {"shape": "box", "size": [3.8, 3.8, 0.06], "at": [0, 0, 1.0], "rot": [0, 0, 20], "color": [0.06, 0.1, 0.22]}]}, "researchPrerequisite": "SolarPanel",
+  "defName": "SolarGenerator", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/SolarGenerator/SM_SolarGenerator.SM_SolarGenerator", "parts": [{"shape": "box", "size": [0.1, 0.1, 1.0], "at": [-1.5, 0, 0], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [0.1, 0.1, 1.0], "at": [0, 0, 0], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [0.1, 0.1, 1.0], "at": [1.5, 0, 0], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [3.5, 0.12, 0.12], "at": [0, 0, 0.9], "color": [0.62, 0.63, 0.65]}, {"shape": "box", "size": [3.9, 3.9, 0.05], "at": [0, 0, 0.98], "rot": [0, 0, 20], "color": [0.72, 0.74, 0.77]}, {"shape": "box", "size": [3.8, 3.8, 0.06], "at": [0, 0, 1.0], "rot": [0, 0, 20], "color": [0.06, 0.1, 0.22]}]}, "researchPrerequisite": "SolarPanel",
   "parent": "PowerBase",
   "label": "solar generator",
   "size": [
@@ -178,7 +178,7 @@
   ]
  },
  {
-  "defName": "WindTurbine", "visual": {"sound": {"loop": "Hum_Wind"}, "parts": [{"shape": "box", "size": [1.2, 1.2, 0.3], "color": [0.55, 0.55, 0.55]}, {"shape": "cylinder", "radius": 0.2, "height": 6.6, "at": [0, 0, 0.3], "color": [0.85, 0.86, 0.88]}, {"shape": "box", "size": [0.6, 1.5, 0.6], "at": [0, -0.1, 6.7], "color": [0.85, 0.86, 0.88]}, {"shape": "sphere", "radius": 0.25, "at": [0, 0.75, 6.75], "color": [0.8, 0.8, 0.82]}, {"shape": "box", "size": [0.28, 0.06, 2.6], "at": [0, 0.8, 7.0], "color": [0.9, 0.9, 0.92]}, {"shape": "box", "size": [0.28, 0.06, 2.6], "at": [1.126, 0.8, 5.05], "rot": [-120, 0, 0], "color": [0.9, 0.9, 0.92]}, {"shape": "box", "size": [0.28, 0.06, 2.6], "at": [-1.126, 0.8, 5.05], "rot": [120, 0, 0], "color": [0.9, 0.9, 0.92]}]}, "researchPrerequisite": "Electricity",
+  "defName": "WindTurbine", "visual": {"sound": {"loop": "Hum_Wind"}, "mesh": "/Game/Rim3D/Generated/Buildings/WindTurbine/SM_WindTurbine.SM_WindTurbine", "rotor": {"mesh": "/Game/Rim3D/Generated/Buildings/WindTurbineRotor/SM_WindTurbineRotor.SM_WindTurbineRotor", "at": [0, 0.55, 6.6], "axis": [0, 1, 0], "rpm": 24}, "parts": [{"shape": "box", "size": [1.2, 1.2, 0.3], "color": [0.55, 0.55, 0.55]}, {"shape": "cylinder", "radius": 0.2, "height": 6.6, "at": [0, 0, 0.3], "color": [0.85, 0.86, 0.88]}, {"shape": "box", "size": [0.6, 1.5, 0.6], "at": [0, -0.1, 6.7], "color": [0.85, 0.86, 0.88]}, {"shape": "sphere", "radius": 0.25, "at": [0, 0.75, 6.75], "color": [0.8, 0.8, 0.82]}, {"shape": "box", "size": [0.28, 0.06, 2.6], "at": [0, 0.8, 7.0], "color": [0.9, 0.9, 0.92]}, {"shape": "box", "size": [0.28, 0.06, 2.6], "at": [1.126, 0.8, 5.05], "rot": [-120, 0, 0], "color": [0.9, 0.9, 0.92]}, {"shape": "box", "size": [0.28, 0.06, 2.6], "at": [-1.126, 0.8, 5.05], "rot": [120, 0, 0], "color": [0.9, 0.9, 0.92]}]}, "researchPrerequisite": "Electricity",
   "parent": "PowerBase",
   "label": "wind turbine",
   "size": [
