@@ -259,13 +259,15 @@ TEST_CASE("Swing speed: the club swings twice as fast, other melee weapons half 
     const int gladius = feelTestSwingSteps("Melee_Gladius");  // RimWorld 2 s, now 1.33 s
     const int longsword = feelTestSwingSteps("Melee_Longsword");  // 2.45 s, halved (#363), now a third
     MESSAGE("club " << club << ", gladius " << gladius << ", longsword " << longsword << " steps");
-    // At the default Melee skill (4) a swing takes 1 / 0.88 of the weapon's time.
-    CHECK(club >= 32);
-    CHECK(club <= 36);
-    CHECK(gladius >= 43);
-    CHECK(gladius <= 48);
-    CHECK(longsword >= 26);
-    CHECK(longsword <= 30);
+    // At the default Melee skill (4) a swing takes 1 / 0.88 of the weapon's time, and every swing 0.75 of that
+    // (attackTimeFactor: "all melee attacks 33% faster", sneed 2026-11-23).
+    const float f = feelTestSim(1)->melee().rules().attackTimeFactor;
+    CHECK(club >= static_cast<int>(32.0f * f));
+    CHECK(club <= static_cast<int>(std::ceil(36.0f * f)));
+    CHECK(gladius >= static_cast<int>(43.0f * f));
+    CHECK(gladius <= static_cast<int>(std::ceil(48.0f * f)));
+    CHECK(longsword >= static_cast<int>(26.0f * f));
+    CHECK(longsword <= static_cast<int>(std::ceil(30.0f * f)));
 }
 
 TEST_CASE("Landing blows: the player's swing at its lock just past its reach still goes at it, and lands once in reach") {
@@ -333,6 +335,17 @@ TEST_CASE("Landing blows: a target that shuffles a little after the line is fixe
     CHECK(hit);
 }
 
+TEST_CASE("Swing speed: a person's fists punch four times as fast as the other swings' pace, and weakly (sneed 2026-11-23)") {
+    const int fists = feelTestSwingSteps(nullptr);  // RimWorld 2 s at Melee 10; Melee 4: 68 steps
+    const MeleeRules& rules = feelTestSim(1)->melee().rules();
+    MESSAGE("fists " << fists << " steps");
+    const float expected = 68.0f * rules.attackTimeFactor * rules.unarmedTimeFactor;
+    CHECK(fists >= static_cast<int>(expected) - 1);
+    CHECK(fists <= static_cast<int>(std::ceil(expected)) + 1);
+    CHECK(rules.unarmedTimeFactor == doctest::Approx(0.25f));  // "400% faster"
+    CHECK(rules.unarmedPowerFactor < 1.0f);                    // "and weak"
+}
+
 TEST_CASE("Defending: an enemy fighter dodges some of the player's knife swings by skill, and the rest land") {
     auto sim = feelTestSim(318);
     const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Knife");
@@ -364,7 +377,7 @@ TEST_CASE("Defending: an enemy fighter dodges some of the player's knife swings 
         }
     }
     MESSAGE(swings << " swings, " << hits << " hits, " << dodges << " dodges");
-    CHECK(dodges >= 3);
+    CHECK(dodges >= 1);  // (3 or more before the swings got a quarter faster, sneed 2026-11-23: fewer are read in time)
     CHECK(hits >= 10);
 }
 
@@ -464,7 +477,7 @@ TEST_CASE("Finishers: a knife at a downed enemy plays its whole-body kneeling cl
     FEEL_REQUIRE(clip != nullptr);
     FEEL_REQUIRE(motion.moving(hero));
     CHECK(sim->things().registry().get<BodyMotion>(hero).clip == clip->def);
-    const int hitStep = static_cast<int>(std::lround(f->hitSeconds * 30.0f));
+    const int hitStep = static_cast<int>(std::lround(f->hitSeconds * 30.0f * sim->melee().rules().attackTimeFactor));
     // The finisher lasts as long as the clip, played at the pace that lands its blow on the hit step.
     const int total = sim->things().registry().get<Melee>(hero).finisherSteps;
     const int clipTotal = static_cast<int>(std::lround(clip->seconds * static_cast<float>(hitStep) / sim->melee().finisherClipHit(finisher)));
@@ -494,7 +507,9 @@ TEST_CASE("Finishers: a knife at a downed enemy plays its whole-body kneeling cl
         sim->writeSnapshot(snap);
         if (const ThingView* v = snap.find(hero); v != nullptr && v->meleeFinisher != 0) {
             CHECK(v->meleeFinisherTarget == enemy);
-            CHECK(v->motionClip == clip->def);  // Unreal plays the clip on the whole body
+            if (s < total) {  // (on the last step the clip, rounded to whole steps, may just have ended)
+                CHECK(v->motionClip == clip->def);  // Unreal plays the clip on the whole body
+            }
             CHECK_FALSE(v->motionUpper);
             sawT = std::max(sawT, v->meleeFinisherT);
         }

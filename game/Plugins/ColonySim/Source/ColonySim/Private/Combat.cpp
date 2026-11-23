@@ -1486,8 +1486,9 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
         }
     }
     // Cooldown bursts: a fighter's burst stops when a friend comes into the line, during the aim or between shots (bodies
-    // shove each other in a melee next to it); the store keeps the rest.
-    if (gun->store && !s.player && s.target != kNoEntity && holdFire_ && holdFire_(pawn, s.target)) {
+    // shove each other in a melee next to it); the store keeps the rest. A gun without a store holds its shot the same way
+    // (a colonist not drafted shooting a manhunter its friend is clubbing: 2026-11-23).
+    if (!s.player && s.target != kNoEntity && holdFire_ && holdFire_(pawn, s.target)) {
         s.shotsLeft = 0;
         s.phase = ShotPhase::Cooling;
         s.stepsLeft = std::max(0, gun->burstGap - 1);

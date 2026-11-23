@@ -51,6 +51,8 @@ constexpr int kFightMaxThreats = static_cast<int>(sizeof kFightThreatWeights / s
 constexpr float kFightShotClearance = 0.3f;  // metres below the chest the shot's line must still clear the ground (our number)
 constexpr float kFightAimTopMargin = 0.15f;  // as Combat.cpp's kCombatAimTopMargin: the highest aim over a crest
 constexpr float kFightFriendSpread = 0.3f;   // metres to either side of the target's chest a shot may stray and still miss a friend (ours)
+constexpr float kFightFriendBody = 0.3f;      // metres: a friend's body about its centre, as a column, for the shot's line (ours)
+constexpr float kFightFriendMaxStray = 2.0f;  // metres: the most a shot's stray at the target is allowed for (ours)
 constexpr float kFightFriendCorridor = 0.9f; // a friend this near the shot's line on the ground gets the exact check (ours)
 constexpr float kFightFallBackCap = 40.0f;  // metres from the nearest enemy beyond which falling back gains nothing
 
@@ -964,7 +966,22 @@ bool FighterSystem::friendInLineNow(Entity shooter, Entity target) const {
             return friendInLine(shooter, pos->x, pos->y, pos->level, posture->stance, now, true);
         }
     }
-    return false;
+    // Not in this step's list (no fighter planned this step: a colonist not drafted defending itself, a manhunter at it):
+    // the target as it stands now.
+    const Position* tp = reg.try_get<Position>(target);
+    if (tp == nullptr) {
+        return false;
+    }
+    PawnInfo now;
+    now.pawn = target;
+    now.faction = factionOf(target);
+    now.x = tp->x;
+    now.y = tp->y;
+    now.level = tp->level;
+    if (const Posture* tposture = reg.try_get<Posture>(target)) {
+        now.stance = tposture->stance;
+    }
+    return friendInLine(shooter, pos->x, pos->y, pos->level, posture->stance, now, true);
 }
 
 bool FighterSystem::friendInLine(Entity pawn, float x, float y, int level, Stance stance, const PawnInfo& target, bool live) const {
@@ -975,6 +992,24 @@ bool FighterSystem::friendInLine(Entity pawn, float x, float y, int level, Stanc
     if (len2 <= 0.0f) {
         return false;
     }
+    // How far a shot may stray at the target: the gun's spread for this shooter at this distance (a disc, CombatSystem::
+    // launch), at least kFightFriendSpread. A long shot past a friend near the line strays across it (a routed raider
+    // 21 m off shot at past the clubman standing 3 m ahead: the faster swings of 2026-11-23 showed it).
+    const float len = std::sqrt(len2);
+    float stray = kFightFriendSpread;
+    if (const Gear* gear = things_.registry().try_get<Gear>(pawn); gear != nullptr && things_.registry().valid(gear->weapon)) {
+        const DefId gun = things_.registry().get<Thing>(gear->weapon).def;
+        stray = std::clamp(combat_.spread(gun, combat_.shootingSkill(pawn), len, false) * len, kFightFriendSpread, kFightFriendMaxStray);
+    }
+    const float corridor = kFightFriendCorridor + (stray - kFightFriendSpread);
+    float muzzle = 0.0f;
+    float aim = 0.0f;
+    float targetMuzzle = 0.0f;
+    float targetAim = 0.0f;
+    combat_.shotHeights(pawn, stance, muzzle, aim);
+    combat_.shotHeights(target.pawn, target.stance, targetMuzzle, targetAim);
+    const float az = map_.heightAt(x, y) + muzzle;
+    const float bz = map_.heightAt(target.x, target.y) + targetAim;
     bool near = false;  // the cheap test first: any friend near the line on the ground
     for (const PawnInfo& info : pawns_) {
         PawnInfo p = info;
@@ -987,33 +1022,35 @@ bool FighterSystem::friendInLine(Entity pawn, float x, float y, int level, Stanc
         if (p.pawn == pawn || p.pawn == target.pawn || p.level != level || (p.faction != side && !p.animal)) {
             continue;
         }
-        const float s = std::clamp(((p.x - x) * dx + (p.y - y) * dy) / len2, 0.0f, 1.0f);
+        const float along = ((p.x - x) * dx + (p.y - y) * dy) / len2;
+        const float s = std::clamp(along, 0.0f, 1.0f);
         const float ex = x + dx * s - p.x;
         const float ey = y + dy * s - p.y;
-        if (ex * ex + ey * ey <= kFightFriendCorridor * kFightFriendCorridor) {
+        const float off2 = ex * ex + ey * ey;
+        // A friend's body as a solid column, not its hitboxes: a line between its legs is still a shot through it (a
+        // stray hits a leg: the clubman at a manhunting megascarab, 2026-11-23).
+        const float body = kFightFriendBody + stray * s;
+        if (along > 0.0f && along < 1.0f && off2 <= body * body) {
+            const float z = az + (bz - az) * s - map_.heightAt(p.x, p.y);
+            if (z > -kFightFriendSpread && z < bodyHeight(p.stance) + kFightFriendSpread) {
+                return true;
+            }
+        }
+        if (off2 <= corridor * corridor) {
             near = true;
-            break;
         }
     }
-    if (!near) {
+    if (!near && !live) {  // (a live check, once a shot, always traces: the list may be from another step or empty)
         return false;
     }
-    float muzzle = 0.0f;
-    float aim = 0.0f;
-    float targetMuzzle = 0.0f;
-    float targetAim = 0.0f;
-    combat_.shotHeights(pawn, stance, muzzle, aim);
-    combat_.shotHeights(target.pawn, target.stance, targetMuzzle, targetAim);
-    const float len = std::sqrt(len2);
     const float sideX = -dy / len;
     const float sideY = dx / len;
-    const float az = map_.heightAt(x, y) + muzzle;
-    const float bz = map_.heightAt(target.x, target.y) + targetAim;
     const CellPos from{static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y)), level};
     // Strays to either side, and up and down (a shot at a small animal low on the ground that strays up meets the legs
     // of a friend fighting it; cooldown bursts and halved damage made those fights long enough to show it).
-    const float offsets[5][2] = {{0.0f, 0.0f}, {kFightFriendSpread, 0.0f}, {-kFightFriendSpread, 0.0f}, {0.0f, kFightFriendSpread},
-                                 {0.0f, -kFightFriendSpread}};
+    const float half = stray * 0.5f;
+    const float offsets[9][2] = {{0.0f, 0.0f}, {stray, 0.0f}, {-stray, 0.0f}, {half, 0.0f}, {-half, 0.0f},
+                                 {0.0f, stray}, {0.0f, -stray}, {0.0f, half}, {0.0f, -half}};
     for (const auto& o : offsets) {
         const float off = o[0];
         const TraceHit hit = combat_.trace(x, y, az, target.x + sideX * off, target.y + sideY * off, bz + o[1], level, pawn, from, true);
@@ -1021,7 +1058,7 @@ bool FighterSystem::friendInLine(Entity pawn, float x, float y, int level, Stanc
             continue;
         }
         const PawnInfo* other = info(hit.thing);
-        if (other != nullptr && (other->faction == side || other->animal)) {
+        if (other != nullptr ? (other->faction == side || other->animal) : (live && factionOf(hit.thing) == side)) {
             return true;
         }
     }

@@ -34,7 +34,7 @@
     "minWindup": 9,
     "attackTimeFactor": 0.75,
     "unarmedTimeFactor": 0.25,
-    "unarmedPowerFactor": 0.4,
+    "unarmedPowerFactor": 0.25,
     "unarmedMinWindup": 4,
     "playerStepIn": true,
     "stepInFreesFeet": true,

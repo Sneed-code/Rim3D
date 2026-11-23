@@ -198,8 +198,10 @@ TEST_CASE("Day length: a melee swing takes the same steps whatever the day lengt
             sim->step();
             ++steps;
         }
-        // No skills: Melee 4, 0.88 of the pace (real-time-combat.md): 20 steps of wind-up and 48 of recovery.
-        CHECK(steps == 68);
+        // No skills: Melee 4, 0.88 of the pace (real-time-combat.md): 68 steps at RimWorld's pace; a person's fists swing
+        // at 0.75 x 0.25 of that (MeleeRules attackTimeFactor, unarmedTimeFactor: sneed 2026-11-23), about 12.
+        CHECK(steps >= 11);
+        CHECK(steps <= 14);
         if (first < 0) {
             first = steps;
         }
