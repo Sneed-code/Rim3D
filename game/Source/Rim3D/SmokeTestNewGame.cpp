@@ -5,6 +5,8 @@
 #include "SmokeTest.h"
 
 #include "Camera/CameraActor.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Components/DirectionalLightComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
@@ -16,6 +18,7 @@
 #include "SimSubsystem.h"
 #include "SkySubsystem.h"
 #include "TerrainSubsystem.h"
+#include "TitleStage.h"
 
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Combat.h"
@@ -51,10 +54,11 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 	const auto Hud = [this]() { return GetWorld()->GetSubsystem<UColonyHudSubsystem>(); };
 	const auto Pawns = [this]() { return GetWorld()->GetSubsystem<USimPawnSubsystem>(); };
 
-	// 1. The title screen over its own backdrop: a wild rainforest tile in the morning, the camera circling a glade.
+	// 1. The title screen over its own backdrop: the starship stage (sneed 2026-11-23: the character at a window in orbit,
+	// a planet and the galaxy behind her) over the wild rainforest tile the title runs.
 	FPhase TitlePhase;
 	TitlePhase.Name = TEXT("newgame_title");
-	TitlePhase.WarmupSeconds = 7.0f;
+	TitlePhase.WarmupSeconds = 12.0f;
 	TitlePhase.MeasureSeconds = 0.5f;
 	TitlePhase.Setup = [=, this]()
 	{
@@ -108,14 +112,36 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 			Fail(TEXT("newgame_title: the title's camera is not on the backdrop"));
 		}
 		const USkySubsystem* TitleSky = GetWorld()->GetSubsystem<USkySubsystem>();
-		const UTerrainSubsystem* TitleTerrain = GetWorld()->GetSubsystem<UTerrainSubsystem>();
-		if (!TitleSky || TitleSky->GetHourOverride() < 0.0f || !TitleTerrain || TitleTerrain->GetPlantClearingCount() == 0)
+		// The starship stage: her body on show and dressed, the planet and the galaxy, the sky stepped aside.
+		const ATitleStage* Stage = Hud()->GetTitleStage();
+		if (!Stage)
 		{
-			Fail(TEXT("newgame_title: no morning light or no trunk-free circle for the title camera"));
+			Fail(TEXT("newgame_title: no starship stage behind the title (Title.Stage)"));
+			return;
 		}
-		Notes.Add(FString::Printf(TEXT("NEWGAME title backdrop %s, sky %.2f h, exposure %.1f EV, %d plants drawn"),
-			TitleSim ? UTF8_TO_TCHAR(TitleSim->biome().c_str()) : TEXT("-"), TitleSky ? TitleSky->GetHourOverride() : -1.0f,
-			TitleSky ? TitleSky->GetExposure() : 0.0f, TitleTerrain ? static_cast<int32>(TitleTerrain->GetStats().PlantInstances) : -1));
+		if (!Stage->GetDisplayPawn() || !Stage->HasBody())
+		{
+			Fail(TEXT("newgame_title: the character is missing from the title's starship stage"));
+		}
+		if (!Stage->HasPlanet() || !Stage->HasGalaxy())
+		{
+			Fail(TEXT("newgame_title: the planet or the galaxy is missing behind the window"));
+		}
+		if (Stage->HasBody() && (!Stage->IsDressed() || Stage->GetOutfit().IsEmpty()))
+		{
+			Fail(TEXT("newgame_title: the character on the title stands there undressed"));
+		}
+		if (!TitleSky || !TitleSky->IsStageMode() || (TitleSky->GetSun() && TitleSky->GetSun()->IsVisible()))
+		{
+			Fail(TEXT("newgame_title: the sky's own sun still shines on the starship stage"));
+		}
+		if (TitlePC && TitlePC->PlayerCameraManager && FVector::Dist(TitlePC->PlayerCameraManager->GetCameraLocation(), Stage->GetCameraTransform().GetLocation()) > 50.0)
+		{
+			Fail(TEXT("newgame_title: the camera is not in the starship cabin"));
+		}
+		Notes.Add(FString::Printf(TEXT("NEWGAME title stage: look %s, outfit '%s', planet map %d, galaxy map %d, measured exposure %.1f EV"),
+			*Stage->GetLookSource(), *Stage->GetOutfit(), Stage->HasPlanetMap() ? 1 : 0, Stage->HasGalaxyMap() ? 1 : 0,
+			TitleSky ? TitleSky->GetMeasuredExposure() : -99.0f));
 	};
 	Phases.Add(MoveTemp(TitlePhase));
 
@@ -156,9 +182,13 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 			Fail(TEXT("newgame_people: the You page is not open"));
 			return;
 		}
-		if (Bridge()->IsTitleBackdrop() || Hud()->HasTitleCamera())
+		if (Bridge()->IsTitleBackdrop() || Hud()->HasTitleCamera() || Hud()->GetTitleStage())
 		{
-			Fail(TEXT("newgame_people: the title's backdrop or camera outlived the new colony"));
+			Fail(TEXT("newgame_people: the title's backdrop, camera or starship stage outlived the new colony"));
+		}
+		if (const USkySubsystem* PeopleSky = GetWorld()->GetSubsystem<USkySubsystem>(); PeopleSky && PeopleSky->IsStageMode())
+		{
+			Fail(TEXT("newgame_people: the sky is still put away for the title's starship stage"));
 		}
 		if (Sim->time().steps != 0)
 		{

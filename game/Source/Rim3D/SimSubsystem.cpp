@@ -16,6 +16,7 @@
 #include "Misc/Paths.h"
 #include "KeyBindings.h"
 #include "ProtagonistSubsystem.h"
+#include "TitleStage.h"
 
 #include "ColonySim/Map.h"
 #include "ColonySim/Replay.h"
@@ -684,6 +685,7 @@ FString USimSubsystem::SaveGame(const FString& Slot)
 	UE_LOG(LogColonySim, Display, TEXT("Saved %s (%d KB, %.1f ms, day %lld)"), *Path, static_cast<int32>(Bytes.size() / 1024),
 		(FPlatformTime::Seconds() - Start) * 1000.0, static_cast<long long>(Sim->time().day() + 1));
 	SimBridgeScreenMessage(11, 3.0f, FColor::Green, FString::Printf(TEXT("Saved: %s"), *Clean));
+	TitleStage::RememberCharacter(*Sim);  // the title screen shows this game's character
 	return Path;
 }
 
@@ -741,6 +743,7 @@ bool USimSubsystem::LoadGame(const FString& Slot)
 	ResetAfterSimChange();
 	UE_LOG(LogColonySim, Display, TEXT("Loaded %s: day %lld, %d things"), *Path, static_cast<long long>(Sim->time().day() + 1), static_cast<int32>(Current.things.size()));
 	SimBridgeScreenMessage(11, 3.0f, FColor::Green, FString::Printf(TEXT("Loaded: %s"), *Clean));
+	TitleStage::RememberCharacter(*Sim);
 	return true;
 }
 
