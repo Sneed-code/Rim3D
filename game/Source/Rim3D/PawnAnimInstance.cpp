@@ -376,8 +376,6 @@ private:
 	bool bResetHistory = true;
 	/** The ground speed a moment ago (smoothed over about 0.15 s), cm/s: whether the pawn is speeding up or holding its pace. */
 	float RecentSpeed = 0.0f;
-	/** Frames an upper-body swing on the move had its waist turn held back (PawnUpperMovingTwist), for the smokes. */
-	int32 UpperTwistHeld = 0;
 	/** The velocity smoothed over about 0.12 s: the player's pawn moves by the steps the keys send, uneven from step to step. */
 	FVector SmoothVelocity = FVector::ZeroVector;
 	/** How long the pawn has stood still (s); 0 while it moves. StillTime the same, route or not. */
@@ -777,6 +775,10 @@ protected:
 
 public:
 	TArray<FSimPawnKick, TInlineAllocator<8>> PendingKicks;
+	/** The locomotion's smoothed ground speed (cm/s), published each update for the upper-body slot's waist hold. */
+	float RecentSpeed = 0.0f;
+	/** Frames an upper-body swing on the move had its waist turn held back (PawnUpperMovingTwist), for the smokes. */
+	int32 UpperTwistHeld = 0;
 
 private:
 	FSimPawnHitLayerNode HitLayer;
@@ -1210,6 +1212,10 @@ void FSimPawnLocomotionNode::PredictAlongRoute(const FSimPawnAnimInputs& In, flo
 	const bool bSlowingDown = Speed < RecentSpeed - 0.06f * In.CruiseSpeed;
 	const float Pace = bSpeedingUp ? In.CruiseSpeed : FMath::Min(Speed, In.CruiseSpeed * 2.0f);
 	RecentSpeed = FMath::Lerp(RecentSpeed, Speed, FMath::Clamp(DeltaTime / 0.25f, 0.0f, 1.0f));
+	if (Proxy)
+	{
+		Proxy->RecentSpeed = RecentSpeed;
+	}
 	FVector Heading = Speed > PawnStandSpeed ? SmoothVelocity.GetSafeNormal2D() : FVector::ZeroVector;
 	float Yaw = In.Yaw;
 	int32 Next = 0;
