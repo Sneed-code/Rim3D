@@ -22,6 +22,7 @@
 #include <imgui.h>
 
 #include "ProtagonistPawn.h"
+#include "RocketShape.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
 #include "VisualMesh.h"
@@ -176,6 +177,7 @@ void UShooterFeelSubsystem::Teardown()
 		Holder = nullptr;
 	}
 	ParticleInstances.Reset();
+	RocketInstances = nullptr;
 	FlashLights.Reset();
 	KeepMeshes.Reset();
 	Particles.Reset();
@@ -324,6 +326,63 @@ UStaticMesh* UShooterFeelSubsystem::MakeClod(int32 Seed, const FLinearColor& Col
 	return Mesh;
 }
 
+UStaticMesh* UShooterFeelSubsystem::MakeRocket()
+{
+	const rocketshape::Shape Shape = rocketshape::makeRocket();
+	// Smooth normals from the faces round each point (the seams in the shape keep the colour bands and the fins hard edged).
+	TArray<FVector3f> Normals;
+	Normals.SetNumZeroed(static_cast<int32>(Shape.points.size()));
+	const auto Point = [&Shape](int32 I) { return FVector3f(Shape.points[I].x, Shape.points[I].y, Shape.points[I].z); };
+	for (size_t T = 0; T + 2 < Shape.triangles.size(); T += 3)
+	{
+		const int32 A = Shape.triangles[T], B = Shape.triangles[T + 1], C = Shape.triangles[T + 2];
+		const FVector3f Normal = FVector3f::CrossProduct(Point(C) - Point(A), Point(B) - Point(A));
+		Normals[A] += Normal;
+		Normals[B] += Normal;
+		Normals[C] += Normal;
+	}
+	FMeshDescription Description;
+	FStaticMeshAttributes Attributes(Description);
+	Attributes.Register();
+	const FPolygonGroupID Group = Description.CreatePolygonGroup();
+	Attributes.GetPolygonGroupMaterialSlotNames()[Group] = FName(TEXT("Rocket"));
+	TArray<FVertexID> Vertices;
+	for (int32 I = 0; I < static_cast<int32>(Shape.points.size()); ++I)
+	{
+		const FVertexID Vertex = Description.CreateVertex();
+		Attributes.GetVertexPositions()[Vertex] = Point(I);
+		Vertices.Add(Vertex);
+	}
+	for (size_t T = 0; T + 2 < Shape.triangles.size(); T += 3)
+	{
+		TArray<FVertexInstanceID> Corners;
+		for (int32 K = 0; K < 3; ++K)
+		{
+			const int32 Index = Shape.triangles[T + K];
+			const FVertexInstanceID Instance = Description.CreateVertexInstance(Vertices[Index]);
+			const FVector3f Normal = Normals[Index].GetSafeNormal(UE_SMALL_NUMBER, FVector3f::UpVector);
+			Attributes.GetVertexInstanceNormals()[Instance] = Normal;
+			Attributes.GetVertexInstanceTangents()[Instance] = FVector3f::CrossProduct(Normal, FVector3f::UpVector).GetSafeNormal(UE_SMALL_NUMBER, FVector3f::ForwardVector);
+			Attributes.GetVertexInstanceBinormalSigns()[Instance] = 1.0f;
+			const rocketshape::Col& Colour = Shape.colours[Index];
+			Attributes.GetVertexInstanceColors()[Instance] = FVector4f(Colour.r, Colour.g, Colour.b, 1.0f);
+			Attributes.GetVertexInstanceUVs().Set(Instance, 0, FVector2f(0.0f, 0.0f));
+			Corners.Add(Instance);
+		}
+		Description.CreateTriangle(Group, Corners);
+	}
+	UStaticMesh* Mesh = NewObject<UStaticMesh>(this, NAME_None, RF_Transient);
+	Mesh->GetStaticMaterials().Add(FStaticMaterial(SolidMaterial, FName(TEXT("Rocket"))));
+	UStaticMesh::FBuildMeshDescriptionsParams Params;
+	Params.bBuildSimpleCollision = false;
+	Params.bFastBuild = true;
+	Params.bMarkPackageDirty = false;
+	Params.bCommitMeshDescription = false;
+	Mesh->BuildFromMeshDescriptions({&Description}, Params);
+	KeepMeshes.Add(Mesh);
+	return Mesh;
+}
+
 UInstancedStaticMeshComponent* UShooterFeelSubsystem::MakeInstanced(UStaticMesh* Mesh)
 {
 	UInstancedStaticMeshComponent* Component = NewObject<UInstancedStaticMeshComponent>(Holder);
@@ -372,6 +431,11 @@ void UShooterFeelSubsystem::EnsureScene()
 	ParticleInstances.Add(MakeInstanced(MakeSolid(Box, 2.0f, 2.0f, 2.0f, FLinearColor(1.0f, 0.62f, 0.15f))));        // Spark
 	ParticleInstances.Add(MakeInstanced(MakeSolid(Sphere, 10.0f, 10.0f, 20.0f, FLinearColor(0.16f, 0.12f, 0.08f))));  // Dust
 	ParticleInstances.Add(MakeInstanced(MakeSolid(Sphere, 4.0f, 4.0f, 8.0f, FLinearColor(0.07f, 0.09f, 0.04f))));     // Grenade
+	if (UStaticMesh* Rocket = MakeRocket())
+	{
+		RocketInstances = MakeInstanced(Rocket);
+		RocketInstances->SetCastShadow(true);
+	}
 	// Debris: lumpy clods of dark and brown soil and a few grey stones (several shapes each).
 	DebrisMeshes.Reset();
 	int32 ClodSeed = 1;
@@ -808,8 +872,10 @@ void UShooterFeelSubsystem::UpdateParticles(float DeltaTime, const USimSubsystem
 		ByKind[static_cast<int32>(P.Kind)].Add(FTransform(FRotator(P.Age * 400.0f, P.Age * 700.0f, 0.0f), P.Position, FVector(FMath::Max(Scale, 0.01f))));
 	}
 
-	// Grenades the sim has in the air or lying with their fuse lit (a Projectiles def that explodes).
+	// Grenades the sim has in the air or lying with their fuse lit (a Projectiles def that explodes); rockets as the rocket.
 	GrenadesDrawn = 0;
+	RocketsDrawn = 0;
+	TArray<FTransform> Rockets;
 	const colony::Snapshot& Now = Source.GetCurrentSnapshot();
 	const colony::Snapshot& Before = Source.GetPreviousSnapshot();
 	const float Alpha = Source.GetSpeed() > 0 ? Source.GetBlendAlpha() : 1.0f;
@@ -856,6 +922,20 @@ void UShooterFeelSubsystem::UpdateParticles(float DeltaTime, const USimSubsystem
 				Burst(EBlastParticle::Smoke, At + Back, Puffs, 10.0f, 0.3f, 8.0f, 0.6f, -10.0f);
 			}
 		}
+		// A rocket (visual.trail "rocket") is the rocket model, nose along its flight, its length from the def's part (0.45 m
+		// for a plain rocket, a doomsday rocket's 0.5 a little bigger).
+		if (Source.GetDefs()->get(View.def).text("visual.trail") == "rocket")
+		{
+			const FVector Velocity(View.vx, View.vy, View.vz);
+			const double Length = Source.GetDefs()->get(View.def).number("visual.parts.0.size.0", 0.45);
+			const float Scale = FMath::Clamp(static_cast<float>(Length / 0.45), 0.6f, 2.0f);
+			const FQuat Facing = Velocity.SizeSquared() > 1.0e-10 ? FRotationMatrix::MakeFromX(Velocity.GetSafeNormal()).ToQuat() : FQuat::Identity;
+			// Spinning slowly about its length, as a finned rocket does.
+			const FQuat Spin(FVector::ForwardVector, static_cast<float>(Now.gameSeconds) * 6.0f);
+			Rockets.Add(FTransform(Facing * Spin, At, FVector(Scale)));
+			++RocketsDrawn;
+			continue;
+		}
 		// A lit fuse blinks quicker as it runs out.
 		const float Blink = View.fuse >= 0 ? 1.0f + 0.35f * FMath::Sin(static_cast<float>(View.fuse) * (0.6f + 6.0f / (1.0f + View.fuse))) : 1.0f;
 		ByKind[static_cast<int32>(EBlastParticle::Grenade)].Add(FTransform(FRotator(static_cast<float>(Now.gameSeconds) * 20.0f, static_cast<float>(Now.gameSeconds) * 35.0f, 0.0f), At + FVector(0.0, 0.0, 4.0), FVector(Blink)));
@@ -874,6 +954,14 @@ void UShooterFeelSubsystem::UpdateParticles(float DeltaTime, const USimSubsystem
 					Component->AddInstances(ByKind[Kind], false, true);
 				}
 			}
+		}
+	}
+	if (RocketInstances && (RocketInstances->GetInstanceCount() > 0 || !Rockets.IsEmpty()))
+	{
+		RocketInstances->ClearInstances();
+		if (!Rockets.IsEmpty())
+		{
+			RocketInstances->AddInstances(Rockets, false, true);
 		}
 	}
 }

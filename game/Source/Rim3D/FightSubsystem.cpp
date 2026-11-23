@@ -1006,6 +1006,12 @@ void UFightSubsystem::UpdateTracers(float DeltaTime, float GameDelta)
 					break;
 				}
 			}
+			// A rocket or a launcher's shell is drawn by UShooterFeelSubsystem (the rocket model, the shell), not as a streak.
+			if (Found && Found->def.valid() && Bridge->GetDefs() && Bridge->GetDefs()->get(Found->def).has("explosion"))
+			{
+				Tracers.RemoveAtSwap(Index);
+				continue;
+			}
 			if (Found)
 			{
 				const FVector Velocity(Found->vx, Found->vy, Found->vz);

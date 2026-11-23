@@ -5,6 +5,7 @@
 #include "HAL/IConsoleManager.h"
 #include "HAL/PlatformTime.h"
 
+#include "BlastFxSubsystem.h"
 #include "FireSubsystem.h"
 #include "SimSubsystem.h"
 
@@ -96,8 +97,12 @@ void USmokeTestSubsystem::BuildFirePhases()
 		{
 			return;
 		}
-		State->MaxFlames = FMath::Max(State->MaxFlames, F->GetParticles(EFireParticle::FlameCore) + F->GetParticles(EFireParticle::FlameMid) + F->GetParticles(EFireParticle::FlameTip));
-		State->MaxSmoke = FMath::Max(State->MaxSmoke, F->GetParticles(EFireParticle::Smoke));
+		// The flames and smoke are the blast art's flipbook when it is in (UBlastFxSubsystem::AddFlames), else the cones here.
+		const UBlastFxSubsystem* Flipbook = GetWorld() ? GetWorld()->GetSubsystem<UBlastFxSubsystem>() : nullptr;
+		const int32 Tongues = Flipbook ? Flipbook->GetFlameTongues() : 0;
+		const int32 FlipSmoke = Flipbook ? Flipbook->GetFireSmoke() : 0;
+		State->MaxFlames = FMath::Max(State->MaxFlames, F->GetParticles(EFireParticle::FlameCore) + F->GetParticles(EFireParticle::FlameMid) + F->GetParticles(EFireParticle::FlameTip) + Tongues);
+		State->MaxSmoke = FMath::Max(State->MaxSmoke, F->GetParticles(EFireParticle::Smoke) + FlipSmoke);
 		State->MaxEmbers = FMath::Max(State->MaxEmbers, F->GetParticles(EFireParticle::Ember));
 		State->MaxLights = FMath::Max(State->MaxLights, F->GetLights().Num());
 		State->MaxParticles = FMath::Max(State->MaxParticles, F->GetParticleTotal());

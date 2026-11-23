@@ -1,10 +1,12 @@
-// Renders the organ shapes (game/Source/Rim3D/GoreOrganShapes.h) without Unreal, so the cloud can look at them.
+// Renders the organ shapes (game/Source/Rim3D/GoreOrganShapes.h) and the rocket (RocketShape.h) without Unreal, so the
+// cloud can look at them.
 //   g++ -O2 -std=c++20 -I game/Source/Rim3D tools/gore_organs_preview.cpp -o build/gore_organs_preview
 //   ./build/gore_organs_preview out.ppm [cell]
 // A sheet of every organ from two sides, lit by a sun and a soft sky, with a wet highlight where the surface is wet.
 // Also checks that every mesh is closed (each edge used twice) where it should be, and that its faces point out.
 
 #include "GoreOrganShapes.h"
+#include "RocketShape.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -175,6 +177,21 @@ int main(int argc, char** argv)
 		Mesh large = makeGut(big, true, 1.0f, 13);
 		large.centre();
 		items.push_back({"large gut", large});
+	}
+	{
+		// The rocket, wound the Unreal way round: turned back to this file's way.
+		const rocketshape::Shape r = rocketshape::makeRocket();
+		Mesh m;
+		for (size_t i = 0; i < r.points.size(); ++i)
+		{
+			m.add(V3(r.points[i].x, r.points[i].y, r.points[i].z), C4(r.colours[i].r, r.colours[i].g, r.colours[i].b, 0.6f));
+		}
+		for (size_t t = 0; t + 2 < r.triangles.size(); t += 3)
+		{
+			m.tri(r.triangles[t], r.triangles[t + 2], r.triangles[t + 1]);
+		}
+		m.computeNormals();
+		items.push_back({"rocket", m});
 	}
 	for (const Item& it : items)
 	{

@@ -2,6 +2,22 @@
 
 Updated 2026-11-23.
 
+Gore, liquid fire, rocket and roll (sneed, 2026-11-23 night; Unreal only, the rest of the second combat batch):
+**torso bursts** now throw the torso itself cut into slabs (breasts, belly, back, buttocks, the genitals as their own
+piece, each with the body's own skin and clothes and a raw fat-and-muscle inside), the organs (heart, lungs, windpipe,
+liver, stomach, spleen, kidneys, spine, ribs, fat; the same on every race, sized to the body, in a wet `M_Organ` from
+BloodArt), four ropes of intestine that drape over the ground, and much more blood (`docs/design/body-health.md`
+"Organs, guts and torso slabs"); **the neck comes off with the head** (cut at `neck_01`); bullets, blasts, blows, swings
+and walking feet knock loose heads, limbs, gibs, organs and guts about. **Molotovs are liquid fire**: burning drops flung
+out in arcs, a ragged splash that spreads and burns 11 s under black smoke with a flickering light, a dark stain; **every
+fire in the game** (ground, bodies, campfires, torches) is drawn with the photographed fire flipbook (`Fire.Flipbook`).
+**Blasts** gain white-hot pockets in the fireball, a rising smoke column and burning debris that smoulders where it lands
+(`docs/design/blast-draw.md`). **Rockets** fly as a real rocket model (`RocketShape.h`) with a longer white-hot plume and a
+motor light; no tracer streak on rockets and shells. **Roll**: the clip now holds its last frame instead of restarting at
+the end (the likely cause of the 3.5 m snap back); smoke `feel` logs `ROLLTRACE` each frame. All Unreal code is
+unbuilt in the cloud: needs the PC to compile, run BloodArt (art step, automatic), and smokes `gore`, `feel`, `fire`,
+`fights`, `melee` (run `fights` and `melee` on main first for a baseline).
+
 Combat feel batch 2 (sneed, 2026-11-23 evening; sim, data and Unreal): **fists** 40% slower with a 0.1 s gap after each
 punch (`MeleeRules` `unarmedWindupShare`, `unarmedGapSteps`), **melee** a third slower (`attackTimeFactor` 1.125). **Guns**
 (`data/tuning.json`, defs): rockets start at 10 m/s and speed up 7 m/s each second to 60 (`projectile.thrust`, `topSpeed`),
@@ -15,10 +31,8 @@ shoulder anchors and the aimed camera follows softly (no shake walking), waist t
 upper-body swing on the move, blocks rise and hold (`blockHold`) instead of looping, boxing guard from Mixamo (art step
 `mixamo-guard`), breach axe turned round into the left hand (`importRotation`), corpses never pushed into the ground,
 no glowing mist/gush blobs off shot corpses, strand hair held still while a hand sweeps past the head, gun range box off
-(`GunRange.Panel 1`) and +/- cycle the guns, dirt hits throw soil jets and clods, stronger rocket plume. **Not done yet**
-(next thread): neck gone with the head and lower torso cut, loose head physics, organs/intestines/genital gore, realistic
-torso chunks, molotov liquid fire, more realistic explosions, a rocket model, the roll snap-back (smoke `feel` now
-measures the pelvis jump back). PC (2026-11-23): compiles; smokes `gore` and `sound` pass; `feel` fails on the roll
+(`GunRange.Panel 1`) and +/- cycle the guns, dirt hits throw soil jets and clods, stronger rocket plume. The rest (gore,
+liquid fire, explosions, rocket model, roll) is in the paragraph above. PC (2026-11-23): compiles; smokes `gore` and `sound` pass; `feel` fails on the roll
 (the hips snap back the whole 3.5 m at the end, the body never turns over), `melee` fails holsters/switch_key (old) and
 3 late blows of 14, `fights` fails fire_at_pawn (0 hits from 12 m), frozen_hit and ragdoll (pelvis 87 cm up); no
 baseline on main was run, so run `fights` and `melee` on main first to see which are new. `gunrange` not run (PC busy):
