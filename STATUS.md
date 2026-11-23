@@ -2,6 +2,18 @@
 
 Updated 2026-11-22.
 
+The 18 missing animals and the giant insects (sneed, 2026-11-22; data and Unreal, `assets/animal_art.json`): 18 animal
+defs and the 3 chitinids had no model and were drawn as the husky. Each now has a free, rigged, animated model, 13 new
+Sketchfab imports (`assets/manifest.json`, batch 2), mostly WildMesh 3D's realistic ones: grizzly and polar bear (bear,
+81 clips), caribou and gazelle (doe), goat (mountain goat), sheep (bighorn), muskox and yak (buffalo), goose and duck
+(goose), chicken and ostrich (guineafowl), turkey, dromedary (camel), arctic fox (fox), capybara, and the three brood
+insects (rhino beetle). Arctic wolf uses the timber wolf, the iguana a small raptor. Lookalikes are marked `stand_in`.
+Sketchfab's FBX conversions keep their mesh in another unit than their animation, so `"fit": "pose"` sizes them on their
+posed skeleton, and `skipMeshes` drops stray parts. The iguana and wolf spider files still drew 10 times too big or
+vanished, so they are left out (the elk file is imported but unused). `AnimalArt` picks the shortest matching clip name.
+Smoke `animals` has a phase `animals_new` (fails if any is still the husky) and one close-up picture per new animal. The
+4 mechanoids are drawn as people, not the husky, and are left for a later task.
+
 Whole-body melee finishers, held blocks, no crouch slides (sneed, 2026-11-22; sim, data, Unreal, tools,
 `docs/design/lock-on.md` "Whole-body finishers"): **finishers at the downed are now whole-body mocap clips** instead of
 arms posed by hand (the longsword's arms went through its body, the knife's shook and showed the joints): knife kneels and

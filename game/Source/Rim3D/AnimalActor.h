@@ -52,6 +52,8 @@ public:
 	ESimAnimalPose GetPose() const { return Pose; }
 	USkeletalMeshComponent* GetBody() const { return Body; }
 	/** The clip playing now (null before the first update). */
+	/** About how long the drawn body is, nose to tail, in cm (for the tests). */
+	float GetDrawLengthCm() const;
 	const UAnimSequence* GetClip() const;
 	/** The scale the body is drawn at (model scale from the art table, life stage, body size). */
 	float GetDrawScale() const { return DrawScale; }
@@ -69,6 +71,8 @@ private:
 	void SetPose(ESimAnimalPose NewPose, float PlayRate);
 	/** Turns the mesh to face forward, or onto its side for a dead model with no death clip. */
 	void PlaceBody(bool bOnSide);
+	/** For a `"fit": "pose"` model: sets ArtScale from the skeleton's reach in the idle pose. */
+	void FitToPose(float InArtScale);
 
 	FSimAnimalModel Model;
 	colony::Entity Thing = colony::kNoEntity;
@@ -80,4 +84,6 @@ private:
 	float DrawScale = 1.0f;
 	float Yaw = 0.0f;
 	float SwimLiftCm = 0.0f;
+	/** Half the posed skeleton's size at scale 1 (a pose-fitted model), else zero: the mesh's bounds are used. */
+	FVector PoseHalfSize = FVector::ZeroVector;
 };

@@ -231,6 +231,22 @@ namespace
 				Skeletons += Cast<USkeleton>(Object) ? 1 : 0;
 			}
 		}
+		// `skipMeshes`: parts left out (the iguana's tongue, imported as Object_193, sits hundreds of metres from the body and hides the scene).
+		if (const TArray<TSharedPtr<FJsonValue>>* Skip = nullptr; Entry->TryGetArrayField(TEXT("skipMeshes"), Skip))
+		{
+			Meshes.RemoveAll([Skip, &Model](const USkeletalMesh* Mesh)
+			{
+				for (const TSharedPtr<FJsonValue>& Word : *Skip)
+				{
+					if (Mesh->GetName().Contains(Word->AsString()))
+					{
+						UE_LOG(LogAnimalArt, Display, TEXT("%s: left out %s"), *Model, *Mesh->GetName());
+						return true;
+					}
+				}
+				return false;
+			});
+		}
 		FString Names;
 		for (const UAnimSequence* Clip : Clips)
 		{
@@ -268,11 +284,12 @@ namespace
 				UAnimSequence* Match = nullptr;
 				for (UAnimSequence* Clip : Clips)
 				{
-					// Importers prefix clip names with the file or mesh name; the glTF animation name is at the end.
-					if (Clip->GetName().Equals(Wanted, ESearchCase::IgnoreCase) || Clip->GetName().EndsWith(Wanted, ESearchCase::IgnoreCase))
+					// Importers prefix clip names with the file or mesh name; the glTF animation name is at the end. The
+					// shortest name that ends in the wanted one wins, so "Run" picks "Bear_Run", not "Trans_Stand_to_Run".
+					if ((Clip->GetName().Equals(Wanted, ESearchCase::IgnoreCase) || Clip->GetName().EndsWith(Wanted, ESearchCase::IgnoreCase)) &&
+						(!Match || Clip->GetName().Len() < Match->GetName().Len()))
 					{
 						Match = Clip;
-						break;
 					}
 				}
 				if (!Match)
