@@ -438,12 +438,14 @@ void USmokeTestSubsystem::BuildGorePhases()
 		};
 		Phase.WarmupSeconds = 0.0f;
 		Phase.MeasureSeconds = 1.5f;
-		Phase.OnFrame = [=]()
+		Phase.OnFrame = [=, this]()
 		{
 			Front(160.0f, 200.0f);
 			if (const ASimPawnActor* Actor = ActorOf(); Actor && Actor->GetAnim())
 			{
-				State->MaxWobble = FMath::Max(State->MaxWobble, Actor->GetAnim()->GetStats().WobbleDegrees);
+				const float Wobble = Actor->GetAnim()->GetStats().WobbleDegrees;
+				State->MaxWobble = FMath::Max(State->MaxWobble, Wobble);
+				UE_LOG(LogTemp, Display, TEXT("GORETRACE head t=%.3f dt=%.4f wobble=%.2f"), PhaseTime, GetWorld()->GetDeltaSeconds(), Wobble);
 			}
 		};
 		Phase.Verify = [=, this]()
@@ -498,12 +500,14 @@ void USmokeTestSubsystem::BuildGorePhases()
 		Phase.WarmupSeconds = 0.0f;
 		Phase.MeasureSeconds = 7.0f;
 		Phase.ScreenshotAt = 6.0f;
-		Phase.OnFrame = [=]()
+		Phase.OnFrame = [=, this]()
 		{
 			Front(30.0f, 260.0f);
 			if (const ASimPawnActor* Actor = ActorOf())
 			{
 				State->bRagdoll |= Actor->IsRagdoll();
+				UE_LOG(LogTemp, Display, TEXT("GORETRACE corpse t=%.2f ragdoll=%d fastest=%.1f asleep=%d sleeps=%d"), PhaseTime, Actor->IsRagdoll() ? 1 : 0,
+					Actor->GetRagdollFastest(), Actor->IsRagdollAsleep() ? 1 : 0, Actor->GetRagdollSleeps());
 			}
 		};
 		Phase.Verify = [=, this]()
@@ -512,6 +516,8 @@ void USmokeTestSubsystem::BuildGorePhases()
 			const int32 Sleeps = Actor ? Actor->GetRagdollSleeps() - State->SleepsAtStart : 0;
 			PhaseNumbers.Add(TEXT("ragdoll"), State->bRagdoll ? 1 : 0);
 			PhaseNumbers.Add(TEXT("sleeps"), Sleeps);
+			PhaseNumbers.Add(TEXT("asleepAtEnd"), Actor && Actor->IsRagdollAsleep() ? 1 : 0);
+			PhaseNumbers.Add(TEXT("fastestAtEndCmS"), Actor ? Actor->GetRagdollFastest() : -1.0f);
 			if (!State->bKilled || !State->bRagdoll)
 			{
 				Fail(TEXT("corpse: the colonist was not killed into a ragdoll"));

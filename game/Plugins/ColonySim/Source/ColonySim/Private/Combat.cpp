@@ -2677,8 +2677,18 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
             if (part < 0) {
                 break;
             }
-            const PawnHitResult piece = armorPass(pawn, part, ex.damageType, amount * weights[i] / weightSum, ex.penetration, rng, true,
-                                                    HitFrom{true, bx, by});
+            const float share = amount * weights[i] / weightSum;
+            PawnHitResult piece = armorPass(pawn, part, ex.damageType, share, ex.penetration, rng, true, HitFrom{true, bx, by});
+            if (corpse) {
+                // Clothes don't keep a blast from tearing a dead body apart (the gore smoke's rocket at a dressed corpse
+                // tore nothing off when the parka took the piece): the whole share lands, the clothes still wear.
+                piece.deflected = false;
+                piece.shieldBlocked = false;
+                piece.amount = std::max(piece.amount, share);
+                if (!piece.damageType.valid()) {
+                    piece.damageType = ex.damageType;
+                }
+            }
             if (piece.deflected || piece.amount <= 0.0f) {
                 wearApparel(pawn, piece);
                 continue;

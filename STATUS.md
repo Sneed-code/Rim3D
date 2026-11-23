@@ -62,6 +62,12 @@ skin, ribs, bone shards, dark wet lumps, made in code like the stumps) with spra
 splats where they land and lie 5 minutes like blood, then shrink away. **Next:** PC build, smoke `gore` (phases `gibs`,
 `gibsclose`), gun range look.
 
+Gore smoke made dependable (2026-11-23, follow-up to #445): on sneed's PC at 1080p the `gore` smoke failed on frame
+rate, not on the game: the head snap read 6 degrees (the hit layer's wobble was read only at each frame's end; now its
+peak within the frame), a corpse sometimes never slept (a ragdoll that only creeps under 20 cm/s is put to sleep 5 s
+after the fall; corpse phase now shows `asleepAtEnd` and `fastestAtEndCmS`, `GORETRACE` log lines), and a rocket at the
+dressed corpse sometimes tore nothing off (clothes no longer stop a blast's piece on a corpse; test: 8 sides, 8 tears).
+
 Corpses come apart, jolt and stay silent; blasts throw people (sneed, 2026-11-22; sim, data and Unreal,
 `docs/design/body-health.md` part F): **overkill on a corpse is kept until it is in pieces**: every 25 piled past 0 on
 the torso takes one more limb off (the most battered first), then the head, until only the trunk is left; what a cut

@@ -1349,3 +1349,26 @@ TEST_CASE("Dismemberment: rockets on a corpse burst its trunk (smoke gore phase 
     }
     CHECK(burst == 8);
 }
+
+TEST_CASE("Dismemberment: a rocket a metre from a dressed corpse tears something off every time, from any side") {
+    for (int i = 0; i < 8; ++i) {
+        SimSettings settings;
+        settings.seed = 700 + static_cast<uint64_t>(i);
+        settings.mapSize = 64;
+        settings.flatMap = true;
+        settings.pawns = 0;
+        settings.items = 0;
+        auto sim = std::make_unique<Sim>(settings, zoneTestDefs());
+        const Entity pawn = zoneTestPawn(*sim, 20, 20, false);
+        sim->submit(DamagePawnCommand{pawn, "Blunt", 62.0f, zoneTestPart(*sim, pawn, "head")});
+        zoneTestRun(*sim, 3);
+        CHECK(zoneTestHealth(*sim, pawn).dead);
+        const uint16_t before = sim->health().severed(pawn);
+        const Position at = sim->things().registry().get<Position>(pawn);
+        const float angle = 6.2831853f * static_cast<float>(i) / 8.0f;
+        sim->submit(ExplodeCommand{at.x + std::cos(angle), at.y + std::sin(angle), 3.9f, 50.0f, "Bomb", 0.1f});
+        zoneTestRun(*sim, 10);
+        MESSAGE("side " << i << ": severed " << before << " -> " << sim->health().severed(pawn));
+        CHECK((sim->health().severed(pawn) != before || sim->health().gibbed(pawn)));
+    }
+}
