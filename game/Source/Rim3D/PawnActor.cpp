@@ -2905,10 +2905,12 @@ void ASimPawnActor::UpdateRagdollRest(float DeltaTime)
 				continue;
 			}
 			FTransform T = Instance->GetUnrealWorldTransform();
-			const double Below = FVector::DotProduct(T.GetLocation() - RagdollGround, RagdollGroundNormal);
-			if (Below < -1.0)
+			// Measured from the ground itself (the floor box sits PawnRagdollFloorLift above it), with room for a joint
+			// lying flat on it, so a body at rest is never nudged.
+			const double Below = FVector::DotProduct(T.GetLocation() - RagdollGround, RagdollGroundNormal) + PawnRagdollFloorLift;
+			if (Below < -3.0)
 			{
-				T.AddToTranslation(RagdollGroundNormal * (2.0 - Below));
+				T.AddToTranslation(RagdollGroundNormal * (PawnRagdollFloorLift - Below));
 				Instance->SetBodyTransform(T, ETeleportType::TeleportPhysics);
 				FVector V = Instance->GetUnrealWorldVelocity();
 				const double Into = FVector::DotProduct(V, RagdollGroundNormal);
