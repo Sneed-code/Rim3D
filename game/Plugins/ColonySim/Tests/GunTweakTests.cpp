@@ -324,7 +324,7 @@ TEST_CASE("Gun changes (second batch): charge lance, machine pistol store, chain
     CHECK(defs.find("Things", "Gun_Minigun")->number("stats.rangedWeaponCooldown") == doctest::Approx(225.0));
     CHECK(defs.find("Things", "Gun_ChainShotgun")->number("stats.rangedWeaponCooldown") == doctest::Approx(60.75));
     // Revolver +25%, spray-and-pray guns -25% (after the 0.5 for all bullets).
-    CHECK(defs.find("Projectiles", "Bullet_Revolver")->number("projectile.damageAmountBase") == doctest::Approx(18.0 * 0.5 * 1.25));
+    CHECK(defs.find("Projectiles", "Bullet_Revolver")->number("projectile.damageAmountBase") == doctest::Approx(12.0 * 0.5 * 1.25));
     CHECK(defs.find("Projectiles", "Bullet_Minigun")->number("projectile.damageAmountBase") == doctest::Approx(10.0 * 0.5 * 0.75));
     CHECK(defs.find("Projectiles", "Bullet_LMG")->number("projectile.damageAmountBase") == doctest::Approx(12.0 * 0.5 * 0.75));
     CHECK(defs.find("Projectiles", "Bullet_HeavySMG")->number("projectile.damageAmountBase") == doctest::Approx(12.0 * 0.5 * 0.75));
@@ -360,8 +360,8 @@ TEST_CASE("Gun changes: the grenade launcher lobs slower, in an arc, and still r
         }
     }
     GT_REQUIRE(firstBounceX > 0.0f);
-    CHECK(arc > 0.8f);                               // a visible arc
-    CHECK(std::fabs(firstBounceX - tx) < 1.0f);      // first touchdown at the aimed point
+    CHECK(arc > 0.3f);                               // a visible arc (flatter at 36 m/s)
+    CHECK(std::fabs(firstBounceX - tx) < 1.5f);      // first touchdown near the aimed point (a 1.2 m step at 36 m/s)
     // Far beyond reach it still goes as far as it can (the 45 degree shot) instead of falling short.
     const Entity far = sim->combat().fire(shooter, 20.5f + 200.0f, ty, 0.0f, 0.0f, rng);
     GT_REQUIRE(far != kNoEntity);

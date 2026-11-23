@@ -132,7 +132,7 @@ TEST_CASE("sound: events turn into cues") {
     CHECK(soundTestPlay(db, mh).at(0).cue == "Hit_Wood_Flesh");
     mh.message = "deflected";
     mh.hit = ProjectileHitKind::Armor;
-    CHECK(soundTestPlay(db, mh).at(0).cue == "Hit_Wood_Steel");
+    CHECK(soundTestPlay(db, mh).at(0).cue == "Hit_Blunt_Steel");  // sneed 2026-11-23: sharp and blunt sets by surface
     mh.message = "missed";
     CHECK(soundTestPlay(db, mh).empty());
     mh.message = "hit";
@@ -441,15 +441,15 @@ TEST_CASE("sound: melee blows sound by what strikes what") {
     e.message = "blocked";
     e.struckDef = club;
     e.struckStuff = wood;
-    CHECK(soundMeleeCue(db, e) == "Hit_Steel_Wood");
+    CHECK(soundMeleeCue(db, e) == "Hit_Blunt_Wood");  // the blunt set by what is struck (sneed 2026-11-23)
     e.def = club;
     e.struckStuff = steel;
-    CHECK(soundMeleeCue(db, e) == "Hit_Wood_Steel");
+    CHECK(soundMeleeCue(db, e) == "Hit_Blunt_Steel");
     e.message = "deflected";
     e.hit = ProjectileHitKind::Armor;
     e.struckDef = DefId{};
     e.struckStuff = DefId{};
-    CHECK(soundMeleeCue(db, e) == "Hit_Wood_Steel");
+    CHECK(soundMeleeCue(db, e) == "Hit_Blunt_Steel");
     e.message = "missed";
     e.hit = ProjectileHitKind::None;
     CHECK(soundMeleeCue(db, e).empty());  // a swing through air
@@ -457,11 +457,11 @@ TEST_CASE("sound: melee blows sound by what strikes what") {
     e.hit = ProjectileHitKind::Rock;
     e.def = knife;
     e.stuff = steel;
-    CHECK(soundMeleeCue(db, e) == "Hit_Steel_Stone");
+    CHECK(soundMeleeCue(db, e) == "Hit_Sharp_Stone");  // a blade: the sharp set
     e.hit = ProjectileHitKind::Building;
     e.struckDef = db.idOf("Things", "Wall");
     e.struckStuff = wood;
-    CHECK(soundMeleeCue(db, e) == "Hit_Steel_Wood");
+    CHECK(soundMeleeCue(db, e) == "Hit_Sharp_Wood");
     // Every pairing has its cue.
     for (const char* w : {"Wood", "Steel"}) {
         for (const char* s2 : {"Flesh", "Wood", "Steel", "Stone"}) {
