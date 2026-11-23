@@ -2,6 +2,16 @@
 
 Updated 2026-11-22.
 
+Solar panel and wind turbine models (sneed, 2026-11-22; tools, data and Unreal, `docs/design/building-draw.md`
+"Downloaded models with a moving part"): the two power buildings were still box shapes. Now they use free Fab models,
+downloaded once into `assets/raw/fab/` on the PC: "Animated Wind Turbine" (Glowbox3D, CC BY) and "Solar Panel Array
+Rack" (FunkFX, free Personal licence). `tools/fab_prep.py` (Blender) fits the turbine to RimWorld's 5 x 2 footprint
+(4.8 m rotor, hub 6.6 m up, tower stretched to suit) and splits off its blades as their own mesh with its origin on the
+hub; the solar generator is two racks side by side on its 4 x 4 (their node colours baked to textures). GunArt imports
+them (`assets/power_art.json`). A def's new `visual.rotor` turns the blades every frame, faster with more wind power,
+still with none (`UBuildingSubsystem::AnimateRotors`). Art steps `power-models` and `power-art` run them in
+`update-and-play.bat`. Smoke test `power` (pictures; fails if the turbine makes power and the blades do not turn).
+
 The 18 missing animals and the giant insects (sneed, 2026-11-22; data and Unreal, `assets/animal_art.json`): 18 animal
 defs and the 3 chitinids had no model and were drawn as the husky. Each now has a free, rigged, animated model, 13 new
 Sketchfab imports (`assets/manifest.json`, batch 2), mostly WildMesh 3D's realistic ones: grizzly and polar bear (bear,

@@ -78,6 +78,10 @@ public:
 	int32 GetChunkInstances(int32 ChunkX, int32 ChunkY) const;
 	/** Instances drawn on a level, all chunks; only the ones visible right now if `bVisibleOnly` (the cut-away levels are hidden). */
 	int32 GetLevelInstances(int32 Level, bool bVisibleOnly) const;
+	/** Turning parts drawn (visual.rotor), and one's angle (degrees) and speed (turns a minute); false if `Thing` has none. */
+	int32 GetRotorsDrawn() const { return RotorSlots.Num(); }
+	bool GetRotor(colony::Entity Thing, float& OutAngleDeg, float& OutRpm) const;
+
 	/** How open the door `Door` is drawn right now, 0 to 1; -1 if it is not a drawn door. */
 	float GetDoorShown(colony::Entity Door) const;
 	/** The slide of the door's moving leaf from its closed place along its length, cm; 0 for no such door. */
@@ -160,6 +164,14 @@ private:
 		float HeightCm = 0.0f;
 		/** The def's own mesh (visual.mesh, A1), already sized and stood on the ground; null draws the parts. A door's is its leaf. */
 		UStaticMesh* ArtMesh = nullptr;
+		/** A part that turns (visual.rotor: a wind turbine's blades), drawn with the def's own mesh only; its origin is the hub. */
+		UStaticMesh* RotorMesh = nullptr;
+		/** Where the hub is (cm) and the axis it turns about, in the building's own frame (x east, y north, z up). */
+		FVector RotorAtCm = FVector::ZeroVector;
+		FVector RotorAxis = FVector::YAxisVector;
+		/** Turns a minute at full power (the def's power.output); slower with less, still with none. */
+		float RotorRpm = 0.0f;
+		float RotorFullWatts = 0.0f;
 		/** Moving parts of a model with animations (visual.moving, docs/design/neon-assets.md): each part's own mesh, in the
 		 *  same frame as ArtMesh, and the rules that pick the clip it plays (PropAnims.h). Drawn only with ArtMesh. */
 		FString AnimSet;
@@ -185,6 +197,7 @@ private:
 		uint64 Signature = 0;
 		int32 Instances = 0;
 		TArray<colony::Entity> Doors;
+		TArray<colony::Entity> Rotors;
 		TArray<uint64> Moving;
 	};
 
@@ -217,6 +230,20 @@ private:
 		float Shown = 0.0f;
 	};
 
+	/** A turning part (visual.rotor), for the animation. */
+	struct FRotorSlot
+	{
+		UInstancedStaticMeshComponent* Component = nullptr;
+		int32 Index = 0;
+		/** The hub's transform with the rotor unturned, and the axis in the world. */
+		FTransform Base;
+		FVector Axis = FVector::YAxisVector;
+		float MaxRpm = 0.0f;
+		float FullWatts = 0.0f;
+		float Rpm = 0.0f;
+		float AngleDeg = 0.0f;
+	};
+
 	void Teardown();
 	void RebuildAll();
 	void ReadDefs(const colony::Sim& Sim);
@@ -234,6 +261,8 @@ private:
 	void ApplyCut(bool bForce);
 	UInstancedStaticMeshComponent* GetComponent(FChunk& Chunk, int32 Key, UStaticMesh* Mesh, bool bGhost, bool bItem, bool bCastShadow);
 	void AnimateDoors();
+	/** Turns the rotors at a speed eased towards their power output (cosmetic, real time, still while paused). */
+	void AnimateRotors(float DeltaTime);
 	void AnimateMoving();
 	int32 ChunkIndex(int32 Level, int32 ChunkX, int32 ChunkY) const { return (Level * ChunksY + ChunkY) * ChunksX + ChunkX; }
 	int32 LevelOfChunk(int32 Index) const { return Index / FMath::Max(1, ChunksX * ChunksY); }
@@ -263,6 +292,7 @@ private:
 	TMap<uint64, int32> LookIndex;
 	TArray<FLook> Looks;
 	TMap<uint32, FDoorSlot> DoorSlots;
+	TMap<uint32, FRotorSlot> RotorSlots;
 	TMap<uint64, FMovingSlot> MovingSlots;
 	TMap<uint32, FMoveState> MoveStates;
 	uint32 MoveFrame = 0;

@@ -250,6 +250,23 @@
       "run": [{"commandlet": "GunArt", "args": ["-List=assets/codex_art.json", "-nullrhi"]}]
     },
     {
+      "name": "power-models",
+      "what": "Turn the downloaded solar panel and wind turbine into game files in Blender",
+      "inputs": ["tools/fab_prep.py", "tools/codex_prep.py", "assets/power_art.json"],
+      "raw": ["assets/raw/fab/wind-turbine", "assets/raw/fab/solar-rack"],
+      "needs": ["blender"],
+      "run": [{"blender": ["-b", "--factory-startup", "-P", "tools/fab_prep.py", "--"]}]
+    },
+    {
+      "name": "power-art",
+      "what": "Solar panel and wind turbine",
+      "inputs": ["assets/power_art.json"],
+      "after": ["power-models"],
+      "raw": ["assets/raw/power"],
+      "commandletSource": "GunArt",
+      "run": [{"commandlet": "GunArt", "args": ["-List=assets/power_art.json", "-nullrhi"]}]
+    },
+    {
       "name": "blood-art",
       "what": "Blood, spray and skin blood",
       "after": ["makehuman-bodies"],
@@ -267,7 +284,7 @@
       "what": "Rain makes everything wet (after any material is remade)",
       "after": ["placeholder-art", "terrain-materials", "surface-materials", "building-materials", "tree-art", "foliage-materials", "sky-art",
                 "water-art", "fight-materials", "shield-art", "animal-art", "pawn-looks", "pawn-faces", "clothes-art", "makehuman-bodies",
-                "makehuman-garments", "hair-grooms", "gun-art", "shuttle-art", "codex-art", "blood-art", "blast-art"],
+                "makehuman-garments", "hair-grooms", "gun-art", "shuttle-art", "codex-art", "power-art", "blood-art", "blast-art"],
       "makes": ["game/Content/Rim3D/Generated/Weather"],
       "run": [{"commandlet": "WetLook", "args": ["-nullrhi"]}]
     }

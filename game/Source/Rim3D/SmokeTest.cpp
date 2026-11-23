@@ -222,6 +222,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildSkyPhases();
 	}
+	else if (TestName == TEXT("power"))
+	{
+		BuildPowerPhases();
+	}
 	else if (TestName == TEXT("melee"))
 	{
 		BuildMeleePhases();
