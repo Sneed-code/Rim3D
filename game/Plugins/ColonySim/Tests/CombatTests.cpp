@@ -295,9 +295,9 @@ TEST_CASE("Combat: armor softens every hit by the same share, wherever it lands,
                 }
                 if (e.type == EventType::ProjectileHit && (e.hit == ProjectileHitKind::Armor || e.hit == ProjectileHitKind::Pawn)) {
                     stopped += e.hit == ProjectileHitKind::Armor ? 1 : 0;
-                    // A revolver bullet, 12 damage halved by tuning.json to 6, 75% blunt and 25% sharp, 18% penetration:
-                    // the vest's 15% blunt and 30% sharp work at 82% (docs/design/armour.md).
-                    const float expected = 4.5f / (1.0f + 0.15f * 0.82f) + 1.5f / (1.0f + 0.30f * 0.82f);
+                    // A revolver bullet, 12 damage halved by tuning.json and +25% for the revolver (7.5), 75% blunt and 25%
+                    // sharp, 18% penetration: the vest's 15% blunt and 30% sharp work at 82% (docs/design/armour.md).
+                    const float expected = 5.625f / (1.0f + 0.15f * 0.82f) + 1.875f / (1.0f + 0.30f * 0.82f);
                     if (e.amount != doctest::Approx(expected).epsilon(0.001)) {
                         ++bruised;
                         MESSAGE("amount " << e.amount << " expected " << expected);

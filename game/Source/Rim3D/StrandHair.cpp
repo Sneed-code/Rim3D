@@ -62,6 +62,9 @@ namespace
 		TEXT("0 to 1: strand hair is simulated in the upper chest's frame (Unreal's local simulation), keeping this share of the ")
 		TEXT("body's turning as swing. Negative (default): simulated in the world. Tried at 0.25 on the PC (2026-11-22): the hair ")
 		TEXT("swung stiffly and sank into the back after turns, so it is off."));
+	TAutoConsoleVariable<float> GStrandHairSwingHold(TEXT("Pawns.StrandHairSwingHold"), 350.0f,
+		TEXT("cm/s: a hand moving faster than this within 45 cm of the head holds the strand hair at rest while it passes (the arm ")
+		TEXT("shapes swept through it and threw it up, sneed 2026-11-23). 0: off."));
 	TAutoConsoleVariable<float> GStrandHairTurnHold(TEXT("Pawns.StrandHairTurnHold"), 240.0f,
 		TEXT("Degrees a second: while a strand-haired body turns faster than this (a turn round, a swing at someone) its hair is ")
 		TEXT("held at its resting shape on the head, turning with the body, and swings freely again from there once the turn ends; ")
@@ -973,6 +976,37 @@ void UStrandHairSubsystem::Tick(float DeltaTime)
 		}
 		Wearer.LastYaw = Yaw;
 		Wearer.bHaveYaw = true;
+		// A hand swung fast past the head (an overhead club or hammer blow): the arms' collision shapes swept through
+		// the hair and threw it straight up (sneed 2026-11-23). Held at rest while it passes, like a fast turn.
+		{
+			USkeletalMeshComponent* Body = Wearer.Body.Get();
+			const FVector Head = Body->GetSocketLocation(TEXT("head"));
+			const FName HandBones[2] = {TEXT("hand_l"), TEXT("hand_r")};
+			const float SwingSpeed = FMath::Max(50.0f, GStrandHairSwingHold.GetValueOnGameThread());
+			bool bSweep = false;
+			for (int32 H = 0; H < 2; ++H)
+			{
+				if (Body->GetBoneIndex(HandBones[H]) == INDEX_NONE)
+				{
+					continue;
+				}
+				const FVector Hand = Body->GetSocketLocation(HandBones[H]) - Head;
+				if (Wearer.bHaveHands && DeltaTime > 0.0f && Hand.Size() < 45.0 && (Hand - Wearer.LastHands[H]).Size() / DeltaTime > SwingSpeed)
+				{
+					bSweep = true;
+				}
+				Wearer.LastHands[H] = Hand;
+			}
+			Wearer.bHaveHands = true;
+			if (bSweep && GStrandHairSwingHold.GetValueOnGameThread() > 0.0f)
+			{
+				if (Wearer.TurnHold <= 0.0f)
+				{
+					++SwingHolds;
+				}
+				Wearer.TurnHold = FMath::Max(Wearer.TurnHold, 0.12f + DeltaTime);
+			}
+		}
 		if (Wearer.TurnHold > 0.0f)
 		{
 			Wearer.TurnHold -= DeltaTime;

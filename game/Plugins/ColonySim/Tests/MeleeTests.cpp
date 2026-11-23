@@ -61,11 +61,15 @@ std::string meleeTestBasePace(std::string body) {
         const size_t end = body.find_first_of(",}", colon);
         body.replace(colon + 1, end - colon - 1, " false");
     }
-    const size_t mw = body.find("\"unarmedMinWindup\"");
-    if (mw != std::string::npos) {
+    for (const auto& [key, value] : {std::pair<const char*, const char*>{"\"unarmedMinWindup\"", " 9"},
+                                     {"\"unarmedWindupShare\"", " 0.3"}, {"\"unarmedGapSteps\"", " 0"}}) {
+        const size_t mw = body.find(key);
+        if (mw == std::string::npos) {
+            continue;
+        }
         const size_t colon = body.find(':', mw);
         const size_t end = body.find_first_of(",}", colon);
-        body.replace(colon + 1, end - colon - 1, " 9");
+        body.replace(colon + 1, end - colon - 1, value);
     }
     return body;
 }

@@ -229,5 +229,21 @@
   {"defName": "Animal_Mech_Death", "label": "mechanoid breaks down", "loop": false, "volume": 0.85, "range": 120, "priority": 1, "tone": {"wave": "square", "hz": 90, "seconds": 0.6}},
   {"defName": "Animal_Chitinid_Idle", "label": "chitinid chittering", "loop": false, "volume": 0.4, "range": 50, "priority": 3, "tone": {"wave": "saw", "hz": 2200, "seconds": 0.2}},
   {"defName": "Animal_Chitinid_Hurt", "label": "chitinid hiss", "loop": false, "volume": 0.65, "range": 70, "priority": 2, "tone": {"wave": "noise", "hz": 3000, "seconds": 0.25}},
-  {"defName": "Animal_Chitinid_Death", "label": "chitinid dies", "loop": false, "volume": 0.7, "range": 80, "priority": 2, "tone": {"wave": "saw", "hz": 1500, "seconds": 0.4}}
+  {"defName": "Animal_Chitinid_Death", "label": "chitinid dies", "loop": false, "volume": 0.7, "range": 80, "priority": 2, "tone": {"wave": "saw", "hz": 1500, "seconds": 0.4}},
+  {"defName": "Hit_Sharp_Steel", "label": "edge on metal", "loop": false, "volume": 0.65, "range": 120, "near": 2, "priority": 1, "tone": {"wave": "noise", "hz": 1800, "seconds": 0.08}},
+  {"defName": "Hit_Blunt_Steel", "label": "blunt blow on metal", "loop": false, "volume": 0.65, "range": 110, "near": 2, "priority": 1, "tone": {"wave": "noise", "hz": 900, "seconds": 0.1}},
+  {"defName": "Hit_Sharp_Stone", "label": "edge on stone", "loop": false, "volume": 0.65, "range": 120, "near": 2, "priority": 1, "tone": {"wave": "noise", "hz": 2400, "seconds": 0.08}},
+  {"defName": "Hit_Blunt_Stone", "label": "blunt blow on stone", "loop": false, "volume": 0.65, "range": 110, "near": 2, "priority": 1, "tone": {"wave": "noise", "hz": 1200, "seconds": 0.1}},
+  {"defName": "Hit_Sharp_Wood", "label": "edge on wood", "loop": false, "volume": 0.65, "range": 120, "near": 2, "priority": 1, "tone": {"wave": "noise", "hz": 700, "seconds": 0.08}},
+  {"defName": "Hit_Blunt_Wood", "label": "blunt blow on wood", "loop": false, "volume": 0.65, "range": 110, "near": 2, "priority": 1, "tone": {"wave": "noise", "hz": 350, "seconds": 0.1}},
+  {"defName": "Hit_Sharp_Dirt", "label": "edge on earth", "loop": false, "volume": 0.65, "range": 120, "near": 2, "priority": 1, "tone": {"wave": "noise", "hz": 200, "seconds": 0.08}},
+  {"defName": "Hit_Blunt_Dirt", "label": "blunt blow on earth", "loop": false, "volume": 0.65, "range": 110, "near": 2, "priority": 1, "tone": {"wave": "noise", "hz": 100, "seconds": 0.1}},
+  {"defName": "Minigun_Motor", "label": "minigun barrels spinning", "loop": true, "volume": 0.55, "range": 120, "near": 3, "priority": 1, "tone": {"wave": "saw", "hz": 220, "seconds": 1.0}},
+  {"defName": "Swing_Saber", "label": "plasma sword swing", "loop": false, "volume": 0.6, "range": 25, "near": 2, "priority": 1, "tone": {"wave": "saw", "hz": 180, "seconds": 0.3}},
+  {"defName": "Saber_Hum", "label": "plasma sword hum", "loop": true, "volume": 0.3, "range": 10, "near": 1.5, "priority": 2, "tone": {"wave": "saw", "hz": 90, "seconds": 1.0}},
+  {"defName": "Saber_Hit", "label": "plasma sword strike", "loop": false, "volume": 0.75, "range": 60, "near": 2, "priority": 1, "tone": {"wave": "saw", "hz": 300, "seconds": 0.2}},
+  {"defName": "Charge_Up", "label": "charge lance charging", "loop": false, "volume": 0.6, "range": 40, "near": 3, "priority": 1, "tone": {"wave": "saw", "hz": 400, "seconds": 2.0}},
+  {"defName": "Shot_ChargeLance", "label": "charge lance blast", "loop": false, "volume": 0.95, "range": 1400, "near": 8, "priority": 0, "tone": {"wave": "saw", "hz": 300, "seconds": 0.3}},
+  {"defName": "Zap_Electric", "label": "electric burst", "loop": false, "volume": 0.8, "range": 80, "near": 3, "priority": 1, "tone": {"wave": "noise", "hz": 3000, "seconds": 0.2}},
+  {"defName": "Zap_Big", "label": "huge electric discharge", "loop": false, "volume": 0.95, "range": 200, "near": 5, "priority": 0, "tone": {"wave": "noise", "hz": 2000, "seconds": 0.5}}
 ]

@@ -205,6 +205,9 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
                     j["aimPart"] = c.aimPart;
                     j["aimSpot"] = {static_cast<double>(c.aimDx), static_cast<double>(c.aimDy), static_cast<double>(c.aimUp)};
                 }
+                if (c.charge > 0.0f) {  // a charged gun's held trigger
+                    j["charge"] = static_cast<double>(c.charge);
+                }
             } else if constexpr (std::is_same_v<Type, SetStanceCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["stance"] = kReplayStanceNames[static_cast<int>(c.stance)];
@@ -1058,6 +1061,12 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             c.aimDx = (*spot)[0].get<float>();
             c.aimDy = (*spot)[1].get<float>();
             c.aimUp = (*spot)[2].get<float>();
+        }
+        if (const auto charge = j.find("charge"); charge != j.end()) {
+            if (!charge->is_number()) {
+                return r.fail(where + ".charge must be a number");
+            }
+            c.charge = charge->get<float>();
         }
         c.aimPawn = static_cast<Entity>(aimPawn);
         c.pawn = static_cast<Entity>(pawn);

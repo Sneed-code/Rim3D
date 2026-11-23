@@ -2085,6 +2085,13 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                    !combat_->shoot(shoot->pawn, shoot->target, shoot->x, shoot->y, shoot->z, shoot->player, &error,
                                    shoot->aimPawn != kNoEntity ? &drawn : nullptr)) {
             commandFailed(id, error);
+        } else if (shoot->player && shoot->charge > 0.0f) {
+            // A charged gun's held trigger (the charge lance): its next shot hits harder.
+            entt::registry& reg = things_->registry();
+            const Gear* gear = reg.try_get<Gear>(shoot->pawn);
+            if (Shooter* s = reg.try_get<Shooter>(shoot->pawn); s != nullptr && gear != nullptr && gear->weapon != kNoEntity) {
+                s->chargeFactor = combat_->chargeFactorFor(reg.get<Thing>(gear->weapon).def, shoot->charge);
+            }
         }
     } else if (const auto* stance = std::get_if<SetStanceCommand>(&command)) {
         if (static_cast<int>(stance->stance) > static_cast<int>(Stance::Prone) ||

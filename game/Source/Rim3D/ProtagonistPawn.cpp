@@ -93,9 +93,10 @@ namespace
 	constexpr float ProtagonistFocusRecentreStart = 0.1f;
 	// The third person camera follows the body softly (time constants, real seconds): barely while running, so it feels
 	// as it did, and more in a roll, so the view glides after the tumble instead of lurching with it (Elden Ring). Aiming
-	// follows exactly. It never trails more than the most below (cm), and jumps (a teleport, a new body) are not followed.
+	// follows a little more tightly. It never trails more than the most below (cm), and jumps (a teleport, a new body) are not followed.
 	constexpr float ProtagonistFollowRunSeconds = 0.05f;
 	constexpr float ProtagonistFollowRollSeconds = 0.2f;
+	constexpr float ProtagonistFollowAimSeconds = 0.04f;
 	constexpr float ProtagonistRollFollowPerSecond = 3.0f;
 	constexpr double ProtagonistFollowMaxTrail = 140.0;
 	constexpr double ProtagonistFollowTeleport = 500.0;
@@ -608,8 +609,10 @@ void AProtagonistPawn::UpdateCamera()
 	}
 	else if (CameraDelta > 0.0f)
 	{
-		const float Seconds = FMath::Lerp(ProtagonistFollowRunSeconds, ProtagonistFollowRollSeconds, ProtagonistSmooth(RollFollow))
-			* (1.0f - Blend);
+		// Aimed it still follows softly, just less (sneed 2026-11-23: the view shook while walking and aiming; locked to
+		// the body it took every hitch of the drawn position).
+		const float Seconds = FMath::Lerp(FMath::Lerp(ProtagonistFollowRunSeconds, ProtagonistFollowRollSeconds, ProtagonistSmooth(RollFollow)),
+			ProtagonistFollowAimSeconds, Blend);
 		const double Share = Seconds > 1.0e-3f ? 1.0 - FMath::Exp(-CameraDelta / Seconds) : 1.0;
 		SmoothFeet = FMath::Lerp(SmoothFeet, Feet, Share);
 		const FVector Behind = SmoothFeet - Feet;

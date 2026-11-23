@@ -217,7 +217,7 @@ TEST_CASE("Gun changes: buckshot is strong up close and weak far away") {
     CHECK(near > far * 2);
 }
 
-TEST_CASE("Gun changes: rockets fly straight at 7 metres a second and reach 30 metres") {
+TEST_CASE("Gun changes: rockets leave at 10 m/s, speed up 7 m/s every second up to 60, fly straight and reach 30 metres") {
     for (const char* gun : {"Gun_TripleRocketLauncher", "Gun_DoomsdayLauncher"}) {
         auto sim = gtSim();
         const Entity shooter = gtPawn(*sim, 20, 40, gun);
@@ -228,34 +228,107 @@ TEST_CASE("Gun changes: rockets fly straight at 7 metres a second and reach 30 m
         const Entity rocket = sim->combat().fire(shooter, tx, ty, tz, 0.0f, rng);
         GT_REQUIRE(rocket != kNoEntity);
         const Projectile start = sim->things().registry().get<Projectile>(rocket);
-        const float speed = std::sqrt(start.vx * start.vx + start.vy * start.vy + start.vz * start.vz);
-        CHECK(speed * 30.0f == doctest::Approx(7.0f).epsilon(0.005));  // metres per real second at 1x
+        const auto speedOf = [](const Projectile& p) { return std::sqrt(p.vx * p.vx + p.vy * p.vy + p.vz * p.vz) * 30.0f; };
+        CHECK(speedOf(start) == doctest::Approx(10.0f).epsilon(0.005));  // metres per real second at 1x
         // No drop: the aim is the straight line to the point.
         CHECK(start.vz / start.vx == doctest::Approx((tz - start.z) / (tx - start.x)).epsilon(0.01));
         int steps = 0;
-        float lastVz = start.vz;
+        float slope = start.vz / start.vx;
         bool straight = true;
         bool burst = false;
+        float speedAt30 = 0.0f;
         for (int i = 0; i < 600 && !burst; ++i) {
             sim->step();
             ++steps;
             if (sim->things().registry().valid(rocket) && sim->things().registry().all_of<Projectile>(rocket)) {
-                straight = straight && sim->things().registry().get<Projectile>(rocket).vz == doctest::Approx(lastVz);
+                const Projectile& p = sim->things().registry().get<Projectile>(rocket);
+                straight = straight && p.vz / p.vx == doctest::Approx(slope).epsilon(0.001);
+                if (steps == 30) {
+                    speedAt30 = speedOf(p);
+                }
             }
             for (const Event& e : sim->events()) {
                 if (e.type == EventType::ProjectileHit) {
                     burst = true;
                     CHECK(e.hit == ProjectileHitKind::Ground);
-                    CHECK(std::fabs(e.x - tx) < 0.6f);
+                    CHECK(std::fabs(e.x - tx) < 1.2f);
                     CHECK(std::fabs(e.y - ty) < 0.1f);
                 }
             }
         }
         CHECK(straight);
         CHECK(burst);
-        CHECK(steps > 120);  // longer than a bullet's flight limit, and it got there
-        CHECK(steps == doctest::Approx(30.0f / (speed)).epsilon(0.05));
+        CHECK(speedAt30 == doctest::Approx(17.0f).epsilon(0.02));  // 10 + 7 after a second
+        // 30 m at 10 m/s plus 7 m/s/s: about 1.9 s.
+        CHECK(steps >= 50);
+        CHECK(steps <= 64);
     }
+}
+
+TEST_CASE("Gun changes: a rocket's motor stops speeding it up at 60 m/s") {
+    auto sim = gtSim();
+    const Entity shooter = gtPawn(*sim, 5, 5, "Gun_TripleRocketLauncher");
+    Rng rng(1);
+    // Up into the sky, so nothing stops it.
+    const Entity rocket = sim->combat().fire(shooter, 5.6f, 5.5f, 400.0f, 0.0f, rng);
+    GT_REQUIRE(rocket != kNoEntity);
+    for (int i = 0; i < 300; ++i) {
+        sim->step();
+    }
+    GT_REQUIRE(sim->things().registry().valid(rocket));
+    const Projectile& p = sim->things().registry().get<Projectile>(rocket);
+    CHECK(std::sqrt(p.vx * p.vx + p.vy * p.vy + p.vz * p.vz) * 30.0f == doctest::Approx(60.0f).epsilon(0.01));
+}
+
+TEST_CASE("Gun changes (second batch): charge lance, machine pistol store, chain shotgun blasts, cooldowns and damage") {
+    auto sim = gtSim();
+    const DefId lance = sim->defs().idOf("Things", "Gun_ChargeLance");
+    CHECK(sim->combat().chargeFactorFor(lance, 0.0f) == doctest::Approx(1.0f));
+    CHECK(sim->combat().chargeFactorFor(lance, 1.0f) == doctest::Approx(1.5f));
+    CHECK(sim->combat().chargeFactorFor(lance, 2.0f) == doctest::Approx(2.0f));  // "at max charge up it does x2 damage"
+    CHECK(sim->combat().chargeFactorFor(lance, 3.5f) == doctest::Approx(2.0f));
+    CHECK(sim->combat().chargeFactorFor(sim->defs().idOf("Things", "Gun_Revolver"), 2.0f) == doctest::Approx(1.0f));
+    CHECK(sim->defs().find("Things", "Gun_ChargeLance")->number("charge.forceSeconds") == doctest::Approx(4.0));
+
+    // A held trigger's charge goes on the next shot only.
+    const Entity hero = gtPawn(*sim, 30, 40, "Gun_ChargeLance");
+    ShootCommand c{hero, kNoEntity, 45.5f, 40.5f, 1.0f, true};
+    c.charge = 2.0f;
+    sim->submit(c);
+    float factor = 0.0f;
+    for (int i = 0; i < 5 && factor == 0.0f; ++i) {
+        sim->step();
+        for (const Entity e : gtProjectiles(*sim)) {
+            factor = sim->things().registry().get<Projectile>(e).damageFactor;
+        }
+    }
+    const Entity plain = gtPawn(*sim, 30, 50, "Gun_ChargeLance");
+    Rng rng(2);
+    const Entity unCharged = sim->combat().fire(plain, 45.5f, 50.5f, 1.0f, 0.0f, rng);
+    GT_REQUIRE(unCharged != kNoEntity);
+    CHECK(factor == doctest::Approx(2.0f * sim->things().registry().get<Projectile>(unCharged).damageFactor));
+    CHECK(sim->things().registry().get<Shooter>(hero).chargeFactor == doctest::Approx(1.0f));
+
+    // The machine pistol holds half: 5 of the 9 a 3-shot burst gives.
+    const Entity mp = gtPawn(*sim, 30, 60, "Gun_MachinePistol");
+    int stored = 0, size = 0, left = 0, from = 0;
+    CHECK(sim->combat().shotStore(mp, stored, size, left, from));
+    CHECK(size == 5);
+    // The chain shotgun fires three blasts, not a store of nine.
+    const Entity cs = gtPawn(*sim, 30, 70, "Gun_ChainShotgun");
+    CHECK(sim->combat().shotStore(cs, stored, size, left, from));
+    CHECK(size == 3);
+
+    const DefDatabase& defs = *gtDefs();
+    // Cooldowns: minigun x5 (45 -> 225 steps), chain shotgun x1.5 (40.5 -> 60.75).
+    CHECK(defs.find("Things", "Gun_Minigun")->number("stats.rangedWeaponCooldown") == doctest::Approx(225.0));
+    CHECK(defs.find("Things", "Gun_ChainShotgun")->number("stats.rangedWeaponCooldown") == doctest::Approx(60.75));
+    // Revolver +25%, spray-and-pray guns -25% (after the 0.5 for all bullets).
+    CHECK(defs.find("Projectiles", "Bullet_Revolver")->number("projectile.damageAmountBase") == doctest::Approx(12.0 * 0.5 * 1.25));
+    CHECK(defs.find("Projectiles", "Bullet_Minigun")->number("projectile.damageAmountBase") == doctest::Approx(10.0 * 0.5 * 0.75));
+    CHECK(defs.find("Projectiles", "Bullet_LMG")->number("projectile.damageAmountBase") == doctest::Approx(12.0 * 0.5 * 0.75));
+    CHECK(defs.find("Projectiles", "Bullet_HeavySMG")->number("projectile.damageAmountBase") == doctest::Approx(12.0 * 0.5 * 0.75));
+    CHECK(defs.find("Things", "Gun_MachinePistol")->number("spreadFactor") == doctest::Approx(0.4));
 }
 
 TEST_CASE("Gun changes: the grenade launcher lobs slower, in an arc, and still reaches its range") {
@@ -270,8 +343,7 @@ TEST_CASE("Gun changes: the grenade launcher lobs slower, in an arc, and still r
     GT_REQUIRE(shell != kNoEntity);
     const Projectile start = sim->things().registry().get<Projectile>(shell);
     const float speed = std::sqrt(start.vx * start.vx + start.vy * start.vy + start.vz * start.vz);
-    CHECK(speed * 30.0f < 40.5f * 0.7f);  // at most 70% of the old 40.5 m/s
-    CHECK(speed * 30.0f > 40.5f * 0.6f);
+    CHECK(speed * 30.0f == doctest::Approx(36.0f).epsilon(0.01));  // sneed 2026-11-23 second batch: faster again
     CHECK(start.vz > 0.0f);  // thrown up, the lower arc
     float arc = 0.0f;  // the most the shell is above the straight line from the muzzle to the point
     float firstBounceX = -1.0f;
@@ -288,8 +360,8 @@ TEST_CASE("Gun changes: the grenade launcher lobs slower, in an arc, and still r
         }
     }
     GT_REQUIRE(firstBounceX > 0.0f);
-    CHECK(arc > 0.8f);                               // a visible arc
-    CHECK(std::fabs(firstBounceX - tx) < 1.0f);      // first touchdown at the aimed point
+    CHECK(arc > 0.3f);                               // a visible arc (flatter at 36 m/s)
+    CHECK(std::fabs(firstBounceX - tx) < 1.5f);      // first touchdown near the aimed point (a 1.2 m step at 36 m/s)
     // Far beyond reach it still goes as far as it can (the 45 degree shot) instead of falling short.
     const Entity far = sim->combat().fire(shooter, 20.5f + 200.0f, ty, 0.0f, 0.0f, rng);
     GT_REQUIRE(far != kNoEntity);

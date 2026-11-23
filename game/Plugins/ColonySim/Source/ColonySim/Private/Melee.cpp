@@ -104,6 +104,8 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     num("unarmedTimeFactor", r.unarmedTimeFactor);
     num("unarmedPowerFactor", r.unarmedPowerFactor);
     whole("unarmedMinWindup", r.unarmedMinWindup);
+    num("unarmedWindupShare", r.unarmedWindupShare);
+    whole("unarmedGapSteps", r.unarmedGapSteps);
     r.playerStepIn = def->flag("playerStepIn", r.playerStepIn);
     r.stepInFreesFeet = def->flag("stepInFreesFeet", r.stepInFreesFeet);
     num("stepInMaxSpeed", r.stepInMaxSpeed);
@@ -214,6 +216,11 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     r.attackTimeFactor = std::max(0.05f, r.attackTimeFactor);
     r.unarmedTimeFactor = std::max(0.05f, r.unarmedTimeFactor);
     r.unarmedPowerFactor = std::max(0.0f, r.unarmedPowerFactor);
+    if (r.unarmedWindupShare < 0.0f) {
+        r.unarmedWindupShare = r.windupShare;
+    }
+    r.unarmedWindupShare = std::clamp(r.unarmedWindupShare, 0.0f, 1.0f);
+    r.unarmedGapSteps = std::max(0, r.unarmedGapSteps);
     r.commitSteps = std::max(0, r.commitSteps);
     r.guardBlocks = std::max(1, r.guardBlocks);
     for (float& f : r.skillSpeed) {
@@ -222,8 +229,8 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
 }
 
 // Steps of a tool's swing spent winding up; the rest of its cooldown is recovery.
-int meleeWindup(const MeleeRules& r, int cooldown, int minWindup) {
-    return std::clamp(static_cast<int>(std::lround(static_cast<float>(cooldown) * r.windupShare)), minWindup,
+int meleeWindup(int cooldown, int minWindup, float windupShare) {
+    return std::clamp(static_cast<int>(std::lround(static_cast<float>(cooldown) * windupShare)), minWindup,
                       std::max(minWindup, cooldown - 1));
 }
 
@@ -265,15 +272,18 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
             t.label = def.text((base + ".label").c_str());
             t.damageType = defs_.idOf("DamageTypes", def.textAt((base + ".capacities").c_str(), 0));
             t.power = static_cast<float>(def.number((base + ".power").c_str(), 0.0));
-            // sneed 2026-11-23: all swings a third faster; a person's own fists and head four times faster and weak.
+            // sneed 2026-11-23: swings paced by attackTimeFactor; a person's own fists and head by unarmedTimeFactor
+            // alone (quick, weak jabs with a short pause after each).
             const bool unarmedPerson = !weapon && def.text("race.intelligence") == "Humanlike";
-            const float timeFactor = rules_.attackTimeFactor * (unarmedPerson ? rules_.unarmedTimeFactor : 1.0f);
+            const float timeFactor = unarmedPerson ? rules_.unarmedTimeFactor : rules_.attackTimeFactor;
             t.cooldown = std::max(2, static_cast<int>(std::lround(def.number((base + ".cooldownTime").c_str(), 60.0) * cooldownFactor *
                                                                   static_cast<double>(timeFactor))));
-            t.minWindup = std::max(1, static_cast<int>(std::lround(
-                                          static_cast<float>(unarmedPerson ? rules_.unarmedMinWindup : rules_.minWindup) * rules_.attackTimeFactor)));
+            t.minWindup = unarmedPerson ? rules_.unarmedMinWindup
+                                        : std::max(1, static_cast<int>(std::lround(static_cast<float>(rules_.minWindup) * rules_.attackTimeFactor)));
+            t.windupShare = unarmedPerson ? rules_.unarmedWindupShare : rules_.windupShare;
             if (unarmedPerson) {
                 t.power *= rules_.unarmedPowerFactor;
+                t.gapSteps = rules_.unarmedGapSteps;
             }
             t.penetration = static_cast<float>(
                 def.number((base + ".armorPenetration").c_str(), static_cast<double>(t.power * rules_.penetrationPerDamage)));
@@ -751,7 +761,7 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     const Tool& tool = set->tools[m.tool];
     // Worn armour's weight slows a swing (docs/design/armour.md), melee skill changes its pace (real-time-combat.md).
     int windup =
-        std::max(1, static_cast<int>(std::lround(static_cast<float>(meleeWindup(rules_, tool.cooldown, tool.minWindup)) * swingTimeFactor(pawn))));
+        std::max(1, static_cast<int>(std::lround(static_cast<float>(meleeWindup(tool.cooldown, tool.minWindup, tool.windupShare)) * swingTimeFactor(pawn))));
     m.phase = MeleePhase::Windup;
     m.target = target;
     // A blow at a body on the ground goes down at it (the strike already aims at its aim point there): Unreal plays a
@@ -1629,8 +1639,8 @@ void MeleeSystem::step() {
                     m.stepsLeft = m.finisher != 0 ? std::max(1, m.finisherSteps - static_cast<int>(now() - m.finisherFrom))
                                   : tool != nullptr
                                       ? std::max(1, static_cast<int>(std::lround(
-                                                        static_cast<float>(tool->cooldown - meleeWindup(rules_, tool->cooldown, tool->minWindup)) *
-                                                        swingTimeFactor(pawn))))
+                                                        static_cast<float>(tool->cooldown - meleeWindup(tool->cooldown, tool->minWindup, tool->windupShare)) *
+                                                        swingTimeFactor(pawn)))) + tool->gapSteps
                                       : 1;
                 }
                 break;

@@ -8,7 +8,9 @@
     "grip": "None",
     "attackStyle": "Unarmed",
     "stance": "",
-    "block": "Mixamo/Magic/A_ProMagicStandingBlockIdle",
+    "block": "Mixamo/Fighting/A_BoxingGuard",
+    "blockAlt": "Mixamo/Magic/A_ProMagicStandingBlockIdle",
+    "blockHold": 0.55,
     "fpStance": "Mixamo/MeleeAxe/A_ProMeleeAxeUnarmedIdle",
     "fpBlock": "Mixamo/Magic/A_ProMagicStandingBlockIdle"
   },

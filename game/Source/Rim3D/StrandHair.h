@@ -95,11 +95,14 @@ private:
 		float LastYaw = 0.0f;  // the body's facing last tick (degrees), for Pawns.StrandHairTurnHold
 		bool bHaveYaw = false;
 		float TurnHold = 0.0f;  // seconds the hair is still held at rest after a fast turn
+		FVector LastHands[2] = {FVector::ZeroVector, FVector::ZeroVector};  // relative to the head, cm
+		bool bHaveHands = false;
 	};
 	TArray<FWearer> Wearers;
 	float SinceSort = 1.0f;
 	int32 TurnHoldFrames = 0;
 	int32 TurnHolds = 0;
+	int32 SwingHolds = 0;
 
 	void Show(FWearer& Wearer, bool bStrands);
 };

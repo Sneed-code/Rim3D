@@ -36,6 +36,25 @@
     },
     "Things/Melee_Zeushammer": {
       "tools.cooldownTime": 0.6666667
+    },
+    "Things/Gun_Minigun": {
+      "stats.rangedWeaponCooldown": 5.0
+    },
+    "Things/Gun_ChainShotgun": {
+      "stats.rangedWeaponCooldown": 1.5,
+      "verbs.secondsBetweenBurstShots": 1.6
+    },
+    "Projectiles/Bullet_Revolver": {
+      "projectile.damageAmountBase": 1.25
+    },
+    "Projectiles/Bullet_Minigun": {
+      "projectile.damageAmountBase": 0.75
+    },
+    "Projectiles/Bullet_LMG": {
+      "projectile.damageAmountBase": 0.75
+    },
+    "Projectiles/Bullet_HeavySMG": {
+      "projectile.damageAmountBase": 0.75
     }
   },
   "values": {

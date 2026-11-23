@@ -1,4 +1,6 @@
 #include "FightSubsystem.h"
+#include "ColonySim/Sound.h"
+#include "SoundSubsystem.h"
 
 #include "BlastFxSubsystem.h"
 #include "SeveredPieceActor.h"
@@ -76,6 +78,8 @@ namespace
 	constexpr float FightTracerMaxAge = 6.0f;
 	constexpr float FightTracerMaxDistance = 20000.0f;
 	constexpr int32 FightMaxTracers = 400;
+	// A beam stays glowing this long after it lands, thinning away (game seconds).
+	constexpr float FightBeamLingerSeconds = 0.18f;
 	constexpr int32 FightMaxParticles = 1800;
 	constexpr int32 FightMaxDecals = 160;
 	constexpr int32 FightLightCount = 6;
@@ -104,6 +108,7 @@ namespace
 			case EFightParticle::Spark: return {FLinearColor(1.0f, 0.62f, 0.18f), false};
 			case EFightParticle::Blood: return {FLinearColor(0.42f, 0.01f, 0.01f), true};  // drops, stretched along their flight
 			case EFightParticle::Smoke: return {FLinearColor(0.36f, 0.36f, 0.38f), true};  // opaque mesh, so kept small and dim
+			case EFightParticle::Arc: return {FLinearColor(0.7f, 0.88f, 1.0f), false};
 			default: return {FLinearColor(1.0f, 0.92f, 0.62f), true};
 		}
 	}
@@ -240,6 +245,9 @@ void UFightSubsystem::EnsureEffects()
 
 	// A tracer is a long thin box standing on z = 0, stretched to length per instance.
 	TracerInstances = MakeInstanced(MakeBox(1.6f, 1.6f, 100.0f, FLinearColor(1.0f, 0.78f, 0.3f), false));
+	// A beam (the charge lance): a blue sheath round a white-hot core, both 1 cm across and widened per instance.
+	BeamInstances = MakeInstanced(MakeBox(1.0f, 1.0f, 100.0f, FLinearColor(0.35f, 0.75f, 1.0f), false));
+	BeamCoreInstances = MakeInstanced(MakeBox(1.0f, 1.0f, 100.0f, FLinearColor(0.92f, 0.97f, 1.0f), false));
 	ParticleInstances.Reset();
 	for (int32 Kind = 0; Kind < static_cast<int32>(EFightParticle::Count); ++Kind)
 	{
@@ -297,6 +305,14 @@ void UFightSubsystem::ResetEffects()
 	if (TracerInstances)
 	{
 		TracerInstances->ClearInstances();
+	}
+	if (BeamInstances)
+	{
+		BeamInstances->ClearInstances();
+	}
+	if (BeamCoreInstances)
+	{
+		BeamCoreInstances->ClearInstances();
 	}
 	for (UInstancedStaticMeshComponent* Component : ParticleInstances)
 	{
@@ -391,6 +407,15 @@ void UFightSubsystem::OnShotFired(const colony::Event& Event)
 		Tracer.Id = Event.target;
 		Tracer.Shooter = Event.thing;
 		Tracer.Start = Muzzle;
+		if (const colony::ThingView* Shooter = Bridge->GetCurrentSnapshot().find(Event.thing); Shooter && Shooter->weapon.valid() && Bridge->GetDefs())
+		{
+			const double BeamWidth = Bridge->GetDefs()->get(Shooter->weapon).number("visual.beam.width", 0.0);
+			if (BeamWidth > 0.0)
+			{
+				Tracer.bBeam = true;
+				Tracer.BeamWidthCm = static_cast<float>(BeamWidth * 100.0);
+			}
+		}
 		Tracers.Add(Tracer);
 		++TracersSpawned;
 	}
@@ -587,6 +612,7 @@ void UFightSubsystem::SpawnFlash(const FVector& Muzzle)
 		{
 			Lights[Index]->SetWorldLocation(Muzzle);
 			Lights[Index]->SetVisibility(true);
+			Lights[Index]->SetLightColor(FLinearColor(1.0f, 0.72f, 0.38f));
 			Lights[Index]->SetIntensity(FightLightIntensity);
 			LightAges[Index] = 0.0f;
 		}
@@ -628,9 +654,23 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 	switch (Tracer.HitKind)
 	{
 		case colony::ProjectileHitKind::Ground:
-			SpawnBurst(EFightParticle::Dust, At, FVector::UpVector, 9, 300.0f, 0.8f, 8.0f, 0.9f, 980.0f);
-			SpawnBurst(EFightParticle::Smoke, At, FVector::UpVector, 3, 60.0f, 0.5f, 5.0f, 0.8f, -30.0f);
+		{
+			// Soil (sneed 2026-11-23: "realistic dirt, not poofs"): clods and grit thrown up in a cone and falling back,
+			// and the soil jet and haze from the explosions' smoke sprites.
+			const float Strength = FMath::Clamp(Tracer.Amount / 12.0f, 0.5f, 2.0f);
+			const FVector Kick = (FVector::UpVector * 1.4f + Back * 0.5f).GetSafeNormal();
+			SpawnBurst(EFightParticle::Dust, At, Kick, FMath::RoundToInt(10.0f * Strength), 520.0f, 0.45f, 2.6f, 0.9f, 980.0f);
+			SpawnBurst(EFightParticle::Dust, At, Kick, FMath::RoundToInt(16.0f * Strength), 380.0f, 0.6f, 1.2f, 0.7f, 980.0f);
+			if (UBlastFxSubsystem* Blast = GetWorld()->GetSubsystem<UBlastFxSubsystem>())
+			{
+				Blast->AddDirtImpact(At, FVector::UpVector, Strength);
+			}
+			else
+			{
+				SpawnBurst(EFightParticle::Smoke, At, FVector::UpVector, 3, 60.0f, 0.5f, 5.0f, 0.8f, -30.0f);
+			}
 			break;
+		}
 		case colony::ProjectileHitKind::Rock:
 			SpawnBurst(EFightParticle::Dust, At, Back + FVector::UpVector * 0.5f, 6, 280.0f, 0.8f, 8.0f, 0.8f, 980.0f);
 			SpawnBurst(EFightParticle::Chip, At, Back + FVector::UpVector * 0.5f, 5, 380.0f, 0.7f, 5.0f, 0.7f, 980.0f);
@@ -799,7 +839,9 @@ void UFightSubsystem::SpawnBodyThroughHit(const FFightTracer& Tracer)
 		SpawnBodyDecal(*Actor, At, Dir, 10.0f);
 		if (UPrimitiveComponent* Body = Hit.GetComponent(); Body && Body->IsSimulatingPhysics(Hit.BoneName))
 		{
-			Body->AddImpulseAtLocation(Dir * 6000.0f, At, Hit.BoneName);
+			FVector Push = Dir * 6000.0f;
+			Push.Z = FMath::Max(Push.Z, 0.0);  // never into the ground under a lying body (sneed 2026-11-23)
+			Body->AddImpulseAtLocation(Push, At, Hit.BoneName);
 		}
 		++BodyThroughHits;
 		return;
@@ -927,6 +969,20 @@ void UFightSubsystem::UpdateTracers(float DeltaTime, float GameDelta)
 	const colony::Snapshot& Snapshot = Bridge->GetCurrentSnapshot();
 	TArray<FTransform> Transforms;
 	Transforms.Reserve(Tracers.Num());
+	TArray<FTransform> Beams;
+	TArray<FTransform> BeamCores;
+	const auto AddBeam = [&Beams, &BeamCores](const FVector& From, const FVector& To, float WidthCm)
+	{
+		const FVector Line = To - From;
+		const double Length = Line.Size();
+		if (Length < 5.0 || WidthCm < 0.2f)
+		{
+			return;
+		}
+		const FQuat Along = FRotationMatrix::MakeFromZ(Line / Length).ToQuat();
+		Beams.Add(FTransform(Along, From, FVector(WidthCm, WidthCm, Length / 100.0)));
+		BeamCores.Add(FTransform(Along, From, FVector(WidthCm * 0.35f, WidthCm * 0.35f, Length / 100.0)));
+	};
 
 	for (int32 Index = Tracers.Num() - 1; Index >= 0; --Index)
 	{
@@ -985,6 +1041,26 @@ void UFightSubsystem::UpdateTracers(float DeltaTime, float GameDelta)
 		}
 		Tracer.Distance += Tracer.Speed * GameDelta;
 
+		if (Tracer.bBeam && Tracer.BeamLinger >= 0.0f)
+		{
+			// Landed: the whole line glows on and thins away.
+			Tracer.BeamLinger -= GameDelta;
+			if (Tracer.BeamLinger <= 0.0f)
+			{
+				Tracers.RemoveAtSwap(Index);
+				continue;
+			}
+			AddBeam(Tracer.Start, Tracer.End, Tracer.BeamWidthCm * (Tracer.BeamLinger / FightBeamLingerSeconds));
+			continue;
+		}
+		if (Tracer.bBeam && Tracer.bEnded && Tracer.Distance >= ChordLength)
+		{
+			++TracersArrived;
+			SpawnImpact(Tracer);
+			Tracer.BeamLinger = FightBeamLingerSeconds;
+			AddBeam(Tracer.Start, Tracer.End, Tracer.BeamWidthCm);
+			continue;
+		}
 		if (Tracer.bEnded && Tracer.Distance >= ChordLength)
 		{
 			++TracersArrived;
@@ -1000,6 +1076,11 @@ void UFightSubsystem::UpdateTracers(float DeltaTime, float GameDelta)
 			continue;
 		}
 
+		if (Tracer.bBeam)
+		{
+			AddBeam(Tracer.Start, Tracer.Start + Tracer.Dir * FMath::Min(Tracer.Distance, ChordLength), Tracer.BeamWidthCm);
+			continue;
+		}
 		const float Length = FMath::Clamp(Tracer.Speed * GameDelta * 1.5f, 150.0f, 1800.0f);
 		const float TailDistance = FMath::Max(0.0f, Tracer.Distance - Length);
 		const float Segment = Tracer.Distance - TailDistance;
@@ -1015,6 +1096,16 @@ void UFightSubsystem::UpdateTracers(float DeltaTime, float GameDelta)
 		if (!Transforms.IsEmpty())
 		{
 			TracerInstances->AddInstances(Transforms, false, true);
+		}
+	}
+	if (BeamInstances && BeamCoreInstances)
+	{
+		BeamInstances->ClearInstances();
+		BeamCoreInstances->ClearInstances();
+		if (!Beams.IsEmpty())
+		{
+			BeamInstances->AddInstances(Beams, false, true);
+			BeamCoreInstances->AddInstances(BeamCores, false, true);
 		}
 	}
 }
@@ -1341,6 +1432,50 @@ void UFightSubsystem::SpawnMeleeImpact(colony::ProjectileHitKind Kind, colony::E
 	Blow.Part = Part;
 	Blow.Amount = Amount;
 	SpawnImpact(Blow);
+	SpawnWeaponHitFx(Attacker, Target, At, Direction);
+}
+
+// A weapon's own burst on a blow (defs `visual.hitFx`): the zeushammer's electricity (sneed 2026-11-23: "when it hits
+// something it bursts electricity; if it hits something mechanical the burst is far larger"): a spray of blue-white
+// arcs and hot sparks with a cold flash of light, `mechScale` times bigger on a mechanoid.
+void UFightSubsystem::SpawnWeaponHitFx(colony::Entity Attacker, colony::Entity Target, const FVector& At, const FVector& Direction)
+{
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	if (!Bridge || !Bridge->GetDefs() || Attacker == colony::kNoEntity)
+	{
+		return;
+	}
+	const colony::Snapshot& Snap = Bridge->GetCurrentSnapshot();
+	const colony::ThingView* Hitter = Snap.find(Attacker);
+	if (!Hitter || !Hitter->weapon.valid())
+	{
+		return;
+	}
+	const colony::Def& Weapon = Bridge->GetDefs()->get(Hitter->weapon);
+	if (Weapon.text("visual.hitFx.kind") != "electric")
+	{
+		return;
+	}
+	const colony::ThingView* Struck = Target != colony::kNoEntity ? Snap.find(Target) : nullptr;
+	const bool bMech = Struck && Bridge->GetDefs()->get(Struck->def).text("race.intelligence") == "Mechanoid";
+	const float Scale = bMech ? FMath::Max(1.0f, static_cast<float>(Weapon.number("visual.hitFx.mechScale", 3.0))) : 1.0f;
+	const FVector Back = (-Direction.GetSafeNormal() + FVector::UpVector * 0.35f).GetSafeNormal();
+	++ElectricBursts;
+	SpawnBurst(EFightParticle::Arc, At, Back, FMath::RoundToInt(16.0f * Scale), 750.0f * FMath::Sqrt(Scale), 1.2f, 1.8f, 0.16f, 120.0f);
+	SpawnBurst(EFightParticle::Arc, At, FVector::UpVector, FMath::RoundToInt(6.0f * Scale), 260.0f, 1.6f, 3.2f, 0.09f, 0.0f);
+	SpawnBurst(EFightParticle::Spark, At, Back, FMath::RoundToInt(10.0f * Scale), 520.0f, 0.9f, 2.4f, 0.45f, 980.0f);
+	if (Lights.Num() > 0)
+	{
+		const int32 Index = NextLight++ % Lights.Num();
+		if (Lights[Index])
+		{
+			Lights[Index]->SetWorldLocation(At);
+			Lights[Index]->SetVisibility(true);
+			Lights[Index]->SetLightColor(FLinearColor(0.55f, 0.75f, 1.0f));
+			Lights[Index]->SetIntensity(FightLightIntensity * 1.5f * Scale);
+			LightAges[Index] = 0.0f;
+		}
+	}
 }
 // Downed and dead pawns fall; pawns that get up are put back on their feet; armed pawns show their gun.
 void UFightSubsystem::SyncPawns()
@@ -1566,7 +1701,7 @@ bool UFightSubsystem::ComputeAimPoint(FVector& OutWorldPoint, colony::Entity* Ou
 	return true;
 }
 
-bool UFightSubsystem::Fire()
+bool UFightSubsystem::Fire(float ChargeSeconds)
 {
 	USimSubsystem* Bridge = BridgeSource.Get();
 	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
@@ -1604,6 +1739,7 @@ bool UFightSubsystem::Fire()
 	Shot.aimDx = Drawn.dx;
 	Shot.aimDy = Drawn.dy;
 	Shot.aimUp = Drawn.up;
+	Shot.charge = FMath::Max(0.0f, ChargeSeconds);
 	Bridge->Submit(Shot);
 	LastFireStep = Bridge->GetSteps();
 	++FireOrders;
@@ -1733,9 +1869,58 @@ void UFightSubsystem::UpdatePlayerInput()
 	const bool bBuilding = Orders && Orders->IsDirectBuilding();
 	using Rim3DKeys::IsDown;
 	using Rim3DKeys::WasPressed;
-	if (!bBuilding && IsDown(PC, ERim3DAction::Attack))
+	// A charged gun (sneed 2026-11-23, the charge lance): hold the trigger to charge (up to `charge.maxSeconds` for up to
+	// `charge.maxDamageFactor` times the damage), let go to fire; it fires by itself at `charge.forceSeconds`.
+	const colony::Def* ChargeDef = nullptr;
+	if (const USimSubsystem* ChargeBridge = BridgeSource.Get(); ChargeBridge && ChargeBridge->GetSim() && ChargeBridge->GetDefs())
 	{
-		Fire();
+		const colony::ThingView* Me = ChargeBridge->GetCurrentSnapshot().find(Protagonist->GetControlled());
+		if (Me && Me->weapon.valid() && ChargeBridge->GetDefs()->get(Me->weapon).number("charge.maxSeconds", 0.0) > 0.0)
+		{
+			ChargeDef = &ChargeBridge->GetDefs()->get(Me->weapon);
+		}
+	}
+	if (ChargeDef && !bBuilding)
+	{
+		const USimSubsystem* ChargeBridge = BridgeSource.Get();
+		const bool bReady = ChargeBridge->GetSim()->combat().shotReadyIn(Protagonist->GetControlled()) <= 0;
+		const float ForceAt = static_cast<float>(ChargeDef->number("charge.forceSeconds", 4.0));
+		if (IsDown(PC, ERim3DAction::Attack) && bReady && ChargeBridge->GetSpeed() != 0)
+		{
+			if (ChargeHeld < 0.0f)
+			{
+				ChargeHeld = 0.0f;
+				if (USoundSubsystem* Sounds = GetWorld()->GetSubsystem<USoundSubsystem>())
+				{
+					const FString Cue = UTF8_TO_TCHAR(colony::soundSlot(*ChargeDef, "charge").c_str());
+					if (!Cue.IsEmpty() && Protagonist->GetBody())
+					{
+						Sounds->PlayCue(Cue, Protagonist->GetBody()->GetActorLocation());
+					}
+				}
+			}
+			ChargeHeld += GetWorld()->GetDeltaSeconds();
+			if (ChargeHeld >= ForceAt && Fire(ChargeHeld))
+			{
+				ChargeHeld = -1.0f;
+			}
+		}
+		else if (ChargeHeld >= 0.0f)
+		{
+			if (!IsDown(PC, ERim3DAction::Attack))
+			{
+				Fire(ChargeHeld);
+				ChargeHeld = -1.0f;
+			}
+		}
+	}
+	else
+	{
+		ChargeHeld = -1.0f;
+		if (!bBuilding && IsDown(PC, ERim3DAction::Attack))
+		{
+			Fire();
+		}
 	}
 	if (!bBuilding && WasPressed(PC, ERim3DAction::Reload))
 	{

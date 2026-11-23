@@ -14,6 +14,7 @@
 #include "Materials/MaterialInterface.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Misc/ScopeExit.h"
 
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
@@ -603,6 +604,12 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 	USkeletalMeshComponent* Mesh = Hit.Mesh.Get();
 	AActor* Ignore = Mesh ? Mesh->GetOwner() : ActorOf(Hit.Victim);
 	const float GroundZ = GroundBelow(Hit.At, Ignore);
+	SprayGroundZ = GroundZ;
+	// A dead body has no blood pressure: no mist and no gushing streaks from it, only drops, splatter and pooling
+	// (sneed 2026-11-23: shooting up a corpse left light blobs that moved about on the ground: the translucent mist and
+	// streak cards sliding under and along it).
+	bSprayingCorpse = View && View->dead && Kind != EBloodWound::Blast;  // a blast still throws it about
+	ON_SCOPE_EXIT { bSprayingCorpse = false; };
 
 	// How thick the body is along the shot: the head, the trunk or a limb by the hit's height, bigger animals thicker.
 	float Half = Hit.BodyHalfThicknessCm;
@@ -709,6 +716,7 @@ void UBloodSubsystem::DrawHit(const FBloodHit& Hit)
 
 	// Big gushes you can see from across a fight (sneed 2026-11-20: "big graphical blood spray when i melee enemies (and
 	// shoot), i can't see anything"): ragged streaks along the blow or out of the exit, and a splash at the wound.
+	if (!bSprayingCorpse)
 	{
 		const float Gush = FMath::Clamp(Force, 0.4f, 1.8f);
 		switch (Kind)
@@ -1047,6 +1055,10 @@ void UBloodSubsystem::SprayCone(const FVector& At, const FVector& Axis, float Co
 void UBloodSubsystem::SprayMist(const FVector& At, const FVector& Axis, float ConeDegrees, int32 Count, float Speed, float RadiusCm, float Life, float Opacity,
 	const FBloodFluid& Fluid)
 {
+	if (bSprayingCorpse)
+	{
+		return;
+	}
 	for (int32 I = 0; I < Count; ++I)
 	{
 		FMistPuff Puff;
@@ -1085,6 +1097,7 @@ void UBloodSubsystem::SprayGush(const FVector& At, const FVector& Axis, float Co
 		Streak.Opacity = Random.FRandRange(0.8f, 0.97f);
 		Streak.Seed = Random.FRandRange(0.0f, 97.0f);
 		Streak.Color = Color;
+		Streak.GroundZ = SprayGroundZ;
 		Spray.Add(Streak);
 		++SpraySpawned;
 	}
@@ -1101,6 +1114,7 @@ void UBloodSubsystem::SprayGush(const FVector& At, const FVector& Axis, float Co
 		Burst.Opacity = 0.95f;
 		Burst.Seed = Random.FRandRange(0.0f, 97.0f);
 		Burst.Color = Color;
+		Burst.GroundZ = SprayGroundZ;
 		Spray.Add(Burst);
 		++SpraySpawned;
 	}
@@ -1120,6 +1134,10 @@ void UBloodSubsystem::UpdateSpray(float Dt)
 		Streak.Velocity *= FMath::Exp(-2.5f * Dt);
 		Streak.Velocity.Z -= BloodGravity * Dt;
 		Streak.Position += Streak.Velocity * Dt;
+		if (Streak.Position.Z < Streak.GroundZ + 1.0f)
+		{
+			Spray.RemoveAtSwap(Index);  // came down on the ground: no card sliding along under it
+		}
 	}
 }
 

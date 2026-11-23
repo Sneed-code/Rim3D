@@ -12,7 +12,7 @@
     {"def": "Melee_Monosword", "label": "Monosword", "credit": "Codex (our own model)", "art": {"name": "MeleeMonosword", "fbx": "assets/raw/codex/Melee_Monosword/Melee_Monosword_Game.fbx", "combine": true, "slotTextureDir": "assets/raw/codex/Melee_Monosword", "normalOpenGL": true, "emissiveStrength": 3.0}},
     {"def": "Melee_Plasmasword", "label": "Plasma sword", "credit": "Codex (our own model)", "art": {"name": "MeleePlasmasword", "fbx": "assets/raw/codex/Melee_Plasmasword/Melee_Plasmasword_Game.fbx", "combine": true, "slotTextureDir": "assets/raw/codex/Melee_Plasmasword", "normalOpenGL": true, "emissiveStrength": 3.0}},
     {"def": "Melee_Zeushammer", "label": "Zeushammer", "credit": "Codex (our own model)", "art": {"name": "MeleeZeushammer", "fbx": "assets/raw/codex/Melee_Zeushammer/Melee_Zeushammer_Game.fbx", "combine": true, "slotTextureDir": "assets/raw/codex/Melee_Zeushammer", "normalOpenGL": true, "emissiveStrength": 3.0}},
-    {"def": "Melee_BreachAxe", "label": "Breach axe", "credit": "Codex (our own model)", "art": {"name": "MeleeBreachAxe", "fbx": "assets/raw/codex/Melee_BreachAxe/Melee_BreachAxe_Game.fbx", "combine": true, "slotTextureDir": "assets/raw/codex/Melee_BreachAxe", "normalOpenGL": true}}
+    {"def": "Melee_BreachAxe", "label": "Breach axe", "credit": "Codex (our own model)", "art": {"name": "MeleeBreachAxe", "importRotation": [0, 0, 180], "importOffset": [-14, 0, 0], "fbx": "assets/raw/codex/Melee_BreachAxe/Melee_BreachAxe_Game.fbx", "combine": true, "slotTextureDir": "assets/raw/codex/Melee_BreachAxe", "normalOpenGL": true}}
   ],
   "guns": [
     {

@@ -194,6 +194,11 @@ private:
 
 	/** A gush of blood in the air (sneed 2026-11-20: big spray you can see on every melee hit and gunshot): a ragged
 	 *  streak drawn along its flight, facing the camera, gone in a fraction of a second. Cosmetic. */
+	/** The ground under the hit being sprayed (SprayGush streaks end there). */
+	float SprayGroundZ = -1.0e9f;
+	/** The hit being sprayed is on a dead body (no mist, no gushes). */
+	bool bSprayingCorpse = false;
+
 	struct FSprayStreak
 	{
 		FVector Position = FVector::ZeroVector;
@@ -206,6 +211,7 @@ private:
 		float Opacity = 0.9f;
 		float Seed = 0.0f;
 		FLinearColor Color;
+		float GroundZ = -1.0e9f;  // cm: a streak that comes down to here is gone (its drops make the stain)
 	};
 
 	/** A stain on the world: a splat, a pool, a run on a wall. */

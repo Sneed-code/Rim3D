@@ -24,6 +24,7 @@
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
 #include "SkySubsystem.h"
+#include "WeaponDrawSubsystem.h"
 
 #include "ColonySim/Defs.h"
 #include "ColonySim/Events.h"
@@ -91,6 +92,7 @@ namespace
 		Bed = 5,
 		Weather = 6,
 		Lovin = 7,
+		WeaponLoop = 8,
 	};
 
 	uint64 SoundKey(ESoundKey Kind, uint64 Id) { return (static_cast<uint64>(Kind) << 56) | (Id & 0x00FFFFFFFFFFFFFFull); }
@@ -1695,6 +1697,47 @@ void USoundSubsystem::UpdateLoops(const colony::Snapshot& Snap, const USimSubsys
 			KeepLoop(Slots.Loop, SoundKey(ESoundKey::Building, SoundEntityId(View.id)), Location, colony::kNoEntity, false, 1.0f);
 		}
 	}
+	// Weapons in hand that hum (the plasma sword) or spin (the minigun's motor, sneed 2026-11-23: "a wind up ... a wind
+	// down that dynamically winds up again if you resume"): one loop each, its pitch and loudness following the barrels'
+	// spin, so letting go and firing again bends the same sound back up instead of cutting it.
+	const UWeaponDrawSubsystem* Draw = GetWorld()->GetSubsystem<UWeaponDrawSubsystem>();
+	const colony::DefDatabase& LoopDefs = *Source.GetDefs();
+	for (const colony::ThingView& View : Snap.things)
+	{
+		if (View.category != colony::ThingCategory::Pawn || View.dead || View.downed || !View.weapon.valid())
+		{
+			continue;
+		}
+		const colony::Def& WeaponDef = LoopDefs.get(View.weapon);
+		const FString Hum = UTF8_TO_TCHAR(colony::soundSlot(WeaponDef, "hum").c_str());
+		const FString Spin = UTF8_TO_TCHAR(colony::soundSlot(WeaponDef, "spin").c_str());
+		if (Hum.IsEmpty() && Spin.IsEmpty())
+		{
+			continue;
+		}
+		const FVector Location = Source.SimToWorld(View.x, View.y, View.level) + FVector(0.0, 0.0, 100.0);
+		if (FVector::DistSquared(Location, Ears) > FMath::Square(12000.0f))
+		{
+			continue;
+		}
+		if (!Hum.IsEmpty())
+		{
+			KeepLoop(Hum, SoundKey(ESoundKey::WeaponLoop, SoundEntityId(View.id)) ^ (SoundNameId(Hum) << 32), Location, View.id, false, 1.0f);
+		}
+		const float Share = !Spin.IsEmpty() && Draw ? Draw->GetSpinShare(View.id) : 0.0f;
+		if (Share > 0.02f)
+		{
+			const uint64 Key = SoundKey(ESoundKey::WeaponLoop, SoundEntityId(View.id)) ^ (SoundNameId(Spin) << 32);
+			KeepLoop(Spin, Key, Location, View.id, false, 1.0f);
+			if (const int32* Found = LoopsByKey.Find(Key))
+			{
+				FSound& Motor = Sounds[*Found];
+				Motor.Gain = FMath::Sqrt(Share);
+				Motor.Pitch = 0.45f + 0.65f * Share;
+				Motor.bLivePitch = true;
+			}
+		}
+	}
 	for (auto It = DoorOpen.CreateIterator(); It; ++It)
 	{
 		if (!Doors.Contains(It.Key()))
@@ -1706,7 +1749,8 @@ void USoundSubsystem::UpdateLoops(const colony::Snapshot& Snap, const USimSubsys
 	for (int32 I = 0; I < Sounds.Num(); ++I)
 	{
 		FSound& Sound = Sounds[I];
-		if (!Sound.bDead && Sound.bScanned && !Sound.bSeen && (Sound.Key >> 56) == static_cast<uint64>(ESoundKey::Building))
+		if (!Sound.bDead && Sound.bScanned && !Sound.bSeen &&
+			((Sound.Key >> 56) == static_cast<uint64>(ESoundKey::Building) || (Sound.Key >> 56) == static_cast<uint64>(ESoundKey::WeaponLoop)))
 		{
 			LoopsByKey.Remove(Sound.Key);
 			StopSound(I);
@@ -2052,6 +2096,10 @@ void USoundSubsystem::MixAndAssign(const USimSubsystem* Source, float Delta)
 		UAudioComponent* Component = Voices[Sound.Voice].Component;
 		Component->SetWorldLocation(Sound.Location);
 		Component->SetVolumeMultiplier(Sound.Volume);
+		if (Sound.bLivePitch)
+		{
+			Component->SetPitchMultiplier(Sound.Pitch);
+		}
 		SoundApplyFilter(Component, Sound.Cutoff);
 	}
 	MaxVoicesInUse = FMath::Max(MaxVoicesInUse, GetVoicesInUse());

@@ -5,7 +5,7 @@
   },
   {
     "defName": "Bullet_Revolver", "parent": "BulletBase", "label": "revolver bullet",
-    "projectile": { "damageAmountBase": 12, "armorPenetrationBase": 0.18, "stoppingPower": 1, "speed": 1.833333 }
+    "projectile": { "damageAmountBase": 12.0, "armorPenetrationBase": 0.18, "stoppingPower": 1, "speed": 1.833333 }
   },
   {
     "defName": "Bullet_Autopistol", "parent": "BulletBase", "label": "autopistol bullet",

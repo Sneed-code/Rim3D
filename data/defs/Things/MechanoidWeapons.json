@@ -1,6 +1,7 @@
 [
  {
-  "defName": "Gun_ChargeLance", "keepBurst": true, "hold": {"style": "Hold_Rifle", "off": [25, 0, 0], "places": {"aim": {"anchor": "Shoulder", "point": "Stock", "at": [-3, -5, 4], "turn": [0, 0, 0]}}},
+  "defName": "Gun_ChargeLance", "keepBurst": true,
+  "charge": {"maxSeconds": 2, "forceSeconds": 4, "maxDamageFactor": 2}, "hold": {"style": "Hold_Rifle", "off": [25, 0, 0], "places": {"aim": {"anchor": "Shoulder", "point": "Stock", "at": [-3, -5, 4], "turn": [0, 0, 0]}}},
   "parent": "GunBase",
   "label": "charge lance",
   "source": "RimWorld wiki",
@@ -38,11 +39,12 @@
    "recoilKicks",
    "magazineSize",
    "reloadTime",
-   "weaponSlot"
+   "weaponSlot",
+   "charge: sneed 2026-11-23, the player holds the trigger up to 2 s for up to twice the damage; it fires by itself at 4 s (Unreal holds it)"
   ],
   "mechOnly": true,
   "visual": {
-   "sound": {"shot": "Shot_ChargeHeavy"}
+   "sound": {"shot": "Shot_ChargeLance", "charge": "Charge_Up"}, "beam": {"color": [0.35, 0.75, 1.0], "width": 0.06, "glow": 40}
   }
  },
  {

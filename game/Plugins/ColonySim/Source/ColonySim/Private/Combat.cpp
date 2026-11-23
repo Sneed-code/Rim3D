@@ -44,6 +44,9 @@ struct CombatModel {
         float recoil = 0.0f;
         float spreadFactor = 1.0f;  // ours: times the gun's whole spray (accuracy cone and the recoil it builds up)
         bool store = false;  // sneed's cooldown bursts: the shots are a store refilled by the cooldown (no magazine)
+        // ours: a charged shot (`charge` block: maxSeconds held gives maxDamageFactor times the damage).
+        float chargeSeconds = 0.0f;
+        float chargeDamage = 1.0f;
         int magazine = 0;    // rounds; 0 for none (never reloads)
         int reloadTime = 0;  // steps, at the skill where reloadTimeFactorBySkill is 1
         // The player's gun kick per shot of a spray (P2), degrees: up, then to the right. The shot
@@ -70,6 +73,10 @@ struct CombatModel {
         float pelletSlope = 0.0f;
         float gravityFactor = 1.0f;
         int maxFlight = 0;
+        // ours: a rocket motor (`projectile.thrust` m/s per second, up to `projectile.topSpeed` m/s), in metres per
+        // step per step and metres per step. 0: none.
+        float thrust = 0.0f;
+        float topSpeed = 0.0f;
         BounceRules bounce;
         float stoppingPower = 0.5f;  // staggers pawns of this body size or smaller (RimWorld's default 0.5)
         // A rocket or shell: the projectile def's `explosion` block, set off where it lands (R2).
@@ -439,6 +446,8 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         b.pelletSlope = std::max(0.0f, static_cast<float>(def.number("projectile.pelletSlope", 0.0)));
         b.gravityFactor = std::max(0.0f, static_cast<float>(def.number("projectile.gravityFactor", 1.0)));
         b.maxFlight = std::max(0, static_cast<int>(def.integer("projectile.maxFlight", 0)));
+        b.thrust = std::max(0.0f, static_cast<float>(def.number("projectile.thrust", 0.0))) / (30.0f * 30.0f);
+        b.topSpeed = std::max(0.0f, static_cast<float>(def.number("projectile.topSpeed", 0.0))) / 30.0f;
         if (def.has("bounce")) {
             b.bounce.restitution = std::clamp(static_cast<float>(def.number("bounce.restitution", 0.0)), 0.0f, 0.95f);
             b.bounce.friction = std::clamp(static_cast<float>(def.number("bounce.friction", 0.0)), 0.0f, 1.0f);
@@ -485,8 +494,14 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
             g.store = bursts.on && !bursts.reloads && !def.flag("reloads");
             if (g.store && !def.flag("keepBurst")) {
                 const int gap = g.burst > 1 ? g.burstGap : g.cooldown;
-                g.burst = std::max(1, static_cast<int>(std::lround(static_cast<float>(g.burst) * bursts.shotsFactor)));
+                // ours: `storeFactor` times the store (sneed 2026-11-23: the machine pistol holds half).
+                const float storeFactor = std::max(0.0f, static_cast<float>(def.number("storeFactor", 1.0)));
+                g.burst = std::max(1, static_cast<int>(std::lround(static_cast<float>(g.burst) * bursts.shotsFactor * storeFactor)));
                 g.burstGap = std::max(1, static_cast<int>(std::lround(static_cast<float>(gap) * bursts.gapFactor)));
+            }
+            if (def.has("charge")) {
+                g.chargeSeconds = std::max(0.0f, static_cast<float>(def.number("charge.maxSeconds", 0.0)));
+                g.chargeDamage = std::max(1.0f, static_cast<float>(def.number("charge.maxDamageFactor", 1.0)));
             }
             const char* acc[4] = {"stats.accuracyTouch", "stats.accuracyShort", "stats.accuracyMedium", "stats.accuracyLong"};
             for (int i = 0; i < 4; ++i) {
@@ -1223,7 +1238,12 @@ Entity CombatSystem::fire(Entity pawn, float x, float y, float z, float spreadSl
     const float muzzle = kind != nullptr ? kind->poses[static_cast<int>(stance)].muzzle * hitboxScale(pawn) : eyeHeight(stance) - 0.15f;
     // The weapon's quality and stuff, and the shooter's lineage (drow +10%, docs/design/races.md).
     const PawnGenes* genes = reg.try_get<PawnGenes>(pawn);
-    const float damageFactor = rangedDamageFactor(weapon) * (genes != nullptr ? genes->effects.rangedDamage : 1.0f);
+    Shooter* shooter = reg.try_get<Shooter>(pawn);
+    const float charge = shooter != nullptr ? shooter->chargeFactor : 1.0f;
+    if (shooter != nullptr) {
+        shooter->chargeFactor = 1.0f;  // one charged shot
+    }
+    const float damageFactor = rangedDamageFactor(weapon) * (genes != nullptr ? genes->effects.rangedDamage : 1.0f) * charge;
     return launch(pawn, weaponDef, pos.x, pos.y, map_.heightAt(pos.x, pos.y) + muzzle, pos.level, cellOf(pos), x, y, z,
                   spreadSlope, rng, kickUp, kickSide, &reg.get<Posture>(pawn), damageFactor);
 }
@@ -1360,6 +1380,14 @@ Entity CombatSystem::launch(Entity pawn, DefId weaponDef, float ox, float oy, fl
         events_->push_back(std::move(e));
     }
     return shot;
+}
+
+float CombatSystem::chargeFactorFor(DefId weaponDef, float seconds) const {
+    const CombatModel::Gun* gun = model_->gun(weaponDef);
+    if (gun == nullptr || gun->chargeSeconds <= 0.0f || !(seconds > 0.0f)) {
+        return 1.0f;
+    }
+    return 1.0f + (gun->chargeDamage - 1.0f) * std::min(1.0f, seconds / gun->chargeSeconds);
 }
 
 bool CombatSystem::shoot(Entity pawn, Entity target, float x, float y, float z, bool player, std::string* why,
@@ -2598,6 +2626,17 @@ void CombatSystem::step(Rng& rng) {
         p.y = ny;
         p.z = nz;
         p.vz -= g;
+        if (flying.thrust > 0.0f) {
+            // A rocket motor: faster along its flight each step, up to its top speed (sneed 2026-11-23).
+            const float speed = std::sqrt(p.vx * p.vx + p.vy * p.vy + p.vz * p.vz);
+            if (speed > 1e-6f) {
+                const float faster = flying.topSpeed > 0.0f ? std::min(flying.topSpeed, speed + flying.thrust) : speed + flying.thrust;
+                const float k = std::max(speed, faster) / speed;
+                p.vx *= k;
+                p.vy *= k;
+                p.vz *= k;
+            }
+        }
     }
 }
 

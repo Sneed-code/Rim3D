@@ -168,11 +168,15 @@ std::string soundMaterialOf(const DefDatabase& db, DefId def) {
     return {};
 }
 
+namespace {
+std::string soundFirstCue(const DefDatabase& db, std::initializer_list<std::string> cues);
+}  // namespace
+
 std::string soundMeleeCue(const DefDatabase& db, const Event& e) {
     const std::string& m = e.message;
     // A blow into a wall or rock comes as "missed" (no pawn was struck) with `hit` Building or Rock.
     if (m == "missed" && e.hit != ProjectileHitKind::Building && e.hit != ProjectileHitKind::Rock &&
-        e.hit != ProjectileHitKind::Plant)
+        e.hit != ProjectileHitKind::Plant && e.hit != ProjectileHitKind::Ground)
         return {};
     if (m == "dodged") return "Dodge";
     // The weapon's material (its stuff, else its def), wood or steel: a stone club rings hard like steel, a cloth one is wood.
@@ -196,6 +200,7 @@ std::string soundMeleeCue(const DefDatabase& db, const Event& e) {
     if (surface.empty()) {
         if (e.hit == ProjectileHitKind::Rock) surface = "Stone";
         else if (e.hit == ProjectileHitKind::Plant) surface = "Wood";  // a tree trunk
+        else if (e.hit == ProjectileHitKind::Ground) surface = "Dirt";  // the earth under a body
         else if (e.hit == ProjectileHitKind::Building) surface = "Stone";
         else if (m == "deflected" || e.hit == ProjectileHitKind::Armor) surface = "Steel";  // plate turns a blow
         else if (m == "blocked") surface = "Steel";
@@ -205,7 +210,12 @@ std::string soundMeleeCue(const DefDatabase& db, const Event& e) {
         return surface == "Steel" || surface == "Stone" ? "Melee_Clang" : "Punch";
     }
     if (surface.empty()) return {};
-    return "Hit_" + weapon + "_" + surface;
+    // A weapon that sounds the same on everything (the plasma sword's `hitAll`).
+    if (const std::string all = soundSlot(*weaponDef, "hitAll"); !all.empty()) return all;
+    // sneed 2026-11-23: an edge sounds sharp on every surface, a club or hammer blunt, whatever it is made of
+    // (Hit_Sharp_<surface>, Hit_Blunt_<surface>); the older weapon-material pairs are the fallback.
+    const bool sharp = slot == "Flesh_Cut" || slot == "Flesh_Stab";
+    return soundFirstCue(db, {std::string(sharp ? "Hit_Sharp_" : "Hit_Blunt_") + surface, "Hit_" + weapon + "_" + surface});
 }
 
 std::string soundSurfaceOfStep(const std::string& step) {
@@ -279,6 +289,22 @@ void soundMeleeHit(const DefDatabase& db, const Event& e, std::vector<SoundPlay>
               : e.hit == ProjectileHitKind::Building || e.hit == ProjectileHitKind::Plant ? "Impact_Building" : "Flesh_Blunt";
     }
     out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));
+}
+
+// A weapon's own sound on top of every blow that lands on something (its `hitExtra` slot: the zeushammer's electric
+// burst, sneed 2026-11-23), `hitExtraMech` instead on a mechanoid (a far bigger discharge).
+void soundMeleeExtra(const DefDatabase& db, const SoundDefOf& defOf, const Event& e, std::vector<SoundPlay>& out) {
+    const bool landed = e.message == "hit" || e.message == "blocked" || e.message == "deflected" ||
+                        (e.message == "missed" && e.hit != ProjectileHitKind::None);
+    const Def* weapon = landed ? soundDef(db, e.def) : nullptr;
+    if (weapon == nullptr) return;
+    std::string cue;
+    if (e.hit == ProjectileHitKind::Pawn || e.hit == ProjectileHitKind::Armor) {
+        const Def* target = soundDefOfEntity(db, defOf, e.target);
+        if (target != nullptr && target->text("race.intelligence") == "Mechanoid") cue = soundSlot(*weapon, "hitExtraMech");
+    }
+    if (cue.empty()) cue = soundSlot(*weapon, "hitExtra");
+    if (!cue.empty() && db.find("SoundCues", cue) != nullptr) out.push_back(soundAt(cue.c_str(), e.x, e.y, e.z));
 }
 
 // The voice slot of a pawn's gender ("femaleHit"), or null when it has no voice.
@@ -408,6 +434,7 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
         }
         case EventType::MeleeHit:
             soundMeleeHit(db, e, out);
+            soundMeleeExtra(db, defOf, e, out);
             if (voiced(e.target)) soundHitVoice(db, e, defOf, genderOf, out);
             break;
         // A hit softened by a raised shield (docs/design/shields.md); one it stopped already sounds as a blocked blow or an

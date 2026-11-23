@@ -61,6 +61,8 @@ namespace
 	// back bends its carrier forward (degrees).
 	constexpr float WeaponReadyRate = 2.5f;
 	constexpr float WeaponCarryBend = 26.0f;
+	// Aimed anchors follow the joints at this rate (1/s): about a quarter second, slower than the walk cycle bob.
+	constexpr float WeaponDrawSteadyRate = 4.0f;
 
 	const TCHAR* const WeaponSolidMaterialPath = TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial");
 
@@ -1002,6 +1004,7 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 			const float Dt = GetWorld()->GetDeltaSeconds();
 			Shown.SpinSpeed = GunRangeSpinSpeed(*PartDef, Shown.SpinSpeed, Shot ? Now - *Shot : 99.0f, Dt);
 			Shown.SpinAngle = FMath::Fmod(Shown.SpinAngle + Shown.SpinSpeed * 360.0f * Dt, 360.0f);
+			Shown.SpinShare = FMath::Clamp(Shown.SpinSpeed / FMath::Max(PartDef->SpinRps, 0.01f), 0.0f, 1.0f);
 			Shown.Parts[P]->SetRelativeTransform(GunRangeSpinTransform(*PartDef, Shown.SpinAngle));
 		}
 		if (Slot == InHands && InHand >= 0.999f && bInHandFrame)
@@ -1116,7 +1119,27 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 
 	// The anchors in the world from this frame's pose: between the shoulder joints, or the head; the body's facing.
 	const FVector Chest = (Mesh->GetSocketLocation(TEXT("upperarm_l")) + Mesh->GetSocketLocation(TEXT("upperarm_r"))) * 0.5;
-	const FVector Head = Mesh->GetSocketLocation(TEXT("head"));
+	FVector Head = Mesh->GetSocketLocation(TEXT("head"));
+	FVector ShoulderR = Mesh->GetSocketLocation(TEXT("upperarm_r"));
+	if (bGun && Body)
+	{
+		// Aimed, the gun hangs off steadied anchors: the joints' places in the actor's frame, low-passed (about a quarter
+		// second), so the walk's bob and sway stay in the legs and body and out of the sight line. Blended in with the aim.
+		const FTransform ActorFrame = Actor.GetActorTransform();
+		const FVector HeadLocal = ActorFrame.InverseTransformPosition(Head);
+		const FVector ShoulderLocal = ActorFrame.InverseTransformPosition(ShoulderR);
+		const float Follow = Pawn.bSteadyValid && Pawn.AimBlend > 0.01f ? 1.0f - FMath::Exp(-WeaponDrawSteadyRate * FrameDelta) : 1.0f;
+		Pawn.SteadyHead = FMath::Lerp(Pawn.SteadyHead, HeadLocal, static_cast<double>(Follow));
+		Pawn.SteadyShoulder = FMath::Lerp(Pawn.SteadyShoulder, ShoulderLocal, static_cast<double>(Follow));
+		Pawn.bSteadyValid = true;
+		const double Steady = MeleePose::EaseInOut(FMath::Clamp(Pawn.AimBlend, 0.0f, 1.0f));
+		Head = FMath::Lerp(Head, ActorFrame.TransformPosition(Pawn.SteadyHead), Steady);
+		ShoulderR = FMath::Lerp(ShoulderR, ActorFrame.TransformPosition(Pawn.SteadyShoulder), Steady);
+	}
+	else
+	{
+		Pawn.bSteadyValid = false;
+	}
 	const FQuat Facing = FRotationMatrix::MakeFromXZ(Actor.GetActorForwardVector(), Actor.GetActorUpVector()).ToQuat();
 	// Third person, aiming (sneed 2026-11-20: "the weapon doesn't move with my cursor to aim, and arms"): an aimed place on
 	// the head is turned to look straight at what the crosshair is on (yaw and pitch, at most 60 degrees round from
@@ -1146,7 +1169,6 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 		return FRotationMatrix::MakeFromXZ(Dir, FVector::UpVector).ToQuat();
 	};
 	// The right shoulder joint (HoldAnchor::Shoulder): a long gun's butt goes in its pocket when aimed (sneed 2026-11-23).
-	const FVector ShoulderR = Mesh->GetSocketLocation(TEXT("upperarm_r"));
 	const auto Placed = [&](const colony::HoldPlace& P)
 	{
 		const bool bHead = P.anchor == colony::HoldAnchor::Head;
@@ -1192,7 +1214,7 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 		double Slide = 0.0;
 		while (Slide < 12.0 && FMath::PointDistToSegment(Skull, Butt + Barrel * Slide, Grip + Barrel * Slide) < Clear)
 		{
-			Slide += 1.0;
+			Slide += 0.25;  // fine steps: whole centimetres made the aimed gun tick back and forth as the head bobbed
 		}
 		const double SkullSlide = Slide;
 		// Aimed, the butt sits in the shoulder, never out behind it (sneed 2026-11-22, PC round 1: the shotgun's and the
@@ -1201,7 +1223,7 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 		// behind the right shoulder joint; at most 25 cm in all.
 		if (Pawn.AimBlend > 0.0f && Mesh->GetBoneIndex(TEXT("upperarm_r")) != INDEX_NONE)
 		{
-			const FVector Shoulder = Mesh->GetSocketLocation(TEXT("upperarm_r"));
+			const FVector Shoulder = ShoulderR;
 			const double Behind = -FVector::DotProduct(Butt + Barrel * Slide - Shoulder, Barrel) - 7.0 * BodyScale;
 			if (Behind > 0.0)
 			{
@@ -1515,6 +1537,7 @@ void UWeaponDrawSubsystem::UpdateStance(ASimPawnActor& Actor, const colony::Thin
 	const colony::DefDatabase& Defs = *Bridge->GetDefs();
 	UAnimSequence* Clip = nullptr;
 	float Weight = 0.0f;
+	float HoldAt = -1.0f;
 	colony::WeaponHold Hold;
 	if (bShow && GWeaponStances.GetValueOnGameThread() != 0 && !Actor.IsJumping() && colony::holdFor(Defs, View.weapon, Hold))
 	{
@@ -1532,7 +1555,13 @@ void UWeaponDrawSubsystem::UpdateStance(ASimPawnActor& Actor, const colony::Thin
 		}
 		else if (View.blocking || View.shieldUp)
 		{
-			Clip = bShieldArm ? HoldDraw::StyleClip(Defs, Hold, "shieldBlock", "block") : HoldDraw::StyleClip(Defs, Hold, "block");
+			Clip = bShieldArm ? HoldDraw::StyleClip(Defs, Hold, "shieldBlock", "block") : HoldDraw::StyleClip(Defs, Hold, "block", "blockAlt");
+			// Raised once and held there, not looped (the style's `blockHold`, seconds into the clip); let go, the layer's
+			// weight fades and the arms come back down by themselves.
+			if (Hold.style.valid() && Hold.style.value < Defs.size())
+			{
+				HoldAt = static_cast<float>(Defs.get(Hold.style).number("blockHold", 0.35));
+			}
 			if (!Clip && View.shieldUp)
 			{
 				colony::WeaponHold Shield;
@@ -1561,7 +1590,7 @@ void UWeaponDrawSubsystem::UpdateStance(ASimPawnActor& Actor, const colony::Thin
 			Weight *= 0.6f;  // crouched: the arms only
 		}
 	}
-	Anim->SetUpperStance(Clip, Clip ? Weight : 0.0f);
+	Anim->SetUpperStance(Clip, Clip ? Weight : 0.0f, 0.2f, HoldAt >= 0.0f ? 3.5f : 5.0f, HoldAt);
 	// A body on the back: bent forward under it (docs/design/weapon-hold.md, "Carrying a body").
 	float Bend = View.carryingPawn != colony::kNoEntity && !View.downed && !View.dead ? WeaponCarryBend : 0.0f;
 	// Through a finisher: bent over the body on the ground, most at the blow (sneed 2026-11-20).
@@ -1704,6 +1733,21 @@ float UWeaponDrawSubsystem::GetShieldRaise(colony::Entity Pawn) const
 {
 	const FPawnWeapons* Found = Weapons.Find(entt::to_integral(Pawn));
 	return Found ? Found->ShieldRaise : 0.0f;
+}
+
+float UWeaponDrawSubsystem::GetSpinShare(colony::Entity Pawn) const
+{
+	const FPawnWeapons* Found = Weapons.Find(entt::to_integral(Pawn));
+	float Share = 0.0f;
+	for (int32 Slot = 0; Found && Slot < GWeaponDisplaySlots; ++Slot)
+	{
+		const FDisplayed& Shown = Found->Slots[Slot];
+		if (Shown.Component.IsValid() && Shown.Component->IsVisible())
+		{
+			Share = FMath::Max(Share, Shown.SpinShare);
+		}
+	}
+	return Share;
 }
 
 int32 UWeaponDrawSubsystem::CountWeaponsInHands() const

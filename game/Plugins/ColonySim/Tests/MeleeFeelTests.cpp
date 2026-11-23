@@ -260,7 +260,7 @@ TEST_CASE("Swing speed: the club swings twice as fast, other melee weapons half 
     const int longsword = feelTestSwingSteps("Melee_Longsword");  // 2.45 s, halved (#363), now a third
     MESSAGE("club " << club << ", gladius " << gladius << ", longsword " << longsword << " steps");
     // At the default Melee skill (4) a swing takes 1 / 0.88 of the weapon's time, and every swing 0.75 of that
-    // (attackTimeFactor: "all melee attacks 33% faster", sneed 2026-11-23).
+    // (attackTimeFactor: 0.75 "33% faster", then sneed 2026-11-23 again "slow it down 33%": 1.125).
     const float f = feelTestSim(1)->melee().rules().attackTimeFactor;
     CHECK(club >= static_cast<int>(32.0f * f));
     CHECK(club <= static_cast<int>(std::ceil(36.0f * f)));
@@ -335,15 +335,19 @@ TEST_CASE("Landing blows: a target that shuffles a little after the line is fixe
     CHECK(hit);
 }
 
-TEST_CASE("Swing speed: a person's fists punch four times as fast as the other swings' pace, and weakly (sneed 2026-11-23)") {
+TEST_CASE("Swing speed: a person's fists punch quickly with a short pause between, and weakly (sneed 2026-11-23)") {
     const int fists = feelTestSwingSteps(nullptr);  // RimWorld 2 s at Melee 10; Melee 4: 68 steps
     const MeleeRules& rules = feelTestSim(1)->melee().rules();
     MESSAGE("fists " << fists << " steps");
-    const float expected = 68.0f * rules.attackTimeFactor * rules.unarmedTimeFactor;
+    // Their own pace (not times attackTimeFactor), plus the pause.
+    const float expected = 68.0f * rules.unarmedTimeFactor + static_cast<float>(rules.unarmedGapSteps);
     CHECK(fists >= static_cast<int>(expected) - 1);
     CHECK(fists <= static_cast<int>(std::ceil(expected)) + 1);
-    CHECK(rules.unarmedTimeFactor == doctest::Approx(0.25f));  // "400% faster"
-    CHECK(rules.unarmedPowerFactor < 1.0f);                    // "and weak"
+    // "reduce the unarmed attack speed by 40%": 0.6 of the first batch's 0.75 x 0.25 pace (about 13 steps then).
+    CHECK(fists >= 19);
+    CHECK(fists <= 24);
+    CHECK(rules.unarmedGapSteps == 3);       // "a .1 sec added delay"
+    CHECK(rules.unarmedPowerFactor < 1.0f);  // "and weak"
 }
 
 TEST_CASE("Defending: an enemy fighter dodges some of the player's knife swings by skill, and the rest land") {

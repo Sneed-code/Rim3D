@@ -114,6 +114,9 @@ struct Shooter {
     int refillFrom = 0;           // the steps `refill` started at
     Entity storeGun = kNoEntity;  // the weapon the store is for; another one in the hands starts full
     DrawnAim drawn;               // the player's shot: the part of a drawn body under the crosshair
+    // A charged shot (a gun's `charge` block, the charge lance: sneed 2026-11-23): the damage factor of the player's
+    // next shot, from the seconds the trigger was held (ShootCommand::charge). Back to 1 once fired. Not saved.
+    float chargeFactor = 1.0f;
 };
 
 // On a gun item once it has been fired: the rounds left in its magazine (F5). A gun without one
@@ -430,6 +433,9 @@ public:
     // During warm-up a new order changes the aim. False if the pawn can't shoot now (no gun,
     // downed, mid-burst or cooling down).
     // `drawn` (player shots only): the drawn body part under the crosshair; the shot aims at it as the pawn stands.
+    // The damage factor a gun's charge of `seconds` gives (its `charge` block: 1 at none, maxDamageFactor at
+    // maxSeconds); 1 for a gun without one.
+    float chargeFactorFor(DefId weaponDef, float seconds) const;
     bool shoot(Entity pawn, Entity target, float x, float y, float z, bool player, std::string* why = nullptr,
                const DrawnAim* drawn = nullptr);
     // The body part index of the pawn's hitbox labelled `label` ("head", "left arm"...); -1 if none. For Unreal's

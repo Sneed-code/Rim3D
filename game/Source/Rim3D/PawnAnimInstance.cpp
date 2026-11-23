@@ -62,6 +62,8 @@ namespace
 	constexpr float PawnStandStepTime = 0.3f;
 	constexpr float PawnStandStepLift = 5.0f;
 	constexpr float PawnStandTwistMax = 60.0f;
+	// The most the chest turns from the hips through an upper-body swing on the move (degrees, about the up axis).
+	constexpr float PawnUpperMovingTwist = 50.0f;
 	constexpr float PawnStandRelease = 0.2f;
 	// A foot further than this (cm) from where the idle wants it steps too (an idle drift, a body that crept).
 	constexpr float PawnStandStepFar = 22.0f;
@@ -773,6 +775,10 @@ protected:
 
 public:
 	TArray<FSimPawnKick, TInlineAllocator<8>> PendingKicks;
+	/** The locomotion's smoothed ground speed (cm/s), published each update for the upper-body slot's waist hold. */
+	float RecentSpeed = 0.0f;
+	/** Frames an upper-body swing on the move had its waist turn held back (PawnUpperMovingTwist), for the smokes. */
+	int32 UpperTwistHeld = 0;
 
 private:
 	FSimPawnHitLayerNode HitLayer;
@@ -1014,7 +1020,29 @@ void FSimPawnUpperSlotNode::EvaluateSlotted(FPoseContext& Output)
 	// ... of which the legs and hips are left as they were: spine_01 takes the slotted chest's direction in mesh space
 	// under the walk's own hips, and every bone above it the slotted pose.
 	const FQuat LocoPelvis = PawnUpperComponent(Output.Pose, Pelvis).GetRotation();
-	const FQuat SlottedSpine = PawnUpperComponent(Slotted.Pose, Spine).GetRotation();
+	FQuat SlottedSpine = PawnUpperComponent(Slotted.Pose, Spine).GetRotation();
+	// On the move the waist turns only so far (sneed 2026-11-23: the zeushammer's big uppercut while running turned
+	// the chest 180 degrees round over the running legs; standing, the clip's own footwork turns the whole body, so it is
+	// left alone): the chest's turn about the up axis, against the walk's own chest, is held within PawnUpperMovingTwist.
+	if (Proxy)
+	{
+		const float Moving = FMath::Clamp((Proxy->RecentSpeed - 40.0f) / 110.0f, 0.0f, 1.0f);
+		const float MostTwist = FMath::Lerp(180.0f, PawnUpperMovingTwist, Moving);
+		if (MostTwist < 179.0f)
+		{
+			const FQuat LocoSpine = PawnUpperComponent(Output.Pose, Spine).GetRotation();
+			const FQuat Delta = (SlottedSpine * LocoSpine.Inverse()).GetNormalized();
+			FQuat Swing, Twist;
+			Delta.ToSwingTwist(FVector::UpVector, Swing, Twist);
+			const float TwistDegrees = FMath::RadiansToDegrees(Twist.GetTwistAngle(FVector::UpVector));
+			if (FMath::Abs(TwistDegrees) > MostTwist)
+			{
+				const FQuat Held(FVector::UpVector, FMath::DegreesToRadians(FMath::Sign(TwistDegrees) * MostTwist));
+				SlottedSpine = (Swing * Held * LocoSpine).GetNormalized();
+				++Proxy->UpperTwistHeld;
+			}
+		}
+	}
 	Output.Pose[Spine].SetRotation((LocoPelvis.Inverse() * SlottedSpine).GetNormalized());
 	for (FCompactPoseBoneIndex Bone : Output.Pose.ForEachBoneIndex())
 	{
@@ -1184,6 +1212,10 @@ void FSimPawnLocomotionNode::PredictAlongRoute(const FSimPawnAnimInputs& In, flo
 	const bool bSlowingDown = Speed < RecentSpeed - 0.06f * In.CruiseSpeed;
 	const float Pace = bSpeedingUp ? In.CruiseSpeed : FMath::Min(Speed, In.CruiseSpeed * 2.0f);
 	RecentSpeed = FMath::Lerp(RecentSpeed, Speed, FMath::Clamp(DeltaTime / 0.25f, 0.0f, 1.0f));
+	if (Proxy)
+	{
+		Proxy->RecentSpeed = RecentSpeed;
+	}
 	FVector Heading = Speed > PawnStandSpeed ? SmoothVelocity.GetSafeNormal2D() : FVector::ZeroVector;
 	float Yaw = In.Yaw;
 	int32 Next = 0;
@@ -2145,12 +2177,20 @@ void USimPawnAnimInstance::DestroyAnimInstanceProxy(FAnimInstanceProxy* InProxy)
 	delete static_cast<FSimPawnAnimInstanceProxy*>(InProxy);
 }
 
-void USimPawnAnimInstance::SetUpperStance(UAnimSequence* Clip, float Weight, float BlendSeconds, float WeightRate)
+void USimPawnAnimInstance::SetUpperStance(UAnimSequence* Clip, float Weight, float BlendSeconds, float WeightRate, float HoldAt)
 {
 	UpperWeightTarget = FMath::Clamp(Weight, 0.0f, 1.0f);
 	UpperWeightRate = FMath::Max(WeightRate, 0.1f);
+	if (Clip && Clip == UpperClip && UpperWeight <= 0.01f && HoldAt >= 0.0f)
+	{
+		UpperTime = 0.0f;  // a held clip raised again from nothing starts over (the block comes up again)
+	}
 	if (Clip == UpperClip || !Clip)
 	{
+		if (Clip)
+		{
+			UpperHoldAt = HoldAt;
+		}
 		// No clip: keep the last one while the weight fades out.
 		if (!Clip)
 		{
@@ -2163,14 +2203,17 @@ void USimPawnAnimInstance::SetUpperStance(UAnimSequence* Clip, float Weight, flo
 		// Nothing showing: start straight on the new clip.
 		UpperClip = Clip;
 		UpperTime = 0.0f;
+		UpperHoldAt = HoldAt;
 		UpperBlend = 1.0f;
 		UpperOldClip = nullptr;
 		return;
 	}
 	UpperOldClip = UpperClip;
 	UpperOldTime = UpperTime;
+	UpperOldHoldAt = UpperHoldAt;
 	UpperClip = Clip;
 	UpperTime = 0.0f;
+	UpperHoldAt = HoldAt;
 	UpperBlend = 0.0f;
 	UpperBlendRate = BlendSeconds > 0.0f ? 1.0f / BlendSeconds : 1000.0f;
 }
@@ -2180,6 +2223,14 @@ void USimPawnAnimInstance::AdvanceUpper(float DeltaSeconds)
 	const float Dt = FMath::Max(DeltaSeconds, 0.0f);
 	UpperTime += Dt;
 	UpperOldTime += Dt;
+	if (UpperHoldAt >= 0.0f && UpperClip)
+	{
+		UpperTime = FMath::Min(UpperTime, FMath::Min(UpperHoldAt, UpperClip->GetPlayLength() - 0.001f));
+	}
+	if (UpperOldHoldAt >= 0.0f && UpperOldClip)
+	{
+		UpperOldTime = FMath::Min(UpperOldTime, FMath::Min(UpperOldHoldAt, UpperOldClip->GetPlayLength() - 0.001f));
+	}
 	UpperBlend = FMath::Min(1.0f, UpperBlend + Dt * UpperBlendRate);
 	if (UpperBlend >= 1.0f)
 	{

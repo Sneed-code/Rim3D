@@ -2,6 +2,28 @@
 
 Updated 2026-11-23.
 
+Combat feel batch 2 (sneed, 2026-11-23 evening; sim, data and Unreal): **fists** 40% slower with a 0.1 s gap after each
+punch (`MeleeRules` `unarmedWindupShare`, `unarmedGapSteps`), **melee** a third slower (`attackTimeFactor` 1.125). **Guns**
+(`data/tuning.json`, defs): rockets start at 10 m/s and speed up 7 m/s each second to 60 (`projectile.thrust`, `topSpeed`),
+grenade launcher shell 36 m/s, chain shotgun three buckshot blasts and 1.5x recharge, minigun 5x recharge, machine pistol
+half the store and 60% less spread (`storeFactor`, `spreadFactor`), revolver +25%, spray guns -25%. **Charge lance**: hold
+to charge up to 2 s for up to 2x damage, fires itself at 4 s (`charge` block; `ShootCommand.charge`, saves commands v7),
+drawn as a blue beam. **Sounds**: magnum revolver, Glock pistols, minigun motor loop whose pitch follows the barrels' spin
+(winds down and back up), melee hits per material sharp and blunt (`Hit_Sharp_*`, `Hit_Blunt_*`), saber swing/hit/hum,
+charge-up, zeushammer zap (larger on mechanoids, with blue arc sparks). **Unreal**: aimed guns hang off steadied head and
+shoulder anchors and the aimed camera follows softly (no shake walking), waist turn held to 50 degrees through an
+upper-body swing on the move, blocks rise and hold (`blockHold`) instead of looping, boxing guard from Mixamo (art step
+`mixamo-guard`), breach axe turned round into the left hand (`importRotation`), corpses never pushed into the ground,
+no glowing mist/gush blobs off shot corpses, strand hair held still while a hand sweeps past the head, gun range box off
+(`GunRange.Panel 1`) and +/- cycle the guns, dirt hits throw soil jets and clods, stronger rocket plume. **Not done yet**
+(next thread): neck gone with the head and lower torso cut, loose head physics, organs/intestines/genital gore, realistic
+torso chunks, molotov liquid fire, more realistic explosions, a rocket model, the roll snap-back (smoke `feel` now
+measures the pelvis jump back). PC (2026-11-23): compiles; smokes `gore` and `sound` pass; `feel` fails on the roll
+(the hips snap back the whole 3.5 m at the end, the body never turns over), `melee` fails holsters/switch_key (old) and
+3 late blows of 14, `fights` fails fire_at_pawn (0 hits from 12 m), frozen_hit and ragdoll (pelvis 87 cm up); no
+baseline on main was run, so run `fights` and `melee` on main first to see which are new. `gunrange` not run (PC busy):
+`tools\smoke.ps1 -Test gunrange -NoBuild -Visible -ExtraArgs "-GunRangeScript"`.
+
 Combat feel batch (sneed, 2026-11-23; sim, data and Unreal): **melee** every swing a quarter quicker (`MeleeRules`
 `attackTimeFactor` 0.75, finishers and their clips too), a person's fists four times as fast and a quarter as strong
 (`unarmedTimeFactor`, `unarmedPowerFactor`: RimWorld's damage per second kept); the player's swing from standing is the whole

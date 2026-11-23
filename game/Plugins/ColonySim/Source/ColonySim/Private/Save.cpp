@@ -1628,6 +1628,9 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                     ar.value("aimDy", shoot->aimDy);
                     ar.value("aimUp", shoot->aimUp);
                 }
+                if (ar.sectionVersion() >= 7) {  // a charged gun's held trigger
+                    ar.value("charge", shoot->charge);
+                }
             } else if constexpr (std::is_same_v<Type, SetStanceCommand>) {
                 auto* stance = &c;
                 ar.value("pawn", stance->pawn);
@@ -3584,7 +3587,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("repaths", d.repaths);
         ar.list("setupErrors", d.setupErrors, [&](std::string& s) { ar.text(nullptr, s); });
     });
-    ar.section("commands", 6, [&] { saveCommandsSection(ar, d); });
+    ar.section("commands", 7, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
     ar.section("movement", 3, [&] {
