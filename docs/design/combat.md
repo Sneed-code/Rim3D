@@ -154,6 +154,26 @@ snapshot `staggeredFor`. Tests `AnimationHookTests`.
 Grenades and blasts (F9) are in [explosives.md](explosives.md). They use this file's armor rule
 (`armorPass`) and hitboxes, and `trace` with `pawns` false for the blast's lines of sight.
 
+## Gun changes (sneed, 2026-11-23)
+
+Tests: `Tests/GunTweakTests.cpp`. All ours, all in data (`ours` lists in the defs).
+
+- **`spreadFactor`** on a gun (default 1) multiplies its whole spray: the accuracy cone and the recoil the shots built up.
+  Minigun and LMG 0.2; chain shotgun 0 (and `recoilPerShot` 0; its `recoilKicks` stay, the visible kick).
+- **Buckshot**: a projectile's `projectile.pellets` and `projectile.pelletSlope`. One shot makes N projectiles, each in a
+  random direction in a cone of that slope around the aim, each with `1/N` of the damage (`Projectile::damageScale`) and the
+  bullet's own armour penetration. One ShotFired per shot (the first pellet's `target`); each pellet has its own
+  ProjectileHit. Chain shotgun: 9 pellets, slope 0.1 (0.5 m at 5 m).
+- **Rockets** (triple, doomsday): `projectile.speed` 0.0777778 = 7 m/s (tuning x3, 30 steps a second),
+  `projectile.gravityFactor` 0 (straight), `projectile.maxFlight` 400 steps (a bullet's limit is 120).
+- **Grenade launcher** shell 0.3 (27 m/s, was 40): the lower arc; out of reach it fires the 45 degree shot.
+- **Bounces** (`bounce` block on Shell_Frag and Proj_GrenadeFrag, not molotovs): a pawn in the way bursts it at once;
+  ground, rock, buildings and trees bounce it (`CombatSystem::flyBouncing`: speed into the surface x 0.4, the rest x 0.3;
+  a slow touch on the ground rolls and stops). It bursts 90 steps (3 s) after the first bounce or 150 steps (5 s) after
+  the shot, whichever is first. Each hard bounce is a `GrenadeLanded` event (the def's `landed` sound, else the
+  grenade clunk; `amount` the steps to the burst). A hand-thrown grenade's plan (`planThrow`) aims its first touchdown at the
+  target, so it ends a little past it. Saves: `combat` 7 (`damageScale`, `sinceBounce`), `explosives` 2 (`sinceBounce`).
+
 ## Not done yet
 
 Melee is F8's ([melee.md](melee.md)); melee weapons go in `Gear::weapon` through `equip`, and

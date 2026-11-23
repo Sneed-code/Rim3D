@@ -104,6 +104,9 @@ float explosiveBySkill(const float (&v)[2], int skill) {
     return v[0] + (v[1] - v[0]) * t;
 }
 
+// A bounce into a surface faster than this (metres per step) is heard (as CombatSystem's shells).
+constexpr float kExplosiveBounceAudibleSpeed = 0.05f;
+
 float explosiveDistance(float ax, float ay, float bx, float by) {
     return std::sqrt((ax - bx) * (ax - bx) + (ay - by) * (ay - by));
 }
@@ -597,7 +600,44 @@ void ExplosiveSystem::flyOrBlow(Entity grenade, Rng& rng) {
     Grenade& g = reg.get<Grenade>(grenade);
     const ExplosiveModel::Proj& proj = *model_->proj(g.def);
     ++g.age;
-    if (g.fuse < 0) {
+    const BounceRules bounce = combat_.bounceRules(g.def);
+    if (g.fuse < 0 && bounce.bounces()) {
+        // A bouncing grenade (frag): bursts on a pawn at once, bounces off everything else, and goes off 3 s after its
+        // first bounce or 5 s after the throw, whichever comes first.
+        if (g.sinceBounce >= 0) {
+            ++g.sinceBounce;
+        }
+        TraceHit hit;
+        float impactSpeed = 0.0f;
+        const BounceResult result = combat_.flyBouncing(g.x, g.y, g.z, g.vx, g.vy, g.vz, g.level, g.thrower, g.startCell,
+                                                        1.0f, bounce, hit, impactSpeed);
+        bool burst = result == BounceResult::Pawn || result == BounceResult::Gone;
+        if (result == BounceResult::Pawn) {
+            g.x = hit.x;
+            g.y = hit.y;
+            g.z = hit.z;
+        }
+        if (result == BounceResult::Bounced && g.sinceBounce < 0) {
+            g.sinceBounce = 0;
+        }
+        const int toFuse = std::min(bounce.flightFuse - g.age, g.sinceBounce >= 0 ? bounce.bounceFuse - g.sinceBounce : bounce.flightFuse);
+        burst = burst || toFuse <= 0;
+        if (!burst) {
+            if (result == BounceResult::Bounced && impactSpeed > kExplosiveBounceAudibleSpeed && events_ != nullptr) {
+                Event e;
+                e.type = EventType::GrenadeLanded;  // a clunk on every hard bounce; `amount` is the steps to the blast
+                e.thing = grenade;
+                e.def = g.def;
+                e.x = g.x;
+                e.y = g.y;
+                e.z = g.z;
+                e.amount = static_cast<float>(toFuse);
+                e.cell = CellPos{static_cast<int>(std::floor(g.x)), static_cast<int>(std::floor(g.y)), g.level};
+                events_->push_back(std::move(e));
+            }
+            return;
+        }
+    } else if (g.fuse < 0) {
         const float gravity = combat_.gravity();
         const float nx = g.x + g.vx;
         const float ny = g.y + g.vy;
@@ -747,7 +787,13 @@ void ExplosiveSystem::dangers(std::vector<GrenadeDanger>& out) const {
         d.radius = proj->radius;
         d.age = g.age;
         d.thrower = g.thrower;
-        if (g.fuse >= 0) {
+        const BounceRules bounce = combat_.bounceRules(g.def);
+        if (g.fuse < 0 && bounce.bounces() && g.sinceBounce >= 0) {
+            d.x = g.x;  // bouncing already: it goes off about here, `bounceFuse` after its first bounce
+            d.y = g.y;
+            d.z = g.z;
+            d.stepsToBlast = std::max(0, std::min(bounce.flightFuse - g.age, bounce.bounceFuse - g.sinceBounce));
+        } else if (g.fuse >= 0) {
             d.x = g.x;
             d.y = g.y;
             d.z = g.z;
@@ -757,7 +803,8 @@ void ExplosiveSystem::dangers(std::vector<GrenadeDanger>& out) const {
             if (!simulate(g, d.x, d.y, d.z, steps)) {
                 continue;
             }
-            d.stepsToBlast = steps + proj->fuse;
+            d.stepsToBlast = bounce.bounces() ? std::max(0, std::min(bounce.flightFuse - g.age, steps + bounce.bounceFuse))
+                                              : steps + proj->fuse;
         }
         out.push_back(d);
     }
@@ -798,6 +845,7 @@ void ExplosiveSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(g->level);
         h.add(g->age);
         h.add(g->fuse);
+        h.add(g->sinceBounce);
         h.add(g->startCell.x);
         h.add(g->startCell.y);
         h.add(g->startCell.level);

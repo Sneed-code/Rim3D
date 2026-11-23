@@ -79,6 +79,10 @@ struct Grenade {
     int level = 0;
     int age = 0;                  // steps since the throw
     int fuse = -1;                // -1 while it flies; steps left once it has landed
+    // A bouncing grenade (the def's `bounce` block, ours): `fuse` stays -1 for its whole life, it bursts on a pawn at
+    // once and otherwise `bounceFuse` steps after its first bounce or `flightFuse` after the throw. Steps since that first
+    // bounce, -1 before it.
+    int sinceBounce = -1;
     CellPos startCell;            // the thrower's cell: a building there never stops the throw
     uint64_t seed = 0;            // where the blast's choices (fragments, parts, armor) come from
 };

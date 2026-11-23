@@ -2,6 +2,13 @@
 
 Updated 2026-11-22.
 
+Gun changes (sneed, 2026-11-23; sim and data, `docs/design/combat.md` "Gun changes"): minigun and LMG spray 80% narrower
+(`spreadFactor` 0.2); the chain shotgun fires a 9-pellet buckshot load with no spray (strong close, weak far); rockets fly
+straight at 7 m/s; the grenade launcher shell is slower (27 m/s) and arcs; frag grenades and launcher shells bounce and burst
+on a pawn at once, otherwise 3 s after the first bounce or 5 s after the shot (molotovs unchanged). **Unreal side, not done:**
+draw each pellet (they are separate projectiles, one ShotFired), a bounce sound/puff on each `GrenadeLanded` of a shell (its
+`thing` is the projectile, not a grenade entity), and check the slow rocket's trail.
+
 Solar panel and wind turbine models (sneed, 2026-11-22; tools, data and Unreal, `docs/design/building-draw.md`
 "Downloaded models with a moving part"): the two power buildings were still box shapes. Now they use free Fab models,
 downloaded once into `assets/raw/fab/` on the PC: "Animated Wind Turbine" (Glowbox3D, CC BY) and "Solar Panel Array

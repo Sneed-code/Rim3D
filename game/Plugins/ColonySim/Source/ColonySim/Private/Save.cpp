@@ -2529,6 +2529,10 @@ void saveProjectilePart(Ar& ar, SaveProjectile& sp) {
     if (ar.sectionVersion() >= 6) {
         saveDrawnAim(ar, sp.p.drawn);
     }
+    if (ar.sectionVersion() >= 7) {  // buckshot pellets and bouncing shells
+        ar.value("damageScale", sp.p.damageScale);
+        ar.value("sinceBounce", sp.p.sinceBounce);
+    }
 }
 
 template <typename Ar>
@@ -2547,6 +2551,9 @@ void saveGrenadePart(Ar& ar, SaveGrenade& sg) {
     ar.value("fuse", sg.g.fuse);
     ar.group("startCell", [&] { saveCell(ar, sg.g.startCell); });
     ar.value("seed", sg.g.seed);
+    if (ar.sectionVersion() >= 2) {  // bouncing grenades
+        ar.value("sinceBounce", sg.g.sinceBounce);
+    }
 }
 
 template <typename Ar>
@@ -3628,7 +3635,7 @@ void saveSections(Ar& ar, SaveData& d) {
     ar.section("mood", 1, [&] {
         saveParts(ar, "mood", e, &SaveEntity::mood, [&](Mood& m) { saveMoodPart(ar, m); });
     });
-    ar.section("combat", 6, [&] {
+    ar.section("combat", 7, [&] {
         saveParts(ar, "posture", e, &SaveEntity::posture, [&](Posture& p) { savePosturePart(ar, p); });
         saveParts(ar, "gear", e, &SaveEntity::gear, [&](Gear& g) { saveGearPart(ar, g); });
         saveParts(ar, "equippedBy", e, &SaveEntity::equippedBy, [&](EquippedBy& b) { saveEquippedByPart(ar, b); });
@@ -3850,7 +3857,7 @@ void saveSections(Ar& ar, SaveData& d) {
         d.hasWeather = true;
         saveWeather(ar, d.weather);
     });
-    ar.section("explosives", 1, [&] {
+    ar.section("explosives", 2, [&] {
         saveParts(ar, "belt", e, &SaveEntity::belt, [&](SaveBelt& b) { saveBeltPart(ar, b); });
         saveParts(ar, "thrower", e, &SaveEntity::thrower, [&](SaveThrower& t) { saveThrowerPart(ar, t); });
         saveParts(ar, "grenade", e, &SaveEntity::grenade, [&](SaveGrenade& g) { saveGrenadePart(ar, g); });
