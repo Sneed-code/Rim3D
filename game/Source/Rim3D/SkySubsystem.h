@@ -283,6 +283,10 @@ public:
 	float GetMeasuredExposure() const { return MeasuredExposureEV; }
 	/** How many times a stuck exposure had its view history reset (WatchExposure). */
 	int32 GetExposureHeals() const { return ExposureHeals; }
+	/** The title screen's starship stage stands (ATitleStage, docs/design/new-game.md "Title"): the sky's lights,
+	 *  atmosphere, fog, clouds, stars, rain and its exposure are put away (the stage brings its own) until it goes. */
+	void SetStageMode(bool bOn);
+	bool IsStageMode() const { return bStageMode; }
 
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
@@ -371,6 +375,10 @@ private:
 	float ExposureStuckSeconds = 0.0f;
 	int32 ExposureHeals = 0;
 	float HourOverride = -1.0f;
+	/** SetStageMode: on, and the sky's parts it hid (shown again when it goes off). */
+	bool bStageMode = false;
+	TArray<TWeakObjectPtr<USceneComponent>> StageHidden;
+	void HideForStage();
 	float LastExposureEV = -100.0f;
 	/** 0 with the camera outdoors, 1 under a roof; eased so stepping through a door is not a jump. */
 	float IndoorShare = 0.0f;

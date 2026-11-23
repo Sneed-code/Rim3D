@@ -38,6 +38,14 @@
       "run": [{"python": ["tools/sky_textures.py"]}]
     },
     {
+      "name": "title-art",
+      "what": "Paint the title screen's planet, clouds and galaxy (game/Saved/TitleArt; Blender's Python has numpy)",
+      "inputs": ["tools/title_art.py"],
+      "needs": ["blender"],
+      "makes": ["game/Saved/TitleArt/planet_color.png", "game/Saved/TitleArt/planet_clouds.png", "game/Saved/TitleArt/galaxy.png"],
+      "run": [{"blender": ["-b", "--factory-startup", "-P", "tools/title_art.py", "--"]}]
+    },
+    {
       "name": "creator-bodies",
       "what": "Build the character creator's bodies in Blender",
       "inputs": ["tools/makehuman/mh_creator.py", "tools/makehuman/mh_common.py", "tools/makehuman/mh_export.py", "tools/makehuman/markings.py", "tools/makehuman/skin_4k.py", "tools/makehuman/creator.json"],

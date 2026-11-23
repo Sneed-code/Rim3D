@@ -7,12 +7,14 @@
 
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/PointLight.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/DateTime.h"
 #include "Misc/Paths.h"
@@ -28,6 +30,7 @@
 #include "SimSubsystem.h"
 #include "SkySubsystem.h"
 #include "TerrainSubsystem.h"
+#include "TitleStage.h"
 #include "WorldScreenSubsystem.h"
 
 #include "ColonySim/Clock.h"
@@ -68,6 +71,11 @@ namespace
 	constexpr float NgTitleSubjectOffsetDegrees = 14.0f;
 	constexpr float NgTitleHour = 7.25f;
 	constexpr float NgTitleLetterSpacing = 0.16f;  // of the name's size, between its letters
+	// The title's starship stage (ATitleStage) stands this high over the map's corner, far above anything drawn there.
+	constexpr double NgTitleStageHeightCm = 3000000.0;
+
+	TAutoConsoleVariable<int32> GNgTitleStage(TEXT("Title.Stage"), 1,
+		TEXT("1: the title screen shows the starship stage (the character at a window in orbit); 0: the old camera round a rainforest glade."));
 
 	/** The hour nearest `Preferred`, earlier in the morning, whose exposure stays under NgPreviewMaxEV (see there). */
 	float NgCalmHour(const USkySubsystem& Sky, const USimSubsystem& Bridge, float Preferred)
@@ -636,6 +644,10 @@ void UColonyHudSubsystem::SubmitPeopleLook(colony::Entity Pawn, int32 Slot, cons
 {
 	const FString Text = CreatorPeople::Encode(Look);
 	PeopleLooks.Add(static_cast<uint32>(entt::to_integral(Pawn)), Text);
+	if (Slot == 0)
+	{
+		TitleStage::RememberCharacterText(Text);  // You: the character the title screen shows next time
+	}
 	colony::EditColonistCommand Edit;
 	Edit.slot = Slot;
 	Edit.setCreator = true;
@@ -653,6 +665,10 @@ void UColonyHudSubsystem::UpdateTitleCamera(USimSubsystem& Bridge)
 	APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
 	const colony::Sim* Sim = Bridge.GetSim();
 	if (!PC || !Sim)
+	{
+		return;
+	}
+	if (GNgTitleStage.GetValueOnGameThread() != 0 && UpdateTitleStage(Bridge))
 	{
 		return;
 	}
@@ -744,8 +760,80 @@ void UColonyHudSubsystem::UpdateTitleCamera(USimSubsystem& Bridge)
 	}
 }
 
+const ATitleStage* UColonyHudSubsystem::GetTitleStage() const
+{
+	return TitleStageActor.Get();
+}
+
+bool UColonyHudSubsystem::UpdateTitleStage(USimSubsystem& Bridge)
+{
+	UWorld* World = GetWorld();
+	APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	if (!PC)
+	{
+		return false;
+	}
+	if (!TitleStageActor.IsValid())
+	{
+		// High over the map, out of sight of everything else: the stage brings its own sun, sky and exposure, and the
+		// sky's are put away while it stands.
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Params.ObjectFlags |= RF_Transient;
+		const FVector At = Bridge.SimToWorld(0.0f, 0.0f, 0) + FVector(0.0, 0.0, NgTitleStageHeightCm);
+		ATitleStage* Made = World->SpawnActor<ATitleStage>(At, FRotator::ZeroRotator, Params);
+		if (!Made)
+		{
+			return false;
+		}
+		Made->Build();
+		TitleStageActor = Made;
+		if (USkySubsystem* Sky = World->GetSubsystem<USkySubsystem>())
+		{
+			Sky->SetStageMode(true);
+			bTitleStageSky = true;
+		}
+		if (!TitleCamera.IsValid())
+		{
+			FActorSpawnParameters CameraParams;
+			CameraParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			TitleCamera = World->SpawnActor<ACameraActor>(Made->GetCameraTransform().GetLocation(), Made->GetCameraTransform().Rotator(), CameraParams);
+		}
+		if (APlayerCameraManager* CameraManager = PC->PlayerCameraManager)
+		{
+			CameraManager->SetGameCameraCutThisFrame();
+		}
+	}
+	ATitleStage* Stage = TitleStageActor.Get();
+	ACameraActor* Camera = TitleCamera.Get();
+	if (!Stage || !Camera)
+	{
+		return false;
+	}
+	Camera->GetCameraComponent()->SetFieldOfView(Stage->GetFieldOfView());
+	Camera->SetActorTransform(Stage->GetCameraTransform());
+	if (PC->GetViewTarget() != Camera)
+	{
+		PC->SetViewTarget(Camera);
+	}
+	return true;
+}
+
 void UColonyHudSubsystem::EndTitleCamera()
 {
+	if (ATitleStage* Stage = TitleStageActor.Get())
+	{
+		Stage->Destroy();
+	}
+	TitleStageActor.Reset();
+	if (bTitleStageSky)
+	{
+		bTitleStageSky = false;
+		if (USkySubsystem* Sky = GetWorld() ? GetWorld()->GetSubsystem<USkySubsystem>() : nullptr)
+		{
+			Sky->SetStageMode(false);
+		}
+	}
 	ACameraActor* Camera = TitleCamera.Get();
 	if (!Camera)
 	{
@@ -967,7 +1055,11 @@ void UColonyHudSubsystem::DrawTitlePage(USimSubsystem& Bridge, float Scale)
 	ImGui::PushFont(nullptr, Base * 0.95f * ToFont);
 	const float FootY = Viewport->Pos.y + H - FMath::Max(H * 0.06f, 32.0f * Scale);
 	FString Where;
-	if (Bridge.IsTitleBackdrop() && Bridge.GetSim() && Bridge.GetDefs())
+	if (Bridge.IsTitleBackdrop() && TitleStageActor.IsValid())
+	{
+		Where = TEXT("High orbit, over a world on the rim");
+	}
+	else if (Bridge.IsTitleBackdrop() && Bridge.GetSim() && Bridge.GetDefs())
 	{
 		const colony::Def* Biome = Bridge.GetDefs()->find("Biomes", Bridge.GetSim()->biome());
 		Where = Biome ? FString::Printf(TEXT("The wilds: %s, morning"), *NgCapital(Biome->label())) : FString();
