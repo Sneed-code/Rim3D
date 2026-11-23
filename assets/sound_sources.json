@@ -41,6 +41,7 @@
     {"cues": "^Power_|^Research_Done$", "from": ["kenney-interface", "kenney-jingles"], "pick": "switch click, short chime"},
     {"cues": "^Hum_|^Alarm$|^Raid_Horn$", "from": ["sonniss-gdc"], "pick": "generator, heater, turbine loops, siren, war horn"},
     {"cues": "^Fire_|^Pawn_Burning$", "from": ["sonniss-gdc"], "pick": "crackling fire loops, ignite whoosh, hiss"},
+    {"cues": "^Player_Died$", "from": ["freesound"], "pick": "a dark deep piano sting for the death screen (sneed 2026-11-23): Werra's Dark Piano Tension, CC0"},
     {"cues": "^Pawn_(Death|Downed)$", "from": ["sonniss-gdc", "freesound-cc0"], "pick": "grunt, groan, fall"},
     {"cues": "^Alert_", "from": ["kenney-interface", "freesound-cc0"], "pick": "GAP: stealth stings (docs/design/stealth.md): a soft questioning tone (Suspicious) and a sharp one (Spotted), or a spoken bark; none picked yet, they keep the placeholder tones"},
     {"cues": "^Animal_", "from": ["sonniss-gdc", "freesound-cc0"], "pick": "GAP: no verified free pack found; search each animal on freesound (CC0 only) or in the Sonniss packs. Missing ones keep the placeholder tone"},
