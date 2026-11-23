@@ -252,6 +252,7 @@ public:
     float bloodRegenPerSecond = 10.0f;
     float stepsPerRealSecond = 30.0f;
     float protagonistZoneHp = 100.0f;  // the protagonist: never downed, dies when this much damage is on its zones
+    bool protagonistDownedDies = false;  // the protagonist who would be knocked out (head or blood) dies instead (docs/design/protagonist.md "Death")
     float patchSeconds[3] = {1.0f, 2.0f, 3.0f};  // patching a zone that bleeds lightly, moderately, heavily (real seconds)
     float patchQuality = 0.3f;                   // the tend quality of a patch
     float coverBlood = 1500.0f;                  // under this a bleeding fighter falls back to cover to patch
@@ -643,6 +644,7 @@ HealthModel::HealthModel(const DefDatabase& database) : defs(database) {
             num("zones.bloodRegenPerSecond", bloodRegenPerSecond);
             num("zones.stepsPerRealSecond", stepsPerRealSecond);
             num("zones.protagonistHp", protagonistZoneHp);
+            protagonistDownedDies = rules->flag("zones.protagonistDownedDies", protagonistDownedDies);
             for (size_t i = 0; i < 3; ++i) {
                 patchSeconds[i] = static_cast<float>(rules->numberAt("zones.patchSeconds", i, patchSeconds[i]));
             }
@@ -1460,6 +1462,12 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
             if (cause == DeathCause::None && lost >= model_->protagonistZoneHp * eval.hpFactor) {
                 cause = DeathCause::Wounds;
             }
+            // Knocked out by the head or by blood loss: for now that is death (the rule's flag; a later quest may lift it).
+            // Legs and torso never down the protagonist, as before.
+            const bool bloodOut = health.bloodLoss >= 1.0f - model_->bloodUnconscious / model_->bloodMax;
+            if (cause == DeathCause::None && model_->protagonistDownedDies && (headOut || bloodOut)) {
+                cause = bloodOut ? DeathCause::BloodLoss : DeathCause::Wounds;
+            }
         } else {
             if (cause == DeathCause::None && (coreGone || (limbsGone >= model_->deadLimbs && coreLow))) {
                 cause = DeathCause::Wounds;
@@ -1475,6 +1483,10 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
         const HealthModel::Capacity& cap = model_->capacities[c];
         shouldBeDown = shouldBeDown || (cap.hasDownedBelow && health.capacities[c] < cap.downedBelow) ||
                        (cap.hasDownedAtOrBelow && health.capacities[c] <= cap.downedAtOrBelow);
+    }
+    // A protagonist on a body without zones who would be downed dies instead (the same rule flag).
+    if (health.protagonist && model_->protagonistDownedDies && shouldBeDown && cause == DeathCause::None) {
+        cause = DeathCause::Wounds;
     }
 }
 

@@ -233,10 +233,14 @@ Code: `USimSubsystem` (`SimSubsystem.h/.cpp`). Smoke test: `saves`.
 | F8 | `Sim.BugReport` | Writes a folder in `game/Saved/BugReports/` (below). |
 | F7 | `Sim.SaveReplay` | Just the replay file, in `game/Saved/Replays/` (U2). |
 
-- **Autosave** happens once a game day, at midnight (day 2 starts, day 3 starts...), into
-  `autosave-1.save`, `autosave-2.save`, `autosave-3.save` in turn, so a bad autosave never costs the two
-  before it. A loaded game does not autosave until the next midnight. `SetAutosaveInterval` shortens it
-  for tests; 0 turns it off. A save takes a few milliseconds for a small colony, done on the game thread.
+- **Autosave** happens every 15 real minutes of unpaused play (sneed, 2026-11-23): the clock runs only while the game
+  is not paused and is a normal game (not the title's backdrop, not a debug scene such as the gun range). It writes
+  `autosave-1.save` to `autosave-5.save` in turn (the one never written, else the oldest, so a game loaded from
+  `autosave-3` does not start over at 1), so a bad autosave never costs the four before it. A loaded game starts its
+  15 minutes again. `SetAutosaveInterval(gameSeconds)` is a test override that autosaves by game seconds instead (the
+  `saves` smoke test); `SetAutosaveRealSeconds` changes the real interval, 0 turns it off. While the YOU DIED screen is up
+  nothing saves, autosave and F5 included (`SetSavingBlocked`), so "load last save" never finds the dead state. A save
+  takes a few milliseconds for a small colony, done on the game thread.
 - **A save never replaces a good file with half a file**: it is written beside the old one and swapped in.
 - **Loading is all or nothing.** The new sim is made first; only if that works does it replace the
   running one. A missing, damaged or newer-format file, or a def the data no longer has, leaves the game

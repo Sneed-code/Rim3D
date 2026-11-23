@@ -1,5 +1,6 @@
 {
   "note": "V21. Which downloaded files each cue plays, picked by file name (Kenney and OpenGameArt names say what they are) and not yet listened to by sneed. tools/sound_assets.py cuts them with ffmpeg into game/Content/ThirdParty/Sounds/cues/<Cue>/<n>.wav (16-bit, 44.1 kHz, peak at -1 dB; mono for sounds with a place, stereo for the ones heard everywhere) and the music into Sounds/music/<mood>/. Paths are relative to game/Content/ThirdParty/Sounds and may use * and ?. 'start' and 'seconds' cut a part out of each file, 'gain' is in dB after the peak is set. A cue left out keeps its placeholder tone (docs/design/sound.md).",
+  "todo": "Player_Died (the YOU DIED sting, a dark low piano chord) has no pick yet: add a CC0 Freesound row to sound_freesound.json with a real id and name it under cues here. Until then it plays its low tone.",
   "cues": {
     "Shot_Revolver": {"files": ["oga-firearms/Prepared SFX Library/Smith & Wesson 642/V_27P.wav", "oga-firearms/Prepared SFX Library/Ruger Single Six/S_14P.wav"], "seconds": 1.4, "trimSilence": true},
     "Shot_Pistol": {"files": ["oga-firearms/Prepared SFX Library/1911/A_42P.wav", "oga-firearms/Prepared SFX Library/Walther PPQ/X_39P.wav", "oga-firearms/Prepared SFX Library/Bersa/F_47P.wav"], "seconds": 1.2, "trimSilence": true},

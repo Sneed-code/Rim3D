@@ -153,6 +153,7 @@ EVENT_CUES = {
     "Hit_Wood_Flesh", "Hit_Wood_Wood", "Hit_Wood_Steel", "Hit_Wood_Stone",
     "Hit_Steel_Flesh", "Hit_Steel_Wood", "Hit_Steel_Steel", "Hit_Steel_Stone",
     "Ui_KillConfirm",  # Unreal, the kill feed on the player's own kill (KillFeedSubsystem.cpp)
+    "Player_Died",  # Unreal, the YOU DIED screen (ProtagonistSubsystem.cpp)
     # Impacts by surface (soundImpactCue): bullets and arrows on what they struck; ricochets off stone and steel
     "Impact_Wood", "Impact_Steel", "Impact_Stone", "Impact_Dirt", "Impact_Sand", "Impact_Water", "Impact_Glass",
     "Arrow_Flesh", "Arrow_Wood", "Arrow_Stone", "Arrow_Dirt", "Ricochet",

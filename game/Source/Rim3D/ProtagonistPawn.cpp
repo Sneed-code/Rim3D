@@ -241,18 +241,18 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		using Rim3DKeys::IsDown;
 		using Rim3DKeys::WasPressed;
 		UProtagonistSubsystem* Unstuck = GetWorld() ? GetWorld()->GetSubsystem<UProtagonistSubsystem>() : nullptr;
-		if (Unstuck && WasPressed(PC, ERim3DAction::Unstuck))
+		if (!bFrozen && Unstuck && WasPressed(PC, ERim3DAction::Unstuck))
 		{
 			Unstuck->StartUnstuck();
 		}
 		// F12 Unstuck: standing still, no actions, until the sim moves the colonist (docs/design/earthworks.md).
-		const bool bUnstucking = Unstuck && Unstuck->IsUnstucking();
+		const bool bUnstucking = bFrozen || (Unstuck && Unstuck->IsUnstucking());
 		Right = bUnstucking ? 0.0 : (IsDown(PC, ERim3DAction::MoveRight) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveLeft) ? 1.0 : 0.0);
 		Forward = bUnstucking ? 0.0 : (IsDown(PC, ERim3DAction::MoveForward) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveBack) ? 1.0 : 0.0);
 		bWalk = IsDown(PC, ERim3DAction::WalkSlow);
 		// Sprint is a toggle (sneed 2026-11-17): on until pressed again, and it stays on when you take over another colonist.
 		// It doesn't sprint while walking slowly or aiming.
-		if (WasPressed(PC, ERim3DAction::Sprint))
+		if (!bFrozen && WasPressed(PC, ERim3DAction::Sprint))
 		{
 			SetSprintToggle(!IsSprintToggleOn());
 		}
@@ -261,11 +261,11 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		{
 			Jump();
 		}
-		if (WasPressed(PC, ERim3DAction::SwitchMode))
+		if (!bFrozen && WasPressed(PC, ERim3DAction::SwitchMode))
 		{
 			OnSwitchModePressed();
 		}
-		if (WasPressed(PC, ERim3DAction::TakeOver))
+		if (!bFrozen && WasPressed(PC, ERim3DAction::TakeOver))
 		{
 			OnTakeOverPressed();
 		}
@@ -291,7 +291,7 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	{
 		bWantAim = bScriptAimHeld;
 	}
-	else if (const APlayerController* PC = GetPlayerController(); PC && Thing != colony::kNoEntity)
+	else if (const APlayerController* PC = GetPlayerController(); PC && Thing != colony::kNoEntity && !bFrozen)
 	{
 		bWantAim = Rim3DKeys::IsDown(PC, ERim3DAction::AimBlock);
 	}

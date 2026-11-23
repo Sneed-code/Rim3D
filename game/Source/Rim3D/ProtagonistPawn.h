@@ -65,6 +65,9 @@ public:
 	void SetScopeAllowed(bool bAllowed) { bScopeAllowed = bAllowed; }
 	/** Puts the camera where it is heading right now (after switching bodies or views), with no soft follow. */
 	void SnapCamera();
+	/** The death screen: no walking, jumping, aiming or mode keys; the mouse still turns the camera and the wheel zooms. */
+	void SetFrozen(bool bFreeze) { bFrozen = bFreeze; }
+	bool IsFrozen() const { return bFrozen; }
 
 	/** Holding aim (right mouse button with a gun in hand): the view blends to the aimed one over about a fifth of a second
 	 *  (over the shoulder and zoomed; a scoped gun goes to its scope once fully aimed) and back when it is let go (docs/design/shooter-feel-draw.md).
@@ -188,6 +191,7 @@ private:
 	bool bScriptAimHeld = false;
 	float AimBlend = 0.0f;
 	float EffectiveArm = 350.0f;
+	bool bFrozen = false;
 	bool bScripted = false;
 	double ScriptRight = 0.0;
 	double ScriptForward = 0.0;
