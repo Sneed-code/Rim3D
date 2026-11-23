@@ -1,0 +1,290 @@
+{
+	"test": "animals",
+	"status": "pass",
+	"durationSeconds": 59.092838101089001,
+	"errors": [],
+	"gpu": "NVIDIA GeForce RTX 5080",
+	"resolution": "1920x1080",
+	"phases": [
+		{
+			"phase": "animals_row",
+			"frames": 1304,
+			"avgFps": 162.87903997274805,
+			"p95FrameMs": 6.9090018272399902,
+			"medianGameThreadMs": 4.3131999969482422,
+			"medianRenderThreadMs": 5.7802000045776367,
+			"medianGpuMs": 4.9176998138427734,
+			"actors": 0,
+			"screenshot": "animals/animals_row.png"
+		},
+		{
+			"phase": "animals_detail",
+			"frames": 646,
+			"avgFps": 161.39298875463916,
+			"p95FrameMs": 6.2986016273498535,
+			"medianGameThreadMs": 3.7971999645233154,
+			"medianRenderThreadMs": 5.8067002296447754,
+			"medianGpuMs": 5.0142998695373535,
+			"actors": 0,
+			"screenshot": "animals/animals_detail.png"
+		},
+		{
+			"phase": "animals_close",
+			"frames": 301,
+			"avgFps": 149.89872741130222,
+			"p95FrameMs": 6.6911988258361816,
+			"medianGameThreadMs": 4.5798001289367676,
+			"medianRenderThreadMs": 5.8545999526977539,
+			"medianGpuMs": 4.9524002075195312,
+			"actors": 0,
+			"screenshot": "animals/animals_close.png"
+		},
+		{
+			"phase": "animals_new",
+			"frames": 303,
+			"avgFps": 151.19573350293476,
+			"p95FrameMs": 7.1197004318237305,
+			"medianGameThreadMs": 4.8052000999450684,
+			"medianRenderThreadMs": 5.8730001449584961,
+			"medianGpuMs": 4.9580998420715332,
+			"actors": 0,
+			"screenshot": "animals/animals_new.png"
+		},
+		{
+			"phase": "animal_GrizzlyBear",
+			"frames": 52,
+			"avgFps": 97.370690810533418,
+			"p95FrameMs": 8.0274972915649414,
+			"medianGameThreadMs": 4.8706002235412598,
+			"medianRenderThreadMs": 5.8854999542236328,
+			"medianGpuMs": 5.0180001258850098,
+			"actors": 0,
+			"screenshot": "animals/animal_GrizzlyBear.png"
+		},
+		{
+			"phase": "animal_PolarBear",
+			"frames": 52,
+			"avgFps": 96.486714965554,
+			"p95FrameMs": 6.5684022903442383,
+			"medianGameThreadMs": 4.5714998245239258,
+			"medianRenderThreadMs": 6.0943999290466309,
+			"medianGpuMs": 5.124000072479248,
+			"actors": 0,
+			"screenshot": "animals/animal_PolarBear.png"
+		},
+		{
+			"phase": "animal_Caribou",
+			"frames": 52,
+			"avgFps": 102.66342428628916,
+			"p95FrameMs": 7.4678993225097656,
+			"medianGameThreadMs": 4.4787001609802246,
+			"medianRenderThreadMs": 5.9267997741699219,
+			"medianGpuMs": 5.0556998252868652,
+			"actors": 0,
+			"screenshot": "animals/animal_Caribou.png"
+		},
+		{
+			"phase": "animal_Muskox",
+			"frames": 52,
+			"avgFps": 98.099622553696634,
+			"p95FrameMs": 6.6113991737365723,
+			"medianGameThreadMs": 4.5722999572753906,
+			"medianRenderThreadMs": 5.9665999412536621,
+			"medianGpuMs": 5.1128997802734375,
+			"actors": 0,
+			"screenshot": "animals/animal_Muskox.png"
+		},
+		{
+			"phase": "animal_Yak",
+			"frames": 52,
+			"avgFps": 100.97104814307647,
+			"p95FrameMs": 6.5186023712158203,
+			"medianGameThreadMs": 4.7017998695373535,
+			"medianRenderThreadMs": 5.9723000526428223,
+			"medianGpuMs": 5.0929999351501465,
+			"actors": 0,
+			"screenshot": "animals/animal_Yak.png"
+		},
+		{
+			"phase": "animal_Dromedary",
+			"frames": 50,
+			"avgFps": 97.803107892945661,
+			"p95FrameMs": 7.1561002731323242,
+			"medianGameThreadMs": 5.1373000144958496,
+			"medianRenderThreadMs": 6.161099910736084,
+			"medianGpuMs": 5.2077999114990234,
+			"actors": 0,
+			"screenshot": "animals/animal_Dromedary.png"
+		},
+		{
+			"phase": "animal_Gazelle",
+			"frames": 52,
+			"avgFps": 98.246710978946538,
+			"p95FrameMs": 6.8159999847412109,
+			"medianGameThreadMs": 4.9738001823425293,
+			"medianRenderThreadMs": 6.054999828338623,
+			"medianGpuMs": 5.1584000587463379,
+			"actors": 0,
+			"screenshot": "animals/animal_Gazelle.png"
+		},
+		{
+			"phase": "animal_Goat",
+			"frames": 51,
+			"avgFps": 96.9160373695007,
+			"p95FrameMs": 7.4317007064819336,
+			"medianGameThreadMs": 5.0998997688293457,
+			"medianRenderThreadMs": 5.9345002174377441,
+			"medianGpuMs": 5.0699000358581543,
+			"actors": 0,
+			"screenshot": "animals/animal_Goat.png"
+		},
+		{
+			"phase": "animal_Sheep",
+			"frames": 52,
+			"avgFps": 103.23490492631699,
+			"p95FrameMs": 6.631098747253418,
+			"medianGameThreadMs": 4.9864001274108887,
+			"medianRenderThreadMs": 5.8519001007080078,
+			"medianGpuMs": 5.0247998237609863,
+			"actors": 0,
+			"screenshot": "animals/animal_Sheep.png"
+		},
+		{
+			"phase": "animal_Megaspider",
+			"frames": 52,
+			"avgFps": 94.942521925800335,
+			"p95FrameMs": 6.8613996505737305,
+			"medianGameThreadMs": 4.9697999954223633,
+			"medianRenderThreadMs": 5.9071002006530762,
+			"medianGpuMs": 5.0247001647949219,
+			"actors": 0,
+			"screenshot": "animals/animal_Megaspider.png"
+		},
+		{
+			"phase": "animal_Spelopede",
+			"frames": 51,
+			"avgFps": 100.18418336479289,
+			"p95FrameMs": 7.4840002059936523,
+			"medianGameThreadMs": 5.1012997627258301,
+			"medianRenderThreadMs": 5.942500114440918,
+			"medianGpuMs": 5.1279001235961914,
+			"actors": 0,
+			"screenshot": "animals/animal_Spelopede.png"
+		},
+		{
+			"phase": "animal_Capybara",
+			"frames": 51,
+			"avgFps": 98.386406482724666,
+			"p95FrameMs": 7.4329004287719727,
+			"medianGameThreadMs": 4.9376001358032227,
+			"medianRenderThreadMs": 6.0167999267578125,
+			"medianGpuMs": 5.117800235748291,
+			"actors": 0,
+			"screenshot": "animals/animal_Capybara.png"
+		},
+		{
+			"phase": "animal_Iguana",
+			"frames": 52,
+			"avgFps": 98.958482201391334,
+			"p95FrameMs": 6.248898983001709,
+			"medianGameThreadMs": 4.7003002166748047,
+			"medianRenderThreadMs": 5.921299934387207,
+			"medianGpuMs": 5.0457000732421875,
+			"actors": 0,
+			"screenshot": "animals/animal_Iguana.png"
+		},
+		{
+			"phase": "animal_Chicken",
+			"frames": 52,
+			"avgFps": 103.20980670895396,
+			"p95FrameMs": 6.4752998352050781,
+			"medianGameThreadMs": 4.496300220489502,
+			"medianRenderThreadMs": 5.9804000854492188,
+			"medianGpuMs": 5.186500072479248,
+			"actors": 0,
+			"screenshot": "animals/animal_Chicken.png"
+		},
+		{
+			"phase": "animal_Duck",
+			"frames": 53,
+			"avgFps": 104.81939590123578,
+			"p95FrameMs": 6.4082036018371582,
+			"medianGameThreadMs": 4.5233001708984375,
+			"medianRenderThreadMs": 5.9625000953674316,
+			"medianGpuMs": 5.109799861907959,
+			"actors": 0,
+			"screenshot": "animals/animal_Duck.png"
+		},
+		{
+			"phase": "animal_Goose",
+			"frames": 52,
+			"avgFps": 102.54820447618793,
+			"p95FrameMs": 6.3937005996704102,
+			"medianGameThreadMs": 4.8270998001098633,
+			"medianRenderThreadMs": 5.9909000396728516,
+			"medianGpuMs": 5.1560001373291016,
+			"actors": 0,
+			"screenshot": "animals/animal_Goose.png"
+		},
+		{
+			"phase": "animal_Turkey",
+			"frames": 51,
+			"avgFps": 97.02361863158788,
+			"p95FrameMs": 6.3054003715515137,
+			"medianGameThreadMs": 4.7023000717163086,
+			"medianRenderThreadMs": 6.0348000526428223,
+			"medianGpuMs": 5.1956000328063965,
+			"actors": 0,
+			"screenshot": "animals/animal_Turkey.png"
+		},
+		{
+			"phase": "animal_ArcticFox",
+			"frames": 52,
+			"avgFps": 102.83122110738896,
+			"p95FrameMs": 6.5583996772766113,
+			"medianGameThreadMs": 4.5911998748779297,
+			"medianRenderThreadMs": 6.0296001434326172,
+			"medianGpuMs": 5.1981000900268555,
+			"actors": 0,
+			"screenshot": "animals/animal_ArcticFox.png"
+		},
+		{
+			"phase": "animal_ArcticWolf",
+			"frames": 53,
+			"avgFps": 99.474231665181478,
+			"p95FrameMs": 6.3198990821838379,
+			"medianGameThreadMs": 4.4853000640869141,
+			"medianRenderThreadMs": 5.9141998291015625,
+			"medianGpuMs": 5.0581002235412598,
+			"actors": 0,
+			"screenshot": "animals/animal_ArcticWolf.png"
+		},
+		{
+			"phase": "animal_Ostrich",
+			"frames": 53,
+			"avgFps": 104.47837680699378,
+			"p95FrameMs": 6.4816994667053223,
+			"medianGameThreadMs": 4.5851001739501953,
+			"medianRenderThreadMs": 5.9875001907348633,
+			"medianGpuMs": 5.2097001075744629,
+			"actors": 0,
+			"screenshot": "animals/animal_Ostrich.png"
+		},
+		{
+			"phase": "animal_Megascarab",
+			"frames": 55,
+			"avgFps": 107.87239050363206,
+			"p95FrameMs": 6.2705016136169434,
+			"medianGameThreadMs": 4.4210000038146973,
+			"medianRenderThreadMs": 5.8017997741699219,
+			"medianGpuMs": 5.0257000923156738,
+			"actors": 0,
+			"screenshot": "animals/animal_Megascarab.png"
+		}
+	],
+	"notes": [
+		"animals_row: 18 animals, 18 actors, 18 defs drawn, 18 models loaded, poses seen 3",
+		"animals_detail: near 1, mid 4, far 13, hidden 0",
+		"animals_new: 28 models loaded; lengths: Cow 230 cm, Muffalo 262 cm, Deer 170 cm, Husky 100 cm, TimberWolf 130 cm, Thrumbo 312 cm, Alpaca 140 cm, Cat 80 cm, WildBoar 104 cm, Cougar 208 cm, GrizzlyBear 220 cm, Chicken 49 cm, Monkey 88 cm, Elephant 627 cm, Rhinoceros 510 cm, Lion 286 cm, Raptor 350 cm, TRex 1200 cm, Monkey 88 cm, Cat 80 cm, Cougar 208 cm, Thrumbo 312 cm, Elephant 627 cm, Rhinoceros 510 cm, Muffalo 262 cm, Raptor 350 cm, TRex 1200 cm, GrizzlyBear 220 cm, PolarBear 253 cm, Caribou 192 cm, Muskox 240 cm, Yak 270 cm, Dromedary 300 cm, Gazelle 112 cm, Goat 135 cm, Sheep 136 cm, Megaspider 105 cm, Spelopede 66 cm, Capybara 120 cm, Iguana 150 cm, Chicken 49 cm, Duck 58 cm, Goose 90 cm, Turkey 110 cm, ArcticFox 76 cm, ArcticWolf 130 cm, Ostrich 198 cm, Megascarab 30 cm,"
+	]
+}
