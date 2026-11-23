@@ -60,6 +60,14 @@ public:
 	void RequestControl(colony::Entity Pawn) { RequestedControl = Pawn; }
 
 	bool IsDirectMode() const;
+	/** The death screen is up: the protagonist died, the camera stays on the body in slow motion and grey, Space loads the
+	 *  newest save (docs/design/protagonist.md "Death"). */
+	bool IsDeathScreenUp() const { return bDead; }
+	/** Real seconds since the protagonist died (0 when not dead). */
+	float GetDeathSeconds() const;
+	/** What Space does on the death screen: loads the newest save, or with none opens the title (main menu). Returns false
+	 *  if there was a save but it would not load. */
+	bool LeaveDeathScreen();
 	/** The controlled colonist is sleeping the night away (SleepCommand, docs/design/needs.md). */
 	bool IsAsleep() const;
 	/** N: sleep where you stand (a bed is F while looking at it). Any of W, A, S, D, N or Esc wakes you. */
@@ -120,6 +128,11 @@ private:
 	void DrawFocus(USimSubsystem& Bridge, float Top, float Scale);
 	void SubmitFocus(USimSubsystem& Bridge, colony::FocusMode Mode);
 	void ApplyBodyVisibility();
+	void BeginDeathScreen(USimSubsystem& Bridge);
+	/** Puts time, colour and the camera back to normal and lets the body move again. */
+	void EndDeathScreen();
+	void TickDeathScreen();
+	void DrawDeathScreen(float Seconds, bool bHasSave);
 
 	UPROPERTY()
 	TObjectPtr<AProtagonistPawn> Body;
@@ -127,6 +140,13 @@ private:
 	colony::Entity Controlled = colony::kNoEntity;
 	colony::Entity RequestedControl = colony::kNoEntity;
 	bool bExitRequested = false;
+	/** The controlled protagonist died in the sim (set from the event, handled at the start of the next frame). */
+	bool bDeathRequested = false;
+	bool bDead = false;
+	/** FPlatformTime::Seconds() when the death screen began (real time: the world runs at a fifth of it). */
+	double DeathStartedAt = 0.0;
+	/** The newest save when the death screen began ("" for none): decides the prompt's words. */
+	FString DeathSaveSlot;
 	bool bDirect = false;
 	int32 SpeedBeforeDirect = 1;
 	const colony::Sim* LastSim = nullptr;

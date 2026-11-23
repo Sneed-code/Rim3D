@@ -14,6 +14,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
+#include "DebugScenes.h"
 #include "KeyBindings.h"
 #include "ProtagonistSubsystem.h"
 
@@ -361,6 +362,8 @@ void USimSubsystem::ResetAfterSimChange()
 	EventCount = 0;
 	AutosaveCount = 0;
 	LastAutosaveBucket = AutosaveInterval > 0 ? Sim->time().seconds / AutosaveInterval : 0;
+	AutosaveRealClock = 0.0;
+	bSavingBlocked = false;
 	Timings = FSimTimings();
 	WindowSeconds = 0.0;
 	WindowFrames = WindowSteps = 0;
@@ -396,6 +399,11 @@ void USimSubsystem::AdvanceFrame(float DeltaTime)
 	AdvancedFrame = GFrameCounter;
 	if (Speed > 0)
 	{
+		// The autosave clock is real time (not the sped-up or slowed sim): unpaused play of a normal game only.
+		if (!StartOptions.bTitle && !DebugScenes::IsDebugScene())
+		{
+			AutosaveRealClock += FMath::Min(static_cast<double>(FApp::GetDeltaTime()), 1.0);
+		}
 		StepAccumulator += static_cast<double>(DeltaTime) * colony::kStepsPerRealSecondAt1x * Speed;
 		StepAccumulator = FMath::Min(StepAccumulator, SimBridgeMaxCatchUpSteps);
 		const int64 Steps = static_cast<int64>(StepAccumulator);
@@ -750,20 +758,71 @@ void USimSubsystem::SetAutosaveInterval(int64 GameSeconds)
 	LastAutosaveBucket = (Sim && AutosaveInterval > 0) ? Sim->time().seconds / AutosaveInterval : 0;
 }
 
+void USimSubsystem::SetAutosaveRealSeconds(double Seconds)
+{
+	AutosaveRealSeconds = FMath::Max(Seconds, 0.0);
+	AutosaveRealClock = 0.0;
+}
+
+FString USimSubsystem::FindNewestSaveSlot()
+{
+	TArray<FString> Files;
+	IFileManager::Get().FindFiles(Files, *(GetSaveDirectory() / TEXT("*.save")), true, false);
+	FString Newest;
+	FDateTime NewestTime = FDateTime::MinValue();
+	for (const FString& File : Files)
+	{
+		const FDateTime Time = IFileManager::Get().GetTimeStamp(*(GetSaveDirectory() / File));
+		if (Newest.IsEmpty() || Time > NewestTime)
+		{
+			NewestTime = Time;
+			Newest = FPaths::GetBaseFilename(File);
+		}
+	}
+	return Newest;
+}
+
 void USimSubsystem::MaybeAutosave()
 {
-	if (!Sim || AutosaveInterval <= 0)
+	if (!Sim || bSavingBlocked)
 	{
 		return;
 	}
-	const int64 Bucket = Sim->time().seconds / AutosaveInterval;
-	if (Bucket == LastAutosaveBucket)
+	if (AutosaveInterval > 0)
+	{
+		// Test override: by game seconds.
+		const int64 Bucket = Sim->time().seconds / AutosaveInterval;
+		if (Bucket == LastAutosaveBucket)
+		{
+			return;
+		}
+		LastAutosaveBucket = Bucket;
+	}
+	else if (AutosaveRealSeconds <= 0.0 || AutosaveRealClock < AutosaveRealSeconds)
 	{
 		return;
 	}
-	LastAutosaveBucket = Bucket;
-	// Three files in turn, so a bad autosave never costs the two before it.
-	if (!SaveGame(FString::Printf(TEXT("autosave-%d"), static_cast<int32>(Bucket % 3) + 1)).IsEmpty())
+	AutosaveRealClock = 0.0;
+	// Five files in turn: the one never written, else the oldest, so a bad autosave never costs the four before it
+	// (and a game loaded from autosave-3 does not start over at autosave-1).
+	int32 Slot = 1;
+	FDateTime OldestTime = FDateTime::MaxValue();
+	for (int32 Index = 1; Index <= kAutosaveSlots; ++Index)
+	{
+		const FString Path = GetSaveDirectory() / FString::Printf(TEXT("autosave-%d.save"), Index);
+		if (!IFileManager::Get().FileExists(*Path))
+		{
+			Slot = Index;
+			break;
+		}
+		const FDateTime Time = IFileManager::Get().GetTimeStamp(*Path);
+		if (Time < OldestTime)
+		{
+			OldestTime = Time;
+			Slot = Index;
+		}
+	}
+	if (!SaveGame(FString::Printf(TEXT("autosave-%d"), Slot)).IsEmpty())
 	{
 		++AutosaveCount;
 	}
@@ -864,7 +923,11 @@ bool USimSubsystem::HandleKey(const FKey& Key)
 	}
 	else if (Key == EKeys::F5)
 	{
-		QuickSave();
+		// Works in any normal game (and the debug scenes), not on the title's backdrop map and not on the death screen.
+		if (!bSavingBlocked && !StartOptions.bTitle)
+		{
+			QuickSave();
+		}
 	}
 	else if (Key == EKeys::F9)
 	{

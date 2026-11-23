@@ -277,6 +277,52 @@ TEST_CASE("Body zones: the protagonist is never downed and dies when 100 hit poi
     CHECK(zoneTestHealth(*sim, hero).cause == DeathCause::Wounds);
 }
 
+TEST_CASE("Protagonist: knocked out by blood loss dies, an ordinary colonist stays downed") {
+    auto sim = zoneTestSim();
+    const Entity hero = zoneTestPawn(*sim);
+    sim->things().registry().get<Health>(hero).protagonist = true;
+    sim->health().refresh(hero);
+    const Entity other = zoneTestPawn(*sim, 14, 10);
+    // 900 of 3000 blood left: under the 1000 that knocks anybody out.
+    for (const Entity pawn : {hero, other}) {
+        sim->things().registry().get<Health>(pawn).bloodLoss = 1.0f - 900.0f / 3000.0f;
+        sim->health().refresh(pawn);
+    }
+    CHECK(zoneTestHealth(*sim, hero).dead);
+    CHECK(zoneTestHealth(*sim, hero).cause == DeathCause::BloodLoss);
+    CHECK_FALSE(zoneTestHealth(*sim, other).dead);
+    CHECK(zoneTestHealth(*sim, other).downed);
+    CHECK(zoneTestHealth(*sim, other).unconscious);
+}
+
+TEST_CASE("Protagonist: a head blow that would knock anybody out kills it, other pawns stay downed") {
+    auto sim = zoneTestSim();
+    const Entity hero = zoneTestPawn(*sim);
+    sim->things().registry().get<Health>(hero).protagonist = true;
+    sim->health().refresh(hero);
+    const Entity other = zoneTestPawn(*sim, 14, 10);
+    for (const Entity pawn : {hero, other}) {
+        const int head = zoneTestPart(*sim, pawn, "head");
+        const float max = sim->health().partMaxHitPoints(pawn, head);
+        CHECK(max > 0.0f);
+        Rng rng(5);
+        sim->health().applyDamage(pawn, sim->health().damageTypeId("Blunt"), max * 0.8f, head, rng);
+    }
+    CHECK(zoneTestHealth(*sim, hero).dead);
+    CHECK_FALSE(zoneTestHealth(*sim, other).dead);
+    CHECK(zoneTestHealth(*sim, other).downed);
+}
+
+TEST_CASE("Protagonist: a leg that downs anybody else still does not down or kill it") {
+    auto sim = zoneTestSim();
+    const Entity hero = zoneTestPawn(*sim);
+    sim->things().registry().get<Health>(hero).protagonist = true;
+    sim->health().refresh(hero);
+    CHECK(zoneTestHit(*sim, hero, "Blunt", 60.0f, "left leg"));
+    CHECK_FALSE(zoneTestHealth(*sim, hero).downed);
+    CHECK_FALSE(zoneTestHealth(*sim, hero).dead);
+}
+
 TEST_CASE("Body zones: when the bleeding stopped is saved, so the blood comes back on time after a load") {
     auto sim = zoneTestSim();
     const Entity pawn = zoneTestPawn(*sim, 10, 10, true);

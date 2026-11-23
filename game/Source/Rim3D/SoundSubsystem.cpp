@@ -1824,6 +1824,8 @@ void USoundSubsystem::StartVoice(int32 VoiceIndex, int32 SoundIndex)
 	// A loop that comes back into range picks up where it would be by now.
 	const int64 Offset = Sound.Cue->bLoop && Sound.Clip ? static_cast<int64>((Now - Sound.StartedAt) * Sound.Clip->SampleRate) : 0;
 	Wave->Setup(Sound.Clip, Sound.Cue->bLoop, Offset);
+	// The death sting keeps its own pitch and speed while the world is slowed to a fifth.
+	Wave->bIgnoreTimeDilation = Sound.Cue->Name == TEXT("Player_Died");
 	UAudioComponent* Component = Voice.Component;
 	Component->Stop();
 	// Never let Unreal's own voice limit or silence check drop it: which sounds play is decided here.
