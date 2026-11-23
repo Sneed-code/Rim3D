@@ -10,8 +10,9 @@ aimed (stock no longer in the cheek or through the head), the left hand keeps it
 `assets/guns.json`), the grenade launcher is raised and aimed. **Debug scenes load inside the running game**: Debug >
 Gun range opens the range in the same window (no close and relaunch) and F10 goes back to the title, with every setting
 the scene changed put back (`DebugScenes::Launch`). Smoke `-DebugSceneHop` checks title > range > title in one process.
-**Open:** after the in-game load the range picture came out almost white in the test copy (settings and exposure match a
-fresh start; next PC round checks whether full-window resolution, not the in-game load, causes it). Not merged yet.
+A scene loaded inside the game once came out almost white (the camera's auto exposure stuck); the sky now reads back the
+camera's real exposure and resets the view history if it stays more than 6 EV off (`USkySubsystem::WatchExposure`);
+five later in-game loads on the PC were all lit normally. **Next:** rocket launcher aimed view covers the screen centre.
 
 Whole-body melee finishers, held blocks, no crouch slides (sneed, 2026-11-22; sim, data, Unreal, tools,
 `docs/design/lock-on.md` "Whole-body finishers"): **finishers at the downed are now whole-body mocap clips** instead of
