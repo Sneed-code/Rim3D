@@ -121,8 +121,9 @@ leaving the title (New colony's landing, a load, a debug scene, the people pages
   default woman with long hair. A stand-alone `ASimPawnActor` (no sim pawn) with the creator look and strand hair,
   standing idle (the animation's standing idle: breathing, weight shifts), facing the camera, framed from mid-thigh up
   on the right third so the menu has the left. Smoke tests never write the file.
-- **Her clothes** (lumen-world wear): the fitted `UniformJacket` in pearl white with a soft sheen over glossy black
-  `Trousers` (first imported of `UniformJacket, Blouse, Tank, TeeTucked` and `Trousers, JeansClassic, JeansStraight`):
+- **Her clothes** (lumen-world wear): the lace-up `Blouse` in pearl satin over tight glossy black `JeansClassic`
+  (first imported of `Blouse, Tank, UniformJacket, TeeTucked` and `JeansClassic, Trousers, JeansStraight`; the
+  padded jacket looked bulky in the first PC picture):
   the garments' tint (custom primitive data), no wear, and a lower `Roughness` on their own material instances. The
   garment material has no emissive, so the glowing accents are the cabin's.
 - **Through the window**: a planet 2 km across seen 35 degrees wide, its limb just under the middle of the picture,

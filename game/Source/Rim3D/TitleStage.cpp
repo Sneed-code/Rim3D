@@ -91,14 +91,15 @@ namespace
 	constexpr float TsCyanGlow = 1500.0f;
 	constexpr float TsGoldGlow = 800.0f;
 
-	// Her clothes (sneed: "glitterworld wear ... rizz up her attire"): a fitted jacket in pearl white with a soft sheen
-	// over glossy black trousers. The first garment of each list that is imported for her body is worn.
-	const TCHAR* const TsTops[] = {TEXT("UniformJacket"), TEXT("Blouse"), TEXT("Tank"), TEXT("TeeTucked")};
-	const TCHAR* const TsBottoms[] = {TEXT("Trousers"), TEXT("JeansClassic"), TEXT("JeansStraight")};
-	const FLinearColor TsTopColour(0.80f, 0.80f, 0.84f);
+	// Her clothes (sneed: "glitterworld wear ... rizz up her attire"): a fitted lace-up blouse in pearl satin over tight
+	// glossy black jeans (the padded uniform jacket looked bulky in the PC picture, 2026-11-23). The first garment of
+	// each list that is imported for her body is worn (a man gets the jacket and trousers).
+	const TCHAR* const TsTops[] = {TEXT("Blouse"), TEXT("Tank"), TEXT("UniformJacket"), TEXT("TeeTucked")};
+	const TCHAR* const TsBottoms[] = {TEXT("JeansClassic"), TEXT("Trousers"), TEXT("JeansStraight")};
+	const FLinearColor TsTopColour(0.86f, 0.82f, 0.74f);
 	const FLinearColor TsBottomColour(0.012f, 0.013f, 0.018f);
-	constexpr float TsTopRoughness = 0.32f;
-	constexpr float TsBottomRoughness = 0.2f;
+	constexpr float TsTopRoughness = 0.22f;
+	constexpr float TsBottomRoughness = 0.15f;
 	constexpr uint32 TsTopItem = 0x7FFE0002u;
 	constexpr uint32 TsBottomItem = 0x7FFE0001u;
 
