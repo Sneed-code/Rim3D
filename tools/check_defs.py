@@ -317,8 +317,8 @@ def check_hold_styles(defs_by_kind):
             elif not isinstance(place, dict) or not point(place.get("at")):
                 problems.append(f"{where} places.{key} needs at: [x, y, z]")
             else:
-                if place.get("anchor", "Chest") not in ("Chest", "Head", "View"):
-                    problems.append(f"{where} places.{key} anchor must be Chest, Head or View")
+                if place.get("anchor", "Chest") not in ("Chest", "Head", "View", "Shoulder"):
+                    problems.append(f"{where} places.{key} anchor must be Chest, Head, View or Shoulder")
                 if place.get("point", "Main") not in ("Main", "Sight", "Stock"):
                     problems.append(f"{where} places.{key} point must be Main, Sight or Stock")
                 if "turn" in place and not point(place["turn"]):

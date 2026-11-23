@@ -1145,18 +1145,22 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 		Dir.Z = FMath::Clamp(Dir.Z, -0.94, 0.94);
 		return FRotationMatrix::MakeFromXZ(Dir, FVector::UpVector).ToQuat();
 	};
+	// The right shoulder joint (HoldAnchor::Shoulder): a long gun's butt goes in its pocket when aimed (sneed 2026-11-23).
+	const FVector ShoulderR = Mesh->GetSocketLocation(TEXT("upperarm_r"));
 	const auto Placed = [&](const colony::HoldPlace& P)
 	{
 		const bool bHead = P.anchor == colony::HoldAnchor::Head;
-		FQuat Frame = bHead ? Facing * FRotator(AimPitch, 0.0f, 0.0f).Quaternion() : Facing;
-		if (bHead && bCrosshair && &P == Aim)
+		const bool bShoulder = P.anchor == colony::HoldAnchor::Shoulder;
+		const FVector AnchorAt = bHead ? Head : bShoulder ? ShoulderR : Chest;
+		FQuat Frame = bHead || bShoulder ? Facing * FRotator(AimPitch, 0.0f, 0.0f).Quaternion() : Facing;
+		if ((bHead || bShoulder) && bCrosshair && &P == Aim)
 		{
 			// Twice: the second time from where the first put the sight, so the sight line itself meets the crosshair.
-			Frame = AimAt(Head);
-			const FTransform First = HoldDraw::PlaceInAnchor(P, Points, Size, BodyPlace) * FTransform(Frame, Head);
+			Frame = AimAt(AnchorAt);
+			const FTransform First = HoldDraw::PlaceInAnchor(P, Points, Size, BodyPlace) * FTransform(Frame, AnchorAt);
 			Frame = AimAt(First.TransformPosition(Points.Sight * Size));
 		}
-		return HoldDraw::PlaceInAnchor(P, Points, Size, BodyPlace) * FTransform(Frame, bHead ? Head : Chest);
+		return HoldDraw::PlaceInAnchor(P, Points, Size, BodyPlace) * FTransform(Frame, AnchorAt);
 	};
 	const auto Blend = [](const FTransform& A, const FTransform& B, float T)
 	{

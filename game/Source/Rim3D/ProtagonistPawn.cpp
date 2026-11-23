@@ -632,7 +632,18 @@ void AProtagonistPawn::UpdateCamera()
 		const FVector Pivot = SmoothFeet + FVector(0.0, 0.0, ProtagonistPivotHeight * BodyScale);
 		EffectiveArm = FMath::Lerp(ArmLength, FMath::Min(ArmLength, ProtagonistAimArm), Blend);
 		const FVector Right = FRotator(0.0, Yaw, 0.0).RotateVector(FVector::RightVector);
-		Location = Pivot - Look.Vector() * EffectiveArm + Right * (ProtagonistAimShoulder * Blend) + FVector(0.0, 0.0, ProtagonistAimLift * BodyScale * Blend);
+		// A gun may sit the aimed camera further right and up (its def's `aimCamera`, cm; sneed 2026-11-22: the rocket
+		// launcher's tube on the shoulder ran into the middle of the screen).
+		float ExtraRight = 0.0f;
+		float ExtraLift = 0.0f;
+		if (const colony::ThingView* Me = Thing != colony::kNoEntity ? Bridge->GetCurrentSnapshot().find(Thing) : nullptr; Me && Me->weapon.valid())
+		{
+			const colony::Def& GunDef = Bridge->GetSim()->defs().get(Me->weapon);
+			ExtraRight = static_cast<float>(GunDef.number("aimCamera.right", 0.0));
+			ExtraLift = static_cast<float>(GunDef.number("aimCamera.lift", 0.0));
+		}
+		Location = Pivot - Look.Vector() * EffectiveArm + Right * ((ProtagonistAimShoulder + ExtraRight) * Blend) +
+			FVector(0.0, 0.0, (ProtagonistAimLift + ExtraLift) * BodyScale * Blend);
 		// Never under the ground on a hillside.
 		const FVector Local = (Location - Bridge->GetWorldOrigin()) / 100.0;
 		const colony::Map& Map = Bridge->GetSim()->map();

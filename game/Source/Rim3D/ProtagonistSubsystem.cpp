@@ -556,8 +556,16 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 	if (Bridge->GetSim()->controlledPawn() == Controlled)
 	{
 		Body->FollowSim(FVector2D(View->x, View->y), View->level, View->climb > 0.0f);
-		if (!Body->IsClimbing() && (((View->motionClip.valid() || View->motionPush) && !View->motionFreeFeet) || View->meleeFinisher != 0) && View->rollPhase == 0)
+		// The player's own swing from standing carries the whole body (MeleeRules playerStepIn); a walking key during it lets
+		// the local body walk on, and the sim hands the swing to the upper body when that move comes in (freeFeetToWalk).
+		const bool bStepInSwing = View->motionClip.valid() && !View->motionFreeFeet && View->meleeFinisher == 0 && !View->meleeLow &&
+			(View->meleePhase == colony::MeleePhase::Windup || View->meleePhase == colony::MeleePhase::Recovery);
+		const bool bWalksOutOfSwing = bStepInSwing && Body->GetTargetSpeed() > 0.5f;
+		if (!Body->IsClimbing() && !bWalksOutOfSwing && (((View->motionClip.valid() || View->motionPush) && !View->motionFreeFeet) || View->meleeFinisher != 0 || View->rollPhase != 0))
 		{
+			// A roll too (sneed 2026-11-23: "at the last bit of a roll it resets my character"): the local body used to stay
+			// behind during the roll and was only pulled along a metre at a time, so where the roll ended the drawn body
+			// jumped back to it and the hair reset with the jump. Now it is carried along with the sim's roll.
 			// A stagger or a knockdown carries the colonist: the keys wait and the body is where the sim's clip takes it,
 			// so nothing snaps back a metre when it ends. (The player's own swings leave the feet to the keys.)
 			Body->SetSimPosition(FVector2D(View->x, View->y));

@@ -100,6 +100,13 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     num("standGround", r.standGround);
     num("windupShare", r.windupShare);
     whole("minWindup", r.minWindup);
+    num("attackTimeFactor", r.attackTimeFactor);
+    num("unarmedTimeFactor", r.unarmedTimeFactor);
+    num("unarmedPowerFactor", r.unarmedPowerFactor);
+    whole("unarmedMinWindup", r.unarmedMinWindup);
+    r.playerStepIn = def->flag("playerStepIn", r.playerStepIn);
+    r.stepInFreesFeet = def->flag("stepInFreesFeet", r.stepInFreesFeet);
+    num("stepInMaxSpeed", r.stepInMaxSpeed);
     whole("commitSteps", r.commitSteps);
     bySkill("reactionStepsBySkill", r.reactionSteps);
     num("reactionJitter", r.reactionJitter);
@@ -203,6 +210,10 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     num("finisherStepMetres", r.finisherStepMetres);
     r.arcRaysPerSide = std::clamp(r.arcRaysPerSide, 0, 8);
     r.minWindup = std::max(1, r.minWindup);
+    r.unarmedMinWindup = std::max(1, r.unarmedMinWindup);
+    r.attackTimeFactor = std::max(0.05f, r.attackTimeFactor);
+    r.unarmedTimeFactor = std::max(0.05f, r.unarmedTimeFactor);
+    r.unarmedPowerFactor = std::max(0.0f, r.unarmedPowerFactor);
     r.commitSteps = std::max(0, r.commitSteps);
     r.guardBlocks = std::max(1, r.guardBlocks);
     for (float& f : r.skillSpeed) {
@@ -211,10 +222,12 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
 }
 
 // Steps of a tool's swing spent winding up; the rest of its cooldown is recovery.
-int meleeWindup(const MeleeRules& r, int cooldown) {
-    return std::clamp(static_cast<int>(std::lround(static_cast<float>(cooldown) * r.windupShare)), r.minWindup,
-                      std::max(r.minWindup, cooldown - 1));
+int meleeWindup(const MeleeRules& r, int cooldown, int minWindup) {
+    return std::clamp(static_cast<int>(std::lround(static_cast<float>(cooldown) * r.windupShare)), minWindup,
+                      std::max(minWindup, cooldown - 1));
 }
+
+constexpr float kMotionStepSecondsMelee = 1.0f / 30.0f;  // a step's real seconds: Mover speeds are metres per step
 
 bool meleeAble(const entt::registry& reg, Entity pawn) {
     const Health* h = reg.try_get<Health>(pawn);
@@ -252,7 +265,16 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
             t.label = def.text((base + ".label").c_str());
             t.damageType = defs_.idOf("DamageTypes", def.textAt((base + ".capacities").c_str(), 0));
             t.power = static_cast<float>(def.number((base + ".power").c_str(), 0.0));
-            t.cooldown = std::max(2, static_cast<int>(std::lround(def.number((base + ".cooldownTime").c_str(), 60.0) * cooldownFactor)));
+            // sneed 2026-11-23: all swings a third faster; a person's own fists and head four times faster and weak.
+            const bool unarmedPerson = !weapon && def.text("race.intelligence") == "Humanlike";
+            const float timeFactor = rules_.attackTimeFactor * (unarmedPerson ? rules_.unarmedTimeFactor : 1.0f);
+            t.cooldown = std::max(2, static_cast<int>(std::lround(def.number((base + ".cooldownTime").c_str(), 60.0) * cooldownFactor *
+                                                                  static_cast<double>(timeFactor))));
+            t.minWindup = std::max(1, static_cast<int>(std::lround(
+                                          static_cast<float>(unarmedPerson ? rules_.unarmedMinWindup : rules_.minWindup) * rules_.attackTimeFactor)));
+            if (unarmedPerson) {
+                t.power *= rules_.unarmedPowerFactor;
+            }
             t.penetration = static_cast<float>(
                 def.number((base + ".armorPenetration").c_str(), static_cast<double>(t.power * rules_.penetrationPerDamage)));
             // Ours: a tool is picked by chanceFactor times power, so the strongest is used most (RimWorld
@@ -638,6 +660,19 @@ bool MeleeSystem::winding(Entity pawn) const {
     return m != nullptr && m->phase == MeleePhase::Windup;
 }
 
+bool MeleeSystem::freeFeetToWalk(Entity pawn, float move) {
+    if (!combat_.motion().holdsBody(pawn)) {
+        return true;
+    }
+    const Melee* m = things_.registry().try_get<Melee>(pawn);
+    if (!rules_.stepInFreesFeet || move < 0.005f || m == nullptr || !meleeFreeFeet(*m) || m->finisher != 0 ||
+        (m->phase != MeleePhase::Windup && m->phase != MeleePhase::Recovery)) {
+        return false;
+    }
+    combat_.motion().setLayers(pawn, true, true);
+    return true;
+}
+
 bool MeleeSystem::blocking(Entity pawn) const {
     const Melee* m = things_.registry().try_get<Melee>(pawn);
     return m != nullptr && now() >= m->blockFrom && now() < m->blockUntil;
@@ -716,7 +751,7 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     const Tool& tool = set->tools[m.tool];
     // Worn armour's weight slows a swing (docs/design/armour.md), melee skill changes its pace (real-time-combat.md).
     int windup =
-        std::max(1, static_cast<int>(std::lround(static_cast<float>(meleeWindup(rules_, tool.cooldown)) * swingTimeFactor(pawn))));
+        std::max(1, static_cast<int>(std::lround(static_cast<float>(meleeWindup(rules_, tool.cooldown, tool.minWindup)) * swingTimeFactor(pawn))));
     m.phase = MeleePhase::Windup;
     m.target = target;
     // A blow at a body on the ground goes down at it (the strike already aims at its aim point there): Unreal plays a
@@ -765,8 +800,8 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         const MeleeFinisher& f = *finisherRule;
         m.finisher = static_cast<uint8_t>(set->finisher);
         m.finisherFrom = now();
-        m.finisherSteps = std::max(2, static_cast<int>(std::lround(f.seconds * 30.0f)));
-        windup = std::clamp(static_cast<int>(std::lround(f.hitSeconds * 30.0f)), 1, m.finisherSteps - 1);
+        m.finisherSteps = std::max(2, static_cast<int>(std::lround(f.seconds * 30.0f * rules_.attackTimeFactor)));
+        windup = std::clamp(static_cast<int>(std::lround(f.hitSeconds * 30.0f * rules_.attackTimeFactor)), 1, m.finisherSteps - 1);
         if (Mover* mover = reg.try_get<Mover>(pawn)) {
             mover->vx = 0.0f;  // the player's last walk no longer turns it
             mover->vy = 0.0f;
@@ -825,8 +860,18 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
                                    false);
         // The player's swing is the arms' and the chest's: the player keeps walking under it (sneed 2026-11-18). A
         // blow at someone on the ground (a stomp, an overhead smash) stays the whole body's.
+        // From standing (sneed 2026-11-23) the whole body plays it: the clip's step forward carries the feet into the
+        // blow (freeFeetToWalk hands it to the upper body if the player sets off during it).
         if (meleeFreeFeet(m)) {
-            combat_.motion().setLayers(pawn, true, true);
+            bool standing = false;
+            if (rules_.playerStepIn) {
+                const Mover* mover = reg.try_get<Mover>(pawn);
+                const float perStep = mover != nullptr ? std::sqrt(mover->vx * mover->vx + mover->vy * mover->vy) : 0.0f;
+                standing = perStep < rules_.stepInMaxSpeed * kMotionStepSecondsMelee;
+            }
+            if (!standing) {
+                combat_.motion().setLayers(pawn, true, true);
+            }
         }
     }
     if (events_ != nullptr) {
@@ -1584,7 +1629,7 @@ void MeleeSystem::step() {
                     m.stepsLeft = m.finisher != 0 ? std::max(1, m.finisherSteps - static_cast<int>(now() - m.finisherFrom))
                                   : tool != nullptr
                                       ? std::max(1, static_cast<int>(std::lround(
-                                                        static_cast<float>(tool->cooldown - meleeWindup(rules_, tool->cooldown)) *
+                                                        static_cast<float>(tool->cooldown - meleeWindup(rules_, tool->cooldown, tool->minWindup)) *
                                                         swingTimeFactor(pawn))))
                                       : 1;
                 }

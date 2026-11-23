@@ -1918,7 +1918,10 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
             commandFailed(id, "that pawn isn't under direct control");
         } else if (health_->incapacitated(move->pawn)) {
             commandFailed(id, "that colonist is downed or dead");
-        } else if (combat_->rollLocked(move->pawn) || reg.any_of<Stunned, Casting>(move->pawn) || combat_->motion().holdsBody(move->pawn)) {
+        } else if (combat_->rollLocked(move->pawn) || reg.any_of<Stunned, Casting>(move->pawn) ||
+                   (combat_->motion().holdsBody(move->pawn) &&
+                    !melee_->freeFeetToWalk(move->pawn, std::hypot(move->x - reg.get<Position>(move->pawn).x,
+                                                                   move->y - reg.get<Position>(move->pawn).y)))) {
             // Rolling (P2), stunned, winding up a power (X2) or carried by a clip (a stagger): the player's position is
             // ignored, without a failure because Unreal sends one every step. The player's own swings leave the feet
             // free (BodyMotion::freeFeet): walking goes on while the arms swing.

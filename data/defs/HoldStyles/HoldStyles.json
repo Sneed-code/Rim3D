@@ -135,7 +135,7 @@
     "offTurn": [0, 0, 80],
     "places": {
       "ready": {"anchor": "Chest", "at": [6, 14, -22], "turn": [-20, -12, 0]},
-      "aim": {"anchor": "Head", "point": "Sight", "at": [19, 3.5, 7], "turn": [0, 0, 0]},
+      "aim": {"anchor": "Shoulder", "point": "Stock", "at": [3, -5, 4], "turn": [0, 0, 0]},
       "fpReady": {"anchor": "View", "point": "Sight", "at": [22, 10, -6], "turn": [0, 0, 0]},
       "fpAim": {"anchor": "View", "point": "Sight", "at": [10, 0, 0], "turn": [0, 0, 0]}
     }

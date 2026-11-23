@@ -2031,6 +2031,13 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 				MotionOutPelvisBone = MotionPelvisBone;
 				MotionOutPelvisStart = MotionPelvisStart;
 			}
+			// The player's standing swing handed to the upper body when it sets off walking (MeleeRules stepInFreesFeet):
+			// the whole-body montage fades out over the same time the upper one fades in, from the same moment, so the arms
+			// go on unbroken and only the legs change (the slots may not share a group, so it is stopped by hand).
+			if (bFollows && Now.motionUpper != bMotionUpper)
+			{
+				Anim->Montage_Stop(PawnMotionFollowBlendIn, MotionMontage.Get());
+			}
 			bMotionUpper = Now.motionUpper;
 			MotionMontage = Anim->PlaySlotAnimationAsDynamicMontage(Asset, bMotionUpper ? USimPawnAnimInstance::UpperBodySlot : FAnimSlotGroup::DefaultSlotName,
 				bFollows ? PawnMotionFollowBlendIn : PawnMotionBlendIn, PawnMotionBlendOut, Rate, 1, -1.0f, Want);
