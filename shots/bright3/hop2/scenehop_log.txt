@@ -1,0 +1,25 @@
+LogSky: Display: Look.Quality 2 (High): scalability 2, volumetric fog 1, contact shadows 1, clouds 1
+LogSky: Display: Look: read C:/Dev/Rim3D-gunhits/data/look.json (sun 110000 lux at a clear noon, noon exposure EV 15.0)
+LogSky: Display: Sky: built; the level's own sun, sky light and fog (3 parts) are out, a clear noon is 110000 lux
+LogSky: Display: Look.Quality 2 (High): scalability 2, volumetric fog 1, contact shadows 1, clouds 1
+LogTemp: Display: SCENEHOP: title shown, loading the gun range in this game (pid 9164)
+LogTemp: Display: Level loaded in the game: view history reset (1)
+LogTemp: Display: Level loaded in the game: view history reset (1)
+LogSky: Display: Look.Quality 2 (High): scalability 2, volumetric fog 1, contact shadows 1, clouds 1
+LogSky: Display: Look: read C:/Dev/Rim3D-gunhits/data/look.json (sun 110000 lux at a clear noon, noon exposure EV 15.0)
+LogSky: Display: Sky: built; the level's own sun, sky light and fog (3 parts) are out, a clear noon is 110000 lux
+LogSky: Display: Look.Quality 2 (High): scalability 2, volumetric fog 1, contact shadows 1, clouds 1
+LogTemp: Display: Level loaded in the game: view history reset (2)
+LogTemp: Display: SCENEHOP: range sky exposure 14.91 EV, cuts 1, camera really at 13.94 EV, heals 0
+LogTemp: Display: SCENEHOP: picture 2b_nofog after ShowFlag.Fog 0
+LogTemp: Display: SCENEHOP: picture 2c_noeye after ShowFlag.EyeAdaptation 0
+LogTemp: Display: SCENEHOP: picture 2d_ev17 after Look.Exposure 17
+LogTemp: Display: SCENEHOP: picture 2e_nolight after ShowFlag.Lighting 0
+LogTemp: Display: SCENEHOP: in the gun range (pid 9164), back to the title
+LogTemp: Display: Level loaded in the game: view history reset (1)
+LogSky: Display: Look.Quality 2 (High): scalability 2, volumetric fog 1, contact shadows 1, clouds 1
+LogSky: Display: Look: read C:/Dev/Rim3D-gunhits/data/look.json (sun 110000 lux at a clear noon, noon exposure EV 15.0)
+LogSky: Display: Sky: built; the level's own sun, sky light and fog (3 parts) are out, a clear noon is 110000 lux
+LogSky: Display: Look.Quality 2 (High): scalability 2, volumetric fog 1, contact shadows 1, clouds 1
+LogTemp: Display: Level loaded in the game: view history reset (2)
+LogTemp: Display: SCENEHOP OK: back on the title in the same game (pid 9164, menu 1), Sky.Hour -1, Overseer.UI 1, Pawns.MetaHumans 0, near clip 10.0

@@ -1,0 +1,5 @@
+LogSky: Display: Look.Quality 2 (High): scalability 2, volumetric fog 1, contact shadows 1, clouds 1
+LogSky: Display: Look: read C:/Dev/Rim3D-gunhits/data/look.json (sun 110000 lux at a clear noon, noon exposure EV 15.0)
+LogSky: Display: Sky: built; the level's own sun, sky light and fog (3 parts) are out, a clear noon is 110000 lux
+LogSky: Display: Look.Quality 2 (High): scalability 2, volumetric fog 1, contact shadows 1, clouds 1
+LogTemp: Display: CVARDUMP: sky exposure 14.91 EV, cuts 1, camera really at 13.95 EV, heals 0
