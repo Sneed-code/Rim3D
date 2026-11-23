@@ -8,8 +8,7 @@ Combat feel batch (sneed, 2026-11-23; sim, data and Unreal): **melee** every swi
 body's, so thrusts step in instead of leaning, and setting off mid-swing hands the clip to the upper body (`playerStepIn`,
 `stepInFreesFeet`: set both false to go back). **Roll end** no longer snaps body and hair back (the local body follows
 the sim through the roll). **Gun holds**: new `Shoulder` anchor; rifles (sniper, bolt action) cheek-welded on the
-shoulder, LMG, SMG, minigun and both shotguns stock low on the right shoulder; the rocket launchers' aim camera sits off
-to the side (`aimCamera`). **4K skin** on every MakeHuman pawn (`Pawns.Skin4K`). **Strand hair** collides with the
+shoulder, LMG, SMG, minigun and both shotguns stock low on the right shoulder. **4K skin** on every MakeHuman pawn (`Pawns.Skin4K`). **Strand hair** collides with the
 breasts (capsules fitted per body, `Pawns.StrandHairBreasts`). **Death screen** (slow motion, black and white, red YOU
 DIED, piano sting; Space loads the newest save after 2 s), F5 quicksave, autosave every 15 min (5 kept), protagonist
 downed by combat or blood loss dies (`docs/design/saves.md`, `protagonist.md`). **Title from orbit** (`TitleStage`, art
@@ -47,6 +46,10 @@ hub; the solar generator is two racks side by side on its 4 x 4 (their node colo
 them (`assets/power_art.json`). A def's new `visual.rotor` turns the blades every frame, faster with more wind power,
 still with none (`UBuildingSubsystem::AnimateRotors`). Art steps `power-models` and `power-art` run them in
 `update-and-play.bat`. Smoke test `power` (pictures; fails if the turbine makes power and the blades do not turn).
+
+Rocket launcher aim view (sneed, 2026-11-22 playtest): aimed in third person the launcher's back end sat over the
+middle of the screen. A gun can now move the aim camera (`assets/guns.json` `"aimCamera": [right, up]`); the rocket
+launcher's camera sits further right and higher, so the tubes are low left of the crosshair. **Next:** PC pictures.
 
 Third person only (sneed, 2026-11-22: "lets forget first person view now ... its a 3rd person game"; Unreal,
 `docs/decisions/0012-third-person-only.md`): the first-person view is gone (no V key, no first-person aim). Right mouse

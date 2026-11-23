@@ -77,6 +77,7 @@ namespace
 	// (fixed in PawnActor); at 55-68 right and 16-26 up the body sat in the bottom corner and the gun left the frame.
 	constexpr float ProtagonistAimShoulder = 45.0f;
 	constexpr float ProtagonistAimLift = 8.0f;
+	constexpr float ProtagonistAimCameraEase = 6.0f;
 	constexpr float ProtagonistNormalFov = 80.0f;
 	// A scoped gun's aim goes to the scope only once this far aimed in (so the view never passes through the head).
 	constexpr float ProtagonistScopeAt = 0.97f;
@@ -241,18 +242,18 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		using Rim3DKeys::IsDown;
 		using Rim3DKeys::WasPressed;
 		UProtagonistSubsystem* Unstuck = GetWorld() ? GetWorld()->GetSubsystem<UProtagonistSubsystem>() : nullptr;
-		if (!bFrozen && Unstuck && WasPressed(PC, ERim3DAction::Unstuck))
+		if (Unstuck && WasPressed(PC, ERim3DAction::Unstuck))
 		{
 			Unstuck->StartUnstuck();
 		}
 		// F12 Unstuck: standing still, no actions, until the sim moves the colonist (docs/design/earthworks.md).
-		const bool bUnstucking = bFrozen || (Unstuck && Unstuck->IsUnstucking());
+		const bool bUnstucking = Unstuck && Unstuck->IsUnstucking();
 		Right = bUnstucking ? 0.0 : (IsDown(PC, ERim3DAction::MoveRight) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveLeft) ? 1.0 : 0.0);
 		Forward = bUnstucking ? 0.0 : (IsDown(PC, ERim3DAction::MoveForward) ? 1.0 : 0.0) - (IsDown(PC, ERim3DAction::MoveBack) ? 1.0 : 0.0);
 		bWalk = IsDown(PC, ERim3DAction::WalkSlow);
 		// Sprint is a toggle (sneed 2026-11-17): on until pressed again, and it stays on when you take over another colonist.
 		// It doesn't sprint while walking slowly or aiming.
-		if (!bFrozen && WasPressed(PC, ERim3DAction::Sprint))
+		if (WasPressed(PC, ERim3DAction::Sprint))
 		{
 			SetSprintToggle(!IsSprintToggleOn());
 		}
@@ -261,11 +262,11 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		{
 			Jump();
 		}
-		if (!bFrozen && WasPressed(PC, ERim3DAction::SwitchMode))
+		if (WasPressed(PC, ERim3DAction::SwitchMode))
 		{
 			OnSwitchModePressed();
 		}
-		if (!bFrozen && WasPressed(PC, ERim3DAction::TakeOver))
+		if (WasPressed(PC, ERim3DAction::TakeOver))
 		{
 			OnTakeOverPressed();
 		}
@@ -291,7 +292,7 @@ void AProtagonistPawn::Tick(float DeltaTime)
 	{
 		bWantAim = bScriptAimHeld;
 	}
-	else if (const APlayerController* PC = GetPlayerController(); PC && Thing != colony::kNoEntity && !bFrozen)
+	else if (const APlayerController* PC = GetPlayerController(); PC && Thing != colony::kNoEntity)
 	{
 		bWantAim = Rim3DKeys::IsDown(PC, ERim3DAction::AimBlock);
 	}
@@ -632,18 +633,23 @@ void AProtagonistPawn::UpdateCamera()
 		const FVector Pivot = SmoothFeet + FVector(0.0, 0.0, ProtagonistPivotHeight * BodyScale);
 		EffectiveArm = FMath::Lerp(ArmLength, FMath::Min(ArmLength, ProtagonistAimArm), Blend);
 		const FVector Right = FRotator(0.0, Yaw, 0.0).RotateVector(FVector::RightVector);
-		// A gun may sit the aimed camera further right and up (its def's `aimCamera`, cm; sneed 2026-11-22: the rocket
-		// launcher's tube on the shoulder ran into the middle of the screen).
-		float ExtraRight = 0.0f;
-		float ExtraLift = 0.0f;
-		if (const colony::ThingView* Me = Thing != colony::kNoEntity ? Bridge->GetCurrentSnapshot().find(Thing) : nullptr; Me && Me->weapon.valid())
+		// A gun may ask for its own shoulder offset (guns.json "aimCamera": the rocket launcher sits in front of the
+		// usual one); it eases over when the gun changes.
+		FVector2D WantCamera(ProtagonistAimShoulder, ProtagonistAimLift);
+		if (const UWorld* CamWorld = GetWorld())
 		{
-			const colony::Def& GunDef = Bridge->GetSim()->defs().get(Me->weapon);
-			ExtraRight = static_cast<float>(GunDef.number("aimCamera.right", 0.0));
-			ExtraLift = static_cast<float>(GunDef.number("aimCamera.lift", 0.0));
+			if (const UGunRangeSubsystem* CamRange = CamWorld->GetSubsystem<UGunRangeSubsystem>())
+			{
+				const FVector2D GunCamera = CamRange->GetAimCamera();
+				WantCamera = FVector2D(GunCamera.X >= 0.0 ? GunCamera.X : WantCamera.X, GunCamera.Y >= 0.0 ? GunCamera.Y : WantCamera.Y);
+			}
 		}
-		Location = Pivot - Look.Vector() * EffectiveArm + Right * ((ProtagonistAimShoulder + ExtraRight) * Blend) +
-			FVector(0.0, 0.0, (ProtagonistAimLift + ExtraLift) * BodyScale * Blend);
+		if (AimCameraNow.X < 0.0)
+		{
+			AimCameraNow = WantCamera;
+		}
+		AimCameraNow = FMath::Vector2DInterpTo(AimCameraNow, WantCamera, CameraDelta, ProtagonistAimCameraEase);
+		Location = Pivot - Look.Vector() * EffectiveArm + Right * (AimCameraNow.X * Blend) + FVector(0.0, 0.0, AimCameraNow.Y * BodyScale * Blend);
 		// Never under the ground on a hillside.
 		const FVector Local = (Location - Bridge->GetWorldOrigin()) / 100.0;
 		const colony::Map& Map = Bridge->GetSim()->map();

@@ -84,6 +84,9 @@ struct FGunRangeGun
 	/** A telescopic sight: fully aimed, the view goes through it (this field of view, a scope ring drawn over it, the arms
 	 *  and gun hidden). 0: open sights, the gun stays in view. */
 	float ScopeFov = 0.0f;
+	/** The over-the-shoulder aim camera with this gun (guns.json "aimCamera": [right cm, up cm]); negative keeps the
+	 *  pawn's own (AProtagonistPawn). A big shoulder launcher needs the camera further right and higher to see past it. */
+	FVector2D AimCamera = FVector2D(-1.0, -1.0);
 };
 
 /** A spinning part's speed after `Dt` seconds (turns a second): up to its full speed while the gun has fired in the last
@@ -153,6 +156,8 @@ public:
 	/** The held gun's scope field of view while the player holds a scoped gun (bolt-action rifle), else 0. Fully aimed,
 	 *  the third-person camera goes to the scope (AProtagonistPawn::IsScopeView) and the scope ring is drawn. */
 	float GetScopeFov() const { return ScopeFovNow; }
+	/** The held gun's aim camera offsets (FGunRangeGun::AimCamera), negative when none. */
+	FVector2D GetAimCamera() const { return AimCameraNow; }
 	/** Whether the scope's ring is drawn this frame. */
 	bool IsScoped() const { return bScoped; }
 	/** A line for the panel from the scene (targets left and so on). */
@@ -287,6 +292,7 @@ private:
 	bool bScoped = false;
 	/** The held gun's scope (0: none, or not usable now). */
 	float ScopeFovNow = 0.0f;
+	FVector2D AimCameraNow = FVector2D(-1.0, -1.0);
 	FString BoneLine;
 	// The hold-style path.
 	bool bHeldView = false;

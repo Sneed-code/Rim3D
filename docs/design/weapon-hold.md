@@ -200,5 +200,4 @@ the feet now turn with the body through a swing (`bTurnFeet`), so a turning mace
 
 `"anchor": "Shoulder"` places a point at the right upper arm with the aim frame (as `Head`). Rifles (Hold_Rifle,
 sniper, bolt action) put the stock there, cheek on it (sneed's reference picture); the LMG, heavy SMG, minigun and both
-shotguns override their `places.aim` with the stock lower on the shoulder, clear of the face. A def's `aimCamera`
-(`right`, `lift` in cm) moves the aim camera off a big launcher (triple and doomsday rockets).
+shotguns override their `places.aim` with the stock lower on the shoulder, clear of the face.

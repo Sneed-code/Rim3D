@@ -51,6 +51,8 @@ Hung on the view camera, so they move with the gun kick and shake of the shooter
 - **Scope**: a gun with `"scope": {"fov": n}` (the bolt-action rifle's side-mounted scope) goes through it once fully
   aimed: the arms and gun hide, the view narrows to `fov`, and a scope ring and post reticle are drawn over it. On the
   way up the scope's eyepiece comes to the eye (its `sight` is the eyepiece on the scope's axis).
+- **Aim camera**: `"aimCamera": [right, up]` (cm) moves the over-the-shoulder aim camera for one gun (default 45 right,
+  8 up). The triple rocket launcher uses [70, 26] so its tubes sit low left of the crosshair instead of over it.
 - The **left hand** goes to the `offHand` point (the fore-end) with the MakeHuman two-bone IK.
 - **Moving parts**: the bolt-action rifle's bolt lifts and runs back after each shot (the Codex model's own parts and
   pivots), triggers pull. A gun with a separate magazine mesh drops the empty one and the left
