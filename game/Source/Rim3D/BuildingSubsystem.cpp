@@ -1314,6 +1314,7 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 		}
 		RotorSlots.Add(Rotor.Id, Slot);
 		Chunk.Rotors.Add(static_cast<colony::Entity>(Rotor.Id));
+	}
 	for (const FPendingMoving& Moving : PendingMoving)
 	{
 		FMovingSlot Slot;

@@ -15,6 +15,7 @@
 #include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Snapshot.h"
+#include "ColonySim/Weather.h"
 
 namespace
 {
