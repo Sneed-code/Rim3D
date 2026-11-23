@@ -12,6 +12,8 @@
 #include "PhysicsEngine/SphylElem.h"
 #include "Rendering/SkeletalMeshRenderData.h"
 #include "MakeHumanArt.h"
+#include "PawnActor.h"
+#include "ColonySim/Health.h"
 #include "UObject/ObjectKey.h"
 #include "UObject/UnrealType.h"
 #include "UObject/Package.h"
@@ -155,6 +157,13 @@ namespace
 			Property->ExportTextItem_Direct(Applied, Value, nullptr, &Hair, PPF_None);
 			UE_LOG(LogTemp, Display, TEXT("STRANDHAIR turn follow %.2f: simulation settings now %s"), Follow, *Applied);
 		}
+	}
+
+	/** Whether Body's pawn has lost its head (body-health.md part F): no strands then. */
+	bool StrandHairHeadGone(const USkeletalMeshComponent& Body)
+	{
+		const ASimPawnActor* Pawn = Cast<ASimPawnActor>(Body.GetOwner());
+		return Pawn && (Pawn->GetSeveredShown() & colony::kSeveredHead) != 0;
 	}
 
 	/** Puts Groom on Body's head: the groom's curves are in a space where the head they were made on is at SourceHead
@@ -881,6 +890,18 @@ void UStrandHairSubsystem::Want(USkeletalMeshComponent* Body, const FString& Bas
 	SinceSort = 1.0f;  // sort at the next tick
 }
 
+bool UStrandHairSubsystem::GetHiddenWig(const USkeletalMeshComponent* Body, TArray<int32>& OutSections) const
+{
+	OutSections.Reset();
+	const FWearer* Found = Body ? Wearers.FindByPredicate([Body](const FWearer& W) { return W.Body.Get() == Body; }) : nullptr;
+	if (!Found || !Found->bStrands)
+	{
+		return false;
+	}
+	OutSections = Found->WigSections;
+	return true;
+}
+
 int32 UStrandHairSubsystem::NumWearing() const
 {
 	int32 Count = 0;
@@ -897,6 +918,12 @@ void UStrandHairSubsystem::Show(FWearer& Wearer, bool bStrands)
 	if (!Body)
 	{
 		return;
+	}
+	// A body whose head is off grows no hair: the strands hung on its folded head bone and came back whenever the
+	// wearers were sorted again (the head went with its piece, which wears the wig instead).
+	if (bStrands && StrandHairHeadGone(*Body))
+	{
+		bStrands = false;
 	}
 	if (bStrands)
 	{
@@ -991,7 +1018,7 @@ void UStrandHairSubsystem::Tick(float DeltaTime)
 	for (int32 i = 0; i < Wearers.Num(); ++i)
 	{
 		const USkeletalMeshComponent* Body = Wearers[i].Body.Get();
-		const bool bVisible = Body->IsVisible() && Body->GetOwner() && !Body->GetOwner()->IsHidden();
+		const bool bVisible = Body->IsVisible() && Body->GetOwner() && !Body->GetOwner()->IsHidden() && !StrandHairHeadGone(*Body);
 		const float Distance = static_cast<float>(FVector::Dist(Body->GetComponentLocation(), Eye)) - (Wearers[i].bStrands ? 100.0f : 0.0f);
 		Order.Emplace(bVisible && bOn && Distance < NearCm ? Distance : TNumericLimits<float>::Max(), i);
 	}

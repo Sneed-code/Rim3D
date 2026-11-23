@@ -70,6 +70,10 @@ public:
 	/** How many people wear strands now (for tests and notes). */
 	int32 NumWearing() const;
 
+	/** The wig sections Body hides because it wears strands now (a severed head's piece shows them: strands can't be
+	 *  copied onto it). False if Body wears no strands. */
+	bool GetHiddenWig(const USkeletalMeshComponent* Body, TArray<int32>& OutSections) const;
+
 	/** Frames (summed over wearers) a fast turn held someone's hair at rest (Pawns.StrandHairTurnHold), for notes. */
 	int32 GetTurnHoldFrames() const { return TurnHoldFrames; }
 

@@ -1469,10 +1469,14 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
             s.target = kNoEntity;
         }
     }
-    // The player's crosshair on a drawn body part: aim at that spot on the pawn as it stands now.
+    // The player's crosshair on a drawn body part: aim at that spot on the pawn as it stands now. A corpse that can still
+    // be cut up keeps the spot too (sneed, 2026-11-23: shooting a dead leg again and again with a pistol must take it
+    // off): it lies as a ragdoll far from the sim's lying hitboxes, so without the drawn spot the bullet hit the ground
+    // or the chest and the leg's pile never grew.
     if (s.player && s.drawn.pawn != kNoEntity) {
         const Health* health = reg.valid(s.drawn.pawn) ? reg.try_get<Health>(s.drawn.pawn) : nullptr;
-        if (!things_.spawned(s.drawn.pawn) || !reg.all_of<Position, Posture>(s.drawn.pawn) || (health != nullptr && health->dead)) {
+        if (!things_.spawned(s.drawn.pawn) || !reg.all_of<Position, Posture>(s.drawn.pawn) ||
+            (health != nullptr && health->dead && !health_.takesCorpseHits(s.drawn.pawn))) {
             s.drawn = DrawnAim{};
         } else {
             const Position& tp = reg.get<Position>(s.drawn.pawn);
