@@ -12,6 +12,10 @@ them (`assets/power_art.json`). A def's new `visual.rotor` turns the blades ever
 still with none (`UBuildingSubsystem::AnimateRotors`). Art steps `power-models` and `power-art` run them in
 `update-and-play.bat`. Smoke test `power` (pictures; fails if the turbine makes power and the blades do not turn).
 
+Rocket launcher aim view (sneed, 2026-11-22 playtest): aimed in third person the launcher's back end sat over the
+middle of the screen. A gun can now move the aim camera (`assets/guns.json` `"aimCamera": [right, up]`); the rocket
+launcher's camera sits further right and higher, so the tubes are low left of the crosshair. **Next:** PC pictures.
+
 Third person only (sneed, 2026-11-22: "lets forget first person view now ... its a 3rd person game"; Unreal,
 `docs/decisions/0012-third-person-only.md`): the first-person view is gone (no V key, no first-person aim). Right mouse
 with a gun keeps the third-person zoom and steady aim; only a scoped gun (bolt action) goes to a scope picture at full

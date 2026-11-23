@@ -77,6 +77,7 @@ namespace
 	// (fixed in PawnActor); at 55-68 right and 16-26 up the body sat in the bottom corner and the gun left the frame.
 	constexpr float ProtagonistAimShoulder = 45.0f;
 	constexpr float ProtagonistAimLift = 8.0f;
+	constexpr float ProtagonistAimCameraEase = 6.0f;
 	constexpr float ProtagonistNormalFov = 80.0f;
 	// A scoped gun's aim goes to the scope only once this far aimed in (so the view never passes through the head).
 	constexpr float ProtagonistScopeAt = 0.97f;
@@ -632,7 +633,23 @@ void AProtagonistPawn::UpdateCamera()
 		const FVector Pivot = SmoothFeet + FVector(0.0, 0.0, ProtagonistPivotHeight * BodyScale);
 		EffectiveArm = FMath::Lerp(ArmLength, FMath::Min(ArmLength, ProtagonistAimArm), Blend);
 		const FVector Right = FRotator(0.0, Yaw, 0.0).RotateVector(FVector::RightVector);
-		Location = Pivot - Look.Vector() * EffectiveArm + Right * (ProtagonistAimShoulder * Blend) + FVector(0.0, 0.0, ProtagonistAimLift * BodyScale * Blend);
+		// A gun may ask for its own shoulder offset (guns.json "aimCamera": the rocket launcher sits in front of the
+		// usual one); it eases over when the gun changes.
+		FVector2D WantCamera(ProtagonistAimShoulder, ProtagonistAimLift);
+		if (const UWorld* CamWorld = GetWorld())
+		{
+			if (const UGunRangeSubsystem* CamRange = CamWorld->GetSubsystem<UGunRangeSubsystem>())
+			{
+				const FVector2D GunCamera = CamRange->GetAimCamera();
+				WantCamera = FVector2D(GunCamera.X >= 0.0 ? GunCamera.X : WantCamera.X, GunCamera.Y >= 0.0 ? GunCamera.Y : WantCamera.Y);
+			}
+		}
+		if (AimCameraNow.X < 0.0)
+		{
+			AimCameraNow = WantCamera;
+		}
+		AimCameraNow = FMath::Vector2DInterpTo(AimCameraNow, WantCamera, CameraDelta, ProtagonistAimCameraEase);
+		Location = Pivot - Look.Vector() * EffectiveArm + Right * (AimCameraNow.X * Blend) + FVector(0.0, 0.0, AimCameraNow.Y * BodyScale * Blend);
 		// Never under the ground on a hillside.
 		const FVector Local = (Location - Bridge->GetWorldOrigin()) / 100.0;
 		const colony::Map& Map = Bridge->GetSim()->map();
