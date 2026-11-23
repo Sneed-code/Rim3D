@@ -18,7 +18,11 @@ no glowing mist/gush blobs off shot corpses, strand hair held still while a hand
 (`GunRange.Panel 1`) and +/- cycle the guns, dirt hits throw soil jets and clods, stronger rocket plume. **Not done yet**
 (next thread): neck gone with the head and lower torso cut, loose head physics, organs/intestines/genital gore, realistic
 torso chunks, molotov liquid fire, more realistic explosions, a rocket model, the roll snap-back (smoke `feel` now
-measures the pelvis jump back). Needs the PC to compile and run the smokes.
+measures the pelvis jump back). PC (2026-11-23): compiles; smokes `gore` and `sound` pass; `feel` fails on the roll
+(the hips snap back the whole 3.5 m at the end, the body never turns over), `melee` fails holsters/switch_key (old) and
+3 late blows of 14, `fights` fails fire_at_pawn (0 hits from 12 m), frozen_hit and ragdoll (pelvis 87 cm up); no
+baseline on main was run, so run `fights` and `melee` on main first to see which are new. `gunrange` not run (PC busy):
+`tools\smoke.ps1 -Test gunrange -NoBuild -Visible -ExtraArgs "-GunRangeScript"`.
 
 Combat feel batch (sneed, 2026-11-23; sim, data and Unreal): **melee** every swing a quarter quicker (`MeleeRules`
 `attackTimeFactor` 0.75, finishers and their clips too), a person's fists four times as fast and a quarter as strong
