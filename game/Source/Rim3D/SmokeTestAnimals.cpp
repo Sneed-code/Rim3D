@@ -21,12 +21,18 @@
 namespace
 {
 	const FVector AnimalSmokeOrigin(-900000.0, 0.0, 0.0);
-	// Every def A4 has art for, the realistic Sketchfab ones (monkey, cat, cougar, thrumbo), plus two with none (they fall back on a stand-in model).
+	// Every def A4 has art for, the realistic Sketchfab ones (monkey, cat, cougar, thrumbo), plus the grizzly and chicken.
 	const TCHAR* const AnimalSmokeDefs[] = {TEXT("Cow"), TEXT("Muffalo"), TEXT("Deer"), TEXT("Husky"), TEXT("TimberWolf"), TEXT("Thrumbo"),
 		TEXT("Alpaca"), TEXT("Cat"), TEXT("WildBoar"), TEXT("Cougar"), TEXT("GrizzlyBear"), TEXT("Chicken"), TEXT("Monkey"), TEXT("Elephant"), TEXT("Rhinoceros"), TEXT("Lion"), TEXT("Raptor"), TEXT("TRex")};
 	constexpr float AnimalSmokeSpacing = 2.0f;
 	// The realistic Sketchfab models, side by side in daylight for a close look (phase animals_close).
 	const TCHAR* const AnimalSmokeCloseDefs[] = {TEXT("Monkey"), TEXT("Cat"), TEXT("Cougar"), TEXT("Thrumbo"), TEXT("Elephant"), TEXT("Rhinoceros"), TEXT("Muffalo"), TEXT("Raptor"), TEXT("TRex")};
+
+	// The 2026-11-22 batch that replaced the husky stand-in (phase animals_new): big ones in the back row, small ones in front.
+	const TCHAR* const AnimalSmokeNewBigDefs[] = {TEXT("GrizzlyBear"), TEXT("PolarBear"), TEXT("Caribou"), TEXT("Muskox"), TEXT("Yak"), TEXT("Dromedary"),
+		TEXT("Gazelle"), TEXT("Goat"), TEXT("Sheep"), TEXT("Megaspider"), TEXT("Spelopede")};
+	const TCHAR* const AnimalSmokeNewSmallDefs[] = {TEXT("Capybara"), TEXT("Iguana"), TEXT("Chicken"), TEXT("Duck"), TEXT("Goose"), TEXT("Turkey"),
+		TEXT("ArcticFox"), TEXT("ArcticWolf"), TEXT("Ostrich"), TEXT("Megascarab")};
 
 	struct FAnimalSmokeState
 	{
@@ -106,7 +112,7 @@ void USmokeTestSubsystem::BuildAnimalsPhases()
 			State->PosesSeen.Add(static_cast<uint8>(Animal->GetPose()));
 			State->DefsDrawn.Add(FName(UTF8_TO_TCHAR(B->GetDefs()->get(View.def).defName().c_str())));
 			// Drawn about as big as an animal: the whole body between 15 cm and 13 m long (the 12 m T-rex).
-			const double Size = Body->Bounds.BoxExtent.GetMax() * 2.0;
+			const double Size = Animal->GetDrawLengthCm();
 			if (Size < 15.0 || Size > 1300.0)
 			{
 				State->Error(FString::Printf(TEXT("an animal is %.0f cm across (draw scale %.2f)"), Size, Animal->GetDrawScale()));
@@ -304,4 +310,105 @@ void USmokeTestSubsystem::BuildAnimalsPhases()
 		AnimalSmokeSetDistance(TEXT("Sky.DayOfYear"), -1.0f);
 	};
 	Phases.Add(MoveTemp(Near));
+
+	// 4. The batch that replaced the husky stand-in, close up in daylight and paused: every one must have its own model.
+	FPhase Batch;
+	Batch.Name = TEXT("animals_new");
+	Batch.WarmupSeconds = 3.0f;
+	Batch.MeasureSeconds = 2.0f;
+	Batch.Setup = [=, this]()
+	{
+		USimSubsystem* B = Bridge();
+		if (!B || !B->GetSim())
+		{
+			return;
+		}
+		AnimalSmokeSetDistance(TEXT("Sky.Hour"), 12.0f);
+		AnimalSmokeSetDistance(TEXT("Sky.DayOfYear"), 22.5f);
+		const colony::CellPos M = Middle();
+		int32 I = 0;
+		for (const TCHAR* Def : AnimalSmokeNewBigDefs)
+		{
+			B->Submit(colony::SpawnThingCommand{std::string(TCHAR_TO_UTF8(Def)), colony::CellPos{M.x + 26, M.y - 20 + I++ * 4, 0}});
+		}
+		I = 0;
+		for (const TCHAR* Def : AnimalSmokeNewSmallDefs)
+		{
+			B->Submit(colony::SpawnThingCommand{std::string(TCHAR_TO_UTF8(Def)), colony::CellPos{M.x + 31, M.y - 18 + I++ * 4, 0}});
+		}
+		B->StepOnce();
+		B->SetSpeed(0);
+		const FVector Target = B->SimToWorld(M.x + 28.0f, M.y, 0) + FVector(0.0, 0.0, 80.0);
+		const FVector From = Target + FVector(2200.0, -500.0, 600.0);
+		ViewFrom(From, (Target - From).Rotation());
+		State->Reset();
+	};
+	Batch.OnFrame = CheckFrame;
+	Batch.Verify = [=, this]()
+	{
+		VerifyFrames(TEXT("animals_new"));
+		USimAnimalSubsystem* Animals = AnimalsOf();
+		USimSubsystem* B = Bridge();
+		if (Animals && B && B->GetSim())
+		{
+			// A def with no entry in assets/animal_art.json is drawn as the husky and marked a stand-in; these all have one.
+			const auto CheckDef = [&](const TCHAR* Def)
+			{
+				FSimAnimalArt Art;
+				Animals->GetModelFor(FName(Def), Art);
+				if (!State->DefsDrawn.Contains(FName(Def)))
+				{
+					Fail(FString::Printf(TEXT("animals_new: %s was not drawn"), Def));
+				}
+				else if (Art.Model == FName(TEXT("Husky")))
+				{
+					Fail(FString::Printf(TEXT("animals_new: %s is still drawn as the husky"), Def));
+				}
+			};
+			for (const TCHAR* Def : AnimalSmokeNewBigDefs) { CheckDef(Def); }
+			for (const TCHAR* Def : AnimalSmokeNewSmallDefs) { CheckDef(Def); }
+			FString Lengths;
+			for (const TPair<uint32, TObjectPtr<ASimAnimalActor>>& Pair : Animals->GetAnimals())
+			{
+				const colony::ThingView* View = B->GetCurrentSnapshot().find(Pair.Value->GetThing());
+				if (View && View->def.valid())
+				{
+					Lengths += FString::Printf(TEXT(" %s %.0f cm,"), UTF8_TO_TCHAR(B->GetDefs()->get(View->def).defName().c_str()), Pair.Value->GetDrawLengthCm());
+				}
+			}
+			Notes.Add(FString::Printf(TEXT("animals_new: %d models loaded; lengths:%s"), Animals->GetModelsLoaded(), *Lengths));
+		}
+	};
+	Phases.Add(MoveTemp(Batch));
+
+	// 5. One picture of each animal of the batch, close up from its side (phases animal_<def>), so each model's look,
+	// size and facing can be checked on its own.
+	const auto AddCloseUp = [=, this](const TCHAR* Def, float CellX, float CellY, float DistanceCm)
+	{
+		FPhase One;
+		One.Name = FString::Printf(TEXT("animal_%s"), Def);
+		One.WarmupSeconds = 0.5f;
+		One.MeasureSeconds = 0.5f;
+		One.Setup = [=, this]()
+		{
+			USimSubsystem* B = Bridge();
+			if (!B || !B->GetSim())
+			{
+				return;
+			}
+			const colony::CellPos M = Middle();
+			const FVector Target = B->SimToWorld(M.x + CellX, M.y + CellY, 0) + FVector(0.0, 0.0, DistanceCm * 0.12);
+			const FVector From = Target + FVector(DistanceCm * 0.85, -DistanceCm * 0.45, DistanceCm * 0.3);
+			ViewFrom(From, (Target - From).Rotation());
+		};
+		Phases.Add(MoveTemp(One));
+	};
+	for (int32 Index = 0; Index < static_cast<int32>(UE_ARRAY_COUNT(AnimalSmokeNewBigDefs)); ++Index)
+	{
+		AddCloseUp(AnimalSmokeNewBigDefs[Index], 26.0f, -20.0f + Index * 4.0f, 900.0f);
+	}
+	for (int32 Index = 0; Index < static_cast<int32>(UE_ARRAY_COUNT(AnimalSmokeNewSmallDefs)); ++Index)
+	{
+		AddCloseUp(AnimalSmokeNewSmallDefs[Index], 31.0f, -18.0f + Index * 4.0f, 450.0f);
+	}
 }

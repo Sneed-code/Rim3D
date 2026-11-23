@@ -201,6 +201,9 @@ public:
 	/** Frames a downed body's ragdoll was steered back over its sim spot (UpdateRagdollTether). */
 	int32 GetRagdollTethers() const { return RagdollTethers; }
 	int32 GetRagdollPushes() const { return RagdollPushes; }
+	/** For the tests: the fastest part of the ragdoll last frame, cm/s, and whether it sleeps now. */
+	float GetRagdollFastest() const { return RagdollFastest; }
+	bool IsRagdollAsleep() const;
 	/** The ragdoll's floor taken away (carried on a back, BodyCarrySubsystem) or made again under where the pawn is now. */
 	void ResetRagdollFloor(bool bWanted);
 	/** Where the ragdoll's pelvis is now (world cm); false if the pawn is not a ragdoll. */
@@ -447,6 +450,8 @@ private:
 	bool bRagdoll = false;
 	float RagdollSeconds = 0.0f;
 	float RagdollStillSeconds = 0.0f;
+	float RagdollCreepSeconds = 0.0f;
+	float RagdollFastest = 0.0f;
 	bool bSoftTissueBeforeRagdoll = true;
 	int32 RagdollSleeps = 0;
 	int32 RagdollPushes = 0;

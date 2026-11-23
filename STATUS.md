@@ -12,6 +12,18 @@ them (`assets/power_art.json`). A def's new `visual.rotor` turns the blades ever
 still with none (`UBuildingSubsystem::AnimateRotors`). Art steps `power-models` and `power-art` run them in
 `update-and-play.bat`. Smoke test `power` (pictures; fails if the turbine makes power and the blades do not turn).
 
+The 18 missing animals and the giant insects (sneed, 2026-11-22; data and Unreal, `assets/animal_art.json`): 18 animal
+defs and the 3 chitinids had no model and were drawn as the husky. Each now has a free, rigged, animated model, 13 new
+Sketchfab imports (`assets/manifest.json`, batch 2), mostly WildMesh 3D's realistic ones: grizzly and polar bear (bear,
+81 clips), caribou and gazelle (doe), goat (mountain goat), sheep (bighorn), muskox and yak (buffalo), goose and duck
+(goose), chicken and ostrich (guineafowl), turkey, dromedary (camel), arctic fox (fox), capybara, and the three brood
+insects (rhino beetle). Arctic wolf uses the timber wolf, the iguana a small raptor. Lookalikes are marked `stand_in`.
+Sketchfab's FBX conversions keep their mesh in another unit than their animation, so `"fit": "pose"` sizes them on their
+posed skeleton, and `skipMeshes` drops stray parts. The iguana and wolf spider files still drew 10 times too big or
+vanished, so they are left out (the elk file is imported but unused). `AnimalArt` picks the shortest matching clip name.
+Smoke `animals` has a phase `animals_new` (fails if any is still the husky) and one close-up picture per new animal. The
+4 mechanoids are drawn as people, not the husky, and are left for a later task.
+
 Whole-body melee finishers, held blocks, no crouch slides (sneed, 2026-11-22; sim, data, Unreal, tools,
 `docs/design/lock-on.md` "Whole-body finishers"): **finishers at the downed are now whole-body mocap clips** instead of
 arms posed by hand (the longsword's arms went through its body, the knife's shook and showed the joints): knife kneels and
@@ -71,6 +83,12 @@ one hit 50 past 0 (a rocket in the chest) takes everything at once. The body goe
 skin, ribs, bone shards, dark wet lumps, made in code like the stumps) with sprays of blood; they tumble, bounce, leave
 splats where they land and lie 5 minutes like blood, then shrink away. **Next:** PC build, smoke `gore` (phases `gibs`,
 `gibsclose`), gun range look.
+
+Gore smoke made dependable (2026-11-23, follow-up to #445): on sneed's PC at 1080p the `gore` smoke failed on frame
+rate, not on the game: the head snap read 6 degrees (the hit layer's wobble was read only at each frame's end; now its
+peak within the frame), a corpse sometimes never slept (a ragdoll that only creeps under 20 cm/s is put to sleep 5 s
+after the fall; corpse phase now shows `asleepAtEnd` and `fastestAtEndCmS`, `GORETRACE` log lines), and a rocket at the
+dressed corpse sometimes tore nothing off (clothes no longer stop a blast's piece on a corpse; test: 8 sides, 8 tears).
 
 Corpses come apart, jolt and stay silent; blasts throw people (sneed, 2026-11-22; sim, data and Unreal,
 `docs/design/body-health.md` part F): **overkill on a corpse is kept until it is in pieces**: every 25 piled past 0 on

@@ -2774,6 +2774,7 @@ void ASimPawnActor::StartRagdoll(const FVector& Impulse)
 	}
 	RagdollSeconds = 0.0f;
 	RagdollStillSeconds = 0.0f;
+	RagdollCreepSeconds = 0.0f;
 	if (UMakeHumanAnimInstance* Soft = MakeHumanMesh ? Cast<UMakeHumanAnimInstance>(MakeHumanMesh->GetAnimInstance()) : nullptr)
 	{
 		bSoftTissueBeforeRagdoll = Soft->IsSoftTissueEnabled();
@@ -2860,7 +2861,12 @@ void ASimPawnActor::UpdateRagdollRest(float DeltaTime)
 		}
 	}
 	RagdollStillSeconds = Fastest < 6.0f ? RagdollStillSeconds + DeltaTime : 0.0f;
-	if (RagdollSeconds > 2.0f && RagdollStillSeconds > 0.5f && Body->RigidBodyIsAwake())
+	// A body that never quite stops (limbs jittering on each other or the floor at a lower frame rate, the gore smoke
+	// at 70 fps) is put to sleep anyway once it has only crept for half a second, 5 s after the fall.
+	RagdollCreepSeconds = Fastest < 20.0f ? RagdollCreepSeconds + DeltaTime : 0.0f;
+	RagdollFastest = Fastest;
+	if (((RagdollSeconds > 2.0f && RagdollStillSeconds > 0.5f) || (RagdollSeconds > 5.0f && RagdollCreepSeconds > 0.5f)) &&
+		Body->RigidBodyIsAwake())
 	{
 		Body->PutAllRigidBodiesToSleep();
 		++RagdollSleeps;
@@ -2918,6 +2924,7 @@ void ASimPawnActor::PushRagdoll(const FVector& Centre, float RadiusCm, float Spe
 	Body->AddRadialImpulse(Centre - FVector(0.0, 0.0, 40.0), RadiusCm, SpeedCmPerSecond, ERadialImpulseFalloff::RIF_Linear, true);
 	RagdollSeconds = 0.0f;
 	RagdollStillSeconds = 0.0f;
+	RagdollCreepSeconds = 0.0f;
 	++RagdollPushes;
 }
 
@@ -2938,7 +2945,13 @@ void ASimPawnActor::PushRagdollAt(const FVector& At, const FVector& Impulse)
 	Body->AddImpulse(Impulse * 0.15f, NAME_None, true);
 	RagdollSeconds = 0.0f;
 	RagdollStillSeconds = 0.0f;
+	RagdollCreepSeconds = 0.0f;
 	++RagdollHitPushes;
+}
+
+bool ASimPawnActor::IsRagdollAsleep() const
+{
+	return bRagdoll && Body && Body->IsSimulatingPhysics() && !Body->RigidBodyIsAwake();
 }
 
 bool ASimPawnActor::GetRagdollPelvis(FVector& OutLocation) const
