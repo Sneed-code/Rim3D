@@ -73,6 +73,41 @@ int32 AGoreGibActor::CountLive(const UWorld* World)
 	return Count;
 }
 
+void AGoreGibActor::GetLive(const UWorld* World, TArray<AGoreGibActor*>& Out)
+{
+	for (const TWeakObjectPtr<AGoreGibActor>& Gib : GibLive())
+	{
+		if (Gib.IsValid() && Gib->GetWorld() == World)
+		{
+			Out.Add(Gib.Get());
+		}
+	}
+}
+
+void AGoreGibActor::Track(AGoreGibActor* Gib)
+{
+	if (Gib)
+	{
+		GibLive().Add(Gib);
+	}
+}
+
+void AGoreGibActor::MakeRoom(int32 Count)
+{
+	TArray<TWeakObjectPtr<AGoreGibActor>>& Live = GibLive();
+	Live.RemoveAll([](const TWeakObjectPtr<AGoreGibActor>& Gib) { return !Gib.IsValid(); });
+	const int32 Max = FMath::Max(GGibMax.GetValueOnGameThread(), Count);
+	while (Live.Num() + Count > Max && Live.Num() > 0)
+	{
+		const TWeakObjectPtr<AGoreGibActor> Old = Live[0];
+		Live.RemoveAt(0);
+		if (Old.IsValid())
+		{
+			Old->Destroy();
+		}
+	}
+}
+
 void AGoreGibActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GibLive().RemoveAll([this](const TWeakObjectPtr<AGoreGibActor>& Gib) { return !Gib.IsValid() || Gib.Get() == this; });
@@ -144,18 +179,27 @@ void AGoreGibActor::Tick(float DeltaSeconds)
 			Velocity = FVector::ZeroVector;
 		}
 	}
-	const FQuat Turned = (GetActorQuat() * (Spin * Step).Quaternion()).GetNormalized();
+	FQuat Turned = (GetActorQuat() * (Spin * Step).Quaternion()).GetNormalized();
+	if (bLanded && !RestAxis.IsNearlyZero())
+	{
+		// Once down it tips over onto its flat side (quickly; flat when it stops), not left balanced on an edge.
+		const FVector Now = Turned.RotateVector(RestAxis);
+		const FVector Want = Now.Z >= 0.0 ? FVector::UpVector : -FVector::UpVector;
+		const FQuat Over = FQuat::FindBetweenNormals(Now, Want);
+		Turned = (FQuat::Slerp(FQuat::Identity, Over, bAtRest ? 1.0f : FMath::Clamp(Step * 8.0f, 0.0f, 1.0f)) * Turned).GetNormalized();
+	}
 	SetActorLocationAndRotation(At, Turned);
 }
 
-int32 AGoreGibActor::Burst(UWorld* World, const FVector& Centre, float BodyScale, float Strength, const FLinearColor& Skin, int32 Seed, colony::Entity Victim)
+int32 AGoreGibActor::Burst(UWorld* World, const FVector& Centre, float BodyScale, float Strength, const FLinearColor& Skin, int32 Seed, colony::Entity Victim,
+	int32 CountOverride)
 {
 	if (!World)
 	{
 		return 0;
 	}
 	FRandomStream Random(Seed);
-	const int32 Count = FMath::Clamp(GGibCount.GetValueOnGameThread(), 0, 64);
+	const int32 Count = FMath::Clamp(CountOverride >= 0 ? CountOverride : GGibCount.GetValueOnGameThread(), 0, 64);
 	const float Scale = FMath::Clamp(BodyScale, 0.5f, 1.5f);
 	const float Speed = FMath::Clamp(Strength, 0.8f, 1.4f) * FMath::Max(GGibSpeed.GetValueOnGameThread(), 0.0f);
 	// Room for them: the oldest gibs go first.

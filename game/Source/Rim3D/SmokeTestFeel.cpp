@@ -436,6 +436,15 @@ void USmokeTestSubsystem::BuildFeelPhases()
 					State->PelvisBackAt = PhaseTime;
 				}
 			}
+			// A frame by frame trace of the roll's end for the log (where the hips and the actor are, the clip's set-back).
+			if (Me->rollPhase != 0 || Me->motionClip.valid() || (State->bHavePelvis && FVector::Dist2D(Pelvis, State->LastPelvis) > 6.0))
+			{
+				const FVector ActorAt = Drawn->GetActorLocation();
+				const FVector Set = Drawn->GetMotionOffset();
+				UE_LOG(LogTemp, Display, TEXT("ROLLTRACE t=%.3f phase=%d left=%d clip=%d mt=%.3f actor=(%.0f,%.0f) pelvis=(%.0f,%.0f) off=(%.0f,%.0f) clips=%d"),
+					PhaseTime, static_cast<int32>(Me->rollPhase), Me->rollStepsLeft, Me->motionClip.valid() ? 1 : 0, Me->motionTime, ActorAt.X, ActorAt.Y,
+					Pelvis.X, Pelvis.Y, Set.X, Set.Y, Drawn->GetMotionClipsPlayed());
+			}
 			State->LastPelvis = Pelvis;
 			State->bHavePelvis = true;
 		}
@@ -464,7 +473,9 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		{
 			Fail(FString::Printf(TEXT("feel_roll: the pawn moved %.0f cm (the sim rolls it 4 m)"), State->RollMoved));
 		}
-		if (State->MaxRollAngle < 330.0f || !Actor || Actor->GetRollsSeen() < 1 || Actor->GetRollAngle() != 0.0f)
+		// The roll is the sim's motion clip (Motion_Roll, Mixamo's stand-to-roll): the clip itself turns the body over, and
+		// the old procedural tumble (RollAngle) stays at 0 while it plays. Either drawing counts.
+		if ((State->MaxRollAngle < 330.0f && (!Actor || Actor->GetMotionClipsPlayed() < 1)) || !Actor || Actor->GetRollsSeen() < 1 || Actor->GetRollAngle() != 0.0f)
 		{
 			Fail(FString::Printf(TEXT("feel_roll: the body turned over %.0f degrees at most and %.0f now (rolls drawn %d)"), State->MaxRollAngle, Actor ? Actor->GetRollAngle() : -1.0f, Actor ? Actor->GetRollsSeen() : 0));
 		}

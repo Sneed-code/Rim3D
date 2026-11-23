@@ -34,7 +34,18 @@ public:
 	/** Knocked by a bullet or blast: a change of speed in cm/s; one at rest flies again. */
 	void Push(const FVector& DeltaVelocity);
 	void SetChunk(UProceduralMeshComponent* InChunk) { Chunk = InChunk; }
+	/** The axis (actor space) that ends up pointing up or down when it comes to rest: a slab of flesh lies on its skin or
+	 *  its raw side, an organ on its flattest side, not balanced on an edge. Zero: wherever it stops. */
+	void SetRestAxis(const FVector& InAxis) { RestAxis = InAxis.GetSafeNormal(); }
 	bool IsAtRest() const { return bAtRest; }
+	/** Roughly how far it reaches from its middle, cm (a bullet passing this close knocks it). */
+	float GetReachCm() const { return FMath::Max(Radius * 2.5f, 8.0f); }
+	/** Each gib in this world. */
+	static void GetLive(const UWorld* World, TArray<AGoreGibActor*>& Out);
+	/** One more gib counted for the cap (the oldest go first when there are too many). */
+	static void Track(AGoreGibActor* Gib);
+	/** Room for `Count` more under Gore.GibMax: the oldest go. */
+	static void MakeRoom(int32 Count);
 	bool HasLanded() const { return bLanded; }
 
 	/** How many gibs lie in this world now (for the tests and the cap). */
@@ -45,7 +56,8 @@ public:
 	 * (about 1; the damage that burst it over 25), sized by `BodyScale`, with sprays of the victim's blood all round.
 	 * Returns how many chunks were made.
 	 */
-	static int32 Burst(UWorld* World, const FVector& Centre, float BodyScale, float Strength, const FLinearColor& Skin, int32 Seed, colony::Entity Victim);
+	static int32 Burst(UWorld* World, const FVector& Centre, float BodyScale, float Strength, const FLinearColor& Skin, int32 Seed, colony::Entity Victim,
+		int32 CountOverride = -1);
 
 private:
 	UPROPERTY()
@@ -54,6 +66,7 @@ private:
 	TObjectPtr<UProceduralMeshComponent> Chunk;
 	FVector Velocity = FVector::ZeroVector;
 	FRotator Spin = FRotator::ZeroRotator;
+	FVector RestAxis = FVector::ZeroVector;
 	float Radius = 4.0f;
 	float Age = 0.0f;
 	bool bAtRest = false;

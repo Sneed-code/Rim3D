@@ -1,4 +1,6 @@
 #include "BlastFxSubsystem.h"
+
+#include "GoreOrgans.h"
 #include "SeveredPieceActor.h"
 #include "EngineUtils.h"
 
@@ -318,6 +320,8 @@ void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 			Piece->Push((Out + FVector(0.0, 0.0, 0.6)).GetSafeNormal() * Speed * 1.5f * Falloff, Piece->GetActorLocation() - Out * 5.0);
 			++PiecesThrown;
 		}
+		// And the gibs, organs and guts lying about, lighter still.
+		GorePushRadial(GetWorld(), Centre - FVector(0.0, 0.0, 40.0), static_cast<float>(Reach) + 150.0f, Speed * 1.6f);
 	}
 
 	// The rest is art: without it (-run=BlastArt not run) the bodies are still thrown, above.

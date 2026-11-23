@@ -16,6 +16,7 @@
 #include "CreatorPeople.h"
 #include "FightSubsystem.h"
 #include "GoreGibActor.h"
+#include "GoreOrgans.h"
 #include "BloodSubsystem.h"
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
@@ -586,9 +587,9 @@ void USmokeTestSubsystem::BuildGorePhases()
 			{
 				Notes.Add(TEXT("headoff: the head piece's skin could not be read (no CPU copy of the vertices); look at the picture"));
 			}
-			else if (PieceCm > 45.0f * Tall)
+			else if (PieceCm > 58.0f * Tall)
 			{
-				Fail(FString::Printf(TEXT("headoff: the severed head's skin is drawn out %.0f cm long (45 at most): skin still tied to the body"), PieceCm));
+				Fail(FString::Printf(TEXT("headoff: the severed head's skin is drawn out %.0f cm long (58 at most: head and neck): skin still tied to the body"), PieceCm));
 			}
 		};
 		Phases.Add(MoveTemp(Phase));
@@ -785,6 +786,19 @@ void USmokeTestSubsystem::BuildGorePhases()
 			PhaseNumbers.Add(TEXT("gibsAtRest"), Resting);
 			PhaseNumbers.Add(TEXT("gibsMostInAir"), State->MostGibsInAir);
 			PhaseNumbers.Add(TEXT("bodyHidden"), Actor && Actor->IsGibbed() ? 1 : 0);
+			TArray<AGoreRopeActor*> Ropes;
+			AGoreRopeActor::GetLive(GetWorld(), Ropes);
+			int32 RopesDown = 0;
+			for (const AGoreRopeActor* Rope : Ropes)
+			{
+				RopesDown += Rope->IsAtRest() ? 1 : 0;
+			}
+			PhaseNumbers.Add(TEXT("gutRopes"), Ropes.Num());
+			PhaseNumbers.Add(TEXT("gutRopesAtRest"), RopesDown);
+			if (State->bGibbedSeen && Ropes.Num() == 0)
+			{
+				Fail(TEXT("gibs: the burst trunk spilled no intestines"));
+			}
 			if (!State->bGibbedSeen || Burst < 1)
 			{
 				Fail(FString::Printf(TEXT("gibs: %d blasts on the corpse and its trunk never burst (sim %d, drawn %d)"), State->GibBlasts,

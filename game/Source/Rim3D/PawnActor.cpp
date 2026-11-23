@@ -2037,18 +2037,29 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 		{
 			ShownTime = FMath::Lerp(Prev->motionTime, Now.motionTime, Bridge.GetBlendAlpha());
 		}
-		const float Want = Clip->from + ShownTime;
+		// Never past the animation's own end: the roll's clip runs to the last frame of A_StandToRoll, and the sim's moment
+		// can step a little past it. A montage started there finished at once, was started again the next frame, and so
+		// on; each new one dropped the old one's set-back while the old one still showed, and the hips jumped a whole
+		// roll's length (smoke feel_roll, PC 2026-11-23: 3.5 m back in one frame at the roll's end).
+		const float AssetEnd = FMath::Max(0.0f, Asset->GetPlayLength() - 0.02f);
+		const float Want = FMath::Min(Clip->from + ShownTime, AssetEnd);
 		const float Rate = FMath::Max(0.05f, Now.motionRate);
 		MotionClipFrom = Clip->from;
 		MotionClipHit = Clip->hitSeconds;
-		if (MotionClipDef != Now.motionClip.value || Now.motionTime < MotionClipTime - 0.02f || Now.motionUpper != bMotionUpper || !MotionMontage.IsValid() ||
-			!Anim->Montage_IsPlaying(MotionMontage.Get()))
+		// Still the same clip, run to its last frame and holding there (a montage stops "playing" at its end while it is
+		// still drawn): leave it be until the sim's clip is over, then it blends out below.
+		const bool bHeldAtEnd = MotionClipDef == Now.motionClip.value && MotionMontage.IsValid() && Now.motionUpper == bMotionUpper &&
+			Anim->Montage_IsActive(MotionMontage.Get()) && Now.motionTime >= MotionClipTime - 0.02f &&
+			Anim->Montage_GetPosition(MotionMontage.Get()) >= AssetEnd - 0.05f;
+		if (!bHeldAtEnd && (MotionClipDef != Now.motionClip.value || Now.motionTime < MotionClipTime - 0.02f || Now.motionUpper != bMotionUpper || !MotionMontage.IsValid() ||
+			!Anim->Montage_IsPlaying(MotionMontage.Get())))
 		{
 			// A stagger, a flinch or the player's own swing plays on the upper body, over legs that walk the way the body
 			// really goes (sneed 2026-11-18); a roll, a sidestep, a knockdown or an AI's lunging swing plays whole.
 			// A clip that follows another (the next swing, a stagger on a stagger) cross-fades from it a little longer, and
 			// the one going out keeps its share of the set-back below while it fades, so the body does not jump.
-			const bool bFollows = MotionMontage.IsValid() && Anim->Montage_IsPlaying(MotionMontage.Get());
+			// Whatever of the old clip still shows (playing, or stopped and fading) keeps its set-back while it fades.
+			const bool bFollows = MotionMontage.IsValid() && Anim->Montage_IsActive(MotionMontage.Get());
 			if (bFollows && !bMotionUpper && MotionAsset.IsValid() && MotionPelvisBone != INDEX_NONE)
 			{
 				MotionOutMontage = MotionMontage;
@@ -2074,7 +2085,7 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 			MotionPelvisBone = Skeleton ? Skeleton->GetReferenceSkeleton().FindBoneIndex(FName(TEXT("pelvis"))) : INDEX_NONE;
 			MotionPelvisStart = MotionPelvisBone != INDEX_NONE ? PawnMotionBoneAt(*Asset, MotionPelvisBone, 0.0) : FVector::ZeroVector;
 		}
-		else
+		else if (!bHeldAtEnd)
 		{
 			// Kept in step with the sim: its rate, and its moment if the picture drifted (a pause, a hitch, a hit-stop). A
 			// picture a little behind (a hit-stop froze it while the sim went on) plays faster until it is back, within about
