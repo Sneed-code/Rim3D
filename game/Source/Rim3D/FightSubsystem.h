@@ -31,6 +31,7 @@ enum class EFightParticle : uint8
 	Blood,
 	Smoke,
 	Flash,
+	Arc,  // electric sparks (the zeushammer's burst): blue-white, fast and short-lived
 	Count,
 };
 
@@ -55,6 +56,11 @@ struct FFightTracer
 	colony::Entity Target = colony::kNoEntity;
 	int32 Part = -1;
 	float Amount = 0.0f;
+	/** A beam weapon's shot (defs `visual.beam`, the charge lance): drawn as one line from the muzzle to the head, this
+	 *  wide (cm), and left glowing a moment after it lands (seconds left, counted once it has landed). */
+	bool bBeam = false;
+	float BeamWidthCm = 6.0f;
+	float BeamLinger = -1.0f;
 };
 
 /** A hit on a pawn as the sim reported it, and how far the hit point was from the pawn's hitboxes. */
@@ -113,8 +119,11 @@ public:
 
 	/** Fires at the crosshair: sends ShootCommand{player} if the gun is ready. False (and nothing sent) if
 	 *  not in direct mode, no gun, the game is paused, an order went out this step, or the gun isn't ready. */
-	bool Fire();
+	bool Fire(float ChargeSeconds = 0.0f);
 	bool Reload();
+	/** A charged gun's trigger held this long (real seconds; -1 when not charging), for the charge meter. */
+	float GetChargeHeld() const { return ChargeHeld; }
+	int32 GetElectricBursts() const { return ElectricBursts; }
 	/** Patches your worst bleeding zone (H; body-health.md part B). False if nothing bleeds, you are down or patching already. */
 	bool Patch();
 	/** Crouch or stand up. */
@@ -326,6 +335,8 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UInstancedStaticMeshComponent> TracerInstances;
+	TObjectPtr<UInstancedStaticMeshComponent> BeamInstances;
+	TObjectPtr<UInstancedStaticMeshComponent> BeamCoreInstances;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ParticleInstances;
@@ -369,6 +380,11 @@ private:
 	bool bDecalMaterialMissing = false;
 	int32 NextLight = 0;
 	int64 LastFireStep = -1;
+	/** The zeushammer's electric bursts drawn (for the smokes). */
+	int32 ElectricBursts = 0;
+	void SpawnWeaponHitFx(colony::Entity Attacker, colony::Entity Target, const FVector& At, const FVector& Direction);
+	/** A charged gun (the charge lance, defs `charge`): how long the trigger has been held (real seconds, -1 none). */
+	float ChargeHeld = -1.0f;
 	colony::DefId GrenadeChoice;
 	bool bAimingGrenade = false;
 	int32 GrenadeArcFrames = 0;

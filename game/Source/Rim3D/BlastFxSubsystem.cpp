@@ -710,8 +710,8 @@ void UBlastFxSubsystem::AddTrail(const FVector& At, const FVector& Back, const F
 		// The motor's flame: one bright short-lived blob right behind it each frame.
 		FSprite& Fire = Add(EKind::Fire);
 		Fire.Position = At + Back * 18.0f;
-		Fire.StartCm = Random.FRandRange(30.0f, 42.0f);
-		Fire.EndCm = 18.0f;
+		Fire.StartCm = Random.FRandRange(48.0f, 64.0f);
+		Fire.EndCm = 26.0f;
 		Fire.Life = FMath::Max(DeltaTime * 1.5f, 0.03f);
 		Fire.FadeIn = 0.0f;
 		Fire.FrameFrom = 0.0f;
@@ -719,6 +719,22 @@ void UBlastFxSubsystem::AddTrail(const FVector& At, const FVector& Back, const F
 		Fire.FireGain = FireGain * 2.5f;
 		Fire.Roll = Random.FRandRange(-180.0f, 180.0f);
 		Fire.Tint = BlastSoot;
+		// A strong thrust plume (sneed 2026-11-23): a longer tongue of flame streaming back behind the nozzle.
+		for (int32 Tongue = 1; Tongue <= 3; ++Tongue)
+		{
+			FSprite& Plume = Add(EKind::Fire);
+			Plume.Position = At + Back * (18.0f + 26.0f * Tongue) + Random.VRand() * 3.0f;
+			Plume.Velocity = Back * 300.0f;
+			Plume.StartCm = Random.FRandRange(40.0f, 52.0f) - 8.0f * Tongue;
+			Plume.EndCm = 12.0f;
+			Plume.Life = FMath::Max(DeltaTime * 1.5f, 0.04f);
+			Plume.FadeIn = 0.0f;
+			Plume.FrameFrom = 0.0f;
+			Plume.FrameTo = 6.0f;
+			Plume.FireGain = FireGain * (2.2f - 0.4f * Tongue);
+			Plume.Roll = Random.FRandRange(-180.0f, 180.0f);
+			Plume.Tint = BlastSoot;
+		}
 	}
 }
 
@@ -766,6 +782,57 @@ void UBlastFxSubsystem::AddDebrisTrail(const FVector& At, float SizeCm)
 	Dust.FrameFrom = 10.0f;
 	Dust.FrameTo = 63.0f;
 	Dust.Tint = BlastSoil;
+}
+
+void UBlastFxSubsystem::AddDirtImpact(const FVector& At, const FVector& Up, float Strength)
+{
+	if (!EnsureScene() || Sprites.Num() >= GBlastMaxSprites.GetValueOnGameThread() - 40)
+	{
+		return;
+	}
+	++DirtImpacts;
+	const float S = FMath::Clamp(Strength, 0.3f, 3.0f);
+	const FVector Normal = Up.GetSafeNormal().IsNearlyZero() ? FVector::UpVector : Up.GetSafeNormal();
+	// The jet: a few dense soil puffs thrown up fast in a narrow cone, slowed by the air and pulled back down.
+	const int32 Jets = FMath::RoundToInt32(3.0f + 2.0f * S);
+	for (int32 I = 0; I < Jets; ++I)
+	{
+		FSprite& Jet = Add(EKind::Smoke);
+		const FVector Dir = (Normal + Random.VRand() * 0.28f).GetSafeNormal();
+		Jet.Position = At + Normal * 4.0f;
+		Jet.Velocity = Dir * Random.FRandRange(260.0f, 460.0f) * FMath::Sqrt(S);
+		Jet.Drag = 3.5f;
+		Jet.Gravity = 420.0f;
+		Jet.Wind = 0.3f;
+		Jet.StartCm = 8.0f * S;
+		Jet.EndCm = Random.FRandRange(45.0f, 70.0f) * S;
+		Jet.Life = Random.FRandRange(0.55f, 0.9f);
+		Jet.FadeIn = 0.0f;
+		Jet.Opacity = 0.85f;
+		Jet.FrameFrom = 2.0f;
+		Jet.FrameTo = 40.0f;
+		Jet.Spin = Random.FRandRange(-60.0f, 60.0f);
+		Jet.Tint = BlastSoil;
+	}
+	// The haze it leaves: low, wide and slow, drifting off on the wind.
+	for (int32 I = 0; I < 2; ++I)
+	{
+		FSprite& Haze = Add(EKind::Smoke);
+		Haze.Position = At + Normal * 10.0f + Random.VRand() * 6.0f;
+		Haze.Velocity = Random.VRand() * 25.0f + Normal * 20.0f;
+		Haze.Drag = 1.5f;
+		Haze.Gravity = -6.0f;
+		Haze.Wind = 0.8f;
+		Haze.StartCm = 20.0f * S;
+		Haze.EndCm = Random.FRandRange(90.0f, 130.0f) * S;
+		Haze.Life = Random.FRandRange(1.4f, 2.2f);
+		Haze.FadeIn = 0.08f;
+		Haze.Opacity = 0.35f;
+		Haze.FrameFrom = 12.0f;
+		Haze.FrameTo = 63.0f;
+		Haze.Spin = Random.FRandRange(-15.0f, 15.0f);
+		Haze.Tint = BlastSoil;
+	}
 }
 
 int32 UBlastFxSubsystem::GetSmokeAlive() const

@@ -318,11 +318,14 @@ UAnimSequence* HoldDraw::StyleClip(const colony::DefDatabase& Defs, const colony
 	}
 	const colony::Def& Style = Defs.get(Hold.style);
 	std::string Rel = Style.text(Key);
-	if (Rel.empty() && Fallback != nullptr)
+	UAnimSequence* Clip = Rel.empty() ? nullptr : LoadClip(UTF8_TO_TCHAR(Rel.c_str()));
+	// The fallback when the key is empty, or names a clip not imported yet (a new download still to come in).
+	if (!Clip && Fallback != nullptr)
 	{
 		Rel = Style.text(Fallback);
+		Clip = Rel.empty() ? nullptr : LoadClip(UTF8_TO_TCHAR(Rel.c_str()));
 	}
-	return Rel.empty() ? nullptr : LoadClip(UTF8_TO_TCHAR(Rel.c_str()));
+	return Clip;
 }
 
 // ---- Weapon first, then the hands -------------------------------------------------------------------------------------

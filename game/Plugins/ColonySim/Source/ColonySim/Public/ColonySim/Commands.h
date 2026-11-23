@@ -203,6 +203,9 @@ struct ShootCommand {
     float aimDx = 0.0f;
     float aimDy = 0.0f;
     float aimUp = 0.0f;
+    // A charged gun (its def's `charge` block, the charge lance): the seconds the player held the trigger before this
+    // shot; 0 for none. More damage, up to the block's maxDamageFactor at maxSeconds.
+    float charge = 0.0f;
 };
 
 // Stands, crouches or lies down: changes the pawn's hitboxes, muzzle height and what hides it

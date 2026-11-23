@@ -152,7 +152,9 @@ public:
 
 	/** The upper body plays Clip (looping) over the locomotion, cross-fading from the clip before over BlendSeconds; null
 	 *  for none. Weight is how much it shows (0 to 1), eased towards at WeightRate per second. */
-	void SetUpperStance(UAnimSequence* Clip, float Weight, float BlendSeconds = 0.2f, float WeightRate = 5.0f);
+	/** HoldAt >= 0: the clip plays once up to that moment (s) and holds there (a block raised and held, sneed 2026-11-23:
+	 *  "it loops, it's supposed to be a natural hold"); below 0 it loops. */
+	void SetUpperStance(UAnimSequence* Clip, float Weight, float BlendSeconds = 0.2f, float WeightRate = 5.0f, float HoldAt = -1.0f);
 	/** Bends the body forward at the waist by this many degrees (a load on the back), eased in and out. */
 	void SetSpineBend(float Degrees) { SpineBendTarget = Degrees; }
 	UAnimSequence* GetUpperStance() const { return UpperClip; }
@@ -197,6 +199,8 @@ private:
 	TObjectPtr<UAnimSequence> UpperOldClip;
 	float UpperTime = 0.0f;
 	float UpperOldTime = 0.0f;
+	float UpperHoldAt = -1.0f;     // the clip holds at this moment (s); below 0 it loops
+	float UpperOldHoldAt = -1.0f;
 	float UpperBlend = 1.0f;       // the new clip's share against the old one
 	float UpperBlendRate = 5.0f;
 	float UpperWeight = 0.0f;      // how much the layer shows now

@@ -13,12 +13,17 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SRC = os.path.join(ROOT, "assets", "raw", "mixamo", "extra")
+# Clips downloaded later (assets/raw/mixamo/new, raw Y Bot files) that the art step `mixamo-guard` put through
+# mixamo_prep.py into this folder: listed the same way (its Rig.fbx is the skeleton, not a clip).
+PREPARED = os.path.join(ROOT, "game", "Saved", "Mocap", "MixamoNew")
 DST = os.path.join(ROOT, "game", "Saved", "Mocap", "Mixamo")
 # Name (the FBX's file name) -> category, the folder under Animations/Mixamo/ the clip lands in.
 CATEGORIES = {
     "LeadJab": "Fighting", "CrossPunch": "Fighting", "HookPunch": "Fighting",
     "KnifeStabLow": "Fighting", "SpearStabLow": "Fighting", "OneHandHackLow": "Fighting",
     "TwoHandHackLow": "Fighting", "UnarmedStomp": "Fighting",
+    # sneed 2026-11-23: a boxer's guard for blocking with bare fists (Mixamo "Center Block"), and "Body Block" spare.
+    "BoxingGuard": "Fighting", "BodyBlock": "Fighting",
 }
 
 
@@ -27,7 +32,8 @@ def main():
     if not os.path.isfile(manifest_path):
         print(f"mixamo_extra: no {manifest_path} (run mixamo_prep.py first); nothing done")
         return 0
-    if not os.path.isdir(SRC):
+    sources = [d for d in (SRC, PREPARED) if os.path.isdir(d)]
+    if not sources:
         print(f"mixamo_extra: no {SRC}; nothing to add")
         return 0
     with open(manifest_path, encoding="utf-8") as f:
@@ -35,12 +41,13 @@ def main():
     clips = manifest.setdefault("clips", [])
     by_name = {c.get("name"): c for c in clips}
     added = []
-    for file in sorted(os.listdir(SRC)):
+    files = [(src, f) for src in sources for f in sorted(os.listdir(src))]
+    for src, file in files:
         name, ext = os.path.splitext(file)
-        if ext.lower() != ".fbx":
+        if ext.lower() != ".fbx" or name == "Rig":
             continue
         target = os.path.join(DST, file)
-        shutil.copy2(os.path.join(SRC, file), target)
+        shutil.copy2(os.path.join(src, file), target)
         entry = {"name": name, "category": CATEGORIES.get(name, "Other"), "fbx": target.replace("\\", "/")}
         if by_name.get(name) != entry:
             if name in by_name:

@@ -231,6 +231,7 @@ private:
 		bool bEverywhere = false;
 		float Gain = 1.0f;      // beds and weather fade with this
 		float Pitch = 1.0f;
+		bool bLivePitch = false;  // a loop whose pitch follows something each frame (the minigun's spin)
 		double EndsAt = 0.0;    // one-shots: real seconds
 		/** When it is heard (real seconds): later than asked by the distance over the speed of sound (343 m/s). */
 		double StartedAt = 0.0;

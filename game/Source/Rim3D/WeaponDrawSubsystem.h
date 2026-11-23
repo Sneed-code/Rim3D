@@ -92,6 +92,8 @@ public:
 	float GetShieldRaise(colony::Entity Pawn) const;
 	/** Weapons drawn in the hands of pawns now. */
 	int32 CountWeaponsInHands() const;
+	/** How fast a shown spinning gun part (the minigun's barrels) turns, 0 to 1 of its top speed (the motor loop's pitch). */
+	float GetSpinShare(colony::Entity Pawn) const;
 	/** Weapons drawn on one pawn, in the hands and on the body. */
 	int32 CountVisibleWeapons(colony::Entity Pawn) const;
 	/** "Q switch:  [rifle]  revolver  club": what the pawn carries, the one in the hands in brackets. */
@@ -162,6 +164,7 @@ private:
 		TArray<int32> PartDefs;
 		float SpinSpeed = 0.0f;
 		float SpinAngle = 0.0f;
+		float SpinShare = 0.0f;  // SpinSpeed over the part's top speed (0 to 1): the motor sound follows it
 	};
 
 	struct FPawnWeapons
@@ -203,6 +206,12 @@ private:
 		/** How far the finisher's weapon had to come back to stay in reach (cm), and the extra forward bend that answers it (degrees). */
 		float FinisherShort = 0.0f;
 		float FinisherReachBend = 0.0f;
+		/** Aimed anchors held steady (sneed 2026-11-23: "whenever i move aiming my character vibrates and wobbles"): the
+		 *  head and right shoulder in the actor's frame, smoothed so the step bob of the walk cycle doesn't shake the
+		 *  aimed gun (the hands follow the gun, so the arms stay steady; the legs and body animate as before). */
+		FVector SteadyHead = FVector::ZeroVector;
+		FVector SteadyShoulder = FVector::ZeroVector;
+		bool bSteadyValid = false;
 	};
 	int32 FloatFrames = 0;
 	int32 FloatFixes = 0;

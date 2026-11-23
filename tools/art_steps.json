@@ -213,6 +213,18 @@
       ]
     },
     {
+      "name": "mixamo-guard",
+      "what": "The bare-fist boxing guard block (Mixamo Center Block, sneed 2026-11-23) put onto the game's rig and imported",
+      "inputs": ["tools/makehuman/mixamo_prep.py", "tools/makehuman/mixamo_extra.py"],
+      "raw": ["assets/raw/mixamo/new"],
+      "needs": ["blender"],
+      "run": [
+        {"blender": ["-b", "-noaudio", "--python", "tools/makehuman/mixamo_prep.py", "--", "assets/raw/mixamo/new", "game/Saved/Mocap/MixamoNew"]},
+        {"python": ["tools/makehuman/mixamo_extra.py"]},
+        {"commandlet": "MakeHumanArt", "args": ["-Clips", "-Only=BoxingGuard,BodyBlock", "-nullrhi"]}
+      ]
+    },
+    {
       "name": "makehuman-clips",
       "what": "Animation clips",
       "inputs": ["assets/animations.json"],

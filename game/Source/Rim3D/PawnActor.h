@@ -444,6 +444,11 @@ private:
 	/** An invisible slab at the ground under a ragdoll (the ground is drawn from the sim and has no collision). */
 	UPROPERTY()
 	TObjectPtr<UStaticMeshComponent> RagdollFloor;
+	/** The ground plane under the ragdoll (its floor's top) and its normal: no part may sink below it (sneed 2026-11-23:
+	 *  a minigun pushed a corpse into the ground). */
+	FVector RagdollGround = FVector::ZeroVector;
+	FVector RagdollGroundNormal = FVector::UpVector;
+	int32 RagdollUnsinks = 0;
 
 	FSimPawnLooks Looks;
 	bool bHasLooks = false;

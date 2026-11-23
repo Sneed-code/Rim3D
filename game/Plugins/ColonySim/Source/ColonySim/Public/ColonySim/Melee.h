@@ -152,6 +152,11 @@ struct MeleeRules {
     float unarmedTimeFactor = 1.0f;   // a person's (humanlike) own tools: fists and head
     float unarmedPowerFactor = 1.0f;
     int unarmedMinWindup = 9;
+    // sneed 2026-11-23 (second batch): fists keep their own pace (unarmedTimeFactor alone, not times attackTimeFactor,
+    // so slowing weapons leaves them be), a quick jab (unarmedWindupShare of the swing winds up) and a short pause
+    // after each (unarmedGapSteps added to the recovery).
+    float unarmedWindupShare = -1.0f;  // below 0: windupShare
+    int unarmedGapSteps = 0;
     // sneed 2026-11-23: the player's swing from standing plays on the whole body, so the feet step into a thrust instead
     // of the chest leaning over planted legs; walking (faster than stepInMaxSpeed, m/s) it stays the arms' over walking
     // legs. With stepInFreesFeet, starting to walk during a standing swing hands it to the upper body there and then.
@@ -383,6 +388,8 @@ private:
         float power = 0.0f;
         int cooldown = 60;  // steps for the whole swing
         int minWindup = 9;  // MeleeRules minWindup (or unarmedMinWindup), times attackTimeFactor
+        float windupShare = 0.3f;  // MeleeRules windupShare (or unarmedWindupShare)
+        int gapSteps = 0;          // added to the recovery (MeleeRules unarmedGapSteps for fists)
         float penetration = 0.0f;
         float weight = 1.0f;
     };

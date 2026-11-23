@@ -103,7 +103,7 @@ are kept by the section of the system they belong to, as a list of (thing id, pa
 | Section | Version | Holds |
 | --- | --- | --- |
 | `sim` | 1 | sim version, data files' hash, settings, clock, random stream, the map's hash, the hauling test |
-| `commands` | 3 | the names of the command types used, then queued commands, the command log and the checkpoints |
+| `commands` | 7 | the names of the command types used, then queued commands, the command log and the checkpoints (7: `ShootCommand.charge`, the charge lance's held seconds) |
 | `things` | 1 | free ids, then every thing: id, def, position, footprint, stack, hit points |
 | `movement` | 2 | `mover` |
 | `jobs` | 1 | `worker` (the job, its bill picks and ingredients, avoid memory), `work` (Work tab), `carrying` |

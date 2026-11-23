@@ -733,7 +733,8 @@ void UGunRangeSubsystem::UpdateInput()
 	{
 		return;
 	}
-	static const FKey Keys[] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine, EKeys::Zero, EKeys::Hyphen, EKeys::Equals};
+	// sneed 2026-11-23: + (either one) steps to the next weapon on the rack and - back, so 1-0 pick the first ten.
+	static const FKey Keys[] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine, EKeys::Zero};
 	for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(Keys)) && i < Rack.Num(); ++i)
 	{
 		if (PC->WasInputKeyJustPressed(Keys[i]))
@@ -746,6 +747,12 @@ void UGunRangeSubsystem::UpdateInput()
 	{
 		const int32 Step = PC->WasInputKeyJustPressed(EKeys::MouseScrollUp) ? -1 : 1;
 		SelectGun(((HeldRack < 0 ? (Current < 0 ? 0 : Current) : HeldRack) + Step + Count) % Count);
+	}
+	const bool bNext = PC->WasInputKeyJustPressed(EKeys::Add) || PC->WasInputKeyJustPressed(EKeys::Equals);
+	const bool bPrev = PC->WasInputKeyJustPressed(EKeys::Subtract) || PC->WasInputKeyJustPressed(EKeys::Hyphen);
+	if (Count > 0 && (bNext || bPrev))
+	{
+		SelectGun(((HeldRack < 0 ? (Current < 0 ? -1 : Current) : HeldRack) + (bNext ? 1 : -1) + Count) % Count);
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::F6))
 	{
@@ -1571,6 +1578,9 @@ bool UGunRangeSubsystem::GetViewGunFrame(FTransform& OutFrame, FVector& OutMuzzl
 	return true;
 }
 
+static TAutoConsoleVariable<int32> CVarGunRangePanel(TEXT("GunRange.Panel"), 0,
+	TEXT("1 shows the COMBAT RANGE key list on the left (off by default, sneed 2026-11-23)."));
+
 void UGunRangeSubsystem::DrawPanel()
 {
 	const ImGui::FScopedContext ScopedContext;
@@ -1588,6 +1598,11 @@ void UGunRangeSubsystem::DrawPanel()
 	if (bScoped)
 	{
 		DrawScope();
+	}
+	// sneed 2026-11-23: the COMBAT RANGE box on the left is off ("i dont need to see it anymore"); GunRange.Panel 1 shows it.
+	if (CVarGunRangePanel.GetValueOnGameThread() == 0)
+	{
+		return;
 	}
 	const ImGuiWindowFlags Flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs;

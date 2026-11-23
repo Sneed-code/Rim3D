@@ -2735,6 +2735,8 @@ void ASimPawnActor::SpawnRagdollFloor()
 	RagdollFloor->SetWorldScale3D(FVector(PawnRagdollFloorSize, PawnRagdollFloorSize, PawnRagdollFloorThickness));
 	RagdollFloor->RegisterComponent();
 	RagdollFloor->SetWorldLocationAndRotation(Ground - Normal * (PawnRagdollFloorThickness * 50.0f), FRotationMatrix::MakeFromZ(Normal).ToQuat());
+	RagdollGround = Ground;
+	RagdollGroundNormal = Normal;
 }
 
 void ASimPawnActor::StartRagdoll(const FVector& Impulse)
@@ -2892,6 +2894,32 @@ void ASimPawnActor::UpdateRagdollRest(float DeltaTime)
 			Fastest = FMath::Max(Fastest, static_cast<float>(Instance->GetUnrealWorldVelocity().Size()));
 		}
 	}
+	// Never under the ground: a part pushed through the floor (a burst of hits from above drove it through the thin box
+	// faster than the physics could stop it) is put back on top, its sinking stopped.
+	if (RagdollFloor)
+	{
+		for (FBodyInstance* Instance : Body->Bodies)
+		{
+			if (!Instance || !Instance->IsInstanceSimulatingPhysics())
+			{
+				continue;
+			}
+			FTransform T = Instance->GetUnrealWorldTransform();
+			const double Below = FVector::DotProduct(T.GetLocation() - RagdollGround, RagdollGroundNormal);
+			if (Below < -1.0)
+			{
+				T.AddToTranslation(RagdollGroundNormal * (2.0 - Below));
+				Instance->SetBodyTransform(T, ETeleportType::TeleportPhysics);
+				FVector V = Instance->GetUnrealWorldVelocity();
+				const double Into = FVector::DotProduct(V, RagdollGroundNormal);
+				if (Into < 0.0)
+				{
+					Instance->SetLinearVelocity(V - RagdollGroundNormal * Into, false);
+				}
+				++RagdollUnsinks;
+			}
+		}
+	}
 	RagdollStillSeconds = Fastest < 6.0f ? RagdollStillSeconds + DeltaTime : 0.0f;
 	// A body that never quite stops (limbs jittering on each other or the floor at a lower frame rate, the gore smoke
 	// at 70 fps) is put to sleep anyway once it has only crept for half a second, 5 s after the fall.
@@ -2970,11 +2998,18 @@ void ASimPawnActor::PushRagdollAt(const FVector& At, const FVector& Impulse)
 	// body a little (sneed 2026-11-22: "corpses need to wriggle, have ragdoll physics when hit, not just lie still").
 	const FName Bone = Body->FindClosestBone(At, nullptr, 0.0f, true);
 	Body->WakeAllRigidBodies();
+	// The ground takes what drives a lying body down into it: only the part along or away from the ground is kept.
+	FVector Push = Impulse;
+	const double Into = FVector::DotProduct(Push, RagdollGroundNormal);
+	if (Into < 0.0)
+	{
+		Push -= RagdollGroundNormal * Into;
+	}
 	if (!Bone.IsNone())
 	{
-		Body->AddImpulse(Impulse, Bone, true);
+		Body->AddImpulse(Push, Bone, true);
 	}
-	Body->AddImpulse(Impulse * 0.15f, NAME_None, true);
+	Body->AddImpulse(Push * 0.15f, NAME_None, true);
 	RagdollSeconds = 0.0f;
 	RagdollStillSeconds = 0.0f;
 	RagdollCreepSeconds = 0.0f;

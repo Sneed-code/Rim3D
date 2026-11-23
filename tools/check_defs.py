@@ -151,6 +151,7 @@ EVENT_CUES = {
     "Voice_LovinCouple", "Voice_LovinFem",  # Unreal, from the Lovin event (soundLovinCue)
     # MeleeHit by material (soundMeleeCue): weapon wood or steel on flesh, wood, steel or stone
     "Hit_Wood_Flesh", "Hit_Wood_Wood", "Hit_Wood_Steel", "Hit_Wood_Stone",
+    "Hit_Sharp_Steel", "Hit_Sharp_Stone", "Hit_Sharp_Wood", "Hit_Sharp_Dirt", "Hit_Blunt_Steel", "Hit_Blunt_Stone", "Hit_Blunt_Wood", "Hit_Blunt_Dirt",
     "Hit_Steel_Flesh", "Hit_Steel_Wood", "Hit_Steel_Steel", "Hit_Steel_Stone",
     "Ui_KillConfirm",  # Unreal, the kill feed on the player's own kill (KillFeedSubsystem.cpp)
     "Player_Died",  # Unreal, the YOU DIED screen (ProtagonistSubsystem.cpp)

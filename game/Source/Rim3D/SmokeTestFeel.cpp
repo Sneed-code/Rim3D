@@ -58,6 +58,14 @@ namespace
 		bool bThrown = false;
 		FVector RollFrom = FVector::ZeroVector;
 		double RollMoved = 0.0;
+		// The drawn hips through the roll and after it (sneed 2026-11-23: "it still snaps back"): the biggest step back
+		// against the roll in one frame, and the biggest jump either way.
+		FVector RollForward = FVector::ForwardVector;
+		FVector LastPelvis = FVector::ZeroVector;
+		bool bHavePelvis = false;
+		double MaxPelvisBack = 0.0;
+		double MaxPelvisJump = 0.0;
+		float PelvisBackAt = -1.0f;
 		double MaxCameraTrail = 0.0;
 		double CameraTrailAtEnd = 0.0;
 
@@ -400,6 +408,7 @@ void USmokeTestSubsystem::BuildFeelPhases()
 			Bridge()->GetBlendedLocation(State->Me, Here);
 			State->RollFrom = Here;
 			State->bRollSent = Fight()->Roll(FVector2D(0.0, 1.0));
+			State->RollForward = FRotator(0.0, Prot() && Prot()->GetBody() ? Prot()->GetBody()->GetYaw() : 0.0f, 0.0).Vector();
 		}
 		if (State->bRollSent && Me->rollPhase != 0 && !State->bRollRefused)
 		{
@@ -411,12 +420,37 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		{
 			State->RollMoved = FMath::Max(State->RollMoved, FVector::Dist2D(Now, State->RollFrom));
 		}
+		const ASimPawnActor* Drawn = Pawns() ? Pawns()->FindPawn(State->Me) : nullptr;
+		const USkeletalMeshComponent* Mesh = Drawn ? (Drawn->GetMakeHumanMesh() && Drawn->GetMakeHumanMesh()->IsVisible() ? Drawn->GetMakeHumanMesh() : Drawn->GetBody()) : nullptr;
+		if (State->bRollSent && Mesh && Mesh->DoesSocketExist(TEXT("pelvis")))
+		{
+			const FVector Pelvis = Mesh->GetSocketLocation(TEXT("pelvis"));
+			if (State->bHavePelvis)
+			{
+				const FVector Step = Pelvis - State->LastPelvis;
+				State->MaxPelvisJump = FMath::Max(State->MaxPelvisJump, Step.Size2D());
+				const double Back = -FVector::DotProduct(FVector(Step.X, Step.Y, 0.0), State->RollForward);
+				if (Back > State->MaxPelvisBack)
+				{
+					State->MaxPelvisBack = Back;
+					State->PelvisBackAt = PhaseTime;
+				}
+			}
+			State->LastPelvis = Pelvis;
+			State->bHavePelvis = true;
+		}
 	};
 	Roll.Verify = [=, this]()
 	{
 		const ASimPawnActor* Actor = Pawns()->FindPawn(State->Me);
 		Notes.Add(FString::Printf(TEXT("feel_roll: moved %.0f cm, the body turned over %.0f degrees, the camera ducked %.1f degrees, trailed up to %.0f cm and %.0f cm at the end, blur up to %.2f, rolls drawn %d"), State->RollMoved, State->MaxRollAngle,
 			-State->MinFeelPitch, State->MaxCameraTrail, State->CameraTrailAtEnd, State->MaxBlur, Actor ? Actor->GetRollsSeen() : 0));
+		Notes.Add(FString::Printf(TEXT("feel_roll: drawn hips stepped back up to %.1f cm in one frame (at %.2f s), jumped up to %.1f cm"),
+			State->MaxPelvisBack, State->PelvisBackAt, State->MaxPelvisJump));
+		if (State->MaxPelvisBack > 6.0)
+		{
+			Fail(FString::Printf(TEXT("feel_roll: the drawn hips snapped back %.1f cm in one frame at %.2f s"), State->MaxPelvisBack, State->PelvisBackAt));
+		}
 		if (!State->bRollSent)
 		{
 			Fail(TEXT("feel_roll: the roll command was not sent"));

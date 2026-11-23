@@ -61,6 +61,11 @@ public:
 	/** A puff of dust behind a piece of debris in flight (UShooterFeelSubsystem calls it). */
 	void AddDebrisTrail(const FVector& At, float SizeCm);
 
+	/** A bullet striking soil (sneed 2026-11-23: "realistic dirt and particle effects, not poofs"): a fast jet of soil
+	 *  thrown up and falling back, with a low brown haze left hanging. `Strength` 1 for a rifle round. */
+	void AddDirtImpact(const FVector& At, const FVector& Up, float Strength);
+	int32 GetDirtImpacts() const { return DirtImpacts; }
+
 	// For the smoke test and the screen.
 	int32 GetBlastsDrawn() const { return BlastsDrawn; }
 	int32 GetRagdollsThrown() const { return RagdollsThrown; }
@@ -146,6 +151,7 @@ private:
 	FRandomStream Random = FRandomStream(0xB1A57);
 	int32 LastGeneration = -1;
 	bool bTriedLoad = false;
+	int32 DirtImpacts = 0;
 	bool bReady = false;
 	int32 BlastsDrawn = 0;
 	int32 RagdollsThrown = 0;
