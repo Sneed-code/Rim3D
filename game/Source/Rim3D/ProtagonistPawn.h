@@ -170,6 +170,8 @@ private:
 	bool bFirstPerson = false;  // always false now (third person only); the old first-person branches stay unused
 	bool bScopeView = false;
 	bool bScopeAllowed = true;
+	/** The aim camera's shoulder (right) and lift offsets now, easing to the held gun's (cm; X < 0 before the first frame). */
+	FVector2D AimCameraNow = FVector2D(-1.0, -1.0);
 	bool bAimHeld = false;
 	bool bFocusLocked = false;
 	void FollowFocus(float DeltaTime);

@@ -266,6 +266,11 @@ bool UGunRangeSubsystem::LoadConfig()
 		{
 			G.ScopeFov = FMath::Clamp(GunRangeNum(*Scope, TEXT("fov"), 20.0f), 2.0f, 60.0f);
 		}
+		const TArray<TSharedPtr<FJsonValue>>* AimCam = nullptr;
+		if (J->TryGetArrayField(TEXT("aimCamera"), AimCam) && AimCam->Num() == 2)
+		{
+			G.AimCamera = FVector2D(FMath::Clamp((*AimCam)[0]->AsNumber(), 0.0, 150.0), FMath::Clamp((*AimCam)[1]->AsNumber(), 0.0, 80.0));
+		}
 		Read.Add(MoveTemp(G));
 	}
 	Guns = MoveTemp(Read);
@@ -765,6 +770,7 @@ void UGunRangeSubsystem::Tick(float DeltaTime)
 			HideAll();
 		}
 		ScopeFovNow = 0.0f;
+		AimCameraNow = FVector2D(-1.0, -1.0);
 		bScoped = false;
 		return;
 	}
@@ -802,6 +808,7 @@ void UGunRangeSubsystem::Tick(float DeltaTime)
 	// shows the scope's view and nothing else; AProtagonistPawn reads the field of view and puts the camera at the eyes.
 	const FGunRangeGun* HeldGun = Def.IsEmpty() ? nullptr : FindGunByDef(Def);
 	ScopeFovNow = Body && Player && Me && !Me->downed && !Me->dead && !Me->reloading && HeldGun ? HeldGun->ScopeFov : 0.0f;
+	AimCameraNow = HeldGun ? HeldGun->AimCamera : FVector2D(-1.0, -1.0);
 	if (!Body || !Player || !Me || Me->downed || Me->dead || !Body->IsFirstPerson() || !EnsureRig(*Player))
 	{
 		HideAll();
