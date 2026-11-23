@@ -472,8 +472,12 @@ private:
 	int32 GibHideFrames = 0;
 	int32 GibsThrown = 0;
 	void HideGibbedBody();
-	/** Meshes hidden whole because the head is off (a MetaHuman face); they still go into the head's piece. */
+	/** Meshes hidden whole because the head is off (a MetaHuman face); they still go into the head's piece. Only meshes
+	 *  that were really drawn: the hidden MetaHuman under a MakeHuman body never goes in (its face, posed long ago where
+	 *  the body once stood, was stretched from the stump into a long tube). */
 	TSet<TWeakObjectPtr<class USkinnedMeshComponent>> SeveredHidden;
+	/** What hung on a cut bone (a hat, hair cards, horns) and was drawn until the cut hid it: it still goes into the piece. */
+	TSet<TWeakObjectPtr<class USceneComponent>> SeveredHiddenParts;
 	int32 RagdollsStarted = 0;
 	float ReactionAge = kHitReactionSeconds;
 	int32 HitClipsPlayed = 0;

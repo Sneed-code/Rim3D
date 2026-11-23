@@ -1,6 +1,8 @@
 #include "ProtagonistSubsystem.h"
 #include "KeyBindings.h"
 
+#include "Camera/CameraComponent.h"
+#include "Engine/Scene.h"
 #include "Engine/World.h"
 #include "Framework/Application/NavigationConfig.h"
 #include "Framework/Application/SlateApplication.h"
@@ -8,12 +10,15 @@
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CommandLine.h"
+#include "HAL/PlatformTime.h"
 #include "Misc/Parse.h"
 
 #include <imgui.h>
 
 #include "ColonyHudStyle.h"
 
+#include "ColonyHudSubsystem.h"
+#include "DebugScenes.h"
 #include "OverseerPawn.h"
 #include "OverseerSubsystem.h"
 #include "PawnActor.h"
@@ -22,6 +27,7 @@
 #include "SimPicking.h"
 #include "SimSubsystem.h"
 #include "SkySubsystem.h"
+#include "SoundSubsystem.h"
 
 #include "ColonySim/Clock.h"
 #include "ColonySim/Colonist.h"
@@ -54,6 +60,30 @@ namespace
 				Protagonist->ExitDirectMode();
 			}
 		}));
+
+	// The death screen (docs/design/protagonist.md "Death"): all in real seconds, since the world runs slowed.
+	constexpr float kProtagonistDeathTimeDilation = 0.2f;  // 80% slower: the world and, because the sim ticks on world time, the sim
+	constexpr double kProtagonistDeathGreySeconds = 1.5;   // colour drains to grey over this
+	constexpr double kProtagonistDeathTextSeconds = 1.0;   // the words and the band fade in over this
+	constexpr double kProtagonistDeathPromptAt = 2.0;      // the "Space" prompt appears this long after the death
+	const TCHAR* const kProtagonistDeathCue = TEXT("Player_Died");
+
+	/** Colour drained from the view through the camera's own post process (0 full colour, 1 black and white). */
+	void ProtagonistSetGrey(UCameraComponent* Camera, float Grey)
+	{
+		if (!Camera)
+		{
+			return;
+		}
+		FPostProcessSettings& PostProcess = Camera->PostProcessSettings;
+		PostProcess.bOverride_ColorSaturation = Grey > 0.0f;
+		const double Saturation = 1.0 - static_cast<double>(FMath::Clamp(Grey, 0.0f, 1.0f));
+		PostProcess.ColorSaturation = FVector4(Saturation, Saturation, Saturation, 1.0);
+		if (Grey > 0.0f)
+		{
+			Camera->PostProcessBlendWeight = 1.0f;
+		}
+	}
 
 	void ProtagonistText(const FString& Text)
 	{
@@ -125,6 +155,10 @@ void UProtagonistSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UProtagonistSubsystem::Deinitialize()
 {
+	if (bDead)
+	{
+		EndDeathScreen();  // the slowed world must not outlive the screen
+	}
 	if (USimSubsystem* Bridge = BridgeSource.Get())
 	{
 		Bridge->OnBeforeStep.Remove(BeforeStepHandle);
@@ -410,7 +444,7 @@ bool UProtagonistSubsystem::TakeOverLookedAt()
 void UProtagonistSubsystem::OnBeforeStep()
 {
 	USimSubsystem* Bridge = BridgeSource.Get();
-	if (!bDirect || !IsValid(Body.Get()) || !Bridge || !Bridge->GetSim())
+	if (!bDirect || bDead || !IsValid(Body.Get()) || !Bridge || !Bridge->GetSim())
 	{
 		return;
 	}
@@ -439,12 +473,24 @@ void UProtagonistSubsystem::OnSimEvent(const colony::Event& Event)
 {
 	// Downed or dead: the sim lets the colonist go in the same step, so the player goes back to the
 	// overseer view (next frame, not in the middle of the sim's step).
-	if (bDirect && Event.thing == Controlled && (Event.type == colony::EventType::PawnDowned || Event.type == colony::EventType::PawnDied))
+	// The protagonist dying is the death screen instead (docs/design/protagonist.md "Death"): the view stays on the body.
+	if (bDirect && !bDead && Event.thing == Controlled && Event.type == colony::EventType::PawnDied)
+	{
+		const USimSubsystem* Source = BridgeSource.Get();
+		const colony::Colonist* Who = Source && Source->GetSim() ? Source->GetSim()->colonistOf(Event.thing) : nullptr;
+		if (!Who || Who->protagonist)
+		{
+			bDeathRequested = true;
+			return;
+		}
+	}
+	if (bDirect && !bDead && Event.thing == Controlled && (Event.type == colony::EventType::PawnDowned || Event.type == colony::EventType::PawnDied))
 	{
 		bExitRequested = true;
 	}
-	// The controlled colonist stops existing (a later task's death): back to the overseer view.
-	if (bDirect && Event.type == colony::EventType::ThingDestroyed && Event.thing == Controlled)
+	// The controlled colonist stops existing (a later task's death): back to the overseer view. (Not on the death screen:
+	// the camera stays where it was.)
+	if (bDirect && !bDead && Event.type == colony::EventType::ThingDestroyed && Event.thing == Controlled)
 	{
 		UE_LOG(LogProtagonist, Log, TEXT("The controlled colonist is gone"));
 		Controlled = colony::kNoEntity;
@@ -520,6 +566,11 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 		EnterDirectMode(Pawn);
 	}
 
+	// A game loaded from the main menu (or a new one) ends the death screen.
+	if (bDead && Bridge->GetSim() != LastSim)
+	{
+		EndDeathScreen();
+	}
 	// A loaded game replaces the sim: keep the mode the save was made in.
 	if (Bridge->GetSim() != LastSim)
 	{
@@ -541,6 +592,23 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 			}
 		}
 	}
+	if (bDeathRequested)
+	{
+		bDeathRequested = false;
+		if (bDirect && !bDead && IsValid(Body.Get()))
+		{
+			BeginDeathScreen(*Bridge);
+		}
+		else if (bDirect && !bDead)
+		{
+			ExitDirectMode();
+		}
+	}
+	if (bDead)
+	{
+		TickDeathScreen();
+		return;
+	}
 	if (!bDirect || !IsValid(Body.Get()))
 	{
 		return;
@@ -556,8 +624,16 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 	if (Bridge->GetSim()->controlledPawn() == Controlled)
 	{
 		Body->FollowSim(FVector2D(View->x, View->y), View->level, View->climb > 0.0f);
-		if (!Body->IsClimbing() && (((View->motionClip.valid() || View->motionPush) && !View->motionFreeFeet) || View->meleeFinisher != 0) && View->rollPhase == 0)
+		// The player's own swing from standing carries the whole body (MeleeRules playerStepIn); a walking key during it lets
+		// the local body walk on, and the sim hands the swing to the upper body when that move comes in (freeFeetToWalk).
+		const bool bStepInSwing = View->motionClip.valid() && !View->motionFreeFeet && View->meleeFinisher == 0 && !View->meleeLow &&
+			(View->meleePhase == colony::MeleePhase::Windup || View->meleePhase == colony::MeleePhase::Recovery);
+		const bool bWalksOutOfSwing = bStepInSwing && Body->GetTargetSpeed() > 0.5f;
+		if (!Body->IsClimbing() && !bWalksOutOfSwing && (((View->motionClip.valid() || View->motionPush) && !View->motionFreeFeet) || View->meleeFinisher != 0 || View->rollPhase != 0))
 		{
+			// A roll too (sneed 2026-11-23: "at the last bit of a roll it resets my character"): the local body used to stay
+			// behind during the roll and was only pulled along a metre at a time, so where the roll ended the drawn body
+			// jumped back to it and the hair reset with the jump. Now it is carried along with the sim's roll.
 			// A stagger or a knockdown carries the colonist: the keys wait and the body is where the sim's clip takes it,
 			// so nothing snaps back a metre when it ends. (The player's own swings leave the feet to the keys.)
 			Body->SetSimPosition(FVector2D(View->x, View->y));
@@ -596,6 +672,221 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 	SleepFade = FMath::Clamp(SleepFade + (bAsleep ? DeltaTime : -DeltaTime) * 1.5f, 0.0f, 1.0f);
 	ApplyBodyVisibility();
 	DrawHud(*Bridge);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The death screen (sneed, 2026-11-23, Elden Ring style; docs/design/protagonist.md "Death"). The camera stays on the
+// body, the world runs at a fifth of its speed (global time dilation; the sim ticks on world time, so it slows too),
+// the picture drains to black and white, YOU DIED fades in over a dark band, a piano sting plays once, and after 2 real
+// seconds Space loads the newest save. Every timer here is real time (FPlatformTime), because the world's is slowed.
+
+float UProtagonistSubsystem::GetDeathSeconds() const
+{
+	return bDead ? static_cast<float>(FPlatformTime::Seconds() - DeathStartedAt) : 0.0f;
+}
+
+void UProtagonistSubsystem::BeginDeathScreen(USimSubsystem& Bridge)
+{
+	UWorld* World = GetWorld();
+	if (bDead || !World)
+	{
+		return;
+	}
+	bDead = true;
+	DeathStartedAt = FPlatformTime::Seconds();
+	DeathSaveSlot = USimSubsystem::FindNewestSaveSlot();
+	Bridge.SetSavingBlocked(true);  // no autosave or F5 of the dead state: "load last save" must find a living one
+	if (IsValid(Body.Get()))
+	{
+		Body->SetFrozen(true);
+	}
+	UGameplayStatics::SetGlobalTimeDilation(World, kProtagonistDeathTimeDilation);
+	if (USoundSubsystem* Sound = World->GetSubsystem<USoundSubsystem>())
+	{
+		Sound->PlayCue(kProtagonistDeathCue, FVector::ZeroVector, true);  // heard everywhere, not spatial
+	}
+	UE_LOG(LogProtagonist, Log, TEXT("The protagonist died: death screen (newest save: %s)"), DeathSaveSlot.IsEmpty() ? TEXT("none") : *DeathSaveSlot);
+}
+
+void UProtagonistSubsystem::EndDeathScreen()
+{
+	if (!bDead)
+	{
+		return;
+	}
+	bDead = false;
+	bDeathRequested = false;
+	if (UWorld* World = GetWorld())
+	{
+		UGameplayStatics::SetGlobalTimeDilation(World, 1.0f);
+	}
+	if (IsValid(Body.Get()))
+	{
+		Body->SetFrozen(false);
+		ProtagonistSetGrey(Body->GetCamera(), 0.0f);
+	}
+	if (USimSubsystem* Bridge = BridgeSource.Get())
+	{
+		Bridge->SetSavingBlocked(false);
+	}
+}
+
+bool UProtagonistSubsystem::LeaveDeathScreen()
+{
+	USimSubsystem* Bridge = BridgeSource.Get();
+	UWorld* World = GetWorld();
+	if (!bDead || !Bridge || !World)
+	{
+		return false;
+	}
+	UColonyHudSubsystem* Hud = World->GetSubsystem<UColonyHudSubsystem>();
+	const FString Slot = USimSubsystem::FindNewestSaveSlot();
+	if (!Slot.IsEmpty())
+	{
+		if (!Bridge->LoadGame(Slot))
+		{
+			return false;  // the reason is on screen and in the log; the death screen stays
+		}
+		EndDeathScreen();
+		if (Hud)
+		{
+			Hud->SetMainMenuOpen(false);
+		}
+		UE_LOG(LogProtagonist, Log, TEXT("Death screen: loaded %s"), *Slot);
+		return true;
+	}
+	// No save at all: back to the title.
+	EndDeathScreen();
+	if (DebugScenes::IsDebugScene())
+	{
+		DebugScenes::ReturnToTitle(World);
+	}
+	else
+	{
+		ExitDirectMode();
+		if (Hud)
+		{
+			Hud->SetMainMenuOpen(true);
+		}
+	}
+	UE_LOG(LogProtagonist, Log, TEXT("Death screen: no save, back to the title"));
+	return true;
+}
+
+void UProtagonistSubsystem::TickDeathScreen()
+{
+	UWorld* World = GetWorld();
+	const double Seconds = FPlatformTime::Seconds() - DeathStartedAt;
+	const float Grey = FMath::SmoothStep(0.0f, 1.0f, static_cast<float>(FMath::Clamp(Seconds / kProtagonistDeathGreySeconds, 0.0, 1.0)));
+	if (IsValid(Body.Get()))
+	{
+		ProtagonistSetGrey(Body->GetCamera(), Grey);
+	}
+	UColonyHudSubsystem* Hud = World ? World->GetSubsystem<UColonyHudSubsystem>() : nullptr;
+	if (Hud && Hud->IsMainMenuOpen())
+	{
+		return;  // the main menu is drawn over the dead world; its own buttons decide
+	}
+	if (const APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0))
+	{
+		if (PC->WasInputKeyJustPressed(EKeys::Escape) && Hud)
+		{
+			Hud->SetMainMenuOpen(true);  // the menu (settings, load, quit) works while dead
+			return;
+		}
+		if (Seconds >= kProtagonistDeathPromptAt && PC->WasInputKeyJustPressed(EKeys::SpaceBar))
+		{
+			LeaveDeathScreen();
+			return;
+		}
+	}
+	DrawDeathScreen(static_cast<float>(Seconds), !DeathSaveSlot.IsEmpty());
+}
+
+void UProtagonistSubsystem::DrawDeathScreen(float Seconds, bool bHasSave)
+{
+	const ImGui::FScopedContext ScopedContext;
+	if (!ScopedContext)
+	{
+		return;
+	}
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	if (Viewport->Size.x <= 0.0f || Viewport->Size.y <= 0.0f)
+	{
+		return;
+	}
+	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
+	ColonyHud::ApplyFrameStyle(Scale);
+	// Font sizes go to PushFont before the frame's text scale (as the title screen does).
+	const float BaseSize = ImGui::GetFontSize();
+	const float ToFont = ImGui::GetStyle().FontSizeBase / FMath::Max(BaseSize, 1.0f);
+	const float Wide = Viewport->Size.x;
+	const float High = Viewport->Size.y;
+	const float Left = Viewport->Pos.x;
+	const float CentreX = Viewport->Pos.x + Wide * 0.5f;
+	const float CentreY = Viewport->Pos.y + High * 0.5f;
+
+	const float TextFade = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp(Seconds / static_cast<float>(kProtagonistDeathTextSeconds), 0.0f, 1.0f));
+	const float GreyFade = FMath::Clamp(Seconds / static_cast<float>(kProtagonistDeathGreySeconds), 0.0f, 1.0f);
+	ImDrawList* Back = ImGui::GetBackgroundDrawList();
+	ImDrawList* Front = ImGui::GetForegroundDrawList();
+	Back->AddRectFilled(Viewport->Pos, ImVec2(Left + Wide, Viewport->Pos.y + High), IM_COL32(0, 0, 0, static_cast<int>(60.0f * GreyFade)));
+
+	// The dark band: solid across the middle, fading out above and below.
+	const float TextSize = FMath::Clamp(High * 0.12f, 80.0f * Scale, 200.0f * Scale);
+	const float BandHalf = TextSize * 1.25f;
+	const int32 BandAlpha = static_cast<int32>(210.0f * TextFade);
+	Back->AddRectFilledMultiColor(ImVec2(Left, CentreY - BandHalf), ImVec2(Left + Wide, CentreY), IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0),
+		IM_COL32(0, 0, 0, BandAlpha), IM_COL32(0, 0, 0, BandAlpha));
+	Back->AddRectFilledMultiColor(ImVec2(Left, CentreY), ImVec2(Left + Wide, CentreY + BandHalf), IM_COL32(0, 0, 0, BandAlpha), IM_COL32(0, 0, 0, BandAlpha),
+		IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0));
+
+	// YOU DIED: big, widely spaced capitals in a dark red. The engine ships only the sans UI font, so the weight and a soft
+	// glow come from drawing each letter a few times.
+	const char* const Words = "YOU DIED";
+	const float Spacing = TextSize * 0.14f;
+	ImGui::PushFont(nullptr, TextSize * ToFont);
+	float TotalWidth = -Spacing;
+	for (const char* Letter = Words; *Letter; ++Letter)
+	{
+		const char Glyph[2] = {*Letter, 0};
+		TotalWidth += ImGui::CalcTextSize(Glyph).x + Spacing;
+	}
+	const float LineHeight = ImGui::CalcTextSize("Y").y;
+	float PenX = CentreX - TotalWidth * 0.5f;
+	const float PenY = CentreY - LineHeight * 0.5f;
+	const int32 RedAlpha = static_cast<int32>(255.0f * TextFade);
+	const float Glow = TextSize * 0.03f;
+	for (const char* Letter = Words; *Letter; ++Letter)
+	{
+		const char Glyph[2] = {*Letter, 0};
+		Front->AddText(ImVec2(PenX - Glow, PenY), IM_COL32(120, 10, 10, RedAlpha / 4), Glyph);
+		Front->AddText(ImVec2(PenX + Glow, PenY), IM_COL32(120, 10, 10, RedAlpha / 4), Glyph);
+		Front->AddText(ImVec2(PenX, PenY - Glow), IM_COL32(120, 10, 10, RedAlpha / 4), Glyph);
+		Front->AddText(ImVec2(PenX, PenY + Glow), IM_COL32(120, 10, 10, RedAlpha / 4), Glyph);
+		Front->AddText(ImVec2(PenX, PenY), IM_COL32(168, 22, 22, RedAlpha), Glyph);
+		Front->AddText(ImVec2(PenX + Scale, PenY), IM_COL32(168, 22, 22, RedAlpha), Glyph);  // a little weight
+		PenX += ImGui::CalcTextSize(Glyph).x + Spacing;
+	}
+	ImGui::PopFont();
+
+	// After 2 seconds, what Space does, small, under the band.
+	const float PromptFade = FMath::Clamp((Seconds - static_cast<float>(kProtagonistDeathPromptAt)) / 0.6f, 0.0f, 1.0f);
+	if (PromptFade > 0.0f)
+	{
+		const int32 PromptAlpha = static_cast<int32>(235.0f * PromptFade);
+		const char* const Prompt = bHasSave ? "Space: load last save" : "Space: back to the title";
+		ImGui::PushFont(nullptr, TextSize * 0.2f * ToFont);
+		const ImVec2 PromptSize = ImGui::CalcTextSize(Prompt);
+		const float PromptY = CentreY + BandHalf + 14.0f * Scale;
+		Front->AddText(ImVec2(CentreX - PromptSize.x * 0.5f, PromptY), IM_COL32(226, 220, 205, PromptAlpha), Prompt);
+		ImGui::PopFont();
+		ImGui::PushFont(nullptr, TextSize * 0.14f * ToFont);
+		const char* const MenuHint = "Esc: menu";
+		const ImVec2 HintSize = ImGui::CalcTextSize(MenuHint);
+		Front->AddText(ImVec2(CentreX - HintSize.x * 0.5f, PromptY + PromptSize.y + 6.0f * Scale), IM_COL32(150, 150, 142, PromptAlpha), MenuHint);
+		ImGui::PopFont();
+	}
 }
 
 void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)

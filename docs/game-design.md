@@ -36,7 +36,7 @@ You switch freely between two modes with one key. The colony keeps running eithe
 
 **Taking over another colonist.** You can possess any colonist and play as them. The one you left goes back to their AI.
 
-**Saving and death.** F5 quicksaves, F9 quickloads, and the game autosaves every in-game day. If your protagonist dies, it's game over and you reload your last save.
+**Saving and death.** F5 quicksaves, F9 quickloads, and the game autosaves every 15 real minutes of play (five files in turn). If your protagonist dies, the YOU DIED screen comes up and Space loads your last save.
 
 **Skipping the boring parts.** When you and every colonist who isn't on night shift are asleep, the night can be skipped to morning, Palworld style. Fast travel to places you've already visited on the map works when no threat is active. Nothing can happen during a skip, so no event is ever missed.
 

@@ -43,6 +43,9 @@ enum class HoldAnchor : uint8_t {
     Chest,  // between the shoulder joints, in the body's facing (x ahead, y right, z up)
     Head,   // the head bone, in the body's facing turned by the aim's pitch
     View,   // the first-person camera
+    // The right shoulder joint, in the body's facing turned by the aim (sneed 2026-11-23): a long gun's butt in the
+    // shoulder's pocket, pointed at the crosshair from there, so the stock never goes into the face or the head.
+    Shoulder,
 };
 
 // Which point of the weapon goes to the place.

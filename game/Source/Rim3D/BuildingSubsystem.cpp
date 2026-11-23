@@ -17,6 +17,7 @@
 #include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
+#include "ColonySim/Weather.h"
 #include "ColonySim/Windows.h"
 
 #include "WetnessShared.h"

@@ -1,6 +1,41 @@
 # Status
 
-Updated 2026-11-22.
+Updated 2026-11-23.
+
+Combat feel batch (sneed, 2026-11-23; sim, data and Unreal): **melee** every swing a quarter quicker (`MeleeRules`
+`attackTimeFactor` 0.75, finishers and their clips too), a person's fists four times as fast and a quarter as strong
+(`unarmedTimeFactor`, `unarmedPowerFactor`: RimWorld's damage per second kept); the player's swing from standing is the whole
+body's, so thrusts step in instead of leaning, and setting off mid-swing hands the clip to the upper body (`playerStepIn`,
+`stepInFreesFeet`: set both false to go back). **Roll end** no longer snaps body and hair back (the local body follows
+the sim through the roll). **Gun holds**: new `Shoulder` anchor; rifles (sniper, bolt action) cheek-welded on the
+shoulder, LMG, SMG, minigun and both shotguns stock low on the right shoulder. **4K skin** on every MakeHuman pawn (`Pawns.Skin4K`). **Strand hair** collides with the
+breasts (capsules fitted per body, `Pawns.StrandHairBreasts`). **Death screen** (slow motion, black and white, red YOU
+DIED, piano sting; Space loads the newest save after 2 s), F5 quicksave, autosave every 15 min (5 kept), protagonist
+downed by combat or blood loss dies (`docs/design/saves.md`, `protagonist.md`). **Title from orbit** (`TitleStage`, art
+step `title-art`, `Title.Stage 0` for the old glade). **Friendly fire**: a gunman's check treats a friend as a solid body
+(a line between the legs was "clear"), allows for the gun's real stray at that distance, and every shooter, drafted or
+not, holds a shot through a friend (`Fighters.cpp` `friendInLine`). Boxing guard waits on a Mixamo login. Needs the PC
+to compile and run the smokes.
+
+Dismemberment with any weapon, clean severed heads (sneed, 2026-11-23; sim and Unreal, `docs/design/body-health.md`):
+**shooting a corpse's leg or head with a pistol again and again now takes it off** (about 19 autopistol shots for a
+leg, 13 for a head). The piling rule was right, but the player's shot at a dead body dropped the crosshair's spot on
+the drawn ragdoll, so bullets flew at the sim's lying hitboxes (seldom where the ragdoll's limbs are) and hit the ground
+or the chest; only blasts, which need no aim, ever took pieces off (`Combat.cpp` `updateShooter`; tests in
+`BodyZoneTests.cpp`, pistol and knife). **A severed head no longer trails a long stretched tube**: the hidden
+MetaHuman under a MakeHuman body had its face counted as drawn and copied into the head's piece, posed where it was
+left, and its neck was drawn out to the stump. Now only meshes really drawn go into a piece, a mesh posed away from the
+body is left out, everything outside the piece folds into the piece's own joint, the copy shows the same hair style
+and cut-away skin as the body, strand hair stays off a headless body (`SeveredPieceActor.cpp`, `StrandHair.cpp`).
+Smoke `gore` has a new `headoff` phase (the head piece must fit in 45 cm, close-up picture). Needs the PC to compile
+and run smoke `gore`.
+
+Gun changes (sneed, 2026-11-23; sim and data, `docs/design/combat.md` "Gun changes"): minigun and LMG spray 80% narrower
+(`spreadFactor` 0.2); the chain shotgun fires a 9-pellet buckshot load with no spray (strong close, weak far); rockets fly
+straight at 7 m/s; the grenade launcher shell is slower (27 m/s) and arcs; frag grenades and launcher shells bounce and burst
+on a pawn at once, otherwise 3 s after the first bounce or 5 s after the shot (molotovs unchanged). **Unreal side, not done:**
+draw each pellet (they are separate projectiles, one ShotFired), a bounce sound/puff on each `GrenadeLanded` of a shell (its
+`thing` is the projectile, not a grenade entity), and check the slow rocket's trail.
 
 Solar panel and wind turbine models (sneed, 2026-11-22; tools, data and Unreal, `docs/design/building-draw.md`
 "Downloaded models with a moving part"): the two power buildings were still box shapes. Now they use free Fab models,

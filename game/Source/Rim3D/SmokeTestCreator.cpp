@@ -1043,7 +1043,7 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			State->CameraYaw += Yaw;
 		}
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorFocusZ="), State->FocusOffset.Z);
-		State->b4KSkin = FParse::Param(FCommandLine::Get(), TEXT("Creator4K"));
+		State->b4KSkin = !FParse::Param(FCommandLine::Get(), TEXT("Creator2K"));  // 4K by default (sneed 2026-11-23)
 		// -CreatorJewels=0,3,7 (indices into CreatorJewels) for pictures; -CreatorMetal=<0-5>.
 		FString JewelArg;
 		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorJewels="), JewelArg, false))

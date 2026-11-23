@@ -308,8 +308,11 @@ TEST_CASE("Weapon hold: every held weapon has a place on the body, and the hands
         if (hold.grip == HoldGrip::Gun) {
             const HoldPlace* aimed = holdPlaceFor(hold, false, true, false);
             HOLD_REQUIRE(aimed != nullptr);
-            CHECK(aimed->point == HoldPlacePoint::Sight);
-            CHECK(aimed->anchor == HoldAnchor::Head);
+            // Aimed: the sight before the eye, or the stock in the shoulder (rifles' cheek weld, the big guns low on
+            // the shoulder: sneed 2026-11-23).
+            const bool sighted = aimed->point == HoldPlacePoint::Sight && aimed->anchor == HoldAnchor::Head;
+            const bool shouldered = aimed->point == HoldPlacePoint::Stock && aimed->anchor == HoldAnchor::Shoulder;
+            CHECK((sighted || shouldered));
             CHECK(holdPlaceFor(hold, true, true, false)->point == HoldPlacePoint::Sight);
         } else {
             CHECK(holdPlaceFor(hold, false, false, true) != nullptr);
@@ -322,7 +325,8 @@ TEST_CASE("Weapon hold: every held weapon has a place on the body, and the hands
     // hand's palm lies under the fore-end.
     const WeaponHold rifle = holdTestOf(*defs, "Gun_AssaultRifle");
     CHECK(rifle.aim.set);
-    CHECK(rifle.aim.point == HoldPlacePoint::Sight);
+    CHECK(rifle.aim.point == HoldPlacePoint::Stock);  // the stock in the shoulder, cheek on it (sneed's picture 2026-11-23)
+    CHECK(rifle.aim.anchor == HoldAnchor::Shoulder);
     CHECK(rifle.ready.pitch < -10.0f);
     CHECK(rifle.ready.yaw < 0.0f);
     CHECK(rifle.hasOff);

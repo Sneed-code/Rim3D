@@ -638,17 +638,11 @@ TEST_CASE("Motion: the player's own swing leaves the feet free: walking goes on,
     sim->step();
     MOTION_REQUIRE(sim->melee().winding(player));
     MOTION_REQUIRE(motion.moving(player));
-    const BodyMotion& m = sim->things().registry().get<BodyMotion>(player);
-    CHECK(m.upper);
-    CHECK(m.freeFeet);
-    CHECK_FALSE(motion.holdsBody(player));
-    Snapshot snap;
-    sim->writeSnapshot(snap);
-    const ThingView* view = snap.find(player);
-    MOTION_REQUIRE(view != nullptr);
-    CHECK(view->motionUpper);
-    CHECK(view->motionFreeFeet);
-    // Walking sideways through the swing: every step's move is taken, and the clip adds nothing of its own.
+    // From standing (sneed 2026-11-23: "step forward, not lean") the whole body plays the swing: its step carries the feet.
+    CHECK_FALSE(sim->things().registry().get<BodyMotion>(player).freeFeet);
+    CHECK(motion.holdsBody(player));
+    // Walking sideways through the swing: the first step hands the clip to the arms and the chest, every step's move
+    // is taken, and the clip adds nothing of its own.
     const Position start = motionTestPos(*sim, player);
     float y = start.y;
     for (int i = 0; i < 10 && motion.moving(player); ++i) {
@@ -657,6 +651,18 @@ TEST_CASE("Motion: the player's own swing leaves the feet free: walking goes on,
         sim->step();
         CHECK(motionTestPos(*sim, player).y == doctest::Approx(y));
         CHECK(motionTestPos(*sim, player).x == doctest::Approx(start.x));
+        if (i == 0) {
+            const BodyMotion& m = sim->things().registry().get<BodyMotion>(player);
+            CHECK(m.upper);
+            CHECK(m.freeFeet);
+            CHECK_FALSE(motion.holdsBody(player));
+            Snapshot snap;
+            sim->writeSnapshot(snap);
+            const ThingView* view = snap.find(player);
+            MOTION_REQUIRE(view != nullptr);
+            CHECK(view->motionUpper);
+            CHECK(view->motionFreeFeet);
+        }
     }
     // The swing still lands: its reach makes up for the step the clip no longer takes.
     for (int s = 0; s < 120 && sim->melee().winding(player); ++s) {

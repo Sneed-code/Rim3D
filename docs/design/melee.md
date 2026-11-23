@@ -160,3 +160,15 @@ head are never strong (8.2, 8.2 and 5). The MeleeSwing event's `count` is 1 for 
 - Crashlanded's knife: the starting items don't include it yet (it would change every replay's
   hashes; add it with the next task that changes the start anyway).
 - Several weapons and switching between a gun and a melee weapon by range (P1).
+
+## Pace and step-in (sneed, 2026-11-23)
+
+- Every swing takes `attackTimeFactor` (0.75) of its RimWorld time: "all melee attacks 33% faster". Finishers and the
+  clips (played timed to the hit step) speed up with it.
+- A person's bare fists take a further `unarmedTimeFactor` (0.25) and hit with `unarmedPowerFactor` (0.25) of the power:
+  four times the punches, each weak, the same damage per second. Animals' bites and claws are unchanged.
+- `unarmedMinWindup` (4 steps) is the shortest wind-up for fists (`minWindup` 9 for weapons, both times the pace factor).
+- The player's swing from standing (slower than `stepInMaxSpeed`) is the whole body's: the clip's step forward carries
+  the feet into a thrust instead of the chest leaning. Walking off during the wind-up or recovery hands the clip to
+  the upper body (`stepInFreesFeet`, `MeleeSystem::freeFeetToWalk`), so stopping or moving mid-swing stays seamless.
+  Set `playerStepIn` and `stepInFreesFeet` to false to go back to the arms-only swing of 2026-11-18.

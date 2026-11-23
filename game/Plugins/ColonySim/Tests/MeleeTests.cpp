@@ -41,6 +41,35 @@ using namespace colony;
 
 namespace {
 
+// The pace factors in MeleeRules.json set back to 1 (and the standing step-in off).
+std::string meleeTestBasePace(std::string body) {
+    for (const char* key : {"\"attackTimeFactor\"", "\"unarmedTimeFactor\"", "\"unarmedPowerFactor\""}) {
+        const size_t at = body.find(key);
+        if (at == std::string::npos) {
+            continue;
+        }
+        const size_t colon = body.find(':', at);
+        const size_t end = body.find_first_of(",}", colon);
+        body.replace(colon + 1, end - colon - 1, " 1");
+    }
+    for (const char* key : {"\"playerStepIn\"", "\"stepInFreesFeet\""}) {
+        const size_t at = body.find(key);
+        if (at == std::string::npos) {
+            continue;
+        }
+        const size_t colon = body.find(':', at);
+        const size_t end = body.find_first_of(",}", colon);
+        body.replace(colon + 1, end - colon - 1, " false");
+    }
+    const size_t mw = body.find("\"unarmedMinWindup\"");
+    if (mw != std::string::npos) {
+        const size_t colon = body.find(':', mw);
+        const size_t end = body.find_first_of(",}", colon);
+        body.replace(colon + 1, end - colon - 1, " 9");
+    }
+    return body;
+}
+
 std::shared_ptr<const DefDatabase> meleeTestDefs() {
     static const std::shared_ptr<const DefDatabase> defs = [] {
         namespace fs = std::filesystem;
@@ -57,7 +86,13 @@ std::shared_ptr<const DefDatabase> meleeTestDefs() {
             std::ifstream in(file, std::ios::binary);
             std::stringstream text;
             text << in.rdbuf();
-            sources.push_back(DefSource{file.parent_path().filename().string(), file.filename().string(), text.str()});
+            std::string body = text.str();
+            if (file.filename() == "MeleeRules.json") {
+                // These tests pin RimWorld's own pace (fists 60 steps a swing); sneed's faster swings (2026-11-23) are
+                // checked in MeleeFeelTests ("Swing speed: ...").
+                body = meleeTestBasePace(body);
+            }
+            sources.push_back(DefSource{file.parent_path().filename().string(), file.filename().string(), body});
         }
         std::ifstream tuningFile(root / "tuning.json", std::ios::binary);
         std::stringstream tuning;

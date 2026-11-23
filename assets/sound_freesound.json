@@ -1,6 +1,7 @@
 {
   "note": "Freesound recordings for the cues (sneed, 2026-11-20, docs/design/sound.md 'Every weapon, surface and job'). Picked in the cloud from Freesound's CC0 and CC-BY search by title, length and downloads, not by ear. tools/sound_assets.py downloads each one's high-quality preview (https://cdn.freesound.org/previews/<id/1000>/<file>-hq.mp3, no account needed) into game/Content/ThirdParty/Sounds/freesound/<id>.mp3 and credits the CC-BY ones in CREDITS.txt. Each row: id, preview file, author, licence, title. sound_picks.json names them as freesound/<id>.mp3.",
   "sounds": [
+    [231562, "231562_525427", "Werra", "CC0", "Dark Piano Tension"],
     [3398, "3398_6997", "patchen", "CC-BY 4.0", "Rhino.wav"],
     [13160, "13160_35815", "dommygee", "CC-BY 4.0", "wind turbine (binaural) .wav"],
     [19022, "19022_50162", "l0calh05t", "CC-BY 4.0", "anvil strike weak 2.wav"],

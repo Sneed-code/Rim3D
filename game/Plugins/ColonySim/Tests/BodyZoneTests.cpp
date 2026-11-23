@@ -277,6 +277,52 @@ TEST_CASE("Body zones: the protagonist is never downed and dies when 100 hit poi
     CHECK(zoneTestHealth(*sim, hero).cause == DeathCause::Wounds);
 }
 
+TEST_CASE("Protagonist: knocked out by blood loss dies, an ordinary colonist stays downed") {
+    auto sim = zoneTestSim();
+    const Entity hero = zoneTestPawn(*sim);
+    sim->things().registry().get<Health>(hero).protagonist = true;
+    sim->health().refresh(hero);
+    const Entity other = zoneTestPawn(*sim, 14, 10);
+    // 900 of 3000 blood left: under the 1000 that knocks anybody out.
+    for (const Entity pawn : {hero, other}) {
+        sim->things().registry().get<Health>(pawn).bloodLoss = 1.0f - 900.0f / 3000.0f;
+        sim->health().refresh(pawn);
+    }
+    CHECK(zoneTestHealth(*sim, hero).dead);
+    CHECK(zoneTestHealth(*sim, hero).cause == DeathCause::BloodLoss);
+    CHECK_FALSE(zoneTestHealth(*sim, other).dead);
+    CHECK(zoneTestHealth(*sim, other).downed);
+    CHECK(zoneTestHealth(*sim, other).unconscious);
+}
+
+TEST_CASE("Protagonist: a head blow that would knock anybody out kills it, other pawns stay downed") {
+    auto sim = zoneTestSim();
+    const Entity hero = zoneTestPawn(*sim);
+    sim->things().registry().get<Health>(hero).protagonist = true;
+    sim->health().refresh(hero);
+    const Entity other = zoneTestPawn(*sim, 14, 10);
+    for (const Entity pawn : {hero, other}) {
+        const int head = zoneTestPart(*sim, pawn, "head");
+        const float max = sim->health().partMaxHitPoints(pawn, head);
+        CHECK(max > 0.0f);
+        Rng rng(5);
+        sim->health().applyDamage(pawn, sim->health().damageTypeId("Blunt"), max * 0.8f, head, rng);
+    }
+    CHECK(zoneTestHealth(*sim, hero).dead);
+    CHECK_FALSE(zoneTestHealth(*sim, other).dead);
+    CHECK(zoneTestHealth(*sim, other).downed);
+}
+
+TEST_CASE("Protagonist: a leg that downs anybody else still does not down or kill it") {
+    auto sim = zoneTestSim();
+    const Entity hero = zoneTestPawn(*sim);
+    sim->things().registry().get<Health>(hero).protagonist = true;
+    sim->health().refresh(hero);
+    CHECK(zoneTestHit(*sim, hero, "Blunt", 60.0f, "left leg"));
+    CHECK_FALSE(zoneTestHealth(*sim, hero).downed);
+    CHECK_FALSE(zoneTestHealth(*sim, hero).dead);
+}
+
 TEST_CASE("Body zones: when the bleeding stopped is saved, so the blood comes back on time after a load") {
     auto sim = zoneTestSim();
     const Entity pawn = zoneTestPawn(*sim, 10, 10, true);
@@ -1371,4 +1417,115 @@ TEST_CASE("Dismemberment: a rocket a metre from a dressed corpse tears something
         MESSAGE("side " << i << ": severed " << before << " -> " << sim->health().severed(pawn));
         CHECK((sim->health().severed(pawn) != before || sim->health().gibbed(pawn)));
     }
+}
+
+namespace {
+
+// A dead body lying at (x, y), killed by a blow that leaves its head and limbs on with nothing piled past 0 (the torso at
+// exactly 0).
+Entity zoneTestCorpse(Sim& sim, int x, int y) {
+    const Entity body = zoneTestPawn(sim, x, y, false);
+    sim.submit(DamagePawnCommand{body, "Blunt", 100.0f, zoneTestPart(sim, body, "torso")});
+    zoneTestRun(sim, 3);
+    return body;
+}
+
+// The player's gun fired again and again at a spot on a corpse as Unreal draws it (its ragdoll, DrawnAim), until `bit`
+// comes off or `most` shots have gone. Returns the shots it took, or -1 if the piece never came off.
+int zoneTestShootCorpse(Sim& sim, Entity shooter, Entity body, const std::string& label, float dx, float dy, float up,
+                        uint16_t bit, int most) {
+    const int part = sim.combat().hitboxPart(body, label);
+    if (part < 0) {
+        return -1;
+    }
+    int fired = 0;
+    for (int step = 0; step < 40000; ++step) {
+        const bool off = (sim.health().severed(body) & bit) != 0;
+        if (off || fired >= most) {
+            if (sim.things().registry().view<Projectile>().empty()) {
+                break;
+            }
+        } else if (sim.combat().shotReadyIn(shooter) == 0) {
+            const Position& at = sim.things().registry().get<Position>(body);
+            ShootCommand shot{shooter, kNoEntity, at.x + dx, at.y + dy, up, true};
+            shot.aimPawn = body;
+            shot.aimPart = part;
+            shot.aimDx = dx;
+            shot.aimDy = dy;
+            shot.aimUp = up;
+            sim.submit(shot);
+        }
+        sim.step();
+        for (const Event& e : sim.events()) {
+            fired += e.type == EventType::ShotFired && e.thing == shooter ? 1 : 0;
+        }
+    }
+    return (sim.health().severed(body) & bit) != 0 ? fired : -1;
+}
+
+}  // namespace
+
+TEST_CASE("Dismemberment: a pistol shot again and again at a corpse's leg, then its head, takes them off (sneed, 2026-11-23)") {
+    auto sim = zoneTestSim();
+    const Entity shooter = sim->things().spawn("Human", CellPos{20, 20, 0});
+    sim->combat().equip(shooter, sim->things().make(sim->defs().idOf("Things", "Gun_Autopistol")));
+    const Entity body = zoneTestCorpse(*sim, 26, 20);
+    CHECK(zoneTestHealth(*sim, body).dead);
+    CHECK(sim->health().severed(body) == 0);
+    if (!zoneTestHealth(*sim, body).dead) {
+        return;
+    }
+    // The drawn leg and head lie well off where the sim's lying body has them (a ragdoll falls its own way): only the
+    // crosshair's spot on the drawn body (DrawnAim) brings the bullet to that part. Before the fix a dead body's spot was
+    // dropped, the bullet went to the ground or the chest, and the leg's pile never grew.
+    // An autopistol bullet does 5 (RimWorld's 10, halved by tuning): the leg's 75, then 19 past 0, about 19 shots.
+    const int legShots = zoneTestShootCorpse(*sim, shooter, body, "left leg", -0.2f, 0.75f, 0.12f, kSeveredLeftLeg, 60);
+    MESSAGE("the leg came off after " << legShots << " pistol shots");
+    CHECK(legShots > 0);
+    CHECK(legShots <= 40);
+    CHECK((sim->health().severed(body) & kSeveredLeftLeg) != 0);
+    // The head the same way: 50, then 13 past 0.
+    const int headShots = zoneTestShootCorpse(*sim, shooter, body, "head", 0.55f, -0.6f, 0.15f, kSeveredHead, 60);
+    MESSAGE("the head came off after " << headShots << " pistol shots");
+    CHECK(headShots > 0);
+    CHECK(headShots <= 30);
+    CHECK((sim->health().severed(body) & kSeveredHead) != 0);
+}
+
+TEST_CASE("Dismemberment: a knife hacking at a corpse takes a piece off within a few dozen blows (sneed, 2026-11-23)") {
+    auto sim = zoneTestSim();
+    const Entity hero = sim->things().spawn("Human", CellPos{30, 30, 0});
+    sim->combat().equip(hero, sim->things().make(sim->defs().idOf("Things", "Melee_Knife")));
+    sim->things().registry().emplace<Colonist>(hero);
+    sim->jobs().addWorker(hero);
+    sim->submit(ControlPawnCommand{hero});
+    sim->step();
+    const Entity body = zoneTestCorpse(*sim, 31, 30);
+    CHECK(zoneTestHealth(*sim, body).dead);
+    Posture& facing = sim->things().registry().get<Posture>(hero);
+    facing.facingX = 1.0f;
+    facing.facingY = 0.0f;
+    CHECK(sim->melee().corpseAhead(hero) == body);
+    if (sim->melee().corpseAhead(hero) != body) {
+        return;
+    }
+    int swings = 0;
+    int hits = 0;
+    for (; swings < 80 && sim->health().severed(body) == 0; ++swings) {
+        std::string why;
+        if (!sim->melee().attack(hero, kNoEntity, true, &why)) {
+            MESSAGE(why);
+            break;
+        }
+        for (int s = 0; s < 200 && !(s > 2 && sim->melee().ready(hero)); ++s) {
+            sim->step();
+            for (const Event& e : sim->events()) {
+                hits += e.type == EventType::MeleeHit && e.target == body && e.message == "hit" ? 1 : 0;
+            }
+        }
+    }
+    MESSAGE("knife: " << hits << " of " << swings << " swings landed before a piece came off (severed "
+                      << sim->health().severed(body) << ")");
+    CHECK(sim->health().severed(body) != 0);
+    CHECK(swings <= 60);
 }

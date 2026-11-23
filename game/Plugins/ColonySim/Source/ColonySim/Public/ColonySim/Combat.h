@@ -241,6 +241,31 @@ struct Projectile {
     uint64_t seed = 0;      // where the hit's choices (part, armor) come from
     float damageFactor = 1.0f;  // the gun's quality: times the bullet's damage and armor penetration
     DrawnAim drawn;             // a player's shot at a drawn body part (DrawnAim)
+    // One pellet of a buckshot load (Projectiles `projectile.pellets`): its share of the bullet's damage (armour
+    // penetration is the bullet's own for each pellet). 1 for an ordinary shot.
+    float damageScale = 1.0f;
+    // A bouncing shell (Projectiles `bounce`): steps since its first bounce, -1 while it has not touched anything.
+    int sinceBounce = -1;
+};
+
+// A grenade's or shell's bounce (a Projectiles def's `bounce` block, ours): it bursts at once on a pawn; on the
+// ground, a wall or a tree it bounces (`restitution` of the speed into the surface is kept, `friction` of the speed along
+// it is lost) and bursts `bounceFuse` steps after the first bounce, or `flightFuse` steps after the throw, whichever
+// comes first. Steps: 30 to the real second at 1x.
+struct BounceRules {
+    float restitution = 0.0f;  // 0: no bounce (a molotov bursts where it lands)
+    float friction = 0.0f;
+    int flightFuse = 0;
+    int bounceFuse = 0;
+    bool bounces() const { return restitution > 0.0f; }
+};
+
+// What one step of a bouncing flight did (CombatSystem::flyBouncing).
+enum class BounceResult : uint8_t {
+    Flew,     // moved on, touching nothing
+    Bounced,  // touched ground, a wall or a tree and bounced (or rolled); `impactSpeed` says how hard
+    Pawn,     // met a pawn: the caller bursts it there (`hit`)
+    Gone,     // flew off the map: the caller bursts it where it was
 };
 
 // A hitbox in the world, for the debug view (CombatSystem::hitboxesOf).
@@ -441,6 +466,19 @@ public:
     // False if the target isn't a pawn on the map or the shooter has no gun.
     bool leadPoint(Entity shooter, Entity target, float lead, float& x, float& y, float& z) const;
     float gravity() const;
+    // A projectile def's bounce rules (all zero if it has none) and its flight limit in steps.
+    BounceRules bounceRules(DefId projectile) const;
+
+    // One step of a bouncing flight for a grenade or shell (docs/design/explosives.md "Bounces"): gravity (times
+    // `gravityFactor`), then the first thing in the way. A pawn or the map's edge is returned for the caller to burst
+    // at; ground, rock, buildings and trees bounce it: the velocity is reflected about the axes that blocked it (the
+    // ground's up, a wall's sides), the speed into the surface times `rules.restitution`, the rest cut by
+    // `rules.friction`, and a slow touch on the ground rolls on and stops instead of hopping. Windows break as it
+    // goes through. The position and velocity are changed in place; `impactSpeed` is the speed into the surface (metres
+    // per step) on a bounce, else 0.
+    BounceResult flyBouncing(float& x, float& y, float& z, float& vx, float& vy, float& vz, int level, Entity skipPawn,
+                             CellPos startCell, float gravityFactor, const BounceRules& rules, TraceHit& hit,
+                             float& impactSpeed);
 
     // One step: pawns face where they walk or aim, triggers count down and fire, then every
     // projectile flies one step. Runs after movement, so it sees where pawns are now.
@@ -637,7 +675,8 @@ private:
     void stepBlocking();
     int pickOutsidePart(Entity pawn, Rng& rng) const;
     Entity launch(Entity launcher, DefId weaponDef, float ox, float oy, float oz, int level, CellPos startCell, float x,
-                  float y, float z, float spreadSlope, Rng& rng, float kickUp, float kickSide, Posture* posture);
+                  float y, float z, float spreadSlope, Rng& rng, float kickUp, float kickSide, Posture* posture,
+                  float damageFactor = 1.0f);
     void stepRolls();
     void stepKicks();
     void stepSwitches();

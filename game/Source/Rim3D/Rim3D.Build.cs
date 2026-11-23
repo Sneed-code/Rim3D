@@ -36,6 +36,9 @@ public class Rim3D : ModuleRules
 		// Sound (V20): the procedural voice waves.
 		PrivateDependencyModuleNames.Add("AudioExtensions");
 
+		// The title stage (TitleStage.cpp): reads its planet and galaxy maps (PNGs from tools/title_art.py).
+		PrivateDependencyModuleNames.Add("ImageWrapper");
+
 		// Ragdoll rest (PawnActor.cpp UpdateRagdollRest): FBodyInstanceCore::ShouldInstanceSimulatingPhysics.
 		PrivateDependencyModuleNames.Add("PhysicsCore");
 	}

@@ -42,6 +42,7 @@ struct CombatModel {
         int burstGap = 0;  // steps
         float accuracy[4] = {1.0f, 1.0f, 1.0f, 1.0f};  // touch, short, medium, long
         float recoil = 0.0f;
+        float spreadFactor = 1.0f;  // ours: times the gun's whole spray (accuracy cone and the recoil it builds up)
         bool store = false;  // sneed's cooldown bursts: the shots are a store refilled by the cooldown (no magazine)
         int magazine = 0;    // rounds; 0 for none (never reloads)
         int reloadTime = 0;  // steps, at the skill where reloadTimeFactorBySkill is 1
@@ -61,6 +62,15 @@ struct CombatModel {
         float damage = 0.0f;
         float penetration = 0.0f;
         float speed = 0.0f;  // metres per step, tuning applied
+        // ours: a buckshot load (`projectile.pellets` of them, each in a random direction within a cone of slope
+        // `projectile.pelletSlope` around the aim, each with 1/N of the damage), the share of gravity that acts on it
+        // (`projectile.gravityFactor`: 0 for a rocket), a flight limit in steps (`projectile.maxFlight`: 0 for the rules')
+        // and its bounces (`bounce`).
+        int pellets = 1;
+        float pelletSlope = 0.0f;
+        float gravityFactor = 1.0f;
+        int maxFlight = 0;
+        BounceRules bounce;
         float stoppingPower = 0.5f;  // staggers pawns of this body size or smaller (RimWorld's default 0.5)
         // A rocket or shell: the projectile def's `explosion` block, set off where it lands (R2).
         float blastRadius = 0.0f;
@@ -211,6 +221,11 @@ namespace {
 
 constexpr float kCombatAimRaiseStep = 0.1f;  // metres the aim goes up at a time over a crest (ours)
 constexpr float kCombatAimTopMargin = 0.15f;  // the highest aim over a crest: this far under the top of the body (ours)
+// A bouncing grenade or shell (ours): a bounce into a surface faster than this (metres per step) makes a sound; a touch down
+// slower than the second rolls instead of hopping, and a roll slower than the third stops.
+constexpr float kCombatBounceAudibleSpeed = 0.05f;
+constexpr float kCombatBounceRestSpeed = 0.06f;
+constexpr float kCombatBounceStopSpeed = 0.01f;
 
 constexpr const char* kCombatThingsKind = "Things";
 constexpr const char* kCombatStanceNames[3] = {"Standing", "Crouching", "Prone"};
@@ -420,6 +435,16 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         b.penetration = combatNum(def, "projectile.armorPenetrationBase", 0.0);
         b.speed = combatNum(def, "projectile.speed", 0.0);
         b.stoppingPower = static_cast<float>(def.number("projectile.stoppingPower", 0.5));
+        b.pellets = std::max(1, static_cast<int>(def.integer("projectile.pellets", 1)));
+        b.pelletSlope = std::max(0.0f, static_cast<float>(def.number("projectile.pelletSlope", 0.0)));
+        b.gravityFactor = std::max(0.0f, static_cast<float>(def.number("projectile.gravityFactor", 1.0)));
+        b.maxFlight = std::max(0, static_cast<int>(def.integer("projectile.maxFlight", 0)));
+        if (def.has("bounce")) {
+            b.bounce.restitution = std::clamp(static_cast<float>(def.number("bounce.restitution", 0.0)), 0.0f, 0.95f);
+            b.bounce.friction = std::clamp(static_cast<float>(def.number("bounce.friction", 0.0)), 0.0f, 1.0f);
+            b.bounce.flightFuse = std::max(1, static_cast<int>(def.integer("bounce.flightFuse", 150)));
+            b.bounce.bounceFuse = std::max(1, static_cast<int>(def.integer("bounce.bounceFuse", 90)));
+        }
         b.valid = b.damageType.valid() && b.speed > 0.0f;
         if (def.has("explosion")) {
             b.blastRadius = combatNum(def, "explosion.radius", 0.0);
@@ -468,6 +493,7 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
                 g.accuracy[i] = combatNum(def, acc[i], 1.0);
             }
             g.recoil = combatNum(def, "recoilPerShot", 0.0);
+            g.spreadFactor = std::max(0.0f, static_cast<float>(def.number("spreadFactor", 1.0)));
             g.magazine = g.store ? 0 : std::max(0, static_cast<int>(def.integer("magazineSize", 0)));
             g.reloadTime = std::max(0, static_cast<int>(std::lround(def.number("reloadTime"))));
             for (size_t k = 0; k < def.count("recoilKicks"); ++k) {
@@ -1195,14 +1221,11 @@ Entity CombatSystem::fire(Entity pawn, float x, float y, float z, float spreadSl
     const CombatModel::Kind* kind = model_->kind(reg.get<Thing>(pawn).def);
     const Stance stance = combatStanceOf(reg, pawn);
     const float muzzle = kind != nullptr ? kind->poses[static_cast<int>(stance)].muzzle * hitboxScale(pawn) : eyeHeight(stance) - 0.15f;
-    const Entity shot = launch(pawn, weaponDef, pos.x, pos.y, map_.heightAt(pos.x, pos.y) + muzzle, pos.level, cellOf(pos), x, y,
-                               z, spreadSlope, rng, kickUp, kickSide, &reg.get<Posture>(pawn));
-    if (shot != kNoEntity) {
-        // The weapon's quality and stuff, and the shooter's lineage (drow +10%, docs/design/races.md).
-        const PawnGenes* genes = reg.try_get<PawnGenes>(pawn);
-        reg.get<Projectile>(shot).damageFactor = rangedDamageFactor(weapon) * (genes != nullptr ? genes->effects.rangedDamage : 1.0f);
-    }
-    return shot;
+    // The weapon's quality and stuff, and the shooter's lineage (drow +10%, docs/design/races.md).
+    const PawnGenes* genes = reg.try_get<PawnGenes>(pawn);
+    const float damageFactor = rangedDamageFactor(weapon) * (genes != nullptr ? genes->effects.rangedDamage : 1.0f);
+    return launch(pawn, weaponDef, pos.x, pos.y, map_.heightAt(pos.x, pos.y) + muzzle, pos.level, cellOf(pos), x, y, z,
+                  spreadSlope, rng, kickUp, kickSide, &reg.get<Posture>(pawn), damageFactor);
 }
 
 Entity CombatSystem::fireFrom(Entity launcher, DefId weapon, float ox, float oy, float oz, int level, CellPos startCell,
@@ -1212,7 +1235,7 @@ Entity CombatSystem::fireFrom(Entity launcher, DefId weapon, float ox, float oy,
 
 Entity CombatSystem::launch(Entity pawn, DefId weaponDef, float ox, float oy, float oz, int level, CellPos startCell,
                             float x, float y, float z, float spreadSlope, Rng& rng, float kickUp, float kickSide,
-                            Posture* posture) {
+                            Posture* posture, float damageFactor) {
     entt::registry& reg = things_.registry();
     const CombatModel::Gun* gun = model_->gun(weaponDef);
     if (gun == nullptr) {
@@ -1234,10 +1257,14 @@ Entity CombatSystem::launch(Entity pawn, DefId weaponDef, float ox, float oy, fl
     }
     // Aim above the point so the drop brings the shot onto it (the lower of the two arcs).
     const float v = bullet.speed;
-    const float g = model_->gravity;
+    const float g = model_->gravity * bullet.gravityFactor;
     const float v2 = v * v;
-    const float disc = v2 * v2 - g * (g * flat * flat + 2.0f * dz * v2);
-    const float slope = disc >= 0.0f ? (v2 - std::sqrt(disc)) / (g * flat) : v2 / (g * flat);
+    float slope = dz / flat;  // no gravity (a rocket): straight at it
+    if (g > 0.0f) {
+        const float disc = v2 * v2 - g * (g * flat * flat + 2.0f * dz * v2);
+        // The lower of the two arcs; out of reach, the 45 degree shot that goes furthest.
+        slope = disc >= 0.0f ? (v2 - std::sqrt(disc)) / (g * flat) : 1.0f;
+    }
     CombatVec dir{dx / flat, dy / flat, slope};
     float n = std::sqrt(combatDot(dir, dir));
     dir = {dir.x / n, dir.y / n, dir.z / n};
@@ -1273,21 +1300,54 @@ Entity CombatSystem::launch(Entity pawn, DefId weaponDef, float ox, float oy, fl
         dir = {dir.x / n, dir.y / n, dir.z / n};
     }
 
-    const Entity shot = reg.create();
-    Projectile p;
-    p.def = gun->projectile;
-    p.weapon = weaponDef;
-    p.launcher = pawn;
-    p.x = ox;
-    p.y = oy;
-    p.z = oz;
-    p.vx = dir.x * v;
-    p.vy = dir.y * v;
-    p.vz = dir.z * v;
-    p.level = level;
-    p.startCell = startCell;
-    p.seed = (static_cast<uint64_t>(rng.next()) << 32) | rng.next();
-    reg.emplace<Projectile>(shot, p);
+    // One projectile, or a buckshot load of `pellets` of them: each in its own direction in a cone around the aim.
+    const auto spawn = [&](const CombatVec& d, float scale) {
+        const Entity shot = reg.create();
+        Projectile p;
+        p.def = gun->projectile;
+        p.weapon = weaponDef;
+        p.launcher = pawn;
+        p.x = ox;
+        p.y = oy;
+        p.z = oz;
+        p.vx = d.x * v;
+        p.vy = d.y * v;
+        p.vz = d.z * v;
+        p.level = level;
+        p.startCell = startCell;
+        p.seed = (static_cast<uint64_t>(rng.next()) << 32) | rng.next();
+        p.damageFactor = damageFactor;
+        p.damageScale = scale;
+        reg.emplace<Projectile>(shot, p);
+        return shot;
+    };
+    Entity shot = kNoEntity;
+    if (bullet.pellets <= 1) {
+        shot = spawn(dir, 1.0f);
+    } else {
+        const float share = 1.0f / static_cast<float>(bullet.pellets);
+        for (int i = 0; i < bullet.pellets; ++i) {
+            float u = 0.0f;
+            float w = 0.0f;
+            for (int tries = 0; tries < 16; ++tries) {
+                const float cu = 2.0f * rng.unit() - 1.0f;
+                const float cw = 2.0f * rng.unit() - 1.0f;
+                if (cu * cu + cw * cw <= 1.0f) {
+                    u = cu;
+                    w = cw;
+                    break;
+                }
+            }
+            CombatVec d{dir.x + (right.x * u + up.x * w) * bullet.pelletSlope, dir.y + (right.y * u + up.y * w) * bullet.pelletSlope,
+                        dir.z + (right.z * u + up.z * w) * bullet.pelletSlope};
+            const float len = std::sqrt(combatDot(d, d));
+            d = {d.x / len, d.y / len, d.z / len};
+            const Entity pellet = spawn(d, share);
+            if (shot == kNoEntity) {
+                shot = pellet;  // the one ShotFired (and the one the caller gets) is the first pellet's
+            }
+        }
+    }
     if (events_ != nullptr) {
         Event e;
         e.type = EventType::ShotFired;
@@ -1469,10 +1529,14 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
             s.target = kNoEntity;
         }
     }
-    // The player's crosshair on a drawn body part: aim at that spot on the pawn as it stands now.
+    // The player's crosshair on a drawn body part: aim at that spot on the pawn as it stands now. A corpse that can still
+    // be cut up keeps the spot too (sneed, 2026-11-23: shooting a dead leg again and again with a pistol must take it
+    // off): it lies as a ragdoll far from the sim's lying hitboxes, so without the drawn spot the bullet hit the ground
+    // or the chest and the leg's pile never grew.
     if (s.player && s.drawn.pawn != kNoEntity) {
         const Health* health = reg.valid(s.drawn.pawn) ? reg.try_get<Health>(s.drawn.pawn) : nullptr;
-        if (!things_.spawned(s.drawn.pawn) || !reg.all_of<Position, Posture>(s.drawn.pawn) || (health != nullptr && health->dead)) {
+        if (!things_.spawned(s.drawn.pawn) || !reg.all_of<Position, Posture>(s.drawn.pawn) ||
+            (health != nullptr && health->dead && !health_.takesCorpseHits(s.drawn.pawn))) {
             s.drawn = DrawnAim{};
         } else {
             const Position& tp = reg.get<Position>(s.drawn.pawn);
@@ -1482,8 +1546,9 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
         }
     }
     // Cooldown bursts: a fighter's burst stops when a friend comes into the line, during the aim or between shots (bodies
-    // shove each other in a melee next to it); the store keeps the rest.
-    if (gun->store && !s.player && s.target != kNoEntity && holdFire_ && holdFire_(pawn, s.target)) {
+    // shove each other in a melee next to it); the store keeps the rest. A gun without a store holds its shot the same way
+    // (a colonist not drafted shooting a manhunter its friend is clubbing: 2026-11-23).
+    if (!s.player && s.target != kNoEntity && holdFire_ && holdFire_(pawn, s.target)) {
         s.shotsLeft = 0;
         s.phase = ShotPhase::Cooling;
         s.stepsLeft = std::max(0, gun->burstGap - 1);
@@ -1557,9 +1622,9 @@ void CombatSystem::updateShooter(Entity pawn, Shooter& s, Rng& rng) {
     const float partsAccuracy = mods != nullptr ? mods->accuracy : 1.0f;
     const float quality = rangedAccuracyFactor(gear->weapon);
     const Entity shot = fire(pawn, fx, fy, fz,
-                             spread(weaponDef, skill, distance, s.player,
+                             (spread(weaponDef, skill, distance, s.player,
                                     accuracyFactor * quality * partsAccuracy * performance(pawn) * (aimFactor_ ? std::max(0.05f, aimFactor_(pawn)) : 1.0f)) *
-                                     steady + s.recoil,
+                                         steady + s.recoil) * gun->spreadFactor,
                              rng, kickUp, kickSide);
     if (shot != kNoEntity && s.player) {
         reg.get<Projectile>(shot).drawn = s.drawn;
@@ -1777,6 +1842,89 @@ float CombatSystem::gravity() const {
     return model_->gravity;
 }
 
+BounceRules CombatSystem::bounceRules(DefId projectile) const {
+    // Not `bullet()`: a thrown grenade's def has no gun speed, so it is no bullet, but its bounce is read all the same.
+    return projectile.valid() && projectile.value < model_->bullets.size() ? model_->bullets[projectile.value].bounce
+                                                                           : BounceRules{};
+}
+
+BounceResult CombatSystem::flyBouncing(float& x, float& y, float& z, float& vx, float& vy, float& vz, int level,
+                                       Entity skipPawn, CellPos startCell, float gravityFactor, const BounceRules& rules,
+                                       TraceHit& hit, float& impactSpeed) {
+    impactSpeed = 0.0f;
+    const float g = model_->gravity * gravityFactor;
+    const float nx = x + vx;
+    const float ny = y + vy;
+    const float nz = z + vz - 0.5f * g;
+    hit = TraceHit{};
+    const CellPos next{static_cast<int>(std::floor(nx)), static_cast<int>(std::floor(ny)), level};
+    if (!map_.inBounds(next)) {
+        hit.kind = ProjectileHitKind::Gone;
+        hit.x = x;
+        hit.y = y;
+        hit.z = z;
+        return BounceResult::Gone;
+    }
+    hit = trace(x, y, z, nx, ny, nz, level, skipPawn, startCell, true, nullptr, true);
+    if (hit.glass != kNoEntity && (hit.kind == ProjectileHitKind::None || hit.glassT <= hit.t)) {
+        breakWindow(hit.glass, hit.glassX, hit.glassY, hit.glassZ, skipPawn);  // it goes on through
+    }
+    if (hit.kind == ProjectileHitKind::None) {
+        x = nx;
+        y = ny;
+        z = nz;
+        vz -= g;
+        return BounceResult::Flew;
+    }
+    if (hit.kind == ProjectileHitKind::Pawn || hit.kind == ProjectileHitKind::Armor) {
+        return BounceResult::Pawn;
+    }
+    // Which sides of the step ran into something: each axis alone, from where it is now. The ground is always up.
+    const float dx = nx - x;
+    const float dy = ny - y;
+    const float dz = nz - z;
+    const auto blocked = [&](float ex, float ey, float ez) {
+        const TraceHit h = trace(x, y, z, ex, ey, ez, level, skipPawn, startCell, false, nullptr, true);
+        return h.kind != ProjectileHitKind::None;
+    };
+    const bool ground = hit.kind == ProjectileHitKind::Ground;
+    bool flipX = !ground && blocked(x + dx, y, z);
+    bool flipY = !ground && blocked(x, y + dy, z);
+    bool flipZ = ground || blocked(x, y, z + dz);
+    if (!flipX && !flipY && !flipZ) {
+        flipX = flipY = flipZ = true;  // a corner: straight back
+    }
+    const float into = std::sqrt((flipX ? vx * vx : 0.0f) + (flipY ? vy * vy : 0.0f) + (flipZ ? vz * vz : 0.0f));
+    const float keep = 1.0f - rules.friction;
+    if (ground && flipZ && !flipX && !flipY && into < kCombatBounceRestSpeed) {
+        // Touching down slowly: no more hops. It rolls, losing speed each step, and stops.
+        vz = 0.0f;
+        vx *= keep;
+        vy *= keep;
+        if (vx * vx + vy * vy < kCombatBounceStopSpeed * kCombatBounceStopSpeed) {
+            vx = vy = 0.0f;
+        }
+        const float level0 = map_.heightAt(x, y) + 0.1f;
+        if ((vx != 0.0f || vy != 0.0f) && !blocked(x + vx, y + vy, level0)) {
+            x += vx;
+            y += vy;
+        } else {
+            vx = vy = 0.0f;
+        }
+        z = map_.heightAt(x, y) + 0.02f;
+        impactSpeed = into;
+        return BounceResult::Bounced;
+    }
+    vx = flipX ? -vx * rules.restitution : vx * keep;
+    vy = flipY ? -vy * rules.restitution : vy * keep;
+    vz = flipZ ? -vz * rules.restitution : vz * keep;
+    if (flipZ && ground) {
+        z = std::max(z, map_.heightAt(x, y) + 0.02f);
+    }
+    impactSpeed = into;
+    return BounceResult::Bounced;
+}
+
 bool CombatSystem::leadPoint(Entity shooter, Entity target, float lead, float& x, float& y, float& z) const {
     const entt::registry& reg = things_.registry();
     if (!reg.all_of<Position, Gear>(shooter)) {
@@ -1911,6 +2059,7 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
     entt::registry& reg = things_.registry();
     const CombatModel::Bullet& bullet = *model_->bullet(p.def);
     TraceHit h = hit;
+    const float damage = bullet.damage * p.damageScale;  // a pellet's share (1 for a shot)
     if (bullet.blastRadius > 0.0f) {
         // A rocket does nothing on its own: wherever it ends (pawn, wall, ground, out of range) it bursts.
         emitHit(projectile, p, h, 0.0f);
@@ -1941,14 +2090,14 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
                 break;
             }
             // The event goes first: the building may be gone after the damage.
-            const float amount = bullet.damage * p.damageFactor;
+            const float amount = damage * p.damageFactor;
             const float factor = hit.kind == ProjectileHitKind::Plant ? model_->rangedPlantFactor : model_->rangedBuildingFactor;
             emitHit(projectile, p, h, factor > 0.0f && amount > 0.0f ? static_cast<float>(std::max(1, static_cast<int>(std::lround(amount * factor)))) : 0.0f);
             damageStruck(hit, amount, false);
             break;
         }
         case ProjectileHitKind::Pawn: {
-            if (bullet.damage <= 0.0f) {
+            if (damage <= 0.0f) {
                 emitHit(projectile, p, h, 0.0f);
                 break;
             }
@@ -1959,7 +2108,7 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
                 (bodySize_ ? bodySize_(hit.thing) : 1.0f) <= bullet.stoppingPower + 0.001f) {
                 stagger(hit.thing, HitFrom{true, h.x - p.vx, h.y - p.vy});
             }
-            const PawnHitResult result = hitPawn(hit.thing, hit.part, bullet.damageType, bullet.damage * p.damageFactor,
+            const PawnHitResult result = hitPawn(hit.thing, hit.part, bullet.damageType, damage * p.damageFactor,
                                                  bullet.penetration * p.damageFactor, p.seed, HitFrom{true, h.x - p.vx, h.y - p.vy});
             h.part = result.part;
             if (result.deflected) {
@@ -1974,7 +2123,7 @@ void CombatSystem::impact(Entity projectile, Projectile& p, const TraceHit& hit)
             health_.applyHit(hit.thing, result.damageType, result.amount, result.part);
             wearApparel(hit.thing, result);
             if (zoned && !corpse) {
-                jolt(hit.thing, result.part, bullet.damageType, bullet.damage * p.damageFactor, result.amount,
+                jolt(hit.thing, result.part, bullet.damageType, damage * p.damageFactor, result.amount,
                      HitFrom{true, h.x - p.vx, h.y - p.vy});
             }
             if (p.launcher != kNoEntity && !corpse) {
@@ -2375,17 +2524,63 @@ void CombatSystem::step(Rng& rng) {
         scratch_.push_back(shot);
     }
     std::sort(scratch_.begin(), scratch_.end());
-    const float g = model_->gravity;
     for (const Entity shot : scratch_) {
         Projectile& p = reg.get<Projectile>(shot);
         ++p.age;
+        const CombatModel::Bullet& flying = *model_->bullet(p.def);
+        if (flying.bounce.bounces()) {
+            // A grenade shell: bursts on a pawn at once, bounces off everything else, bursts at its fuse's end.
+            if (p.sinceBounce >= 0) {
+                ++p.sinceBounce;
+            }
+            TraceHit hit;
+            float impactSpeed = 0.0f;
+            const BounceResult result = flyBouncing(p.x, p.y, p.z, p.vx, p.vy, p.vz, p.level, p.launcher, p.startCell,
+                                                    flying.gravityFactor, flying.bounce, hit, impactSpeed);
+            bool burst = result == BounceResult::Pawn;
+            if (result == BounceResult::Gone) {
+                burst = true;
+                hit.kind = ProjectileHitKind::Gone;
+            }
+            if (result == BounceResult::Bounced && p.sinceBounce < 0) {
+                p.sinceBounce = 0;
+            }
+            const int toFuse = std::min(flying.bounce.flightFuse - p.age,
+                                        p.sinceBounce >= 0 ? flying.bounce.bounceFuse - p.sinceBounce : flying.bounce.flightFuse);
+            if (!burst && toFuse <= 0) {
+                burst = true;
+                hit = TraceHit{};
+                hit.kind = ProjectileHitKind::Gone;
+                hit.x = p.x;
+                hit.y = p.y;
+                hit.z = p.z;
+            }
+            if (!burst && result == BounceResult::Bounced && impactSpeed > kCombatBounceAudibleSpeed && events_ != nullptr) {
+                Event e;  // the grenade's clunk (Sound.cpp plays the def's `landed` cue)
+                e.type = EventType::GrenadeLanded;
+                e.thing = shot;
+                e.def = p.def;
+                e.x = p.x;
+                e.y = p.y;
+                e.z = p.z;
+                e.amount = static_cast<float>(toFuse);
+                e.cell = CellPos{static_cast<int>(std::floor(p.x)), static_cast<int>(std::floor(p.y)), p.level};
+                events_->push_back(std::move(e));
+            }
+            if (burst) {
+                impact(shot, p, hit);
+                reg.destroy(shot);
+            }
+            continue;
+        }
+        const float g = model_->gravity * flying.gravityFactor;
         const float nx = p.x + p.vx;
         const float ny = p.y + p.vy;
         const float nz = p.z + p.vz - 0.5f * g;
         TraceHit hit = trace(p.x, p.y, p.z, nx, ny, nz, p.level, p.launcher, p.startCell, true,
                              p.drawn.pawn != kNoEntity ? &p.drawn : nullptr, true);
         const CellPos next{static_cast<int>(std::floor(nx)), static_cast<int>(std::floor(ny)), p.level};
-        if (hit.kind == ProjectileHitKind::None && (p.age > model_->maxFlight || !map_.inBounds(next))) {
+        if (hit.kind == ProjectileHitKind::None && (p.age > (flying.maxFlight > 0 ? flying.maxFlight : model_->maxFlight) || !map_.inBounds(next))) {
             hit.kind = ProjectileHitKind::Gone;
             hit.x = nx;
             hit.y = ny;

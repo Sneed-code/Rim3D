@@ -98,6 +98,7 @@
       "bloodRegenPerSecond": 10,
       "stepsPerRealSecond": 30,
       "protagonistHp": 100,
+      "protagonistDownedDies": true,
       "patchSeconds": [1, 2, 3],
       "patchQuality": 0.3,
       "coverBlood": 1500,

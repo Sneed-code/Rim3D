@@ -376,6 +376,57 @@ void USkySubsystem::WatchExposure(float RealDelta)
 	}
 }
 
+void USkySubsystem::SetStageMode(bool bOn)
+{
+	if (bStageMode == bOn)
+	{
+		return;
+	}
+	bStageMode = bOn;
+	if (bOn)
+	{
+		HideForStage();
+		return;
+	}
+	for (const TWeakObjectPtr<USceneComponent>& Part : StageHidden)
+	{
+		if (USceneComponent* Component = Part.Get())
+		{
+			Component->SetVisibility(true);
+		}
+	}
+	StageHidden.Reset();
+	if (Exposure)
+	{
+		Exposure->bEnabled = true;
+	}
+	// The next ApplyState puts the sun, moon and stars right and jumps the exposure to its target.
+	LastExposureEV = -100.0f;
+	ExposureStuckSeconds = 0.0f;
+}
+
+void USkySubsystem::HideForStage()
+{
+	if (!Holder)
+	{
+		return;
+	}
+	TInlineComponentArray<USceneComponent*> Parts;
+	Holder->GetComponents(Parts);
+	for (USceneComponent* Part : Parts)
+	{
+		if (Part && Part != Holder->GetRootComponent() && Part->IsVisible())
+		{
+			Part->SetVisibility(false);
+			StageHidden.Add(Part);
+		}
+	}
+	if (Exposure && Exposure->bEnabled)
+	{
+		Exposure->bEnabled = false;
+	}
+}
+
 void USkySubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
@@ -839,6 +890,7 @@ void USkySubsystem::BuildScene()
 void USkySubsystem::DestroyScene()
 {
 	ShowLevelParts();
+	StageHidden.Reset();
 	if (Holder)
 	{
 		Holder->Destroy();
@@ -1391,6 +1443,11 @@ void USkySubsystem::Tick(float DeltaTime)
 	}
 	if (!Holder)
 	{
+		return;
+	}
+	if (bStageMode)
+	{
+		HideForStage();
 		return;
 	}
 

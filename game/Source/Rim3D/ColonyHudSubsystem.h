@@ -12,6 +12,7 @@
 
 class ACameraActor;
 class APointLight;
+class ATitleStage;
 
 class AActor;
 class USceneCaptureComponent2D;
@@ -131,6 +132,8 @@ public:
 	void SetMainMenuPageForTest(int32 Page) { MainMenuPage = Page; }
 	/** True while the title's own camera circles the backdrop map (smoke tests). */
 	bool HasTitleCamera() const { return TitleCamera.IsValid(); }
+	/** The title's starship stage (ATitleStage) while it stands, else null (smoke tests). */
+	const ATitleStage* GetTitleStage() const;
 	/** The new game's seed and map size, and the people page's picked colonist and tab (smoke test `newgame`). */
 	void SetNewGameForTest(int32 Seed, int32 MapSize) { NewSeed = Seed; NewMapSize = MapSize; }
 	/** Slot 0 opens "You", another slot "Your companions" on that stranger; Tab 0 traits, 1 looks. */
@@ -228,6 +231,9 @@ private:
 	void DrawLoadPage(USimSubsystem& Bridge, float Scale);
 	/** The title's camera: a slow drift round an open glade of the backdrop map, in morning light. */
 	void UpdateTitleCamera(USimSubsystem& Bridge);
+	/** The title in its starship (ATitleStage, Title.Stage 1): builds the stage high over the map once and puts the
+	 *  title camera in it. False if it could not (the glade camera is used instead). */
+	bool UpdateTitleStage(USimSubsystem& Bridge);
 	void EndTitleCamera();
 	/** Loads a save from the title or the load page and goes to the colony. */
 	void LoadFromMenu(USimSubsystem& Bridge, const FString& Slot);
@@ -313,6 +319,8 @@ private:
 	/** The menu has the mouse (cursor shown, UI input) while it is open; given back when the game takes over. */
 	bool bMenuMouse = false;
 	TWeakObjectPtr<ACameraActor> TitleCamera;
+	TWeakObjectPtr<ATitleStage> TitleStageActor;
+	bool bTitleStageSky = false;  // the sky was told to step aside for the stage (USkySubsystem::SetStageMode)
 	FVector2D TitleFocus = FVector2D::ZeroVector;  // sim metres: the glade the title camera circles
 	float TitleRadius = 14.0f;                    // metres from the glade's middle to the camera
 	float TitleYaw = 0.0f;                        // degrees round the glade

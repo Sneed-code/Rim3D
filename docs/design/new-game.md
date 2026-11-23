@@ -30,9 +30,9 @@ from a point pool ([traits.md](traits.md) "Trait points"); you have none. Biome 
    **Its own scene** (sneed 2026-11-22: not the engine's sample level, not the gun range): a plain launch starts the
    `TitleBackdrop` scenario (a wild tropical rainforest tile, 256 m, no people or cargo, animals on, 7:00) off the sample
    level (`-SimOriginX` 300000), flagged `FSimStartOptions::bTitle` so it never counts as a game (no "Back to the game";
-   New colony or a load replaces it; `-SimNoTitleScene` keeps the old empty start). The title camera circles the
-   open glade with the fewest trees in the map's middle (14 m out, 2.3 m up, 1.6 degrees a second, the glade right of
-   the middle), trunks on its circle hidden (`SetPlantClearings` trees-only), the sky held at a calm morning hour.
+   New colony or a load replaces it; `-SimNoTitleScene` keeps the old empty start). What the title shows is the
+   **starship stage** below; `Title.Stage 0` brings back the old camera circling the rainforest glade (the open spot
+   with the fewest trees, trunks on its circle hidden, the sky held at a calm morning hour).
    **Layout**: no box. The name in big, widely spaced capitals with a jade bar and the setting line under it, then the
    menu as big plain words (the hovered one brightens, steps in and gets the jade bar; Continue or New colony in jade),
    fading and sliding in one by one; a deep shade on the left fading out by the middle, darker top and bottom edges; the
@@ -102,9 +102,47 @@ slot and rerolls). Pawns without one (joiners, raiders) are still the MetaHumans
 "Clothes on" draws the cotton shirt and trousers as MakeHuman garments (#425). The scenario's `startHour` (Crash Landed:
 7, ours) sets the calendar's first hour so the landing is by daylight; steps still start at 0.
 
+## The starship stage (title backdrop)
+
+sneed (2026-11-23): "on title screen I'd prefer it's from a space ship window in orbit with the current character in
+some glitterworld wear looking at the viewer with a world at her back and the galaxy background. Rizz up her attire."
+
+`ATitleStage` (`TitleStage.cpp`), all cosmetic, built by `UColonyHudSubsystem::UpdateTitleStage` 30 km over the title
+map's corner, where nothing else is drawn. The TitleBackdrop sim still runs underneath (the menus work as before);
+leaving the title (New colony's landing, a load, a debug scene, the people pages) destroys the stage in
+`EndTitleCamera`, and the sky comes back.
+
+- **Cabin**: run-time meshes (`UProceduralMeshComponent`) of `M_GunPBR` instances: a dark glossy floor, the window's
+  sill, header and mullions in gunmetal, thin glowing cyan strips on the sill and mullions and a gold one under the
+  header. Without `M_GunPBR` the plain vertex-colour material, no glow.
+- **Her**: the player's character. Her creator look text (`PawnLooks::creator`) is remembered in
+  `game/Saved/TitleArt/Character.txt` whenever a game is saved or loaded (the protagonist's) and when "You" is edited
+  on the character screen; with nothing remembered yet, the newest save is read once; with no save, the creator's
+  default woman with long hair. A stand-alone `ASimPawnActor` (no sim pawn) with the creator look and strand hair,
+  standing idle (the animation's standing idle: breathing, weight shifts), facing the camera, framed from mid-thigh up
+  on the right third so the menu has the left. Smoke tests never write the file.
+- **Her clothes** (lumen-world wear): the lace-up `Blouse` in pearl satin over tight glossy black `JeansClassic`
+  (first imported of `Blouse, Tank, UniformJacket, TeeTucked` and `JeansClassic, Trousers, JeansStraight`; the
+  padded jacket looked bulky in the first PC picture):
+  the garments' tint (custom primitive data), no wear, and a lower `Roughness` on their own material instances. The
+  garment material has no emissive, so the glowing accents are the cabin's.
+- **Through the window**: a planet 2 km across seen 35 degrees wide, its limb just under the middle of the picture,
+  the surface map with the cloud map laid over it, turning slowly; a thin rim of air (rings of `M_BuildingGhost` just in
+  front of the planet, brightest on the sun's side); and the galaxy, a 9 km sphere seen from inside with the galaxy map
+  as glow, on its own light channel so the sun leaves it black.
+- **Light**: the stage's own sun from screen right and a little behind her (a rim on her, the planet half lit), a soft
+  key up left of the camera, a cyan glow from the sill and a warm light over her hair. The exposure is held at 9 EV
+  (no auto exposure); the sky's lights, atmosphere, fog, clouds, stars and exposure are put away
+  (`USkySubsystem::SetStageMode`).
+- **Camera**: 45 degrees wide, 1.38 m up, drifting a few centimetres and a fraction of a degree.
+- **Maps**: `tools/title_art.py` (art step `title-art`, run through Blender's Python for numpy) paints
+  `planet_color.png`, `planet_clouds.png` and `galaxy.png` (4096 x 2048, equirectangular, seeded) into
+  `game/Saved/TitleArt/`. The game reads them at run time; without them the planet is plain blue and space plain dark.
+
 ## Smoke test `newgame`
 
-Title, scenario page, "Land somewhere random" on seed 42 (You: three colonists, each with a creator look on its
+Title (the starship stage: fails if she, her body, her clothes, the planet or the galaxy is missing, or the sky's
+sun still shines there; `NEWGAME title stage` names where her look came from and her outfit), scenario page, "Land somewhere random" on seed 42 (You: three colonists, each with a creator look on its
 MakeHuman body, you the default woman with no traits, game still at step 0, `NEWGAME person` lines), clothes on and
 spinning (`NEWGAME clothes on`: shirt and trousers drawn as garments, nothing worn in the sim), the companions after random traits (`NEWGAME companion`: 18,
 10 of 10 points), their Looks tab after a reroll of slot 2 (`NEWGAME reroll`), and Start (the game runs, looks kept).

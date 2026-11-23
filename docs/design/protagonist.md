@@ -169,4 +169,40 @@ choices (berserk, fire-starting spree, jealousy, prisoner-style behaviour) must 
 change the rule later, for example "exempt only while the player is steering" (`PlayerControl`),
 change that function.
 
-Protagonist death is still game over (reload the last save); this does not change.
+## Death
+
+Protagonist death is game over, shown the Elden Ring way (sneed, 2026-11-23). Code: `UProtagonistSubsystem`
+(`BeginDeathScreen`, `TickDeathScreen`, `DrawDeathScreen`, `LeaveDeathScreen`), the sim rule in `Health.cpp`.
+
+**Downed counts as dead.** The protagonist is never downed by the body zones (a leg or the torso under a quarter does
+not down it; it dies when its zones have lost 100 hit points). Knocked out is different: with the head under a quarter
+or under 1000 of 3000 blood the protagonist **dies instead** (`DeathCause::Wounds` for the head, `BloodLoss` for blood),
+and on a body without zones one who would be downed by pain or a capacity dies the same way. The rule flag is
+`zones.protagonistDownedDies` in `data/defs/Rules/Rules.json` (true); a later quest that needs the protagonist to be
+knocked out sets it false. Sleeping is not unconsciousness here (`SleepCommand` is a job, not a health state), so a
+sleeping protagonist is untouched. Tests: `Tests/BodyZoneTests.cpp` ("Protagonist: ...").
+
+**The screen.** When the controlled protagonist's `PawnDied` arrives, the player no longer goes back to the overseer
+view. The camera stays on the body (the body is frozen: no walking, jumping, aiming, mode keys; the mouse still turns
+the camera). Then, all times in real seconds:
+
+- the world runs at a fifth of its speed (`SetGlobalTimeDilation 0.2`; the sim ticks on world time, so it slows to 0.2x
+  too, and no separate sim time scale is added or the two would multiply);
+- the colour drains to grey over 1.5 s (the camera's own post process, `ColorSaturation`);
+- over 1 s a dark band fades in across the middle with a big, widely spaced dark red YOU DIED (the engine has only the
+  sans UI font, so there is no serif; weight and glow come from drawing each letter a few times);
+- the cue `Player_Died` plays once, heard everywhere (not spatial) and ignoring the time dilation;
+- after 2 s a small prompt: "Space: load last save" (or "Space: back to the title" with no save at all), and "Esc: menu".
+  Space loads the newest `.save` by file time among `quicksave`, `autosave-N` and manual saves
+  (`USimSubsystem::FindNewestSaveSlot`). With no save it opens the title (the main menu; in a debug scene, the scene's
+  way back to the title). Esc opens the main menu at any time (settings, load, quit work while dead).
+- nothing saves while the screen is up (autosave and F5), so the newest save is always a living one.
+
+Time, colour and the overlay go back to normal as soon as a game loads (Space or the menu's Load) or the screen
+closes. Design choice: only the protagonist gets this; another colonist you took over and who dies still sends you back
+to the overview.
+
+**Sound TODO.** `Player_Died` has no recording yet: it plays a low 55 Hz tone (`data/defs/SoundCues/Cues.json`). It wants a
+dark, low piano chord or horror piano sting: add a CC0 row to `assets/sound_freesound.json` with a real Freesound id and
+name it for `Player_Died` in `assets/sound_picks.json` (a note there marks it).
+

@@ -40,6 +40,16 @@ public:
 	/** The open end (its stump cap): blood drips from there for a while once the piece has come down. */
 	void SetCutEnd(USceneComponent* InEnd) { CutEnd = InEnd; }
 	const USceneComponent* GetCutEnd() const { return CutEnd; }
+	/** Which piece it is (colony::SeveredBits: an arm, a leg, the head...). */
+	void SetBit(uint16 InBit) { Bit = InBit; }
+	uint16 GetBit() const { return Bit; }
+	/**
+	 * The piece's drawn skin as it is posed now (every copied mesh's vertices skinned on the CPU, hidden sections and scalp
+	 * hair left out, which may hang long): the longest side of the box round it, cm. A clean head is about 25 to 35 cm; a
+	 * piece with skin still tied to bones that stayed behind is drawn out much longer. -1 if no vertices could be read (a
+	 * cooked build keeps no CPU copy). `OutVertices`: how many were measured.
+	 */
+	float MeasureSkinLengthCm(int32& OutVertices) const;
 
 private:
 	UPROPERTY()
@@ -52,6 +62,7 @@ private:
 	FRotator Spin = FRotator::ZeroRotator;
 	FVector LimbAxis = FVector::ZeroVector;
 	float Radius = 8.0f;
+	uint16 Bit = 0;
 	bool bAtRest = false;
 	bool bLanded = false;
 	int32 Pushes = 0;

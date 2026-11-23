@@ -33,7 +33,7 @@ HoldPlace holdPlaceAt(const Def& def, const std::string& path, const HoldPlace& 
     HoldPlace p;
     p.set = true;
     const std::string anchor = def.text((path + ".anchor").c_str(), "Chest");
-    p.anchor = anchor == "Head" ? HoldAnchor::Head : (anchor == "View" ? HoldAnchor::View : HoldAnchor::Chest);
+    p.anchor = anchor == "Head" ? HoldAnchor::Head : anchor == "View" ? HoldAnchor::View : anchor == "Shoulder" ? HoldAnchor::Shoulder : HoldAnchor::Chest;
     const std::string point = def.text((path + ".point").c_str(), "Main");
     p.point = point == "Sight" ? HoldPlacePoint::Sight : (point == "Stock" ? HoldPlacePoint::Stock : HoldPlacePoint::Main);
     p.at = holdPointAt(def, path + ".at", HoldPoint{});

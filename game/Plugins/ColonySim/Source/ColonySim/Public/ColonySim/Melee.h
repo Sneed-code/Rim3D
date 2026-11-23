@@ -146,6 +146,19 @@ struct MeleeRules {
     float closeIn = 0.2f;             // a charging fighter walks on until the target is this far inside its reach (0.7 m at least)
     float windupShare = 0.3f;         // of a tool's cooldown spent winding up; the rest is recovery
     int minWindup = 9;
+    // sneed 2026-11-23: every melee attack 33% faster (windup, recovery and the clip with them), and a person's bare
+    // fists four times faster and weak (quick jabs). Times are multiplied, power too.
+    float attackTimeFactor = 1.0f;
+    float unarmedTimeFactor = 1.0f;   // a person's (humanlike) own tools: fists and head
+    float unarmedPowerFactor = 1.0f;
+    int unarmedMinWindup = 9;
+    // sneed 2026-11-23: the player's swing from standing plays on the whole body, so the feet step into a thrust instead
+    // of the chest leaning over planted legs; walking (faster than stepInMaxSpeed, m/s) it stays the arms' over walking
+    // legs. With stepInFreesFeet, starting to walk during a standing swing hands it to the upper body there and then.
+    // Both off: every player swing is the upper body's, as before (the revert).
+    bool playerStepIn = false;
+    bool stepInFreesFeet = false;
+    float stepInMaxSpeed = 0.6f;
     int commitSteps = 6;              // steps before the hit at which the strike's line is fixed
     float reactionSteps[2] = {9.0f, 3.0f};  // at Melee skill 0 and 20: steps to read a swing
     float reactionJitter = 4.0f;      // plus or minus this, picked per swing
@@ -252,6 +265,10 @@ public:
     // Whether the pawn could start a swing now (not winding up or recovering, able).
     bool ready(Entity pawn) const;
     bool winding(Entity pawn) const;
+    // The player's standing swing (MeleeRules playerStepIn) carries the whole body; when the player walks during it
+    // (`move` metres asked this step) and stepInFreesFeet is on, the swing goes on in the upper body and the feet are the
+    // player's again. True if the feet are free (now or already).
+    bool freeFeetToWalk(Entity pawn, float move);
     bool blocking(Entity pawn) const;
     // A finisher under way (sneed 2026-11-20): its MeleeRules entry, else null; how far through it is (0 to 1).
     const MeleeFinisher* finisherOf(Entity pawn) const;
@@ -365,6 +382,7 @@ private:
         DefId damageType;
         float power = 0.0f;
         int cooldown = 60;  // steps for the whole swing
+        int minWindup = 9;  // MeleeRules minWindup (or unarmedMinWindup), times attackTimeFactor
         float penetration = 0.0f;
         float weight = 1.0f;
     };

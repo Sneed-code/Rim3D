@@ -76,7 +76,8 @@ struct FSimTimings
  * . (period) steps once while paused, F7 saves a replay of the session to Saved/Replays/,
  * F5 quicksaves and F9 quickloads (Saved/Saves/, docs/design/saves.md), F8 writes a bug report
  * (a replay, a save and a readable dump in one folder under Saved/BugReports/). The game also
- * autosaves once a game day, rotating through three files.
+ * autosaves every 15 real minutes of unpaused play (not on the title backdrop or in a debug scene), rotating through
+ * five files autosave-1 to autosave-5 (always the oldest is written next).
  * Console: Sim.Speed, Sim.Spawn, Sim.SaveReplay, Sim.Save, Sim.Load, Sim.BugReport,
  * Sim.ShowTimings, Sim.DebugDraw.
  */
@@ -166,9 +167,21 @@ public:
 	/** Whether the HUDs show their list of keys (UI.KeyHelp, F1); folded by default. */
 	static bool IsKeyHelpShown();
 
-	/** Game seconds between autosaves; a day unless a test shortens it. 0 turns autosave off. */
+	/** Test override: autosave every this many GAME seconds instead of by the real-time clock. 0 (the default) goes back
+	 *  to the real-time autosave (SetAutosaveRealSeconds). */
 	void SetAutosaveInterval(int64 GameSeconds);
 	int64 GetAutosaveInterval() const { return AutosaveInterval; }
+	/** Real seconds of unpaused play between autosaves: 900 (15 minutes) by default, 0 turns it off. */
+	void SetAutosaveRealSeconds(double Seconds);
+	double GetAutosaveRealSeconds() const { return AutosaveRealSeconds; }
+	/** The protagonist's death screen holds saving: no autosave and no F5 while set, so "load last save" never finds the
+	 *  dead state. Cleared when a game starts or loads. */
+	void SetSavingBlocked(bool bBlocked) { bSavingBlocked = bBlocked; }
+	bool IsSavingBlocked() const { return bSavingBlocked; }
+	/** The slot of the newest .save file in the saves folder (quicksave, autosave-N or a manual one), or empty if none. */
+	static FString FindNewestSaveSlot();
+	/** Number of autosave files in the rotation. */
+	static constexpr int32 kAutosaveSlots = 5;
 	/** Number of autosaves written since the sim started or loaded. */
 	int32 GetAutosaveCount() const { return AutosaveCount; }
 
@@ -255,9 +268,12 @@ private:
 	int32 SpeedBeforePause = 1;
 	int32 MaxSpeed = 3;
 	int64 LastLoggedHour = -1;
-	int64 AutosaveInterval = colony::kSecondsPerDay;
+	int64 AutosaveInterval = 0;  // game seconds, tests only; 0: the real-time clock below
 	int64 LastAutosaveBucket = 0;
 	int32 AutosaveCount = 0;
+	double AutosaveRealSeconds = 900.0;
+	double AutosaveRealClock = 0.0;
+	bool bSavingBlocked = false;
 	int64 EventCount = 0;
 	int32 SimGeneration = 0;
 	FVector WorldOrigin = FVector::ZeroVector;

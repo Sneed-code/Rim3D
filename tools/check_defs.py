@@ -153,6 +153,7 @@ EVENT_CUES = {
     "Hit_Wood_Flesh", "Hit_Wood_Wood", "Hit_Wood_Steel", "Hit_Wood_Stone",
     "Hit_Steel_Flesh", "Hit_Steel_Wood", "Hit_Steel_Steel", "Hit_Steel_Stone",
     "Ui_KillConfirm",  # Unreal, the kill feed on the player's own kill (KillFeedSubsystem.cpp)
+    "Player_Died",  # Unreal, the YOU DIED screen (ProtagonistSubsystem.cpp)
     # Impacts by surface (soundImpactCue): bullets and arrows on what they struck; ricochets off stone and steel
     "Impact_Wood", "Impact_Steel", "Impact_Stone", "Impact_Dirt", "Impact_Sand", "Impact_Water", "Impact_Glass",
     "Arrow_Flesh", "Arrow_Wood", "Arrow_Stone", "Arrow_Dirt", "Ricochet",
@@ -317,8 +318,8 @@ def check_hold_styles(defs_by_kind):
             elif not isinstance(place, dict) or not point(place.get("at")):
                 problems.append(f"{where} places.{key} needs at: [x, y, z]")
             else:
-                if place.get("anchor", "Chest") not in ("Chest", "Head", "View"):
-                    problems.append(f"{where} places.{key} anchor must be Chest, Head or View")
+                if place.get("anchor", "Chest") not in ("Chest", "Head", "View", "Shoulder"):
+                    problems.append(f"{where} places.{key} anchor must be Chest, Head, View or Shoulder")
                 if place.get("point", "Main") not in ("Main", "Sight", "Stock"):
                     problems.append(f"{where} places.{key} point must be Main, Sight or Stock")
                 if "turn" in place and not point(place["turn"]):

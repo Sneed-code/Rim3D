@@ -20,6 +20,7 @@
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
 #include "PawnSubsystem.h"
+#include "SeveredPieceActor.h"
 #include "SimSubsystem.h"
 #include "SkinBlood.h"
 
@@ -495,7 +496,9 @@ void USmokeTestSubsystem::BuildGorePhases()
 		Phase.Setup = [=, this]()
 		{
 			State->SleepsAtStart = ActorOf() ? ActorOf()->GetRagdollSleeps() : 0;
-			State->bKilled = Damage("Blunt", 62.0f, "head");  // dead with its limbs on, so the blast has something to tear
+			// Dead with its limbs on, so the blast has something to tear; 14 past the head's 0 takes the head off (a quarter of
+			// 50), for the headoff phase.
+			State->bKilled = Damage("Blunt", 64.0f, "head");
 		};
 		Phase.WarmupSeconds = 0.0f;
 		Phase.MeasureSeconds = 7.0f;
@@ -525,6 +528,67 @@ void USmokeTestSubsystem::BuildGorePhases()
 			else if (Sleeps < 1)
 			{
 				Fail(TEXT("corpse: the ragdoll never settled and slept (it keeps twitching)"));
+			}
+		};
+		Phases.Add(MoveTemp(Phase));
+	}
+
+	{
+		// The head the corpse phase's blow took off (sneed, 2026-11-23: a severed head stayed tied to the neck stump by a
+		// long stretched pink and white tube): a clean piece of its own, about a head long, seen close.
+		FPhase Phase;
+		Phase.Name = TEXT("headoff");
+		Phase.Setup = []() {};
+		Phase.WarmupSeconds = 0.0f;
+		Phase.MeasureSeconds = 1.0f;
+		Phase.ScreenshotAt = 0.5f;
+		Phase.OnFrame = [=, this]()
+		{
+			for (TActorIterator<ASeveredPieceActor> It(GetWorld()); It; ++It)
+			{
+				if (It->GetBit() == colony::kSeveredHead)
+				{
+					// The piece's bounds, not its actor: the head simulates and rolls away from where the actor was made.
+					const FBox Bounds = It->GetComponentsBoundingBox(true);
+					const FVector At = Bounds.IsValid ? Bounds.GetCenter() : It->GetActorLocation();
+					const FVector Eye = At + FVector(0.55, 0.45, 0.70).GetSafeNormal() * 120.0;
+					ViewFrom(Eye, (At - Eye).Rotation());
+					break;
+				}
+			}
+		};
+		Phase.Verify = [=, this]()
+		{
+			const ASeveredPieceActor* HeadPiece = nullptr;
+			for (TActorIterator<ASeveredPieceActor> It(GetWorld()); It; ++It)
+			{
+				if (It->GetBit() == colony::kSeveredHead)
+				{
+					HeadPiece = *It;
+				}
+			}
+			const colony::ThingView* Now = Bridge() ? Bridge()->GetCurrentSnapshot().find(State->Pawn) : nullptr;
+			const bool bOff = Now && (Now->severed & colony::kSeveredHead) != 0;
+			const ASimPawnActor* Actor = ActorOf();
+			const float Tall = Actor ? FMath::Max(Actor->GetBodyScale(), 1.0f) : 1.0f;
+			PhaseNumbers.Add(TEXT("headOff"), bOff ? 1 : 0);
+			if (!bOff || !HeadPiece)
+			{
+				Fail(FString::Printf(TEXT("headoff: head off in the sim %d, head piece drawn %d (both expected)"), bOff ? 1 : 0, HeadPiece ? 1 : 0));
+				return;
+			}
+			int32 PieceVertices = 0;
+			const float PieceCm = HeadPiece->MeasureSkinLengthCm(PieceVertices);
+			PhaseNumbers.Add(TEXT("headPieceCm"), PieceCm);
+			PhaseNumbers.Add(TEXT("headPieceVertices"), PieceVertices);
+			PhaseNumbers.Add(TEXT("headPieceMeshes"), HeadPiece->GetMeshCount());
+			if (PieceCm < 0.0f)
+			{
+				Notes.Add(TEXT("headoff: the head piece's skin could not be read (no CPU copy of the vertices); look at the picture"));
+			}
+			else if (PieceCm > 45.0f * Tall)
+			{
+				Fail(FString::Printf(TEXT("headoff: the severed head's skin is drawn out %.0f cm long (45 at most): skin still tied to the body"), PieceCm));
 			}
 		};
 		Phases.Add(MoveTemp(Phase));
