@@ -548,8 +548,10 @@ void USmokeTestSubsystem::BuildGorePhases()
 			{
 				if (It->GetBit() == colony::kSeveredHead)
 				{
-					const FVector At = It->GetActorLocation();
-					const FVector Eye = At + FVector(80.0, 55.0, 50.0);
+					// The piece's bounds, not its actor: the head simulates and rolls away from where the actor was made.
+					const FBox Bounds = It->GetComponentsBoundingBox(true);
+					const FVector At = Bounds.IsValid ? Bounds.GetCenter() : It->GetActorLocation();
+					const FVector Eye = At + FVector(0.55, 0.45, 0.70).GetSafeNormal() * 120.0;
 					ViewFrom(Eye, (At - Eye).Rotation());
 					break;
 				}

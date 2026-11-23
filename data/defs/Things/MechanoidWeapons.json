@@ -1,6 +1,6 @@
 [
  {
-  "defName": "Gun_ChargeLance", "keepBurst": true, "hold": {"style": "Hold_Rifle", "off": [25, 0, 0]},
+  "defName": "Gun_ChargeLance", "keepBurst": true, "hold": {"style": "Hold_Rifle", "off": [25, 0, 0], "places": {"aim": {"anchor": "Shoulder", "point": "Stock", "at": [-3, -5, 4], "turn": [0, 0, 0]}}},
   "parent": "GunBase",
   "label": "charge lance",
   "source": "RimWorld wiki",
