@@ -13,8 +13,13 @@ pick up two-handed weapons (`CombatSystem::dropTwoHandersOfOneArmed`), its one-h
 leaves a big blood pool (`UBloodSubsystem::AddBurstPool`), rocket smoke trail a third the width, mace/zeushammer block
 puts the left hand on the haft (`blockOff` in HoldStyles), **roll** keeps both hands on the weapon riding with the upper
 body (`ClipRide`, new hand goal space `AnchorFull`) so no arm through the body, **severed heads keep their strand hair**
-(the groom moves to the piece, simulated in the world), head pieces of non-MakeHuman bodies now include the neck. New
-smoke phase `feel_roll_walking` (W held through a roll with the rifle; logs `WALKROLLTRACE`) to find the roll's end snap.
+(the groom moves to the piece, simulated in the world), head pieces of non-MakeHuman bodies now include the neck. **Roll end
+snap fixed**: the clip set-back was worked out before the mesh moved the montage blend on, so a frame hitch at the
+fade threw the hips up to 100 cm for a frame; it is now made exact after the pose is evaluated
+(`USimPawnAnimInstance::NativePostEvaluateAnimation` -> `ASimPawnActor::RefreshMotionSetBack`), and the drawn body eases
+between the sim's place and the player's own when a roll starts or ends (`SourceEase`). New smoke phase
+`feel_roll_walking` (W held, rifle; `WALKROLLTRACE`). PC (2026-11-24, test clone): compiles; `feel`, `gore`, `hurt`
+pass; `melee` fails only switch_key, which fails on main too.
 
 Gore, liquid fire, rocket and roll (sneed, 2026-11-23 night; Unreal only, the rest of the second combat batch):
 **torso bursts** now throw the torso itself cut into slabs (breasts, belly, back, buttocks, the genitals as their own
