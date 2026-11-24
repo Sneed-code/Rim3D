@@ -2167,16 +2167,15 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 	const float Height = bHasLooks ? Looks.Height : 1.0f;
 	const UWorld* World = GetWorld();
 	const double FrameAhead = World ? static_cast<double>(World->GetDeltaSeconds()) : 0.0;
-	const double BlendAhead = MotionLastDelta;
-	MotionLastDelta = FrameAhead;
+	const double BlendAhead = FrameAhead;
 	const auto SetBack = [Height, FrameAhead, BlendAhead](const FAnimMontageInstance& Playing, const UAnimSequence& PlayingAsset, int32 Pelvis, const FVector& PelvisStart)
 	{
 		const double Ahead = Playing.IsPlaying() ? FrameAhead * static_cast<double>(Playing.GetPlayRate()) : 0.0;
 		const double At = FMath::Clamp(static_cast<double>(Playing.GetPosition()) + Ahead, 0.0, static_cast<double>(PlayingAsset.GetPlayLength()));
 		const FVector Travel = PawnMotionBoneAt(PlayingAsset, Pelvis, At) - PelvisStart;
-		// The weight the pose is drawn with this frame: the mesh moves the montage's blend on by the LAST frame's time
-		// before it draws (PC trace, 2026-11-24: after a 55 ms hitch the weight read here was 0.975 while the body was
-		// drawn at 0.77, and the hips landed 90 cm behind for a frame at the end of a walking roll).
+		// The weight the pose is drawn with this frame: the mesh moves the montage's blend on by this frame's time after
+		// this reads it (PC trace, 2026-11-24: after a 55 ms hitch the weight read here was 0.975 while the body was drawn
+		// at 0.77, and the hips landed 90 cm behind for a frame at the end of a walking roll).
 		double Weight = Playing.GetWeight();
 		const FAlphaBlend& Blend = Playing.GetBlend();
 		const double Remaining = Blend.GetBlendTimeRemaining();
