@@ -1,0 +1,15 @@
+diff --git a/game/Source/Rim3DEditor/AnimalArtCommandlet.cpp b/game/Source/Rim3DEditor/AnimalArtCommandlet.cpp
+index 6d277426..748bf882 100644
+--- a/game/Source/Rim3DEditor/AnimalArtCommandlet.cpp
++++ b/game/Source/Rim3DEditor/AnimalArtCommandlet.cpp
+@@ -41,7 +41,9 @@ namespace
+ 	// Moves an imported asset to <folder>/<NewName> (the name the game loads) and saves it there.
+ 	bool AnimalArtRename(IAssetTools& Tools, UObject* Object, const FString& Folder, const FString& NewName)
+ 	{
+-		if (Object->GetName() != NewName)
++		// Compare the package, not just the name: a GLB named like its model imports a mesh already called <model>,
++		// but in the import's own subfolder, not at <folder>/<model> where the game loads it.
++		if (Object->GetOutermost()->GetName() != Folder / NewName)
+ 		{
+ 			if (!Tools.RenameAssets({FAssetRenameData(Object, Folder, NewName)}))
+ 			{
