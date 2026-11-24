@@ -2031,6 +2031,84 @@ namespace
 	}
 }
 
+namespace
+{
+	/** The instance of Montage that shows most on Anim (playing, or stopped and fading out). */
+	const FAnimMontageInstance* PawnMontageShown(const UAnimInstance* Anim, const TWeakObjectPtr<UAnimMontage>& Montage)
+	{
+		const FAnimMontageInstance* Best = nullptr;
+		if (Anim && Montage.IsValid())
+		{
+			for (const FAnimMontageInstance* Each : Anim->MontageInstances)
+			{
+				if (Each && Each->Montage == Montage.Get() && Each->IsValid() && (!Best || Each->GetWeight() > Best->GetWeight()))
+				{
+					Best = Each;
+				}
+			}
+		}
+		return Best;
+	}
+}
+
+/**
+ * The set-back: the drawn hips' travel at each montage's own moment, as much as each shows (blending in or out): the
+ * clip now playing, and the one it took over from while that fades out (without it the body jumped forward by the old
+ * clip's travel the moment a second swing or stagger began). Ahead > 0: as it will be after the mesh moves the montages
+ * on by that much time (the estimate for placing the body before its pose is worked out); 0: as the pose now is.
+ */
+FVector ASimPawnActor::MotionSetBack(double Ahead) const
+{
+	const USimPawnAnimInstance* Anim = GetAnim();
+	// The mannequin faces +Y in its own space and the actor +X, so the mesh's +Y is the actor's +X and its -X the
+	// actor's +Y (right); the body is scaled by the pawn's height, and so is its hips' travel.
+	const float Height = bHasLooks ? Looks.Height : 1.0f;
+	const auto SetBack = [Height, Ahead](const FAnimMontageInstance& Playing, const UAnimSequence& PlayingAsset, int32 Pelvis, const FVector& PelvisStart)
+	{
+		const double Play = Playing.IsPlaying() ? Ahead * static_cast<double>(Playing.GetPlayRate()) : 0.0;
+		const double At = FMath::Clamp(static_cast<double>(Playing.GetPosition()) + Play, 0.0, static_cast<double>(PlayingAsset.GetPlayLength()));
+		const FVector Travel = PawnMotionBoneAt(PlayingAsset, Pelvis, At) - PelvisStart;
+		double Weight = Playing.GetWeight();
+		const FAlphaBlend& Blend = Playing.GetBlend();
+		const double Remaining = Blend.GetBlendTimeRemaining();
+		if (Remaining > 1.0e-4 && Ahead > 0.0)
+		{
+			Weight += (static_cast<double>(Blend.GetDesiredValue()) - Weight) * FMath::Min(1.0, Ahead / Remaining);
+		}
+		return FVector(-Travel.Y, Travel.X, 0.0) * Weight * Height;
+	};
+	FVector Sum = FVector::ZeroVector;
+	const FAnimMontageInstance* Shown = PawnMontageShown(Anim, MotionMontage);
+	if (Shown && MotionAsset.IsValid() && MotionPelvisBone != INDEX_NONE && !bMotionUpper)
+	{
+		Sum += SetBack(*Shown, *MotionAsset.Get(), MotionPelvisBone, MotionPelvisStart);
+	}
+	const FAnimMontageInstance* Out = MotionOutMontage != MotionMontage ? PawnMontageShown(Anim, MotionOutMontage) : nullptr;
+	if (Out && MotionOutAsset.IsValid() && MotionOutPelvisBone != INDEX_NONE)
+	{
+		Sum += SetBack(*Out, *MotionOutAsset.Get(), MotionOutPelvisBone, MotionOutPelvisStart);
+	}
+	return Sum;
+}
+
+void ASimPawnActor::RefreshMotionSetBack()
+{
+	// Called once the body's pose for this frame is worked out, before it is drawn: the set-back from the very moments
+	// and weights that pose used, the body moved by what the estimate missed. The estimate could not know a hitch's
+	// frame time or when the mesh moved the blend on (PC 2026-11-24: the hips 20 to 100 cm off for a frame at a roll's end).
+	if (!Body || bRagdoll || (MotionOffset.IsNearlyZero(0.01) && !MotionMontage.IsValid() && !MotionOutMontage.IsValid()))
+	{
+		return;
+	}
+	const FVector Exact = MotionSetBack(0.0);
+	const FVector Missed = Exact - MotionOffset;
+	if (!Missed.IsNearlyZero(0.01) && Missed.SizeSquared() < FMath::Square(250.0))
+	{
+		Body->SetRelativeLocation(Body->GetRelativeLocation() + Missed);
+		MotionOffset = Exact;
+	}
+}
+
 /**
  * Plays the clip the sim is moving this body along (docs/design/body-motion.md), at the sim's own moment of it. The
  * clip's travel is in its hips, and the sim has already put that travel into the pawn's position, so the visible body
@@ -2144,67 +2222,21 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 		MotionClipTime = Now.motionTime;
 	}
 
-	// The set-back: the drawn hips' travel at each montage's own moment, as much as each shows (blending in or out): the
-	// clip now playing, and the one it took over from while that fades out (without it the body jumped forward by the
-	// old clip's travel the moment a second swing or stagger began).
-	const auto MontageShown = [Anim](const TWeakObjectPtr<UAnimMontage>& Montage) -> const FAnimMontageInstance*
-	{
-		const FAnimMontageInstance* Best = nullptr;
-		if (Anim && Montage.IsValid())
-		{
-			for (const FAnimMontageInstance* Each : Anim->MontageInstances)
-			{
-				if (Each && Each->Montage == Montage.Get() && Each->IsValid() && (!Best || Each->GetWeight() > Best->GetWeight()))
-				{
-					Best = Each;
-				}
-			}
-		}
-		return Best;
-	};
-	// The mannequin faces +Y in its own space and the actor +X, so the mesh's +Y is the actor's +X and its -X the
-	// actor's +Y (right); the body is scaled by the pawn's height, and so is its hips' travel.
-	const float Height = bHasLooks ? Looks.Height : 1.0f;
+	// The set-back (MotionSetBack): estimated here for this frame's placement, then made exact once the body's pose for
+	// this frame has been worked out (RefreshMotionSetBack, from the anim instance after it evaluates).
 	const UWorld* World = GetWorld();
-	const double FrameAhead = World ? static_cast<double>(World->GetDeltaSeconds()) : 0.0;
-	const double BlendAhead = FrameAhead;
-	const auto SetBack = [Height, FrameAhead, BlendAhead](const FAnimMontageInstance& Playing, const UAnimSequence& PlayingAsset, int32 Pelvis, const FVector& PelvisStart)
-	{
-		const double Ahead = Playing.IsPlaying() ? FrameAhead * static_cast<double>(Playing.GetPlayRate()) : 0.0;
-		const double At = FMath::Clamp(static_cast<double>(Playing.GetPosition()) + Ahead, 0.0, static_cast<double>(PlayingAsset.GetPlayLength()));
-		const FVector Travel = PawnMotionBoneAt(PlayingAsset, Pelvis, At) - PelvisStart;
-		// The weight the pose is drawn with this frame: the mesh moves the montage's blend on by this frame's time after
-		// this reads it (PC trace, 2026-11-24: after a 55 ms hitch the weight read here was 0.975 while the body was drawn
-		// at 0.77, and the hips landed 90 cm behind for a frame at the end of a walking roll).
-		double Weight = Playing.GetWeight();
-		const FAlphaBlend& Blend = Playing.GetBlend();
-		const double Remaining = Blend.GetBlendTimeRemaining();
-		if (Remaining > 1.0e-4 && BlendAhead > 0.0)
-		{
-			Weight += (static_cast<double>(Blend.GetDesiredValue()) - Weight) * FMath::Min(1.0, BlendAhead / Remaining);
-		}
-		return FVector(-Travel.Y, Travel.X, 0.0) * Weight * Height;
-	};
-	// The bodies' meshes tick after the pawns (TG_PostUpdateWork), so the moments and weights read here are a frame
-	// old; the hips' travel is read a frame on (the montage's moment plus this frame's play), which is where it is drawn.
-	const FAnimMontageInstance* Shown = MontageShown(MotionMontage);
-	const UAnimSequence* ShownAsset = MotionAsset.Get();
-	MotionOffset = FVector::ZeroVector;
+	MotionOffset = MotionSetBack(World ? static_cast<double>(World->GetDeltaSeconds()) : 0.0);
+	const FAnimMontageInstance* Shown = PawnMontageShown(Anim, MotionMontage);
 	LegsClipWeight = Shown && !bMotionUpper ? Shown->GetWeight() : 0.0f;
-	if (Shown && ShownAsset && MotionPelvisBone != INDEX_NONE && !bMotionUpper)
-	{
-		MotionOffset += SetBack(*Shown, *ShownAsset, MotionPelvisBone, MotionPelvisStart);
-	}
-	else if (!Asset)
+	if (!(Shown && MotionAsset.IsValid() && MotionPelvisBone != INDEX_NONE && !bMotionUpper) && !Asset)
 	{
 		MotionMontage.Reset();
 		MotionAsset.Reset();
 	}
-	const FAnimMontageInstance* Out = MotionOutMontage != MotionMontage ? MontageShown(MotionOutMontage) : nullptr;
+	const FAnimMontageInstance* Out = MotionOutMontage != MotionMontage ? PawnMontageShown(Anim, MotionOutMontage) : nullptr;
 	if (Out && MotionOutAsset.IsValid() && MotionOutPelvisBone != INDEX_NONE)
 	{
 		LegsClipWeight = FMath::Max(LegsClipWeight, Out->GetWeight());
-		MotionOffset += SetBack(*Out, *MotionOutAsset.Get(), MotionOutPelvisBone, MotionOutPelvisStart);
 	}
 	else
 	{

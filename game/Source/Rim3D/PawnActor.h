@@ -268,6 +268,9 @@ public:
 	bool IsMotionClipUpper() const { return IsInMotionClip() && bMotionUpper; }
 	FVector GetMotionOffset() const { return MotionOffset; }
 	float GetLegsClipWeight() const { return LegsClipWeight; }
+	/** The body moved by what the clip set-back's estimate missed, once its pose for this frame is worked out (from
+	 *  USimPawnAnimInstance after it evaluates). */
+	void RefreshMotionSetBack();
 	/** While an attack clip is on screen: the seconds of the clip still to play before its blow (negative once past it) and
 	 *  the rate it plays at. False when no clip with a blow is playing. */
 	bool GetMotionClipToHit(float& OutSeconds, float& OutRate) const;
@@ -614,6 +617,7 @@ private:
 	float PreviewSpin = 0.0f;
 	/** How much of a whole-body clip shows now (the clip playing and the one fading out). */
 	float LegsClipWeight = 0.0f;
+	FVector MotionSetBack(double Ahead) const;
 	float SwimLiftCm = 0.0f;
 	bool bPlaced = false;
 	/** Drawn at the player's own place last frame (else the sim's), and the gap left when that switched, easing out. */

@@ -166,6 +166,8 @@ public:
 	const FSimPawnAnimStats& GetStats() const { return Stats; }
 
 protected:
+	/** After the pose is worked out: the pawn makes its clip set-back exact (ASimPawnActor::RefreshMotionSetBack). */
+	virtual void NativePostEvaluateAnimation() override;
 	virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;
 	virtual void DestroyAnimInstanceProxy(FAnimInstanceProxy* InProxy) override;
 
