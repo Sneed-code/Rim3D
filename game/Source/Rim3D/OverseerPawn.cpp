@@ -94,6 +94,13 @@ void AOverseerPawn::Tick(float DeltaTime)
 		{
 			OnTakeControlPressed();
 		}
+		float BoxX = 0.0f;
+		float BoxY = 0.0f;
+		UOverseerSubsystem* BoxOverseer = GetWorld()->GetSubsystem<UOverseerSubsystem>();
+		if (BoxOverseer && PC->GetMousePosition(BoxX, BoxY))
+		{
+			BoxOverseer->UpdateSelectPress(FVector2D(BoxX, BoxY));
+		}
 		const auto Down = [PC](const FKey& A, const FKey& B) { return PC->IsInputKeyDown(A) || PC->IsInputKeyDown(B); };
 		const double Right = (Down(EKeys::D, EKeys::Right) ? 1.0 : 0.0) - (Down(EKeys::A, EKeys::Left) ? 1.0 : 0.0);
 		const double Forward = (Down(EKeys::W, EKeys::Up) ? 1.0 : 0.0) - (Down(EKeys::S, EKeys::Down) ? 1.0 : 0.0);
@@ -249,7 +256,15 @@ void AOverseerPawn::OnSelectPressed()
 	UE_LOG(LogOverseerInput, Log, TEXT("Left press at (%.0f, %.0f)"), MouseX, MouseY);
 	if (!Orders || !Orders->HandleLeftPressed(FVector2D(MouseX, MouseY)))
 	{
-		SelectAtScreenPosition(FVector2D(MouseX, MouseY));
+		// A click selects on release; held and dragged it draws a box that selects everything in it (UOverseerSubsystem).
+		if (UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>())
+		{
+			Overseer->BeginSelectPress(FVector2D(MouseX, MouseY));
+		}
+		else
+		{
+			SelectAtScreenPosition(FVector2D(MouseX, MouseY));
+		}
 	}
 }
 
@@ -263,9 +278,14 @@ void AOverseerPawn::OnSelectReleased()
 		UE_LOG(LogOverseerInput, Warning, TEXT("Left release: %s"), PC ? TEXT("the viewport has no mouse position") : TEXT("no player controller"));
 		return;
 	}
-	if (UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>())
+	UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
+	if (Orders && Orders->HandleLeftReleased(FVector2D(MouseX, MouseY)))
 	{
-		Orders->HandleLeftReleased(FVector2D(MouseX, MouseY));
+		return;
+	}
+	if (UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>())
+	{
+		Overseer->EndSelectPress(FVector2D(MouseX, MouseY), PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift));
 	}
 }
 

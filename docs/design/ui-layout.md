@@ -217,3 +217,54 @@ wider", and "stop looking basic, make it professional ... be consistent".
 - **Glass**: every plain box gets a faint jade glow fading down from its top edge, a hairline of light inside the top
   border and a darker foot (the same end-of-frame hook as the jade bars), slimmer jade scrollbars and a little more
   padding, so all boxes read as one lit pane.
+
+## Layout v2 (sneed, 2026-11-24)
+
+`game/Source/Rim3D/HudLayout.h` holds the rules:
+
+- **Bar windows** (Work, Schedule, Assign, the Build menu and every other tab) start at the screen's left edge and sit right
+  on the bottom bar, no gap. They are only as wide as they need to be. The Build menu's list and tiles are equal height
+  and touch. While a tab is open the terrain hover box and a selected cell's box are hidden.
+- **The right column** stacks from the very top right: the inspect box (or the hover readout when nothing is selected),
+  the alarm, the learning helper, then the alerts. Each box reports its height. The next frame stacks on those heights.
+- The bottom bar's buttons are 1.35 frame heights tall (`ColonyHud::BarButtonHeight`). The text size comes from the
+  shared Canopy style (`TextGrow`).
+- Power and Temperature buttons are hidden (`Overlay.Toggles 1` shows them).
+- Engine debug keys (F1 wireframe, F2 unlit, F3 lit...) are off: `DefaultInput.ini` clears
+  `PlayerInput.DebugExecBindings`, and the HUD empties the list at run time too.
+
+## Selecting (2026-11-24)
+
+- A click selects one thing. Shift + click adds or removes a thing.
+- **Drag a box** (more than 10 px) to select many. Your colonists come first. With none in the box, it picks other people,
+  then animals. With none of those, it picks things of the same kind as the one nearest where the drag began.
+  Shift + drag adds to the selection.
+- The selection shows as a flat jade ring on the ground round each thing, not a box. Your pawns' routes are drawn flat.
+- Draft, move and attack orders go to every selected colonist. A move spreads them over nearby cells.
+- When the game starts, the camera goes to your character and selects them.
+
+## Order marks (2026-11-24)
+
+The tall posts are gone. A marked cell or thing gets a flat ring: green for chop, yellow for harvest, orange for mine,
+red for take down (deconstruct or remove floor). Rings show only while that order's tool is held, for all of them while
+Cancel is held, or for the selected thing or cell. Otherwise the order stays but nothing is drawn. Chop marks
+only trees (`DesignateCommand.treesOnly`, RimWorld's "Chop wood"), not the grass and bushes in the drag.
+
+## Alerts (2026-11-24)
+
+The old event list is replaced by RimWorld-style alerts down the right side. Each has a short title of one to three
+words, coloured by severity.
+
+- **Left click** opens the full message in the middle of the screen. Reading it removes the alert. The pop-up can jump
+  to the subject.
+- **Right click** dismisses it.
+- **Shift + right click** (or "Never show this kind" in the pop-up) turns that kind off for good. The list is saved in
+  `GameUserSettings.ini` `[Rim3D.Alerts]`. Menu > Message log shows it with a "Turn on" button for each kind.
+- An alert fades after `UPanelsSubsystem::AlertSeconds` (60 s for every severity for now) and dims in its last 8 s.
+- The same alert repeated within 5 s counts up ("x3") instead of stacking.
+- Menu > Message log keeps every message with its game time, including single finished crafts, which never become alerts.
+
+## Colonist bar (2026-11-24)
+
+The faces grow with the text. A health bar under each face shows the worst body part's health: green, then amber below
+60%, then red below 30%.

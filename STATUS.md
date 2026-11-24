@@ -2,6 +2,21 @@
 
 Updated 2026-11-24.
 
+HUD batch (sneed, 2026-11-24; Unreal only, `docs/design/ui-layout.md` "Layout v2" onward): bar windows (Work,
+Schedule, Build...) sit flush on the screen's left edge and on the bar; the terrain/inspect box moved fully top right, with
+the alarm, lessons and alerts stacked under it (`HudLayout.h`); a taller bottom bar; Power/Temperature hidden; F1/F2/F3
+engine view keys off; **drag-box selection** (colonists, then other people, then animals, then things of one kind), flat
+selection rings, orders to every selected colonist; chop/harvest/mine/take-down marks are flat coloured rings shown only
+with their tool or on the selected thing; **RimWorld-style alerts** (short titles, click for a pop-up, right click
+dismiss, shift + right click off for good, turned back on in Menu > Message log, 60 s fade); health bars under colonist
+faces; the camera starts on your character; Chop marks only trees (`DesignateCommand.treesOnly`, save section
+`commands` 8). **Giant grey animals** were the capybara: its leg IK/stretch bones are 0.001 in the bind pose but about 0.105
+in its clips, and its skin is bound against a mesh in another unit. AnimalArt now clamps bone scale (`clampBoneScale`)
+but the pillars stay, so the Capybara def uses the ShibaInu model as a stand-in until the glb is re-exported from Blender
+with the armature scale applied (and its `Piel` material, an instance of Interchange's default, gets morph usage). PC (2026-11-24,
+test clone): compiles; `hud`, `orders`, `panels` pass; `newgame` fails only its 2 known clothes checks. The order icons came in #463.
+
+
 HUD icons (sneed, 2026-11-24; Unreal only): 45 painted icons made with ChatGPT in one style for the bottom bar tabs,
 Build categories, every order and zone tool, Draft / Stand down / alarm and area Paint / Erase, in
 `assets/ui/icons/` (256 px PNGs, loaded at run time by `HudIcons.cpp`; docs/design/ui-layout.md "Icons").

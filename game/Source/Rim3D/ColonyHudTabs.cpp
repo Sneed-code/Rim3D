@@ -8,6 +8,7 @@
 #include <imgui.h>
 
 #include "ColonyHudStyle.h"
+#include "HudLayout.h"
 
 #include "OverseerSubsystem.h"
 #include "PanelsSubsystem.h"
@@ -111,10 +112,13 @@ namespace
 
 void UColonyHudSubsystem::PlaceTabWindow(float Scale, float Width, float MaxHeightShare) const
 {
+	// sneed 2026-11-24: from the screen's left edge, its bottom on the bar, no gap (HudLayout); wider by however much the text
+	// has grown since these widths were set (the font scale was 1.2 then), so the bigger text still fits.
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
-	const float W = FMath::Min(Width, Viewport->Size.x - 24.0f * Scale);
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(W, 0.0f), ImVec2(W, Viewport->Size.y * MaxHeightShare));
+	const float Grow = FMath::Max(1.0f, ImGui::GetStyle().FontScaleMain / (1.2f * Scale));
+	const float W = FMath::Min(Width * Grow, Viewport->Size.x);
+	HudLayout::PlaceTab(Viewport, Scale);
+	ImGui::SetNextWindowSizeConstraints(ImVec2(W, 0.0f), ImVec2(W, (HudLayout::TabBottom(Viewport, Scale) - Viewport->Pos.y) * FMath::Min(1.0f, MaxHeightShare * 1.15f)));
 }
 
 // ---- Assign ------------------------------------------------------------------------------------

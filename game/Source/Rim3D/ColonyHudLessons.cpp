@@ -6,6 +6,7 @@
 #include <imgui.h>
 
 #include "ColonyHudStyle.h"
+#include "HudLayout.h"
 #include "SimSubsystem.h"
 
 #include "ColonySim/Clock.h"
@@ -150,11 +151,12 @@ void UColonyHudSubsystem::DrawLessons(USimSubsystem& Bridge, float Scale)
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	const float Width = 380.0f * Scale;
 	// Top right, under the alarm button and the event line.
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - 12.0f * Scale, Viewport->Pos.y + 110.0f * Scale), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+	HudLayout::PlaceRight(Viewport, HudLayout::ERightSlot::Lessons, Scale);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(Width, 0.0f), ImVec2(Width, Viewport->Size.y * 0.4f));
 	ColonyHud::HoldWidth("##HudLesson", Scale);
 	if (ImGui::Begin("##HudLesson", nullptr, ColonyHud::BoxFlags()))
 	{
+		HudLayout::ReportRight(HudLayout::ERightSlot::Lessons);
 		++Stats.LessonFrames;
 		ColonyHud::TextColored(ColonyHud::TextFaint(), FString::Printf(TEXT("Learning helper  %d / %d"), Learned, CountLessons()));
 		ColonyHud::Heading(Showing->Title);

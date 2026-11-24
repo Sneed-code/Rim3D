@@ -552,9 +552,10 @@ public:
     // (FighterSystem::sprinting) or carrying a downed friend to cover, or a colonist rescuing a downed colonist or beating
     // out a fire. Never the player's pawn (Unreal's sprint toggle sets its speed), visitors or animals.
     bool pawnSprinting(Entity pawn) const;
+    // The worst body part's health share, 0..1: the focus HP bar (docs/design/focus.md) and the colonist bar's health strip.
+    float lowestPartHealth(Entity pawn) const;
 
 private:
-    float lowestPartHealth(Entity pawn) const;  // the focus HP bar (docs/design/focus.md)
     float pawnMoveFactor(Entity pawn) const;  // see Sim.cpp
     void dropLostDecks();  // what stood on a bridge that fell into deep water is gone (docs/design/roads-bridges.md)
     // Buildings wrecked by damage (docs/design/destruction.md): noted just before they go, then at the end of the step,

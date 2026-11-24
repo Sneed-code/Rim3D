@@ -292,6 +292,28 @@ TEST_CASE("Mining: designating marks only what suits, and cancelling takes the m
     CHECK(failed == 1);
 }
 
+TEST_CASE("Designations: Chop with treesOnly marks the trees and leaves the grass (sneed 2026-11-24)") {
+    Sim sim = miningSim();
+    sim.plants().place(CellPos{5, 5, 0}, miningDef(sim, "Plant_TreeOak"), 1.0f);
+    sim.plants().place(CellPos{6, 5, 0}, miningDef(sim, "Plant_Grass"), 1.0f);
+    sim.plants().place(CellPos{20, 20, 0}, miningDef(sim, "Plant_Grass"), 1.0f);
+    DesignateCommand chop{CellRect{0, 0, 10, 10, 0}, DesignationKind::CutPlant};
+    chop.treesOnly = true;
+    sim.submit(chop);
+    DesignateCommand grassOnly{CellRect{18, 18, 4, 4, 0}, DesignationKind::CutPlant};
+    grassOnly.treesOnly = true;
+    sim.submit(grassOnly);  // no tree there: fails
+    sim.step();
+    int failed = 0;
+    for (const Event& e : sim.events()) {
+        failed += e.type == EventType::CommandFailed ? 1 : 0;
+    }
+    CHECK(failed == 1);
+    CHECK(sim.designations().at(CellPos{5, 5, 0}) == DesignationKind::CutPlant);
+    CHECK(sim.designations().at(CellPos{6, 5, 0}) == DesignationKind::None);
+    CHECK(sim.designations().at(CellPos{20, 20, 0}) == DesignationKind::None);
+}
+
 TEST_CASE("Mining: a colonist walks over, picks the rock down in two hits and leaves a chunk") {
     Sim sim = miningSim();
     const CellPos rock{12, 8, 0};

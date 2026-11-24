@@ -214,6 +214,9 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, DesignateCommand>) {
                 j["area"] = replayRectJson(c.area);
                 j["kind"] = designationKindName(c.kind);
+                if (c.treesOnly) {
+                    j["treesOnly"] = true;
+                }
             } else if constexpr (std::is_same_v<Type, CancelDesignationsCommand>) {
                 j["area"] = replayRectJson(c.area);
                 j["kind"] = designationKindName(c.kind);
@@ -1098,6 +1101,12 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
         }
         if (c.kind == DesignationKind::None) {
             return r.fail(where + ".kind must be Mine, CutPlant, HarvestPlant, RemoveFloor, AddWindow or RemoveWindow");
+        }
+        if (const auto trees = j.find("treesOnly"); trees != j.end()) {
+            if (!trees->is_boolean()) {
+                return r.fail(where + ".treesOnly must be true or false");
+            }
+            c.treesOnly = trees->get<bool>();
         }
         out.command = c;
     } else if (type == "CancelDesignations") {

@@ -1,5 +1,7 @@
 #include "ColonyHudSubsystem.h"
 
+#include "GameFramework/PlayerInput.h"
+
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/LightComponent.h"
 #include "Components/PostProcessComponent.h"
@@ -31,6 +33,7 @@
 
 #include "ColonyHudStyle.h"
 #include "HudIcons.h"
+#include "HudLayout.h"
 #include "DebugScenes.h"
 
 #include "GraphicsOptionsSubsystem.h"
@@ -682,6 +685,14 @@ void UColonyHudSubsystem::Tick(float DeltaTime)
 		}
 	}
 	TickSceneHop();
+	// No engine debug view keys (F1 wireframe, F2 unlit, F4 lighting only...): the config clear covers a fresh start, this
+	// covers a player controller made later (a level loaded in the game) and any build that reads another config.
+	if (APlayerController* KeysPC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr; KeysPC && KeysPC->PlayerInput &&
+		!KeysPC->PlayerInput->DebugExecBindings.IsEmpty())
+	{
+		KeysPC->PlayerInput->DebugExecBindings.Empty();
+		UE_LOG(LogTemp, Display, TEXT("Engine debug keys (F1 wireframe and the like) turned off"));
+	}
 	// After a level load inside the game, the player's view keeps the last level's rendering history (its exposure,
 	// Lumen's cached lighting, temporal buffers): the gun range loaded from the title came up washed out white (PC
 	// round 3, 2026-11-22) while a fresh start of it was fine. Its first frames reset that history, as a fresh start has.
@@ -859,7 +870,7 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 		// A bar button with a drawn icon: 0 pause, 1-3 that many play arrows, 4 keyboard, 5 flag, 6 menu lines, 7 an open book.
 		const auto IconButton = [&](const TCHAR* Name, int32 Icon, bool bActive) -> bool
 		{
-			const bool bPressed = ColonyHud::Button(FString::Printf(TEXT("##icon%s"), Name), bActive, ImVec2(ImGui::GetFrameHeight() * 1.35f, ImGui::GetFrameHeight()));
+			const bool bPressed = ColonyHud::Button(FString::Printf(TEXT("##icon%s"), Name), bActive, ImVec2(ImGui::GetFrameHeight() * 1.35f, ColonyHud::BarButtonHeight()));
 			const ImVec2 Min = ImGui::GetItemRectMin();
 			const ImVec2 Max = ImGui::GetItemRectMax();
 			const ImVec2 Mid((Min.x + Max.x) * 0.5f, (Min.y + Max.y) * 0.5f);
@@ -972,7 +983,7 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 			}
 			// On a narrow window a label that would be cut off is drawn smaller to fit its tab.
 			const float LabelWidth = ImGui::CalcTextSize(TCHAR_TO_UTF8(*Label)).x + 2.0f * Style.FramePadding.x;
-			const float TabHeight = ImGui::GetFrameHeight();
+			const float TabHeight = ColonyHud::BarButtonHeight();
 			// The tab's painted icon sits left of its label; HudIcons::Button shrinks a label that would not fit beside it.
 			UTexture* TabIcon = HudIcons::Get(TEXT("tab_") + FString(TabLabel(Tab)).ToLower(), TabHeight);
 			const bool bShrink = !TabIcon && LabelWidth > TabWidth;
@@ -1271,11 +1282,13 @@ void UColonyHudSubsystem::DrawHoverReadout(USimSubsystem& Bridge, float Scale)
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const colony::Map& Map = Sim.map();
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + 12.0f * Scale, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+	// Fully top right, where the inspect box goes when something is selected (sneed 2026-11-24, HudLayout).
+	HudLayout::PlaceRight(Viewport, HudLayout::ERightSlot::Inspect, Scale);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(220.0f * Scale, 0.0f), ImVec2(420.0f * Scale, FLT_MAX));
 	ColonyHud::HoldWidth("##HudHover", Scale);
 	if (ImGui::Begin("##HudHover", nullptr, ColonyHud::BoxFlags() | ImGuiWindowFlags_NoInputs))
 	{
+		HudLayout::ReportRight(HudLayout::ERightSlot::Inspect);
 		++Stats.HoverFrames;
 		const colony::DefId Floor = Sim.floors().at(HoverCell);
 		ColonyHud::Title(Floor.valid() ? HudCapital(Sim.defs().get(Floor).label()) : FString(HudTerrainName(Map.terrain(HoverCell))));
@@ -1637,6 +1650,12 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 		{
 			continue;
 		}
+		// Only from the front of an upright pawn: lying in bed or downed, the camera saw the back of the head (a grey shape in
+		// the bar, PC 2026-11-24). The old picture stays until they are up again.
+		if (View.posture == colony::PawnPosture::Lie || View.downed)
+		{
+			continue;
+		}
 		ASimPawnActor* Actor = Pawns->FindPawn(View.id);
 		if (!Actor)
 		{
@@ -1676,7 +1695,7 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 			UTextureRenderTarget2D* Target = NewObject<UTextureRenderTarget2D>(this);
 			Target->RenderTargetFormat = RTF_RGBA8;
 			Target->ClearColor = FLinearColor(0.07f, 0.08f, 0.09f, 1.0f);
-			Target->InitAutoFormat(128, 128);
+			Target->InitAutoFormat(256, 256);  // sharp at the bigger portrait size
 			Target->UpdateResourceImmediate(true);
 			Shot->Target = Target;
 			MugshotTargets.Add(Target);

@@ -298,6 +298,7 @@ private:
 	bool SetDraft(colony::Entity Pawn, bool bDraft);
 	/** The selected thing if it is one of the player's colonists on the map. */
 	const colony::ThingView* SelectedColonist(const USimSubsystem& Bridge) const;
+	void SelectedColonists(const USimSubsystem& Bridge, TArray<const colony::ThingView*>& Out) const;
 	void Say(const FString& Text);
 
 	void EnsureOverlayActor();
@@ -307,6 +308,10 @@ private:
 	void UpdatePreview(USimSubsystem& Bridge);
 	void DrawDragOutline(const USimSubsystem& Bridge) const;
 	void DrawDraftMarkers(const USimSubsystem& Bridge) const;
+	void DrawOrderRings(const USimSubsystem& Bridge) const;
+	/** Last frame's heights of the Build menu's two boxes, so both are drawn the same height (snug, sneed 2026-11-24). */
+	float BuildNavHeight = 0.0f;
+	float BuildTilesHeight = 0.0f;
 	void DrawPanels(USimSubsystem& Bridge);
 	/** The Build menu: categories, tiles, and the strip about the thing in hand. */
 	void DrawBuildMenu(USimSubsystem& Bridge, float Scale);

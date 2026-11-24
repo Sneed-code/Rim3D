@@ -1,6 +1,8 @@
 #include "AnimalArtCommandlet.h"
 
 #include "Animation/AnimSequence.h"
+#include "Animation/AnimData/IAnimationDataController.h"
+#include "Animation/AnimData/IAnimationDataModel.h"
 #include "Animation/Skeleton.h"
 #include "AssetImportTask.h"
 #include "AssetToolsModule.h"
@@ -86,6 +88,18 @@ namespace
 		for (const FSkeletalMaterial& Slot : Mesh->GetMaterials())
 		{
 			UMaterialInstanceConstant* Instance = Cast<UMaterialInstanceConstant>(Slot.MaterialInterface);
+			// A plain material made by the import in the model's own folder (the capybara's "Piel") needs the skeletal and
+			// morph-target usage ticked, or the game draws the grey default material on the animal.
+			if (UMaterial* Plain = Cast<UMaterial>(Slot.MaterialInterface); Plain && Plain->GetPathName().StartsWith(Folder) &&
+				(!Plain->bUsedWithSkeletalMesh || !Plain->bUsedWithMorphTargets))
+			{
+				Plain->bUsedWithSkeletalMesh = true;
+				Plain->bUsedWithMorphTargets = true;
+				Plain->PostEditChange();
+				AnimalArtSave(Plain);
+				UE_LOG(LogAnimalArt, Display, TEXT("%s: material %s gets the skeletal and morph target usage"), *Mesh->GetName(), *Plain->GetName());
+				continue;
+			}
 			if (!Instance)
 			{
 				UE_LOG(LogAnimalArt, Display, TEXT("%s: material %s is not an instance"), *Mesh->GetName(), Slot.MaterialInterface ? *Slot.MaterialInterface->GetPathName() : TEXT("none"));
@@ -179,6 +193,56 @@ namespace
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * `clampBoneScale`: N puts back the bind pose's scale on any bone whose animated scale is more than N times off it. The
+	 * capybara's leg IK/stretch bones are 0.001 in the bind pose but about 0.105 in its clips, so the legs were drawn as
+	 * tree-high grey pillars (sneed 2026-11-24, "gigantic animal silhouettes").
+	 */
+	void AnimalArtClampBoneScale(const USkeletalMesh* Mesh, UAnimSequence* Clip, double Limit)
+	{
+		const FReferenceSkeleton& Ref = Mesh->GetRefSkeleton();
+		const IAnimationDataModel* Data = Clip->GetDataModel();
+		IAnimationDataController& Controller = Clip->GetController();
+		TArray<FName> Tracks;
+		Data->GetBoneTrackNames(Tracks);
+		int32 Fixed = 0;
+		Controller.OpenBracket(FText::FromString(TEXT("Clamp bone scale")), false);
+		for (const FName Track : Tracks)
+		{
+			const int32 Bone = Ref.FindBoneIndex(Track);
+			if (Bone == INDEX_NONE)
+			{
+				continue;
+			}
+			const FVector BindScale = Ref.GetRefBonePose()[Bone].GetScale3D();
+			TArray<FTransform> Keys;
+			Data->GetBoneTrackTransforms(Track, Keys);
+			bool bOff = false;
+			for (const FTransform& Key : Keys)
+			{
+				const double Ratio = FMath::Max(Key.GetScale3D().GetAbsMax(), 1e-9) / FMath::Max(BindScale.GetAbsMax(), 1e-9);
+				bOff = bOff || Ratio > Limit || Ratio < 1.0 / Limit;
+			}
+			if (!bOff)
+			{
+				continue;
+			}
+			TArray<FVector3f> Positions;
+			TArray<FQuat4f> Rotations;
+			TArray<FVector3f> Scales;
+			for (const FTransform& Key : Keys)
+			{
+				Positions.Add(FVector3f(Key.GetTranslation()));
+				Rotations.Add(FQuat4f(Key.GetRotation()));
+				Scales.Add(FVector3f(BindScale));
+			}
+			Controller.SetBoneTrackKeys(Track, Positions, Rotations, Scales, false);
+			++Fixed;
+		}
+		Controller.CloseBracket(false);
+		UE_LOG(LogAnimalArt, Display, TEXT("%s: %d bones given back their bind pose scale"), *Clip->GetName(), Fixed);
 	}
 
 	/**
@@ -299,6 +363,10 @@ namespace
 					UE_LOG(LogAnimalArt, Error, TEXT("%s: no clip named %s for %s"), *Model, *Wanted, *Role.Key);
 					bOk = false;
 					continue;
+				}
+				if (double Limit = 0.0; Entry->TryGetNumberField(TEXT("clampBoneScale"), Limit) && Limit > 1.0)
+				{
+					AnimalArtClampBoneScale(Meshes[0], Match, Limit);
 				}
 				bOk = AnimalArtRename(Tools, Match, Folder, Model + TEXT("AnimalArmature_") + Role.Key) && bOk;
 			}

@@ -2122,7 +2122,8 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                 } else if (kind == DesignationKind::RemoveWindow) {
                     suits = windows_->whyNotRemove(c).empty();
                 } else if (plants_->has(c)) {
-                    suits = kind == DesignationKind::CutPlant || defs_->get(plants_->defAt(c)).has("plant.harvestedThingDef");
+                    const Def& plantDef = defs_->get(plants_->defAt(c));
+                    suits = kind == DesignationKind::CutPlant ? (!designate->treesOnly || plantDef.flag("plant.isTree")) : plantDef.has("plant.harvestedThingDef");
                 }
                 if (suits) {
                     designations_->set(c, kind);
@@ -2135,7 +2136,7 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                               : kind == DesignationKind::RemoveFloor ? "there is no floor to take up there"
                               : kind == DesignationKind::AddWindow   ? "there is no wall to put a window in there"
                               : kind == DesignationKind::RemoveWindow ? "there is no window there"
-                              : kind == DesignationKind::CutPlant    ? "there is no plant to cut there"
+                              : kind == DesignationKind::CutPlant    ? (designate->treesOnly ? "there is no tree to chop there" : "there is no plant to cut there")
                                                                      : "there is nothing to harvest there");
         } else {
             Event changed;
