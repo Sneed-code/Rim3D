@@ -614,6 +614,8 @@ private:
 	float PreviewSpin = 0.0f;
 	/** How much of a whole-body clip shows now (the clip playing and the one fading out). */
 	float LegsClipWeight = 0.0f;
+	/** The last frame's time (s): the mesh moves montage blends on by it before drawing this frame. */
+	double MotionLastDelta = 0.0;
 	float SwimLiftCm = 0.0f;
 	bool bPlaced = false;
 	/** Drawn at the player's own place last frame (else the sim's), and the gap left when that switched, easing out. */
