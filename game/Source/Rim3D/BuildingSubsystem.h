@@ -113,7 +113,7 @@ private:
 	};
 
 	/** When a building plays a clip: `when` always, running (has power, or needs none), on or off (a switch, a consumer
-	 *  flicked); a looping clip plays while that holds, a one-shot plays once from the moment it starts to hold and then,
+	 *  flicked), working (a pawn is at it on a bill or butchering), fueled (fuel in it); a looping clip plays while that holds, a one-shot plays once from the moment it starts to hold and then,
 	 *  with `hold`, keeps its last pose. The first rule that moves a part decides its pose; with none it rests. */
 	enum class EMoveWhen : uint8
 	{
@@ -121,6 +121,8 @@ private:
 		Running,
 		On,
 		Off,
+		Working,
+		Fueled,
 	};
 	struct FMoveRule
 	{
