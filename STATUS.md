@@ -1,6 +1,16 @@
 # Status
 
-Updated 2026-11-23.
+Updated 2026-11-24.
+
+Models batch 5: remnants, chitinids and the stand-ins (sneed, 2026-11-24; `docs/design/codex-models.md` "Batch 5"):
+**30 new models**. Gemini 4 Neon (high) made the hardest ten: the four **remnant war machines** (reaper, striker, ranger,
+crawler) rigged and animated (idle, walk, run, strike, shoot, flinch, death), the **chitinid warrior and stalker** (no
+longer the stretched beetle), and four benches whose parts move (the wood-fired generator's flywheel and fire while it has
+fuel, the forge's bellows and the electric smithy's power hammer and the electric sewing machine while someone works at
+them). Codex (6.2 Sol, high) made twenty benches, stoves, beds, lamps and furniture that replace the stretched Poly Haven
+stand-ins. **The remnants are drawn as machines** by the animal subsystem now, with their strike and shot clips playing
+on a melee wind-up and a shot (`DrawsMachine`, smoke phase `remnants`); building clips take `when: working` and
+`fueled`. Art steps: `codex-models` copies the creature GLBs, `animal-art` imports them, `codex-art` the buildings.
 
 Gore, liquid fire, rocket and roll (sneed, 2026-11-23 night; Unreal only, the rest of the second combat batch):
 **torso bursts** now throw the torso itself cut into slabs (breasts, belly, back, buttocks, the genitals as their own

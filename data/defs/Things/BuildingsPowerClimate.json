@@ -69,7 +69,7 @@
   ]
  },
  {
-  "defName": "WoodFiredGenerator", "visual": {"sound": {"loop": "Hum_Generator"}, "mesh": "/Game/Rim3D/Generated/Art/SM_WoodFiredGenerator.SM_WoodFiredGenerator" }, "researchPrerequisite": "Electricity",
+  "defName": "WoodFiredGenerator", "visual": {"sound": {"loop": "Hum_Generator"}, "mesh": "/Game/Rim3D/Generated/Buildings/WoodFiredGenerator/SM_WoodFiredGenerator.SM_WoodFiredGenerator", "moving": {"anims": "WoodFiredGenerator", "parts": [{"part": "Flywheel", "mesh": "/Game/Rim3D/Generated/Buildings/WoodFiredGenerator_Flywheel/SM_WoodFiredGenerator_Flywheel.SM_WoodFiredGenerator_Flywheel"}, {"part": "Piston", "mesh": "/Game/Rim3D/Generated/Buildings/WoodFiredGenerator_Piston/SM_WoodFiredGenerator_Piston.SM_WoodFiredGenerator_Piston"}, {"part": "Door", "mesh": "/Game/Rim3D/Generated/Buildings/WoodFiredGenerator_Door/SM_WoodFiredGenerator_Door.SM_WoodFiredGenerator_Door"}, {"part": "Embers", "mesh": "/Game/Rim3D/Generated/Buildings/WoodFiredGenerator_Embers/SM_WoodFiredGenerator_Embers.SM_WoodFiredGenerator_Embers"}, {"part": "DynamoRotor", "mesh": "/Game/Rim3D/Generated/Buildings/WoodFiredGenerator_DynamoRotor/SM_WoodFiredGenerator_DynamoRotor.SM_WoodFiredGenerator_DynamoRotor"}], "play": [{"clip": "Running", "when": "fueled", "loop": true}]}}, "researchPrerequisite": "Electricity",
   "parent": "PowerBase",
   "label": "wood-fired generator",
   "size": [
@@ -207,7 +207,7 @@
   ]
  },
  {
-  "defName": "Battery", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_Battery.SM_Battery" }, "researchPrerequisite": "Battery",
+  "defName": "Battery", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/Battery/SM_Battery.SM_Battery"}, "researchPrerequisite": "Battery",
   "parent": "PowerBase",
   "label": "battery",
   "size": [
@@ -249,7 +249,7 @@
   ]
  },
  {
-  "defName": "Heater", "visual": {"sound": {"loop": "Hum_Climate"}, "mesh": "/Game/Rim3D/Generated/Art/SM_Heater.SM_Heater" }, "researchPrerequisite": "Electricity",
+  "defName": "Heater", "visual": {"sound": {"loop": "Hum_Climate"}, "mesh": "/Game/Rim3D/Generated/Buildings/Heater/SM_Heater.SM_Heater"}, "researchPrerequisite": "Electricity",
   "parent": "ClimateBase",
   "label": "heater",
   "size": [
@@ -391,7 +391,7 @@
   "ours": ["costs", "stats.workToBuild", "hatchery"]
  },
  {
-  "defName": "Campfire", "visual": {"sound": {"loop": "Fire_Campfire"}, "mesh": "/Game/Rim3D/Generated/Art/SM_Campfire.SM_Campfire", "flame": { "lift": 0.18, "size": 0.45 } },
+  "defName": "Campfire", "visual": {"sound": {"loop": "Fire_Campfire"}, "mesh": "/Game/Rim3D/Generated/Buildings/Campfire/SM_Campfire.SM_Campfire", "flame": {"lift": 0.18, "size": 0.45}},
   "parent": "ClimateBase",
   "label": "campfire",
   "size": [
@@ -453,7 +453,7 @@
   ]
  },
  {
-  "defName": "StandingLamp", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_StandingLamp.SM_StandingLamp" }, "researchPrerequisite": "Electricity",
+  "defName": "StandingLamp", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/StandingLamp/SM_StandingLamp.SM_StandingLamp"}, "researchPrerequisite": "Electricity",
   "parent": "LampBase",
   "label": "standing lamp",
   "size": [
@@ -488,7 +488,7 @@
   ]
  },
  {
-  "defName": "SunLamp", "visual": { "mesh": "/Game/Rim3D/Generated/Art/SM_SunLamp.SM_SunLamp" }, "researchPrerequisite": "Electricity",
+  "defName": "SunLamp", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/SunLamp/SM_SunLamp.SM_SunLamp"}, "researchPrerequisite": "Electricity",
   "parent": "LampBase",
   "label": "sun lamp",
   "size": [
@@ -520,7 +520,7 @@
   "unverified": ["glower.radius", "glower.lift"]
  },
  {
-  "defName": "TorchLamp", "visual": {"sound": {"loop": "Fire_Torch"}, "mesh": "/Game/Rim3D/Generated/Art/SM_TorchLamp.SM_TorchLamp", "flame": { "lift": 0.34, "size": 0.14 } },
+  "defName": "TorchLamp", "visual": {"sound": {"loop": "Fire_Torch"}, "mesh": "/Game/Rim3D/Generated/Buildings/TorchLamp/SM_TorchLamp.SM_TorchLamp", "flame": {"lift": 0.34, "size": 0.14}},
   "parent": "LampBase",
   "label": "torch lamp",
   "size": [
