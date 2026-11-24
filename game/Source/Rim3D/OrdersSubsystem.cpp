@@ -2038,6 +2038,7 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 	else if (!Message.IsEmpty() && FPlatformTime::Seconds() < MessageUntil)
 	{
 		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+		ColonyHud::HoldWidth("##OrdersMessage", Scale);
 		if (ImGui::Begin("##OrdersMessage", nullptr, ColonyHud::BoxFlags() | ImGuiWindowFlags_NoInputs))
 		{
 			OrdText(Message);
@@ -2216,9 +2217,11 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 	};
 
 	// Left: the search box and the categories, two columns, the picked one lit.
-	const float NavWidth = 250.0f * Scale * FMath::Max(1.0f, ImGui::GetStyle().FontScaleMain / (1.2f * Scale));
+	// Held at its width as the text grew (sneed 2026-11-24): flush left, as tall as the tiles beside it; text wraps.
+	const float NavWidth = 250.0f * Scale;
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
 	ImGui::SetNextWindowSizeConstraints(ImVec2(NavWidth, SnugHeight), ImVec2(NavWidth, FLT_MAX));
+	ColonyHud::HeldBoxes().Add(ImHashStr("##BuildNav"));
 	if (ImGui::Begin("##BuildNav", nullptr, ColonyHud::BoxFlags()))
 	{
 		ImGui::SetNextItemWidth(-1.0f);
@@ -2554,6 +2557,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 	{
 		ImGui::SetNextWindowPos(ImVec2(TilesLeft, TilesTop), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
 		ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(Viewport->Size.x - (TilesLeft - Viewport->Pos.x) - Margin, FLT_MAX));
+		ColonyHud::HoldWidth("##BuildStrip", Scale);
 		if (ImGui::Begin("##BuildStrip", nullptr, ColonyHud::BoxFlags()))
 		{
 			if (Tool == EOrderTool::Build && BuildDef.valid())

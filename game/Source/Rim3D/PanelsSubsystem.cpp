@@ -54,13 +54,12 @@ namespace
 
 	void PText(const FString& Text)
 	{
-		const FTCHARToUTF8 Utf8(*Text);
-		ImGui::TextUnformatted(Utf8.Get(), Utf8.Get() + Utf8.Length());
+		ColonyHud::Text(Text);  // wraps in a box of held width
 	}
 
 	void PText(const std::string& Text)
 	{
-		ImGui::TextUnformatted(Text.c_str(), Text.c_str() + Text.size());
+		ColonyHud::Text(FString(UTF8_TO_TCHAR(Text.c_str())));
 	}
 
 	void PTextColored(const ImVec4& Color, const FString& Text)
@@ -743,7 +742,7 @@ void UPanelsSubsystem::DrawMenuAndColonistBar(USimSubsystem& Bridge, float Scale
 				ImGui::SameLine();
 			}
 			++Shown;
-			const bool bSelected = Overseer && Overseer->GetSelection().Kind == ESimPickKind::Thing && Overseer->GetSelection().Thing == Pawn;
+			const bool bSelected = Overseer && Overseer->IsThingSelected(Pawn);
 			ImGui::PushID(PId(Pawn));
 			ImGui::BeginGroup();
 			const ImVec2 Corner = ImGui::GetCursorScreenPos();
@@ -794,15 +793,31 @@ void UPanelsSubsystem::DrawMenuAndColonistBar(USimSubsystem& Bridge, float Scale
 				}
 			}
 			ImGui::PushStyleColor(ImGuiCol_Text, View->downed ? ImVec4(0.6f, 0.6f, 0.6f, 1.0f) : MoodColor(View->moodBand));
+			// The first name only, cut to the face's width with "..." so neighbours never run together, centred under it.
 			FString Name = NameOf(Pawn);
-			if (ImGui::CalcTextSize(TCHAR_TO_UTF8(*Name)).x > Slot)
+			int32 Space = INDEX_NONE;
+			if (Name.FindChar(TEXT(' '), Space) && Space > 0)
 			{
-				Name = Name.Left(7);
+				Name = Name.Left(Space);
 			}
+			const float NameRoom = FaceMax.x - Corner.x;
+			if (ImGui::CalcTextSize(TCHAR_TO_UTF8(*Name)).x > NameRoom)
+			{
+				while (Name.Len() > 1 && ImGui::CalcTextSize(TCHAR_TO_UTF8(*(Name + TEXT("...")))).x > NameRoom)
+				{
+					Name.LeftChopInline(1);
+				}
+				Name += TEXT("...");
+			}
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + FMath::Max(0.0f, (NameRoom - ImGui::CalcTextSize(TCHAR_TO_UTF8(*Name)).x) * 0.5f));
 			PText(Name);
 			ImGui::PopStyleColor();
 			ImGui::EndGroup();
-			if (bClicked && Overseer)
+			if (bClicked && Overseer && ImGui::GetIO().KeyShift)
+			{
+				Overseer->ToggleThingSelected(Pawn);  // shift click adds or removes, as in the world
+			}
+			else if (bClicked && Overseer)
 			{
 				FSimPick Pick;
 				Pick.Kind = ESimPickKind::Thing;
@@ -831,6 +846,27 @@ void UPanelsSubsystem::DrawMenuAndColonistBar(USimSubsystem& Bridge, float Scale
 		OutBottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y - Viewport->Pos.y;
 	}
 	ImGui::End();
+}
+
+namespace
+{
+	/** The work table's whole width (its columns' own widths), so the auto-sized window never cuts the last columns off. */
+	float WorkTableWidth(const colony::Sim& Sim, const std::vector<int32>& Columns, float Names, float Scale, float ViewportWidth)
+	{
+		const ImGuiStyle& Style = ImGui::GetStyle();
+		const float Cell = 2.0f * Style.CellPadding.x + 1.0f;
+		float Width = 110.0f * Scale + 2.0f * Style.FramePadding.x + Cell;
+		Names = FMath::Max(Names, ImGui::CalcTextSize("Colonist").x);
+		Width += Names + 2.0f * Style.FramePadding.x + Cell;
+		const auto& WorkTypes = Sim.jobs().workTypes();
+		for (const int32 Index : Columns)
+		{
+			const std::string Label = Sim.defs().get(WorkTypes[Index].def).label();
+			Width += FMath::Max(ImGui::CalcTextSize(Label.c_str()).x, ImGui::GetFrameHeight() * 1.6f) + Cell;
+		}
+		Width += Style.ScrollbarSize + 2.0f * Style.WindowPadding.x;
+		return FMath::Min(Width, ViewportWidth - 2.0f * Style.WindowPadding.x);
+	}
 }
 
 void UPanelsSubsystem::DrawWorkTab(USimSubsystem& Bridge, float Scale)
@@ -899,12 +935,24 @@ void UPanelsSubsystem::DrawWorkTab(USimSubsystem& Bridge, float Scale)
 				Prisoners.Add(View.id);
 			}
 		}
+		const auto WorkNamesWidth = [this](const TArray<colony::Entity>& A, const TArray<colony::Entity>& B)
+		{
+			float Widest = 0.0f;
+			for (const TArray<colony::Entity>* List : {&A, &B})
+			{
+				for (const colony::Entity Pawn : *List)
+				{
+					Widest = FMath::Max(Widest, ImGui::CalcTextSize(TCHAR_TO_UTF8(*(NameOf(Pawn) + TEXT("  (prisoner)")))).x);
+				}
+			}
+			return Widest;
+		};
 		if ((Colonists.IsEmpty() && Prisoners.IsEmpty()) || Columns.empty())
 		{
 			PText(TEXT("No colonists or no work to set."));
 		}
 		else if (ImGui::BeginTable("##WorkTable", static_cast<int>(Columns.size()) + 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg |
-			ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX, ImVec2(0.0f, FMath::Min(Viewport->Size.y * 0.52f, ImGui::GetFrameHeightWithSpacing() * (Colonists.Num() + Prisoners.Num() + 2)))))
+			ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX, ImVec2(WorkTableWidth(Sim, Columns, WorkNamesWidth(Colonists, Prisoners), Scale, Viewport->Size.x), FMath::Min(Viewport->Size.y * 0.52f, ImGui::GetFrameHeightWithSpacing() * (Colonists.Num() + Prisoners.Num() + 2)))))
 		{
 			ImGui::TableSetupScrollFreeze(2, 1);
 			ImGui::TableSetupColumn("Group");
@@ -1116,7 +1164,9 @@ void UPanelsSubsystem::DrawColonistPanel(USimSubsystem& Bridge, const colony::Th
 	const int64 Now = Sim.time().seconds;
 
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Left, Viewport->Pos.y + Top), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(360.0f * Scale, 0.0f), ImVec2(460.0f * Scale, FMath::Max(200.0f * Scale, Viewport->Size.y - Top - 330.0f * Scale)));
+	// The width it had before the text grew half as big again (sneed 2026-11-24: boxes keep their widths).
+	ImGui::SetNextWindowSizeConstraints(ImVec2(360.0f * Scale, 0.0f), ImVec2(360.0f * Scale, FMath::Max(200.0f * Scale, Viewport->Size.y - Top - 330.0f * Scale)));
+	ColonyHud::HeldBoxes().Add(ImHashStr("##PanelsColonist"));
 	if (ImGui::Begin("##PanelsColonist", nullptr, PanelFlags() & ~ImGuiWindowFlags_NoScrollbar))
 	{
 		++Stats.ColonistPanelFrames;
@@ -1168,7 +1218,7 @@ void UPanelsSubsystem::DrawColonistPanel(USimSubsystem& Bridge, const colony::Th
 		const auto Bar = [&](const char* Name, float Fraction, const FString& Overlay)
 		{
 			PText(FString(UTF8_TO_TCHAR(Name)));
-			ImGui::SameLine(80.0f * Scale);
+			ImGui::SameLine(80.0f * Scale * ColonyHud::TextGrow());
 			ImGui::ProgressBar(FMath::Clamp(Fraction, 0.0f, 1.0f), ImVec2(-1.0f, 0.0f), TCHAR_TO_UTF8(*Overlay));
 		};
 		if (View.food >= 0.0f)
@@ -1261,7 +1311,7 @@ void UPanelsSubsystem::DrawColonistPanel(USimSubsystem& Bridge, const colony::Th
 				(Skill.passion == colony::Passion::Minor ? ImVec4(0.85f, 0.55f, 0.38f, 0.85f) : ImVec4(0.30f, 0.66f, 0.53f, 0.85f)));
 			const FString Overlay = Skill.disabled ? FString(TEXT("incapable")) : FString::Printf(TEXT("%d %s"), Skill.level, UTF8_TO_TCHAR(Passion));
 			PText(Name);
-			ImGui::SameLine(110.0f * Scale);
+			ImGui::SameLine(110.0f * Scale * ColonyHud::TextGrow());
 			ImGui::ProgressBar(Skill.disabled ? 0.0f : Skill.level / 20.0f, ImVec2(-1.0f, 0.0f), TCHAR_TO_UTF8(*Overlay));
 			ImGui::PopStyleColor();
 		}

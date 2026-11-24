@@ -3912,6 +3912,26 @@ bool CombatSystem::rollDirection(Entity pawn, float& x, float& y) const {
     return true;
 }
 
+float CombatSystem::rollProgress(Entity pawn, float* turnFrom) const {
+    const entt::registry& reg = things_.registry();
+    const DodgeRoll* roll = reg.valid(pawn) ? reg.try_get<DodgeRoll>(pawn) : nullptr;
+    const int total = rollTotalSteps();
+    if (turnFrom != nullptr) {
+        *turnFrom = total > 0 ? (static_cast<float>(model_->rollStartUp) + 0.25f * static_cast<float>(model_->rollActive)) / static_cast<float>(total) : 0.0f;
+    }
+    if (roll == nullptr || roll->phase == RollPhase::Idle || total <= 0) {
+        return 0.0f;
+    }
+    int done = 0;
+    switch (roll->phase) {
+        case RollPhase::StartUp: done = model_->rollStartUp - roll->stepsLeft; break;
+        case RollPhase::Rolling: done = model_->rollStartUp + model_->rollActive - roll->stepsLeft; break;
+        case RollPhase::Recovery: done = model_->rollStartUp + model_->rollActive + model_->rollRecovery - roll->stepsLeft; break;
+        case RollPhase::Idle: break;
+    }
+    return std::clamp(static_cast<float>(done) / static_cast<float>(total), 0.0f, 1.0f);
+}
+
 int CombatSystem::rollTotalSteps() const { return model_->rollStartUp + model_->rollActive + model_->rollRecovery; }
 
 bool CombatSystem::dodgeRoll(Entity pawn, float dx, float dy, std::string* why, bool ai) {

@@ -593,10 +593,14 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 				if (const colony::ThingView* View = Snapshot.find(Selection.Thing))
 				{
 					// The name large, with the info button ("i", the full info window) and close at the right.
+					// The buttons sit centred on the big title's line, inside the box (they used to hang off its top edge).
 					ColonyHud::PushLarge();
+					const float TitleTop = ImGui::GetCursorPosY();
 					OverseerText(OverseerLabel(Bridge, *View));
+					const float TitleHeight = ImGui::GetItemRectSize().y;
 					ColonyHud::PopLarge();
 					ImGui::SameLine(0.0f, 16.0f * Scale);
+					ImGui::SetCursorPosY(TitleTop + FMath::Max(0.0f, (TitleHeight - ImGui::GetFontSize()) * 0.5f));
 					if (ImGui::SmallButton(" i "))
 					{
 						if (UColonyHudSubsystem* Hud = GetWorld()->GetSubsystem<UColonyHudSubsystem>())
@@ -606,6 +610,7 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 					}
 					ColonyHud::Tip(TEXT("Everything about it"));
 					ImGui::SameLine();
+					ImGui::SetCursorPosY(TitleTop + FMath::Max(0.0f, (TitleHeight - ImGui::GetFontSize()) * 0.5f));
 					if (ImGui::SmallButton(" x "))
 					{
 						ClearSelection();

@@ -189,9 +189,9 @@
     "traitCount": [1, 3],
     "skillLevelRandomCurve": [[0, 0], [0.5, 150], [4, 150], [5, 25], [10, 5], [15, 0]], "backstoryDefinedSkills": ["Shooting", "Melee", "Social", "Medicine", "Artistic", "Intellectual"], "backstoryDefinedLevel": [0, 4], "ageSkillMaxFactorCurve": [[0, 0], [10, 0.7], [35, 1], [60, 1.6], [100, 1.6]],
     "passionCount": [0, 4],
-    "majorPassionChance": 0.33, "pointSkillBoosts": [3, 3, 6],
+    "majorPassionChance": 0.33, "skillPointPool": 30, "pointPassions": [1, 1],
     "unverified": ["ageGenerationCurve", "skillLevelRandomCurve", "backstoryDefinedSkills", "backstoryDefinedLevel", "ageSkillMaxFactorCurve"],
-    "ours": ["adultAgeMin", "passionCount", "majorPassionChance", "pointSkillBoosts (trait-point colonists, no backstories: 3 skills get +3 to +6 in place of the backstories' gains)"]
+    "ours": ["adultAgeMin", "passionCount", "majorPassionChance", "skillPointPool (trait-point colonists, sneed 2026-11-24: 30 skill levels spread at random over the usable skills)", "pointPassions (trait-point colonists: 1 major and 1 minor passion)"]
   },
   {
     "defName": "ConstructionRules", "source": "RimWorld wiki",

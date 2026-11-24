@@ -153,6 +153,7 @@ void UColonyHudSubsystem::DrawLessons(USimSubsystem& Bridge, float Scale)
 	// Top right, under the alarm button and the event line.
 	HudLayout::PlaceRight(Viewport, HudLayout::ERightSlot::Lessons, Scale);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(Width, 0.0f), ImVec2(Width, Viewport->Size.y * 0.4f));
+	ColonyHud::HoldWidth("##HudLesson", Scale);
 	if (ImGui::Begin("##HudLesson", nullptr, ColonyHud::BoxFlags()))
 	{
 		HudLayout::ReportRight(HudLayout::ERightSlot::Lessons);

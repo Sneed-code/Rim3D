@@ -11,6 +11,21 @@ with their tool or on the selected thing; **RimWorld-style alerts** (short title
 dismiss, shift + right click off for good, turned back on in Menu > Message log, 60 s fade); health bars under colonist
 faces; the camera starts on your character. Still to do: ChatGPT icons for the orders, the giant grey animal shapes.
 
+Rolls, character screen, bigger text, skill points (sneed, 2026-11-24; sim and Unreal): **rolls curve round to the focus**:
+every pawn's roll keeps its path, but its facing turns from the roll's way to the one it is locked on to (an AI's dodge:
+whoever it dodged) over the last three quarters of the tumble and the recovery, eased in and out, so nobody swings round at the
+end (`MeleeSystem::steerRoll`, `CombatSystem::rollProgress`; test in `FocusTests.cpp`); the locked-on camera keeps
+following through the roll, softer, instead of catching up after it (`ProtagonistPawn.cpp`). **Character screen**: it
+showed bare mannequins running about because the game had started running underneath it (the world map's landing kept
+the title's speed), so every look edit was refused ("can only be edited before the game starts"); the new game now waits
+paused at its first second on that screen, the people stand in their calm idle (it plays on while paused,
+`SetPreviewLive`), and the strip under them has zoom buttons as well as the wheel. **Text 1.5x everywhere**, boxes keep
+their widths and wrap (`ColonyHud::TextGrow`, `HoldWidth`, widths measured on the PC),
+and every box gets the glass look (`docs/design/ui-layout.md` "Bigger text, same widths"). **Skills**: trait-point
+people get 30 skill levels spread at random over the skills they can use (a disabled skill's share boosts the others,
+also when a trait is changed on the screen), one major and one minor passion on their best skills (`skillPointPool`,
+`pointPassions`; `docs/design/traits.md`).
+
 Combat polish (sneed, 2026-11-24; sim, data and Unreal): **downed and corpses** are hit a third quicker (`MeleeRules`
 `lowTimeFactor` 0.6667, three blows in the time of two) and a corpse in reach with nobody focused gets the very finisher a
 downed enemy would; **fists** half as fast again but with no wait after a punch, and a click during a punch is kept for

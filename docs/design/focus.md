@@ -34,7 +34,11 @@ State is on the `Melee` component (melee save section 4): `focus`, `focusPlayer`
 - A focus lets go by itself when the target dies, leaves, changes level or goes beyond 25 m (the AI's beyond
   `aiFocusRange` + 2 m), or the pawn is downed. A downed target keeps the focus (to finish it).
 - **Facing** (`MeleeSystem::faceFocus`, after the combat step): every focused pawn faces its focus, so it walks sideways
-  or backwards facing it (strafing). Not during a roll, nor while aiming a gun (it faces its aim).
+  or backwards facing it (strafing). Not while aiming a gun (it faces its aim). **In a roll** (sneed 2026-11-24, no snap
+  round at the end): the path is the roll's, but the body's facing curves from the roll's way to the focus over the last
+  three quarters of the tumble and the recovery (`MeleeSystem::steerRoll`, eased in and out, about two thirds of a second), so it faces the
+  focus on the step the roll ends. The same runs for every pawn's roll: an AI's dodge with no focus turns to whoever it
+  dodged (`Melee::threat`). A gun in hand doesn't turn (free aim).
 - **The fighter AI** locks a fighter with no gun on to its target when it is within `aiFocusRange` (8 m), in Fight mode,
   not falling back or fleeing; it lets go otherwise or when it stands down. Never over a focus the player set.
 - **The player's swing** (`MeleeCommand` with no target, `MeleeSystem::playerTarget`): the focus if it is in reach, so the
@@ -137,7 +141,7 @@ Built (2026-11-18):
 - **Marker**: a small dot on the target's chest (low over a body on the ground), `GetFocusPoint`.
 - **Camera** (`AProtagonistPawn::FollowFocus`): the view turns to keep the focus ahead, 360 degrees a second in third
   person (the mouse only tilts it), 100 in first person (the mouse still turns, the focus pulls back). Not while aiming a
-  gun or rolling.
+  gun. Through a roll it keeps following, softer (half the turn rate, 0.2 s), so there is no gap to swing across after.
 - **Bodies**: every focused pawn's actor faces the sim's facing while it moves (`ASimPawnActor`), so it strafes and backs
   off facing its enemy; the walk blends play from the velocity.
 - Smoke test `melee`, phase `focus`.

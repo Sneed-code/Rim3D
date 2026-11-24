@@ -128,6 +128,7 @@ void UColonyHudSubsystem::DrawAssignTab(USimSubsystem& Bridge, float Scale)
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
 	PlaceTabWindow(Scale, 1100.0f * Scale);
+	ColonyHud::HoldWidth("##HudAssign", Scale);
 	if (ImGui::Begin("##HudAssign", nullptr, ColonyHud::BoxFlags()))
 	{
 		++Stats.TabWindowFrames;
@@ -279,6 +280,7 @@ void UColonyHudSubsystem::DrawAnimalsTab(USimSubsystem& Bridge, float Scale, boo
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
 	PlaceTabWindow(Scale, (bWild ? 820.0f : 1420.0f) * Scale);
+	ColonyHud::HoldWidth(bWild ? "##HudWildlife" : "##HudAnimals", Scale);
 	if (ImGui::Begin(bWild ? "##HudWildlife" : "##HudAnimals", nullptr, ColonyHud::BoxFlags()))
 	{
 		++Stats.TabWindowFrames;
@@ -536,6 +538,7 @@ void UColonyHudSubsystem::DrawMechsTab(USimSubsystem& Bridge, float Scale)
 {
 	const colony::Sim& Sim = *Bridge.GetSim();
 	PlaceTabWindow(Scale, 620.0f * Scale);
+	ColonyHud::HoldWidth("##HudMechs", Scale);
 	if (ImGui::Begin("##HudMechs", nullptr, ColonyHud::BoxFlags()))
 	{
 		++Stats.TabWindowFrames;
@@ -583,6 +586,7 @@ void UColonyHudSubsystem::DrawResearchTab(USimSubsystem& Bridge, float Scale)
 	const std::vector<colony::ResearchView>& Projects = Bridge.GetCurrentSnapshot().research;
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	PlaceTabWindow(Scale, Viewport->Size.x - 40.0f * Scale, 0.78f);
+	ColonyHud::HoldWidth("##HudResearch", Scale);
 	if (!ImGui::Begin("##HudResearch", nullptr, ColonyHud::BoxFlags()))
 	{
 		ImGui::End();
@@ -802,6 +806,7 @@ void UColonyHudSubsystem::DrawInventoryTab(USimSubsystem& Bridge, float Scale)
 {
 	const colony::Sim& Sim = *Bridge.GetSim();
 	PlaceTabWindow(Scale, 720.0f * Scale);
+	ColonyHud::HoldWidth("##HudInventory", Scale);
 	if (!ImGui::Begin("##HudInventory", nullptr, ColonyHud::BoxFlags()))
 	{
 		ImGui::End();
