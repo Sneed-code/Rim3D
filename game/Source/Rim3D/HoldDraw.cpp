@@ -469,7 +469,16 @@ void HoldDraw::ApplyPinned(USkeletalMeshComponent* Mesh, const colony::WeaponHol
 	const double Scale = FMath::Max(static_cast<double>(Comp.GetScale3D().GetAbsMax()), 0.01);
 	FTransform MainCS = Pinned.MainHand.GetRelativeTransform(Comp);
 	MainCS.SetScale3D(FVector::OneVector);
-	if (static_cast<EMakeHumanGoalSpace>(Space) == EMakeHumanGoalSpace::Anchor && HdHas(Mesh, *Anchor.ToString()))
+	// AnchorFull: in the anchor bone's whole component-space transform (unit scale), so the goal turns with it.
+	const bool bAnchorFull = static_cast<EMakeHumanGoalSpace>(Space) == EMakeHumanGoalSpace::AnchorFull && HdHas(Mesh, *Anchor.ToString());
+	FTransform AnchorCS = FTransform::Identity;
+	if (bAnchorFull)
+	{
+		AnchorCS = Mesh->GetSocketTransform(Anchor, RTS_Component);
+		AnchorCS.SetScale3D(FVector::OneVector);
+		MainCS = MainCS.GetRelativeTransform(AnchorCS);
+	}
+	else if (static_cast<EMakeHumanGoalSpace>(Space) == EMakeHumanGoalSpace::Anchor && HdHas(Mesh, *Anchor.ToString()))
 	{
 		MainCS.AddToTranslation(-Comp.InverseTransformPosition(Mesh->GetSocketLocation(Anchor)));
 	}
@@ -497,7 +506,11 @@ void HoldDraw::ApplyPinned(USkeletalMeshComponent* Mesh, const colony::WeaponHol
 		// the wrist limits may have held back), so it stays on the fore-end.
 		FTransform OffWorldCS = (Pinned.OffInMain * Pinned.MainHand).GetRelativeTransform(Comp);
 		OffWorldCS.SetScale3D(FVector::OneVector);
-		if (Main.Space == EMakeHumanGoalSpace::Anchor && HdHas(Mesh, *Anchor.ToString()))
+		if (bAnchorFull)
+		{
+			OffWorldCS = OffWorldCS.GetRelativeTransform(AnchorCS);
+		}
+		else if (Main.Space == EMakeHumanGoalSpace::Anchor && HdHas(Mesh, *Anchor.ToString()))
 		{
 			OffWorldCS.AddToTranslation(-Comp.InverseTransformPosition(Mesh->GetSocketLocation(Anchor)));
 		}

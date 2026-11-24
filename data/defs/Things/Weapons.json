@@ -31,7 +31,7 @@
     "magazineSize": 5, "reloadTime": 105
   },
   {
-    "defName": "Gun_PumpShotgun", "hold": {"style": "Hold_Rifle", "off": [25, 0, 0], "places": {"aim": {"anchor": "Shoulder", "point": "Stock", "at": [-1, -3, -2], "turn": [0, 0, 0]}}}, "twoHanded": true, "researchPrerequisite": "Gunsmithing", "visual": {"sound": {"shot": "Shot_Shotgun"}}, "parent": "GunBase", "label": "pump shotgun",
+    "defName": "Gun_PumpShotgun", "hold": {"style": "Hold_Rifle", "off": [25, 0, 0], "places": {"aim": {"anchor": "Shoulder", "point": "Stock", "at": [-1, -3, -2], "turn": [0, 0, 0]}}}, "twoHanded": true, "researchPrerequisite": "Gunsmithing", "visual": {"sound": {"shot": "Shot_Shotgun", "pump": "Gun_Pump"}}, "parent": "GunBase", "label": "pump shotgun",
     "stats": { "mass": 3.4, "rangedWeaponCooldown": 37.5, "accuracyTouch": 0.8, "accuracyShort": 0.87, "accuracyMedium": 0.77, "accuracyLong": 0.64 },
     "verbs": [ { "range": 15.9, "warmupTime": 27, "burstShotCount": 1, "defaultProjectile": "Bullet_Shotgun" } ],
     "recoilPerShot": 0.03,
@@ -44,6 +44,8 @@
     "verbs": [ { "range": 30.9, "warmupTime": 30, "burstShotCount": 3, "secondsBetweenBurstShots": 5, "defaultProjectile": "Bullet_AssaultRifle" } ],
     "recoilPerShot": 0.01,
     "recoilKicks": [{"up": 0.7, "side": 0.05}, {"up": 0.8, "side": -0.15}, {"up": 0.9, "side": 0.2}, {"up": 0.9, "side": 0.25}, {"up": 0.8, "side": -0.1}, {"up": 0.8, "side": -0.25}],
-    "magazineSize": 30, "reloadTime": 75
+    "magazineSize": 30, "reloadTime": 75,
+    "spreadFactor": 0.4,
+    "ours": ["spreadFactor: times the gun's whole spray (accuracy cone and recoil spread), sneed 2026-11-24: a tighter spray, 60% less", "recoilPerShot", "recoilKicks", "magazineSize", "reloadTime"]
   }
 ]

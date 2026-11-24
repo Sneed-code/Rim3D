@@ -8,7 +8,8 @@
       "stats.carryingCapacity": 0.6666667
     },
     "Things/Melee_Knife": {
-      "tools.cooldownTime": 0.2222222
+      "tools.cooldownTime": 0.2222222,
+      "tools.power": 0.5
     },
     "Things/Melee_Club": {
       "tools.cooldownTime": 0.5

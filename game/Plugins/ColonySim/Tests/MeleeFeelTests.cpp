@@ -335,7 +335,7 @@ TEST_CASE("Landing blows: a target that shuffles a little after the line is fixe
     CHECK(hit);
 }
 
-TEST_CASE("Swing speed: a person's fists punch quickly with a short pause between, and weakly (sneed 2026-11-23)") {
+TEST_CASE("Swing speed: a person's fists punch at half the first batch's pace with no pause between, and weakly (sneed 2026-11-24)") {
     const int fists = feelTestSwingSteps(nullptr);  // RimWorld 2 s at Melee 10; Melee 4: 68 steps
     const MeleeRules& rules = feelTestSim(1)->melee().rules();
     MESSAGE("fists " << fists << " steps");
@@ -343,10 +343,10 @@ TEST_CASE("Swing speed: a person's fists punch quickly with a short pause betwee
     const float expected = 68.0f * rules.unarmedTimeFactor + static_cast<float>(rules.unarmedGapSteps);
     CHECK(fists >= static_cast<int>(expected) - 1);
     CHECK(fists <= static_cast<int>(std::ceil(expected)) + 1);
-    // "reduce the unarmed attack speed by 40%": 0.6 of the first batch's 0.75 x 0.25 pace (about 13 steps then).
-    CHECK(fists >= 19);
-    CHECK(fists <= 24);
-    CHECK(rules.unarmedGapSteps == 3);       // "a .1 sec added delay"
+    // "fist attacks are too fast still, half it" (2026-11-24): twice the 2026-11-23 pace of about 20 steps.
+    CHECK(fists >= 32);
+    CHECK(fists <= 37);
+    CHECK(rules.unarmedGapSteps == 0);       // "no delay between"
     CHECK(rules.unarmedPowerFactor < 1.0f);  // "and weak"
 }
 
@@ -481,7 +481,7 @@ TEST_CASE("Finishers: a knife at a downed enemy plays its whole-body kneeling cl
     FEEL_REQUIRE(clip != nullptr);
     FEEL_REQUIRE(motion.moving(hero));
     CHECK(sim->things().registry().get<BodyMotion>(hero).clip == clip->def);
-    const int hitStep = static_cast<int>(std::lround(f->hitSeconds * 30.0f * sim->melee().rules().attackTimeFactor));
+    const int hitStep = static_cast<int>(std::lround(f->hitSeconds * 30.0f * sim->melee().rules().attackTimeFactor * sim->melee().rules().lowTimeFactor));
     // The finisher lasts as long as the clip, played at the pace that lands its blow on the hit step.
     const int total = sim->things().registry().get<Melee>(hero).finisherSteps;
     const int clipTotal = static_cast<int>(std::lround(clip->seconds * static_cast<float>(hitStep) / sim->melee().finisherClipHit(finisher)));
@@ -796,4 +796,49 @@ TEST_CASE("Corpses: the player's swing at nobody goes down at a corpse lying bef
     }
     MESSAGE(hits << " of 3 swings landed on the corpse");
     CHECK(hits >= 2);
+}
+
+TEST_CASE("Corpses and the downed: a corpse before the player gets the very finisher a downed enemy gets, and both come quicker (sneed 2026-11-24)") {
+    auto sim = feelTestSim(319);
+    const MeleeRules& rules = sim->melee().rules();
+    CHECK(rules.lowTimeFactor < 0.7f);  // "x3 attacks in the time it takes x2"
+    CHECK(rules.lowTimeFactor > 0.6f);
+    // At a downed enemy, locked on.
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Knife");
+    const Entity enemy = feelTestDowned(*sim, hero, 0.9f);
+    feelTestFace(*sim, hero, 1.0f, 0.0f);
+    std::string why;
+    FEEL_REQUIRE(sim->melee().attack(hero, enemy, true, &why));
+    const int downedFinisher = sim->things().registry().get<Melee>(hero).finisher;
+    const int downedSteps = sim->things().registry().get<Melee>(hero).finisherSteps;
+    CHECK(downedFinisher != 0);
+    for (int s = 0; s < 300 && !(s > 2 && sim->melee().ready(hero)); ++s) {
+        sim->step();
+    }
+    // Kill it where it lies; the player swings at nobody with the body before it.
+    int torso = -1;
+    const std::vector<std::string> labels = sim->health().partLabels(sim->things().registry().get<Thing>(enemy).def);
+    for (size_t i = 0; i < labels.size(); ++i) {
+        torso = labels[i] == "torso" ? static_cast<int>(i) : torso;
+    }
+    FEEL_REQUIRE(torso >= 0);
+    sim->submit(DamagePawnCommand{enemy, "Blunt", 120.0f, torso});
+    for (int i = 0; i < 20 && !sim->things().registry().get<Health>(enemy).dead; ++i) {
+        sim->step();
+    }
+    FEEL_REQUIRE(sim->things().registry().get<Health>(enemy).dead);
+    sim->submit(FocusCommand{hero, kNoEntity, FocusMode::Clear});
+    sim->step();
+    feelTestFace(*sim, hero, 1.0f, 0.0f);
+    FEEL_REQUIRE(sim->melee().corpseAhead(hero) == enemy);
+    FEEL_REQUIRE(sim->melee().attack(hero, kNoEntity, true, &why));
+    const Melee& m = sim->things().registry().get<Melee>(hero);
+    CHECK(m.finisher == downedFinisher);   // the same move as at the downed enemy
+    CHECK(m.target == enemy);
+    CHECK(std::abs(m.finisherSteps - downedSteps) <= 1);
+    // Quicker than the finisher's own time at the weapons' pace.
+    const MeleeFinisher& f = rules.finishers[static_cast<size_t>(downedFinisher - 1)];
+    const int unhurried = static_cast<int>(std::lround(f.seconds * 30.0f * rules.attackTimeFactor));
+    MESSAGE("finisher " << downedSteps << " steps, " << unhurried << " at the old pace");
+    CHECK(downedSteps < unhurried);
 }

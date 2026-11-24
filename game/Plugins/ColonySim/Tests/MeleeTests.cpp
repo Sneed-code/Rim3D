@@ -43,7 +43,7 @@ namespace {
 
 // The pace factors in MeleeRules.json set back to 1 (and the standing step-in off).
 std::string meleeTestBasePace(std::string body) {
-    for (const char* key : {"\"attackTimeFactor\"", "\"unarmedTimeFactor\"", "\"unarmedPowerFactor\""}) {
+    for (const char* key : {"\"attackTimeFactor\"", "\"unarmedTimeFactor\"", "\"unarmedPowerFactor\"", "\"lowTimeFactor\""}) {
         const size_t at = body.find(key);
         if (at == std::string::npos) {
             continue;

@@ -81,6 +81,8 @@ bool holdFromStyle(const DefDatabase& defs, const std::string& name, WeaponHold&
     out.rake = static_cast<float>(style->number("rake", 0.0));
     out.hasSupport = style->count("support") >= 3;
     out.support = holdPointAt(*style, "support", HoldPoint{});
+    out.hasBlockOff = style->count("blockOff") >= 3;
+    out.blockOff = holdPointAt(*style, "blockOff", HoldPoint{});
     holdOffTurnFrom(*style, "offTurn", out);
     holdPlacesFrom(*style, "places.", out);
     return true;

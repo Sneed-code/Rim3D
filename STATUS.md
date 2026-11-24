@@ -11,6 +11,24 @@ them). Codex (6.2 Sol, high) made twenty benches, stoves, beds, lamps and furnit
 stand-ins. **The remnants are drawn as machines** by the animal subsystem now, with their strike and shot clips playing
 on a melee wind-up and a shot (`DrawsMachine`, smoke phase `remnants`); building clips take `when: working` and
 `fueled`. Art steps: `codex-models` copies the creature GLBs, `animal-art` imports them, `codex-art` the buildings.
+Combat polish (sneed, 2026-11-24; sim, data and Unreal): **downed and corpses** are hit a third quicker (`MeleeRules`
+`lowTimeFactor` 0.6667, three blows in the time of two) and a corpse in reach with nobody focused gets the very finisher a
+downed enemy would; **fists** half as fast again but with no wait after a punch, and a click during a punch is kept for
+0.4 s so the next one follows at once; **knife** damage halved (`tuning.json`); **assault rifle** spray 60% tighter
+(`spreadFactor` 0.4); **pump shotgun** plays the 12-gauge shot plus a pump sound (`Gun_Pump`); flesh hit sounds (sword on
+flesh, stabs, punches) carry much further (`Cues.json` near/volume); **one arm**: a pawn that lost an arm drops and can't
+pick up two-handed weapons (`CombatSystem::dropTwoHandersOfOneArmed`), its one-handed weapon goes in the hand it has
+(Unreal mirrors the hold to the left hand); **a lost leg** downs the pawn crawling (can't fight). Unreal: a torso burst
+leaves a big blood pool (`UBloodSubsystem::AddBurstPool`), rocket smoke trail a third the width, mace/zeushammer block
+puts the left hand on the haft (`blockOff` in HoldStyles), **roll** keeps both hands on the weapon riding with the upper
+body (`ClipRide`, new hand goal space `AnchorFull`) so no arm through the body, **severed heads keep their strand hair**
+(the groom moves to the piece, simulated in the world), head pieces of non-MakeHuman bodies now include the neck. **Roll end
+snap fixed**: the clip set-back was worked out before the mesh moved the montage blend on, so a frame hitch at the
+fade threw the hips up to 100 cm for a frame; it is now made exact after the pose is evaluated
+(`USimPawnAnimInstance::NativePostEvaluateAnimation` -> `ASimPawnActor::RefreshMotionSetBack`), and the drawn body eases
+between the sim's place and the player's own when a roll starts or ends (`SourceEase`). New smoke phase
+`feel_roll_walking` (W held, rifle; `WALKROLLTRACE`). PC (2026-11-24, test clone): compiles; `feel`, `gore`, `hurt`
+pass; `melee` fails only switch_key, which fails on main too.
 
 Gore, liquid fire, rocket and roll (sneed, 2026-11-23 night; Unreal only, the rest of the second combat batch):
 **torso bursts** now throw the torso itself cut into slabs (breasts, belly, back, buttocks, the genitals as their own

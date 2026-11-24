@@ -542,6 +542,13 @@ TEST_CASE("sound: every gun sounds like itself") {
     CHECK(plays[1].delay > 0.2f);
     shot.def = db.idOf("Things", "Gun_RecurveBow");
     CHECK(soundTestPlay(db, shot).size() == 1);
+    // The pump shotgun is racked after each shot, before its case lands (sneed 2026-11-24).
+    shot.def = db.idOf("Things", "Gun_PumpShotgun");
+    const auto pumped = soundTestPlay(db, shot);
+    if (pumped.size() != 3) { CHECK(pumped.size() == 3); return; }
+    CHECK(pumped[0].cue == "Shot_Shotgun");
+    CHECK(pumped[2].cue == "Gun_Pump");
+    CHECK(pumped[2].delay > 0.2f);
 }
 
 TEST_CASE("sound: bullets and arrows sound by what they strike") {

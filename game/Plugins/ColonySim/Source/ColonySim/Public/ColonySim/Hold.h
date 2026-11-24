@@ -85,6 +85,10 @@ struct WeaponHold {
     // shield on the left arm takes that hand).
     HoldPoint support;
     bool hasSupport = false;
+    // A one-handed weapon's other hand while blocking (the style's `blockOff`): the club or hammer held up across the body
+    // in both fists, the second hand on the haft under the head (sneed 2026-11-24: the left hand stayed up in the air).
+    HoldPoint blockOff;
+    bool hasBlockOff = false;
     // Where the weapon is held (the style's `places`, a weapon's own `hold.places` over them): third person ready
     // (drafted, in a fight, the player's own), aimed (guns), blocking (melee); first person the same with `fp`.
     HoldPlace ready, aim, block, fpReady, fpAim, fpBlock;
