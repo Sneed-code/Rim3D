@@ -14,6 +14,7 @@
 #include <imgui.h>
 
 #include "ColonyHudStyle.h"
+#include "HudIcons.h"
 
 #include "OrdersSubsystem.h"
 #include "OverseerSubsystem.h"
@@ -427,13 +428,13 @@ void UColonyHudSubsystem::DrawAreasScreen(USimSubsystem& Bridge, float Scale)
 			ImGui::TableNextColumn();
 			const bool bPainting = Orders && Orders->GetAreaToolArea() == Area.id && Orders->GetTool() == EOrderTool::PaintArea;
 			const bool bErasing = Orders && Orders->GetAreaToolArea() == Area.id && Orders->GetTool() == EOrderTool::EraseArea;
-			if (ColonyHud::Button(TEXT("Paint"), bPainting) && Orders)
+			if (HudIcons::Button(HudIcons::Get(TEXT("area_paint"), ImGui::GetFrameHeight()), TEXT("Paint"), bPainting, ImVec2(0.0f, 0.0f)) && Orders)
 			{
 				Orders->SetAreaTool(bPainting ? 0 : Area.id, true);
 			}
 			ColonyHud::Tip(TEXT("Drag rectangles on the map to add them to the area. Right click or Esc stops"));
 			ImGui::SameLine();
-			if (ColonyHud::Button(TEXT("Erase"), bErasing) && Orders)
+			if (HudIcons::Button(HudIcons::Get(TEXT("area_erase"), ImGui::GetFrameHeight()), TEXT("Erase"), bErasing, ImVec2(0.0f, 0.0f)) && Orders)
 			{
 				Orders->SetAreaTool(bErasing ? 0 : Area.id, false);
 			}

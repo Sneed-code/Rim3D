@@ -24,6 +24,7 @@
 #include <imgui.h>
 
 #include "ColonyHudStyle.h"
+#include "HudIcons.h"
 
 #include "BuildingSubsystem.h"
 #include "LevelsSubsystem.h"
@@ -262,6 +263,40 @@ namespace
 			case EOrderTool::Slaughter: return TEXT("Slaughter");
 		}
 		return TEXT("?");
+	}
+
+	/** The painted icon of a tool (assets/ui/icons), empty for one that has none. */
+	const TCHAR* OrdToolIcon(EOrderTool Tool)
+	{
+		switch (Tool)
+		{
+			case EOrderTool::Stockpile: return TEXT("zone_stockpile");
+			case EOrderTool::RemoveZone: return TEXT("zone_remove");
+			case EOrderTool::Mine: return TEXT("order_mine");
+			case EOrderTool::Chop: return TEXT("order_chop");
+			case EOrderTool::Harvest: return TEXT("order_harvest");
+			case EOrderTool::Cancel: return TEXT("order_cancel");
+			case EOrderTool::Deconstruct: return TEXT("order_deconstruct");
+			case EOrderTool::Grow: return TEXT("zone_grow");
+			case EOrderTool::RemoveFloor: return TEXT("order_remove_floor");
+			case EOrderTool::LandingZone: return TEXT("zone_landing");
+			case EOrderTool::RemoveLandingZone: return TEXT("zone_remove_landing");
+			case EOrderTool::LevelEarth: return TEXT("earth_level");
+			case EOrderTool::CancelEarth: return TEXT("earth_cancel");
+			case EOrderTool::PaintArea: return TEXT("area_paint");
+			case EOrderTool::EraseArea: return TEXT("area_erase");
+			case EOrderTool::AnimalZone: return TEXT("zone_animal");
+			case EOrderTool::Tame: return TEXT("order_tame");
+			case EOrderTool::Hunt: return TEXT("order_hunt");
+			case EOrderTool::Slaughter: return TEXT("order_slaughter");
+			default: return TEXT("");
+		}
+	}
+
+	/** The painted icon of a Build menu category: "cat_" and its name in lower case ("cat_structure", "cat_recreation"). */
+	FString OrdCategoryIcon(const FString& Category)
+	{
+		return TEXT("cat_") + Category.ToLower().Replace(TEXT(" "), TEXT("_"));
 	}
 
 	void OrdText(const FString& Text)
@@ -1208,13 +1243,13 @@ void UOrdersSubsystem::DrawDraftControls(const colony::ThingView& View)
 	}
 	if (View.drafted)
 	{
-		if (ImGui::Button("Stand down (R)"))
+		if (HudIcons::Button(HudIcons::Get(TEXT("pawn_undraft"), ImGui::GetFrameHeight()), TEXT("Stand down (R)"), false, ImVec2(0.0f, 0.0f)))
 		{
 			DraftSelected(false);
 		}
 		ImGui::TextUnformatted("Right click: move, or attack an enemy");
 	}
-	else if (!View.downed && ImGui::Button("Draft (R)"))
+	else if (!View.downed && HudIcons::Button(HudIcons::Get(TEXT("pawn_draft"), ImGui::GetFrameHeight()), TEXT("Draft (R)"), false, ImVec2(0.0f, 0.0f)))
 	{
 		DraftSelected(true);
 	}
@@ -1854,7 +1889,8 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 			}
 		}
 		ImGui::PushStyleColor(ImGuiCol_Button, bAnyUndrafted ? ImVec4(0.72f, 0.14f, 0.12f, 1.0f) : ImVec4(0.22f, 0.45f, 0.30f, 1.0f));
-		if (ImGui::Button(bAnyUndrafted ? "ALARM" : "Stand down") && bAnyColonist)
+		if (HudIcons::Button(HudIcons::Get(bAnyUndrafted ? TEXT("pawn_draft") : TEXT("pawn_undraft"), ImGui::GetFrameHeight()),
+				bAnyUndrafted ? TEXT("ALARM##alarm") : TEXT("Stand down##alarm"), false, ImVec2(0.0f, 0.0f)) && bAnyColonist)
 		{
 			Alarm();
 		}
@@ -2081,7 +2117,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 				continue;
 			}
 			const FString& Name = Categories[Index];
-			if (ColonyHud::Button(Name, OpenCategory == Name && BuildSearch[0] == 0, ImVec2(CellWidth, 0.0f)))
+			if (HudIcons::Button(HudIcons::Get(OrdCategoryIcon(Name), ImGui::GetFrameHeight()), Name, OpenCategory == Name && BuildSearch[0] == 0, ImVec2(CellWidth, 0.0f)))
 			{
 				OpenCategory = Name;
 				BuildSearch[0] = 0;
@@ -2359,6 +2395,10 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 							Draw->AddRectFilled(ImVec2(A.x + X * Cell + 1.0f, A.y + Y * Cell + 1.0f), ImVec2(A.x + (X + 1) * Cell - 1.0f, A.y + (Y + 1) * Cell - 1.0f), IconColor, 2.0f);
 						}
 					}
+				}
+				else if (UTexture* ToolIcon = HudIcons::Get(OrdToolIcon(Tile.TileTool), TileSize * 0.62f))
+				{
+					HudIcons::Draw(Draw, ToolIcon, ImVec2(IconCentre.x, IconCentre.y + TileSize * 0.02f), TileSize * 0.62f, bLocked);
 				}
 				else
 				{

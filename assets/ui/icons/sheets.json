@@ -1,0 +1,11 @@
+{
+  "comment": "The painted HUD icons (docs/design/ui-layout.md, 'Icons'). Made 2026-11-24 with ChatGPT image generation, one chat so the style holds, as 3x3 sheets on a transparent background, then cut with tools/slice_icon_sheet.py into 256 px PNGs here (names left to right, top to bottom). The game loads <name>.png at run time (HudIcons.cpp); a missing file falls back to text. To add icons: ask the same chat for another sheet 'in the exact same style, strict 3x3 grid, fully transparent background, no text, wide gaps', then slice it.",
+  "style": "Hand-painted semi-realistic game icon art, bold readable silhouette, object centred filling about 80% of its cell, soft top-left lighting, rich but slightly muted colours with one accent colour per icon, thin dark outline for a dark UI. No text, frames or backgrounds.",
+  "sheets": [
+    {"sheet": "A", "names": ["order_cancel", "order_deconstruct", "order_mine", "order_chop", "order_harvest", "order_remove_floor", "order_tame", "order_hunt", "order_slaughter"]},
+    {"sheet": "B", "names": ["zone_stockpile", "zone_grow", "zone_animal", "zone_remove", "zone_landing", "zone_remove_landing", "earth_level", "earth_cancel", "pawn_draft"]},
+    {"sheet": "C", "names": ["cat_orders", "cat_zone", "cat_structure", "cat_production", "cat_furniture", "cat_power", "cat_security", "cat_misc", "cat_floors"]},
+    {"sheet": "D", "names": ["cat_recreation", "cat_ship", "cat_temperature", "tab_build", "tab_work", "tab_schedule", "tab_assign", "tab_animals", "tab_mechs"]},
+    {"sheet": "E", "names": ["tab_wildlife", "tab_research", "tab_quests", "tab_world", "tab_inventory", "pawn_undraft", "area_paint", "area_erase", "log_messages"]}
+  ]
+}

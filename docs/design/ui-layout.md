@@ -159,6 +159,14 @@ drawn footprints. Floors and orders keep their drawn icons.
 keyboard), the learning helper (an open book), Factions (a flag) and Menu (three lines) are clean line icons drawn by ImGui on
 square-ish buttons, amber when on; their names are in the tooltips. Ship stays a word.
 
+**Icons** (2026-11-24): painted icons, one style (hand-painted, semi-realistic, bold silhouette, thin dark outline, no
+text), made with ChatGPT as 3x3 sheets in one chat and cut into 256 px PNGs in `assets/ui/icons/` by
+`tools/slice_icon_sheet.py` (prompts and names in `assets/ui/icons/sheets.json`). `HudIcons.cpp` loads them at run time
+with 128/64/32 px copies so they stay smooth at any scale (`UI.HudIcons 0` turns them off). They show on the bottom bar
+tabs (icon left of the label), the Build categories, the order and zone tiles (in place of the coloured rings), Draft /
+Stand down, the alarm button and the area Paint / Erase buttons. A missing file falls back to the text or drawn icon.
+The speed, Keys, helper, Factions and Menu buttons keep their line icons. Building tiles keep their mesh pictures.
+
 Each faction also shows its last three goodwill changes with why and the day ("Lately: -19 a caravan called (day 3)"),
 from the sim's goodwill log (`comms-console.md`). Build tiles fill their rows evenly (27 tiles: 9, 9, 9, not 13, 13, 1).
 

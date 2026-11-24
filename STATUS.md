@@ -2,6 +2,10 @@
 
 Updated 2026-11-24.
 
+HUD icons (sneed, 2026-11-24; Unreal only): 45 painted icons made with ChatGPT in one style for the bottom bar tabs,
+Build categories, every order and zone tool, Draft / Stand down / alarm and area Paint / Erase, in
+`assets/ui/icons/` (256 px PNGs, loaded at run time by `HudIcons.cpp`; docs/design/ui-layout.md "Icons").
+
 Combat polish (sneed, 2026-11-24; sim, data and Unreal): **downed and corpses** are hit a third quicker (`MeleeRules`
 `lowTimeFactor` 0.6667, three blows in the time of two) and a corpse in reach with nobody focused gets the very finisher a
 downed enemy would; **fists** half as fast again but with no wait after a punch, and a click during a punch is kept for
