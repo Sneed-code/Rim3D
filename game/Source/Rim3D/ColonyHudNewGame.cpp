@@ -387,6 +387,9 @@ void UColonyHudSubsystem::LandColony(USimSubsystem& Bridge)
 	if (UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>())
 	{
 		Overseer->EnterOverseerMode();
+		// The camera starts on you (the protagonist, else the first colonist), selected, not over the map's middle where
+		// nobody is (sneed 2026-11-24: "i cannot see my character").
+		Overseer->FocusOnColonists(true);
 	}
 	Bridge.SetSpeed(1);
 }

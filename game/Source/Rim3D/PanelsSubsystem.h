@@ -23,15 +23,29 @@ enum class EColonyTab : uint8
 	Schedule,
 };
 
-/** One line of the message log. */
+/** One line of the message log, and the short alert it shows on the right while it is fresh (docs/design/ui-layout.md "Alerts"). */
 struct FColonyLogLine
 {
 	int64 GameSeconds = 0;
+	/** The whole message, as the log and the alert's pop-up show it. */
 	FString Text;
+	/** The alert's one to three words ("Colonist down"). */
+	FString Title;
+	/** What kind of alert it is, for turning that kind off for good ("ColonistDown"). */
+	FString Kind;
 	/** Danger (red), trouble (orange), good news (green) or plain. */
 	uint8 Severity = 0;
 	/** The pawn it is about, to jump to it with a click. */
 	colony::Entity Subject = colony::kNoEntity;
+	/** Real time it came in (FPlatformTime::Seconds), for the alert's fade. */
+	double RealSeconds = 0.0;
+	/** Shown as an alert at all (a finished craft only goes in the log). */
+	bool bAlert = true;
+	/** Read (its pop-up opened) or turned off with a right click: no longer on the right. */
+	bool bRead = false;
+	bool bDismissed = false;
+	/** The same alert again within a few seconds is counted on this one ("x3") instead of stacking. */
+	int32 Repeats = 1;
 };
 
 /** What the panels drew and did (smoke test `panels`). */
@@ -107,6 +121,17 @@ public:
 	 *  two frames, else 0: the kill feed starts below them. */
 	float GetTopLeftBottom() const { return GFrameCounter - TopLeftFrame <= 2 ? TopLeftBottom : 0.0f; }
 	const TArray<FColonyLogLine>& GetLog() const { return Log; }
+	/** The alerts showing on the right now (fresh, not read, not turned off), newest first: indexes into GetLog. */
+	void GetLiveAlerts(TArray<int32>& Out) const;
+	/** How long an alert of this severity stays on the right before it fades out, real seconds (sneed: a minute for now). */
+	static double AlertSeconds(uint8 Severity);
+	/** Opens an alert's pop-up in the middle of the screen; that reads it, so it leaves the right side. */
+	void OpenAlert(int32 LogIndex);
+	/** Right click: the alert goes. Shift right click: its kind is turned off for good (back on from the message log). */
+	void DismissAlert(int32 LogIndex, bool bForGood);
+	bool IsAlertKindOff(const FString& Kind) const { return ExcludedKinds.Contains(Kind); }
+	void SetAlertKindOff(const FString& Kind, bool bOff);
+	const TArray<FString>& GetExcludedKinds() const { return ExcludedKinds; }
 	/** The colonists the tabs list, in the order of the snapshot. */
 	void GetColonists(TArray<colony::Entity>& Out) const;
 
@@ -119,6 +144,13 @@ private:
 	void Submit(colony::Command Command);
 	void OnSimEvent(const colony::Event& Event);
 	void AddLog(const FString& Text, uint8 Severity, colony::Entity Subject = colony::kNoEntity);
+	/** A log line with its alert: one to three words of title, the kind (for turning it off) and the whole message. */
+	void AddAlert(const FString& Title, const FString& Kind, const FString& Text, uint8 Severity, colony::Entity Subject = colony::kNoEntity, bool bAlert = true);
+	void LoadAlertPrefs();
+	void SaveAlertPrefs() const;
+	void DrawAlerts(USimSubsystem& Bridge, float Scale);
+	void DrawAlertPopup(USimSubsystem& Bridge, float Scale);
+	void DrawLogWindow(USimSubsystem& Bridge, float Scale);
 	FString NameOf(colony::Entity Pawn) const;
 	void ResetForNewSim();
 
@@ -137,6 +169,11 @@ private:
 	FString WorkGroupFilter;
 	char NewGroupName[32] = {};
 	TArray<FColonyLogLine> Log;
+	/** Alert kinds turned off for good (shift right click), kept in the player's settings. */
+	TArray<FString> ExcludedKinds;
+	bool bAlertPrefsLoaded = false;
+	/** The alert whose pop-up is open, as a log index, or -1. */
+	int32 PopupLine = -1;
 	FDelegateHandle EventHandle;
 	TWeakObjectPtr<USimSubsystem> EventSource;
 	int32 ContentGeneration = -1;

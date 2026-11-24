@@ -2,6 +2,15 @@
 
 Updated 2026-11-24.
 
+HUD batch (sneed, 2026-11-24; Unreal only, `docs/design/ui-layout.md` "Layout v2" onward): bar windows (Work,
+Schedule, Build...) sit flush on the screen's left edge and on the bar; the terrain/inspect box moved fully top right, with
+the alarm, lessons and alerts stacked under it (`HudLayout.h`); a taller bottom bar; Power/Temperature hidden; F1/F2/F3
+engine view keys off; **drag-box selection** (colonists, then other people, then animals, then things of one kind), flat
+selection rings, orders to every selected colonist; chop/harvest/mine/take-down marks are flat coloured rings shown only
+with their tool or on the selected thing; **RimWorld-style alerts** (short titles, click for a pop-up, right click
+dismiss, shift + right click off for good, turned back on in Menu > Message log, 60 s fade); health bars under colonist
+faces; the camera starts on your character. Still to do: ChatGPT icons for the orders, the giant grey animal shapes.
+
 Combat polish (sneed, 2026-11-24; sim, data and Unreal): **downed and corpses** are hit a third quicker (`MeleeRules`
 `lowTimeFactor` 0.6667, three blows in the time of two) and a corpse in reach with nobody focused gets the very finisher a
 downed enemy would; **fists** half as fast again but with no wait after a punch, and a click during a punch is kept for

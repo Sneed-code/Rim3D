@@ -26,6 +26,8 @@ namespace
 		TEXT("Overlay.Power"), 0, TEXT("1 shows the power view in the overseer screen: grids, power made and used, batteries."), ECVF_Default);
 	TAutoConsoleVariable<int32> GOverlayTemperature(
 		TEXT("Overlay.Temperature"), 0, TEXT("1 shows the temperature view in the overseer screen: each room's temperature, coolers' sides."), ECVF_Default);
+	TAutoConsoleVariable<int32> GOverlayToggles(
+		TEXT("Overlay.Toggles"), 0, TEXT("1 shows the Power and Temperature tick boxes by the date box (hidden, sneed 2026-11-24)."), ECVF_Default);
 
 	void PowerOverlaySpawn(USimSubsystem& Bridge, const char* Def, int32 X, int32 Y, colony::Rot4 Rot = colony::Rot4::North, int32 Count = 1)
 	{
@@ -215,7 +217,10 @@ void UPowerOverlaySubsystem::Tick(float DeltaTime)
 		return;
 	}
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
-	DrawToggles(Scale);
+	if (GOverlayToggles.GetValueOnGameThread() != 0)
+	{
+		DrawToggles(Scale);
+	}
 	float Top = Viewport->Pos.y + Viewport->Size.y * 0.42f;
 	if (IsPowerViewOn())
 	{

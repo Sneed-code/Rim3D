@@ -13,6 +13,7 @@
 
 #include "ColonyHudStyle.h"
 #include "ColonyHudSubsystem.h"
+#include "HudLayout.h"
 
 #include "LevelsSubsystem.h"
 #include "OrdersSubsystem.h"
@@ -194,11 +195,65 @@ AOverseerPawn* UOverseerSubsystem::EnterOverseerMode()
 void UOverseerSubsystem::Select(const FSimPick& Pick)
 {
 	Selection = Pick;
+	Extra.Reset();
+}
+
+void UOverseerSubsystem::SelectThings(const TArray<colony::Entity>& Things)
+{
+	Extra.Reset();
+	Selection = FSimPick();
+	for (const colony::Entity Thing : Things)
+	{
+		if (Thing == colony::kNoEntity || IsThingSelected(Thing))
+		{
+			continue;
+		}
+		if (!Selection.IsValid())
+		{
+			Selection.Kind = ESimPickKind::Thing;
+			Selection.Thing = Thing;
+		}
+		else
+		{
+			Extra.Add(Thing);
+		}
+	}
+}
+
+void UOverseerSubsystem::ToggleThingSelected(colony::Entity Thing)
+{
+	TArray<colony::Entity> Things;
+	GetSelectedThings(Things);
+	if (Things.Contains(Thing))
+	{
+		Things.Remove(Thing);
+	}
+	else
+	{
+		Things.Add(Thing);
+	}
+	SelectThings(Things);
+}
+
+void UOverseerSubsystem::GetSelectedThings(TArray<colony::Entity>& Out) const
+{
+	Out.Reset();
+	if (Selection.Kind == ESimPickKind::Thing)
+	{
+		Out.Add(Selection.Thing);
+		Out.Append(Extra);
+	}
+}
+
+bool UOverseerSubsystem::IsThingSelected(colony::Entity Thing) const
+{
+	return Selection.Kind == ESimPickKind::Thing && (Selection.Thing == Thing || Extra.Contains(Thing));
 }
 
 void UOverseerSubsystem::ClearSelection()
 {
 	Selection = FSimPick();
+	Extra.Reset();
 }
 
 void UOverseerSubsystem::FocusOnSelection()
@@ -219,6 +274,191 @@ void UOverseerSubsystem::FocusOnSelection()
 	}
 }
 
+bool UOverseerSubsystem::FocusOnColonists(bool bSelect)
+{
+	const USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+	if (!Bridge || !Bridge->GetSim() || !IsValid(Pawn.Get()))
+	{
+		return false;
+	}
+	const colony::Sim& Sim = *Bridge->GetSim();
+	colony::Entity Found = colony::kNoEntity;
+	for (const colony::ThingView& View : Bridge->GetCurrentSnapshot().things)
+	{
+		const colony::Colonist* Colonist = View.category == colony::ThingCategory::Pawn && !View.dead ? Sim.colonistOf(View.id) : nullptr;
+		if (!Colonist || View.faction != 1)
+		{
+			continue;
+		}
+		if (Found == colony::kNoEntity || Colonist->protagonist)
+		{
+			Found = View.id;
+		}
+		if (Colonist->protagonist)
+		{
+			break;
+		}
+	}
+	FVector Location;
+	if (Found == colony::kNoEntity || !Bridge->GetBlendedLocation(Found, Location))
+	{
+		return false;
+	}
+	Pawn->FocusOn(Location);
+	Pawn->SnapCamera();
+	if (bSelect)
+	{
+		FSimPick Pick;
+		Pick.Kind = ESimPickKind::Thing;
+		Pick.Thing = Found;
+		Select(Pick);
+	}
+	UE_LOG(LogOverseer, Log, TEXT("Camera on the colonists: #%u"), OverseerIdNumber(Found));
+	return true;
+}
+
+void UOverseerSubsystem::FindThingsInBox(const FVector2D& A, const FVector2D& B, TArray<colony::Entity>& Out) const
+{
+	Out.Reset();
+	const USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>();
+	const APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	if (!Bridge || !Bridge->GetSim() || !PC)
+	{
+		return;
+	}
+	const colony::Sim& Sim = *Bridge->GetSim();
+	const FVector2D Min(FMath::Min(A.X, B.X), FMath::Min(A.Y, B.Y));
+	const FVector2D Max(FMath::Max(A.X, B.X), FMath::Max(A.Y, B.Y));
+	const int32 TopLevel = ULevelsSubsystem::TopShownLevel(GetWorld());
+	// Sorted by how near the box's start they are on screen, so the main selection is the one the drag began on.
+	struct FBoxHit
+	{
+		colony::Entity Id;
+		int32 Group;  // 0 your colonists, 1 other people, 2 animals, 3 anything else
+		colony::DefId Def;
+		double Distance;
+	};
+	TArray<FBoxHit> Hits;
+	for (const colony::ThingView& View : Bridge->GetCurrentSnapshot().things)
+	{
+		if (View.level > TopLevel)
+		{
+			continue;
+		}
+		FVector Location;
+		if (!Bridge->GetBlendedLocation(View.id, Location))
+		{
+			continue;
+		}
+		if (View.category == colony::ThingCategory::Pawn)
+		{
+			Location.Z += 80.0;  // the body's middle, not its feet
+		}
+		FVector2D Screen;
+		if (!PC->ProjectWorldLocationToScreen(Location, Screen, true) || Screen.X < Min.X || Screen.X > Max.X || Screen.Y < Min.Y || Screen.Y > Max.Y)
+		{
+			continue;
+		}
+		int32 Group = 3;
+		if (View.category == colony::ThingCategory::Pawn)
+		{
+			const bool bPerson = Sim.looksOf(View.id) != nullptr || Sim.colonistOf(View.id) != nullptr;
+			Group = bPerson ? (Sim.colonistOf(View.id) && View.faction == 1 && !View.dead ? 0 : 1) : 2;
+			if (View.dead)
+			{
+				Group = 3;  // bodies are things
+			}
+		}
+		Hits.Add({View.id, Group, View.def, FVector2D::DistSquared(Screen, A)});
+	}
+	if (Hits.IsEmpty())
+	{
+		return;
+	}
+	Hits.Sort([](const FBoxHit& L, const FBoxHit& R) { return L.Distance < R.Distance; });
+	int32 Best = 3;
+	for (const FBoxHit& Hit : Hits)
+	{
+		Best = FMath::Min(Best, Hit.Group);
+	}
+	// People: your colonists if any are in the box, with anyone else of yours (prisoners and guests stay out unless no
+	// colonist is in it). Animals: every animal. Else the kind of thing nearest the start (all the logs, all the walls).
+	const colony::DefId Kind = Hits[0].Def;
+	for (const FBoxHit& Hit : Hits)
+	{
+		if (Best <= 2 ? Hit.Group == Best : Hit.Def == Kind)
+		{
+			Out.Add(Hit.Id);
+		}
+	}
+}
+
+void UOverseerSubsystem::BeginSelectPress(const FVector2D& Screen)
+{
+	bBoxPressed = true;
+	bBoxActive = false;
+	BoxStart = BoxEnd = Screen;
+}
+
+void UOverseerSubsystem::UpdateSelectPress(const FVector2D& Screen)
+{
+	if (!bBoxPressed)
+	{
+		return;
+	}
+	BoxEnd = Screen;
+	if (!bBoxActive && FVector2D::Distance(BoxStart, BoxEnd) > 10.0)
+	{
+		bBoxActive = true;
+	}
+}
+
+bool UOverseerSubsystem::EndSelectPress(const FVector2D& Screen, bool bAdd)
+{
+	if (!bBoxPressed)
+	{
+		return false;
+	}
+	UpdateSelectPress(Screen);
+	bBoxPressed = false;
+	if (bBoxActive)
+	{
+		bBoxActive = false;
+		TArray<colony::Entity> Found;
+		FindThingsInBox(BoxStart, BoxEnd, Found);
+		UE_LOG(LogOverseer, Log, TEXT("Drag box (%.0f, %.0f) to (%.0f, %.0f): %d selected"), BoxStart.X, BoxStart.Y, BoxEnd.X, BoxEnd.Y, Found.Num());
+		if (bAdd)
+		{
+			TArray<colony::Entity> Things;
+			GetSelectedThings(Things);
+			for (const colony::Entity Thing : Found)
+			{
+				Things.AddUnique(Thing);
+			}
+			SelectThings(Things);
+		}
+		else if (!Found.IsEmpty())
+		{
+			SelectThings(Found);
+		}
+		else
+		{
+			ClearSelection();
+		}
+		return true;
+	}
+	const FSimPick Pick = IsValid(Pawn.Get()) ? Pawn->PickAtScreenPosition(Screen) : FSimPick();
+	if (bAdd && Pick.Kind == ESimPickKind::Thing && (Selection.Kind == ESimPickKind::Thing || !Selection.IsValid()))
+	{
+		ToggleThingSelected(Pick.Thing);
+	}
+	else
+	{
+		Select(Pick);
+	}
+	return true;
+}
+
 void UOverseerSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -229,9 +469,12 @@ void UOverseerSubsystem::Tick(float DeltaTime)
 	}
 
 	// A selected thing that left the map (picked up, destroyed) is no longer selected.
+	Extra.RemoveAll([Bridge](colony::Entity Thing) { return !Bridge->GetCurrentSnapshot().find(Thing); });
 	if (Selection.Kind == ESimPickKind::Thing && !Bridge->GetCurrentSnapshot().find(Selection.Thing))
 	{
-		ClearSelection();
+		// The main one went: the next selected thing takes its place.
+		TArray<colony::Entity> Rest = Extra;
+		SelectThings(Rest);
 	}
 	DrawSelectionHighlight(*Bridge);
 	if (GOverseerShowUi.GetValueOnGameThread() != 0)
@@ -245,26 +488,42 @@ void UOverseerSubsystem::DrawSelectionHighlight(const USimSubsystem& Bridge) con
 	UWorld* World = GetWorld();
 	if (Selection.Kind == ESimPickKind::Thing)
 	{
+		// A flat ring on the ground round each selected thing (sneed 2026-11-24: "a unit circle, no 3 dimensions"), sized to
+		// what it is: a person's ring is about a metre across, a building's covers its footprint.
 		const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
-		const colony::ThingView* View = Snapshot.find(Selection.Thing);
-		FBox Box;
-		if (!View || !SimPicking::ThingBox(Bridge, *View, Box))
+		TArray<colony::Entity> Things;
+		GetSelectedThings(Things);
+		const FColor Ring(170, 240, 205);
+		for (const colony::Entity Thing : Things)
 		{
-			return;
-		}
-		DrawDebugBox(World, Box.GetCenter(), Box.GetExtent(), FColor::White, false, -1.0f, SDPG_Foreground, 4.0f);
-		// A moving pawn's route ahead, from its feet along the waypoints.
-		if (View->category == colony::ThingCategory::Pawn && View->waypointCount > 0)
-		{
-			FVector From;
-			Bridge.GetBlendedLocation(View->id, From);
-			From.Z += 20.0;
-			for (uint32 Index = 0; Index < View->waypointCount; ++Index)
+			const colony::ThingView* View = Snapshot.find(Thing);
+			FBox Box;
+			if (!View || !SimPicking::ThingBox(Bridge, *View, Box))
 			{
-				const colony::PathPointView& Point = Snapshot.waypoints[View->firstWaypoint + Index];
-				const FVector To = Bridge.SimToWorld(Point.x, Point.y, View->level) + FVector(0.0, 0.0, 20.0);
-				DrawDebugLine(World, From, To, FColor::Cyan, false, -1.0f, SDPG_Foreground, 3.0f);
-				From = To;
+				continue;
+			}
+			FVector Feet;
+			if (!Bridge.GetBlendedLocation(View->id, Feet))
+			{
+				Feet = FVector(Box.GetCenter().X, Box.GetCenter().Y, Box.Min.Z);
+			}
+			const FVector Extent = Box.GetExtent();
+			float Radius = static_cast<float>(FMath::Max(Extent.X, Extent.Y));
+			Radius = View->category == colony::ThingCategory::Pawn ? FMath::Clamp(Radius * 0.85f, 45.0f, 260.0f) : FMath::Max(Radius * 0.95f, 35.0f);
+			const FVector Centre(Box.GetCenter().X, Box.GetCenter().Y, Feet.Z + 6.0);
+			DrawDebugCircle(World, Centre, Radius, 48, Ring, false, -1.0f, SDPG_World, FMath::Max(2.5f, Radius * 0.045f), FVector(1.0, 0.0, 0.0),
+				FVector(0.0, 1.0, 0.0), false);
+			// A moving pawn's route ahead, from its feet along the waypoints, flat on the ground.
+			if (View->category == colony::ThingCategory::Pawn && View->waypointCount > 0 && View->faction == 1)
+			{
+				FVector From = Feet + FVector(0.0, 0.0, 8.0);
+				for (uint32 Index = 0; Index < View->waypointCount; ++Index)
+				{
+					const colony::PathPointView& Point = Snapshot.waypoints[View->firstWaypoint + Index];
+					const FVector To = Bridge.SimToWorld(Point.x, Point.y, View->level) + FVector(0.0, 0.0, 8.0);
+					DrawDebugLine(World, From, To, FColor(120, 220, 255, 200), false, -1.0f, SDPG_World, 2.0f);
+					From = To;
+				}
 			}
 		}
 	}
@@ -305,23 +564,27 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
 	ColonyHud::ApplyFrameStyle(Scale);
 	const float Margin = 12.0f * Scale;
+	if (bBoxActive)
+	{
+		// The drag box: a faint jade fill with a bright edge, over the world and under the boxes.
+		ImDrawList* Draw = ImGui::GetBackgroundDrawList();
+		const ImVec2 A(Viewport->Pos.x + static_cast<float>(FMath::Min(BoxStart.X, BoxEnd.X)), Viewport->Pos.y + static_cast<float>(FMath::Min(BoxStart.Y, BoxEnd.Y)));
+		const ImVec2 B(Viewport->Pos.x + static_cast<float>(FMath::Max(BoxStart.X, BoxEnd.X)), Viewport->Pos.y + static_cast<float>(FMath::Max(BoxStart.Y, BoxEnd.Y)));
+		Draw->AddRectFilled(A, B, ImGui::GetColorU32(ImVec4(0.37f, 0.83f, 0.66f, 0.10f)));
+		Draw->AddRect(A, B, ImGui::GetColorU32(ImVec4(0.55f, 0.95f, 0.78f, 0.85f)), 0.0f, 0, 1.5f * Scale);
+	}
 	const ImGuiWindowFlags PanelFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
 
 	// The speed buttons, the date and the level looked at are on the bottom bar now (UColonyHudSubsystem).
 
-	// Inspect panel, bottom left: what is selected.
-	if (Selection.IsValid())
+	// Inspect panel, fully top right (sneed 2026-11-24): what is selected. A selected ground cell's box is left out while a
+	// bar window (Build, Work...) is open, so nothing but that window shows over the world.
+	const UColonyHudSubsystem* TabsHud = GetWorld()->GetSubsystem<UColonyHudSubsystem>();
+	const bool bTabOpen = TabsHud && TabsHud->GetOpenTab() != EHudTab::None;
+	if (Selection.IsValid() && !(bTabOpen && Selection.Kind == ESimPickKind::Cell))
 	{
-		// Bottom left, just above the tab bar; above the Build menu while it is open (docs/design/ui-layout.md).
-		float Bottom = ColonyHud::AboveBar(Viewport, Scale);
-		FBox2D Menu;
-		if (const UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>(); Orders && Orders->IsBuildMenuOpen() && Orders->GetBuildMenuRect(Menu) &&
-			Menu.Min.X < Viewport->Pos.x + Margin + 560.0f * Scale)
-		{
-			Bottom = FMath::Min(Bottom, static_cast<float>(Menu.Min.Y) - 6.0f * Scale);
-		}
-		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Margin, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+		HudLayout::PlaceRight(Viewport, HudLayout::ERightSlot::Inspect, Scale);
 		ImGui::SetNextWindowSizeConstraints(ImVec2(300.0f * Scale, 0.0f), ImVec2(560.0f * Scale, FLT_MAX));
 		if (ImGui::Begin("##OverseerInspect", nullptr, PanelFlags))
 		{
@@ -348,6 +611,10 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 						ClearSelection();
 					}
 					ColonyHud::Tip(TEXT("Deselect (Esc)"));
+					if (Extra.Num() > 0)
+					{
+						ColonyHud::TextColored(ColonyHud::Accent(), FString::Printf(TEXT("and %d more selected"), Extra.Num()));
+					}
 					ImGui::Separator();
 					OverseerText(FString::Printf(TEXT("%s   #%u"), OverseerCategoryName(View->category), OverseerIdNumber(View->id)));
 					OverseerText(FString::Printf(TEXT("Cell %d, %d   ground %.1f m"), FMath::FloorToInt32(View->x), FMath::FloorToInt32(View->y), View->z));
@@ -416,6 +683,7 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 					}
 				}
 			}
+			HudLayout::ReportRight(HudLayout::ERightSlot::Inspect);
 		}
 		ImGui::End();
 	}

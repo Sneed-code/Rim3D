@@ -24,6 +24,7 @@
 #include <imgui.h>
 
 #include "ColonyHudStyle.h"
+#include "HudLayout.h"
 
 #include "BuildingSubsystem.h"
 #include "LevelsSubsystem.h"
@@ -796,8 +797,22 @@ bool UOrdersSubsystem::HandleRightClick(const FVector2D& Screen)
 	USimSubsystem* Bridge = GetBridge();
 	UOverseerSubsystem* Overseer = GetWorld() ? GetWorld()->GetSubsystem<UOverseerSubsystem>() : nullptr;
 	AOverseerPawn* Camera = Overseer ? Overseer->GetOverseerPawn() : nullptr;
-	const colony::ThingView* Selected = Bridge ? SelectedColonist(*Bridge) : nullptr;
-	if (!Selected || !Selected->drafted || !Camera)
+	// Any drafted colonist in the selection takes the order (several selected with a drag box all go).
+	TArray<const colony::ThingView*> Pawns;
+	if (Bridge)
+	{
+		SelectedColonists(*Bridge, Pawns);
+	}
+	const colony::ThingView* Selected = nullptr;
+	for (const colony::ThingView* View : Pawns)
+	{
+		if (View->drafted)
+		{
+			Selected = View;
+			break;
+		}
+	}
+	if (!Selected || !Camera)
 	{
 		return false;
 	}
@@ -1103,13 +1118,30 @@ int32 UOrdersSubsystem::EndDrag(colony::CellPos Cell)
 
 const colony::ThingView* UOrdersSubsystem::SelectedColonist(const USimSubsystem& Bridge) const
 {
+	TArray<const colony::ThingView*> All;
+	SelectedColonists(Bridge, All);
+	return All.IsEmpty() ? nullptr : All[0];
+}
+
+void UOrdersSubsystem::SelectedColonists(const USimSubsystem& Bridge, TArray<const colony::ThingView*>& Out) const
+{
+	// Every colonist in the selection (a drag box can hold several, docs/design/ui-layout.md "Selecting").
+	Out.Reset();
 	const UOverseerSubsystem* Overseer = GetWorld() ? GetWorld()->GetSubsystem<UOverseerSubsystem>() : nullptr;
-	if (!Overseer || Overseer->GetSelection().Kind != ESimPickKind::Thing || !Bridge.GetSim())
+	if (!Overseer || !Bridge.GetSim())
 	{
-		return nullptr;
+		return;
 	}
-	const colony::ThingView* View = Bridge.GetCurrentSnapshot().find(Overseer->GetSelection().Thing);
-	return View && View->category == colony::ThingCategory::Pawn && View->faction == 1 && !View->dead && Bridge.GetSim()->colonistOf(View->id) ? View : nullptr;
+	TArray<colony::Entity> Things;
+	Overseer->GetSelectedThings(Things);
+	for (const colony::Entity Thing : Things)
+	{
+		const colony::ThingView* View = Bridge.GetCurrentSnapshot().find(Thing);
+		if (View && View->category == colony::ThingCategory::Pawn && View->faction == 1 && !View->dead && Bridge.GetSim()->colonistOf(View->id))
+		{
+			Out.Add(View);
+		}
+	}
 }
 
 bool UOrdersSubsystem::SetDraft(colony::Entity Pawn, bool bDraft)
@@ -1127,20 +1159,50 @@ bool UOrdersSubsystem::SetDraft(colony::Entity Pawn, bool bDraft)
 bool UOrdersSubsystem::DraftSelected(bool bDraft)
 {
 	USimSubsystem* Bridge = GetBridge();
-	const colony::ThingView* View = Bridge ? SelectedColonist(*Bridge) : nullptr;
-	if (!View || !SetDraft(View->id, bDraft))
+	TArray<const colony::ThingView*> Pawns;
+	if (Bridge)
 	{
-		return false;
+		SelectedColonists(*Bridge, Pawns);
 	}
-	FlushIfPaused();
-	return true;
+	TArray<colony::Entity> Ids;
+	for (const colony::ThingView* View : Pawns)
+	{
+		if (!bDraft || !View->downed)
+		{
+			Ids.Add(View->id);
+		}
+	}
+	bool bAny = false;
+	for (const colony::Entity Id : Ids)
+	{
+		bAny = SetDraft(Id, bDraft) || bAny;
+	}
+	if (bAny)
+	{
+		FlushIfPaused();
+	}
+	return bAny;
 }
 
 bool UOrdersSubsystem::ToggleDraftSelected()
 {
+	// Several selected: any of them not drafted drafts them all, else they all stand down (RimWorld's draft button).
 	USimSubsystem* Bridge = GetBridge();
-	const colony::ThingView* View = Bridge ? SelectedColonist(*Bridge) : nullptr;
-	return View && DraftSelected(!View->drafted);
+	TArray<const colony::ThingView*> Pawns;
+	if (Bridge)
+	{
+		SelectedColonists(*Bridge, Pawns);
+	}
+	if (Pawns.IsEmpty())
+	{
+		return false;
+	}
+	bool bAnyUndrafted = false;
+	for (const colony::ThingView* View : Pawns)
+	{
+		bAnyUndrafted = bAnyUndrafted || (!View->drafted && !View->downed);
+	}
+	return DraftSelected(bAnyUndrafted);
 }
 
 int32 UOrdersSubsystem::Alarm()
@@ -1177,12 +1239,43 @@ int32 UOrdersSubsystem::Alarm()
 bool UOrdersSubsystem::OrderMoveSelected(colony::CellPos Cell)
 {
 	USimSubsystem* Bridge = GetBridge();
-	const colony::ThingView* View = Bridge ? SelectedColonist(*Bridge) : nullptr;
-	if (!View || !View->drafted)
+	TArray<const colony::ThingView*> Pawns;
+	if (Bridge)
+	{
+		SelectedColonists(*Bridge, Pawns);
+	}
+	TArray<colony::Entity> Drafted;
+	for (const colony::ThingView* View : Pawns)
+	{
+		if (View->drafted)
+		{
+			Drafted.Add(View->id);
+		}
+	}
+	if (Drafted.IsEmpty())
 	{
 		return false;
 	}
-	Submit(colony::MoveOrderCommand{View->id, Cell});
+	// Several go to cells side by side round the one clicked (the first on it), so they don't all stand in one spot.
+	static const int32 OrdSpread[][2] = {{0, 0}, {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {-1, -1}, {1, -1}, {-1, 1}, {2, 0}, {-2, 0}, {0, 2}, {0, -2},
+		{2, 1}, {-2, -1}, {1, 2}, {-1, -2}, {2, -1}, {-2, 1}, {1, -2}, {-1, 2}, {2, 2}, {-2, -2}, {2, -2}, {-2, 2}};
+	const colony::Map* Map = Bridge->GetSim() ? &Bridge->GetSim()->map() : nullptr;
+	int32 Next = 0;
+	for (const colony::Entity Pawn : Drafted)
+	{
+		colony::CellPos Target = Cell;
+		while (Next < static_cast<int32>(UE_ARRAY_COUNT(OrdSpread)))
+		{
+			const colony::CellPos Try{Cell.x + OrdSpread[Next][0], Cell.y + OrdSpread[Next][1], Cell.level};
+			++Next;
+			if (!Map || (Map->inBounds(Try) && Map->walkable(Try)))
+			{
+				Target = Try;
+				break;
+			}
+		}
+		Submit(colony::MoveOrderCommand{Pawn, Target});
+	}
 	FlushIfPaused();
 	return true;
 }
@@ -1190,12 +1283,27 @@ bool UOrdersSubsystem::OrderMoveSelected(colony::CellPos Cell)
 bool UOrdersSubsystem::OrderAttackSelected(colony::Entity Target)
 {
 	USimSubsystem* Bridge = GetBridge();
-	const colony::ThingView* View = Bridge ? SelectedColonist(*Bridge) : nullptr;
-	if (!View || !View->drafted)
+	TArray<const colony::ThingView*> Pawns;
+	if (Bridge)
+	{
+		SelectedColonists(*Bridge, Pawns);
+	}
+	TArray<colony::Entity> Drafted;
+	for (const colony::ThingView* View : Pawns)
+	{
+		if (View->drafted)
+		{
+			Drafted.Add(View->id);
+		}
+	}
+	for (const colony::Entity Pawn : Drafted)
+	{
+		Submit(colony::AttackOrderCommand{Pawn, Target});
+	}
+	if (Drafted.IsEmpty())
 	{
 		return false;
 	}
-	Submit(colony::AttackOrderCommand{View->id, Target});
 	FlushIfPaused();
 	return true;
 }
@@ -1408,41 +1516,28 @@ void UOrdersSubsystem::RebuildMarks(const USimSubsystem& Bridge)
 		Materials.Add(Key, Material);
 	};
 
+	// Mine, cut, harvest, deconstruct and remove-floor marks are no longer posts in the world: flat rings drawn only while
+	// that order's tool is in hand, or for the one thing or cell selected (DrawOrderRings, sneed 2026-11-24). Counted here.
 	for (const colony::DesignationView& Mark : Snapshot.designations)
 	{
 		switch (Mark.kind)
 		{
-			case colony::DesignationKind::Mine:
-				Place(OrdMine, OrdPostMineCm, Mark.cell.x, Mark.cell.y, 3.0, nullptr);
-				++Stats.MineMarks;
-				break;
-			case colony::DesignationKind::CutPlant:
-				Place(OrdCut, TopOfPlant(Mark.cell), Mark.cell.x, Mark.cell.y, 3.0, nullptr);
-				++Stats.CutMarks;
-				break;
-			case colony::DesignationKind::HarvestPlant:
-				Place(OrdHarvest, TopOfPlant(Mark.cell), Mark.cell.x, Mark.cell.y, 3.0, nullptr);
-				++Stats.HarvestMarks;
-				break;
-			case colony::DesignationKind::RemoveFloor:
-				// A red plate on the floor to be taken up, like a building marked to come down.
-				Place(OrdDeconstruct, 0, Mark.cell.x, Mark.cell.y, 3.0, nullptr);
-				++Stats.DeconstructMarks;
-				break;
-			default:
-				break;
+			case colony::DesignationKind::Mine: ++Stats.MineMarks; break;
+			case colony::DesignationKind::CutPlant: ++Stats.CutMarks; break;
+			case colony::DesignationKind::HarvestPlant: ++Stats.HarvestMarks; break;
+			case colony::DesignationKind::RemoveFloor: ++Stats.DeconstructMarks; break;
+			default: break;
 		}
 	}
 	for (const colony::ThingView& View : Snapshot.things)
 	{
 		if (View.category == colony::ThingCategory::Building && View.stage == colony::ConstructionStage::Built && View.markedForDeconstruct)
 		{
-			// On top of the building, where it can be seen.
-			const float Height = Buildings ? Buildings->GetDrawnHeightCm(View.def) : 0.0f;
-			Place(OrdDeconstruct, 0, FMath::FloorToInt32(View.x), FMath::FloorToInt32(View.y), static_cast<double>(Height > 0.0f ? Height : 250.0f) + 6.0, nullptr);
 			++Stats.DeconstructMarks;
 		}
 	}
+	(void)Buildings;
+	(void)TopOfPlant;
 	UMaterialInterface* ZoneDraw = ZoneMaterial.Get();
 	for (const colony::CellPos& Cell : Snapshot.zoneCells)
 	{
@@ -1703,6 +1798,70 @@ void UOrdersSubsystem::DrawDragOutline(const USimSubsystem& Bridge) const
 	OrdDrawRect(World, Bridge, DragRect(), OrdToolColor(Tool), bDragging ? 6.0f : 3.0f);
 }
 
+void UOrdersSubsystem::DrawOrderRings(const USimSubsystem& Bridge) const
+{
+	// sneed 2026-11-24: no tall marker posts. A flat ring on each marked cell (green chop, yellow harvest, orange mine,
+	// red deconstruct and floors to take up), drawn over everything so it shows under a tree's crown, and only while that
+	// order's tool is in hand (Cancel shows them all), or on the cell or building selected. The orders stay either way.
+	if (GOrdersMarks.GetValueOnGameThread() == 0 || !Bridge.GetSim())
+	{
+		return;
+	}
+	const bool bAll = Tool == EOrderTool::Cancel;
+	const bool bMine = bAll || Tool == EOrderTool::Mine;
+	const bool bCut = bAll || Tool == EOrderTool::Chop;
+	const bool bHarvest = bAll || Tool == EOrderTool::Harvest;
+	const bool bTakeDown = bAll || Tool == EOrderTool::Deconstruct || Tool == EOrderTool::RemoveFloor;
+	const UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>();
+	const FSimPick Picked = Overseer ? Overseer->GetSelection() : FSimPick();
+	const bool bPickedCell = Picked.Kind == ESimPickKind::Cell;
+	UWorld* World = GetWorld();
+	const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
+	int32 Drawn = 0;
+	const auto Ring = [&](int32 X, int32 Y, double Z, const FLinearColor& Color, float RadiusCm)
+	{
+		const FVector Centre = Bridge.SimToWorld(static_cast<float>(X) + 0.5f, static_cast<float>(Y) + 0.5f, 0);
+		DrawDebugCircle(World, FVector(Centre.X, Centre.Y, Z), RadiusCm, 20, Color.ToFColor(true), false, -1.0f, SDPG_Foreground, 3.5f, FVector(1.0, 0.0, 0.0),
+			FVector(0.0, 1.0, 0.0), false);
+		++Drawn;
+	};
+	for (const colony::DesignationView& Mark : Snapshot.designations)
+	{
+		if (Drawn >= 4000)
+		{
+			break;
+		}
+		const bool bThisCell = bPickedCell && Picked.Cell.x == Mark.cell.x && Picked.Cell.y == Mark.cell.y;
+		const FLinearColor* Color = nullptr;
+		switch (Mark.kind)
+		{
+			case colony::DesignationKind::Mine: Color = (bMine || bThisCell) ? &OrdMineColor : nullptr; break;
+			case colony::DesignationKind::CutPlant: Color = (bCut || bThisCell) ? &OrdCutColor : nullptr; break;
+			case colony::DesignationKind::HarvestPlant: Color = (bHarvest || bThisCell) ? &OrdHarvestColor : nullptr; break;
+			case colony::DesignationKind::RemoveFloor: Color = (bTakeDown || bThisCell) ? &OrdDeconstructColor : nullptr; break;
+			default: break;
+		}
+		if (Color)
+		{
+			Ring(Mark.cell.x, Mark.cell.y, OrdCellTopCm(Bridge, Mark.cell.x, Mark.cell.y) + 8.0, *Color, 38.0f);
+		}
+	}
+	for (const colony::ThingView& View : Snapshot.things)
+	{
+		if (View.category != colony::ThingCategory::Building || View.stage != colony::ConstructionStage::Built || !View.markedForDeconstruct)
+		{
+			continue;
+		}
+		const bool bThis = Overseer && Overseer->IsThingSelected(View.id);
+		if (bTakeDown || bThis)
+		{
+			const int32 X = FMath::FloorToInt32(View.x);
+			const int32 Y = FMath::FloorToInt32(View.y);
+			Ring(X, Y, OrdCellTopCm(Bridge, X, Y) + 8.0, OrdDeconstructColor, 45.0f * static_cast<float>(FMath::Max(View.sizeX, View.sizeY)));
+		}
+	}
+}
+
 void UOrdersSubsystem::DrawDraftMarkers(const USimSubsystem& Bridge) const
 {
 	UWorld* World = GetWorld();
@@ -1792,6 +1951,7 @@ void UOrdersSubsystem::Tick(float DeltaTime)
 	}
 	DrawDragOutline(*Bridge);
 	DrawDraftMarkers(*Bridge);
+	DrawOrderRings(*Bridge);
 	IConsoleVariable* ShowUi = IConsoleManager::Get().FindConsoleVariable(TEXT("Overseer.UI"));
 	if (!ShowUi || ShowUi->GetInt() != 0)
 	{
@@ -1840,9 +2000,10 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 	ButtonRects.Reset();
 
 	// The alarm, top right.
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - Margin, Viewport->Pos.y + Margin), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+	HudLayout::PlaceRight(Viewport, HudLayout::ERightSlot::Alarm, Scale);
 	if (ImGui::Begin("##OrdersAlarm", nullptr, PanelFlags))
 	{
+		HudLayout::ReportRight(HudLayout::ERightSlot::Alarm);
 		bool bAnyColonist = false;
 		bool bAnyUndrafted = false;
 		for (const colony::ThingView& View : Bridge.GetCurrentSnapshot().things)
@@ -2024,7 +2185,10 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const float Margin = 12.0f * Scale;
-	const float Bottom = ColonyHud::AboveBar(Viewport, Scale);
+	// sneed 2026-11-24: the menu sits right on the bar from the screen's left edge, the tiles hard against the categories, both
+	// the same height, no world showing between them (HudLayout).
+	const float Bottom = HudLayout::TabBottom(Viewport, Scale);
+	const float SnugHeight = FMath::Max(BuildNavHeight, BuildTilesHeight);
 
 	// Research finished since the menu was read: locked entries open up.
 	int32 Done = 0;
@@ -2052,9 +2216,9 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 	};
 
 	// Left: the search box and the categories, two columns, the picked one lit.
-	const float NavWidth = 250.0f * Scale;
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Margin, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
-	ImGui::SetNextWindowSize(ImVec2(NavWidth, 0.0f), ImGuiCond_Always);
+	const float NavWidth = 250.0f * Scale * FMath::Max(1.0f, ImGui::GetStyle().FontScaleMain / (1.2f * Scale));
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(NavWidth, SnugHeight), ImVec2(NavWidth, FLT_MAX));
 	if (ImGui::Begin("##BuildNav", nullptr, ColonyHud::BoxFlags()))
 	{
 		ImGui::SetNextItemWidth(-1.0f);
@@ -2088,6 +2252,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 			}
 			Record(Name);
 		}
+		BuildNavHeight = ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y + ImGui::GetStyle().WindowPadding.y;  // its own content
 		Grow();
 	}
 	ImGui::End();
@@ -2207,7 +2372,8 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 	}
 
 	float TilesTop = Bottom;
-	const float TilesLeft = Viewport->Pos.x + Margin + NavWidth + 8.0f * Scale;
+	const float TilesLeft = Viewport->Pos.x + NavWidth;
+	BuildTilesHeight = 0.0f;
 	if (!Tiles.IsEmpty())
 	{
 		// Tiles are a little taller than wide: the picture on top, the name (up to two lines) under it at a readable size.
@@ -2227,7 +2393,8 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 		const int32 PerRow = FMath::Max(1, FMath::DivideAndRoundUp(Tiles.Num(), RowCount));
 		ImGui::SetNextWindowPos(ImVec2(TilesLeft, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
 		// Never taller than the room above the bar (the rest scrolls), so the window stays on screen.
-		ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, FMath::Max(120.0f * Scale, Bottom - Viewport->Pos.y - 150.0f * Scale)));
+		const float TilesMaxHeight = FMath::Max(120.0f * Scale, Bottom - Viewport->Pos.y - 150.0f * Scale);
+		ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, FMath::Min(SnugHeight, TilesMaxHeight)), ImVec2(FLT_MAX, TilesMaxHeight));
 		if (ImGui::Begin("##BuildTiles", nullptr, ColonyHud::BoxFlags()))
 		{
 			ImDrawList* Draw = ImGui::GetWindowDrawList();
@@ -2373,6 +2540,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 				}
 				ImGui::PopID();
 			}
+			BuildTilesHeight = FMath::Min(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y + ImGui::GetStyle().WindowPadding.y, TilesMaxHeight);
 			Grow();
 			TilesTop = ImGui::GetWindowPos().y;
 			UpdateTileIcons();
@@ -2384,7 +2552,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 	const bool bMessage = !Message.IsEmpty() && FPlatformTime::Seconds() < MessageUntil;
 	if (Tool != EOrderTool::None || bMessage)
 	{
-		ImGui::SetNextWindowPos(ImVec2(TilesLeft, TilesTop - 6.0f * Scale), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+		ImGui::SetNextWindowPos(ImVec2(TilesLeft, TilesTop), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
 		ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(Viewport->Size.x - (TilesLeft - Viewport->Pos.x) - Margin, FLT_MAX));
 		if (ImGui::Begin("##BuildStrip", nullptr, ColonyHud::BoxFlags()))
 		{

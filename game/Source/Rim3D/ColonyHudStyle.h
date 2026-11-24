@@ -265,16 +265,22 @@ namespace ColonyHud
 			ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
 	}
 
-	/** The bottom bar's padding; with the frame height it gives the bar's height. */
+	/** The bottom bar's padding; with the buttons' height it gives the bar's height. */
 	inline float BarPadY(float Scale)
 	{
 		return 5.0f * Scale;
 	}
 
+	/** The bottom bar's buttons: a third taller than a plain button (sneed 2026-11-24: "make it a bit higher"). */
+	inline float BarButtonHeight()
+	{
+		return ImGui::GetFrameHeight() * 1.35f;
+	}
+
 	/** Height of the bottom tab bar in the overseer view, in pixels (call after ApplyFrameStyle). */
 	inline float BarHeight(float Scale)
 	{
-		return ImGui::GetFrameHeight() + 2.0f * BarPadY(Scale);
+		return BarButtonHeight() + 2.0f * BarPadY(Scale);
 	}
 
 	/** Where boxes that sit above the bottom bar put their bottom edge: the bar's top less a small gap. */

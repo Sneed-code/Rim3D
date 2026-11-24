@@ -1,11 +1,14 @@
 #include "PanelsSubsystem.h"
 
 #include "Engine/World.h"
+#include "HAL/PlatformTime.h"
+#include "Misc/ConfigCacheIni.h"
 #include "HAL/IConsoleManager.h"
 
 #include <imgui.h>
 
 #include "ColonyHudStyle.h"
+#include "HudLayout.h"
 
 #include "ColonyHudSubsystem.h"
 #include "Engine/Engine.h"
@@ -235,6 +238,7 @@ bool UPanelsSubsystem::IsOverseerActive() const
 void UPanelsSubsystem::ResetForNewSim()
 {
 	Log.Reset();
+	PopupLine = -1;
 	Stats.CommandsSent = 0;
 	NewBillBuilding = colony::kNoEntity;
 	NewRecipe = 0;
@@ -289,17 +293,125 @@ void UPanelsSubsystem::GetColonists(TArray<colony::Entity>& Out) const
 
 void UPanelsSubsystem::AddLog(const FString& Text, uint8 Severity, colony::Entity Subject)
 {
+	AddAlert(Severity == 2 ? TEXT("Danger") : Severity == 1 ? TEXT("Trouble") : Severity == 3 ? TEXT("Good news") : TEXT("Notice"), TEXT("Other"), Text, Severity, Subject);
+}
+
+void UPanelsSubsystem::AddAlert(const FString& Title, const FString& Kind, const FString& Text, uint8 Severity, colony::Entity Subject, bool bAlert)
+{
 	const USimSubsystem* Bridge = GetBridge();
+	const double Now = FPlatformTime::Seconds();
+	// The same alert again within a few seconds (a refused order clicked twice, a run of hurts) is counted on the last one.
+	if (!Log.IsEmpty())
+	{
+		FColonyLogLine& Last = Log.Last();
+		if (Last.Kind == Kind && Last.Text == Text && Last.Subject == Subject && Now - Last.RealSeconds < 5.0)
+		{
+			++Last.Repeats;
+			Last.RealSeconds = Now;
+			Last.bRead = Last.bDismissed = false;
+			return;
+		}
+	}
 	FColonyLogLine Line;
 	Line.GameSeconds = Bridge ? Bridge->GetGameSeconds() : 0;
 	Line.Text = Text;
+	Line.Title = Title;
+	Line.Kind = Kind;
 	Line.Severity = Severity;
 	Line.Subject = Subject;
+	Line.RealSeconds = Now;
+	Line.bAlert = bAlert;
 	Log.Add(MoveTemp(Line));
 	if (Log.Num() > MaxLogLines)
 	{
-		Log.RemoveAt(0, Log.Num() - MaxLogLines);
+		const int32 Cut = Log.Num() - MaxLogLines;
+		Log.RemoveAt(0, Cut);
+		PopupLine = PopupLine >= Cut ? PopupLine - Cut : -1;
 	}
+}
+
+double UPanelsSubsystem::AlertSeconds(uint8 Severity)
+{
+	// sneed 2026-11-24: "the fade time depends on importance but ... lets do 1 min for now". One place to tune it later.
+	switch (Severity)
+	{
+		case 2: return 60.0;  // danger
+		case 1: return 60.0;  // trouble
+		case 3: return 60.0;  // good news
+		default: return 60.0;
+	}
+}
+
+void UPanelsSubsystem::GetLiveAlerts(TArray<int32>& Out) const
+{
+	Out.Reset();
+	const double Now = FPlatformTime::Seconds();
+	for (int32 Index = Log.Num() - 1; Index >= 0; --Index)
+	{
+		const FColonyLogLine& Line = Log[Index];
+		if (!Line.bAlert || Line.bRead || Line.bDismissed || ExcludedKinds.Contains(Line.Kind) || Now - Line.RealSeconds > AlertSeconds(Line.Severity))
+		{
+			continue;
+		}
+		Out.Add(Index);
+	}
+}
+
+void UPanelsSubsystem::OpenAlert(int32 LogIndex)
+{
+	if (!Log.IsValidIndex(LogIndex))
+	{
+		return;
+	}
+	Log[LogIndex].bRead = true;
+	PopupLine = LogIndex;
+}
+
+void UPanelsSubsystem::DismissAlert(int32 LogIndex, bool bForGood)
+{
+	if (!Log.IsValidIndex(LogIndex))
+	{
+		return;
+	}
+	Log[LogIndex].bDismissed = true;
+	if (bForGood)
+	{
+		SetAlertKindOff(Log[LogIndex].Kind, true);
+	}
+}
+
+void UPanelsSubsystem::SetAlertKindOff(const FString& Kind, bool bOff)
+{
+	LoadAlertPrefs();
+	if (bOff)
+	{
+		ExcludedKinds.AddUnique(Kind);
+	}
+	else
+	{
+		ExcludedKinds.Remove(Kind);
+	}
+	SaveAlertPrefs();
+}
+
+void UPanelsSubsystem::LoadAlertPrefs()
+{
+	if (bAlertPrefsLoaded || !GConfig)
+	{
+		return;
+	}
+	bAlertPrefsLoaded = true;
+	GConfig->GetArray(TEXT("Rim3D.Alerts"), TEXT("Off"), ExcludedKinds, GGameUserSettingsIni);
+}
+
+void UPanelsSubsystem::SaveAlertPrefs() const
+{
+	if (!GConfig)
+	{
+		return;
+	}
+	GConfig->SetArray(TEXT("Rim3D.Alerts"), TEXT("Off"), ExcludedKinds, GGameUserSettingsIni);
+	GConfig->Flush(false, GGameUserSettingsIni);
 }
 
 void UPanelsSubsystem::OnSimEvent(const colony::Event& Event)
@@ -314,51 +426,54 @@ void UPanelsSubsystem::OnSimEvent(const colony::Event& Event)
 	switch (Event.type)
 	{
 		case colony::EventType::CommandFailed:
-			AddLog(FString::Printf(TEXT("Refused: %s"), UTF8_TO_TCHAR(Event.message.c_str())), 1);
+			AddAlert(TEXT("Order refused"), TEXT("Refused"), FString::Printf(TEXT("Refused: %s"), UTF8_TO_TCHAR(Event.message.c_str())), 1);
 			break;
 		case colony::EventType::PawnDied:
 			if (bColonist)
 			{
-				AddLog(FString::Printf(TEXT("%s died (%s)."), *NameOf(Event.thing), UTF8_TO_TCHAR(Event.message.c_str())), 2, Event.thing);
+				AddAlert(FString::Printf(TEXT("%s died"), *NameOf(Event.thing)), TEXT("ColonistDied"), FString::Printf(TEXT("%s died (%s)."), *NameOf(Event.thing), UTF8_TO_TCHAR(Event.message.c_str())), 2, Event.thing);
 			}
 			break;
 		case colony::EventType::PawnDowned:
 			if (bColonist)
 			{
-				AddLog(FString::Printf(TEXT("%s is down."), *NameOf(Event.thing)), 2, Event.thing);
+				AddAlert(FString::Printf(TEXT("%s down"), *NameOf(Event.thing)), TEXT("ColonistDown"), FString::Printf(TEXT("%s is down."), *NameOf(Event.thing)), 2, Event.thing);
 			}
 			break;
 		case colony::EventType::PawnGotUp:
 			if (bColonist)
 			{
-				AddLog(FString::Printf(TEXT("%s got back up."), *NameOf(Event.thing)), 3, Event.thing);
+				AddAlert(FString::Printf(TEXT("%s up again"), *NameOf(Event.thing)), TEXT("ColonistUp"), FString::Printf(TEXT("%s got back up."), *NameOf(Event.thing)), 3, Event.thing);
 			}
 			break;
 		case colony::EventType::PawnInjured:
 			if (bColonist && Event.def.valid())
 			{
-				AddLog(FString::Printf(TEXT("%s was hurt: %s."), *NameOf(Event.thing), UTF8_TO_TCHAR(Sim.defs().get(Event.def).label().c_str())), 1, Event.thing);
+				AddAlert(FString::Printf(TEXT("%s hurt"), *NameOf(Event.thing)), TEXT("ColonistHurt"), FString::Printf(TEXT("%s was hurt: %s."), *NameOf(Event.thing), UTF8_TO_TCHAR(Sim.defs().get(Event.def).label().c_str())), 1, Event.thing);
 			}
 			break;
 		case colony::EventType::PawnPartLost:
 			if (bColonist)
 			{
-				AddLog(FString::Printf(TEXT("%s lost a body part."), *NameOf(Event.thing)), 2, Event.thing);
+				AddAlert(TEXT("Body part lost"), TEXT("PartLost"), FString::Printf(TEXT("%s lost a body part."), *NameOf(Event.thing)), 2, Event.thing);
 			}
 			break;
 		case colony::EventType::PawnMoodBand:
 			if (bColonist)
 			{
 				const bool bStable = Event.message == "stable";
-				AddLog(bStable ? FString::Printf(TEXT("%s has calmed down."), *NameOf(Event.thing))
-							   : FString::Printf(TEXT("%s is close to a %s mental break (mood %.0f)."), *NameOf(Event.thing), UTF8_TO_TCHAR(Event.message.c_str()), Event.amount),
+				AddAlert(bStable ? FString::Printf(TEXT("%s calmer"), *NameOf(Event.thing)) : FString(TEXT("Break risk")), bStable ? TEXT("Calmed") : TEXT("BreakRisk"),
+					bStable ? FString::Printf(TEXT("%s has calmed down."), *NameOf(Event.thing))
+							: FString::Printf(TEXT("%s is close to a %s mental break (mood %.0f)."), *NameOf(Event.thing), UTF8_TO_TCHAR(Event.message.c_str()), Event.amount),
 					bStable ? 3 : (Event.message == "minor" ? 1 : 2), Event.thing);
 			}
 			break;
 		case colony::EventType::RecipeDone:
 		{
 			const FString What = Event.def.valid() ? UTF8_TO_TCHAR(Sim.defs().get(Event.def).label().c_str()) : TEXT("a bill");
-			AddLog(FString::Printf(TEXT("%s finished: %s%s."), *NameOf(Event.thing), *What, Event.message.empty() ? TEXT("") : TEXT(" (bill done)")), 3, Event.thing);
+			// Each finished craft goes in the log only; a whole bill finished is an alert.
+			AddAlert(TEXT("Bill done"), TEXT("BillDone"), FString::Printf(TEXT("%s finished: %s%s."), *NameOf(Event.thing), *What, Event.message.empty() ? TEXT("") : TEXT(" (bill done)")), 3,
+				Event.thing, !Event.message.empty());
 			break;
 		}
 		case colony::EventType::QuestOffered:
@@ -373,30 +488,30 @@ void UPanelsSubsystem::OnSimEvent(const colony::Event& Event)
 			const FString Why = UTF8_TO_TCHAR(Event.message.c_str());
 			switch (Event.type)
 			{
-				case colony::EventType::QuestOffered: AddLog(FString::Printf(TEXT("Quest offered: %s. Open Quests to answer."), *What), 0); break;
-				case colony::EventType::QuestAccepted: AddLog(FString::Printf(TEXT("Quest accepted: %s."), *What), 0); break;
-				case colony::EventType::QuestDeclined: AddLog(FString::Printf(TEXT("Quest declined: %s."), *What), 0); break;
-				case colony::EventType::QuestExpired: AddLog(FString::Printf(TEXT("Quest lapsed: %s."), *What), 1); break;
-				case colony::EventType::QuestCompleted: AddLog(FString::Printf(TEXT("Quest done: %s (%s)."), *What, *Why), 3); break;
-				default: AddLog(FString::Printf(TEXT("Quest failed: %s (%s)."), *What, *Why), 2); break;
+				case colony::EventType::QuestOffered: AddAlert(TEXT("Quest offered"), TEXT("QuestOffered"), FString::Printf(TEXT("Quest offered: %s. Open Quests to answer."), *What), 0); break;
+				case colony::EventType::QuestAccepted: AddAlert(TEXT("Quest accepted"), TEXT("QuestAccepted"), FString::Printf(TEXT("Quest accepted: %s."), *What), 0); break;
+				case colony::EventType::QuestDeclined: AddAlert(TEXT("Quest declined"), TEXT("QuestDeclined"), FString::Printf(TEXT("Quest declined: %s."), *What), 0); break;
+				case colony::EventType::QuestExpired: AddAlert(TEXT("Quest lapsed"), TEXT("QuestLapsed"), FString::Printf(TEXT("Quest lapsed: %s."), *What), 1); break;
+				case colony::EventType::QuestCompleted: AddAlert(TEXT("Quest done"), TEXT("QuestDone"), FString::Printf(TEXT("Quest done: %s (%s)."), *What, *Why), 3); break;
+				default: AddAlert(TEXT("Quest failed"), TEXT("QuestFailed"), FString::Printf(TEXT("Quest failed: %s (%s)."), *What, *Why), 2); break;
 			}
 			break;
 		}
 		// The spaceship ending (docs/design/ship.md); the ship window is UShipPanelSubsystem.
 		case colony::EventType::ShipReactorStarted:
-			AddLog(FString::Printf(TEXT("The ship reactor is starting. It needs %.0f days, and raiders will come for it."), Event.amount), 1, Event.thing);
+			AddAlert(TEXT("Reactor starting"), TEXT("ShipReactor"), FString::Printf(TEXT("The ship reactor is starting. It needs %.0f days, and raiders will come for it."), Event.amount), 1, Event.thing);
 			break;
 		case colony::EventType::ShipWave:
-			AddLog(FString::Printf(TEXT("Raiders are coming for the ship reactor (wave %.0f)."), Event.amount), 2, Event.thing);
+			AddAlert(TEXT("Raid on reactor"), TEXT("ShipWave"), FString::Printf(TEXT("Raiders are coming for the ship reactor (wave %.0f)."), Event.amount), 2, Event.thing);
 			break;
 		case colony::EventType::ShipReactorReady:
-			AddLog(TEXT("The ship reactor is active. Open Ship to launch."), 3, Event.thing);
+			AddAlert(TEXT("Ship ready"), TEXT("ShipReady"), TEXT("The ship reactor is active. Open Ship to launch."), 3, Event.thing);
 			break;
 		case colony::EventType::ShipReactorLost:
-			AddLog(TEXT("The ship reactor is lost. It must be started again."), 2);
+			AddAlert(TEXT("Reactor lost"), TEXT("ShipLost"), TEXT("The ship reactor is lost. It must be started again."), 2);
 			break;
 		case colony::EventType::ShipLaunched:
-			AddLog(FString::Printf(TEXT("The ship has launched with %.0f aboard."), Event.amount), 3);
+			AddAlert(TEXT("Ship launched"), TEXT("ShipLaunched"), FString::Printf(TEXT("The ship has launched with %.0f aboard."), Event.amount), 3);
 			break;
 		default:
 			break;
@@ -611,7 +726,8 @@ void UPanelsSubsystem::DrawMenuAndColonistBar(USimSubsystem& Bridge, float Scale
 		TArray<colony::Entity> Colonists;
 		GetColonists(Colonists);
 		const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
-		const float Face = 56.0f * Scale;
+		// The portraits grow with the text (sneed 2026-11-24: everything 50% bigger).
+		const float Face = 56.0f * Scale * FMath::Max(1.0f, ImGui::GetStyle().FontScaleMain / (1.2f * Scale));
 		const float Slot = Face + 16.0f * Scale;
 		const int32 PerRow = FMath::Max(1, static_cast<int32>((Viewport->Size.x * 0.55f) / (Slot + ImGui::GetStyle().ItemSpacing.x)));
 		int32 Shown = 0;
@@ -655,9 +771,27 @@ void UPanelsSubsystem::DrawMenuAndColonistBar(USimSubsystem& Bridge, float Scale
 				ImGui::SetTooltip("%s", TCHAR_TO_UTF8(*Tip));
 			}
 			// Drafted: a red edge; downed: greyed.
+			const ImVec2 FaceMax = ImGui::GetItemRectMax();
 			if (View->drafted)
 			{
-				ImGui::GetWindowDrawList()->AddRect(Corner, ImGui::GetItemRectMax(), ImGui::GetColorU32(ColonyHud::Bad()), 4.0f * Scale, 2.0f * Scale, 0);
+				ImGui::GetWindowDrawList()->AddRect(Corner, FaceMax, ImGui::GetColorU32(ColonyHud::Bad()), 4.0f * Scale, 2.0f * Scale, 0);
+			}
+			// Health under the face (sneed 2026-11-24): the worst body part's share, green to amber to red, as the focus bar.
+			{
+				const float Health = FMath::Clamp(View->dead ? 0.0f : Bridge.GetSim()->lowestPartHealth(Pawn), 0.0f, 1.0f);
+				const float BarHeight = FMath::Max(4.0f, 6.0f * Scale);
+				ImGui::Dummy(ImVec2(FaceMax.x - Corner.x, BarHeight));
+				const ImVec2 BarMin = ImGui::GetItemRectMin();
+				const ImVec2 BarMax(FaceMax.x, BarMin.y + BarHeight);
+				const ImVec4 Fill = Health > 0.6f ? ColonyHud::Good() : Health > 0.3f ? ColonyHud::Warn() : ColonyHud::Bad();
+				ImDrawList* Draw = ImGui::GetWindowDrawList();
+				Draw->AddRectFilled(BarMin, BarMax, ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.65f)));
+				Draw->AddRectFilled(BarMin, ImVec2(BarMin.x + (BarMax.x - BarMin.x) * Health, BarMax.y), ImGui::GetColorU32(Fill));
+				Draw->AddRect(BarMin, BarMax, ImGui::GetColorU32(ColonyHud::ButtonBorder()));
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+				{
+					ImGui::SetTooltip("Health %.0f%%", Health * 100.0f);
+				}
 			}
 			ImGui::PushStyleColor(ImGuiCol_Text, View->downed ? ImVec4(0.6f, 0.6f, 0.6f, 1.0f) : MoodColor(View->moodBand));
 			FString Name = NameOf(Pawn);
@@ -714,9 +848,9 @@ void UPanelsSubsystem::DrawWorkTab(USimSubsystem& Bridge, float Scale)
 			Columns.push_back(Index);
 		}
 	}
-	// Above the bottom bar, in the middle.
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(Viewport->Size.x * 0.92f, Viewport->Size.y * 0.66f));
+	// From the screen's left edge, its bottom right on the bar (sneed 2026-11-24, HudLayout).
+	HudLayout::PlaceTab(Viewport, Scale);
+	ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(Viewport->Size.x, Viewport->Size.y * 0.7f));
 	if (ImGui::Begin("##PanelsWork", nullptr, PanelFlags() & ~ImGuiWindowFlags_NoScrollbar))
 	{
 		++Stats.WorkTabFrames;
@@ -904,8 +1038,8 @@ void UPanelsSubsystem::DrawScheduleTab(USimSubsystem& Bridge, float Scale)
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const int32 Now = Sim.time().hourOfDay();
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(Viewport->Size.x * 0.9f, Viewport->Size.y * 0.6f));
+	HudLayout::PlaceTab(Viewport, Scale);
+	ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(Viewport->Size.x, Viewport->Size.y * 0.7f));
 	if (ImGui::Begin("##PanelsSchedule", nullptr, PanelFlags() & ~ImGuiWindowFlags_NoScrollbar))
 	{
 		++Stats.ScheduleTabFrames;
@@ -1408,43 +1542,235 @@ void UPanelsSubsystem::DrawThermostatPanel(USimSubsystem& Bridge, const colony::
 
 void UPanelsSubsystem::DrawLog(USimSubsystem& Bridge, float Scale, float Margin)
 {
-	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
-	UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>();
-	// Right side, under the alarm button.
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - Margin, Viewport->Pos.y + Margin + 48.0f * Scale), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(380.0f * Scale, 0.0f), ImVec2(540.0f * Scale, bLogOpen ? Viewport->Size.y * 0.5f : FLT_MAX));
-	ImGui::SetNextWindowBgAlpha(bLogOpen ? 0.85f : 0.55f);
-	if (ImGui::Begin("##PanelsLog", nullptr, PanelFlags() & ~ImGuiWindowFlags_NoScrollbar))
+	(void)Margin;
+	LoadAlertPrefs();
+	++Stats.LogPanelFrames;
+	DrawAlerts(Bridge, Scale);
+	DrawAlertPopup(Bridge, Scale);
+	if (bLogOpen)
 	{
-		++Stats.LogPanelFrames;
-		const int32 Wanted = bLogOpen ? 40 : 5;
-		const int32 First = FMath::Max(0, Log.Num() - Wanted);
-		if (Log.IsEmpty())
+		DrawLogWindow(Bridge, Scale);
+	}
+}
+
+void UPanelsSubsystem::DrawAlerts(USimSubsystem& Bridge, float Scale)
+{
+	// sneed 2026-11-24, as RimWorld: short alerts down the right side, one to three words each, coloured by how bad they
+	// are. Left click opens the whole message in the middle of the screen (and reads it, so it goes), right click turns it
+	// off, shift right click turns its kind off for good (Menu > Message log turns it back on). Each fades out after
+	// AlertSeconds; everything stays in the message log.
+	(void)Bridge;
+	TArray<int32> Live;
+	GetLiveAlerts(Live);
+	if (Live.IsEmpty())
+	{
+		return;
+	}
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	const double Now = FPlatformTime::Seconds();
+	HudLayout::PlaceRight(Viewport, HudLayout::ERightSlot::Alerts, Scale);
+	ImGui::SetNextWindowBgAlpha(0.0f);
+	if (ImGui::Begin("##PanelsAlerts", nullptr, PanelFlags() | ImGuiWindowFlags_NoBackground))
+	{
+		const int32 Shown = FMath::Min(Live.Num(), 14);
+		// All the same width, right-aligned: the widest title sets it.
+		float Width = 0.0f;
+		for (int32 Index = 0; Index < Shown; ++Index)
 		{
-			PTextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), TEXT("Nothing has happened yet."));
+			const FColonyLogLine& Line = Log[Live[Index]];
+			const FString Label = Line.Repeats > 1 ? FString::Printf(TEXT("%s  x%d"), *Line.Title, Line.Repeats) : Line.Title;
+			Width = FMath::Max(Width, ImGui::CalcTextSize(TCHAR_TO_UTF8(*Label)).x);
 		}
-		for (int32 Index = First; Index < Log.Num(); ++Index)
+		Width += 2.0f * ImGui::GetStyle().FramePadding.x + 10.0f * Scale;
+		const bool bShift = ImGui::GetIO().KeyShift;
+		int32 Open = -1;
+		int32 Dismiss = -1;
+		for (int32 Index = 0; Index < Shown; ++Index)
 		{
-			const FColonyLogLine& Line = Log[Index];
-			ImGui::PushID(Index);
-			ImGui::PushStyleColor(ImGuiCol_Text, SeverityColor(Line.Severity));
-			const FString Text = FString::Printf(TEXT("%s  %s"), *TimeText(Line.GameSeconds), *Line.Text);
-			if (ImGui::Selectable(TCHAR_TO_UTF8(*Text)) && Overseer && Line.Subject != colony::kNoEntity && Bridge.GetCurrentSnapshot().find(Line.Subject))
+			const int32 LogIndex = Live[Index];
+			const FColonyLogLine& Line = Log[LogIndex];
+			const double Age = Now - Line.RealSeconds;
+			const float Fade = static_cast<float>(FMath::Clamp((AlertSeconds(Line.Severity) - Age) / 8.0, 0.15, 1.0));
+			const ImVec4 Ink = SeverityColor(Line.Severity);
+			ImGui::PushID(LogIndex);
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, Fade);
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.03f, 0.05f, 0.043f, 0.88f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ColonyHud::ButtonHover());
+			ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(Ink.x, Ink.y, Ink.z, 0.55f));
+			ImGui::PushStyleColor(ImGuiCol_Text, Ink);
+			ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(1.0f, 0.5f));
+			const FString Label = Line.Repeats > 1 ? FString::Printf(TEXT("%s  x%d"), *Line.Title, Line.Repeats) : Line.Title;
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + FMath::Max(0.0f, ImGui::GetContentRegionAvail().x - Width));
+			ImGui::Button(TCHAR_TO_UTF8(*(Label + TEXT("##alert"))), ImVec2(Width, 0.0f));
+			// A bar of the severity's colour on the left edge.
+			const ImVec2 Min = ImGui::GetItemRectMin();
+			const ImVec2 Max = ImGui::GetItemRectMax();
+			ImGui::GetWindowDrawList()->AddRectFilled(Min, ImVec2(Min.x + 3.0f * Scale, Max.y), ImGui::GetColorU32(Ink));
+			if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
 			{
-				FSimPick Pick;
-				Pick.Kind = ESimPickKind::Thing;
-				Pick.Thing = Line.Subject;
-				Overseer->Select(Pick);
-				Overseer->FocusOnSelection();
+				Open = LogIndex;
 			}
-			ImGui::PopStyleColor();
+			else if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+			{
+				Dismiss = LogIndex;
+			}
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+			{
+				ImGui::SetTooltip("%s\n\nClick: read it.  Right click: dismiss.  Shift + right click: never show this kind again.", TCHAR_TO_UTF8(*Line.Text));
+			}
+			ImGui::PopStyleVar(2);
+			ImGui::PopStyleColor(4);
 			ImGui::PopID();
 		}
-		if (bLogOpen && Log.Num() != LastLogCountShown)
+		if (Live.Num() > Shown)
 		{
-			ImGui::SetScrollHereY(1.0f);
+			PTextColored(ColonyHud::TextFaint(), FString::Printf(TEXT("%d more in the message log"), Live.Num() - Shown));
 		}
-		LastLogCountShown = Log.Num();
+		HudLayout::ReportRight(HudLayout::ERightSlot::Alerts);
+		if (Open >= 0)
+		{
+			OpenAlert(Open);
+		}
+		if (Dismiss >= 0)
+		{
+			DismissAlert(Dismiss, bShift);
+		}
+	}
+	ImGui::End();
+}
+
+void UPanelsSubsystem::DrawAlertPopup(USimSubsystem& Bridge, float Scale)
+{
+	if (!Log.IsValidIndex(PopupLine))
+	{
+		PopupLine = -1;
+		return;
+	}
+	const FColonyLogLine& Line = Log[PopupLine];
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	const float Width = FMath::Min(620.0f * Scale * FMath::Max(1.0f, ImGui::GetStyle().FontScaleMain / (1.2f * Scale)), Viewport->Size.x * 0.8f);
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.42f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(Width, 0.0f), ImVec2(Width, Viewport->Size.y * 0.7f));
+	if (ImGui::Begin("##PanelsAlertPopup", nullptr, PanelFlags()))
+	{
+		ColonyHud::PushLarge();
+		PTextColored(SeverityColor(Line.Severity), Line.Title);
+		ColonyHud::PopLarge();
+		PTextColored(ColonyHud::TextFaint(), TimeText(Line.GameSeconds));
+		ImGui::Separator();
+		ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + Width - 2.0f * ImGui::GetStyle().WindowPadding.x);
+		PText(Line.Text);
+		ImGui::PopTextWrapPos();
+		ImGui::Spacing();
+		UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>();
+		const bool bCanJump = Overseer && Line.Subject != colony::kNoEntity && Bridge.GetCurrentSnapshot().find(Line.Subject);
+		if (bCanJump && ColonyHud::Button(TEXT("Jump to it")))
+		{
+			FSimPick Pick;
+			Pick.Kind = ESimPickKind::Thing;
+			Pick.Thing = Line.Subject;
+			Overseer->Select(Pick);
+			Overseer->FocusOnSelection();
+			PopupLine = -1;
+		}
+		if (bCanJump)
+		{
+			ImGui::SameLine();
+		}
+		if (ColonyHud::Button(TEXT("Close")) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+		{
+			PopupLine = -1;
+		}
+		ImGui::SameLine();
+		if (ColonyHud::Button(TEXT("Never show this kind")))
+		{
+			SetAlertKindOff(Line.Kind, true);
+			PopupLine = -1;
+		}
+		ColonyHud::Tip(TEXT("Turn this kind of alert off for good. The message log turns it back on"));
+	}
+	ImGui::End();
+}
+
+void UPanelsSubsystem::DrawLogWindow(USimSubsystem& Bridge, float Scale)
+{
+	// Menu > Message log: every message with its time and title, newest last, and the alert kinds turned off for good.
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>();
+	const float Width = FMath::Min(900.0f * Scale * FMath::Max(1.0f, ImGui::GetStyle().FontScaleMain / (1.2f * Scale)), Viewport->Size.x * 0.9f);
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.45f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(Width, Viewport->Size.y * 0.7f), ImGuiCond_Always);
+	if (ImGui::Begin("##PanelsLogWindow", nullptr, PanelFlags() & ~ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ColonyHud::Title(TEXT("Message log"));
+		ImGui::SameLine(ImGui::GetContentRegionAvail().x - 80.0f * Scale);
+		if (ColonyHud::Button(TEXT("Close")))
+		{
+			bLogOpen = false;
+		}
+		const float OffHeight = ExcludedKinds.IsEmpty() ? 0.0f : ImGui::GetFrameHeightWithSpacing() * (1.6f + FMath::Min(ExcludedKinds.Num(), 4));
+		if (ImGui::BeginChild("##LogLines", ImVec2(0.0f, -OffHeight), ImGuiChildFlags_Borders))
+		{
+			if (Log.IsEmpty())
+			{
+				PTextColored(ColonyHud::TextFaint(), TEXT("Nothing has happened yet."));
+			}
+			for (int32 Index = 0; Index < Log.Num(); ++Index)
+			{
+				const FColonyLogLine& Line = Log[Index];
+				ImGui::PushID(Index);
+				PTextColored(ColonyHud::TextFaint(), TimeText(Line.GameSeconds));
+				ImGui::SameLine();
+				PTextColored(SeverityColor(Line.Severity), Line.Title + (Line.Repeats > 1 ? FString::Printf(TEXT(" x%d"), Line.Repeats) : FString()));
+				ImGui::SameLine();
+				ImGui::PushTextWrapPos(0.0f);
+				const FString Text = Line.Text;
+				if (ImGui::Selectable(TCHAR_TO_UTF8(*Text)) && Overseer && Line.Subject != colony::kNoEntity && Bridge.GetCurrentSnapshot().find(Line.Subject))
+				{
+					FSimPick Pick;
+					Pick.Kind = ESimPickKind::Thing;
+					Pick.Thing = Line.Subject;
+					Overseer->Select(Pick);
+					Overseer->FocusOnSelection();
+				}
+				ImGui::PopTextWrapPos();
+				ImGui::PopID();
+			}
+			if (Log.Num() != LastLogCountShown)
+			{
+				ImGui::SetScrollHereY(1.0f);
+			}
+			LastLogCountShown = Log.Num();
+		}
+		ImGui::EndChild();
+		if (!ExcludedKinds.IsEmpty())
+		{
+			PTextColored(ColonyHud::TextDim(), TEXT("Alerts turned off for good (they still go in the log):"));
+			FString TurnOn;
+			for (const FString& Kind : ExcludedKinds)
+			{
+				// The newest title of that kind names it, else the kind itself.
+				FString Name = Kind;
+				for (int32 Index = Log.Num() - 1; Index >= 0; --Index)
+				{
+					if (Log[Index].Kind == Kind)
+					{
+						Name = Log[Index].Title;
+						break;
+					}
+				}
+				if (ColonyHud::Button(FString::Printf(TEXT("Turn on: %s##%s"), *Name, *Kind)))
+				{
+					TurnOn = Kind;
+				}
+				ImGui::SameLine();
+			}
+			ImGui::NewLine();
+			if (!TurnOn.IsEmpty())
+			{
+				SetAlertKindOff(TurnOn, false);
+			}
+		}
 	}
 	ImGui::End();
 }
