@@ -736,7 +736,8 @@ void USmokeTestSubsystem::BuildHurtPhases()
 				Fail(TEXT("dismember: 400 blunt damage to the torso did not kill the colonist"));
 				return;
 			}
-			if (Now->severed != All || SimPieces != 5)
+			// The overkill may carry on into the trunk (kSeveredTrunk, sneed 2026-11-22: overkill carries until gibbed): never a piece.
+			if ((Now->severed & ~static_cast<uint16>(colony::kSeveredTrunk)) != All || SimPieces != 5)
 			{
 				Fail(FString::Printf(TEXT("dismember: the sim took off 0x%x (0x%x expected) and left %d pieces (5 expected)"), Now->severed, All, SimPieces));
 			}
