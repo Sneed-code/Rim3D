@@ -327,6 +327,70 @@ All 6 actions are exported as individual glTF animations (via NLA tracks) and ve
 | `Death` | `0–45` (45 frames) | **1.500 s** | Starts in `Idle` f0: lethal spasm -> heavy belly-down slumped collapse onto `z = 0` (`min_z = +0.0001 m`, final `min_z = +0.002 m`), held still on final frames | Grounded collapse (zero floor clipping) |
 
 
+## WoodFiredGenerator
+
+| **Final Size (X × Y × Z)** | **1.815 m × 1.811 m × 1.326 m** (2 × 2 cell footprint, ~1.3 m tall) |
+| **Total Triangle Count** | **14,972 tris** (budget: 15,000 tris; 0 n-gons; consistent outward normals; scale `(1, 1, 1)`) |
+**Axis Convention**
+
+- **Blender authoring space**: Right-handed, **+Z up**, metres, footprint centred on `(0, 0)`, bottom grounded strictly at `Z = 0.000 m`, front (firebox door / colonist work side) facing **-Y**.
+- **glTF 2.0 export (`.glb`)**: Exported with Blender's glTF 2.0 exporter default `+Y` up conversion (`export_yup=True`), real-world metres, embedded textures.
+
+---
+
+**Separate Mesh Objects & Pivots**
+
+All coordinates in Blender authoring space (`+Z` up, metres). Rest transforms have scale `(1.0, 1.0, 1.0)` and rotation `(0, 0, 0)`.
+
+| Object Name | Triangles | Pivot / Origin `(X, Y, Z)` m | Role & Motion Axis |
+|---|---:|---|---|
+| `Body` | 10,436 | `( 0.000,  0.000, 0.000)` | Static chassis: I-beam skid frame, deck plate, hollow riveted firebox & grate, boiler drum, pressure gauge, steam dome, valves, pipes, chimney, engine bed & cylinder, bearing pedestals, safety guard, drive belt, dynamo stator & junction box, coiled power cable, log rack & 10 split logs. **Never animated.** |
+| `Flywheel` | 1,730 | `(+0.620, +0.220, +0.560)` | 0.88 m spoked cast-iron flywheel, main axle, eccentric cam, and coaxial belt pulley (`R = 0.210 m`). Pivot on axle centre; rotates around local **X**. |
+| `DynamoRotor` | 1,068 | `(+0.220, +0.680, +0.420)` | Rotor shaft, 12-coil copper-wound armature, commutator, cooling fan, and flanged belt pulley (`R = 0.070 m`, exact 3:1 ratio). Pivot on axle centre; rotates around local **X**. |
+| `Door` | 758 | `(-0.470, -0.700, +0.390)` | Cast-iron firebox door with cutout grille, heat-stained quartz glass pane (`Mat_FireGlass`), hinge straps, and greased wood/brass latch handle. Pivot on hinge pin axis; rotates around local **Z**. |
+| `Piston` | 496 | `(+0.340, +0.020, +0.440)` | Machined steel piston rod, brass-shoed crosshead block, wrist pin, and yoke bar sliding inside open engine guide rails. Pivot at rest centre; translates along local **Y**. |
+| `Embers` | 484 | `(-0.260, -0.470, +0.350)` | Sculpted glowing 3D firebed of charred burning logs and incandescent coals inside the firebox cavity (`Mat_Embers`). Pivot at firebed centre; scales unevenly on **X/Y/Z**. |
+
+**Animations (glTF 2.0 NLA Tracks, 24 fps)**
+
+All three animations are embedded in `WoodFiredGenerator.glb` as separate named glTF animations at **24 fps** using linear interpolation for seamless looping and exact quaternion steps. Only the specified moving parts are animated (`Body` has zero animation tracks).
+
+| Action Name | Frame Range | Duration | Frame Rate | Interpolation | Motion Description |
+|---|---|---|---|---|---|
+| `Running` | `0 – 48` | `2.000 s` (seamless loop) | 24 fps | Linear | `Flywheel`: 2 full turns (`720°`, local X); `DynamoRotor`: 6 full turns (`2160°`, local X, 3:1 belt ratio); `Piston`: 4 full back-and-forth sinusoidal strokes (`±0.072 m`, local Y) in step with flywheel; `Embers`: uneven periodic flicker (`scale 0.95 – 1.05` on X/Y/Z). |
+| `DoorOpen` | `0 – 24` | `1.000 s` (`0.60 s` swing + `0.40 s` hold) | 24 fps | Linear-sampled smooth ease | `Door` swings outward `-100°` around local Z (frames `0–14`, `0.6 s`) and holds open at `-100°` (frames `15–24`). |
+| `DoorClose` | `0 – 24` | `1.000 s` (`0.60 s` swing + `0.40 s` hold) | 24 fps | Linear-sampled smooth ease | `Door` swings smoothly closed from `-100°` back to `0°` (frames `0–14`, `0.6 s`) and holds latched at `0°` (frames `15–24`). |
+
+
+## FueledSmithy
+
+**Axis Convention**
+
+- **Blender authoring space**: `+Z` up, `-Y` front (working side where the colonist stands), `+X` right, footprint centered around `(0, 0, 0)`, bottom grounded strictly at `z = 0.000 m`, applied scale `(1, 1, 1)`.
+- **glTF export (`FueledSmithy.glb`)**: Exported using Blender's default glTF 2.0 binary exporter (`+Y` up as required by the glTF specification, all textures embedded, NLA tracks exported as discrete animations).
+
+---
+
+**Geometry & Parts (Triangle Budget: 15,000 max)**
+
+| Mesh Object | Triangles | N-gons | Origin / Pivot (Blender metres) | Role |
+|---|---:|---:|---|---|
+| `Body` | 11,686 | 0 | `(0.000, 0.000, 0.000)` | Static hearth, hood, chimney, firewood stand, lower bellows & nozzle, anvil, stump, quench bucket, hanging tools, hot blade, ash/scale floor mounds |
+| `Bellows` | 1,058 | 0 | `(-0.640, +0.060, +0.720)` | Moving bellows top wood board, iron straps, intake valve & overhanging upper leather pleat skirt (pivot on nozzle-end hinge) |
+| `BellowsLever` | 532 | 0 | `(-0.660, +0.060, +0.930)` | Moving forged iron press lever, roller saddle shoe & turned hardwood grip (pivot on hearth-mounted fulcrum pin) |
+| `Coals` | 1,206 | 0 | `(-0.030, +0.020, +0.700)` | Separate glowing coal bed & 54 faceted charcoal/coke lumps inside firepot (dedicated emissive material; pivot at bottom-center of bed) |
+| **Total** | **14,482** | **0** | — | **Within 15,000 triangle budget**, consistent outward normals, clean non-overlapping UV0 |
+
+**Animations (Embedded in `FueledSmithy.glb`)**
+
+All actions are authored at **24 fps** with **linear interpolation** on every keyframe so loops are seamless, pushed to matching NLA tracks, and animate only the moving parts (`Body` is never animated):
+
+| Action Name | Frame Range (24 fps) | Length | Looping | Animated Objects & Motion |
+|---|---:|---:|---|---|
+| `Working` | `1–49` (48 frame intervals) | `2.00 s` | Seamless | `BellowsLever` and `Bellows` pump down and up twice (`rot_y` stroke `+0.062` to `-0.118 rad`); `Coals` surges in scale from `1.00` to `1.08` as air is forced into the firepot |
+| `Idle` | `1–97` (96 frame intervals) | `4.00 s` | Seamless | `Coals` pulses gently in scale between `0.98` and `1.02`; all other parts remain still |
+
+
 ## ButcherTable
 
 | Overall Blender bounds (X × Y × Z) | 1.8996 × 0.9000 × 1.3777 m |
@@ -421,3 +485,69 @@ The Blender scene uses metres, +Z up and −Y toward the working end. The footpr
 ## Heater
 
 | Size in Blender (X × Y × Z) | 0.9559 × 0.7624 × 1.1030 m, including handles and cable |
+
+## SunLamp
+
+| Blender bounds (X × Y × Z) | 0.998 × 0.892 × 2.391 m |
+| Triangles | 5,988 of 6,000, with 5,400 in Body and 588 in Bulbs |
+**Parts and pivots**
+
+| Mesh | Blender-space pivot in metres | Role |
+| --- | --- | --- |
+| `Body` | (0.000, 0.000, 0.000) | Cell centre at floor level. The mast and reflector are in their deployed pose. |
+| `Bulbs` | (0.000, -0.057, 2.186) | Centre of the optic bank at its seating plane, for swapping the six optics as one assembly. |
+
+Blender uses +Z up and −Y toward the working side. The default Blender glTF
+export maps (X, Y, Z) to (X, Z, −Y), so `SunLamp.glb` uses +Y up and +Z
+
+## StandingLamp
+
+| Overall size in Blender X × Y × Z | 0.6730 × 0.7722 × 1.5740 m, including the cord and plug |
+| Triangles | 3,988 total (3,672 Body, 316 Bulb) |
+| Part | Pivot in Blender coordinates (m) | Use |
+| --- | --- | --- |
+| `Body` | (0, 0, 0), footprint centre at floor level | Cast base, mast, switch, fixed hinge and shade, cord and plug |
+| `Bulb` | (-0.0545, -0.1630, 1.4891), on the socket centreline at the bulb seat | Swappable warm emissive bulb |
+
+
+## TorchLamp
+
+| Size in Blender (X × Y × Z) | 0.5921 × 0.5703 × 1.4028 m |
+| Triangles | 2,865 |
+
+## Campfire
+
+| Mesh dimensions (Blender X × Y × Z) | 0.922 × 0.938 × 0.887 m |
+| Triangles | 3,986 |
+- Blender uses metres, +Z up, and −Y toward the working side. The default glTF conversion produces +Y up and +Z toward the working side. Both nodes use unit scale.
+
+## Dresser
+
+| Dimensions in Blender X × Y × Z | 1.940 × 0.940 × 1.238 m, including the mirror and open pull |
+| Triangles | 5,652 |
+Blender uses metres, +Z up, and −Y toward the working side. Blender's default glTF export converts this to metres, +Y up, and +Z toward the working side.
+
+## EndTable
+
+| Asset bounds in Blender (X × Y × Z) | 0.450 × 0.450 × 0.618 m, including the tabletop props |
+| Triangles | 3,988 of 4,000 |
+
+## Armchair
+
+| Blender bounds, X × Y × Z | 0.8603 × 0.8305 × 0.9341 m |
+
+## MegascreenTelevision
+
+- Blender uses metres, +Z up, and −Y facing the viewer. The footprint is centred at the origin and rests at Z = 0. The default glTF export uses metres, +Y up, and +Z toward the viewer.
+
+## Bed
+
+**Parts and coordinates**
+
+
+Blender uses metres, **+Z up**, **+Y toward the headboard**, and **−Y toward the foot
+and working side**. The footprint is centred at the ground origin. Blender’s
+default glTF conversion gives the GLB **+Y up**, with **−Z toward the headboard**
+and **+Z toward the foot**. The GLB sleeper marker is at `(0, 0.630, −0.405)`.
+The timber has a neutral base tone for applying a stuff tint to the `Frame` slot.
+
