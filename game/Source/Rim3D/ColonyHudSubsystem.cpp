@@ -32,6 +32,7 @@
 #include <imgui.h>
 
 #include "ColonyHudStyle.h"
+#include "HudIcons.h"
 #include "HudLayout.h"
 #include "DebugScenes.h"
 
@@ -982,13 +983,16 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 			}
 			// On a narrow window a label that would be cut off is drawn smaller to fit its tab.
 			const float LabelWidth = ImGui::CalcTextSize(TCHAR_TO_UTF8(*Label)).x + 2.0f * Style.FramePadding.x;
-			const bool bShrink = LabelWidth > TabWidth;
 			const float TabHeight = ColonyHud::BarButtonHeight();
+			// The tab's painted icon sits left of its label; HudIcons::Button shrinks a label that would not fit beside it.
+			UTexture* TabIcon = HudIcons::Get(TEXT("tab_") + FString(TabLabel(Tab)).ToLower(), TabHeight);
+			const bool bShrink = !TabIcon && LabelWidth > TabWidth;
 			if (bShrink)
 			{
 				ImGui::PushFont(nullptr, Style.FontSizeBase * FMath::Max(0.55f, TabWidth / LabelWidth));
 			}
-			if (ColonyHud::Button(Label + TEXT("##tab"), Open == Tab, ImVec2(TabWidth, TabHeight)))
+			if (TabIcon ? HudIcons::Button(TabIcon, Label + TEXT("##tab"), Open == Tab, ImVec2(TabWidth, TabHeight))
+					: ColonyHud::Button(Label + TEXT("##tab"), Open == Tab, ImVec2(TabWidth, TabHeight)))
 			{
 				ToggleTab(Tab);
 			}
