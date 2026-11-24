@@ -321,6 +321,8 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	// The player's colonist: the sim moves it by the steps the keys send, which come unevenly (two or three frames a step),
 	// so it would jerk and its animation would see a stuttering speed. It is drawn where the player's body is (moved
 	// every frame, at most a metre from the sim's: ProtagonistPawn reconciles) at its smooth velocity.
+	bool bDrawnLocalNow = false;
+	FVector SimToLocal = FVector::ZeroVector;
 	if (const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
 		Protagonist && Protagonist->IsDirectMode() && Protagonist->GetControlled() == Thing && Now.rollPhase == 0 && Now.climb <= 0.0f &&
 		!PawnMotionHolds(Now))
@@ -328,12 +330,46 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		if (const AProtagonistPawn* Player = Protagonist->GetBody(); Player && Player->GetSimLevel() == Now.level && !Player->IsClimbing())
 		{
 			const FVector Local = Bridge.SimToWorld(static_cast<float>(Player->GetSimPosition().X), static_cast<float>(Player->GetSimPosition().Y), Now.level);
+			bDrawnLocalNow = true;
+			SimToLocal = FVector(Local.X - Location.X, Local.Y - Location.Y, 0.0);
 			Location.X = Local.X;
 			Location.Y = Local.Y;
 			Velocity = FVector(Player->GetLocalVelocity().X * 100.0, Player->GetLocalVelocity().Y * 100.0, 0.0);
 			Pace = Player->GetTargetSpeed() > 0.1f ? Player->GetTargetSpeed() * 100.0f : CruiseSpeed;
 		}
 	}
+	// Handed between the sim's place and the player's own (a roll, a stagger or a swing begins or ends, sneed 2026-11-24:
+	// "rolling still snaps my character back"): the two differ by the walk the keys made ahead of the sim (8 to 14 cm in
+	// smoke feel_roll_walking), so the gap is eased out over about a tenth of a second instead of jumped.
+	if (bPlaced && bDrawnLocalNow != bDrawnLocal && !bTeleported)
+	{
+		// Was the local place, now the sim's: the gap starts at local minus sim; the other way round, sim minus local.
+		const FVector Gap = bDrawnLocalNow ? -SimToLocal : SimToLocal;
+		if (!bDrawnLocalNow && Bridge.GetSim())
+		{
+			if (const UProtagonistSubsystem* P = GetWorld()->GetSubsystem<UProtagonistSubsystem>(); P && P->GetBody())
+			{
+				const FVector Local = Bridge.SimToWorld(static_cast<float>(P->GetBody()->GetSimPosition().X), static_cast<float>(P->GetBody()->GetSimPosition().Y), Now.level);
+				SourceEase += FVector(Local.X - Location.X, Local.Y - Location.Y, 0.0);
+			}
+		}
+		else
+		{
+			SourceEase += Gap;
+		}
+		if (SourceEase.Size2D() > 120.0)
+		{
+			SourceEase = FVector::ZeroVector;  // a real jump (a teleport, a climb): not eased
+		}
+	}
+	bDrawnLocal = bDrawnLocalNow;
+	SourceEase *= FMath::Exp(-DeltaTime / 0.06f);
+	if (SourceEase.SizeSquared2D() < 0.01)
+	{
+		SourceEase = FVector::ZeroVector;
+	}
+	Location.X += SourceEase.X;
+	Location.Y += SourceEase.Y;
 	GroundSpeed = Velocity.Size2D();
 
 	// Turns advance by at most PawnTurnMaxStep of time a frame: after a hitch (a quarter to half a second measured in the

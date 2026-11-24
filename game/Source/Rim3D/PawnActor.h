@@ -615,6 +615,9 @@ private:
 	float LegsClipWeight = 0.0f;
 	float SwimLiftCm = 0.0f;
 	bool bPlaced = false;
+	/** Drawn at the player's own place last frame (else the sim's), and the gap left when that switched, easing out. */
+	bool bDrawnLocal = false;
+	FVector SourceEase = FVector::ZeroVector;
 	bool bBodyHidden = false;
 	bool bCutAway = false;
 	double ActionEndSeconds = 0.0;
