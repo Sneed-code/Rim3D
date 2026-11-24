@@ -465,6 +465,77 @@ namespace
 		Failures += BloodArtSave(Material) ? 0 : 1;
 	}
 
+	/**
+	 * M_Organ, the organs and guts of a burst trunk (GoreOrgans.cpp): colour from the vertex colours like M_Gore, under a
+	 * wet clear coat (the glistening membrane over a liver or a loop of gut), its gloss from the alpha (0 wet), and a soft
+	 * bump so the surface isn't plastic-smooth.
+	 */
+	void BloodArtMakeOrgan(IAssetTools& Tools, int32& Failures)
+	{
+		UMaterial* Material = BloodArtNewMaterial(Tools, TEXT("M_Organ"), Failures);
+		if (!Material)
+		{
+			return;
+		}
+		Material->MaterialDomain = MD_Surface;
+		Material->BlendMode = BLEND_Opaque;
+		Material->SetShadingModel(MSM_ClearCoat);
+		auto* Vertex = BloodArtNode<UMaterialExpressionVertexColor>(Material, -1000, -200);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Vertex, TEXT(""), MP_BaseColor);
+		// Under the coat the tissue is soft and fairly rough; the coat is glass-smooth where wet.
+		auto* Wet = BloodArtNode<UMaterialExpressionConstant>(Material, -800, 50);
+		Wet->R = 0.42f;
+		auto* Dry = BloodArtNode<UMaterialExpressionConstant>(Material, -800, 150);
+		Dry->R = 0.7f;
+		auto* Rough = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -500, 100);
+		BloodArtConnect(Wet, TEXT(""), Rough, TEXT("A"));
+		BloodArtConnect(Dry, TEXT(""), Rough, TEXT("B"));
+		BloodArtConnect(Vertex, TEXT("A"), Rough, TEXT("Alpha"));
+		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
+		auto* Specular = BloodArtNode<UMaterialExpressionConstant>(Material, -400, 250);
+		Specular->R = 0.45f;
+		UMaterialEditingLibrary::ConnectMaterialProperty(Specular, TEXT(""), MP_Specular);
+		auto* CoatWet = BloodArtNode<UMaterialExpressionConstant>(Material, -800, 300);
+		CoatWet->R = 1.0f;
+		auto* CoatDry = BloodArtNode<UMaterialExpressionConstant>(Material, -800, 380);
+		CoatDry->R = 0.15f;
+		auto* Coat = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -500, 320);
+		BloodArtConnect(CoatWet, TEXT(""), Coat, TEXT("A"));
+		BloodArtConnect(CoatDry, TEXT(""), Coat, TEXT("B"));
+		BloodArtConnect(Vertex, TEXT("A"), Coat, TEXT("Alpha"));
+		UMaterialEditingLibrary::ConnectMaterialProperty(Coat, TEXT(""), MP_CustomData0);
+		auto* GlossWet = BloodArtNode<UMaterialExpressionConstant>(Material, -800, 460);
+		GlossWet->R = 0.06f;
+		auto* GlossDry = BloodArtNode<UMaterialExpressionConstant>(Material, -800, 540);
+		GlossDry->R = 0.45f;
+		auto* Gloss = BloodArtNode<UMaterialExpressionLinearInterpolate>(Material, -500, 480);
+		BloodArtConnect(GlossWet, TEXT(""), Gloss, TEXT("A"));
+		BloodArtConnect(GlossDry, TEXT(""), Gloss, TEXT("B"));
+		BloodArtConnect(Vertex, TEXT("A"), Gloss, TEXT("Alpha"));
+		UMaterialEditingLibrary::ConnectMaterialProperty(Gloss, TEXT(""), MP_CustomData1);
+		// A soft bump: two scales of smooth noise in the mesh's own space (cm).
+		auto* Bump = BloodArtNode<UMaterialExpressionCustom>(Material, -500, 700);
+		Bump->OutputType = CMOT_Float3;
+		Bump->Description = TEXT("OrganBump");
+		Bump->Code = TEXT("float2 g = 0;\n"
+			"for (int o = 0; o < 2; ++o) {\n"
+			"  float3 p = LocalPos * (o == 0 ? 0.6 : 2.3);\n"
+			"  float3 i = floor(p); float3 f = frac(p); f = f * f * (3.0 - 2.0 * f);\n"
+			"  float a = frac(sin(dot(i, float3(12.9898, 78.233, 37.719))) * 43758.5453);\n"
+			"  float b = frac(sin(dot(i + float3(1, 0, 0), float3(12.9898, 78.233, 37.719))) * 43758.5453);\n"
+			"  float c = frac(sin(dot(i + float3(0, 1, 0), float3(12.9898, 78.233, 37.719))) * 43758.5453);\n"
+			"  g += float2(lerp(a, b, f.x) - a, lerp(a, c, f.y) - a) * (o == 0 ? 0.22 : 0.12);\n"
+			"}\n"
+			"return normalize(float3(g, 1.0));");
+		Bump->Inputs.SetNum(1);
+		Bump->Inputs[0].InputName = TEXT("LocalPos");
+		auto* Local = BloodArtNode<UMaterialExpressionLocalPosition>(Material, -800, 700);
+		Bump->Inputs[0].Input.Connect(0, Local);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Bump, TEXT(""), MP_Normal);
+		UMaterialEditingLibrary::RecompileMaterial(Material);
+		Failures += BloodArtSave(Material) ? 0 : 1;
+	}
+
 	/** M_BloodMist: a soft round puff in its instance's colour; opacity from instance data 3, faded where it meets a surface. */
 	void BloodArtMakeMist(IAssetTools& Tools, int32& Failures)
 	{
@@ -1354,6 +1425,10 @@ int32 UBloodArtCommandlet::Main(const FString& Params)
 	if (BloodArtWanted(TEXT("M_Gore"), bForce))
 	{
 		BloodArtMakeGore(Tools, Failures);
+	}
+	if (BloodArtWanted(TEXT("M_Organ"), bForce))
+	{
+		BloodArtMakeOrgan(Tools, Failures);
 	}
 	if (BloodArtWanted(TEXT("M_BloodMist"), bForce))
 	{

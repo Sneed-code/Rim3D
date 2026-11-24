@@ -1,5 +1,7 @@
 #include "FireSubsystem.h"
 
+#include "BlastFxSubsystem.h"
+
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
@@ -387,6 +389,13 @@ void UFireSubsystem::Emit(const TArray<FEmitter>& Emitters, float Delta, const F
 		Whole += Random.FRand() < Wanted - Whole ? 1 : 0;
 		return Whole;
 	};
+	// With the blast art in, every fire's flames and smoke are the photographed fire flipbook (sneed 2026-11-23: photoreal
+	// fire, and the same everywhere in the game); the embers stay here. Without it, the simple cones and balls.
+	UBlastFxSubsystem* Flipbook = GetWorld() ? GetWorld()->GetSubsystem<UBlastFxSubsystem>() : nullptr;
+	if (Flipbook && !Flipbook->IsReady())
+	{
+		Flipbook = nullptr;
+	}
 	for (const FEmitter& Emitter : Emitters)
 	{
 		if (Particles.Num() >= Max)
@@ -404,7 +413,8 @@ void UFireSubsystem::Emit(const TArray<FEmitter>& Emitters, float Delta, const F
 			const float Radius = FMath::Sqrt(Random.FRand()) * Emitter.SpreadCm;
 			return Emitter.Position + FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, Random.FRand() * Emitter.HeightSpreadCm);
 		};
-		for (int32 I = Count(FireFlamesPerSecond * FMath::Pow(Size, 0.7f)); I > 0; --I)
+		const bool bFlipbook = Flipbook && Flipbook->AddFlames(Emitter.Position, Emitter.SpreadCm, Emitter.HeightSpreadCm, Size, Emitter.Scale, bSmoke && Emitter.bSmoke, Delta);
+		for (int32 I = bFlipbook ? 0 : Count(FireFlamesPerSecond * FMath::Pow(Size, 0.7f)); I > 0; --I)
 		{
 			FParticle Flame;
 			Flame.Kind = EFireParticle::FlameCore;
@@ -426,7 +436,7 @@ void UFireSubsystem::Emit(const TArray<FEmitter>& Emitters, float Delta, const F
 			Ember.Seed = Random.FRand();
 			Particles.Add(Ember);
 		}
-		if (bSmoke && Emitter.bSmoke)
+		if (bSmoke && Emitter.bSmoke && !bFlipbook)
 		{
 			for (int32 I = Count(FireSmokePerSecond * Size); I > 0; --I)
 			{

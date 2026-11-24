@@ -19,12 +19,14 @@
 #include "BloodSubsystem.h"
 #include "GoreCut.h"
 #include "GoreGibActor.h"
+#include "GoreOrgans.h"
 #include "GoreStump.h"
 #include "MakeHumanAnimInstance.h"
 #include "PawnActor.h"
 #include "SimSubsystem.h"
 #include "StrandHair.h"
 
+#include "ColonySim/Filth.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Map.h"
 #include "ColonySim/Sim.h"
@@ -57,7 +59,9 @@ namespace
 		case colony::kSeveredLeftLeg: OutBone = TEXT("thigh_l"); OutEnd = TEXT("calf_l"); return true;
 		case colony::kSeveredRightLowerLeg: OutBone = TEXT("calf_r"); OutEnd = TEXT("foot_r"); return true;
 		case colony::kSeveredRightLeg: OutBone = TEXT("thigh_r"); OutEnd = TEXT("calf_r"); return true;
-		case colony::kSeveredHead: OutBone = TEXT("head"); OutEnd = NAME_None; return true;
+		// The head comes off with its neck (sneed, 2026-11-23: "the neck looks weird; make it so the neck is destroyed when
+		// the head comes off"): cut at the neck's root on the shoulders, not under the skull.
+		case colony::kSeveredHead: OutBone = TEXT("neck_01"); OutEnd = TEXT("head"); return true;
 		default: return false;
 		}
 	}
@@ -75,7 +79,7 @@ namespace
 		case colony::kSeveredRightLowerLeg: return 5.4f;
 		case colony::kSeveredLeftLeg:
 		case colony::kSeveredRightLeg: return 7.8f;
-		default: return 5.6f;  // the neck
+		default: return 6.4f;  // the root of the neck
 		}
 	}
 
@@ -805,8 +809,38 @@ int32 ASimPawnActor::BurstIntoGibs(float Overkill)
 	}
 	// 25 past 0 bursts it: that is strength 1; a rocket's far more throws harder.
 	const float Strength = 0.8f + FMath::Max(Overkill, 0.0f) / 60.0f;
-	GibsThrown = AGoreGibActor::Burst(GetWorld(), Centre, GetBodyScale(), Strength, SeveredSkinColour(*this),
-		static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 977u + 13u), Thing);
+	// The body's up (organs from the chest, guts from the belly): along its spine as it lies now.
+	FVector Up = FVector::UpVector;
+	if (Skin && Skin->GetBoneIndex(TEXT("pelvis")) != INDEX_NONE && Skin->GetBoneIndex(TEXT("spine_05")) != INDEX_NONE)
+	{
+		Up = (Skin->GetBoneLocation(TEXT("spine_05"), EBoneSpaces::WorldSpace) - Skin->GetBoneLocation(TEXT("pelvis"), EBoneSpaces::WorldSpace))
+			.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+	}
+	// Organs only in a body that bleeds red (not a machine's fluid or an insect's).
+	bool bOrgans = true;
+	if (const USimSubsystem* Bridge = GetWorld()->GetSubsystem<USimSubsystem>(); Bridge && Bridge->GetSim())
+	{
+		if (const colony::ThingView* View = Bridge->GetCurrentSnapshot().find(Thing))
+		{
+			const colony::Sim& Sim = *Bridge->GetSim();
+			const int Kind = Sim.filth().bloodKindOf(View->def);
+			bOrgans = Kind >= 0 && Kind < static_cast<int>(Sim.filth().kinds().size()) && Sim.filth().kinds()[Kind].name == "Blood";
+		}
+	}
+	// The drawn meshes (the bare body and its clothes) for the torso's slabs.
+	TArray<USkinnedMeshComponent*> All;
+	SeveredSkinned(*this, All);
+	TArray<USkinnedMeshComponent*> Drawn;
+	for (USkinnedMeshComponent* Mesh : All)
+	{
+		const AActor* MeshOwner = Mesh ? Mesh->GetOwner() : nullptr;
+		if (Mesh && SeveredDrawn(*Mesh) && !(MeshOwner && MeshOwner->IsHidden()) && Mesh->GetBoneIndex(TEXT("pelvis")) != INDEX_NONE)
+		{
+			Drawn.Add(Mesh);
+		}
+	}
+	GibsThrown = GoreBurstTrunk(GetWorld(), Drawn, Skin, Centre, Up, GetBodyScale(), Strength, SeveredSkinColour(*this),
+		static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 977u + 13u), Thing, bOrgans);
 	if (!bGibHidden && !bGibPending)
 	{
 		bGibPending = true;
@@ -1075,8 +1109,8 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		const float PieceRadiusTable = SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread();
 		float PieceOpening = -1.0f;
 		float PieceSkin = -1.0f;
-		// A head is cut at the base of the skull, above the jaw: the throat and the jaw's underside, wholly on the head,
-		// closed over its cap (a smooth skin oval seen from the neck, PC round 16). Its cap stands below all of that.
+		// A head (with its neck) is cut at the neck's root: skin wholly on the piece closes over its cap, which stands below
+		// all of it.
 		const float PieceDome = SeveredDome(Skinned, Bone, true, PieceRadiusTable, PieceOpening, PieceSkin, Bit == colony::kSeveredHead);
 		const float PieceRadius = SeveredFitFace(PieceRadiusTable, PieceSkin);
 		UE_LOG(LogTemp, Log, TEXT("Severed piece 0x%x: bulges %.1f cm past the cut (cap radius %.1f cm)"), Bit, PieceDome, PieceRadius);

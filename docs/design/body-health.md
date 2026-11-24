@@ -230,6 +230,23 @@ torsos, whole-corpse gibs) was never merged.
   other one first lands, with six blast sprays of the body's blood and a heavy one onto where it lay. The body hides a
   few frames later (after the limbs that came off in the same hit are copied into their pieces), with no collision or
   physics. Gibs lie 5 minutes like blood (`Gore.GibSeconds`), then shrink away; at most 240 at once (`Gore.GibMax`).
+  **Organs, guts and torso slabs** (sneed, 2026-11-23: "torso gibbing needs to show organs, liver, lots of intestines,
+  heart, lungs, viscera, more blood, bone ... the balls of flesh should be chunks of the torso including breasts";
+  `GoreOrgans.cpp`, `GoreTorso.cpp`, shapes in `GoreOrganShapes.h`, previewed without Unreal by
+  `tools/gore_organs_preview.cpp`): a burst trunk (`GoreBurstTrunk`) throws **the torso itself** cut into 12 slabs
+  (`Gore.TorsoSlabs`; Voronoi cells seeded at the breasts, belly and buttocks, the rest spread evenly) plus the genitals as
+  a piece of their own, each copying its triangles of the body's skin and every drawn piece of clothing with their own
+  materials, with thickness: a raw inner face and torn sides showing the fat under the skin; **the organs** (heart with its
+  vessels, both lungs, windpipe, liver with the gall bladder, stomach, spleen, two kidneys, a length of spine, two rib
+  racks, three lumps of fat), every one the same on every race and sized to the body (`Gore.Organs`), in `M_Organ` (wet
+  clear coat, made by BloodArt); **four ropes of intestine** (`AGoreRopeActor`, one of them large intestine, up to 40
+  links, `Gore.GutRopes`, `Gore.GutRopeMax`) that fall, uncoil and drape over the ground; small chunks (10, or 22 when the
+  meshes can't be read, as in a cooked build); and ten more blast sprays and four pools of blood. A body with machine
+  fluid or insect blood (filth not "Blood") throws only chunks. Bullets (`GorePushLine`), blasts and melee blows
+  (`GorePushRadial`), swings and walking feet (`UFightSubsystem::UpdateLooseKicks`) knock the gibs, organs, guts, loose
+  heads and limbs about.
+  **The neck goes with the head** (sneed, 2026-11-23): a severed head is cut at `neck_01`, so the whole neck comes off with
+  it and the torso's cut sits low at the base of the neck.
   Smoke `gore` phases `gibs` and `gibsclose`.
   The struck zone is looked at on every hit; on the blow that kills every other zone too (a leg already battered
   past 0 comes off with the death). After a cut the zone's pile starts again, so a forearm comes off first and the

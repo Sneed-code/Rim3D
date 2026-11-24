@@ -15,7 +15,7 @@ fires from the snapshot's `fires`, burning pawns from `ThingView::onFire`, burnt
 | --- | --- | --- |
 | Lamp light | `lights().sources()` (building, radius, glow) | a point light at the building, coloured by the def's `glower.color`, `glower.lift` metres up (campfire 0.3, torch 0.55 so the light sits above its bowl, standing lamp 1.4, sun lamp 2.1), 40 candelas times the glow, out to the sim's radius (10 m). Lamps with a fuel part (campfire, torch) flicker |
 | Lamp flames | `visual.flame` on the def (`lift`, `size`) | the campfire and the torch lamp have flames and embers; the campfire smokes a little |
-| Fire | the snapshot's `fires` (cell, size 0 to 1.75) | per burning cell: flames (cones that go yellow, orange, then red as they rise and shrink), embers that drift up and wink out, smoke that rises and leans with the wind. How many and how big follow the fire's size, which the drawn fire follows over about a second (so a fire the rain shrinks, or one that spreads, changes smoothly) |
+| Fire | the snapshot's `fires` (cell, size 0 to 1.75) | per burning cell: flames (with the blast art in, tongues of the photographed fire flipbook drawn by `UBlastFxSubsystem::AddFlames`, and its soot; see blast-draw.md. Without it, or with `Fire.Flipbook 0`, cones that go yellow, orange, then red as they rise and shrink), embers that drift up and wink out, smoke that rises and leans with the wind. How many and how big follow the fire's size, which the drawn fire follows over about a second (so a fire the rain shrinks, or one that spreads, changes smoothly) |
 | Fire light | the same | one orange light for each 4 m block of fire, 10 candelas plus 3.5 per unit of size (at most 60), radius 5.5 to 15 m, flickering |
 | Burning pawn | `ThingView::onFire` | flames over the body (to head height), a small orange light that follows it |
 | Burnt ground | the snapshot's `burnt` cells | a charcoal skin on the ground, a little lighter or darker at each corner so it has no cell edges; it goes when the sim lets the burn fade (6 days) |
@@ -45,7 +45,9 @@ base height 58 cm, 20 flames, 2.4 embers and 1.5 smoke puffs a second for a fire
 
 ## Console
 
-`Fire.Enable` (0 draws none of it), `Fire.MaxLights`, `Fire.MaxParticles`, `Fire.LampIntensity`, `Fire.Smoke` (0 draws no smoke).
+`Fire.Enable` (0 draws none of it), `Fire.MaxLights`, `Fire.MaxParticles`, `Fire.LampIntensity`, `Fire.Smoke` (0 draws no smoke),
+`Fire.Flipbook` (1: flames and smoke from the blast art's fire flipbook; 0: the simple cones and balls). The smoke test counts
+the flipbook's flame tongues and fire smoke with the cones.
 
 ## Smoke test `fire`
 
@@ -60,7 +62,7 @@ and the light cap (24) hold. Frame times: 240 to 300 fps at 888 x 500 on the RTX
 
 ## Not done
 
-Niagara fire with soft sprites and heat shimmer; fire under roofs lighting the room through windows (the lights are real, so
+Heat shimmer over fires; fire under roofs lighting the room through windows (the lights are real, so
 walls shade them, but there is no glow on the ceiling); the home-area overlay (U19); sparks flying from lightning strikes;
 burnt plants and scorched walls and trees (a burnt tree is gone from the snapshot, so only the ground shows it); rain steam;
 sound; a burning pawn running about (the sim has none yet).

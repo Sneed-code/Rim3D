@@ -1,4 +1,6 @@
 #include "BlastFxSubsystem.h"
+
+#include "GoreOrgans.h"
 #include "SeveredPieceActor.h"
 #include "EngineUtils.h"
 
@@ -39,8 +41,14 @@ namespace
 		TEXT("How long a blast's smoke hangs in the air, seconds (each puff 70% to 120% of it)."), ECVF_Default);
 	TAutoConsoleVariable<float> GBlastScorchSeconds(TEXT("Blast.ScorchSeconds"), 300.0f,
 		TEXT("How long a blast's scorch mark takes to fade away, seconds."), ECVF_Default);
-	TAutoConsoleVariable<int32> GBlastMaxSprites(TEXT("Blast.MaxSprites"), 1500,
+	TAutoConsoleVariable<int32> GBlastMaxSprites(TEXT("Blast.MaxSprites"), 2600,
 		TEXT("At most this many blast sprites (fire, smoke, sparks) at once; new ones are skipped past it."), ECVF_Default);
+	TAutoConsoleVariable<float> GBlastFuelSeconds(TEXT("Blast.FuelSeconds"), 11.0f,
+		TEXT("How long a molotov's splash of fuel burns on the ground, seconds (the drops it threw burn for less)."), ECVF_Default);
+	TAutoConsoleVariable<float> GBlastPoolLight(TEXT("Blast.PoolLight"), 1.0f,
+		TEXT("Scales the flickering light of burning fuel on the ground (and a rocket motor's light)."), ECVF_Default);
+	TAutoConsoleVariable<int32> GFireFlipbook(TEXT("Fire.Flipbook"), 1,
+		TEXT("1 draws every fire's flames (burning ground, bodies, campfires, torches) with the photographed fire flipbook, 0 with the simple cones."), ECVF_Default);
 	TAutoConsoleVariable<int32> GBlastFlipV(TEXT("Blast.FlipV"), 0,
 		TEXT("1 turns the fire and smoke pictures upside down (if the plane mesh's V runs the other way)."), ECVF_Default);
 
@@ -58,6 +66,25 @@ namespace
 	{
 		return Source.GetWorldOrigin() + FVector(X * 100.0, Y * 100.0, Z * 100.0);
 	}
+
+	/** How many to make this frame from a rate per second, carrying the fraction over in `Debt`. */
+	int32 BlastTake(float PerSecond, float DeltaTime, float& Debt)
+	{
+		Debt += FMath::Max(0.0f, PerSecond) * DeltaTime;
+		const int32 Whole = FMath::Min(FMath::FloorToInt32(Debt), 40);
+		Debt -= Whole;
+		Debt = FMath::Min(Debt, 1.0f);
+		return Whole;
+	}
+
+	/** A slow irregular flicker about 1 (0.6 to 1.25), as a fire's light does. */
+	float BlastFlicker(float T, float Seed)
+	{
+		return 0.88f + 0.16f * FMath::Sin(T * 9.3f + Seed * 31.0f) + 0.11f * FMath::Sin(T * 17.1f + Seed * 7.0f) + 0.07f * FMath::Sin(T * 31.7f + Seed * 3.0f);
+	}
+
+	// Burning fuel and the soot it gives (linear).
+	const FLinearColor BlastFuelSoot(0.024f, 0.022f, 0.02f);
 }
 
 bool UBlastFxSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
@@ -103,6 +130,13 @@ void UBlastFxSubsystem::Teardown()
 	Holder = nullptr;
 	Instances.Reset();
 	FlashLight = nullptr;
+	PoolLight = nullptr;
+	MotorLight = nullptr;
+	Pools.Reset();
+	Drops.Reset();
+	FlameTongues = 0;
+	FireSmoke = 0;
+	MotorAge = 99.0f;
 	FlashAge = 99.0f;
 	FlashCandelas = 0.0f;
 }
@@ -225,6 +259,30 @@ bool UBlastFxSubsystem::EnsureScene()
 	FlashLight->SetupAttachment(Root);
 	FlashLight->RegisterComponent();
 	FlashLight->SetVisibility(false);
+
+	PoolLight = NewObject<UPointLightComponent>(Holder);
+	PoolLight->SetMobility(EComponentMobility::Movable);
+	PoolLight->SetIntensityUnits(ELightUnits::Candelas);
+	PoolLight->SetIntensity(0.0f);
+	PoolLight->SetLightColor(FLinearColor(1.0f, 0.45f, 0.13f));
+	PoolLight->SetAttenuationRadius(2200.0f);
+	PoolLight->SetSourceRadius(80.0f);
+	PoolLight->SetCastShadows(true);
+	PoolLight->SetupAttachment(Root);
+	PoolLight->RegisterComponent();
+	PoolLight->SetVisibility(false);
+
+	MotorLight = NewObject<UPointLightComponent>(Holder);
+	MotorLight->SetMobility(EComponentMobility::Movable);
+	MotorLight->SetIntensityUnits(ELightUnits::Candelas);
+	MotorLight->SetIntensity(0.0f);
+	MotorLight->SetLightColor(FLinearColor(1.0f, 0.62f, 0.3f));
+	MotorLight->SetAttenuationRadius(1600.0f);
+	MotorLight->SetSourceRadius(15.0f);
+	MotorLight->SetCastShadows(false);
+	MotorLight->SetupAttachment(Root);
+	MotorLight->RegisterComponent();
+	MotorLight->SetVisibility(false);
 	return true;
 }
 
@@ -318,6 +376,8 @@ void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 			Piece->Push((Out + FVector(0.0, 0.0, 0.6)).GetSafeNormal() * Speed * 1.5f * Falloff, Piece->GetActorLocation() - Out * 5.0);
 			++PiecesThrown;
 		}
+		// And the gibs, organs and guts lying about, lighter still.
+		GorePushRadial(GetWorld(), Centre - FVector(0.0, 0.0, 40.0), static_cast<float>(Reach) + 150.0f, Speed * 1.6f);
 	}
 
 	// The rest is art: without it (-run=BlastArt not run) the bodies are still thrown, above.
@@ -347,14 +407,13 @@ void UBlastFxSubsystem::OnSimEvent(const colony::Event& Event)
 	const double Above = Centre.Z - Ground.Z;
 	const FVector Floor(Centre.X, Centre.Y, Above >= 0.0 && Above < 150.0 ? Ground.Z : Centre.Z - 30.0);
 	SpawnBlast(Centre, Floor, RadiusM, bFire);
-	if (!bFire)
 	{
-		// The ground leans with the map there (as the debris floor).
+		// The ground leans with the map there (as the debris floor). A molotov leaves a dark stain of burnt fuel, fainter.
 		const colony::Map& Map = Source->GetSim()->map();
 		const float MX = Event.x;
 		const float MY = Event.y;
 		const FVector Normal = FVector((Map.heightAt(MX - 1.0f, MY) - Map.heightAt(MX + 1.0f, MY)) * 0.5f, (Map.heightAt(MX, MY - 1.0f) - Map.heightAt(MX, MY + 1.0f)) * 0.5f, 1.0f).GetSafeNormal();
-		SpawnScorch(Floor, Normal, RadiusM);
+		SpawnScorch(Floor, Normal, bFire ? RadiusM * 0.9f : RadiusM, bFire ? 0.7f : 1.0f);
 	}
 }
 
@@ -379,28 +438,54 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 
 	if (bFire)
 	{
-		// A molotov: a wide low splash of burning fuel, black smoke, a few sparks (the sim lights the ground).
+		// A molotov is liquid fire (sneed 2026-11-23: "photorealistic proper liquid fire with molotovs"): the bottle bursts,
+		// the fuel's vapour goes up in one soft orange whoomp, the fuel itself splashes out as burning drops trailing flame,
+		// and the splash lies burning as a carpet of flames, spreading in a moment and dying down over ten seconds or so,
+		// under a column of black smoke (the sim lights the ground under it, drawn by AddFlames too).
 		const float S = FMath::Clamp(RadiusM / 1.1f, 0.6f, 3.0f);
-		for (int32 I = 0; I < 9; ++I)
+		const float FuelSeconds = FMath::Clamp(GBlastFuelSeconds.GetValueOnGameThread(), 1.0f, 60.0f);
+		// The whoomp: wide, low and quick, the flipbook's fiery first half.
+		for (int32 I = 0; I < 10; ++I)
 		{
 			FSprite& Fire = Add(EKind::Fire);
 			const FVector Out = FVector(Random.FRandRange(-1.0f, 1.0f), Random.FRandRange(-1.0f, 1.0f), 0.0f).GetSafeNormal();
-			Fire.Position = Ground + Out * Random.FRandRange(0.0f, 90.0f * S) + FVector(0.0, 0.0, 30.0);
-			Fire.Velocity = Out * Random.FRandRange(100.0f, 250.0f) * S + FVector(0.0, 0.0, Random.FRandRange(80.0f, 200.0f));
+			Fire.Position = Ground + Out * Random.FRandRange(0.0f, 90.0f * S) + FVector(0.0, 0.0, 40.0);
+			Fire.Velocity = Out * Random.FRandRange(150.0f, 320.0f) * S + FVector(0.0, 0.0, Random.FRandRange(120.0f, 260.0f));
 			Fire.Drag = 3.0f;
-			Fire.Gravity = -150.0f;
-			Fire.StartCm = 110.0f * S;
-			Fire.EndCm = 220.0f * S;
-			Fire.Life = Random.FRandRange(0.9f, 1.4f);
+			Fire.Gravity = -180.0f;
+			Fire.StartCm = 120.0f * S;
+			Fire.EndCm = 240.0f * S;
+			Fire.Life = Random.FRandRange(0.7f, 1.1f);
 			Fire.FadeIn = 0.03f;
-			// Burning fuel stays hot: only the flipbook's fiery first half, a little brighter than the frag's (PC round 6: the
-			// whole flipbook read as a smoky blob).
+			// Burning fuel stays hot: only the flipbook's fiery first half (PC round 6: the whole flipbook read as a smoky blob).
 			Fire.FrameTo = 32.0f;
 			Fire.FireGain = FireGain * 1.3f;
 			Fire.Roll = Random.FRandRange(-25.0f, 25.0f);
 			Fire.Tint = BlastSoot;
 			Fire.Wind = 0.3f;
 		}
+		// The splash on the ground: one pool where it burst and a few lobes splashed out round it, so the burning patch is
+		// ragged rather than a disc.
+		const float MainCm = RadiusM * 100.0f * 0.8f;
+		AddPool(Ground, MainCm, FuelSeconds * Random.FRandRange(0.9f, 1.1f), 1.0f, false);
+		const int32 Lobes = 3 + Random.RandHelper(3);
+		for (int32 I = 0; I < Lobes; ++I)
+		{
+			const float Angle = Random.FRandRange(0.0f, 2.0f * PI);
+			const FVector Out(FMath::Cos(Angle), FMath::Sin(Angle), 0.0f);
+			const FVector At = Ground + Out * MainCm * Random.FRandRange(0.6f, 1.1f);
+			AddPool(FVector(At.X, At.Y, GroundZAt(At) + 3.0), MainCm * Random.FRandRange(0.3f, 0.5f), FuelSeconds * Random.FRandRange(0.5f, 0.8f), 0.8f, false);
+		}
+		// The drops: flung out low and fast, falling in arcs of flame.
+		const int32 DropCount = FMath::RoundToInt32(16.0f * S);
+		for (int32 I = 0; I < DropCount; ++I)
+		{
+			const float Angle = Random.FRandRange(0.0f, 2.0f * PI);
+			const FVector Out(FMath::Cos(Angle), FMath::Sin(Angle), 0.0f);
+			const FVector Velocity = Out * Random.FRandRange(220.0f, 620.0f) * FMath::Sqrt(S) + FVector(0.0, 0.0, Random.FRandRange(150.0f, 480.0f));
+			AddDrop(Ground + Out * Random.FRandRange(10.0f, 40.0f) + FVector(0.0, 0.0, 25.0), Velocity, Random.FRandRange(16.0f, 38.0f), FuelSeconds * Random.FRandRange(0.25f, 0.6f), false);
+		}
+		// The first billow of black smoke off the whoomp (the pools keep the column going).
 		for (int32 I = 0; I < 6; ++I)
 		{
 			FSprite& Smoke = Add(EKind::Smoke);
@@ -419,7 +504,8 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 			Smoke.Spin = Random.FRandRange(-8.0f, 8.0f);
 			Smoke.Tint = FLinearColor(0.03f, 0.028f, 0.026f);
 		}
-		for (int32 I = 0; I < 14; ++I)
+		// Glass and burning fuel spattering out.
+		for (int32 I = 0; I < 18; ++I)
 		{
 			FSprite& Spark = Add(EKind::Spark);
 			FVector Dir = Random.VRand();
@@ -575,6 +661,62 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 		Haze.FadeIn = 0.0f;
 		Haze.Opacity = 0.6f;
 	}
+	// More detail in the ball (sneed 2026-11-23: "far more realistic detailed explosions"): small white-hot pockets burning
+	// out inside it in half a second, so it reads as a churning ball rather than a few big billows.
+	for (int32 I = 0; I < 6; ++I)
+	{
+		FSprite& Core = Add(EKind::Fire);
+		const FVector Out = Random.VRand();
+		Core.Age = -Random.FRandRange(0.0f, 0.12f);
+		Core.Position = Centre + Out * Random.FRandRange(20.0f, 90.0f * S) + FVector(0.0, 0.0, 60.0 * S);
+		Core.Velocity = Out * 220.0f * S + FVector(0.0, 0.0, 150.0f);
+		Core.Drag = 4.0f;
+		Core.Gravity = -100.0f;
+		Core.StartCm = Random.FRandRange(140.0f, 210.0f) * S;
+		Core.EndCm = Random.FRandRange(220.0f, 300.0f) * S;
+		Core.Life = Random.FRandRange(0.45f, 0.75f);
+		Core.FadeIn = 0.02f;
+		Core.FrameFrom = 0.0f;
+		Core.FrameTo = 18.0f;
+		Core.FireGain = FireGain * 1.1f;
+		Core.Roll = Random.FRandRange(-180.0f, 180.0f);
+		Core.Spin = Random.FRandRange(-40.0f, 40.0f);
+		Core.Tint = BlastSoot;
+	}
+	// The hot cloud lifts: a column of soot rising off the ball over the next seconds, lit orange from below at first, so the
+	// smoke climbs into a stem and cap instead of only spreading.
+	for (int32 I = 0; I < 6; ++I)
+	{
+		FSprite& Stem = Add(EKind::Smoke);
+		Stem.Age = -Random.FRandRange(0.25f, 1.1f);
+		Stem.Position = Centre + FVector(Random.FRandRange(-40.0f, 40.0f) * S, Random.FRandRange(-40.0f, 40.0f) * S, (120.0f + 70.0f * I) * Root);
+		Stem.Velocity = FVector(0.0, 0.0, Random.FRandRange(150.0f, 240.0f) * Root);
+		Stem.Drag = 0.5f;
+		Stem.Gravity = -25.0f;
+		Stem.Wind = 1.0f;
+		Stem.StartCm = 170.0f * Root;
+		Stem.EndCm = Random.FRandRange(480.0f, 640.0f) * Root;
+		Stem.Life = SmokeSeconds * Random.FRandRange(0.8f, 1.1f);
+		Stem.FadeIn = 0.35f;
+		Stem.Opacity = 0.7f;
+		Stem.Glow = 0.8f;
+		Stem.Spin = Random.FRandRange(-6.0f, 6.0f);
+		Stem.Tint = FLinearColor::LerpUsingHSV(BlastSoot, FLinearColor(0.05f, 0.047f, 0.044f), Random.FRand());
+	}
+	// Burning bits flung out of the ball, trailing smoke and flame, that smoulder a moment where they land; and little fires
+	// left in the crater.
+	const int32 Burning = FMath::Clamp(FMath::RoundToInt32(7.0f * Root), 4, 16);
+	for (int32 I = 0; I < Burning; ++I)
+	{
+		FVector Dir = Random.VRand();
+		Dir.Z = FMath::Abs(Dir.Z) * 0.9f + 0.35f;
+		AddDrop(Centre + FVector(0.0, 0.0, 40.0), Dir.GetSafeNormal() * Random.FRandRange(600.0f, 1300.0f) * Root, Random.FRandRange(10.0f, 20.0f), Random.FRandRange(1.5f, 4.0f), true);
+	}
+	for (int32 I = 0; I < 3; ++I)
+	{
+		const FVector At = Ground + FVector(Random.FRandRange(-60.0f, 60.0f) * S, Random.FRandRange(-60.0f, 60.0f) * S, 3.0f);
+		AddPool(At, Random.FRandRange(20.0f, 35.0f) * Root, Random.FRandRange(1.5f, 3.5f), 0.7f, true);
+	}
 	// Hot fragments: fast glowing streaks, and slower embers that fall.
 	const int32 Fragments = FMath::Clamp(FMath::RoundToInt(40.0f * S), 15, 120);
 	for (int32 I = 0; I < Fragments + 10; ++I)
@@ -594,7 +736,7 @@ void UBlastFxSubsystem::SpawnBlast(const FVector& Centre, const FVector& Ground,
 	}
 }
 
-void UBlastFxSubsystem::SpawnScorch(const FVector& Ground, const FVector& GroundNormal, float RadiusM)
+void UBlastFxSubsystem::SpawnScorch(const FVector& Ground, const FVector& GroundNormal, float RadiusM, float Strength)
 {
 	if (!ScorchInstances)
 	{
@@ -637,7 +779,7 @@ void UBlastFxSubsystem::SpawnScorch(const FVector& Ground, const FVector& Ground
 	const FQuat Facing = FRotationMatrix::MakeFromZX(Normal, Along).ToQuat();
 	FScorch& Mark = Scorches.AddDefaulted_GetRef();
 	Mark.Where = FTransform(Facing, At + Normal * 4.0, FVector(SizeCm / 100.0f, SizeCm / 100.0f, 1.0f));
-	Mark.Strength = Random.FRandRange(0.85f, 1.0f);
+	Mark.Strength = Random.FRandRange(0.85f, 1.0f) * FMath::Clamp(Strength, 0.0f, 1.0f);
 }
 
 void UBlastFxSubsystem::ClearForTest()
@@ -709,7 +851,8 @@ void UBlastFxSubsystem::AddTrail(const FVector& At, const FVector& Back, const F
 	{
 		// The motor's flame: one bright short-lived blob right behind it each frame.
 		FSprite& Fire = Add(EKind::Fire);
-		Fire.Position = At + Back * 18.0f;
+		// (The rocket's model is about 55 cm long round `At`: its nozzle is 27 cm back.)
+		Fire.Position = At + Back * 32.0f;
 		Fire.StartCm = Random.FRandRange(48.0f, 64.0f);
 		Fire.EndCm = 26.0f;
 		Fire.Life = FMath::Max(DeltaTime * 1.5f, 0.03f);
@@ -719,21 +862,37 @@ void UBlastFxSubsystem::AddTrail(const FVector& At, const FVector& Back, const F
 		Fire.FireGain = FireGain * 2.5f;
 		Fire.Roll = Random.FRandRange(-180.0f, 180.0f);
 		Fire.Tint = BlastSoot;
-		// A strong thrust plume (sneed 2026-11-23): a longer tongue of flame streaming back behind the nozzle.
-		for (int32 Tongue = 1; Tongue <= 3; ++Tongue)
+		// A strong thrust plume (sneed 2026-11-23): a white-hot core right at the nozzle and a long tongue of flame streaming
+		// back, each piece drawn long along the line of flight, flickering in length frame to frame.
+		const float Flicker = Random.FRandRange(0.8f, 1.2f);
+		for (int32 Tongue = 0; Tongue < 4; ++Tongue)
 		{
 			FSprite& Plume = Add(EKind::Fire);
-			Plume.Position = At + Back * (18.0f + 26.0f * Tongue) + Random.VRand() * 3.0f;
-			Plume.Velocity = Back * 300.0f;
-			Plume.StartCm = Random.FRandRange(40.0f, 52.0f) - 8.0f * Tongue;
-			Plume.EndCm = 12.0f;
+			Plume.Position = At + Back * (36.0f + 30.0f * Tongue * Flicker) + Random.VRand() * 2.0f;
+			Plume.Velocity = Back * 400.0f;
+			Plume.Axis = Back;
+			Plume.Stretch = Tongue == 0 ? 2.2f : 2.8f;
+			Plume.StartCm = (Tongue == 0 ? 30.0f : 34.0f - 6.0f * Tongue) * Flicker;
+			Plume.EndCm = Plume.StartCm * 0.6f;
 			Plume.Life = FMath::Max(DeltaTime * 1.5f, 0.04f);
 			Plume.FadeIn = 0.0f;
 			Plume.FrameFrom = 0.0f;
-			Plume.FrameTo = 6.0f;
-			Plume.FireGain = FireGain * (2.2f - 0.4f * Tongue);
-			Plume.Roll = Random.FRandRange(-180.0f, 180.0f);
+			Plume.FrameTo = Tongue == 0 ? 2.0f : 8.0f;
+			Plume.FireGain = FireGain * (Tongue == 0 ? 3.5f : 2.4f - 0.45f * Tongue);
+			Plume.Roll = Random.FRandRange(-6.0f, 6.0f);
 			Plume.Tint = BlastSoot;
+		}
+		// The motor lights what it flies past (the nearest rocket to the camera gets the light).
+		if (MotorLight)
+		{
+			APlayerCameraManager* Camera = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0);
+			const double Away = Camera ? FVector::DistSquared(Camera->GetCameraLocation(), At) : 0.0;
+			if (MotorAge > 0.05f || MotorNearest <= 0.0 || Away <= MotorNearest)
+			{
+				MotorNearest = Away;
+				MotorAge = 0.0f;
+				MotorLight->SetWorldLocation(At + Back * 40.0f);
+			}
 		}
 	}
 }
@@ -835,6 +994,303 @@ void UBlastFxSubsystem::AddDirtImpact(const FVector& At, const FVector& Up, floa
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Flames: every fire in the game, and burning fuel.
+
+UBlastFxSubsystem::FSprite& UBlastFxSubsystem::AddTongue(const FVector& Base, float WidthCm, float FireGain)
+{
+	FSprite& Fire = Add(EKind::Fire);
+	Fire.Source = 1;
+	Fire.Stretch = Random.FRandRange(1.5f, 2.2f);
+	// The sprite stands on its base: its middle half its height up (the flipbook's flame fills about 40% of the square).
+	Fire.Position = Base + FVector(0.0, 0.0, WidthCm * Fire.Stretch * 0.22f);
+	Fire.Velocity = FVector(Random.FRandRange(-15.0f, 15.0f), Random.FRandRange(-15.0f, 15.0f), Random.FRandRange(70.0f, 130.0f) * FMath::Clamp(WidthCm / 70.0f, 0.5f, 1.4f));
+	Fire.Gravity = -60.0f;
+	Fire.Drag = 1.2f;
+	Fire.Wind = 0.5f;
+	Fire.StartCm = WidthCm;
+	Fire.EndCm = WidthCm * Random.FRandRange(0.45f, 0.65f);
+	Fire.Life = Random.FRandRange(0.45f, 0.8f);
+	Fire.FadeIn = 0.06f;
+	// The flipbook's bright first part only, starting at a random frame so no two tongues look alike.
+	Fire.FrameFrom = Random.FRandRange(0.0f, 6.0f);
+	Fire.FrameTo = Fire.FrameFrom + Random.FRandRange(12.0f, 20.0f);
+	Fire.FireGain = FireGain;
+	Fire.Roll = Random.FRandRange(-10.0f, 10.0f);
+	Fire.Spin = Random.FRandRange(-12.0f, 12.0f);
+	Fire.Tint = BlastSoot;
+	return Fire;
+}
+
+UBlastFxSubsystem::FSprite& UBlastFxSubsystem::AddFireSmoke(const FVector& At, float SizeCm, float Opacity)
+{
+	FSprite& Smoke = Add(EKind::Smoke);
+	Smoke.Source = 2;
+	Smoke.Position = At;
+	Smoke.Velocity = FVector(Random.FRandRange(-12.0f, 12.0f), Random.FRandRange(-12.0f, 12.0f), Random.FRandRange(70.0f, 120.0f));
+	Smoke.Drag = 0.5f;
+	Smoke.Gravity = -14.0f;
+	Smoke.Wind = 1.0f;
+	Smoke.StartCm = SizeCm;
+	Smoke.EndCm = SizeCm * Random.FRandRange(3.5f, 5.0f);
+	Smoke.Life = Random.FRandRange(4.0f, 6.5f);
+	Smoke.FadeIn = 0.4f;
+	Smoke.Opacity = Opacity;
+	Smoke.Glow = 0.5f;
+	Smoke.FrameFrom = 6.0f;
+	Smoke.FrameTo = 63.0f;
+	Smoke.Spin = Random.FRandRange(-10.0f, 10.0f);
+	Smoke.Tint = BlastFuelSoot;
+	return Smoke;
+}
+
+bool UBlastFxSubsystem::AddFlames(const FVector& At, float SpreadCm, float HeightSpreadCm, float Size, float Scale, bool bSmoke, float DeltaTime)
+{
+	if (GFireFlipbook.GetValueOnGameThread() == 0 || !EnsureScene())
+	{
+		return false;
+	}
+	// Full up: this frame's flames are skipped (the fire still shows; it never falls back to the cones half way).
+	if (DeltaTime <= 0.0f || Sprites.Num() >= GBlastMaxSprites.GetValueOnGameThread() - 200)
+	{
+		return true;
+	}
+	const float S = FMath::Clamp(Size, 0.0f, 1.75f);
+	const float Big = 0.55f + 0.5f * FMath::Sqrt(S);
+	const float FireGain = FMath::Max(0.0f, GBlastFireBrightness.GetValueOnGameThread()) * 1.15f;
+	const auto Start = [&]()
+	{
+		const float Angle = Random.FRand() * 2.0f * PI;
+		const float Radius = FMath::Sqrt(Random.FRand()) * SpreadCm;
+		return At + FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, Random.FRand() * HeightSpreadCm);
+	};
+	// At least ten a second, so even a torch's flame never gaps.
+	const float Rate = FMath::Max(10.0f, 10.0f * FMath::Pow(FMath::Max(S, 0.01f), 0.7f) * FMath::Clamp(Scale, 0.5f, 1.5f));
+	const float Wanted = Rate * DeltaTime;
+	int32 Count = FMath::FloorToInt32(Wanted);
+	Count += Random.FRand() < Wanted - Count ? 1 : 0;
+	for (int32 I = 0; I < Count; ++I)
+	{
+		AddTongue(Start(), 72.0f * Scale * Big * Random.FRandRange(0.8f, 1.2f), FireGain);
+	}
+	if (bSmoke)
+	{
+		const float SmokeWanted = 0.6f * S * DeltaTime;
+		if (Random.FRand() < SmokeWanted)
+		{
+			AddFireSmoke(Start() + FVector(0.0, 0.0, 70.0f * Scale * Big), 55.0f * Scale * Big, 0.55f);
+		}
+	}
+	return true;
+}
+
+double UBlastFxSubsystem::GroundZAt(const FVector& At) const
+{
+	const USimSubsystem* Source = Bridge.Get();
+	if (!Source || !Source->GetSim())
+	{
+		return At.Z;
+	}
+	const FVector Origin = Source->GetWorldOrigin();
+	return Source->SimToWorld(static_cast<float>((At.X - Origin.X) / 100.0), static_cast<float>((At.Y - Origin.Y) / 100.0), 0).Z;
+}
+
+void UBlastFxSubsystem::AddPool(const FVector& Centre, float RadiusCm, float Life, float Strength, bool bSmoulder)
+{
+	if (Pools.Num() >= 48)
+	{
+		Pools.RemoveAt(0);
+	}
+	FFuelPool& Pool = Pools.AddDefaulted_GetRef();
+	Pool.Centre = Centre;
+	Pool.RadiusCm = FMath::Max(RadiusCm, 8.0f);
+	Pool.Life = FMath::Max(Life, 0.5f);
+	Pool.Strength = Strength;
+	Pool.Seed = Random.FRand();
+	Pool.bSmoulder = bSmoulder;
+}
+
+void UBlastFxSubsystem::AddDrop(const FVector& At, const FVector& Velocity, float PoolCm, float PoolLife, bool bDebris)
+{
+	if (Drops.Num() >= 64)
+	{
+		return;
+	}
+	FFuelDrop& Drop = Drops.AddDefaulted_GetRef();
+	Drop.Position = At;
+	Drop.Velocity = Velocity;
+	Drop.PoolCm = PoolCm;
+	Drop.PoolLife = PoolLife;
+	Drop.bDebris = bDebris;
+}
+
+void UBlastFxSubsystem::UpdateFuel(float DeltaTime)
+{
+	if (DeltaTime <= 0.0f)
+	{
+		return;
+	}
+	FuelClock += DeltaTime;
+	const float FireGain = FMath::Max(0.0f, GBlastFireBrightness.GetValueOnGameThread());
+	const bool bRoom = Sprites.Num() < GBlastMaxSprites.GetValueOnGameThread() - 120;
+
+	// Drops in flight: falling in an arc, trailing flame (a burning bit of a blast trails more smoke than flame).
+	for (int32 Index = Drops.Num() - 1; Index >= 0; --Index)
+	{
+		FFuelDrop& Drop = Drops[Index];
+		Drop.Age += DeltaTime;
+		Drop.Velocity.Z -= 980.0f * DeltaTime;
+		Drop.Velocity *= FMath::Max(0.0f, 1.0f - (Drop.bDebris ? 0.6f : 0.35f) * DeltaTime);
+		Drop.Position += Drop.Velocity * DeltaTime;
+		const double Floor = GroundZAt(Drop.Position);
+		const int32 Puffs = BlastTake(Drop.bDebris ? 30.0f : 45.0f, DeltaTime, Drop.Debt);
+		for (int32 I = 0; bRoom && I < Puffs; ++I)
+		{
+			const FVector Back = Drop.Position - Drop.Velocity * DeltaTime * Random.FRand();
+			if (Drop.bDebris && Random.FRand() < 0.6f)
+			{
+				FSprite& Smoke = Add(EKind::Smoke);
+				Smoke.Position = Back;
+				Smoke.Velocity = Random.VRand() * 15.0f + FVector(0.0, 0.0, 20.0);
+				Smoke.Drag = 1.5f;
+				Smoke.Gravity = -10.0f;
+				Smoke.Wind = 0.8f;
+				Smoke.StartCm = 18.0f;
+				Smoke.EndCm = Random.FRandRange(90.0f, 140.0f);
+				Smoke.Life = Random.FRandRange(1.6f, 2.6f);
+				Smoke.FadeIn = 0.03f;
+				Smoke.Opacity = 0.6f;
+				Smoke.FrameFrom = 6.0f;
+				Smoke.FrameTo = 63.0f;
+				Smoke.Glow = 0.5f;
+				Smoke.Tint = BlastSoot;
+				continue;
+			}
+			FSprite& Fire = Add(EKind::Fire);
+			Fire.Position = Back + Random.VRand() * 2.0f;
+			Fire.Velocity = Drop.Velocity * 0.15f + FVector(0.0, 0.0, 40.0);
+			Fire.Drag = 3.0f;
+			Fire.Gravity = -80.0f;
+			Fire.StartCm = Random.FRandRange(20.0f, 30.0f) * (Drop.bDebris ? 0.7f : 1.0f);
+			Fire.EndCm = 10.0f;
+			Fire.Life = Random.FRandRange(0.18f, 0.32f);
+			Fire.FadeIn = 0.0f;
+			Fire.FrameFrom = 2.0f;
+			Fire.FrameTo = 16.0f;
+			Fire.FireGain = FireGain * 1.3f;
+			Fire.Tint = BlastSoot;
+		}
+		if (Drop.Position.Z <= Floor + 2.0 || Drop.Age > 4.0f)
+		{
+			// Landed: it splashes into a small burning patch (a spatter of sparks as it hits).
+			const FVector At(Drop.Position.X, Drop.Position.Y, Floor + 3.0);
+			AddPool(At, Drop.PoolCm, Drop.PoolLife, Drop.bDebris ? 0.5f : 0.75f, Drop.bDebris);
+			for (int32 I = 0; bRoom && I < 3; ++I)
+			{
+				FSprite& Spark = Add(EKind::Spark);
+				FVector Dir = Random.VRand();
+				Dir.Z = FMath::Abs(Dir.Z);
+				Spark.Position = At + FVector(0.0, 0.0, 4.0);
+				Spark.Velocity = Dir * Random.FRandRange(150.0f, 350.0f);
+				Spark.Gravity = 980.0f;
+				Spark.Drag = 1.0f;
+				Spark.Life = Random.FRandRange(0.25f, 0.5f);
+				Spark.StartCm = Spark.EndCm = 1.8f;
+				Spark.FireGain = 2.5f;
+				Spark.FadeIn = 0.0f;
+			}
+			Drops.RemoveAtSwap(Index);
+		}
+	}
+
+	// Pools: spreading out in the first third of a second, burning hard, then dying down over the last 40% of their life.
+	int32 Brightest = INDEX_NONE;
+	float BrightestPower = 0.0f;
+	for (int32 Index = Pools.Num() - 1; Index >= 0; --Index)
+	{
+		FFuelPool& Pool = Pools[Index];
+		Pool.Age += DeltaTime;
+		if (Pool.Age >= Pool.Life)
+		{
+			Pools.RemoveAt(Index);
+			continue;
+		}
+		const float Spread = FMath::Min(1.0f, 0.35f + 0.65f * Pool.Age / 0.35f);
+		const float Radius = Pool.RadiusCm * Spread;
+		const float Left = Pool.Age > Pool.Life * 0.6f ? (Pool.Life - Pool.Age) / (Pool.Life * 0.4f) : 1.0f;
+		const float Burn = Pool.Strength * Left * FMath::Clamp(BlastFlicker(FuelClock, Pool.Seed), 0.6f, 1.25f);
+		const float AreaM2 = PI * FMath::Square(Radius / 100.0f);
+		// Flames over the patch: more on a bigger one, packed so the whole patch burns as one sheet of fire.
+		const float FlameRate = FMath::Clamp(AreaM2 * 30.0f, 6.0f, 80.0f) * FMath::Max(Left, 0.15f) * (Pool.bSmoulder ? 0.6f : 1.0f);
+		const int32 Flames = BlastTake(FlameRate, DeltaTime, Pool.FlameDebt);
+		for (int32 I = 0; bRoom && I < Flames; ++I)
+		{
+			const float Angle = Random.FRand() * 2.0f * PI;
+			const float R = FMath::Sqrt(Random.FRand()) * Radius;
+			// The flames stand tallest in the middle where the fuel is deepest, lower at the thin edge.
+			const float Depth = 1.0f - 0.45f * (R / FMath::Max(Radius, 1.0f));
+			const float Width = (Pool.bSmoulder ? Random.FRandRange(25.0f, 40.0f) : Random.FRandRange(50.0f, 85.0f)) * Depth * FMath::Sqrt(FMath::Max(Burn, 0.05f)) *
+				FMath::Clamp(Pool.RadiusCm / 60.0f, 0.55f, 1.3f);
+			const FVector Base = Pool.Centre + FVector(FMath::Cos(Angle) * R, FMath::Sin(Angle) * R, 0.0);
+			FSprite& Tongue = AddTongue(Base, Width, FireGain * (Pool.bSmoulder ? 0.9f : 1.25f));
+			Tongue.Life *= Pool.bSmoulder ? 0.8f : 1.0f;
+		}
+		// The column of black smoke burning fuel gives (a smoulder's is greyer and thinner).
+		const float SmokeRate = FMath::Clamp(AreaM2 * 2.5f, 0.6f, 5.0f) * Left;
+		const int32 Puffs = BlastTake(SmokeRate, DeltaTime, Pool.SmokeDebt);
+		for (int32 I = 0; bRoom && I < Puffs; ++I)
+		{
+			const FVector At = Pool.Centre + FVector(Random.FRandRange(-0.6f, 0.6f) * Radius, Random.FRandRange(-0.6f, 0.6f) * Radius, Random.FRandRange(90.0f, 150.0f));
+			FSprite& Smoke = AddFireSmoke(At, FMath::Clamp(Radius * 1.1f, 40.0f, 160.0f), Pool.bSmoulder ? 0.45f : 0.75f);
+			if (Pool.bSmoulder)
+			{
+				Smoke.Tint = BlastSoot;
+			}
+		}
+		// Embers lifting off now and then.
+		if (bRoom && Random.FRand() < 3.0f * DeltaTime * Left)
+		{
+			FSprite& Ember = Add(EKind::Spark);
+			Ember.Position = Pool.Centre + FVector(Random.FRandRange(-1.0f, 1.0f) * Radius, Random.FRandRange(-1.0f, 1.0f) * Radius, 30.0);
+			Ember.Velocity = FVector(Random.FRandRange(-40.0f, 40.0f), Random.FRandRange(-40.0f, 40.0f), Random.FRandRange(150.0f, 300.0f));
+			Ember.Gravity = -20.0f;
+			Ember.Drag = 0.8f;
+			Ember.Wind = 0.6f;
+			Ember.Life = Random.FRandRange(1.0f, 2.0f);
+			Ember.StartCm = Ember.EndCm = 1.6f;
+			Ember.FireGain = 2.0f;
+			Ember.FadeIn = 0.0f;
+		}
+		const float Power = Burn * AreaM2;
+		if (Power > BrightestPower)
+		{
+			BrightestPower = Power;
+			Brightest = Index;
+		}
+	}
+
+	// The glow of the fire on everything round it, flickering, from the biggest pool (the others' sim fire has its own lights).
+	if (PoolLight)
+	{
+		float Candelas = 0.0f;
+		if (Pools.IsValidIndex(Brightest))
+		{
+			const FFuelPool& Pool = Pools[Brightest];
+			Candelas = 9000.0f * FMath::Sqrt(BrightestPower) * FMath::Max(GBlastPoolLight.GetValueOnGameThread(), 0.0f) * (Pool.bSmoulder ? 0.5f : 1.0f);
+			PoolLight->SetWorldLocation(Pool.Centre + FVector(Random.FRandRange(-8.0f, 8.0f), Random.FRandRange(-8.0f, 8.0f), 70.0f + 15.0f * FMath::Sin(FuelClock * 7.0f)));
+		}
+		const bool bOn = Candelas > 5.0f;
+		if (PoolLight->IsVisible() != bOn)
+		{
+			PoolLight->SetVisibility(bOn);
+		}
+		if (bOn)
+		{
+			PoolLight->SetIntensity(Candelas);
+		}
+	}
+}
+
 int32 UBlastFxSubsystem::GetSmokeAlive() const
 {
 	int32 Count = 0;
@@ -881,8 +1337,12 @@ void UBlastFxSubsystem::UpdateSprites(float DeltaTime, float Wind)
 		Sprite.Position += Sprite.Velocity * DeltaTime;
 		Sprite.Roll += Sprite.Spin * DeltaTime;
 	}
+	FlameTongues = 0;
+	FireSmoke = 0;
 	for (int32 Index = 0; Index < Sprites.Num(); ++Index)
 	{
+		FlameTongues += Sprites[Index].Source == 1 ? 1 : 0;
+		FireSmoke += Sprites[Index].Source == 2 ? 1 : 0;
 		if (Sprites[Index].Age >= 0.0f)
 		{
 			ByKind[static_cast<int32>(Sprites[Index].Kind)].Add(FDrawn{Index, FVector::DistSquared(Sprites[Index].Position, CameraAt)});
@@ -934,8 +1394,24 @@ void UBlastFxSubsystem::UpdateSprites(float DeltaTime, float Wind)
 			// The flipbooks' clouds fill less of their square than they used to (they no longer touch its edges): drawn bigger.
 			const float Scale = Sprite.Kind == EKind::Haze ? 1.0f : BlastFxData::SpriteScale;
 			const float SizeCm = FMath::Lerp(Sprite.StartCm, Sprite.EndCm, 1.0f - FMath::Square(1.0f - T)) * Scale;
-			const FQuat Facing = FQuat(ToCamera, FMath::DegreesToRadians(Sprite.Roll)) * FRotationMatrix::MakeFromZX(ToCamera, CameraRight).ToQuat();
-			Transforms.Add(FTransform(Facing, Sprite.Position, FVector(SizeCm / 100.0f, SizeCm / 100.0f, 1.0f)));
+			FQuat Facing;
+			float Tall = 1.0f;
+			if (Sprite.Stretch != 1.0f)
+			{
+				// A tongue of flame (or a rocket's plume): its long side kept along its axis as seen (world up for a fire),
+				// turned the same way round as an unrolled square sprite, with only a little sway.
+				const FVector Axis = Sprite.Axis.IsNearlyZero() ? FVector::UpVector : Sprite.Axis;
+				const FVector Long = FVector::VectorPlaneProject(Axis, ToCamera).GetSafeNormal();
+				const FVector Side = Long.IsNearlyZero() ? CameraRight : FVector::CrossProduct(ToCamera, Long);
+				Facing = FQuat(ToCamera, FMath::DegreesToRadians(Sprite.Roll)) * FRotationMatrix::MakeFromZX(ToCamera, Side).ToQuat();
+				// Seen end on (looking straight down on a fire) the tongue foreshortens to a square.
+				Tall = FMath::Lerp(1.0f, Sprite.Stretch, Long.IsNearlyZero() ? 0.0f : static_cast<float>(FVector::VectorPlaneProject(Axis, ToCamera).Size() / FMath::Max(Axis.Size(), 1e-4)));
+			}
+			else
+			{
+				Facing = FQuat(ToCamera, FMath::DegreesToRadians(Sprite.Roll)) * FRotationMatrix::MakeFromZX(ToCamera, CameraRight).ToQuat();
+			}
+			Transforms.Add(FTransform(Facing, Sprite.Position, FVector(SizeCm / 100.0f, SizeCm * Tall / 100.0f, 1.0f)));
 			if (Sprite.Kind == EKind::Haze)
 			{
 				Out[0] = Sprite.Opacity * (1.0f - T);
@@ -969,6 +1445,24 @@ void UBlastFxSubsystem::UpdateSprites(float DeltaTime, float Wind)
 void UBlastFxSubsystem::UpdateLight(float DeltaTime)
 {
 	FlashAge += DeltaTime;
+	MotorAge += DeltaTime;
+	if (MotorLight)
+	{
+		// The motor's light goes out a moment after its rocket stops calling (it hit, or flew out of sight).
+		const bool bMotor = MotorAge < 0.12f;
+		if (MotorLight->IsVisible() != bMotor)
+		{
+			MotorLight->SetVisibility(bMotor);
+		}
+		if (bMotor)
+		{
+			MotorLight->SetIntensity(14000.0f * FMath::Max(GBlastPoolLight.GetValueOnGameThread(), 0.0f) * FMath::Clamp(BlastFlicker(FlashAge * 3.0f, 0.3f), 0.7f, 1.25f));
+		}
+		if (MotorAge > 0.5f)
+		{
+			MotorNearest = 0.0;
+		}
+	}
 	if (!FlashLight)
 	{
 		return;
@@ -1064,6 +1558,7 @@ void UBlastFxSubsystem::Tick(float DeltaTime)
 	// Frozen while the game is paused, real time otherwise (as the fire).
 	const float Step = Source->GetSpeed() > 0 ? DeltaTime : 0.0f;
 	const float Wind = static_cast<float>(Source->GetSim()->weather().wind());
+	UpdateFuel(Step);
 	UpdateSprites(Step, Wind);
 	UpdateLight(Step);
 	UpdateScorches(Step);

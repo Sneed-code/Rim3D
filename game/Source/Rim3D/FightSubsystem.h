@@ -225,6 +225,8 @@ public:
 	int32 GetCasingsEjected() const { return CasingsEjected; }
 	/** Knocks every severed piece the line from `From` to `To` passes through (body-health.md part F, "Physics"). */
 	void PushSeveredPieces(const FVector& From, const FVector& To, const FVector& Dir, float Damage);
+	/** How many times a blow, a swing or a passing foot knocked loose gore (a severed head, a gib, guts). */
+	int32 GetLooseKicks() const { return LooseKicks; }
 	int32 GetFireOrders() const { return FireOrders; }
 	int32 GetHitMarkers() const { return HitMarkers; }
 	int32 GetActiveTracers() const { return Tracers.Num(); }
@@ -443,6 +445,13 @@ private:
 	int32 TrunksBurst = 0;
 	int32 GibsThrown = 0;
 	int32 SeveredPiecesPushed = 0;
+	int32 LooseKicks = 0;
+	/** Swings and feet knock loose gore about (sneed, 2026-11-23: a loose head must obey physics when hit again). */
+	void UpdateLooseKicks(const USimSubsystem& Bridge);
+	/** Each pawn's melee phase last frame (a swing's blow is the moment its wind-up ends). */
+	TMap<uint32, uint8> LastMeleePhase;
+	/** When each loose piece was last kicked (real seconds), so a foot standing on it doesn't keep kicking it. */
+	TMap<TWeakObjectPtr<AActor>, double> LastKicked;
 	int32 FireOrders = 0;
 	int32 HitMarkers = 0;
 	int32 HitboxesDrawn = 0;

@@ -49,6 +49,9 @@ namespace
 		int32 ScorchesAtStart = 0;
 		int32 MaxGrenades = 0;
 		int32 MaxDebris = 0;
+		int32 MaxPools = 0;
+		int32 MaxDrops = 0;
+		int32 MaxRockets = 0;
 		int32 ShotsAtStart = 0;
 		int32 ShakesAtStart = 0;
 		int32 ExplosionsAtStart = 0;
@@ -72,7 +75,7 @@ namespace
 		void Reset()
 		{
 			MaxKickPitch = MaxFeelPitch = MinFeelPitch = MaxAimDirectionError = MaxShake = MaxBlur = MaxRollAngle = MaxFlash = 0.0f;
-			MaxBlast = MaxGrenades = MaxDebris = MaxSmoke = 0;
+			MaxBlast = MaxGrenades = MaxDebris = MaxSmoke = MaxPools = MaxDrops = MaxRockets = 0;
 			MaxCameraTrail = CameraTrailAtEnd = 0.0;
 		}
 	};
@@ -122,7 +125,10 @@ void USmokeTestSubsystem::BuildFeelPhases()
 			State->MaxFlash = FMath::Max(State->MaxFlash, Fx->GetFlashCandelas());
 			State->MaxBlast = FMath::Max(State->MaxBlast, Fx->GetSpritesAlive());
 			State->MaxSmoke = FMath::Max(State->MaxSmoke, Fx->GetSmokeAlive());
+			State->MaxPools = FMath::Max(State->MaxPools, Fx->GetFuelPools());
+			State->MaxDrops = FMath::Max(State->MaxDrops, Fx->GetFuelDrops());
 		}
+		State->MaxRockets = FMath::Max(State->MaxRockets, F->GetRocketsDrawn());
 		State->MaxCameraTrail = FMath::Max(State->MaxCameraTrail, Body->GetCameraTrail());
 		State->CameraTrailAtEnd = Body->GetCameraTrail();
 		State->MaxBlast = FMath::Max(State->MaxBlast, F->GetBlastParticles());
@@ -436,6 +442,15 @@ void USmokeTestSubsystem::BuildFeelPhases()
 					State->PelvisBackAt = PhaseTime;
 				}
 			}
+			// A frame by frame trace of the roll's end for the log (where the hips and the actor are, the clip's set-back).
+			if (Me->rollPhase != 0 || Me->motionClip.valid() || (State->bHavePelvis && FVector::Dist2D(Pelvis, State->LastPelvis) > 6.0))
+			{
+				const FVector ActorAt = Drawn->GetActorLocation();
+				const FVector Set = Drawn->GetMotionOffset();
+				UE_LOG(LogTemp, Display, TEXT("ROLLTRACE t=%.3f phase=%d left=%d clip=%d mt=%.3f actor=(%.0f,%.0f) pelvis=(%.0f,%.0f) off=(%.0f,%.0f) clips=%d"),
+					PhaseTime, static_cast<int32>(Me->rollPhase), Me->rollStepsLeft, Me->motionClip.valid() ? 1 : 0, Me->motionTime, ActorAt.X, ActorAt.Y,
+					Pelvis.X, Pelvis.Y, Set.X, Set.Y, Drawn->GetMotionClipsPlayed());
+			}
 			State->LastPelvis = Pelvis;
 			State->bHavePelvis = true;
 		}
@@ -464,7 +479,9 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		{
 			Fail(FString::Printf(TEXT("feel_roll: the pawn moved %.0f cm (the sim rolls it 4 m)"), State->RollMoved));
 		}
-		if (State->MaxRollAngle < 330.0f || !Actor || Actor->GetRollsSeen() < 1 || Actor->GetRollAngle() != 0.0f)
+		// The roll is the sim's motion clip (Motion_Roll, Mixamo's stand-to-roll): the clip itself turns the body over, and
+		// the old procedural tumble (RollAngle) stays at 0 while it plays. Either drawing counts.
+		if ((State->MaxRollAngle < 330.0f && (!Actor || Actor->GetMotionClipsPlayed() < 1)) || !Actor || Actor->GetRollsSeen() < 1 || Actor->GetRollAngle() != 0.0f)
 		{
 			Fail(FString::Printf(TEXT("feel_roll: the body turned over %.0f degrees at most and %.0f now (rolls drawn %d)"), State->MaxRollAngle, Actor ? Actor->GetRollAngle() : -1.0f, Actor ? Actor->GetRollsSeen() : 0));
 		}
@@ -763,8 +780,9 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	FPhase Molotov;
 	Molotov.Name = TEXT("blast_molotov");
 	Molotov.WarmupSeconds = 0.2f;
-	Molotov.MeasureSeconds = 1.5f;
-	Molotov.ScreenshotAt = 0.3f;
+	// Pictured a second in, when the splash lies burning as liquid fire (the whoomp is over by then).
+	Molotov.MeasureSeconds = 2.0f;
+	Molotov.ScreenshotAt = 1.1f;
 	Molotov.Setup = [=, this]()
 	{
 		State->Reset();
@@ -776,7 +794,12 @@ void USmokeTestSubsystem::BuildFeelPhases()
 	Molotov.OnFrame = Watch;
 	Molotov.Verify = [=, this]()
 	{
-		Notes.Add(FString::Printf(TEXT("blast_molotov: %d sprites at most, light up to %.0f cd"), State->MaxBlast, State->MaxFlash));
+		Notes.Add(FString::Printf(TEXT("blast_molotov: %d sprites at most, light up to %.0f cd, %d burning pools and %d burning drops at most: look for a ragged sheet of flame tongues on the ground under black smoke"),
+			State->MaxBlast, State->MaxFlash, State->MaxPools, State->MaxDrops));
+		if (Fx() && Fx()->IsReady() && (State->MaxPools < 3 || State->MaxDrops < 5))
+		{
+			Fail(FString::Printf(TEXT("blast_molotov: %d burning pools and %d drops (the splash should lie burning with drops flung out)"), State->MaxPools, State->MaxDrops));
+		}
 		FeelSmokeSet(TEXT("Sky.Hour"), -1.0f);
 	};
 	Phases.Add(MoveTemp(Molotov));

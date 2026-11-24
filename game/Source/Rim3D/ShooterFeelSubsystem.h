@@ -92,6 +92,8 @@ public:
 	// --- Grenades and blasts, for the smoke test and the screen ---
 
 	int32 GetGrenadesDrawn() const { return GrenadesDrawn; }
+	/** Rockets in flight drawn as the rocket model (RocketShape.h), nose along the way they fly. */
+	int32 GetRocketsDrawn() const { return RocketsDrawn; }
 	int32 GetExplosionsSeen() const { return ExplosionsSeen; }
 	int32 GetShotsFelt() const { return ShotsFelt; }
 	int32 GetHitsFelt() const { return HitsFelt; }
@@ -151,6 +153,8 @@ private:
 	UStaticMesh* MakeSolid(int32 Shape, float X, float Y, float Z, const FLinearColor& Color);
 	/** A lumpy clod of soil or a stone, about 10 cm across, smooth shaded with mottled colour, with a sphere to roll on. */
 	UStaticMesh* MakeClod(int32 Seed, const FLinearColor& Color, float Lumpiness);
+	/** The rocket model (RocketShape.h): olive body, yellow band, swept fins, dark nozzle; 55 cm long along +X. */
+	UStaticMesh* MakeRocket();
 	UInstancedStaticMeshComponent* MakeInstanced(UStaticMesh* Mesh);
 	void Advance(float DeltaTime);
 	void UpdateKick(float DeltaTime, const colony::Sim& Sim, const USimSubsystem& Bridge);
@@ -166,6 +170,9 @@ private:
 
 	UPROPERTY()
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ParticleInstances;
+
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> RocketInstances;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMesh>> KeepMeshes;
@@ -208,6 +215,7 @@ private:
 	float FlashPeak = 0.0f;
 	FVector FlashAt = FVector::ZeroVector;
 	int32 GrenadesDrawn = 0;
+	int32 RocketsDrawn = 0;
 	int32 ExplosionsSeen = 0;
 	int32 ShotsFelt = 0;
 	int32 HitsFelt = 0;

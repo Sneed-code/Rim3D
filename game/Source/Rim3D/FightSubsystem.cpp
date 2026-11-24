@@ -1,4 +1,7 @@
 #include "FightSubsystem.h"
+
+#include "GoreGibActor.h"
+#include "GoreOrgans.h"
 #include "ColonySim/Sound.h"
 #include "SoundSubsystem.h"
 
@@ -931,6 +934,7 @@ void UFightSubsystem::Tick(float DeltaTime)
 		ResetEffects();
 	}
 	UpdatePlayerInput();
+	UpdateLooseKicks(*Bridge);
 	if (EffectsOn())
 	{
 		EnsureEffects();
@@ -1001,6 +1005,12 @@ void UFightSubsystem::UpdateTracers(float DeltaTime, float GameDelta)
 					Found = &View;
 					break;
 				}
+			}
+			// A rocket or a launcher's shell is drawn by UShooterFeelSubsystem (the rocket model, the shell), not as a streak.
+			if (Found && Found->def.valid() && Bridge->GetDefs() && Bridge->GetDefs()->get(Found->def).has("explosion"))
+			{
+				Tracers.RemoveAtSwap(Index);
+				continue;
 			}
 			if (Found)
 			{
@@ -1414,6 +1424,20 @@ int32 UFightSubsystem::GetHeldGuns() const
 void UFightSubsystem::SpawnMeleeImpact(colony::ProjectileHitKind Kind, colony::Entity Attacker, colony::Entity Target, const FVector& At,
 	const FVector& Direction, int32 Part, float Amount)
 {
+	// A blow knocks what lies loose where it lands (a severed head, gibs, guts), effects on or not.
+	{
+		const FVector Dir = Direction.GetSafeNormal(UE_SMALL_NUMBER, FVector::ForwardVector);
+		const float Speed = FMath::Clamp(260.0f + 12.0f * FMath::Max(Amount, 0.0f), 260.0f, 700.0f);
+		for (const TPair<uint32, TWeakObjectPtr<ASeveredPieceActor>>& Pair : SeveredPieces)
+		{
+			if (ASeveredPieceActor* Piece = Pair.Value.Get(); Piece && FVector::Dist(Piece->GetActorLocation(), At) < Piece->GetReachCm() + 25.0f)
+			{
+				Piece->Push(Dir * Speed + FVector(0.0, 0.0, Speed * 0.4f), At);
+				++SeveredPiecesPushed;
+			}
+		}
+		GorePushRadial(GetWorld(), At, 45.0f, Speed * 0.4f, Dir * Speed);
+	}
 	if (!EffectsOn())
 	{
 		return;
@@ -1574,6 +1598,115 @@ void UFightSubsystem::PushSeveredPieces(const FVector& From, const FVector& To, 
 		Piece->Push(Dir * Speed + FVector(0.0, 0.0, Speed * 0.35f), Closest);
 		++SeveredPiecesPushed;
 	}
+	// Gibs, organs and guts on the line too.
+	GorePushLine(GetWorld(), From, To, Dir, Damage);
+}
+
+void UFightSubsystem::UpdateLooseKicks(const USimSubsystem& Bridge)
+{
+	UWorld* World = GetWorld();
+	TArray<AGoreGibActor*> Gibs;
+	AGoreGibActor::GetLive(World, Gibs);
+	TArray<AGoreRopeActor*> Ropes;
+	AGoreRopeActor::GetLive(World, Ropes);
+	TArray<ASeveredPieceActor*> Pieces;
+	for (const TPair<uint32, TWeakObjectPtr<ASeveredPieceActor>>& Pair : SeveredPieces)
+	{
+		if (Pair.Value.IsValid())
+		{
+			Pieces.Add(Pair.Value.Get());
+		}
+	}
+	if (Gibs.Num() == 0 && Ropes.Num() == 0 && Pieces.Num() == 0)
+	{
+		LastMeleePhase.Reset();
+		LastKicked.Reset();
+		return;
+	}
+	const double Now = FPlatformTime::Seconds();
+	for (auto It = LastKicked.CreateIterator(); It; ++It)
+	{
+		if (!It.Key().IsValid() || Now - It.Value() > 2.0)
+		{
+			It.RemoveCurrent();
+		}
+	}
+	const auto Ready = [this, Now](AActor* Thing) { const double* When = LastKicked.Find(Thing); return !When || Now - *When > 0.4; };
+	const auto Kick = [&](AActor* Thing, const FVector& Delta, const FVector& At)
+	{
+		LastKicked.Add(Thing, Now);
+		++LooseKicks;
+		if (ASeveredPieceActor* Piece = Cast<ASeveredPieceActor>(Thing))
+		{
+			Piece->Push(Delta, At);
+		}
+		else if (AGoreGibActor* Gib = Cast<AGoreGibActor>(Thing))
+		{
+			Gib->Push(Delta);
+		}
+		else if (AGoreRopeActor* Rope = Cast<AGoreRopeActor>(Thing))
+		{
+			Rope->Push(Delta, At, 25.0f);
+		}
+	};
+	// Everything loose with where it is.
+	TArray<TPair<AActor*, FVector>> Loose;
+	for (ASeveredPieceActor* Piece : Pieces)
+	{
+		Loose.Add({Piece, Piece->GetActorLocation()});
+	}
+	for (AGoreGibActor* Gib : Gibs)
+	{
+		Loose.Add({Gib, Gib->GetActorLocation()});
+	}
+	for (AGoreRopeActor* Rope : Ropes)
+	{
+		Loose.Add({Rope, Rope->GetMiddle()});
+	}
+	TMap<uint32, uint8> Phases;
+	for (const colony::ThingView& View : Bridge.GetCurrentSnapshot().things)
+	{
+		if (View.category != colony::ThingCategory::Pawn || View.dead || View.downed)
+		{
+			continue;
+		}
+		const uint32 Id = static_cast<uint32>(entt::to_integral(View.id));
+		Phases.Add(Id, static_cast<uint8>(View.meleePhase));
+		FVector Here;
+		if (!Bridge.GetBlendedLocation(View.id, Here))
+		{
+			continue;
+		}
+		const FVector Facing = FVector(View.facingX, View.facingY, 0.0).GetSafeNormal(UE_SMALL_NUMBER, FVector::ForwardVector);
+		// A swing's blow (its wind-up just ended): whatever lies within its reach in front flies off along the swing.
+		const uint8* Was = LastMeleePhase.Find(Id);
+		const bool bBlow = Was && *Was == static_cast<uint8>(colony::MeleePhase::Windup) && View.meleePhase != colony::MeleePhase::Windup;
+		// A foot going through it: a pawn walking or running knocks what lies at its feet along.
+		const FVector Walk(View.vx * colony::kStepsPerRealSecondAt1x * 100.0f, View.vy * colony::kStepsPerRealSecondAt1x * 100.0f, 0.0f);
+		const bool bMoving = Walk.Size2D() > 90.0;
+		if (!bBlow && !bMoving)
+		{
+			continue;
+		}
+		for (const TPair<AActor*, FVector>& Each : Loose)
+		{
+			const FVector Off = Each.Value - Here;
+			const double Flat = Off.Size2D();
+			if (Flat > 170.0 || FMath::Abs(Off.Z) > 200.0 || !Ready(Each.Key))
+			{
+				continue;
+			}
+			if (bBlow && Flat < 160.0 && FVector::DotProduct(FVector(Off.X, Off.Y, 0.0).GetSafeNormal(), Facing) > 0.25)
+			{
+				Kick(Each.Key, Facing * 420.0f + FVector(0.0, 0.0, 200.0f), Each.Value - Facing * 5.0);
+			}
+			else if (bMoving && Flat < 32.0 && Off.Z < 45.0)
+			{
+				Kick(Each.Key, Walk * 1.3f + FVector(0.0, 0.0, 120.0f), Each.Value - Walk.GetSafeNormal() * 5.0);
+			}
+		}
+	}
+	LastMeleePhase = MoveTemp(Phases);
 }
 
 int32 UFightSubsystem::GetSeveredPiecesShown() const
