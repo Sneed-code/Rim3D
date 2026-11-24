@@ -486,6 +486,10 @@ int32 GoreBurstTrunk(UWorld* World, const TArray<USkinnedMeshComponent*>& Meshes
 	}
 	if (!bOrgans || GGoreOrgans.GetValueOnGameThread() == 0)
 	{
+		if (UBloodSubsystem* Blood = World->GetSubsystem<UBloodSubsystem>(); Blood && Blood->IsReady())
+		{
+			Blood->AddBurstPool(Centre, Victim, 120.0f * BodyScale, SkinMesh ? const_cast<AActor*>(SkinMesh->GetOwner()) : nullptr);
+		}
 		return AGoreGibActor::Burst(World, Centre, BodyScale, Strength, Skin, Seed, Victim);
 	}
 	FRandomStream Random(Seed);
@@ -628,6 +632,9 @@ int32 GoreBurstTrunk(UWorld* World, const TArray<USkinnedMeshComponent*>& Meshes
 			Pool.BleedSecondsWithoutSim = 2.0f;
 			Blood->AddHit(Pool);
 		}
+		// One big pool spreading out where it burst (sneed 2026-11-24: "when the torso explodes it should leave a big
+		// blood puddle where it explodes"), about 1.2 m across a man-sized body's middle.
+		Blood->AddBurstPool(Centre, Victim, 120.0f * S, SkinMesh ? const_cast<AActor*>(SkinMesh->GetOwner()) : nullptr);
 	}
 	UE_LOG(LogTemp, Log, TEXT("Gibs: a trunk burst open: %d slabs (sliced %d), %d organs, %d gut ropes, %d pieces in all"), Slabs.Num(), bSliced ? 1 : 0, OrganIndex,
 		Ropes, Made);

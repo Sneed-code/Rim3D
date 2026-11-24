@@ -806,12 +806,14 @@ void UBlastFxSubsystem::AddTrail(const FVector& At, const FVector& Back, const F
 	const bool bRocket = Kind == TEXT("rocket");
 	const bool bFlame = Kind == TEXT("flame");
 	// Puffs a second, whatever the frame rate; spread back along the way it came so they don't bunch at the frame's end.
-	const float Rate = bRocket ? 45.0f : (bFlame ? 30.0f : 20.0f);
-	const int32 Count = FMath::Clamp(FMath::FloorToInt32(DeltaTime * Rate + Random.FRand()), 0, 6);
+	// A rocket's smoke is a thin trail behind it (sneed 2026-11-24: a third of the old radius): more, smaller puffs, so it
+	// stays one unbroken line.
+	const float Rate = bRocket ? 90.0f : (bFlame ? 30.0f : 20.0f);
+	const int32 Count = FMath::Clamp(FMath::FloorToInt32(DeltaTime * Rate + Random.FRand()), 0, bRocket ? 10 : 6);
 	const float FireGain = FMath::Max(0.0f, GBlastFireBrightness.GetValueOnGameThread());
 	for (int32 I = 0; I < Count; ++I)
 	{
-		const FVector Where = At + Back * Random.FRandRange(20.0f, 60.0f) + Random.VRand() * 4.0f;
+		const FVector Where = At + Back * Random.FRandRange(30.0f, 70.0f) + Random.VRand() * (bRocket ? 1.5f : 4.0f);
 		if (bFlame)
 		{
 			FSprite& Fire = Add(EKind::Fire);
@@ -829,14 +831,14 @@ void UBlastFxSubsystem::AddTrail(const FVector& At, const FVector& Back, const F
 		}
 		FSprite& Smoke = Add(EKind::Smoke);
 		Smoke.Position = Where;
-		Smoke.Velocity = Random.VRand() * (bRocket ? 40.0f : 15.0f) + FVector(0.0, 0.0, 15.0);
+		Smoke.Velocity = Random.VRand() * (bRocket ? 13.0f : 15.0f) + FVector(0.0, 0.0, bRocket ? 5.0 : 15.0);
 		Smoke.Drag = 1.5f;
 		Smoke.Gravity = -12.0f;
 		Smoke.Wind = 0.7f;
 		// A flipbook's early cloud fills only about a third of its square: these sizes make a trail about half a metre wide
 		// at once, swelling to a couple of metres (PC round 13: 22 cm puffs were dots at 13 m).
-		Smoke.StartCm = bRocket ? 70.0f : 25.0f;
-		Smoke.EndCm = (bRocket ? Random.FRandRange(280.0f, 380.0f) : Random.FRandRange(90.0f, 140.0f));
+		Smoke.StartCm = bRocket ? 24.0f : 25.0f;
+		Smoke.EndCm = (bRocket ? Random.FRandRange(95.0f, 125.0f) : Random.FRandRange(90.0f, 140.0f));
 		Smoke.Life = bRocket ? Random.FRandRange(3.0f, 4.2f) : Random.FRandRange(1.0f, 1.6f);
 		Smoke.FadeIn = 0.03f;
 		Smoke.Opacity = bRocket ? 0.7f : 0.45f;

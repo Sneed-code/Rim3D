@@ -7,6 +7,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Hash.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Hold.h"
 #include "ColonySim/Inspirations.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Map.h"
@@ -118,6 +119,7 @@ struct CombatModel {
     std::vector<DamageMix> blastMix;   // `explosionMix`, else `mix`: the same type set off by an explosion
     std::vector<Kind> kinds;        // by Things DefId value
     std::vector<uint8_t> melee;     // by Things DefId value: 1 for a melee weapon (an item with `tools`, F8)
+    std::vector<uint8_t> bothHands; // by Things DefId value: 1 for a weapon held in both hands (`twoHanded`, or a two-hand hold)
     // What a weapon's quality and stuff do to it (QualityRules levels, stuffProps.statFactors).
     struct WeaponQuality {
         float melee = 1.0f;     // damage and armor penetration of a blow
@@ -296,6 +298,7 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
     kinds.resize(defs.size());
     blast.resize(defs.size());
     melee.resize(defs.size(), 0);
+    bothHands.resize(defs.size(), 0);
     stuffSharp.resize(defs.size(), 1.0f);
     stuffBlunt.resize(defs.size(), 1.0f);
     slot.resize(defs.size(), 255);
@@ -524,6 +527,10 @@ CombatModel::CombatModel(const DefDatabase& defs, const HealthSystem& health) {
         if (def.has("tools") && !def.has("race") && !def.has("verbs.0.defaultProjectile")) {
             melee[id.value] = 1;
             slot[id.value] = static_cast<uint8_t>(WeaponSlot::Melee);
+        }
+        if (def.has("verbs.0.defaultProjectile") || melee[id.value] != 0) {
+            WeaponHold hold;
+            bothHands[id.value] = def.flag("twoHanded") || (holdFor(defs, id, hold) && hold.hands >= 2) ? 1 : 0;
         }
         if (def.has("apparel")) {
             Apparel& a = apparel[id.value];
@@ -2400,6 +2407,47 @@ bool CombatSystem::isMeleeWeapon(DefId def) const {
     return def.valid() && def.value < model_->melee.size() && model_->melee[def.value] != 0;
 }
 
+bool CombatSystem::needsBothHands(DefId def) const {
+    return def.valid() && def.value < model_->bothHands.size() && model_->bothHands[def.value] != 0;
+}
+
+bool CombatSystem::oneArmed(Entity pawn) const {
+    constexpr uint16_t arms = kSeveredLeftArm | kSeveredLeftForearm | kSeveredRightArm | kSeveredRightForearm;
+    return (health_.severed(pawn) & arms) != 0;
+}
+
+// sneed 2026-11-24: a pawn that has lost an arm (or a forearm) can't hold a weapon that needs both hands: it drops it
+// where it stands (a one-handed weapon it keeps); one stowed for later goes too.
+void CombatSystem::dropTwoHandersOfOneArmed() {
+    entt::registry& reg = things_.registry();
+    scratch_.clear();
+    for (const auto [pawn, gear] : reg.view<const Gear>().each()) {
+        bool holds = gear.weapon != kNoEntity && reg.valid(gear.weapon) && needsBothHands(reg.get<Thing>(gear.weapon).def);
+        for (const Entity e : gear.stowed) {
+            holds = holds || (reg.valid(e) && needsBothHands(reg.get<Thing>(e).def));
+        }
+        if (holds && oneArmed(pawn)) {
+            scratch_.push_back(pawn);
+        }
+    }
+    std::sort(scratch_.begin(), scratch_.end());
+    for (const Entity pawn : scratch_) {
+        std::vector<Entity> gone;
+        const Gear& gear = reg.get<Gear>(pawn);
+        if (gear.weapon != kNoEntity && reg.valid(gear.weapon) && needsBothHands(reg.get<Thing>(gear.weapon).def)) {
+            gone.push_back(gear.weapon);
+        }
+        for (const Entity e : gear.stowed) {
+            if (reg.valid(e) && needsBothHands(reg.get<Thing>(e).def)) {
+                gone.push_back(e);
+            }
+        }
+        for (const Entity e : gone) {
+            drop(pawn, e);
+        }
+    }
+}
+
 namespace {
 int combatQualityOf(const entt::registry& reg, Entity item, int fallback, size_t levels) {
     if (item == kNoEntity || !reg.valid(item)) {
@@ -2455,6 +2503,7 @@ bool CombatSystem::isGun(DefId def) const {
 void CombatSystem::step(Rng& rng) {
     entt::registry& reg = things_.registry();
     stepRolls();
+    dropTwoHandersOfOneArmed();
     motion_->step();  // rolls, sidesteps, staggers, knockdowns and lunging swings move their bodies
     stepKicks();
     stepSwitches();
@@ -3448,6 +3497,9 @@ bool CombatSystem::equip(Entity pawn, Entity item, std::string* why) {
     const bool weapon = model_->gun(def) != nullptr || isMeleeWeapon(def);
     if (!weapon && wear == nullptr) {
         return fail("that is neither a weapon nor apparel");
+    }
+    if (weapon && needsBothHands(def) && oneArmed(pawn)) {
+        return fail("one arm can't hold a two-handed weapon");
     }
     Gear& gear = reg.get_or_emplace<Gear>(pawn);
     if (weapon) {

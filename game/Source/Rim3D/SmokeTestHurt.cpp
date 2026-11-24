@@ -724,6 +724,7 @@ void USmokeTestSubsystem::BuildHurtPhases()
 			PhaseNumbers.Add(TEXT("severed_sim"), Now ? Now->severed : 0);
 			PhaseNumbers.Add(TEXT("severed_shown"), Actor ? Actor->GetSeveredShown() : 0);
 			PhaseNumbers.Add(TEXT("stump_caps"), Actor ? Actor->GetSeveredCaps() : 0);
+			PhaseNumbers.Add(TEXT("strands_with_head"), Actor ? Actor->GetSeveredStrandsMoved() : 0);
 			PhaseNumbers.Add(TEXT("real_body"), Actor && Actor->GetMetaHuman() ? 1 : 0);
 			if (const UBloodSubsystem* Blood = GetWorld()->GetSubsystem<UBloodSubsystem>())
 			{
@@ -735,7 +736,8 @@ void USmokeTestSubsystem::BuildHurtPhases()
 				Fail(TEXT("dismember: 400 blunt damage to the torso did not kill the colonist"));
 				return;
 			}
-			if (Now->severed != All || SimPieces != 5)
+			// The overkill may carry on into the trunk (kSeveredTrunk, sneed 2026-11-22: overkill carries until gibbed): never a piece.
+			if ((Now->severed & ~static_cast<uint16>(colony::kSeveredTrunk)) != All || SimPieces != 5)
 			{
 				Fail(FString::Printf(TEXT("dismember: the sim took off 0x%x (0x%x expected) and left %d pieces (5 expected)"), Now->severed, All, SimPieces));
 			}

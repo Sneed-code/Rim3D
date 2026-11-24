@@ -1,4 +1,5 @@
 #include "PawnAnimInstance.h"
+#include "PawnActor.h"
 
 #include "Animation/AnimInstanceProxy.h"
 #include "Animation/AnimMontage.h"
@@ -2238,4 +2239,13 @@ void USimPawnAnimInstance::AdvanceUpper(float DeltaSeconds)
 	}
 	UpperWeight = FMath::FInterpConstantTo(UpperWeight, UpperWeightTarget, Dt, UpperWeightRate);
 	SpineBend = FMath::FInterpConstantTo(SpineBend, SpineBendTarget, Dt, 60.0f);
+}
+
+void USimPawnAnimInstance::NativePostEvaluateAnimation()
+{
+	Super::NativePostEvaluateAnimation();
+	if (ASimPawnActor* Pawn = Cast<ASimPawnActor>(GetOwningActor()))
+	{
+		Pawn->RefreshMotionSetBack();
+	}
 }

@@ -113,6 +113,10 @@ public:
 	/** A blow on a body. Drawn at the next tick, once the sim's injury events of this step are in. */
 	void AddHit(const FBloodHit& Hit);
 
+	/** A big pool that spreads out on the ground below Centre over a second or two, with splashes round its rim (a
+	 *  torso burst open, sneed 2026-11-24). Victim gives its fluid (red without one). */
+	void AddBurstPool(const FVector& Centre, colony::Entity Victim, float RadiusCm, AActor* Ignore = nullptr);
+
 	/** Wipes every drop, stain, pool and bleeding wound (the creator's Clean up). */
 	void CleanAll();
 
@@ -392,6 +396,15 @@ private:
 	TArray<FBodyStain> BodyStains;
 	TArray<FBleed> Bleeds;
 	TArray<FPool> Pools;
+	/** A burst pool spreading to its size (AddBurstPool). */
+	struct FBurstPool
+	{
+		int32 Stain = -1;
+		float RadiusCm = 0.0f;
+		float TargetCm = 0.0f;
+	};
+	TArray<FBurstPool> BurstPools;
+	void UpdateBurstPools(float Dt);
 	TArray<FPendingHit> Pending;
 	TMap<uint32, FInjury> Injuries;     // by pawn id: its worst injury of the latest step
 	TMap<uint32, int64> SimHitSteps;    // by pawn id: the step the sim last reported a bullet or blow landing on it

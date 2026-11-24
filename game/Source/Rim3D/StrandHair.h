@@ -67,6 +67,10 @@ public:
 	void Want(USkeletalMeshComponent* Body, const FString& Base, const FString& CreatorStyle, const FLinearColor& Colour, const TArray<int32>& WigSections,
 		bool bUnderHat = false);
 
+	/** Body's strands handed over (a severed head takes them with it, still simulated): the groom, which this
+	 *  subsystem no longer moves, hides or resets; null if Body wears none now. */
+	UGroomComponent* Release(const USkeletalMeshComponent* Body);
+
 	/** How many people wear strands now (for tests and notes). */
 	int32 NumWearing() const;
 

@@ -42,6 +42,7 @@
     "grip": "Blade",
     "attackStyle": "Club",
     "main": [-4, 0, 0],
+    "blockOff": [24, 0, 0],
     "stance": "Mixamo/MeleeAxe/A_ProMeleeAxeStandingIdle",
     "block": "Mixamo/MeleeAxe/A_ProMeleeAxeStandingBlockIdle",
     "shieldStance": "Mixamo/SwordandShield/A_ProSwordAndShieldSwordAndShieldIdle",

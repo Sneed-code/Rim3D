@@ -29,7 +29,7 @@
     {"cues": "^Shot_(Rifle|AssaultRifle)$", "from": ["oga-firearms", "oga-gunshots"], "pick": "rifle, carbine and automatic shots"},
     {"cues": "^Shot_(Shotgun|Launcher)$", "from": ["oga-firearms", "oga-gunshots"], "pick": "shotgun, pump action"},
     {"cues": "^Shot_(Turret|Foam)$", "from": ["oga-firearms", "kenney-impact"], "pick": "turret: automatic shot; foam: a hiss or thump (sonniss-gdc if nothing fits)"},
-    {"cues": "^Gun_(Reload|Switch)$", "from": ["oga-firearms", "kenney-rpg"], "pick": "bolt, slide and metal click"},
+    {"cues": "^Gun_(Reload|Switch|Pump)$", "from": ["oga-firearms", "kenney-rpg"], "pick": "bolt, slide, shotgun pump and metal click"},
     {"cues": "^Impact_", "from": ["kenney-impact"], "pick": "metal (Armor), wood (Building), dirt thud (Ground), stone (Rock)"},
     {"cues": "^Flesh_|^Punch$|^Pawn_Hurt$", "from": ["kenney-impact", "kenney-rpg"], "pick": "soft and punch impacts, knife slice (Cut, Stab), bite from sonniss-gdc"},
     {"cues": "^Swing_|^Melee_|^Dodge$", "from": ["kenney-rpg", "kenney-impact"], "pick": "blade whoosh, metal clang, cloth for Dodge"},

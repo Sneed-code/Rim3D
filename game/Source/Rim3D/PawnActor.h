@@ -224,6 +224,8 @@ public:
 	int32 GetGibsThrown() const { return GibsThrown; }
 	/** How many stumps got their flesh cap. */
 	int32 GetSeveredCaps() const { return SeveredCaps; }
+	/** Severed heads that took their strands with them (for the gore smoke). */
+	int32 GetSeveredStrandsMoved() const { return SeveredStrandsMoved; }
 	/** The piece itself, as the body has it now, thrown clear (SeveredPieceActor.cpp). Null if the body has no such bone. */
 	class ASeveredPieceActor* SpawnSeveredPiece(uint16 Bit);
 
@@ -265,6 +267,10 @@ public:
 	bool IsInMotionClip() const { return MotionClipDef != MAX_uint32; }
 	bool IsMotionClipUpper() const { return IsInMotionClip() && bMotionUpper; }
 	FVector GetMotionOffset() const { return MotionOffset; }
+	float GetLegsClipWeight() const { return LegsClipWeight; }
+	/** The body moved by what the clip set-back's estimate missed, once its pose for this frame is worked out (from
+	 *  USimPawnAnimInstance after it evaluates). */
+	void RefreshMotionSetBack();
 	/** While an attack clip is on screen: the seconds of the clip still to play before its blow (negative once past it) and
 	 *  the rate it plays at. False when no clip with a blow is playing. */
 	bool GetMotionClipToHit(float& OutSeconds, float& OutRate) const;
@@ -470,6 +476,7 @@ private:
 	int32 MeshTickCount = 0;
 	uint16 SeveredShown = 0;
 	int32 SeveredCaps = 0;
+	int32 SeveredStrandsMoved = 0;
 	/** The trunk burst: the body hides once GibHideFrames more frames have passed (pieces copy it first). */
 	bool bGibPending = false;
 	bool bGibHidden = false;
@@ -610,8 +617,12 @@ private:
 	float PreviewSpin = 0.0f;
 	/** How much of a whole-body clip shows now (the clip playing and the one fading out). */
 	float LegsClipWeight = 0.0f;
+	FVector MotionSetBack(double Ahead) const;
 	float SwimLiftCm = 0.0f;
 	bool bPlaced = false;
+	/** Drawn at the player's own place last frame (else the sim's), and the gap left when that switched, easing out. */
+	bool bDrawnLocal = false;
+	FVector SourceEase = FVector::ZeroVector;
 	bool bBodyHidden = false;
 	bool bCutAway = false;
 	double ActionEndSeconds = 0.0;

@@ -406,6 +406,13 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
                 p.delay = 0.45f;
                 out.push_back(p);
             }
+            // A pump gun is racked after each shot (its `pump`, sneed 2026-11-24: "pump shotguns don't have the shotgun sounds").
+            const std::string pump = gun != nullptr ? soundSlot(*gun, "pump") : std::string();
+            if (!pump.empty() && e.thing != kNoEntity && db.find("SoundCues", pump) != nullptr) {
+                SoundPlay p = soundOn(pump, e.thing);
+                p.delay = 0.35f;
+                out.push_back(p);
+            }
             break;
         }
         case EventType::ProjectileHit: {

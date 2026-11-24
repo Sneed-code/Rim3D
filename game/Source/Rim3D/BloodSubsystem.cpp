@@ -431,6 +431,7 @@ void UBloodSubsystem::ApplyCvarsToMaterials()
 
 void UBloodSubsystem::ResetAll()
 {
+	BurstPools.Reset();
 	Drops.Reset();
 	Mist.Reset();
 	Spray.Reset();
@@ -1574,6 +1575,7 @@ void UBloodSubsystem::Tick(float DeltaTime)
 	UpdateMist(Dt);
 	UpdateSpray(Dt);
 	UpdateBleeding(Dt, GameSeconds);
+	UpdateBurstPools(Dt);
 	UpdateStains(Dt, GameSeconds);
 	if (SkinBlood)
 	{
@@ -1669,6 +1671,74 @@ void UBloodSubsystem::UpdateMist(float Dt)
 		Puff.Velocity.Z -= 60.0f * Dt;  // the finest drops settle slowly
 		Puff.Position += Puff.Velocity * Dt;
 	}
+}
+
+void UBloodSubsystem::AddBurstPool(const FVector& Centre, colony::Entity Victim, float RadiusCm, AActor* Ignore)
+{
+	if (!IsReady() || !CellMaterials.IsValidIndex(BloodCellPool))
+	{
+		return;
+	}
+	USimSubsystem* Bridge = BridgeSource.Get();
+	const colony::Sim* Sim = Bridge ? Bridge->GetSim() : nullptr;
+	FBloodFluid Fluid;
+	const colony::ThingView* View = Bridge && Victim != colony::kNoEntity ? Bridge->GetCurrentSnapshot().find(Victim) : nullptr;
+	Fluid = View ? FluidForPawnDef(Sim, View->def) : FluidForPawnDef(nullptr, colony::DefId{});
+	const FVector Ground(Centre.X, Centre.Y, GroundBelow(Centre + FVector(0, 0, 60), Ignore));
+	const FLinearColor Fresh = DecalColorFor(Fluid, 0.0f, 1.0f);
+	const float Start = FMath::Max(10.0f, RadiusCm * 0.3f);
+	UDecalComponent* Decal = MakeWorldDecal(BloodCellPool + Random.RandRange(0, 1), Ground, FVector::UpVector, FMath::VRand().GetSafeNormal2D(), Start, Start, Fresh);
+	if (!Decal)
+	{
+		return;
+	}
+	Decal->SetFadeScreenSize(0.0f);
+	Decal->SetSortOrder(BloodNextSortOrder(0));
+	FBurstPool Pool;
+	Pool.Stain = AddStain(Decal, Ground, FVector::UpVector, Start, Fluid, true);
+	Pool.RadiusCm = Start;
+	Pool.TargetCm = RadiusCm;
+	BurstPools.Add(Pool);
+	++PoolsMade;
+	// Lobes and splashes round it, so the edge is broken, out past where it will spread.
+	for (int32 I = 0; I < 14; ++I)
+	{
+		const FVector Off = FMath::VRand().GetSafeNormal2D();
+		const bool bLobe = I < 4;
+		const float W = bLobe ? Random.FRandRange(0.3f, 0.45f) * RadiusCm : Random.FRandRange(4.0f, 12.0f);
+		const FVector Where = Ground + Off * (bLobe ? Random.FRandRange(0.45f, 0.75f) * RadiusCm : Random.FRandRange(0.9f, 1.6f) * RadiusCm);
+		const FVector OnGround(Where.X, Where.Y, GroundBelow(Where + FVector(0, 0, 60), Ignore));
+		if (UDecalComponent* Rim = MakeWorldDecal(bLobe ? BloodCellPool + Random.RandRange(0, 1) : BloodCellRound + Random.RandRange(0, 3), OnGround, FVector::UpVector, Off,
+			W, W * Random.FRandRange(0.7f, 1.0f), Fresh))
+		{
+			Rim->SetFadeScreenSize(0.0f);
+			AddStain(Rim, OnGround, FVector::UpVector, W, Fluid, bLobe);
+		}
+	}
+}
+
+void UBloodSubsystem::UpdateBurstPools(float Dt)
+{
+	for (FBurstPool& Pool : BurstPools)
+	{
+		// Fast at first, slowing as it nears its size (about 90% in two seconds).
+		const float Grown = FMath::Min(Pool.TargetCm, Pool.RadiusCm + Dt * FMath::Max(4.0f, (Pool.TargetCm - Pool.RadiusCm) * 1.2f));
+		if (Grown <= Pool.RadiusCm + 0.05f)
+		{
+			continue;
+		}
+		if (FStain* Stain = Stains.FindByPredicate([&Pool](const FStain& S) { return S.Serial == Pool.Stain; }); Stain && Stain->Decal.IsValid())
+		{
+			const float Ratio = Grown / FMath::Max(0.1f, Pool.RadiusCm);
+			Stain->RadiusCm = Grown;
+			Stain->Decal->DecalSize = FVector(Stain->Decal->DecalSize.X, Stain->Decal->DecalSize.Y * Ratio, Stain->Decal->DecalSize.Z * Ratio);
+			Stain->Decal->MarkRenderStateDirty();
+			Stain->WetSince = Clock;
+		}
+		Pool.RadiusCm = Grown;
+	}
+	BurstPools.RemoveAll([this](const FBurstPool& Pool)
+		{ return Pool.RadiusCm >= Pool.TargetCm - 0.1f || !Stains.ContainsByPredicate([&Pool](const FStain& S) { return S.Serial == Pool.Stain; }); });
 }
 
 void UBloodSubsystem::UpdateBleeding(float Dt, float GameSeconds)

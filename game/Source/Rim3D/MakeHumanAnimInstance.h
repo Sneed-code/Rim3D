@@ -154,6 +154,7 @@ enum class EMakeHumanGoalSpace : uint8
 	Component,  // the mesh component's space
 	Anchor,     // offset from a bone's place in component space this very pose (no lag behind the body), rotation in component space
 	OtherHand,  // in the other hand's bone space after that hand is solved (a second hand on the same weapon)
+	AnchorFull, // in a bone's whole transform this very pose (turns with it too: a weapon riding a rolling body)
 };
 
 /** A hand's goal for the arm solver (FMakeHumanArmsNode). */

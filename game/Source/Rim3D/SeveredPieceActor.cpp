@@ -899,7 +899,11 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		// bone, was drawn out into a jagged shard under the head. The MakeHuman body is the exception: its one mesh is
 		// the whole person, head and face included, so it always goes (everything below the neck folds into the cut).
 		const float Share = CutIndex == INDEX_NONE ? 0.0f : SeveredSkinnedTo(*Asset, CutIndex);
-		if (Share < 0.01f || (Bit == colony::kSeveredHead && Share < 0.5f && Source != MakeHumanMesh.Get()))
+		// The drawn skin body of any kind is the exception too (sneed 2026-11-24: "head dismemberment sometimes includes
+		// neck, the neck's destroyed so you only have the skull": on a MetaHuman or bare body the face went alone and the
+		// body's neck, under half of it on the head, was left out of the piece and folded away on the body).
+		const bool bSkinBody = Source == MakeHumanMesh.Get() || Source == GetDecalMesh() || Source == Body.Get();
+		if (Share < 0.01f || (Bit == colony::kSeveredHead && Share < 0.5f && !bSkinBody))
 		{
 			continue;
 		}
@@ -962,11 +966,16 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 				}
 			}
 		}
+		// The strands themselves go with the head when it wore them (sneed 2026-11-24: "dismembered head hair stops
+		// working and is stiff and weird": the wig stood in, set in its mesh's rest pose); the wig only if they can't.
+		UGroomComponent* MovedStrands = nullptr;
 		if (Bit == colony::kSeveredHead && Source == MakeHumanMesh.Get())
 		{
 			TArray<int32> Wig;
-			const UStrandHairSubsystem* Strands = GetWorld()->GetSubsystem<UStrandHairSubsystem>();
-			if (Strands && Strands->GetHiddenWig(MakeHumanMesh.Get(), Wig))
+			UStrandHairSubsystem* Strands = GetWorld()->GetSubsystem<UStrandHairSubsystem>();
+			const bool bWig = Strands && Strands->GetHiddenWig(MakeHumanMesh.Get(), Wig);
+			MovedStrands = Strands && Copy->GetBoneIndex(TEXT("head")) != INDEX_NONE ? Strands->Release(MakeHumanMesh.Get()) : nullptr;
+			if (bWig && !MovedStrands)
 			{
 				for (const int32 Section : Wig)
 				{
@@ -1019,6 +1028,32 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 			}
 		}
 		Piece->AddMesh(Copy);
+		if (MovedStrands)
+		{
+			// Handed to the piece (it goes when the piece goes), on the copy's head bone where it sat on the body's, and
+			// simulated in the world: its local frame was the body's spine_03, which the piece has folded away.
+			const FTransform OnHead = MovedStrands->GetRelativeTransform();
+			MovedStrands->UnregisterComponent();
+			if (AActor* OldOwner = MovedStrands->GetOwner())
+			{
+				OldOwner->RemoveOwnedComponent(MovedStrands);
+			}
+			MovedStrands->Rename(nullptr, Piece, REN_DontCreateRedirectors | REN_DoNotDirty);
+			Piece->AddOwnedComponent(MovedStrands);
+			MovedStrands->AttachToComponent(Copy, FAttachmentTransformRules::KeepRelativeTransform, TEXT("head"));
+			MovedStrands->SetRelativeTransform(OnHead);
+			if (FStructProperty* Settings = FindFProperty<FStructProperty>(UGroomComponent::StaticClass(), TEXT("SimulationSettings")))
+			{
+				Settings->ImportText_Direct(TEXT("(bOverrideSettings=False)"), Settings->ContainerPtrToValuePtr<void>(MovedStrands), MovedStrands, PPF_None);
+			}
+			MovedStrands->ResetCollisionComponents();
+			MovedStrands->SetPhysicsAsset(nullptr);
+			MovedStrands->RegisterComponent();
+			MovedStrands->SetVisibility(true, true);
+			MovedStrands->ResetSimulation();
+			++SeveredStrandsMoved;
+			UE_LOG(LogTemp, Display, TEXT("Severed piece 0x%x: strands %s go with the head"), Bit, *MovedStrands->GetName());
+		}
 		UE_LOG(LogTemp, Log, TEXT("Severed piece 0x%x: %s (%s), material %s, %.0f cm across"), Bit, *Source->GetName(), *Asset->GetName(),
 			Copy->GetMaterial(0) ? *Copy->GetMaterial(0)->GetName() : TEXT("none"), Copy->Bounds.SphereRadius * 2.0f);
 	}

@@ -1425,6 +1425,7 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
         // or less. An arm under half slows attacks, a leg under half the walk: half a percent for every percent under.
         bool down = false;
         bool torsoDown = false;
+        bool legDown = false;
         bool headOut = false;
         int low = 0;
         float lost = 0.0f;
@@ -1450,6 +1451,7 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
                 (kind == HealthModel::ZoneKind::Head || kind == HealthModel::ZoneKind::Torso || kind == HealthModel::ZoneKind::Leg)) {
                 down = true;
                 torsoDown = torsoDown || kind == HealthModel::ZoneKind::Torso;
+                legDown = legDown || kind == HealthModel::ZoneKind::Leg;
             }
             headOut = headOut || (kind == HealthModel::ZoneKind::Head && f < model_->zoneHeadUnconscious);
         }
@@ -1474,7 +1476,9 @@ void HealthSystem::derive(int bodyIndex, float healthScale, bool mechanical, con
             }
             health.unconscious = headOut || health.bloodLoss >= 1.0f - model_->bloodUnconscious / model_->bloodMax;
             shouldBeDown = down || low >= model_->zoneManyCount || health.unconscious;
-            health.crawls = torsoDown && !health.unconscious;
+            // Downed by the torso or by a leg (lost, or under a quarter: sneed 2026-11-24 "if they lose a leg they crawl
+            // and cannot fight"), and awake: it drags itself along; downed, it fights no more.
+            health.crawls = (torsoDown || legDown) && !health.unconscious;
         }
         return;
     }

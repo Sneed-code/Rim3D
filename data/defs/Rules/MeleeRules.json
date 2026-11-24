@@ -1,6 +1,6 @@
 [
   {
-    "defName": "MeleeRules", "source": "ours and sneed's (docs/design/real-time-combat.md; 2026-11-23 second batch: weapon swings 1.5 times as long as the 0.75 before, so 2 blows where 3 were (attackTimeFactor 1.125); fists 40% slower than before, unarmedTimeFactor 0.25 on its own plus a 0.1 s pause (unarmedGapSteps 3), the jab itself as quick (unarmedWindupShare 0.2, 3 steps)); armorPenetrationPerDamage from the RimWorld wiki",
+    "defName": "MeleeRules", "source": "ours and sneed's (docs/design/real-time-combat.md; 2026-11-23 second batch: weapon swings 1.5 times as long as the 0.75 before, so 2 blows where 3 were (attackTimeFactor 1.125); fists 40% slower than before, unarmedTimeFactor 0.25 on its own plus a 0.1 s pause (unarmedGapSteps 3), the jab itself as quick (unarmedWindupShare 0.2, 3 steps)); 2026-11-24 third batch: fists half as fast again (unarmedTimeFactor 0.5) with no pause between punches (unarmedGapSteps 0; the jab winds up over 0.3 of it so its clip fills the whole punch), blows at a body on the ground three where two were (lowTimeFactor 0.6667); armorPenetrationPerDamage from the RimWorld wiki",
     "defaultMeleeSkill": 4,
     "skillSpeedBySkill": [0.8, 1.2],
     "skillDamageBySkill": [0.8, 1.2],
@@ -33,11 +33,12 @@
     "windupShare": 0.3,
     "minWindup": 9,
     "attackTimeFactor": 1.125,
-    "unarmedTimeFactor": 0.25,
+    "unarmedTimeFactor": 0.5,
     "unarmedPowerFactor": 0.25,
     "unarmedMinWindup": 3,
-    "unarmedWindupShare": 0.2,
-    "unarmedGapSteps": 3,
+    "unarmedWindupShare": 0.3,
+    "unarmedGapSteps": 0,
+    "lowTimeFactor": 0.6667,
     "playerStepIn": true,
     "stepInFreesFeet": true,
     "stepInMaxSpeed": 0.6,
@@ -92,7 +93,7 @@
     "unverified": ["armorPenetrationPerDamage"],
     "ours": [
       "bodyReach", "animalReachBase", "animalReachPerRoot", "weaponReach", "reachSlack", "closeIn", "standGround", "defaultWeaponReach", "shoulderBelowEye", "strikeDepth", "windupShare",
-      "minWindup", "attackTimeFactor", "unarmedTimeFactor", "unarmedPowerFactor", "unarmedMinWindup", "unarmedWindupShare", "unarmedGapSteps", "playerStepIn", "stepInFreesFeet", "stepInMaxSpeed", "commitSteps", "reactionStepsBySkill", "reactionJitter", "blockSteps",
+      "minWindup", "attackTimeFactor", "unarmedTimeFactor", "unarmedPowerFactor", "unarmedMinWindup", "unarmedWindupShare", "unarmedGapSteps", "lowTimeFactor", "playerStepIn", "stepInFreesFeet", "stepInMaxSpeed", "commitSteps", "reactionStepsBySkill", "reactionJitter", "blockSteps",
       "defaultMeleeSkill", "skillSpeedBySkill", "skillDamageBySkill", "aimWobbleBySkill", "reactionTraitSteps", "guardBlocks",
       "guardWindowSteps", "guardBreakSteps", "dodgeRecoverySteps", "recoveryNoDefendSteps", "guardWaitSteps", "guardFacingCos", "rollClearance", "aiRollEverySteps",
       "blockRecoverySteps", "playerBlockSteps", "playerBlockHoldSteps", "dodgeHoldSteps", "chargeTraits", "strongPowerShare",

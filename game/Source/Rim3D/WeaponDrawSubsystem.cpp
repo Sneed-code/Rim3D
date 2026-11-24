@@ -32,6 +32,7 @@
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
+#include "ColonySim/Health.h"
 #include "ColonySim/Hold.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Melee.h"
@@ -820,6 +821,27 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 			Hold.off = colony::HoldPoint{static_cast<float>(Art->OffHand.X), static_cast<float>(Art->OffHand.Y), static_cast<float>(Art->OffHand.Z)};
 			Hold.rake = Art->Rake;
 		}
+		// One arm (sneed 2026-11-24: a pawn that lost an arm fights on one-handed, the sim drops two-handed weapons): no
+		// second hand on the weapon, and with the right arm gone it goes in the left hand, held mirrored.
+		{
+			const uint16 Severed = Actor.GetSeveredShown();
+			const bool bRightGone = (Severed & (colony::kSeveredRightArm | colony::kSeveredRightForearm)) != 0;
+			const bool bLeftGone = (Severed & (colony::kSeveredLeftArm | colony::kSeveredLeftForearm)) != 0;
+			if ((bRightGone || bLeftGone) && Hold.hand == colony::HoldHand::Right)
+			{
+				Hold.hasOff = Hold.hasSupport = Hold.hasBlockOff = false;
+				if (bRightGone && !bLeftGone)
+				{
+					Hold.hand = colony::HoldHand::Left;
+					for (colony::HoldPlace* P : {&Hold.ready, &Hold.aim, &Hold.block, &Hold.fpReady, &Hold.fpAim, &Hold.fpBlock})
+					{
+						P->at.y = -P->at.y;
+						P->yaw = -P->yaw;
+						P->roll = -P->roll;
+					}
+				}
+			}
+		}
 		// The defs' guns share one shape, so a sidearm without a model of its own is drawn at half size.
 		const float Size = Gear.size * (!Art && Slot == static_cast<int32>(colony::WeaponSlot::Sidearm) ? WeaponSidearmScale : 1.0f);
 
@@ -873,6 +895,13 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 			(Pawn.ForceHandSeconds <= 0.0f || bFinisherNow))
 		{
 			HoldDraw::FPoints Points = HoldDraw::PointsOf(Hold, HasShieldOnArm(View));
+			// A one-handed club or hammer held up to block takes the other hand on its haft (the style's `blockOff`),
+			// eased in with the block (sneed 2026-11-24: the mace's and zeushammer's left hand stayed up in the air).
+			if (!Points.bOff && Hold.hasBlockOff && !HasShieldOnArm(View) && Pawn.BlockBlend > 0.01f)
+			{
+				Points.Off = FVector(Hold.blockOff.x, Hold.blockOff.y, Hold.blockOff.z);
+				Points.bOff = true;
+			}
 			const UStaticMeshComponent* Body = Shown.Component.Get();
 			const FBox Bounds = Body && Body->GetStaticMesh() ? Body->GetStaticMesh()->GetBoundingBox() : FBox(ForceInit);
 			if (Bounds.IsValid)
@@ -903,7 +932,8 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 			// back); in the hand while a swing or a full-body clip moves the hand.
 			FTransform InHandWorld = WeaponInHand * HandWorld;
 			InHandWorld.SetScale3D(FVector::OneVector);
-			const float Free = MeleePose::EaseInOut(FMath::Clamp(Pawn.HandFree, 0.0f, 1.0f));
+			// Riding a clip, in the hand too: the hands are solved on this frame's pose, the place was from the last one.
+			const float Free = MeleePose::EaseInOut(FMath::Clamp(FMath::Max(Pawn.HandFree, Pawn.ClipRide), 0.0f, 1.0f));
 			Hands = FTransform(FQuat::Slerp(WeaponPlaced.GetRotation(), InHandWorld.GetRotation(), Free),
 				FMath::Lerp(WeaponPlaced.GetLocation(), InHandWorld.GetLocation(), static_cast<double>(Free)));
 		}
@@ -1114,7 +1144,12 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 	const bool bClipSwing = !bFinisher && !bGun && Actor.IsInMotionClip() && (View.meleePhase != colony::MeleePhase::Ready || Actor.GetSwing().IsActive());
 	const bool bWeaponSwing = !bFinisher && !bGun && !Actor.IsInMotionClip() && Actor.GetSwing().IsActive();
 	const bool bFullBodyClip = Actor.IsInMotionClip() && !Actor.IsMotionClipUpper();
-	Pawn.HandFree = FMath::FInterpConstantTo(Pawn.HandFree, bClipSwing || bFullBodyClip ? 1.0f : 0.0f, FrameDelta, 8.0f);
+	// A full-body clip that is no swing (a roll, a stagger, a knockdown): the weapon rides with the upper body and both
+	// hands stay on it (they used to let go: the main hand followed the clip and the other arm reached across the
+	// tumbling body to the weapon, then snapped back as the clip ended, sneed 2026-11-24).
+	const bool bRideClip = bFullBodyClip && !bClipSwing && !bFinisher && Mesh->GetBoneIndex(TEXT("neck_01")) != INDEX_NONE;
+	Pawn.ClipRide = FMath::FInterpConstantTo(Pawn.ClipRide, bRideClip && Pawn.bWeaponInNeck ? 1.0f : 0.0f, FrameDelta, 8.0f);
+	Pawn.HandFree = FMath::FInterpConstantTo(Pawn.HandFree, bClipSwing || (bFullBodyClip && !bRideClip) ? 1.0f : 0.0f, FrameDelta, 8.0f);
 	Pawn.SwingBlend = FMath::FInterpConstantTo(Pawn.SwingBlend, bWeaponSwing ? 1.0f : 0.0f, FrameDelta, 10.0f);
 
 	// The anchors in the world from this frame's pose: between the shoulder joints, or the head; the body's facing.
@@ -1267,6 +1302,23 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 		Weapon = Blend(Weapon, SwingWeapon, Pawn.SwingBlend);
 	}
 
+	FTransform NeckWorld = FTransform::Identity;
+	if (Mesh->GetBoneIndex(TEXT("neck_01")) != INDEX_NONE)
+	{
+		NeckWorld = Mesh->GetSocketTransform(TEXT("neck_01"), RTS_World);
+		NeckWorld.SetScale3D(FVector::OneVector);
+		if (!Actor.IsInMotionClip() && Pawn.ClipRide <= 0.0f)
+		{
+			Pawn.WeaponInNeck = Weapon.GetRelativeTransform(NeckWorld);
+			Pawn.WeaponInNeck.SetScale3D(FVector::OneVector);
+			Pawn.bWeaponInNeck = true;
+		}
+		if (Pawn.ClipRide > 0.0f && Pawn.bWeaponInNeck)
+		{
+			Weapon = Blend(Weapon, Pawn.WeaponInNeck * NeckWorld, Pawn.ClipRide);
+		}
+	}
+
 	FTransform PinAt = Weapon;
 	if (bFinisher && Pawn.FinisherBlend > 0.0f)
 	{
@@ -1281,7 +1333,12 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 		PinFailReason = TEXT("the hands could not be pinned");
 		return false;
 	}
-	HoldDraw::ApplyPinned(Mesh, Hold, Pinned, static_cast<uint8>(EMakeHumanGoalSpace::Anchor), TEXT("neck_01"), Alpha * (1.0f - Pawn.HandFree), Alpha);
+	// The block's second hand (blockOff) only as far as the block is up.
+	const bool bBlockOffGrip = !Hold.hasOff && Hold.hasBlockOff && Points.bOff && !bGun;
+	const float OffAlpha = bBlockOffGrip ? Alpha * MeleePose::EaseInOut(FMath::Clamp(Pawn.BlockBlend, 0.0f, 1.0f)) : Alpha;
+	// Riding a clip, the goals turn with the neck in the very pose the arms are solved in (no frame behind a roll).
+	const EMakeHumanGoalSpace GoalSpace = Pawn.ClipRide > 0.0f ? EMakeHumanGoalSpace::AnchorFull : EMakeHumanGoalSpace::Anchor;
+	HoldDraw::ApplyPinned(Mesh, Hold, Pinned, static_cast<uint8>(GoalSpace), TEXT("neck_01"), Alpha * (1.0f - Pawn.HandFree), OffAlpha);
 	OutWeaponInHand = Pinned.WeaponInHand;
 	OutWeaponWorld = Weapon;
 	OutWeaponWorld.SetScale3D(FVector::OneVector);
@@ -2027,9 +2084,14 @@ void UWeaponDrawSubsystem::UpdatePlayerInput()
 		HoldShield(false);
 		return;
 	}
-	if (Rim3DKeys::IsDown(PC, ERim3DAction::Attack))
+	const double RealNow = FPlatformTime::Seconds();
+	if (Rim3DKeys::WasPressed(PC, ERim3DAction::Attack))
 	{
-		Swing();
+		SwingBufferedUntil = RealNow + 0.4;
+	}
+	if ((Rim3DKeys::IsDown(PC, ERim3DAction::Attack) || RealNow < SwingBufferedUntil) && Swing())
+	{
+		SwingBufferedUntil = 0.0;
 	}
 	// The right mouse button holds up the shield when one is on the arm, else the weapon (a gun aims, ProtagonistPawn).
 	USimSubsystem* Bridge = nullptr;

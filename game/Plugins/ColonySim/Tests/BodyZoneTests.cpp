@@ -600,7 +600,7 @@ TEST_CASE("Body zones: a person on their feet limps at 40% or better, however mu
 
 // ---- Part D: crawling away.
 
-TEST_CASE("Crawling: a person downed by the torso crawls away from an enemy near; by a leg, or with nobody near, lies still") {
+TEST_CASE("Crawling: a person downed by the torso or a leg crawls away from an enemy near; with nobody near, lies still") {
     const auto run = [](const char* part, float amount, bool enemy) {
         auto sim = zoneTestSim();
         const Entity pawn = zoneTestPawn(*sim, 20, 20);
@@ -626,7 +626,41 @@ TEST_CASE("Crawling: a person downed by the torso crawls away from an enemy near
     CHECK(crawled > 1.5f);   // away from the raider (it stands to the west)
     CHECK(crawled < 5.0f);   // and slowly (a twentieth of its walk, a cell at a time: sneed 2026-11-22, too fast)
     CHECK(std::abs(run("torso", 80.0f, false)) < 0.01f);
-    CHECK(std::abs(run("left leg", 60.0f, true)) < 0.01f);
+    // sneed 2026-11-24: "if they lose a leg they crawl and cannot fight".
+    const float legCrawl = run("left leg", 60.0f, true);
+    MESSAGE("downed by a leg, crawled " << legCrawl << " m in 20 s");
+    CHECK(legCrawl > 1.5f);
+}
+
+TEST_CASE("One arm: a person who loses an arm drops a two-handed weapon and can't take one up, but keeps a one-handed one (sneed 2026-11-24)") {
+    const auto lose = [](const char* weapon) {
+        auto sim = zoneTestSim();
+        const Entity pawn = zoneTestPawn(*sim, 20, 20);
+        sim->step();
+        entt::registry& reg = sim->things().registry();
+        CHECK(sim->combat().equip(pawn, sim->things().make(sim->defs().idOf("Things", weapon))));
+        sim->step();
+        CHECK(reg.get<Gear>(pawn).weapon != kNoEntity);
+        // The left arm off, the body alive (as "one limb at 0 never kills").
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 60.0f, "torso"));
+        CHECK(zoneTestHit(*sim, pawn, "Blunt", 500.0f, "left arm"));
+        CHECK_FALSE(reg.get<Health>(pawn).dead);
+        CHECK(sim->combat().oneArmed(pawn));
+        sim->step();
+        return std::make_pair(reg.get<Gear>(pawn).weapon != kNoEntity, std::move(sim));
+    };
+    auto [keptRifle, rifleSim] = lose("Gun_AssaultRifle");
+    CHECK_FALSE(keptRifle);
+    auto [keptPistol, pistolSim] = lose("Gun_Autopistol");
+    CHECK(keptPistol);
+    // Nor can it take one up again.
+    auto [keptSword, swordSim] = lose("Melee_Longsword");
+    CHECK_FALSE(keptSword);
+    const Entity pawn = swordSim->things().registry().view<Gear>().front();
+    std::string why;
+    CHECK_FALSE(swordSim->combat().equip(pawn, swordSim->things().make(swordSim->defs().idOf("Things", "Gun_AssaultRifle")), &why));
+    MESSAGE(why);
+    CHECK(swordSim->combat().equip(pawn, swordSim->things().make(swordSim->defs().idOf("Things", "Melee_Gladius")), &why));
 }
 
 TEST_CASE("Crawling: a downed enemy crawls away from the player's own colonist, drafted or not") {
