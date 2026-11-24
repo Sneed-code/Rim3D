@@ -6,6 +6,15 @@ HUD icons (sneed, 2026-11-24; Unreal only): 45 painted icons made with ChatGPT i
 Build categories, every order and zone tool, Draft / Stand down / alarm and area Paint / Erase, in
 `assets/ui/icons/` (256 px PNGs, loaded at run time by `HudIcons.cpp`; docs/design/ui-layout.md "Icons").
 
+Models batch 5: remnants, chitinids and the stand-ins (sneed, 2026-11-24; `docs/design/codex-models.md` "Batch 5"):
+**30 new models**. Gemini 4 Neon (high) made the hardest ten: the four **remnant war machines** (reaper, striker, ranger,
+crawler) rigged and animated (idle, walk, run, strike, shoot, flinch, death), the **chitinid warrior and stalker** (no
+longer the stretched beetle), and four benches whose parts move (the wood-fired generator's flywheel and fire while it has
+fuel, the forge's bellows and the electric smithy's power hammer and the electric sewing machine while someone works at
+them). Codex (6.2 Sol, high) made twenty benches, stoves, beds, lamps and furniture that replace the stretched Poly Haven
+stand-ins. **The remnants are drawn as machines** by the animal subsystem now, with their strike and shot clips playing
+on a melee wind-up and a shot (`DrawsMachine`, smoke phase `remnants`); building clips take `when: working` and
+`fueled`. Art steps: `codex-models` copies the creature GLBs, `animal-art` imports them, `codex-art` the buildings.
 Rolls, character screen, bigger text, skill points (sneed, 2026-11-24; sim and Unreal): **rolls curve round to the focus**:
 every pawn's roll keeps its path, but its facing turns from the roll's way to the one it is locked on to (an AI's dodge:
 whoever it dodged) over the last three quarters of the tumble and the recovery, eased in and out, so nobody swings round at the

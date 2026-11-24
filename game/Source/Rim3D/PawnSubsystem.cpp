@@ -16,6 +16,7 @@
 #include "Misc/PackageName.h"
 #include "PoseSearch/PoseSearchDatabase.h"
 
+#include "AnimalSubsystem.h"
 #include "LevelsSubsystem.h"
 #include "PawnActor.h"
 #include "PawnFaces.h"
@@ -736,13 +737,18 @@ void USimPawnSubsystem::Tick(float DeltaTime)
 	const colony::Snapshot& Now = Bridge->GetCurrentSnapshot();
 	const colony::Snapshot& Before = Bridge->GetPreviousSnapshot();
 	const colony::DefDatabase* Defs = Bridge->GetDefs().get();
+	USimAnimalSubsystem* Machines = GetWorld()->GetSubsystem<USimAnimalSubsystem>();
 	// The levels above the one the overseer looks at are cut away (docs/design/levels-draw.md).
 	const int32 TopLevel = ULevelsSubsystem::TopShownLevel(GetWorld());
 	TSet<uint32> Seen;
 	for (const colony::ThingView& View : Now.things)
 	{
-		// Animals (life stage 0 to 2) are drawn by USimAnimalSubsystem.
+		// Animals (life stage 0 to 2) and war machines with their own model are drawn by USimAnimalSubsystem.
 		if (View.category != colony::ThingCategory::Pawn || View.lifeStage >= 0)
+		{
+			continue;
+		}
+		if (Machines && Defs && View.def.valid() && Machines->DrawsMachine(FName(UTF8_TO_TCHAR(Defs->get(View.def).defName().c_str()))))
 		{
 			continue;
 		}

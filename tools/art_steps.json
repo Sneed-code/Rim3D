@@ -161,8 +161,8 @@
       "name": "animal-art",
       "what": "Animals",
       "inputs": ["assets/animal_art.json"],
-      "after": ["animal-glb-join"],
-      "raw": ["game/Content/ThirdParty/Animals", "assets/raw/sketchfab"],
+      "after": ["animal-glb-join", "codex-models"],
+      "raw": ["game/Content/ThirdParty/Animals", "assets/raw/sketchfab", "assets/raw/codex"],
       "run": [{"commandlet": "AnimalArt", "args": ["-nullrhi"]}]
     },
     {

@@ -32,6 +32,9 @@ struct FSimAnimalModel
 	TObjectPtr<UAnimSequence> Gallop;
 	TObjectPtr<UAnimSequence> Eat;
 	TObjectPtr<UAnimSequence> Death;
+	/** One-shot fight clips, null when the model has none: a melee strike and a shot (the remnants' own models). */
+	TObjectPtr<UAnimSequence> Attack;
+	TObjectPtr<UAnimSequence> Shoot;
 	/** Half the model's size in cm, from its bounds (for the log and the tests). */
 	FVector Extent = FVector::ZeroVector;
 	/** Scale that makes the imported mesh as long as the animal really is (`lengthM` in the art table). */
@@ -96,6 +99,9 @@ public:
 
 	/** The model a def is drawn with, or null (the log says why once). Loads it on first use. */
 	const FSimAnimalModel* GetModelFor(FName DefName, FSimAnimalArt& OutArt);
+	/** True for a pawn that is no animal but has its own model in the art table's `defs` (the remnant war machines,
+	 *  docs/design/codex-models.md): this subsystem draws it, not USimPawnSubsystem. Loads the model on first use. */
+	bool DrawsMachine(FName DefName);
 	/** Models loaded so far. */
 	int32 GetModelsLoaded() const;
 
@@ -127,6 +133,8 @@ private:
 	TArray<TObjectPtr<UObject>> KeepAlive;
 
 	TSet<FName> Warned;
+	/** DrawsMachine's answer by def. */
+	TMap<FName, bool> MachineDefs;
 	bool bArtTried = false;
 	const colony::Sim* LastSim = nullptr;
 	FSimAnimalDetailCounts DetailCounts;
