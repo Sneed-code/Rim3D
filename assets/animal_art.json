@@ -67,7 +67,7 @@
     {"def": "Ostrich", "model": "WildGuineafowl", "scale": 3.6, "stand_in": true},
     {"def": "ArcticFox", "model": "WildFox", "scale": 0.85},
     {"def": "ArcticWolf", "model": "Wolf", "scale": 1.0},
-    {"def": "Capybara", "model": "Capybara", "scale": 1.0},
+    {"def": "Capybara", "model": "ShibaInu", "scale": 1.4, "stand_in": true, "note": "Rim3D_Capybara.glb draws as tree-high pillars: its skin is bound with bone scales 0.001 to 0.103 against a mesh in another unit (PC 2026-11-24). Back to model Capybara after a Blender re-export with the armature scale applied."},
     {"def": "Iguana", "model": "Raptor", "scale": 0.43, "stand_in": true},
     {"def": "Megascarab", "model": "RhinoBeetle", "scale": 1.0},
     {"def": "Spelopede", "model": "RhinoBeetle", "scale": 2.2, "stand_in": true},
