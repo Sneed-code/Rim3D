@@ -537,6 +537,9 @@ public:
     // Whether bullets pass through the pawn right now.
     bool hitProof(Entity pawn) const;
     bool rollDirection(Entity pawn, float& x, float& y) const;
+    // How far through its roll the pawn is, 0 at the command to 1 at the end of the recovery; 0 when not rolling.
+    // `turnFrom` is the share at which a rolling body may start turning: a quarter into the tumble.
+    float rollProgress(Entity pawn, float* turnFrom = nullptr) const;
 
     // What the straight stretch from a to b meets first: ground, rock, a building (not in
     // `skipCell`'s cell) or a pawn's hitbox (not `skipPawn`). Kind None if nothing.

@@ -87,10 +87,12 @@ namespace
 	// The locked-on view closes its gap with this time constant (s): it eases on, faster when further off,
 	// never over the turn rates above (Elden Ring: no whip).
 	constexpr float ProtagonistFocusEaseSeconds = 0.08f;
-	// After a roll the lock-on view eases back to the enemy over this long (real seconds, sneed 2026-11-19), starting
-	// from this share of its turn rate.
+	// Through a roll the lock-on view keeps following the enemy, more softly (sneed 2026-11-24: no swing back after the
+	// roll; the body itself curves round to the enemy in the sim, MeleeSystem::steerRoll): this share of the turn rate
+	// and this time constant. After the roll it eases back up to the full rate over ProtagonistFocusRecentreSeconds.
+	constexpr float ProtagonistFocusRollShare = 0.5f;
+	constexpr float ProtagonistFocusRollEaseSeconds = 0.2f;
 	constexpr float ProtagonistFocusRecentreSeconds = 0.5f;
-	constexpr float ProtagonistFocusRecentreStart = 0.1f;
 	// The third person camera follows the body softly (time constants, real seconds): barely while running, so it feels
 	// as it did, and more in a roll, so the view glides after the tumble instead of lurching with it (Elden Ring). Aiming
 	// follows a little more tightly. It never trails more than the most below (cm), and jumps (a teleport, a new body) are not followed.
@@ -340,7 +342,7 @@ void AProtagonistPawn::FollowFocus(float DeltaTime)
 	bRollingNow = bRolling;
 	// Nor with a gun in hand (free aim, sneed 2026-11-18, docs/design/lock-on.md), nor while sprinting (the run goes
 	// where the keys say, as in Elden Ring).
-	if (!Me || Me->focusTarget == colony::kNoEntity || bAimHeld || bRolling || bSprinting || HasGunDrawn())
+	if (!Me || Me->focusTarget == colony::kNoEntity || bAimHeld || bSprinting || HasGunDrawn())
 	{
 		return;
 	}
@@ -357,12 +359,13 @@ void AProtagonistPawn::FollowFocus(float DeltaTime)
 	bFocusLocked = true;
 	const float Wanted = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(To.Y), static_cast<float>(To.X)));
 	// Eased, not a fixed spin (sneed 2026-11-19: after a roll the view whipped back to the enemy): it closes a share of
-	// the gap each frame, capped at the turn rate, and for half a second after a roll that cap starts low and grows.
-	const float Recentre = ProtagonistSmooth(SinceRoll / ProtagonistFocusRecentreSeconds);
+	// the gap each frame, capped at the turn rate; in a roll softer and slower, easing back to full after it, so the view
+	// glides along with the roll and never has a gap to swing across at its end.
+	const float Recentre = bRolling ? 0.0f : ProtagonistSmooth(SinceRoll / ProtagonistFocusRecentreSeconds);
 	const float Cap = (bFirstPerson ? ProtagonistFocusTurnFirst : ProtagonistFocusTurnThird)
-		* FMath::Lerp(ProtagonistFocusRecentreStart, 1.0f, Recentre);
+		* FMath::Lerp(ProtagonistFocusRollShare, 1.0f, Recentre);
 	const float Gap = FMath::FindDeltaAngleDegrees(Yaw, Wanted);
-	const float Share = 1.0f - FMath::Exp(-DeltaTime / ProtagonistFocusEaseSeconds);
+	const float Share = 1.0f - FMath::Exp(-DeltaTime / FMath::Lerp(ProtagonistFocusRollEaseSeconds, ProtagonistFocusEaseSeconds, Recentre));
 	const float Step = FMath::Clamp(Gap * Share, -Cap * DeltaTime, Cap * DeltaTime);
 	Yaw = FRotator::NormalizeAxis(Yaw + Step);
 }

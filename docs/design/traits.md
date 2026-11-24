@@ -54,5 +54,9 @@ and decay like level 20; shooting and melee keep improving past 20 (accuracy add
 99.5%; melee lines run on). Drawbacks made from backstory "incapable of": **pacifist** (no violence, -4), **pampered**
 (no hauling or cleaning, -3), **clumsy** (-4 construction and crafting, -2), **frail** (20% more damage, -3).
 
-Without backstories, a point-trait person's skills come from the random curve for every skill, stretched by age, with 3
-random skills lifted +3 to +6 (`PawnGenRules.pointSkillBoosts`) in place of the backstories' gains.
+Without backstories, a point-trait person's skills come from a pool (sneed 2026-11-24): `PawnGenRules.skillPointPool`
+(30) levels handed out at random, one at a time, among the skills the person can use, each skill drawn a weight first
+(0.15 plus a cube of a random number, so most people have a few favourites); a skill a trait disables gets none, so its
+share boosts the others. One skill gets a major passion and another a minor one (`pointPassions` [1, 1]), the best two.
+Traits' skill gains go on top. Changing traits on the character screen moves a newly disabled skill's levels to the usable
+skills (one at a time, best first) and its passion to the best skill without one (`setColonistTraits`).

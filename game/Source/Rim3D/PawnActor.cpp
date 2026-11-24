@@ -541,8 +541,9 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	}
 	ApplyBodyPose(GameDelta, (Now.blocking || Now.shieldUp) && !Now.downed && !Now.dead);
 
-	// Animation runs at the game's speed and stops while paused (and during a hit-stop).
-	Body->GlobalAnimRateScale = HitStopLeft > 0.0f ? 0.0f : static_cast<float>(Speed);
+	// Animation runs at the game's speed and stops while paused (and during a hit-stop); on the character screen it
+	// plays on at 1x while paused (SetPreviewLive).
+	Body->GlobalAnimRateScale = HitStopLeft > 0.0f ? 0.0f : (bPreviewLive && Speed == 0 ? 1.0f : static_cast<float>(Speed));
 	if (USimPawnAnimInstance* Anim = GetAnim())
 	{
 		FSimPawnAnimInputs& In = Anim->Inputs;

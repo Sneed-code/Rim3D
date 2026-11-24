@@ -418,6 +418,9 @@ private:
     void strike(Entity pawn, Melee& m);
     bool arcSwing(DefId damageType) const;
     void face(Entity pawn, float x, float y);
+    // A rolling pawn's facing curves from the way it rolls to `target` over the tumble and recovery (sneed 2026-11-24:
+    // no snap round at the end of a roll); its path stays the roll's. Every pawn's roll goes through here.
+    void steerRoll(Entity pawn, Entity target);
     bool shoulder(Entity pawn, float& x, float& y, float& z) const;
     float swingTimeFactor(Entity pawn) const;
     int64_t now() const;

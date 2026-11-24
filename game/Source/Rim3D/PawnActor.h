@@ -92,6 +92,9 @@ public:
 	/** The character screen's turntable (docs/design/new-game.md): turns the drawn body this many degrees past its
 	 *  facing, cosmetic only. The body really turns, so soft tissue and hair swing as it spins. 0 to stop. */
 	void SetPreviewSpin(float Degrees) { PreviewSpin = Degrees; }
+	/** The character screen (sneed 2026-11-24): the body breathes through its calm standing idle while the game waits
+	 *  paused at its first second, instead of standing frozen. */
+	void SetPreviewLive(bool bLive) { bPreviewLive = bLive; }
 	float GetPreviewSpin() const { return PreviewSpin; }
 	/** The facing the body is drawn at before the turntable's spin, degrees. */
 	float GetDrawnYaw() const { return DrawnYaw; }
@@ -615,6 +618,7 @@ private:
 	float DrawnYawRate = 0.0f;
 	/** The character screen's turntable (SetPreviewSpin), on top of the facing. */
 	float PreviewSpin = 0.0f;
+	bool bPreviewLive = false;
 	/** How much of a whole-body clip shows now (the clip playing and the one fading out). */
 	float LegsClipWeight = 0.0f;
 	FVector MotionSetBack(double Ahead) const;
