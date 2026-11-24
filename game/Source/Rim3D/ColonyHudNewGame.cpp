@@ -2051,7 +2051,8 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 		ColonyHud::TextColored(NgStyle::Faint, TEXT("Drag to spin, wheel to zoom"));
 		// Zoom buttons as well as the wheel (sneed 2026-11-24: "i need to be able to zoom them"): in to the face, out to the feet.
 		const float ZoomW = 2.2f * ImGui::GetFontSize();
-		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 2.0f * ZoomW - ImGui::GetStyle().ItemSpacing.x);
+		const float StripRight = ImGui::GetCursorStartPos().x + ImGui::GetWindowWidth() - 2.0f * ImGui::GetStyle().WindowPadding.x;
+		ImGui::SameLine(StripRight - 2.0f * ZoomW - ImGui::GetStyle().ItemSpacing.x);
 		if (NgButton(TEXT("-##zoomout"), false, ImVec2(ZoomW, 0.0f)))
 		{
 			PeopleDistance = FMath::Clamp(PeopleDistance / 0.8f, 70.0f, 520.0f);
