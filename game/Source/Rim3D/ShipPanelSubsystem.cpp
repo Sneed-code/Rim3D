@@ -99,7 +99,7 @@ namespace
 	{
 		const bool bEnough = Have >= Need;
 		SpTextColored(bEnough ? SpGood : SpBad, FString::Printf(TEXT("%s %s"), bEnough ? TEXT("[x]") : TEXT("[ ]"), Label));
-		ImGui::SameLine(280.0f * Scale);
+		ImGui::SameLine(280.0f * Scale * ColonyHud::TextGrow());
 		SpText(FString::Printf(TEXT("%d of %d"), Have, Need));
 	}
 }

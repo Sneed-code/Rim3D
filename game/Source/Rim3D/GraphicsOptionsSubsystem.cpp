@@ -7,6 +7,8 @@
 #include "RenderUtils.h"
 #include "Scalability.h"
 
+#include "ColonyHudStyle.h"
+
 #include <imgui.h>
 
 DEFINE_LOG_CATEGORY_STATIC(LogGfxOptions, Log, All);
@@ -218,7 +220,7 @@ void UGraphicsOptionsSubsystem::DrawOptions(float Scale)
 	// Quality step (the sky's Look.Quality).
 	int32 Quality = GfxGetInt(TEXT("Look.Quality"), 2);
 	ImGui::TextUnformatted("Quality");
-	ImGui::SameLine(110.0f * Scale);
+	ImGui::SameLine(110.0f * Scale * ColonyHud::TextGrow());
 	bool bQuality = false;
 	bQuality |= GfxRadio("Low##GfxQ", Quality, 0);
 	ImGui::SameLine();
@@ -253,7 +255,7 @@ void UGraphicsOptionsSubsystem::DrawOptions(float Scale)
 	// Upscaler.
 	int32 Upscaler = GGfxUpscaler.GetValueOnGameThread();
 	ImGui::TextUnformatted("Upscaler");
-	ImGui::SameLine(110.0f * Scale);
+	ImGui::SameLine(110.0f * Scale * ColonyHud::TextGrow());
 	bool bUpscaler = GfxRadio("TSR (Unreal)##Gfx", Upscaler, 0);
 	if (IsDlssAvailable())
 	{

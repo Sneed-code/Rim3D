@@ -918,6 +918,7 @@ void UTradePanelSubsystem::DrawFactionsWindow(USimSubsystem& Bridge, float Scale
 	// Bottom edge just above the bar, so a long list grows upward and scrolls rather than running off the screen.
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
 	ImGui::SetNextWindowSizeConstraints(ImVec2(Width, 0.0f), ImVec2(Width, (ColonyHud::AboveBar(Viewport, Scale) - Viewport->Pos.y) * 0.85f));
+	ColonyHud::HoldWidth("##FactionsWindow", Scale);
 	if (ImGui::Begin("##FactionsWindow", nullptr, ColonyHud::BoxFlags() & ~ImGuiWindowFlags_NoScrollbar))
 	{
 		++Stats.FactionFrames;

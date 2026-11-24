@@ -371,6 +371,11 @@ bool UWorldScreenSubsystem::StartHere()
 		Options.Scenario = TEXT("Crashlanded");
 	}
 	const int32 Wanted = Selected;
+	// A new game waits paused at its first second for the character screen (its edits are refused once it has run).
+	if (bNewGame)
+	{
+		Bridge->SetSpeed(0);
+	}
 	Bridge->StartSim(Options);
 	const colony::World* Made = Bridge->GetSim() ? Bridge->GetSim()->world() : nullptr;
 	if (!Made || Made->startTile() != Wanted)

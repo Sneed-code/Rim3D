@@ -200,3 +200,20 @@ over the date box (key hints, visitors) use where it was really drawn (`DateBoxT
 sit left of it, and the visitors strip shows only while visitors are here (Factions is the bar's flag).
 
 Next: Canopy cards for the colonist bar and the selected panel, then each tab's window.
+
+## Bigger text, same widths (2026-11-24)
+
+sneed: "text size is too small. gotta be 50% bigger ... universally ... make sure width of ui boxes etc don't expand
+wider", and "stop looking basic, make it professional ... be consistent".
+
+- **Text 1.5x everywhere**: `ColonyHud::TextGrow()` (console `UI.TextGrow`, default 1.5) multiplies the frame's text
+  scale in `ApplyFrameStyle`, so every box, the new-game screens and the title's menu grow together. The Settings
+  "bigger text" choice still adds its 1.2 on top.
+- **Widths held**: boxes that size themselves call `ColonyHud::HoldWidth(name, Scale)` before `Begin`; it fixes the
+  width they had before (table `HeldWidthOf`, pixels at 1080 lines) and their text wraps at the edge (`ColonyHud::Text`
+  wraps in any box of fixed width, never in one that fits its text). The colonist panel keeps 360. Measure a box with
+  `UI.TextGrow 1` and `UI.LogBoxes 1` (log lines `BOXWIDTH name width`); a box not in the table sizes itself as before.
+  Label columns that were fixed pixels (skills, needs) grow with the text instead, inside the same width.
+- **Glass**: every plain box gets a faint jade glow fading down from its top edge, a hairline of light inside the top
+  border and a darker foot (the same end-of-frame hook as the jade bars), slimmer jade scrollbars and a little more
+  padding, so all boxes read as one lit pane.

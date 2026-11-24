@@ -183,6 +183,7 @@ void UColonyHudSubsystem::DrawOutfitsScreen(USimSubsystem& Bridge, float Scale)
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
 	HudScrPlace(Scale, 1000.0f * Scale);
+	ColonyHud::HoldWidth("##HudOutfits", Scale);
 	if (!ImGui::Begin("##HudOutfits", nullptr, ColonyHud::BoxFlags()))
 	{
 		ImGui::End();
@@ -395,6 +396,7 @@ void UColonyHudSubsystem::DrawAreasScreen(USimSubsystem& Bridge, float Scale)
 	const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
 	UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
 	HudScrPlace(Scale, 760.0f * Scale);
+	ColonyHud::HoldWidth("##HudAreas", Scale);
 	if (!ImGui::Begin("##HudAreas", nullptr, ColonyHud::BoxFlags()))
 	{
 		ImGui::End();
@@ -492,6 +494,7 @@ void UColonyHudSubsystem::DrawMedicalScreen(USimSubsystem& Bridge, float Scale)
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
 	HudScrPlace(Scale, 1150.0f * Scale);
+	ColonyHud::HoldWidth("##HudMedical", Scale);
 	if (!ImGui::Begin("##HudMedical", nullptr, ColonyHud::BoxFlags()))
 	{
 		ImGui::End();
@@ -673,6 +676,7 @@ void UColonyHudSubsystem::DrawPrisonersScreen(USimSubsystem& Bridge, float Scale
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
 	HudScrPlace(Scale, 980.0f * Scale);
+	ColonyHud::HoldWidth("##HudPrisoners", Scale);
 	if (!ImGui::Begin("##HudPrisoners", nullptr, ColonyHud::BoxFlags()))
 	{
 		ImGui::End();
@@ -891,6 +895,7 @@ bool UColonyHudSubsystem::StartNewColony(bool bPickSite)
 		}
 		return false;
 	}
+	Bridge->SetSpeed(0);  // held at its first second for the character screen
 	const bool bStarted = Bridge->StartSim(Options);
 	if (bStarted)
 	{
