@@ -898,7 +898,6 @@
    ],
    "parts": [
     "Bellows",
-    "BellowsLever",
     "Coals"
    ]
   },
@@ -2084,17 +2083,6 @@
    "art": {
     "name": "FueledSmithy_Bellows",
     "fbx": "assets/raw/codex/FueledSmithy/FueledSmithy_Bellows_Game.fbx",
-    "combine": true,
-    "slotTextureDir": "assets/raw/codex/FueledSmithy",
-    "normalOpenGL": true
-   }
-  },
-  {
-   "def": "FueledSmithy",
-   "credit": "Neon (our own model, Gemini 4 Neon)",
-   "art": {
-    "name": "FueledSmithy_BellowsLever",
-    "fbx": "assets/raw/codex/FueledSmithy/FueledSmithy_BellowsLever_Game.fbx",
     "combine": true,
     "slotTextureDir": "assets/raw/codex/FueledSmithy",
     "normalOpenGL": true
