@@ -224,6 +224,8 @@ public:
 	int32 GetGibsThrown() const { return GibsThrown; }
 	/** How many stumps got their flesh cap. */
 	int32 GetSeveredCaps() const { return SeveredCaps; }
+	/** Severed heads that took their strands with them (for the gore smoke). */
+	int32 GetSeveredStrandsMoved() const { return SeveredStrandsMoved; }
 	/** The piece itself, as the body has it now, thrown clear (SeveredPieceActor.cpp). Null if the body has no such bone. */
 	class ASeveredPieceActor* SpawnSeveredPiece(uint16 Bit);
 
@@ -470,6 +472,7 @@ private:
 	int32 MeshTickCount = 0;
 	uint16 SeveredShown = 0;
 	int32 SeveredCaps = 0;
+	int32 SeveredStrandsMoved = 0;
 	/** The trunk burst: the body hides once GibHideFrames more frames have passed (pieces copy it first). */
 	bool bGibPending = false;
 	bool bGibHidden = false;

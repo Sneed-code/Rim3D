@@ -195,6 +195,12 @@ private:
 		float BlockBlend = 0.0f;
 		float HandFree = 0.0f;
 		float SwingBlend = 0.0f;  // a swing with no clip: the weapon itself follows the procedural swing
+		/** Through a full-body clip that is not a swing (a roll, a stagger), the weapon rides with the upper body: its
+		 *  place in the neck's frame from before the clip (captured while no clip plays), how far it rides (0 to 1). Both
+		 *  hands stay on it the whole time, so an arm never crosses the tumbling body and snaps back (sneed 2026-11-24). */
+		FTransform WeaponInNeck = FTransform::Identity;
+		bool bWeaponInNeck = false;
+		float ClipRide = 0.0f;
 		bool bPinned = false;
 		/** A held weapon drawn away from its hand this long (real seconds), and how long it is kept on the hand's own
 		 *  grip after that (no place, no pinned hands) so it never floats. */
@@ -275,6 +281,9 @@ private:
 	TWeakObjectPtr<USimSubsystem> BridgeSource;
 	int32 LastGeneration = -1;
 	int64 LastOrderStep = -1;
+	/** A click during a swing is kept this long (real seconds) and swings the moment the last one lets it (sneed
+	 *  2026-11-24: "make sure you can still punch immediately after so there's no delay between"). */
+	double SwingBufferedUntil = 0.0;
 	float FrameDelta = 0.0f;
 	/** The right-mouse shield: whether the player wants it up, for which pawn, the way it was last sent and when (real seconds). */
 	bool bShieldWanted = false;

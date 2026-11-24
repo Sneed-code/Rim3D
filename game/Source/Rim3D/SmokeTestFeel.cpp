@@ -71,6 +71,11 @@ namespace
 		float PelvisBackAt = -1.0f;
 		double MaxCameraTrail = 0.0;
 		double CameraTrailAtEnd = 0.0;
+		// The walking roll (sneed 2026-11-24, W held through it with the rifle in hand): whether it ended, and how close
+		// the left hand came to the line up the body (pelvis to neck) while it tumbled (an arm through the body).
+		bool bWalkRollEnded = false;
+		float WalkRollEndedAt = -1.0f;
+		double MinHandToBody = 1.0e9;
 
 		void Reset()
 		{
@@ -500,6 +505,105 @@ void USmokeTestSubsystem::BuildFeelPhases()
 		}
 	};
 	Phases.Add(MoveTemp(Roll));
+
+	// 5b. The same roll with the walk key held through it and after it, as a player does (sneed 2026-11-24: "rolling still
+	// snaps my character back to a different point when it finishes", and the arm on a two-handed weapon went through the
+	// body): the drawn hips never step back against the way they go, and the left hand stays off the body's middle.
+	FPhase WalkRoll;
+	WalkRoll.Name = TEXT("feel_roll_walking");
+	WalkRoll.WarmupSeconds = 0.5f;
+	WalkRoll.MeasureSeconds = 3.5f;
+	WalkRoll.Setup = [=, this]()
+	{
+		State->Reset();
+		State->bRollSent = false;
+		State->bHavePelvis = false;
+		State->MaxPelvisBack = State->MaxPelvisJump = 0.0;
+		State->PelvisBackAt = -1.0f;
+		State->bWalkRollEnded = false;
+		State->WalkRollEndedAt = -1.0f;
+		State->MinHandToBody = 1.0e9;
+		AProtagonistPawn* Body = Prot()->GetBody();
+		Body->SetFirstPerson(false);
+		Body->SetScriptedInput(0.0, 1.0, false);
+	};
+	WalkRoll.OnFrame = [=, this]()
+	{
+		Watch();
+		const colony::ThingView* Me = MyView();
+		if (!Me)
+		{
+			return;
+		}
+		if (!State->bRollSent && PhaseTime > 0.6f)
+		{
+			State->bRollSent = Fight()->Roll(FVector2D(0.0, 1.0));
+			State->RollForward = FRotator(0.0, Prot() && Prot()->GetBody() ? Prot()->GetBody()->GetYaw() : 0.0f, 0.0).Vector();
+		}
+		if (State->bRollSent && !State->bWalkRollEnded && Me->rollPhase == 0 && !Me->motionClip.valid() && PhaseTime > 1.0f)
+		{
+			State->bWalkRollEnded = true;
+			State->WalkRollEndedAt = PhaseTime;
+		}
+		const ASimPawnActor* Drawn = Pawns() ? Pawns()->FindPawn(State->Me) : nullptr;
+		const USkeletalMeshComponent* Mesh = Drawn ? (Drawn->GetMakeHumanMesh() && Drawn->GetMakeHumanMesh()->IsVisible() ? Drawn->GetMakeHumanMesh() : Drawn->GetBody()) : nullptr;
+		if (!State->bRollSent || !Mesh || !Mesh->DoesSocketExist(TEXT("pelvis")))
+		{
+			return;
+		}
+		const FVector Pelvis = Mesh->GetSocketLocation(TEXT("pelvis"));
+		if (State->bHavePelvis)
+		{
+			const FVector Step = Pelvis - State->LastPelvis;
+			State->MaxPelvisJump = FMath::Max(State->MaxPelvisJump, Step.Size2D());
+			const double Back = -FVector::DotProduct(FVector(Step.X, Step.Y, 0.0), State->RollForward);
+			if (Back > State->MaxPelvisBack)
+			{
+				State->MaxPelvisBack = Back;
+				State->PelvisBackAt = PhaseTime;
+			}
+		}
+		if (Me->rollPhase != 0 && Mesh->DoesSocketExist(TEXT("neck_01")) && Mesh->DoesSocketExist(TEXT("hand_l")))
+		{
+			State->MinHandToBody = FMath::Min(State->MinHandToBody,
+				static_cast<double>(FMath::PointDistToSegment(Mesh->GetSocketLocation(TEXT("hand_l")), Pelvis, Mesh->GetSocketLocation(TEXT("neck_01")))));
+		}
+		if (Me->rollPhase != 0 || Me->motionClip.valid() || (State->bHavePelvis && FVector::Dist2D(Pelvis, State->LastPelvis) > 6.0) || PhaseTime < State->WalkRollEndedAt + 0.5f)
+		{
+			const FVector ActorAt = Drawn->GetActorLocation();
+			const FVector Set = Drawn->GetMotionOffset();
+			const AProtagonistPawn* Body = Prot() ? Prot()->GetBody() : nullptr;
+			const FVector2D Local = Body ? Body->GetSimPosition() : FVector2D::ZeroVector;
+			UE_LOG(LogTemp, Display, TEXT("WALKROLLTRACE t=%.3f phase=%d clip=%d mt=%.3f sim=(%.2f,%.2f) local=(%.2f,%.2f) actor=(%.0f,%.0f) pelvis=(%.0f,%.0f) off=(%.0f,%.0f)"),
+				PhaseTime, static_cast<int32>(Me->rollPhase), Me->motionClip.valid() ? 1 : 0, Me->motionTime, Me->x, Me->y, Local.X, Local.Y, ActorAt.X, ActorAt.Y,
+				Pelvis.X, Pelvis.Y, Set.X, Set.Y);
+		}
+		State->LastPelvis = Pelvis;
+		State->bHavePelvis = true;
+	};
+	WalkRoll.Verify = [=, this]()
+	{
+		if (AProtagonistPawn* Body = Prot() ? Prot()->GetBody() : nullptr)
+		{
+			Body->ClearScriptedInput();
+		}
+		Notes.Add(FString::Printf(TEXT("feel_roll_walking: drawn hips stepped back up to %.1f cm in one frame (at %.2f s, the roll over at %.2f s), jumped up to %.1f cm; left hand came %.0f cm from the body's middle"),
+			State->MaxPelvisBack, State->PelvisBackAt, State->WalkRollEndedAt, State->MaxPelvisJump, State->MinHandToBody));
+		if (!State->bRollSent || !State->bWalkRollEnded)
+		{
+			Fail(TEXT("feel_roll_walking: the roll was not sent or did not end"));
+			return;
+		}
+		if (State->MaxPelvisBack > 6.0)
+		{
+			Fail(FString::Printf(TEXT("feel_roll_walking: the drawn hips snapped back %.1f cm in one frame at %.2f s"), State->MaxPelvisBack, State->PelvisBackAt));
+		}
+		if (State->MinHandToBody < 8.0)
+		{
+			Fail(FString::Printf(TEXT("feel_roll_walking: the left hand went %.0f cm from the body's middle (through it) in the roll"), State->MinHandToBody));
+		}
+	};
+	Phases.Add(MoveTemp(WalkRoll));
 
 	// 6. A grenade: drawn in the air and on the ground, then the blast (fireball, smoke, sparks, a flash, debris on an invisible floor),
 	// a shake that grows with nearness, and everything gone a few seconds later.

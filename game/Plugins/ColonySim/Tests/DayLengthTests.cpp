@@ -199,9 +199,9 @@ TEST_CASE("Day length: a melee swing takes the same steps whatever the day lengt
             ++steps;
         }
         // No skills: Melee 4, 0.88 of the pace (real-time-combat.md): 68 steps at RimWorld's pace; a person's fists swing
-        // at 0.25 of that plus a 0.1 s pause (MeleeRules unarmedTimeFactor, unarmedGapSteps: sneed 2026-11-23), about 20.
-        CHECK(steps >= 18);
-        CHECK(steps <= 23);
+        // at half of that with no pause (MeleeRules unarmedTimeFactor, unarmedGapSteps: sneed 2026-11-24), about 34.
+        CHECK(steps >= 32);
+        CHECK(steps <= 37);
         if (first < 0) {
             first = steps;
         }

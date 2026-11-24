@@ -625,6 +625,9 @@ public:
     float spreadRadiusFor(float chance) const;
     // Things defs that go in a pawn's hands: a melee weapon (an item with `tools`, F8) or a gun.
     bool isMeleeWeapon(DefId def) const;
+    // A weapon held in both hands (`twoHanded`, or a two-hand hold): a pawn missing an arm can't use one (sneed 2026-11-24).
+    bool needsBothHands(DefId def) const;
+    bool oneArmed(Entity pawn) const;
     // What a weapon item's quality and stuff make of it, from QualityRules and the stuff's statFactors:
     // 1 for a normal weapon of no stuff. The melee factor is by the blow's damage type (sharp or blunt
     // stuff factor times the quality's) and applies to damage and armor penetration alike.
@@ -684,6 +687,7 @@ private:
                   float y, float z, float spreadSlope, Rng& rng, float kickUp, float kickSide, Posture* posture,
                   float damageFactor = 1.0f);
     void stepRolls();
+    void dropTwoHandersOfOneArmed();
     void stepKicks();
     void stepSwitches();
 };

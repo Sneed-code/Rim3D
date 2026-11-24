@@ -724,6 +724,7 @@ void USmokeTestSubsystem::BuildHurtPhases()
 			PhaseNumbers.Add(TEXT("severed_sim"), Now ? Now->severed : 0);
 			PhaseNumbers.Add(TEXT("severed_shown"), Actor ? Actor->GetSeveredShown() : 0);
 			PhaseNumbers.Add(TEXT("stump_caps"), Actor ? Actor->GetSeveredCaps() : 0);
+			PhaseNumbers.Add(TEXT("strands_with_head"), Actor ? Actor->GetSeveredStrandsMoved() : 0);
 			PhaseNumbers.Add(TEXT("real_body"), Actor && Actor->GetMetaHuman() ? 1 : 0);
 			if (const UBloodSubsystem* Blood = GetWorld()->GetSubsystem<UBloodSubsystem>())
 			{

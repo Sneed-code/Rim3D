@@ -411,15 +411,22 @@ TEST_CASE("Animal fights: an armed colonist stands and shoots a wolf at arm's le
     sim->things().registry().emplace<Colonist>(bare);
     fightSettle(*sim);
     sim->animals().enrage(wolf, AnimalTemper::Hunting, armed);
-    sim->stepMany(150);
-    CHECK(sim->raids().state().alarm);
-    // The unarmed colonist is called up as a Shelter; the armed one as a Defender.
-    const Fighter* bareFighter = sim->things().registry().try_get<Fighter>(bare);
-    FIGHT_REQUIRE(bareFighter != nullptr);
-    CHECK(bareFighter->mode == FightMode::Shelter);
-    const Fighter* armedFighter = sim->things().registry().try_get<Fighter>(armed);
-    FIGHT_REQUIRE(armedFighter != nullptr);
-    CHECK(armedFighter->mode == FightMode::Fight);
+    // Watched step by step: the rifle's tighter spray (2026-11-24) can drop the wolf, and end the alarm, inside 150 steps.
+    bool alarmed = false;
+    bool sheltered = false;
+    bool fought = false;
+    for (int i = 0; i < 150; ++i) {
+        sim->stepMany(1);
+        alarmed = alarmed || sim->raids().state().alarm;
+        // The unarmed colonist is called up as a Shelter; the armed one as a Defender.
+        const Fighter* bareFighter = sim->things().registry().try_get<Fighter>(bare);
+        const Fighter* armedFighter = sim->things().registry().try_get<Fighter>(armed);
+        sheltered = sheltered || (bareFighter != nullptr && bareFighter->mode == FightMode::Shelter);
+        fought = fought || (armedFighter != nullptr && armedFighter->mode == FightMode::Fight);
+    }
+    CHECK(alarmed);
+    CHECK(sheltered);
+    CHECK(fought);
     sim->stepMany(1500);
     CHECK(fightOut(*sim, wolf));
     CHECK_FALSE(fightDead(*sim, armed));

@@ -10,6 +10,7 @@
     "Shot_Turret": {"files": ["oga-firearms/Prepared SFX Library/AR-15/D_32P.wav", "oga-firearms/Prepared SFX Library/SKS/U_14P.wav"], "seconds": 0.8, "trimSilence": true, "filter": ["bass=g=2"]},
     "Shot_Foam": {"files": ["kenney-impact/Audio/impactSoft_heavy_*.ogg"], "gain": -3},
     "Gun_Reload": {"files": ["kenney-rpg/Audio/metalLatch.ogg", "kenney-rpg/Audio/metalClick.ogg"]},
+    "Gun_Pump": {"files": ["kenney-rpg/Audio/metalLatch.ogg"]},
     "Gun_Switch": {"files": ["kenney-rpg/Audio/beltHandle1.ogg", "kenney-rpg/Audio/beltHandle2.ogg", "kenney-rpg/Audio/clothBelt.ogg"]},
     "Impact_Armor": {"files": ["freesound/351371.mp3", "freesound/778028.mp3", "kenney-impact/Audio/impactMetal_medium_*.ogg"], "trimSilence": true, "seconds": 0.8},
     "Impact_Building": {"files": ["freesound/237448.mp3", "freesound/319223.mp3", "freesound/319228.mp3", "freesound/381617.mp3"], "trimSilence": true, "seconds": 0.8},

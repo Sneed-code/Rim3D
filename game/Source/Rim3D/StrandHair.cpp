@@ -905,6 +905,20 @@ bool UStrandHairSubsystem::GetHiddenWig(const USkeletalMeshComponent* Body, TArr
 	return true;
 }
 
+UGroomComponent* UStrandHairSubsystem::Release(const USkeletalMeshComponent* Body)
+{
+	FWearer* Found = Body ? Wearers.FindByPredicate([Body](const FWearer& W) { return W.Body.Get() == Body; }) : nullptr;
+	UGroomComponent* Strands = Found ? Found->Strands.Get() : nullptr;
+	if (!Found || !Strands)
+	{
+		return nullptr;
+	}
+	const bool bShowing = Found->bStrands;
+	Found->Strands = nullptr;
+	Found->bStrands = false;
+	return bShowing || Strands->IsVisible() ? Strands : nullptr;
+}
+
 int32 UStrandHairSubsystem::NumWearing() const
 {
 	int32 Count = 0;

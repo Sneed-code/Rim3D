@@ -157,6 +157,9 @@ struct MeleeRules {
     // after each (unarmedGapSteps added to the recovery).
     float unarmedWindupShare = -1.0f;  // below 0: windupShare
     int unarmedGapSteps = 0;
+    // sneed 2026-11-24: a blow at a body on the ground (downed or dead: the low blows and the finishers) is quicker,
+    // three where two were: its wind-up, recovery and finisher times are multiplied by this.
+    float lowTimeFactor = 1.0f;
     // sneed 2026-11-23: the player's swing from standing plays on the whole body, so the feet step into a thrust instead
     // of the chest leaning over planted legs; walking (faster than stepInMaxSpeed, m/s) it stays the arms' over walking
     // legs. With stepInFreesFeet, starting to walk during a standing swing hands it to the upper body there and then.

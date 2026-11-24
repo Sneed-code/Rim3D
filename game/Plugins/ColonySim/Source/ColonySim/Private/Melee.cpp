@@ -106,6 +106,7 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     whole("unarmedMinWindup", r.unarmedMinWindup);
     num("unarmedWindupShare", r.unarmedWindupShare);
     whole("unarmedGapSteps", r.unarmedGapSteps);
+    num("lowTimeFactor", r.lowTimeFactor);
     r.playerStepIn = def->flag("playerStepIn", r.playerStepIn);
     r.stepInFreesFeet = def->flag("stepInFreesFeet", r.stepInFreesFeet);
     num("stepInMaxSpeed", r.stepInMaxSpeed);
@@ -221,6 +222,7 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     }
     r.unarmedWindupShare = std::clamp(r.unarmedWindupShare, 0.0f, 1.0f);
     r.unarmedGapSteps = std::max(0, r.unarmedGapSteps);
+    r.lowTimeFactor = std::max(0.05f, r.lowTimeFactor);
     r.commitSteps = std::max(0, r.commitSteps);
     r.guardBlocks = std::max(1, r.guardBlocks);
     for (float& f : r.skillSpeed) {
@@ -775,13 +777,20 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         const Position& to = reg.get<Position>(corpse);
         face(pawn, to.x, to.y);
     }
+    // sneed 2026-11-24: blows at a body on the ground come quicker (MeleeRules lowTimeFactor).
+    if (m.low) {
+        windup = std::max(1, static_cast<int>(std::lround(static_cast<float>(windup) * rules_.lowTimeFactor)));
+    }
+    // The body on the ground the blow is for: the target, or the corpse before a player swinging at nobody (sneed
+    // 2026-11-24: a corpse gets the very same move, finisher and all, as a downed enemy would).
+    const Entity lowBody = target != kNoEntity ? target : corpse;
     // At a body on the ground with a weapon that has one, a finisher (sneed 2026-11-20): its own slow move, timed by
     // MeleeRules finishers, the attacker stepping to its place beside the body and holding still till it is over.
     m.finisher = 0;
     m.finisherSteps = 0;
     // A finisher with a whole-body clip (sneed 2026-11-22) plays it where the attacker stands, so only close enough to
     // the body; further off (or with no clips for this body) the weapon's low blow below.
-    const MeleeFinisher* finisherRule = m.low && target != kNoEntity && weapon && set->finisher > 0 && static_cast<size_t>(set->finisher) <= rules_.finishers.size()
+    const MeleeFinisher* finisherRule = m.low && lowBody != kNoEntity && weapon && set->finisher > 0 && static_cast<size_t>(set->finisher) <= rules_.finishers.size()
                                             ? &rules_.finishers[static_cast<size_t>(set->finisher - 1)]
                                             : nullptr;
     const MotionClip* finisherClip = nullptr;
@@ -792,7 +801,7 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         finisherClip = combat_.motion().clip(finisherRule->clip);
         clipBlowAt = finisherClipHit(set->finisher);
         const Position& a = reg.get<Position>(pawn);
-        const Position& b = reg.get<Position>(target);
+        const Position& b = reg.get<Position>(lowBody);
         const float d = std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
         // Where the clip alone would leave it at the blow: its own step forward (scaled to the body) taken off.
         finisherShift = d - combat_.motion().forwardAt(finisherClip->def, clipBlowAt) * combat_.motion().sizeScale(pawn) -
@@ -810,8 +819,11 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         const MeleeFinisher& f = *finisherRule;
         m.finisher = static_cast<uint8_t>(set->finisher);
         m.finisherFrom = now();
-        m.finisherSteps = std::max(2, static_cast<int>(std::lround(f.seconds * 30.0f * rules_.attackTimeFactor)));
-        windup = std::clamp(static_cast<int>(std::lround(f.hitSeconds * 30.0f * rules_.attackTimeFactor)), 1, m.finisherSteps - 1);
+        m.finisherSteps = std::max(2, static_cast<int>(std::lround(f.seconds * 30.0f * rules_.attackTimeFactor * rules_.lowTimeFactor)));
+        windup = std::clamp(static_cast<int>(std::lround(f.hitSeconds * 30.0f * rules_.attackTimeFactor * rules_.lowTimeFactor)), 1, m.finisherSteps - 1);
+        if (target == kNoEntity) {
+            m.target = lowBody;  // the corpse: the finisher holds over it (it is the target when the line is fixed anyway)
+        }
         if (Mover* mover = reg.try_get<Mover>(pawn)) {
             mover->vx = 0.0f;  // the player's last walk no longer turns it
             mover->vy = 0.0f;
@@ -820,7 +832,7 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     if (finisherClip != nullptr) {
         // The whole body plays the clip, timed so its blow lands on the hit step; the finisher lasts as long as the clip.
         const Position& a = reg.get<Position>(pawn);
-        const Position& b = reg.get<Position>(target);
+        const Position& b = reg.get<Position>(lowBody);
         combat_.motion().playTimed(pawn, finisherClip->def, clipBlowAt, windup, b.x - a.x, b.y - a.y, false);
         // To its place by the body during the clip's start (no glide before it): done by two thirds of the wind-up.
         if (std::fabs(finisherShift) > 0.02f) {
@@ -832,7 +844,7 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         const MeleeFinisher& f = *finisherRule;
         // To its place: standOff from the body's centre, on the side it came from.
         const Position& a = reg.get<Position>(pawn);
-        const Position& b = reg.get<Position>(target);
+        const Position& b = reg.get<Position>(lowBody);
         float dx = a.x - b.x;
         float dy = a.y - b.y;
         const float d = std::sqrt(dx * dx + dy * dy);
@@ -1640,7 +1652,7 @@ void MeleeSystem::step() {
                                   : tool != nullptr
                                       ? std::max(1, static_cast<int>(std::lround(
                                                         static_cast<float>(tool->cooldown - meleeWindup(tool->cooldown, tool->minWindup, tool->windupShare)) *
-                                                        swingTimeFactor(pawn)))) + tool->gapSteps
+                                                        swingTimeFactor(pawn) * (m.low ? rules_.lowTimeFactor : 1.0f)))) + tool->gapSteps
                                       : 1;
                 }
                 break;
