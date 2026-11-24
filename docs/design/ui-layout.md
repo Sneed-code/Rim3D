@@ -239,7 +239,8 @@ wider", and "stop looking basic, make it professional ... be consistent".
 
 The tall posts are gone. A marked cell or thing gets a flat ring: green for chop, yellow for harvest, orange for mine,
 red for take down (deconstruct or remove floor). Rings show only while that order's tool is held, for all of them while
-Cancel is held, or for the selected thing or cell. Otherwise the order stays but nothing is drawn.
+Cancel is held, or for the selected thing or cell. Otherwise the order stays but nothing is drawn. Chop marks
+only trees (`DesignateCommand.treesOnly`, RimWorld's "Chop wood"), not the grass and bushes in the drag.
 
 ## Alerts (2026-11-24)
 

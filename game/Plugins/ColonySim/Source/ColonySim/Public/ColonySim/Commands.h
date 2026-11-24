@@ -222,6 +222,7 @@ struct SetStanceCommand {
 struct DesignateCommand {
     CellRect area;
     DesignationKind kind = DesignationKind::Mine;
+    bool treesOnly = false;  // CutPlant only: mark just the trees (RimWorld's "Chop wood"), not the grass and bushes
 };
 
 // Takes the marks off the cells in `area`; with a kind, only marks of that kind. Fails if there

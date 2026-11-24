@@ -1642,6 +1642,9 @@ void saveCommand(Ar& ar, Command& command, SaveCommandNames* names) {
                 ar.value("kind", designate->kind);
                 ar.require(designate->kind >= DesignationKind::Mine && designate->kind <= DesignationKind::RemoveWindow,
                        "the save file has a bad designation kind");
+                if (ar.sectionVersion() >= 8) {  // Chop marks only the trees (sneed 2026-11-24)
+                    ar.value("treesOnly", designate->treesOnly);
+                }
             } else if constexpr (std::is_same_v<Type, CancelDesignationsCommand>) {
                 auto* cancelMarks = &c;
                 ar.group("area", [&] { saveRect(ar, cancelMarks->area); });
@@ -3587,7 +3590,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("repaths", d.repaths);
         ar.list("setupErrors", d.setupErrors, [&](std::string& s) { ar.text(nullptr, s); });
     });
-    ar.section("commands", 7, [&] { saveCommandsSection(ar, d); });
+    ar.section("commands", 8, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
     ar.section("movement", 3, [&] {

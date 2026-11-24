@@ -9,7 +9,12 @@ engine view keys off; **drag-box selection** (colonists, then other people, then
 selection rings, orders to every selected colonist; chop/harvest/mine/take-down marks are flat coloured rings shown only
 with their tool or on the selected thing; **RimWorld-style alerts** (short titles, click for a pop-up, right click
 dismiss, shift + right click off for good, turned back on in Menu > Message log, 60 s fade); health bars under colonist
-faces; the camera starts on your character. Still to do: ChatGPT icons for the orders, the giant grey animal shapes.
+faces; the camera starts on your character; Chop marks only trees (`DesignateCommand.treesOnly`, save section
+`commands` 8). **Giant grey animals** were the capybara: its leg IK/stretch bones are 0.001 in the bind pose but about 0.105
+in its clips, and its `Piel` material lacked the morph-target usage; AnimalArt now clamps bone scale (`clampBoneScale`
+in `assets/animal_art.json`) and ticks the usage on plain materials (art step `animal-art` re-runs). PC (2026-11-24,
+test clone): compiles; `hud`, `orders`, `panels` pass; `newgame` fails only its 2 known clothes checks. Still to do:
+ChatGPT icons for the orders (own thread).
 
 Rolls, character screen, bigger text, skill points (sneed, 2026-11-24; sim and Unreal): **rolls curve round to the focus**:
 every pawn's roll keeps its path, but its facing turns from the roll's way to the one it is locked on to (an AI's dodge:

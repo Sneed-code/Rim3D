@@ -1013,9 +1013,14 @@ int32 UOrdersSubsystem::EndDrag(colony::CellPos Cell)
 			Say(FString::Printf(TEXT("Mine %d x %d"), Rect.sizeX, Rect.sizeY));
 			break;
 		case EOrderTool::Chop:
-			Submit(colony::DesignateCommand{Rect, colony::DesignationKind::CutPlant});
+		{
+			// Only the trees (RimWorld's "Chop wood"), not every blade of grass (PC 2026-11-24: 61 marks for 4 trees).
+			colony::DesignateCommand Chop{Rect, colony::DesignationKind::CutPlant};
+			Chop.treesOnly = true;
+			Submit(Chop);
 			Say(FString::Printf(TEXT("Chop %d x %d"), Rect.sizeX, Rect.sizeY));
 			break;
+		}
 		case EOrderTool::Harvest:
 			Submit(colony::DesignateCommand{Rect, colony::DesignationKind::HarvestPlant});
 			Say(FString::Printf(TEXT("Harvest %d x %d"), Rect.sizeX, Rect.sizeY));
@@ -2218,7 +2223,17 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 
 	// Left: the search box and the categories, two columns, the picked one lit.
 	// Held at its width as the text grew (sneed 2026-11-24): flush left, as tall as the tiles beside it; text wraps.
-	const float NavWidth = 250.0f * Scale;
+	// Wide enough for two columns of the longest category name, so none is cut ("Productic", "Temperat" at 1.5x text).
+	float NavWidth = 250.0f * Scale;
+	{
+		float Widest = FMath::Max(ImGui::CalcTextSize("Orders").x, ImGui::CalcTextSize("Zone").x);
+		for (const FString& Name : BuildCategories)
+		{
+			Widest = FMath::Max(Widest, ImGui::CalcTextSize(TCHAR_TO_UTF8(*Name)).x);
+		}
+		const ImGuiStyle& NavStyle = ImGui::GetStyle();
+		NavWidth = FMath::Max(NavWidth, 2.0f * (Widest + 2.0f * NavStyle.FramePadding.x + 6.0f * Scale) + NavStyle.ItemSpacing.x + 2.0f * NavStyle.WindowPadding.x);
+	}
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
 	ImGui::SetNextWindowSizeConstraints(ImVec2(NavWidth, SnugHeight), ImVec2(NavWidth, FLT_MAX));
 	ColonyHud::HeldBoxes().Add(ImHashStr("##BuildNav"));
@@ -2302,7 +2317,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 		AddTool(TEXT("Cancel"), EOrderTool::Cancel, TEXT("Drag over marks, plans and frames to take them off"));
 		AddTool(TEXT("Deconstruct"), EOrderTool::Deconstruct, TEXT("Drag over buildings to have them taken down"));
 		AddTool(TEXT("Mine"), EOrderTool::Mine, TEXT("Drag over rock to have it mined"));
-		AddTool(TEXT("Chop trees"), EOrderTool::Chop, TEXT("Drag over trees and plants to have them cut"));
+		AddTool(TEXT("Chop trees"), EOrderTool::Chop, TEXT("Drag over trees to have them chopped for wood"));
 		AddTool(TEXT("Harvest"), EOrderTool::Harvest, TEXT("Drag over grown plants to have them harvested"));
 		AddTool(TEXT("Remove floor"), EOrderTool::RemoveFloor, TEXT("Drag over laid floors to have them taken up"));
 		AddTool(TEXT("Tame"), EOrderTool::Tame, TEXT("Drag over wild animals: a colonist with Handling work tries to tame them"));

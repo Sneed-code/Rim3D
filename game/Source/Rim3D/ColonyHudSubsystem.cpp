@@ -1646,6 +1646,12 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 		{
 			continue;
 		}
+		// Only from the front of an upright pawn: lying in bed or downed, the camera saw the back of the head (a grey shape in
+		// the bar, PC 2026-11-24). The old picture stays until they are up again.
+		if (View.posture == colony::PawnPosture::Lie || View.downed)
+		{
+			continue;
+		}
 		ASimPawnActor* Actor = Pawns->FindPawn(View.id);
 		if (!Actor)
 		{
