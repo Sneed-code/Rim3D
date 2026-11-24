@@ -2065,7 +2065,7 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 		ColonyHud::TextColored(NgStyle::Text, TEXT("CLOTHES ON"));
 		ColonyHud::Tip(TEXT("Shows the cotton shirt and trousers from the cargo pack. Everyone lands naked."));
 		ImGui::SameLine(0.0f, 2.0f * Gap);
-		ImGui::TextColored(NgStyle::Faint, "%s", "Drag to spin, wheel to zoom");
+		ImGui::TextColored(NgStyle::Faint, "%s", "Drag to spin");
 		// Zoom buttons as well as the wheel (sneed 2026-11-24: "i need to be able to zoom them"): in to the face, out to the feet.
 		const float ZoomW = 2.2f * ImGui::GetFontSize();
 		const float StripRight = ImGui::GetCursorStartPos().x + ImGui::GetWindowWidth() - 2.0f * ImGui::GetStyle().WindowPadding.x;

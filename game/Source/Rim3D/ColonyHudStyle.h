@@ -198,7 +198,6 @@ namespace ColonyHud
 		};
 		static const FHeld Widths[] = {
 			{"##HudLesson", 380.0f},
-			{"##HudDate", 300.0f},
 			{"##HudHover", 220.0f},
 			{"##HudInfo", 760.0f},
 			{"##HudSettings", 745.0f},
