@@ -51,13 +51,12 @@ namespace
 
 	void PText(const FString& Text)
 	{
-		const FTCHARToUTF8 Utf8(*Text);
-		ImGui::TextUnformatted(Utf8.Get(), Utf8.Get() + Utf8.Length());
+		ColonyHud::Text(Text);  // wraps in a box of held width
 	}
 
 	void PText(const std::string& Text)
 	{
-		ImGui::TextUnformatted(Text.c_str(), Text.c_str() + Text.size());
+		ColonyHud::Text(FString(UTF8_TO_TCHAR(Text.c_str())));
 	}
 
 	void PTextColored(const ImVec4& Color, const FString& Text)
@@ -982,7 +981,9 @@ void UPanelsSubsystem::DrawColonistPanel(USimSubsystem& Bridge, const colony::Th
 	const int64 Now = Sim.time().seconds;
 
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Left, Viewport->Pos.y + Top), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(360.0f * Scale, 0.0f), ImVec2(460.0f * Scale, FMath::Max(200.0f * Scale, Viewport->Size.y - Top - 330.0f * Scale)));
+	// The width it had before the text grew half as big again (sneed 2026-11-24: boxes keep their widths).
+	ImGui::SetNextWindowSizeConstraints(ImVec2(360.0f * Scale, 0.0f), ImVec2(360.0f * Scale, FMath::Max(200.0f * Scale, Viewport->Size.y - Top - 330.0f * Scale)));
+	ColonyHud::HeldBoxes().Add(ImHashStr("##PanelsColonist"));
 	if (ImGui::Begin("##PanelsColonist", nullptr, PanelFlags() & ~ImGuiWindowFlags_NoScrollbar))
 	{
 		++Stats.ColonistPanelFrames;
@@ -1034,7 +1035,7 @@ void UPanelsSubsystem::DrawColonistPanel(USimSubsystem& Bridge, const colony::Th
 		const auto Bar = [&](const char* Name, float Fraction, const FString& Overlay)
 		{
 			PText(FString(UTF8_TO_TCHAR(Name)));
-			ImGui::SameLine(80.0f * Scale);
+			ImGui::SameLine(80.0f * Scale * ColonyHud::TextGrow());
 			ImGui::ProgressBar(FMath::Clamp(Fraction, 0.0f, 1.0f), ImVec2(-1.0f, 0.0f), TCHAR_TO_UTF8(*Overlay));
 		};
 		if (View.food >= 0.0f)
@@ -1127,7 +1128,7 @@ void UPanelsSubsystem::DrawColonistPanel(USimSubsystem& Bridge, const colony::Th
 				(Skill.passion == colony::Passion::Minor ? ImVec4(0.85f, 0.55f, 0.38f, 0.85f) : ImVec4(0.30f, 0.66f, 0.53f, 0.85f)));
 			const FString Overlay = Skill.disabled ? FString(TEXT("incapable")) : FString::Printf(TEXT("%d %s"), Skill.level, UTF8_TO_TCHAR(Passion));
 			PText(Name);
-			ImGui::SameLine(110.0f * Scale);
+			ImGui::SameLine(110.0f * Scale * ColonyHud::TextGrow());
 			ImGui::ProgressBar(Skill.disabled ? 0.0f : Skill.level / 20.0f, ImVec2(-1.0f, 0.0f), TCHAR_TO_UTF8(*Overlay));
 			ImGui::PopStyleColor();
 		}

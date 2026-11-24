@@ -416,3 +416,57 @@ TEST_CASE("Focus: a spawned pawn has a name for the HP bar and the kill feed, ke
     CHECK(loaded.sim->stateHash() == sim->stateHash());
     CHECK(loaded.sim->feedName(spawned[0]) == sim->feedName(spawned[0]));
 }
+
+TEST_CASE("Focus: a locked-on roll curves round to the focus as it goes, with no snap at the end") {
+    // sneed (2026-11-24): rolling sideways while locked on, the body swung round to the enemy in one go at the end.
+    auto sim = focusTestSim(84);
+    const Entity hero = focusTestHero(*sim, 30.5f, 30.5f, "Melee_Longsword");
+    const Entity enemy = focusTestPawn(*sim, 34.5f, 30.5f);  // 4 m east
+    sim->submit(FocusCommand{hero, enemy, FocusMode::Set});
+    sim->step();
+    FOCUS_REQUIRE(sim->melee().focusOf(hero) == enemy);
+    const Position start = sim->things().registry().get<Position>(hero);
+    sim->submit(DodgeRollCommand{hero, 0.0f, 1.0f});  // roll north, across the enemy
+    sim->step();
+    FOCUS_REQUIRE(sim->combat().rollLocked(hero));
+    const auto facing = [&] {
+        const Posture& p = sim->things().registry().get<Posture>(hero);
+        return std::atan2(p.facingY, p.facingX);
+    };
+    const auto toEnemy = [&] {
+        const Position& p = sim->things().registry().get<Position>(hero);
+        const Position& q = sim->things().registry().get<Position>(enemy);
+        return std::atan2(q.y - p.y, q.x - p.x);
+    };
+    const auto gap = [](float a, float b) {
+        float d = a - b;
+        while (d > 3.14159265f) d -= 6.2831853f;
+        while (d < -3.14159265f) d += 6.2831853f;
+        return std::fabs(d);
+    };
+    CHECK(gap(facing(), 1.5707963f) < 0.01f);  // it starts facing the way it rolls
+    float last = facing();
+    float biggest = 0.0f;
+    bool turnedMidway = false;
+    int steps = 0;
+    while (sim->combat().rollLocked(hero) && steps < 100) {
+        sim->step();
+        ++steps;
+        const float now = facing();
+        biggest = std::max(biggest, gap(now, last));
+        last = now;
+        if (sim->combat().rollLocked(hero) && gap(now, 1.5707963f) > 0.2f && gap(now, toEnemy()) > 0.2f) {
+            turnedMidway = true;  // part way round: neither the roll's way nor the enemy's
+        }
+    }
+    CHECK_FALSE(sim->combat().rollLocked(hero));
+    CHECK(turnedMidway);
+    CHECK(gap(facing(), toEnemy()) < 0.05f);  // facing the enemy when the roll ends
+    CHECK(biggest < 0.3f);                    // never more than ~17 degrees in one step (it was 130 at once): no snap
+    // The path is the roll's own: it went north, not round towards the enemy.
+    const Position& end = sim->things().registry().get<Position>(hero);
+    CHECK(end.y - start.y > 2.0f);
+    CHECK(std::fabs(end.x - start.x) < 0.3f);
+    sim->step();
+    CHECK(gap(facing(), toEnemy()) < 0.05f);  // and the step after, no swing round
+}

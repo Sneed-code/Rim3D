@@ -312,13 +312,66 @@ TEST_CASE("Trait points: colonists made this way spend the whole pool, and skill
                 CHECK(shooting->level >= 3);
             }
         }
+        // sneed (2026-11-24): 30 skill levels spread over the usable skills, none in a disabled one; one major and one
+        // minor passion, on usable skills.
+        int base = 0;
+        int majors = 0;
+        int minors = 0;
         for (const SkillRecord& s : c.skills) {
             CHECK(s.level >= 0);
             CHECK(s.level <= 20 + std::max(0, s.bonus));
+            base += s.level - s.bonus;
+            if (s.disabled) {
+                CHECK(s.level - s.bonus == 0);
+                CHECK(s.passion == Passion::None);
+            }
+            majors += s.passion == Passion::Major ? 1 : 0;
+            minors += s.passion == Passion::Minor ? 1 : 0;
         }
+        CHECK(base == 30);
+        CHECK(majors == 1);
+        CHECK(minors == 1);
     }
     CHECK(seenSkillTrait > 0);
     CHECK(seenNegative > 0);
+
+    // Taking a trait that disables a skill moves that skill's levels and passion to the others: still 30, still one each.
+    {
+        Colonist c;
+        std::string error;
+        ColonistGenOptions options;
+        options.traitPoints = 0;
+        NG_REQUIRE(generateColonist(*defs, 5, false, c, error, options));
+        SkillRecord* shooting = nullptr;
+        for (SkillRecord& s : c.skills) {
+            shooting = s.def == "Shooting" ? &s : shooting;
+        }
+        NG_REQUIRE(shooting != nullptr);
+        shooting->level += 4;  // make sure it has levels and the major passion to give away
+        for (SkillRecord& s : c.skills) {
+            if (s.passion == Passion::Major) {
+                s.passion = Passion::None;
+            }
+        }
+        shooting->passion = Passion::Major;
+        int before = 0;
+        for (const SkillRecord& s : c.skills) {
+            before += s.level - s.bonus;
+        }
+        setColonistTraits(*defs, c, {TraitRecord{"Pacifist", 0}});
+        int after = 0;
+        int majors = 0;
+        for (const SkillRecord& s : c.skills) {
+            after += s.level - s.bonus;
+            majors += s.passion == Passion::Major ? 1 : 0;
+        }
+        CHECK(c.skill("Shooting")->disabled);
+        CHECK(c.skill("Shooting")->level - c.skill("Shooting")->bonus == 0);
+        CHECK(c.skill("Melee")->level - c.skill("Melee")->bonus == 0);
+        CHECK(c.skill("Shooting")->passion == Passion::None);
+        CHECK(after == before);
+        CHECK(majors == 1);
+    }
 
     // The backstory way is unchanged: no point-only traits drawn there.
     for (uint64_t seed = 1; seed <= 200; ++seed) {

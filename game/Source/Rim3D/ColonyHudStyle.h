@@ -41,6 +41,13 @@ namespace ColonyHud
 	inline ImVec4 FieldBg() { return ImVec4(0.015f, 0.025f, 0.022f, 0.95f); }
 	inline ImVec4 Locked() { return ImVec4(0.035f, 0.045f, 0.042f, 0.90f); }  // a button for something not yet open (research)
 
+	/** Ids of the boxes that keep a fixed width this frame (HoldWidth): text in them wraps at their edge. */
+	inline TSet<ImGuiID>& HeldBoxes()
+	{
+		static TSet<ImGuiID> Held;
+		return Held;
+	}
+
 	/** How many jade bars have been drawn since the game started (the smoke test checks the hook runs). */
 	inline int64& CanopyBarsDrawn()
 	{
@@ -50,6 +57,25 @@ namespace ColonyHud
 
 	/** Name prefix of boxes that get no jade bar (the bottom bar draws its own line). */
 	inline const char* NoBarPrefix() { return "##HudBar"; }
+
+	/** With console UI.LogBoxes 1, logs each box's width once per size (BOXWIDTH name width-at-1080), for HeldWidthOf. */
+	inline void LogBoxWidth(const ImGuiWindow& Window, float Scale)
+	{
+		static IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("UI.LogBoxes"));
+		if (!Variable || Variable->GetInt() == 0 || !Window.Name)
+		{
+			return;
+		}
+		static TSet<FString> Logged;
+		const FString Name = UTF8_TO_TCHAR(Window.Name);
+		const int32 Width = FMath::RoundToInt32(Window.Size.x / Scale);
+		const FString Key = FString::Printf(TEXT("%s %d"), *Name, Width);
+		if (!Logged.Contains(Key))
+		{
+			Logged.Add(Key);
+			UE_LOG(LogTemp, Display, TEXT("BOXWIDTH %s %d (auto %d)"), *Name, Width, (Window.Flags & ImGuiWindowFlags_AlwaysAutoResize) != 0 ? 1 : 0);
+		}
+	}
 
 	/**
 	 * Draws the jade bar on the top edge of every plain box this frame, just before ImGui ends it, so no window has to do
@@ -74,6 +100,7 @@ namespace ColonyHud
 			{
 				continue;
 			}
+			LogBoxWidth(*Window, Scale);
 			if (Window->Size.x < 150.0f * Scale || Window->Size.y < 56.0f * Scale)
 			{
 				continue;
@@ -83,11 +110,22 @@ namespace ColonyHud
 				continue;
 			}
 			const ImVec2 At = Window->Pos;
-			Window->DrawList->PushClipRect(At, ImVec2(At.x + Window->Size.x, At.y + Window->Size.y), false);
+			const ImVec2 End(At.x + Window->Size.x, At.y + Window->Size.y);
+			Window->DrawList->PushClipRect(At, End, false);
+			// The glass (sneed 2026-11-24, "make it professional"): a faint jade glow fading down from the top edge, a
+			// hairline of light along the top inside the border, and a darker foot, so every box reads as one lit pane.
+			const float Glow = FMath::Min(Window->Size.y, 64.0f * Scale);
+			Window->DrawList->AddRectFilledMultiColor(At, ImVec2(End.x, At.y + Glow), IM_COL32(94, 212, 168, 16), IM_COL32(94, 212, 168, 16),
+				IM_COL32(94, 212, 168, 0), IM_COL32(94, 212, 168, 0));
+			Window->DrawList->AddLine(ImVec2(At.x + 1.0f, At.y + 1.0f), ImVec2(End.x - 1.0f, At.y + 1.0f), IM_COL32(232, 228, 214, 22), 1.0f);
+			const float Foot = FMath::Min(Window->Size.y * 0.5f, 48.0f * Scale);
+			Window->DrawList->AddRectFilledMultiColor(ImVec2(At.x, End.y - Foot), End, IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0),
+				IM_COL32(0, 0, 0, 40), IM_COL32(0, 0, 0, 40));
 			Window->DrawList->AddRectFilled(At, ImVec2(At.x + 36.0f * Scale, At.y + 3.0f), Jade);
 			Window->DrawList->PopClipRect();
 			++CanopyBarsDrawn();
 		}
+		HeldBoxes().Reset();  // HoldWidth marks them afresh each frame
 	}
 
 	/** Our hook's owner id, so one context gets it once. */
@@ -132,12 +170,97 @@ namespace ColonyHud
 		return Variable && Variable->GetInt() == 1 ? 1.2f : 1.0f;
 	}
 
+	/**
+	 * Every text in the game is this much bigger than it was (sneed 2026-11-24: "text size is too small, gotta be 50%
+	 * bigger, universally"), while boxes keep their widths (HoldWidth) and wrap. Console UI.TextGrow (1 is the old size).
+	 */
+	inline float TextGrow()
+	{
+		static IConsoleVariable* Variable = nullptr;
+		if (!Variable)
+		{
+			Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("UI.TextGrow"));
+		}
+		return Variable ? FMath::Clamp(Variable->GetFloat(), 0.75f, 2.5f) : 1.5f;
+	}
+
+	/**
+	 * The widths boxes had before the text grew (sneed 2026-11-24: "i like the width ... make sure ui boxes don't expand
+	 * wider"), in pixels at 1080 lines, measured on the PC with UI.TextGrow 1 and UI.LogBoxes 1 (BOXWIDTH lines). A box
+	 * not listed sizes itself as before.
+	 */
+	inline float HeldWidthOf(const char* Name)
+	{
+		struct FHeld
+		{
+			const char* Name;
+			float Width;
+		};
+		static const FHeld Widths[] = {
+			{"##HudLesson", 380.0f},
+			{"##HudDate", 225.0f},
+			{"##HudHover", 300.0f},
+			{"##HudInfo", 420.0f},
+			{"##HudSettings", 560.0f},
+			{"##HudAssign", 640.0f},
+			{"##HudAnimals", 640.0f},
+			{"##HudWildlife", 640.0f},
+			{"##HudMechs", 560.0f},
+			{"##HudResearch", 760.0f},
+			{"##HudInventory", 420.0f},
+			{"##HudOutfits", 640.0f},
+			{"##HudAreas", 520.0f},
+			{"##HudMedical", 560.0f},
+			{"##HudPrisoners", 600.0f},
+			{"##OrdersMessage", 420.0f},
+			{"##BuildNav", 260.0f},
+			{"##FactionsWindow", 620.0f},
+		};
+		for (const FHeld& Held : Widths)
+		{
+			if (FCStringAnsi::Strcmp(Held.Name, Name) == 0)
+			{
+				return Held.Width;
+			}
+		}
+		return 0.0f;
+	}
+
+	/**
+	 * Call just before ImGui::Begin of a box that sizes itself: it keeps the width it had before the text grew (or
+	 * `Width` pixels at 1080 lines, if given) and its text wraps; its height still fits what it holds.
+	 */
+	inline void HoldWidth(const char* Name, float Scale, float Width = 0.0f)
+	{
+		const float At1080 = Width > 0.0f ? Width : HeldWidthOf(Name);
+		static IConsoleVariable* Measuring = IConsoleManager::Get().FindConsoleVariable(TEXT("UI.LogBoxes"));
+		if (At1080 <= 0.0f || (Measuring && Measuring->GetInt() != 0))
+		{
+			return;
+		}
+		const float W = At1080 * Scale;
+		ImGui::SetNextWindowSizeConstraints(ImVec2(W, 0.0f), ImVec2(W, TNumericLimits<float>::Max()));
+		HeldBoxes().Add(ImHashStr(Name));
+	}
+
+	/** Whether text drawn now should wrap at the box's edge: in a box of fixed width, never in one that fits its text. */
+	inline bool WrapHere()
+	{
+		const ImGuiWindow* Window = ImGui::GetCurrentWindowRead();
+		const ImGuiWindow* Root = Window ? Window->RootWindow : nullptr;
+		if (!Root || (Window->Flags & ImGuiWindowFlags_Tooltip) != 0)
+		{
+			return false;
+		}
+		return (Root->Flags & ImGuiWindowFlags_AlwaysAutoResize) == 0 || HeldBoxes().Contains(Root->ID);
+	}
+
 	/** Sets the shared look for this frame's windows. Cheap: a few style fields. */
 	inline void ApplyFrameStyle(float Scale)
 	{
 		InstallCanopyBars();
 		ImGuiStyle& Style = ImGui::GetStyle();
-		Style.FontScaleMain = 1.2f * Scale * TextSizeFactor();
+		Style.FontScaleMain = 1.2f * Scale * TextSizeFactor() * TextGrow();
 		Style.WindowRounding = 0.0f;
 		Style.ChildRounding = 0.0f;
 		Style.FrameRounding = 0.0f;
@@ -147,8 +270,12 @@ namespace ColonyHud
 		Style.WindowBorderSize = 1.0f;
 		Style.FrameBorderSize = 1.0f;
 		Style.PopupBorderSize = 1.0f;
-		Style.WindowPadding = ImVec2(10.0f * Scale, 8.0f * Scale);
+		Style.WindowPadding = ImVec2(12.0f * Scale, 10.0f * Scale);
 		Style.FramePadding = ImVec2(8.0f * Scale, 4.0f * Scale);
+		Style.GrabMinSize = 10.0f * Scale;
+		Style.ScrollbarSize = 10.0f * Scale;
+		Style.ScrollbarRounding = 0.0f;
+		Style.SeparatorTextBorderSize = 1.0f;
 		Style.ItemSpacing = ImVec2(6.0f * Scale, 5.0f * Scale);
 		Style.ItemInnerSpacing = ImVec2(5.0f * Scale, 4.0f * Scale);
 		// Tooltips after the mouse rests about 1.2 s (SetItemTooltip and IsItemHovered(ImGuiHoveredFlags_ForTooltip)).
@@ -188,6 +315,13 @@ namespace ColonyHud
 		C[ImGuiCol_TableBorderStrong] = Border();
 		C[ImGuiCol_TableBorderLight] = ImVec4(0.37f, 0.83f, 0.66f, 0.08f);
 		C[ImGuiCol_TableRowBgAlt] = ImVec4(1.0f, 1.0f, 1.0f, 0.03f);
+		C[ImGuiCol_ScrollbarBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+		C[ImGuiCol_ScrollbarGrab] = ImVec4(0.37f, 0.83f, 0.66f, 0.22f);
+		C[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.37f, 0.83f, 0.66f, 0.40f);
+		C[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.37f, 0.83f, 0.66f, 0.60f);
+		C[ImGuiCol_ResizeGrip] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+		C[ImGuiCol_TextSelectedBg] = ImVec4(0.37f, 0.83f, 0.66f, 0.30f);
+		C[ImGuiCol_PlotLines] = Accent();
 	}
 
 	/** The large text size, for titles: a thing's name, a window's title. */
@@ -204,7 +338,16 @@ namespace ColonyHud
 	inline void Text(const FString& Value)
 	{
 		const FTCHARToUTF8 Utf8(*Value);
+		const bool bWrap = WrapHere();
+		if (bWrap)
+		{
+			ImGui::PushTextWrapPos(0.0f);  // at the box's edge: bigger text in the same width goes onto more lines
+		}
 		ImGui::TextUnformatted(Utf8.Get(), Utf8.Get() + Utf8.Length());
+		if (bWrap)
+		{
+			ImGui::PopTextWrapPos();
+		}
 	}
 
 	inline void TextColored(const ImVec4& Color, const FString& Value)

@@ -439,6 +439,7 @@ void UColonyHudSubsystem::EndPeopleCamera()
 					if (ASimPawnActor* Actor = Pawns->FindPawn(Pawn))
 					{
 						Actor->SetPreviewSpin(0.0f);
+						Actor->SetPreviewLive(false);
 					}
 				}
 			}
@@ -1721,8 +1722,14 @@ void UColonyHudSubsystem::DrawTraitShop(const colony::Sim& Sim, const colony::Co
 	// Skills: bars to 20; a skill trait's levels show past it in jade (up to 23).
 	NgHeading(TEXT("Skills"));
 	ImGui::BeginChild("##NgSkills", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None);
-	const float LabelW = 110.0f * Scale;
-	const float BarW = ImGui::GetContentRegionAvail().x - LabelW - 92.0f * Scale;
+	// The label column fits the longest skill name at the text size in use (text grew half again, sneed 2026-11-24).
+	float LabelW = 110.0f * Scale;
+	for (const colony::SkillRecord& Skill : Colonist.skills)
+	{
+		const FTCHARToUTF8 Name(*NgDefLabel(Defs, "Skills", Skill.def));
+		LabelW = FMath::Max(LabelW, ImGui::CalcTextSize(Name.Get()).x + 12.0f * Scale);
+	}
+	const float BarW = FMath::Max(40.0f * Scale, ImGui::GetContentRegionAvail().x - LabelW - 3.2f * ImGui::GetFontSize());
 	for (const colony::SkillRecord& Skill : Colonist.skills)
 	{
 		ColonyHud::TextColored(Skill.disabled ? NgStyle::Faint : NgStyle::Text, NgDefLabel(Defs, "Skills", Skill.def));
@@ -1771,6 +1778,12 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 		MainMenuPage = 0;
 		EndPeopleCamera();
 		return;
+	}
+	// The game waits at its first second while the people are made (sneed 2026-11-24: it had started running, so every
+	// edit was refused and the people walked off as bare mannequins): held paused whatever pressed play.
+	if (Bridge.GetSpeed() != 0)
+	{
+		Bridge.SetSpeed(0);
 	}
 	// Rerolls and edits apply at once while the game waits at its first second.
 	Bridge.ApplyPregameCommands();
@@ -1830,6 +1843,10 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 		}
 		for (const colony::Entity Pawn : People)
 		{
+			if (ASimPawnActor* Shown = Pawns->FindPawn(Pawn))
+			{
+				Shown->SetPreviewLive(true);  // a calm standing idle, breathing, while the game is held
+			}
 			if (bPeopleClothes)
 			{
 				Pawns->SetApparelPreview(Pawn, Cotton);
@@ -2022,15 +2039,30 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 	}
 
 	// Under the body: how to look at it, and the clothes.
-	const float StripW = 520.0f * Scale;
-	if (NgBeginPanel("##NgPeopleStrip", ImVec2(Viewport->Pos.x + (Viewport->Size.x - StripW) * 0.5f, Bottom - 50.0f * Scale - Gap), ImVec2(StripW, 50.0f * Scale)))
+	const float StripW = 680.0f * Scale;
+	const float StripH = ImGui::GetFrameHeight() + 2.0f * ImGui::GetStyle().WindowPadding.y + 4.0f * Scale;
+	if (NgBeginPanel("##NgPeopleStrip", ImVec2(Viewport->Pos.x + (Viewport->Size.x - StripW) * 0.5f, Bottom - StripH - Gap), ImVec2(StripW, StripH)))
 	{
 		ImGui::Checkbox("##clothes", &bPeopleClothes);
 		ImGui::SameLine();
 		ColonyHud::TextColored(NgStyle::Text, TEXT("CLOTHES ON"));
 		ColonyHud::Tip(TEXT("Shows the cotton shirt and trousers from the cargo pack. Everyone lands naked."));
-		ImGui::SameLine(StripW * 0.42f);
+		ImGui::SameLine(StripW * 0.30f);
 		ColonyHud::TextColored(NgStyle::Faint, TEXT("Drag to spin, wheel to zoom"));
+		// Zoom buttons as well as the wheel (sneed 2026-11-24: "i need to be able to zoom them"): in to the face, out to the feet.
+		const float ZoomW = 2.2f * ImGui::GetFontSize();
+		ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 2.0f * ZoomW - ImGui::GetStyle().ItemSpacing.x);
+		if (NgButton(TEXT("-##zoomout"), false, ImVec2(ZoomW, 0.0f)))
+		{
+			PeopleDistance = FMath::Clamp(PeopleDistance / 0.8f, 70.0f, 520.0f);
+		}
+		ColonyHud::Tip(TEXT("Zoom out"));
+		ImGui::SameLine();
+		if (NgButton(TEXT("+##zoomin"), false, ImVec2(ZoomW, 0.0f)))
+		{
+			PeopleDistance = FMath::Clamp(PeopleDistance * 0.8f, 70.0f, 520.0f);
+		}
+		ColonyHud::Tip(TEXT("Zoom in"));
 	}
 	NgEndPanel();
 

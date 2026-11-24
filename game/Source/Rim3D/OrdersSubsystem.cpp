@@ -1877,6 +1877,7 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 	else if (!Message.IsEmpty() && FPlatformTime::Seconds() < MessageUntil)
 	{
 		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+		ColonyHud::HoldWidth("##OrdersMessage", Scale);
 		if (ImGui::Begin("##OrdersMessage", nullptr, ColonyHud::BoxFlags() | ImGuiWindowFlags_NoInputs))
 		{
 			OrdText(Message);
@@ -2055,6 +2056,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 	const float NavWidth = 250.0f * Scale;
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Margin, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
 	ImGui::SetNextWindowSize(ImVec2(NavWidth, 0.0f), ImGuiCond_Always);
+	ColonyHud::HoldWidth("##BuildNav", Scale);
 	if (ImGui::Begin("##BuildNav", nullptr, ColonyHud::BoxFlags()))
 	{
 		ImGui::SetNextItemWidth(-1.0f);
@@ -2228,6 +2230,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 		ImGui::SetNextWindowPos(ImVec2(TilesLeft, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
 		// Never taller than the room above the bar (the rest scrolls), so the window stays on screen.
 		ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, FMath::Max(120.0f * Scale, Bottom - Viewport->Pos.y - 150.0f * Scale)));
+		ColonyHud::HoldWidth("##BuildTiles", Scale);
 		if (ImGui::Begin("##BuildTiles", nullptr, ColonyHud::BoxFlags()))
 		{
 			ImDrawList* Draw = ImGui::GetWindowDrawList();
@@ -2386,6 +2389,7 @@ void UOrdersSubsystem::DrawBuildMenu(USimSubsystem& Bridge, float Scale)
 	{
 		ImGui::SetNextWindowPos(ImVec2(TilesLeft, TilesTop - 6.0f * Scale), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
 		ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(Viewport->Size.x - (TilesLeft - Viewport->Pos.x) - Margin, FLT_MAX));
+		ColonyHud::HoldWidth("##BuildStrip", Scale);
 		if (ImGui::Begin("##BuildStrip", nullptr, ColonyHud::BoxFlags()))
 		{
 			if (Tool == EOrderTool::Build && BuildDef.valid())
