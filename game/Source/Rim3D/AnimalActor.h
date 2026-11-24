@@ -23,7 +23,9 @@ enum class ESimAnimalPose : uint8
 	Gallop,
 	Eat,
 	Sleep,
-	Dead
+	Dead,
+	Attack,  // a melee strike (models with an Attack clip), played once
+	Shoot    // a shot (models with a Shoot clip), played once
 };
 
 /**
@@ -84,6 +86,9 @@ private:
 	float DrawScale = 1.0f;
 	float Yaw = 0.0f;
 	float SwimLiftCm = 0.0f;
+	/** Game time a one-shot fight clip (Attack, Shoot) began, and how long it lasts; -1 for none under way. */
+	float OneShotStart = -1.0f;
+	float OneShotLength = 0.0f;
 	/** Half the posed skeleton's size at scale 1 (a pose-fitted model), else zero: the mesh's bounds are used. */
 	FVector PoseHalfSize = FVector::ZeroVector;
 };

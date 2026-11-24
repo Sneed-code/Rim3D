@@ -40,6 +40,25 @@ reactor, sandbags, barricade, bionic leg, EMP grenade and industrial medicine. M
 bow (no bow entry in guns.json yet) and the vent (like the cooler, the def is a wall-height block). Neon made the
 LMG, minigun, hatchery, power switch, ship computer core and sensor cluster, so Codex skipped them.
 
+### Batch 5 (2026-11-24): remnants, chitinids and the stand-ins
+
+sneed asked for 10 on Neon high (the hardest, animated, most detailed) and 20 on Codex 6.2 Sol high. Neon
+(`tools/neon_assets/`): `Mech_Scyther`, `Mech_Lancer`, `Mech_Pikeman`, `Mech_Centipede`, `Megaspider`, `Spelopede` as
+**rigged creatures** (one armature, rigid-skinned plates, in-place clips `Idle`, `Walk`, `Run`, `Attack`, `Hit`,
+`Death`, plus `Shoot`/`Aim` for the gunners and `Charge` for the reaper; facing Blender -Y), and `WoodFiredGenerator`,
+`FueledSmithy`, `ElectricSmithy`, `TailorBenchElectric` with moving parts (`Running`, `Working`, `Idle` clips). Codex:
+butcher, stonecutter, machining and hand tailor benches, fueled and electric stoves, bed, hospital bed, chess and
+billiards tables, battery, heater, sun lamp, standing lamp, torch lamp, campfire, dresser, end table, armchair and the
+megascreen TV, replacing the Poly Haven stand-ins in `assets/placeholder_art.json` (entries removed).
+
+- Creatures: prep kind `creature` copies the GLB to `assets/raw/codex/<Name>/<Name>.glb`; `assets/animal_art.json`
+  `imports` name the clips (`Run` is the gallop role; `Attack` and `Shoot` are new roles). The remnants are pawns, not
+  animals: `USimAnimalSubsystem::DrawsMachine` takes any non-animal pawn whose def has a model in the art table's `defs`,
+  and `USimPawnSubsystem` skips it. The actor plays `Attack` once when a melee swing winds up and `Shoot` once when a shot
+  goes (the gun's cooldown starts again); a downed remnant lies in its death pose. The pikeman model is drawn at 0.6.
+- Moving benches: `visual.moving` rules `working` (a pawn on a bill or butchering stands within reach of it) and
+  `fueled` (fuel in it), next to `always`, `running`, `on`, `off`.
+
 ## How a model is made
 
 `tools/codex_assets/`: `_common.md` is the brief every job shares (GLB in metres, +Z up, real scale, PBR BaseColor /

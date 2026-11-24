@@ -673,6 +673,263 @@
     "AmmoBox",
     "FeedCover"
    ]
+  },
+  "Mech_Scyther": {
+   "kind": "creature"
+  },
+  "Mech_Lancer": {
+   "kind": "creature"
+  },
+  "Mech_Pikeman": {
+   "kind": "creature"
+  },
+  "Mech_Centipede": {
+   "kind": "creature"
+  },
+  "Megaspider": {
+   "kind": "creature"
+  },
+  "Spelopede": {
+   "kind": "creature"
+  },
+  "ButcherTable": {
+   "kind": "building",
+   "def": "ButcherTable",
+   "size": [
+    1.9,
+    0.9,
+    1.38
+   ]
+  },
+  "StonecutterTable": {
+   "kind": "building",
+   "def": "StonecutterTable",
+   "size": [
+    2.9,
+    0.9,
+    1.28
+   ]
+  },
+  "MachiningTable": {
+   "kind": "building",
+   "def": "MachiningTable",
+   "size": [
+    2.9,
+    0.9,
+    1.79
+   ]
+  },
+  "TailorBenchHand": {
+   "kind": "building",
+   "def": "TailorBenchHand",
+   "size": [
+    2.9,
+    0.9,
+    1.39
+   ]
+  },
+  "FueledStove": {
+   "kind": "building",
+   "def": "FueledStove",
+   "size": [
+    2.9,
+    0.9,
+    1.47
+   ]
+  },
+  "ElectricStove": {
+   "kind": "building",
+   "def": "ElectricStove",
+   "size": [
+    2.9,
+    0.9,
+    1.25
+   ]
+  },
+  "HospitalBed": {
+   "kind": "building",
+   "def": "HospitalBed",
+   "size": [
+    0.95,
+    2.0,
+    1.8
+   ]
+  },
+  "ChessTable": {
+   "kind": "building",
+   "def": "ChessTable",
+   "size": [
+    0.94,
+    1.94,
+    0.84
+   ]
+  },
+  "BilliardsTable": {
+   "kind": "building",
+   "def": "BilliardsTable",
+   "size": [
+    1.94,
+    3.94,
+    0.85
+   ]
+  },
+  "Battery": {
+   "kind": "building",
+   "def": "Battery",
+   "size": [
+    0.94,
+    1.94,
+    0.81
+   ]
+  },
+  "Heater": {
+   "kind": "building",
+   "def": "Heater",
+   "size": [
+    0.96,
+    0.76,
+    1.1
+   ]
+  },
+  "SunLamp": {
+   "kind": "building",
+   "def": "SunLamp",
+   "size": [
+    1.0,
+    0.89,
+    2.39
+   ]
+  },
+  "StandingLamp": {
+   "kind": "building",
+   "def": "StandingLamp",
+   "size": [
+    0.67,
+    0.77,
+    1.57
+   ]
+  },
+  "TorchLamp": {
+   "kind": "building",
+   "def": "TorchLamp",
+   "size": [
+    0.59,
+    0.57,
+    1.4
+   ]
+  },
+  "Campfire": {
+   "kind": "building",
+   "def": "Campfire",
+   "size": [
+    0.92,
+    0.94,
+    0.89
+   ]
+  },
+  "Dresser": {
+   "kind": "building",
+   "def": "Dresser",
+   "size": [
+    1.94,
+    0.94,
+    1.24
+   ]
+  },
+  "EndTable": {
+   "kind": "building",
+   "def": "EndTable",
+   "size": [
+    0.45,
+    0.45,
+    0.62
+   ]
+  },
+  "Armchair": {
+   "kind": "building",
+   "def": "Armchair",
+   "size": [
+    0.86,
+    0.83,
+    0.93
+   ]
+  },
+  "MegascreenTelevision": {
+   "kind": "building",
+   "def": "MegascreenTelevision",
+   "size": [
+    2.9,
+    0.9,
+    1.9
+   ]
+  },
+  "Bed": {
+   "kind": "building",
+   "def": "Bed",
+   "size": [
+    0.95,
+    2.0,
+    1.0
+   ]
+  },
+  "WoodFiredGenerator": {
+   "kind": "building",
+   "def": "WoodFiredGenerator",
+   "size": [
+    1.9,
+    1.9,
+    1.4
+   ],
+   "parts": [
+    "Flywheel",
+    "Piston",
+    "Door",
+    "Embers",
+    "DynamoRotor"
+   ]
+  },
+  "FueledSmithy": {
+   "kind": "building",
+   "def": "FueledSmithy",
+   "size": [
+    2.9,
+    0.9,
+    1.6
+   ],
+   "parts": [
+    "Bellows",
+    "Coals"
+   ]
+  },
+  "ElectricSmithy": {
+   "kind": "building",
+   "def": "ElectricSmithy",
+   "size": [
+    2.9,
+    0.9,
+    1.6
+   ],
+   "parts": [
+    "Ram",
+    "HammerFlywheel",
+    "Fan",
+    "Coil"
+   ]
+  },
+  "TailorBenchElectric": {
+   "kind": "building",
+   "def": "TailorBenchElectric",
+   "size": [
+    2.9,
+    0.9,
+    1.3
+   ],
+   "parts": [
+    "HandWheel",
+    "Needle",
+    "Spool",
+    "Lamp"
+   ]
   }
  },
  "buildings": [
@@ -1520,6 +1777,435 @@
     "fbx": "assets/raw/codex/CowboyHat/CowboyHat_Game.fbx",
     "combine": true,
     "slotTextureDir": "assets/raw/codex/CowboyHat",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ButcherTable",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ButcherTable",
+    "fbx": "assets/raw/codex/ButcherTable/ButcherTable_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ButcherTable",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "StonecutterTable",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "StonecutterTable",
+    "fbx": "assets/raw/codex/StonecutterTable/StonecutterTable_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/StonecutterTable",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "MachiningTable",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "MachiningTable",
+    "fbx": "assets/raw/codex/MachiningTable/MachiningTable_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/MachiningTable",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "TailorBenchHand",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "TailorBenchHand",
+    "fbx": "assets/raw/codex/TailorBenchHand/TailorBenchHand_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/TailorBenchHand",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "FueledStove",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "FueledStove",
+    "fbx": "assets/raw/codex/FueledStove/FueledStove_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/FueledStove",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ElectricStove",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ElectricStove",
+    "fbx": "assets/raw/codex/ElectricStove/ElectricStove_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ElectricStove",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "HospitalBed",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "HospitalBed",
+    "fbx": "assets/raw/codex/HospitalBed/HospitalBed_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/HospitalBed",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ChessTable",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ChessTable",
+    "fbx": "assets/raw/codex/ChessTable/ChessTable_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ChessTable",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "BilliardsTable",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "BilliardsTable",
+    "fbx": "assets/raw/codex/BilliardsTable/BilliardsTable_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/BilliardsTable",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Battery",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Battery",
+    "fbx": "assets/raw/codex/Battery/Battery_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Battery",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Heater",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Heater",
+    "fbx": "assets/raw/codex/Heater/Heater_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Heater",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "SunLamp",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "SunLamp",
+    "fbx": "assets/raw/codex/SunLamp/SunLamp_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/SunLamp",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "StandingLamp",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "StandingLamp",
+    "fbx": "assets/raw/codex/StandingLamp/StandingLamp_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/StandingLamp",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "TorchLamp",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "TorchLamp",
+    "fbx": "assets/raw/codex/TorchLamp/TorchLamp_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/TorchLamp",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Campfire",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Campfire",
+    "fbx": "assets/raw/codex/Campfire/Campfire_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Campfire",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Dresser",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Dresser",
+    "fbx": "assets/raw/codex/Dresser/Dresser_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Dresser",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "EndTable",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "EndTable",
+    "fbx": "assets/raw/codex/EndTable/EndTable_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/EndTable",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Armchair",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Armchair",
+    "fbx": "assets/raw/codex/Armchair/Armchair_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Armchair",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "MegascreenTelevision",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "MegascreenTelevision",
+    "fbx": "assets/raw/codex/MegascreenTelevision/MegascreenTelevision_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/MegascreenTelevision",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Bed",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Bed",
+    "fbx": "assets/raw/codex/Bed/Bed_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Bed",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WoodFiredGenerator",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "WoodFiredGenerator",
+    "fbx": "assets/raw/codex/WoodFiredGenerator/WoodFiredGenerator_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WoodFiredGenerator",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WoodFiredGenerator",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "WoodFiredGenerator_Flywheel",
+    "fbx": "assets/raw/codex/WoodFiredGenerator/WoodFiredGenerator_Flywheel_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WoodFiredGenerator",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WoodFiredGenerator",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "WoodFiredGenerator_Piston",
+    "fbx": "assets/raw/codex/WoodFiredGenerator/WoodFiredGenerator_Piston_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WoodFiredGenerator",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WoodFiredGenerator",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "WoodFiredGenerator_Door",
+    "fbx": "assets/raw/codex/WoodFiredGenerator/WoodFiredGenerator_Door_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WoodFiredGenerator",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WoodFiredGenerator",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "WoodFiredGenerator_Embers",
+    "fbx": "assets/raw/codex/WoodFiredGenerator/WoodFiredGenerator_Embers_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WoodFiredGenerator",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WoodFiredGenerator",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "WoodFiredGenerator_DynamoRotor",
+    "fbx": "assets/raw/codex/WoodFiredGenerator/WoodFiredGenerator_DynamoRotor_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WoodFiredGenerator",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "FueledSmithy",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "FueledSmithy",
+    "fbx": "assets/raw/codex/FueledSmithy/FueledSmithy_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/FueledSmithy",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "FueledSmithy",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "FueledSmithy_Bellows",
+    "fbx": "assets/raw/codex/FueledSmithy/FueledSmithy_Bellows_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/FueledSmithy",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "FueledSmithy",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "FueledSmithy_Coals",
+    "fbx": "assets/raw/codex/FueledSmithy/FueledSmithy_Coals_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/FueledSmithy",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ElectricSmithy",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ElectricSmithy",
+    "fbx": "assets/raw/codex/ElectricSmithy/ElectricSmithy_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ElectricSmithy",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ElectricSmithy",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ElectricSmithy_Ram",
+    "fbx": "assets/raw/codex/ElectricSmithy/ElectricSmithy_Ram_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ElectricSmithy",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ElectricSmithy",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ElectricSmithy_HammerFlywheel",
+    "fbx": "assets/raw/codex/ElectricSmithy/ElectricSmithy_HammerFlywheel_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ElectricSmithy",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ElectricSmithy",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ElectricSmithy_Fan",
+    "fbx": "assets/raw/codex/ElectricSmithy/ElectricSmithy_Fan_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ElectricSmithy",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ElectricSmithy",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ElectricSmithy_Coil",
+    "fbx": "assets/raw/codex/ElectricSmithy/ElectricSmithy_Coil_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ElectricSmithy",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "TailorBenchElectric",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "TailorBenchElectric",
+    "fbx": "assets/raw/codex/TailorBenchElectric/TailorBenchElectric_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/TailorBenchElectric",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "TailorBenchElectric",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "TailorBenchElectric_HandWheel",
+    "fbx": "assets/raw/codex/TailorBenchElectric/TailorBenchElectric_HandWheel_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/TailorBenchElectric",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "TailorBenchElectric",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "TailorBenchElectric_Needle",
+    "fbx": "assets/raw/codex/TailorBenchElectric/TailorBenchElectric_Needle_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/TailorBenchElectric",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "TailorBenchElectric",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "TailorBenchElectric_Spool",
+    "fbx": "assets/raw/codex/TailorBenchElectric/TailorBenchElectric_Spool_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/TailorBenchElectric",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "TailorBenchElectric",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "TailorBenchElectric_Lamp",
+    "fbx": "assets/raw/codex/TailorBenchElectric/TailorBenchElectric_Lamp_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/TailorBenchElectric",
     "normalOpenGL": true
    }
   }

@@ -29,7 +29,13 @@
     {"model": "Turkey", "file": "assets/raw/sketchfab/rim3d-animals-2/Rim3D_Turkey.glb", "credit": "Turkey (Rigged) by DreamingInAlternateRealities, CC BY", "clips": {"Idle": "Walking_Feathers_Spread", "Walk": "Walking_Feathers_Down"}, "fit": "pose", "yaw": -90, "walkCm": 60, "gallopCm": 60},
     {"model": "Camel", "file": "assets/raw/sketchfab/rim3d-animals-2/Rim3D_Camel.glb", "credit": "Camel by E.A.Cornell, CC BY", "clips": {"Idle": "Idle_01", "Walk": "WalkCycle"}, "yaw": -90, "walkCm": 150, "gallopCm": 150},
     {"model": "Capybara", "file": "assets/raw/sketchfab/rim3d-animals-2/Rim3D_Capybara.glb", "credit": "capybara by Ear.Rodriguez (Rectus' capybara, animated), CC BY", "clips": {"Idle": "skeleton_idle", "Walk": "skeleton_walk_cycle"}, "fit": "pose", "clampBoneScale": 20, "yaw": -90, "walkCm": 60, "gallopCm": 60},
-    {"model": "RhinoBeetle", "file": "assets/raw/sketchfab/rim3d-animals-2/Rim3D_RhinoBeetle.glb", "credit": "A Rhino beetle by aaadragon, CC BY", "clips": {"Idle": "Beetle_idle", "Walk": "Beetle_walk", "Death": "Beetle_death"}, "yaw": -90, "walkCm": 40, "gallopCm": 40}
+    {"model": "RhinoBeetle", "file": "assets/raw/sketchfab/rim3d-animals-2/Rim3D_RhinoBeetle.glb", "credit": "A Rhino beetle by aaadragon, CC BY", "clips": {"Idle": "Beetle_idle", "Walk": "Beetle_walk", "Death": "Beetle_death"}, "yaw": -90, "walkCm": 40, "gallopCm": 40},
+    {"model": "Mech_Scyther", "file": "assets/raw/codex/Mech_Scyther/Mech_Scyther.glb", "credit": "Neon (our own model, Gemini 4 Neon; tools/neon_assets)", "clips": {"Idle": "Idle", "Walk": "Walk", "Gallop": "Run", "Death": "Death", "Attack": "Attack"}, "yaw": -90, "walkCm": 160, "gallopCm": 470},
+    {"model": "Mech_Lancer", "file": "assets/raw/codex/Mech_Lancer/Mech_Lancer.glb", "credit": "Neon (our own model, Gemini 4 Neon; tools/neon_assets)", "clips": {"Idle": "Idle", "Walk": "Walk", "Gallop": "Run", "Death": "Death", "Attack": "Attack", "Shoot": "Shoot"}, "yaw": -90, "walkCm": 150, "gallopCm": 400},
+    {"model": "Mech_Pikeman", "file": "assets/raw/codex/Mech_Pikeman/Mech_Pikeman.glb", "credit": "Neon (our own model, Gemini 4 Neon; tools/neon_assets)", "clips": {"Idle": "Idle", "Walk": "Walk", "Gallop": "Run", "Death": "Death", "Attack": "Attack", "Shoot": "Shoot"}, "yaw": -90, "walkCm": 130, "gallopCm": 320},
+    {"model": "Mech_Centipede", "file": "assets/raw/codex/Mech_Centipede/Mech_Centipede.glb", "credit": "Neon (our own model, Gemini 4 Neon; tools/neon_assets)", "clips": {"Idle": "Idle", "Walk": "Walk", "Gallop": "Run", "Death": "Death", "Attack": "Attack", "Shoot": "Shoot"}, "yaw": -90, "walkCm": 80, "gallopCm": 180},
+    {"model": "Megaspider", "file": "assets/raw/codex/Megaspider/Megaspider.glb", "credit": "Neon (our own model, Gemini 4 Neon; tools/neon_assets)", "clips": {"Idle": "Idle", "Walk": "Walk", "Gallop": "Run", "Death": "Death", "Attack": "Attack"}, "yaw": -90, "walkCm": 140, "gallopCm": 380},
+    {"model": "Spelopede", "file": "assets/raw/codex/Spelopede/Spelopede.glb", "credit": "Neon (our own model, Gemini 4 Neon; tools/neon_assets)", "clips": {"Idle": "Idle", "Walk": "Walk", "Gallop": "Run", "Death": "Death", "Attack": "Attack"}, "yaw": -90, "walkCm": 160, "gallopCm": 420}
   ],
   "defs": [
     {"def": "Alpaca", "model": "Alpaca", "scale": 1.0},
@@ -70,8 +76,12 @@
     {"def": "Capybara", "model": "ShibaInu", "scale": 1.4, "stand_in": true, "note": "Rim3D_Capybara.glb draws as tree-high pillars: its skin is bound with bone scales 0.001 to 0.103 against a mesh in another unit (PC 2026-11-24). Back to model Capybara after a Blender re-export with the armature scale applied."},
     {"def": "Iguana", "model": "Raptor", "scale": 0.43, "stand_in": true},
     {"def": "Megascarab", "model": "RhinoBeetle", "scale": 1.0},
-    {"def": "Spelopede", "model": "RhinoBeetle", "scale": 2.2, "stand_in": true},
-    {"def": "Megaspider", "model": "RhinoBeetle", "scale": 3.5, "stand_in": true}
+    {"def": "Spelopede", "model": "Spelopede", "scale": 1.0},
+    {"def": "Megaspider", "model": "Megaspider", "scale": 1.0},
+    {"def": "Mech_Scyther", "model": "Mech_Scyther", "scale": 1.0},
+    {"def": "Mech_Lancer", "model": "Mech_Lancer", "scale": 1.0},
+    {"def": "Mech_Pikeman", "model": "Mech_Pikeman", "scale": 0.6},
+    {"def": "Mech_Centipede", "model": "Mech_Centipede", "scale": 1.0}
   ],
   "missing": []
 }
