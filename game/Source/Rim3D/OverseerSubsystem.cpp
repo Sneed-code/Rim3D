@@ -571,7 +571,7 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 		const ImVec2 A(Viewport->Pos.x + static_cast<float>(FMath::Min(BoxStart.X, BoxEnd.X)), Viewport->Pos.y + static_cast<float>(FMath::Min(BoxStart.Y, BoxEnd.Y)));
 		const ImVec2 B(Viewport->Pos.x + static_cast<float>(FMath::Max(BoxStart.X, BoxEnd.X)), Viewport->Pos.y + static_cast<float>(FMath::Max(BoxStart.Y, BoxEnd.Y)));
 		Draw->AddRectFilled(A, B, ImGui::GetColorU32(ImVec4(0.37f, 0.83f, 0.66f, 0.10f)));
-		Draw->AddRect(A, B, ImGui::GetColorU32(ImVec4(0.55f, 0.95f, 0.78f, 0.85f)), 0.0f, 0, 1.5f * Scale);
+		Draw->AddRect(A, B, ImGui::GetColorU32(ImVec4(0.55f, 0.95f, 0.78f, 0.85f)), 0.0f, 1.5f * Scale, 0);
 	}
 	const ImGuiWindowFlags PanelFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
