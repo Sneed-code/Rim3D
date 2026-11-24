@@ -1821,6 +1821,16 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 				colony::EditColonistCommand Edit;
 				Edit.slot = Slot;
 				Edit.female = 1;
+				// You start as the creator's woman, so a man's name drawn for you goes (sneed's screen showed "Theo").
+				if (!Colonist->female)
+				{
+					const std::string Name = colony::randomFirstName(*Defs, Sim->settings().seed ^ 0x594F55ULL, true);
+					if (!Name.empty())
+					{
+						Edit.firstName = Name;
+						PeopleNamesFor = colony::kNoEntity;  // the name boxes read the new name
+					}
+				}
 				Edit.setCreator = true;
 				Edit.creator = TCHAR_TO_UTF8(*Text);
 				Submit(Edit);
@@ -1833,6 +1843,7 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 			}
 		}
 	}
+	Bridge.ApplyPregameCommands();  // the first looks and your name show this frame
 	// Naked by default (they land so); "clothes on" shows the cargo pack's cotton shirt and trousers on everyone.
 	if (USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
 	{
@@ -1910,20 +1921,23 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 	else
 	{
 		// Header: the title and the races (only humans for now, the rest shown and locked).
-		const float HeadH = 92.0f * Scale;
+		// Sized from the text (it grew half again, sneed 2026-11-24): the title, and beside it the line and the races.
+		const float HeadH = FMath::Max(92.0f * Scale, ImGui::GetFontSize() * NgStyle::kTitle + 2.0f * ImGui::GetStyle().WindowPadding.y + 10.0f * Scale);
 		if (NgBeginPanel("##NgCompanionsHead", ImVec2(Left, Top), ImVec2(Right - Left, HeadH)))
 		{
 			NgTitle(TEXT("Your companions"));
-			ImGui::SameLine(SideW + Pad);
+			ImGui::SameLine(0.0f, 2.0f * Pad);
 			ImGui::BeginGroup();
-			ColonyHud::TextColored(NgStyle::Dim, TEXT("Two strangers, both 18. Shape them, and choose what they are good and bad at."));
+			ImGui::PushTextWrapPos(-1.0f);  // one line, never folded under the title
+			ImGui::TextColored(NgStyle::Dim, "%s", "Two strangers, both 18. Shape them, and choose what they are good and bad at.");
+			ImGui::PopTextWrapPos();
 			for (const FNgRace& Race : NgRaces)
 			{
 				const colony::Def* Lineage = Defs->find("Lineages", Race.Lineage);
 				const bool bOpen = FCStringAnsi::Strcmp(Race.Lineage, "Baseline") == 0;
 				const FString Label = bOpen ? FString(Race.Fallback) : (Lineage ? NgCapital(Lineage->label()) : FString(Race.Fallback));
 				ImGui::BeginDisabled(!bOpen);
-				NgButton(bOpen ? Label : FString::Printf(TEXT("%s  (locked)"), *Label), bOpen, ImVec2(150.0f * Scale, 0.0f));
+				NgButton(bOpen ? Label : FString::Printf(TEXT("%s  (locked)"), *Label), bOpen);
 				ImGui::EndDisabled();
 				if (!bOpen && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 				{
@@ -1954,7 +1968,10 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 				const bool bPicked = Slot == PeopleSelected;
 				ImGui::PushStyleColor(ImGuiCol_ChildBg, bPicked ? NgStyle::JadeDeep : ImVec4(0.05f, 0.08f, 0.07f, 0.7f));
 				ImGui::PushStyleColor(ImGuiCol_Border, bPicked ? NgStyle::Jade : NgStyle::PanelEdge);
-				ImGui::BeginChild("##card", ImVec2(0.0f, Face + 22.0f * Scale), ImGuiChildFlags_Borders);
+				// Tall enough for the name, the line under it and the buttons at the text size in use.
+				const float CardH = FMath::Max(Face, ImGui::GetFontSize() * NgStyle::kHeading + ImGui::GetTextLineHeightWithSpacing() +
+					ImGui::GetFrameHeightWithSpacing() + 2.0f * ImGui::GetStyle().ItemSpacing.y) + 2.0f * ImGui::GetStyle().WindowPadding.y;
+				ImGui::BeginChild("##card", ImVec2(0.0f, CardH), ImGuiChildFlags_Borders);
 				if (UTexture* Mugshot = GetMugshot(Pawn))
 				{
 					ImGui::Image(ImTextureRef(Mugshot), ImVec2(Face, Face));
@@ -2047,8 +2064,8 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 		ImGui::SameLine();
 		ColonyHud::TextColored(NgStyle::Text, TEXT("CLOTHES ON"));
 		ColonyHud::Tip(TEXT("Shows the cotton shirt and trousers from the cargo pack. Everyone lands naked."));
-		ImGui::SameLine(StripW * 0.30f);
-		ColonyHud::TextColored(NgStyle::Faint, TEXT("Drag to spin, wheel to zoom"));
+		ImGui::SameLine(0.0f, 2.0f * Gap);
+		ImGui::TextColored(NgStyle::Faint, "%s", "Drag to spin, wheel to zoom");
 		// Zoom buttons as well as the wheel (sneed 2026-11-24: "i need to be able to zoom them"): in to the face, out to the feet.
 		const float ZoomW = 2.2f * ImGui::GetFontSize();
 		const float StripRight = ImGui::GetCursorStartPos().x + ImGui::GetWindowWidth() - 2.0f * ImGui::GetStyle().WindowPadding.x;

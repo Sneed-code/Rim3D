@@ -186,7 +186,7 @@ namespace ColonyHud
 
 	/**
 	 * The widths boxes had before the text grew (sneed 2026-11-24: "i like the width ... make sure ui boxes don't expand
-	 * wider"), in pixels at 1080 lines, measured on the PC with UI.TextGrow 1 and UI.LogBoxes 1 (BOXWIDTH lines). A box
+	 * wider"), in pixels at 1080 lines, measured on the PC with UI.TextGrow 1 and UI.LogBoxes 1 (BOXWIDTH lines, 2026-11-24). A box
 	 * not listed sizes itself as before.
 	 */
 	inline float HeldWidthOf(const char* Name)
@@ -198,23 +198,22 @@ namespace ColonyHud
 		};
 		static const FHeld Widths[] = {
 			{"##HudLesson", 380.0f},
-			{"##HudDate", 225.0f},
-			{"##HudHover", 300.0f},
-			{"##HudInfo", 420.0f},
-			{"##HudSettings", 560.0f},
-			{"##HudAssign", 640.0f},
-			{"##HudAnimals", 640.0f},
-			{"##HudWildlife", 640.0f},
-			{"##HudMechs", 560.0f},
-			{"##HudResearch", 760.0f},
-			{"##HudInventory", 420.0f},
-			{"##HudOutfits", 640.0f},
-			{"##HudAreas", 520.0f},
-			{"##HudMedical", 560.0f},
-			{"##HudPrisoners", 600.0f},
-			{"##OrdersMessage", 420.0f},
-			{"##BuildNav", 260.0f},
-			{"##FactionsWindow", 620.0f},
+			{"##HudDate", 300.0f},
+			{"##HudHover", 220.0f},
+			{"##HudInfo", 760.0f},
+			{"##HudSettings", 745.0f},
+			{"##HudAssign", 1100.0f},
+			{"##HudAnimals", 1420.0f},
+			{"##HudWildlife", 820.0f},
+			{"##HudMechs", 620.0f},
+			{"##HudResearch", 1880.0f},
+			{"##HudInventory", 720.0f},
+			{"##HudOutfits", 1000.0f},
+			{"##HudAreas", 760.0f},
+			{"##HudMedical", 1150.0f},
+			{"##HudPrisoners", 980.0f},
+			{"##BuildNav", 250.0f},
+			{"##FactionsWindow", 760.0f},
 		};
 		for (const FHeld& Held : Widths)
 		{

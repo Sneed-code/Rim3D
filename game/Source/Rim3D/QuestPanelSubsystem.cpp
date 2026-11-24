@@ -346,6 +346,7 @@ void UQuestPanelSubsystem::DrawWindow(USimSubsystem& Bridge)
 
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSizeConstraints(ImVec2(620.0f * Scale, 0.0f), ImVec2(620.0f * Scale, Viewport->Size.y * 0.8f));
+	ColonyHud::HeldBoxes().Add(ImHashStr("##QuestWindow"));
 	if (ImGui::Begin("##QuestWindow", nullptr, QpFlags() & ~ImGuiWindowFlags_NoScrollbar))
 	{
 		++Stats.WindowFrames;

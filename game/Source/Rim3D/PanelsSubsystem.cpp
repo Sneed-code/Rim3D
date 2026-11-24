@@ -1413,7 +1413,9 @@ void UPanelsSubsystem::DrawLog(USimSubsystem& Bridge, float Scale, float Margin)
 	UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>();
 	// Right side, under the alarm button.
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - Margin, Viewport->Pos.y + Margin + 48.0f * Scale), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-	ImGui::SetNextWindowSizeConstraints(ImVec2(380.0f * Scale, 0.0f), ImVec2(540.0f * Scale, bLogOpen ? Viewport->Size.y * 0.5f : FLT_MAX));
+	// Held at its width as the text grew (sneed 2026-11-24); lines wrap.
+	ImGui::SetNextWindowSizeConstraints(ImVec2(380.0f * Scale, 0.0f), ImVec2(380.0f * Scale, bLogOpen ? Viewport->Size.y * 0.5f : FLT_MAX));
+	ColonyHud::HeldBoxes().Add(ImHashStr("##PanelsLog"));
 	ImGui::SetNextWindowBgAlpha(bLogOpen ? 0.85f : 0.55f);
 	if (ImGui::Begin("##PanelsLog", nullptr, PanelFlags() & ~ImGuiWindowFlags_NoScrollbar))
 	{

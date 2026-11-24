@@ -322,7 +322,8 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 			Bottom = FMath::Min(Bottom, static_cast<float>(Menu.Min.Y) - 6.0f * Scale);
 		}
 		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Margin, Bottom), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
-		ImGui::SetNextWindowSizeConstraints(ImVec2(300.0f * Scale, 0.0f), ImVec2(560.0f * Scale, FLT_MAX));
+		ImGui::SetNextWindowSizeConstraints(ImVec2(300.0f * Scale, 0.0f), ImVec2(300.0f * Scale, FLT_MAX));  // held as the text grew; it wraps
+		ColonyHud::HeldBoxes().Add(ImHashStr("##OverseerInspect"));
 		if (ImGui::Begin("##OverseerInspect", nullptr, PanelFlags))
 		{
 			if (Selection.Kind == ESimPickKind::Thing)

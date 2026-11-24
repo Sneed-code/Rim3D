@@ -11,7 +11,7 @@ showed bare mannequins running about because the game had started running undern
 the title's speed), so every look edit was refused ("can only be edited before the game starts"); the new game now waits
 paused at its first second on that screen, the people stand in their calm idle (it plays on while paused,
 `SetPreviewLive`), and the strip under them has zoom buttons as well as the wheel. **Text 1.5x everywhere**, boxes keep
-their widths and wrap (`ColonyHud::TextGrow`, `HoldWidth`; widths still to be measured on the PC with `UI.LogBoxes 1`),
+their widths and wrap (`ColonyHud::TextGrow`, `HoldWidth`, widths measured on the PC),
 and every box gets the glass look (`docs/design/ui-layout.md` "Bigger text, same widths"). **Skills**: trait-point
 people get 30 skill levels spread at random over the skills they can use (a disabled skill's share boosts the others,
 also when a trait is changed on the screen), one major and one minor passion on their best skills (`skillPointPool`,
