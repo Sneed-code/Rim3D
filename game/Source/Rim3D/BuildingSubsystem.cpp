@@ -647,7 +647,8 @@ void UBuildingSubsystem::ReadDefs(const colony::Sim& Sim)
 				FMoveRule Rule;
 				Rule.Clip = UTF8_TO_TCHAR(Def.text((Base + ".clip").c_str()).c_str());
 				const std::string When = Def.text((Base + ".when").c_str(), "always");
-				Rule.When = When == "running" ? EMoveWhen::Running : When == "on" ? EMoveWhen::On : When == "off" ? EMoveWhen::Off : EMoveWhen::Always;
+				Rule.When = When == "running" ? EMoveWhen::Running : When == "on" ? EMoveWhen::On : When == "off" ? EMoveWhen::Off
+					: When == "working" ? EMoveWhen::Working : When == "fueled" ? EMoveWhen::Fueled : EMoveWhen::Always;
 				Rule.bLoop = Def.flag((Base + ".loop").c_str());
 				Rule.bHold = Def.flag((Base + ".hold").c_str());
 				Look.MoveRules.Add(Rule);
@@ -1429,6 +1430,26 @@ void UBuildingSubsystem::AnimateMoving()
 	const colony::Snapshot& Current = Sim->GetCurrentSnapshot();
 	const float Now = World->GetTimeSeconds();
 	++MoveFrame;
+	// Buildings a pawn is working at right now (a bill or butchering, standing by it), for `working` rules.
+	TSet<uint32> WorkedAt;
+	for (const colony::ThingView& Worker : Current.things)
+	{
+		if (Worker.category != colony::ThingCategory::Pawn || Worker.jobTarget == colony::kNoEntity
+			|| (Worker.job != colony::JobType::DoBill && Worker.job != colony::JobType::Butcher))
+		{
+			continue;
+		}
+		const colony::ThingView* Bench = Current.find(Worker.jobTarget);
+		if (!Bench)
+		{
+			continue;
+		}
+		const float Reach = 0.5f * static_cast<float>(FMath::Max(Bench->sizeX, Bench->sizeY)) + 1.6f;
+		if (FMath::Square(Worker.x - Bench->x) + FMath::Square(Worker.y - Bench->y) <= Reach * Reach)
+		{
+			WorkedAt.Add(static_cast<uint32>(Worker.jobTarget));
+		}
+	}
 	TSet<UInstancedStaticMeshComponent*> Touched;
 	for (TPair<uint64, FMovingSlot>& Pair : MovingSlots)
 	{
@@ -1460,6 +1481,8 @@ void UBuildingSubsystem::AnimateMoving()
 					case EMoveWhen::Running: bHolds = Power == colony::PowerState::None || Power == colony::PowerState::Powered; break;
 					case EMoveWhen::On: bHolds = Power != colony::PowerState::Off; break;
 					case EMoveWhen::Off: bHolds = Power == colony::PowerState::Off; break;
+					case EMoveWhen::Working: bHolds = WorkedAt.Contains(static_cast<uint32>(Slot.Thing)); break;
+					case EMoveWhen::Fueled: bHolds = View->fuel > 0.0f; break;
 					default: break;
 				}
 				float& Since = State.Since[R];

@@ -17,6 +17,8 @@ Kinds ("kind" in the prep entry):
                    building meshes face (docs/design/building-draw.md).
   gun              the origin is kept (the firing hand's palm on the grip), +X out of the muzzle; the named "parts" are
                    kept as their own objects and everything else is joined into "Body".
+  creature         a rigged, animated creature (the Neon remnants and chitinids): the GLB is copied as it is to
+                   assets/raw/codex/<Name>/<Name>.glb for the AnimalArt commandlet (assets/animal_art.json "imports").
 "drop" lists objects to leave out (a second copy, a stack). Empties are recorded as sockets and not exported.
 
 Moving parts (Neon models, docs/design/neon-assets.md): a building or item with "parts" keeps each named part as its own
@@ -405,9 +407,16 @@ def prep(src_root, name, entry):
     if not os.path.exists(glb):
         print(f"CODEXPREP {name}: no {glb}")
         return False
+    kind = entry["kind"]
+    if kind == "creature":
+        import shutil
+        out = os.path.join(OUT, name)
+        os.makedirs(out, exist_ok=True)
+        shutil.copyfile(glb, os.path.join(out, f"{name}.glb"))
+        print(f"CODEXPREP {name}: creature, GLB copied -> {out}")
+        return True
     bpy.ops.import_scene.gltf(filepath=glb)
     bpy.context.view_layer.update()  # matrix_world is stale until then
-    kind = entry["kind"]
     FRAME[0] = mathutils.Matrix.Identity(4)
     parts = entry.get("parts", [])
     sampled, rest, bake = sample_actions(parts) if parts else ({}, {}, {})

@@ -34,6 +34,10 @@ namespace
 	const TCHAR* const AnimalSmokeNewSmallDefs[] = {TEXT("Capybara"), TEXT("Iguana"), TEXT("Chicken"), TEXT("Duck"), TEXT("Goose"), TEXT("Turkey"),
 		TEXT("ArcticFox"), TEXT("ArcticWolf"), TEXT("Ostrich"), TEXT("Megascarab")};
 
+	// The remnant war machines on their own models (phase remnants, docs/design/codex-models.md): drawn by the animal
+	// subsystem, not as people.
+	const TCHAR* const AnimalSmokeRemnantDefs[] = {TEXT("Mech_Scyther"), TEXT("Mech_Lancer"), TEXT("Mech_Pikeman"), TEXT("Mech_Centipede")};
+
 	struct FAnimalSmokeState
 	{
 		TSet<uint8> PosesSeen;
@@ -381,6 +385,61 @@ void USmokeTestSubsystem::BuildAnimalsPhases()
 	};
 	Phases.Add(MoveTemp(Batch));
 
+	// 4b. The remnants, paused in a row: each must be drawn as its own machine by the animal subsystem.
+	FPhase Remnants;
+	Remnants.Name = TEXT("remnants");
+	Remnants.WarmupSeconds = 3.0f;
+	Remnants.MeasureSeconds = 1.0f;
+	Remnants.Setup = [=, this]()
+	{
+		USimSubsystem* B = Bridge();
+		if (!B || !B->GetSim())
+		{
+			return;
+		}
+		const colony::CellPos M = Middle();
+		int32 I = 0;
+		for (const TCHAR* Def : AnimalSmokeRemnantDefs)
+		{
+			B->Submit(colony::SpawnThingCommand{std::string(TCHAR_TO_UTF8(Def)), colony::CellPos{M.x + 38, M.y - 9 + I++ * 6, 0}});
+		}
+		B->StepOnce();
+		B->SetSpeed(0);
+		const FVector Target = B->SimToWorld(M.x + 38.0f, M.y, 0) + FVector(0.0, 0.0, 100.0);
+		const FVector From = Target + FVector(1900.0, -500.0, 500.0);
+		ViewFrom(From, (Target - From).Rotation());
+		State->Reset();
+	};
+	Remnants.OnFrame = CheckFrame;
+	Remnants.Verify = [=, this]()
+	{
+		VerifyFrames(TEXT("remnants"));
+		USimAnimalSubsystem* Animals = AnimalsOf();
+		USimSubsystem* B = Bridge();
+		if (!Animals || !B || !B->GetSim())
+		{
+			return;
+		}
+		FString Seen;
+		for (const TCHAR* Def : AnimalSmokeRemnantDefs)
+		{
+			if (!Animals->DrawsMachine(FName(Def)))
+			{
+				Fail(FString::Printf(TEXT("remnants: %s has no machine model (assets/animal_art.json, AnimalArt)"), Def));
+			}
+		}
+		for (const TPair<uint32, TObjectPtr<ASimAnimalActor>>& Pair : Animals->GetAnimals())
+		{
+			const colony::ThingView* View = B->GetCurrentSnapshot().find(Pair.Value->GetThing());
+			if (View && View->def.valid() && View->lifeStage < 0)
+			{
+				Seen += FString::Printf(TEXT(" %s %.0f cm,"), UTF8_TO_TCHAR(B->GetDefs()->get(View->def).defName().c_str()), Pair.Value->GetDrawLengthCm());
+			}
+		}
+		Notes.Add(FString::Printf(TEXT("remnants: drawn as machines:%s"), *Seen));
+	};
+	Phases.Add(MoveTemp(Remnants));
+
 	// 5. One picture of each animal of the batch, close up from its side (phases animal_<def>), so each model's look,
 	// size and facing can be checked on its own.
 	const auto AddCloseUp = [=, this](const TCHAR* Def, float CellX, float CellY, float DistanceCm)
@@ -410,5 +469,9 @@ void USmokeTestSubsystem::BuildAnimalsPhases()
 	for (int32 Index = 0; Index < static_cast<int32>(UE_ARRAY_COUNT(AnimalSmokeNewSmallDefs)); ++Index)
 	{
 		AddCloseUp(AnimalSmokeNewSmallDefs[Index], 31.0f, -18.0f + Index * 4.0f, 450.0f);
+	}
+	for (int32 Index = 0; Index < static_cast<int32>(UE_ARRAY_COUNT(AnimalSmokeRemnantDefs)); ++Index)
+	{
+		AddCloseUp(AnimalSmokeRemnantDefs[Index], 38.0f, -9.0f + Index * 6.0f, Index == 3 ? 1100.0f : 700.0f);
 	}
 }

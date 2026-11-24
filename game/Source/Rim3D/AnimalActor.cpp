@@ -5,6 +5,7 @@
 #include "Animation/AnimSingleNodeInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/World.h"
 
 #include "AnimalSubsystem.h"
 #include "SimSubsystem.h"
@@ -155,6 +156,8 @@ void ASimAnimalActor::SetPose(ESimAnimalPose NewPose, float PlayRate)
 			case ESimAnimalPose::Gallop: Clip = Model.Gallop; break;
 			case ESimAnimalPose::Eat: Clip = Model.Eat; break;
 			case ESimAnimalPose::Dead: Clip = Model.Death; bLoop = false; break;
+			case ESimAnimalPose::Attack: Clip = Model.Attack ? Model.Attack.Get() : Model.Idle.Get(); bLoop = false; break;
+			case ESimAnimalPose::Shoot: Clip = Model.Shoot ? Model.Shoot.Get() : Model.Idle.Get(); bLoop = false; break;
 			default: break;
 		}
 		const bool bWasPlaced = bPoseSet;
@@ -171,6 +174,10 @@ void ASimAnimalActor::SetPose(ESimAnimalPose NewPose, float PlayRate)
 		{
 			// It was already dead when we first saw it (a load): lie where it fell.
 			Single->SetPosition(Clip->GetPlayLength(), false);
+		}
+		else if (NewPose == ESimAnimalPose::Attack || NewPose == ESimAnimalPose::Shoot)
+		{
+			Single->SetPosition(0.0f, false);
 		}
 		else if (!bWasPlaced && Clip)
 		{
@@ -212,14 +219,40 @@ void ASimAnimalActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::T
 	Location.Z += SwimLiftCm;
 	SetActorLocationAndRotation(Location, FRotator(0.0, Yaw, 0.0));
 
-	const int32 Stage = FMath::Clamp(Now.lifeStage, 0, 2);
+	// A war machine (no life stage) is drawn full size.
+	const int32 Stage = Now.lifeStage < 0 ? 2 : FMath::Clamp(Now.lifeStage, 0, 2);
 	DrawScale = ArtScale * AnimalStageScale[Stage];
 	Body->SetRelativeScale3D(FVector(DrawScale));
 
 	// Animation runs at the game's speed and stops while paused.
 	Body->GlobalAnimRateScale = static_cast<float>(Speed);
 
-	if (Now.dead)
+	// Fight clips (the remnants): a strike as a melee swing winds up, a shot as the gun fires (its cooldown starts
+	// again); each plays once over whatever the body was doing, then the usual pose comes back.
+	const float GameTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	if (!Now.dead && !Now.downed && Before)
+	{
+		const bool bStrike = Model.Attack && Now.meleePhase == colony::MeleePhase::Windup && Before->meleePhase != colony::MeleePhase::Windup;
+		const bool bShot = Model.Shoot && Now.shotReadyIn > Before->shotReadyIn;
+		if (bStrike || bShot)
+		{
+			UAnimSequence* Clip = bStrike ? Model.Attack.Get() : Model.Shoot.Get();
+			OneShotStart = GameTime;
+			OneShotLength = Clip->GetPlayLength() / FMath::Max(static_cast<float>(Speed), 1.0f);
+			const ESimAnimalPose Wanted = bStrike ? ESimAnimalPose::Attack : ESimAnimalPose::Shoot;
+			if (bPoseSet && Pose == Wanted)
+			{
+				Pose = ESimAnimalPose::Idle;  // so SetPose starts the clip again
+			}
+			SetPose(Wanted, 1.0f);
+		}
+	}
+	if (OneShotStart >= 0.0f && !Now.dead && !Now.downed && GameTime - OneShotStart < OneShotLength)
+	{
+		return;  // the strike or shot plays out
+	}
+	OneShotStart = -1.0f;
+	if (Now.dead || (Now.lifeStage < 0 && Now.downed))
 	{
 		SetPose(ESimAnimalPose::Dead, 1.0f);
 	}

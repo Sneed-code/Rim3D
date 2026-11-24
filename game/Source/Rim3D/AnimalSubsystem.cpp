@@ -205,6 +205,8 @@ const FSimAnimalModel* USimAnimalSubsystem::GetModelFor(FName DefName, FSimAnima
 		Model.Gallop = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Gallop"));
 		Model.Eat = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Eating"));
 		Model.Death = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Death"));
+		Model.Attack = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Attack"));
+		Model.Shoot = AnimalLoad<UAnimSequence>(Name, Prefix + TEXT("Shoot"));
 		if (const TMap<FString, FString>* Paths = ImportAssets.Find(OutArt.Model))
 		{
 			// A pack already in Unreal's format: the art table names each asset by its path.
@@ -259,9 +261,27 @@ const FSimAnimalModel* USimAnimalSubsystem::GetModelFor(FName DefName, FSimAnima
 		KeepAlive.Add(Model.Gallop);
 		KeepAlive.Add(Model.Eat);
 		KeepAlive.Add(Model.Death);
+		KeepAlive.Add(Model.Attack);
+		KeepAlive.Add(Model.Shoot);
 		UE_LOG(LogSimAnimals, Display, TEXT("Model %s loaded: half size %.0f x %.0f x %.0f cm, fitted by %.2f"), *Name, Model.Extent.X, Model.Extent.Y, Model.Extent.Z, Model.FitScale);
 	}
 	return Model.bLoaded ? &Model : nullptr;
+}
+
+bool USimAnimalSubsystem::DrawsMachine(FName DefName)
+{
+	if (bool* Known = MachineDefs.Find(DefName))
+	{
+		return *Known;
+	}
+	if (!bArtTried)
+	{
+		LoadArtTable();
+	}
+	FSimAnimalArt Looks;
+	const bool bDraws = Art.Contains(DefName) && GetModelFor(DefName, Looks) != nullptr;
+	MachineDefs.Add(DefName, bDraws);
+	return bDraws;
 }
 
 int32 USimAnimalSubsystem::GetModelsLoaded() const
@@ -314,9 +334,13 @@ void USimAnimalSubsystem::Tick(float DeltaTime)
 	TSet<uint32> Seen;
 	for (const colony::ThingView& View : Now.things)
 	{
-		if (View.category != colony::ThingCategory::Pawn || View.lifeStage < 0 || !Defs || !View.def.valid())
+		if (View.category != colony::ThingCategory::Pawn || !Defs || !View.def.valid())
 		{
 			continue;
+		}
+		if (View.lifeStage < 0 && !DrawsMachine(FName(UTF8_TO_TCHAR(Defs->get(View.def).defName().c_str()))))
+		{
+			continue;  // a person (USimPawnSubsystem draws it)
 		}
 		const uint32 Key = AnimalKey(View.id);
 		TObjectPtr<ASimAnimalActor>* Existing = Animals.Find(Key);
